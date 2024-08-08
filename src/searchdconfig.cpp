@@ -1563,7 +1563,7 @@ static bool DropLocalIndex ( const CSphString & sIndex, CSphString & sError, CSp
 		StrVec_t dExtFiles;
 		pRt->GetIndexFiles ( dIndexFiles, dExtFiles );
 
-		if ( !pRt->Truncate(sError) )
+		if ( !pRt->Truncate(sError, RtIndex_i::DROP ) )
 			return false;
 
 		DeleteRtIndex ( pRt, &dExtFiles );

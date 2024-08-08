@@ -1254,7 +1254,7 @@ public:
 	bool				ForceDiskChunk() final;
 	bool				AttachDiskIndex ( CSphIndex * pIndex, bool bTruncate, bool & bFatal, CSphString & sError ) final;
 	bool				AttachRtIndex ( RtIndex_i * pIndex, bool bTruncate, bool & bFatal, CSphString & sError ) final;
-	bool				Truncate ( CSphString & sError ) final;
+	bool				Truncate ( CSphString & sError, Truncate_e eAction ) final;
 	bool				CheckValidateOptimizeParams ( OptimizeTask_t& tTask ) const;
 	bool				CheckValidateChunk ( int& iChunk, int iChunks, bool bByOrder ) const;
 	void				Optimize ( OptimizeTask_t tTask ) final;
@@ -8608,7 +8608,7 @@ bool RtIndex_c::AttachDiskIndex ( CSphIndex * pIndex, bool bTruncate, bool & bFa
 
 	bFatal = false;
 
-	if ( bTruncate && !Truncate ( sError ) )
+	if ( bTruncate && !Truncate ( sError, TRUNCATE ) )
 		return false;
 
 	// safeguards
@@ -8617,7 +8617,8 @@ bool RtIndex_c::AttachDiskIndex ( CSphIndex * pIndex, bool bTruncate, bool & bFa
 		return false;
 
 	// note: that is important. Active readers prohibited by topmost w-lock, but internal processes not!
-	if ( bTruncate && !Truncate ( sError ) )
+	// fixme! Looks like a dupe, look at few lines above
+	if ( bTruncate && !Truncate ( sError, TRUNCATE ) )
 		return false;
 
 	// attach to non-empty RT: first flush RAM segments to disk chunk, then apply upcoming index'es docs as k-list.
@@ -8741,7 +8742,7 @@ bool RtIndex_c::AttachRtIndex ( RtIndex_i * pSrcIndex, bool bTruncate, bool & bF
 	assert ( pSrcIndex );
 	bFatal = false;
 
-	if ( bTruncate && !Truncate ( sError ) )
+	if ( bTruncate && !Truncate ( sError, TRUNCATE ) )
 		return false;
 
 	// safeguards
@@ -8750,7 +8751,8 @@ bool RtIndex_c::AttachRtIndex ( RtIndex_i * pSrcIndex, bool bTruncate, bool & bF
 		return false;
 
 	// note: that is important. Active readers prohibited by topmost w-lock, but internal processes not!
-	if ( bTruncate && !Truncate ( sError ) )
+	// fixme! Looks like a dupe, look at few lines above
+	if ( bTruncate && !Truncate ( sError, TRUNCATE ) )
 		return false;
 
 	// attach to non-empty RT: first flush RAM segments to disk chunk, then apply upcoming index'es docs as k-list.
@@ -8840,7 +8842,7 @@ void RtIndex_c::UnlinkRAMChunk ( const char* szInfo )
 		sphWarning ( "rt: %s failed to unlink %s: (errno=%d, error=%s)", szInfo, sFile.cstr(), errno, strerrorm ( errno ) );
 }
 
-bool RtIndex_c::Truncate ( CSphString& )
+bool RtIndex_c::Truncate ( CSphString&, Truncate_e eAction )
 {
 	// TRUNCATE will drop everything; so all 'optimizing' should be discarded as useless
 	OptimizeGuard_c tStopOptimize ( *this );
@@ -8856,7 +8858,7 @@ bool RtIndex_c::Truncate ( CSphString& )
 	SaveMeta ( m_iTID, { nullptr, 0 } );
 
 	// allow binlog to unlink now-redundant data files
-	Binlog::NotifyIndexFlush ( m_iTID, GetName(), Binlog::NoShutdown, Binlog::ForceSave );
+	Binlog::NotifyIndexFlush ( m_iTID, GetName(), Binlog::NoShutdown, eAction==TRUNCATE ? Binlog::ForceSave : Binlog::DropTable );
 
 	// kill RAM chunk file
 	UnlinkRAMChunk ( "truncate" );

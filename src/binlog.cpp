@@ -177,7 +177,7 @@ public:
 	void DoFsync ( int iFd );
 	void CollectBinlogFiles ( CSphVector<int>& tOutput ) const noexcept REQUIRES_SHARED ( m_tWriteAccess );
 	bool BinlogCommit ( int64_t * pTID, const char* szIndexName, FnWriteCommit fnSaver, CSphString & sError ) EXCLUDES ( m_tWriteAccess );
-	void NotifyIndexFlush ( int64_t iFlushedTID, const char * szIndexName, bool bShutdown, bool bForceSave ) EXCLUDES ( m_tWriteAccess );
+	bool NotifyIndexFlush ( int64_t iFlushedTID, const char * szIndexName, Shutdown_e eShutdown, ForceSave_e eForceSave ) EXCLUDES ( m_tWriteAccess );
 	void AdoptIndex ( int iExt, const BinlogIndexInfo_t & tIdx ) REQUIRES ( m_tWriteAccess );
 	void AdoptFile ( int iExt ) REQUIRES ( m_tWriteAccess );
 	void OpenNewLog ( BinlogFileState_e eState = BinlogFileState_e::OK ) REQUIRES ( m_tWriteAccess );
@@ -204,7 +204,7 @@ class Binlog_c : public ISphNoncopyable
 public:
 			~Binlog_c();
 
-	void	NotifyIndexFlush ( int64_t iTID, const char * szIndexName, bool bShutdown, bool bForceSave );
+	void	NotifyIndexFlush ( int64_t iTID, const char * szIndexName, Shutdown_e eShutdown, ForceSave_e eForceSave );
 	bool	BinlogCommit ( int64_t * pTID, const char * szIndexName, FnWriteCommit fnSaver, CSphString & sError );
 
 	void	Configure ( const CSphConfigSection & hSearchd, DWORD uReplayFlags );
@@ -258,11 +258,15 @@ private:
 	SingleBinlog_c *		GetWriteIndexBinlog ( const char* szIndexName, bool bOpenNewLog=true ) EXCLUDES ( m_tHashAccess );
 	SingleBinlog_c * 		GetSingleWriteIndexBinlog ( bool bOpenNewLog ) EXCLUDES ( m_tHashAccess );
 
+	SingleBinlog_c *		GetFlushIndexBinlog ( const char * szIndexName ) REQUIRES ( m_tHashAccess );
 
 	void					LoadMeta ();
+	enum SaveMeta_e : bool { eNoForce, eForce };
+	void					DoSaveMeta ( IntVec_t dFiles, SaveMeta_e eForce ) EXCLUDES ( m_tCurrentFilesAccess );
 	void					SaveMeta () EXCLUDES ( m_tHashAccess ) EXCLUDES ( m_tCurrentFilesAccess );
-
+	void					SaveMetaUnlock ( SaveMeta_e eForce = eNoForce ) REQUIRES_SHARED ( m_tHashAccess ) EXCLUDES ( m_tCurrentFilesAccess );
 	IntVec_t				CollectBinlogFiles() EXCLUDES ( m_tHashAccess );
+	IntVec_t				CollectBinlogFilesUnlock() REQUIRES_SHARED ( m_tHashAccess );
 	bool					CompareCurrentFiles ( const IntVec_t & dFiles ) EXCLUDES ( m_tCurrentFilesAccess );
 
 	void					LockBinlog ();
@@ -633,12 +637,12 @@ bool SingleBinlog_c::BinlogCommit ( int64_t * pTID, const char * szIndexName, Fn
 }
 
 
-void SingleBinlog_c::NotifyIndexFlush ( int64_t iFlushedTID, const char * szFlushedIndexName, bool bShutdown, bool bForceSave )
+bool SingleBinlog_c::NotifyIndexFlush ( int64_t iFlushedTID, const char * szFlushedIndexName, Shutdown_e eShutdown, ForceSave_e eAction )
 {
 	MEMORY ( MEM_BINLOG );
 	ScopedBinlogMutex_t tLock ( m_tWriteAccess );
 
-	assert ( bShutdown || m_dLogFiles.GetLength () );
+	assert ( eShutdown || m_dLogFiles.GetLength () );
 
 	bool bCurrentLogAbandoned = false;
 	const int iPreflushFiles = m_dLogFiles.GetLength ();
@@ -687,20 +691,21 @@ void SingleBinlog_c::NotifyIndexFlush ( int64_t iFlushedTID, const char * szFlus
 		m_dLogFiles.Remove ( iLog-- );
 	}
 
-	if ( bCurrentLogAbandoned && !bShutdown )
+	if ( bCurrentLogAbandoned && !eShutdown )
 	{
 		// if all logs were closed, we can rewind binlog file ext back to 0
 		if ( m_dLogFiles.IsEmpty() )
 			FixNofFiles ( iPreflushFiles );
 
 		// if current log was closed, we need a new one (it will automatically save meta, too)
-		OpenNewLog ();
-
-	} else if ( iPreflushFiles!=m_dLogFiles.GetLength () || bForceSave )
+		if ( eAction!=DropTable )
+			OpenNewLog ();
+	} else if ( iPreflushFiles!=m_dLogFiles.GetLength () || eAction!=NoSave )
 	{
 		// if we unlinked any logs, we need to save meta, too
 		SaveMeta();
 	}
+	return m_dLogFiles.IsEmpty ();
 }
 
 
@@ -1030,6 +1035,24 @@ SingleBinlog_c * Binlog_c::GetSingleWriteIndexBinlog ( bool bOpenNewLog ) NO_THR
 }
 
 
+SingleBinlog_c * Binlog_c::GetFlushIndexBinlog ( const char * szIndexName ) REQUIRES ( m_tHashAccess )
+{
+	SingleBinlogPtr * pVal = nullptr;
+	if ( !m_bCommonBinlog )
+		pVal = m_hBinlogs ( szIndexName );
+	else
+	{
+		auto Iter = m_hBinlogs.begin ();
+		if ( Iter!=m_hBinlogs.end () )
+			pVal = &Iter->second;
+	}
+
+	if ( !pVal )
+		return nullptr;
+	return pVal->get ();
+}
+
+
 Binlog_c::~Binlog_c ()
 {
 	if ( m_bDisabled )
@@ -1052,14 +1075,14 @@ CSphString Binlog_c::MakeBinlogName ( int iExt ) const noexcept
 	return SphSprintf ( m_sBinlogFileNameTemplate.scstr(), iExt );
 }
 
-void Binlog_c::RemoveFile ( int iExt )
+void Binlog_c::RemoveFile ( int iExt ) NO_THREAD_SAFETY_ANALYSIS
 {
 	auto sLog = MakeBinlogName ( iExt );
 	::unlink ( sLog.cstr () );
 }
 
 // here's been going binlogs with ALL closed indices removing // notify per-index-binlog?
-void Binlog_c::NotifyIndexFlush ( int64_t iFlushedTID, const char* szFlushedIndexName, bool bShutdown, bool bForceSave )
+void Binlog_c::NotifyIndexFlush ( int64_t iFlushedTID, const char* szFlushedIndexName, Shutdown_e eShutdown, ForceSave_e eAction )
 {
 	if ( m_bReplayMode )
 		sphInfo ( "table '%s': ramchunk saved. TID=" INT64_FMT, szFlushedIndexName, iFlushedTID );
@@ -1067,8 +1090,26 @@ void Binlog_c::NotifyIndexFlush ( int64_t iFlushedTID, const char* szFlushedInde
 	if ( !IsBinlogWritable () )
 		return;
 
-	auto pSingleBinlog = GetWriteIndexBinlog ( szFlushedIndexName );
-	pSingleBinlog->NotifyIndexFlush ( iFlushedTID, szFlushedIndexName, bShutdown, bForceSave );
+	if ( m_bCommonBinlog || eAction!=DropTable )
+	{
+		if ( eAction == DropTable )
+			eAction = ForceSave;
+		auto pSingleBinlog = GetWriteIndexBinlog ( szFlushedIndexName );
+		pSingleBinlog->NotifyIndexFlush ( iFlushedTID, szFlushedIndexName, eShutdown, eAction );
+		return;
+	}
+
+	Threads::SccWL_t tLock ( m_tHashAccess );
+	auto pSingleBinlog = GetFlushIndexBinlog ( szFlushedIndexName );
+	if ( !pSingleBinlog )
+		return;
+
+	bool bAbandoned = pSingleBinlog->NotifyIndexFlush ( iFlushedTID, szFlushedIndexName, eShutdown, eAction );
+	if ( !bAbandoned )
+		return;
+
+	m_hBinlogs.Delete ( szFlushedIndexName );
+	SaveMetaUnlock();
 }
 
 
@@ -1189,13 +1230,9 @@ int64_t Binlog_c::LastTidFor ( const CSphString & sIndex ) const noexcept
 static constexpr int SAVE_TRIES = 4;
 static constexpr int SAVE_TRIE_DELAY = 50;
 
-void Binlog_c::SaveMeta () NO_THREAD_SAFETY_ANALYSIS
+void Binlog_c::DoSaveMeta ( IntVec_t dFiles, SaveMeta_e eForce )
 {
-	MEMORY ( MEM_BINLOG );
-
-	// opened and locked, lets write
-	auto dFiles = CollectBinlogFiles();
-	if ( CompareCurrentFiles (dFiles) )
+	if ( eForce==eNoForce && CompareCurrentFiles ( dFiles ) )
 		return; // files are same as stored; no need to rewrite meta
 
 	CSphVector<BYTE> dMeta;
@@ -1218,7 +1255,7 @@ void Binlog_c::SaveMeta () NO_THREAD_SAFETY_ANALYSIS
 	// sphWarning ( "%s", sMetaLog.cstr() );
 
 	Threads::SccWL_t rLock { m_tCurrentFilesAccess };
-	if ( m_dCurrentFiles==dFiles )
+	if ( eForce==eNoForce && m_dCurrentFiles==dFiles )
 		return;
 
 	if ( dFiles.IsEmpty() )
@@ -1268,14 +1305,32 @@ void Binlog_c::SaveMeta () NO_THREAD_SAFETY_ANALYSIS
 }
 
 
+void Binlog_c::SaveMeta ()
+{
+	MEMORY ( MEM_BINLOG );
+	DoSaveMeta ( CollectBinlogFiles (), eNoForce );
+}
+
+
+void Binlog_c::SaveMetaUnlock ( SaveMeta_e eForce )
+{
+	MEMORY ( MEM_BINLOG );
+	DoSaveMeta ( CollectBinlogFilesUnlock (), eForce );
+}
+
+
 IntVec_t Binlog_c::CollectBinlogFiles ()
 {
+	Threads::SccRL_t rLock { m_tHashAccess };
+	return CollectBinlogFilesUnlock();
+}
+
+
+IntVec_t Binlog_c::CollectBinlogFilesUnlock ()
+{
 	IntVec_t dFiles;
-	{
-		Threads::SccRL_t rLock { m_tHashAccess };
-		for ( auto & tBinlog: m_hBinlogs )
-			tBinlog.second->CollectBinlogFiles ( dFiles );
-	}
+	for ( auto & tBinlog: m_hBinlogs )
+		tBinlog.second->CollectBinlogFiles ( dFiles );
 
 	// append not yet processed saved files
 	for ( int i = m_dSavedFiles.GetLength ()-1; i>=0; --i )
@@ -1435,7 +1490,7 @@ void Binlog_c::Replay ( const SmallStringHash_T<CSphIndex *> & hIndexes, Progres
 	}
 
 	if ( !pInfo && !pPrevInfo )
-		SaveMeta();
+		SaveMetaUnlock ( eForce );
 
 	if ( pPrevInfo )
 		pPrevInfo->OpenNewLog ( eLastLogState );
@@ -1902,7 +1957,7 @@ bool Binlog::Commit ( int64_t * pTID, const char* szIndexName, CSphString & sErr
 	return g_pRtBinlog->BinlogCommit ( pTID, szIndexName, std::move (fnSaver), sError );
 }
 
-void Binlog::NotifyIndexFlush ( int64_t iTID, const char * szIndexName, Shutdown_e eShutdown, ForceSave_e eForceSave )
+void Binlog::NotifyIndexFlush ( int64_t iTID, const char * szIndexName, Shutdown_e eShutdown, ForceSave_e eAction )
 {
 	if ( !g_pRtBinlog )
 		return;
@@ -1910,7 +1965,7 @@ void Binlog::NotifyIndexFlush ( int64_t iTID, const char * szIndexName, Shutdown
 	if ( iTID==-1 )
 		return;
 
-	g_pRtBinlog->NotifyIndexFlush ( iTID, szIndexName, (bool)eShutdown, (bool)eForceSave );
+	g_pRtBinlog->NotifyIndexFlush ( iTID, szIndexName, eShutdown, eAction );
 }
 
 CSphString Binlog::GetPath()

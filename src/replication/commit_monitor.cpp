@@ -55,7 +55,7 @@ bool CommitMonitor_c::CommitNonEmptyCmds ( RtIndex_i * pIndex, const Replication
 	if ( !bOnlyTruncate )
 		return pIndex->Commit ( m_pDeletedCount, &m_tAcc, &sError );
 
-	if ( !pIndex->Truncate ( sError ))
+	if ( !pIndex->Truncate ( sError, RtIndex_i::TRUNCATE ))
 		return false;
 
 	if ( !tCmd.m_tReconfigure )

@@ -107,7 +107,7 @@ public:
 	LOAD_E LoadMetaJson ( const CSphString& sMeta, bool bStripPath, FilenameBuilder_i* pFilenameBuilder, StrVec_t& dWarnings );
 	LOAD_E LoadMetaLegacy ( const CSphString& sMeta, bool bStripPath, FilenameBuilder_i* pFilenameBuilder, StrVec_t& dWarnings );
 	bool LoadMeta ( const CSphString& sMeta, bool bStripPath, FilenameBuilder_i* pFilenameBuilder, StrVec_t& dWarnings );
-	bool Truncate ( CSphString & ) override EXCLUDES ( m_tLock );
+	bool Truncate ( CSphString &, Truncate_e eAction ) override EXCLUDES ( m_tLock );
 
 	// RT index stub
 	bool MultiQuery ( CSphQueryResult &, const CSphQuery &, const VecTraits_T<ISphMatchSorter *> &, const CSphMultiQueryArgs & ) const override;
@@ -2895,7 +2895,7 @@ void PercolateIndex_c::SaveMeta ( bool bShutdown )
 	SaveMeta ( GetStored(), bShutdown );
 }
 
-bool PercolateIndex_c::Truncate ( CSphString & sError )
+bool PercolateIndex_c::Truncate ( CSphString & sError, Truncate_e eAction )
 {
 	ScWL_t wLock ( m_tLock );
 
@@ -2908,7 +2908,7 @@ bool PercolateIndex_c::Truncate ( CSphString & sError )
 	SaveMeta ( SharedPQSlice_t ( m_pQueries ) );
 
 	// allow binlog to unlink now-redundant data files
-	Binlog::NotifyIndexFlush ( m_iTID, GetName (), Binlog::NoShutdown, Binlog::ForceSave );
+	Binlog::NotifyIndexFlush ( m_iTID, GetName (), Binlog::NoShutdown, eAction==TRUNCATE ? Binlog::ForceSave : Binlog::DropTable );
 
 	return true;
 }

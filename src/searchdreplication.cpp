@@ -949,7 +949,7 @@ bool HandleCmdReplicated ( RtAccum_t & tAcc )
 	if ( tCmd.m_eCommand == ReplCmd_e::TRUNCATE )
 	{
 		RPL_TNX << "truncate-commit, table '" << tCmd.m_sIndex.cstr() << "'";
-		return WIdx_T<RtIndex_i*> ( pServed )->Truncate ( sError )
+		return WIdx_T<RtIndex_i*> ( pServed )->Truncate ( sError, RtIndex_i::TRUNCATE )
 			|| TlsMsg::Err ( "%s", sError.cstr() );
 	}
 

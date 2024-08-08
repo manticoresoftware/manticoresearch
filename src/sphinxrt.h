@@ -146,7 +146,8 @@ public:
 	virtual bool AttachRtIndex ( RtIndex_i * pIndex, bool bTruncate, bool & bFatal, CSphString & sError ) { return true; }
 
 	/// truncate index (that is, kill all data)
-	virtual bool Truncate ( CSphString & sError ) = 0;
+	enum Truncate_e : bool { TRUNCATE, DROP };
+	virtual bool Truncate ( CSphString & sError, Truncate_e eAction ) = 0;
 
 	virtual void Optimize ( OptimizeTask_t tTask ) {}
 

@@ -2,9 +2,9 @@
 
 **WARNING: This functionality is in beta stage. Use it with caution.**
 
-Joining in Manticore Search allows you to combine rows from two tables based on a related column between them. This feature enables more complex queries and data retrieval across multiple indexes.
+Joining in Manticore Search allows you to combine documents from two tables based on a related column between them. It enables more complex queries and data retrieval across multiple tables.
 
-## Syntax
+## General syntax
 
 ### SQL
 
@@ -17,10 +17,9 @@ SELECT
 	[...other select options]
 ```
 
-You can find other select options in [SELECT](../Searching/Intro.md#SQL) section.
+You can find additional select options in the [SELECT](../Searching/Intro.md#General-syntax) section.
 
 ### JSON
-
 
 ```json
 POST /search
@@ -338,5 +337,3 @@ When using JOINs in Manticore Search, keep the following points in mind:
    ```
 
 By following these guidelines, you can effectively use JOINs in Manticore Search to combine data from multiple indexes and perform complex queries.
-
-

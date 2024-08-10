@@ -15,7 +15,7 @@ listening on %{IPADDR}:9306 for mysql
 listening on %{IPADDR}:9308 for sphinx and http(s)
 Buddy started!
 [%{NUMBER}] %{NUMBER}
-[2] 65
+[%{NUMBER}] %{NUMBER}
 0
 +-------+------+
 | Index | Type |

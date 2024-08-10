@@ -10,7 +10,6 @@
 // did not, you can find it at http://www.gnu.org/
 //
 #include "taskoptimize.h"
-#include "searchdtask.h"
 #include "searchdaemon.h"
 
 /////////////////////////////////////////////////////////////////////////////

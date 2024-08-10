@@ -18,7 +18,7 @@ CREATE TABLE tbl (id BIGINT, model TEXT, storage_capacity INTEGER, color string,
 chmod +x ./test/clt-tests/core/generate-1mln-records.sh
 ––– output –––
 ––– input –––
-./test/clt-tests/core/generate-1mln-records.sh
+total_iterations=20000 ./test/clt-tests/core/generate-1mln-records.sh
 ––– output –––
 +-------+------+
 | Index | Type |
@@ -234,7 +234,7 @@ CREATE TABLE tbl (id BIGINT, model TEXT, storage_capacity INTEGER, color string,
 chmod +x ./test/clt-tests/core/generate-1mln-records.sh
 ––– output –––
 ––– input –––
-./test/clt-tests/core/generate-1mln-records.sh
+total_iterations=20000 ./test/clt-tests/core/generate-1mln-records.sh
 ––– output –––
 +-------+------+
 | Index | Type |

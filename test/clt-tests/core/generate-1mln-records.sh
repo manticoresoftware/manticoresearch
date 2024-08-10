@@ -1,8 +1,6 @@
 #!/bin/bash
 set -e
 
-total_iterations=20000
-
 output_file="/tmp/insert_commands.sql"
 echo "" > $output_file
 

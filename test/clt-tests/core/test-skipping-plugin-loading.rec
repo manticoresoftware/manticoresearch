@@ -1,0 +1,262 @@
+––– block: ../base/start-searchd –––
+––– input –––
+mysql -h0 -P9306 -e "SHOW BUDDY PLUGINS\G;" | grep "manticoresoftware/buddy-plugin-replace"
+––– output –––
+Package: manticoresoftware/buddy-plugin-replace
+––– input –––
+mysql -v -h0 -P9306 -e "SHOW TABLES; DROP TABLE IF EXISTS tbl; SHOW TABLES; CREATE TABLE tbl (id BIGINT, model TEXT, storage_capacity INTEGER, color string, release_year INTEGER, price FLOAT, discounted_price FLOAT, sold BOOL, date_added TIMESTAMP, product_codes MULTI, values MULTI64, additional_info JSON, vector float_vector knn_type='hnsw' knn_dims='4' hnsw_similarity='l2');"
+––– output –––
+--------------
+SHOW TABLES
+--------------
+--------------
+DROP TABLE IF EXISTS tbl
+--------------
+--------------
+SHOW TABLES
+--------------
+--------------
+CREATE TABLE tbl (id BIGINT, model TEXT, storage_capacity INTEGER, color string, release_year INTEGER, price FLOAT, discounted_price FLOAT, sold BOOL, date_added TIMESTAMP, product_codes MULTI, values MULTI64, additional_info JSON, vector float_vector knn_type='hnsw' knn_dims='4' hnsw_similarity='l2')
+--------------
+––– input –––
+chmod +x ./test/clt-tests/core/generate-1mln-records.sh
+––– output –––
+––– input –––
+total_iterations=20 ./test/clt-tests/core/generate-1mln-records.sh
+––– output –––
++-------+------+
+| Index | Type |
++-------+------+
+| tbl   | rt   |
++-------+------+
++----------+
+| count(*) |
++----------+
+|     1000 |
++----------+
+––– input –––
+mysql -h0 -P9306 -e "REPLACE INTO tbl SET model ='iPhone 15 PRO' WHERE id = 101; select * from tbl WHERE id = 101;"
+––– output –––
++------+---------------+------------------+--------+--------------+-------------+------------------+------+------------+---------------+----------------------------------------+-----------------------------------------------------------------------------------+-------------------------------------+
+| id   | model         | storage_capacity | color  | release_year | price       | discounted_price | sold | date_added | product_codes | values                                 | additional_info                                                                   | vector                              |
++------+---------------+------------------+--------+--------------+-------------+------------------+------+------------+---------------+----------------------------------------+-----------------------------------------------------------------------------------+-------------------------------------+
+|  101 | iPhone 15 PRO |              256 | silver |         2021 | 1099.989990 |       989.989990 |    1 | 2224442480 | 1,2,3         | 523456764345678976,9223372036854775807 | {"features":["ProMotion display","A15 Bionic chip","Ceramic Shield front cover"]} | 0.773448,0.312478,0.137971,0.459821 |
++------+---------------+------------------+--------+--------------+-------------+------------------+------+------------+---------------+----------------------------------------+-----------------------------------------------------------------------------------+-------------------------------------+
+––– input –––
+searchd --stopwait
+––– output –––
+Manticore %{SEMVER} %{COMMITDATE}#!/(\sdev)?\s/!#(columnar %{SEMVER} %{COMMITDATE}) (secondary %{SEMVER} %{COMMITDATE}) (knn %{SEMVER} %{COMMITDATE})
+Copyright (c) 2001-2016, Andrew Aksyonoff
+Copyright (c) 2008-2016, Sphinx Technologies Inc (http://sphinxsearch.com)
+Copyright (c) 2017-%{YEAR}, Manticore Software LTD (https://manticoresearch.com)
+[#!/[0-9]{2}:[0-9]{2}.[0-9]{3}/!#] [#!/[0-9]+/!#] using config file '/etc/manticoresearch/manticore.conf' (%{NUMBER} chars)...
+[#!/[0-9]{2}:[0-9]{2}.[0-9]{3}/!#] [#!/[0-9]+/!#] stop: successfully sent SIGTERM to pid %{NUMBER}
+––– input –––
+sed -i '/data_dir = \/var\/lib\/manticore/a\    buddy_path = manticore-executor -n /usr/share/manticore/modules/manticore-buddy/src/main.php --debugv --skip=manticoresoftware/buddy-plugin-replace' /etc/manticoresearch/manticore.conf
+––– output –––
+––– input –––
+rm -f /var/log/manticore/searchd.log; searchd --stopwait > /dev/null; searchd; if timeout 10 grep -qm1 '\[BUDDY\] started' <(tail -n 1000 -f /var/log/manticore/searchd.log); then echo 'Buddy started!'; else echo 'Timeout or failed!'; cat /var/log/manticore/searchd.log;fi
+––– output –––
+Manticore %{SEMVER} %{COMMITDATE}#!/(\sdev)?\s/!#(columnar %{SEMVER} %{COMMITDATE}) (secondary %{SEMVER} %{COMMITDATE}) (knn %{SEMVER} %{COMMITDATE})
+Copyright (c) 2001-2016, Andrew Aksyonoff
+Copyright (c) 2008-2016, Sphinx Technologies Inc (http://sphinxsearch.com)
+Copyright (c) 2017-%{YEAR}, Manticore Software LTD (https://manticoresearch.com)
+[#!/[0-9]{2}:[0-9]{2}.[0-9]{3}/!#] [#!/[0-9]+/!#] using config file '/etc/manticoresearch/manticore.conf' (%{NUMBER} chars)...
+starting daemon version '%{SEMVER} %{COMMITDATE}#!/(\sdev)?\s/!#(columnar %{SEMVER} %{COMMITDATE}) (secondary %{SEMVER} %{COMMITDATE}) (knn %{SEMVER} %{COMMITDATE})' ...
+listening on %{IPADDR}:9312 for sphinx and http(s)
+listening on %{IPADDR}:9306 for mysql
+listening on %{IPADDR}:9308 for sphinx and http(s)
+precaching table 'tbl'
+precached 1 tables in #!/[0-9]{1}.[0-9]{3}/!# sec
+Buddy started!
+––– input –––
+mysql -h0 -P9306 -e "REPLACE INTO tbl SET price =15000.99 WHERE id = 117; select * from tbl WHERE id = 117;"
+––– output –––
+ERROR 1064 (42000) at line 1: P01: syntax error, unexpected SET, expecting VALUES near 'SET price =15000.99 WHERE id = 117'
+––– input –––
+mysql -h0 -P9306 -e "SHOW BUDDY PLUGINS\G;" | grep "manticoresoftware/buddy-plugin-replace"
+––– output –––
+––– input –––
+mysql -h0 -P9306 -e "SHOW BUDDY PLUGINS\G;" | grep "manticoresoftware/buddy-plugin-alter-rename-table"
+––– output –––
+Package: manticoresoftware/buddy-plugin-alter-rename-table
+––– input –––
+mysql -h0 -P9306 -e "CREATE TABLE index2001(f text, s string); insert into index2001 values(01,'abc','string');"
+––– output –––
+––– input –––
+mysql -h0 -P9306 -e "SHOW TABLES"
+––– output –––
++-----------+------+
+| Index     | Type |
++-----------+------+
+| index2001 | rt   |
+| tbl       | rt   |
++-----------+------+
+––– input –––
+mysql -h0 -P9306 -e "ALTER TABLE index2001 RENAME new_index2001;"
+––– output –––
+––– input –––
+mysql -h0 -P9306 -e "SHOW TABLES"
+––– output –––
++---------------+------+
+| Index         | Type |
++---------------+------+
+| new_index2001 | rt   |
+| tbl           | rt   |
++---------------+------+
+––– input –––
+searchd --stopwait
+––– output –––
+Manticore %{SEMVER} %{COMMITDATE}#!/(\sdev)?\s/!#(columnar %{SEMVER} %{COMMITDATE}) (secondary %{SEMVER} %{COMMITDATE}) (knn %{SEMVER} %{COMMITDATE})
+Copyright (c) 2001-2016, Andrew Aksyonoff
+Copyright (c) 2008-2016, Sphinx Technologies Inc (http://sphinxsearch.com)
+Copyright (c) 2017-%{YEAR}, Manticore Software LTD (https://manticoresearch.com)
+[#!/[0-9]{2}:[0-9]{2}.[0-9]{3}/!#] [#!/[0-9]+/!#] using config file '/etc/manticoresearch/manticore.conf' (%{NUMBER} chars)...
+[#!/[0-9]{2}:[0-9]{2}.[0-9]{3}/!#] [#!/[0-9]+/!#] stop: successfully sent SIGTERM to pid %{NUMBER}
+––– input –––
+sed -i '/buddy_path =/c\    buddy_path = manticore-executor -n /usr/share/manticore/modules/manticore-buddy/src/main.php --debugv --skip=manticoresoftware/buddy-plugin-alter-rename-table --skip=manticoresoftware/buddy-plugin-replace' /etc/manticoresearch/manticore.conf
+––– output –––
+––– input –––
+rm -f /var/log/manticore/searchd.log; searchd --stopwait > /dev/null; searchd; if timeout 10 grep -qm1 '\[BUDDY\] started' <(tail -n 1000 -f /var/log/manticore/searchd.log); then echo 'Buddy started!'; else echo 'Timeout or failed!'; cat /var/log/manticore/searchd.log;fi
+––– output –––
+Manticore %{SEMVER} %{COMMITDATE}#!/(\sdev)?\s/!#(columnar %{SEMVER} %{COMMITDATE}) (secondary %{SEMVER} %{COMMITDATE}) (knn %{SEMVER} %{COMMITDATE})
+Copyright (c) 2001-2016, Andrew Aksyonoff
+Copyright (c) 2008-2016, Sphinx Technologies Inc (http://sphinxsearch.com)
+Copyright (c) 2017-%{YEAR}, Manticore Software LTD (https://manticoresearch.com)
+[#!/[0-9]{2}:[0-9]{2}.[0-9]{3}/!#] [#!/[0-9]+/!#] using config file '/etc/manticoresearch/manticore.conf' (%{NUMBER} chars)...
+starting daemon version '%{SEMVER} %{COMMITDATE}#!/(\sdev)?\s/!#(columnar %{SEMVER} %{COMMITDATE}) (secondary %{SEMVER} %{COMMITDATE}) (knn %{SEMVER} %{COMMITDATE})' ...
+listening on %{IPADDR}:9312 for sphinx and http(s)
+listening on %{IPADDR}:9306 for mysql
+listening on %{IPADDR}:9308 for sphinx and http(s)
+precaching table 'tbl'
+precaching table 'new_index2001'
+precached 2 tables in #!/[0-9]{1}.[0-9]{3}/!# sec
+Buddy started!
+––– input –––
+mysql -h0 -P9306 -e "SHOW BUDDY PLUGINS\G;" | grep "manticoresoftware/buddy-plugin-alter-rename-table"
+––– output –––
+––– input –––
+mysql -h0 -P9306 -e "ALTER TABLE new_index2001 RENAME new_index2002;"
+––– output –––
+ERROR 1064 (42000) at line 1: P03: syntax error, unexpected tablename, expecting '=' near 'new_index2002'
+––– input –––
+mysql -h0 -P9306 -e "SHOW TABLES"
+––– output –––
++---------------+------+
+| Index         | Type |
++---------------+------+
+| new_index2001 | rt   |
+| tbl           | rt   |
++---------------+------+
+––– input –––
+searchd --stopwait
+––– output –––
+Manticore %{SEMVER} %{COMMITDATE}#!/(\sdev)?\s/!#(columnar %{SEMVER} %{COMMITDATE}) (secondary %{SEMVER} %{COMMITDATE}) (knn %{SEMVER} %{COMMITDATE})
+Copyright (c) 2001-2016, Andrew Aksyonoff
+Copyright (c) 2008-2016, Sphinx Technologies Inc (http://sphinxsearch.com)
+Copyright (c) 2017-%{YEAR}, Manticore Software LTD (https://manticoresearch.com)
+[#!/[0-9]{2}:[0-9]{2}.[0-9]{3}/!#] [#!/[0-9]+/!#] using config file '/etc/manticoresearch/manticore.conf' (%{NUMBER} chars)...
+[#!/[0-9]{2}:[0-9]{2}.[0-9]{3}/!#] [#!/[0-9]+/!#] stop: successfully sent SIGTERM to pid %{NUMBER}
+––– input –––
+sed -i '/buddy_path =/c\    buddy_path = manticore-executor -n /usr/share/manticore/modules/manticore-buddy/src/main.php --debugv' /etc/manticoresearch/manticore.conf
+––– output –––
+––– input –––
+rm -f /var/log/manticore/searchd.log; searchd --stopwait > /dev/null; searchd; if timeout 10 grep -qm1 '\[BUDDY\] started' <(tail -n 1000 -f /var/log/manticore/searchd.log); then echo 'Buddy started!'; else echo 'Timeout or failed!'; cat /var/log/manticore/searchd.log;fi
+––– output –––
+Manticore %{SEMVER} %{COMMITDATE}#!/(\sdev)?\s/!#(columnar %{SEMVER} %{COMMITDATE}) (secondary %{SEMVER} %{COMMITDATE}) (knn %{SEMVER} %{COMMITDATE})
+Copyright (c) 2001-2016, Andrew Aksyonoff
+Copyright (c) 2008-2016, Sphinx Technologies Inc (http://sphinxsearch.com)
+Copyright (c) 2017-%{YEAR}, Manticore Software LTD (https://manticoresearch.com)
+[#!/[0-9]{2}:[0-9]{2}.[0-9]{3}/!#] [#!/[0-9]+/!#] using config file '/etc/manticoresearch/manticore.conf' (%{NUMBER} chars)...
+starting daemon version '%{SEMVER} %{COMMITDATE}#!/(\sdev)?\s/!#(columnar %{SEMVER} %{COMMITDATE}) (secondary %{SEMVER} %{COMMITDATE}) (knn %{SEMVER} %{COMMITDATE})' ...
+listening on %{IPADDR}:9312 for sphinx and http(s)
+listening on %{IPADDR}:9306 for mysql
+listening on %{IPADDR}:9308 for sphinx and http(s)
+precaching table 'tbl'
+precaching table 'new_index2001'
+precached 2 tables in #!/[0-9]{1}.[0-9]{3}/!# sec
+Buddy started!
+––– input –––
+mysql -h0 -P9306 -e "SHOW BUDDY PLUGINS\G;" | grep "manticoresoftware/buddy-plugin-alter-rename-table"
+––– output –––
+Package: manticoresoftware/buddy-plugin-alter-rename-table
+––– input –––
+mysql -h0 -P9306 -e "ALTER TABLE new_index2001 RENAME new_index2002;"
+––– output –––
+––– input –––
+mysql -h0 -P9306 -e "SHOW TABLES"
+––– output –––
++---------------+------+
+| Index         | Type |
++---------------+------+
+| new_index2002 | rt   |
+| tbl           | rt   |
++---------------+------+
+––– input –––
+searchd --stopwait
+––– output –––
+Manticore %{SEMVER} %{COMMITDATE}#!/(\sdev)?\s/!#(columnar %{SEMVER} %{COMMITDATE}) (secondary %{SEMVER} %{COMMITDATE}) (knn %{SEMVER} %{COMMITDATE})
+Copyright (c) 2001-2016, Andrew Aksyonoff
+Copyright (c) 2008-2016, Sphinx Technologies Inc (http://sphinxsearch.com)
+Copyright (c) 2017-%{YEAR}, Manticore Software LTD (https://manticoresearch.com)
+[#!/[0-9]{2}:[0-9]{2}.[0-9]{3}/!#] [#!/[0-9]+/!#] using config file '/etc/manticoresearch/manticore.conf' (%{NUMBER} chars)...
+[#!/[0-9]{2}:[0-9]{2}.[0-9]{3}/!#] [#!/[0-9]+/!#] stop: successfully sent SIGTERM to pid %{NUMBER}
+––– input –––
+sed -i '/buddy_path =/c\    buddy_path = manticore-executor -n /usr/share/manticore/modules/manticore-buddy/src/main.php --debugv' /etc/manticoresearch/manticore.conf && for plugin in "manticoresoftware/buddy-plugin-empty-string" "manticoresoftware/buddy-plugin-backup" "manticoresoftware/buddy-plugin-emulate-elastic" "manticoresoftware/buddy-plugin-create" "manticoresoftware/buddy-plugin-drop" "manticoresoftware/buddy-plugin-insert" "manticoresoftware/buddy-plugin-alias" "manticoresoftware/buddy-plugin-select" "manticoresoftware/buddy-plugin-show" "manticoresoftware/buddy-plugin-cli-table" "manticoresoftware/buddy-plugin-test" "manticoresoftware/buddy-plugin-alter-column" "manticoresoftware/buddy-plugin-alter-distributed-table" "manticoresoftware/buddy-plugin-alter-rename-table" "manticoresoftware/buddy-plugin-modify-table" "manticoresoftware/buddy-plugin-knn" "manticoresoftware/buddy-plugin-replace" "manticoresoftware/buddy-plugin-queue" "manticoresoftware/buddy-plugin-sharding" "manticoresoftware/buddy-plugin-update" "manticoresoftware/buddy-plugin-fuzzy" "manticoresoftware/buddy-plugin-autocomplete"; do sed -i "/buddy_path =/ s/$/ --skip=${plugin//\//\\/}/" /etc/manticoresearch/manticore.conf; done
+––– output –––
+––– input –––
+cat /etc/manticoresearch/manticore.conf
+––– output –––
+searchd {
+listen = 127.0.0.1:9312
+listen = 127.0.0.1:9306:mysql
+listen = 127.0.0.1:9308:http
+log = /var/log/manticore/searchd.log
+query_log = /var/log/manticore/query.log
+pid_file = /var/run/manticore/searchd.pid
+data_dir = /var/lib/manticore
+buddy_path = manticore-executor -n /usr/share/manticore/modules/manticore-buddy/src/main.php --debugv --skip=manticoresoftware/buddy-plugin-empty-string --skip=manticoresoftware/buddy-plugin-backup --skip=manticoresoftware/buddy-plugin-emulate-elastic --skip=manticoresoftware/buddy-plugin-create --skip=manticoresoftware/buddy-plugin-drop --skip=manticoresoftware/buddy-plugin-insert --skip=manticoresoftware/buddy-plugin-alias --skip=manticoresoftware/buddy-plugin-select --skip=manticoresoftware/buddy-plugin-show --skip=manticoresoftware/buddy-plugin-cli-table --skip=manticoresoftware/buddy-plugin-test --skip=manticoresoftware/buddy-plugin-alter-column --skip=manticoresoftware/buddy-plugin-alter-distributed-table --skip=manticoresoftware/buddy-plugin-alter-rename-table --skip=manticoresoftware/buddy-plugin-modify-table --skip=manticoresoftware/buddy-plugin-knn --skip=manticoresoftware/buddy-plugin-replace --skip=manticoresoftware/buddy-plugin-queue --skip=manticoresoftware/buddy-plugin-sharding --skip=manticoresoftware/buddy-plugin-update --skip=manticoresoftware/buddy-plugin-fuzzy --skip=manticoresoftware/buddy-plugin-autocomplete
+}
+––– input –––
+rm -f /var/log/manticore/searchd.log; searchd --stopwait > /dev/null; searchd; if timeout 10 grep -qm1 '\[BUDDY\] started' <(tail -n 1000 -f /var/log/manticore/searchd.log); then echo 'Buddy started!'; else echo 'Timeout or failed!'; cat /var/log/manticore/searchd.log;fi
+––– output –––
+Manticore %{SEMVER} %{COMMITDATE}#!/(\sdev)?\s/!#(columnar %{SEMVER} %{COMMITDATE}) (secondary %{SEMVER} %{COMMITDATE}) (knn %{SEMVER} %{COMMITDATE})
+Copyright (c) 2001-2016, Andrew Aksyonoff
+Copyright (c) 2008-2016, Sphinx Technologies Inc (http://sphinxsearch.com)
+Copyright (c) 2017-%{YEAR}, Manticore Software LTD (https://manticoresearch.com)
+[#!/[0-9]{2}:[0-9]{2}.[0-9]{3}/!#] [#!/[0-9]+/!#] using config file '/etc/manticoresearch/manticore.conf' (%{NUMBER} chars)...
+starting daemon version '%{SEMVER} %{COMMITDATE}#!/(\sdev)?\s/!#(columnar %{SEMVER} %{COMMITDATE}) (secondary %{SEMVER} %{COMMITDATE}) (knn %{SEMVER} %{COMMITDATE})' ...
+listening on %{IPADDR}:9312 for sphinx and http(s)
+listening on %{IPADDR}:9306 for mysql
+listening on %{IPADDR}:9308 for sphinx and http(s)
+precaching table 'tbl'
+precaching table 'new_index2002'
+precached 2 tables in #!/[0-9]{1}.[0-9]{3}/!# sec
+Buddy started!
+––– input –––
+mysql -h0 -P9306 -e "SHOW BUDDY PLUGINS\G;"
+––– output –––
+*************************** 1. row ***************************
+Package: manticoresoftware/buddy-plugin-plugin
+Plugin: plugin
+Version: 2.3.13
+Type: core
+Info: Core logic for plugin support and helpers. Also handles `create buddy plugin`, `delete buddy plugin`, and `show buddy plugins`
+*************************** 2. row ***************************
+Package: manticoresoftware/buddy-plugin-update
+Plugin: update
+Version: 2.3.13
+Type: core
+Info: Handles UPDATE statements sent by MySQL tools making possible for them to update full-text fields
+*************************** 3. row ***************************
+Package: manticoresoftware/buddy-plugin-fuzzy
+Plugin: fuzzy
+Version: 2.3.13
+Type: core
+Info: Fuzzy search plugin. It helps to find the best match for a given query.
+*************************** 4. row ***************************
+Package: manticoresoftware/buddy-plugin-autocomplete
+Plugin: autocomplete
+Version: 2.3.13
+Type: core
+Info: Autocomplete plugin that offers suggestions based on the starting query

@@ -1,0 +1,10 @@
+––– input –––
+sed -i '/data_dir = \/var\/lib\/manticore/a\    buddy_path = manticore-executor -n /usr/share/manticore/modules/manticore-buddy/src/main.php --debugv --telemetry-period=1' /etc/manticoresearch/manticore.conf
+––– output –––
+––– input –––
+cat /etc/manticoresearch/manticore.conf
+––– output –––
+––– block: ../base/start-searchd –––
+––– input –––
+cat /var/log/manticore/searchd.log
+––– output –––

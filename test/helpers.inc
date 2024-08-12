@@ -501,6 +501,9 @@ function CheckSearchdLog ( $error_file, &$retval )
 				// Adding an explicit check to avoid possible fails caused by the columnar library init warning
 				if ( $tag==="WARNING:" && strpos ( $line, "WARNING: Error initializing columnar storage" )!==false )
 					continue;
+				// empty binlog is not the actual warning for tests
+				if ( $tag==="WARNING:" && strpos ( $line, "WARNING: binlog: empty binlog" )!==false )
+					continue;
 				$error .= $t."\n";
 				if ( $tag!="WARNING:" )
 					$retval = 1;

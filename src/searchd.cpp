@@ -16076,6 +16076,11 @@ void HandleMysqlShowIndexSettings ( RowBuffer_i & tOut, const SqlStmt_t & tStmt 
 
 	auto fnShowSettings = [&tOut, szStmt=tStmt.m_sStmt] ( const CSphIndex* pIndex )
 	{
+		if ( !pIndex )
+		{
+			tOut.Error ( "SHOW TABLE SETTINGS requires an existing table" );
+			return;
+		}
 		if ( !tOut.HeadOfStrings ( { "Variable_name", "Value" } ) )
 			return;
 

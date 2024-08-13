@@ -187,6 +187,8 @@ public:
 		Dequeue();
 		if ( m_bVip )
 			ClientTaskInfo_t::m_iVips.fetch_sub ( 1, std::memory_order_relaxed );
+		if ( m_pInfo->GetBuddy() )
+			ClientTaskInfo_t::m_iBuddy.fetch_sub ( 1, std::memory_order_relaxed );
 		ClientTaskInfo_t::m_iClients.fetch_sub ( 1, std::memory_order_relaxed );
 	}
 

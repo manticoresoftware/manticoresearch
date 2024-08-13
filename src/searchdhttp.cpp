@@ -555,6 +555,11 @@ const char* HttpRequestParser_c::Error() const
 	return m_szError;
 }
 
+bool HttpRequestParser_c::IsBuddyQuery () const
+{
+	return ::IsBuddyQuery ( m_hOptions );
+}
+
 inline int Char2Hex ( BYTE uChar )
 {
 	switch (uChar)

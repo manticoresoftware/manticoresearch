@@ -122,7 +122,10 @@ void HttpServe ( std::unique_ptr<AsyncNetBuffer_c> pBuf )
 			break;
 		}
 
+		session::Info().SetBuddy ( tParser.IsBuddyQuery() );
+
 		// check if we should interrupt because of maxed-out
+		// but not for buddy queries
 		if ( IsMaxedOut() )
 		{
 			HttpReply ( EHTTP_STATUS::_503, g_sMaxedOutMessage );

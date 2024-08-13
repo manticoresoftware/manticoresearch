@@ -1,10 +1,36 @@
 ––– input –––
-sed -i '/data_dir = \/var\/lib\/manticore/a\    buddy_path = manticore-executor -n /usr/share/manticore/modules/manticore-buddy/src/main.php --debugv --telemetry-period=1' /etc/manticoresearch/manticore.conf
+apt-get install jq -y > /dev/null; echo $?
 ––– output –––
+debconf: delaying package configuration, since apt-utils is not installed
+0
 ––– input –––
-cat /etc/manticoresearch/manticore.conf
+sed -i '/data_dir = \/var\/lib\/manticore/a\    buddy_path = manticore-executor -n /usr/share/manticore/modules/manticore-buddy/src/main.php --debugv --telemetry-period=5' /etc/manticoresearch/manticore.conf
 ––– output –––
 ––– block: ../base/start-searchd –––
 ––– input –––
-cat /var/log/manticore/searchd.log
+timeout 60 bash -c 'grep -m 1 "labels:" <(tail -f /var/log/manticore/searchd.log) | sed "s/.*labels: //" | jq -M .'
 ––– output –––
+{
+"collector": "buddy",
+"os_name": "Linux",
+"os_release_name": "Ubuntu",
+"os_release_version": "22.04.4 LTS (Jammy Jellyfish)",
+"machine_type": "x86_64",
+"machine_id": "#!/[0-9A-Za-z]+/!#",
+"dockerized": "unknown",
+"official_docker": "no",
+"buddy_version": "%{SEMVER}",
+"manticore_version": "%{SEMVER} %{COMMITDATE} dev",
+"columnar_version": "%{SEMVER} %{COMMITDATE}",
+"secondary_version": "%{SEMVER} %{COMMITDATE}",
+"knn_version": "%{SEMVER} %{COMMITDATE}",
+"manticore_mode": "rt",
+"manticore_binlog_enabled": "yes",
+"manticore_auto_optimize_enabled": "yes",
+"manticore_query_log_format": "sphinxql",
+"manticore_max_allowed_packet": "%{NUMBER}",
+"manticore_pseudo_sharding_enabled": "yes",
+"manticore_secondary_indexes_enabled": "yes",
+"manticore_accurate_aggregation_enabled": "no",
+"manticore_distinct_precision_threshold": "3500"
+}

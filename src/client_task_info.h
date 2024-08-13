@@ -43,6 +43,7 @@ private:
 	bool m_bVip = false;
 	bool m_bReadOnly = false;
 	bool m_bKilled = false;
+	bool m_bBuddy = false;
 
 	// session variables - doesn't participate in render, used as connection-wide globals
 public:
@@ -63,6 +64,7 @@ public:
 	void*				m_pSessionOpaque2 = nullptr;
 	static std::atomic<int> m_iClients;
 	static std::atomic<int> m_iVips;
+	static std::atomic<int> m_iBuddy;
 
 	Dispatcher::Template_t m_tBaseDispatcherTemplate;
 	Dispatcher::Template_t m_tPseudoShardingDispatcherTemplate;
@@ -96,6 +98,10 @@ public:
 	bool GetVip() const { return m_bVip; }
 	inline static int GetVips() { return m_iVips.load ( std::memory_order_relaxed ); }
 	inline static int GetClients() { return m_iClients.load ( std::memory_order_relaxed ); }
+
+	void SetBuddy ( bool bBuddy );
+	bool GetBuddy() const { return m_bBuddy; }
+	inline static int GetBuddyCount() { return m_iBuddy.load ( std::memory_order_relaxed ); }
 
 	void SetReadOnly ( bool bReadOnly ) { m_bReadOnly = bReadOnly; }
 	bool GetReadOnly() const { return m_bReadOnly; }
@@ -179,6 +185,9 @@ namespace session {
 	inline int GetVips() { return ClientTaskInfo_t::GetVips(); }
 	inline int GetClients() { return ClientTaskInfo_t::GetClients(); }
 
+	inline bool GetBuddy() { return ClientTaskInfo_t::Info().GetBuddy(); }
+	inline int GetBuddyCount() { return ClientTaskInfo_t::GetBuddyCount(); }
+
 	inline void SetReadOnly ( bool bReadOnly ) { ClientTaskInfo_t::Info().SetReadOnly (bReadOnly); }
 	inline bool GetReadOnly() { return ClientTaskInfo_t::Info().GetReadOnly(); }
 
@@ -222,7 +231,7 @@ namespace myinfo {
 	// num of client tasks, not including vips
 	inline int CountClients ()
 	{
-		return session::GetClients() - session::GetVips();
+		return session::GetClients() - ( session::GetVips() + session::GetBuddyCount() );
 	}
 
 	// num of real tasks (that is mini-info + client-info)

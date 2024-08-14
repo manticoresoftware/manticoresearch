@@ -87,3 +87,8 @@ query: show_settings
 time: %{NUMBER}us
 protocol: http
 host: %{IPADDR}:%{NUMBER}
+––– input –––
+mysql -P9306 -h0 -e "SHOW STATUS\G;" | grep -A 1 'Counter: workers_clients_buddy'
+––– output –––
+Counter: workers_clients_buddy
+Value: 2

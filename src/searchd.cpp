@@ -15137,6 +15137,16 @@ void HandleCurl ( RowBuffer_i & tOut, const CSphString & sParam )
 	tOut.Eof();
 }
 
+
+void HandlePause ( RowBuffer_i & tOut, const DebugCmd::DebugCommand_t & tCmd )
+{
+	tOut.HeadTuplet ( "command", "result" );
+	auto bPause = tCmd.m_iPar1!=0;
+	PauseAt ( tCmd.m_sParam, bPause );
+	tOut.DataTuplet ( "debug pause ...", bPause ? "Set" : "Unset" );
+	tOut.Eof ();
+}
+
 #if HAVE_MALLOC_STATS
 void HandleMallocStats ( RowBuffer_i & tOut, const CSphString& sParam )
 {
@@ -15268,6 +15278,7 @@ void HandleMysqlDebug ( RowBuffer_i &tOut, const DebugCmd::DebugCommand_t* pComm
 #endif
 	case Cmd_e::TRACE: HandleTrace ( tOut, tCmd );	return;
 	case Cmd_e::CURL: HandleCurl ( tOut, tCmd.m_sParam ); return;
+	case Cmd_e::PAUSE: HandlePause ( tOut, tCmd ); return;
 	default: break;
 	}
 

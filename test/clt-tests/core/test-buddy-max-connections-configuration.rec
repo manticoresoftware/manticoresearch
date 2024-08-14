@@ -26,7 +26,7 @@ host: %{IPADDR}:%{NUMBER}
 *************************** 2. row ***************************
 id: %{NUMBER}
 query: select
-time: %{NUMBER}ms ago
+time: %{NUMBER}#!/\b(?:us|ms)\b/!# ago
 protocol: http
 host: %{IPADDR}:%{NUMBER}
 *************************** 3. row ***************************
@@ -78,7 +78,7 @@ host: %{IPADDR}:%{NUMBER}
 *************************** 2. row ***************************
 id: %{NUMBER}
 query: select
-time: %{NUMBER}ms ago
+time: %{NUMBER}#!/\b(?:us|ms)\b/!# ago
 protocol: http
 host: %{IPADDR}:%{NUMBER}
 *************************** 3. row ***************************

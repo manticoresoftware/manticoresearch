@@ -265,6 +265,15 @@ If you attempt to INSERT multiple rows with different, incompatible value types 
 * uint -> bigint -> float
 * string -> text
 
+Also, the following formats of dates will be recognized and converted to timestamps while all other date formats will be treated as strings:
+- `%Y-%m-%dT%H:%M:%E*S%Z`
+- `%Y-%m-%d'T'%H:%M:%S%Z`
+- `%Y-%m-%dT%H:%M:%E*S`
+- `%Y-%m-%dT%H:%M:%s`
+- `%Y-%m-%dT%H:%M`
+- `%Y-%m-%dT%H`
+
+
 Keep in mind that the `/bulk` HTTP endpoint does not support automatic table creation (auto schema). Only the `/_bulk` (Elasticsearch-like) HTTP endpoint and the SQL interface support this feature.
 
 <!-- intro -->

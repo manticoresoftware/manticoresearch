@@ -1,0 +1,89 @@
+––– input –––
+sed -i '/^searchd/a\    max_connections=1' /etc/manticoresearch/manticore.conf
+––– output –––
+––– input –––
+rm -f /var/log/manticore/searchd.log; searchd --stopwait > /dev/null; searchd; if timeout 10 grep -qm1 '\[BUDDY\] started' <(tail -n 1000 -f /var/log/manticore/searchd.log); then echo 'Buddy started!'; else echo 'Timeout or failed!'; cat /var/log/manticore/searchd.log;fi;
+––– output –––
+Manticore %{SEMVER} %{COMMITDATE}#!/(\sdev)?\s/!#(columnar %{SEMVER} %{COMMITDATE}) (secondary %{SEMVER} %{COMMITDATE}) (knn %{SEMVER} %{COMMITDATE})
+Copyright (c) 2001-2016, Andrew Aksyonoff
+Copyright (c) 2008-2016, Sphinx Technologies Inc (http://sphinxsearch.com)
+Copyright (c) 2017-%{YEAR}, Manticore Software LTD (https://manticoresearch.com)
+[#!/[0-9]{2}:[0-9]{2}.[0-9]{3}/!#] [#!/[0-9]+/!#] using config file '/etc/manticoresearch/manticore.conf' (%{NUMBER} chars)...
+starting daemon version '%{SEMVER} %{COMMITDATE}#!/(\sdev)?\s/!#(columnar %{SEMVER} %{COMMITDATE}) (secondary %{SEMVER} %{COMMITDATE}) (knn %{SEMVER} %{COMMITDATE})' ...
+listening on %{IPADDR}:9312 for sphinx and http(s)
+listening on %{IPADDR}:9306 for mysql
+listening on %{IPADDR}:9308 for sphinx and http(s)
+Buddy started!
+––– input –––
+mysql -P9306 -h0 -e "CREATE TABLE IF NOT EXISTS t (id INT); INSERT INTO t (id) VALUES(0); SHOW QUERIES\G;"
+––– output –––
+*************************** 1. row ***************************
+id: %{NUMBER}
+query: SHOW QUERIES
+time: %{NUMBER}us
+protocol: mysql
+host: %{IPADDR}:%{NUMBER}
+*************************** 2. row ***************************
+id: %{NUMBER}
+query: select
+time: %{NUMBER}ms ago
+protocol: http
+host: %{IPADDR}:%{NUMBER}
+*************************** 3. row ***************************
+id: %{NUMBER}
+query: show_settings
+time: %{NUMBER}us
+protocol: http
+host: %{IPADDR}:%{NUMBER}
+––– input –––
+searchd --stopwait
+––– output –––
+Manticore %{SEMVER} %{COMMITDATE}#!/(\sdev)?\s/!#(columnar %{SEMVER} %{COMMITDATE}) (secondary %{SEMVER} %{COMMITDATE}) (knn %{SEMVER} %{COMMITDATE})
+Copyright (c) 2001-2016, Andrew Aksyonoff
+Copyright (c) 2008-2016, Sphinx Technologies Inc (http://sphinxsearch.com)
+Copyright (c) 2017-%{YEAR}, Manticore Software LTD (https://manticoresearch.com)
+[#!/[0-9]{2}:[0-9]{2}.[0-9]{3}/!#] [#!/[0-9]+/!#] using config file '/etc/manticoresearch/manticore.conf' (%{NUMBER} chars)...
+[#!/[0-9]{2}:[0-9]{2}.[0-9]{3}/!#] [#!/[0-9]+/!#] stop: successfully sent SIGTERM to pid %{NUMBER}
+––– input –––
+sed -i '/^searchd/,/^}/s/max_connections=1/max_connections=2/' /etc/manticoresearch/manticore.conf
+––– output –––
+––– input –––
+rm -f /var/log/manticore/searchd.log; searchd --stopwait > /dev/null; searchd; if timeout 10 grep -qm1 '\[BUDDY\] started' <(tail -n 1000 -f /var/log/manticore/searchd.log); then echo 'Buddy started!'; else echo 'Timeout or failed!'; cat /var/log/manticore/searchd.log;fi;
+––– output –––
+Manticore %{SEMVER} %{COMMITDATE}#!/(\sdev)?\s/!#(columnar %{SEMVER} %{COMMITDATE}) (secondary %{SEMVER} %{COMMITDATE}) (knn %{SEMVER} %{COMMITDATE})
+Copyright (c) 2001-2016, Andrew Aksyonoff
+Copyright (c) 2008-2016, Sphinx Technologies Inc (http://sphinxsearch.com)
+Copyright (c) 2017-%{YEAR}, Manticore Software LTD (https://manticoresearch.com)
+[#!/[0-9]{2}:[0-9]{2}.[0-9]{3}/!#] [#!/[0-9]+/!#] using config file '/etc/manticoresearch/manticore.conf' (%{NUMBER} chars)...
+starting daemon version '%{SEMVER} %{COMMITDATE}#!/(\sdev)?\s/!#(columnar %{SEMVER} %{COMMITDATE}) (secondary %{SEMVER} %{COMMITDATE}) (knn %{SEMVER} %{COMMITDATE})' ...
+listening on %{IPADDR}:9312 for sphinx and http(s)
+listening on %{IPADDR}:9306 for mysql
+listening on %{IPADDR}:9308 for sphinx and http(s)
+precaching table 't'
+precached 1 tables in #!/[0-9]+.[0-9]+/!# sec
+Buddy started!
+––– input –––
+for n in 1 2; do mysql -P9306 -h0 -e "CREATE TABLE IF NOT EXISTS b${n} (id INT);" ; done; sleep 1; for n in 1 2; do mysql -P9306 -h0 -e "INSERT INTO b${n} (id) VALUES(0)" & pids="$pids $!"; done; for pid in $pids; do wait $pid; done; mysql -P9306 -h0 -e "show queries\G;"
+––– output –––
+[1] %{NUMBER}
+[2] %{NUMBER}
+[1]-  Done                    mysql -P9306 -h0 -e "INSERT INTO b${n} (id) VALUES(0)"
+[2]+  Done                    mysql -P9306 -h0 -e "INSERT INTO b${n} (id) VALUES(0)"
+*************************** 1. row ***************************
+id: %{NUMBER}
+query: show queries
+time: %{NUMBER}us
+protocol: mysql
+host: %{IPADDR}:%{NUMBER}
+*************************** 2. row ***************************
+id: %{NUMBER}
+query: select
+time: %{NUMBER}ms ago
+protocol: http
+host: %{IPADDR}:%{NUMBER}
+*************************** 3. row ***************************
+id: %{NUMBER}
+query: show_settings
+time: %{NUMBER}us
+protocol: http
+host: %{IPADDR}:%{NUMBER}

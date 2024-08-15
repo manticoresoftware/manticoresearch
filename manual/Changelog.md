@@ -1,5 +1,9 @@
 # Changelog
 
+# Version x.y.z (dev)
+
+* [Issue #268](https://github.com/manticoresoftware/manticoresearch-buddy/issues/268) Autodetection of data types imported from Elastic.
+
 # Version 6.3.6
 Released: August 2nd 2024
 

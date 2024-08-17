@@ -8113,25 +8113,26 @@ bool RtIndex_c::FillKeywords ( CSphVector<CSphKeywordInfo> & dKeywords ) const
 
 
 // for each RamSegment collect list of rows and indexes in update ctx
-CSphFixedVector<RowsToUpdateData_t> Update_CollectRowPtrs ( UpdateContext_t & tCtx, const ConstRtSegmentSlice_t& tSegments  )
+RowsToUpdateData_t CollectUpdatableRows ( UpdateContext_t & tCtx, const ConstRtSegmentRefPtf_t & tSegment ) noexcept
 {
-	CSphFixedVector<RowsToUpdateData_t> dUpdateSets { tSegments.GetLength () };
+	RowsToUpdateData_t dUpdateSet;
 
 	// collect idxes of alive (not-yet-updated) rows
-	const auto& dDocids = tCtx.m_tUpd.m_pUpdate->m_dDocids;
+	const auto & dDocids = tCtx.m_tUpd.m_pUpdate->m_dDocids;
 	ARRAY_CONSTFOREACH ( i, dDocids )
-		if ( !tCtx.m_tUpd.m_dUpdated.BitGet ( i ) )
-			ARRAY_CONSTFOREACH ( j, tSegments )
-			{
-				auto tRowID = tSegments[j]->GetAliveRowidByDocid( dDocids[i] );
-				if ( tRowID==INVALID_ROWID )
-					continue;
+	{
+		if ( tCtx.m_tUpd.m_dUpdated.BitGet ( i ) )
+			continue;
 
-				auto& dUpd = dUpdateSets[j].Add();
-				dUpd.m_tRow = tRowID;
-				dUpd.m_iIdx = i;
-			}
-	return dUpdateSets;
+		auto tRowID = tSegment->GetAliveRowidByDocid ( dDocids[i] );
+		if ( tRowID==INVALID_ROWID )
+			continue;
+
+		auto & dUpd = dUpdateSet.Add ();
+		dUpd.m_tRow = tRowID;
+		dUpd.m_iIdx = i;
+	}
+	return dUpdateSet;
 }
 
 // when RAM segment is used in merge or saving to disk - it's data finally became merged into new segment or chunk,
@@ -8266,20 +8267,20 @@ int RtIndex_c::CheckThenUpdateAttributes ( AttrUpdateInc_t& tUpd, bool& bCritica
 	// do update in serial fiber. That ensures no concurrency with set of chunks changing, however need to dispatch
 	// with changers themselves (merge segments, merge chunks, save disk chunks).
 	// fixme! Find another way (dedicated fiber?), as long op in serial fiber may pause another ops.
-	auto tGuard = RtGuard();
-	auto dRamUpdateSets = Update_CollectRowPtrs ( tCtx, tGuard.m_dRamSegs );
-
 	ScopedScheduler_c tSerialFiber ( m_tWorkers.SerialChunkAccess() );
+	auto tGuard = RtGuard ();
+//	PauseCheck("rtpause"); // catch if something happened between RtGuard() and actual updates
 	TRACE_CORO ( "rt", "UpdateAttributes_serial" );
-	ARRAY_CONSTFOREACH ( i, dRamUpdateSets )
+	for ( auto& dRamSegment : tGuard.m_dRamSegs )
 	{
-		if ( dRamUpdateSets[i].IsEmpty() )
+		auto dRamUpdateSet = CollectUpdatableRows ( tCtx, dRamSegment );
+		if ( dRamUpdateSet.IsEmpty() )
 			continue;
 
 		if ( fnWatcher && !fnWatcher() )
 			return -1;
 
-		auto* pSeg = const_cast<RtSegment_t*> ( (const RtSegment_t*)tGuard.m_dRamSegs[i] );
+		auto* pSeg = const_cast<RtSegment_t*> ( (const RtSegment_t*) dRamSegment );
 		BEGIN_CORO ( "wait", "ram-seg-wlock");
 		SccWL_t wLock ( pSeg->m_tLock );
 		END_CORO ( "wait" );
@@ -8289,10 +8290,10 @@ int RtIndex_c::CheckThenUpdateAttributes ( AttrUpdateInc_t& tUpd, bool& bCritica
 		// point context to target segment
 		tCtx.m_pAttrPool = pSeg->m_dRows.begin();
 		tCtx.m_pBlobPool = pSeg->m_dBlobs.begin();
-		if ( !pSeg->Update_UpdateAttributes ( dRamUpdateSets[i], tCtx, bCritical, sError ) )
+		if ( !pSeg->Update_UpdateAttributes ( dRamUpdateSet, tCtx, bCritical, sError ) )
 			return -1;
 
-		pSeg->MaybeAddPostponedUpdate( dRamUpdateSets[i], tCtx );
+		pSeg->MaybeAddPostponedUpdate( dRamUpdateSet, tCtx );
 
 		if ( tUpd.AllApplied () )
 			break;

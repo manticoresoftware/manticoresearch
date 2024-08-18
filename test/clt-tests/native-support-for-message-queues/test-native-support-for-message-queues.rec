@@ -370,9 +370,12 @@ docker exec manticore mysql -h0 -P9306 -e "CREATE MATERIALIZED VIEW view_table_s
 docker exec kafka ./import.sh; echo $?
 ––– output –––
 ––– input –––
-timeout 60 bash -c 'docker exec manticore bash -c "tail -f /var/log/manticore/searchd.log" | grep -m2 "REPLACE+INTO+destination_kafka" > /dev/null && echo "Download completed."' || echo "Download failed."
+timeout 60 bash -c 'docker exec manticore bash -c "tail -f /var/log/manticore/searchd.log" | grep -m1 "REPLACE+INTO+destination_kafka_stop" > /dev/null && echo "Download completed."' || echo "Download failed."
 ––– output –––
 Download completed.
+––– input –––
+docker exec manticore mysql -h0 -P9306 -e "SELECT COUNT(*) FROM destination_kafka_stop;"
+––– output –––
 ––– input –––
 sleep 1; docker exec manticore searchd --stopwait
 ––– output –––
@@ -417,10 +420,12 @@ Copyright (c) 2017-%{YEAR}, Manticore Software LTD (https://manticoresearch.com)
 docker exec manticore mysql -h0 -P9306 -e "SELECT COUNT(*) FROM destination_kafka_stop;"
 ––– output –––
 ––– input –––
-timeout 60 bash -c 'docker exec manticore bash -c "tail -f /var/log/manticore/searchd.log" | grep -m1 "REPLACE+INTO+destination_kafka_stop" > /dev/null && echo "Download completed."' || echo "Download failed."
+sleep 30; docker exec manticore cat /var/log/manticore/searchd.log
+––– output –––
+––– input –––
+timeout 60 bash -c 'docker exec manticore bash -c "tail -f /var/log/manticore/searchd.log" | grep -m2 "REPLACE+INTO+destination_kafka_stop" > /dev/null && echo "Download completed."' || echo "Download failed."
 ––– output –––
 Download completed.
 ––– input –––
 docker exec manticore mysql -h0 -P9306 -e "SELECT COUNT(*) FROM destination_kafka_stop";"
 ––– output –––
-

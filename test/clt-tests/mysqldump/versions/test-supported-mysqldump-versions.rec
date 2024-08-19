@@ -405,7 +405,7 @@ WARNING: option --ssl-verify-server-cert is disabled, because of an insecure pas
 |   20 | bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb                                       |  48474 |   62408120.000000 | {"a":[1200217209,500666982],"b":2116623760}  | 328478084,504655829,1689585645   | bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb                                       |    1 |  920211881 | 229395197  | 1011787776.000000 |
 +------+----------------------------------------------------------------------------------------------------+--------+-------------------+----------------------------------------------+----------------------------------+----------------------------------------------------------------------------------------------------+------+------------+------------+-------------------+
 Dump mariadb:11.4 completed successfully
-Testing version: mariadb:latest
+Testing version: mariadb:11.5
 WARNING: option --ssl-verify-server-cert is disabled, because of an insecure passwordless login.
 WARNING: option --ssl-verify-server-cert is disabled, because of an insecure passwordless login.
 WARNING: option --ssl-verify-server-cert is disabled, because of an insecure passwordless login.

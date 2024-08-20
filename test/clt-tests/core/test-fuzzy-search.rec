@@ -392,6 +392,17 @@ mysql -h0 -P9306 -e "CALL AUTOCOMPLETE('jo', 'name', 1 AS prepend, 1 AS append);
 ––– input –––
 mysql -h0 -P9306 -e "CALL AUTOCOMPLETE('jo', 'name', 1 AS fuzziness, '' AS layouts, 1 AS append, 1 AS prepend);" | tail -n +4 | sort
 ––– output –––
++---------+
+| joe     |
+| john    |
+| johnson |
+| jonas   |
+| jordan  |
+| jose    |
+| joseph  |
+| joy     |
+| joyce   |
+| major   |
 ––– input –––
 mysql -h0 -P9306 -e "CALL AUTOCOMPLETE('jo', 'name', 2 AS fuzziness, 'us,ru' AS layouts, 1 AS append, 1 AS prepend, 2 AS expansion_len);" | tail -n +4 | sort
 ––– output –––
@@ -531,6 +542,17 @@ mysql -h0 -P9306 -e "CALL AUTOCOMPLETE('ch', 'name', 1 AS fuzziness, 3 AS expans
 ––– input –––
 mysql -h0 -P9306 -e "CALL AUTOCOMPLETE('зф', 'name', 'us,ru' AS layouts);" | tail -n +4 | sort
 ––– output –––
++---------+
+| page    |
+| paige   |
+| palma   |
+| palmer  |
+| paris   |
+| parker  |
+| pat     |
+| patrick |
+| paul    |
+| paz     |
 ––– input –––
 mysql -h0 -P9306 -e "CALL AUTOCOMPLETE('зф', 'name', 'us' AS layouts);" | tail -n +4 | sort
 ––– output –––

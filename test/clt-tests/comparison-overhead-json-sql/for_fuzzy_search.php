@@ -16,7 +16,7 @@ function connectDb() {
 function process($link, $query) {
     $result = mysqli_query($link, $query);
     if (!$result) {
-        echo "Ошибка выполнения запроса: " . mysqli_error($link) . "\n";
+        echo "Request Execution Error: " . mysqli_error($link) . "\n";
         return false;
     }
     return true;

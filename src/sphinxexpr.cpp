@@ -2766,7 +2766,7 @@ bool CanAliasedExprSetupAsFilter ( const CSphFilterSettings & tFilter, bool & bE
 		if ( tFilter.m_dValues[0]!=0 && tFilter.m_dValues[0]!=1 )
 			return false;
 
-		bExclude = tFilter.m_dValues[0]==0;
+		bExclude = ( tFilter.m_dValues[0]==0 ) ^ tFilter.m_bExclude;
 		return true;
 
 	case SPH_FILTER_RANGE:

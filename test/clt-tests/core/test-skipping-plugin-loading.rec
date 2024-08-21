@@ -59,7 +59,7 @@ Copyright (c) 2017-%{YEAR}, Manticore Software LTD (https://manticoresearch.com)
 ––– input –––
 sed -i '/data_dir = \/var\/lib\/manticore/a\    buddy_path = manticore-executor -n /usr/share/manticore/modules/manticore-buddy/src/main.php --debugv --skip=manticoresoftware/buddy-plugin-replace' /etc/manticoresearch/manticore.conf
 ––– output –––
-––– block: ../base/start-searchd-precaching –––
+––– block: ../base/searchd-without-table-details –––
 ––– input –––
 mysql -h0 -P9306 -e "REPLACE INTO tbl SET price =15000.99 WHERE id = 117; select * from tbl WHERE id = 117;"
 ––– output –––
@@ -107,7 +107,7 @@ Copyright (c) 2017-%{YEAR}, Manticore Software LTD (https://manticoresearch.com)
 ––– input –––
 sed -i '/buddy_path =/c\    buddy_path = manticore-executor -n /usr/share/manticore/modules/manticore-buddy/src/main.php --debugv --skip=manticoresoftware/buddy-plugin-alter-rename-table --skip=manticoresoftware/buddy-plugin-replace' /etc/manticoresearch/manticore.conf
 ––– output –––
-––– block: ../base/start-searchd-precaching –––
+––– block: ../base/searchd-without-table-details –––
 ––– input –––
 mysql -h0 -P9306 -e "SHOW BUDDY PLUGINS\G;" | grep "manticoresoftware/buddy-plugin-alter-rename-table"
 ––– output –––
@@ -136,7 +136,7 @@ Copyright (c) 2017-%{YEAR}, Manticore Software LTD (https://manticoresearch.com)
 ––– input –––
 sed -i '/buddy_path =/c\    buddy_path = manticore-executor -n /usr/share/manticore/modules/manticore-buddy/src/main.php --debugv' /etc/manticoresearch/manticore.conf
 ––– output –––
-––– block: ../base/start-searchd-precaching –––
+––– block: ../base/searchd-without-table-details –––
 ––– input –––
 mysql -h0 -P9306 -e "SHOW BUDDY PLUGINS\G;" | grep "manticoresoftware/buddy-plugin-alter-rename-table"
 ––– output –––

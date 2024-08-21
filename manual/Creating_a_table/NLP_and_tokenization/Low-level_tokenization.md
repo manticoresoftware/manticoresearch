@@ -148,10 +148,15 @@ table products {
 
 <!-- example charset_table 2 -->
 Besides definitions of characters and mappings, there are several built-in aliases that can be used. Current aliases are:
-* `english`
-* `russian`
-* `non_cont`
+* `chinese`
+* `cjk`
 * `cont`
+* `english`
+* `japanese`
+* `korean`
+* `non_cont` (`non_cjk`)
+* `russian`
+* `thai`
 
 <!-- request SQL -->
 

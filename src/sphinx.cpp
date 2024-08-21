@@ -57,6 +57,7 @@
 #include "querycontext.h"
 #include "dict/infix/infix_builder.h"
 #include "skip_cache.h"
+#include "jsonsi.h"
 
 #include <errno.h>
 #include <ctype.h>
@@ -1186,7 +1187,7 @@ public:
 	void				UpdateAttributesOffline ( VecTraits_T<PostponedUpdate_t> & dPostUpdates ) final;
 
 	// the only txn we can replay is 'update attributes', but it is processed by dedicated branch in binlog, so we have nothing to do here.
-	Binlog::CheckTnxResult_t ReplayTxn (Binlog::Blop_e, CSphReader&, CSphString & , Binlog::CheckTxn_fn&&) final { return {}; }
+	Binlog::CheckTnxResult_t ReplayTxn ( CSphReader&, CSphString&, BYTE, Binlog::CheckTxn_fn&& ) final;
 	bool				SaveAttributes ( CSphString & sError ) const final;
 	DWORD				GetAttributeStatus () const final;
 
@@ -1222,7 +1223,11 @@ public:
 	bool				PreallocKNN();
 	bool				PreallocSkiplist();
 
+	bool				LoadSecondaryIndex ( const CSphString & sFile );
 	bool				PreallocSecondaryIndex();
+
+	void				PrepareHeaders ( BuildHeader_t & tBuildHeader, WriteHeader_t & tWriteHeader, bool bCopyDictHeader = true );
+	bool				SaveHeader ( CSphString & sError );
 
 	CSphVector<SphAttr_t> 	BuildDocList () const final;
 
@@ -1233,12 +1238,12 @@ public:
 	Bson_t				ExplainQuery ( const CSphString & sQuery ) const final;
 
 	HistogramContainer_c * Debug_GetHistograms() const override { return m_pHistograms; }
-	SI::Index_i *		Debug_GetSI() const override { return m_pSIdx.get(); }
+	const SIContainer_c * Debug_GetSI() const override { return &m_tSI; }
 
 	bool				CheckEarlyReject ( const CSphVector<CSphFilterSettings> & dFilters, const ISphFilter * pFilter, ESphCollation eCollation, const ISphSchema & tSchema ) const;
 	std::pair<int64_t,int> GetPseudoShardingMetric ( const VecTraits_T<const CSphQuery> & dQueries, const VecTraits_T<int64_t> & dMaxCountDistinct, int iThreads, bool & bForceSingleThread ) const override;
-	int64_t				GetCountDistinct ( const CSphString & sAttr ) const override;
-	int64_t				GetCountFilter ( const CSphFilterSettings & tFilter ) const override;
+	int64_t				GetCountDistinct ( const CSphString & sAttr, CSphString & sModifiedAttr ) const override;
+	int64_t				GetCountFilter ( const CSphFilterSettings & tFilter, CSphString & sModifiedAttr ) const override;
 	int64_t				GetCount() const override;
 
 private:
@@ -1272,8 +1277,8 @@ private:
 
 	std::unique_ptr<Docstore_i>	m_pDocstore;
 	std::unique_ptr<columnar::Columnar_i> m_pColumnar;
-	std::unique_ptr<SI::Index_i> m_pSIdx;
 	std::unique_ptr<knn::KNN_i>	m_pKNN;
+	SIContainer_c				m_tSI;
 
 	DWORD						m_uVersion;				///< data files version
 	volatile bool				m_bPassedRead;
@@ -1338,9 +1343,10 @@ private:
 	bool						Build_SetupDocstore ( std::unique_ptr<DocstoreBuilder_i> & pDocstore, CSphBitvec & dStoredFields, CSphBitvec & dStoredAttrs, CSphVector<CSphVector<BYTE>> & dTmpDocstoreFieldStorage, CSphVector<CSphVector<BYTE>> & dTmpDocstoreAttrStorage ); // fixme! build only
 	bool						Build_SetupBlobBuilder ( std::unique_ptr<BlobRowBuilder_i> & pBuilder ); // fixme! build only
 	bool						Build_SetupColumnar ( std::unique_ptr<columnar::Builder_i> & pBuilder, CSphBitvec & tColumnarAttrs ); // fixme! build only
+	bool						Build_SetupSI ( std::unique_ptr<SI::Builder_i> & pSIBuilder, std::unique_ptr<JsonSIBuilder_i> & pJsonSIBuilder, CSphBitvec & tSIAttrs, int64_t iMemoryLimit );
 
 	void						Build_AddToDocstore ( DocstoreBuilder_i * pDocstoreBuilder, DocID_t tDocID, QueryMvaContainer_c & tMvaContainer, CSphSource & tSource, const CSphBitvec & dStoredFields, const CSphBitvec & dStoredAttrs, CSphVector<CSphVector<BYTE>> & dTmpDocstoreFieldStorage, CSphVector<CSphVector<BYTE>> & dTmpDocstoreAttrStorage, const CSphVector<std::unique_ptr<OpenHashTable_T<uint64_t, uint64_t>>> & dJoinedOffsets, CSphReader & tJoinedReader ); // fixme! build only
-	bool						Build_StoreBlobAttrs ( DocID_t tDocId, SphOffset_t & tOffset, BlobRowBuilder_i & tBlobRowBuilderconst, QueryMvaContainer_c & tMvaContainer, AttrSource_i & tSource, bool bForceSource ); // fixme! build only
+	bool						Build_StoreBlobAttrs ( DocID_t tDocId, std::pair<SphOffset_t,SphOffset_t> & tOffsetSize, BlobRowBuilder_i & tBlobRowBuilderconst, QueryMvaContainer_c & tMvaContainer, AttrSource_i & tSource, bool bForceSource ); // fixme! build only
 	bool						Build_CollectQueryMvas ( const CSphVector<CSphSource*> & dSources, QueryMvaContainer_c & tMvaContainer ); // build only
 	bool						Build_CollectJoinedFields ( const CSphVector<CSphSource*> & dSources, CSphAutofile & tFile, CSphVector<std::unique_ptr<OpenHashTable_T<uint64_t, uint64_t>>> & dJoinedOffsets );
 
@@ -1357,6 +1363,8 @@ private:
 
 	bool						IsQueryFast ( const CSphQuery & tQuery, const CSphVector<SecondaryIndexInfo_t> & dEnabledIndexes, float fCost ) const;
 	CSphVector<SecondaryIndexInfo_t> GetEnabledIndexes ( const CSphQuery & tQuery, bool bFT, float & fCost, int iThreads ) const;
+
+	bool						SetupFiltersAndContext ( CSphQueryContext & tCtx, CreateFilterContext_t & tFlx, CSphQueryResultMeta & tMeta, const ISphSchema * & pMaxSorterSchema, CSphVector<CSphFilterSettings> & dTransformedFilters, CSphVector<FilterTreeItem_t> & dTransformedFilterTree, const VecTraits_T<ISphMatchSorter *> & dSorters, const CSphMultiQueryArgs & tArgs ) const;
 
 	Docstore_i *				GetDocstore() const override { return m_pDocstore.get(); }
 	columnar::Columnar_i *		GetColumnar() const override { return m_pColumnar.get(); }
@@ -2090,7 +2098,10 @@ bool CSphIndex::MustRunInSingleThread ( const VecTraits_T<const CSphQuery> & dQu
 			if ( iGroupby>0 )
 			{
 				if ( iMaxCountDistinct==-1 )
-					iMaxCountDistinct = GetCountDistinct ( tQuery.m_sGroupBy );
+				{
+					CSphString sModifiedAttr;
+					iMaxCountDistinct = GetCountDistinct ( tQuery.m_sGroupBy, sModifiedAttr );
+				}
 
 				if ( iMaxCountDistinct==-1 )
 				{
@@ -2399,16 +2410,88 @@ bool CSphIndex_VLN::DoUpdateAttributes ( const RowsToUpdate_t& dRows, UpdateCont
 	if ( !Update_CheckAttributes ( *tCtx.m_tUpd.m_pUpdate, tCtx.m_tSchema, sError ) )
 		return false;
 
-	tCtx.PrepareListOfUpdatedAttributes ( sError );
-
 	tCtx.m_pHistograms = m_pHistograms;
 	tCtx.m_pBlobPool = m_tBlobAttrs.GetWritePtr();
 	tCtx.m_pAttrPool = m_tAttr.GetWritePtr ();
+
+	tCtx.PrepareListOfUpdatedAttributes ( sError );
 
 	if ( !Update_UpdateAttributes ( dRows, tCtx, bCritical, sError ) )
 		return false;
 	Update_MinMax ( dRows, tCtx );
 	return true;
+}
+void CommitUpdateAttributes ( int64_t * pTID, const char * szName, const CSphAttrUpdate & tUpd )
+{
+	CSphString sError;
+	Binlog::Commit ( pTID, szName, sError, [&tUpd] ( Writer_i & tWriter ) {
+
+		// my user op
+		tWriter.PutByte ( Binlog::UPDATE_ATTRS );
+
+		// update data
+		tWriter.ZipOffset ( tUpd.m_dAttributes.GetLength () );
+		for ( const auto & i: tUpd.m_dAttributes )
+		{
+			tWriter.PutZString ( i.m_sName );
+			tWriter.ZipOffset ( i.m_eType );
+		}
+
+		// POD vectors
+		Binlog::SaveVector ( tWriter, tUpd.m_dPool );
+		Binlog::SaveVector ( tWriter, tUpd.m_dDocids );
+		Binlog::SaveVector ( tWriter, tUpd.m_dRowOffset );
+		Binlog::SaveVector ( tWriter, tUpd.m_dBlobs );
+	} );
+}
+
+
+Binlog::CheckTnxResult_t CSphIndex::ReplayUpdate ( CSphReader & tReader, CSphString & sError, Binlog::CheckTxn_fn && fnCanContinue )
+{
+	// load transaction data
+	AttrUpdateSharedPtr_t pUpd { new CSphAttrUpdate };
+	auto & tUpd = *pUpd;
+	tUpd.m_bIgnoreNonexistent = true;
+
+	int iAttrs = (int) tReader.UnzipOffset ();
+	tUpd.m_dAttributes.Resize ( iAttrs ); // FIXME! sanity check
+	for ( auto & i: tUpd.m_dAttributes )
+	{
+		i.m_sName = tReader.GetZString ();
+		i.m_eType = (ESphAttr) tReader.UnzipOffset (); // safe, we'll crc check later
+	}
+
+	if ( tReader.GetErrorFlag () )
+		return {};
+
+	if ( !Binlog::LoadVector ( tReader, tUpd.m_dPool ) ) return {};
+	if ( !Binlog::LoadVector ( tReader, tUpd.m_dDocids ) ) return {};
+	if ( !Binlog::LoadVector ( tReader, tUpd.m_dRowOffset ) ) return {};
+	if ( !Binlog::LoadVector ( tReader, tUpd.m_dBlobs ) ) return {};
+
+	Binlog::CheckTnxResult_t tRes = fnCanContinue ();
+	if ( tRes.m_bValid && tRes.m_bApply )
+	{
+		CSphString sError, sWarning;
+		bool bCritical = false;
+		UpdateAttributes ( pUpd, bCritical, sError, sWarning ); // FIXME! check for errors
+		assert ( !bCritical ); // fixme! handle this
+		tRes.m_bApply = true;
+	}
+	return tRes;
+}
+
+
+Binlog::CheckTnxResult_t CSphIndex_VLN::ReplayTxn ( CSphReader & tReader, CSphString & sError, BYTE uOp, Binlog::CheckTxn_fn && fnCanContinue )
+{
+	switch ( uOp )
+	{
+	case Binlog::UPDATE_ATTRS:
+		return ReplayUpdate ( tReader, sError, std::move ( fnCanContinue ) );
+	default:
+		assert ( false && "unknown op provided to replay" );
+	}
+	return {};
 }
 
 int CSphIndex_VLN::CheckThenUpdateAttributes ( AttrUpdateInc_t& tUpd, bool& bCritical, CSphString& sError, CSphString& sWarning, BlockerFn&& fnWatcher )
@@ -2433,7 +2516,7 @@ int CSphIndex_VLN::CheckThenUpdateAttributes ( AttrUpdateInc_t& tUpd, bool& bCri
 	MaybeAddPostponedUpdate ( dRowsToUpdate, tCtx );
 
 	if ( tCtx.m_uUpdateMask && m_bBinlog )
-		Binlog::CommitUpdateAttributes ( &m_iTID, { GetName(), m_iIndexId }, *tUpd.m_pUpdate );
+		CommitUpdateAttributes ( &m_iTID, GetName(), *tUpd.m_pUpdate );
 
 	m_uAttrsStatus |= tCtx.m_uUpdateMask; // FIXME! add lock/atomic?
 
@@ -2441,11 +2524,7 @@ int CSphIndex_VLN::CheckThenUpdateAttributes ( AttrUpdateInc_t& tUpd, bool& bCri
 	{
 		for ( const UpdatedAttribute_t & tAttr : tCtx.m_dUpdatedAttrs )
 			if ( tAttr.m_iSchemaAttr!=-1 )
-			{
-				auto & sName = m_tSchema.GetAttr ( tAttr.m_iSchemaAttr ).m_sName;
-				if ( m_pSIdx )
-					m_pSIdx->ColumnUpdated ( sName.cstr() );
-			}
+				m_tSI.ColumnUpdated ( m_tSchema.GetAttr ( tAttr.m_iSchemaAttr ).m_sName );
 	}
 
 	iUpdated = tUpd.m_iAffected - iUpdated;
@@ -2546,18 +2625,12 @@ bool CSphIndex_VLN::SaveAttributes ( CSphString & sError ) const
 			return false;
 	}
 
-	if ( m_pSIdx && ( ( uAttrStatus & IndexSegment_c::ATTRS_UPDATED ) || ( uAttrStatus & IndexSegment_c::ATTRS_BLOB_UPDATED ) ) )
-	{
-		std::string sTmpError;
-		if ( !m_pSIdx->SaveMeta ( sTmpError ) )
-		{
-			sError = sTmpError.c_str();
-			return false;
-		}
-	}
+	bool bAttrsUpdated = ( uAttrStatus & IndexSegment_c::ATTRS_UPDATED ) || ( uAttrStatus & IndexSegment_c::ATTRS_BLOB_UPDATED );
+	if ( bAttrsUpdated && !m_tSI.SaveMeta(sError) )
+		return false;
 
 	if ( m_bBinlog )
-		Binlog::NotifyIndexFlush ( m_iTID, { GetName(), m_iIndexId }, false, false );
+		Binlog::NotifyIndexFlush ( m_iTID, GetName(), Binlog::NoShutdown, Binlog::NoSave );
 
 	if ( m_uAttrsStatus==uAttrStatus )
 		m_uAttrsStatus = 0;
@@ -2621,27 +2694,17 @@ bool CSphIndex_VLN::AddRemoveAttribute ( bool bAddAttr, const AttrAddRemoveCtx_t
 		return false;
 
 	int iNewStride = tNewSchema.GetRowSize();
-
 	int64_t iNewMinMaxIndex = m_iDocinfo * iNewStride;
 
-	BuildHeader_t tBuildHeader ( m_tStats );
-	tBuildHeader.m_iDocinfo = m_iDocinfo;
-	tBuildHeader.m_iDocinfoIndex = m_iDocinfoIndex;
-	tBuildHeader.m_iMinMaxIndex = iNewMinMaxIndex;
-
-	*(DictHeader_t*)&tBuildHeader = *(DictHeader_t*)&m_tWordlist;
-
-	CSphString sHeaderName = GetTmpFilename ( SPH_EXT_SPH );
+	BuildHeader_t tBuildHeader;
 	WriteHeader_t tWriteHeader;
-	tWriteHeader.m_pSettings = &m_tSettings;
+	PrepareHeaders ( tBuildHeader, tWriteHeader );
+
+	tBuildHeader.m_iMinMaxIndex = iNewMinMaxIndex;
 	tWriteHeader.m_pSchema = &tNewSchema;
-	tWriteHeader.m_pTokenizer = m_pTokenizer;
-	tWriteHeader.m_pDict = m_pDict;
-	tWriteHeader.m_pFieldFilter = m_pFieldFilter.get();
-	tWriteHeader.m_pFieldLens = m_dFieldLens.Begin();
 
 	// save the header
-	if ( !IndexBuildDone ( tBuildHeader, tWriteHeader, sHeaderName, sError ) )
+	if ( !IndexBuildDone ( tBuildHeader, tWriteHeader, GetTmpFilename(SPH_EXT_SPH), sError ) )
 		return false;
 
 	// generate new .SPA, .SPB files
@@ -2799,6 +2862,41 @@ bool CSphIndex_VLN::AddRemoveAttribute ( bool bAddAttr, const AttrAddRemoveCtx_t
 		PrereadMapping ( GetName(), "blob attributes", IsMlock ( m_tMutableSettings.m_tFileAccess.m_eBlob ), IsOndisk ( m_tMutableSettings.m_tFileAccess.m_eBlob ), m_tBlobAttrs );
 
 	return true;
+}
+
+
+void CSphIndex_VLN::PrepareHeaders ( BuildHeader_t & tBuildHeader, WriteHeader_t & tWriteHeader, bool bCopyDictHeader )
+{
+	tBuildHeader.m_iTotalDocuments = m_tStats.m_iTotalDocuments;
+	tBuildHeader.m_iTotalBytes = m_tStats.m_iTotalBytes;
+	tBuildHeader.m_iDocinfo = m_iDocinfo;
+	tBuildHeader.m_iDocinfoIndex = m_iDocinfoIndex;
+	tBuildHeader.m_iMinMaxIndex = m_iMinMaxIndex;
+
+	if ( bCopyDictHeader )
+		*(DictHeader_t*)&tBuildHeader = *(DictHeader_t*)&m_tWordlist;
+
+	tWriteHeader.m_pSettings = &m_tSettings;
+	tWriteHeader.m_pSchema = &m_tSchema;
+	tWriteHeader.m_pTokenizer = m_pTokenizer;
+	tWriteHeader.m_pDict = m_pDict;
+	tWriteHeader.m_pFieldFilter = m_pFieldFilter.get();
+	tWriteHeader.m_pFieldLens = m_dFieldLens.Begin();
+	tWriteHeader.m_pSI = &m_tSI;
+}
+
+
+bool CSphIndex_VLN::SaveHeader ( CSphString & sError )
+{
+	BuildHeader_t tBuildHeader;
+	WriteHeader_t tWriteHeader;
+	PrepareHeaders ( tBuildHeader, tWriteHeader );
+
+	// save the header
+	if ( !IndexBuildDone ( tBuildHeader, tWriteHeader, GetTmpFilename(SPH_EXT_SPH), sError ) )
+		return false;
+
+	return JuggleFile ( SPH_EXT_SPH, sError );
 }
 
 
@@ -3040,14 +3138,15 @@ bool CSphIndex_VLN::IsQueryFast ( const CSphQuery & tQuery, const CSphVector<Sec
 }
 
 
-static bool CheckQueryFilters ( const CSphQuery & tQuery, const CSphSchema & tSchema )
+static bool CheckQueryFilters ( const CSphQuery & tQuery, const CSphSchema & tIndexSchema )
 {
 	for ( auto & tFilter : tQuery.m_dFilters )
 	{
 		CommonFilterSettings_t tFixedSettings;
 		CSphString sError;
 		CreateFilterContext_t tCtx;
-		tCtx.m_pSchema = &tSchema;
+		tCtx.m_pMatchSchema = &tIndexSchema;
+		tCtx.m_pIndexSchema = &tIndexSchema;
 		if ( !FixupFilterSettings ( tFilter, tFixedSettings, tCtx, tFilter.m_sAttrName, sError ) )
 			return false;
 	}
@@ -3065,14 +3164,14 @@ CSphVector<SecondaryIndexInfo_t> CSphIndex_VLN::GetEnabledIndexes ( const CSphQu
 	int iCutoff = ApplyImplicitCutoff ( tQuery, {}, bFT );
 
 	StrVec_t dWarnings;
-	SelectIteratorCtx_t tCtx ( tQuery, tQuery.m_dFilters, m_tSchema, m_tSchema, m_pHistograms, m_pColumnar.get(), m_pSIdx.get(), iCutoff, m_iDocinfo, iThreads );
+	SelectIteratorCtx_t tCtx ( tQuery, tQuery.m_dFilters, m_tSchema, m_tSchema, m_pHistograms, m_pColumnar.get(), m_tSI, iCutoff, m_iDocinfo, iThreads );
 	return SelectIterators ( tCtx, fCost, dWarnings );
 }
 
 
 std::pair<int64_t,int> CSphIndex_VLN::GetPseudoShardingMetric ( const VecTraits_T<const CSphQuery> & dQueries, const VecTraits_T<int64_t> & dMaxCountDistinct, int iThreads, bool & bForceSingleThread ) const
 {
-	if ( MustRunInSingleThread ( dQueries, !!m_pSIdx, dMaxCountDistinct, bForceSingleThread ) )
+	if ( MustRunInSingleThread ( dQueries, !m_tSI.IsEmpty(), dMaxCountDistinct, bForceSingleThread ) )
 		return { 0, 1 };
 
 	bool bAllFast = true;
@@ -3116,34 +3215,47 @@ std::pair<int64_t,int> CSphIndex_VLN::GetPseudoShardingMetric ( const VecTraits_
 }
 
 
-int64_t	CSphIndex_VLN::GetCountDistinct ( const CSphString & sAttr ) const
+int64_t	CSphIndex_VLN::GetCountDistinct ( const CSphString & sAttr, CSphString & sModifiedAttr ) const
 {
-	if ( !m_pSIdx.get() || m_tDeadRowMap.HasDead() )
+	if ( m_tDeadRowMap.HasDead() )
 		return -1;
 
-	std::string sAttrSTL = sAttr.cstr();
-	return m_pSIdx.get()->GetCountDistinct(sAttrSTL);
+	sModifiedAttr = sAttr;
+	if ( !m_tSchema.GetAttr ( sAttr.cstr() ) && sphJsonNameSplit ( sAttr.cstr() ) )
+		sModifiedAttr = UnifyJsonFieldName(sAttr);
+
+	return m_tSI.GetCountDistinct(sModifiedAttr);
 }
 
 
-int64_t CSphIndex_VLN::GetCountFilter ( const CSphFilterSettings & tFilter ) const
+int64_t CSphIndex_VLN::GetCountFilter ( const CSphFilterSettings & tFilter, CSphString & sModifiedAttr ) const
 {
-	if ( !m_pSIdx.get() || m_tDeadRowMap.HasDead() )
+	if ( m_tDeadRowMap.HasDead() )
 		return -1;
 
+	CSphFilterSettings tModifiedFilter = tFilter;
+
 	CSphQuery tQuery;
-	SelectIteratorCtx_t tCtx ( tQuery, tQuery.m_dFilters, m_tSchema, m_tSchema, m_pHistograms, m_pColumnar.get(), m_pSIdx.get(), 0, m_iDocinfo, 1 );
-	if ( !tCtx.IsEnabled_SI(tFilter) )
+	SelectIteratorCtx_t tCtx ( tQuery, tQuery.m_dFilters, m_tSchema, m_tSchema, m_pHistograms, m_pColumnar.get(), m_tSI, 0, m_iDocinfo, 1 );
+
+	sModifiedAttr = tFilter.m_sAttrName;
+	if ( !m_tSchema.GetAttr ( sModifiedAttr.cstr() ) && sphJsonNameSplit ( sModifiedAttr.cstr() ) )
+	{
+		tModifiedFilter.m_sAttrName = UnifyJsonFieldName(sModifiedAttr);
+		sModifiedAttr = tModifiedFilter.m_sAttrName;
+	}
+
+	if ( !tCtx.IsEnabled_SI(tModifiedFilter) )
 		return -1;
 
 	common::Filter_t tColumnarFilter;
 	CSphString sWarning;
-	if ( !ToColumnarFilter ( tColumnarFilter, tFilter, SPH_COLLATION_DEFAULT, m_tSchema, sWarning ) )
+	if ( !ToColumnarFilter ( tColumnarFilter, tModifiedFilter, SPH_COLLATION_DEFAULT, m_tSchema, sWarning ) )
 		return -1;
 
 	uint32_t uCount = 0;
-	std::string sError;
-	if ( !m_pSIdx.get()->CalcCount ( uCount, tColumnarFilter, m_iDocinfo, sError ) )
+	CSphString sError;
+	if ( !m_tSI.CalcCount ( uCount, tColumnarFilter, m_iDocinfo, sError ) )
 		return -1;
 
 	return uCount;
@@ -3205,6 +3317,9 @@ void CSphIndex_VLN::GetIndexFiles ( StrVec_t& dFiles, StrVec_t& dExt, const File
 
 	if ( m_uVersion >= 64 )
 		fnAddFile ( SPH_EXT_SPIDX );
+
+	if ( m_uVersion >= 66 )
+		fnAddFile ( SPH_EXT_SPJIDX );
 
 	if ( m_tSchema.HasNonColumnarAttrs() )
 		fnAddFile ( SPH_EXT_SPA );
@@ -3866,127 +3981,6 @@ void operator<< ( JsonEscapedBuilder& tOut, const CSphSchema& tSchema )
 }
 
 
-void SaveIndexSettings ( Writer_i & tWriter, const CSphIndexSettings & tSettings )
-{
-	tWriter.PutDword ( tSettings.RawMinPrefixLen() );
-	tWriter.PutDword ( tSettings.m_iMinInfixLen );
-	tWriter.PutDword ( tSettings.m_iMaxSubstringLen );
-	tWriter.PutByte ( tSettings.m_bHtmlStrip ? 1 : 0 );
-	tWriter.PutString ( tSettings.m_sHtmlIndexAttrs.cstr () );
-	tWriter.PutString ( tSettings.m_sHtmlRemoveElements.cstr () );
-	tWriter.PutByte ( tSettings.m_bIndexExactWords ? 1 : 0 );
-	tWriter.PutDword ( tSettings.m_eHitless );
-	tWriter.PutDword ( tSettings.m_eHitFormat );
-	tWriter.PutByte ( tSettings.m_bIndexSP );
-	tWriter.PutString ( tSettings.m_sZones );
-	tWriter.PutDword ( tSettings.m_iBoundaryStep );
-	tWriter.PutDword ( tSettings.m_iStopwordStep );
-	tWriter.PutDword ( tSettings.m_iOvershortStep );
-	tWriter.PutDword ( tSettings.m_iEmbeddedLimit );
-	tWriter.PutByte ( tSettings.m_eBigramIndex );
-	tWriter.PutString ( tSettings.m_sBigramWords );
-	tWriter.PutByte ( tSettings.m_bIndexFieldLens );
-	tWriter.PutByte ( tSettings.m_ePreprocessor==Preprocessor_e::ICU ? 1 : 0 );
-	tWriter.PutString("");	// was: RLP context
-	tWriter.PutString ( tSettings.m_sIndexTokenFilter );
-	tWriter.PutOffset ( tSettings.m_tBlobUpdateSpace );
-	tWriter.PutDword ( tSettings.m_iSkiplistBlockSize );
-	tWriter.PutString ( tSettings.m_sHitlessFiles );
-	tWriter.PutDword ( (DWORD)tSettings.m_eEngine );
-}
-
-void operator<< ( JsonEscapedBuilder& tOut, const CSphIndexSettings& tSettings )
-{
-	auto _ = tOut.ObjectW();
-	tOut.NamedValNonDefault ( "min_prefix_len", tSettings.RawMinPrefixLen() );
-	tOut.NamedValNonDefault ( "min_infix_len", tSettings.m_iMinInfixLen );
-	tOut.NamedValNonDefault ( "max_substring_len", tSettings.m_iMaxSubstringLen );
-	tOut.NamedValNonDefault ( "strip_html", tSettings.m_bHtmlStrip, false );
-	tOut.NamedStringNonEmpty ( "html_index_attrs", tSettings.m_sHtmlIndexAttrs );
-	tOut.NamedStringNonEmpty ( "html_remove_elements", tSettings.m_sHtmlRemoveElements );
-	tOut.NamedValNonDefault ( "index_exact_words", tSettings.m_bIndexExactWords, false );
-	tOut.NamedValNonDefault ( "hitless", tSettings.m_eHitless, SPH_HITLESS_NONE );
-	tOut.NamedValNonDefault ( "hit_format", tSettings.m_eHitFormat, SPH_HIT_FORMAT_PLAIN );
-	tOut.NamedValNonDefault ( "index_sp", tSettings.m_bIndexSP, false );
-	tOut.NamedStringNonEmpty ( "zones", tSettings.m_sZones );
-	tOut.NamedValNonDefault ( "boundary_step", tSettings.m_iBoundaryStep );
-	tOut.NamedValNonDefault ( "stopword_step", tSettings.m_iStopwordStep, 1 );
-	tOut.NamedValNonDefault ( "overshort_step", tSettings.m_iOvershortStep, 1 );
-	tOut.NamedValNonDefault ( "embedded_limit", tSettings.m_iEmbeddedLimit );
-	tOut.NamedValNonDefault ( "bigram_index", tSettings.m_eBigramIndex, SPH_BIGRAM_NONE );
-	tOut.NamedStringNonEmpty ( "bigram_words", tSettings.m_sBigramWords );
-	tOut.NamedValNonDefault ( "index_field_lens", tSettings.m_bIndexFieldLens, false );
-	tOut.NamedValNonDefault ( "icu", (DWORD)tSettings.m_ePreprocessor, (DWORD)Preprocessor_e::NONE );
-	tOut.NamedStringNonEmpty ( "index_token_filter", tSettings.m_sIndexTokenFilter );
-	tOut.NamedValNonDefault ( "blob_update_space", tSettings.m_tBlobUpdateSpace );
-	tOut.NamedValNonDefault ( "skiplist_block_size", tSettings.m_iSkiplistBlockSize, 32 );
-	tOut.NamedStringNonEmpty ( "hitless_files", tSettings.m_sHitlessFiles );
-	tOut.NamedValNonDefault ( "engine", (DWORD)tSettings.m_eEngine, (DWORD)AttrEngine_e::DEFAULT );
-	tOut.NamedValNonDefault ( "engine_default", (DWORD)tSettings.m_eDefaultEngine, (DWORD)AttrEngine_e::ROWWISE );
-}
-
-void IndexWriteHeader ( const BuildHeader_t & tBuildHeader, const WriteHeader_t & tWriteHeader, JsonEscapedBuilder& sJson, bool bForceWordDict, bool SkipEmbeddDict )
-{
-	auto _ = sJson.ObjectW();
-
-	// human-readable sugar
-	sJson.NamedString ( "meta_created_time_utc", sphCurrentUtcTime() );
-
-	// version
-	sJson.NamedVal ( "index_format_version", INDEX_FORMAT_VERSION );
-
-	// index stats - json (put here to be similar with .meta)
-	sJson.NamedValNonDefault ( "total_documents", tBuildHeader.m_iTotalDocuments );
-	sJson.NamedValNonDefault ( "total_bytes", tBuildHeader.m_iTotalBytes );
-
-	// schema
-	sJson.NamedVal ( "schema", *tWriteHeader.m_pSchema );
-
-	// index settings
-	sJson.NamedVal ( "index_settings", *tWriteHeader.m_pSettings );
-
-	// tokenizer info
-	assert ( tWriteHeader.m_pTokenizer );
-	sJson.Named ( "tokenizer_settings" );
-	SaveTokenizerSettings ( sJson, tWriteHeader.m_pTokenizer, tWriteHeader.m_pSettings->m_iEmbeddedLimit );
-
-	// dictionary info
-	assert ( tWriteHeader.m_pDict );
-	sJson.Named ( "dictionary_settings" );
-	SaveDictionarySettings ( sJson, tWriteHeader.m_pDict, bForceWordDict, SkipEmbeddDict ? 0 : tWriteHeader.m_pSettings->m_iEmbeddedLimit );
-
-	// wordlist checkpoints - json
-	sJson.NamedValNonDefault ( "dict_checkpoints_offset", tBuildHeader.m_iDictCheckpointsOffset );
-	sJson.NamedValNonDefault ( "dict_checkpoints", tBuildHeader.m_iDictCheckpoints );
-	sJson.NamedValNonDefault ( "infix_codepoint_bytes", tBuildHeader.m_iInfixCodepointBytes );
-	sJson.NamedValNonDefault ( "infix_blocks_offset", tBuildHeader.m_iInfixBlocksOffset );
-	sJson.NamedValNonDefault ( "infix_block_words_size", tBuildHeader.m_iInfixBlocksWordsSize );
-
-	sJson.NamedValNonDefault ( "docinfo", tBuildHeader.m_iDocinfo );
-	sJson.NamedValNonDefault ( "docinfo_index", tBuildHeader.m_iDocinfoIndex );
-	sJson.NamedValNonDefault ( "min_max_index", tBuildHeader.m_iMinMaxIndex );
-
-	// field filter info
-	CSphFieldFilterSettings tFieldFilterSettings;
-	if ( tWriteHeader.m_pFieldFilter )
-	{
-		tWriteHeader.m_pFieldFilter->GetSettings ( tFieldFilterSettings );
-		sJson.NamedVal ( "field_filter_settings", tFieldFilterSettings );
-	}
-
-	// average field lengths
-	if ( tWriteHeader.m_pSettings->m_bIndexFieldLens )
-	{
-		sJson.Named ( "index_fields_lens" );
-		auto _ = sJson.Array();
-		for ( int i=0; i < tWriteHeader.m_pSchema->GetFieldsCount(); ++i )
-		{
-			sJson << tWriteHeader.m_pFieldLens[i];
-		}
-	}
-}
-
-
 bool IndexBuildDone ( const BuildHeader_t & tBuildHeader, const WriteHeader_t & tWriteHeader, const CSphString & sFileName, CSphString & sError )
 {
 	JsonEscapedBuilder sJson;
@@ -4581,7 +4575,7 @@ static const CSphVector<int64_t> * FetchMVA ( DocID_t tDocId, int iAttr, const C
 }
 
 
-bool CSphIndex_VLN::Build_StoreBlobAttrs ( DocID_t tDocId, SphOffset_t & tOffset, BlobRowBuilder_i & tBlobRowBuilder, QueryMvaContainer_c & tMvaContainer, AttrSource_i & tSource, bool bForceSource )
+bool CSphIndex_VLN::Build_StoreBlobAttrs ( DocID_t tDocId, std::pair<SphOffset_t,SphOffset_t> & tOffsetSize, BlobRowBuilder_i & tBlobRowBuilder, QueryMvaContainer_c & tMvaContainer, AttrSource_i & tSource, bool bForceSource )
 {
 	CSphString sError;
 	int iBlobAttr = 0;
@@ -4633,7 +4627,7 @@ bool CSphIndex_VLN::Build_StoreBlobAttrs ( DocID_t tDocId, SphOffset_t & tOffset
 		}
 	}
 
-	tOffset = tBlobRowBuilder.Flush();
+	tOffsetSize = tBlobRowBuilder.Flush();
 	return true;
 }
 
@@ -5204,6 +5198,27 @@ bool CSphIndex_VLN::Build_SetupColumnar ( std::unique_ptr<columnar::Builder_i> &
 }
 
 
+bool CSphIndex_VLN::Build_SetupSI ( std::unique_ptr<SI::Builder_i> & pSIBuilder, std::unique_ptr<JsonSIBuilder_i> & pJsonSIBuilder, CSphBitvec & tSIAttrs, int64_t iMemoryLimit )
+{
+	if ( !IsSecondaryLibLoaded() )
+		return true;
+
+	BuildBufferSettings_t tSettings; // use default buffer settings
+	pSIBuilder = CreateIndexBuilder ( iMemoryLimit, m_tSchema, tSIAttrs, GetFilename ( SPH_EXT_SPIDX ), tSettings.m_iBufferStorage, m_sLastError );
+	if ( !pSIBuilder )
+		return false;
+
+	if ( m_tSchema.HasJsonSIAttrs() )
+	{
+		pJsonSIBuilder = CreateJsonSIBuilder ( m_tSchema, GetFilename(SPH_EXT_SPB), GetFilename(SPH_EXT_SPJIDX), m_sLastError );
+		if ( !pJsonSIBuilder )
+			return false;
+	}
+
+	return true;
+}
+
+
 static bool BuildSetupHistograms ( const ISphSchema & tSchema, std::unique_ptr<HistogramContainer_c> & pContainer, CSphVector<HistogramSource_t> & dHistograms )
 {
 	const int MAX_HISTOGRAM_SIZE = 8192;
@@ -5500,15 +5515,11 @@ int CSphIndex_VLN::Build ( const CSphVector<CSphSource*> & dSources, int iMemory
 	if ( !Build_SetupColumnar ( pColumnarBuilder, tColumnarAttrs ) )
 		return 0;
 
-	std::unique_ptr<SI::Builder_i> pCidxBuilder;
+	std::unique_ptr<SI::Builder_i> pSIBuilder;
+	std::unique_ptr<JsonSIBuilder_i> pJsonSIBuilder;
 	CSphBitvec tSIAttrs ( m_tSchema.GetAttrsCount() );
-	if ( IsSecondaryLibLoaded() )
-	{
-		BuildBufferSettings_t tSettings; // use default buffer settings
-		pCidxBuilder = CreateIndexBuilder ( iMemoryLimit, m_tSchema, tSIAttrs, GetFilename ( SPH_EXT_SPIDX ), tSettings.m_iBufferStorage, m_sLastError );
-		if ( !pCidxBuilder )
-			return 0;
-	}
+	if ( !Build_SetupSI ( pSIBuilder, pJsonSIBuilder, tSIAttrs, iMemoryLimit ) )
+		return 0;
 
 	std::unique_ptr<DocstoreBuilder_i> pDocstoreBuilder;
 	CSphBitvec dStoredFields, dStoredAttrs;
@@ -5597,21 +5608,24 @@ int CSphIndex_VLN::Build ( const CSphVector<CSphSource*> & dSources, int iMemory
 				AttrSource_i * pBlobSource = pSource;
 				if ( bKeepRow )
 					pBlobSource = &tPrevAttrs;
-				SphOffset_t tBlobOffset = 0;
-				if ( !Build_StoreBlobAttrs ( tDocID, tBlobOffset, *pBlobRowBuilder, tQueryMvaContainer, *pBlobSource, bKeepRow ) )
+				std::pair<SphOffset_t,SphOffset_t> tOffsetSize = {0,0};
+				if ( !Build_StoreBlobAttrs ( tDocID, tOffsetSize, *pBlobRowBuilder, tQueryMvaContainer, *pBlobSource, bKeepRow ) )
 					return 0;
 
-				pSource->m_tDocInfo.SetAttr ( pBlobLocatorAttr->m_tLocator, tBlobOffset );
+				if ( pJsonSIBuilder )
+					pJsonSIBuilder->AddRowSize ( tOffsetSize.second );
+
+				pSource->m_tDocInfo.SetAttr ( pBlobLocatorAttr->m_tLocator, tOffsetSize.first );
 			}
 
 			// store anything columnar
 			if ( pColumnarBuilder )
 				Builder_StoreAttrs ( m_tSchema, tDocID, *pSource, tQueryMvaContainer, pColumnarBuilder.get(), tColumnarAttrs );
 
-			if ( pCidxBuilder )
+			if ( pSIBuilder )
 			{
-				pCidxBuilder->SetRowID ( pSource->m_tDocInfo.m_tRowID );
-				Builder_StoreAttrs ( m_tSchema, tDocID, *pSource, tQueryMvaContainer, pCidxBuilder.get(), tSIAttrs );
+				pSIBuilder->SetRowID ( pSource->m_tDocInfo.m_tRowID );
+				Builder_StoreAttrs ( m_tSchema, tDocID, *pSource, tQueryMvaContainer, pSIBuilder.get(), tSIAttrs );
 			}
 
 			BuildStoreHistograms ( m_tSchema, tDocID, *pSource, tQueryMvaContainer, dHistograms );
@@ -5843,11 +5857,11 @@ int CSphIndex_VLN::Build ( const CSphVector<CSphSource*> & dSources, int iMemory
 		return 0;
 	}
 
-	if ( pCidxBuilder )
+	if ( pSIBuilder )
 	{
 		tProgress.PhaseBegin ( CSphIndexProgress::PHASE_SI_BUILD );
 		tProgress.Show();
-		bool bSiDone = pCidxBuilder->Done ( sError );
+		bool bSiDone = pSIBuilder->Done(sError);
 		tProgress.PhaseEnd();
 
 		if ( !bSiDone )
@@ -5885,6 +5899,17 @@ int CSphIndex_VLN::Build ( const CSphVector<CSphSource*> & dSources, int iMemory
 	{
 		m_sLastError.SetSprintf ( "failed to rename %s to %s", sSPCTmp.cstr(), sSPC.cstr() );
 		return false;
+	}
+
+	if ( pJsonSIBuilder )
+	{
+		tProgress.PhaseBegin ( CSphIndexProgress::PHASE_JSONSI_BUILD );
+		tProgress.Show();
+		bool bSiDone = pJsonSIBuilder->Done(m_sLastError);
+		tProgress.PhaseEnd();
+
+		if ( !bSiDone )
+			return 0;
 	}
 
 	if ( !WriteDeadRowMap ( GetFilename ( SPH_EXT_SPM ), (DWORD)m_tStats.m_iTotalDocuments, m_sLastError ) )
@@ -6066,27 +6091,18 @@ int CSphIndex_VLN::Build ( const CSphVector<CSphSource*> & dSources, int iMemory
 		}
 	}
 
-	BuildHeader_t tBuildHeader ( m_tStats );
+	BuildHeader_t tBuildHeader;
+	WriteHeader_t tWriteHeader;
+	PrepareHeaders ( tBuildHeader, tWriteHeader, false );
+	tBuildHeader.m_iDocinfo = m_tStats.m_iTotalDocuments;
+
 	if ( !tHitBuilder.cidxDone ( iMemoryLimit, m_tSettings.m_iMinInfixLen, m_pTokenizer->GetMaxCodepointLength(), &tBuildHeader ) )
 		return 0;
 
 	dRelocationBuffer.Reset(0);
 
-	tBuildHeader.m_iDocinfo = m_tStats.m_iTotalDocuments;
-	tBuildHeader.m_iDocinfoIndex = m_iDocinfoIndex;
-	tBuildHeader.m_iMinMaxIndex = m_iMinMaxIndex;
-
-	CSphString sHeaderName = GetFilename ( SPH_EXT_SPH );
-	WriteHeader_t tWriteHeader;
-	tWriteHeader.m_pSettings = &m_tSettings;
-	tWriteHeader.m_pSchema = &m_tSchema;
-	tWriteHeader.m_pTokenizer = m_pTokenizer;
-	tWriteHeader.m_pDict = m_pDict;
-	tWriteHeader.m_pFieldFilter = m_pFieldFilter.get();
-	tWriteHeader.m_pFieldLens = m_dFieldLens.Begin();
-
 	// we're done
-	if ( !IndexBuildDone ( tBuildHeader, tWriteHeader, sHeaderName, m_sLastError ) )
+	if ( !IndexBuildDone ( tBuildHeader, tWriteHeader, GetFilename(SPH_EXT_SPH), m_sLastError ) )
 		return 0;
 
 	// when the party's over..
@@ -6266,7 +6282,8 @@ std::unique_ptr<ISphFilter> CSphIndex_VLN::CreateMergeFilters ( const VecTraits_
 	CSphString sError, sWarning;
 	std::unique_ptr<ISphFilter> pResult;
 	CreateFilterContext_t tCtx;
-	tCtx.m_pSchema = &m_tSchema;
+	tCtx.m_pMatchSchema = &m_tSchema;
+	tCtx.m_pIndexSchema = &m_tSchema;
 	tCtx.m_pBlobPool = m_tBlobAttrs.GetReadPtr();
 
 	for ( const auto& dSetting : dSettings )
@@ -7033,12 +7050,9 @@ bool CSphIndex_VLN::AddRemoveField ( bool bAddField, const CSphString & sFieldNa
 	auto iRemoveIdx = m_tSchema.GetFieldIndex ( sFieldName.cstr () );
 	m_tSchema = tNewSchema;
 
-	BuildHeader_t tBuildHeader ( m_tStats );
-	tBuildHeader.m_iDocinfo = m_iDocinfo;
-	tBuildHeader.m_iDocinfoIndex = m_iDocinfoIndex;
-	tBuildHeader.m_iMinMaxIndex = m_iMinMaxIndex;
-
-	*(DictHeader_t *) &tBuildHeader = *(DictHeader_t *) &m_tWordlist;
+	BuildHeader_t tBuildHeader;
+	WriteHeader_t tWriteHeader;
+	PrepareHeaders ( tBuildHeader, tWriteHeader );
 
 	if ( !bAddField && !DeleteFieldFromDict ( iRemoveIdx, tBuildHeader, sError ) )
 		return false;
@@ -7046,19 +7060,13 @@ bool CSphIndex_VLN::AddRemoveField ( bool bAddField, const CSphString & sFieldNa
 	if ( !AddRemoveFromDocstore ( tOldSchema, tNewSchema, sError ) )
 		return false;
 
-	WriteHeader_t tWriteHeader;
-	tWriteHeader.m_pSettings = &m_tSettings;
 	tWriteHeader.m_pSchema = &tNewSchema;
-	tWriteHeader.m_pTokenizer = m_pTokenizer;
-	tWriteHeader.m_pDict = m_pDict;
-	tWriteHeader.m_pFieldFilter = m_pFieldFilter.get();
-	tWriteHeader.m_pFieldLens = m_dFieldLens.Begin ();
 
 	// save the header
-	if ( !IndexBuildDone ( tBuildHeader, tWriteHeader, GetTmpFilename ( SPH_EXT_SPH ), sError ) ) 	return false;
-	if ( !JuggleFile ( SPH_EXT_SPH, sError ) )		return false;
+	if ( !IndexBuildDone ( tBuildHeader, tWriteHeader, GetTmpFilename ( SPH_EXT_SPH ), sError ) )
+		return false;
 
-	return true;
+	return JuggleFile ( SPH_EXT_SPH, sError );
 }
 
 /////////////////////////////////////////////////////////////////////////////
@@ -7790,7 +7798,7 @@ bool CSphIndex_VLN::SelectIteratorsFT ( const CSphQuery & tQuery, const CSphVect
 	NodeEstimate_t tEstimate = pRanker->Estimate ( m_iDocinfo );
 
 	// always do single-thread estimates here
-	SelectIteratorCtx_t tSelectIteratorCtx ( tQuery, dFilters, m_tSchema, tSorterSchema, m_pHistograms, m_pColumnar.get(), m_pSIdx.get(), iCutoff, m_iDocinfo, 1 );
+	SelectIteratorCtx_t tSelectIteratorCtx ( tQuery, dFilters, m_tSchema, tSorterSchema, m_pHistograms, m_pColumnar.get(), m_tSI, iCutoff, m_iDocinfo, 1 );
 	tSelectIteratorCtx.IgnorePushCost();
 	float fBestCost = FLT_MAX;
 	dSIInfo = SelectIterators ( tSelectIteratorCtx, fBestCost, dWarnings );
@@ -7883,7 +7891,7 @@ bool CSphIndex_VLN::ChooseIterators ( CSphVector<SecondaryIndexInfo_t> & dSIInfo
 
 	if ( bKNN )
 	{
-		SelectIteratorCtx_t tSelectIteratorCtx ( tQuery, dFilters, m_tSchema, tMaxSorterSchema, m_pHistograms, m_pColumnar.get(), m_pSIdx.get(), iCutoff, m_iDocinfo, 1 );
+		SelectIteratorCtx_t tSelectIteratorCtx ( tQuery, dFilters, m_tSchema, tMaxSorterSchema, m_pHistograms, m_pColumnar.get(), m_tSI, iCutoff, m_iDocinfo, 1 );
 		tSelectIteratorCtx.m_bFromIterator = true;
 
 		int iRequestedKNNDocs = Min ( tQuery.m_iKNNK, m_iDocinfo );
@@ -7898,7 +7906,7 @@ bool CSphIndex_VLN::ChooseIterators ( CSphVector<SecondaryIndexInfo_t> & dSIInfo
 			// a. Run this with the number of docs in this pseudo_chunk and one thread
 			// b. Run this with the same number of docs and number of threads as in GetPseudoShardingMetric()
 			// For now we use approach b) as it is simpler
-			SelectIteratorCtx_t tSelectIteratorCtx ( tQuery, dFilters, m_tSchema, tMaxSorterSchema, m_pHistograms, m_pColumnar.get(), m_pSIdx.get(), iCutoff, m_iDocinfo, iThreads );
+			SelectIteratorCtx_t tSelectIteratorCtx ( tQuery, dFilters, m_tSchema, tMaxSorterSchema, m_pHistograms, m_pColumnar.get(), m_tSI, iCutoff, m_iDocinfo, iThreads );
 			dSIInfo = SelectIterators ( tSelectIteratorCtx, fBestCost, dWarnings );
 		}
 		else
@@ -7953,7 +7961,7 @@ std::pair<RowidIterator_i *, bool> CSphIndex_VLN::SpawnIterators ( const CSphQue
 		return { nullptr, true };
 
 	// secondary index iterators
-	dSIIterators = CreateSecondaryIndexIterator ( m_pSIdx.get(), dSIInfo, dFilters, tQuery.m_eCollation, tMaxSorterSchema, RowID_t(m_iDocinfo), iCutoff );
+	dSIIterators = m_tSI.CreateSecondaryIndexIterator ( dSIInfo, dFilters, tQuery.m_eCollation, tMaxSorterSchema, RowID_t(m_iDocinfo), iCutoff );
 
 	// lookup-by-id (.SPT) iterators
 	dLookupIterators = CreateLookupIterator ( dSIInfo, dFilters, m_tDocidLookup.GetReadPtr(), RowID_t(m_iDocinfo) );
@@ -8037,6 +8045,52 @@ static bool AreAllFiltersExpressions ( const CSphVector<CSphFilterSettings> & dF
 }
 
 
+bool CSphIndex_VLN::SetupFiltersAndContext ( CSphQueryContext & tCtx, CreateFilterContext_t & tFlx, CSphQueryResultMeta & tMeta, const ISphSchema * & pMaxSorterSchema, CSphVector<CSphFilterSettings> & dTransformedFilters, CSphVector<FilterTreeItem_t> & dTransformedFilterTree, const VecTraits_T<ISphMatchSorter *> & dSorters, const CSphMultiQueryArgs & tArgs ) const
+{
+	// select the sorter with max schema
+	int iMaxSchemaIndex = GetMaxSchemaIndexAndMatchCapacity ( dSorters ).first;
+	pMaxSorterSchema = dSorters[iMaxSchemaIndex]->GetSchema();
+	auto dSorterSchemas = SorterSchemas ( dSorters, iMaxSchemaIndex);
+
+	auto & tQuery = tCtx.m_tQuery;
+
+	// setup filters
+	tFlx.m_pFilters		= &tQuery.m_dFilters;
+	tFlx.m_pFilterTree	= &tQuery.m_dFilterTree;
+	tFlx.m_pMatchSchema	= pMaxSorterSchema;
+	tFlx.m_pIndexSchema	= &m_tSchema;
+	tFlx.m_pBlobPool	= m_tBlobAttrs.GetReadPtr();
+	tFlx.m_pColumnar	= m_pColumnar.get();
+	tFlx.m_eCollation	= tQuery.m_eCollation;
+	tFlx.m_bScan		= tQuery.m_sQuery.IsEmpty();
+	tFlx.m_pHistograms	= m_pHistograms;
+	tFlx.m_pSI			= &m_tSI;
+	tFlx.m_iTotalDocs	= m_iDocinfo;
+	tFlx.m_sJoinIdx		= tQuery.m_sJoinIdx;
+
+	// may modify eval stages in schema; needs to be before SetupCalc
+	if ( !TransformFilters ( tFlx, dTransformedFilters, dTransformedFilterTree, tQuery.m_dItems, tMeta.m_sError ) )
+		return false;
+
+	tFlx.m_pFilters = &dTransformedFilters;
+	tFlx.m_pFilterTree = dTransformedFilterTree.GetLength() ? &dTransformedFilterTree : nullptr;
+
+	// setup calculations and result schema
+	if ( !tCtx.SetupCalc ( tMeta, *pMaxSorterSchema, m_tSchema, m_tBlobAttrs.GetReadPtr(), m_pColumnar.get(), dSorterSchemas ) )
+		return false;
+
+	// set blob pool for string on_sort expression fix up
+	tCtx.SetBlobPool ( m_tBlobAttrs.GetReadPtr() );
+	tCtx.SetColumnar ( m_pColumnar.get() );
+	tCtx.m_pProfile = tMeta.m_pProfile;
+	tCtx.m_pLocalDocs = tArgs.m_pLocalDocs;
+	tCtx.m_iTotalDocs = ( tArgs.m_iTotalDocs ? tArgs.m_iTotalDocs : m_tStats.m_iTotalDocuments );
+	tCtx.m_iIndexTotalDocs = m_iDocinfo;
+
+	return tCtx.CreateFilters ( tFlx, tMeta.m_sError, tMeta.m_sWarning );
+}
+
+
 bool CSphIndex_VLN::MultiScan ( CSphQueryResult & tResult, const CSphQuery & tQuery, const VecTraits_T<ISphMatchSorter *> & dSorters, const CSphMultiQueryArgs & tArgs, int64_t tmMaxTimer ) const
 {
 	assert ( tArgs.m_iTag>=0 );
@@ -8078,45 +8132,16 @@ bool CSphIndex_VLN::MultiScan ( CSphQueryResult & tResult, const CSphQuery & tQu
 	if ( tQuery.m_bLowPriority )
 		tPrio.emplace();
 
-	// select the sorter with max schema
-	int iMaxSchemaIndex = GetMaxSchemaIndexAndMatchCapacity ( dSorters ).first;
-	const ISphSchema & tMaxSorterSchema = *(dSorters[iMaxSchemaIndex]->GetSchema());
-	auto dSorterSchemas = SorterSchemas ( dSorters, iMaxSchemaIndex);
-
-	// setup calculations and result schema
-	CSphQueryContext tCtx ( tQuery );
-	if ( !tCtx.SetupCalc ( tMeta, tMaxSorterSchema, m_tSchema, m_tBlobAttrs.GetReadPtr(), m_pColumnar.get(), dSorterSchemas ) )
-		return false;
-
-	// set blob pool for string on_sort expression fix up
-	tCtx.SetBlobPool ( m_tBlobAttrs.GetReadPtr() );
-	tCtx.SetColumnar ( m_pColumnar.get() );
-	tCtx.m_pProfile = tMeta.m_pProfile;
-
-	// setup filters
+	CSphQueryContext tCtx(tQuery);
 	CreateFilterContext_t tFlx;
-	tFlx.m_pFilters = &tQuery.m_dFilters;
-	tFlx.m_pFilterTree = &tQuery.m_dFilterTree;
-	tFlx.m_pSchema = &tMaxSorterSchema;
-	tFlx.m_pBlobPool = m_tBlobAttrs.GetReadPtr();
-	tFlx.m_pColumnar = m_pColumnar.get();
-	tFlx.m_eCollation = tQuery.m_eCollation;
-	tFlx.m_bScan = true;
-	tFlx.m_pHistograms = m_pHistograms;
-	tFlx.m_pSI = m_pSIdx.get();
-	tFlx.m_iTotalDocs = m_iDocinfo;
-	tFlx.m_sJoinIdx = tQuery.m_sJoinIdx;
-	
+	const ISphSchema * pMaxSorterSchema = nullptr;
 	CSphVector<CSphFilterSettings> dTransformedFilters; // holds filter settings if they were modified. filters hold pointers to those settings
 	CSphVector<FilterTreeItem_t> dTransformedFilterTree;
-	if ( !TransformFilters ( tFlx, dTransformedFilters, dTransformedFilterTree, tMeta.m_sError ) )
+	if ( !SetupFiltersAndContext ( tCtx, tFlx, tMeta, pMaxSorterSchema, dTransformedFilters, dTransformedFilterTree, dSorters, tArgs ) )
 		return false;
 
-	tFlx.m_pFilters = &dTransformedFilters;
-	tFlx.m_pFilterTree = dTransformedFilterTree.GetLength() ? &dTransformedFilterTree : nullptr;
-
-	if ( !tCtx.CreateFilters ( tFlx, tMeta.m_sError, tMeta.m_sWarning ) )
-		return false;
+	assert(pMaxSorterSchema);
+	const ISphSchema & tMaxSorterSchema = *pMaxSorterSchema;
 
 	if ( CheckEarlyReject ( dTransformedFilters, tCtx.m_pFilter.get(), tQuery.m_eCollation, tMaxSorterSchema ) )
 	{
@@ -8154,6 +8179,13 @@ bool CSphIndex_VLN::MultiScan ( CSphQueryResult & tResult, const CSphQuery & tQu
 
 	int iCutoff = ApplyImplicitCutoff ( tQuery, dSorters, false );
 	bool bAllPrecalc = dSorters.GetLength() && dSorters.all_of ( []( auto pSorter ){ return pSorter->IsPrecalc(); } );
+
+	int iOldLen = tMeta.m_tIteratorStats.m_dIterators.GetLength();
+	for ( auto & i : dSorters )
+		i->AddDesc ( tMeta.m_tIteratorStats.m_dIterators );
+
+	if ( tMeta.m_tIteratorStats.m_dIterators.GetLength()!=iOldLen )
+		tMeta.m_tIteratorStats.m_iTotal = 1;
 
 	// try to spawn an iterator from a secondary index
 	CSphVector<CSphFilterSettings> dFiltersAfterIterator; // holds filter settings if they were modified. filters hold pointers to those settings
@@ -8494,7 +8526,7 @@ void CSphIndex_VLN::Dealloc ()
 	m_pDoclistFile = nullptr;
 	m_pHitlistFile = nullptr;
 	m_pColumnar = nullptr;
-	m_pSIdx = nullptr;
+	m_tSI.Reset();
 
 	m_tAttr.Reset ();
 	m_tBlobAttrs.Reset();
@@ -8515,85 +8547,6 @@ void CSphIndex_VLN::Dealloc ()
 	SkipCache::DeleteAll ( m_iIndexId );
 
 	m_iIndexId = GetIndexUid();
-}
-
-
-void LoadIndexSettings ( CSphIndexSettings & tSettings, CSphReader & tReader, DWORD uVersion )
-{
-	tSettings.SetMinPrefixLen ( tReader.GetDword() );
-	tSettings.m_iMinInfixLen = tReader.GetDword ();
-	tSettings.m_iMaxSubstringLen = tReader.GetDword();
-
-	tSettings.m_bHtmlStrip = !!tReader.GetByte ();
-	tSettings.m_sHtmlIndexAttrs = tReader.GetString ();
-	tSettings.m_sHtmlRemoveElements = tReader.GetString ();
-
-	tSettings.m_bIndexExactWords = !!tReader.GetByte ();
-	tSettings.m_eHitless = (ESphHitless)tReader.GetDword();
-
-	tSettings.m_eHitFormat = (ESphHitFormat)tReader.GetDword();
-	tSettings.m_bIndexSP = !!tReader.GetByte();
-
-	tSettings.m_sZones = tReader.GetString();
-
-	tSettings.m_iBoundaryStep = (int)tReader.GetDword();
-	tSettings.m_iStopwordStep = (int)tReader.GetDword();
-
-	tSettings.m_iOvershortStep = (int)tReader.GetDword();
-	tSettings.m_iEmbeddedLimit = (int)tReader.GetDword();
-
-	tSettings.m_eBigramIndex = (ESphBigram)tReader.GetByte();
-	tSettings.m_sBigramWords = tReader.GetString();
-
-	tSettings.m_bIndexFieldLens = ( tReader.GetByte()!=0 );
-
-	tSettings.m_ePreprocessor = tReader.GetByte()==1 ? Preprocessor_e::ICU : Preprocessor_e::NONE;
-	tReader.GetString(); // was: RLP context
-
-	tSettings.m_sIndexTokenFilter = tReader.GetString();
-	tSettings.m_tBlobUpdateSpace = tReader.GetOffset();
-
-	if ( uVersion<56 )
-		tSettings.m_iSkiplistBlockSize = 128;
-	else
-		tSettings.m_iSkiplistBlockSize = (int)tReader.GetDword();
-
-	if ( uVersion>=60 )
-		tSettings.m_sHitlessFiles = tReader.GetString();
-
-	if ( uVersion>=63 )
-		tSettings.m_eEngine = (AttrEngine_e)tReader.GetDword();
-}
-
-
-void LoadIndexSettingsJson ( bson::Bson_c tNode, CSphIndexSettings & tSettings )
-{
-	using namespace bson;
-	tSettings.SetMinPrefixLen ( (int)Int ( tNode.ChildByName ( "min_prefix_len" ) ) );
-	tSettings.m_iMinInfixLen = (int)Int ( tNode.ChildByName ( "min_infix_len" ) );
-	tSettings.m_iMaxSubstringLen = (int)Int ( tNode.ChildByName ( "max_substring_len" ) );
-	tSettings.m_bHtmlStrip = Bool ( tNode.ChildByName ( "strip_html" ) );
-	tSettings.m_sHtmlIndexAttrs = String ( tNode.ChildByName ( "html_index_attrs" ) );
-	tSettings.m_sHtmlRemoveElements = String ( tNode.ChildByName ( "html_remove_elements" ) );
-	tSettings.m_bIndexExactWords = Bool ( tNode.ChildByName ( "index_exact_words" ) );
-	tSettings.m_eHitless = (ESphHitless)Int ( tNode.ChildByName ( "hitless" ), SPH_HITLESS_NONE );
-	tSettings.m_eHitFormat = (ESphHitFormat)Int ( tNode.ChildByName ( "hit_format" ), SPH_HIT_FORMAT_PLAIN );
-	tSettings.m_bIndexSP = Bool ( tNode.ChildByName ( "index_sp" ) );
-	tSettings.m_sZones = String ( tNode.ChildByName ( "zones" ) );
-	tSettings.m_iBoundaryStep = (int)Int ( tNode.ChildByName ( "boundary_step" ) );
-	tSettings.m_iStopwordStep = (int)Int ( tNode.ChildByName ( "stopword_step" ), 1 );
-	tSettings.m_iOvershortStep = (int)Int ( tNode.ChildByName ( "overshort_step" ), 1 );
-	tSettings.m_iEmbeddedLimit = (int)Int ( tNode.ChildByName ( "embedded_limit" ) );
-	tSettings.m_eBigramIndex = (ESphBigram)Int ( tNode.ChildByName ( "bigram_index" ), SPH_BIGRAM_NONE );
-	tSettings.m_sBigramWords = String ( tNode.ChildByName ( "bigram_words" ) );
-	tSettings.m_bIndexFieldLens = Bool ( tNode.ChildByName ( "index_field_lens" ) );
-	tSettings.m_ePreprocessor = (Preprocessor_e)Int ( tNode.ChildByName ( "icu" ), (DWORD)Preprocessor_e::NONE  );
-	tSettings.m_sIndexTokenFilter = String ( tNode.ChildByName ( "index_token_filter" ) );
-	tSettings.m_tBlobUpdateSpace = Int ( tNode.ChildByName ( "blob_update_space" ) );
-	tSettings.m_iSkiplistBlockSize = (int)Int ( tNode.ChildByName ( "skiplist_block_size" ), 32 );
-	tSettings.m_sHitlessFiles = String ( tNode.ChildByName ( "hitless_files" ) );
-	tSettings.m_eEngine = (AttrEngine_e)Int ( tNode.ChildByName ( "engine" ), (DWORD)AttrEngine_e::DEFAULT );
-	tSettings.m_eDefaultEngine = (AttrEngine_e)Int ( tNode.ChildByName ( "engine_default" ), (DWORD)AttrEngine_e::ROWWISE );
 }
 
 
@@ -9307,6 +9260,38 @@ bool CSphIndex_VLN::PreallocSkiplist()
 	return m_tSkiplists.Setup ( GetFilename ( SPH_EXT_SPE ), m_sLastError, false );
 }
 
+
+bool CSphIndex_VLN::LoadSecondaryIndex ( const CSphString & sFile )
+{
+	if ( !sphFileExists ( sFile.cstr() ) )
+	{
+		if ( GetSecondaryIndexDefault()!=SIDefault_e::DISABLED )
+		{
+			if ( GetSecondaryIndexDefault()==SIDefault_e::FORCE )
+				m_sLastError.SetSprintf ( "missing secondary index %s", sFile.cstr() );
+			else
+				sphWarning ( "missing %s; secondary index(es) disabled, consider using ALTER REBUILD SECONDARY to recover the secondary index", sFile.cstr() );
+		}
+
+		return GetSecondaryIndexDefault()!=SIDefault_e::FORCE;
+	}
+
+	if ( !m_tSI.Load ( sFile, m_sLastError ) && GetSecondaryIndexDefault()!=SIDefault_e::DISABLED )
+	{
+		if ( GetSecondaryIndexDefault()!=SIDefault_e::FORCE )
+		{
+			sphWarning ( "'%s': secondary index not loaded, %s; secondary index(es) disabled, consider using ALTER REBUILD SECONDARY to recover the secondary index", GetName(), m_sLastError.cstr() );
+			m_sLastError = "";
+		}
+
+		if ( GetSecondaryIndexDefault()==SIDefault_e::FORCE )
+			return false;
+	}
+
+	return true;
+}
+
+
 bool CSphIndex_VLN::PreallocSecondaryIndex()
 {
 	if ( m_uVersion<61 )
@@ -9324,32 +9309,11 @@ bool CSphIndex_VLN::PreallocSecondaryIndex()
 		return ( GetSecondaryIndexDefault()!=SIDefault_e::FORCE );
 	}
 
-	const CSphString & sFile = GetFilename ( SPH_EXT_SPIDX );
-	if ( !sphFileExists ( sFile.cstr() ) )
-	{
-		if ( GetSecondaryIndexDefault()!=SIDefault_e::DISABLED )
-		{
-			if ( GetSecondaryIndexDefault()==SIDefault_e::FORCE )
-				m_sLastError.SetSprintf ( "missing secondary index %s", sFile.cstr() );
-			else
-				sphWarning ( "missing %s; secondary index(es) disabled, consider using ALTER REBUILD SECONDARY to recover the secondary index", sFile.cstr() );
-		}
-		return ( GetSecondaryIndexDefault()!=SIDefault_e::FORCE );
-	}
+	if ( !LoadSecondaryIndex ( GetFilename(SPH_EXT_SPIDX) ) )
+		return false;
 
-	m_pSIdx.reset ( CreateSecondaryIndex ( sFile.cstr(), m_sLastError ) );
-
-	bool bValid = !!m_pSIdx;
-	if ( !bValid && GetSecondaryIndexDefault()!=SIDefault_e::DISABLED )
-	{
-		if ( GetSecondaryIndexDefault()!=SIDefault_e::FORCE )
-		{
-			sphWarning ( "'%s': secondary index not loaded, %s; secondary index(es) disabled, consider using ALTER REBUILD SECONDARY to recover the secondary index", GetName(), m_sLastError.cstr() );
-			m_sLastError = "";
-		}
-		if ( GetSecondaryIndexDefault()==SIDefault_e::FORCE )
-			return false;
-	}
+	if ( m_tSchema.HasJsonSIAttrs() && !LoadSecondaryIndex ( GetFilename(SPH_EXT_SPJIDX) ) )
+		return false;
 
 	return true;
 }
@@ -9661,6 +9625,7 @@ bool CSphIndex_VLN::DoGetKeywords ( CSphVector <CSphKeywordInfo> & dKeywords, co
 	tExpCtx.m_bMergeSingles = false;
 	tExpCtx.m_eHitless = m_tSettings.m_eHitless;
 	tExpCtx.m_iCutoff = tSettings.m_iCutoff;
+	tExpCtx.m_bAllowExpansion = tSettings.m_bAllowExpansion;
 
 	tAotFilter.GetKeywords ( dKeywords, tExpCtx );
 	return true;
@@ -10525,7 +10490,7 @@ static bool RunSplitQuery ( RUN && tRun, const CSphQuery & tQuery, CSphQueryResu
 	tClonableCtx.LimitConcurrency ( pDispatcher->GetConcurrency() );
 
 	auto iStart = sphMicroTimer();
-	QUERYINFO << "Started: " << ( sphMicroTimer()-iStart );
+	QUERYINFO << " Started: " << ( sphMicroTimer()-iStart ) << " index:" << szIndexName;
 
 	// because disk chunk search within the loop will switch the profiler state
 	SwitchProfile ( pProfiler, SPH_QSTATE_INIT );
@@ -10544,22 +10509,23 @@ static bool RunSplitQuery ( RUN && tRun, const CSphQuery & tQuery, CSphQueryResu
 
 		if ( !pSource->FetchTask ( iJob ) || CheckInterrupt() )
 		{
-			QUERYINFO << "Early finish parallel RunSplitQuery because of empty queue";
+			QUERYINFO << "Early finish parallel RunSplitQuery because of empty queue" << " index:" << szIndexName;
 			return; // already nothing to do, early finish.
 		}
 
 		auto tJobContext = tClonableCtx.CloneNewContext ( !iJob );
 		auto& tCtx = tJobContext.first;
-		auto Interrupt = [&bInterrupt, &tCtx] ( const char* szReason ) {
+		auto Interrupt = [&bInterrupt, &tCtx, &szIndexName] ( const char* szReason ) {
 			tCtx.m_tMeta.m_sWarning = szReason;
 			bInterrupt.store ( true, std::memory_order_relaxed );
+			QUERYINFO << "RunSplitQuery interrupted " << szReason << " index:" << szIndexName;
 		};
-		QUERYINFO << "RunSplitQuery cloned context " << tJobContext.second;
+		QUERYINFO << "RunSplitQuery cloned context " << tJobContext.second << " index:" << szIndexName;
 		tClonableCtx.SetJobOrder ( tJobContext.second, iJob );
 		Threads::Coro::SetThrottlingPeriodMS ( session::GetThrottlingPeriodMS() );
 		while ( !CheckInterrupt() ) // some earlier job met error; abort.
 		{
-			QUERYINFO << "RunSplitQuery " << tJobContext.second << ", job " << iJob;
+			QUERYINFO << "RunSplitQuery " << tJobContext.second << ", job " << iJob << " index:" << szIndexName;
 			myinfo::SetTaskInfo ( "%d ch %d:", Threads::Coro::NumOfRestarts(), iJob );
 			auto & dLocalSorters = tCtx.m_dSorters;
 			CSphQueryResultMeta tChunkMeta;
@@ -10616,9 +10582,12 @@ static bool RunSplitQuery ( RUN && tRun, const CSphQuery & tQuery, CSphQueryResu
 			}
 		}
 	});
-	QUERYINFO << "RunSplitQuery processed in " << tClonableCtx.NumWorked() << " thread(s)";
+	QUERYINFO << "RunSplitQuery processed in " << tClonableCtx.NumWorked() << " thread(s)" << " index:" << szIndexName;
 	tClonableCtx.Finalize();
-	return !CheckInterrupt();
+	// can not fail query due to interruption or timeout
+	// that is valid result set with just warning
+	// parent sorters merge well in case of interruption or timeout
+	return ( tResult.m_sError.IsEmpty() );
 }
 
 template<typename RUN>
@@ -10634,16 +10603,13 @@ bool CSphIndex_VLN::SplitQuery ( RUN && tRun, CSphQueryResult & tResult, const C
 	int iSplit = Max ( Min ( (int)m_tStats.m_iTotalDocuments, tArgs.m_iThreads ), 1 );
 	int64_t iTotalDocs = tArgs.m_iTotalDocs ? tArgs.m_iTotalDocs : m_tStats.m_iTotalDocuments;
 	bool bOk = RunSplitQuery ( tRun, tQuery, *tResult.m_pMeta, dSorters, tArgs, pProfile, tArgs.m_pLocalDocs, iTotalDocs, GetName(), iSplit, tmMaxTimer );
-	if ( !bOk )
-		return false;
 
 	tResult.m_pBlobPool = m_tBlobAttrs.GetReadPtr();
 	tResult.m_pDocstore = m_pDocstore ? this : nullptr;
 	tResult.m_pColumnar = m_pColumnar.get();
 
 	PooledAttrsToPtrAttrs ( dSorters, m_tBlobAttrs.GetReadPtr(), m_pColumnar.get(), tArgs.m_bFinalizeSorters, pProfile, tArgs.m_bModifySorterSchemas );
-
-	return true;
+	return bOk;
 }
 
 
@@ -10720,13 +10686,16 @@ bool CSphIndex_VLN::MultiQuery ( CSphQueryResult & tResult, const CSphQuery & tQ
 	if ( pQueryParser->IsFullscan ( tQuery ) )
 	{
 		if ( tArgs.m_iThreads>1 )
+		{
 			return SplitQuery (
 				[this, &tmMaxTimer]
 				( CSphQueryResult & tChunkResult, const CSphQuery & tQuery, VecTraits_T<ISphMatchSorter *> dLocalSorters, const CSphMultiQueryArgs & tMultiArgs )
 				{ return MultiScan ( tChunkResult, tQuery, dLocalSorters, tMultiArgs, tmMaxTimer ); },
 				tResult, tQuery, dAllSorters, tArgs, tmMaxTimer );
-
-		return MultiScan ( tResult, tQuery, dSorters, tArgs, tmMaxTimer );
+		} else
+		{
+			return MultiScan ( tResult, tQuery, dSorters, tArgs, tmMaxTimer );
+		}
 	}
 
 	SwitchProfile ( pProfile, SPH_QSTATE_DICT_SETUP );
@@ -10757,13 +10726,16 @@ bool CSphIndex_VLN::MultiQuery ( CSphQueryResult & tResult, const CSphQuery & tQ
 	if ( pQueryParser->IsFullscan ( tParsed ) )
 	{
 		if ( tArgs.m_iThreads>1 )
+		{
 			return SplitQuery (
 				[this, &tmMaxTimer]
 				( CSphQueryResult & tChunkResult, const CSphQuery & tQuery, VecTraits_T<ISphMatchSorter *> dLocalSorters, const CSphMultiQueryArgs & tMultiArgs )
 				{ return MultiScan ( tChunkResult, tQuery, dLocalSorters, tMultiArgs, tmMaxTimer ); },
 				tResult, tQuery, dAllSorters, tArgs, tmMaxTimer );
-
-		return MultiScan ( tResult, tQuery, dSorters, tArgs, tmMaxTimer );
+		} else
+		{
+			return MultiScan ( tResult, tQuery, dSorters, tArgs, tmMaxTimer );
+		}
 	}
 
 	if ( !tParsed.m_sParseWarning.IsEmpty() )
@@ -10798,13 +10770,16 @@ bool CSphIndex_VLN::MultiQuery ( CSphQueryResult & tResult, const CSphQuery & tQ
 		return false;
 
 	if ( tArgs.m_iThreads>1 )
+	{
 		return SplitQuery (
 			[this, iStackNeed, &pDict, &tParsed, &tmMaxTimer]
 			( CSphQueryResult & tChunkResult, const CSphQuery & tQuery, VecTraits_T<ISphMatchSorter *> dLocalSorters, const CSphMultiQueryArgs & tMultiArgs )
 			{ return RunParsedMultiQuery ( iStackNeed, pDict, true, tQuery, tChunkResult, dLocalSorters, tParsed, tMultiArgs, tmMaxTimer ); },
 			tResult, tQuery, dAllSorters, tArgs, tmMaxTimer );
-
-	return RunParsedMultiQuery ( iStackNeed, pDict, false, tQuery, tResult, dSorters, tParsed, tArgs, tmMaxTimer );
+	} else
+	{
+		return RunParsedMultiQuery ( iStackNeed, pDict, false, tQuery, tResult, dSorters, tParsed, tArgs, tmMaxTimer );
+	}
 }
 
 
@@ -11051,20 +11026,16 @@ bool CSphIndex_VLN::ParsedMultiQuery ( const CSphQuery & tQuery, CSphQueryResult
 		return false;
 	}
 
-	// select the sorter with max schema
-	int iMaxSchemaIndex = GetMaxSchemaIndexAndMatchCapacity ( dSorters ).first;
-	const ISphSchema & tMaxSorterSchema = *(dSorters[iMaxSchemaIndex]->GetSchema());
-	auto dSorterSchemas = SorterSchemas ( dSorters, iMaxSchemaIndex);
-
-	// setup calculations and result schema
-	CSphQueryContext tCtx ( tQuery );
-	tCtx.m_pProfile = pProfile;
-	tCtx.m_pLocalDocs = tArgs.m_pLocalDocs;
-	tCtx.m_iTotalDocs = ( tArgs.m_iTotalDocs ? tArgs.m_iTotalDocs : m_tStats.m_iTotalDocuments );
-	tCtx.m_iIndexTotalDocs = m_iDocinfo;
-
-	if ( !tCtx.SetupCalc ( tMeta, tMaxSorterSchema, m_tSchema, m_tBlobAttrs.GetReadPtr(), m_pColumnar.get(), dSorterSchemas ) )
+	CSphQueryContext tCtx(tQuery);
+	CreateFilterContext_t tFlx;
+	const ISphSchema * pMaxSorterSchema = nullptr;
+	CSphVector<CSphFilterSettings> dTransformedFilters; // holds filter settings if they were modified. filters hold pointers to those settings
+	CSphVector<FilterTreeItem_t> dTransformedFilterTree;
+	if ( !SetupFiltersAndContext ( tCtx, tFlx, tMeta, pMaxSorterSchema, dTransformedFilters, dTransformedFilterTree, dSorters, tArgs ) )
 		return false;
+
+	assert(pMaxSorterSchema);
+	const ISphSchema & tMaxSorterSchema = *pMaxSorterSchema;
 
 	// set blob pool for string on_sort expression fix up
 	tCtx.SetBlobPool ( m_tBlobAttrs.GetReadPtr() );
@@ -11155,30 +11126,6 @@ bool CSphIndex_VLN::ParsedMultiQuery ( const CSphQuery & tQuery, CSphQueryResult
 
 	SetupRowIdBoundaries ( tQuery.m_dFilters, RowID_t(m_iDocinfo), *pRanker );
 
-	// setup filters
- 	CreateFilterContext_t tFlx;
-	tFlx.m_pFilters = &tQuery.m_dFilters;
-	tFlx.m_pFilterTree = &tQuery.m_dFilterTree;
-	tFlx.m_pSchema = &tMaxSorterSchema;
-	tFlx.m_pBlobPool = m_tBlobAttrs.GetReadPtr();
-	tFlx.m_pColumnar = m_pColumnar.get();
-	tFlx.m_eCollation = tQuery.m_eCollation;
-	tFlx.m_bScan = tQuery.m_sQuery.IsEmpty ();
-	tFlx.m_pHistograms = m_pHistograms;
-	tFlx.m_pSI = m_pSIdx.get();
-	tFlx.m_sJoinIdx = tQuery.m_sJoinIdx;
-
-	CSphVector<CSphFilterSettings> dTransformedFilters; // holds filter settings if they were modified. filters hold pointers to those settings
-	CSphVector<FilterTreeItem_t> dTransformedFilterTree;
-	if ( !TransformFilters ( tFlx, dTransformedFilters, dTransformedFilterTree, tMeta.m_sError ) )
-		return false;
-
-	tFlx.m_pFilters = &dTransformedFilters;
-	tFlx.m_pFilterTree = dTransformedFilterTree.GetLength() ? &dTransformedFilterTree : nullptr;
-
-	if ( !tCtx.CreateFilters ( tFlx, tMeta.m_sError, tMeta.m_sWarning ) )
-		return false;
-
 	if ( CheckEarlyReject ( dTransformedFilters, tCtx.m_pFilter.get(), tQuery.m_eCollation, tMaxSorterSchema ) )
 	{
 		tMeta.m_iQueryTime += (int)( ( sphMicroTimer()-tmQueryStart )/1000 );
@@ -11195,6 +11142,14 @@ bool CSphIndex_VLN::ParsedMultiQuery ( const CSphQuery & tQuery, CSphQueryResult
 	SwitchProfile ( pProfile, SPH_QSTATE_SETUP_ITER );
 
 	int iCutoff = ApplyImplicitCutoff ( tQuery, dSorters, true );
+
+	int iOldLen = tMeta.m_tIteratorStats.m_dIterators.GetLength();
+	for ( auto & i : dSorters )
+		i->AddDesc ( tMeta.m_tIteratorStats.m_dIterators );
+
+	if ( tMeta.m_tIteratorStats.m_dIterators.GetLength()!=iOldLen )
+		tMeta.m_tIteratorStats.m_iTotal = 1;
+
 	CSphVector<CSphFilterSettings> dFiltersAfterIterator; // holds filter settings if they were modified. filters hold pointers to those settings
 	std::pair<RowidIterator_i *, bool> tSpawned = SpawnIterators ( tQuery, dTransformedFilters, tCtx, tFlx, tMaxSorterSchema, tMeta, iCutoff, tArgs.m_iTotalThreads, dFiltersAfterIterator, pRanker.get() );
 	std::unique_ptr<RowidIterator_i> pIterator = std::unique_ptr<RowidIterator_i> ( tSpawned.first );
@@ -11298,9 +11253,7 @@ bool CSphIndex_VLN::ParsedMultiQuery ( const CSphQuery & tQuery, CSphQueryResult
 	tMeta.m_iQueryTime += (int)( tmWall/1000 );
 	tMeta.m_iCpuTime += sphTaskCpuTimer ()-tmCpuQueryStart;
 
-#if 0
-	printf ( "qtm %d, %d, %d, %d, %d\n", int(tmWall), tQueryStats.m_iFetchedDocs, tQueryStats.m_iFetchedHits, tQueryStats.m_iSkips, dSorters[0]->GetTotalCount() );
-#endif
+	QUERYINFO << GetName() << ": qtm " << (int)(tmWall) << ", " << tQueryStats.m_iFetchedDocs << ", " << tQueryStats.m_iFetchedHits << ", " << tQueryStats.m_iSkips << ", " << dSorters[0]->GetTotalCount();
 
 	SwitchProfile ( pProfile, eOldState );
 
@@ -11665,6 +11618,7 @@ Bson_t CSphIndex_VLN::ExplainQuery ( const CSphString & sQuery ) const
 	return Explain ( tArgs );
 }
 
+
 bool CSphIndex_VLN::AlterSI ( CSphString & sError )
 {
 	if ( !IsSecondaryLibLoaded() )
@@ -11674,45 +11628,41 @@ bool CSphIndex_VLN::AlterSI ( CSphString & sError )
 	}
 
 	MergeCb_c tMonitor;
-	CSphFixedVector<RowID_t> dDeadRows {0}, dTmpRows{0};
-	CreateRowMapsAndCountTotalDocs ( this, this, dTmpRows, dDeadRows, nullptr, false, tMonitor );
-
-	CSphString sFileNew;
-	if ( !SiRecreate ( tMonitor, *this, dDeadRows, sFileNew, sError ) )
+	StrVec_t dCurFiles, dNewFiles;
+	if ( !SiRecreate ( tMonitor, *this, m_iDocinfo, dCurFiles, dNewFiles, sError ) )
 		return false;
 
-	m_pSIdx.reset();
-
-	const CSphString sFileCur = GetFilename ( SPH_EXT_SPIDX );
-	CSphString sFileOld;
-	sFileOld.SetSprintf ( "%s.old", sFileCur.cstr() );
-	StrVec_t dFilesFrom ( 1 );
-	StrVec_t dFilesTo ( 1 );
-
-	bool bCurExists = sphFileExists ( sFileCur.cstr() );
-
-	if ( bCurExists )
+	ARRAY_FOREACH ( i, dCurFiles )
 	{
-		dFilesFrom[0] = sFileCur;
-		dFilesTo[0] = sFileOld;
+		StrVec_t dFilesFrom(1);
+		StrVec_t dFilesTo(1);
+		CSphString sFileOld;
+		bool bCurExists = sphFileExists ( dCurFiles[i].cstr() );
+		if ( bCurExists )
+		{
+			sFileOld.SetSprintf ( "%s.old", dCurFiles[i].cstr() );
+
+			dFilesFrom[0] = dCurFiles[i];
+			dFilesTo[0] = sFileOld;
+
+			if ( !RenameWithRollback ( dFilesFrom, dFilesTo, sError ) )
+				return false;
+
+			if ( !m_tSI.Drop ( dCurFiles[i], sError ) )
+				return false;
+		}
+
+		dFilesFrom[0] = dNewFiles[i];
+		dFilesTo[0] = dCurFiles[i];
 
 		if ( !RenameWithRollback ( dFilesFrom, dFilesTo, sError ) )
 			return false;
-	}
 
-	dFilesFrom[0] = sFileNew;
-	dFilesTo[0] = sFileCur;
+		if ( !m_tSI.Load ( dCurFiles[i].cstr(), sError ) )
+			return false;
 
-	if ( !RenameWithRollback ( dFilesFrom, dFilesTo, sError ) )
-		return false;
-
-	m_pSIdx.reset ( CreateSecondaryIndex ( sFileCur.cstr(), sError ) );
-	if ( !m_pSIdx )
-		return false;
-
-	if ( bCurExists )
-	{
-		::unlink ( sFileOld.cstr() );
+		if ( bCurExists )
+			::unlink ( sFileOld.cstr() );
 	}
 
 	return true;

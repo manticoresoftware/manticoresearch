@@ -4,7 +4,7 @@ mkdir /tmp/import-table/
 ––– input –––
 echo "a > b" > /tmp/import-table/wordforms1.txt; echo "c > d" > /tmp/import-table/exc.txt; echo "abcstop" > /tmp/import-table/stop.txt
 ––– output –––
-––– block: ../base/start-searchd-with-buddy –––
+––– block: ../base/start-searchd –––
 ––– input –––
 mysql -h0 -P9306 -e "CREATE TABLE test (id INT) exceptions='/tmp/import-table/exc.txt' wordforms='/tmp/import-table/wordforms1.txt' stopwords='/tmp/import-table/stop.txt'; INSERT INTO test(id) VALUES(1);"
 ––– output –––
@@ -13,9 +13,9 @@ mysql -h0 -P9306 -e "SHOW TABLE test SETTINGS\G"
 ––– output –––
 *************************** 1. row ***************************
 Variable_name: settings
-Value: exceptions = /var/lib/manticore/test/exc.txt
-stopwords = /var/lib/manticore/test/stop.txt
-wordforms = /var/lib/manticore/test/wordforms1.txt
+Value: exceptions = /var/lib/manticore/test/exceptions_chunk0_0.txt
+stopwords = /var/lib/manticore/test/stopwords_chunk0_0.txt
+wordforms = /var/lib/manticore/test/wordforms_chunk0_0.txt
 ––– input –––
 mysql -h0 -P9306 -e "import table test2 from '/var/lib/manticore/test/test'"
 ––– output –––

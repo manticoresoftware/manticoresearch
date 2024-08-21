@@ -33,6 +33,7 @@ public:
 
 	int				Open ( const CSphString & sName, int iMode, CSphString & sError, bool bTemp=false );
 	void			Close ();
+	int 			LeakID ();
 	void 			SetPersistent(); ///< would unset 'temporary' flag, if any - so that file will not be unlinked
 	int				GetFD () const { return m_iFD; }
 	const char *	GetFilename () const;
@@ -80,6 +81,7 @@ public:
 	DWORD		GetDword ();
 	SphOffset_t	GetOffset ();
 	CSphString	GetString ();
+	CSphString  GetZString ();
 	int			GetLine ( char * sBuffer, int iMaxLen );
 	bool		Tag ( const char * sTag );
 
@@ -180,6 +182,9 @@ public:
 	virtual void	PutString ( const char * szString ) = 0;
 	virtual void	PutString ( const CSphString & sString ) = 0;
 
+	virtual void	PutZString ( const char * szString ) = 0;
+	virtual void	PutZString ( const CSphString & sString ) = 0;
+
 	virtual void	ZipInt ( DWORD uValue ) = 0;
 	virtual void	ZipOffset ( uint64_t uValue ) = 0;
 	virtual			~Writer_i() = default;
@@ -217,6 +222,8 @@ public:
 	void			PutString ( const char * szString ) override;
 	void			PutString ( const CSphString & sString ) override;
 	void			PutString ( Str_t tString ) { PutBytes ( tString.first, tString.second ); };
+	void			PutZString ( const char * szString ) override;
+	void			PutZString ( const CSphString & sString ) override;
 	void			Tag ( const char * sTag );
 
 	void			SeekTo ( SphOffset_t iPos, bool bTruncate = false );
@@ -251,6 +258,12 @@ private:
 	void			UpdatePoolUsed();
 };
 
+class CSphWriterNonThrottled final : public CSphWriter
+{
+public:
+	void Flush () final;
+};
+
 
 bool SeekAndWarn ( int iFD, SphOffset_t iPos, const char * szWarnPrefix );
 
@@ -261,12 +274,10 @@ int sphPread ( int iFD, void * pBuf, int iBytes, SphOffset_t iOffset );
 void sphSetThrottling ( int iMaxIOps, int iMaxIOSize );
 
 /// write blob to file honoring throttling
-bool sphWriteThrottled ( int iFD, const void * pBuf, int64_t iCount, const char * sName, CSphString & sError );
+bool sphWriteThrottled ( int iFD, const void * pBuf, int64_t iCount, const char * szName, CSphString & sError );
 
-using WriteSize_fn = std::function<int ( int64_t iCount, int iChunkSize )>;
-
-/// write blob to file honoring throttling
-bool sphWriteThrottled ( int iFD, const void * pBuf, int64_t iCount, WriteSize_fn && fnWriteSize, const char * sName, CSphString & sError );
+/// write blob to file honoring iostats, but without throttling
+bool WriteNonThrottled ( int iFD, const void * pBuf, int64_t iCount, const char * sName, CSphString & sError );
 
 /// read blob from file honoring throttling
 size_t sphReadThrottled ( int iFD, void* pBuf, size_t iCount );

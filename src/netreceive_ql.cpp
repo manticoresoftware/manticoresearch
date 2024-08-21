@@ -968,7 +968,11 @@ static bool LoopClientMySQL ( BYTE & uPacketID, int iPacketLen, QueryProfile_c *
 		case MYSQL_COM_QUERY:
 		{
 			// handle query packet
-			myinfo::SetDescription ( tIn.GetRawString ( iPacketLen-1 ), iPacketLen-1 ); // OPTIMIZE? could be huge, but string is hazard.
+			Str_t tSrcQueryReference ( nullptr, iPacketLen-1 );
+			tIn.GetBytesZerocopy ( ( const BYTE ** )( &tSrcQueryReference.first ), tSrcQueryReference.second );
+
+			// string created from the tSrcQueryReference data got moved into myinfo then could be changed during query parsing
+			myinfo::SetDescription ( CSphString ( tSrcQueryReference ), tSrcQueryReference.second ); // OPTIMIZE? could be huge, but string is hazard.
 			AT_SCOPE_EXIT ( []() { myinfo::SetDescription ( {}, 0 ); } );
 			assert ( !tIn.GetError() );
 			sphLogDebugv ( "LoopClientMySQL command %d, '%s'", uMysqlCmd, myinfo::UnsafeDescription().first );
@@ -987,7 +991,7 @@ static bool LoopClientMySQL ( BYTE & uPacketID, int iPacketLen, QueryProfile_c *
 						sphLogDebug ( "Can't invoke buddy, because output socket was flushed; unable to rewind/overwrite anything" );
 				} else
 				{
-					ProcessSqlQueryBuddy ( myinfo::UnsafeDescription(), FromStr ( tRows.GetError() ), tStoredPos, uPacketID, tOut );
+					ProcessSqlQueryBuddy ( tSrcQueryReference, FromStr ( tRows.GetError() ), tStoredPos, uPacketID, tOut );
 				}
 			}
 		}

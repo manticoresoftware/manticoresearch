@@ -18,6 +18,7 @@
 #include "sphinxint.h"
 #include "coroutine.h"
 #include "sphinxpq.h"
+#include "binlog.h"
 
 using namespace Threads;
 
@@ -520,6 +521,8 @@ static bool ConfigWrite ( const CSphString & sConfigPath, const CSphVector<Clust
 		auto _ = tOut.Object();
 		for_each ( dIndexes, [&tOut] ( const auto& tIndex ) { tIndex.Save ( tOut ); } );
 	}
+	SaveCompatHttp ( tOut );
+
 	tOut.FinishBlocks();
 
 	CSphString sNew, sOld;
@@ -796,33 +799,6 @@ static bool PrepareDirForNewIndex ( CSphString & sPath, CSphString & sIndexPath,
 	sPath = sRes.cstr();
 	sRes << sIndexName;
 	sIndexPath = sRes.cstr();
-
-	return true;
-}
-
-
-bool CopyExternalIndexFiles ( const StrVec_t & dFiles, const CSphString & sDestPath, StrVec_t & dCopied, CSphString & sError )
-{
-	for ( const auto & i : dFiles )
-	{
-		CSphString sDest = i;
-		StripPath(sDest);
-		sDest.SetSprintf ( "%s%s", sDestPath.cstr(), sDest.cstr() );
-		if ( RealPath ( i ) == RealPath ( sDest ) )
-			continue;
-
-		// can not overwrite existed destination file
-		if ( sphIsReadable ( sDest.cstr(), nullptr ) )
-		{
-			sError.SetSprintf ( "can not overwrite index file '%s'", sDest.cstr() );
-			return false;
-		}
-
-		if ( !CopyFile ( i, sDest, sError ) )
-			return false;
-
-		dCopied.Add(sDest);
-	}
 
 	return true;
 }
@@ -1188,7 +1164,7 @@ bool CopyIndexFiles ( const CSphString & sIndex, const CSphString & sPathToIndex
 
 static bool CheckCreateTableSettings ( const CreateTableSettings_t & tCreateTable, CSphString & sError )
 {
-	static const char * dForbidden[] = { "path", "stored_fields", "stored_only_fields", "columnar_attrs", "columnar_no_fast_fetch", "rowwise_attrs", "rt_field", "embedded_limit", "knn" };
+	static const char * dForbidden[] = { "path", "stored_fields", "stored_only_fields", "columnar_attrs", "columnar_no_fast_fetch", "rowwise_attrs", "rt_field", "embedded_limit", "knn", "json_secondary_indexes" };
 	static const char * dTypes[] = { "rt", "pq", "percolate", "distributed" };
 
 	for ( const auto & i : tCreateTable.m_dOpts )
@@ -1336,6 +1312,13 @@ static void DeleteRtIndex ( CSphIndex * pIdx, const StrVec_t * pExtFiles )
 	DeleteExtraIndexFiles ( pRt, pExtFiles );
 }
 
+static void FixupIndexTID ( CSphIndex * pIdx, int64_t iTID )
+{
+	assert ( IsConfigless () );
+	if ( pIdx && ( pIdx->IsRT () || pIdx->IsPQ () ) && pIdx->m_iTID!=-1 )
+		pIdx->m_iTID = iTID;
+}
+
 static void RemoveAndDeleteRtIndex ( const CSphString& sIndex )
 {
 	assert ( IsConfigless() );
@@ -1358,17 +1341,14 @@ bool CreateNewIndexConfigless ( const CSphString & sIndex, const CreateTableSett
 	if ( !CheckCreateTableSettings ( tCreateTable, sError ) )
 		return false;
 
-	IndexSettingsContainer_c tSettingsContainer;
-	if ( !tSettingsContainer.Populate ( tCreateTable ) )
+	std::unique_ptr<IndexSettingsContainer_i> pSettingsContainer { CreateIndexSettingsContainer() };
+	if ( !pSettingsContainer->Populate ( tCreateTable, true ) )
 	{
-		sError = tSettingsContainer.GetError();
+		sError = pSettingsContainer->GetError();
 		return false;
 	}
 
-	StrVec_t dWipe;
-	auto tCleanup = AtScopeExit ( [&dWipe] { dWipe.for_each ( [] ( const auto& i ) { unlink ( i.cstr() ); } ); } );
-
-	if ( tSettingsContainer.Get ( "type" ) != "distributed")
+	if ( pSettingsContainer->Get ( "type" )!="distributed")
 	{
 		CSphString sPath, sIndexPath;
 		if ( !PrepareDirForNewIndex ( sPath, sIndexPath, sIndex, sError ) )
@@ -1378,12 +1358,15 @@ bool CreateNewIndexConfigless ( const CSphString & sIndex, const CreateTableSett
 			return false;
 		}
 
-		tSettingsContainer.Add ( "path", sIndexPath );
-		if ( !CopyExternalIndexFiles ( tSettingsContainer.GetFiles(), sPath, dWipe, sError ) )
+		pSettingsContainer->Add ( "path", sIndexPath );
+		if ( !pSettingsContainer->CopyExternalFiles ( sPath, 0 ) )
+		{
+			sError = pSettingsContainer->GetError();
 			return false;
+		}
 	}
 
-	const CSphConfigSection & hCfg = tSettingsContainer.AsCfg();
+	const CSphConfigSection & hCfg = pSettingsContainer->AsCfg();
 
 	ESphAddIndex eAdd;
 	ServedIndexRefPtr_c pDesc;
@@ -1394,6 +1377,7 @@ bool CreateNewIndexConfigless ( const CSphString & sIndex, const CreateTableSett
 	case ADD_NEEDLOAD:
 		{
 			assert ( pDesc );
+			FixupIndexTID ( UnlockedHazardIdxFromServed ( *pDesc ), Binlog::LastTidFor ( sIndex ) );
 			if ( !PreallocNewIndex ( *pDesc, &hCfg, sIndex.cstr(), dWarnings, sError ) )
 			{
 				DeleteRtIndex ( UnlockedHazardIdxFromServed ( *pDesc ), nullptr );
@@ -1410,7 +1394,7 @@ bool CreateNewIndexConfigless ( const CSphString & sIndex, const CreateTableSett
 
 	if ( SaveConfigInt ( sError ) )
 	{
-		dWipe.Reset();
+		pSettingsContainer->ResetCleanup();
 		return true;
 	}
 
@@ -1579,7 +1563,7 @@ static bool DropLocalIndex ( const CSphString & sIndex, CSphString & sError, CSp
 		StrVec_t dExtFiles;
 		pRt->GetIndexFiles ( dIndexFiles, dExtFiles );
 
-		if ( !pRt->Truncate(sError) )
+		if ( !pRt->Truncate(sError, RtIndex_i::DROP ) )
 			return false;
 
 		DeleteRtIndex ( pRt, &dExtFiles );

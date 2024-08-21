@@ -11,16 +11,33 @@
 //
 
 #include "binlog.h"
-#include "sphinxsearch.h"
-#include "sphinxpq.h"
-#include "accumulator.h"
+#include "sphinxrt.h"
+#include "memio.h"
+#include "coroutine.h"
 
-#define BINLOG_WRITE_BUFFER		(256*1024)
-#define BINLOG_AUTO_FLUSH		1000000 // 1 sec
+static constexpr int BINLOG_WRITE_BUFFER = 256*1024;
+static constexpr int64_t BINLOG_AUTO_FLUSH = 1000000; // 1 sec
 
-static const DWORD		BINLOG_HEADER_MAGIC = 0x4c425053;	/// magic 'SPBL' header that marks binlog file
-static const DWORD		BLOP_MAGIC = 0x214e5854;			/// magic 'TXN!' header that marks binlog entry
-static const DWORD		BINLOG_META_MAGIC = 0x494c5053;		/// magic 'SPLI' header that marks binlog meta
+static constexpr DWORD		BINLOG_HEADER_MAGIC_SPBL = 0x4c425053;	/// magic 'SPBL' header that marks binlog file
+static constexpr DWORD		BLOP_MAGIC_TXN_ = 0x214e5854;			/// magic 'TXN!' header that marks binlog entry
+static constexpr DWORD		BINLOG_META_MAGIC_SPLI = 0x494c5053;	/// magic 'SPLI' header that marks binlog meta
+
+// up to 12: PQ_ADD_DELETE added
+// 13 : changed txn format; now stores total documents also
+// 14 : ??
+// 15 : big refactor: remove external ops; ops is 1 byte (unzipped); + internal ops, + size for ADD_TXN, - index ID
+
+constexpr unsigned int BINLOG_VERSION = 15;
+
+/// Bin Log Operation
+enum Blop_e : BYTE
+{
+	ADD_INDEX = 1,
+	ADD_TXN = 2,
+	ADD_CACHE = 3,
+
+	TOTAL
+};
 
 //////////////////////////////////////////////////////////////////////////
 // BINLOG
@@ -30,16 +47,16 @@ static const DWORD		BINLOG_META_MAGIC = 0x494c5053;		/// magic 'SPLI' header tha
 /// everything that a given log file needs to know about an index
 struct BinlogIndexInfo_t
 {
-	CSphString	m_sName;				///< index name
-	int64_t		m_iIndexGen = 0;		///< index UID
+	CSphString	m_sName;
 	int64_t		m_iMinTID = INT64_MAX;	///< min TID logged by this file
 	int64_t		m_iMaxTID = 0;			///< max TID logged by this file
 	int64_t		m_iFlushedTID = 0;		///< last flushed TID
-	int64_t		m_tmMin = INT64_MAX;	///< min TID timestamp
-	int64_t		m_tmMax = 0;			///< max TID timestamp
+};
 
-	CSphIndex *	m_pIndex = nullptr;		///< replay only; associated index (might be NULL if we don't serve it anymore!)
-	int64_t		m_iPreReplayTID = 0;	///< replay only; index TID at the beginning of this file replay
+struct BinlogIndexReplayInfo_t : BinlogIndexInfo_t
+{
+	CSphIndex * m_pIndex = nullptr;  ///< associated index (might be NULL if we don't serve it anymore!)
+	int64_t m_iPreReplayTID = 0;     ///< index TID at the beginning of this file replay
 };
 
 /// binlog file descriptor
@@ -50,293 +67,326 @@ struct BinlogFileDesc_t
 	CSphVector<BinlogIndexInfo_t>	m_dIndexInfos;
 };
 
+struct BinlogReplayFileDesc_t
+{
+	int									m_iExt;
+	CSphVector<BinlogIndexReplayInfo_t> m_dIndexInfos;
+};
 
-class BinlogWriter_c : public MemoryWriter2_c
+
+class BinlogWriter_c final : public MemoryWriter2_c
 {
 public:
 					BinlogWriter_c() : MemoryWriter2_c(m_dBuf) {}
-					~BinlogWriter_c() { CloseFile(); }
+					~BinlogWriter_c() final { CloseFile(); }
 
 	bool			Write ( bool bRemoveUnsuccessful = true );
-	bool			Fsync();
-	int64_t			GetPos() const				{ return m_iFilePos; }
+	bool			WriteAndFsync();
+	bool			Fsync ( int iFD = -1 );
+
+	int64_t			GetFilePos() const noexcept			{ return m_iLastFilePos; }
 
 	bool			OpenFile ( const CSphString & sFile, CSphString & sError );
 	void			CloseFile();
+	int				LeakFD();
+	int				GetFD () const noexcept;
+	CSphString		GetFilename() const noexcept;
 	const CSphString & GetError() const			{ return m_sError; }
 
-	bool			HasUnwrittenData () const	{ return m_dBuf.GetLength()>0; }
-	bool			HasUnsyncedData () const	{ return m_iLastFsyncPos!=m_iFilePos; }
+	bool			HasUnwrittenData () const	{ return !m_dBuf.IsEmpty(); }
+	bool			HasUnsyncedData () const	{ return m_iLastFsyncPos.load(std::memory_order_relaxed)!=m_iLastFilePos; }
 
-	void			StartTransaction();
-	void			EndTransaction ( bool bWriteOnOverflow );
-	bool			IsOpen() const { return ( m_tFile.GetFD()!=-1 ); }
+	bool			IsOpen() const noexcept { return ( m_tFile.GetFD()!=-1 ); }
+
+
+private:
+	friend class BinlogTransactionGuard_c;
+	friend class TransactionSizeGuard_c;
+
+	void StartTransaction ();
+	void EndTransaction ( int64_t iStartTransaction, bool bWriteOnOverflow );
+	inline int64_t GetBuffPos () const noexcept { return m_dBuf.GetLengthBytes64 (); }
 
 private:
 	CSphAutofile	m_tFile;
 	CSphVector<BYTE> m_dBuf;
-	CSphVector<int> m_dTnxOff;
 	CSphString		m_sError;
 
-	int64_t			m_iFilePos = 0;
-	int64_t			m_iLastFsyncPos = 0;
-	int				m_iLastCrcPos = 0;
-	int				m_iTransactionStartPos = 0;
-	DWORD			m_uCRC = 0;
-
-	void			CalculateHash();
+	int64_t			m_iLastFilePos = 0;
+	std::atomic<int64_t> m_iLastFsyncPos { 0 };
+	int				m_iLastTransactionStartPos = 0;
 };
 
 
 class BinlogReader_c final : public CSphAutoreader
 {
 public:
-					BinlogReader_c ();
-
 	void			ResetCrc ();
 	bool			CheckCrc ( const char * sOp, const char * sIndexName, int64_t iTid, int64_t iTxnPos );
 
 private:
-	DWORD			m_uCRC;
-	int				m_iLastCrcPos;
+	DWORD			m_uCRC = 0;
+	int				m_iLastCrcPos = m_iBuffPos;
 	void			UpdateCache () final;
 	void			HashCollected ();
 };
 
 using namespace Binlog;
+class Binlog_c;
+
+enum class FlushAction_e : int
+{
+	ACTION_NONE = 0,
+	ACTION_FSYNC = 1,
+	ACTION_WRITE = 2,
+	ACTION_FSYNC_ON_CLOSE = 3,
+};
+
+enum class BinlogFileState_e
+{
+	OK,
+	ERROR_NON_READABLE, // if can't open binlog file
+	ERROR_EMPTY_0,		// if file is empty (0 bytes)
+	ERROR_WRONG_FILE,	// file is broken
+	ERROR_EMPTY_8,		// file is valid, but no txns
+	ERROR_ABANDONED		// file is valid, but only cache, no txns
+};
+
+using BinlogMutex_t = Threads::Coro::Mutex_c;
+using ScopedBinlogMutex_t = Threads::ScopedCoroMutex_t;
+
+class SingleBinlog_c final
+{
+	Binlog_c * m_pOwner;
+
+	mutable BinlogMutex_t m_tWriteAccess;      // serialize ops
+	BinlogWriter_c m_tWriter GUARDED_BY ( m_tWriteAccess );
+	mutable Threads::Coro::RWLock_c m_tLogFilesAccess;
+	CSphVector<BinlogFileDesc_t> m_dLogFiles GUARDED_BY ( m_tLogFilesAccess ); // active log files
+	Threads::Coro::Waitable_T<int> m_tFlushRunning { 0 };
+
+public:
+	NONCOPYMOVABLE( SingleBinlog_c );
+
+	explicit SingleBinlog_c ( Binlog_c* pOwner ) noexcept
+		: m_pOwner { pOwner } {}
+
+	~SingleBinlog_c ();
+	void Deinit();
+
+	std::pair<int, SingleBinlog_c*> DoFlush ( FlushAction_e eAction ) EXCLUDES ( m_tWriteAccess );
+	void DoFsync ( int iFd );
+	void CollectBinlogFiles ( CSphVector<int>& tOutput ) const noexcept EXCLUDES ( m_tLogFilesAccess );
+	bool BinlogCommit ( int64_t * pTID, const char* szIndexName, FnWriteCommit fnSaver, CSphString & sError ) EXCLUDES ( m_tWriteAccess );
+	bool NotifyIndexFlush ( int64_t iFlushedTID, const char * szIndexName, Shutdown_e eShutdown, ForceSave_e eForceSave ) EXCLUDES ( m_tWriteAccess );
+	void AdoptIndex ( int iExt, const BinlogIndexInfo_t & tIdx ) REQUIRES ( m_tLogFilesAccess );
+	void AdoptFile ( int iExt ) REQUIRES ( m_tLogFilesAccess );
+	void OpenNewLog ( BinlogFileState_e eState = BinlogFileState_e::OK ) REQUIRES ( m_tWriteAccess );
+	int64_t LastTidFor ( const CSphString & sIndex ) const noexcept EXCLUDES ( m_tLogFilesAccess );
+
+	void LockWriter () ACQUIRE ( m_tWriteAccess );
+	void UnlockWriter () RELEASE ( m_tWriteAccess );
+
+private:
+	void RemoveLastEmptyLog () EXCLUDES ( m_tLogFilesAccess );
+	int GetWriteIndexID ( const char * szIndexName, int64_t iTID ) EXCLUDES ( m_tLogFilesAccess ) REQUIRES ( m_tWriteAccess );
+	void DoCacheWrite () EXCLUDES ( m_tLogFilesAccess ) REQUIRES ( m_tWriteAccess );
+	void CheckDoRestart () REQUIRES ( m_tWriteAccess );
+	bool CheckDoFlush () REQUIRES ( m_tWriteAccess );
+	void SaveMeta () EXCLUDES ( m_tLogFilesAccess ) ;
+	void FixNofFiles ( int iFiles );
+};
+
+using SingleBinlogPtr = std::unique_ptr<SingleBinlog_c>;
 
 class Binlog_c : public ISphNoncopyable
 {
+	friend class SingleBinlog_c;
 public:
 			~Binlog_c();
 
-	void	NotifyIndexFlush ( int64_t iTID, IndexNameUid_t tIndexName, bool bShutdown, bool bForceSave );
-	bool	BinlogCommit ( Blop_e eOp, int64_t * pTID, IndexNameUid_t tIndexName, bool bIncTID, FnWriteCommit && fnSaver, CSphString & sError );
+	void	NotifyIndexFlush ( int64_t iTID, const char * szIndexName, Shutdown_e eShutdown, ForceSave_e eForceSave );
+	bool	BinlogCommit ( int64_t * pTID, const char * szIndexName, FnWriteCommit fnSaver, CSphString & sError );
 
-	void	Configure ( const CSphConfigSection & hSearchd, bool bTestMode, DWORD uReplayFlags, bool bConfigless );
+	void	Configure ( const CSphConfigSection & hSearchd, DWORD uReplayFlags );
+	void	SetCommon ( bool bCommonBinlog );
 	void	Replay ( const SmallStringHash_T<CSphIndex*> & hIndexes, ProgressCallbackSimple_t * pfnProgressCallback );
 
 	bool	IsActive () const { return !m_bDisabled; }
 	bool 	MockDisabled ( bool bNewVal );
-	void	CheckPath ( const CSphConfigSection & hSearchd, bool bTestMode );
+	void	CheckAndSetPath ( CSphString sBinlogPath );
 
 	bool	IsFlushingEnabled() const;
-	void	DoFlush ();
-	int64_t	NextFlushingTime() const;
+	void	DoFlush (); // invoked by task binlog flush, every BINLOG_AUTO_FLUSH (1 sec)
+	int64_t	NextFlushingTime() const noexcept;
 
-	CSphString GetLogPath() const;
+	inline CSphString GetLogPath() const noexcept { return m_sLogPath; }
+	int64_t LastTidFor ( const CSphString & sIndex ) const noexcept EXCLUDES ( m_tHashAccess );
 
 private:
-	volatile int64_t		m_iLastFlushed = 0;
-	volatile int64_t		m_iFlushPeriod = BINLOG_AUTO_FLUSH;
+	std::atomic<int64_t>	m_iLastFlushed {0};
+	int64_t					m_iFlushPeriod = BINLOG_AUTO_FLUSH;
 
-	enum OnCommitAction_e
-	{
-		ACTION_NONE,
-		ACTION_FSYNC,
-		ACTION_WRITE
-	};
-	OnCommitAction_e		m_eOnCommit { ACTION_NONE };
+	FlushAction_e			m_eFlushFlavour = FlushAction_e::ACTION_NONE;
 
-	CSphMutex				m_tWriteLock; // lock on operation
+	mutable Threads::Coro::RWLock_c m_tHashAccess;
+	SmallStringHash_T<SingleBinlogPtr> m_hBinlogs GUARDED_BY ( m_tHashAccess );
 
 	int						m_iLockFD = -1;
-	CSphString				m_sWriterError;
-	BinlogWriter_c			m_tWriter;
-
-	mutable CSphVector<BinlogFileDesc_t>	m_dLogFiles; // active log files
 
 	CSphString				m_sLogPath;
 
+	IntVec_t		 		m_dSavedFiles;
+
+	mutable Threads::Coro::RWLock_c m_tCurrentFilesAccess;
+	IntVec_t				m_dCurrentFiles GUARDED_BY ( m_tCurrentFilesAccess );
+
 	bool					m_bReplayMode = false; // replay mode indicator
 	bool					m_bDisabled = true;
-	bool					m_bConfigless = false;
 	DWORD					m_uReplayFlags = 0;
 	bool					m_bWrongVersion = false;
+	bool					m_bCommonBinlog = false; // per-index binlog(false), or old-way common binlog(true)
 
-	int						m_iRestartSize = 268435456; // binlog size restart threshold, 256M
+	int						m_iRestartSize = 268435456; // binlog size restart threshold, 256M; searchd.binlog_max_log_size
+	int 					m_iBinlogFileDigits = 4;	// how many digits use for naming binlog files
+	CSphString				m_sBinlogFileNameTemplate;
+
+	std::atomic<int>		m_iNextBinlog { 0 };
+	std::atomic<int>		m_iNumFiles;
 
 private:
 
-	int 					GetWriteIndexID ( IndexNameUid_t tIndexName, int64_t iTID, int64_t tmNow );
+	SingleBinlog_c *		GetWriteIndexBinlog ( const char* szIndexName, bool bOpenNewLog=true ) EXCLUDES ( m_tHashAccess );
+	SingleBinlog_c * 		GetSingleWriteIndexBinlog ( bool bOpenNewLog ) EXCLUDES ( m_tHashAccess );
+
+	SingleBinlog_c *		GetFlushIndexBinlog ( const char * szIndexName ) REQUIRES ( m_tHashAccess );
+
 	void					LoadMeta ();
-	void					SaveMeta ();
-	void					LockFile ( bool bLock );
-	void					DoCacheWrite ();
-	void					CheckDoRestart ();
-	bool					CheckDoFlush();
-	void					OpenNewLog ( int iLastState=0 );
+	enum SaveMeta_e : bool { eNoForce, eForce };
+	void					DoSaveMeta ( IntVec_t dFiles, SaveMeta_e eForce ) EXCLUDES ( m_tCurrentFilesAccess );
+	void					SaveMeta () EXCLUDES ( m_tHashAccess ) EXCLUDES ( m_tCurrentFilesAccess );
+	void					SaveMetaUnlock ( SaveMeta_e eForce = eNoForce ) REQUIRES_SHARED ( m_tHashAccess ) EXCLUDES ( m_tCurrentFilesAccess );
+	IntVec_t				CollectBinlogFiles() EXCLUDES ( m_tHashAccess );
+	IntVec_t				CollectBinlogFilesUnlock() REQUIRES_SHARED ( m_tHashAccess );
+	bool					CompareCurrentFiles ( const IntVec_t & dFiles ) EXCLUDES ( m_tCurrentFilesAccess );
 
-	int						ReplayBinlog ( const SmallStringHash_T<CSphIndex*> & hIndexes, int iBinlog );
-	bool					ReplayTxn ( Binlog::Blop_e eOp, int iBinlog, BinlogReader_c & tReader ) const;
-	bool					ReplayUpdateAttributes ( int iBinlog, BinlogReader_c & tReader ) const;
-	bool					ReplayIndexAdd ( int iBinlog, const SmallStringHash_T<CSphIndex*> & hIndexes, BinlogReader_c & tReader ) const;
-	bool					ReplayCacheAdd ( int iBinlog, DWORD uVersion, BinlogReader_c & tReader ) const;
-	bool 					IsBinlogWritable ( int64_t * pTID = nullptr );
+	void					LockBinlog ();
+	void					UnlockBinlog ();
+	void					RemoveFile ( int iExt );
 
-	static bool	CheckCrc ( const char * sOp, const CSphString & sIndex, int64_t iTID, int64_t iTxnPos, BinlogReader_c & tReader ) ;
-	bool		CheckTid ( const char * sOp, const BinlogIndexInfo_t & tIndex, int64_t iTID, int64_t iTxnPos ) const;
+	BinlogFileState_e		ReplayBinlog ( BinlogReplayFileDesc_t & tLog, const SmallStringHash_T<CSphIndex*> & hIndexes );
+	bool					ReplayTxn ( const BinlogReplayFileDesc_t & tLog, BinlogReader_c & tReader ) const;
+	bool					ReplayIndexAdd ( BinlogReplayFileDesc_t & tLog, const SmallStringHash_T<CSphIndex*> & hIndexes, BinlogReader_c & tReader ) const;
+	bool					ReplayCacheAdd ( const BinlogReplayFileDesc_t & tLog, DWORD uVersion, BinlogReader_c & tReader ) const;
+	bool 					IsBinlogWritable () const noexcept;
 
-	void	CheckTidSeq ( const char * sOp, const BinlogIndexInfo_t & tIndex, int64_t iTID, CSphIndex * pIndexTID, int64_t iTxnPos ) const;
-	bool	CheckTime ( BinlogIndexInfo_t & tIndex, const char * sOp, int64_t tmStamp, int64_t iTID, int64_t iTxnPos ) const;
-	bool	PerformChecks ( const char * szOp, BinlogIndexInfo_t & tIndex, int64_t iTID, int64_t iTxnPos, int64_t tmStamp, BinlogReader_c & tReader ) const;
-	static void	UpdateIndexInfo ( BinlogIndexInfo_t & tIndex, int64_t iTID, int64_t tmStamp ) ;
+	bool	PerformChecks ( const char * szOp, BinlogIndexInfo_t & tIndex, int64_t iTID, int64_t iTxnPos, BinlogReader_c & tReader ) const;
 
 	void	Log ( DWORD uFlag, const char * sTemplate, ... ) const;
-	int		ReplayIndexID ( BinlogReader_c & tReader, const BinlogFileDesc_t & tLog, const char * sPlace ) const;
-	bool	IsSame ( const BinlogIndexInfo_t & tIndex, IndexNameUid_t tIndexName ) const;
-	bool	IsIndexMatched ( const BinlogIndexInfo_t & tIndex ) const;
-	void	RemoveAbondonedLog();
+	int		ReplayIndexID ( CSphReader & tReader, const BinlogReplayFileDesc_t & tLog ) const;
+	CSphString MakeBinlogName ( int iExt ) const noexcept;
+	void MakeBinlogFilenameTemplate () noexcept;
+
+	int NextBinlogExt();
+	void FixNofFiles ( int iFiles );
 };
 
-static Binlog_c *		g_pRtBinlog				= nullptr;
+std::unique_ptr<Binlog_c>		g_pRtBinlog;
 
-//////////////////////////////////////////////////////////////////////////
-// BINLOG
-//////////////////////////////////////////////////////////////////////////
 
-static CSphString MakeBinlogName ( const char * sPath, int iExt )
+inline const char * SzTxnName ( Txn_e eTxn )
 {
-	CSphString sName;
-	sName.SetSprintf ( "%s/binlog.%03d", sPath, iExt );
-	return sName;
+	switch ( eTxn )
+	{
+	case UPDATE_ATTRS: return "update";
+	case COMMIT: return "commit";
+	case PQ_ADD_DELETE: return "pq_add_delete";
+	}
 }
 
 //////////////////////////////////////////////////////////////////////////
-class BinlogTransactionGuard_c
+// BinlogTransactionGuard_c
+//////////////////////////////////////////////////////////////////////////
+
+class BinlogTransactionGuard_c final
 {
 public:
-	BinlogTransactionGuard_c ( BinlogWriter_c & tWriter, bool bWriteOnOverflow = true )
+	NONCOPYMOVABLE ( BinlogTransactionGuard_c );
+
+	explicit BinlogTransactionGuard_c ( BinlogWriter_c & tWriter, bool bWriteOnOverflow = true )
 		: m_tWriter ( tWriter )
 		, m_bWriteOnOverflow ( bWriteOnOverflow )
+		, m_iStartTransaction ( tWriter.GetBuffPos() )
 	{
 		m_tWriter.StartTransaction();
 	}
 
 	~BinlogTransactionGuard_c()
 	{
-		m_tWriter.EndTransaction ( m_bWriteOnOverflow );
+		m_tWriter.EndTransaction ( m_iStartTransaction+sizeof ( BLOP_MAGIC_TXN_ ), m_bWriteOnOverflow );
 	}
 
 private:
 	BinlogWriter_c &	m_tWriter;
-	bool				m_bWriteOnOverflow = true;
+	bool				m_bWriteOnOverflow;
+	int64_t				m_iStartTransaction;
+};
+
+class TransactionSizeGuard_c final
+{
+public:
+	NONCOPYMOVABLE ( TransactionSizeGuard_c );
+
+
+	explicit TransactionSizeGuard_c ( BinlogWriter_c & tWriter )
+			: m_tWriter ( tWriter )
+			, m_iStartTransaction ( tWriter.GetBuffPos () )
+	{
+		m_tWriter.PutDword ( 0 ); // placeholder for size
+	}
+
+
+	~TransactionSizeGuard_c ()
+	{
+		DWORD uSize = m_tWriter.GetBuffPos ()-m_iStartTransaction-sizeof ( DWORD );
+		memcpy ( &m_tWriter.m_dBuf[m_iStartTransaction], &uSize, sizeof ( DWORD ) );
+	}
+
+
+private:
+	BinlogWriter_c & m_tWriter;
+	int64_t m_iStartTransaction;
 };
 
 //////////////////////////////////////////////////////////////////////////
-
-void BinlogWriter_c::StartTransaction()
-{
-	m_iTransactionStartPos = m_dBuf.GetLength();
-
-	PutDword ( BLOP_MAGIC ); 
-
-	m_uCRC = 0;
-	m_iLastCrcPos = m_dBuf.GetLength();
-}
-
-
-void BinlogWriter_c::EndTransaction ( bool bWriteOnOverflow )
-{
-	CalculateHash();
-	PutDword(m_uCRC);
-	m_uCRC = 0;
-	m_iLastCrcPos = m_dBuf.GetLength();
-
-	// store tnx end
-	m_dTnxOff.Add ( m_dBuf.GetLength() );
-
-	// try to write if buffer gets too large but don't handle write errors just yet
-	// also, don't remove unsuccessful transactions from the buffer
-	if ( bWriteOnOverflow && m_dBuf.GetLength()>BINLOG_WRITE_BUFFER )
-		Write(false);
-}
-
-
-void BinlogWriter_c::CalculateHash()
-{
-	assert ( m_iLastCrcPos<=m_dBuf.GetLength() );
-	m_uCRC = sphCRC32 ( m_dBuf.Begin() + m_iLastCrcPos, m_dBuf.GetLength() - m_iLastCrcPos, m_uCRC );
-	m_iLastCrcPos = m_dBuf.GetLength();
-}
-
-struct TnxSize_t
-{
-	explicit TnxSize_t ( const VecTraits_T<int> & dOff )
-		: m_dOff ( dOff )
-	{
-	}
-
-	int GetSize ( int64_t iCount, int iChunkSize )
-	{
-		// even with no tnx binlog could have some head meta that should be written
-		if ( m_iTnx==m_dOff.GetLength() )
-			return ClumpSize ( iCount, iChunkSize );
-
-		// need to write at least one tnx
-		int64_t iSize = m_dOff[m_iTnx];
-		if ( m_iTnx )
-			iSize = iSize - m_dOff[m_iTnx-1];
-		m_iTnx++;
-
-		// accumulate up to the chunk size
-		while ( m_iTnx<m_dOff.GetLength() && iSize<iChunkSize )
-		{
-			int iCurSize = m_dOff[m_iTnx] - m_dOff[m_iTnx-1];
-			iSize += iCurSize;
-			m_iTnx++;
-		}
-
-		// switch to old write for extra large tnx
-		if ( iSize>INT_MAX )
-		{
-			m_iTnx = m_dOff.GetLength();
-			return ClumpSize ( iCount, iChunkSize );
-		}
-
-		return (int)iSize;
-	}
-
-	int ClumpSize ( int64_t iCount, int iChunkSize ) const
-	{
-		return ( (int)Min ( iCount, iChunkSize ) );
-	}
-
-	const VecTraits_T<int> & m_dOff;
-	int m_iTnx = 0;
-};
+// BinlogWriter_c
+//////////////////////////////////////////////////////////////////////////
 
 bool BinlogWriter_c::Write ( bool bRemoveUnsuccessful )
 {
-	if ( !m_dBuf.GetLength() )
+	if ( m_dBuf.IsEmpty() )
 		return true;
 
-	TnxSize_t tWriteSize ( m_dTnxOff );
-	WriteSize_fn fnWriteSize = [&tWriteSize]( int64_t iCount, int iChunkSize ) { return tWriteSize.GetSize ( iCount, iChunkSize ); };
-
-	if ( !sphWriteThrottled ( m_tFile.GetFD(), m_dBuf.Begin(), m_dBuf.GetLength(), std::move ( fnWriteSize ), m_tFile.GetFilename(), m_sError ) )
+	if ( !WriteNonThrottled ( m_tFile.GetFD(), m_dBuf.Begin(), m_dBuf.GetLength(), m_tFile.GetFilename(), m_sError ) )
 	{
 		// if we got a partial write, clamp the file at the end of last written transaction
-		sphSeek ( m_tFile.GetFD(), m_iFilePos, SEEK_SET );
+		sphSeek ( m_tFile.GetFD(), m_iLastFilePos, SEEK_SET );
 		sphTruncate ( m_tFile.GetFD() );
 
 		if ( bRemoveUnsuccessful )
 		{
 			// remove last transaction from memory buffer
-			// other unwritten transactions may still be in the buffer, but we can't tell the daemon that they failed at this point
+			// other unwritten transactions may still be in the buffer, but we can't tell the daemon that they failed at this point,
 			// so we remove only the last one
-			m_dBuf.Resize(m_iTransactionStartPos);
-			m_dTnxOff.Pop();
+			m_dBuf.Resize ( m_iLastTransactionStartPos );
 		}
 
 		return false;
 	}
-	
-	m_iFilePos += m_dBuf.GetLength();
-	m_iLastCrcPos = 0;
-	m_iTransactionStartPos = 0;
+
+	m_iLastFilePos += m_dBuf.GetLength ();
+	m_iLastTransactionStartPos = 0;
 	m_dBuf.Resize(0);
-	m_dTnxOff.Resize(0);
 	return true;
 }
 
@@ -364,7 +414,23 @@ int fsync ( int iFD )
 #endif
 
 
-bool BinlogWriter_c::Fsync()
+bool BinlogWriter_c::Fsync (int iFD)
+{
+	if ( iFD==-1 )
+		iFD = m_tFile.GetFD ();
+
+	if ( fsync ( iFD )!=0 )
+	{
+		m_sError.SetSprintf ( "failed to sync %s: %s", m_tFile.GetFilename (), strerrorm ( errno ) );
+		return false;
+	}
+
+	if ( m_iLastFsyncPos<m_iLastFilePos )
+		m_iLastFsyncPos.store ( m_iLastFilePos, std::memory_order_relaxed );
+	return true;
+}
+
+bool BinlogWriter_c::WriteAndFsync()
 {
 	if ( HasUnwrittenData() && !Write() )
 		return false;
@@ -372,20 +438,13 @@ bool BinlogWriter_c::Fsync()
 	if ( !HasUnsyncedData() )
 		return true;
 
-	if ( fsync ( m_tFile.GetFD() )!=0 )
-	{
-		m_sError.SetSprintf ( "failed to sync %s: %s" , m_tFile.GetFilename(), strerrorm(errno) );
-		return false;
-	}
-
-	m_iLastFsyncPos = m_iFilePos;
-	return true;
+	return Fsync();
 }
 
 
 bool BinlogWriter_c::OpenFile ( const CSphString & sFile, CSphString & sError )
 {
-	m_iFilePos = 0;
+	m_iLastFilePos = 0;
 	return m_tFile.Open ( sFile, SPH_O_NEW, sError )>=0;
 }
 
@@ -396,16 +455,53 @@ void BinlogWriter_c::CloseFile()
 		Write();
 
 	m_tFile.Close();
-
-	m_iLastFsyncPos = m_iFilePos = 0;
+	m_iLastFsyncPos.store ( m_iLastFilePos = 0, std::memory_order_relaxed ); // that is =, not ==
 }
+
+int BinlogWriter_c::LeakFD()
+{
+	if ( HasUnwrittenData () )
+		Write ();
+
+	m_iLastFsyncPos.store ( m_iLastFilePos = 0, std::memory_order_relaxed ); // that is =, not ==
+	return m_tFile.LeakID ();
+}
+
+
+int BinlogWriter_c::GetFD () const noexcept
+{
+	return m_tFile.GetFD();
+}
+
+
+CSphString BinlogWriter_c::GetFilename () const noexcept
+{
+	return m_tFile.GetFilename();
+}
+
+
+void BinlogWriter_c::StartTransaction ()
+{
+	m_iLastTransactionStartPos = m_dBuf.GetLength ();
+	PutDword ( BLOP_MAGIC_TXN_ );
+}
+
+
+void BinlogWriter_c::EndTransaction ( int64_t iStartTransaction, bool bWriteOnOverflow )
+{
+	auto uCRC = sphCRC32 ( m_dBuf.Slice ( iStartTransaction ) );
+	PutDword ( uCRC );
+
+	// try to write if buffer gets too large but don't handle write errors just yet
+	// also, don't remove unsuccessful transactions from the buffer
+	if ( bWriteOnOverflow && m_dBuf.GetLength ()>BINLOG_WRITE_BUFFER )
+		Write ( false );
+}
+
 
 //////////////////////////////////////////////////////////////////////////
-
-BinlogReader_c::BinlogReader_c()
-{
-	ResetCrc ();
-}
+// BinlogReader_c
+//////////////////////////////////////////////////////////////////////////
 
 void BinlogReader_c::ResetCrc ()
 {
@@ -418,11 +514,11 @@ bool BinlogReader_c::CheckCrc ( const char * sOp, const char * sIndexName, int64
 {
 	HashCollected ();
 	DWORD uCRC = m_uCRC;
-	DWORD uRef = CSphAutoreader::GetDword();
+	DWORD uRefCRC = CSphAutoreader::GetDword();
 	ResetCrc();
-	bool bPassed = ( uRef==uCRC );
+	bool bPassed = ( uRefCRC==uCRC );
 	if ( !bPassed )
-		sphWarning ( "binlog: %s: CRC mismatch (table=%s, tid=" INT64_FMT ", pos=" INT64_FMT ", size=" INT64_FMT ")", sOp, sIndexName ? sIndexName : "", iTid, iTxnPos, (int64_t)GetFilesize() );
+		sphWarning ( "binlog: %s: CRC mismatch (table=%s, tid=" INT64_FMT ", pos=" INT64_FMT ")", sOp, sIndexName ? sIndexName : "", iTid, iTxnPos );
 	return bPassed;
 }
 
@@ -441,187 +537,990 @@ void BinlogReader_c::HashCollected ()
 }
 
 //////////////////////////////////////////////////////////////////////////
-
-Binlog_c::~Binlog_c ()
+SingleBinlog_c::~SingleBinlog_c ()
 {
-	if ( !m_bDisabled )
-	{
-		bool bEmptyLastLog = false;
-		if ( m_dLogFiles.GetLength() && m_tWriter.IsOpen() )
-			bEmptyLastLog = m_dLogFiles.Last().m_dIndexInfos.IsEmpty();
-
-		// could be already closed and meta saved on shutdown
-		if ( m_tWriter.IsOpen() )
-			DoCacheWrite();
-		m_tWriter.CloseFile();
-		// should remove last binlog if no tnx was writen
-		if ( bEmptyLastLog )
-			RemoveAbondonedLog();
-		LockFile ( false );
-	}
+	Deinit ();
 }
 
-void Binlog_c::RemoveAbondonedLog()
-{
-	assert ( m_dLogFiles.GetLength() && m_dLogFiles.Last().m_dIndexInfos.IsEmpty() );
-	// do unlink
-	CSphString sLog = MakeBinlogName ( m_sLogPath.cstr(), m_dLogFiles.Last().m_iExt );
-	if ( ::unlink ( sLog.cstr() ) )
-		sphWarning ( "binlog: failed to unlink abandoned %s: %s", sLog.cstr(), strerrorm(errno) );
 
-	// we need to reset it, otherwise there might be leftover data after last Remove()
-	m_dLogFiles.Last() = BinlogFileDesc_t();
-	// quit tracking it
-	m_dLogFiles.Pop();
+void SingleBinlog_c::Deinit () NO_THREAD_SAFETY_ANALYSIS
+{
+	if ( !m_pOwner )
+		return;
+
+	bool bLastLogEmpty = false;
+	if ( !m_dLogFiles.IsEmpty () && m_tWriter.IsOpen () )
+		bLastLogEmpty = m_dLogFiles.Last ().m_dIndexInfos.IsEmpty ();
+
+	// could be already closed and meta saved on shutdown
+	if ( m_tWriter.IsOpen () )
+	{
+		DoCacheWrite ();
+		m_tWriter.WriteAndFsync ();
+	}
+	m_tWriter.CloseFile ();
+
+	// should remove last binlog if no tnx was writen
+	if ( bLastLogEmpty )
+		RemoveLastEmptyLog ();
+
+	m_pOwner = nullptr;
+}
+
+
+std::pair<int, SingleBinlog_c*> SingleBinlog_c::DoFlush ( FlushAction_e eAction )
+{
+	MEMORY ( MEM_BINLOG );
+
+	ScopedBinlogMutex_t tLock ( m_tWriteAccess );
+	std::pair<int, SingleBinlog_c *> tRes { -1, this };
+	if ( eAction==FlushAction_e::ACTION_NONE && m_tWriter.HasUnwrittenData () )
+	{
+		if ( !m_tWriter.Write () )
+			return tRes;
+	}
+	if ( !m_tWriter.HasUnsyncedData () )
+		return tRes;
+
+	tRes.first = m_tWriter.GetFD ();
+	if ( tRes.first != -1 )
+		m_tFlushRunning.ModifyValue ( [] ( int & iVal ) { ++iVal; } );
+	return tRes;
+}
+
+
+void SingleBinlog_c::DoFsync ( int iSyncFd ) NO_THREAD_SAFETY_ANALYSIS
+{
+	if ( iSyncFd==-1 )
+		return;
+	m_tWriter.Fsync ( iSyncFd );
+	m_tFlushRunning.ModifyValueAndNotifyAll ( [] ( int & iVal ) { --iVal; } );
+}
+
+
+void SingleBinlog_c::CollectBinlogFiles ( CSphVector<int> & tOutput ) const noexcept
+{
+	Threads::SccRL_t tLock ( m_tLogFilesAccess );
+	for ( const auto & tLog: m_dLogFiles )
+		tOutput.Add ( tLog.m_iExt );
+}
+
+
+bool SingleBinlog_c::BinlogCommit ( int64_t * pTID, const char * szIndexName, FnWriteCommit fnSaver, CSphString & sError )
+{
+	MEMORY ( MEM_BINLOG );
+	ScopedBinlogMutex_t tLock ( m_tWriteAccess );
+
+	int64_t iTID = ++( *pTID );
+	const int uIndex = GetWriteIndexID ( szIndexName, iTID );
+
+	{
+		BinlogTransactionGuard_c tGuard ( m_tWriter, m_pOwner->m_eFlushFlavour==FlushAction_e::ACTION_NONE );
+
+		// header
+		m_tWriter.PutByte ( Blop_e::ADD_TXN );
+		m_tWriter.ZipOffset ( uIndex );
+		m_tWriter.ZipOffset ( iTID );
+		TransactionSizeGuard_c tPutSize ( m_tWriter );
+
+		// save txn data
+		fnSaver ( m_tWriter );
+	}
+
+	// finalize
+	if ( !CheckDoFlush () )
+	{
+		sError.SetSprintf ( "unable to write to binlog: %s", m_tWriter.GetError ().cstr () );
+		return false;
+	}
+
+	CheckDoRestart ();
+	return true;
+}
+
+
+bool SingleBinlog_c::NotifyIndexFlush ( int64_t iFlushedTID, const char * szFlushedIndexName, Shutdown_e eShutdown, ForceSave_e eAction )
+{
+	MEMORY ( MEM_BINLOG );
+	ScopedBinlogMutex_t tLock ( m_tWriteAccess );
+
+	bool bCurrentLogAbandoned = false;
+	int iPreflushFiles = 0;
+	int iFinalFiles = 0;
+
+	{
+		Threads::SccWL_t tLogLock ( m_tLogFilesAccess );
+		assert ( eShutdown || m_dLogFiles.GetLength () );
+
+		iPreflushFiles = m_dLogFiles.GetLength ();
+
+		// loop through all log files, and check if we can unlink any
+		ARRAY_FOREACH ( iLog, m_dLogFiles )
+		{
+			BinlogFileDesc_t & tLog = m_dLogFiles[iLog];
+			bool bUsed = false;
+
+			// update index info for this log file
+			for ( auto & tIndex: tLog.m_dIndexInfos )
+			{
+				// this index was just flushed, update flushed TID
+				if ( tIndex.m_sName==szFlushedIndexName )
+				{
+					assert ( iFlushedTID>=tIndex.m_iFlushedTID );
+					tIndex.m_iFlushedTID = Max ( tIndex.m_iFlushedTID, iFlushedTID );
+				}
+
+				// if max logged TID is greater than last flushed TID, log file still has needed recovery data
+				if ( tIndex.m_iFlushedTID<tIndex.m_iMaxTID )
+					bUsed = true;
+			}
+
+			// it's needed, keep looking
+			if ( bUsed )
+				continue;
+
+			// hooray, we can remove this log!
+			// if this is our current log, we have to close it first
+			if ( iLog==m_dLogFiles.GetLength ()-1 )
+			{
+				m_tWriter.CloseFile ();
+				bCurrentLogAbandoned = true;
+			}
+
+			// do unlink
+			CSphString sLog = m_pOwner->MakeBinlogName ( tLog.m_iExt );
+			if ( ::unlink ( sLog.cstr () ) )
+				sphWarning ( "binlog: failed to unlink %s: %s", sLog.cstr (), strerrorm ( errno ) );
+
+			// we need to reset it, otherwise there might be leftover data after last Remove()
+			m_dLogFiles[iLog] = {};
+			// quit tracking it
+			m_dLogFiles.Remove ( iLog-- );
+		}
+		iFinalFiles = m_dLogFiles.GetLength();
+	} // release m_tLogFilesAccess
+
+	if ( bCurrentLogAbandoned && !eShutdown )
+	{
+		// if all logs were closed, we can rewind binlog file ext back to 0
+		if ( !iFinalFiles )
+			FixNofFiles ( iPreflushFiles );
+
+		// if current log was closed, we need a new one (it will automatically save meta, too)
+		if ( eAction!=DropTable )
+			OpenNewLog ();
+	} else if ( iPreflushFiles!=iFinalFiles || eAction!=NoSave )
+	{
+		// if we unlinked any logs, we need to save meta, too
+		SaveMeta();
+	}
+	return iFinalFiles==0;
+}
+
+
+void SingleBinlog_c::AdoptIndex ( int iExt, const BinlogIndexInfo_t & tIdx )
+{
+	if ( m_dLogFiles.IsEmpty () )
+	{
+		BinlogFileDesc_t & tLog = m_dLogFiles.Add ();
+		tLog.m_iExt = iExt;
+		tLog.m_dIndexInfos.Add ( tIdx );
+		return;
+	}
+
+	if ( m_dLogFiles.Last ().m_iExt!=iExt )
+	{
+		BinlogFileDesc_t & tLog = m_dLogFiles.Add ();
+		tLog.m_iExt = iExt;
+		tLog.m_dIndexInfos.Add ( tIdx );
+		return;
+	}
+
+	BinlogFileDesc_t & tLog = m_dLogFiles.Last ();
+	assert ( tLog.m_iExt==iExt );
+	tLog.m_dIndexInfos.Add ( tIdx );
+}
+
+
+void SingleBinlog_c::AdoptFile ( int iExt )
+{
+	if ( !m_dLogFiles.IsEmpty () && m_dLogFiles.Last ().m_iExt==iExt )
+		return;
+
+	BinlogFileDesc_t & tLog = m_dLogFiles.Add ();
+	tLog.m_iExt = iExt;
+}
+
+
+void SingleBinlog_c::OpenNewLog ( BinlogFileState_e eState )
+{
+	MEMORY ( MEM_BINLOG );
+
+	// calc new ext
+	int iExt = 0;
+	{
+		Threads::SccWL_t tLogLock ( m_tLogFilesAccess );
+		if ( !m_dLogFiles.IsEmpty () )
+			iExt = m_dLogFiles.Last ().m_iExt;
+
+		if ( eState==BinlogFileState_e::OK || iExt<0 )
+		{
+			iExt = m_pOwner->NextBinlogExt ();
+			BinlogFileDesc_t tLog;
+			tLog.m_iExt = iExt;
+			m_dLogFiles.Add ( std::move ( tLog ) );
+		}
+	}
+
+	// update meta first then only remove binlog file
+	SaveMeta ();
+
+	// create file
+	CSphString sLog = m_pOwner->MakeBinlogName ( iExt );
+
+	if ( eState!=BinlogFileState_e::OK && eState!=BinlogFileState_e::ERROR_NON_READABLE ) // reuse the last binlog since it is empty or useless.
+		::unlink ( sLog.cstr () );
+
+	CSphString sError;
+	if ( !m_tWriter.OpenFile ( sLog, sError ) )
+		sphDie ( "failed to create %s: %s errno=%d, error=%s", sLog.cstr (), sError.cstr (), errno, strerrorm ( errno ) );
+
+	// emit header
+	m_tWriter.PutDword ( BINLOG_HEADER_MAGIC_SPBL );
+	m_tWriter.PutDword ( BINLOG_VERSION );
+}
+
+
+int64_t SingleBinlog_c::LastTidFor ( const CSphString & sIndex ) const noexcept
+{
+	int64_t iTID = 0;
+	Threads::SccRL_t tLogLock ( m_tLogFilesAccess );
+	if ( m_dLogFiles.IsEmpty () )
+		return iTID;
+
+	for ( const auto& tLog : m_dLogFiles )
+	{
+		for ( const auto & tIndex: tLog.m_dIndexInfos )
+		{
+			if ( tIndex.m_sName == sIndex )
+				iTID = Max ( tIndex.m_iFlushedTID, iTID );
+		}
+	}
+	return iTID;
+}
+
+
+void SingleBinlog_c::LockWriter ()
+{
+	m_tWriteAccess.Lock();
+}
+
+void SingleBinlog_c::UnlockWriter ()
+{
+	m_tWriteAccess.Unlock();
+}
+
+
+void SingleBinlog_c::RemoveLastEmptyLog ()
+{
+	{
+		Threads::SccWL_t tLock { m_tLogFilesAccess };
+		assert ( !m_dLogFiles.IsEmpty () && m_dLogFiles.Last ().m_dIndexInfos.IsEmpty () );
+		// do unlink
+		CSphString sLog = m_pOwner->MakeBinlogName ( m_dLogFiles.Last ().m_iExt );
+		if ( ::unlink ( sLog.cstr () ) )
+			sphWarning ( "binlog: failed to unlink abandoned %s: %s", sLog.cstr (), strerrorm ( errno ) );
+
+		// quit tracking it
+		m_dLogFiles.Pop ();
+	}
 
 	// if we unlinked any logs, we need to save meta, too
 	SaveMeta ();
 }
 
-bool Binlog_c::IsSame ( const BinlogIndexInfo_t & tIndex, IndexNameUid_t tIndexName ) const
+
+int SingleBinlog_c::GetWriteIndexID ( const char * szIndexName, int64_t iTID )
 {
-	if ( !m_bConfigless )
-		return ( tIndex.m_sName==tIndexName.first );
-	else
-		return ( tIndex.m_sName==tIndexName.first && tIndex.m_iIndexGen==tIndexName.second );
+	MEMORY ( MEM_BINLOG );
+	Threads::SccRL_t tLogLock { m_tLogFilesAccess };
+	assert ( !m_dLogFiles.IsEmpty () );
+
+	// OPTIMIZE? maybe hash them?
+	BinlogFileDesc_t & tLog = m_dLogFiles.Last ();
+	ARRAY_FOREACH ( i, tLog.m_dIndexInfos )
+	{
+		BinlogIndexInfo_t & tIndex = tLog.m_dIndexInfos[i];
+		if ( tIndex.m_sName==szIndexName )
+		{
+			tIndex.m_iMaxTID = Max ( tIndex.m_iMaxTID, iTID );
+			return i;
+		}
+	}
+
+	// create a new entry
+	int iID = tLog.m_dIndexInfos.GetLength ();
+	BinlogIndexInfo_t & tIndex = tLog.m_dIndexInfos.Add (); // caller must hold a wlock
+	tIndex.m_iMinTID = iTID;
+	tIndex.m_iMaxTID = iTID;
+	tIndex.m_sName = szIndexName;
+	tIndex.m_iFlushedTID = 0;
+
+	// log this new entry
+	BinlogTransactionGuard_c tGuard ( m_tWriter, false );
+
+	m_tWriter.PutByte ( ADD_INDEX );
+	m_tWriter.ZipOffset ( iID );
+	m_tWriter.PutZString ( szIndexName );
+
+	// return the index
+	return iID;
 }
 
-bool Binlog_c::IsIndexMatched ( const BinlogIndexInfo_t & tIndex ) const
+
+// cache is a small summary of affected indexes, it is written at the very end of binlog file when it exceeded size limit,
+// before opening new file.
+void SingleBinlog_c::DoCacheWrite ()
 {
-	return ( !m_bConfigless || ( tIndex.m_pIndex && tIndex.m_iIndexGen==tIndex.m_pIndex->GetIndexId() ) );
+	Threads::SccRL_t tLogLock { m_tLogFilesAccess };
+	if ( m_dLogFiles.IsEmpty () )
+		return;
+
+	assert ( m_tWriter.IsOpen () );
+	const CSphVector<BinlogIndexInfo_t> & dIndexes = m_dLogFiles.Last ().m_dIndexInfos;
+
+	BinlogTransactionGuard_c tGuard ( m_tWriter );
+
+	m_tWriter.PutByte ( ADD_CACHE );
+	m_tWriter.ZipOffset ( dIndexes.GetLength () );
+	for ( const auto & tIndex: dIndexes )
+	{
+		m_tWriter.PutZString ( tIndex.m_sName.cstr () );
+		m_tWriter.ZipOffset ( tIndex.m_iMinTID );
+		m_tWriter.ZipOffset ( tIndex.m_iMaxTID );
+		m_tWriter.ZipOffset ( tIndex.m_iFlushedTID );
+	}
+	m_tWriter.Write ();
 }
 
-// here's been going binlogs with ALL closed indices removing
-void Binlog_c::NotifyIndexFlush ( int64_t iTID, IndexNameUid_t tIndexName, bool bShutdown, bool bForceSave )
-{
-	if ( m_bReplayMode )
-		sphInfo ( "table '%s': ramchunk saved. TID=" INT64_FMT "", tIndexName.first, iTID );
 
-	if ( !IsBinlogWritable() )
+void SingleBinlog_c::CheckDoRestart ()
+{
+	// restart on exceed file size limit
+	if ( !m_pOwner->m_iRestartSize || m_tWriter.GetFilePos ()<=m_pOwner->m_iRestartSize )
 		return;
 
 	MEMORY ( MEM_BINLOG );
-	assert ( bShutdown || m_dLogFiles.GetLength() );
+#ifndef NDEBUG
+	{ Threads::SccRL_t tLock { m_tLogFilesAccess };
+	assert ( !m_dLogFiles.IsEmpty () ); }
+#endif
+	DoCacheWrite ();
 
-	ScopedMutex_t tWriteLock ( m_tWriteLock );
+	auto sName = m_tWriter.GetFilename();
+	int iFD = m_tWriter.LeakFD();
+	bool bFsyncOnClose = m_pOwner->m_eFlushFlavour==FlushAction_e::ACTION_FSYNC_ON_CLOSE;
+	OpenNewLog ();
 
-	bool bCurrentLogAbandoned = false;
-	const int iPreflushFiles = m_dLogFiles.GetLength();
-
-	// loop through all log files, and check if we can unlink any
-	ARRAY_FOREACH ( iLog, m_dLogFiles )
-	{
-		BinlogFileDesc_t & tLog = m_dLogFiles[iLog];
-		bool bUsed = false;
-
-		// update index info for this log file
-		for ( auto& tIndex : tLog.m_dIndexInfos )
-		{
-			// this index was just flushed, update flushed TID
-			if ( IsSame ( tIndex, tIndexName ) )
-			{
-				assert ( iTID>=tIndex.m_iFlushedTID );
-				tIndex.m_iFlushedTID = Max ( tIndex.m_iFlushedTID, iTID );
-			}
-
-			// if max logged TID is greater than last flushed TID, log file still has needed recovery data
-			if ( tIndex.m_iFlushedTID < tIndex.m_iMaxTID )
-				bUsed = true;
-		}
-
-		// it's needed, keep looking
-		if ( bUsed )
-			continue;
-
-		// hooray, we can remove this log!
-		// if this is our current log, we have to close it first
-		if ( iLog==m_dLogFiles.GetLength()-1 )
-		{
-			m_tWriter.CloseFile ();
-			bCurrentLogAbandoned = true;
-		}
-
-		// do unlink
-		CSphString sLog = MakeBinlogName ( m_sLogPath.cstr(), tLog.m_iExt );
-		if ( ::unlink ( sLog.cstr() ) )
-			sphWarning ( "binlog: failed to unlink %s: %s", sLog.cstr(), strerrorm(errno) );
-
-		// we need to reset it, otherwise there might be leftover data after last Remove()
-		m_dLogFiles[iLog] = BinlogFileDesc_t();
-		// quit tracking it
-		m_dLogFiles.Remove ( iLog-- );
-	}
-
-	if ( bCurrentLogAbandoned && !bShutdown )
-	{
-		// if current log was closed, we need a new one (it will automatically save meta, too)
-		OpenNewLog ();
-
-	} else if ( iPreflushFiles!=m_dLogFiles.GetLength() || bForceSave )
-	{
-		// if we unlinked any logs, we need to save meta, too
-		SaveMeta ();
-	}
+	Threads::Coro::Go ( [this, iFD, bFsyncOnClose, sName] {
+		m_tFlushRunning.Wait ( [] ( int iVal ) { return iVal<1; } );
+		if ( bFsyncOnClose && fsync ( iFD )!=0 )
+			sphWarning ( "failed to sync %s: %d (%s)", sName.cstr(), errno, strerrorm ( errno ) );
+		::close ( iFD );
+	}, Threads::Coro::CurrentScheduler () );
 }
 
-#ifndef LOCALDATADIR
-#define LOCALDATADIR "."
-#endif
 
-void Binlog_c::Configure ( const CSphConfigSection & hSearchd, bool bTestMode, DWORD uReplayFlags, bool bConfigless )
+bool SingleBinlog_c::CheckDoFlush ()
+{
+	switch ( m_pOwner->m_eFlushFlavour )
+	{
+	case FlushAction_e::ACTION_NONE:
+		break;
+
+	case FlushAction_e::ACTION_WRITE:
+	case FlushAction_e::ACTION_FSYNC_ON_CLOSE:
+		if ( !m_tWriter.Write () )
+			return false;
+		break;
+
+	case FlushAction_e::ACTION_FSYNC:
+		if ( !m_tWriter.WriteAndFsync () )
+			return false;
+		break;
+
+	default:
+		assert( false && "wrong binlog flush action flag" );
+		break;
+	}
+
+	return true;
+}
+
+
+void SingleBinlog_c::SaveMeta ()
+{
+	m_pOwner->SaveMeta ();
+}
+
+
+void SingleBinlog_c::FixNofFiles ( int iFiles )
+{
+	m_pOwner->FixNofFiles (iFiles);
+}
+
+//////////////////////////////////////////////////////////////////////////
+
+SingleBinlog_c* Binlog_c::GetWriteIndexBinlog ( const char* szIndexName, bool bOpenNewLog ) NO_THREAD_SAFETY_ANALYSIS
+{
+	if ( m_bCommonBinlog )
+		return GetSingleWriteIndexBinlog ( bOpenNewLog );
+
+	SingleBinlogPtr * pVal;
+	{
+		Threads::SccRL_t tLock ( m_tHashAccess );
+		pVal = m_hBinlogs ( szIndexName );
+	}
+	if ( pVal )
+		return pVal->get();
+
+	bool bLocked = false;
+	{
+		Threads::SccWL_t tLock ( m_tHashAccess );
+		pVal = m_hBinlogs ( szIndexName );
+		if ( pVal ) // the value arrived while we acquired w-lock
+			return pVal->get ();
+
+		m_hBinlogs.Add ( std::make_unique<SingleBinlog_c> (this), szIndexName );
+		pVal = m_hBinlogs ( szIndexName );
+		if ( bOpenNewLog )
+		{
+			pVal->get ()->LockWriter ();
+			bLocked = true;
+		}
+	}
+	assert ( pVal );
+	// OpenNewLog invokes SaveMeta, which excludes m_tHashAccess
+	if ( bOpenNewLog )
+		pVal->get ()->OpenNewLog ();
+
+	if ( bLocked )
+		pVal->get ()->UnlockWriter ();
+
+	return pVal->get ();
+}
+
+
+SingleBinlog_c * Binlog_c::GetSingleWriteIndexBinlog ( bool bOpenNewLog ) NO_THREAD_SAFETY_ANALYSIS
+{
+	assert ( m_bCommonBinlog );
+
+	SingleBinlogPtr * pVal = nullptr;
+	{
+		Threads::SccRL_t tLock ( m_tHashAccess );
+		auto Iter = m_hBinlogs.begin ();
+		if ( Iter != m_hBinlogs.end() )
+			pVal = &Iter->second;
+	}
+	if ( pVal )
+		return pVal->get ();
+
+	bool bLocked = false;
+	{
+		Threads::SccWL_t tLock ( m_tHashAccess );
+		auto Iter = m_hBinlogs.begin ();
+		if ( Iter!=m_hBinlogs.end () )
+			pVal = &Iter->second;
+
+		if ( pVal ) // the value arrived while we acquired w-lock
+			return pVal->get ();
+
+		m_hBinlogs.Add ( std::make_unique<SingleBinlog_c> ( this ), "common" );
+		pVal = &m_hBinlogs.begin ()->second;
+		if ( bOpenNewLog )
+		{
+			pVal->get()->LockWriter();
+			bLocked = true;
+		}
+	}
+	assert ( pVal );
+	// OpenNewLog invokes SaveMeta, which excludes m_tHashAccess
+	if ( bOpenNewLog )
+		pVal->get ()->OpenNewLog ();
+
+	if ( bLocked )
+		pVal->get ()->UnlockWriter();
+
+	return pVal->get ();
+}
+
+
+SingleBinlog_c * Binlog_c::GetFlushIndexBinlog ( const char * szIndexName ) REQUIRES ( m_tHashAccess )
+{
+	SingleBinlogPtr * pVal = nullptr;
+	if ( !m_bCommonBinlog )
+		pVal = m_hBinlogs ( szIndexName );
+	else
+	{
+		auto Iter = m_hBinlogs.begin ();
+		if ( Iter!=m_hBinlogs.end () )
+			pVal = &Iter->second;
+	}
+
+	if ( !pVal )
+		return nullptr;
+	return pVal->get ();
+}
+
+
+Binlog_c::~Binlog_c ()
+{
+	if ( m_bDisabled )
+		return;
+
+	for ( auto & tBinlog: m_hBinlogs )
+		tBinlog.second->Deinit();
+
+	UnlockBinlog ();
+}
+
+void Binlog_c::MakeBinlogFilenameTemplate() noexcept
+{
+	m_sBinlogFileNameTemplate = SphSprintf ( "%s/binlog.%%0%dd", m_sLogPath.cstr (), m_iBinlogFileDigits );
+}
+
+CSphString Binlog_c::MakeBinlogName ( int iExt ) const noexcept
+{
+	assert ( !m_sBinlogFileNameTemplate.IsEmpty() );
+	return SphSprintf ( m_sBinlogFileNameTemplate.scstr(), iExt );
+}
+
+void Binlog_c::RemoveFile ( int iExt ) NO_THREAD_SAFETY_ANALYSIS
+{
+	auto sLog = MakeBinlogName ( iExt );
+	::unlink ( sLog.cstr () );
+}
+
+// here's been going binlogs with ALL closed indices removing // notify per-index-binlog?
+void Binlog_c::NotifyIndexFlush ( int64_t iFlushedTID, const char* szFlushedIndexName, Shutdown_e eShutdown, ForceSave_e eAction )
+{
+	if ( m_bReplayMode )
+		sphInfo ( "table '%s': ramchunk saved. TID=" INT64_FMT, szFlushedIndexName, iFlushedTID );
+
+	if ( !IsBinlogWritable () )
+		return;
+
+	if ( m_bCommonBinlog || eAction!=DropTable )
+	{
+		if ( eAction == DropTable )
+			eAction = ForceSave;
+		auto pSingleBinlog = GetWriteIndexBinlog ( szFlushedIndexName );
+		pSingleBinlog->NotifyIndexFlush ( iFlushedTID, szFlushedIndexName, eShutdown, eAction );
+		return;
+	}
+
+	Threads::SccWL_t tLock ( m_tHashAccess );
+	auto pSingleBinlog = GetFlushIndexBinlog ( szFlushedIndexName );
+	if ( !pSingleBinlog )
+		return;
+
+	bool bAbandoned = pSingleBinlog->NotifyIndexFlush ( iFlushedTID, szFlushedIndexName, eShutdown, eAction );
+	if ( !bAbandoned )
+		return;
+
+	m_hBinlogs.Delete ( szFlushedIndexName );
+	SaveMetaUnlock();
+}
+
+
+int Binlog_c::NextBinlogExt ()
+{
+	return m_iNextBinlog.fetch_add ( 1, std::memory_order_relaxed );
+}
+
+
+void Binlog_c::FixNofFiles ( int iFiles )
+{
+	m_iNumFiles.fetch_sub ( iFiles );
+	if ( !m_iNumFiles )
+		m_iNextBinlog.store ( 0, std::memory_order_release );
+}
+
+
+// run once on startup
+void Binlog_c::CheckAndSetPath ( CSphString sBinlogPath )
+{
+	m_sLogPath = std::move ( sBinlogPath );
+	MakeBinlogFilenameTemplate();
+	m_bDisabled = m_sLogPath.IsEmpty ();
+
+	if ( m_bDisabled )
+		return;
+
+	// pair lock/unlock ensures binlog path is available and writable
+	LockBinlog ();
+	UnlockBinlog ();
+}
+
+// run once on startup
+void Binlog_c::Configure ( const CSphConfigSection & hSearchd, DWORD uReplayFlags )
 {
 	MEMORY ( MEM_BINLOG );
 
 	const int iMode = hSearchd.GetInt ( "binlog_flush", 2 );
 	switch ( iMode )
 	{
-		case 0:		m_eOnCommit = ACTION_NONE; break;
-		case 1:		m_eOnCommit = ACTION_FSYNC; break;
-		case 2:		m_eOnCommit = ACTION_WRITE; break;
-		default:	sphDie ( "unknown binlog flush mode %d (must be 0, 1, or 2)\n", iMode );
+	case 0: m_eFlushFlavour = FlushAction_e::ACTION_NONE; break;
+	case 1: m_eFlushFlavour = FlushAction_e::ACTION_FSYNC; break;
+	case 2: m_eFlushFlavour = FlushAction_e::ACTION_WRITE; break;
+	case 3: m_eFlushFlavour = FlushAction_e::ACTION_FSYNC_ON_CLOSE; break;
+		default:	sphDie ( "unknown binlog flush mode %d (must be 0, 1, 2, or 3)\n", iMode );
 	}
-
-	m_sLogPath = hSearchd.GetStr ( "binlog_path", bTestMode ? "" : LOCALDATADIR );
-	m_bDisabled = m_sLogPath.IsEmpty();
-	m_bConfigless = bConfigless;
 
 	m_iRestartSize = hSearchd.GetSize ( "binlog_max_log_size", m_iRestartSize );
 	m_uReplayFlags = uReplayFlags;
+	m_iBinlogFileDigits = hSearchd.GetInt ( "binlog_filename_digits", 4 );
 
-	if ( !m_bDisabled )
+	if ( m_bDisabled )
+		return;
+
+	LockBinlog ();
+	LoadMeta();
+	MakeBinlogFilenameTemplate ();
+}
+
+void Binlog_c::SetCommon ( bool bCommonBinlog )
+{
+	if ( m_bCommonBinlog == bCommonBinlog )
+		return;
+
+	m_bCommonBinlog = bCommonBinlog;
+	// fixme! add cleanup to avoid 'mixed' binlog
+}
+
+bool Binlog_c::IsFlushingEnabled () const
+{
+	return !m_bDisabled && m_eFlushFlavour!=FlushAction_e::ACTION_FSYNC;
+}
+
+
+// executed externally by task binlog flush, every BINLOG_AUTO_FLUSH (1 sec)
+void Binlog_c::DoFlush ()
+{
+	assert ( !m_bDisabled );
+	MEMORY ( MEM_BINLOG );
+
+	if ( sphInterrupted () )
+		return;
+
+	m_iLastFlushed.store ( sphMicroTimer (), std::memory_order_relaxed );
+
+	CSphVector<std::pair<int, SingleBinlog_c *>> dToFsync;
 	{
-		LockFile ( true );
-		LoadMeta();
+		Threads::SccRL_t tLock ( m_tHashAccess );
+		for ( auto& tBinlog : m_hBinlogs )
+			dToFsync.Add ( tBinlog.second->DoFlush ( m_eFlushFlavour ) );
+	}
+	for ( auto& tSync : dToFsync)
+	{
+		if ( sphInterrupted () )
+			return;
+		tSync.second->DoFsync ( tSync.first );
 	}
 }
 
-void Binlog_c::Replay ( const SmallStringHash_T<CSphIndex*> & hIndexes, ProgressCallbackSimple_t * pfnProgressCallback )
+int64_t Binlog_c::NextFlushingTime () const noexcept
+{
+	auto iLastFlushed = m_iLastFlushed.load ( std::memory_order_relaxed );
+	if ( !iLastFlushed )
+		return sphMicroTimer () + m_iFlushPeriod;
+	return iLastFlushed + m_iFlushPeriod;
+}
+
+
+int64_t Binlog_c::LastTidFor ( const CSphString & sIndex ) const noexcept
+{
+	int64_t iTID = 0;
+	Threads::SccRL_t tLock ( m_tHashAccess );
+	for ( auto & tBinlog: m_hBinlogs )
+		iTID = Max ( iTID, tBinlog.second->LastTidFor ( sIndex ) );
+	return iTID;
+}
+
+static constexpr int SAVE_TRIES = 4;
+static constexpr int SAVE_TRIE_DELAY = 50;
+
+void Binlog_c::DoSaveMeta ( IntVec_t dFiles, SaveMeta_e eForce )
+{
+	if ( eForce==eNoForce && CompareCurrentFiles ( dFiles ) )
+		return; // files are same as stored; no need to rewrite meta
+
+	CSphVector<BYTE> dMeta;
+	MemoryWriter2_c wrMeta ( dMeta );
+	wrMeta.PutDword ( BINLOG_META_MAGIC_SPLI );
+	wrMeta.PutDword ( BINLOG_VERSION );
+	wrMeta.PutByte ( m_iBinlogFileDigits );
+
+//	StringBuilder_c sMetaLog;
+//	sMetaLog << "SaveMeta: " << m_bReplayMode << " " << dFiles.GetLength () << ": ";
+//	sMetaLog.StartBlock ();
+	m_iNumFiles.store ( dFiles.GetLength (), std::memory_order_relaxed );
+	wrMeta.ZipInt ( dFiles.GetLength () );
+	for ( const auto & iExt: dFiles )
+	{
+		wrMeta.ZipInt ( iExt ); // everything else is saved in logs themselves
+//		sMetaLog << iExt;
+	}
+
+	// sphWarning ( "%s", sMetaLog.cstr() );
+
+	Threads::SccWL_t rLock { m_tCurrentFilesAccess };
+	if ( eForce==eNoForce && m_dCurrentFiles==dFiles )
+		return;
+
+	if ( dFiles.IsEmpty() )
+		m_iNextBinlog.store ( 0, std::memory_order_release );
+
+	m_dCurrentFiles.SwapData ( dFiles );
+
+	auto sMetaNew = SphSprintf ( "%s/binlog.meta.new", m_sLogPath.cstr () );
+	auto sMeta = SphSprintf ( "%s/binlog.meta", m_sLogPath.cstr () );
+
+	for ( int i=0; i<SAVE_TRIES; ++i )
+	{
+		CSphString sError;
+		CSphWriterNonThrottled wrMetaFile;
+		::unlink ( sMetaNew.cstr() );
+		if ( !wrMetaFile.OpenFile ( sMetaNew, sError ) )
+			sphDie ( "failed to open '%s': '%s'", sMetaNew.cstr(), sError.cstr() );
+
+		wrMetaFile.PutBytes ( dMeta.begin(), dMeta.GetLength() );
+		wrMetaFile.CloseFile();
+
+		if ( wrMetaFile.IsError() )
+		{
+			sphWarning ( "Error when closing file %s, errno=%d, error=%s, try=%d", sError.cstr(), errno, strerrorm ( errno ), i+1 );
+			continue;
+		}
+
+		if ( sph::rename ( sMetaNew.cstr(), sMeta.cstr() ) )
+		{
+			sphSleepMsec ( SAVE_TRIE_DELAY );
+			if ( sph::rename ( sMetaNew.cstr (), sMeta.cstr () ) )
+			{
+				if ( i<SAVE_TRIES-1 )
+				{
+					sphWarning ( "failed to rename meta (src=%s, dst=%s, errno=%d, error=%s), try %d",
+								 sMetaNew.cstr (), sMeta.cstr (), errno, strerrorm ( errno ),
+								 i+1 ); // !COMMIT handle this gracefully
+					sphSleepMsec ( SAVE_TRIE_DELAY );
+				} else
+					sphDie ( "failed to rename meta (src=%s, dst=%s, errno=%d, error=%s)",
+							 sMetaNew.cstr (), sMeta.cstr (), errno,
+							 strerrorm ( errno ) ); // !COMMIT handle this gracefully
+			} else break;
+		} else break;
+	}
+	sphLogDebug ( "Binlog::SaveMeta: Done (%s)", sMetaNew.cstr() );
+}
+
+
+void Binlog_c::SaveMeta ()
+{
+	MEMORY ( MEM_BINLOG );
+	DoSaveMeta ( CollectBinlogFiles (), eNoForce );
+}
+
+
+void Binlog_c::SaveMetaUnlock ( SaveMeta_e eForce )
+{
+	MEMORY ( MEM_BINLOG );
+	DoSaveMeta ( CollectBinlogFilesUnlock (), eForce );
+}
+
+
+IntVec_t Binlog_c::CollectBinlogFiles ()
+{
+	Threads::SccRL_t rLock { m_tHashAccess };
+	return CollectBinlogFilesUnlock();
+}
+
+
+IntVec_t Binlog_c::CollectBinlogFilesUnlock ()
+{
+	IntVec_t dFiles;
+	for ( auto & tBinlog: m_hBinlogs )
+		tBinlog.second->CollectBinlogFiles ( dFiles );
+
+	// append not yet processed saved files
+	for ( int i = m_dSavedFiles.GetLength ()-1; i>=0; --i )
+		dFiles.Add ( m_dSavedFiles[i] );
+
+	return dFiles;
+}
+
+
+bool Binlog_c::CompareCurrentFiles ( const IntVec_t & dFiles )
+{
+	Threads::SccRL_t rLock { m_tCurrentFilesAccess };
+	return m_dCurrentFiles==dFiles;
+}
+
+void Binlog_c::LockBinlog ()
+{
+	assert ( m_iLockFD==-1 );
+	CSphString sError;
+	if ( !RawFileLock ( SphSprintf ( "%s/binlog.lock", m_sLogPath.cstr () ), m_iLockFD, sError ) )
+		sphDie ( "%s", sError.scstr () );
+}
+
+void Binlog_c::UnlockBinlog ()
+{
+	RawFileUnLock ( SphSprintf ( "%s/binlog.lock", m_sLogPath.cstr () ), m_iLockFD );
+}
+
+
+bool Binlog_c::IsBinlogWritable () const noexcept
+{
+	if ( m_bReplayMode )
+		return false;
+
+	return !m_bDisabled;
+}
+
+
+// commit stuff. Indexes call this function with serialization cb; binlog is agnostic to alien data structures.
+bool Binlog_c::BinlogCommit ( int64_t * pTID, const char* szIndexName, FnWriteCommit fnSaver, CSphString & sError )
+{
+	if ( !IsBinlogWritable () ) // m.b. need to advance TID as index flush according to it
+		return true;
+
+	auto pSingleBinlog = GetWriteIndexBinlog ( szIndexName );
+	return pSingleBinlog->BinlogCommit ( pTID, szIndexName, std::move ( fnSaver ), sError );
+}
+
+
+// called once on startup from Configure()
+void Binlog_c::LoadMeta ()
+{
+	MEMORY ( MEM_BINLOG );
+
+	auto sMeta = SphSprintf ( "%s/binlog.meta", m_sLogPath.cstr () );
+	if ( !sphIsReadable ( sMeta.cstr () ) )
+		return;
+
+	CSphString sError;
+
+	// opened and locked, lets read
+	CSphAutoreader rdMeta;
+	if ( !rdMeta.Open ( sMeta, sError ) )
+		sphDie ( "%s error: %s", sMeta.cstr (), sError.cstr () );
+
+	if ( rdMeta.GetDword ()!=BINLOG_META_MAGIC_SPLI )
+		sphDie ( "invalid meta file %s", sMeta.cstr () );
+
+	// binlog meta v1 was dev only, crippled, and we don't like it anymore
+	// binlog metas v2 upto current v4 (and likely up) share the same simplistic format
+	// so let's support empty (!) binlogs w/ known versions and compatible metas
+	DWORD uVersion = rdMeta.GetDword ();
+	if ( uVersion==1 || uVersion>BINLOG_VERSION )
+		sphDie ( "binlog meta file %s is v.%d, binary is v.%d; recovery requires previous binary version",
+				 sMeta.cstr (), uVersion, BINLOG_VERSION );
+
+	auto uByte = rdMeta.GetByte(); // id64 for v<15; num of digits in names for v>=15
+	m_dSavedFiles.Resize ( rdMeta.UnzipInt () ); // FIXME! sanity check
+
+	if ( m_dSavedFiles.IsEmpty () )
+		return;
+
+	// ok, so there is actual recovery data
+	// could be wrong version of the empty binlog
+	m_bWrongVersion = ( uVersion!=BINLOG_VERSION );
+
+	// let's require that bitness
+	if ( uVersion < 15 )
+	{
+		if ( uByte != 1 )
+			sphDie ( "tables with 32-bit docids are no longer supported; recovery requires previous binary version" );
+	} else
+		m_iBinlogFileDigits = uByte;
+
+	assert ( m_iBinlogFileDigits>0 );
+
+	// load list of active log files
+	int iMaxExt = 0;
+	for ( int i=m_dSavedFiles.GetLength ()-1; i>=0; --i )
+	{
+		auto iExt = rdMeta.UnzipInt (); // everything else is saved in logs themselves
+		if ( iExt>iMaxExt )
+			iMaxExt = iExt;
+		m_dSavedFiles[i] = iExt;
+	}
+
+	m_iNextBinlog.store ( iMaxExt+1, std::memory_order_release );
+}
+
+// primary call - invoked from daemon once on start
+void Binlog_c::Replay ( const SmallStringHash_T<CSphIndex *> & hIndexes, ProgressCallbackSimple_t * pfnProgressCallback ) NO_THREAD_SAFETY_ANALYSIS
 {
 	if ( m_bDisabled )
 		return;
 
 	// on replay started
 	if ( pfnProgressCallback )
-		pfnProgressCallback();
+		pfnProgressCallback ();
 
-	int64_t tmReplay = sphMicroTimer();
+	int64_t tmReplay = sphMicroTimer ();
 
 	// do replay
 	m_bReplayMode = true;
-	int iLastLogState = 0;
-	ARRAY_FOREACH ( i, m_dLogFiles )
+	BinlogFileState_e ePrevLogState = BinlogFileState_e::OK, eLastLogState = BinlogFileState_e::OK;
+	SingleBinlog_c* pPrevInfo = nullptr, *pInfo = nullptr;
+	while ( !m_dSavedFiles.IsEmpty() )
 	{
-		iLastLogState = ReplayBinlog ( hIndexes, i );
+		auto iExt = m_dSavedFiles.Last();
+		BinlogReplayFileDesc_t tLog;
+		tLog.m_iExt = iExt;
+		ePrevLogState = std::exchange ( eLastLogState, ReplayBinlog ( tLog, hIndexes ) );
 		if ( pfnProgressCallback ) // on each replayed binlog
-			pfnProgressCallback();
+			pfnProgressCallback ();
+
+		m_dSavedFiles.Pop();
+
+		if ( tLog.m_dIndexInfos.IsEmpty() )
+		{
+			if ( pInfo )
+				pInfo->AdoptFile ( iExt );
+			else
+				RemoveFile ( iExt );
+		}
+
+
+		for ( const auto& tInfo : tLog.m_dIndexInfos )
+		{
+			pInfo = GetWriteIndexBinlog ( tInfo.m_sName.cstr (), false );
+			pInfo->AdoptIndex ( tLog.m_iExt, tInfo );
+			if ( pInfo!=pPrevInfo )
+			{
+				if ( pPrevInfo )
+					pPrevInfo->OpenNewLog ( ePrevLogState );
+				pPrevInfo = pInfo;
+			}
+		}
 	}
 
-	if ( m_dLogFiles.GetLength()>0 )
+	if ( !pInfo && !pPrevInfo )
+		SaveMetaUnlock ( eForce );
+
+	if ( pPrevInfo )
+		pPrevInfo->OpenNewLog ( eLastLogState );
+
+	if ( m_dSavedFiles.GetLength ()>0 )
 	{
-		tmReplay = sphMicroTimer() - tmReplay;
+		tmReplay = sphMicroTimer ()-tmReplay;
 		sphInfo ( "binlog: finished replaying total %d in %d.%03d sec",
-			m_dLogFiles.GetLength(),
-			(int)(tmReplay/1000000), (int)((tmReplay/1000)%1000) );
+				  m_dSavedFiles.GetLength (),
+				  (int) ( tmReplay/1000000 ), (int) ( ( tmReplay/1000 )%1000 ) );
 	}
 
 	// FIXME?
@@ -631,306 +1530,13 @@ void Binlog_c::Replay ( const SmallStringHash_T<CSphIndex*> & hIndexes, Progress
 
 	// resume normal operation
 	m_bReplayMode = false;
-	OpenNewLog ( iLastLogState );
 }
 
 
-bool Binlog_c::IsFlushingEnabled () const
+BinlogFileState_e Binlog_c::ReplayBinlog ( BinlogReplayFileDesc_t & tLog, const SmallStringHash_T<CSphIndex*> & hIndexes ) NO_THREAD_SAFETY_ANALYSIS
 {
-	return ( !m_bDisabled && m_eOnCommit!=ACTION_FSYNC );
-}
-
-
-void Binlog_c::DoFlush ()
-{
-	assert ( !m_bDisabled );
-	MEMORY ( MEM_BINLOG );
-
-	if ( m_eOnCommit==ACTION_NONE || m_tWriter.HasUnwrittenData() )
-	{
-		ScopedMutex_t LockWriter( m_tWriteLock);
-		if ( !m_tWriter.Write() )
-			return;
-	}
-
-	if ( m_tWriter.HasUnsyncedData() && !m_tWriter.Fsync() )
-		return;
-
-	m_iLastFlushed = sphMicroTimer ();
-}
-
-int64_t Binlog_c::NextFlushingTime () const
-{
-	if ( !m_iLastFlushed )
-		return sphMicroTimer () + m_iFlushPeriod;
-	return m_iLastFlushed + m_iFlushPeriod;
-}
-
-int Binlog_c::GetWriteIndexID ( IndexNameUid_t tIndexName, int64_t iTID, int64_t tmNow )
-{
-	MEMORY ( MEM_BINLOG );
-	assert ( m_dLogFiles.GetLength() );
-
-	// OPTIMIZE? maybe hash them?
-	BinlogFileDesc_t & tLog = m_dLogFiles.Last();
-	ARRAY_FOREACH ( i, tLog.m_dIndexInfos )
-	{
-		BinlogIndexInfo_t & tIndex = tLog.m_dIndexInfos[i];
-		if ( IsSame ( tIndex, tIndexName ) )
-		{
-			tIndex.m_iMaxTID = Max ( tIndex.m_iMaxTID, iTID );
-			tIndex.m_tmMax = Max ( tIndex.m_tmMax, tmNow );
-			return i;
-		}
-	}
-
-	// create a new entry
-	int iID = tLog.m_dIndexInfos.GetLength();
-	BinlogIndexInfo_t & tIndex = tLog.m_dIndexInfos.Add(); // caller must hold a wlock
-	tIndex.m_sName = tIndexName.first;
-	tIndex.m_iIndexGen = tIndexName.second;
-	tIndex.m_iMinTID = iTID;
-	tIndex.m_iMaxTID = iTID;
-	tIndex.m_iFlushedTID = 0;
-	tIndex.m_tmMin = tmNow;
-	tIndex.m_tmMax = tmNow;
-
-	// log this new entry
-	BinlogTransactionGuard_c tGuard ( m_tWriter, false );
-
-	m_tWriter.ZipOffset ( ADD_INDEX );
-	m_tWriter.ZipOffset ( iID );
-	m_tWriter.PutString ( tIndexName.first );
-	m_tWriter.ZipOffset ( tIndexName.second );
-	m_tWriter.ZipOffset ( iTID );
-	m_tWriter.ZipOffset ( tmNow );
-
-	// return the index
-	return iID;
-}
-
-void Binlog_c::LoadMeta ()
-{
-	MEMORY ( MEM_BINLOG );
-
-	CSphString sMeta;
-	sMeta.SetSprintf ( "%s/binlog.meta", m_sLogPath.cstr() );
-	if ( !sphIsReadable ( sMeta.cstr() ) )
-		return;
-
 	CSphString sError;
-
-	// opened and locked, lets read
-	CSphAutoreader rdMeta;
-	if ( !rdMeta.Open ( sMeta, sError ) )
-		sphDie ( "%s error: %s", sMeta.cstr(), sError.cstr() );
-
-	if ( rdMeta.GetDword()!=BINLOG_META_MAGIC )
-		sphDie ( "invalid meta file %s", sMeta.cstr() );
-
-	// binlog meta v1 was dev only, crippled, and we don't like it anymore
-	// binlog metas v2 upto current v4 (and likely up) share the same simplistic format
-	// so let's support empty (!) binlogs w/ known versions and compatible metas
-	DWORD uVersion = rdMeta.GetDword();
-	if ( uVersion==1 || uVersion>BINLOG_VERSION )
-		sphDie ( "binlog meta file %s is v.%d, binary is v.%d; recovery requires previous binary version",
-			sMeta.cstr(), uVersion, BINLOG_VERSION );
-
-	const bool bLoaded64bit = ( rdMeta.GetByte()==1 );
-	m_dLogFiles.Resize ( rdMeta.UnzipInt() ); // FIXME! sanity check
-
-	if ( !m_dLogFiles.GetLength() )
-		return;
-
-	// ok, so there is actual recovery data
-	// could be wrong version of the empty binlog
-	m_bWrongVersion = ( uVersion!=BINLOG_VERSION );
-
-	// let's require that bitness
-	if ( !bLoaded64bit )
-		sphDie ( "tables with 32-bit docids are no longer supported; recovery requires previous binary version" );
-
-	// load list of active log files
-	ARRAY_FOREACH ( i, m_dLogFiles )
-		m_dLogFiles[i].m_iExt = rdMeta.UnzipInt(); // everything else is saved in logs themselves
-}
-
-void Binlog_c::SaveMeta ()
-{
-	MEMORY ( MEM_BINLOG );
-
-	CSphString sMeta, sMetaOld;
-	sMeta.SetSprintf ( "%s/binlog.meta.new", m_sLogPath.cstr() );
-	sMetaOld.SetSprintf ( "%s/binlog.meta", m_sLogPath.cstr() );
-
-	CSphString sError;
-
-	// opened and locked, lets write
-	CSphWriter wrMeta;
-	if ( !wrMeta.OpenFile ( sMeta, sError ) )
-		sphDie ( "failed to open '%s': '%s'", sMeta.cstr(), sError.cstr() );
-
-	wrMeta.PutDword ( BINLOG_META_MAGIC );
-	wrMeta.PutDword ( BINLOG_VERSION );
-	wrMeta.PutByte ( 1 ); // was USE_64BIT
-
-	// save list of active log files
-	wrMeta.ZipInt ( m_dLogFiles.GetLength() );
-	ARRAY_FOREACH ( i, m_dLogFiles )
-		wrMeta.ZipInt ( m_dLogFiles[i].m_iExt ); // everything else is saved in logs themselves
-
-	wrMeta.CloseFile();
-
-	if ( wrMeta.IsError() )
-	{
-		sphWarning ( "%s", sError.cstr() );
-		return;
-	}
-
-	if ( sph::rename ( sMeta.cstr(), sMetaOld.cstr() ) )
-		sphDie ( "failed to rename meta (src=%s, dst=%s, errno=%d, error=%s)",
-			sMeta.cstr(), sMetaOld.cstr(), errno, strerrorm(errno) ); // !COMMIT handle this gracefully
-	sphLogDebug ( "SaveMeta: Done (%s)", sMeta.cstr() );
-}
-
-void Binlog_c::LockFile ( bool bLock )
-{
-	CSphString sName;
-	sName.SetSprintf ( "%s/binlog.lock", m_sLogPath.cstr() );
-
-	if ( bLock )
-	{
-		assert ( m_iLockFD==-1 );
-		const int iLockFD = ::open ( sName.cstr(), SPH_O_NEW, 0644 );
-
-		if ( iLockFD<0 )
-			sphDie ( "failed to open '%s': %u '%s'", sName.cstr(), errno, strerrorm(errno) );
-
-		if ( !sphLockEx ( iLockFD, false ) )
-			sphDie ( "failed to lock '%s': %u '%s'", sName.cstr(), errno, strerrorm(errno) );
-
-		m_iLockFD = iLockFD;
-	} else
-	{
-		if ( m_iLockFD>=0 )
-			sphLockUn ( m_iLockFD );
-		SafeClose ( m_iLockFD );
-		::unlink ( sName.cstr()	);
-	}
-}
-
-void Binlog_c::OpenNewLog ( int iLastState )
-{
-	MEMORY ( MEM_BINLOG );
-
-	// calc new ext
-	int iExt = 1;
-	if ( m_dLogFiles.GetLength() )
-	{
-		iExt = m_dLogFiles.Last().m_iExt;
-		if ( !iLastState )
-			iExt++;
-	}
-
-	// create entry
-	// we need to reset it, otherwise there might be leftover data after last Remove()
-	BinlogFileDesc_t tLog;
-	tLog.m_iExt = iExt;
-	m_dLogFiles.Add ( tLog );
-
-	// update meta first then only remove binlog file
-	SaveMeta();
-
-	// create file
-	CSphString sLog = MakeBinlogName ( m_sLogPath.cstr(), tLog.m_iExt );
-
-	if ( !iLastState ) // reuse the last binlog since it is empty or useless.
-		::unlink ( sLog.cstr() );
-
-	if ( !m_tWriter.OpenFile ( sLog, m_sWriterError ) )
-		sphDie ( "failed to create %s: errno=%d, error=%s", sLog.cstr(), errno, strerrorm(errno) );
-
-	// emit header
-	m_tWriter.PutDword ( BINLOG_HEADER_MAGIC );
-	m_tWriter.PutDword ( BINLOG_VERSION );
-}
-
-// cache is a small summary of affected indexes, it is written at the very end of binlog file when it exceeded size limit,
-// before opening new file.
-void Binlog_c::DoCacheWrite ()
-{
-	if ( !m_dLogFiles.GetLength() )
-		return;
-
-	assert ( m_tWriter.IsOpen() );
-	const CSphVector<BinlogIndexInfo_t> & dIndexes = m_dLogFiles.Last().m_dIndexInfos;
-
-	BinlogTransactionGuard_c tGuard(m_tWriter);
-
-	m_tWriter.ZipOffset ( ADD_CACHE );
-	m_tWriter.ZipOffset ( dIndexes.GetLength() );
-	ARRAY_FOREACH ( i, dIndexes )
-	{
-		m_tWriter.PutString ( dIndexes[i].m_sName.cstr() );
-		m_tWriter.ZipOffset ( dIndexes[i].m_iIndexGen );
-		m_tWriter.ZipOffset ( dIndexes[i].m_iMinTID );
-		m_tWriter.ZipOffset ( dIndexes[i].m_iMaxTID );
-		m_tWriter.ZipOffset ( dIndexes[i].m_iFlushedTID );
-		m_tWriter.ZipOffset ( dIndexes[i].m_tmMin );
-		m_tWriter.ZipOffset ( dIndexes[i].m_tmMax );
-	}
-}
-
-void Binlog_c::CheckDoRestart ()
-{
-	// restart on exceed file size limit
-	if ( m_iRestartSize>0 && m_tWriter.GetPos()>m_iRestartSize )
-	{
-		MEMORY ( MEM_BINLOG );
-
-		assert ( m_dLogFiles.GetLength() );
-
-		DoCacheWrite();
-		m_tWriter.CloseFile();
-		OpenNewLog();
-	}
-}
-
-bool Binlog_c::CheckDoFlush()
-{
-	switch ( m_eOnCommit )
-	{
-	case ACTION_NONE:
-		break;
-
-	case ACTION_WRITE:
-		if ( !m_tWriter.Write() )
-			return false;
-		break;
-
-	case ACTION_FSYNC:
-		if ( !m_tWriter.Write() )
-			return false;
-
-		if ( !m_tWriter.Fsync() )
-			return false;
-		break;
-
-	default:
-		assert(false && "wrong binlog flush action flag");
-		break;
-	}
-
-	return true;
-}
-
-int Binlog_c::ReplayBinlog ( const SmallStringHash_T<CSphIndex*> & hIndexes, int iBinlog )
-{
-	assert ( iBinlog>=0 && iBinlog<m_dLogFiles.GetLength() );
-	CSphString sError;
-
-	const CSphString sLog ( MakeBinlogName ( m_sLogPath.cstr(), m_dLogFiles[iBinlog].m_iExt ) );
-	BinlogFileDesc_t & tLog = m_dLogFiles[iBinlog];
+	const CSphString sLog ( MakeBinlogName ( tLog.m_iExt ) );
 
 	// open, check, play
 	sphInfo ( "binlog: replaying log %s", sLog.cstr() );
@@ -939,21 +1545,20 @@ int Binlog_c::ReplayBinlog ( const SmallStringHash_T<CSphIndex*> & hIndexes, int
 	if ( !tReader.Open ( sLog, sError ) )
 	{
 		Log ( REPLAY_IGNORE_OPEN_ERROR, "binlog: log open error: %s", sError.cstr() );
-		return 0;
+		return BinlogFileState_e::ERROR_NON_READABLE;
 	}
 
 	const SphOffset_t iFileSize = tReader.GetFilesize();
-
 	if ( !iFileSize )
 	{
 		sphWarning ( "binlog: empty binlog %s detected, skipping", sLog.cstr() );
-		return -1;
+		return BinlogFileState_e::ERROR_EMPTY_0;
 	}
 
-	if ( tReader.GetDword()!=BINLOG_HEADER_MAGIC )
+	if ( tReader.GetDword()!=BINLOG_HEADER_MAGIC_SPBL )
 	{
 		Log ( REPLAY_IGNORE_TRX_ERROR, "binlog: log %s missing magic header (corrupted?)", sLog.cstr() );
-		return -1;
+		return BinlogFileState_e::ERROR_WRONG_FILE;
 	}
 
 	DWORD uVersion = tReader.GetDword();
@@ -963,11 +1568,17 @@ int Binlog_c::ReplayBinlog ( const SmallStringHash_T<CSphIndex*> & hIndexes, int
 	// could replay empty binlog of the old version
 	m_bWrongVersion = ( uVersion!=BINLOG_VERSION );
 
+	if ( iFileSize==8 ) // couple of DWORDs we just read - header and version
+	{
+		sphWarning ( "binlog: empty binlog %s detected, skipping", sLog.cstr () );
+		return BinlogFileState_e::ERROR_EMPTY_8;
+	}
+
 	/////////////
 	// do replay
 	/////////////
 
-	int dTotal [ TOTAL+1 ] = {0};
+	std::array<int, TOTAL+1> dTotal {0};
 
 	// !COMMIT
 	// instead of simply replaying everything, we should check whether this binlog is clean
@@ -983,15 +1594,14 @@ int Binlog_c::ReplayBinlog ( const SmallStringHash_T<CSphIndex*> & hIndexes, int
 	while ( iFileSize!=tReader.GetPos() && !tReader.GetErrorFlag() && bReplayOK )
 	{
 		iPos = tReader.GetPos();
-		if ( tReader.GetDword()!=BLOP_MAGIC )
+		if ( tReader.GetDword()!=BLOP_MAGIC_TXN_ )
 		{
 			Log ( REPLAY_IGNORE_TRX_ERROR, "binlog: log missing txn marker at pos=" INT64_FMT " (corrupted?)", iPos );
 			bReplayOK = false;
 			break;
 		}
-
 		tReader.ResetCrc ();
-		const uint64_t uOp = tReader.UnzipOffset ();
+		const auto uOp = (Blop_e) tReader.GetByte ();
 
 		if ( uOp<=0 || uOp>=TOTAL )
 		{
@@ -1010,7 +1620,7 @@ int Binlog_c::ReplayBinlog ( const SmallStringHash_T<CSphIndex*> & hIndexes, int
 		switch ( uOp )
 		{
 			case ADD_INDEX:
-				bReplayOK = ReplayIndexAdd ( iBinlog, hIndexes, tReader );
+				bReplayOK = ReplayIndexAdd ( tLog, hIndexes, tReader );
 				break;
 
 			case ADD_CACHE:
@@ -1021,19 +1631,11 @@ int Binlog_c::ReplayBinlog ( const SmallStringHash_T<CSphIndex*> & hIndexes, int
 					break;
 				}
 				bHaveCacheOp = true;
-				bReplayOK = ReplayCacheAdd ( iBinlog, uVersion, tReader );
+				bReplayOK = ReplayCacheAdd ( tLog, uVersion, tReader );
 				break;
 
-			case UPDATE_ATTRS:
-				bReplayOK = ReplayUpdateAttributes ( iBinlog, tReader );
-				break;
-
-			case COMMIT:
-			case RECONFIGURE:
-			case PQ_ADD:
-			case PQ_DELETE:
-			case PQ_ADD_DELETE:
-				bReplayOK = ReplayTxn ( Binlog::Blop_e(uOp), iBinlog, tReader );
+			case ADD_TXN:
+				bReplayOK = ReplayTxn ( tLog, tReader );
 				break;
 
 			default:
@@ -1069,48 +1671,41 @@ int Binlog_c::ReplayBinlog ( const SmallStringHash_T<CSphIndex*> & hIndexes, int
 		}
 	}
 
-	sphInfo ( "binlog: replay stats: %d commits; %d updates, %d reconfigure; %d pq-add; %d pq-delete; %d pq-add-delete, %d tables",
-		dTotal[COMMIT], dTotal[UPDATE_ATTRS], dTotal[RECONFIGURE], dTotal[PQ_ADD], dTotal[PQ_DELETE],
-			dTotal[PQ_ADD_DELETE], dTotal[ADD_INDEX] );
+	sphInfo ( "binlog: replay stats: %d commits, %d tables", dTotal[ADD_TXN], dTotal[ADD_INDEX] );
 	sphInfo ( "binlog: finished replaying %s; %d.%d MB in %d.%03d sec",
 		sLog.cstr(),
 		(int)(iFileSize/1048576), (int)((iFileSize*10/1048576)%10),
 		(int)(tmReplay/1000000), (int)((tmReplay/1000)%1000) );
 
 	// only one operation, that is Add Cache - by the fact, empty binlog
-	return ( bHaveCacheOp && dTotal[TOTAL]==1 ) ? 1 : 0;
+	return ( bHaveCacheOp && dTotal[TOTAL]==1 ) ? BinlogFileState_e::ERROR_ABANDONED : BinlogFileState_e::OK;
 }
 
-bool Binlog_c::ReplayIndexAdd ( int iBinlog, const SmallStringHash_T<CSphIndex*> & hIndexes, BinlogReader_c & tReader ) const
+bool Binlog_c::ReplayIndexAdd ( BinlogReplayFileDesc_t & tLog, const SmallStringHash_T<CSphIndex*> & hIndexes, BinlogReader_c & tReader ) const NO_THREAD_SAFETY_ANALYSIS
 {
 	// load and check index
-	const int64_t iTxnPos = tReader.GetPos(); // that is purely for reporting anomalities
-	BinlogFileDesc_t & tLog = m_dLogFiles[iBinlog];
+	const int64_t iTxnPos = tReader.GetPos(); // that is purely for reporting anomalies
 
 	uint64_t uVal = tReader.UnzipOffset();
-	if ( (int)uVal!=tLog.m_dIndexInfos.GetLength() )
-	{
-		Log ( REPLAY_IGNORE_TRX_ERROR, "binlog: indexadd: unexpected table id (id=" UINT64_FMT ", expected=%d, pos=" INT64_FMT ")",
-			uVal, tLog.m_dIndexInfos.GetLength(), iTxnPos );
-		return false;
-	}
 
 	// load data
-	CSphString sName = tReader.GetString();
-	int64_t iIndexGen = tReader.UnzipOffset();
-	IndexNameUid_t tLoadIdx { sName.cstr(), iIndexGen };
-
-	// FIXME? use this for double checking?
-	tReader.UnzipOffset (); // TID
-	tReader.UnzipOffset (); // time
+	CSphString sName = tReader.GetZString();
 
 	if ( !tReader.CheckCrc ( "indexadd", sName.cstr(), 0, iTxnPos ) )
 		return false;
 
+	if ( (int) uVal!=tLog.m_dIndexInfos.GetLength () )
+	{
+		Log ( REPLAY_IGNORE_TRX_ERROR,
+			  "binlog: indexadd: unexpected table id (id=" UINT64_FMT ", expected=%d, pos=" INT64_FMT ")",
+			  uVal, tLog.m_dIndexInfos.GetLength (), iTxnPos );
+		return false;
+	}
+
 	// check for index name dupes
 	ARRAY_FOREACH ( i, tLog.m_dIndexInfos )
 	{
-		if ( IsSame ( tLog.m_dIndexInfos[i], tLoadIdx ) )
+		if ( tLog.m_dIndexInfos[i].m_sName == sName )
 		{
 			Log ( REPLAY_IGNORE_TRX_ERROR, "binlog: duplicate table name (name=%s, dupeid=%d, pos=" INT64_FMT ")",
 				sName.cstr(), i, iTxnPos );
@@ -1119,9 +1714,8 @@ bool Binlog_c::ReplayIndexAdd ( int iBinlog, const SmallStringHash_T<CSphIndex*>
 	}
 
 	// not a dupe, lets add
-	BinlogIndexInfo_t & tIndex = tLog.m_dIndexInfos.Add();
+	BinlogIndexReplayInfo_t & tIndex = tLog.m_dIndexInfos.Add();
 	tIndex.m_sName = sName;
-	tIndex.m_iIndexGen = iIndexGen;
 
 	// lookup index in the list of currently served ones
 	CSphIndex ** ppIndex = hIndexes ( sName.cstr() );
@@ -1129,11 +1723,8 @@ bool Binlog_c::ReplayIndexAdd ( int iBinlog, const SmallStringHash_T<CSphIndex*>
 	if ( pIndex )
 	{
 		tIndex.m_pIndex = pIndex;
-		if ( IsIndexMatched ( tIndex ) )
-		{
-			tIndex.m_iPreReplayTID = pIndex->m_iTID;
-			tIndex.m_iFlushedTID = pIndex->m_iTID;
-		}
+		tIndex.m_iPreReplayTID = pIndex->m_iTID;
+		tIndex.m_iFlushedTID = pIndex->m_iTID;
 	}
 
 	// all ok
@@ -1141,29 +1732,42 @@ bool Binlog_c::ReplayIndexAdd ( int iBinlog, const SmallStringHash_T<CSphIndex*>
 	return true;
 }
 
-bool Binlog_c::ReplayCacheAdd ( int iBinlog, DWORD uVersion, BinlogReader_c & tReader ) const
+bool Binlog_c::ReplayCacheAdd ( const BinlogReplayFileDesc_t & tLog, DWORD uVersion, BinlogReader_c & tReader ) const NO_THREAD_SAFETY_ANALYSIS
 {
 	const int64_t iTxnPos = tReader.GetPos();
-	BinlogFileDesc_t & tLog = m_dLogFiles[iBinlog];
 
-	// load data
-	CSphVector<BinlogIndexInfo_t> dCache;
-	dCache.Resize ( (int) tReader.UnzipOffset() ); // FIXME! sanity check
-	if ( m_bWrongVersion && dCache.GetLength() )
+	// check data
+	int iCache = tReader.UnzipOffset (); // FIXME! sanity check
+	if ( m_bWrongVersion && iCache )
 	{
 		Log ( REPLAY_IGNORE_TRX_ERROR, "binlog: log %s is v.%d, binary is v.%d; recovery requires previous binary version", tReader.GetFilename().cstr(), uVersion, BINLOG_VERSION );
 		return false;
 	}
-	ARRAY_FOREACH ( i, dCache )
+
+	BinlogIndexInfo_t tCache;
+	for ( int i = 0; i<iCache; ++i )
 	{
-		dCache[i].m_sName = tReader.GetString();
-		dCache[i].m_iIndexGen = tReader.UnzipOffset();
-		dCache[i].m_iMinTID = tReader.UnzipOffset();
-		dCache[i].m_iMaxTID = tReader.UnzipOffset();
-		dCache[i].m_iFlushedTID = tReader.UnzipOffset();
-		dCache[i].m_tmMin = tReader.UnzipOffset();
-		dCache[i].m_tmMax = tReader.UnzipOffset();
+		tCache.m_sName = tReader.GetZString ();
+		tCache.m_iMinTID = tReader.UnzipOffset ();
+		tCache.m_iMaxTID = tReader.UnzipOffset ();
+		tCache.m_iFlushedTID = tReader.UnzipOffset ();
+
+		const BinlogIndexInfo_t & tIndex = tLog.m_dIndexInfos[i];
+
+		if ( tCache.m_sName!=tIndex.m_sName )
+		{
+			sphWarning ( "binlog: cache mismatch: table %d name mismatch (%s cached, %s replayed)",
+				i, tCache.m_sName.cstr (), tIndex.m_sName.cstr () );
+			continue;
+		}
+
+		if ( tCache.m_iMinTID!=tIndex.m_iMinTID || tCache.m_iMaxTID!=tIndex.m_iMaxTID )
+		{
+			sphWarning ( "binlog: cache mismatch: table %s tid ranges mismatch (cached " INT64_FMT " to " INT64_FMT ", replayed " INT64_FMT " to " INT64_FMT ")",
+				tCache.m_sName.cstr (), tCache.m_iMinTID, tCache.m_iMaxTID, tIndex.m_iMinTID, tIndex.m_iMaxTID );
+		}
 	}
+
 	if ( !tReader.CheckCrc ( "cache", "", 0, iTxnPos ) )
 		return false;
 
@@ -1172,33 +1776,8 @@ bool Binlog_c::ReplayCacheAdd ( int iBinlog, DWORD uVersion, BinlogReader_c & tR
 	// in any case, broken log or not, we probably managed to replay something
 	// so let's just report differences as warnings
 
-	if ( dCache.GetLength()!=tLog.m_dIndexInfos.GetLength() )
-	{
-		sphWarning ( "binlog: cache mismatch: %d tables cached, %d replayed",
-			dCache.GetLength(), tLog.m_dIndexInfos.GetLength() );
-		return true;
-	}
-
-	ARRAY_FOREACH ( i, dCache )
-	{
-		BinlogIndexInfo_t & tCache = dCache[i];
-		BinlogIndexInfo_t & tIndex = tLog.m_dIndexInfos[i];
-
-		if ( tCache.m_sName!=tIndex.m_sName )
-		{
-			sphWarning ( "binlog: cache mismatch: table %d name mismatch (%s cached, %s replayed)",
-				i, tCache.m_sName.cstr(), tIndex.m_sName.cstr() );
-			continue;
-		}
-
-		if ( tCache.m_iMinTID!=tIndex.m_iMinTID || tCache.m_iMaxTID!=tIndex.m_iMaxTID )
-		{
-			sphWarning ( "binlog: cache mismatch: table %s tid ranges mismatch "
-				"(cached " INT64_FMT " to " INT64_FMT ", replayed " INT64_FMT " to " INT64_FMT ")",
-				tCache.m_sName.cstr(),
-				tCache.m_iMinTID, tCache.m_iMaxTID, tIndex.m_iMinTID, tIndex.m_iMaxTID );
-		}
-	}
+	if ( iCache!=tLog.m_dIndexInfos.GetLength() )
+		sphWarning ( "binlog: cache mismatch: %d tables cached, %d replayed", iCache, tLog.m_dIndexInfos.GetLength() );
 
 	return true;
 }
@@ -1208,134 +1787,83 @@ bool Binlog_c::ReplayCacheAdd ( int iBinlog, DWORD uVersion, BinlogReader_c & tR
 //////////////////////////////////////////////////////////////////////////
 
 // helper used in about all replay ops
-int Binlog_c::ReplayIndexID ( BinlogReader_c & tReader, const BinlogFileDesc_t & tLog, const char * sPlace ) const
+int Binlog_c::ReplayIndexID ( CSphReader & tReader, const BinlogReplayFileDesc_t & tLog ) const
 {
 	const int64_t iTxnPos = tReader.GetPos();
 	const int iVal = (int)tReader.UnzipOffset();
 
 	if ( iVal<0 || iVal>=tLog.m_dIndexInfos.GetLength() )
 	{
-		Log ( REPLAY_IGNORE_TRX_ERROR, "binlog: %s: unexpected table id (id=%d, max=%d, pos=" INT64_FMT ")",
-			sPlace, iVal, tLog.m_dIndexInfos.GetLength(), iTxnPos );
+		Log ( REPLAY_IGNORE_TRX_ERROR, "binlog: unexpected table id (id=%d, max=%d, pos=" INT64_FMT ")", iVal, tLog.m_dIndexInfos.GetLength(), iTxnPos );
 		return -1;
 	}
 
 	return iVal;
 }
 
-CSphString Binlog_c::GetLogPath() const
+namespace {
+void SkipBytes ( CSphAutoreader& tReader, DWORD uSize )
 {
-	return m_sLogPath;
-}
-
-static const char* OpName ( Binlog::Blop_e eOp)
-{
-	switch (eOp)
+	auto uFakeBuf = Min ( uSize, 4096 );
+	CSphFixedVector<BYTE> dFakeBuf { uFakeBuf };
+	while ( uSize )
 	{
-		case Binlog::COMMIT: return "commit";
-		case Binlog::RECONFIGURE: return "reconfigure";
-		case Binlog::PQ_ADD: return "pq-add";
-		case Binlog::PQ_DELETE: return "pq-delete";
-		case Binlog::PQ_ADD_DELETE: return "pq-add-delete";
-		default: return "other";
+		tReader.GetBytes ( dFakeBuf.begin (), uFakeBuf );
+		uSize -= uFakeBuf;
+		uFakeBuf = Min ( uSize, 4096 );
 	}
 }
+}
 
-// dedicated function for replay attribute update
-bool Binlog_c::ReplayUpdateAttributes ( int iBinlog, BinlogReader_c & tReader ) const
+bool Binlog_c::ReplayTxn ( const BinlogReplayFileDesc_t & tLog, BinlogReader_c & tReader ) const NO_THREAD_SAFETY_ANALYSIS
 {
 	// load and lookup index
 	const int64_t iTxnPos = tReader.GetPos();
-	BinlogFileDesc_t & tLog = m_dLogFiles[iBinlog];
-	
-	int iIdx = ReplayIndexID ( tReader, tLog, "update" );
-	if ( iIdx==-1 )
-		return false;
-	BinlogIndexInfo_t & tIndex = tLog.m_dIndexInfos[iIdx];
-
-	auto iTID = (int64_t) tReader.UnzipOffset();
-	auto tmStamp = (int64_t) tReader.UnzipOffset();
-
-	// load transaction data
-	AttrUpdateSharedPtr_t pUpd { new CSphAttrUpdate };
-	auto& tUpd = *pUpd;
-	tUpd.m_bIgnoreNonexistent = true;
-
-	int iAttrs = (int)tReader.UnzipOffset();
-	tUpd.m_dAttributes.Resize ( iAttrs ); // FIXME! sanity check
-	for ( auto & i : tUpd.m_dAttributes )
-	{
-		i.m_sName = tReader.GetString();
-		i.m_eType = (ESphAttr) tReader.UnzipOffset(); // safe, we'll crc check later
-	}
-
-	if ( tReader.GetErrorFlag() ) return false;
-
-	if ( !Binlog::LoadVector ( tReader, tUpd.m_dPool ) ) return false;
-	if ( !Binlog::LoadVector ( tReader, tUpd.m_dDocids ) ) return false;
-	if ( !Binlog::LoadVector ( tReader, tUpd.m_dRowOffset ) ) return false;
-	if ( !Binlog::LoadVector ( tReader, tUpd.m_dBlobs ) ) return false;
-
-	if (!PerformChecks ( "update", tIndex, iTID, iTxnPos, tmStamp, tReader ))
-		return false;
-
-	if ( tIndex.m_pIndex && IsIndexMatched ( tIndex ) && iTID > tIndex.m_pIndex->m_iTID )
-	{
-		// we normally expect per-index TIDs to be sequential
-		// but let's be graceful about that
-		CheckTidSeq ("update", tIndex, iTID, tIndex.m_pIndex, iTxnPos );
-
-		CSphString sError, sWarning;
-		bool bCritical = false;
-		tIndex.m_pIndex->UpdateAttributes ( pUpd, bCritical, sError, sWarning ); // FIXME! check for errors
-		assert ( !bCritical ); // fixme! handle this
-
-		// update committed tid on replay in case of unexpected / mismatched tid
-		tIndex.m_pIndex->m_iTID = iTID;
-	}
-
-	// update info
-	if ( IsIndexMatched ( tIndex ) )
-		UpdateIndexInfo ( tIndex, iTID, tmStamp );
-
-	return true;
-}
-
-bool Binlog_c::ReplayTxn ( Binlog::Blop_e eOp, int iBinlog, BinlogReader_c & tReader ) const
-{
-	// load and lookup index
-	const int64_t iTxnPos = tReader.GetPos();
-	BinlogFileDesc_t & tLog = m_dLogFiles[iBinlog];
-
-	int iIdx = ReplayIndexID ( tReader, tLog, OpName (eOp) );
+	int iIdx = ReplayIndexID ( tReader, tLog );
 	if ( iIdx==-1 )
 		return false;
 
-	BinlogIndexInfo_t & tIndex = tLog.m_dIndexInfos[iIdx];
+	BinlogIndexReplayInfo_t & tIndex = tLog.m_dIndexInfos[iIdx];
 
 	// load transaction data
 	auto iTID = (int64_t) tReader.UnzipOffset();
-	auto tmStamp = (int64_t) tReader.UnzipOffset();
+	auto uSize = tReader.GetDword();
 
-	if ( !tIndex.m_pIndex )
-		return false;
+	// skip txns of non-existent (deleted) indexes (skip blobs by size)
+	if ( !tIndex.m_pIndex || iTID<=tIndex.m_pIndex->m_iTID || tIndex.m_pIndex->m_iTID==-1 )
+	{
+		tIndex.m_iMinTID = Min ( tIndex.m_iMinTID, iTID );
+		tIndex.m_iFlushedTID = tIndex.m_iMaxTID = Max ( tIndex.m_iMaxTID, iTID );
+
+		// just skip the blob
+		SkipBytes ( tReader, uSize );
+
+		// checksum
+		return !tReader.GetErrorFlag () && tReader.CheckCrc ( "skip", tIndex.m_sName.cstr (), iTID, iTxnPos );
+	}
+
+	assert ( tIndex.m_pIndex );
 
 	CSphString sError;
-	CheckTnxResult_t tReplayed = tIndex.m_pIndex->ReplayTxn ( eOp, tReader, sError, [ eOp, iTxnPos, iTID, tmStamp, this, &tReader, &tIndex ] () {
+	BYTE uOp = tReader.GetByte();
+	CSphString sOp = SzTxnName ( (Txn_e) uOp );
+	CheckTnxResult_t tReplayed = tIndex.m_pIndex->ReplayTxn ( tReader, sError, uOp, [ iTxnPos, iTID, this, &tReader, &tIndex, &sOp ] {
 		
 		CheckTnxResult_t tRes;
-
-		tRes.m_bValid = PerformChecks ( OpName (eOp), tIndex, iTID, iTxnPos, tmStamp, tReader );
+		tRes.m_bValid = PerformChecks ( sOp.cstr (), tIndex, iTID, iTxnPos, tReader );
 		if ( !tRes.m_bValid )
 			return tRes;
 
 		// only replay transaction when index exists and does not have it yet (based on TID)
-		if ( tIndex.m_pIndex && IsIndexMatched ( tIndex ) && iTID > tIndex.m_pIndex->m_iTID )
+		if ( tIndex.m_pIndex && iTID>tIndex.m_pIndex->m_iTID )
 		{
+			tRes.m_bApply = true;
 			// we normally expect per-index TIDs to be sequential
 			// but let's be graceful about that
-			CheckTidSeq ( OpName (eOp), tIndex, iTID, tIndex.m_pIndex, iTxnPos );
-			tRes.m_bApply = true;
+			if ( iTID!=tIndex.m_pIndex->m_iTID+1 )
+				sphWarning (
+						"binlog: %s: unexpected tid (table=%s, indextid=" INT64_FMT ", logtid=" INT64_FMT ", pos=" INT64_FMT ")",
+						sOp.cstr (), tIndex.m_sName.cstr (), tIndex.m_pIndex->m_iTID, iTID, iTxnPos );
 		}
 		return tRes;
 	});
@@ -1344,7 +1872,7 @@ bool Binlog_c::ReplayTxn ( Binlog::Blop_e eOp, int iBinlog, BinlogReader_c & tRe
 	if ( !tReplayed.m_bValid )
 	{
 		Log ( REPLAY_IGNORE_TRX_ERROR, "binlog: %s (table=%s, lasttid=" INT64_FMT ", logtid=" INT64_FMT ", pos=" INT64_FMT ", error=%s)",
-			OpName ( eOp ), tIndex.m_sName.cstr(), tIndex.m_iMaxTID, iTID, iTxnPos, sError.cstr() );
+			  sOp.cstr (), tIndex.m_sName.cstr(), tIndex.m_iMaxTID, iTID, iTxnPos, sError.cstr() );
 		return false;
 	}
 
@@ -1355,23 +1883,10 @@ bool Binlog_c::ReplayTxn ( Binlog::Blop_e eOp, int iBinlog, BinlogReader_c & tRe
 		tIndex.m_pIndex->m_iTID = iTID;
 	} 
 
-	if ( IsIndexMatched (  tIndex ) )
-		UpdateIndexInfo ( tIndex, iTID, tmStamp );
-
+	tIndex.m_iMinTID = Min ( tIndex.m_iMinTID, iTID );
+	tIndex.m_iMaxTID = Max ( tIndex.m_iMaxTID, iTID );
 	return true;
 
-}
-
-void Binlog_c::CheckPath ( const CSphConfigSection & hSearchd, bool bTestMode )
-{
-	m_sLogPath = hSearchd.GetStr ( "binlog_path", bTestMode ? "" : LOCALDATADIR );
-	m_bDisabled = m_sLogPath.IsEmpty();
-
-	if ( !m_bDisabled )
-	{
-		LockFile ( true );
-		LockFile ( false );
-	}
 }
 
 bool Binlog_c::MockDisabled ( bool bNewVal )
@@ -1379,151 +1894,54 @@ bool Binlog_c::MockDisabled ( bool bNewVal )
 	return std::exchange ( m_bDisabled, bNewVal );
 }
 
-bool Binlog_c::CheckCrc ( const char * sOp, const CSphString & sIndex, int64_t iTID, int64_t iTxnPos, BinlogReader_c & tReader )
-{
-	return !tReader.GetErrorFlag() && tReader.CheckCrc ( sOp, sIndex.cstr(), iTID, iTxnPos );
-}
-
-bool Binlog_c::CheckTid ( const char * sOp, const BinlogIndexInfo_t & tIndex, int64_t iTID, int64_t iTxnPos ) const
-{
-	if ( iTID<tIndex.m_iMaxTID )
-	{
-		Log ( REPLAY_IGNORE_TRX_ERROR, "binlog: %s: descending tid (table=%s, lasttid=" INT64_FMT ", logtid=" INT64_FMT ", pos=" INT64_FMT ")",
-			sOp, tIndex.m_sName.cstr(), tIndex.m_iMaxTID, iTID, iTxnPos );
-		return false;
-	}
-
-	return true;
-}
-
-
-void Binlog_c::CheckTidSeq ( const char * sOp, const BinlogIndexInfo_t & tIndex, int64_t iTID, CSphIndex * pIndexTID, int64_t iTxnPos ) const
-{
-	if ( pIndexTID && iTID!=pIndexTID->m_iTID+1 )
-		sphWarning ( "binlog: %s: unexpected tid (table=%s, indextid=" INT64_FMT ", logtid=" INT64_FMT ", pos=" INT64_FMT ")",
-			sOp, tIndex.m_sName.cstr(), pIndexTID->m_iTID, iTID, iTxnPos );
-}
-
-bool Binlog_c::CheckTime ( BinlogIndexInfo_t & tIndex, const char * sOp, int64_t tmStamp, int64_t iTID, int64_t iTxnPos ) const
-{
-	if ( tmStamp<tIndex.m_tmMax )
-	{
-		Log ( REPLAY_ACCEPT_DESC_TIMESTAMP, "binlog: %s: descending time (table=%s, lasttime=" INT64_FMT ", logtime=" INT64_FMT ", pos=" INT64_FMT ")",
-				sOp, tIndex.m_sName.cstr(), tIndex.m_tmMax, tmStamp, iTxnPos );
-		return false;
-	}
-
-	tIndex.m_tmMax = tmStamp;
-	return true;
-}
-
-
-bool Binlog_c::PerformChecks ( const char * szOp, BinlogIndexInfo_t & tIndex, int64_t iTID, int64_t iTxnPos, int64_t tmStamp,
-		BinlogReader_c & tReader ) const
+bool Binlog_c::PerformChecks ( const char * szOp, BinlogIndexInfo_t & tIndex, int64_t iTID, int64_t iTxnPos, BinlogReader_c & tReader ) const
 {
 	// checksum
-	if ( !CheckCrc ( szOp, tIndex.m_sName, iTID, iTxnPos, tReader ) )
+	if ( tReader.GetErrorFlag () || !tReader.CheckCrc ( szOp, tIndex.m_sName.cstr (), iTID, iTxnPos ) )
 		return false;
 
 	// check TID
-	if ( !CheckTid ( szOp, tIndex, iTID, iTxnPos ) )
+	if ( iTID<tIndex.m_iMaxTID )
+	{
+		Log ( REPLAY_IGNORE_TRX_ERROR,  "binlog: %s: descending tid (table=%s, lasttid=" INT64_FMT ", logtid=" INT64_FMT ", pos=" INT64_FMT ")",
+			  szOp, tIndex.m_sName.cstr (), tIndex.m_iMaxTID, iTID, iTxnPos );
 		return false;
-
-	// check timestamp
-	if ( !CheckTime ( tIndex, szOp, tmStamp, iTID, iTxnPos ) )
-		return false;
-
+	}
 	return true;
 }
 
-
-void Binlog_c::UpdateIndexInfo ( BinlogIndexInfo_t & tIndex, int64_t iTID, int64_t tmStamp )
-{
-	tIndex.m_iMinTID = Min ( tIndex.m_iMinTID, iTID );
-	tIndex.m_iMaxTID = Max ( tIndex.m_iMaxTID, iTID );
-	tIndex.m_tmMin = Min ( tIndex.m_tmMin, tmStamp );
-	tIndex.m_tmMax = Max ( tIndex.m_tmMax, tmStamp );
-}
-
-bool Binlog_c::IsBinlogWritable ( int64_t * pTID )
-{
-	if ( m_bReplayMode )
-		return false;
-
-	if ( !m_bDisabled )
-		return true;
-
-	if ( pTID ) // still need to advance TID as index flush according to it
-	{
-		ScopedMutex_t tLock ( m_tWriteLock );
-		++(*pTID);
-	}
-	return false;
-}
-
-// commit stuff. Indexes call this function with serialization cb; binlog is agnostic to alien data structures.
-bool Binlog_c::BinlogCommit ( Blop_e eOp, int64_t * pTID, IndexNameUid_t tIndexName, bool bIncTID, FnWriteCommit && fnSaver, CSphString & sError )
-{
-	if (!IsBinlogWritable ( bIncTID ? pTID : nullptr )) // m.b. need to advance TID as index flush according to it
-		return true;
-
-	MEMORY ( MEM_BINLOG );
-	ScopedMutex_t tWriteLock ( m_tWriteLock );
-
-	int64_t iTID = ++(*pTID);
-	const int64_t tmNow = sphMicroTimer();
-	const int uIndex = GetWriteIndexID ( tIndexName, iTID, tmNow );
-
-	{
-		BinlogTransactionGuard_c tGuard ( m_tWriter, m_eOnCommit==ACTION_NONE );
-
-		// header
-		m_tWriter.ZipOffset ( eOp );
-		m_tWriter.ZipOffset ( uIndex );
-		m_tWriter.ZipOffset ( iTID );
-		m_tWriter.ZipOffset ( tmNow );
-
-		// save txn data
-		fnSaver ( m_tWriter );
-	}
-
-	// finalize
-	if ( !CheckDoFlush() )
-	{
-		sError.SetSprintf ( "unable to write to binlog: %s", m_tWriter.GetError().cstr() );
-		return false;
-	}
-
-	CheckDoRestart();
-	return true;
-}
 
 static auto & g_bRTChangesAllowed = RTChangesAllowed();
 
-void Binlog::Init ( const CSphConfigSection & hSearchd, bool bTestMode )
+void Binlog::Init ( CSphString sBinlogPath )
 {
 	MEMORY ( MEM_BINLOG );
 
 	g_bRTChangesAllowed = false;
-	g_pRtBinlog = new Binlog_c();
+	g_pRtBinlog.reset ( new Binlog_c );
 	if ( !g_pRtBinlog )
 		sphDie ( "binlog: failed to create binlog" );
 
-	// check binlog path before detaching from the console
-	g_pRtBinlog->CheckPath ( hSearchd, bTestMode );
+	// check binlog path before detaching from the console - since we call sphDie on failure, and it should be visible.
+	g_pRtBinlog->CheckAndSetPath ( std::move ( sBinlogPath ) );
 }
 
-void Binlog::Configure ( const CSphConfigSection & hSearchd, bool bTestMode, DWORD uReplayFlags, bool bConfigless )
+void Binlog::SetCommon ( bool bCommonBinlog )
 {
 	assert ( g_pRtBinlog );
-	g_pRtBinlog->Configure ( hSearchd, bTestMode, uReplayFlags, bConfigless );
+	g_pRtBinlog->SetCommon ( bCommonBinlog );
+}
+
+void Binlog::Configure ( const CSphConfigSection & hSearchd, DWORD uReplayFlags )
+{
+	assert ( g_pRtBinlog );
+	g_pRtBinlog->Configure ( hSearchd, uReplayFlags );
 }
 
 
 void Binlog::Deinit ()
 {
-	// its valid for "searchd --stop" case
-	SafeDelete ( g_pRtBinlog );
+	g_pRtBinlog.reset();
 }
 
 
@@ -1534,31 +1952,9 @@ void Binlog::Replay ( const SmallStringHash_T<CSphIndex*> & hIndexes, ProgressCa
 	g_bRTChangesAllowed = true;
 }
 
-// implemented here because used both in plain and rt indexes
-void Binlog::CommitUpdateAttributes ( int64_t * pTID, IndexNameUid_t tIndexName, const CSphAttrUpdate & tUpd )
-{
-	CSphString sError;
-	Binlog::Commit ( Binlog::UPDATE_ATTRS, pTID, tIndexName, false, sError, [&tUpd] ( Writer_i & tWriter ) {
-
-		// update data
-		tWriter.ZipOffset ( tUpd.m_dAttributes.GetLength() );
-		for ( const auto & i : tUpd.m_dAttributes )
-		{
-			tWriter.PutString ( i.m_sName );
-			tWriter.ZipOffset ( i.m_eType );
-		}
-
-		// POD vectors
-		Binlog::SaveVector ( tWriter, tUpd.m_dPool );
-		Binlog::SaveVector ( tWriter, tUpd.m_dDocids );
-		Binlog::SaveVector ( tWriter, tUpd.m_dRowOffset );
-		Binlog::SaveVector ( tWriter, tUpd.m_dBlobs );
-	});
-}
-
 bool Binlog::IsActive()
 {
-	if (!g_pRtBinlog)
+	if ( !g_pRtBinlog )
 		return false;
 	return g_pRtBinlog->IsActive();
 }
@@ -1570,20 +1966,26 @@ bool Binlog::MockDisabled ( bool bNewVal )
 	return bNewVal;
 }
 
-bool Binlog::Commit ( Blop_e eOp, int64_t * pTID, IndexNameUid_t tIndexName, bool bIncTID, CSphString & sError, FnWriteCommit && fnSaver )
+bool Binlog::Commit ( int64_t * pTID, const char* szIndexName, CSphString & sError, FnWriteCommit && fnSaver )
 {
 	if ( !g_pRtBinlog )
 		return true;
 
-	return g_pRtBinlog->BinlogCommit ( eOp, pTID, tIndexName, bIncTID, std::move (fnSaver), sError );
+	if ( *pTID==-1 )
+		return true;
+
+	return g_pRtBinlog->BinlogCommit ( pTID, szIndexName, std::move (fnSaver), sError );
 }
 
-void Binlog::NotifyIndexFlush ( int64_t iTID, IndexNameUid_t tIndexName, bool bShutdown, bool bForceSave )
+void Binlog::NotifyIndexFlush ( int64_t iTID, const char * szIndexName, Shutdown_e eShutdown, ForceSave_e eAction )
 {
-	if (!g_pRtBinlog)
+	if ( !g_pRtBinlog )
 		return;
 
-	g_pRtBinlog->NotifyIndexFlush ( iTID, tIndexName, bShutdown, bForceSave );
+	if ( iTID==-1 )
+		return;
+
+	g_pRtBinlog->NotifyIndexFlush ( iTID, szIndexName, eShutdown, eAction );
 }
 
 CSphString Binlog::GetPath()
@@ -1591,6 +1993,13 @@ CSphString Binlog::GetPath()
 	if ( g_pRtBinlog )
 		return g_pRtBinlog->GetLogPath();
 	return "";
+}
+
+int64_t Binlog::LastTidFor ( const CSphString & sIndex )
+{
+	if ( !g_pRtBinlog )
+		return 0;
+	return g_pRtBinlog->LastTidFor ( sIndex );
 }
 
 

@@ -161,6 +161,18 @@ insert into test:rt1 (id,title,mva1) values (601, 'test 201', (621,622));
 SELECT * FROM test:rt1 order by id asc;
 </sphinxql>
 
+<!-- request to node 0 -->
+<sphinxql d="0">
+ALTER CLUSTER test DROP rt1,rt2,rtc;
+ALTER CLUSTER test ADD rt1,rt2,rtc;
+</sphinxql>
+
+<sphinxql d="0">
+ALTER CLUSTER test DROP `rt1`,`rt2`;
+ALTER CLUSTER test ADD rt1, rt2;
+</sphinxql>
+
+
 <!-- cleanup -->
 <sphinxql d="0">
 	ALTER CLUSTER test DROP rt1;

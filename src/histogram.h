@@ -26,9 +26,7 @@ enum HistogramType_e
 
 struct HistogramRset_t
 {
-	int64_t m_iTotal { 0 };
-	DWORD m_iCount { 0 };
-	float m_fRangeSize { 0.0f };
+	int64_t		m_iTotal = 0;
 };
 
 class Histogram_i

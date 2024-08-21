@@ -146,7 +146,8 @@ public:
 	virtual bool AttachRtIndex ( RtIndex_i * pIndex, bool bTruncate, bool & bFatal, CSphString & sError ) { return true; }
 
 	/// truncate index (that is, kill all data)
-	virtual bool Truncate ( CSphString & sError ) = 0;
+	enum Truncate_e : bool { TRUNCATE, DROP };
+	virtual bool Truncate ( CSphString & sError, Truncate_e eAction ) = 0;
 
 	virtual void Optimize ( OptimizeTask_t tTask ) {}
 
@@ -180,6 +181,7 @@ public:
 	
 	virtual bool	NeedStoreWordID () const = 0;
 	virtual	int64_t	GetMemLimit() const = 0;
+	virtual int		GetChunkId () const { return 0; };
 
 protected:
 	bool PrepareAccum ( RtAccum_t* pAccExt, bool bWordDict, CSphString* pError );
@@ -187,7 +189,7 @@ protected:
 
 /// initialize subsystem
 class CSphConfigSection;
-void sphRTInit ( const CSphConfigSection & hSearchd, bool bTestMode, const CSphConfigSection * pCommon );
+void sphRTInit ( CSphString sBinlogPath, bool bCommonBinlog = false, const CSphConfigSection * pCommon = nullptr );
 bool sphRTSchemaConfigure ( const CSphConfigSection & hIndex, CSphSchema & tSchema, const CSphIndexSettings & tSettings, StrVec_t * pWarnings, CSphString & sError, bool bSkipValidation, bool bPQ );
 void sphRTSetTestMode ();
 

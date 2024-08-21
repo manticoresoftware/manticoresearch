@@ -38,25 +38,14 @@ static RwLock_t g_tLockAlias;
 static RwLock_t g_tLockKbnTable;
 static nljson g_tKbnTable = "{}"_json;
 
-enum class CompatMode_e
-{
-	ON = 0,
-	OFF,
-	DASHBOARDS,
-
-	COUNT,
-	DEFAULT = ON
-};
-
-static CompatMode_e g_eMode = CompatMode_e::DEFAULT;
-static std::array<const char *, (int)CompatMode_e::COUNT> g_dModeNames = { "on", "off", "dashboards" };
+static bool g_bEnabled = true;
 
 static CSphString g_sKbnTableName = ".kibana";
 static CSphString g_sKbnTableAlias = ".kibana_1";
 static std::vector<CSphString> g_dKbnTablesNames { ".kibana_task_manager", ".apm-agent-configuration", g_sKbnTableName };
 
-static nljson::json_pointer g_tConfigTables ( "/es_compat/tables" );
-static nljson::json_pointer g_tMode ( "/es_compat/mode" );
+static nljson::json_pointer g_tConfigTables ( "/dashboards/tables" );
+static nljson::json_pointer g_tMode ( "/dashboards/mode" );
 
 static bool LOG_LEVEL_COMPAT = val_from_env ( "MANTICORE_LOG_ES_COMPAT", false ); // verbose logging compat events, ruled by this env variable
 #define LOG_COMPONENT_COMPATINFO ""
@@ -434,7 +423,7 @@ static void CatColumnsSetup();
 
 void SetupCompatHttp()
 {
-	if ( g_eMode!=CompatMode_e::DASHBOARDS )
+	if ( !IsLogManagementEnabled() )
 		return;
 
 	Threads::CallCoroutine ( [] { 
@@ -443,22 +432,6 @@ void SetupCompatHttp()
 	CreateScripts();
 	CatColumnsSetup();
 	} );
-}
-
-static CompatMode_e GetMode ( const std::string & sName, CSphString * pError=nullptr )
-{
-	auto tIt = std::find ( g_dModeNames.begin(), g_dModeNames.end(), sName );
-	if ( tIt!=g_dModeNames.end() )
-		return (CompatMode_e)( tIt - g_dModeNames.begin() );
-
-	if ( pError )
-		pError->SetSprintf ( "unknown mode %s (must be one of: on, off, dashboards)", sName.c_str() );
-	return CompatMode_e::DEFAULT;
-}
-
-static const char * GetModeName ( CompatMode_e eMode )
-{
-	return g_dModeNames[(int)eMode];
 }
 
 void LoadCompatHttp ( const char * sData )
@@ -474,26 +447,30 @@ void LoadCompatHttp ( const char * sData )
 	}
 
 	if ( tRaw.contains ( g_tMode ) )
-		g_eMode = GetMode ( tRaw[g_tMode].get<std::string>() );
+		g_bEnabled = tRaw[g_tMode].get<bool>();
 
-	COMPATINFO << "load compat http complete, loaded " << iLoadedItems << " items, mode " << GetModeName ( g_eMode );
+	COMPATINFO << "load compat http complete, loaded " << iLoadedItems << " items, mode " << g_bEnabled;
 }
 
-void SaveCompatHttp ( JsonObj_c & tRoot )
+void SaveCompatHttp ( JsonEscapedBuilder & tOut )
 {
-	if ( g_eMode!=CompatMode_e::DEFAULT )
+	if ( IsLogManagementEnabled() )
 	{
 		JsonObj_c tRaw ( false );
 		{
 			ScRL_t tLockTbl ( g_tLockKbnTable );
-			if ( g_tKbnTable.size() )
+			if ( !g_tKbnTable.size() )
+				return;
+
 			{
 				JsonObj_c tTable ( g_tKbnTable.dump().c_str() );
 				tRaw.AddItem ( g_tConfigTables.back().c_str(), tTable );
 			}
-			tRaw.AddStr ( g_tMode.back().c_str(), GetModeName ( g_eMode ) );
+			tRaw.AddBool ( g_tMode.back().c_str(), IsLogManagementEnabled() );
 		}
-		tRoot.AddItem ( g_tConfigTables.parent_pointer().back().c_str(), tRaw );
+
+		tOut.Named ( g_tConfigTables.parent_pointer().back().c_str() );
+		tOut.Appendf ( "%s", tRaw.AsString().cstr() );
 	}
 }
 
@@ -717,8 +694,10 @@ private:
 
 			nljson tShouldObj;
 			tShouldObj["should"] = tExistVec;
+			nljson tBoolObj;
+			tBoolObj["bool"] = tShouldObj;
 			nljson::json_pointer tParent = tIt.parent_pointer();
-			tFullQuery[tParent] = tShouldObj;
+			tFullQuery[tParent] = tBoolObj;
 
 			//std::cout << tParent << " : " << tFullQuery[tParent] << "\n";
 		}
@@ -2823,7 +2802,7 @@ bool HttpCompatHandler_c::ProcessUpdateDoc()
 	if ( sIndex.IsEmpty() )
 	{
 		ReportMissedIndex ( GetUrlParts()[0] );
-		return true;
+		return false;
 	}
 	if ( IsEmpty ( GetBody() ) )
 	{
@@ -2831,7 +2810,12 @@ bool HttpCompatHandler_c::ProcessUpdateDoc()
 		return false;
 	}
 
-	nljson tUpd = nljson::parse ( GetBody().first );
+	nljson tUpd = nljson::parse ( GetBody().first, nullptr, false );
+	if ( tUpd.is_discarded() )
+	{
+		ReportError ( "invalid body", "parse_exception", EHTTP_STATUS::_400 );
+		return false;
+	}
 
 	bool bHasScript = tUpd.contains ( "script" );
 
@@ -2840,7 +2824,7 @@ bool HttpCompatHandler_c::ProcessUpdateDoc()
 	if ( bHasScript &&( !tUpd.contains ( tScriptName ) || !tUpd.contains ( tScriptParamsName )  ) )
 	{
 		ReportMissedScript ( sIndex );
-		return true;
+		return false;
 	}
 
 	fnScript * pUpdateScript = nullptr;
@@ -2853,15 +2837,14 @@ bool HttpCompatHandler_c::ProcessUpdateDoc()
 		if ( !pUpdateScript )
 		{
 			ReportMissedScript ( sIndex );
-			return true;
+			return false;
 		}
 	}
 
-	CSphString sError;
 	DocIdVer_t dIds;
-	if ( !GetDocIds ( sIndex.cstr(), sId.cstr(), dIds, sError ) )
+	if ( !GetDocIds ( sIndex.cstr(), sId.cstr(), dIds, m_sError ) )
 	{
-		CompatWarning ( "%s", sError.cstr() );
+		ReportError ( m_sError.cstr(), "document_missing_exception", EHTTP_STATUS::_400 );
 		return false;
 	}
 
@@ -2873,7 +2856,7 @@ bool HttpCompatHandler_c::ProcessUpdateDoc()
 		CSphString sMsg;
 		sMsg.SetSprintf ( "[_doc][%s]: document missing", sId.cstr() );
 		ReportError ( sMsg.cstr(), "document_missing_exception", EHTTP_STATUS::_404 );
-		return true;
+		return false;
 	}
 
 	int iVersion = 1;
@@ -2886,9 +2869,9 @@ bool HttpCompatHandler_c::ProcessUpdateDoc()
 	if ( !dIds.GetLength() )
 	{
 		const nljson & tSrc = tUpd[tSrcName];
-		if ( !InsertDoc ( sIndex, dComplexFields, tSrc, false, sId.cstr(), iVersion, sError ) )
+		if ( !InsertDoc ( sIndex, dComplexFields, tSrc, false, sId.cstr(), iVersion, m_sError ) )
 		{
-			CompatWarning ( "doc '%s', error: %s", sId.cstr(), sError.cstr() );
+			CompatWarning ( "doc '%s', error: %s", sId.cstr(), m_sError.cstr() );
 
 			CSphString sMsg;
 			sMsg.SetSprintf ( "[%s]: version conflict, document already exists (current version [%d])", sId.cstr(), iVersion );
@@ -2917,7 +2900,7 @@ bool HttpCompatHandler_c::ProcessUpdateDoc()
 	auto tServed ( GetServed ( sIndex ) );
 	if ( !tServed )
 	{
-		CompatWarning ( "unknown kibana table %s", sIndex.cstr() );
+		ReportMissedIndex ( sIndex );
 		return false;
 	}
 
@@ -2929,9 +2912,9 @@ bool HttpCompatHandler_c::ProcessUpdateDoc()
 
 	//const auto & tDocId = dIds[0];
 	iVersion = dIds[0].second + 1;
-	if ( !GetIndexDoc ( pIndex, sId.cstr(), tSession.GetUID(), dRawDoc, sError ) )
+	if ( !GetIndexDoc ( pIndex, sId.cstr(), tSession.GetUID(), dRawDoc, m_sError ) )
 	{
-		CompatWarning ( "%s", sError.cstr() );
+		ReportError ( m_sError.cstr(), "document_missing_exception", EHTTP_STATUS::_404 );
 		return false;
 	}
 
@@ -2941,11 +2924,10 @@ bool HttpCompatHandler_c::ProcessUpdateDoc()
 	if ( bHasScript )
 	{
 		assert ( pUpdateScript );
-		if ( !((*pUpdateScript)( tUpd[tScriptParamsName], iVersion, tSrc, sError ) ) )
+		if ( !((*pUpdateScript)( tUpd[tScriptParamsName], iVersion, tSrc, m_sError ) ) )
 		{
-			CompatWarning ( "%s", sError.cstr() );
-			ReportError ( "failed to execute script", "illegal_argument_exception", EHTTP_STATUS::_400 );
-			return true;
+			ReportError ( m_sError.cstr(), "illegal_argument_exception", EHTTP_STATUS::_400 );
+			return false;
 		}
 	} else if ( tUpd.contains ( "doc" ) )
 	{
@@ -2957,18 +2939,18 @@ bool HttpCompatHandler_c::ProcessUpdateDoc()
 		CSphString sMsg;
 		sMsg.SetSprintf ( "[_doc][%s]: document missing", sId.cstr() );
 		ReportError ( sMsg.cstr(), "document_missing_exception", EHTTP_STATUS::_404 );
-		return true;
+		return false;
 	}
 
 	// reinsert updated document
-	if ( !InsertDoc ( sIndex, dComplexFields, tSrc, true, sId.cstr(), iVersion, sError ) )
+	if ( !InsertDoc ( sIndex, dComplexFields, tSrc, true, sId.cstr(), iVersion, m_sError ) )
 	{
-			CompatWarning ( "doc '%s', error: %s", sId.cstr(), sError.cstr() );
+			CompatWarning ( "doc '%s', error: %s", sId.cstr(), m_sError.cstr() );
 
 			CSphString sMsg;
 			sMsg.SetSprintf ( "[%s]: version conflict, document already exists (current version [%d])", sId.cstr(), iVersion );
 			ReportError ( sMsg.cstr(), "version_conflict_engine_exception", EHTTP_STATUS::_409, sIndex.cstr() );
-			return true;
+			return false;
 	}
 
 
@@ -3529,9 +3511,8 @@ bool HttpCompatHandler_c::ProcessEndpoints()
 		return true;
 
 
-	if ( GetRequestType()==HTTP_POST && m_dUrlParts.GetLength()>2 && m_dUrlParts[1]=="_update" 
-		&& ProcessUpdateDoc() )
-		return true;
+	if ( GetRequestType()==HTTP_POST && m_dUrlParts.GetLength()>2 && m_dUrlParts[1]=="_update" )
+		return ProcessUpdateDoc();
 
 	if ( GetRequestType()==HTTP_DELETE && m_dUrlParts.GetLength()==1 )
 	{
@@ -3621,14 +3602,10 @@ static void DropKbnTables()
 
 bool SetLogManagement ( const CSphString & sVal, CSphString & sError )
 {
-	CompatMode_e eMode = GetMode ( sVal.scstr(), &sError );
-	if ( !sError.IsEmpty() )
-		return false;
-
-	g_eMode = eMode;
+	g_bEnabled = ( sVal=="on" || sVal=="1" || sVal=="dashboards" );
 	DropKbnTables();
 
-	if ( g_eMode==CompatMode_e::DASHBOARDS )
+	if ( IsLogManagementEnabled() )
 	{
 		nljson tSys = GetSystemTable();
 		g_tKbnTable.update ( tSys );
@@ -3641,7 +3618,7 @@ bool SetLogManagement ( const CSphString & sVal, CSphString & sError )
 
 bool IsLogManagementEnabled ()
 {
-	return ( g_eMode!=CompatMode_e::OFF );
+	return g_bEnabled;
 }
 
 HttpCompatBaseHandler_c::HttpCompatBaseHandler_c ( Str_t sBody, int iReqType, const SmallStringHash_T<CSphString> & hOpts )

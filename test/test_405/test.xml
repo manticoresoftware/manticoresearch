@@ -77,7 +77,12 @@ drop table test4;
 
 <!-- regression failed to create RT index after previous RT index has disk chunk with different externals -->
 create table test4 ( title text, tag integer );
+
+<!-- regression crash of daemon on query into unknown chunks -->
+show table test4 chunk 15 settings;
+
 drop table test4;
+
 </sphinxql>
 
 

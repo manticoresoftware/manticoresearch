@@ -330,6 +330,18 @@ streq:
 	| strval TOK_EQ strval			{ $$ = pParser->AddNodeOp ( TOK_EQ, $1, $3 ); }
 	| expr TOK_NE strval			{ $$ = pParser->AddNodeOp ( TOK_NE, $1, $3 ); }
 	| strval TOK_NE expr			{ $$ = pParser->AddNodeOp ( TOK_NE, $3, $1 ); }
+	| expr '<' strval				{ $$ = pParser->AddNodeOp ( '<', $1, $3 ); }
+	| strval '<' expr				{ $$ = pParser->AddNodeOp ( '<', $1, $3 ); }
+	| strval '<' strval				{ $$ = pParser->AddNodeOp ( '<', $1, $3 ); }
+	| expr '>' strval				{ $$ = pParser->AddNodeOp ( '>', $1, $3 ); }
+	| strval '>' expr				{ $$ = pParser->AddNodeOp ( '>', $1, $3 ); }
+	| strval '>' strval				{ $$ = pParser->AddNodeOp ( '>', $1, $3 ); }
+	| expr TOK_LTE strval			{ $$ = pParser->AddNodeOp ( TOK_LTE, $1, $3 ); }
+	| strval TOK_LTE expr			{ $$ = pParser->AddNodeOp ( TOK_LTE, $1, $3 ); }
+	| strval TOK_LTE strval			{ $$ = pParser->AddNodeOp ( TOK_LTE, $1, $3 ); }
+	| expr TOK_GTE strval			{ $$ = pParser->AddNodeOp ( TOK_GTE, $1, $3 ); }
+	| strval TOK_GTE expr			{ $$ = pParser->AddNodeOp ( TOK_GTE, $1, $3 ); }
+	| strval TOK_GTE strval			{ $$ = pParser->AddNodeOp ( TOK_GTE, $1, $3 ); }
 	;
 
 strval:

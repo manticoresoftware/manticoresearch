@@ -19,7 +19,9 @@ source test1
 	type			= mysql
 	<sql_settings/>
 	sql_query		= select * from test_table where id%2=0
-	sql_attr_uint	= attr
+	sql_attr_uint	= attr1
+	sql_attr_uint	= attr2
+	sql_attr_uint	= attr3
 }
 
 index test1
@@ -33,6 +35,9 @@ source test2
 	type			= mysql
 	<sql_settings/>
 	sql_query		= select * from test_table where id%2=1
+	sql_attr_uint	= attr1
+	sql_attr_uint	= attr2
+	sql_attr_uint	= attr3
 }
 
 index test2
@@ -63,12 +68,14 @@ create table test_table
 (
 	id int not null,
 	title varchar(255) not null,
-	attr int not null
+	attr1 int not null,
+	attr2 int not null,
+	attr3 int not null
 );
 </db_create>
 <db_drop>drop table if exists test_table;</db_drop>
-<db_insert>insert into test_table values ( 1, 'asdf asdf asdf', 11 );</db_insert>
-<db_insert>insert into test_table values ( 2, 'asdf', 22 );</db_insert>
+<db_insert>insert into test_table values ( 1, 'asdf asdf asdf', 11, 1, 1 );</db_insert>
+<db_insert>insert into test_table values ( 2, 'asdf', 22, 2, 2 );</db_insert>
 
 <queries>
 <query mode="extended2" index="test1 test2" ranker="wordcount" sortmode="expr" sortby="@weight" index_weights="test1:10 test2:1">asdf</query>
@@ -82,6 +89,8 @@ insert into test4 ( id, title ) values ( 2, 'asdf' );
 select id, weight() as skey from test3, test4 where match('asdf') option ranker=wordcount, index_weights=(test3=1, test4=10);
 select id from test3 option index_weights=(test3=10);
 <!-- regression crash on reverse_scan, MOVED to separete test 239 to pass rt mode -->
+<!-- regression for a crash on fetching attr dependencies at rset merge -->
+select ( weight() + attr3 ) as sort_expr1 from test1, test2 order by sort_expr1 desc;
 </sphinxql></queries>
 
 </test>

@@ -16,6 +16,7 @@
 #include "api_command_cluster.h"
 #include "nodes.h"
 #include "searchdreplication.h"
+#include "serialize.h"
 
 // API command to remote node to get nodes it sees
 using ClusterGetNodes_c = ClusterCommand_T<E_CLUSTER::GET_NODES, ClusterRequest_t, StrVec_t>;
@@ -182,4 +183,76 @@ void ReceiveClusterGetState ( ISphOutputBuffer & tOut, InputBuffer_c & tBuf, CSp
 	
 	ClusterGetState ( tRequest.m_sCluster, tRequest.m_tState );
 	ClusterNodeState_c::BuildReply ( tOut, tRequest );
+}
+
+struct ClusterNodeVerReply_t
+{
+	WORD m_uVerCommandCluster = 0;
+	WORD m_uVerCommandReplicate = 0;
+};
+
+static const WORD g_uClusterNodeVer = 1;
+
+// API command to remote node to get node versions
+using ClusterNodeVer_c = ClusterCommand_T<E_CLUSTER::GET_NODE_VER, ClusterNodeVerReply_t, ClusterNodeVerReply_t>;
+
+void operator<< ( ISphOutputBuffer & tOut, const ClusterNodeVerReply_t & tReq )
+{
+	tOut.SendWord ( g_uClusterNodeVer );
+	tOut.SendWord ( tReq.m_uVerCommandCluster );
+	tOut.SendWord ( tReq.m_uVerCommandReplicate );
+}
+
+void operator>> ( InputBuffer_c & tIn, ClusterNodeVerReply_t & tReq )
+{
+	WORD uVer = tIn.GetWord();
+	if ( uVer>=g_uClusterNodeVer )
+	{
+		tReq.m_uVerCommandCluster = tIn.GetWord();
+		tReq.m_uVerCommandReplicate = tIn.GetWord();
+	}
+}
+
+void ReceiveClusterGetVer ( ISphOutputBuffer & tOut )
+{
+	ClusterNodeVerReply_t tReply;
+	tReply.m_uVerCommandCluster = VER_COMMAND_CLUSTER;
+	tReply.m_uVerCommandReplicate = GetVerCommandReplicate();
+	ClusterNodeVer_c::BuildReply ( tOut, tReply );
+}
+
+bool CheckRemotesVersions ( const ClusterDesc_t & tDesc )
+{
+	ClusterNodeVer_c::REQUEST_T tReq;
+
+	auto dAgents = ClusterNodeVer_c::MakeAgents ( GetDescAPINodes ( tDesc.m_dClusterNodes, Resolve_e::QUICK ), ReplicationTimeoutAnyNode(), tReq );
+	// no nodes left seems a valid case
+	if ( dAgents.IsEmpty() )
+		return true;
+
+	ClusterNodeVer_c tReply;
+	PerformRemoteTasksWrap ( dAgents, tReply, tReply, false );
+
+	for ( const AgentConn_t * pAgent : dAgents )
+	{
+		// failure if:
+		// - fetched but versions are wrong either VER_COMMAND_CLUSTER or VER_COMMAND_REPLICATE
+		// - get remote node error reply with the wrong version message
+		if ( pAgent->m_bSuccess )
+		{
+			ClusterNodeVerReply_t tVer = ClusterNodeVer_c::GetRes ( *pAgent );
+			if ( tVer.m_uVerCommandCluster!=VER_COMMAND_CLUSTER || tVer.m_uVerCommandReplicate!=GetVerCommandReplicate() )
+			{
+				TlsMsg::Err ( "versions mismatch, node removed from the cluster '%s': %d(%d), replication: %d(%d)", tDesc.m_sName.cstr(), (int)tVer.m_uVerCommandCluster, (int)VER_COMMAND_CLUSTER, (int)tVer.m_uVerCommandReplicate, (int)GetVerCommandReplicate() );
+				return false;
+			}
+		} else if ( pAgent->m_sFailure.Begins ( "remote error: client version is" ) )
+		{
+			TlsMsg::ResetErr();
+			TlsMsg::Err ( pAgent->m_sFailure );
+			return false;
+		}
+	}
+
+	return true;
 }

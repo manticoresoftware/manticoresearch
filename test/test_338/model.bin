@@ -1,4 +1,4 @@
-a:1:{i:0;a:65:{i:0;a:6:{s:13:"http_endpoint";s:11:"json/insert";s:11:"http_method";s:4:"POST";s:12:"http_request";s:278:"{
+a:1:{i:0;a:67:{i:0;a:6:{s:13:"http_endpoint";s:11:"json/insert";s:11:"http_method";s:4:"POST";s:12:"http_request";s:278:"{
 	"index":"test_rt",
 	"id":1,
 	"doc":
@@ -244,11 +244,18 @@ a:1:{i:0;a:65:{i:0;a:6:{s:13:"http_endpoint";s:11:"json/insert";s:11:"http_metho
 	{
 		"price": null
 	}
-}";s:4:"rows";s:58:"{"error":"unsupported value type 'null' in field 'price'"}";s:9:"http_code";i:400;s:4:"http";i:1;}i:64;a:6:{s:13:"http_endpoint";s:6:"update";s:11:"http_method";s:4:"POST";s:12:"http_request";s:66:"{
+}";s:4:"rows";s:75:"{"error":{"type":"unknown column: 'price'","index":"test_rt"},"status":409}";s:9:"http_code";i:409;s:4:"http";i:1;}i:64;a:6:{s:13:"http_endpoint";s:6:"update";s:11:"http_method";s:4:"POST";s:12:"http_request";s:66:"{
 	"index":"test_rt",
 	"id":10001,
 	"doc":
 	{
 		"price": null
 	}
-}";s:4:"rows";s:58:"{"error":"unsupported value type 'null' in field 'price'"}";s:9:"http_code";i:400;s:4:"http";i:1;}}}
+}";s:4:"rows";s:58:"{"error":"unsupported value type 'null' in field 'price'"}";s:9:"http_code";i:400;s:4:"http";i:1;}i:65;a:6:{s:13:"http_endpoint";s:6:"insert";s:11:"http_method";s:4:"POST";s:12:"http_request";s:85:"{
+	"index":"test_rt",
+	"id":10010,
+	"doc":
+	{
+		"bint_col" : 9223372036854775807
+	}
+}";s:4:"rows";s:79:"{"_index":"test_rt","_id":10010,"created":true,"result":"created","status":201}";s:9:"http_code";i:200;s:4:"http";i:1;}i:66;a:6:{s:13:"http_endpoint";s:6:"search";s:11:"http_method";s:4:"POST";s:12:"http_request";s:127:"{ "index": "test_rt", "_source": { "includes": [ "id", "bint_col" ] }, "query": { "equals": { "id": 10010 } }, "sort": ["id"] }";s:4:"rows";s:137:"{"timed_out":false,"hits":{"total":1,"total_relation":"eq","hits":[{"_id":10010,"_score":1,"_source":{"bint_col":9223372036854775807}}]}}";s:9:"http_code";i:200;s:4:"http";i:1;}}}

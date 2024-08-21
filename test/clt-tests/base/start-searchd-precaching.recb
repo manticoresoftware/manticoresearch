@@ -6,7 +6,7 @@ Manticore %{SEMVER} %{COMMITDATE}#!/(\sdev)?\s/!#(columnar %{SEMVER} %{COMMITDAT
 Copyright (c) 2001-2016, Andrew Aksyonoff
 Copyright (c) 2008-2016, Sphinx Technologies Inc (http://sphinxsearch.com)
 Copyright (c) 2017-%{YEAR}, Manticore Software LTD (https://manticoresearch.com)
-starting daemon version '6.3.7 9c915a9a6@24081909 dev (columnar 2.3.1 eb62283@24072718) (secondary 2.3.1 eb62283@24072718) (knn 2.3.1 eb62283@24072718)' ...
+starting daemon version '%{SEMVER} %{COMMITDATE}#!/(\sdev)?\s/!#(columnar %{SEMVER} %{COMMITDATE}) (secondary %{SEMVER} %{COMMITDATE}) (knn %{SEMVER} %{COMMITDATE})' ...
 listening on 127.0.0.1:9312 for sphinx and http(s)
 listening on 127.0.0.1:9306 for mysql
 listening on 127.0.0.1:9308 for sphinx and http(s)

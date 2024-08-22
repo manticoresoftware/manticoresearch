@@ -512,6 +512,7 @@ precaching table '_buffer_kafka_ts_0'
 precaching table 'destination_kafka_ts'
 precaching table '_buffer_kafka_combined_0'
 precaching table 'destination_kafka_combined'
+precaching table '_buffer_kafka_stop_0'
 precaching table 'destination_kafka_stop'
 Manticore %{SEMVER} %{COMMITDATE}#!/(\sdev)?\s/!#(columnar %{SEMVER} %{COMMITDATE}) (secondary %{SEMVER} %{COMMITDATE}) (knn %{SEMVER} %{COMMITDATE})
 Copyright (c) 2001-2016, Andrew Aksyonoff

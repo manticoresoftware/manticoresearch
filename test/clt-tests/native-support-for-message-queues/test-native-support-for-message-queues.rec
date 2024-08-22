@@ -458,7 +458,7 @@ docker exec manticore mysql -h0 -P9306 -e "CREATE MATERIALIZED VIEW view_table_s
 ––– output –––
 0
 ––– input –––
-docker exec kafka chmod +x ./import.sh; docker exec kafka ./import.sh; echo $?
+docker exec kafka ./import.sh; echo $?
 ––– output –––
 0
 ––– input –––
@@ -471,11 +471,8 @@ docker exec manticore mysql -h0 -P9306 -e "SELECT COUNT(*) FROM destination_kafk
 +----------+
 | count(*) |
 +----------+
-|       50 |
+|       57 |
 +----------+
-––– input –––
-docker exec manticore cat /var/log/manticore/searchd.log
-––– output –––
 ––– input –––
 sleep 1; docker exec manticore searchd --stopwait
 ––– output –––
@@ -486,7 +483,7 @@ Copyright (c) 2001-2016, Andrew Aksyonoff
 Copyright (c) 2008-2016, Sphinx Technologies Inc (http://sphinxsearch.com)
 Copyright (c) 2017-%{YEAR}, Manticore Software LTD (https://manticoresearch.com)
 ––– input –––
-sleep 3; docker exec manticore searchd
+sleep 1; docker exec manticore searchd
 ––– output –––
 [#!/[a-zA-Z]{3}\s[a-zA-Z]{3}\s+[0-9]{1,2}\s[0-9]{2}:[0-9]{2}:[0-9]{2}.[0-9]{3}\s[0-9]{4}/!#] [%{NUMBER}] using config file '/etc/manticoresearch/manticore.conf' (%{NUMBER} chars)...
 Manticore %{SEMVER} %{COMMITDATE}#!/(\sdev)?\s/!#(columnar %{SEMVER} %{COMMITDATE}) (secondary %{SEMVER} %{COMMITDATE}) (knn %{SEMVER} %{COMMITDATE})
@@ -501,19 +498,70 @@ Manticore %{SEMVER} %{COMMITDATE}#!/(\sdev)?\s/!#(columnar %{SEMVER} %{COMMITDAT
 Copyright (c) 2001-2016, Andrew Aksyonoff
 Copyright (c) 2008-2016, Sphinx Technologies Inc (http://sphinxsearch.com)
 Copyright (c) 2017-%{YEAR}, Manticore Software LTD (https://manticoresearch.com)
+precaching table '_sources'
+precaching table '_views'
+precaching table '_buffer_kafka_0'
+precaching table 'destination_kafka'
+precaching table '_buffer_kafka_metadata_0'
+precaching table 'destination_kafka_metadata'
+precaching table '_buffer_kafka_tags_0'
+precaching table 'destination_kafka_tags'
+precaching table '_buffer_kafka_alter_0'
+precaching table 'destination_kafka_alter'
+precaching table '_buffer_kafka_ts_0'
+precaching table 'destination_kafka_ts'
+precaching table '_buffer_kafka_combined_0'
+precaching table 'destination_kafka_combined'
+precaching table 'destination_kafka_stop'
 Manticore %{SEMVER} %{COMMITDATE}#!/(\sdev)?\s/!#(columnar %{SEMVER} %{COMMITDATE}) (secondary %{SEMVER} %{COMMITDATE}) (knn %{SEMVER} %{COMMITDATE})
 Copyright (c) 2001-2016, Andrew Aksyonoff
 Copyright (c) 2008-2016, Sphinx Technologies Inc (http://sphinxsearch.com)
 Copyright (c) 2017-%{YEAR}, Manticore Software LTD (https://manticoresearch.com)
 ––– input –––
-timeout 60 bash -c 'docker exec manticore bash -c "tail -f /var/log/manticore/searchd.log" | grep -m2 "REPLACE+INTO+destination_kafka_stop" > /dev/null && echo "Download completed."' || echo "Download failed."
+while [[ $(docker exec manticore mysql -h0 -P9306 -e "SELECT COUNT(*) FROM destination_kafka_stop;" | grep -o '[0-9]*') -ne 57 ]]; do sleep 1; done && echo "Download completed."
 ––– output –––
 Download completed.
 ––– input –––
-docker exec manticore cat /var/log/manticore/searchd.log
+docker exec manticore mysql -h0 -P9306 -e "SELECT COUNT(*) FROM destination_kafka_stop;"
 ––– output –––
++----------+
+| count(*) |
++----------+
+|       57 |
++----------+
 ––– input –––
-docker exec manticore mysql -h0 -P9306 -e "SELECT COUNT(*) FROM destination_kafka_stop"
+docker exec manticore mysql -h0 -P9306 -e "CREATE SOURCE invalid-source (id bigint, term text) type='kafka' broker_list='kafka:9092' topic_list='my-data' consumer_group='invalid' num_consumers='1' batch=50;"; echo $?
+––– output –––
+ERROR 1064 (42000) at line 1: P03: syntax error, unexpected tablename, expecting CLUSTER or FUNCTION or PLUGIN or TABLE near 'SOURCE invalid-source (id bigint, term text) type='kafka' broker_list='kafka:9092' topic_list='my-data' consumer_group='invalid' num_consumers='1' batch=50'
+1
+––– input –––
+docker exec manticore mysql -h0 -P9306 -e "CREATE MATERIALIZED VIEW invalid@view TO destination_kafka AS SELECT id, term as name FROM kafka;"; echo $?
+––– output –––
+ERROR 1064 (42000) at line 1: Undefined array key "kafka_metadata_0"
+1
+––– input –––
+docker exec manticore mysql -h0 -P9306 -e "CREATE MATERIALIZED VIEW invalid_query_view TO destination_kafka AS SELECT non_existing_column FROM kafka;"; echo $?
+––– output –––
+ERROR 1064 (42000) at line 1: Undefined array key "kafka_metadata_0"
+1
+––– input –––
+docker exec manticore mysql -h0 -P9306 -e "DROP SOURCE kafka;"; echo $?
+––– output –––
+0
+––– input –––
+docker exec manticore mysql -h0 -P9306 -e "CREATE SOURCE kafka (id bigint, term text, new_column text) type='kafka' broker_list='kafka:9092' topic_list='my-data' consumer_group='manticore_new' num_consumers='2' batch=50;"; echo $?
+––– output –––
+0
+––– input –––
+docker exec manticore mysql -h0 -P9306 -e "CREATE MATERIALIZED VIEW view_table_new TO destination_kafka AS SELECT id, term as name, new_column FROM kafka;"; echo $?
+––– output –––
+0
+––– input –––
+docker exec kafka ./import.sh; echo $?
+––– output –––
+0
+––– input –––
+docker exec manticore mysql -h0 -P9306 -e "SELECT COUNT(*) FROM destination_kafka;"
 ––– output –––
 +----------+
 | count(*) |

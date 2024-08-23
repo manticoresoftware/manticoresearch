@@ -556,7 +556,7 @@ void Go ( Handler&& fnHandler, Scheduler_i * pScheduler )
 }
 
 // start secondary subtasks (parallel search, pq processing, etc)
-void Co ( Handler&& fnHandler, Waiter_t tSignaller)
+void Co ( Handler&& fnHandler, Waiter_t tSignaller )
 {
 	auto pScheduler = CurrentScheduler ();
 	if ( !pScheduler )
@@ -679,10 +679,8 @@ bool CallCoroutineRes ( Predicate fnHandler )
 }
 
 // start secondary subtasks (parallel search, pq processing, etc)
-void StartJob ( Handler fnHandler )
+void StartJob ( Handler fnHandler, Scheduler_i * pScheduler )
 {
-	auto pScheduler = GlobalWorkPool();
-
 	assert ( pScheduler );
 	Coro::Worker_c::StartPrimary ( std::move ( fnHandler ), pScheduler, false );
 }

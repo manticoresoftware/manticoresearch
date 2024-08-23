@@ -49,7 +49,7 @@ void CallCoroutine ( Handler fnHandler );
 bool CallCoroutineRes ( Predicate fnHandler );
 
 // start handler in coroutine, self (if any) or main scheduler, second-priority
-void StartJob ( Handler handler );
+void StartJob ( Handler handler, Scheduler_i * pScheduler = GlobalWorkPool() );
 
 // perform handler in custom stack
 // note: handler is called as linear routine, without scheduler.

@@ -148,18 +148,6 @@ volatile int AutoOptimizeCutoff() noexcept
 	return iAutoOptimizeCutoff;
 }
 
-volatile OptimizeExecutorFnPtr& OptimizeExecutor() noexcept
-{
-	static OptimizeExecutorFnPtr OptimizeExecutorFn = nullptr;
-	return OptimizeExecutorFn;
-}
-
-void RunOptimizeRtIndexWeak ( OptimizeTask_t tTask )
-{
-	auto * OptimizeExecutorFn = OptimizeExecutor();
-	if ( OptimizeExecutorFn)
-		OptimizeExecutorFn ( std::move ( tTask ) );
-}
 
 //////////////////////////////////////////////////////////////////////////
 
@@ -1257,6 +1245,7 @@ public:
 	bool				Truncate ( CSphString & sError, Truncate_e eAction ) final;
 	bool				CheckValidateOptimizeParams ( OptimizeTask_t& tTask ) const;
 	bool				CheckValidateChunk ( int& iChunk, int iChunks, bool bByOrder ) const;
+	void				StartOptimize ( OptimizeTask_t tTask ) final;
 	void				Optimize ( OptimizeTask_t tTask ) final;
 	void				CheckStartAutoOptimize ();
 	int					ClassicOptimize ();
@@ -9851,6 +9840,16 @@ bool RtIndex_c::CheckValidateOptimizeParams ( OptimizeTask_t& tTask ) const
 	return true;
 }
 
+
+void RtIndex_c::StartOptimize ( OptimizeTask_t tTask )
+{
+	Threads::StartJob ( [tTask = std::move ( tTask ), this] () {
+		// want to track optimize only at work
+		auto pDesc = PublishSystemInfo ( "OPTIMIZE" );
+		Optimize ( std::move ( tTask ) );
+	} );
+}
+
 void RtIndex_c::Optimize ( OptimizeTask_t tTask )
 {
 	TRACE_CORO ( "rt", "RtIndex_c::Optimize" );
@@ -10002,11 +10001,10 @@ void RtIndex_c::CheckStartAutoOptimize()
 	OptimizeTask_t tTask;
 	tTask.m_eVerb = OptimizeTask_t::eAutoOptimize;
 	tTask.m_iCutoff = iCutoff;
-	tTask.m_sIndex = GetName();
 
-	RTDLOG << "RunOptimizeRtIndexWeak for " << GetName() << ", auto-optimize with cutoff " << iCutoff;
+	RTDLOG << "StartOptimize for " << GetName () << ", auto-optimize with cutoff " << iCutoff;
 
-	RunOptimizeRtIndexWeak ( tTask );
+	StartOptimize ( std::move ( tTask ) );
 }
 
 

@@ -66,7 +66,6 @@
 // services
 #include "taskping.h"
 #include "taskmalloctrim.h"
-#include "taskoptimize.h"
 #include "taskglobalidf.h"
 #include "tasksavestate.h"
 #include "taskflushbinlog.h"
@@ -14760,12 +14759,11 @@ void HandleMysqlOptimizeManual ( RowBuffer_i & tOut, const DebugCmd::DebugComman
 	tTask.m_iTo = (int)tCmd.m_iPar2;
 	tTask.m_bByOrder = !tCmd.bOpt ( "byid", session::GetOptimizeById() );
 	tTask.m_iCutoff = (int)tCmd.iOpt("cutoff");
-	tTask.m_sIndex = std::move (sIndex);
 
 	if ( tCmd.bOpt ( "sync" ) )
 		RIdx_T<RtIndex_i*> ( pIndex )->Optimize ( std::move ( tTask ) );
 	else
-		RunOptimizeRtIndex ( std::move ( tTask ) );
+		RIdx_T<RtIndex_i *> ( pIndex )->StartOptimize ( std::move ( tTask ) );
 	tOut.Ok();
 }
 
@@ -14787,12 +14785,11 @@ void HandleMysqlDropManual ( RowBuffer_i & tOut, const DebugCmd::DebugCommand_t 
 	tTask.m_eVerb = OptimizeTask_t::eDrop;
 	tTask.m_iFrom = (int)tCmd.m_iPar1;
 	tTask.m_bByOrder = !tCmd.bOpt ( "byid", session::GetOptimizeById() );
-	tTask.m_sIndex = std::move ( sIndex );
 
 	if ( tCmd.bOpt ( "sync" ) )
 		RIdx_T<RtIndex_i*> ( pIndex )->Optimize ( std::move ( tTask ) );
 	else
-		RunOptimizeRtIndex ( std::move ( tTask ) );
+		RIdx_T<RtIndex_i *> ( pIndex )->StartOptimize ( std::move ( tTask ) );
 	tOut.Ok();
 }
 
@@ -14813,12 +14810,11 @@ void HandleMysqlCompress ( RowBuffer_i & tOut, const DebugCmd::DebugCommand_t & 
 	tTask.m_eVerb = OptimizeTask_t::eCompress;
 	tTask.m_iFrom = (int) tCmd.m_iPar1;
 	tTask.m_bByOrder = !tCmd.bOpt ( "byid", session::GetOptimizeById() );
-	tTask.m_sIndex = std::move ( sIndex );
 
 	if ( tCmd.bOpt ( "sync" ) )
 		RIdx_T<RtIndex_i*> ( pIndex )->Optimize ( std::move ( tTask ) );
 	else
-		RunOptimizeRtIndex ( std::move ( tTask ) );
+		RIdx_T<RtIndex_i *> ( pIndex )->StartOptimize ( std::move ( tTask ) );
 	tOut.Ok();
 }
 
@@ -14839,7 +14835,6 @@ void HandleMysqlDedup ( RowBuffer_i& tOut, const DebugCmd::DebugCommand_t& tCmd 
 	tTask.m_eVerb = OptimizeTask_t::eDedup;
 	tTask.m_iFrom = (int)tCmd.m_iPar1;
 	tTask.m_bByOrder = !tCmd.bOpt ( "byid", session::GetOptimizeById() );
-	tTask.m_sIndex = std::move ( sIndex );
 
 	RIdx_T<RtIndex_i*> ( pIndex )->Optimize ( std::move ( tTask ) );
 	tOut.Ok();
@@ -14882,12 +14877,11 @@ void HandleMysqlSplit ( RowBuffer_i & tOut, const DebugCmd::DebugCommand_t & tCm
 	tTask.m_iFrom = (int)tCmd.m_iPar1;
 	tTask.m_sUvarFilter = tCmd.m_sParam2;
 	tTask.m_bByOrder = !tCmd.bOpt ( "byid", session::GetOptimizeById() );
-	tTask.m_sIndex = std::move ( sIndex );
 
 	if ( tCmd.bOpt ( "sync" ) )
 		RIdx_T<RtIndex_i*> ( pIndex )->Optimize ( std::move ( tTask ) );
 	else
-		RunOptimizeRtIndex ( std::move ( tTask ) );
+		RIdx_T<RtIndex_i *> ( pIndex )->StartOptimize ( std::move ( tTask ) );
 	tOut.Ok();
 }
 
@@ -15381,12 +15375,11 @@ void HandleMysqlOptimize ( RowBuffer_i & tOut, const SqlStmt_t & tStmt )
 	OptimizeTask_t tTask;
 	tTask.m_eVerb = OptimizeTask_t::eManualOptimize;
 	tTask.m_iCutoff = tStmt.m_tQuery.m_iCutoff<=0 ? 0 : tStmt.m_tQuery.m_iCutoff;
-	tTask.m_sIndex = std::move ( sIndex );
 
 	if ( tStmt.m_tQuery.m_bSync )
 		RIdx_T<RtIndex_i*> ( pIndex )->Optimize ( std::move ( tTask ) );
 	else
-		RunOptimizeRtIndex ( std::move ( tTask ) );
+		RIdx_T<RtIndex_i *> ( pIndex )->StartOptimize ( std::move ( tTask ) );
 	tOut.Ok();
 }
 
@@ -21500,8 +21493,6 @@ int WINAPI ServiceMain ( int argc, char **argv ) EXCLUDES (MainThread)
 	}
 
 	ServeUserVars ();
-
-	ServeAutoOptimize();
 
 	PrereadIndexes ( bForcedPreread );
 

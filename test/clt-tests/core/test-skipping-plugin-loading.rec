@@ -18,7 +18,7 @@ mysql -h0 -P9306 -e "SHOW TABLES;"
 | tbl   | rt   |
 +-------+------+
 ––– input –––
-./test/clt-tests/core/generate-1mln-records.sh 1000
+./test/clt-tests/scripts/generate-1mln-records.sh 1000
 ––– output –––
 +-------+------+
 | Index | Type |

@@ -517,6 +517,8 @@ jobs:
             test_prefix: test/clt-tests/replication/
           - name: Plugins
             test_prefix: test/clt-tests/plugins/
+          - name: Buddy
+            test_prefix: test/clt-tests/buddy/
     steps:
       - uses: manticoresoftware/clt@0.1.23
         with:

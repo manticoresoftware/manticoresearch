@@ -1,0 +1,32 @@
+––– block: ../base/start-searchd –––
+––– input –––
+php -d memory_limit=-1 ./test/clt-tests/scripts/load_us_names.php 1000 10 1000000 5 > /dev/null
+––– output –––
+––– input –––
+mysql -h0 -P9306 -e "SELECT COUNT(*) FROM name;"
+––– output –––
++----------+
+| count(*) |
++----------+
+|  1000000 |
++----------+
+––– input –––
+mysql -h0 -P9306 -e "SELECT * FROM name WHERE MATCH('RICH') OPTION fuzzy=-1;"
+––– output –––
+ERROR 1064 (42000) at line 1: P01: syntax error, unexpected '-' near '-1'
+––– input –––
+mysql -h0 -P9306 -e "SELECT * FROM name WHERE MATCH('SMITH') OPTION fuzzy='0';"
+––– output –––
+ERROR 1064 (42000) at line 1: unknown option 'fuzzy'
+––– input –––
+mysql -h0 -P9306 -e "SELECT * FROM name WHERE MATCH('SMYTH') OPTION fuzzy='2';"
+––– output –––
+ERROR 1064 (42000) at line 1: unknown option 'fuzzy'
+––– input –––
+mysql -h0 -P9306 -e "SELECT * FROM name WHERE MATCH('john') OPTION fuzzy=a;"
+––– output –––
+ERROR 1064 (42000) at line 1: unknown option 'fuzzy'
+––– input –––
+mysql -h0 -P9306 -e "SELECT * FROM name WHERE MATCH('jane') OPTION fuzzy=@;"
+––– output –––
+ERROR 1064 (42000) at line 1: unknown option 'fuzzy'

@@ -15,10 +15,10 @@ SHOW TABLES
 CREATE TABLE tbl (id BIGINT, model TEXT, storage_capacity INTEGER, color string, release_year INTEGER, price FLOAT, discounted_price FLOAT, sold BOOL, date_added TIMESTAMP, product_codes MULTI, values MULTI64, additional_info JSON, vector float_vector knn_type='hnsw' knn_dims='4' hnsw_similarity='l2')
 --------------
 ––– input –––
-chmod +x ./test/clt-tests/core/generate-1mln-records.sh
+chmod +x ./test/clt-tests/scripts/generate-1mln-records.sh
 ––– output –––
 ––– input –––
-total_iterations=20000 ./test/clt-tests/core/generate-1mln-records.sh
+total_iterations=20000 ./test/clt-tests/scripts/generate-1mln-records.sh
 ––– output –––
 +-------+------+
 | Index | Type |
@@ -231,10 +231,10 @@ SHOW TABLES
 CREATE TABLE tbl (id BIGINT, model TEXT, storage_capacity INTEGER, color string, release_year INTEGER, price FLOAT, discounted_price FLOAT, sold BOOL, date_added TIMESTAMP, product_codes MULTI, values MULTI64, additional_info JSON, vector float_vector knn_type='hnsw' knn_dims='4' hnsw_similarity='l2') engine='columnar'
 --------------
 ––– input –––
-chmod +x ./test/clt-tests/core/generate-1mln-records.sh
+chmod +x ./test/clt-tests/scripts/generate-1mln-records.sh
 ––– output –––
 ––– input –––
-total_iterations=20000 ./test/clt-tests/core/generate-1mln-records.sh
+total_iterations=20000 ./test/clt-tests/scripts/generate-1mln-records.sh
 ––– output –––
 +-------+------+
 | Index | Type |

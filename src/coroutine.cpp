@@ -1062,7 +1062,6 @@ Debug (static constexpr DWORD uxFE = ~ux01;)		   // mask for w-lock flag (0xFFFF
 void RWLock_c::ReadLock()
 {
 	while ( true ) {
-		// store this task in order to be resumed later
 		sph::Spinlock_lock tLock { m_tInternalMutex };
 		if ( !( m_uState & ux01 ) && m_tWaitWQueue.Empty() )
 		{

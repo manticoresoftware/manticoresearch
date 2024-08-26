@@ -808,7 +808,7 @@ public:
 
 	virtual void SetEvent ( Event_e eEvent, int64_t iPayload ) {}
 
-	inline bool NeedStop () const
+	inline bool NeedStop () const noexcept
 	{
 		return sphInterrupted() || ( m_pStop && m_pStop->load ( std::memory_order_relaxed ) );
 	}

@@ -1410,9 +1410,9 @@ private:
 
 	int							CompareWords ( const RtWord_t * pWord1, const RtWord_t * pWord2 ) const;
 
-	CSphFixedVector<RowID_t>	CopyAttributesFromAliveDocs ( RtSegment_t& tDstSeg, const RtSegment_t & tSrcSeg, RtAttrMergeContext_t & tCtx ) const;
+	CSphFixedVector<RowID_t>	CopyAttributesFromAliveDocs ( RtSegment_t& tDstSeg, const RtSegment_t & tSrcSeg, RtAttrMergeContext_t & tCtx ) const REQUIRES ( tDstSeg.m_tLock ) REQUIRES (m_tWorkers.SerialChunkAccess());
 	void						MergeKeywords ( RtSegment_t & tSeg, const RtSegment_t & tSeg1, const RtSegment_t & tSeg2, const VecTraits_T<RowID_t> & dRowMap1, const VecTraits_T<RowID_t> & dRowMap2 ) const;
-	RtSegment_t *				MergeTwoSegments ( const RtSegment_t * pA, const RtSegment_t * pB ) const;
+	RtSegment_t *				MergeTwoSegments ( const RtSegment_t * pA, const RtSegment_t * pB ) const REQUIRES (m_tWorkers.SerialChunkAccess());
 	static void					CopyWord ( RtSegment_t& tDstSeg, RtWord_t& tDstWord, RtDocWriter_c& tDstDoc, const RtSegment_t& tSrcSeg, const RtWord_t* pSrcWord, const VecTraits_T<RowID_t>& dRowMap );
 
 	void						DeleteFieldFromDict ( RtSegment_t * pSeg, int iKillField );
@@ -2515,7 +2515,7 @@ void BuildSegmentInfixes ( RtSegment_t * pSeg, bool bHasMorphology, bool bKeywor
 }
 
 
-CSphFixedVector<RowID_t> RtIndex_c::CopyAttributesFromAliveDocs ( RtSegment_t & tDstSeg, const RtSegment_t & tSrcSeg, RtAttrMergeContext_t & tCtx ) const REQUIRES ( tDstSeg.m_tLock )
+CSphFixedVector<RowID_t> RtIndex_c::CopyAttributesFromAliveDocs ( RtSegment_t & tDstSeg, const RtSegment_t & tSrcSeg, RtAttrMergeContext_t & tCtx ) const REQUIRES ( tDstSeg.m_tLock ) REQUIRES (m_tWorkers.SerialChunkAccess())
 {
 	CSphFixedVector<RowID_t> dRowMap { tSrcSeg.m_uRows };
 	dRowMap.Fill ( INVALID_ROWID );
@@ -2524,7 +2524,7 @@ CSphFixedVector<RowID_t> RtIndex_c::CopyAttributesFromAliveDocs ( RtSegment_t & 
 	tSrcSeg.m_bAttrsBusy.store ( true, std::memory_order_release );
 
 	// perform merging attrs in single fiber - that eliminates concurrency with optimize
-	ScopedScheduler_c tSerialFiber { m_tWorkers.SerialChunkAccess() };
+//	ScopedScheduler_c tSerialFiber { m_tWorkers.SerialChunkAccess() };
 	TRACE_SCHED ( "rt", "CopyAttrs" );
 
 	auto dColumnarIterators = CreateAllColumnarIterators ( tSrcSeg.m_pColumnar.get(), m_tSchema );
@@ -2634,7 +2634,7 @@ void RtIndex_c::MergeKeywords ( RtSegment_t & tSeg, const RtSegment_t & tSeg1, c
 // it seems safe to kill documents directly during merging.
 // already killed will not come to the merged.
 // killed after pass of merge attributes will survive, and need to be killed finally by separate killmulti
-RtSegment_t* RtIndex_c::MergeTwoSegments ( const RtSegment_t* pA, const RtSegment_t* pB ) const
+RtSegment_t* RtIndex_c::MergeTwoSegments ( const RtSegment_t* pA, const RtSegment_t* pB ) const REQUIRES (m_tWorkers.SerialChunkAccess())
 {
 	////////////////////
 	// merge attributes
@@ -8319,17 +8319,17 @@ bool RtIndex_c::SaveAttributes ( CSphString & sError ) const
 }
 
 
-class OptimizeGuard_c : ISphNoncopyable
+class OptimizeGuard_c final
 {
 	RtIndex_c & m_tIndex;
-	bool m_bPreviousOptimizeState;
+	const bool m_bPreviousOptimizeState;
 
 public:
-	explicit OptimizeGuard_c ( RtIndex_c& tIndex )
-		: m_tIndex ( tIndex )
-	{
-		m_bPreviousOptimizeState = m_tIndex.StopOptimize();
-	}
+	NONCOPYMOVABLE (OptimizeGuard_c);
+
+	explicit OptimizeGuard_c ( RtIndex_c & tIndex )
+			: m_tIndex { tIndex }, m_bPreviousOptimizeState { tIndex.StopOptimize () }
+	{}
 
 	~OptimizeGuard_c ()
 	{
@@ -8887,19 +8887,19 @@ void RtIndex_c::SetKillHookFor ( IndexSegment_c* pAccum, VecTraits_T<int> dDiskC
 }
 
 // track internals of merge to catch critical points necessary for concurrent kill and update
-class RTMergeCb_c: public MergeCb_c
+class RTMergeCb_c final: public MergeCb_c
 {
 	KillAccum_t m_tKilledWhileMerge;
 	RtIndex_c* m_pOwner;
 	CSphVector<int> m_dTrackedChunks;
 
 public:
-	explicit RTMergeCb_c ( std::atomic<bool>* pStop, RtIndex_c* pOwner )
+	RTMergeCb_c ( std::atomic<bool>* pStop, RtIndex_c* pOwner )
 		: MergeCb_c ( pStop )
 		, m_pOwner ( pOwner )
 	{}
 
-	void SetEvent ( Event_e eEvent, int64_t iPayload ) override
+	void SetEvent ( Event_e eEvent, int64_t iPayload ) final
 	{
 		assert ( m_pOwner );
 		RTLOGV << "SetEvent (" << eEvent << ", " << iPayload << ")";
@@ -8920,7 +8920,7 @@ public:
 		}
 	}
 
-	~RTMergeCb_c() override
+	~RTMergeCb_c() final
 	{
 		assert ( m_pOwner );
 		m_pOwner->SetKillHookFor ( nullptr, m_dTrackedChunks );

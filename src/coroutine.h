@@ -318,7 +318,7 @@ public:
 // instead of real blocking it yield current coro, so, MUST be used only with coro context
 class CAPABILITY ( "mutex" ) RWLock_c: public ISphNoncopyable
 {
-	sph::Spinlock_c m_tInternalMutex {};
+	mutable sph::Spinlock_c m_tInternalMutex {};
 	WaitQueue_c m_tWaitRQueue {};
 	WaitQueue_c m_tWaitWQueue {};
 	DWORD m_uState { 0 }; // lower bit - w-locked, rest - N of r-locks with bias 2
@@ -328,6 +328,7 @@ public:
 	void WriteLock() ACQUIRE();
 	void ReadLock() ACQUIRE_SHARED();
 	void Unlock() UNLOCK_FUNCTION();
+	bool TestNextWlock() const noexcept;
 };
 
 class CAPABILITY ( "mutex" ) Mutex_c: public ISphNoncopyable

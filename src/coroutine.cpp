@@ -1102,5 +1102,17 @@ void RWLock_c::Unlock()
 		m_tWaitRQueue.NotifyAll();
 }
 
+// returns true if there are single read-lock, and pending write-lock
+bool RWLock_c::TestNextWlock () const noexcept
+{
+	sph::Spinlock_lock tLock { m_tInternalMutex };
+
+	if ( m_uState != ux02 )
+		return false;
+
+	return !m_tWaitWQueue.Empty ();
+}
+
+
 } // namespace Coro
 } // namespace Threads

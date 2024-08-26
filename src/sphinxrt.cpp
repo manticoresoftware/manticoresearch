@@ -1298,7 +1298,7 @@ public:
 	void				PostSetup() final;
 	bool				IsRT() const final { return true; }
 
-	int					CheckThenUpdateAttributes ( AttrUpdateInc_t & tUpd, bool & bCritical, CSphString & sError, CSphString & sWarning, BlockerFn&& ) final;
+	int					CheckThenUpdateAttributes ( AttrUpdateInc_t & tUpd, bool & bCritical, CSphString & sError, CSphString & sWarning ) final;
 	bool				SaveAttributes ( CSphString & sError ) const final;
 	DWORD				GetAttributeStatus () const final { return m_uDiskAttrStatus; }
 
@@ -8166,17 +8166,6 @@ bool RtIndex_c::Update_DiskChunks ( AttrUpdateInc_t& tUpd, const DiskChunkSlice_
 	bool bEnabled = m_tSaving.ActiveStateIs ( SaveState_c::ENABLED );
 	bool bNeedWait = !bEnabled;
 
-	// if saving is disabled, and we NEED to actually update a disk chunk,
-	// we'll pause that action, waiting until index is unlocked.
-	BlockerFn fnBlock = [this, &bNeedWait, &bEnabled]() {
-		if ( bNeedWait )
-		{
-			bNeedWait = false;
-			bEnabled = m_tSaving.WaitEnabledOrShutdown();
-		}
-		return bEnabled;
-	};
-
 	for ( auto& pDiskChunk : dDiskChunks )
 	{
 		if ( tUpd.AllApplied () )
@@ -8187,7 +8176,17 @@ bool RtIndex_c::Update_DiskChunks ( AttrUpdateInc_t& tUpd, const DiskChunkSlice_
 		SccWL_t wLock ( pDiskChunk->m_tLock );
 		END_CORO ( "wait" );
 
-		int iRes = pDiskChunk->CastIdx().CheckThenUpdateAttributes ( tUpd, bCritical, sError, sWarning, bNeedWait ? fnBlock : nullptr );
+		// if saving is disabled, and we NEED to actually update a disk chunk,
+		// we'll pause that action, waiting until index is unlocked.
+		if ( bNeedWait )
+		{
+			bNeedWait = false;
+			BEGIN_CORO ( "wait", "WaitEnabledOrShutdown" );
+			bEnabled = m_tSaving.WaitEnabledOrShutdown ();
+			END_CORO ( "wait" );
+		}
+
+		int iRes = bEnabled ? pDiskChunk->CastIdx().CheckThenUpdateAttributes ( tUpd, bCritical, sError, sWarning ) : -1;
 
 		// FIXME! need to handle critical failures here (chunk is unusable at this point)
 		assert ( !bCritical );
@@ -8233,7 +8232,7 @@ bool RtSegment_t::Update_WriteBlobRow ( UpdateContext_t & tCtx, RowID_t tRowID, 
 
 
 // FIXME! might be inconsistent in case disk chunk update fails
-int RtIndex_c::CheckThenUpdateAttributes ( AttrUpdateInc_t& tUpd, bool& bCritical, CSphString& sError, CSphString& sWarning, BlockerFn&& fnWatcher )
+int RtIndex_c::CheckThenUpdateAttributes ( AttrUpdateInc_t& tUpd, bool& bCritical, CSphString& sError, CSphString& sWarning )
 {
 	TRACE_CORO ( "rt", "CheckThenUpdateAttributes" );
 	const auto& tUpdc = *tUpd.m_pUpdate;
@@ -8265,9 +8264,6 @@ int RtIndex_c::CheckThenUpdateAttributes ( AttrUpdateInc_t& tUpd, bool& bCritica
 		auto dRamUpdateSet = CollectUpdatableRows ( tCtx, dRamSegment );
 		if ( dRamUpdateSet.IsEmpty() )
 			continue;
-
-		if ( fnWatcher && !fnWatcher() )
-			return -1;
 
 		auto* pSeg = const_cast<RtSegment_t*> ( (const RtSegment_t*) dRamSegment );
 		BEGIN_CORO ( "wait", "ram-seg-wlock");

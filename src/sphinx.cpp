@@ -1185,7 +1185,7 @@ public:
 	template <class QWORD>
 	static bool			DeleteField ( const CSphIndex_VLN * pIndex, CSphHitBuilder * pHitBuilder, CSphString & sError, CSphSourceStats & tStat, int iKillField );
 
-	int					CheckThenUpdateAttributes ( AttrUpdateInc_t& tUpd, bool& bCritical, CSphString& sError, CSphString& sWarning, BlockerFn&& fnWatcher ) final;
+	int					CheckThenUpdateAttributes ( AttrUpdateInc_t& tUpd, bool& bCritical, CSphString& sError, CSphString& sWarning ) final;
 	void				UpdateAttributesOffline ( VecTraits_T<PostponedUpdate_t> & dPostUpdates ) final;
 
 	// the only txn we can replay is 'update attributes', but it is processed by dedicated branch in binlog, so we have nothing to do here.
@@ -2003,7 +2003,7 @@ int CSphIndex::UpdateAttributes ( AttrUpdateSharedPtr_t pUpd, bool & bCritical, 
 
 int CSphIndex::UpdateAttributes ( AttrUpdateInc_t& tUpd, bool& bCritical, CSphString& sError, CSphString& sWarning )
 {
-	return CheckThenUpdateAttributes ( tUpd, bCritical, sError, sWarning, nullptr );
+	return CheckThenUpdateAttributes ( tUpd, bCritical, sError, sWarning );
 }
 
 CSphVector<SphAttr_t> CSphIndex::BuildDocList () const
@@ -2499,7 +2499,7 @@ Binlog::CheckTnxResult_t CSphIndex_VLN::ReplayTxn ( CSphReader & tReader, CSphSt
 	return {};
 }
 
-int CSphIndex_VLN::CheckThenUpdateAttributes ( AttrUpdateInc_t& tUpd, bool& bCritical, CSphString& sError, CSphString& sWarning, BlockerFn&& fnWatcher )
+int CSphIndex_VLN::CheckThenUpdateAttributes ( AttrUpdateInc_t& tUpd, bool& bCritical, CSphString& sError, CSphString& sWarning )
 {
 	TRACE_CORO ( "sph", "CSphIndex_VLN::CheckThenUpdateAttributes" );
 	assert ( tUpd.m_pUpdate->m_dRowOffset.IsEmpty() || tUpd.m_pUpdate->m_dDocids.GetLength()==tUpd.m_pUpdate->m_dRowOffset.GetLength() );
@@ -2512,13 +2512,6 @@ int CSphIndex_VLN::CheckThenUpdateAttributes ( AttrUpdateInc_t& tUpd, bool& bCri
 	int iUpdated = tUpd.m_iAffected;
 
 	auto dRowsToUpdate = Update_CollectRowPtrs ( tCtx );
-
-	BEGIN_CORO ( "wait", "fnWatcher" );
-	bool bWatcher = fnWatcher && !fnWatcher();
-	END_CORO ( "wait" );
-
-	if ( bWatcher )
-		return -1;
 
 	if ( !DoUpdateAttributes ( dRowsToUpdate, tCtx, bCritical, sError ))
 		return -1;

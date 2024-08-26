@@ -35,7 +35,7 @@ docker exec kafka /opt/bitnami/kafka/bin/kafka-topics.sh --create --topic my-dat
 ––– output –––
 Created topic my-data.
 ––– input –––
-docker exec manticore mysql -h0 -P9306 -e "CREATE SOURCE kafka (id bigint, term text, abbrev text, GlossDef json) type='kafka' broker_list='kafka:9092' topic_list='my-data' consumer_group='manticore' num_consumers='2' batch=50;"; echo $?
+docker exec manticore mysql -h0 -P9306 -e "CREATE SOURCE kafka (id bigint, term text, abbrev text, GlossDef json) type='kafka' broker_list='kafka:9092' topic_list='my-data' consumer_group='manticore' num_consumers='1' batch=50;"; echo $?
 ––– output –––
 0
 ––– input –––
@@ -66,7 +66,7 @@ type='kafka'
 broker_list='kafka:9092'
 topic_list='my-data'
 consumer_group='manticore'
-num_consumers='2'
+num_consumers='1'
 batch=50 |
 +--------+-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
 ––– input –––
@@ -146,7 +146,11 @@ docker exec manticore mysql -h0 -P9306 -e "SHOW TABLES;"
 | _views   | rt   |
 +----------+------+
 ––– input –––
-docker exec manticore mysql -h0 -P9306 -e "CREATE SOURCE kafka (id bigint, term text, abbrev text, GlossDef json, location json) type='kafka' broker_list='kafka:9092' topic_list='my-data' consumer_group='destination' num_consumers='1' batch=50;"; echo $?
+docker exec kafka kafka-consumer-groups.sh --bootstrap-server localhost:9092 --group manticore_destination --reset-offsets --to-latest --topic my-data --execute > /dev/null; echo $?
+––– output –––
+0
+––– input –––
+docker exec manticore mysql -h0 -P9306 -e "CREATE SOURCE kafka (id bigint, term text, abbrev text, GlossDef json, location json) type='kafka' broker_list='kafka:9092' topic_list='my-data' consumer_group='manticore_destination' num_consumers='1' batch=50;"; echo $?
 ––– output –––
 0
 ––– input –––
@@ -192,6 +196,10 @@ docker exec manticore mysql -h0 -P9306 -e "SELECT id, name, short_name, received
 |   19 | Every Dog Has His Day                       | ISO 56789:86420 | %{DATETIME} | 20,25,30 | 57.000000 | 11.000000 |
 |   20 | Haste Makes Waste                           | ISO 86420:97531 | %{DATETIME} | 20,25,30 | 48.000000 |  2.000000 |
 +------+---------------------------------------------+-----------------+---------------------+----------+-----------+-----------+
+––– input –––
+docker exec kafka kafka-consumer-groups.sh --bootstrap-server localhost:9092 --group manticore_metadata --reset-offsets --to-latest --topic my-data --execute > /dev/null; echo $?
+––– output –––
+0
 ––– input –––
 docker exec manticore mysql -h0 -P9306 -e "CREATE SOURCE kafka_metadata (id bigint, term text, abbrev text, GlossDef json, metadata json) type='kafka' broker_list='kafka:9092' topic_list='my-data' consumer_group='manticore_metadata' num_consumers='1' batch=50;"; echo $?
 ––– output –––
@@ -248,6 +256,10 @@ docker exec manticore mysql -h0 -P9306 -e "SELECT * FROM destination_kafka_metad
 |   30 | Rome Wasn't Built In A Day                  | ISO 86420:97531 | %{DATETIME} | Extra data for item 30 | 20,25,30 |  3000 |
 +------+---------------------------------------------+-----------------+---------------------+------------------------+----------+-------+
 ––– input –––
+docker exec kafka kafka-consumer-groups.sh --bootstrap-server localhost:9092 --group manticore_tags --reset-offsets --to-latest --topic my-data --execute > /dev/null; echo $?
+––– output –––
+0
+––– input –––
 docker exec manticore mysql -h0 -P9306 -e "CREATE SOURCE kafka_tags (id bigint, term text, abbrev text, GlossDef json, tags json) type='kafka' broker_list='kafka:9092' topic_list='my-data' consumer_group='manticore_tags' num_consumers='1' batch=50;"; echo $?
 ––– output –––
 0
@@ -303,6 +315,10 @@ docker exec manticore mysql -h0 -P9306 -e "SELECT * FROM destination_kafka_tags 
 |   47 | No Pain, No Gain                            | ISO 13579:86420 | %{DATETIME} | 20,25,30 | ["test","data","item2"] |
 +------+---------------------------------------------+-----------------+---------------------+----------+-------------------------+
 ––– input –––
+docker exec kafka kafka-consumer-groups.sh --bootstrap-server localhost:9092 --group manticore_alter --reset-offsets --to-latest --topic my-data --execute > /dev/null; echo $?
+––– output –––
+0
+––– input –––
 docker exec manticore mysql -h0 -P9306 -e "CREATE SOURCE kafka_alter (id bigint, term text, abbrev text, GlossDef json, metadata json) type='kafka' broker_list='kafka:9092' topic_list='my-data' consumer_group='manticore_alter' num_consumers='1' batch=50;"; echo $?
 ––– output –––
 0
@@ -332,14 +348,22 @@ docker exec manticore mysql -h0 -P9306 -e "SELECT COUNT(*) FROM destination_kafk
 +----------+
 | count(*) |
 +----------+
-|       57 |
+|       50 |
++----------+
+––– input –––
+sleep 10; docker exec manticore mysql -h0 -P9306 -e "SELECT COUNT(*) FROM destination_kafka_alter;"
+––– output –––
++----------+
+| count(*) |
++----------+
+|       50 |
 +----------+
 ––– input –––
 docker exec manticore mysql -h0 -P9306 -e "ALTER MATERIALIZED VIEW view_table_alter suspended=0;"; echo $?
 ––– output –––
 0
 ––– input –––
-timeout 60 bash -c 'docker exec manticore bash -c "tail -f /var/log/manticore/searchd.log" | grep -m2 "REPLACE+INTO+destination_kafka_alter" > /dev/null && echo "Download completed."' || echo "Download failed."
+while [[ $(docker exec manticore mysql -h0 -P9306 -e "SELECT COUNT(*) FROM destination_kafka_alter;" | grep -o '[0-9]*') -ne 57 ]]; do sleep 1; done && echo "Download completed."
 ––– output –––
 Download completed.
 ––– input –––
@@ -350,6 +374,10 @@ docker exec manticore mysql -h0 -P9306 -e "SELECT COUNT(*) FROM destination_kafk
 +----------+
 |       57 |
 +----------+
+––– input –––
+docker exec kafka kafka-consumer-groups.sh --bootstrap-server localhost:9092 --group manticore_ts --reset-offsets --to-latest --topic my-data --execute > /dev/null; echo $?
+––– output –––
+0
 ––– input –––
 docker exec manticore mysql -h0 -P9306 -e "CREATE SOURCE kafka_ts (id bigint, term text, abbrev text, GlossDef json, timestamp_unix timestamp) type='kafka' broker_list='kafka:9092' topic_list='my-data' consumer_group='manticore_ts' num_consumers='1' batch=50;"; echo $?
 ––– output –––
@@ -406,6 +434,10 @@ docker exec manticore mysql -h0 -P9306 -e "SELECT * FROM destination_kafka_ts OR
 |   50 | All's Well That Ends Well                     | ISO 13579:86420 | %{DATETIME} | 20,25,30 |      1690761600 |
 +------+-----------------------------------------------+-----------------+---------------------+----------+-----------------+
 ––– input –––
+docker exec kafka kafka-consumer-groups.sh --bootstrap-server localhost:9092 --group manticore_combined --reset-offsets --to-latest --topic my-data --execute > /dev/null; echo $?
+––– output –––
+0
+––– input –––
 docker exec manticore mysql -h0 -P9306 -e "CREATE SOURCE kafka_combined (id bigint, term text, abbrev text, GlossDef json, location json, metadata json, tags json, timestamp_unix timestamp) type='kafka' broker_list='kafka:9092' topic_list='my-data' consumer_group='manticore_combined' num_consumers='1' batch=50;"; echo $?
 ––– output –––
 0
@@ -446,6 +478,10 @@ docker exec manticore mysql -h0 -P9306 -e "SELECT * FROM destination_kafka_combi
 |   56 | The Grass Is Always Greener On The Other Side | ISO 97531:86420 | %{DATETIME} | Extra data for item 56 | 20,25,30 | 54.000000 | 8.000000 |  5600 | ["test","data","item1"] |         1690761600 |
 +------+-----------------------------------------------+-----------------+---------------------+------------------------+----------+-----------+----------+-------+-------------------------+--------------------+
 ––– input –––
+docker exec kafka kafka-consumer-groups.sh --bootstrap-server localhost:9092 --group manticore_stop --reset-offsets --to-latest --topic my-data --execute > /dev/null; echo $?
+––– output –––
+0
+––– input –––
 docker exec manticore mysql -h0 -P9306 -e "CREATE SOURCE kafka_stop (id bigint, term text, abbrev text, GlossDef json, location json, metadata json, tags json, timestamp_unix timestamp) type='kafka' broker_list='kafka:9092' topic_list='my-data' consumer_group='manticore_stop' num_consumers='1' batch=50;"; echo $?
 ––– output –––
 0
@@ -462,7 +498,7 @@ docker exec kafka ./import.sh; echo $?
 ––– output –––
 0
 ––– input –––
-timeout 60 bash -c 'docker exec manticore bash -c "tail -f /var/log/manticore/searchd.log" | grep -m1 "REPLACE+INTO+destination_kafka_stop" > /dev/null && echo "Download completed."' || echo "Download failed."
+timeout 60 bash -c 'docker exec manticore bash -c "tail -f -n 10000 /var/log/manticore/searchd.log" | grep -m1 "REPLACE+INTO+destination_kafka_stop" > /dev/null && echo "Download completed."' || echo "Download failed."
 ––– output –––
 Download completed.
 ––– input –––
@@ -471,7 +507,7 @@ docker exec manticore mysql -h0 -P9306 -e "SELECT COUNT(*) FROM destination_kafk
 +----------+
 | count(*) |
 +----------+
-|       57 |
+|       50 |
 +----------+
 ––– input –––
 sleep 1; docker exec manticore searchd --stopwait
@@ -531,38 +567,63 @@ docker exec manticore mysql -h0 -P9306 -e "SELECT COUNT(*) FROM destination_kafk
 |       57 |
 +----------+
 ––– input –––
-docker exec manticore mysql -h0 -P9306 -e "CREATE SOURCE invalid-source (id bigint, term text) type='kafka' broker_list='kafka:9092' topic_list='my-data' consumer_group='invalid' num_consumers='1' batch=50;"; echo $?
+docker exec manticore mysql -h0 -P9306 -e "CREATE SOURCE invalid-source (id bigint, term text) type='kafka' broker_list='kafka:9092' topic_list='my-data' consumer_group='manticore_invalid' num_consumers='1' batch=50;"
 ––– output –––
-ERROR 1064 (42000) at line 1: P03: syntax error, unexpected tablename, expecting CLUSTER or FUNCTION or PLUGIN or TABLE near 'SOURCE invalid-source (id bigint, term text) type='kafka' broker_list='kafka:9092' topic_list='my-data' consumer_group='invalid' num_consumers='1' batch=50'
-1
+ERROR 1064 (42000) at line 1: P03: syntax error, unexpected tablename, expecting CLUSTER or FUNCTION or PLUGIN or TABLE near 'SOURCE invalid-source (id bigint, term text) type='kafka' broker_list='kafka:9092' topic_list='my-data' consumer_group='manticore_invalid' num_consumers='1' batch=50'
 ––– input –––
-docker exec manticore mysql -h0 -P9306 -e "CREATE MATERIALIZED VIEW invalid@view TO destination_kafka AS SELECT id, term as name FROM kafka;"; echo $?
+docker exec manticore mysql -h0 -P9306 -e "CREATE MATERIALIZED VIEW invalid@view TO destination_kafka AS SELECT id, term as name FROM kafka;"
 ––– output –––
 ERROR 1064 (42000) at line 1: Undefined array key "kafka_metadata_0"
-1
 ––– input –––
-docker exec manticore mysql -h0 -P9306 -e "CREATE MATERIALIZED VIEW invalid_query_view TO destination_kafka AS SELECT non_existing_column FROM kafka;"; echo $?
+docker exec manticore mysql -h0 -P9306 -e "CREATE MATERIALIZED VIEW invalid_query_view TO destination_kafka AS SELECT non_existing_column FROM kafka;"
 ––– output –––
 ERROR 1064 (42000) at line 1: Undefined array key "kafka_metadata_0"
-1
 ––– input –––
-docker exec manticore mysql -h0 -P9306 -e "DROP SOURCE kafka;"; echo $?
+docker exec kafka kafka-consumer-groups.sh --bootstrap-server localhost:9092 --group manticore_drop_source --reset-offsets --to-latest --topic my-data --execute > /dev/null; echo $?
 ––– output –––
 0
 ––– input –––
-docker exec manticore mysql -h0 -P9306 -e "CREATE SOURCE kafka (id bigint, term text, new_column text) type='kafka' broker_list='kafka:9092' topic_list='my-data' consumer_group='manticore_new' num_consumers='2' batch=50;"; echo $?
+docker exec manticore mysql -h0 -P9306 -e "CREATE SOURCE kafka_drop_source (id bigint, term text) type='kafka' broker_list='kafka:9092' topic_list='my-data' consumer_group='manticore_drop_source' num_consumers='1' batch=50;"; echo $?
 ––– output –––
 0
 ––– input –––
-docker exec manticore mysql -h0 -P9306 -e "CREATE MATERIALIZED VIEW view_table_new TO destination_kafka AS SELECT id, term as name, new_column FROM kafka;"; echo $?
+docker exec manticore mysql -h0 -P9306 -e "CREATE TABLE destination_drop_source (id bigint, name text);"; echo $?
 ––– output –––
 0
+––– input –––
+docker exec manticore mysql -h0 -P9306 -e "CREATE MATERIALIZED VIEW view_drop_source TO destination_drop_source AS SELECT id, term as name FROM kafka_drop_source;"; echo $?
+––– output –––
+0
+––– input –––
+docker exec manticore mysql -h0 -P9306 -e "SHOW MV view_drop_source\G;" | grep suspended
+––– output –––
+suspended: 0
+––– input –––
+docker exec manticore mysql -h0 -P9306 -e "DROP SOURCE kafka_drop_source;"; echo $?
+––– output –––
+0
+––– input –––
+docker exec manticore mysql -h0 -P9306 -e "SHOW MV view_drop_source\G;" | grep suspended
+––– output –––
+suspended: 1
+––– input –––
+docker exec manticore mysql -h0 -P9306 -e "CREATE SOURCE kafka_drop_source (id bigint, term text) type='kafka' broker_list='kafka:9092' topic_list='my-data' consumer_group='manticore_drop_source' num_consumers='1' batch=50;"; echo $?
+––– output –––
+0
+––– input –––
+docker exec manticore mysql -h0 -P9306 -e "SHOW MV view_drop_source\G;" | grep suspended
+––– output –––
+suspended: 1
 ––– input –––
 docker exec kafka ./import.sh; echo $?
 ––– output –––
 0
 ––– input –––
-docker exec manticore mysql -h0 -P9306 -e "SELECT COUNT(*) FROM destination_kafka;"
+timeout 60 bash -c 'docker exec manticore bash -c "tail -f -n 10000 /var/log/manticore/searchd.log" | grep -m2 "REPLACE+INTO+destination_drop_source" > /dev/null && echo "Download completed."' || echo "Download failed."
+––– output –––
+Download completed.
+––– input –––
+docker exec manticore mysql -h0 -P9306 -e "SELECT COUNT(*) FROM destination_drop_source;"
 ––– output –––
 +----------+
 | count(*) |

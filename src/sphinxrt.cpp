@@ -775,7 +775,8 @@ class DiskChunk_c final : public ISphRefcountedMT
 public:
 	mutable std::atomic<bool>			m_bOptimizing { false };	// to protect from simultaneous optimizing one and same chunk
 	mutable bool						m_bFinallyUnlink = false;	// unlink index files on destroy
-	mutable Threads::Coro::RWLock_c 	m_tLock;					// fine-grain lock
+	mutable Threads::Coro::RWLock_c 	m_tLock;					// fine-grain lock between update and merge (optimize)
+	mutable std::atomic<int>			m_iPendingUpdates {0};		// if right now some updates pending
 
 	inline static CSphRefcountedPtr<const DiskChunk_c> make ( CSphIndex* pIndex ) { return CSphRefcountedPtr<const DiskChunk_c> { pIndex ? new DiskChunk_c(pIndex) : nullptr }; }
 	inline static CSphRefcountedPtr<const DiskChunk_c> make ( std::unique_ptr<CSphIndex> pIndex ) { return CSphRefcountedPtr<const DiskChunk_c> { pIndex ? new DiskChunk_c(std::move(pIndex)) : nullptr }; }
@@ -8171,6 +8172,8 @@ bool RtIndex_c::Update_DiskChunks ( AttrUpdateInc_t& tUpd, const DiskChunkSlice_
 		if ( tUpd.AllApplied () )
 			break;
 
+		pDiskChunk->m_iPendingUpdates.fetch_add ( 1, std::memory_order_relaxed );
+		AT_SCOPE_EXIT ( [pDiskChunk] { pDiskChunk->m_iPendingUpdates.fetch_sub ( 1, std::memory_order_relaxed ); } );
 		// acquire fine-grain lock
 		BEGIN_CORO ( "wait", "disk-chunk w-lock");
 		SccWL_t wLock ( pDiskChunk->m_tLock );
@@ -8893,13 +8896,17 @@ class RTMergeCb_c final: public MergeCb_c
 	RtIndex_c* m_pOwner;
 	CSphVector<int> m_dTrackedChunks;
 
+	const DiskChunk_c* m_pChunk = nullptr;
+	int64_t m_iLastPayload = -1;
+
 public:
+	NONCOPYMOVABLE ( RTMergeCb_c );
 	RTMergeCb_c ( std::atomic<bool>* pStop, RtIndex_c* pOwner )
 		: MergeCb_c ( pStop )
 		, m_pOwner ( pOwner )
 	{}
 
-	void SetEvent ( Event_e eEvent, int64_t iPayload ) final
+	void SetEvent ( Event_e eEvent, int64_t iPayload ) final NO_THREAD_SAFETY_ANALYSIS
 	{
 		assert ( m_pOwner );
 		RTLOGV << "SetEvent (" << eEvent << ", " << iPayload << ")";
@@ -8910,10 +8917,30 @@ public:
 			m_pOwner->SetKillHookFor ( &m_tKilledWhileMerge, (int)iPayload );
 			break;
 		case E_MERGEATTRS_START: // enter serial state/rlock
-			m_pOwner->ProcessDiskChunkByID ( (int)iPayload, [] ( const DiskChunk_c* p ) NO_THREAD_SAFETY_ANALYSIS { p->m_tLock.ReadLock(); } );
+			m_iLastPayload = iPayload;
+			m_pOwner->ProcessDiskChunkByID ( (int)iPayload, [this] ( const DiskChunk_c* p ) { m_pChunk = p; } );
+			m_pChunk->m_tLock.ReadLock ();
+			break;
+		case E_MERGEATTRS_PULSE: // inside serial state/rlock
+#ifndef NDEBUG
+			assert ( m_iLastPayload==iPayload );
+			m_pOwner->ProcessDiskChunkByID ( (int)iPayload, [this] ( const DiskChunk_c* p ) { assert ( m_pChunk == p); } );
+#endif
+			if ( m_pChunk && m_pChunk->m_iPendingUpdates.load ( std::memory_order_relaxed )>0 && m_pChunk->m_tLock.TestNextWlock() )
+			{
+				m_pChunk->m_tLock.Unlock (); // pulse lock that update can catch
+				Threads::Coro::Reschedule();
+				m_pChunk->m_tLock.ReadLock ();
+			}
 			break;
 		case E_MERGEATTRS_FINISHED: // leave serial state/rlock
-			m_pOwner->ProcessDiskChunkByID ( (int)iPayload, [] ( const DiskChunk_c* p ) NO_THREAD_SAFETY_ANALYSIS { p->m_tLock.Unlock(); } );
+#ifndef NDEBUG
+			assert ( m_iLastPayload==iPayload );
+			m_pOwner->ProcessDiskChunkByID ( (int)iPayload, [this] ( const DiskChunk_c* p ) { assert ( m_pChunk == p); } );
+#endif
+			m_pChunk->m_tLock.Unlock ();
+			m_iLastPayload = -1;
+			m_pChunk = nullptr;
 			break;
 		default:
 			break;

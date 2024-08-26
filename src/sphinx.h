@@ -796,6 +796,7 @@ public:
 		E_COLLECT_START,		// begin collecting alive docs on merge; payload is chunk ID
 		E_COLLECT_FINISHED,		// collecting alive docs on merge is finished; payload is chunk ID
 		E_MERGEATTRS_START,
+		E_MERGEATTRS_PULSE,
 		E_MERGEATTRS_FINISHED,
 		E_KEYWORDS,
 		E_FINISHED,

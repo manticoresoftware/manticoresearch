@@ -167,6 +167,8 @@ bool AttrMerger_c::Impl_c::CopyMixedAttributes_T ( const CSphIndex & tIndex, con
 		if ( dRowMap[tRowID] == INVALID_ROWID )
 			continue;
 
+		m_tMonitor.SetEvent ( MergeCb_c::E_MERGEATTRS_PULSE, iChunk );
+
 		if ( m_tMonitor.NeedStop() )
 			return false;
 

@@ -1,11 +1,24 @@
 #!/bin/bash
 set -e
 
-total_iterations=20000
-
 output_file="/tmp/insert_commands.sql"
 echo "" > $output_file
 
+# Get the total number of rows from the argument, default to 1,000,000 if not provided
+total_rows=${1:-1000000}
+
+# Number of rows per iteration (based on the number of INSERT statements in one iteration)
+rows_per_iteration=50
+
+# Calculate the total number of iterations needed
+total_iterations=$((total_rows / rows_per_iteration))
+
+# If total_rows is not divisible by rows_per_iteration, add one more iteration
+if ((total_rows % rows_per_iteration > 0)); then
+    total_iterations=$((total_iterations + 1))
+fi
+
+# Loop through the required number of iterations
 for ((i=1; i<=total_iterations; i++)); do
     echo "INSERT INTO tbl (id, model, storage_capacity, color, release_year, price, discounted_price, sold, date_added, product_codes, values, additional_info, vector) VALUES
     (${i}01, 'iPhone 13 Pro', 256, 'silver', 2021, 1099.99, 989.99, 'TRUE', '1591362342000', (1,2,3), (523456764345678976, 98765409877866654098, 1109876543450987650987), '{\"features\": [\"ProMotion display\", \"A15 Bionic chip\", \"Ceramic Shield front cover\"]}', (0.773448, 0.312478, 0.137971, 0.459821)),

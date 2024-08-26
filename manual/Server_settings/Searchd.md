@@ -149,7 +149,7 @@ binlog_flush = 1 # ultimate safety, low speed
 ### binlog_max_log_size
 
 <!-- example conf binlog_max_log_size -->
-This setting controls the maximum binary log file size. It is optional, with a default value of 268435456, or 256 MB.
+This setting controls the maximum binary log file size. It is optional, with a default value of 256 MB.
 
 A new binlog file will be forcibly opened once the current binlog file reaches this size limit. This results in a finer granularity of logs and can lead to more efficient binlog disk usage under certain borderline workloads. A value of 0 indicates that the binlog file should not be reopened based on size.
 
@@ -1250,8 +1250,6 @@ This option enables/disables the use of secondary indexes for search queries. It
 * `0`: Disable the use of secondary indexes on search. They can be enabled for individual queries using [analyzer hints](../Searching/Options.md#Query-optimizer-hints)
 * `1`: Enable the use of secondary indexes on search. They can be disabled for individual queries using [analyzer hints](../Searching/Options.md#Query-optimizer-hints)
 * `force`: Same as enable, but any errors during the loading of secondary indexes will be reported, and the whole index will not be loaded into the daemon.
-
-Note that secondary indexes are not effective for full-text queries.
 
 <!-- intro -->
 ##### Example:

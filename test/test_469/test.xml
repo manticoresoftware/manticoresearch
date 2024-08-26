@@ -66,6 +66,8 @@ select id, any(x='val0' for x in j.arr) a from t where a>0; show meta;
 select id, any(x='val0' for x in j.arr) a from t where a&lt;1; show meta;
 select id, any(x='val0' for x in j.arr) a from t where a=0; show meta;
 select id, any(x='val0' for x in j.arr) a from t where a=1; show meta;
+select id, any(x='val0' for x in j.arr) a from t where a!=0; show meta;
+select id, any(x='val0' for x in j.arr) a from t where a!=1; show meta;
 
 select id from t where j.addresses is not null; show meta;
 select id from t where j.addresses.a1 is not null; show meta;

@@ -18,7 +18,7 @@ CREATE TABLE tbl (id BIGINT, model TEXT, storage_capacity INTEGER, color string,
 chmod +x ./test/clt-tests/scripts/generate-1mln-records.sh
 ––– output –––
 ––– input –––
-./test/clt-tests/scripts/generate-1mln-records.sh
+total_iterations=20000 ./test/clt-tests/scripts/generate-1mln-records.sh
 ––– output –––
 +-------+------+
 | Index | Type |
@@ -234,7 +234,7 @@ CREATE TABLE tbl (id BIGINT, model TEXT, storage_capacity INTEGER, color string,
 chmod +x ./test/clt-tests/scripts/generate-1mln-records.sh
 ––– output –––
 ––– input –––
-./test/clt-tests/scripts/generate-1mln-records.sh
+total_iterations=20000 ./test/clt-tests/scripts/generate-1mln-records.sh
 ––– output –––
 +-------+------+
 | Index | Type |
@@ -419,3 +419,37 @@ mysql -h0 -P9306 -e "REPLACE INTO tbl SET id =777 WHERE id = 144; select * from 
 +------+-----------------+------------------+--------------+--------------+------------+------------------+------+------------+---------------+-----------------------------------------+--------------------------------------------------------------------+-------------------------------------+
 |  144 | Sony Xperia XZ3 |               64 | forest green |         2018 | 899.989990 |       799.989990 |    1 | 3308512240 | 126,127,128   | 3723456764345678976,9223372036854775807 | {"features":["Snapdragon 845","6.0-inch display","Single camera"]} | 0.733448,0.272478,0.097971,0.419821 |
 +------+-----------------+------------------+--------------+--------------+------------+------------------+------+------------+---------------+-----------------------------------------+--------------------------------------------------------------------+-------------------------------------+
+––– input –––
+mysql -h0 -P9306 -e "REPLACE INTO tbl SET model = 'Sony Xperia X\'Z3' WHERE id = 144; select * from tbl WHERE id = 144\G"
+––– output –––
+*************************** 1. row ***************************
+id: 144
+model: Sony Xperia X'Z3
+storage_capacity: 64
+color: forest green
+release_year: 2018
+price: 899.989990
+discounted_price: 799.989990
+sold: 1
+date_added: 3308512240
+product_codes: 126,127,128
+values: 3723456764345678976,9223372036854775807
+additional_info: {"features":["Snapdragon 845","6.0-inch display","Single camera"]}
+vector: 0.733448,0.272478,0.097971,0.419821
+––– input –––
+mysql -h0 -P9306 -e "REPLACE INTO tbl SET release_year = 2019 WHERE id = 144; select * from tbl WHERE id = 144\G"
+––– output –––
+*************************** 1. row ***************************
+id: 144
+model: Sony Xperia X'Z3
+storage_capacity: 64
+color: forest green
+release_year: 2019
+price: 899.989990
+discounted_price: 799.989990
+sold: 1
+date_added: 3308512240
+product_codes: 126,127,128
+values: 3723456764345678976,9223372036854775807
+additional_info: {"features":["Snapdragon 845","6.0-inch display","Single camera"]}
+vector: 0.733448,0.272478,0.097971,0.419821

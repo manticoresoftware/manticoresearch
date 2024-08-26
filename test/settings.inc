@@ -47,6 +47,7 @@ $g_ssl = false;
 $g_secondary_loaded = false;
 $g_knn_loaded = false;
 $g_tzdata_loaded = false;
+$g_zlib		= false;
 
 $windows = isset($_SERVER["WINDIR"]) || isset($_SERVER["windir"]) || isset($_SERVER["HOMEDRIVE"]);
 $action_retries			= 100;
@@ -105,7 +106,7 @@ function LoadCachedGuesses ()
 function CacheGuesses ()
 {
 	global $g_locals;
-	global $g_re2, $g_icu, $g_odbc, $g_repli, $g_ssl, $g_columnar_loaded, $g_secondary_loaded, $g_knn_loaded, $g_tzdata_loaded;
+	global $g_re2, $g_icu, $g_odbc, $g_repli, $g_ssl, $g_columnar_loaded, $g_secondary_loaded, $g_knn_loaded, $g_tzdata_loaded, $g_zlib;
 
 	$guessfile = $g_locals['scriptdir'].'guess.txt';
 
@@ -119,6 +120,7 @@ function CacheGuesses ()
     if ( $g_secondary_loaded ) $text .= "global \$g_secondary_loaded; \$g_secondary_loaded = true;\n";
     if ( $g_knn_loaded ) $text .= "global \$g_knn_loaded; \$g_knn_loaded = true;\n";
     if ( $g_tzdata_loaded ) $text .= "global \g_tzdata_loaded; \$g_tzdata_loaded = true;\n";
+    if ( $g_zlib ) $text .= "global \$g_zlib; \$g_zlib = true;\n";
 
 	file_put_contents ( $guessfile, $text );
 }
@@ -269,6 +271,22 @@ function GuessSSL ()
 		if ( strpos ( $line, 'DWITH_SSL=1' ) !== false )
 		{
 			$g_ssl = true;
+			break;
+		}
+	}
+}
+
+function GuessZlib()
+{
+    global $g_zlib;
+    $zlib_on = 'DWITH_ZLIB=1';
+    
+	$banner = GetBanner();
+	foreach ( $banner as $line )
+	{
+		if ( strpos ( $line, $zlib_on ) !== false )
+		{
+			$g_zlib = true;
 			break;
 		}
 	}

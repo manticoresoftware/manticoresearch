@@ -80,7 +80,7 @@ jobs:
       - name: Extract Windows bundle from Windows sysroot
         if: steps.cache.outputs.cache-hit != 'true'
         run: |
-          wget https://repo.manticoresearch.com/repository/sysroots/roots_jul24/sysroot_windows_x64.tar.xz
+          wget https://repo.manticoresearch.com/repository/sysroots/roots_apr15/sysroot_windows_x64.tar.xz
           tar -xvf sysroot_windows_x64.tar.xz
           mv diskc/winbundle bundle
       - name: Extract Boost to put it to the cache
@@ -388,7 +388,7 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v3
-      
+
       - name: Generate cache key
         id: generate-key
         run: |
@@ -419,11 +419,11 @@ jobs:
         uses: manticoresoftware/upload_artifact_with_retries@v3
         with:
           name: build_jammy_RelWithDebInfo_x86_64
-          path: "build/manticore*deb" 
+          path: "build/manticore*deb"
 
   pack_jammy:
     needs: pack_jammy_cache_check
-    if: | 
+    if: |
       needs.pack_jammy_cache_check.outputs.cache-hit != 'true' ||
       needs.changes.outputs.source == 'true'
     name: Jammy x86_64 package [build]
@@ -528,7 +528,7 @@ jobs:
 
   test_kit_docker_push:
     if: needs.changes.outputs.source == 'true'
-    needs: 
+    needs:
       - changes
       - clt
     name: Push Test Kit docker image to repo
@@ -570,7 +570,7 @@ jobs:
     uses: ./.github/workflows/build_template.yml
     with:
       DISTR: freebsd13
-      boost: none
+      boost_url_key: none
       cmake_command: mkdir build && cd build && ctest -VV -S ../misc/ctest/justbuild.cmake -DCTEST_SOURCE_DIRECTORY=.. --no-compress-output
       cache_key: build_freebsd_x86_64
 
@@ -582,7 +582,8 @@ jobs:
     with:
       DISTR: windows
       arch: x64
-      sysroot: roots_jul24
+      sysroot_url_key: roots_mysql83_jul29
+      boost_url_key: boost80_zstd_zlib
       CTEST_CMAKE_GENERATOR: "Ninja Multi-Config"
       CTEST_CONFIGURATION_TYPE: Debug
       cache_key: build_windows_x64

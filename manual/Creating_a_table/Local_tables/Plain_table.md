@@ -88,6 +88,7 @@ The following table outlines the various file extensions used in a plain table a
 |`.sphi` | stores histograms of attribute values |
 |`.spi` | stores word lists (word IDs and pointers to `.spd` file) |
 |`.spidx` | stores secondary indexes data |
+|`.spjidx` | stores data of secondary indexes generated for JSON attributes |
 |`.spk` | stores kill-lists |
 |`.spl` | lock file |
 |`.spm` | stores a bitmap of killed documents |

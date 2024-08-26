@@ -468,7 +468,7 @@ Using `blend_mode` with the example `@dude!` string above, the setting `blend_mo
 Default behavior is to index the entire token, equivalent to `blend_mode = trim_none`.
 
 Be aware that using blend modes limits your search, even with the default mode `trim_none` if you assume `.` is a blended character:
-* `.dog.` will become `dog. dog` during indexing
+* `.dog.` will become `.dog. dog` during indexing
 * and you won't be able to find it by `dog.`.
 
 Using more modes increases the chance your keyword will match something.
@@ -997,6 +997,8 @@ Bigram indexing is a feature to accelerate phrase searches. When indexing, it st
 * `both_freq`, only index word pairs where both words are frequent. Continuing with the same example, in this mode indexing "alone in the dark" would only store "in the" (the very worst of them all from searching perspective) as a bigram, but none of the other word pairs.
 
 For most use cases, `both_freq` would be the best mode, but your mileage may vary.
+
+It's important to note that `bigram_index` works only at the tokenization level and doesn't account for transformations like `morphology`, `wordforms` or `stopwords`. This means the tokens it creates are very straightforward, which makes searching phrases more exact and strict. While this can improve the accuracy of phrase matching, it also makes the system less able to recognize different forms of words or variations in how words appear.
 
 <!-- request SQL -->
 

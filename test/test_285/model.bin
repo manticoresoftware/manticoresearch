@@ -1,0 +1,7 @@
+a:1:{i:0;a:8:{i:0;a:2:{s:8:"sphinxql";s:26:"drop table if exists test1";s:14:"total_affected";i:0;}i:1;a:2:{s:8:"sphinxql";s:26:"drop table if exists test2";s:14:"total_affected";i:0;}i:2;a:2:{s:8:"sphinxql";s:91:"create table test1 (id bigint, data text) regexp_filter='\\*(\\d )\\" => %CODE_BLOCK% inch'";s:14:"total_affected";i:0;}i:3;a:3:{s:8:"sphinxql";s:23:"show create table test1";s:10:"total_rows";i:1;s:4:"rows";a:1:{i:0;a:2:{s:5:"Table";s:5:"test1";s:12:"Create Table";s:93:"CREATE TABLE test1 (
+id bigint,
+data text
+) regexp_filter='\\*(\\d )\\" => %CODE_BLOCK% inch'";}}}i:4;a:2:{s:8:"sphinxql";s:29:"create table test2 like test1";s:14:"total_affected";i:0;}i:5;a:3:{s:8:"sphinxql";s:23:"show create table test2";s:10:"total_rows";i:1;s:4:"rows";a:1:{i:0;a:2:{s:5:"Table";s:5:"test2";s:12:"Create Table";s:93:"CREATE TABLE test2 (
+id bigint,
+data text
+) regexp_filter='\\*(\\d )\\" => %CODE_BLOCK% inch'";}}}i:6;a:2:{s:8:"sphinxql";s:16:"drop table test1";s:14:"total_affected";i:0;}i:7;a:2:{s:8:"sphinxql";s:16:"drop table test2";s:14:"total_affected";i:0;}}}

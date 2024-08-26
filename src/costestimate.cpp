@@ -137,6 +137,7 @@ private:
 	float	CalcMTCostSI ( float fCost ) const	{ return EstimateMTCostSI ( fCost, m_tCtx.m_iThreads ); }
 
 	bool	IsGeodistFilter ( const CSphFilterSettings & tFilter ) const;
+	bool	IsPoly2dFilter ( const CSphFilterSettings & tFilter, int & iNumPoints ) const;
 	float	CalcGetFilterComplexity ( const SecondaryIndexInfo_t & tSIInfo, const CSphFilterSettings & tFilter ) const;
 	bool	NeedBitmapUnion ( int iNumIterators ) const;
 	uint32_t CalcNumSIIterators ( const CSphFilterSettings & tFilter, int64_t iDocs ) const;
@@ -176,13 +177,39 @@ int64_t CostEstimate_c::ApplyCutoff ( int64_t iDocs ) const
 
 bool CostEstimate_c::IsGeodistFilter ( const CSphFilterSettings & tFilter ) const
 {
-	auto pAttr = m_tCtx.m_tSorterSchema.GetAttr ( tFilter.m_sAttrName.cstr() );
-	if ( !pAttr || !pAttr->m_pExpr )
+	int iAttr = GetAliasedAttrIndex ( tFilter.m_sAttrName, m_tCtx.m_tQuery, m_tCtx.m_tSorterSchema );
+	if ( iAttr<0 )
+		return false;
+
+	const CSphColumnInfo & tAttr = m_tCtx.m_tSorterSchema.GetAttr(iAttr);
+	if ( !tAttr.m_pExpr )
 		return false;
 
 	std::pair<GeoDistSettings_t *, bool> tSettingsPair { nullptr, false };
-	pAttr->m_pExpr->Command ( SPH_EXPR_GET_GEODIST_SETTINGS, &tSettingsPair );
+	tAttr.m_pExpr->Command ( SPH_EXPR_GET_GEODIST_SETTINGS, &tSettingsPair );
 	return tSettingsPair.second;
+}
+
+
+bool CostEstimate_c::IsPoly2dFilter ( const CSphFilterSettings & tFilter, int & iNumPoints ) const
+{
+	int iAttr = GetAliasedAttrIndex ( tFilter.m_sAttrName, m_tCtx.m_tQuery, m_tCtx.m_tSorterSchema );
+	if ( iAttr<0 )
+		return false;
+
+	const CSphColumnInfo & tAttr = m_tCtx.m_tSorterSchema.GetAttr(iAttr);
+	if ( !tAttr.m_pExpr )
+		return false;
+
+	std::pair<Poly2dBBox_t *, bool> tSettingsPair { nullptr, false };
+	tAttr.m_pExpr->Command ( SPH_EXPR_GET_POLY2D_BBOX, &tSettingsPair );
+	if ( tSettingsPair.second )
+	{
+		iNumPoints = tSettingsPair.first->m_iNumPoints;
+		return true;
+	}
+
+	return false;
 }
 
 
@@ -190,6 +217,13 @@ float CostEstimate_c::CalcGetFilterComplexity ( const SecondaryIndexInfo_t & tSI
 {
 	if ( IsGeodistFilter(tFilter) )
 		return 3.0f;
+
+	int iNumPoints = 0;
+	if ( IsPoly2dFilter ( tFilter, iNumPoints ) )
+	{
+		const float COMPLEXITY_PER_POINT = 0.007f;
+		return 1.2f + COMPLEXITY_PER_POINT*iNumPoints;
+	}
 
 	auto pAttr = m_tCtx.m_tIndexSchema.GetAttr ( tFilter.m_sAttrName.cstr() );
 	if ( !pAttr )
@@ -337,11 +371,11 @@ bool CostEstimate_c::IsFilterOverExpr ( int iIndex ) const
 		return false;
 
 	auto & tFilter = GetFilter(iIndex);
-	auto * pAttr = m_tCtx.m_tSorterSchema.GetAttr ( tFilter.m_sAttrName.cstr() );
-	if ( !pAttr )
-		return false;
+	int iAttr = GetAliasedAttrIndex ( tFilter.m_sAttrName, m_tCtx.m_tQuery, m_tCtx.m_tSorterSchema );
+	if ( iAttr<0 )
+		return true;
 
-	return !!pAttr->m_pExpr;
+	return !!m_tCtx.m_tSorterSchema.GetAttr(iAttr).m_pExpr;
 }
 
 

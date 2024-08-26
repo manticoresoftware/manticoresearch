@@ -220,6 +220,7 @@ if ( !$g_guesscached ) {
 	GuessColumnar();
 	GuessSecondary();
 	GuessKNN();
+	GuessZlib();
 	if ( !$force_guess )
 		CacheGuesses();
 }

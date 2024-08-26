@@ -4,7 +4,7 @@
 <name>json queries: gzip requests</name>
 
 <skip_indexer/>
-<requires> <http/><non-columnar/><non-secondary/> </requires>
+<requires> <http/><non-columnar/><non-secondary/><zlib/> </requires>
 
 <config>
 searchd

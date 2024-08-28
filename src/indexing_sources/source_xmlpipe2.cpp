@@ -841,8 +841,15 @@ void CSphSource_XMLPipe2::StartElement ( const char * szName, const char ** pAtt
 		{
 			if ( !strcmp ( *dAttrs, "name" ) )
 			{
-				AddFieldToSchema ( dAttrs[1], bWordDict, m_tSchema );
 				Info.m_sName = dAttrs[1];
+				if ( m_tSchema.GetField ( Info.m_sName.cstr() ) )
+				{
+					Error ( "field '%s' is added twice", Info.m_sName.cstr() );
+					return;
+				}
+
+				AddFieldToSchema ( Info.m_sName.cstr(), bWordDict, m_tSchema );
+
 			} else if ( !strcmp ( *dAttrs, "attr" ) )
 			{
 				bIsAttr = true;
@@ -862,6 +869,11 @@ void CSphSource_XMLPipe2::StartElement ( const char * szName, const char ** pAtt
 			if ( Info.m_sName.IsEmpty() || CSphSchema::IsReserved ( Info.m_sName.cstr() ) )
 			{
 				Error ( "%s is not a valid attribute name", Info.m_sName.cstr() );
+				return;
+			}
+			if ( m_tSchema.GetAttr ( Info.m_sName.cstr() ) )
+			{
+				Error ( "attribute '%s' is added twice", Info.m_sName.cstr() );
 				return;
 			}
 
@@ -929,6 +941,11 @@ void CSphSource_XMLPipe2::StartElement ( const char * szName, const char ** pAtt
 			if ( Info.m_sName.IsEmpty() || CSphSchema::IsReserved ( Info.m_sName.cstr() ) )
 			{
 				Error ( "%s is not a valid attribute name", Info.m_sName.cstr() );
+				return;
+			}
+			if ( m_tSchema.GetAttr ( Info.m_sName.cstr() ) )
+			{
+				Error ( "attribute '%s' is added twice", Info.m_sName.cstr() );
 				return;
 			}
 

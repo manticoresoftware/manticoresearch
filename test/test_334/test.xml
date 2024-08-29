@@ -701,5 +701,31 @@ select * from dist_gr2 facet gid facet tag;;
 }
 </query>
 
+<!-- boost at JSON queries -->
+<query endpoint="json/search">
+{
+  "index":"test2",
+  "query":{
+    "bool":{
+      "should":[
+        {
+          "match":{
+            "_all":"glanced now"
+          }
+        },
+        {
+          "match":{
+            "_all":{
+              "query":"despite",
+              "boost":50
+            }
+          }
+        }
+      ]
+    }
+  }
+}
+</query>
+
 </queries>
 </test>

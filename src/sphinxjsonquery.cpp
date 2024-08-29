@@ -40,7 +40,7 @@ class QueryTreeBuilder_c : public XQParseHelper_c
 public:
 					QueryTreeBuilder_c ( const CSphQuery * pQuery, TokenizerRefPtr_c pQueryTokenizerQL, const CSphIndexSettings & tSettings );
 
-	void			CollectKeywords ( const char * szStr, XQNode_t * pNode, const XQLimitSpec_t & tLimitSpec );
+	void			CollectKeywords ( const char * szStr, XQNode_t * pNode, const XQLimitSpec_t & tLimitSpec, float fBoost );
 
 	bool			HandleFieldBlockStart ( const char * & /*pPtr*/ ) override { return true; }
 	bool			HandleSpecialFields ( const char * & pPtr, FieldMask_t & dFields ) override;
@@ -65,7 +65,7 @@ private:
 	const TokenizerRefPtr_c		m_pQueryTokenizerQL;
 	const CSphIndexSettings &	m_tSettings;
 
-	XQNode_t *		AddChildKeyword ( XQNode_t * pParent, const char * szKeyword, int iSkippedPosBeforeToken, const XQLimitSpec_t & tLimitSpec );
+	XQNode_t *		AddChildKeyword ( XQNode_t * pParent, const char * szKeyword, int iSkippedPosBeforeToken, const XQLimitSpec_t & tLimitSpec, float fBoost );
 
 	friend ErrorPathGuard_t;
 	CSphVector< std::pair<CSphString, const void *> > m_dErrorPath;
@@ -80,7 +80,7 @@ QueryTreeBuilder_c::QueryTreeBuilder_c ( const CSphQuery * pQuery, TokenizerRefP
 {}
 
 
-void QueryTreeBuilder_c::CollectKeywords ( const char * szStr, XQNode_t * pNode, const XQLimitSpec_t & tLimitSpec )
+void QueryTreeBuilder_c::CollectKeywords ( const char * szStr, XQNode_t * pNode, const XQLimitSpec_t & tLimitSpec, float fBoost )
 {
 	m_pTokenizer->SetBuffer ( (const BYTE*)szStr, (int) strlen ( szStr ) );
 
@@ -99,7 +99,7 @@ void QueryTreeBuilder_c::CollectKeywords ( const char * szStr, XQNode_t * pNode,
 		const char * sToken = (const char *) m_pTokenizer->GetToken ();
 		if ( !sToken )
 		{
-			AddChildKeyword ( pNode, nullptr, iSkippedPosBeforeToken, tLimitSpec );
+			AddChildKeyword ( pNode, nullptr, iSkippedPosBeforeToken, tLimitSpec, fBoost );
 			break;
 		}
 
@@ -156,7 +156,7 @@ void QueryTreeBuilder_c::CollectKeywords ( const char * szStr, XQNode_t * pNode,
 			m_dMultiforms.Last().m_iDestCount++;
 			m_dDestForms.Add ( sToken );
 		} else
-			pChildNode = AddChildKeyword ( pNode, sToken, iSkippedPosBeforeToken, tLimitSpec );
+			pChildNode = AddChildKeyword ( pNode, sToken, iSkippedPosBeforeToken, tLimitSpec, fBoost );
 
 		if ( bMultiDestHead )
 		{
@@ -194,10 +194,11 @@ XQNode_t * QueryTreeBuilder_c::CreateNode ( XQLimitSpec_t & tLimitSpec )
 }
 
 
-XQNode_t * QueryTreeBuilder_c::AddChildKeyword ( XQNode_t * pParent, const char * szKeyword, int iSkippedPosBeforeToken, const XQLimitSpec_t & tLimitSpec )
+XQNode_t * QueryTreeBuilder_c::AddChildKeyword ( XQNode_t * pParent, const char * szKeyword, int iSkippedPosBeforeToken, const XQLimitSpec_t & tLimitSpec, float fBoost )
 {
 	XQKeyword_t tKeyword ( szKeyword, m_iAtomPos );
 	tKeyword.m_iSkippedBefore = iSkippedPosBeforeToken;
+	tKeyword.m_fBoost = fBoost;
 	auto * pNode = new XQNode_t ( tLimitSpec );
 	pNode->m_pParent = pParent;
 	pNode->m_dWords.Add ( tKeyword );
@@ -445,6 +446,19 @@ bool IsBoolNode ( const CSphString & sName )
 	return ( sName=="bool" );
 }
 
+static float GetBoost ( const JsonObj_c & tFields )
+{
+	const float fBoostDefault = 1.0f;
+	if ( !tFields.IsObj() )
+		return fBoostDefault;
+
+ 	JsonObj_c tBoost = tFields.GetItem ( "boost" );
+	if ( !tBoost || !tBoost.IsNum() )
+		return fBoostDefault;
+	
+	return tBoost.FltVal();
+}
+
 XQNode_t * QueryParserJson_c::ConstructMatchNode ( const JsonObj_c & tJson, bool bPhrase, bool bTerms, bool bSingleTerm, QueryTreeBuilder_c & tBuilder ) const
 {
 	ErrorPathGuard_t tGuard = tBuilder.ErrorAddPath ( tJson );
@@ -543,7 +557,8 @@ XQNode_t * QueryParserJson_c::ConstructMatchNode ( const JsonObj_c & tJson, bool
 
 	XQNode_t * pNewNode = tBuilder.CreateNode ( tLimitSpec );
 	pNewNode->SetOp ( eNodeOp );
-	tBuilder.CollectKeywords ( szQuery, pNewNode, tLimitSpec );
+	float fBoost = GetBoost ( tFields );
+	tBuilder.CollectKeywords ( szQuery, pNewNode, tLimitSpec, fBoost );
 
 	return pNewNode;
 }

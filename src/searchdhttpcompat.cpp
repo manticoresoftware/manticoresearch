@@ -89,11 +89,9 @@ private:
 	void ProcessIgnored();
 	bool ProcessCreateTable();
 	bool ProcessDeleteDoc();
-	bool ProcessUpdateDoc();
 	void ProcessDeleteTable();
 	void ProcessAliasSet();
 	void ProcessRefresh ( const CSphString * pName );
-	void ProcessFields();
 
 	static CSphMutex m_tReqStatLock;
 	static SmallStringHash_T<int> m_tReqStat;
@@ -418,7 +416,6 @@ static void CreateKbnIndexes()
 	}
 }
 
-static void CreateScripts();
 static void CatColumnsSetup();
 
 void SetupCompatHttp()
@@ -429,7 +426,6 @@ void SetupCompatHttp()
 	Threads::CallCoroutine ( [] { 
 	CreateAliases();
 
-	CreateScripts();
 	CatColumnsSetup();
 	} );
 }
@@ -2685,279 +2681,6 @@ bool HttpCompatHandler_c::ProcessDeleteDoc()
 	return true;
 }
 
-typedef bool ( *fnScript ) ( const nljson & tParams, int & iVersion, nljson & tDoc, CSphString & sError );
-
-static bool fnScriptUpdate1 ( const nljson & tParams, int & iVersion, nljson & tDoc, CSphString & sError )
-{
-	nljson::json_pointer tParamType ( "/type" );
-	nljson::json_pointer tParamCntName ( "/counterFieldName" );
-	nljson::json_pointer tParamCnt ( "/count" );
-	nljson::json_pointer tParamTime ( "/time" );
-	if ( !tParams.contains ( tParamType ) || !tParams.contains ( tParamCntName ) || !tParams.contains ( tParamCnt ) || !tParams.contains ( tParamTime ) )
-	{
-		sError.SetSprintf ( "missed parameter: %s=%d,  %s=%d,  %s=%d,  %s=%d",
-			tParamType.to_string().c_str(), (int)tParams.contains ( tParamType ),
-			tParamCntName.to_string().c_str(), (int)tParams.contains ( tParamCntName ), 
-			tParamCnt.to_string().c_str(), (int)tParams.contains ( tParamCnt ), 
-			tParamTime.to_string().c_str(), (int)tParams.contains ( tParamTime ) );
-		return false;
-	}
-
-	std::string sValType = tParams[tParamType];
-	std::string sValCntName = tParams[tParamCntName];
-	int iValCnt = tParams[tParamCnt];
-
-	if ( !tDoc.contains ( sValType ) ||! tDoc[sValType].contains ( sValCntName ) )
-	{
-		tDoc[sValType][sValCntName] = iValCnt;
-	} else
-	{
-		int iPrevCnt = tDoc[sValType][sValCntName];
-		tDoc[sValType][sValCntName] = iPrevCnt + iValCnt;
-	}
-
-	tDoc["updated_at"] = tParams[tParamTime];
-
-	return true;
-}
-
-static std::pair < const char *, fnScript >  g_sScripts[] = {
-	{ R"(
-if (ctx._source[params.type][params.counterFieldName] == null)
-{
-	ctx._source[params.type][params.counterFieldName] = params.count;
-} else {
-	ctx._source[params.type][params.counterFieldName] += params.count;
-}
-ctx._source.updated_at = params.time;
-		)", fnScriptUpdate1 },
-	{ nullptr, nullptr }
-};
-
-static SmallStringHash_T< fnScript > g_hScripts;
-
-static void StripSpaces ( char * sBuf )
-{
-	char * sDst = sBuf;
-	char * sSrc = sBuf;
-	while ( *sSrc )
-	{
-		if ( sphIsSpace ( *sSrc ) )
-			sSrc++;
-		else
-			*sDst++ = *sSrc++;
-	}
-
-	*sDst = '\0';
-}
-
-void CreateScripts()
-{
-	int iScript = 0;
-	for ( const auto & tItem : g_sScripts )
-	{
-		if ( !tItem.first )
-			break;
-
-		CSphString sScript = tItem.first;
-		StripSpaces ( const_cast<char *>( sScript.cstr() ) );
-		
-		if ( !g_hScripts.Add ( tItem.second, sScript ) )
-			CompatWarning ( "duplicate script %d found %s", iScript, tItem.first );
-
-		iScript++;
-	}
-}
-
-static void ReportUpated ( const char * sId, int iVersion, const char * sIndex, const char * sOperation, const nljson & tDoc, CSphVector<BYTE> & dResult )
-{
-	nljson tRes;
-	tRes["_index"] = sIndex;
-	tRes["_type"] = "_doc";
-	tRes["_id"] = sId;
-	tRes["_version"] = iVersion;
-	tRes["result"] = sOperation;
-	tRes["_shards"] = R"( { "total": 1, "successful": 1, "failed": 0 } )"_json;
-	tRes["_seq_no"] = 0;
-	tRes["_primary_term"] = 1;
-
-	nljson tGet;
-	tGet["_seq_no"] = 0;
-	tGet["_primary_term"] = 1;
-	tGet["found"] = true;
-	tGet["_source"] = tDoc;
-
-	tRes["get"] = tGet;
-
-	std::string sRes = tRes.dump();
-	HttpBuildReply ( dResult, EHTTP_STATUS::_200, sRes.c_str(), sRes.length(), false );
-}
-
-bool HttpCompatHandler_c::ProcessUpdateDoc()
-{
-	CSphString sIndex;
-	ExpandIndexes ( GetUrlParts()[0], sIndex );
-	const CSphString & sId = GetUrlParts()[2];
-
-	if ( sIndex.IsEmpty() )
-	{
-		ReportMissedIndex ( GetUrlParts()[0] );
-		return false;
-	}
-	if ( IsEmpty ( GetBody() ) )
-	{
-		ReportError ( "Validation Failed: 1: script or doc is missing", "action_request_validation_exception", EHTTP_STATUS::_400 );
-		return false;
-	}
-
-	nljson tUpd = nljson::parse ( GetBody().first, nullptr, false );
-	if ( tUpd.is_discarded() )
-	{
-		ReportError ( "invalid body", "parse_exception", EHTTP_STATUS::_400 );
-		return false;
-	}
-
-	bool bHasScript = tUpd.contains ( "script" );
-
-	nljson::json_pointer tScriptName ( "/script/source" );
-	nljson::json_pointer tScriptParamsName ( "/script/params" );
-	if ( bHasScript &&( !tUpd.contains ( tScriptName ) || !tUpd.contains ( tScriptParamsName )  ) )
-	{
-		ReportMissedScript ( sIndex );
-		return false;
-	}
-
-	fnScript * pUpdateScript = nullptr;
-	if ( bHasScript )
-	{
-		// compact script by removing space characters and get script function
-		CSphString sScript = tUpd[tScriptName].get<std::string>().c_str();
-		StripSpaces ( const_cast<char *>( sScript.cstr() ) );
-		pUpdateScript = g_hScripts ( sScript );
-		if ( !pUpdateScript )
-		{
-			ReportMissedScript ( sIndex );
-			return false;
-		}
-	}
-
-	DocIdVer_t dIds;
-	if ( !GetDocIds ( sIndex.cstr(), sId.cstr(), dIds, m_sError ) )
-	{
-		ReportError ( m_sError.cstr(), "document_missing_exception", EHTTP_STATUS::_400 );
-		return false;
-	}
-
-	// validate document source for insert new document
-	nljson::json_pointer tSrcName ( "/upsert" );
-	if ( !dIds.GetLength() && !tUpd.contains ( tSrcName ) )
-	{
-		CompatWarning ( "doc '%s' source '%s' missed", sId.cstr(), tSrcName.to_string().c_str() );
-		CSphString sMsg;
-		sMsg.SetSprintf ( "[_doc][%s]: document missing", sId.cstr() );
-		ReportError ( sMsg.cstr(), "document_missing_exception", EHTTP_STATUS::_404 );
-		return false;
-	}
-
-	int iVersion = 1;
-
-	ComplexFields_t dComplexFields;
-	if ( !GetIndexComplexFields ( sIndex, dComplexFields ) )
-		return false;
-
-	// create new document
-	if ( !dIds.GetLength() )
-	{
-		const nljson & tSrc = tUpd[tSrcName];
-		if ( !InsertDoc ( sIndex, dComplexFields, tSrc, false, sId.cstr(), iVersion, m_sError ) )
-		{
-			CompatWarning ( "doc '%s', error: %s", sId.cstr(), m_sError.cstr() );
-
-			CSphString sMsg;
-			sMsg.SetSprintf ( "[%s]: version conflict, document already exists (current version [%d])", sId.cstr(), iVersion );
-			ReportError ( sMsg.cstr(), "version_conflict_engine_exception", EHTTP_STATUS::_409, sIndex.cstr() );
-			return true;
-		} else
-		{
-			ReportUpated ( sId.cstr(), iVersion, sIndex.cstr(), "created", tSrc, GetResult() );
-			return true;
-		}
-	}
-
-	if ( dIds.GetLength()!=1 )
-	{
-		CompatWarning ( "multiple %d documents found for '%s'", dIds.GetLength(), sId.cstr() );
-		ReportError ( "failed to execute script", "illegal_argument_exception", EHTTP_STATUS::_400 );
-		return false;
-	}
-	if ( dIds[0].first!=sId )
-	{
-		CompatWarning ( "wrong document found '%s' for '%s'", dIds[0].first.cstr(), sId.cstr() );
-		ReportError ( "failed to execute script", "illegal_argument_exception", EHTTP_STATUS::_400 );
-		return false;
-	}
-
-	auto tServed ( GetServed ( sIndex ) );
-	if ( !tServed )
-	{
-		ReportMissedIndex ( sIndex );
-		return false;
-	}
-
-	RIdx_c pIndex ( tServed );
-
-	DocstoreSession_c tSession;
-	pIndex->CreateReader ( tSession.GetUID() );
-	CSphVector<BYTE> dRawDoc;
-
-	//const auto & tDocId = dIds[0];
-	iVersion = dIds[0].second + 1;
-	if ( !GetIndexDoc ( pIndex, sId.cstr(), tSession.GetUID(), dRawDoc, m_sError ) )
-	{
-		ReportError ( m_sError.cstr(), "document_missing_exception", EHTTP_STATUS::_404 );
-		return false;
-	}
-
-	nljson tSrc = nljson::parse ( dRawDoc.Begin() );
-
-	// update raw source document
-	if ( bHasScript )
-	{
-		assert ( pUpdateScript );
-		if ( !((*pUpdateScript)( tUpd[tScriptParamsName], iVersion, tSrc, m_sError ) ) )
-		{
-			ReportError ( m_sError.cstr(), "illegal_argument_exception", EHTTP_STATUS::_400 );
-			return false;
-		}
-	} else if ( tUpd.contains ( "doc" ) )
-	{
-		const nljson & tDocUpd = tUpd["doc"];
-		tSrc.update ( tDocUpd );
-	} else
-	{
-		CompatWarning ( "doc '%s' source 'doc' missed", sId.cstr() );
-		CSphString sMsg;
-		sMsg.SetSprintf ( "[_doc][%s]: document missing", sId.cstr() );
-		ReportError ( sMsg.cstr(), "document_missing_exception", EHTTP_STATUS::_404 );
-		return false;
-	}
-
-	// reinsert updated document
-	if ( !InsertDoc ( sIndex, dComplexFields, tSrc, true, sId.cstr(), iVersion, m_sError ) )
-	{
-			CompatWarning ( "doc '%s', error: %s", sId.cstr(), m_sError.cstr() );
-
-			CSphString sMsg;
-			sMsg.SetSprintf ( "[%s]: version conflict, document already exists (current version [%d])", sId.cstr(), iVersion );
-			ReportError ( sMsg.cstr(), "version_conflict_engine_exception", EHTTP_STATUS::_409, sIndex.cstr() );
-			return false;
-	}
-
-
-	ReportUpated ( sId.cstr(), iVersion, sIndex.cstr(), "updated", tSrc, GetResult() );
-	return true;
-}
-
 static void DropTable ( const CSphString & sName )
 {
 	CSphString sError;
@@ -3258,159 +2981,6 @@ void HttpCompatHandler_c::ProcessILM()
 	BuildReplyHead ( FromStd ( sRes ), EHTTP_STATUS::_200 );
 }
 
-static nljson GetFieldDesc ( const CSphColumnInfo & tCol, bool bField )
-{
-	nljson tField = R"({"searchable":false, "aggregatable": false})"_json;
-	if ( bField )
-	{
-		tField["type"] = "text";
-		tField["searchable"] = true;
-	} else if ( tCol.m_eAttrType!=SPH_ATTR_NONE )
-	{
-		switch ( tCol.m_eAttrType )
-		{
-		case SPH_ATTR_TIMESTAMP:
-			tField["type"] = "date";
-			tField["aggregatable"] = true;
-			tField["searchable"] = true;
-		break;
-
-		case SPH_ATTR_INTEGER:
-		case SPH_ATTR_BOOL:
-			tField["type"] = "integer";
-			tField["aggregatable"] = true;
-			tField["searchable"] = true;
-		break;
-
-		case SPH_ATTR_FLOAT:
-			tField["type"] = "float";
-			tField["searchable"] = true;
-		break;
-
-		case SPH_ATTR_BIGINT:
-			tField["type"] = "long";
-			tField["aggregatable"] = true;
-			tField["searchable"] = true;
-		break;
-
-		case SPH_ATTR_STRING:
-			tField["type"] = "keyword";
-			tField["aggregatable"] = true;
-			tField["searchable"] = true;
-		break;
-
-		case SPH_ATTR_JSON:
-			tField["type"] = "object";
-			tField["searchable"] = true;
-		break;
-
-		default:
-			break;
-		}
-	}
-
-	return tField;
-}
-
-static bool CheckFieldDesc ( const nljson & tFields, const char * sColName, const nljson & tDesc, const CSphString & sIndex, StringBuilder_c & sError )
-{
-	if ( !tDesc.contains ( "type" ) )
-	{
-		sError.Appendf ( "index '%s' has unmapped column '%s'", sIndex.cstr(), sColName );
-		return false;
-	}
-
-	if ( !tFields.contains ( sColName ) )
-		return true;
-
-	assert ( tDesc.contains ( "type" ) );
-	if ( tFields[sColName].contains ( tDesc["type"] ) )
-		return true;
-
-	const nljson & tField = tFields[sColName];
-	sError.Appendf ( "'%s' already has type '%s' but index '%s' type is '%s'", sColName, tField.cbegin().key().c_str(), sIndex.cstr(), tDesc["type"].get<std::string>().c_str() );
-
-	return false;
-}
-
-static void AddSpecialColumns ( nljson & tFields )
-{
-	tFields["_index"] = R"( { "_index": { "type": "_index", "searchable": false, "aggregatable": false } } )"_json;
-	tFields["_feature"] = R"( { "_feature": { "type": "_feature", "searchable": false, "aggregatable": false } } )"_json;
-	tFields["_ignored"] = R"( { "_ignored": { "type": "_ignored", "searchable": false, "aggregatable": false } } )"_json;
-	tFields["_version"] = R"( { "_version": { "type": "_version", "searchable": false, "aggregatable": false } } )"_json;
-	tFields["_type"] = R"( { "_type": { "type": "_type", "searchable": false, "aggregatable": false } } )"_json;
-	tFields["_seq_no"] = R"( { "_seq_no": { "type": "_seq_no", "searchable": false, "aggregatable": false } } )"_json;
-	tFields["_field_names"] = R"( { "_field_names": { "type": "_field_names", "searchable": false, "aggregatable": false } } )"_json;
-	tFields["_source"] = R"( { "_source": { "type": "_source", "searchable": false, "aggregatable": false } } )"_json;
-	tFields["_id"] = R"( { "_id": { "type": "_id", "searchable": false, "aggregatable": false } } )"_json;
-}
-
-// FIXME!!! add support of Elastic \ Kibana tables
-void HttpCompatHandler_c::ProcessFields()
-{
-	const CSphString & sIndex = GetUrlParts()[0];
-
-	nljson tRes = R"({"indices":[], "fields":{}})"_json;
-
-	StringBuilder_c sError ( "," );
-	ServedSnap_t hLocal = g_pLocalIndexes->GetHash();
-	for ( const auto & tIt : *hLocal )
-	{
-		if ( !tIt.second )
-			continue;
-
-		if ( !sIndex.IsEmpty() && !sphWildcardMatch ( tIt.first.cstr(), sIndex.cstr() ) )
-			continue;
-
-		RIdx_c tIdx ( tIt.second );
-
-		tRes["indices"].push_back ( tIt.first.cstr() );
-
-		const CSphSchema & tSchema = tIdx->GetMatchSchema();
-		for ( const CSphColumnInfo & tCol : tSchema.GetFields() )
-		{
-			// field-string types will be processed at attributes
-			if ( tSchema.GetAttr ( tCol.m_sName.cstr() ) )
-				continue;
-
-			const char * sColName = tCol.m_sName.cstr();
-
-			nljson tField = GetFieldDesc ( tCol, true );
-			if ( !CheckFieldDesc ( tRes["fields"], sColName, tField, sIndex, sError ) )
-				continue;
-
-			tRes["fields"][sColName][tField["type"].get<std::string>()] = tField;
-		}
-
-		for ( int i=0; i<tSchema.GetAttrsCount(); i++ )
-		{
-			const CSphColumnInfo & tCol = tSchema.GetAttr ( i );
-
-			// skip special only manticore related attributes and tokecounts types
-			if ( tCol.m_sName=="@version" || tCol.m_sName==sphGetBlobLocatorName() || tCol.m_eAttrType==SPH_ATTR_TOKENCOUNT )
-				continue;
-
-			bool bField = ( tSchema.GetField ( tCol.m_sName.cstr() ) );
-
-			nljson tField = GetFieldDesc ( tCol, bField );
-			if ( !CheckFieldDesc ( tRes["fields"], tCol.m_sName.cstr(), tField, sIndex, sError ) )
-				continue;
-
-			tRes["fields"][tCol.m_sName.cstr()][tField["type"].get<std::string>()] = tField;
-		}
-	}
-
-	// add special only elastic related attributes
-	AddSpecialColumns ( tRes["fields"] );
-
-	if ( !sError.IsEmpty() )
-		CompatWarning ( "%s", sError.cstr() );
-
-	std::string sRes = tRes.dump();
-	BuildReply ( FromStd ( sRes ), EHTTP_STATUS::_200 );
-}
-
 bool HttpCompatHandler_c::ProcessEndpoints()
 {
 	if ( m_dUrlParts.GetLength() && m_dUrlParts.Last().Ends ( "_msearch" ) )
@@ -3510,10 +3080,6 @@ bool HttpCompatHandler_c::ProcessEndpoints()
 		&& ProcessDeleteDoc() )
 		return true;
 
-
-	if ( GetRequestType()==HTTP_POST && m_dUrlParts.GetLength()>2 && m_dUrlParts[1]=="_update" )
-		return ProcessUpdateDoc();
-
 	if ( GetRequestType()==HTTP_DELETE && m_dUrlParts.GetLength()==1 )
 	{
 		ProcessDeleteTable();
@@ -3534,12 +3100,6 @@ bool HttpCompatHandler_c::ProcessEndpoints()
 	if ( GetRequestType()==HTTP_POST && m_dUrlParts.GetLength()>=1 && m_dUrlParts[0]=="_refresh" )
 	{
 		ProcessRefresh ( nullptr );
-		return true;
-	}
-
-	if ( GetRequestType()==HTTP_POST && m_dUrlParts.GetLength()>=2 && m_dUrlParts[1]=="_field_caps" )
-	{
-		ProcessFields();
 		return true;
 	}
 

@@ -126,6 +126,23 @@ index expanded_rt2
 	rt_attr_uint = idd	
 }
 
+source src_phrase1
+{
+	type			= mysql
+	<sql_settings/>
+	sql_query		= SELECT document_id, body FROM test_table1
+}
+
+index phrase1
+{
+	source			= src_phrase1
+	path			= <data_path/>/phrase1
+	index_exact_words = 1
+    min_prefix_len = 1
+    index_exact_words = 1
+    expand_keywords = 1
+}
+
 </config>
 
 <queries>
@@ -163,6 +180,12 @@ index expanded_rt2
 	insert into expanded_rt2 values ( 11,  'abcdef', 11 );
 	select * from expanded_rt2 where match ( '=def' );
 </sphinxql>
+
+<!-- the case expanded inside the phrase with modifiers-->
+<sphinxql>select * from phrase1 where match ( ' =9 =7900 ' ); show meta</sphinxql>
+<sphinxql>select * from phrase1 where match ( ' "=9 =7900" ' ); show meta</sphinxql>
+<sphinxql>select * from phrase1 where match ( ' ="9 7900" ' ); show meta</sphinxql>
+<sphinxql>select * from phrase1 where match ( ' "9 =7900" ' ); show meta</sphinxql>
     
 </queries>
 
@@ -190,6 +213,26 @@ INSERT INTO `test_table` VALUES
 ( 2,  'dogs run' ),
 ( 3,  'dogs running' ),
 ( 4,  'dog run' )
+</db_insert>
+
+<db_create>
+CREATE TABLE `test_table1`
+(
+	`document_id` int(11) NOT NULL default '0',
+	`body` varchar(255) NOT NULL default ''
+)
+</db_create>
+
+<db_drop>
+DROP TABLE IF EXISTS `test_table1`
+</db_drop>
+
+<db_insert>
+INSERT INTO `test_table1` VALUES
+( 1, 'ryzen 9 7900XT' ),
+( 2, 'ryzen 9 7900' ),
+( 3, 'ryzen 90 7900' ),
+( 4, 'ryzen 90 7900XT' )
 </db_insert>
 
 </test>

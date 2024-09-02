@@ -3917,6 +3917,8 @@ bool RtIndex_c::SaveDiskData ( const char * szFilename, const ConstRtSegmentSlic
 	if ( !sError.IsEmpty() )
 		return false;
 
+//	PauseCheck("savepause"); // catch if something happened between RtGuard() and actual updates
+
 	// fixme: handle errors
 	if ( !WriteAttributes ( tCtx, sError ) )
 		return false;
@@ -8920,6 +8922,7 @@ public:
 			m_iLastPayload = iPayload;
 			m_pOwner->ProcessDiskChunkByID ( (int)iPayload, [this] ( const DiskChunk_c* p ) { m_pChunk = p; } );
 			m_pChunk->m_tLock.ReadLock ();
+			m_pChunk->CastIdx().m_bAttrsBusy.store ( true, std::memory_order_release );
 			break;
 		case E_MERGEATTRS_PULSE: // inside serial state/rlock
 #ifndef NDEBUG
@@ -9191,6 +9194,8 @@ ConstDiskChunkRefPtr_t RtIndex_c::MergeDiskChunks ( const char* szParentAction, 
 		sphWarning ( "rt %s: table %s: failed to %s %s (%s)", szParentAction, GetName(), dFilters.IsEmpty() ? "merge" : "split", tChunkA.GetFilebase(), sError.cstr() );
 		return pChunk;
 	}
+
+//	PauseCheck ( "postmerge" );
 
 	auto fnFnameBuilder = GetIndexFilenameBuilder();
 	std::unique_ptr<FilenameBuilder_i> pFilenameBuilder;

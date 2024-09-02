@@ -9854,6 +9854,11 @@ static XQNode_t * ExpandKeyword ( XQNode_t * pNode, const CSphIndexSettings & tS
 	return pExpand;
 }
 
+static bool SkipExpand ( const CSphString & sWord )
+{
+	return ( sWord.Begins("=") || sWord.Begins("*") || sWord.Ends("*") );
+}
+
 void sphQueryExpandKeywords ( XQNode_t ** ppNode, const CSphIndexSettings & tSettings, int iExpandKeywords, bool bWordDict )
 {
 	assert ( ppNode );
@@ -9878,11 +9883,22 @@ void sphQueryExpandKeywords ( XQNode_t ** ppNode, const CSphIndexSettings & tSet
 	if ( pNode->GetOp()==SPH_QUERY_PHRASE || pNode->GetOp()==SPH_QUERY_PROXIMITY || pNode->GetOp()==SPH_QUERY_QUORUM )
 	{
 		assert ( pNode->m_dWords.GetLength()>1 );
+
+		// should skip expansion if all terms have modifiers
+		if ( pNode->m_dWords.all_of ( [] ( const XQKeyword_t & tWord ) { return SkipExpand ( tWord.m_sWord ); } ) )
+			return;
+
 		ARRAY_FOREACH ( i, pNode->m_dWords )
 		{
 			auto * pWord = new XQNode_t ( pNode->m_dSpec );
 			pWord->m_dWords.Add ( pNode->m_dWords[i] );
-			pNode->m_dChildren.Add ( ExpandKeyword ( pWord, tSettings, iExpandKeywords, bWordDict ) );
+
+			// should not expand if word already has any modifiers
+			if ( SkipExpand ( pWord->m_dWords[0].m_sWord ) )
+				pNode->m_dChildren.Add ( pWord );
+			else
+				pNode->m_dChildren.Add ( ExpandKeyword ( pWord, tSettings, iExpandKeywords, bWordDict ) );
+
 			pNode->m_dChildren.Last()->m_iAtomPos = pNode->m_dWords[i].m_iAtomPos;
 			pNode->m_dChildren.Last()->m_pParent = pNode;
 		}
@@ -9898,10 +9914,7 @@ void sphQueryExpandKeywords ( XQNode_t ** ppNode, const CSphIndexSettings & tSet
 	// process keywords for plain nodes
 	assert ( pNode->m_dWords.GetLength()==1 );
 
-	XQKeyword_t & tKeyword = pNode->m_dWords[0];
-	if ( tKeyword.m_sWord.Begins("=")
-		|| tKeyword.m_sWord.Begins("*")
-		|| tKeyword.m_sWord.Ends("*") )
+	if ( SkipExpand ( pNode->m_dWords[0].m_sWord ) )
 		return;
 
 	// do the expansion

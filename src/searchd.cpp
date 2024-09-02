@@ -7458,6 +7458,9 @@ bool IsMaxedOut ()
 	if ( session::GetVip () )
 		return false;
 
+	if ( session::GetBuddy() )
+		return false;
+
 	if ( g_iThdQueueMax!=0 )
 		return GlobalWorkPool()->Works() > g_iThdQueueMax; // that is "jobs_queue_size" param of searchd conf, "work_queue_length" in 'show status', or "Queue:" in 'status'
 
@@ -9004,6 +9007,7 @@ void BuildStatus ( VectorLike & dStatus )
 	dStatus.MatchTupletf ( "workers_active", "%d", myinfo::CountTasks () );
 	dStatus.MatchTupletf ( "workers_clients", "%d", myinfo::CountClients () );
 	dStatus.MatchTupletf ( "workers_clients_vip", "%u", session::GetVips() );
+	dStatus.MatchTupletf ( "workers_clients_buddy", "%u", session::GetBuddyCount() );
 	dStatus.MatchTupletf ( "work_queue_length", "%d", GlobalWorkPool ()->Works () );
 	dStatus.MatchTupletf ( "load", "%0.2f %0.2f %0.2f", g_tStat1m.Value(), g_tStat5m.Value(), g_tStat15m.Value() );
 	dStatus.MatchTupletf ( "load_primary", "%0.2f %0.2f %0.2f", g_tPriStat1m.Value(), g_tPriStat5m.Value(), g_tPriStat15m.Value() );
@@ -9142,6 +9146,7 @@ void BuildStatusOneline ( StringBuilder_c & sOut )
 	sOut
 	<< " Clients:" << myinfo::CountClients()
 	<< " Vip clients:" << session::GetVips()
+	<< " Buddy clients:" << session::GetBuddyCount()
 	<< " Tasks:" << iTasks
 	<< " Queries:" << g_tStats.m_iQueries.load ( std::memory_order_relaxed );
 	sOut.Sprintf ( " Wall: %t", (int64_t)g_tStats.m_iQueryTime.load ( std::memory_order_relaxed ) );
@@ -16093,6 +16098,11 @@ void HandleMysqlShowIndexSettings ( RowBuffer_i & tOut, const SqlStmt_t & tStmt 
 
 	auto fnShowSettings = [&tOut, szStmt=tStmt.m_sStmt] ( const CSphIndex* pIndex )
 	{
+		if ( !pIndex )
+		{
+			tOut.Error ( "SHOW TABLE SETTINGS requires an existing table" );
+			return;
+		}
 		if ( !tOut.HeadOfStrings ( { "Variable_name", "Value" } ) )
 			return;
 

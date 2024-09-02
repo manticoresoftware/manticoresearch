@@ -31,6 +31,7 @@ public:
 	bool Expect100() const;
 	bool KeepAlive() const;
 	const char* Error() const;
+	bool IsBuddyQuery () const;
 
 	static void ParseList ( Str_t sData, OptionsHash_t & hOptions );
 

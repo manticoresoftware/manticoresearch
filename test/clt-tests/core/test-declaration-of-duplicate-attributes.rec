@@ -1,0 +1,21 @@
+––– input –––
+echo '<?xml version="1.0" encoding="utf-8"?><sphinx:docset xmlns:sphinx="http://sphinxsearch.com/"><sphinx:schema><sphinx:attr name="a" type="int" /><sphinx:attr name="a" type="string" /></sphinx:schema><sphinx:document id="10"><a>1</a><a>a</a></sphinx:document></sphinx:docset>' > /tmp/xml
+––– output –––
+––– input –––
+echo -e "source min {\n  type = xmlpipe2\n  xmlpipe_command = cat /tmp/xml\n}\n\nindex idx {\n  path = /tmp/idx\n  source = min\n}" > /tmp/xml_crash.conf
+––– output –––
+––– input –––
+indexer -c /tmp/xml_crash.conf --all
+––– output –––
+Manticore %{SEMVER} %{COMMITDATE}#!/(\sdev)?\s/!#(columnar %{SEMVER} %{COMMITDATE}) (secondary %{SEMVER} %{COMMITDATE}) (knn %{SEMVER} %{COMMITDATE})
+Copyright (c) 2001-2016, Andrew Aksyonoff
+Copyright (c) 2008-2016, Sphinx Technologies Inc (http://sphinxsearch.com)
+Copyright (c) 2017-%{YEAR}, Manticore Software LTD (https://manticoresearch.com)
+using config file '/tmp/xml_crash.conf'...
+indexing table 'idx'...
+WARNING: duplicate attribute node <a> - using first value
+ERROR: table 'idx': source 'min': attribute 'a' is added twice (line=1, pos=143, docid=0).
+total 0 docs, 0 bytes
+total #!/[0-9]+\.[0-9]+/!# sec, 0 bytes/sec, 0.00 docs/sec
+total 0 reads, 0.000 sec, 0.0 kb/call avg, 0.0 msec/call avg
+total 0 writes, 0.000 sec, 0.0 kb/call avg, 0.0 msec/call avg

@@ -81,12 +81,12 @@ attr_flush_period = 900 # persist updates to disk every 15 minutes
 <!-- example conf auto_optimize -->
 This setting controls the automatic [OPTIMIZE](../Securing_and_compacting_a_table/Compacting_a_table.md#OPTIMIZE-TABLE) process for table compaction.
 
-Starting with Manticore 4, table compaction occurs automatically. You can modify this behavior with the `auto_optimize` setting:
+By default table compaction occurs automatically. You can modify this behavior with the `auto_optimize` setting:
 * 0 to disable automatic table compaction (you can still call `OPTIMIZE` manually)
 * 1 to explicitly enable it
 * N to enable it, but allow OPTIMIZE to start when the number of disk chunks is greater than `# of CPU cores * 2 * N`
 
-Note that toggling `auto_optimize` on or off doesn't prevent you from running `OPTIMIZE` manually.
+Note that toggling `auto_optimize` on or off doesn't prevent you from running [OPTIMIZE TABLE](../Securing_and_compacting_a_table/Compacting_a_table.md#OPTIMIZE-TABLE) manually.
 
 <!-- intro -->
 ##### Example:
@@ -149,7 +149,7 @@ binlog_flush = 1 # ultimate safety, low speed
 ### binlog_max_log_size
 
 <!-- example conf binlog_max_log_size -->
-This setting controls the maximum binary log file size. It is optional, with a default value of 268435456, or 256 MB.
+This setting controls the maximum binary log file size. It is optional, with a default value of 256 MB.
 
 A new binlog file will be forcibly opened once the current binlog file reaches this size limit. This results in a finer granularity of logs and can lead to more efficient binlog disk usage under certain borderline workloads. A value of 0 indicates that the binlog file should not be reopened based on size.
 
@@ -708,7 +708,7 @@ max_open_files = max
 ### max_packet_size
 
 <!-- example conf max_packet_size -->
-Maximum allowed network packet size. This setting limits both query packets from clients and response packets from remote agents in a distributed environment. Only used for internal sanity checks, it does not directly affect RAM usage or performance. Optional, the default is 8M.
+Maximum allowed network packet size. This setting limits both query packets from clients and response packets from remote agents in a distributed environment. Only used for internal sanity checks, it does not directly affect RAM usage or performance. Optional, the default is 128M.
 
 
 <!-- intro -->
@@ -752,8 +752,7 @@ This setting is useful for extremely high query rates when just one thread is no
 
 Controls the busy loop interval of the network thread. The default is -1, and it can be set to -1, 0, or a positive integer.
 
-In cases where the server is configured as a pure master and just routes requests to agents, it is important to handle requests without delays and not allow the network thread to sleep. There is a busy loop for that. After an incoming request, the network thread uses CPU poll for `10 * net_wait_tm` milliseconds if
- `net_wait_tm` is a positive number or polls only with the CPU if`net_wait_tm` is `0`.  Also, the busy loop can be disabled with `net_wait_tm = -1` - in this case, the poller sets the timeout to the actual agent's timeouts on the system polling call.
+In cases where the server is configured as a pure master and just routes requests to agents, it is important to handle requests without delays and not allow the network thread to sleep. There is a busy loop for that. After an incoming request, the network thread uses CPU poll for `10 * net_wait_tm` milliseconds if `net_wait_tm` is a positive number or polls only with the CPU if `net_wait_tm` is `0`.  Also, the busy loop can be disabled with `net_wait_tm = -1` - in this case, the poller sets the timeout to the actual agent's timeouts on the system polling call.
 
 > **WARNING:** A CPU busy loop actually loads the CPU core, so setting this value to any non-default value will cause noticeable CPU usage even with an idle server.
 
@@ -1251,8 +1250,6 @@ This option enables/disables the use of secondary indexes for search queries. It
 * `0`: Disable the use of secondary indexes on search. They can be enabled for individual queries using [analyzer hints](../Searching/Options.md#Query-optimizer-hints)
 * `1`: Enable the use of secondary indexes on search. They can be disabled for individual queries using [analyzer hints](../Searching/Options.md#Query-optimizer-hints)
 * `force`: Same as enable, but any errors during the loading of secondary indexes will be reported, and the whole index will not be loaded into the daemon.
-
-Note that secondary indexes are not effective for full-text queries.
 
 <!-- intro -->
 ##### Example:

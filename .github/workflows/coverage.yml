@@ -36,7 +36,7 @@ jobs:
     needs: simple_build
     uses: ./.github/workflows/test_template.yml
     with:
-      CTEST_CONFIGURATION_TYPE: Debug
       WITH_COVERAGE: 1
       artifact_name: test_debug_coverage
+      build_artifact_name: build_jammy_Debug_x86_64
       timeout: 20

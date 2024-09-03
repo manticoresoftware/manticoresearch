@@ -841,8 +841,15 @@ void CSphSource_XMLPipe2::StartElement ( const char * szName, const char ** pAtt
 		{
 			if ( !strcmp ( *dAttrs, "name" ) )
 			{
-				AddFieldToSchema ( dAttrs[1], bWordDict, m_tSchema );
 				Info.m_sName = dAttrs[1];
+				if ( m_tSchema.GetField ( Info.m_sName.cstr() ) )
+				{
+					Error ( "field '%s' is added twice", Info.m_sName.cstr() );
+					return;
+				}
+
+				AddFieldToSchema ( Info.m_sName.cstr(), bWordDict, m_tSchema );
+
 			} else if ( !strcmp ( *dAttrs, "attr" ) )
 			{
 				bIsAttr = true;
@@ -862,6 +869,11 @@ void CSphSource_XMLPipe2::StartElement ( const char * szName, const char ** pAtt
 			if ( Info.m_sName.IsEmpty() || CSphSchema::IsReserved ( Info.m_sName.cstr() ) )
 			{
 				Error ( "%s is not a valid attribute name", Info.m_sName.cstr() );
+				return;
+			}
+			if ( m_tSchema.GetAttr ( Info.m_sName.cstr() ) )
+			{
+				Error ( "attribute '%s' is added twice", Info.m_sName.cstr() );
 				return;
 			}
 
@@ -929,6 +941,11 @@ void CSphSource_XMLPipe2::StartElement ( const char * szName, const char ** pAtt
 			if ( Info.m_sName.IsEmpty() || CSphSchema::IsReserved ( Info.m_sName.cstr() ) )
 			{
 				Error ( "%s is not a valid attribute name", Info.m_sName.cstr() );
+				return;
+			}
+			if ( m_tSchema.GetAttr ( Info.m_sName.cstr() ) )
+			{
+				Error ( "attribute '%s' is added twice", Info.m_sName.cstr() );
 				return;
 			}
 
@@ -1050,11 +1067,19 @@ void CSphSource_XMLPipe2::EndElement ( const char * szName )
 		return;
 
 	case ELEM_SCHEMA:
+	{
 		m_bInSchema = false;
 		m_tSchema.SetupFlags ( *this, false, nullptr );
+		// id attribute is auto added - can not redefine it in schema
+		if ( m_tSchema.GetAttr ( sphGetDocidName() ) )
+		{
+			Error ( "can not define auto-defined '%s' attribute", sphGetDocidName() );
+			return;
+		}
 		AddAutoAttrs ( m_sError, &m_dDefaultAttrs );
 		AllocDocinfo();
-		return;
+	}
+	return;
 
 	case ELEM_DOCUMENT:
 		m_bInDocument = false;
@@ -1119,10 +1144,27 @@ void CSphSource_XMLPipe2::EndElement ( const char * szName )
 		if ( m_iCurAttr!=-1 )
 		{
 			assert ( m_pCurDocument );
+
 			if ( !m_pCurDocument->m_dAttrs [ m_iCurAttr ].IsEmpty () )
-				sphWarn ( "duplicate attribute node <%s> - using first value", m_tSchema.GetAttr ( m_iCurAttr ).m_sName.cstr() );
-			else
+			{
+				const CSphColumnInfo & tCol = m_tSchema.GetAttr ( m_iCurAttr );
+				// can not redefine id attribute
+				if ( tCol.m_sName=="id" )
+				{
+					m_pCurDocument->m_dAttrs [ m_iCurAttr ].SetBinary ( (char*)m_pFieldBuffer, m_iFieldBufferLen );
+					if ( m_dParsedDocuments.GetLength() )
+						m_dParsedDocuments.Last()->m_tDocID = sphToUInt64 ( m_pCurDocument->m_dAttrs [ m_iCurAttr ].cstr() );
+					Error ( "duplicate attribute node <%s>", tCol.m_sName.cstr() );
+					return;
+				}
+				else
+				{
+					sphWarn ( "duplicate attribute node <%s> - using first value", tCol.m_sName.cstr() );
+				}
+			} else
+			{
 				m_pCurDocument->m_dAttrs [ m_iCurAttr ].SetBinary ( (char*)m_pFieldBuffer, m_iFieldBufferLen );
+			}
 		}
 
 		m_iFieldBufferLen = 0;

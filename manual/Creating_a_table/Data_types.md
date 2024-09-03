@@ -1165,7 +1165,22 @@ table products
 
 <!-- example for timestamps  -->
 
-Timestamp type represents unix timestamps which is stored as a 32-bit integer. The difference is that [time and date](../Functions/Date_and_time_functions.md) functions are available for the timestamp type.
+The timestamp type represents Unix timestamps, which are stored as 32-bit integers. Unlike basic integers, the timestamp type allows the use of [time and date](../Functions/Date_and_time_functions.md) functions. Conversion from string values follows these rules:
+
+- Numbers without delimiters, at least 10 characters long, are converted to timestamps as is.
+- `%Y-%m-%dT%H:%M:%E*S%Z`
+- `%Y-%m-%d'T'%H:%M:%S%Z`
+- `%Y-%m-%dT%H:%M:%E*S`
+- `%Y-%m-%dT%H:%M:%s`
+- `%Y-%m-%dT%H:%M`
+- `%Y-%m-%dT%H`
+- `%Y-%m-%d`
+- `%Y-%m`
+- `%Y`
+
+The meanings of these conversion specifiers are detailed in the [strptime manual](https://man7.org/linux/man-pages/man3/strptime.3.html), except for `%E*S`, which stands for milliseconds.
+
+Note that auto-conversion of timestamps is not supported in plain tables.
 
 <!-- intro -->
 ##### SQL:
@@ -2310,7 +2325,7 @@ POST /search
       "total":1,
       "hits":[
          {
-            "_id":"1",
+            "_id": 1,
             "_score":1,
             "_source":{
                "product_codes":[
@@ -2419,7 +2434,7 @@ res = await searchApi.search({"index":"products","query":{"match_all":{}}});
 <!-- response javascript -->
 
 ```javascript
-{"took":0,"timed_out":false,"hits":{"total":1,"hits":[{"_id":"1","_score":1,"_source":{"product_codes":[1,2,3,4],"title":"first"}}]}}
+{"took":0,"timed_out":false,"hits":{"total":1,"hits":[{"_id": 1,"_score":1,"_source":{"product_codes":[1,2,3,4],"title":"first"}}]}}
 ```
 <!-- intro -->
 ##### java:

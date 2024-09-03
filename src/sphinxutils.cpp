@@ -927,6 +927,7 @@ static KeyDesc_t g_dKeysIndex[] =
 	{ "optimize_cutoff",		0, nullptr },
 	{ "engine_default",			0, nullptr },
 	{ "knn",					0, nullptr },
+	{ "json_secondary_indexes",	0, nullptr },
 	{ nullptr,					0, nullptr }
 };
 
@@ -990,6 +991,8 @@ static KeyDesc_t g_dKeysSearchd[] =
 	{ "binlog_flush",			0, NULL },
 	{ "binlog_path",			0, NULL },
 	{ "binlog_max_log_size",	0, NULL },
+	{ "binlog_filename_digits",	0, NULL },
+	{ "binlog_common",			0, NULL },
 	{ "thread_stack",			0, NULL },
 	{ "expansion_limit",		0, NULL },
 	{ "rt_flush_period",		0, NULL },
@@ -3572,16 +3575,46 @@ BYTE Pearson8 ( const BYTE * pBuf, int iLen )
 	return iNew;
 }
 
+static const char * g_dDateTimeFormats[] = {
+	"%Y-%m-%dT%H:%M:%E*S%Z",
+	"%Y-%m-%d'T'%H:%M:%S%Z",
+	"%Y-%m-%dT%H:%M:%E*S",
+	"%Y-%m-%dT%H:%M:%s",
+	"%Y-%m-%dT%H:%M",
+	"%Y-%m-%dT%H",
+	"%Y-%m-%d",
+	"%Y-%m",
+	"%Y"
+};
 
-int64_t GetUTC ( const CSphString & sTime, const CSphString & sFormat )
+int64_t GetUTC ( const CSphString & sTime, const char * pFormat )
 {
-	std::tm tTM = {};
-	std::stringstream sTimeStream (  sTime.cstr() );
-	sTimeStream >> std::get_time ( &tTM, sFormat.cstr() );
-	if ( sTimeStream.fail() )
-		return -1;
+	if ( sTime.IsEmpty() )
+		return 0;
 
-	return std::mktime ( &tTM );
+	const char * szCur = sTime.cstr();
+	while ( isdigit(*szCur) )
+		szCur++;
+
+	// should be timestamp with only numeric values and at least 5 symbols
+	if ( !*szCur && (szCur-sTime.cstr())>4 )
+		return strtoul ( sTime.cstr(), nullptr, 10 );
+
+	time_t tConverted = 0;
+	if ( pFormat && *pFormat )
+	{
+		if ( ParseAsLocalTime ( pFormat, sTime, tConverted ) )
+			return tConverted;
+	}
+	else
+	{
+		// loop from the built-in formats from longest to shortest and try one by one
+		for ( const char * pFmt : g_dDateTimeFormats )
+			if ( ParseAsLocalTime ( pFmt, sTime, tConverted ) )
+				return tConverted;
+	}
+
+	return 0;
 }
 
 enum class DateMathOp_e
@@ -3619,20 +3652,13 @@ static bool ParseDateMath ( const Str_t & sMathExpr, time_t & tDateTime )
 
 	while ( sCur<sEnd && *sCur )
 	{
-		const int iOp = *sCur++;
-		DateMathOp_e eOp = DateMathOp_e::Mod;
-		if ( iOp=='/' )
+		DateMathOp_e eOp;
+		switch ( *sCur++ )
 		{
-			eOp = DateMathOp_e::Mod;
-		} else if ( iOp=='+' )
-		{
-			eOp = DateMathOp_e::Add;
-		} else if ( iOp=='-' )
-		{
-			eOp = DateMathOp_e::Sub;
-		} else
-		{
-			return false;
+			case '/' : eOp = DateMathOp_e::Mod; break;
+			case '+' : eOp = DateMathOp_e::Add; break;
+			case '-' : eOp = DateMathOp_e::Sub; break;
+			default: return false;
 		}
 
 		int iNum = 1;
@@ -3665,7 +3691,7 @@ static bool ParseDateMath ( const Str_t & sMathExpr, time_t & tDateTime )
 	return tDateTime;
 }
 
-bool ParseDateMath ( const CSphString & sMathExpr, const CSphString & sFormat, int iNow, time_t & tDateTime )
+bool ParseDateMath ( const CSphString & sMathExpr, int iNow, time_t & tDateTime )
 {
 	if ( sMathExpr.IsEmpty() )
 		return false;
@@ -3695,7 +3721,7 @@ bool ParseDateMath ( const CSphString & sMathExpr, const CSphString & sFormat, i
 		}
 
 		// We're going to just require ISO8601 timestamps, k?
-		tDateTime = GetUTC ( sDateOnly, sFormat );
+		tDateTime = GetUTC ( sDateOnly );
 	}
 
 	if ( IsEmpty ( sExpr ) )

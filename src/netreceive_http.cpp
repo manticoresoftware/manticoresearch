@@ -47,7 +47,7 @@ void HttpServe ( std::unique_ptr<AsyncNetBuffer_c> pBuf )
 	if ( bINeedSSL && !bHeNeedSSL )
 	{
 		CSphVector<BYTE> dResult;
-		sphHttpErrorReply ( dResult, SPH_HTTP_STATUS_400, "The plain HTTP request was sent to HTTPS port" );
+		sphHttpErrorReply ( dResult, EHTTP_STATUS::_400, "The plain HTTP request was sent to HTTPS port" );
 		auto & tOut = *(GenericOutputBuffer_c *) pBuf.get();
 		tOut.SwapData ( dResult );
 		tOut.Flush (); // no need to check return code since we break anyway
@@ -73,7 +73,7 @@ void HttpServe ( std::unique_ptr<AsyncNetBuffer_c> pBuf )
 	CSphVector<BYTE> dResult;
 	TRACE_CONN ( "conn", "HttpServe" );
 
-	auto HttpReply = [&dResult, &tOut] ( ESphHttpStatus eCode, Str_t sMsg )
+	auto HttpReply = [&dResult, &tOut] ( EHTTP_STATUS eCode, Str_t sMsg )
 	{
 		if ( IsEmpty ( sMsg ) )
 		{
@@ -105,7 +105,7 @@ void HttpServe ( std::unique_ptr<AsyncNetBuffer_c> pBuf )
 			if ( !iChunk || tIn.GetError() )
 			{
 				sError.SetSprintf ( "failed to receive HTTP request, %s", ( tIn.GetError() ? tIn.GetErrorMessage().cstr() : sphSockError() ) );
-				HttpReply ( SPH_HTTP_STATUS_400, FromStr ( sError ) );
+				HttpReply ( EHTTP_STATUS::_400, FromStr ( sError ) );
 			}
 
 			return;
@@ -118,14 +118,17 @@ void HttpServe ( std::unique_ptr<AsyncNetBuffer_c> pBuf )
 				sError.SetSprintf ( "%s, %s", tIn.GetErrorMessage().cstr(), tParser.Error() );
 			else
 				sError = tParser.Error();
-			HttpReply ( SPH_HTTP_STATUS_400, FromStr ( sError ) );
+			HttpReply ( EHTTP_STATUS::_400, FromStr ( sError ) );
 			break;
 		}
 
+		session::Info().SetBuddy ( tParser.IsBuddyQuery() );
+
 		// check if we should interrupt because of maxed-out
+		// but not for buddy queries
 		if ( IsMaxedOut() )
 		{
-			HttpReply ( SPH_HTTP_STATUS_503, g_sMaxedOutMessage );
+			HttpReply ( EHTTP_STATUS::_503, g_sMaxedOutMessage );
 			gStats().m_iMaxedOut.fetch_add ( 1, std::memory_order_relaxed );
 			break;
 		}
@@ -145,7 +148,7 @@ void HttpServe ( std::unique_ptr<AsyncNetBuffer_c> pBuf )
 		// if first chunk is (most probably) pure header, we can proceed special headers here
 		if ( tParser.Expect100() && !tParser.ParsedBodyLength() )
 		{
-			if ( !HttpReply ( SPH_HTTP_STATUS_100, dEmptyStr ) )
+			if ( !HttpReply ( EHTTP_STATUS::_100, dEmptyStr ) )
 				break;
 			LogReplyStatus100();
 		}

@@ -6,16 +6,8 @@ apt-get update -y > /dev/null; echo $?
 ––– output –––
 0
 ––– input –––
-apt-get install -y gnupg2 wget mariadb-client > /dev/null; echo $?
+apt-get install -y gnupg2 wget mariadb-client procps > /dev/null 2>&1; echo $?
 ––– output –––
-perl: warning: Setting locale failed.
-perl: warning: Please check that your locale settings:
-LANGUAGE = (unset),
-LC_ALL = (unset),
-LANG = "en_US.UTF-8"
-are supported and installed on your system.
-perl: warning: Falling back to the standard locale ("C").
-debconf: delaying package configuration, since apt-utils is not installed
 0
 ––– input –––
 wget -q https://repo.manticoresearch.com/manticore-repo.noarch.deb
@@ -32,30 +24,34 @@ apt-get update -y > /dev/null; echo $?
 ––– output –––
 0
 ––– input –––
-apt-get install -y manticore manticore-extra > /dev/null; echo $?
+apt-get install -y manticore manticore-extra > /dev/null 2>&1; echo $?
 ––– output –––
-perl: warning: Setting locale failed.
-perl: warning: Please check that your locale settings:
-LANGUAGE = (unset),
-LC_ALL = (unset),
-LANG = "en_US.UTF-8"
-are supported and installed on your system.
-perl: warning: Falling back to the standard locale ("C").
-debconf: delaying package configuration, since apt-utils is not installed
 0
 ––– input –––
 searchd --version
 ––– output –––
-Manticore %{SEMVER} %{COMMITDATE} (columnar %{SEMVER} %{COMMITDATE}) (secondary %{SEMVER} %{COMMITDATE})
+Manticore %{SEMVER} %{COMMITDATE} (columnar %{SEMVER} %{COMMITDATE}) (secondary %{SEMVER} %{COMMITDATE}) (knn %{SEMVER} %{COMMITDATE})
 Copyright (c) 2001-2016, Andrew Aksyonoff
 Copyright (c) 2008-2016, Sphinx Technologies Inc (http://sphinxsearch.com)
 Copyright (c) 2017-%{YEAR}, Manticore Software LTD (https://manticoresearch.com)
 ––– input –––
 manticore-executor -v
 ––– output –––
-PHP %{SEMVER} (cli) (built: #!/[a-zA-Z]{3}/!# #!/[0-9]+/!# %{YEAR} %{TIME}) (ZTS)
+PHP %{SEMVER} (cli) (built: #!/[a-zA-Z]{3}/!# #!/[0-9]+/!# %{YEAR} %{TIME}) (NTS)
 Copyright (c) The PHP Group
 Zend Engine %{SEMVER}, Copyright (c) Zend Technologies
 ––– block: start-searchd-release –––
-––– block: check-buddy –––
+––– block: check-searchd-process –––
 ––– block: check-backup –––
+––– input –––
+apt-get remove -y 'manticore*' > /dev/null 2>&1; echo $?
+––– output –––
+0
+––– input –––
+dpkg -l | grep ^rc | awk '/^rc/ && /manticore/ { print $2 }'
+––– output –––
+manticore-common
+manticore-repo
+manticore-server
+manticore-server-core
+manticore-tools

@@ -1,5 +1,8 @@
 ––– input –––
-yum install -y --skip-broken mariadb mariadb105 which > /dev/null 2>&1; echo $?
+sed -i s/mirror.centos.org/vault.centos.org/g /etc/yum.repos.d/*.repo; sed -i s/^#.*baseurl=http/baseurl=http/g /etc/yum.repos.d/*.repo
+––– output –––
+––– input –––
+yum install -y --skip-broken mariadb mariadb105 which procps > /dev/null 2>&1; echo $?
 ––– output –––
 0
 ––– input –––
@@ -13,16 +16,23 @@ yum install -y -q manticore manticore-extra > /dev/null 2>&1; echo $?
 ––– input –––
 searchd --version
 ––– output –––
-Manticore %{SEMVER} %{COMMITDATE} (columnar %{SEMVER} #!/[a-f0-9]{7}@[0-9]{6,8}/!#) (secondary %{SEMVER} #!/[a-f0-9]{7}@[0-9]{6}/!#)
+Manticore %{SEMVER} %{COMMITDATE} (columnar %{SEMVER} %{COMMITDATE}) (secondary %{SEMVER} %{COMMITDATE}) (knn %{SEMVER} %{COMMITDATE})
 Copyright (c) 2001-2016, Andrew Aksyonoff
 Copyright (c) 2008-2016, Sphinx Technologies Inc (http://sphinxsearch.com)
 Copyright (c) 2017-%{YEAR}, Manticore Software LTD (https://manticoresearch.com)
 ––– input –––
 manticore-executor -v
 ––– output –––
-PHP %{SEMVER} (cli) (built: #!/[a-zA-Z]{3}/!# #!/[0-9]+/!# %{YEAR} %{TIME}) (ZTS)
+PHP %{SEMVER} (cli) (built: #!/[a-zA-Z]{3}/!# #!/[0-9]+/!# %{YEAR} %{TIME}) (NTS)
 Copyright (c) The PHP Group
 Zend Engine #!/v[0-9]+\.[0-9]+\.[0-9]+/!#, Copyright (c) Zend Technologies
 ––– block: start-searchd-release –––
-––– block: check-buddy –––
+––– block: check-searchd-process –––
 ––– block: check-backup –––
+––– input –––
+yum remove -y 'manticore*' > /dev/null 2>&1; echo $?
+––– output –––
+0
+––– input –––
+rpm -qa | grep manticore
+––– output –––

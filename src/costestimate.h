@@ -39,10 +39,7 @@ struct SecondaryIndexInfo_t
 	bool					m_bCreated = false;
 };
 
-namespace SI
-{
-	class Index_i;
-}
+class SIContainer_c;
 
 struct SelectIteratorCtx_t
 {
@@ -52,7 +49,7 @@ struct SelectIteratorCtx_t
 	const ISphSchema &						m_tSorterSchema;
 	const HistogramContainer_c *			m_pHistograms = nullptr;
 	columnar::Columnar_i *					m_pColumnar = nullptr;
-	SI::Index_i *							m_pSI = nullptr;
+	const SIContainer_c &					m_tSI;
 	int										m_iCutoff = -1;
 	int64_t									m_iTotalDocs = 0;
 	int										m_iThreads = 1;
@@ -60,7 +57,7 @@ struct SelectIteratorCtx_t
 	bool									m_bFromIterator = false;
 	float									m_fDocsLeft = 1.0f;
 
-			SelectIteratorCtx_t ( const CSphQuery & tQuery, const CSphVector<CSphFilterSettings> & dFilters, const ISphSchema & tIndexSchema, const ISphSchema & tSorterSchema, const HistogramContainer_c * pHistograms, columnar::Columnar_i * pColumnar, SI::Index_i * pSI, int iCutoff, int64_t iTotalDocs, int iThreads );
+			SelectIteratorCtx_t ( const CSphQuery & tQuery, const CSphVector<CSphFilterSettings> & dFilters, const ISphSchema & tIndexSchema, const ISphSchema & tSorterSchema, const HistogramContainer_c * pHistograms, columnar::Columnar_i * pColumnar, const SIContainer_c & tSI, int iCutoff, int64_t iTotalDocs, int iThreads );
 
 	bool	IsEnabled_SI ( const CSphFilterSettings & tFilter ) const;
 	bool	IsEnabled_Analyzer ( const CSphFilterSettings & tFilter ) const;

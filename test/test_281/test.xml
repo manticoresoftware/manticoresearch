@@ -1,0 +1,91 @@
+<?xml version="1.0" encoding="utf-8"?>
+<test>
+
+<name>Deduplicate in rt-index chunk</name>
+
+<requires>
+<non-rt/>
+</requires>
+
+<config>
+indexer
+{
+	mem_limit		= 30M
+}
+
+searchd
+{
+	<searchd_settings/>
+}
+
+source disk
+{
+	type			= mysql
+	<sql_settings/>
+	sql_query		= select * from test_table
+	sql_attr_uint	= gid
+}
+
+index disk
+{
+	source			= disk
+	path			= <data_path/>/disk
+}
+
+index rt
+{
+	type			= rt
+	path			= <data_path/>/rt
+	rt_attr_uint = gid
+	rt_field = title
+}
+
+</config>
+
+<db_create>
+CREATE TABLE test_table
+(
+	id INTEGER NOT NULL,
+	gid INTEGER NOT NULL,
+	title VARCHAR(255) NOT NULL
+);
+</db_create>
+<db_drop>DROP TABLE IF EXISTS test_table;</db_drop>
+<db_insert><![CDATA[
+INSERT INTO test_table VALUES
+( 1, 11, 'Fare thee well' ),
+( 1, 12, 'And if for ever got' ),
+( 2, 21, 'Still for ever fare thee well' ),
+( 2, 22, 'under_score <stuff>got removed</stuff>' ),
+( 2, 23, 'And if for ever got' ),
+( 3, 31, 'Still for ever fare thee well' ),
+( 3, 32, 'under_score <stuff>got removed</stuff>' ),
+( 3, 33, 'And if for ever got' )
+]]></db_insert>
+
+<queries><sphinxql>
+	SELECT * FROM rt;
+	SELECT * FROM disk;
+	ATTACH INDEX disk TO RTINDEX rt;
+	SELECT * FROM rt;
+	SELECT * FROM disk;
+	delete from rt where id=2;
+	select * from rt;
+	select count(*) from rt;
+	delete from rt where id=2;
+	select * from rt;
+	select count(*) from rt;
+	show index rt status like 'killed_rate';
+
+	debug dedup rt 0;
+	select * from rt;
+	select count(*) from rt;
+	show index rt status like 'killed_rate';
+
+	debug compress rt 0 option sync=1;
+	select * from rt;
+	select count(*) from rt;
+	show index rt status like 'killed_rate';
+</sphinxql></queries>
+
+</test>

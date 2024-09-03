@@ -170,6 +170,12 @@ index mva_save
 	<sphinxql ignore="tag">
 		flush attributes;
 	</sphinxql>
+
+	<sphinxql>
+		<!-- regression: crash on mva min or max for empty mva array -->
+		UPDATE mva_save SET mva = () WHERE id in (10);
+		select id, mva a, least(a) lt, greatest(a) gr from mva_save order by id asc;
+	</sphinxql>
 </queries>
 
 

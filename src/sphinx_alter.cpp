@@ -82,6 +82,7 @@ void AddToSchema ( CSphSchema & tSchema, const AttrAddRemoveCtx_t & tCtx, CSphSt
 	tInfo.m_uAttrFlags			= tCtx.m_uFlags;
 	tInfo.m_eEngine				= tCtx.m_eEngine;
 	tInfo.m_tLocator.m_iBitCount = tCtx.m_iBits;
+	tInfo.m_tKNN				= tCtx.m_tKNN;
 
 	auto iIdxExisting = tSchema.GetAttrIndex ( tCtx.m_sName.cstr() );
 	if ( iIdxExisting >= 0 )
@@ -364,6 +365,8 @@ protected:
 bool IndexAlterHelper_c::Alter_AddRemoveRowwiseAttr ( const CSphSchema & tOldSchema, const CSphSchema & tNewSchema, const CSphRowitem * pDocinfo, DWORD uNumRows, const BYTE * pBlobPool, WriteWrapper_c & tSPAWriter,
 	WriteWrapper_c & tSPBWriter, bool bAddAttr, const CSphString & sAttrName )
 {
+	if ( !pDocinfo && tOldSchema.GetRowSize() )
+		return false;
 	AddRemoveCtx_c tCtx ( tOldSchema, tNewSchema, pDocinfo, uNumRows, pBlobPool, tSPAWriter, tSPBWriter, sAttrName, *this );
 	if ( bAddAttr )
 		return tCtx.AddRowwiseAttr();

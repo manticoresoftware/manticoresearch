@@ -1,0 +1,11 @@
+––– input –––
+(dockerd > /var/log/dockerd.log 2>&1 &) > /dev/null
+––– output –––
+––– input –––
+if timeout 30 grep -qm1 'API listen on /var/run/docker.sock' <(tail -n 0 -f /var/log/dockerd.log); then echo 'Done'; else echo 'Timeout failed'; fi
+––– output –––
+Done
+––– input –––
+docker ps
+––– output –––
+CONTAINER ID   IMAGE     COMMAND   CREATED   STATUS    PORTS     NAMES

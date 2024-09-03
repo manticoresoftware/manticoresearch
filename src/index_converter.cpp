@@ -1076,10 +1076,8 @@ bool ConverterPlain_t::WriteAttributes ( Index_t & tIndex, CSphString & sError )
 	while ( ( pRow = tConv.NextRow() )!=nullptr )
 	{
 		if ( pBlobLocatorAttr )
-		{
-			SphOffset_t tOffset = pBlobRowBuilder->Flush();
-			sphSetRowAttr ( pRow, pBlobLocatorAttr->m_tLocator, tOffset );
-		}
+			sphSetRowAttr ( pRow, pBlobLocatorAttr->m_tLocator, pBlobRowBuilder->Flush().first );
+
 		tMinMaxBuilder.Collect ( pRow );
 		tWriterSPA.PutBytes ( pRow, iStride*sizeof(CSphRowitem) );
 
@@ -1430,7 +1428,7 @@ void ConverterPlain_t::WriteCheckpoints ( const Index_t & tIndex, CSphWriter & t
 	// primary storage is in the index wide header
 	if ( bKeywordDict )
 	{
-		tWriterDict.PutBytes ( "dict-header", 11 );
+		tWriterDict.PutBlob ( g_sTagDictHeader );
 		tWriterDict.ZipInt ( m_dCheckpoints.GetLength() );
 		tWriterDict.ZipOffset ( m_tCheckpointsPosition );
 		tWriterDict.ZipInt ( tIndex.m_pTokenizer->GetMaxCodepointLength() );

@@ -2058,7 +2058,7 @@ JsonObj_c JsonObj_c::GetChild ( const char * szName, CSphString & sError, bool b
 }
 
 
-cJSON * JsonObj_c::GetRoot()
+cJSON * JsonObj_c::GetRoot() const
 {
 	return m_pRoot;
 }
@@ -2126,6 +2126,38 @@ JsonObj_c JsonObj_c::Clone () const
 
 	JsonObj_c tNew ( cJSON_Duplicate ( m_pRoot, true ) );
 	return tNew;
+}
+
+const char * JsonObj_c::TypeName() const
+{
+	if ( !m_pRoot )
+		return "invalid";
+
+    switch ( m_pRoot->type & 0xFF )
+    {
+        case cJSON_False:
+        case cJSON_True:
+			return "bool";
+        case cJSON_NULL:
+			return "null";
+        case cJSON_Number:
+			return "double";
+        case cJSON_Integer:
+			return "integet";
+        case cJSON_UInteger:
+			return "unsigned";
+        case cJSON_String:
+			return "string";
+        case cJSON_Raw:
+			return "raw";
+        case cJSON_Array:
+			return "array";
+        case cJSON_Object:
+			return "object";
+
+        default:
+            return "invalid";
+    }
 }
 
 //////////////////////////////////////////////////////////////////////////

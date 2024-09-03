@@ -24,6 +24,7 @@ REPLACE INTO table
     WHERE id = <id>
 ```
 Note, you can filter only by id in this mode.
+Read more about `UPDATE` vs. partial `REPLACE` [here](../../Data_creation_and_modification/Updating_documents/REPLACE_vs_UPDATE.md#UPDATE-vs-partial-REPLACE).
 
 See the examples for more details.
 
@@ -81,7 +82,7 @@ Query OK, 1 row affected (0.00 sec)
 
 <!-- intro -->
 ##### REPLACE ... SET:
-<!-- request REPLACE ... SET -->
+<!-- request REPLACE SET -->
 
 ```sql
 REPLACE INTO products SET description='HUAWEI Matebook 15', price=10 WHERE id = 55;
@@ -186,26 +187,18 @@ POST /products/_doc/3
 ```json
 POST /products/_update/55
 {
-  "description": "HUAWEI Matebook 15",
-  "price": 10
+  "doc": {
+    "description": "HUAWEI Matebook 15",
+    "price": 10
+  }
 }
 ```
 
 <!-- response Elasticsearch-like partial -->
 ```json
 {
-"_id":55,
 "_index":"products",
-"_primary_term":1,
-"_seq_no":0,
-"_shards":{
-    "failed":0,
-    "successful":1,
-    "total":1
-},
-"_type":"_doc",
-"_version":1,
-"result":"updated"
+"updated":1
 }
 ```
 

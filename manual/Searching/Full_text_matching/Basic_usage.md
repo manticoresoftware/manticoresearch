@@ -101,6 +101,21 @@ By default, keywords are combined using the OR operator. However, you can change
 
 "operator" can be set to "or" or "and".
 
+The `boost` modifier can also be applied. It raises the word [IDF](../../Searching/Options.md#idf)_score by the indicated factor in ranking scores that incorporate IDF into their calculations. It does not impact the matching process in any manner.
+```json
+"query":
+{
+  "match":
+  {
+    "field1":
+    {
+      "query": "keyword",
+      "boost": 2.0
+    }
+  }
+}
+```
+
 ### match_phrase
 
 "match_phrase" is a query that matches the entire phrase. It is similar to a phrase operator in SQL. Here's an example:
@@ -168,7 +183,7 @@ POST /search
    "hits" : {
       "hits" : [
          {
-            "_id" : "668018",
+            "_id": 668018,
             "_score" : 3579,
             "_source" : {
                "story_author" : "IgorPartola",
@@ -206,7 +221,7 @@ POST /search
    "hits" : {
       "hits" : [
          {
-            "_id" : "807160",
+            "_id": 807160,
             "_score" : 2599,
             "_source" : {
                "story_author" : "rbanffy",
@@ -241,7 +256,7 @@ POST /search
   "hits" : {
       "hits" : [
          {
-            "_id" : "807160",
+            "_id": 807160,
             "_score" : 2566,
             "_source" : {
                "story_author" : "rbanffy",
@@ -436,7 +451,7 @@ resp, httpRes, err := search.SearchRequest(*searchRequest).Execute()
   "hits": {
     "hits": [
       {
-        "_id": "1",
+        "_id": 1,
         "_score": 2566,
         "_source": {
           "content": "This is a test document 1",

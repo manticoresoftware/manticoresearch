@@ -193,6 +193,7 @@ struct SqlInsert_t
 		QUOTED_STRING = 263,
 		CONST_STRINGS = 269,
 		TABLE = 378,
+		TOK_NULL = 473, // NULL is already reserved using TOK_NULL
 	};
 
 	int						m_iType = 0;
@@ -272,6 +273,7 @@ public:
 	DWORD					m_uFieldFlags = 0;
 	DWORD					m_uAttrFlags = 0;
 	int						m_iBits = -1;
+	knn::IndexSettings_t	m_tAlterKNN;
 
 	// CREATE TABLE specific
 	CreateTableSettings_t	m_tCreateTable;

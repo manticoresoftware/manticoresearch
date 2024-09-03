@@ -80,4 +80,4 @@ bool LoadFunc ( T & pFunc, void * pHandle, const char * szFunc, const CSphString
 }
 #endif // HAVE_DLOPEN
 
-CSphString TryDifferentPaths ( const CSphString & sLibfile, const CSphString & sFullpath );
+CSphString TryDifferentPaths ( const CSphString & sLibfile, const CSphString & sFullpath, int iVersion );

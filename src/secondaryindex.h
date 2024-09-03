@@ -15,6 +15,7 @@
 #include "sphinx.h"
 #include "columnarmisc.h"
 #include "costestimate.h"
+#include "secondary/secondary.h"
 
 #include <math.h>
 #include <vector>
@@ -35,6 +36,37 @@ public:
 	virtual void	AddDesc ( CSphVector<IteratorDesc_t> & dDesc ) const = 0;
 };
 
+using RowIteratorsWithEstimates_t = CSphVector<std::pair<RowidIterator_i *,int64_t>>;
+
+class SIContainer_c
+{
+	friend void operator << ( JsonEscapedBuilder & tOut, const SIContainer_c & tSI );
+
+public:
+	bool		Load ( const CSphString & sFile, CSphString & sError );
+	bool		Drop ( const CSphString & sFile, CSphString & sError );
+	bool		IsEmpty() const { return m_dIndexes.IsEmpty(); }
+	void		Reset() { m_dIndexes.Reset(); }
+
+	void		ColumnUpdated ( const CSphString & sAttr );
+	bool		SaveMeta ( CSphString & sError ) const;
+	bool		CreateIterators ( std::vector<common::BlockIterator_i *> & dIterators, const common::Filter_t & tFilter, const common::RowidRange_t * pBounds, uint32_t uMaxValues, int64_t iRsetSize, int iCutoff, CSphString & sError ) const;
+	int64_t		GetCountDistinct ( const CSphString & sAttr ) const;
+	bool		CalcCount ( uint32_t & uCount, const common::Filter_t & tFilter, uint32_t uMaxValues, CSphString & sError ) const;
+	uint32_t	GetNumIterators ( const common::Filter_t & tFilter ) const;
+	bool		IsEnabled ( const CSphString & sAttr ) const;
+
+	RowIteratorsWithEstimates_t CreateSecondaryIndexIterator ( CSphVector<SecondaryIndexInfo_t> & dSIInfo, const CSphVector<CSphFilterSettings> & dFilters, ESphCollation eCollation, const ISphSchema & tSchema, RowID_t uRowsCount, int iCutoff ) const;
+
+private:
+	struct IndexInfo_t
+	{
+		std::unique_ptr<SI::Index_i>	m_pIndex;
+		CSphString						m_sFile;
+	};
+
+	CSphVector<IndexInfo_t> m_dIndexes;
+};
 
 struct RowIdBoundaries_t;
 
@@ -45,7 +77,6 @@ const CSphFilterSettings * GetRowIdFilter ( const CSphVector<CSphFilterSettings>
 bool				ReturnIteratorResult ( RowID_t * pRowID, RowID_t * pRowIdStart, RowIdBlock_t & dRowIdBlock );
 
 CSphVector<SecondaryIndexInfo_t> SelectIterators ( const SelectIteratorCtx_t & tCtx, float & fBestCost, StrVec_t & dWarnings );
-bool				HaveAvailableSI ( const SelectIteratorCtx_t & tCtx );
 
 namespace SI
 {
@@ -53,12 +84,9 @@ namespace SI
 	class Builder_i;
 }
 
-using RowIteratorsWithEstimates_t = CSphVector<std::pair<RowidIterator_i *,int64_t>>;
 
-RowIteratorsWithEstimates_t CreateSecondaryIndexIterator ( const SI::Index_i * pSIIndex, CSphVector<SecondaryIndexInfo_t> & dSIInfo, const CSphVector<CSphFilterSettings> & dFilters, ESphCollation eCollation, const ISphSchema & tSchema, RowID_t uRowsCount, int iCutoff );
-
-std::unique_ptr<SI::Builder_i> CreateIndexBuilder ( int iMemoryLimit, const CSphSchema & tSchema, CSphBitvec & tSIAttrs, const CSphString & sFile, int iBufferSize, CSphString & sError );
-std::unique_ptr<SI::Builder_i> CreateIndexBuilder ( int iMemoryLimit, const CSphSchema & tSchema, const CSphString & sFile, CSphVector<PlainOrColumnar_t> & dAttrs, int iBufferSize, CSphString & sError );
+std::unique_ptr<SI::Builder_i> CreateIndexBuilder ( int64_t iMemoryLimit, const CSphSchema & tSchema, CSphBitvec & tSIAttrs, const CSphString & sFile, int iBufferSize, CSphString & sError );
+std::unique_ptr<SI::Builder_i> CreateIndexBuilder ( int64_t iMemoryLimit, const CSphSchema & tSchema, const CSphString & sFile, CSphVector<PlainOrColumnar_t> & dAttrs, int iBufferSize, CSphString & sError );
 
 void BuildStoreSI ( RowID_t tRowID, const CSphRowitem * pRow, const BYTE * pPool, CSphVector<ScopedTypedIterator_t> & dIterators, const CSphVector<PlainOrColumnar_t> & dAttrs, SI::Builder_i * pBuilder, CSphVector<int64_t> & dTmp );
 

@@ -626,6 +626,11 @@ static bool HaveSI ( const CSphFilterSettings & tFilter, const SelectIteratorCtx
 	if ( !IsSecondaryLibLoaded() || GetSecondaryIndexDefault()==SIDefault_e::DISABLED )
 		return false;
 
+	// force secondary indexes from non-default files (that would be JSON SI); at least for now
+	// the idea is that they should always be faster
+	if ( !tCtx.m_tIndexSchema.GetAttr ( tFilter.m_sAttrName.cstr() ) )
+		bForce = true;
+
 	return true;
 }
 
@@ -662,6 +667,7 @@ static void FetchHistogramInfo ( CSphVector<SecondaryIndexInfo_t> & dSIInfo, con
 		{
 			tSIInfo.m_iTotalValues = tCtx.m_iTotalDocs;
 			tSIInfo.m_iRsetEstimate = tCtx.m_iTotalDocs;
+			tSIInfo.m_bUsable = !tCtx.m_tIndexSchema.GetAttr ( tFilter.m_sAttrName.cstr() );
 			continue;
 		}
 
@@ -692,14 +698,14 @@ static void MarkAvailableLookup ( CSphVector<SecondaryIndexInfo_t> & dSIInfo, co
 }
 
 
-static void MarkAvailableSI ( CSphVector<SecondaryIndexInfo_t> & dSIInfo, const SelectIteratorCtx_t & tCtx, bool bCheckUsable = true )
+static void MarkAvailableSI ( CSphVector<SecondaryIndexInfo_t> & dSIInfo, const SelectIteratorCtx_t & tCtx )
 {
 	if ( !tCtx.m_pHistograms )
 		return;
 
 	ARRAY_FOREACH ( i, tCtx.m_dFilters )
 	{
-		if ( bCheckUsable && !dSIInfo[i].m_bUsable )
+		if ( !dSIInfo[i].m_bUsable )
 			continue;
 
 		bool bForce = false;
@@ -804,7 +810,8 @@ static void FetchPartialColumnarMinMax ( CSphVector<SecondaryIndexInfo_t> & dSII
 
 			CreateFilterContext_t tCFCtx;
 			tCFCtx.m_pFilters	= &dFilter;
-			tCFCtx.m_pSchema	= &tCtx.m_tIndexSchema;
+			tCFCtx.m_pMatchSchema = &tCtx.m_tSorterSchema;
+			tCFCtx.m_pIndexSchema = &tCtx.m_tIndexSchema;
 			tCFCtx.m_pColumnar	= tCtx.m_pColumnar;
 			tCFCtx.m_eCollation	= tCtx.m_tQuery.m_eCollation;
 			tCFCtx.m_bScan		= true;
@@ -828,7 +835,7 @@ static void FetchPartialColumnarMinMax ( CSphVector<SecondaryIndexInfo_t> & dSII
 static uint32_t CalcNumSIIterators ( const CSphFilterSettings & tFilter, int64_t iDocs, const SelectIteratorCtx_t & tCtx )
 {
 	uint32_t uNumIterators = 1;
-	if ( !tCtx.m_pSI )
+	if ( tCtx.m_tSI.IsEmpty() )
 		return uNumIterators;
 
 	common::Filter_t tColumnarFilter;
@@ -836,7 +843,7 @@ static uint32_t CalcNumSIIterators ( const CSphFilterSettings & tFilter, int64_t
 	if ( !ToColumnarFilter ( tColumnarFilter, tFilter, tCtx.m_tQuery.m_eCollation, tCtx.m_tIndexSchema, sWarning ) )
 		return 0;
 
-	return tCtx.m_pSI->GetNumIterators(tColumnarFilter);
+	return tCtx.m_tSI.GetNumIterators(tColumnarFilter);
 }
 
 
@@ -854,14 +861,14 @@ static void CheckHint ( const IndexHint_t & tHint, const CSphFilterSettings & tF
 {
 	CSphString sWarning;
 	const auto * pAttr = tCtx.m_tIndexSchema.GetAttr ( tHint.m_sIndex.cstr() );
-	if ( !pAttr )
+	if ( !pAttr && !sphJsonNameSplit ( tHint.m_sIndex.cstr() ) )
 	{
 		sWarning.SetSprintf ( "hint error: '%s' attribute not found", tHint.m_sIndex.cstr() );
 		dWarnings.Add (sWarning);
 		return;
 	}
 
-	if ( !tSIInfo.m_bHasHistograms )
+	if ( !tSIInfo.m_bHasHistograms && !tSIInfo.m_bUsable )
 	{
 		sWarning.SetSprintf ( "hint error: histogram not found for attribute '%s'", tHint.m_sIndex.cstr() );
 		dWarnings.Add (sWarning);
@@ -910,9 +917,9 @@ static void CheckHint ( const IndexHint_t & tHint, const CSphFilterSettings & tF
 				dWarnings.Add ( "hint error: secondary library not loaded" );
 			else if ( GetSecondaryIndexDefault()==SIDefault_e::DISABLED )
 				dWarnings.Add ( "hint error: secondary indexes are disabled" );
-			else if ( !tCtx.m_pSI )
+			else if ( tCtx.m_tSI.IsEmpty() )
 				dWarnings.Add ( "hint error: table has no secondary indexes" );
-			else if ( !tCtx.m_pSI->IsEnabled ( tHint.m_sIndex.cstr() ) )
+			else if ( !tCtx.m_tSI.IsEnabled ( tHint.m_sIndex ) )
 			{
 				sWarning.SetSprintf ( "hint error: secondary index disabled for '%s' (attribute was updated?)", tHint.m_sIndex.cstr() );
 				dWarnings.Add(sWarning);
@@ -1052,14 +1059,6 @@ CSphVector<SecondaryIndexInfo_t> SelectIterators ( const SelectIteratorCtx_t & t
 }
 
 
-bool HaveAvailableSI ( const SelectIteratorCtx_t & tCtx )
-{
-	CSphVector<SecondaryIndexInfo_t> dSIInfo ( tCtx.m_dFilters.GetLength() );
-	MarkAvailableSI ( dSIInfo, tCtx, false );
-	return dSIInfo.any_of ( []( auto & tInfo ){ return tInfo.m_dCapabilities.any_of ( []( auto eType ){ return eType==SecondaryIndexType_e::INDEX; } ); } );
-}
-
-
 const CSphFilterSettings * GetRowIdFilter ( const CSphVector<CSphFilterSettings> & dFilters, RowID_t uTotalDocs, RowIdBoundaries_t & tRowidBounds )
 {
 	const CSphFilterSettings * pRowIdFilter = nullptr;
@@ -1099,151 +1098,30 @@ RowidIterator_i * CreateIteratorWrapper ( common::BlockIterator_i * pIterator, c
 class RowidEmptyIterator_c : public RowidIterator_i
 {
 public:
-			RowidEmptyIterator_c () = default;
+			RowidEmptyIterator_c ( const CSphString & sAttr ) : m_sAttr ( sAttr ){}
 
 	bool	HintRowID ( RowID_t tRowID ) override { return false; }
 	bool	GetNextRowIdBlock ( RowIdBlock_t & dRowIdBlock ) override { return false; }
 	int64_t	GetNumProcessed() const override { return 0; }
 	void	SetCutoff ( int iCutoff ) override {}
 	bool	WasCutoffHit() const override { return false; }
-	void	AddDesc ( CSphVector<IteratorDesc_t> & dDesc ) const override {}
-};
-
-static const int CIDX_ROWS = 512;
-
-class RowidIteratorNot_c : public RowidIterator_i
-{
-public:
-			RowidIteratorNot_c ( RowidIterator_i * pIterator, RowID_t uRowsCount );
-
-	bool	HintRowID ( RowID_t tRowID ) override { return m_pExcludedIt->HintRowID ( tRowID ); }
-	bool	GetNextRowIdBlock ( RowIdBlock_t & dRowIdBlock ) override ;
-	int64_t	GetNumProcessed() const override { return m_pExcludedIt->GetNumProcessed(); }
-	void	SetCutoff ( int iCutoff ) override {}		// fixme! implement cutoff
-	bool	WasCutoffHit() const override { return false; }
-	void	AddDesc ( CSphVector<IteratorDesc_t> & dDesc ) const override { m_pExcludedIt->AddDesc(dDesc); }
+	void	AddDesc ( CSphVector<IteratorDesc_t> & dDesc ) const override { dDesc.Add ( { m_sAttr, "SecondaryIndex" } ); }
 
 private:
-	RowID_t		m_uRowsCount { 0 };
-	RowID_t		m_uCurRow { 0 };
-	bool		m_bStopped = false;
-	bool		m_bPass = false;
-
-	bool		m_bExcludedStarted = false;
-	bool		m_bExcludedStopped = false;
-	int			m_iExcludedCur = 0;
-	RowIdBlock_t m_dExcludedRows;
-	std::unique_ptr<RowidIterator_i> m_pExcludedIt;
-
-	CSphVector<RowID_t> m_dRows;
-
-	void CopyTail ();
+	CSphString m_sAttr;
 };
-
-
-RowidIteratorNot_c::RowidIteratorNot_c ( RowidIterator_i * pIterator, RowID_t uRowsCount )
-	: m_uRowsCount ( uRowsCount )
-	, m_pExcludedIt ( pIterator )
-{
-	m_dRows.Reserve ( CIDX_ROWS );
-}
-
-
-void RowidIteratorNot_c::CopyTail()
-{
-	int iCount = Min ( m_uRowsCount-m_uCurRow, CIDX_ROWS-m_dRows.GetLength() );
-	RowID_t * pRow = m_dRows.AddN ( iCount );
-
-	while ( iCount>0 )
-	{
-		*pRow++ = m_uCurRow++;
-		iCount--;
-	}
-}
-
-bool RowidIteratorNot_c::GetNextRowIdBlock ( RowIdBlock_t & dRowIdBlock )
-{
-	if ( m_bStopped )
-		return false;
-
-	m_dRows.Resize ( 0 );
-
-	if ( !m_bPass )
-	{
-		// warmup
-		if ( !m_bExcludedStarted )
-		{
-			m_bExcludedStopped = !m_pExcludedIt->GetNextRowIdBlock ( m_dExcludedRows );
-			m_bExcludedStarted = true;
-			m_iExcludedCur = 0;
-		}
-
-		for ( ; m_uCurRow<m_uRowsCount && m_dRows.GetLength()<CIDX_ROWS; )
-		{
-			// cases if filter values is over
-			if ( m_iExcludedCur>=m_dExcludedRows.GetLength() || m_bExcludedStopped )
-			{
-				// fetch more values
-				if ( !m_bExcludedStopped )
-				{
-					m_bExcludedStopped = !m_pExcludedIt->GetNextRowIdBlock ( m_dExcludedRows );
-					m_iExcludedCur = 0;
-				}
-
-				// copy tail rows
-				if ( m_bExcludedStopped )
-				{
-					m_bPass = true;
-					break;
-				}
-			}
-
-			assert ( m_dExcludedRows.GetLength() && m_iExcludedCur<m_dExcludedRows.GetLength() );
-			RowID_t uNotRowid = m_dExcludedRows[m_iExcludedCur];
-
-			// copy accepted with filter by excluded
-			while ( m_uCurRow<uNotRowid && m_uCurRow<m_uRowsCount && m_dRows.GetLength()<CIDX_ROWS )
-					m_dRows.Add ( m_uCurRow++ );
-
-			// result vector full
-			if ( m_uCurRow>=m_uRowsCount || m_dRows.GetLength()==CIDX_ROWS )
-				break;
-
-			// skip rejected till min accepted
-			while ( m_iExcludedCur<m_dExcludedRows.GetLength() && m_dExcludedRows[m_iExcludedCur]<m_uCurRow )
-				m_iExcludedCur++;
-
-			// skip both while matched
-			while ( m_iExcludedCur<m_dExcludedRows.GetLength() && m_uCurRow<m_uRowsCount && m_dExcludedRows[m_iExcludedCur]==m_uCurRow )
-			{
-				m_iExcludedCur++;
-				m_uCurRow++;
-			}
-		}
-	}
-
-	if ( m_bPass )
-		CopyTail();
-
-	dRowIdBlock = m_dRows;
-
-	if ( !m_dRows.GetLength() || m_uCurRow==m_uRowsCount )
-		m_bStopped = true;
-
-	return ( m_dRows.GetLength() );
-}
 
 /////////////////////////////////////////////////////////////////////
 
 class SIIteratorCreator_c
 {
 public:
-						SIIteratorCreator_c ( const SI::Index_i * pSIIndex, CSphVector<SecondaryIndexInfo_t> & dSIInfo, const CSphVector<CSphFilterSettings> & dFilters, ESphCollation eCollation, const ISphSchema & tSchema, RowID_t uRowsCount, int iCutoff );
+						SIIteratorCreator_c ( const SIContainer_c & tSI, CSphVector<SecondaryIndexInfo_t> & dSIInfo, const CSphVector<CSphFilterSettings> & dFilters, ESphCollation eCollation, const ISphSchema & tSchema, RowID_t uRowsCount, int iCutoff );
 
 	RowIteratorsWithEstimates_t Create();
 
 private:
-	const SI::Index_i *						m_pSIIndex = nullptr;
+	const SIContainer_c &					m_tSI;
 	CSphVector<SecondaryIndexInfo_t> &		m_dSIInfo;
 	const CSphVector<CSphFilterSettings> &	m_dFilters;
 	ESphCollation							m_eCollation;
@@ -1259,8 +1137,8 @@ private:
 };
 
 
-SIIteratorCreator_c::SIIteratorCreator_c ( const SI::Index_i * pSIIndex, CSphVector<SecondaryIndexInfo_t> & dSIInfo, const CSphVector<CSphFilterSettings> & dFilters, ESphCollation eCollation, const ISphSchema & tSchema, RowID_t uRowsCount, int iCutoff )
-	: m_pSIIndex ( pSIIndex )
+SIIteratorCreator_c::SIIteratorCreator_c ( const SIContainer_c & tSI, CSphVector<SecondaryIndexInfo_t> & dSIInfo, const CSphVector<CSphFilterSettings> & dFilters, ESphCollation eCollation, const ISphSchema & tSchema, RowID_t uRowsCount, int iCutoff )
+	: m_tSI ( tSI )
 	, m_dSIInfo ( dSIInfo )
 	, m_dFilters ( dFilters )
 	, m_eCollation ( eCollation )
@@ -1281,26 +1159,26 @@ bool SIIteratorCreator_c::CreateSIIterators ( std::vector<common::BlockIterator_
 	bool bCreated = false;
 	common::Filter_t tColumnarFilter;
 	CSphString sWarning;
-	std::string sError;
+	CSphString sError;
 	if ( ToColumnarFilter ( tColumnarFilter, tFilter, m_eCollation, m_tSchema, sWarning ) )
-		bCreated = m_pSIIndex->CreateIterators ( dFilterIt, tColumnarFilter, m_pRowIdFilter ? &tRange : nullptr, m_uRowsCount, iRsetSize, m_iCutoff, sError );
+		bCreated = m_tSI.CreateIterators ( dFilterIt, tColumnarFilter, m_pRowIdFilter ? &tRange : nullptr, m_uRowsCount, iRsetSize, m_iCutoff, sError );
 	else
 		sphWarning ( "secondary index %s: %s", tFilter.m_sAttrName.cstr(), sWarning.cstr() );
 
 	if ( !bCreated )
 	{
 		// FIXME!!! return as query warning
-		sphWarning ( "%s", sError.c_str() );
+		sphWarning ( "%s", sError.cstr() );
 		for ( auto * pIt : dFilterIt ) { SafeDelete ( pIt ); }
 		dFilterIt.resize ( 0 );
 		return false;
 	}
 
-	if ( !sError.empty() )
+	if ( !sError.IsEmpty() )
 	{
 		// FIXME!!! return as query warning
-		sphWarning ( "secondary index %s:%s", tFilter.m_sAttrName.cstr(), sError.c_str() );
-		sError.clear();
+		sphWarning ( "secondary index %s:%s", tFilter.m_sAttrName.cstr(), sError.cstr() );
+		sError = "";
 	}
 
 	return true;
@@ -1311,7 +1189,7 @@ RowidIterator_i * SIIteratorCreator_c::CreateRowIdIteratorFromSI ( std::vector<c
 {
 	RowidIterator_i * pIt = nullptr;
 	if ( !dFilterIt.size() )
-		pIt = new RowidEmptyIterator_c();
+		pIt = new RowidEmptyIterator_c ( tFilter.m_sAttrName );
 	else if ( dFilterIt.size()==1 )
 	{
 		if ( m_pRowIdFilter )
@@ -1326,9 +1204,6 @@ RowidIterator_i * SIIteratorCreator_c::CreateRowIdIteratorFromSI ( std::vector<c
 		else
 			pIt = new RowidIterator_Union_T<common::BlockIterator_i,false> ( &dFilterIt[0], (int)dFilterIt.size() );
 	}
-
-	if ( tFilter.m_bExclude )
-		pIt = new RowidIteratorNot_c ( pIt, m_uRowsCount );
 
 	return pIt;
 }
@@ -1358,21 +1233,128 @@ RowIteratorsWithEstimates_t SIIteratorCreator_c::Create()
 	return dRes;
 }
 
+/////////////////////////////////////////////////////////////////////
 
-RowIteratorsWithEstimates_t CreateSecondaryIndexIterator ( const SI::Index_i * pSIIndex, CSphVector<SecondaryIndexInfo_t> & dSIInfo, const CSphVector<CSphFilterSettings> & dFilters, ESphCollation eCollation, const ISphSchema & tSchema, RowID_t uRowsCount, int iCutoff )
+bool SIContainer_c::Load ( const CSphString & sFile, CSphString & sError )
 {
-	if ( !pSIIndex )
-		return {};
+	SI::Index_i * pIndex = CreateSecondaryIndex ( sFile.cstr(), sError );
+	if ( !pIndex )
+		return false;
 
+	m_dIndexes.Add ( { std::unique_ptr<SI::Index_i>(pIndex), sFile } );
+	return true;
+}
+
+
+bool SIContainer_c::Drop ( const CSphString & sFile, CSphString & sError )
+{
+	ARRAY_FOREACH ( i, m_dIndexes )
+		if ( m_dIndexes[i].m_sFile==sFile )
+		{
+			m_dIndexes.Remove(i);
+			return true;
+		}
+
+	sError.SetSprintf ( "secondary index file '%s' not loaded", sFile.cstr() );
+	return false;
+}
+
+
+void SIContainer_c::ColumnUpdated ( const CSphString & sAttr )
+{
+	for ( auto & i : m_dIndexes )
+		if ( i.m_pIndex->IsEnabled ( sAttr.cstr() ) )
+			i.m_pIndex->ColumnUpdated ( sAttr.cstr() );
+}
+
+
+bool SIContainer_c::SaveMeta ( CSphString & sError ) const
+{
+	std::string sTmpError;
+	for ( auto & i : m_dIndexes )
+		if ( !i.m_pIndex->SaveMeta ( sTmpError ) )
+		{
+			sError = sTmpError.c_str();
+			return false;
+		}
+
+	return true;
+}
+
+
+bool SIContainer_c::CreateIterators ( std::vector<common::BlockIterator_i *> & dIterators, const common::Filter_t & tFilter, const common::RowidRange_t * pBounds, uint32_t uMaxValues, int64_t iRsetSize, int iCutoff, CSphString & sError ) const
+{
+	for ( auto & i : m_dIndexes )
+		if ( i.m_pIndex->IsEnabled ( tFilter.m_sName ) )
+		{
+			std::string sErrorSTL;
+			bool bOk = i.m_pIndex->CreateIterators ( dIterators, tFilter, pBounds, uMaxValues, iRsetSize, iCutoff, sErrorSTL );
+			sError = sErrorSTL.c_str();
+			return bOk;
+		}
+
+	return false;
+}
+
+
+int64_t	SIContainer_c::GetCountDistinct ( const CSphString & sAttr ) const
+{
+	std::string sAttrSTL = sAttr.cstr();
+	for ( auto & i : m_dIndexes )
+		if ( i.m_pIndex->IsEnabled(sAttrSTL) )
+			return i.m_pIndex->GetCountDistinct(sAttrSTL);
+
+	return -1;
+}
+
+
+bool SIContainer_c::CalcCount ( uint32_t & uCount, const common::Filter_t & tFilter, uint32_t uMaxValues, CSphString & sError ) const
+{
+	for ( auto & i : m_dIndexes )
+		if ( i.m_pIndex->IsEnabled ( tFilter.m_sName ) )
+		{
+			std::string sErrorSTL;
+			bool bOk = i.m_pIndex->CalcCount ( uCount, tFilter, uMaxValues, sErrorSTL );
+			sError = sErrorSTL.c_str();
+			return bOk;
+		}
+
+	return false;
+}
+
+
+uint32_t SIContainer_c::GetNumIterators ( const common::Filter_t & tFilter ) const
+{
+	for ( auto & i : m_dIndexes )
+		if ( i.m_pIndex->IsEnabled ( tFilter.m_sName ) )
+			return i.m_pIndex->GetNumIterators(tFilter);
+
+	return 0;
+}
+
+
+bool SIContainer_c::IsEnabled ( const CSphString & sAttr ) const
+{
+	for ( auto & i : m_dIndexes )
+		if ( i.m_pIndex->IsEnabled ( sAttr.cstr() ) )
+			return true;
+
+	return false;
+}
+
+
+RowIteratorsWithEstimates_t SIContainer_c::CreateSecondaryIndexIterator ( CSphVector<SecondaryIndexInfo_t> & dSIInfo, const CSphVector<CSphFilterSettings> & dFilters, ESphCollation eCollation, const ISphSchema & tSchema, RowID_t uRowsCount, int iCutoff ) const
+{
 	// don't use cutoff if we have more than one instance of SecondaryIndex/ColumnarScan
 	int iNumIterators = dSIInfo.count_of ( []( auto & tSI ){ return tSI.m_eType==SecondaryIndexType_e::INDEX || tSI.m_eType==SecondaryIndexType_e::ANALYZER; } );
 	if ( iNumIterators > 1 )
 		iCutoff = -1;
 
-	SIIteratorCreator_c tCreator ( pSIIndex, dSIInfo, dFilters, eCollation, tSchema, uRowsCount, iCutoff );
+	SIIteratorCreator_c tCreator ( *this, dSIInfo, dFilters, eCollation, tSchema, uRowsCount, iCutoff );
 	return tCreator.Create();
 }
 
+/////////////////////////////////////////////////////////////////////
 
 static void ConvertSchema ( const CSphSchema & tSchema, common::Schema_t & tSISchema, CSphBitvec & tSIAttrs )
 {
@@ -1416,7 +1398,7 @@ static void GetAttrsProxy ( const ISphSchema & tSchema, common::Schema_t & tSISc
 }
 
 
-std::unique_ptr<SI::Builder_i> CreateIndexBuilder ( int iMemoryLimit, const CSphSchema & tSchema, CSphBitvec & tSIAttrs, const CSphString & sFile, int iBufferSize, CSphString & sError )
+std::unique_ptr<SI::Builder_i> CreateIndexBuilder ( int64_t iMemoryLimit, const CSphSchema & tSchema, CSphBitvec & tSIAttrs, const CSphString & sFile, int iBufferSize, CSphString & sError )
 {
 	common::Schema_t tSISchema;
 	ConvertSchema ( tSchema, tSISchema, tSIAttrs );
@@ -1424,7 +1406,7 @@ std::unique_ptr<SI::Builder_i> CreateIndexBuilder ( int iMemoryLimit, const CSph
 }
 
 
-std::unique_ptr<SI::Builder_i> CreateIndexBuilder ( int iMemoryLimit, const CSphSchema & tSchema, const CSphString & sFile, CSphVector<PlainOrColumnar_t> & dAttrs, int iBufferSize, CSphString & sError )
+std::unique_ptr<SI::Builder_i> CreateIndexBuilder ( int64_t iMemoryLimit, const CSphSchema & tSchema, const CSphString & sFile, CSphVector<PlainOrColumnar_t> & dAttrs, int iBufferSize, CSphString & sError )
 {
 	common::Schema_t tSISchema;
 	CSphBitvec tSIAttrs ( tSchema.GetAttrsCount() );

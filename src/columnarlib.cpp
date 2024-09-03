@@ -128,7 +128,7 @@ bool InitColumnar ( CSphString & sError )
 {
 	assert ( !g_pColumnarLib );
 
-	CSphString sLibfile = TryDifferentPaths ( LIB_MANTICORE_COLUMNAR, GetColumnarFullpath() );
+	CSphString sLibfile = TryDifferentPaths ( LIB_MANTICORE_COLUMNAR, GetColumnarFullpath(), columnar::LIB_VERSION );
 	if ( sLibfile.IsEmpty() )
 		return true;
 

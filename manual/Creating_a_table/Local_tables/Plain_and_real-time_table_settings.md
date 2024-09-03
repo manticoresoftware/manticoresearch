@@ -204,6 +204,92 @@ In contrast, the latter (string attribute):
 * is stored in an uncompressed format
 * can be used for sorting, grouping, filtering, and any other actions you want to take with attributes.
 
+#### json_secondary_indexes
+
+```ini
+json_secondary_indexes = json_attr
+```
+
+<!-- example json_secondary_indexes -->
+
+By default, secondary indexes are generated for all attributes except JSON attributes. However, secondary indexes for JSON attributes can be explicitly generated using the `json_secondary_indexes` setting. When a JSON attribute is included in this option, its contents are flattened into multiple secondary indexes. These indexes can be used by the query optimizer to speed up queries.
+
+Value: A comma-separated list of JSON attributes for which secondary indexes should be generated.
+
+<!-- intro -->
+##### SQL:
+
+<!-- request SQL -->
+
+```sql
+CREATE TABLE products(title text, j json secondary_index='1')
+```
+
+<!-- request JSON -->
+
+```JSON
+POST /cli -d "
+CREATE TABLE products(title text, j json secondary_index='1')"
+```
+
+<!-- request PHP -->
+
+```php
+$params = [
+    'body' => [
+        'columns' => [
+            'title'=>['type'=>'text'],
+            'j'=>['type'=>'json', 'options' => ['secondary_index' => 1]]
+        ]
+    ],
+    'index' => 'products'
+];
+$index = new \Manticoresearch\Index($client);
+$index->create($params);
+```
+<!-- intro -->
+##### Python:
+<!-- request Python -->
+```python
+utilsApi.sql('CREATE TABLE products(title text, j json secondary_index='1')')
+```
+
+<!-- intro -->
+##### Javascript:
+
+<!-- request Javascript -->
+```javascript
+res = await utilsApi.sql('CREATE TABLE products(title text, j json secondary_index=\'1\')');
+```
+
+<!-- intro -->
+##### Java:
+<!-- request Java -->
+```java
+utilsApi.sql("CREATE TABLE products(title text, j json secondary_index='1')");
+```
+
+<!-- intro -->
+##### C#:
+<!-- request C# -->
+```clike
+utilsApi.Sql("CREATE TABLE products(title text, j json secondary_index='1')");
+```
+
+<!-- request CONFIG -->
+
+```ini
+table products {
+  json_secondary_indexes = j
+
+  type = rt
+  path = tbl
+  rt_field = title
+  rt_attr_json = j
+}
+```
+<!-- end -->
+
 ### Real-time table settings:
 
 #### optimize_cutoff
@@ -354,8 +440,8 @@ In the plain mode, you can change the values of `rt_mem_limit` and `optimize_cut
 * Each RAM chunk is made up of multiple segments, which are special RAM-only tables.
 * While disk chunks are stored on disk, RAM chunks are stored in memory.
 * Each transaction made to a real-time table generates a new segment, and RAM chunk segments are merged after each transaction commit. It is more efficient to perform bulk INSERTs of hundreds or thousands of documents rather than multiple separate INSERTs with one document to reduce the overhead from merging RAM chunk segments.
-* When the number of segments exceeds 32, they will be merged to keep the count below 32. 
-* Real-time tables always have one RAM chunk (which may be empty) and one or more disk chunks. 
+* When the number of segments exceeds 32, they will be merged to keep the count below 32.
+* Real-time tables always have one RAM chunk (which may be empty) and one or more disk chunks.
 * Merging larger segments takes longer, so it's best to avoid having a very large RAM chunk (and therefore `rt_mem_limit`).
 * The number of disk chunks depends on the data in the table and the `rt_mem_limit` setting.
 * Searchd flushes the RAM chunk to disk (as a persisted file, not as a disk chunk) on shutdown and periodically according to the [rt_flush_period](../../Server_settings/Searchd.md#rt_flush_period) setting. Flushing several gigabytes to disk may take some time.
@@ -672,7 +758,7 @@ table products {
 inplace_reloc_factor = 0.1
 ```
 
-The inplace_reloc_factor setting determines the size of the relocation buffer within the memory arena used during indexing. The default value is 0.1. 
+The inplace_reloc_factor setting determines the size of the relocation buffer within the memory arena used during indexing. The default value is 0.1.
 
 This option is optional and only affects the [indexer](../../Data_creation_and_modification/Adding_data_from_external_storages/Plain_tables_creation.md#Indexer-tool) tool, not the [searchd](../../Starting_the_server/Manually.md)  server.
 

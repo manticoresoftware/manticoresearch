@@ -23,7 +23,7 @@ variables:
   needs: [ ]
   tags:
     - docker
-  image: manticoresearch/external_toolchain:clang15_cmake3263
+  image: manticoresearch/external_toolchain:clang16_cmake3263
   variables:
     CACHEB: "../cache"
     arch: x86_64
@@ -121,7 +121,9 @@ windows:
   extends: [ .build ]
   variables:
     arch: x64
-    sysroot: roots_apr12
+    # use roots_mysql83_jul29 for another (non-gitlab) builds
+    sysroot: roots_jul29
+    boost: boost80_zstd_zlib
     DISTR: windows
 
 # windows build with native clang flavour

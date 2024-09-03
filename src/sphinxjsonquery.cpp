@@ -25,13 +25,22 @@ static const char * g_szAll = "_all";
 static const char * g_szHighlight = "_@highlight_";
 static const char * g_szOrder = "_@order_";
 
+class QueryTreeBuilder_c;
+struct ErrorPathGuard_t
+{
+	ErrorPathGuard_t ( QueryTreeBuilder_c & tBuilder, bool bEnabled, const JsonObj_c & tPath );
+	~ErrorPathGuard_t ();
+
+	QueryTreeBuilder_c & m_tBuilder;
+	const bool m_bEnabled;
+};
 
 class QueryTreeBuilder_c : public XQParseHelper_c
 {
 public:
 					QueryTreeBuilder_c ( const CSphQuery * pQuery, TokenizerRefPtr_c pQueryTokenizerQL, const CSphIndexSettings & tSettings );
 
-	void			CollectKeywords ( const char * szStr, XQNode_t * pNode, const XQLimitSpec_t & tLimitSpec );
+	void			CollectKeywords ( const char * szStr, XQNode_t * pNode, const XQLimitSpec_t & tLimitSpec, float fBoost );
 
 	bool			HandleFieldBlockStart ( const char * & /*pPtr*/ ) override { return true; }
 	bool			HandleSpecialFields ( const char * & pPtr, FieldMask_t & dFields ) override;
@@ -47,12 +56,20 @@ public:
 	bool m_bHasFilter = false;
 	void ResetNodesFlags() { m_bHasFulltext = m_bHasFilter = false; } 
 
+	QueryTreeBuilder_c CreateCollectPath ( const CSphSchema * pSchema );
+	void ErrorPrintPath ( QueryTreeBuilder_c & tOrig );
+	ErrorPathGuard_t ErrorAddPath ( const JsonObj_c & tPath );
+
 private:
 	const CSphQuery *			m_pQuery {nullptr};
 	const TokenizerRefPtr_c		m_pQueryTokenizerQL;
 	const CSphIndexSettings &	m_tSettings;
 
-	XQNode_t *		AddChildKeyword ( XQNode_t * pParent, const char * szKeyword, int iSkippedPosBeforeToken, const XQLimitSpec_t & tLimitSpec );
+	XQNode_t *		AddChildKeyword ( XQNode_t * pParent, const char * szKeyword, int iSkippedPosBeforeToken, const XQLimitSpec_t & tLimitSpec, float fBoost );
+
+	friend ErrorPathGuard_t;
+	CSphVector< std::pair<CSphString, const void *> > m_dErrorPath;
+	bool m_bErrorCollectPath = false;
 };
 
 
@@ -63,7 +80,7 @@ QueryTreeBuilder_c::QueryTreeBuilder_c ( const CSphQuery * pQuery, TokenizerRefP
 {}
 
 
-void QueryTreeBuilder_c::CollectKeywords ( const char * szStr, XQNode_t * pNode, const XQLimitSpec_t & tLimitSpec )
+void QueryTreeBuilder_c::CollectKeywords ( const char * szStr, XQNode_t * pNode, const XQLimitSpec_t & tLimitSpec, float fBoost )
 {
 	m_pTokenizer->SetBuffer ( (const BYTE*)szStr, (int) strlen ( szStr ) );
 
@@ -82,7 +99,7 @@ void QueryTreeBuilder_c::CollectKeywords ( const char * szStr, XQNode_t * pNode,
 		const char * sToken = (const char *) m_pTokenizer->GetToken ();
 		if ( !sToken )
 		{
-			AddChildKeyword ( pNode, nullptr, iSkippedPosBeforeToken, tLimitSpec );
+			AddChildKeyword ( pNode, nullptr, iSkippedPosBeforeToken, tLimitSpec, fBoost );
 			break;
 		}
 
@@ -139,7 +156,7 @@ void QueryTreeBuilder_c::CollectKeywords ( const char * szStr, XQNode_t * pNode,
 			m_dMultiforms.Last().m_iDestCount++;
 			m_dDestForms.Add ( sToken );
 		} else
-			pChildNode = AddChildKeyword ( pNode, sToken, iSkippedPosBeforeToken, tLimitSpec );
+			pChildNode = AddChildKeyword ( pNode, sToken, iSkippedPosBeforeToken, tLimitSpec, fBoost );
 
 		if ( bMultiDestHead )
 		{
@@ -177,10 +194,11 @@ XQNode_t * QueryTreeBuilder_c::CreateNode ( XQLimitSpec_t & tLimitSpec )
 }
 
 
-XQNode_t * QueryTreeBuilder_c::AddChildKeyword ( XQNode_t * pParent, const char * szKeyword, int iSkippedPosBeforeToken, const XQLimitSpec_t & tLimitSpec )
+XQNode_t * QueryTreeBuilder_c::AddChildKeyword ( XQNode_t * pParent, const char * szKeyword, int iSkippedPosBeforeToken, const XQLimitSpec_t & tLimitSpec, float fBoost )
 {
 	XQKeyword_t tKeyword ( szKeyword, m_iAtomPos );
 	tKeyword.m_iSkippedBefore = iSkippedPosBeforeToken;
+	tKeyword.m_fBoost = fBoost;
 	auto * pNode = new XQNode_t ( tLimitSpec );
 	pNode->m_pParent = pParent;
 	pNode->m_dWords.Add ( tKeyword );
@@ -189,6 +207,61 @@ XQNode_t * QueryTreeBuilder_c::AddChildKeyword ( XQNode_t * pParent, const char 
 
 	return pNode;
 }
+
+ErrorPathGuard_t QueryTreeBuilder_c::ErrorAddPath ( const JsonObj_c & tPath )
+{
+	return ErrorPathGuard_t ( *this, m_bErrorCollectPath, tPath );
+}
+
+void QueryTreeBuilder_c::ErrorPrintPath ( QueryTreeBuilder_c & tOrig )
+{
+	assert ( IsError() );
+
+	StringBuilder_c tBuilder;
+	tBuilder.Appendf ( "%s at '", tOrig.m_pParsed->m_sParseError.cstr() );
+
+	const void * pLast = nullptr;
+	for ( const auto & tEntry : m_dErrorPath )
+	{
+		// skip duplicates
+		if ( !tEntry.second || pLast!=tEntry.second )
+			tBuilder.Appendf ( "/%s", tEntry.first.scstr() );
+
+		pLast = tEntry.second;
+	}
+
+	tBuilder << "'";
+
+	tOrig.m_pParsed->m_sParseError = (CSphString)tBuilder;
+}
+
+QueryTreeBuilder_c QueryTreeBuilder_c::CreateCollectPath ( const CSphSchema * pSchema )
+{
+	QueryTreeBuilder_c tOther ( m_pQuery, std::move ( m_pQueryTokenizerQL ), m_tSettings );
+	tOther.Setup ( pSchema, m_pTokenizer->Clone ( SPH_CLONE ), std::move ( m_pDict ), m_pParsed, m_tSettings );
+
+	tOther.m_bErrorCollectPath = true;
+	tOther.m_dErrorPath.Add ( { "query", nullptr } );
+
+	return tOther;
+}
+
+
+ErrorPathGuard_t::ErrorPathGuard_t ( QueryTreeBuilder_c & tBuilder, bool bEnabled, const JsonObj_c & tPath )
+	: m_tBuilder ( tBuilder )
+	, m_bEnabled ( bEnabled )
+{
+	// add path entry only in the collect pass and only prior to error point
+	if ( m_bEnabled && !m_tBuilder.IsError() )
+		m_tBuilder.m_dErrorPath.Add ( { tPath.Name(), tPath.GetRoot() } );
+}
+
+ErrorPathGuard_t::~ErrorPathGuard_t ()
+{
+	if ( m_bEnabled && !m_tBuilder.IsError() )
+		m_tBuilder.m_dErrorPath.Pop();
+}
+
 
 //////////////////////////////////////////////////////////////////////////
 
@@ -275,6 +348,18 @@ bool CheckRootNode ( const JsonObj_c & tRoot, CSphString & sError )
 	return true;
 }
 
+static JsonObj_c FindFullTextQueryNode ( const JsonObj_c & tRoot )
+{
+	for ( JsonObj_c tChild : tRoot )
+	{
+		if ( !IsFilter ( tChild ) )
+			return tChild;
+	}
+
+	return tRoot[0];
+}
+
+
 bool QueryParserJson_c::ParseQuery ( XQQuery_t & tParsed, const char * szQuery, const CSphQuery * pQuery, TokenizerRefPtr_c pQueryTokenizerQL, TokenizerRefPtr_c pQueryTokenizerJson, const CSphSchema * pSchema, const DictRefPtr_c & pDict, const CSphIndexSettings & tSettings, const CSphBitvec * pMorphFields ) const
 {
 	JsonObj_c tRoot ( szQuery );
@@ -295,10 +380,17 @@ bool QueryParserJson_c::ParseQuery ( XQQuery_t & tParsed, const char * szQuery, 
 	QueryTreeBuilder_c tBuilder ( pQuery, std::move ( pQueryTokenizerQL ), tSettings );
 	tBuilder.Setup ( pSchema, pQueryTokenizerJson->Clone ( SPH_CLONE ), pMyDict, &tParsed, tSettings );
 
-	XQNode_t * pRoot = ConstructNode ( tRoot[0], tBuilder );
+	const JsonObj_c tFtNode = FindFullTextQueryNode ( tRoot );
+	XQNode_t * pRoot = ConstructNode ( tFtNode, tBuilder );
 	if ( tBuilder.IsError() )
 	{
 		tBuilder.Cleanup();
+
+		QueryTreeBuilder_c tErrorBuilder { tBuilder.CreateCollectPath ( pSchema ) };
+		ConstructNode ( tFtNode, tErrorBuilder );
+		tErrorBuilder.Cleanup();
+		tErrorBuilder.ErrorPrintPath ( tBuilder );
+
 		return false;
 	}
 
@@ -354,8 +446,22 @@ bool IsBoolNode ( const CSphString & sName )
 	return ( sName=="bool" );
 }
 
+static float GetBoost ( const JsonObj_c & tFields )
+{
+	const float fBoostDefault = 1.0f;
+	if ( !tFields.IsObj() )
+		return fBoostDefault;
+
+ 	JsonObj_c tBoost = tFields.GetItem ( "boost" );
+	if ( !tBoost || !tBoost.IsNum() )
+		return fBoostDefault;
+	
+	return tBoost.FltVal();
+}
+
 XQNode_t * QueryParserJson_c::ConstructMatchNode ( const JsonObj_c & tJson, bool bPhrase, bool bTerms, bool bSingleTerm, QueryTreeBuilder_c & tBuilder ) const
 {
+	ErrorPathGuard_t tGuard = tBuilder.ErrorAddPath ( tJson );
 	if ( !tJson.IsObj() )
 	{
 		tBuilder.Error ( "\"match\" value should be an object" );
@@ -451,7 +557,8 @@ XQNode_t * QueryParserJson_c::ConstructMatchNode ( const JsonObj_c & tJson, bool
 
 	XQNode_t * pNewNode = tBuilder.CreateNode ( tLimitSpec );
 	pNewNode->SetOp ( eNodeOp );
-	tBuilder.CollectKeywords ( szQuery, pNewNode, tLimitSpec );
+	float fBoost = GetBoost ( tFields );
+	tBuilder.CollectKeywords ( szQuery, pNewNode, tLimitSpec, fBoost );
 
 	return pNewNode;
 }
@@ -474,7 +581,6 @@ bool QueryParserJson_c::ConstructNodeOrFilter ( const JsonObj_c & tItem, CSphVec
 		return IsBoolNode ( tItem ); // need walk down the tree for compart mode
 
 	dNodes.Add ( pNode );
-	tBuilder.m_bHasFulltext = true;
 
 	return true;
 }
@@ -482,6 +588,7 @@ bool QueryParserJson_c::ConstructNodeOrFilter ( const JsonObj_c & tItem, CSphVec
 
 bool QueryParserJson_c::ConstructBoolNodeItems ( const JsonObj_c & tClause, CSphVector<XQNode_t *> & dItems, QueryTreeBuilder_c & tBuilder ) const
 {
+	ErrorPathGuard_t tGuard = tBuilder.ErrorAddPath ( tClause );
 	if ( tClause.IsArray() )
 	{
 		for ( const auto & tObject : tClause )
@@ -511,6 +618,7 @@ bool QueryParserJson_c::ConstructBoolNodeItems ( const JsonObj_c & tClause, CSph
 
 XQNode_t * QueryParserJson_c::ConstructBoolNode ( const JsonObj_c & tJson, QueryTreeBuilder_c & tBuilder ) const
 {
+	ErrorPathGuard_t tGuard = tBuilder.ErrorAddPath ( tJson );
 	if ( !tJson.IsObj() )
 	{
 		tBuilder.Error ( "\"bool\" value should be an object" );
@@ -521,6 +629,7 @@ XQNode_t * QueryParserJson_c::ConstructBoolNode ( const JsonObj_c & tJson, Query
 
 	for ( const auto & tClause : tJson )
 	{
+		tBuilder.ResetNodesFlags();
 		CSphString sName = tClause.Name();
 		if ( sName=="must" )
 		{
@@ -528,7 +637,6 @@ XQNode_t * QueryParserJson_c::ConstructBoolNode ( const JsonObj_c & tJson, Query
 				return nullptr;
 		} else if ( sName=="should" )
 		{
-			tBuilder.ResetNodesFlags();
 			if ( !ConstructBoolNodeItems ( tClause, dShould, tBuilder ) )
 				return nullptr;
 			if ( tBuilder.m_bHasFilter && tBuilder.m_bHasFulltext )
@@ -685,6 +793,7 @@ XQNode_t * QueryParserJson_c::ConstructBoolNode ( const JsonObj_c & tJson, Query
 
 XQNode_t * QueryParserJson_c::ConstructQLNode ( const JsonObj_c & tJson, QueryTreeBuilder_c & tBuilder ) const
 {
+	ErrorPathGuard_t tGuard = tBuilder.ErrorAddPath ( tJson );
 	if ( !tJson.IsStr() )
 	{
 		tBuilder.Error ( "\"query_string\" value should be an string" );
@@ -760,6 +869,7 @@ bool IsFullText ( const CSphString & sName )
 
 XQNode_t * QueryParserJson_c::ConstructNode ( const JsonObj_c & tJson, QueryTreeBuilder_c & tBuilder ) const
 {
+	ErrorPathGuard_t tGuard = tBuilder.ErrorAddPath ( tJson );
 	CSphString sName = tJson.Name();
 	if ( !tJson || sName.IsEmpty() )
 	{
@@ -772,20 +882,33 @@ XQNode_t * QueryParserJson_c::ConstructNode ( const JsonObj_c & tJson, QueryTree
 	bool bPhrase = IsFtPhrase ( sName );
 	bool bSingleTerm = IsFtTerm ( sName );
 	if ( bMatch || bPhrase || bTerms || bSingleTerm )
+	{
+		tBuilder.m_bHasFulltext = true;
 		return ConstructMatchNode ( tJson, bPhrase, bTerms, bSingleTerm, tBuilder );
+	}
 
 	if ( IsFtMatchAll ( sName ) )
+	{
+		tBuilder.m_bHasFulltext = true;
 		return ConstructMatchAllNode ( tBuilder );
+	}
 
 	if ( IsBoolNode ( sName ) )
 		return ConstructBoolNode ( tJson, tBuilder );
 
 	if ( IsFtQueryString ( sName ) )
+	{
+		tBuilder.m_bHasFulltext = true;
 		return ConstructQLNode ( tJson, tBuilder );
+	}
 
 	if ( IsFtQueryStringSimple ( sName ) && tJson.IsObj() )
+	{
+		tBuilder.m_bHasFulltext = true;
 		return ConstructQLNode ( tJson.GetItem ( "query" ), tBuilder );
+	}
 
+	tBuilder.Error ( "unknown full-text node '%s'", sName.cstr() );
 	return nullptr;
 }
 
@@ -1026,6 +1149,7 @@ static bool ParseKNNQuery ( const JsonObj_c & tJson, CSphQuery & tQuery, CSphStr
 
 	if ( !tJson.FetchStrItem ( tQuery.m_sKNNAttr, "field", sError ) )	return false;
 	if ( !tJson.FetchIntItem ( tQuery.m_iKNNK, "k", sError ) )			return false;
+	if ( !tJson.FetchIntItem ( tQuery.m_iKnnEf, "ef", sError, true ) )		return false;
 
 	JsonObj_c tQueryVec = tJson.GetArrayItem ( "query_vector", sError );
 	if ( !tQueryVec )
@@ -1198,15 +1322,15 @@ static bool ParseJsonInsertSource ( const JsonObj_c & tSource, StrVec_t & dInser
 		dInsertSchema.Last().ToLower();
 
 		SqlInsert_t & tNewValue = dInsertValues.Add();
-		if ( tItem.IsStr() )
+		if ( tItem.IsStr() || tItem.IsNull() )
 		{
-			tNewValue.m_iType = SqlInsert_t::QUOTED_STRING;
+			tNewValue.m_iType = ( tItem.IsStr() ? SqlInsert_t::QUOTED_STRING : SqlInsert_t::TOK_NULL );
 			tNewValue.m_sVal = tItem.StrVal();
 		} else if ( tItem.IsDbl() )
 		{
 			tNewValue.m_iType = SqlInsert_t::CONST_FLOAT;
 			tNewValue.m_fVal = tItem.FltVal();
-		} else if ( tItem.IsInt() || tItem.IsBool() )
+		} else if ( tItem.IsInt() || tItem.IsBool() || tItem.IsUint() )
 		{
 			tNewValue.m_iType = SqlInsert_t::CONST_INT;
 			tNewValue.SetValueInt ( tItem.IntVal() );
@@ -1243,7 +1367,7 @@ static bool ParseJsonInsertSource ( const JsonObj_c & tSource, StrVec_t & dInser
 
 		} else
 		{
-			sError = "unsupported value type";
+			sError.SetSprintf ( "unsupported value type '%s' in field '%s'", tItem.TypeName(), tItem.Name() );
 			return false;
 		}
 	}
@@ -1345,7 +1469,7 @@ bool ParseJsonUpdate ( const JsonObj_c & tRoot, SqlStmt_t & tStmt, DocID_t & tDo
 
 		if ( !bFloat && !bInt && !bBool && !bString && !bArray && !bObject )
 		{
-			sError = "unsupported value type";
+			sError.SetSprintf ( "unsupported value type '%s' in field '%s'", tItem.TypeName(), tItem.Name() );
 			return false;
 		}
 
@@ -1873,7 +1997,7 @@ static const char * GetBucketPrefix ( const AggrKeyTrait_t & tKey, Aggr_e eAggrF
 
 static void PrintKey ( const AggrKeyTrait_t & tKey, Aggr_e eAggrFunc, const RangeKeyDesc_t * pRange, const CSphMatch & tMatch, bool bCompat, JsonEscapedBuilder & tBuf, JsonEscapedBuilder & tOut )
 {
-	if ( eAggrFunc==Aggr_e::RANGE || eAggrFunc==Aggr_e::DATE_RANGE )
+	if ( eAggrFunc==Aggr_e::DATE_RANGE )
 	{
 		if ( !tKey.m_bKeyed )
 			tOut.Sprintf ( R"("key":"%s")", pRange->m_sKey.cstr() );
@@ -1881,6 +2005,15 @@ static void PrintKey ( const AggrKeyTrait_t & tKey, Aggr_e eAggrFunc, const Rang
 			tOut.Sprintf ( R"("from":"%s")", pRange->m_sFrom.cstr() );
 		if ( !pRange->m_sTo.IsEmpty() )
 			tOut.Sprintf ( R"("to":"%s")", pRange->m_sTo.cstr() );
+
+	} else if ( eAggrFunc==Aggr_e::RANGE )
+	{
+		if ( !tKey.m_bKeyed )
+			tOut.Sprintf ( R"("key":"%s")", pRange->m_sKey.cstr() );
+		if ( !pRange->m_sFrom.IsEmpty() )
+			tOut.Sprintf ( R"("from":%s)", pRange->m_sFrom.cstr() );
+		if ( !pRange->m_sTo.IsEmpty() )
+			tOut.Sprintf ( R"("to":%s)", pRange->m_sTo.cstr() );
 
 	} else if ( eAggrFunc==Aggr_e::DATE_HISTOGRAM )
 	{
@@ -1910,7 +2043,7 @@ static void PrintKey ( const AggrKeyTrait_t & tKey, Aggr_e eAggrFunc, const Rang
 		tOut.Sprintf ( R"("key":%s)", tBuf.cstr() );
 
 		if ( tKey.m_pKey->m_eAttrType==SPH_ATTR_STRINGPTR )
-			tOut.Sprintf ( R"("key_as_string":"%s")", tBuf.cstr() );
+			tOut.Sprintf ( R"("key_as_string":%s)", tBuf.cstr() );
 		else
 			tOut.Sprintf ( R"("key_as_string":"%s")", tBuf.cstr() );
 	}
@@ -1925,7 +2058,7 @@ static VecTraits_T<CSphMatch> GetResultMatches ( const VecTraits_T<CSphMatch> & 
 	CSphString sError;
 	CreateFilterContext_t tCtx;
 	tCtx.m_pFilters = &tAggr.m_dCompositeAfterKey;
-	tCtx.m_pSchema = &tSchema;
+	tCtx.m_pMatchSchema = &tSchema;
 	tCtx.m_bScan = true;
 	if ( !sphCreateFilters ( tCtx, sError, sError ) || !sError.IsEmpty() )
 	{
@@ -1955,15 +2088,6 @@ static void EncodeAggr ( const JsonAggr_t & tAggr, int iAggrItem, const AggrResu
 	bool bHasKey = GetAggrKey ( tAggr, tRes.m_tSchema, iAggrItem, iNow, tKey );
 
 	// might be null for empty result set
-
-	CSphFixedVector<std::pair<const CSphColumnInfo *, const char *>> dNested ( tAggr.m_dNested.GetLength() );
-	ARRAY_FOREACH ( i, tAggr.m_dNested )
-	{
-		dNested[i].second = tAggr.m_dNested[i].m_sBucketName.cstr();
-		dNested[i].first = tRes.m_tSchema.GetAttr ( tAggr.m_dNested[i].GetAliasName().cstr() );
-		assert ( dNested[i].first );
-	}
-
 	auto dMatches = GetResultMatches ( tRes.m_dResults.First().m_dMatches, tRes.m_tSchema, tRes.m_iOffset, tRes.m_iCount, tAggr );
 
 	CSphString sBucketName;
@@ -2026,17 +2150,6 @@ static void EncodeAggr ( const JsonAggr_t & tAggr, int iAggrItem, const AggrResu
 				{
 					tOut.Sprintf ( R"("score":0.001)" );
 					JsonObjAddAttr ( tOut, pCount->m_eAttrType, "bg_count", tMatch, pCount->m_tLocator );
-				}
-
-				for ( const auto & tNested : dNested )
-				{
-					tBufMatch.Clear();
-					tBufMatch.Appendf ( R"("%s":{"value":)",  tNested.second );
-					tOut.StartBlock ( ",", tBufMatch.cstr(), "}");
-
-					JsonObjAddAttr ( tOut, tNested.first->m_eAttrType, tMatch, tNested.first->m_tLocator );
-
-					tOut.FinishBlock ( false ); // named bucket obj
 				}
 			}
 		}
@@ -2360,7 +2473,7 @@ CSphString sphEncodeResultJson ( const VecTraits_T<const AggrResult_t *> & dRes,
 		else if ( pId )
 		{
 			DocID_t tDocID = tMatch.GetAttr ( pId->m_tLocator );
-			tOut.Sprintf ( R"("_id":"%U","_score":%d)", tDocID, tMatch.m_iWeight );
+			tOut.Sprintf ( R"("_id":%U,"_score":%d)", tDocID, tMatch.m_iWeight );
 		}
 		else
 			tOut.Sprintf ( R"("_score":%d)", tMatch.m_iWeight );
@@ -2517,7 +2630,7 @@ JsonObj_c sphEncodeInsertErrorJson ( const char * szIndex, const char * szError 
 	tErr.AddStr ( "index", szIndex );
 
 	tObj.AddItem ( "error", tErr );
-	tObj.AddInt ( "status", HttpGetStatusCodes ( SPH_HTTP_STATUS_409 ) );
+	tObj.AddInt ( "status", HttpGetStatusCodes ( EHTTP_STATUS::_409 ) );
 
 	return tObj;
 }
@@ -3604,6 +3717,87 @@ static bool ParseAggrComposite ( const JsonObj_c & tBucket, JsonAggr_t & tAggr, 
 	return true;
 }
 
+static bool ParseAggsNode ( const JsonObj_c & tBucket, const JsonObj_c & tJsonItem, bool bRoot, JsonAggr_t & tItem, CSphString & sError )
+{
+	if ( !tBucket.IsObj() )
+	{
+		sError.SetSprintf ( R"("aggs" bucket '%s' should be an object)", tItem.m_sBucketName.cstr() );
+		return false;
+	}
+
+	if ( !StrEq ( tBucket.Name(), "composite" ) && !tBucket.FetchStrItem ( tItem.m_sCol, "field", sError, false ) )
+		return false;
+
+	tBucket.FetchIntItem ( tItem.m_iSize, "size", sError, true );
+	int iShardSize = 0;
+	tBucket.FetchIntItem ( iShardSize, "shard_size", sError, true );
+	tItem.m_iSize = Max ( tItem.m_iSize, iShardSize ); // FIXME!!! use (size * 1.5 + 10) for shard size
+	tItem.m_eAggrFunc = GetAggrFunc ( tBucket, !bRoot );
+	switch ( tItem.m_eAggrFunc )
+	{
+	case Aggr_e::DATE_HISTOGRAM:
+		if ( !ParseAggrDateHistogram ( tBucket, tItem, sError ) )
+			return false;
+		tItem.m_iSize = Max ( tItem.m_iSize, 1000 ); // set max_matches to min\max / interval
+	break;
+
+	case Aggr_e::HISTOGRAM:
+		if ( !ParseAggrHistogram ( tBucket, tItem, sError ) )
+			return false;
+		tItem.m_iSize = Max ( tItem.m_iSize, 1000 ); // set max_matches to min\max / interval
+	break;
+
+	case Aggr_e::RANGE:
+		if ( !ParseAggrRange ( tBucket, tItem, false, sError ) )
+			return false;
+		tItem.m_iSize = Max ( tItem.m_iSize, tItem.m_tRange.GetLength() + 1 ); // set max_matches to buckets count + _all bucket
+		break;
+
+	case Aggr_e::DATE_RANGE:
+		if ( !ParseAggrRange ( tBucket, tItem, true, sError ) )
+			return false;
+		tItem.m_iSize = Max ( tItem.m_iSize, tItem.m_tDateRange.GetLength() + 1 ); // set max_matches to buckets count + _all bucket
+		break;
+	case Aggr_e::COMPOSITE:
+		if ( !ParseAggrComposite ( tJsonItem, tItem, sError ) )
+			return false;
+		break;
+	case Aggr_e::MIN:
+	case Aggr_e::MAX:
+	case Aggr_e::SUM:
+	case Aggr_e::AVG:
+		tItem.m_iSize = 1;
+		break;
+			
+	default: break;
+	}
+
+	return true;
+}
+
+static bool ParseAggsNodeSort ( const JsonObj_c & tJsonItem, bool bOrder, JsonAggr_t & tItem, CSphString & sError )
+{
+	if ( !( tJsonItem.IsArray() || tJsonItem.IsObj() ) )
+	{
+		sError.SetSprintf ( "\"%s\" property value should be an array or an object", ( bOrder ? "order" : "sort" ) );
+		return false;
+	}
+
+	bool bGotWeight = false;
+	JsonQuery_c tTmpQuery;
+	tTmpQuery.m_sSortBy = "";
+	tTmpQuery.m_eSort = SPH_SORT_RELEVANCE;
+
+	// FIXME!!! reports warnings for geodist sort
+	CSphString sWarning;
+
+	if ( !ParseSort ( tJsonItem, tTmpQuery, bGotWeight, sError, sWarning ) )
+		return false;
+
+	tItem.m_sSort = tTmpQuery.m_sSortBy;
+	return true;
+}
+
 static bool AddSubAggregate ( const JsonObj_c & tAggs, bool bRoot, CSphVector<JsonAggr_t> & dParentItems, CSphString & sError )
 {
 	if ( bRoot && tAggs.begin().Empty() )
@@ -3613,9 +3807,6 @@ static bool AddSubAggregate ( const JsonObj_c & tAggs, bool bRoot, CSphVector<Js
 		tCount.m_iSize = 1;
 		return true;
 	}
-
-	CSphString sWarning;
-	JsonQuery_c tTmpQuery;
 
 	for ( const auto & tJsonItem : tAggs )
 	{
@@ -3628,102 +3819,41 @@ static bool AddSubAggregate ( const JsonObj_c & tAggs, bool bRoot, CSphVector<Js
 		JsonAggr_t tItem;
 		tItem.m_sBucketName = tJsonItem.Name();
 
-		JsonObj_c tBucket = tJsonItem.begin();
-
-		if ( StrEq ( tBucket.Name(), "aggs" ) && tBucket!=tJsonItem.end() )
+		for ( const auto & tAggsItem : tJsonItem )
 		{
-			if ( !AddSubAggregate ( tBucket, false, tItem.m_dNested, sError ) )
-				return false;
-			++tBucket;
-		}
+			// could be a sort object at the aggs item or order object at the bucket
+			if ( strcmp (  tAggsItem.Name(), "sort" )==0 )
+			{
+				if ( !ParseAggsNodeSort ( tAggsItem, false, tItem, sError ) )
+					return false;
 
-		if ( tBucket==tJsonItem.end() )
-		{
-			sError.SetSprintf ( R"("aggs" bucket '%s' with only nested items)", tItem.m_sBucketName.cstr() );
-			return false;
-		}
+			} else
+			{
+				if ( StrEq ( tAggsItem.Name(), "aggs" ) ||  tAggsItem.HasItem ( "aggs" ) )
+				{
+					sError = R"(nested "aggs" is not supported)";
+					return false;
+				}
+				if ( tAggsItem==tAggsItem.end() )
+				{
+					sError.SetSprintf ( R"("aggs" bucket '%s' with only nested items)", tAggsItem.Name() );
+					return false;
+				}
+				if ( !ParseAggsNode ( tAggsItem, tJsonItem, bRoot, tItem, sError ) )
+					return false;
 
-		if ( !tBucket.IsObj() )
-		{
-			sError.SetSprintf ( R"("aggs" bucket '%s' should be an object)", tItem.m_sBucketName.cstr() );
-			return false;
-		}
-
-		if ( !StrEq ( tBucket.Name(), "composite" ) && !tBucket.FetchStrItem ( tItem.m_sCol, "field", sError, false ) )
-			return false;
-
-		//tBucket.FetchStrItem ( tItem.m_sExpr, "calendar_interval", sError, true );
-		tBucket.FetchIntItem ( tItem.m_iSize, "size", sError, true );
-		int iShardSize = 0;
-		tBucket.FetchIntItem ( iShardSize, "shard_size", sError, true );
-		tItem.m_iSize = Max ( tItem.m_iSize, iShardSize ); // FIXME!!! use (size * 1.5 + 10) for shard size
-		tItem.m_eAggrFunc = GetAggrFunc ( tBucket, !bRoot );
-		switch ( tItem.m_eAggrFunc )
-		{
-		case Aggr_e::DATE_HISTOGRAM:
-			if ( !ParseAggrDateHistogram ( tBucket, tItem, sError ) )
-				return false;
-			tItem.m_iSize = Max ( tItem.m_iSize, 1000 ); // set max_matches to min\max / interval
-		break;
-
-		case Aggr_e::HISTOGRAM:
-			if ( !ParseAggrHistogram ( tBucket, tItem, sError ) )
-				return false;
-			tItem.m_iSize = Max ( tItem.m_iSize, 1000 ); // set max_matches to min\max / interval
-		break;
-
-		case Aggr_e::RANGE:
-			if ( !ParseAggrRange ( tBucket, tItem, false, sError ) )
-				return false;
-			tItem.m_iSize = Max ( tItem.m_iSize, tItem.m_tRange.GetLength() + 1 ); // set max_matches to buckets count + _all bucket
-			break;
-
-		case Aggr_e::DATE_RANGE:
-			if ( !ParseAggrRange ( tBucket, tItem, true, sError ) )
-				return false;
-			tItem.m_iSize = Max ( tItem.m_iSize, tItem.m_tDateRange.GetLength() + 1 ); // set max_matches to buckets count + _all bucket
-			break;
-		case Aggr_e::COMPOSITE:
-			if ( !ParseAggrComposite ( tJsonItem, tItem, sError ) )
-				return false;
-			break;
-		case Aggr_e::MIN:
-		case Aggr_e::MAX:
-		case Aggr_e::SUM:
-		case Aggr_e::AVG:
-			tItem.m_iSize = 1;
-			
-		default: break;
-		}
-
-		// could be a sort object at the aggs item or order object at the bucket
-		bool bOrder = false;
-		JsonObj_c tSort = tJsonItem.GetItem("sort");
-		if ( !tSort && tBucket.HasItem ( "order" ) )
-		{
-			tSort = tBucket.GetItem("order");
-			bOrder = true;
-		}
-		if ( tSort && !( tSort.IsArray() || tSort.IsObj() ) )
-		{
-			sError.SetSprintf ( "\"%s\" property value should be an array or an object", ( bOrder ? "order" : "sort" ) );
-			return false;
-		}
-		if ( tSort )
-		{
-			bool bGotWeight = false;
-			tTmpQuery.m_sSortBy = "";
-			tTmpQuery.m_eSort = SPH_SORT_RELEVANCE;
-			// FIXME!!! reports warnings for geodist sort
-			if ( !ParseSort ( tSort, tTmpQuery, bGotWeight, sError, sWarning ) )
-				return false;
-
-			tItem.m_sSort = tTmpQuery.m_sSortBy;
+				// bucket could have its own order item
+				if ( tAggsItem.HasItem ( "order" ) )
+				{
+					if ( !ParseAggsNodeSort ( tAggsItem.GetItem("order"), true, tItem, sError ) )
+						return false;
+				}
+			}
 		}
 
 		if ( tItem.m_eAggrFunc==Aggr_e::NONE && !bRoot )
 		{
-			sError.SetSprintf ( R"(bucket '%s' without aggregate items, item type is '%s')", tItem.m_sBucketName.cstr(), tBucket.Name() );
+			sError.SetSprintf ( R"(bucket '%s' without aggregate items)", tItem.m_sBucketName.cstr() );
 			return false;
 		}
 

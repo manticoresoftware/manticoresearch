@@ -21,6 +21,22 @@ struct EqualQuotator_t
 	static constexpr BYTE EscapingSpace ( BYTE c ) { return 0; }
 };
 
+struct EscapeQuotator_t
+{
+	static constexpr BYTE EscapingSpace ( BYTE c )
+	{
+		return ( c == '\\' || c == '\'' ) ? 1 : 0;
+	}
+};
+
+struct SqlQuotator_t
+{
+	static constexpr BYTE EscapingSpace ( BYTE c )
+	{
+		return ( c == '\\' || c == '\'' || c == '\t' ) ? 1 : 0;
+	}
+};
+
 struct FixupSpace_t
 {
 	// replaces \t, \n, \r into spaces
@@ -66,7 +82,8 @@ enum eAct : BYTE {
 	eEscape = 2,	 // [comma,] all escaping according to provided interface
 	eAll = 3,		 // [comma,] escape and change spaces
 	eSkipComma = 4,	 // force to NOT prefix comma (if any active)
-	eNoLimit = 8,	 // internal - set if iLen is not set (i.e. -1). To convert conditions into switch cases
+	eSkipQuotes = 8, // don't enclose text into quotes
+	eNoLimit = 16,	 // internal - set if iLen is not set (i.e. -1). To convert conditions into switch cases
 };
 }
 
@@ -80,21 +97,26 @@ class EscapedStringBuilder_T: public StringBuilder_c
 public:
 	// dedicated EscBld::eEscape | EscBld::eSkipComma
 	void AppendEscapedSkippingComma ( const char* sText );
+	void AppendEscapedSkippingCommaNoQuotes ( const char* sText );
 
 	// dedicated EscBld::eEscape with comma
 	void AppendEscapedWithComma ( const char* sText );
+	void AppendEscapedWithCommaNoQuotes ( const char* sText );
 
 	// dedicated EscBld::eEscape with comma with external len
 	void AppendEscapedWithComma ( const char* sText, int iLen );
+	void AppendEscapedWithCommaNoQuotes ( const char* sText, int iLen );
 
 	// dedicated EscBld::eFixupSpace
 	void FixupSpacesAndAppend ( const char* sText );
 
 	// dedicated EscBld::eAll (=EscBld::eFixupSpace | EscBld::eEscape )
 	void FixupSpacedAndAppendEscaped ( const char* sText );
+	void FixupSpacedAndAppendEscapedNoQuotes ( const char* sText );
 
 	// dedicated EscBld::eAll (=EscBld::eFixupSpace | EscBld::eEscape ) with external len
 	void FixupSpacedAndAppendEscaped ( const char* sText, int iLen );
+	void FixupSpacedAndAppendEscapedNoQuotes ( const char* sText, int iLen );
 
 	// generic implementation. Used this way in tests. For best performance consider to use specialized versions
 	// (see selector switch inside) directly.
@@ -102,6 +124,18 @@ public:
 
 	EscapedStringBuilder_T& SkipNextComma();
 	EscapedStringBuilder_T& AppendName ( const char* sName, bool bQuoted = true );
+
+private:
+	template<bool BQUOTE = true>
+	void AppendEscapedSkippingCommaT ( const char* sText );
+	template<bool BQUOTE = true>
+	void AppendEscapedWithCommaT ( const char* sText );
+	template <bool BQUOTE = true>
+	void AppendEscapedWithCommaT ( const char* sText, int iLen );
+	template<bool BQUOTE = true>
+	void FixupSpacedAndAppendEscapedT ( const char* sText );
+	template<bool BQUOTE = true>
+	void FixupSpacedAndAppendEscapedT ( const char* sText, int iLen );
 };
 
 #include "escaped_builder_impl.h"

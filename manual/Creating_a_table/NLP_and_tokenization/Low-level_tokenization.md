@@ -468,7 +468,7 @@ Using `blend_mode` with the example `@dude!` string above, the setting `blend_mo
 Default behavior is to index the entire token, equivalent to `blend_mode = trim_none`.
 
 Be aware that using blend modes limits your search, even with the default mode `trim_none` if you assume `.` is a blended character:
-* `.dog.` will become `dog. dog` during indexing
+* `.dog.` will become `.dog. dog` during indexing
 * and you won't be able to find it by `dog.`.
 
 Using more modes increases the chance your keyword will match something.
@@ -998,6 +998,8 @@ Bigram indexing is a feature to accelerate phrase searches. When indexing, it st
 
 For most use cases, `both_freq` would be the best mode, but your mileage may vary.
 
+It's important to note that `bigram_index` works only at the tokenization level and doesn't account for transformations like `morphology`, `wordforms` or `stopwords`. This means the tokens it creates are very straightforward, which makes searching phrases more exact and strict. While this can improve the accuracy of phrase matching, it also makes the system less able to recognize different forms of words or variations in how words appear.
+
 <!-- request SQL -->
 
 ```sql
@@ -1180,7 +1182,7 @@ CRC dictionaries do not store the original keyword text in the index. Instead, t
 
 The keywords dictionary resolves both of these issues. It stores keywords in the index and performs search-time wildcard expansion. For instance, a search for a `test*` prefix could internally expand to a 'test|tests|testing' query based on the dictionary's contents. This expansion process is entirely invisible to the application, with the exception that the separate per-keyword statistics for all the matched keywords are now also reported.
 
-For substring (infix) searches, extended wildcards can be used. Special characters such as `?` and `%` are compatible with substring (infix) search (e.g., `t?st*`, `run%`, `*abc*`). Note that the [wildcards operators](Searching/Full_text_matching/Operators.md#Wildcard-operators) and the [REGEX](../../Searching/Full_text_matching/Operators.md#REGEX-operator) operator only function with `dict=keywords`.
+For substring (infix) searches, extended wildcards can be used. Special characters such as `?` and `%` are compatible with substring (infix) search (e.g., `t?st*`, `run%`, `*abc*`). Note that the [wildcards operators](Searching/Full_text_matching/Operators.md#Wildcard-operators) and the [REGEX](../../Searching/Full_text_matching/Operators.md#REGEX-operator) only function with `dict=keywords`.
 
 Indexing with a keywords dictionary is approximately 1.1x to 1.3x slower than regular, non-substring indexing - yet significantly faster than substring indexing (either prefix or infix). The index size should only be slightly larger than that of the standard non-substring table, with a total difference of 1..10% percent. The time it takes for regular keyword searching should be nearly the same or identical across all three index types discussed (CRC non-substring, CRC substring, keywords). Substring searching time can significantly fluctuate based on how many actual keywords match the given substring (i.e., how many keywords the search term expands into). The maximum number of matched keywords is limited by the [expansion_limit](../../Server_settings/Searchd.md#expansion_limit) directive.
 

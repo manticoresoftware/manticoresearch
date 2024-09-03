@@ -1,0 +1,9 @@
+––– block: ../base/start-searchd –––
+––– input –––
+curl -s localhost:9308/cli -d 'debug sleep 30' &
+––– output –––
+[%{NUMBER}] %{NUMBER}
+––– input –––
+curl -s localhost:9308/cli -d 'show queries' | grep -q debug && echo "Success" || echo "Failure"
+––– output –––
+Success

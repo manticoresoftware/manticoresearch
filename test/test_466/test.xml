@@ -255,7 +255,7 @@ insert into table_multi1 (id,title,brand_id,j) values
   }
 }
 </query>
-<sphinxql>select count(*), date_range(tm, {range_to='2017||+2M/M'},{range_from='2017||+2M/M',range_to='2017||+5M/M'},{range_from='2017||+5M/M'}) as points from idx_dates group by points order by points asc</sphinxql>
+<sphinxql>select count(*), date_range(tm, {range_to='2017||+2M/M'},{range_from='2017||+2M/M',range_to='2017||+4M/M'},{range_from='2017||+4M/M'}) as points from idx_dates group by points order by points asc</sphinxql>
 
 <!-- count(*) -->
 <query endpoint="json/search">{ "index": "test_group2", "size":0, "aggs":{}}</query>
@@ -295,7 +295,8 @@ insert into table_multi1 (id,title,brand_id,j) values
 }
 </query>
 
-
+<!-- aggs.ranges with empty or open range -->
+<query endpoint="json/search">{ "index": "test_group1", "size":0, "aggs":{ "gr_1": { "range": { "field": "code", "ranges": [{}] } }} }</query>
 
 </queries>
 </test>

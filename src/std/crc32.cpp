@@ -35,8 +35,3 @@ DWORD sphCRC32 ( const void* s, int iLen, DWORD uPrevCRC )
 }
 
 
-DWORD sphCRC32 ( const void * s, int iLen )
-{
-	return sphCRC32 ( s, iLen, 0 );
-}
-

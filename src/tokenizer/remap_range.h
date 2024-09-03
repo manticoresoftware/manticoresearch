@@ -18,7 +18,6 @@ struct CSphRemapRange
 	int m_iStart = -1;
 	int m_iEnd = -1;
 	int m_iRemapStart = -1;
-	int m_iOrder = -1;
 
 	CSphRemapRange() = default;
 	CSphRemapRange ( int iStart, int iEnd, int iRemapStart )
@@ -32,12 +31,3 @@ struct CSphRemapRange
 		, m_iRemapStart ( iSingle )
 	{}
 };
-
-// need a stable sort with the desc order 
-inline bool operator< ( const CSphRemapRange & a, const CSphRemapRange & b )
-{
-	if ( a.m_iStart==b.m_iStart )
-		return ( a.m_iOrder>b.m_iOrder );
-
-	return ( a.m_iStart<b.m_iStart );
-}

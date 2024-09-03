@@ -293,7 +293,7 @@ public:
 	bool			AddSchemaItem ( SqlNode_t * pNode );
 	bool			SetMatch ( const SqlNode_t & tValue );
 	bool			AddMatch ( const SqlNode_t & tValue, const SqlNode_t & tIndex );
-	bool			SetKNN ( const SqlNode_t & tAttr, const SqlNode_t & tK, const SqlNode_t & tValues );
+	bool			SetKNN ( const SqlNode_t & tAttr, const SqlNode_t & tK, const SqlNode_t & tValues, const SqlNode_t * pEf );
 	void			AddConst ( int iList, const SqlNode_t& tValue );
 	void			SetLocalStatement ( const SqlNode_t & tName );
 	bool			AddFloatRangeFilter ( const SqlNode_t & tAttr, float fMin, float fMax, bool bHasEqual, bool bExclude=false );
@@ -316,7 +316,8 @@ public:
 
 	bool			SetJoin ( const SqlNode_t & tIdx );
 	void			SetJoinType ( JoinType_e eType );
-	bool			AddOnFilter ( const SqlNode_t & tIdx1, const SqlNode_t & tAttr1, const SqlNode_t & tIdx2, const SqlNode_t & tAttr2 );
+	bool			AddOnFilter ( const SqlNode_t & tIdx1, const SqlNode_t & tAttr1, const SqlNode_t & tIdx2, const SqlNode_t & tAttr2, int iTypeCast );
+	void			SetJoinOnCast ( ESphAttr eType ) { m_eJoinTypeCast = eType; }
 
 	bool			AddDistinct ( SqlNode_t * pNewExpr, SqlNode_t * pStart, SqlNode_t * pEnd );
 	void			AddDistinct ( SqlNode_t * pNewExpr );
@@ -360,6 +361,7 @@ private:
 	BYTE						m_uSyntaxFlags = 0;
 	bool						m_bNamedVecBusy = false;
 	CSphVector<CSphNamedInt>	m_dNamedVec;
+	ESphAttr					m_eJoinTypeCast = SPH_ATTR_NONE;
 
 	void			AutoAlias ( CSphQueryItem & tItem, SqlNode_t * pStart, SqlNode_t * pEnd );
 	bool			CheckOption ( Option_e eOption ) const override;
@@ -986,7 +988,7 @@ void SqlParser_c::AddIndexHint ( SecondaryIndexType_e eType, bool bForce, const 
 	CSphString sIndexes;
 	ToString ( sIndexes, tValue );
 	StrVec_t dIndexes;
-	sphSplit ( dIndexes, sIndexes.cstr() );
+	sphSplit ( dIndexes, sIndexes.cstr(), ", \t" );
 	
 	for ( const auto & i : dIndexes )
 	{
@@ -1236,10 +1238,12 @@ bool SqlParser_c::AddMatch ( const SqlNode_t & tValue, const SqlNode_t & tIndex 
 	return true;
 }
 
-bool SqlParser_c::SetKNN ( const SqlNode_t & tAttr, const SqlNode_t & tK, const SqlNode_t & tValues )
+bool SqlParser_c::SetKNN ( const SqlNode_t & tAttr, const SqlNode_t & tK, const SqlNode_t & tValues, const SqlNode_t * pEf )
 {
 	ToString ( m_pQuery->m_sKNNAttr, tAttr );
 	m_pQuery->m_iKNNK = tK.GetValueInt();
+	if ( pEf )
+		m_pQuery->m_iKnnEf = pEf->GetValueInt();
 	auto pValues = tValues.m_pValues;
 	if ( pValues )
 	{
@@ -1587,7 +1591,7 @@ bool SqlParser_c::SetJoin ( const SqlNode_t & tIdx )
 }
 
 
-bool SqlParser_c::AddOnFilter ( const SqlNode_t & tIdx1, const SqlNode_t & tAttr1, const SqlNode_t & tIdx2, const SqlNode_t & tAttr2 )
+bool SqlParser_c::AddOnFilter ( const SqlNode_t & tIdx1, const SqlNode_t & tAttr1, const SqlNode_t & tIdx2, const SqlNode_t & tAttr2, int iTypeCast )
 {
 	auto & tOn = m_pQuery->m_dOnFilters.Add();
 	ToString ( tOn.m_sIdx1, tIdx1 );
@@ -1603,6 +1607,14 @@ bool SqlParser_c::AddOnFilter ( const SqlNode_t & tIdx1, const SqlNode_t & tAttr
 
 	sphColumnToLowercase ( const_cast<char*>( tOn.m_sAttr1.cstr() ) );
 	sphColumnToLowercase ( const_cast<char*>( tOn.m_sAttr2.cstr() ) );
+
+	if ( iTypeCast==0 )
+		tOn.m_eTypeCast1 = m_eJoinTypeCast;
+
+	if ( iTypeCast==1 )
+		tOn.m_eTypeCast2 = m_eJoinTypeCast;
+
+	m_eJoinTypeCast = SPH_ATTR_NONE;
 
 	return true;
 }

@@ -71,10 +71,11 @@ bool ValidateClusterStatement ( const CSphString & sIndexName, const ServedDesc_
 
 std::optional<CSphString> IsPartOfCluster ( const ServedDesc_t* pDesc );
 
-// set cluster name into index desc for fast rejects
-bool AssignClusterToIndex ( const CSphString & sIndex, CSphString sCluster );
+// set cluster name into index(es) desc for fast rejects
+bool AssignClusterToIndex ( const CSphString & sIndex, const CSphString & sCluster );
+bool AssignClusterToIndexes ( const VecTraits_T<CSphString> & dIndexes, const CSphString & sCluster );
 
-bool SetIndexClusterTOI ( const ReplicationCommand_t * pCmd );
+bool SetIndexesClusterTOI ( const ReplicationCommand_t * pCmd );
 
 CSphString WaitClusterReady ( const CSphString& sCluster, int64_t iTimeoutS );
 std::pair<int,CSphString> WaitClusterCommit ( const CSphString& sCluster, int iTxn, int64_t iTimeoutS );

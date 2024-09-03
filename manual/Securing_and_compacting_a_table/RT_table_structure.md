@@ -40,7 +40,7 @@ As a summary: the deletion works in two phases:
 1. First, we mark documents as 'deleted' in real-time and suppress them in search results.
 2. During some operation with an RT table chunk, we finally physically wipe the deleted documents for good.
 
-**Fifth, if an RT table contains plain disk tables in its collection, can I just add my ready old disk table to it?** No. It's not possible to avoid unneeded complexity and prevent accidental corruption. However, if your RT table has just been created and contains no data, then you can [ATTACH TABLE](../Data_creation_and_modification/Adding_data_from_external_storages/Adding_data_to_tables/Attaching_a_plain_table_to_RT_table.md) your disk table to it. Your old table will be moved inside the RT table and will become its part.
+**Fifth, if an RT table contains plain disk tables in its collection, can I just add my ready old disk table to it?** No. It's not possible to avoid unneeded complexity and prevent accidental corruption. However, if your RT table has just been created and contains no data, then you can [ATTACH TABLE](../Data_creation_and_modification/Adding_data_from_external_storages/Adding_data_to_tables/Attaching_one_table_to_another.md) your disk table to it. Your old table will be moved inside the RT table and will become its part.
 
 As a summary about the RT table structure: it is a cleverly organized collection of plain disk tables with a fast in-memory table, intended for real-time insertions and semi-real-time deletions of documents. The RT table has a common schema, common settings, and can be easily maintained without deep digging into details. 
 <!-- proofread -->

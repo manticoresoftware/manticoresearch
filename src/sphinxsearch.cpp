@@ -1069,13 +1069,13 @@ SphZoneHit_e ExtRanker_c::IsInZone ( int iZone, const ExtHit_t * pHit, int * pLa
 				while ( bEofDoc!=3 ) /// action end-of-doc
 				{
 					// action inspan/start-marker
-					if ( bInSpan )
+					if ( bInSpan || ( bEofDoc & 2 ) )
 					{
 						++pStartHits;
 						bEofDoc |= (pStartHits->m_tRowID!=tCurRowID)?1:0;
 					} else
-						// action outspan/end-marker
 					{
+						// action outspan/end-marker
 						++pEndHits;
 						bEofDoc |= (pEndHits->m_tRowID!=tCurRowID)?2:0;
 					}
@@ -1105,6 +1105,15 @@ SphZoneHit_e ExtRanker_c::IsInZone ( int iZone, const ExtHit_t * pHit, int * pLa
 					pZone->m_dStarts.Add ( iSpanBegin );
 					pZone->m_dEnds.Add ( iSpanEnd );
 				}
+			}
+
+			// skip to the same doc
+			while ( pStartHits->m_tRowID!=INVALID_ROWID && pEndHits->m_tRowID!=INVALID_ROWID && pStartHits->m_tRowID!=pEndHits->m_tRowID )
+			{
+				while ( pStartHits->m_tRowID!=INVALID_ROWID && pEndHits->m_tRowID!=INVALID_ROWID && pStartHits->m_tRowID<pEndHits->m_tRowID )
+					pStartHits++;
+				while ( pStartHits->m_tRowID!=INVALID_ROWID && pEndHits->m_tRowID!=INVALID_ROWID && pEndHits->m_tRowID<pStartHits->m_tRowID )
+					pEndHits++;
 			}
 
 			// data sanity checks

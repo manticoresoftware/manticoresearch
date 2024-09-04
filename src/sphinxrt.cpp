@@ -1247,6 +1247,7 @@ public:
 	bool				CheckValidateOptimizeParams ( OptimizeTask_t& tTask ) const;
 	bool				CheckValidateChunk ( int& iChunk, int iChunks, bool bByOrder ) const;
 	void				StartOptimize ( OptimizeTask_t tTask ) final;
+	int					OptimizesRunning() const noexcept final;
 	void				Optimize ( OptimizeTask_t tTask ) final;
 	void				CheckStartAutoOptimize ();
 	int					ClassicOptimize ();
@@ -9878,6 +9879,12 @@ void RtIndex_c::StartOptimize ( OptimizeTask_t tTask )
 	} );
 }
 
+
+int RtIndex_c::OptimizesRunning() const noexcept
+{
+	return m_tOptimizeRuns.GetValue ();
+}
+
 void RtIndex_c::Optimize ( OptimizeTask_t tTask )
 {
 	TRACE_CORO ( "rt", "RtIndex_c::Optimize" );
@@ -10087,6 +10094,7 @@ void RtIndex_c::GetStatus ( CSphIndexStatus * pRes ) const
 	pRes->m_iTID = m_iTID;
 	pRes->m_iSavedTID = m_iSavedTID;
 	pRes->m_iLockCount = m_tSaving.GetNumOfLocks();
+	pRes->m_iOptimizesCount = OptimizesRunning();
 //	sphWarning ( "Chunks: %d, RAM: %d, DISK: %d", pRes->m_iNumChunks, (int) pRes->m_iRamUse, (int) pRes->m_iDiskUse );
 }
 

@@ -15845,6 +15845,7 @@ static void AddDiskIndexStatus ( VectorLike & dStatus, const CSphIndex * pIndex,
 		dStatus.MatchTupletf ( "mem_limit", "%l", tStatus.m_iMemLimit );
 		dStatus.MatchTupletf ( "mem_limit_rate", "%0.2F%%", PercentOf ( tStatus.m_fSaveRateLimit, 1.0, 2 ) );
 		dStatus.MatchTupletf ( "ram_bytes_retired", "%l", tStatus.m_iRamRetired );
+		dStatus.MatchTupletf ( "optimizing", "%l", tStatus.m_iOptimizesCount );
 		dStatus.MatchTupletf ( "locked", "%d", tStatus.m_iLockCount );
 	}
 	if ( bPq )

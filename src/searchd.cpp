@@ -14745,6 +14745,21 @@ int GetLogFD ()
 	return g_iLogFile;
 }
 
+bool PollOptimizeRunning ( const CSphString & sIndex )
+{
+	while ( true )
+	{
+		Threads::Coro::SleepMsec ( 500 );
+		auto pTmpIndex = GetServed ( sIndex );
+		if ( !ServedDesc_t::IsMutable ( pTmpIndex ) )
+			return false;
+
+		RIdx_T<RtIndex_i *> pRtIndex { pTmpIndex };
+		if ( !pRtIndex->OptimizesRunning () )
+			return true;
+	}
+}
+
 void HandleMysqlOptimizeManual ( RowBuffer_i & tOut, const DebugCmd::DebugCommand_t & tCmd )
 {
 	if ( !sphCheckWeCanModify ( tOut ) )
@@ -14765,11 +14780,11 @@ void HandleMysqlOptimizeManual ( RowBuffer_i & tOut, const DebugCmd::DebugComman
 	tTask.m_bByOrder = !tCmd.bOpt ( "byid", session::GetOptimizeById() );
 	tTask.m_iCutoff = (int)tCmd.iOpt("cutoff");
 
-	if ( tCmd.bOpt ( "sync" ) )
-		RIdx_T<RtIndex_i*> ( pIndex )->Optimize ( std::move ( tTask ) );
+	RIdx_T<RtIndex_i *> ( pIndex )->StartOptimize ( std::move ( tTask ) );
+	if ( tCmd.bOpt ( "sync" ) && !PollOptimizeRunning ( sIndex ) )
+		tOut.Error ( "RT table went away during waiting" );
 	else
-		RIdx_T<RtIndex_i *> ( pIndex )->StartOptimize ( std::move ( tTask ) );
-	tOut.Ok();
+		tOut.Ok ();
 }
 
 // command 'drop [chunk] X [from] <IDX> [option...]'
@@ -14791,11 +14806,11 @@ void HandleMysqlDropManual ( RowBuffer_i & tOut, const DebugCmd::DebugCommand_t 
 	tTask.m_iFrom = (int)tCmd.m_iPar1;
 	tTask.m_bByOrder = !tCmd.bOpt ( "byid", session::GetOptimizeById() );
 
-	if ( tCmd.bOpt ( "sync" ) )
-		RIdx_T<RtIndex_i*> ( pIndex )->Optimize ( std::move ( tTask ) );
+	RIdx_T<RtIndex_i *> ( pIndex )->StartOptimize ( std::move ( tTask ) );
+	if ( tCmd.bOpt ( "sync" ) && !PollOptimizeRunning ( sIndex ) )
+		tOut.Error ( "RT table went away during waiting" );
 	else
-		RIdx_T<RtIndex_i *> ( pIndex )->StartOptimize ( std::move ( tTask ) );
-	tOut.Ok();
+		tOut.Ok ();
 }
 
 void HandleMysqlCompress ( RowBuffer_i & tOut, const DebugCmd::DebugCommand_t & tCmd )
@@ -14816,11 +14831,11 @@ void HandleMysqlCompress ( RowBuffer_i & tOut, const DebugCmd::DebugCommand_t & 
 	tTask.m_iFrom = (int) tCmd.m_iPar1;
 	tTask.m_bByOrder = !tCmd.bOpt ( "byid", session::GetOptimizeById() );
 
-	if ( tCmd.bOpt ( "sync" ) )
-		RIdx_T<RtIndex_i*> ( pIndex )->Optimize ( std::move ( tTask ) );
+	RIdx_T<RtIndex_i *> ( pIndex )->StartOptimize ( std::move ( tTask ) );
+	if ( tCmd.bOpt ( "sync" ) && !PollOptimizeRunning ( sIndex ) )
+		tOut.Error ( "RT table went away during waiting" );
 	else
-		RIdx_T<RtIndex_i *> ( pIndex )->StartOptimize ( std::move ( tTask ) );
-	tOut.Ok();
+		tOut.Ok ();
 }
 
 void HandleMysqlDedup ( RowBuffer_i& tOut, const DebugCmd::DebugCommand_t& tCmd )
@@ -14883,11 +14898,11 @@ void HandleMysqlSplit ( RowBuffer_i & tOut, const DebugCmd::DebugCommand_t & tCm
 	tTask.m_sUvarFilter = tCmd.m_sParam2;
 	tTask.m_bByOrder = !tCmd.bOpt ( "byid", session::GetOptimizeById() );
 
-	if ( tCmd.bOpt ( "sync" ) )
-		RIdx_T<RtIndex_i*> ( pIndex )->Optimize ( std::move ( tTask ) );
+	RIdx_T<RtIndex_i *> ( pIndex )->StartOptimize ( std::move ( tTask ) );
+	if ( tCmd.bOpt ( "sync" ) && !PollOptimizeRunning ( sIndex ) )
+		tOut.Error ( "RT table went away during waiting" );
 	else
-		RIdx_T<RtIndex_i *> ( pIndex )->StartOptimize ( std::move ( tTask ) );
-	tOut.Ok();
+		tOut.Ok ();
 }
 
 
@@ -15381,11 +15396,11 @@ void HandleMysqlOptimize ( RowBuffer_i & tOut, const SqlStmt_t & tStmt )
 	tTask.m_eVerb = OptimizeTask_t::eManualOptimize;
 	tTask.m_iCutoff = tStmt.m_tQuery.m_iCutoff<=0 ? 0 : tStmt.m_tQuery.m_iCutoff;
 
-	if ( tStmt.m_tQuery.m_bSync )
-		RIdx_T<RtIndex_i*> ( pIndex )->Optimize ( std::move ( tTask ) );
+	RIdx_T<RtIndex_i *> ( pIndex )->StartOptimize ( std::move ( tTask ) );
+	if ( tStmt.m_tQuery.m_bSync && !PollOptimizeRunning ( sIndex ) )
+		tOut.Error ( "RT table went away during waiting" );
 	else
-		RIdx_T<RtIndex_i *> ( pIndex )->StartOptimize ( std::move ( tTask ) );
-	tOut.Ok();
+		tOut.Ok ();
 }
 
 class ExtraLastInsertID_c final: public ISphExtra

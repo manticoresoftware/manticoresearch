@@ -1265,7 +1265,7 @@ public:
 	void				DropDiskChunk ( int iChunk, int* pAffected=nullptr );
 	bool				CompressOneChunk ( int iChunk, int* pAffected = nullptr );
 	bool				DedupOneChunk ( int iChunk, int* pAffected = nullptr );
-	bool				MergeTwoChunks ( int iA, int iB, int* pAffected = nullptr );
+	bool				MergeTwoChunks ( int iA, int iB, int* pAffected, CSphString* sLog = nullptr );
 	bool				MergeCanRun () const;
 	bool				SplitOneChunk ( int iChunkID, const char* szUvarFilter, int* pAffected = nullptr );
 	bool				SplitOneChunkFast ( int iChunkID, const char * szUvarFilter, bool& bResult, int* pAffected = nullptr );
@@ -9688,7 +9688,7 @@ bool RtIndex_c::SplitOneChunk ( int iChunkID, const char* szUvarFilter, int* pAf
 	return true;
 }
 
-bool RtIndex_c::MergeTwoChunks ( int iAID, int iBID, int* pAffected )
+bool RtIndex_c::MergeTwoChunks ( int iAID, int iBID, int* pAffected, CSphString* sLog )
 {
 	TRACE_SCHED ( "rt", "RtIndex_c::MergeTwoChunks" );
 
@@ -9771,6 +9771,8 @@ bool RtIndex_c::MergeTwoChunks ( int iAID, int iBID, int* pAffected )
 		return false;
 
 	sphLogDebug ( "optimized a=%s, b=%s, new=%s, killed=%d", pA->Cidx().GetFilebase(), pB->Cidx().GetFilebase(), tMerged.GetFilebase(), iKilled );
+	if ( sLog )
+		sLog->SetSprintf ("%s and %s to %s", pA->Cidx ().GetFilebase(), pB->Cidx ().GetFilebase (), tMerged.GetFilebase ());
 
 	pA->m_bFinallyUnlink = true;
 	pB->m_bFinallyUnlink = true;
@@ -9914,6 +9916,7 @@ int RtIndex_c::ProgressiveOptimize ( int iCutoff )
 		if ( ( pChunks->GetLength() - GetNumOfOptimizingNow ( *pChunks ) ) <= iCutoff )
 			break;
 
+		auto tmStart = sphMicroTimer();
 		// merge 'smallest' to 'smaller' and get 'merged' that names like 'A'+.tmp
 		// however 'merged' got placed at 'B' position and 'merged' renamed to 'B' name
 
@@ -9939,7 +9942,12 @@ int RtIndex_c::ProgressiveOptimize ( int iCutoff )
 			Swap ( chB, chA );
 
 		RTDLOG << "Optimize: merge chunks " << chA.m_iId << " and " << chB.m_iId;
-		bWork &= MergeTwoChunks ( chA.m_iId, chB.m_iId, &iAffected );
+
+		CSphString sLog;
+		bWork &= MergeTwoChunks ( chA.m_iId, chB.m_iId, &iAffected, &sLog );
+
+		auto tmPass = sphMicroTimer() - tmStart;
+		LogInfo ( "rt: table %s: merged chunks %s in %t (progressive mode). Remaining chunk count: %d", GetName (), sLog.cstr(), tmPass, m_tRtChunks.GetDiskChunksCount () );
 	}
 
 	RTDLOG << "Optimize: start compressing pass for the rest of " << m_tRtChunks.GetDiskChunksCount() << " chunks.";

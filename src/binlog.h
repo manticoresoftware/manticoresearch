@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2021-2023, Manticore Software LTD (https://manticoresearch.com)
+// Copyright (c) 2021-2024, Manticore Software LTD (https://manticoresearch.com)
 // Copyright (c) 2001-2016, Andrew Aksyonoff
 // Copyright (c) 2008-2016, Sphinx Technologies Inc
 // All rights reserved
@@ -18,6 +18,13 @@
 namespace Binlog {
 
 	using ProgressCallbackSimple_t = void();
+
+	enum Txn_e : BYTE
+	{
+		UPDATE_ATTRS,
+		COMMIT,
+		PQ_ADD_DELETE,
+	};
 
 	enum ReplayFlags_e
 	{
@@ -49,8 +56,9 @@ namespace Binlog {
 		return !tReader.GetErrorFlag();
 	}
 
-	void Init ( const CSphConfigSection & hSearchd, bool bTestMode );
-	void Configure ( const CSphConfigSection & hSearchd, bool bTestMode, DWORD uReplayFlags, bool bConfigless );
+	void Init ( CSphString sBinlogPath );
+	void Configure ( const CSphConfigSection & hSearchd, DWORD uReplayFlags );
+	void SetCommon ( bool bCommonBinlog );
 	void Deinit ();
 	bool IsActive();
 	bool MockDisabled ( bool bNewVal );
@@ -59,18 +67,16 @@ namespace Binlog {
 	void Flush();
 	int64_t NextFlushTimestamp();
 
-	using IndexNameUid_t = std::pair<const char *, int64_t>;
-
-	// bIncTID require increasing *pTID even if binlog is disabled, used in pq
-	bool Commit ( Blop_e eOp, int64_t * pTID, IndexNameUid_t tIndexName, bool bIncTID, CSphString & sError, FnWriteCommit && fnSaver );
+	bool Commit ( int64_t * pTID, const char* szIndexName, CSphString & sError, FnWriteCommit && fnSaver );
 
 	/// replay stored binlog
 	void Replay ( const SmallStringHash_T<CSphIndex*> & hIndexes, ProgressCallbackSimple_t * pfnProgressCallback = nullptr );
 
-	// dedicated for Commit BLOP_UPDATE_ATTRS
-	void CommitUpdateAttributes ( int64_t * pTID, IndexNameUid_t tIndexName, const CSphAttrUpdate & tUpd );
-
-	void NotifyIndexFlush ( int64_t iTID, IndexNameUid_t tIndexName, bool bShutdown, bool bForceSave );
+	enum Shutdown_e : bool { NoShutdown=false, Shutdown };
+	enum ForceSave_e : BYTE { NoSave=0, ForceSave, DropTable };
+	void NotifyIndexFlush ( int64_t iTID, const char* szIndexName, Shutdown_e eShutdown, ForceSave_e eForceSave );
 
 	CSphString GetPath();
+
+	int64_t LastTidFor ( const CSphString & sIndex );
 }

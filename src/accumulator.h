@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2017-2023, Manticore Software LTD (https://manticoresearch.com)
+// Copyright (c) 2017-2024, Manticore Software LTD (https://manticoresearch.com)
 // All rights reserved
 //
 // This program is free software; you can redistribute it and/or modify
@@ -51,7 +51,7 @@ enum class ReplCmd_e {
 };
 
 struct CSphReconfigureSettings;
-struct InsertDocData_t;
+class InsertDocData_c;
 struct RtSegment_t;
 class MemoryWriter_c;
 
@@ -113,7 +113,7 @@ public:
 	void			CleanupPart();
 	void			Cleanup();
 
-	void			AddDocument ( ISphHits * pHits, const InsertDocData_t & tDoc, bool bReplace, int iRowSize, const DocstoreBuilder_i::Doc_t * pStoredDoc );
+	void			AddDocument ( ISphHits * pHits, const InsertDocData_c & tDoc, bool bReplace, int iRowSize, const DocstoreBuilder_i::Doc_t * pStoredDoc );
 	void			CleanupDuplicates ( int iRowSize );
 	void			GrabLastWarning ( CSphString & sWarning );
 	void			SetIndex ( RtIndex_i * pIndex );
@@ -124,6 +124,9 @@ public:
 
 	RtIndex_i *		GetIndex() const { return m_pIndex; }
 	int 			GetIndexGeneration() const { return m_iIndexGeneration; }
+	const CSphString & GetIndexName() const { return m_sIndexName; }
+	int64_t			GetIndexId() const { return m_iIndexId; }
+
 	ReplicationCommand_t * AddCommand ( ReplCmd_e eCmd, CSphString sIndex, CSphString sCluster = CSphString() );
 
 	void			LoadRtTrx ( ByteBlob_t tTrx, DWORD uVer );
@@ -134,6 +137,9 @@ public:
 
 	bool			SetupDocstore ( const RtIndex_i & tIndex, CSphString & sError );
 	bool			IsReplace () const { return m_bReplace; }
+
+	[[nodiscard]] bool IsClusterCommand () const noexcept;
+	[[nodiscard]] bool IsUpdateCommand ( ) const noexcept;
 
 private:
 	bool								m_bReplace = false;		///< insert or replace mode (affects CleanupDuplicates() behavior)
@@ -149,6 +155,8 @@ private:
 	// FIXME!!! index is unlocked between add data and commit or at begin and end
 	RtIndex_i *							m_pIndex = nullptr;		///< my current owner in this thread
 	int									m_iIndexGeneration = 0;
+	CSphString							m_sIndexName;
+	int64_t								m_iIndexId = 0;
 
 	void			ResetDict();
 	void			SetupDocstore();

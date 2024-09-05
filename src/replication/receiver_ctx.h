@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2019-2023, Manticore Software LTD (https://manticoresearch.com)
+// Copyright (c) 2019-2024, Manticore Software LTD (https://manticoresearch.com)
 // All rights reserved
 //
 // This program is free software; you can redistribute it and/or modify
@@ -13,4 +13,4 @@
 #include "wsrep_cxx.h"
 
 // returns main receiver which will take and apply replication commands from remote nodes
-Wsrep::Receiver_i* MakeReceiverCtx ( CSphString sName, Wsrep::Provider_c * pProvider, std::function<void()> fnOnClean );
+Wsrep::Receiver_i* MakeReceiverCtx ( CSphString sName, Wsrep::Provider_i * pProvider, std::function<void()> fnOnClean );

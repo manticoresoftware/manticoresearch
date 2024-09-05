@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2017-2023, Manticore Software LTD (https://manticoresearch.com)
+// Copyright (c) 2017-2024, Manticore Software LTD (https://manticoresearch.com)
 // Copyright (c) 2001-2016, Andrew Aksyonoff
 // Copyright (c) 2008-2016, Sphinx Technologies Inc
 // All rights reserved
@@ -26,6 +26,7 @@ public:
 	BitVec_T () = default;
 
 	explicit BitVec_T ( int iElements );
+	explicit BitVec_T ( T * pData, int iElements );
 	~BitVec_T ();
 
 	void Swap ( BitVec_T & rhs ) noexcept;
@@ -47,7 +48,8 @@ public:
 
 	bool IsEmpty() const noexcept;
 	int BitCount () const noexcept;
-	int Scan ( int iStart );
+	int Scan ( int iStart ) const;
+	void Negate ();
 
 protected:
 	static constexpr int	SIZEBITS = sizeof ( T ) * CHAR_BIT;
@@ -58,9 +60,10 @@ protected:
 	T *		m_pData = nullptr;
 	T		m_dStatic[STATICSIZE] {0};
 	int		m_iElements = 0;
+	bool	m_bOwnStorage = true;
 
 private:
-	int ScanBit ( int iIndex, int iStart );
+	int ScanBit ( int iIndex, int iStart ) const;
 	int CalcStorage() const noexcept;
 };
 

@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2017-2023, Manticore Software LTD (https://manticoresearch.com)
+// Copyright (c) 2017-2024, Manticore Software LTD (https://manticoresearch.com)
 // Copyright (c) 2001-2016, Andrew Aksyonoff
 // Copyright (c) 2008-2016, Sphinx Technologies Inc
 // All rights reserved
@@ -38,7 +38,7 @@ void ApiServe ( std::unique_ptr<AsyncNetBuffer_c> pBuf )
 	tSess.SetTaskState ( TaskState_e::HANDSHAKE );
 	tOut.SendDword ( SPHINX_SEARCHD_PROTO ); // that is handshake
 
-	// SphinxSE - legacy client, waits first handshake from us to be send, and answers only when it is done.
+	// SphinxSE - legacy client, waits first handshake from us to send, and answers only when it is done.
 	if ( bClientWaitsHandshake && !tOut.Flush () )
 	{
 		sphLogDebugv ( "conn %s(%d): legacy client timeout when sending handshake", sClientIP, iCID );

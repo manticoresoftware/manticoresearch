@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2017-2023, Manticore Software LTD (https://manticoresearch.com)
+// Copyright (c) 2017-2024, Manticore Software LTD (https://manticoresearch.com)
 // Copyright (c) 2001-2016, Andrew Aksyonoff
 // Copyright (c) 2008-2016, Sphinx Technologies Inc
 // All rights reserved
@@ -63,13 +63,15 @@ public:
 using UservarIntSetValues_c = CSphVector<SphAttr_t>;
 using UservarIntSet_c = SharedPtr_t<UservarIntSetValues_c>;
 class HistogramContainer_c;
+class SIContainer_c;
 
 struct CreateFilterContext_t
 {
 	const VecTraits_T<CSphFilterSettings> * m_pFilters = nullptr;
 	const VecTraits_T<FilterTreeItem_t> * m_pFilterTree = nullptr;
 
-	const ISphSchema *			m_pSchema = nullptr;
+	const ISphSchema *			m_pMatchSchema = nullptr;
+	const ISphSchema *			m_pIndexSchema = nullptr;
 	const BYTE *				m_pBlobPool = nullptr;
 	const columnar::Columnar_i * m_pColumnar = nullptr;
 
@@ -81,11 +83,9 @@ struct CreateFilterContext_t
 	CSphVector<UservarIntSet_c>	m_dUserVals;
 
 	const HistogramContainer_c * m_pHistograms = nullptr;
-	const SI::Index_i *			m_pSI = nullptr;
+	const SIContainer_c *		m_pSI = nullptr;
 	int64_t						m_iTotalDocs = 0;
-
-	CreateFilterContext_t ( const ISphSchema * pSchema=nullptr )
-		: m_pSchema ( pSchema ) {}
+	CSphString					m_sJoinIdx;
 };
 
 std::unique_ptr<ISphFilter> sphCreateFilter ( const CSphFilterSettings &tSettings, const CreateFilterContext_t &tCtx, CSphString &sError, CSphString &sWarning);
@@ -119,6 +119,33 @@ inline bool EvalRange ( T tValue, T tMin, T tMax )
 
 	auto bMinOk = HAS_EQUAL_MIN ? ( tValue>=tMin ) : ( tValue>tMin );
 	auto bMaxOk = HAS_EQUAL_MAX ? ( tValue<=tMax ) : ( tValue<tMax );
+
+	return bMinOk && bMaxOk;
+}
+
+template<typename T = SphAttr_t>
+inline bool EvalRange ( T tValue, const CommonFilterSettings_t & tFilter )
+{
+	T tMin, tMax;
+	if ( tFilter.m_eType==SPH_FILTER_FLOATRANGE )
+	{
+		tMin = (T)tFilter.m_fMinValue;
+		tMax = (T)tFilter.m_fMaxValue;
+	}
+	else
+	{
+		tMin = (T)tFilter.m_iMinValue;
+		tMax = (T)tFilter.m_iMaxValue;
+	}
+
+	if ( tFilter.m_bOpenLeft )
+		return tFilter.m_bHasEqualMax ? ( tValue<=tMax ) : ( tValue<tMax );
+
+	if ( tFilter.m_bOpenRight )
+		return tFilter.m_bHasEqualMin ? ( tValue>=tMin ) : ( tValue>tMin );
+
+	auto bMinOk = tFilter.m_bHasEqualMin ? ( tValue>=tMin ) : ( tValue>tMin );
+	auto bMaxOk = tFilter.m_bHasEqualMax ? ( tValue<=tMax ) : ( tValue<tMax );
 
 	return bMinOk && bMaxOk;
 }
@@ -301,7 +328,7 @@ struct RowIdBoundaries_t
 RowIdBoundaries_t GetFilterRowIdBoundaries ( const CSphFilterSettings & tFilter, RowID_t tTotalDocs );
 
 bool	FixupFilterSettings ( const CSphFilterSettings & tSettings, CommonFilterSettings_t & tFixedSettings, const CreateFilterContext_t & tCtx, const CSphString & sAttrName, CSphString & sError );
-bool	TransformFilters ( const CreateFilterContext_t & tCtx, CSphVector<CSphFilterSettings> & dModified, CSphString & sError );
+bool	TransformFilters ( const CreateFilterContext_t & tCtx, CSphVector<CSphFilterSettings> & dModified, CSphVector<FilterTreeItem_t> & dModifiedTree, const CSphVector<CSphQueryItem> & dItems, CSphString & sError );
 int64_t	EstimateFilterSelectivity ( const CSphFilterSettings & tSettings, const CreateFilterContext_t & tCtx );
 
 #endif // _sphinxfilter_

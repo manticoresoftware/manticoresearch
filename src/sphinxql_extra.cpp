@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2021-2023, Manticore Software LTD (https://manticoresearch.com)
+// Copyright (c) 2021-2024, Manticore Software LTD (https://manticoresearch.com)
 // Copyright (c) 2001-2016, Andrew Aksyonoff
 // Copyright (c) 2008-2016, Sphinx Technologies Inc
 // All rights reserved
@@ -83,7 +83,7 @@ public:
 // unused parameter, simply to avoid type clash between all my yylex() functions
 #define YY_DECL inline int flex_extraparser ( YYSTYPE* lvalp, void* yyscanner, SqlExtraParser_c* pParser )
 
-#include "flexsphinxqlextra.c"
+#include "flexsphinxql_extra.c"
 
 static void yyerror ( SqlParserTraits_c* pParser, const char* szMessage )
 {

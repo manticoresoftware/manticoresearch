@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2017-2023, Manticore Software LTD (https://manticoresearch.com)
+// Copyright (c) 2017-2024, Manticore Software LTD (https://manticoresearch.com)
 // Copyright (c) 2001-2016, Andrew Aksyonoff
 // Copyright (c) 2008-2016, Sphinx Technologies Inc
 // All rights reserved
@@ -57,11 +57,6 @@ public:
 
 	void Export ( Writer_i & w ) const;
 	void Export ( JsonEscapedBuilder& tOut ) const;
-
-private:
-//	void Export ( CSphWriter& w, CSphVector<BYTE>& dPrefix, int iNode, int* pCount ) const;
-	template<typename WRITER>
-	void Export ( WRITER&& W, CSphVector<BYTE>& dPrefix, int iNode, int* pCount ) const;
 };
 
 /// exceptions trie builder

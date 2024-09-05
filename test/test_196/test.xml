@@ -66,7 +66,72 @@ index idx_pre2 : idx_pre1
 	wordforms			= <this_test/>/wf_pre.txt
 }
 
+
+source test3
+{
+	type				= mysql
+	<sql_settings/>
+	sql_query			= select *, 11 as gid from test_table1
+	sql_attr_uint		= gid
+}
+
+index idx3
+{
+	source				= test3
+	path				= <data_path/>/idx3
+    wordforms			= <this_test/>/wf3.txt
+}
+
+index idx21
+{
+	source				= test3
+	path				= <data_path/>/idx21
+    wordforms			= <this_test/>/wf21.txt
+    
+    charset_table       = non_cjk,=,U+3e,U+7e
+    embedded_limit      = 0  
+}
+
+index idx22
+{
+	source				= test3
+	path				= <data_path/>/idx22
+    wordforms			= <this_test/>/wf21.txt
+    
+    charset_table       = non_cjk,=,U+3e,U+7e
+    embedded_limit      = 128000
+}
+
+index idx31
+{
+	source				= test3
+	path				= <data_path/>/idx31
+    exceptions			= <this_test/>/ex21.txt
+    
+    charset_table       = non_cjk,=,U+3e
+    embedded_limit      = 0  
+}
+
+index idx32
+{
+	source				= test3
+	path				= <data_path/>/idx32
+    exceptions			= <this_test/>/ex21.txt
+    
+    charset_table       = non_cjk,=,U+3e
+    embedded_limit      = 128000    
+}
 </config>
+
+<metaindex name='META:wf'>
+<index>idx21</index>
+<index>idx22</index>
+</metaindex>
+
+<metaindex name='META:ex'>
+<index>idx31</index>
+<index>idx32</index>
+</metaindex>
 
 <db_create>
 CREATE TABLE test_table
@@ -121,6 +186,25 @@ select * from ord2 where match('^wound$');
 <!-- regression prefix matches no wordform only index -->
 select id from idx_pre1 where match('forty*') order by id asc;
 select id from idx_pre2 where match('forty*') order by id asc;
+
+<!-- regression query parse error due to multi wordform inside the phrase -->
+select id from idx3 where match(' ("e a") ') order by id asc;
+
+<!-- escaping delimiter at wordforms and exceptions -->
+CALL KEYWORDS ( 'a> b', 'META:wf' );
+CALL KEYWORDS ( '>b b', 'META:wf' );
+CALL KEYWORDS ( 'c=> b', 'META:wf' );
+CALL KEYWORDS ( '=>d b', 'META:wf' );
+CALL KEYWORDS ( '=>a > f > b', 'META:wf' );
+CALL KEYWORDS ( '\\~g b', 'META:wf' );
+CALL KEYWORDS ( '\\~g b ~g', 'META:wf' );
+
+CALL KEYWORDS ( 'a> b', 'META:ex' );
+CALL KEYWORDS ( '>b b', 'META:ex' );
+CALL KEYWORDS ( 'c=> b', 'META:ex' );
+CALL KEYWORDS ( '=>d b', 'META:ex' );
+CALL KEYWORDS ( '=>a> b', 'META:ex' );
+
 </sphinxql></queries>
 
 </test>

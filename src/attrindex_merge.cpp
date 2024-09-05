@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2017-2023, Manticore Software LTD (https://manticoresearch.com)
+// Copyright (c) 2017-2024, Manticore Software LTD (https://manticoresearch.com)
 // Copyright (c) 2001-2016, Andrew Aksyonoff
 // Copyright (c) 2008-2016, Sphinx Technologies Inc
 // All rights reserved
@@ -18,6 +18,7 @@
 #include "attrindex_builder.h"
 #include "secondarylib.h"
 #include "knnmisc.h"
+#include "jsonsi.h"
 #include "attrindex_merge.h"
 
 class AttrMerger_c::Impl_c
@@ -26,6 +27,7 @@ class AttrMerger_c::Impl_c
 	HistogramContainer_c					m_tHistograms;
 	CSphVector<PlainOrColumnar_t>			m_dAttrsForHistogram;
 	std::unique_ptr<knn::Builder_i>			m_pKNNBuilder;
+	std::unique_ptr<JsonSIBuilder_i>		m_pJsonSIBuilder;
 	CSphVector<PlainOrColumnar_t>			m_dAttrsForKNN;
 	CSphFixedVector<DocidRowidPair_t> 		m_dDocidLookup {0};
 	CSphWriter								m_tWriterSPA;
@@ -38,6 +40,7 @@ class AttrMerger_c::Impl_c
 	MergeCb_c & 							m_tMonitor;
 	CSphString &							m_sError;
 	int64_t									m_iTotalDocs;
+	BuildBufferSettings_t					m_tBufferSettings;
 
 	CSphVector<PlainOrColumnar_t>	m_dSiAttrs;
 	std::unique_ptr<SI::Builder_i>	m_pSIdxBuilder;
@@ -55,10 +58,11 @@ private:
 	}
 
 public:
-	Impl_c ( MergeCb_c & tMonitor, CSphString & sError, int64_t iTotalDocs )
+	Impl_c ( MergeCb_c & tMonitor, CSphString & sError, int64_t iTotalDocs, const BuildBufferSettings_t & tSettings )
 		: m_tMonitor ( tMonitor )
 		, m_sError ( sError )
 		, m_iTotalDocs ( iTotalDocs )
+		, m_tBufferSettings ( tSettings )
 	{}
 
 	bool Prepare ( const CSphIndex * pSrcIndex, const CSphIndex * pDstIndex );
@@ -75,56 +79,64 @@ public:
 bool AttrMerger_c::Impl_c::Prepare ( const CSphIndex * pSrcIndex, const CSphIndex * pDstIndex )
 {
 	auto sSPA = GetTmpFilename ( pDstIndex, SPH_EXT_SPA );
-	if ( pDstIndex->GetMatchSchema().HasNonColumnarAttrs() && !m_tWriterSPA.OpenFile ( sSPA, m_sError ) )
+	const CSphSchema & tDstSchema = pDstIndex->GetMatchSchema();
+	if ( tDstSchema.HasNonColumnarAttrs() && !m_tWriterSPA.OpenFile ( sSPA, m_sError ) )
 		return false;
 
-	if ( pDstIndex->GetMatchSchema().HasBlobAttrs() )
+	if ( tDstSchema.HasBlobAttrs() )
 	{
-		m_pBlobRowBuilder = sphCreateBlobRowBuilder ( pSrcIndex->GetMatchSchema(), GetTmpFilename ( pDstIndex, SPH_EXT_SPB ), pSrcIndex->GetSettings().m_tBlobUpdateSpace, m_sError );
+		m_pBlobRowBuilder = sphCreateBlobRowBuilder ( pSrcIndex->GetMatchSchema(), GetTmpFilename ( pDstIndex, SPH_EXT_SPB ), pSrcIndex->GetSettings().m_tBlobUpdateSpace, m_tBufferSettings.m_iBufferAttributes, m_sError );
 		if ( !m_pBlobRowBuilder )
 			return false;
 	}
 
 	if ( pDstIndex->GetDocstore() )
 	{
-		m_pDocstoreBuilder = CreateDocstoreBuilder ( GetTmpFilename ( pDstIndex, SPH_EXT_SPDS ), pDstIndex->GetDocstore()->GetDocstoreSettings(), m_sError );
+		m_pDocstoreBuilder = CreateDocstoreBuilder ( GetTmpFilename ( pDstIndex, SPH_EXT_SPDS ), pDstIndex->GetDocstore()->GetDocstoreSettings(), m_tBufferSettings.m_iBufferStorage, m_sError );
 		if ( !m_pDocstoreBuilder )
 			return false;
 
-		for ( int i = 0; i < pDstIndex->GetMatchSchema().GetFieldsCount(); ++i )
-			if ( pDstIndex->GetMatchSchema().IsFieldStored(i) )
-				m_pDocstoreBuilder->AddField ( pDstIndex->GetMatchSchema().GetFieldName(i), DOCSTORE_TEXT );
+		for ( int i = 0; i < tDstSchema.GetFieldsCount(); ++i )
+			if ( tDstSchema.IsFieldStored(i) )
+				m_pDocstoreBuilder->AddField ( tDstSchema.GetFieldName(i), DOCSTORE_TEXT );
 
-		for ( int i = 0; i < pDstIndex->GetMatchSchema().GetAttrsCount(); ++i )
-			if ( pDstIndex->GetMatchSchema().IsAttrStored(i) )
-				m_pDocstoreBuilder->AddField ( pDstIndex->GetMatchSchema().GetAttr(i).m_sName, DOCSTORE_ATTR );
+		for ( int i = 0; i < tDstSchema.GetAttrsCount(); ++i )
+			if ( tDstSchema.IsAttrStored(i) )
+				m_pDocstoreBuilder->AddField ( tDstSchema.GetAttr(i).m_sName, DOCSTORE_ATTR );
 	}
 
-	if ( pDstIndex->GetMatchSchema().HasColumnarAttrs() )
+	if ( tDstSchema.HasColumnarAttrs() )
 	{
-		m_pColumnarBuilder = CreateColumnarBuilder ( pDstIndex->GetMatchSchema(), GetTmpFilename ( pDstIndex, SPH_EXT_SPC ), m_sError );
+		m_pColumnarBuilder = CreateColumnarBuilder ( tDstSchema, GetTmpFilename ( pDstIndex, SPH_EXT_SPC ), m_tBufferSettings.m_iBufferColumnar, m_sError );
 		if ( !m_pColumnarBuilder )
 			return false;
 	}
 
-	if ( pDstIndex->GetMatchSchema().HasKNNAttrs() )
+	if ( tDstSchema.HasKNNAttrs() )
 	{
-		m_pKNNBuilder = BuildCreateKNN ( pDstIndex->GetMatchSchema(), m_iTotalDocs, m_dAttrsForKNN, m_sError );
+		m_pKNNBuilder = BuildCreateKNN ( tDstSchema, m_iTotalDocs, m_dAttrsForKNN, m_sError );
 		if ( !m_pKNNBuilder )
+			return false;
+	}
+
+	if ( tDstSchema.HasJsonSIAttrs() )
+	{
+		m_pJsonSIBuilder = CreateJsonSIBuilder ( tDstSchema, pDstIndex->GetTmpFilename(SPH_EXT_SPB), GetTmpFilename ( pDstIndex, SPH_EXT_SPJIDX ), m_sError );
+		if ( !m_pJsonSIBuilder )
 			return false;
 	}
 
 	if ( IsSecondaryLibLoaded() )
 	{
-		m_pSIdxBuilder = CreateIndexBuilder ( 64 * 1024 * 1024, pDstIndex->GetMatchSchema(), GetTmpFilename ( pDstIndex, SPH_EXT_SPIDX ), m_dSiAttrs, m_sError );
+		m_pSIdxBuilder = CreateIndexBuilder ( m_tBufferSettings.m_iSIMemLimit, tDstSchema, GetTmpFilename ( pDstIndex, SPH_EXT_SPIDX ), m_dSiAttrs, m_tBufferSettings.m_iBufferStorage, m_sError );
 		if ( !m_pSIdxBuilder )
 			return false;
 	}
 
-	m_tMinMax.Init ( pDstIndex->GetMatchSchema() );
+	m_tMinMax.Init ( tDstSchema );
 
 	m_dDocidLookup.Reset ( m_iTotalDocs );
-	BuildCreateHistograms ( m_tHistograms, m_dAttrsForHistogram, pDstIndex->GetMatchSchema() );
+	BuildCreateHistograms ( m_tHistograms, m_dAttrsForHistogram, tDstSchema );
 
 	m_tResultRowID = 0;
 	return true;
@@ -216,11 +228,14 @@ bool AttrMerger_c::Impl_c::CopyMixedAttributes ( const CSphIndex & tIndex, const
 
 		if ( m_pBlobRowBuilder )
 		{
-			const BYTE* pOldBlobRow = tIndex.GetRawBlobAttrs() + sphGetRowAttr ( pRow, pBlobLocator->m_tLocator );
-			uint64_t	uNewOffset	= m_pBlobRowBuilder->Flush ( pOldBlobRow );
+			const BYTE * pOldBlobRow = tIndex.GetRawBlobAttrs() + sphGetRowAttr ( pRow, pBlobLocator->m_tLocator );
+			std::pair<SphOffset_t, SphOffset_t> tOffsetSize = m_pBlobRowBuilder->Flush ( pOldBlobRow );
+
+			if ( m_pJsonSIBuilder )
+				m_pJsonSIBuilder->AddRowSize ( tOffsetSize.second );
 
 			memcpy ( dTmpRow.Begin(), pRow, iStrideBytes );
-			sphSetRowAttr ( dTmpRow.Begin(), pBlobLocator->m_tLocator, uNewOffset );
+			sphSetRowAttr ( dTmpRow.Begin(), pBlobLocator->m_tLocator, tOffsetSize.first );
 
 			m_tWriterSPA.PutBytes ( dTmpRow.Begin(), iStrideBytes );
 		} else if ( iStrideBytes )
@@ -331,7 +346,10 @@ bool AttrMerger_c::Impl_c::FinishMergeAttributes ( const CSphIndex * pDstIndex, 
 		return false;
 	}
 
-	if ( m_pKNNBuilder && !m_pKNNBuilder->Save ( GetTmpFilename ( pDstIndex, SPH_EXT_SPKNN ).cstr(), sError ) )
+	if ( m_pJsonSIBuilder && !m_pJsonSIBuilder->Done(m_sError) )
+		return false;
+
+	if ( m_pKNNBuilder && !m_pKNNBuilder->Save ( GetTmpFilename ( pDstIndex, SPH_EXT_SPKNN ).cstr(), m_tBufferSettings.m_iBufferStorage, sError ) )
 	{
 		m_sError = sError.c_str();
 		return false;
@@ -344,8 +362,8 @@ bool AttrMerger_c::Impl_c::FinishMergeAttributes ( const CSphIndex * pDstIndex, 
 }
 
 
-AttrMerger_c::AttrMerger_c ( MergeCb_c& tMonitor, CSphString& sError, int64_t iTotalDocs )
-	: m_pImpl { std::make_unique<Impl_c> ( tMonitor, sError, iTotalDocs ) }
+AttrMerger_c::AttrMerger_c ( MergeCb_c& tMonitor, CSphString& sError, int64_t iTotalDocs, const BuildBufferSettings_t & tSettings )
+	: m_pImpl { std::make_unique<Impl_c> ( tMonitor, sError, iTotalDocs, tSettings ) }
 {}
 
 AttrMerger_c::~AttrMerger_c() = default;
@@ -367,50 +385,56 @@ bool AttrMerger_c::FinishMergeAttributes ( const CSphIndex* pDstIndex, BuildHead
 	return bOk;
 }
 
-
 /////////////////////////////////////////////////////////////////////////////
-
 
 class SiBuilder_c
 {
 public:
-	SiBuilder_c (  MergeCb_c & tMonitor, CSphString & sError )
-		: m_tMonitor ( tMonitor )
-		, m_sError ( sError )
-	{}
+				SiBuilder_c ( const CSphIndex & tIndex, MergeCb_c & tMonitor, int64_t iNumDocs, CSphString & sError );
 
-	bool CopyAttributes ( const CSphIndex & tIndex, const VecTraits_T<RowID_t> & dRowMap );
-
-	CSphString m_sFilename;
+	bool		Build();
+	StrVec_t	GetOldFiles() const { return m_dOldFiles; }
+	StrVec_t	GetNewFiles() const { return m_dNewFiles; }
 
 private:
-	MergeCb_c & m_tMonitor;
-	CSphString & m_sError;
+	const CSphIndex &	m_tIndex;
+	MergeCb_c &			m_tMonitor;
+	int64_t				m_iNumDocs;
+	CSphString &		m_sError;
+	StrVec_t			m_dOldFiles;
+	StrVec_t			m_dNewFiles;
 
 	CSphVector<PlainOrColumnar_t>	m_dSiAttrs;
 	std::unique_ptr<SI::Builder_i>	m_pSIdxBuilder;
+	std::unique_ptr<JsonSIBuilder_i> m_pJsonSIBuilder;
 
-	bool CopyPureColumnarAttributes ( const CSphIndex & tIndex, const VecTraits_T<RowID_t> & dRowMap );
-	bool CopyMixedAttributes ( const CSphIndex & tIndex, const VecTraits_T<RowID_t> & dRowMap );
+	bool		ProcessPureColumnarAttributes();
+	bool		ProcessMixedAttributes();
 };
 
-bool SiBuilder_c::CopyPureColumnarAttributes ( const CSphIndex & tIndex, const VecTraits_T<RowID_t> & dRowMap )
-{
-	assert ( !tIndex.GetRawAttrs() );
-	assert ( tIndex.GetMatchSchema().GetAttr ( 0 ).IsColumnar() );
 
-	auto dColumnarIterators = CreateAllColumnarIterators ( tIndex.GetColumnar(), tIndex.GetMatchSchema() );
+SiBuilder_c::SiBuilder_c ( const CSphIndex & tIndex, MergeCb_c & tMonitor, int64_t iNumDocs, CSphString & sError )
+	: m_tIndex ( tIndex )
+	, m_tMonitor ( tMonitor )
+	, m_iNumDocs ( iNumDocs )
+	, m_sError ( sError )
+{}
+
+
+bool SiBuilder_c::ProcessPureColumnarAttributes()
+{
+	assert ( !m_tIndex.GetRawAttrs() );
+	assert ( m_tIndex.GetMatchSchema().GetAttr ( 0 ).IsColumnar() );
+
+	auto dColumnarIterators = CreateAllColumnarIterators ( m_tIndex.GetColumnar(), m_tIndex.GetMatchSchema() );
 	CSphVector<int64_t> dTmp;
 
-	int iChunk = tIndex.m_iChunk;
+	int iChunk = m_tIndex.m_iChunk;
 	m_tMonitor.SetEvent ( MergeCb_c::E_MERGEATTRS_START, iChunk );
 	AT_SCOPE_EXIT ( [this, iChunk] { m_tMonitor.SetEvent ( MergeCb_c::E_MERGEATTRS_FINISHED, iChunk ); } );
 
-	for ( RowID_t tRowID = 0, tRows = (RowID_t)dRowMap.GetLength64(); tRowID<tRows; ++tRowID )
+	for ( RowID_t tRowID = 0; tRowID<(RowID_t)m_iNumDocs; ++tRowID )
 	{
-		if ( dRowMap[tRowID] == INVALID_ROWID )
-			continue;
-
 		if ( m_tMonitor.NeedStop() )
 			return false;
 
@@ -420,74 +444,104 @@ bool SiBuilder_c::CopyPureColumnarAttributes ( const CSphIndex & tIndex, const V
 	return true;
 }
 
-bool SiBuilder_c::CopyMixedAttributes ( const CSphIndex & tIndex, const VecTraits_T<RowID_t> & dRowMap )
+
+bool SiBuilder_c::ProcessMixedAttributes()
 {
-	auto dColumnarIterators = CreateAllColumnarIterators ( tIndex.GetColumnar(), tIndex.GetMatchSchema() );
+	auto dColumnarIterators = CreateAllColumnarIterators ( m_tIndex.GetColumnar(), m_tIndex.GetMatchSchema() );
 	CSphVector<int64_t> dTmp;
 
-	const CSphRowitem * pRow = tIndex.GetRawAttrs();
-	assert ( pRow );
-	int iStride = tIndex.GetMatchSchema().GetRowSize();
+	const CSphRowitem * pRow = m_tIndex.GetRawAttrs();
+	assert(pRow);
+	const BYTE * pBlobRow = m_tIndex.GetRawBlobAttrs();
+	const CSphSchema & tSchema = m_tIndex.GetMatchSchema();
+	const CSphColumnInfo * pBlobLoc = tSchema.GetAttr ( sphGetBlobLocatorName() );
+	int iStride = tSchema.GetRowSize();
+	int iNumBlobAttrs = 0;
+	for ( int i = 0; i < tSchema.GetAttrsCount(); i++ )
+		if ( tSchema.GetAttr(i).m_tLocator.IsBlobAttr() )
+			iNumBlobAttrs++;
 
-	int iChunk = tIndex.m_iChunk;
+	int iChunk = m_tIndex.m_iChunk;
 	m_tMonitor.SetEvent ( MergeCb_c::E_MERGEATTRS_START, iChunk );
 	AT_SCOPE_EXIT ( [this, iChunk] { m_tMonitor.SetEvent ( MergeCb_c::E_MERGEATTRS_FINISHED, iChunk ); } );
 
-	for ( RowID_t tRowID = 0, tRows = (RowID_t)dRowMap.GetLength64(); tRowID<tRows; ++tRowID, pRow += iStride )
+	for ( RowID_t tRowID = 0; tRowID<(RowID_t)m_iNumDocs; ++tRowID, pRow += iStride )
 	{
-		if ( dRowMap[tRowID] == INVALID_ROWID )
-			continue;
-
 		if ( m_tMonitor.NeedStop() )
 			return false;
 
-		m_pSIdxBuilder->SetRowID ( tRowID );
-		BuildStoreSI ( tRowID, pRow, tIndex.GetRawBlobAttrs(), dColumnarIterators, m_dSiAttrs, m_pSIdxBuilder.get(), dTmp );
+		m_pSIdxBuilder->SetRowID(tRowID);
+		BuildStoreSI ( tRowID, pRow, m_tIndex.GetRawBlobAttrs(), dColumnarIterators, m_dSiAttrs, m_pSIdxBuilder.get(), dTmp );
+
+		if ( m_pJsonSIBuilder )
+		{
+			assert ( pBlobRow && pBlobLoc );
+			SphAttr_t tBlobRowOffset = sphGetRowAttr ( pRow, pBlobLoc->m_tLocator );
+			m_pJsonSIBuilder->AddRowSize ( sphGetBlobTotalLen ( pBlobRow+tBlobRowOffset, iNumBlobAttrs ) );
+		}
 	}
 	return true;
 }
 
 
-bool SiBuilder_c::CopyAttributes ( const CSphIndex & tIndex, const VecTraits_T<RowID_t> & dRowMap )
+bool SiBuilder_c::Build()
 {
-	if ( IsSecondaryLibLoaded() )
-	{
-		m_sFilename = tIndex.GetTmpFilename ( SPH_EXT_SPIDX );
-		m_pSIdxBuilder = CreateIndexBuilder ( 64*1024*1024, tIndex.GetMatchSchema(), m_sFilename, m_dSiAttrs, m_sError );
-	} else
+	if ( !IsSecondaryLibLoaded() )
 	{
 		m_sError = "secondary index library not loaded";
+		return false;
 	}
 
+	CSphString sSPIDX = m_tIndex.GetTmpFilename ( SPH_EXT_SPIDX );
+	CSphString sSPJIDX = m_tIndex.GetTmpFilename ( SPH_EXT_SPJIDX );
+	m_dNewFiles.Add(sSPIDX);
+	m_dOldFiles.Add ( m_tIndex.GetFilename ( SPH_EXT_SPIDX ) );
+
+	BuildBufferSettings_t tSettings; // use default buffer settings
+	m_pSIdxBuilder = CreateIndexBuilder ( tSettings.m_iSIMemLimit, m_tIndex.GetMatchSchema(), sSPIDX, m_dSiAttrs, tSettings.m_iBufferStorage, m_sError );
 	if ( !m_pSIdxBuilder )
 		return false;
 
+	if ( m_tIndex.GetMatchSchema().HasJsonSIAttrs() )
+	{
+		m_dNewFiles.Add(sSPJIDX);
+		m_dOldFiles.Add ( m_tIndex.GetFilename ( SPH_EXT_SPJIDX ) );
+		m_pJsonSIBuilder = CreateJsonSIBuilder ( m_tIndex.GetMatchSchema(), m_tIndex.GetFilename(SPH_EXT_SPB), sSPJIDX, m_sError );
+		if ( !m_pJsonSIBuilder )
+			return false;
+	}
+
 	bool bOk = false;
-	if ( !tIndex.GetRawAttrs() )
-		bOk = CopyPureColumnarAttributes( tIndex, dRowMap );
+	if ( !m_tIndex.GetRawAttrs() )
+		bOk = ProcessPureColumnarAttributes();
 	else
-		bOk = CopyMixedAttributes ( tIndex, dRowMap );
+		bOk = ProcessMixedAttributes();
 
 	if ( !bOk )
 		return false;
 
 	std::string sError;
-	if ( m_pSIdxBuilder.get() && !m_pSIdxBuilder->Done ( sError ) )
+	if ( !m_pSIdxBuilder->Done(sError) )
 	{
 		m_sError = sError.c_str();
 		return false;
 	}
 
+	if ( m_pJsonSIBuilder && !m_pJsonSIBuilder->Done(m_sError) )
+		return false;
+
 	return true;
 }
 
-bool SiRecreate ( MergeCb_c & tMonitor, const CSphIndex & tIndex, const VecTraits_T<RowID_t> & dRowMap, CSphString & sFile, CSphString & sError )
+
+bool SiRecreate ( MergeCb_c & tMonitor, const CSphIndex & tIndex, int64_t iNumDocs, StrVec_t & dOldFiles, StrVec_t & dNewFiles, CSphString & sError )
 {
-	SiBuilder_c tBuilder ( tMonitor, sError );
-	if ( !tBuilder.CopyAttributes ( tIndex, dRowMap ) )
+	SiBuilder_c tBuilder ( tIndex, tMonitor, iNumDocs, sError );
+	if ( !tBuilder.Build() )
 		return false;
 
-	sFile = tBuilder.m_sFilename;
+	dOldFiles = tBuilder.GetOldFiles();
+	dNewFiles = tBuilder.GetNewFiles();
 
 	return true;
 }

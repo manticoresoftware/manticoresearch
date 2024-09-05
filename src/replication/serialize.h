@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2019-2023, Manticore Software LTD (https://manticoresearch.com)
+// Copyright (c) 2019-2024, Manticore Software LTD (https://manticoresearch.com)
 // Copyright (c) 2001-2016, Andrew Aksyonoff
 // Copyright (c) 2008-2016, Sphinx Technologies Inc
 // All rights reserved
@@ -19,4 +19,6 @@ bool LoadCmdHeader ( MemoryReader_c & tReader, ReplicationCommand_t * pCmd );
 void SaveUpdate ( const CSphQuery & tQuery, MemoryWriter_c & tWriter );
 void SaveAttrUpdate ( const CSphAttrUpdate & tUpd, MemoryWriter_c & tWriter );
 void SaveCmdHeader ( const ReplicationCommand_t& tCmd, MemoryWriter_c & tWriter );
+
+WORD GetVerCommandReplicate();
 

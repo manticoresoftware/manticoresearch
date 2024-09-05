@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2017-2023, Manticore Software LTD (https://manticoresearch.com)
+// Copyright (c) 2017-2024, Manticore Software LTD (https://manticoresearch.com)
 // Copyright (c) 2001-2016, Andrew Aksyonoff
 // Copyright (c) 2008-2016, Sphinx Technologies Inc
 // All rights reserved
@@ -17,6 +17,7 @@
 #include "tokenizer/tokenizer.h"
 
 void CSphDict::DictBegin ( CSphAutofile&, CSphAutofile&, int ) {}
+void CSphDict::SortedDictBegin ( CSphAutofile&, int, int ) {}
 void CSphDict::DictEntry ( const DictEntry_t& ) {}
 void CSphDict::DictEndEntries ( SphOffset_t ) {}
 
@@ -60,12 +61,7 @@ void SetupDictionary ( DictRefPtr_c& pDict, const CSphDictSettings& tSettings, c
 	{
 		CSphString sStopwordFile = tSettings.m_sStopwords;
 		if ( !sStopwordFile.IsEmpty() )
-		{
-			if ( pFilenameBuilder )
-				sStopwordFile = pFilenameBuilder->GetFullPath ( sStopwordFile );
-
-			pDict->LoadStopwords ( sStopwordFile.cstr(), pTokenizer, bStripFile );
-		}
+			pDict->LoadStopwords ( sStopwordFile.cstr(), pFilenameBuilder, pTokenizer, bStripFile );
 	}
 
 	StrVec_t dWordformFiles;

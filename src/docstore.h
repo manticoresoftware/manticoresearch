@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2017-2023, Manticore Software LTD (https://manticoresearch.com)
+// Copyright (c) 2017-2024, Manticore Software LTD (https://manticoresearch.com)
 // All rights reserved
 //
 // This program is free software; you can redistribute it and/or modify
@@ -117,8 +117,8 @@ private:
 };
 
 
-std::unique_ptr<Docstore_i>		CreateDocstore ( int64_t iIndexId, const CSphString & sFilename, CSphString & sError );
-std::unique_ptr<DocstoreBuilder_i> CreateDocstoreBuilder ( const CSphString & sFilename, const DocstoreSettings_t & tSettings, CSphString & sError );
+std::unique_ptr<Docstore_i>			CreateDocstore ( int64_t iIndexId, const CSphString & sFilename, CSphString & sError );
+std::unique_ptr<DocstoreBuilder_i>	CreateDocstoreBuilder ( const CSphString & sFilename, const DocstoreSettings_t & tSettings, int iBufferSize, CSphString & sError );
 std::unique_ptr<DocstoreRT_i>		CreateDocstoreRT();
 std::unique_ptr<DocstoreFields_i>	CreateDocstoreFields();
 
@@ -128,9 +128,6 @@ void				ShutdownDocstore();
 class DebugCheckError_i;
 class CSphAutoreader;
 bool				CheckDocstore ( CSphAutoreader & tReader, DebugCheckError_i & tReporter, int64_t iRowsCount );
-
-ISphExpr *			CreateExpr_GetStoredField ( const CSphString & sName );
-ISphExpr *			CreateExpr_GetStoredAttr ( const CSphString & sName, ESphAttr eAttr );
 
 #endif
 

@@ -54,29 +54,89 @@ insert into test_table values
 </db_insert>
 
 <httpqueries>
-<query endpoint="json/search">{ "index": "test1", "profile":true, "query": { "match": { "content": "first" } } } }</query>
-<query endpoint="json/search">{ "index": "test1", "profile":true, "query": { "match_all": {} } } }</query>
-<query endpoint="json/search">{ "index": "test1", "profile":true, "query": { "match": { "content,title": { "query":"glanced on", "operator":"or" } } } }</query>
-<query endpoint="json/search">{ "index": "test1", "profile":true, "query": { "match": { "content,title": { "query":"glanced on", "operator":"and" } } } }</query>
+<query endpoint="json/search">{ "index": "test1", "plan":1, "query": { "match": { "content": "first" } } } }</query>
+<query endpoint="json/search">{ "index": "test1", "plan":1, "query": { "match_all": {} } } }</query>
+<query endpoint="json/search">{ "index": "test1", "plan":1, "query": { "match": { "content,title": { "query":"glanced on", "operator":"or" } } } }</query>
+<query endpoint="json/search">{ "index": "test1", "plan":1, "query": { "match": { "content,title": { "query":"glanced on", "operator":"and" } } } }</query>
 
 <!-- bool queries -->
 <!-- "must" -->
-<query endpoint="json/search">{ "index": "test1", "profile":true, "query": { "bool" : { "must": [ { "match" : { "_all" : "to" } }, { "match" : { "_all" : "on" } } ] } } }</query>
+<query endpoint="json/search">{ "index": "test1", "plan":1, "query": { "bool" : { "must": [ { "match" : { "_all" : "to" } }, { "match" : { "_all" : "on" } } ] } } }</query>
 
 <!-- "should" -->
-<query endpoint="json/search">{ "index": "test1", "profile":true, "query": { "bool" : { "should": [ { "match" : { "_all" : "glanced " } }, { "match" : { "_all" : "despite" } } ] } } }</query>
+<query endpoint="json/search">{ "index": "test1", "plan":1, "query": { "bool" : { "should": [ { "match" : { "_all" : "glanced " } }, { "match" : { "_all" : "despite" } } ] } } }</query>
 
 <!-- "must+must_not" -->
-<query endpoint="json/search">{ "index": "test1", "profile":true, "query": { "bool": { "must": { "match" : { "_all" : "glanced grown paean" } }, "must_not": [ { "match" : { "_all" : "irresistible" } }, { "match" : { "_all" : "certain" } } ] } } }</query>
+<query endpoint="json/search">{ "index": "test1", "plan":1, "query": { "bool": { "must": { "match" : { "_all" : "glanced grown paean" } }, "must_not": [ { "match" : { "_all" : "irresistible" } }, { "match" : { "_all" : "certain" } } ] } } }</query>
 
 <!-- must+should -->
-<query endpoint="json/search">{ "index": "test1", "profile":true, "query": { "bool": { "must": { "match" : { "_all" : "glanced grown" } }, "should": { "match" : { "_all" : "paean" } } } } }</query>
+<query endpoint="json/search">{ "index": "test1", "plan":1, "query": { "bool": { "must": { "match" : { "_all" : "glanced grown" } }, "should": { "match" : { "_all" : "paean" } } } } }</query>
 
 <!-- phrase -->
 <query endpoint="json/search">
 {
   "index":"test1",
-  "profile":true,
+  "plan":1,
+  "query":
+  {
+	"match_phrase": { "_all" : "had grown quite" }
+  }
+}
+</query>
+
+<query endpoint="json/search">{ "index": "test1", "plan":2, "query": { "match": { "content": "first" } } } }</query>
+<query endpoint="json/search">{ "index": "test1", "plan":2, "query": { "match_all": {} } } }</query>
+<query endpoint="json/search">{ "index": "test1", "plan":2, "query": { "match": { "content,title": { "query":"glanced on", "operator":"or" } } } }</query>
+<query endpoint="json/search">{ "index": "test1", "plan":2, "query": { "match": { "content,title": { "query":"glanced on", "operator":"and" } } } }</query>
+
+<!-- bool queries -->
+<!-- "must" -->
+<query endpoint="json/search">{ "index": "test1", "plan":2, "query": { "bool" : { "must": [ { "match" : { "_all" : "to" } }, { "match" : { "_all" : "on" } } ] } } }</query>
+
+<!-- "should" -->
+<query endpoint="json/search">{ "index": "test1", "plan":2, "query": { "bool" : { "should": [ { "match" : { "_all" : "glanced " } }, { "match" : { "_all" : "despite" } } ] } } }</query>
+
+<!-- "must+must_not" -->
+<query endpoint="json/search">{ "index": "test1", "plan":2, "query": { "bool": { "must": { "match" : { "_all" : "glanced grown paean" } }, "must_not": [ { "match" : { "_all" : "irresistible" } }, { "match" : { "_all" : "certain" } } ] } } }</query>
+
+<!-- must+should -->
+<query endpoint="json/search">{ "index": "test1", "plan":2, "query": { "bool": { "must": { "match" : { "_all" : "glanced grown" } }, "should": { "match" : { "_all" : "paean" } } } } }</query>
+
+<!-- phrase -->
+<query endpoint="json/search">
+{
+  "index":"test1",
+  "plan":2,
+  "query":
+  {
+	"match_phrase": { "_all" : "had grown quite" }
+  }
+}
+</query>
+
+<query endpoint="json/search">{ "index": "test1", "plan":3, "query": { "match": { "content": "first" } } } }</query>
+<query endpoint="json/search">{ "index": "test1", "plan":3, "query": { "match_all": {} } } }</query>
+<query endpoint="json/search">{ "index": "test1", "plan":3, "query": { "match": { "content,title": { "query":"glanced on", "operator":"or" } } } }</query>
+<query endpoint="json/search">{ "index": "test1", "plan":3, "query": { "match": { "content,title": { "query":"glanced on", "operator":"and" } } } }</query>
+
+<!-- bool queries -->
+<!-- "must" -->
+<query endpoint="json/search">{ "index": "test1", "plan":3, "query": { "bool" : { "must": [ { "match" : { "_all" : "to" } }, { "match" : { "_all" : "on" } } ] } } }</query>
+
+<!-- "should" -->
+<query endpoint="json/search">{ "index": "test1", "plan":3, "query": { "bool" : { "should": [ { "match" : { "_all" : "glanced " } }, { "match" : { "_all" : "despite" } } ] } } }</query>
+
+<!-- "must+must_not" -->
+<query endpoint="json/search">{ "index": "test1", "plan":3, "query": { "bool": { "must": { "match" : { "_all" : "glanced grown paean" } }, "must_not": [ { "match" : { "_all" : "irresistible" } }, { "match" : { "_all" : "certain" } } ] } } }</query>
+
+<!-- must+should -->
+<query endpoint="json/search">{ "index": "test1", "plan":3, "query": { "bool": { "must": { "match" : { "_all" : "glanced grown" } }, "should": { "match" : { "_all" : "paean" } } } } }</query>
+
+<!-- phrase -->
+<query endpoint="json/search">
+{
+  "index":"test1",
+  "plan":3,
   "query":
   {
 	"match_phrase": { "_all" : "had grown quite" }

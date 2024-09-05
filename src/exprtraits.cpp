@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2017-2023, Manticore Software LTD (https://manticoresearch.com)
+// Copyright (c) 2017-2024, Manticore Software LTD (https://manticoresearch.com)
 // Copyright (c) 2001-2016, Andrew Aksyonoff
 // Copyright (c) 2008-2016, Sphinx Technologies Inc
 // All rights reserved
@@ -63,22 +63,23 @@ uint64_t sphCalcExprDepHash ( const char * szTag, ISphExpr * pExpr, const ISphSc
 
 uint64_t sphCalcExprDepHash ( ISphExpr * pExpr, const ISphSchema & tSorterSchema, uint64_t uPrevHash, bool & bDisable )
 {
-	CSphVector<int> dCols;
+	CSphVector<CSphString> dCols;
 	pExpr->Command ( SPH_EXPR_GET_DEPENDENT_COLS, &dCols );
 
 	uint64_t uHash = uPrevHash;
 	ARRAY_FOREACH ( i, dCols )
 	{
-		const CSphColumnInfo & tCol = tSorterSchema.GetAttr ( dCols[i] );
-		if ( tCol.m_pExpr )
+		const CSphColumnInfo * pCol = tSorterSchema.GetAttr ( dCols[i].cstr() );
+		assert(pCol);
+		if ( pCol->m_pExpr )
 		{
 			// one more expression
-			uHash = tCol.m_pExpr->GetHash ( tSorterSchema, uHash, bDisable );
+			uHash = pCol->m_pExpr->GetHash ( tSorterSchema, uHash, bDisable );
 			if ( bDisable )
 				return 0;
 		}
 		else
-			uHash = sphCalcLocatorHash ( tCol.m_tLocator, uHash ); // plain column, add locator to hash
+			uHash = sphCalcLocatorHash ( pCol->m_tLocator, uHash ); // plain column, add locator to hash
 	}
 
 	return uHash;
@@ -123,3 +124,84 @@ void ConstList_c::Add ( float fValue )
 
 	m_dFloats.Add ( fValue );
 }
+
+/////////////////////////////////////////////////////////////////////
+
+Expr_Unary_c::Expr_Unary_c ( const char * szClassName, ISphExpr * pFirst )
+	: m_pFirst ( pFirst )
+	, m_szExprName ( szClassName )
+{
+	SafeAddRef ( pFirst );
+}
+
+
+void Expr_Unary_c::FixupLocator ( const ISphSchema * pOldSchema, const ISphSchema * pNewSchema )
+{
+	if ( m_pFirst )
+		m_pFirst->FixupLocator ( pOldSchema, pNewSchema );
+}
+
+
+void Expr_Unary_c::Command ( ESphExprCommand eCmd, void * pArg )
+{
+	if ( m_pFirst )
+		m_pFirst->Command ( eCmd, pArg );
+}
+
+
+uint64_t Expr_Unary_c::GetHash ( const ISphSchema & tSorterSchema, uint64_t uPrevHash, bool & bDisable )
+{
+	EXPR_CLASS_NAME_NOCHECK(m_szExprName);
+	CALC_CHILD_HASH(m_pFirst);
+	return CALC_DEP_HASHES();
+}
+
+
+Expr_Unary_c::Expr_Unary_c ( const Expr_Unary_c & rhs )
+	: m_pFirst ( SafeClone (rhs.m_pFirst) )
+	, m_szExprName ( rhs.m_szExprName )
+{}
+
+
+Expr_Binary_c::Expr_Binary_c ( const char * szClassName, ISphExpr * pFirst, ISphExpr * pSecond )
+	: m_pFirst ( pFirst )
+	, m_pSecond ( pSecond )
+	, m_szExprName ( szClassName )
+{
+	SafeAddRef ( pFirst );
+	SafeAddRef ( pSecond );
+}
+
+
+void Expr_Binary_c::FixupLocator ( const ISphSchema * pOldSchema, const ISphSchema * pNewSchema )
+{
+	m_pFirst->FixupLocator ( pOldSchema, pNewSchema );
+
+	if ( m_pSecond )
+		m_pSecond->FixupLocator ( pOldSchema, pNewSchema );
+}
+
+
+void Expr_Binary_c::Command ( ESphExprCommand eCmd, void * pArg )
+{
+	m_pFirst->Command ( eCmd, pArg );
+
+	if ( m_pSecond )
+		m_pSecond->Command ( eCmd, pArg );
+}
+
+
+uint64_t Expr_Binary_c::GetHash ( const ISphSchema & tSorterSchema, uint64_t uPrevHash, bool & bDisable )
+{
+	EXPR_CLASS_NAME_NOCHECK(m_szExprName);
+	CALC_CHILD_HASH(m_pFirst);
+	CALC_CHILD_HASH(m_pSecond);
+	return CALC_DEP_HASHES();
+}
+
+
+Expr_Binary_c::Expr_Binary_c ( const Expr_Binary_c & rhs )
+	: m_pFirst ( SafeClone (rhs.m_pFirst) )
+	, m_pSecond ( SafeClone (rhs.m_pSecond) )
+	, m_szExprName ( rhs.m_szExprName )
+{}

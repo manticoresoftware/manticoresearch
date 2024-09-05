@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2017-2023, Manticore Software LTD (https://manticoresearch.com)
+// Copyright (c) 2017-2024, Manticore Software LTD (https://manticoresearch.com)
 // Copyright (c) 2001-2016, Andrew Aksyonoff
 // Copyright (c) 2008-2016, Sphinx Technologies Inc
 // All rights reserved
@@ -449,12 +449,9 @@ bool DiskIndexChecker_c::Impl_c::ReadLegacyHeader ( CSphString& sError )
 
 	m_tWordlist.m_dCheckpoints.Reset ( m_tWordlist.m_iDictCheckpoints );
 
-	if ( !m_tWordlist.Preread ( GetFilename(SPH_EXT_SPI), m_tIndex.GetDictionary()->GetSettings().m_bWordDict, m_tIndex.GetSettings().m_iSkiplistBlockSize, sError ) )
-		return false;
-
+	return m_tWordlist.Preread ( GetFilename(SPH_EXT_SPI), m_tIndex.GetDictionary()->GetSettings().m_bWordDict, m_tIndex.GetSettings().m_iSkiplistBlockSize, sError );
 	// FIXME! add more header checks
 
-	return true;
 }
 
 bool DiskIndexChecker_c::Impl_c::ReadHeader ( CSphString& sError )
@@ -517,12 +514,8 @@ bool DiskIndexChecker_c::Impl_c::ReadHeader ( CSphString& sError )
 
 	m_tWordlist.m_dCheckpoints.Reset ( m_tWordlist.m_iDictCheckpoints );
 
-	if ( !m_tWordlist.Preread ( GetFilename ( SPH_EXT_SPI ), m_tIndex.GetDictionary()->GetSettings().m_bWordDict, m_tIndex.GetSettings().m_iSkiplistBlockSize, sError ) )
-		return false;
-
+	return m_tWordlist.Preread ( GetFilename ( SPH_EXT_SPI ), m_tIndex.GetDictionary()->GetSettings().m_bWordDict, m_tIndex.GetSettings().m_iSkiplistBlockSize, sError );
 	// FIXME! add more header checks
-
-	return true;
 }
 
 
@@ -920,24 +913,24 @@ void DiskIndexChecker_c::Impl_c::CheckDictionary()
 	{
 		CSphWordlistCheckpoint tRefCP = dCheckpoints[i];
 		const CSphWordlistCheckpoint & tCP = m_tWordlist.m_dCheckpoints[i];
-		const int iLen = bWordDict ? (int) strlen ( tCP.m_sWord ) : 0;
+		const int iLen = bWordDict ? (int) strlen ( tCP.m_szWord ) : 0;
 		if ( bWordDict )
-			tRefCP.m_sWord = dCheckpointWords.Begin() + tRefCP.m_uWordID;
-		if ( bWordDict && ( tRefCP.m_sWord[0]=='\0' || tCP.m_sWord[0]=='\0' ) )
+			tRefCP.m_szWord = dCheckpointWords.Begin() + tRefCP.m_uWordID;
+		if ( bWordDict && ( tRefCP.m_szWord[0]=='\0' || tCP.m_szWord[0]=='\0' ) )
 		{
 			m_tReporter.Fail ( "empty checkpoint %d (read_word=%s, read_len=%u, readpos=" INT64_FMT ", calc_word=%s, calc_len=%u, calcpos=" INT64_FMT ")",
-				i, tCP.m_sWord, (DWORD)strlen ( tCP.m_sWord ), (int64_t)tCP.m_iWordlistOffset,
-				tRefCP.m_sWord, (DWORD)strlen ( tRefCP.m_sWord ), (int64_t)tRefCP.m_iWordlistOffset );
+				i, tCP.m_szWord, (DWORD)strlen ( tCP.m_szWord ), (int64_t)tCP.m_iWordlistOffset,
+				tRefCP.m_szWord, (DWORD)strlen ( tRefCP.m_szWord ), (int64_t)tRefCP.m_iWordlistOffset );
 
-		} else if ( sphCheckpointCmpStrictly ( tCP.m_sWord, iLen, tCP.m_uWordID, bWordDict, tRefCP ) || tRefCP.m_iWordlistOffset!=tCP.m_iWordlistOffset )
+		} else if ( sphCheckpointCmpStrictly ( tCP.m_szWord, iLen, tCP.m_uWordID, bWordDict, tRefCP ) || tRefCP.m_iWordlistOffset!=tCP.m_iWordlistOffset )
 		{
 			if ( bWordDict )
 			{
 				m_tReporter.Fail ( "checkpoint %d differs (read_word=%s, readpos=" INT64_FMT ", calc_word=%s, calcpos=" INT64_FMT ")",
 					i,
-					tCP.m_sWord,
+					tCP.m_szWord,
 					(int64_t)tCP.m_iWordlistOffset,
-					tRefCP.m_sWord,
+					tRefCP.m_szWord,
 					(int64_t)tRefCP.m_iWordlistOffset );
 			} else
 			{
@@ -1509,13 +1502,13 @@ void DiskIndexChecker_c::Impl_c::CheckDocidLookup()
 		tCp.m_tOffset = tLookup.GetOffset();
 		tLastDocID = tCp.m_tBaseDocID;
 
-		if ( tPrevCp.m_tBaseDocID>=tCp.m_tBaseDocID )
-			m_tReporter.Fail ( "descending docid at checkpoint %d, previous docid " INT64_FMT " docid " INT64_FMT, iCp, tPrevCp.m_tBaseDocID, tCp.m_tBaseDocID );
+		if ( (uint64_t)tPrevCp.m_tBaseDocID>=(uint64_t)tCp.m_tBaseDocID )
+			m_tReporter.Fail ( "descending docid at checkpoint %d, previous docid " UINT64_FMT " docid " UINT64_FMT, iCp, tPrevCp.m_tBaseDocID, tCp.m_tBaseDocID );
 
 		tLookup.SeekTo ( tCp.m_tOffset, sizeof(DWORD) * 3 * iDocsPerCheckpoint );
 
 		int iCpDocs = iDocsPerCheckpoint;
-		// last checkpoint might have less docs
+		// last checkpoint might have fewer docs
 		if ( iCp==iCheckpoints-1 )
 		{
 			int iLefover = ( iDocs % iDocsPerCheckpoint );
@@ -1524,7 +1517,7 @@ void DiskIndexChecker_c::Impl_c::CheckDocidLookup()
 
 		for ( int i=0; i<iCpDocs; i++ )
 		{
-			DocID_t tDelta = 0;
+			uint64_t tDelta = 0;
 			DocID_t tDocID = 0;
 			RowID_t tRowID = INVALID_ROWID;
 
@@ -1536,8 +1529,8 @@ void DiskIndexChecker_c::Impl_c::CheckDocidLookup()
 			{
 				tDelta = tLookup.UnzipOffset();
 				tRowID = tLookup.GetDword();
-				if ( tDelta<0 )
-					m_tReporter.Fail ( "invalid docid delta " INT64_FMT " at row %u, checkpoint %d, doc %d, last docid " INT64_FMT, tDocID, tRowID, iCp, i, tLastDocID );
+				if ( tDelta==0 )
+					m_tReporter.Fail ( "invalid docid delta " UINT64_FMT " at row %u, checkpoint %d, doc %d, last docid " UINT64_FMT, tDocID, tRowID, iCp, i, tLastDocID );
 				else
 					tDocID = tLastDocID + tDelta;
 
@@ -1557,7 +1550,7 @@ void DiskIndexChecker_c::Impl_c::CheckDocidLookup()
 				dRowids.BitSet ( tRowID );
 
 				if ( tDocID!=sphGetDocID ( dRow.Begin() ) )
-					m_tReporter.Fail ( "invalid docid " INT64_FMT "(" INT64_FMT ") at row %u, checkpoint %d, doc %d, last docid " INT64_FMT,
+					m_tReporter.Fail ( "invalid docid " UINT64_FMT "(" UINT64_FMT ") at row %u, checkpoint %d, doc %d, last docid " UINT64_FMT,
 						tDocID, sphGetDocID ( dRow.Begin() ), tRowID, iCp, i, tLastDocID );
 			}
 
@@ -1579,7 +1572,7 @@ void DiskIndexChecker_c::Impl_c::CheckDocidLookup()
 
 			DocID_t tDocID = sphGetDocID ( dRow.Begin() );
 		
-			m_tReporter.Fail ( "row %u(" INT64_FMT ") not mapped at lookup, docid " INT64_FMT, i, m_iNumRows, tDocID );
+			m_tReporter.Fail ( "row %u(" INT64_FMT ") not mapped at lookup, docid " UINT64_FMT, i, m_iNumRows, tDocID );
 		}
 	}
 }

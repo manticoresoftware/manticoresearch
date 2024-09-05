@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2017-2023, Manticore Software LTD (https://manticoresearch.com)
+// Copyright (c) 2017-2024, Manticore Software LTD (https://manticoresearch.com)
 // Copyright (c) 2001-2016, Andrew Aksyonoff
 // Copyright (c) 2008-2016, Sphinx Technologies Inc
 // All rights reserved
@@ -316,6 +316,10 @@ struct ConsoleIndexProgress_t: public CSphIndexProgress
 
 		case PHASE_SI_BUILD:
 			cOut.Sprintf ( "creating secondary index" );
+			break;
+
+		case PHASE_JSONSI_BUILD:
+			cOut.Sprintf ( "creating json secondary index" );
 			break;
 
 		default:
@@ -1034,11 +1038,15 @@ bool DoIndex ( const CSphConfigSection & hIndex, const char * szIndexName, const
 			fprintf ( stdout, "WARNING: table '%s': no morphology or wordforms, index_exact_words=1 has no effect, ignoring\n", szIndexName );
 		}
 
-		if ( tDictSettings.m_bWordDict && pDict->HasMorphology() && ( tSettings.RawMinPrefixLen() || tSettings.m_iMinInfixLen ) && !tSettings.m_bIndexExactWords )
+		if ( !tSettings.m_bIndexExactWords && ForceExactWords ( tDictSettings.m_bWordDict, pDict->HasMorphology(), tSettings.RawMinPrefixLen(), tSettings.m_iMinInfixLen, pDict->GetSettings().m_sMorphFields.IsEmpty() ) )
 		{
 			tSettings.m_bIndexExactWords = true;
 			fprintf ( stdout, "WARNING: table '%s': dict=keywords and prefixes and morphology enabled, forcing index_exact_words=1\n", szIndexName );
 		}
+
+		bool bExpandExact = ( tSettings.m_bIndexExactWords && ( tMutableSettings.m_iExpandKeywords & KWE_EXACT )==KWE_EXACT );
+		if ( !pDict->GetSettings().m_sMorphFields.IsEmpty() && !bExpandExact )
+			fprintf ( stdout, "WARNING: table '%s': morphology_skip_fields set, consider enable expand_keywords\n", szIndexName );
 
 		Tokenizer::AddToMultiformFilterTo ( pTokenizer, pDict->GetMultiWordforms () );
 

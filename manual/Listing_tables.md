@@ -229,7 +229,7 @@ utilsApi.Sql("SHOW TABLES LIKE 'pro%'")
 ## DESCRIBE
 
 ```sql
-{DESC | DESCRIBE} table [ LIKE pattern ]
+{DESC | DESCRIBE} table_name [ LIKE pattern ]
 ```
 
 The `DESCRIBE` statement lists the table columns and their associated types. The columns are document ID, full-text fields, and attributes. The order matches the order in which fields and attributes are expected by `INSERT` and `REPLACE` statements. Column types  include `field`, `integer`, `timestamp`, `ordinal`, `bool`, `float`, `bigint`, `string`, and `mva`. ID column will be typed as `bigint`. Example:
@@ -250,14 +250,14 @@ mysql> DESC rt;
 An optional LIKE clause is supported. Refer to
 [SHOW META](Node_info_and_management/SHOW_META.md) for its syntax details.
 
-### SELECT FROM name.table
+### SELECT FROM name.@table
 
 <!-- example name_table -->
-You can also view the table schema by executing the query `select * from <table_name>.table`. The benefit of this method is that you can use the `WHERE` clause for filtering:
+You can also view the table schema by executing the query `select * from <table_name>.@table`. The benefit of this method is that you can use the `WHERE` clause for filtering:
 
 <!-- request SQL -->
 ```sql
-select * from tbl.table where type='text';
+select * from tbl.@table where type='text';
 ```
 
 <!-- response SQL -->
@@ -274,14 +274,14 @@ select * from tbl.table where type='text';
 
 <!-- example name_table2 -->
 
-You can also perform many other actions on `<your_table_name>.table` considering it as a regular Manticore table with columns consisting of integer and string attributes.
+You can also perform many other actions on `<your_table_name>.@table` considering it as a regular Manticore table with columns consisting of integer and string attributes.
 
 <!-- request SQL -->
 
 ```sql
-select field from tbl.table;
-select field, properties from tbl.table where type in ('text', 'uint');
-select * from tbl.table where properties any ('stored');
+select field from tbl.@table;
+select field, properties from tbl.@table where type in ('text', 'uint');
+select * from tbl.@table where properties any ('stored');
 ```
 
 <!-- end -->
@@ -290,7 +290,7 @@ select * from tbl.table where properties any ('stored');
 
 <!-- example show_create -->
 ```sql
-SHOW CREATE TABLE name
+SHOW CREATE TABLE table_name
 ```
 
 Prints the `CREATE TABLE` statement used to create the specified table.

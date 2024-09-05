@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2019-2023, Manticore Software LTD (https://manticoresearch.com)
+// Copyright (c) 2019-2024, Manticore Software LTD (https://manticoresearch.com)
 // All rights reserved
 //
 // This program is free software; you can redistribute it and/or modify
@@ -163,7 +163,7 @@ static bool RotateFiles ( const std::unique_ptr<MergeState_t>& pState, FilesTrai
 }
 
 // load index from disk files for cluster use
-static ServedIndexRefPtr_c LoadNewIndex ( const CSphString& sIndexPath, IndexType_e eIndexType, const char* szIndexName, const CSphString& sCluster, FilesTrait_t& tIndexFiles )
+static ServedIndexRefPtr_c LoadNewIndex ( const CSphString & sIndexPath, IndexType_e eIndexType, const char * szIndexName, FilesTrait_t & tIndexFiles )
 {
 	CSphConfigSection hIndex;
 	hIndex.Add ( CSphVariant ( sIndexPath.cstr() ), "path" );
@@ -181,7 +181,6 @@ static ServedIndexRefPtr_c LoadNewIndex ( const CSphString& sIndexPath, IndexTyp
 		return pResult;
 
 	assert ( pNewServed );
-	pNewServed->m_sCluster = sCluster;
 
 	StrVec_t dWarnings;
 	bool bPrealloc = PreallocNewIndex ( *pNewServed, &hIndex, szIndexName, dWarnings, sError );
@@ -197,9 +196,9 @@ static ServedIndexRefPtr_c LoadNewIndex ( const CSphString& sIndexPath, IndexTyp
 }
 
 // load index into daemon
-static bool LoadAndReplaceIndex ( const CSphString& sIndexPath, IndexType_e eIndexType, const CSphString& sIndexName, const CSphString& sCluster, FilesTrait_t& tIndexFiles )
+static bool LoadAndReplaceIndex ( const CSphString& sIndexPath, IndexType_e eIndexType, const CSphString & sIndexName, FilesTrait_t & tIndexFiles )
 {
-	auto pNewIndex = LoadNewIndex ( sIndexPath, eIndexType, sIndexName.cstr(), sCluster, tIndexFiles );
+	auto pNewIndex = LoadNewIndex ( sIndexPath, eIndexType, sIndexName.cstr(), tIndexFiles );
 	if ( !pNewIndex )
 		return false;
 
@@ -209,16 +208,16 @@ static bool LoadAndReplaceIndex ( const CSphString& sIndexPath, IndexType_e eInd
 
 // load index into daemon
 // in case index already exists prohibit it to save on index delete as disk files has fresh data received from remote node
-static bool LoadIndex ( const CSphString& sIndexPath, IndexType_e eIndexType, const CSphString& sIndexName, const CSphString& sCluster, FilesTrait_t& tIndexFiles )
+static bool LoadIndex ( const CSphString & sIndexPath, IndexType_e eIndexType, const CSphString & sIndexName, FilesTrait_t & tIndexFiles )
 {
 	cServedIndexRefPtr_c pOldIndex = GetServed ( sIndexName );
 	if ( !ServedDesc_t::IsMutable ( pOldIndex ) )
-		return LoadAndReplaceIndex ( sIndexPath, eIndexType, sIndexName.cstr(), sCluster, tIndexFiles );
+		return LoadAndReplaceIndex ( sIndexPath, eIndexType, sIndexName.cstr(), tIndexFiles );
 
 	WIdx_T<RtIndex_i*> pIndex { pOldIndex };
 	pIndex->ProhibitSave();
 	pIndex->GetIndexFiles ( tIndexFiles.m_dOld, tIndexFiles.m_dOld );
-	return LoadAndReplaceIndex ( sIndexPath, eIndexType, sIndexName.cstr(), sCluster, tIndexFiles );
+	return LoadAndReplaceIndex ( sIndexPath, eIndexType, sIndexName.cstr(), tIndexFiles );
 }
 
 
@@ -260,8 +259,11 @@ static bool AddReceivedIndex ( const ClusterIndexAddLocalRequest_t& tAddCmd )
 
 	FilesTrait_t tIndexFiles;
 
-	if ( !LoadIndex ( pMerge->m_sIndexPath, tAddCmd.m_eIndex, tAddCmd.m_sIndex, tAddCmd.m_sCluster, tIndexFiles ) )
+	if ( !LoadIndex ( pMerge->m_sIndexPath, tAddCmd.m_eIndex, tAddCmd.m_sIndex, tIndexFiles ) )
 		return TlsMsg::Err ( "failed to load index '%s'", tAddCmd.m_sIndex.cstr() );
+
+	if ( !AddLoadedIndexIntoCluster ( tAddCmd.m_sCluster, tAddCmd.m_sIndex ) )
+		return false;
 
 	// keep: only files that donor has
 	// remove:

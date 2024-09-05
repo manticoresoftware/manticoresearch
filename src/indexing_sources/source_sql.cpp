@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2021-2023, Manticore Software LTD (https://manticoresearch.com)
+// Copyright (c) 2021-2024, Manticore Software LTD (https://manticoresearch.com)
 // Copyright (c) 2001-2016, Andrew Aksyonoff
 // Copyright (c) 2008-2016, Sphinx Technologies Inc
 // All rights reserved
@@ -522,10 +522,10 @@ bool CSphSource_SQL::IterateStart ( CSphString & sError )
 
 		CSphColumnInfo tCol ( sName );
 		ARRAY_FOREACH ( j, m_tParams.m_dAttrs )
-			if ( !strcasecmp ( tCol.m_sName.cstr(), m_tParams.m_dAttrs[j].m_sName.cstr() ) )
+		{
+			const CSphColumnInfo & tAttr = m_tParams.m_dAttrs[j];
+			if ( !strcasecmp ( tCol.m_sName.cstr(), tAttr.m_sName.cstr() ) )
 			{
-				const CSphColumnInfo & tAttr = m_tParams.m_dAttrs[j];
-
 				tCol.m_eAttrType = tAttr.m_eAttrType;
 				assert ( tCol.m_eAttrType!=SPH_ATTR_NONE );
 
@@ -536,6 +536,9 @@ bool CSphSource_SQL::IterateStart ( CSphString & sError )
 				dFound[j] = true;
 				break;
 			}
+			if ( !strcasecmp ( sphGetDocidName(), tAttr.m_sName.cstr() ) )
+				LOC_ERROR ( "can not redefine auto-defined '%s' attribute", tAttr.m_sName.cstr() );
+		}
 
 		for ( auto & tJoined : m_tParams.m_dJoinedFields )
 			if ( tJoined.m_sName==sName )
@@ -559,6 +562,9 @@ bool CSphSource_SQL::IterateStart ( CSphString & sError )
 
 		if ( tCol.m_eAttrType==SPH_ATTR_NONE || tCol.m_bIndexed )
 		{
+			if ( m_tSchema.GetField ( tCol.m_sName.cstr() ) )
+				LOC_ERROR ( "field '%s' is added twice", tCol.m_sName.cstr() );
+
 			m_tSchema.AddField ( tCol );
 			ARRAY_FOREACH ( k, m_tParams.m_dUnpack )
 			{
@@ -585,6 +591,8 @@ bool CSphSource_SQL::IterateStart ( CSphString & sError )
 		{
 			if ( CSphSchema::IsReserved ( tCol.m_sName.cstr() ) )
 				LOC_ERROR ( "%s is not a valid attribute name", tCol.m_sName.cstr() );
+			if ( m_tSchema.GetAttr ( tCol.m_sName.cstr() ) )
+				LOC_ERROR ( "attribute '%s' is added twice", tCol.m_sName.cstr() );
 
 			m_tSchema.AddAttr ( tCol, true ); // all attributes are dynamic at indexing time
 		}

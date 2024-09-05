@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2017-2023, Manticore Software LTD (https://manticoresearch.com)
+// Copyright (c) 2017-2024, Manticore Software LTD (https://manticoresearch.com)
 // Copyright (c) 2001-2016, Andrew Aksyonoff
 // Copyright (c) 2008-2016, Sphinx Technologies Inc
 // All rights reserved
@@ -148,13 +148,16 @@ class ExtNode_c : public ExtNode_i
 public:
 	static const int		MAX_HITS = 512;
 
-							ExtNode_c();
+							ExtNode_c ( int64_t tmTimeout=0 );
 
 	const ExtHit_t *		GetHits ( const ExtDoc_t * pDocs ) override;
 	void					DebugDump ( int iLevel ) override;
 	void 					SetAtomPos ( int iPos ) override;
 	int						GetAtomPos() const override;
 	void					SetQPosReverse();
+	void					SetMaxTimeout ( int64_t iTimer );
+	bool					TimeExceeded() const override;
+	int64_t 				GetMaxTimeout() const override;
 
 protected:
 	ExtDoc_t				m_dDocs[MAX_BLOCK_DOCS];
@@ -162,6 +165,7 @@ protected:
 	bool					m_bQPosReverse {false};
 	int						m_iAtomPos {0};		///< we now need it on this level for tricks like expanded keywords within phrases
 	const int64_t&			m_iCheckTimePoint { Threads::Coro::GetNextTimePointUS() };
+	int64_t					m_iMaxTimer; ///< work until this timestamp
 
 	virtual void			CollectHits ( const ExtDoc_t * pDocs ) = 0;
 
@@ -267,7 +271,6 @@ protected:
 	FieldMask_t			m_dQueriedFields;	///< accepted fields mask
 	bool				m_bHasWideFields = false;	///< whether fields mask for this term refer to fields 32+
 	float				m_fIDF = 0.0f;		///< IDF for this term (might be 0.0f for non-1st occurences in query)
-	int64_t				m_iMaxTimer = 0;	///< work until this timestamp
 	CSphString *		m_pWarning = nullptr;
 	bool				m_bNotWeighted = true;
 	CSphQueryStats *	m_pStats = nullptr;
@@ -546,7 +549,6 @@ private:
 	int								m_iNodesSet {0};
 	RowIdBoundaries_t				m_tBoundaries;
 
-	int64_t							m_iMaxTimer {0};
 	CSphString *					m_pWarning {nullptr};
 	CSphQueryStats *				m_pStats {nullptr};
 	int64_t *						m_pNanoBudget {nullptr};
@@ -1322,7 +1324,8 @@ ExtNode_i * ExtNode_i::Create ( const XQKeyword_t & tWord, const ISphQwordSetup 
 
 //////////////////////////////////////////////////////////////////////////
 
-ExtNode_c::ExtNode_c()
+ExtNode_c::ExtNode_c ( int64_t tmTimeout )
+	: m_iMaxTimer { tmTimeout }
 {
 	m_dDocs[0].m_tRowID = INVALID_ROWID;
 	m_dHits.Reserve ( MAX_BLOCK_DOCS );
@@ -1351,6 +1354,21 @@ int ExtNode_c::GetAtomPos() const
 void ExtNode_c::SetQPosReverse ()
 {
 	m_bQPosReverse = true;
+}
+
+void ExtNode_c::SetMaxTimeout ( int64_t iTimer )
+{
+	m_iMaxTimer = iTimer;
+}
+
+bool ExtNode_c::TimeExceeded() const
+{
+	return sph::TimeExceeded ( m_iMaxTimer );
+}
+
+int64_t ExtNode_c::GetMaxTimeout() const
+{
+	return m_iMaxTimer;
 }
 
 
@@ -1463,7 +1481,6 @@ protected:
 	int					m_iCurDocsEnd;		///< end of the last docs chunk returned, exclusive, ie [begin,end)
 	int					m_iCurHit;			///< end of the last hits chunk (within the last docs chunk) returned, exclusive
 
-	int64_t				m_iMaxTimer;		///< work until this timestamp
 	CSphString *		m_pWarning;
 
 private:
@@ -1489,6 +1506,7 @@ public:
 
 template<bool ROWID_LIMITS>
 ExtPayloadBase_T<ROWID_LIMITS>::ExtPayloadBase_T ( const XQNode_t * pNode, const ISphQwordSetup & tSetup, const RowIdBoundaries_t * pBoundaries )
+	: ExtNode_c { tSetup.m_iMaxTimer }
 {
 	// sanity checks
 	// this node must be only created for a huge OR of tiny expansions
@@ -1513,7 +1531,7 @@ ExtPayloadBase_T<ROWID_LIMITS>::ExtPayloadBase_T ( const XQNode_t * pNode, const
 	m_tWord.m_iHits = 0;
 
 	m_pWarning = tSetup.m_pWarning;
-	m_iMaxTimer = tSetup.m_iMaxTimer;
+	SetMaxTimeout ( tSetup.m_iMaxTimer );
 
 	if ( pBoundaries )
 		m_tBoundaries = *pBoundaries;
@@ -1651,7 +1669,7 @@ void ExtPayloadBase_T<ROWID_LIMITS>::PopulateCache ( const ISphQwordSetup & tSet
 template<bool ROWID_LIMITS>
 void ExtPayloadBase_T<ROWID_LIMITS>::Reset ( const ISphQwordSetup & tSetup )
 {
-	m_iMaxTimer = tSetup.m_iMaxTimer;
+	SetMaxTimeout ( tSetup.m_iMaxTimer );
 	m_dCache.Resize ( 0 );
 	PopulateCache ( tSetup, false );
 }
@@ -1747,7 +1765,7 @@ template <bool USE_BM25, bool ROWID_LIMITS>
 const ExtDoc_t * ExtPayload_T<USE_BM25,ROWID_LIMITS>::GetDocsChunk()
 {
 	// max_query_time
-	if ( sph::TimeExceeded ( BASE::m_iMaxTimer ) )
+	if ( BASE::TimeExceeded() )
 	{
 		if ( BASE::m_pWarning )
 			*BASE::m_pWarning = "query time exceeded max_query_time";
@@ -2054,7 +2072,7 @@ inline void ExtTerm_T<USE_BM25,ROWID_LIMITS,STATS>::Init ( ISphQword * pQword, c
 		for ( int i=1; i<FieldMask_t::SIZE && !m_bHasWideFields; i++ )
 			if ( m_dQueriedFields[i] )
 				m_bHasWideFields = true;
-	m_iMaxTimer = tSetup.m_iMaxTimer;
+	SetMaxTimeout ( tSetup.m_iMaxTimer );
 
 	if constexpr(STATS)
 	{
@@ -2071,7 +2089,7 @@ ExtTerm_T<USE_BM25,ROWID_LIMITS,STATS>::ExtTerm_T ( ISphQword * pQword, const IS
 	m_iAtomPos = pQword->m_iAtomPos;
 	m_dQueriedFields.SetAll();
 	m_bHasWideFields = tSetup.m_bHasWideFields;
-	m_iMaxTimer = tSetup.m_iMaxTimer;
+	SetMaxTimeout( tSetup.m_iMaxTimer );
 
 	if constexpr ( STATS )
 	{
@@ -2083,7 +2101,7 @@ ExtTerm_T<USE_BM25,ROWID_LIMITS,STATS>::ExtTerm_T ( ISphQword * pQword, const IS
 template<bool USE_BM25, bool ROWID_LIMITS, bool STATS>
 void ExtTerm_T<USE_BM25,ROWID_LIMITS,STATS>::Reset ( const ISphQwordSetup & tSetup )
 {
-	m_iMaxTimer = tSetup.m_iMaxTimer;
+	SetMaxTimeout ( tSetup.m_iMaxTimer );
 	m_pQword->Reset ();
 	tSetup.QwordSetup ( m_pQword );
 	m_dStoredHits.Resize(0);
@@ -2096,7 +2114,7 @@ const ExtDoc_t * ExtTerm_T<USE_BM25,ROWID_LIMITS,STATS>::GetDocsChunk()
 		return NULL;
 
 	// max_query_time
-	if ( sph::TimeExceeded ( m_iMaxTimer ) )
+	if ( TimeExceeded () )
 	{
 		if ( m_pWarning )
 			*m_pWarning = "query time exceeded max_query_time";
@@ -2491,7 +2509,8 @@ void BufferedNode_c::CopyMatchingHits ( CSphVector<ExtHit_t> & dHits, const ExtD
 
 template < TermPosFilter_e T, class NODE >
 ExtConditional_T<T,NODE>::ExtConditional_T ( ISphQword * pQword, const XQNode_t * pNode, const ISphQwordSetup & tSetup )
-	: BufferedNode_c ()
+	: ExtNode_c { tSetup.m_iMaxTimer }
+	, BufferedNode_c ()
 	, Acceptor_c ( pQword, pNode, tSetup )
 {
 	// we still need those hits even if the ranker hints us that we can ignore them
@@ -2734,6 +2753,12 @@ inline void	ExtTwofer_c::Init ( ExtNode_i * pLeft, ExtNode_i * pRight )
 	m_iAtomPos = ( pLeft && pLeft->GetAtomPos() ) ? pLeft->GetAtomPos() : 0;
 	if ( pRight && pRight->GetAtomPos() && pRight->GetAtomPos()<m_iAtomPos && m_iAtomPos!=0 )
 		m_iAtomPos = pRight->GetAtomPos();
+	int64_t tmTimeout = 0;
+	if ( pLeft )
+		tmTimeout = pLeft->GetMaxTimeout();
+	if ( !tmTimeout && pRight )
+		tmTimeout = pRight->GetMaxTimeout();
+	SetMaxTimeout ( tmTimeout );
 }
 
 void ExtTwofer_c::Reset ( const ISphQwordSetup & tSetup )
@@ -3045,7 +3070,8 @@ ExtMultiAnd_T<USE_BM25,TEST_FIELDS,ROWID_LIMITS>::HitWithQpos_t::HitWithQpos_t (
 
 template <bool USE_BM25,bool TEST_FIELDS,bool ROWID_LIMITS>
 ExtMultiAnd_T<USE_BM25,TEST_FIELDS,ROWID_LIMITS>::ExtMultiAnd_T ( const VecTraits_T<XQNode_t*> & dXQNodes, const ISphQwordSetup & tSetup )
-	: m_dWordIds ( dXQNodes.GetLength() )
+	: ExtNode_c { tSetup.m_iMaxTimer }
+	, m_dWordIds ( dXQNodes.GetLength() )
 	, m_tQueue ( dXQNodes.GetLength() )
 {
 	m_dNodes.Resize ( dXQNodes.GetLength() );
@@ -3067,7 +3093,6 @@ ExtMultiAnd_T<USE_BM25,TEST_FIELDS,ROWID_LIMITS>::ExtMultiAnd_T ( const VecTrait
 	m_iNodesSet = m_dNodes.GetLength();
 
 	m_pWarning = tSetup.m_pWarning;
-	m_iMaxTimer = tSetup.m_iMaxTimer;
 	m_pStats = tSetup.m_pStats;
 	m_pNanoBudget = m_pStats ? m_pStats->m_pNanoBudget : NULL;
 }
@@ -3184,7 +3209,7 @@ const ExtDoc_t * ExtMultiAnd_T<USE_BM25,TEST_FIELDS,ROWID_LIMITS>::GetDocsChunk(
 {
 	// since we're working directly with qwords, we need to check all those things here and not in ExtTerm
 	// max_query_time
-	if ( sph::TimeExceeded ( m_iMaxTimer ) )
+	if ( TimeExceeded () )
 	{
 		if ( m_pWarning )
 			*m_pWarning = "query time exceeded max_query_time";
@@ -3517,7 +3542,7 @@ void ExtMultiAnd_T<USE_BM25,TEST_FIELDS,ROWID_LIMITS>::Reset ( const ISphQwordSe
 {
 	m_bFirstChunk = true;
 	m_iNodesSet = 0;
-	m_iMaxTimer = tSetup.m_iMaxTimer;
+	SetMaxTimeout ( tSetup.m_iMaxTimer );
 	for ( auto & i : m_dNodes )
 	{
 		i.m_tRowID = INVALID_ROWID;
@@ -3796,10 +3821,18 @@ const ExtDoc_t * ExtOr_c::GetDocsChunk()
 	while ( iDoc<MAX_BLOCK_DOCS-1 )
 	{
 		if ( !HasDocs(pDocL) )
+		{
 			pDocL = m_pLeft->GetDocsChunk();
+			if ( !pDocL && TimeExceeded() )
+				break;
+		}
 
 		if ( !HasDocs(pDocR) )
+		{
 			pDocR = m_pRight->GetDocsChunk();
+			if ( !pDocR && TimeExceeded() )
+				break;
+		}
 
 		if ( !HasDocs(pDocL) && !HasDocs(pDocR) )
 			break;
@@ -4054,6 +4087,7 @@ void ExtAndNot_c::DebugDump ( int iLevel )
 //////////////////////////////////////////////////////////////////////////
 
 ExtNWay_c::ExtNWay_c ( const CSphVector<ExtNode_i *> & dNodes, const ISphQwordSetup & tSetup )
+	: ExtNode_c { tSetup.m_iMaxTimer }
 {
 	assert ( dNodes.GetLength()>1 );
 	m_iAtomPos = dNodes[0]->GetAtomPos();
@@ -4682,6 +4716,7 @@ struct QuorumNodeAtomPos_fn
 
 
 ExtQuorum_c::ExtQuorum_c ( CSphVector<ExtNode_i*> & dQwords, const XQNode_t & tNode, const ISphQwordSetup & tSetup )
+	: ExtNode_c ( tSetup.m_iMaxTimer)
 {
 	assert ( tNode.GetOp()==SPH_QUERY_QUORUM );
 	assert ( dQwords.GetLength()<MAX_HITS );
@@ -5021,7 +5056,8 @@ bool ExtQuorum_c::CollectMatchingHits ( RowID_t tRowID, int iThreshold )
 //////////////////////////////////////////////////////////////////////////
 
 ExtOrder_c::ExtOrder_c ( const CSphVector<ExtNode_i *> & dChildren, const ISphQwordSetup & tSetup )
-	: m_dChildren ( dChildren )
+	: ExtNode_c { tSetup.m_iMaxTimer }
+	, m_dChildren ( dChildren )
 	, m_bDone ( false )
 {
 	int iChildren = dChildren.GetLength();
@@ -5365,7 +5401,8 @@ void ExtOrder_c::SetRowidBoundaries ( const RowIdBoundaries_t & tBoundaries )
 
 template<bool ROWID_LIMITS>
 ExtUnit_T<ROWID_LIMITS>::ExtUnit_T ( ExtNode_i * pFirst, ExtNode_i * pSecond, const FieldMask_t & uFields, const ISphQwordSetup & tSetup, const char * szUnit )
-	: m_pArg1 ( pFirst )
+	: ExtNode_c { tSetup.m_iMaxTimer }
+	, m_pArg1 ( pFirst )
 	, m_pArg2 ( pSecond )
 {
 	XQKeyword_t tDot;
@@ -5944,7 +5981,6 @@ private:
 	NodeCacheContainer_c * m_pNode;
 	const ExtDoc_t *	m_pHitDoc;			///< points to entry in m_dDocs which GetHitsChunk() currently emits hits for
 	CSphString *		m_pWarning;
-	int64_t				m_iMaxTimer;		///< work until this timestamp
 	int					m_iHitIndex;		///< store the current position in m_Hits for GetHitsChunk()
 	int					m_iDocIndex;		///< store the current position in m_Docs for GetDocsChunk()
 	ExtNode_i *			m_pChild;			///< pointer to donor for the sake of AtomPos procession
@@ -6058,8 +6094,7 @@ void ExtNodeCached_c::Reset ( const ISphQwordSetup & tSetup )
 	m_iHitIndex = 0;
 	m_iDocIndex = 0;
 	m_pHitDoc = NULL;
-	m_iMaxTimer = 0;
-	m_iMaxTimer = tSetup.m_iMaxTimer;
+	SetMaxTimeout ( tSetup.m_iMaxTimer );
 	m_pWarning = tSetup.m_pWarning;
 }
 
@@ -6128,10 +6163,10 @@ void ExtNodeCached_c::SetRowidBoundaries ( const RowIdBoundaries_t & tBoundaries
 
 
 ExtNodeCached_c::ExtNodeCached_c ( NodeCacheContainer_c * pNode, ExtNode_i * pChild )
-	: m_pNode ( pNode )
+	: ExtNode_c (0)
+	, m_pNode ( pNode )
 	, m_pHitDoc ( NULL )
 	, m_pWarning ( NULL )
-	, m_iMaxTimer ( 0 )
 	, m_iHitIndex ( 0 )
 	, m_iDocIndex ( 0 )
 	, m_pChild ( pChild )
@@ -6167,7 +6202,7 @@ const ExtDoc_t * ExtNodeCached_c::GetDocsChunk()
 	if ( !m_pNode->m_bStateOk )
 		return m_pChild->GetDocsChunk();
 
-	if ( m_iMaxTimer>0 && sph::TimeExceeded ( m_iMaxTimer ) )
+	if ( TimeExceeded() )
 	{
 		if ( m_pWarning )
 			*m_pWarning = "query time exceeded max_query_time";

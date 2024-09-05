@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2017-2023, Manticore Software LTD (https://manticoresearch.com)
+// Copyright (c) 2017-2024, Manticore Software LTD (https://manticoresearch.com)
 // Copyright (c) 2001-2016, Andrew Aksyonoff
 // Copyright (c) 2008-2016, Sphinx Technologies Inc
 // All rights reserved
@@ -701,7 +701,6 @@ int SockWrapper_c::GetSocket () const
 // Send a blob into socket.
 // Alone worker will use waiting in poll.
 // Cooperative worker will yield and resume instead of waiting.
-// timeout is ruled by g_iWriteTimeoutS.
 static bool SyncSend ( SockWrapper_c* pSock, const char * pBuffer, int64_t iLen, CSphString & sError )
 {
 	if ( sphInterrupted () )
@@ -715,32 +714,50 @@ static bool SyncSend ( SockWrapper_c* pSock, const char * pBuffer, int64_t iLen,
 
 	sphLogDebugv ( "AsyncSend " INT64_FMT " bytes, sock=%d", iLen, pSock->GetSocket() );
 
-	auto iTimeoutUntilUs = MonoMicroTimer () + pSock->GetWTimeoutUS();
-	do
+	int64_t iMaxTimerPeriodUS = pSock->GetWTimeoutUS();
+	int64_t iLastTimestamp = MonoMicroTimer();
+	auto iTimeoutUntilUs = iLastTimestamp + iMaxTimerPeriodUS; // in microseconds
+	for (;;)
 	{
-		auto iRes = pSock->SockSend ( pBuffer, iLen );
-		if ( iRes<0 )
+		do
 		{
-			int iErrno = sphSockGetErrno ();
-			if ( iErrno==EINTR ) // interrupted before any data was sent; just loop
-				continue;
-			if ( iErrno!=EAGAIN && iErrno!=EWOULDBLOCK )
+			auto iRes = pSock->SockSend ( pBuffer, iLen );
+			if ( iRes<0 )
 			{
-				sError.SetSprintf ( "send() failed: %d: %s", iErrno, sphSockError ( iErrno ) );
-				sphWarning ( "%s, sock=%d", sError.cstr(), pSock->GetSocket() );
-				return false;
+				int iErrno = sphSockGetErrno ();
+				if ( iErrno==EINTR ) // interrupted before any data was sent; just loop
+					continue;
+				if ( iErrno!=EAGAIN && iErrno!=EWOULDBLOCK )
+				{
+					sError.SetSprintf ( "send() failed: %d: %s", iErrno, sphSockError ( iErrno ) );
+					sphWarning ( "%s, sock=%d", sError.cstr(), pSock->GetSocket() );
+					return false;
+				}
+			} else
+			{
+				if ( iLen==iRes )
+					return true; // we're finished
+
+				iLen -= iRes;
+				pBuffer += iRes;
 			}
-		} else
+
+			iLastTimestamp = MonoMicroTimer();
+			sphLogDebugv ("Still need to send " INT64_FMT " bytes, sock=%d", iLen, pSock->GetSocket() );
+		} while ( pSock->SockPoll ( iTimeoutUntilUs, true ) );
+
+		if ( !g_bTimeoutEachPacket )
 		{
-			if ( iLen==iRes )
-				return true; // we're finished
-
-			iLen -= iRes;
-			pBuffer += iRes;
+			auto iTimeoutFromLastActivity = iLastTimestamp + iMaxTimerPeriodUS;
+			if ( iTimeoutFromLastActivity > MonoMicroTimer() )
+			{
+				sphWarning ( "sync-send action for more %d", (int)( iTimeoutFromLastActivity - MonoMicroTimer() ) );
+				iTimeoutUntilUs = iTimeoutFromLastActivity;
+				continue;
+			}
 		}
-
-		sphLogDebugv ("Still need to send " INT64_FMT " bytes, sock=%d", iLen, pSock->GetSocket() );
-	} while (pSock->SockPoll ( iTimeoutUntilUs, true ) );
+		break;
+	}
 
 	sError = "timed out while performing SyncSend to flush network buffers";
 	sphWarning ( "%s, sock=%d", sError.cstr(), pSock->GetSocket() );
@@ -789,22 +806,24 @@ static int SyncSockRead ( SockWrapper_c * pSock, BYTE* pBuf, int iLen, int iSpac
 	if ( !iLen )
 		return iReceived;
 
-	int64_t tmMaxTimer = MonoMicroTimer()+Max ( S2US, pSock->GetTimeoutUS () ); // in microseconds
+	int64_t iMaxTimerPeriodUS = Max ( S2US, pSock->GetTimeoutUS() );
+	int64_t tmMaxTimer = MonoMicroTimer() + iMaxTimerPeriodUS; // in microseconds
 
 	int iErr, iRes;
 	while ( iLen>0 )
 	{
 		int64_t tmNextStopUs = tmMaxTimer;
+		int64_t iLastTimestamp = MonoMicroTimer();
 
 #if EMULATE_EINTR
 		// Windows EINTR emulation
 		// Ctrl-C will not interrupt select on Windows, so let's handle that manually
 		// forcibly limit select() to 100 ms, and check flag afterwards
 		if ( bIntr )
-			tmNextStopUs = Min ( tmMaxTimer, MonoMicroTimer () + 100000 );
+			tmNextStopUs = Min ( tmMaxTimer, iLastTimestamp + 100000 );
 #endif
 
-		if ( ( tmNextStopUs - MonoMicroTimer() )<=0 )
+		if ( ( tmNextStopUs - iLastTimestamp )<=0 )
 			break; // timed out
 
 		// wait until there is data
@@ -845,6 +864,17 @@ static int SyncSockRead ( SockWrapper_c * pSock, BYTE* pBuf, int iLen, int iSpac
 				continue;
 			}
 #endif
+
+			if ( g_bTimeoutEachPacket )
+			{
+				auto iTimeoutFromLastActivity = iLastTimestamp + iMaxTimerPeriodUS;
+				auto iMonoTimer = MonoMicroTimer();
+				if ( tmMaxTimer < iMonoTimer && iTimeoutFromLastActivity > iMonoTimer )
+				{
+					tmMaxTimer = iTimeoutFromLastActivity;
+					continue;
+				}
+			}
 			sphLogDebugv ( "return TIMEOUT, sock=%d", pSock->GetSocket() );
 			sphSockSetErrno( ETIMEDOUT );
 			return -1;
@@ -907,14 +937,14 @@ AsyncNetInputBuffer_c::AsyncNetInputBuffer_c ()
 	m_iLen = 0;
 }
 
-Proto_e AsyncNetInputBuffer_c::Probe ( bool bLight )
+Proto_e AsyncNetInputBuffer_c::Probe()
 {
 	Proto_e eResult = Proto_e::UNKNOWN;
 	m_bIntr = false;
 	int iRest = 0;
 	if ( !HasBytes() )
 	{
-		iRest = GetRoomForTail();
+		iRest = Min ( NET_MINIBUFFER_SIZE, GetRoomForTail() );
 		if ( !iRest )
 			return eResult; // hard limit reached
 		AppendData ( 0, iRest, true );
@@ -923,11 +953,6 @@ Proto_e AsyncNetInputBuffer_c::Probe ( bool bLight )
 	auto iHas = HasBytes();
 	if (!iHas)
 	{
-		if ( bLight )
-		{
-			sphLogDebugv ( "+++++ Light probing revealed nothing, bail" );
-			return eResult;
-		}
 		sphLogDebugv ( "+++++ Light probing revealed nothing, try blocking" );
 		AppendData ( 1, iRest, true );
 		iHas = HasBytes ();
@@ -1031,6 +1056,9 @@ int AsyncNetInputBuffer_c::ReadAny ()
 	auto iRest = GetRoomForTail();
 	if ( !iRest )
 		return 0;
+	// ReadAny used only for HTTP header read (NET_MINIBUFFER_SIZE is enough  for header) and for initial HTTP fetch with the empty buffer - no need to allocate up to g_iMaxPacketSize
+	if ( !HasBytes() )
+		iRest = Min ( NET_MINIBUFFER_SIZE, iRest );
 
 	return AppendData ( 1, iRest, true );
 }

@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2017-2023, Manticore Software LTD (https://manticoresearch.com)
+// Copyright (c) 2017-2024, Manticore Software LTD (https://manticoresearch.com)
 // Copyright (c) 2001-2016, Andrew Aksyonoff
 // Copyright (c) 2008-2016, Sphinx Technologies Inc
 // All rights reserved
@@ -80,4 +80,4 @@ bool LoadFunc ( T & pFunc, void * pHandle, const char * szFunc, const CSphString
 }
 #endif // HAVE_DLOPEN
 
-CSphString TryDifferentPaths ( const CSphString & sLibfile, const CSphString & sFullpath );
+CSphString TryDifferentPaths ( const CSphString & sLibfile, const CSphString & sFullpath, int iVersion );

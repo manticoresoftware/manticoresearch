@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2017-2023, Manticore Software LTD (https://manticoresearch.com)
+// Copyright (c) 2017-2024, Manticore Software LTD (https://manticoresearch.com)
 // Copyright (c) 2001-2016, Andrew Aksyonoff
 // Copyright (c) 2008-2016, Sphinx Technologies Inc
 // All rights reserved
@@ -28,7 +28,7 @@ public:
 	SphWordID_t GetWordIDNonStemmed ( BYTE* pWord ) final { return m_pDict->GetWordIDNonStemmed ( pWord ); }
 	SphWordID_t GetWordID ( const BYTE* pWord, int iLen, bool bFilterStops ) final { return m_pDict->GetWordID ( pWord, iLen, bFilterStops ); }
 	void ApplyStemmers ( BYTE* pWord ) const final { m_pDict->ApplyStemmers ( pWord ); }
-	void LoadStopwords ( const char* sFiles, const TokenizerRefPtr_c& pTokenizer, bool bStripFile ) final { m_pDict->LoadStopwords ( sFiles, pTokenizer, bStripFile ); }
+	void LoadStopwords ( const char * sFiles, FilenameBuilder_i * pFilenameBuilder, const TokenizerRefPtr_c& pTokenizer, bool bStripFile ) final { m_pDict->LoadStopwords ( sFiles, pFilenameBuilder, pTokenizer, bStripFile ); }
 	void LoadStopwords ( const CSphVector<SphWordID_t>& dStopwords ) final { m_pDict->LoadStopwords ( dStopwords ); }
 	void WriteStopwords ( Writer_i & tWriter ) const final { m_pDict->WriteStopwords ( tWriter ); }
 	void WriteStopwords ( JsonEscapedBuilder& tOut ) const final { m_pDict->WriteStopwords ( tOut ); }
@@ -57,6 +57,7 @@ public:
 
 public:
 	void DictBegin ( CSphAutofile& tTempDict, CSphAutofile& tDict, int iDictLimit ) final { m_pDict->DictBegin ( tTempDict, tDict, iDictLimit ); };
+	void SortedDictBegin ( CSphAutofile& tDict, int iDictLimit, int iInfixCodepointBytes ) final { m_pDict->SortedDictBegin ( tDict, iDictLimit, iInfixCodepointBytes ); };
 	void DictEntry ( const DictEntry_t& tEntry ) final { m_pDict->DictEntry ( tEntry ); };
 	void DictEndEntries ( SphOffset_t iDoclistOffset ) final { m_pDict->DictEndEntries ( iDoclistOffset ); };
 	bool DictEnd ( DictHeader_t* pHeader, int iMemLimit, CSphString& sError ) final { return m_pDict->DictEnd ( pHeader, iMemLimit, sError ); };

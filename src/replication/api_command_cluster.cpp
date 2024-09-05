@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2019-2023, Manticore Software LTD (https://manticoresearch.com)
+// Copyright (c) 2019-2024, Manticore Software LTD (https://manticoresearch.com)
 // Copyright (c) 2001-2016, Andrew Aksyonoff
 // Copyright (c) 2008-2016, Sphinx Technologies Inc
 // All rights reserved
@@ -104,15 +104,16 @@ bool PerformRemoteTasksWrap ( VectorAgentConn_t & dNodes, RequestBuilder_i & tRe
 // handler of all remote commands via API parsed at daemon as SEARCHD_COMMAND_CLUSTER
 void HandleAPICommandCluster ( ISphOutputBuffer & tOut, WORD uCommandVer, InputBuffer_c & tBuf, const char * szClient )
 {
-	if ( !CheckCommandVersion ( uCommandVer, VER_COMMAND_CLUSTER, tOut ))
-		return;
+	auto eClusterCmd = (E_CLUSTER)tBuf.GetWord();
 
-	auto eClusterCmd = (E_CLUSTER) tBuf.GetWord ();
-	CSphString sCluster;
+	// GET_NODE_VER should skip version check and provide both VER_COMMAND_CLUSTER and VER_COMMAND_REPLICATE
+	if ( eClusterCmd!=E_CLUSTER::GET_NODE_VER && !CheckCommandVersion ( uCommandVer, VER_COMMAND_CLUSTER, tOut ) )
+		return;
 
 	if ( eClusterCmd!=E_CLUSTER::FILE_SEND )
 		sphLogDebugRpl ( "remote cluster command %d(%s), client %s", (int) eClusterCmd, szClusterCmd (eClusterCmd), szClient );
 
+	CSphString sCluster;
 	TlsMsg::ResetErr();
 	switch (eClusterCmd) {
 	case E_CLUSTER::DELETE_:
@@ -147,6 +148,14 @@ void HandleAPICommandCluster ( ISphOutputBuffer & tOut, WORD uCommandVer, InputB
 		ReceiveDistIndex ( tOut, tBuf, sCluster );
 		break;
 
+	case E_CLUSTER::GET_NODE_STATE:
+		ReceiveClusterGetState ( tOut, tBuf, sCluster );
+		break;
+
+	case E_CLUSTER::GET_NODE_VER:
+		ReceiveClusterGetVer ( tOut );
+		break;
+
 	default:
 		TlsMsg::Err ( "INTERNAL ERROR: unhandled command %d", (int) eClusterCmd );
 		break;
@@ -158,12 +167,12 @@ void HandleAPICommandCluster ( ISphOutputBuffer & tOut, WORD uCommandVer, InputB
 	assert ( eClusterCmd != E_CLUSTER::FILE_SEND );
 
 	auto szError = TlsMsg::szError();
-	sphLogDebugRpl ( "remote cluster '%s' command %d, client %s - %s", sCluster.scstr(), (int)eClusterCmd, szClient, szError );
+	sphLogDebugRpl ( "remote cluster '%s' command %s(%d), client %s - %s", sCluster.scstr(), szClusterCmd ( eClusterCmd ), (int)eClusterCmd, szClient, szError );
 
 	auto tReply = APIHeader ( tOut, SEARCHD_ERROR );
 	tOut.SendString ( SphSprintf ( "[%s] %s", szIncomingIP(), szError ).cstr() );
 
-	ReportClusterError ( sCluster, szError, szClient, (int)eClusterCmd );
+	ReportClusterError ( sCluster, szError, szClient, eClusterCmd );
 }
 
 // 200 msec is ok as we do not need to any missed nodes in cluster node list

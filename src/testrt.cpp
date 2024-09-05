@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2017-2023, Manticore Software LTD (https://manticoresearch.com)
+// Copyright (c) 2017-2024, Manticore Software LTD (https://manticoresearch.com)
 // Copyright (c) 2001-2016, Andrew Aksyonoff
 // Copyright (c) 2008-2016, Sphinx Technologies Inc
 // All rights reserved
@@ -94,7 +94,7 @@ void DoIndexing ( CSphSource_SQL * pSrc, RtIndex_i * pIndex )
 	int64_t tmMaxCommit = 0;
 	int iCommits = 0;
 
-	InsertDocData_t tDoc ( pIndex->GetMatchSchema() );
+	InsertDocData_c tDoc ( pIndex->GetMatchSchema() );
 	tDoc.m_dFields.Resize(g_iFieldsCount);
 
 	int iDynamic = pIndex->GetMatchSchema().GetRowSize();
@@ -629,8 +629,8 @@ int main ( int argc, char ** argv )
 	g_iFieldsCount = tSrcSchema.GetFieldsCount();
 
 	CSphConfigSection tRTConfig;
-	sphRTInit ( tRTConfig, true, nullptr );
-	Binlog::Configure ( tRTConfig, true, 0, false );
+	sphRTInit ( "" );
+	Binlog::Configure ( tRTConfig, 0 );
 	SmallStringHash_T< CSphIndex * > dTemp;
 	Binlog::Replay ( dTemp );
 	auto pIndex = sphCreateIndexRT ( "testrt", DATAFLD "dump", tSchema, 32*1024*1024, false ).release();

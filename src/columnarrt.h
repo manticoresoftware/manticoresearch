@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2021-2023, Manticore Software LTD (https://manticoresearch.com)
+// Copyright (c) 2021-2024, Manticore Software LTD (https://manticoresearch.com)
 // All rights reserved
 //
 // This program is free software; you can redistribute it and/or modify
@@ -33,7 +33,6 @@ class ColumnarAttrRT_i;
 class ColumnarBuilderRT_i : public columnar::Builder_i
 {
 public:
-	virtual void		Kill ( const CSphVector<RowID_t> & dKilled ) = 0;
 	virtual void		Save ( MemoryWriter_c & tWriter ) = 0;
 	virtual CSphVector<std::unique_ptr<ColumnarAttrRT_i>> & GetAttrs() = 0;
 	virtual const CSphVector<std::unique_ptr<ColumnarAttrRT_i>>& GetAttrs() const = 0;
@@ -54,5 +53,7 @@ std::unique_ptr<ColumnarRT_i>			CreateLightColumnarRT ( const CSphSchema& tSchem
 
 // used by ram segments and binlog
 std::unique_ptr<ColumnarRT_i>			CreateColumnarRT ( const CSphSchema & tSchema, CSphReader & tReader, CSphString & sError );
+
+void RemoveColumnarDuplicates ( std::unique_ptr<ColumnarBuilderRT_i> & pBuilder, const CSphFixedVector<RowID_t> & dRowMap, const CSphSchema & tSchema );
 
 #endif // _columnarrt_

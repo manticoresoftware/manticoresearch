@@ -52,7 +52,7 @@ POST /search
     "hits":
     [
       {
-        "_id":"4",
+        "_id": 4,
         "_score":1704,
         "_source":
         {
@@ -134,7 +134,7 @@ res =  await searchApi.search({"index":"books","query":{"match":{"*":"try"}},"hi
 ```
 <!-- response Javascript -->
 ``` javascript
-{"took":0,"timed_out":false,"hits":{"total":1,"hits":[{"_id":"4","_score":1695,"_source":{"title":"Book four","content":"Don`t try to compete in childishness, said Bliss."},"highlight":{"title":["Book four"],"content":["Don`t <b>try</b> to compete in childishness, said Bliss."]}}]}}
+{"took":0,"timed_out":false,"hits":{"total":1,"hits":[{"_id": 4,"_score":1695,"_source":{"title":"Book four","content":"Don`t try to compete in childishness, said Bliss."},"highlight":{"title":["Book four"],"content":["Don`t <b>try</b> to compete in childishness, said Bliss."]}}]}}
 ```
 
 <!-- intro -->
@@ -199,6 +199,84 @@ class SearchResponse {
     profile: null
 }
 ```
+
+<!-- request TypeScript -->
+``` typescript
+res = await searchApi.search({
+  index: 'test',
+  query: {
+    match: {
+      *: 'Text 1'
+    }
+  },
+  highlight: {}
+});
+```
+<!-- response TypeScript -->
+``` typescript
+{
+	"took":0,
+	"timed_out":false,
+	"hits":
+	{
+		"total":1,
+		"hits":
+		[{
+			"_id": 1,
+			"_score":1480,
+			"_source":
+			{
+				"content":"Text 1"
+			},
+			"highlight":
+			{
+				"content":
+				[
+					"<b>Text 1</b>"
+				]
+			}
+		]}
+	}
+}
+```
+
+<!-- request Go -->
+``` go
+matchClause := map[string]interface{} {"*": "Text 1"};
+query := map[string]interface{} {"match": matchClause};
+searchRequest.SetQuery(query);
+highlight := manticoreclient.NewHighlight()
+searchRequest.SetHighlight(highlight)
+res, _, _ := apiClient.SearchAPI.Search(context.Background()).SearchRequest(*searchRequest).Execute()
+```
+<!-- response Go -->
+``` go
+{
+	"took":0,
+	"timed_out":false,
+	"hits":
+	{
+		"total":1,
+		"hits":
+		[{
+			"_id": 1,
+			"_score":1480,
+			"_source":
+			{
+				"content":"Text 1"
+			},
+			"highlight":
+			{
+				"content":
+				[
+					"<b>Text 1</b>"
+				]
+			}
+		]}
+	}
+}
+```
+
 <!-- end -->
 
 When using SQL for highlighting search results, you will receive snippets from various fields combined into a single string due to the limitations of the MySQL protocol. You can adjust the concatenation separators with the `field_separator` and `snippet_separator` options, as detailed below.
@@ -310,7 +388,7 @@ POST /search
     "hits":
     [
       {
-        "_id":"3",
+        "_id": 3,
         "_score":1602,
         "_source":
         {
@@ -331,7 +409,7 @@ POST /search
         }
       },
       {
-        "_id":"4",
+        "_id": 4,
         "_score":1573,
         "_source":
         {
@@ -351,7 +429,7 @@ POST /search
         }
       },
       {
-        "_id":"2",
+        "_id": 2,
         "_score":1521,
         "_source":
         {
@@ -454,7 +532,7 @@ res =  await searchApi.search({"index":"books","query":{"query_string":"try|gets
 ```
 <!-- response Javascript -->
 ``` javascript
-{"took":0,"timed_out":false,"hits":{"total":3,"hits":[{"_id":"3","_score":1597,"_source":{"title":"Book three","content":"Trevize whispered, \"It gets infantile pleasure out of display. I`d love to knock it down.\""},"highlight":{"title":["Book three"],"content":[", \"It <b>gets</b> infantile pleasure "," to knock it <b>down</b>.\""]}},{"_id":"4","_score":1563,"_source":{"title":"Book four","content":"Don`t try to compete in childishness, said Bliss."},"highlight":{"title":["Book four"],"content":["Don`t <b>try</b> to compete in childishness, <b>said</b> Bliss."]}},{"_id":"5","_score":1514,"_source":{"title":"Books two","content":"A door opened before them, revealing a small room. Bander said, \"Come, half-humans, I want to show you how we live.\""},"highlight":{"title":["Books two"],"content":[" a small room. Bander <b>said</b>, \"Come, half-humans, I"]}}]}}
+{"took":0,"timed_out":false,"hits":{"total":3,"hits":[{"_id": 3,"_score":1597,"_source":{"title":"Book three","content":"Trevize whispered, \"It gets infantile pleasure out of display. I`d love to knock it down.\""},"highlight":{"title":["Book three"],"content":[", \"It <b>gets</b> infantile pleasure "," to knock it <b>down</b>.\""]}},{"_id": 4,"_score":1563,"_source":{"title":"Book four","content":"Don`t try to compete in childishness, said Bliss."},"highlight":{"title":["Book four"],"content":["Don`t <b>try</b> to compete in childishness, <b>said</b> Bliss."]}},{"_id": 5,"_score":1514,"_source":{"title":"Books two","content":"A door opened before them, revealing a small room. Bander said, \"Come, half-humans, I want to show you how we live.\""},"highlight":{"title":["Books two"],"content":[" a small room. Bander <b>said</b>, \"Come, half-humans, I"]}}]}}
 ```
 
 <!-- intro -->
@@ -520,6 +598,117 @@ class SearchResponse {
     profile: null
 }
 ```
+<!-- request TypeScript -->
+``` typescript
+res = await searchApi.search({
+  index: 'test',
+  query: { match: { *: 'Text } },
+  highlight: { limit: 2}
+});
+```
+<!-- response TypeScript -->
+``` typescript
+{
+	"took":0,
+	"timed_out":false,
+	"hits":
+	{
+		"total":2,
+		"hits":
+		[{
+			"_id": 1,
+			"_score":1480,
+			"_source":
+			{
+				"content":"Text 1",
+				"name":"Doc 1",
+				"cat":1
+			},
+			"highlight":
+			{
+				"content":
+				[
+					"<b>Text 1</b>"
+				]
+			}
+		},
+		{
+			"_id": 2,
+			"_score":1480,
+			"_source":
+			{
+				"content":"Text 2",
+				"name":"Doc 2",
+				"cat":2
+			},
+			"highlight":
+			{
+				"content":
+				[
+					"<b>Text 2</b>"
+				]
+			}
+		}]
+	}
+}
+```
+
+<!-- request Go -->
+``` go
+matchClause := map[string]interface{} {"*": "Text 1"};
+query := map[string]interface{} {"match": matchClause};
+searchRequest.SetQuery(query);
+highlight := manticoreclient.NewHighlight()
+searchRequest.SetHighlight(highlight)
+res, _, _ := apiClient.SearchAPI.Search(context.Background()).SearchRequest(*searchRequest).Execute()
+```
+<!-- response Go -->
+``` go
+{
+	"took":0,
+	"timed_out":false,
+	"hits":
+	{
+		"total":2,
+		"hits":
+		[{
+			"_id": 1,
+			"_score":1480,
+			"_source":
+			{
+				"content":"Text 1",
+				"name":"Doc 1",
+				"cat":1
+			},
+			"highlight":
+			{
+				"content":
+				[
+					"<b>Text 1</b>"
+				]
+			}
+		},
+		{
+			"_id": 2,
+			"_score":1480,
+			"_source":
+			{
+				"content":"Text 2",
+				"name":"Doc 2",
+				"cat":2
+			},
+			"highlight":
+			{
+				"content":
+				[
+					"<b>Text 2</b>"
+				]
+			}
+		}]
+	}
+}
+```
+
 
 <!-- end -->
 
@@ -754,7 +943,7 @@ POST /search
     "total": 1,
     "hits": [
       {
-        "_id": "1",
+        "_id": 1,
         "_score": 2788,
         "_source": {
           "title": "Books one",
@@ -836,7 +1025,7 @@ res =  await searchApi.search({"index":"books","query":{"match":{"*":"one|robots
 ```
 <!-- response Javascript -->
 ``` javascript
-{"took":0,"timed_out":false,"hits":{"total":1,"hits":[{"_id":"1","_score":2788,"_source":{"title":"Books one","content":"They followed Bander. The robots remained at a polite distance, but their presence was a constantly felt threat. Bander ushered all three into the room. One of the robots followed as well. Bander gestured the other robots away and entered itself. The door closed behind it. "},"highlight":{"content":["They followed Bander. The <b>robots</b> remained at a polite distance, "," three into the room. <b>One</b> of the <b>robots</b> followed as well. Bander"," gestured the other <b>robots</b> away and entered itself. The"]}}]}}
+{"took":0,"timed_out":false,"hits":{"total":1,"hits":[{"_id": 1,"_score":2788,"_source":{"title":"Books one","content":"They followed Bander. The robots remained at a polite distance, but their presence was a constantly felt threat. Bander ushered all three into the room. One of the robots followed as well. Bander gestured the other robots away and entered itself. The door closed behind it. "},"highlight":{"content":["They followed Bander. The <b>robots</b> remained at a polite distance, "," three into the room. <b>One</b> of the <b>robots</b> followed as well. Bander"," gestured the other <b>robots</b> away and entered itself. The"]}}]}}
 ```
 
 <!-- intro -->
@@ -905,6 +1094,87 @@ class SearchResponse {
 
 ```
 
+<!-- request TypeScript -->
+``` typescript
+res = await searchApi.search({
+  index: 'test',
+  query: {
+    match: {
+      *: 'Text 1|Text 9'
+    }
+  },
+  highlight: {}
+});
+```
+<!-- response TypeScript -->
+``` typescript
+{
+	"took":0,
+	"timed_out":false,
+	"hits":
+	{
+		"total":1,
+		"hits":
+		[{
+			"_id": 1,
+			"_score":1480,
+			"_source":
+			{
+				"content":"Text 1",
+				"name":"Doc 1",
+				"cat":1
+			},
+			"highlight":
+			{
+				"content":
+				[
+					"<b>Text 1</b>"
+				]
+			}
+		]}
+	}
+}
+```
+
+<!-- request Go -->
+``` go
+matchClause := map[string]interface{} {"*": "Text 1|Text 9"};
+query := map[string]interface{} {"match": matchClause};
+searchRequest.SetQuery(query);
+highlight := manticoreclient.NewHighlight()
+searchRequest.SetHighlight(highlight)
+res, _, _ := apiClient.SearchAPI.Search(context.Background()).SearchRequest(*searchRequest).Execute()
+```
+<!-- response Go -->
+``` go
+{
+	"took":0,
+	"timed_out":false,
+	"hits":
+	{
+		"total":1,
+		"hits":
+		[{
+			"_id": 1,
+			"_score":1480,
+			"_source":
+			{
+				"content":"Text 1",
+				"name":"Doc 1",
+				"cat":1
+			},
+			"highlight":
+			{
+				"content":
+				[
+					"<b>Text 1</b>"
+				]
+			}
+		]}
+	}
+}
+```
+
 <!-- end -->
 
 <!-- example highlight JSON all field  -->
@@ -934,7 +1204,7 @@ POST /search
     "total": 1,
     "hits": [
       {
-        "_id": "1",
+        "_id": 1,
         "_score": 2788,
         "_source": {
           "title": "Books one",
@@ -1022,7 +1292,7 @@ res =  await searchApi.search({"index":"books","query":{"match":{"*":"one|robots
 ```
 <!-- response Javascript -->
 ``` javascript
-{"took":0,"timed_out":false,"hits":{"total":1,"hits":[{"_id":"1","_score":2788,"_source":{"title":"Books one","content":"They followed Bander. The robots remained at a polite distance, but their presence was a constantly felt threat. Bander ushered all three into the room. One of the robots followed as well. Bander gestured the other robots away and entered itself. The door closed behind it. "},"highlight":{"title":["Books <b>one</b>"],"content":["They followed Bander. The <b>robots</b> remained at a polite distance, "," three into the room. <b>One</b> of the <b>robots</b> followed as well. Bander"," gestured the other <b>robots</b> away and entered itself. The"]}}]}}
+{"took":0,"timed_out":false,"hits":{"total":1,"hits":[{"_id": 1,"_score":2788,"_source":{"title":"Books one","content":"They followed Bander. The robots remained at a polite distance, but their presence was a constantly felt threat. Bander ushered all three into the room. One of the robots followed as well. Bander gestured the other robots away and entered itself. The door closed behind it. "},"highlight":{"title":["Books <b>one</b>"],"content":["They followed Bander. The <b>robots</b> remained at a polite distance, "," three into the room. <b>One</b> of the <b>robots</b> followed as well. Bander"," gestured the other <b>robots</b> away and entered itself. The"]}}]}}
 
 ```
 
@@ -1088,6 +1358,96 @@ class SearchResponse {
     profile: null
 }
 ```
+
+<!-- request TypeScript -->
+``` typescript
+res = await searchApi.search({
+  index: 'test',
+  query: {
+    match: {
+      *: 'Text 1|Doc 1'
+    }
+  },
+  highlight: {}
+});
+```
+<!-- response TypeScript -->
+``` typescript
+{
+	"took":0,
+	"timed_out":false,
+	"hits":
+	{
+		"total":1,
+		"hits":
+		[{
+			"_id": 1,
+			"_score":1480,
+			"_source":
+			{
+				"content":"Text 1",
+				"name":"Doc 1",
+				"cat":1
+			},
+			"highlight":
+			{
+				"content":
+				[
+					"<b>Text 1</b>"
+				],
+				"name":
+				[
+					"<b>Doc 1</b>"
+				]
+			}
+		]}
+	}
+}
+```
+
+<!-- request Go -->
+``` go
+matchClause := map[string]interface{} {"*": "Text 1|Doc 1"};
+query := map[string]interface{} {"match": matchClause};
+searchRequest.SetQuery(query);
+highlight := manticoreclient.NewHighlight()
+searchRequest.SetHighlight(highlight)
+res, _, _ := apiClient.SearchAPI.Search(context.Background()).SearchRequest(*searchRequest).Execute()
+```
+<!-- response Go -->
+``` go
+{
+	"took":0,
+	"timed_out":false,
+	"hits":
+	{
+		"total":1,
+		"hits":
+		[{
+			"_id": 1,
+			"_score":1480,
+			"_source":
+			{
+				"content":"Text 1",
+				"name":"Doc 1",
+				"cat":1
+			},
+			"highlight":
+			{
+				"content":
+				[
+					"<b>Text 1</b>"
+				],
+				"name":
+				[
+					"<b>Doc 1</b>"
+				]
+			}
+		]}
+	}
+}
+```
+
 
 <!-- end -->
 
@@ -1175,7 +1535,7 @@ res =  await searchApi.search({"index":"books","query":{"match":{"content":"one|
 ```
 <!-- response Javascript -->
 ``` javascript
-{"took":0,"timed_out":false,"hits":{"total":1,"hits":[{"_id":"1","_score":1788,"_source":{"title":"Books one","content":"They followed Bander. The robots remained at a polite distance, but their presence was a constantly felt threat. Bander ushered all three into the room. One of the robots followed as well. Bander gestured the other robots away and entered itself. The door closed behind it. "},"highlight":{"content":[". The robots remained at a <b>polite distance</b>, but their presence was a"]}}]}}
+{"took":0,"timed_out":false,"hits":{"total":1,"hits":[{"_id": 1,"_score":1788,"_source":{"title":"Books one","content":"They followed Bander. The robots remained at a polite distance, but their presence was a constantly felt threat. Bander ushered all three into the room. One of the robots followed as well. Bander gestured the other robots away and entered itself. The door closed behind it. "},"highlight":{"content":[". The robots remained at a <b>polite distance</b>, but their presence was a"]}}]}}
 ```
 
 
@@ -1223,6 +1583,99 @@ highlight.HighlightQuery = highlightQuery;
 searchRequest.Highlight = highlight;
 var searchResponse = searchApi.Search(searchRequest);
 ```
+
+<!-- request TypeScript -->
+``` typescript
+res = await searchApi.search({
+  index: 'test',
+  query: {
+    match: {
+      *: 'Text 1'
+    }
+  },
+  highlight: {
+    fields: ['content'],
+    highlight_query: {
+      match: {*: 'Text'}
+    }
+  }
+});
+```
+<!-- response TypeScript -->
+``` typescript
+{
+	"took":0,
+	"timed_out":false,
+	"hits":
+	{
+		"total":1,
+		"hits":
+		[{
+			"_id": 1,
+			"_score":1480,
+			"_source":
+			{
+				"content":"Text 1",
+				"name":"Doc 1",
+				"cat":1
+			},
+			"highlight":
+			{
+				"content":
+				[
+					"<b>Text</b> 1"
+				]
+			}
+		]}
+	}
+}
+```
+
+<!-- request Go -->
+``` go
+matchClause := map[string]interface{} {"*": "Text 1"};
+query := map[string]interface{} {"match": matchClause};
+searchRequest.SetQuery(query);
+highlight := manticoreclient.NewHighlight()
+highlightField := manticoreclient.NetHighlightField("content")
+highlightFields := []interface{} { highlightField } 
+highlight.SetFields(highlightFields)
+queryMatchClause := map[string]interface{} {"*": "Text"};
+highlightQuery := map[string]interface{} {"match": queryMatchClause};
+highlight.SetHighlightQuery(highlightQuery)
+searchRequest.SetHighlight(highlight)
+res, _, _ := apiClient.SearchAPI.Search(context.Background()).SearchRequest(*searchRequest).Execute()
+```
+<!-- response Go -->
+``` go
+{
+	"took":0,
+	"timed_out":false,
+	"hits":
+	{
+		"total":1,
+		"hits":
+		[{
+			"_id": 1,
+			"_score":1480,
+			"_source":
+			{
+				"content":"Text 1",
+				"name":"Doc 1",
+				"cat":1
+			},
+			"highlight":
+			{
+				"content":
+				[
+					"<b>Text</b> 1"
+				]
+			}
+		]}
+	}
+}
+```
+
 <!-- end -->
 
 <!-- example pre_tags  -->
@@ -1316,7 +1769,7 @@ res =  await searchApi.search({"index":"books","query":{"match":{"*":"one|robots
 ```
 <!-- response Javascript -->
 ``` javascript
-{"took":0,"timed_out":false,"hits":{"total":1,"hits":[{"_id":"1","_score":2788,"_source":{"title":"Books one","content":"They followed Bander. The robots remained at a polite distance, but their presence was a constantly felt threat. Bander ushered all three into the room. One of the robots followed as well. Bander gestured the other robots away and entered itself. The door closed behind it. "},"highlight":{"content":["They followed Bander. The before_robots_after remained at a polite distance, "," three into the room. before_One_after of the before_robots_after followed as well. Bander"," gestured the other before_robots_after away and entered itself. The"],"title":["Books before_one_after"]}}]}}
+{"took":0,"timed_out":false,"hits":{"total":1,"hits":[{"_id": 1,"_score":2788,"_source":{"title":"Books one","content":"They followed Bander. The robots remained at a polite distance, but their presence was a constantly felt threat. Bander ushered all three into the room. One of the robots followed as well. Bander gestured the other robots away and entered itself. The door closed behind it. "},"highlight":{"content":["They followed Bander. The before_robots_after remained at a polite distance, "," three into the room. before_One_after of the before_robots_after followed as well. Bander"," gestured the other before_robots_after away and entered itself. The"],"title":["Books before_one_after"]}}]}}
 ```
 
 
@@ -1357,6 +1810,93 @@ highlight.PostTags = "_after";
 searchRequest.Highlight = highlight;
 var searchResponse = searchApi.Search(searchRequest);
 ```
+
+<!-- request TypeScript -->
+``` typescript
+res = await searchApi.search({
+  index: 'test',
+  query: {
+    match: {
+      *: 'Text 1'
+    }
+  },
+  highlight: {
+    pre_tags: 'before_',
+    post_tags: '_after'
+  }
+});
+```
+<!-- response TypeScript -->
+``` typescript
+{
+	"took":0,
+	"timed_out":false,
+	"hits":
+	{
+		"total":1,
+		"hits":
+		[{
+			"_id": 1,
+			"_score":1480,
+			"_source":
+			{
+				"content":"Text 1",
+				"name":"Doc 1",
+				"cat":1
+			},
+			"highlight":
+			{
+				"content":
+				[
+					"before_Text 1_after"
+				]
+			}
+		]}
+	}
+}
+```
+
+<!-- request Go -->
+``` go
+matchClause := map[string]interface{} {"*": "Text 1"}
+query := map[string]interface{} {"match": matchClause}
+searchRequest.SetQuery(query)
+highlight := manticoreclient.NewHighlight()
+highlight.SetPreTags("before_")
+highlight.SetPostTags("_after")
+searchRequest.SetHighlight(highlight)
+res, _, _ := apiClient.SearchAPI.Search(context.Background()).SearchRequest(*searchRequest).Execute()
+```
+<!-- response Go -->
+``` go
+{
+	"took":0,
+	"timed_out":false,
+	"hits":
+	{
+		"total":1,
+		"hits":
+		[{
+			"_id": 1,
+			"_score":1480,
+			"_source":
+			{
+				"content":"Text 1",
+				"name":"Doc 1",
+				"cat":1
+			},
+			"highlight":
+			{
+				"content":
+				[
+					"before_Text 1_after"
+				]
+			}
+		]}
+	}
+}
+```
+
 <!-- end -->
 
 <!-- example no_match_size  -->
@@ -1447,7 +1987,7 @@ res =  await searchApi.search({"index":"books","query":{"match":{"*":"one|robots
 ```
 <!-- response Javascript -->
 ``` javascript
-{"took":0,"timed_out":false,"hits":{"total":1,"hits":[{"_id":"1","_score":2788,"_source":{"title":"Books one","content":"They followed Bander. The robots remained at a polite distance, but their presence was a constantly felt threat. Bander ushered all three into the room. One of the robots followed as well. Bander gestured the other robots away and entered itself. The door closed behind it. "},"highlight":{"content":["They followed Bander. The <b>robots</b> remained at a polite distance, "," three into the room. <b>One</b> of the <b>robots</b> followed as well. Bander"," gestured the other <b>robots</b> away and entered itself. The"],"title":["Books <b>one</b>"]}}]}}
+{"took":0,"timed_out":false,"hits":{"total":1,"hits":[{"_id": 1,"_score":2788,"_source":{"title":"Books one","content":"They followed Bander. The robots remained at a polite distance, but their presence was a constantly felt threat. Bander ushered all three into the room. One of the robots followed as well. Bander gestured the other robots away and entered itself. The door closed behind it. "},"highlight":{"content":["They followed Bander. The <b>robots</b> remained at a polite distance, "," three into the room. <b>One</b> of the <b>robots</b> followed as well. Bander"," gestured the other <b>robots</b> away and entered itself. The"],"title":["Books <b>one</b>"]}}]}}
 
 ```
 
@@ -1486,6 +2026,89 @@ highlight.NoMatchSize = 0;
 searchRequest.Highlight = highlight;
 var searchResponse = searchApi.Search(searchRequest);
 ```
+
+<!-- request TypeScript -->
+``` typescript
+res = await searchApi.search({
+  index: 'test',
+  query: {
+    match: {
+      *: 'Text 1'
+    }
+  },
+  highlight: {no_match_size: 0}
+});
+```
+<!-- response TypeScript -->
+``` typescript
+{
+	"took":0,
+	"timed_out":false,
+	"hits":
+	{
+		"total":1,
+		"hits":
+		[{
+			"_id": 1,
+			"_score":1480,
+			"_source":
+			{
+				"content":"Text 1",
+				"name":"Doc 1",
+				"cat":1
+			},
+			"highlight":
+			{
+				"content":
+				[
+					"<b>Text 1</b>"
+				]
+			}
+		]}
+	}
+}
+```
+
+<!-- request Go -->
+``` go
+matchClause := map[string]interface{} {"*": "Text 1"};
+query := map[string]interface{} {"match": matchClause};
+searchRequest.SetQuery(query);
+highlight := manticoreclient.NewHighlight()
+highlight.SetNoMatchSize(0)
+searchRequest.SetHighlight(highlight)
+res, _, _ := apiClient.SearchAPI.Search(context.Background()).SearchRequest(*searchRequest).Execute()
+```
+<!-- response Go -->
+``` go
+{
+	"took":0,
+	"timed_out":false,
+	"hits":
+	{
+		"total":1,
+		"hits":
+		[{
+			"_id": 1,
+			"_score":1480,
+			"_source":
+			{
+				"content":"Text 1",
+				"name":"Doc 1",
+				"cat":1
+			},
+			"highlight":
+			{
+				"content":
+				[
+					"<b>Text 1</b>"
+				]
+			}
+		]}
+	}
+}
+```
+
 <!-- end -->
 
 <!-- example order  -->
@@ -1574,7 +2197,7 @@ res =  await searchApi.search({"index":"books","query":{"match":{"*":"one|robots
 ```
 <!-- response Javascript -->
 ``` javascript
-{"took":0,"timed_out":false,"hits":{"total":1,"hits":[{"_id":"1","_score":2788,"_source":{"title":"Books one","content":"They followed Bander. The robots remained at a polite distance, but their presence was a constantly felt threat. Bander ushered all three into the room. One of the robots followed as well. Bander gestured the other robots away and entered itself. The door closed behind it. "},"highlight":{"content":[" three into the room. <b>One</b> of the <b>robots</b> followed as well. Bander"," gestured the other <b>robots</b> away and entered itself. The","They followed Bander. The <b>robots</b> remained at a polite distance, "],"title":["Books <b>one</b>"]}}]}}
+{"took":0,"timed_out":false,"hits":{"total":1,"hits":[{"_id": 1,"_score":2788,"_source":{"title":"Books one","content":"They followed Bander. The robots remained at a polite distance, but their presence was a constantly felt threat. Bander ushered all three into the room. One of the robots followed as well. Bander gestured the other robots away and entered itself. The door closed behind it. "},"highlight":{"content":[" three into the room. <b>One</b> of the <b>robots</b> followed as well. Bander"," gestured the other <b>robots</b> away and entered itself. The","They followed Bander. The <b>robots</b> remained at a polite distance, "],"title":["Books <b>one</b>"]}}]}}
 
 
 ```
@@ -1613,6 +2236,89 @@ highlight.Order =  "score";
 searchRequest.Highlight = highlight;
 var searchResponse = searchApi.Search(searchRequest);
 ```
+
+<!-- request TypeScript -->
+``` typescript
+res = await searchApi.search({
+  index: 'test',
+  query: {
+    match: {
+      *: 'Text 1'
+    }
+  },
+  highlight: { order: 'score' }
+});
+```
+<!-- response TypeScript -->
+``` typescript
+{
+	"took":0,
+	"timed_out":false,
+	"hits":
+	{
+		"total":1,
+		"hits":
+		[{
+			"_id": 1,
+			"_score":1480,
+			"_source":
+			{
+				"content":"Text 1",
+				"name":"Doc 1",
+				"cat":1
+			},
+			"highlight":
+			{
+				"content":
+				[
+					"<b>Text 1</b>"
+				]
+			}
+		]}
+	}
+}
+```
+
+<!-- request Go -->
+``` go
+matchClause := map[string]interface{} {"*": "Text 1"};
+query := map[string]interface{} {"match": matchClause};
+searchRequest.SetQuery(query);
+highlight := manticoreclient.NewHighlight()
+highlight.SetOrder("score")
+searchRequest.SetHighlight(highlight)
+res, _, _ := apiClient.SearchAPI.Search(context.Background()).SearchRequest(*searchRequest).Execute()
+```
+<!-- response Go -->
+``` go
+{
+	"took":0,
+	"timed_out":false,
+	"hits":
+	{
+		"total":1,
+		"hits":
+		[{
+			"_id": 1,
+			"_score":1480,
+			"_source":
+			{
+				"content":"Text 1",
+				"name":"Doc 1",
+				"cat":1
+			},
+			"highlight":
+			{
+				"content":
+				[
+					"<b>Text 1</b>"
+				]
+			}
+		]}
+	}
+}
+```
+
 
 <!-- end -->
 
@@ -1699,7 +2405,7 @@ res =  await searchApi.search({"index":"books","query":{"match":{"*":"one|robots
 ```
 <!-- response Javascript -->
 ``` javascript
-{"took":0,"timed_out":false,"hits":{"total":1,"hits":[{"_id":"1","_score":2788,"_source":{"title":"Books one","content":"They followed Bander. The robots remained at a polite distance, but their presence was a constantly felt threat. Bander ushered all three into the room. One of the robots followed as well. Bander gestured the other robots away and entered itself. The door closed behind it. "},"highlight":{"content":[" the room. <b>One</b> of the <b>robots</b> followed as well","Bander gestured the other <b>robots</b> away and entered "],"title":["Books <b>one</b>"]}}]}}
+{"took":0,"timed_out":false,"hits":{"total":1,"hits":[{"_id": 1,"_score":2788,"_source":{"title":"Books one","content":"They followed Bander. The robots remained at a polite distance, but their presence was a constantly felt threat. Bander ushered all three into the room. One of the robots followed as well. Bander gestured the other robots away and entered itself. The door closed behind it. "},"highlight":{"content":[" the room. <b>One</b> of the <b>robots</b> followed as well","Bander gestured the other <b>robots</b> away and entered "],"title":["Books <b>one</b>"]}}]}}
 ```
 <!-- intro -->
 ##### Java:
@@ -1736,6 +2442,89 @@ highlight.FragmentSize = 100;
 searchRequest.Highlight = highlight;
 var searchResponse = searchApi.Search(searchRequest);
 ```
+
+<!-- request TypeScript -->
+``` typescript
+res = await searchApi.search({
+  index: 'test',
+  query: {
+    match: {
+      *: 'Text 1'
+    }
+  },
+  highlight: { fragment_size: 4}
+});
+```
+<!-- response TypeScript -->
+``` typescript
+{
+	"took":0,
+	"timed_out":false,
+	"hits":
+	{
+		"total":1,
+		"hits":
+		[{
+			"_id": 1,
+			"_score":1480,
+			"_source":
+			{
+				"content":"Text 1",
+				"name":"Doc 1",
+				"cat":1
+			},
+			"highlight":
+			{
+				"content":
+				[
+					"<b>Text</b>"
+				]
+			}
+		]}
+	}
+}
+```
+
+<!-- request Go -->
+``` go
+matchClause := map[string]interface{} {"*": "Text 1"};
+query := map[string]interface{} {"match": matchClause};
+searchRequest.SetQuery(query);
+highlight := manticoreclient.NewHighlight()
+highlight.SetFragmentSize(4)
+searchRequest.SetHighlight(highlight)
+res, _, _ := apiClient.SearchAPI.Search(context.Background()).SearchRequest(*searchRequest).Execute()
+```
+<!-- response Go -->
+``` go
+{
+	"took":0,
+	"timed_out":false,
+	"hits":
+	{
+		"total":1,
+		"hits":
+		[{
+			"_id": 1,
+			"_score":1480,
+			"_source":
+			{
+				"content":"Text 1",
+				"name":"Doc 1",
+				"cat":1
+			},
+			"highlight":
+			{
+				"content":
+				[
+					"<b>Text</b>"
+				]
+			}
+		]}
+	}
+}
+```
+
 <!-- end -->
 
 <!-- example number_of_fragments -->
@@ -1825,7 +2614,7 @@ res =  await searchApi.search({"index":"books","query":{"match":{"*":"one|robots
 ```
 <!-- response Javascript -->
 ``` javascript
-{"took":0,"timed_out":false,"hits":{"total":1,"hits":[{"_id":"1","_score":2788,"_source":{"title":"Books one","content":"They followed Bander. The robots remained at a polite distance, but their presence was a constantly felt threat. Bander ushered all three into the room. One of the robots followed as well. Bander gestured the other robots away and entered itself. The door closed behind it. "},"highlight":{"content":["They followed Bander. The <b>robots</b> remained at a polite distance, "," three into the room. <b>One</b> of the <b>robots</b> followed as well. Bander"," gestured the other <b>robots</b> away and entered itself. The"],"title":["Books <b>one</b>"]}}]}}
+{"took":0,"timed_out":false,"hits":{"total":1,"hits":[{"_id": 1,"_score":2788,"_source":{"title":"Books one","content":"They followed Bander. The robots remained at a polite distance, but their presence was a constantly felt threat. Bander ushered all three into the room. One of the robots followed as well. Bander gestured the other robots away and entered itself. The door closed behind it. "},"highlight":{"content":["They followed Bander. The <b>robots</b> remained at a polite distance, "," three into the room. <b>One</b> of the <b>robots</b> followed as well. Bander"," gestured the other <b>robots</b> away and entered itself. The"],"title":["Books <b>one</b>"]}}]}}
 
 ```
 <!-- intro -->
@@ -1862,6 +2651,88 @@ highlight.Fieldnames = new List<string> {"content", "title"};
 highlight.NumberOfFragments = 10;
 searchRequest.Highlight = highlight;
 var searchResponse = searchApi.Search(searchRequest);
+```
+
+<!-- request TypeScript -->
+``` typescript
+res = await searchApi.search({
+  index: 'test',
+  query: {
+    match: {
+      *: 'Text 1'
+    }
+  },
+  highlight: { number_of_fragments: 1}
+});
+```
+<!-- response TypeScript -->
+``` typescript
+{
+	"took":0,
+	"timed_out":false,
+	"hits":
+	{
+		"total":1,
+		"hits":
+		[{
+			"_id": 1,
+			"_score":1480,
+			"_source":
+			{
+				"content":"Text 1",
+				"name":"Doc 1",
+				"cat":1
+			},
+			"highlight":
+			{
+				"content":
+				[
+					"<b>Text 1</b>"
+				]
+			}
+		]}
+	}
+}
+```
+
+<!-- request Go -->
+``` go
+matchClause := map[string]interface{} {"*": "Text 1"};
+query := map[string]interface{} {"match": matchClause};
+searchRequest.SetQuery(query);
+highlight := manticoreclient.NewHighlight()
+highlight.SetNumberOfFragments(1)
+searchRequest.SetHighlight(highlight)
+res, _, _ := apiClient.SearchAPI.Search(context.Background()).SearchRequest(*searchRequest).Execute()
+```
+<!-- response Go -->
+``` go
+{
+	"took":0,
+	"timed_out":false,
+	"hits":
+	{
+		"total":1,
+		"hits":
+		[{
+			"_id": 1,
+			"_score":1480,
+			"_source":
+			{
+				"content":"Text 1",
+				"name":"Doc 1",
+				"cat":1
+			},
+			"highlight":
+			{
+				"content":
+				[
+					"<b>Text 1</b>"
+				]
+			}
+		]}
+	}
+}
 ```
 
 <!-- end -->
@@ -1951,7 +2822,7 @@ res =  await searchApi.search({"index":"books","query":{"match":{"*":"one|robots
 ```
 <!-- response Javascript -->
 ``` javascript
-{"took":0,"timed_out":false,"hits":{"total":1,"hits":[{"_id":"1","_score":2788,"_source":{"title":"Books one","content":"They followed Bander. The robots remained at a polite distance, but their presence was a constantly felt threat. Bander ushered all three into the room. One of the robots followed as well. Bander gestured the other robots away and entered itself. The door closed behind it. "},"highlight":{"title":["Books <b>one</b>"],"content":[" into the room. <b>One</b> of the <b>robots</b> followed as well"]}}]}}
+{"took":0,"timed_out":false,"hits":{"total":1,"hits":[{"_id": 1,"_score":2788,"_source":{"title":"Books one","content":"They followed Bander. The robots remained at a polite distance, but their presence was a constantly felt threat. Bander ushered all three into the room. One of the robots followed as well. Bander gestured the other robots away and entered itself. The door closed behind it. "},"highlight":{"title":["Books <b>one</b>"],"content":[" into the room. <b>One</b> of the <b>robots</b> followed as well"]}}]}}
 ```
 <!-- intro -->
 ##### Java:
@@ -1994,6 +2865,96 @@ highlight.Fields = new List<Object> {highlightField};
 searchRequest.Highlight = highlight;
 var searchResponse = searchApi.Search(searchRequest);
 ```
+
+<!-- request TypeScript -->
+``` typescript
+res = await searchApi.search({
+  index: 'test',
+  query: {
+    match: {
+      *: 'Text 1'
+    }
+  },
+  highlight: {
+    fields: {
+      content: { limit:1 }
+    }
+  }
+});
+```
+<!-- response TypeScript -->
+``` typescript
+{
+	"took":0,
+	"timed_out":false,
+	"hits":
+	{
+		"total":1,
+		"hits":
+		[{
+			"_id": 1,
+			"_score":1480,
+			"_source":
+			{
+				"content":"Text 1",
+				"name":"Doc 1",
+				"cat":1
+			},
+			"highlight":
+			{
+				"content":
+				[
+					"<b>Text</b>"
+				]
+			}
+		]}
+	}
+}
+```
+
+<!-- request Go -->
+``` go
+matchClause := map[string]interface{} {"*": "Text 1"};
+query := map[string]interface{} {"match": matchClause};
+searchRequest.SetQuery(query);
+highlight := manticoreclient.NewHighlight()
+highlightField := manticoreclient.NetHighlightField("content")
+highlightField.SetLimit(1);
+highlightFields := []interface{} { highlightField } 
+highlight.SetFields(highlightFields)
+searchRequest.SetHighlight(highlight)
+res, _, _ := apiClient.SearchAPI.Search(context.Background()).SearchRequest(*searchRequest).Execute()
+```
+<!-- response Go -->
+``` go
+{
+	"took":0,
+	"timed_out":false,
+	"hits":
+	{
+		"total":1,
+		"hits":
+		[{
+			"_id": 1,
+			"_score":1480,
+			"_source":
+			{
+				"content":"Text 1",
+				"name":"Doc 1",
+				"cat":1
+			},
+			"highlight":
+			{
+				"content":
+				[
+					"<b>Text</b>"
+				]
+			}
+		]}
+	}
+}
+```
+
 <!-- end -->
 
 <!-- example highlight json global limits -->
@@ -2079,7 +3040,7 @@ res =  await searchApi.search({"index":"books","query":{"match":{"content":"and 
 ```
 <!-- response Javascript -->
 ``` javascript
-{"took":0,"timed_out":false,"hits":{"total":1,"hits":[{"_id":"1","_score":1597,"_source":{"title":"Books one","content":"They followed Bander. The robots remained at a polite distance, but their presence was a constantly felt threat. Bander ushered all three into the room. One of the robots followed as well. Bander gestured the other robots away and entered itself. The door closed behind it. "},"highlight":{"content":[" gestured the other robots away <b>and</b> entered itself. The door closed"]}}]}}
+{"took":0,"timed_out":false,"hits":{"total":1,"hits":[{"_id": 1,"_score":1597,"_source":{"title":"Books one","content":"They followed Bander. The robots remained at a polite distance, but their presence was a constantly felt threat. Bander ushered all three into the room. One of the robots followed as well. Bander gestured the other robots away and entered itself. The door closed behind it. "},"highlight":{"content":[" gestured the other robots away <b>and</b> entered itself. The door closed"]}}]}}
 
 ```
 <!-- intro -->
@@ -2124,6 +3085,29 @@ searchRequest.Highlight = highlight;
 var searchResponse = searchApi.Search(searchRequest);
 ```
 
+<!-- request TypeScript -->
+``` typescript
+res = await searchApi.search({
+  index: 'test',
+  query: {
+    match: {
+      *: 'Text 1'
+    }
+  },
+  highlight: { limits_per_field: 0 }
+});
+```
+
+<!-- request Go -->
+``` go
+matchClause := map[string]interface{} {"*": "Text 1"};
+query := map[string]interface{} {"match": matchClause};
+searchRequest.SetQuery(query);
+highlight := manticoreclient.NewHighlight()
+highlight.SetLimitsPerField(0)
+searchRequest.SetHighlight(highlight)
+res, _, _ := apiClient.SearchAPI.Search(context.Background()).SearchRequest(*searchRequest).Execute()
+```
 <!-- end -->
 
 # CALL SNIPPETS

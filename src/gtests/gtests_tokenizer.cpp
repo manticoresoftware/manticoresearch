@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2017-2023, Manticore Software LTD (https://manticoresearch.com)
+// Copyright (c) 2017-2024, Manticore Software LTD (https://manticoresearch.com)
 // Copyright (c) 2001-2016, Andrew Aksyonoff
 // Copyright (c) 2008-2016, Sphinx Technologies Inc
 // All rights reserved
@@ -14,6 +14,7 @@
 
 #include "sphinxint.h"
 #include "tokenizer/tokenizer.h"
+#include "tokenizer/tok_internals.h"
 
 // Miscelaneous tests of tokenizer
 
@@ -742,7 +743,7 @@ TEST_F ( QueryParser, test_many )
 	for ( auto & dTest : dTests )
 	{
 		XQQuery_t tQuery;
-		sphParseExtendedQuery ( tQuery, dTest.m_sQuery, NULL, pTokenizer, &tSchema, pDict, tTmpSettings );
+		sphParseExtendedQuery ( tQuery, dTest.m_sQuery, nullptr, pTokenizer, &tSchema, pDict, tTmpSettings, nullptr );
 		CSphString sReconst = sphReconstructNode ( tQuery.m_pRoot, &tSchema );
 		ASSERT_STREQ ( sReconst.cstr(), dTest.m_sReconst );
 	}
@@ -751,16 +752,14 @@ TEST_F ( QueryParser, test_many )
 TEST_F ( QueryParser, NEAR_with_NOT )
 {
 	XQQuery_t tQuery;
-	ASSERT_FALSE ( sphParseExtendedQuery ( tQuery, "me -test NEAR/2 off", NULL, pTokenizer, &tSchema
-									   , pDict, tTmpSettings ) );
+	ASSERT_FALSE ( sphParseExtendedQuery ( tQuery, "me -test NEAR/2 off", nullptr, pTokenizer, &tSchema, pDict, tTmpSettings, nullptr ) );
 	ASSERT_FALSE ( tQuery.m_pRoot );
 }
 
 TEST_F ( QueryParser, soft_whitespace1 )
 {
 	XQQuery_t tQuery;
-	ASSERT_TRUE ( sphParseExtendedQuery ( tQuery, "me [ off", NULL, pTokenizer, &tSchema, pDict
-										  , tTmpSettings ) );
+	ASSERT_TRUE ( sphParseExtendedQuery ( tQuery, "me [ off", nullptr, pTokenizer, &tSchema, pDict, tTmpSettings, nullptr ) );
 	int dQpos[] = { 1, 2 };
 	SCOPED_TRACE( "soft_whitespace1" );
 	CheckQuerySoftSpace ( tQuery.m_pRoot, dQpos, sizeof ( dQpos ) / sizeof ( dQpos[0] ) );
@@ -769,8 +768,7 @@ TEST_F ( QueryParser, soft_whitespace1 )
 TEST_F ( QueryParser, soft_whitespace2 )
 {
 	XQQuery_t tQuery;
-	ASSERT_TRUE ( sphParseExtendedQuery ( tQuery, "me [ ,, &&,[ off", NULL, pTokenizer, &tSchema, pDict
-										  , tTmpSettings ) );
+	ASSERT_TRUE ( sphParseExtendedQuery ( tQuery, "me [ ,, &&,[ off", nullptr, pTokenizer, &tSchema, pDict, tTmpSettings, nullptr ) );
 	int dQpos[] = { 1, 2 };
 	SCOPED_TRACE( "soft_whitespace2" );
 	CheckQuerySoftSpace ( tQuery.m_pRoot, dQpos, sizeof ( dQpos ) / sizeof ( dQpos[0] ) );
@@ -779,8 +777,7 @@ TEST_F ( QueryParser, soft_whitespace2 )
 TEST_F ( QueryParser, soft_whitespace3 )
 {
 	XQQuery_t tQuery;
-	ASSERT_TRUE ( sphParseExtendedQuery ( tQuery, "me \xE7\xA7\x81\xE3\x81\xAF\xE3\x82\xAC off", NULL, pTokenizer, &tSchema, pDict
-										  , tTmpSettings ) );
+	ASSERT_TRUE ( sphParseExtendedQuery ( tQuery, "me \xE7\xA7\x81\xE3\x81\xAF\xE3\x82\xAC off", nullptr, pTokenizer, &tSchema, pDict, tTmpSettings, nullptr ) );
 	int dQpos[] = { 1, 3 };
 	SCOPED_TRACE( "soft_whitespace3" );
 	CheckQuerySoftSpace ( tQuery.m_pRoot, dQpos, sizeof ( dQpos ) / sizeof ( dQpos[0] ) );
@@ -790,8 +787,7 @@ TEST_F ( QueryParser, soft_whitespace4 )
 {
 	XQQuery_t tQuery;
 	ASSERT_TRUE (
-		sphParseExtendedQuery ( tQuery, "me \xE7\xA7\x81\xE3\x81\xAF\xE3\x82\xAC \xE7\xA7\x81\xE3\x81\xAF\xE3\x82\xAC \xE7\xA7\x81\xE3\x81\xAF\xE3\x82\xAC off", NULL, pTokenizer, &tSchema, pDict
-								, tTmpSettings ) );
+		sphParseExtendedQuery ( tQuery, "me \xE7\xA7\x81\xE3\x81\xAF\xE3\x82\xAC \xE7\xA7\x81\xE3\x81\xAF\xE3\x82\xAC \xE7\xA7\x81\xE3\x81\xAF\xE3\x82\xAC off", nullptr, pTokenizer, &tSchema, pDict, tTmpSettings, nullptr ) );
 	int dQpos[] = { 1, 3 };
 	SCOPED_TRACE( "soft_whitespace4" );
 	CheckQuerySoftSpace ( tQuery.m_pRoot, dQpos, sizeof ( dQpos ) / sizeof ( dQpos[0] ) );
@@ -1147,8 +1143,7 @@ TEST_F ( QueryParser, query_transforms )
 	while ( pTest->m_sQuery )
 	{
 		XQQuery_t tQuery;
-		sphParseExtendedQuery ( tQuery, pTest->m_sQuery, NULL, pTokenizer, &tSchema, pDict
-								, tTmpSettings );
+		sphParseExtendedQuery ( tQuery, pTest->m_sQuery, nullptr, pTokenizer, &tSchema, pDict, tTmpSettings, nullptr );
 
 		CSphString sReconst = sphReconstructNode ( tQuery.m_pRoot, &tSchema );
 
@@ -1187,8 +1182,164 @@ TEST_F ( QueryParser, test_NOT )
 		AllowOnlyNot ( tCase.m_bNotAllowed );
 
 		XQQuery_t tQuery;
-		sphParseExtendedQuery ( tQuery, tCase.m_sQuery, NULL, pTokenizer, &tSchema, pDict, tTmpSettings );
+		sphParseExtendedQuery ( tQuery, tCase.m_sQuery, nullptr, pTokenizer, &tSchema, pDict, tTmpSettings, nullptr );
 		CSphString sReconst = sphReconstructNode ( tQuery.m_pRoot, &tSchema );
 		ASSERT_STREQ ( sReconst.cstr(), tCase.m_sReconst );
 	}
+}
+
+TEST ( Charsets, Merge_noIntersection )
+{
+	CSphVector<RemapRangeTagged_t> dRanges;
+	AddRange ( { 100, 200, 103 }, dRanges );
+	AddRange ( { 201, 300, 120 }, dRanges );
+	MergeIntersectedRanges ( dRanges );
+	EXPECT_EQ ( dRanges.GetLength(), 2 );
+	auto dFoo = dRanges[0];
+	EXPECT_EQ ( dFoo.m_iStart, 100 );
+	EXPECT_EQ ( dFoo.m_iEnd, 200 );
+	EXPECT_EQ ( dFoo.m_iRemapStart, 103 );
+	dFoo = dRanges[1];
+	EXPECT_EQ ( dFoo.m_iStart, 201 );
+	EXPECT_EQ ( dFoo.m_iEnd, 300 );
+	EXPECT_EQ ( dFoo.m_iRemapStart, 120 );
+}
+
+TEST ( Charsets, Merge_SameRange )
+{
+	CSphVector<RemapRangeTagged_t> dRanges;
+	AddRange ( { 100, 200, 103 }, dRanges );
+	AddRange ( { 100, 200, 120 }, dRanges );
+	MergeIntersectedRanges ( dRanges );
+	EXPECT_EQ ( dRanges.GetLength(), 1 );
+	auto dFoo = dRanges[0];
+	EXPECT_EQ ( dFoo.m_iStart, 100 );
+	EXPECT_EQ ( dFoo.m_iEnd, 200 );
+	EXPECT_EQ ( dFoo.m_iRemapStart, 120 );
+}
+
+TEST ( Charsets, Merge_FirstEndLonger )
+{
+	CSphVector<RemapRangeTagged_t> dRanges;
+	AddRange ( { 100, 150, 102 }, dRanges );
+	AddRange ( { 100, 200, 101 }, dRanges );
+	MergeIntersectedRanges ( dRanges );
+	EXPECT_EQ ( dRanges.GetLength(), 1 );
+	auto dFoo = dRanges[0];
+	EXPECT_EQ ( dFoo.m_iStart, 100 );
+	EXPECT_EQ ( dFoo.m_iEnd, 200 );
+	EXPECT_EQ ( dFoo.m_iRemapStart, 101 );
+}
+
+TEST ( Charsets, Merge_intersection )
+{
+	CSphVector<RemapRangeTagged_t> dRanges;
+	AddRange ( { 100, 150, 101 }, dRanges );
+	AddRange ( { 110, 160, 102 }, dRanges );
+	MergeIntersectedRanges ( dRanges );
+	EXPECT_EQ ( dRanges.GetLength(), 2 );
+	auto dFoo = dRanges[0];
+	EXPECT_EQ ( dFoo.m_iStart, 100 );
+	EXPECT_EQ ( dFoo.m_iEnd, 109 );
+	EXPECT_EQ ( dFoo.m_iRemapStart, 101 );
+	dFoo = dRanges[1];
+	EXPECT_EQ ( dFoo.m_iStart, 110 );
+	EXPECT_EQ ( dFoo.m_iEnd, 160 );
+	EXPECT_EQ ( dFoo.m_iRemapStart, 102 );
+}
+
+TEST ( Charsets, Merge_intersectionSameEnd )
+{
+	CSphVector<RemapRangeTagged_t> dRanges;
+	AddRange ( { 100, 150, 101 }, dRanges );
+	AddRange ( { 110, 150, 102 }, dRanges );
+	MergeIntersectedRanges ( dRanges );
+	EXPECT_EQ ( dRanges.GetLength(), 2 );
+	auto dFoo = dRanges[0];
+	EXPECT_EQ ( dFoo.m_iStart, 100 );
+	EXPECT_EQ ( dFoo.m_iEnd, 109 );
+	EXPECT_EQ ( dFoo.m_iRemapStart, 101 );
+	dFoo = dRanges[1];
+	EXPECT_EQ ( dFoo.m_iStart, 110 );
+	EXPECT_EQ ( dFoo.m_iEnd, 150 );
+	EXPECT_EQ ( dFoo.m_iRemapStart, 102 );
+}
+
+TEST ( Charsets, Merge_intersectionFullCover )
+{
+	CSphVector<RemapRangeTagged_t> dRanges;
+	AddRange ( { 100, 160, 101 }, dRanges );
+	AddRange ( { 110, 150, 102 }, dRanges );
+	MergeIntersectedRanges ( dRanges );
+	EXPECT_EQ ( dRanges.GetLength(), 3 );
+	auto dFoo = dRanges[0];
+	EXPECT_EQ ( dFoo.m_iStart, 100 );
+	EXPECT_EQ ( dFoo.m_iEnd, 109 );
+	EXPECT_EQ ( dFoo.m_iRemapStart, 101 );
+	dFoo = dRanges[1];
+	EXPECT_EQ ( dFoo.m_iStart, 110 );
+	EXPECT_EQ ( dFoo.m_iEnd, 150 );
+	EXPECT_EQ ( dFoo.m_iRemapStart, 102 );
+	dFoo = dRanges[2];
+	EXPECT_EQ ( dFoo.m_iStart, 151 );
+	EXPECT_EQ ( dFoo.m_iEnd, 160 );
+	EXPECT_EQ ( dFoo.m_iRemapStart, 152 );
+}
+
+TEST ( Charsets, ComplexMergeRanges )
+{
+	CSphVector<RemapRangeTagged_t> dRanges;
+	AddRange ( { 100, 200, 103 }, dRanges );
+	AddRange ( { 110, 190, 120 }, dRanges );
+	AddRange ( { 120, 180, 121 }, dRanges );
+	AddRange ( { 130, 170, 122 }, dRanges );
+	AddRange ( { 140, 160, 123 }, dRanges );
+	AddRange ( { 142, 158, 125 }, dRanges );
+	AddRange ( { 144, 156, 127 }, dRanges );
+	AddRange ( { 146, 170, 129 }, dRanges );
+	AddRange ( { 150, 150, 124 }, dRanges );
+
+	MergeIntersectedRanges ( dRanges );
+	EXPECT_EQ ( dRanges.GetLength(), 10 );
+	auto dFoo = dRanges[0];
+	EXPECT_EQ ( dFoo.m_iStart, 100 );
+	EXPECT_EQ ( dFoo.m_iEnd, 109 );
+	EXPECT_EQ ( dFoo.m_iRemapStart, 103 );
+	dFoo = dRanges[1];
+	EXPECT_EQ ( dFoo.m_iStart, 110 );
+	EXPECT_EQ ( dFoo.m_iEnd, 119 );
+	EXPECT_EQ ( dFoo.m_iRemapStart, 120 );
+	dFoo = dRanges[2];
+	EXPECT_EQ ( dFoo.m_iStart, 120 );
+	EXPECT_EQ ( dFoo.m_iEnd, 129 );
+	EXPECT_EQ ( dFoo.m_iRemapStart, 121 );
+	dFoo = dRanges[3];
+	EXPECT_EQ ( dFoo.m_iStart, 130 );
+	EXPECT_EQ ( dFoo.m_iEnd, 139 );
+	EXPECT_EQ ( dFoo.m_iRemapStart, 122 );
+	dFoo = dRanges[4];
+	EXPECT_EQ ( dFoo.m_iStart, 140 );
+	EXPECT_EQ ( dFoo.m_iEnd, 149 );
+	EXPECT_EQ ( dFoo.m_iRemapStart, 123 );
+	dFoo = dRanges[5];
+	EXPECT_EQ ( dFoo.m_iStart, 150 );
+	EXPECT_EQ ( dFoo.m_iEnd, 150 );
+	EXPECT_EQ ( dFoo.m_iRemapStart, 124 );
+	dFoo = dRanges[6];
+	EXPECT_EQ ( dFoo.m_iStart, 151 );
+	EXPECT_EQ ( dFoo.m_iEnd, 170 );
+	EXPECT_EQ ( dFoo.m_iRemapStart, 134 );
+	dFoo = dRanges[7];
+	EXPECT_EQ ( dFoo.m_iStart, 171 );
+	EXPECT_EQ ( dFoo.m_iEnd, 180 );
+	EXPECT_EQ ( dFoo.m_iRemapStart, 172 );
+	dFoo = dRanges[8];
+	EXPECT_EQ ( dFoo.m_iStart, 181 );
+	EXPECT_EQ ( dFoo.m_iEnd, 190 );
+	EXPECT_EQ ( dFoo.m_iRemapStart, 191 );
+	dFoo = dRanges[9];
+	EXPECT_EQ ( dFoo.m_iStart, 191 );
+	EXPECT_EQ ( dFoo.m_iEnd, 200 );
+	EXPECT_EQ ( dFoo.m_iRemapStart, 194 );
+
 }

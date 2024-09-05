@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2017-2023, Manticore Software LTD (https://manticoresearch.com)
+// Copyright (c) 2017-2024, Manticore Software LTD (https://manticoresearch.com)
 // Copyright (c) 2001-2016, Andrew Aksyonoff
 // Copyright (c) 2008-2016, Sphinx Technologies Inc
 // All rights reserved
@@ -93,4 +93,10 @@ inline DWORD CRC32_next ( DWORD uPrevCRC, BYTE uByte )
 inline void CRC32_step ( DWORD& uCRC, BYTE uByte )
 {
 	uCRC = CRC32_next ( uCRC, uByte );
+}
+
+template<typename T>
+inline DWORD sphCRC32 ( VecTraits_T<T> dData, DWORD uPrevCRC )
+{
+	return sphCRC32 ( dData.Begin (), dData.GetLengthBytes (), uPrevCRC );
 }

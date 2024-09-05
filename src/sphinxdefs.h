@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2017-2023, Manticore Software LTD (https://manticoresearch.com)
+// Copyright (c) 2017-2024, Manticore Software LTD (https://manticoresearch.com)
 // Copyright (c) 2001-2016, Andrew Aksyonoff
 // Copyright (c) 2008-2016, Sphinx Technologies Inc
 // All rights reserved
@@ -76,7 +76,7 @@ using DictRefPtr_c = CSphRefcountedPtr<CSphDict>;
 // DATASOURCES
 /////////////////////////////////////////////////////////////////////////////
 
-typedef uint64_t SphWordID_t;
+using SphWordID_t = uint64_t;
 STATIC_SIZE_ASSERT ( SphWordID_t, 8 );
 
 /// hit position storage type
@@ -243,8 +243,6 @@ enum QueryOption_e
 enum ESphSortFunc
 {
 	FUNC_REL_DESC,
-	FUNC_ATTR_DESC,
-	FUNC_ATTR_ASC,
 	FUNC_TIMESEGS,
 	FUNC_GENERIC1,
 	FUNC_GENERIC2,

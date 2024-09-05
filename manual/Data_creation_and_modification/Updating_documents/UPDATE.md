@@ -2,14 +2,15 @@
 
 <!-- example update -->
 
-UPDATE changes [row-wise](../../Creating_a_table/Data_types.md#Row-wise-and-columnar-attribute-storages) attribute values of existing documents in a specified table with new values. Note that you can't update the contents of a fulltext field or a columnar attribute. If there's such a need, use [REPLACE](../../Data_creation_and_modification/Updating_documents/REPLACE.md).
+The `UPDATE` command changes [row-wise](../../Creating_a_table/Data_types.md#Row-wise-and-columnar-attribute-storages) attribute values of existing documents in a specified table with new values. Note that you can't update the contents of a fulltext field or a columnar attribute. If there's such a need, use [REPLACE](../../Data_creation_and_modification/Updating_documents/REPLACE.md).
 
-Attribute updates are supported for RT, PQ, and plain tables. All attribute types can be updated as long as they are stored in the [traditional row-wise storage](../../Creating_a_table/Data_types.md#Row-wise-and-columnar-attribute-storages).
-
+Attribute updates are supported for RT, PQ, and plain tables. All attribute types can be updated as long as they are stored in the [row-wise storage](../../Creating_a_table/Data_types.md#Row-wise-and-columnar-attribute-storages).
 
 Note that the document ID cannot be updated.
 
-Note that when you update an attribute, its [secondary index](../../Server_settings/Searchd.md#secondary_indexes) gets disabled, so consider [replacing](../../Data_creation_and_modification/Updating_documents/REPLACE.md) the document instead.
+It's important to be aware that updating an attribute disables its [secondary index](../../Server_settings/Searchd.md#secondary_indexes). If maintaining secondary index continuity is critical, consider fully or [partially replacing](../../Data_creation_and_modification/Updating_documents/REPLACE.md?client=REPLACE+SET) the document instead.
+
+Read more about `UPDATE` vs. partial `REPLACE` [here](../../Data_creation_and_modification/Updating_documents/REPLACE_vs_UPDATE.md#UPDATE-vs-partial-REPLACE).
 
 <!-- intro -->
 ##### SQL:
@@ -124,7 +125,7 @@ class UpdateResponse {
 
 <!-- request C# -->
 ``` clike
-Dictionary<string, Object> doc = new Dictionary<string, Object>(); 
+Dictionary<string, Object> doc = new Dictionary<string, Object>();
 doc.Add("price", 10);
 UpdateDocumentRequest updateRequest = new UpdateDocumentRequest(index: "products", id: 1, doc: doc);
 indexApi.Update(updateRequest);
@@ -137,6 +138,43 @@ class UpdateResponse {
     updated: null
     id: 1
     result: updated
+}
+```
+
+<!-- intro -->
+##### TypeScript:
+
+<!-- request TypeScript -->
+``` typescript
+res = await indexApi.update({ index: "test", id: 1, doc: { cat: 10 } });
+```
+
+<!-- response TypeScript -->
+```typescript
+{
+	"_index":"test",
+	"_id":1,
+	"result":"updated"
+}
+```
+
+<!-- intro -->
+##### Go:
+
+<!-- request Go -->
+``` go
+updateDoc = map[string]interface{} {"cat":10}
+updateRequest = openapiclient.NewUpdateDocumentRequest("test", updateDoc)
+updateRequest.SetId(1)
+res, _, _ = apiClient.IndexAPI.Update(context.Background()).UpdateDocumentRequest(*updateRequest).Execute()
+```
+
+<!-- response Go -->
+```go
+{
+	"_index":"test",
+	"_id":1,
+	"result":"updated"
 }
 ```
 
@@ -288,7 +326,7 @@ class UpdateResponse {
 
 <!-- request C# -->
 ``` clike
-Dictionary<string, Object> doc = new Dictionary<string, Object>(); 
+Dictionary<string, Object> doc = new Dictionary<string, Object>();
 doc.Add("price", 10);
 doc.Add("coeff", 3465.23);
 doc.Add("tags1", new List<int> {3,6,4});
@@ -305,6 +343,43 @@ class UpdateResponse {
     updated: null
     id: 1
     result: updated
+}
+```
+
+<!-- intro -->
+##### TypeScript:
+
+<!-- request TypeScript -->
+``` typescript
+res = await indexApi.update({ index: "test", id: 1, doc: { name: "Doc 21", cat: "10" } });
+```
+
+<!-- response TypeScript -->
+```go
+{
+  "_index":"test",
+  "_id":1,
+  "result":"updated"
+}
+```
+
+<!-- intro -->
+##### Go:
+
+<!-- request Go -->
+``` go
+updateDoc = map[string]interface{} {"name":"Doc 21", "cat":10}
+updateRequest = manticoreclient.NewUpdateDocumentRequest("test", updateDoc)
+updateRequest.SetId(1)
+res, _, _ = apiClient.IndexAPI.Update(context.Background()).UpdateDocumentRequest(*updateRequest).Execute()
+```
+
+<!-- response Go -->
+```go
+{
+  "_index":"test",
+  "_id":1,
+  "result":"updated"
 }
 ```
 
@@ -467,7 +542,7 @@ class UpdateResponse {
 
 <!-- request C# -->
 ``` clike
-Dictionary<string, Object> doc = new Dictionary<string, Object>(); 
+Dictionary<string, Object> doc = new Dictionary<string, Object>();
 doc.Add("meta.tags[0]", 100);
 UpdateDocumentRequest updateRequest = new UpdateDocumentRequest(index: "products", id: 1, doc: doc);
 indexApi.Update(updateRequest);
@@ -481,6 +556,39 @@ class UpdateResponse {
     updated: null
     id: 1
     result: updated
+}
+```
+
+<!-- intro -->
+##### TypeScript:
+
+<!-- request TypeScript -->
+``` typescript
+res = await indexApi.update({"index" : "test", "id" : 1, "doc" : { "meta.tags[0]": 100} });
+```
+
+<!-- response TypeScript -->
+```typescript
+{"_index":"test","_id":1,"result":"updated"}
+```
+
+<!-- intro -->
+##### Go:
+
+<!-- request Go -->
+``` go
+updateDoc = map[string]interface{} {"meta.tags[0]":100}
+updateRequest = manticoreclient.NewUpdateDocumentRequest("test", updateDoc)
+updateRequest.SetId(1)
+res, _, _ = apiClient.IndexAPI.Update(context.Background()).UpdateDocumentRequest(*updateRequest).Execute()
+```
+
+<!-- response Go -->
+```go
+{
+	"_index":"test",
+	"_id":1,
+	"result":"updated"
 }
 ```
 
@@ -666,17 +774,17 @@ class UpdateResponse {
 
 <!-- request C# -->
 ``` clike
-Dictionary<string, Object> meta = new Dictionary<string, Object>(); 
+Dictionary<string, Object> meta = new Dictionary<string, Object>();
 meta.Add("tags", new List<int> {1,2,3});
-Dictionary<string, Object> doc = new Dictionary<string, Object>(); 
+Dictionary<string, Object> doc = new Dictionary<string, Object>();
 doc.Add("title", "title");
 doc.Add("meta", meta);
 InsertDocumentRequest newdoc = new InsertDocumentRequest(index: "products", id: 100, doc: doc);
 indexApi.Insert(newdoc);
 
 meta = new Dictionary<string, Object>();
-meta.Add("tags", new List<string> {"one","two","three"}); 
-doc = new Dictionary<string, Object>(); 
+meta.Add("tags", new List<string> {"one","two","three"});
+doc = new Dictionary<string, Object>();
 doc.Add("meta", meta);
 UpdateDocumentRequest updatedoc = new UpdateDocumentRequest(index: "products", id: 100, doc: doc);
 indexApi.Update(updatedoc);
@@ -697,6 +805,68 @@ class UpdateResponse {
     updated: null
     id: 100
     result: updated
+}
+```
+
+<!-- intro -->
+##### TypeScript:
+
+<!-- request TypeScript -->
+``` typescript
+res = await indexApi.insert({
+  index: 'test',
+  id: 1,
+  doc: { content: 'Text 1', name: 'Doc 1', meta: { tags:[1,2,3] } }
+})
+res = await indexApi.update({ index: 'test', id: 1, doc: { meta: { tags:['one','two','three'] } } });
+```
+
+<!-- response TypeScript -->
+```typescript
+{
+	"_index":"test",
+	"_id":1,
+	"created":true,
+	"result":"created"
+}
+
+{
+	"_index":"test",
+	"_id":1,
+	"result":"updated"
+}
+```
+
+<!-- intro -->
+##### TypeScript:
+
+<!-- request Go -->
+``` go
+metaField := map[string]interface{} {"tags": []int{1, 2, 3}}
+insertDoc := map[string]interface{} {"name": "Doc 1", "meta": metaField}}
+insertRequest := manticoreclient.NewInsertDocumentRequest("test", insertDoc)
+insertRequest.SetId(1)
+res, _, _ := apiClient.IndexAPI.Insert(context.Background()).InsertDocumentRequest(*insertRequest).Execute();
+
+metaField = map[string]interface{} {"tags": []string{"one", "two", "three"}}
+updateDoc := map[string]interface{} {"meta": metaField}
+updateRequest := manticoreclient.NewUpdateDocumentRequest("test", updateDoc)
+res, _, _ = apiClient.IndexAPI.Update(context.Background()).UpdateDocumentRequest(*updateRequest).Execute()
+```
+
+<!-- response Go -->
+```go
+{
+	"_index":"test",
+	"_id":1,
+	"created":true,
+	"result":"created"
+}
+
+{
+	"_index":"test",
+	"_id":1,
+	"result":"updated"
 }
 ```
 
@@ -784,35 +954,35 @@ indexApi.update(updatedoc);
 
 ```
 
-<!-- response Java -->
-```java
-class UpdateResponse {
-    index: products
-    updated: null
-    id: 1
-    result: updated
-}
-```
-
 <!-- intro -->
 ##### C#:
 
 <!-- request C# -->
 ``` clike
-Dictionary<string, Object> doc = new Dictionary<string, Object>(); 
+Dictionary<string, Object> doc = new Dictionary<string, Object>();
 doc.Add("enabled", 0);
 UpdateDocumentRequest updatedoc = new UpdateDocumentRequest(index: "products", cluster: "weekly", id: 1, doc: doc);
 indexApi.Update(updatedoc);
 ```
 
-<!-- response C# -->
-```clike
-class UpdateResponse {
-    index: products
-    updated: null
-    id: 1
-    result: updated
-}
+<!-- intro -->
+##### TypeScript:
+
+<!-- request TypeScript -->
+``` typescript
+res = wait indexApi.update( {cluster: 'test_cluster', index : 'test', id : 1, doc : {name : 'Doc 11'}} );
+```
+
+<!-- intro -->
+##### Go:
+
+<!-- request Go -->
+``` go
+updateDoc = map[string]interface{} {"name":"Doc 11"}
+updateRequest = manticoreclient.NewUpdateDocumentRequest("test", updateDoc)
+updateRequest.SetCluster("test_cluster")
+updateRequest.SetId(1)
+res, _, _ = apiClient.IndexAPI.Update(context.Background()).UpdateDocumentRequest(*updateRequest).Execute()
 ```
 
 <!-- end -->
@@ -950,7 +1120,7 @@ class UpdateResponse {
 
 <!-- request C# -->
 ``` clike
-Dictionary<string, Object> doc = new Dictionary<string, Object>(); 
+Dictionary<string, Object> doc = new Dictionary<string, Object>();
 doc.Add("tags1", new List<int> {});
 UpdateDocumentRequest updatedoc = new UpdateDocumentRequest(index: "products", id: 1, doc: doc);
 indexApi.Update(updatedoc);
@@ -965,6 +1135,44 @@ class UpdateResponse {
     result: updated
 }
 ```
+
+<!-- intro -->
+##### TypeScript:
+
+<!-- request TypeScript -->
+``` typescript
+res = await indexApi.update({ index: 'test', id: 1, doc: { cat: 10 } });
+```
+
+<!-- response TypeScript -->
+```typescript
+{
+	"_index":"test",
+	"_id":1,
+	"result":"updated"
+}
+```
+
+<!-- intro -->
+##### Go:
+
+<!-- request Go -->
+``` go
+updateDoc = map[string]interface{} {"cat":10}
+updateRequest = manticoreclient.NewUpdateDocumentRequest("test", updateDoc)
+updateRequest.SetId(1)
+res, _, _ = apiClient.IndexAPI.Update(context.Background()).UpdateDocumentRequest(*updateRequest).Execute()
+```
+
+<!-- response Go -->
+```go
+{
+	"_index":"test",
+	"_id":1,
+	"result":"updated"
+}
+```
+
 <!-- end -->
 
 
@@ -1065,7 +1273,7 @@ The query syntax is the same as in the [/search endpoint](../../Searching/Full_t
 FLUSH ATTRIBUTES
 ```
 
-The FLUSH ATTRIBUTES command flushes all in-memory attribute updates in all the active tables to disk. It returns a tag that identifies the result on-disk state, which represents the number of actual disk attribute saves performed since the server startup.
+The FLUSH ATTRIBUTES command ensures that all in-memory attribute updates in all active tables are flushed to disk. It returns a tag that identifies the result on-disk state, which represents the number of actual disk attribute saves performed since the server startup.
 
 ```sql
 mysql> UPDATE testindex SET channel_id=1107025 WHERE id=1;
@@ -1305,6 +1513,88 @@ class BulkResponse {
 }
 ```
 
+<!-- request TypeScript -->
+
+``` typescript
+updateDocs = [
+  {
+    update: {
+      index: 'test',
+      id: 1,
+      doc: { content: 'Text 11', cat: 1, name: 'Doc 11' },
+    },
+  },
+  {
+    update: {
+      index: 'test',
+      id: 2,
+      doc: { content: 'Text 22', cat: 9, name: 'Doc 22' },
+    },
+  },
+];
+
+res = await indexApi.bulk(
+  updateDocs.map((e) => JSON.stringify(e)).join("\n")
+);
+```
+
+<!-- response TypeScript -->
+```typescript
+{
+  "items":
+  [
+    {
+      "update":
+      {
+        "_index":"test",
+        "updated":1
+      }
+    },
+    {
+      "update":
+      {
+        "_index":"test",
+        "updated":1
+      }
+    }
+  ],
+  "errors":false
+}
+```
+
+<!-- request Go -->
+
+``` go
+body := "{\"update\": {\"index\": \"test\", \"id\": 1, \"doc\": {\"content\": \"Text 11\", \"name\": \"Doc 11\", \"cat\": 1 }}}" + "\n" +
+	"{\"update\": {\"index\": \"test\", \"id\": 2, \"doc\": {\"content\": \"Text 22\", \"name\": \"Doc 22\", \"cat\": 9 }}}" +"\n";
+res, _, _ := apiClient.IndexAPI.Bulk(context.Background()).Body(body).Execute()
+```
+
+<!-- response Go -->
+```go
+{
+  "items":
+  [
+    {
+      "update":
+      {
+        "_index":"test",
+        "updated":1
+      }
+    },
+    {
+      "update":
+      {
+        "_index":"test",
+        "updated":1
+      }
+    }
+  ],
+  "errors":false
+}
+```
+
+
 <!-- end -->
 
 
@@ -1374,7 +1664,7 @@ utilsApi.sql('create table products(title text, price float) attr_update_reserve
 
 <!-- request javascript -->
 
-```java
+```javascript
 res = await utilsApi.sql('create table products(title text, price float) attr_update_reserve = \'1M\'');
 ```
 
@@ -1391,6 +1681,25 @@ utilsApi.sql("create table products(title text, price float) attr_update_reserve
 ```clike
 utilsApi.Sql("create table products(title text, price float) attr_update_reserve = '1M'");
 ```
+
+<!-- intro -->
+##### TypeScript:
+
+<!-- request TypeScript -->
+
+```typescript
+utilsApi.sql("create table test(content text, name string, cat int) attr_update_reserve = '1M'");
+```
+
+<!-- intro -->
+##### Go:
+
+<!-- request Go -->
+
+```go
+apiClient.UtilsAPI.Sql(context.Background()).Body("create table test(content text, name string, cat int) attr_update_reserve = '1M'").Execute()
+```
+
 <!-- request CONFIG -->
 
 ```ini

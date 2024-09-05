@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2017-2023, Manticore Software LTD (https://manticoresearch.com)
+// Copyright (c) 2017-2024, Manticore Software LTD (https://manticoresearch.com)
 // Copyright (c) 2001-2016, Andrew Aksyonoff
 // Copyright (c) 2008-2016, Sphinx Technologies Inc
 // All rights reserved
@@ -119,6 +119,7 @@ public:
 	bool					HasColumnarAttrs() const;
 	bool					HasNonColumnarAttrs() const;
 	bool					HasKNNAttrs() const;
+	bool					HasJsonSIAttrs() const;
 	bool					IsFieldStored ( int iField ) const;
 	bool					IsAttrStored ( int iAttr ) const;
 
@@ -154,4 +155,8 @@ private:
 
 	void					SetupColumnarFlags ( const CSphSourceSettings & tSettings, StrVec_t * pWarnings );
 	void					SetupKNNFlags ( const CSphSourceSettings & tSettings );
+	void					SetupSIFlags ( const CSphSourceSettings & tSettings, StrVec_t * pWarnings );
 };
+
+
+void sphFixupLocator ( CSphAttrLocator & tLocator, const ISphSchema * pOldSchema, const ISphSchema * pNewSchema );

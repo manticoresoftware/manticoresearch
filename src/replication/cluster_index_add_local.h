@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2019-2023, Manticore Software LTD (https://manticoresearch.com)
+// Copyright (c) 2019-2024, Manticore Software LTD (https://manticoresearch.com)
 // Copyright (c) 2001-2016, Andrew Aksyonoff
 // Copyright (c) 2008-2016, Sphinx Technologies Inc
 // All rights reserved
@@ -29,4 +29,4 @@ void operator>> ( MemInputBuffer_c& tOut, ClusterIndexAddLocalRequest_t& tReq );
 
 using ClusterIndexAddLocal_c = ClusterCommand_T<E_CLUSTER::INDEX_ADD_LOCAL, ClusterIndexAddLocalRequest_t>;
 
-
+bool AddLoadedIndexIntoCluster ( const CSphString & sCluster, const CSphString & sIndex );

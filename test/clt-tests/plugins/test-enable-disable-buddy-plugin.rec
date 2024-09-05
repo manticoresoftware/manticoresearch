@@ -1,0 +1,38 @@
+––– block: ../base/start-searchd –––
+––– input –––
+mysql -h0 -P9306 -e "SHOW QUERIES\G"|grep "1. row"
+––– output –––
+*************************** 1. row ***************************
+––– input –––
+mysql -h0 -P9306 -e "DISABLE BUDDY PLUGIN manticoresoftware/buddy-plugin-show"
+––– output –––
+––– input –––
+mysql -h0 -P9306 -e "SHOW QUERIES"
+––– output –––
+ERROR 1064 (42000) at line 1: Plugin 'show' is disabled
+––– input –––
+mysql -h0 -P9306 -e "ENABLE BUDDY PLUGIN manticoresoftware/buddy-plugin-show"
+––– output –––
+––– input –––
+mysql -h0 -P9306 -e "SHOW QUERIES\G"|grep "1. row"
+––– output –––
+*************************** 1. row ***************************
+––– input –––
+mysql -h0 -P9306 -e "create table t (id bigint, vector float_vector knn_type='hnsw' knn_dims='4' hnsw_similarity='l2')"
+––– output –––
+––– input –––
+mysql -h0 -P9306 -e "select id, knn_dist() from t where knn ( image_vector, 5, 1 );"
+––– output –––
+––– input –––
+mysql -h0 -P9306 -e "DISABLE BUDDY PLUGIN manticoresoftware/buddy-plugin-knn"
+––– output –––
+––– input –––
+mysql -h0 -P9306 -e "select id, knn_dist() from t where knn ( image_vector, 5, 1 );"
+––– output –––
+ERROR 1064 (42000) at line 1: Plugin 'knn' is disabled
+––– input –––
+mysql -h0 -P9306 -e "ENABLE BUDDY PLUGIN manticoresoftware/buddy-plugin-knn"
+––– output –––
+––– input –––
+mysql -h0 -P9306 -e "select id, knn_dist() from t where knn ( image_vector, 5, 1 );"
+––– output –––

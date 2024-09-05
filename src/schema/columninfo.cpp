@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2017-2023, Manticore Software LTD (https://manticoresearch.com)
+// Copyright (c) 2017-2024, Manticore Software LTD (https://manticoresearch.com)
 // Copyright (c) 2001-2016, Andrew Aksyonoff
 // Copyright (c) 2008-2016, Sphinx Technologies Inc
 // All rights reserved
@@ -68,6 +68,18 @@ bool CSphColumnInfo::IsStoredExpr() const
 bool CSphColumnInfo::IsIndexedKNN() const
 {
 	return m_uAttrFlags & ATTR_INDEXED_KNN;
+}
+
+
+bool CSphColumnInfo::IsJoined() const
+{
+	return m_uAttrFlags & ATTR_JOINED;
+}
+
+
+bool CSphColumnInfo::IsIndexedSI() const
+{
+	return m_uAttrFlags & ATTR_INDEXED_SI;
 }
 
 

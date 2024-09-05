@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2017-2023, Manticore Software LTD (https://manticoresearch.com)
+// Copyright (c) 2017-2024, Manticore Software LTD (https://manticoresearch.com)
 // Copyright (c) 2001-2016, Andrew Aksyonoff
 // Copyright (c) 2008-2016, Sphinx Technologies Inc
 // All rights reserved
@@ -27,6 +27,11 @@
 inline int sphIsAlpha ( int c )
 {
 	return ( c>='0' && c<='9' ) || ( c>='a' && c<='z' ) || ( c>='A' && c<='Z' ) || c=='-' || c=='_';
+}
+
+inline int sphIsAlphaOnly ( int c )
+{
+	return ( c>='0' && c<='9' ) || ( c>='a' && c<='z' ) || ( c>='A' && c<='Z' );
 }
 
 inline bool sphIsInteger ( char c )
@@ -73,6 +78,8 @@ inline bool sphIsWild ( T c )
 {
 	return c=='*' || c=='?' || c=='%';
 }
+
+bool HasWildcards ( const char * sWord );
 
 namespace sph {
 
@@ -165,7 +172,17 @@ int64_t sphGetSize64 ( const char * sValue, char ** ppErr = nullptr, int64_t iDe
 /// *ppErr, if provided, will point to parsing error, if any. By default scale is 's', seconds.
 int64_t sphGetTime64 ( const char* sValue, char** ppErr = nullptr, int64_t iDefault = -1 );
 
-int64_t GetUTC ( const CSphString & sTime, const CSphString & sFormat );
+int64_t GetUTC ( const CSphString & sTime, const char * sFormat=nullptr );
+bool ParseDateMath ( const CSphString & sMathExpr, int iNow, time_t & tDateTime );
+
+enum class DateUnit_e
+{
+	ms, sec, minute, hour, day, week, month, year,
+	total_units
+};
+void RoundDate ( DateUnit_e eUnit, time_t & tDateTime );
+DateUnit_e ParseDateInterval ( const CSphString & sExpr, CSphString & sError );
+
 //////////////////////////////////////////////////////////////////////////
 
 namespace sph
@@ -441,6 +458,7 @@ class CSphDynamicLibrary : public ISphNoncopyable
 
 public:
 	explicit CSphDynamicLibrary ( const char* sPath, bool bGlobal=true );
+	void CSphDynamicLibraryAlternative ( const char* sPath, bool bGlobal = true );
 
 	// We are suppose, that library is loaded once when necessary, and will alive whole lifetime of utility.
 	// So, no need to explicitly desctruct it, this is intended leak.

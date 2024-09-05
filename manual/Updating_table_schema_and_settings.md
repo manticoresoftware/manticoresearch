@@ -8,9 +8,11 @@
 ALTER TABLE table ADD COLUMN column_name [{INTEGER|INT|BIGINT|FLOAT|BOOL|MULTI|MULTI64|JSON|STRING|TIMESTAMP|TEXT [INDEXED [ATTRIBUTE]]}] [engine='columnar']
 
 ALTER TABLE table DROP COLUMN column_name
+
+ALTER TABLE table MODIFY COLUMN column_name bigint
 ```
 
-This feature only supports adding one field at a time for RT tables. The supported data types are:
+This feature only supports adding one field at a time for RT tables or the expansion of an `int` column to `bigint`. The supported data types are:
 * `int` - integer attribute
 * `timestamp` - timestamp attribute
 * `bigint` - big integer attribute
@@ -31,7 +33,7 @@ This feature only supports adding one field at a time for RT tables. The support
 * Querying a table is impossible while a column is being added.
 * Newly created attribute's values are set to 0.
 * `ALTER` will not work for distributed tables and tables without any attributes.
-* `DROP COLUMN` will fail if a table has only one field.
+* You can't delete the `id` column.
 * When dropping a field which is both a full-text field and a string attribute the first `ALTER DROP` drops the attribute, the second one drops the full-text field.
 * Adding/dropping full-text field is only supported in the [RT mode](Read_this_first.md#Real-time-mode-vs-plain-mode).
 
@@ -216,6 +218,28 @@ mysql> show meta;
 
 <!-- end -->
 
+## Renaming a real-time table
+
+<!-- example Renaming RT tables -->
+
+You can change the name of a real-time table in RT mode.
+```sql
+ALTER TABLE table_name RENAME new_table_name;
+```
+
+<!-- request Example -->
+```sql
+ALTER TABLE table_name RENAME new_table_name;
+```
+
+<!-- response Example -->
+
+```sql
+Query OK, 0 rows affected (0.00 sec)
+```
+
+<!-- end -->
+
 ## Updating table FT settings in plain mode
 
 <!-- example ALTER RECONFIGURE -->
@@ -248,7 +272,7 @@ mysql> show table rt settings;
 ```
 <!-- end -->
 
-## Rebuild secondary index
+## Rebuilding a secondary index
 
 <!-- example ALTER REBUILD SECONDARY -->
 ```sql
@@ -272,6 +296,23 @@ ALTER TABLE rt REBUILD SECONDARY;
 
 ```sql
 Query OK, 0 rows affected (0.00 sec)
+```
+
+<!-- end -->
+
+## Changing a distributed table
+
+<!-- example local_dist -->
+
+To change the list of local or remote nodes in a distributed table, follow the same syntax you used to [create the table](../Creating_a_table/Creating_a_distributed_table/Creating_a_local_distributed_table.md#Creating-a-local-distributed-table). Just replace `CREATE` with `ALTER` in the command:
+
+```sql
+ALTER TABLE `distr_table_name` type='distributed' [[local='local_index_name'], [agent='host:port:remote_index'] ... ]
+```
+
+<!-- request Example -->
+```sql
+ALTER TABLE local_dist type='distributed' local='index1' local='index2' agent='127.0.0.1:9312:remote_index';
 ```
 
 <!-- end -->

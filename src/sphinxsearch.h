@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2017-2023, Manticore Software LTD (https://manticoresearch.com)
+// Copyright (c) 2017-2024, Manticore Software LTD (https://manticoresearch.com)
 // Copyright (c) 2001-2016, Andrew Aksyonoff
 // Copyright (c) 2008-2016, Sphinx Technologies Inc
 // All rights reserved
@@ -229,6 +229,7 @@ struct ExplainQueryArgs_t
 	int m_iExpansionLimit = 0;
 	bool m_bExpandPrefix = false;
 	cRefCountedRefPtrGeneric_t m_pIndexData;
+	const CSphBitvec * m_pMorphFields { nullptr };
 };
 
 Bson_t Explain ( ExplainQueryArgs_t & tArgs );

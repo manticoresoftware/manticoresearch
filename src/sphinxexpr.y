@@ -38,15 +38,26 @@
 %token <iFunc>			TOK_IF
 %token <iFunc>			TOK_FUNC
 %token <iFunc>			TOK_FUNC_IN
+%token <iFunc>			TOK_FUNC_INTERVAL
 %token <iFunc>			TOK_FUNC_RAND
 %token <iFunc>			TOK_FUNC_REMAP
 %token <iNode>			TOK_FUNC_PF
 %token <iNode>			TOK_FUNC_JA
+%token <iFunc>			TOK_FUNC_DATE
+%token <iFunc>			TOK_FUNC_SECOND			
+%token <iFunc>			TOK_FUNC_MINUTE
+%token <iFunc>			TOK_FUNC_HOUR
+%token <iFunc>			TOK_FUNC_DAY
+%token <iFunc>			TOK_FUNC_WEEK
+%token <iFunc>			TOK_FUNC_MONTH
+%token <iFunc>			TOK_FUNC_QUARTER
+%token <iFunc>			TOK_FUNC_YEAR
 %token <iNode>			TOK_USERVAR
 %token <iNode>			TOK_UDF
 %token <iNode>			TOK_HOOK_IDENT
 %token <iNode>			TOK_HOOK_FUNC
 %token <sIdent>			TOK_IDENT
+%token <sIdent>			TOK_TABLE_NAME
 %token <iAttrLocator>	TOK_ATTR_JSON
 %token <iAttrLocator>	TOK_FIELD
 %token <iAttrLocator>	TOK_COLUMNAR_INT
@@ -89,12 +100,15 @@
 %type <iNode>			stringlist
 %type <iNode>			json_field
 %type <iNode>			json_expr
+%type <iAttrLocator>	json_attr_name
 %type <iNode>			subkey
 %type <iNode>			subscript
 %type <iNode>			for_loop
 %type <iNode>			iterator
 %type <iNode>			streq
 %type <iNode>			strval
+%type <iConst>			time_unit
+%type <iFunc>			accepted_funcs
 
 
 %left TOK_OR
@@ -134,6 +148,7 @@ attr:
 	| TOK_COLUMNAR_FLOATVEC			{ $$ = pParser->AddNodeColumnar ( TOK_COLUMNAR_FLOATVEC, $1 ); }
 	| TOK_FIELD						{ $$ = pParser->AddNodeField ( TOK_FIELD, $1 ); }
 	| '`' attr '`'					{ $$ = $2; }
+	| TOK_TABLE_NAME TOK_SUBKEY		{ $$ = pParser->AddNodeWithTable ( $1, $2 ); }
 	;
 
 expr:
@@ -173,13 +188,15 @@ expr:
 	;
 
 maparg:
-													{ $$ = pParser->AddNodeMapArg ( NULL, NULL, 0 ); }
-	| map_key TOK_EQ TOK_CONST_INT					{ $$ = pParser->AddNodeMapArg ( $1, NULL, $3 ); }
-	| map_key TOK_EQ TOK_IDENT						{ $$ = pParser->AddNodeMapArg ( $1, $3, 0 ); }
-	| map_key TOK_EQ TOK_CONST_STRING				{ $$ = pParser->AddNodeMapArg ( $1, NULL, $3, true ); }
-	| maparg ',' map_key TOK_EQ TOK_CONST_INT		{ pParser->AppendToMapArg ( $$, $3, NULL, $5 ); }
-	| maparg ',' map_key TOK_EQ TOK_IDENT			{ pParser->AppendToMapArg ( $$, $3, $5, 0 ); }
-	| maparg ',' map_key TOK_EQ	TOK_CONST_STRING	{ pParser->AppendToMapArg ( $$, $3, NULL, $5, true ); }
+													{ $$ = pParser->AddNodeMapArg ( NULL, NULL, 0,  0.0f, VariantType_e::EMPTY ); }
+	| map_key TOK_EQ TOK_CONST_INT					{ $$ = pParser->AddNodeMapArg ( $1, NULL,   $3, 0.0f, VariantType_e::BIGINT ); }
+	| map_key TOK_EQ TOK_CONST_FLOAT				{ $$ = pParser->AddNodeMapArg ( $1, NULL,   0,  $3,   VariantType_e::FLOAT ); }
+	| map_key TOK_EQ TOK_IDENT						{ $$ = pParser->AddNodeMapArg ( $1, $3,     0,  0.0f, VariantType_e::IDENT ); }
+	| map_key TOK_EQ TOK_CONST_STRING				{ $$ = pParser->AddNodeMapArg ( $1, NULL,   $3, 0.0f, VariantType_e::STRING ); }
+	| maparg ',' map_key TOK_EQ TOK_CONST_INT		{ pParser->AppendToMapArg ( $$, $3, NULL,   $5, 0.0f, VariantType_e::BIGINT ); }
+	| maparg ',' map_key TOK_EQ TOK_CONST_FLOAT		{ pParser->AppendToMapArg ( $$, $3, NULL,   0,  $5,   VariantType_e::FLOAT ); }
+	| maparg ',' map_key TOK_EQ TOK_IDENT			{ pParser->AppendToMapArg ( $$, $3, $5,     0,  0.0f, VariantType_e::IDENT ); }
+	| maparg ',' map_key TOK_EQ	TOK_CONST_STRING	{ pParser->AppendToMapArg ( $$, $3, NULL,   $5, 0.0f, VariantType_e::STRING ); }
 	;
 
 map_key:
@@ -229,9 +246,22 @@ ident:
 	| TOK_IDENT
 	;
 
+accepted_funcs:
+	TOK_FUNC_INTERVAL
+	| TOK_FUNC_SECOND
+	| TOK_FUNC_MINUTE
+	| TOK_FUNC_HOUR
+	| TOK_FUNC_DAY
+	| TOK_FUNC_WEEK
+	| TOK_FUNC_MONTH
+	| TOK_FUNC_QUARTER
+	| TOK_FUNC_YEAR
+	;
+
 function:
 	TOK_FUNC '(' ')'				{ $$ = pParser->AddNodeFunc0 ( $1 ); if ( $$<0 ) YYERROR; }
 	| TOK_FUNC '(' arglist ')'		{ $$ = pParser->AddNodeFunc ( $1, $3 ); if ( $$<0 ) YYERROR; }
+	| accepted_funcs '(' arglist ')'	{ $$ = pParser->AddNodeFunc ( $1, $3 ); if ( $$<0 ) YYERROR; }
 	| TOK_IF '(' arglist ')'		{ $$ = pParser->AddNodeFunc ( $1, $3 ); if ( $$<0 ) YYERROR; }
 	| TOK_UDF '(' arglist ')'		{ $$ = pParser->AddNodeUdf ( $1, $3 ); if ( $$<0 ) YYERROR; }
 	| TOK_UDF '(' ')'				{ $$ = pParser->AddNodeUdf ( $1, -1 ); if ( $$<0 ) YYERROR; }
@@ -240,6 +270,7 @@ function:
 	| TOK_HOOK_FUNC '(' arglist ')' { $$ = pParser->AddNodeHookFunc ( $1, $3 ); if ( $$<0 ) YYERROR; }
 	| TOK_HOOK_FUNC '(' ')'			{ $$ = pParser->AddNodeHookFunc ( $1 ); if ( $$<0 ) YYERROR; }
 	| TOK_FUNC_JA '(' expr for_loop ')' { $$ = pParser->AddNodeFor ( $1, $3, $4 ); }
+	| TOK_FUNC_DATE '(' expr ',' TOK_FUNC_INTERVAL expr time_unit ')' { $$ = pParser->AddNodeDate ( $1, $3, $6, $7 ); }
 	| TOK_FUNC_REMAP '(' expr ',' expr ',' '(' constlist ')' ',' '(' constlist ')' ')' { $$ = pParser->AddNodeRemap ( $3, $5, $8, $12 ); }
 	| TOK_FUNC_PF '(' ')'			{ $$ = pParser->AddNodePF ( $1, -1 ); }
 	| TOK_FUNC_PF '(' arg ')'		{ $$ = pParser->AddNodePF ( $1, $3 ); }
@@ -252,8 +283,14 @@ json_field:
 	| attr
 	;
 
+json_attr_name:
+	TOK_TABLE_NAME TOK_SUBKEY       {  $$ = pParser->ParseAttrWithTable ( $1, $2 ); }
+	| TOK_ATTR_JSON
+	;
+
 json_expr:
-	TOK_ATTR_JSON subscript { $$ = pParser->AddNodeJsonField ( $1, $2 ); }
+	json_attr_name subscript 		{ $$ = pParser->AddNodeJsonField ( $1, $2 ); }
+	;
 
 subscript:
 	subkey
@@ -271,6 +308,17 @@ for_loop:
 	TOK_FOR TOK_IDENT TOK_FUNC_IN json_field { $$ = pParser->AddNodeIdent ( $2, $4 ); }
 	;
 
+time_unit:
+	TOK_FUNC_SECOND					{ $$ = pParser->AddNodeInt ( (int)TimeUnit_e::SECOND ); }
+	| TOK_FUNC_MINUTE				{ $$ = pParser->AddNodeInt ( (int)TimeUnit_e::MINUTE ); }
+	| TOK_FUNC_HOUR					{ $$ = pParser->AddNodeInt ( (int)TimeUnit_e::HOUR ); }
+	| TOK_FUNC_DAY					{ $$ = pParser->AddNodeInt ( (int)TimeUnit_e::DAY ); }
+	| TOK_FUNC_WEEK					{ $$ = pParser->AddNodeInt ( (int)TimeUnit_e::WEEK ); }
+	| TOK_FUNC_MONTH				{ $$ = pParser->AddNodeInt ( (int)TimeUnit_e::MONTH ); }
+	| TOK_FUNC_QUARTER				{ $$ = pParser->AddNodeInt ( (int)TimeUnit_e::QUARTER ); }
+	| TOK_FUNC_YEAR					{ $$ = pParser->AddNodeInt ( (int)TimeUnit_e::YEAR ); }
+	;
+
 iterator:
 	TOK_IDENT						{ $$ = pParser->AddNodeIdent ( $1, -1 ); }
 	| TOK_IDENT subscript			{ $$ = pParser->AddNodeIdent ( $1, $2 ); }
@@ -282,6 +330,18 @@ streq:
 	| strval TOK_EQ strval			{ $$ = pParser->AddNodeOp ( TOK_EQ, $1, $3 ); }
 	| expr TOK_NE strval			{ $$ = pParser->AddNodeOp ( TOK_NE, $1, $3 ); }
 	| strval TOK_NE expr			{ $$ = pParser->AddNodeOp ( TOK_NE, $3, $1 ); }
+	| expr '<' strval				{ $$ = pParser->AddNodeOp ( '<', $1, $3 ); }
+	| strval '<' expr				{ $$ = pParser->AddNodeOp ( '<', $1, $3 ); }
+	| strval '<' strval				{ $$ = pParser->AddNodeOp ( '<', $1, $3 ); }
+	| expr '>' strval				{ $$ = pParser->AddNodeOp ( '>', $1, $3 ); }
+	| strval '>' expr				{ $$ = pParser->AddNodeOp ( '>', $1, $3 ); }
+	| strval '>' strval				{ $$ = pParser->AddNodeOp ( '>', $1, $3 ); }
+	| expr TOK_LTE strval			{ $$ = pParser->AddNodeOp ( TOK_LTE, $1, $3 ); }
+	| strval TOK_LTE expr			{ $$ = pParser->AddNodeOp ( TOK_LTE, $1, $3 ); }
+	| strval TOK_LTE strval			{ $$ = pParser->AddNodeOp ( TOK_LTE, $1, $3 ); }
+	| expr TOK_GTE strval			{ $$ = pParser->AddNodeOp ( TOK_GTE, $1, $3 ); }
+	| strval TOK_GTE expr			{ $$ = pParser->AddNodeOp ( TOK_GTE, $1, $3 ); }
+	| strval TOK_GTE strval			{ $$ = pParser->AddNodeOp ( TOK_GTE, $1, $3 ); }
 	;
 
 strval:

@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2017-2023, Manticore Software LTD (https://manticoresearch.com)
+// Copyright (c) 2017-2024, Manticore Software LTD (https://manticoresearch.com)
 // Copyright (c) 2001-2016, Andrew Aksyonoff
 // Copyright (c) 2008-2016, Sphinx Technologies Inc
 // All rights reserved
@@ -77,12 +77,13 @@ struct LowThreadDesc_t
 	CSphString			m_sThreadName;
 	std::atomic<void *>	m_pTaskInfo;	///< what kind of task I'm doing now (nullptr - idle, i.e. nothing)
 	std::atomic<void *> m_pHazards;		///< my hazard pointers
+	void *				m_pWorker = nullptr;	///< my coro worker (m.b. empty in generic threads)
 	StringBuilder_c		m_sThreadMsg;
 	std::atomic<StringBuilder_c*> m_pTlsMsg { &m_sThreadMsg };
 };
 
 // thread-local description available globaly from any thread
-LowThreadDesc_t& MyThd ();
+LowThreadDesc_t& MyThd () noexcept;
 
 // save name from my local LowThreadDesc into OS thread name
 void SetSysThreadName();

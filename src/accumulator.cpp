@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2017-2023, Manticore Software LTD (https://manticoresearch.com)
+// Copyright (c) 2017-2024, Manticore Software LTD (https://manticoresearch.com)
 // Copyright (c) 2001-2016, Andrew Aksyonoff
 // Copyright (c) 2008-2016, Sphinx Technologies Inc
 // All rights reserved
@@ -116,6 +116,8 @@ void RtAccum_t::Cleanup()
 	m_uAccumDocs = 0;
 	m_iAccumBytes = 0;
 	m_dAccumKlist.Reset();
+	m_sIndexName = CSphString();
+	m_iIndexId = 0;
 
 	m_dCmd.Reset();
 }
@@ -146,6 +148,21 @@ bool RtAccum_t::SetupDocstore ( const RtIndex_i& tIndex, CSphString& sError )
 	return m_pDocstore->CheckFieldsLoaded ( sError );
 }
 
+
+[[nodiscard]] bool RtAccum_t::IsClusterCommand() const noexcept
+{
+	return ( m_dCmd.GetLength () && !m_dCmd[0]->m_sCluster.IsEmpty () );
+}
+
+
+[[nodiscard]] bool RtAccum_t::IsUpdateCommand() const noexcept
+{
+	return ( m_dCmd.GetLength () &&
+			( m_dCmd[0]->m_eCommand==ReplCmd_e::UPDATE_API
+					|| m_dCmd[0]->m_eCommand==ReplCmd_e::UPDATE_QL
+					|| m_dCmd[0]->m_eCommand==ReplCmd_e::UPDATE_JSON ) );
+}
+
 static void ResetTailHit ( CSphWordHit * pHit )
 {
 	if ( pHit->m_tRowID!=pHit[1].m_tRowID || pHit->m_uWordID!=pHit[1].m_uWordID )
@@ -155,7 +172,7 @@ static void ResetTailHit ( CSphWordHit * pHit )
 		pHit->m_uWordPos = HITMAN::GetPosWithField ( pHit->m_uWordPos );
 }
 
-void RtAccum_t::AddDocument ( ISphHits* pHits, const InsertDocData_t& tDoc, bool bReplace, int iRowSize, const DocstoreBuilder_i::Doc_t* pStoredDoc )
+void RtAccum_t::AddDocument ( ISphHits* pHits, const InsertDocData_c& tDoc, bool bReplace, int iRowSize, const DocstoreBuilder_i::Doc_t* pStoredDoc )
 {
 	MEMORY ( MEM_RT_ACCUM );
 
@@ -190,6 +207,8 @@ void RtAccum_t::AddDocument ( ISphHits* pHits, const InsertDocData_t& tDoc, bool
 	int iColumnarAttr = 0;
 	int iMva = 0;
 
+	CSphVector<int64_t> dTempKNN;
+
 	const char** ppStr = tDoc.m_dStrings.Begin();
 	const CSphSchema& tSchema = m_pIndex->GetInternalSchema();
 	for ( int i = 0; i < tSchema.GetAttrsCount(); ++i )
@@ -219,14 +238,25 @@ void RtAccum_t::AddDocument ( ISphHits* pHits, const InsertDocData_t& tDoc, bool
 		case SPH_ATTR_INT64SET:
 		case SPH_ATTR_FLOAT_VECTOR:
 			{
-				const int64_t* pMva = &tDoc.m_dMvas[iMva];
-				int nValues = (int)*pMva++;
-				iMva += nValues + 1;
+				int iNumValues = 0;
+				bool bDefault = false;
+				const int64_t * pMva = tDoc.GetMVA(iMva);
+				std::tie ( iNumValues, bDefault ) = tDoc.ReadMVALength(pMva);
+				iMva += iNumValues + 1;
+
+				// fill default/missing float_vector+knn attributes with zeroes
+				if ( tColumn.m_eAttrType==SPH_ATTR_FLOAT_VECTOR && tColumn.IsIndexedKNN() && bDefault )
+				{
+					dTempKNN.Resize ( tColumn.m_tKNN.m_iDims );
+					dTempKNN.ZeroVec();
+					pMva = dTempKNN.Begin();
+					iNumValues = dTempKNN.GetLength(); 
+				}
 
 				if ( tColumn.IsColumnar() )
-					m_pColumnarBuilder->SetAttr ( iColumnarAttr, pMva, nValues );
+					m_pColumnarBuilder->SetAttr ( iColumnarAttr, pMva, iNumValues );
 				else
-					m_pBlobWriter->SetAttr ( iBlobAttr, (const BYTE*)pMva, nValues * sizeof ( int64_t ), sError );
+					m_pBlobWriter->SetAttr ( iBlobAttr, (const BYTE*)pMva, iNumValues * sizeof ( int64_t ), sError );
 			}
 			break;
 
@@ -248,7 +278,7 @@ void RtAccum_t::AddDocument ( ISphHits* pHits, const InsertDocData_t& tDoc, bool
 		const CSphColumnInfo* pBlobLoc = tSchema.GetAttr ( sphGetBlobLocatorName() );
 		assert ( pBlobLoc );
 
-		sphSetRowAttr ( pRow, pBlobLoc->m_tLocator, m_pBlobWriter->Flush() );
+		sphSetRowAttr ( pRow, pBlobLoc->m_tLocator, m_pBlobWriter->Flush().first );
 	}
 
 	// handle index_field_lengths
@@ -351,31 +381,33 @@ void RtAccum_t::CleanupDuplicates ( int iRowSize )
 	const CSphSchema& tSchema = m_pIndex->GetInternalSchema();
 	bool bColumnarId = tSchema.GetAttr ( 0 ).IsColumnar();
 
-	// create temporary columnar accessor; don't take ownership of built attributes
-	auto pColumnar = CreateLightColumnarRT ( m_pIndex->GetInternalSchema(), m_pColumnarBuilder.get() );
-
-	std::string sError;
-	std::unique_ptr<columnar::Iterator_i> pColumnarIdIterator;
-	if ( bColumnarId )
 	{
-		pColumnarIdIterator = CreateColumnarIterator ( pColumnar.get(), sphGetDocidName(), sError );
-		assert ( pColumnarIdIterator );
-	}
+		// create temporary columnar accessor; don't take ownership of built attributes
+		auto pColumnar = CreateLightColumnarRT ( m_pIndex->GetInternalSchema(), m_pColumnarBuilder.get() );
 
-//	int iHitIndex = 0;
-	CSphRowitem* pRow = m_dAccumRows.Begin();
-	for ( DWORD i = 0; i < m_uAccumDocs; ++i, pRow += iRowSize )
-	{
-		AccumDocHits_t& tElem = dDocHits[i];
-		if ( !bColumnarId )
-			tElem.m_tDocID = sphGetDocID ( pRow );
-		else
-			tElem.m_tDocID = pColumnarIdIterator->Get(i);
+		std::string sError;
+		std::unique_ptr<columnar::Iterator_i> pColumnarIdIterator;
+		if ( bColumnarId )
+		{
+			pColumnarIdIterator = CreateColumnarIterator ( pColumnar.get(), sphGetDocidName(), sError );
+			assert ( pColumnarIdIterator );
+		}
 
-		tElem.m_iDocIndex = i;
-//		tElem.m_iHitIndex = iHitIndex;
-//		tElem.m_iHitCount = m_dPerDocHitsCount[i];
-//		iHitIndex += m_dPerDocHitsCount[i];
+	//	int iHitIndex = 0;
+		CSphRowitem* pRow = m_dAccumRows.Begin();
+		for ( DWORD i = 0; i < m_uAccumDocs; ++i, pRow += iRowSize )
+		{
+			AccumDocHits_t& tElem = dDocHits[i];
+			if ( !bColumnarId )
+				tElem.m_tDocID = sphGetDocID ( pRow );
+			else
+				tElem.m_tDocID = pColumnarIdIterator->Get(i);
+
+			tElem.m_iDocIndex = i;
+	//		tElem.m_iHitIndex = iHitIndex;
+	//		tElem.m_iHitCount = m_dPerDocHitsCount[i];
+	//		iHitIndex += m_dPerDocHitsCount[i];
+		}
 	}
 
 	dDocHits.Sort ( Lesser ( [] ( const AccumDocHits_t& a, const AccumDocHits_t& b )
@@ -436,26 +468,19 @@ void RtAccum_t::CleanupDuplicates ( int iRowSize )
 
 	m_dAccum.Resize ( iDstRow );
 
-	// remove duplicates
-	if ( m_pColumnarBuilder )
-	{
-		CSphVector<RowID_t> dKilled;
-		ARRAY_FOREACH ( i, dRowMap )
-			if ( dRowMap[i] == INVALID_ROWID )
-				dKilled.Add ( i );
-
-		if ( m_pColumnarBuilder )
-			m_pColumnarBuilder->Kill ( dKilled );
-	}
+	RemoveColumnarDuplicates ( m_pColumnarBuilder, dRowMap, tSchema );
 
 	iDstRow = 0;
 	ARRAY_FOREACH ( i, dRowMap )
+	{
 		if ( dRowMap[i] != INVALID_ROWID )
 		{
 			if ( i != iDstRow )
 			{
 				// remove duplicate docinfo
-				memcpy ( &m_dAccumRows[iDstRow * iRowSize], &m_dAccumRows[i * iRowSize], iRowSize * sizeof ( CSphRowitem ) );
+				// but all attributes could be columnar
+				if ( iRowSize )
+					memcpy ( &m_dAccumRows[iDstRow * iRowSize], &m_dAccumRows[i * iRowSize], iRowSize * sizeof ( CSphRowitem ) );
 
 				// remove duplicate docstore
 				if ( m_pDocstore )
@@ -463,6 +488,7 @@ void RtAccum_t::CleanupDuplicates ( int iRowSize )
 			}
 			++iDstRow;
 		}
+	}
 
 	m_dAccumRows.Resize ( iDstRow * iRowSize );
 	m_uAccumDocs = iDstRow;
@@ -481,12 +507,14 @@ void RtAccum_t::GrabLastWarning ( CSphString& sWarning )
 }
 
 
-void RtAccum_t::SetIndex ( RtIndex_i* pIndex )
+void RtAccum_t::SetIndex ( RtIndex_i * pIndex )
 {
 	assert ( pIndex );
 	m_iIndexGeneration = pIndex->GetAlterGeneration();
 	m_pIndex = pIndex;
 	m_pBlobWriter.reset();
+	m_sIndexName = pIndex->GetName();
+	m_iIndexId = pIndex->GetIndexId();
 
 	const CSphSchema& tSchema = pIndex->GetInternalSchema();
 	if ( tSchema.HasBlobAttrs() )

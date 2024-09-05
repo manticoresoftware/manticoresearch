@@ -97,13 +97,11 @@ index dist
 {
 	type					= distributed
 	local					= block1
-	agent					= <Agent_Address/>:block2
+	agent					= <my_address/>:block2
 	agent_connect_timeout	= 1000
 	agent_query_timeout		= 3000
 }
 </Config>
-
-  <Num_Agents>2</Num_Agents>
 
   <Query_Attributes>
 	<Attr_1>lng</Attr_1>

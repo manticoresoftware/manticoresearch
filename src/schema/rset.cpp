@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2017-2023, Manticore Software LTD (https://manticoresearch.com)
+// Copyright (c) 2017-2024, Manticore Software LTD (https://manticoresearch.com)
 // Copyright (c) 2001-2016, Andrew Aksyonoff
 // Copyright (c) 2008-2016, Sphinx Technologies Inc
 // All rights reserved
@@ -81,7 +81,7 @@ int CSphRsetSchema::GetAttrIndex ( const char* sName ) const
 	int iRes = m_pIndexSchema->GetAttrIndex ( sName );
 	if ( iRes >= 0 )
 	{
-		if ( m_dRemoved.Contains ( iRes ) )
+		if ( m_dRemoved.BinarySearch ( iRes ) )
 			return -1;
 		int iSub = 0;
 		ARRAY_FOREACH_COND ( i, m_dRemoved, iRes >= m_dRemoved[i] )
@@ -216,12 +216,6 @@ void CSphRsetSchema::RemoveStaticAttr ( int iAttr )
 	assert ( iAttr >= 0 );
 	assert ( iAttr < ActualLen() );
 
-	// we may be removing our static attribute after expressions have been created and that invalidates their dependent cols (if any)
-	// we need to update those
-	for ( auto & i : m_dExtraAttrs )
-		if ( i.m_pExpr )
-			i.m_pExpr->Command ( SPH_EXPR_UPDATE_DEPENDENT_COLS, &iAttr );
-
 	// map from rset indexes (adjusted for removal) to index schema indexes (the original ones)
 	ARRAY_FOREACH_COND ( i, m_dRemoved, iAttr >= m_dRemoved[i] )
 		iAttr++;
@@ -230,6 +224,10 @@ void CSphRsetSchema::RemoveStaticAttr ( int iAttr )
 	m_dRemoved.Uniq();
 }
 
+bool CSphRsetSchema::IsRemovedAttr ( int iAttr ) const
+{
+	return ( m_dRemoved.BinarySearch ( iAttr ) );
+}
 
 void CSphRsetSchema::SwapAttrs ( CSphVector<CSphColumnInfo>& dAttrs )
 {

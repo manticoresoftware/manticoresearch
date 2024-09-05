@@ -2,7 +2,10 @@
 <test>
 
 <name>configless vs daemon restart</name>
-<requires><force-rt/></requires>
+<requires>
+	<non-windows/>
+	<force-rt/>
+</requires>
 <skip_indexer/>
 
 <config>

@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2022-2023, Manticore Software LTD (https://manticoresearch.com)
+// Copyright (c) 2022-2024, Manticore Software LTD (https://manticoresearch.com)
 // All rights reserved
 //
 // This program is free software; you can redistribute it and/or modify
@@ -68,6 +68,7 @@
 
 #if WITH_CURL
 
+#include "datetime.h"
 #include <curl/curl.h>
 
 #if DL_CURL
@@ -160,15 +161,10 @@ static CSphString STime (int64_t iNow=-1)
 		iNow = sphMicroTimer();
 	time_t ts = (time_t)( iNow / 1000000 ); // on some systems (eg. FreeBSD 6.2), tv.tv_sec has another type, and we can't just pass it
 
-#if !_WIN32
-	struct tm tmp;
-	localtime_r ( &ts, &tmp );
-#else
-	struct tm tmp;
-	tmp = *localtime ( &ts );
-#endif
+	cctz::civil_second tCS = ConvertTimeUTC(ts);
+
 	StringBuilder_c tOut;
-	tOut << Digits<2> ( tmp.tm_hour ) << ':' << Digits<2> ( tmp.tm_min ) << ':' << Digits<2> ( tmp.tm_sec )	 << '.' << FixedNum<10, 3, 0, '0'> ( ( iNow % 1000000 ) / 1000 );
+	tOut << Digits<2> ( tCS.hour() ) << ':' << Digits<2> ( tCS.minute() ) << ':' << Digits<2> ( tCS.second() ) << '.' << FixedNum<10, 3, 0, '0'> ( ( iNow % 1000000 ) / 1000 );
 	CSphString sRes;
 	tOut.MoveTo ( sRes );
 	return sRes;
@@ -683,7 +679,7 @@ std::pair<bool, CSphString> InvokeCurl ( CSphString sUrl, const VecTraits_T<Curl
 CSphString FetchUrl ( const CSphString& sUrl )
 {
 	CSphVector<CurlOpt_t> dCurlOpts;
-	dCurlOpts.Add ( { (CURLoption)237, 1L } ); // CURLOPT_PIPEWAIT. If not exist, will be just ignored
+	dCurlOpts.Add ( { (CURLoption)237, 0L } ); // CURLOPT_PIPEWAIT. If not exist, will be just ignored
 	auto [bSuccess, sResult] = InvokeCurl ( sUrl, dCurlOpts );
 	return sResult;
 }
@@ -694,7 +690,7 @@ std::pair<bool, CSphString> PostToHelperUrl ( CSphString sUrl, Str_t sQuery, con
 	dOptions.Add ( { CURLOPT_POST, 1 } );
 	dOptions.Add ( { CURLOPT_POSTFIELDSIZE, sQuery.second } );
 	dOptions.Add ( { CURLOPT_POSTFIELDS, (intptr_t)sQuery.first } );
-	dOptions.Add ( { (CURLoption)237, 1L } ); // CURLOPT_PIPEWAIT. If not exist, will be just ignored
+	dOptions.Add ( { (CURLoption)237, 0L } ); // CURLOPT_PIPEWAIT. If not exist, will be just ignored
 
 	CurlHttpHeaders_c tHeaders;
 	dHeaders.for_each ( [&tHeaders] ( const auto& sHeader ) { tHeaders.Append ( sHeader.cstr() ); } );

@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2017-2023, Manticore Software LTD (https://manticoresearch.com)
+// Copyright (c) 2017-2024, Manticore Software LTD (https://manticoresearch.com)
 // Copyright (c) 2001-2016, Andrew Aksyonoff
 // Copyright (c) 2008-2016, Sphinx Technologies Inc
 // All rights reserved
@@ -16,9 +16,6 @@
 #include "rset.h"
 #include "match.h"
 #include "indexsettings.h"
-
-
-//////////////////////////////////////////////////////////////////////////
 
 
 CSphSchema::CSphSchema ( CSphString sName )
@@ -356,9 +353,9 @@ bool CSphSchema::IsReserved ( const char* szToken )
 	static const char * dReserved[] =
 	{
 		"AND", "AS", "BY", "COLUMNARSCAN", "DISTINCT", "DIV", "DOCIDINDEX", "EXPLAIN",
-		"FACET", "FALSE", "FORCE", "FROM", "IGNORE", "IN", "INDEXES", "IS", "KNN", "LIMIT",
-		"MOD", "NOT", "NO_COLUMNARSCAN", "NO_DOCIDINDEX", "NO_SECONDARYINDEX", "NULL",
-		"OFFSET", "OR", "ORDER", "REGEX", "RELOAD", "SECONDARYINDEX", "SELECT", "SYSFILTERS",
+		"FACET", "FALSE", "FORCE", "FROM", "IGNORE", "IN", "INDEXES", "INNER", "IS", "JOIN", "KNN",
+		"LEFT", "LIMIT", "MOD", "NOT", "NO_COLUMNARSCAN", "NO_DOCIDINDEX", "NO_SECONDARYINDEX", "NULL",
+		"OFFSET", "ON", "OR", "ORDER", "RELOAD", "SECONDARYINDEX", "SELECT", "SYSFILTERS",
 		"TRUE", NULL
 	};
 
@@ -578,6 +575,29 @@ void CSphSchema::SetupKNNFlags ( const CSphSourceSettings & tSettings )
 }
 
 
+void CSphSchema::SetupSIFlags ( const CSphSourceSettings & tSettings, StrVec_t * pWarnings )
+{
+	SmallStringHash_T<int> hJsonSI;
+	for ( const auto & i : tSettings.m_dJsonSIAttrs )
+		hJsonSI.Add ( 0, i );
+
+	for ( auto & tAttr : m_dAttrs )
+	{
+		if ( !hJsonSI.Exists ( tAttr.m_sName ) )
+			continue;
+
+		if ( tAttr.m_eAttrType!=SPH_ATTR_JSON )
+		{
+			CSphString sWarning;
+			sWarning.SetSprintf ( "unable to create json SI on non-json attribute '%s'", tAttr.m_sName.cstr() );
+			pWarnings->Add ( sWarning );
+		}
+		else
+			tAttr.m_uAttrFlags |= CSphColumnInfo::ATTR_INDEXED_SI;
+	}
+}
+
+
 void CSphSchema::SetupFlags ( const CSphSourceSettings & tSettings, bool bPQ, StrVec_t * pWarnings )
 {
 	bool bAllFieldsStored = false;
@@ -606,6 +626,7 @@ void CSphSchema::SetupFlags ( const CSphSourceSettings & tSettings, bool bPQ, St
 	{
 		SetupColumnarFlags ( tSettings, pWarnings );
 		SetupKNNFlags(tSettings);
+		SetupSIFlags ( tSettings, pWarnings );
 	}
 
 	bool bAllNonStored = false;
@@ -660,6 +681,12 @@ bool CSphSchema::HasKNNAttrs() const
 }
 
 
+bool CSphSchema::HasJsonSIAttrs() const
+{
+	return m_dAttrs.any_of ( [] ( const CSphColumnInfo& tAttr ) { return tAttr.IsIndexedSI(); } );
+}
+
+
 bool CSphSchema::IsFieldStored ( int iField ) const
 {
 	return !!( m_dFields[iField].m_uFieldFlags & CSphColumnInfo::FIELD_STORED );
@@ -669,4 +696,31 @@ bool CSphSchema::IsFieldStored ( int iField ) const
 bool CSphSchema::IsAttrStored ( int iAttr ) const
 {
 	return !!( m_dAttrs[iAttr].m_uAttrFlags & CSphColumnInfo::ATTR_STORED );
+}
+
+///////////////////////////////////////////////////////////////////////////////
+
+void sphFixupLocator ( CSphAttrLocator & tLocator, const ISphSchema * pOldSchema, const ISphSchema * pNewSchema )
+{
+	// first time schema setup?
+	if ( !pOldSchema )
+		return;
+
+	if ( tLocator.m_iBlobAttrId==-1 && tLocator.m_iBitCount==-1 )
+		return;
+
+	assert ( pNewSchema );
+	for ( int i = 0; i < pOldSchema->GetAttrsCount(); i++ )
+	{
+		const CSphColumnInfo & tAttr = pOldSchema->GetAttr(i);
+		if ( tLocator==tAttr.m_tLocator )
+		{
+			const CSphColumnInfo * pAttrInNewSchema = pNewSchema->GetAttr ( tAttr.m_sName.cstr() );
+			if ( pAttrInNewSchema )
+			{
+				tLocator = pAttrInNewSchema->m_tLocator;
+				return;
+			}
+		}
+	}
 }

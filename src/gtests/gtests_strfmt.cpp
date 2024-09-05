@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2022-2023, Manticore Software LTD (https://manticoresearch.com)
+// Copyright (c) 2022-2024, Manticore Software LTD (https://manticoresearch.com)
 // Copyright (c) 2001-2016, Andrew Aksyonoff
 // Copyright (c) 2008-2016, Sphinx Technologies Inc
 // All rights reserved
@@ -16,6 +16,7 @@
 #include "std/num_conv.h"
 #include "sphinxutils.h"
 #include "sphinxjson.h"
+#include "aggrexpr.h"
 
 TEST ( functions, NtoA )
 {
@@ -409,3 +410,53 @@ TEST ( functions, sph_Sprintf_fractimezero )
 	sBuf.Clear();
 }
 
+TEST ( functions, date_parse )
+{
+	int64_t iDate = 0;
+	StringBuilder_c sBuf;
+
+	sBuf.Clear();
+	iDate = GetUTC ( "2019-03" );
+	FormatDate ( iDate, sBuf );
+	EXPECT_STREQ ( sBuf.cstr(), "2019-03-01T00:00:00" );
+
+	sBuf.Clear();
+	iDate = GetUTC ( "2019-03-23" );
+	FormatDate ( iDate, sBuf );
+	EXPECT_STREQ ( sBuf.cstr(), "2019-03-23T00:00:00" );
+
+	sBuf.Clear();
+	iDate = GetUTC ( "2019-03-23T21" );
+	FormatDate ( iDate, sBuf );
+	EXPECT_STREQ ( sBuf.cstr(), "2019-03-23T21:00:00" );
+
+	sBuf.Clear();
+	iDate = GetUTC ( "2019-03-23T21:34" );
+	FormatDate ( iDate, sBuf );
+	EXPECT_STREQ ( sBuf.cstr(), "2019-03-23T21:34:00" );
+
+	sBuf.Clear();
+	iDate = GetUTC ( "2019-03-23T21:34:46" );
+	FormatDate ( iDate, sBuf );
+	EXPECT_STREQ ( sBuf.cstr(), "2019-03-23T21:34:46" );
+
+	sBuf.Clear();
+	iDate = GetUTC ( "2019-03-23T21:34:46.1234567" );
+	FormatDate ( iDate, sBuf );
+	EXPECT_STREQ ( sBuf.cstr(), "2019-03-23T21:34:46" );
+
+	sBuf.Clear();
+	iDate = GetUTC ( "2019-03-23T21:34:46-04:00" );
+	FormatDate ( iDate, sBuf );
+	EXPECT_STREQ ( sBuf.cstr(), "2019-03-23T21:34:46" );
+
+	sBuf.Clear();
+	iDate = GetUTC ( "2019-03-23T21:34:46.123-04:00" );
+	FormatDate ( iDate, sBuf );
+	EXPECT_STREQ ( sBuf.cstr(), "2019-03-23T21:34:46" );
+
+	sBuf.Clear();
+	iDate = GetUTC ( "1553371205" );
+	FormatDate ( iDate, sBuf );
+	EXPECT_STREQ ( sBuf.cstr(), "2019-03-23T20:00:05" );
+}

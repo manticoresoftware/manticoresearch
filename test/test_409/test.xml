@@ -62,7 +62,7 @@ searchd
 
 <!-- request to node 1 -->
 <sphinxql d="1">
-	debug wait test status 6 like 'state' option 'timeout'=30;
+	debug wait test status 10 like 'state' option 'timeout'=30;
 	SELECT * FROM test:rt_wf11 where match ('blue'); SHOW META;
 	SELECT * FROM test:rt_wf11 where match ('big sky'); SHOW META;
 	SELECT * FROM test:rt_st1 where match ('and you'); SHOW META;
@@ -110,20 +110,35 @@ debug wait test status 13 like 'state' option 'timeout'=30;
 SELECT * FROM dist1 order by id asc;
 </sphinxql>
 
+<!-- error on drop distributed table that is still part of the cluster -->
+<sphinxql d="1">
+DROP table dist1;
+ALTER CLUSTER test drop dist1;
+DROP table dist1;
+</sphinxql>
+
+<!-- missed error on alter table that is still part of the cluster -->
+<sphinxql d="0">
+create table rt_wf21 (t1 text indexed stored, gid int);
+ALTER CLUSTER test add rt_wf21;
+ALTER table rt_wf21 wordforms = '<this_test/>/wf1.txt';
+</sphinxql>
+
+
 <!-- cleanup -->
 <sphinxql d="0">
-	ALTER CLUSTER test DROP dist1;
 	ALTER CLUSTER test DROP rt_st1;
 	ALTER CLUSTER test DROP rt_many1;
 	ALTER CLUSTER test DROP rt_many2;
 	ALTER CLUSTER test DROP rt_st2;
 	ALTER CLUSTER test DROP pq_st2;
-	DROP TABLE dist1;
+    ALTER CLUSTER test DROP rt_wf21;
 	DROP TABLE rt_st1;
 	DROP TABLE rt_many1;
 	DROP TABLE rt_many2;
 	DROP TABLE rt_st2;
 	DROP TABLE pq_st2;
+    DROP table rt_wf21;
 </sphinxql>
 
 </queries>

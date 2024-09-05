@@ -1,0 +1,121 @@
+<?xml version="1.0" encoding="utf-8"?>
+<test>
+
+<name>string directional comparison filter</name>
+
+<config>
+
+indexer
+{
+	mem_limit = 16M
+}
+
+searchd
+{
+	<searchd_settings/>
+}
+
+source test
+{
+	type = mysql
+	<sql_settings/>
+	sql_query 			= SELECT * FROM test_table
+	sql_attr_string    = s
+}
+
+index test
+{
+	source			= test
+	path = <data_path/>/test
+	dict = keywords
+    charset_table = a..z
+}
+
+index dist1
+{
+	type = distributed
+	agent = <my_address/>:test
+}
+
+</config>
+
+<db_create>
+CREATE TABLE test_table
+(
+	id INTEGER PRIMARY KEY NOT NULL,
+	s VARCHAR(255) NOT NULL
+) CHARACTER SET utf8;
+</db_create>
+<db_drop>DROP TABLE IF EXISTS test_table</db_drop>
+<db_insert>INSERT INTO test_table VALUES
+( 1, '' ),
+( 2, 'a' ),
+( 3, 'b' ),
+( 4, 'c' ),
+( 5, 'd' ),
+( 6, 'e' ),
+( 7, 'w' ),
+( 8, 'x' ),
+( 9, 'y' ),
+( 10, 'z' ),
+( 11, 'aa' ),
+( 12, 'ab' ),
+( 13, 'ac' ),
+( 14, 'bbb'),
+( 15, 'ccc'),
+( 16, 'ddd'),
+( 17, 'ee'),
+( 18, 'eee'),
+( 19, 'eeee'),
+( 20, 'eeeee')
+</db_insert>
+
+<metaindex name='META:all'>
+<index>test</index>
+<index>dist1</index>
+</metaindex>
+
+<queries><sphinxql>
+select * from META:all;
+
+select * from META:all where s = 'eee';
+select * from META:all where s != 'eee';
+select * from META:all where s &lt; 'eee';
+select * from META:all where s &lt;= 'eee';
+select * from META:all where s >= 'eee';
+select * from META:all where s > 'eee';
+
+select * from META:all where s > 'b' and s &lt; 'e';
+select * from META:all where s >= 'b' and s &lt; 'e';
+select * from META:all where s > 'b' and s &lt;= 'e';
+select * from META:all where s >= 'b' and s &lt;= 'e';
+
+select * from META:all where s > 'w' and s &lt; 'w';
+select * from META:all where s > 'w' and s &lt; 'c';
+select * from META:all where s > 'w' and s &lt;= 'w';
+select * from META:all where s >= 'w' and s &lt; 'w';
+
+select * from META:all where s > 'w' or s &lt; 'w';
+select * from META:all where s &lt; 'e' or s &lt; 'c';
+select * from META:all where s &lt; 'e' or s &lt;= 'e';
+select * from META:all where s > 'eeee' or s >= 'eeee';
+
+select * from META:all where (s > 'b' and s &lt; 'e') and s != 'c';
+select * from META:all where (s > 'b' and s &lt; 'e') or s > 'eeee';
+select * from META:all where (s > 'b' and s &lt; 'e') and id &lt; 5;
+select * from META:all where (s > 'b' and s &lt; 'e') or id > 17;
+
+<!-- cases for string comparison simple and complex expressions -->
+select *, (s = 'w') as cnd1, if (cnd1, 10, 0) as cnd from META:all where id &lt; 10 order by id asc;
+select *, if (s = 'w', 10, 0) as cnd from META:all where id &lt; 10 order by id asc;
+select *, if (s != 'w', 10, 0) as cnd from META:all where id &lt; 10 order by id asc;
+select *, (s &lt; 'w') as cnd1, if (cnd1, 10, 0) as cnd from META:all where id &lt; 10 order by id asc;
+select *, if (s &lt; 'w', 10, 0) as cnd from META:all where id &lt; 10 order by id asc;
+select *, (s &gt; 'w') as cnd1, if (cnd1, 10, 0) as cnd from META:all where id &lt; 10 order by id asc;
+select *, if (s &gt; 'w', 10, 0) as cnd from META:all where id &lt; 10 order by id asc;
+select *, if (s &lt;= 'w', 10, 0) as cnd from META:all where id &lt; 10 order by id asc;
+select *, if (s &gt;= 'w', 10, 0) as cnd from META:all where id &lt; 10 order by id asc;
+</sphinxql>
+</queries>
+
+</test>

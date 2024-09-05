@@ -10,7 +10,7 @@ on:
       DISTR:
         required: false
         type: string
-        default: bionic
+        default: jammy
       CTEST_CMAKE_GENERATOR:
         required: false
         type: string
@@ -31,11 +31,11 @@ on:
         required: false
         type: string
         default: build_linux_x86_64
-      boost:
+      boost_url_key:
         required: false
         type: string
         default: boost_nov22
-      sysroot:
+      sysroot_url_key:
         required: false
         type: string
         default: roots_nov22
@@ -43,6 +43,9 @@ on:
         required: false
         type: string
         default: "build/xml build/CMakeFiles/CMake*.log build/api/libsphinxclient/testcli build/src/indexer build/src/indextool build/src/searchd build/src/tests build/src/gtests/gmanticoretest build/config/*.c build/config/*.h build/**/*.gcno"
+      artifact_name:
+        required: false
+        type: string
       HOMEBREW_PREFIX:
         required: false
         type: string
@@ -60,15 +63,15 @@ jobs:
         shell: bash
     timeout-minutes: 30
     container:
-      image: manticoresearch/external_toolchain:clang15_cmake3263
+      image: manticoresearch/external_toolchain:clang16_cmake3263
       env:
         CACHEB: "../cache"
         DIAGNOSTIC: 1
         PACK_ICUDATA: 0
         NO_TESTS: 1
         DISTR: ${{ inputs.DISTR }}
-        boost: ${{ inputs.boost }}
-        sysroot: ${{ inputs.sysroot }}
+        boost: ${{ inputs.boost_url_key }}
+        sysroot: ${{ inputs.sysroot_url_key }}
         arch: ${{ inputs.arch }}
         CTEST_CMAKE_GENERATOR: ${{ inputs.CTEST_CMAKE_GENERATOR }}
         CTEST_CONFIGURATION_TYPE: ${{ inputs.CTEST_CONFIGURATION_TYPE }}
@@ -89,6 +92,12 @@ jobs:
           git config --global --add safe.directory /__w/manticoresearch/manticoresearch
           git config --global core.abbrev 9
 
+      - name: Set output artifact name
+        id: artifact_name
+        run: |
+          USER_INPUT=${{ inputs.artifact_name }}
+          echo "value=${USER_INPUT:-"build_${{ inputs.DISTR }}_${{ inputs.CTEST_CONFIGURATION_TYPE }}_${{ inputs.arch }}"}" >> "$GITHUB_OUTPUT"
+
       - name: Check out cache before building
         uses: actions/cache@v3.3.1
         with:
@@ -103,5 +112,5 @@ jobs:
         if: success()
         uses: manticoresoftware/upload_artifact_with_retries@v3
         with:
-          name: build_${{ inputs.DISTR }}_${{ inputs.CTEST_CONFIGURATION_TYPE }}_${{ inputs.arch }}
+          name: ${{ steps.artifact_name.outputs.value }}
           path: ${{ inputs.artifact_list }}

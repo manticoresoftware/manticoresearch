@@ -1,0 +1,569 @@
+––– input –––
+mkdir /tmp/import-table/
+––– output –––
+––– input –––
+echo "a > b" > /tmp/import-table/wordforms1.txt; echo "c > d" > /tmp/import-table/exc.txt; echo "abcstop" > /tmp/import-table/stop.txt
+––– output –––
+––– block: ../base/start-searchd –––
+––– input –––
+mysql -h0 -P9306 -e "CREATE TABLE test (id INT) exceptions='/tmp/import-table/exc.txt' wordforms='/tmp/import-table/wordforms1.txt' stopwords='/tmp/import-table/stop.txt'; INSERT INTO test(id) VALUES(1);"
+––– output –––
+––– input –––
+mysql -h0 -P9306 -e "SHOW TABLE test SETTINGS\G"
+––– output –––
+*************************** 1. row ***************************
+Variable_name: settings
+Value: exceptions = /var/lib/manticore/test/exceptions_chunk0_0.txt
+stopwords = /var/lib/manticore/test/stopwords_chunk0_0.txt
+wordforms = /var/lib/manticore/test/wordforms_chunk0_0.txt
+––– input –––
+mysql -h0 -P9306 -e "import table test2 from '/var/lib/manticore/test/test'"
+––– output –––
+––– input –––
+mysql -h0 -P9306 -e "SHOW TABLE test2 SETTINGS\G"
+––– output –––
+*************************** 1. row ***************************
+Variable_name: settings
+Value: exceptions = /var/lib/manticore/test2/exceptions.txt
+stopwords = /var/lib/manticore/test2/stopwords_0.txt
+wordforms = /var/lib/manticore/test2/wordforms_0.txt
+––– input –––
+mysql -h0 -P9306 -e "import table test3 from '/var/lib/manticore/test2/test2'"
+––– output –––
+––– input –––
+mysql -h0 -P9306 -e "SHOW TABLE test3 SETTINGS\G"
+––– output –––
+*************************** 1. row ***************************
+Variable_name: settings
+Value: exceptions = /var/lib/manticore/test3/exceptions.txt
+stopwords = /var/lib/manticore/test3/stopwords_0.txt
+wordforms = /var/lib/manticore/test3/wordforms_0.txt
+––– input –––
+mysql -h0 -P9306 -e "CALL keywords('a 123', 'test2');"
+––– output –––
++------+-----------+------------+
+| qpos | tokenized | normalized |
++------+-----------+------------+
+| 1    | a         | b          |
+| 2    | 123       | 123        |
++------+-----------+------------+
+––– input –––
+mysql -h0 -P9306 -e "CALL keywords('a 123', 'test3');"
+––– output –––
++------+-----------+------------+
+| qpos | tokenized | normalized |
++------+-----------+------------+
+| 1    | a         | b          |
+| 2    | 123       | 123        |
++------+-----------+------------+
+––– input –––
+mysql -h0 -P9306 -e "import table test-5 from '/var/lib/manticore/test2/test2'"
+––– output –––
+ERROR 1064 (42000) at line 1: P03: syntax error, unexpected $undefined, expecting FROM near '-5 from '/var/lib/manticore/test2/test2''
+––– input –––
+mysql -h0 -P9306 -e "import table test_5 from '/var/lib/manticore/test2/test2'"
+––– output –––
+––– input –––
+mysql -h0 -P9306 -e "import table test4 from '/var/lib/manticore/test101/test101'"
+––– output –––
+ERROR 1064 (42000) at line 1: unable to import table 'test4': no table files found
+––– input –––
+for i in {2..100}; do prev_table="test$((i-1))"; new_table="test${i}"; import_path="/var/lib/manticore/${prev_table}/${prev_table}"; mysql -h0 -P9306 -e "import table ${new_table} from '${import_path}'"; mysql -h0 -P9306 -e "SHOW TABLE ${new_table} SETTINGS\G"; done
+––– output –––
+ERROR 1064 (42000) at line 1: table 'test2' already exists
+*************************** 1. row ***************************
+Variable_name: settings
+Value: exceptions = /var/lib/manticore/test2/exceptions.txt
+stopwords = /var/lib/manticore/test2/stopwords_0.txt
+wordforms = /var/lib/manticore/test2/wordforms_0.txt
+ERROR 1064 (42000) at line 1: table 'test3' already exists
+*************************** 1. row ***************************
+Variable_name: settings
+Value: exceptions = /var/lib/manticore/test3/exceptions.txt
+stopwords = /var/lib/manticore/test3/stopwords_0.txt
+wordforms = /var/lib/manticore/test3/wordforms_0.txt
+*************************** 1. row ***************************
+Variable_name: settings
+Value: exceptions = /var/lib/manticore/test4/exceptions.txt
+stopwords = /var/lib/manticore/test4/stopwords_0.txt
+wordforms = /var/lib/manticore/test4/wordforms_0.txt
+*************************** 1. row ***************************
+Variable_name: settings
+Value: exceptions = /var/lib/manticore/test5/exceptions.txt
+stopwords = /var/lib/manticore/test5/stopwords_0.txt
+wordforms = /var/lib/manticore/test5/wordforms_0.txt
+*************************** 1. row ***************************
+Variable_name: settings
+Value: exceptions = /var/lib/manticore/test6/exceptions.txt
+stopwords = /var/lib/manticore/test6/stopwords_0.txt
+wordforms = /var/lib/manticore/test6/wordforms_0.txt
+*************************** 1. row ***************************
+Variable_name: settings
+Value: exceptions = /var/lib/manticore/test7/exceptions.txt
+stopwords = /var/lib/manticore/test7/stopwords_0.txt
+wordforms = /var/lib/manticore/test7/wordforms_0.txt
+*************************** 1. row ***************************
+Variable_name: settings
+Value: exceptions = /var/lib/manticore/test8/exceptions.txt
+stopwords = /var/lib/manticore/test8/stopwords_0.txt
+wordforms = /var/lib/manticore/test8/wordforms_0.txt
+*************************** 1. row ***************************
+Variable_name: settings
+Value: exceptions = /var/lib/manticore/test9/exceptions.txt
+stopwords = /var/lib/manticore/test9/stopwords_0.txt
+wordforms = /var/lib/manticore/test9/wordforms_0.txt
+*************************** 1. row ***************************
+Variable_name: settings
+Value: exceptions = /var/lib/manticore/test10/exceptions.txt
+stopwords = /var/lib/manticore/test10/stopwords_0.txt
+wordforms = /var/lib/manticore/test10/wordforms_0.txt
+*************************** 1. row ***************************
+Variable_name: settings
+Value: exceptions = /var/lib/manticore/test11/exceptions.txt
+stopwords = /var/lib/manticore/test11/stopwords_0.txt
+wordforms = /var/lib/manticore/test11/wordforms_0.txt
+*************************** 1. row ***************************
+Variable_name: settings
+Value: exceptions = /var/lib/manticore/test12/exceptions.txt
+stopwords = /var/lib/manticore/test12/stopwords_0.txt
+wordforms = /var/lib/manticore/test12/wordforms_0.txt
+*************************** 1. row ***************************
+Variable_name: settings
+Value: exceptions = /var/lib/manticore/test13/exceptions.txt
+stopwords = /var/lib/manticore/test13/stopwords_0.txt
+wordforms = /var/lib/manticore/test13/wordforms_0.txt
+*************************** 1. row ***************************
+Variable_name: settings
+Value: exceptions = /var/lib/manticore/test14/exceptions.txt
+stopwords = /var/lib/manticore/test14/stopwords_0.txt
+wordforms = /var/lib/manticore/test14/wordforms_0.txt
+*************************** 1. row ***************************
+Variable_name: settings
+Value: exceptions = /var/lib/manticore/test15/exceptions.txt
+stopwords = /var/lib/manticore/test15/stopwords_0.txt
+wordforms = /var/lib/manticore/test15/wordforms_0.txt
+*************************** 1. row ***************************
+Variable_name: settings
+Value: exceptions = /var/lib/manticore/test16/exceptions.txt
+stopwords = /var/lib/manticore/test16/stopwords_0.txt
+wordforms = /var/lib/manticore/test16/wordforms_0.txt
+*************************** 1. row ***************************
+Variable_name: settings
+Value: exceptions = /var/lib/manticore/test17/exceptions.txt
+stopwords = /var/lib/manticore/test17/stopwords_0.txt
+wordforms = /var/lib/manticore/test17/wordforms_0.txt
+*************************** 1. row ***************************
+Variable_name: settings
+Value: exceptions = /var/lib/manticore/test18/exceptions.txt
+stopwords = /var/lib/manticore/test18/stopwords_0.txt
+wordforms = /var/lib/manticore/test18/wordforms_0.txt
+*************************** 1. row ***************************
+Variable_name: settings
+Value: exceptions = /var/lib/manticore/test19/exceptions.txt
+stopwords = /var/lib/manticore/test19/stopwords_0.txt
+wordforms = /var/lib/manticore/test19/wordforms_0.txt
+*************************** 1. row ***************************
+Variable_name: settings
+Value: exceptions = /var/lib/manticore/test20/exceptions.txt
+stopwords = /var/lib/manticore/test20/stopwords_0.txt
+wordforms = /var/lib/manticore/test20/wordforms_0.txt
+*************************** 1. row ***************************
+Variable_name: settings
+Value: exceptions = /var/lib/manticore/test21/exceptions.txt
+stopwords = /var/lib/manticore/test21/stopwords_0.txt
+wordforms = /var/lib/manticore/test21/wordforms_0.txt
+*************************** 1. row ***************************
+Variable_name: settings
+Value: exceptions = /var/lib/manticore/test22/exceptions.txt
+stopwords = /var/lib/manticore/test22/stopwords_0.txt
+wordforms = /var/lib/manticore/test22/wordforms_0.txt
+*************************** 1. row ***************************
+Variable_name: settings
+Value: exceptions = /var/lib/manticore/test23/exceptions.txt
+stopwords = /var/lib/manticore/test23/stopwords_0.txt
+wordforms = /var/lib/manticore/test23/wordforms_0.txt
+*************************** 1. row ***************************
+Variable_name: settings
+Value: exceptions = /var/lib/manticore/test24/exceptions.txt
+stopwords = /var/lib/manticore/test24/stopwords_0.txt
+wordforms = /var/lib/manticore/test24/wordforms_0.txt
+*************************** 1. row ***************************
+Variable_name: settings
+Value: exceptions = /var/lib/manticore/test25/exceptions.txt
+stopwords = /var/lib/manticore/test25/stopwords_0.txt
+wordforms = /var/lib/manticore/test25/wordforms_0.txt
+*************************** 1. row ***************************
+Variable_name: settings
+Value: exceptions = /var/lib/manticore/test26/exceptions.txt
+stopwords = /var/lib/manticore/test26/stopwords_0.txt
+wordforms = /var/lib/manticore/test26/wordforms_0.txt
+*************************** 1. row ***************************
+Variable_name: settings
+Value: exceptions = /var/lib/manticore/test27/exceptions.txt
+stopwords = /var/lib/manticore/test27/stopwords_0.txt
+wordforms = /var/lib/manticore/test27/wordforms_0.txt
+*************************** 1. row ***************************
+Variable_name: settings
+Value: exceptions = /var/lib/manticore/test28/exceptions.txt
+stopwords = /var/lib/manticore/test28/stopwords_0.txt
+wordforms = /var/lib/manticore/test28/wordforms_0.txt
+*************************** 1. row ***************************
+Variable_name: settings
+Value: exceptions = /var/lib/manticore/test29/exceptions.txt
+stopwords = /var/lib/manticore/test29/stopwords_0.txt
+wordforms = /var/lib/manticore/test29/wordforms_0.txt
+*************************** 1. row ***************************
+Variable_name: settings
+Value: exceptions = /var/lib/manticore/test30/exceptions.txt
+stopwords = /var/lib/manticore/test30/stopwords_0.txt
+wordforms = /var/lib/manticore/test30/wordforms_0.txt
+*************************** 1. row ***************************
+Variable_name: settings
+Value: exceptions = /var/lib/manticore/test31/exceptions.txt
+stopwords = /var/lib/manticore/test31/stopwords_0.txt
+wordforms = /var/lib/manticore/test31/wordforms_0.txt
+*************************** 1. row ***************************
+Variable_name: settings
+Value: exceptions = /var/lib/manticore/test32/exceptions.txt
+stopwords = /var/lib/manticore/test32/stopwords_0.txt
+wordforms = /var/lib/manticore/test32/wordforms_0.txt
+*************************** 1. row ***************************
+Variable_name: settings
+Value: exceptions = /var/lib/manticore/test33/exceptions.txt
+stopwords = /var/lib/manticore/test33/stopwords_0.txt
+wordforms = /var/lib/manticore/test33/wordforms_0.txt
+*************************** 1. row ***************************
+Variable_name: settings
+Value: exceptions = /var/lib/manticore/test34/exceptions.txt
+stopwords = /var/lib/manticore/test34/stopwords_0.txt
+wordforms = /var/lib/manticore/test34/wordforms_0.txt
+*************************** 1. row ***************************
+Variable_name: settings
+Value: exceptions = /var/lib/manticore/test35/exceptions.txt
+stopwords = /var/lib/manticore/test35/stopwords_0.txt
+wordforms = /var/lib/manticore/test35/wordforms_0.txt
+*************************** 1. row ***************************
+Variable_name: settings
+Value: exceptions = /var/lib/manticore/test36/exceptions.txt
+stopwords = /var/lib/manticore/test36/stopwords_0.txt
+wordforms = /var/lib/manticore/test36/wordforms_0.txt
+*************************** 1. row ***************************
+Variable_name: settings
+Value: exceptions = /var/lib/manticore/test37/exceptions.txt
+stopwords = /var/lib/manticore/test37/stopwords_0.txt
+wordforms = /var/lib/manticore/test37/wordforms_0.txt
+*************************** 1. row ***************************
+Variable_name: settings
+Value: exceptions = /var/lib/manticore/test38/exceptions.txt
+stopwords = /var/lib/manticore/test38/stopwords_0.txt
+wordforms = /var/lib/manticore/test38/wordforms_0.txt
+*************************** 1. row ***************************
+Variable_name: settings
+Value: exceptions = /var/lib/manticore/test39/exceptions.txt
+stopwords = /var/lib/manticore/test39/stopwords_0.txt
+wordforms = /var/lib/manticore/test39/wordforms_0.txt
+*************************** 1. row ***************************
+Variable_name: settings
+Value: exceptions = /var/lib/manticore/test40/exceptions.txt
+stopwords = /var/lib/manticore/test40/stopwords_0.txt
+wordforms = /var/lib/manticore/test40/wordforms_0.txt
+*************************** 1. row ***************************
+Variable_name: settings
+Value: exceptions = /var/lib/manticore/test41/exceptions.txt
+stopwords = /var/lib/manticore/test41/stopwords_0.txt
+wordforms = /var/lib/manticore/test41/wordforms_0.txt
+*************************** 1. row ***************************
+Variable_name: settings
+Value: exceptions = /var/lib/manticore/test42/exceptions.txt
+stopwords = /var/lib/manticore/test42/stopwords_0.txt
+wordforms = /var/lib/manticore/test42/wordforms_0.txt
+*************************** 1. row ***************************
+Variable_name: settings
+Value: exceptions = /var/lib/manticore/test43/exceptions.txt
+stopwords = /var/lib/manticore/test43/stopwords_0.txt
+wordforms = /var/lib/manticore/test43/wordforms_0.txt
+*************************** 1. row ***************************
+Variable_name: settings
+Value: exceptions = /var/lib/manticore/test44/exceptions.txt
+stopwords = /var/lib/manticore/test44/stopwords_0.txt
+wordforms = /var/lib/manticore/test44/wordforms_0.txt
+*************************** 1. row ***************************
+Variable_name: settings
+Value: exceptions = /var/lib/manticore/test45/exceptions.txt
+stopwords = /var/lib/manticore/test45/stopwords_0.txt
+wordforms = /var/lib/manticore/test45/wordforms_0.txt
+*************************** 1. row ***************************
+Variable_name: settings
+Value: exceptions = /var/lib/manticore/test46/exceptions.txt
+stopwords = /var/lib/manticore/test46/stopwords_0.txt
+wordforms = /var/lib/manticore/test46/wordforms_0.txt
+*************************** 1. row ***************************
+Variable_name: settings
+Value: exceptions = /var/lib/manticore/test47/exceptions.txt
+stopwords = /var/lib/manticore/test47/stopwords_0.txt
+wordforms = /var/lib/manticore/test47/wordforms_0.txt
+*************************** 1. row ***************************
+Variable_name: settings
+Value: exceptions = /var/lib/manticore/test48/exceptions.txt
+stopwords = /var/lib/manticore/test48/stopwords_0.txt
+wordforms = /var/lib/manticore/test48/wordforms_0.txt
+*************************** 1. row ***************************
+Variable_name: settings
+Value: exceptions = /var/lib/manticore/test49/exceptions.txt
+stopwords = /var/lib/manticore/test49/stopwords_0.txt
+wordforms = /var/lib/manticore/test49/wordforms_0.txt
+*************************** 1. row ***************************
+Variable_name: settings
+Value: exceptions = /var/lib/manticore/test50/exceptions.txt
+stopwords = /var/lib/manticore/test50/stopwords_0.txt
+wordforms = /var/lib/manticore/test50/wordforms_0.txt
+*************************** 1. row ***************************
+Variable_name: settings
+Value: exceptions = /var/lib/manticore/test51/exceptions.txt
+stopwords = /var/lib/manticore/test51/stopwords_0.txt
+wordforms = /var/lib/manticore/test51/wordforms_0.txt
+*************************** 1. row ***************************
+Variable_name: settings
+Value: exceptions = /var/lib/manticore/test52/exceptions.txt
+stopwords = /var/lib/manticore/test52/stopwords_0.txt
+wordforms = /var/lib/manticore/test52/wordforms_0.txt
+*************************** 1. row ***************************
+Variable_name: settings
+Value: exceptions = /var/lib/manticore/test53/exceptions.txt
+stopwords = /var/lib/manticore/test53/stopwords_0.txt
+wordforms = /var/lib/manticore/test53/wordforms_0.txt
+*************************** 1. row ***************************
+Variable_name: settings
+Value: exceptions = /var/lib/manticore/test54/exceptions.txt
+stopwords = /var/lib/manticore/test54/stopwords_0.txt
+wordforms = /var/lib/manticore/test54/wordforms_0.txt
+*************************** 1. row ***************************
+Variable_name: settings
+Value: exceptions = /var/lib/manticore/test55/exceptions.txt
+stopwords = /var/lib/manticore/test55/stopwords_0.txt
+wordforms = /var/lib/manticore/test55/wordforms_0.txt
+*************************** 1. row ***************************
+Variable_name: settings
+Value: exceptions = /var/lib/manticore/test56/exceptions.txt
+stopwords = /var/lib/manticore/test56/stopwords_0.txt
+wordforms = /var/lib/manticore/test56/wordforms_0.txt
+*************************** 1. row ***************************
+Variable_name: settings
+Value: exceptions = /var/lib/manticore/test57/exceptions.txt
+stopwords = /var/lib/manticore/test57/stopwords_0.txt
+wordforms = /var/lib/manticore/test57/wordforms_0.txt
+*************************** 1. row ***************************
+Variable_name: settings
+Value: exceptions = /var/lib/manticore/test58/exceptions.txt
+stopwords = /var/lib/manticore/test58/stopwords_0.txt
+wordforms = /var/lib/manticore/test58/wordforms_0.txt
+*************************** 1. row ***************************
+Variable_name: settings
+Value: exceptions = /var/lib/manticore/test59/exceptions.txt
+stopwords = /var/lib/manticore/test59/stopwords_0.txt
+wordforms = /var/lib/manticore/test59/wordforms_0.txt
+*************************** 1. row ***************************
+Variable_name: settings
+Value: exceptions = /var/lib/manticore/test60/exceptions.txt
+stopwords = /var/lib/manticore/test60/stopwords_0.txt
+wordforms = /var/lib/manticore/test60/wordforms_0.txt
+*************************** 1. row ***************************
+Variable_name: settings
+Value: exceptions = /var/lib/manticore/test61/exceptions.txt
+stopwords = /var/lib/manticore/test61/stopwords_0.txt
+wordforms = /var/lib/manticore/test61/wordforms_0.txt
+*************************** 1. row ***************************
+Variable_name: settings
+Value: exceptions = /var/lib/manticore/test62/exceptions.txt
+stopwords = /var/lib/manticore/test62/stopwords_0.txt
+wordforms = /var/lib/manticore/test62/wordforms_0.txt
+*************************** 1. row ***************************
+Variable_name: settings
+Value: exceptions = /var/lib/manticore/test63/exceptions.txt
+stopwords = /var/lib/manticore/test63/stopwords_0.txt
+wordforms = /var/lib/manticore/test63/wordforms_0.txt
+*************************** 1. row ***************************
+Variable_name: settings
+Value: exceptions = /var/lib/manticore/test64/exceptions.txt
+stopwords = /var/lib/manticore/test64/stopwords_0.txt
+wordforms = /var/lib/manticore/test64/wordforms_0.txt
+*************************** 1. row ***************************
+Variable_name: settings
+Value: exceptions = /var/lib/manticore/test65/exceptions.txt
+stopwords = /var/lib/manticore/test65/stopwords_0.txt
+wordforms = /var/lib/manticore/test65/wordforms_0.txt
+*************************** 1. row ***************************
+Variable_name: settings
+Value: exceptions = /var/lib/manticore/test66/exceptions.txt
+stopwords = /var/lib/manticore/test66/stopwords_0.txt
+wordforms = /var/lib/manticore/test66/wordforms_0.txt
+*************************** 1. row ***************************
+Variable_name: settings
+Value: exceptions = /var/lib/manticore/test67/exceptions.txt
+stopwords = /var/lib/manticore/test67/stopwords_0.txt
+wordforms = /var/lib/manticore/test67/wordforms_0.txt
+*************************** 1. row ***************************
+Variable_name: settings
+Value: exceptions = /var/lib/manticore/test68/exceptions.txt
+stopwords = /var/lib/manticore/test68/stopwords_0.txt
+wordforms = /var/lib/manticore/test68/wordforms_0.txt
+*************************** 1. row ***************************
+Variable_name: settings
+Value: exceptions = /var/lib/manticore/test69/exceptions.txt
+stopwords = /var/lib/manticore/test69/stopwords_0.txt
+wordforms = /var/lib/manticore/test69/wordforms_0.txt
+*************************** 1. row ***************************
+Variable_name: settings
+Value: exceptions = /var/lib/manticore/test70/exceptions.txt
+stopwords = /var/lib/manticore/test70/stopwords_0.txt
+wordforms = /var/lib/manticore/test70/wordforms_0.txt
+*************************** 1. row ***************************
+Variable_name: settings
+Value: exceptions = /var/lib/manticore/test71/exceptions.txt
+stopwords = /var/lib/manticore/test71/stopwords_0.txt
+wordforms = /var/lib/manticore/test71/wordforms_0.txt
+*************************** 1. row ***************************
+Variable_name: settings
+Value: exceptions = /var/lib/manticore/test72/exceptions.txt
+stopwords = /var/lib/manticore/test72/stopwords_0.txt
+wordforms = /var/lib/manticore/test72/wordforms_0.txt
+*************************** 1. row ***************************
+Variable_name: settings
+Value: exceptions = /var/lib/manticore/test73/exceptions.txt
+stopwords = /var/lib/manticore/test73/stopwords_0.txt
+wordforms = /var/lib/manticore/test73/wordforms_0.txt
+*************************** 1. row ***************************
+Variable_name: settings
+Value: exceptions = /var/lib/manticore/test74/exceptions.txt
+stopwords = /var/lib/manticore/test74/stopwords_0.txt
+wordforms = /var/lib/manticore/test74/wordforms_0.txt
+*************************** 1. row ***************************
+Variable_name: settings
+Value: exceptions = /var/lib/manticore/test75/exceptions.txt
+stopwords = /var/lib/manticore/test75/stopwords_0.txt
+wordforms = /var/lib/manticore/test75/wordforms_0.txt
+*************************** 1. row ***************************
+Variable_name: settings
+Value: exceptions = /var/lib/manticore/test76/exceptions.txt
+stopwords = /var/lib/manticore/test76/stopwords_0.txt
+wordforms = /var/lib/manticore/test76/wordforms_0.txt
+*************************** 1. row ***************************
+Variable_name: settings
+Value: exceptions = /var/lib/manticore/test77/exceptions.txt
+stopwords = /var/lib/manticore/test77/stopwords_0.txt
+wordforms = /var/lib/manticore/test77/wordforms_0.txt
+*************************** 1. row ***************************
+Variable_name: settings
+Value: exceptions = /var/lib/manticore/test78/exceptions.txt
+stopwords = /var/lib/manticore/test78/stopwords_0.txt
+wordforms = /var/lib/manticore/test78/wordforms_0.txt
+*************************** 1. row ***************************
+Variable_name: settings
+Value: exceptions = /var/lib/manticore/test79/exceptions.txt
+stopwords = /var/lib/manticore/test79/stopwords_0.txt
+wordforms = /var/lib/manticore/test79/wordforms_0.txt
+*************************** 1. row ***************************
+Variable_name: settings
+Value: exceptions = /var/lib/manticore/test80/exceptions.txt
+stopwords = /var/lib/manticore/test80/stopwords_0.txt
+wordforms = /var/lib/manticore/test80/wordforms_0.txt
+*************************** 1. row ***************************
+Variable_name: settings
+Value: exceptions = /var/lib/manticore/test81/exceptions.txt
+stopwords = /var/lib/manticore/test81/stopwords_0.txt
+wordforms = /var/lib/manticore/test81/wordforms_0.txt
+*************************** 1. row ***************************
+Variable_name: settings
+Value: exceptions = /var/lib/manticore/test82/exceptions.txt
+stopwords = /var/lib/manticore/test82/stopwords_0.txt
+wordforms = /var/lib/manticore/test82/wordforms_0.txt
+*************************** 1. row ***************************
+Variable_name: settings
+Value: exceptions = /var/lib/manticore/test83/exceptions.txt
+stopwords = /var/lib/manticore/test83/stopwords_0.txt
+wordforms = /var/lib/manticore/test83/wordforms_0.txt
+*************************** 1. row ***************************
+Variable_name: settings
+Value: exceptions = /var/lib/manticore/test84/exceptions.txt
+stopwords = /var/lib/manticore/test84/stopwords_0.txt
+wordforms = /var/lib/manticore/test84/wordforms_0.txt
+*************************** 1. row ***************************
+Variable_name: settings
+Value: exceptions = /var/lib/manticore/test85/exceptions.txt
+stopwords = /var/lib/manticore/test85/stopwords_0.txt
+wordforms = /var/lib/manticore/test85/wordforms_0.txt
+*************************** 1. row ***************************
+Variable_name: settings
+Value: exceptions = /var/lib/manticore/test86/exceptions.txt
+stopwords = /var/lib/manticore/test86/stopwords_0.txt
+wordforms = /var/lib/manticore/test86/wordforms_0.txt
+*************************** 1. row ***************************
+Variable_name: settings
+Value: exceptions = /var/lib/manticore/test87/exceptions.txt
+stopwords = /var/lib/manticore/test87/stopwords_0.txt
+wordforms = /var/lib/manticore/test87/wordforms_0.txt
+*************************** 1. row ***************************
+Variable_name: settings
+Value: exceptions = /var/lib/manticore/test88/exceptions.txt
+stopwords = /var/lib/manticore/test88/stopwords_0.txt
+wordforms = /var/lib/manticore/test88/wordforms_0.txt
+*************************** 1. row ***************************
+Variable_name: settings
+Value: exceptions = /var/lib/manticore/test89/exceptions.txt
+stopwords = /var/lib/manticore/test89/stopwords_0.txt
+wordforms = /var/lib/manticore/test89/wordforms_0.txt
+*************************** 1. row ***************************
+Variable_name: settings
+Value: exceptions = /var/lib/manticore/test90/exceptions.txt
+stopwords = /var/lib/manticore/test90/stopwords_0.txt
+wordforms = /var/lib/manticore/test90/wordforms_0.txt
+*************************** 1. row ***************************
+Variable_name: settings
+Value: exceptions = /var/lib/manticore/test91/exceptions.txt
+stopwords = /var/lib/manticore/test91/stopwords_0.txt
+wordforms = /var/lib/manticore/test91/wordforms_0.txt
+*************************** 1. row ***************************
+Variable_name: settings
+Value: exceptions = /var/lib/manticore/test92/exceptions.txt
+stopwords = /var/lib/manticore/test92/stopwords_0.txt
+wordforms = /var/lib/manticore/test92/wordforms_0.txt
+*************************** 1. row ***************************
+Variable_name: settings
+Value: exceptions = /var/lib/manticore/test93/exceptions.txt
+stopwords = /var/lib/manticore/test93/stopwords_0.txt
+wordforms = /var/lib/manticore/test93/wordforms_0.txt
+*************************** 1. row ***************************
+Variable_name: settings
+Value: exceptions = /var/lib/manticore/test94/exceptions.txt
+stopwords = /var/lib/manticore/test94/stopwords_0.txt
+wordforms = /var/lib/manticore/test94/wordforms_0.txt
+*************************** 1. row ***************************
+Variable_name: settings
+Value: exceptions = /var/lib/manticore/test95/exceptions.txt
+stopwords = /var/lib/manticore/test95/stopwords_0.txt
+wordforms = /var/lib/manticore/test95/wordforms_0.txt
+*************************** 1. row ***************************
+Variable_name: settings
+Value: exceptions = /var/lib/manticore/test96/exceptions.txt
+stopwords = /var/lib/manticore/test96/stopwords_0.txt
+wordforms = /var/lib/manticore/test96/wordforms_0.txt
+*************************** 1. row ***************************
+Variable_name: settings
+Value: exceptions = /var/lib/manticore/test97/exceptions.txt
+stopwords = /var/lib/manticore/test97/stopwords_0.txt
+wordforms = /var/lib/manticore/test97/wordforms_0.txt
+*************************** 1. row ***************************
+Variable_name: settings
+Value: exceptions = /var/lib/manticore/test98/exceptions.txt
+stopwords = /var/lib/manticore/test98/stopwords_0.txt
+wordforms = /var/lib/manticore/test98/wordforms_0.txt
+*************************** 1. row ***************************
+Variable_name: settings
+Value: exceptions = /var/lib/manticore/test99/exceptions.txt
+stopwords = /var/lib/manticore/test99/stopwords_0.txt
+wordforms = /var/lib/manticore/test99/wordforms_0.txt
+*************************** 1. row ***************************
+Variable_name: settings
+Value: exceptions = /var/lib/manticore/test100/exceptions.txt
+stopwords = /var/lib/manticore/test100/stopwords_0.txt
+wordforms = /var/lib/manticore/test100/wordforms_0.txt

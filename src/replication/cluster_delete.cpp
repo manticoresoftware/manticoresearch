@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2019-2023, Manticore Software LTD (https://manticoresearch.com)
+// Copyright (c) 2019-2024, Manticore Software LTD (https://manticoresearch.com)
 // Copyright (c) 2001-2016, Andrew Aksyonoff
 // Copyright (c) 2008-2016, Sphinx Technologies Inc
 // All rights reserved
@@ -38,6 +38,6 @@ void SendClusterDeleteToNodes ( const VecTraits_T<CSphString>& dNodes, const CSp
 
 	ClusterRequest_t tData { sCluster };
 	ClusterDelete_c tReq;
-	auto dAgents = tReq.MakeAgents ( GetDescAPINodes ( dNodes, Resolve_e::QUICK ), ReplicationTimeoutQuery(), tData );
+	auto dAgents = tReq.MakeAgents ( GetDescAPINodes ( dNodes, Resolve_e::SLOW ), ReplicationTimeoutQuery(), tData );
 	PerformRemoteTasksWrap ( dAgents, tReq, tReq, true );
 }

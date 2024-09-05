@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2017-2023, Manticore Software LTD (https://manticoresearch.com)
+// Copyright (c) 2017-2024, Manticore Software LTD (https://manticoresearch.com)
 // Copyright (c) 2001-2016, Andrew Aksyonoff
 // Copyright (c) 2008-2016, Sphinx Technologies Inc
 // All rights reserved
@@ -67,6 +67,6 @@ struct ExtraSortExpr_t
 
 /// parses sort clause, using a given schema
 /// fills eFunc and tState and optionally sError, returns result code
-ESortClauseParseResult sphParseSortClause ( const CSphQuery & tQuery, const char * sClause, const ISphSchema & tSchema, ESphSortFunc & eFunc, CSphMatchComparatorState & tState, CSphVector<ExtraSortExpr_t> & dExtraExprs, bool bComputeItems, CSphString & sError );
+ESortClauseParseResult sphParseSortClause ( const CSphQuery & tQuery, const char * sClause, const ISphSchema & tSchema, ESphSortFunc & eFunc, CSphMatchComparatorState & tState, CSphVector<ExtraSortExpr_t> & dExtraExprs, bool bComputeItems, const JoinArgs_t * pJoinArgs, CSphString & sError );
 
 #endif // _sortsetup_

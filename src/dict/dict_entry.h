@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2017-2023, Manticore Software LTD (https://manticoresearch.com)
+// Copyright (c) 2017-2024, Manticore Software LTD (https://manticoresearch.com)
 // Copyright (c) 2001-2016, Andrew Aksyonoff
 // Copyright (c) 2008-2016, Sphinx Technologies Inc
 // All rights reserved
@@ -19,7 +19,7 @@
 struct DictEntry_t
 {
 	SphWordID_t m_uWordID = 0;		   ///< keyword id (for dict=crc)
-	const BYTE* m_sKeyword = nullptr;  ///< keyword text (for dict=keywords)
+	const BYTE* m_szKeyword = nullptr; ///< keyword text (for dict=keywords)
 	int m_iDocs = 0;				   ///< number of matching documents
 	int m_iHits = 0;				   ///< number of occurrences
 	SphOffset_t m_iDoclistOffset = 0;  ///< absolute document list offset (into .spd)

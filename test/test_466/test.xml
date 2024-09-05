@@ -1,0 +1,302 @@
+<?xml version="1.0" encoding="utf-8"?>
+
+<test>
+<name>aggs queries</name>
+
+<requires>
+<http/>
+</requires>
+
+<config>
+searchd
+{
+	<searchd_settings/>
+	binlog_path =
+  timezone = UTC
+}
+
+source src_gr1
+{
+  type      = mysql
+  <sql_settings/>
+  sql_query     = SELECT * FROM test_group1
+  sql_attr_uint   = tag
+  sql_attr_uint   = gid
+  sql_attr_uint   = code
+}
+
+
+index test_group1
+{
+  source      = src_gr1
+  path      = <data_path/>/test_group1
+}
+
+source src_gr2
+{
+  type      = mysql
+  <sql_settings/>
+  sql_query     = SELECT * FROM test_group2
+  sql_attr_uint   = tag
+  sql_attr_uint   = gid
+  sql_attr_uint   = code
+}
+
+
+index test_group2
+{
+  source      = src_gr2
+  path      = <data_path/>/test_group2
+}
+
+source src_dates
+{
+    type			= mysql
+    <sql_settings/>
+    sql_query		= SELECT * FROM test_table_dates
+    sql_attr_timestamp	= tm
+}
+
+
+index idx_dates
+{
+    source			= src_dates
+    path			= <data_path/>/idx_dates
+}
+
+source src_multi1
+{
+	type              = mysql
+	<sql_settings/>
+	sql_query         = SELECT * FROM table_multi1
+	sql_attr_uint   = brand_id
+	sql_attr_json     = j
+}
+
+
+index multi1
+{
+	source            = src_multi1
+	path              = <data_path/>/multi1
+}
+
+</config>
+
+<db_drop>drop table if exists test_group1</db_drop>
+<db_drop>drop table if exists test_group2</db_drop>
+
+<db_create>
+CREATE TABLE `test_group1` (
+  `id` int(11),
+  `tag` int(11),
+  `gid` int(11),
+  `code` int(11),
+  `text` varchar(255) NOT NULL
+)
+</db_create>
+
+<db_create>
+CREATE TABLE `test_group2` (
+  `id` int(11),
+  `tag` int(11),
+  `gid` int(11),
+  `code` int(11),
+  `text` varchar(255) NOT NULL
+)
+</db_create>
+
+<db_insert>
+INSERT INTO `test_group1` VALUES
+( 1,    2,  3,  100, 'test 101'),
+( 2,    2,  2,  110, 'test 104'),
+( 3,    2,  3,  160, 'test 107'),
+( 4,    2,  10, 201, 'test 110'),
+( 5,    2,  9,  200, 'test 113'),
+( 6,    3,  8,  404, 'test 116'),
+( 7,    3,  7,  405, 'test 119'),
+( 8,    3,  6,  301, 'test 122'),
+( 9,    3,  5,  300, 'test 125'),
+( 10,   3,  4,  100, 'test 128')
+</db_insert>
+
+<db_insert>
+INSERT INTO `test_group2` VALUES
+( 21,   2,  3,  100, 'test 101'),
+( 22,   2,  2,  110, 'test 104'),
+( 23,   2,  3,  161, 'test 107'),
+( 24,   2,  10, 404, 'test 110'),
+( 25,   2,  9,  401, 'test 113'),
+( 26,   3,  8,  100, 'test 116'),
+( 27,   3,  7,  200, 'test 119'),
+( 28,   3,  6,  300, 'test 122'),
+( 29,   3,  5,  101, 'test 125'),
+( 30,   3,  4,  110, 'test 128')
+</db_insert>
+
+<db_create>
+CREATE TABLE test_table_dates
+(
+	id INTEGER AUTO_INCREMENT PRIMARY KEY NOT NULL,
+	tm INTEGER NOT NULL,
+	title TEXT NOT NULL
+) ENGINE=MYISAM
+</db_create>
+
+<db_insert>								  
+	<repeat count="24" vars="stamp" init="1486735200">
+		<var name="vals"/>
+		<repeat count="89" vars="stamp" inc="3600"><var name="vals" delimiter=",">(0,<stamp/>,'aaaa')</var></repeat>
+		INSERT INTO test_table_dates VALUES <vals/><db_insert/></repeat>
+</db_insert>
+
+<db_drop>DROP TABLE IF EXISTS test_table_dates</db_drop>
+
+<db_create>
+CREATE TABLE `table_multi1` (
+  `id` int(11),
+  `title` varchar(255),
+  `brand_id` int(11),
+  `j` varchar(255)
+);
+</db_create>
+<db_drop>DROP TABLE IF EXISTS `table_multi1`;</db_drop>
+
+<db_insert>
+insert into table_multi1 (id,title,brand_id,j) values
+(1,'Product 1', 11, '{a:13, b:14}'),
+(2,'Product 2', 12, '{a:13, b:12}'),
+(3,'Product 3', 11, '{a:13, b:13}')
+</db_insert>
+
+<queries>
+<query endpoint="json/search">{ "index": "test_group1", "size":0, "aggs":{ "gr_1": { "histogram": { "field": "code", "interval":50, "size": 40 } }} }</query>
+<query endpoint="json/search">{ "index": "test_group2", "size":0, "aggs":{ "gr_1": { "histogram": { "field": "code", "interval":50, "keyed":true, "size": 40 } }} }</query>
+<query endpoint="json/search">{ "index": "test_group1,test_group2", "size":0, "aggs":{ "gr_1": { "histogram": { "field": "code", "interval":90 } }} }</query>
+<query endpoint="json/search">{ "index": "test_group1,test_group2", "size":0, "aggs":{ "gr_1": { "histogram": { "field": "code", "interval":100, "keyed":true } }} }</query>
+
+<sphinxql>select id, code, count(*), histogram(code, {hist_interval=90}) as c from test_group1,test_group2 group by c order by c asc</sphinxql>
+<sphinxql>select id, code, count(*), histogram(code, {hist_interval=100}) as c from test_group1,test_group2 group by c order by c asc</sphinxql>
+
+<query endpoint="json/search">{ "index": "test_group1,test_group2", "size":0, "aggs":{ "gr_1": { "range": { "field": "code", "ranges": [{"to":150},{"from":150, "to":300},{"from":300}] } }} }</query>
+<query endpoint="json/search">{ "index": "test_group1,test_group2", "size":0, "aggs":{
+"gr_1":       { "range": { "field": "code", "keyed":true, "ranges": [{"from":150, "to":200}, {"from":200, "to":300}, {"from":300, "to":404}] } },
+"gr_outside": { "range": { "field": "code", "keyed":true, "ranges": [{"to":150},                                     {"from":404}] } }
+}}</query>
+
+<sphinxql>select id, code, count(*), range(code, {range_to=150},{range_from=150,range_to=300},{range_from=300}) c from test_group1,test_group2 group by c order by c asc</sphinxql>
+<sphinxql>select id, code, count(*), range(code, {range_from=150,range_to=200},{range_from=200,range_to=300},{range_from=300,range_to=404}) c1, range(code, {range_to=150}, {range_from=404}) c2 from test_group1,test_group2 facet c1 as r1 order by c1 asc facet c2 as r2 order by c2 asc;</sphinxql>
+
+<query endpoint="json/search">{ "index": "test_group1,test_group2", "size":0, "aggs":{ "gr_1": { "range": { "field": "code", "ranges": [{"from":200, "to":300},{"from":400, "to":415}] } }} }</query>
+
+<sphinxql>select id, code, count(*), range(code, {range_from=200,range_to=300},{range_from=400,range_to=415}) c1 from test_group1,test_group2 facet c1 as r1 order by c1 asc;</sphinxql>
+
+<!-- aggs.composite  -->
+<query endpoint="json/search">
+{
+    "index": "test_group1,test_group2",
+    "size":0,
+    "aggs": {
+        "gr_1": {
+            "composite": {
+                "size":5,
+                "sources": [
+                    { "product_tag": { "terms": { "field": "tag" } } },
+                    { "product_id": { "terms": { "field": "gid" } } }
+                ]
+            }
+        }
+    }
+}
+</query>
+<query endpoint="json/search">
+{
+    "index": "test_group1,test_group2",
+    "size":0,
+    "aggs": {
+        "gr_1": {
+            "composite": {
+                "after":{
+                    "product_tag":3,
+                    "product_id":8
+                },
+                "size":2,
+                "sources": [
+                    { "product_tag": { "terms": { "field": "tag" } } },
+                    { "product_id": { "terms": { "field": "gid" } } }
+                ]
+            }
+        }
+    }
+}
+</query>
+
+<query endpoint="json/search">{ "index": "idx_dates", "size":0, "aggs":{ "months": { "date_histogram": { "field": "tm", "keyed":true, "calendar_interval":"month" } }} }</query>
+<sphinxql>select id, count(*), date_histogram(tm, {calendar_interval='month'}) as months from idx_dates group by months order by months asc</sphinxql>
+
+<query endpoint="json/search">
+{
+  "index":"idx_dates",
+  "size":0,
+  "aggs":{
+    "points":{
+      "date_range":{
+        "field":"tm",
+        "keyed":true,
+        "ranges":[
+          {
+            "to":"2017-02-10||+30d/M"
+          },
+          {
+            "from":"2017-04-10||/M"
+          }
+        ]
+      }
+    }
+  }
+}
+</query>
+<sphinxql>select count(*), date_range(tm, {range_to='2017||+2M/M'},{range_from='2017||+2M/M',range_to='2017||+4M/M'},{range_from='2017||+4M/M'}) as points from idx_dates group by points order by points asc</sphinxql>
+
+<!-- count(*) -->
+<query endpoint="json/search">{ "index": "test_group2", "size":0, "aggs":{}}</query>
+<!-- min(code) -->
+<query endpoint="json/search">{ "index": "test_group2", "size":0, "aggs":{"min_code":{"min":{"field": "code"}}}}</query>
+<!-- max(code) -->
+<query endpoint="json/search">{ "index": "test_group2", "size":0, "aggs":{"max_code":{"max":{"field": "code"}}}}</query>
+<!-- sum(code) -->
+<query endpoint="json/search">{ "index": "test_group2", "size":0, "aggs":{"sum_code":{"sum":{"field": "code"}}}}</query>
+<!-- avg(code) -->
+<query endpoint="json/search">{ "index": "test_group2", "size":0, "aggs":{"avg_code":{"avg":{"field": "code"}}},
+"query": {
+    "range": {
+      "code": {
+        "lte": 200
+      }
+    }
+}
+}</query>
+
+<!-- aggs.composite with JSON.field  -->
+<query endpoint="json/search">
+{
+    "index": "multi1",
+    "size":0,
+    "aggs": {
+        "gr_1": {
+            "composite": {
+                "size":20,
+                "sources": [
+                    { "brand_id": { "terms": { "field": "brand_id" } } },
+                    { "product_id": { "terms": { "field": "j.a" } } }
+                ]
+            }
+        }
+    }
+}
+</query>
+
+<!-- aggs.ranges with empty or open range -->
+<query endpoint="json/search">{ "index": "test_group1", "size":0, "aggs":{ "gr_1": { "range": { "field": "code", "ranges": [{}] } }} }</query>
+
+</queries>
+</test>

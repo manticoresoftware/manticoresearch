@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2020-2023, Manticore Software LTD (https://manticoresearch.com)
+// Copyright (c) 2020-2024, Manticore Software LTD (https://manticoresearch.com)
 // All rights reserved
 //
 // This program is free software; you can redistribute it and/or modify
@@ -20,7 +20,7 @@
 class ISphSchema;
 
 std::unique_ptr<columnar::Columnar_i>	CreateColumnarStorageReader ( const CSphString & sFile, DWORD uNumDocs, CSphString & sError );
-std::unique_ptr<columnar::Builder_i>	CreateColumnarBuilder ( const ISphSchema & tSchema, const CSphString & sFilename, CSphString & sError );
+std::unique_ptr<columnar::Builder_i>	CreateColumnarBuilder ( const ISphSchema & tSchema, const CSphString & sFilename, size_t tBufferSize, CSphString & sError );
 void					CheckColumnarStorage ( const CSphString & sFile, DWORD uNumRows, std::function<void (const char*)> fnError, std::function<void (const char*)> fnProgress );
 
 common::AttrType_e	ToColumnarType ( ESphAttr eAttrType, int iBitCount );

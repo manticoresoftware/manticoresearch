@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2020-2023, Manticore Software LTD (https://manticoresearch.com)
+// Copyright (c) 2020-2024, Manticore Software LTD (https://manticoresearch.com)
 // All rights reserved
 //
 // This program is free software; you can redistribute it and/or modify
@@ -15,9 +15,9 @@
 #include "schema/columninfo.h"
 
 class CSphGrouper;
-CSphGrouper * CreateGrouperColumnarInt ( const CSphColumnInfo & tAttr );
-CSphGrouper * CreateGrouperColumnarString ( const CSphColumnInfo & tAttr, ESphCollation eCollation );
-CSphGrouper * CreateGrouperColumnarMVA ( const CSphColumnInfo & tAttr );
+CSphGrouper * CreateGrouperColumnarInt ( const CSphString & sName, ESphAttr eType );
+CSphGrouper * CreateGrouperColumnarString ( const CSphString & sName, ESphCollation eCollation );
+CSphGrouper * CreateGrouperColumnarMVA ( const CSphString & sName, ESphAttr eType );
 CSphGrouper * CreateGrouperColumnarMulti ( const CSphVector<CSphColumnInfo> & dAttrs, ESphCollation eCollation );
 
 class DistinctFetcher_i;

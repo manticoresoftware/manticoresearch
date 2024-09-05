@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2017-2023, Manticore Software LTD (https://manticoresearch.com)
+// Copyright (c) 2017-2024, Manticore Software LTD (https://manticoresearch.com)
 // Copyright (c) 2001-2016, Andrew Aksyonoff
 // Copyright (c) 2008-2016, Sphinx Technologies Inc
 // All rights reserved
@@ -119,6 +119,9 @@ public:
 
 	/// get next token
 	virtual BYTE *					GetToken () = 0;
+
+	/// get next token comply escaping rules
+	virtual BYTE *					GetTokenEscaped () { return GetToken(); }
 
 	/// calc codepoint length
 	virtual int						GetCodepointLength ( int iCode ) const noexcept = 0;

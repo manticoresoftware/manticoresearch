@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2023, Manticore Software LTD (https://manticoresearch.com)
+// Copyright (c) 2023-2024, Manticore Software LTD (https://manticoresearch.com)
 // Copyright (c) 2001-2016, Andrew Aksyonoff
 // Copyright (c) 2008-2016, Sphinx Technologies Inc
 // All rights reserved
@@ -73,7 +73,7 @@ std::optional<int> SyncSrc_t::InitSyncSrc ()
 	m_dChunks.Reset ( iFiles );
 
 	int iMaxChunkBytes = 0;
-	m_iBufferSize = g_iMaxPacketSize * 3 / 4;
+	m_iBufferSize = (int64_t)g_iMaxPacketSize * 3 / 4;
 	int iHashes = iFiles;
 
 	for ( int i = 0; i < iFiles; ++i )

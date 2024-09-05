@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2017-2023, Manticore Software LTD (https://manticoresearch.com)
+// Copyright (c) 2017-2024, Manticore Software LTD (https://manticoresearch.com)
 // Copyright (c) 2001-2016, Andrew Aksyonoff
 // Copyright (c) 2008-2016, Sphinx Technologies Inc
 // All rights reserved
@@ -74,8 +74,10 @@ class ISphNoncopyable
 public:
 	ISphNoncopyable() = default;
 	ISphNoncopyable ( const ISphNoncopyable& ) = delete;
-	const ISphNoncopyable& operator= ( const ISphNoncopyable& ) = delete;
+	ISphNoncopyable& operator= ( const ISphNoncopyable& ) = delete;
 };
+
+#define NONCOPYABLE( a ) a(const a&) = delete; a& operator= (const a&) = delete
 
 /// prevent move
 class ISphNonmovable
@@ -85,6 +87,20 @@ public:
 	ISphNonmovable ( ISphNonmovable&& ) noexcept = delete;
 	ISphNonmovable& operator= ( ISphNonmovable&& ) noexcept = delete;
 };
+
+#define NONMOVABLE( a ) a(a&&) = delete; a& operator= (a&&) = delete
+
+/// prevent copy and move
+class ISphNonCopyMovable
+{
+public:
+	ISphNonCopyMovable() = default;
+	ISphNonCopyMovable ( const ISphNonCopyMovable& ) = delete;
+	ISphNonCopyMovable ( ISphNonCopyMovable&& ) = delete;
+	ISphNonCopyMovable& operator= ( ISphNonCopyMovable ) = delete;
+};
+
+#define NONCOPYMOVABLE( a ) a(const a&) = delete; a (a&&) = delete; a& operator= (const a&) = delete; a& operator= (a&&) = delete
 
 // implement moving ctr and moving= using swap-and-release
 #define MOVE_BYSWAP( class_c )								\

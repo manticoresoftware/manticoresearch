@@ -3,7 +3,10 @@
 
 <name>secondary</name>
 
-<requires> <secondary/> </requires>
+<requires>
+<secondary/>
+<non-rt/>
+</requires>
 
 <config>
 searchd
@@ -65,6 +68,21 @@ index test4
 	source 			= src_test4
 	path			= <data_path/>/test4
 }
+
+source src_testpoly
+{
+	type			= mysql
+	<sql_settings/>
+	sql_query		= select * from test_table3
+	sql_attr_uint  = x
+	sql_attr_uint  = y
+}
+
+index testpoly
+{
+	source 			= src_testpoly
+	path			= <data_path/>/testpoly
+}
 </config>
 
 <db_create>
@@ -86,6 +104,15 @@ CREATE TABLE `test_table2` (
 );
 </db_create>
 
+<db_create>
+CREATE TABLE `test_table3` (
+  `id` int,
+  `title` varchar(255),
+  `x` int,
+  `y` int
+);
+</db_create>
+
 <db_drop>DROP TABLE IF EXISTS test_table1</db_drop>
 <db_insert>
 insert into test_table1 (id,title, tag, flag,extra,coeff) values
@@ -93,7 +120,8 @@ insert into test_table1 (id,title, tag, flag,extra,coeff) values
 (2,'abc', 1, 1,'', -1.0 ),
 (3,'abc', 2, 0,'', -10.0 ),
 (4,'abc', 1, 1,'1', 10.0 ),
-(5,'abc', 2, 0,'1', -100.0 )
+(5,'abc', 2, 0,'1', -100.0 ),
+(6,'dec', 1, 0,'1', -100.0 )
 </db_insert>
 
 <db_drop>DROP TABLE IF EXISTS test_table2</db_drop>
@@ -101,6 +129,15 @@ insert into test_table1 (id,title, tag, flag,extra,coeff) values
 	<var name="vals">( 1, 'real word and more', 1)</var>
 	<repeat count="1000" vars="i t" inc="2 2" init="10 10"><var name="vals" delimiter=",">( <i/>, 'dummy word not another', <t/> )</var></repeat>
 	insert into test_table2 values <vals/>
+</db_insert>
+
+<db_drop>DROP TABLE IF EXISTS test_table3</db_drop>
+<db_insert>
+insert into test_table3 (id,title,x,y) values
+(1,'abc', 3, 2),
+(2,'abc', 5, 3 ),
+(3,'abc', 2, 5 ),
+(4,'abc', 4, 6 )
 </db_insert>
 
 <queries>
@@ -125,6 +162,22 @@ select * from test4 where tag in (2006) order by id desc /*+ SecondaryIndex(tag)
 select * from test4 where tag in (2007) order by id desc /*+ SecondaryIndex(tag) */;
 select * from test4 where tag in (2010) order by id desc /*+ SecondaryIndex(tag) */;
 </sphinxql>
+
+<!-- regression no forced SI at FT -->
+<sphinxql>select * from test1 where MATCH('dec') AND tag=1 /*+ SecondaryIndex(tag) */; show meta</sphinxql>
+
+<!-- regression for exclude filters with SI -->
+<sphinxql>select id,tag from test1</sphinxql>
+<sphinxql>select id,tag from test1 where tag not in (1,2) /*+ SecondaryIndex(tag) */; show meta</sphinxql>
+<sphinxql>select id,tag from test1 where tag not in (1) /*+ SecondaryIndex(tag) */; show meta</sphinxql>
+<sphinxql>select id,tag from test1 where tag not in (2) /*+ SecondaryIndex(tag) */; show meta</sphinxql>
+
+<!-- extra SI on poly2d -->
+<sphinxql>SELECT * FROM testpoly order by id asc</sphinxql>
+<sphinxql>SELECT x,y,CONTAINS(POLY2D(1,1,1,7,7,7,7,1),x,y) a FROM testpoly WHERE a=1 order by id asc /*+ No_SecondaryIndex(x,y) */; show meta</sphinxql>
+<sphinxql>SELECT x,y,CONTAINS(POLY2D(1,1,1,7,7,7,7,1),x,y) a FROM testpoly WHERE a=1 order by id asc /*+ SecondaryIndex(x,y) */; show meta</sphinxql>
+<sphinxql>SELECT x,y,CONTAINS(POLY2D(4,1,4,7,7,7,7,1),x,y) a FROM testpoly WHERE a=1 order by id asc /*+ No_SecondaryIndex(x,y) */; show meta</sphinxql>
+<sphinxql>SELECT x,y,CONTAINS(POLY2D(4,1,4,7,7,7,7,1),x,y) a FROM testpoly WHERE a=1 order by id asc /*+ SecondaryIndex(x,y) */; show meta</sphinxql>
 
 </queries>
 

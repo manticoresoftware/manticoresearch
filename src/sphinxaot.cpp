@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2017-2023, Manticore Software LTD (https://manticoresearch.com)
+// Copyright (c) 2017-2024, Manticore Software LTD (https://manticoresearch.com)
 // Copyright (c) 2011-2016, Andrew Aksyonoff
 // Copyright (c) 2011-2016, Sphinx Technologies Inc
 // All rights reserved
@@ -269,9 +269,9 @@ bool CMorphAutomat::LoadPak ( CSphReader & rd, int iCacheSize )
 
 #if !USE_LITTLE_ENDIAN
 	for ( int i=0; i< m_NodesCount; ++i )
-		FlipEndianess ( &m_pNodes[i].m_Data );
+		FlipEndianness ( &m_pNodes[i].m_Data );
 	for ( int i=0; i< m_RelationsCount; ++i )
-		FlipEndianess ( &m_pRelations[i].m_Data );
+		FlipEndianness ( &m_pRelations[i].m_Data );
 #endif
 
 	BuildChildrenCache ( iCacheSize );

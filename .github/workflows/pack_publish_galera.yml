@@ -98,7 +98,7 @@ jobs:
         mkdir build
         cd build
         cmake -DPACK=1 ..
-      cache_key: pack_${{ matrix.DISTR }}_${{ matrix.arch }}
+      cache_key: pack_galera_${{ matrix.DISTR }}_${{ matrix.arch }}
       artifact_list: "build/manticore*rpm"
 
   pack_macos:
@@ -119,7 +119,7 @@ jobs:
         mkdir build
         cd build
         cmake -DPACK=1 ..
-      cache_key: pack_${{ matrix.DISTR }}_${{ matrix.arch }}
+      cache_key: pack_galera_${{ matrix.DISTR }}_${{ matrix.arch }}
       artifact_list: "build/manticore*tar.gz"
 
   # virtual job to simplify the CI
@@ -127,8 +127,7 @@ jobs:
   publish:
     name: OK to publish?
     runs-on: ubuntu-22.04
-#    needs: [pack_debian_ubuntu, pack_rhel, pack_macos]
-    needs: [pack_debian_ubuntu, pack_rhel]
+    needs: [pack_debian_ubuntu, pack_rhel, pack_macos]
     if: |
       (github.repository == 'manticoresoftware/manticoresearch')
       && (
@@ -206,7 +205,7 @@ jobs:
         image: [ "centos:7", "almalinux:8", "almalinux:9", "oraclelinux:9", "amazonlinux:latest" ]
     runs-on: ubuntu-22.04
     steps:
-      - uses: manticoresoftware/clt@0.1.11
+      - uses: manticoresoftware/clt@0.1.21
         with:
           image: ${{ matrix.image }}
           test_prefix: test/clt-tests/installation/rhel-dev-
@@ -220,7 +219,7 @@ jobs:
         image: [ "ubuntu:bionic", "ubuntu:focal", "ubuntu:jammy", "debian:buster", "debian:bullseye", "debian:bookworm" ]
     runs-on: ubuntu-22.04
     steps:
-      - uses: manticoresoftware/clt@0.1.11
+      - uses: manticoresoftware/clt@0.1.21
         with:
           image: ${{ matrix.image }}
           test_prefix: test/clt-tests/installation/deb-dev-

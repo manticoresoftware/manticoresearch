@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2017-2023, Manticore Software LTD (https://manticoresearch.com)
+// Copyright (c) 2017-2024, Manticore Software LTD (https://manticoresearch.com)
 // Copyright (c) 2001-2016, Andrew Aksyonoff
 // Copyright (c) 2008-2016, Sphinx Technologies Inc
 // All rights reserved
@@ -123,6 +123,26 @@ void MemoryWriter_c::PutString ( const char * sVal )
 	PutDword ( iLen );
 	if ( iLen )
 		PutBytes ( (const BYTE *)sVal, iLen );
+}
+
+
+void MemoryWriter_c::PutZString ( const CSphString & sVal )
+{
+	int iLen = sVal.Length ();
+	ZipOffset ( iLen );
+	if ( iLen )
+		PutBytes ( (const BYTE *) sVal.cstr (), iLen );
+}
+
+
+void MemoryWriter_c::PutZString ( const char * sVal )
+{
+	int iLen = 0;
+	if ( sVal )
+		iLen = (int) strlen ( sVal );
+	ZipOffset ( iLen );
+	if ( iLen )
+		PutBytes ( (const BYTE *) sVal, iLen );
 }
 
 

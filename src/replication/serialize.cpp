@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2017-2023, Manticore Software LTD (https://manticoresearch.com)
+// Copyright (c) 2017-2024, Manticore Software LTD (https://manticoresearch.com)
 // Copyright (c) 2001-2016, Andrew Aksyonoff
 // Copyright (c) 2008-2016, Sphinx Technologies Inc
 // All rights reserved
@@ -151,7 +151,8 @@ int LoadUpdate ( const BYTE * pBuf, int iLen, CSphQuery & tQuery )
 // ver 0x106 add total indexed bytes to accum
 // ver 0x107 add blobs vector to replicate update statement
 // ver 0x108 gtid is sent and parsed as blob (was string)
-static constexpr WORD REPLICATE_COMMAND_VER = 0x108;
+// ver 0x109 indexes support for ALTER ADD \ DROP table
+static constexpr WORD VER_COMMAND_REPLICATE = 0x109;
 bool LoadCmdHeader( MemoryReader_c& tReader, ReplicationCommand_t* pCmd )
 {
 	TlsMsg::ResetErr();
@@ -160,8 +161,8 @@ bool LoadCmdHeader( MemoryReader_c& tReader, ReplicationCommand_t* pCmd )
 		return TlsMsg::Err ( "bad replication command %d", (int) eCommand );
 
 	pCmd->m_uVersion = tReader.GetVal<WORD> ();
-	if ( pCmd->m_uVersion>REPLICATE_COMMAND_VER )
-		return TlsMsg::Err ( "replication command %d, version mismatch %d, got %d", (int) eCommand, REPLICATE_COMMAND_VER, (int)pCmd->m_uVersion );
+	if ( pCmd->m_uVersion>VER_COMMAND_REPLICATE )
+		return TlsMsg::Err ( "replication command %d, version mismatch %d, got %d", (int) eCommand, VER_COMMAND_REPLICATE, (int)pCmd->m_uVersion );
 
 	pCmd->m_eCommand = eCommand;
 	pCmd->m_sIndex = tReader.GetString ();
@@ -171,6 +172,11 @@ bool LoadCmdHeader( MemoryReader_c& tReader, ReplicationCommand_t* pCmd )
 void SaveCmdHeader ( const ReplicationCommand_t & tCmd, MemoryWriter_c & tWriter )
 {
 	tWriter.PutWord ((WORD) tCmd.m_eCommand );
-	tWriter.PutWord ( REPLICATE_COMMAND_VER );
+	tWriter.PutWord ( VER_COMMAND_REPLICATE );
 	tWriter.PutString ( tCmd.m_sIndex );
+}
+
+WORD GetVerCommandReplicate()
+{
+	return VER_COMMAND_REPLICATE;
 }

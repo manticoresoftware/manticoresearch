@@ -38,7 +38,7 @@ searchd {
 ...
 }
 ```
-<!-- end --> 
+<!-- end -->
 
 ### VIP Connection
 <!-- example VIP -->
@@ -61,27 +61,39 @@ searchd {
 
 Endpoints `/sql` and `/cli` allow running SQL queries via HTTP.
 
-* `/sql` endpoint accepts only SELECT statements and returns the response in HTTP JSON format. The query parameter should be URL-encoded.
-* The `/sql?mode=raw` endpoint accepts any SQL query and returns the response in raw format, similar to what you would receive via mysql. The `query` parameter should also be URL-encoded.
-* The `/cli` endpoint accepts any SQL query and returns the response in raw format, similar to what you would receive via mysql. Unlike the `/sql` and `/sql?mode=raw` endpoints, the `query` parameter should not be URL-encoded. This endpoint is intended for manual actions using a browser or command line HTTP clients such as curl. It is not recommended to use the `/cli` endpoint in scripts.
-
+* `/sql` endpoint accepts only SELECT statements and returns the response in HTTP JSON format.
+* The `/sql?mode=raw` endpoint accepts any SQL query and returns the response in raw format, similar to what you would receive via mysql.
+* The `/cli` endpoint accepts any SQL query and returns the response in raw format, similar to what you would receive via mysql. Unlike the `/sql` and `/sql?mode=raw` endpoints, the `query` parameter must not be URL-encoded. This endpoint is intended for manual actions using a browser or command line HTTP clients such as curl. It is not recommended to use the `/cli` endpoint in scripts.
 
 ### /sql
 
 <!-- example SQL_over_HTTP -->
 
-`/sql` accepts an **SQL [SELECT](../Searching/Full_text_matching/Basic_usage.md#SQL) query** via HTTP JSON interface.
+General syntax:
+* `curl "localhost:6780/sql[?mode=raw]&query={URL_ENCODED_QUERY}"`
+* `curl localhost:6780/sql[?mode=raw] -d "[query={URL_ENCODED_QUERY}|{NOT_URL_ENCODED_QUERY}]"`
 
-Query payload **must** be URL encoded, otherwise query statements with `=` (filtering or setting options) will result in an error.
+The `/sql` endpoint accepts an SQL query via the HTTP JSON interface:
+* Without `mode=raw`- only [SELECTs](../Searching/Full_text_matching/Basic_usage.md#SQL) are allowed, returning the response in JSON format.
+* With [mode=raw](../Connecting_to_the_server/HTTP.md#mode=raw) - any SQL query is permitted, returning the response in raw format.
 
-It returns a JSON response which contains hits information and execution time. The response has the same format as [json/search](../Searching/Full_text_matching/Basic_usage.md#HTTP-JSON) endpoint. Note, that `/sql` endpoint supports only single search requests. If you are looking for processing a multi-query see below.
+The endpoint can handle HTTP requests using either the GET or the POST method. For sending queries, you can:
+1. **Using GET:** Include the query in the `query` parameter of the URL, like `/sql?query=your_encoded_query_here`. It's **important to URL encode** this parameter to avoid errors, especially if the query includes an `=` sign, which might be interpreted as part of the URL syntax rather than the query.
+2. **Using POST:** You can also send the query within the body of a POST request. When using this method:
+   - If you send the query as a parameter named `query`, **ensure it is URL encoded**.
+   - If you send the query directly as plain text (a raw POST body), **do not URL encode it**. This is useful when the query is long or complex, or if the query is stored in a file and you want to send it as is by pointing your HTTP client (e.g., `curl`) to it.
 
-<!-- request HTTP -->
+This approach keeps the usage of GET and POST distinct and avoids any confusion about combining methods in a single request.
+
+Without `mode=raw` the response is a JSON containing information about the hits and the execution time. The response format is the same as the [json/search](../Searching/Full_text_matching/Basic_usage.md#HTTP-JSON) endpoint. Note that the `/sql` endpoint only supports single search requests. For processing a multi-query, see the section below about the [raw mode](../Connecting_to_the_server/HTTP.md#mode=raw).
+
+<!-- request POST -->
 ```bash
-POST /sql -d "query=select%20id%2Csubject%2Cauthor_id%20%20from%20forum%20where%20match%28%27%40subject%20php%20manticore%27%29%20group%20by%20author_id%20order%20by%20id%20desc%20limit%200%2C5"
+POST /sql
+select id,subject,author_id  from forum where match('@subject php manticore') group by author_id order by id desc limit 0,5
 ```
 
-<!-- response HTTP -->
+<!-- response POST -->
 ```json
 {
   "took": 0,
@@ -91,7 +103,7 @@ POST /sql -d "query=select%20id%2Csubject%2Cauthor_id%20%20from%20forum%20where%
     "total_relation": "eq",
     "hits": [
       {
-        "_id": "2",
+        "_id": 2,
         "_score": 2356,
         "_source": {
           "subject": "php manticore",
@@ -99,7 +111,77 @@ POST /sql -d "query=select%20id%2Csubject%2Cauthor_id%20%20from%20forum%20where%
         }
       },
       {
-        "_id": "1",
+        "_id": 1,
+        "_score": 2356,
+        "_source": {
+          "subject": "php manticore",
+          "author_id": 11
+        }
+      }
+    ]
+  }
+}
+```
+
+<!-- request POST URL-encoded -->
+```bash
+POST /sql query=select%20id%2Csubject%2Cauthor_id%20%20from%20forum%20where%20match%28%27%40subject%20php%20manticore%27%29%20group%20by%20author_id%20order%20by%20id%20desc%20limit%200%2C5
+```
+
+<!-- response POST URL-encoded -->
+```json
+{
+  "took": 0,
+  "timed_out": false,
+  "hits": {
+    "total": 2,
+    "total_relation": "eq",
+    "hits": [
+      {
+        "_id": 2,
+        "_score": 2356,
+        "_source": {
+          "subject": "php manticore",
+          "author_id": 12
+        }
+      },
+      {
+        "_id": 1,
+        "_score": 2356,
+        "_source": {
+          "subject": "php manticore",
+          "author_id": 11
+        }
+      }
+    ]
+  }
+}
+```
+
+<!-- request GET URL-encoded -->
+```bash
+GET /sql?query=select%20id%2Csubject%2Cauthor_id%20%20from%20forum%20where%20match%28%27%40subject%20php%20manticore%27%29%20group%20by%20author_id%20order%20by%20id%20desc%20limit%200%2C5
+```
+
+<!-- response GET URL-encoded -->
+```json
+{
+  "took": 0,
+  "timed_out": false,
+  "hits": {
+    "total": 2,
+    "total_relation": "eq",
+    "hits": [
+      {
+        "_id": 2,
+        "_score": 2356,
+        "_source": {
+          "subject": "php manticore",
+          "author_id": 12
+        }
+      },
+      {
+        "_id": 1,
         "_score": 2356,
         "_source": {
           "subject": "php manticore",
@@ -113,17 +195,19 @@ POST /sql -d "query=select%20id%2Csubject%2Cauthor_id%20%20from%20forum%20where%
 
 <!-- end -->
 
-<!-- example SQL_over_HTTP_2 -->
-### /sql?mode=raw
+#### mode=raw
 
-`/sql` endpoint also has a special mode **"raw"**, which allows to send **any valid sphinxql queries including multi-queries**. The returned value is a json array of one or more result sets.
+<!-- example mode=raw -->
 
-<!-- request HTTP -->
+The `/sql` endpoint also includes a special "raw" mode, which allows you to send **any valid SQL queries, including multi-queries**. The response is a JSON array containing one or more result sets. You can activate this mode by using the option `mode=raw`.
+
+<!-- request POST -->
 ```bash
-POST /sql?mode=raw -d "query=desc%20test"
+POST /sql?mode=raw
+desc test
 ```
 
-<!-- response HTTP -->
+<!-- response POST -->
 ```json
 [
   {
@@ -182,20 +266,236 @@ POST /sql?mode=raw -d "query=desc%20test"
   }
 ]
 ```
-<!-- end -->
 
-<!-- example SQL_over_HTTP_4 -->
-### /cli
-While the `/sql` endpoint is useful to control Manticore programmatically from your application, there's also endpoint `/cli` which makes it easier to maintain a Manticore instance via curl or your browser manually. It accepts POST and GET HTTP methods. Everything after `/cli?` is taken by Manticore as is, even if you don't escape it manually via curl or let the browser encode it automatically. The `+` sign is not decoded to a space as well, eliminating the necessity of encoding it. The response format is tabular, similar to the one returned by  MySQL console.
-
-
-<!-- request HTTP -->
-
+<!-- request POST URL-encoded -->
 ```bash
-POST /cli -d "desc test"
+POST /sql?mode=raw
+query=desc%20test
 ```
 
-<!-- response HTTP -->
+<!-- response POST URL-encoded -->
+```json
+[
+  {
+    "columns": [
+      {
+        "Field": {
+          "type": "string"
+        }
+      },
+      {
+        "Type": {
+          "type": "string"
+        }
+      },
+      {
+        "Properties": {
+          "type": "string"
+        }
+      }
+    ],
+    "data": [
+      {
+        "Field": "id",
+        "Type": "bigint",
+        "Properties": ""
+      },
+      {
+        "Field": "title",
+        "Type": "text",
+        "Properties": "indexed"
+      },
+      {
+        "Field": "gid",
+        "Type": "uint",
+        "Properties": ""
+      },
+      {
+        "Field": "title",
+        "Type": "string",
+        "Properties": ""
+      },
+      {
+        "Field": "j",
+        "Type": "json",
+        "Properties": ""
+      },
+      {
+        "Field": "new1",
+        "Type": "uint",
+        "Properties": ""
+      }
+    ],
+    "total": 6,
+    "error": "",
+    "warning": ""
+  }
+]
+```
+
+<!-- request POST URL-encoded 2nd way -->
+```bash
+POST /sql
+mode=raw&query=desc%20test
+```
+
+<!-- response POST URL-encoded 2nd way -->
+```json
+[
+  {
+    "columns": [
+      {
+        "Field": {
+          "type": "string"
+        }
+      },
+      {
+        "Type": {
+          "type": "string"
+        }
+      },
+      {
+        "Properties": {
+          "type": "string"
+        }
+      }
+    ],
+    "data": [
+      {
+        "Field": "id",
+        "Type": "bigint",
+        "Properties": ""
+      },
+      {
+        "Field": "title",
+        "Type": "text",
+        "Properties": "indexed"
+      },
+      {
+        "Field": "gid",
+        "Type": "uint",
+        "Properties": ""
+      },
+      {
+        "Field": "title",
+        "Type": "string",
+        "Properties": ""
+      },
+      {
+        "Field": "j",
+        "Type": "json",
+        "Properties": ""
+      },
+      {
+        "Field": "new1",
+        "Type": "uint",
+        "Properties": ""
+      }
+    ],
+    "total": 6,
+    "error": "",
+    "warning": ""
+  }
+]
+```
+
+<!-- request GET URL-encoded -->
+```bash
+GET /sql?mode=raw&query=desc%20test
+```
+
+<!-- response GET URL-encoded -->
+```json
+[
+  {
+    "columns": [
+      {
+        "Field": {
+          "type": "string"
+        }
+      },
+      {
+        "Type": {
+          "type": "string"
+        }
+      },
+      {
+        "Properties": {
+          "type": "string"
+        }
+      }
+    ],
+    "data": [
+      {
+        "Field": "id",
+        "Type": "bigint",
+        "Properties": ""
+      },
+      {
+        "Field": "title",
+        "Type": "text",
+        "Properties": "indexed"
+      },
+      {
+        "Field": "gid",
+        "Type": "uint",
+        "Properties": ""
+      },
+      {
+        "Field": "title",
+        "Type": "string",
+        "Properties": ""
+      },
+      {
+        "Field": "j",
+        "Type": "json",
+        "Properties": ""
+      },
+      {
+        "Field": "new1",
+        "Type": "uint",
+        "Properties": ""
+      }
+    ],
+    "total": 6,
+    "error": "",
+    "warning": ""
+  }
+]
+```
+
+<!-- request curl examples -->
+```bash
+# POST:
+curl localhost:9308/sql?mode=raw -d 'SHOW TABLES'
+
+# POST, URL-encoded:
+curl localhost:9308/sql?mode=raw -d 'query=SHOW%20TABLES'
+
+# POST, URL-encoded, 2nd way:
+curl localhost:9308/sql -d 'mode=raw&query=SHOW%20TABLES'
+
+# POST, URL-non-encoded:
+curl localhost:9308/sql -d 'mode=raw&query=SHOW TABLES'
+```
+
+<!-- end -->
+
+
+### /cli
+
+<!-- example cli -->
+
+While the `/sql` endpoint is useful for controlling Manticore programmatically from your application, there's also the `/cli` endpoint. This makes it easier to **manually maintain a Manticore instance** using curl or your browser. It accepts both POST and GET HTTP methods. Everything inputted after `/cli?` is understood by Manticore, even if it's not manually escaped with curl or automatically encoded by the browser. No `query` parameter is required. Importantly, the `+` sign is not changed to a space, eliminating the need for encoding it. For the POST method, Manticore accepts everything exactly as it is, without any changes. The response is in tabular format, similar to an SQL result set you might see in a MySQL client.
+
+<!-- request POST -->
+
+```bash
+POST /cli
+desc test
+```
+
+<!-- response POST -->
 
 ```bash
 +-------+--------+----------------+
@@ -208,27 +508,168 @@ POST /cli -d "desc test"
 3 rows in set (0.001 sec)
 ```
 
+<!-- request GET -->
+
+```bash
+GET /cli?desc%20test
+```
+
+<!-- response GET -->
+
+```bash
++-------+--------+----------------+
+| Field | Type   | Properties     |
++-------+--------+----------------+
+| id    | bigint |                |
+| body  | text   | indexed stored |
+| title | string |                |
++-------+--------+----------------+
+3 rows in set (0.001 sec)
+```
 
 <!-- request Browser -->
 
 ![using /cli in browser](cli_browser.png)
 
-<!-- end -->
-
-<!-- example SQL_over_HTTP_cli_json -->
-
-### /cli_json
-
-The `/cli_json` endpoint provides the same functionality as `/cli` , but returns the response in JSON format. 
-
-
-<!-- request HTTP -->
+<!-- request curl example -->
 
 ```bash
-POST /cli_json -d "desc test"
+curl 0:9308/cli -d 'desc test'
 ```
 
-<!-- response HTTP -->
+<!-- response curl example -->
+
+```sql
++-------+--------+----------------+
+| Field | Type   | Properties     |
++-------+--------+----------------+
+| id    | bigint |                |
+| title | text   | indexed stored |
++-------+--------+----------------+
+2 rows in set (0.001 sec)
+```
+
+<!-- end -->
+
+### /cli_json
+<!-- example cli_json -->
+The `/cli_json` endpoint provides the same functionality as `/cli`, but the response format is JSON. It includes:
+- `columns` section describing the schema.
+- `data` section with the actual data.
+- Summary section with "total", "error", and "warning".
+
+<!-- request POST -->
+
+```bash
+POST /cli_json
+desc test
+```
+
+<!-- response POST -->
+
+```json
+[
+   {
+      "columns":[
+         {
+            "Field":{
+               "type":"string"
+            }
+         },
+         {
+            "Type":{
+               "type":"string"
+            }
+         },
+         {
+            "Properties":{
+               "type":"string"
+            }
+         }
+      ],
+      "data":[
+         {
+            "Field":"id",
+            "Type":"bigint",
+            "Properties":""
+         },
+         {
+            "Field":"body",
+            "Type":"text",
+            "Properties":"indexed stored"
+         },
+         {
+            "Field":"title",
+            "Type":"string",
+            "Properties":""
+         }
+      ],
+      "total":3,
+      "error":"",
+      "warning":""
+   }
+]
+```
+
+<!-- request GET -->
+
+```bash
+GET /cli_json?desc%20test
+```
+
+<!-- response GET -->
+
+```json
+[
+   {
+      "columns":[
+         {
+            "Field":{
+               "type":"string"
+            }
+         },
+         {
+            "Type":{
+               "type":"string"
+            }
+         },
+         {
+            "Properties":{
+               "type":"string"
+            }
+         }
+      ],
+      "data":[
+         {
+            "Field":"id",
+            "Type":"bigint",
+            "Properties":""
+         },
+         {
+            "Field":"body",
+            "Type":"text",
+            "Properties":"indexed stored"
+         },
+         {
+            "Field":"title",
+            "Type":"string",
+            "Properties":""
+         }
+      ],
+      "total":3,
+      "error":"",
+      "warning":""
+   }
+]
+```
+
+<!-- request curl example -->
+
+```bash
+curl 0:9308/cli_json -d 'desc test'
+```
+
+<!-- response curl example -->
 
 ```json
 [{
@@ -246,8 +687,9 @@ POST /cli_json -d "desc test"
 
 <!-- end -->
 
-
 ### Keep-alive
 
-HTTP keep-alive is also supported, which makes working via the HTTP JSON interface stateful as long as the client supports keep-alive too. For example, using the new [/cli](../Connecting_to_the_server/HTTP.md#/cli) endpoint you can call `SHOW META` after `SELECT` and it will work the same way it works via mysql.
+HTTP keep-alive is supported (except for the `/cli` endpoint), which allows for stateful interactions via the HTTP JSON interface as long as the client also supports keep-alive. For instance, using the [/cli_json](../Connecting_to_the_server/HTTP.md#/cli_json) endpoint, you can execute `SHOW META` after a `SELECT` command, and it will function similarly to interactions with Manticore through a MySQL client.
+
+
 <!-- proofread -->

@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2017-2023, Manticore Software LTD (https://manticoresearch.com)
+// Copyright (c) 2017-2024, Manticore Software LTD (https://manticoresearch.com)
 // Copyright (c) 2001-2016, Andrew Aksyonoff
 // Copyright (c) 2008-2016, Sphinx Technologies Inc
 // All rights reserved
@@ -163,6 +163,8 @@ CSphString		GetPathOnly ( const CSphString & sFullPath );
 const char *	GetExtension ( const CSphString & sFullPath );
 
 CSphString		RealPath ( const CSphString& sPath );
+bool			IsSymlink ( const CSphString & sFile );
+bool			ResolveSymlink ( const CSphString & sFile, CSphString & sResult );
 
 class CSphWriter;
 void			SeekAndPutOffset ( CSphWriter & tWriter, SphOffset_t tOffset, SphOffset_t tValue );
@@ -407,7 +409,7 @@ public:
 	#endif
 								;
 
-		auto uPageSize = getpagesize ();
+		auto uPageSize = GetMemPageSize ();
 		auto uSize = this->GetLengthBytes();
 		auto uPages = ( uSize+uPageSize-1 ) / uPageSize;
 		CSphFixedVector<PAGETYPE> dMap ( uPages );

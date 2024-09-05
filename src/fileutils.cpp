@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2017-2023, Manticore Software LTD (https://manticoresearch.com)
+// Copyright (c) 2017-2024, Manticore Software LTD (https://manticoresearch.com)
 // Copyright (c) 2001-2016, Andrew Aksyonoff
 // Copyright (c) 2008-2016, Sphinx Technologies Inc
 // All rights reserved
@@ -140,27 +140,26 @@ void sphLockUn ( int iFile )
 }
 #endif
 
-bool RawFileLock ( const CSphString& sFile, int& iLockFD, CSphString& sError )
+bool RawFileLock ( const CSphString & sFile, int & iLockFD, CSphString & sError )
 {
-	if ( iLockFD < 0 )
+	if ( iLockFD<0 )
 	{
-		iLockFD = ::open ( sFile.cstr(), SPH_O_NEW, 0644 );
-		if ( iLockFD < 0 )
+		iLockFD = ::open ( sFile.cstr (), SPH_O_NEW, 0644 );
+		if ( iLockFD<0 )
 		{
-			sError.SetSprintf ( "failed to open %s: %s", sFile.cstr(), strerrorm ( errno ) );
-			sphLogDebug ( "failed to open %s: %s", sFile.cstr(), strerrorm ( errno ) );
+			sError.SetSprintf ( "failed to open '%s': %u '%s'", sFile.cstr (), errno, strerrorm ( errno ) );
+			sphLogDebug ( "failed to open '%s': %u '%s'", sFile.cstr (), errno, strerrorm ( errno ) );
 			return false;
 		}
 	}
 
 	if ( !sphLockEx ( iLockFD, false ) )
 	{
-		sError.SetSprintf ( "failed to lock %s: %s", sFile.cstr(), strerrorm ( errno ) );
-		::close ( iLockFD );
-		iLockFD = -1;
+		sError.SetSprintf ( "failed to lock '%s': %u '%s'", sFile.cstr (), errno, strerrorm ( errno ) );
+		SafeClose ( iLockFD );
 		return false;
 	}
-	sphLogDebug ( "lock %s success", sFile.cstr() );
+	sphLogDebug ( "lock %s success", sFile.cstr () );
 	return true;
 }
 
@@ -170,9 +169,8 @@ void RawFileUnLock ( const CSphString& sFile, int& iLockFD )
 		return;
 	sphLogDebug ( "File ID ok, closing lock FD %d, unlinking %s", iLockFD, sFile.cstr() );
 	sphLockUn ( iLockFD );
-	::close ( iLockFD );
+	SafeClose ( iLockFD );
 	::unlink ( sFile.cstr() );
-	iLockFD = -1;
 }
 
 //////////////////////////////////////////////////////////////////////////
@@ -871,6 +869,72 @@ CSphString RealPath ( const CSphString& sPath )
 #endif
 
 	return sPath;
+}
+
+
+bool IsSymlink ( const CSphString & sFile )
+{
+#if _WIN32
+	DWORD uAttrs = GetFileAttributes ( sFile.cstr() );
+	if ( uAttrs==INVALID_FILE_ATTRIBUTES )
+		return false;
+
+	if ( !( uAttrs & FILE_ATTRIBUTE_REPARSE_POINT ) )
+		return false;
+
+	WIN32_FIND_DATA tFindData;
+	HANDLE hFind = FindFirstFile ( sFile.cstr(), &tFindData );
+	if ( hFind==INVALID_HANDLE_VALUE )
+		return false;
+
+	bool bSymlink = tFindData.dwReserved0==IO_REPARSE_TAG_SYMLINK;
+	FindClose(hFind);
+
+	return bSymlink;
+#else
+	struct_stat tStat = {0};
+
+	if ( lstat ( sFile.cstr(), &tStat ) )
+		return false;	// not found
+
+	return S_ISLNK(tStat.st_mode);
+#endif
+}
+
+
+bool ResolveSymlink ( const CSphString & sFile, CSphString & sResult )
+{
+	sResult = sFile;
+
+#if _WIN32
+	HANDLE hFile = CreateFile ( sFile.cstr(), 0, 0, nullptr, OPEN_EXISTING, FILE_FLAG_BACKUP_SEMANTICS, nullptr );
+	if ( hFile==INVALID_HANDLE_VALUE )
+		return false;
+
+	CHAR szTargetPath[MAX_PATH];
+	DWORD uBytesRead = GetFinalPathNameByHandle ( hFile, szTargetPath, MAX_PATH, FILE_NAME_NORMALIZED );
+	if ( uBytesRead )
+	{
+		sResult.SetBinary ( szTargetPath, uBytesRead );
+		if ( sResult.Begins ( R"(\\?\)" ) )
+			sResult = sResult.SubString ( 4, sResult.Length()-4 );
+
+		return true;
+	}
+
+	CloseHandle(hFile);
+	return false;
+#else
+	char szPath[PATH_MAX];
+	ssize_t tLen = ::readlink ( sFile.cstr(), szPath, sizeof(szPath)-1 );
+	if ( tLen!=-1 )
+	{
+		sResult = CSphString ( szPath, tLen );
+		return true;
+	}
+
+	return false;
+#endif
 }
 
 

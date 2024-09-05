@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2019-2023, Manticore Software LTD (https://manticoresearch.com)
+// Copyright (c) 2019-2024, Manticore Software LTD (https://manticoresearch.com)
 // Copyright (c) 2001-2016, Andrew Aksyonoff
 // Copyright (c) 2008-2016, Sphinx Technologies Inc
 // All rights reserved
@@ -55,7 +55,7 @@ bool CommitMonitor_c::CommitNonEmptyCmds ( RtIndex_i * pIndex, const Replication
 	if ( !bOnlyTruncate )
 		return pIndex->Commit ( m_pDeletedCount, &m_tAcc, &sError );
 
-	if ( !pIndex->Truncate ( sError ))
+	if ( !pIndex->Truncate ( sError, RtIndex_i::TRUNCATE ))
 		return false;
 
 	if ( !tCmd.m_tReconfigure )
@@ -75,7 +75,11 @@ bool CommitMonitor_c::CommitTOI()
 	{
 	case ReplCmd_e::CLUSTER_ALTER_ADD:
 	case ReplCmd_e::CLUSTER_ALTER_DROP:
-		return SetIndexClusterTOI ( &tCmd );
+	{
+		bool bOk = SetIndexesClusterTOI ( &tCmd );
+		sphLogDebugRpl ( "CommitTOI %s for '%s'; %s", ( bOk ? "finished" : "failed" ), tCmd.m_sCluster.cstr(), ( bOk ? "" : TlsMsg::szError() ) );
+		return bOk;
+	}
 	default:
 		return TlsMsg::Err ( "unknown command '%d'", (int) tCmd.m_eCommand );
 	}

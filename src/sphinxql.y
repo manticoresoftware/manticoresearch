@@ -22,6 +22,7 @@
 %token	TOK_CONST_FLOAT 261 "float"
 %token	TOK_CONST_MVA 262	// not a real token, only placeholder
 %token	TOK_QUOTED_STRING 263 "string"
+%token	TOK_NULL 473 "null"
 %token	TOK_USERVAR "@uservar"
 %token	TOK_SYSVAR "@@sysvar"
 %token	TOK_CONST_STRINGS 269	// not a real token, only placeholder
@@ -52,6 +53,9 @@
 %token	TOK_COUNT
 %token	TOK_CREATE
 %token	TOK_DATABASES
+%token	TOK_DAY
+%token	TOK_DATE_ADD
+%token	TOK_DATE_SUB
 %token	TOK_DELETE
 %token	TOK_DESC
 %token	TOK_DESCRIBE
@@ -80,18 +84,23 @@
 %token	TOK_HINT_NO_COLUMNAR
 %token	TOK_HINT_OPEN
 %token	TOK_HOSTNAMES
+%token	TOK_HOUR
 %token	TOK_IGNORE
 %token	TOK_IN
 %token	TOK_INDEX
 %token	TOK_INDEXES
 %token	TOK_INDEXOF
+%token	TOK_INNER
 %token	TOK_INSERT
 %token	TOK_INT
+%token	TOK_INTERVAL
 %token	TOK_INTEGER
 %token	TOK_INTO
 %token	TOK_IS
+%token	TOK_JOIN
 %token	TOK_KILL
 %token	TOK_KNN
+%token	TOK_LEFT
 %token	TOK_LIKE
 %token	TOK_LIMIT
 %token	TOK_LOGS
@@ -99,19 +108,22 @@
 %token	TOK_MAX
 %token	TOK_META
 %token	TOK_MIN
+%token	TOK_MINUTE
 %token	TOK_MOD
+%token	TOK_MONTH
 %token	TOK_MULTI
 %token	TOK_MULTI64
 %token	TOK_NAMES
 %token	TOK_NOT
-%token	TOK_NULL
 %token	TOK_OFFSET
+%token	TOK_ON
 %token	TOK_OPTION
 %token	TOK_ORDER
 %token	TOK_OPTIMIZE
 %token	TOK_PLAN
 %token	TOK_PLUGINS
 %token	TOK_PROFILE
+%token	TOK_QUARTER
 %token	TOK_QUERY
 %token	TOK_RAND
 %token	TOK_REBUILD
@@ -120,6 +132,7 @@
 %token	TOK_REPLACE
 %token	TOK_REMAP
 %token	TOK_ROLLBACK
+%token	TOK_SECOND
 %token	TOK_SECONDARY
 %token	TOK_SELECT
 %token	TOK_SET
@@ -143,9 +156,11 @@
 %token	TOK_VALUES
 %token	TOK_VARIABLES
 %token	TOK_WARNINGS
+%token	TOK_WEEK
 %token	TOK_WEIGHT
 %token	TOK_WHERE
 %token	TOK_WITHIN
+%token	TOK_YEAR
 
 %token	TOK_LTE "<="
 %token	TOK_GTE ">="
@@ -257,6 +272,8 @@ reserved_no_option:
 	| TOK_SUM | TOK_TABLE | TOK_TABLES | TOK_THREADS | TOK_TO
 	| TOK_UNFREEZE | TOK_UPDATE | TOK_VALUES | TOK_VARIABLES
 	| TOK_WARNINGS | TOK_WEIGHT | TOK_WHERE | TOK_WITHIN | TOK_KILL | TOK_QUERY
+	| TOK_INTERVAL | TOK_REGEX
+	| TOK_DATE_ADD | TOK_DATE_SUB | TOK_DAY | TOK_HOUR | TOK_MINUTE | TOK_MONTH | TOK_QUARTER | TOK_SECOND | TOK_WEEK | TOK_YEAR
 	;
 
 reserved_set_tail:
@@ -556,6 +573,7 @@ opt_outer_limit:
 select_from:
 	TOK_SELECT select_items_list
 	TOK_FROM from_target { pParser->m_pStmt->m_eStmt = STMT_SELECT; } // set stmt here to check the option below
+	opt_join_clause
 	opt_where_clause
 	opt_group_clause
 	opt_group_order_clause
@@ -582,6 +600,16 @@ opt_alias:
 	| opt_as identcol						{ pParser->AliasLastItem ( &$2 ); }
 	;
 
+distinct_joined_col:
+	TOK_SUBKEY
+	| distinct_joined_col TOK_SUBKEY	{ $$ = $1; $$.m_iEnd = $2.m_iEnd; }
+	;
+
+distinct_ident:
+	identcol
+	| identcol distinct_joined_col		{ $$ = $1; $$.m_iEnd = $2.m_iEnd; }
+	;
+
 select_expr:
 	expr								{ pParser->AddItem ( &$1 ); }
 	| sysvar							{ pParser->AddItem ( &$1 ); }
@@ -592,7 +620,7 @@ select_expr:
 	| TOK_GROUP_CONCAT '(' expr ')'		{ pParser->AddItem ( &$3, SPH_AGGR_CAT, &$1, &$4 ); }
 	| TOK_COUNT '(' '*' ')'				{ if ( !pParser->AddItem ( "count(*)", &$1, &$4 ) ) YYERROR; }
 	| TOK_GROUPBY '(' ')'				{ if ( !pParser->AddItem ( "groupby()", &$1, &$3 ) ) YYERROR; }
-	| TOK_COUNT '(' TOK_DISTINCT identcol')' 	{ if ( !pParser->AddDistinct ( &$4, &$1, &$5 ) ) YYERROR; }
+	| TOK_COUNT '(' TOK_DISTINCT distinct_ident ')' { if ( !pParser->AddDistinct ( &$4, &$1, &$5 ) ) YYERROR; }
 	;
 
 opt_where_clause:
@@ -608,6 +636,10 @@ where_expr:
 	where_item
 	| filter_expr
 	| where_item TOK_AND filter_expr
+	| where_item TOK_AND where_item
+	| where_item TOK_AND filter_expr TOK_AND where_item
+	| where_item TOK_AND where_item TOK_AND filter_expr
+	| filter_expr TOK_AND where_item TOK_AND where_item
     | filter_expr TOK_AND where_item
 	| filter_expr TOK_AND where_item TOK_AND filter_expr	{ pParser->FilterAnd ( $$, $1, $5 ); }
 	;
@@ -618,17 +650,73 @@ where_item:
 			if ( !pParser->SetMatch($3) )
 				YYERROR;
 		}
+	| TOK_MATCH '(' TOK_QUOTED_STRING ',' idxname ')'
+		{
+			if ( !pParser->AddMatch($3,$5) )
+				YYERROR;
+		}
 	| '(' TOK_MATCH '(' TOK_QUOTED_STRING ')' ')'
 		{
 			if ( !pParser->SetMatch($4) )
 				YYERROR;
 		}
+	| '(' TOK_MATCH '(' TOK_QUOTED_STRING  ',' idxname ')' ')'
+		{
+			if ( !pParser->AddMatch($4,$6) )
+				YYERROR;
+		}
+	;
+
+opt_join_clause:
+	// empty
+	| join_clause
+	;
+
+join_type:
+	// empty
+	| TOK_INNER	{ pParser->SetJoinType ( JoinType_e::INNER ); }
+	| TOK_LEFT	{ pParser->SetJoinType ( JoinType_e::LEFT ); }
+	;
+
+join_clause:
+	join_type TOK_JOIN idxname TOK_ON on_clause
+		{
+			if ( !pParser->SetJoin($3) )
+				YYERROR;
+		}
+	;
+
+on_clause_attr:
+	TOK_SUBKEY
+	| on_clause_attr TOK_SUBKEY			{ $$ = $1; $$.m_iEnd = $2.m_iEnd; }
+	;
+
+on_clause_type_cast:
+	TOK_INT			{ pParser->SetJoinOnCast(SPH_ATTR_INTEGER); }
+	| TOK_FLOAT		{ pParser->SetJoinOnCast(SPH_ATTR_FLOAT); }
+	| TOK_STRING	{ pParser->SetJoinOnCast(SPH_ATTR_STRING); }
+	;
+
+on_clause_equality:
+    idxname on_clause_attr '=' idxname on_clause_attr								{ pParser->AddOnFilter ( $1, $2, $4, $5, -1 ); }
+	| on_clause_type_cast '(' idxname on_clause_attr ')' '=' idxname on_clause_attr	{ pParser->AddOnFilter ( $3, $4, $7, $8, 0 ); }
+	| idxname on_clause_attr '=' on_clause_type_cast '(' idxname on_clause_attr	')' { pParser->AddOnFilter ( $1, $2, $6, $7, 1 ); }
+	;
+
+on_clause:
+	on_clause_equality
+	| on_clause TOK_AND on_clause
 	;
 
 knn_item:
 	TOK_KNN '(' ident ',' const_int ',' '(' const_list ')' ')'
 		{
-			if ( !pParser->SetKNN ( $3, $5, $8 ) )
+			if ( !pParser->SetKNN ( $3, $5, $8, nullptr ) )
+				YYERROR;
+		}
+	| TOK_KNN '(' ident ',' const_int ',' '(' const_list ')' ',' const_int ')'
+		{
+			if ( !pParser->SetKNN ( $3, $5, $8, &$11 ) )
 				YYERROR;
 		}
 	;
@@ -794,6 +882,26 @@ filter_item:
 	| expr_ident TOK_NE TOK_QUOTED_STRING
 		{
 			if ( !pParser->AddStringFilter ( $1, $3, true ) )
+				YYERROR;
+		}
+	| expr_ident '>' TOK_QUOTED_STRING
+		{
+			if ( !pParser->AddStringCmpFilter ( $1, $3, false, EStrCmpDir::GT ) )
+				YYERROR;
+		}
+	| expr_ident '<' TOK_QUOTED_STRING
+		{
+			if ( !pParser->AddStringCmpFilter ( $1, $3, false, EStrCmpDir::LT ) )
+				YYERROR;
+		}
+	| expr_ident TOK_GTE TOK_QUOTED_STRING
+		{
+			if ( !pParser->AddStringCmpFilter ( $1, $3, true, EStrCmpDir::LT ) )
+				YYERROR;
+		}
+	| expr_ident TOK_LTE TOK_QUOTED_STRING
+		{
+			if ( !pParser->AddStringCmpFilter ( $1, $3, true, EStrCmpDir::GT ) )
 				YYERROR;
 		}
 	| expr_ident TOK_IS TOK_NULL
@@ -1163,8 +1271,8 @@ hint_list:
 	;
 
 hint_attr_list:
-	ident
-	| hint_attr_list ',' ident {TRACK_BOUNDS ( $$, $1, $3 );}
+	json_field
+	| hint_attr_list ',' json_field {TRACK_BOUNDS ( $$, $1, $3 );}
 	;
 
 hint_item:           
@@ -1194,6 +1302,16 @@ hint_item:
 		}
 	;
 
+time_unit:
+	TOK_SECOND
+	| TOK_MINUTE
+	| TOK_HOUR
+	| TOK_DAY
+	| TOK_WEEK
+	| TOK_MONTH
+	| TOK_QUARTER
+	| TOK_YEAR
+	;
 
 //////////////////////////////////////////////////////////////////////////
 
@@ -1232,14 +1350,27 @@ expr:
 	| json_field TOK_IS TOK_NOT TOK_NULL	{ TRACK_BOUNDS ( $$, $1, $4 ); }
 	;
 
+accepted_funcs:
+	TOK_INTEGER
+	| TOK_BIGINT
+	| TOK_FLOAT
+	| TOK_DOUBLE
+	| TOK_REGEX
+	| TOK_IN
+	| TOK_INTERVAL
+	| TOK_SECOND
+	| TOK_MINUTE
+	| TOK_HOUR
+	| TOK_DAY
+	| TOK_WEEK
+	| TOK_MONTH
+	| TOK_QUARTER
+	| TOK_YEAR
+	;
+
 function:
 	TOK_IDENT '(' arglist ')'		{ TRACK_BOUNDS ( $$, $1, $4 ); }
-	| TOK_IN '(' arglist ')'		{ TRACK_BOUNDS ( $$, $1, $4 ); } // handle exception from 'ident' rule
 	| json_field TOK_IN '(' arglist ')' { TRACK_BOUNDS ( $$, $1, $5 ); } // handle exception from 'ident' rule
-	| TOK_INTEGER '(' arglist ')'	{ TRACK_BOUNDS ( $$, $1, $4 ); }
-	| TOK_BIGINT '(' arglist ')'	{ TRACK_BOUNDS ( $$, $1, $4 ); }
-	| TOK_FLOAT '(' arglist ')'		{ TRACK_BOUNDS ( $$, $1, $4 ); }
-	| TOK_DOUBLE '(' arglist ')'	{ TRACK_BOUNDS ( $$, $1, $4 ); }
 	| TOK_IDENT '(' ')'				{ TRACK_BOUNDS ( $$, $1, $3 ); }
 	| TOK_QUERY '(' ')'				{ TRACK_BOUNDS ( $$, $1, $3 ); }
 	| TOK_MIN '(' expr ',' expr ')'	{ TRACK_BOUNDS ( $$, $1, $6 ); } // handle clash with aggregate functions
@@ -1248,8 +1379,10 @@ function:
 	| json_aggr '(' expr TOK_FOR identcol TOK_IN json_field ')' { TRACK_BOUNDS ( $$, $1, $8 ); }
 	| TOK_REMAP '(' expr ',' expr ',' '(' arglist ')' ',' '(' arglist ')' ')' { TRACK_BOUNDS ( $$, $1, $14 ); }
 	| TOK_RAND '(' ')'				{ TRACK_BOUNDS ( $$, $1, $3 ); }
-	| TOK_RAND '(' arglist ')'		{ TRACK_BOUNDS ( $$, $1, $4 ); }
-	| TOK_REGEX '(' arglist ')'		{ TRACK_BOUNDS ( $$, $1, $4 ); }
+	| TOK_RAND '(' arglist ')' 		{ TRACK_BOUNDS ( $$, $1, $4 ); }
+	| TOK_DATE_ADD '(' expr ',' TOK_INTERVAL expr time_unit ')' { TRACK_BOUNDS ( $$, $1, $8 ); }
+	| TOK_DATE_SUB '(' expr ',' TOK_INTERVAL expr time_unit ')' { TRACK_BOUNDS ( $$, $1, $8 ); }
+	| accepted_funcs '(' arglist ')' { TRACK_BOUNDS ( $$, $1, $4 ); }
 	;
 
 arglist:
@@ -1712,6 +1845,16 @@ subkey:
 streq:
 	expr '=' strval				{ TRACK_BOUNDS ( $$, $1, $3 ); }
 	| strval '=' expr			{ TRACK_BOUNDS ( $$, $1, $3 ); }
+	| expr TOK_NE strval			{ TRACK_BOUNDS ( $$, $1, $3 ); }
+	| strval TOK_NE expr			{ TRACK_BOUNDS ( $$, $1, $3 ); }
+	| expr '<' strval			{ TRACK_BOUNDS ( $$, $1, $3 ); }
+	| strval '<' expr			{ TRACK_BOUNDS ( $$, $1, $3 ); }
+	| expr '>' strval			{ TRACK_BOUNDS ( $$, $1, $3 ); }
+	| strval '>' expr			{ TRACK_BOUNDS ( $$, $1, $3 ); }
+	| expr TOK_LTE strval		{ TRACK_BOUNDS ( $$, $1, $3 ); }
+	| strval TOK_LTE expr		{ TRACK_BOUNDS ( $$, $1, $3 ); }
+	| expr TOK_GTE strval		{ TRACK_BOUNDS ( $$, $1, $3 ); }
+	| strval TOK_GTE expr		{ TRACK_BOUNDS ( $$, $1, $3 ); }
 	;
 
 strval:
@@ -1760,13 +1903,7 @@ facet_items_list:
 facet_stmt:
 	TOK_FACET facet_items_list opt_facet_by_items_list opt_distinct_item opt_order_clause opt_limit_clause
 		{
-			pParser->m_pStmt->m_eStmt = STMT_FACET;
-			if ( pParser->m_pQuery->m_sFacetBy.IsEmpty() )
-			{
-				pParser->m_pQuery->m_sFacetBy = pParser->m_pQuery->m_sGroupBy;
-				pParser->AddCount ();
-			}
-			if ( !pParser->MaybeAddFacetDistinct() )
+			if ( !pParser->SetupFacetStmt() )
 				YYERROR;
 		}
 	;

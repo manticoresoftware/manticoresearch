@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2017-2023, Manticore Software LTD (https://manticoresearch.com)
+// Copyright (c) 2017-2024, Manticore Software LTD (https://manticoresearch.com)
 // All rights reserved
 //
 // This program is free software; you can redistribute it and/or modify
@@ -172,22 +172,24 @@ protected:
 class BlobRowBuilder_File_c : public BlobRowBuilder_Base_c
 {
 public:
-							BlobRowBuilder_File_c ( const ISphSchema & tSchema, SphOffset_t tSpaceForUpdates, bool bJsonPacked );
+				BlobRowBuilder_File_c ( const ISphSchema & tSchema, SphOffset_t tSpaceForUpdates, bool bJsonPacked, int iBufferSize );
 
-	bool					Setup ( const CSphString & sFile, CSphString & sError );
+	bool		Setup ( const CSphString & sFile, CSphString & sError );
 
-	SphOffset_t				Flush() override;
-	SphOffset_t				Flush ( const BYTE * pOldRow ) override;
-	bool					Done ( CSphString & sError ) override;
+	std::pair<SphOffset_t,SphOffset_t> Flush() override;
+	std::pair<SphOffset_t,SphOffset_t> Flush ( const BYTE * pOldRow ) override;
+	bool		Done ( CSphString & sError ) override;
 
 private:
-	CSphWriter				m_tWriter;
-	SphOffset_t				m_tSpaceForUpdates {0};
+	CSphWriter	m_tWriter;
+	SphOffset_t	m_tSpaceForUpdates = 0;
+	int			m_iBufferSize = 0;
 };
 
 
-BlobRowBuilder_File_c::BlobRowBuilder_File_c ( const ISphSchema & tSchema, SphOffset_t tSpaceForUpdates, bool bJsonPacked )
+BlobRowBuilder_File_c::BlobRowBuilder_File_c ( const ISphSchema & tSchema, SphOffset_t tSpaceForUpdates, bool bJsonPacked, int iBufferSize )
 	: m_tSpaceForUpdates ( tSpaceForUpdates )
+	, m_iBufferSize ( iBufferSize )
 {
 	for ( int i = 0; i < tSchema.GetAttrsCount(); i++ )
 	{
@@ -226,6 +228,8 @@ BlobRowBuilder_File_c::BlobRowBuilder_File_c ( const ISphSchema & tSchema, SphOf
 
 bool BlobRowBuilder_File_c::Setup ( const CSphString & sFile, CSphString & sError )
 {
+	m_tWriter.SetBufferSize ( m_iBufferSize );
+
 	if ( !m_tWriter.OpenFile ( sFile, sError ) )
 		return false;
 
@@ -236,7 +240,7 @@ bool BlobRowBuilder_File_c::Setup ( const CSphString & sFile, CSphString & sErro
 }
 
 
-SphOffset_t BlobRowBuilder_File_c::Flush()
+std::pair<SphOffset_t,SphOffset_t> BlobRowBuilder_File_c::Flush()
 {
 	SphOffset_t tRowOffset = m_tWriter.GetPos();
 
@@ -273,17 +277,17 @@ SphOffset_t BlobRowBuilder_File_c::Flush()
 	for ( const auto & i : m_dAttrs )
 		m_tWriter.PutBytes ( i->GetData().Begin(), i->GetData().GetLength() );
 
-	return tRowOffset;
+	return { tRowOffset, m_tWriter.GetPos()-tRowOffset };
 }
 
 
-SphOffset_t BlobRowBuilder_File_c::Flush ( const BYTE * pOldRow )
+std::pair<SphOffset_t,SphOffset_t> BlobRowBuilder_File_c::Flush ( const BYTE * pOldRow )
 {
 	assert ( pOldRow );
 	SphOffset_t tRowOffset = m_tWriter.GetPos();
 	m_tWriter.PutBytes ( pOldRow, sphGetBlobTotalLen ( pOldRow, m_dAttrs.GetLength() ) );
 
-	return tRowOffset;
+	return { tRowOffset, m_tWriter.GetPos()-tRowOffset };
 }
 
 
@@ -311,9 +315,9 @@ public:
 							BlobRowBuilder_Mem_c ( CSphTightVector<BYTE> & dPool );
 							BlobRowBuilder_Mem_c ( const ISphSchema & tSchema, CSphTightVector<BYTE> & dPool );
 
-	SphOffset_t				Flush() override;
-	SphOffset_t				Flush ( const BYTE * pOldRow ) override;
-	bool					Done ( CSphString & /*sError*/ ) override { return true; }
+	std::pair<SphOffset_t,SphOffset_t> Flush() override;
+	std::pair<SphOffset_t,SphOffset_t> Flush ( const BYTE * pOldRow ) override  { assert (0); return {0,0}; }
+	bool					Done ( CSphString & /*sError*/ ) override			{ return true; }
 
 protected:
 	CSphTightVector<BYTE> & m_dPool;
@@ -357,7 +361,7 @@ BlobRowBuilder_Mem_c::BlobRowBuilder_Mem_c ( const ISphSchema & tSchema, CSphTig
 }
 
 
-SphOffset_t BlobRowBuilder_Mem_c::Flush()
+std::pair<SphOffset_t,SphOffset_t> BlobRowBuilder_Mem_c::Flush()
 {
 	SphOffset_t tRowOffset = m_dPool.GetLength();
 
@@ -400,16 +404,8 @@ SphOffset_t BlobRowBuilder_Mem_c::Flush()
 		memcpy ( pPtr, i->GetData().Begin(), iLen );
 	}
 
-	return tRowOffset;
+	return { tRowOffset, m_dPool.GetLength()-tRowOffset };
 }
-
-
-SphOffset_t BlobRowBuilder_Mem_c::Flush ( const BYTE * pOldRow )
-{
-	assert ( 0 );
-	return 0;
-}
-
 
 //////////////////////////////////////////////////////////////////////////
 
@@ -478,9 +474,9 @@ BlobRowBuilder_MemUpdate_c::BlobRowBuilder_MemUpdate_c ( const ISphSchema & tSch
 
 //////////////////////////////////////////////////////////////////////////
 
-std::unique_ptr<BlobRowBuilder_i> sphCreateBlobRowBuilder ( const ISphSchema & tSchema, const CSphString & sFile, SphOffset_t tSpaceForUpdates, CSphString & sError )
+std::unique_ptr<BlobRowBuilder_i> sphCreateBlobRowBuilder ( const ISphSchema & tSchema, const CSphString & sFile, SphOffset_t tSpaceForUpdates, int iBufferSize, CSphString & sError )
 {
-	auto pBuilder = std::make_unique<BlobRowBuilder_File_c> ( tSchema, tSpaceForUpdates, false );
+	auto pBuilder = std::make_unique<BlobRowBuilder_File_c> ( tSchema, tSpaceForUpdates, false, iBufferSize );
 	if ( !pBuilder->Setup ( sFile, sError ) )
 		pBuilder = nullptr;
 
@@ -488,9 +484,9 @@ std::unique_ptr<BlobRowBuilder_i> sphCreateBlobRowBuilder ( const ISphSchema & t
 }
 
 
-std::unique_ptr<BlobRowBuilder_i> sphCreateBlobRowJsonBuilder ( const ISphSchema & tSchema, const CSphString & sFile, SphOffset_t tSpaceForUpdates, CSphString & sError )
+std::unique_ptr<BlobRowBuilder_i> sphCreateBlobRowJsonBuilder ( const ISphSchema & tSchema, const CSphString & sFile, SphOffset_t tSpaceForUpdates, int iBufferSize, CSphString & sError )
 {
-	auto pBuilder = std::make_unique<BlobRowBuilder_File_c> ( tSchema, tSpaceForUpdates, true );
+	auto pBuilder = std::make_unique<BlobRowBuilder_File_c> ( tSchema, tSpaceForUpdates, true, iBufferSize );
 	if ( !pBuilder->Setup ( sFile, sError ) )
 		pBuilder = nullptr;
 
@@ -576,6 +572,12 @@ static ByteBlob_t GetBlobAttr ( const BYTE * pRow, int iBlobAttrId, int nBlobAtt
 
 	assert ( 0 && "Unknown blob row type" );
 	return { nullptr, 0 };
+}
+
+
+ByteBlob_t sphGetBlobAttr ( const BYTE * pBlobRow, const CSphAttrLocator & tLocator )
+{
+	return GetBlobAttr ( pBlobRow, tLocator.m_iBlobAttrId, tLocator.m_nBlobAttrs );
 }
 
 
@@ -920,6 +922,14 @@ const char * sphGetBlobLocatorName()
 	return BLOB_LOCATOR_ATTR;
 }
 
+
+const char * GetNullMaskAttrName()
+{
+	static const char * szNullMaskAttrName = "$_null_mask";
+	return szNullMaskAttrName;
+}
+
+
 static const CSphString g_sDocidName { "id" };
 
 const char * sphGetDocidName()
@@ -1087,7 +1097,7 @@ static void FloatVec2Str ( const float * pFloatVec, int iLengthBytes, StringBuil
 
 bool sphIsInternalAttr ( const CSphString & sAttrName )
 {
-	return sAttrName==sphGetBlobLocatorName();
+	return sAttrName==sphGetBlobLocatorName() || sAttrName==GetNullMaskAttrName();
 }
 
 

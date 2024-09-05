@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2021-2023, Manticore Software LTD (https://manticoresearch.com)
+// Copyright (c) 2021-2024, Manticore Software LTD (https://manticoresearch.com)
 // All rights reserved
 //
 // This program is free software; you can redistribute it and/or modify
@@ -169,6 +169,8 @@ struct MiniTaskInfo_t : public TaskInfo_t
 	void RenderWithoutChain ( PublicThreadDesc_t& dDst );
 
 	int64_t m_tmStart = sphMicroTimer ();
+	int64_t m_tmLastJobStartTimeUS = -1;
+	int64_t m_tmLastJobDoneTimeUS = -1;
 	const char *	m_szCommand = nullptr; // is always mt-safe since always set static const
 	hazard::ScopedPtr_t<const CSphString *> m_pHazardDescription;
 	int				m_iDescriptionLen = 0;	// len of string in m_pHazardDescription
@@ -218,6 +220,7 @@ namespace myinfo {
 
 	// set MiniTaskInfo_t::m_sCommand
 	void SetCommand ( const char * szCommand );
+	void SetCommandDone ();
 
 	// set MiniTaskInfo_t::m_pHazardDescription. and refresh timer
 	// iLen used to select retire policy (lazy, or immediate retire)

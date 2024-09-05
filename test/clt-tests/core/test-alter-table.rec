@@ -1,0 +1,40 @@
+––– input –––
+rm -rf /var/lib/manticore
+––– output –––
+––– input –––
+mkdir /tmp/test-alter/
+––– output –––
+––– input –––
+ln -s /tmp/test-alter/ /var/lib/manticore
+––– output –––
+––– input –––
+echo "a > b" > /tmp/test-alter/wordforms1.txt; echo "c > d" > /tmp/test-alter/exc.txt; echo "abcstop" > /tmp/test-alter/stop.txt
+––– output –––
+––– input –––
+ls -1 /var/lib/manticore/
+––– output –––
+exc.txt
+stop.txt
+wordforms1.txt
+––– block: ../base/start-searchd –––
+––– input –––
+mysql -h0 -P9306 -e "CREATE TABLE test3 (title TEXT, tag INTEGER) exceptions='/var/lib/manticore/exc.txt' wordforms='/var/lib/manticore/wordforms1.txt' stopwords='/var/lib/manticore/stop.txt';"
+––– output –––
+––– input –––
+mysql -h0 -P9306 -e "SHOW TABLE test3 SETTINGS\G"
+––– output –––
+*************************** 1. row ***************************
+Variable_name: settings
+Value: exceptions = /tmp/test-alter/test3/exceptions_chunk0_0.txt
+stopwords = /tmp/test-alter/test3/stopwords_chunk0_0.txt
+wordforms = /tmp/test-alter/test3/wordforms_chunk0_0.txt
+––– input –––
+mysql -h0 -P9306 -e "ALTER TABLE test3 exceptions = ''"
+––– output –––
+––– input –––
+mysql -h0 -P9306 -e "SHOW TABLE test3 SETTINGS\G"
+––– output –––
+*************************** 1. row ***************************
+Variable_name: settings
+Value: stopwords = /tmp/test-alter/test3/stopwords_chunk0_0.txt
+wordforms = /tmp/test-alter/test3/wordforms_chunk0_0.txt

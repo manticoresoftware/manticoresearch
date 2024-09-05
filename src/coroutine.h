@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2017-2023, Manticore Software LTD (https://manticoresearch.com)
+// Copyright (c) 2017-2024, Manticore Software LTD (https://manticoresearch.com)
 // All rights reserved
 //
 // This program is free software; you can redistribute it and/or modify
@@ -253,7 +253,8 @@ void SetDefaultThrottlingPeriodMS ( int tmPeriodMs );
 // -1 means 'use value of tmThrotleTimeQuantumMs'
 // 0 means 'don't throttle'
 // any other positive expresses throttling interval in milliseconds
-void SetThrottlingPeriod ( int tmPeriodMs = -1 );
+void SetThrottlingPeriodMS ( int tmPeriodMs = -1 );
+void SetThrottlingPeriodUS ( int64_t tmPeriodUs );
 int64_t GetThrottlingPeriodUS();
 
 // check if we run > ThrottleQuantum since last resume, or since timer restart

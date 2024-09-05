@@ -46,6 +46,15 @@ index test
 	source	= test
 	path	= <data_path/>/test
 }
+
+index rt1
+{
+	type = rt
+	path			= <data_path/>/rt1
+	rt_mem_limit = 128M
+    rt_field = title
+    rt_attr_timestamp = tid
+}
 </config>
 
 <queries>
@@ -67,16 +76,16 @@ index test
 	select tm, yearmonthday(tm) d from idx_bigint where match('aaaa') group by d WITHIN GROUP order by id desc order by id desc;
     
 	<!-- BIGINT() for time functions -->
-	SELECT year(22496904880);
+	SELECT year(4594967295);
 	<!-- check BIGINT for day, month, year, yearmonth(), yearmonthday() and crash on localtime overflow -->
-	select id, 22496904880 + (id*500000000) as a, yearmonthday(a), yearmonth(a), year(a), month(a), day(a) from test;
+	select id, 4594967295 + (id*400000000) as a, yearmonthday(a), yearmonth(a), year(a), month(a), day(a) from test;
 
     <!-- date_format-->
-	SELECT date_format(22496904880, '%m');
+	SELECT date_format(4594967295, '%m');
 	select id, 1096904880 + id * 1000 as a, date_format(a, '%m and year of %Y') from test;
 
-	SELECT bigint(date_format(22496904880, '%m'));
-	SELECT sint(date_format(22496904880, '%m'));
+	SELECT bigint(date_format(4594967295, '%m'));
+	SELECT sint(date_format(4594967295, '%m'));
 
 	<!-- implicit conversion -->
 	select timediff(908, 0);
@@ -98,6 +107,13 @@ index test
     <!-- all other date conversions support for JSON and STRING attributes -->
     SELECT id, j.jdata, s, day(j.jdata) jd, day(s) sd, month(j.jdata) jm, month(s) sm, year(j.jdata) jy, year(s) sy, yearmonth(j.jdata) as jym, yearmonth(s) as sym, yearmonthday(j.jdata) as jymd, yearmonthday(s) as symd from test order by id asc;
 	</sphinxql>
+    
+    <sphinxql>
+	set global grouping_in_utc=0;
+	set global timezone=UTC;
+    INSERT into rt1 (id, tid) values (1, 1568577600), (2, '2019-10'),(3, '2019-10-15T20:00');
+    SELECT id, tid, date_format(tid, '%Y-%m-%dT%H:%M') as d from rt1 order by id asc;
+    </sphinxql>
     
 </queries>
 
@@ -121,8 +137,8 @@ CREATE TABLE test_table
 );
 </db_create>
 
-<db_insert>
-	<repeat count="24" vars="stamp" init="22500115200">
+<db_insert>								  
+	<repeat count="24" vars="stamp" init="5594967295">
 		<var name="vals"/>
 		<repeat count="89" vars="stamp" inc="3600"><var name="vals" delimiter=",">(0,<stamp/>,'aaaa')</var></repeat>
 		INSERT INTO test_table_bigint VALUES <vals/><db_insert/></repeat>

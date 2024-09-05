@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2021-2023, Manticore Software LTD (https://manticoresearch.com)
+// Copyright (c) 2021-2024, Manticore Software LTD (https://manticoresearch.com)
 // Copyright (c) 2001-2016, Andrew Aksyonoff
 // Copyright (c) 2008-2016, Sphinx Technologies Inc
 // All rights reserved
@@ -67,7 +67,7 @@ void SqlSecondParser_c::SetStatement ( const SqlNode_t & tName, SqlSet_e eSet, c
 // unused parameter, simply to avoid type clash between all my yylex() functions
 #define YY_DECL inline int flex_secondparser ( YYSTYPE* lvalp, void* yyscanner, SqlSecondParser_c* pParser )
 
-#include "flexsphinxqlsecond.c"
+#include "flexsphinxql_second.c"
 
 static void yyerror ( SqlParserTraits_c* pParser, const char* szMessage )
 {

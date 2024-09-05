@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2017-2023, Manticore Software LTD (https://manticoresearch.com)
+// Copyright (c) 2017-2024, Manticore Software LTD (https://manticoresearch.com)
 // Copyright (c) 2001-2016, Andrew Aksyonoff
 // Copyright (c) 2008-2016, Sphinx Technologies Inc
 // All rights reserved
@@ -1202,6 +1202,7 @@ static std::unique_ptr<CSphIndex> CreateIndex ( CSphConfig & hConf, CSphString s
 
 static void PreallocIndex ( const char * szIndex, bool bStripPath, CSphIndex * pIndex )
 {
+	SetIndexFilenameBuilder ( CreateFilenameBuilder );
 	std::unique_ptr<FilenameBuilder_i> pFilenameBuilder = CreateFilenameBuilder ( szIndex );
 	StrVec_t dWarnings;
 	if ( !pIndex->Prealloc ( bStripPath, pFilenameBuilder.get(), dWarnings ) )
@@ -1593,7 +1594,7 @@ int main ( int argc, char ** argv )
 			fprintf ( stdout, "checking table '%s'...\n", sIndex.cstr() );
 			{
 			std::unique_ptr<DebugCheckError_i> pReporter { MakeDebugCheckError ( stdout, ( g_eCommand == IndextoolCmd_e::CHECK ? nullptr : &iExtractDocid ) ) };
-				iCheckErrno = pIndex->DebugCheck ( *pReporter );
+				iCheckErrno = pIndex->DebugCheck ( *pReporter, nullptr );
 			}
 			if ( iCheckErrno )
 				return iCheckErrno;
@@ -1648,6 +1649,7 @@ int main ( int argc, char ** argv )
 			sphDie ( "INTERNAL ERROR: unhandled command (id=%d)", (int)g_eCommand );
 	}
 
+	pIndex = nullptr; // need to reset index prior to release of the libraries
 	ShutdownColumnar();
 	ShutdownSecondary();
 	ShutdownKNN();

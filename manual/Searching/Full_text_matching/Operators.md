@@ -6,19 +6,23 @@ The query string can include specific operators that define the conditions for h
 
 #### AND operator
 
-An implicit `AND` operator is always present, so "hello world" implies that both "hello" and "world" must be found in the matching document.
+An implicit logical AND operator is always present, so "hello world" implies that both "hello" and "world" must be found in the matching document.
 
 ```sql
 hello  world
 ```
 
+Note: There is no explicit `AND` operator.
+
 #### OR operator
 
-The `OR` operator has a higher precedence than AND, so `looking for cat | dog | mouse` means `looking for (cat | dog | mouse)` rather than `(looking for cat) | dog | mouse`.
+The logical OR operator `|` has a higher precedence than AND, so `looking for cat | dog | mouse` means `looking for (cat | dog | mouse)` rather than `(looking for cat) | dog | mouse`.
 
 ```sql
 hello | world
 ```
+
+Note: There is no operator `OR`. Please use `|` instead.
 
 ### MAYBE operator
 
@@ -168,7 +172,7 @@ Requires the [min_infix_len](../../Creating_a_table/NLP_and_tokenization/Wildcar
 Similarly to the [wildcard operators](../../Searching/Full_text_matching/Operators.md#Wildcard-operators), the REGEX operator attempts to find all tokens matching the provided pattern, and each expansion is recorded as a matched hit. Note, this can have a significant impact on query search time, as the entire dictionary is scanned, and every term in the dictionary undergoes matching with the REGEX pattern.
 
 The patterns should adhere to the [RE2 syntax](https://github.com/google/re2/wiki/Syntax). The REGEX expression delimiter is the first symbol after the open bracket. In other words, all text between the open bracket followed by the delimiter and the delimiter and the closed bracket is considered as a RE2 expression.
-Please note that the terms stored in the dictionary undergo `charset_table` transformation, meaning that for example, REGEX may not be able to match uppercase characters if all characters are lowercased according to the `charset_table` (which happens by default).
+Please note that the terms stored in the dictionary undergo `charset_table` transformation, meaning that for example, REGEX may not be able to match uppercase characters if all characters are lowercased according to the `charset_table` (which happens by default). To successfully match a term using a REGEX expression, the pattern must correspond to the entire token. To achieve partial matching, place `.*` at the beginning and/or end of your pattern.
 
 ```sql
 REGEX(/.{3}t/)
@@ -189,7 +193,7 @@ Field-start and field-end keyword modifiers ensure that a keyword only matches i
 boosted^1.234 boostedfieldend$^1.234
 ```
 
-The boost modifier raises the word IDF score by the indicated factor in ranking scores that incorporate IDF into their calculations. It does not impact the matching process in any manner.
+The boost modifier raises the word [IDF](../../Searching/Options.md#idf)_score by the indicated factor in ranking scores that incorporate IDF into their calculations. It does not impact the matching process in any manner.
 
 ### NEAR operator
 

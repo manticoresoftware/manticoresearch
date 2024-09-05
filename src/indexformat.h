@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2017-2023, Manticore Software LTD (https://manticoresearch.com)
+// Copyright (c) 2017-2024, Manticore Software LTD (https://manticoresearch.com)
 // Copyright (c) 2001-2016, Andrew Aksyonoff
 // Copyright (c) 2008-2016, Sphinx Technologies Inc
 // All rights reserved
@@ -18,6 +18,7 @@
 #include "fileutils.h"
 #include "indexing_sources/source_stats.h"
 #include "dict/dict_entry.h"
+#include "dict/infix/infix_builder.h"
 
 const int	DOCLIST_HINT_THRESH = 256;
 const DWORD HITLESS_DOC_MASK = 0x7FFFFFFF;
@@ -73,7 +74,7 @@ struct CSphWordlistCheckpoint
 	union
 	{
 		SphWordID_t		m_uWordID;
-		const char *	m_sWord;
+		const char *	m_szWord;
 	};
 	SphOffset_t			m_iWordlistOffset;
 };
@@ -147,12 +148,12 @@ public:
 	void			Reset ( const BYTE * pBuf );
 	bool			UnpackWord();
 
-	const char *	GetWord() const			{ return (const char*)m_sWord; }
+	const char *	GetWord() const			{ return (const char*)m_sWord.data(); }
 	int				GetWordLen() const		{ return m_iLen; }
 
 private:
 	const BYTE *	m_pBuf;
-	BYTE			m_sWord [ MAX_KEYWORD_BYTES ];
+	std::array<BYTE, MAX_KEYWORD_BYTES>	m_sWord;
 	int				m_iLen;
 	BYTE			m_uHint = 0;
 	int				m_iSkiplistBlockSize = 0;
@@ -181,6 +182,7 @@ struct WriteHeader_t
 	DictRefPtr_c				m_pDict;
 	const ISphFieldFilter *		m_pFieldFilter;
 	const int64_t *				m_pFieldLens;
+	const SIContainer_c *		m_pSI = nullptr;
 };
 
 void IndexWriteHeader ( const BuildHeader_t & tBuildHeader, const WriteHeader_t & tWriteHeader, JsonEscapedBuilder& sJson, bool bForceWordDict, bool SkipEmbeddDict=false );

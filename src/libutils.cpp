@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2017-2023, Manticore Software LTD (https://manticoresearch.com)
+// Copyright (c) 2017-2024, Manticore Software LTD (https://manticoresearch.com)
 // Copyright (c) 2001-2016, Andrew Aksyonoff
 // Copyright (c) 2008-2016, Sphinx Technologies Inc
 // All rights reserved
@@ -12,6 +12,8 @@
 
 #include "libutils.h"
 #include "fileutils.h"
+
+#include <optional>
 
 #if _WIN32
 void * dlsym ( void * lib, const char * name )
@@ -44,18 +46,31 @@ const char * dlerror()
 
 #endif // _WIN32
 
-CSphString TryDifferentPaths ( const CSphString & sLibfile, const CSphString & sFullpath )
+std::optional<CSphString> TryPath ( const CSphString& sFullpath, int iVersion )
 {
+	// first try versioned variant. So, that non-versioned libs from 'ancient age' doesn't suppress new one one
+	auto sVersionedFullPath = SphSprintf ( "%s.%i", sFullpath.cstr(), iVersion );
+	if ( sphFileExists ( sVersionedFullPath.cstr() ) )
+		return sVersionedFullPath;
+
 	if ( sphFileExists ( sFullpath.cstr() ) )
 		return sFullpath;
+
+	return std::nullopt;
+}
+
+CSphString TryDifferentPaths ( const CSphString & sLibfile, const CSphString & sFullpath, int iVersion )
+{
+	auto sAnyPath = TryPath ( sFullpath, iVersion );
+	if ( sAnyPath )
+		return sAnyPath.value();
 
 #if _WIN32
 	CSphString sPathToExe = GetPathOnly ( GetExecutablePath() );
 	CSphString sPath;
 	sPath.SetSprintf ( "%s%s", sPathToExe.cstr(), sLibfile.cstr() );
-	if ( sphFileExists ( sPath.cstr() ) )
-		return sPath;
+	sAnyPath = TryPath ( sPath, iVersion );
 #endif
 
-	return "";
+	return sAnyPath.value_or("");
 }

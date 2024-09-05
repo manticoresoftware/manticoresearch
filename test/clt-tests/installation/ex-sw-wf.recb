@@ -1,0 +1,39 @@
+––– input –––
+echo "a => b" > /var/lib/manticore/wordforms1.txt; echo "c => d" > /var/lib/manticore/exc.txt; echo "abcstop" > /var/lib/manticore/stop.txt
+––– output –––
+––– input –––
+mysql -h0 -P9306 -e "CREATE TABLE table1 (title TEXT, tag INTEGER) exceptions='/var/lib/manticore/exc.txt' wordforms='/var/lib/manticore/wordforms1.txt' stopwords='/var/lib/manticore/stop.txt';"
+––– output –––
+––– input –––
+mysql -h0 -P9306 -e "INSERT INTO table1 (id, title, tag) values (1, 'zxczxc', 77); FLUSH RAMCHUNK table1;"
+––– output –––
+––– input –––
+mysql -h0 -P9306 -e "INSERT INTO table1 (id, title, tag) values (2, 'srthh', 88); FLUSH RAMCHUNK table1;"
+––– output –––
+––– input –––
+mysql -h0 -P9306 -e "INSERT INTO table1 (id, title, tag) values (3, 'srthgrth', 99); FLUSH RAMCHUNK table1;"
+––– output –––
+––– input –––
+mysql -h0 -P9306 -e "SHOW TABLES; SELECT * FROM table1; SHOW CREATE TABLE table1;"
+––– output –––
+ +--------+------+
+| Index  | Type |
++--------+------+
+| table1 | rt   |
++--------+------+
++------+----------+------+
+| id   | title    | tag  |
++------+----------+------+
+|    2 | srthh    |   88 |
+|    1 | zxczxc   |   77 |
+|    3 | srthgrth |   99 |
++------+----------+------+
++--------+---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
+| Table  | Create Table                                                                                                                                                                                                  |
++--------+---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
+| table1 | CREATE TABLE table1 (
+id bigint,
+title text,
+tag integer
+) exceptions='/var/lib/manticore/table1/exc.txt' stopwords='/var/lib/manticore/table1/stop.txt' wordforms='/var/lib/manticore/table1/wordforms1.txt' |
++--------+---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+

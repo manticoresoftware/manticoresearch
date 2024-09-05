@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2019-2023, Manticore Software LTD (https://manticoresearch.com)
+// Copyright (c) 2019-2024, Manticore Software LTD (https://manticoresearch.com)
 // All rights reserved
 //
 // This program is free software; you can redistribute it and/or modify
@@ -32,6 +32,8 @@ enum class E_CLUSTER : WORD
 	GET_NODES			= 6,
 	UPDATE_NODES		= 7,
 	INDEX_ADD_DIST		= 8,
+	GET_NODE_STATE		= 9,
+	GET_NODE_VER		= 10,
 };
 
 inline constexpr const char* szClusterCmd ( E_CLUSTER eCmd )
@@ -46,6 +48,8 @@ inline constexpr const char* szClusterCmd ( E_CLUSTER eCmd )
 	case E_CLUSTER::GET_NODES: return "get_nodes";
 	case E_CLUSTER::UPDATE_NODES: return "update_nodes";
 	case E_CLUSTER::INDEX_ADD_DIST: return "index_add_distributed";
+	case E_CLUSTER::GET_NODE_STATE: return "get_node_state";
+	case E_CLUSTER::GET_NODE_VER: return "get_node_ver";
 	default: return "unknown";
 	}
 }
@@ -198,3 +202,5 @@ int ReplicationRetryDelay ();
 int ReplicationTimeoutAnyNode ();
 int ReplicationFileRetryCount ();
 int ReplicationFileRetryDelay ();
+void ReportClusterError ( const CSphString& sCluster, const CSphString& sError, const char* szClient, E_CLUSTER eCmd );
+

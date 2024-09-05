@@ -490,6 +490,41 @@ index test_vec
 
 <query endpoint="json/search">{ "index": "test_vec", "query": { "match_all": {} } }, "sort": ["id"] }</query>
 
+<query endpoint="insert">
+{
+	"index":"test_rt",
+	"id":10001,
+	"doc":
+	{
+		"price": null
+	}
+}
+</query>
+
+<query endpoint="update">
+{
+	"index":"test_rt",
+	"id":10001,
+	"doc":
+	{
+		"price": null
+	}
+}
+</query>
+
+<!-- case insert unsigned int into bigint -->
+<query endpoint="insert">
+{
+	"index":"test_rt",
+	"id":10010,
+	"doc":
+	{
+		"bint_col" : 9223372036854775807
+	}
+}
+</query>
+<query endpoint="search">{ "index": "test_rt", "_source": { "includes": [ "id", "bint_col" ] }, "query": { "equals": { "id": 10010 } }, "sort": ["id"] }</query>
+
 </httpqueries>
 
 </test>

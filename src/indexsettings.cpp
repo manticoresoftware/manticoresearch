@@ -328,7 +328,7 @@ void CSphTokenizerSettings::Setup ( const CSphConfigSection & hIndex, CSphString
 			sWarning = "ngram_chars specified, but ngram_len=0; IGNORED";
 	}
 
-	m_sCaseFolding = hIndex.GetStr ( "charset_table", "non_cjk" );
+	m_sCaseFolding = hIndex.GetStr ( "charset_table", "non_cont" );
 	m_iMinWordLen = Max ( hIndex.GetInt ( "min_word_len", 1 ), 1 );
 	m_sNgramChars = hIndex.GetStr ( "ngram_chars" );
 	m_sSynonymsFile = hIndex.GetStr ( "exceptions" ); // new option name
@@ -423,7 +423,7 @@ void CSphTokenizerSettings::Format ( SettingsFormatter_c & tOut, FilenameBuilder
 	tOut.Add ( "charset_type",		bKnownTokenizer ? "utf-8" : "unknown tokenizer (deprecated sbcs?)", !bKnownTokenizer );
 
 	// fixme! need unified default charset handling
-	tOut.Add ( "charset_table",		m_sCaseFolding,	!m_sCaseFolding.IsEmpty() && m_sCaseFolding!="non_cjk" );
+	tOut.Add ( "charset_table",		m_sCaseFolding,	!m_sCaseFolding.IsEmpty() && m_sCaseFolding!="non_cont" );
 	tOut.Add ( "min_word_len",		m_iMinWordLen,	m_iMinWordLen>1 );
 	tOut.Add ( "ngram_len",			m_iNgramLen,	m_iNgramLen && !m_sNgramChars.IsEmpty() );
 	tOut.Add ( "ngram_chars",		m_sNgramChars,	m_iNgramLen && !m_sNgramChars.IsEmpty() );
@@ -1562,7 +1562,7 @@ const CSphConfigSection & IndexSettingsContainer_c::AsCfg() const
 // TODO: read defaults from file or predefined templates
 static std::pair<const char* , const char *> g_dIndexSettingsDefaults[] =
 {
-	{ "charset_table", "non_cjk" }
+	{ "charset_table", "non_cont" }
 };
 
 void IndexSettingsContainer_c::SetDefaults()

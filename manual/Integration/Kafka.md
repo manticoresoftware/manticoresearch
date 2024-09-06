@@ -251,7 +251,8 @@ SHOW MV view_table
 ### Altering materialized views
 
 You can suspend consumption by altering materialized views.
-If you remove the `source` and do not delete the MV, it will automatically suspend until you recreate the source with the same name.
+
+If you remove the `source` and do not delete the MV, it will automatically suspend. After recreation of the related source, you should unsuspend MV manually the `ALTER` command
 
 Currently, only altering materalized views is supported. To change `source` parameters, you should drop it and recreate it.
 

@@ -47,11 +47,12 @@ public:
 			// Event
 			perfetto::protos::gen::TrackEventConfig tTrackEventCfg;
 			tTrackEventCfg.add_disabled_categories ( "*" );
-			tTrackEventCfg.add_enabled_categories ( "rt" );
-			tTrackEventCfg.add_enabled_categories ( "network" );
-			tTrackEventCfg.add_enabled_categories ( "conn" );
-			tTrackEventCfg.add_enabled_categories ( "wait" );
-			tTrackEventCfg.add_enabled_categories ( "mem" );
+			tTrackEventCfg.add_enabled_categories ( "*" );
+//			tTrackEventCfg.add_enabled_categories ( "rt" );
+//			tTrackEventCfg.add_enabled_categories ( "network" );
+//			tTrackEventCfg.add_enabled_categories ( "conn" );
+//			tTrackEventCfg.add_enabled_categories ( "wait" );
+//			tTrackEventCfg.add_enabled_categories ( "mem" );
 
 			// Trace
 			perfetto::TraceConfig tTraceCfg;

@@ -66,7 +66,6 @@
 // services
 #include "taskping.h"
 #include "taskmalloctrim.h"
-#include "taskoptimize.h"
 #include "taskglobalidf.h"
 #include "tasksavestate.h"
 #include "taskflushbinlog.h"
@@ -8734,6 +8733,8 @@ void UpdateRequestBuilder_c::BuildRequest ( const AgentConn_t & tAgent, ISphOutp
 static void DoCommandUpdate ( const CSphString & sIndex, const CSphString& sCluster, const char * sDistributed, AttrUpdateSharedPtr_t pUpd,
 	bool bBlobUpdate, int & iSuccesses, int & iUpdated, SearchFailuresLog_c & dFails )
 {
+	TRACE_CORO ( "rt", "DoCommandUpdate" );
+
 	int iUpd = 0;
 	CSphString sWarning;
 	RtAccum_t tAcc;
@@ -13010,6 +13011,8 @@ void SphinxqlRequestBuilder_c::BuildRequest ( const AgentConn_t & tAgent, ISphOu
 
 static void DoExtendedUpdate ( const SqlStmt_t & tStmt, const CSphString & sIndex, const char * szDistributed, bool bBlobUpdate, int & iSuccesses, int & iUpdated, SearchFailuresLog_c & dFails, CSphString & sWarning, const cServedIndexRefPtr_c & pServed )
 {
+	TRACE_CORO ( "rt", "DoExtendedUpdate" );
+
 	TlsMsg::ResetErr();
 	// checks
 	if ( !pServed )
@@ -13062,6 +13065,7 @@ DocsCollector_c InitUpdate( AttrUpdateArgs& tArgs, const cServedIndexRefPtr_c& p
 
 static void DoUpdate( DocsCollector_c& tCollector, AttrUpdateArgs& tArgs, CSphIndex * pIndex )
 {
+	TRACE_CORO ( "rt", "DoUpdate" );
 	AttrUpdateSharedPtr_t& pUpdate = tArgs.m_pUpdate;
 	while ( tCollector.GetValuesChunk ( pUpdate->m_dDocids, tArgs.m_pQuery->m_iMaxMatches ) )
 	{
@@ -13073,16 +13077,22 @@ static void DoUpdate( DocsCollector_c& tCollector, AttrUpdateArgs& tArgs, CSphIn
 
 void UpdateWlocked ( AttrUpdateArgs& tArgs, const cServedIndexRefPtr_c& pDesc, int& iUpdated )
 {
+	TRACE_CORO ( "sph", "UpdateWlocked" );
 	// short-living r-lock m.b. acquired and released by collector when running query
 	auto tCollector = InitUpdate ( tArgs, pDesc );
+	BEGIN_CORO ( "wait", "take w-lock" );
 	WIdx_c wLocked { pDesc }; // exclusive lock for process of update. Note, between collecting and updating m.b. race! To eliminate it, need to trace index generation and recollect if it changed.
+	END_CORO ( "wait" );
 	DoUpdate ( tCollector, tArgs, wLocked );
 }
 
 void UpdateRlocked ( AttrUpdateArgs& tArgs, const cServedIndexRefPtr_c& pDesc, int& iUpdated)
 {
+	TRACE_CORO ( "sph", "UpdateRlocked" );
 	// wide r-lock over whole update. r-locks acquired by collector should be re-enterable.
+	BEGIN_CORO ( "wait", "take r-lock" );
 	RWIdx_c rLocked { pDesc };
+	END_CORO ( "wait" );
 	auto tCollector = InitUpdate ( tArgs, pDesc );
 	DoUpdate ( tCollector, tArgs, rLocked );
 }
@@ -13090,11 +13100,13 @@ void UpdateRlocked ( AttrUpdateArgs& tArgs, const cServedIndexRefPtr_c& pDesc, i
 
 void HandleMySqlExtendedUpdate ( AttrUpdateArgs& tArgs, const cServedIndexRefPtr_c& pDesc, int& iUpdated, bool bNeedWlock )
 {
+	TRACE_CORO ( "sph", "HandleMySqlExtendedUpdate" );
 	return bNeedWlock ? UpdateWlocked ( tArgs, pDesc, iUpdated ) : UpdateRlocked ( tArgs, pDesc, iUpdated );
 }
 
 void sphHandleMysqlUpdate ( StmtErrorReporter_i & tOut, const SqlStmt_t & tStmt, Str_t sQuery )
 {
+	TRACE_CORO ( "sph", "sphHandleMysqlUpdate" );
 	if ( !sphCheckWeCanModify ( tOut ) )
 		return;
 
@@ -14733,6 +14745,21 @@ int GetLogFD ()
 	return g_iLogFile;
 }
 
+bool PollOptimizeRunning ( const CSphString & sIndex )
+{
+	while ( true )
+	{
+		Threads::Coro::SleepMsec ( 500 );
+		auto pTmpIndex = GetServed ( sIndex );
+		if ( !ServedDesc_t::IsMutable ( pTmpIndex ) )
+			return false;
+
+		RIdx_T<RtIndex_i *> pRtIndex { pTmpIndex };
+		if ( !pRtIndex->OptimizesRunning () )
+			return true;
+	}
+}
+
 void HandleMysqlOptimizeManual ( RowBuffer_i & tOut, const DebugCmd::DebugCommand_t & tCmd )
 {
 	if ( !sphCheckWeCanModify ( tOut ) )
@@ -14752,13 +14779,12 @@ void HandleMysqlOptimizeManual ( RowBuffer_i & tOut, const DebugCmd::DebugComman
 	tTask.m_iTo = (int)tCmd.m_iPar2;
 	tTask.m_bByOrder = !tCmd.bOpt ( "byid", session::GetOptimizeById() );
 	tTask.m_iCutoff = (int)tCmd.iOpt("cutoff");
-	tTask.m_sIndex = std::move (sIndex);
 
-	if ( tCmd.bOpt ( "sync" ) )
-		RIdx_T<RtIndex_i*> ( pIndex )->Optimize ( std::move ( tTask ) );
+	RIdx_T<RtIndex_i *> ( pIndex )->StartOptimize ( std::move ( tTask ) );
+	if ( tCmd.bOpt ( "sync" ) && !PollOptimizeRunning ( sIndex ) )
+		tOut.Error ( "RT table went away during waiting" );
 	else
-		RunOptimizeRtIndex ( std::move ( tTask ) );
-	tOut.Ok();
+		tOut.Ok ();
 }
 
 // command 'drop [chunk] X [from] <IDX> [option...]'
@@ -14779,13 +14805,12 @@ void HandleMysqlDropManual ( RowBuffer_i & tOut, const DebugCmd::DebugCommand_t 
 	tTask.m_eVerb = OptimizeTask_t::eDrop;
 	tTask.m_iFrom = (int)tCmd.m_iPar1;
 	tTask.m_bByOrder = !tCmd.bOpt ( "byid", session::GetOptimizeById() );
-	tTask.m_sIndex = std::move ( sIndex );
 
-	if ( tCmd.bOpt ( "sync" ) )
-		RIdx_T<RtIndex_i*> ( pIndex )->Optimize ( std::move ( tTask ) );
+	RIdx_T<RtIndex_i *> ( pIndex )->StartOptimize ( std::move ( tTask ) );
+	if ( tCmd.bOpt ( "sync" ) && !PollOptimizeRunning ( sIndex ) )
+		tOut.Error ( "RT table went away during waiting" );
 	else
-		RunOptimizeRtIndex ( std::move ( tTask ) );
-	tOut.Ok();
+		tOut.Ok ();
 }
 
 void HandleMysqlCompress ( RowBuffer_i & tOut, const DebugCmd::DebugCommand_t & tCmd )
@@ -14805,13 +14830,12 @@ void HandleMysqlCompress ( RowBuffer_i & tOut, const DebugCmd::DebugCommand_t & 
 	tTask.m_eVerb = OptimizeTask_t::eCompress;
 	tTask.m_iFrom = (int) tCmd.m_iPar1;
 	tTask.m_bByOrder = !tCmd.bOpt ( "byid", session::GetOptimizeById() );
-	tTask.m_sIndex = std::move ( sIndex );
 
-	if ( tCmd.bOpt ( "sync" ) )
-		RIdx_T<RtIndex_i*> ( pIndex )->Optimize ( std::move ( tTask ) );
+	RIdx_T<RtIndex_i *> ( pIndex )->StartOptimize ( std::move ( tTask ) );
+	if ( tCmd.bOpt ( "sync" ) && !PollOptimizeRunning ( sIndex ) )
+		tOut.Error ( "RT table went away during waiting" );
 	else
-		RunOptimizeRtIndex ( std::move ( tTask ) );
-	tOut.Ok();
+		tOut.Ok ();
 }
 
 void HandleMysqlDedup ( RowBuffer_i& tOut, const DebugCmd::DebugCommand_t& tCmd )
@@ -14831,7 +14855,6 @@ void HandleMysqlDedup ( RowBuffer_i& tOut, const DebugCmd::DebugCommand_t& tCmd 
 	tTask.m_eVerb = OptimizeTask_t::eDedup;
 	tTask.m_iFrom = (int)tCmd.m_iPar1;
 	tTask.m_bByOrder = !tCmd.bOpt ( "byid", session::GetOptimizeById() );
-	tTask.m_sIndex = std::move ( sIndex );
 
 	RIdx_T<RtIndex_i*> ( pIndex )->Optimize ( std::move ( tTask ) );
 	tOut.Ok();
@@ -14874,13 +14897,12 @@ void HandleMysqlSplit ( RowBuffer_i & tOut, const DebugCmd::DebugCommand_t & tCm
 	tTask.m_iFrom = (int)tCmd.m_iPar1;
 	tTask.m_sUvarFilter = tCmd.m_sParam2;
 	tTask.m_bByOrder = !tCmd.bOpt ( "byid", session::GetOptimizeById() );
-	tTask.m_sIndex = std::move ( sIndex );
 
-	if ( tCmd.bOpt ( "sync" ) )
-		RIdx_T<RtIndex_i*> ( pIndex )->Optimize ( std::move ( tTask ) );
+	RIdx_T<RtIndex_i *> ( pIndex )->StartOptimize ( std::move ( tTask ) );
+	if ( tCmd.bOpt ( "sync" ) && !PollOptimizeRunning ( sIndex ) )
+		tOut.Error ( "RT table went away during waiting" );
 	else
-		RunOptimizeRtIndex ( std::move ( tTask ) );
-	tOut.Ok();
+		tOut.Ok ();
 }
 
 
@@ -15129,6 +15151,16 @@ void HandleCurl ( RowBuffer_i & tOut, const CSphString & sParam )
 	tOut.Eof();
 }
 
+
+void HandlePause ( RowBuffer_i & tOut, const DebugCmd::DebugCommand_t & tCmd )
+{
+	tOut.HeadTuplet ( "command", "result" );
+	auto bPause = tCmd.m_iPar1!=0;
+	PauseAt ( tCmd.m_sParam, bPause );
+	tOut.DataTuplet ( "debug pause ...", bPause ? "Set" : "Unset" );
+	tOut.Eof ();
+}
+
 #if HAVE_MALLOC_STATS
 void HandleMallocStats ( RowBuffer_i & tOut, const CSphString& sParam )
 {
@@ -15260,6 +15292,7 @@ void HandleMysqlDebug ( RowBuffer_i &tOut, const DebugCmd::DebugCommand_t* pComm
 #endif
 	case Cmd_e::TRACE: HandleTrace ( tOut, tCmd );	return;
 	case Cmd_e::CURL: HandleCurl ( tOut, tCmd.m_sParam ); return;
+	case Cmd_e::PAUSE: HandlePause ( tOut, tCmd ); return;
 	default: break;
 	}
 
@@ -15362,13 +15395,12 @@ void HandleMysqlOptimize ( RowBuffer_i & tOut, const SqlStmt_t & tStmt )
 	OptimizeTask_t tTask;
 	tTask.m_eVerb = OptimizeTask_t::eManualOptimize;
 	tTask.m_iCutoff = tStmt.m_tQuery.m_iCutoff<=0 ? 0 : tStmt.m_tQuery.m_iCutoff;
-	tTask.m_sIndex = std::move ( sIndex );
 
-	if ( tStmt.m_tQuery.m_bSync )
-		RIdx_T<RtIndex_i*> ( pIndex )->Optimize ( std::move ( tTask ) );
+	RIdx_T<RtIndex_i *> ( pIndex )->StartOptimize ( std::move ( tTask ) );
+	if ( tStmt.m_tQuery.m_bSync && !PollOptimizeRunning ( sIndex ) )
+		tOut.Error ( "RT table went away during waiting" );
 	else
-		RunOptimizeRtIndex ( std::move ( tTask ) );
-	tOut.Ok();
+		tOut.Ok ();
 }
 
 class ExtraLastInsertID_c final: public ISphExtra
@@ -15828,6 +15860,7 @@ static void AddDiskIndexStatus ( VectorLike & dStatus, const CSphIndex * pIndex,
 		dStatus.MatchTupletf ( "mem_limit", "%l", tStatus.m_iMemLimit );
 		dStatus.MatchTupletf ( "mem_limit_rate", "%0.2F%%", PercentOf ( tStatus.m_fSaveRateLimit, 1.0, 2 ) );
 		dStatus.MatchTupletf ( "ram_bytes_retired", "%l", tStatus.m_iRamRetired );
+		dStatus.MatchTupletf ( "optimizing", "%l", tStatus.m_iOptimizesCount );
 		dStatus.MatchTupletf ( "locked", "%d", tStatus.m_iLockCount );
 	}
 	if ( bPq )
@@ -21486,8 +21519,6 @@ int WINAPI ServiceMain ( int argc, char **argv ) EXCLUDES (MainThread)
 	}
 
 	ServeUserVars ();
-
-	ServeAutoOptimize();
 
 	PrereadIndexes ( bForcedPreread );
 

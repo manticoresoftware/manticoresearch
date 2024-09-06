@@ -1639,7 +1639,7 @@ void PercolateIndex_c::GetStatus ( CSphIndexStatus * pRes ) const
 		ScRL_t rLock { m_tLock };
 		iRamUse = m_hQueries.GetLengthBytes();
 		iRamUse += m_dHitlessWords.GetLengthBytes64() + m_dLoadedQueries.GetLengthBytes64();
-		iRamUse = m_pQueries->GetLengthBytes64 ();
+		iRamUse += m_pQueries->GetLengthBytes64 ();
 		for ( auto & pItem : *m_pQueries )
 		{
 			iMaxStack = Max ( iMaxStack, pItem->m_iStackRequired );

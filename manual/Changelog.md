@@ -7,7 +7,7 @@
 ### Breaking changes
 
 * ⚠️[Issue #2103](https://github.com/manticoresoftware/manticoresearch/issues/2103) Thai chars removed from internal `cjk` charset.
-If you have `cjk,non_cjk` in charset definitions, you should change it to `ckj,thai,non_cjk`, or `cont,non_cjk`, where `cont` is the
+If you have `cjk,non_cjk` in charset definitions, you should change it to `cjk,thai,non_cjk`, or `cont,non_cjk`, where `cont` is the
 new name for all continuous-script languages (that is, cjk + thai). Existing tables may be modified using ['alter table']((Updating_table_schema_and_settings.md#Updating-table-FT-settings-in-RT-mode)).
 
 # Version 6.3.6

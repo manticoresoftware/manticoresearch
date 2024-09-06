@@ -9442,6 +9442,7 @@ void HandleCommandJson ( ISphOutputBuffer & tOut, WORD uVer, InputBuffer_c & tRe
 void StatCountCommand ( SearchdCommand_e eCmd );
 void HandleCommandUserVar ( ISphOutputBuffer & tOut, WORD uVer, InputBuffer_c & tReq );
 void HandleCommandCallPq ( ISphOutputBuffer &tOut, WORD uVer, InputBuffer_c &tReq );
+static void HandleCommandSuggest ( ISphOutputBuffer & tOut, WORD uVer, InputBuffer_c & tReq );
 
 /// ping/pong exchange over API
 void HandleCommandPing ( ISphOutputBuffer & tOut, WORD uVer, InputBuffer_c & tReq )
@@ -9495,8 +9496,12 @@ void ExecuteApiCommand ( SearchdCommand_e eCommand, WORD uCommandVer, int iLengt
 		case SEARCHD_COMMAND_CALLPQ:	HandleCommandCallPq ( tOut, uCommandVer, tBuf ); break;
 		case SEARCHD_COMMAND_CLUSTER:	HandleAPICommandCluster ( tOut, uCommandVer, tBuf, tSess.szClientName() ); break;
 		case SEARCHD_COMMAND_GETFIELD:	HandleCommandGetField ( tOut, uCommandVer, tBuf ); break;
+		case SEARCHD_COMMAND_SUGGEST:	HandleCommandSuggest ( tOut, uCommandVer, tBuf ); break;
 		case SEARCHD_COMMAND_PERSIST: break; // already processes, here just for stat
-		default:						assert ( 0 && "internal error: unhandled command" ); break;
+
+		default:
+			SendErrorReply ( tOut, "internal error: unhandled command" );
+			break;
 	}
 }
 
@@ -11846,6 +11851,315 @@ struct CmpDistDocABC_fn
 	}
 };
 
+static void SuggestSendResult ( const SuggestArgs_t & tArgs, SuggestResultSet_t & tRes, const CSphString & sSentence, RowBuffer_i & tOut )
+{
+	if ( tArgs.m_bResultOneline )
+	{
+		// let's resort by alphabet to better compare result sets
+		CmpDistDocABC_fn tCmp ( (const char *)( tRes.m_dBuf.Begin() ) );
+		tRes.m_dMatched.Sort ( tCmp );
+
+		// result set header packet
+		tOut.HeadBegin ();
+		tOut.HeadColumn ( "name" );
+		tOut.HeadColumn ( "value" );
+		tOut.HeadEnd ();
+
+		StringBuilder_c sBuf ( "," );
+		for ( auto& dMatched : tRes.m_dMatched )
+			sBuf << (const char*) tRes.m_dBuf.Begin() + dMatched.m_iNameOff;
+		tOut.PutString ( "suggests" );
+		tOut.PutString ( sBuf.cstr() );
+		if ( !tOut.Commit() )
+			return;
+
+		if ( tArgs.m_bResultStats )
+		{
+			sBuf.Clear ();
+			sBuf.StartBlock ( "," );
+			for ( auto &dMatched : tRes.m_dMatched )
+				sBuf.Appendf ( "%d", dMatched.m_iDistance );
+			tOut.PutString ( "distance" );
+			tOut.PutString ( sBuf.cstr () );
+			if ( !tOut.Commit() )
+				return;
+			sBuf.Clear ();
+			sBuf.StartBlock ( "," );
+			for ( auto &dMatched : tRes.m_dMatched )
+				sBuf.Appendf ( "%d", dMatched.m_iDocs );
+			tOut.PutString ( "docs" );
+			tOut.PutString ( sBuf );
+			if ( !tOut.Commit() )
+				return;
+		}
+	} else
+	{
+		// result set header packet
+		tOut.HeadBegin ();
+		tOut.HeadColumn ( "suggest" );
+		if ( tArgs.m_bResultStats )
+		{
+			tOut.HeadColumn ( "distance" );
+			tOut.HeadColumn ( "docs" );
+		}
+		tOut.HeadEnd ();
+
+		StringBuilder_c sBuf;
+		auto * szResult = (const char *)( tRes.m_dBuf.Begin() );
+		ARRAY_FOREACH ( i, tRes.m_dMatched )
+		{
+			const SuggestWord_t & tWord = tRes.m_dMatched[i];
+			if ( tArgs.m_bSentence && !sSentence.IsEmpty() )
+			{
+				sBuf.Clear();
+				sBuf.Appendf ( "%s %s", sSentence.cstr(), ( szResult + tWord.m_iNameOff ) );
+				tOut.PutString ( sBuf );
+			} else
+			{
+				tOut.PutString ( szResult + tWord.m_iNameOff );
+			}
+			if ( tArgs.m_bResultStats )
+			{
+				tOut.PutNumAsString ( tWord.m_iDistance );
+				tOut.PutNumAsString ( tWord.m_iDocs );
+			}
+			if ( !tOut.Commit() )
+				return;
+		}
+	}
+
+	tOut.Eof();
+}
+
+static bool SuggestLocalIndexGet ( const cServedIndexRefPtr_c & pServed, const SuggestArgs_t & tArgs, const char * sWord, SuggestResult_t & tRes, CSphString & sError )
+{
+	RIdx_c pIdx { pServed };
+	if ( !pIdx->GetSettings().m_iMinInfixLen || !pIdx->GetDictionary()->GetSettings().m_bWordDict )
+	{
+		sError.SetSprintf ( "suggests work only for keywords dictionary with infix enabled" );
+		return false;
+	}
+
+	if ( tRes.SetWord ( sWord, pIdx->GetQueryTokenizer(), tArgs.m_bQueryMode, tArgs.m_bSentence ) )
+		pIdx->GetSuggest ( tArgs, tRes );
+
+	return true;
+}
+
+static void MergetRestultSets ( const SuggestResult_t & tSrc, SuggestResult_t & tDst )
+{
+	if ( tDst.m_sSentence.IsEmpty() )
+		tDst.m_sSentence = tSrc.m_sSentence;
+
+	const BYTE * sBuf = ( tSrc.m_dBuf.Begin() );
+	for ( const auto & tSrcWord : tSrc.m_dMatched )
+	{
+		auto & tDstWord = tDst.m_dMatched.Add();
+		tDstWord = tSrcWord;
+		tDstWord.m_iNameOff = tDst.m_dBuf.GetLength();
+
+		BYTE * pDst = tDst.m_dBuf.AddN ( tSrcWord.m_iLen + 1 );
+		memcpy ( pDst, sBuf + tSrcWord.m_iNameOff, tSrcWord.m_iLen + 1 );
+	}
+}
+
+static void UniqRestultSets ( int iLimit, SuggestResult_t & tRes )
+{
+	SuggestMergeDocs ( tRes.m_dMatched );
+
+	CmpDistDocABC_fn tCmp ( (const char *)( tRes.m_dBuf.Begin() ) );
+	tRes.m_dMatched.Sort ( tCmp );
+
+	tRes.Flattern ( iLimit );
+}
+
+/// Suggest Flags
+enum class SuggestFlags_e : DWORD
+{
+	NON_CHAR_ALLOWED			= 1UL << 0,
+	SENTENCE					= 1UL << 1,
+	QUERY_MODE					= 1UL << 2,
+};
+
+static void SendSuggestReply ( const SuggestResult_t & tRes, ISphOutputBuffer & tOut )
+{
+	auto tReply = APIAnswer ( tOut, VER_COMMAND_SUGGEST );
+	tOut.SendString ( tRes.m_sSentence.cstr() );
+
+	const BYTE * pBuf = tRes.m_dBuf.Begin();
+	tOut.SendInt ( tRes.m_dMatched.GetLength() );
+	for ( const auto & tWord : tRes.m_dMatched )
+	{
+		tOut.SendInt ( tWord.m_iDistance );
+		tOut.SendInt ( tWord.m_iDocs );
+		
+		tOut.SendInt ( tWord.m_iLen );
+		tOut.SendBytes ( pBuf + tWord.m_iNameOff, tWord.m_iLen );
+	}
+}
+
+
+void HandleCommandSuggest ( ISphOutputBuffer & tOut, WORD uVer, InputBuffer_c & tReq )
+{
+	if ( !CheckCommandVersion ( uVer, VER_COMMAND_SUGGEST, tOut ) )
+		return;
+
+	// parse request
+	CSphString sIndex = tReq.GetString();
+	CSphString sWord = tReq.GetString();
+
+	SuggestArgs_t tArgs;
+	tArgs.m_iLimit = tReq.GetInt();
+	tArgs.m_iDeltaLen = tReq.GetInt();
+	tArgs.m_iQueueLen = tReq.GetInt();
+	tArgs.m_iRejectThr = tReq.GetInt();
+	tArgs.m_iMaxEdits = tReq.GetInt();
+
+	DWORD uFlags = tReq.GetDword();
+	tArgs.m_bNonCharAllowed = !!( uFlags & (DWORD)SuggestFlags_e::NON_CHAR_ALLOWED );
+	tArgs.m_bSentence = !!( uFlags & (DWORD)SuggestFlags_e::SENTENCE );
+	tArgs.m_bQueryMode = !!( uFlags & (DWORD)SuggestFlags_e::QUERY_MODE );
+
+	if ( tReq.GetError() )
+	{
+		SendErrorReply ( tOut, "invalid or truncated request" );
+		return;
+	}
+
+	auto pServed = GetServed ( sIndex );
+	if ( !pServed )
+	{
+		SendErrorReply ( tOut, "missed table %s", sIndex.cstr() );
+		return;
+	}
+
+	CSphString sError;
+	SuggestResult_t tRes;
+	if ( !SuggestLocalIndexGet ( pServed, tArgs, sWord.cstr(), tRes, sError ) )
+	{
+		SendErrorReply ( tOut, "%s", sError.cstr() );
+		return;
+	}
+
+	SendSuggestReply ( tRes, tOut );
+}
+
+class SuggestRequestBuilder_c : public RequestBuilder_i
+{
+public:
+	SuggestRequestBuilder_c ( const SuggestArgs_t & tArgs, const char * sWord )
+		: m_tArgs ( tArgs )
+		, m_sWord ( sWord )
+	{}
+
+	void BuildRequest ( const AgentConn_t & tAgent, ISphOutputBuffer & tOut ) const final
+	{
+		auto tHdr = APIHeader ( tOut, SEARCHD_COMMAND_SUGGEST, VER_COMMAND_SUGGEST );
+
+		tOut.SendString ( tAgent.m_tDesc.m_sIndexes.cstr() );
+		tOut.SendString ( m_sWord );
+
+		tOut.SendInt ( m_tArgs.m_iLimit );
+		tOut.SendInt ( m_tArgs.m_iDeltaLen );
+		tOut.SendInt ( m_tArgs.m_iQueueLen );
+		tOut.SendInt ( m_tArgs.m_iRejectThr );
+		tOut.SendInt ( m_tArgs.m_iMaxEdits );
+
+		DWORD uFlags = 0;
+		uFlags |= (DWORD)SuggestFlags_e::NON_CHAR_ALLOWED * m_tArgs.m_bNonCharAllowed;
+		uFlags |= (DWORD)SuggestFlags_e::SENTENCE * m_tArgs.m_bSentence;
+		uFlags |= (DWORD)SuggestFlags_e::QUERY_MODE * m_tArgs.m_bQueryMode;
+		tOut.SendDword ( uFlags );
+	}
+
+protected:
+	const SuggestArgs_t & m_tArgs;
+	const char * m_sWord;
+};
+
+
+class SuggestReplyParser_c : public ReplyParser_i
+{
+public:
+	SuggestReplyParser_c ( SuggestResultSet_t & tRes, CSphString & sSentence )
+		: m_tRes ( tRes )
+		, m_sSentence ( sSentence )
+	{}
+	bool ParseReply ( MemInputBuffer_c & tReq, AgentConn_t & ) const final
+	{
+		CSphString sSentence = tReq.GetString();
+		if ( m_sSentence.IsEmpty() )
+			m_sSentence = sSentence;
+
+		int iWords = tReq.GetInt();
+		int iOff = m_tRes.m_dMatched.GetLength();
+		m_tRes.m_dMatched.Resize ( iOff + iWords );
+		for ( int i=0; i<iWords; i++ )
+		{
+			SuggestWord_t & tWord = m_tRes.m_dMatched[iOff + i];
+			tWord.m_iDistance = tReq.GetInt();
+			tWord.m_iDocs = tReq.GetInt();
+			
+			int iWordLen = tReq.GetInt();
+			tWord.m_iNameOff = m_tRes.m_dBuf.GetLength();
+			tWord.m_iLen = iWordLen + 1;
+			BYTE * pDst = m_tRes.m_dBuf.AddN ( iWordLen + 1 );
+			tReq.GetBytes ( pDst, iWordLen );
+			pDst[iWordLen] = '\0';
+			tWord.m_iNameHash = sphCRC32 ( pDst, iWordLen );
+		}
+
+		return true;
+	}
+	SuggestResultSet_t & m_tRes;
+	CSphString & m_sSentence;
+};
+
+static bool SuggestDistIndexGet ( const cDistributedIndexRefPtr_t & pDistributed, const CSphString & sIndex, const SuggestArgs_t & tArgs, const char * sWord, SuggestResult_t & tRes, CSphString & sError )
+{
+	const StrVec_t & dLocals = pDistributed->m_dLocal;
+	for ( const CSphString & sLocal : dLocals )
+	{
+		auto pServed = GetServed ( sLocal );
+		if ( !pServed )
+		{
+			sError.SetSprintf ( sLocal.cstr(), sIndex.cstr(), "missed table %s at %s ", sLocal.cstr(), sIndex.cstr() );
+			return false;
+		}
+
+		SuggestResult_t tCur;
+		if ( !SuggestLocalIndexGet ( pServed, tArgs, sWord, tCur, sError ) )
+			return false;
+
+		MergetRestultSets ( tCur, tRes );
+	}
+
+	// remote agents requests send off thread
+	VecRefPtrsAgentConn_t dAgents;
+	// fixme! We don't need all hosts here, only usual selected mirrors
+	pDistributed->GetAllHosts ( dAgents );
+
+	int iAgentsReply = 0;
+	if ( !dAgents.IsEmpty() )
+	{
+		SuggestResult_t tCur;
+		// connect to remote agents and query them
+		SuggestRequestBuilder_c tReqBuilder ( tArgs, sWord );
+		SuggestReplyParser_c tParser ( tRes, tRes.m_sSentence );
+		iAgentsReply = PerformRemoteTasks ( dAgents, &tReqBuilder, &tParser );
+
+		for ( const AgentConn_t * pAgent : dAgents )
+			if ( !pAgent->m_bSuccess && !pAgent->m_sFailure.IsEmpty() )
+				sError.SetSprintf ( "agent %s: %s", pAgent->m_tDesc.GetMyUrl().cstr(), pAgent->m_sFailure.cstr() );
+	}
+
+	// sort and relimit results sets
+	if ( ( iAgentsReply + dLocals.GetLength() )>1 )
+		UniqRestultSets ( tArgs.m_iLimit, tRes );
+
+	return true;
+}
+
 void HandleMysqlCallSuggest ( RowBuffer_i & tOut, SqlStmt_t & tStmt, bool bQueryMode )
 {
 	StatCountCommand ( SEARCHD_COMMAND_SUGGEST );
@@ -11917,105 +12231,32 @@ void HandleMysqlCallSuggest ( RowBuffer_i & tOut, SqlStmt_t & tStmt, bool bQuery
 		}
 	}
 
-	{ // scope for ServedINdexPtr_c
-		auto pServed = GetServed ( tStmt.m_dInsertValues[1].m_sVal );
-		if ( !pServed )
+	const CSphString & sIndex = tStmt.m_dInsertValues[1].m_sVal;
+
+	{
+		auto pLocal = GetServed ( sIndex );
+		auto pDistributed = GetDistr ( sIndex );
+
+		if ( !pLocal && !pDistributed )
 		{
-			sError.SetSprintf ( "no such table %s", tStmt.m_dInsertValues[1].m_sVal.cstr () );
+			sError.SetSprintf ( "no such table %s", sIndex.cstr() );
 			tOut.Error ( sError.cstr () );
 			return;
 		}
-		RIdx_c pIdx { pServed };
-		if ( !pIdx->GetSettings().m_iMinInfixLen || !pIdx->GetDictionary()->GetSettings().m_bWordDict )
+
+		if ( pLocal && !SuggestLocalIndexGet ( pLocal, tArgs, sWord, tRes, sError ) )
 		{
-			sError.SetSprintf ( "suggests work only for keywords dictionary with infix enabled" );
-			tOut.Error ( sError.cstr() );
+			tOut.Error ( sError.cstr () );
 			return;
 		}
-
-		if ( tRes.SetWord ( sWord, pIdx->GetQueryTokenizer(), tArgs.m_bQueryMode, tArgs.m_bSentence ) )
+		if ( pDistributed && !SuggestDistIndexGet ( pDistributed, sIndex, tArgs, sWord, tRes, sError ) )
 		{
-			pIdx->GetSuggest ( tArgs, tRes );
+			tOut.Error ( sError.cstr () );
+			return;
 		}
 	}
 
-	// data
-	if ( tArgs.m_bResultOneline )
-	{
-		// let's resort by alphabet to better compare result sets
-		CmpDistDocABC_fn tCmp ( (const char *)( tRes.m_dBuf.Begin() ) );
-		tRes.m_dMatched.Sort ( tCmp );
-
-		// result set header packet
-		tOut.HeadBegin ();
-		tOut.HeadColumn ( "name" );
-		tOut.HeadColumn ( "value" );
-		tOut.HeadEnd ();
-
-		StringBuilder_c sBuf ( "," );
-		for ( auto& dMatched : tRes.m_dMatched )
-			sBuf << (const char*) tRes.m_dBuf.Begin() + dMatched.m_iNameOff;
-		tOut.PutString ( "suggests" );
-		tOut.PutString ( sBuf.cstr() );
-		if ( !tOut.Commit() )
-			return;
-
-		if ( tArgs.m_bResultStats )
-		{
-			sBuf.Clear ();
-			sBuf.StartBlock ( "," );
-			for ( auto &dMatched : tRes.m_dMatched )
-				sBuf.Appendf ( "%d", dMatched.m_iDistance );
-			tOut.PutString ( "distance" );
-			tOut.PutString ( sBuf.cstr () );
-			if ( !tOut.Commit() )
-				return;
-			sBuf.Clear ();
-			sBuf.StartBlock ( "," );
-			for ( auto &dMatched : tRes.m_dMatched )
-				sBuf.Appendf ( "%d", dMatched.m_iDocs );
-			tOut.PutString ( "docs" );
-			tOut.PutString ( sBuf );
-			if ( !tOut.Commit() )
-				return;
-		}
-	} else
-	{
-		// result set header packet
-		tOut.HeadBegin ();
-		tOut.HeadColumn ( "suggest" );
-		if ( tArgs.m_bResultStats )
-		{
-			tOut.HeadColumn ( "distance" );
-			tOut.HeadColumn ( "docs" );
-		}
-		tOut.HeadEnd ();
-
-		StringBuilder_c sBuf;
-		auto * szResult = (const char *)( tRes.m_dBuf.Begin() );
-		ARRAY_FOREACH ( i, tRes.m_dMatched )
-		{
-			const SuggestWord_t & tWord = tRes.m_dMatched[i];
-			if ( tArgs.m_bSentence && !tRes.m_sSentence.IsEmpty() )
-			{
-				sBuf.Clear();
-				sBuf.Appendf ( "%s %s", tRes.m_sSentence.cstr(), ( szResult + tWord.m_iNameOff ) );
-				tOut.PutString ( sBuf );
-			} else
-			{
-				tOut.PutString ( szResult + tWord.m_iNameOff );
-			}
-			if ( tArgs.m_bResultStats )
-			{
-				tOut.PutNumAsString ( tWord.m_iDistance );
-				tOut.PutNumAsString ( tWord.m_iDocs );
-			}
-			if ( !tOut.Commit() )
-				return;
-		}
-	}
-
-	tOut.Eof();
+	SuggestSendResult ( tArgs, tRes, tRes.m_sSentence, tOut );
 }
 
 

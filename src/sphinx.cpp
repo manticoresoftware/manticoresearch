@@ -12360,7 +12360,7 @@ static int DecodeUtf8 ( const BYTE * sWord, int * pBuf )
 }
 
 
-bool SuggestResult_t::SetWord ( const char * sWord, const TokenizerRefPtr_c& pTok, bool bUseLastWord, bool bSetSentence )
+bool SuggestResult_t::SetWord ( const char * sWord, const TokenizerRefPtr_c & pTok, bool bUseLastWord, bool bSetSentence )
 {
 	assert ( pTok->IsQueryTok() );
 	TokenizerRefPtr_c pTokenizer = pTok->Clone ( SPH_CLONE );
@@ -12514,7 +12514,7 @@ struct CmpSuggestOrder_fn
 };
 
 
-static void SuggestMergeDocs ( CSphVector<SuggestWord_t> & dMatched )
+void SuggestMergeDocs ( CSphVector<SuggestWord_t> & dMatched )
 {
 	if ( !dMatched.GetLength() )
 		return;

@@ -1119,6 +1119,8 @@ static bool HandleRealCmdReplicate ( RtAccum_t & tAcc, CommitMonitor_c && tMonit
 // single point there all commands passed these might be replicated, even if no cluster
 static bool HandleCmdReplicateImpl ( RtAccum_t & tAcc, int * pDeletedCount, CSphString * pWarning, int * pUpdated ) EXCLUDES ( g_tClustersLock )
 {
+	TRACE_CORO ( "sph", "HandleCmdReplicateImpl" );
+
 	CommitMonitor_c tMonitor ( tAcc, pDeletedCount, pWarning, pUpdated );
 
 	// with cluster path

@@ -20,6 +20,9 @@
 #include "knnmisc.h"
 #include "jsonsi.h"
 #include "attrindex_merge.h"
+#include "tracer.h"
+
+#include <boost/preprocessor/repetition/repeat.hpp>
 
 class AttrMerger_c::Impl_c
 {
@@ -48,8 +51,8 @@ class AttrMerger_c::Impl_c
 	CSphVector<ESphExt> 					m_dCreatedFiles;
 
 private:
-	bool CopyPureColumnarAttributes ( const CSphIndex & tIndex, const VecTraits_T<RowID_t>& dRowMap );
-	bool CopyMixedAttributes ( const CSphIndex & tIndex, const VecTraits_T<RowID_t>& dRowMap );
+	template<bool WITH_BLOB, bool WITH_STRIDE, bool WITH_DOCSTORE, bool WITH_SI, bool WITH_KNN, bool PURE_COLUMNAR>
+	bool CopyMixedAttributes_T ( const CSphIndex & tIndex, const VecTraits_T<RowID_t>& dRowMap );
 	CSphString GetTmpFilename ( const CSphIndex* pIdx, ESphExt eExt )
 	{
 		m_dCreatedFiles.Add ( eExt );
@@ -142,81 +145,29 @@ bool AttrMerger_c::Impl_c::Prepare ( const CSphIndex * pSrcIndex, const CSphInde
 	return true;
 }
 
-
-bool AttrMerger_c::Impl_c::CopyPureColumnarAttributes ( const CSphIndex & tIndex, const VecTraits_T<RowID_t> & dRowMap )
-{
-	assert ( !tIndex.GetRawAttrs() );
-	assert ( tIndex.GetMatchSchema().GetAttr ( 0 ).IsColumnar() );
-
-	auto dColumnarIterators = CreateAllColumnarIterators ( tIndex.GetColumnar(), tIndex.GetMatchSchema() );
-	CSphVector<int64_t> dTmp;
-
-	int iChunk = tIndex.m_iChunk;
-	m_tMonitor.SetEvent ( MergeCb_c::E_MERGEATTRS_START, iChunk );
-	AT_SCOPE_EXIT( [this, iChunk] { m_tMonitor.SetEvent ( MergeCb_c::E_MERGEATTRS_FINISHED, iChunk ); } );
-	for ( RowID_t tRowID = 0, tRows = (RowID_t)dRowMap.GetLength64(); tRowID < tRows; ++tRowID )
-	{
-		if ( dRowMap[tRowID] == INVALID_ROWID )
-			continue;
-
-		if ( m_tMonitor.NeedStop() )
-			return false;
-
-		// limit granted by caller code
-		assert ( m_tResultRowID != INVALID_ROWID );
-
-		DocID_t tDocID = 0;
-		ARRAY_FOREACH ( i, dColumnarIterators )
-		{
-			auto & tIt = dColumnarIterators[i];
-			SphAttr_t tAttr = SetColumnarAttr ( i, tIt.second, m_pColumnarBuilder.get(), tIt.first, tRowID, dTmp );
-			if ( !i )
-				tDocID = tAttr;
-		}
-
-		BuildStoreHistograms ( tRowID, nullptr, nullptr, dColumnarIterators, m_dAttrsForHistogram, m_tHistograms );
-
-		if ( m_pDocstoreBuilder )
-			m_pDocstoreBuilder->AddDoc ( m_tResultRowID, tIndex.GetDocstore()->GetDoc ( tRowID, nullptr, -1, false ) );
-
-		if ( m_pSIdxBuilder )
-		{
-			m_pSIdxBuilder->SetRowID ( m_tResultRowID );
-			BuildStoreSI ( tRowID, nullptr, nullptr, dColumnarIterators, m_dSiAttrs, m_pSIdxBuilder.get(), dTmp );
-		}
-
-		if ( m_pKNNBuilder && !BuildStoreKNN ( tRowID, nullptr, nullptr, dColumnarIterators, m_dAttrsForKNN, *m_pKNNBuilder ) )
-		{
-			m_sError = m_pKNNBuilder->GetError().c_str();
-			return false;
-		}
-
-		m_dDocidLookup[m_tResultRowID] = { tDocID, m_tResultRowID };
-		++m_tResultRowID;
-	}
-	return true;
-}
-
-bool AttrMerger_c::Impl_c::CopyMixedAttributes ( const CSphIndex & tIndex, const VecTraits_T<RowID_t>& dRowMap )
+template <bool WITH_BLOB, bool WITH_STRIDE, bool WITH_DOCSTORE, bool WITH_SI, bool WITH_KNN, bool PURE_COLUMNAR>
+bool AttrMerger_c::Impl_c::CopyMixedAttributes_T ( const CSphIndex & tIndex, const VecTraits_T<RowID_t>& dRowMap )
 {
 	auto dColumnarIterators = CreateAllColumnarIterators ( tIndex.GetColumnar(), tIndex.GetMatchSchema() );
 	CSphVector<int64_t> dTmp;
 
-	int iColumnarIdLoc = tIndex.GetMatchSchema().GetAttr ( 0 ).IsColumnar() ? 0 : - 1;
-	const CSphRowitem* pRow = tIndex.GetRawAttrs();
-	assert ( pRow );
+	int iColumnarIdLoc = PURE_COLUMNAR ? 0 : ( tIndex.GetMatchSchema ().GetAttr ( 0 ).IsColumnar () ? 0 : -1 );
+	const CSphRowitem * pRow = tIndex.GetRawAttrs ();
+	const BYTE * pRawBlobAttrs = PURE_COLUMNAR ? nullptr : tIndex.GetRawBlobAttrs ();
 	int iStride = tIndex.GetMatchSchema().GetRowSize();
 	CSphFixedVector<CSphRowitem> dTmpRow ( iStride );
 	auto iStrideBytes = dTmpRow.GetLengthBytes();
-	const CSphColumnInfo* pBlobLocator = tIndex.GetMatchSchema().GetAttr ( sphGetBlobLocatorName() );
+	const CSphColumnInfo* pBlobLocator = WITH_BLOB ? tIndex.GetMatchSchema().GetAttr ( sphGetBlobLocatorName() ) : nullptr;
 
 	int iChunk = tIndex.m_iChunk;
 	m_tMonitor.SetEvent ( MergeCb_c::E_MERGEATTRS_START, iChunk );
 	AT_SCOPE_EXIT ( [this, iChunk] { m_tMonitor.SetEvent ( MergeCb_c::E_MERGEATTRS_FINISHED, iChunk ); } );
-	for ( RowID_t tRowID = 0, tRows = (RowID_t)dRowMap.GetLength64(); tRowID < tRows; ++tRowID, pRow += iStride )
+	for ( RowID_t tRowID = 0, tRows = (RowID_t)dRowMap.GetLength64(); tRowID < tRows; ++tRowID, pRow += PURE_COLUMNAR ? 0 : iStride )
 	{
 		if ( dRowMap[tRowID] == INVALID_ROWID )
 			continue;
+
+		m_tMonitor.SetEvent ( MergeCb_c::E_MERGEATTRS_PULSE, iChunk );
 
 		if ( m_tMonitor.NeedStop() )
 			return false;
@@ -224,11 +175,12 @@ bool AttrMerger_c::Impl_c::CopyMixedAttributes ( const CSphIndex & tIndex, const
 		// limit granted by caller code
 		assert ( m_tResultRowID != INVALID_ROWID );
 
-		m_tMinMax.Collect ( pRow );
+		if constexpr ( !PURE_COLUMNAR )
+			m_tMinMax.Collect ( pRow );
 
-		if ( m_pBlobRowBuilder )
+		if constexpr ( WITH_BLOB )
 		{
-			const BYTE * pOldBlobRow = tIndex.GetRawBlobAttrs() + sphGetRowAttr ( pRow, pBlobLocator->m_tLocator );
+			const BYTE * pOldBlobRow = pRawBlobAttrs + sphGetRowAttr ( pRow, pBlobLocator->m_tLocator );
 			std::pair<SphOffset_t, SphOffset_t> tOffsetSize = m_pBlobRowBuilder->Flush ( pOldBlobRow );
 
 			if ( m_pJsonSIBuilder )
@@ -238,11 +190,10 @@ bool AttrMerger_c::Impl_c::CopyMixedAttributes ( const CSphIndex & tIndex, const
 			sphSetRowAttr ( dTmpRow.Begin(), pBlobLocator->m_tLocator, tOffsetSize.first );
 
 			m_tWriterSPA.PutBytes ( dTmpRow.Begin(), iStrideBytes );
-		} else if ( iStrideBytes )
+		} else if constexpr ( WITH_STRIDE )
 			m_tWriterSPA.PutBytes ( pRow, iStrideBytes );
 
 		DocID_t tDocID = 0;
-
 		ARRAY_FOREACH ( i, dColumnarIterators )
 		{
 			auto & tIt = dColumnarIterators[i];
@@ -251,21 +202,31 @@ bool AttrMerger_c::Impl_c::CopyMixedAttributes ( const CSphIndex & tIndex, const
 				tDocID = tAttr;
 		}
 
-		if ( iColumnarIdLoc < 0 )
-			tDocID = sphGetDocID(pRow);
+		if constexpr ( !PURE_COLUMNAR )
+		{
+			if ( iColumnarIdLoc < 0 )
+				tDocID = sphGetDocID(pRow);
+		}
 
-		BuildStoreHistograms ( tRowID, pRow, tIndex.GetRawBlobAttrs(), dColumnarIterators, m_dAttrsForHistogram, m_tHistograms );
+		if constexpr ( PURE_COLUMNAR )
+		{
+			assert ( !pRow );
+			assert ( !pRawBlobAttrs );
+		}
 
-		if ( m_pDocstoreBuilder )
+		BuildStoreHistograms ( tRowID, pRow, pRawBlobAttrs, dColumnarIterators, m_dAttrsForHistogram, m_tHistograms );
+
+		if constexpr ( WITH_DOCSTORE )
 			m_pDocstoreBuilder->AddDoc ( m_tResultRowID, tIndex.GetDocstore()->GetDoc ( tRowID, nullptr, -1, false ) );
 
-		if ( m_pSIdxBuilder )
+		if constexpr ( WITH_SI )
 		{
 			m_pSIdxBuilder->SetRowID ( m_tResultRowID );
 			BuildStoreSI ( tRowID, pRow, tIndex.GetRawBlobAttrs(), dColumnarIterators, m_dSiAttrs, m_pSIdxBuilder.get(), dTmp );
 		}
 
-		if ( m_pKNNBuilder && !BuildStoreKNN ( tRowID, pRow, tIndex.GetRawBlobAttrs(), dColumnarIterators, m_dAttrsForKNN, *m_pKNNBuilder ) )
+		if constexpr ( WITH_KNN )
+			if ( !BuildStoreKNN ( tRowID, pRow, tIndex.GetRawBlobAttrs(), dColumnarIterators, m_dAttrsForKNN, *m_pKNNBuilder ) )
 		{
 			m_sError = m_pKNNBuilder->GetError().c_str();
 			return false;
@@ -287,9 +248,25 @@ bool AttrMerger_c::Impl_c::CopyAttributes ( const CSphIndex & tIndex, const VecT
 	// that is very empyric, however is better than nothing.
 	m_iTotalBytes += tIndex.GetStats().m_iTotalBytes * ( (float)uAlive / (float)dRowMap.GetLength64() );
 
-	if ( !tIndex.GetRawAttrs() )
-		return CopyPureColumnarAttributes( tIndex, dRowMap );
-	return CopyMixedAttributes ( tIndex, dRowMap );
+	const bool bPureColumnar = !tIndex.GetRawAttrs ();
+	const bool bBlob = !bPureColumnar && !!m_pBlobRowBuilder;
+	const bool bStride = !bPureColumnar && tIndex.GetMatchSchema ().GetRowSize ()>0;
+	const bool bDocstore = !!m_pDocstoreBuilder;
+	const bool bSI = !!m_pSIdxBuilder;
+	const bool bKNN = !!m_pKNNBuilder;
+
+	int iIndex = bPureColumnar*32+bKNN*16+bSI*8+bDocstore*4+bStride*2+bBlob;
+
+	switch ( iIndex )
+	{
+#define DECL_COPYMIX( _, n, params ) case n: return CopyMixedAttributes_T<!!(n&1), !!(n&2), !!(n&4), !!(n&8), !!(n&16), !!(n&32)> params;
+		BOOST_PP_REPEAT ( 64, DECL_COPYMIX, ( tIndex, dRowMap ) )
+#undef DECL_COPYMIX
+	default:
+		assert ( 0 && "Internal error" );
+		break;
+	}
+	return false;
 }
 
 
@@ -370,16 +347,19 @@ AttrMerger_c::~AttrMerger_c() = default;
 
 bool AttrMerger_c::Prepare ( const CSphIndex* pSrcIndex, const CSphIndex* pDstIndex )
 {
+	TRACE_CORO ( "sph", "AttrMerger_c::Prepare" );
 	return m_pImpl->Prepare ( pSrcIndex, pDstIndex );
 }
 
 bool AttrMerger_c::CopyAttributes ( const CSphIndex& tIndex, const VecTraits_T<RowID_t>& dRowMap, DWORD uAlive )
 {
+	TRACE_CORO ( "sph", "AttrMerger_c::CopyAttributes" );
 	return m_pImpl->CopyAttributes ( tIndex, dRowMap, uAlive );
 }
 
 bool AttrMerger_c::FinishMergeAttributes ( const CSphIndex* pDstIndex, BuildHeader_t& tBuildHeader, StrVec_t* pCreatedFiles )
 {
+	TRACE_CORO ( "sph", "AttrMerger_c::FinishMergeAttributes" );
 	bool bOk = m_pImpl->FinishMergeAttributes ( pDstIndex, tBuildHeader, pCreatedFiles );
 	m_pImpl->AddCreatedFiles ( pDstIndex, pCreatedFiles );
 	return bOk;

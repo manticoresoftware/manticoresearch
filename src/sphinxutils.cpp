@@ -3896,3 +3896,34 @@ bool HasWildcards ( const char * sWord )
 
 	return false;
 }
+
+static RwLock_t hBreaksProtect;
+static SmallStringHash_T<bool> hBreaks GUARDED_BY ( hBreaksProtect );
+
+// sleep on named pause. Put into interest clauses in the code where a race expected
+void PauseCheck ( const CSphString & sName )
+{
+	auto fnCheck = [&sName] () {
+		ScRL_t tProtect { hBreaksProtect };
+		return hBreaks.Exists ( sName );
+	};
+	if ( !fnCheck () )
+		return;
+
+	sphInfo ( "Paused '%s'", sName.cstr () );
+	auto tmStart = sphMicroTimer ();
+	while ( fnCheck () )
+		sphSleepMsec ( 20 );
+	LogInfo ( "Released '%s' in %.3t", sName.cstr (), sphMicroTimer ()-tmStart );
+}
+
+// debug pause 'id' on / debug pause 'id' off
+void PauseAt ( const CSphString& sName, bool bPause )
+{
+	ScWL_t tProtect { hBreaksProtect };
+	auto bExist = hBreaks.Exists ( sName );
+	if ( !bPause && bExist )
+		hBreaks.Delete ( sName );
+	else if ( bPause && !bExist )
+		hBreaks.Add ( true, sName );
+}

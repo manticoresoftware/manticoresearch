@@ -4624,13 +4624,23 @@ int ExprParser_t::CheckForFields ( Tokh_e eTok, YYSTYPE * lvalp )
 int ExprParser_t::ProcessRawToken ( const char * sToken, int iLen, YYSTYPE * lvalp )
 {
 	int iRes = -1;
+	const bool bFunc = lvalp->iTrailingBr!=0;
+	if ( lvalp->iTrailingBr==2 ) // trim trailing 	[ \t\n\r]
+	{
+		while ( sphIsSpace ( sToken[iLen-1] ) )
+			--iLen;
+	}
+	lvalp->iTrailingBr = 0;
 
 	auto eTok = TokHashLookup ( { sToken, iLen } );
 	if ( IsTok(eTok) )
 	{
-		iRes = CheckForFields ( eTok, lvalp );
-		if ( iRes>=0 ) 
-			return iRes;
+		if ( !bFunc )
+		{
+			iRes = CheckForFields ( eTok, lvalp );
+			if ( iRes>=0 )
+				return iRes;
+		}
 
 		return g_dHash2Op[eTok-FUNC_FUNCS_COUNT];
 	}
@@ -4640,9 +4650,12 @@ int ExprParser_t::ProcessRawToken ( const char * sToken, int iLen, YYSTYPE * lva
 	sTok.ToLower ();
 
 	// check for attributes and fields
-	iRes = ParseAttrsAndFields ( sTok.cstr(), lvalp );
-	if ( iRes>=0 )
-		return iRes;
+	if ( !bFunc )
+	{
+		iRes = ParseAttrsAndFields ( sTok.cstr(), lvalp );
+		if ( iRes>=0 )
+			return iRes;
+	}
 
 	// check for table name
 	if ( m_pJoinIdx && *m_pJoinIdx==sTok )

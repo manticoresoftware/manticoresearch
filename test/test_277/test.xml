@@ -118,9 +118,6 @@ INSERT INTO `test_table` VALUES
     
     <!-- all date and time removed from the reserved words -->
     select id, year as year1, year, month as month1, month from test1 order by id asc;
-    <!-- Github #2001 can not call any expression if the column with the same name exists -->
-    select id, year(`year`) as year0 from test1 order by id asc;
-    select id, year(year) as year0 from test1 order by id asc;
 </sphinxql>
 </queries>
 

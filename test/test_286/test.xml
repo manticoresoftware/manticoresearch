@@ -1,0 +1,45 @@
+<?xml version="1.0" encoding="utf-8"?>
+<test>
+
+<name>funcnames as column names</name>
+
+<requires>
+	<force-rt/>
+</requires>
+
+<skip_indexer/>
+
+<config>
+searchd
+{
+	<searchd_settings/>
+	data_dir = <data_path/>
+	binlog_path =
+}
+</config>
+
+<queries>
+<sphinxql>
+	drop table if exists test;
+	create table test (weight int, concat string, raw string);
+	insert into test values (1, 2, 'aa', 'bb'), (2, 2, 'AA', 'BB');
+	select weight() from test order by id asc;
+	select weight () from test order by id asc;
+	select weight   () from test order by id asc;
+	select concat(raw,'xxx') from test order by id asc;
+	select concat (raw,'xxx') from test order by id asc;
+	select concat   (raw,'xxx') from test order by id asc;
+	drop table test;
+	create table test (year int, month int);
+	insert into test values (1, 2024, 5), (2, 2023, 6);
+	select id, year(`year`) as year0 from test order by id asc;
+	select id, year(year) as year0 from test order by id asc;
+	select id, year (`year`) as year0 from test order by id asc;
+	select id, year (year) as year0 from test order by id asc;
+	select id, year  (`year`) as year0 from test order by id asc;
+	select id, year  (year) as year0 from test order by id asc;
+	drop table test;
+</sphinxql>
+</queries>
+
+</test>

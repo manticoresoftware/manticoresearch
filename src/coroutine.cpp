@@ -967,7 +967,7 @@ bool WaitQueue_c::SuspendAndWaitUntil ( sph::Spinlock_lock& tLock, Worker_c* pAc
 	});
 
 	// resumed. Check if deadline is reached
-	if ( sph::TimeExceeded ( iTimestamp ) )
+	if ( sph::TimeExceeded ( iTimestamp ) || sphInterrupted () )
 	{
 		tLock.lock();
 		// remove from waiting-queue
@@ -976,6 +976,7 @@ bool WaitQueue_c::SuspendAndWaitUntil ( sph::Spinlock_lock& tLock, Worker_c* pAc
 		tLock.unlock();
 		return false;
 	}
+	assert ( !w.is_linked () );
 	return true;
 }
 

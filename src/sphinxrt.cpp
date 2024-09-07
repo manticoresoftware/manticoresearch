@@ -1194,13 +1194,17 @@ public:
 	// sleep and return false if index's shutdown happened.
 	bool WaitEnabledOrShutdown () const noexcept
 	{
-		return !m_tValue.Wait ( [&] ( const Value_t& tVal ) {
-			if ( tVal.m_bShutdown )
-				return true;
-			if ( tVal.m_eValue != States_e::ENABLED )
-				return false;
-			return tVal.m_iDisabledCounter == 0;
-		}).m_bShutdown;
+		while (true) {
+			auto tVal = m_tValue.WaitForMs ( [&] ( const Value_t& tVal ) {
+				if ( tVal.m_bShutdown )
+					return true;
+				if ( tVal.m_eValue!=States_e::ENABLED )
+					return false;
+				return tVal.m_iDisabledCounter==0;
+			}, 10000 ); // time doesn't matter, as shutdown abandons all timers
+			if ( tVal.m_bShutdown || sphInterrupted() || tVal.m_iDisabledCounter==0 )
+				return !tVal.m_bShutdown;
+		}
 	}
 
 	int GetNumOfLocks() const noexcept

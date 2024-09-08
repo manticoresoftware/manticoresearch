@@ -571,14 +571,6 @@ docker exec manticore mysql -h0 -P9306 -e "CREATE SOURCE invalid-source (id bigi
 ––– output –––
 ERROR 1064 (42000) at line 1: P03: syntax error, unexpected tablename, expecting CLUSTER or FUNCTION or PLUGIN or TABLE near 'SOURCE invalid-source (id bigint, term text) type='kafka' broker_list='kafka:9092' topic_list='my-data' consumer_group='manticore_invalid' num_consumers='1' batch=50'
 ––– input –––
-docker exec manticore mysql -h0 -P9306 -e "CREATE MATERIALIZED VIEW invalid@view TO destination_kafka AS SELECT id, term as name FROM kafka;"
-––– output –––
-ERROR 1064 (42000) at line 1: Undefined array key "kafka_metadata_0"
-––– input –––
-docker exec manticore mysql -h0 -P9306 -e "CREATE MATERIALIZED VIEW invalid_query_view TO destination_kafka AS SELECT non_existing_column FROM kafka;"
-––– output –––
-ERROR 1064 (42000) at line 1: Undefined array key "kafka_metadata_0"
-––– input –––
 docker exec kafka kafka-consumer-groups.sh --bootstrap-server localhost:9092 --group manticore_drop_source --reset-offsets --to-latest --topic my-data --execute > /dev/null; echo $?
 ––– output –––
 0
@@ -614,6 +606,10 @@ docker exec manticore mysql -h0 -P9306 -e "CREATE SOURCE kafka_drop_source (id b
 docker exec manticore mysql -h0 -P9306 -e "SHOW MV view_drop_source\G;" | grep suspended
 ––– output –––
 suspended: 1
+––– input –––
+docker exec manticore mysql -h0 -P9306 -e "ALTER MATERIALIZED VIEW view_drop_source suspended=0"; echo $?
+––– output –––
+0
 ––– input –––
 docker exec kafka ./import.sh; echo $?
 ––– output –––

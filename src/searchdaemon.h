@@ -162,7 +162,7 @@ const char* szCommand ( int );
 /// master-agent API SEARCH command protocol extensions version
 enum
 {
-	VER_COMMAND_SEARCH_MASTER = 21
+	VER_COMMAND_SEARCH_MASTER = 22
 };
 
 
@@ -181,8 +181,9 @@ enum SearchdCommandV_e : WORD
 	VER_COMMAND_PING		= 0x100,
 	VER_COMMAND_UVAR		= 0x100,
 	VER_COMMAND_CALLPQ		= 0x100,
-	VER_COMMAND_CLUSTER		= 0x108,
+	VER_COMMAND_CLUSTER		= 0x109,
 	VER_COMMAND_GETFIELD	= 0x100,
+	VER_COMMAND_SUGGEST		= 0x101,
 
 	VER_COMMAND_WRONG = 0,
 };
@@ -1373,6 +1374,7 @@ enum class EHTTP_STATUS : BYTE
 	_405,
 	_409,
 	_413,
+	_415,
 	_500,
 	_501,
 	_503,

@@ -54,7 +54,7 @@ TEST_F ( filter_block_level, range )
 	tOpt.m_iMinValue = 10;
 	tOpt.m_iMaxValue = 40;
 
-	tCtx.m_pSchema = &tSchema;
+	tCtx.m_pMatchSchema = &tSchema;
 
 	tFilter = sphCreateFilter ( tOpt, tCtx, sError, sWarning );
 	ASSERT_TRUE ( tFilter!=nullptr );
@@ -262,7 +262,7 @@ TEST_F ( filter_block_level, range_float )
 	tOpt.m_fMaxValue = 40.0f;
 	tOpt.m_bHasEqualMin = false;
 	tOpt.m_bHasEqualMax = false;
-	tCtx.m_pSchema = &tSchema;
+	tCtx.m_pMatchSchema = &tSchema;
 	tFilter = sphCreateFilter ( tOpt, tCtx, sError, sWarning );
 	ASSERT_TRUE ( tFilter!=nullptr );
 
@@ -385,7 +385,7 @@ TEST_F ( filter_block_level, values )
 	tOpt.m_eType = SPH_FILTER_VALUES;
 	SphAttr_t dValues[] = { 10, 40, 100 };
 	tOpt.SetExternalValues ( { dValues, sizeof ( dValues ) / sizeof ( dValues[0] ) } );
-	tCtx.m_pSchema = &tSchema;
+	tCtx.m_pMatchSchema = &tSchema;
 
 	tFilter = sphCreateFilter ( tOpt, tCtx, sError, sWarning );
 	ASSERT_TRUE ( tFilter != nullptr );
@@ -451,7 +451,7 @@ TEST_F ( filter_block_level, and2 )
 	SphAttr_t dVal1[] = { 10 };
 	tOpt.SetExternalValues ( { dVal1, sizeof ( dVal1 ) / sizeof ( dVal1[0] ) } );
 
-	tCtx.m_pSchema = &tSchema;
+	tCtx.m_pMatchSchema = &tSchema;
 
 	auto pFilter1 = sphCreateFilter ( tOpt, tCtx, sError, sWarning );
 	ASSERT_TRUE ( pFilter1!=nullptr );
@@ -497,7 +497,7 @@ TEST_F ( filter_block_level, and3 )
 	SphAttr_t dVal1[] = { 10 };
 	tOpt.SetExternalValues ( { dVal1, sizeof ( dVal1 ) / sizeof ( dVal1[0] ) } );
 
-	tCtx.m_pSchema = &tSchema;
+	tCtx.m_pMatchSchema = &tSchema;
 
 	auto pFilter1 = sphCreateFilter ( tOpt, tCtx, sError, sWarning );
 	ASSERT_TRUE ( pFilter1!=nullptr );
@@ -549,7 +549,7 @@ TEST_F ( filter_block_level, and )
 	SphAttr_t dVal1[] = { 10 };
 	tOpt.SetExternalValues ( { dVal1, sizeof ( dVal1 ) / sizeof ( dVal1[0] ) } );
 
-	tCtx.m_pSchema = &tSchema;
+	tCtx.m_pMatchSchema = &tSchema;
 
 	auto pFilter1 = sphCreateFilter ( tOpt, tCtx, sError, sWarning );
 	ASSERT_TRUE ( pFilter1!=nullptr );

@@ -1273,7 +1273,7 @@ The query syntax is the same as in the [/search endpoint](../../Searching/Full_t
 FLUSH ATTRIBUTES
 ```
 
-The FLUSH ATTRIBUTES command flushes all in-memory attribute updates in all the active tables to disk. It returns a tag that identifies the result on-disk state, which represents the number of actual disk attribute saves performed since the server startup.
+The FLUSH ATTRIBUTES command ensures that all in-memory attribute updates in all active tables are flushed to disk. It returns a tag that identifies the result on-disk state, which represents the number of actual disk attribute saves performed since the server startup.
 
 ```sql
 mysql> UPDATE testindex SET channel_id=1107025 WHERE id=1;

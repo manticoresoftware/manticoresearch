@@ -63,22 +63,23 @@ uint64_t sphCalcExprDepHash ( const char * szTag, ISphExpr * pExpr, const ISphSc
 
 uint64_t sphCalcExprDepHash ( ISphExpr * pExpr, const ISphSchema & tSorterSchema, uint64_t uPrevHash, bool & bDisable )
 {
-	CSphVector<int> dCols;
+	CSphVector<CSphString> dCols;
 	pExpr->Command ( SPH_EXPR_GET_DEPENDENT_COLS, &dCols );
 
 	uint64_t uHash = uPrevHash;
 	ARRAY_FOREACH ( i, dCols )
 	{
-		const CSphColumnInfo & tCol = tSorterSchema.GetAttr ( dCols[i] );
-		if ( tCol.m_pExpr )
+		const CSphColumnInfo * pCol = tSorterSchema.GetAttr ( dCols[i].cstr() );
+		assert(pCol);
+		if ( pCol->m_pExpr )
 		{
 			// one more expression
-			uHash = tCol.m_pExpr->GetHash ( tSorterSchema, uHash, bDisable );
+			uHash = pCol->m_pExpr->GetHash ( tSorterSchema, uHash, bDisable );
 			if ( bDisable )
 				return 0;
 		}
 		else
-			uHash = sphCalcLocatorHash ( tCol.m_tLocator, uHash ); // plain column, add locator to hash
+			uHash = sphCalcLocatorHash ( pCol->m_tLocator, uHash ); // plain column, add locator to hash
 	}
 
 	return uHash;

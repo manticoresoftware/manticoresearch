@@ -610,7 +610,7 @@ select * from dist_gr2 facet gid facet tag;;
             "should":[
                 { "bool":{
                   "must":[ { "term" : { "content" : "in" } } ],
-                  "must_not":[ { "exist" : { "field" : "title" } } ]
+                  "must_not":[ { "exists" : { "field" : "title" } } ]
                 }
               } ]
   } } ] } }
@@ -645,6 +645,80 @@ select * from dist_gr2 facet gid facet tag;;
                 }
               }
             ]
+          }
+        }
+      ]
+    }
+  }
+}
+</query>
+
+<!-- facets with sort defined as order property at aggregate bucket -->
+<query endpoint="json/search">{ "index": "test_gr1", "size":0, "aggs":{ "gr_desc": { "terms": { "field": "gid", "size": 5, "order": {"gid" : "asc"} } } } }</query>
+
+<!-- facets with sort but the wrong order -->
+<query endpoint="json/search">{ "index": "test_gr1", "size":0, "aggs":{ "gr_desc": { "sort":[{"gid":{"order":"asc"}}], "terms": { "field": "gid", "size": 5 }}}}</query>
+
+/* error on mix of full-text with filters with long error path */
+<query endpoint="json/search">
+{
+  "index":"test1",
+  "query":{
+    "bool":{
+      "must":[
+        {
+          "bool":{
+            "should":[
+              { "match":{ "_all":"white" } },
+              { "range":{ "id":{ "lt":10 } }
+              }
+            ]
+          }
+        }
+      ]
+    }
+  }
+}
+</query>
+
+<!-- error on full-text vs filter order -->
+<query endpoint="json/search">
+{
+  "index": "test2",
+  "query": {
+    "equals": { "gid": 11 },
+    "match": { "*": "on" }
+  }
+}
+</query>
+<query endpoint="json/search">
+{
+  "index": "test2",
+  "query": {
+    "match": { "*": "on" },
+    "equals": { "gid": 11 }
+  }
+}
+</query>
+
+<!-- boost at JSON queries -->
+<query endpoint="json/search">
+{
+  "index":"test2",
+  "query":{
+    "bool":{
+      "should":[
+        {
+          "match":{
+            "_all":"glanced now"
+          }
+        },
+        {
+          "match":{
+            "_all":{
+              "query":"despite",
+              "boost":50
+            }
           }
         }
       ]

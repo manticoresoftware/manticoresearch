@@ -116,8 +116,8 @@ inline CSphString CSphString::SubString ( int iStart, int iCount ) const
 	auto iLen = (int)strlen ( m_sValue );
 	iCount = Min ( iLen - iStart, iCount );
 #endif
-	assert ( iStart >= 0 && iStart < iLen );
-	assert ( iCount > 0 );
+	assert ( iStart >= 0 && iStart <= iLen );
+	assert ( iCount >= 0 );
 	assert ( ( iStart + iCount ) <= iLen );
 
 	CSphString sRes;

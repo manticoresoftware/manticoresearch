@@ -82,6 +82,7 @@ void AddToSchema ( CSphSchema & tSchema, const AttrAddRemoveCtx_t & tCtx, CSphSt
 	tInfo.m_uAttrFlags			= tCtx.m_uFlags;
 	tInfo.m_eEngine				= tCtx.m_eEngine;
 	tInfo.m_tLocator.m_iBitCount = tCtx.m_iBits;
+	tInfo.m_tKNN				= tCtx.m_tKNN;
 
 	auto iIdxExisting = tSchema.GetAttrIndex ( tCtx.m_sName.cstr() );
 	if ( iIdxExisting >= 0 )

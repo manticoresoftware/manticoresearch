@@ -182,6 +182,7 @@ struct WriteHeader_t
 	DictRefPtr_c				m_pDict;
 	const ISphFieldFilter *		m_pFieldFilter;
 	const int64_t *				m_pFieldLens;
+	const SIContainer_c *		m_pSI = nullptr;
 };
 
 void IndexWriteHeader ( const BuildHeader_t & tBuildHeader, const WriteHeader_t & tWriteHeader, JsonEscapedBuilder& sJson, bool bForceWordDict, bool SkipEmbeddDict=false );

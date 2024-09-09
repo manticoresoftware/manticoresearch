@@ -13,9 +13,9 @@ mysql -h0 -P9306 -e "SHOW TABLE test SETTINGS\G"
 ––– output –––
 *************************** 1. row ***************************
 Variable_name: settings
-Value: exceptions = /var/lib/manticore/test/exc.txt
-stopwords = /var/lib/manticore/test/stop.txt
-wordforms = /var/lib/manticore/test/wordforms1.txt
+Value: exceptions = /var/lib/manticore/test/exceptions_chunk0_0.txt
+stopwords = /var/lib/manticore/test/stopwords_chunk0_0.txt
+wordforms = /var/lib/manticore/test/wordforms_chunk0_0.txt
 ––– input –––
 mysql -h0 -P9306 -e "import table test2 from '/var/lib/manticore/test/test'"
 ––– output –––

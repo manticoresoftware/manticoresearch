@@ -21,7 +21,8 @@
 #include "conversion.h"
 #include "geodist.h"
 #include "joinsorter.h"
-#include "secondarylib.h"
+#include "secondaryindex.h"
+#include "jsonsi.h"
 
 #include <boost/icl/interval.hpp>
 
@@ -1245,24 +1246,51 @@ public:
 };
 
 
-
-static std::unique_ptr<ISphFilter> CreateFilterExpr ( ISphExpr * _pExpr, const CSphFilterSettings & tSettings, const CommonFilterSettings_t & tFixedSettings, CSphString & sError, ESphCollation eCollation, ESphAttr eAttrType )
+static std::unique_ptr<ISphFilter> SetupJsonExpr ( CSphRefcountedPtr<ISphExpr> & pExpr, const CSphFilterSettings & tSettings, const CommonFilterSettings_t & tFixedSettings )
 {
-	CSphRefcountedPtr<ISphExpr> pExpr { _pExpr };
-	SafeAddRef ( _pExpr );
-
 	// auto-convert all JSON types except SPH_FILTER_NULL, it needs more info
 	bool bAutoConvert = false;
 	bool bJsonExpr = false;
 	if ( pExpr && tFixedSettings.m_eType!=SPH_FILTER_NULL )
 		bJsonExpr = pExpr->IsJson ( bAutoConvert );
 
-	// IN ( string list ) filter by JSON attribute should be done via Expr_JsonFieldIn_c expression
-	if ( bJsonExpr && tFixedSettings.m_eType==SPH_FILTER_STRING_LIST )
-		return std::make_unique< ExprFilterProxy_c > ( ExprJsonIn ( tSettings.m_dStrings, pExpr ), SPH_ATTR_INTEGER );
+	if ( !bJsonExpr )
+		return nullptr;
 
-	if ( bJsonExpr && !bAutoConvert )
-		pExpr = sphJsonFieldConv ( pExpr );
+	if ( tFixedSettings.m_eType==SPH_FILTER_STRING_LIST )
+		return std::make_unique<ExprFilterProxy_c> ( ExprJsonIn ( tSettings.m_dStrings, pExpr ), SPH_ATTR_INTEGER );
+
+	if ( tSettings.m_eMvaFunc==SPH_MVAFUNC_ANY )
+	{
+		switch ( tFixedSettings.m_eType )
+		{
+		case SPH_FILTER_VALUES:
+			return std::make_unique<ExprFilterProxy_c> ( ExprJsonIn ( tSettings.m_dValues, pExpr ), SPH_ATTR_INTEGER );
+
+		case SPH_FILTER_RANGE:
+		case SPH_FILTER_FLOATRANGE:
+			return std::make_unique<ExprFilterProxy_c> ( ExprJsonRange ( tFixedSettings, pExpr ), SPH_ATTR_INTEGER );
+
+		default:
+			break;
+		}
+	}
+
+	if ( !bAutoConvert )
+		pExpr = sphJsonFieldConv(pExpr);
+
+	return nullptr;
+}
+
+
+static std::unique_ptr<ISphFilter> CreateFilterExpr ( ISphExpr * _pExpr, const CSphFilterSettings & tSettings, const CommonFilterSettings_t & tFixedSettings, CSphString & sError, ESphCollation eCollation, ESphAttr eAttrType )
+{
+	CSphRefcountedPtr<ISphExpr> pExpr { _pExpr };
+	SafeAddRef ( _pExpr );
+
+	std::unique_ptr<ISphFilter> pRes = SetupJsonExpr ( pExpr, tSettings, tFixedSettings );
+	if ( pRes )
+		return pRes;
 
 	switch ( tFixedSettings.m_eType )
 	{
@@ -1316,8 +1344,8 @@ static void SetFilterLocator ( const std::unique_ptr<ISphFilter>& pFilter, const
 	if ( !pFilter )
 		return;
 
-	assert ( tCtx.m_pSchema );
-	const ISphSchema & tSchema = *tCtx.m_pSchema;
+	assert ( tCtx.m_pMatchSchema );
+	const ISphSchema & tSchema = *tCtx.m_pMatchSchema;
 
 	int iAttr = ( tSettings.m_eType!=SPH_FILTER_EXPRESSION ? tSchema.GetAttrIndex ( sAttrName.cstr() ) : -1 );
 	if ( iAttr==-1 )
@@ -1433,14 +1461,14 @@ static void TryToCreateJoinNullFilter ( std::unique_ptr<ISphFilter> & pFilter, c
 	if ( pFilter )
 		return;
 
-	assert ( tCtx.m_pSchema );
-	const ISphSchema & tSchema = *tCtx.m_pSchema;
+	assert ( tCtx.m_pMatchSchema );
+	const ISphSchema & tSchema = *tCtx.m_pMatchSchema;
 
 	int iAttr = tSchema.GetAttrIndex ( sAttrName.cstr() );
 	if ( iAttr<0 )
 		return;
 
-	const CSphColumnInfo * pAttrMask = tCtx.m_pSchema->GetAttr ( GetNullMaskAttrName() );
+	const CSphColumnInfo * pAttrMask = tSchema.GetAttr ( GetNullMaskAttrName() );
 	const CSphColumnInfo & tAttr = tSchema.GetAttr(iAttr);
 	if ( ( tAttr.m_uAttrFlags & CSphColumnInfo::ATTR_JOINED ) && pAttrMask && tFixedSettings.m_eType==SPH_FILTER_NULL )
 		pFilter = CreateJoinNullFilter ( tSettings, pAttrMask->m_tLocator );
@@ -1452,8 +1480,8 @@ static void TryToCreateExpressionFilter ( std::unique_ptr<ISphFilter> & pFilter,
 	if ( pFilter )
 		return;
 
-	assert ( tCtx.m_pSchema );
-	const ISphSchema & tSchema = *tCtx.m_pSchema;
+	assert ( tCtx.m_pMatchSchema );
+	const ISphSchema & tSchema = *tCtx.m_pMatchSchema;
 
 	int iAttr = ( tFixedSettings.m_eType!=SPH_FILTER_EXPRESSION ? tSchema.GetAttrIndex ( sAttrName.cstr() ) : -1 );
 	bool bColumnar = CanSpawnColumnarFilter ( iAttr, tSchema );
@@ -1480,8 +1508,8 @@ static void TryToCreatePlainAttrFilter ( std::unique_ptr<ISphFilter>& pFilter, c
 	if ( pFilter )
 		return;
 
-	assert ( tCtx.m_pSchema );
-	const ISphSchema & tSchema = *tCtx.m_pSchema;
+	assert ( tCtx.m_pMatchSchema );
+	const ISphSchema & tSchema = *tCtx.m_pMatchSchema;
 
 	int iAttr = ( tSettings.m_eType!=SPH_FILTER_EXPRESSION ? tSchema.GetAttrIndex ( sAttrName.cstr() ) : -1 );
 	bool bColumnar = iAttr>=0 && tSchema.GetAttr(iAttr).IsColumnar();
@@ -1521,8 +1549,8 @@ static void TryToCreatePlainAttrFilter ( std::unique_ptr<ISphFilter>& pFilter, c
 
 bool FixupFilterSettings ( const CSphFilterSettings & tSettings, CommonFilterSettings_t & tFixedSettings, const CreateFilterContext_t & tCtx, const CSphString & sAttrName, CSphString & sError )
 {
-	assert ( tCtx.m_pSchema );
-	const ISphSchema & tSchema = *tCtx.m_pSchema;
+	assert ( tCtx.m_pMatchSchema );
+	const ISphSchema & tSchema = *tCtx.m_pMatchSchema;
 
 	int iAttr = ( tSettings.m_eType!=SPH_FILTER_EXPRESSION ? tSchema.GetAttrIndex ( sAttrName.cstr() ) : -1 );
 	if ( iAttr<0 )
@@ -1592,20 +1620,21 @@ void FixupFilterSettings ( const CSphFilterSettings & tSettings, ESphAttr eAttrT
 
 static bool CanAddGeodist ( const CSphColumnInfo & tAttr, const CreateFilterContext_t & tCtx )
 {
-	// add filters only if they are columnar or they have enabled SI
-	if ( tAttr.m_pExpr && !tAttr.IsColumnarExpr() )
+	if ( !tCtx.m_pIndexSchema )
 		return false;
 
-	if ( tAttr.IsColumnar() || tAttr.IsColumnarExpr() )
-		return true;
+	const CSphColumnInfo * pAttr = tCtx.m_pIndexSchema->GetAttr ( tAttr.m_sName.cstr() );
+	if ( !pAttr )
+		return false;
 
-	return tCtx.m_pSI && tCtx.m_pSI->IsEnabled ( tAttr.m_sName.cstr() );
+	return pAttr->IsColumnar() || ( tCtx.m_pSI && tCtx.m_pSI->IsEnabled ( pAttr->m_sName ) );
 }
 
 
 static void TryToAddGeodistFilters ( const CreateFilterContext_t & tCtx, const CSphFilterSettings & tFilter, CSphVector<CSphFilterSettings> & dModified )
 {
-	const CSphColumnInfo * pFilterColumn = tCtx.m_pSchema->GetAttr ( tFilter.m_sAttrName.cstr() );
+	assert ( tCtx.m_pMatchSchema );
+	const CSphColumnInfo * pFilterColumn = tCtx.m_pMatchSchema->GetAttr ( tFilter.m_sAttrName.cstr() );
 	if ( !pFilterColumn || !pFilterColumn->m_pExpr.Ptr() )
 		return;
 
@@ -1620,21 +1649,22 @@ static void TryToAddGeodistFilters ( const CreateFilterContext_t & tCtx, const C
 	assert ( tSettingsPair.first );
 	const GeoDistSettings_t & tSettings = *tSettingsPair.first;
 
-	const CSphColumnInfo & tLat = tCtx.m_pSchema->GetAttr ( tSettings.m_iAttrLat );
-	const CSphColumnInfo & tLon = tCtx.m_pSchema->GetAttr ( tSettings.m_iAttrLon );
-	if ( tLat.m_eAttrType!=SPH_ATTR_FLOAT || tLon.m_eAttrType!=SPH_ATTR_FLOAT )
+	const CSphColumnInfo * pLat = tCtx.m_pMatchSchema->GetAttr ( tSettings.m_sAttrLat.cstr() );
+	const CSphColumnInfo * pLon = tCtx.m_pMatchSchema->GetAttr ( tSettings.m_sAttrLon.cstr() );
+	assert ( pLat && pLon );
+	if ( pLat->m_eAttrType!=SPH_ATTR_FLOAT || pLon->m_eAttrType!=SPH_ATTR_FLOAT )
 		return;
 
 	CSphFilterSettings tFilterLat;
 	tFilterLat.m_eType = SPH_FILTER_FLOATRANGE;
-	tFilterLat.m_sAttrName = tLat.m_sName;
+	tFilterLat.m_sAttrName = pLat->m_sName;
 	tFilterLat.m_bHasEqualMin = tFilter.m_bHasEqualMax;
 	tFilterLat.m_bHasEqualMax = tFilter.m_bHasEqualMax;
 	tFilterLat.m_bOptional = true;
 
 	CSphFilterSettings tFilterLon;
 	tFilterLon.m_eType = SPH_FILTER_FLOATRANGE;
-	tFilterLon.m_sAttrName = tLon.m_sName;
+	tFilterLon.m_sAttrName = pLon->m_sName;
 	tFilterLon.m_bHasEqualMin = tFilter.m_bHasEqualMax;
 	tFilterLon.m_bHasEqualMax = tFilter.m_bHasEqualMax;
 	tFilterLon.m_bOptional = true;
@@ -1644,11 +1674,87 @@ static void TryToAddGeodistFilters ( const CreateFilterContext_t & tCtx, const C
 	if ( !GeodistGetSphereBBox ( tSettings.m_pFunc, tSettings.m_fAnchorLat, tSettings.m_fAnchorLon, fDist, tFilterLat.m_fMinValue, tFilterLat.m_fMaxValue, tFilterLon.m_fMinValue, tFilterLon.m_fMaxValue ) )
 		return;
 
-	if ( CanAddGeodist ( tLat, tCtx ) )
+	if ( CanAddGeodist ( *pLat, tCtx ) )
 		dModified.Add ( tFilterLat );
 
-	if ( CanAddGeodist ( tLon, tCtx ) )
+	if ( CanAddGeodist ( *pLon, tCtx ) )
 		dModified.Add ( tFilterLon );
+}
+
+
+static void TryToAddPoly2dFilters ( const CreateFilterContext_t & tCtx, const CSphFilterSettings & tFilter, CSphVector<CSphFilterSettings> & dModified )
+{
+	assert ( tCtx.m_pMatchSchema );
+	const CSphColumnInfo * pFilterColumn = tCtx.m_pMatchSchema->GetAttr ( tFilter.m_sAttrName.cstr() );
+	if ( !pFilterColumn || !pFilterColumn->m_pExpr.Ptr() )
+		return;
+
+	bool bExclude = false;
+	if ( !CanAliasedExprSetupAsFilter ( tFilter, bExclude ) )
+		return;
+
+	if ( bExclude )
+		return;
+
+	std::pair<Poly2dBBox_t *, bool> tSettingsPair { nullptr, false };
+	pFilterColumn->m_pExpr->Command ( SPH_EXPR_GET_POLY2D_BBOX, &tSettingsPair );
+	if ( !tSettingsPair.second )
+		return;
+
+	assert ( tSettingsPair.first );
+	const Poly2dBBox_t & tBBox = *tSettingsPair.first;
+
+	const CSphColumnInfo * pLat = tCtx.m_pMatchSchema->GetAttr ( tBBox.m_sAttrLat.cstr() );
+	if ( pLat && ( pLat->m_eAttrType==SPH_ATTR_FLOAT || pLat->m_eAttrType==SPH_ATTR_INTEGER || pLat->m_eAttrType==SPH_ATTR_BIGINT ) )
+	{
+		bool bFloat = pLat->m_eAttrType==SPH_ATTR_FLOAT;
+
+		CSphFilterSettings tFilterLat;
+		tFilterLat.m_eType = bFloat ? SPH_FILTER_FLOATRANGE : SPH_FILTER_RANGE;
+		tFilterLat.m_sAttrName = pLat->m_sName;
+		tFilterLat.m_bHasEqualMin = true;
+		tFilterLat.m_bHasEqualMax = true;
+		tFilterLat.m_bOptional = true;
+		if ( bFloat )
+		{
+			tFilterLat.m_fMinValue = tBBox.m_fMinX;
+			tFilterLat.m_fMaxValue = tBBox.m_fMaxX;
+		}
+		else
+		{
+			tFilterLat.m_iMinValue = (SphAttr_t)tBBox.m_fMinX;
+			tFilterLat.m_iMaxValue = (SphAttr_t)tBBox.m_fMaxX;
+		}
+
+		if ( CanAddGeodist ( *pLat, tCtx ) )
+			dModified.Add ( tFilterLat );
+	}
+
+	const CSphColumnInfo * pLon = tCtx.m_pMatchSchema->GetAttr ( tBBox.m_sAttrLon.cstr() );
+	if ( pLon && ( pLon->m_eAttrType==SPH_ATTR_FLOAT || pLon->m_eAttrType==SPH_ATTR_INTEGER || pLon->m_eAttrType==SPH_ATTR_BIGINT ) )
+	{
+		bool bFloat = pLon->m_eAttrType==SPH_ATTR_FLOAT;
+
+		CSphFilterSettings tFilterLon;
+		tFilterLon.m_eType = bFloat ? SPH_FILTER_FLOATRANGE : SPH_FILTER_RANGE;
+		tFilterLon.m_sAttrName = pLon->m_sName;
+		tFilterLon.m_bHasEqualMin = true;
+		tFilterLon.m_bHasEqualMax = true;
+		tFilterLon.m_bOptional = true;
+		if ( bFloat )
+		{
+			tFilterLon.m_fMinValue = tBBox.m_fMinY;
+			tFilterLon.m_fMaxValue = tBBox.m_fMaxY;
+		}
+		else
+		{
+			tFilterLon.m_iMinValue = (SphAttr_t)tBBox.m_fMinY;
+			tFilterLon.m_iMaxValue = (SphAttr_t)tBBox.m_fMaxY;
+		}
+
+		if ( CanAddGeodist ( *pLon, tCtx ) )
+			dModified.Add ( tFilterLon );
+	}
 }
 
 
@@ -1657,7 +1763,7 @@ static void RemoveJoinFilters ( const CreateFilterContext_t & tCtx, CSphVector<C
 	if ( tCtx.m_sJoinIdx.IsEmpty() )
 		return;
 
-	CSphVector<std::pair<int,bool>> dRightFilters = FetchJoinRightTableFilters ( dModified, *tCtx.m_pSchema, tCtx.m_sJoinIdx.cstr() );
+	CSphVector<std::pair<int,bool>> dRightFilters = FetchJoinRightTableFilters ( dModified, *tCtx.m_pMatchSchema, tCtx.m_sJoinIdx.cstr() );
 
 	bool bHaveNullFilters = false;
 	for ( const auto & i : dRightFilters )
@@ -1689,7 +1795,7 @@ static void RemoveJoinFilters ( const CreateFilterContext_t & tCtx, CSphVector<C
 	sPrefix.SetSprintf ( "%s.", tCtx.m_sJoinIdx.cstr() );
 	for ( int i = dModified.GetLength()-1; i>=0; i-- )
 	{
-		const CSphColumnInfo * pAttr = tCtx.m_pSchema->GetAttr ( dModified[i].m_sAttrName.cstr() );
+		const CSphColumnInfo * pAttr = tCtx.m_pMatchSchema->GetAttr ( dModified[i].m_sAttrName.cstr() );
 		bool bRemove = pAttr ? pAttr->IsJoined() : dModified[i].m_sAttrName.Begins ( sPrefix.cstr() );
 		if ( bRemove )
 			dModified.Remove(i);		
@@ -1697,7 +1803,54 @@ static void RemoveJoinFilters ( const CreateFilterContext_t & tCtx, CSphVector<C
 }
 
 
-bool TransformFilters ( const CreateFilterContext_t & tCtx, CSphVector<CSphFilterSettings> & dModified, CSphVector<FilterTreeItem_t> & dModifiedTree, CSphString & sError )
+static void TransformForJsonSI ( const CreateFilterContext_t & tCtx, CSphVector<CSphFilterSettings> & dFilters, const CSphVector<CSphQueryItem> & dItems )
+{
+	if ( !tCtx.m_pSI )
+		return;
+
+	const ISphSchema & tMatchSchema = *tCtx.m_pMatchSchema;
+
+	for ( auto & i : dFilters )
+	{
+		const CSphColumnInfo * pAttr = tMatchSchema.GetAttr ( i.m_sAttrName.cstr() );
+		if ( pAttr && pAttr->m_pExpr && pAttr->m_pExpr->SetupAsFilter ( i, tMatchSchema, *tCtx.m_pSI ) )
+		{
+			// we transformed an attribute from an expression filter into a plain filter
+			// we may no longer need to calculate that expression at PREFILTER stage
+			StrVec_t dAttrNames;
+			dAttrNames.Add ( pAttr->m_sName );
+			FetchAttrDependencies ( dAttrNames, tMatchSchema );
+			for ( const auto & sAttr : dAttrNames )
+			{
+				const CSphColumnInfo * pDependentAttr = tMatchSchema.GetAttr ( sAttr.cstr() );
+				assert(pDependentAttr);
+				if ( pDependentAttr->m_eStage!=SPH_EVAL_STATIC )
+					(const_cast<CSphColumnInfo *>(pDependentAttr))->m_eStage = Max ( pDependentAttr->m_eStage, SPH_EVAL_FINAL );
+			}
+
+			continue;
+		}
+
+		if ( !pAttr || pAttr->m_tLocator.m_bDynamic )
+		{
+			CSphString sTransformed = UnifyJsonFieldName ( i.m_sAttrName );
+			for ( const auto & tItem : dItems )
+				if ( tItem.m_sAlias==i.m_sAttrName && tItem.m_eAggrFunc==SPH_AGGR_NONE )
+				{
+					sTransformed = tItem.m_sExpr;
+					if ( sphJsonNameSplit ( sTransformed.cstr() ) )
+						sTransformed = UnifyJsonFieldName ( sTransformed );
+					break;
+				}
+
+			if ( tCtx.m_pSI->IsEnabled(sTransformed) )
+				i.m_sAttrName = sTransformed;
+		}
+	}
+}
+
+
+bool TransformFilters ( const CreateFilterContext_t & tCtx, CSphVector<CSphFilterSettings> & dModified, CSphVector<FilterTreeItem_t> & dModifiedTree, const CSphVector<CSphQueryItem> & dItems, CSphString & sError )
 {
 	assert(tCtx.m_pFilters);
 	const VecTraits_T<CSphFilterSettings> & dFilters = *tCtx.m_pFilters;
@@ -1719,6 +1872,7 @@ bool TransformFilters ( const CreateFilterContext_t & tCtx, CSphVector<CSphFilte
 	}
 
 	RemoveJoinFilters ( tCtx, dModified, dModifiedTree );
+	TransformForJsonSI ( tCtx, dModified, dItems );
 
 	// FIXME: no further transformations if we have a filter tree
 	if ( tCtx.m_pFilterTree && tCtx.m_pFilterTree->GetLength() )
@@ -1726,7 +1880,10 @@ bool TransformFilters ( const CreateFilterContext_t & tCtx, CSphVector<CSphFilte
 
 	int iNumModified = dModified.GetLength();
 	for ( int i = 0; i < iNumModified; i++ )
+	{
 		TryToAddGeodistFilters ( tCtx, dModified[i], dModified );
+		TryToAddPoly2dFilters ( tCtx, dModified[i], dModified );
+	}
 
 	return true;
 }
@@ -2081,7 +2238,7 @@ std::unique_ptr<ISphFilter> sphCreateAggrFilter ( const CSphFilterSettings * pSe
 	assert ( pSettings );
 	CSphString sWarning;
 	CreateFilterContext_t tCtx;
-	tCtx.m_pSchema = &tSchema;
+	tCtx.m_pMatchSchema = &tSchema;
 	tCtx.m_eCollation = SPH_COLLATION_DEFAULT;
 
 	std::unique_ptr<ISphFilter> pRes = CreateFilter ( *pSettings, sAttrName, tCtx, true, sError, sWarning );
@@ -2122,7 +2279,7 @@ static std::unique_ptr<ISphFilter> CreateFilterNode ( CreateFilterContext_t & tC
 			return nullptr;
 		}
 
-		bHasWeight |= IsWeightColumn ( pFilterSettings->m_sAttrName, *tCtx.m_pSchema );
+		bHasWeight |= IsWeightColumn ( pFilterSettings->m_sAttrName, *tCtx.m_pMatchSchema );
 
 		// bind user variable local to that daemon
 		CSphFilterSettings tUservar;
@@ -2251,7 +2408,7 @@ bool sphCreateFilters ( CreateFilterContext_t & tCtx, CSphString & sError, CSphS
 		return Threads::Coro::ContinueBool ( iStackNeeded, [&] { return CreateFilterTree ( tCtx, sError, sWarning ); } );
 	}
 
-	assert ( tCtx.m_pSchema );
+	assert ( tCtx.m_pMatchSchema );
 	CSphVector<FilterInfo_t> dFilters, dWeightFilters;
 
 	bool bSingleFilter = tCtx.m_pFilters->GetLength()==1;
@@ -2265,7 +2422,7 @@ bool sphCreateFilters ( CreateFilterContext_t & tCtx, CSphString & sError, CSphS
 		if ( pFilterSettings->m_sAttrName=="@rowid" && pFilterSettings->m_eType==SPH_FILTER_RANGE )
 			continue;
 
-		bool bWeight = IsWeightColumn ( pFilterSettings->m_sAttrName, *tCtx.m_pSchema );
+		bool bWeight = IsWeightColumn ( pFilterSettings->m_sAttrName, *tCtx.m_pMatchSchema );
 		if ( tCtx.m_bScan && bWeight )
 			continue; // @weight is not available in fullscan mode
 

@@ -132,6 +132,78 @@ Integer. Max found matches threshold. The value is selected automatically if not
 
 In case Manticore cannot calculate the exact matching documents count, you will see `total_relation: gte` in the query [meta information](../Node_info_and_management/SHOW_META.md#SHOW-META), which means that the actual count is **Greater Than or Equal** to the total (`total_found` in `SHOW META` via SQL, `hits.total` in JSON via HTTP). If the total value is precise, you'll get `total_relation: eq`.
 
+<!-- example cutoff_aggregation -->
+Note: Using `cutoff` in aggregation queries is not recommended, as it can produce meaningless results.
+
+<!-- request Example -->
+
+Using cutoff in an aggregation query can lead to incorrect results
+```
+drop table if exists t
+--------------
+
+Query OK, 0 rows affected (0.02 sec)
+
+--------------
+create table t(a int)
+--------------
+
+Query OK, 0 rows affected (0.04 sec)
+
+--------------
+insert into t(a) values(1),(2),(3),(1),(2),(3)
+--------------
+
+Query OK, 6 rows affected (0.00 sec)
+
+--------------
+select avg(a) from t option cutoff=1 facet a
+--------------
+
++----------+
+| avg(a)   |
++----------+
+| 1.000000 |
++----------+
+1 row in set (0.00 sec)
+--- 1 out of 1 results in 0ms ---
+
++------+----------+
+| a    | count(*) |
++------+----------+
+|    1 |        1 |
++------+----------+
+1 row in set (0.00 sec)
+--- 1 out of 1 results in 0ms ---
+```
+
+Compare it with the same query without `cutoff`:
+```
+--------------
+select avg(a) from t facet a
+--------------
+
++----------+
+| avg(a)   |
++----------+
+| 2.000000 |
++----------+
+1 row in set (0.00 sec)
+--- 1 out of 1 results in 0ms ---
+
++------+----------+
+| a    | count(*) |
++------+----------+
+|    1 |        2 |
+|    2 |        2 |
+|    3 |        2 |
++------+----------+
+3 rows in set (0.00 sec)
+--- 3 out of 3 results in 0ms ---
+```
+
+<!-- end -->
+
 ### distinct_precision_threshold
 Integer. Default is `3500`. This option sets the threshold below which counts returned by `count distinct` are guaranteed to be exact within a plain table.
 
@@ -177,9 +249,9 @@ IDF flags can be combined; `plain` and `normalized` are mutually exclusive; `tfi
 Named integer list. Per-table user weights for ranking.
 
 ### local_df
-`0` or `1`, automatically sum DFs over all local parts of a distributed table, ensuring consistent (and accurate) IDF across a locally sharded table. Enabled dy default for disk chunks of the RT table.
+`0` or `1`, automatically sum DFs over all local parts of a distributed table, ensuring consistent (and accurate) IDF across a locally sharded table. Enabled by default for disk chunks of the RT table. Query terms with wildcards are ignored.
 
-### Low Priority
+### low_priority
 `0` or `1` (`0` by default). Setting `low_priority=1` executes the query with a lower priority, rescheduling its jobs 10 times less frequently than other queries with normal priority.
 
 ### max_matches

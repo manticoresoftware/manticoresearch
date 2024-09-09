@@ -13,11 +13,12 @@
 #pragma once
 
 #include "ints.h"
+#include "vectraits.h"
 
 /// Sphinx CRC32 implementation
 DWORD sphCRC32 ( const void* pString );
-DWORD sphCRC32 ( const void* pString, int iLen );
-DWORD sphCRC32 ( const void* pString, int iLen, DWORD uPrevCRC );
+DWORD sphCRC32 ( const void* pString, int iLen, DWORD uPrevCRC=0 );
+template<typename T> DWORD sphCRC32 ( VecTraits_T<T> dData, DWORD uPrevCRC=0 );
 
 void CRC32_step ( DWORD& uCRC, BYTE uByte );
 DWORD CRC32_next ( DWORD uPrevCRC, BYTE uByte );

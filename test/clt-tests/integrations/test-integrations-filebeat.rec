@@ -1,0 +1,60 @@
+––– input –––
+set -b
+––– output –––
+––– input –––
+export PATH=/usr/bin:/usr/local/bin:/usr/sbin:/sbin:/bin
+––– output –––
+––– input –––
+wget -qO - https://artifacts.elastic.co/GPG-KEY-elasticsearch | gpg --dearmor -o /usr/share/keyrings/elastic-keyring.gpg
+––– output –––
+––– input –––
+echo "deb [signed-by=/usr/share/keyrings/elastic-keyring.gpg] https://artifacts.elastic.co/packages/8.x/apt stable main" | tee -a /etc/apt/sources.list.d/elastic-8.x.list
+––– output –––
+deb [signed-by=/usr/share/keyrings/elastic-keyring.gpg] https://artifacts.elastic.co/packages/8.x/apt stable main
+––– input –––
+apt-get update > /dev/null 2>&1; echo $?
+––– output –––
+0
+––– input –––
+apt-get -y install gnupg2 openjdk-8-jre-headless curl jq filebeat > /dev/null 2>&1; echo $?
+––– output –––
+0
+––– input –––
+echo -e "filebeat.inputs:\n- type: filestream\n  id: example\n  paths:\n    - /var/log/dpkg.log\n\noutput.elasticsearch:\n  hosts: [\"http://localhost:9308\"]\n  index: \"dpkg_log\"\n  allow_older_versions: true\n  compression_level: 0\n\nsetup.ilm:\n  enabled: false\n\nsetup.template:\n  name: \"dpkg_log\"\n  pattern: \"dpkg_log\"" > /filebeat.yml
+––– output –––
+––– block: ../base/start-searchd –––
+––– input –––
+echo -e "2023-05-31 10:42:55 status triggers-awaited ca-certificates-java:all 20190405ubuntu1.1\n2023-05-31 10:42:55 trigproc libc-bin:amd64 2.31-0ubuntu9.9 <none>\n2023-05-31 10:42:55 status half-configured libc-bin:amd64 2.31-0ubuntu9.9\n2023-05-31 10:42:55 status installed libc-bin:amd64 2.31-0ubuntu9.9\n2023-05-31 10:42:55 trigproc systemd:amd64 245.4-4ubuntu3.21 <none>" > /var/log/dpkg.log; echo $?
+––– output –––
+0
+––– input –––
+cat /var/log/dpkg.log | wc -l
+––– output –––
+5
+––– input –––
+filebeat -c /filebeat.yml -strict.perms=false -e 2>/var/log/filebeat.log &
+––– output –––
+[1] #!/[0-9]+/!#
+––– input –––
+if timeout 60 grep -qm1 'Non-zero metrics in the last 30s' <(tail -n 0 -f /var/log/filebeat.log); then echo 'Done'; else echo 'Timeout or failed'; cat /var/log/filebeat.log; cat /var/log/manticore/searchd.log; fi
+––– output –––
+Done
+––– input –––
+filebeat version | sed 's/ \[.*//'
+––– output –––
+filebeat version #!/[0-9]{1}\.[0-9]{2}\.[0-9]{1}/!# (amd64), libbeat #!/[0-9]{1}\.[0-9]{2}\.[0-9]{1}/!#
+––– input –––
+curl -s localhost:9308/cli_json -d 'describe dpkg_log' | jq -cM '.[].data | sort_by(.Field)'
+––– output –––
+[{"Field":"@timestamp","Type":"timestamp","Properties":""},{"Field":"agent","Type":"json","Properties":""},{"Field":"ecs","Type":"json","Properties":""},{"Field":"host","Type":"json","Properties":""},{"Field":"id","Type":"bigint","Properties":""},{"Field":"input","Type":"json","Properties":""},{"Field":"log","Type":"json","Properties":""},{"Field":"message","Type":"text","Properties":"indexed stored"}]
+––– input –––
+mysql -P9306 -h0 -N -e "SHOW TABLES\G; SELECT COUNT(*) FROM dpkg_log\G; SELECT message FROM dpkg_log\G;"  | grep -v '^*'
+––– output –––
+dpkg_log
+rt
+5
+2023-05-31 10:42:55 status triggers-awaited ca-certificates-java:all 20190405ubuntu1.1
+2023-05-31 10:42:55 trigproc libc-bin:amd64 2.31-0ubuntu9.9 <none>
+2023-05-31 10:42:55 status half-configured libc-bin:amd64 2.31-0ubuntu9.9
+2023-05-31 10:42:55 status installed libc-bin:amd64 2.31-0ubuntu9.9
+2023-05-31 10:42:55 trigproc systemd:amd64 245.4-4ubuntu3.21 <none>

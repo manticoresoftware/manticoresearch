@@ -31,11 +31,11 @@ on:
         required: false
         type: string
         default: build_linux_x86_64
-      boost:
+      boost_url_key:
         required: false
         type: string
         default: boost_nov22
-      sysroot:
+      sysroot_url_key:
         required: false
         type: string
         default: roots_nov22
@@ -70,8 +70,8 @@ jobs:
         PACK_ICUDATA: 0
         NO_TESTS: 1
         DISTR: ${{ inputs.DISTR }}
-        boost: ${{ inputs.boost }}
-        sysroot: ${{ inputs.sysroot }}
+        boost: ${{ inputs.boost_url_key }}
+        sysroot: ${{ inputs.sysroot_url_key }}
         arch: ${{ inputs.arch }}
         CTEST_CMAKE_GENERATOR: ${{ inputs.CTEST_CMAKE_GENERATOR }}
         CTEST_CONFIGURATION_TYPE: ${{ inputs.CTEST_CONFIGURATION_TYPE }}

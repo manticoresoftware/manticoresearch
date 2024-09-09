@@ -1,0 +1,45 @@
+<?xml version="1.0" encoding="utf-8"?>
+
+<test>
+<name>json queries: gzip requests</name>
+
+<skip_indexer/>
+<requires> <http/><non-columnar/><non-secondary/><zlib/> </requires>
+
+<config>
+searchd
+{
+	<searchd_settings/>
+	binlog_path =
+}
+
+index test_rt
+{
+    type = rt
+    path = <data_path/>/rt
+    rt_field = title
+	rt_field = content
+    rt_attr_uint = int_col
+	rt_attr_float = flt_col
+}
+
+index test2
+{
+    type = rt
+    path = <data_path/>/rt2
+    rt_field = title
+	rt_field = content
+    rt_attr_uint = int_col
+	rt_attr_float = flt_col
+}
+</config>
+
+<httpqueries>
+
+<query endpoint="json/bulk" content="application/x-ndjson" gzip="1">bulk339_1.gz</query>
+<query endpoint="json/replace" content="application/json" gzip="1">replace339_1.gz</query>
+<query endpoint="json/search" content="application/json" gzip="1">search339_1.gz</query>
+
+</httpqueries>
+
+</test>

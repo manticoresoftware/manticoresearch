@@ -124,11 +124,11 @@
 * [access_dict](Server_settings/Searchd.md#access_dict)
 * [attr_update_reserve](Data_creation_and_modification/Updating_documents/UPDATE.md#attr_update_reserve)
 * [bigram_freq_words](Creating_a_table/NLP_and_tokenization/Low-level_tokenization.md#bigram_freq_words)
-* [bigram_index](Creating_a_table/NLP_and_tokenization/Low-level_tokenization.md#bigram_freq_words)
-* [blend_chars](Creating_a_table/NLP_and_tokenization/Low-level_tokenization.md#bigram_freq_words)
-* [blend_mode](Creating_a_table/NLP_and_tokenization/Low-level_tokenization.md#bigram_freq_words)
-* [charset_table](Creating_a_table/NLP_and_tokenization/Low-level_tokenization.md#bigram_freq_words)
-* [dict](Creating_a_table/NLP_and_tokenization/Low-level_tokenization.md#bigram_freq_words)
+* [bigram_index](Creating_a_table/NLP_and_tokenization/Low-level_tokenization.md#bigram_index)
+* [blend_chars](Creating_a_table/NLP_and_tokenization/Low-level_tokenization.md#blend_chars)
+* [blend_mode](Creating_a_table/NLP_and_tokenization/Low-level_tokenization.md#blend_mode)
+* [charset_table](Creating_a_table/NLP_and_tokenization/Low-level_tokenization.md#charset_table)
+* [dict](Creating_a_table/NLP_and_tokenization/Low-level_tokenization.md#dict)
 * [docstore_block_size](Creating_a_table/Local_tables/Plain_and_real-time_table_settings.md#General-syntax-of-CREATE-TABLE)
 * [docstore_compression](Creating_a_table/Local_tables/Plain_and_real-time_table_settings.md#General-syntax-of-CREATE-TABLE)
 * [docstore_compression_level](Creating_a_table/Local_tables/Plain_and_real-time_table_settings.md#General-syntax-of-CREATE-TABLE)
@@ -177,6 +177,7 @@
 * [wordforms](Creating_a_table/NLP_and_tokenization/Low-level_tokenization.md#bigram_freq_words)
 
 ##### Plain table settings
+* [json_secondary_indexes](Creating_a_table/Local_tables/Plain_and_real-time_table_settings.md#json_secondary_indexes)
 * [source](Creating_a_table/Local_tables/Plain_and_real-time_table_settings.md#General-syntax-of-CREATE-TABLE)
 * [stored_fields](Creating_a_table/Local_tables/Plain_and_real-time_table_settings.md#General-syntax-of-CREATE-TABLE)
 * [stored_only_fields](Creating_a_table/Local_tables/Plain_and_real-time_table_settings.md#General-syntax-of-CREATE-TABLE)
@@ -220,7 +221,7 @@
 * ["word1 word2 ... "](Searching/Full_text_matching/Operators.md#Phrase-search-operator) - phrase search operator
 * ["word1 word2 ... "~N](Searching/Full_text_matching/Operators.md#Proximity-search-operator) - proximity search operator
 * ["word1 word2 ... "/N](Searching/Full_text_matching/Operators.md#Quorum-matching-operator) - quorum matching operator
-* [word1 <<< word2 <<< word3](Searching/Full_text_matching/Operators.md#Strict-order-operator) - strict order operator
+* [word1 << word2 << word3](Searching/Full_text_matching/Operators.md#Strict-order-operator) - strict order operator
 * [=word1](Searching/Full_text_matching/Operators.md#Exact-form-modifier) - exact form modifier
 * [^word1](Searching/Full_text_matching/Operators.md#Field-start-and-field-end-modifier) - field-start modifier
 * [word2$](Searching/Full_text_matching/Operators.md#Field-start-and-field-end-modifier) - field-end modifier
@@ -416,6 +417,9 @@ To be put in the `searchd {}` section of the configuration file:
   * [attr_flush_period](Data_creation_and_modification/Updating_documents/UPDATE.md#attr_flush_period) - Sets the time period between flushing updated attributes to disk
   * [binlog_flush](Server_settings/Searchd.md#binlog_flush) - Binary log transaction flush/sync mode
   * [binlog_max_log_size](Server_settings/Searchd.md#binlog_max_log_size) - Maximum binary log file size
+  * [binlog_common](Logging/Binary_logging.md#Binary-logging-strategies) - Common binary log file for all tables
+  * [binlog_filename_digits](Logging/Binary_logging.md#Log-files) - Number of digits in a binlog file name
+  * [binlog_flush](Logging/Binary_logging.md#Binary-flushing-strategies) - Binlog flushing strategy
   * [binlog_path](Server_settings/Searchd.md#binlog_path) - Binary log files path
   * [client_timeout](Creating_a_table/Creating_a_distributed_table/Remote_tables.md#agent) - Maximum time to wait between requests when using persistent connections
   * [collation_libc_locale](Server_settings/Searchd.md#collation_libc_locale) - Server libc locale
@@ -577,7 +581,7 @@ spelldump [options] <dictionary> <affix> [result] [locale-name]
 A comprehensive alphabetical list of keywords currently reserved in Manticore SQL syntax (thus, they cannot be used as identifiers).
 
 ```
-AND, AS, BY, COLUMNARSCAN, DATE_ADD, DATE_SUB, DAY, DISTINCT, DIV, DOCIDINDEX, EXPLAIN, FACET, FALSE, FORCE, FROM, HOUR, IGNORE, IN, INTERVAL, INDEXES, INNER, IS, JOIN, KNN, LEFT, LIMIT, MINUTE, MOD, MONTH, NOT, NO_COLUMNARSCAN, NO_DOCIDINDEX, NO_SECONDARYINDEX, NULL, OFFSET, ON, OR, ORDER, QUARTER, REGEX, RELOAD, SECOND, SECONDARYINDEX, SELECT, SYSFILTERS, TRUE, WEEK, YEAR
+AND, AS, BY, COLUMNARSCAN, DISTINCT, DIV, DOCIDINDEX, EXPLAIN, FACET, FALSE, FORCE, FROM, IGNORE, IN, INDEXES, INNER, IS, JOIN, KNN, LEFT, LIMIT, MOD, NOT, NO_COLUMNARSCAN, NO_DOCIDINDEX, NO_SECONDARYINDEX, NULL, OFFSET, ON, OR, ORDER, RELOAD, SECONDARYINDEX, SELECT, SYSFILTERS, TRUE
 ```
 
 ## Documentation for old Manticore versions
@@ -610,10 +614,8 @@ AND, AS, BY, COLUMNARSCAN, DATE_ADD, DATE_SUB, DAY, DISTINCT, DIV, DOCIDINDEX, E
 * [3.5.0](https://manual.manticoresearch.com/manticore-3-5-0/)
 * [3.5.2](https://manual.manticoresearch.com/manticore-3-5-2/)
 * [3.5.4](https://manual.manticoresearch.com/manticore-3-5-4/)
-* [3.6.0](https://manual.manticoresearch.com/manticore-3-6-0/)
 * [4.0.2](https://manual.manticoresearch.com/manticore-4-0-2/)
 * [4.2.0](https://manual.manticoresearch.com/manticore-4-2-0/)
-* [5.0.0](https://manual.manticoresearch.com/manticore-5-0-0/). [Installation page](https://manticoresearch.com/install-5.0.0/)
 * [5.0.2](https://manual.manticoresearch.com/manticore-5-0-2/). [Installation page](https://manticoresearch.com/install-5.0.2/)
 * [6.0.0](https://manual.manticoresearch.com/manticore-6-0-0/). [Installation page](https://manticoresearch.com/install-6.0.0/)
 * [6.0.2](https://manual.manticoresearch.com/manticore-6-0-2/). [Installation page](https://manticoresearch.com/install-6.0.2/)
@@ -621,4 +623,7 @@ AND, AS, BY, COLUMNARSCAN, DATE_ADD, DATE_SUB, DAY, DISTINCT, DIV, DOCIDINDEX, E
 * [6.2.0](https://manual.manticoresearch.com/manticore-6-2-0/). [Installation page](https://manticoresearch.com/install-6.2.0/)
 * [6.2.12](https://manual.manticoresearch.com/manticore-6-2-12/). [Installation page](https://manticoresearch.com/install-6.2.12/)
 * [6.3.0](https://manual.manticoresearch.com/manticore-6-3-0/). [Installation page](https://manticoresearch.com/install-6.3.0/)
+* [6.3.2](https://manual.manticoresearch.com/manticore-6-3-2/). [Installation page](https://manticoresearch.com/install-6.3.2/)
+* [6.3.4](https://manual.manticoresearch.com/manticore-6-3-4/). [Installation page](https://manticoresearch.com/install-6.3.4/)
+* [6.3.6](https://manual.manticoresearch.com/manticore-6-3-6/). [Installation page](https://manticoresearch.com/install-6.3.6/)
 <!-- proofread -->

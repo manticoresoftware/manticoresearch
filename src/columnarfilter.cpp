@@ -760,9 +760,8 @@ static common::FilterType_e ToColumnarFilterType ( ESphFilter eType )
 	case SPH_FILTER_RANGE:		return common::FilterType_e::RANGE;
 	case SPH_FILTER_FLOATRANGE:	return common::FilterType_e::FLOATRANGE;
 	case SPH_FILTER_STRING:
-	case SPH_FILTER_STRING_LIST:
-		return common::FilterType_e::STRINGS;
-
+	case SPH_FILTER_STRING_LIST:return common::FilterType_e::STRINGS;
+	case SPH_FILTER_NULL:		return common::FilterType_e::NOTNULL;
 	default:					return common::FilterType_e::NONE;
 	}
 }
@@ -786,7 +785,7 @@ bool ToColumnarFilter ( common::Filter_t & tFilter, const CSphFilterSettings & t
 		return false;
 
 	tFilter.m_sName			= tSrc.m_sAttrName.cstr();
-	tFilter.m_bExclude		= tSrc.m_bExclude;
+	tFilter.m_bExclude		= tFilter.m_eType==common::FilterType_e::NOTNULL ? tSrc.m_bIsNull : tSrc.m_bExclude;
 	tFilter.m_eMvaAggr		= ToColumnarAggr ( tSrc.m_eMvaFunc );
 	tFilter.m_iMinValue		= tSrc.m_iMinValue;
 	tFilter.m_iMaxValue		= tSrc.m_iMaxValue;

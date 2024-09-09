@@ -530,24 +530,25 @@ bool HasBuddy()
 	return ( g_eBuddy==BuddyState_e::WORK );
 }
 
-static void BuddyQueryAddErrorBody ( JsonEscapedBuilder & tBuddyQuery, const VecTraits_T<BYTE> & dSrcHttpReply )
+static bool BuddyQueryAddErrorBody ( JsonEscapedBuilder & tBuddyQuery, const VecTraits_T<BYTE> & dSrcHttpReply )
 {
 	if ( !dSrcHttpReply.GetLength() )
-		return;
+		return false;
 
 	const char * sErrorStart = (const char *)dSrcHttpReply.Begin();
 	const char * sBodyDel = strstr ( sErrorStart, "\r\n\r\n" );
 	if ( !sBodyDel )
-		return;
+		return false;
 	const char * sBody = sBodyDel + 4;
 	if ( (sBodyDel - sErrorStart )>dSrcHttpReply.GetLength() )
-		return;
+		return false;
 
 	JsonObj_c tError ( sBody );
 	if ( tError.Empty() )
-		return;
+		return false;
 
-	tBuddyQuery.NamedValNE ( "error_body", sBody );
+	tBuddyQuery.NamedValNE ( "body", sBody );
+	return true;
 }
 
 static std::pair<bool, CSphString> BuddyQuery ( bool bHttp, Str_t sQueryError, Str_t sPathQuery, Str_t sQuery, http_method eRequestType, const VecTraits_T<BYTE> & dSrcHttpReply )
@@ -559,7 +560,14 @@ static std::pair<bool, CSphString> BuddyQuery ( bool bHttp, Str_t sQueryError, S
 	{
 		auto tRoot = tBuddyQuery.Object();
 		tBuddyQuery.NamedString ( "type", bHttp ? "unknown json request" : "unknown sql request" );
-		tBuddyQuery.NamedString ( "error", sQueryError );
+		{
+			tBuddyQuery.Named ( "error" );
+			auto tMessageRoot = tBuddyQuery.Object();
+
+			tBuddyQuery.NamedString ( "message", sQueryError );
+			if ( !BuddyQueryAddErrorBody ( tBuddyQuery, dSrcHttpReply ) )
+				tBuddyQuery.NamedValNE ( "body", "null" );
+		}
 		tBuddyQuery.NamedVal ( "version", g_iBuddyVersion );
 		if ( !bHttp )
 			tBuddyQuery.NamedString ( "user", session::GetClientSession()->m_sUser );
@@ -570,8 +578,6 @@ static std::pair<bool, CSphString> BuddyQuery ( bool bHttp, Str_t sQueryError, S
 			tBuddyQuery.NamedString ( "path_query", sPathQuery );
 			tBuddyQuery.NamedString ( "body", sQuery );
 			tBuddyQuery.NamedString ( "http_method", ( bHttp ? http_method_str ( eRequestType ) : "" ) );
-			if ( bHttp && dSrcHttpReply.GetLength() )
-				BuddyQueryAddErrorBody ( tBuddyQuery, dSrcHttpReply );
 		}
 	}
 

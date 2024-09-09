@@ -1655,7 +1655,7 @@ static void PackedFloatVec2Json ( StringBuilder_c & tOut, const BYTE * pFV )
 }
 
 
-static void JsonObjAddAttr ( JsonEscapedBuilder & tOut, ESphAttr eAttrType, const CSphMatch & tMatch, const CSphAttrLocator & tLoc )
+static void JsonObjAddAttr ( JsonEscapedBuilder & tOut, ESphAttr eAttrType, const CSphMatch & tMatch, const CSphAttrLocator & tLoc, int iMulti=1 )
 {
 	switch ( eAttrType )
 	{
@@ -1663,19 +1663,19 @@ static void JsonObjAddAttr ( JsonEscapedBuilder & tOut, ESphAttr eAttrType, cons
 	case SPH_ATTR_TIMESTAMP:
 	case SPH_ATTR_TOKENCOUNT:
 	case SPH_ATTR_BIGINT:
-		tOut.NtoA ( tMatch.GetAttr(tLoc) );
+		tOut.NtoA ( tMatch.GetAttr(tLoc) * iMulti );
 		break;
 
 	case SPH_ATTR_UINT64:
-		tOut.NtoA ( (uint64_t)tMatch.GetAttr(tLoc) );
+		tOut.NtoA ( (uint64_t)tMatch.GetAttr(tLoc) * iMulti  );
 		break;
 
 	case SPH_ATTR_FLOAT:
-		tOut.FtoA ( tMatch.GetAttrFloat(tLoc) );
+		tOut.FtoA ( tMatch.GetAttrFloat(tLoc) * iMulti );
 		break;
 
 	case SPH_ATTR_DOUBLE:
-		tOut.DtoA ( tMatch.GetAttrDouble(tLoc) );
+		tOut.DtoA ( tMatch.GetAttrDouble(tLoc) * iMulti  );
 		break;
 
 	case SPH_ATTR_BOOL:
@@ -1852,15 +1852,26 @@ void EncodeHighlight ( const CSphMatch & tMatch, int iAttr, const ISphSchema & t
 	}
 }
 
-static void EncodeFields ( const StrVec_t & dFields, const AggrResult_t & tRes, const CSphMatch & tMatch, const ISphSchema & tSchema,
+static const char * GetName ( const CSphString & sName )
+{
+	return sName.cstr();
+}
+
+static const char * GetName ( const JsonDocField_t & tDF )
+{
+	return tDF.m_sName.cstr();
+}
+
+template <typename T>
+void EncodeFields ( const CSphVector<T> & dFields, const AggrResult_t & tRes, const CSphMatch & tMatch, const ISphSchema & tSchema,
 	bool bValArray, const char * sPrefix, const char * sEnd, JsonEscapedBuilder & tOut )
 {
 	JsonEscapedBuilder tDFVal;
 
 	tOut.StartBlock ( ",", sPrefix, sEnd );
-	for ( const CSphString & sDF : dFields )
+	for ( const T & tDF : dFields )
 	{
-		const CSphColumnInfo * pCol = tSchema.GetAttr ( sDF.cstr() );
+		const CSphColumnInfo * pCol = tSchema.GetAttr ( GetName ( tDF ) );
 		if ( !pCol )
 		{
 			tOut += R"("Default")";
@@ -1874,7 +1885,7 @@ static void EncodeFields ( const StrVec_t & dFields, const AggrResult_t & tRes, 
 		if ( bValArray )
 			tOut.Sprintf ( "%s", tDFVal.cstr() );
 		else
-			tOut.Sprintf ( R"("%s":["%s"])", sDF.cstr(), tDFVal.cstr() );
+			tOut.Sprintf ( R"("%s":["%s"])", GetName ( tDF ), tDFVal.cstr() );
 	}
 	tOut.FinishBlock ( false ); // close obj
 }
@@ -1995,7 +2006,7 @@ static const char * GetBucketPrefix ( const AggrKeyTrait_t & tKey, Aggr_e eAggrF
 	return sPrefix;
 }
 
-static void PrintKey ( const AggrKeyTrait_t & tKey, Aggr_e eAggrFunc, const RangeKeyDesc_t * pRange, const CSphMatch & tMatch, bool bCompat, JsonEscapedBuilder & tBuf, JsonEscapedBuilder & tOut )
+static void PrintKey ( const AggrKeyTrait_t & tKey, Aggr_e eAggrFunc, const RangeKeyDesc_t * pRange, const CSphMatch & tMatch, bool bCompat, const sph::StringSet & hDatetime, JsonEscapedBuilder & tBuf, JsonEscapedBuilder & tOut )
 {
 	if ( eAggrFunc==Aggr_e::DATE_RANGE )
 	{
@@ -2038,8 +2049,13 @@ static void PrintKey ( const AggrKeyTrait_t & tKey, Aggr_e eAggrFunc, const Rang
 
 	} else
 	{
+		// FIXME!!! remove after proper data type added but now need to multiple datatime values by 1000 for compat aggs result set
+		int iMulti = 1;
+		if ( bCompat && hDatetime [ tKey.m_pKey->m_sName ] )
+			iMulti = 1000;
+
 		tBuf.Clear();
-		JsonObjAddAttr ( tBuf, tKey.m_pKey->m_eAttrType, tMatch, tKey.m_pKey->m_tLocator );
+		JsonObjAddAttr ( tBuf, tKey.m_pKey->m_eAttrType, tMatch, tKey.m_pKey->m_tLocator, iMulti );
 		tOut.Sprintf ( R"("key":%s)", tBuf.cstr() );
 
 		if ( tKey.m_pKey->m_eAttrType==SPH_ATTR_STRINGPTR )
@@ -2078,7 +2094,7 @@ static bool IsSingleValue ( Aggr_e eAggr )
 	return ( eAggr==Aggr_e::MIN || eAggr==Aggr_e::MAX || eAggr==Aggr_e::SUM || eAggr==Aggr_e::AVG );
 }
 
-static void EncodeAggr ( const JsonAggr_t & tAggr, int iAggrItem, const AggrResult_t & tRes, bool bCompat, int iNow, JsonEscapedBuilder & tOut )
+static void EncodeAggr ( const JsonAggr_t & tAggr, int iAggrItem, const AggrResult_t & tRes, bool bCompat, const sph::StringSet & hDatetime, int iNow, JsonEscapedBuilder & tOut )
 {
 	if ( tAggr.m_eAggrFunc==Aggr_e::COUNT )
 		return;
@@ -2142,7 +2158,7 @@ static void EncodeAggr ( const JsonAggr_t & tAggr, int iAggrItem, const AggrResu
 				// bucket item is array item or dict item
 				const char * sBucketPrefix = GetBucketPrefix ( tKey, tAggr.m_eAggrFunc, pRange, tMatch, tPrefixBucketBlock );
 				ScopedComma_c sBucketBlock ( tOut, ",", sBucketPrefix, "}" );
-				PrintKey ( tKey, tAggr.m_eAggrFunc, pRange, tMatch, bCompat, tBufMatch, tOut );
+				PrintKey ( tKey, tAggr.m_eAggrFunc, pRange, tMatch, bCompat, hDatetime, tBufMatch, tOut );
 
 				JsonObjAddAttr ( tOut, pCount->m_eAttrType, "doc_count", tMatch, pCount->m_tLocator );
 				// FIXME!!! add support
@@ -2526,10 +2542,20 @@ CSphString sphEncodeResultJson ( const VecTraits_T<const AggrResult_t *> & dRes,
 
 	if ( dRes.GetLength()>1 )
 	{
+		sph::StringSet hDatetime;
+		if ( bCompat )
+		{
+			tQuery.m_dDocFields.for_each ( [&hDatetime]( const auto & tDocfield )
+			{
+					if ( tDocfield.m_bDateTime )
+						hDatetime.Add ( tDocfield.m_sName );
+			});
+		}
+
 		assert ( dRes.GetLength()==tQuery.m_dAggs.GetLength()+1 );
 		tOut.StartBlock ( ",", R"("aggregations":{)", "}");
 		ARRAY_FOREACH ( i, tQuery.m_dAggs )
-			EncodeAggr ( tQuery.m_dAggs[i], i, *dRes[i+1], bCompat, tQuery.m_iNow, tOut );
+			EncodeAggr ( tQuery.m_dAggs[i], i, *dRes[i+1], bCompat, hDatetime, tQuery.m_iNow, tOut );
 		tOut.FinishBlock ( false ); // aggregations obj
 	}
 	if ( bCompat )
@@ -3351,7 +3377,13 @@ bool ParseDocFields ( const JsonObj_c & tDocFields, JsonQuery_c & tQuery, CSphSt
 			tDFItem.m_sAlias = sFieldName;
 		}
 
-		tQuery.m_dDocFields.Add ( sFieldName );
+		// FIXME!!! collect format type
+		bool bDateTime = false;
+		CSphString sFormat;
+		if ( tItem.FetchStrItem ( sFormat, "format", sError, true ) )
+			bDateTime = ( sFormat=="date_time" );
+
+		tQuery.m_dDocFields.Add ( { sFieldName, bDateTime } );
 	}
 
 	return true;

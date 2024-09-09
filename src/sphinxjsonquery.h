@@ -40,11 +40,17 @@ struct JsonAggr_t : public AggrSettings_t
 	CSphString GetAliasName () const;
 };
 
+struct JsonDocField_t
+{
+	CSphString m_sName;
+	bool m_bDateTime = false;
+};
+
 /// search query. Pure struct, no member functions
 struct JsonQuery_c : public CSphQuery
 {
 	StrVec_t m_dSortFields;
-	StrVec_t m_dDocFields;
+	CSphVector<JsonDocField_t> m_dDocFields;
 	CSphVector<JsonAggr_t> m_dAggs;
 };
 

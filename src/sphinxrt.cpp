@@ -1250,7 +1250,7 @@ public:
 	bool				Truncate ( CSphString & sError, Truncate_e eAction ) final;
 	bool				CheckValidateOptimizeParams ( OptimizeTask_t& tTask ) const;
 	bool				CheckValidateChunk ( int& iChunk, int iChunks, bool bByOrder ) const;
-	void				StartOptimize ( OptimizeTask_t tTask ) final;
+	bool				StartOptimize ( OptimizeTask_t tTask ) final;
 	int					OptimizesRunning() const noexcept final;
 	void				Optimize ( OptimizeTask_t tTask ) final;
 	void				CheckStartAutoOptimize ();
@@ -9876,13 +9876,17 @@ bool RtIndex_c::CheckValidateOptimizeParams ( OptimizeTask_t& tTask ) const
 }
 
 
-void RtIndex_c::StartOptimize ( OptimizeTask_t tTask )
+bool RtIndex_c::StartOptimize ( OptimizeTask_t tTask )
 {
+	if ( m_tSaving.GetNumOfLocks ()>0 )
+		return false;
+
 	Threads::StartJob ( [tTask = std::move ( tTask ), this] () {
 		// want to track optimize only at work
 		auto pDesc = PublishSystemInfo ( "OPTIMIZE" );
 		Optimize ( std::move ( tTask ) );
 	} );
+	return true;
 }
 
 

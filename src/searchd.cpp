@@ -12361,6 +12361,9 @@ void ShowFields ( VectorLike& dOut, const CSphSchema& tSchema )
 		if ( sphIsInternalAttr ( tAttr ) )
 			continue;
 
+		if ( tAttr.m_eAttrType==SPH_ATTR_TOKENCOUNT )
+			continue;
+
 		if ( tSchema.GetField ( tAttr.m_sName.cstr() ) )
 			continue; // already described it as a field property
 

@@ -304,15 +304,15 @@ Query OK, 0 rows affected (0.00 sec)
 
 <!-- example local_dist -->
 
-To change the list of local or remote nodes in a distributed table, follow the same syntax you used to [create the table](../Creating_a_table/Creating_a_distributed_table/Creating_a_local_distributed_table.md#Creating-a-local-distributed-table). Just replace `CREATE` with `ALTER` in the command:
+To change the list of local or remote nodes in a distributed table, follow the same syntax you used to [create the table](../Creating_a_table/Creating_a_distributed_table/Creating_a_local_distributed_table.md#Creating-a-local-distributed-table). Just replace `CREATE` with `ALTER` in the command and remove `type='distributed'`:
 
 ```sql
-ALTER TABLE `distr_table_name` type='distributed' [[local='local_index_name'], [agent='host:port:remote_index'] ... ]
+ALTER TABLE `distr_table_name` [[local='local_index_name'], [agent='host:port:remote_index'] ... ]
 ```
 
 <!-- request Example -->
 ```sql
-ALTER TABLE local_dist type='distributed' local='index1' local='index2' agent='127.0.0.1:9312:remote_index';
+ALTER TABLE local_dist local='index1' local='index2' agent='127.0.0.1:9312:remote_index';
 ```
 
 <!-- end -->

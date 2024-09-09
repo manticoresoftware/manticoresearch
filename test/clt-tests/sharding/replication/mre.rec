@@ -135,9 +135,6 @@ for i in 1 2 3 4 5; do echo "#{$i}"; cat /var/lib/manticore-$i/manticore.json | 
 "ha_strategy": "random"
 }
 ––– input –––
-grep '\[error\]' /var/log/manticore-{1,2,3,4,5}/searchd.log | grep -v 'no such local table'
-––– output –––
-––– input –––
 mysql -h0 -P19306 -e "select * from _sharding_queue where status = 'error' order by id asc limit 10000\G"
 ––– output –––
 ––– input –––

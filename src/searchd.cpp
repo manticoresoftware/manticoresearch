@@ -15637,7 +15637,14 @@ void HandleMysqlOptimize ( RowBuffer_i & tOut, const SqlStmt_t & tStmt )
 	tTask.m_eVerb = OptimizeTask_t::eManualOptimize;
 	tTask.m_iCutoff = tStmt.m_tQuery.m_iCutoff<=0 ? 0 : tStmt.m_tQuery.m_iCutoff;
 
-	RIdx_T<RtIndex_i *> ( pIndex )->StartOptimize ( std::move ( tTask ) );
+	auto bOptimizeStarted = RIdx_T<RtIndex_i *> ( pIndex )->StartOptimize ( std::move ( tTask ) );
+
+	if ( tStmt.m_tQuery.m_bSync && !bOptimizeStarted )
+	{
+		tOut.Error ( "Can't optimize frozen table" );
+		return;
+	}
+
 	if ( tStmt.m_tQuery.m_bSync && !PollOptimizeRunning ( sIndex ) )
 		tOut.Error ( "RT table went away during waiting" );
 	else

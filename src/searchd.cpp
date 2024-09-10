@@ -3763,6 +3763,7 @@ void SendResult ( int iVer, ISphOutputBuffer & tOut, const AggrResult_t& tRes, b
 	// multi-query status
 	bool bError = !tRes.m_sError.IsEmpty();
 	bool bWarning = !bError && !tRes.m_sWarning.IsEmpty();
+	bError |= tRes.m_dResults.IsEmpty() && tQuery.m_bFacet;
 
 	assert ( bError || tRes.m_bSingle );
 	assert ( bError || tRes.m_bOneSchema );

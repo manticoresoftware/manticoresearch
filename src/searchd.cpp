@@ -17211,7 +17211,7 @@ void HandleMysqlFreezeIndexes ( RowBuffer_i& tOut, const SqlStmt_t& tStmt, CSphS
 	tOut.Eof ( false, iWarnings );
 }
 
-void HandleMysqlUnfreezeIndexes ( RowBuffer_i& tOut, const CSphString& sIndexes, CSphString& sWarningOut )
+void HandleMysqlUnfreezeIndexes ( RowBuffer_i& tOut, const CSphString& sIndexes )
 {
 	// search through specified local indexes
 	StrVec_t dIndexes;
@@ -17793,7 +17793,7 @@ bool ClientSession_c::Execute ( Str_t sQuery, RowBuffer_i & tOut )
 		return true;
 
 	case STMT_UNFREEZE:
-		HandleMysqlUnfreezeIndexes ( tOut, pStmt->m_sIndex, m_tLastMeta.m_sWarning );
+		HandleMysqlUnfreezeIndexes ( tOut, pStmt->m_sIndex );
 		return true;
 
 	case STMT_SHOW_SETTINGS:

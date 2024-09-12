@@ -1,4 +1,4 @@
-––– block: ../base/dind/init –––
+––– block: ../../base/dind/init –––
 ––– input –––
 docker network create app-network --driver bridge > /dev/null; echo $?
 ––– output –––
@@ -27,11 +27,11 @@ Copyright (c) 2001-2016, Andrew Aksyonoff
 Copyright (c) 2008-2016, Sphinx Technologies Inc (http://sphinxsearch.com)
 Copyright (c) 2017-%{YEAR}, Manticore Software LTD (https://manticoresearch.com)
 ––– input –––
-docker run -it -d -e EXTRA=1 --network=app-network --name kafka -v ./test/clt-tests/kafka/import.sh:/import.sh -v ./test/clt-tests/kafka/dump.json:/tmp/dump.json -e KAFKA_CFG_NODE_ID=0 -e KAFKA_CFG_PROCESS_ROLES=controller,broker -e KAFKA_CFG_CONTROLLER_QUORUM_VOTERS=0@kafka:9093 -e KAFKA_CFG_LISTENERS=PLAINTEXT://:9092,CONTROLLER://:9093 -e KAFKA_CFG_ADVERTISED_LISTENERS=PLAINTEXT://:9092 -e KAFKA_CFG_LISTENER_SECURITY_PROTOCOL_MAP=CONTROLLER:PLAINTEXT,PLAINTEXT:PLAINTEXT -e KAFKA_CFG_CONTROLLER_LISTENER_NAMES=CONTROLLER -e KAFKA_CFG_INTER_BROKER_LISTENER_NAME=PLAINTEXT bitnami/kafka:3.7.0 > /dev/null 2>&1; echo $?
+docker run -it -d -e EXTRA=1 --network=app-network --name kafka -v ./test/clt-tests/integrations/kafka/import.sh:/import.sh -v ./test/clt-tests/integrations/kafka/dump.json:/tmp/dump.json -e KAFKA_CFG_NODE_ID=0 -e KAFKA_CFG_PROCESS_ROLES=controller,broker -e KAFKA_CFG_CONTROLLER_QUORUM_VOTERS=0@kafka:9093 -e KAFKA_CFG_LISTENERS=PLAINTEXT://:9092,CONTROLLER://:9093 -e KAFKA_CFG_ADVERTISED_LISTENERS=PLAINTEXT://:9092 -e KAFKA_CFG_LISTENER_SECURITY_PROTOCOL_MAP=CONTROLLER:PLAINTEXT,PLAINTEXT:PLAINTEXT -e KAFKA_CFG_CONTROLLER_LISTENER_NAMES=CONTROLLER -e KAFKA_CFG_INTER_BROKER_LISTENER_NAME=PLAINTEXT bitnami/kafka:3.7.0 > /dev/null 2>&1; echo $?
 ––– output –––
 0
 ––– input –––
-docker exec kafka /opt/bitnami/kafka/bin/kafka-topics.sh --create --topic my-data --partitions 4 --bootstrap-server localhost:9092 2>&1 | grep -o 'Created topic my-data\.' | head -n 1
+docker exec kafka kafka-topics.sh --create --topic my-data --partitions 4 --bootstrap-server localhost:9092 2>&1 | grep -o 'Created topic my-data\.' | head -n 1
 ––– output –––
 Created topic my-data.
 ––– input –––
@@ -90,9 +90,9 @@ docker exec kafka chmod +x ./import.sh; docker exec kafka ./import.sh; echo $?
 ––– output –––
 0
 ––– input –––
-timeout 60 bash -c 'docker exec manticore bash -c "tail -f /var/log/manticore/searchd.log" | grep -m2 "REPLACE+INTO+destination_kafka" > /dev/null && echo "Download completed."' || echo "Download failed."
+timeout 60 bash -c 'docker exec manticore bash -c "tail -f /var/log/manticore/searchd.log" | grep -m2 "REPLACE+INTO+destination_kafka" > /dev/null && echo "Data processing completed."' || echo "Data processing failed."
 ––– output –––
-Download completed.
+Data processing completed.
 ––– input –––
 docker exec manticore mysql -h0 -P9306 -e "SELECT COUNT(*) FROM destination_kafka;"
 ––– output –––
@@ -162,13 +162,13 @@ docker exec manticore mysql -h0 -P9306 -e "CREATE MATERIALIZED VIEW view_table_d
 ––– output –––
 0
 ––– input –––
-docker exec kafka chmod +x ./import.sh; docker exec kafka ./import.sh; echo $?
+docker exec kafka ./import.sh; echo $?
 ––– output –––
 0
 ––– input –––
-timeout 60 bash -c 'docker exec manticore bash -c "tail -f /var/log/manticore/searchd.log" | grep -m2 "REPLACE+INTO+destination_kafka" > /dev/null && echo "Download completed."' || echo "Download failed."
+timeout 60 bash -c 'docker exec manticore bash -c "tail -f /var/log/manticore/searchd.log" | grep -m2 "REPLACE+INTO+destination_kafka" > /dev/null && echo "Data processing completed."' || echo "Data processing failed."
 ––– output –––
-Download completed.
+Data processing completed.
 ––– input –––
 docker exec manticore mysql -h0 -P9306 -e "SELECT id, name, short_name, received_at, size, lat, lon AS distance FROM destination_kafka ORDER BY id ASC;"
 ––– output –––
@@ -217,9 +217,9 @@ docker exec kafka ./import.sh; echo $?
 ––– output –––
 0
 ––– input –––
-timeout 60 bash -c 'docker exec manticore bash -c "tail -f /var/log/manticore/searchd.log" | grep -m2 "REPLACE+INTO+destination_kafka_metadata" > /dev/null && echo "Download completed."' || echo "Download failed."
+timeout 60 bash -c 'docker exec manticore bash -c "tail -f /var/log/manticore/searchd.log" | grep -m2 "REPLACE+INTO+destination_kafka_metadata" > /dev/null && echo "Data processing completed."' || echo "Data processing failed."
 ––– output –––
-Download completed.
+Data processing completed.
 ––– input –––
 docker exec manticore mysql -h0 -P9306 -e "SELECT COUNT(*) FROM destination_kafka_metadata;"
 ––– output –––
@@ -276,9 +276,9 @@ docker exec kafka ./import.sh; echo $?
 ––– output –––
 0
 ––– input –––
-timeout 60 bash -c 'docker exec manticore bash -c "tail -f /var/log/manticore/searchd.log" | grep -m2 "REPLACE+INTO+destination_kafka_tags" > /dev/null && echo "Download completed."' || echo "Download failed."
+timeout 60 bash -c 'docker exec manticore bash -c "tail -f /var/log/manticore/searchd.log" | grep -m2 "REPLACE+INTO+destination_kafka_tags" > /dev/null && echo "Data processing completed."' || echo "Data processing failed."
 ––– output –––
-Download completed.
+Data processing completed.
 ––– input –––
 docker exec manticore mysql -h0 -P9306 -e "SELECT COUNT(*) FROM destination_kafka_tags;"
 ––– output –––
@@ -335,9 +335,9 @@ docker exec kafka ./import.sh; echo $?
 ––– output –––
 0
 ––– input –––
-timeout 60 bash -c 'docker exec manticore bash -c "tail -f /var/log/manticore/searchd.log" | grep -m1 "REPLACE+INTO+destination_kafka_alter" > /dev/null && echo "Download completed."' || echo "Download failed."
+timeout 60 bash -c 'docker exec manticore bash -c "tail -f /var/log/manticore/searchd.log" | grep -m1 "REPLACE+INTO+destination_kafka_alter" > /dev/null && echo "Data processing completed."' || echo "Data processing failed."
 ––– output –––
-Download completed.
+Data processing completed.
 ––– input –––
 docker exec manticore mysql -h0 -P9306 -e "ALTER MATERIALIZED VIEW view_table_alter suspended=1;"; echo $?
 ––– output –––
@@ -363,9 +363,9 @@ docker exec manticore mysql -h0 -P9306 -e "ALTER MATERIALIZED VIEW view_table_al
 ––– output –––
 0
 ––– input –––
-while [[ $(docker exec manticore mysql -h0 -P9306 -e "SELECT COUNT(*) FROM destination_kafka_alter;" | grep -o '[0-9]*') -ne 57 ]]; do sleep 1; done && echo "Download completed."
+timeout 120 bash -c 'while [[ $(docker exec manticore mysql -h0 -P9306 -e "SELECT COUNT(*) FROM destination_kafka_alter;" | grep -o "[0-9]*") -ne 57 ]]; do sleep 1; done && echo "Data processing completed."'
 ––– output –––
-Download completed.
+Data processing completed.
 ––– input –––
 docker exec manticore mysql -h0 -P9306 -e "SELECT COUNT(*) FROM destination_kafka_alter;"
 ––– output –––
@@ -395,9 +395,9 @@ docker exec kafka ./import.sh; echo $?
 ––– output –––
 0
 ––– input –––
-timeout 60 bash -c 'docker exec manticore bash -c "tail -f /var/log/manticore/searchd.log" | grep -m2 "REPLACE+INTO+destination_kafka_ts" > /dev/null && echo "Download completed."' || echo "Download failed."
+timeout 60 bash -c 'docker exec manticore bash -c "tail -f /var/log/manticore/searchd.log" | grep -m2 "REPLACE+INTO+destination_kafka_ts" > /dev/null && echo "Data processing completed."' || echo "Data processing failed."
 ––– output –––
-Download completed.
+Data processing completed.
 ––– input –––
 docker exec manticore mysql -h0 -P9306 -e "SELECT COUNT(*) FROM destination_kafka_ts;"
 ––– output –––
@@ -454,9 +454,9 @@ docker exec kafka ./import.sh; echo $?
 ––– output –––
 0
 ––– input –––
-timeout 60 bash -c 'docker exec manticore bash -c "tail -f /var/log/manticore/searchd.log" | grep -m2 "REPLACE+INTO+destination_kafka_combined" > /dev/null && echo "Download completed."' || echo "Download failed."
+timeout 60 bash -c 'docker exec manticore bash -c "tail -f /var/log/manticore/searchd.log" | grep -m2 "REPLACE+INTO+destination_kafka_combined" > /dev/null && echo "Data processing completed."' || echo "Data processing failed."
 ––– output –––
-Download completed.
+Data processing completed.
 ––– input –––
 docker exec manticore mysql -h0 -P9306 -e "SELECT COUNT(*) FROM destination_kafka_combined;"
 ––– output –––
@@ -466,16 +466,16 @@ docker exec manticore mysql -h0 -P9306 -e "SELECT COUNT(*) FROM destination_kafk
 |        5 |
 +----------+
 ––– input –––
-docker exec manticore mysql -h0 -P9306 -e "SELECT * FROM destination_kafka_combined WHERE views > 1000 AND timestamp_combined >= 1690761600 AND tags IN ('item1', 'item2') AND lat > 50 AND lon > 5 ORDER BY id ASC;"
+docker exec manticore mysql -h0 -P9306 -e "SELECT * FROM destination_kafka_combined;"
 ––– output –––
 +------+-----------------------------------------------+-----------------+---------------------+------------------------+----------+-----------+----------+-------+-------------------------+--------------------+
 | id   | name                                          | short_name      | received_at         | info                   | size     | lat       | lon      | views | tags                    | timestamp_combined |
 +------+-----------------------------------------------+-----------------+---------------------+------------------------+----------+-----------+----------+-------+-------------------------+--------------------+
-|   36 | A Penny For Your Thoughts                     | ISO 86420:97531 | %{DATETIME} | Extra data for item 36 | 20,25,30 | 54.000000 | 8.000000 |  3600 | ["test","data","item1"] |         1690761600 |
-|   37 | Bite The Bullet                               | ISO 13579:86420 | %{DATETIME} | Extra data for item 37 | 20,25,30 | 55.000000 | 9.000000 |  3700 | ["test","data","item2"] |         1690761600 |
-|   46 | Money Doesn't Grow On "Trees                  | ISO 97531:86420 | %{DATETIME} | Extra data for item 46 | 20,25,30 | 54.000000 | 8.000000 |  4600 | ["test","data","item1"] |         1690761600 |
-|   47 | No Pain, No Gain                              | ISO 13579:86420 | %{DATETIME} | Extra data for item 47 | 20,25,30 | 55.000000 | 9.000000 |  4700 | ["test","data","item2"] |         1690761600 |
-|   56 | The Grass Is Always Greener On The Other Side | ISO 97531:86420 | %{DATETIME} | Extra data for item 56 | 20,25,30 | 54.000000 | 8.000000 |  5600 | ["test","data","item1"] |         1690761600 |
+|   56 | The Grass Is Always Greener On The Other Side | ISO 97531:86420 | 2024-09-12 10:37:12 | Extra data for item 56 | 20,25,30 | 54.000000 | 8.000000 |  5600 | ["test","data","item1"] |         1690761600 |
+|   36 | A Penny For Your Thoughts                     | ISO 86420:97531 | 2024-09-12 10:37:01 | Extra data for item 36 | 20,25,30 | 54.000000 | 8.000000 |  3600 | ["test","data","item1"] |         1690761600 |
+|   37 | Bite The Bullet                               | ISO 13579:86420 | 2024-09-12 10:37:01 | Extra data for item 37 | 20,25,30 | 55.000000 | 9.000000 |  3700 | ["test","data","item2"] |         1690761600 |
+|   46 | Money Doesn't Grow On "Trees                  | ISO 97531:86420 | 2024-09-12 10:37:01 | Extra data for item 46 | 20,25,30 | 54.000000 | 8.000000 |  4600 | ["test","data","item1"] |         1690761600 |
+|   47 | No Pain, No Gain                              | ISO 13579:86420 | 2024-09-12 10:37:01 | Extra data for item 47 | 20,25,30 | 55.000000 | 9.000000 |  4700 | ["test","data","item2"] |         1690761600 |
 +------+-----------------------------------------------+-----------------+---------------------+------------------------+----------+-----------+----------+-------+-------------------------+--------------------+
 ––– input –––
 docker exec kafka kafka-consumer-groups.sh --bootstrap-server localhost:9092 --group manticore_stop --reset-offsets --to-latest --topic my-data --execute > /dev/null; echo $?
@@ -498,9 +498,9 @@ docker exec kafka ./import.sh; echo $?
 ––– output –––
 0
 ––– input –––
-timeout 60 bash -c 'docker exec manticore bash -c "tail -f -n 10000 /var/log/manticore/searchd.log" | grep -m1 "REPLACE+INTO+destination_kafka_stop" > /dev/null && echo "Download completed."' || echo "Download failed."
+timeout 60 bash -c 'docker exec manticore bash -c "tail -f -n 10000 /var/log/manticore/searchd.log" | grep -m1 "REPLACE+INTO+destination_kafka_stop" > /dev/null && echo "Data processing completed."' || echo "Data processing failed."
 ––– output –––
-Download completed.
+Data processing completed.
 ––– input –––
 docker exec manticore mysql -h0 -P9306 -e "SELECT COUNT(*) FROM destination_kafka_stop;"
 ––– output –––
@@ -555,9 +555,9 @@ Copyright (c) 2001-2016, Andrew Aksyonoff
 Copyright (c) 2008-2016, Sphinx Technologies Inc (http://sphinxsearch.com)
 Copyright (c) 2017-%{YEAR}, Manticore Software LTD (https://manticoresearch.com)
 ––– input –––
-while [[ $(docker exec manticore mysql -h0 -P9306 -e "SELECT COUNT(*) FROM destination_kafka_stop;" | grep -o '[0-9]*') -ne 57 ]]; do sleep 1; done && echo "Download completed."
+timeout 120 bash -c 'while [[ $(docker exec manticore mysql -h0 -P9306 -e "SELECT COUNT(*) FROM destination_kafka_stop;" | grep -o "[0-9]*") -ne 57 ]]; do sleep 1; done && echo "Data processing completed."'
 ––– output –––
-Download completed.
+Data processing completed.
 ––– input –––
 docker exec manticore mysql -h0 -P9306 -e "SELECT COUNT(*) FROM destination_kafka_stop;"
 ––– output –––
@@ -615,9 +615,9 @@ docker exec kafka ./import.sh; echo $?
 ––– output –––
 0
 ––– input –––
-timeout 60 bash -c 'docker exec manticore bash -c "tail -f -n 10000 /var/log/manticore/searchd.log" | grep -m2 "REPLACE+INTO+destination_drop_source" > /dev/null && echo "Download completed."' || echo "Download failed."
+timeout 60 bash -c 'docker exec manticore bash -c "tail -f -n 10000 /var/log/manticore/searchd.log" | grep -m2 "REPLACE+INTO+destination_drop_source" > /dev/null && echo "Data processing completed."' || echo "Data processing failed."
 ––– output –––
-Download completed.
+Data processing completed.
 ––– input –––
 docker exec manticore mysql -h0 -P9306 -e "SELECT COUNT(*) FROM destination_drop_source;"
 ––– output –––

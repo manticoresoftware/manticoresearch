@@ -26,10 +26,10 @@ Manticore provides the commands `CALL QSUGGEST` and `CALL SUGGEST` that can be u
 
 ### CALL QSUGGEST, CALL SUGGEST
 
-Both commands are accessible via SQL and support querying both local and distributed tables. The syntax is as follows:
+Both commands are accessible via SQL and support querying both local (plain and real-time) and distributed tables. The syntax is as follows:
 ```sql
-CALL QSUGGEST(<word or words>, <non-percolate table name> [,options])
-CALL SUGGEST(<word or words>, <non-percolate table name> [,options])
+CALL QSUGGEST(<word or words>, <table name> [,options])
+CALL SUGGEST(<word or words>, <table name> [,options])
 
 options: N as option_name[, M as another_option, ...]
 ```

@@ -83,7 +83,7 @@ public:
 
 static FileAccessSettings_t g_tDummyFASettings;
 
-class PercolateIndex_c : public PercolateIndex_i
+class PercolateIndex_c final : public PercolateIndex_i
 {
 public:
 	PercolateIndex_c ( CSphString sIndexName, CSphString sPath, CSphSchema tSchema );
@@ -173,6 +173,7 @@ private:
 
 public:
 	PercolateMatchContext_t * CreateMatchContext ( const RtSegment_t * pSeg, const SegmentReject_t &tReject );
+	int GetNumOfLocks () const noexcept final;
 
 private:
 	int ReplayInsertAndDeleteQueries ( const VecTraits_T<StoredQuery_i*>& dNewQueries, const VecTraits_T<int64_t>& dDeleteQueries, const VecTraits_T<uint64_t>& dDeleteTags ) EXCLUDES ( m_tLock );
@@ -1659,7 +1660,7 @@ void PercolateIndex_c::GetStatus ( CSphIndexStatus * pRes ) const
 	pRes->m_iRamUse = iRamUse;
 	pRes->m_iStackNeed = iMaxStack;
 	pRes->m_iStackBase = StoredQuery_t::m_iStackBaseRequired;
-	pRes->m_iLockCount = m_iDisabledCounter;
+	pRes->m_iLockCount = GetNumOfLocks();
 }
 
 class XQTreeCompressor_t
@@ -3063,7 +3064,12 @@ bool PercolateIndex_c::ForceDiskChunk()
 
 bool PercolateIndex_c::IsSaveDisabled() const noexcept
 {
-	return m_iDisabledCounter > 0;
+	return GetNumOfLocks() > 0;
+}
+
+int PercolateIndex_c::GetNumOfLocks () const noexcept
+{
+	return m_iDisabledCounter;
 }
 
 void PercolateIndex_c::ProhibitSave()

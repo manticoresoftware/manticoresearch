@@ -7740,7 +7740,7 @@ static const char * g_dSqlStmts[] =
 	"flush_hostnames", "flush_logs", "reload_indexes", "sysfilters", "debug", "alter_killlist_target",
 	"alter_index_settings", "join_cluster", "cluster_create", "cluster_delete", "cluster_index_add",
 	"cluster_index_delete", "cluster_update", "explain", "import_table", "freeze_indexes", "unfreeze_indexes",
-	"show_settings", "alter_rebuild_si", "kill"
+	"show_settings", "alter_rebuild_si", "kill", "show_locks"
 };
 
 
@@ -17211,7 +17211,7 @@ void HandleMysqlFreezeIndexes ( RowBuffer_i& tOut, const SqlStmt_t& tStmt, CSphS
 	tOut.Eof ( false, iWarnings );
 }
 
-void HandleMysqlUnfreezeIndexes ( RowBuffer_i& tOut, const CSphString& sIndexes, CSphString& sWarningOut )
+void HandleMysqlUnfreezeIndexes ( RowBuffer_i& tOut, const CSphString& sIndexes )
 {
 	// search through specified local indexes
 	StrVec_t dIndexes;
@@ -17250,6 +17250,49 @@ void HandleMysqlKill ( RowBuffer_i& tOut, int iKill )
 	{
 		tOut.Ok ( iKilled );
 	}
+}
+
+
+void HandleMysqlShowLocks ( RowBuffer_i & tOut )
+{
+	tOut.HeadBegin ();
+	tOut.HeadColumn ( "Type" );
+	tOut.HeadColumn ( "Name" );
+	tOut.HeadColumn ( "Lock Type" );
+	tOut.HeadColumn ( "Additional Info" );
+	if ( !tOut.HeadEnd () )
+		return;
+
+
+	// collect local, rt, percolate
+	auto dIndexes = GetAllServedIndexes ();
+	for ( auto & dPair: dIndexes )
+	{
+		switch ( dPair.second )
+		{
+		case IndexType_e::RT:
+		case IndexType_e::PERCOLATE:
+		{
+			auto pIndex = GetServed ( dPair.first );
+			assert ( ServedDesc_t::IsMutable ( pIndex ) );
+			RIdx_T<RtIndex_i *> pRt { pIndex };
+			int iLocks = pRt->GetNumOfLocks ();
+			if ( iLocks>0 )
+			{
+				tOut.PutString ( GetIndexTypeName ( dPair.second ) );
+				tOut.PutString ( dPair.first );
+				tOut.PutString ( "freeze" );
+				tOut.PutNumAsString ( iLocks );
+				if ( !tOut.Commit () )
+					return;
+			}
+		}
+		default:
+			break;
+		}
+	}
+
+	tOut.Eof ( false );
 }
 
 
@@ -17793,7 +17836,7 @@ bool ClientSession_c::Execute ( Str_t sQuery, RowBuffer_i & tOut )
 		return true;
 
 	case STMT_UNFREEZE:
-		HandleMysqlUnfreezeIndexes ( tOut, pStmt->m_sIndex, m_tLastMeta.m_sWarning );
+		HandleMysqlUnfreezeIndexes ( tOut, pStmt->m_sIndex );
 		return true;
 
 	case STMT_SHOW_SETTINGS:
@@ -17805,6 +17848,10 @@ bool ClientSession_c::Execute ( Str_t sQuery, RowBuffer_i & tOut )
 
 	case STMT_KILL:
 		HandleMysqlKill ( tOut, pStmt->m_iIntParam );
+		return true;
+
+	case STMT_SHOW_LOCKS:
+		HandleMysqlShowLocks ( tOut );
 		return true;
 
 	default:

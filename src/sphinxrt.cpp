@@ -1252,6 +1252,7 @@ public:
 	bool				CheckValidateChunk ( int& iChunk, int iChunks, bool bByOrder ) const;
 	bool				StartOptimize ( OptimizeTask_t tTask ) final;
 	int					OptimizesRunning() const noexcept final;
+	int					GetNumOfLocks() const noexcept final;
 	void				Optimize ( OptimizeTask_t tTask ) final;
 	void				CheckStartAutoOptimize ();
 	int					ClassicOptimize ();
@@ -9878,7 +9879,7 @@ bool RtIndex_c::CheckValidateOptimizeParams ( OptimizeTask_t& tTask ) const
 
 bool RtIndex_c::StartOptimize ( OptimizeTask_t tTask )
 {
-	if ( m_tSaving.GetNumOfLocks ()>0 )
+	if ( GetNumOfLocks ()>0 )
 		return false;
 
 	Threads::StartJob ( [tTask = std::move ( tTask ), this] () {
@@ -9893,6 +9894,12 @@ bool RtIndex_c::StartOptimize ( OptimizeTask_t tTask )
 int RtIndex_c::OptimizesRunning() const noexcept
 {
 	return m_tOptimizeRuns.GetValue ();
+}
+
+
+int RtIndex_c::GetNumOfLocks () const noexcept
+{
+	return m_tSaving.GetNumOfLocks();
 }
 
 void RtIndex_c::Optimize ( OptimizeTask_t tTask )
@@ -10109,7 +10116,7 @@ void RtIndex_c::GetStatus ( CSphIndexStatus * pRes ) const
 
 	pRes->m_iTID = m_iTID;
 	pRes->m_iSavedTID = m_iSavedTID;
-	pRes->m_iLockCount = m_tSaving.GetNumOfLocks();
+	pRes->m_iLockCount = GetNumOfLocks();
 	pRes->m_iOptimizesCount = OptimizesRunning();
 //	sphWarning ( "Chunks: %d, RAM: %d, DISK: %d", pRes->m_iNumChunks, (int) pRes->m_iRamUse, (int) pRes->m_iDiskUse );
 }

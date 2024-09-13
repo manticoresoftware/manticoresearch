@@ -22,7 +22,6 @@ on:
       - 'test/clt-tests/integrations/**'
       - 'test/clt-tests/core/test-performance-for-queries-with-multiple-disk-chunks'
       - 'test/clt-tests/integrations/**'
-      - 'test/clt-tests/integrations/kafka/**'
 
 # cancels the previous workflow run when a new one appears in the same branch (e.g. master or a PR's branch)
 concurrency:

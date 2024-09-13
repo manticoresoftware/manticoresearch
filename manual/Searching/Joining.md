@@ -1,8 +1,8 @@
-# Joining in Manticore Search
+# Joining tables
 
 **WARNING: This functionality is in beta stage. Use it with caution.**
 
-Joining in Manticore Search allows you to combine documents from two tables based on a related column between them. It enables more complex queries and data retrieval across multiple tables.
+Table joins in Manticore Search enable you to combine documents from two tables by matching related columns. This functionality allows for more complex queries and enhanced data retrieval across multiple tables.
 
 ## General syntax
 
@@ -15,9 +15,30 @@ SELECT
 	{INNER | LEFT} JOIN tbl2_name
 	ON join_condition
 	[...other select options]
+
+join_condition: {
+	left_table.attr = right_table.attr
+	| left_table.json_attr.string_id = string(right_table.json_attr.string_id)
+	| left_table.json_attr.int_id = int(right_table.json_attr.int_id)
+}
 ```
 
-You can find additional select options in the [SELECT](../Searching/Intro.md#General-syntax) section.
+For more information on select options, refer to the [SELECT](../Searching/Intro.md#General-syntax) section.
+
+<!--example join_sql_json_type -->
+When joining by a value from a JSON attribute, you need to explicitly specify the value's type using the `int()` or `string()` function.
+
+<!-- request string -->
+```sql
+SELECT ... ON left_table.json_attr.string_id = string(right_table.json_attr.string_id)
+```
+
+<!-- request int -->
+```sql
+SELECT ... ON left_table.json_attr.int_id = int(right_table.json_attr.int_id)
+```
+
+<!-- end -->
 
 ### JSON
 
@@ -26,21 +47,21 @@ POST /search
 {
   "index": "table_name",
   "query": {
-    ...
+    <optional full-text query against the left table>
   },
   "join": [
     {
       "type": "inner" | "left",
       "table": "joined_table_name",
       "query": {
-        ...
+        <optional full-text query against the right table>
       },
       "on": [
         {
           "left": {
             "table": "left_table_name",
             "field": "field_name",
-            "type": "field_type"
+            "type": "<common field's type when joining using json attributes>"
           },
           "operator": "eq",
           "right": {
@@ -55,118 +76,21 @@ POST /search
     ...
   }
 }
+
+on.type: {
+  int
+	| string
+}
 ```
-The need for specifying left and right values in join conditions:
-
-1. Clarity in multiple table joins
-2. Field disambiguation when names are similar
-3. Defining join types (inner, left, right, full)
-4. Aiding query optimization
-5. Handling complex join conditions
-6. Flexibility in modifying join criteria
-7. Enabling cross-database joins
-8. Improving query readability and maintenance
-
-Explicit left and right operands ensure accurate joins, prevent ambiguity, and support efficient query execution across various scenarios.
-
-There is `type` field in the `left` operand section that serves two important purposes:
-
-1. **Full-Text Match Joins**: Enables the creation of full-text match joins by including a nested `query` in the `join` object array. This query should contain only full-text items (not filters) and specify the type as "string".
-
-2. **Explicit Type Specification**: Allows for precise type specification of matching fields when using JSON for joining, as there's no syntax for explicit type conversion of JSON fields in the ON clause.
-
-These features enhance the flexibility of joining operations and address specific edge cases in data matching scenarios.
+Note, there is the `type` field in the `left` operand section which you should use when joining two tables using json attributes. The allowed values are `string` and `int`.
 
 ## Types of Joins
 
 Manticore Search supports two types of joins:
 
-1. **INNER JOIN**: Returns only the rows where there is a match in both tables.
-2. **LEFT JOIN**: Returns all rows from the left table and the matched rows from the right table. If there's no match, NULL values are returned for the right table's columns.
-
-## Examples
-
-### Left Join
-
-<!-- example left_basic -->
-
-This query retrieves all products from the `orders` table along with the corresponding `email`, `name`, and `address` of customers from the `customers` table using a LEFT JOIN.
-
-<!-- request SQL -->
-```sql
-SELECT
-product, customers.email, customers.name, customers.address
-FROM orders
-LEFT JOIN customers
-ON customers.id = orders.customer_id
-WHERE MATCH('maple', customers)
-ORDER BY customers.email ASC;
-```
-
-<!-- request JSON -->
-```json
-POST /search
-{
-  "index": "orders",
-  "query": {
-    "match": {
-      "customers": "maple"
-    }
-  },
-  "join": [
-    {
-      "type": "left",
-      "table": "customers",
-      "on": [
-        {
-          "left": {
-            "table": "orders",
-            "field": "customer_id",
-            "type": "int"
-          },
-          "operator": "eq",
-          "right": {
-            "table": "customers",
-            "field": "id"
-          }
-        }
-      ]
-    }
-  ],
-  "select": ["product", "customers.email", "customers.name", "customers.address"],
-  "sort": [{"customers.email": "asc"}]
-}
-```
-
-<!-- response -->
-```
-+----------+-------------------+----------------+-------------------+
-| product  | customers.email   | customers.name | customers.address |
-+----------+-------------------+----------------+-------------------+
-| Phone    | NULL              | NULL           | NULL              |
-| Monitor  | NULL              | NULL           | NULL              |
-| Keyboard | NULL              | NULL           | NULL              |
-| Laptop   | alice@example.com | Alice Johnson  | 123 Maple St      |
-| Tablet   | alice@example.com | Alice Johnson  | 123 Maple St      |
-+----------+-------------------+----------------+-------------------+
-5 rows in set (0.00 sec)
-```
-
-<!-- end -->
-
-The `table.field` syntax is used in database queries for clarity and precision. It's essential for:
-
-1. Disambiguating field names when working with joined tables
-2. Making queries more readable and explicit
-3. Avoiding conflicts when tables have fields with identical names
-
-This syntax is particularly important in the `select` and `sort` sections of queries. It helps specify exactly which field from which table is being referenced, preventing misinterpretation and ensuring the correct data is retrieved or sorted.
-
-### Inner Join
-
 <!-- example inner_basic -->
 
-This query performs an INNER JOIN between the `orders` and `customers` tables, including only the orders with matching customers.
+1. **INNER JOIN**: Returns only the rows where there is a match in both tables. For example, the query performs an INNER JOIN between the `orders` and `customers` tables, including only the orders that have matching customers.
 
 <!-- request SQL -->
 ```sql
@@ -183,21 +107,18 @@ ORDER BY customers.email ASC;
 POST /search
 {
   "index": "orders",
-  "query": {
-    "match": {
-      "customers": "maple"
-    }
-  },
   "join": [
     {
       "type": "inner",
       "table": "customers",
+      "query": {
+        "query_string": "maple"
+      },
       "on": [
         {
           "left": {
             "table": "orders",
-            "field": "customer_id",
-            "type": "int"
+            "field": "customer_id"
           },
           "operator": "eq",
           "right": {
@@ -208,13 +129,14 @@ POST /search
       ]
     }
   ],
-  "select": ["product", "customers.email", "customers.name", "customers.address"],
+  "_source": ["product", "customers.email", "customers.name", "customers.address"],
   "sort": [{"customers.email": "asc"}]
 }
 ```
 
-<!-- response -->
-```
+<!-- response SQL -->
+
+```sql
 +---------+-------------------+----------------+-------------------+
 | product | customers.email   | customers.name | customers.address |
 +---------+-------------------+----------------+-------------------+
@@ -223,13 +145,224 @@ POST /search
 +---------+-------------------+----------------+-------------------+
 2 rows in set (0.00 sec)
 ```
+
+<!-- response JSON -->
+
+```json
+{
+  "took": 0,
+  "timed_out": false,
+  "hits": {
+    "total": 2,
+    "total_relation": "eq",
+    "hits": [
+      {
+        "_id": 1,
+        "_score": 1,
+        "_source": {
+          "product": "Laptop",
+          "customers.email": "alice@example.com",
+          "customers.name": "Alice Johnson",
+          "customers.address": "123 Maple St"
+        }
+      },
+      {
+        "_id": 3,
+        "_score": 1,
+        "_source": {
+          "product": "Tablet",
+          "customers.email": "alice@example.com",
+          "customers.name": "Alice Johnson",
+          "customers.address": "123 Maple St"
+        }
+      }
+    ]
+  }
+}
+```
+<!-- end -->
+
+<!-- example left_basic -->
+
+2. **LEFT JOIN**: Returns all rows from the left table and the matched rows from the right table. If there is no match, NULL values are returned for the right table's columns. For example, this query retrieves all customers along with their corresponding orders using a LEFT JOIN. If no corresponding order exists, NULL values will appear. The results are sorted by the customer's email, and only the customer's name and the order quantity are selected.
+
+<!-- request SQL -->
+```sql
+SELECT
+name, orders.quantity
+FROM customers
+LEFT JOIN orders
+ON orders.customer_id = customers.id
+ORDER BY email ASC;
+```
+
+<!-- request JSON -->
+```json
+POST /search
+{
+	"index": "customers",
+	"_source": ["name", "orders.quantity"],
+	"join": [
+    {
+      "type": "left",
+      "table": "orders",
+      "on": [
+        {
+          "left": {
+            "table": "orders",
+            "field": "customer_id"
+          },
+          "operator": "eq",
+          "right": {
+            "table": "customers",
+            "field": "id"
+          }
+        }
+      ]
+    }
+  ],
+  "sort": [{"email": "asc"}]
+}
+```
+
+<!-- response SQL -->
+```
++---------------+-----------------+-------------------+
+| name          | orders.quantity | @int_attr_email   |
++---------------+-----------------+-------------------+
+| Alice Johnson |               1 | alice@example.com |
+| Alice Johnson |               1 | alice@example.com |
+| Bob Smith     |               2 | bob@example.com   |
+| Carol White   |               1 | carol@example.com |
+| John Smith    |            NULL | john@example.com  |
++---------------+-----------------+-------------------+
+5 rows in set (0.00 sec)
+```
+
+<!-- response JSON -->
+
+```
+{
+  "took": 0,
+  "timed_out": false,
+  "hits": {
+    "total": 5,
+    "total_relation": "eq",
+    "hits": [
+      {
+        "_id": 1,
+        "_score": 1,
+        "_source": {
+          "name": "Alice Johnson",
+          "address": "123 Maple St",
+          "email": "alice@example.com",
+          "orders.id": 3,
+          "orders.customer_id": 1,
+          "orders.quantity": 1,
+          "orders.order_date": "2023-01-03",
+          "orders.tags": [
+            101,
+            104
+          ],
+          "orders.details": {
+            "price": 450,
+            "warranty": "1 year"
+          },
+          "orders.product": "Tablet"
+        }
+      },
+      {
+        "_id": 1,
+        "_score": 1,
+        "_source": {
+          "name": "Alice Johnson",
+          "address": "123 Maple St",
+          "email": "alice@example.com",
+          "orders.id": 1,
+          "orders.customer_id": 1,
+          "orders.quantity": 1,
+          "orders.order_date": "2023-01-01",
+          "orders.tags": [
+            101,
+            102
+          ],
+          "orders.details": {
+            "price": 1200,
+            "warranty": "2 years"
+          },
+          "orders.product": "Laptop"
+        }
+      },
+      {
+        "_id": 2,
+        "_score": 1,
+        "_source": {
+          "name": "Bob Smith",
+          "address": "456 Oak St",
+          "email": "bob@example.com",
+          "orders.id": 2,
+          "orders.customer_id": 2,
+          "orders.quantity": 2,
+          "orders.order_date": "2023-01-02",
+          "orders.tags": [
+            103
+          ],
+          "orders.details": {
+            "price": 800,
+            "warranty": "1 year"
+          },
+          "orders.product": "Phone"
+        }
+      },
+      {
+        "_id": 3,
+        "_score": 1,
+        "_source": {
+          "name": "Carol White",
+          "address": "789 Pine St",
+          "email": "carol@example.com",
+          "orders.id": 4,
+          "orders.customer_id": 3,
+          "orders.quantity": 1,
+          "orders.order_date": "2023-01-04",
+          "orders.tags": [
+            105
+          ],
+          "orders.details": {
+            "price": 300,
+            "warranty": "1 year"
+          },
+          "orders.product": "Monitor"
+        }
+      },
+      {
+        "_id": 4,
+        "_score": 1,
+        "_source": {
+          "name": "John Smith",
+          "address": "15 Barclays St",
+          "email": "john@example.com",
+          "orders.id": 0,
+          "orders.customer_id": 0,
+          "orders.quantity": 0,
+          "orders.order_date": "",
+          "orders.tags": [],
+          "orders.details": null,
+          "orders.product": ""
+        }
+      }
+    ]
+  }
+}
+```
+
 <!-- end -->
 
 ### Complex Join with Faceting
 
 <!-- example basic_complex -->
 
-This query retrieves products, customer names, product prices, and product tags from the `orders` table and `customers` table. It performs a `LEFT JOIN`, ensuring all customers are included even if they have not made an order. The query filters to include only those orders with a price greater than `500` and matches the products to the terms 'laptop', 'phone', or 'monitor'. The results are ordered by the `id` of the orders in ascending order. Additionally, the query facets the results based on the `warranty details` from the JSON attributes of the joined `orders` table.
+This query retrieves products, customer names, product prices, and product tags from the `orders` and `customers` tables. It performs a `LEFT JOIN`, ensuring all customers are included even if they have not made an order. The query filters the results to include only orders with a price greater than `500` and matches the products to the terms 'laptop', 'phone', or 'monitor'. The results are ordered by the `id` of the orders in ascending order. Additionally, the query facets the results based on the warranty details from the JSON attributes of the joined `orders` table.
 
 <!-- request SQL -->
 ```sql
@@ -248,6 +381,8 @@ FACET orders.details.warranty;
 POST /search
 {
   "index": "customers",
+	"_source": ["orders.product", "name", "orders.details", "orders.tags"],
+  "sort": [{"orders.id": "asc"}],
   "join": [
     {
       "type": "left",
@@ -256,8 +391,7 @@ POST /search
         {
           "left": {
             "table": "customers",
-            "field": "id",
-            "type": "int"
+            "field": "id"
           },
           "operator": "eq",
           "right": {
@@ -268,7 +402,7 @@ POST /search
       ],
       "query": {
         "range": {
-          "details.price": {
+          "orders.details.price": {
             "gt": 500
           }
         },
@@ -278,15 +412,17 @@ POST /search
       }
     }
   ],
-  "select": ["orders.product", "name", "orders.details.price", "orders.tags"],
-  "sort": [{"orders.id": "asc"}],
-  "facet": {
-    "orders.details.warranty": {}
-  }
+	"aggs":	{
+		"group_property": {
+			"terms": {
+				"field": "orders.details.warranty"
+			}
+		}
+	}
 }
 ```
 
-<!-- response -->
+<!-- response SQL -->
 ```
 +----------------+---------------+----------------------+-------------+
 | orders.product | name          | orders.details.price | orders.tags |
@@ -304,7 +440,70 @@ POST /search
 | 1 year                  |        1 |
 +-------------------------+----------+
 2 rows in set (0.01 sec)
+--- 2 out of 2 results in 0ms ---
 ```
+
+<!-- response JSON -->
+
+```
+{
+  "took": 0,
+  "timed_out": false,
+  "hits": {
+    "total": 2,
+    "total_relation": "eq",
+    "hits": [
+      {
+        "_id": 1,
+        "_score": 1,
+        "_source": {
+          "name": "Alice Johnson",
+          "orders.tags": [
+            101,
+            102
+          ],
+          "orders.details": {
+            "price": 1200,
+            "warranty": "2 years"
+          },
+          "orders.product": "Laptop"
+        }
+      },
+      {
+        "_id": 2,
+        "_score": 1,
+        "_source": {
+          "name": "Bob Smith",
+          "orders.tags": [
+            103
+          ],
+          "orders.details": {
+            "price": 800,
+            "warranty": "1 year"
+          },
+          "orders.product": "Phone"
+        }
+      }
+    ]
+  },
+  "aggregations": {
+    "group_property": {
+      "buckets": [
+        {
+          "key": "1 year",
+          "doc_count": 1
+        },
+        {
+          "key": "2 years",
+          "doc_count": 1
+        }
+      ]
+    }
+  }
+}
+```
+
+
 <!-- end -->
 
 ## Caveats and Best Practices
@@ -337,3 +536,5 @@ When using JOINs in Manticore Search, keep the following points in mind:
    ```
 
 By following these guidelines, you can effectively use JOINs in Manticore Search to combine data from multiple indexes and perform complex queries.
+
+<!-- proofread -->

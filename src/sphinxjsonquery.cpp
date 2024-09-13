@@ -271,6 +271,7 @@ public:
 	bool	IsFullscan ( const CSphQuery & tQuery ) const final;
 	bool	IsFullscan ( const XQQuery_t & tQuery ) const final;
 	bool	ParseQuery ( XQQuery_t & tParsed, const char * sQuery, const CSphQuery * pQuery, TokenizerRefPtr_c pQueryTokenizer, TokenizerRefPtr_c pQueryTokenizerJson, const CSphSchema * pSchema, const DictRefPtr_c& pDict, const CSphIndexSettings & tSettings, const CSphBitvec * pMorphFields ) const final;
+	QueryParser_i * Clone() const final { return new QueryParserJson_c; }
 
 private:
 	XQNode_t *		ConstructMatchNode ( const JsonObj_c & tJson, bool bPhrase, bool bTerms, bool bSingleTerm, QueryTreeBuilder_c & tBuilder ) const;
@@ -1074,13 +1075,17 @@ static bool ParseLimits ( const JsonObj_c & tRoot, CSphQuery & tQuery, CSphStrin
 
 static bool ParseOptions ( const JsonObj_c & tRoot, CSphQuery & tQuery, CSphString & sError )
 {
-	if ( !tRoot.IsObj() )
+	JsonObj_c tOptions = tRoot.GetItem("options");
+	if ( !tOptions )
+		return true;
+
+	if ( !tOptions.IsObj() )
 	{	
 		sError = "\"options\" property value should be an object";
 		return false;
 	}
 
-	for ( const auto & i : tRoot )
+	for ( const auto & i : tOptions )
 	{
 		AddOption_e eAdd = AddOption_e::NOT_FOUND;
 		CSphString sOpt = i.Name();
@@ -1170,16 +1175,134 @@ static bool ParseKNNQuery ( const JsonObj_c & tJson, CSphQuery & tQuery, CSphStr
 }
 
 
-bool sphParseJsonQuery ( Str_t sQuery, ParsedJsonQuery_t* pQuery )
+static bool ParseOnCond ( const JsonObj_c & tRoot, CSphString & sIdx, CSphString & sAttr, ESphAttr & eType, CSphString & sError )
 {
-	assert ( pQuery );
-	JsonObj_c tRoot ( sQuery );
-	pQuery->m_tQuery.m_sRawQuery = sQuery;
+	CSphString sType;
+	if ( !tRoot.FetchStrItem ( sIdx, "table", sError ) ) return false;
+	if ( !tRoot.FetchStrItem ( sAttr, "field", sError ) ) return false;
+	if ( !tRoot.FetchStrItem ( sType, "type", sError, true ) ) return false;
 
-	return sphParseJsonQuery ( tRoot, pQuery );
+	if ( !sType.IsEmpty() )
+	{
+		if ( sType=="int" || sType=="integer" )
+			eType = SPH_ATTR_INTEGER;
+		else if ( sType=="float" )
+			eType = SPH_ATTR_FLOAT;
+		else if ( sType=="string" )
+			eType = SPH_ATTR_STRING;
+		else
+		{
+			sError.SetSprintf ( "unknown \"type\" value: \"%s\"", sType.cstr() );
+			return false;
+		}
+	}
+
+	return true;
 }
 
-bool sphParseJsonQuery ( const JsonObj_c & tRoot, ParsedJsonQuery_t* pQuery )
+
+static bool ParseOnFilter ( const JsonObj_c & tRoot, OnFilter_t & tOnFilter, CSphString & sError )
+{
+	if ( !tRoot.IsObj() )
+	{
+		sError = "\"on\" items should be objects";
+		return false;
+	}
+
+	CSphString sOp;
+	if ( !tRoot.FetchStrItem ( sOp, "operator", sError ) )
+		return false;
+
+	if ( sOp!="eq" )
+	{
+		sError = "Unknown \"operator\" value";
+		return false;
+	}
+
+	JsonObj_c tLeft = tRoot.GetObjItem ( "left", sError );
+	if ( !tLeft )
+		return false;
+
+	JsonObj_c tRight = tRoot.GetObjItem ( "right", sError );
+	if ( !tRight )
+		return false;
+
+	if ( !ParseOnCond ( tLeft, tOnFilter.m_sIdx1, tOnFilter.m_sAttr1, tOnFilter.m_eTypeCast1, sError ) )
+		return false;
+
+	if ( !ParseOnCond ( tRight, tOnFilter.m_sIdx2, tOnFilter.m_sAttr2, tOnFilter.m_eTypeCast2, sError ) )
+		return false;
+
+	return true;
+}
+
+
+static bool ParseJoin ( const JsonObj_c & tRoot, CSphQuery & tQuery, CSphString & sError, CSphString & sWarning )
+{
+	JsonObj_c tJoin = tRoot.GetArrayItem ( "join", sError, true );
+	if ( !tJoin )
+		return true;
+
+	int iNumJoins = 0;
+	for ( const auto & tJoinItem : tJoin )
+	{
+		if ( iNumJoins>0 )
+		{
+			sError = "Only single table joins are currently supported";
+			return false;
+		}
+
+		CSphString sJoinType;
+		if ( !tJoinItem.FetchStrItem ( sJoinType, "type", sError ) )
+			return false;
+
+		if ( sJoinType=="inner" )
+			tQuery.m_eJoinType = JoinType_e::INNER;
+		else if ( sJoinType=="left" )
+			tQuery.m_eJoinType = JoinType_e::LEFT;
+		else
+		{	
+			sError.SetSprintf ( "unknown join type '%s'", sJoinType.cstr() );
+			return false;
+		}
+
+		if ( !tJoinItem.FetchStrItem ( tQuery.m_sJoinIdx, "table", sError ) )
+			return false;
+
+		JsonObj_c tMatchQuery = tJoinItem.GetObjItem ( "query", sError, true );
+		if ( tMatchQuery )
+			tQuery.m_sJoinQuery = tMatchQuery.AsString();
+		
+		JsonObj_c tOn = tJoinItem.GetArrayItem ( "on", sError );
+		if ( !tOn )
+			return false;
+
+		for ( const auto & tCond : tOn )
+		{
+			OnFilter_t tOnFilter;
+			if ( !ParseOnFilter ( tCond, tOnFilter, sError ) )
+				return false;
+
+			tQuery.m_dOnFilters.Add(tOnFilter);
+		}
+
+		iNumJoins++;
+	}
+
+	return true;
+}
+
+
+bool sphParseJsonQuery ( Str_t sQuery, ParsedJsonQuery_t & tPJQuery )
+{
+	JsonObj_c tRoot ( sQuery );
+	tPJQuery.m_tQuery.m_sRawQuery = sQuery;
+
+	return sphParseJsonQuery ( tRoot, tPJQuery );
+}
+
+
+bool sphParseJsonQuery ( const JsonObj_c & tRoot, ParsedJsonQuery_t & tPJQuery )
 {
 	TlsMsg::ResetErr();
 	if ( !tRoot )
@@ -1190,7 +1313,7 @@ bool sphParseJsonQuery ( const JsonObj_c & tRoot, ParsedJsonQuery_t* pQuery )
 	if ( !tIndex )
 		return false;
 
-	auto& tQuery = pQuery->m_tQuery;
+	auto & tQuery = tPJQuery.m_tQuery;
 
 	tQuery.m_sIndexes = tIndex.StrVal();
 	if ( tQuery.m_sIndexes==g_szAll )
@@ -1205,23 +1328,25 @@ bool sphParseJsonQuery ( const JsonObj_c & tRoot, ParsedJsonQuery_t* pQuery )
 		return TlsMsg::Err ( "\"query\" can't be used together with \"knn\"" );
 
 	// common code used by search queries and update/delete by query
-	if ( !ParseJsonQueryFilters ( tJsonQuery, tQuery, sError, pQuery->m_sWarning ) )
+	if ( !ParseJsonQueryFilters ( tJsonQuery, tQuery, sError, tPJQuery.m_sWarning ) )
 		return false;
 
-	if ( !ParseKNNQuery ( tKNNQuery, tQuery, sError, pQuery->m_sWarning ) )
+	if ( !ParseKNNQuery ( tKNNQuery, tQuery, sError, tPJQuery.m_sWarning ) )
 		return false;
 
-	if ( tKNNQuery && !ParseJsonQueryFilters ( tKNNQuery, tQuery, sError, pQuery->m_sWarning ) )
+	if ( tKNNQuery && !ParseJsonQueryFilters ( tKNNQuery, tQuery, sError, tPJQuery.m_sWarning ) )
 		return false;
 
-	JsonObj_c tOptions = tRoot.GetItem("options");
-	if ( tOptions && !ParseOptions ( tOptions, tQuery, sError ) )
+	if ( !ParseJoin ( tRoot, tQuery, sError, tPJQuery.m_sWarning ) )
 		return false;
 
-	if ( !tRoot.FetchBoolItem ( pQuery->m_bProfile, "profile", sError, true ) )
+	if ( !ParseOptions ( tRoot, tQuery, sError ) )
 		return false;
 
-	if ( !tRoot.FetchIntItem ( pQuery->m_iPlan, "plan", sError, true ) )
+	if ( !tRoot.FetchBoolItem ( tPJQuery.m_bProfile, "profile", sError, true ) )
+		return false;
+
+	if ( !tRoot.FetchIntItem ( tPJQuery.m_iPlan, "plan", sError, true ) )
 		return false;
 
 	// expression columns go first to select list
@@ -1253,7 +1378,7 @@ bool sphParseJsonQuery ( const JsonObj_c & tRoot, ParsedJsonQuery_t* pQuery )
 	if ( tSort )
 	{
 		bool bGotWeight = false;
-		if ( !ParseSort ( tSort, tQuery, bGotWeight, sError, pQuery->m_sWarning ) )
+		if ( !ParseSort ( tSort, tQuery, bGotWeight, sError, tPJQuery.m_sWarning ) )
 			return false;
 
 		JsonObj_c tTrackScore = tRoot.GetBoolItem ( "track_scores", sError, true );

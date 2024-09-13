@@ -62,9 +62,9 @@ struct ParsedJsonQuery_t
 	int m_iPlan = 0; // 0 - no plan, 1 - description, 2 - object, 3 - both
 };
 
-std::unique_ptr<QueryParser_i>	sphCreateJsonQueryParser();
-bool			sphParseJsonQuery ( Str_t sQuery, ParsedJsonQuery_t* pQuery );
-bool			sphParseJsonQuery ( const JsonObj_c & tRoot, ParsedJsonQuery_t* pQuery );
+std::unique_ptr<QueryParser_i> sphCreateJsonQueryParser();
+bool			sphParseJsonQuery ( Str_t sQuery, ParsedJsonQuery_t & tPJQuery );
+bool			sphParseJsonQuery ( const JsonObj_c & tRoot, ParsedJsonQuery_t & tPJQuery );
 bool			sphParseJsonInsert ( const char * szInsert, SqlStmt_t & tStmt, DocID_t & tDocId, bool bReplace, CSphString & sError );
 bool			sphParseJsonUpdate ( Str_t sUpdate, SqlStmt_t & tStmt, DocID_t & tDocId, CSphString & sError );
 bool			sphParseJsonDelete ( Str_t sDelete, SqlStmt_t & tStmt, DocID_t & tDocId, CSphString & sError );

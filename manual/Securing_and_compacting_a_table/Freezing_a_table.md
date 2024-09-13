@@ -11,7 +11,12 @@ FREEZE tbl1[, tbl2, ...]
 2. Transfers the current RAM chunk to a disk chunk.
 3. Flushes attributes.
 4. Disables implicit operations that could modify the disk files.
-5. Shows the actual file list associated with the table.
+5. Increases locked counter of a table.
+6. Shows the actual file list associated with the table.
+
+If the table is already frozen (locked), `FREEZE` will:
+1. Increase locked counter of a table.
+2. Shows the actual file list associated with the table.
 
 The built-in tool [manticore-backup](../Securing_and_compacting_a_table/Backup_and_restore.md) uses `FREEZE` to ensure data consistency. You can do the same if you want to create your own backup solution or need to freeze tables for other reasons. Just follow these steps:
 1. `FREEZE` a table (or a few).
@@ -72,7 +77,7 @@ If you shut down the daemon with a frozen table, it will act as if it experience
 UNFREEZE tbl1[, tbl2, ...]
 ```
 
-`UNFREEZE` reactivates previously blocked operations and resumes the internal compaction service. All operations waiting for a table to unfreeze will also be unfrozen and complete normally.
+`UNFREEZE` decreases locked counter of the table, and if it reaches zero, reactivates previously blocked operations and resumes the internal compaction service. All operations waiting for a table to unfreeze will also be unfrozen and complete normally.
 
 <!-- request Example -->
 ```sql
@@ -81,4 +86,51 @@ UNFREEZE tbl;
 
 <!-- end -->
 
-<!-- proofread -->
+# Inspecting lock state of a tables
+
+Locked counter is displayed in table's status as column `locked`. Zero counter means table is not frozen. Non-zero indicates
+number of currently active locks. Each explicit `FREEZE` and implicit locking (for example, when table is a part of cluster,
+and replication routine decided to use it as donor for a replica) increases the counter. Each `UNFREEZE` decreases it,
+down to zero.
+
+<!-- request Example -->
+
+```sql
+SHOW TABLE `foo` STATUS LIKE 'locked';
+```
+
+<!-- response Example -->
+
+```sql
++---------------+-------+
+| Variable_name | Value |
++---------------+-------+
+| locked        | 2     |
++---------------+-------+
+1 row in set (0,00 sec)
+```
+
+<!-- end -->
+
+Also locked tables displayed with command `SHOW LOCKS`. Locked counters expressed there as column `Additional Info`.
+
+<!-- request Example -->
+
+```sql
+SHOW LOCKS;
+```
+
+<!-- response Example -->
+
+```sql
++-----------+------+-----------+-----------------+
+| Type      | Name | Lock Type | Additional Info |
++-----------+------+-----------+-----------------+
+| rt        | a    | freeze    | 1               |
+| percolate | bar  | freeze    | 3               |
+| rt        | foo  | freeze    | 2               |
++-----------+------+-----------+-----------------+
+3 rows in set (0,01 sec)
+```
+
+<!-- end -->

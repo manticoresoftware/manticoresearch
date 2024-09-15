@@ -1994,6 +1994,11 @@ float CSphIndex::GetGlobalIDF ( const CSphString & sWord, int64_t iDocsLocal, bo
 	return pIDFer->GetIDF ( sWord, iDocsLocal, bPlainIDF );
 }
 
+bool CSphIndex::HasGlobalIDF() const
+{
+	return ( !m_sGlobalIDFPath.IsEmpty() && sph::GetIDFer ( m_sGlobalIDFPath ) );
+}
+
 
 int CSphIndex::UpdateAttributes ( AttrUpdateSharedPtr_t pUpd, bool & bCritical, CSphString & sError, CSphString & sWarning )
 {

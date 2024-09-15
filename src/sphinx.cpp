@@ -26,6 +26,7 @@
 #include "sphinxplugin.h"
 #include "sphinxqcache.h"
 #include "icu.h"
+#include "jieba.h"
 #include "attribute.h"
 #include "secondaryindex.h"
 #include "docidlookup.h"
@@ -8813,6 +8814,9 @@ CSphIndex_VLN::LOAD_E CSphIndex_VLN::LoadHeaderJson ( const CSphString& sHeaderN
 	}
 
 	if ( !sphSpawnFilterICU ( pFieldFilter, m_tSettings, tTokSettings, sHeaderName.cstr(), m_sLastError ) )
+		return LOAD_E::GeneralError_e;
+
+	if ( !SpawnFilterJieba ( pFieldFilter, m_tSettings, tTokSettings, sHeaderName.cstr(), m_sLastError ) )
 		return LOAD_E::GeneralError_e;
 
 	SetFieldFilter ( std::move ( pFieldFilter ) );

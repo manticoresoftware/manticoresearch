@@ -214,6 +214,7 @@ else
 if ( !$g_guesscached ) {
 	GuessRE2();
 	GuessICU();
+	GuessJieba();
 	GuessODBC();
 	GuessReplication();
 	GuessSSL();

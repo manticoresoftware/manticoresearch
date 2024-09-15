@@ -37,6 +37,7 @@ $g_guesscached = false;
 $g_model	= false;
 $g_re2		= false;
 $g_icu		= false;
+$g_jieba	= false;
 $g_odbc     = false;
 $g_columnar_loaded = false;
 $g_strict	= false;
@@ -106,13 +107,14 @@ function LoadCachedGuesses ()
 function CacheGuesses ()
 {
 	global $g_locals;
-	global $g_re2, $g_icu, $g_odbc, $g_repli, $g_ssl, $g_columnar_loaded, $g_secondary_loaded, $g_knn_loaded, $g_tzdata_loaded, $g_zlib;
+	global $g_re2, $g_icu, $g_jieba, $g_odbc, $g_repli, $g_ssl, $g_columnar_loaded, $g_secondary_loaded, $g_knn_loaded, $g_tzdata_loaded, $g_zlib;
 
 	$guessfile = $g_locals['scriptdir'].'guess.txt';
 
 	$text = "global \$g_guesscached; \$g_guesscached = true;\n";
 	if ( $g_re2 ) $text .= "global \$g_re2; \$g_re2 = true;\n";
 	if ( $g_icu ) $text .= "global \$g_icu; \$g_icu = true;\n";
+	if ( $g_jieba ) $text .= "global \$g_jieba; \$g_jieba = true;\n";
 	if ( $g_odbc ) $text .= "global \$g_odbc; \$g_odbc = true;\n";
 	if ( $g_repli ) $text .= "global \$g_repli; \$g_repli = true;\n";
 	if ( $g_ssl ) $text .= "global \$g_ssl; \$g_ssl = true;\n";
@@ -202,6 +204,12 @@ function GuessICU ()
 {
 	global $g_icu;
     $g_icu = GuessFeature ( 'test_icu.conf','no ICU support compiled');
+}
+
+function GuessJieba ()
+{
+	global $g_jieba;
+    $g_jieba = GuessFeature ( 'test_jieba.conf','no Jieba support compiled');
 }
 
 function GuessODBC ()

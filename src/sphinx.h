@@ -325,9 +325,6 @@ public:
 /// create a regexp field filter
 std::unique_ptr<ISphFieldFilter> sphCreateRegexpFilter ( const CSphFieldFilterSettings & tFilterSettings, CSphString & sError );
 
-/// create an ICU field filter
-std::unique_ptr<ISphFieldFilter> sphCreateFilterICU ( std::unique_ptr<ISphFieldFilter> pParent, const char * szBlendChars, CSphString & sError );
-
 /////////////////////////////////////////////////////////////////////////////
 // SEARCH QUERIES
 /////////////////////////////////////////////////////////////////////////////

@@ -4458,7 +4458,7 @@ function CopyDirContents ( $from, $to )
 
 function CheckConfig ( $config, $path )
 {
-	global $g_re2, $g_icu, $g_odbc, $windows, $g_locals, $mysql_simulated, $g_repli, $g_ssl, $g_columnar_loaded, $g_secondary_loaded, $g_knn_loaded, $g_tzdata_loaded, $g_zlib;
+	global $g_re2, $g_icu, $g_jieba, $g_odbc, $windows, $g_locals, $mysql_simulated, $g_repli, $g_ssl, $g_columnar_loaded, $g_secondary_loaded, $g_knn_loaded, $g_tzdata_loaded, $g_zlib;
 
 	if ( $config->Requires("non-windows") && $windows )
 	{
@@ -4499,6 +4499,12 @@ function CheckConfig ( $config, $path )
 	if ( $config->Requires("icu") && !$g_icu )
 	{
 		printf ( "SKIPPING %s, %s - compile with ICU support to run this test\n", $path, $config->Name () );
+		return false;
+	}
+
+	if ( $config->Requires("jieba") && !$g_jieba )
+	{
+		printf ( "SKIPPING %s, %s - compile with Jieba support to run this test\n", $path, $config->Name () );
 		return false;
 	}
 

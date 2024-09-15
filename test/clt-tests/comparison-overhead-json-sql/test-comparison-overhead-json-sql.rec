@@ -31,6 +31,6 @@ echo "Duration: ${mysql} ${curl} ms"
 ––– output –––
 Duration: %{NUMBER} %{NUMBER} ms
 ––– input –––
-php -r "exit(round(abs($curl - $mysql) / ($curl + $mysql)/2 * 100, 0) >= 2);" 2>\dev\null && echo "----$?----"
+php -r "\$curl=${curl}; \$mysql=${mysql}; \$diff_percent=round(abs(\$curl-\$mysql)/(\$curl+\$mysql)/2*100,0); if (\$diff_percent >= 2) { echo 'Test failed: curl=' . \$curl . ' ms, mysql=' . \$mysql . ' ms\n'; exit(1); } else { exit(0); }" 2>/dev/null && echo "----$?----"
 ––– output –––
 ----0----

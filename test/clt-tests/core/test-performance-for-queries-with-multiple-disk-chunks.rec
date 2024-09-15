@@ -38,9 +38,13 @@ mysql -P9306 -h0 -e "select count(*) from name.@status;"
 mysql -h0 -P9306 -e "OPTIMIZE TABLE name OPTION cutoff=1, sync=1;"
 ––– output –––
 ––– input –––
-mysql -h0 -P9306 -e "show table name status" | grep "disk_chunks"
+mysql -h0 -P9306 -e "show table name status like 'disk_chunks'"
 ––– output –––
-| disk_chunks                 | 1                                                                                                      |
++---------------+-------+
+| Variable_name | Value |
++---------------+-------+
+| disk_chunks   | 1     |
++---------------+-------+
 ––– input –––
 export start=$(date +%s%N)
 ––– output –––
@@ -59,6 +63,6 @@ echo "Duration: ${optimize} ${multiple_disk_chunks} ms"
 ––– output –––
 Duration: %{NUMBER} %{NUMBER} ms
 ––– input –––
-php -r "exit(round(abs($multiple_disk_chunks - $optimize) / ($multiple_disk_chunks + $optimize)/2 * 100, 0) >= 15);" 2>\dev\null && echo "----$?----"
+php -r "\$multiple_disk_chunks=${multiple_disk_chunks}; \$optimize=${optimize}; \$diff_percent=round(abs(\$multiple_disk_chunks - \$optimize) / (\$multiple_disk_chunks + \$optimize) * 100, 0); if (\$diff_percent >= 15) { echo 'Test failed: multiple_disk_chunks=' . \$multiple_disk_chunks . ' optimize=' . \$optimize . ' diff=' . \$diff_percent . '%\n'; exit(1); } else { exit(0); }" 2>/dev/null && echo "----$?----"
 ––– output –––
 ----0----

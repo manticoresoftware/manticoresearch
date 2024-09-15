@@ -471,11 +471,11 @@ docker exec manticore mysql -h0 -P9306 -e "SELECT * FROM destination_kafka_combi
 +------+-----------------------------------------------+-----------------+---------------------+------------------------+----------+-----------+----------+-------+-------------------------+--------------------+
 | id   | name                                          | short_name      | received_at         | info                   | size     | lat       | lon      | views | tags                    | timestamp_combined |
 +------+-----------------------------------------------+-----------------+---------------------+------------------------+----------+-----------+----------+-------+-------------------------+--------------------+
-|   56 | The Grass Is Always Greener On The Other Side | ISO 97531:86420 | 2024-09-12 10:37:12 | Extra data for item 56 | 20,25,30 | 54.000000 | 8.000000 |  5600 | ["test","data","item1"] |         1690761600 |
-|   36 | A Penny For Your Thoughts                     | ISO 86420:97531 | 2024-09-12 10:37:01 | Extra data for item 36 | 20,25,30 | 54.000000 | 8.000000 |  3600 | ["test","data","item1"] |         1690761600 |
-|   37 | Bite The Bullet                               | ISO 13579:86420 | 2024-09-12 10:37:01 | Extra data for item 37 | 20,25,30 | 55.000000 | 9.000000 |  3700 | ["test","data","item2"] |         1690761600 |
-|   46 | Money Doesn't Grow On "Trees                  | ISO 97531:86420 | 2024-09-12 10:37:01 | Extra data for item 46 | 20,25,30 | 54.000000 | 8.000000 |  4600 | ["test","data","item1"] |         1690761600 |
-|   47 | No Pain, No Gain                              | ISO 13579:86420 | 2024-09-12 10:37:01 | Extra data for item 47 | 20,25,30 | 55.000000 | 9.000000 |  4700 | ["test","data","item2"] |         1690761600 |
+|   56 | The Grass Is Always Greener On The Other Side | ISO 97531:86420 | %{DATETIME} | Extra data for item 56 | 20,25,30 | 54.000000 | 8.000000 |  5600 | ["test","data","item1"] |         1690761600 |
+|   36 | A Penny For Your Thoughts                     | ISO 86420:97531 | %{DATETIME} | Extra data for item 36 | 20,25,30 | 54.000000 | 8.000000 |  3600 | ["test","data","item1"] |         1690761600 |
+|   37 | Bite The Bullet                               | ISO 13579:86420 | %{DATETIME} | Extra data for item 37 | 20,25,30 | 55.000000 | 9.000000 |  3700 | ["test","data","item2"] |         1690761600 |
+|   46 | Money Doesn't Grow On "Trees                  | ISO 97531:86420 | %{DATETIME} | Extra data for item 46 | 20,25,30 | 54.000000 | 8.000000 |  4600 | ["test","data","item1"] |         1690761600 |
+|   47 | No Pain, No Gain                              | ISO 13579:86420 | %{DATETIME} | Extra data for item 47 | 20,25,30 | 55.000000 | 9.000000 |  4700 | ["test","data","item2"] |         1690761600 |
 +------+-----------------------------------------------+-----------------+---------------------+------------------------+----------+-----------+----------+-------+-------------------------+--------------------+
 ––– input –––
 docker exec kafka kafka-consumer-groups.sh --bootstrap-server localhost:9092 --group manticore_stop --reset-offsets --to-latest --topic my-data --execute > /dev/null; echo $?

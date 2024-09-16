@@ -78,7 +78,7 @@ POST /search
 }
 
 on.type: {
-  int
+	int
 	| string
 }
 ```

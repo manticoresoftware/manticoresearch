@@ -29,7 +29,6 @@ export mysql=$(( (end - start) / 1000000 ))
 ––– input –––
 echo "Duration: ${mysql} ${curl} ms"
 ––– output –––
-Duration: %{NUMBER} %{NUMBER} ms
 ––– input –––
 php -r "\$curl=${curl}; \$mysql=${mysql}; \$diff_percent=round(abs(\$curl-\$mysql)/(\$curl+\$mysql)/2*100,0); if (\$diff_percent >= 2) { echo 'Test failed: curl=' . \$curl . ' ms, mysql=' . \$mysql . ' ms\n'; exit(1); } else { exit(0); }" 2>/dev/null && echo "----$?----"
 ––– output –––

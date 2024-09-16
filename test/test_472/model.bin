@@ -1,4 +1,4 @@
-a:1:{i:0;a:21:{i:0;a:2:{s:8:"sphinxql";s:125:"CREATE TABLE rt_no_idf(title text, brand text) index_field_lengths='1' index_exact_words = '1' morphology = 'stem_ru,stem_en'";s:14:"total_affected";i:0;}i:1;a:2:{s:8:"sphinxql";s:186:"CREATE TABLE rt_idf(title text, brand text) index_field_lengths='1' index_exact_words = '1' morphology = 'stem_ru,stem_en' global_idf = 'C:/dev/sphinx/manticore/test/test_472/global.idf'";s:14:"total_affected";i:0;}i:2;a:2:{s:8:"sphinxql";s:233:"INSERT INTO rt_no_idf VALUES
+a:1:{i:0;a:21:{i:0;a:2:{s:8:"sphinxql";s:125:"CREATE TABLE rt_no_idf(title text, brand text) index_field_lengths='1' index_exact_words = '1' morphology = 'stem_ru,stem_en'";s:14:"total_affected";i:0;}i:1;a:2:{s:8:"sphinxql";s:148:"CREATE TABLE rt_idf(title text, brand text) index_field_lengths='1' index_exact_words = '1' morphology = 'stem_ru,stem_en' global_idf = 'global.idf'";s:14:"total_affected";i:0;}i:2;a:2:{s:8:"sphinxql";s:233:"INSERT INTO rt_no_idf VALUES
 (1, 'Crossbody Bag with Tassel', 'Burberry'),
 (2, 'Some other bag', 'Gucci'),
 (3, 'Шла собока по рояле', 'Ризеншнауцер'),

@@ -4561,7 +4561,7 @@ std::unique_ptr<ISphRanker> sphCreateRanker ( const XQQuery_t & tXQ, const CSphQ
 	pRanker->m_uPayloadMask = uPayloadMask;
 
 	if ( tQuery.m_bGlobalIDF && !pIndex->HasGlobalIDF() )
-		tMeta.m_sWarning.SetSprintf ( "query sets global_idf, but global_idf is missing from the index", tQuery.m_sUDRanker.cstr() );
+		tMeta.m_sWarning.SetSprintf ( "query sets global_idf, but global_idf is missing from the index" );
 
 	// setup IDFs
 	ExtQwordsHash_t hQwords;

@@ -18798,7 +18798,7 @@ bool SwitchoverIndexSeamless ( const cServedIndexRefPtr_c& pServed, const char* 
 void ConfigureLocalIndex ( ServedDesc_t * pIdx, const CSphConfigSection & hIndex, bool bMutableOpt, StrVec_t * pWarnings )
 {
 	pIdx->m_tSettings.Load ( hIndex, bMutableOpt, pWarnings );
-	pIdx->m_sGlobalIDFPath = hIndex.GetStr ( "global_idf" );
+	pIdx->m_sGlobalIDFPath = pIdx->m_tSettings.m_sGlobalIDFPath;
 }
 
 bool ConfigureDistributedIndex ( std::function<bool(const CSphString&)>&& fnCheck, DistributedIndex_t & tIdx, const char * szIndexName, const CSphConfigSection & hIndex, CSphString & sError, StrVec_t * pWarnings )
@@ -20743,8 +20743,17 @@ ESphAddIndex ConfigureAndPreloadIndex ( const CSphConfigSection & hIndex, const 
 				if ( !PreallocNewIndex ( *pJustLoadedLocal, &hIndex, szIndexName, dWarnings, sError ) )
 					return ADD_ERROR;
 			}
-		} else if ( !PreallocNewIndex ( *pJustLoadedLocal, &hIndex, szIndexName, dWarnings, sError ) )
-			return ADD_ERROR;
+		} else
+		{
+			if ( !PreallocNewIndex ( *pJustLoadedLocal, &hIndex, szIndexName, dWarnings, sError ) )
+				return ADD_ERROR;
+
+			// index could load global_idf from the settings
+			// need to pass and load global idf below
+			CSphIndex * pIdx = UnlockedHazardIdxFromServed ( *pJustLoadedLocal );
+			if ( pIdx->GetMutableSettings().IsSet ( MutableName_e::GLOBAL_IDF ) )
+				pJustLoadedLocal->m_sGlobalIDFPath = pIdx->GetMutableSettings().m_sGlobalIDFPath;
+		}
 	}
 	// no break
 	case ADD_SERVED:

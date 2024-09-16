@@ -2405,6 +2405,7 @@ const char * GetMutableName ( MutableName_e eName )
 		case MutableName_e::READ_BUFFER_DOCS: return "read_buffer_docs";
 		case MutableName_e::READ_BUFFER_HITS: return "read_buffer_hits";
 		case MutableName_e::OPTIMIZE_CUTOFF: return "optimize_cutoff";
+		case MutableName_e::GLOBAL_IDF: return "global_idf";
 		default: assert ( 0 && "Invalid mutable option" ); return "";
 	}
 }
@@ -2605,6 +2606,18 @@ bool MutableIndexSettings_c::Load ( const char * sFileName, const char * sIndexN
 		sError = "";
 	}
 
+	JsonObj_c tGlobalIdf = tParser.GetStrItem ( "global_idf", sError, true );
+	if ( tGlobalIdf )
+	{
+		m_sGlobalIDFPath = tGlobalIdf.StrVal();
+		m_dLoaded.BitSet ( (int)MutableName_e::GLOBAL_IDF );
+	} else if ( !sError.IsEmpty() )
+	{
+		sphWarning ( "table %s: %s", sIndexName, sError.cstr() );
+		sError = "";
+	}
+
+
 	m_bNeedSave = true;
 
 	return true;
@@ -2683,6 +2696,12 @@ void MutableIndexSettings_c::Load ( const CSphConfigSection & hIndex, bool bNeed
 		m_iOptimizeCutoff = Max ( m_iOptimizeCutoff, 1 );
 		m_dLoaded.BitSet ( (int)MutableName_e::OPTIMIZE_CUTOFF );
 	}
+
+	if ( hIndex.Exists ( "global_idf" ) )
+	{
+		m_sGlobalIDFPath = hIndex.GetStr ( "global_idf" );
+		m_dLoaded.BitSet ( (int)MutableName_e::GLOBAL_IDF );
+	}
 }
 
 static void AddStr ( const CSphBitvec & dLoaded, MutableName_e eName, JsonObj_c & tRoot, const char * sVal )
@@ -2738,6 +2757,7 @@ bool MutableIndexSettings_c::Save ( CSphString & sBuf ) const
 	AddInt ( m_dLoaded, MutableName_e::READ_BUFFER_HITS, tRoot, m_tFileAccess.m_iReadBufferHitList );
 
 	AddInt ( m_dLoaded, MutableName_e::OPTIMIZE_CUTOFF, tRoot, m_iOptimizeCutoff );
+	AddStr ( m_dLoaded, MutableName_e::GLOBAL_IDF, tRoot, m_sGlobalIDFPath.cstr() );
 
 	sBuf = tRoot.AsString ( true );
 
@@ -2805,6 +2825,12 @@ void MutableIndexSettings_c::Combine ( const MutableIndexSettings_c & tOther )
 		m_iOptimizeCutoff = tOther.m_iOptimizeCutoff;
 		m_dLoaded.BitSet ( (int)MutableName_e::OPTIMIZE_CUTOFF );
 	}
+
+	if ( tOther.m_dLoaded.BitGet ( (int)MutableName_e::GLOBAL_IDF ) )
+	{
+		m_sGlobalIDFPath = tOther.m_sGlobalIDFPath;
+		m_dLoaded.BitSet ( (int)MutableName_e::GLOBAL_IDF );
+	}
 }
 
 MutableIndexSettings_c & MutableIndexSettings_c::GetDefaults ()
@@ -2847,6 +2873,8 @@ void MutableIndexSettings_c::Format ( SettingsFormatter_c & tOut, FilenameBuilde
 
 	tOut.Add ( GetMutableName ( MutableName_e::OPTIMIZE_CUTOFF ), m_iOptimizeCutoff,
 		FormatCond ( m_bNeedSave, m_dLoaded, MutableName_e::OPTIMIZE_CUTOFF, HasSettings() && m_dLoaded.BitGet ( (int)MutableName_e::OPTIMIZE_CUTOFF ) ) );
+	tOut.Add ( GetMutableName ( MutableName_e::GLOBAL_IDF ), m_sGlobalIDFPath,
+		FormatCond ( m_bNeedSave, m_dLoaded, MutableName_e::GLOBAL_IDF, HasSettings() && m_dLoaded.BitGet ( (int)MutableName_e::GLOBAL_IDF ) ) );
 }
 
 

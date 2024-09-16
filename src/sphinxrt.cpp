@@ -1526,6 +1526,8 @@ private:
 	bool						AttachSaveDiskChunk ();
 	ConstDiskChunkRefPtr_t		PopDiskChunk();
 	int							GetChunkId () const override { return m_tChunkID.GetChunkId ( m_tRtChunks ); }
+	void						SetGlobalIDFPath ( const CSphString & sPath ) override;
+	void						DebugDumpDict ( FILE * fp, bool bDumpOnly ) final;
 };
 
 
@@ -4348,6 +4350,7 @@ std::unique_ptr<CSphIndex> RtIndex_c::PreallocDiskChunk ( const CSphString& sChu
 
 	pDiskChunk->m_iExpansionLimit = m_iExpansionLimit;
 	pDiskChunk->SetMutableSettings ( m_tMutableSettings );
+	pDiskChunk->SetGlobalIDFPath ( m_sGlobalIDFPath );
 	pDiskChunk->SetBinlog ( false );
 	pDiskChunk->m_iChunk = iChunk;
 
@@ -4774,6 +4777,8 @@ bool RtIndex_c::Prealloc ( bool bStripPath, FilenameBuilder_i * pFilenameBuilder
 	if ( !m_tMutableSettings.Load ( sMutableFile.cstr(), GetName() ) )
 		return false;
 	SetMemLimit ( m_tMutableSettings.m_iMemLimit );
+	if ( m_tMutableSettings.IsSet ( MutableName_e::GLOBAL_IDF ) )
+		m_sGlobalIDFPath = m_tMutableSettings.m_sGlobalIDFPath;
 
 	m_bPathStripped = bStripPath;
 
@@ -10742,4 +10747,35 @@ bool RtIndex_c::AlterSI ( CSphString & sError )
 
 	RaiseAlterGeneration();
 	return true;
+}
+
+void RtIndex_c::SetGlobalIDFPath ( const CSphString & sPath )
+{
+	m_sGlobalIDFPath = sPath;
+
+	auto pChunks = m_tRtChunks.DiskChunks();
+	for ( auto & pChunk : *pChunks )
+		pChunk->CastIdx().SetGlobalIDFPath ( m_sGlobalIDFPath );
+}
+
+void RtIndex_c::DebugDumpDict ( FILE * fp, bool bDumpOnly )
+{
+	if ( !m_bKeywordDict )
+		sphDie ( "DebugDumpDict() only supports dict=keywords for now" );
+
+	if ( !bDumpOnly )
+		fprintf ( fp, "keyword,docs,hits,offset\n" );
+
+	auto tGuard = RtGuard();
+
+	for ( const auto & pSeg : tGuard.m_dRamSegs )
+	{
+		RtWordReader_c tRdWord ( pSeg, m_bKeywordDict, m_iWordsCheckpoint, m_tSettings.m_eHitless );
+		while ( tRdWord.UnzipWord() )
+			fprintf ( fp, "%s,%u,%u,0\n", tRdWord->m_sWord, tRdWord->m_uDocs, tRdWord->m_uHits );
+
+	}
+
+	for ( auto & tDiskChunk : tGuard.m_dDiskChunks )
+		tDiskChunk->CastIdx().DebugDumpDict ( fp, true );
 }

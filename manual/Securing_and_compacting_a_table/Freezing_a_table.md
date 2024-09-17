@@ -11,7 +11,12 @@ FREEZE tbl1[, tbl2, ...]
 2. Transfers the current RAM chunk to a disk chunk.
 3. Flushes attributes.
 4. Disables implicit operations that could modify the disk files.
-5. Shows the actual file list associated with the table.
+5. Increments the table's locked counter.
+6. Shows the actual file list associated with the table.
+
+If the table is already frozen (locked), `FREEZE` will:
+1. Increment the table's locked counter.
+2. Shows the actual file list associated with the table.
 
 The built-in tool [manticore-backup](../Securing_and_compacting_a_table/Backup_and_restore.md) uses `FREEZE` to ensure data consistency. You can do the same if you want to create your own backup solution or need to freeze tables for other reasons. Just follow these steps:
 1. `FREEZE` a table (or a few).
@@ -72,7 +77,7 @@ If you shut down the daemon with a frozen table, it will act as if it experience
 UNFREEZE tbl1[, tbl2, ...]
 ```
 
-`UNFREEZE` reactivates previously blocked operations and resumes the internal compaction service. All operations waiting for a table to unfreeze will also be unfrozen and complete normally.
+`UNFREEZE` command decreases the table's locked counter, and if it reaches zero, reactivates previously blocked operations and resumes the internal compaction service. Any operations that were waiting for the table to unfreeze will also resume and complete normally.
 
 <!-- request Example -->
 ```sql
@@ -81,4 +86,56 @@ UNFREEZE tbl;
 
 <!-- end -->
 
-<!-- proofread -->
+# Inspecting the lock state of a table
+
+<!-- example show_locks -->
+
+You can use `SHOW table_name STATUS` to check if a table is frozen or not.
+
+The locked counter is displayed in the table's status under the `locked` column. A value of zero indicates that the table is not frozen, while a non-zero value reflects the number of active locks. Each explicit `FREEZE` command and implicit locking (such as when the table is part of a cluster and a replication routine selects it as a donor for a replica) increases the counter. Each `UNFREEZE` command decreases the counter, eventually down to zero.
+
+<!-- request Example -->
+
+```sql
+SHOW TABLE `foo` STATUS LIKE 'locked';
+```
+
+<!-- response Example -->
+
+```sql
++---------------+-------+
+| Variable_name | Value |
++---------------+-------+
+| locked        | 2     |
++---------------+-------+
+1 row in set (0,00 sec)
+```
+
+<!-- end -->
+
+# SHOW LOCKS
+
+<!-- example show_locks -->
+
+Locked tables are also displayed using the `SHOW LOCKS` command. The lock counters are shown in the `Additional Info` column.
+
+<!-- request Example -->
+
+```sql
+SHOW LOCKS;
+```
+
+<!-- response Example -->
+
+```sql
++-----------+------+-----------+-----------------+
+| Type      | Name | Lock Type | Additional Info |
++-----------+------+-----------+-----------------+
+| rt        | a    | freeze    | Count: 1        |
+| percolate | bar  | freeze    | Count: 3        |
+| rt        | foo  | freeze    | Count: 2        |
++-----------+------+-----------+-----------------+
+3 rows in set (0,01 sec)
+```
+
+<!-- end -->

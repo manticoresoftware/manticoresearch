@@ -77,6 +77,7 @@
 * [CALL SNIPPETS](Searching/Highlighting.md) - Builds a highlighted results snippet from provided data and query
 * [CALL PQ](Searching/Percolate_query.md) - Runs a percolate query
 * [CALL KEYWORDS](Searching/Autocomplete.md#CALL-KEYWORDS) - Used to check how keywords are tokenized. Also allows to retrieve tokenized forms of provided keywords
+* [CALL AUTOCOMPLETE](Searching/Autocomplete.md#CALL-AUTOCOMPLETE) - Autocompletes your search query
 
 ##### Plugins
 * [CREATE FUNCTION](Extensions/UDFs_and_Plugins/UDF/Creating_a_function.md) - Installs a user-defined function (UDF)

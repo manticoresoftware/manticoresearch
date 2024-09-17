@@ -24,7 +24,7 @@
 ### Bug fixes
 * [Issue #2335](https://github.com/manticoresoftware/manticoresearch/issues/2335) Resolved an issue where table join failed when two json attributes were used in the condition.
 * [Issue #2338](https://github.com/manticoresoftware/manticoresearch/issues/2338) Fixed incorrect total_relation in multiqueries with [cutoff](../Searching/Options.md#cutoff).
-* [Issue #2366](https://github.com/manticoresoftware/manticoresearch/issues/2366) Corrected filtering by `json.string` in the right table on [table join](../Searching/Joining.md#Joining).
+* [Issue #2366](https://github.com/manticoresoftware/manticoresearch/issues/2366) Corrected filtering by `json.string` in the right table on [table join](../Searching/Joining.md).
 * [Issue #2406](https://github.com/manticoresoftware/manticoresearch/issues/2406) Enabled use of `null` for all values in any POST HTTP JSON endpoints (insert/replace/bulk). In this case a default value is used.
 * [Issue #2418](https://github.com/manticoresoftware/manticoresearch/issues/2418) Optimized memory consumption by adjusting allocation of [the max_packet_size](../Server_settings/Searchd.md#max_packet_size) network buffer for the initial socket probe.
 * [Issue #2420](https://github.com/manticoresoftware/manticoresearch/issues/2420) Fixed insertion of unsigned int into bigint attribute via JSON interface.

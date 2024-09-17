@@ -8,6 +8,8 @@ Table joins in Manticore Search enable you to combine documents from two tables 
 
 ### SQL
 
+<!--example join_sql_json_type -->
+
 ```sql
 SELECT
 	select_expr [, select_expr] ...
@@ -25,15 +27,14 @@ join_condition: {
 
 For more information on select options, refer to the [SELECT](../Searching/Intro.md#General-syntax) section.
 
-<!--example join_sql_json_type -->
 When joining by a value from a JSON attribute, you need to explicitly specify the value's type using the `int()` or `string()` function.
 
-<!-- request string -->
+<!-- request String JSON attribute -->
 ```sql
 SELECT ... ON left_table.json_attr.string_id = string(right_table.json_attr.string_id)
 ```
 
-<!-- request int -->
+<!-- request Int JSON attribute -->
 ```sql
 SELECT ... ON left_table.json_attr.int_id = int(right_table.json_attr.int_id)
 ```

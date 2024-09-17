@@ -1,4 +1,4 @@
-# Autocomplete in Manticore Search
+# Autocomplete
 
 Autocomplete (or word completion) predicts and suggests the rest of a word or phrase as a user types. This feature is commonly used in:
 

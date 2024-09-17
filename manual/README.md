@@ -90,11 +90,12 @@
     * [• Intro](Searching/Intro.md)
     * [⪢ Full-text matching]
         * [• Basic usage](Searching/Full_text_matching/Basic_usage.md)
+        * [• Fuzzy search](Searching/Full_text_matching/Fuzzy_search.md)
         * [• Operators](Searching/Full_text_matching/Operators.md)
         * [• Escaping](Searching/Full_text_matching/Escaping.md)
         * [• Search profiling](Searching/Full_text_matching/Profiling.md)
         * [• Boolean optimization](Searching/Full_text_matching/Boolean_optimization.md)
-    * [• Fuzzy Search](Searching/Fuzzy_Search.md)
+    * [• Autocomplete](Searching/Autocomplete.md)
     * [• Search results](Searching/Search_results.md)
     * [• Filters](Searching/Filters.md)
     * [• Joining](Searching/Joining.md)

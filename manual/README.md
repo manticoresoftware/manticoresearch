@@ -90,7 +90,6 @@
     * [• Intro](Searching/Intro.md)
     * [⪢ Full-text matching]
         * [• Basic usage](Searching/Full_text_matching/Basic_usage.md)
-        * [• Fuzzy search](Searching/Full_text_matching/Fuzzy_search.md)
         * [• Operators](Searching/Full_text_matching/Operators.md)
         * [• Escaping](Searching/Full_text_matching/Escaping.md)
         * [• Search profiling](Searching/Full_text_matching/Profiling.md)
@@ -113,6 +112,7 @@
     * [• Percolate query](Searching/Percolate_query.md)
     * [• Autocomplete](Searching/Autocomplete.md)
     * [• Spell correction](Searching/Spell_correction.md)
+        * [• Fuzzy search](Searching/Spell_correction.md#Fuzzy-Search)
     * [• Query cache](Searching/Query_cache.md)
     * [• Collations](Searching/Collations.md)
     * [• Cost-based optimizer](Searching/Cost_based_optimizer.md)

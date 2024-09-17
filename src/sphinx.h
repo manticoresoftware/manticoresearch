@@ -793,6 +793,7 @@ public:
 		E_COLLECT_START,		// begin collecting alive docs on merge; payload is chunk ID
 		E_COLLECT_FINISHED,		// collecting alive docs on merge is finished; payload is chunk ID
 		E_MERGEATTRS_START,
+		E_MERGEATTRS_PULSE,
 		E_MERGEATTRS_FINISHED,
 		E_KEYWORDS,
 		E_FINISHED,
@@ -805,7 +806,7 @@ public:
 
 	virtual void SetEvent ( Event_e eEvent, int64_t iPayload ) {}
 
-	inline bool NeedStop () const
+	inline bool NeedStop () const noexcept
 	{
 		return sphInterrupted() || ( m_pStop && m_pStop->load ( std::memory_order_relaxed ) );
 	}
@@ -930,6 +931,7 @@ struct CSphIndexStatus
 	int64_t 		m_iDead = 0;
 	double			m_fSaveRateLimit {0.0};	 // not used for plain. Part of m_iMemLimit to be achieved before flushing
 	int 			m_iLockCount = 0;		// not used for plain. N of active locks (i.e. - if N>0, saving is prohibited)
+	int 			m_iOptimizesCount = 0;	// not used for plain. N of currently run optimizes.
 };
 
 
@@ -1226,7 +1228,7 @@ public:
 	int							UpdateAttributes ( AttrUpdateInc_t & tUpd, bool & bCritical, CSphString & sError, CSphString & sWarning );
 
 	/// update accumulating state
-	virtual int					CheckThenUpdateAttributes ( AttrUpdateInc_t& tUpd, bool& bCritical, CSphString& sError, CSphString& sWarning, BlockerFn&& /*fnWatcher*/ ) = 0;
+	virtual int					CheckThenUpdateAttributes ( AttrUpdateInc_t& tUpd, bool& bCritical, CSphString& sError, CSphString& sWarning ) = 0;
 
 	virtual Binlog::CheckTnxResult_t ReplayTxn ( CSphReader & tReader, CSphString & sError, BYTE uOp, Binlog::CheckTxn_fn&& fnCheck ) = 0;
 
@@ -1261,7 +1263,7 @@ public:
 	virtual void				DebugDumpHitlist ( FILE * fp, const char * sKeyword, bool bID ) = 0;
 
 	/// internal debugging hook, DO NOT USE
-	virtual void				DebugDumpDict ( FILE * fp ) = 0;
+	virtual void				DebugDumpDict ( FILE * fp, bool bDumpOnly ) = 0;
 
 	/// internal debugging hook, DO NOT USE
 	virtual int					DebugCheck ( DebugCheckError_i & , FilenameBuilder_i * ) = 0;
@@ -1330,8 +1332,9 @@ private:
 	CSphString					m_sIndexName;			///< index ID in binlogging; otherwise used only in messages. Use GetName()!
 
 public:
-	void						SetGlobalIDFPath ( const CSphString & sPath ) { m_sGlobalIDFPath = sPath; }
+	virtual void				SetGlobalIDFPath ( const CSphString & sPath ) { m_sGlobalIDFPath = sPath; }
 	float						GetGlobalIDF ( const CSphString & sWord, int64_t iDocsLocal, bool bPlainIDF ) const;
+	bool						HasGlobalIDF () const;
 
 protected:
 	CSphString					m_sGlobalIDFPath;
@@ -1361,7 +1364,7 @@ public:
 	void				GetStatus ( CSphIndexStatus* ) const override {}
 	bool				GetKeywords ( CSphVector <CSphKeywordInfo> & , const char * , const GetKeywordsSettings_t & tSettings, CSphString * ) const override { return false; }
 	bool				FillKeywords ( CSphVector <CSphKeywordInfo> & ) const override { return true; }
-	int					CheckThenUpdateAttributes ( AttrUpdateInc_t&, bool &, CSphString & , CSphString &, BlockerFn&& ) override { return -1; }
+	int					CheckThenUpdateAttributes ( AttrUpdateInc_t&, bool &, CSphString & , CSphString & ) override { return -1; }
 	Binlog::CheckTnxResult_t ReplayTxn ( CSphReader &, CSphString &, BYTE, Binlog::CheckTxn_fn&& ) override { return {}; }
 	bool				SaveAttributes ( CSphString & ) const override { return true; }
 	DWORD				GetAttributeStatus () const override { return 0; }
@@ -1371,7 +1374,7 @@ public:
 	void				DebugDumpDocids ( FILE * ) override {}
 	void				DebugDumpHitlist ( FILE * , const char * , bool ) override {}
 	int					DebugCheck ( DebugCheckError_i & , FilenameBuilder_i * ) override { return 0; }
-	void				DebugDumpDict ( FILE * ) override {}
+	void				DebugDumpDict ( FILE *, bool bDumpOnly ) override {}
 	Bson_t				ExplainQuery ( const CSphString & sQuery ) const override { return EmptyBson (); }
 
 	bool				MultiQuery ( CSphQueryResult & , const CSphQuery & , const VecTraits_T<ISphMatchSorter *> &, const CSphMultiQueryArgs & ) const override { return false; }

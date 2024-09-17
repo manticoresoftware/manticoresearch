@@ -83,7 +83,7 @@ public:
 
 static FileAccessSettings_t g_tDummyFASettings;
 
-class PercolateIndex_c : public PercolateIndex_i
+class PercolateIndex_c final : public PercolateIndex_i
 {
 public:
 	PercolateIndex_c ( CSphString sIndexName, CSphString sPath, CSphSchema tSchema );
@@ -107,7 +107,7 @@ public:
 	LOAD_E LoadMetaJson ( const CSphString& sMeta, bool bStripPath, FilenameBuilder_i* pFilenameBuilder, StrVec_t& dWarnings );
 	LOAD_E LoadMetaLegacy ( const CSphString& sMeta, bool bStripPath, FilenameBuilder_i* pFilenameBuilder, StrVec_t& dWarnings );
 	bool LoadMeta ( const CSphString& sMeta, bool bStripPath, FilenameBuilder_i* pFilenameBuilder, StrVec_t& dWarnings );
-	bool Truncate ( CSphString & ) override EXCLUDES ( m_tLock );
+	bool Truncate ( CSphString &, Truncate_e eAction ) override EXCLUDES ( m_tLock );
 
 	// RT index stub
 	bool MultiQuery ( CSphQueryResult &, const CSphQuery &, const VecTraits_T<ISphMatchSorter *> &, const CSphMultiQueryArgs & ) const override;
@@ -173,6 +173,7 @@ private:
 
 public:
 	PercolateMatchContext_t * CreateMatchContext ( const RtSegment_t * pSeg, const SegmentReject_t &tReject );
+	int GetNumOfLocks () const noexcept final;
 
 private:
 	int ReplayInsertAndDeleteQueries ( const VecTraits_T<StoredQuery_i*>& dNewQueries, const VecTraits_T<int64_t>& dDeleteQueries, const VecTraits_T<uint64_t>& dDeleteTags ) EXCLUDES ( m_tLock );
@@ -1189,10 +1190,10 @@ void MatchingWorkAction ( const StoredQuery_t * pStored, PercolateMatchContext_t
 
 	// setup filters
 	CreateFilterContext_t tFlx;
-	tFlx.m_pFilters = &pStored->m_dFilters;
-	tFlx.m_pFilterTree = &pStored->m_dFilterTree;
-	tFlx.m_pSchema = &tMatchCtx.m_tSchema;
-	tFlx.m_pBlobPool = pBlobs;
+	tFlx.m_pFilters		= &pStored->m_dFilters;
+	tFlx.m_pFilterTree	= &pStored->m_dFilterTree;
+	tFlx.m_pMatchSchema	= &tMatchCtx.m_tSchema;
+	tFlx.m_pBlobPool	= pBlobs;
 
 	bool bRes = tMatchCtx.m_pCtx->CreateFilters ( tFlx, sError, sWarning );
 	tMatchCtx.m_dMsg.Err ( sError );
@@ -1639,7 +1640,7 @@ void PercolateIndex_c::GetStatus ( CSphIndexStatus * pRes ) const
 		ScRL_t rLock { m_tLock };
 		iRamUse = m_hQueries.GetLengthBytes();
 		iRamUse += m_dHitlessWords.GetLengthBytes64() + m_dLoadedQueries.GetLengthBytes64();
-		iRamUse = m_pQueries->GetLengthBytes64 ();
+		iRamUse += m_pQueries->GetLengthBytes64 ();
 		for ( auto & pItem : *m_pQueries )
 		{
 			iMaxStack = Max ( iMaxStack, pItem->m_iStackRequired );
@@ -1659,7 +1660,7 @@ void PercolateIndex_c::GetStatus ( CSphIndexStatus * pRes ) const
 	pRes->m_iRamUse = iRamUse;
 	pRes->m_iStackNeed = iMaxStack;
 	pRes->m_iStackBase = StoredQuery_t::m_iStackBaseRequired;
-	pRes->m_iLockCount = m_iDisabledCounter;
+	pRes->m_iLockCount = GetNumOfLocks();
 }
 
 class XQTreeCompressor_t
@@ -2259,7 +2260,8 @@ bool PercolateIndex_c::MultiScan ( CSphQueryResult & tResult, const CSphQuery & 
 	CreateFilterContext_t tFlx;
 	tFlx.m_pFilters = &tQuery.m_dFilters;
 	tFlx.m_pFilterTree = &tQuery.m_dFilterTree;
-	tFlx.m_pSchema = &tMaxSorterSchema;
+	tFlx.m_pMatchSchema = &tMaxSorterSchema;
+	tFlx.m_pIndexSchema = &m_tSchema;
 	tFlx.m_eCollation = tQuery.m_eCollation;
 	tFlx.m_bScan = true;
 
@@ -2894,7 +2896,7 @@ void PercolateIndex_c::SaveMeta ( bool bShutdown )
 	SaveMeta ( GetStored(), bShutdown );
 }
 
-bool PercolateIndex_c::Truncate ( CSphString & sError )
+bool PercolateIndex_c::Truncate ( CSphString & sError, Truncate_e eAction )
 {
 	ScWL_t wLock ( m_tLock );
 
@@ -2907,7 +2909,7 @@ bool PercolateIndex_c::Truncate ( CSphString & sError )
 	SaveMeta ( SharedPQSlice_t ( m_pQueries ) );
 
 	// allow binlog to unlink now-redundant data files
-	Binlog::NotifyIndexFlush ( m_iTID, GetName (), Binlog::NoShutdown, Binlog::ForceSave );
+	Binlog::NotifyIndexFlush ( m_iTID, GetName (), Binlog::NoShutdown, eAction==TRUNCATE ? Binlog::ForceSave : Binlog::DropTable );
 
 	return true;
 }
@@ -3062,7 +3064,12 @@ bool PercolateIndex_c::ForceDiskChunk()
 
 bool PercolateIndex_c::IsSaveDisabled() const noexcept
 {
-	return m_iDisabledCounter > 0;
+	return GetNumOfLocks() > 0;
+}
+
+int PercolateIndex_c::GetNumOfLocks () const noexcept
+{
+	return m_iDisabledCounter;
 }
 
 void PercolateIndex_c::ProhibitSave()

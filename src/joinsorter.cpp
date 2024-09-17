@@ -678,8 +678,9 @@ void JoinSorter_c::SetupAggregates()
 
 bool JoinSorter_c::SetupJoinQuery ( int iDynamicSize, CSphString & sError )
 {
-	m_pJoinQueryParser = sphCreatePlainQueryParser();
+	m_pJoinQueryParser = std::unique_ptr<QueryParser_i>( m_tQuery.m_pQueryParser->Clone() );
 	m_tJoinQuery.m_pQueryParser = m_pJoinQueryParser.get();
+	m_tJoinQuery.m_eQueryType = m_tQuery.m_eQueryType;
 	m_tJoinQuery.m_iLimit = DEFAULT_MAX_MATCHES;
 	m_tJoinQuery.m_iCutoff = 0;
 	m_tJoinQuery.m_sQuery = m_tJoinQuery.m_sRawQuery = m_tQuery.m_sJoinQuery;
@@ -724,14 +725,14 @@ void JoinSorter_c::SetupDependentAttrCalc ( const IntVec_t & dJoinedAttrs )
 		if ( !tAttr.m_pExpr )
 			continue;
 
-		IntVec_t dDeps;
-		dDeps.Add(i);
+		StrVec_t dDeps;
+		dDeps.Add ( tAttr.m_sName );
 		FetchAttrDependencies ( dDeps, *m_pSorterSchema );
 
 		bool bFound = false;
 		for ( auto iJoinedAttr : dJoinedAttrs )
-			for ( auto iDep : dDeps )
-				bFound |= iJoinedAttr==iDep;
+			for ( const auto & sDep : dDeps )
+				bFound |= m_pSorterSchema->GetAttr(iJoinedAttr).m_sName==sDep;
 
 		if ( !bFound )
 			continue;
@@ -1050,7 +1051,8 @@ bool JoinSorter_c::SetupRightFilters ( CSphString & sError )
 			CreateFilterContext_t tCtx;
 			tCtx.m_pFilters		= &m_tQuery.m_dFilters;
 			tCtx.m_pFilterTree	= &m_tQuery.m_dFilterTree;
-			tCtx.m_pSchema		= m_pSorterSchema;
+			tCtx.m_pMatchSchema	= m_pSorterSchema;
+			tCtx.m_pIndexSchema	= &m_pIndex->GetMatchSchema();
 			tCtx.m_bScan		= m_tQuery.m_sQuery.IsEmpty();
 			tCtx.m_sJoinIdx		= m_pJoinedIndex->GetName();
 			if ( !sphCreateFilters ( tCtx, sError, sError ) )

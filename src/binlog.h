@@ -73,7 +73,7 @@ namespace Binlog {
 	void Replay ( const SmallStringHash_T<CSphIndex*> & hIndexes, ProgressCallbackSimple_t * pfnProgressCallback = nullptr );
 
 	enum Shutdown_e : bool { NoShutdown=false, Shutdown };
-	enum ForceSave_e : bool { NoSave=false, ForceSave };
+	enum ForceSave_e : BYTE { NoSave=0, ForceSave, DropTable };
 	void NotifyIndexFlush ( int64_t iTID, const char* szIndexName, Shutdown_e eShutdown, ForceSave_e eForceSave );
 
 	CSphString GetPath();

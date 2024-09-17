@@ -42,6 +42,7 @@ enum class Cmd_e : BYTE
 	META,
 	TRACE,
 	CURL,
+	PAUSE,
 
 	INVALID_CMD,
 	PARSE_SYNTAX_ERROR,

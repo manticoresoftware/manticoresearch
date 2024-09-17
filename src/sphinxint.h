@@ -1034,12 +1034,14 @@ struct SuggestArgs_t
 	bool			m_bSentence			{ false };
 };
 
-struct SuggestResult_t
+struct SuggestResultSet_t
 {
-	// result set
 	CSphVector<BYTE>			m_dBuf;
 	CSphVector<SuggestWord_t>	m_dMatched;
+};
 
+struct SuggestResult_t : public SuggestResultSet_t
+{
 	// state
 	CSphVector<char>			m_dTrigrams;
 	int							m_iNGramLen = 3;
@@ -1093,6 +1095,7 @@ public:
 };
 
 void sphGetSuggest ( const ISphWordlistSuggest * pWordlist, int iInfixCodepointBytes, const SuggestArgs_t & tArgs, SuggestResult_t & tRes );
+void SuggestMergeDocs ( CSphVector<SuggestWord_t> & dMatched );
 
 struct ExpansionTrait_t
 {

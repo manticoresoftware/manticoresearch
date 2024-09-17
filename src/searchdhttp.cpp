@@ -555,6 +555,11 @@ const char* HttpRequestParser_c::Error() const
 	return m_szError;
 }
 
+bool HttpRequestParser_c::IsBuddyQuery () const
+{
+	return ::IsBuddyQuery ( m_hOptions );
+}
+
 inline int Char2Hex ( BYTE uChar )
 {
 	switch (uChar)
@@ -1840,7 +1845,7 @@ public:
 		// TODO!!! add parsing collation from the query
 		m_tParsed.m_tQuery.m_eCollation = session::GetCollation();
 
-		if ( !sphParseJsonQuery ( m_sQuery, &m_tParsed ) )
+		if ( !sphParseJsonQuery ( m_sQuery, m_tParsed ) )
 		{
 			ReportError ( TlsMsg::szError(), EHTTP_STATUS::_400 );
 			return nullptr;
@@ -2624,12 +2629,14 @@ bool HttpRequestParser_c::ProcessClientHttp ( AsyncNetInputBuffer_c& tIn, CSphVe
 		tRes.m_eReplyHttpCode = EHTTP_STATUS::_415;
 		tRes.m_bOk = false;
 		tRes.m_sError = "gzip error: unpack is not supported, rebuild with zlib";
+		sphHttpErrorReply ( dResult, tRes.m_eReplyHttpCode, tRes.m_sError.cstr() );
 
 	} else if ( bCompressed && ( m_tParser.flags & F_CHUNKED ) )
 	{
 		tRes.m_eReplyHttpCode = EHTTP_STATUS::_415;
 		tRes.m_bOk = false;
 		tRes.m_sError = "can not process chunked transfer-coding along with gzip";
+		sphHttpErrorReply ( dResult, tRes.m_eReplyHttpCode, tRes.m_sError.cstr() );
 
 	} else
 	{

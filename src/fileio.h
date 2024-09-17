@@ -33,6 +33,7 @@ public:
 
 	int				Open ( const CSphString & sName, int iMode, CSphString & sError, bool bTemp=false );
 	void			Close ();
+	int 			LeakID ();
 	void 			SetPersistent(); ///< would unset 'temporary' flag, if any - so that file will not be unlinked
 	int				GetFD () const { return m_iFD; }
 	const char *	GetFilename () const;

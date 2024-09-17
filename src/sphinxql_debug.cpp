@@ -270,4 +270,5 @@ CmdNotice_t DebugCmd::dCommands[(BYTE) Cmd_e::INVALID_CMD] = {
 	{ NONE, "debug meta", "Show max_matches/pseudo_shards. Needs set profiling=1" },
 	{ NONE, "debug trace OFF|'path/to/file' [<N>]", "trace flow to file until N bytes written, or 'trace OFF'" },
 	{ NONE, "debug curl <URL>", "request given url via libcurl" },
+	{ NONE, "debug pause <ID> on|off", "switch named breakpoint [dev only]" },
 };

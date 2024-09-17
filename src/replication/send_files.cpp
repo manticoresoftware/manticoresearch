@@ -73,7 +73,7 @@ std::optional<int> SyncSrc_t::InitSyncSrc ()
 	m_dChunks.Reset ( iFiles );
 
 	int iMaxChunkBytes = 0;
-	m_iBufferSize = g_iMaxPacketSize * 3 / 4;
+	m_iBufferSize = (int64_t)g_iMaxPacketSize * 3 / 4;
 	int iHashes = iFiles;
 
 	for ( int i = 0; i < iFiles; ++i )

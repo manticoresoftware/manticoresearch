@@ -77,7 +77,6 @@ struct OptimizeTask_t
 	int m_iTo		=	-1;
 	bool m_bByOrder = false;
 	CSphString m_sUvarFilter;
-	CSphString m_sIndex;
 };
 
 struct CSphReconfigureSettings
@@ -146,9 +145,14 @@ public:
 	virtual bool AttachRtIndex ( RtIndex_i * pIndex, bool bTruncate, bool & bFatal, CSphString & sError ) { return true; }
 
 	/// truncate index (that is, kill all data)
-	virtual bool Truncate ( CSphString & sError ) = 0;
+	enum Truncate_e : bool { TRUNCATE, DROP };
+	virtual bool Truncate ( CSphString & sError, Truncate_e eAction ) = 0;
 
 	virtual void Optimize ( OptimizeTask_t tTask ) {}
+	virtual bool StartOptimize ( OptimizeTask_t tTask ) { return true; }
+	virtual int OptimizesRunning () const noexcept { return 0; }
+
+	virtual int GetNumOfLocks () const noexcept { return 0; }
 
 	/// check settings vs current and return back tokenizer and dictionary in case of difference
 	virtual bool IsSameSettings ( CSphReconfigureSettings & tSettings, CSphReconfigureSetup & tSetup, StrVec_t & dWarnings, CSphString & sError ) const = 0;
@@ -451,8 +455,5 @@ volatile bool &RTChangesAllowed () noexcept;
 // Get global flag of autooptimize
 volatile int & AutoOptimizeCutoffMultiplier() noexcept;
 volatile int AutoOptimizeCutoff() noexcept;
-
-using OptimizeExecutorFnPtr = void (*) ( OptimizeTask_t );
-volatile OptimizeExecutorFnPtr& OptimizeExecutor() noexcept;
 
 #endif // _sphinxrt_

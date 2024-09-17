@@ -17,6 +17,9 @@
 static void ScheduleFlushBinlogNext ()
 {
 	static int iFlushBinlogTask = TaskManager::RegisterGlobal ( "Flush binlog", 1 );
+	if ( sphInterrupted () )
+		return;
+
 	TaskManager::ScheduleJob ( iFlushBinlogTask, Binlog::NextFlushTimestamp (), []
 	{
 		auto pDesc = PublishSystemInfo ( "FLUSH RT BINLOG" );

@@ -574,4 +574,9 @@ void		CheckWinInstall();
 CSphString	GetWinInstallDir();
 #endif
 
+
+void PauseAt ( const CSphString& sName, bool bPause );
+
+void PauseCheck ( const CSphString& sName );
+
 #endif // _sphinxutils_

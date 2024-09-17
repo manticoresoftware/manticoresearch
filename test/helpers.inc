@@ -501,6 +501,9 @@ function CheckSearchdLog ( $error_file, &$retval )
 				// Adding an explicit check to avoid possible fails caused by the columnar library init warning
 				if ( $tag==="WARNING:" && strpos ( $line, "WARNING: Error initializing columnar storage" )!==false )
 					continue;
+				// empty binlog is not the actual warning for tests
+				if ( $tag==="WARNING:" && strpos ( $line, "WARNING: binlog: empty binlog" )!==false )
+					continue;
 				$error .= $t."\n";
 				if ( $tag!="WARNING:" )
 					$retval = 1;
@@ -2408,7 +2411,7 @@ class SphinxConfig
 		if ( StrBegins ( $lower_query, $create_table ) || StrBegins ( $lower_query, $alter_table ) )
 		{
 			$matches = array();
-			$preg = preg_match_all ( "/(?:(?:wordforms|stopwords|exceptions|hitless_words)[ \t]*=[ \t]*)'([^']+)'/", $query, $matches, PREG_OFFSET_CAPTURE );
+			$preg = preg_match_all ( "/(?:(?:wordforms|stopwords|exceptions|hitless_words|global_idf)[ \t]*=[ \t]*)'([^']+)'/", $query, $matches, PREG_OFFSET_CAPTURE );
 
 			$result_str = "";
 			$prev_offset = 0;
@@ -4455,7 +4458,7 @@ function CopyDirContents ( $from, $to )
 
 function CheckConfig ( $config, $path )
 {
-	global $g_re2, $g_icu, $g_odbc, $windows, $g_locals, $mysql_simulated, $g_repli, $g_ssl, $g_columnar_loaded, $g_secondary_loaded, $g_knn_loaded, $g_tzdata_loaded;
+	global $g_re2, $g_icu, $g_odbc, $windows, $g_locals, $mysql_simulated, $g_repli, $g_ssl, $g_columnar_loaded, $g_secondary_loaded, $g_knn_loaded, $g_tzdata_loaded, $g_zlib;
 
 	if ( $config->Requires("non-windows") && $windows )
 	{
@@ -4478,6 +4481,12 @@ function CheckConfig ( $config, $path )
 	if ( $config->Requires("non-columnar") && $config->IsColumnar() )
 	{
 		printf ( "SKIPPING %s, %s - explicitly non-columnar test skipped in columnar mode\n", $path, $config->Name () );
+		return false;
+	}
+
+	if ( $config->Requires("non-secondary") && $g_secondary_loaded )
+	{
+        printf ( "SKIPPING %s, %s - explicitly non-secondary test skipped in secondary mode\n", $path, $config->Name () );
 		return false;
 	}
 
@@ -4561,6 +4570,12 @@ function CheckConfig ( $config, $path )
 	if ( $config->Requires("tzdata") && !$g_tzdata_loaded)
 	{
 		printf ( "SKIPPING %s, %s - timezone data is not available\n", $path, $config->Name () );
+		return false;
+	}
+
+	if ( $config->Requires("zlib") && !$g_zlib)
+	{
+		printf ( "SKIPPING %s, %s - zlib is not available\n", $path, $config->Name () );
 		return false;
 	}
 

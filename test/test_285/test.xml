@@ -1,0 +1,34 @@
+<?xml version="1.0" encoding="utf-8"?>
+<test>
+
+<name>escaping when formatting settings</name>
+
+<requires>
+	<force-rt/>
+</requires>
+
+<skip_indexer/>
+
+<config>
+searchd
+{
+	<searchd_settings/>
+	data_dir = <data_path/>
+	binlog_path =
+}
+</config>
+
+<queries>
+<sphinxql>
+	drop table if exists test1;
+	drop table if exists test2;
+	create table test1 (id bigint, data text) regexp_filter='\\*(\\d )\\" => %CODE_BLOCK% inch';
+	show create table test1;
+	create table test2 like test1;
+	show create table test2;
+	drop table test1;
+	drop table test2;
+</sphinxql>
+</queries>
+
+</test>

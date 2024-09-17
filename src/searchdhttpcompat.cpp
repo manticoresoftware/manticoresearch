@@ -694,8 +694,10 @@ private:
 
 			nljson tShouldObj;
 			tShouldObj["should"] = tExistVec;
+			nljson tBoolObj;
+			tBoolObj["bool"] = tShouldObj;
 			nljson::json_pointer tParent = tIt.parent_pointer();
-			tFullQuery[tParent] = tShouldObj;
+			tFullQuery[tParent] = tBoolObj;
 
 			//std::cout << tParent << " : " << tFullQuery[tParent] << "\n";
 		}
@@ -1197,8 +1199,7 @@ static bool DoSearch ( const CSphString & sDefaultIndex, nljson & tReq, const CS
 	tParsedQuery.m_bProfile = false;
 	JsonObj_c tMntReq = JsonObj_c ( tQuery.m_sRawQuery.cstr() );
 
-
-	if ( !sphParseJsonQuery ( tMntReq, &tParsedQuery ) )
+	if ( !sphParseJsonQuery ( tMntReq, tParsedQuery ) )
 	{
 		const char * sError = TlsMsg::szError();
 		CompatWarning ( "%s at '%s' body '%s'", sError, sURL.cstr(), tQuery.m_sRawQuery.cstr() );
@@ -2800,7 +2801,7 @@ bool HttpCompatHandler_c::ProcessUpdateDoc()
 	if ( sIndex.IsEmpty() )
 	{
 		ReportMissedIndex ( GetUrlParts()[0] );
-		return true;
+		return false;
 	}
 	if ( IsEmpty ( GetBody() ) )
 	{
@@ -2808,7 +2809,12 @@ bool HttpCompatHandler_c::ProcessUpdateDoc()
 		return false;
 	}
 
-	nljson tUpd = nljson::parse ( GetBody().first );
+	nljson tUpd = nljson::parse ( GetBody().first, nullptr, false );
+	if ( tUpd.is_discarded() )
+	{
+		ReportError ( "invalid body", "parse_exception", EHTTP_STATUS::_400 );
+		return false;
+	}
 
 	bool bHasScript = tUpd.contains ( "script" );
 
@@ -2817,7 +2823,7 @@ bool HttpCompatHandler_c::ProcessUpdateDoc()
 	if ( bHasScript &&( !tUpd.contains ( tScriptName ) || !tUpd.contains ( tScriptParamsName )  ) )
 	{
 		ReportMissedScript ( sIndex );
-		return true;
+		return false;
 	}
 
 	fnScript * pUpdateScript = nullptr;
@@ -2830,15 +2836,14 @@ bool HttpCompatHandler_c::ProcessUpdateDoc()
 		if ( !pUpdateScript )
 		{
 			ReportMissedScript ( sIndex );
-			return true;
+			return false;
 		}
 	}
 
-	CSphString sError;
 	DocIdVer_t dIds;
-	if ( !GetDocIds ( sIndex.cstr(), sId.cstr(), dIds, sError ) )
+	if ( !GetDocIds ( sIndex.cstr(), sId.cstr(), dIds, m_sError ) )
 	{
-		CompatWarning ( "%s", sError.cstr() );
+		ReportError ( m_sError.cstr(), "document_missing_exception", EHTTP_STATUS::_400 );
 		return false;
 	}
 
@@ -2850,7 +2855,7 @@ bool HttpCompatHandler_c::ProcessUpdateDoc()
 		CSphString sMsg;
 		sMsg.SetSprintf ( "[_doc][%s]: document missing", sId.cstr() );
 		ReportError ( sMsg.cstr(), "document_missing_exception", EHTTP_STATUS::_404 );
-		return true;
+		return false;
 	}
 
 	int iVersion = 1;
@@ -2863,9 +2868,9 @@ bool HttpCompatHandler_c::ProcessUpdateDoc()
 	if ( !dIds.GetLength() )
 	{
 		const nljson & tSrc = tUpd[tSrcName];
-		if ( !InsertDoc ( sIndex, dComplexFields, tSrc, false, sId.cstr(), iVersion, sError ) )
+		if ( !InsertDoc ( sIndex, dComplexFields, tSrc, false, sId.cstr(), iVersion, m_sError ) )
 		{
-			CompatWarning ( "doc '%s', error: %s", sId.cstr(), sError.cstr() );
+			CompatWarning ( "doc '%s', error: %s", sId.cstr(), m_sError.cstr() );
 
 			CSphString sMsg;
 			sMsg.SetSprintf ( "[%s]: version conflict, document already exists (current version [%d])", sId.cstr(), iVersion );
@@ -2894,7 +2899,7 @@ bool HttpCompatHandler_c::ProcessUpdateDoc()
 	auto tServed ( GetServed ( sIndex ) );
 	if ( !tServed )
 	{
-		CompatWarning ( "unknown kibana table %s", sIndex.cstr() );
+		ReportMissedIndex ( sIndex );
 		return false;
 	}
 
@@ -2906,9 +2911,9 @@ bool HttpCompatHandler_c::ProcessUpdateDoc()
 
 	//const auto & tDocId = dIds[0];
 	iVersion = dIds[0].second + 1;
-	if ( !GetIndexDoc ( pIndex, sId.cstr(), tSession.GetUID(), dRawDoc, sError ) )
+	if ( !GetIndexDoc ( pIndex, sId.cstr(), tSession.GetUID(), dRawDoc, m_sError ) )
 	{
-		CompatWarning ( "%s", sError.cstr() );
+		ReportError ( m_sError.cstr(), "document_missing_exception", EHTTP_STATUS::_404 );
 		return false;
 	}
 
@@ -2918,11 +2923,10 @@ bool HttpCompatHandler_c::ProcessUpdateDoc()
 	if ( bHasScript )
 	{
 		assert ( pUpdateScript );
-		if ( !((*pUpdateScript)( tUpd[tScriptParamsName], iVersion, tSrc, sError ) ) )
+		if ( !((*pUpdateScript)( tUpd[tScriptParamsName], iVersion, tSrc, m_sError ) ) )
 		{
-			CompatWarning ( "%s", sError.cstr() );
-			ReportError ( "failed to execute script", "illegal_argument_exception", EHTTP_STATUS::_400 );
-			return true;
+			ReportError ( m_sError.cstr(), "illegal_argument_exception", EHTTP_STATUS::_400 );
+			return false;
 		}
 	} else if ( tUpd.contains ( "doc" ) )
 	{
@@ -2934,18 +2938,18 @@ bool HttpCompatHandler_c::ProcessUpdateDoc()
 		CSphString sMsg;
 		sMsg.SetSprintf ( "[_doc][%s]: document missing", sId.cstr() );
 		ReportError ( sMsg.cstr(), "document_missing_exception", EHTTP_STATUS::_404 );
-		return true;
+		return false;
 	}
 
 	// reinsert updated document
-	if ( !InsertDoc ( sIndex, dComplexFields, tSrc, true, sId.cstr(), iVersion, sError ) )
+	if ( !InsertDoc ( sIndex, dComplexFields, tSrc, true, sId.cstr(), iVersion, m_sError ) )
 	{
-			CompatWarning ( "doc '%s', error: %s", sId.cstr(), sError.cstr() );
+			CompatWarning ( "doc '%s', error: %s", sId.cstr(), m_sError.cstr() );
 
 			CSphString sMsg;
 			sMsg.SetSprintf ( "[%s]: version conflict, document already exists (current version [%d])", sId.cstr(), iVersion );
 			ReportError ( sMsg.cstr(), "version_conflict_engine_exception", EHTTP_STATUS::_409, sIndex.cstr() );
-			return true;
+			return false;
 	}
 
 
@@ -3506,9 +3510,8 @@ bool HttpCompatHandler_c::ProcessEndpoints()
 		return true;
 
 
-	if ( GetRequestType()==HTTP_POST && m_dUrlParts.GetLength()>2 && m_dUrlParts[1]=="_update" 
-		&& ProcessUpdateDoc() )
-		return true;
+	if ( GetRequestType()==HTTP_POST && m_dUrlParts.GetLength()>2 && m_dUrlParts[1]=="_update" )
+		return ProcessUpdateDoc();
 
 	if ( GetRequestType()==HTTP_DELETE && m_dUrlParts.GetLength()==1 )
 	{

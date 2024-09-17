@@ -1,5 +1,95 @@
 # Changelog
 
+# Version x.y.z (dev)
+
+### Major issues
+* [Issue #1928](https://github.com/manticoresoftware/manticoresearch/issues/1928) Introduced [secondary indexes for JSON](../Creating_a_table/Local_tables/Plain_and_real-time_table_settings.md#json_secondary_indexes).
+* [Issue #2361](https://github.com/manticoresoftware/manticoresearch/issues/2361) [Updates](../Data_creation_and_modification/Updating_documents/UPDATE.md#UPDATE) and searches during updates are no longer blocked by chunk merging.
+* ⚠️ BREAKING [Issue #879](https://github.com/manticoresoftware/manticoresearch/issues/879) Introduced [per-table binlog](../Logging/Binary_logging.md#Per-table-binary-logging-configuration) with new options: [binlog_common](../Logging/Binary_logging.md#Binary-logging-strategies), [binlog](../Logging/Binary_logging.md#Per-table-binary-logging-configuration) for `create table` / `alter table`.
+
+### Minor changes
+* [Issue #1103](https://github.com/manticoresoftware/manticoresearch/issues/1103) Improved clarity in [logging](../Logging/Server_logging.md#Server-logging) chunk merging.
+* [Issue #1130](https://github.com/manticoresoftware/manticoresearch/issues/1130) Added support for [DBeaver](../Integration/DBeaver.md).
+* [Issue #1546](https://github.com/manticoresoftware/manticoresearch/issues/1546) Implemented secondary indexes for [POLY2D()](../Functions/Geo_spatial_functions.md#POLY2D%28%29)/[GEOPOLY2D()](../Functions/Geo_spatial_functions.md#GEOPOLY2D%28%29) functions.
+* [Issue #1630](https://github.com/manticoresoftware/manticoresearch/issues/1630) HTTP requests now support `Content-Encoding: gzip`.
+* [Issue #2187](https://github.com/manticoresoftware/manticoresearch/issues/2197) Allowed Buddy request to daemon to bypass the [searchd.max_connections](../Server_settings/Searchd.md#max_connections) constraint.
+* [Issue #2402](https://github.com/manticoresoftware/manticoresearch/issues/2402) Updated [searchd.max_packet_size](../Server_settings/Searchd.md#max_packet_size) default to 128MB.
+* [Issue #2419](https://github.com/manticoresoftware/manticoresearch/issues/2419) Added support for [IDF boost modifier](../Searching/Full_text_matching/Operators.md#IDF-boost-modifier) in JSON ["match"](../Searching/Full_text_matching/Basic_usage.md#match).
+* [Issue #2430](https://github.com/manticoresoftware/manticoresearch/issues/2430) Enhanced [binlog](../Logging/Binary_logging.md#Binary-logging) writing synchronization to prevent errors.
+* [Issue #2490](https://github.com/manticoresoftware/manticoresearch/issues/2490) msc scale for aggs at compat endpoints.
+* [Issue #268](https://github.com/manticoresoftware/manticoresearch-buddy/issues/268) Implemented autodetection of data types imported from Elasticsearch.
+* ⚠️ BREAKING [Issue #2458](https://github.com/manticoresoftware/manticoresearch/issues/2458) Incorporated zlib support in Windows packages.
+* ⚠️ BREAKING [Issue #2468](https://github.com/manticoresoftware/manticoresearch/issues/2468) [CALL SUGGEST / QSUGGEST](../Searching/Spell_correction.md#CALL-QSUGGEST,-CALL-SUGGEST) now compatible with distributed tables.
+
+### Bug fixes
+* [Issue #2335](https://github.com/manticoresoftware/manticoresearch/issues/2335) Resolved an issue where table join failed when two json attributes were used in the condition.
+* [Issue #2338](https://github.com/manticoresoftware/manticoresearch/issues/2338) Fixed incorrect total_relation in multiqueries with [cutoff](../Searching/Options.md#cutoff).
+* [Issue #2366](https://github.com/manticoresoftware/manticoresearch/issues/2366) Corrected filtering by `json.string` in the right table on [table join](../Searching/Joining.md#Joining).
+* [Issue #2406](https://github.com/manticoresoftware/manticoresearch/issues/2406) Enabled use of `null` for all values in any POST HTTP JSON endpoints (insert/replace/bulk). In this case a default value is used.
+* [Issue #2418](https://github.com/manticoresoftware/manticoresearch/issues/2418) Optimized memory consumption by adjusting allocation of [the max_packet_size](../Server_settings/Searchd.md#max_packet_size) network buffer for the initial socket probe.
+* [Issue #2420](https://github.com/manticoresoftware/manticoresearch/issues/2420) Fixed insertion of unsigned int into bigint attribute via JSON interface.
+* [Issue #2422](https://github.com/manticoresoftware/manticoresearch/issues/2422) Fixed secondary indexes to work correctly with exclude filters and pseudo_sharding enabled.
+* [Issue #2423](https://github.com/manticoresoftware/manticoresearch/issues/2423) Addressed a bug in [manticore_new_cluster](../Starting_the_server/Manually.md#searchd-command-line-options).
+* [Issue #2448](https://github.com/manticoresoftware/manticoresearch/issues/2448) Resolved daemon crash on malformed `_update` request.
+* [Issue #2452](https://github.com/manticoresoftware/manticoresearch/issues/2452) Fixed histograms' inability to handle value filters with excludes.
+* [Issue #2524](https://github.com/manticoresoftware/manticoresearch/issues/2524) Fixed secondary indexes for JSON attributes failing with exclude filters over aliased expressions.
+* [Issue #55](https://github.com/manticoresoftware/columnar/issues/55) Fixed [knn](../Searching/KNN.md#KNN-vector-search) queries against distributed tables.
+* [Issue #68](https://github.com/manticoresoftware/columnar/issues/68) Enhanced handling of exclude filters on table encoding in columnar accessor.
+* [Issue #1107](https://github.com/manticoresoftware/manticoresearch/issues/1107) Fixed escaping of special characters in `CREATE TABLE` and `ALTER TABLE`.
+* [Issue #2001](https://github.com/manticoresoftware/manticoresearch/issues/2001) Allowed function names to be used as column names.
+* [Issue #2153](https://github.com/manticoresoftware/manticoresearch/issues/2153) Fixed daemon crash on querying table settings with unknown disk chunk.
+* [Issue #2228](https://github.com/manticoresoftware/manticoresearch/issues/2228) Removed date/time related tokens (and regex) from the reserved words.
+* [Issue #2447](https://github.com/manticoresoftware/manticoresearch/issues/2447) Fixed an escaping issue in [_update](../Data_creation_and_modification/Updating_documents/REPLACE.md?client=Elasticsearch-like+partial).
+* [Issue #2460](https://github.com/manticoresoftware/manticoresearch/issues/2460) Fixed indexer crash when declaring multiple attributes or fields with the same name.
+* [Issue #2467](https://github.com/manticoresoftware/manticoresearch/issues/2467) Resolved crash of daemon on incorrect transform for nested bool queries for the "compat" search related endpoints.
+* [Issue #2493](https://github.com/manticoresoftware/manticoresearch/issues/2493) Fixed expansion in phrases with modifiers.
+* [Issue #2509](https://github.com/manticoresoftware/manticoresearch/issues/2509) Addressed a warning message about an empty binlog not to be counted in "ubertests".
+* [Issue #2535](https://github.com/manticoresoftware/manticoresearch/issues/2535) Resolved daemon crash on using [ZONE](../Searching/Full_text_matching/Operators.md#ZONE-limit-operator) or [ZONESPAN](../Searching/Full_text_matching/Operators.md#ZONESPAN-limit-operator) fulltext operator.
+* ⚠️ BREAKING [Issue #2103](https://github.com/manticoresoftware/manticoresearch/issues/2103) Removed Thai characters from internal `cjk` charset. Update your charset definitions accordingly: if you have `cjk,non_cjk`, change it to `cjk,thai,non_cjk`, or `cont,non_cjk`, where `cont` is the new designation for all continuous-script languages (i.e., `cjk` + `thai`). Modify existing tables using [ALTER TABLE](../Updating_table_schema_and_settings.md#Updating-table-FT-settings-in-RT-mode).
+
+### Replication-related
+* ⚠️ BREAKING [Issue #1789](https://github.com/manticoresoftware/manticoresearch/issues/1789) Fixed incorrect error message when a node joins a cluster with the wrong replication protocol version.
+* ⚠️ BREAKING [Issue #2308](https://github.com/manticoresoftware/manticoresearch/issues/2308) Added support for multiple tables in [ALTER CLUSTER ADD and DROP](../Creating_a_cluster/Setting_up_replication/Adding_and_removing_a_table_from_a_replication_cluster.md#Adding-and-removing-a-table-from-a-replication-cluster).
+
+# Version 6.3.6
+Released: August 2nd 2024
+
+Version 6.3.6 continues the 6.3 series and includes only bug fixes.
+
+### Bug fixes
+
+* [Issue #2477](https://github.com/manticoresoftware/manticoresearch/issues/2477) Fixed a crash introduced in version 6.3.4, which could occur when dealing with expressions and distributed or multiple tables.
+* [Issue #2352](https://github.com/manticoresoftware/manticoresearch/issues/2352) Fixed a daemon crash or internal error upon early exit caused by `max_query_time` when querying multiple indexes.
+
+# Version 6.3.4
+Released: July 31st 2024
+
+Version 6.3.4 continues the 6.3 series and includes only minor improvements and bug fixes.
+
+### Minor changes
+* [Issue #1130](https://github.com/manticoresoftware/manticoresearch/issues/1130) Added support for [DBeaver](../Integration/DBeaver.md#Integration-with-DBeaver).
+* [Issue #2146](https://github.com/manticoresoftware/manticoresearch/issues/2146) Improved escaping of delimiters in word forms and exceptions.
+* [Issue #2268](https://github.com/manticoresoftware/manticoresearch/issues/2268) Improved external files renaming on copy for CREATE and ALTER TABLE statements.
+* [Issue #2315](https://github.com/manticoresoftware/manticoresearch/issues/2315) Added string comparison operators to SELECT list expressions.
+* [Issue #2363](https://github.com/manticoresoftware/manticoresearch/issues/2363) Added support for null values in Elastic-like bulk requests.
+* [Issue #2374](https://github.com/manticoresoftware/manticoresearch/issues/2374) Added support for mysqldump version 9.
+* [Issue #2375](https://github.com/manticoresoftware/manticoresearch/issues/2375) Improved error handling in HTTP JSON queries with JSON path to the node where the error occurs.
+
+### Bug fixes
+* [Issue #2280](https://github.com/manticoresoftware/manticoresearch/issues/2280) Fixed performance degradation in wildcard queries with many matches when disk_chunks > 1.
+* [Issue #2332](https://github.com/manticoresoftware/manticoresearch/issues/2332) Fixed crash in MVA MIN or MAX SELECT list expressions for empty MVA arrays.
+* [Issue #2339](https://github.com/manticoresoftware/manticoresearch/issues/2339) Fixed incorrect processing of Kibana's infinite range request.
+* [Issue #2342](https://github.com/manticoresoftware/manticoresearch/issues/2342) Fixed join filter on columnar attributes from the right table when the attribute is not in the SELECT list.
+* [Issue #2343](https://github.com/manticoresoftware/manticoresearch/issues/2343) Fixed duplicate 'static' specifier in Manticore 6.3.2.
+* [Issue #2344](https://github.com/manticoresoftware/manticoresearch/issues/2344) Fixed LEFT JOIN returning non-matching entries when MATCH() over the right table is used.
+* [Issue #2350](https://github.com/manticoresoftware/manticoresearch/issues/2350) Fixed saving of disk chunk at RT index with `hitless_words`.
+* [Issue #2364](https://github.com/manticoresoftware/manticoresearch/issues/2364) The 'aggs_node_sort' property can now be added in any order among other properties.
+* [Issue #2368](https://github.com/manticoresoftware/manticoresearch/issues/2368) Fixed error on full-text vs filter order in the JSON query.
+* [Issue #2376](https://github.com/manticoresoftware/manticoresearch/issues/2376) Fixed bug related to incorrect JSON response for long UTF-8 requests.
+* [Issue #2684](https://github.com/manticoresoftware/dev/issues/2684) Fixed calculation of presort/prefilter expressions that depend on joined attributes.
+* [Issue #301](https://github.com/manticoresoftware/manticoresearch-buddy/issues/301) Changed the method of calculating data size for metrics to read from the `manticore.json` file instead of checking the entire size of the data directory.
+* [Issue #302](https://github.com/manticoresoftware/manticoresearch-buddy/issues/302) Added handling of validation requests from Vector.dev.
+
 # Version 6.3.2
 Released: June 26th 2024
 

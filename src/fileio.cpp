@@ -78,6 +78,14 @@ void CSphAutofile::Close()
 	m_bTemporary = false;
 }
 
+
+int CSphAutofile::LeakID ()
+{
+	m_sFilename = "";
+	m_bTemporary = false;
+	return std::exchange ( m_iFD, -1 );
+}
+
 void CSphAutofile::SetPersistent()
 {
 	m_bTemporary = false;

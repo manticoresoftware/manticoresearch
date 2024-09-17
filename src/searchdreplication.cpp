@@ -298,7 +298,15 @@ static bool ValidateUpdate ( const ReplicationCommand_t & tCmd );
 static bool DoClusterAlterUpdate ( const CSphString & sCluster, const CSphString & sUpdate, NODES_E eUpdate );
 static bool IsSameVector ( StrVec_t & dSrc, StrVec_t & dDst );
 
+
+static bool g_bReplicationEnabled = false;
+static CSphString g_sReplicationStartError;
 static bool g_bReplicationStarted = false;
+
+bool ReplicationEnabled()
+{
+	return g_bReplicationEnabled;
+}
 
 static constexpr const char * szNodeState ( ClusterState_e eState )
 {
@@ -949,7 +957,7 @@ bool HandleCmdReplicated ( RtAccum_t & tAcc )
 	if ( tCmd.m_eCommand == ReplCmd_e::TRUNCATE )
 	{
 		RPL_TNX << "truncate-commit, table '" << tCmd.m_sIndex.cstr() << "'";
-		return WIdx_T<RtIndex_i*> ( pServed )->Truncate ( sError )
+		return WIdx_T<RtIndex_i*> ( pServed )->Truncate ( sError, RtIndex_i::TRUNCATE )
 			|| TlsMsg::Err ( "%s", sError.cstr() );
 	}
 
@@ -979,7 +987,8 @@ static bool HandleRealCmdReplicate ( RtAccum_t & tAcc, CommitMonitor_c && tMonit
 	{
 		if ( g_bReplicationStarted )
 			return TlsMsg::Err ( "unknown cluster '%s'", tCmdCluster.m_sCluster.cstr() );
-		return TlsMsg::Err ( "cluster '%s' is not ready, starting", tCmdCluster.m_sCluster.cstr() );
+
+		return TlsMsg::Err ( "cluster '%s' can not replicate: %s", tCmdCluster.m_sCluster.cstr(), g_sReplicationStartError.cstr() );
 	}
 	if ( !pCluster->IsHealthy() )
 		return false;
@@ -1119,6 +1128,8 @@ static bool HandleRealCmdReplicate ( RtAccum_t & tAcc, CommitMonitor_c && tMonit
 // single point there all commands passed these might be replicated, even if no cluster
 static bool HandleCmdReplicateImpl ( RtAccum_t & tAcc, int * pDeletedCount, CSphString * pWarning, int * pUpdated ) EXCLUDES ( g_tClustersLock )
 {
+	TRACE_CORO ( "sph", "HandleCmdReplicateImpl" );
+
 	CommitMonitor_c tMonitor ( tAcc, pDeletedCount, pWarning, pUpdated );
 
 	// with cluster path
@@ -1426,7 +1437,7 @@ static void CoReplicationServiceStart ( bool bBootStrap ) EXCLUDES ( g_tClusters
 		pCluster->StartListen();
 		sphLogDebugRpl ( "'%s' cluster started with %d tables", sName.cstr(), pCluster->WithRlockedIndexes ( [] ( const auto& hIndexes ) { return hIndexes.GetLength(); } ) );
 	}
-	if ( !g_hClusters.IsEmpty() && dFailedClustersToRemove.GetLength() == g_hClusters.GetLength() )
+	if ( !g_hClusters.IsEmpty() && dFailedClustersToRemove.GetLength()==g_hClusters.GetLength() )
 		sphWarning ( "no clusters to start" );
 
 	for ( const auto& sCluster : dFailedClustersToRemove )
@@ -1440,7 +1451,11 @@ void ReplicationServiceStart ( bool bBootStrap ) EXCLUDES ( g_tClustersLock )
 {
 	// should be lined up with PrepareClustersOnStartup
 	if ( !ReplicationEnabled() )
+	{
+		if ( !g_hClusters.IsEmpty() )
+			sphWarning ( "loading %d cluster(s) but the replication disabled, %s", g_hClusters.GetLength(), g_sReplicationStartError.cstr() );
 		return;
+	}
 
 	Threads::CallCoroutine ( [=]() EXCLUDES ( g_tClustersLock ) { CoReplicationServiceStart ( bBootStrap ); } );
 }
@@ -1502,14 +1517,15 @@ static void CoPrepareClustersOnStartup ( bool bForce ) EXCLUDES ( g_tClustersLoc
 
 void PrepareClustersOnStartup ( const VecTraits_T<ListenerDesc_t>& dListeners, bool bForce ) EXCLUDES ( g_tClustersLock )
 {
-	SetReplicationListener ( dListeners );
-
-	if ( !ReplicationEnabled() )
+	if ( !SetReplicationListener ( dListeners, g_sReplicationStartError ) )
 	{
 		if ( !GetClustersInt().IsEmpty() )
-			sphWarning ( "data_dir option is missing in config or no replication listener is set, replication is disabled" );
+			sphWarning ( "%s", g_sReplicationStartError.cstr() );
+		else
+			sphLogDebugRpl ( "%s", g_sReplicationStartError.cstr() );
 		return;
 	}
+	g_bReplicationEnabled = true;
 
 	Threads::CallCoroutine ( [=]() EXCLUDES ( g_tClustersLock ) { CoPrepareClustersOnStartup ( bForce ); } );
 }
@@ -1665,7 +1681,7 @@ bool ClusterCreate ( const CSphString & sCluster, const StrVec_t & dNames, const
 	Threads::ScopedCoroMutex_t tClusterLock { g_tClusterOpsLock };
 	TlsMsg::ResetErr();
 	if ( !g_bReplicationStarted )
-		return TlsMsg::Err ( "cluster '%s' is not ready, starting", sCluster.cstr() );
+		return TlsMsg::Err ( "can not create cluster '%s': %s", sCluster.cstr(), g_sReplicationStartError.cstr() );
 
 	auto tDesc = ClusterDescFromSphinxqlStatement ( sCluster, dNames, dValues, MAKE_E::CREATE );
 	if ( !tDesc )
@@ -1775,7 +1791,7 @@ bool GloballyDeleteCluster ( const CSphString & sCluster, CSphString & sError ) 
 	TlsMsg::Err();
 	if ( !g_bReplicationStarted )
 	{
-		sError.SetSprintf ( "cluster '%s' is not ready, replication wasn't started", sCluster.cstr() );
+		sError.SetSprintf ( "can not delete cluster '%s': %s", sCluster.cstr(), g_sReplicationStartError.cstr() );
 		return false;
 	}
 
@@ -2034,7 +2050,7 @@ bool ClusterAlter ( const CSphString & sCluster, const CSphString & sIndexes, bo
 
 	if ( !g_bReplicationStarted )
 	{
-		sError.SetSprintf ( "cluster '%s' is not ready, starting", sCluster.cstr() );
+		sError.SetSprintf ( "can not ALTER cluster '%s': %s", sCluster.cstr(), g_sReplicationStartError.cstr() );
 		return false;
 	}
 

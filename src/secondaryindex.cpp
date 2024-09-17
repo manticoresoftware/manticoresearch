@@ -810,7 +810,8 @@ static void FetchPartialColumnarMinMax ( CSphVector<SecondaryIndexInfo_t> & dSII
 
 			CreateFilterContext_t tCFCtx;
 			tCFCtx.m_pFilters	= &dFilter;
-			tCFCtx.m_pSchema	= &tCtx.m_tIndexSchema;
+			tCFCtx.m_pMatchSchema = &tCtx.m_tSorterSchema;
+			tCFCtx.m_pIndexSchema = &tCtx.m_tIndexSchema;
 			tCFCtx.m_pColumnar	= tCtx.m_pColumnar;
 			tCFCtx.m_eCollation	= tCtx.m_tQuery.m_eCollation;
 			tCFCtx.m_bScan		= true;
@@ -1110,130 +1111,6 @@ private:
 	CSphString m_sAttr;
 };
 
-static const int CIDX_ROWS = 512;
-
-class RowidIteratorNot_c : public RowidIterator_i
-{
-public:
-			RowidIteratorNot_c ( RowidIterator_i * pIterator, RowID_t uRowsCount );
-
-	bool	HintRowID ( RowID_t tRowID ) override { return m_pExcludedIt->HintRowID ( tRowID ); }
-	bool	GetNextRowIdBlock ( RowIdBlock_t & dRowIdBlock ) override ;
-	int64_t	GetNumProcessed() const override { return m_pExcludedIt->GetNumProcessed(); }
-	void	SetCutoff ( int iCutoff ) override {}		// fixme! implement cutoff
-	bool	WasCutoffHit() const override { return false; }
-	void	AddDesc ( CSphVector<IteratorDesc_t> & dDesc ) const override { m_pExcludedIt->AddDesc(dDesc); }
-
-private:
-	RowID_t		m_uRowsCount { 0 };
-	RowID_t		m_uCurRow { 0 };
-	bool		m_bStopped = false;
-	bool		m_bPass = false;
-
-	bool		m_bExcludedStarted = false;
-	bool		m_bExcludedStopped = false;
-	int			m_iExcludedCur = 0;
-	RowIdBlock_t m_dExcludedRows;
-	std::unique_ptr<RowidIterator_i> m_pExcludedIt;
-
-	CSphVector<RowID_t> m_dRows;
-
-	void CopyTail ();
-};
-
-
-RowidIteratorNot_c::RowidIteratorNot_c ( RowidIterator_i * pIterator, RowID_t uRowsCount )
-	: m_uRowsCount ( uRowsCount )
-	, m_pExcludedIt ( pIterator )
-{
-	m_dRows.Reserve ( CIDX_ROWS );
-}
-
-
-void RowidIteratorNot_c::CopyTail()
-{
-	int iCount = Min ( m_uRowsCount-m_uCurRow, CIDX_ROWS-m_dRows.GetLength() );
-	RowID_t * pRow = m_dRows.AddN ( iCount );
-
-	while ( iCount>0 )
-	{
-		*pRow++ = m_uCurRow++;
-		iCount--;
-	}
-}
-
-bool RowidIteratorNot_c::GetNextRowIdBlock ( RowIdBlock_t & dRowIdBlock )
-{
-	if ( m_bStopped )
-		return false;
-
-	m_dRows.Resize ( 0 );
-
-	if ( !m_bPass )
-	{
-		// warmup
-		if ( !m_bExcludedStarted )
-		{
-			m_bExcludedStopped = !m_pExcludedIt->GetNextRowIdBlock ( m_dExcludedRows );
-			m_bExcludedStarted = true;
-			m_iExcludedCur = 0;
-		}
-
-		for ( ; m_uCurRow<m_uRowsCount && m_dRows.GetLength()<CIDX_ROWS; )
-		{
-			// cases if filter values is over
-			if ( m_iExcludedCur>=m_dExcludedRows.GetLength() || m_bExcludedStopped )
-			{
-				// fetch more values
-				if ( !m_bExcludedStopped )
-				{
-					m_bExcludedStopped = !m_pExcludedIt->GetNextRowIdBlock ( m_dExcludedRows );
-					m_iExcludedCur = 0;
-				}
-
-				// copy tail rows
-				if ( m_bExcludedStopped )
-				{
-					m_bPass = true;
-					break;
-				}
-			}
-
-			assert ( m_dExcludedRows.GetLength() && m_iExcludedCur<m_dExcludedRows.GetLength() );
-			RowID_t uNotRowid = m_dExcludedRows[m_iExcludedCur];
-
-			// copy accepted with filter by excluded
-			while ( m_uCurRow<uNotRowid && m_uCurRow<m_uRowsCount && m_dRows.GetLength()<CIDX_ROWS )
-					m_dRows.Add ( m_uCurRow++ );
-
-			// result vector full
-			if ( m_uCurRow>=m_uRowsCount || m_dRows.GetLength()==CIDX_ROWS )
-				break;
-
-			// skip rejected till min accepted
-			while ( m_iExcludedCur<m_dExcludedRows.GetLength() && m_dExcludedRows[m_iExcludedCur]<m_uCurRow )
-				m_iExcludedCur++;
-
-			// skip both while matched
-			while ( m_iExcludedCur<m_dExcludedRows.GetLength() && m_uCurRow<m_uRowsCount && m_dExcludedRows[m_iExcludedCur]==m_uCurRow )
-			{
-				m_iExcludedCur++;
-				m_uCurRow++;
-			}
-		}
-	}
-
-	if ( m_bPass )
-		CopyTail();
-
-	dRowIdBlock = m_dRows;
-
-	if ( !m_dRows.GetLength() || m_uCurRow==m_uRowsCount )
-		m_bStopped = true;
-
-	return ( m_dRows.GetLength() );
-}
-
 /////////////////////////////////////////////////////////////////////
 
 class SIIteratorCreator_c
@@ -1327,9 +1204,6 @@ RowidIterator_i * SIIteratorCreator_c::CreateRowIdIteratorFromSI ( std::vector<c
 		else
 			pIt = new RowidIterator_Union_T<common::BlockIterator_i,false> ( &dFilterIt[0], (int)dFilterIt.size() );
 	}
-
-	if ( tFilter.m_bExclude )
-		pIt = new RowidIteratorNot_c ( pIt, m_uRowsCount );
 
 	return pIt;
 }

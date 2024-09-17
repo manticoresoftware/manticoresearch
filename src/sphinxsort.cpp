@@ -680,19 +680,13 @@ void SendSqlSchema ( const ISphSchema& tSchema, RowBuffer_i* pRows, const VecTra
 			pRows->HeadColumn ( "id", ESphAttr2MysqlColumnStreamed ( SPH_ATTR_UINT64 ) );
 			continue;
 		}
+		if ( tCol.m_eAttrType==SPH_ATTR_TOKENCOUNT )
+			continue;
 		pRows->HeadColumn ( tCol.m_sName.cstr(), ESphAttr2MysqlColumnStreamed ( tCol.m_eAttrType ) );
 	}
 
 	pRows->HeadEnd ( false, 0 );
 }
-
-struct SqlQuotator_t
-{
-	static constexpr BYTE EscapingSpace ( BYTE c )
-	{
-		return ( c == '\\' || c == '\'' || c == '\t' ) ? 1 : 0;
-	}
-};
 
 using SqlEscapedBuilder_c = EscapedStringBuilder_T<BaseQuotation_T<SqlQuotator_t>>;
 
@@ -703,6 +697,8 @@ void SendSqlMatch ( const ISphSchema& tSchema, RowBuffer_i* pRows, CSphMatch& tM
 	{
 		const CSphColumnInfo& dAttr = tSchema.GetAttr ( dOrder[i] );
 		if ( sphIsInternalAttr ( dAttr ) )
+			continue;
+		if ( dAttr.m_eAttrType==SPH_ATTR_TOKENCOUNT )
 			continue;
 
 		CSphAttrLocator tLoc = dAttr.m_tLocator;

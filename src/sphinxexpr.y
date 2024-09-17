@@ -20,6 +20,7 @@
 	uint64_t		iAttrLocator;	// attribute locator (rowitem for int/float; offset+size for bits)
 	int				iFunc;			// function id
 	int				iNode;			// node, or uservar, or udf index
+	int				iTrailingBr;	// TOKEN = 0, TOKEN( = 1, TOKEN  ( = 2 - whether lexer token has trailing bracket
 	const char *	sIdent;			// generic identifier (token does NOT own ident storage; ie values are managed by parser)
 };
 

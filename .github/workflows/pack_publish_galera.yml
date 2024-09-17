@@ -90,7 +90,7 @@ jobs:
     with:
       DISTR: ${{ matrix.DISTR }}
       arch: ${{ matrix.arch }}
-      boost: boost_rhel_feb17
+      boost_url_key: boost_rhel_feb17
       PACK_GALERA: 1
       cmake_command: |
         ln -s $(pwd) /builds_manticoresearch_dev_usr_src_debug_manticore_component_src_0

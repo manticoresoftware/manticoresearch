@@ -113,7 +113,7 @@ SettingsFormatterState_t::SettingsFormatterState_t ( StringBuilder_c & tBuf )
 class SettingsFormatter_c
 {
 public:
-				SettingsFormatter_c ( SettingsFormatterState_t & tState, const char * szPrefix, const char * szEq, const char * szPostfix, const char * szSeparator, bool bIgnoreConf = false );
+				SettingsFormatter_c ( SettingsFormatterState_t & tState, const char * szPrefix, const char * szEq, const char * szPostfix, const char * szSeparator, bool bIgnoreConf = false, bool bEscapeValues = false );
 
 	template <typename T>
 	void		Add ( const char * szKey, T tVal, bool bCond );
@@ -122,23 +122,52 @@ public:
 	void		AddEmbedded ( const char * szKey, const VecTraits_T<T> & dEmbedded, bool bCond );
 
 private:
+	template <typename T>
+	CSphString FormatValue(T tVal);
+
 	SettingsFormatterState_t & m_tState;
 	CSphString			m_sPrefix;
 	CSphString			m_sEq;
 	CSphString			m_sPostfix;
 	CSphString			m_sSeparator;
 	bool				m_bIgnoreCond = false;
+	bool				m_bEscapeValues = false;
 };
 
 
-SettingsFormatter_c::SettingsFormatter_c ( SettingsFormatterState_t & tState, const char * szPrefix, const char * szEq, const char * szPostfix, const char * szSeparator, bool bIgnoreCond )
-	: m_tState		( tState )
-	, m_sPrefix		( szPrefix )
-	, m_sEq			( szEq )
-	, m_sPostfix	( szPostfix )
-	, m_sSeparator	( szSeparator )
-	, m_bIgnoreCond	( bIgnoreCond )
+SettingsFormatter_c::SettingsFormatter_c ( SettingsFormatterState_t & tState, const char * szPrefix, const char * szEq, const char * szPostfix, const char * szSeparator, bool bIgnoreCond, bool bEscapeValues )
+	: m_tState			( tState )
+	, m_sPrefix			( szPrefix )
+	, m_sEq				( szEq )
+	, m_sPostfix		( szPostfix )
+	, m_sSeparator		( szSeparator )
+	, m_bIgnoreCond		( bIgnoreCond )
+	, m_bEscapeValues	( bEscapeValues )
 {}
+
+using SqlEscapedBuilder_c = EscapedStringBuilder_T<BaseQuotation_T<SqlQuotator_t>>;
+
+template<typename T>
+CSphString SettingsFormatter_c::FormatValue(T tVal) {
+	SqlEscapedBuilder_c dEscaped;
+
+	// convert tVal to CSphString
+	CSphString sVal;
+	dEscaped << tVal;
+	dEscaped.MoveTo(sVal);
+
+	if (!m_bEscapeValues) {
+		// return plain string
+		return sVal;
+	}
+
+	// build escaped string
+	CSphString sRes;
+	dEscaped.AppendEscapedSkippingCommaNoQuotes(sVal.cstr());
+	dEscaped.MoveTo( sRes);
+
+	return sRes;
+}
 
 template <typename T>
 void SettingsFormatter_c::Add ( const char * szKey, T tVal, bool bCond )
@@ -151,7 +180,7 @@ void SettingsFormatter_c::Add ( const char * szKey, T tVal, bool bCond )
 		if ( !m_tState.m_bFirst )
 			(*m_tState.m_pBuf) << m_sSeparator;
 
-		(*m_tState.m_pBuf) << m_sPrefix << szKey << m_sEq << tVal << m_sPostfix;
+		(*m_tState.m_pBuf) << m_sPrefix << szKey << m_sEq << FormatValue(tVal) << m_sPostfix;
 	}
 
 	if ( m_tState.m_pFile )
@@ -160,7 +189,7 @@ void SettingsFormatter_c::Add ( const char * szKey, T tVal, bool bCond )
 		if ( !m_tState.m_bFirst )
 			tBuilder << m_sSeparator;
 
-		tBuilder << m_sPrefix << szKey << m_sEq << tVal << m_sPostfix;
+		tBuilder << m_sPrefix << szKey << m_sEq << FormatValue(tVal) << m_sPostfix;
 		fputs ( tBuilder.cstr(), m_tState.m_pFile );
 	}
 
@@ -299,7 +328,7 @@ void CSphTokenizerSettings::Setup ( const CSphConfigSection & hIndex, CSphString
 			sWarning = "ngram_chars specified, but ngram_len=0; IGNORED";
 	}
 
-	m_sCaseFolding = hIndex.GetStr ( "charset_table", "non_cjk" );
+	m_sCaseFolding = hIndex.GetStr ( "charset_table", "non_cont" );
 	m_iMinWordLen = Max ( hIndex.GetInt ( "min_word_len", 1 ), 1 );
 	m_sNgramChars = hIndex.GetStr ( "ngram_chars" );
 	m_sSynonymsFile = hIndex.GetStr ( "exceptions" ); // new option name
@@ -394,7 +423,7 @@ void CSphTokenizerSettings::Format ( SettingsFormatter_c & tOut, FilenameBuilder
 	tOut.Add ( "charset_type",		bKnownTokenizer ? "utf-8" : "unknown tokenizer (deprecated sbcs?)", !bKnownTokenizer );
 
 	// fixme! need unified default charset handling
-	tOut.Add ( "charset_table",		m_sCaseFolding,	!m_sCaseFolding.IsEmpty() && m_sCaseFolding!="non_cjk" );
+	tOut.Add ( "charset_table",		m_sCaseFolding,	!m_sCaseFolding.IsEmpty() && m_sCaseFolding!="non_cont" );
 	tOut.Add ( "min_word_len",		m_iMinWordLen,	m_iMinWordLen>1 );
 	tOut.Add ( "ngram_len",			m_iNgramLen,	m_iNgramLen && !m_sNgramChars.IsEmpty() );
 	tOut.Add ( "ngram_chars",		m_sNgramChars,	m_iNgramLen && !m_sNgramChars.IsEmpty() );
@@ -1533,7 +1562,7 @@ const CSphConfigSection & IndexSettingsContainer_c::AsCfg() const
 // TODO: read defaults from file or predefined templates
 static std::pair<const char* , const char *> g_dIndexSettingsDefaults[] =
 {
-	{ "charset_table", "non_cjk" }
+	{ "charset_table", "non_cont" }
 };
 
 void IndexSettingsContainer_c::SetDefaults()
@@ -1934,7 +1963,7 @@ void DumpSettingsCfg ( FILE * fp, const CSphIndex & tIndex, FilenameBuilder_i * 
 static void DumpCreateTable ( StringBuilder_c & tBuf, const CSphIndex & tIndex, FilenameBuilder_i * pFilenameBuilder )
 {
 	SettingsFormatterState_t tState(tBuf);
-	SettingsFormatter_c tFormatter ( tState, "", "='", "'", " " );
+	SettingsFormatter_c tFormatter ( tState, "", "='", "'", " ", false, true );
 	FormatAllSettings ( tIndex, tFormatter, pFilenameBuilder );
 }
 
@@ -2376,6 +2405,7 @@ const char * GetMutableName ( MutableName_e eName )
 		case MutableName_e::READ_BUFFER_DOCS: return "read_buffer_docs";
 		case MutableName_e::READ_BUFFER_HITS: return "read_buffer_hits";
 		case MutableName_e::OPTIMIZE_CUTOFF: return "optimize_cutoff";
+		case MutableName_e::GLOBAL_IDF: return "global_idf";
 		default: assert ( 0 && "Invalid mutable option" ); return "";
 	}
 }
@@ -2576,6 +2606,18 @@ bool MutableIndexSettings_c::Load ( const char * sFileName, const char * sIndexN
 		sError = "";
 	}
 
+	JsonObj_c tGlobalIdf = tParser.GetStrItem ( "global_idf", sError, true );
+	if ( tGlobalIdf )
+	{
+		m_sGlobalIDFPath = tGlobalIdf.StrVal();
+		m_dLoaded.BitSet ( (int)MutableName_e::GLOBAL_IDF );
+	} else if ( !sError.IsEmpty() )
+	{
+		sphWarning ( "table %s: %s", sIndexName, sError.cstr() );
+		sError = "";
+	}
+
+
 	m_bNeedSave = true;
 
 	return true;
@@ -2654,6 +2696,12 @@ void MutableIndexSettings_c::Load ( const CSphConfigSection & hIndex, bool bNeed
 		m_iOptimizeCutoff = Max ( m_iOptimizeCutoff, 1 );
 		m_dLoaded.BitSet ( (int)MutableName_e::OPTIMIZE_CUTOFF );
 	}
+
+	if ( hIndex.Exists ( "global_idf" ) )
+	{
+		m_sGlobalIDFPath = hIndex.GetStr ( "global_idf" );
+		m_dLoaded.BitSet ( (int)MutableName_e::GLOBAL_IDF );
+	}
 }
 
 static void AddStr ( const CSphBitvec & dLoaded, MutableName_e eName, JsonObj_c & tRoot, const char * sVal )
@@ -2709,6 +2757,7 @@ bool MutableIndexSettings_c::Save ( CSphString & sBuf ) const
 	AddInt ( m_dLoaded, MutableName_e::READ_BUFFER_HITS, tRoot, m_tFileAccess.m_iReadBufferHitList );
 
 	AddInt ( m_dLoaded, MutableName_e::OPTIMIZE_CUTOFF, tRoot, m_iOptimizeCutoff );
+	AddStr ( m_dLoaded, MutableName_e::GLOBAL_IDF, tRoot, m_sGlobalIDFPath.cstr() );
 
 	sBuf = tRoot.AsString ( true );
 
@@ -2776,6 +2825,12 @@ void MutableIndexSettings_c::Combine ( const MutableIndexSettings_c & tOther )
 		m_iOptimizeCutoff = tOther.m_iOptimizeCutoff;
 		m_dLoaded.BitSet ( (int)MutableName_e::OPTIMIZE_CUTOFF );
 	}
+
+	if ( tOther.m_dLoaded.BitGet ( (int)MutableName_e::GLOBAL_IDF ) )
+	{
+		m_sGlobalIDFPath = tOther.m_sGlobalIDFPath;
+		m_dLoaded.BitSet ( (int)MutableName_e::GLOBAL_IDF );
+	}
 }
 
 MutableIndexSettings_c & MutableIndexSettings_c::GetDefaults ()
@@ -2818,6 +2873,8 @@ void MutableIndexSettings_c::Format ( SettingsFormatter_c & tOut, FilenameBuilde
 
 	tOut.Add ( GetMutableName ( MutableName_e::OPTIMIZE_CUTOFF ), m_iOptimizeCutoff,
 		FormatCond ( m_bNeedSave, m_dLoaded, MutableName_e::OPTIMIZE_CUTOFF, HasSettings() && m_dLoaded.BitGet ( (int)MutableName_e::OPTIMIZE_CUTOFF ) ) );
+	tOut.Add ( GetMutableName ( MutableName_e::GLOBAL_IDF ), m_sGlobalIDFPath,
+		FormatCond ( m_bNeedSave, m_dLoaded, MutableName_e::GLOBAL_IDF, HasSettings() && m_dLoaded.BitGet ( (int)MutableName_e::GLOBAL_IDF ) ) );
 }
 
 

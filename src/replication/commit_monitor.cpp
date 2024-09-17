@@ -55,7 +55,7 @@ bool CommitMonitor_c::CommitNonEmptyCmds ( RtIndex_i * pIndex, const Replication
 	if ( !bOnlyTruncate )
 		return pIndex->Commit ( m_pDeletedCount, &m_tAcc, &sError );
 
-	if ( !pIndex->Truncate ( sError ))
+	if ( !pIndex->Truncate ( sError, RtIndex_i::TRUNCATE ))
 		return false;
 
 	if ( !tCmd.m_tReconfigure )
@@ -88,6 +88,7 @@ bool CommitMonitor_c::CommitTOI()
 
 static bool DoUpdate ( AttrUpdateArgs& tUpd, const cServedIndexRefPtr_c& pDesc, int& iUpdated, bool bUpdateAPI, bool bNeedWlock )
 {
+	TRACE_CORO ( "rt", "commit_monitor::DoUpdate" );
 	if ( bUpdateAPI )
 	{
 		Debug ( bool bOk = ) [&]() {
@@ -109,6 +110,7 @@ static bool DoUpdate ( AttrUpdateArgs& tUpd, const cServedIndexRefPtr_c& pDesc, 
 
 bool CommitMonitor_c::UpdateTOI ()
 {
+	TRACE_CORO ( "rt", "commit_monitor::UpdateTOI" );
 	using namespace TlsMsg;
 	if ( m_tAcc.m_dCmd.IsEmpty ())
 		return TlsMsg::Err ( "empty accumulator" );

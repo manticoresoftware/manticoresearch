@@ -54,8 +54,8 @@
 %token	TOK_CREATE
 %token	TOK_DATABASES
 %token	TOK_DAY
-%token	TOK_DATEADD
-%token	TOK_DATESUB
+%token	TOK_DATE_ADD
+%token	TOK_DATE_SUB
 %token	TOK_DELETE
 %token	TOK_DESC
 %token	TOK_DESCRIBE
@@ -104,6 +104,7 @@
 %token	TOK_LIKE
 %token	TOK_LIMIT
 %token	TOK_LOGS
+%token	TOK_LOCKS
 %token	TOK_MATCH
 %token	TOK_MAX
 %token	TOK_META
@@ -272,6 +273,9 @@ reserved_no_option:
 	| TOK_SUM | TOK_TABLE | TOK_TABLES | TOK_THREADS | TOK_TO
 	| TOK_UNFREEZE | TOK_UPDATE | TOK_VALUES | TOK_VARIABLES
 	| TOK_WARNINGS | TOK_WEIGHT | TOK_WHERE | TOK_WITHIN | TOK_KILL | TOK_QUERY
+	| TOK_INTERVAL | TOK_REGEX
+	| TOK_DATE_ADD | TOK_DATE_SUB | TOK_DAY | TOK_HOUR | TOK_MINUTE | TOK_MONTH | TOK_QUARTER | TOK_SECOND | TOK_WEEK | TOK_YEAR
+	| TOK_LOCKS
 	;
 
 reserved_set_tail:
@@ -1378,8 +1382,8 @@ function:
 	| TOK_REMAP '(' expr ',' expr ',' '(' arglist ')' ',' '(' arglist ')' ')' { TRACK_BOUNDS ( $$, $1, $14 ); }
 	| TOK_RAND '(' ')'				{ TRACK_BOUNDS ( $$, $1, $3 ); }
 	| TOK_RAND '(' arglist ')' 		{ TRACK_BOUNDS ( $$, $1, $4 ); }
-	| TOK_DATEADD '(' expr ',' TOK_INTERVAL expr time_unit ')' { TRACK_BOUNDS ( $$, $1, $8 ); }
-	| TOK_DATESUB '(' expr ',' TOK_INTERVAL expr time_unit ')' { TRACK_BOUNDS ( $$, $1, $8 ); }
+	| TOK_DATE_ADD '(' expr ',' TOK_INTERVAL expr time_unit ')' { TRACK_BOUNDS ( $$, $1, $8 ); }
+	| TOK_DATE_SUB '(' expr ',' TOK_INTERVAL expr time_unit ')' { TRACK_BOUNDS ( $$, $1, $8 ); }
 	| accepted_funcs '(' arglist ')' { TRACK_BOUNDS ( $$, $1, $4 ); }
 	;
 
@@ -1489,6 +1493,10 @@ show_what:
 	| TOK_SETTINGS
 		{
 			pParser->m_pStmt->m_eStmt = STMT_SHOW_SETTINGS;
+		}
+	| TOK_LOCKS
+		{
+			pParser->m_pStmt->m_eStmt = STMT_SHOW_LOCKS;
 		}
 	;
 

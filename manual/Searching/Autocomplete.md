@@ -1,67 +1,55 @@
 # Autocomplete
 
-Autocomplete (or word completion) predicts and suggests the rest of a word or phrase as a user types. This feature is commonly used in:
-
+Autocomplete, or word completion, predicts and suggests the end of a word or phrase as you type. It's commonly used in:
 - Search boxes on websites
-- Query suggestions in search engines
-- Text input fields in various applications
+- Suggestions in search engines
+- Text fields in apps
 
-Manticore offers a powerful autocomplete feature that functions similarly to Google's autocomplete. It provides suggestions as users type, improving the search experience and helping users find relevant information quickly.
+Manticore offers an advanced autocomplete feature that gives suggestions while you type, similar to those in well-known search engines. This helps speed up searches and lets users find what they need faster.
 
 In addition to basic autocomplete functionality, Manticore includes advanced features to enhance the user experience:
 
-1. Spell Correction (Fuzziness): Manticore's autocomplete incorporates spell correction capabilities, allowing it to suggest correct spellings for misspelled queries. This feature uses fuzzy matching algorithms to identify and correct common typos and spelling errors, ensuring users can find what they're looking for even if they make mistakes while typing.
+1. **Spell Correction (Fuzziness):** Manticore's autocomplete helps correct spelling mistakes by using algorithms that recognize and fix common errors. This means even if you type something wrong, you can still find what you were looking for.
+2. **Keyboard Layout Autodetection:** Manticore can figure out which keyboard layout you are using. This is really useful in places where many languages are used, or if you accidentally type in the wrong language. For example, if you type "ghbdtn" by mistake, Manticore knows you meant to say "привет" (hello in Russian) and suggests the correct word.
 
-2. Keyboard Layout Autodetection: Manticore employs intelligent logic to automatically detect the user's keyboard layout. This feature is particularly useful for multilingual environments or when users accidentally type in the wrong language. For example, if a user types "ghbdtn" (which is "привет" or "hello" in Russian, typed using an English keyboard layout), Manticore can recognize the intent and suggest the correct word in the appropriate language.
-
-These advanced features make Manticore's autocomplete system more robust and user-friendly, catering to a diverse user base and improving overall search accuracy and efficiency.
-
-Key benefits of autocomplete:
-
-1. Faster query input
-2. Reduced typing errors
-3. Improved search accuracy
-4. Enhanced user experience
-
-Manticore's autocomplete can be customized to fit specific use cases and data sets, making it a versatile tool for various applications.
+Manticore's autocomplete can be tailored to match different needs and settings, making it a flexible tool for many applications.
 
 ![Autocomplete](autocomplete.png)
 
 ## CALL AUTOCOMPLETE
 
-The primary method for implementing autocomplete in Manticore is the `CALL AUTOCOMPLETE` function. This powerful feature provides intelligent word completion suggestions based on your indexed data.
+<!-- example call_autocomplete -->
+To use autocomplete in Manticore, use the `CALL AUTOCOMPLETE` SQL statement or its JSON equivalent `/autocomplete`. This feature provides word completion suggestions based on your indexed data.
 
-Before you proceed, ensure that the table you try to use for autocomplete has [infixes](../Creating_a_table/NLP_and_tokenization/Wildcard_searching_settings.md#min_infix_len) enabled.
+Before you proceed, ensure that the table you intend to use for autocomplete has [infixes](../Creating_a_table/NLP_and_tokenization/Wildcard_searching_settings.md#min_infix_len) enabled.
 
-*Attention:*
+**Note:** There's autochecking for `min_infix_len` in table settings, which uses a 30-second cache to improve performance. After changing your table, there might be a short delay when you first use `CALL AUTOCOMPLETE` (this is usually not noticeable). Only positive results are cached, so if you remove or drop `min_infix_len`, issues may occur.
 
-We employ smart autochecking for `min_infix_len` in table options, with results cached for 30 seconds. After altering your table, a brief delay may occur (usually unnoticeable). Note that we only cache positive results, so issues may arise when removing or dropping min_infix_len.
+### General syntax
 
-### Syntax
-
+#### SQL
 ```sql
-CALL AUTOCOMPLETE('word', 'table', [...options]);
+CALL AUTOCOMPLETE('query_beginning', 'table', [...options]);
 ```
 
-Or JSON request with fields "query", "table" and optional "options" sent to `/autocomplete` endpoint.
+#### JSON
+```json
+POST /autocomplete
+{
+	"table":"table_name",
+	"query":"query_beginning"
+	[,"options": {<autocomplete options>}]
+}
+```
 
-### Parameters
+#### Options
+- `layouts`: A comma-separated string of keyboard layout codes to validate and check for spell correction. Available options: us, ru, ua, se, pt, no, it, gr, uk, fr, es, dk, de, ch, br, bg, be (more details [here](../../Searching/Spell_correction.md#Options)). Default: all enabled
+- `fuzziness`: `0`, `1`, or `2` (default: `2`). Maximum Levenshtein distance for finding typos. Set to `0` to disable fuzzy matching
+- `prepend`: Boolean (0/1 in SQL). If true(1), adds an asterisk before the last word for prefix expansion (e.g., `*word`)
+- `append`: Boolean (0/1 in SQL). If true(1), adds an asterisk after the last word for suffix expansion (e.g., `word*`)
+- `expansion_len`: Number of characters to expand in the last word. Default: `10`
 
-- `word`: The partial word or phrase to autocomplete
-- `table`: The name of the table to use for autocomplete suggestions
-- `options`: Additional parameters to customize the autocomplete behavior
-
-### Options
-
-- `layouts`: A comma-separated string of keyboard layout codes to validate and check for spell correction. Available options: us, ru, ua, se, pt, no, it, gr, uk, fr, es, dk, de, ch, br, bg, be. Default: all enabled
-- `fuzziness`: 0, 1, or 2 (default: 2). Maximum Levenshtein distance for finding typos. Set to 0 to disable fuzzy matching
-- `prepend`: Boolean. If true, adds an asterisk before the last word for prefix expansion (e.g., *word)
-- `append`: Boolean. If true, adds an asterisk after the last word for suffix expansion (e.g., word*)
-- `expansion_len`: Number of characters to expand in the last word. Default: 10
-
-### Examples
-
-Basic usage:
+<!-- request SQL -->
 
 ```sql
 mysql> CALL AUTOCOMPLETE('hello', 'comment');
@@ -79,7 +67,7 @@ mysql> CALL AUTOCOMPLETE('hello', 'comment');
 +------------+
 ```
 
-Disabling fuzzy matching:
+<!-- request SQL with no fuzzy search -->
 
 ```sql
 mysql> CALL AUTOCOMPLETE('hello', 'comment', 0 as fuzziness);
@@ -90,17 +78,18 @@ mysql> CALL AUTOCOMPLETE('hello', 'comment', 0 as fuzziness);
 +-------+
 ```
 
-Using JSON request:
+<!-- request JSON -->
 
 ```json
+POST /autocomplete
 {
 	"table":"comment",
 	"query":"hello"
 }
 ```
 
-```bash
-$ curl -sd @request.json localhost:9308/autocomplete | jq
+<!-- response JSON -->
+```json
 [
   {
     "total": 8,
@@ -143,20 +132,20 @@ $ curl -sd @request.json localhost:9308/autocomplete | jq
 ]
 ```
 
-## Alternative autocomplete with CALL KEYWORDS in controllable way
+<!-- end -->
+
+## Alternative autocomplete methods
 
 While `CALL AUTOCOMPLETE` is the recommended method for most use cases, Manticore also supports other controllable and customizable approaches to implement autocomplete functionality:
 
 ##### Autocomplete a sentence
-To autocomplete a sentence, you can use [infixed search](../Creating_a_table/NLP_and_tokenization/Wildcard_searching_settings.md#min_infix_len). You can find endings of a document's field by providing its beginning and:
-
-* using [full-text operators](../Searching/Full_text_matching/Operators.md) `*` to match anything it substitutes
-* and optionally `^` to start from the beginning of the field
-* and perhaps `""` for phrase matching
-* and optionally [highlight the results](../Searching/Highlighting.md) so you don't have to fetch them in full to your application
+To autocomplete a sentence, you can use [infixed search](../Creating_a_table/NLP_and_tokenization/Wildcard_searching_settings.md#min_infix_len). You can find the end of a document field by providing its beginning and:
+* using the [full-text wildcard operator](../Searching/Full_text_matching/Operators.md) `*` to match any characters
+* optionally using `^` to start from the beginning of the field
+* optionally using `""` for phrase matching
+* and using [result highlighting](../Searching/Highlighting.md)
 
 There is an [article about it in our blog](https://manticoresearch.com/2020/03/31/simple-autocomplete-with-manticore/) and an [interactive course](../Searching/Spell_correction.md#Interactive-course). A quick example is:
-
 * Let's assume you have a document: `My cat loves my dog. The cat (Felis catus) is a domestic species of small carnivorous mammal.`
 * Then you can use `^`, `""`, and `*` so as the user is typing, you make queries like: `^"m*"`, `^"my *"`, `^"my c*"`, `^"my ca*"` and so on
 * It will find the document, and if you also do [highlighting](../Searching/Highlighting.md), you will get something like: `<b>My cat</b> loves my dog. The cat ( ...`

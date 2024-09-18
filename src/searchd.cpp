@@ -17282,7 +17282,7 @@ void HandleMysqlShowLocks ( RowBuffer_i & tOut )
 				tOut.PutString ( GetIndexTypeName ( dPair.second ) );
 				tOut.PutString ( dPair.first );
 				tOut.PutString ( "freeze" );
-				tOut.PutNumAsString ( iLocks );
+				tOut.PutStringf ( "locks: %d", iLocks );
 				if ( !tOut.Commit () )
 					return;
 			}

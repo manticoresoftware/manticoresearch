@@ -5860,11 +5860,12 @@ void SearchHandler_c::CalcThreadsPerIndex ( int iConcurrency )
 		iEnabledIndexes++;
 		auto & tPSInfo = m_dPSInfo[iLocal];
 		auto & tSplitData = dSplitData[iLocal];
-		if ( GetPseudoSharding() || RIdx_c(pIndex)->IsRT() )
+		RIdx_c pIdx { pIndex };
+		if ( GetPseudoSharding () || pIdx->IsRT() )
 		{
 			// do metric calcs
 			tPSInfo.m_iMaxThreads = iMaxThreadsPerIndex;
-			auto tMetric = RIdx_c ( pIndex )->GetPseudoShardingMetric ( m_dNQueries, dCountDistinct[iLocal], tPSInfo.m_iMaxThreads, tPSInfo.m_bForceSingleThread );
+			auto tMetric = pIdx->GetPseudoShardingMetric ( m_dNQueries, dCountDistinct[iLocal], tPSInfo.m_iMaxThreads, tPSInfo.m_bForceSingleThread );
 			assert ( tMetric.first>=0 );
 
 			tSplitData.m_iMetric = tMetric.first;
@@ -11345,11 +11346,11 @@ static void CommitAcc ( const SqlStmt_t & tStmt, cServedIndexRefPtr_c & pServed,
 	if ( bCommit )
 	{
 		RtAccum_t * pAccum = pSession->m_tAcc.GetAcc();
-		assert ( pSession->m_tAcc.GetAcc ( RIdx_T<RtIndex_i *>(pServed), sError )==pAccum );
+		RIdx_T<RtIndex_i *> pIndex { pServed };
+		assert ( pSession->m_tAcc.GetAcc ( pIndex, sError )==pAccum );
 
 		if ( !HandleCmdReplicate ( *pAccum ) )
 		{
-			RIdx_T<RtIndex_i *> pIndex { pServed };
 			TlsMsg::MoveError ( sError );
 			pIndex->RollBack ( pAccum ); // clean up collected data
 			tOut.Error ( "%s", sError.cstr() );

@@ -2,26 +2,10 @@ name: Nightly tests
 run-name: Nightly tests ${{ github.sha }}
 
 on:
-  schedule:
-    - cron: '00 20 * * *'
   push:
+    branches: [ test-perf ]
     paths:
-      - 'test/clt-tests/**'
-    branches:
-      - manticore-6.2.12
-  pull_request:
-    branches: [ master ]
-    paths:
-      - '.github/workflows/clt_nightly.yml'
-      - 'test/clt-tests/installation/**'
-      - 'test/clt-tests/core/test-replace-into'
       - 'test/clt-tests/comparison-overhead-json-sql/**'
-      - 'test/clt-tests/id-attribute-error-during-indexing/**'
-      - 'test/clt-tests/indexer-latest-mysql-postgres/**'
-      - 'test/clt-tests/core/test-alter-rename-nightly'
-      - 'test/clt-tests/integrations/**'
-      - 'test/clt-tests/core/test-performance-for-queries-with-multiple-disk-chunks'
-      - 'test/clt-tests/integrations/**'
 
 # cancels the previous workflow run when a new one appears in the same branch (e.g. master or a PR's branch)
 concurrency:
@@ -117,7 +101,7 @@ jobs:
             image: ubuntu:noble
             test_prefix: test/clt-tests/installation/deb-dev-update
           - name: JSON vs SQL perf
-            image: ghcr.io/manticoresoftware/manticoresearch:test-kit-latest
+            image: ghcr.io/manticoresoftware/manticoresearch:test-kit-2fe793f
             test_prefix: test/clt-tests/comparison-overhead-json-sql/test-comparison-
           - name: REPLACE INTO
             image: ghcr.io/manticoresoftware/manticoresearch:test-kit-latest

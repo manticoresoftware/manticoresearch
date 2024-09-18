@@ -29,6 +29,7 @@ export mysql=$(( (end - start) / 1000000 ))
 ––– input –––
 echo "Duration: ${mysql} ${curl} ms"
 ––– output –––
+Duration: %{NUMBER} %{NUMBER} ms
 ––– input –––
 php -r "exit(round(abs($curl - $mysql) / ($curl + $mysql)/2 * 100, 0) >= 2);" 2>\dev\null && echo "----$?----"
 ––– output –––

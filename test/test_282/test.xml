@@ -20,12 +20,12 @@ searchd
 <queries>
 <sphinxql>
 	drop table if exists t;
-	create table t;
-	replace into t values (10000000000000000000), (2);
-	flush ramchunk t;
-	replace into t values (10000000000000000000);
-	select * from t;
-	drop table t;
+	create table tt;
+	replace into tt values (10000000000000000000), (2);
+	flush ramchunk tt;
+	replace into tt values (10000000000000000000);
+	select * from tt;
+	drop table tt;
 </sphinxql>
 </queries>
 

@@ -238,7 +238,7 @@ target_link_libraries ( lextra INTERFACE cctz::cctz )
 include ( GetxxHash )
 target_link_libraries ( lextra INTERFACE xxHash::xxhash )
 
-include ( GetJieba )
+include ( GetJIEBA )
 target_link_libraries ( lextra INTERFACE jieba::jieba )
 with_get ( jieba "Jieba" "Chinese text segmentation tool" )
 

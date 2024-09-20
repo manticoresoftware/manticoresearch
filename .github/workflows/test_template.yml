@@ -51,6 +51,7 @@ jobs:
         # CTEST_REGEX: test_234
         WITH_COVERAGE: ${{ inputs.WITH_COVERAGE }}
         LIBS_BUNDLE:
+        JIEBA_DATA_DIR: /usr/share/manticore/jieba/
     steps:
       - name: Checkout repository
         uses: actions/checkout@v3

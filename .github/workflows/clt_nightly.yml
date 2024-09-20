@@ -21,6 +21,7 @@ on:
       - 'test/clt-tests/core/test-alter-rename-nightly'
       - 'test/clt-tests/integrations/**'
       - 'test/clt-tests/core/test-performance-for-queries-with-multiple-disk-chunks'
+      - 'test/clt-tests/integrations/kafka/**'
 
 # cancels the previous workflow run when a new one appears in the same branch (e.g. master or a PR's branch)
 concurrency:
@@ -138,8 +139,7 @@ jobs:
             test_prefix: test/clt-tests/integrations/test-integrations-
           - name: Test Kafka integration
             image: dind
-            test_prefix: test/clt-tests/integrations/kafka/test-integration-
-
+            test_prefix: test/clt-tests/integrations/kafka/test-integration-kafka-ms-
     steps:
       - uses: manticoresoftware/clt@0.1.23
         with:

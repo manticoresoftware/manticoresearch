@@ -666,8 +666,8 @@ private:
 	std::unique_ptr<QueryStatContainer_i> m_pQueryStatRecordsExact GUARDED_BY ( m_tStatsLock );
 #endif
 
-	std::unique_ptr<TDigest_i>	m_pQueryTimeDigest GUARDED_BY ( m_tStatsLock );
-	std::unique_ptr<TDigest_i>	m_pRowsFoundDigest GUARDED_BY ( m_tStatsLock );
+	TDigest_c			m_tQueryTimeDigest GUARDED_BY ( m_tStatsLock );
+	TDigest_c			m_tRowsFoundDigest GUARDED_BY ( m_tStatsLock );
 
 	uint64_t			m_uTotalFoundRowsMin GUARDED_BY ( m_tStatsLock )= UINT64_MAX;
 	uint64_t			m_uTotalFoundRowsMax GUARDED_BY ( m_tStatsLock )= 0;

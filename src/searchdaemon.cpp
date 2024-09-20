@@ -1213,16 +1213,15 @@ ServedStats_c::ServedStats_c()
 #ifndef NDEBUG
 	, m_pQueryStatRecordsExact { std::make_unique<QueryStatContainerExact_c>() }
 #endif
-	, m_pQueryTimeDigest { sphCreateTDigest() }
-	, m_pRowsFoundDigest { sphCreateTDigest() }
+
 {}
 
 void ServedStats_c::AddQueryStat( uint64_t uFoundRows, uint64_t uQueryTime )
 {
 	ScWL_t wLock( m_tStatsLock );
 
-	m_pRowsFoundDigest->Add(( double ) uFoundRows );
-	m_pQueryTimeDigest->Add(( double ) uQueryTime );
+	m_tRowsFoundDigest.Add(( double ) uFoundRows );
+	m_tQueryTimeDigest.Add(( double ) uQueryTime );
 
 	uint64_t uTimeStamp = sphMicroTimer();
 	m_pQueryStatRecords->Add( uFoundRows, uQueryTime, uTimeStamp );
@@ -1350,16 +1349,16 @@ void ServedStats_c::DoStatCalcStats( const QueryStatContainer_i* pContainer,
 	tRowsAllStats.m_dData[TYPE_AVG] = m_uTotalQueries ? m_uTotalFoundRowsSum / m_uTotalQueries : 0;
 	tRowsAllStats.m_dData[TYPE_MIN] = m_uTotalFoundRowsMin;
 	tRowsAllStats.m_dData[TYPE_MAX] = m_uTotalFoundRowsMax;
-	tRowsAllStats.m_dData[TYPE_95] = ( uint64_t ) m_pRowsFoundDigest->Percentile( 95 );
-	tRowsAllStats.m_dData[TYPE_99] = ( uint64_t ) m_pRowsFoundDigest->Percentile( 99 );
+	tRowsAllStats.m_dData[TYPE_95] = ( uint64_t ) m_tRowsFoundDigest.Percentile( 95 );
+	tRowsAllStats.m_dData[TYPE_99] = ( uint64_t ) m_tRowsFoundDigest.Percentile( 99 );
 	tRowsAllStats.m_uTotalQueries = m_uTotalQueries;
 
 	auto& tQueryAllStats = tQueryTimeStats.m_dStats[INTERVAL_ALLTIME];
 	tQueryAllStats.m_dData[TYPE_AVG] = m_uTotalQueries ? m_uTotalQueryTimeSum / m_uTotalQueries : 0;
 	tQueryAllStats.m_dData[TYPE_MIN] = m_uTotalQueryTimeMin;
 	tQueryAllStats.m_dData[TYPE_MAX] = m_uTotalQueryTimeMax;
-	tQueryAllStats.m_dData[TYPE_95] = ( uint64_t ) m_pQueryTimeDigest->Percentile( 95 );
-	tQueryAllStats.m_dData[TYPE_99] = ( uint64_t ) m_pQueryTimeDigest->Percentile( 99 );
+	tQueryAllStats.m_dData[TYPE_95] = ( uint64_t ) m_tQueryTimeDigest.Percentile( 95 );
+	tQueryAllStats.m_dData[TYPE_99] = ( uint64_t ) m_tQueryTimeDigest.Percentile( 99 );
 	tQueryAllStats.m_uTotalQueries = m_uTotalQueries;
 }
 

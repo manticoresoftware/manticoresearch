@@ -642,10 +642,11 @@ class QueryStatContainer_i
 public:
 	virtual								~QueryStatContainer_i() {}
 	virtual void						Add ( uint64_t uFoundRows, uint64_t uQueryTime, uint64_t uTimestamp ) = 0;
-	virtual void						GetRecord ( int iRecord, QueryStatRecord_t & tRecord ) const = 0;
+	virtual QueryStatRecord_t			GetRecord ( int iRecord ) const noexcept = 0;
 	virtual int							GetNumRecords() const = 0;
 };
 
+std::unique_ptr<QueryStatContainer_i> MakeStatsContainer();
 
 class ServedStats_c final
 {
@@ -679,12 +680,11 @@ private:
 
 	uint64_t			m_uTotalQueries GUARDED_BY ( m_tStatsLock ) = 0;
 
-	static void			CalcStatsForInterval ( const QueryStatContainer_i * pContainer, QueryStatElement_t & tRowResult,
-							QueryStatElement_t & tTimeResult, uint64_t uTimestamp, uint64_t uInterval, int iRecords );
-
 	void				DoStatCalcStats ( const QueryStatContainer_i * pContainer, QueryStats_t & tRowsFoundStats,
 							QueryStats_t & tQueryTimeStats ) const REQUIRES_SHARED ( m_tStatsLock );
 };
+
+void CalcSimpleStats ( const QueryStatContainer_i * pContainer, QueryStats_t & tRowsFoundStats, QueryStats_t & tQueryTimeStats );
 
 // calculate index mass based on status
 uint64_t CalculateMass ( const CSphIndexStatus & dStats );

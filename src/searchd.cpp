@@ -8996,6 +8996,10 @@ void BuildStatus ( VectorLike & dStatus )
 		dStatus.MatchTupletf ( szCommand ( i ), "%l", g_tStats.m_iCommandCount[i].load ( std::memory_order_relaxed ) );
 	}
 
+	FormatCmdStats ( dStatus, "insert_replace", SearchdStats_t::eReplace );
+	FormatCmdStats ( dStatus, "search", SearchdStats_t::eSearch );
+	FormatCmdStats ( dStatus, "update", SearchdStats_t::eUpdate );
+
 	auto iConnects = g_tStats.m_iAgentConnectTFO.load ( std::memory_order_relaxed )
 			+g_tStats.m_iAgentConnect.load ( std::memory_order_relaxed );
 	dStatus.MatchTupletf ( "agent_connect", "%l", iConnects );
@@ -11168,6 +11172,8 @@ void sphHandleMysqlInsert ( StmtErrorReporter_i & tOut, const SqlStmt_t & tStmt 
 
 	MEMORY ( MEM_SQL_INSERT );
 
+	auto tmStart = sphMicroTimer ();
+
 	auto pServed = GetServed ( tStmt.m_sIndex );
 	if ( !ServedDesc_t::IsMutable ( pServed ) )
 	{
@@ -11183,6 +11189,7 @@ void sphHandleMysqlInsert ( StmtErrorReporter_i & tOut, const SqlStmt_t & tStmt 
 
 	// index lock after replication takes place
 	CommitAcc ( tStmt, pServed, tOut );
+	StatCountCommandDetails ( SearchdStats_t::eReplace, tStmt.m_iRowsAffected, tmStart );
 }
 
 static bool AddDocument ( const SqlStmt_t & tStmt, cServedIndexRefPtr_c & pServed, StmtErrorReporter_i & tOut )
@@ -13438,6 +13445,7 @@ void sphHandleMysqlUpdate ( StmtErrorReporter_i & tOut, const SqlStmt_t & tStmt,
 	StringBuilder_c sReport;
 	dFails.BuildReport ( sReport );
 
+	StatCountCommandDetails ( SearchdStats_t::eUpdate, iUpdated, tmStart );
 	if ( !iSuccesses )
 	{
 		tOut.Error ( "%s", sReport.cstr() );
@@ -13774,8 +13782,8 @@ static void SendMysqlMatch ( const CSphMatch & tMatch, const CSphBitvec & tAttrs
 	}
 }
 
-
-void SendMysqlSelectResult ( RowBuffer_i & dRows, const AggrResult_t & tRes, bool bMoreResultsFollow, bool bAddQueryColumn, const CSphString * pQueryColumn, QueryProfile_c * pProfile )
+// returns N of matches in resultset
+uint64_t SendMysqlSelectResult ( RowBuffer_i & dRows, const AggrResult_t & tRes, bool bMoreResultsFollow, bool bAddQueryColumn, const CSphString * pQueryColumn, QueryProfile_c * pProfile )
 {
 	CSphScopedProfile tProf ( pProfile, SPH_QSTATE_NET_WRITE );
 
@@ -13785,7 +13793,7 @@ void SendMysqlSelectResult ( RowBuffer_i & dRows, const AggrResult_t & tRes, boo
 		{
 			// at this point, SELECT error logging should have been handled, so pass a NULL stmt to logger
 			dRows.Error ( tRes.m_sError.cstr() );
-			return;
+			return 0;
 		}
 		assert ( tRes.m_sError.IsEmpty() );
 		auto iWarns = tRes.m_sWarning.IsEmpty() ? 0 : 1;
@@ -13795,7 +13803,7 @@ void SendMysqlSelectResult ( RowBuffer_i & dRows, const AggrResult_t & tRes, boo
 		dRows.HeadColumn ( "" );
 		dRows.HeadEnd();
 		dRows.Eof ( bMoreResultsFollow, iWarns, sMeta.cstr() );
-		return;
+		return 0;
 	}
 
 	// empty result sets just might carry the full uberschema
@@ -13828,6 +13836,7 @@ void SendMysqlSelectResult ( RowBuffer_i & dRows, const AggrResult_t & tRes, boo
 
 	assert ( tRes.m_bSingle );
 	auto dMatches = tRes.m_dResults.First ().m_dMatches.Slice ( tRes.m_iOffset, tRes.m_iCount );
+	uint64_t uMatches = tRes.m_dResults.First ().m_dMatches.GetLength();
 	for ( const auto & tMatch : dMatches )
 	{
 		SendMysqlMatch ( tMatch, tAttrsToSend, tRes.m_tSchema, dRows, pNullBitmaskAttr );
@@ -13839,7 +13848,7 @@ void SendMysqlSelectResult ( RowBuffer_i & dRows, const AggrResult_t & tRes, boo
 		}
 
 		if ( !dRows.Commit() )
-			return;
+			return uMatches;
 	}
 
 	if ( bReturnZeroCount )
@@ -13849,6 +13858,7 @@ void SendMysqlSelectResult ( RowBuffer_i & dRows, const AggrResult_t & tRes, boo
 
 	// eof packet
 	dRows.Eof ( bMoreResultsFollow, iWarns, sMeta.cstr() );
+	return uMatches;
 }
 
 
@@ -14213,6 +14223,8 @@ void HandleMysqlMultiStmt ( const CSphVector<SqlStmt_t> & dStmt, CSphQueryResult
 	for ( int i=0; i<iSelect; i++ )
 		StatCountCommand ( SEARCHD_COMMAND_SEARCH );
 
+	auto tmStart = sphMicroTimer();
+
 	// setup query for searching
 	SearchHandler_c tHandler ( iSelect, sphCreatePlainQueryParser(), QUERY_SQL, true );
 	QueryProfile_c tProfile;
@@ -14286,7 +14298,9 @@ void HandleMysqlMultiStmt ( const CSphVector<SqlStmt_t> & dStmt, CSphQueryResult
 			AggrResult_t & tRes = tHandler.m_dAggrResults[iSelect++];
 			if ( !sWarning.IsEmpty() )
 				tRes.m_sWarning = sWarning;
-			SendMysqlSelectResult ( dRows, tRes, bMoreResultsFollow, false, nullptr, ( tSess.IsProfile() ? &tProfile : nullptr ) );
+			auto uMatches = SendMysqlSelectResult ( dRows, tRes, bMoreResultsFollow, false, nullptr, ( tSess.IsProfile() ? &tProfile : nullptr ) );
+
+			StatCountCommandDetails ( SearchdStats_t::eSearch, uMatches, tmStart );
 			// mysql server breaks send on error
 			bBreak = !tRes.m_iSuccesses;
 			break;
@@ -17454,6 +17468,7 @@ bool ClientSession_c::Execute ( Str_t sQuery, RowBuffer_i & tOut )
 			MEMORY ( MEM_SQL_SELECT );
 
 			StatCountCommand ( SEARCHD_COMMAND_SEARCH );
+			auto tmStart = sphMicroTimer();
 			SearchHandler_c tHandler ( 1, sphCreatePlainQueryParser(), QUERY_SQL, true );
 			// no log for search queries from the buddy in the info verbosity
 			if ( session::IsQueryLogDisabled() )
@@ -17472,7 +17487,8 @@ bool ClientSession_c::Execute ( Str_t sQuery, RowBuffer_i & tOut )
 				// query just completed ok; reset out error message
 				m_sError = "";
 				AggrResult_t & tLast = tHandler.m_dAggrResults.Last();
-				SendMysqlSelectResult ( tOut, tLast, false, m_bFederatedUser, &m_sFederatedQuery, ( tSess.IsProfile() ? &m_tProfile : nullptr ) );
+				auto uMatches = SendMysqlSelectResult ( tOut, tLast, false, m_bFederatedUser, &m_sFederatedQuery, ( tSess.IsProfile() ? &m_tProfile : nullptr ) );
+				StatCountCommandDetails ( SearchdStats_t::eSearch, uMatches, tmStart );
 			}
 
 			// save meta for SHOW META (profile is saved elsewhere)
@@ -21815,7 +21831,7 @@ int WINAPI ServiceMain ( int argc, char **argv ) EXCLUDES (MainThread)
 	ScheduleFlushAttrs();
 	SetupCompatHttp();
 
-	gStats().Init();
+	InitSearchdStats();
 
 	{
 		CSphString sSQLStateDefault;

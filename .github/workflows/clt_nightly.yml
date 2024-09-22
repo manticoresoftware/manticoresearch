@@ -117,7 +117,7 @@ jobs:
             image: ubuntu:noble
             test_prefix: test/clt-tests/installation/deb-dev-update
           - name: JSON vs SQL perf
-            image: ghcr.io/manticoresoftware/manticoresearch:test-kit-latest
+            image: ghcr.io/manticoresoftware/manticoresearch:test-kit-78e8fc1
             test_prefix: test/clt-tests/comparison-overhead-json-sql/test-comparison-
           - name: REPLACE INTO
             image: ghcr.io/manticoresoftware/manticoresearch:test-kit-latest

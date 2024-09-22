@@ -137,7 +137,7 @@ jobs:
             image: ghcr.io/manticoresoftware/manticoresearch:test-kit-latest
             test_prefix: test/clt-tests/integrations/test-integrations-
           - name: Test Kafka integration
-            image: dind:v1
+            image: manticoresearch/dind:v1
             test_prefix: test/clt-tests/integrations/kafka/test-integration-
     steps:
       - uses: manticoresoftware/clt@0.1.23

@@ -1194,13 +1194,17 @@ public:
 	// sleep and return false if index's shutdown happened.
 	bool WaitEnabledOrShutdown () const noexcept
 	{
-		return !m_tValue.Wait ( [&] ( const Value_t& tVal ) {
-			if ( tVal.m_bShutdown )
-				return true;
-			if ( tVal.m_eValue != States_e::ENABLED )
-				return false;
-			return tVal.m_iDisabledCounter == 0;
-		}).m_bShutdown;
+		while (true) {
+			auto tVal = m_tValue.WaitForMs ( [&] ( const Value_t& tVal ) {
+				if ( tVal.m_bShutdown )
+					return true;
+				if ( tVal.m_eValue!=States_e::ENABLED )
+					return false;
+				return tVal.m_iDisabledCounter==0;
+			}, 10000 ); // time doesn't matter, as shutdown abandons all timers
+			if ( tVal.m_bShutdown || sphInterrupted() || tVal.m_iDisabledCounter==0 )
+				return !tVal.m_bShutdown;
+		}
 	}
 
 	int GetNumOfLocks() const noexcept
@@ -1246,8 +1250,9 @@ public:
 	bool				Truncate ( CSphString & sError, Truncate_e eAction ) final;
 	bool				CheckValidateOptimizeParams ( OptimizeTask_t& tTask ) const;
 	bool				CheckValidateChunk ( int& iChunk, int iChunks, bool bByOrder ) const;
-	void				StartOptimize ( OptimizeTask_t tTask ) final;
+	bool				StartOptimize ( OptimizeTask_t tTask ) final;
 	int					OptimizesRunning() const noexcept final;
+	int					GetNumOfLocks() const noexcept final;
 	void				Optimize ( OptimizeTask_t tTask ) final;
 	void				CheckStartAutoOptimize ();
 	int					ClassicOptimize ();
@@ -1521,6 +1526,8 @@ private:
 	bool						AttachSaveDiskChunk ();
 	ConstDiskChunkRefPtr_t		PopDiskChunk();
 	int							GetChunkId () const override { return m_tChunkID.GetChunkId ( m_tRtChunks ); }
+	void						SetGlobalIDFPath ( const CSphString & sPath ) override;
+	void						DebugDumpDict ( FILE * fp, bool bDumpOnly ) final;
 };
 
 
@@ -4343,6 +4350,7 @@ std::unique_ptr<CSphIndex> RtIndex_c::PreallocDiskChunk ( const CSphString& sChu
 
 	pDiskChunk->m_iExpansionLimit = m_iExpansionLimit;
 	pDiskChunk->SetMutableSettings ( m_tMutableSettings );
+	pDiskChunk->SetGlobalIDFPath ( m_sGlobalIDFPath );
 	pDiskChunk->SetBinlog ( false );
 	pDiskChunk->m_iChunk = iChunk;
 
@@ -4769,6 +4777,8 @@ bool RtIndex_c::Prealloc ( bool bStripPath, FilenameBuilder_i * pFilenameBuilder
 	if ( !m_tMutableSettings.Load ( sMutableFile.cstr(), GetName() ) )
 		return false;
 	SetMemLimit ( m_tMutableSettings.m_iMemLimit );
+	if ( m_tMutableSettings.IsSet ( MutableName_e::GLOBAL_IDF ) )
+		m_sGlobalIDFPath = m_tMutableSettings.m_sGlobalIDFPath;
 
 	m_bPathStripped = bStripPath;
 
@@ -9872,19 +9882,29 @@ bool RtIndex_c::CheckValidateOptimizeParams ( OptimizeTask_t& tTask ) const
 }
 
 
-void RtIndex_c::StartOptimize ( OptimizeTask_t tTask )
+bool RtIndex_c::StartOptimize ( OptimizeTask_t tTask )
 {
+	if ( GetNumOfLocks ()>0 )
+		return false;
+
 	Threads::StartJob ( [tTask = std::move ( tTask ), this] () {
 		// want to track optimize only at work
 		auto pDesc = PublishSystemInfo ( "OPTIMIZE" );
 		Optimize ( std::move ( tTask ) );
 	} );
+	return true;
 }
 
 
 int RtIndex_c::OptimizesRunning() const noexcept
 {
 	return m_tOptimizeRuns.GetValue ();
+}
+
+
+int RtIndex_c::GetNumOfLocks () const noexcept
+{
+	return m_tSaving.GetNumOfLocks();
 }
 
 void RtIndex_c::Optimize ( OptimizeTask_t tTask )
@@ -10101,7 +10121,7 @@ void RtIndex_c::GetStatus ( CSphIndexStatus * pRes ) const
 
 	pRes->m_iTID = m_iTID;
 	pRes->m_iSavedTID = m_iSavedTID;
-	pRes->m_iLockCount = m_tSaving.GetNumOfLocks();
+	pRes->m_iLockCount = GetNumOfLocks();
 	pRes->m_iOptimizesCount = OptimizesRunning();
 //	sphWarning ( "Chunks: %d, RAM: %d, DISK: %d", pRes->m_iNumChunks, (int) pRes->m_iRamUse, (int) pRes->m_iDiskUse );
 }
@@ -10727,4 +10747,35 @@ bool RtIndex_c::AlterSI ( CSphString & sError )
 
 	RaiseAlterGeneration();
 	return true;
+}
+
+void RtIndex_c::SetGlobalIDFPath ( const CSphString & sPath )
+{
+	m_sGlobalIDFPath = sPath;
+
+	auto pChunks = m_tRtChunks.DiskChunks();
+	for ( auto & pChunk : *pChunks )
+		pChunk->CastIdx().SetGlobalIDFPath ( m_sGlobalIDFPath );
+}
+
+void RtIndex_c::DebugDumpDict ( FILE * fp, bool bDumpOnly )
+{
+	if ( !m_bKeywordDict )
+		sphDie ( "DebugDumpDict() only supports dict=keywords for now" );
+
+	if ( !bDumpOnly )
+		fprintf ( fp, "keyword,docs,hits,offset\n" );
+
+	auto tGuard = RtGuard();
+
+	for ( const auto & pSeg : tGuard.m_dRamSegs )
+	{
+		RtWordReader_c tRdWord ( pSeg, m_bKeywordDict, m_iWordsCheckpoint, m_tSettings.m_eHitless );
+		while ( tRdWord.UnzipWord() )
+			fprintf ( fp, "%s,%u,%u,0\n", tRdWord->m_sWord, tRdWord->m_uDocs, tRdWord->m_uHits );
+
+	}
+
+	for ( auto & tDiskChunk : tGuard.m_dDiskChunks )
+		tDiskChunk->CastIdx().DebugDumpDict ( fp, true );
 }

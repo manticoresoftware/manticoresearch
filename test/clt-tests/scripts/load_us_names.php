@@ -1,6 +1,6 @@
 #!/usr/bin/php
 <?php
-if (count($argv) < 5) die("Usage: ".__FILE__." <batch size> <concurrency> <docs> <multiplier>\n");
+if (count($argv) < 5) die("Usage: ".__FILE__." <batch size> <concurrency> <docs> <multiplier> [min_infix_len]\n");
 
 /*
 Requires:
@@ -64,6 +64,8 @@ for ($i=0;$i<$argv[2];$i++) {
 // init
 mysqli_query($all_links[0], "drop table if exists name");
 mysqli_query($all_links[0], "create table name(username text) min_infix_len='2' expand_keywords='1'");
+$pdo = $all_links[0];
+mysqli_query($pdo, "DROP TABLE IF EXISTS name");
 
 $batch = [];
 $query_start = "insert into name(id, username) values ";

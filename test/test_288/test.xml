@@ -1,0 +1,33 @@
+<?xml version="1.0" encoding="utf-8"?>
+<test>
+
+<name>facet and many sorting attrubutes</name>
+
+<requires>
+	<force-rt/>
+</requires>
+
+<skip_indexer/>
+
+<config>
+searchd
+{
+	<searchd_settings/>
+	data_dir = <data_path/>
+	binlog_path =
+}
+</config>
+
+<queries>
+<sphinxql>
+	drop table if exists ts;
+	create table ts(a int, b int, c int, d int, e int, f int);
+	insert into ts(id) values(1);
+	select id from ts group by a order by a desc, b desc, c desc, d desc, e desc, f desc facet a;
+	create table d type='distributed' agent='<agent0_address/>:ts';
+	select id from d group by a order by a desc, b desc, c desc, d desc, e desc, f desc facet a;
+	drop table ts;
+</sphinxql>
+</queries>
+
+</test>

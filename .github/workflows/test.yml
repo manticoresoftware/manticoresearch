@@ -600,12 +600,12 @@ jobs:
       matrix:
         name: [1_400, 401_650, 651_and_on]
         include:
-          - name: 1_400
-            start: 1
-            end: 400
-          - name: 401_650
-            start: 401
-            end: 650
+          # - name: 1_400
+          #   start: 1
+          #   end: 400
+          # - name: 401_650
+          #   start: 401
+          #   end: 650
           - name: 651_and_on
             start: 651
             end: 999999

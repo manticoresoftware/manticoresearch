@@ -1,4 +1,5 @@
 <?php
+print_r($_ENV);
 
 $sd_managed_searchd	= false;
 $sd_skip_indexer = false;
@@ -75,7 +76,7 @@ $locals['ctest'] = false;
 if ( array_key_exists ( "DBUSER", $_ENV ) && $_ENV["DBUSER"] )
 	$locals['db-user'] = $_ENV["DBUSER"];
 
-if ( array_key_exists ( "DBPASS", $_ENV ) && $_ENV["DBPASS"] ) 
+if ( array_key_exists ( "DBPASS", $_ENV ) && $_ENV["DBPASS"] )
 	$locals['db-password'] = $_ENV["DBPASS"];
 
 $run = false;
@@ -229,7 +230,7 @@ if ( !$g_guesscached ) {
 if ( $g_locals["malloc-scribble"] )
 {
 	print ( "Malloc scribbling enabled.\n" );
-	putenv ( "MallocLogFile=/dev/null" );	
+	putenv ( "MallocLogFile=/dev/null" );
 	putenv ( "MallocScribble=1" );
 	putenv ( "MallocPreScribble=1" );
 	putenv ( "MallocGuardEdges=1" );
@@ -343,7 +344,7 @@ foreach ( $tests as $test )
 	{
 		$total_tests++;
 		$res = RunTest ( $test, $g_skipdemo, $g_usemarks );
-		
+
 		// copy searchd log into a file
 		file_put_contents($name_err_all, "\n*** in test $test ***\n", FILE_APPEND);
 		if ( file_exists ($name_err) )

@@ -94,7 +94,7 @@ jobs:
         # Add -VV to ctest to display extra debug info
         run: |
           $env:JIEBA_DATA_DIR = "C:\jieba\"
-          ctest -V -S misc/ctest/gltest.cmake --no-compress-output --timeout 60
+          ctest -VV -S misc/ctest/gltest.cmake --no-compress-output --timeout 60
         continue-on-error: true
       - name: Remember status
         if: always()

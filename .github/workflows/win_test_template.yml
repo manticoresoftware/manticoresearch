@@ -75,7 +75,7 @@ jobs:
         with:
           php-version: '8.2'
           extensions: mysqli
-      - name: Run Download Jieba files
+      - name: Download Jieba files
         run: |
              # Create the 'jieba' directory
              mkdir C:\jieba
@@ -87,6 +87,7 @@ jobs:
                  $output = "C:\jieba\$name.utf8"
                  Invoke-WebRequest -Uri $url -OutFile $output
              }
+             Get-ChildItem -Recurse -Path "C:\jieba" | Select-Object Name, Length, LastWriteTime
       - name: 🚀 Test
         id: test
         # --timeout may be not working https://gitlab.kitware.com/cmake/cmake/-/issues/23979

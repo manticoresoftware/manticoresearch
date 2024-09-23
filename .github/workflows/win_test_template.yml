@@ -77,11 +77,8 @@ jobs:
           extensions: mysqli
       - name: Download Jieba files
         run: |
-             # Create the 'jieba' directory
              mkdir C:\jieba
-             # Define the file names in an array
              $files = @("hmm_model", "idf", "jieba.dict", "stop_words", "user.dict")
-             # Loop through each file and download using Invoke-WebRequest
              foreach ($name in $files) {
                  $url = "https://raw.githubusercontent.com/manticoresoftware/cppjieba/master/dict/$name.utf8"
                  $output = "C:\jieba\$name.utf8"
@@ -93,7 +90,12 @@ jobs:
         # --timeout may be not working https://gitlab.kitware.com/cmake/cmake/-/issues/23979
         # Add -VV to ctest to display extra debug info
         run: |
-          $env:JIEBA_DATA_DIR = "C:\jieba\"
+          $content = @"
+          (
+              'jieba_data_dir'=>'C:\jieba\'
+          )
+          "@
+          Set-Content -Path "build/src/.sphinx" -Value $content
           ctest -VV -S misc/ctest/gltest.cmake --no-compress-output --timeout 60
         continue-on-error: true
       - name: Remember status

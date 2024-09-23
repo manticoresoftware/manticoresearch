@@ -15,6 +15,7 @@ set ( WITH_COVERAGE "$ENV{WITH_COVERAGE}" )
 set ( NO_TESTS "$ENV{NO_TESTS}" )
 set ( NO_BUILD "$ENV{NO_BUILD}" )
 set_property ( GLOBAL PROPERTY Label P$ENV{CI_PIPELINE_ID} J$ENV{CI_JOB_ID} )
+set( ENV{JIEBA_DATA_DIR} "$ENV{JIEBA_DATA_DIR}" )
 
 # how may times try the test before it is considered failed
 set (RETRIES 5)

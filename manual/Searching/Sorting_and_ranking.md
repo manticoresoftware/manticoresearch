@@ -940,7 +940,6 @@ A **field aggregation function** is a single-argument function that accepts an e
 
 * `sum`, which adds the argument expression over all matched fields. For example `sum(1)` should return the number of matched fields.
 * `top`, which returns the highest value of the argument across all matched fields.
-* `max_window_hits`, manages a sliding window of hit positions to track the maximum number of hits within a specified window size. It removes outdated hits that fall outside the window and adds the latest hit, updating the maximum number of hits found within that window.
 
 ### Formula expressions for all the built-in rankers
 

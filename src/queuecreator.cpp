@@ -2550,16 +2550,13 @@ static void CreateMultiQueue ( RawVector_T<QueueCreator_c> & dCreators, const Sp
 	dCreators[0].m_bMulti = true;
 
 	// same as SetupQueue
-	bool bSuccess = dCreators[0].SetupComputeQueue ();
+	dCreators[0].SetupComputeQueue ();
 	// copy schema WO group by and internals
 	CSphRsetSchema tRefSchema = dCreators[0].SorterSchema();
 	bool bHasJson = dCreators[0].HasJson();
 	bool bJsonMixed = false;
 
-	if ( bSuccess )
-		bSuccess &= dCreators[0].SetupGroupQueue ();
-
-	dCreators[0].m_bCreate = bSuccess;
+	dCreators[0].SetupGroupQueue ();
 
 	// create rest of schemas
 	for ( int i=1; i<dSorters.GetLength(); ++i )

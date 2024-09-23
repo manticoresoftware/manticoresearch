@@ -8001,7 +8001,6 @@ private:
 	Expr_JsonFieldIn_c ( const Expr_JsonFieldIn_c& rhs )
 		: Expr_ArgVsConstSet_T<int64_t> ( rhs )
 		, m_dHashes ( rhs.m_dHashes )
-		, m_dStrings ( rhs.m_dStrings )
 	{}
 };
 

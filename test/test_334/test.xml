@@ -727,10 +727,5 @@ select * from dist_gr2 facet gid facet tag;;
 }
 </query>
 
-<!-- docvalue_fields with date_time format to emulate es timestamp microseconds scale  -->
-<query endpoint="search">{ "index": "test_gr1", "size":0, "aggs":{ "gr_small": { "terms": { "field": "gid", "size":5 } }} }</query>
-<query endpoint="test_gr1/_search">{ "size":0, "aggs":{ "gr_small": { "terms": { "field": "gid", "size":5 } }} }</query>
-<query endpoint="test_gr1/_search">{ "size":0, "aggs":{ "gr_small": { "terms": { "field": "gid", "size":5 } }}, "docvalue_fields": [ { "field": "gid", "format": "date_time" }] }</query>
-
 </queries>
 </test>

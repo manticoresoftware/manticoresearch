@@ -75,13 +75,18 @@ jobs:
         with:
           php-version: '8.2'
           extensions: mysqli
+      - name: Upload test artifact before running test
+        if: always()
+        continue-on-error: true
+        uses: manticoresoftware/upload_artifact_with_retries@v3
+        with:
+          name: win_test_artifact
+          path: .
       - name: 🚀 Test
         id: test
         # --timeout may be not working https://gitlab.kitware.com/cmake/cmake/-/issues/23979
         # Add -VV to ctest to display extra debug info
-        run: |
-          Get-ChildItem -Recurse | Select-Object Name, Length, LastWriteTime
-          ctest -VV -S misc/ctest/gltest.cmake --no-compress-output --timeout 60
+        run: ctest -VV -S misc/ctest/gltest.cmake --no-compress-output --timeout 60
         continue-on-error: true
       - name: Remember status
         if: always()

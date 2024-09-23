@@ -1,6 +1,6 @@
 #!/usr/bin/php
 <?php
-if (count($argv) < 5) die("Usage: ".__FILE__." <batch size> <concurrency> <docs> <multiplier>\n");
+if (count($argv) < 5) die("Usage: ".__FILE__." <batch size> <concurrency> <docs> <multiplier> [min_infix_len]\n");
 
 function connectDb() {
     $host = '127.0.0.1';
@@ -28,9 +28,10 @@ for ($i = 0; $i < $argv[2]; $i++) {
 }
 
 // init
+mysqli_query($all_links[0], "drop table if exists name");
+mysqli_query($all_links[0], "create table name(username text) min_infix_len='2' expand_keywords='1'");
 $pdo = $all_links[0];
 mysqli_query($pdo, "DROP TABLE IF EXISTS name");
-mysqli_query($pdo, "CREATE TABLE name(id INTEGER, username TEXT) min_infix_len='2' expand_keywords='1'");
 
 $batch = [];
 $query_start = "INSERT INTO name(id, username) VALUES ";

@@ -3763,6 +3763,7 @@ void SendResult ( int iVer, ISphOutputBuffer & tOut, const AggrResult_t& tRes, b
 	// multi-query status
 	bool bError = !tRes.m_sError.IsEmpty();
 	bool bWarning = !bError && !tRes.m_sWarning.IsEmpty();
+	bError |= tRes.m_dResults.IsEmpty() && tQuery.m_bFacet;
 
 	assert ( bError || tRes.m_bSingle );
 	assert ( bError || tRes.m_bOneSchema );
@@ -7739,7 +7740,7 @@ static const char * g_dSqlStmts[] =
 	"flush_hostnames", "flush_logs", "reload_indexes", "sysfilters", "debug", "alter_killlist_target",
 	"alter_index_settings", "join_cluster", "cluster_create", "cluster_delete", "cluster_index_add",
 	"cluster_index_delete", "cluster_update", "explain", "import_table", "freeze_indexes", "unfreeze_indexes",
-	"show_settings", "alter_rebuild_si", "kill"
+	"show_settings", "alter_rebuild_si", "kill", "show_locks"
 };
 
 
@@ -12361,6 +12362,9 @@ void ShowFields ( VectorLike& dOut, const CSphSchema& tSchema )
 		if ( sphIsInternalAttr ( tAttr ) )
 			continue;
 
+		if ( tAttr.m_eAttrType==SPH_ATTR_TOKENCOUNT )
+			continue;
+
 		if ( tSchema.GetField ( tAttr.m_sName.cstr() ) )
 			continue; // already described it as a field property
 
@@ -15637,7 +15641,14 @@ void HandleMysqlOptimize ( RowBuffer_i & tOut, const SqlStmt_t & tStmt )
 	tTask.m_eVerb = OptimizeTask_t::eManualOptimize;
 	tTask.m_iCutoff = tStmt.m_tQuery.m_iCutoff<=0 ? 0 : tStmt.m_tQuery.m_iCutoff;
 
-	RIdx_T<RtIndex_i *> ( pIndex )->StartOptimize ( std::move ( tTask ) );
+	auto bOptimizeStarted = RIdx_T<RtIndex_i *> ( pIndex )->StartOptimize ( std::move ( tTask ) );
+
+	if ( tStmt.m_tQuery.m_bSync && !bOptimizeStarted )
+	{
+		tOut.Error ( "Can't optimize frozen table" );
+		return;
+	}
+
 	if ( tStmt.m_tQuery.m_bSync && !PollOptimizeRunning ( sIndex ) )
 		tOut.Error ( "RT table went away during waiting" );
 	else
@@ -17200,7 +17211,7 @@ void HandleMysqlFreezeIndexes ( RowBuffer_i& tOut, const SqlStmt_t& tStmt, CSphS
 	tOut.Eof ( false, iWarnings );
 }
 
-void HandleMysqlUnfreezeIndexes ( RowBuffer_i& tOut, const CSphString& sIndexes, CSphString& sWarningOut )
+void HandleMysqlUnfreezeIndexes ( RowBuffer_i& tOut, const CSphString& sIndexes )
 {
 	// search through specified local indexes
 	StrVec_t dIndexes;
@@ -17239,6 +17250,49 @@ void HandleMysqlKill ( RowBuffer_i& tOut, int iKill )
 	{
 		tOut.Ok ( iKilled );
 	}
+}
+
+
+void HandleMysqlShowLocks ( RowBuffer_i & tOut )
+{
+	tOut.HeadBegin ();
+	tOut.HeadColumn ( "Type" );
+	tOut.HeadColumn ( "Name" );
+	tOut.HeadColumn ( "Lock Type" );
+	tOut.HeadColumn ( "Additional Info" );
+	if ( !tOut.HeadEnd () )
+		return;
+
+
+	// collect local, rt, percolate
+	auto dIndexes = GetAllServedIndexes ();
+	for ( auto & dPair: dIndexes )
+	{
+		switch ( dPair.second )
+		{
+		case IndexType_e::RT:
+		case IndexType_e::PERCOLATE:
+		{
+			auto pIndex = GetServed ( dPair.first );
+			assert ( ServedDesc_t::IsMutable ( pIndex ) );
+			RIdx_T<RtIndex_i *> pRt { pIndex };
+			int iLocks = pRt->GetNumOfLocks ();
+			if ( iLocks>0 )
+			{
+				tOut.PutString ( GetIndexTypeName ( dPair.second ) );
+				tOut.PutString ( dPair.first );
+				tOut.PutString ( "freeze" );
+				tOut.PutNumAsString ( iLocks );
+				if ( !tOut.Commit () )
+					return;
+			}
+		}
+		default:
+			break;
+		}
+	}
+
+	tOut.Eof ( false );
 }
 
 
@@ -17782,7 +17836,7 @@ bool ClientSession_c::Execute ( Str_t sQuery, RowBuffer_i & tOut )
 		return true;
 
 	case STMT_UNFREEZE:
-		HandleMysqlUnfreezeIndexes ( tOut, pStmt->m_sIndex, m_tLastMeta.m_sWarning );
+		HandleMysqlUnfreezeIndexes ( tOut, pStmt->m_sIndex );
 		return true;
 
 	case STMT_SHOW_SETTINGS:
@@ -17794,6 +17848,10 @@ bool ClientSession_c::Execute ( Str_t sQuery, RowBuffer_i & tOut )
 
 	case STMT_KILL:
 		HandleMysqlKill ( tOut, pStmt->m_iIntParam );
+		return true;
+
+	case STMT_SHOW_LOCKS:
+		HandleMysqlShowLocks ( tOut );
 		return true;
 
 	default:
@@ -18740,7 +18798,7 @@ bool SwitchoverIndexSeamless ( const cServedIndexRefPtr_c& pServed, const char* 
 void ConfigureLocalIndex ( ServedDesc_t * pIdx, const CSphConfigSection & hIndex, bool bMutableOpt, StrVec_t * pWarnings )
 {
 	pIdx->m_tSettings.Load ( hIndex, bMutableOpt, pWarnings );
-	pIdx->m_sGlobalIDFPath = hIndex.GetStr ( "global_idf" );
+	pIdx->m_sGlobalIDFPath = pIdx->m_tSettings.m_sGlobalIDFPath;
 }
 
 bool ConfigureDistributedIndex ( std::function<bool(const CSphString&)>&& fnCheck, DistributedIndex_t & tIdx, const char * szIndexName, const CSphConfigSection & hIndex, CSphString & sError, StrVec_t * pWarnings )
@@ -20685,8 +20743,17 @@ ESphAddIndex ConfigureAndPreloadIndex ( const CSphConfigSection & hIndex, const 
 				if ( !PreallocNewIndex ( *pJustLoadedLocal, &hIndex, szIndexName, dWarnings, sError ) )
 					return ADD_ERROR;
 			}
-		} else if ( !PreallocNewIndex ( *pJustLoadedLocal, &hIndex, szIndexName, dWarnings, sError ) )
-			return ADD_ERROR;
+		} else
+		{
+			if ( !PreallocNewIndex ( *pJustLoadedLocal, &hIndex, szIndexName, dWarnings, sError ) )
+				return ADD_ERROR;
+
+			// index could load global_idf from the settings
+			// need to pass and load global idf below
+			CSphIndex * pIdx = UnlockedHazardIdxFromServed ( *pJustLoadedLocal );
+			if ( pIdx->GetMutableSettings().IsSet ( MutableName_e::GLOBAL_IDF ) )
+				pJustLoadedLocal->m_sGlobalIDFPath = pIdx->GetMutableSettings().m_sGlobalIDFPath;
+		}
 	}
 	// no break
 	case ADD_SERVED:

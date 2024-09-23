@@ -149,10 +149,8 @@ public:
 	virtual bool Truncate ( CSphString & sError, Truncate_e eAction ) = 0;
 
 	virtual void Optimize ( OptimizeTask_t tTask ) {}
-	virtual bool StartOptimize ( OptimizeTask_t tTask ) { return true; }
+	virtual void StartOptimize ( OptimizeTask_t tTask ) {}
 	virtual int OptimizesRunning () const noexcept { return 0; }
-
-	virtual int GetNumOfLocks () const noexcept { return 0; }
 
 	/// check settings vs current and return back tokenizer and dictionary in case of difference
 	virtual bool IsSameSettings ( CSphReconfigureSettings & tSettings, CSphReconfigureSetup & tSetup, StrVec_t & dWarnings, CSphString & sError ) const = 0;

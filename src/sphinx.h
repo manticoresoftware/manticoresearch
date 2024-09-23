@@ -1266,7 +1266,7 @@ public:
 	virtual void				DebugDumpHitlist ( FILE * fp, const char * sKeyword, bool bID ) = 0;
 
 	/// internal debugging hook, DO NOT USE
-	virtual void				DebugDumpDict ( FILE * fp, bool bDumpOnly ) = 0;
+	virtual void				DebugDumpDict ( FILE * fp ) = 0;
 
 	/// internal debugging hook, DO NOT USE
 	virtual int					DebugCheck ( DebugCheckError_i & , FilenameBuilder_i * ) = 0;
@@ -1335,9 +1335,8 @@ private:
 	CSphString					m_sIndexName;			///< index ID in binlogging; otherwise used only in messages. Use GetName()!
 
 public:
-	virtual void				SetGlobalIDFPath ( const CSphString & sPath ) { m_sGlobalIDFPath = sPath; }
+	void						SetGlobalIDFPath ( const CSphString & sPath ) { m_sGlobalIDFPath = sPath; }
 	float						GetGlobalIDF ( const CSphString & sWord, int64_t iDocsLocal, bool bPlainIDF ) const;
-	bool						HasGlobalIDF () const;
 
 protected:
 	CSphString					m_sGlobalIDFPath;
@@ -1377,7 +1376,7 @@ public:
 	void				DebugDumpDocids ( FILE * ) override {}
 	void				DebugDumpHitlist ( FILE * , const char * , bool ) override {}
 	int					DebugCheck ( DebugCheckError_i & , FilenameBuilder_i * ) override { return 0; }
-	void				DebugDumpDict ( FILE *, bool bDumpOnly ) override {}
+	void				DebugDumpDict ( FILE * ) override {}
 	Bson_t				ExplainQuery ( const CSphString & sQuery ) const override { return EmptyBson (); }
 
 	bool				MultiQuery ( CSphQueryResult & , const CSphQuery & , const VecTraits_T<ISphMatchSorter *> &, const CSphMultiQueryArgs & ) const override { return false; }

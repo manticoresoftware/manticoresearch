@@ -11,13 +11,11 @@
   * 18.04 (Bionic)
   * 20.04 (Focal)
   * 21.04 (Hirsute Hippo)
-  * 22.04 (Jammy)
-  * 24.04 (Noble)
+  * 22.04 (Ubuntu Jammy)
 
 * Mint
   * 19
   * 20
-  * 21
 
 ### APT repository
 The easiest way to install Manticore in Ubuntu/Debian/Mint is by using our APT repository.

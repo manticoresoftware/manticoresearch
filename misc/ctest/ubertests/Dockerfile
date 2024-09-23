@@ -8,7 +8,6 @@ RUN wget https://repo.manticoresearch.com/manticore-dev-repo.noarch.deb && \
     dpkg -i manticore-dev-repo.noarch.deb && \
     apt-get update && apt-get install -y \
     manticore-tzdata \
-    manticore-language-packs \
     libmysqlclient-dev \
     libexpat-dev \
     libpq-dev \
@@ -116,7 +115,7 @@ CMD []
 
 # docker buildx create --name manticore_build --platform linux/amd64,linux/arm64
 # docker buildx use manticore_build
-# docker buildx build --platform linux/amd64,linux/arm64 --push -t manticoresearch/ubertests_ctest:3263_20240919 .
+# docker buildx build --platform linux/amd64,linux/arm64 --push -t manticoresearch/ubertests_ctest:3263_mar_2024 .
 
 # deprecated:
 # docker build -t registry.gitlab.com/manticoresearch/dev/ubertests_ctest:3263 .

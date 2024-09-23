@@ -1155,7 +1155,7 @@ public:
 	void				DebugDumpHeader ( FILE * fp, const CSphString& sHeaderName, bool bConfig ) final;
 	void				DebugDumpDocids ( FILE * fp ) final;
 	void				DebugDumpHitlist ( FILE * fp, const char * sKeyword, bool bID ) final;
-	void				DebugDumpDict ( FILE * fp, bool bDumpOnly ) final;
+	void				DebugDumpDict ( FILE * fp ) final;
 	void				SetDebugCheck ( bool bCheckIdDups, int iCheckChunk ) final;
 	int					DebugCheck ( DebugCheckError_i & , FilenameBuilder_i * pFilenameBuilder ) final;
 	template <class Qword> void		DumpHitlist ( FILE * fp, const char * sKeyword, bool bID );
@@ -1992,11 +1992,6 @@ float CSphIndex::GetGlobalIDF ( const CSphString & sWord, int64_t iDocsLocal, bo
 	if ( !pIDFer )
 		return 0.0;
 	return pIDFer->GetIDF ( sWord, iDocsLocal, bPlainIDF );
-}
-
-bool CSphIndex::HasGlobalIDF() const
-{
-	return ( !m_sGlobalIDFPath.IsEmpty() && sph::GetIDFer ( m_sGlobalIDFPath ) );
 }
 
 
@@ -9076,16 +9071,14 @@ void CSphIndex_VLN::DumpHitlist ( FILE * fp, const char * sKeyword, bool bID )
 }
 
 
-void CSphIndex_VLN::DebugDumpDict ( FILE * fp, bool bDumpOnly )
+void CSphIndex_VLN::DebugDumpDict ( FILE * fp )
 {
 	if ( !m_pDict->GetSettings().m_bWordDict )
 	{
 		sphDie ( "DebugDumpDict() only supports dict=keywords for now" );
 	}
 
-	if ( !bDumpOnly )
-		fprintf ( fp, "keyword,docs,hits,offset\n" );
-
+	fprintf ( fp, "keyword,docs,hits,offset\n" );
 	m_tWordlist.DebugPopulateCheckpoints();
 	ARRAY_FOREACH ( i, m_tWordlist.m_dCheckpoints )
 	{

@@ -19,7 +19,6 @@
 #include "coroutine.h"
 #include "sphinxpq.h"
 #include "binlog.h"
-#include "global_idf.h"
 
 using namespace Threads;
 
@@ -1378,9 +1377,6 @@ bool CreateNewIndexConfigless ( const CSphString & sIndex, const CreateTableSett
 	case ADD_NEEDLOAD:
 		{
 			assert ( pDesc );
-			if ( !pDesc->m_sGlobalIDFPath.IsEmpty() && !sph::PrereadGlobalIDF ( pDesc->m_sGlobalIDFPath, sError ) )
-				dWarnings.Add ( "global IDF unavailable - IGNORING" );
-
 			FixupIndexTID ( UnlockedHazardIdxFromServed ( *pDesc ), Binlog::LastTidFor ( sIndex ) );
 			if ( !PreallocNewIndex ( *pDesc, &hCfg, sIndex.cstr(), dWarnings, sError ) )
 			{

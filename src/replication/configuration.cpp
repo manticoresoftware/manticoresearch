@@ -14,6 +14,8 @@
 #include "searchdaemon.h"
 #include "searchdha.h"
 
+static bool g_bReplicationEnabled = false;
+
 static constexpr int g_iDefaultPortBias = 10;
 static constexpr int g_iDefaultPortRange = 200;
 
@@ -26,8 +28,9 @@ static CSphString g_sIncomingApiPoint;
 // listen IP part of address for Galera
 static CSphString g_sListenReplicationIP;
 
+
 // setup IP, ports and node incoming address
-bool SetReplicationListener ( const VecTraits_T<ListenerDesc_t> & dListeners, CSphString & sError )
+void SetReplicationListener ( const VecTraits_T<ListenerDesc_t> & dListeners )
 {
 	bool bGotReplicationPorts = false;
 	for ( const ListenerDesc_t& tListen : dListeners )
@@ -72,8 +75,9 @@ bool SetReplicationListener ( const VecTraits_T<ListenerDesc_t> & dListeners, CS
 	int iAPIPort = dListeners.GetFirst ( [&] ( const ListenerDesc_t & tListen ) { return tListen.m_eProto==Proto_e::SPHINX; } );
 	if ( iAPIPort==-1 )
 	{
-		sError = "no 'listen' is found, cannot set incoming addresses, replication is disabled";
-		return false;
+		if ( !GetClustersInt().IsEmpty() )
+			sphWarning ( "no 'listen' is found, cannot set incoming addresses, replication is disabled" );
+		return;
 	}
 
 	if ( !bGotReplicationPorts )
@@ -99,10 +103,12 @@ bool SetReplicationListener ( const VecTraits_T<ListenerDesc_t> & dListeners, CS
 
 	sphLogDebugRpl ( "listens: Galera '%s', own '%s:%d'", g_sListenReplicationIP.cstr(), g_sIncomingIP.cstr(), dListeners[iAPIPort].m_iPort );
 	g_sIncomingApiPoint.SetSprintf ( "%s:%d", g_sIncomingIP.cstr(), dListeners[iAPIPort].m_iPort );
-	if ( !IsConfigless() )
-		sError = "data_dir option is missing in config, replication is disabled";
+	g_bReplicationEnabled = IsConfigless();
+}
 
-	return IsConfigless();
+bool ReplicationEnabled()
+{
+	return g_bReplicationEnabled;
 }
 
 void ReplicationSetIncoming ( CSphString sIncoming )

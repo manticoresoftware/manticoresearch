@@ -678,9 +678,8 @@ void JoinSorter_c::SetupAggregates()
 
 bool JoinSorter_c::SetupJoinQuery ( int iDynamicSize, CSphString & sError )
 {
-	m_pJoinQueryParser = std::unique_ptr<QueryParser_i>( m_tQuery.m_pQueryParser->Clone() );
+	m_pJoinQueryParser = sphCreatePlainQueryParser();
 	m_tJoinQuery.m_pQueryParser = m_pJoinQueryParser.get();
-	m_tJoinQuery.m_eQueryType = m_tQuery.m_eQueryType;
 	m_tJoinQuery.m_iLimit = DEFAULT_MAX_MATCHES;
 	m_tJoinQuery.m_iCutoff = 0;
 	m_tJoinQuery.m_sQuery = m_tJoinQuery.m_sRawQuery = m_tQuery.m_sJoinQuery;

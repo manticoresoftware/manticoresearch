@@ -84,6 +84,19 @@ desc t1;
 drop table t1;
 drop table t;
 
+create table t ( j json secondary_index='1' );
+desc t;
+insert into t values (1,'{ "price": 10.0, "factor": 1, "addresses": { "a1": { "id": "id_of_address_a1", "name": "name_of_address_a1" }, "a2": { "id":   "id_of_address_a1", "name": "name_of_address_a2" } }, "tags": { "1": "data_of_tag_1" }, "arr":["val0","val1"], "int_arr":[1,2,3], "str":"str1" }');
+flush ramchunk t;
+insert into t values (2,'{ "price": 20.0, "factor": 2, "addresses": { "a3": { "id": "id_of_address_a3", "name": "name_of_address_a3" }, "a4": { "id":   "id_of_address_a4", "name": "name_of_address_a4" } }, "tags": { "2": "data_of_tag_2" }, "arr":["val1","val2"], "int_arr":[4,5,6], "str":"str2" }');
+insert into t values (3,'{ "price": 30.0, "factor": 3, "addresses": { "a5": { "id": "id_of_address_a5", "name": "name_of_address_a5" }, "a6": { "id":   "id_of_address_a6", "name": "name_of_address_a6" } }, "tags": { "3": "data_of_tag_3" }, "arr":["val2","val3"], "int_arr":[7,8,9], "str":"str3" }');
+select * from t;
+
+select id, in(j.str,'str1','str3') as check from t where check!=1 order by id asc option threads=1;
+select id, in(j.str,'str1','str3') as check from t where check!=1 order by id asc option threads=2;
+
+drop table t;
+
 </sphinxql></queries>
 
 </test>

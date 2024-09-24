@@ -1803,17 +1803,46 @@ static void RemoveJoinFilters ( const CreateFilterContext_t & tCtx, CSphVector<C
 }
 
 
-static void TransformForJsonSI ( const CreateFilterContext_t & tCtx, CSphVector<CSphFilterSettings> & dFilters, const CSphVector<CSphQueryItem> & dItems )
+static void TransformForJsonSI ( const CreateFilterContext_t & tCtx, CSphVector<CSphFilterSettings> & dFilters, std::unique_ptr<ISphSchema> & pModifiedMatchSchema, const CSphVector<CSphQueryItem> & dItems )
 {
 	if ( !tCtx.m_pSI )
 		return;
 
-	const ISphSchema & tMatchSchema = *tCtx.m_pMatchSchema;
+	// check if we need to modify the schema
+	bool bNeedToCloneSchema = false;
+	for ( auto i : dFilters )
+	{
+		const CSphColumnInfo * pAttr = tCtx.m_pMatchSchema->GetAttr ( i.m_sAttrName.cstr() );
+		if ( pAttr && pAttr->m_pExpr && pAttr->m_pExpr->SetupAsFilter ( i, *tCtx.m_pMatchSchema, *tCtx.m_pSI ) )
+		{
+			// we transformed an attribute from an expression filter into a plain filter
+			// we may no longer need to calculate that expression at PREFILTER stage
+			StrVec_t dAttrNames;
+			dAttrNames.Add ( pAttr->m_sName );
+			FetchAttrDependencies ( dAttrNames, *tCtx.m_pMatchSchema );
+			for ( const auto & sAttr : dAttrNames )
+			{
+				const CSphColumnInfo * pDependentAttr = tCtx.m_pMatchSchema->GetAttr ( sAttr.cstr() );
+				assert(pDependentAttr);
+				if ( pDependentAttr->m_eStage!=SPH_EVAL_STATIC && pDependentAttr->m_eStage < SPH_EVAL_FINAL )
+				{
+					bNeedToCloneSchema = true;
+					break;
+				}
+			}
+		}
+	}
 
+	if ( bNeedToCloneSchema )
+		pModifiedMatchSchema = std::unique_ptr<ISphSchema> ( tCtx.m_pMatchSchema->CloneMe() );
+
+	const ISphSchema & tMatchSchema = pModifiedMatchSchema ? *pModifiedMatchSchema : *tCtx.m_pMatchSchema;
+
+	// now modify the schema
 	for ( auto & i : dFilters )
 	{
 		const CSphColumnInfo * pAttr = tMatchSchema.GetAttr ( i.m_sAttrName.cstr() );
-		if ( pAttr && pAttr->m_pExpr && pAttr->m_pExpr->SetupAsFilter ( i, tMatchSchema, *tCtx.m_pSI ) )
+		if ( bNeedToCloneSchema && pAttr && pAttr->m_pExpr && pAttr->m_pExpr->SetupAsFilter ( i, tMatchSchema, *tCtx.m_pSI ) )
 		{
 			// we transformed an attribute from an expression filter into a plain filter
 			// we may no longer need to calculate that expression at PREFILTER stage
@@ -1850,7 +1879,7 @@ static void TransformForJsonSI ( const CreateFilterContext_t & tCtx, CSphVector<
 }
 
 
-bool TransformFilters ( const CreateFilterContext_t & tCtx, CSphVector<CSphFilterSettings> & dModified, CSphVector<FilterTreeItem_t> & dModifiedTree, const CSphVector<CSphQueryItem> & dItems, CSphString & sError )
+bool TransformFilters ( const CreateFilterContext_t & tCtx, CSphVector<CSphFilterSettings> & dModified, CSphVector<FilterTreeItem_t> & dModifiedTree, std::unique_ptr<ISphSchema> & pModifiedMatchSchema, const CSphVector<CSphQueryItem> & dItems, CSphString & sError )
 {
 	assert(tCtx.m_pFilters);
 	const VecTraits_T<CSphFilterSettings> & dFilters = *tCtx.m_pFilters;
@@ -1872,7 +1901,7 @@ bool TransformFilters ( const CreateFilterContext_t & tCtx, CSphVector<CSphFilte
 	}
 
 	RemoveJoinFilters ( tCtx, dModified, dModifiedTree );
-	TransformForJsonSI ( tCtx, dModified, dItems );
+	TransformForJsonSI ( tCtx, dModified, pModifiedMatchSchema, dItems );
 
 	// FIXME: no further transformations if we have a filter tree
 	if ( tCtx.m_pFilterTree && tCtx.m_pFilterTree->GetLength() )

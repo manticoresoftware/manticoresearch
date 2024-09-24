@@ -7872,13 +7872,15 @@ bool RtIndex_c::MultiQuery ( CSphQueryResult & tResult, const CSphQuery & tQuery
 	tSess.m_pSessionOpaque1 = (void*)(const DocstoreReader_i*)this;
 	tSess.m_pSessionOpaque2 = nullptr;
 
+	bool bParsedFullscan = bFullscan ||  pQueryParser->IsFullscan(tParsed);
+
 	CSphVector<CSphFilterSettings> dTransformedFilters; // holds filter settings if they were modified. filters hold pointers to those settings
 	CSphVector<FilterTreeItem_t> dTransformedFilterTree;
-	if ( !SetupFilters ( tQuery, tMaxSorterSchema, m_tSchema, true, tCtx, dTransformedFilters, dTransformedFilterTree, dSorterSchemas, tMeta ) )
+	if ( !SetupFilters ( tQuery, tMaxSorterSchema, m_tSchema, bParsedFullscan, tCtx, dTransformedFilters, dTransformedFilterTree, dSorterSchemas, tMeta ) )
 		return false;
 
 	bool bResult;
-	if ( bFullscan || pQueryParser->IsFullscan ( tParsed ) )
+	if ( bParsedFullscan )
 		bResult = DoFullScanQuery ( tGuard.m_dRamSegs, tMaxSorterSchema, m_tSchema, tQuery, tArgs, m_iStride, tmMaxTimer, pProfiler, tCtx, dSorters, tMeta );
 	else
 	{

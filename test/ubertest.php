@@ -1,5 +1,4 @@
 <?php
-print_r($_ENV);
 
 $sd_managed_searchd	= false;
 $sd_skip_indexer = false;

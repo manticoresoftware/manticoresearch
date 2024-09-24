@@ -77,6 +77,7 @@ jobs:
           extensions: mysqli
       - name: Download Jieba files
         run: |
+             Get-ChildItem -Recurse -Path "D:\a\manticoresearch\manticoresearch\misc" | Select-Object Name, Length, LastWriteTime
              mkdir D:\a\manticoresearch\manticoresearch\misc\jieba
              $files = @("hmm_model", "idf", "jieba.dict", "stop_words", "user.dict")
              foreach ($name in $files) {
@@ -90,6 +91,7 @@ jobs:
         # --timeout may be not working https://gitlab.kitware.com/cmake/cmake/-/issues/23979
         # Add -VV to ctest to display extra debug info
         run: |
+          Get-ChildItem -Recurse -Path "D:\a\manticoresearch\manticoresearch" | Select-Object Name, Length, LastWriteTime
           Get-ChildItem -Recurse -Path "D:\a\manticoresearch\manticoresearch\build" | Select-Object Name, Length, LastWriteTime
           ctest -VV -S misc/ctest/gltest.cmake --no-compress-output --timeout 60
         continue-on-error: true

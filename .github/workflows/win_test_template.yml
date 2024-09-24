@@ -28,7 +28,7 @@ jobs:
       CTEST_START: ${{ inputs.CTEST_START }}
       CTEST_END: ${{ inputs.CTEST_END }}
       # The following is useful to test a specific test, just uncomment it, no need to disable CTEST_START/END
-      CTEST_REGEX: test_311
+      # CTEST_REGEX: test_311
       NO_BUILD: 1
     steps:
       - name: Checkout repository # We have to checkout to access .github/workflows/ in further steps
@@ -90,10 +90,7 @@ jobs:
         id: test
         # --timeout may be not working https://gitlab.kitware.com/cmake/cmake/-/issues/23979
         # Add -VV to ctest to display extra debug info
-        run: |
-          Get-ChildItem -Recurse -Path "D:\a\manticoresearch\manticoresearch" | Select-Object Name, Length, LastWriteTime
-          Get-ChildItem -Recurse -Path "D:\a\manticoresearch\manticoresearch\build" | Select-Object Name, Length, LastWriteTime
-          ctest -VV -S misc/ctest/gltest.cmake --no-compress-output --timeout 60
+        run: ctest -VV -S misc/ctest/gltest.cmake --no-compress-output --timeout 60
         continue-on-error: true
       - name: Remember status
         if: always()

@@ -480,6 +480,7 @@ function RunIndexerOnce ( &$error, $params )
 	// Print directory structure and permissions
 	printDirectoryContents('D:/a/manticoresearch/manticoresearch/build/test/data/');
 
+	echo "Running indexer\n";
 	$retval = 0;
 	exec ( "$path --quiet --config ".testdir('config.conf')." $params", $error, $retval );
 
@@ -4446,9 +4447,11 @@ function HandleFailure ( $config, $report, $error, &$nfailed )
 
 function EraseDirContents($path, $dir = false)
 {
+	  echo "EraseDirContents($path, $dir)\n";
     $fp = opendir($path);
 
     if ($fp) {
+			  echo "fp ok\n";
         while (($file = readdir($fp)) !== false) {
             if ($file != "." && $file != ".." && $file != "stub.txt") {
                 $filePath = "$path/$file";

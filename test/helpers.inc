@@ -488,6 +488,7 @@ function RunIndexerOnce ( &$error, $params )
 	$error = join ( "\n", array_filter ( $error, function( $errLine ) {
 		return strpos ( $errLine, "FATAL:" )===0 ||  strpos ( $errLine, "ERROR:" )===0;
 	} ) );
+	echo "indexer error: $error\n";
 	return ( $retval==0 && !empty($error) ) ? 2 : $retval;
 }
 

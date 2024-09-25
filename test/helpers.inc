@@ -442,6 +442,28 @@ function from_utf8 ( $to, $text )
     return iconv ('utf-8', $to, $text);
 }
 
+function printDirectoryContents($path, $indent = '')
+{
+    if (!is_dir($path)) {
+        return;
+    }
+
+    $permissions = substr(sprintf('%o', fileperms($path)), -4);
+    echo $indent . "[DIR] $path (Permissions: $permissions)\n";
+
+    $items = scandir($path);
+    foreach ($items as $item) {
+        if ($item != "." && $item != "..") {
+            $itemPath = "$path/$item";
+            if (is_dir($itemPath)) {
+                printDirectoryContents($itemPath, $indent . '  ');
+            } else {
+                $filePermissions = substr(sprintf('%o', fileperms($itemPath)), -4);
+                echo $indent . "  [FILE] $itemPath (Permissions: $filePermissions)\n";
+            }
+        }
+    }
+}
 
 function RunIndexerOnce ( &$error, $params )
 {
@@ -454,6 +476,9 @@ function RunIndexerOnce ( &$error, $params )
 		$error = "$path: indexer not found";
 		return 1;
 	}
+
+	// Print directory structure and permissions
+	printDirectoryContents('D:/a/manticoresearch/manticoresearch/build/test/data/');
 
 	$retval = 0;
 	exec ( "$path --quiet --config ".testdir('config.conf')." $params", $error, $retval );
@@ -1307,19 +1332,19 @@ function HttpQueryCurl ( $http_method, $http_endpoint, $http_content, $http_quer
 
 	if ( $http_content!==NULL )
 		$curl_desc[CURLOPT_HTTPHEADER] = array("Content-Type: ".$http_content);
-        
-    if ( $use_gzip && $http_method=="POST" ) 
+
+    if ( $use_gzip && $http_method=="POST" )
     {
         $cfile = file_get_contents( $testdir . "/" . $http_query );
         $curl_desc[CURLOPT_ENCODING] = 'gzip';
         $curl_desc[CURLOPT_POSTFIELDS] = $cfile;
-        
+
         $http_headers = array("Content-Encoding:gzip");
         if ( $http_content!==NULL )
             $http_headers[] = "Content-Type: ".$http_content;
-        
+
         $curl_desc[CURLOPT_HTTPHEADER] = $http_headers;
-        
+
         //$curl_desc[CURLOPT_VERBOSE] = 1;
         //var_dump ( $curl_desc );
     }
@@ -2242,7 +2267,7 @@ class SphinxConfig
                     "$1",
                     "$1 substituted"
                 ], $s );
-		
+
 		return $s;
 	}
 
@@ -4419,25 +4444,34 @@ function HandleFailure ( $config, $report, $error, &$nfailed )
 }
 
 
-function EraseDirContents ( $path, $dir=false )
+function EraseDirContents($path, $dir = false)
 {
-	$fp = opendir ( $path );
+    $fp = opendir($path);
 
-	if ( $fp )
-	{
-		while ( ( $file = readdir ( $fp ) ) !== false )
-		{
-		if ( $file!="." && $file!=".." && $file!="stub.txt" )
-			if (!is_dir("$path/$file")) {
-				unlink ( "$path/$file" );
-			} else if ( $dir ) {
-				EraseDirContents ( "$path/$file", $dir );
-				rmdir ( "$path/$file" );
-			}
-		}
+    if ($fp) {
+        while (($file = readdir($fp)) !== false) {
+            if ($file != "." && $file != ".." && $file != "stub.txt") {
+                $filePath = "$path/$file";
+                $permissions = substr(sprintf('%o', fileperms($filePath)), -4);
 
-		closedir ( $fp );
-	}
+                if (!is_dir($filePath)) {
+                    if (unlink($filePath)) {
+                        echo "Deleted file: $filePath (Permissions: $permissions)\n";
+                    } else {
+                        echo "Failed to delete file: $filePath (Permissions: $permissions)\n";
+                    }
+                } else if ($dir) {
+                    EraseDirContents($filePath, $dir);
+                    if (rmdir($filePath)) {
+                        echo "Deleted directory: $filePath (Permissions: $permissions)\n";
+                    } else {
+                        echo "Failed to delete directory: $filePath (Permissions: $permissions)\n";
+                    }
+                }
+            }
+        }
+        closedir($fp);
+    }
 }
 
 function CopyDirContents ( $from, $to )
@@ -4924,4 +4958,3 @@ function RunTest ( $test_dir, $skipdemo, $usemarks )
 
 	return array ( "tests_total"=>$total, "tests_failed"=>$nfailed, "tests_skipped"=>0 );
 }
-

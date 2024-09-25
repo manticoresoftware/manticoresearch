@@ -76,7 +76,7 @@ sleep 1; searchd --stop
 | /var/lib/manticore/t/t.ram      | /var/lib/manticore/t/t.ram      |
 | /var/lib/manticore/t/t.settings | /var/lib/manticore/t/t.settings |
 +---------------------------------+---------------------------------+
-Manticore 6.3.7 3376190b9@24092413 dev (columnar 2.3.1 f9ef8b9@24090411) (secondary 2.3.1 f9ef8b9@24090411) (knn 2.3.1 f9ef8b9@24090411)
+Manticore %{SEMVER} %{COMMITDATE}#!/(\sdev)?\s/!#(columnar %{SEMVER} %{COMMITDATE}) (secondary %{SEMVER} %{COMMITDATE}) (knn %{SEMVER} %{COMMITDATE})
 Copyright (c) 2001-2016, Andrew Aksyonoff
 Copyright (c) 2008-2016, Sphinx Technologies Inc (http://sphinxsearch.com)
 Copyright (c) 2017-2024, Manticore Software LTD (https://manticoresearch.com)

@@ -5860,11 +5860,12 @@ void SearchHandler_c::CalcThreadsPerIndex ( int iConcurrency )
 		iEnabledIndexes++;
 		auto & tPSInfo = m_dPSInfo[iLocal];
 		auto & tSplitData = dSplitData[iLocal];
-		if ( GetPseudoSharding() || RIdx_c(pIndex)->IsRT() )
+		RIdx_c pIdx { pIndex };
+		if ( GetPseudoSharding () || pIdx->IsRT() )
 		{
 			// do metric calcs
 			tPSInfo.m_iMaxThreads = iMaxThreadsPerIndex;
-			auto tMetric = RIdx_c ( pIndex )->GetPseudoShardingMetric ( m_dNQueries, dCountDistinct[iLocal], tPSInfo.m_iMaxThreads, tPSInfo.m_bForceSingleThread );
+			auto tMetric = pIdx->GetPseudoShardingMetric ( m_dNQueries, dCountDistinct[iLocal], tPSInfo.m_iMaxThreads, tPSInfo.m_bForceSingleThread );
 			assert ( tMetric.first>=0 );
 
 			tSplitData.m_iMetric = tMetric.first;
@@ -11345,11 +11346,11 @@ static void CommitAcc ( const SqlStmt_t & tStmt, cServedIndexRefPtr_c & pServed,
 	if ( bCommit )
 	{
 		RtAccum_t * pAccum = pSession->m_tAcc.GetAcc();
-		assert ( pSession->m_tAcc.GetAcc ( RIdx_T<RtIndex_i *>(pServed), sError )==pAccum );
+		RIdx_T<RtIndex_i *> pIndex { pServed };
+		assert ( pSession->m_tAcc.GetAcc ( pIndex, sError )==pAccum );
 
 		if ( !HandleCmdReplicate ( *pAccum ) )
 		{
-			RIdx_T<RtIndex_i *> pIndex { pServed };
 			TlsMsg::MoveError ( sError );
 			pIndex->RollBack ( pAccum ); // clean up collected data
 			tOut.Error ( "%s", sError.cstr() );
@@ -16449,24 +16450,33 @@ static void AddAttrToIndex ( const SqlStmt_t & tStmt, CSphIndex * pIdx, CSphStri
 
 	auto pHasAttr = pIdx->GetMatchSchema ().GetAttr ( sAttrToAdd.cstr () );
 	bool bHasField = pIdx->GetMatchSchema ().GetFieldIndex ( sAttrToAdd.cstr () )!=-1;
+	const bool bInt2Bigint = pHasAttr
+			&& pHasAttr->m_eAttrType==SPH_ATTR_INTEGER
+			&& pHasAttr->m_eEngine==AttrEngine_e::DEFAULT
+			&& tStmt.m_eAlterColType==SPH_ATTR_BIGINT
+			&& tStmt.m_eEngine==AttrEngine_e::DEFAULT;
 
 	if ( !bIndexed && pHasAttr )
 	{
-		if ( !bModify
-			 || pHasAttr->m_eAttrType != SPH_ATTR_INTEGER
-			 || pHasAttr->m_eEngine != AttrEngine_e::DEFAULT
-			 || tStmt.m_eAlterColType != SPH_ATTR_BIGINT
-			 || tStmt.m_eEngine != AttrEngine_e::DEFAULT)
+		if ( !bModify || !bInt2Bigint )
 		{
 			sError.SetSprintf ( "'%s' attribute already in schema", sAttrToAdd.cstr () );
 			return;
 		}
 	}
 
-	if ( !pHasAttr && bModify )
+	if ( bModify )
 	{
-		sError.SetSprintf ( "attribute '%s' does not exist", sAttrToAdd.cstr() );
-		return;
+		if ( !pHasAttr )
+		{
+			sError.SetSprintf ( "attribute '%s' does not exist", sAttrToAdd.cstr() );
+			return;
+		}
+		if ( !bInt2Bigint )
+		{
+			sError.SetSprintf ( "attribute '%s': only alter from rowise int to bigint supported", sAttrToAdd.cstr () );
+			return;
+		}
 	}
 
 	if ( bIndexed && bHasField )
@@ -17282,7 +17292,7 @@ void HandleMysqlShowLocks ( RowBuffer_i & tOut )
 				tOut.PutString ( GetIndexTypeName ( dPair.second ) );
 				tOut.PutString ( dPair.first );
 				tOut.PutString ( "freeze" );
-				tOut.PutNumAsString ( iLocks );
+				tOut.PutStringf ( "Count: %d", iLocks );
 				if ( !tOut.Commit () )
 					return;
 			}

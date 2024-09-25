@@ -23,7 +23,7 @@ To use autocomplete in Manticore, use the `CALL AUTOCOMPLETE` SQL statement or i
 
 Before you proceed, ensure that the table you intend to use for autocomplete has [infixes](../Creating_a_table/NLP_and_tokenization/Wildcard_searching_settings.md#min_infix_len) enabled.
 
-**Note:** There's autochecking for `min_infix_len` in table settings, which uses a 30-second cache to improve performance. After changing your table, there might be a short delay when you first use `CALL AUTOCOMPLETE` (this is usually not noticeable). Only positive results are cached, so if you remove or drop `min_infix_len`, issues may occur.
+**Note:** There's an automatic check for `min_infix_len` in the table settings, which uses a 30-second cache to improve the performance of `CALL AUTOCOMPLETE`. After making changes to your table, there may be a brief delay the first time you use `CALL AUTOCOMPLETE` (though this is usually not noticeable). Only successful results are cached, so if you remove the table or disable `min_infix_len`, `CALL AUTOCOMPLETE` may temporarily return incorrect results until it eventually starts showing an error related to `min_infix_len`.
 
 ### General syntax
 

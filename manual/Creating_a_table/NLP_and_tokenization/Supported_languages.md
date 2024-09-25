@@ -23,7 +23,7 @@ The table below lists all supported languages and indicates how to enable:
 | Buhid | specify charset_table manually | - | - | |
 | Bulgarian | charset_table=non_cont | bg | - | |
 | Catalan | charset_table=non_cont | ca | morphology=libstemmer_ca | |
-| Chinese | charset_table=chinese or ngram_chars=chinese | zh | morphology=icu_chinese or ngram_chars=1 correspondingly | ICU dictionary based segmentation is much more accurate than ngram-based |
+| Chinese | charset_table=chinese or ngram_chars=chinese | zh | morphology=icu_chinese or morphology=jieba_chinese and ngram_chars=1 correspondingly | ICU or Jieba dictionary-based segmentation is much more accurate than ngram-based methods |
 | Croatian | charset_table=non_cont | hr | - | |
 | Kurdish | charset_table=non_cont | ckb | - | |
 | Czech | charset_table=non_cont | cz | morphology=stem_cz (Czech stemmer) | |

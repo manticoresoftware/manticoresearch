@@ -17,6 +17,7 @@
 #include "fileutils.h"
 #include "sphinxstem.h"
 #include "icu.h"
+#include "jieba.h"
 #include "attribute.h"
 #include "knnmisc.h"
 #include "indexfiles.h"
@@ -1081,10 +1082,24 @@ bool CSphIndexSettings::Setup ( const CSphConfigSection & hIndex, const char * s
 			}
 	}
 
-	m_ePreprocessor = dMorphs.Contains ( "icu_chinese" ) ? Preprocessor_e::ICU : Preprocessor_e::NONE;
+	bool bICU = dMorphs.Contains ( "icu_chinese" );
+	bool bJieba = dMorphs.Contains ( "jieba_chinese" );
+
+	if ( bICU && bJieba )
+	{
+		sError = "ICU and Jieba cannot both be enabled at the same time";
+		return false;
+	}
+	else
+		m_ePreprocessor = bICU ? Preprocessor_e::ICU : ( bJieba ? Preprocessor_e::JIEBA : Preprocessor_e::NONE );
 
 	if ( !sphCheckConfigICU ( *this, sError ) )
 		return false;
+
+	if ( !CheckConfigJieba ( *this, sError ) )
+		return false;
+
+	m_bJiebaHMM = hIndex.GetBool ( "jieba_hmm", true );
 
 	// all good
 	return true;

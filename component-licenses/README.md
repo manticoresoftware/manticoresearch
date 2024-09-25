@@ -702,9 +702,10 @@ License: [GPLv2](https://raw.githubusercontent.com/codership/galera/3.x/LICENSE)
 
 https://xxhash.com/, https://github.com/Cyan4973/xxHash
 
-Source files: Manticore Search project does not modify of redistribute any source
-files from this component. However, its source files are utilized during the
-compilation process and become a part of Manticore Search binaries.
+Source files: Manticore Search project uses a modified fork of this component
+but does not redistribute any of its source files. However, these source files
+are utilized during the compilation process and become part of the Manticore
+Search binaries.
 
 Copyright:
 ```
@@ -741,3 +742,14 @@ Copyright:
 ```
 
 License: [BSD 2-Clause License](https://www.opensource.org/licenses/bsd-license.php)
+
+## cppjieba
+
+https://github.com/yanyiwu/cppjieba
+
+Source files: Manticore Search project uses a modified fork of this component
+but does not redistribute any of its source files. However, these source files
+are utilized during the compilation process and become part of the Manticore
+Search binaries.
+
+License: [MIT License](https://opensource.org/license/mit)

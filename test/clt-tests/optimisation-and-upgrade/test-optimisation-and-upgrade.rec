@@ -1,0 +1,28 @@
+––– block: ../base/start-searchd –––
+––– input –––
+php -d memory_limit=-1 ./test/clt-tests/optimisation-and-upgrade/load_names_attr.php 10000 10 2000000 1 > /dev/null
+––– output –––
+––– input –––
+mysql -h0 -P9306 -e "show table name status like '%chunk%';"
+––– output –––
+––– input –––
+mysql -h0 -P9306 -e "select * from name limit 5;"
+––– output –––
+––– input –––
+mysql -h0 -P9306 -e "OPTIMIZE TABLE name OPTION sync=1, cutoff=1;" &
+––– output –––
+––– input –––
+mysql -h0 -P9306 -e "UPDATE name SET s='b' WHERE id=1;"
+––– output –––
+––– input –––
+mysql -h0 -P9306 -e "UPDATE name SET a=123 WHERE id=1;"
+––– output –––
+––– input –––
+mysql -h0 -P9306 -e "UPDATE name SET unknown='b' WHERE id=1;"
+––– output –––
+––– input –––
+mysql -h0 -P9306 -e "UPDATE name SET s='b' WHERE id > 0;"
+––– output –––
+––– input –––
+mysql -h0 -P9306 -e "SELECT * FROM name WHERE s='b' LIMIT 5;"
+––– output –––

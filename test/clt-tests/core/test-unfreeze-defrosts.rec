@@ -62,3 +62,27 @@ sleep 5; mysql -h0 -P9306 -e "select count(*) from orders\G"
 ––– output –––
 *************************** 1. row ***************************
 count(*): 10000
+––– input –––
+mysql -h0 -P9306 -e "drop table if exists t; create table t; freeze t; flush ramchunk t;" &
+––– output –––
+[1] %{NUMBER}
+––– input –––
+sleep 1; searchd --stop
+––– output –––
++---------------------------------+---------------------------------+
+| file                            | normalized                      |
++---------------------------------+---------------------------------+
+| /var/lib/manticore/t/t.meta     | /var/lib/manticore/t/t.meta     |
+| /var/lib/manticore/t/t.ram      | /var/lib/manticore/t/t.ram      |
+| /var/lib/manticore/t/t.settings | /var/lib/manticore/t/t.settings |
++---------------------------------+---------------------------------+
+Manticore 6.3.7 3376190b9@24092413 dev (columnar 2.3.1 f9ef8b9@24090411) (secondary 2.3.1 f9ef8b9@24090411) (knn 2.3.1 f9ef8b9@24090411)
+Copyright (c) 2001-2016, Andrew Aksyonoff
+Copyright (c) 2008-2016, Sphinx Technologies Inc (http://sphinxsearch.com)
+Copyright (c) 2017-2024, Manticore Software LTD (https://manticoresearch.com)
+[#!/[0-9]{2}:[0-9]{2}.[0-9]{3}/!#] [#!/[0-9]+/!#] using config file '/etc/manticoresearch/manticore.conf' (%{NUMBER} chars)...
+[#!/[0-9]{2}:[0-9]{2}.[0-9]{3}/!#] [#!/[0-9]+/!#] stop: successfully sent SIGTERM to pid %{NUMBER}
+––– input –––
+if timeout 10 grep -qm1 'shutting down' <(tail -n 1000 -f /var/log/manticore/searchd.log); then echo 'Searchd stopped!'; else echo 'Timeout or failed!'; cat /var/log/manticore/searchd.log;fi
+––– output –––
+Searchd stopped!

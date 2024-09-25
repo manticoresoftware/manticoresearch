@@ -227,6 +227,8 @@ You can change the name of a real-time table in RT mode.
 ALTER TABLE table_name RENAME new_table_name;
 ```
 
+> NOTE: Renaming a real-time table requires [Manticore Buddy](../Installation/Manticore_Buddy.md). If it doesn't work, make sure Buddy is installed.
+
 <!-- request Example -->
 ```sql
 ALTER TABLE table_name RENAME new_table_name;

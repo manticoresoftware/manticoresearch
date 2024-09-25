@@ -18,6 +18,8 @@ Manticore's autocomplete can be tailored to match different needs and settings, 
 
 ## CALL AUTOCOMPLETE
 
+> NOTE: `CALL AUTOCOMPLETE` and `/autocomplete` require [Manticore Buddy](../Installation/Manticore_Buddy.md). If it doesn't work, make sure Buddy is installed.
+
 <!-- example call_autocomplete -->
 To use autocomplete in Manticore, use the `CALL AUTOCOMPLETE` SQL statement or its JSON equivalent `/autocomplete`. This feature provides word completion suggestions based on your indexed data.
 

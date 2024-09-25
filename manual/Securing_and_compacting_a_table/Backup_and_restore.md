@@ -148,7 +148,9 @@ Manticore versions:
 
 You can also back up your data through SQL by running the simple command `BACKUP TO /path/to/backup`.
 
-Note, this command is not supported in Windows yet.
+> NOTE: `BACKUP` is not supported in Windows. Consider using [mysqldump](../Securing_and_compacting_a_table/Backup_and_restore.md#Backup-and-restore-with-mysqldump) instead.
+
+> NOTE: `BACKUP` requires [Manticore Buddy](../Installation/Manticore_Buddy.md). If it doesn't work, make sure Buddy is installed.
 
 ### General syntax of BACKUP
 

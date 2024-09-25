@@ -7,6 +7,7 @@
     * [• MacOS](Installation/MacOS.md)
     * [• Windows](Installation/Windows.md)
     * [• Compiling from sources](Installation/Compiling_from_sources.md)
+    * [• Manticore Buddy](Installation/Manticore_Buddy.md)
     * [• Migration from Sphinx](Installation/Migration_from_Sphinx.md)
 * [🔰 Quick start guide](Quick_start_guide.md)
 * [2️⃣ Starting the server](Starting_the_server.md)

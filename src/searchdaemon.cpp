@@ -1621,3 +1621,18 @@ volatile bool& sphGetSeamlessRotate() noexcept
 #endif
 	return bSeamlessRotate;
 }
+
+bool PollOptimizeRunning ( const CSphString & sIndex )
+{
+	while ( true )
+	{
+		Threads::Coro::SleepMsec ( 500 );
+		auto pTmpIndex = GetServed ( sIndex );
+		if ( !ServedDesc_t::IsMutable ( pTmpIndex ) )
+			return false;
+
+		RIdx_T<RtIndex_i *> pRtIndex { pTmpIndex };
+		if ( !pRtIndex->OptimizesRunning () )
+			return true;
+	}
+}

@@ -442,28 +442,6 @@ function from_utf8 ( $to, $text )
     return iconv ('utf-8', $to, $text);
 }
 
-function printDirectoryContents($path, $indent = '')
-{
-    if (!is_dir($path)) {
-        return;
-    }
-
-    $permissions = substr(sprintf('%o', fileperms($path)), -4);
-    echo $indent . "[DIR] $path (Permissions: $permissions)\n";
-
-    $items = scandir($path);
-    foreach ($items as $item) {
-        if ($item != "." && $item != "..") {
-            $itemPath = "$path/$item";
-            if (is_dir($itemPath)) {
-                printDirectoryContents($itemPath, $indent . '  ');
-            } else {
-                $filePermissions = substr(sprintf('%o', fileperms($itemPath)), -4);
-                echo $indent . "  [FILE] $itemPath (Permissions: $filePermissions)\n";
-            }
-        }
-    }
-}
 
 function RunIndexerOnce ( &$error, $params )
 {
@@ -477,10 +455,6 @@ function RunIndexerOnce ( &$error, $params )
 		return 1;
 	}
 
-	// Print directory structure and permissions
-	printDirectoryContents('D:/a/manticoresearch/manticoresearch/build/test/data/');
-
-	echo "Running indexer\n";
 	$retval = 0;
 	exec ( "$path --quiet --config ".testdir('config.conf')." $params", $error, $retval );
 
@@ -488,7 +462,6 @@ function RunIndexerOnce ( &$error, $params )
 	$error = join ( "\n", array_filter ( $error, function( $errLine ) {
 		return strpos ( $errLine, "FATAL:" )===0 ||  strpos ( $errLine, "ERROR:" )===0;
 	} ) );
-	echo "indexer error: $error\n";
 	return ( $retval==0 && !empty($error) ) ? 2 : $retval;
 }
 
@@ -4446,36 +4419,25 @@ function HandleFailure ( $config, $report, $error, &$nfailed )
 }
 
 
-function EraseDirContents($path, $dir = false)
+function EraseDirContents ( $path, $dir=false )
 {
-	  echo "EraseDirContents($path, $dir)\n";
-    $fp = opendir($path);
+	$fp = opendir ( $path );
 
-    if ($fp) {
-			  echo "fp ok\n";
-        while (($file = readdir($fp)) !== false) {
-            if ($file != "." && $file != ".." && $file != "stub.txt") {
-                $filePath = "$path/$file";
-                $permissions = substr(sprintf('%o', fileperms($filePath)), -4);
+	if ( $fp )
+	{
+		while ( ( $file = readdir ( $fp ) ) !== false )
+		{
+		if ( $file!="." && $file!=".." && $file!="stub.txt" )
+			if (!is_dir("$path/$file")) {
+				unlink ( "$path/$file" );
+			} else if ( $dir ) {
+				EraseDirContents ( "$path/$file", $dir );
+				rmdir ( "$path/$file" );
+			}
+		}
 
-                if (!is_dir($filePath)) {
-                    if (unlink($filePath)) {
-                        echo "Deleted file: $filePath (Permissions: $permissions)\n";
-                    } else {
-                        echo "Failed to delete file: $filePath (Permissions: $permissions)\n";
-                    }
-                } else if ($dir) {
-                    EraseDirContents($filePath, $dir);
-                    if (rmdir($filePath)) {
-                        echo "Deleted directory: $filePath (Permissions: $permissions)\n";
-                    } else {
-                        echo "Failed to delete directory: $filePath (Permissions: $permissions)\n";
-                    }
-                }
-            }
-        }
-        closedir($fp);
-    }
+		closedir ( $fp );
+	}
 }
 
 function CopyDirContents ( $from, $to )

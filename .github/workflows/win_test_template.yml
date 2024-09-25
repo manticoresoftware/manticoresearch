@@ -28,7 +28,7 @@ jobs:
       CTEST_START: ${{ inputs.CTEST_START }}
       CTEST_END: ${{ inputs.CTEST_END }}
       # The following is useful to test a specific test, just uncomment it, no need to disable CTEST_START/END
-      CTEST_REGEX: test_311
+      # CTEST_REGEX: test_234
       NO_BUILD: 1
     steps:
       - name: Checkout repository # We have to checkout to access .github/workflows/ in further steps
@@ -75,22 +75,11 @@ jobs:
         with:
           php-version: '8.2'
           extensions: mysqli
-      - name: Download Jieba files
-        run: |
-             Get-ChildItem -Recurse -Path "D:\a\manticoresearch\manticoresearch\misc" | Select-Object Name, Length, LastWriteTime
-             mkdir D:\a\manticoresearch\manticoresearch\misc\jieba
-             $files = @("hmm_model", "idf", "jieba.dict", "stop_words", "user.dict")
-             foreach ($name in $files) {
-                 $url = "https://raw.githubusercontent.com/manticoresoftware/cppjieba/master/dict/$name.utf8"
-                 $output = "D:\a\manticoresearch\manticoresearch\misc\jieba\$name.utf8"
-                 Invoke-WebRequest -Uri $url -OutFile $output
-             }
-             Get-ChildItem -Recurse -Path "D:\a\manticoresearch\manticoresearch\misc\jieba" | Select-Object Name, Length, LastWriteTime
       - name: 🚀 Test
         id: test
         # --timeout may be not working https://gitlab.kitware.com/cmake/cmake/-/issues/23979
         # Add -VV to ctest to display extra debug info
-        run: ctest -VV -S misc/ctest/gltest.cmake --no-compress-output --timeout 600
+        run: ctest -V -S misc/ctest/gltest.cmake --no-compress-output --timeout 600
         continue-on-error: true
       - name: Remember status
         if: always()

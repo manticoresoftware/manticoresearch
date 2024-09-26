@@ -60,6 +60,9 @@
 %token <sValue>	TOK_TRACE
 %token <sValue> TOK_CURL
 %token <sValue> TOK_PAUSE
+%token <sValue>	TOK_LOAD
+%token <sValue> TOK_EMBEDDINGS
+%token <sValue> TOK_MODEL
 
 %type <iValue> boolpar timeint
 %type <sValue> ident szparam ident_special szparam_special
@@ -96,6 +99,10 @@ debugcommand:
 	| trace			{ pParser->SetCommand ( Cmd_e::TRACE ); }
 	| curl			{ pParser->SetCommand ( Cmd_e::CURL ); }
 	| pause			{ pParser->SetCommand ( Cmd_e::PAUSE ); }
+	| load_emb		{ pParser->SetCommand ( Cmd_e::LOAD_EMB ); }
+	| load_model	{ pParser->SetCommand ( Cmd_e::LOAD_MODEL ); }
+	| embeddings	{ pParser->SetCommand ( Cmd_e::GET_EMBEDDINGS ); }
+
 	;
 
 //////////////////////////////////////////////////////////////////////////
@@ -104,6 +111,7 @@ ident_special:
 	TOK_IDENT | TOK_DEBUG | TOK_SHUTDOWN | TOK_CRASH | TOK_TOKEN | TOK_MALSTATS | TOK_MALTRIM
 	| TOK_PROCDUMP | TOK_CLOSE | TOK_SETGDB | TOK_SLEEP | TOK_SCHED | TOK_MERGE | TOK_FILES
 	| TOK_STATUS | TOK_COMPRESS | TOK_DEDUP | TOK_SPLIT | TOK_WAIT | TOK_LIKE | TOK_CURL
+	| TOK_LOAD | TOK_EMBEDDINGS | TOK_MODEL
 	;
 
 ident:
@@ -325,6 +333,27 @@ pause:
 	{
 		pParser->SetSParam ($2);
 		pParser->SetPar1 ($3);
+	}
+	;
+
+load_emb:
+	TOK_LOAD TOK_EMBEDDINGS TOK_QUOTED_STRING
+	{
+		pParser->SetSParam ($3);
+	}
+	;
+
+load_model:
+	TOK_LOAD TOK_MODEL TOK_QUOTED_STRING
+	{
+		pParser->SetSParam ($3);
+	}
+	;
+
+embeddings:
+	TOK_EMBEDDINGS TOK_QUOTED_STRING
+	{
+		pParser->SetSParam ($2);
 	}
 	;
 

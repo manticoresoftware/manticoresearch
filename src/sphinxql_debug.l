@@ -91,6 +91,9 @@ FLOAT_CONSTANT      ({I}\.{I}?|{I}?\.{I}){EXPONENT}?
 "CURL"				{ STORE_BOUNDS; return TOK_CURL; }
 "PAUSE"				{ STORE_BOUNDS; return TOK_PAUSE; }
 
+"LOAD"				{ STORE_BOUNDS; return TOK_LOAD; }
+"EMBEDDINGS"		{ STORE_BOUNDS; return TOK_EMBEDDINGS; }
+"MODEL"				{ STORE_BOUNDS; return TOK_MODEL; }
 
 '	                { STORE_START; BEGIN (QSTR); }
 <QSTR>[^'\n\\]+

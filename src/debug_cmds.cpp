@@ -42,8 +42,7 @@ struct CmdNotice_t
 	const char * m_szExplanation;
 };
 
-//static constexpr std::array<CmdNotice_t, (BYTE)Cmd_e::INVALID_CMD> dCommands {
-static constexpr CmdNotice_t dCommands[(BYTE) Cmd_e::INVALID_CMD] {
+static constexpr std::array<CmdNotice_t, (BYTE)Cmd_e::INVALID_CMD> dCommands {{
 	{ NEED_VIP, "debug shutdown <password>", "emulate TERM signal" },
 	{ NEED_VIP, "debug crash <password>", "crash daemon (make SIGSEGV action)" },
 	{ NONE, "debug token <password>", "calculate token for password" },
@@ -74,7 +73,10 @@ static constexpr CmdNotice_t dCommands[(BYTE) Cmd_e::INVALID_CMD] {
 	{ NONE, "debug trace OFF|'path/to/file' [<N>]", "trace flow to file until N bytes written, or 'trace OFF'" },
 	{ NONE, "debug curl <URL>", "request given url via libcurl" },
 	{ NONE, "debug pause <ID> on|off", "switch named breakpoint [dev only]" },
-};
+	{ NONE, "debug load embeddings <path>", "load external embedding library" },
+	{ NONE, "debug load model <path>", "load embedding model" },
+	{ NONE, "debug embeddings <text>", "generates and prints embeddings for given text" },
+}};
 
 }
 /////////////////////////////////////////////////////////////////////////////
@@ -532,6 +534,33 @@ void HandleSched ( RowBuffer_i & tOut )
 	tOut.Eof ();
 }
 
+
+void HandleLoadEmbeddings ( RowBuffer_i & tOut, const CSphString & sParam )
+{
+	auto sSha = strSHA1 ( sParam );
+	tOut.HeadTuplet ( "command", "result" );
+	tOut.DataTuplet ( "debug token", sSha.cstr () );
+	tOut.Eof ();
+}
+
+
+void HandleLoadModel ( RowBuffer_i & tOut, const CSphString & sParam )
+{
+	auto sSha = strSHA1 ( sParam );
+	tOut.HeadTuplet ( "command", "result" );
+	tOut.DataTuplet ( "debug token", sSha.cstr () );
+	tOut.Eof ();
+}
+
+
+void HandleGetEmbeddings ( RowBuffer_i & tOut, const CSphString & sParam )
+{
+	auto sSha = strSHA1 ( sParam );
+	tOut.HeadTuplet ( "command", "result" );
+	tOut.DataTuplet ( "debug token", sSha.cstr () );
+	tOut.Eof ();
+}
+
 void HandleMysqlDebug ( RowBuffer_i &tOut, const DebugCmd::DebugCommand_t* pCommand, const QueryProfile_c & tProfile )
 {
 	using namespace DebugCmd;
@@ -584,6 +613,9 @@ void HandleMysqlDebug ( RowBuffer_i &tOut, const DebugCmd::DebugCommand_t* pComm
 	case Cmd_e::TRACE: HandleTrace ( tOut, tCmd );	return;
 	case Cmd_e::CURL: HandleCurl ( tOut, tCmd.m_sParam ); return;
 	case Cmd_e::PAUSE: HandlePause ( tOut, tCmd ); return;
+	case Cmd_e::LOAD_EMB: HandleLoadEmbeddings ( tOut, tCmd.m_sParam );	return;
+	case Cmd_e::LOAD_MODEL: HandleLoadModel ( tOut, tCmd.m_sParam ); return;
+	case Cmd_e::GET_EMBEDDINGS: HandleGetEmbeddings ( tOut, tCmd.m_sParam ); return;
 	default: break;
 	}
 

@@ -1,9 +1,9 @@
 # Chinese, Japanese and Korean (CJK) and Thai languages
 
-Manticore provides built-in support for indexing languages with [continuous scripts](https://en.wikipedia.org/wiki/Scriptio_continua) (i.e., languages that does not use spaces or other marks between the words or sentences), allowing you to process texts in these languages in two different ways:
+Manticore provides built-in support for indexing languages with [continuous scripts](https://en.wikipedia.org/wiki/Scriptio_continua) (i.e., languages that do not use spaces or other marks between words or sentences). This allows you to process texts in these languages in two different ways:
 
 <!-- example cont 1 -->
-1. Precise segmentation using the ICU library. Currently, only Chinese is supported.
+1. Precise segmentation using the [ICU](https://icu.unicode.org/) library. Currently, only Chinese is supported.
 
 
 <!-- intro -->
@@ -78,7 +78,7 @@ utilsApi.Sql("CREATE TABLE products(title text, price float) charset_table = 'co
 table products {
   charset_table = cont
   morphology = icu_chinese
-  
+
   type = rt
   path = tbl
   rt_field = title
@@ -88,8 +88,7 @@ table products {
 <!-- end -->
 
 <!-- example cont 2 -->
-2. Precise segmentation using the Jieba library. Similar to ICU, it currently supports only Chinese.
-
+2. Precise segmentation using the [Jieba](https://github.com/fxsjy/jieba) library. Like ICU, it currently supports only Chinese.
 
 <!-- intro -->
 ##### SQL:
@@ -163,7 +162,7 @@ utilsApi.Sql("CREATE TABLE products(title text, price float) charset_table = 'co
 table products {
   charset_table = cont
   morphology = jieba_chinese
-  
+
   type = rt
   path = tbl
   rt_field = title
@@ -265,7 +264,7 @@ table products {
 ```
 <!-- end -->
 
-<!-- example cont 3 -->
+<!-- example cont 3_2 -->
 Additionally, there is built-in support for Chinese [stopwords](../../Creating_a_table/NLP_and_tokenization/Ignoring_stop-words.md#stopwords)  with the alias `zh`.
 
 
@@ -342,7 +341,7 @@ table products {
   charset_table = chinese
   morphology = icu_chinese
   stopwords = zh
-  
+
   type = rt
   path = tbl
   rt_field = title

@@ -133,6 +133,9 @@
 #cmakedefine01 DL_ICU
 #cmakedefine ICU_LIB "${ICU_LIB}"
 
+/* Whether to use Jieba */
+#cmakedefine01 WITH_JIEBA
+
 /* Whether to use OpenSSL */
 #cmakedefine01 WITH_SSL
 

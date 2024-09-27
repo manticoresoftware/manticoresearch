@@ -202,6 +202,28 @@ POST /products/_update/55
 }
 ```
 
+<!-- intro -->
+##### Elasticsearch-like partial replace in cluster:
+
+<!-- request Elasticsearch-like partial in cluster -->
+
+```json
+POST /cluster_name:products/_update/55
+{
+  "doc": {
+    "description": "HUAWEI Matebook 15",
+    "price": 10
+  }
+}
+```
+
+<!-- response Elasticsearch-like partial in cluster -->
+```json
+{
+"_index":"products",
+"updated":1
+}
+```
 
 <!-- intro -->
 ##### PHP:
@@ -429,12 +451,12 @@ POST /bulk
 
 ```php
 $index->replaceDocuments([
-    [   
+    [
         'id' => 1,
         'title' => 'document one',
         'tag' => 10
     ],
-    [   
+    [
         'id' => 2,
         'title' => 'document one',
         'tag' => 20
@@ -509,7 +531,7 @@ res =  await indexApi.bulk(docs.map(e=>JSON.stringify(e)).join('\n'));
 
 ``` java
 body = "{\"replace\": {\"index\" : \"products\", \"id\" : 1, \"doc\" : {\"title\" : \"document one\"}}}" +"\n"+
-    "{\"replace\": {\"index\" : \"products\", \"id\" : 2, \"doc\" : {\"title\" : \"document two\"}}}"+"\n" ;         
+    "{\"replace\": {\"index\" : \"products\", \"id\" : 2, \"doc\" : {\"title\" : \"document two\"}}}"+"\n" ;
 indexApi.bulk(body);
 ```
 
@@ -526,7 +548,7 @@ class BulkResponse {
 
 ``` clike
 string body = "{\"replace\": {\"index\" : \"products\", \"id\" : 1, \"doc\" : {\"title\" : \"document one\"}}}" +"\n"+
-    "{\"replace\": {\"index\" : \"products\", \"id\" : 2, \"doc\" : {\"title\" : \"document two\"}}}"+"\n" ;         
+    "{\"replace\": {\"index\" : \"products\", \"id\" : 2, \"doc\" : {\"title\" : \"document two\"}}}"+"\n" ;
 indexApi.Bulk(body);
 ```
 

@@ -378,7 +378,6 @@ table products {
 }
 ```
 <!-- end -->
-<!-- proofread -->
 
 ## jieba_hmm
 

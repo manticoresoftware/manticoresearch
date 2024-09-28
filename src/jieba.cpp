@@ -22,10 +22,10 @@
 class JiebaPreprocessor_c : public CJKPreprocessor_c
 {
 public:
-						JiebaPreprocessor_c ( bool bHMM ) : m_bHMM ( bHMM ) {}
+						JiebaPreprocessor_c ( JiebaMode_e eMode, bool bHMM );
 
 	bool				Init ( CSphString & sError ) override;
-	CJKPreprocessor_c * Clone() override { return new JiebaPreprocessor_c(m_bHMM); }
+	CJKPreprocessor_c * Clone() override { return new JiebaPreprocessor_c ( m_eMode, m_bHMM ); }
 
 protected:
 	void				ProcessBuffer ( const BYTE * pBuffer, int iLength ) override;
@@ -36,8 +36,16 @@ private:
 	std::vector<cppjieba::Word>	m_dWords;
 	cppjieba::CutContext		m_tCtx;
 	int							m_iToken = 0;
+
+	JiebaMode_e					m_eMode;
 	bool						m_bHMM = true;
 };
+
+
+JiebaPreprocessor_c::JiebaPreprocessor_c ( JiebaMode_e eMode, bool bHMM )
+	: m_eMode ( eMode )
+	, m_bHMM ( bHMM )
+{}
 
 
 bool JiebaPreprocessor_c::Init ( CSphString & sError )
@@ -85,9 +93,25 @@ bool JiebaPreprocessor_c::Init ( CSphString & sError )
 void JiebaPreprocessor_c::ProcessBuffer ( const BYTE * pBuffer, int iLength )
 {
 	m_dWords.resize(0);
-	m_tCtx.Reset();
 
-	m_pJieba->Cut ( { (const char*)pBuffer, (size_t)iLength }, m_dWords, m_tCtx, m_bHMM );
+	switch ( m_eMode )
+	{
+	case JiebaMode_e::ACCURATE:
+		m_pJieba->Cut ( { (const char*)pBuffer, (size_t)iLength }, m_dWords, m_tCtx, m_bHMM );
+		break;
+
+	case JiebaMode_e::FULL:
+		m_pJieba->CutAll ( { (const char*)pBuffer, (size_t)iLength }, m_dWords, m_tCtx );
+		break;
+
+	case JiebaMode_e::SEARCH:
+		m_pJieba->CutForSearch ( { (const char*)pBuffer, (size_t)iLength }, m_dWords, m_tCtx, m_bHMM );
+		break;
+
+	default:
+		break;
+	}
+
 	m_iToken = 0;
 }
 
@@ -115,7 +139,7 @@ bool SpawnFilterJieba ( std::unique_ptr<ISphFieldFilter> & pFieldFilter, const C
 	if ( tSettings.m_ePreprocessor!=Preprocessor_e::JIEBA )
 		return true;
 
-	auto pFilterICU = CreateFilterCJK ( std::move ( pFieldFilter ), std::make_unique<JiebaPreprocessor_c> ( tSettings.m_bJiebaHMM ), tTokSettings.m_sBlendChars.cstr(), sError );
+	auto pFilterICU = CreateFilterCJK ( std::move ( pFieldFilter ), std::make_unique<JiebaPreprocessor_c> ( tSettings.m_eJiebaMode, tSettings.m_bJiebaHMM ), tTokSettings.m_sBlendChars.cstr(), sError );
 	if ( !sError.IsEmpty() )
 	{
 		sError.SetSprintf ( "table '%s': Error initializing Jieba: %s", szIndex, sError.cstr() );

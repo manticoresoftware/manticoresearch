@@ -9,8 +9,8 @@
 # See the License for more information.
 #=============================================================================
 set ( JIEBA_REPO "https://github.com/manticoresoftware/cppjieba" )
-set ( JIEBA_REV "a83c7e58" )
-set ( JIEBA_SRC_MD5 "c6905f9b28322002c2a1c69b20acacf6" )
+set ( JIEBA_REV "c4eda211" )
+set ( JIEBA_SRC_MD5 "28329fd68b17410210369fb43a2127a1" )
 
 set ( JIEBA_GITHUB "${JIEBA_REPO}/archive/${JIEBA_REV}.zip" )
 set ( JIEBA_BUNDLE "${LIBS_BUNDLE}/cppjieba-${XXH_REV}.zip" )

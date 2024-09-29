@@ -387,13 +387,13 @@ table products {
 jieba_hmm = {0|1}
 ```
 
-Enable or disable HMM in the Jieba segmentation tool. Optional; the default is 1.
+Enable or disable HMM in the Jieba segmentation tool. Optional; the default is 0.
 
 In Jieba, the HMM (Hidden Markov Model) option refers to an algorithm used for word segmentation. Specifically, it allows Jieba to perform Chinese word segmentation by recognizing unknown words, especially those not present in its dictionary.
 
 Jieba primarily uses a dictionary-based method for segmenting known words, but when the HMM option is enabled, it applies a statistical model to identify probable word boundaries for words or phrases that are not in its dictionary. This is particularly useful for segmenting new or rare words, names, and slang.
 
-In summary, the `jieba_hmm` option helps improve segmentation accuracy at the expense of indexing performance. It must be used with `morphology = 'jieba_chinese'`, see [Chinese, Japanese and Korean (CJK) and Thai languages](Creating_a_table/NLP_and_tokenization/Languages_with_continuous_scripts.md).
+In summary, the `jieba_hmm` option helps improve segmentation accuracy at the expense of indexing performance. It must be used with `morphology = jieba_chinese`, see [Chinese, Japanese and Korean (CJK) and Thai languages](Creating_a_table/NLP_and_tokenization/Languages_with_continuous_scripts.md).
 
 <!-- request SQL -->
 
@@ -459,6 +459,97 @@ utilsApi.Sql("CREATE TABLE products(title text, price float) morphology = 'jieba
 table products {
   morphology = jieba_chinese
   jieba_hmm = 0
+
+  type = rt
+  path = tbl
+  rt_field = title
+  rt_attr_uint = price
+}
+```
+<!-- end -->
+
+## jieba_mode
+
+<!-- example jieba_mode -->
+
+```ini
+jieba_mode = {accurate|full|search}
+```
+
+Jieba segmentation mode. Optional; the default is `accurate`.
+
+In accurate mode, Jieba segments the sentence into the most precise word boundaries using dictionary matching. It prioritizes precision over exhaustiveness.
+
+In full mode, Jieba attempts to cut the sentence into every possible word combination, maximizing recall by including all potential words. It produces all matching words found in its dictionary.
+
+In search mode, Jieba breaks the text down into both full words and smaller components, combining precise segmentation with extra granularity by producing overlapping word fragments.
+
+`jieba_mode` must be used with `morphology = jieba_chinese`, see [Chinese, Japanese and Korean (CJK) and Thai languages](Creating_a_table/NLP_and_tokenization/Languages_with_continuous_scripts.md).
+
+<!-- request SQL -->
+
+```sql
+CREATE TABLE products(title text, price float) morphology = 'jieba_chinese' jieba_mode = 'full'
+```
+
+<!-- request JSON -->
+
+```JSON
+POST /cli -d "
+CREATE TABLE products(title text, price float) morphology = 'jieba_chinese' jieba_mode = 'full'"
+```
+
+<!-- request PHP -->
+
+```php
+$index = new \Manticoresearch\Index($client);
+$index->setName('products');
+$index->create([
+            'title'=>['type'=>'text'],
+            'price'=>['type'=>'float']
+        ],[
+			 'morphology' => 'jieba_chinese',
+	  		 'jieba_mode'='full'
+        ]);
+
+```
+<!-- intro -->
+##### Python:
+
+<!-- request Python -->
+
+```python
+utilsApi.sql('CREATE TABLE products(title text, price float) morphology = \'jieba_chinese\' jieba_mode = \'full\'')
+```
+<!-- intro -->
+##### Javascript:
+
+<!-- request javascript -->
+
+```javascript
+res = await utilsApi.sql('CREATE TABLE products(title text, price float) morphology = \'jieba_chinese\' jieba_mode = \'full\'');
+```
+
+<!-- intro -->
+##### Java:
+<!-- request Java -->
+```java
+utilsApi.sql("CREATE TABLE products(title text, price float) morphology = 'jieba_chinese' jieba_mode = 'full'");
+```
+
+<!-- intro -->
+##### C#:
+<!-- request C# -->
+```clike
+utilsApi.Sql("CREATE TABLE products(title text, price float) morphology = 'jieba_chinese' jieba_mode = 'full'");
+```
+
+<!-- request CONFIG -->
+
+```ini
+table products {
+  morphology = jieba_chinese
+  jieba_mode = full
 
   type = rt
   path = tbl

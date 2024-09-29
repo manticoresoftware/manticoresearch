@@ -63,12 +63,9 @@ sleep 5; mysql -h0 -P9306 -e "select count(*) from orders\G"
 *************************** 1. row ***************************
 count(*): 10000
 ––– input –––
-mysql -h0 -P9306 -e "drop table if exists t; create table t; freeze t; flush ramchunk t;" &
+mysql -h0 -P9306 -e "drop table if exists t; create table t; freeze t; flush ramchunk t;" & sleep 3; searchd --stop | grep TERM
 ––– output –––
 [1] %{NUMBER}
-––– input –––
-sleep 10; searchd --stop | grep TERM
-––– output –––
 +---------------------------------+---------------------------------+
 | file                            | normalized                      |
 +---------------------------------+---------------------------------+

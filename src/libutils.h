@@ -35,7 +35,7 @@
 
 #include <utility>
 
-class ScopedHandle_c
+class ScopedHandle_c final
 {
 public:
 	explicit ScopedHandle_c ( void * pHandle )

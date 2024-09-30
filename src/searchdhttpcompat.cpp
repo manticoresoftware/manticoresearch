@@ -1995,7 +1995,7 @@ bool HttpCompatHandler_c::ProcessDeleteDoc()
 		{
 			CompatWarning ( "doc '%s', error: %s", sId.cstr(), pReporter->GetError() );
 			ReportError ( "request body or source parameter is required", "parse_exception", EHTTP_STATUS::_400 );
-			return true;
+			return false;
 		}
 	}
 
@@ -2235,8 +2235,8 @@ bool HttpCompatHandler_c::ProcessEndpoints()
 			return true;
 		}
 
-		if ( m_dUrlParts.GetLength() && ProcessCreateTable() )
-			return true;
+		if ( m_dUrlParts.GetLength() )
+			return	ProcessCreateTable();
 	}
 
 	if ( GetRequestType()==HTTP_DELETE && m_dUrlParts.GetLength()>2 && m_dUrlParts[1]=="_doc" 

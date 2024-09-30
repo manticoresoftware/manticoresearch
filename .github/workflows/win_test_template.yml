@@ -75,17 +75,17 @@ jobs:
         with:
           php-version: '8.2'
           extensions: mysqli
-      - name: Download Jieba files
-        run: |
-             Get-ChildItem -Recurse -Path "D:\a\manticoresearch\manticoresearch\misc" | Select-Object Name, Length, LastWriteTime
-             mkdir D:\a\manticoresearch\manticoresearch\misc\jieba
-             $files = @("hmm_model", "idf", "jieba.dict", "stop_words", "user.dict")
-             foreach ($name in $files) {
-                 $url = "https://raw.githubusercontent.com/manticoresoftware/cppjieba/master/dict/$name.utf8"
-                 $output = "D:\a\manticoresearch\manticoresearch\misc\jieba\$name.utf8"
-                 Invoke-WebRequest -Uri $url -OutFile $output
-             }
-             Get-ChildItem -Recurse -Path "D:\a\manticoresearch\manticoresearch\misc\jieba" | Select-Object Name, Length, LastWriteTime
+#      - name: Download Jieba files
+#        run: |
+#             Get-ChildItem -Recurse -Path "D:\a\manticoresearch\manticoresearch\misc" | Select-Object Name, Length, LastWriteTime
+#             mkdir D:\a\manticoresearch\manticoresearch\misc\jieba
+#             $files = @("hmm_model", "idf", "jieba.dict", "stop_words", "user.dict")
+#             foreach ($name in $files) {
+#                 $url = "https://raw.githubusercontent.com/manticoresoftware/cppjieba/master/dict/$name.utf8"
+#                 $output = "D:\a\manticoresearch\manticoresearch\misc\jieba\$name.utf8"
+#                 Invoke-WebRequest -Uri $url -OutFile $output
+#             }
+#             Get-ChildItem -Recurse -Path "D:\a\manticoresearch\manticoresearch\misc\jieba" | Select-Object Name, Length, LastWriteTime
       - name: 🚀 Test
         id: test
         # --timeout may be not working https://gitlab.kitware.com/cmake/cmake/-/issues/23979

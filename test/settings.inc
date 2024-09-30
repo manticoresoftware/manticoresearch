@@ -21,7 +21,7 @@ $agent_port_sql		= 6707;
 $agent_port_sql_vip	= 6710;
 $agent_port_http	= 6781;
 
-if ( array_key_exists ( "SPHINXDAEMON", $_ENV ) && $_ENV["SPHINXDAEMON"] ) 
+if ( array_key_exists ( "SPHINXDAEMON", $_ENV ) && $_ENV["SPHINXDAEMON"] )
 	$sd_address = $_ENV["SPHINXDAEMON"];
 else if ( array_key_exists ( "SPHINXDAEMON", $_SERVER ) && $_SERVER["SPHINXDAEMON"] )
 	$sd_address = $_SERVER["SPHINXDAEMON"];
@@ -81,7 +81,7 @@ if ( file_exists ('localsettings.inc') )
 function GetBanner ()
 {
 	global $g_locals;
-	
+
 	exec ( $g_locals['indexer'], $output, $result );
 	if ( count($output) == 0 )
 	{
@@ -209,7 +209,7 @@ function GuessICU ()
 function GuessJieba ()
 {
 	global $g_jieba;
-    $g_jieba = GuessFeature ( 'test_jieba.conf','no Jieba support compiled');
+    $g_jieba = GuessFeature ( 'test_jieba.conf','Error initializing Jieba');
 }
 
 function GuessODBC ()
@@ -252,7 +252,7 @@ function GuessReplication()
 {
 	$repli_on = 'DWITH_GALERA=1';
 	global $g_repli;
-	
+
 	$banner = GetBanner();
 	foreach ( $banner as $line )
 	{
@@ -272,7 +272,7 @@ function GuessSSL ()
 		$g_ssl = false;
 		return;
 	}
-	
+
 	$banner = GetBanner();
 	foreach ( $banner as $line )
 	{
@@ -288,7 +288,7 @@ function GuessZlib()
 {
     global $g_zlib;
     $zlib_on = 'DWITH_ZLIB=1';
-    
+
 	$banner = GetBanner();
 	foreach ( $banner as $line )
 	{
@@ -310,7 +310,7 @@ function PublishLocals ( &$locals, $benchmark )
 		$locals['bin'] = $locals['root'] . '/src/';
 		$locals['api'] = $locals['root'] . '/api/sphinxapi.php';
 	}
-	
+
 	$text = @file_get_contents ( getenv('HOME') . '/.sphinx' );
 	if ( !$text )
 	{
@@ -318,7 +318,7 @@ function PublishLocals ( &$locals, $benchmark )
 			$path = $benchmark ? '..\\bin\\release\\' : '..\\bin\\debug\\';
 		else
 			$path = '../src/';
-	
+
 		$text = @file_get_contents ( $path . '/.sphinx' );
 	}
 	if ( $text )

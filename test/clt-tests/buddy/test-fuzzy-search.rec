@@ -590,5 +590,11 @@ mysql -h0 -P9306 -e "drop table if exists t; create table t(f text) min_infix_le
 mysql -h0 -P9306 -e "select * from t where match('somethin') option fuzzy=0;"
 ––– output –––
 ––– input –––
-mysql -P9306 -h0 -e "drop table if exists t; create table t(f text) min_infix_len='2'; insert into t values(1, 'something');"
+mysql -P9306 -h0 -e "drop table if exists t; create table t(f text) min_infix_len='2'; insert into t values(1, 'something'), (2, 'some thing'); call autocomplete('some', 't');"
 ––– output –––
++-----------+
+| query     |
++-----------+
+| some      |
+| something |
++-----------+

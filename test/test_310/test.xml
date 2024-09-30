@@ -35,7 +35,7 @@ index test
 			U+2E80..U+2EF3, U+2F00..U+2FD5, U+3105..U+312D, U+31C0..U+31E3, U+3400..U+4DB5, U+4E00..U+9FCC, \
 			U+F900..U+FAD9, U+20000..U+2FA1D
 			
-	morphology 		= icu_chinese, stem_enru
+	morphology 		= jieba_chinese, stem_enru
 	
 	blend_chars		= -, U+23
 

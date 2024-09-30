@@ -21,6 +21,7 @@
 
 #include "taskmalloctrim.h"
 #include "tasksavestate.h"
+#include "embeddings/embeddings.h"
 
 #include <csignal>
 
@@ -535,29 +536,38 @@ void HandleSched ( RowBuffer_i & tOut )
 }
 
 
-void HandleLoadEmbeddings ( RowBuffer_i & tOut, const CSphString & sParam )
+void HandleLoadEmbeddingsLib ( RowBuffer_i & tOut, const CSphString & sParam )
 {
-	auto sSha = strSHA1 ( sParam );
+	auto bResult = Embeddings::LoadLib ( sParam );
 	tOut.HeadTuplet ( "command", "result" );
-	tOut.DataTuplet ( "debug token", sSha.cstr () );
+	tOut.DataTuplet ( "debug load embeddings", ( bResult ? "Ok" : "Fail" ) );
 	tOut.Eof ();
 }
 
 
 void HandleLoadModel ( RowBuffer_i & tOut, const CSphString & sParam )
 {
-	auto sSha = strSHA1 ( sParam );
+	auto tResult = Embeddings::LoadModel ( sParam );
 	tOut.HeadTuplet ( "command", "result" );
-	tOut.DataTuplet ( "debug token", sSha.cstr () );
+	auto sData = SphSprintf ("hidden_size=%d, max_input_size=%d", tResult.first, tResult.second );
+	tOut.DataTuplet ( "debug load model", sData.cstr() );
 	tOut.Eof ();
 }
 
 
 void HandleGetEmbeddings ( RowBuffer_i & tOut, const CSphString & sParam )
 {
-	auto sSha = strSHA1 ( sParam );
-	tOut.HeadTuplet ( "command", "result" );
-	tOut.DataTuplet ( "debug token", sSha.cstr () );
+	tOut.HeadTuplet ( "embedding", "value" );
+	Embeddings::ProcessEmbeddings ( sParam, [&tOut] ( VecTraits_T<float> dEmbeddings )
+	{
+		std::array<char, 20> sLeft;
+		int iVal = 0;
+		for ( auto fNum: dEmbeddings )
+		{
+			snprintf ( sLeft.data (), sizeof ( sLeft ), "%d", iVal++ );
+			tOut.DataTupletf ( sLeft.data (), "%f", fNum );
+		}
+	});
 	tOut.Eof ();
 }
 
@@ -613,7 +623,7 @@ void HandleMysqlDebug ( RowBuffer_i &tOut, const DebugCmd::DebugCommand_t* pComm
 	case Cmd_e::TRACE: HandleTrace ( tOut, tCmd );	return;
 	case Cmd_e::CURL: HandleCurl ( tOut, tCmd.m_sParam ); return;
 	case Cmd_e::PAUSE: HandlePause ( tOut, tCmd ); return;
-	case Cmd_e::LOAD_EMB: HandleLoadEmbeddings ( tOut, tCmd.m_sParam );	return;
+	case Cmd_e::LOAD_EMB: HandleLoadEmbeddingsLib ( tOut, tCmd.m_sParam );	return;
 	case Cmd_e::LOAD_MODEL: HandleLoadModel ( tOut, tCmd.m_sParam ); return;
 	case Cmd_e::GET_EMBEDDINGS: HandleGetEmbeddings ( tOut, tCmd.m_sParam ); return;
 	default: break;

@@ -345,6 +345,9 @@ endif (WITH_SSL)
 add_subdirectory ( replication )
 target_link_libraries ( lsearchd PUBLIC repli_stuff)
 
+add_subdirectory ( embeddings )
+target_link_libraries ( lsearchd PUBLIC embeddings )
+
 trace ( lextra )
 trace ( lsearchd )
 

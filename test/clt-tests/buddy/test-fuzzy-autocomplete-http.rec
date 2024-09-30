@@ -24,44 +24,1294 @@ mysql -h0 -P9306 -e "SELECT COUNT(*) FROM name;"
 |  1000000 |
 +----------+
 ––– input –––
-curl -sX POST http://localhost:9308/search -d '{"index":"name","query":{"bool":{"must":[{"match":{"*":"RICH"}}]}},"options":{"fuzzy":true}}' | jq .
+curl -sX POST http://localhost:9308/search -d '{"index":"name","query":{"bool":{"must":[{"match":{"*":"RICH"}}]}},"options":{"fuzzy":true}}' | jq -M
 ––– output –––
+{
+"took": %{NUMBER},
+"timed_out": false,
+"hits": {
+"total": 8380,
+"total_relation": "eq",
+"hits": [
+{
+"_id": 832342,
+"_score": 1595,
+"_source": {
+"username": "RICO RICE"
+}
+},
+{
+"_id": 768099,
+"_score": 1562,
+"_source": {
+"username": "BRICE RICH"
+}
+},
+{
+"_id": 989140,
+"_score": 1549,
+"_source": {
+"username": "LEVI RICO"
+}
+},
+{
+"_id": 869271,
+"_score": 1549,
+"_source": {
+"username": "MARQUITA RICO"
+}
+},
+{
+"_id": 932341,
+"_score": 1549,
+"_source": {
+"username": "JERAMY RICO"
+}
+},
+{
+"_id": 989530,
+"_score": 1549,
+"_source": {
+"username": "RICO RAWLINGS"
+}
+},
+{
+"_id": 939666,
+"_score": 1549,
+"_source": {
+"username": "LAURENE RICO"
+}
+},
+{
+"_id": 944740,
+"_score": 1549,
+"_source": {
+"username": "JOSHUA RICO"
+}
+},
+{
+"_id": 979783,
+"_score": 1549,
+"_source": {
+"username": "RICO SWANK"
+}
+},
+{
+"_id": 929967,
+"_score": 1549,
+"_source": {
+"username": "BIANCA RICO"
+}
+},
+{
+"_id": 914988,
+"_score": 1549,
+"_source": {
+"username": "SUSANNE RICO"
+}
+},
+{
+"_id": 911989,
+"_score": 1549,
+"_source": {
+"username": "RICO IVY"
+}
+},
+{
+"_id": 975060,
+"_score": 1549,
+"_source": {
+"username": "RICO BRENNER"
+}
+},
+{
+"_id": 921107,
+"_score": 1549,
+"_source": {
+"username": "KENYETTA RICO"
+}
+},
+{
+"_id": 996127,
+"_score": 1549,
+"_source": {
+"username": "RICO WHITLOCK"
+}
+},
+{
+"_id": 918295,
+"_score": 1549,
+"_source": {
+"username": "MARLEN RICO"
+}
+},
+{
+"_id": 933392,
+"_score": 1549,
+"_source": {
+"username": "AN RICO"
+}
+},
+{
+"_id": 924527,
+"_score": 1549,
+"_source": {
+"username": "RICO BOEHM"
+}
+},
+{
+"_id": 995638,
+"_score": 1549,
+"_source": {
+"username": "RICO JAEGER"
+}
+},
+{
+"_id": 950970,
+"_score": 1549,
+"_source": {
+"username": "RICO TOTH"
+}
+}
+]
+}
+}
 ––– input –––
-curl -sX POST http://localhost:9308/search -d '{"index":"name","query":{"bool":{"must":[{"match":{"*":"EBGRNA"}}]}},"options":{"fuzzy":true}}' | jq .
+curl -sX POST http://localhost:9308/search -d '{"index":"name","query":{"bool":{"must":[{"match":{"*":"EBGRNA"}}]}},"options":{"fuzzy":true}}' | jq -M
 ––– output –––
+{
+"took": %{NUMBER},
+"timed_out": false,
+"hits": {
+"total": 4329,
+"total_relation": "eq",
+"hits": [
+{
+"_id": 999307,
+"_score": 1602,
+"_source": {
+"username": "BERNA WEIR"
+}
+},
+{
+"_id": 929492,
+"_score": 1602,
+"_source": {
+"username": "BERNA CHEUNG"
+}
+},
+{
+"_id": 926530,
+"_score": 1602,
+"_source": {
+"username": "BERNA GRAFF"
+}
+},
+{
+"_id": 935711,
+"_score": 1602,
+"_source": {
+"username": "BERNA PUGA"
+}
+},
+{
+"_id": 985405,
+"_score": 1602,
+"_source": {
+"username": "BERNA WOODWORTH"
+}
+},
+{
+"_id": 943151,
+"_score": 1602,
+"_source": {
+"username": "BERNA REICHERT"
+}
+},
+{
+"_id": 916301,
+"_score": 1602,
+"_source": {
+"username": "BERNA LATHAM"
+}
+},
+{
+"_id": 928383,
+"_score": 1602,
+"_source": {
+"username": "BERNA FRANZ"
+}
+},
+{
+"_id": 868777,
+"_score": 1602,
+"_source": {
+"username": "BERNA HAMLIN"
+}
+},
+{
+"_id": 953801,
+"_score": 1602,
+"_source": {
+"username": "BERNA POSTON"
+}
+},
+{
+"_id": 936413,
+"_score": 1602,
+"_source": {
+"username": "BERNA HOOPER"
+}
+},
+{
+"_id": 987047,
+"_score": 1602,
+"_source": {
+"username": "BERNA WITTE"
+}
+},
+{
+"_id": 977094,
+"_score": 1602,
+"_source": {
+"username": "BERNA ISBELL"
+}
+},
+{
+"_id": 817074,
+"_score": 1602,
+"_source": {
+"username": "BERNA VEGA"
+}
+},
+{
+"_id": 799233,
+"_score": 1602,
+"_source": {
+"username": "BERNA MOREY"
+}
+},
+{
+"_id": 905588,
+"_score": 1602,
+"_source": {
+"username": "BERNA GUILLORY"
+}
+},
+{
+"_id": 798723,
+"_score": 1602,
+"_source": {
+"username": "BERNA LOUIE"
+}
+},
+{
+"_id": 788674,
+"_score": 1602,
+"_source": {
+"username": "BERNA GILL"
+}
+},
+{
+"_id": 790830,
+"_score": 1602,
+"_source": {
+"username": "BERNA ABRAHAM"
+}
+},
+{
+"_id": 889071,
+"_score": 1602,
+"_source": {
+"username": "BERNA ELLIS"
+}
+}
+]
+}
+}
 ––– input –––
-curl -sX POST http://localhost:9308/search -d '{"index":"name","query":{"bool":{"must":[{"match":{"*":"ANT"}}]}},"options":{"fuzzy":true}}' | jq .
+curl -sX POST http://localhost:9308/search -d '{"index":"name","query":{"bool":{"must":[{"match":{"*":"ANT"}}]}},"options":{"fuzzy":true}}' | jq -M
 ––– output –––
+{
+"took": %{NUMBER},
+"timed_out": false,
+"hits": {
+"total": 249348,
+"total_relation": "eq",
+"hits": [
+{
+"_id": 855401,
+"_score": 1538,
+"_source": {
+"username": "LUCIANA GANT"
+}
+},
+{
+"_id": 796101,
+"_score": 1538,
+"_source": {
+"username": "ANNIE GANT"
+}
+},
+{
+"_id": 768944,
+"_score": 1538,
+"_source": {
+"username": "ANNITA GANT"
+}
+},
+{
+"_id": 773157,
+"_score": 1536,
+"_source": {
+"username": "JOANNA DENT"
+}
+},
+{
+"_id": 779895,
+"_score": 1535,
+"_source": {
+"username": "ANNALISA KENT"
+}
+},
+{
+"_id": 935071,
+"_score": 1531,
+"_source": {
+"username": "DORIAN GANT"
+}
+},
+{
+"_id": 929610,
+"_score": 1531,
+"_source": {
+"username": "TANDRA GANT"
+}
+},
+{
+"_id": 950473,
+"_score": 1531,
+"_source": {
+"username": "MELANY GANT"
+}
+},
+{
+"_id": 976868,
+"_score": 1531,
+"_source": {
+"username": "STEFANIE GANT"
+}
+},
+{
+"_id": 972411,
+"_score": 1531,
+"_source": {
+"username": "JORDAN GANT"
+}
+},
+{
+"_id": 895992,
+"_score": 1531,
+"_source": {
+"username": "ANTONE GANT"
+}
+},
+{
+"_id": 832469,
+"_score": 1531,
+"_source": {
+"username": "STEFANIE GANT"
+}
+},
+{
+"_id": 984473,
+"_score": 1530,
+"_source": {
+"username": "LEONIE GANT"
+}
+},
+{
+"_id": 959771,
+"_score": 1530,
+"_source": {
+"username": "IRMA GANT"
+}
+},
+{
+"_id": 917932,
+"_score": 1530,
+"_source": {
+"username": "LISHA GANT"
+}
+},
+{
+"_id": 970346,
+"_score": 1530,
+"_source": {
+"username": "LORY GANT"
+}
+},
+{
+"_id": 945404,
+"_score": 1530,
+"_source": {
+"username": "EILENE GANT"
+}
+},
+{
+"_id": 940539,
+"_score": 1530,
+"_source": {
+"username": "NADINE GANT"
+}
+},
+{
+"_id": 997179,
+"_score": 1530,
+"_source": {
+"username": "DORSEY GANT"
+}
+},
+{
+"_id": 934538,
+"_score": 1530,
+"_source": {
+"username": "AUTUMN GANT"
+}
+}
+]
+}
+}
 ––– input –––
-curl -sX POST http://localhost:9308/search -d '{"index":"name","query":{"bool":{"must":[{"match":{"*":"tony"}}]}},"options":{"fuzzy":true}}' | jq .
+curl -sX POST http://localhost:9308/search -d '{"index":"name","query":{"bool":{"must":[{"match":{"*":"tony"}}]}},"options":{"fuzzy":true}}' | jq -M
 ––– output –––
+{
+"took": %{NUMBER},
+"timed_out": false,
+"hits": {
+"total": 4252,
+"total_relation": "eq",
+"hits": [
+{
+"_id": 998183,
+"_score": 1532,
+"_source": {
+"username": "TONA CHOATE"
+}
+},
+{
+"_id": 999284,
+"_score": 1532,
+"_source": {
+"username": "TONA EDMONDS"
+}
+},
+{
+"_id": 932916,
+"_score": 1532,
+"_source": {
+"username": "TONA GROGAN"
+}
+},
+{
+"_id": 924415,
+"_score": 1532,
+"_source": {
+"username": "TONA REYNOSO"
+}
+},
+{
+"_id": 918798,
+"_score": 1532,
+"_source": {
+"username": "TONA KOCH"
+}
+},
+{
+"_id": 973217,
+"_score": 1532,
+"_source": {
+"username": "TONA WINTER"
+}
+},
+{
+"_id": 910284,
+"_score": 1532,
+"_source": {
+"username": "TONA PRENTICE"
+}
+},
+{
+"_id": 943295,
+"_score": 1532,
+"_source": {
+"username": "TONA LAUGHLIN"
+}
+},
+{
+"_id": 988528,
+"_score": 1532,
+"_source": {
+"username": "TONA SUTHERLAND"
+}
+},
+{
+"_id": 928754,
+"_score": 1532,
+"_source": {
+"username": "TONA BARRETT"
+}
+},
+{
+"_id": 916837,
+"_score": 1532,
+"_source": {
+"username": "TONA IVORY"
+}
+},
+{
+"_id": 993840,
+"_score": 1532,
+"_source": {
+"username": "TONA MARQUARDT"
+}
+},
+{
+"_id": 943890,
+"_score": 1532,
+"_source": {
+"username": "TONA ASHE"
+}
+},
+{
+"_id": 988892,
+"_score": 1532,
+"_source": {
+"username": "TONA BOX"
+}
+},
+{
+"_id": 943985,
+"_score": 1532,
+"_source": {
+"username": "TONA DEHART"
+}
+},
+{
+"_id": 971179,
+"_score": 1532,
+"_source": {
+"username": "TONA KOZAK"
+}
+},
+{
+"_id": 981673,
+"_score": 1532,
+"_source": {
+"username": "TONA MCNEILL"
+}
+},
+{
+"_id": 865983,
+"_score": 1532,
+"_source": {
+"username": "TONA PETTIGREW"
+}
+},
+{
+"_id": 982220,
+"_score": 1532,
+"_source": {
+"username": "TONA ARNDT"
+}
+},
+{
+"_id": 947393,
+"_score": 1532,
+"_source": {
+"username": "TONA SEELEY"
+}
+}
+]
+}
+}
 ––– input –––
-curl -sX POST http://localhost:9308/search -d '{"index":"name","query":{"bool":{"must":[{"match":{"*":"SMITH"}}]}}, "sort":[{"id":"desc"},{"username":"asc"}], "options":{"fuzzy":true}}' | jq .
+curl -sX POST http://localhost:9308/search -d '{"index":"name","query":{"bool":{"must":[{"match":{"*":"SMITH"}}]}}, "sort":[{"id":"desc"},{"username":"asc"}], "options":{"fuzzy":true}}' | jq -M
 ––– output –––
+{
+"took": %{NUMBER},
+"timed_out": false,
+"hits": {
+"total": 7170,
+"total_relation": "eq",
+"hits": [
+{
+"_id": 999972,
+"_score": 1,
+"_source": {
+"username": "KEITH SNOW"
+}
+},
+{
+"_id": 999928,
+"_score": 1,
+"_source": {
+"username": "BONITA LEONG"
+}
+},
+{
+"_id": 999858,
+"_score": 1,
+"_source": {
+"username": "TONITA GEARY"
+}
+},
+{
+"_id": 999854,
+"_score": 1,
+"_source": {
+"username": "DOROTHA WISEMAN"
+}
+},
+{
+"_id": 999722,
+"_score": 1,
+"_source": {
+"username": "SCOTT OLSON"
+}
+},
+{
+"_id": 999721,
+"_score": 1,
+"_source": {
+"username": "TONITA ESTRADA"
+}
+},
+{
+"_id": 999263,
+"_score": 1,
+"_source": {
+"username": "RUTHANN GREENE"
+}
+},
+{
+"_id": 999249,
+"_score": 1,
+"_source": {
+"username": "MINH LANDERS"
+}
+},
+{
+"_id": 999126,
+"_score": 1,
+"_source": {
+"username": "MALENA RUTHERFORD"
+}
+},
+{
+"_id": 999119,
+"_score": 1,
+"_source": {
+"username": "RUTHANNE CARDOSO"
+}
+},
+{
+"_id": 998892,
+"_score": 1,
+"_source": {
+"username": "IRWIN SOUTHARD"
+}
+},
+{
+"_id": 998690,
+"_score": 1,
+"_source": {
+"username": "MITCHELL SEITZ"
+}
+},
+{
+"_id": 998580,
+"_score": 1,
+"_source": {
+"username": "RAMONITA SWISHER"
+}
+},
+{
+"_id": 998565,
+"_score": 1,
+"_source": {
+"username": "RAMONITA MAYO"
+}
+},
+{
+"_id": 998538,
+"_score": 1,
+"_source": {
+"username": "ELSA SEITZ"
+}
+},
+{
+"_id": 998525,
+"_score": 1,
+"_source": {
+"username": "SCOTT CARRION"
+}
+},
+{
+"_id": 997944,
+"_score": 1,
+"_source": {
+"username": "RUTHE SCHENK"
+}
+},
+{
+"_id": 997814,
+"_score": 1,
+"_source": {
+"username": "MINH GOODWIN"
+}
+},
+{
+"_id": 997587,
+"_score": 1,
+"_source": {
+"username": "RAMONITA GIBBONS"
+}
+},
+{
+"_id": 997557,
+"_score": 1,
+"_source": {
+"username": "ARTIE SOUTH"
+}
+}
+]
+}
+}
 ––– input –––
-curl -sX POST http://localhost:9308/search -d '{"index":"name","query":{"bool":{"must":[{"match":{"*":"SMYTH"}}]}}, "sort":[{"id":"desc"},{"username":"asc"}], "options":{"fuzzy":true}}' | jq .
+curl -sX POST http://localhost:9308/search -d '{"index":"name","query":{"bool":{"must":[{"match":{"*":"SMYTH"}}]}}, "sort":[{"id":"desc"},{"username":"asc"}], "options":{"fuzzy":true}}' | jq -M
 ––– output –––
+{
+"took": %{NUMBER},
+"timed_out": false,
+"hits": {
+"total": 9965,
+"total_relation": "eq",
+"hits": [
+{
+"_id": 999972,
+"_score": 1,
+"_source": {
+"username": "KEITH SNOW"
+}
+},
+{
+"_id": 999854,
+"_score": 1,
+"_source": {
+"username": "DOROTHA WISEMAN"
+}
+},
+{
+"_id": 999722,
+"_score": 1,
+"_source": {
+"username": "SCOTT OLSON"
+}
+},
+{
+"_id": 999498,
+"_score": 1,
+"_source": {
+"username": "DORTHY DUCKWORTH"
+}
+},
+{
+"_id": 999263,
+"_score": 1,
+"_source": {
+"username": "RUTHANN GREENE"
+}
+},
+{
+"_id": 999196,
+"_score": 1,
+"_source": {
+"username": "HEATH MCNAMARA"
+}
+},
+{
+"_id": 999126,
+"_score": 1,
+"_source": {
+"username": "MALENA RUTHERFORD"
+}
+},
+{
+"_id": 999119,
+"_score": 1,
+"_source": {
+"username": "RUTHANNE CARDOSO"
+}
+},
+{
+"_id": 999012,
+"_score": 1,
+"_source": {
+"username": "HEATHER HAMMOCK"
+}
+},
+{
+"_id": 998892,
+"_score": 1,
+"_source": {
+"username": "IRWIN SOUTHARD"
+}
+},
+{
+"_id": 998676,
+"_score": 1,
+"_source": {
+"username": "BURT WOODWORTH"
+}
+},
+{
+"_id": 998525,
+"_score": 1,
+"_source": {
+"username": "SCOTT CARRION"
+}
+},
+{
+"_id": 998220,
+"_score": 1,
+"_source": {
+"username": "MORA WENTWORTH"
+}
+},
+{
+"_id": 998083,
+"_score": 1,
+"_source": {
+"username": "EDMUND ASHWORTH"
+}
+},
+{
+"_id": 997999,
+"_score": 1,
+"_source": {
+"username": "EDYTH CARLISLE"
+}
+},
+{
+"_id": 997944,
+"_score": 1,
+"_source": {
+"username": "RUTHE SCHENK"
+}
+},
+{
+"_id": 997557,
+"_score": 1,
+"_source": {
+"username": "ARTIE SOUTH"
+}
+},
+{
+"_id": 997543,
+"_score": 1,
+"_source": {
+"username": "HEATHER CLAUSEN"
+}
+},
+{
+"_id": 997395,
+"_score": 1,
+"_source": {
+"username": "JON ASHWORTH"
+}
+},
+{
+"_id": 997286,
+"_score": 1,
+"_source": {
+"username": "JOI FARNSWORTH"
+}
+}
+]
+}
+}
 ––– input –––
-curl -sX POST http://localhost:9308/autocomplete -d '{"table":"name","query":"jo","options":{"layouts":"us,ru"}}' | jq .
+curl -sX POST http://localhost:9308/autocomplete -d '{"table":"name","query":"jo","options":{"layouts":"us,ru"}}' | jq -M
 ––– output –––
+[
+{
+"total": %{NUMBER},
+"error": "",
+"warning": "",
+"columns": [
+{
+"query": {
+"type": "string"
+}
+}
+],
+"data": [
+{
+"query": "joe"
+},
+{
+"query": "jordan"
+},
+{
+"query": "joseph"
+},
+{
+"query": "john"
+},
+{
+"query": "jose"
+},
+{
+"query": "joy"
+},
+{
+"query": "joyce"
+},
+{
+"query": "jonas"
+},
+{
+"query": "johnson"
+},
+{
+"query": "major"
+}
+]
+}
+]
 ––– input –––
-curl -sX POST http://localhost:9308/autocomplete -d '{"table":"name","query":"jo","options":{"append":1}}' | jq .
+curl -sX POST http://localhost:9308/autocomplete -d '{"table":"name","query":"jo","options":{"append":1}}' | jq -M
 ––– output –––
+[
+{
+"total": %{NUMBER},
+"error": "",
+"warning": "",
+"columns": [
+{
+"query": {
+"type": "string"
+}
+}
+],
+"data": [
+{
+"query": "joe"
+},
+{
+"query": "jordan"
+},
+{
+"query": "joseph"
+},
+{
+"query": "john"
+},
+{
+"query": "jose"
+},
+{
+"query": "joy"
+},
+{
+"query": "joyce"
+},
+{
+"query": "jonas"
+},
+{
+"query": "johnson"
+},
+{
+"query": "major"
+}
+]
+}
+]
 ––– input –––
-curl -sX POST http://localhost:9308/autocomplete -d '{"table":"name","query":"jo","options":{"prepend":0}}' | jq .
+curl -sX POST http://localhost:9308/autocomplete -d '{"table":"name","query":"jo","options":{"prepend":0}}' | jq -M
 ––– output –––
+[
+{
+"total": %{NUMBER},
+"error": "",
+"warning": "",
+"columns": [
+{
+"query": {
+"type": "string"
+}
+}
+],
+"data": [
+{
+"query": "jordan"
+},
+{
+"query": "joe"
+},
+{
+"query": "joseph"
+},
+{
+"query": "john"
+},
+{
+"query": "jose"
+},
+{
+"query": "joy"
+},
+{
+"query": "joyce"
+},
+{
+"query": "jonas"
+},
+{
+"query": "johnson"
+},
+{
+"query": "joshua"
+}
+]
+}
+]
 ––– input –––
-curl -sX POST http://localhost:9308/autocomplete -d '{"table":"name","query":"jo","options":{"prepend":1,"append":1}}' | jq .
+curl -sX POST http://localhost:9308/autocomplete -d '{"table":"name","query":"jo","options":{"prepend":1,"append":1}}' | jq -M
 ––– output –––
+[
+{
+"total": %{NUMBER},
+"error": "",
+"warning": "",
+"columns": [
+{
+"query": {
+"type": "string"
+}
+}
+],
+"data": [
+{
+"query": "joe"
+},
+{
+"query": "jordan"
+},
+{
+"query": "joseph"
+},
+{
+"query": "john"
+},
+{
+"query": "jose"
+},
+{
+"query": "joy"
+},
+{
+"query": "joyce"
+},
+{
+"query": "jonas"
+},
+{
+"query": "johnson"
+},
+{
+"query": "major"
+}
+]
+}
+]
 ––– input –––
-curl -sX POST http://localhost:9308/autocomplete -d '{"table":"name","query":"jo","options":{"fuzziness":1,"layouts":"","append":1,"prepend":1}}' | jq .
+curl -sX POST http://localhost:9308/autocomplete -d '{"table":"name","query":"jo","options":{"fuzziness":1,"layouts":"","append":1,"prepend":1}}' | jq -M
 ––– output –––
+[
+{
+"total": %{NUMBER},
+"error": "",
+"warning": "",
+"columns": [
+{
+"query": {
+"type": "string"
+}
+}
+],
+"data": [
+{
+"query": "joe"
+},
+{
+"query": "jordan"
+},
+{
+"query": "joseph"
+},
+{
+"query": "john"
+},
+{
+"query": "jose"
+},
+{
+"query": "joy"
+},
+{
+"query": "joyce"
+},
+{
+"query": "jonas"
+},
+{
+"query": "johnson"
+},
+{
+"query": "major"
+}
+]
+}
+]
 ––– input –––
-curl -sX POST http://localhost:9308/autocomplete -d '{"table":"name","query":"jo","options":{"fuzziness":2,"layouts":"us,ru","append":1,"prepend":1,"expansion_len":2}}' | jq .
+curl -sX POST http://localhost:9308/autocomplete -d '{"table":"name","query":"jo","options":{"fuzziness":2,"layouts":"us,ru","append":1,"prepend":1,"expansion_len":2}}' | jq -M
 ––– output –––
+[
+{
+"total": %{NUMBER},
+"error": "",
+"warning": "",
+"columns": [
+{
+"query": {
+"type": "string"
+}
+}
+],
+"data": [
+{
+"query": "joe"
+},
+{
+"query": "john"
+},
+{
+"query": "jose"
+},
+{
+"query": "joy"
+}
+]
+}
+]
 ––– input –––
-curl -sX POST http://localhost:9308/autocomplete -d '{"table":"name","query":"gr","options":{"fuzziness":1,"layouts":"ru","append":1,"prepend":1}}' | jq .
+curl -sX POST http://localhost:9308/autocomplete -d '{"table":"name","query":"gr","options":{"fuzziness":1,"layouts":"ru","append":1,"prepend":1}}' | jq -M
 ––– output –––
+[
+{
+"total": %{NUMBER},
+"error": "",
+"warning": "",
+"columns": [
+{
+"query": {
+"type": "string"
+}
+}
+],
+"data": [
+{
+"query": "gregory"
+},
+{
+"query": "grover"
+},
+{
+"query": "grant"
+},
+{
+"query": "grady"
+},
+{
+"query": "gracia"
+},
+{
+"query": "gregg"
+},
+{
+"query": "grace"
+},
+{
+"query": "graham"
+},
+{
+"query": "griffin"
+},
+{
+"query": "montenegro"
+}
+]
+}
+]
 ––– input –––
-curl -sX POST http://localhost:9308/autocomplete -d '{"table":"name","query":"jo","options":{"fuzziness":1}}' | jq .
+curl -sX POST http://localhost:9308/autocomplete -d '{"table":"name","query":"jo","options":{"fuzziness":1}}' | jq -M
 ––– output –––
+[
+{
+"total": %{NUMBER},
+"error": "",
+"warning": "",
+"columns": [
+{
+"query": {
+"type": "string"
+}
+}
+],
+"data": [
+{
+"query": "joe"
+},
+{
+"query": "jordan"
+},
+{
+"query": "joseph"
+},
+{
+"query": "john"
+},
+{
+"query": "jose"
+},
+{
+"query": "joy"
+},
+{
+"query": "joyce"
+},
+{
+"query": "jonas"
+},
+{
+"query": "johnson"
+},
+{
+"query": "major"
+}
+]
+}
+]

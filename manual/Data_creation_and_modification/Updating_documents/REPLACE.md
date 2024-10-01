@@ -55,14 +55,15 @@ See the examples for more details.
   }
   ```
 * Partial replace:
-```
-POST /<table name>/_update/<id>
-{
-  "<field1>": <value1>,
-  ...
-  "<fieldN>": <valueN>
-}
-```
+  ```
+  POST /<{table | cluster:table}>/_update/<id>
+  {
+    "<field1>": <value1>,
+    ...
+    "<fieldN>": <valueN>
+  }
+  ```
+  The `<table name>` can either be just the table name or in the format `cluster:table`. This allows for updates across a specific cluster if needed.
 
 See the examples for more details.
 

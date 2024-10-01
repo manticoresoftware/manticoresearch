@@ -74,6 +74,6 @@ mysql -h0 -P9306 -e "drop table if exists t; create table t; freeze t; flush ram
 | /var/lib/manticore/t/t.settings | /var/lib/manticore/t/t.settings |
 +---------------------------------+---------------------------------+
 ––– input –––
-searchd --stop > /dev/null 2>&1; if timeout 60 grep -qm1 'TERM' <(tail -n 1000 -f /var/log/manticore/searchd.log); then echo 'Searchd stopped.'; else echo 'Timeout or failed!'; cat /var/log/manticore/searchd.log; fi
+searchd --stop > /dev/null 2>&1; if timeout 60 grep -qm1 'shutting down' <(tail -n 1000 -f /var/log/manticore/searchd.log); then echo 'Searchd stopped.'; else echo 'Timeout or failed!'; cat /var/log/manticore/searchd.log; fi
 ––– output –––
 Searchd stopped.

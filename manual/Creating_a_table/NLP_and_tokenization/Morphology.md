@@ -478,13 +478,13 @@ jieba_mode = {accurate|full|search}
 
 Jieba segmentation mode. Optional; the default is `accurate`.
 
-In accurate mode, Jieba segments the sentence into the most precise word boundaries using dictionary matching. It prioritizes precision over exhaustiveness.
+In accurate mode, Jieba splits the sentence into the most precise words using dictionary matching. This mode focuses on precision, ensuring that the segmentation is as accurate as possible.
 
-In full mode, Jieba attempts to cut the sentence into every possible word combination, maximizing recall by including all potential words. It produces all matching words found in its dictionary.
+In full mode, Jieba tries to split the sentence into every possible word combination, aiming to include all potential words. This mode focuses on maximizing recall, meaning it identifies as many words as possible, even if some of them overlap or are less commonly used. It returns all the words found in its dictionary.
 
-In search mode, Jieba breaks the text down into both full words and smaller components, combining precise segmentation with extra granularity by producing overlapping word fragments.
+In search mode, Jieba breaks the text into both whole words and smaller parts, combining precise segmentation with extra detail by providing overlapping word fragments. This mode balances precision and recall, making it useful for search engines.
 
-`jieba_mode` must be used with `morphology = jieba_chinese`, see [Chinese, Japanese and Korean (CJK) and Thai languages](Creating_a_table/NLP_and_tokenization/Languages_with_continuous_scripts.md).
+`jieba_mode` should be used with `morphology = jieba_chinese`. See [Chinese, Japanese, Korean (CJK) and Thai languages](Creating_a_table/NLP_and_tokenization/Languages_with_continuous_scripts.md).
 
 <!-- request SQL -->
 

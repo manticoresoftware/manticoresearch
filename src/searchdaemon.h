@@ -1626,6 +1626,16 @@ public:
 		PutString ( (Str_t)sMsg );
 	}
 
+	void PutStringf ( const char * szFmt, ... )
+	{
+		StringBuilder_c sRight;
+		va_list ap;
+		va_start ( ap, szFmt );
+		sRight.vSprintf ( szFmt, ap );
+		va_end ( ap );
+		PutString ( sRight );
+	}
+
 	void PutTimeAsString ( int64_t tmVal, const char* szSuffix = nullptr )
 	{
 		if ( tmVal==-1 )

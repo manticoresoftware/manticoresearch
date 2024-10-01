@@ -18,8 +18,11 @@
 // this returns env FULL_SHARE_DIR, or hardcoded path, or '.' if nothing hardcoded
 const char* GET_FULL_SHARE_DIR();
 
-// this returns env ICU_DATA_DIR, or hardcoded path, or nullptr if nothing hardcoded
-CSphString GET_ICU_DATA_DIR();
+// returns env ICU_DATA_DIR, or hardcoded path, or nullptr if nothing hardcoded
+CSphString GetICUDataDir();
+
+// returns env JIEBA_DATA_DIR, or hardcoded path, or nullptr if nothing hardcoded
+CSphString GetJiebaDataDir();
 
 // this returns env MANTICORE_MODULES, or GET_FULL_SHARE_DIR()/modules
 const char* GET_MANTICORE_MODULES();

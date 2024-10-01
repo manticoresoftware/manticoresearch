@@ -324,6 +324,9 @@ int TemplateDictTraits_c::InitMorph ( const char* szMorph, int iLength, CSphStri
 	if ( iLength == 11 && !strncmp ( szMorph, "icu_chinese", iLength ) )
 		return ST_OK;
 
+	if ( iLength == 13 && !strncmp ( szMorph, "jieba_chinese", iLength ) )
+		return ST_OK;
+
 	sMessage.SetBinary ( szMorph, iLength );
 	sMessage.SetSprintf ( "unknown stemmer %s", sMessage.cstr() );
 	return ST_ERROR;

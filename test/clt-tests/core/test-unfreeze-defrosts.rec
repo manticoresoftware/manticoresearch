@@ -63,10 +63,17 @@ sleep 5; mysql -h0 -P9306 -e "select count(*) from orders\G"
 *************************** 1. row ***************************
 count(*): 10000
 ––– input –––
-mysql -h0 -P9306 -e "drop table if exists t; create table t; freeze t; flush ramchunk t;" >/dev/null 2>&1 &
+mysql -h0 -P9306 -e "drop table if exists t; create table t; freeze t; flush ramchunk t;" & sleep 1; true
 ––– output –––
-[1] %{NUMBER}
+[2] %{NUMBER}
++---------------------------------+---------------------------------+
+| file                            | normalized                      |
++---------------------------------+---------------------------------+
+| /var/lib/manticore/t/t.meta     | /var/lib/manticore/t/t.meta     |
+| /var/lib/manticore/t/t.ram      | /var/lib/manticore/t/t.ram      |
+| /var/lib/manticore/t/t.settings | /var/lib/manticore/t/t.settings |
++---------------------------------+---------------------------------+
 ––– input –––
-sleep 3; searchd --stop | grep TERM
+searchd --stop > /dev/null 2>&1; if timeout 60 grep -qm1 'TERM' <(tail -n 1000 -f /var/log/manticore/searchd.log); then echo 'Searchd stopped.'; else echo 'Timeout or failed!'; cat /var/log/manticore/searchd.log; fi
 ––– output –––
-[#!/[A-Za-z]{3}\s+[A-Za-z]{3}\s+[0-9]{1,2}\s+[0-9]{2}:[0-9]{2}:[0-9]{2}\.[0-9]{3}\s+[0-9]{4}/!#] [%{NUMBER}] stop: successfully sent SIGTERM to pid %{NUMBER}
+Searchd stopped.

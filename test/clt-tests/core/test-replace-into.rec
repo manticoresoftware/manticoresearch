@@ -336,7 +336,7 @@ start_time=$(date +%s%3N) && for i in {1..5000}; do echo "REPLACE INTO tbl SET c
 ––– input –––
 echo $elapsed_time
 ––– output –––
-#!/[0-9]{4,5}/!#
+#!/([1-9]|1[0-2])/!#
 ––– input –––
 mysql -h0 -P9306 -e "select count(*) from tbl WHERE regex (color, 'color_[0-9]+')"
 ––– output –––

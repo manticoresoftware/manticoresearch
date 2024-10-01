@@ -10,14 +10,16 @@
 // did not, you can find it at http://www.gnu.org/
 //
 
+// this file is should build ONLY when 'WITH_JIEBA" defined
+
 #include "jieba.h"
+
+STATIC_ASSERT ( WITH_JIEBA, SHOULD_NOT_BUILD_WIHTOUT_WITH_JIEBA_DEFINITION );
 
 #include "cjkpreprocessor.h"
 
 #include "Jieba.hpp"
 
-
-#if WITH_JIEBA
 
 class JiebaPreprocessor_c : public CJKPreprocessor_c
 {
@@ -150,30 +152,3 @@ bool SpawnFilterJieba ( std::unique_ptr<ISphFieldFilter> & pFieldFilter, const C
 	return true;
 }
 
-#else
-
-bool CheckConfigJieba ( CSphIndexSettings & tSettings, CSphString & sError )
-{
-	if ( tSettings.m_ePreprocessor==Preprocessor_e::JIEBA )
-	{
-		tSettings.m_ePreprocessor = Preprocessor_e::NONE;
-		sError.SetSprintf ( "Jieba options specified, but no Jieba support compiled; ignoring" );
-		return false;
-	}
-
-	return true;
-}
-
-
-bool CheckTokenizerJieba ( CSphIndexSettings &, const CSphTokenizerSettings &, CSphString & )
-{
-	return true;
-}
-
-
-bool SpawnFilterJieba ( std::unique_ptr<ISphFieldFilter> &, const CSphIndexSettings &, const CSphTokenizerSettings &, const char *, CSphString & )
-{
-	return true;
-}
-
-#endif

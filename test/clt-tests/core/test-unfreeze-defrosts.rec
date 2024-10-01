@@ -28,7 +28,7 @@ mysql -h0 -P9306 -e "drop table if exists t; create table t(f text, s string) rt
 ––– input –––
 for n in `seq 1 100`; do mysql -h0 -P9306 -e "insert into t values(0, 'abc', 'string string string stringstring stringstring stringstring stringstring stringstring stringstring stringstring stringstring stringstring stringstring stringstring stringstring stringstring stringstring stringstring stringstring stringstring stringstring stringstring stringstring stringstring stringstring stringstring stringstring stringstring stringstring stringstring stringstring stringstring stringstring stringstring stringstring stringstring stringstring stringstring stringstring stringstring stringstring stringstring stringstring stringstring stringstring stringstring stringstring stringstring stringstring stringstring stringstring stringstring stringstring stringstring stringstring stringstring stringstring string');"; done &
 ––– output –––
-[1] %{NUMBER}
+[%{NUMBER}] %{NUMBER}
 ––– input –––
 sleep 10; mysql -h0 -P9306 -e "select count(*) from t\G"
 ––– output –––
@@ -65,7 +65,7 @@ count(*): 10000
 ––– input –––
 mysql -h0 -P9306 -e "drop table if exists t; create table t; freeze t; flush ramchunk t;" & sleep 1; true
 ––– output –––
-[2] %{NUMBER}
+[%{NUMBER}] %{NUMBER}
 +---------------------------------+---------------------------------+
 | file                            | normalized                      |
 +---------------------------------+---------------------------------+

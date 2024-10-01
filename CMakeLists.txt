@@ -416,6 +416,10 @@ if (WITH_ICU)
 	cpack_add_component ( icudata )
 endif ()
 
+#if (WITH_JIEBA)
+#	cpack_add_component ( jiebadicts )
+#endif ()
+
 if (WIN32)
 	cpack_add_component ( runtime GROUP main )
 endif ()

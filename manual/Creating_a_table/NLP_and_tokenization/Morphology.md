@@ -387,7 +387,7 @@ table products {
 jieba_hmm = {0|1}
 ```
 
-Enable or disable HMM in the Jieba segmentation tool. Optional; the default is 0.
+Enable or disable HMM in the Jieba segmentation tool. Optional; the default is 1.
 
 In Jieba, the HMM (Hidden Markov Model) option refers to an algorithm used for word segmentation. Specifically, it allows Jieba to perform Chinese word segmentation by recognizing unknown words, especially those not present in its dictionary.
 

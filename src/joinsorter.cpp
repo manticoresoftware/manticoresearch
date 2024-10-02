@@ -790,9 +790,20 @@ void JoinSorter_c::SetupJoinAttrRemap()
 	m_bNeedToSetupRemap = false;
 }
 
+
+FORCE_INLINE void SetExprBlobPool ( const CSphVector<ContextCalcItem_t> & dItems, const BYTE * pBlobPool )
+{
+	for ( const auto & i : dItems )
+		i.m_pExpr->Command ( SPH_EXPR_SET_BLOB_POOL, (void*)pBlobPool );
+}
+
 template <typename PUSH>
 bool JoinSorter_c::PushJoinedMatches ( const CSphMatch & tEntry, PUSH && fnPush )
 {
+	SetExprBlobPool ( m_dCalcPrefilter, m_pBlobPool );
+	SetExprBlobPool ( m_dCalcPresort, m_pBlobPool );
+	SetExprBlobPool ( m_dAggregates, m_pBlobPool );
+
 	bool bAnythingPushed = false;
 	ARRAY_FOREACH ( iMatch, m_dMatches )
 	{

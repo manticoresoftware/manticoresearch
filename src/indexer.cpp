@@ -16,7 +16,9 @@
 #include "sphinxstem.h"
 #include "sphinxplugin.h"
 #include "attribute.h"
+#include "cjkpreprocessor.h"
 #include "icu.h"
+#include "jieba.h"
 #include <config_indexer.h>
 #include "indexing_sources/source_sql.h"
 #include "indexfiles.h"
@@ -978,7 +980,7 @@ bool DoIndex ( const CSphConfigSection & hIndex, const char * szIndexName, const
 
 	{
 		CSphString sWarning;
-		if ( !sphCheckTokenizerICU ( tSettings, tTokSettings, sWarning ) )
+		if ( !CheckTokenizerCJK ( tSettings, tTokSettings, sWarning ) )
 			fprintf ( stdout, "WARNING: table '%s': %s\n", szIndexName, sWarning.cstr() );
 	}
 
@@ -1069,6 +1071,9 @@ bool DoIndex ( const CSphConfigSection & hIndex, const char * szIndexName, const
 		fprintf ( stdout, "WARNING: table '%s': %s\n", szIndexName, sError.cstr() );
 
 	if ( !sphSpawnFilterICU ( pFieldFilter, tSettings, tTokSettings, szIndexName, sError ) )
+		sphDie ( "%s", sError.cstr() );
+
+	if ( !SpawnFilterJieba ( pFieldFilter, tSettings, tTokSettings, szIndexName, sError ) )
 		sphDie ( "%s", sError.cstr() );
 
 	// boundary

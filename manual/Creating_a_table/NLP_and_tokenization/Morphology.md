@@ -28,7 +28,7 @@ Manticore comes with built-in morphological preprocessors for:
 
 Lemmatizers require dictionary `.pak` files that can be [downloaded from the Manticore website](https://manticoresearch.com/install/#other-downloads). The dictionaries need to be put in the directory specified by [lemmatizer_base](../../Server_settings/Common.md#lemmatizer_base). Additionally, the [lemmatizer_cache](../../Data_creation_and_modification/Adding_data_from_external_storages/Plain_tables_creation.md#lemmatizer_cache) setting can be used to speed up lemmatizing by spending more RAM for an uncompressed dictionary cache.
 
-The Chinese language segmentation can be performed using [ICU](http://site.icu-project.org/). It provides more precise segmentation compared to n-grams but is slightly slower. The [charset_table](../../Creating_a_table/NLP_and_tokenization/Low-level_tokenization.md#charset_table) must include all Chinese characters, which can be done by using the "cont", "cjk" or "chinese" character sets. When "morphology=icu_chinese" is specified, the documents are first pre-processed by ICU. Then, the result is processed by the tokenizer according to the charset_table, and finally, other morphology processors specified in the "morphology" option are applied. Only those parts of texts that contain Chinese are passed to ICU for segmentation, while others can be modified by different means such as different morphologies or charset_table.
+The Chinese language segmentation can be done using [ICU](http://site.icu-project.org/) or [Jieba](https://github.com/yanyiwu/cppjieba). Both libraries provide more accurate segmentation than n-grams, but are slightly slower. The [charset_table](../../Creating_a_table/NLP_and_tokenization/Low-level_tokenization.md#charset_table) must include all Chinese characters, which can be done using the `cont`, `cjk` or `chinese` character sets. When you set `morphology=icu_chinese` or `morphology=jieba_chinese`, the documents are first pre-processed by ICU or Jieba. Then, the tokenizer processes the result according to the charset_table, and finally, other morphology processors from the `morphology` option are applied. Only those parts of the text that contain Chinese are passed to ICU/Jieba for segmentation, while the other parts can be modified by different means such as different morphologies or `charset_table`.
 
 Built-in English and Russian stemmers are faster than their libstemmer counterparts but may produce slightly different results
 
@@ -52,6 +52,7 @@ To use the `morphology` option, specify one or multiple of the built-in options,
 * soundex - replace keywords with their SOUNDEX code
 * metaphone - replace keywords with their METAPHONE code
 * icu_chinese - apply Chinese text segmentation using ICU
+* jieba_chinese - apply Chinese text segmentation using Jieba
 * libstemmer_* . Refer to the [list of supported languages](../../Creating_a_table/NLP_and_tokenization/Supported_languages.md) for details
 
 Multiple stemmers can be specified, separated by commas. They will be applied to incoming words in the order they are listed, and the processing will stop once one of the stemmers modifies the word. Additionally, when [wordforms](../../Creating_a_table/NLP_and_tokenization/Wordforms.md#wordforms) feature is enabled, the word will be looked up in the word forms dictionary first. If there is a matching entry in the dictionary, stemmers will not be applied at all.  [wordforms](../../Creating_a_table/NLP_and_tokenization/Wordforms.md#wordforms) сan be used to implement stemming exceptions.
@@ -369,6 +370,186 @@ utilsApi.Sql("CREATE TABLE products(title text, price float) index_exact_words =
 table products {
   index_exact_words = 1
   morphology = stem_en
+
+  type = rt
+  path = tbl
+  rt_field = title
+  rt_attr_uint = price
+}
+```
+<!-- end -->
+
+## jieba_hmm
+
+<!-- example jieba_hmm -->
+
+```ini
+jieba_hmm = {0|1}
+```
+
+Enable or disable HMM in the Jieba segmentation tool. Optional; the default is 0.
+
+In Jieba, the HMM (Hidden Markov Model) option refers to an algorithm used for word segmentation. Specifically, it allows Jieba to perform Chinese word segmentation by recognizing unknown words, especially those not present in its dictionary.
+
+Jieba primarily uses a dictionary-based method for segmenting known words, but when the HMM option is enabled, it applies a statistical model to identify probable word boundaries for words or phrases that are not in its dictionary. This is particularly useful for segmenting new or rare words, names, and slang.
+
+In summary, the `jieba_hmm` option helps improve segmentation accuracy at the expense of indexing performance. It must be used with `morphology = jieba_chinese`, see [Chinese, Japanese and Korean (CJK) and Thai languages](Creating_a_table/NLP_and_tokenization/Languages_with_continuous_scripts.md).
+
+<!-- request SQL -->
+
+```sql
+CREATE TABLE products(title text, price float) morphology = 'jieba_chinese' jieba_hmm = '0'
+```
+
+<!-- request JSON -->
+
+```JSON
+POST /cli -d "
+CREATE TABLE products(title text, price float) morphology = 'jieba_chinese' jieba_hmm = '0'"
+```
+
+<!-- request PHP -->
+
+```php
+$index = new \Manticoresearch\Index($client);
+$index->setName('products');
+$index->create([
+            'title'=>['type'=>'text'],
+            'price'=>['type'=>'float']
+        ],[
+			 'morphology' => 'jieba_chinese',
+	  		 'jieba_hmm'='1'
+        ]);
+
+```
+<!-- intro -->
+##### Python:
+
+<!-- request Python -->
+
+```python
+utilsApi.sql('CREATE TABLE products(title text, price float) morphology = \'jieba_chinese\' jieba_hmm = \'0\'')
+```
+<!-- intro -->
+##### Javascript:
+
+<!-- request javascript -->
+
+```javascript
+res = await utilsApi.sql('CREATE TABLE products(title text, price float) morphology = \'jieba_chinese\' jieba_hmm = \'0\'');
+```
+
+<!-- intro -->
+##### Java:
+<!-- request Java -->
+```java
+utilsApi.sql("CREATE TABLE products(title text, price float) morphology = 'jieba_chinese' jieba_hmm = '0'");
+```
+
+<!-- intro -->
+##### C#:
+<!-- request C# -->
+```clike
+utilsApi.Sql("CREATE TABLE products(title text, price float) morphology = 'jieba_chinese' jieba_hmm = '0'");
+```
+
+<!-- request CONFIG -->
+
+```ini
+table products {
+  morphology = jieba_chinese
+  jieba_hmm = 0
+
+  type = rt
+  path = tbl
+  rt_field = title
+  rt_attr_uint = price
+}
+```
+<!-- end -->
+
+## jieba_mode
+
+<!-- example jieba_mode -->
+
+```ini
+jieba_mode = {accurate|full|search}
+```
+
+Jieba segmentation mode. Optional; the default is `accurate`.
+
+In accurate mode, Jieba splits the sentence into the most precise words using dictionary matching. This mode focuses on precision, ensuring that the segmentation is as accurate as possible.
+
+In full mode, Jieba tries to split the sentence into every possible word combination, aiming to include all potential words. This mode focuses on maximizing recall, meaning it identifies as many words as possible, even if some of them overlap or are less commonly used. It returns all the words found in its dictionary.
+
+In search mode, Jieba breaks the text into both whole words and smaller parts, combining precise segmentation with extra detail by providing overlapping word fragments. This mode balances precision and recall, making it useful for search engines.
+
+`jieba_mode` should be used with `morphology = jieba_chinese`. See [Chinese, Japanese, Korean (CJK) and Thai languages](Creating_a_table/NLP_and_tokenization/Languages_with_continuous_scripts.md).
+
+<!-- request SQL -->
+
+```sql
+CREATE TABLE products(title text, price float) morphology = 'jieba_chinese' jieba_mode = 'full'
+```
+
+<!-- request JSON -->
+
+```JSON
+POST /cli -d "
+CREATE TABLE products(title text, price float) morphology = 'jieba_chinese' jieba_mode = 'full'"
+```
+
+<!-- request PHP -->
+
+```php
+$index = new \Manticoresearch\Index($client);
+$index->setName('products');
+$index->create([
+            'title'=>['type'=>'text'],
+            'price'=>['type'=>'float']
+        ],[
+			 'morphology' => 'jieba_chinese',
+	  		 'jieba_mode'='full'
+        ]);
+
+```
+<!-- intro -->
+##### Python:
+
+<!-- request Python -->
+
+```python
+utilsApi.sql('CREATE TABLE products(title text, price float) morphology = \'jieba_chinese\' jieba_mode = \'full\'')
+```
+<!-- intro -->
+##### Javascript:
+
+<!-- request javascript -->
+
+```javascript
+res = await utilsApi.sql('CREATE TABLE products(title text, price float) morphology = \'jieba_chinese\' jieba_mode = \'full\'');
+```
+
+<!-- intro -->
+##### Java:
+<!-- request Java -->
+```java
+utilsApi.sql("CREATE TABLE products(title text, price float) morphology = 'jieba_chinese' jieba_mode = 'full'");
+```
+
+<!-- intro -->
+##### C#:
+<!-- request C# -->
+```clike
+utilsApi.Sql("CREATE TABLE products(title text, price float) morphology = 'jieba_chinese' jieba_mode = 'full'");
+```
+
+<!-- request CONFIG -->
+
+```ini
+table products {
+  morphology = jieba_chinese
+  jieba_mode = full
 
   type = rt
   path = tbl

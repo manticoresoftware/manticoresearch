@@ -16464,24 +16464,33 @@ static void AddAttrToIndex ( const SqlStmt_t & tStmt, CSphIndex * pIdx, CSphStri
 
 	auto pHasAttr = pIdx->GetMatchSchema ().GetAttr ( sAttrToAdd.cstr () );
 	bool bHasField = pIdx->GetMatchSchema ().GetFieldIndex ( sAttrToAdd.cstr () )!=-1;
+	const bool bInt2Bigint = pHasAttr
+			&& pHasAttr->m_eAttrType==SPH_ATTR_INTEGER
+			&& pHasAttr->m_eEngine==AttrEngine_e::DEFAULT
+			&& tStmt.m_eAlterColType==SPH_ATTR_BIGINT
+			&& tStmt.m_eEngine==AttrEngine_e::DEFAULT;
 
 	if ( !bIndexed && pHasAttr )
 	{
-		if ( !bModify
-			 || pHasAttr->m_eAttrType != SPH_ATTR_INTEGER
-			 || pHasAttr->m_eEngine != AttrEngine_e::DEFAULT
-			 || tStmt.m_eAlterColType != SPH_ATTR_BIGINT
-			 || tStmt.m_eEngine != AttrEngine_e::DEFAULT)
+		if ( !bModify || !bInt2Bigint )
 		{
 			sError.SetSprintf ( "'%s' attribute already in schema", sAttrToAdd.cstr () );
 			return;
 		}
 	}
 
-	if ( !pHasAttr && bModify )
+	if ( bModify )
 	{
-		sError.SetSprintf ( "attribute '%s' does not exist", sAttrToAdd.cstr() );
-		return;
+		if ( !pHasAttr )
+		{
+			sError.SetSprintf ( "attribute '%s' does not exist", sAttrToAdd.cstr() );
+			return;
+		}
+		if ( !bInt2Bigint )
+		{
+			sError.SetSprintf ( "attribute '%s': only alter from rowise int to bigint supported", sAttrToAdd.cstr () );
+			return;
+		}
 	}
 
 	if ( bIndexed && bHasField )
@@ -17297,7 +17306,7 @@ void HandleMysqlShowLocks ( RowBuffer_i & tOut )
 				tOut.PutString ( GetIndexTypeName ( dPair.second ) );
 				tOut.PutString ( dPair.first );
 				tOut.PutString ( "freeze" );
-				tOut.PutNumAsString ( iLocks );
+				tOut.PutStringf ( "Count: %d", iLocks );
 				if ( !tOut.Commit () )
 					return;
 			}

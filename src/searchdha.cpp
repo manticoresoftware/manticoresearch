@@ -1018,6 +1018,7 @@ void FormatCmdStats ( VectorLike & dStatus, const char * szPrefix, SearchdStats_
 
 	QueryStats_t tRowStats, tTimeStats;
 	bool bCalculated = false;
+	int iNulls = 0;
 
 	for ( int j = 0; j<TYPE_TOTAL; ++j )
 	{
@@ -1027,12 +1028,31 @@ void FormatCmdStats ( VectorLike & dStatus, const char * szPrefix, SearchdStats_
 		if ( !bCalculated )
 		{
 			CalculateCommandStats ( eCmd, tRowStats, tTimeStats );
+			iNulls = 0;
+			if ( UINT64_MAX==tTimeStats.m_dStats[INTERVAL_15MIN].m_dData[TYPE_MIN] )
+				iNulls = 3;
+			else if ( UINT64_MAX==tTimeStats.m_dStats[INTERVAL_5MIN].m_dData[TYPE_MIN] )
+				iNulls = 2;
+			else if ( UINT64_MAX==tTimeStats.m_dStats[INTERVAL_1MIN].m_dData[TYPE_MIN] )
+				iNulls = 1;
 			bCalculated = true;
 		}
 
 		StringBuilder_c sBuf;
-		sBuf.Sprintf ( "%0.3D %0.3D %0.3D", tTimeStats.m_dStats[INTERVAL_1MIN].m_dData[j], tTimeStats.m_dStats[INTERVAL_5MIN].m_dData[j],
-					   tTimeStats.m_dStats[INTERVAL_15MIN].m_dData[j] );
+		switch ( iNulls )
+		{
+		case 0:
+			sBuf.Sprintf ( "%0.3D %0.3D %0.3D", tTimeStats.m_dStats[INTERVAL_1MIN].m_dData[j], tTimeStats.m_dStats[INTERVAL_5MIN].m_dData[j], tTimeStats.m_dStats[INTERVAL_15MIN].m_dData[j] );
+			break;
+		case 1:
+			sBuf.Sprintf ( "N/A %0.3D %0.3D", tTimeStats.m_dStats[INTERVAL_5MIN].m_dData[j], tTimeStats.m_dStats[INTERVAL_15MIN].m_dData[j] );
+			break;
+		case 2:
+			sBuf.Sprintf ( "N/A N/A %0.3D", tTimeStats.m_dStats[INTERVAL_15MIN].m_dData[j] );
+			break;
+		case 3:
+			sBuf << "N/A N/A N/A";
+		}
 
 		dStatus.Add ( sBuf.cstr () );
 	}

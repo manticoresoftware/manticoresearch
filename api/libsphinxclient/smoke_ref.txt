@@ -323,21 +323,21 @@ command_json: 0
 command_callpq: 0
 command_cluster: 0
 command_getfield: 0
-insert_replace_stats_ms_avg: 0.000 0.000 0.000
-insert_replace_stats_ms_min: -0.001 -0.001 -0.001
-insert_replace_stats_ms_max: 0.000 0.000 0.000
-insert_replace_stats_ms_pct95: 0.000 0.000 0.000
-insert_replace_stats_ms_pct99: 0.000 0.000 0.000
-search_stats_ms_avg: 0.000 0.000 0.000
-search_stats_ms_min: -0.001 -0.001 -0.001
-search_stats_ms_max: 0.000 0.000 0.000
-search_stats_ms_pct95: 0.000 0.000 0.000
-search_stats_ms_pct99: 0.000 0.000 0.000
-update_stats_ms_avg: 0.000 0.000 0.000
-update_stats_ms_min: -0.001 -0.001 -0.001
-update_stats_ms_max: 0.000 0.000 0.000
-update_stats_ms_pct95: 0.000 0.000 0.000
-update_stats_ms_pct99: 0.000 0.000 0.000
+insert_replace_stats_ms_avg: N/A N/A N/A
+insert_replace_stats_ms_min: N/A N/A N/A
+insert_replace_stats_ms_max: N/A N/A N/A
+insert_replace_stats_ms_pct95: N/A N/A N/A
+insert_replace_stats_ms_pct99: N/A N/A N/A
+search_stats_ms_avg: N/A N/A N/A
+search_stats_ms_min: N/A N/A N/A
+search_stats_ms_max: N/A N/A N/A
+search_stats_ms_pct95: N/A N/A N/A
+search_stats_ms_pct99: N/A N/A N/A
+update_stats_ms_avg: N/A N/A N/A
+update_stats_ms_min: N/A N/A N/A
+update_stats_ms_max: N/A N/A N/A
+update_stats_ms_pct95: N/A N/A N/A
+update_stats_ms_pct99: N/A N/A N/A
 agent_connect: 1
 agent_retry: 0
 queries: 17

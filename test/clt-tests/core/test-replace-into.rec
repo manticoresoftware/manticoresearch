@@ -147,7 +147,7 @@ mysql -h0 -P9306 -e "select count(*) from tbl WHERE regex (color, 'silver[0-9]+'
 ––– input –––
 echo $((elapsed_time / elapsed_time2))
 ––– output –––
-#!/[1-9]|1[0-2]/!#
+#!/([0-9]{1}|1[0-2]{1})/!#
 ––– input –––
 mysql -v -h0 -P9306 -e "SHOW TABLES; DROP TABLE IF EXISTS abc; create table abc(id, t1 text, t2 text indexed); insert into abc VALUES (1, 'abc', 'cde'); desc abc;"
 ––– output –––

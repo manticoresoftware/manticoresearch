@@ -233,7 +233,7 @@ private:
 		case JSON_STRING:
 			{
 				char szBuf[64];
-				sprintf ( szBuf, INT64_FMT, iValue );
+				snprintf ( szBuf, 64, INT64_FMT, iValue );
 				m_pBuilder->SetAttr ( iAttr, (const uint8_t*)szBuf, strlen(szBuf) );
 			}
 			break;
@@ -255,7 +255,7 @@ private:
 		case JSON_STRING:
 			{
 				char szBuf[64];
-				sprintf ( szBuf, "%f", (float)fValue );
+				snprintf ( szBuf, 64, "%f", (float)fValue );
 				m_pBuilder->SetAttr ( iAttr, (const uint8_t*)szBuf, strlen(szBuf) );
 			}
 			break;

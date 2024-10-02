@@ -60,13 +60,15 @@ See the examples for more details.
   > NOTE: Elasticsearch-like replace requires [Manticore Buddy](../Installation/Manticore_Buddy.md). If it doesn't work, make sure Buddy is installed.
 * Partial replace:
   ```
-  POST /<table name>/_update/<id>
+  POST /<{table | cluster:table}>/_update/<id>
   {
     "<field1>": <value1>,
     ...
     "<fieldN>": <valueN>
   }
   ```
+  The `<table name>` can either be just the table name or in the format `cluster:table`. This allows for updates across a specific cluster if needed.
+
   > NOTE: Partial replace requires [Manticore Buddy](../Installation/Manticore_Buddy.md). If it doesn't work, make sure Buddy is installed.
 
 See the examples for more details.
@@ -211,6 +213,28 @@ POST /products/_update/55
 }
 ```
 
+<!-- intro -->
+##### Elasticsearch-like partial replace in cluster:
+
+<!-- request Elasticsearch-like partial in cluster -->
+
+```json
+POST /cluster_name:products/_update/55
+{
+  "doc": {
+    "description": "HUAWEI Matebook 15",
+    "price": 10
+  }
+}
+```
+
+<!-- response Elasticsearch-like partial in cluster -->
+```json
+{
+"_index":"products",
+"updated":1
+}
+```
 
 <!-- intro -->
 ##### PHP:
@@ -438,12 +462,12 @@ POST /bulk
 
 ```php
 $index->replaceDocuments([
-    [   
+    [
         'id' => 1,
         'title' => 'document one',
         'tag' => 10
     ],
-    [   
+    [
         'id' => 2,
         'title' => 'document one',
         'tag' => 20
@@ -518,7 +542,7 @@ res =  await indexApi.bulk(docs.map(e=>JSON.stringify(e)).join('\n'));
 
 ``` java
 body = "{\"replace\": {\"index\" : \"products\", \"id\" : 1, \"doc\" : {\"title\" : \"document one\"}}}" +"\n"+
-    "{\"replace\": {\"index\" : \"products\", \"id\" : 2, \"doc\" : {\"title\" : \"document two\"}}}"+"\n" ;         
+    "{\"replace\": {\"index\" : \"products\", \"id\" : 2, \"doc\" : {\"title\" : \"document two\"}}}"+"\n" ;
 indexApi.bulk(body);
 ```
 
@@ -535,7 +559,7 @@ class BulkResponse {
 
 ``` clike
 string body = "{\"replace\": {\"index\" : \"products\", \"id\" : 1, \"doc\" : {\"title\" : \"document one\"}}}" +"\n"+
-    "{\"replace\": {\"index\" : \"products\", \"id\" : 2, \"doc\" : {\"title\" : \"document two\"}}}"+"\n" ;         
+    "{\"replace\": {\"index\" : \"products\", \"id\" : 2, \"doc\" : {\"title\" : \"document two\"}}}"+"\n" ;
 indexApi.Bulk(body);
 ```
 

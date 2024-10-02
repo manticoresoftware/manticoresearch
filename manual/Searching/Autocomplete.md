@@ -136,6 +136,11 @@ POST /autocomplete
 
 <!-- end -->
 
+#### Links
+* [This demo](https://github.manticoresearch.com/manticoresoftware/manticoresearch) demonstrates the autocomplete functionality:
+  ![Autocomplete example](autocomplete_github_demo.png){.scale-0.7}
+* Blog post about Fuzzy Search and Autocomplete - https://manticoresearch.com/blog/new-fuzzy-search-and-autocomplete/
+
 ## Alternative autocomplete methods
 
 While `CALL AUTOCOMPLETE` is the recommended method for most use cases, Manticore also supports other controllable and customizable approaches to implement autocomplete functionality:

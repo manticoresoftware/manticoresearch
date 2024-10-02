@@ -94,12 +94,23 @@ target_link_libraries ( lmanticore PUBLIC schema )
 add_subdirectory ( dict )
 target_link_libraries ( lmanticore PUBLIC dict )
 
+if (WITH_ICU OR WITH_JIEBA)
+	add_library ( lcjk cjkpreprocessor.cpp )
+	target_link_libraries ( lcjk PUBLIC lextra)
+endif()
+
 add_library ( lmanticore_icu icu.cpp )
 if (WITH_ICU)
 	target_link_libraries ( lmanticore_icu PRIVATE icu::icu )
 endif ()
-target_link_libraries ( lmanticore_icu PRIVATE lextra )
+target_link_libraries ( lmanticore_icu PRIVATE lcjk )
 target_link_libraries ( lmanticore PUBLIC lmanticore_icu )
+
+if (WITH_JIEBA)
+	add_library ( lmanticore_jieba jieba.cpp jieba.h )
+	target_link_libraries ( lmanticore_jieba PRIVATE lcjk jieba::jieba )
+	target_link_libraries ( lmanticore PUBLIC lmanticore_jieba )
+endif ()
 
 if (WITH_STEMMER)
 	target_link_libraries ( lmanticore PRIVATE stemmer::stemmer )
@@ -154,7 +165,7 @@ set ( HEADERS sphinxexcerpt.h sphinxfilter.h sphinxint.h sphinxpq.h sphinxrt.h
 		costestimate.h docidlookup.h tracer.h attrindex_merge.h columnarmisc.h distinct.h hyperloglog.h pseudosharding.h datetime.h
 		grouper.h exprdatetime.h geodist.h detail/indexlink.h detail/expmeter.h knnmisc.h knnlib.h match_impl.h std/string_impl.h
 		aggrexpr.h joinsorter.h queuecreator.h exprgeodist.h exprremap.h exprdocstore.h schematransform.h sortergroup.h
-		sortertraits.h sorterprecalc.h querycontext.h skip_cache.h jsonsi.h )
+		sortertraits.h sorterprecalc.h querycontext.h skip_cache.h jsonsi.h jieba.h cjkpreprocessor.h )
 
 set ( SEARCHD_H searchdaemon.h searchdconfig.h searchdddl.h searchdexpr.h searchdha.h searchdreplication.h searchdsql.h
 		searchdtask.h client_task_info.h taskflushattrs.h taskflushbinlog.h taskflushmutable.h taskglobalidf.h

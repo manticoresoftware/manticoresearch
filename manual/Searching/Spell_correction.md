@@ -147,11 +147,11 @@ Note: If you use the [query_string](../../Searching/Full_text_matching/Basic_usa
   - `us` - American QWERTY layout
 
 
-### Demo
+### Links
 
-* <a href="https://github.manticoresearch.com/manticoresoftware/manticoresearch?query=fature&filters%5Bcomment%5D%5B%5D=28798446&filters%5Bcommon%5D%5Brepo_id%5D%5B%5D=95614931&sort=&search=keyword-search-fuzzy-layouts">This demo</a> demonstrates the fuzzy search functionality.
-
-![Fuzzy search example](fuzzysearch.png){.scale-0.7}
+* <a href="https://github.manticoresearch.com/manticoresoftware/manticoresearch?query=fature&filters%5Bcomment%5D%5B%5D=28798446&filters%5Bcommon%5D%5Brepo_id%5D%5B%5D=95614931&sort=&search=keyword-search-fuzzy-layouts">This demo</a> demonstrates the fuzzy search functionality:
+  ![Fuzzy search example](fuzzysearch.png){.scale-0.7}
+* Blog post about Fuzzy Search and Autocomplete - https://manticoresearch.com/blog/new-fuzzy-search-and-autocomplete/
 
 ## CALL QSUGGEST, CALL SUGGEST
 

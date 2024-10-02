@@ -802,6 +802,25 @@ table products
 
 </details>
 
+### Storing binary data in Manticore
+
+<!-- example binary -->
+
+Manticore doesn't have a dedicated field type for binary data, but you can store it safely by using base64 encoding and the `text stored` or `string stored` field types (which are synonyms). If you don't encode the binary data, parts of it may get lost — for example, Manticore trims the end of a string if it encounters a null-byte.
+
+Here is an example where we encode the `ls` command using base64, store it in Manticore, and then decode it to verify that the MD5 checksum remains unchanged:
+
+<!-- request Example -->
+```bash
+# md5sum /bin/ls
+43d1b8a7ccda411118e2caba685f4329  /bin/ls
+# encoded_data=`base64 -i /bin/ls `
+# mysql -P9306 -h0 -e "drop table if exists test; create table test(data text stored); insert into test(data) values('$encoded_data')"
+# mysql -P9306 -h0 -NB -e "select data from test" | base64 -d > /tmp/ls | md5sum
+43d1b8a7ccda411118e2caba685f4329  -
+```
+<!-- end -->
+
 ## Integer
 
 <!-- example for integers  -->

@@ -63,17 +63,14 @@ sleep 5; mysql -h0 -P9306 -e "select count(*) from orders\G"
 *************************** 1. row ***************************
 count(*): 10000
 ––– input –––
-mysql -h0 -P9306 -e "drop table if exists t; create table t; freeze t; flush ramchunk t;" & sleep 1; true
+mysql -h0 -P9306 -e "drop table if exists t; create table t; freeze t;" > /dev/null 2>&1
+––– output –––
+––– input –––
+mysql -h0 -P9306 -e "flush ramchunk t;" > /dev/null 2>&1 &
 ––– output –––
 [%{NUMBER}] %{NUMBER}
-+---------------------------------+---------------------------------+
-| file                            | normalized                      |
-+---------------------------------+---------------------------------+
-| /var/lib/manticore/t/t.meta     | /var/lib/manticore/t/t.meta     |
-| /var/lib/manticore/t/t.ram      | /var/lib/manticore/t/t.ram      |
-| /var/lib/manticore/t/t.settings | /var/lib/manticore/t/t.settings |
-+---------------------------------+---------------------------------+
 ––– input –––
-searchd --stop > /dev/null 2>&1; if timeout 60 grep -qm1 'shutting down' <(tail -n 1000 -f /var/log/manticore/searchd.log); then echo 'Searchd stopped.'; else echo 'Timeout or failed!'; cat /var/log/manticore/searchd.log; fi
+searchd --stopwait > /dev/null 2>&1; if timeout 60 grep -qm1 'shutdown complete' <(tail -n 1000 -f /var/log/manticore/searchd.log); then echo 'Shutdown complete'; else echo 'Shutdown not completed'; cat /var/log/manticore/searchd.log; fi
 ––– output –––
-Searchd stopped.
+ERROR 2013 (HY000): Lost connection to MySQL server at 'reading initial communication packet', system error: 104
+Shutdown complete

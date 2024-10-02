@@ -72,5 +72,4 @@ mysql -h0 -P9306 -e "flush ramchunk t;" > /dev/null 2>&1 &
 ––– input –––
 searchd --stopwait > /dev/null 2>&1; if timeout 60 grep -qm1 'shutdown complete' <(tail -n 1000 -f /var/log/manticore/searchd.log); then echo 'Shutdown complete'; else echo 'Shutdown not completed'; cat /var/log/manticore/searchd.log; fi
 ––– output –––
-ERROR 2013 (HY000): Lost connection to MySQL server at 'reading initial communication packet', system error: 104
 Shutdown complete

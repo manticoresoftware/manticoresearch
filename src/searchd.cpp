@@ -223,7 +223,6 @@ static bool				g_bHasBuddyPath = false;
 static bool				g_bAutoSchema = true;
 static bool				g_bNoChangeCwd = val_from_env ( "MANTICORE_NO_CHANGE_CWD", false );
 static bool				g_bCwdChanged = false;
-static int				g_iDumpDocs = 1000000000;
 
 // for CLang thread-safety analysis
 ThreadRole MainThread; // functions which called only from main thread
@@ -5847,7 +5846,7 @@ void SearchHandler_c::CalcThreadsPerIndex ( int iConcurrency )
 	int iMaxThreadsPerIndex = CalcMaxThreadsPerIndex ( iAvailableWorkers );
 
 	CSphVector<SplitData_t> dSplitData ( m_dLocal.GetLength() );
-	
+
 	int iEnabledIndexes = 0;
 	ARRAY_FOREACH ( iLocal, m_dLocal )
 	{
@@ -5869,7 +5868,7 @@ void SearchHandler_c::CalcThreadsPerIndex ( int iConcurrency )
 
 			tSplitData.m_iMetric = tMetric.first;
 
-			bool bExplicitConcurrency = m_dNQueries.any_of ( []( auto & tQuery ){ return tQuery.m_iConcurrency>0; } );		
+			bool bExplicitConcurrency = m_dNQueries.any_of ( []( auto & tQuery ){ return tQuery.m_iConcurrency>0; } );
 			tSplitData.m_iThreadCap = bExplicitConcurrency ? 0 : tMetric.second;	// ignore thread cap if concurrency is explicitly specified
 		}
 		else
@@ -6403,7 +6402,7 @@ void SearchHandler_c::SetupLocalDF ()
 	for ( const CSphQuery & tQuery : m_dNQueries )
 	{
 		bOnlyFullScan &= tQuery.m_sQuery.IsEmpty();
-		
+
 		bHasLocalDF |= tQuery.m_bLocalDF.value_or ( false );
 		if ( !tQuery.m_sQuery.IsEmpty() && tQuery.m_bLocalDF.value_or ( false ) )
 			bOnlyNoneRanker &= ( tQuery.m_eRanker==SPH_RANK_NONE );
@@ -11212,7 +11211,7 @@ void sphHandleMysqlInsert ( StmtErrorReporter_i & tOut, const SqlStmt_t & tStmt 
 
 	GlobalCrashQueryGetRef().m_dIndex = FromStr ( tStmt.m_sIndex );
 
-	// with index RLocked at the 
+	// with index RLocked at the
 	if ( !AddDocument ( tStmt, pServed, tOut ) )
 		return;
 
@@ -12030,7 +12029,7 @@ static void SendSuggestReply ( const SuggestResult_t & tRes, ISphOutputBuffer & 
 	{
 		tOut.SendInt ( tWord.m_iDistance );
 		tOut.SendInt ( tWord.m_iDocs );
-		
+
 		tOut.SendInt ( tWord.m_iLen );
 		tOut.SendBytes ( pBuf + tWord.m_iNameOff, tWord.m_iLen );
 	}
@@ -12137,7 +12136,7 @@ public:
 			SuggestWord_t & tWord = m_tRes.m_dMatched[iOff + i];
 			tWord.m_iDistance = tReq.GetInt();
 			tWord.m_iDocs = tReq.GetInt();
-			
+
 			int iWordLen = tReq.GetInt();
 			tWord.m_iNameOff = m_tRes.m_dBuf.GetLength();
 			tWord.m_iLen = iWordLen + 1;
@@ -14933,7 +14932,7 @@ void HandleMysqlAttach ( RowBuffer_i & tOut, const SqlStmt_t & tStmt, CSphString
 	{
 		if ( tClusterTo )
 			tOut.ErrorEx ( "table %s is part of cluster %s, can not issue ATTACH", sTo.cstr(), tClusterTo->cstr() );
-		else 
+		else
 			tOut.ErrorEx ( "table %s is part of cluster %s, can not issue ATTACH", sFrom.cstr(), tClusterFrom->cstr() );
 		return;
 	}
@@ -16061,7 +16060,7 @@ static void RemoveAttrFromIndex ( const SqlStmt_t& tStmt, CSphIndex* pIdx, CSphS
 		tCtx.m_eType = pAttr->m_eAttrType;
 		pIdx->AddRemoveAttribute ( false, tCtx, sError );
 	}
-	
+
 	if ( pField )
 		pIdx->AddRemoveField ( false, sAttrToRemove, 0, sError );
 }
@@ -16177,7 +16176,7 @@ static bool PrepareReconfigure ( const char * szIndex, const CSphConfigSection &
 		if ( !tSettings.m_tIndex.Setup ( hIndex, szIndex, sWarning, sError ) )
 		{
 			sError.SetSprintf ( "failed to parse table '%s' settings, error: '%s'", szIndex, sError.cstr() );
-			return false;	
+			return false;
 		}
 
 		if ( pWarnings && !sWarning.IsEmpty() )
@@ -16942,24 +16941,6 @@ bool ClientSession_c::Execute ( Str_t sQuery, RowBuffer_i & tOut )
 			return true;
 		}
 	}
-	if ( bParsedOK && m_bDumpUser )
-	{
-		ARRAY_FOREACH ( i, dStmt )
-		{
-			SqlStmt_t & tStmt = dStmt[i];
-			if ( tStmt.m_eStmt!=STMT_SELECT )
-				continue;
-
-			if ( !tStmt.m_tQuery.m_bExplicitMaxMatches )
-			{
-				tStmt.m_tQuery.m_iLimit = g_iDumpDocs;
-				tStmt.m_tQuery.m_iMaxMatches = g_iDumpDocs;
-				tStmt.m_tQuery.m_bExplicitMaxMatches = true;
-			}
-
-			tStmt.m_tQuery.m_iConcurrency = 1;
-		}
-	}
 
 	// handle multi SQL query
 	if ( bParsedOK && dStmt.GetLength()>1 )
@@ -17446,11 +17427,9 @@ void session::SetFederatedUser ()
 	GetClientSession()->m_bFederatedUser = true;
 }
 
-void session::SetDumpUser ( const CSphString & sUser )
+void session::SetUser ( const CSphString & sUser )
 {
-	ClientSession_c * pSession = GetClientSession();
-	pSession->m_sUser = sUser;
-	pSession->m_bDumpUser = ( sUser=="mysqldump" );
+	GetClientSession()->m_sUser = sUser;
 }
 
 void session::SetAutoCommit ( bool bAutoCommit )

@@ -290,6 +290,8 @@ static ExpMeter_c							g_tSecStat5m { 12*5 }; // once a 5 minutes
 static ExpMeter_c							g_tSecStat15m { 12*15 }; // once a 15 minutes
 int64_t g_iNextExpMeterTimestamp = sphMicroTimer() + g_iExpMeterPeriod;
 
+static CSphString							g_sClusterUser { "cluster" }; // user with this name will see cluster:table in show tables
+
 /// command names
 static const char * g_dApiCommands[] =
 {
@@ -12514,7 +12516,31 @@ void HandleMysqlDescribe ( RowBuffer_i & tOut, const SqlStmt_t * pStmt )
 	tOut.DataTable ( dOut );
 }
 
-using NamedIndexType_t = std::pair<CSphString, IndexType_e>;
+struct NamedIndexType_t
+{
+	CSphString m_sName;
+	CSphString m_sCluster;
+	IndexType_e m_eType;
+
+
+	NamedIndexType_t() = default;
+	NamedIndexType_t ( NamedIndexType_t && ) noexcept = default;
+	NamedIndexType_t & operator= ( NamedIndexType_t && ) noexcept = default;
+	NamedIndexType_t ( const NamedIndexType_t & ) noexcept = default;
+	NamedIndexType_t & operator= ( const NamedIndexType_t & ) noexcept = default;
+
+
+	NamedIndexType_t ( CSphString sName, CSphString sCluster, IndexType_e eType )
+		: m_sName { std::move (sName) }
+		, m_sCluster { std::move (sCluster) }
+		, m_eType { eType }
+	{}
+
+	NamedIndexType_t ( CSphString sName, IndexType_e eType )
+		: m_sName { std::move (sName) }
+		, m_eType { eType }
+	{}
+};
 
 CSphVector<NamedIndexType_t> GetAllServedIndexes()
 {
@@ -12533,10 +12559,10 @@ CSphVector<NamedIndexType_t> GetAllServedIndexes()
 		case IndexType_e::RT:
 		case IndexType_e::PERCOLATE:
 		case IndexType_e::TEMPLATE:
-			dIndexes.Add ( NamedIndexType_t ( tIt.first, tIt.second->m_eType ) );
+			dIndexes.Add ( { tIt.first, tIt.second->m_sCluster, tIt.second->m_eType } );
 			break;
 		default:
-			dIndexes.Add ( NamedIndexType_t ( tIt.first, IndexType_e::ERROR_ ) );
+			dIndexes.Add ( { tIt.first, IndexType_e::ERROR_ } );
 		}
 	}
 
@@ -12545,20 +12571,28 @@ CSphVector<NamedIndexType_t> GetAllServedIndexes()
 	auto pDistSnapshot = g_pDistIndexes->GetHash();
 	for ( auto& tIt : *pDistSnapshot )
 		// no need to check distr's it, iterating guarantees index existance.
-		dIndexes.Add ( NamedIndexType_t ( tIt.first, IndexType_e::DISTR ) );
+		dIndexes.Add ( { tIt.first, IndexType_e::DISTR } );
 
-	dIndexes.Sort ( Lesser ( [] ( const NamedIndexType_t& a, const NamedIndexType_t& b ) { return strcasecmp ( a.first.cstr(), b.first.cstr() ) < 0; } ) );
+	dIndexes.Sort ( Lesser ( [] ( const NamedIndexType_t& a, const NamedIndexType_t& b ) { return strcasecmp ( a.m_sName.cstr(), b.m_sName.cstr() ) < 0; } ) );
 	return dIndexes;
 }
 
 void HandleMysqlShowTables ( RowBuffer_i & tOut, const SqlStmt_t * pStmt )
 {
 	auto dIndexes = GetAllServedIndexes();
+	bool bWithClusters = false;
+	if ( !g_sClusterUser.IsEmpty() && session::GetClientSession ()->m_sUser==g_sClusterUser )
+		bWithClusters = true;
 
 	// output the results
 	VectorLike dTable ( pStmt->m_sStringParam, { "Index", "Type" } );
 	for ( auto& dPair : dIndexes )
-		dTable.MatchTuplet( dPair.first.cstr (), szIndexType(dPair.second) );
+	{
+		if ( bWithClusters && !dPair.m_sCluster.IsEmpty ())
+			dTable.MatchTuplet ( SphSprintf ("%s:%s", dPair.m_sCluster.cstr(), dPair.m_sName.cstr()).cstr(), szIndexType ( dPair.m_eType ) );
+		else
+			dTable.MatchTuplet( dPair.m_sName.cstr (), szIndexType(dPair.m_eType) );
+	}
 	tOut.DataTable ( dTable );
 }
 
@@ -14767,6 +14801,12 @@ static bool HandleSetGlobal ( CSphString& sError, const CSphString& sName, int64
 		return true;
 	}
 
+	if ( sName=="cluster_user" )
+	{
+		g_sClusterUser = std::move ( sSetValue );
+		return true;
+	}
+
 	return false;
 }
 
@@ -15466,6 +15506,7 @@ void HandleMysqlShowVariables ( RowBuffer_i & dRows, const SqlStmt_t & tStmt )
 		Dispatcher::RenderTemplates ( tBuf, { x, y } );
 		return tBuf;
 	} );
+	dTable.MatchTuplet ( "cluster_user", g_sClusterUser.scstr() );
 
 	if ( tStmt.m_iIntParam>=0 ) // that is SHOW GLOBAL VARIABLES
 	{
@@ -15491,6 +15532,7 @@ void HandleMysqlShowVariables ( RowBuffer_i & dRows, const SqlStmt_t & tStmt )
 			Dispatcher::RenderTemplates ( tBuf, { x, y } );
 			return tBuf;
 		});
+		dTable.MatchTuplet ( "user", session::GetClientSession()->m_sUser.scstr () );
 	}
 
 	// fine
@@ -15769,18 +15811,18 @@ void HandleMysqlShowFederatedIndexStatus ( RowBuffer_i & tOut, const SqlStmt_t &
 
 	for ( const NamedIndexType_t& tIndex : dIndexes )
 	{
-		if ( !tSelector.Match ( tIndex.first.cstr() ) )
+		if ( !tSelector.Match ( tIndex.m_sName.cstr() ) )
 			continue;
 
-		if ( tIndex.second == IndexType_e::DISTR )
-			AddFederatedIndexStatusLine ( tFakeStats, tIndex.first, tOut );
+		if ( tIndex.m_eType == IndexType_e::DISTR )
+			AddFederatedIndexStatusLine ( tFakeStats, tIndex.m_sName, tOut );
 		else {
-			auto pServed = GetServed ( tIndex.first );
+			auto pServed = GetServed ( tIndex.m_sName );
 			if ( !pServed )
 				continue; // really rare case when between GetAllServedIndexes and that moment table was removed.
 			RIdx_c pIndex { pServed };
 			assert ( pIndex );
-			AddFederatedIndexStatusLine ( pIndex->GetStats(), tIndex.first, tOut );
+			AddFederatedIndexStatusLine ( pIndex->GetStats(), tIndex.m_sName, tOut );
 		}
 	}
 
@@ -16796,19 +16838,19 @@ void HandleMysqlShowLocks ( RowBuffer_i & tOut )
 	auto dIndexes = GetAllServedIndexes ();
 	for ( auto & dPair: dIndexes )
 	{
-		switch ( dPair.second )
+		switch ( dPair.m_eType )
 		{
 		case IndexType_e::RT:
 		case IndexType_e::PERCOLATE:
 		{
-			auto pIndex = GetServed ( dPair.first );
+			auto pIndex = GetServed ( dPair.m_sName );
 			assert ( ServedDesc_t::IsMutable ( pIndex ) );
 			RIdx_T<RtIndex_i *> pRt { pIndex };
 			int iLocks = pRt->GetNumOfLocks ();
 			if ( iLocks>0 )
 			{
-				tOut.PutString ( GetIndexTypeName ( dPair.second ) );
-				tOut.PutString ( dPair.first );
+				tOut.PutString ( GetIndexTypeName ( dPair.m_eType ) );
+				tOut.PutString ( dPair.m_sName );
 				tOut.PutString ( "freeze" );
 				tOut.PutStringf ( "Count: %d", iLocks );
 				if ( !tOut.Commit () )

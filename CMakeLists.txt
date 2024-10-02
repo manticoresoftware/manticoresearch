@@ -238,8 +238,6 @@ target_link_libraries ( lextra INTERFACE cctz::cctz )
 include ( GetxxHash )
 target_link_libraries ( lextra INTERFACE xxHash::xxhash )
 
-include ( GetJIEBA )
-target_link_libraries ( lextra INTERFACE jieba::jieba )
 with_get ( jieba "Jieba" "Chinese text segmentation tool" )
 
 # Support for OpenSSL
@@ -417,6 +415,10 @@ cpack_add_component_group ( helpers EXPANDED )
 if (WITH_ICU)
 	cpack_add_component ( icudata )
 endif ()
+
+#if (WITH_JIEBA)
+#	cpack_add_component ( jiebadicts )
+#endif ()
 
 if (WIN32)
 	cpack_add_component ( runtime GROUP main )

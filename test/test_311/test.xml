@@ -5,6 +5,7 @@
 
 <requires>
 <jieba/>
+<heavy/>
 <non-rt/>
 </requires>
 

@@ -67,8 +67,7 @@ add_library ( lmanticore STATIC sphinx.cpp sphinxexcerpt.cpp sphinxquery.cpp sph
 		docidlookup.cpp tracer.cpp attrindex_merge.cpp distinct.cpp hyperloglog.cpp pseudosharding.cpp geodist.cpp
 		datetime.cpp grouper.cpp exprdatetime.cpp detail/indexlink.cpp knnmisc.cpp knnlib.cpp libutils.cpp
 		aggrexpr.cpp joinsorter.cpp queuecreator.cpp exprgeodist.cpp exprremap.cpp exprdocstore.cpp schematransform.cpp
-		sortergroup.cpp sortertraits.cpp sorterprecalc.cpp querycontext.cpp skip_cache.cpp jsonsi.cpp jieba.cpp
-		cjkpreprocessor.cpp )
+		sortergroup.cpp sortertraits.cpp sorterprecalc.cpp querycontext.cpp skip_cache.cpp jsonsi.cpp )
 
 add_library ( lstem STATIC sphinxsoundex.cpp sphinxmetaphone.cpp sphinxstemen.cpp sphinxstemru.cpp sphinxstemru.inl
 		sphinxstemcz.cpp sphinxstemar.cpp )
@@ -95,12 +94,23 @@ target_link_libraries ( lmanticore PUBLIC schema )
 add_subdirectory ( dict )
 target_link_libraries ( lmanticore PUBLIC dict )
 
+if (WITH_ICU OR WITH_JIEBA)
+	add_library ( lcjk cjkpreprocessor.cpp )
+	target_link_libraries ( lcjk PUBLIC lextra)
+endif()
+
 add_library ( lmanticore_icu icu.cpp )
 if (WITH_ICU)
 	target_link_libraries ( lmanticore_icu PRIVATE icu::icu )
 endif ()
-target_link_libraries ( lmanticore_icu PRIVATE lextra )
+target_link_libraries ( lmanticore_icu PRIVATE lcjk )
 target_link_libraries ( lmanticore PUBLIC lmanticore_icu )
+
+if (WITH_JIEBA)
+	add_library ( lmanticore_jieba jieba.cpp jieba.h )
+	target_link_libraries ( lmanticore_jieba PRIVATE lcjk jieba::jieba )
+	target_link_libraries ( lmanticore PUBLIC lmanticore_jieba )
+endif ()
 
 if (WITH_STEMMER)
 	target_link_libraries ( lmanticore PRIVATE stemmer::stemmer )

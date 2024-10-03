@@ -1,6 +1,6 @@
 ––– block: ../base/start-searchd –––
 ––– input –––
-php -d memory_limit=-1 ./test/clt-tests/scripts/load_us_names_min_infix_len.php 1000 10 1000000 5 2 > /dev/null
+php -d memory_limit=-1 ./test/clt-tests/scripts/load_us_names_min_infix_len.php 1000 10 1000000 5 > /dev/null
 ––– output –––
 ––– input –––
 mysql -h0 -P9306 -e "SELECT COUNT(*) FROM name;"

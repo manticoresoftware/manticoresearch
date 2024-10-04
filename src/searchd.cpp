@@ -7075,6 +7075,35 @@ DEFINE_RENDER ( QueryInfo_t )
 		dDst.m_pQuery = std::make_unique<CSphQuery> ( *pQuery );
 }
 
+static void FillupFacetError ( int iQueries, const CSphVector<CSphQuery> & dQueries, VecTraits_T<AggrResult_t> & dAggrResults )
+{
+	if ( iQueries>1 && !dAggrResults.Begin()->m_iSuccesses && dAggrResults.Begin()->m_sError.IsEmpty() && dQueries.Begin()->m_bFacetHead )
+	{
+		const CSphString * pError = nullptr;
+		for ( int iRes=0; iRes<iQueries; ++iRes )
+		{
+			const AggrResult_t & tRes = dAggrResults[iRes];
+			if ( !tRes.m_iSuccesses && !tRes.m_sError.IsEmpty() )
+			{
+				pError = &tRes.m_sError;
+				break;
+			}
+		}
+
+		if ( !pError )
+			return;
+
+		for ( int iRes=0; iRes<iQueries; ++iRes )
+		{
+			AggrResult_t & tRes = dAggrResults[iRes];
+			if ( !tRes.m_sError.IsEmpty() )
+				break;
+
+			tRes.m_sError = *pError;
+		}
+	}
+}
+
 // one or more queries against one and same set of indexes
 void SearchHandler_c::RunSubset ( int iStart, int iEnd )
 {
@@ -7406,6 +7435,9 @@ void SearchHandler_c::RunSubset ( int iStart, int iEnd )
 		for ( const auto & tLocal : m_dLocal )
 			tRes.m_dIndexNames.Add ( tLocal.m_sName );
 	}
+
+	// pop up facet error from one of the query to the front
+	FillupFacetError ( iQueries, m_dQueries, m_dNAggrResults );
 
 	/////////////////////////////////
 	// functions on a table argument
@@ -14296,13 +14328,16 @@ void HandleMysqlMultiStmt ( const CSphVector<SqlStmt_t> & dStmt, CSphQueryResult
 		case STMT_SELECT:
 		{
 			AggrResult_t & tRes = tHandler.m_dAggrResults[iSelect++];
-			if ( !sWarning.IsEmpty() )
-				tRes.m_sWarning = sWarning;
-			auto uMatches = SendMysqlSelectResult ( dRows, tRes, bMoreResultsFollow, false, nullptr, ( tSess.IsProfile() ? &tProfile : nullptr ) );
-
-			StatCountCommandDetails ( SearchdStats_t::eSearch, uMatches, tmStart );
 			// mysql server breaks send on error
 			bBreak = !tRes.m_iSuccesses;
+
+			if ( !sWarning.IsEmpty() )
+				tRes.m_sWarning = sWarning;
+			if ( bBreak )
+				bMoreResultsFollow = false;
+
+			auto uMatches = SendMysqlSelectResult ( dRows, tRes, bMoreResultsFollow, false, nullptr, ( tSess.IsProfile() ? &tProfile : nullptr ) );
+			StatCountCommandDetails ( SearchdStats_t::eSearch, uMatches, tmStart );
 			break;
 		}
 		case STMT_SHOW_WARNINGS:

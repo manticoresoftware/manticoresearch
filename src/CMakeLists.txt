@@ -363,6 +363,9 @@ trace ( lsearchd )
 add_executable ( searchd searchd.cpp )
 target_link_libraries ( searchd searchd_ssl lmanticore lsearchd )
 
+# RUST SECTION
+target_link_libraries ( searchd manticore-rs::hello_world )
+
 if (NOT STATIC_BINARY)
 	add_executable ( indexer indexer.cpp )
 	add_executable ( indextool indextool.cpp )

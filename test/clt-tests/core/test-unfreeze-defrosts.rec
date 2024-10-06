@@ -58,10 +58,9 @@ count(*): #!/3\d{3}|4\d{3}/!#
 sleep 5; mysql -h0 -P9306 -e "unfreeze orders;"
 ––– output –––
 ––– input –––
-sleep 5; mysql -h0 -P9306 -e "select count(*) from orders\G"
+timeout 60 bash -c 'while [[ $(mysql -h0 -P9306 -e "SELECT COUNT(*) FROM orders;" | grep -o "[0-9]*") -ne 10000 ]]; do sleep 1; done && echo "Data processing completed."'
 ––– output –––
-*************************** 1. row ***************************
-count(*): 10000
+Data processing completed.
 ––– input –––
 mysql -h0 -P9306 -e "drop table if exists t; create table t; freeze t;" > /dev/null 2>&1
 ––– output –––

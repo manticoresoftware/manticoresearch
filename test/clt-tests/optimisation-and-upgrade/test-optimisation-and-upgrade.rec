@@ -1,6 +1,33 @@
 ––– block: ../base/start-searchd –––
 ––– input –––
-php -d memory_limit=-1 ./test/clt-tests/optimisation-and-upgrade/load_names_attr.php 10000 10 2000000 1 > /dev/null
+apt-get update -y > /dev/null; echo $?
+––– output –––
+0
+––– input –––
+apt-get install zstd -y > /dev/null; echo $?
+––– output –––
+debconf: delaying package configuration, since apt-utils is not installed
+––– input –––
+chmod +x ./test/clt-tests/optimisation-and-upgrade/load_data_manticore.sh > /dev/null; echo $?
+0
+––– input –––
+./test/clt-tests/optimisation-and-upgrade/load_data_manticore.sh > /dev/null; echo $?
+––– output –––
+0
+––– input –––
+searchd --stopwait > /dev/null
+––– output –––
+––– input –––
+tar -cf - /var/lib/manticore/ | zstd > ./test/clt-tests/optimisation-and-upgrade/datadir.tar.zst
+––– output –––
+0
+––– input –––
+rm -rf /var/lib/manticore/data; zstd -d < ./test/clt-tests/optimisation-and-upgrade/datadir.tar.zst | tar -xf - -C /var/lib/manticore/
+––– output –––
+0
+––– block: ../base/start-searchd –––
+––– input –––
+mysql -h0 -P9306 -e "SHOW TABLES;"
 ––– output –––
 ––– input –––
 mysql -h0 -P9306 -e "show table name status like '%chunk%';"

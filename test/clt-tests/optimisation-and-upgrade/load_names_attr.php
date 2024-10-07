@@ -1,14 +1,15 @@
 #!/usr/bin/php
 <?php
-if (count($argv) < 5) die("Usage: ".__FILE__." <batch size> <concurrency> <docs> <multiplier>\n");
+if (count($argv) < 8) die("Usage: ".__FILE__." <host> <port> <batch size> <concurrency> <docs> <multiplier> <firstdoc>\n");
 
 /*
 Requires:
 
 wget https://raw.githubusercontent.com/zeraye/names-surnames-list/master/male-names-list.txt > names.txt
-wget https://raw.githubusercontent.com/zeraye/names-surnames-list/master/female-names-list.txt >> names.txt
+wget https://raw.githubusercontent.com/zeraye/names-surnames-list/master/female-names-list.txt >> fnames.txt
 wget https://raw.githubusercontent.com/zeraye/names-surnames-list/master/surnames-list.txt > surnames.txt
-*/
+ */
+
 
 // This function waits for an idle mysql connection for the $query, runs it and exits
 function process($query) {
@@ -52,18 +53,28 @@ function process($query) {
     return true;
 }
 
+global $batch_size, $concurrency, $docs, $multiplier, $host, $port;
+$host = $argv[1];
+$port = $argv[2];
+$batch_size = $argv[3];
+$concurrency = $argv[4];
+$docs = $argv[5];
+$multiplier = $argv[6];
+$offset = $argv[7];
+
+
 $all_links = [];
 $requests = [];
 $c = 0;
-for ($i=0;$i<$argv[2];$i++) {
-  $m = @mysqli_connect('127.0.0.1', '', '', '', 9306);
+for ($i=0;$i<$concurrency;$i++) {
+  $m = @mysqli_connect($host, '', '', '', $port);
       if (mysqli_connect_error()) die("Cannot connect to Manticore\n");
       $all_links[] = $m;
   }
 
 // init
-mysqli_query($all_links[0], "drop table if exists name");
-mysqli_query($all_links[0], "create table name(username text, s string) min_infix_len='2' expand_keywords='1' rt_mem_limit = '100M'");
+//mysqli_query($all_links[0], "drop table if exists name");
+//mysqli_query($all_links[0], "create table name(username text, s string) min_infix_len='2' expand_keywords='1'");
 
 $batch = [];
 $query_start = "insert into name(id, username, s) values ";
@@ -74,15 +85,16 @@ $surnamesCount = count($surnames);
 
 echo "preparing...\n";
 $error = false;
-$cache_file_name = '/tmp/'.md5($query_start).'_'.$argv[1].'_'.$argv[3];
-$c = 0;
+$cache_file_name = '/tmp/'.md5($query_start).'_'.$batch_size.'_'.$docs.'_'.$offset;
+$c = 1;
 if (!file_exists($cache_file_name)) {
     $batches = [];
-    while ($c < $argv[3]) {
-      $batch[] = "($c,'".$names[rand(0, $namesCount - 1)].' '.$surnames[rand(0, $surnamesCount - 1)]."', 'a')";
+    while ($c < $docs+1) {
+      $id = $c + $offset;
+      $batch[] = "($id,'".$names[rand(0, $namesCount - 1)].' '.$surnames[rand(0, $surnamesCount - 1)]."', 'a')";
       $c++;
-      if (floor($c/1000) == $c/1000) echo "\r".($c/$argv[3]*100)."%       ";
-        if (count($batch) == $argv[1]) {
+      if (floor($c/1000) == $c/1000) echo "\r".($c/$docs*100)."%       ";
+        if (count($batch) == $batch_size) {
           $batches[] = $query_start.implode(',', $batch);
           $batch = [];
         }
@@ -95,7 +107,7 @@ if (!file_exists($cache_file_name)) {
 }
 
 $batchesMulti = [];
-for ($n=0;$n<$argv[4];$n++) $batchesMulti = array_merge($batchesMulti, $batches);
+for ($n=0;$n<$multiplier;$n++) $batchesMulti = array_merge($batchesMulti, $batches);
 $batches = $batchesMulti;
 
 echo "querying...\n";
@@ -115,4 +127,4 @@ do {
 
 echo "finished inserting\n";
 echo "Total time: ".(microtime(true) - $t)."\n";
-echo round($argv[3] * $argv[4] / (microtime(true) - $t))." docs per sec\n";
+echo round($docs * $multiplier / (microtime(true) - $t))." docs per sec\n";

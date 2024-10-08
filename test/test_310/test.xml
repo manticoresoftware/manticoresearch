@@ -32,10 +32,7 @@ index test
 	source			= test
 	path			= <data_path/>/test
 
-	charset_table	= 0..9, A..Z->a..z, _, a..z, U+410..U+42F->U+430..U+44F, U+430..U+44F, \
-			U+2E80..U+2EF3, U+2F00..U+2FD5, U+3105..U+312D, U+31C0..U+31E3, U+3400..U+4DB5, U+4E00..U+9FCC, \
-			U+F900..U+FAD9, U+20000..U+2FA1D
-			
+	charset_table	= cont, non_cont			
 	morphology 		= jieba_chinese, stem_enru
 	
 	blend_chars		= -, U+23
@@ -68,12 +65,13 @@ INSERT INTO test_table VALUES
 </db_insert>
 
 <queries><sphinxql>
+select * from test;
 select * from test where match('mix');
 select * from test where match('русский');
 select * from test where match('test');
 select * from test where match('test2');
 select * from test where match('許多');
-select * from test where match('則有');
+select * from test where match('社區長');
 select * from test where match('來');
 select * from test where match('這群白髮蒼蒼，');
 select * from test where match('ruin');
@@ -85,6 +83,7 @@ select * from test where match('今天的心情');
 select * from test where match('@content 則有');
 select * from test where match('querymapped');
 
+CALL KEYWORDS ( '許多社區長青學苑多開設有書法、插花、土風舞班，', 'test' );
 CALL KEYWORDS ( '买新的Apple电脑', 'test' );
 CALL KEYWORDS ( '文山區長青學苑則有個十分特別的「英文歌唱班」，test; mixed blended aaa-bbb', 'test' );
 

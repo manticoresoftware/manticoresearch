@@ -38,9 +38,9 @@ mysqli_query($pdo, "CREATE TABLE name(id INTEGER, username TEXT) $min_infix_len 
 
 $batch = [];
 $query_start = "INSERT INTO name(id, username) VALUES ";
-$names = file('./test/clt-tests/comparison-overhead-json-sql/names.txt', FILE_IGNORE_NEW_LINES | FILE_SKIP_EMPTY_LINES);
+$names = file('./test/clt-tests/performance-tests/names.txt', FILE_IGNORE_NEW_LINES | FILE_SKIP_EMPTY_LINES);
 $namesCount = count($names);
-$surnames = file('./test/clt-tests/comparison-overhead-json-sql/surnames.txt', FILE_IGNORE_NEW_LINES | FILE_SKIP_EMPTY_LINES);
+$surnames = file('./test/clt-tests/performance-tests/surnames.txt', FILE_IGNORE_NEW_LINES | FILE_SKIP_EMPTY_LINES);
 $surnamesCount = count($surnames);
 
 echo "preparing...\n";

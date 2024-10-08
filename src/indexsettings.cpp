@@ -1111,7 +1111,7 @@ bool CSphIndexSettings::Setup ( const CSphConfigSection & hIndex, const char * s
 		return false;
 	}
 
-	m_bJiebaHMM = hIndex.GetBool ( "jieba_hmm", false );
+	m_bJiebaHMM = hIndex.GetBool ( "jieba_hmm", true );
 	CSphString sJiebaMode = hIndex.GetStr ( "jieba_mode", "accurate" );
 	if ( sJiebaMode=="accurate" )
 		m_eJiebaMode = JiebaMode_e::ACCURATE;
@@ -1161,7 +1161,7 @@ void CSphIndexSettings::Format ( SettingsFormatter_c & tOut, FilenameBuilder_i *
 	tOut.Add ( "bigram_freq_words",		m_sBigramWords,			!m_sBigramWords.IsEmpty() );
 	tOut.Add ( "index_token_filter",	m_sIndexTokenFilter,	!m_sIndexTokenFilter.IsEmpty() );
 	tOut.Add ( "attr_update_reserve",	m_tBlobUpdateSpace,		m_tBlobUpdateSpace!=DEFAULT_ATTR_UPDATE_RESERVE );
-	tOut.Add ( "binlog",				m_bBinlog,		false );
+	tOut.Add ( "binlog",				0,						!m_bBinlog );
 
 	if ( m_eHitless==SPH_HITLESS_ALL )
 	{
@@ -1175,6 +1175,13 @@ void CSphIndexSettings::Format ( SettingsFormatter_c & tOut, FilenameBuilder_i *
 	AddEngineSettings ( m_eEngine, tOut );
 	if ( m_eEngine==AttrEngine_e::DEFAULT && m_eDefaultEngine!=GetDefaultAttrEngine() )
 		AddEngineSettings ( m_eDefaultEngine, tOut );
+
+	if ( m_eJiebaMode==JiebaMode_e::FULL )
+		tOut.Add ( "jieba_mode",		"full",					true );
+	else if ( m_eJiebaMode==JiebaMode_e::SEARCH )
+		tOut.Add ( "jieba_mode",		"search",				true );
+
+	tOut.Add ( "jieba_hmm",				0,						!m_bJiebaHMM );
 
 	DocstoreSettings_t::Format ( tOut, pFilenameBuilder );
 }
@@ -2950,7 +2957,7 @@ void LoadIndexSettingsJson ( bson::Bson_c tNode, CSphIndexSettings & tSettings )
 	tSettings.m_eEngine = (AttrEngine_e)Int ( tNode.ChildByName ( "engine" ), (DWORD)AttrEngine_e::DEFAULT );
 	tSettings.m_eDefaultEngine = (AttrEngine_e)Int ( tNode.ChildByName ( "engine_default" ), (DWORD)AttrEngine_e::ROWWISE );
 	tSettings.m_eJiebaMode = (JiebaMode_e)Int ( tNode.ChildByName ( "jieba_mode" ), (DWORD)JiebaMode_e::ACCURATE );
-	tSettings.m_bJiebaHMM = Bool ( tNode.ChildByName ( "jieba_hmm" ) );
+	tSettings.m_bJiebaHMM = Bool ( tNode.ChildByName ( "jieba_hmm" ), true );
 }
 
 

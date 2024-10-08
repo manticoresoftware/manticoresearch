@@ -230,6 +230,7 @@ buddy_path = manticore-executor -n /usr/share/manticore/modules/manticore-buddy/
 buddy_path = manticore-executor -n /opt/homebrew/share/manticore/modules/manticore-buddy/bin/manticore-buddy/src/main.php --debug # use the default Manticore Buddy in MacOS arm64, but run it in debug mode
 buddy_path = manticore-executor -n /Users/username/manticoresearch-buddy/src/main.php --debug # use Manticore Buddy from a non-default location
 buddy_path = # disables Manticore Buddy
+buddy_path = manticore-executor -n /Users/username/manticoresearch-buddy/src/main.php --debugv --skip=manticoresoftware/buddy-plugin-replace # debugv - enables more detailed logging, --skip - skips plugins
 ```
 <!-- end -->
 

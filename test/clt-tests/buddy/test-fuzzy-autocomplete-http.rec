@@ -9,7 +9,7 @@ apt-get install jq -y > /dev/null; echo $?
 debconf: delaying package configuration, since apt-utils is not installed
 0
 ––– input –––
-php -d memory_limit=-1 ./test/clt-tests/scripts/load_us_names.php 1000 10 1000000 5 2 > /dev/null
+php -d memory_limit=-1 ./test/clt-tests/scripts/load_us_names_min_infix_len.php 1000 10 1000000 5 2 > /dev/null
 ––– output –––
 ––– input –––
 mysql -h0 -P9306 -e "SHOW CREATE TABLE name;" | grep "min_infix_len='2'" | sed "s/.*\(min_infix_len='2'\).*/\1/"

@@ -431,10 +431,9 @@ void BuddyStart ( const CSphString & sConfigPath, const CSphString & sPluginDir,
 		return;
 	}
 
-	// should not check buddy related code if buddy disabled at config
 	SetContainerName ( sConfigFilePath );
-	CSphString sPath = BuddyGetPath ( sConfigPath, sPluginDir, bHasBuddyPath, (int)g_tBuddyPort, sDataDir );
-	if ( sPath.IsEmpty() )
+	// should not check buddy related code if buddy disabled at config
+	if ( bHasBuddyPath && sConfigPath.IsEmpty() )
 		return;
 
 	ARRAY_FOREACH ( i, dListeners )
@@ -461,6 +460,10 @@ void BuddyStart ( const CSphString & sConfigPath, const CSphString & sPluginDir,
 		sphWarning ( "[BUDDY] no curl found, disabled" );
 		return;
 	}
+
+	CSphString sPath = BuddyGetPath ( sConfigPath, sPluginDir, bHasBuddyPath, (int)g_tBuddyPort, sDataDir );
+	if ( sPath.IsEmpty() )
+		return;
 
 	// at WINDOWS need to stop docker conteiner that could left from the previous run or after daemon got crashed
 	BuddyStopContainer();

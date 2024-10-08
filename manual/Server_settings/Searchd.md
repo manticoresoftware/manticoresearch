@@ -110,6 +110,8 @@ Manticore supports the automatic creation of tables that don't yet exist but are
 
 Keep in mind that the `/bulk` HTTP endpoint does not support automatic table creation.
 
+> NOTE: The [auto schema functionality](../Data_creation_and_modification/Adding_documents_to_a_table/Adding_documents_to_a_real-time_table.md#Auto-schema) requires [Manticore Buddy](../Installation/Manticore_Buddy.md). If it doesn't work, make sure Buddy is installed.
+
 <!-- request Disable -->
 ```ini
 auto_schema = 0 # disable automatic table creation
@@ -216,6 +218,8 @@ You can also opt for the special `manticore-executor-dev` version for Linux amd6
 
 If you go this route, remember to link the dev version of the manticore executor to `/usr/bin/php`.
 
+To disable Manticore Buddy, set the value to empty as shown in the example.
+
 <!-- intro -->
 ##### Example:
 
@@ -225,6 +229,7 @@ If you go this route, remember to link the dev version of the manticore executor
 buddy_path = manticore-executor -n /usr/share/manticore/modules/manticore-buddy/src/main.php --debug # use the default Manticore Buddy in Linux, but run it in debug mode
 buddy_path = manticore-executor -n /opt/homebrew/share/manticore/modules/manticore-buddy/bin/manticore-buddy/src/main.php --debug # use the default Manticore Buddy in MacOS arm64, but run it in debug mode
 buddy_path = manticore-executor -n /Users/username/manticoresearch-buddy/src/main.php --debug # use Manticore Buddy from a non-default location
+buddy_path = # disables Manticore Buddy
 buddy_path = manticore-executor -n /Users/username/manticoresearch-buddy/src/main.php --debugv --skip=manticoresoftware/buddy-plugin-replace # debugv - enables more detailed logging, --skip - skips plugins
 ```
 <!-- end -->

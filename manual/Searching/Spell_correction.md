@@ -28,6 +28,8 @@ Manticore provides the fuzzy search option and the commands `CALL QSUGGEST` and 
 
 The Fuzzy Search feature allows for more flexible matching by accounting for slight variations or misspellings in the search query. It works similarly to a normal `SELECT` SQL statement or a `/search` JSON request but provides additional parameters to control the fuzzy matching behavior.
 
+> NOTE: The `fuzzy` option requires [Manticore Buddy](../Installation/Manticore_Buddy.md). If it doesn't work, make sure Buddy is installed.
+
 ## General syntax
 
 ### SQL

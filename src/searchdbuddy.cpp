@@ -659,7 +659,29 @@ bool ProcessHttpQueryBuddy ( HttpProcessResult_t & tRes, Str_t sSrcQuery, Option
 	myinfo::SetCommand ( sSrcQuery.first );
 	AT_SCOPE_EXIT ( []() { myinfo::SetCommandDone(); } );
 
-	auto tReplyRaw = BuddyQuery ( true, FromStr ( tRes.m_sError ), FromStr ( hOptions["full_url"] ), sSrcQuery, eRequestType );
+	bool bHttpEndpoint = true;
+	if ( tRes.m_eEndpoint==EHTTP_ENDPOINT::SQL )
+	{
+		bHttpEndpoint = false;
+
+		// sql parser put \0 at error position at the reference string
+		// should use raw_query for buddy request
+		CSphString * pRawQuery = hOptions ( "raw_query" );
+		if ( pRawQuery && !pRawQuery->IsEmpty() )
+		{
+			sSrcQuery = FromStr ( *pRawQuery );
+
+			// need also to skip the head chars "query="
+			const char sQueryHead[] = "query=";
+			const int iQueryHeadLen = sizeof ( sQueryHead )-1;
+			if ( pRawQuery->Begins( sQueryHead ) )
+			{
+				sSrcQuery.first +=iQueryHeadLen ;
+				sSrcQuery.second -= iQueryHeadLen;
+			}
+		}
+	}
+	auto tReplyRaw = BuddyQuery ( bHttpEndpoint, FromStr ( tRes.m_sError ), FromStr ( hOptions["full_url"] ), sSrcQuery, eRequestType );
 	if ( !tReplyRaw.first )
 	{
 		sphWarning ( "[BUDDY] [%d] error: %s", session::GetConnID(), tReplyRaw.second.cstr() );

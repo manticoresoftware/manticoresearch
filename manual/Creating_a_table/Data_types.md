@@ -1522,6 +1522,36 @@ var searchResponse = searchApi.Search(searchRequest);
 ```
 <!-- end -->
 
+<!-- example float_accuracy -->
+Float values in Manticore are displayed with precision to ensure they reflect the exact stored value. This approach was introduced to prevent precision loss, especially for cases like geographical coordinates, where rounding to 6 decimal places caused inaccuracies.
+
+Now, Manticore first outputs a number with 6 digits, then parses and compares it to the original value. If they don't match, additional digits are added until they do.
+
+For example, if a float value was inserted as `19.45`, Manticore will display it as `19.450001` to accurately represent the stored value.
+
+<!-- request Example -->
+```sql
+insert into t(id, f) values(1, 19.45)
+--------------
+
+Query OK, 1 row affected (0.02 sec)
+
+--------------
+select * from t
+--------------
+
++------+-----------+
+| id   | f         |
++------+-----------+
+|    1 | 19.450001 |
++------+-----------+
+1 row in set (0.00 sec)
+--- 1 out of 1 results in 0ms ---
+```
+
+<!-- end -->
+
+
 ## JSON
 
 <!-- example for creating json -->

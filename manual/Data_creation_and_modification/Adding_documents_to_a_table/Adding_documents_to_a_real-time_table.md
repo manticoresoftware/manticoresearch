@@ -111,6 +111,8 @@ POST /insert
 
 <!-- request Elasticsearch -->
 
+> NOTE: `_create` requires [Manticore Buddy](../Installation/Manticore_Buddy.md). If it doesn't work, make sure Buddy is installed.
+
 ```json
 POST /products/_create/3
 {
@@ -232,18 +234,18 @@ sqlresult = indexApi.insert(newdoc);
 <!-- request C# -->
 
 ``` clike
-Dictionary<string, Object> doc = new Dictionary<string, Object>(); 
+Dictionary<string, Object> doc = new Dictionary<string, Object>();
 doc.Add("title", "Crossbody Bag with Tassel");
 doc.Add("price", 19.85);
 InsertDocumentRequest newdoc = new InsertDocumentRequest(index: "products", id: 1, doc: doc);
 var sqlresult = indexApi.Insert(newdoc);
 
-doc = new Dictionary<string, Object>(); 
+doc = new Dictionary<string, Object>();
 doc.Add("title", "Crossbody Bag with Tassel");
 newdoc = new InsertDocumentRequest(index: "products", id: 2, doc: doc);
 sqlresult = indexApi.Insert(newdoc);
 
-doc = new Dictionary<string, Object>(); 
+doc = new Dictionary<string, Object>();
 doc.Add("title", "Yellow bag");
 newdoc = new InsertDocumentRequest(index: "products", id: 0, doc: doc);
 sqlresult = indexApi.Insert(newdoc);
@@ -253,6 +255,8 @@ sqlresult = indexApi.Insert(newdoc);
 <!-- end -->
 
 ## Auto schema
+
+> NOTE: Auto schema requires [Manticore Buddy](../Installation/Manticore_Buddy.md). If it doesn't work, make sure Buddy is installed.
 
 Manticore features an automatic table creation mechanism, which activates when a specified table in the insert query doesn't yet exist. This mechanism is enabled by default. To disable it, set `auto_schema = 0` in the [Searchd](../../Server_settings/Searchd.md#auto_schema) section of your Manticore config file.
 
@@ -479,7 +483,7 @@ sqlresult = indexApi.insert(newdoc);
 <!-- request C# -->
 
 ``` clike
-Dictionary<string, Object> doc = new Dictionary<string, Object>(); 
+Dictionary<string, Object> doc = new Dictionary<string, Object>();
 doc.Add("title", "Yellow bag");
 InsertDocumentRequest newdoc = new InsertDocumentRequest(index: "products", id: 0, doc: doc);
 var sqlresult = indexApi.Insert(newdoc);
@@ -626,6 +630,9 @@ POST /bulk
 ```
 
 <!-- request Elasticsearch -->
+
+> NOTE: `_bulk` requires [Manticore Buddy](../Installation/Manticore_Buddy.md). If it doesn't work, make sure Buddy is installed.
+
 ```json
 POST /_bulk
 -H "Content-Type: application/x-ndjson" -d '
@@ -847,7 +854,7 @@ sqlresult = indexApi.insert(newdoc);
 <!-- request C# -->
 
 ``` clike
-Dictionary<string, Object> doc = new Dictionary<string, Object>(); 
+Dictionary<string, Object> doc = new Dictionary<string, Object>();
 doc.Add("title", "Yellow bag");
 doc.Add("sizes", new List<Object> {40,41,42,43});
 InsertDocumentRequest newdoc = new InsertDocumentRequest(index: "products", id: 0, doc: doc);
@@ -981,10 +988,10 @@ sqlresult = indexApi.insert(newdoc);
 <!-- request C# -->
 
 ``` clike
-Dictionary<string, Object> meta = new Dictionary<string, Object>(); 
+Dictionary<string, Object> meta = new Dictionary<string, Object>();
 meta.Add("size", 41);
 meta.Add("color", "red");
-Dictionary<string, Object> doc = new Dictionary<string, Object>(); 
+Dictionary<string, Object> doc = new Dictionary<string, Object>();
 doc.Add("title", "Yellow bag");
 doc.Add("meta", meta);
 InsertDocumentRequest newdoc = new InsertDocumentRequest(index: "products", id: 0, doc: doc);

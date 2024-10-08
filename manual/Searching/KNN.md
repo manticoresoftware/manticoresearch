@@ -213,6 +213,8 @@ POST /search
 
 ### Find similar docs by id
 
+> NOTE: Finding similar documents by id requires [Manticore Buddy](../Installation/Manticore_Buddy.md). If it doesn't work, make sure Buddy is installed.
+
 Finding documents similar to a specific one based on its unique ID is a common task. For instance, when a user views a particular item, Manticore Search can efficiently identify and display a list of items that are most similar to it in the vector space. Here's how you can do it:
 
 - SQL: `select ... from <table name> where knn ( <field>, <k>, <document id> )`

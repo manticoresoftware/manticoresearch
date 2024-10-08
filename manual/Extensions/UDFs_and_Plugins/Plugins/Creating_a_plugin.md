@@ -21,6 +21,7 @@ Query OK, 0 rows affected (0.00 sec)
 ## CREATE BUDDY PLUGIN
 
 <!-- example create_buddy_plugin -->
+
 Buddy plugins can extend Manticore Search's functionality and enable certain queries that are not natively supported. To learn more about creating Buddy plugins, we recommend reading [this article](https://manticoresearch.com/blog/manticoresearch-buddy-pluggable-design/).
 
 To create a Buddy plugin, run the following SQL command:
@@ -28,6 +29,8 @@ To create a Buddy plugin, run the following SQL command:
 ```sql
 CREATE PLUGIN <username/package name on https://packagist.org/> TYPE 'buddy' VERSION <package version>
 ```
+
+> NOTE: `CREATE BUDDY PLUGIN` requires [Manticore Buddy](../Installation/Manticore_Buddy.md). If it doesn't work, make sure Buddy is installed.
 
 You can also use an alias command specifically created for Buddy plugins, which is easier to remember:
 

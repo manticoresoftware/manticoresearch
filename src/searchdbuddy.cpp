@@ -413,7 +413,8 @@ static void BuddyStopContainer()
 #ifdef _WIN32
 	CSphString sCmd;
 	sCmd.SetSprintf ( "docker kill %s", g_sContainerName.cstr() );
-	boost::process::child tStop ( sCmd.cstr(), boost::process::limit_handles );
+	std::error_code tErrorCode;
+	boost::process::child tStop ( sCmd.cstr(), boost::process::limit_handles, boost::process::error ( tErrorCode ) );
 	tStop.wait();
 #endif
 }
@@ -429,6 +430,12 @@ void BuddyStart ( const CSphString & sConfigPath, const CSphString & sPluginDir,
 		g_eBuddy = BuddyState_e::WORK;
 		return;
 	}
+
+	// should not check buddy related code if buddy disabled at config
+	SetContainerName ( sConfigFilePath );
+	CSphString sPath = BuddyGetPath ( sConfigPath, sPluginDir, bHasBuddyPath, (int)g_tBuddyPort, sDataDir );
+	if ( sPath.IsEmpty() )
+		return;
 
 	ARRAY_FOREACH ( i, dListeners )
 	{
@@ -455,11 +462,8 @@ void BuddyStart ( const CSphString & sConfigPath, const CSphString & sPluginDir,
 		return;
 	}
 
-	SetContainerName ( sConfigFilePath );
+	// at WINDOWS need to stop docker conteiner that could left from the previous run or after daemon got crashed
 	BuddyStopContainer();
-	CSphString sPath = BuddyGetPath ( sConfigPath, sPluginDir, bHasBuddyPath, (int)g_tBuddyPort, sDataDir );
-	if ( sPath.IsEmpty() )
-		return;
 
 	g_dLogBuf.Resize ( 0 );
 	g_sPath = sPath;

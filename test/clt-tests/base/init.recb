@@ -1,0 +1,43 @@
+––– input –––
+set -b +m
+––– output –––
+––– input –––
+apt-get update -y > /dev/null; echo $?
+––– output –––
+0
+––– input –––
+apt-get install -y git > /dev/null; echo $?
+––– output –––
+0
+––– input –––
+git clone -q https://github.com/manticoresoftware/manticoresearch-buddy.git /workdir; echo $?
+––– output –––
+0
+––– input –––
+cd /workdir; echo $?
+––– output –––
+0
+––– input –––
+COMPOSER_HOME="$HOME/.config/composer" composer install -q; echo $?
+––– output –––
+0
+––– input –––
+sed -i '/data_dir = \/var\/lib\/manticore/a buddy_path = manticore-executor /workdir/src/main.php --debugv' /etc/manticoresearch/manticore.conf
+––– output –––
+––– input –––
+cd /.clt; echo $?
+––– output –––
+0
+––– input –––
+cat /etc/manticoresearch/manticore.conf
+––– output –––
+searchd {
+listen = 127.0.0.1:9312
+listen = 127.0.0.1:9306:mysql
+listen = 127.0.0.1:9308:http
+log = /var/log/manticore/searchd.log
+query_log = /var/log/manticore/query.log
+pid_file = /var/run/manticore/searchd.pid
+data_dir = /var/lib/manticore
+buddy_path = manticore-executor /workdir/src/main.php --debugv
+}

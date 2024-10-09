@@ -1,3 +1,4 @@
+––– block: ../base/init –––
 ––– block: ../base/start-searchd –––
 ––– input –––
 php -d memory_limit=-1 ./test/clt-tests/scripts/load_us_names_min_infix_len.php 1000 10 1000000 5 > /dev/null
@@ -58,3 +59,7 @@ ERROR 1064 (42000) at line 1: no such table 'non_existing_table'
 mysql -h0 -P9306 -e "CALL AUTOCOMPLETE('jo', 'name', 123 AS layouts);"
 ––– output –––
 ERROR 1064 (42000) at line 1: Autocomplete requires min_infix_len to be set
+––– input –––
+mysql -h0 -P9306 -e "SELECT * FROM test WHERE MATCH('hello') OPTION fuzzy=1 layouts='';"
+––– output –––
+ERROR 1064 (42000) at line 1: Invalid options in query string, make sure they are separated by commas

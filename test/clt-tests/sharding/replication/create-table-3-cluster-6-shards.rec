@@ -1,0 +1,38 @@
+––– block: ../base/init –––
+––– block: ../base/start-searchd-1 –––
+––– block: ../base/start-searchd-2 –––
+––– block: ../base/start-searchd-3 –––
+––– block: ../base/create-cluster-3 –––
+––– input –––
+mysql -h0 -P19306 -e "create table c:t(id bigint) shards=6 rf=2"
+––– output –––
+––– input –––
+for i in 1 2 3; do mysql -h0 -P${i}9306 -e "show tables\G"; done | grep 'Index: t' | sort -V
+––– output –––
+Index: t
+Index: t
+Index: t
+Index: t_s0
+Index: t_s0
+Index: t_s1
+Index: t_s1
+Index: t_s2
+Index: t_s2
+Index: t_s3
+Index: t_s3
+Index: t_s4
+Index: t_s4
+Index: t_s5
+Index: t_s5
+––– input –––
+for i in 1 2 3; do mysql -h0 -P${i}9306 -e "show create table t\G" | grep 'Create Table'; done
+––– output –––
+Create Table: CREATE TABLE t type='distributed' %{DISTRIBUTED_TABLE_T_SHARD} %{DISTRIBUTED_TABLE_T_SHARD} %{DISTRIBUTED_TABLE_T_SHARD} %{DISTRIBUTED_TABLE_T_SHARD} %{DISTRIBUTED_TABLE_T_SHARD} %{DISTRIBUTED_TABLE_T_SHARD}
+Create Table: CREATE TABLE t type='distributed' %{DISTRIBUTED_TABLE_T_SHARD} %{DISTRIBUTED_TABLE_T_SHARD} %{DISTRIBUTED_TABLE_T_SHARD} %{DISTRIBUTED_TABLE_T_SHARD} %{DISTRIBUTED_TABLE_T_SHARD} %{DISTRIBUTED_TABLE_T_SHARD}
+Create Table: CREATE TABLE t type='distributed' %{DISTRIBUTED_TABLE_T_SHARD} %{DISTRIBUTED_TABLE_T_SHARD} %{DISTRIBUTED_TABLE_T_SHARD} %{DISTRIBUTED_TABLE_T_SHARD} %{DISTRIBUTED_TABLE_T_SHARD} %{DISTRIBUTED_TABLE_T_SHARD}
+––– input –––
+for i in 1 2 3; do mysql -h0 -P${i}9306 -e "show tables\G" | grep 'Index: t_' | wc -l; done
+––– output –––
+4
+4
+4

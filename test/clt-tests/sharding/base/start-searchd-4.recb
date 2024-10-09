@@ -1,0 +1,22 @@
+––– input –––
+mkdir -p /var/{run,lib,log}/manticore-4/{a,b,c,d,e}
+––– output –––
+––– input –––
+searchd -c test/clt-tests/sharding/base/config/searchd-4.conf
+––– output –––
+Manticore #!/.*/!#
+Copyright (c) 2001-2016, Andrew Aksyonoff
+Copyright (c) 2008-2016, Sphinx Technologies Inc (http://sphinxsearch.com)
+Copyright (c) 2017-%{YEAR}, Manticore Software LTD (https://manticoresearch.com)
+[#!/[0-9]{2}:[0-9]{2}.[0-9]{3}/!#] [%{NUMBER}] using config file '%{PATH}' (%{NUMBER} chars)...
+starting daemon version '%{SEMVER} #!/.*/!#
+listening on all interfaces for mysql, port=%{NUMBER}
+listening on all interfaces for sphinx and http(s), port=%{NUMBER}
+listening on all interfaces for sphinx and http(s), port=%{NUMBER}
+––– input –––
+tail -n 100 -f /var/log/manticore-4/searchd.log | grep -qm1 'started v' && echo "Buddy started!"
+––– output –––
+Buddy started!
+––– input –––
+mysql -h0 -P19306 -e "show tables"
+––– output –––

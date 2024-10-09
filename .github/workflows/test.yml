@@ -545,16 +545,114 @@ jobs:
       - name: Download artifact
         uses: manticoresoftware/download_artifact_with_retries@main
         with:
-          name: manticore_test_kit.img
-          path: .
-      - name: Calculate short commit hash
-        id: sha
-        run: echo "sha_short=$(git rev-parse --short HEAD)" >> $GITHUB_OUTPUT
-      - name: Pushing docker image to repo
-        id: test-kit-push
-        run: |
-          BUILD_COMMIT=${{ steps.sha.outputs.sha_short }} /bin/bash dist/test_kit_docker_push.sh
+          artifact: manticore_test_kit.img
+          image: test-kit:img
+          test_prefix: test/clt-tests/mysqldump/mysql/
 
+  clt_mysqldump_maria_test:
+    name: CLT test on mysqldump features for MariaDB
+    needs: build_test_kit_docker
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: manticoresoftware/clt@0.1.17
+        with:
+          artifact: manticore_test_kit.img
+          image: test-kit:img
+          test_prefix: test/clt-tests/mysqldump/maria/
+
+  clt_expected_errors_test:
+    name: CLT test on expected errors in Searchd for Buddy
+    needs: build_test_kit_docker
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: manticoresoftware/clt@0.1.5
+        with:
+          artifact: manticore_test_kit.img
+          image: test-kit:img
+          test_prefix: test/clt-tests/expected-errors/
+
+  clt_data_manipulation:
+    name: CLT data manipulation test
+    needs: build_test_kit_docker
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: manticoresoftware/clt@0.1.17
+        with:
+          artifact: manticore_test_kit.img
+          image: test-kit:img
+          test_prefix: test/clt-tests/sharding/replication/
+
+  clt_sharding_cluster_test:
+    name: CLT test cluster logic of the manticoresearch
+    needs: build_test_kit_docker
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: manticoresoftware/clt@0.1.5
+        with:
+          artifact: manticore_test_kit.img
+          image: test-kit:img
+          test_prefix: test/clt-tests/sharding/cluster/
+          run_args: -e TELEMETRY=0
+
+  clt_sharding_syntax_test:
+    name: CLT test syntax of autosharding
+    needs: build_test_kit_docker
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: manticoresoftware/clt@0.1.17
+        with:
+          artifact: manticore_test_kit.img
+          image: test-kit:img
+          test_prefix: test/clt-tests/sharding/syntax/
+          run_args: -e TELEMETRY=0
+
+  clt_sharding_replication_test:
+    name: CLT test replication of autosharding
+    needs: build_test_kit_docker
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: manticoresoftware/clt@0.1.5
+        with:
+          artifact: manticore_test_kit.img
+          image: test-kit:img
+          test_prefix: test/clt-tests/sharding/replication/
+          run_args: -e TELEMETRY=0
+
+  clt_sharding_rebalancing_test:
+    name: CLT test rebalancing of autosharding
+    needs: build_test_kit_docker
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: manticoresoftware/clt@0.1.5
+        with:
+          artifact: manticore_test_kit.img
+          image: test-kit:img
+          test_prefix: test/clt-tests/sharding/rebalancing/
+          run_args: -e TELEMETRY=0
+
+  clt_sharding_data_test:
+    name: CLT test data handle in autosharding
+    needs: build_test_kit_docker
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: manticoresoftware/clt@0.1.5
+        with:
+          artifact: manticore_test_kit.img
+          image: test-kit:img
+          test_prefix: test/clt-tests/sharding/data/
+          run_args: -e TELEMETRY=0
+
+  clt_sharding_performance_test:
+    name: CLT test performance of autosharding
+    needs: build_test_kit_docker
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: manticoresoftware/clt@0.1.5
+        with:
+          artifact: manticore_test_kit.img
+          image: test-kit:img
+          test_prefix: test/clt-tests/sharding/performance/
+          run_args: -e TELEMETRY=0
   build_aarch64:
     if: needs.changes.outputs.source == 'true'
     needs: changes

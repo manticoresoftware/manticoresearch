@@ -1,0 +1,56 @@
+––– block: ../base/init –––
+––– input –––
+export INSTANCE=1
+––– output –––
+––– block: ../base/flexible/start-searchd –––
+––– input –––
+export INSTANCE=2
+––– output –––
+––– block: ../base/flexible/start-searchd –––
+––– input –––
+export CLUSTER_NAME=c
+––– output –––
+––– block: ../base/flexible/create-cluster –––
+––– block: ../base/flexible/join-cluster-on-all-nodes –––
+––– input –––
+mysql -h0 -P1306 -e "CREATE TABLE a (title text, content text, gid uint) shards=4 rf=1";
+––– output –––
+––– input –––
+mysql -h0 -P1306 -e "CREATE TABLE c:b (title text, content text, gid uint) shards=4 rf=1";
+––– output –––
+––– input –––
+for i in 1 2; do mysql -h0 -P${i}306 -e "show tables\G"; done | grep 'Index: a' | sort -V
+––– output –––
+Index: a
+Index: a_s0
+Index: a_s1
+Index: a_s2
+Index: a_s3
+––– input –––
+for i in 1 2; do mysql -h0 -P${i}306 -e "show tables\G"; done | grep 'Index: b' | sort -V
+––– output –––
+Index: b
+Index: b
+Index: b_s0
+Index: b_s1
+Index: b_s2
+Index: b_s3
+––– input –––
+for i in 1 2; do mysql -h0 -P${i}306 -e "describe b\G"; done | awk '/Agent:|Type:/ {printf "%s%s ", $1, $2} /Type:/ {print ""}' | sort
+––– output –––
+Agent:%{IPADDR}:%{NUMBER}:b_s%{NUMBER} Type:remote_%{NUMBER}
+Agent:%{IPADDR}:%{NUMBER}:b_s%{NUMBER} Type:remote_%{NUMBER}
+Agent:%{IPADDR}:%{NUMBER}:b_s%{NUMBER} Type:remote_%{NUMBER}
+Agent:%{IPADDR}:%{NUMBER}:b_s%{NUMBER} Type:remote_%{NUMBER}
+Agent:b_s%{NUMBER} Type:local
+Agent:b_s%{NUMBER} Type:local
+Agent:b_s%{NUMBER} Type:local
+Agent:b_s%{NUMBER} Type:local
+––– input –––
+mysql -h0 -P1306 -e "SHOW STATUS LIKE 'cluster_c_indexes'";
+––– output –––
++-------------------+----------------------------------------------+
+| Counter           | Value                                        |
++-------------------+----------------------------------------------+
+| cluster_c_indexes | _sharding_state,_sharding_queue,_sharding_table |
++-------------------+----------------------------------------------+

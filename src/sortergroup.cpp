@@ -562,13 +562,13 @@ protected:
 			return PushIntoExistingGroup<GROUPED> ( *pMatch, tEntry, uGroupKey, pAttr );
 		}
 
+		// if we're full, let's cut off some worst groups
+		if ( Used ()==m_iSize )
+			CutWorst ( m_iLimit*(int) ( GROUPBY_FACTOR/2 ) );
+
 		// submit actual distinct value
 		if constexpr ( DISTINCT )
 			KBufferGroupSorter::template UpdateDistinct<GROUPED> ( tEntry, uGroupKey );
-
-		// if we're full, let's cut off some worst groups
-		if ( Used()==m_iSize )
-			CutWorst ( m_iLimit * (int)(GROUPBY_FACTOR/2) );
 
 		// do add
 		assert ( Used()<m_iSize );

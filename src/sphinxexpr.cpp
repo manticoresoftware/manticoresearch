@@ -1504,46 +1504,52 @@ public:
 			break;
 
 		case SPH_EXPR_FORMAT_AS_TEXT:
-			if ( !m_sAttr.IsEmpty() && !m_dArgs.IsEmpty() && m_dArgs.all_of( []( auto & pExpr ){ return pExpr->IsConst(); } ) )
+			if ( !m_sAttr.IsEmpty() && m_dArgs.all_of( []( auto & pExpr ){ return pExpr->IsConst(); } ) )
 			{
 				auto pSchemaWithName = static_cast<std::pair<const ISphSchema*,CSphString>*>(pArg);
-				CSphString sAllFields;
-				ARRAY_FOREACH ( i, m_dArgs )
-				{
-					CSphMatch tStub;
-					CSphString sArg;
-
-					switch ( m_dRetTypes[i] )
-					{
-					case SPH_ATTR_INTEGER:
-						sArg.SetSprintf ( "[%d]", m_dArgs[i]->IntEval(tStub) );
-						break;
-
-					case SPH_ATTR_BIGINT:
-						sArg.SetSprintf ( "[" INT64_FMT "]", m_dArgs[i]->Int64Eval(tStub) );
-						break;
-
-					case SPH_ATTR_STRING:
-					{
-						const BYTE * pStr;
-						int iLen = m_dArgs[i]->StringEval ( tStub, &pStr );
-						sArg.SetSprintf ( "['%s']", CSphString ( (const char*)pStr, iLen ).cstr() );
-					}
-					break;
-
-					default:
-						break;
-					}
-
-					if ( sAllFields.IsEmpty() )
-						sAllFields = sArg;
-					else
-						sAllFields.SetSprintf ( "%s%s", sAllFields.cstr(), sArg.cstr() );
-				}
-
 				const CSphColumnInfo * pAttr = pSchemaWithName->first->GetAttr ( m_sAttr.cstr() );
 				assert(pAttr);
-				pSchemaWithName->second.SetSprintf ( "%s%s", pAttr->m_sName.cstr(), sAllFields.cstr() );
+
+				if ( m_dArgs.IsEmpty() )
+					pSchemaWithName->second = pAttr->m_sName;
+				else
+				{
+					CSphString sAllFields;
+					ARRAY_FOREACH ( i, m_dArgs )
+					{
+						CSphMatch tStub;
+						CSphString sArg;
+
+						switch ( m_dRetTypes[i] )
+						{
+						case SPH_ATTR_INTEGER:
+							sArg.SetSprintf ( "[%d]", m_dArgs[i]->IntEval(tStub) );
+							break;
+
+						case SPH_ATTR_BIGINT:
+							sArg.SetSprintf ( "[" INT64_FMT "]", m_dArgs[i]->Int64Eval(tStub) );
+							break;
+
+						case SPH_ATTR_STRING:
+						{
+							const BYTE * pStr;
+							int iLen = m_dArgs[i]->StringEval ( tStub, &pStr );
+							sArg.SetSprintf ( "['%s']", CSphString ( (const char*)pStr, iLen ).cstr() );
+						}
+						break;
+
+						default:
+							break;
+						}
+
+						if ( sAllFields.IsEmpty() )
+							sAllFields = sArg;
+						else
+							sAllFields.SetSprintf ( "%s%s", sAllFields.cstr(), sArg.cstr() );
+					}
+
+					pSchemaWithName->second.SetSprintf ( "%s%s", pAttr->m_sName.cstr(), sAllFields.cstr() );
+				}
 			}
 			break;
 

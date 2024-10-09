@@ -416,7 +416,7 @@ public:
 			dRhs.m_hGroup2Match = std::move ( m_hGroup2Match );
 			dRhs.m_bMatchesFinalized = m_bMatchesFinalized;
 			dRhs.m_iMaxUsed = m_iMaxUsed;
-			if ( !m_bMatchesFinalized && bCopyMeta )
+			if ( bCopyMeta ) // on virgin dRhs it doesn't matter whether matches are finalized or not
 				dRhs.m_tUniq = std::move(m_tUniq);
 
 			m_iMaxUsed = -1;
@@ -528,8 +528,9 @@ protected:
 		}
 
 		// submit actual distinct value
-		if ( DISTINCT && m_bUpdateDistinct )
-			KBufferGroupSorter::template UpdateDistinct<GROUPED> ( tEntry, uGroupKey );
+		if constexpr ( DISTINCT )
+			if ( m_bUpdateDistinct )
+				KBufferGroupSorter::template UpdateDistinct<GROUPED> ( tEntry, uGroupKey );
 
 		return false; // since it is a dupe
 	}
@@ -562,13 +563,14 @@ protected:
 			return PushIntoExistingGroup<GROUPED> ( *pMatch, tEntry, uGroupKey, pAttr );
 		}
 
+		// if we're full, let's cut off some worst groups
+		if ( Used ()==m_iSize )
+			CutWorst ( m_iLimit*(int) ( GROUPBY_FACTOR/2 ) );
+
 		// submit actual distinct value
 		if constexpr ( DISTINCT )
-			KBufferGroupSorter::template UpdateDistinct<GROUPED> ( tEntry, uGroupKey );
-
-		// if we're full, let's cut off some worst groups
-		if ( Used()==m_iSize )
-			CutWorst ( m_iLimit * (int)(GROUPBY_FACTOR/2) );
+			if ( m_bUpdateDistinct )
+				KBufferGroupSorter::template UpdateDistinct<GROUPED> ( tEntry, uGroupKey );
 
 		// do add
 		assert ( Used()<m_iSize );
@@ -590,8 +592,9 @@ protected:
 		{
 			tNew.SetAttr ( m_tLocGroupby, uGroupKey );
 			tNew.SetAttr ( tLocCount, 1 );
-			if ( DISTINCT && m_bUpdateDistinct )
-				tNew.SetAttr ( m_tLocDistinct, 0 );
+			if constexpr ( DISTINCT )
+				if ( m_bUpdateDistinct )
+					tNew.SetAttr ( m_tLocDistinct, 0 );
 
 			if ( pAttr )
 				UpdateGroupbyStr ( tNew, pAttr );
@@ -645,8 +648,9 @@ private:
 			CutWorst ( m_iLimit, true );
 		else
 		{
-			if ( DISTINCT && bCountDistinct )
-				CountDistinct();
+			if constexpr ( DISTINCT )
+				if ( bCountDistinct )
+					CountDistinct();
 
 			CalcAvg ( Avg_e::FINALIZE );
 			SortGroups();
@@ -665,8 +669,9 @@ private:
 	void CutWorst ( int iBound, bool bFinalize=false )
 	{
 		// prepare to partition - finalize distinct, avgs to provide smooth sorting
-		if ( DISTINCT && m_bSortByDistinct )
-			CountDistinct ();
+		if constexpr ( DISTINCT )
+			if ( m_bSortByDistinct )
+				CountDistinct ();
 
 		CalcAvg ( Avg_e::FINALIZE );
 
@@ -693,11 +698,12 @@ private:
 		if ( bFinalize )
 		{
 			SortGroups();
-			if ( DISTINCT && !m_bSortByDistinct ) // since they haven't counted at the top
-			{
-				RebuildHash(); // distinct uses m_hGroup2Match
-				CountDistinct();
-			}
+			if constexpr ( DISTINCT )
+				if ( !m_bSortByDistinct ) // since they haven't counted at the top
+				{
+					RebuildHash(); // distinct uses m_hGroup2Match
+					CountDistinct();
+				}
 		} else
 		{
 			// we've called CalcAvg ( Avg_e::FINALIZE ) before partitioning groups
@@ -1111,8 +1117,9 @@ protected:
 
 
 		// submit actual distinct value in all cases
-		if ( DISTINCT && m_bUpdateDistinct )
-			KBufferGroupSorter::template UpdateDistinct<GROUPED> ( tNew, uGroupKey );
+		if constexpr ( DISTINCT )
+			if ( m_bUpdateDistinct )
+				KBufferGroupSorter::template UpdateDistinct<GROUPED> ( tNew, uGroupKey );
 
 		if constexpr ( NOTIFICATIONS )
 			m_tJustPushed = RowTagged_t ( tNew );
@@ -1246,8 +1253,9 @@ private:
 
 		auto & tHeadMatch = m_dData[iHead];
 		// submit actual distinct value in all cases
-		if ( DISTINCT && m_bUpdateDistinct )
-			KBufferGroupSorter::template UpdateDistinct<GROUPED> ( tEntry, uGroupKey );
+		if constexpr ( DISTINCT )
+			if ( m_bUpdateDistinct )
+				KBufferGroupSorter::template UpdateDistinct<GROUPED> ( tEntry, uGroupKey );
 
 		// update group-wide counters
 		auto & tLocCount = m_tLocCount;
@@ -1843,8 +1851,9 @@ public:
 		if constexpr ( HAS_AGGREGATES )
 			dRhs.UpdateAggregates ( m_tData, false, true );
 
-		if ( !bCopyMeta && DISTINCT )
-			dRhs.UpdateDistinct ( m_tData );
+		if constexpr ( DISTINCT )
+			if ( !bCopyMeta  )
+				dRhs.UpdateDistinct ( m_tData );
 	}
 
 	void SetMerge ( bool bMerge ) override { m_bMerge = bMerge; }

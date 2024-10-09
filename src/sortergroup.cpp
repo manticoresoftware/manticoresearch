@@ -416,7 +416,7 @@ public:
 			dRhs.m_hGroup2Match = std::move ( m_hGroup2Match );
 			dRhs.m_bMatchesFinalized = m_bMatchesFinalized;
 			dRhs.m_iMaxUsed = m_iMaxUsed;
-			if ( !m_bMatchesFinalized && bCopyMeta )
+			if ( bCopyMeta ) // on virgin dRhs it doesn't matter whether matches are finalized or not
 				dRhs.m_tUniq = std::move(m_tUniq);
 
 			m_iMaxUsed = -1;
@@ -569,7 +569,8 @@ protected:
 
 		// submit actual distinct value
 		if constexpr ( DISTINCT )
-			KBufferGroupSorter::template UpdateDistinct<GROUPED> ( tEntry, uGroupKey );
+			if ( m_bUpdateDistinct )
+				KBufferGroupSorter::template UpdateDistinct<GROUPED> ( tEntry, uGroupKey );
 
 		// do add
 		assert ( Used()<m_iSize );

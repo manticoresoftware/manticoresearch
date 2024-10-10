@@ -1812,7 +1812,7 @@ static ParseResult_e ParseNext ( Str_t sQuery, CSphVector<SqlStmt_t>& dStmt, CSp
 			dStmt.Pop();
 		eRes = pParser ( sQuery, dStmt, sNewError );
 		if ( eRes != ParseResult_e::PARSE_OK )
-			sphLogDebug ( "%s", sNewError.cstr() );
+			sphLogDebugv ( "%s", sNewError.cstr() );
 		if ( eRes == ParseResult_e::PARSE_ERROR && !bKeepError )
 		{
 			sError = sNewError;
@@ -1974,10 +1974,11 @@ bool sphParseSqlQuery ( Str_t sQuery, CSphVector<SqlStmt_t> & dStmt, CSphString 
 	// cascade parsing
 	if ( iRes || dStmt.IsEmpty() )
 	{
-		sphLogDebug ( "%s", sError.cstr() );
 		auto eNext = ParseNext ( sQuery, dStmt, sError, !tParser.IsWrongSyntaxError() );
 		if ( eNext == ParseResult_e::PARSE_OK )
 			sError = "";
+		else
+			sphLogDebug ( "%s", sError.cstr () );
 		return eNext == ParseResult_e::PARSE_OK;
 	}
 

@@ -1,4 +1,3 @@
-––– block: ../base/init –––
 ––– block: ../base/start-searchd –––
 ––– input –––
 php -d memory_limit=-1 ./test/clt-tests/scripts/load_us_names_min_infix_len.php 1000 10 1000000 5 > /dev/null

@@ -1,4 +1,3 @@
-––– block: ../base/init –––
 ––– block: ../base/start-searchd –––
 ––– input –––
 apt-get update -y > /dev/null; echo $?

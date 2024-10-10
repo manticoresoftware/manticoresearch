@@ -413,7 +413,8 @@ static void BuddyStopContainer()
 #ifdef _WIN32
 	CSphString sCmd;
 	sCmd.SetSprintf ( "docker kill %s", g_sContainerName.cstr() );
-	boost::process::child tStop ( sCmd.cstr(), boost::process::limit_handles );
+	std::error_code tErrorCode;
+	boost::process::child tStop ( sCmd.cstr(), boost::process::limit_handles, boost::process::error ( tErrorCode ) );
 	tStop.wait();
 #endif
 }
@@ -429,6 +430,11 @@ void BuddyStart ( const CSphString & sConfigPath, const CSphString & sPluginDir,
 		g_eBuddy = BuddyState_e::WORK;
 		return;
 	}
+
+	SetContainerName ( sConfigFilePath );
+	// should not check buddy related code if buddy disabled at config
+	if ( bHasBuddyPath && sConfigPath.IsEmpty() )
+		return;
 
 	ARRAY_FOREACH ( i, dListeners )
 	{
@@ -455,11 +461,12 @@ void BuddyStart ( const CSphString & sConfigPath, const CSphString & sPluginDir,
 		return;
 	}
 
-	SetContainerName ( sConfigFilePath );
-	BuddyStopContainer();
 	CSphString sPath = BuddyGetPath ( sConfigPath, sPluginDir, bHasBuddyPath, (int)g_tBuddyPort, sDataDir );
 	if ( sPath.IsEmpty() )
 		return;
+
+	// at WINDOWS need to stop docker conteiner that could left from the previous run or after daemon got crashed
+	BuddyStopContainer();
 
 	g_dLogBuf.Resize ( 0 );
 	g_sPath = sPath;
@@ -652,7 +659,29 @@ bool ProcessHttpQueryBuddy ( HttpProcessResult_t & tRes, Str_t sSrcQuery, Option
 	myinfo::SetCommand ( sSrcQuery.first );
 	AT_SCOPE_EXIT ( []() { myinfo::SetCommandDone(); } );
 
-	auto tReplyRaw = BuddyQuery ( true, FromStr ( tRes.m_sError ), FromStr ( hOptions["full_url"] ), sSrcQuery, eRequestType );
+	bool bHttpEndpoint = true;
+	if ( tRes.m_eEndpoint==EHTTP_ENDPOINT::SQL )
+	{
+		bHttpEndpoint = false;
+
+		// sql parser put \0 at error position at the reference string
+		// should use raw_query for buddy request
+		CSphString * pRawQuery = hOptions ( "raw_query" );
+		if ( pRawQuery && !pRawQuery->IsEmpty() )
+		{
+			sSrcQuery = FromStr ( *pRawQuery );
+
+			// need also to skip the head chars "query="
+			const char sQueryHead[] = "query=";
+			const int iQueryHeadLen = sizeof ( sQueryHead )-1;
+			if ( pRawQuery->Begins( sQueryHead ) )
+			{
+				sSrcQuery.first +=iQueryHeadLen ;
+				sSrcQuery.second -= iQueryHeadLen;
+			}
+		}
+	}
+	auto tReplyRaw = BuddyQuery ( bHttpEndpoint, FromStr ( tRes.m_sError ), FromStr ( hOptions["full_url"] ), sSrcQuery, eRequestType );
 	if ( !tReplyRaw.first )
 	{
 		sphWarning ( "[BUDDY] [%d] error: %s", session::GetConnID(), tReplyRaw.second.cstr() );

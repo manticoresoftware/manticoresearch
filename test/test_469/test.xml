@@ -97,6 +97,20 @@ select id, in(j.str,'str1','str3') as check from t where check!=1 order by id as
 
 drop table t;
 
+create table t ( j json secondary_index='1' );
+insert into t values (1,'["value1"]');
+insert into t values (2,'["value2"]');
+insert into t values (3,'[]');
+flush ramchunk t;
+select * from t;
+
+select id, in(j,'value1') as check from t where check=1 order by id asc;
+show meta;
+select id, in(j,'value2') as check from t where check=1 order by id asc;
+show meta;
+
+drop table t;
+
 </sphinxql></queries>
 
 </test>

@@ -24,6 +24,9 @@ REPLACE INTO table
     WHERE id = <id>
 ```
 Note, you can filter only by id in this mode.
+
+> NOTE: Partial replace requires [Manticore Buddy](../Installation/Manticore_Buddy.md). If it doesn't work, make sure Buddy is installed.
+
 Read more about `UPDATE` vs. partial `REPLACE` [here](../../Data_creation_and_modification/Updating_documents/REPLACE_vs_UPDATE.md#UPDATE-vs-partial-REPLACE).
 
 See the examples for more details.
@@ -54,6 +57,7 @@ See the examples for more details.
     "<fieldN>": <valueN>
   }
   ```
+  > NOTE: Elasticsearch-like replace requires [Manticore Buddy](../Installation/Manticore_Buddy.md). If it doesn't work, make sure Buddy is installed.
 * Partial replace:
   ```
   POST /<{table | cluster:table}>/_update/<id>
@@ -64,6 +68,8 @@ See the examples for more details.
   }
   ```
   The `<table name>` can either be just the table name or in the format `cluster:table`. This allows for updates across a specific cluster if needed.
+
+  > NOTE: Partial replace requires [Manticore Buddy](../Installation/Manticore_Buddy.md). If it doesn't work, make sure Buddy is installed.
 
 See the examples for more details.
 
@@ -133,6 +139,8 @@ POST /replace
 
 <!-- request Elasticsearch-like -->
 
+> NOTE: Elasticsearch-like replace requires [Manticore Buddy](../Installation/Manticore_Buddy.md). If it doesn't work, make sure Buddy is installed.
+
 ```json
 PUT /products/_doc/2
 {
@@ -184,6 +192,8 @@ POST /products/_doc/3
 ##### Elasticsearch-like partial replace:
 
 <!-- request Elasticsearch-like partial -->
+
+> NOTE: Partial replace requires [Manticore Buddy](../Installation/Manticore_Buddy.md). If it doesn't work, make sure Buddy is installed.
 
 ```json
 POST /products/_update/55

@@ -315,7 +315,7 @@ static bool InsertDoc ( const SqlStmt_t & tStmt, CSphString & sError )
 static bool InsertDoc ( const CSphString & sIndex, const ComplexFields_t & dFields, const nljson & tSrc, bool bReplace, const char * sId, int iVersion, CSphString & sError )
 {
 	nljson tVal;
-	tVal["index"] = sIndex.cstr();
+	tVal["table"] = sIndex.cstr();
 	tVal["id"] = GetDocID(sId);
 	tVal["doc"] = tSrc;
 	tVal["doc"]["_id"] = sId;
@@ -1154,8 +1154,8 @@ static bool DoSearch ( const CSphString & sDefaultIndex, nljson & tReq, const CS
 {
 	// expand index(es) to index list
 	CSphString sIndex = sDefaultIndex;
-	if ( tReq.contains ( "index" ) )
-		sIndex = tReq["index"].get<std::string>().c_str();
+	if ( tReq.contains ( "table" ) )
+		sIndex = tReq["table"].get<std::string>().c_str();
 
 	CSphString sExpandedIndex;
 	StrVec_t dIndexes = ExpandIndexes ( sIndex, sExpandedIndex );
@@ -1185,7 +1185,7 @@ static bool DoSearch ( const CSphString & sDefaultIndex, nljson & tReq, const CS
 		return true;
 	}
 
-	tReq["index"] = sExpandedIndex.cstr();
+	tReq["table"] = sExpandedIndex.cstr();
 
 	EscapeKibanaColumnNames ( dIndexes, tReq );
 	FixupKibana ( dIndexes, tReq );

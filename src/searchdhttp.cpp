@@ -905,9 +905,9 @@ public:
 
 	void BuildRequest ( const AgentConn_t & tAgent, ISphOutputBuffer & tOut ) const final
 	{
-		// replace "index" value in the json query
-		m_tQuery.DelItem ( "index" );
-		m_tQuery.AddStr ( "index", tAgent.m_tDesc.m_sIndexes.cstr() );
+		// replace "table" value in the json query
+		m_tQuery.DelItem ( "table" );
+		m_tQuery.AddStr ( "table", tAgent.m_tDesc.m_sIndexes.cstr() );
 
 		CSphString sRequest = m_tQuery.AsString();
 
@@ -1866,6 +1866,11 @@ protected:
 class HttpJsonTxnTraits_c
 {
 protected:
+	HttpJsonTxnTraits_c() = default;
+	explicit HttpJsonTxnTraits_c ( bool bCompat )
+		: m_bCompat ( bCompat )
+	{}
+
 	void ProcessBegin ( const CSphString& sIndex )
 	{
 		// for now - only local mutable indexes are suitable
@@ -1889,23 +1894,24 @@ protected:
 		if ( tReporter.IsError() )
 		{
 			sError = tReporter.GetError();
-			tResult = sphEncodeInsertErrorJson ( sIndex.first, sError.cstr() );
+			tResult = sphEncodeInsertErrorJson ( sIndex.first, sError.cstr(), m_bCompat );
 		} else
 		{
 			auto iDeletes = tReporter.GetAffectedRows();
 			auto dLastIds = session::LastIds();
 			if ( !dLastIds.IsEmpty() )
 				tDocId = dLastIds[0];
-			tResult = sphEncodeTxnResultJson ( sIndex.first, tDocId, m_iInserts, iDeletes, m_iUpdates );
+			tResult = sphEncodeTxnResultJson ( sIndex.first, tDocId, m_iInserts, iDeletes, m_iUpdates, m_bCompat );
 		}
 		return !tReporter.IsError();
 	}
 
 	int m_iInserts = 0;
 	int m_iUpdates = 0;
+	const bool m_bCompat = false;
 };
 
-static bool ProcessInsert ( SqlStmt_t & tStmt, DocID_t tDocId, JsonObj_c & tResult, CSphString & sError )
+static bool ProcessInsert ( SqlStmt_t & tStmt, DocID_t tDocId, JsonObj_c & tResult, CSphString & sError, bool bCompat )
 {
 	HttpErrorReporter_c tReporter;
 	sphHandleMysqlInsert ( tReporter, tStmt );
@@ -1913,19 +1919,19 @@ static bool ProcessInsert ( SqlStmt_t & tStmt, DocID_t tDocId, JsonObj_c & tResu
 	if ( tReporter.IsError() )
 	{
 		sError = tReporter.GetError();
-		tResult = sphEncodeInsertErrorJson ( tStmt.m_sIndex.cstr(), sError.cstr() );
+		tResult = sphEncodeInsertErrorJson ( tStmt.m_sIndex.cstr(), sError.cstr(), bCompat );
 	} else
 	{
 		auto dLastIds = session::LastIds();
 		if ( !dLastIds.IsEmpty() )
 			tDocId = dLastIds[0];
-		tResult = sphEncodeInsertResultJson ( tStmt.m_sIndex.cstr(), tStmt.m_eStmt == STMT_REPLACE, tDocId );
+		tResult = sphEncodeInsertResultJson ( tStmt.m_sIndex.cstr(), tStmt.m_eStmt == STMT_REPLACE, tDocId, bCompat );
 	}
 
 	return !tReporter.IsError();
 }
 
-static bool ProcessDelete ( Str_t sRawRequest, const SqlStmt_t& tStmt, DocID_t tDocId, JsonObj_c & tResult, CSphString & sError  )
+static bool ProcessDelete ( Str_t sRawRequest, const SqlStmt_t& tStmt, DocID_t tDocId, JsonObj_c & tResult, CSphString & sError, bool bCompat )
 {
 	HttpErrorReporter_c tReporter;
 	sphHandleMysqlDelete ( tReporter, tStmt, std::move ( sRawRequest ) );
@@ -1933,10 +1939,10 @@ static bool ProcessDelete ( Str_t sRawRequest, const SqlStmt_t& tStmt, DocID_t t
 	if ( tReporter.IsError() )
 	{
 		sError = tReporter.GetError();
-		tResult = sphEncodeInsertErrorJson ( tStmt.m_sIndex.cstr(), sError.cstr() );
+		tResult = sphEncodeInsertErrorJson ( tStmt.m_sIndex.cstr(), sError.cstr(), bCompat );
 	} else
 	{
-		tResult = sphEncodeDeleteResultJson ( tStmt.m_sIndex.cstr(), tDocId, tReporter.GetAffectedRows() );
+		tResult = sphEncodeDeleteResultJson ( tStmt.m_sIndex.cstr(), tDocId, tReporter.GetAffectedRows(), bCompat );
 	}
 
 	return !tReporter.IsError();
@@ -1966,7 +1972,7 @@ public:
 
 		tStmt.m_sEndpoint = HttpEndpointToStr ( m_bReplace ? EHTTP_ENDPOINT::JSON_REPLACE : EHTTP_ENDPOINT::JSON_INSERT );
 		JsonObj_c tResult = JsonNull;
-		bool bResult = ProcessInsert ( tStmt, tDocId, tResult, m_sError );
+		bool bResult = ProcessInsert ( tStmt, tDocId, tResult, m_sError, false );
 
 		CSphString sResult = tResult.AsString();
 		BuildReply ( sResult, bResult ? EHTTP_STATUS::_200 : EHTTP_STATUS::_409 );
@@ -1981,6 +1987,11 @@ class HttpJsonUpdateTraits_c
 	int m_iLastUpdated = 0;
 
 protected:
+	HttpJsonUpdateTraits_c() = default;
+	explicit HttpJsonUpdateTraits_c ( bool bCompat )
+		: m_bCompat ( bCompat )
+	{}
+
 	bool ProcessUpdate ( Str_t sRawRequest, const SqlStmt_t & tStmt, DocID_t tDocId, JsonObj_c & tResult, CSphString & sError )
 	{
 		HttpErrorReporter_c tReporter;
@@ -1989,10 +2000,10 @@ protected:
 		if ( tReporter.IsError() )
 		{
 			sError = tReporter.GetError();
-			tResult = sphEncodeInsertErrorJson ( tStmt.m_sIndex.cstr(), sError.cstr() );
+			tResult = sphEncodeInsertErrorJson ( tStmt.m_sIndex.cstr(), sError.cstr(), m_bCompat );
 		} else
 		{
-			tResult = sphEncodeUpdateResultJson ( tStmt.m_sIndex.cstr(), tDocId, tReporter.GetAffectedRows() );
+			tResult = sphEncodeUpdateResultJson ( tStmt.m_sIndex.cstr(), tDocId, tReporter.GetAffectedRows(), m_bCompat );
 		}
 
 		m_iLastUpdated = tReporter.GetAffectedRows();
@@ -2004,6 +2015,8 @@ protected:
 	{
 		return m_iLastUpdated;
 	}
+
+	const bool m_bCompat = false;
 };
 
 
@@ -2068,7 +2081,7 @@ protected:
 
 	bool ProcessQuery ( const SqlStmt_t & tStmt, DocID_t tDocId, JsonObj_c & tResult ) final
 	{
-		return ProcessDelete ( m_sQuery, tStmt, tDocId, tResult, m_sError );
+		return ProcessDelete ( m_sQuery, tStmt, tDocId, tResult, m_sError, false );
 	}
 };
 
@@ -2281,7 +2294,7 @@ public:
 			{
 			case STMT_INSERT:
 			case STMT_REPLACE:
-				bResult = ProcessInsert ( tStmt, tDocId, tResult, m_sError );
+				bResult = ProcessInsert ( tStmt, tDocId, tResult, m_sError, false );
 				if ( bResult )
 					++m_iInserts;
 				break;
@@ -2295,7 +2308,7 @@ public:
 
 			case STMT_DELETE:
 				tStmt.m_sEndpoint = HttpEndpointToStr ( EHTTP_ENDPOINT::JSON_DELETE );
-				bResult = ProcessDelete ( FromStr ( sQuery ), tStmt, tDocId, tResult, m_sError );
+				bResult = ProcessDelete ( FromStr ( sQuery ), tStmt, tDocId, tResult, m_sError, false );
 				break;
 
 			default:
@@ -2390,6 +2403,8 @@ class HttpHandlerEsBulk_c : public HttpCompatBaseHandler_c, public HttpJsonUpdat
 public:
 	HttpHandlerEsBulk_c ( Str_t sBody, int iReqType, const SmallStringHash_T<CSphString> & hOpts )
 		: HttpCompatBaseHandler_c ( sBody, iReqType, hOpts )
+		, HttpJsonUpdateTraits_c ( true )
+		, HttpJsonTxnTraits_c ( true )
 	{}
 
 	bool Process () override;
@@ -2675,7 +2690,7 @@ static void EncodePercolateMatchResult ( const PercolateMatchResult_t & tRes, co
 	for ( const auto& tDesc : tRes.m_dQueryDesc )
 	{
 		ScopedComma_c sQueryComma ( tOut, ",","{"," }");
-		tOut.Sprintf ( R"("_index":"%s","_type":"doc","_id":"%U","_score":"1")", sIndex.cstr(), tDesc.m_iQUID );
+		tOut.Sprintf ( R"("table":"%s","_type":"doc","_id":"%U","_score":"1")", sIndex.cstr(), tDesc.m_iQUID );
 		{
 			ScopedComma_c sBrackets ( tOut, ",", R"("_source":{)", "}");
 			if ( !tDesc.m_bQL )
@@ -2774,9 +2789,9 @@ bool HttpHandlerPQ_c::DoCallPQ ( const CSphString & sIndex, const JsonObj_c & tP
 static void EncodePercolateQueryResult ( bool bReplace, const CSphString & sIndex, int64_t iID, StringBuilder_c & tOut )
 {
 	if ( bReplace )
-		tOut.Sprintf (R"({"index":"%s","type":"doc","_id":"%U","result":"updated","forced_refresh":true})", sIndex.cstr(), iID);
+		tOut.Sprintf (R"({"table":"%s","type":"doc","_id":"%U","result":"updated","forced_refresh":true})", sIndex.cstr(), iID);
 	else
-		tOut.Sprintf ( R"({"index":"%s","type":"doc","_id":"%U","result":"created"})", sIndex.cstr (), iID );
+		tOut.Sprintf ( R"({"table":"%s","type":"doc","_id":"%U","result":"created"})", sIndex.cstr (), iID );
 }
 
 
@@ -2905,11 +2920,11 @@ bool HttpHandlerPQ_c::InsertOrReplaceQuery ( const CSphString & sIndex, const Js
 	return bOk;
 }
 
-// for now - forcibly route query as /json/search POST {"index":"<idx>"}. Later matter of deprecate/delete
+// for now - forcibly route query as /json/search POST {"table":"<idx>"}. Later matter of deprecate/delete
 bool HttpHandlerPQ_c::ListQueries ( const CSphString & sIndex )
 {
 	StringBuilder_c sQuery;
-	sQuery.Sprintf(R"({"index":"%s"})", sIndex.scstr());
+	sQuery.Sprintf(R"({"table":"%s"})", sIndex.scstr());
 	auto pHandler = std::make_unique<HttpHandler_JsonSearch_c> ( (Str_t)sQuery, m_tOptions ) ;
 	if ( !pHandler )
 		return false;
@@ -3192,7 +3207,7 @@ static bool ParseSourceLine ( const char * sLine, const CSphString & sAction, Sq
 	} else if ( sAction=="update" )
 	{
 		JsonObj_c tUpd ( FromSz ( sLine ) );
-		tUpd.AddStr ( "index", tStmt.m_sIndex );
+		tUpd.AddStr ( "table", tStmt.m_sIndex );
 		tUpd.AddInt ( "id", tDocId );
 		if ( !ParseJsonUpdate ( tUpd, tStmt, tDocId, sError ) )
 			return false;
@@ -3466,7 +3481,7 @@ bool HttpHandlerEsBulk_c::ProcessTnx ( const VecTraits_T<BulkTnx_t> & dTnx, VecT
 			{
 			case STMT_INSERT:
 			case STMT_REPLACE:
-				bAction = ProcessInsert ( tStmt, tDoc.m_tDocid, tResult, m_sError );
+				bAction = ProcessInsert ( tStmt, tDoc.m_tDocid, tResult, m_sError, true );
 				break;
 
 			case STMT_UPDATE:
@@ -3477,7 +3492,7 @@ bool HttpHandlerEsBulk_c::ProcessTnx ( const VecTraits_T<BulkTnx_t> & dTnx, VecT
 
 			case STMT_DELETE:
 				tStmt.m_sEndpoint = sphHttpEndpointToStr ( EHTTP_ENDPOINT::JSON_DELETE );
-				bAction = ProcessDelete ( tDoc.m_tDocLine, tStmt, tDoc.m_tDocid, tResult, m_sError );
+				bAction = ProcessDelete ( tDoc.m_tDocLine, tStmt, tDoc.m_tDocid, tResult, m_sError, true );
 				break;
 
 			default:

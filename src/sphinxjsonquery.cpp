@@ -940,7 +940,7 @@ static bool ParseIndex ( const JsonObj_c & tRoot, SqlStmt_t & tStmt, CSphString 
 		return false;
 	}
 
-	JsonObj_c tIndex = tRoot.GetStrItem ( "index", sError );
+	JsonObj_c tIndex = tRoot.GetStrItem ( "table", sError );
 	if ( !tIndex )
 		return false;
 
@@ -1309,7 +1309,7 @@ bool sphParseJsonQuery ( const JsonObj_c & tRoot, ParsedJsonQuery_t & tPJQuery )
 		return TlsMsg::Err ( "unable to parse: %s", tRoot.GetErrorPtr() );
 
 	TLS_MSG_STRING ( sError );
-	JsonObj_c tIndex = tRoot.GetStrItem ( "index", sError );
+	JsonObj_c tIndex = tRoot.GetStrItem ( "table", sError );
 	if ( !tIndex )
 		return false;
 
@@ -2445,7 +2445,7 @@ static CSphString JsonEncodeResultError ( const CSphString & sError, const char 
 
 	if ( sIndex )
 	{
-		tOut.AppendName ( "index" );
+		tOut.AppendName ( "table" );
 		tOut.AppendEscaped ( sIndex, EscBld::eEscape );
 	}
 
@@ -2706,11 +2706,11 @@ CSphString sphEncodeResultJson ( const VecTraits_T<const AggrResult_t *> & dRes,
 }
 
 
-JsonObj_c sphEncodeInsertResultJson ( const char * szIndex, bool bReplace, DocID_t tDocId )
+JsonObj_c sphEncodeInsertResultJson ( const char * szIndex, bool bReplace, DocID_t tDocId, bool bCompat )
 {
 	JsonObj_c tObj;
 
-	tObj.AddStr ( "_index", szIndex );
+	tObj.AddStr ( ( bCompat ? "_index" : "table" ), szIndex );
 	tObj.AddUint ( "_id", tDocId );
 	tObj.AddBool ( "created", !bReplace );
 	tObj.AddStr ( "result", bReplace ? "updated" : "created" );
@@ -2719,11 +2719,11 @@ JsonObj_c sphEncodeInsertResultJson ( const char * szIndex, bool bReplace, DocID
 	return tObj;
 }
 
-JsonObj_c sphEncodeTxnResultJson ( const char* szIndex, DocID_t tDocId, int iInserts, int iDeletes, int iUpdates )
+JsonObj_c sphEncodeTxnResultJson ( const char* szIndex, DocID_t tDocId, int iInserts, int iDeletes, int iUpdates, bool bCompat )
 {
 	JsonObj_c tObj;
 
-	tObj.AddStr ( "_index", szIndex );
+	tObj.AddStr ( ( bCompat ? "_index" : "table" ), szIndex );
 	tObj.AddInt ( "_id", tDocId );
 	tObj.AddInt ( "created", iInserts );
 	tObj.AddInt ( "deleted", iDeletes );
@@ -2736,11 +2736,11 @@ JsonObj_c sphEncodeTxnResultJson ( const char* szIndex, DocID_t tDocId, int iIns
 }
 
 
-JsonObj_c sphEncodeUpdateResultJson ( const char * szIndex, DocID_t tDocId, int iAffected )
+JsonObj_c sphEncodeUpdateResultJson ( const char * szIndex, DocID_t tDocId, int iAffected, bool bCompat )
 {
 	JsonObj_c tObj;
 
-	tObj.AddStr ( "_index", szIndex );
+	tObj.AddStr ( ( bCompat ? "_index" : "table" ), szIndex );
 
 	if ( !tDocId )
 		tObj.AddInt ( "updated", iAffected );
@@ -2754,11 +2754,11 @@ JsonObj_c sphEncodeUpdateResultJson ( const char * szIndex, DocID_t tDocId, int 
 }
 
 
-JsonObj_c sphEncodeDeleteResultJson ( const char * szIndex, DocID_t tDocId, int iAffected )
+JsonObj_c sphEncodeDeleteResultJson ( const char * szIndex, DocID_t tDocId, int iAffected, bool bCompat )
 {
 	JsonObj_c tObj;
 
-	tObj.AddStr ( "_index", szIndex );
+	tObj.AddStr ( ( bCompat ? "_index" : "table" ), szIndex );
 
 	if ( !tDocId )
 		tObj.AddInt ( "deleted", iAffected );
@@ -2773,12 +2773,12 @@ JsonObj_c sphEncodeDeleteResultJson ( const char * szIndex, DocID_t tDocId, int 
 }
 
 
-JsonObj_c sphEncodeInsertErrorJson ( const char * szIndex, const char * szError )
+JsonObj_c sphEncodeInsertErrorJson ( const char * szIndex, const char * szError, bool bCompat )
 {
 	JsonObj_c tObj, tErr;
 
 	tErr.AddStr ( "type", szError );
-	tErr.AddStr ( "index", szIndex );
+	tErr.AddStr ( ( bCompat ? "_index" : "table" ), szIndex );
 
 	tObj.AddItem ( "error", tErr );
 	tObj.AddInt ( "status", HttpGetStatusCodes ( EHTTP_STATUS::_409 ) );

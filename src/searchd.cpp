@@ -12560,7 +12560,7 @@ void HandleMysqlShowTables ( RowBuffer_i & tOut, const SqlStmt_t * pStmt )
 	auto dIndexes = GetAllServedIndexes();
 
 	// output the results
-	VectorLike dTable ( pStmt->m_sStringParam, { "Index", "Type" } );
+	VectorLike dTable ( pStmt->m_sStringParam, { "Table", "Type" } );
 	for ( auto& dPair : dIndexes )
 		dTable.MatchTuplet( dPair.first.cstr (), szIndexType(dPair.second) );
 	tOut.DataTable ( dTable );

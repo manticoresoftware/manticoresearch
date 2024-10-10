@@ -94,15 +94,15 @@ insert into test_mva values
 
 <httpqueries>
 
-<query endpoint="json/search">{ "index": "test_geo", "query": { "match": { "title": "what was" } }, "sort": [ "_score", "id" ] }</query>
-<query endpoint="json/search">{ "index": "test_geo", "query": { "match": { "title": "what was" } }, "sort": [ { "_score":"asc"}, "id" ] }</query>
-<query endpoint="json/search">{ "index": "test_geo", "query": { "match": { "title": "what was" } }, "sort": [ { "gid":{ "order":"desc"} } ] }</query>
-<query endpoint="json/search">{ "index": "test_geo", "query": { "match": { "title": "what was" } }, "sort": [ { "gid":{ "order":"desc"} } ], "track_scores":true }</query>
-<query endpoint="json/search">{ "index": "test_geo", "query": { "match": { "title": "what was" } }, "sort": [ { "gid":{ "order":"desc"} } ], "track_scores":false }</query>
-<query endpoint="json/search">{ "index": "test_geo", "query": { "match": { "title": "what was" } }, "sort": [ { "_geo_distance":{ "location_anchor":{"lat":49, "lon":15}, "location_source":"attr_lat, attr_lon" } } ] }</query>
-<query endpoint="json/search">{ "index": "test_geo", "query": { "match": { "title": "what was" } }, "sort": [ { "_geo_distance":{ "location_anchor":{"lat":41, "lon":32}, "location_source":["attr_lon", "attr_lat"] } } ] }</query>
-<query endpoint="json/search">{ "index": "test_mva", "query": { "match": { "title": "this" } }, "sort": [ { "attr_mva":{ "order":"desc", "mode":"max"} } ] }</query>
-<query endpoint="json/search">{ "index": "test_mva", "query": { "match": { "title": "this" } }, "sort": [ { "attr_mva":{ "order":"asc", "mode":"min"} } ] }</query>
+<query endpoint="json/search">{ "table": "test_geo", "query": { "match": { "title": "what was" } }, "sort": [ "_score", "id" ] }</query>
+<query endpoint="json/search">{ "table": "test_geo", "query": { "match": { "title": "what was" } }, "sort": [ { "_score":"asc"}, "id" ] }</query>
+<query endpoint="json/search">{ "table": "test_geo", "query": { "match": { "title": "what was" } }, "sort": [ { "gid":{ "order":"desc"} } ] }</query>
+<query endpoint="json/search">{ "table": "test_geo", "query": { "match": { "title": "what was" } }, "sort": [ { "gid":{ "order":"desc"} } ], "track_scores":true }</query>
+<query endpoint="json/search">{ "table": "test_geo", "query": { "match": { "title": "what was" } }, "sort": [ { "gid":{ "order":"desc"} } ], "track_scores":false }</query>
+<query endpoint="json/search">{ "table": "test_geo", "query": { "match": { "title": "what was" } }, "sort": [ { "_geo_distance":{ "location_anchor":{"lat":49, "lon":15}, "location_source":"attr_lat, attr_lon" } } ] }</query>
+<query endpoint="json/search">{ "table": "test_geo", "query": { "match": { "title": "what was" } }, "sort": [ { "_geo_distance":{ "location_anchor":{"lat":41, "lon":32}, "location_source":["attr_lon", "attr_lat"] } } ] }</query>
+<query endpoint="json/search">{ "table": "test_mva", "query": { "match": { "title": "this" } }, "sort": [ { "attr_mva":{ "order":"desc", "mode":"max"} } ] }</query>
+<query endpoint="json/search">{ "table": "test_mva", "query": { "match": { "title": "this" } }, "sort": [ { "attr_mva":{ "order":"asc", "mode":"min"} } ] }</query>
 
 </httpqueries>
 

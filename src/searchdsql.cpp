@@ -259,6 +259,12 @@ void SqlParserTraits_c::SetIndex ( const CSphString& sIndex ) const
 		m_pStmt->m_sIndex = sIndex;
 }
 
+
+void SqlParserTraits_c::Comment ( const SqlNode_t& tNode ) const
+{
+}
+
+
 //////////////////////////////////////////////////////////////////////////
 
 enum class Option_e : BYTE;

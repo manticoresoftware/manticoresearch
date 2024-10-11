@@ -57,15 +57,21 @@ INT                 {DIGIT}+
 FLOAT_CONSTANT      ({INT}\.{INT}?|{INT}?\.{INT}){EXPONENT}?
 
 %x ccomment
+%x acomment
 %x QSTR
 
 %%
 
 "/*"         		{ BEGIN(ccomment); }
-<ccomment>"*/"		{ BEGIN(INITIAL); }
+<ccomment>"*/"		{ BEGIN(INITIAL); return TOK_COMMENT;}
 <ccomment>[^*\n]+
 <ccomment>"*"[^/]
 <ccomment>"\n"
+
+^"--"         		{ BEGIN(acomment); }
+<acomment>"\n"		{ BEGIN(INITIAL); return TOK_COMMENT; }
+<acomment><<EOF>>   { BEGIN(INITIAL); return TOK_COMMENT; }
+<acomment>[^*\n]+
 
 '	                { Q_START; BEGIN (QSTR); }
 <QSTR>[^'\n\\]+

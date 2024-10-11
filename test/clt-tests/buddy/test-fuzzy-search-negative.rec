@@ -58,3 +58,7 @@ ERROR 1064 (42000) at line 1: no such table 'non_existing_table'
 mysql -h0 -P9306 -e "CALL AUTOCOMPLETE('jo', 'name', 123 AS layouts);"
 ––– output –––
 ERROR 1064 (42000) at line 1: Autocomplete requires min_infix_len to be set
+––– input –––
+mysql -h0 -P9306 -e "SELECT * FROM test WHERE MATCH('hello') OPTION fuzzy=1 layouts='';"
+––– output –––
+ERROR 1064 (42000) at line 1: Invalid options in query string, make sure they are separated by commas

@@ -3,7 +3,7 @@
 ## SET
 ```sql
 SET [GLOBAL] server_variable_name = value
-SET [INDEX index_name] GLOBAL @user_variable_name = (int_val1 [, int_val2, ...])
+SET [INDEX table_name] GLOBAL @user_variable_name = (int_val1 [, int_val2, ...])
 SET NAMES value [COLLATE value]
 SET @@dummy_variable = ignored_value
 ```
@@ -17,7 +17,7 @@ There are four classes of variables in Manticore Search:
 1.  Per-session server variable: `set var_name = value`
 2.  Global server variable: `set global var_name = value`
 3.  Global user variable: `set global @var_name = (value)`
-4.  Global distributed variable: `set index dist_index_name global @var_name = (value)`
+4.  Global distributed variable: `set index dist_table_name global @var_name = (value)`
 
 Global user variables are shared between concurrent sessions. The only supported value type is a list of BIGINTs, and these variables can be used with the IN() operator for filtering purposes. The primary use case for this feature is to upload large lists of values to `searchd` once and reuse them multiple times later, reducing network overhead. Global user variables can be transferred to all agents of a distributed table or set locally in the case of a local table defined in a distributed table. Example:
 

@@ -43,7 +43,7 @@ When using the HTTP JSON protocol we can just enable `"profile":true` to get in 
 
 ```json
 {
-  "index":"test",
+  "table":"test",
   "profile":true,
   "query":
   {
@@ -97,7 +97,7 @@ Variable: transformed_tree
 ```JSON
 POST /search
 {
-  "index": "forum",
+  "table": "forum",
   "query": {"query_string": "i me"},
   "_source": { "excludes":["*"] },
   "limit": 1,
@@ -213,7 +213,7 @@ Python
 <!-- request Python -->
 
 ```python
-searchApi.search({"index":"forum","query":{"query_string":"i me"},"_source":{"excludes":["*"]},"limit":1,"profile":True})
+searchApi.search({"table":"forum","query":{"query_string":"i me"},"_source":{"excludes":["*"]},"limit":1,"profile":True})
 ```
 <!-- response Python -->
 ``` python
@@ -240,7 +240,7 @@ javascript
 <!-- request javascript -->
 
 ```javascript
-res = await searchApi.search({"index":"forum","query":{"query_string":"i me"},"_source":{"excludes":["*"]},"limit":1,"profile":true});
+res = await searchApi.search({"table":"forum","query":{"query_string":"i me"},"_source":{"excludes":["*"]},"limit":1,"profile":true});
 ```
 <!-- response javascript -->
 ``` javascript
@@ -496,7 +496,7 @@ Query OK, 0 rows affected (0.00 sec)
 ```JSON
 POST /search
 {
-  "index": "forum",
+  "table": "forum",
   "query": {"query_string": "@title way* @content hey"},
   "_source": { "excludes":["*"] },
   "limit": 1,
@@ -822,7 +822,7 @@ Python
 <!-- request Python -->
 
 ```python
-searchApi.search({"index":"forum","query":{"query_string":"@title way* @content hey"},"_source":{"excludes":["*"]},"limit":1,"profile":true})
+searchApi.search({"table":"forum","query":{"query_string":"@title way* @content hey"},"_source":{"excludes":["*"]},"limit":1,"profile":true})
 ```
 <!-- response Python -->
 ``` python
@@ -854,7 +854,7 @@ javascript
 <!-- request javascript -->
 
 ```javascript
-res = await searchApi.search({"index":"forum","query":{"query_string":"@title way* @content hey"},"_source":{"excludes":["*"]},"limit":1,"profile":true});
+res = await searchApi.search({"table":"forum","query":{"query_string":"@title way* @content hey"},"_source":{"excludes":["*"]},"limit":1,"profile":true});
 ```
 <!-- response javascript -->
 ``` javascript

@@ -6,7 +6,7 @@ apt-get update -y > /dev/null; echo $?
 ––– output –––
 0
 ––– input –––
-export DEBIAN_FRONTEND=noninteractive && apt-get install -y unattended-upgrades gnupg2 wget mariadb-client > /dev/null 2>&1; echo $?
+export DEBIAN_FRONTEND=noninteractive && apt-get install -y unattended-upgrades procps gnupg2 wget mariadb-client > /dev/null 2>&1; echo $?
 ––– output –––
 0
 ––– input –––

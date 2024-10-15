@@ -726,7 +726,7 @@ bool ProcessHttpQueryBuddy ( HttpProcessResult_t & tRes, Str_t sSrcQuery, Option
 		sphWarning ( "[BUDDY] [%d] %s: %s", session::GetConnID(), sError.cstr(), tReplyRaw.second.cstr() );
 		return tRes.m_bOk;
 	}
-	if ( bson::String ( tReplyParsed.m_tType )!="json response" )
+	if ( ( bHttpEndpoint && bson::String ( tReplyParsed.m_tType )!="json response" ) || ( !bHttpEndpoint && bson::String ( tReplyParsed.m_tType )!="sql response" ) )
 	{
 		sphWarning ( "[BUDDY] [%d] wrong response type %s: %s", session::GetConnID(), bson::String ( tReplyParsed.m_tType ).cstr(), tReplyRaw.second.cstr() );
 		return tRes.m_bOk;

@@ -6,12 +6,13 @@ apt-get update -y > /dev/null; echo $?
 ––– output –––
 0
 ––– input –––
-export DEBIAN_FRONTEND=noninteractive && apt-get install -y gnupg2 wget mariadb-client procps apt-utils dialog tzdata > /dev/null 2>&1; echo $?
+export DEBIAN_FRONTEND=noninteractive && apt-get install -y unattended-upgrades gnupg2 wget mariadb-client > /dev/null 2>&1; echo $?
 ––– output –––
 0
 ––– input –––
-export TERM=xterm && export LC_ALL=C.UTF-8 && export LANG=C.UTF-8
+apt-get install -y gnupg2 wget mariadb-client procps > /dev/null 2>&1; echo $?
 ––– output –––
+0
 ––– input –––
 wget -q https://repo.manticoresearch.com/manticore-dev-repo.noarch.deb
 ––– output –––
@@ -37,6 +38,13 @@ Manticore %{SEMVER} %{COMMITDATE}#!/(\sdev)?\s/!#(columnar %{SEMVER} %{COMMITDAT
 Copyright (c) 2001-2016, Andrew Aksyonoff
 Copyright (c) 2008-2016, Sphinx Technologies Inc (http://sphinxsearch.com)
 Copyright (c) 2017-%{YEAR}, Manticore Software LTD (https://manticoresearch.com)
+––– input –––
+dpkg-reconfigure unattended-upgrades > /dev/null 2>&1; echo $?
+––– output –––
+0
+––– input –––
+echo "Unattended-Upgrade::Origins-Pattern { \"origin=Debian,codename=\${distro_codename},label=Debian\"; \"origin=Debian,codename=\${distro_codename},label=Debian-Security\"; \"origin=Debian,codename=\${distro_codename}-security,label=Debian-Security\"; }; Unattended-Upgrade::Package-Blacklist { }; Unattended-Upgrade::Remove-Unused-Dependencies \"true\";" > /etc/apt/apt.conf.d/50unattended-upgrades
+––– output –––
 ––– input –––
 unattended-upgrade --dry-run -d 2>/dev/null| grep manticore | grep remov
 ––– output –––

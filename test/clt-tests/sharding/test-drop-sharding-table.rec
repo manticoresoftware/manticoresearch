@@ -1,12 +1,12 @@
-––– block: ../base/init –––
+––– block: ./base/init –––
 ––– input –––
 export INSTANCE=1
 ––– output –––
-––– block: ../base/flexible/start-searchd –––
+––– block: ./base/flexible/start-searchd –––
 ––– input –––
 export INSTANCE=2
 ––– output –––
-––– block: ../base/flexible/start-searchd –––
+––– block: ./base/flexible/start-searchd –––
 ––– input –––
 export CLUSTER_NAME=c
 ––– output –––

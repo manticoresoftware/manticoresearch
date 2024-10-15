@@ -16200,7 +16200,7 @@ static void AddPlainIndexStatus ( RowBuffer_i & tOut, const cServedIndexRefPtr_c
 	assert ( pIndex );
 
 	VectorLike dStatus ( sPattern );
-	dStatus.MatchTuplet ( "index_type", szIndexType ( pServed->m_eType ) );
+	dStatus.MatchTuplet ( "table_type", szIndexType ( pServed->m_eType ) );
 	if ( pServed->m_eType != IndexType_e::TEMPLATE )
 	{
 		AddDiskIndexStatus ( dStatus, pIndex, pServed->m_eType == IndexType_e::RT, pServed->m_eType == IndexType_e::PERCOLATE );
@@ -16214,7 +16214,7 @@ static void AddDistibutedIndexStatus ( RowBuffer_i & tOut, const cDistributedInd
 {
 	assert ( pIndex );
 	VectorLike dStatus ( sPattern );
-	dStatus.MatchTuplet( "index_type", "distributed" );
+	dStatus.MatchTuplet( "table_type", "distributed" );
 	AddIndexQueryStats ( dStatus, pIndex->m_tStats );
 	tOut.DataTable ( dStatus );
 }

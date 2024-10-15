@@ -1156,6 +1156,8 @@ static bool DoSearch ( const CSphString & sDefaultIndex, nljson & tReq, const CS
 	CSphString sIndex = sDefaultIndex;
 	if ( tReq.contains ( "table" ) )
 		sIndex = tReq["table"].get<std::string>().c_str();
+	else if ( tReq.contains ( "index" ) )
+		sIndex = tReq["index"].get<std::string>().c_str();
 
 	CSphString sExpandedIndex;
 	StrVec_t dIndexes = ExpandIndexes ( sIndex, sExpandedIndex );
@@ -1217,7 +1219,7 @@ static bool DoSearch ( const CSphString & sDefaultIndex, nljson & tReq, const CS
 	dAggsRes[0] = tHandler->GetResult ( 0 );
 	ARRAY_FOREACH ( i, tQuery.m_dAggs )
 		dAggsRes[i+1] = tHandler->GetResult ( i+1 );
-	sRes = sphEncodeResultJson ( dAggsRes, tQuery, nullptr, true );
+	sRes = sphEncodeResultJson ( dAggsRes, tQuery, nullptr, ResultSetFormat_e::ES );
 
 	bool bOk = true;
 	// want to see at log url and query for search error

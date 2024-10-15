@@ -1490,7 +1490,7 @@ protected:
 
 	CSphString EncodeResult ( const VecTraits_T<AggrResult_t *> & dRes, QueryProfile_c * pProfile ) final
 	{
-		return sphEncodeResultJson ( dRes, m_tParsed.m_tQuery, pProfile, false );
+		return sphEncodeResultJson ( dRes, m_tParsed.m_tQuery, pProfile, ResultSetFormat_e::MntSearch );
 	}
 
 	void SetStmt ( PubSearchHandler_c & tHandler ) final
@@ -1858,7 +1858,7 @@ public:
 protected:
 	CSphString EncodeResult ( const VecTraits_T<AggrResult_t *> & dRes, QueryProfile_c * pProfile ) override
 	{
-		return sphEncodeResultJson ( dRes, m_tParsed.m_tQuery, pProfile, false );
+		return sphEncodeResultJson ( dRes, m_tParsed.m_tQuery, pProfile, ResultSetFormat_e::MntSearch );
 	}
 };
 
@@ -1867,8 +1867,8 @@ class HttpJsonTxnTraits_c
 {
 protected:
 	HttpJsonTxnTraits_c() = default;
-	explicit HttpJsonTxnTraits_c ( bool bCompat )
-		: m_bCompat ( bCompat )
+	explicit HttpJsonTxnTraits_c ( ResultSetFormat_e eFormat )
+		: m_eFormat ( eFormat )
 	{}
 
 	void ProcessBegin ( const CSphString& sIndex )
@@ -1894,24 +1894,24 @@ protected:
 		if ( tReporter.IsError() )
 		{
 			sError = tReporter.GetError();
-			tResult = sphEncodeInsertErrorJson ( sIndex.first, sError.cstr(), m_bCompat );
+			tResult = sphEncodeInsertErrorJson ( sIndex.first, sError.cstr(), m_eFormat );
 		} else
 		{
 			auto iDeletes = tReporter.GetAffectedRows();
 			auto dLastIds = session::LastIds();
 			if ( !dLastIds.IsEmpty() )
 				tDocId = dLastIds[0];
-			tResult = sphEncodeTxnResultJson ( sIndex.first, tDocId, m_iInserts, iDeletes, m_iUpdates, m_bCompat );
+			tResult = sphEncodeTxnResultJson ( sIndex.first, tDocId, m_iInserts, iDeletes, m_iUpdates, m_eFormat );
 		}
 		return !tReporter.IsError();
 	}
 
 	int m_iInserts = 0;
 	int m_iUpdates = 0;
-	const bool m_bCompat = false;
+	const ResultSetFormat_e m_eFormat = ResultSetFormat_e::MntSearch;
 };
 
-static bool ProcessInsert ( SqlStmt_t & tStmt, DocID_t tDocId, JsonObj_c & tResult, CSphString & sError, bool bCompat )
+static bool ProcessInsert ( SqlStmt_t & tStmt, DocID_t tDocId, JsonObj_c & tResult, CSphString & sError, ResultSetFormat_e eFormat )
 {
 	HttpErrorReporter_c tReporter;
 	sphHandleMysqlInsert ( tReporter, tStmt );
@@ -1919,19 +1919,19 @@ static bool ProcessInsert ( SqlStmt_t & tStmt, DocID_t tDocId, JsonObj_c & tResu
 	if ( tReporter.IsError() )
 	{
 		sError = tReporter.GetError();
-		tResult = sphEncodeInsertErrorJson ( tStmt.m_sIndex.cstr(), sError.cstr(), bCompat );
+		tResult = sphEncodeInsertErrorJson ( tStmt.m_sIndex.cstr(), sError.cstr(), eFormat );
 	} else
 	{
 		auto dLastIds = session::LastIds();
 		if ( !dLastIds.IsEmpty() )
 			tDocId = dLastIds[0];
-		tResult = sphEncodeInsertResultJson ( tStmt.m_sIndex.cstr(), tStmt.m_eStmt == STMT_REPLACE, tDocId, bCompat );
+		tResult = sphEncodeInsertResultJson ( tStmt.m_sIndex.cstr(), tStmt.m_eStmt == STMT_REPLACE, tDocId, eFormat );
 	}
 
 	return !tReporter.IsError();
 }
 
-static bool ProcessDelete ( Str_t sRawRequest, const SqlStmt_t& tStmt, DocID_t tDocId, JsonObj_c & tResult, CSphString & sError, bool bCompat )
+static bool ProcessDelete ( Str_t sRawRequest, const SqlStmt_t& tStmt, DocID_t tDocId, JsonObj_c & tResult, CSphString & sError, ResultSetFormat_e eFormat )
 {
 	HttpErrorReporter_c tReporter;
 	sphHandleMysqlDelete ( tReporter, tStmt, std::move ( sRawRequest ) );
@@ -1939,10 +1939,10 @@ static bool ProcessDelete ( Str_t sRawRequest, const SqlStmt_t& tStmt, DocID_t t
 	if ( tReporter.IsError() )
 	{
 		sError = tReporter.GetError();
-		tResult = sphEncodeInsertErrorJson ( tStmt.m_sIndex.cstr(), sError.cstr(), bCompat );
+		tResult = sphEncodeInsertErrorJson ( tStmt.m_sIndex.cstr(), sError.cstr(), eFormat );
 	} else
 	{
-		tResult = sphEncodeDeleteResultJson ( tStmt.m_sIndex.cstr(), tDocId, tReporter.GetAffectedRows(), bCompat );
+		tResult = sphEncodeDeleteResultJson ( tStmt.m_sIndex.cstr(), tDocId, tReporter.GetAffectedRows(), eFormat );
 	}
 
 	return !tReporter.IsError();
@@ -1972,7 +1972,7 @@ public:
 
 		tStmt.m_sEndpoint = HttpEndpointToStr ( m_bReplace ? EHTTP_ENDPOINT::JSON_REPLACE : EHTTP_ENDPOINT::JSON_INSERT );
 		JsonObj_c tResult = JsonNull;
-		bool bResult = ProcessInsert ( tStmt, tDocId, tResult, m_sError, false );
+		bool bResult = ProcessInsert ( tStmt, tDocId, tResult, m_sError, ResultSetFormat_e::MntSearch );
 
 		CSphString sResult = tResult.AsString();
 		BuildReply ( sResult, bResult ? EHTTP_STATUS::_200 : EHTTP_STATUS::_409 );
@@ -1988,8 +1988,8 @@ class HttpJsonUpdateTraits_c
 
 protected:
 	HttpJsonUpdateTraits_c() = default;
-	explicit HttpJsonUpdateTraits_c ( bool bCompat )
-		: m_bCompat ( bCompat )
+	explicit HttpJsonUpdateTraits_c ( ResultSetFormat_e eFormat )
+		: m_eFormat ( eFormat )
 	{}
 
 	bool ProcessUpdate ( Str_t sRawRequest, const SqlStmt_t & tStmt, DocID_t tDocId, JsonObj_c & tResult, CSphString & sError )
@@ -2000,10 +2000,10 @@ protected:
 		if ( tReporter.IsError() )
 		{
 			sError = tReporter.GetError();
-			tResult = sphEncodeInsertErrorJson ( tStmt.m_sIndex.cstr(), sError.cstr(), m_bCompat );
+			tResult = sphEncodeInsertErrorJson ( tStmt.m_sIndex.cstr(), sError.cstr(), m_eFormat );
 		} else
 		{
-			tResult = sphEncodeUpdateResultJson ( tStmt.m_sIndex.cstr(), tDocId, tReporter.GetAffectedRows(), m_bCompat );
+			tResult = sphEncodeUpdateResultJson ( tStmt.m_sIndex.cstr(), tDocId, tReporter.GetAffectedRows(), m_eFormat );
 		}
 
 		m_iLastUpdated = tReporter.GetAffectedRows();
@@ -2016,7 +2016,7 @@ protected:
 		return m_iLastUpdated;
 	}
 
-	const bool m_bCompat = false;
+	const ResultSetFormat_e m_eFormat = ResultSetFormat_e::MntSearch;
 };
 
 
@@ -2081,7 +2081,7 @@ protected:
 
 	bool ProcessQuery ( const SqlStmt_t & tStmt, DocID_t tDocId, JsonObj_c & tResult ) final
 	{
-		return ProcessDelete ( m_sQuery, tStmt, tDocId, tResult, m_sError, false );
+		return ProcessDelete ( m_sQuery, tStmt, tDocId, tResult, m_sError, ResultSetFormat_e::MntSearch );
 	}
 };
 
@@ -2294,7 +2294,7 @@ public:
 			{
 			case STMT_INSERT:
 			case STMT_REPLACE:
-				bResult = ProcessInsert ( tStmt, tDocId, tResult, m_sError, false );
+				bResult = ProcessInsert ( tStmt, tDocId, tResult, m_sError, ResultSetFormat_e::MntSearch );
 				if ( bResult )
 					++m_iInserts;
 				break;
@@ -2308,7 +2308,7 @@ public:
 
 			case STMT_DELETE:
 				tStmt.m_sEndpoint = HttpEndpointToStr ( EHTTP_ENDPOINT::JSON_DELETE );
-				bResult = ProcessDelete ( FromStr ( sQuery ), tStmt, tDocId, tResult, m_sError, false );
+				bResult = ProcessDelete ( FromStr ( sQuery ), tStmt, tDocId, tResult, m_sError, ResultSetFormat_e::MntSearch );
 				break;
 
 			default:
@@ -2403,8 +2403,8 @@ class HttpHandlerEsBulk_c : public HttpCompatBaseHandler_c, public HttpJsonUpdat
 public:
 	HttpHandlerEsBulk_c ( Str_t sBody, int iReqType, const SmallStringHash_T<CSphString> & hOpts )
 		: HttpCompatBaseHandler_c ( sBody, iReqType, hOpts )
-		, HttpJsonUpdateTraits_c ( true )
-		, HttpJsonTxnTraits_c ( true )
+		, HttpJsonUpdateTraits_c ( ResultSetFormat_e::ES )
+		, HttpJsonTxnTraits_c ( ResultSetFormat_e::ES )
 	{}
 
 	bool Process () override;
@@ -3481,7 +3481,7 @@ bool HttpHandlerEsBulk_c::ProcessTnx ( const VecTraits_T<BulkTnx_t> & dTnx, VecT
 			{
 			case STMT_INSERT:
 			case STMT_REPLACE:
-				bAction = ProcessInsert ( tStmt, tDoc.m_tDocid, tResult, m_sError, true );
+				bAction = ProcessInsert ( tStmt, tDoc.m_tDocid, tResult, m_sError, ResultSetFormat_e::ES );
 				break;
 
 			case STMT_UPDATE:
@@ -3492,7 +3492,7 @@ bool HttpHandlerEsBulk_c::ProcessTnx ( const VecTraits_T<BulkTnx_t> & dTnx, VecT
 
 			case STMT_DELETE:
 				tStmt.m_sEndpoint = sphHttpEndpointToStr ( EHTTP_ENDPOINT::JSON_DELETE );
-				bAction = ProcessDelete ( tDoc.m_tDocLine, tStmt, tDoc.m_tDocid, tResult, m_sError, true );
+				bAction = ProcessDelete ( tDoc.m_tDocLine, tStmt, tDoc.m_tDocid, tResult, m_sError, ResultSetFormat_e::ES );
 				break;
 
 			default:

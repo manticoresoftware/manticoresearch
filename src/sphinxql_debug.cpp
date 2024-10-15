@@ -21,7 +21,7 @@ struct BlobLocator_t
 
 using namespace DebugCmd;
 
-class SqlDebugParser_c : public SqlParserTraits_c
+class SqlDebugParser_c final : public SqlParserTraits_c
 {
 	DebugCommand_t& m_tCmd;
 
@@ -239,36 +239,3 @@ ParseResult_e ParseDebugCmd ( Str_t sQuery, CSphVector<SqlStmt_t>& dStmt, CSphSt
 	return ParseResult_e::PARSE_OK;
 }
 
-
-CmdNotice_t DebugCmd::dCommands[(BYTE) Cmd_e::INVALID_CMD] = {
-	{ NEED_VIP, "debug shutdown <password>", "emulate TERM signal" },
-	{ NEED_VIP, "debug crash <password>", "crash daemon (make SIGSEGV action)" },
-	{ NONE, "debug token <password>", "calculate token for password" },
-	{ MALLOC_STATS, "debug malloc_stats", "perform 'malloc_stats', result in searchd.log" },
-	{ MALLOC_TRIM, "debug malloc_trim", "pefrorm 'malloc_trim' call" },
-	{ NEED_VIP | NO_WIN, "debug procdump", "ask watchdog to dump us" },
-	{ NEED_VIP | NO_WIN, "debug setgdb on|off", "enable or disable potentially dangerous crash dumping with gdb" },
-	{ NEED_VIP | NO_WIN, "debug setgdb status", "show current mode of gdb dumping" },
-	{ NONE, "debug sleep <N>", "sleep for <N> seconds" },
-	{ NONE, "debug tasks", "display global tasks stat (use select from @@system.tasks instead)" },
-	{ NONE, "debug sched", "display task manager schedule (use select from @@system.sched instead)" },
-	{ NONE, "debug merge <TBL> [chunk] <X> [into] [chunk] <Y> [option sync=1,byid=0]",
-			"For RT table <TBL> merge disk chunk X into disk chunk Y" },
-	{ NONE, "debug drop [chunk] <X> [from] <TBL> [option sync=1]",
-			"For RT table <TBL> drop disk chunk X" },
-	{ NONE, "debug files <TBL> [option format=all|external]",
-			"list files belonging to <TBL>. 'all' - including external (wordforms, stopwords, etc.)" },
-	{ NONE, "debug close", "ask server to close connection from it's side" },
-	{ NONE, "debug compress <TBL> [chunk] <X> [option sync=1]",
-			"Compress disk chunk X of RT table <TBL> (wipe out deleted documents)" },
-	{ NONE, "debug dedup <TBL> [chunk] <X>",
-			"Kill duplicates in disk chunk X of RT table <TBL> (mark duplicates as killed)" },
-	{ NONE, "debug split <TBL> [chunk] <X> on @<uservar> [option sync=1]",
-			"Split disk chunk X of RT table <TBL> using set of DocIDs from @uservar" },
-	{ NO_WIN, "debug wait <cluster> [like 'xx'] [option timeout=3]", "wait <cluster> ready, but no more than 3 secs." },
-	{ NO_WIN, "debug wait <cluster> status <N> [like 'xx'] [option timeout=13]", "wait <cluster> commit achieve <N>, but no more than 13 secs" },
-	{ NONE, "debug meta", "Show max_matches/pseudo_shards. Needs set profiling=1" },
-	{ NONE, "debug trace OFF|'path/to/file' [<N>]", "trace flow to file until N bytes written, or 'trace OFF'" },
-	{ NONE, "debug curl <URL>", "request given url via libcurl" },
-	{ NONE, "debug pause <ID> on|off", "switch named breakpoint [dev only]" },
-};

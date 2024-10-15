@@ -1,0 +1,52 @@
+––– block: ../base/init –––
+––– input –––
+export INSTANCE=1
+––– output –––
+––– block: ../base/flexible/start-searchd –––
+––– input –––
+export INSTANCE=2
+––– output –––
+––– block: ../base/flexible/start-searchd –––
+––– input –––
+mysql -h0 -P1306 -e "create table tbl1(id bigint) shards=10 rf=1;"
+––– output –––
+
+––– input –––
+mysql -h0 -P1306 -e "create table tbl2(id bigint) shards=4 rf=1;"
+––– output –––
+––– input –––
+export CLUSTER_NAME=c
+––– output –––
+––– input –––
+mysql -h0 -P1306 -e "create cluster ${CLUSTER_NAME}"
+––– output –––
+––– input –––
+mysql -h0 -P1306 -e "show status like 'cluster_${CLUSTER_NAME}_status'\G"
+––– output –––
+*************************** 1. row ***************************
+Counter: cluster_c_status
+Value: primary
+––– input –––
+for n in `seq 2 4`; do mysql -h0 -P${n}306 -e "join cluster ${CLUSTER_NAME} at '127.0.0.1:1312'"; done;
+––– output –––
+––– input –––
+mysql -h0 -P1306 -e "create table ${CLUSTER_NAME}:tbl3(id bigint) shards=10 rf=1;"
+––– output –––
+––– input –––
+mysql -h0 -P1306 -e "create table ${CLUSTER_NAME}:tbl4(id bigint) shards=10 rf=1;"
+––– output –––
+––– input –––
+mysql -h0 -P1306 -e "SHOW TABLES\G"
+––– output –––
+––– input –––
+mysql -h0 -P1306 -e "DROP SHARDED TABLE tbl3;"
+––– output –––
+––– input –––
+mysql -h0 -P1306 -e "SHOW TABLES\G" || echo "Table tbl3 deleted successfully."
+––– output –––
+––– input –––
+mysql -h0 -P2306 -e "DROP SHARDED TABLE tbl4;"
+––– output –––
+––– input –––
+mysql -h0 -P2306 -e "SHOW TABLES\G" || echo "Table tbl4 deleted successfully."
+––– output –––

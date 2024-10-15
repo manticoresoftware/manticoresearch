@@ -588,9 +588,12 @@ void CSphSchema::SetupSIFlags ( const CSphSourceSettings & tSettings, StrVec_t *
 
 		if ( tAttr.m_eAttrType!=SPH_ATTR_JSON )
 		{
-			CSphString sWarning;
-			sWarning.SetSprintf ( "unable to create json SI on non-json attribute '%s'", tAttr.m_sName.cstr() );
-			pWarnings->Add ( sWarning );
+			if ( pWarnings )
+			{
+				CSphString sWarning;
+				sWarning.SetSprintf ( "unable to create json SI on non-json attribute '%s'", tAttr.m_sName.cstr() );
+				pWarnings->Add ( sWarning );
+			}
 		}
 		else
 			tAttr.m_uAttrFlags |= CSphColumnInfo::ATTR_INDEXED_SI;

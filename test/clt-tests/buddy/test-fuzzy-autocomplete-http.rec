@@ -35,7 +35,7 @@ curl -sX POST http://localhost:9308/search -d '{"index":"name","query":{"bool":{
 "hits": [
 {
 "_id": 832342,
-"_score": 1595,
+"_score": %{NUMBER},
 "_source": {
 "username": "RICO RICE"
 }
@@ -187,143 +187,143 @@ curl -sX POST http://localhost:9308/search -d '{"index":"name","query":{"bool":{
 "total_relation": "eq",
 "hits": [
 {
-"_id": 999307,
+"_id": %{NUMBER},
+"_score": %{NUMBER},
+"_source": {
+"username": "BERNARDA BERNAL"
+}
+},
+{
+"_id": %{NUMBER},
 "_score": 1602,
 "_source": {
 "username": "BERNA WEIR"
 }
 },
 {
-"_id": 929492,
+"_id": %{NUMBER},
 "_score": 1602,
 "_source": {
 "username": "BERNA CHEUNG"
 }
 },
 {
-"_id": 926530,
+"_id": %{NUMBER},
 "_score": 1602,
 "_source": {
 "username": "BERNA GRAFF"
 }
 },
 {
-"_id": 935711,
+"_id": %{NUMBER},
 "_score": 1602,
 "_source": {
 "username": "BERNA PUGA"
 }
 },
 {
-"_id": 985405,
+"_id": %{NUMBER},
 "_score": 1602,
 "_source": {
 "username": "BERNA WOODWORTH"
 }
 },
 {
-"_id": 943151,
+"_id": %{NUMBER},
 "_score": 1602,
 "_source": {
 "username": "BERNA REICHERT"
 }
 },
 {
-"_id": 916301,
+"_id": %{NUMBER},
 "_score": 1602,
 "_source": {
 "username": "BERNA LATHAM"
 }
 },
 {
-"_id": 928383,
+"_id": %{NUMBER},
 "_score": 1602,
 "_source": {
 "username": "BERNA FRANZ"
 }
 },
 {
-"_id": 868777,
+"_id": %{NUMBER},
 "_score": 1602,
 "_source": {
 "username": "BERNA HAMLIN"
 }
 },
 {
-"_id": 953801,
+"_id": %{NUMBER},
 "_score": 1602,
 "_source": {
 "username": "BERNA POSTON"
 }
 },
 {
-"_id": 936413,
+"_id": %{NUMBER},
 "_score": 1602,
 "_source": {
 "username": "BERNA HOOPER"
 }
 },
 {
-"_id": 987047,
+"_id": %{NUMBER},
 "_score": 1602,
 "_source": {
 "username": "BERNA WITTE"
 }
 },
 {
-"_id": 977094,
+"_id": %{NUMBER},
 "_score": 1602,
 "_source": {
 "username": "BERNA ISBELL"
 }
 },
 {
-"_id": 817074,
+"_id": %{NUMBER},
 "_score": 1602,
 "_source": {
 "username": "BERNA VEGA"
 }
 },
 {
-"_id": 799233,
+"_id": %{NUMBER},
 "_score": 1602,
 "_source": {
 "username": "BERNA MOREY"
 }
 },
 {
-"_id": 905588,
+"_id": %{NUMBER},
 "_score": 1602,
 "_source": {
 "username": "BERNA GUILLORY"
 }
 },
 {
-"_id": 798723,
+"_id": %{NUMBER},
 "_score": 1602,
 "_source": {
 "username": "BERNA LOUIE"
 }
 },
 {
-"_id": 788674,
+"_id": %{NUMBER},
 "_score": 1602,
 "_source": {
 "username": "BERNA GILL"
 }
 },
 {
-"_id": 790830,
+"_id": %{NUMBER},
 "_score": 1602,
 "_source": {
 "username": "BERNA ABRAHAM"
-}
-},
-{
-"_id": 889071,
-"_score": 1602,
-"_source": {
-"username": "BERNA ELLIS"
 }
 }
 ]
@@ -340,143 +340,143 @@ curl -sX POST http://localhost:9308/search -d '{"index":"name","query":{"bool":{
 "total_relation": "eq",
 "hits": [
 {
-"_id": 855401,
-"_score": 1538,
-"_source": {
-"username": "LUCIANA GANT"
-}
-},
-{
-"_id": 796101,
-"_score": 1538,
-"_source": {
-"username": "ANNIE GANT"
-}
-},
-{
-"_id": 768944,
-"_score": 1538,
-"_source": {
-"username": "ANNITA GANT"
-}
-},
-{
-"_id": 773157,
-"_score": 1536,
+"_id": %{NUMBER},
+"_score": %{NUMBER},
 "_source": {
 "username": "JOANNA DENT"
 }
 },
 {
-"_id": 779895,
-"_score": 1535,
+"_id": %{NUMBER},
+"_score": %{NUMBER},
 "_source": {
-"username": "ANNALISA KENT"
+"username": "FERDINAND KENT"
 }
 },
 {
-"_id": 935071,
-"_score": 1531,
+"_id": %{NUMBER},
+"_score": %{NUMBER},
 "_source": {
-"username": "DORIAN GANT"
+"username": "ANDREW KENT"
 }
 },
 {
-"_id": 929610,
-"_score": 1531,
+"_id": %{NUMBER},
+"_score": %{NUMBER},
 "_source": {
-"username": "TANDRA GANT"
+"username": "NATHANIAL KENT"
 }
 },
 {
-"_id": 950473,
-"_score": 1531,
+"_id": %{NUMBER},
+"_score": %{NUMBER},
 "_source": {
-"username": "MELANY GANT"
+"username": "ANGELO KENT"
 }
 },
 {
-"_id": 976868,
-"_score": 1531,
+"_id": %{NUMBER},
+"_score": %{NUMBER},
 "_source": {
-"username": "STEFANIE GANT"
+"username": "ANTONETTE KENT"
 }
 },
 {
-"_id": 972411,
-"_score": 1531,
+"_id": %{NUMBER},
+"_score": %{NUMBER},
 "_source": {
-"username": "JORDAN GANT"
+"username": "SUZANN DENTON"
 }
 },
 {
-"_id": 895992,
-"_score": 1531,
+"_id": %{NUMBER},
+"_score": %{NUMBER},
 "_source": {
-"username": "ANTONE GANT"
+"username": "SUZANNA DENT"
 }
 },
 {
-"_id": 832469,
-"_score": 1531,
+"_id": %{NUMBER},
+"_score": %{NUMBER},
 "_source": {
-"username": "STEFANIE GANT"
+"username": "LANDON KENT"
 }
 },
 {
-"_id": 984473,
-"_score": 1530,
+"_id": %{NUMBER},
+"_score": %{NUMBER},
 "_source": {
-"username": "LEONIE GANT"
+"username": "JOANNE DENT"
 }
 },
 {
-"_id": 959771,
-"_score": 1530,
+"_id": %{NUMBER},
+"_score": %{NUMBER},
 "_source": {
-"username": "IRMA GANT"
+"username": "STEPHAN KENT"
 }
 },
 {
-"_id": 917932,
-"_score": 1530,
+"_id": %{NUMBER},
+"_score": %{NUMBER},
 "_source": {
-"username": "LISHA GANT"
+"username": "THURMAN KENT"
 }
 },
 {
-"_id": 970346,
-"_score": 1530,
+"_id": %{NUMBER},
+"_score": %{NUMBER},
 "_source": {
-"username": "LORY GANT"
+"username": "GEORGIANNA DENT"
 }
 },
 {
-"_id": 945404,
-"_score": 1530,
+"_id": %{NUMBER},
+"_score": %{NUMBER},
 "_source": {
-"username": "EILENE GANT"
+"username": "TRAN KENT"
 }
 },
 {
-"_id": 940539,
-"_score": 1530,
+"_id": %{NUMBER},
+"_score": %{NUMBER},
 "_source": {
-"username": "NADINE GANT"
+"username": "CLEVELAND KENT"
 }
 },
 {
-"_id": 997179,
-"_score": 1530,
+"_id": %{NUMBER},
+"_score": %{NUMBER},
 "_source": {
-"username": "DORSEY GANT"
+"username": "LIANA GANTT"
 }
 },
 {
-"_id": 934538,
-"_score": 1530,
+"_id": %{NUMBER},
+"_score": %{NUMBER},
 "_source": {
-"username": "AUTUMN GANT"
+"username": "ADRIAN KENT"
+}
+},
+{
+"_id": %{NUMBER},
+"_score": %{NUMBER},
+"_source": {
+"username": "ANDREW KENT"
+}
+},
+{
+"_id": %{NUMBER},
+"_score": %{NUMBER},
+"_source": {
+"username": "FRANCOISE KENT"
+}
+},
+{
+"_id": %{NUMBER},
+"_score": %{NUMBER},
+"_source": {
+"username": "JOVAN KENT"
 }
 }
 ]

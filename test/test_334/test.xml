@@ -732,5 +732,9 @@ select * from dist_gr2 facet gid facet tag;;
 <query endpoint="test_gr1/_search">{ "size":0, "aggs":{ "gr_small": { "terms": { "field": "gid", "size":5 } }} }</query>
 <query endpoint="test_gr1/_search">{ "size":0, "aggs":{ "gr_small": { "terms": { "field": "gid", "size":5 } }}, "docvalue_fields": [ { "field": "gid", "format": "date_time" }] }</query>
 
+<!-- facet with distinct via sql endpoint and http encoded result -->
+<sphinxql>select * from test_gr1 limit 0 facet tag distinct gid limit 10;</sphinxql>
+<query endpoint="sql">select * from test_gr1 limit 0 facet tag distinct gid limit 10;</query>
+
 </queries>
 </test>

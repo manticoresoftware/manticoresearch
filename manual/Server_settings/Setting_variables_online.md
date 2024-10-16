@@ -100,6 +100,7 @@ Known global server variables are:
 
 * `ACCURATE_AGGREGATION`: Sets the default value for the option [accurate_aggregation](../Searching/Options.md#accurate_aggregation) of future queries.
 * `AUTO_OPTIMIZE = {1|0}` Turns on/off [auto_optimize](../Server_settings/Searchd.md#auto_optimize).
+* `cluster_user = name` Sets the username used with `mysqldump` / `mariadb-dump` to [enable replication mode](../Securing_and_compacting_a_table/Backup_and_restore.md#Backup-and-restore-with-mysqldump).
 * `COREDUMP= {1|0}` Turns on/off saving a core file or a minidump of the server on crash. More details [here](../Starting_the_server/Manually.md#searchd-command-line-options).
 * `CPUSTATS= {1|0}` Turns on/off [CPU time tracking](../Starting_the_server/Manually.md#searchd-command-line-options).
 * `DISTINCT_PRECISION_THRESHOLD`: Sets the default value for the option [distinct_precision_threshold](../Searching/Options.md#distinct_precision_threshold) of future queries.

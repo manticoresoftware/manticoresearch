@@ -546,15 +546,18 @@ static bool BuddyQueryAddErrorBody ( JsonEscapedBuilder & tBuddyQuery, const Vec
 	const char * sBodyDel = strstr ( sErrorStart, "\r\n\r\n" );
 	if ( !sBodyDel )
 		return false;
-	const char * sBody = sBodyDel + 4;
+	const char * sBodyStart = sBodyDel + 4;
 	if ( (sBodyDel - sErrorStart )>dSrcHttpReply.GetLength() )
 		return false;
 
-	JsonObj_c tError ( sBody );
+	int iBodyLen = ( sErrorStart + dSrcHttpReply.GetLength() ) - sBodyStart;
+	Str_t sBodyBuf ( sBodyStart, iBodyLen );
+
+	JsonObj_c tError ( sBodyBuf  );
 	if ( tError.Empty() )
 		return false;
 
-	tBuddyQuery.NamedValNE ( "body", sBody );
+	tBuddyQuery.NamedValNE ( "body", sBodyBuf );
 	return true;
 }
 
@@ -723,7 +726,7 @@ bool ProcessHttpQueryBuddy ( HttpProcessResult_t & tRes, Str_t sSrcQuery, Option
 		sphWarning ( "[BUDDY] [%d] %s: %s", session::GetConnID(), sError.cstr(), tReplyRaw.second.cstr() );
 		return tRes.m_bOk;
 	}
-	if ( bson::String ( tReplyParsed.m_tType )!="json response" )
+	if ( ( bHttpEndpoint && bson::String ( tReplyParsed.m_tType )!="json response" ) || ( !bHttpEndpoint && bson::String ( tReplyParsed.m_tType )!="sql response" ) )
 	{
 		sphWarning ( "[BUDDY] [%d] wrong response type %s: %s", session::GetConnID(), bson::String ( tReplyParsed.m_tType ).cstr(), tReplyRaw.second.cstr() );
 		return tRes.m_bOk;

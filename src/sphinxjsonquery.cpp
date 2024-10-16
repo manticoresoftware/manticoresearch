@@ -2227,7 +2227,7 @@ static bool IsSingleValue ( Aggr_e eAggr )
 	return ( eAggr==Aggr_e::MIN || eAggr==Aggr_e::MAX || eAggr==Aggr_e::SUM || eAggr==Aggr_e::AVG );
 }
 
-static void EncodeAggr ( const JsonAggr_t & tAggr, int iAggrItem, const AggrResult_t & tRes, ResultSetFormat_e eFormat, const sph::StringSet & hDatetime, int iNow, JsonEscapedBuilder & tOut )
+static void EncodeAggr ( const JsonAggr_t & tAggr, int iAggrItem, const AggrResult_t & tRes, ResultSetFormat_e eFormat, const sph::StringSet & hDatetime, int iNow, const CSphString & sDistinctName, JsonEscapedBuilder & tOut )
 {
 	if ( tAggr.m_eAggrFunc==Aggr_e::COUNT )
 		return;
@@ -2235,6 +2235,9 @@ static void EncodeAggr ( const JsonAggr_t & tAggr, int iAggrItem, const AggrResu
 	const CSphColumnInfo * pCount = tRes.m_tSchema.GetAttr ( "count(*)" );
 	AggrKeyTrait_t tKey;
 	bool bHasKey = GetAggrKey ( tAggr, tRes.m_tSchema, iAggrItem, iNow, tKey );
+	const CSphColumnInfo * pDistinct = nullptr;
+	if ( !sDistinctName.IsEmpty() )
+		pDistinct = tRes.m_tSchema.GetAttr ( sDistinctName.cstr() );
 
 	// might be null for empty result set
 	auto dMatches = GetResultMatches ( tRes.m_dResults.First().m_dMatches, tRes.m_tSchema, tRes.m_iOffset, tRes.m_iCount, tAggr );
@@ -2300,6 +2303,8 @@ static void EncodeAggr ( const JsonAggr_t & tAggr, int iAggrItem, const AggrResu
 					tOut.Sprintf ( R"("score":0.001)" );
 					JsonObjAddAttr ( tOut, pCount->m_eAttrType, "bg_count", tMatch, pCount->m_tLocator );
 				}
+				if ( pDistinct )
+					JsonObjAddAttr ( tOut, pDistinct->m_eAttrType, pDistinct->m_sName.cstr(), tMatch, pDistinct->m_tLocator );
 			}
 		}
 	
@@ -2684,11 +2689,20 @@ CSphString sphEncodeResultJson ( const VecTraits_T<const AggrResult_t *> & dRes,
 						hDatetime.Add ( tDocfield.m_sName );
 			});
 		}
+		CSphString sDistinctName;
+		tQuery.m_dItems.any_of ( [&]( const CSphQueryItem & tItem ) {
+			if ( tItem.m_sExpr=="@distinct" )
+			{
+				sDistinctName = tItem.m_sAlias;
+				return true;
+			} else
+				return false;
+		});
 
 		assert ( dRes.GetLength()==tQuery.m_dAggs.GetLength()+1 );
 		tOut.StartBlock ( ",", R"("aggregations":{)", "}");
 		ARRAY_FOREACH ( i, tQuery.m_dAggs )
-			EncodeAggr ( tQuery.m_dAggs[i], i, *dRes[i+1], eFormat, hDatetime, tQuery.m_iNow, tOut );
+			EncodeAggr ( tQuery.m_dAggs[i], i, *dRes[i+1], eFormat, hDatetime, tQuery.m_iNow, sDistinctName, tOut );
 		tOut.FinishBlock ( false ); // aggregations obj
 	}
 	if ( eFormat==ResultSetFormat_e::ES )

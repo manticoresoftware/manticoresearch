@@ -537,7 +537,31 @@ bool HasBuddy()
 	return ( g_eBuddy==BuddyState_e::WORK );
 }
 
-static std::pair<bool, CSphString> BuddyQuery ( bool bHttp, Str_t sQueryError, Str_t sPathQuery, Str_t sQuery, http_method eRequestType )
+static bool BuddyQueryAddErrorBody ( JsonEscapedBuilder & tBuddyQuery, const VecTraits_T<BYTE> & dSrcHttpReply )
+{
+	if ( !dSrcHttpReply.GetLength() )
+		return false;
+
+	const char * sErrorStart = (const char *)dSrcHttpReply.Begin();
+	const char * sBodyDel = strstr ( sErrorStart, "\r\n\r\n" );
+	if ( !sBodyDel )
+		return false;
+	const char * sBodyStart = sBodyDel + 4;
+	if ( (sBodyDel - sErrorStart )>dSrcHttpReply.GetLength() )
+		return false;
+
+	int iBodyLen = ( sErrorStart + dSrcHttpReply.GetLength() ) - sBodyStart;
+	Str_t sBodyBuf ( sBodyStart, iBodyLen );
+
+	JsonObj_c tError ( sBodyBuf  );
+	if ( tError.Empty() )
+		return false;
+
+	tBuddyQuery.NamedValNE ( "body", sBodyBuf );
+	return true;
+}
+
+static std::pair<bool, CSphString> BuddyQuery ( bool bHttp, Str_t sQueryError, Str_t sPathQuery, Str_t sQuery, http_method eRequestType, const VecTraits_T<BYTE> & dSrcHttpReply )
 {
 	if ( !HasBuddy() )
 		return { false, {} };
@@ -546,7 +570,14 @@ static std::pair<bool, CSphString> BuddyQuery ( bool bHttp, Str_t sQueryError, S
 	{
 		auto tRoot = tBuddyQuery.Object();
 		tBuddyQuery.NamedString ( "type", bHttp ? "unknown json request" : "unknown sql request" );
-		tBuddyQuery.NamedString ( "error", sQueryError );
+		{
+			tBuddyQuery.Named ( "error" );
+			auto tMessageRoot = tBuddyQuery.Object();
+
+			tBuddyQuery.NamedString ( "message", sQueryError );
+			if ( !BuddyQueryAddErrorBody ( tBuddyQuery, dSrcHttpReply ) )
+				tBuddyQuery.NamedValNE ( "body", "null" );
+		}
 		tBuddyQuery.NamedVal ( "version", g_iBuddyVersion );
 		if ( !bHttp )
 			tBuddyQuery.NamedString ( "user", session::GetClientSession()->m_sUser );
@@ -681,7 +712,7 @@ bool ProcessHttpQueryBuddy ( HttpProcessResult_t & tRes, Str_t sSrcQuery, Option
 			}
 		}
 	}
-	auto tReplyRaw = BuddyQuery ( bHttpEndpoint, FromStr ( tRes.m_sError ), FromStr ( hOptions["full_url"] ), sSrcQuery, eRequestType );
+	auto tReplyRaw = BuddyQuery ( bHttpEndpoint, FromStr ( tRes.m_sError ), FromStr ( hOptions["full_url"] ), sSrcQuery, eRequestType, dResult );
 	if ( !tReplyRaw.first )
 	{
 		sphWarning ( "[BUDDY] [%d] error: %s", session::GetConnID(), tReplyRaw.second.cstr() );
@@ -695,7 +726,7 @@ bool ProcessHttpQueryBuddy ( HttpProcessResult_t & tRes, Str_t sSrcQuery, Option
 		sphWarning ( "[BUDDY] [%d] %s: %s", session::GetConnID(), sError.cstr(), tReplyRaw.second.cstr() );
 		return tRes.m_bOk;
 	}
-	if ( bson::String ( tReplyParsed.m_tType )!="json response" )
+	if ( ( bHttpEndpoint && bson::String ( tReplyParsed.m_tType )!="json response" ) || ( !bHttpEndpoint && bson::String ( tReplyParsed.m_tType )!="sql response" ) )
 	{
 		sphWarning ( "[BUDDY] [%d] wrong response type %s: %s", session::GetConnID(), bson::String ( tReplyParsed.m_tType ).cstr(), tReplyRaw.second.cstr() );
 		return tRes.m_bOk;
@@ -733,7 +764,7 @@ static bool ConvertErrorMessage ( const char * sStmt, std::pair<int, BYTE> tSave
 
 void ProcessSqlQueryBuddy ( Str_t sSrcQuery, Str_t tError, std::pair<int, BYTE> tSavedPos, BYTE & uPacketID, GenericOutputBuffer_c & tOut )
 {
-	auto tReplyRaw = BuddyQuery ( false, tError, Str_t(), sSrcQuery, HTTP_GET );
+	auto tReplyRaw = BuddyQuery ( false, tError, Str_t(), sSrcQuery, HTTP_GET, VecTraits_T<BYTE>() );
 	if ( !tReplyRaw.first )
 	{
 		LogSphinxqlError ( sSrcQuery.first, tError );

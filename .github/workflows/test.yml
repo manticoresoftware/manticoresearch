@@ -529,7 +529,7 @@ jobs:
 
 
   test_kit_docker_push:
-    if: needs.changes.outputs.source == 'true'
+    if: always() && needs.changes.outputs.source == 'true'
     needs:
       - changes
       - clt
@@ -553,7 +553,7 @@ jobs:
       - name: Pushing docker image to repo
         id: test-kit-push
         run: |
-          BUILD_COMMIT=${{ steps.sha.outputs.sha_short }} /bin/bash dist/test_kit_docker_push.sh
+          TEST_RESULT=${{ needs.clt.result }} BUILD_COMMIT=${{ steps.sha.outputs.sha_short }} /bin/bash dist/test_kit_docker_push.sh
 
   build_aarch64:
     if: needs.changes.outputs.source == 'true'

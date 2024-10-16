@@ -27,6 +27,11 @@ else
 	current_branch="$GITHUB_REF_NAME"
 fi
 
+should_push_main=0
+if [ "$TEST_RESULT" != "failure" ]; then
+	should_push_main=1
+fi
+
 hub_repo="ghcr.io/${REPO_OWNER}/manticoresearch"
 img_url="${hub_repo}:test-kit-${BUILD_COMMIT}"
 images=("$img_url")
@@ -48,6 +53,11 @@ fi
 if [ "$current_branch" != "master" ]; then
 	img_url_branch="${hub_repo}:test-kit-$(sanitize_tag "$current_branch")"
 	images+=("$img_url_branch")
+fi
+
+# if we should skip pushing main branch and only commit, we reset latest tag
+if [ "$should_push_main" -eq 0 ]; then
+	img_url_latest=
 fi
 
 echo "Going to push to '$img_url' and ('$img_url_latest', '$img_url_tag', '$img_url_branch') (if not empty) if there's access to the registry"

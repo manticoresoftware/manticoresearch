@@ -4,27 +4,16 @@ apt-get update -y > /dev/null; echo $?
 ––– output –––
 0
 ––– input –––
-apt-get install zstd -y > /dev/null; echo $?
+chmod +x ./test/clt-tests/optimisation-and-upgrade/load_names_attr.php > /dev/null; echo $?
 ––– output –––
-debconf: delaying package configuration, since apt-utils is not installed
-––– input –––
-chmod +x ./test/clt-tests/optimisation-and-upgrade/load_data_manticore.sh > /dev/null; echo $?
 0
 ––– input –––
-./test/clt-tests/optimisation-and-upgrade/load_data_manticore.sh > /dev/null; echo $?
+php -d memory_limit=2G ./test/clt-tests/optimisation-and-upgrade/load_names_attr.php 10000 10 4000000 1 2
 ––– output –––
 0
 ––– input –––
 searchd --stopwait > /dev/null
 ––– output –––
-––– input –––
-tar -cf - /var/lib/manticore/ | zstd > ./test/clt-tests/optimisation-and-upgrade/datadir.tar.zst
-––– output –––
-0
-––– input –––
-rm -rf /var/lib/manticore/data; zstd -d < ./test/clt-tests/optimisation-and-upgrade/datadir.tar.zst | tar -xf - -C /var/lib/manticore/
-––– output –––
-0
 ––– block: ../base/start-searchd –––
 ––– input –––
 mysql -h0 -P9306 -e "SHOW TABLES;"
@@ -36,20 +25,32 @@ mysql -h0 -P9306 -e "show table name status like '%chunk%';"
 mysql -h0 -P9306 -e "select * from name limit 5;"
 ––– output –––
 ––– input –––
-mysql -h0 -P9306 -e "OPTIMIZE TABLE name OPTION sync=1, cutoff=1;" &
+start_optimize=$(date +%s); time mysql -h0 -P9306 -e "OPTIMIZE TABLE name OPTION sync=1, cutoff=1;" &
 ––– output –––
 ––– input –––
-mysql -h0 -P9306 -e "UPDATE name SET s='b' WHERE id=1;"
+sleep 2 && time mysql -h0 -P9306 -e "UPDATE name SET s='b' WHERE id=1;"
 ––– output –––
 ––– input –––
-mysql -h0 -P9306 -e "UPDATE name SET a=123 WHERE id=1;"
+time mysql -h0 -P9306 -e "SELECT * FROM name WHERE s='b' LIMIT 5;"
 ––– output –––
 ––– input –––
-mysql -h0 -P9306 -e "UPDATE name SET unknown='b' WHERE id=1;"
+time mysql -h0 -P9306 -e "UPDATE name SET s=123 WHERE id=1;"
 ––– output –––
 ––– input –––
-mysql -h0 -P9306 -e "UPDATE name SET s='b' WHERE id > 0;"
+time mysql -h0 -P9306 -e "SELECT * FROM name WHERE s='b' LIMIT 5;"
 ––– output –––
 ––– input –––
-mysql -h0 -P9306 -e "SELECT * FROM name WHERE s='b' LIMIT 5;"
+time mysql -h0 -P9306 -e "UPDATE name SET s='b' WHERE id > 0;"
+––– output –––
+––– input –––
+time mysql -h0 -P9306 -e "SELECT * FROM name WHERE s='b' LIMIT 5;"
+––– output –––
+––– input –––
+time mysql -h0 -P9306 -e "UPDATE name SET unknown='b' WHERE id=1;"
+––– output –––
+––– input –––
+time mysql -h0 -P9306 -e "SELECT * FROM name WHERE s='b' LIMIT 5;"
+––– output –––
+––– input –––
+wait; end_optimize=$(date +%s); optimize_duration=$((end_optimize - start_optimize)); echo "OPTIMIZE duration: $optimize_duration seconds"
 ––– output –––

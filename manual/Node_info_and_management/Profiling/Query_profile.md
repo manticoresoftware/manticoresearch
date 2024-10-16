@@ -93,7 +93,7 @@ Query OK, 0 rows affected (0.00 sec)
 ```json
 POST /search
 {
-  "index": "test",
+  "table": "test",
   "profile": true,
   "query":
   {

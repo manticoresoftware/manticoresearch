@@ -54,8 +54,8 @@ insert into test_table values
 </db_insert>
 
 <httpqueries>
-<query endpoint="json/search">{ "index": "test1", "query": { "match_all": {} } }</query>
-<query endpoint="json/search">{ "index": "test1", "query": { "match_all": {} }, "_source": "title" }</query>
+<query endpoint="json/search">{ "table": "test1", "query": { "match_all": {} } }</query>
+<query endpoint="json/search">{ "table": "test1", "query": { "match_all": {} }, "_source": "title" }</query>
 </httpqueries>
 
 </test>

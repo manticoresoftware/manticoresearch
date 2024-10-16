@@ -65,14 +65,14 @@ Query OK, 2 rows affected (0.00 sec)
 ```json
 POST /insert
 {
-	"index":"test_vec",
+	"table":"test_vec",
 	"id":1,
 	"doc": 	{ "title" : "yellow bag", "image_vector" : [0.653448,0.192478,0.017971,0.339821] }
 }
 
 POST /insert
 {
-	"index":"test_vec",
+	"table":"test_vec",
 	"id":2,
 	"doc": 	{ "title" : "white bag", "image_vector" : [-0.148894,0.748278,0.091892,-0.095406] }
 }
@@ -111,7 +111,7 @@ Now, you can perform a KNN search using the `knn` clause in either SQL or JSON f
   ```
   POST /search
   {
-      "index": "<table name>",
+      "table": "<table name>",
       "knn":
       {
           "field": "<field>",
@@ -158,7 +158,7 @@ select id, knn_dist() from test where knn ( image_vector, 5, (0.286569,-0.031816
 ```json
 POST /search
 {
-	"index": "test",
+	"table": "test",
 	"knn":
 	{
 		"field": "image_vector",
@@ -222,7 +222,7 @@ Finding documents similar to a specific one based on its unique ID is a common t
   ```
   POST /search
   {
-      "index": "<table name>",
+      "table": "<table name>",
       "knn":
       {
           "field": "<field>",
@@ -265,7 +265,7 @@ select id, knn_dist() from test where knn ( image_vector, 5, 1 );
 ```json
 POST /search
 {
-  "index": "test",
+  "table": "test",
   "knn":
   {
     "field": "image_vector",
@@ -337,7 +337,7 @@ select id, knn_dist() from test where knn ( image_vector, 5, (0.286569,-0.031816
 ```json
 POST /search
 {
-	"index": "test",
+	"table": "test",
 	"knn":
 	{
 		"field": "image_vector",

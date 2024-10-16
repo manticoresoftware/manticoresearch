@@ -384,7 +384,7 @@ SELECT sphinx_snippets('hello world doc', 'main', 'world',
     '[**]' AS before_match, '[/**]' AS after_match)
 FROM documents;
 
-SELECT title, sphinx_snippets(text, 'index', 'mysql php') AS text
+SELECT title, sphinx_snippets(text, 'table', 'mysql php') AS text
     FROM sphinx, documents
     WHERE query='mysql php' AND sphinx.id=documents.id;
 ```

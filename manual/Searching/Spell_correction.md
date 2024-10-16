@@ -70,7 +70,7 @@ SELECT * FROM mytable WHERE MATCH('someting') OPTION fuzzy=1 AND (category='book
 ```json
 POST /search
 {
-  "index": "test",
+  "table": "test",
   "query": {
     "bool": {
       "must": [
@@ -109,7 +109,7 @@ POST /search
 ```json
 POST /search
 {
-  "index": "table_name",
+  "table": "table_name",
   "query": {
     <full-text query>
   },

@@ -7,7 +7,7 @@
 The syntax is:
 
 ```sql
-SHOW TABLE index_name STATUS
+SHOW TABLE table_name STATUS
 ```
 
 Depending on index type, displayed statistic includes different set of rows:
@@ -147,7 +147,7 @@ utilsApi.sql('SHOW TABLE statistic STATUS')
 {u'columns': [{u'Key': {u'type': u'string'}},
               {u'Value': {u'type': u'string'}}],
  u'data': [
-   {u'Key': u'index_type', u'Value': u'rt'}
+   {u'Key': u'table_type', u'Value': u'rt'}
     {u'Key': u'indexed_documents', u'Value': u'3'}
     {u'Key': u'indexed_bytes', u'Value': u'0'}
     {u'Key': u'ram_bytes', u'Value': u'6678'}
@@ -185,7 +185,7 @@ res = await utilsApi.sql('SHOW TABLE statistic STATUS');
 {"columns": [{"Key": {"type": "string"}},
               {"Value": {"type": "string"}}],
  "data": [
-   {"Key": "index_type", "Value": "rt"}
+   {"Key": "table_type", "Value": "rt"}
     {"Key": "indexed_documents", "Value": "3"}
     {"Key": "indexed_bytes", "Value": "0"}
     {"Key": "ram_bytes", "Value": "6678"}
@@ -308,7 +308,7 @@ res = await utilsApi.sql('SHOW TABLE statistic STATUS');
     }],
 	"data": 
 	[
-		{"Key": "index_type", "Value": "rt"}
+		{"Key": "table_type", "Value": "rt"}
 	    {"Key": "indexed_documents", "Value": "3"}
 	    {"Key": "indexed_bytes", "Value": "0"}
 	    {"Key": "ram_bytes", "Value": "6678"}
@@ -356,7 +356,7 @@ apiClient.UtilsAPI.Sql(context.Background()).Body("SHOW TABLE statistic STATUS")
     }],
 	"data": 
 	[
-		{"Key": "index_type", "Value": "rt"}
+		{"Key": "table_type", "Value": "rt"}
 	    {"Key": "indexed_documents", "Value": "3"}
 	    {"Key": "indexed_bytes", "Value": "0"}
 	    {"Key": "ram_bytes", "Value": "6678"}

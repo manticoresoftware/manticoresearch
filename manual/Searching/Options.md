@@ -18,7 +18,7 @@ SELECT ... [OPTION <optionname>=<value> [ , ... ]] [/*+ [NO_][ColumnarScan|Docid
 ```json
 POST /search
 {   
-    "index" : "index_name",
+    "table" : "table_name",
     "options":   
     {
         "optionname": "value",
@@ -54,7 +54,7 @@ JSON:
 ```json
 POST /search
 {   
-    "index" : "test",
+    "table" : "test",
     "query": {
       "match": {
         "title": "hello"

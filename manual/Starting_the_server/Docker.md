@@ -117,7 +117,7 @@ Insert a document:
 <!-- request JSON -->
 ```json
 POST /insert
--d'{"index":"testrt","id":1,"doc":{"title":"Hello","content":"world","gid":1}}'
+-d'{"table":"testrt","id":1,"doc":{"title":"Hello","content":"world","gid":1}}'
 ```
 <!-- end -->
 <!-- example search -->
@@ -125,7 +125,7 @@ Perform a simple search:
 
 <!-- request JSON -->
 ```json
-POST /search -d '{"index":"testrt","query":{"match":{"*":"hello world"}}}'
+POST /search -d '{"table":"testrt","query":{"match":{"*":"hello world"}}}'
 ```
 <!-- end -->
 

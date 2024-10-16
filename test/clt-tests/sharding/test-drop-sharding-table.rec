@@ -222,3 +222,29 @@ Type: rt
 *************************** 15. row ***************************
 Index: tbl2_s9
 Type: rt
+––– input –––
+mysql -h0 -P1306 -e "create table tbl3(id bigint) shards=10 rf=1;"; echo $?
+––– output –––
+0
+––– input –––
+mysql -h0 -P2306 -e "create table tbl4 shards=10 rf=1;"; echo $?
+––– output –––
+0
+––– input –––
+mysql -h0 -P1306 -e "SHOW TABLES\G"
+––– output –––
+––– input –––
+mysql -h0 -P2306 -e "SHOW TABLES\G"
+––– output –––
+––– input –––
+mysql -h0 -P1306 -e "DROP SHARDED TABLE tbl3;"
+––– output –––
+––– input –––
+mysql -h0 -P2306 -e "DROP SHARDED TABLE tbl4;"
+––– output –––
+––– input –––
+mysql -h0 -P1306 -e "SHOW TABLES\G"
+––– output –––
+––– input –––
+mysql -h0 -P2306 -e "SHOW TABLES\G"
+––– output –––

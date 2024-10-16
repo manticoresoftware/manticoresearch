@@ -31,8 +31,8 @@ ERROR 1064 (42000) at line 1: unknown option 'key1'
 ––– input –––
 sleep 0.02; cat /var/log/manticore/searchd.log | grep 'request data' | sed 's/.*request data/request data/'
 ––– output –––
-request data: {"type":"unknown sql request","error":{"message":"unknown option 'key1'","body":null},"version":2,"user":"root","message":{"path_query":"","body":"select a, b from test where match('hello world') option key1 = 1, key2 = 2","http_method":""}}
-request data: {"type":"unknown sql request","error":{"message":"unknown option 'key1'","body":null},"version":2,"user":"root","message":{"path_query":"","body":"select b, a from test where match('hello world') option key1 = 1, key2 = 2","http_method":""}}
-request data: {"type":"unknown sql request","error":{"message":"unknown option 'key1'","body":null},"version":2,"user":"root","message":{"path_query":"","body":"select a, b from test where match('hello world') option key1 = 1","http_method":""}}
-request data: {"type":"unknown sql request","error":{"message":"unknown option 'key2'","body":null},"version":2,"user":"root","message":{"path_query":"","body":"select b, a from test where match('hello world') option key2 = 2","http_method":""}}
-request data: {"type":"unknown sql request","error":{"message":"unknown option 'key1'","body":null},"version":2,"user":"root","message":{"path_query":"","body":"select a, b from test where match('hello world') option key1 = 1, key2 = 2, key3 = 3","http_method":""}}
+request data: {"type":"unknown sql request","error":{"message":"unknown option 'key1'","body":null},"version":3,"user":"root","message":{"path_query":"","body":"select a, b from test where match('hello world') option key1 = 1, key2 = 2","http_method":""}}
+request data: {"type":"unknown sql request","error":{"message":"unknown option 'key1'","body":null},"version":3,"user":"root","message":{"path_query":"","body":"select b, a from test where match('hello world') option key1 = 1, key2 = 2","http_method":""}}
+request data: {"type":"unknown sql request","error":{"message":"unknown option 'key1'","body":null},"version":3,"user":"root","message":{"path_query":"","body":"select a, b from test where match('hello world') option key1 = 1","http_method":""}}
+request data: {"type":"unknown sql request","error":{"message":"unknown option 'key2'","body":null},"version":3,"user":"root","message":{"path_query":"","body":"select b, a from test where match('hello world') option key2 = 2","http_method":""}}
+request data: {"type":"unknown sql request","error":{"message":"unknown option 'key1'","body":null},"version":3,"user":"root","message":{"path_query":"","body":"select a, b from test where match('hello world') option key1 = 1, key2 = 2, key3 = 3","http_method":""}}

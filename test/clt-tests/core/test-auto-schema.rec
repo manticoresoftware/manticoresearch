@@ -1,0 +1,10 @@
+––– block: ../base/start-searchd –––
+––– input –––
+mysql -h127.0.0.1 -P9306 -e "drop table if exists test"
+––– output –––
+––– input –––
+curl -X POST "localhost:9308/sql?mode=raw" -d "insert into test(a) values(1)"
+––– output –––
+––– input –––
+mysql -h127.0.0.1 -P9306 -e "select * from test"
+––– output –––

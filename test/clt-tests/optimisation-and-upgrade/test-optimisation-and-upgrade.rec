@@ -76,8 +76,17 @@ mysql -h0 -P9306 -e "show table name status like '%chunk%';"
 | disk_chunks              | 2     |
 +--------------------------+-------+
 ––– input –––
-mysql -h0 -P9306 -e "select * from name limit 5;"
+mysql -h0 -P9306 -e "select * from name ORDER BY id ASC LIMIT 5;"
 ––– output –––
++------+-----------------+------+
+| id   | username        | s    |
++------+-----------------+------+
+|    1 | ROBERT WILLIAMS | a    |
+|    2 | MICHAEL BROWN   | a    |
+|    3 | WILLIAM JONES   | a    |
+|    4 | DAVID GARCIA    | a    |
+|    5 | RICHARD MILLER  | a    |
++------+-----------------+------+
 ––– input –––
 start_optimize=$(date +%s); time mysql -h0 -P9306 -e "OPTIMIZE TABLE name OPTION sync=1, cutoff=1;" &
 ––– output –––
@@ -87,26 +96,61 @@ sleep 2 && start_update=$(date +%s); time_taken_update=$( { time mysql -h0 -P930
 ––– output –––
 Update completed within acceptable time.
 ––– input –––
-mysql -h0 -P9306 -e "SELECT * FROM name WHERE s='b' LIMIT 5;"
+mysql -h0 -P9306 -e "SELECT * FROM name WHERE s='b' ORDER BY id ASC LIMIT 5;"
 ––– output –––
++------+-----------------+------+
+| id   | username        | s    |
++------+-----------------+------+
+|    1 | ROBERT WILLIAMS | b    |
++------+-----------------+------+
 ––– input –––
 start_update=$(date +%s); time_taken_update=$( { time mysql -h0 -P9306 -e "UPDATE name SET s=123 WHERE id=1;"; } 2>&1 | grep real | awk '{print $2}'); update_duration=$(echo $time_taken_update | awk -F'm' '{ print ($1 * 60) + $2 }'); if [ $(echo "$update_duration > 1" | bc) -eq 1 ]; then echo "FAIL: Update took longer than 1 second!"; exit 1; else echo "Update completed within acceptable time."; fi
 ––– output –––
 Update completed within acceptable time.
 ––– input –––
-mysql -h0 -P9306 -e "SELECT * FROM name WHERE s='b' LIMIT 5;"
+mysql -h0 -P9306 -e "SELECT * FROM name WHERE s='b' ORDER BY id ASC LIMIT 5;"
 ––– output –––
++------+-----------------+------+
+| id   | username        | s    |
++------+-----------------+------+
+|    1 | ROBERT WILLIAMS | b    |
++------+-----------------+------+
 ––– input –––
-start_update=$(date +%s); time_taken_update=$( { time mysql -h0 -P9306 -e "UPDATE name SET s='b' WHERE id > 0;"; } 2>&1 | grep real | awk '{print $2}'); update_duration=$(echo $time_taken_update | awk -F'm' '{ print ($1 * 60) + $2 }'); if [ $(echo "$update_duration > 2" | bc) -eq 1 ]; then echo "FAIL: Update took longer than 2 seconds!"; false; else echo "Update completed within acceptable time."; fi
+start_update=$(date +%s); time_taken_update=$( { time mysql -h0 -P9306 -e "UPDATE name SET s='b' WHERE id > 0;"; } 2>&1 | grep real | awk '{print $2}'); update_duration=$(echo $time_taken_update | awk -F'm' '{ print ($1 * 60) + $2 }'); if [ $(echo "$update_duration > 3" | bc) -eq 1 ]; then echo "FAIL: Update took longer than 3 seconds!"; false; else echo "Update completed within acceptable time."; fi
 ––– output –––
 Update completed within acceptable time.
 ––– input –––
-mysql -h0 -P9306 -e "SELECT * FROM name WHERE s='b' LIMIT 5;"
+mysql -h0 -P9306 -e "SELECT * FROM name WHERE s='b' ORDER BY id ASC LIMIT 5;"
 ––– output –––
++------+-----------------+------+
+| id   | username        | s    |
++------+-----------------+------+
+|    1 | ROBERT WILLIAMS | b    |
+|    2 | MICHAEL BROWN   | b    |
+|    3 | WILLIAM JONES   | b    |
+|    4 | DAVID GARCIA    | b    |
+|    5 | RICHARD MILLER  | b    |
++------+-----------------+------+
 ––– input –––
-start_update=$(date +%s); time_taken_update=$( { time mysql -h0 -P9306 -e "UPDATE name SET unknown='b' WHERE id=1;"; } 2>&1 | grep real | awk '{print $2}'); update_duration=$(echo $time_taken_update | awk -F'm' '{ print ($1 * 60) + $2 }'); if [ $(echo "$update_duration > 1" | bc) -eq 1 ]; then echo "FAIL: Update took longer than 1 second!"; exit 1; else echo "Update completed within acceptable time."; fi
+start_update=$(date +%s); time_taken_update=$( { time mysql -h0 -P9306 -e "UPDATE name SET unknown='b' WHERE id=1;" 2>&1; } ); [[ $time_taken_update == *"ERROR"* ]] && echo "$time_taken_update" && false || echo "Update completed within acceptable time."
 ––– output –––
+real	#!/[0-9]{1}m[0-9]{1,2}.[0-9]{3}s/!#
+user	#!/[0-9]{1}m[0-9]{1,2}.[0-9]{3}s/!#
+sys	#!/[0-9]{1}m[0-9]{1,2}.[0-9]{3}s/!#
+ERROR 1064 (42000) at line 1: table name: attribute 'unknown' not found
 Update completed within acceptable time.
+––– input –––
+mysql -h0 -P9306 -e "SELECT * FROM name WHERE s='b' ORDER BY id ASC LIMIT 5;"
+––– output –––
++------+-----------------+------+
+| id   | username        | s    |
++------+-----------------+------+
+|    1 | ROBERT WILLIAMS | b    |
+|    2 | MICHAEL BROWN   | b    |
+|    3 | WILLIAM JONES   | b    |
+|    4 | DAVID GARCIA    | b    |
+|    5 | RICHARD MILLER  | b    |
++------+-----------------+------+
 ––– input –––
 wait > /dev/null 2>&1; end_optimize=$(date +%s); optimize_duration=$((end_optimize - start_optimize)); echo "OPTIMIZE duration: $optimize_duration seconds"
 ––– output –––

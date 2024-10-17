@@ -519,6 +519,8 @@ jobs:
             test_prefix: test/clt-tests/plugins/
           - name: Buddy
             test_prefix: test/clt-tests/buddy/
+          - name: Update
+            test_prefix: test/clt-tests/optimisation-and-upgrade/
     steps:
       - uses: manticoresoftware/clt@0.1.23
         with:

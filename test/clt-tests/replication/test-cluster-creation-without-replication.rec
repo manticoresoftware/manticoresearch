@@ -1,0 +1,67 @@
+––– input –––
+sed -i -e '/listen = \${INSTANCE}312/d' -e '/listen = \${INSTANCE}308:http/d' ./test/clt-tests/base/searchd-with-flexible-ports.conf
+––– output –––
+––– input –––
+mkdir -p /var/{run,lib,log}/manticore-${INSTANCE}/{a,b,c,d,e,f,g,h,i,j}
+––– output –––
+––– input –––
+stdbuf -oL searchd -c test/clt-tests/base/searchd-with-flexible-ports.conf | grep -v precach
+––– output –––
+Manticore %{SEMVER} %{COMMITDATE}#!/(\sdev)?\s/!#(columnar %{SEMVER} %{COMMITDATE}) (secondary %{SEMVER} %{COMMITDATE}) (knn %{SEMVER} %{COMMITDATE})
+Copyright (c) 2001-2016, Andrew Aksyonoff
+Copyright (c) 2008-2016, Sphinx Technologies Inc (http://sphinxsearch.com)
+Copyright (c) 2017-%{YEAR}, Manticore Software LTD (https://manticoresearch.com)
+[#!/[a-zA-Z]{3}\s[a-zA-Z]{3}\s+[0-9]{1,2}\s[0-9]{2}:[0-9]{2}:[0-9]{2}.[0-9]{3}\s[0-9]{4}/!#] [%{NUMBER}] using config file '/.clt/test/clt-tests/base/searchd-with-flexible-ports.conf' (%{NUMBER} chars)...
+starting daemon version '%{SEMVER} %{COMMITDATE} dev (columnar %{SEMVER} %{COMMITDATE}) (secondary %{SEMVER} %{COMMITDATE}) (knn %{SEMVER} %{COMMITDATE})' ...
+listening on all interfaces for mysql, port=%{NUMBER}
+––– input –––
+if timeout 10 grep -qm1 'accepting connections' <(tail -n 1000 -f /var/log/manticore-${INSTANCE}/searchd.log); then echo 'Accepting connections!'; else echo 'Timeout or failed!'; fi
+––– output –––
+Accepting connections!
+––– input –––
+export INSTANCE=1
+––– output –––
+––– input –––
+mkdir -p /var/{run,lib,log}/manticore-${INSTANCE}/{a,b,c,d,e,f,g,h,i,j}
+––– output –––
+––– input –––
+stdbuf -oL searchd -c test/clt-tests/base/searchd-with-flexible-ports.conf | grep -v precach
+––– output –––
+Manticore %{SEMVER} %{COMMITDATE}#!/(\sdev)?\s/!#(columnar %{SEMVER} %{COMMITDATE}) (secondary %{SEMVER} %{COMMITDATE}) (knn %{SEMVER} %{COMMITDATE})
+Copyright (c) 2001-2016, Andrew Aksyonoff
+Copyright (c) 2008-2016, Sphinx Technologies Inc (http://sphinxsearch.com)
+Copyright (c) 2017-%{YEAR}, Manticore Software LTD (https://manticoresearch.com)
+[#!/[a-zA-Z]{3}\s[a-zA-Z]{3}\s+[0-9]{1,2}\s[0-9]{2}:[0-9]{2}:[0-9]{2}.[0-9]{3}\s[0-9]{4}/!#] [%{NUMBER}] using config file '/.clt/test/clt-tests/base/searchd-with-flexible-ports.conf' (%{NUMBER} chars)...
+starting daemon version '%{SEMVER} %{COMMITDATE} dev (columnar %{SEMVER} %{COMMITDATE}) (secondary %{SEMVER} %{COMMITDATE}) (knn %{SEMVER} %{COMMITDATE})' ...
+listening on all interfaces for mysql, port=%{NUMBER}
+––– input –––
+if timeout 10 grep -qm1 'accepting connections' <(tail -n 1000 -f /var/log/manticore-${INSTANCE}/searchd.log); then echo 'Accepting connections!'; else echo 'Timeout or failed!'; fi
+––– output –––
+Accepting connections!
+––– input –––
+export INSTANCE=2
+––– output –––
+––– input –––
+mkdir -p /var/{run,lib,log}/manticore-${INSTANCE}/{a,b,c,d,e,f,g,h,i,j}
+––– output –––
+––– input –––
+stdbuf -oL searchd -c test/clt-tests/base/searchd-with-flexible-ports.conf | grep -v precach
+––– output –––
+Manticore %{SEMVER} %{COMMITDATE}#!/(\sdev)?\s/!#(columnar %{SEMVER} %{COMMITDATE}) (secondary %{SEMVER} %{COMMITDATE}) (knn %{SEMVER} %{COMMITDATE})
+Copyright (c) 2001-2016, Andrew Aksyonoff
+Copyright (c) 2008-2016, Sphinx Technologies Inc (http://sphinxsearch.com)
+Copyright (c) 2017-%{YEAR}, Manticore Software LTD (https://manticoresearch.com)
+[#!/[a-zA-Z]{3}\s[a-zA-Z]{3}\s+[0-9]{1,2}\s[0-9]{2}:[0-9]{2}:[0-9]{2}.[0-9]{3}\s[0-9]{4}/!#] [%{NUMBER}] using config file '/.clt/test/clt-tests/base/searchd-with-flexible-ports.conf' (%{NUMBER} chars)...
+starting daemon version '%{SEMVER} %{COMMITDATE} dev (columnar %{SEMVER} %{COMMITDATE}) (secondary %{SEMVER} %{COMMITDATE}) (knn %{SEMVER} %{COMMITDATE})' ...
+listening on all interfaces for mysql, port=%{NUMBER}
+––– input –––
+if timeout 10 grep -qm1 'accepting connections' <(tail -n 1000 -f /var/log/manticore-${INSTANCE}/searchd.log); then echo 'Accepting connections!'; else echo 'Timeout or failed!'; fi
+––– output –––
+Accepting connections!
+––– input –––
+export CLUSTER_NAME=replication
+––– output –––
+––– input –––
+mysql -h0 -P1306 -e "create cluster ${CLUSTER_NAME}"
+––– output –––
+ERROR 1064 (42000) at line 1: can not create cluster 'replication': no 'listen' is found, cannot set incoming addresses, replication is disabled

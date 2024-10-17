@@ -182,16 +182,12 @@ When creating a table, Elasticsearch data types will be mapped to Manticore type
 ```JSON
 POST /your_table_name/_mapping -d '
 {
-  "test": {
-    "mappings": {
-      "properties": {
-        "price": {
-            "type": "float"
-        },
-        "title": {
-            "type": "text"
-        }
-      }
+  "properties": {
+    "price": {
+        "type": "float"
+    },
+    "title": {
+        "type": "text"
     }
   }
 }

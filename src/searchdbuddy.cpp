@@ -53,7 +53,7 @@ static const int g_iBuddyLoopSleep = 15;
 static const int g_iRestartMax = 3;
 static const int g_iStartMaxTimeout = val_from_env ( "MANTICORE_BUDDY_TIMEOUT", 3 ); // max start timeout 3 sec
 
-static int g_iBuddyVersion = 2;
+static int g_iBuddyVersion = 3;
 static bool g_bBuddyVersion = false;
 extern CSphString g_sStatusVersion;
 static CSphString g_sContainerName;

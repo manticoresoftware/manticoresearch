@@ -17,39 +17,39 @@ ERROR 1064 (42000) at line 1: P01: syntax error, unexpected '-' near '-1'
 ––– input –––
 mysql -h0 -P9306 -e "SELECT * FROM name WHERE MATCH('SMITH') OPTION fuzzy='0';"
 ––– output –––
-ERROR 1064 (42000) at line 1: Fuzzy plugin requires min_infix_len to be set
+ERROR 1064 (42000) at line 1: Invalid value for option 'fuzzy'
 ––– input –––
 mysql -h0 -P9306 -e "SELECT * FROM name WHERE MATCH('SMYTH') OPTION fuzzy='2';"
 ––– output –––
-ERROR 1064 (42000) at line 1: Fuzzy plugin requires min_infix_len to be set
+ERROR 1064 (42000) at line 1: Invalid value for option 'fuzzy'
 ––– input –––
 mysql -h0 -P9306 -e "SELECT * FROM name WHERE MATCH('john') OPTION fuzzy=a;"
 ––– output –––
-ERROR 1064 (42000) at line 1: Fuzzy plugin requires min_infix_len to be set
+ERROR 1064 (42000) at line 1: Invalid value for option 'fuzzy'
 ––– input –––
 mysql -h0 -P9306 -e "SELECT * FROM name WHERE MATCH('jane') OPTION fuzzy=@;"
 ––– output –––
-ERROR 1064 (42000) at line 1: Fuzzy plugin requires min_infix_len to be set
+ERROR 1064 (42000) at line 1: Invalid value for option 'fuzzy'
 ––– input –––
 mysql -h0 -P9306 -e "CALL AUTOCOMPLETE('j', 'name', 'us' AS layouts);"
 ––– output –––
-ERROR 1064 (42000) at line 1: Autocomplete plugin requires min_infix_len to be set
+ERROR 1064 (42000) at line 1: Autocomplete requires min_infix_len to be set
 ––– input –––
 mysql -h0 -P9306 -e "CALL AUTOCOMPLETE(123, 'name', 'us' AS layouts);"
 ––– output –––
-ERROR 1064 (42000) at line 1: Something went wrong
+ERROR 1064 (42000) at line 1: Failed to parse query
 ––– input –––
 mysql -h0 -P9306 -e "CALL AUTOCOMPLETE('', 'name', 'us' AS layouts);"
 ––– output –––
-ERROR 1064 (42000) at line 1: Something went wrong
+ERROR 1064 (42000) at line 1: Autocomplete requires min_infix_len to be set
 ––– input –––
 mysql -h0 -P9306 -e "CALL AUTOCOMPLETE('@#$', 'name', 'us' AS layouts);"
 ––– output –––
-ERROR 1064 (42000) at line 1: Autocomplete plugin requires min_infix_len to be set
+ERROR 1064 (42000) at line 1: Autocomplete requires min_infix_len to be set
 ––– input –––
 mysql -h0 -P9306 -e "CALL AUTOCOMPLETE('thisisaverylonginputstring', 'name', 'us' AS layouts);"
 ––– output –––
-ERROR 1064 (42000) at line 1: Autocomplete plugin requires min_infix_len to be set
+ERROR 1064 (42000) at line 1: Autocomplete requires min_infix_len to be set
 ––– input –––
 mysql -h0 -P9306 -e "CALL AUTOCOMPLETE('jo', 'non_existing_table', 'us' AS layouts);"
 ––– output –––
@@ -57,4 +57,8 @@ ERROR 1064 (42000) at line 1: no such table 'non_existing_table'
 ––– input –––
 mysql -h0 -P9306 -e "CALL AUTOCOMPLETE('jo', 'name', 123 AS layouts);"
 ––– output –––
-ERROR 1064 (42000) at line 1: Autocomplete plugin requires min_infix_len to be set
+ERROR 1064 (42000) at line 1: Autocomplete requires min_infix_len to be set
+––– input –––
+mysql -h0 -P9306 -e "SELECT * FROM test WHERE MATCH('hello') OPTION fuzzy=1 layouts='';"
+––– output –––
+ERROR 1064 (42000) at line 1: Invalid options in query string, make sure they are separated by commas

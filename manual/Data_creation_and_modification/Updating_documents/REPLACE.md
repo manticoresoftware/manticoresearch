@@ -24,6 +24,9 @@ REPLACE INTO table
     WHERE id = <id>
 ```
 Note, you can filter only by id in this mode.
+
+> NOTE: Partial replace requires [Manticore Buddy](../Installation/Manticore_Buddy.md). If it doesn't work, make sure Buddy is installed.
+
 Read more about `UPDATE` vs. partial `REPLACE` [here](../../Data_creation_and_modification/Updating_documents/REPLACE_vs_UPDATE.md#UPDATE-vs-partial-REPLACE).
 
 See the examples for more details.
@@ -54,15 +57,19 @@ See the examples for more details.
     "<fieldN>": <valueN>
   }
   ```
+  > NOTE: Elasticsearch-like replace requires [Manticore Buddy](../Installation/Manticore_Buddy.md). If it doesn't work, make sure Buddy is installed.
 * Partial replace:
-```
-POST /<table name>/_update/<id>
-{
-  "<field1>": <value1>,
-  ...
-  "<fieldN>": <valueN>
-}
-```
+  ```
+  POST /<{table | cluster:table}>/_update/<id>
+  {
+    "<field1>": <value1>,
+    ...
+    "<fieldN>": <valueN>
+  }
+  ```
+  The `<table name>` can either be just the table name or in the format `cluster:table`. This allows for updates across a specific cluster if needed.
+
+  > NOTE: Partial replace requires [Manticore Buddy](../Installation/Manticore_Buddy.md). If it doesn't work, make sure Buddy is installed.
 
 See the examples for more details.
 
@@ -132,6 +139,8 @@ POST /replace
 
 <!-- request Elasticsearch-like -->
 
+> NOTE: Elasticsearch-like replace requires [Manticore Buddy](../Installation/Manticore_Buddy.md). If it doesn't work, make sure Buddy is installed.
+
 ```json
 PUT /products/_doc/2
 {
@@ -184,6 +193,8 @@ POST /products/_doc/3
 
 <!-- request Elasticsearch-like partial -->
 
+> NOTE: Partial replace requires [Manticore Buddy](../Installation/Manticore_Buddy.md). If it doesn't work, make sure Buddy is installed.
+
 ```json
 POST /products/_update/55
 {
@@ -202,6 +213,28 @@ POST /products/_update/55
 }
 ```
 
+<!-- intro -->
+##### Elasticsearch-like partial replace in cluster:
+
+<!-- request Elasticsearch-like partial in cluster -->
+
+```json
+POST /cluster_name:products/_update/55
+{
+  "doc": {
+    "description": "HUAWEI Matebook 15",
+    "price": 10
+  }
+}
+```
+
+<!-- response Elasticsearch-like partial in cluster -->
+```json
+{
+"_index":"products",
+"updated":1
+}
+```
 
 <!-- intro -->
 ##### PHP:
@@ -429,12 +462,12 @@ POST /bulk
 
 ```php
 $index->replaceDocuments([
-    [   
+    [
         'id' => 1,
         'title' => 'document one',
         'tag' => 10
     ],
-    [   
+    [
         'id' => 2,
         'title' => 'document one',
         'tag' => 20
@@ -509,7 +542,7 @@ res =  await indexApi.bulk(docs.map(e=>JSON.stringify(e)).join('\n'));
 
 ``` java
 body = "{\"replace\": {\"index\" : \"products\", \"id\" : 1, \"doc\" : {\"title\" : \"document one\"}}}" +"\n"+
-    "{\"replace\": {\"index\" : \"products\", \"id\" : 2, \"doc\" : {\"title\" : \"document two\"}}}"+"\n" ;         
+    "{\"replace\": {\"index\" : \"products\", \"id\" : 2, \"doc\" : {\"title\" : \"document two\"}}}"+"\n" ;
 indexApi.bulk(body);
 ```
 
@@ -526,7 +559,7 @@ class BulkResponse {
 
 ``` clike
 string body = "{\"replace\": {\"index\" : \"products\", \"id\" : 1, \"doc\" : {\"title\" : \"document one\"}}}" +"\n"+
-    "{\"replace\": {\"index\" : \"products\", \"id\" : 2, \"doc\" : {\"title\" : \"document two\"}}}"+"\n" ;         
+    "{\"replace\": {\"index\" : \"products\", \"id\" : 2, \"doc\" : {\"title\" : \"document two\"}}}"+"\n" ;
 indexApi.Bulk(body);
 ```
 

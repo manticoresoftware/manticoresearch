@@ -1099,7 +1099,34 @@ bool CSphIndexSettings::Setup ( const CSphConfigSection & hIndex, const char * s
 	if ( !CheckConfigJieba ( *this, sError ) )
 		return false;
 
+	if ( hIndex.Exists("jieba_hmm") && m_ePreprocessor!=Preprocessor_e::JIEBA )
+	{
+		sError = "jieba_hmm can't be used without Jieba morphology enabled";
+		return false;
+	}
+
+	if ( hIndex.Exists("jieba_mode") && m_ePreprocessor!=Preprocessor_e::JIEBA )
+	{
+		sError = "jieba_mode can't be used without Jieba morphology enabled";
+		return false;
+	}
+
 	m_bJiebaHMM = hIndex.GetBool ( "jieba_hmm", true );
+	CSphString sJiebaMode = hIndex.GetStr ( "jieba_mode", "accurate" );
+	if ( sJiebaMode=="accurate" )
+		m_eJiebaMode = JiebaMode_e::ACCURATE;
+	else if ( sJiebaMode=="full" )
+		m_eJiebaMode = JiebaMode_e::FULL;
+	else if ( sJiebaMode=="search" )
+		m_eJiebaMode = JiebaMode_e::SEARCH;
+	else
+	{
+		sError.SetSprintf ( "Unknown jieba_mode value '%s'", sJiebaMode.cstr() );
+		return false;
+	}
+
+	if ( m_eJiebaMode==JiebaMode_e::FULL && hIndex.Exists("jieba_hmm")  )
+		sWarning = "jieba_hmm has no effect when jieba_mode=full";
 
 	// all good
 	return true;
@@ -1134,7 +1161,7 @@ void CSphIndexSettings::Format ( SettingsFormatter_c & tOut, FilenameBuilder_i *
 	tOut.Add ( "bigram_freq_words",		m_sBigramWords,			!m_sBigramWords.IsEmpty() );
 	tOut.Add ( "index_token_filter",	m_sIndexTokenFilter,	!m_sIndexTokenFilter.IsEmpty() );
 	tOut.Add ( "attr_update_reserve",	m_tBlobUpdateSpace,		m_tBlobUpdateSpace!=DEFAULT_ATTR_UPDATE_RESERVE );
-	tOut.Add ( "binlog",				m_bBinlog,		false );
+	tOut.Add ( "binlog",				0,						!m_bBinlog );
 
 	if ( m_eHitless==SPH_HITLESS_ALL )
 	{
@@ -1148,6 +1175,13 @@ void CSphIndexSettings::Format ( SettingsFormatter_c & tOut, FilenameBuilder_i *
 	AddEngineSettings ( m_eEngine, tOut );
 	if ( m_eEngine==AttrEngine_e::DEFAULT && m_eDefaultEngine!=GetDefaultAttrEngine() )
 		AddEngineSettings ( m_eDefaultEngine, tOut );
+
+	if ( m_eJiebaMode==JiebaMode_e::FULL )
+		tOut.Add ( "jieba_mode",		"full",					true );
+	else if ( m_eJiebaMode==JiebaMode_e::SEARCH )
+		tOut.Add ( "jieba_mode",		"search",				true );
+
+	tOut.Add ( "jieba_hmm",				0,						!m_bJiebaHMM );
 
 	DocstoreSettings_t::Format ( tOut, pFilenameBuilder );
 }
@@ -2046,6 +2080,7 @@ bool sphFixupIndexSettings ( CSphIndex * pIndex, const CSphConfigSection & hInde
 
 		CSphString sWarning;
 		sphSpawnFilterICU ( pFieldFilter, pIndex->GetSettings(), pIndex->GetTokenizer()->GetSettings(), pIndex->GetName(), sWarning );
+		SpawnFilterJieba ( pFieldFilter, pIndex->GetSettings(), pIndex->GetTokenizer()->GetSettings(), pIndex->GetName(), sWarning );
 		AddWarning ( dWarnings, sWarning );
 
 		pIndex->SetFieldFilter ( std::move ( pFieldFilter ) );
@@ -2921,6 +2956,8 @@ void LoadIndexSettingsJson ( bson::Bson_c tNode, CSphIndexSettings & tSettings )
 	tSettings.m_sHitlessFiles = String ( tNode.ChildByName ( "hitless_files" ) );
 	tSettings.m_eEngine = (AttrEngine_e)Int ( tNode.ChildByName ( "engine" ), (DWORD)AttrEngine_e::DEFAULT );
 	tSettings.m_eDefaultEngine = (AttrEngine_e)Int ( tNode.ChildByName ( "engine_default" ), (DWORD)AttrEngine_e::ROWWISE );
+	tSettings.m_eJiebaMode = (JiebaMode_e)Int ( tNode.ChildByName ( "jieba_mode" ), (DWORD)JiebaMode_e::ACCURATE );
+	tSettings.m_bJiebaHMM = Bool ( tNode.ChildByName ( "jieba_hmm" ), true );
 }
 
 
@@ -2969,6 +3006,12 @@ void LoadIndexSettings ( CSphIndexSettings & tSettings, CSphReader & tReader, DW
 
 	if ( uVersion>=63 )
 		tSettings.m_eEngine = (AttrEngine_e)tReader.GetDword();
+
+	if ( uVersion>=67 )
+	{
+		tSettings.m_eJiebaMode = (JiebaMode_e)tReader.GetDword();
+		tSettings.m_bJiebaHMM = !!tReader.GetByte();
+	}
 }
 
 
@@ -2999,6 +3042,8 @@ void SaveIndexSettings ( Writer_i & tWriter, const CSphIndexSettings & tSettings
 	tWriter.PutDword ( tSettings.m_iSkiplistBlockSize );
 	tWriter.PutString ( tSettings.m_sHitlessFiles );
 	tWriter.PutDword ( (DWORD)tSettings.m_eEngine );
+	tWriter.PutDword ( (DWORD)tSettings.m_eJiebaMode );
+	tWriter.PutByte ( tSettings.m_bJiebaHMM ? 1 : 0 );
 }
 
 
@@ -3030,6 +3075,8 @@ void operator << ( JsonEscapedBuilder & tOut, const CSphIndexSettings & tSetting
 	tOut.NamedStringNonEmpty ( "hitless_files", tSettings.m_sHitlessFiles );
 	tOut.NamedValNonDefault ( "engine", (DWORD)tSettings.m_eEngine, (DWORD)AttrEngine_e::DEFAULT );
 	tOut.NamedValNonDefault ( "engine_default", (DWORD)tSettings.m_eDefaultEngine, (DWORD)AttrEngine_e::ROWWISE );
+	tOut.NamedValNonDefault ( "jieba_mode", (DWORD)tSettings.m_eJiebaMode, (DWORD)JiebaMode_e::ACCURATE );
+	tOut.NamedValNonDefault ( "jieba_hmm", tSettings.m_bJiebaHMM, true );
 }
 
 

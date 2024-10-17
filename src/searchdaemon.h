@@ -642,10 +642,11 @@ class QueryStatContainer_i
 public:
 	virtual								~QueryStatContainer_i() {}
 	virtual void						Add ( uint64_t uFoundRows, uint64_t uQueryTime, uint64_t uTimestamp ) = 0;
-	virtual void						GetRecord ( int iRecord, QueryStatRecord_t & tRecord ) const = 0;
+	virtual QueryStatRecord_t			GetRecord ( int iRecord ) const noexcept = 0;
 	virtual int							GetNumRecords() const = 0;
 };
 
+std::unique_ptr<QueryStatContainer_i> MakeStatsContainer();
 
 class ServedStats_c final
 {
@@ -666,8 +667,8 @@ private:
 	std::unique_ptr<QueryStatContainer_i> m_pQueryStatRecordsExact GUARDED_BY ( m_tStatsLock );
 #endif
 
-	std::unique_ptr<TDigest_i>	m_pQueryTimeDigest GUARDED_BY ( m_tStatsLock );
-	std::unique_ptr<TDigest_i>	m_pRowsFoundDigest GUARDED_BY ( m_tStatsLock );
+	TDigest_c			m_tQueryTimeDigest GUARDED_BY ( m_tStatsLock );
+	TDigest_c			m_tRowsFoundDigest GUARDED_BY ( m_tStatsLock );
 
 	uint64_t			m_uTotalFoundRowsMin GUARDED_BY ( m_tStatsLock )= UINT64_MAX;
 	uint64_t			m_uTotalFoundRowsMax GUARDED_BY ( m_tStatsLock )= 0;
@@ -679,12 +680,11 @@ private:
 
 	uint64_t			m_uTotalQueries GUARDED_BY ( m_tStatsLock ) = 0;
 
-	static void			CalcStatsForInterval ( const QueryStatContainer_i * pContainer, QueryStatElement_t & tRowResult,
-							QueryStatElement_t & tTimeResult, uint64_t uTimestamp, uint64_t uInterval, int iRecords );
-
 	void				DoStatCalcStats ( const QueryStatContainer_i * pContainer, QueryStats_t & tRowsFoundStats,
 							QueryStats_t & tQueryTimeStats ) const REQUIRES_SHARED ( m_tStatsLock );
 };
+
+void CalcSimpleStats ( const QueryStatContainer_i * pContainer, QueryStats_t & tRowsFoundStats, QueryStats_t & tQueryTimeStats );
 
 // calculate index mass based on status
 uint64_t CalculateMass ( const CSphIndexStatus & dStats );
@@ -1413,6 +1413,9 @@ void sphHandleMysqlCommitRollback ( StmtErrorReporter_i& tOut, Str_t sQuery, boo
 bool sphCheckWeCanModify ();
 bool sphCheckWeCanModify ( StmtErrorReporter_i & tOut );
 bool sphCheckWeCanModify ( RowBuffer_i& tOut );
+bool PollOptimizeRunning ( const CSphString & sIndex );
+int GetLogFD ();
+const CSphString& sphGetLogFile() noexcept;
 
 void				sphProcessHttpQueryNoResponce ( const CSphString& sEndpoint, const CSphString& sQuery, CSphVector<BYTE> & dResult );
 void				sphHttpErrorReply ( CSphVector<BYTE> & dData, EHTTP_STATUS eCode, const char * szError );
@@ -1436,7 +1439,7 @@ namespace session
 
 	bool Execute ( Str_t sQuery, RowBuffer_i& tOut );
 	void SetFederatedUser();
-	void SetDumpUser ( const CSphString & sUser );
+	void SetUser ( const CSphString & sUser );
 	void SetAutoCommit ( bool bAutoCommit );
 	void SetInTrans ( bool bInTrans );
 	bool IsAutoCommit();

@@ -67,8 +67,7 @@ add_library ( lmanticore STATIC sphinx.cpp sphinxexcerpt.cpp sphinxquery.cpp sph
 		docidlookup.cpp tracer.cpp attrindex_merge.cpp distinct.cpp hyperloglog.cpp pseudosharding.cpp geodist.cpp
 		datetime.cpp grouper.cpp exprdatetime.cpp detail/indexlink.cpp knnmisc.cpp knnlib.cpp libutils.cpp
 		aggrexpr.cpp joinsorter.cpp queuecreator.cpp exprgeodist.cpp exprremap.cpp exprdocstore.cpp schematransform.cpp
-		sortergroup.cpp sortertraits.cpp sorterprecalc.cpp querycontext.cpp skip_cache.cpp jsonsi.cpp jieba.cpp
-		cjkpreprocessor.cpp )
+		sortergroup.cpp sortertraits.cpp sorterprecalc.cpp querycontext.cpp skip_cache.cpp jsonsi.cpp )
 
 add_library ( lstem STATIC sphinxsoundex.cpp sphinxmetaphone.cpp sphinxstemen.cpp sphinxstemru.cpp sphinxstemru.inl
 		sphinxstemcz.cpp sphinxstemar.cpp )
@@ -95,12 +94,23 @@ target_link_libraries ( lmanticore PUBLIC schema )
 add_subdirectory ( dict )
 target_link_libraries ( lmanticore PUBLIC dict )
 
+if (WITH_ICU OR WITH_JIEBA)
+	add_library ( lcjk cjkpreprocessor.cpp )
+	target_link_libraries ( lcjk PUBLIC lextra)
+endif()
+
 add_library ( lmanticore_icu icu.cpp )
 if (WITH_ICU)
 	target_link_libraries ( lmanticore_icu PRIVATE icu::icu )
 endif ()
-target_link_libraries ( lmanticore_icu PRIVATE lextra )
+target_link_libraries ( lmanticore_icu PRIVATE lcjk )
 target_link_libraries ( lmanticore PUBLIC lmanticore_icu )
+
+if (WITH_JIEBA)
+	add_library ( lmanticore_jieba jieba.cpp jieba.h )
+	target_link_libraries ( lmanticore_jieba PRIVATE lcjk jieba::jieba )
+	target_link_libraries ( lmanticore PUBLIC lmanticore_jieba )
+endif ()
 
 if (WITH_STEMMER)
 	target_link_libraries ( lmanticore PRIVATE stemmer::stemmer )
@@ -164,7 +174,7 @@ set ( SEARCHD_H searchdaemon.h searchdconfig.h searchdddl.h searchdexpr.h search
 		compressed_zlib_mysql.h sphinxql_debug.h stackmock.h searchdssl.h digest_sha1.h
 		client_session.h compressed_zstd_mysql.h docs_collector.h index_rotator.h config_reloader.h searchdhttp.h timeout_queue.h
 		netpoll.h pollable_event.h netfetch.h searchdbuddy.h sphinxql_second.h sphinxql_extra.h sphinxjsonquery.h
-		frontendschema.h )
+		frontendschema.h debug_cmds.h)
 
 
 # add the extra targets in the case we want on-the-fly grammar compiler
@@ -245,7 +255,7 @@ add_library ( lsearchd OBJECT searchdha.cpp http/http_parser.c searchdhttp.cpp
 		netreceive_http.cpp netreceive_ql.cpp query_status.cpp
 		sphinxql_debug.cpp sphinxql_second.cpp stackmock.cpp docs_collector.cpp index_rotator.cpp config_reloader.cpp netpoll.cpp
 		pollable_event.cpp netfetch.cpp searchdbuddy.cpp searchdhttpcompat.cpp sphinxql_extra.cpp searchdreplication.cpp sphinxjsonquery.cpp
-		frontendschema.cpp compressed_http.cpp )
+		frontendschema.cpp compressed_http.cpp debug_cmds.cpp )
 target_sources ( lsearchd PUBLIC ${SEARCHD_SRCS_TESTABLE} ${SEARCHD_H} ${SEARCHD_BISON} ${SEARCHD_FLEX} )
 add_library ( digest_sha1 digest_sha1.cpp )
 target_link_libraries ( digest_sha1 PRIVATE lextra )

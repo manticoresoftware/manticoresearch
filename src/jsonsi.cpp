@@ -233,7 +233,7 @@ private:
 		case JSON_STRING:
 			{
 				char szBuf[64];
-				sprintf ( szBuf, INT64_FMT, iValue );
+				snprintf ( szBuf, 64, INT64_FMT, iValue );
 				m_pBuilder->SetAttr ( iAttr, (const uint8_t*)szBuf, strlen(szBuf) );
 			}
 			break;
@@ -255,7 +255,7 @@ private:
 		case JSON_STRING:
 			{
 				char szBuf[64];
-				sprintf ( szBuf, "%f", (float)fValue );
+				snprintf ( szBuf, 64, "%f", (float)fValue );
 				m_pBuilder->SetAttr ( iAttr, (const uint8_t*)szBuf, strlen(szBuf) );
 			}
 			break;
@@ -440,7 +440,7 @@ static bool BuildJsonSI ( const StrVec_t & dAttributes, const ISphSchema & tSche
 	common::Schema_t tSISchema = tDeductor.CreateSchema();
 	// FIXME!!! pass these settings to the function, don't use default
 	BuildBufferSettings_t tSettings; // use default buffer settings
-	std::unique_ptr<SI::Builder_i> pBuilder = CreateSecondaryIndexBuilder ( tSISchema, tSettings.m_iSIMemLimit, sTmpFile, tSettings.m_iBufferStorage, sError );
+ 	std::unique_ptr<SI::Builder_i> pBuilder = CreateSecondaryIndexBuilder ( tSISchema, tSettings.m_iSIMemLimit, sTmpFile, tSettings.m_iBufferStorage, sError );
 	if ( !pBuilder )
 		return false;
 

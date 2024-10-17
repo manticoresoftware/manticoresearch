@@ -10,39 +10,60 @@
 // did not, you can find it at http://www.gnu.org/
 //
 
+// this file is should build ONLY when 'WITH_JIEBA" defined
+
 #include "jieba.h"
+
+STATIC_ASSERT ( WITH_JIEBA, SHOULD_NOT_BUILD_WIHTOUT_WITH_JIEBA_DEFINITION );
 
 #include "cjkpreprocessor.h"
 
 #include "Jieba.hpp"
 
 
-#if WITH_JIEBA
-
 class JiebaPreprocessor_c : public CJKPreprocessor_c
 {
 public:
-						JiebaPreprocessor_c ( bool bHMM ) : m_bHMM ( bHMM ) {}
+						JiebaPreprocessor_c ( JiebaMode_e eMode, bool bHMM );
 
 	bool				Init ( CSphString & sError ) override;
-	CJKPreprocessor_c * Clone() override { return new JiebaPreprocessor_c(m_bHMM); }
+	CJKPreprocessor_c * Clone() override { return new JiebaPreprocessor_c ( m_eMode, m_bHMM, m_pJieba ); }
 
 protected:
 	void				ProcessBuffer ( const BYTE * pBuffer, int iLength ) override;
 	const BYTE *		GetNextToken ( int & iTokenLen ) override;
 
 private:
-	std::unique_ptr<cppjieba::Jieba> m_pJieba;
+	std::shared_ptr<cppjieba::Jieba> m_pJieba;
 	std::vector<cppjieba::Word>	m_dWords;
 	cppjieba::CutContext		m_tCtx;
 	int							m_iToken = 0;
+
+	JiebaMode_e					m_eMode;
 	bool						m_bHMM = true;
+
+						JiebaPreprocessor_c ( JiebaMode_e eMode, bool bHMM, std::shared_ptr<cppjieba::Jieba> pJieba );
 };
+
+
+JiebaPreprocessor_c::JiebaPreprocessor_c ( JiebaMode_e eMode, bool bHMM )
+	: m_eMode ( eMode )
+	, m_bHMM ( bHMM )
+{}
+
+
+JiebaPreprocessor_c::JiebaPreprocessor_c ( JiebaMode_e eMode, bool bHMM, std::shared_ptr<cppjieba::Jieba> pJieba )
+	: m_pJieba(pJieba)
+	, m_eMode ( eMode )
+	, m_bHMM ( bHMM )
+{}
 
 
 bool JiebaPreprocessor_c::Init ( CSphString & sError )
 {
-	assert ( !m_pJieba );
+	// skip init if reusing existing jieba
+	if ( m_pJieba )
+		return true;
 
 	CSphString sJiebaPath = GetJiebaDataDir();
 	enum class JiebaFiles_e : int
@@ -76,7 +97,7 @@ bool JiebaPreprocessor_c::Init ( CSphString & sError )
 	}
 
 	// fixme! jieba responds to load errors with abort() call
-	m_pJieba = std::make_unique<cppjieba::Jieba> ( dJiebaFiles[(int)JiebaFiles_e::DICT].cstr(), dJiebaFiles[(int)JiebaFiles_e::HMM].cstr(), dJiebaFiles[(int)JiebaFiles_e::USER_DICT].cstr(), dJiebaFiles[(int)JiebaFiles_e::IDF].cstr(), dJiebaFiles[(int)JiebaFiles_e::STOP_WORD].cstr() );
+	m_pJieba = std::make_shared<cppjieba::Jieba> ( dJiebaFiles[(int)JiebaFiles_e::DICT].cstr(), dJiebaFiles[(int)JiebaFiles_e::HMM].cstr(), dJiebaFiles[(int)JiebaFiles_e::USER_DICT].cstr(), dJiebaFiles[(int)JiebaFiles_e::IDF].cstr(), dJiebaFiles[(int)JiebaFiles_e::STOP_WORD].cstr() );
 
 	return true;
 }
@@ -85,9 +106,25 @@ bool JiebaPreprocessor_c::Init ( CSphString & sError )
 void JiebaPreprocessor_c::ProcessBuffer ( const BYTE * pBuffer, int iLength )
 {
 	m_dWords.resize(0);
-	m_tCtx.Reset();
 
-	m_pJieba->Cut ( { (const char*)pBuffer, (size_t)iLength }, m_dWords, m_tCtx, m_bHMM );
+	switch ( m_eMode )
+	{
+	case JiebaMode_e::ACCURATE:
+		m_pJieba->Cut ( { (const char*)pBuffer, (size_t)iLength }, m_dWords, m_tCtx, m_bHMM );
+		break;
+
+	case JiebaMode_e::FULL:
+		m_pJieba->CutAll ( { (const char*)pBuffer, (size_t)iLength }, m_dWords, m_tCtx );
+		break;
+
+	case JiebaMode_e::SEARCH:
+		m_pJieba->CutForSearch ( { (const char*)pBuffer, (size_t)iLength }, m_dWords, m_tCtx, m_bHMM );
+		break;
+
+	default:
+		break;
+	}
+
 	m_iToken = 0;
 }
 
@@ -115,7 +152,7 @@ bool SpawnFilterJieba ( std::unique_ptr<ISphFieldFilter> & pFieldFilter, const C
 	if ( tSettings.m_ePreprocessor!=Preprocessor_e::JIEBA )
 		return true;
 
-	auto pFilterICU = CreateFilterCJK ( std::move ( pFieldFilter ), std::make_unique<JiebaPreprocessor_c> ( tSettings.m_bJiebaHMM ), tTokSettings.m_sBlendChars.cstr(), sError );
+	auto pFilterICU = CreateFilterCJK ( std::move ( pFieldFilter ), std::make_unique<JiebaPreprocessor_c> ( tSettings.m_eJiebaMode, tSettings.m_bJiebaHMM ), tTokSettings.m_sBlendChars.cstr(), sError );
 	if ( !sError.IsEmpty() )
 	{
 		sError.SetSprintf ( "table '%s': Error initializing Jieba: %s", szIndex, sError.cstr() );
@@ -126,30 +163,3 @@ bool SpawnFilterJieba ( std::unique_ptr<ISphFieldFilter> & pFieldFilter, const C
 	return true;
 }
 
-#else
-
-bool CheckConfigJieba ( CSphIndexSettings & tSettings, CSphString & sError )
-{
-	if ( tSettings.m_ePreprocessor==Preprocessor_e::JIEBA )
-	{
-		tSettings.m_ePreprocessor = Preprocessor_e::NONE;
-		sError.SetSprintf ( "Jieba options specified, but no Jieba support compiled; ignoring" );
-		return false;
-	}
-
-	return true;
-}
-
-
-bool CheckTokenizerJieba ( CSphIndexSettings &, const CSphTokenizerSettings &, CSphString & )
-{
-	return true;
-}
-
-
-bool SpawnFilterJieba ( std::unique_ptr<ISphFieldFilter> &, const CSphIndexSettings &, const CSphTokenizerSettings &, const char *, CSphString & )
-{
-	return true;
-}
-
-#endif

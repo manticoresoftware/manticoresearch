@@ -23,7 +23,9 @@ The table below lists all supported languages and indicates how to enable:
 | Buhid | specify charset_table manually | - | - | |
 | Bulgarian | charset_table=non_cont | bg | - | |
 | Catalan | charset_table=non_cont | ca | morphology=libstemmer_ca | |
-| Chinese | charset_table=chinese or ngram_chars=chinese | zh | morphology=icu_chinese or morphology=jieba_chinese and ngram_chars=1 correspondingly | ICU or Jieba dictionary-based segmentation is much more accurate than ngram-based methods |
+| Chinese using [ICU](https://icu.unicode.org/) | charset_table=chinese | zh | morphology=icu_chinese | More accurate than using ngrams |
+| Chinese using [Jieba](https://github.com/fxsjy/jieba) | charset_table=chinese | zh | morphology=jieba_chinese | More accurate than using ngrams |
+| Chinese using ngrams| ngram_chars=chinese | zh | ngram_chars=1 | Faster indexing, but the search performance might not be as good |
 | Croatian | charset_table=non_cont | hr | - | |
 | Kurdish | charset_table=non_cont | ckb | - | |
 | Czech | charset_table=non_cont | cz | morphology=stem_cz (Czech stemmer) | |

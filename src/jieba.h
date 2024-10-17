@@ -12,5 +12,31 @@
 
 #include "indexsettings.h"
 
+#if WITH_JIEBA
+
 bool CheckConfigJieba ( CSphIndexSettings & tSettings, CSphString & sError );
+
 bool SpawnFilterJieba ( std::unique_ptr<ISphFieldFilter> & pFieldFilter, const CSphIndexSettings & m_tSettings, const CSphTokenizerSettings & tTokSettings, const char * szIndex, CSphString & sError );
+
+#else
+
+
+inline bool CheckConfigJieba ( CSphIndexSettings & tSettings, CSphString & sError )
+{
+	if ( tSettings.m_ePreprocessor==Preprocessor_e::JIEBA )
+	{
+		tSettings.m_ePreprocessor = Preprocessor_e::NONE;
+		sError.SetSprintf ( "Jieba options specified, but no Jieba support compiled; ignoring" );
+		return false;
+	}
+
+	return true;
+}
+
+inline bool SpawnFilterJieba ( std::unique_ptr<ISphFieldFilter> &, const CSphIndexSettings &, const CSphTokenizerSettings &,
+		const char *, CSphString & )
+{
+	return true;
+}
+
+#endif

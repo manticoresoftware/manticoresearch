@@ -245,6 +245,12 @@ enum ESphBigram : BYTE
 	SPH_BIGRAM_BOTHFREQ		= 3		///< only index pairs where both words are in a frequent words list
 };
 
+enum class JiebaMode_e
+{
+	ACCURATE,
+	FULL,
+	SEARCH
+};
 
 class CSphIndexSettings : public CSphSourceSettings, public DocstoreSettings_t
 {
@@ -268,6 +274,7 @@ public:
 
 	DWORD			m_uAotFilterMask = 0;			///< lemmatize_XX_all forces us to transform queries on the index level too
 	Preprocessor_e	m_ePreprocessor = Preprocessor_e::NONE;
+	JiebaMode_e		m_eJiebaMode = JiebaMode_e::ACCURATE;
 	bool			m_bJiebaHMM = true;
 
 	CSphString		m_sIndexTokenFilter;	///< indexing time token filter spec string (pretty useless for disk, vital for RT)

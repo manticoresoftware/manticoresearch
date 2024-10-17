@@ -88,7 +88,7 @@ UNFREEZE tbl;
 
 # Inspecting the lock state of a table
 
-<!-- example show_locks -->
+<!-- example show_table_status -->
 
 You can use `SHOW table_name STATUS` to check if a table is frozen or not.
 

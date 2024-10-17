@@ -11,6 +11,8 @@ You need the fully qualified package name of the plugin to enable or disable it.
 ENABLE BUDDY PLUGIN <username/package name on https://packagist.org/>
 ```
 
+> NOTE: `ENABLE BUDDY PLUGIN` requires [Manticore Buddy](../Installation/Manticore_Buddy.md). If it doesn't work, make sure Buddy is installed.
+
 This command reactivates a previously disabled Buddy plugin, allowing it to process your requests again.
 
 <!-- intro -->

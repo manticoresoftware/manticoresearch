@@ -40,7 +40,7 @@ jobs:
       run:
         shell: bash
     container:
-      image: manticoresearch/ubertests_ctest:3263_20240920
+      image: manticoresearch/ubertests_ctest:3263_mar_2024
       env:
         DIAGNOSTIC: 1
         CACHEB: ../cache
@@ -51,7 +51,6 @@ jobs:
         # CTEST_REGEX: test_234
         WITH_COVERAGE: ${{ inputs.WITH_COVERAGE }}
         LIBS_BUNDLE:
-        JIEBA_DATA_DIR: /usr/share/manticore/jieba/
     steps:
       - name: Checkout repository
         uses: actions/checkout@v3
@@ -78,7 +77,7 @@ jobs:
       - name: 🚀 Test
         id: test
         # --timeout may be not working https://gitlab.kitware.com/cmake/cmake/-/issues/23979
-        run: ctest -V -S misc/ctest/gltest.cmake --no-compress-output --timeout 60
+        run: ctest -V -S misc/ctest/gltest.cmake --no-compress-output --timeout 600
         continue-on-error: true
 
       - name: List build files

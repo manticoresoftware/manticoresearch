@@ -15,7 +15,7 @@ on:
       - '.github/workflows/clt_nightly.yml'
       - 'test/clt-tests/installation/**'
       - 'test/clt-tests/core/test-replace-into'
-      - 'test/clt-tests/comparison-overhead-json-sql/**'
+      - 'test/clt-tests/performance-tests/**'
       - 'test/clt-tests/id-attribute-error-during-indexing/**'
       - 'test/clt-tests/indexer-latest-mysql-postgres/**'
       - 'test/clt-tests/core/test-alter-rename-nightly'
@@ -117,9 +117,6 @@ jobs:
           - name: Noble upgrade to dev
             image: ubuntu:noble
             test_prefix: test/clt-tests/installation/deb-dev-update
-          - name: JSON vs SQL perf
-            image: ghcr.io/manticoresoftware/manticoresearch:test-kit-latest
-            test_prefix: test/clt-tests/comparison-overhead-json-sql/test-comparison-
           - name: REPLACE INTO
             image: ghcr.io/manticoresoftware/manticoresearch:test-kit-latest
             test_prefix: test/clt-tests/core/test-replace-into
@@ -132,13 +129,15 @@ jobs:
           - name: Test alter rename nightly
             image: ghcr.io/manticoresoftware/manticoresearch:test-kit-latest
             test_prefix: test/clt-tests/core/test-alter-rename-nightly
-          - name: Test performance for queries with multiple disk chunks
-            image: ghcr.io/manticoresoftware/manticoresearch:test-kit-latest
-            test_prefix: test/clt-tests/core/test-performance-for-queries-with-multiple-disk-chunks
           - name: Test integrations
             image: ghcr.io/manticoresoftware/manticoresearch:test-kit-latest
             test_prefix: test/clt-tests/integrations/test-integrations-
-
+          - name: Tests performance JSON vs SQL
+            image: ghcr.io/manticoresoftware/manticoresearch:test-kit-latest
+            test_prefix: test/clt-tests/performance-tests/test-comparison-
+          - name: Test performance for queries with multiple disk chunks
+            image: ghcr.io/manticoresoftware/manticoresearch:test-kit-latest
+            test_prefix: test/clt-tests/performance-tests/test-performance-for-queries-with-multiple-disk-chunks
     steps:
       - uses: manticoresoftware/clt@0.1.23
         with:

@@ -367,6 +367,9 @@ function PublishLocals ( &$locals, $benchmark )
 	if ( isset($g_locals["icu_data_dir"]))
 		putenv("ICU_DATA_DIR=$g_locals[icu_data_dir]");
 
+	if ( isset($g_locals["jieba_data_dir"]))
+    	putenv("JIEBA_DATA_DIR=$g_locals[jieba_data_dir]");
+
 	if ( isset($g_locals["full_share_dir"]))
 		putenv("FULL_SHARE_DIR=$g_locals[full_share_dir]");
 }

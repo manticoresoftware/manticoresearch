@@ -5,6 +5,7 @@
 
 <requires>
 <jieba/>
+<heavy/>
 <non-rt/>
 </requires>
 
@@ -40,7 +41,13 @@ index test_xml
       <variant>	jieba_hmm = 0</variant>
       <variant>	jieba_hmm = 1</variant>
     </dynamic>
-	
+
+    <dynamic>
+      <variant>	jieba_mode = accurate</variant>
+      <variant>	jieba_mode = full</variant>
+      <variant>	jieba_mode = search</variant>
+    </dynamic>
+
 	blend_chars		= -, U+23
 }
 </config>
@@ -63,6 +70,7 @@ select * from test_xml where match('msgCnt');
 select * from test_xml where match('今天的心情');
 select * from test_xml where match('@content 則有');
 select * from test_xml where match('@content 有個');
+call keywords('文山區長青學苑則有個十分特別的「英文歌唱班」，test; mixed blended aaa-bbb','test_xml');
 </sphinxql></queries>
 
 </test>

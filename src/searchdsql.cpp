@@ -259,6 +259,12 @@ void SqlParserTraits_c::SetIndex ( const CSphString& sIndex ) const
 		m_pStmt->m_sIndex = sIndex;
 }
 
+
+void SqlParserTraits_c::Comment ( const SqlNode_t& tNode ) const
+{
+}
+
+
 //////////////////////////////////////////////////////////////////////////
 
 enum class Option_e : BYTE;
@@ -321,6 +327,7 @@ public:
 
 	bool			AddDistinct ( SqlNode_t * pNewExpr, SqlNode_t * pStart, SqlNode_t * pEnd );
 	void			AddDistinct ( SqlNode_t * pNewExpr );
+	bool			AddDistinctSort ( SqlNode_t * pNewExpr, SqlNode_t * pStart, SqlNode_t * pEnd, bool bSortAsc );
 	bool			MaybeAddFacetDistinct();
 	bool			SetupFacetStmt();
 
@@ -1107,13 +1114,15 @@ void SqlParser_c::SetGroupbyLimit ( int iLimit )
 
 bool SqlParser_c::AddDistinct ( SqlNode_t * pNewExpr, SqlNode_t * pStart, SqlNode_t * pEnd )
 {
-	if ( !m_pQuery->m_sGroupDistinct.IsEmpty() )
+	CSphString sDistinct;
+	ToString ( sDistinct, *pNewExpr );
+	if ( !m_pQuery->m_sGroupDistinct.IsEmpty() && m_pQuery->m_sGroupDistinct!=sDistinct )
 	{
 		yyerror ( this, "too many COUNT(DISTINCT) clauses" );
 		return false;
 	}
 
-	ToString ( m_pQuery->m_sGroupDistinct, *pNewExpr );
+	m_pQuery->m_sGroupDistinct = sDistinct;
 	return AddItem ( "@distinct", pStart, pEnd );
 }
 
@@ -1130,9 +1139,22 @@ void SqlParser_c::AddDistinct ( SqlNode_t * pNewExpr )
 	}
 }
 
+bool SqlParser_c::AddDistinctSort ( SqlNode_t * pNewExpr, SqlNode_t * pStart, SqlNode_t * pEnd, bool bSortAsc )
+{
+	if ( !AddDistinct ( pNewExpr, pStart, pEnd ) )
+		return false;
+
+	m_pQuery->m_sOrderBy.SetSprintf ( "@distinct %s", ( bSortAsc ? "asc" : "desc" ) );
+	return true;
+}
+
 bool SqlParser_c::MaybeAddFacetDistinct()
 {
 	if ( m_pQuery->m_sGroupDistinct.IsEmpty() )
+		return true;
+
+	// distinct could be already added by order by
+	if ( m_pQuery->m_dItems.Contains ( bind ( &CSphQueryItem::m_sExpr ), "@distinct" ) )
 		return true;
 
 	CSphQueryItem tItem;
@@ -1812,7 +1834,7 @@ static ParseResult_e ParseNext ( Str_t sQuery, CSphVector<SqlStmt_t>& dStmt, CSp
 			dStmt.Pop();
 		eRes = pParser ( sQuery, dStmt, sNewError );
 		if ( eRes != ParseResult_e::PARSE_OK )
-			sphLogDebug ( "%s", sNewError.cstr() );
+			sphLogDebugv ( "%s", sNewError.cstr() );
 		if ( eRes == ParseResult_e::PARSE_ERROR && !bKeepError )
 		{
 			sError = sNewError;
@@ -1974,10 +1996,11 @@ bool sphParseSqlQuery ( Str_t sQuery, CSphVector<SqlStmt_t> & dStmt, CSphString 
 	// cascade parsing
 	if ( iRes || dStmt.IsEmpty() )
 	{
-		sphLogDebug ( "%s", sError.cstr() );
 		auto eNext = ParseNext ( sQuery, dStmt, sError, !tParser.IsWrongSyntaxError() );
 		if ( eNext == ParseResult_e::PARSE_OK )
 			sError = "";
+		else
+			sphLogDebug ( "%s", sError.cstr () );
 		return eNext == ParseResult_e::PARSE_OK;
 	}
 

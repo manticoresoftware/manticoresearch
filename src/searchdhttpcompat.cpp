@@ -3492,8 +3492,8 @@ bool HttpCompatHandler_c::ProcessEndpoints()
 			return true;
 		}
 
-		if ( m_dUrlParts.GetLength() && ProcessCreateTable() )
-			return true;
+		if ( m_dUrlParts.GetLength() )
+			return ProcessCreateTable();
 	}
 
 	if ( GetRequestType()==HTTP_DELETE && m_dUrlParts.GetLength()>2 && m_dUrlParts[1]=="_doc" 

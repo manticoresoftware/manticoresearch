@@ -946,6 +946,8 @@ static bool ParseIndex ( const JsonObj_c & tRoot, SqlStmt_t & tStmt, CSphString 
 		tIndex = tRoot.GetStrItem ( "index", sError, true );
 		if ( !tIndex )
 			return false;
+		
+		sError = "";
 	}
 
 	tStmt.m_sIndex = tIndex.StrVal();
@@ -1319,6 +1321,8 @@ bool sphParseJsonQuery ( const JsonObj_c & tRoot, ParsedJsonQuery_t & tPJQuery )
 		tIndex = tRoot.GetStrItem ( "index", sError, true );
 		if ( !tIndex )
 			return false;
+
+		sError = "";
 	}
 
 	auto & tQuery = tPJQuery.m_tQuery;

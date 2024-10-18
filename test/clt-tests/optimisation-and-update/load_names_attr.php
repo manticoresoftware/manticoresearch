@@ -84,9 +84,9 @@ if ($argv[6] == 1) {
 
 $batch = [];
 $query_start = "INSERT INTO name(id, username, s) VALUES ";
-$names = file('./test/clt-tests/optimisation-and-upgrade/names.txt', FILE_IGNORE_NEW_LINES | FILE_SKIP_EMPTY_LINES);
+$names = file('./test/clt-tests/optimisation-and-update/names.txt', FILE_IGNORE_NEW_LINES | FILE_SKIP_EMPTY_LINES);
 $namesCount = count($names);
-$surnames = file('./test/clt-tests/optimisation-and-upgrade/surnames.txt', FILE_IGNORE_NEW_LINES | FILE_SKIP_EMPTY_LINES);
+$surnames = file('./test/clt-tests/optimisation-and-update/surnames.txt', FILE_IGNORE_NEW_LINES | FILE_SKIP_EMPTY_LINES);
 $surnamesCount = count($surnames);
 
 echo "preparing...\n";

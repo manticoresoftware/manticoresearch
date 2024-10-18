@@ -9,11 +9,11 @@ apt-get install -y bc > /dev/null; echo $?
 debconf: delaying package configuration, since apt-utils is not installed
 0
 ––– input –––
-chmod +x ./test/clt-tests/optimisation-and-upgrade/load_names_attr.php > /dev/null; echo $?
+chmod +x ./test/clt-tests/optimisation-and-update/load_names_attr.php > /dev/null; echo $?
 ––– output –––
 0
 ––– input –––
-php -d memory_limit=2G ./test/clt-tests/optimisation-and-upgrade/load_names_attr.php 100000 4 2000000 1 2G 1 > /dev/null; echo $?
+php -d memory_limit=2G ./test/clt-tests/optimisation-and-update/load_names_attr.php 100000 4 2000000 1 2G 1 > /dev/null; echo $?
 ––– output –––
 0
 ––– input –––
@@ -28,7 +28,7 @@ mysql -h0 -P9306 -e "SELECT COUNT(*) FROM name;"
 |  2000000 |
 +----------+
 ––– input –––
-php -d memory_limit=2G ./test/clt-tests/optimisation-and-upgrade/load_names_attr.php 100000 4 2000000 1 2G 2000001 > /dev/null; echo $?
+php -d memory_limit=2G ./test/clt-tests/optimisation-and-update/load_names_attr.php 100000 4 2000000 1 2G 2000001 > /dev/null; echo $?
 ––– output –––
 0
 ––– input –––
@@ -132,13 +132,10 @@ mysql -h0 -P9306 -e "SELECT * FROM name WHERE s='b' ORDER BY id ASC LIMIT 5;"
 |    5 | RICHARD MILLER  | b    |
 +------+-----------------+------+
 ––– input –––
-start_update=$(date +%s); time_taken_update=$( { time mysql -h0 -P9306 -e "UPDATE name SET unknown='b' WHERE id=1;" 2>&1; } ); [[ $time_taken_update == *"ERROR"* ]] && echo "$time_taken_update" && false || echo "Update completed within acceptable time."
+start_update=$(date +%s); time_taken_update=$( { mysql -h0 -P9306 -e "UPDATE name SET unknown='b' WHERE id=1;" 2>&1; } ); update_duration=$(( $(date +%s) - start_update )); [[ -n "$(echo "$time_taken_update" | grep 'ERROR')" ]] && echo "$time_taken_update"; if [[ $update_duration -le 1 ]]; then echo "The command is completed within a reasonable time frame."; else echo "FAIL: Update took longer than 1 second!"; false; fi
 ––– output –––
-real	#!/[0-9]{1}m[0-9]{1,2}.[0-9]{3}s/!#
-user	#!/[0-9]{1}m[0-9]{1,2}.[0-9]{3}s/!#
-sys	#!/[0-9]{1}m[0-9]{1,2}.[0-9]{3}s/!#
 ERROR 1064 (42000) at line 1: table name: attribute 'unknown' not found
-Update completed within acceptable time.
+The command is completed within a reasonable time frame.
 ––– input –––
 mysql -h0 -P9306 -e "SELECT * FROM name WHERE s='b' ORDER BY id ASC LIMIT 5;"
 ––– output –––
@@ -152,9 +149,6 @@ mysql -h0 -P9306 -e "SELECT * FROM name WHERE s='b' ORDER BY id ASC LIMIT 5;"
 |    5 | RICHARD MILLER  | b    |
 +------+-----------------+------+
 ––– input –––
-wait > /dev/null 2>&1; end_optimize=$(date +%s); optimize_duration=$((end_optimize - start_optimize)); echo "OPTIMIZE duration: $optimize_duration seconds"
+{ command time wait > /dev/null 2>&1; } 2>&1 | grep -v "real" | grep -v "user" | grep -v "sys"; end_optimize=$(date +%s); optimize_duration=$((end_optimize - start_optimize)); echo "OPTIMIZE duration: $optimize_duration seconds"
 ––– output –––
-real	#!/[0-9]{1}m[0-9]{1,2}.[0-9]{3}s/!#
-user	#!/[0-9]{1}m[0-9]{1,2}.[0-9]{3}s/!#
-sys	#!/[0-9]{1}m[0-9]{1,2}.[0-9]{3}s/!#
 OPTIMIZE duration: %{NUMBER} seconds

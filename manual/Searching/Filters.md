@@ -24,7 +24,7 @@ This full-text query matches all documents containing `product` in any field. Th
 ```json
 POST /search
 {
-  "index": "test1",
+  "table": "test1",
   "query": {
     "bool": {
       "must": [
@@ -50,7 +50,7 @@ The `bool` query matches documents based on boolean combinations of other querie
 ```json
 POST /search
 {
-  "index":"test1",
+  "table":"test1",
   "query": {
     "bool": {
       "must": [
@@ -103,7 +103,7 @@ Queries and filters specified in the `must_not` section must not match the docum
 ```json
 POST /search
 {
-  "index":"t",
+  "table":"t",
   "query": {
     "bool": {
       "should": [
@@ -153,7 +153,7 @@ a = 2 and (a = 10 or b = 0)
 ```json
 POST /search
 {
-  "index":"t",
+  "table":"t",
   "query": {
     "bool": {
       "must": [
@@ -197,7 +197,7 @@ More complex query:
 ```json
 POST /search
 {
-  "index":"t",
+  "table":"t",
   "query": {
     "bool": {
       "should": [
@@ -260,7 +260,7 @@ Queries in SQL format (`query_string`) can also be used in bool queries.
 ```json
 POST /search
 {
-  "index": "test1",
+  "table": "test1",
   "query": {
     "bool": {
       "must": [
@@ -283,7 +283,7 @@ Equality filters are the simplest filters that work with integer, float and stri
 ```json
 POST /search
 {
-  "index":"test1",
+  "table":"test1",
   "query": {
     "equals": { "price": 500 }
   }
@@ -300,7 +300,7 @@ Filter `equals` can be applied to a [multi-value attribute](../../Creating_a_tab
 ```json
 POST /search
 {
-  "index":"test1",
+  "table":"test1",
   "query": {
     "equals": { "any(price)": 100 }
   }
@@ -319,7 +319,7 @@ Set filters support integer, string and multi-value attributes.
 ```json
 POST /search
 {
-  "index":"test1",
+  "table":"test1",
   "query": {
     "in": {
       "price": [1,10,100]
@@ -338,7 +338,7 @@ When applied to a [multi-value attribute](../../Creating_a_table/Data_types.md#M
 ```json
 POST /search
 {
-  "index":"test1",
+  "table":"test1",
   "query": {
     "in": {
       "all(price)": [1,10]
@@ -362,7 +362,7 @@ Range filters support the following properties:
 ```json
 POST /search
 {
-  "index":"test1",
+  "table":"test1",
   "query": {
     "range": {
       "price": {
@@ -415,7 +415,7 @@ Latitude and longitude are specified in degrees.
 ```json
 POST /search
 {
-  "index":"test",
+  "table":"test",
   "query": {
     "geo_distance": {
       "location_anchor": {"lat":49, "lon":15},
@@ -433,7 +433,7 @@ POST /search
 ```json
 POST /search
 {
-  "index": "geodemo",
+  "table": "geodemo",
   "query": {
     "bool": {
       "must": [

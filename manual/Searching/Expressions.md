@@ -110,7 +110,7 @@ In the HTTP JSON interface, expressions are supported via `script_fields` and `e
 <!-- example script_fields -->
 ```json
 {
-	"index": "test",
+	"table": "test",
 	"query": {
 		"match_all": {}
 	}, "script_fields": {
@@ -141,7 +141,7 @@ The expression name can be utilized in filtering or sorting.
 <!-- request script_fields -->
 ```json
 {
-	"index":"movies_rt",
+	"table":"movies_rt",
 	"script_fields":{
 		"cond1":{
 			"script":{
@@ -206,7 +206,7 @@ By default, expression values are included in the `_source` array of the result 
 <!-- request expressions -->
 ```json
 {
-  "index": "test",
+  "table": "test",
   "query": { "match_all": {} },
   "expressions":
   {

@@ -18,7 +18,7 @@ mysql -h0 -P9306 -e "INSERT INTO t_ram (id, title, tag) VALUES (3, 'srthgrth', 9
 mysql -h0 -P9306 -e "SHOW TABLES; SELECT * FROM t_ram; SHOW CREATE TABLE t_ram;"
 ––– output –––
 +-------+------+
-| Index | Type |
+| Table | Type |
 +-------+------+
 | t_ram | rt   |
 +-------+------+

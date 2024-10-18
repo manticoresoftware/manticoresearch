@@ -7,7 +7,7 @@
 The syntax is:
 
 ```sql
-SHOW TABLE index_name[.N | CHUNK N] SETTINGS
+SHOW TABLE table_name[.N | CHUNK N] SETTINGS
 ```
 
 The output resembles the [--dumpconfig](../../Miscellaneous_tools.md#indextool) option of the [indextool](../../Miscellaneous_tools.md#indextool) utility. The report provides a breakdown of all table settings, including tokenizer and dictionary options.

@@ -12,7 +12,7 @@ debconf: delaying package configuration, since apt-utils is not installed
 mysql -h0 -P9306 -e "CREATE TABLE x ( id bigint, tag bigint ); insert into x values (1,1),(2,2),(3,3); flush ramchunk x; insert into x values (4,1),(5,2),(6,3); flush ramchunk x; SHOW TABLES; SELECT * FROM x;"
 ––– output –––
 +-------+------+
-| Index | Type |
+| Table | Type |
 +-------+------+
 | x     | rt   |
 +-------+------+

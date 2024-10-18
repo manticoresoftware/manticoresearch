@@ -36,7 +36,7 @@ $params = [
             ]
         ]
     ],
-    'index' => 'products'
+    'table' => 'products'
 ];
 $index = new \Manticoresearch\Index($client);
 $index->create($params);

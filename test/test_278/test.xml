@@ -355,7 +355,7 @@ select * from join1 left join join2 on join1.j.a = int(join2.id);
 
 <query endpoint="json/search">
 {
-  "index": "join1",
+  "table": "join1",
   "query": { "query_string": "title1 | title2" },
   "join":
   [
@@ -385,7 +385,7 @@ select * from join1 left join join2 on join1.j.a = int(join2.id);
 
 <query endpoint="json/search">
 {
-  "index": "join1",
+  "table": "join1",
   "query": { "query_string": "title1 | title2" },
   "join":
   [

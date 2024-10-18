@@ -51,7 +51,7 @@ select *, a + b alias from test order by alias desc;
 
 ```json
 {
-  "index":"test",
+  "table":"test",
   "query":
   {
     "match": { "title": "Test document" }
@@ -199,7 +199,7 @@ You can also specify the sort order explicitly:
 
 ```json
 {
-  "index":"test",
+  "table":"test",
   "query":
   {
     "match": { "title": "Test document" }
@@ -359,7 +359,7 @@ You can also use another syntax and specify the sort order via the `order` prope
 
 ```json
 {
-  "index":"test",
+  "table":"test",
   "query":
   {
     "match": { "title": "Test document" }
@@ -517,7 +517,7 @@ Sorting by MVA attributes is also supported in JSON queries. Sorting mode can be
 
 ```json
 {
-  "index":"test",
+  "table":"test",
   "query":
   {
     "match": { "title": "Test document" }
@@ -669,7 +669,7 @@ When sorting on an attribute, match weight (score) calculation is disabled by de
 
 ```json
 {
-  "index":"test",
+  "table":"test",
   "track_scores": true,
   "query":
   {

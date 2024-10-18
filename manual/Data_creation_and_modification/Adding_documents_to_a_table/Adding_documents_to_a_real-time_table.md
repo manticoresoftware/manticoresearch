@@ -48,7 +48,7 @@ Query OK, 1 rows affected (0.00 sec)
 ```json
 POST /insert
 {
-  "index":"products",
+  "table":"products",
   "id":1,
   "doc":
   {
@@ -59,7 +59,7 @@ POST /insert
 
 POST /insert
 {
-  "index":"products",
+  "table":"products",
   "id":2,
   "doc":
   {
@@ -69,7 +69,7 @@ POST /insert
 
 POST /insert
 {
-  "index":"products",
+  "table":"products",
   "id":0,
   "doc":
   {
@@ -183,9 +183,9 @@ $index->addDocuments([
 <!-- request Python -->
 
 ``` python
-indexApi.insert({"index" : "test", "id" : 1, "doc" : {"title" : "Crossbody Bag with Tassel", "price" : 19.85}})
-indexApi.insert({"index" : "test", "id" : 2, "doc" : {"title" : "Crossbody Bag with Tassel"}})
-indexApi.insert({"index" : "test", "id" : 0, "doc" : {{"title" : "Yellow bag"}})
+indexApi.insert({"table" : "test", "id" : 1, "doc" : {"title" : "Crossbody Bag with Tassel", "price" : 19.85}})
+indexApi.insert({"table" : "test", "id" : 2, "doc" : {"title" : "Crossbody Bag with Tassel"}})
+indexApi.insert({"table" : "test", "id" : 0, "doc" : {{"title" : "Yellow bag"}})
 ```
 <!-- intro -->
 ##### Javascript:
@@ -193,9 +193,9 @@ indexApi.insert({"index" : "test", "id" : 0, "doc" : {{"title" : "Yellow bag"}})
 <!-- request Javascript -->
 
 ``` javascript
-res = await indexApi.insert({"index" : "test", "id" : 1, "doc" : {"title" : "Crossbody Bag with Tassel", "price" : 19.85}});
-res = await indexApi.insert({"index" : "test", "id" : 2, "doc" : {"title" : "Crossbody Bag with Tassel"}});
-res = await indexApi.insert({"index" : "test", "id" : 0, "doc" : {{"title" : "Yellow bag"}});
+res = await indexApi.insert({"table" : "test", "id" : 1, "doc" : {"title" : "Crossbody Bag with Tassel", "price" : 19.85}});
+res = await indexApi.insert({"table" : "test", "id" : 2, "doc" : {"title" : "Crossbody Bag with Tassel"}});
+res = await indexApi.insert({"table" : "test", "id" : 0, "doc" : {{"title" : "Yellow bag"}});
 ```
 
 <!-- intro -->
@@ -340,7 +340,7 @@ select * from t
 ```json
 POST /insert  -d
 {
- "index":"t",
+ "table":"t",
  "id": 2,
  "doc":
  {
@@ -407,7 +407,7 @@ select * from products;
 ```json
 POST /insert
 {
-  "index":"products",
+  "table":"products",
   "id":0,
   "doc":
   {
@@ -417,7 +417,7 @@ POST /insert
 
 GET /search
 {
-  "index":"products",
+  "table":"products",
   "query":{
     "query_string":""
   }
@@ -460,7 +460,7 @@ $index->addDocuments([
 <!-- request Python -->
 
 ```python
-indexApi.insert({"index" : "products", "id" : 0, "doc" : {"title" : "Yellow bag"}})
+indexApi.insert({"table" : "products", "id" : 0, "doc" : {"title" : "Yellow bag"}})
 ```
 <!-- intro -->
 
@@ -469,7 +469,7 @@ indexApi.insert({"index" : "products", "id" : 0, "doc" : {"title" : "Yellow bag"
 <!-- request Javascript -->
 
 ```javascript
-res = await indexApi.insert({"index" : "products", "id" : 0, "doc" : {"title" : "Yellow bag"}});
+res = await indexApi.insert({"table" : "products", "id" : 0, "doc" : {"title" : "Yellow bag"}});
 ```
 
 <!-- intro -->
@@ -558,18 +558,18 @@ In the response for a `/bulk` request, you can find the following fields:
 ```json
 POST /bulk
 -H "Content-Type: application/x-ndjson" -d '
-{"insert": {"index":"products", "id":1, "doc":  {"title":"Crossbody Bag with Tassel","price" : 19.85}}}
-{"insert":{"index":"products", "id":2, "doc":  {"title":"microfiber sheet set","price" : 19.99}}}
+{"insert": {"table":"products", "id":1, "doc":  {"title":"Crossbody Bag with Tassel","price" : 19.85}}}
+{"insert":{"table":"products", "id":2, "doc":  {"title":"microfiber sheet set","price" : 19.99}}}
 '
 
 POST /bulk
 -H "Content-Type: application/x-ndjson" -d '
-{"insert":{"index":"test1","id":21,"doc":{"int_col":1,"price":1.1,"title":"bulk doc one"}}}
-{"insert":{"index":"test1","id":22,"doc":{"int_col":2,"price":2.2,"title":"bulk doc two"}}}
+{"insert":{"table":"test1","id":21,"doc":{"int_col":1,"price":1.1,"title":"bulk doc one"}}}
+{"insert":{"table":"test1","id":22,"doc":{"int_col":2,"price":2.2,"title":"bulk doc two"}}}
 
-{"insert":{"index":"test1","id":23,"doc":{"int_col":3,"price":3.3,"title":"bulk doc three"}}}
-{"insert":{"index":"test2","id":24,"doc":{"int_col":4,"price":4.4,"title":"bulk doc four"}}}
-{"insert":{"index":"test2","id":25,"doc":{"int_col":5,"price":5.5,"title":"bulk doc five"}}}
+{"insert":{"table":"test1","id":23,"doc":{"int_col":3,"price":3.3,"title":"bulk doc three"}}}
+{"insert":{"table":"test2","id":24,"doc":{"int_col":4,"price":4.4,"title":"bulk doc four"}}}
+{"insert":{"table":"test2","id":25,"doc":{"int_col":5,"price":5.5,"title":"bulk doc five"}}}
 '
 ```
 
@@ -645,7 +645,7 @@ POST /bulk
 ```json
 POST /_bulk
 -H "Content-Type: application/x-ndjson" -d '
-{ "index" : { "_index" : "products" } }
+{ "table" : { "_index" : "products" } }
 { "title" : "Yellow Bag", "price": 12 }
 { "create" : { "_index" : "products" } }
 { "title" : "Red Bag", "price": 12.5, "id": 3 }
@@ -656,7 +656,7 @@ POST /_bulk
 {
   "items": [
     {
-      "index": {
+      "table": {
         "_index": "products",
         "_type": "doc",
         "_id": 0,
@@ -715,9 +715,9 @@ $index->addDocuments([
 
 ```python
 docs = [ \
-    {"insert": {"index" : "products", "id" : 1, "doc" : {"title" : "Crossbody Bag with Tassel", "price" : 19.85}}}, \
-    {"insert": {"index" : "products", "id" : 2, "doc" : {"title" : "microfiber sheet set", "price" : 19.99}}}, \
-    {"insert": {"index" : "products", "id" : 3, "doc" : {"title" : "CPet Hair Remover Glove", "price" : 7.99}}}
+    {"insert": {"table" : "products", "id" : 1, "doc" : {"title" : "Crossbody Bag with Tassel", "price" : 19.85}}}, \
+    {"insert": {"table" : "products", "id" : 2, "doc" : {"title" : "microfiber sheet set", "price" : 19.99}}}, \
+    {"insert": {"table" : "products", "id" : 3, "doc" : {"title" : "CPet Hair Remover Glove", "price" : 7.99}}}
 ]
 res = indexApi.bulk('\n'.join(map(json.dumps,docs)))
 ```
@@ -730,9 +730,9 @@ res = indexApi.bulk('\n'.join(map(json.dumps,docs)))
 
 ```javascript
 let docs = [
-    {"insert": {"index" : "products", "id" : 3, "doc" : {"title" : "Crossbody Bag with Tassel", "price" : 19.85}}},
-    {"insert": {"index" : "products", "id" : 4, "doc" : {"title" : "microfiber sheet set", "price" : 19.99}}},
-    {"insert": {"index" : "products", "id" : 5, "doc" : {"title" : "CPet Hair Remover Glove", "price" : 7.99}}}
+    {"insert": {"table" : "products", "id" : 3, "doc" : {"title" : "Crossbody Bag with Tassel", "price" : 19.85}}},
+    {"insert": {"table" : "products", "id" : 4, "doc" : {"title" : "microfiber sheet set", "price" : 19.99}}},
+    {"insert": {"table" : "products", "id" : 5, "doc" : {"title" : "CPet Hair Remover Glove", "price" : 7.99}}}
 ];
 res =  await indexApi.bulk(docs.map(e=>JSON.stringify(e)).join('\n'));
 ```
@@ -780,7 +780,7 @@ INSERT INTO products(title, sizes) VALUES('shoes', (40,41,42,43));
 
 POST /insert
 {
-  "index":"products",
+  "table":"products",
   "id":1,
   "doc":
   {
@@ -829,7 +829,7 @@ $index->addDocument(
 <!-- request Python -->
 
 ```python
-indexApi.insert({"index" : "products", "id" : 0, "doc" : {"title" : "Yellow bag","sizes":[40,41,42,43]}})
+indexApi.insert({"table" : "products", "id" : 0, "doc" : {"title" : "Yellow bag","sizes":[40,41,42,43]}})
 ```
 
 <!-- intro -->
@@ -838,7 +838,7 @@ indexApi.insert({"index" : "products", "id" : 0, "doc" : {"title" : "Yellow bag"
 <!-- request Javascript -->
 
 ```javascript
-res = await indexApi.insert({"index" : "products", "id" : 0, "doc" : {"title" : "Yellow bag","sizes":[40,41,42,43]}});
+res = await indexApi.insert({"table" : "products", "id" : 0, "doc" : {"title" : "Yellow bag","sizes":[40,41,42,43]}});
 ```
 
 
@@ -890,7 +890,7 @@ JSON value can be inserted as a JSON object
 ```json
 POST /insert
 {
-  "index":"products",
+  "table":"products",
   "id":1,
   "doc":
   {
@@ -907,7 +907,7 @@ JSON value can be also inserted as a string containing escaped JSON:
 ```json
 POST /insert
 {
-  "index":"products",
+  "table":"products",
   "id":1,
   "doc":
   {
@@ -962,7 +962,7 @@ $index->addDocument(
 <!-- request Python -->
 ``` python
 indexApi = api = manticoresearch.IndexApi(client)
-indexApi.insert({"index" : "products", "id" : 0, "doc" : {"title" : "Yellow bag","meta":'{"size": 41, "color": "red"}'}})
+indexApi.insert({"table" : "products", "id" : 0, "doc" : {"title" : "Yellow bag","meta":'{"size": 41, "color": "red"}'}})
 ```
 <!-- intro -->
 ##### Javascript:
@@ -970,7 +970,7 @@ indexApi.insert({"index" : "products", "id" : 0, "doc" : {"title" : "Yellow bag"
 <!-- request Javascript -->
 ```javascript
 
-res = await indexApi.insert({"index" : "products", "id" : 0, "doc" : {"title" : "Yellow bag","meta":'{"size": 41, "color": "red"}'}});
+res = await indexApi.insert({"table" : "products", "id" : 0, "doc" : {"title" : "Yellow bag","meta":'{"size": 41, "color": "red"}'}});
 ```
 <!-- intro -->
 ##### java:

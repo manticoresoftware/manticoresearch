@@ -48,7 +48,7 @@ Variable: enabled_indexes
 ```json
 POST /search
 {
-  "index": "hn_small",
+  "table": "hn_small",
   "query": {"query_string": "dog|cat"},
   "_source": { "excludes":["*"] },
   "limit": 0,
@@ -154,7 +154,7 @@ Query OK, 0 rows affected (0.00 sec)
 ```JSON
 POST /search
 {
-  "index": "forum",
+  "table": "forum",
   "query": {"query_string": "@title way* @content hey"},
   "_source": { "excludes":["*"] },
   "limit": 1,
@@ -312,7 +312,7 @@ POST /search
 ```JSON
 POST /search
 {
-  "index": "forum",
+  "table": "forum",
   "query": {"query_string": "@title way* @content hey"},
   "_source": { "excludes":["*"] },
   "limit": 1,
@@ -459,7 +459,7 @@ POST /search
 ```JSON
 POST /search
 {
-  "index": "forum",
+  "table": "forum",
   "query": {"query_string": "@title way* @content hey"},
   "_source": { "excludes":["*"] },
   "limit": 1,

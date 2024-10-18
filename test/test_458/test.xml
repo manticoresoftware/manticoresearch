@@ -34,10 +34,10 @@ SELECT * FROM test1 group by @timestamp;
 </queries>
 
 <httpqueries>
-<query endpoint="search">{ "index": "test1", "query": { "match_all": {} } } }</query>
+<query endpoint="search">{ "table": "test1", "query": { "match_all": {} } } }</query>
 
 <query endpoint="search">
-{ "index": "test1",
+{ "table": "test1",
   "query":
   {
     "bool":
@@ -50,7 +50,7 @@ SELECT * FROM test1 group by @timestamp;
   }
 }
 </query>
-<query endpoint="search">{ "index": "test1", "aggs":{ "gr1": { "terms": { "field": "@timestamp" } }, "gr2": { "terms": { "field": "@version" } }} }</query>
+<query endpoint="search">{ "table": "test1", "aggs":{ "gr1": { "terms": { "field": "@timestamp" } }, "gr2": { "terms": { "field": "@version" } }} }</query>
 
 <!-- clean up -->
 <query endpoint="sql" method="post">mode=raw&amp;query=drop table test1</query>

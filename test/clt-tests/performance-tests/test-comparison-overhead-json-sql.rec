@@ -1,6 +1,6 @@
 ––– block: ../base/start-searchd –––
 ––– input –––
-php -d memory_limit=-1 ./test/clt-tests/scripts/load_us_names_min_infix_len.php 1000 10 1000000 5 2 > /dev/null
+php -d memory_limit=2G ./test/clt-tests/optimisation-and-update/load_names_attr_copy.php 100000 4 2000000 1 2G 1 2 async > /dev/null; echo $?
 ––– output –––
 ––– input –––
 export start=$(date +%s%N)

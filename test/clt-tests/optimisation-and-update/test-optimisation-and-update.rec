@@ -13,7 +13,7 @@ chmod +x ./test/clt-tests/optimisation-and-update/load_names_attr.php > /dev/nul
 ––– output –––
 0
 ––– input –––
-php -d memory_limit=2G ./test/clt-tests/optimisation-and-update/load_names_attr.php 100000 4 2000000 1 2G 1 > /dev/null; echo $?
+php -d memory_limit=2G ./test/clt-tests/optimisation-and-update/load_names_attr_copy.php 100000 4 2000000 1 2G 1 2 async > /dev/null; echo $?
 ––– output –––
 0
 ––– input –––
@@ -28,7 +28,7 @@ mysql -h0 -P9306 -e "SELECT COUNT(*) FROM name;"
 |  2000000 |
 +----------+
 ––– input –––
-php -d memory_limit=2G ./test/clt-tests/optimisation-and-update/load_names_attr.php 100000 4 2000000 1 2G 2000001 > /dev/null; echo $?
+php -d memory_limit=2G ./test/clt-tests/optimisation-and-update/load_names_attr_copy.php 100000 4 2000000 1 2G 2000001 > /dev/null; echo $?
 ––– output –––
 0
 ––– input –––

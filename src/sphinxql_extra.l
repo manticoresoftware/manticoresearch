@@ -63,7 +63,7 @@ FLOAT_CONSTANT      ({INT}\.{INT}?|{INT}?\.{INT}){EXPONENT}?
 %%
 
 "/*"         		{ BEGIN(ccomment); }
-<ccomment>"*/"		{ BEGIN(INITIAL); return TOK_COMMENT;}
+<ccomment>"*/"		{ BEGIN(INITIAL); return TOK_COMMENT; }
 <ccomment>[^*\n]+
 <ccomment>"*"[^/]
 <ccomment>"\n"

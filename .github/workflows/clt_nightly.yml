@@ -20,6 +20,7 @@ on:
       - 'test/clt-tests/indexer-latest-mysql-postgres/**'
       - 'test/clt-tests/core/test-alter-rename-nightly'
       - 'test/clt-tests/integrations/**'
+      - 'test/clt-tests/core/test-performance-for-queries-with-multiple-disk-chunks'
 
 # cancels the previous workflow run when a new one appears in the same branch (e.g. master or a PR's branch)
 concurrency:
@@ -129,12 +130,9 @@ jobs:
           - name: Test integrations
             image: ghcr.io/manticoresoftware/manticoresearch:test-kit-latest
             test_prefix: test/clt-tests/integrations/test-integrations-
-          - name: Tests performance JSON vs SQL
-            image: ghcr.io/manticoresoftware/manticoresearch:test-kit-latest
-            test_prefix: test/clt-tests/performance-tests/test-comparison-
-          - name: Test performance for queries with multiple disk chunks
-            image: ghcr.io/manticoresoftware/manticoresearch:test-kit-latest
-            test_prefix: test/clt-tests/performance-tests/test-performance-for-queries-with-multiple-disk-chunks
+          - name: Test Kafka integration
+            image: manticoresearch/dind:v1
+            test_prefix: test/clt-tests/integrations/kafka/test-integration-
     steps:
       - uses: manticoresoftware/clt@0.2.3
         with:

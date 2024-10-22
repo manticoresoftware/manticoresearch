@@ -32,7 +32,7 @@ mysql -h0 -P9306 -e "optimize table x option cutoff=1;"
 ––– input –––
 cat /var/lib/manticore/x/x.meta | jq .total_bytes
 ––– output –––
-[0;39m0[0m
+0
 ––– input –––
 if grep -q 'WARNING' /var/log/manticore/searchd.log; then grep 'WARNING' /var/log/manticore/searchd.log; echo "Test failed"; else echo "Accepting connections"; fi
 ––– output –––

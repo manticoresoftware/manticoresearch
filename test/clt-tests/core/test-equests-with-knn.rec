@@ -1,13 +1,16 @@
 ––– block: ../base/start-searchd –––
 ––– input –––
-mysql -h0 -P9306 -e "CREATE TABLE knn_test (id BIGINT, model TEXT, vector float_vector)"
+mysql -h0 -P9306 -e "CREATE TABLE knn_test (id BIGINT, model TEXT, vector float_vector)"; echo $?
 ––– output –––
+0
 ––– input –––
-mysql -h0 -P9306 -e "INSERT INTO knn_test (id, model, vector) VALUES (1, 'Model_1', '[0.9012, 0.2126, 0.2879, 0.7552]')"
+mysql -h0 -P9306 -e "INSERT INTO knn_test (id, model, vector) VALUES (1, 'Model_1', '[0.9012, 0.2126, 0.2879, 0.7552]')"; echo $?
 ––– output –––
+0
 ––– input –––
-mysql -h0 -P9306 -e "SELECT count(*) FROM knn_test WHERE knn(vector, 10, 1)"
+mysql -h0 -P9306 -e "SELECT count(*) FROM knn_test WHERE knn(vector, 10, 1)"; echo $?
 ––– output –––
+0
 ––– input –––
 mysql -h0 -P9306 -e "SHOW CREATE TABLE knn_test"
 ––– output –––
@@ -21,11 +24,13 @@ vector float_vector
 ) |
 +----------+----------------------------------------------------------------------+
 ––– input –––
-mysql -h0 -P9306 -e "CREATE TABLE knn_test2 (id BIGINT, model TEXT, vector float_vector)"
+mysql -h0 -P9306 -e "CREATE TABLE knn_test2 (id BIGINT, model TEXT, vector float_vector)"; echo $?
 ––– output –––
+0
 ––– input –––
-mysql -h0 -P9306 -e "INSERT INTO knn_test2 (id, model, vector) VALUES (1, 'Model_1', (0.286569,-0.031816,0.066684,0.032926))"
+mysql -h0 -P9306 -e "INSERT INTO knn_test2 (id, model, vector) VALUES (1, 'Model_1', (0.286569,-0.031816,0.066684,0.032926))"; echo $?
 ––– output –––
+0
 ––– input –––
 mysql -h0 -P9306 -e "SELECT count(*) FROM knn_test2 WHERE knn(vector, 10, 1)"
 ––– output –––
@@ -43,14 +48,17 @@ vector float_vector
 ) |
 +-----------+-----------------------------------------------------------------------+
 ––– input –––
-mysql -h0 -P9306 -e "CREATE TABLE knn_test3 (id BIGINT, model TEXT, vector float_vector)"
+mysql -h0 -P9306 -e "CREATE TABLE knn_test3 (id BIGINT, model TEXT, vector float_vector)"; echo $?
 ––– output –––
+0
 ––– input –––
-mysql -h0 -P9306 -e "INSERT INTO knn_test3 (id, model, vector) VALUES (1, 'Model_1', '[0.9012, 0.2126, 0.2879, 0.7552]')"
+mysql -h0 -P9306 -e "INSERT INTO knn_test3 (id, model, vector) VALUES (1, 'Model_1', '[0.9012, 0.2126, 0.2879, 0.7552]')"; echo $?
 ––– output –––
+0
 ––– input –––
-mysql -h0 -P9306 -e "SELECT count(*) FROM knn_test3 WHERE knn(vector, 10, 1)"
+mysql -h0 -P9306 -e "SELECT count(*) FROM knn_test3 WHERE knn(vector, 10, 1)"; echo $?
 ––– output –––
+0
 ––– input –––
 mysql -h0 -P9306 -e "SHOW CREATE TABLE knn_test3"
 ––– output –––

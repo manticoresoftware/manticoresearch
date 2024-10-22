@@ -1,0 +1,65 @@
+––– block: ../base/start-searchd –––
+––– input –––
+mysql -h0 -P9306 -e "CREATE TABLE knn_test (id BIGINT, model TEXT, vector float_vector)"
+––– output –––
+––– input –––
+mysql -h0 -P9306 -e "INSERT INTO knn_test (id, model, vector) VALUES (1, 'Model_1', '[0.9012, 0.2126, 0.2879, 0.7552]')"
+––– output –––
+––– input –––
+mysql -h0 -P9306 -e "SELECT count(*) FROM knn_test WHERE knn(vector, 10, 1)"
+––– output –––
+––– input –––
+mysql -h0 -P9306 -e "SHOW CREATE TABLE knn_test"
+––– output –––
++----------+----------------------------------------------------------------------+
+| Table    | Create Table                                                         |
++----------+----------------------------------------------------------------------+
+| knn_test | CREATE TABLE knn_test (
+id bigint,
+model text,
+vector float_vector
+) |
++----------+----------------------------------------------------------------------+
+––– input –––
+mysql -h0 -P9306 -e "CREATE TABLE knn_test2 (id BIGINT, model TEXT, vector float_vector)"
+––– output –––
+––– input –––
+mysql -h0 -P9306 -e "INSERT INTO knn_test2 (id, model, vector) VALUES (1, 'Model_1', (0.286569,-0.031816,0.066684,0.032926))"
+––– output –––
+––– input –––
+mysql -h0 -P9306 -e "SELECT count(*) FROM knn_test2 WHERE knn(vector, 10, 1)"
+––– output –––
+ERROR 1064 (42000) at line 1: table knn_test2: KNN index not enabled for attribute 'vector'
+––– input –––
+mysql -h0 -P9306 -e "SHOW CREATE TABLE knn_test2"
+––– output –––
++-----------+-----------------------------------------------------------------------+
+| Table     | Create Table                                                          |
++-----------+-----------------------------------------------------------------------+
+| knn_test2 | CREATE TABLE knn_test2 (
+id bigint,
+model text,
+vector float_vector
+) |
++-----------+-----------------------------------------------------------------------+
+––– input –––
+mysql -h0 -P9306 -e "CREATE TABLE knn_test3 (id BIGINT, model TEXT, vector float_vector)"
+––– output –––
+––– input –––
+mysql -h0 -P9306 -e "INSERT INTO knn_test3 (id, model, vector) VALUES (1, 'Model_1', '[0.9012, 0.2126, 0.2879, 0.7552]')"
+––– output –––
+––– input –––
+mysql -h0 -P9306 -e "SELECT count(*) FROM knn_test3 WHERE knn(vector, 10, 1)"
+––– output –––
+––– input –––
+mysql -h0 -P9306 -e "SHOW CREATE TABLE knn_test3"
+––– output –––
++-----------+-----------------------------------------------------------------------+
+| Table     | Create Table                                                          |
++-----------+-----------------------------------------------------------------------+
+| knn_test3 | CREATE TABLE knn_test3 (
+id bigint,
+model text,
+vector float_vector
+) |
++-----------+-----------------------------------------------------------------------+

@@ -54,7 +54,7 @@ public:
 
 	bool m_bHasFulltext = false;
 	bool m_bHasFilter = false;
-	void ResetNodesFlags() { m_bHasFulltext = m_bHasFilter = false; } 
+	void ResetNodesFlags() { m_bHasFulltext = m_bHasFilter = false; }
 
 	QueryTreeBuilder_c CreateCollectPath ( const CSphSchema * pSchema );
 	void ErrorPrintPath ( QueryTreeBuilder_c & tOrig );
@@ -455,7 +455,7 @@ static float GetBoost ( const JsonObj_c & tFields )
  	JsonObj_c tBoost = tFields.GetItem ( "boost" );
 	if ( !tBoost || !tBoost.IsNum() )
 		return fBoostDefault;
-	
+
 	return tBoost.FltVal();
 }
 
@@ -759,7 +759,7 @@ XQNode_t * QueryParserJson_c::ConstructBoolNode ( const JsonObj_c & tJson, Query
 	{
 		pResultNode = pMustNode ? pMustNode : pMustNotNode;
 		assert ( pResultNode );
-		
+
 		// combine 'must' and 'must_not' with AND
 		if ( pMustNode && pMustNotNode )
 		{
@@ -1075,7 +1075,7 @@ static bool ParseLimits ( const JsonObj_c & tRoot, CSphQuery & tQuery, CSphStrin
 static bool ParseOptions ( const JsonObj_c & tRoot, CSphQuery & tQuery, CSphString & sError )
 {
 	if ( !tRoot.IsObj() )
-	{	
+	{
 		sError = "\"options\" property value should be an object";
 		return false;
 	}
@@ -1142,7 +1142,7 @@ static bool ParseKNNQuery ( const JsonObj_c & tJson, CSphQuery & tQuery, CSphStr
 		return true;
 
 	if ( !tJson.IsObj() )
-	{	
+	{
 		sError = "\"knn\" property value should be an object";
 		return false;
 	}
@@ -1400,7 +1400,7 @@ bool sphParseJsonInsert ( const char * szInsert, SqlStmt_t & tStmt, DocID_t & tD
 
 
 static bool ParseUpdateDeleteQueries ( const JsonObj_c & tRoot, bool bDelete, SqlStmt_t & tStmt, DocID_t & tDocId, CSphString & sError )
-{	
+{
 	tStmt.m_tQuery.m_sSelect = "id";
 	if ( !ParseIndex ( tRoot, tStmt, sError ) )
 		return false;
@@ -1913,7 +1913,7 @@ static bool GetAggrKey ( const JsonAggr_t & tAggr, const CSphSchema & tSchema, i
 			CSphString sJsonCol;
 			if ( !pCol && sphJsonNameSplit ( tItem.m_sColumn.cstr(), nullptr, &sJsonCol ) )
 				pCol = tSchema.GetAttr ( sJsonCol.cstr() );
-			
+
 			if ( !pCol )
 				return false;
 
@@ -2086,6 +2086,9 @@ static void EncodeAggr ( const JsonAggr_t & tAggr, int iAggrItem, const AggrResu
 	const CSphColumnInfo * pCount = tRes.m_tSchema.GetAttr ( "count(*)" );
 	AggrKeyTrait_t tKey;
 	bool bHasKey = GetAggrKey ( tAggr, tRes.m_tSchema, iAggrItem, iNow, tKey );
+	const CSphColumnInfo * pDistinct = nullptr;
+	if ( !sDistinctName.IsEmpty() )
+		pDistinct = tRes.m_tSchema.GetAttr ( sDistinctName.cstr() );
 
 	// might be null for empty result set
 	auto dMatches = GetResultMatches ( tRes.m_dResults.First().m_dMatches, tRes.m_tSchema, tRes.m_iOffset, tRes.m_iCount, tAggr );
@@ -2151,9 +2154,11 @@ static void EncodeAggr ( const JsonAggr_t & tAggr, int iAggrItem, const AggrResu
 					tOut.Sprintf ( R"("score":0.001)" );
 					JsonObjAddAttr ( tOut, pCount->m_eAttrType, "bg_count", tMatch, pCount->m_tLocator );
 				}
+				if ( pDistinct )
+					JsonObjAddAttr ( tOut, pDistinct->m_eAttrType, pDistinct->m_sName.cstr(), tMatch, pDistinct->m_tLocator );
 			}
 		}
-	
+
 		tOut.FinishBlock ( false ); // buckets array
 
 	} else
@@ -2898,7 +2903,7 @@ static bool ParseSnippet ( const JsonObj_c & tSnip, CSphQuery & tQuery, CSphStri
 	// elastic-style options
 	if ( !ParseSnippetOptsElastic ( tSnip, sQuery, tSettings, sError ) )
 		return false;
-	
+
 	// sphinx-style options
 	if ( !ParseSnippetOptsSphinx ( tSnip, tSettings, sError ) )
 		return false;
@@ -3768,7 +3773,7 @@ static bool ParseAggsNode ( const JsonObj_c & tBucket, const JsonObj_c & tJsonIt
 	case Aggr_e::AVG:
 		tItem.m_iSize = 1;
 		break;
-			
+
 	default: break;
 	}
 

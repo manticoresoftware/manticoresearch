@@ -10,6 +10,14 @@
 If you have `cjk,non_cjk` in charset definitions, you should change it to `cjk,thai,non_cjk`, or `cont,non_cjk`, where `cont` is the
 new name for all continuous-script languages (that is, cjk + thai). Existing tables may be modified using ['alter table']((Updating_table_schema_and_settings.md#Updating-table-FT-settings-in-RT-mode)).
 
+# manticore-extra v1.1.20
+
+Released: Oct 7 2024
+
+### Bug fixes
+
+* [Issue #64](https://github.com/manticoresoftware/executor/issues/64) Resolved an issue where the `unattended-upgrades` utility, which automatically installs package updates on Debian-based systems, would incorrectly mark several Manticore packages, including `manticore-galera`, `manticore-executor`, and `manticore-columnar-lib`, for removal. This occurred due to `dpkg` mistakenly considering the virtual package `manticore-extra` as redundant. Changes were made to ensure `unattended-upgrades` no longer tries to remove essential Manticore components.
+
 # Version 6.3.6
 Released: August 2nd 2024
 

@@ -1,6 +1,8 @@
 # Integration with DBeaver
 
-[DBeaver](https://dbeaver.io/) is a SQL client software application and a database administration tool. For MySQL databases, it applies the JDBC application programming interface to interact with them via a JDBC driver. 
+> NOTE: The integration with DBeaver requires [Manticore Buddy](../Installation/Manticore_Buddy.md). If it doesn't work, make sure Buddy is installed.
+
+[DBeaver](https://dbeaver.io/) is a SQL client software application and a database administration tool. For MySQL databases, it applies the JDBC application programming interface to interact with them via a JDBC driver.
 
 Manticore allows you to use DBeaver for working with data stored in Manticore tables the same way as if it was stored in a MySQL database.
 
@@ -9,7 +11,7 @@ Manticore allows you to use DBeaver for working with data stored in Manticore ta
 To start working with Manticore in DBeaver, follow these steps:
 
 - Choose the `New database connection` option in DBeaver's UI
-- Choose `SQL` -> `MySQL` as DBeaver's database driver 
+- Choose `SQL` -> `MySQL` as DBeaver's database driver
 - Set the `Server host` and `Port` options corresponding to the host and port of your Manticore instance (keep the `database` field empty)
 - Set `root/<empty password>` as authentication credentials
 
@@ -51,21 +53,17 @@ You can find more details about Manticore data types [here](Creating_a_table/Dat
 Manticore is able to handle the `DATE`, `DATETIME` and `TIMESTAMP` data types, however, this reqiures Manticore's [Buddy](Starting_the_server/Docker.md#Manticore-Columnar-Library-and-Manticore-Buddy) enabled. Otherwise, an attempt to operate with one of these types will result in an error.
 
 Note that the `TIME` type is not supported.
-  
+
 ## Possible caveats
 
 - DBeaver's `Preferences` -> `Connections` -> `Client identification` option must not be turned off or overridden.
-  To work correctly with DBeaver, Manticore needs to distinguish its requests from others. For this, it uses client notification info sent by DBeaver in request headers. Disabling client notification will break that detection and, therefore, Manticore's correct functionality. 
+  To work correctly with DBeaver, Manticore needs to distinguish its requests from others. For this, it uses client notification info sent by DBeaver in request headers. Disabling client notification will break that detection and, therefore, Manticore's correct functionality.
 
 - When trying to update data in your table for the first time, you'll see the `No unique key` popup message and will be asked to define a custom unique key.
   When you get this message, perform the following steps:
 
-  - Choose the `Custom Unique Key` option 
+  - Choose the `Custom Unique Key` option
   - Choose only the `id` column in the columns list
   - Press `Ok`
 
   After that, you'll be able to update your data safely.
- 
-
-
-

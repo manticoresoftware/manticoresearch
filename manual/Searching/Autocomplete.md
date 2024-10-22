@@ -37,7 +37,7 @@ The `CALL KEYWORDS` statement divides text into keywords. It returns the tokeniz
 | Parameter | Description |
 | - | - |
 | text | Text to break down to keywords |
-| table | Name of the table from which to take the text processing settings |  
+| table | Name of the table from which to take the text processing settings |
 | 0/1 as stats | Show statistics of keywords, default is 0 |
 | 0/1 as fold_wildcards | Fold wildcards, default is 0 |
 | 0/1 as fold_lemmas | Fold morphological lemmas, default is 0 |

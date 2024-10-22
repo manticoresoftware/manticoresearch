@@ -1,7 +1,20 @@
 ––– block: ../base/start-searchd –––
 ––– input –––
-php -d memory_limit=-1 ./test/clt-tests/scripts/load_us_names.php 1000 10 1000000 5 > /dev/null
+apt-get update -y > /dev/null; echo $?
 ––– output –––
+0
+––– input –––
+apt-get install jq -y > /dev/null; echo $?
+––– output –––
+debconf: delaying package configuration, since apt-utils is not installed
+0
+––– input –––
+php -d memory_limit=-1 ./test/clt-tests/scripts/load_us_names_min_infix_len.php 1000 10 1000000 5 2 > /dev/null
+––– output –––
+––– input –––
+mysql -h0 -P9306 -e "SHOW CREATE TABLE name;" | grep "min_infix_len='2'" | sed "s/.*\(min_infix_len='2'\).*/\1/"
+––– output –––
+min_infix_len='2'
 ––– input –––
 mysql -h0 -P9306 -e "SELECT COUNT(*) FROM name;"
 ––– output –––
@@ -570,3 +583,18 @@ mysql -h0 -P9306 -e "CALL AUTOCOMPLETE('gr', 'name', 1 AS fuzziness, 'ru' AS lay
 | griffin    |
 | grover     |
 | montenegro |
+––– input –––
+mysql -h0 -P9306 -e "drop table if exists t; create table t(f text) min_infix_len='2'; insert into t values(1, 'something'), (2, 'some thing'); select * from t where match('somethin') option fuzzy=0;"
+––– output –––
+––– input –––
+mysql -h0 -P9306 -e "select * from t where match('somethin') option fuzzy=0;"
+––– output –––
+––– input –––
+mysql -P9306 -h0 -e "drop table if exists t; create table t(f text) min_infix_len='2'; insert into t values(1, 'something'), (2, 'some thing'); call autocomplete('some', 't');"
+––– output –––
++-----------+
+| query     |
++-----------+
+| some      |
+| something |
++-----------+

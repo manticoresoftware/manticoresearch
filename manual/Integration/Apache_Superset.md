@@ -1,5 +1,7 @@
 # Integration with Apache Superset
 
+> NOTE: The integration with Apache Superset requires [Manticore Buddy](../Installation/Manticore_Buddy.md). If it doesn't work, make sure Buddy is installed.
+
 [Apache Superset](https://superset.apache.org/) is a modern data exploration and visualization platform. Manticore Search can be integrated with Apache Superset, allowing users to harness the full potential of Manticore Search for data analysis and visualization.
 
 **Note: This integration works only with Apache Superset 3.x branch and is not yet available for version 4 or newer.**

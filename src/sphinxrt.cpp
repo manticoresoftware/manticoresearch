@@ -230,7 +230,7 @@ void InsertDocData_c::SetID ( SphAttr_t tDocID )
 		m_dColumnarAttrs[m_iColumnarID] = tDocID;
 		return;
 	}
-	
+
 	m_tDoc.SetAttr ( m_tDocIDLocator, tDocID );
 }
 
@@ -1649,7 +1649,7 @@ void RtIndex_c::ProcessDiskChunkByID ( VecTraits_T<int> dChunkIDs, VISITOR&& fnV
 
 bool RtIndex_c::IsFlushNeed() const
 {
-	// m_iTID get managed by binlog that is why wo binlog there is no need to compare it 
+	// m_iTID get managed by binlog that is why wo binlog there is no need to compare it
 	if ( Binlog::IsActive () && m_iTID>=0 && m_iTID<=m_iSavedTID )
 		return false;
 
@@ -2392,7 +2392,7 @@ public:
 			m_tRowID = m_tOwner.NextAliveRow(m_tRowID);
 			return *this;
 		}
-		
+
 	private:
 		const RtLiveRows_c & m_tOwner;
 		RowID_t m_tRowID = 0;
@@ -3937,7 +3937,7 @@ bool RtIndex_c::SaveDiskData ( const char * szFilename, const ConstRtSegmentSlic
 	if ( !WriteDocs ( tCtx, tWriterDict, sError ) )
 		return false;
 	WriteCheckpoints ( tCtx, tWriterDict );
-		
+
 	tWriterDict.CloseFile();
 	if ( tWriterDict.IsError() )
 		return false;
@@ -7316,7 +7316,7 @@ static int PrepareFTSearch ( const RtIndex_c * pThis, bool bIsStarDict, bool bKe
 }
 
 
-static bool SetupFilters ( const CSphQuery & tQuery, const ISphSchema & tMatchSchema, const ISphSchema & tIndexSchema, bool bFullscan, CSphQueryContext & tCtx, CSphVector<CSphFilterSettings> & dTransformedFilters, CSphVector<FilterTreeItem_t> & dTransformedFilterTree, CSphString & sError, CSphString & sWarning )
+static bool SetupFilters ( const CSphQuery & tQuery, const ISphSchema & tMatchSchema, const ISphSchema & tIndexSchema, bool bFullscan, CSphQueryContext & tCtx, CSphVector<CSphFilterSettings> & dTransformedFilters, CSphVector<FilterTreeItem_t> & dTransformedFilterTree, const CSphVector<const ISphSchema *> & dSorterSchemas, CSphQueryResultMeta & tMeta )
 {
 	CreateFilterContext_t tFlx;
 	tFlx.m_pFilters = &tQuery.m_dFilters;
@@ -7327,13 +7327,20 @@ static bool SetupFilters ( const CSphQuery & tQuery, const ISphSchema & tMatchSc
 	tFlx.m_bScan = bFullscan;
 	tFlx.m_sJoinIdx = tQuery.m_sJoinIdx;
 
-	if ( !TransformFilters ( tFlx, dTransformedFilters, dTransformedFilterTree, tQuery.m_dItems, sError ) )
+	std::unique_ptr<ISphSchema> pModifiedMatchSchema;
+	if ( !TransformFilters ( tFlx, dTransformedFilters, dTransformedFilterTree, pModifiedMatchSchema, tQuery.m_dItems, tMeta.m_sError ) )
 		return false;
+
+	if ( pModifiedMatchSchema )
+		tFlx.m_pMatchSchema = pModifiedMatchSchema.get();
 
 	tFlx.m_pFilters = &dTransformedFilters;
 	tFlx.m_pFilterTree = dTransformedFilterTree.GetLength() ? &dTransformedFilterTree : nullptr;
 
-	return tCtx.CreateFilters ( tFlx, sError, sWarning );
+	if ( !tCtx.SetupCalc ( tMeta, *tFlx.m_pMatchSchema, tIndexSchema, nullptr, nullptr, dSorterSchemas ) )
+		return false;
+
+	return tCtx.CreateFilters ( tFlx, tMeta.m_sError, tMeta.m_sWarning );
 }
 
 
@@ -7436,11 +7443,6 @@ static bool DoFullScanQuery ( const RtSegVec_c & dRamChunks, const ISphSchema & 
 	// FIXME!!! move searching at segments before disk chunks as result set is safe with kill-lists
 	if ( !dRamChunks.IsEmpty () )
 	{
-		CSphVector<CSphFilterSettings> dTransformedFilters; // holds filter settings if they were modified. filters hold pointers to those settings
-		CSphVector<FilterTreeItem_t> dTransformedFilterTree;
-		if ( !SetupFilters ( tQuery, tMaxSorterSchema, tIndexSchema, true, tCtx, dTransformedFilters, dTransformedFilterTree, tMeta.m_sError, tMeta.m_sWarning ) )
-			return false;
-
 		// FIXME! OPTIMIZE! check if we can early reject the whole index
 
 		int iCutoff = ApplyImplicitCutoff ( tQuery, dSorters, false );
@@ -7588,11 +7590,6 @@ static bool DoFullTextSearch ( const RtSegVec_c & dRamChunks, const ISphSchema &
 	// FIXME!!! move searching at segments before disk chunks as result set is safe with kill-lists
 	if ( !dRamChunks.IsEmpty () )
 	{
-		CSphVector<CSphFilterSettings> dTransformedFilters; // holds filter settings if they were modified. filters hold pointers to those settings
-		CSphVector<FilterTreeItem_t> dTransformedFilterTree;
-		if ( !SetupFilters ( tQuery, tMaxSorterSchema, tIndexSchema, false, tCtx, dTransformedFilters, dTransformedFilterTree, tMeta.m_sError, tMeta.m_sWarning ) )
-			return false;
-
 		// FIXME! OPTIMIZE! check if we can early reject the whole index
 
 		// do searching
@@ -7792,9 +7789,6 @@ bool RtIndex_c::MultiQuery ( CSphQueryResult & tResult, const CSphQuery & tQuery
 	tCtx.m_iTotalDocs = iTotalDocs;
 	tCtx.m_uPackedFactorFlags = tArgs.m_uPackedFactorFlags;
 
-	if ( !tCtx.SetupCalc ( tMeta, tMaxSorterSchema, m_tSchema, nullptr, nullptr, dSorterSchemas ) )
-		return false;
-
 	// setup search terms
 	RtQwordSetup_t tTermSetup ( tGuard );
 	tTermSetup.SetDict ( pDict );
@@ -7868,8 +7862,15 @@ bool RtIndex_c::MultiQuery ( CSphQueryResult & tResult, const CSphQuery & tQuery
 	tSess.m_pSessionOpaque1 = (void*)(const DocstoreReader_i*)this;
 	tSess.m_pSessionOpaque2 = nullptr;
 
+	bool bParsedFullscan = bFullscan ||  pQueryParser->IsFullscan(tParsed);
+
+	CSphVector<CSphFilterSettings> dTransformedFilters; // holds filter settings if they were modified. filters hold pointers to those settings
+	CSphVector<FilterTreeItem_t> dTransformedFilterTree;
+	if ( !SetupFilters ( tQuery, tMaxSorterSchema, m_tSchema, bParsedFullscan, tCtx, dTransformedFilters, dTransformedFilterTree, dSorterSchemas, tMeta ) )
+		return false;
+
 	bool bResult;
-	if ( bFullscan || pQueryParser->IsFullscan ( tParsed ) )
+	if ( bParsedFullscan )
 		bResult = DoFullScanQuery ( tGuard.m_dRamSegs, tMaxSorterSchema, m_tSchema, tQuery, tArgs, m_iStride, tmMaxTimer, pProfiler, tCtx, dSorters, tMeta );
 	else
 	{
@@ -8785,7 +8786,7 @@ bool RtIndex_c::AttachRtIndex ( RtIndex_i * pSrcIndex, bool bTruncate, bool & bF
 				bFatal = true; // need to destroy source index in case of failure as it does not have right amount of disk chunks anymore
 				return false;
 			}
-		
+
 			// update disk chunk list
 			tNewSet.m_pNewDiskChunks->Add ( tChunk );
 		}
@@ -10508,7 +10509,7 @@ static void SetColumnarFlag ( CSphColumnInfo & tCol, const CSphIndexSettings & t
 {
 	bool bAllColumnar = false;
 	for ( const auto & i : tSettings.m_dColumnarAttrs )
-		bAllColumnar |= i=="*";	
+		bAllColumnar |= i=="*";
 
 	for ( const auto & i : tSettings.m_dColumnarAttrs )
 		if ( ( i==tCol.m_sName || bAllColumnar ) && tCol.m_eAttrType!=SPH_ATTR_JSON )

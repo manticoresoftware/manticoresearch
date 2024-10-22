@@ -1160,6 +1160,16 @@ order_clause:
 		{
 			pParser->m_pQuery->m_sOrderBy = "@random";
 		}
+	| TOK_ORDER TOK_BY TOK_COUNT '(' TOK_DISTINCT distinct_ident ')' TOK_ASC
+		{
+			if ( !pParser->AddDistinctSort ( &$6, &$3, &$7, true ) )
+				YYERROR;
+		}
+	| TOK_ORDER TOK_BY TOK_COUNT '(' TOK_DISTINCT distinct_ident ')' TOK_DESC
+		{
+			if ( !pParser->AddDistinctSort ( &$6, &$3, &$7, false ) )
+				YYERROR;
+		}
 	;
 
 order_items_list:

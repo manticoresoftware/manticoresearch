@@ -228,6 +228,7 @@ searchd
 	select * from t option cutoff=1 facet a;;
 	show meta;
 	drop table t;
+    
 </sphinxql>
 </queries>
 

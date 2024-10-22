@@ -358,7 +358,7 @@ public:
 	void			DefaultOk ( std::initializer_list<const char*> sList = {} );
 	void			SetIndex ( const SqlNode_t& tNode ) const;
 	void			SetIndex ( const CSphString& sIndex ) const;
-	void 			AddComment ( const SqlNode_t* tNode ) const;
+	void 			Comment ( const SqlNode_t& tNode ) const;
 
 protected:
 	CSphVector<SqlStmt_t> &	m_dStmt;

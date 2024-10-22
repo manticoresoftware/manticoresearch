@@ -1307,19 +1307,19 @@ function HttpQueryCurl ( $http_method, $http_endpoint, $http_content, $http_quer
 
 	if ( $http_content!==NULL )
 		$curl_desc[CURLOPT_HTTPHEADER] = array("Content-Type: ".$http_content);
-        
-    if ( $use_gzip && $http_method=="POST" ) 
+
+    if ( $use_gzip && $http_method=="POST" )
     {
         $cfile = file_get_contents( $testdir . "/" . $http_query );
         $curl_desc[CURLOPT_ENCODING] = 'gzip';
         $curl_desc[CURLOPT_POSTFIELDS] = $cfile;
-        
+
         $http_headers = array("Content-Encoding:gzip");
         if ( $http_content!==NULL )
             $http_headers[] = "Content-Type: ".$http_content;
-        
+
         $curl_desc[CURLOPT_HTTPHEADER] = $http_headers;
-        
+
         //$curl_desc[CURLOPT_VERBOSE] = 1;
         //var_dump ( $curl_desc );
     }
@@ -2242,7 +2242,7 @@ class SphinxConfig
                     "$1",
                     "$1 substituted"
                 ], $s );
-		
+
 		return $s;
 	}
 
@@ -4458,7 +4458,7 @@ function CopyDirContents ( $from, $to )
 
 function CheckConfig ( $config, $path )
 {
-	global $g_re2, $g_icu, $g_odbc, $windows, $g_locals, $mysql_simulated, $g_repli, $g_ssl, $g_columnar_loaded, $g_secondary_loaded, $g_knn_loaded, $g_tzdata_loaded, $g_zlib;
+	global $g_re2, $g_icu, $g_jieba, $g_odbc, $windows, $g_locals, $mysql_simulated, $g_repli, $g_ssl, $g_columnar_loaded, $g_secondary_loaded, $g_knn_loaded, $g_tzdata_loaded, $g_zlib;
 
 	if ( $config->Requires("non-windows") && $windows )
 	{
@@ -4499,6 +4499,12 @@ function CheckConfig ( $config, $path )
 	if ( $config->Requires("icu") && !$g_icu )
 	{
 		printf ( "SKIPPING %s, %s - compile with ICU support to run this test\n", $path, $config->Name () );
+		return false;
+	}
+
+	if ( $config->Requires("jieba") && !$g_jieba )
+	{
+		printf ( "SKIPPING %s, %s - compile with Jieba support to run this test\n", $path, $config->Name () );
 		return false;
 	}
 
@@ -4918,4 +4924,3 @@ function RunTest ( $test_dir, $skipdemo, $usemarks )
 
 	return array ( "tests_total"=>$total, "tests_failed"=>$nfailed, "tests_skipped"=>0 );
 }
-

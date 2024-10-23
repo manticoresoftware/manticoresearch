@@ -1151,7 +1151,7 @@ mysql -h0 -P9306 -e "SHOW TABLES" | awk 'NR==1{print $0; next} {print $0 | "sort
 | new_index2003 | rt          |
 | new_index2004 | rt          |
 | products      | percolate   |
-| Index         | Type        |
+| Table         | Type        |
 ––– input –––
 for i in $(seq 1 1000); do mysql -h0 -P9306 -e "ALTER TABLE index${i} RENAME new_index${i};"; done
 ––– output –––
@@ -2169,4 +2169,4 @@ mysql -h0 -P9306 -e "SHOW TABLES" | awk 'NR==1{print $0; next} {print $0 | "sort
 | new_index99   | rt          |
 | new_index9    | rt          |
 | products      | percolate   |
-| Index         | Type        |
+| Table         | Type        |

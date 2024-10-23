@@ -52,12 +52,12 @@ insert into test_table values
 
 <httpqueries>
 
-<query endpoint="json/search">{ "index": "test", "query": { "match_all": {} }, "script_fields": { "add_all":{ "script": { "inline": "( gid * 10 ) | crc32(title)" } }, "title_len":{ "script": { "inline": "crc32(title)" } } } }</query>
-<query endpoint="json/search">{ "index": "test", "query": { "match_all": {} }, "script_fields": { "cnd":{ "script": { "inline": "interval ( gid, 20, 30, 100)" } } } }</query>
+<query endpoint="json/search">{ "table": "test", "query": { "match_all": {} }, "script_fields": { "add_all":{ "script": { "inline": "( gid * 10 ) | crc32(title)" } }, "title_len":{ "script": { "inline": "crc32(title)" } } } }</query>
+<query endpoint="json/search">{ "table": "test", "query": { "match_all": {} }, "script_fields": { "cnd":{ "script": { "inline": "interval ( gid, 20, 30, 100)" } } } }</query>
 
 <query endpoint="json/search">
 {
-  "index": "test",
+  "table": "test",
   "query": { "match_all": {} },
   "expressions":
   {

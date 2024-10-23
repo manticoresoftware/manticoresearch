@@ -71,7 +71,7 @@ PUT /pq/pq_table/doc/2
 <!-- request PHP -->
 ```php
 $newstoredquery = [
-    'index' => 'test_pq',
+    'table' => 'test_pq',
     'body' => [
         'query' => [
                        'match' => [
@@ -93,7 +93,7 @@ $client->pq()->doc($newstoredquery);
 ##### Python
 <!-- request Python -->
 ```python
-newstoredquery ={"index" : "test_pq", "id" : 2, "doc" : {"query": {"ql": "@title shoes"},"filters": "price > 5","tags": ["Loius Vuitton"]}}
+newstoredquery ={"table" : "test_pq", "id" : 2, "doc" : {"query": {"ql": "@title shoes"},"filters": "price > 5","tags": ["Loius Vuitton"]}}
 indexApi.insert(newstoredquery)
 ```
 
@@ -101,7 +101,7 @@ indexApi.insert(newstoredquery)
 ##### Javascript
 <!-- request Javascript -->
 ```javascript
-newstoredquery ={"index" : "test_pq", "id" : 2, "doc" : {"query": {"ql": "@title shoes"},"filters": "price > 5","tags": ["Loius Vuitton"]}};
+newstoredquery ={"table" : "test_pq", "id" : 2, "doc" : {"query": {"ql": "@title shoes"},"filters": "price > 5","tags": ["Loius Vuitton"]}};
 indexApi.insert(newstoredquery);
 ```
 <!-- intro -->
@@ -191,14 +191,14 @@ PUT /pq/pq_table/doc
 
 ```json
 {
-  "index": "pq_table",
+  "table": "pq_table",
   "type": "doc",
   "_id": 1657843905795719196,
   "result": "created"
 }
 
 {
-  "index": "pq_table",
+  "table": "pq_table",
   "type": "doc",
   "_id": 1657843905795719198,
   "result": "created"
@@ -209,7 +209,7 @@ PUT /pq/pq_table/doc
 <!-- request PHP -->
 ```php
 $newstoredquery = [
-    'index' => 'pq_table',
+    'table' => 'pq_table',
     'body' => [
         'query' => [
                        'match' => [
@@ -241,7 +241,7 @@ Array(
 <!-- request Python -->
 ```python
 indexApi = api = manticoresearch.IndexApi(client)
-newstoredquery ={"index" : "test_pq",   "doc" : {"query": {"ql": "@title shoes"},"filters": "price > 5","tags": ["Loius Vuitton"]}}
+newstoredquery ={"table" : "test_pq",   "doc" : {"query": {"ql": "@title shoes"},"filters": "price > 5","tags": ["Loius Vuitton"]}}
 indexApi.insert(store_query)
 ```
 <!-- response Python -->
@@ -249,14 +249,14 @@ indexApi.insert(store_query)
 {'created': True,
  'found': None,
  'id': 1657843905795719198,
- 'index': 'test_pq',
+ 'table': 'test_pq',
  'result': 'created'}
 ```
 <!-- intro -->
 ##### Javascript
 <!-- request Javascript -->
 ```javascript
-newstoredquery ={"index" : "test_pq",  "doc" : {"query": {"ql": "@title shoes"},"filters": "price > 5","tags": ["Loius Vuitton"]}};
+newstoredquery ={"table" : "test_pq",  "doc" : {"query": {"ql": "@title shoes"},"filters": "price > 5","tags": ["Loius Vuitton"]}};
 res =  await indexApi.insert(store_query);
 ```
 <!-- response Javascript -->

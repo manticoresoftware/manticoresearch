@@ -46,7 +46,7 @@ SELECT ... ON left_table.json_attr.int_id = int(right_table.json_attr.int_id)
 ```json
 POST /search
 {
-  "index": "table_name",
+  "table": "table_name",
   "query": {
     <optional full-text query against the left table>
   },
@@ -107,7 +107,7 @@ ORDER BY customers.email ASC;
 ```json
 POST /search
 {
-  "index": "orders",
+  "table": "orders",
   "join": [
     {
       "type": "inner",
@@ -201,7 +201,7 @@ ORDER BY email ASC;
 ```json
 POST /search
 {
-	"index": "customers",
+	"table": "customers",
 	"_source": ["name", "orders.quantity"],
 	"join": [
     {
@@ -381,7 +381,7 @@ FACET orders.details.warranty;
 ```json
 POST /search
 {
-  "index": "customers",
+  "table": "customers",
 	"_source": ["orders.product", "name", "orders.details", "orders.tags"],
   "sort": [{"orders.id": "asc"}],
   "join": [

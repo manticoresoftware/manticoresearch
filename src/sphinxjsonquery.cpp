@@ -940,9 +940,15 @@ static bool ParseIndex ( const JsonObj_c & tRoot, SqlStmt_t & tStmt, CSphString 
 		return false;
 	}
 
-	JsonObj_c tIndex = tRoot.GetStrItem ( "index", sError );
+	JsonObj_c tIndex = tRoot.GetStrItem ( "table", sError );
 	if ( !tIndex )
-		return false;
+	{
+		tIndex = tRoot.GetStrItem ( "index", sError, true );
+		if ( !tIndex )
+			return false;
+		
+		sError = "";
+	}
 
 	tStmt.m_sIndex = tIndex.StrVal();
 	tStmt.m_tQuery.m_sIndexes = tStmt.m_sIndex;
@@ -1309,9 +1315,15 @@ bool sphParseJsonQuery ( const JsonObj_c & tRoot, ParsedJsonQuery_t & tPJQuery )
 		return TlsMsg::Err ( "unable to parse: %s", tRoot.GetErrorPtr() );
 
 	TLS_MSG_STRING ( sError );
-	JsonObj_c tIndex = tRoot.GetStrItem ( "index", sError );
+	JsonObj_c tIndex = tRoot.GetStrItem ( "table", sError );
 	if ( !tIndex )
-		return false;
+	{
+		tIndex = tRoot.GetStrItem ( "index", sError, true );
+		if ( !tIndex )
+			return false;
+
+		sError = "";
+	}
 
 	auto & tQuery = tPJQuery.m_tQuery;
 
@@ -2131,7 +2143,7 @@ static const char * GetBucketPrefix ( const AggrKeyTrait_t & tKey, Aggr_e eAggrF
 	return sPrefix;
 }
 
-static void PrintKey ( const AggrKeyTrait_t & tKey, Aggr_e eAggrFunc, const RangeKeyDesc_t * pRange, const CSphMatch & tMatch, bool bCompat, const sph::StringSet & hDatetime, JsonEscapedBuilder & tBuf, JsonEscapedBuilder & tOut )
+static void PrintKey ( const AggrKeyTrait_t & tKey, Aggr_e eAggrFunc, const RangeKeyDesc_t * pRange, const CSphMatch & tMatch, ResultSetFormat_e eFormat, const sph::StringSet & hDatetime, JsonEscapedBuilder & tBuf, JsonEscapedBuilder & tOut )
 {
 	if ( eAggrFunc==Aggr_e::DATE_RANGE )
 	{
@@ -2168,7 +2180,7 @@ static void PrintKey ( const AggrKeyTrait_t & tKey, Aggr_e eAggrFunc, const Rang
 		for ( const auto & tItem : tKey.m_dCompositeKeys )
 			JsonObjAddAttr ( tOut, tItem.m_eAttrType, tItem.m_sName, tMatch, tItem.m_tLocator );
 
-	} else if ( !bCompat )
+	} else if ( eFormat==ResultSetFormat_e::MntSearch )
 	{
 		JsonObjAddAttr ( tOut, tKey.m_pKey->m_eAttrType, "key", tMatch, tKey.m_pKey->m_tLocator );
 
@@ -2176,7 +2188,7 @@ static void PrintKey ( const AggrKeyTrait_t & tKey, Aggr_e eAggrFunc, const Rang
 	{
 		// FIXME!!! remove after proper data type added but now need to multiple datatime values by 1000 for compat aggs result set
 		int iMulti = 1;
-		if ( bCompat && hDatetime [ tKey.m_pKey->m_sName ] )
+		if ( eFormat==ResultSetFormat_e::ES && hDatetime [ tKey.m_pKey->m_sName ] )
 			iMulti = 1000;
 
 		tBuf.Clear();
@@ -2219,7 +2231,7 @@ static bool IsSingleValue ( Aggr_e eAggr )
 	return ( eAggr==Aggr_e::MIN || eAggr==Aggr_e::MAX || eAggr==Aggr_e::SUM || eAggr==Aggr_e::AVG );
 }
 
-static void EncodeAggr ( const JsonAggr_t & tAggr, int iAggrItem, const AggrResult_t & tRes, bool bCompat, const sph::StringSet & hDatetime, int iNow, const CSphString & sDistinctName, JsonEscapedBuilder & tOut )
+static void EncodeAggr ( const JsonAggr_t & tAggr, int iAggrItem, const AggrResult_t & tRes, ResultSetFormat_e eFormat, const sph::StringSet & hDatetime, int iNow, const CSphString & sDistinctName, JsonEscapedBuilder & tOut )
 {
 	if ( tAggr.m_eAggrFunc==Aggr_e::COUNT )
 		return;
@@ -2286,7 +2298,7 @@ static void EncodeAggr ( const JsonAggr_t & tAggr, int iAggrItem, const AggrResu
 				// bucket item is array item or dict item
 				const char * sBucketPrefix = GetBucketPrefix ( tKey, tAggr.m_eAggrFunc, pRange, tMatch, tPrefixBucketBlock );
 				ScopedComma_c sBucketBlock ( tOut, ",", sBucketPrefix, "}" );
-				PrintKey ( tKey, tAggr.m_eAggrFunc, pRange, tMatch, bCompat, hDatetime, tBufMatch, tOut );
+				PrintKey ( tKey, tAggr.m_eAggrFunc, pRange, tMatch, eFormat, hDatetime, tBufMatch, tOut );
 
 				JsonObjAddAttr ( tOut, pCount->m_eAttrType, "doc_count", tMatch, pCount->m_tLocator );
 				// FIXME!!! add support
@@ -2450,7 +2462,7 @@ static CSphString JsonEncodeResultError ( const CSphString & sError, const char 
 
 	if ( sIndex )
 	{
-		tOut.AppendName ( "index" );
+		tOut.AppendName ( "table" );
 		tOut.AppendEscaped ( sIndex, EscBld::eEscape );
 	}
 
@@ -2523,7 +2535,7 @@ CSphString HandleShowProfile ( const QueryProfile_c& p )
 }
 
 
-CSphString sphEncodeResultJson ( const VecTraits_T<const AggrResult_t *> & dRes, const JsonQuery_c & tQuery, QueryProfile_c * pProfile, bool bCompat )
+CSphString sphEncodeResultJson ( const VecTraits_T<const AggrResult_t *> & dRes, const JsonQuery_c & tQuery, QueryProfile_c * pProfile, ResultSetFormat_e eFormat )
 {
 	assert ( dRes.GetLength()>=1 );
 	assert ( dRes[0]!=nullptr );
@@ -2545,14 +2557,14 @@ CSphString sphEncodeResultJson ( const VecTraits_T<const AggrResult_t *> & dRes,
 		tOut.FinishBlock ( false );
 	}
 
-	if ( bCompat )
+	if ( eFormat==ResultSetFormat_e::ES )
 		tOut += R"("_shards":{ "total": 1, "successful": 1, "skipped": 0, "failed": 0 })";
 
 	auto sHitMeta = tOut.StartBlock ( ",", R"("hits":{)", "}" );
 
 	tOut.Sprintf ( R"("total":%d)", tRes.m_iTotalMatches );
 	tOut.Sprintf ( R"("total_relation":%s)", tRes.m_bTotalMatchesApprox ? R"("gte")" : R"("eq")" );
-	if ( bCompat )
+	if ( eFormat==ResultSetFormat_e::ES )
 		tOut += R"("max_score": null)";
 
 	const ISphSchema & tSchema = tRes.m_tSchema;
@@ -2578,7 +2590,7 @@ CSphString sphEncodeResultJson ( const VecTraits_T<const AggrResult_t *> & dRes,
 		if ( NeedToSkipAttr ( sName, tQuery ) )
 			dSkipAttrs.BitSet ( iAttr );
 
-		if ( bCompat && tCol.m_eAttrType==SPH_ATTR_TOKENCOUNT )
+		if ( eFormat==ResultSetFormat_e::ES && tCol.m_eAttrType==SPH_ATTR_TOKENCOUNT )
 			dSkipAttrs.BitSet ( iAttr );
 	}
 
@@ -2590,7 +2602,7 @@ CSphString sphEncodeResultJson ( const VecTraits_T<const AggrResult_t *> & dRes,
 	bool bCompatId = false;
 	const CSphColumnInfo * pCompatRaw = nullptr;
 	const CSphColumnInfo * pCompatVer = nullptr;
-	if ( bCompat )
+	if ( eFormat==ResultSetFormat_e::ES )
 	{
 		const CSphColumnInfo * pCompatId = tSchema.GetAttr ( "_id" );
 		if ( pCompatId )
@@ -2624,7 +2636,7 @@ CSphString sphEncodeResultJson ( const VecTraits_T<const AggrResult_t *> & dRes,
 		else
 			tOut.Sprintf ( R"("_score":%d)", tMatch.m_iWeight );
 
-		if ( bCompat )
+		if ( eFormat==ResultSetFormat_e::ES )
 		{
 			tOut.Sprintf ( R"("_index":"%s")", tRes.m_dIndexNames[bTag ? tMatch.m_iTag : iTag].scstr() ); // FIXME!!! breaks for multiple indexes
 			tOut += R"("_type": "doc")";
@@ -2659,7 +2671,7 @@ CSphString sphEncodeResultJson ( const VecTraits_T<const AggrResult_t *> & dRes,
 		if ( iHighlightAttr!=-1 )
 			EncodeHighlight ( tMatch, iHighlightAttr, tSchema, tOut );
 
-		if ( bCompat )
+		if ( eFormat==ResultSetFormat_e::ES )
 		{
 			if ( tQuery.m_dDocFields.GetLength() )
 				EncodeFields ( tQuery.m_dDocFields, tRes, tMatch, tSchema, false, R"("fields":{)", "}", tOut );
@@ -2673,7 +2685,7 @@ CSphString sphEncodeResultJson ( const VecTraits_T<const AggrResult_t *> & dRes,
 	if ( dRes.GetLength()>1 )
 	{
 		sph::StringSet hDatetime;
-		if ( bCompat )
+		if ( eFormat==ResultSetFormat_e::ES )
 		{
 			tQuery.m_dDocFields.for_each ( [&hDatetime]( const auto & tDocfield )
 			{
@@ -2694,10 +2706,10 @@ CSphString sphEncodeResultJson ( const VecTraits_T<const AggrResult_t *> & dRes,
 		assert ( dRes.GetLength()==tQuery.m_dAggs.GetLength()+1 );
 		tOut.StartBlock ( ",", R"("aggregations":{)", "}");
 		ARRAY_FOREACH ( i, tQuery.m_dAggs )
-			EncodeAggr ( tQuery.m_dAggs[i], i, *dRes[i+1], bCompat, hDatetime, tQuery.m_iNow, sDistinctName, tOut );
+			EncodeAggr ( tQuery.m_dAggs[i], i, *dRes[i+1], eFormat, hDatetime, tQuery.m_iNow, sDistinctName, tOut );
 		tOut.FinishBlock ( false ); // aggregations obj
 	}
-	if ( bCompat )
+	if ( eFormat==ResultSetFormat_e::ES )
 		tOut += R"("status": 200)";
 
 	if ( pProfile && pProfile->m_bNeedProfile )
@@ -2720,11 +2732,11 @@ CSphString sphEncodeResultJson ( const VecTraits_T<const AggrResult_t *> & dRes,
 }
 
 
-JsonObj_c sphEncodeInsertResultJson ( const char * szIndex, bool bReplace, DocID_t tDocId )
+JsonObj_c sphEncodeInsertResultJson ( const char * szIndex, bool bReplace, DocID_t tDocId, ResultSetFormat_e eFormat )
 {
 	JsonObj_c tObj;
 
-	tObj.AddStr ( "_index", szIndex );
+	tObj.AddStr ( ( eFormat==ResultSetFormat_e::ES ? "_index" : "table" ), szIndex );
 	tObj.AddUint ( "_id", tDocId );
 	tObj.AddBool ( "created", !bReplace );
 	tObj.AddStr ( "result", bReplace ? "updated" : "created" );
@@ -2733,11 +2745,11 @@ JsonObj_c sphEncodeInsertResultJson ( const char * szIndex, bool bReplace, DocID
 	return tObj;
 }
 
-JsonObj_c sphEncodeTxnResultJson ( const char* szIndex, DocID_t tDocId, int iInserts, int iDeletes, int iUpdates )
+JsonObj_c sphEncodeTxnResultJson ( const char* szIndex, DocID_t tDocId, int iInserts, int iDeletes, int iUpdates, ResultSetFormat_e eFormat )
 {
 	JsonObj_c tObj;
 
-	tObj.AddStr ( "_index", szIndex );
+	tObj.AddStr ( ( eFormat==ResultSetFormat_e::ES ? "_index" : "table" ), szIndex );
 	tObj.AddInt ( "_id", tDocId );
 	tObj.AddInt ( "created", iInserts );
 	tObj.AddInt ( "deleted", iDeletes );
@@ -2750,11 +2762,11 @@ JsonObj_c sphEncodeTxnResultJson ( const char* szIndex, DocID_t tDocId, int iIns
 }
 
 
-JsonObj_c sphEncodeUpdateResultJson ( const char * szIndex, DocID_t tDocId, int iAffected )
+JsonObj_c sphEncodeUpdateResultJson ( const char * szIndex, DocID_t tDocId, int iAffected, ResultSetFormat_e eFormat )
 {
 	JsonObj_c tObj;
 
-	tObj.AddStr ( "_index", szIndex );
+	tObj.AddStr ( ( eFormat==ResultSetFormat_e::ES ? "_index" : "table" ), szIndex );
 
 	if ( !tDocId )
 		tObj.AddInt ( "updated", iAffected );
@@ -2768,11 +2780,11 @@ JsonObj_c sphEncodeUpdateResultJson ( const char * szIndex, DocID_t tDocId, int 
 }
 
 
-JsonObj_c sphEncodeDeleteResultJson ( const char * szIndex, DocID_t tDocId, int iAffected )
+JsonObj_c sphEncodeDeleteResultJson ( const char * szIndex, DocID_t tDocId, int iAffected, ResultSetFormat_e eFormat )
 {
 	JsonObj_c tObj;
 
-	tObj.AddStr ( "_index", szIndex );
+	tObj.AddStr ( ( eFormat==ResultSetFormat_e::ES ? "_index" : "table" ), szIndex );
 
 	if ( !tDocId )
 		tObj.AddInt ( "deleted", iAffected );
@@ -2787,12 +2799,12 @@ JsonObj_c sphEncodeDeleteResultJson ( const char * szIndex, DocID_t tDocId, int 
 }
 
 
-JsonObj_c sphEncodeInsertErrorJson ( const char * szIndex, const char * szError )
+JsonObj_c sphEncodeInsertErrorJson ( const char * szIndex, const char * szError, ResultSetFormat_e eFormat )
 {
 	JsonObj_c tObj, tErr;
 
 	tErr.AddStr ( "type", szError );
-	tErr.AddStr ( "index", szIndex );
+	tErr.AddStr ( ( eFormat==ResultSetFormat_e::ES ? "_index" : "table" ), szIndex );
 
 	tObj.AddItem ( "error", tErr );
 	tObj.AddInt ( "status", HttpGetStatusCodes ( EHTTP_STATUS::_409 ) );

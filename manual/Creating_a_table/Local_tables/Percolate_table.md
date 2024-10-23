@@ -60,7 +60,7 @@ POST /cli -d "CREATE TABLE products(title text, meta json) type='pq'"
 
 ```php
 $index = [
-    'index' => 'products',
+    'table' => 'products',
     'body' => [
         'columns' => [
             'title' => ['type' => 'text'],

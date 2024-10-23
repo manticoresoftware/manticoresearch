@@ -12616,7 +12616,7 @@ void HandleMysqlShowTables ( RowBuffer_i & tOut, const SqlStmt_t * pStmt )
 	bool bWithClusters = ClusterFlavour();
 
 	// output the results
-	VectorLike dTable ( pStmt->m_sStringParam, { "Index", "Type" } );
+	VectorLike dTable ( pStmt->m_sStringParam, { "Table", "Type" } );
 	for ( auto& dPair : dIndexes )
 	{
 		if ( bWithClusters && !dPair.m_sCluster.IsEmpty ())
@@ -15742,7 +15742,7 @@ static void AddPlainIndexStatus ( RowBuffer_i & tOut, const cServedIndexRefPtr_c
 	assert ( pIndex );
 
 	VectorLike dStatus ( sPattern );
-	dStatus.MatchTuplet ( "index_type", szIndexType ( pServed->m_eType ) );
+	dStatus.MatchTuplet ( "table_type", szIndexType ( pServed->m_eType ) );
 	if ( pServed->m_eType != IndexType_e::TEMPLATE )
 	{
 		AddDiskIndexStatus ( dStatus, pIndex, pServed->m_eType == IndexType_e::RT, pServed->m_eType == IndexType_e::PERCOLATE );
@@ -15756,7 +15756,7 @@ static void AddDistibutedIndexStatus ( RowBuffer_i & tOut, const cDistributedInd
 {
 	assert ( pIndex );
 	VectorLike dStatus ( sPattern );
-	dStatus.MatchTuplet( "index_type", "distributed" );
+	dStatus.MatchTuplet( "table_type", "distributed" );
 	AddIndexQueryStats ( dStatus, pIndex->m_tStats );
 	tOut.DataTable ( dStatus );
 }
@@ -16828,11 +16828,17 @@ void HandleMysqlUnfreezeIndexes ( RowBuffer_i& tOut, const CSphString& sIndexes 
 	ParseIndexList ( sIndexes, dIndexes );
 	for ( const auto& sIndex : dIndexes )
 	{
-		auto pIndex = GetServed ( sIndex );
-		if ( !ServedDesc_t::IsMutable ( pIndex ) )
+		auto pServed = GetServed ( sIndex );
+		if ( !ServedDesc_t::IsMutable ( pServed ) )
 			continue;
 
-		RIdx_T<RtIndex_i*> pRt { pIndex };
+		// here we get non-locked instance to avoid deadlock with update, that is:
+		// update may acquire w-lock and then wait until index is unfrozen to continue,
+		// but we can't unfreeze, if we need the lock for it.
+		auto * pRt = static_cast<RtIndex_i *> ( UnlockedHazardIdxFromServed ( *pServed ) );
+		if ( !pRt )
+			continue;
+
 		pRt->EnableSave ();
 		++iUnlocked;
 	}

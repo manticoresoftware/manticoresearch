@@ -315,7 +315,7 @@ static bool InsertDoc ( const SqlStmt_t & tStmt, CSphString & sError )
 static bool InsertDoc ( const CSphString & sIndex, const ComplexFields_t & dFields, const nljson & tSrc, bool bReplace, const char * sId, int iVersion, CSphString & sError )
 {
 	nljson tVal;
-	tVal["index"] = sIndex.cstr();
+	tVal["table"] = sIndex.cstr();
 	tVal["id"] = GetDocID(sId);
 	tVal["doc"] = tSrc;
 	tVal["doc"]["_id"] = sId;
@@ -1154,7 +1154,9 @@ static bool DoSearch ( const CSphString & sDefaultIndex, nljson & tReq, const CS
 {
 	// expand index(es) to index list
 	CSphString sIndex = sDefaultIndex;
-	if ( tReq.contains ( "index" ) )
+	if ( tReq.contains ( "table" ) )
+		sIndex = tReq["table"].get<std::string>().c_str();
+	else if ( tReq.contains ( "index" ) )
 		sIndex = tReq["index"].get<std::string>().c_str();
 
 	CSphString sExpandedIndex;
@@ -1185,7 +1187,7 @@ static bool DoSearch ( const CSphString & sDefaultIndex, nljson & tReq, const CS
 		return true;
 	}
 
-	tReq["index"] = sExpandedIndex.cstr();
+	tReq["table"] = sExpandedIndex.cstr();
 
 	EscapeKibanaColumnNames ( dIndexes, tReq );
 	FixupKibana ( dIndexes, tReq );
@@ -1217,7 +1219,7 @@ static bool DoSearch ( const CSphString & sDefaultIndex, nljson & tReq, const CS
 	dAggsRes[0] = tHandler->GetResult ( 0 );
 	ARRAY_FOREACH ( i, tQuery.m_dAggs )
 		dAggsRes[i+1] = tHandler->GetResult ( i+1 );
-	sRes = sphEncodeResultJson ( dAggsRes, tQuery, nullptr, true );
+	sRes = sphEncodeResultJson ( dAggsRes, tQuery, nullptr, ResultSetFormat_e::ES );
 
 	bool bOk = true;
 	// want to see at log url and query for search error
@@ -3490,8 +3492,8 @@ bool HttpCompatHandler_c::ProcessEndpoints()
 			return true;
 		}
 
-		if ( m_dUrlParts.GetLength() && ProcessCreateTable() )
-			return true;
+		if ( m_dUrlParts.GetLength() )
+			return ProcessCreateTable();
 	}
 
 	if ( GetRequestType()==HTTP_DELETE && m_dUrlParts.GetLength()>2 && m_dUrlParts[1]=="_doc" 

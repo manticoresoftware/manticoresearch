@@ -66,7 +66,7 @@ statement:
 	| show_fields
 	| show_triggers
 	| create_database
-	| comment
+	| comments
 	;
 
 //////////////////////////////////////////////////////////////////////////
@@ -250,6 +250,11 @@ comment:
     		pParser->Comment($1);
     	}
     ;
+
+comments:
+	comments comment
+	| comment
+	;
 %%
 
 #if _WIN32

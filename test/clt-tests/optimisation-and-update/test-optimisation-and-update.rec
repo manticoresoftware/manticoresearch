@@ -61,7 +61,7 @@ Buddy started!
 mysql -h0 -P9306 -e "SHOW TABLES;"
 ––– output –––
 +-------+------+
-| Index | Type |
+| Table | Type |
 +-------+------+
 | name  | rt   |
 +-------+------+

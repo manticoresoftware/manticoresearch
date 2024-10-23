@@ -9,8 +9,9 @@ apt-get install jq -y > /dev/null; echo $?
 debconf: delaying package configuration, since apt-utils is not installed
 0
 ––– input –––
-php -d memory_limit=2G ./test/clt-tests/optimisation-and-update/load_names_attr_copy.php 100000 4 1000000 1 2G 1 2 > /dev/null; echo $?
+php -d memory_limit=2G ./test/clt-tests/scripts/load_names_attr.php 100000 4 1000000 1 2G 1 2 > /dev/null; echo $?
 ––– output –––
+0
 ––– input –––
 mysql -h0 -P9306 -e "SHOW CREATE TABLE name;" | grep "min_infix_len='2'" | sed "s/.*\(min_infix_len='2'\).*/\1/"
 ––– output –––
@@ -26,362 +27,361 @@ mysql -h0 -P9306 -e "SELECT COUNT(*) FROM name;"
 ––– input –––
 mysql -h0 -P9306 -e "SELECT * FROM name WHERE MATCH('RICH') ORDER BY id ASC, username ASC OPTION fuzzy=1;"
 ––– output –––
-+------+-------------------+
-| id   | username          |
-+------+-------------------+
-|  195 | BRICE MULLIN      |
-|  306 | GRICELDA SKELTON  |
-|  362 | LAURICE SOLIZ     |
-|  477 | ERICH LLAMAS      |
-|  489 | LATRICE MANCILLA  |
-|  607 | MAURICE PRATHER   |
-|  658 | BRICE OLIVARES    |
-|  696 | PATRICE WOOD      |
-|  821 | JUNITA RICHARD    |
-|  834 | AUREA RICO        |
-|  853 | ROXANNE BRICE     |
-| 1121 | RICH MOLL         |
-| 1133 | JOELLA RICHARD    |
-| 1159 | MINDY HEINRICH    |
-| 1223 | YADIRA RICHARDSON |
-| 1378 | BRICE ALLMAN      |
-| 1573 | RICO VALENZUELA   |
-| 1601 | BEATRICE LOVE     |
-| 1821 | RICHELLE ROE      |
-| 2135 | CHIQUITA RICHTER  |
-+------+-------------------+
++------+-------------------+------+
+| id   | username          | s    |
++------+-------------------+------+
+|    5 | RICHARD MILLER    | a    |
+|   78 | EUGENE RICHARDSON | a    |
+|   89 | ALAN PRICE        | a    |
+|  182 | MAURICE RICE      | a    |
+|  226 | KARL RICHARDS     | a    |
+|  627 | REGGIE RICHARD    | a    |
+|  674 | FEDERICO BOYER    | a    |
+|  694 | ISSAC RICH        | a    |
+|  804 | ERICH GENTRY      | a    |
+|  817 | RICH MCINTOSH     | a    |
+|  911 | RICO LUGO         | a    |
+|  932 | PRINCE RICHMOND   | a    |
+|  965 | RICHIE SCHMITT    | a    |
+|  968 | BRICE CHERRY      | a    |
+| 1175 | HARLAND RICHTER   | a    |
+| 1356 | LESLIE RICO       | a    |
+| 1383 | BEATRICE GREGG    | a    |
+| 1723 | PATRICE BEAL      | a    |
+| 1835 | GRACIELA GOODRICH | a    |
+| 1860 | CLARICE HYATT     | a    |
++------+-------------------+------+
 ––– input –––
 mysql -h0 -P9306 -e "SELECT * FROM name WHERE MATCH('EBGRNA') ORDER BY id ASC, username ASC OPTION fuzzy=1;"
 ––– output –––
-+------+----------------------+
-| id   | username             |
-+------+----------------------+
-|  674 | CONCEPTION ABERNATHY |
-|  963 | BERNARDINA OSHEA     |
-| 1353 | VERNA VITALE         |
-| 1783 | BERNADETTE HALES     |
-| 1838 | BERNARDINA MCMILLAN  |
-| 1863 | ERNA ULLOA           |
-| 1947 | SAMIRA ABERNATHY     |
-| 2237 | JUDI BERNAL          |
-| 2445 | MERNA GAITHER        |
-| 3064 | BERNADINE HIBBARD    |
-| 3194 | BERNADETTE SHELTON   |
-| 3687 | VERNA GASTON         |
-| 3780 | BERNARDINE WILKINS   |
-| 4369 | ERNA VITALE          |
-| 4636 | TARSHA HERNANDEZ     |
-| 4661 | FERNANDO HOUCK       |
-| 5043 | CONSTANCE ABERNATHY  |
-| 5579 | LAVERNA GORMAN       |
-| 5581 | FERNANDE ISRAEL      |
-| 5797 | LAVERNA STORM        |
-+------+----------------------+
++------+-----------------------+------+
+| id   | username              | s    |
++------+-----------------------+------+
+|    9 | CHRISTOPHER HERNANDEZ | a    |
+|  140 | BERNARD FERNANDEZ     | a    |
+|  236 | FERNANDO ESTRADA      | a    |
+|  660 | BERNARDO ATKINS       | a    |
+|  871 | WESTON BERNAL         | a    |
+|  897 | NORBERTO BERNARD      | a    |
+| 1387 | YVONNE SERNA          | a    |
+| 1572 | VERNA WHALEY          | a    |
+| 1613 | BERNADETTE RAMEY      | a    |
+| 1938 | BERNADINE MONDRAGON   | a    |
+| 2003 | ALTHEA FERNANDES      | a    |
+| 2142 | ERNA HUSSAIN          | a    |
+| 2212 | TERRA ABERNATHY       | a    |
+| 3421 | LAVERNA VIEIRA        | a    |
+| 3728 | FERNANDA PACKARD      | a    |
+| 3791 | MERNA HULSEY          | a    |
+| 4117 | KATIA HERNANDES       | a    |
+| 4392 | BERNARDINE MCVAY      | a    |
+| 4660 | BERNARDA OSUNA        | a    |
+| 4661 | BERNA FOLSOM          | a    |
++------+-----------------------+------+
 ––– input –––
 mysql -h0 -P9306 -e "SELECT * FROM name WHERE MATCH('ANT') ORDER BY id ASC, username ASC OPTION fuzzy=1;"
 ––– output –––
-+------+-------------------+
-| id   | username          |
-+------+-------------------+
-|    7 | DAMIAN SOMERS     |
-|   15 | TAMI WHELAN       |
-|   18 | DARCY SANDBERG    |
-|   19 | RANEE BROUGHTON   |
-|   20 | STEPHEN ALLMAN    |
-|   29 | AMANDA KEY        |
-|   36 | ELFRIEDA HANKS    |
-|   40 | NANNIE WILLINGHAM |
-|   41 | YOULANDA TROUT    |
-|   43 | ANTHONY SMOOT     |
-|   46 | FRANCIE BUNDY     |
-|   50 | LATASHA POLAND    |
-|   52 | SHEMEKA DURAND    |
-|   53 | LATANYA ARNDT     |
-|   55 | JANELLE LASTER    |
-|   56 | NANNIE HANNON     |
-|   57 | GRANVILLE VALDEZ  |
-|   58 | DEDE SPANN        |
-|   59 | DANIEL MERRITT    |
-|   62 | SAUL HOWLAND      |
-+------+-------------------+
++------+-----------------------+------+
+| id   | username              | s    |
++------+-----------------------+------+
+|    9 | CHRISTOPHER HERNANDEZ | a    |
+|   10 | DANIEL LOPEZ          | a    |
+|   13 | DONALD ANDERSON       | a    |
+|   18 | BRIAN MARTIN          | a    |
+|   20 | ANTHONY PEREZ         | a    |
+|   24 | GARY SANCHEZ          | a    |
+|   29 | FRANK WALKER          | a    |
+|   33 | ANDREW WRIGHT         | a    |
+|   47 | RYAN CARTER           | a    |
+|   50 | JUAN PHILLIPS         | a    |
+|   51 | JACK EVANS            | a    |
+|   53 | JONATHAN DIAZ         | a    |
+|   66 | BRANDON ORTIZ         | a    |
+|   67 | ADAM MORGAN           | a    |
+|   76 | RANDY COX             | a    |
+|   89 | ALAN PRICE            | a    |
+|   92 | SEAN SANDERS          | a    |
+|   98 | ANTONIO JIMENEZ       | a    |
+|   99 | DANNY POWELL          | a    |
+|  100 | BRYAN JENKINS         | a    |
++------+-----------------------+------+
 ––– input –––
 mysql -h0 -P9306 -e "SELECT * FROM name WHERE MATCH('tony') ORDER BY id ASC, username ASC OPTION fuzzy=1;"
 ––– output –––
-+------+--------------------+
-| id   | username           |
-+------+--------------------+
-|  117 | ANTONIA VANWINKLE  |
-|  219 | ANTONIA MELGAR     |
-|  390 | KARYL TONEY        |
-|  760 | TONYA SHERRILL     |
-| 1526 | LEONE TONEY        |
-| 2131 | TONIA RAPP         |
-| 2194 | TONIE HOANG        |
-| 2332 | LATONIA VILLASENOR |
-| 2356 | TONIE BARNHILL     |
-| 2429 | TONIA BOSTICK      |
-| 2583 | TONI SPENCE        |
-| 2724 | ANTONIETTA CINTRON |
-| 2880 | ANTONINA HASKELL   |
-| 3317 | TONY DUPRE         |
-| 3581 | ANTONIETTA BAEZ    |
-| 3857 | TONEY SCHOEN       |
-| 4365 | ROCHEL TONEY       |
-| 4607 | ANTONIA DRISCOLL   |
-| 4656 | TONYA PARRIS       |
-| 4799 | TONY WEISS         |
-+------+--------------------+
++------+--------------------+------+
+| id   | username           | s    |
++------+--------------------+------+
+|   98 | ANTONIO JIMENEZ    | a    |
+|  101 | TONY PERRY         | a    |
+|  480 | TOBY HAMPTON       | a    |
+|  787 | ANTONY PALACIOS    | a    |
+| 1064 | ANTONIA BARRIOS    | a    |
+| 1115 | TONEY DALY         | a    |
+| 1422 | TONYA FISH         | a    |
+| 1504 | TONI CROCKETT      | a    |
+| 1639 | ANTONIA REGAN      | a    |
+| 1787 | LATONYA URBAN      | a    |
+| 1857 | TONIA ROLAND       | a    |
+| 1916 | MAGDALENA TONEY    | a    |
+| 2354 | MARILYNN ANTONIO   | a    |
+| 2627 | LATONIA SARMIENTO  | a    |
+| 2726 | KENDALL TONG       | a    |
+| 2756 | TONY LASSITER      | a    |
+| 2757 | TOBY WILLETT       | a    |
+| 3297 | ANTONINA CARVALHO  | a    |
+| 3360 | ANTONIO MONTENEGRO | a    |
+| 3710 | TONIE MCCUNE       | a    |
++------+--------------------+------+
 ––– input –––
 mysql -h0 -P9306 -e "SELECT * FROM name WHERE MATCH('SMITH') ORDER BY id DESC, username ASC OPTION fuzzy=1;"
 ––– output –––
-+--------+-------------------+
-| id     | username          |
-+--------+-------------------+
-| 999972 | KEITH SNOW        |
-| 999928 | BONITA LEONG      |
-| 999858 | TONITA GEARY      |
-| 999854 | DOROTHA WISEMAN   |
-| 999722 | SCOTT OLSON       |
-| 999721 | TONITA ESTRADA    |
-| 999263 | RUTHANN GREENE    |
-| 999249 | MINH LANDERS      |
-| 999126 | MALENA RUTHERFORD |
-| 999119 | RUTHANNE CARDOSO  |
-| 998892 | IRWIN SOUTHARD    |
-| 998690 | MITCHELL SEITZ    |
-| 998580 | RAMONITA SWISHER  |
-| 998565 | RAMONITA MAYO     |
-| 998538 | ELSA SEITZ        |
-| 998525 | SCOTT CARRION     |
-| 997944 | RUTHE SCHENK      |
-| 997814 | MINH GOODWIN      |
-| 997587 | RAMONITA GIBBONS  |
-| 997557 | ARTIE SOUTH       |
-+--------+-------------------+
++--------+----------------------+------+
+| id     | username             | s    |
++--------+----------------------+------+
+| 999782 | EDITH TERRELL        | a    |
+| 999574 | LEIGH WHITEHEAD      | a    |
+| 999516 | ANTONIA KEITH        | a    |
+| 999461 | MINH MATHEWS         | a    |
+| 999285 | SCOTTIE CLARKE       | a    |
+| 999042 | SCOTTY VALDEZ        | a    |
+| 998834 | RODOLFO SCOTT        | a    |
+| 998822 | ED WHITE             | a    |
+| 998742 | SETH GOODING         | a    |
+| 998630 | LEWIS WHITTLE        | a    |
+| 998574 | MELVIN WHITEHURST    | a    |
+| 998539 | JESSE WHITED         | a    |
+| 998509 | KEITH TOLIVER        | a    |
+| 998482 | SCOTT MINNICK        | a    |
+| 998447 | ARDELIA WHITEMAN     | a    |
+| 998388 | NEELY SOUTHERN       | a    |
+| 998367 | VASILIKI HITT        | a    |
+| 998062 | HIEN WILHITE         | a    |
+| 998052 | KATHLINE SOUTHERLAND | a    |
+| 997975 | KEITH LOUIE          | a    |
++--------+----------------------+------+
 ––– input –––
 mysql -h0 -P9306 -e "SELECT * FROM name WHERE MATCH('SMITH') ORDER BY id DESC, username ASC OPTION fuzzy=1;"
 ––– output –––
-+--------+-------------------+
-| id     | username          |
-+--------+-------------------+
-| 999972 | KEITH SNOW        |
-| 999928 | BONITA LEONG      |
-| 999858 | TONITA GEARY      |
-| 999854 | DOROTHA WISEMAN   |
-| 999722 | SCOTT OLSON       |
-| 999721 | TONITA ESTRADA    |
-| 999263 | RUTHANN GREENE    |
-| 999249 | MINH LANDERS      |
-| 999126 | MALENA RUTHERFORD |
-| 999119 | RUTHANNE CARDOSO  |
-| 998892 | IRWIN SOUTHARD    |
-| 998690 | MITCHELL SEITZ    |
-| 998580 | RAMONITA SWISHER  |
-| 998565 | RAMONITA MAYO     |
-| 998538 | ELSA SEITZ        |
-| 998525 | SCOTT CARRION     |
-| 997944 | RUTHE SCHENK      |
-| 997814 | MINH GOODWIN      |
-| 997587 | RAMONITA GIBBONS  |
-| 997557 | ARTIE SOUTH       |
-+--------+-------------------+
++--------+----------------------+------+
+| id     | username             | s    |
++--------+----------------------+------+
+| 999782 | EDITH TERRELL        | a    |
+| 999574 | LEIGH WHITEHEAD      | a    |
+| 999516 | ANTONIA KEITH        | a    |
+| 999461 | MINH MATHEWS         | a    |
+| 999285 | SCOTTIE CLARKE       | a    |
+| 999042 | SCOTTY VALDEZ        | a    |
+| 998834 | RODOLFO SCOTT        | a    |
+| 998822 | ED WHITE             | a    |
+| 998742 | SETH GOODING         | a    |
+| 998630 | LEWIS WHITTLE        | a    |
+| 998574 | MELVIN WHITEHURST    | a    |
+| 998539 | JESSE WHITED         | a    |
+| 998509 | KEITH TOLIVER        | a    |
+| 998482 | SCOTT MINNICK        | a    |
+| 998447 | ARDELIA WHITEMAN     | a    |
+| 998388 | NEELY SOUTHERN       | a    |
+| 998367 | VASILIKI HITT        | a    |
+| 998062 | HIEN WILHITE         | a    |
+| 998052 | KATHLINE SOUTHERLAND | a    |
+| 997975 | KEITH LOUIE          | a    |
++--------+----------------------+------+
 ––– input –––
 mysql -h0 -P9306 -e "SELECT * FROM name WHERE MATCH('SMYTH') ORDER BY id DESC, username ASC OPTION fuzzy=1;"
 ––– output –––
-+--------+-------------------+
-| id     | username          |
-+--------+-------------------+
-| 999972 | KEITH SNOW        |
-| 999854 | DOROTHA WISEMAN   |
-| 999722 | SCOTT OLSON       |
-| 999498 | DORTHY DUCKWORTH  |
-| 999263 | RUTHANN GREENE    |
-| 999196 | HEATH MCNAMARA    |
-| 999126 | MALENA RUTHERFORD |
-| 999119 | RUTHANNE CARDOSO  |
-| 999012 | HEATHER HAMMOCK   |
-| 998892 | IRWIN SOUTHARD    |
-| 998676 | BURT WOODWORTH    |
-| 998525 | SCOTT CARRION     |
-| 998220 | MORA WENTWORTH    |
-| 998083 | EDMUND ASHWORTH   |
-| 997999 | EDYTH CARLISLE    |
-| 997944 | RUTHE SCHENK      |
-| 997557 | ARTIE SOUTH       |
-| 997543 | HEATHER CLAUSEN   |
-| 997395 | JON ASHWORTH      |
-| 997286 | JOI FARNSWORTH    |
-+--------+-------------------+
++--------+--------------------+------+
+| id     | username           | s    |
++--------+--------------------+------+
+| 999718 | HEATHER BLANCHARD  | a    |
+| 999675 | DOROTHY VENTURA    | a    |
+| 999565 | ELLSWORTH JACOBSON | a    |
+| 999520 | HOYT MCCLAIN       | a    |
+| 999516 | ANTONIA KEITH      | a    |
+| 999508 | OTHA HUTCHINSON    | a    |
+| 999458 | FLORENCIO HEATH    | a    |
+| 999372 | CLAUDIO ROTH       | a    |
+| 999285 | SCOTTIE CLARKE     | a    |
+| 999121 | SCOT CAMPOS        | a    |
+| 999042 | SCOTTY VALDEZ      | a    |
+| 998973 | HEATH ROBERTSON    | a    |
+| 998834 | RODOLFO SCOTT      | a    |
+| 998742 | SETH GOODING       | a    |
+| 998711 | EVERETT STROTHER   | a    |
+| 998509 | KEITH TOLIVER      | a    |
+| 998482 | SCOTT MINNICK      | a    |
+| 998399 | MADDIE WORTH       | a    |
+| 998388 | NEELY SOUTHERN     | a    |
+| 998229 | JULIETTA WENTWORTH | a    |
++--------+--------------------+------+
 ––– input –––
 mysql -h0 -P9306 -e "SELECT * FROM name WHERE MATCH('SMITH') ORDER BY id DESC, username ASC OPTION fuzzy="1";"
 ––– output –––
-+--------+-------------------+
-| id     | username          |
-+--------+-------------------+
-| 999972 | KEITH SNOW        |
-| 999928 | BONITA LEONG      |
-| 999858 | TONITA GEARY      |
-| 999854 | DOROTHA WISEMAN   |
-| 999722 | SCOTT OLSON       |
-| 999721 | TONITA ESTRADA    |
-| 999263 | RUTHANN GREENE    |
-| 999249 | MINH LANDERS      |
-| 999126 | MALENA RUTHERFORD |
-| 999119 | RUTHANNE CARDOSO  |
-| 998892 | IRWIN SOUTHARD    |
-| 998690 | MITCHELL SEITZ    |
-| 998580 | RAMONITA SWISHER  |
-| 998565 | RAMONITA MAYO     |
-| 998538 | ELSA SEITZ        |
-| 998525 | SCOTT CARRION     |
-| 997944 | RUTHE SCHENK      |
-| 997814 | MINH GOODWIN      |
-| 997587 | RAMONITA GIBBONS  |
-| 997557 | ARTIE SOUTH       |
-+--------+-------------------+
++--------+----------------------+------+
+| id     | username             | s    |
++--------+----------------------+------+
+| 999782 | EDITH TERRELL        | a    |
+| 999574 | LEIGH WHITEHEAD      | a    |
+| 999516 | ANTONIA KEITH        | a    |
+| 999461 | MINH MATHEWS         | a    |
+| 999285 | SCOTTIE CLARKE       | a    |
+| 999042 | SCOTTY VALDEZ        | a    |
+| 998834 | RODOLFO SCOTT        | a    |
+| 998822 | ED WHITE             | a    |
+| 998742 | SETH GOODING         | a    |
+| 998630 | LEWIS WHITTLE        | a    |
+| 998574 | MELVIN WHITEHURST    | a    |
+| 998539 | JESSE WHITED         | a    |
+| 998509 | KEITH TOLIVER        | a    |
+| 998482 | SCOTT MINNICK        | a    |
+| 998447 | ARDELIA WHITEMAN     | a    |
+| 998388 | NEELY SOUTHERN       | a    |
+| 998367 | VASILIKI HITT        | a    |
+| 998062 | HIEN WILHITE         | a    |
+| 998052 | KATHLINE SOUTHERLAND | a    |
+| 997975 | KEITH LOUIE          | a    |
++--------+----------------------+------+
 ––– input –––
 mysql -h0 -P9306 -e "SELECT * FROM name WHERE MATCH('john') ORDER BY id DESC, username ASC OPTION fuzzy=1;"
 ––– output –––
-+--------+------------------------+
-| id     | username               |
-+--------+------------------------+
-| 999960 | JONELL ENRIGHT         |
-| 999931 | JONELL NIX             |
-| 999925 | JONAH BURNSIDE         |
-| 999921 | LAVONNA JONAS          |
-| 999859 | JOHNETTA DO            |
-| 999551 | JOHNNY CARNES          |
-| 999547 | JOHNATHAN PEPPER       |
-| 999508 | JOHNATHAN STUBBLEFIELD |
-| 999170 | JOHNNY ABRAMS          |
-| 999032 | AGNUS STJOHN           |
-| 998834 | SCARLETT JONAS         |
-| 998797 | JOHNATHON READ         |
-| 998466 | JOHNSON JEAN           |
-| 998392 | JOHN BACH              |
-| 998305 | JOHNNY TAFOYA          |
-| 998303 | JONG SAUER             |
-| 998302 | JONATHON DUPRE         |
-| 998277 | JOHNNIE LOR            |
-| 998180 | JONA ELROD             |
-| 998153 | JONG YORK              |
-+--------+------------------------+
++--------+-----------------+------+
+| id     | username        | s    |
++--------+-----------------+------+
+| 999989 | JOANNA CRAMER   | a    |
+| 999831 | LYNN JOHN       | a    |
+| 999829 | JOANN LEVINE    | a    |
+| 999812 | JOANNE SALDANA  | a    |
+| 999727 | JOAN XIONG      | a    |
+| 999575 | JOHNSON PRUITT  | a    |
+| 999537 | CLAUD JOHNS     | a    |
+| 999427 | JONAH RICHARD   | a    |
+| 999275 | JOHNIE SAUNDERS | a    |
+| 999264 | JONAS CANNON    | a    |
+| 999207 | JOAN DENNIS     | a    |
+| 999166 | JOHNATHON MILES | a    |
+| 999023 | BART JOHNSTON   | a    |
+| 998818 | JONATHON MARTIN | a    |
+| 998803 | JOHNATHAN JONES | a    |
+| 998800 | IRA JOHNSON     | a    |
+| 998723 | JOHNNIE RANA    | a    |
+| 998625 | JORGE JOHNSTONE | a    |
+| 998607 | JON PETTIS      | a    |
+| 998547 | JOHNNY CLOUTIER | a    |
++--------+-----------------+------+
 ––– input –––
 mysql -h0 -P9306 -e "SELECT * FROM name WHERE MATCH('jane') AND id BETWEEN 10000 AND 20000 ORDER BY username ASC OPTION fuzzy=1;"
 ––– output –––
-+-------+--------------------+
-| id    | username           |
-+-------+--------------------+
-| 11037 | DESIRE LANE        |
-| 11055 | LANELLE WATTS      |
-| 11358 | JANIE CRAWFORD     |
-| 11391 | JAN LEW            |
-| 11396 | MELITA LANE        |
-| 11414 | MARYJANE HOLTZ     |
-| 11498 | JANN LEDEZMA       |
-| 11568 | JANETH SELBY       |
-| 11752 | TRACIE JANKOWSKI   |
-| 11757 | JANETTE GANTT      |
-| 11833 | JANELLE DRIGGERS   |
-| 10027 | ANJANETTE PORTILLO |
-| 10055 | JANETTE LYNCH      |
-| 10068 | JANN HACKETT       |
-| 10110 | ALEJANDRINA DOWNS  |
-| 10242 | ALEJANDRINA ZAPATA |
-| 10269 | JANNET QUINN       |
-| 10326 | JANICE APPEL       |
-| 10385 | JANN CASON         |
-| 10628 | LANETTE SWAIN      |
-+-------+--------------------+
++-------+------------------+------+
+| id    | username         | s    |
++-------+------------------+------+
+| 10079 | JANELLA CASTILLO | a    |
+| 10198 | JENEE DUNCAN     | a    |
+| 10202 | HEIKE LANE       | a    |
+| 10266 | ELANE BURTON     | a    |
+| 10412 | JANEAN RIVAS     | a    |
+| 10449 | ALANE MULLINS    | a    |
+| 10846 | JENEVA MCMILLAN  | a    |
+| 11043 | BILLY DELANEY    | a    |
+| 11697 | LANE LANIER      | a    |
+| 12107 | JAE DUTTON       | a    |
+| 12230 | JANET STONER     | a    |
+| 12262 | JANE ESPINO      | a    |
+| 12361 | JUNE DOWELL      | a    |
+| 12733 | JANELLE REDD     | a    |
+| 12758 | JANETTE DEVLIN   | a    |
+| 12871 | LORIE JAEGER     | a    |
+| 13160 | JANELL SISSON    | a    |
+| 13287 | MARYJANE AGEE    | a    |
+| 13306 | CELESTINE LANEY  | a    |
+| 13320 | JANEL MENDIOLA   | a    |
++-------+------------------+------+
 ––– input –––
 mysql -h0 -P9306 -e "SELECT * FROM name WHERE MATCH('EBGRNA') AND id BETWEEN 1000 AND 2000 ORDER BY username ASC OPTION fuzzy=1;"
 ––– output –––
-+------+---------------------+
-| id   | username            |
-+------+---------------------+
-| 1353 | VERNA VITALE        |
-| 1783 | BERNADETTE HALES    |
-| 1838 | BERNARDINA MCMILLAN |
-| 1863 | ERNA ULLOA          |
-| 1947 | SAMIRA ABERNATHY    |
-+------+---------------------+
++------+---------------------+------+
+| id   | username            | s    |
++------+---------------------+------+
+| 1387 | YVONNE SERNA        | a    |
+| 1572 | VERNA WHALEY        | a    |
+| 1613 | BERNADETTE RAMEY    | a    |
+| 1938 | BERNADINE MONDRAGON | a    |
++------+---------------------+------+
 ––– input –––
 mysql -h0 -P9306 -e "SELECT * FROM name WHERE MATCH('SARA') ORDER BY id ASC, username ASC OPTION fuzzy=1;"
 ––– output –––
-+------+------------------+
-| id   | username         |
-+------+------------------+
-|  187 | LARA KIRK        |
-|  206 | CLARA MORRIS     |
-|  350 | KLARA DONALDSON  |
-|  989 | ELAINE SARABIA   |
-| 1408 | LARA FREDERICK   |
-| 1660 | SARA GARNER      |
-| 1819 | KARA CINTRON     |
-| 1830 | SARAI ESPINAL    |
-| 2073 | VALENTIN SARABIA |
-| 2929 | LARA CINTRON     |
-| 3044 | KLARA ANDRES     |
-| 3372 | KLARA NORTON     |
-| 3740 | CRUZ SARABIA     |
-| 3779 | RUSSEL LARA      |
-| 4699 | HEE SARABIA      |
-| 4932 | KLARA GOODING    |
-| 5829 | SARAI LINDLEY    |
-| 5864 | SARAN KNAPP      |
-| 5917 | SARA WAITE       |
-| 6634 | CLARA BEALE      |
-+------+------------------+
++------+--------------------+------+
+| id   | username           | s    |
++------+--------------------+------+
+|  379 | BENNY LARA         | a    |
+|  943 | AUGUSTUS JARAMILLO | a    |
+| 1236 | SARAH KNOWLES      | a    |
+| 1297 | SARA CLEMONS       | a    |
+| 1357 | CLARA BINGHAM      | a    |
+| 1908 | LARA SAAVEDRA      | a    |
+| 3664 | LARAE MOSQUEDA     | a    |
+| 4036 | KARLEEN JARA       | a    |
+| 4076 | LAURICE SARABIA    | a    |
+| 4151 | LARAINE ASBURY     | a    |
+| 4376 | KLARA FORT         | a    |
+| 5321 | SARAN LAMBERT      | a    |
+| 5322 | SARAI MIRANDA      | a    |
+| 5373 | EDRA LARA          | a    |
+| 5937 | ELBERT JARAMILLO   | a    |
+| 6722 | SARAH CUMMINS      | a    |
+| 6783 | SARA FONTENOT      | a    |
+| 6843 | CLARA BURKETT      | a    |
+| 7394 | LARA CONN          | a    |
+| 9030 | KILEY JARA         | a    |
++------+--------------------+------+
 ––– input –––
 mysql -h0 -P9306 -e "CALL AUTOCOMPLETE('jo', 'name', 1 AS fuzziness);" | tail -n +4 | sort
 ––– output –––
 +---------+
+| joan    |
+| jody    |
 | joe     |
+| joey    |
 | john    |
-| johnson |
-| jonas   |
+| johnie  |
+| johnnie |
 | jordan  |
 | jose    |
 | joseph  |
-| joy     |
-| joyce   |
-| major   |
 ––– input –––
 mysql -h0 -P9306 -e "CALL AUTOCOMPLETE('jo', 'name', 'us,ru' AS layouts);" | tail -n +4 | sort
 ––– output –––
 +---------+
+| joan    |
+| jody    |
 | joe     |
+| joey    |
 | john    |
-| johnson |
-| jonas   |
+| johnie  |
+| johnnie |
 | jordan  |
 | jose    |
 | joseph  |
-| joy     |
-| joyce   |
-| major   |
 ––– input –––
 mysql -h0 -P9306 -e "CALL AUTOCOMPLETE('jo', 'name', 1 AS append);" | tail -n +4 | sort
 ––– output –––
 +---------+
+| joan    |
+| jody    |
 | joe     |
+| joey    |
 | john    |
-| johnson |
-| jonas   |
+| johnie  |
+| johnnie |
 | jordan  |
 | jose    |
 | joseph  |
-| joy     |
-| joyce   |
-| major   |
 ––– input –––
 mysql -h0 -P9306 -e "CALL AUTOCOMPLETE('jo', 'name', 0 AS prepend);" | tail -n +4 | sort
 ––– output –––
 +---------+
+| joan    |
 | joe     |
 | john    |
 | johnson |
-| jonas   |
 | jordan  |
 | jose    |
 | joseph  |
@@ -392,197 +392,200 @@ mysql -h0 -P9306 -e "CALL AUTOCOMPLETE('jo', 'name', 0 AS prepend);" | tail -n +
 mysql -h0 -P9306 -e "CALL AUTOCOMPLETE('jo', 'name', 1 AS prepend, 1 AS append);" | tail -n +4 | sort
 ––– output –––
 +---------+
+| joan    |
+| jody    |
 | joe     |
+| joey    |
 | john    |
-| johnson |
-| jonas   |
+| johnie  |
+| johnnie |
 | jordan  |
 | jose    |
 | joseph  |
-| joy     |
-| joyce   |
-| major   |
 ––– input –––
 mysql -h0 -P9306 -e "CALL AUTOCOMPLETE('jo', 'name', 1 AS fuzziness, '' AS layouts, 1 AS append, 1 AS prepend);" | tail -n +4 | sort
 ––– output –––
 +---------+
+| joan    |
+| jody    |
 | joe     |
+| joey    |
 | john    |
-| johnson |
-| jonas   |
+| johnie  |
+| johnnie |
 | jordan  |
 | jose    |
 | joseph  |
-| joy     |
-| joyce   |
-| major   |
 ––– input –––
 mysql -h0 -P9306 -e "CALL AUTOCOMPLETE('jo', 'name', 2 AS fuzziness, 'us,ru' AS layouts, 1 AS append, 1 AS prepend, 2 AS expansion_len);" | tail -n +4 | sort
 ––– output –––
 +-------+
+| joan  |
+| jody  |
 | joe   |
+| joey  |
 | john  |
 | jose  |
-| joy   |
 ––– input –––
 mysql -h0 -P9306 -e "CALL AUTOCOMPLETE('jo', 'name', 1 AS append);" | tail -n +4 | sort
 ––– output –––
 +---------+
+| joan    |
+| jody    |
 | joe     |
+| joey    |
 | john    |
-| johnson |
-| jonas   |
+| johnie  |
+| johnnie |
 | jordan  |
 | jose    |
 | joseph  |
-| joy     |
-| joyce   |
-| major   |
 ––– input –––
 mysql -h0 -P9306 -e "CALL AUTOCOMPLETE('jo', 'name', 1 AS prepend);" | tail -n +4 | sort
 ––– output –––
 +---------+
+| joan    |
+| jody    |
 | joe     |
+| joey    |
 | john    |
-| johnson |
-| jonas   |
+| johnie  |
+| johnnie |
 | jordan  |
 | jose    |
 | joseph  |
-| joy     |
-| joyce   |
-| major   |
 ––– input –––
 mysql -h0 -P9306 -e "CALL AUTOCOMPLETE('jo', 'name', 1 AS append, 1 AS prepend);" | tail -n +4 | sort
 ––– output –––
 +---------+
+| joan    |
+| jody    |
 | joe     |
+| joey    |
 | john    |
-| johnson |
-| jonas   |
+| johnie  |
+| johnnie |
 | jordan  |
 | jose    |
 | joseph  |
-| joy     |
-| joyce   |
-| major   |
 ––– input –––
 mysql -h0 -P9306 -e "CALL AUTOCOMPLETE('jo', 'name', 'us' AS layouts);" | tail -n +4 | sort
 ––– output –––
 +---------+
+| joan    |
+| jody    |
 | joe     |
+| joey    |
 | john    |
-| johnson |
-| jonas   |
+| johnie  |
+| johnnie |
 | jordan  |
 | jose    |
 | joseph  |
-| joy     |
-| joyce   |
-| major   |
 ––– input –––
 mysql -h0 -P9306 -e "CALL AUTOCOMPLETE('jo', 'name', 'ru' AS layouts);" | tail -n +4 | sort
 ––– output –––
 +---------+
+| joan    |
+| jody    |
 | joe     |
+| joey    |
 | john    |
-| johnson |
-| jonas   |
+| johnie  |
+| johnnie |
 | jordan  |
 | jose    |
 | joseph  |
-| joy     |
-| joyce   |
-| major   |
 ––– input –––
 mysql -h0 -P9306 -e "CALL AUTOCOMPLETE('al', 'name', 0 AS fuzziness);" | tail -n +4 | sort
 ––– output –––
 +-----------+
-| albert    |
 | alexander |
-| allen     |
+| ali       |
+| calvin    |
 | dale      |
 | dallas    |
+| dalton    |
 | donald    |
+| fallon    |
 | gale      |
-| kendall   |
-| marshall  |
-| walter    |
+| haley     |
 ––– input –––
 mysql -h0 -P9306 -e "CALL AUTOCOMPLETE('mi', 'name', 0 AS append, 1 AS prepend);" | tail -n +4 | sort
 ––– output –––
-+---------+
-| ami     |
-| britni  |
-| brittni |
-| cami    |
-| choi    |
-| darci   |
-| eleni   |
-| jami    |
-| jani    |
-| jeni    |
-| joi     |
-| kaci    |
-| kami    |
-| kimi    |
-| laci    |
-| lani    |
-| luci    |
-| mancini |
-| marci   |
-| martini |
-| melani  |
-| muoi    |
-| nanci   |
-| neomi   |
-| noemi   |
-| nohemi  |
-| ricci   |
-| shani   |
-| staci   |
-| tammi   |
-| toi     |
-| tomi    |
-| traci   |
++----------+
+| ami      |
+| britni   |
+| brittani |
+| brittni  |
+| cami     |
+| choi     |
+| dani     |
+| darci    |
+| eboni    |
+| eleni    |
+| giovanni |
+| jami     |
+| joi      |
+| kaci     |
+| kami     |
+| kimi     |
+| laci     |
+| luci     |
+| mancini  |
+| marci    |
+| martini  |
+| mi       |
+| mimi     |
+| muoi     |
+| nanci    |
+| naomi    |
+| neomi    |
+| noemi    |
+| ricci    |
+| staci    |
+| toi      |
+| toni     |
+| traci    |
 ––– input –––
 mysql -h0 -P9306 -e "CALL AUTOCOMPLETE('ch', 'name', 1 AS fuzziness, 3 AS expansion_len);" | tail -n +4 | sort
 ––– output –––
 +-------+
 | chang |
+| chase |
 | chi   |
-| chung |
+| chong |
 ––– input –––
 mysql -h0 -P9306 -e "CALL AUTOCOMPLETE('зф', 'name', 'us,ru' AS layouts);" | tail -n +4 | sort
 ––– output –––
-+---------+
-| page    |
-| paige   |
-| palma   |
-| palmer  |
-| paris   |
-| parker  |
-| pat     |
-| patrick |
-| paul    |
-| paz     |
++----------+
+| page     |
+| paige    |
+| palma    |
+| palmer   |
+| paris    |
+| parker   |
+| patricia |
+| patrick  |
+| paul     |
+| paz      |
 ––– input –––
 mysql -h0 -P9306 -e "CALL AUTOCOMPLETE('зф', 'name', 'us' AS layouts);" | tail -n +4 | sort
 ––– output –––
 ––– input –––
 mysql -h0 -P9306 -e "CALL AUTOCOMPLETE('gr', 'name', 1 AS fuzziness, 'ru' AS layouts, 1 AS append, 1 AS prepend);" | tail -n +4 | sort
 ––– output –––
-+------------+
-| grace      |
-| gracia     |
-| grady      |
-| graham     |
-| grant      |
-| gregg      |
-| gregory    |
-| griffin    |
-| grover     |
-| montenegro |
++---------+
+| grace   |
+| gracia  |
+| grady   |
+| graham  |
+| grant   |
+| graves  |
+| gregg   |
+| gregory |
+| griffin |
+| grover  |
 ––– input –––
 mysql -h0 -P9306 -e "drop table if exists t; create table t(f text) min_infix_len='2'; insert into t values(1, 'something'), (2, 'some thing'); select * from t where match('somethin') option fuzzy=0;"
 ––– output –––

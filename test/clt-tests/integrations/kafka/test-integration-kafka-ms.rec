@@ -140,7 +140,7 @@ docker exec manticore mysql -h0 -P9306 -e "DROP table destination_kafka;"; echo 
 docker exec manticore mysql -h0 -P9306 -e "SHOW TABLES;"
 ––– output –––
 +----------+------+
-| Index    | Type |
+| Table    | Type |
 +----------+------+
 | _sources | rt   |
 | _views   | rt   |

@@ -7,412 +7,76 @@ export INSTANCE=2
 ––– output –––
 ––– block: ./base/flexible/start-searchd –––
 ––– input –––
-export CLUSTER_NAME=c
+CLUSTER_NAME=c
 ––– output –––
 ––– input –––
-mysql -h0 -P1306 -e "create cluster ${CLUSTER_NAME}"
-––– output –––
-––– input –––
-mysql -h0 -P1306 -e "show status like 'cluster_${CLUSTER_NAME}_status'\G"
-––– output –––
-*************************** 1. row ***************************
-Counter: cluster_#!/[a-z]+/!#_status
-Value: primary
-––– input –––
-export CLUSTER_NAME=c
-––– output –––
-––– input –––
-for n in `seq 2 $INSTANCE`; do mysql -h0 -P${n}306 -e "join cluster ${CLUSTER_NAME} at '127.0.0.1:1312'"; done;
-––– output –––
-––– input –––
-mysql -h0 -P${INSTANCE}306 -e "show status like 'cluster_${CLUSTER_NAME}_status'\G"
-––– output –––
-*************************** 1. row ***************************
-Counter: cluster_#!/[a-z]+/!#_status
-Value: primary
-––– input –––
-mysql -h0 -P1306 -e "show status like 'cluster_${CLUSTER_NAME}_status'\G"
-––– output –––
-*************************** 1. row ***************************
-Counter: cluster_c_status
-Value: primary
-––– input –––
-mysql -h0 -P1306 -e "create table ${CLUSTER_NAME}:tbl1(id bigint) shards=10 rf=1;"
-––– output –––
-––– input –––
-mysql -h0 -P2306 -e "create table ${CLUSTER_NAME}:tbl2(id bigint) shards=10 rf=1;"
-––– output –––
-––– input –––
-mysql -h0 -P1306 -e "SHOW TABLES\G"
-––– output –––
-*************************** 1. row ***************************
-Index: _sharding_queue
-Type: rt
-*************************** 2. row ***************************
-Index: _sharding_state
-Type: rt
-*************************** 3. row ***************************
-Index: _sharding_table
-Type: rt
-*************************** 4. row ***************************
-Index: tbl1
-Type: distributed
-*************************** 5. row ***************************
-Index: tbl1_s0
-Type: rt
-*************************** 6. row ***************************
-Index: tbl1_s2
-Type: rt
-*************************** 7. row ***************************
-Index: tbl1_s4
-Type: rt
-*************************** 8. row ***************************
-Index: tbl1_s6
-Type: rt
-*************************** 9. row ***************************
-Index: tbl1_s8
-Type: rt
-*************************** 10. row ***************************
-Index: tbl2
-Type: distributed
-*************************** 11. row ***************************
-Index: tbl2_s0
-Type: rt
-*************************** 12. row ***************************
-Index: tbl2_s2
-Type: rt
-*************************** 13. row ***************************
-Index: tbl2_s4
-Type: rt
-*************************** 14. row ***************************
-Index: tbl2_s6
-Type: rt
-*************************** 15. row ***************************
-Index: tbl2_s8
-Type: rt
-––– input –––
-mysql -h0 -P2306 -e "SHOW TABLES\G"
-––– output –––
-*************************** 1. row ***************************
-Index: _sharding_queue
-Type: rt
-*************************** 2. row ***************************
-Index: _sharding_state
-Type: rt
-*************************** 3. row ***************************
-Index: _sharding_table
-Type: rt
-*************************** 4. row ***************************
-Index: tbl1
-Type: distributed
-*************************** 5. row ***************************
-Index: tbl1_s1
-Type: rt
-*************************** 6. row ***************************
-Index: tbl1_s3
-Type: rt
-*************************** 7. row ***************************
-Index: tbl1_s5
-Type: rt
-*************************** 8. row ***************************
-Index: tbl1_s7
-Type: rt
-*************************** 9. row ***************************
-Index: tbl1_s9
-Type: rt
-*************************** 10. row ***************************
-Index: tbl2
-Type: distributed
-*************************** 11. row ***************************
-Index: tbl2_s1
-Type: rt
-*************************** 12. row ***************************
-Index: tbl2_s3
-Type: rt
-*************************** 13. row ***************************
-Index: tbl2_s5
-Type: rt
-*************************** 14. row ***************************
-Index: tbl2_s7
-Type: rt
-*************************** 15. row ***************************
-Index: tbl2_s9
-Type: rt
-––– input –––
-mysql -h0 -P1306 -e "DROP SHARDED TABLE ${CLUSTER_NAME}:tbl1;"
-––– output –––
-––– input –––
-mysql -h0 -P2306 -e "DROP SHARDED TABLE ${CLUSTER_NAME}:tbl2;"
-––– output –––
-––– input –––
-mysql -h0 -P1306 -e "SHOW TABLES\G"
-––– output –––
-*************************** 1. row ***************************
-Index: _sharding_queue
-Type: rt
-*************************** 2. row ***************************
-Index: _sharding_state
-Type: rt
-*************************** 3. row ***************************
-Index: _sharding_table
-Type: rt
-*************************** 4. row ***************************
-Index: tbl2
-Type: distributed
-*************************** 5. row ***************************
-Index: tbl2_s0
-Type: rt
-*************************** 6. row ***************************
-Index: tbl2_s2
-Type: rt
-*************************** 7. row ***************************
-Index: tbl2_s4
-Type: rt
-*************************** 8. row ***************************
-Index: tbl2_s6
-Type: rt
-*************************** 9. row ***************************
-Index: tbl2_s8
-Type: rt
-––– input –––
-mysql -h0 -P2306 -e "SHOW TABLES\G"
-––– output –––
-*************************** 1. row ***************************
-Index: _sharding_queue
-Type: rt
-*************************** 2. row ***************************
-Index: _sharding_state
-Type: rt
-*************************** 3. row ***************************
-Index: _sharding_table
-Type: rt
-*************************** 4. row ***************************
-Index: tbl1
-Type: distributed
-*************************** 5. row ***************************
-Index: tbl1_s1
-Type: rt
-*************************** 6. row ***************************
-Index: tbl1_s3
-Type: rt
-*************************** 7. row ***************************
-Index: tbl1_s5
-Type: rt
-*************************** 8. row ***************************
-Index: tbl1_s7
-Type: rt
-*************************** 9. row ***************************
-Index: tbl1_s9
-Type: rt
-*************************** 10. row ***************************
-Index: tbl2
-Type: distributed
-*************************** 11. row ***************************
-Index: tbl2_s1
-Type: rt
-*************************** 12. row ***************************
-Index: tbl2_s3
-Type: rt
-*************************** 13. row ***************************
-Index: tbl2_s5
-Type: rt
-*************************** 14. row ***************************
-Index: tbl2_s7
-Type: rt
-*************************** 15. row ***************************
-Index: tbl2_s9
-Type: rt
-––– input –––
-mysql -h0 -P1306 -e "create table tbl3(id bigint) shards=10 rf=1;"; echo $?
+mysql -h0 -P1306 -e "create cluster ${CLUSTER_NAME}"; echo $?;
 ––– output –––
 0
 ––– input –––
-mysql -h0 -P2306 -e "create table tbl4 shards=10 rf=1;"; echo $?
+for n in `seq 2 $INSTANCE`; do mysql -h0 -P${n}306 -e "join cluster ${CLUSTER_NAME} at '127.0.0.1:1312'"; done; echo $?;
 ––– output –––
 0
 ––– input –––
-mysql -h0 -P1306 -e "SHOW TABLES\G"
+mysql -h0 -P1306 -e "create table ${CLUSTER_NAME}:tbl1(id bigint) shards=3 rf=1;"; echo $?;
 ––– output –––
-*************************** 1. row ***************************
-Index: _sharding_queue
-Type: rt
-*************************** 2. row ***************************
-Index: _sharding_state
-Type: rt
-*************************** 3. row ***************************
-Index: _sharding_table
-Type: rt
-*************************** 4. row ***************************
-Index: tbl3
-Type: distributed
-*************************** 5. row ***************************
-Index: tbl3_s0
-Type: rt
-*************************** 6. row ***************************
-Index: tbl3_s1
-Type: rt
-*************************** 7. row ***************************
-Index: tbl3_s2
-Type: rt
-*************************** 8. row ***************************
-Index: tbl3_s3
-Type: rt
-*************************** 9. row ***************************
-Index: tbl3_s4
-Type: rt
-*************************** 10. row ***************************
-Index: tbl3_s5
-Type: rt
-*************************** 11. row ***************************
-Index: tbl3_s6
-Type: rt
-*************************** 12. row ***************************
-Index: tbl3_s7
-Type: rt
-*************************** 13. row ***************************
-Index: tbl3_s8
-Type: rt
-*************************** 14. row ***************************
-Index: tbl3_s9
-Type: rt
+0
 ––– input –––
-mysql -h0 -P2306 -e "SHOW TABLES\G"
+mysql -h0 -P1306 -e "DROP SHARDED TABLE ${CLUSTER_NAME}:tbl1;"; echo $?;
 ––– output –––
-*************************** 1. row ***************************
-Index: _sharding_queue
-Type: rt
-*************************** 2. row ***************************
-Index: _sharding_state
-Type: rt
-*************************** 3. row ***************************
-Index: _sharding_table
-Type: rt
-*************************** 4. row ***************************
-Index: tbl4
-Type: distributed
-*************************** 5. row ***************************
-Index: tbl4_s0
-Type: rt
-*************************** 6. row ***************************
-Index: tbl4_s1
-Type: rt
-*************************** 7. row ***************************
-Index: tbl4_s2
-Type: rt
-*************************** 8. row ***************************
-Index: tbl4_s3
-Type: rt
-*************************** 9. row ***************************
-Index: tbl4_s4
-Type: rt
-*************************** 10. row ***************************
-Index: tbl4_s5
-Type: rt
-*************************** 11. row ***************************
-Index: tbl4_s6
-Type: rt
-*************************** 12. row ***************************
-Index: tbl4_s7
-Type: rt
-*************************** 13. row ***************************
-Index: tbl4_s8
-Type: rt
-*************************** 14. row ***************************
-Index: tbl4_s9
-Type: rt
+0
 ––– input –––
-mysql -h0 -P1306 -e "DROP SHARDED TABLE tbl3;"
-––– output –––
-––– input –––
-mysql -h0 -P2306 -e "DROP SHARDED TABLE tbl4;"
+sleep 3
 ––– output –––
 ––– input –––
 mysql -h0 -P1306 -e "SHOW TABLES\G"
 ––– output –––
 *************************** 1. row ***************************
-Index: _sharding_queue
+Table: _sharding_queue
 Type: rt
 *************************** 2. row ***************************
-Index: _sharding_state
+Table: _sharding_state
 Type: rt
 *************************** 3. row ***************************
-Index: _sharding_table
-Type: rt
-*************************** 4. row ***************************
-Index: tbl3
-Type: distributed
-*************************** 5. row ***************************
-Index: tbl3_s0
-Type: rt
-*************************** 6. row ***************************
-Index: tbl3_s1
-Type: rt
-*************************** 7. row ***************************
-Index: tbl3_s2
-Type: rt
-*************************** 8. row ***************************
-Index: tbl3_s3
-Type: rt
-*************************** 9. row ***************************
-Index: tbl3_s4
-Type: rt
-*************************** 10. row ***************************
-Index: tbl3_s5
-Type: rt
-*************************** 11. row ***************************
-Index: tbl3_s6
-Type: rt
-*************************** 12. row ***************************
-Index: tbl3_s7
-Type: rt
-*************************** 13. row ***************************
-Index: tbl3_s8
-Type: rt
-*************************** 14. row ***************************
-Index: tbl3_s9
+Table: _sharding_table
 Type: rt
 ––– input –––
-mysql -h0 -P2306 -e "SHOW TABLES\G"
+mysql -h0 -P2306 -e "select * from _sharding_queue order by id asc limit 1000;"
 ––– output –––
-*************************** 1. row ***************************
-Index: _sharding_queue
-Type: rt
-*************************** 2. row ***************************
-Index: _sharding_state
-Type: rt
-*************************** 3. row ***************************
-Index: _sharding_table
-Type: rt
-*************************** 4. row ***************************
-Index: tbl4
-Type: distributed
-*************************** 5. row ***************************
-Index: tbl4_s0
-Type: rt
-*************************** 6. row ***************************
-Index: tbl4_s1
-Type: rt
-*************************** 7. row ***************************
-Index: tbl4_s2
-Type: rt
-*************************** 8. row ***************************
-Index: tbl4_s3
-Type: rt
-*************************** 9. row ***************************
-Index: tbl4_s4
-Type: rt
-*************************** 10. row ***************************
-Index: tbl4_s5
-Type: rt
-*************************** 11. row ***************************
-Index: tbl4_s6
-Type: rt
-*************************** 12. row ***************************
-Index: tbl4_s7
-Type: rt
-*************************** 13. row ***************************
-Index: tbl4_s8
-Type: rt
-*************************** 14. row ***************************
-Index: tbl4_s9
-Type: rt
++----------------+----------------+-----------------------------------------------------------------------------------------------------------------------------+-------------+-------+-----------+---------------+---------------+----------+
+| id             | node           | query                                                                                                                       | wait_for_id | tries | status    | created_at    | updated_at    | duration |
++----------------+----------------+-----------------------------------------------------------------------------------------------------------------------------+-------------+-------+-----------+---------------+---------------+----------+
+| %{NUMBER} | 127.0.0.1:1312 | CREATE TABLE IF NOT EXISTS `tbl1_s0` (id bigint)                                                                            |           %{NUMBER} |     %{NUMBER} | processed | %{NUMBER} | %{NUMBER} |        %{NUMBER} |
+| %{NUMBER} | 127.0.0.1:1312 | CREATE TABLE IF NOT EXISTS `tbl1_s2` (id bigint)                                                                            |           %{NUMBER} |     %{NUMBER} | processed | %{NUMBER} | %{NUMBER} |        %{NUMBER} |
+| %{NUMBER} | 127.0.0.1:2312 | CREATE TABLE IF NOT EXISTS `tbl1_s1` (id bigint)                                                                            |           %{NUMBER} |     %{NUMBER} | processed | %{NUMBER} | %{NUMBER} |        %{NUMBER} |
+| %{NUMBER} | 127.0.0.1:1312 | CREATE TABLE `tbl1`
+type='distributed' local='tbl1_s0' local='tbl1_s2' agent='127.0.0.1:2312:tbl1_s1'
+|           %{NUMBER} |     %{NUMBER} | processed | %{NUMBER} | %{NUMBER} |        %{NUMBER} |
+| %{NUMBER} | 127.0.0.1:2312 | CREATE TABLE `tbl1`
+type='distributed' local='tbl1_s1' agent='127.0.0.1:1312:tbl1_s0' agent='127.0.0.1:1312:tbl1_s2'
+|           %{NUMBER} |     %{NUMBER} | processed | %{NUMBER} | %{NUMBER} |        %{NUMBER} |
+| %{NUMBER} | 127.0.0.1:2312 | DROP TABLE IF EXISTS tbl1                                                                                                   |           %{NUMBER} |     %{NUMBER} | processed | %{NUMBER} | %{NUMBER} |        %{NUMBER} |
+| %{NUMBER} | 127.0.0.1:2312 | DROP TABLE IF EXISTS tbl1_s1                                                                                                |           %{NUMBER} |     %{NUMBER} | processed | %{NUMBER} | %{NUMBER} |        %{NUMBER} |
+| %{NUMBER} | 127.0.0.1:1312 | DROP TABLE IF EXISTS tbl1                                                                                                   |           %{NUMBER} |     %{NUMBER} | processed | %{NUMBER} | %{NUMBER} |        %{NUMBER} |
+| %{NUMBER} | 127.0.0.1:1312 | DROP TABLE IF EXISTS tbl1_s0                                                                                                |           %{NUMBER} |     %{NUMBER} | processed | %{NUMBER} | %{NUMBER} |        %{NUMBER} |
+| %{NUMBER} | 127.0.0.1:1312 | DROP TABLE IF EXISTS tbl1_s2                                                                                                |           %{NUMBER} |     %{NUMBER} | processed | %{NUMBER} | %{NUMBER} |        %{NUMBER} |
++----------------+----------------+-----------------------------------------------------------------------------------------------------------------------------+-------------+-------+-----------+---------------+---------------+----------+
+––– input –––
+cat /var/log/manticore-1/searchd.log
+––– output –––
+[#!/[A-Za-z]{3}\s[A-Za-z]{3}\s{1,2}[0-9]{1,2}\s[0-9]{2}:[0-9]{2}:[0-9]{2}.[0-9]{3}\s[0-9]{4}/!#] [%{NUMBER}] watchdog: main process %{NUMBER} forked ok
+[#!/[A-Za-z]{3}\s[A-Za-z]{3}\s{1,2}[0-9]{1,2}\s[0-9]{2}:[0-9]{2}:[0-9]{2}.[0-9]{3}\s[0-9]{4}/!#] [%{NUMBER}] Using local time zone '/etc/localtime'
+[#!/[A-Za-z]{3}\s[A-Za-z]{3}\s{1,2}[0-9]{1,2}\s[0-9]{2}:[0-9]{2}:[0-9]{2}.[0-9]{3}\s[0-9]{4}/!#] [%{NUMBER}] starting daemon version '%{SEMVER} %{COMMITDATE} dev (columnar %{SEMVER} %{COMMITDATE}) (secondary %{SEMVER} %{COMMITDATE}) (knn %{SEMVER} %{COMMITDATE})' ...
+[#!/[A-Za-z]{3}\s[A-Za-z]{3}\s{1,2}[0-9]{1,2}\s[0-9]{2}:[0-9]{2}:[0-9]{2}.[0-9]{3}\s[0-9]{4}/!#] [%{NUMBER}] listening on all interfaces for mysql, port=1306
+[#!/[A-Za-z]{3}\s[A-Za-z]{3}\s{1,2}[0-9]{1,2}\s[0-9]{2}:[0-9]{2}:[0-9]{2}.[0-9]{3}\s[0-9]{4}/!#] [%{NUMBER}] listening on all interfaces for sphinx and http(s), port=1312
+[#!/[A-Za-z]{3}\s[A-Za-z]{3}\s{1,2}[0-9]{1,2}\s[0-9]{2}:[0-9]{2}:[0-9]{2}.[0-9]{3}\s[0-9]{4}/!#] [%{NUMBER}] listening on all interfaces for sphinx and http(s), port=1308
+[#!/[A-Za-z]{3}\s[A-Za-z]{3}\s{1,2}[0-9]{1,2}\s[0-9]{2}:[0-9]{2}:[0-9]{2}.[0-9]{3}\s[0-9]{4}/!#] [%{NUMBER}] prereading 0 tables
+[#!/[A-Za-z]{3}\s[A-Za-z]{3}\s{1,2}[0-9]{1,2}\s[0-9]{2}:[0-9]{2}:[0-9]{2}.[0-9]{3}\s[0-9]{4}/!#] [%{NUMBER}] preread 0 tables in #!/[0-9]{1}.[0-9]{3}/!# sec
+[#!/[A-Za-z]{3}\s[A-Za-z]{3}\s{1,2}[0-9]{1,2}\s[0-9]{2}:[0-9]{2}:[0-9]{2}.[0-9]{3}\s[0-9]{4}/!#] [%{NUMBER}] accepting connections
+[#!/[A-Za-z]{3}\s[A-Za-z]{3}\s{1,2}[0-9]{1,2}\s[0-9]{2}:[0-9]{2}:[0-9]{2}.[0-9]{3}\s[0-9]{4}/!#] [%{NUMBER}] [BUDDY] started v%{SEMVER} '/usr/share/manticore/modules/manticore-buddy/bin/manticore-buddy --listen=http://0.0.0.0:%{NUMBER} --bind=127.0.0.1  --threads=8' at http://127.0.0.1:%{NUMBER}
+[#!/[A-Za-z]{3}\s[A-Za-z]{3}\s{1,2}[0-9]{1,2}\s[0-9]{2}:[0-9]{2}:[0-9]{2}.[0-9]{3}\s[0-9]{4}/!#] [%{NUMBER}] [BUDDY] Loaded plugins:
+[#!/[A-Za-z]{3}\s[A-Za-z]{3}\s{1,2}[0-9]{1,2}\s[0-9]{2}:[0-9]{2}:[0-9]{2}.[0-9]{3}\s[0-9]{4}/!#] [%{NUMBER}] [BUDDY]   core: empty-string, backup, emulate-elastic, fuzzy, create, drop, insert, alias, select, show, cli-table, plugin, test, alter-column, alter-distributed-table, alter-rename-table, modify-table, knn, replace, queue, sharding, update, autocomplete
+[#!/[A-Za-z]{3}\s[A-Za-z]{3}\s{1,2}[0-9]{1,2}\s[0-9]{2}:[0-9]{2}:[0-9]{2}.[0-9]{3}\s[0-9]{4}/!#] [%{NUMBER}] [BUDDY]   local:
+[#!/[A-Za-z]{3}\s[A-Za-z]{3}\s{1,2}[0-9]{1,2}\s[0-9]{2}:[0-9]{2}:[0-9]{2}.[0-9]{3}\s[0-9]{4}/!#] [%{NUMBER}] [BUDDY]   extra:
+[#!/[A-Za-z]{3}\s[A-Za-z]{3}\s{1,2}[0-9]{1,2}\s[0-9]{2}:[0-9]{2}:[0-9]{2}.[0-9]{3}\s[0-9]{4}/!#] [%{NUMBER}] WARNING: No persistent state found. Bootstraping with default state
+[#!/[A-Za-z]{3}\s[A-Za-z]{3}\s{1,2}[0-9]{1,2}\s[0-9]{2}:[0-9]{2}:[0-9]{2}.[0-9]{3}\s[0-9]{4}/!#] [%{NUMBER}] [BUDDY] [i] becoming master

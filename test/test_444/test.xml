@@ -187,9 +187,9 @@ select id, count(distinct tag) from i11, i12 group by gr limit 10 option max_mat
 
 <!-- sort by count distinct -->
 select tag, count(*) as c from i21 group by tag order by count (distinct gr) desc;
-select tag, count(*) as c from i21 facet tag order by count (distinct gr) desc;;
-select tag, gr, count(*) as c from i21 facet tag order by count (distinct gr) desc facet brand order by count (distinct gr) desc;;
-select tag, count(*) as c from i21 facet tag distinct gr order by count (distinct gr) desc;;
+select id, tag from i21 order by id desc limit 1 facet tag order by count (distinct gr) desc;;
+select id, tag, gr from i21 order by id desc limit 1 facet tag order by count (distinct gr) desc facet brand order by count (distinct gr) desc;;
+select id, tag from i21 order by id desc limit 1 facet tag distinct gr order by count (distinct gr) desc;;
 
 <!-- error for multiple count distinct -->
 select tag, count(*) as c, count (distinct idd) cd from i21 group by tag order by count (distinct gr) desc;

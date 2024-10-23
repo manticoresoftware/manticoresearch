@@ -37,7 +37,7 @@ See the examples for more details.
   ```
   POST /replace
   {
-    "index": "<table name>",
+    "table": "<table name>",
     "id": <document id>,
     "doc":
     {
@@ -110,7 +110,7 @@ Query OK, 1 row affected (0.00 sec)
 POST /replace
 -H "Content-Type: application/x-ndjson" -d '
 {
-  "index":"products",
+  "table":"products",
   "id":1,
   "doc":
   {
@@ -264,7 +264,7 @@ Array(
 
 <!-- request Python -->
 ``` python
-indexApi.replace({"index" : "products", "id" : 1, "doc" : {"title" : "document one","price":10}})
+indexApi.replace({"table" : "products", "id" : 1, "doc" : {"title" : "document one","price":10}})
 ```
 
 <!-- response Python -->
@@ -272,7 +272,7 @@ indexApi.replace({"index" : "products", "id" : 1, "doc" : {"title" : "document o
 {'created': False,
  'found': None,
  'id': 1,
- 'index': 'products',
+ 'table': 'products',
  'result': 'updated'}
 ```
 <!-- intro -->
@@ -281,7 +281,7 @@ indexApi.replace({"index" : "products", "id" : 1, "doc" : {"title" : "document o
 
 <!-- request javascript -->
 ``` javascript
-res = await indexApi.replace({"index" : "products", "id" : 1, "doc" : {"title" : "document one","price":10}});
+res = await indexApi.replace({"table" : "products", "id" : 1, "doc" : {"title" : "document one","price":10}});
 ```
 
 <!-- response javascript -->
@@ -420,8 +420,8 @@ Query OK, 2 rows affected (0.00 sec)
 ```json
 POST /bulk
 -H "Content-Type: application/x-ndjson" -d '
-{ "replace" : { "index" : "products", "id":1, "doc": { "title": "doc one", "tag" : 10 } } }
-{ "replace" : { "index" : "products", "id":2, "doc": { "title": "doc two", "tag" : 20 } } }
+{ "replace" : { "table" : "products", "id":1, "doc": { "title": "doc one", "tag" : 10 } } }
+{ "replace" : { "table" : "products", "id":2, "doc": { "title": "doc two", "tag" : 20 } } }
 '
 ```
 
@@ -503,8 +503,8 @@ Array(
 ``` python
 indexApi = manticoresearch.IndexApi(client)
 docs = [ \
-    {"replace": {"index" : "products", "id" : 1, "doc" : {"title" : "document one"}}}, \
-    {"replace": {"index" : "products", "id" : 2, "doc" : {"title" : "document two"}}} ]
+    {"replace": {"table" : "products", "id" : 1, "doc" : {"title" : "document one"}}}, \
+    {"replace": {"table" : "products", "id" : 2, "doc" : {"title" : "document two"}}} ]
 api_resp = indexApi.bulk('\n'.join(map(json.dumps,docs)))
 ```
 
@@ -527,8 +527,8 @@ api_resp = indexApi.bulk('\n'.join(map(json.dumps,docs)))
 
 ``` javascript
 docs = [
-    {"replace": {"index" : "products", "id" : 1, "doc" : {"title" : "document one"}}},
-    {"replace": {"index" : "products", "id" : 2, "doc" : {"title" : "document two"}}} ];
+    {"replace": {"table" : "products", "id" : 1, "doc" : {"title" : "document one"}}},
+    {"replace": {"table" : "products", "id" : 2, "doc" : {"title" : "document two"}}} ];
 res =  await indexApi.bulk(docs.map(e=>JSON.stringify(e)).join('\n'));
 ```
 

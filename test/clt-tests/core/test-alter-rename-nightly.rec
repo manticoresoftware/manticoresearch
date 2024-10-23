@@ -27,7 +27,7 @@ mysql -h0 -P9306 -e "CREATE TABLE index2004(f text, s string); insert into index
 mysql -h0 -P9306 -e "SHOW TABLES"
 ––– output –––
 +-----------+------+
-| Index     | Type |
+| Table     | Type |
 +-----------+------+
 | index2001 | rt   |
 | index2002 | rt   |
@@ -50,7 +50,7 @@ mysql -h0 -P9306 -e "ALTER TABLE index2004 RENAME new_index2004;"
 mysql -h0 -P9306 -e "SHOW TABLES"
 ––– output –––
 +---------------+------+
-| Index         | Type |
+| Table         | Type |
 +---------------+------+
 | new_index2001 | rt   |
 | new_index2002 | rt   |
@@ -70,7 +70,7 @@ mysql -h0 -P9306 -e "CREATE TABLE dist_table type='distributed' local='index2006
 mysql -h0 -P9306 -e "SHOW TABLES; DESC dist_table"
 ––– output –––
 +---------------+-------------+
-| Index         | Type        |
+| Table         | Type        |
 +---------------+-------------+
 | dist_table    | distributed |
 | index2006     | rt          |
@@ -94,7 +94,7 @@ ERROR 1064 (42000) at line 1: Table dist_table should be RT
 mysql -h0 -P9306 -e "SHOW TABLES"
 ––– output –––
 +---------------+-------------+
-| Index         | Type        |
+| Table         | Type        |
 +---------------+-------------+
 | dist_table    | distributed |
 | index2006     | rt          |
@@ -111,7 +111,7 @@ mysql -h0 -P9306 -e "CREATE TABLE products(title text, meta json) type='pq';"
 mysql -h0 -P9306 -e "SHOW TABLES"
 ––– output –––
 +---------------+-------------+
-| Index         | Type        |
+| Table         | Type        |
 +---------------+-------------+
 | dist_table    | distributed |
 | index2006     | rt          |
@@ -1146,12 +1146,12 @@ mysql -h0 -P9306 -e "SHOW TABLES" | awk 'NR==1{print $0; next} {print $0 | "sort
 | index999      | rt          |
 | index99       | rt          |
 | index9        | rt          |
-| Index         | Type        |
 | new_index2001 | rt          |
 | new_index2002 | rt          |
 | new_index2003 | rt          |
 | new_index2004 | rt          |
 | products      | percolate   |
+| Table         | Type        |
 ––– input –––
 for i in $(seq 1 1000); do mysql -h0 -P9306 -e "ALTER TABLE index${i} RENAME new_index${i};"; done
 ––– output –––
@@ -1164,7 +1164,6 @@ mysql -h0 -P9306 -e "SHOW TABLES" | awk 'NR==1{print $0; next} {print $0 | "sort
 | dist_table    | distributed |
 | index2006     | rt          |
 | index2007     | rt          |
-| Index         | Type        |
 | new_index1000 | rt          |
 | new_index100  | rt          |
 | new_index101  | rt          |
@@ -2170,3 +2169,4 @@ mysql -h0 -P9306 -e "SHOW TABLES" | awk 'NR==1{print $0; next} {print $0 | "sort
 | new_index99   | rt          |
 | new_index9    | rt          |
 | products      | percolate   |
+| Table         | Type        |

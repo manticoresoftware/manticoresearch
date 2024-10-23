@@ -4,7 +4,7 @@
 ## Defining table schema in a configuration file
 
 ```ini
-table <index_name>[:<parent table name>] {
+table <table_name>[:<parent table name>] {
 ...
 }
 ```
@@ -134,7 +134,7 @@ $params = [
             'price'=>['type'=>'float']
         ]
     ],
-    'index' => 'products'
+    'table' => 'products'
 ];
 $index = new \Manticoresearch\Index($client);
 $index->create($params);
@@ -242,7 +242,7 @@ $params = [
             'j'=>['type'=>'json', 'options' => ['secondary_index' => 1]]
         ]
     ],
-    'index' => 'products'
+    'table' => 'products'
 ];
 $index = new \Manticoresearch\Index($client);
 $index->create($params);
@@ -432,7 +432,7 @@ For instance, if 90MB of data is saved to a disk chunk and an additional 10MB of
 
 In real-time mode, you can adjust the size limit of RAM chunks and the maximum number of disk chunks using the `ALTER TABLE` statement. To set `rt_mem_limit` to 1 gigabyte for the table "t," run the following query: `ALTER TABLE t rt_mem_limit='1G'`. To change the maximum number of disk chunks, run the query: `ALTER TABLE t optimize_cutoff='5'`.
 
-In the plain mode, you can change the values of `rt_mem_limit` and `optimize_cutoff` by updating the table configuration or running the command `ALTER TABLE <index_name> RECONFIGURE`
+In the plain mode, you can change the values of `rt_mem_limit` and `optimize_cutoff` by updating the table configuration or running the command `ALTER TABLE <table_name> RECONFIGURE`
 
 ##### Important notes about RAM chunks
 
@@ -472,7 +472,7 @@ killlist_target = main:kl
 
 This setting determines the table(s) to which the kill-list will be applied. Matches in the targeted table that are updated or deleted in the current table will be suppressed. In `:kl` mode, the documents to suppress are taken from the [kill-list](../../Data_creation_and_modification/Adding_data_from_external_storages/Adding_data_to_tables/Killlist_in_plain_tables.md). In `:id` mode, all document IDs from the current table are suppressed in the targeted one. If neither is specified, both modes will take effect. [Learn more about kill-lists here](../../Data_creation_and_modification/Adding_data_from_external_storages/Adding_data_to_tables/Killlist_in_plain_tables.md)
 
-Value: **not specified** (default), target_index_name:kl, target_index_name:id, target_index_name. Multiple values are allowed
+Value: **not specified** (default), target_table_name:kl, target_table_name:id, target_table_name. Multiple values are allowed
 
 #### columnar_attrs
 

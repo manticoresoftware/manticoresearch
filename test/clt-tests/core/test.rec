@@ -1,0 +1,20 @@
+––– input –––
+set -b +m
+––– output –––
+––– input –––
+sed -i '/data_dir = \/var\/lib\/manticore/a\    binlog_common = 1\n' /etc/manticoresearch/manticore.conf
+––– output –––
+––– block: ../base/start-searchd –––
+––– input –––
+for n in 1 2; do mysql -P9306 -h0 -e "create table t${n}"; done;
+––– output –––
+––– input –––
+for n in 1 2; do mysql -P9306 -h0 -e "insert into t${n} values(0)" & done;
+––– output –––
+[1] %{NUMBER}
+[2] %{NUMBER}
+––– input –––
+wait 1>/dev/null 2>&1; echo $?
+––– output –––
+ERROR 1064 (42000) at line 1: unable to write to binlog: : write error: Bad file descriptor
+0

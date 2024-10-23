@@ -1,0 +1,14 @@
+––– block: ../base/start-searchd –––
+––– input –––
+php -d memory_limit=-1 ./test/clt-tests/comparison-overhead-json-sql/load_us_names.php 10000 10 1000000 1 > /dev/null
+––– output –––
+––– input –––
+mysql -h0 -P9306 -e "CALL SUGGEST('snith', 'name', 3 as limit, 2 as max_edits);"
+––– output –––
++---------+----------+------+
+| suggest | distance | docs |
++---------+----------+------+
+| keith   | 2        | 323  |
+| smyth   | 2        | 161  |
+| onita   | 2        | 118  |
++---------+----------+------+

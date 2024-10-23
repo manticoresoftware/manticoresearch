@@ -2,6 +2,7 @@
 ––– input –––
 php -d memory_limit=2G ./test/clt-tests/scripts/load_names_attr.php 100000 4 1000000 1 2G 1 > /dev/null; echo $?
 ––– output –––
+0
 ––– input –––
 mysql -h0 -P9306 -e "SELECT COUNT(*) FROM name;"
 ––– output –––

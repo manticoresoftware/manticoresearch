@@ -1,0 +1,56 @@
+––– input –––
+echo -e "searchd {\n    listen = 9315:mysql\n    listen = 9316\n    log = /tmp/searchd.log\n    pid_file = /tmp/searchd.pid\n    data_dir = /tmp/data\n    watchdog = 0\n}" > /tmp/116.conf
+––– output –––
+––– input –––
+mkdir -p /tmp/data; rm -f /tmp/searchd.log; searchd --stopwait > /dev/null; searchd -c /tmp/116.conf; if timeout 10 grep -qm1 '\[BUDDY\] started' <(tail -n 1000 -f /tmp/searchd.log); then echo 'Buddy started!'; else echo 'Timeout or failed!'; cat /tmp/searchd.log;fi
+––– output –––
+Manticore %{SEMVER} %{COMMITDATE}#!/(\sdev)?\s/!#(columnar %{SEMVER} %{COMMITDATE}) (secondary %{SEMVER} %{COMMITDATE}) (knn %{SEMVER} %{COMMITDATE})
+Copyright (c) 2001-2016, Andrew Aksyonoff
+Copyright (c) 2008-2016, Sphinx Technologies Inc (http://sphinxsearch.com)
+Copyright (c) 2017-%{YEAR}, Manticore Software LTD (https://manticoresearch.com)
+[#!/[0-9]{2}:[0-9]{2}.[0-9]{3}/!#] [#!/[0-9]+/!#] using config file '/tmp/116.conf' (%{NUMBER} chars)...
+starting daemon version '%{SEMVER} %{COMMITDATE}#!/(\sdev)?\s/!#(columnar %{SEMVER} %{COMMITDATE}) (secondary %{SEMVER} %{COMMITDATE}) (knn %{SEMVER} %{COMMITDATE})' ...
+listening on all interfaces for mysql, port=9315
+listening on all interfaces for sphinx and http(s), port=9316
+Buddy started!
+––– input –––
+mysql -P9315 -h0 -e "drop table if exists t; create table t(s string); insert into t values(1, 'a'); flush ramchunk t"; echo $?
+––– output –––
+0
+––– input –––
+rm -f /tmp/update.sql; for n in `seq 1 10000`; do echo "update t set s='b' where id=1;" >> /tmp/update.sql; done; while true; do mysql -P9315 -h0 < /tmp/update.sql | break; echo -n .; done &
+––– output –––
+[#!/[0-9]{1}/!#] %{NUMBER}
+––– input –––
+stdbuf -oL mysql -P9315 -h0 -e "freeze t"
+––– output –––
++------------------------+------------------------+
+| file                   | normalized             |
++------------------------+------------------------+
+| /tmp/data/t/t.0.spa    | /tmp/data/t/t.0.spa    |
+| /tmp/data/t/t.0.spb    | /tmp/data/t/t.0.spb    |
+| /tmp/data/t/t.0.spd    | /tmp/data/t/t.0.spd    |
+| /tmp/data/t/t.0.spe    | /tmp/data/t/t.0.spe    |
+| /tmp/data/t/t.0.sph    | /tmp/data/t/t.0.sph    |
+| /tmp/data/t/t.0.sphi   | /tmp/data/t/t.0.sphi   |
+| /tmp/data/t/t.0.spi    | /tmp/data/t/t.0.spi    |
+| /tmp/data/t/t.0.spidx  | /tmp/data/t/t.0.spidx  |
+| /tmp/data/t/t.0.spm    | /tmp/data/t/t.0.spm    |
+| /tmp/data/t/t.0.spp    | /tmp/data/t/t.0.spp    |
+| /tmp/data/t/t.0.spt    | /tmp/data/t/t.0.spt    |
+| /tmp/data/t/t.meta     | /tmp/data/t/t.meta     |
+| /tmp/data/t/t.ram      | /tmp/data/t/t.ram      |
+| /tmp/data/t/t.settings | /tmp/data/t/t.settings |
++------------------------+------------------------+
+––– input –––
+sleep 1; mysql -P9315 -h0 -e "unfreeze t"; echo $?
+––– output –––
+0
+––– input –––
+mysql -P9315 -h0 -e "select * from t;"
+––– output –––
++------+------+
+| id   | s    |
++------+------+
+|    1 | b    |
++------+------+

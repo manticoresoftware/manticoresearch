@@ -53,6 +53,17 @@ index rt2
 	rt_attr_multi	= mva
 	rt_attr_json = j2
 }
+
+index rt3
+{
+	type = rt
+	path	= <data_path/>/rt3
+	
+	rt_field = desc
+	rt_attr_string = title
+	rt_attr_float = price 
+    rt_attr_uint = count  
+}
 </config>
 
 <db_drop>DROP TABLE IF EXISTS `test_table`</db_drop>
@@ -80,8 +91,9 @@ INSERT INTO `test_table` VALUES
 ( 10,'ten',		'{"tag":"eee"}' )
 </db_insert>
 
-<queries><sphinxql>
+<queries>
 
+<sphinxql>
 select * from idx;
 update idx set title='xxx' where id=1;
 select * from idx;
@@ -135,6 +147,11 @@ select * from rt2;
 update rt2 set js = '{"a":51, "b":"new thing"}', j2.val=56 where id=1;
 select * from rt2;
 
-</sphinxql></queries>
+<!-- crash on update float attribute -->
+insert into rt3 values ( 1, 'one', 'one hundred', 1.0, 1 ), ( 2, 'two', 'two hundred', 3.0, 0 );
+update rt3 set title='doc', price=50 where id=2;
+</sphinxql>
+
+</queries>
 
 </test>

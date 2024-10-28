@@ -2216,7 +2216,7 @@ bool ValidateClusterStatement ( const CSphString & sIndexName, const ServedDesc_
 	if ( !bHTTP )
 		return TlsMsg::Err ( "table '%s' is a part of cluster '%s', use '%s:%s'", sIndexName.cstr(), tDesc.m_sCluster.cstr(), tDesc.m_sCluster.cstr(), sIndexName.cstr() );
 
-	return TlsMsg::Err( R"(table '%s' is a part of cluster '%s', use "cluster":"%s" and "index":"%s" properties)", sIndexName.cstr(), tDesc.m_sCluster.cstr(), tDesc.m_sCluster.cstr(), sIndexName.cstr() );
+	return TlsMsg::Err( R"(table '%s' is a part of cluster '%s', use "cluster":"%s" and "table":"%s" properties)", sIndexName.cstr(), tDesc.m_sCluster.cstr(), tDesc.m_sCluster.cstr(), sIndexName.cstr() );
 }
 
 std::optional<CSphString> IsPartOfCluster ( const ServedDesc_t * pDesc )

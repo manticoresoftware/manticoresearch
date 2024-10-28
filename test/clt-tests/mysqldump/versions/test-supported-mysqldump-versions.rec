@@ -48,7 +48,7 @@ docker exec manticore bash -c "./generate-records.sh 20 | mysql -h0 -P9306"
 docker exec manticore mysql -h0 -P9306 -e 'show tables'
 ––– output –––
 +-------+------+
-| Index | Type |
+| Table | Type |
 +-------+------+
 | t     | rt   |
 +-------+------+

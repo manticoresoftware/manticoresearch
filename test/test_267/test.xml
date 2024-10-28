@@ -23,7 +23,7 @@ searchd
 	create table t(f text, a int);
 	insert into t values(0,'a b c',123), (0,'a b d',123),(0,'a d e',123);
 </sphinxql>
-<query endpoint="json/search">{ "index": "t", "query": { "query_string": "a -b -c" }}</query>
+<query endpoint="json/search">{ "table": "t", "query": { "query_string": "a -b -c" }}</query>
 <sphinxql>
     select * from t;
     select * from t where match('a -b -c'); show meta;

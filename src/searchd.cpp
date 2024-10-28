@@ -12616,7 +12616,7 @@ void HandleMysqlShowTables ( RowBuffer_i & tOut, const SqlStmt_t * pStmt )
 	bool bWithClusters = ClusterFlavour();
 
 	// output the results
-	VectorLike dTable ( pStmt->m_sStringParam, { "Index", "Type" } );
+	VectorLike dTable ( pStmt->m_sStringParam, { "Table", "Type" } );
 	for ( auto& dPair : dIndexes )
 	{
 		if ( bWithClusters && !dPair.m_sCluster.IsEmpty ())
@@ -15742,7 +15742,7 @@ static void AddPlainIndexStatus ( RowBuffer_i & tOut, const cServedIndexRefPtr_c
 	assert ( pIndex );
 
 	VectorLike dStatus ( sPattern );
-	dStatus.MatchTuplet ( "index_type", szIndexType ( pServed->m_eType ) );
+	dStatus.MatchTuplet ( "table_type", szIndexType ( pServed->m_eType ) );
 	if ( pServed->m_eType != IndexType_e::TEMPLATE )
 	{
 		AddDiskIndexStatus ( dStatus, pIndex, pServed->m_eType == IndexType_e::RT, pServed->m_eType == IndexType_e::PERCOLATE );
@@ -15756,7 +15756,7 @@ static void AddDistibutedIndexStatus ( RowBuffer_i & tOut, const cDistributedInd
 {
 	assert ( pIndex );
 	VectorLike dStatus ( sPattern );
-	dStatus.MatchTuplet( "index_type", "distributed" );
+	dStatus.MatchTuplet( "table_type", "distributed" );
 	AddIndexQueryStats ( dStatus, pIndex->m_tStats );
 	tOut.DataTable ( dStatus );
 }
@@ -18519,7 +18519,7 @@ bool ConfigureDistributedIndex ( std::function<bool(const CSphString&)>&& fnChec
 	bool bHaveHA = tIdx.m_dAgents.any_of ( [] ( const auto& ag ) { return ag->IsHA (); } );
 
 	// configure ha_strategy
-	if ( bSetHA && !bHaveHA )
+	if ( bSetHA && !bHaveHA && !IsConfigless() )
 		sphWarning ( "table '%s': ha_strategy defined, but no ha agents in the table", szIndexName );
 
 	return true;

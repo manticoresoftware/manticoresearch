@@ -8,7 +8,7 @@ Beginning with Manticore 4, this process occurs [automatically by default](../Se
 
 <!-- example optimize -->
 ```sql
-OPTIMIZE TABLE index_name [OPTION opt_name = opt_value [,...]]
+OPTIMIZE TABLE table_name [OPTION opt_name = opt_value [,...]]
 ```
 
 `OPTIMIZE` statement adds an RT table to the optimization queue, which will be processed in a background thread.

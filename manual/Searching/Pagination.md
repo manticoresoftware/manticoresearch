@@ -26,14 +26,14 @@ SELECT  ... FROM ...  [LIMIT row_count][ OFFSET offset]
 
 ```json
 {
-  "index": "<index_name>",
+  "table": "<table_name>",
   "query": ...
   ...  
   "limit": 20,
   "offset": 0
 }
 {
-  "index": "<index_name>",
+  "table": "<table_name>",
   "query": ...
   ...  
   "size": 20,
@@ -69,7 +69,7 @@ SELECT  ... FROM ...   OPTION max_matches=<value>
 
 ```json
 {
-  "index": "<index_name>",
+  "table": "<table_name>",
   "query": ...
   ...
   "max_matches":<value>

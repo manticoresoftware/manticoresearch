@@ -110,9 +110,9 @@ runs:
       id: commit-message
       shell: bash
       run: |
-        cd manticoresearch
+        cd repository
         repo_url=${{ github.server_url }}/${{ github.repository }}
-        changes=$(git log --pretty=format:"[\`%h\`]($repo_url/commit/%H) %s" origin/master..HEAD)
+        changes=$(git log --pretty=format:"[\`%h\`]($repo_url/commit/%H) %s" ${{ steps.commit.outputs.original_commit }}..HEAD)
         name=${{ inputs.name }}
         version_string="${{ inputs.version }}"
         title="🆕 Update ${name} version"
@@ -127,6 +127,7 @@ runs:
         echo "title=$title" >> $GITHUB_OUTPUT
         echo "commit=$commit" >> $GITHUB_OUTPUT
         echo "body-path=$body_path" >> $GITHUB_OUTPUT
+        echo "branch=${{ steps.branch.outputs.branch }}" >> $GITHUB_OUTPUT
 
     - name: Create or update Pull Request
       shell: bash

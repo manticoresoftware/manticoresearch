@@ -1,27 +1,27 @@
 # Syncing with Kafka
 
-Manticore Search can efficiently consume messages from a Kafka broker, enabling real-time data indexing and search capabilities.
+Manticore Search can seamlessly consume messages from a Kafka broker, allowing for real-time data indexing and search.
 
-To get started, you need:
-1. **Define the source:** Specify the Kafka topic from which Manticore Search will read messages. This involves setting up connection details such as the broker's host, port, and topic name.
-2. **Destination table:** Designate a Manticore real-time table where the data from Kafka will be stored.
-3. **Create a materialized view:** Establish a materialized view (`mv`) to define the transformation and mapping of data from Kafka to the destination table in Manticore Search. This includes specifying field mappings, data transformations, and any filters or conditions to apply to the incoming data stream.
+To get started, you need to:
+1. **Define the source:** Specify the Kafka topic from which Manticore Search will read messages. This setup includes details like the broker’s host, port, and topic name.
+2. **Set up the destination table:** Choose a Manticore real-time table to store the incoming Kafka data.
+3. **Create a materialized view:** Set up a materialized view (`mv`) to handle data transformation and mapping from Kafka to the destination table in Manticore Search. Here, you’ll define field mappings, data transformations, and any filters or conditions for the incoming data stream.
 
 ## Source
 
 <!-- example kafka_source -->
 
-The `source` configuration allows you to define the `broker`, `topic list`, `consumer group`, and the internal message structure.
+The `source` configuration allows you to define the `broker`, `topic list`, `consumer group`, and the message structure.
 
 #### Schema
 
-Define the schema using standard Manticore fields such as `int`, `float`, `text`, `json`, etc.
+Define the schema using Manticore field types like `int`, `float`, `text`, `json`, etc.
 
 ```sql
 CREATE SOURCE <source name> [(column type, ...)] [source_options]
 ```
 
-All keys in the schema are case-insensitive, meaning there is no difference between Products, products, or PrOdUcTs. They are all converted to lowercase.
+All schema keys are case-insensitive, so `Products`, `products`, and `PrOdUcTs` are treated the same. They are all converted to lowercase.
 
 <!-- intro -->
 
@@ -52,12 +52,12 @@ Query OK, 2 rows affected (0.02 sec)
 
 | Option | Accepted Values | Description |
 |-|-|-|
-| `type` | `kafka` | Specifies the source type. Currently, only `kafka` is supported. |
-| `broker_list` | host:port [, ...] | Specifies the Kafka broker URLs. |
-| `topic_list` | string [, ...] | Lists the Kafka topics to consume from. |
-| `consumer_group`| string | Defines the Kafka consumer group. Default is `manticore`. |
-| `num_consumers` | int | Specifies the number of consumer processes to handle messages. |
-| `batch` | int | Sets the number of messages to accumulate before processing. Default is `100`. Processes what's available at timeout otherwise. |
+| `type` | `kafka` | Sets the source type. Currently, only `kafka` is supported |
+| `broker_list` | host:port [, ...] | Specifies Kafka broker URLs |
+| `topic_list` | string [, ...] | Lists Kafka topics to consume from |
+| `consumer_group`| string | Defines the Kafka consumer group, defaulting to `manticore`. |
+| `num_consumers` | int | Number of consumers to handle messages. |
+| `batch` | int | Number of messages to process before moving on. Default is `100`; processes remaining messages on timeout otherwise |
 
 ### Destination table
 
@@ -88,10 +88,9 @@ Query OK, 0 rows affected (0.02 sec)
 
 <!-- example kafka_mv -->
 
-A materialized view allows you to transform incoming messages from Kafka. You can rename fields, apply various Manticore Search functions, and conduct sorting, grouping, and other advanced data manipulation operations.
+A materialized view enables data transformation from Kafka messages. You can rename fields, apply Manticore Search functions, and perform sorting, grouping, and other data operations.
 
-Essentially, a materialized view functions like a standard query that transfers data from the Kafka source to the destination table. This enables the use of the full range of Manticore Search syntax to tailor these queries according to your specific needs. Ensure the fields you refer to in the `select` match the fields in the source.
-
+A materialized view acts as a query that moves data from the Kafka source to the destination table, letting you use Manticore Search syntax to customize these queries. Make sure that fields in the `select` match those in the source.
 
 ```
 CREATE MATERIALIZED VIEW <materialized view name>
@@ -121,11 +120,12 @@ Query OK, 2 rows affected (0.02 sec)
 
 <!-- end -->
 
-When data is transferred from Kafka to Manticore Search, it is handled in batches, which are cleared after each iteration. This setup means that aggregate calculations that require continuity of data, such as `AVG` or similar functions, should be approached cautiously. These functions might not perform as expected if they span multiple batches because each batch processes data independently.
+Data is transferred from Kafka to Manticore Search in batches, which are cleared after each run. For calculations across batches, such as AVG, use caution, as these may not work as expected due to batch-by-batch processing.
 
-### Mapping fields
 
-For easy comprehension, we provide the following mapping table of examples above:
+### Field Mapping
+
+Here's a mapping table based on the examples above:
 
 | Kafka | Source | Buffer | MV | Destination |
 |-|-|-|-|-|
@@ -140,10 +140,10 @@ For easy comprehension, we provide the following mapping table of examples above
 
 <!-- example kafka_listing -->
 
-To list and inspect the configuration of sources and materialized views within Manticore Search, use the following commands:
-- `SHOW SOURCES`: Lists all the sources configured in the system.
+To view sources and materialized views in Manticore Search, use these commands:
+- `SHOW SOURCES`: Lists all configured sources.
 - `SHOW MVS`: Lists all materialized views.
-- `SHOW MV view_table`: Provides comprehensive details about a specific materialized view.
+- `SHOW MV view_table`: Shows detailed information on a specific materialized view.
 
 <!-- intro -->
 
@@ -250,25 +250,26 @@ SHOW MV view_table
 
 ### Altering materialized views
 
-You can suspend consumption by altering materialized views.
+You can suspend data consumption by altering materialized views.
 
-If you remove the `source` and do not delete the MV, it will automatically suspend. After recreation of the related source, you should unsuspend MV manually the `ALTER` command
+If you remove the `source` without deleting the MV, it automatically suspends. After recreating the source, unsuspend the MV manually using the `ALTER` command.
 
-Currently, only altering materalized views is supported. To change `source` parameters, you should drop it and recreate it.
+Currently, only materialized views can be altered. To change `source` parameters, drop and recreate the source.
 
 ### Troubleshooting
 
-#### Duplicated entries
-Offsets in Kafka are committed after each batch or upon timeout processing. However, if the daemon unexpectedly stops during the execution of the materialized view query, there is a potential risk of duplicated entries in the data received. To mitigate this, it is advisable to include an `id` field in your schema. This field acts as a unique identifier, allowing Manticore Search to automatically manage and prevent duplicates within the table if disruptions occur.
+#### Duplicate entries
+
+Kafka offsets commit after each batch or when processing times out. If the process stops unexpectedly during a materialized view query, you may see duplicate entries. To avoid this, include an `id` field in your schema, allowing Manticore Search to prevent duplicates in the table.
 
 ### How it works internally
 
-1. **Initialization of worker:** Once you configure a source and a materialized view, Manticore Search initializes a dedicated worker to handle data ingestion from the specified Kafka broker.
-2. **Message mapping:** As messages arrive, they are mapped according to the schema provided in the source configuration. This mapping transforms the raw message data into a structured format suitable for processing.
-3. **Batch organization:** Incoming messages are grouped into batches to optimize processing efficiency. The size of these batches can be configured based on your performance and latency requirements.
-4. **Buffering:** The batches of mapped data are temporarily stored in a buffer table. This allows for efficient bulk operations in the subsequent stages.
-5. **Executing materialized view logic:** The logic defined in the materialized view is applied to the data in the buffer table. This may include transformations, aggregations, or filtering operations.
-6. **Data transfer:** After processing, the results are written to the destination real-time table where they are stored permanently or until further processing.
-7. **Cleanup:** To maintain efficiency and prevent data redundancy, the buffer table is truncated after each batch is processed, clearing the way for the next set of data.
+- **Worker initialization:** After configuring a source and materialized view, Manticore Search sets up a dedicated worker to handle data ingestion from Kafka.
+- **Message mapping:** Messages are mapped according to the source configuration schema, transforming them into a structured format.
+- **Batching:** Messages are grouped into batches for efficient processing. Batch size can be adjusted to suit your performance and latency needs.
+- **Buffering:** Mapped data batches are stored in a buffer table for efficient bulk operations.
+- **Materialized view processing:** The view logic is applied to data in the buffer table, performing any transformations or filtering.
+- **Data transfer:** Processed data is then transferred to the destination real-time table.
+- **Cleanup:** The buffer table is cleared after each batch, ensuring it’s ready for the next set of data.
 
 <!-- proofread -->

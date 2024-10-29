@@ -5,7 +5,7 @@ The table can be emptied with a `TRUNCATE TABLE` SQL statement or with a `trunca
 Here is the syntax for the SQL statement:
 
 ```sql
-TRUNCATE TABLE index_name [WITH RECONFIGURE]
+TRUNCATE TABLE table_name [WITH RECONFIGURE]
 ```
 
 <!-- example truncate -->
@@ -51,7 +51,7 @@ POST /cli -d "TRUNCATE TABLE products"
 <!-- request PHP -->
 
 ```php
-$params = [ 'index' => 'products' ];
+$params = [ 'table' => 'products' ];
 $response = $client->indices()->truncate($params);
 ```
 
@@ -120,7 +120,7 @@ utilsApi.Sql("TRUNCATE TABLE products");
 
 <!-- end -->
 
-One of the possible uses of this command is before [attaching a table](Data_creation_and_modification/Adding_data_from_external_storages/Adding_data_to_tables/Attaching_a_plain_table_to_RT_table.md).
+One of the possible uses of this command is before [attaching a table](Data_creation_and_modification/Adding_data_from_external_storages/Adding_data_to_tables/Attaching_one_table_to_another.md).
 
 <!-- example truncate with RECONFIGURE -->
 
@@ -165,7 +165,7 @@ POST /cli -d "TRUNCATE TABLE products with reconfigure"
 <!-- request PHP -->
 
 ```php
-$params = [ 'index' => 'products', 'with' => 'reconfigure' ];
+$params = [ 'table' => 'products', 'with' => 'reconfigure' ];
 $response = $client->indices()->truncate($params);
 ```
 

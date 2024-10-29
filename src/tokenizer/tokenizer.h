@@ -120,6 +120,9 @@ public:
 	/// get next token
 	virtual BYTE *					GetToken () = 0;
 
+	/// get next token comply escaping rules
+	virtual BYTE *					GetTokenEscaped () { return GetToken(); }
+
 	/// calc codepoint length
 	virtual int						GetCodepointLength ( int iCode ) const noexcept = 0;
 

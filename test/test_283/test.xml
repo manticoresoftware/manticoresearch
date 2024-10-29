@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="utf-8"?>
+<test>
+
+<name>overriding in charset table</name>
+
+<requires>
+	<force-rt/>
+</requires>
+
+<skip_indexer/>
+
+<config>
+searchd
+{
+	<searchd_settings/>
+	data_dir = <data_path/>
+}
+</config>
+
+<queries>
+<sphinxql>
+	drop table if exists tt;
+	create table tt(f text) charset_table='non_cjk, y->x';
+	call keywords('yx', 'tt');
+	drop table tt;
+</sphinxql>
+</queries>
+
+</test>

@@ -19,7 +19,7 @@
 bool ReplicationEnabled();
 
 // setup IP, ports and node incoming address
-void SetReplicationListener ( const VecTraits_T<ListenerDesc_t>& dListeners );
+bool SetReplicationListener ( const VecTraits_T<ListenerDesc_t>& dListeners, CSphString & sError );
 
 // listen IP part of address for Galera. The first of 'listen=' config with proto = replication
 const char* szListenReplicationIP();
@@ -35,7 +35,5 @@ const char* szIncomingProto();
 
 // used to filter out own adrress
 bool MyIncomingApiAddrBeginsWith ( const char* szHost );
-
-void SetReplicationListener ( const VecTraits_T<ListenerDesc_t>& dListeners );
 
 void ReplicationSetIncoming ( CSphString sIncoming );

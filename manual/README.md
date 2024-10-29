@@ -7,6 +7,7 @@
     * [• MacOS](Installation/MacOS.md)
     * [• Windows](Installation/Windows.md)
     * [• Compiling from sources](Installation/Compiling_from_sources.md)
+    * [• Manticore Buddy](Installation/Manticore_Buddy.md)
     * [• Migration from Sphinx](Installation/Migration_from_Sphinx.md)
 * [🔰 Quick start guide](Quick_start_guide.md)
 * [2️⃣ Starting the server](Starting_the_server.md)
@@ -27,7 +28,7 @@
     * [⪢ NLP and tokenization]
         * [• Data tokenization](Creating_a_table/NLP_and_tokenization/Data_tokenization.md)
         * [• Supported languages](Creating_a_table/NLP_and_tokenization/Supported_languages.md)
-        * [• CJK](Creating_a_table/NLP_and_tokenization/CJK.md)
+        * [• Languages with continuous scripts](Creating_a_table/NLP_and_tokenization/Languages_with_continuous_scripts.md)
         * [• Low-level tokenization](Creating_a_table/NLP_and_tokenization/Low-level_tokenization.md)
         * [• Wildcard searching settings](Creating_a_table/NLP_and_tokenization/Wildcard_searching_settings.md)
         * [• Ignoring stop words](Creating_a_table/NLP_and_tokenization/Ignoring_stop-words.md)
@@ -96,6 +97,7 @@
         * [• Boolean optimization](Searching/Full_text_matching/Boolean_optimization.md)
     * [• Search results](Searching/Search_results.md)
     * [• Filters](Searching/Filters.md)
+    * [• Joining](Searching/Joining.md)
     * [• Expressions](Searching/Expressions.md)
     * [• Search options](Searching/Options.md)
     * [• Highlighting](Searching/Highlighting.md)
@@ -110,11 +112,21 @@
     * [• Percolate query](Searching/Percolate_query.md)
     * [• Autocomplete](Searching/Autocomplete.md)
     * [• Spell correction](Searching/Spell_correction.md)
+        * [• Fuzzy search](Searching/Spell_correction.md#Fuzzy-Search)
     * [• Query cache](Searching/Query_cache.md)
     * [• Collations](Searching/Collations.md)
     * [• Cost-based optimizer](Searching/Cost_based_optimizer.md)
     * [• K-nearest neighbor vector search](Searching/KNN.md)
 * [• Updating table schema and settings](Updating_table_schema_and_settings.md)
+<<<<<<< HEAD
+=======
+    * [• Updating table schema in RT mode](Updating_table_schema_and_settings.md#Updating-table-schema-in-RT-mode)
+    * [• Updating table FT settings in RT mode](Updating_table_schema_and_settings.md#Updating-table-FT-settings-in-RT-mode)
+    * [• Renaming a real-time table](Updating_table_schema_and_settings.md#Renaming-a-real-time-table)
+    * [• Updating table FT settings in plain mode](Updating_table_schema_and_settings.md#Updating-table-FT-settings-in-plain-mode)
+    * [• Rebuilding a secondary index](Updating_table_schema_and_settings.md#Rebuilding-a-secondary-index)
+    * [• Changing a distributed table](Updating_table_schema_and_settings.md#Changing-a-distributed-table)
+>>>>>>> master
 * [⪢ Functions](Functions.md)
     * [• Mathematical functions](Functions/Mathematical_functions.md)
     * [• Searching and ranking functions](Functions/Searching_and_ranking_functions.md)
@@ -169,7 +181,12 @@
 * [⪢ Integration]
     * [Logstash](Integration/Logstash.md)
     * [Filebeat](Integration/Filebeat.md)
+<<<<<<< HEAD
     * [Kafka](Integration/Kafka.md)
+=======
+    * [DBeaver](Integration/DBeaver.md)
+    * [Apache Superset](Integration/Apache_Superset.md)
+>>>>>>> master
 * [⪢ Extensions]
     * [SphinxSE](Extensions/SphinxSE.md)
     * [FEDERATED](Extensions/FEDERATED.md)

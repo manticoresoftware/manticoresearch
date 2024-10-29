@@ -79,10 +79,10 @@ insert into test_table values
 
 <httpqueries>
 
-<query endpoint="json/search">{ "index": "test", "query": { "match": { "title": "fill" } }, "_source": "*id*" }</query>
-<query endpoint="json/search">{ "index": "test", "query": { "match": { "title": "fill" } }, "_source": ["gi*", "*20*"] }</query>
-<query endpoint="json/search">{ "index": "test", "query": { "match": { "title": "fill" } }, "_source": { "includes":["*"], "excludes":[] } }</query>
-<query endpoint="json/search">{ "index": "test", "query": { "match": { "title": "fill" } }, "_source": { "excludes":["*02", "*id1*"] } }</query>
+<query endpoint="json/search">{ "table": "test", "query": { "match": { "title": "fill" } }, "_source": "*id*" }</query>
+<query endpoint="json/search">{ "table": "test", "query": { "match": { "title": "fill" } }, "_source": ["gi*", "*20*"] }</query>
+<query endpoint="json/search">{ "table": "test", "query": { "match": { "title": "fill" } }, "_source": { "includes":["*"], "excludes":[] } }</query>
+<query endpoint="json/search">{ "table": "test", "query": { "match": { "title": "fill" } }, "_source": { "excludes":["*02", "*id1*"] } }</query>
 
 <query endpoint="json/search">
 {   
@@ -109,7 +109,7 @@ insert into test_table values
          ]  
       }  
    },  
-   "index":"test,test2",  
+   "table":"test,test2",  
    "limit":5  
 }  
 </query>
@@ -139,7 +139,7 @@ insert into test_table values
 			]  
 		}  
 	},  
-   "index":"test,test2",  
+   "table":"test,test2",  
    "limit":5  
 }  
 </query>
@@ -165,14 +165,14 @@ insert into test_table values
 			]  
 		}  
 	},  
-   "index":"test,test2",  
+   "table":"test,test2",  
    "limit":5  
 }  
 </query>
 
 <query endpoint="json/search">
 {
-	"index":"test, test2",
+	"table":"test, test2",
 	"query":
 	{ 
     	"bool":
@@ -194,6 +194,37 @@ insert into test_table values
     	} 
   	} 
 }
+</query>
+
+<!-- complex query error -->
+<query endpoint="json/search">
+{   
+	"query":
+	{   
+		"bool":
+		{   
+			"must":
+			[   
+				{ "match": { "*":"fill" } }  
+			],  
+			"should":
+			[   
+				{ "equals": { "gid101":1 }  },  
+            	{ "bool":
+					{
+						"must":
+						[
+							{ "missed": { "gid102":32 }  },
+							{ "equals": { "gid101":31 }  }
+						]
+					}
+				}  
+			]  
+		}  
+	},  
+   "table":"test,test2",  
+   "limit":5  
+}  
 </query>
 
 </httpqueries>

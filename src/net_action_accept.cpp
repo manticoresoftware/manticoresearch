@@ -120,7 +120,7 @@ void MultiServe ( std::unique_ptr<AsyncNetBuffer_c> pBuf, NetConnection_t tConn,
 		case Proto_e::MYSQL41: return SqlServe ( std::move ( pBuf ) );
 		case Proto_e::SPHINXSE: eMultiProto = Proto_e::SPHINXSE; break; // force sphinx SE
 		default:
-			eMultiProto = pBuf->Probe ( false );
+			eMultiProto = pBuf->Probe();
 	}
 
 	switch ( eMultiProto )
@@ -187,6 +187,8 @@ public:
 		Dequeue();
 		if ( m_bVip )
 			ClientTaskInfo_t::m_iVips.fetch_sub ( 1, std::memory_order_relaxed );
+		if ( m_pInfo->GetBuddy() )
+			ClientTaskInfo_t::m_iBuddy.fetch_sub ( 1, std::memory_order_relaxed );
 		ClientTaskInfo_t::m_iClients.fetch_sub ( 1, std::memory_order_relaxed );
 	}
 

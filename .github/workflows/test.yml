@@ -26,7 +26,6 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-
   commit_info:
     name: Commit info
     runs-on: ubuntu-22.04
@@ -38,7 +37,33 @@ jobs:
           echo "* Ref: ${{ github.ref_type }} \"${{ github.ref_name }}\"" >> $GITHUB_STEP_SUMMARY
           echo "* Attempt: ${{ github.run_attempt }}" >> $GITHUB_STEP_SUMMARY
 
+  changes:
+    name: Detect changes in commit
+    runs-on: ubuntu-22.04
+    outputs:
+      source: ${{ steps.filter.outputs.source }}
+      test: ${{ steps.filter.outputs.test }}
+      clt: ${{ steps.filter.outputs.clt }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dorny/paths-filter@v3
+        id: filter
+        with:
+          filters: |
+            source:
+            - '**'
+            - '!.github/**'
+            - '!manual/**'
+            - '!doc/**'
+            - '!test/**'
+            test:
+            - 'test/**'
+            - '!test/clt-tests/**'
+            clt:
+            - 'test/clt-tests/**'
   win_bundle:
+    if: needs.changes.outputs.source == 'true'
+    needs: changes
     name: Windows supplementary files preparation
     runs-on: ubuntu-22.04
     steps:
@@ -65,6 +90,8 @@ jobs:
           tar -xf boost_1_75_0.tgz
 
   build_linux_debug:
+    if: needs.changes.outputs.source == 'true'
+    needs: changes
     name: Linux debug build
     uses: ./.github/workflows/build_template.yml
     with:
@@ -208,6 +235,8 @@ jobs:
           path: build
 
   build_linux_release:
+    if: needs.changes.outputs.source == 'true'
+    needs: changes
     name: Linux release build
     uses: ./.github/workflows/build_template.yml
     with:
@@ -349,8 +378,55 @@ jobs:
           name: release_test_resuls
           path: build
 
+  pack_jammy_cache_check:
+    needs: changes
+    name: Jammy x86_64 package [check cache]
+    runs-on: ubuntu-22.04
+    outputs:
+      cache-key: ${{ steps.generate-key.outputs.cache-key }}
+      cache-hit: ${{ steps.cache.outputs.cache-hit }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      - name: Generate cache key
+        id: generate-key
+        run: |
+          if [ "${{ github.event_name }}" == "pull_request" ]; then
+            branch=${{ github.head_ref }}
+          else
+            branch=$(git rev-parse --abbrev-ref HEAD)
+          fi
+          cache_key="jammy-build-${branch}"
+          echo "cache-key=${cache_key}" >> $GITHUB_OUTPUT
+
+      - name: Set up cache
+        id: cache
+        uses: actions/cache@v4
+        with:
+          path: build
+          key: ${{ steps.generate-key.outputs.cache-key }}
+
+      - name: Override cache hit
+        id: override-cache-hit
+        run: |
+          if [ "${{ needs.changes.outputs.source }}" == "true" ]; then
+            echo "cache-hit=false" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Upload build artifacts from cache
+        if: ${{ steps.cache.outputs.cache-hit == 'true' }}
+        uses: manticoresoftware/upload_artifact_with_retries@v3
+        with:
+          name: build_jammy_RelWithDebInfo_x86_64
+          path: "build/manticore*deb"
+
   pack_jammy:
-    name: Jammy x86_64 package
+    needs: pack_jammy_cache_check
+    if: |
+      needs.pack_jammy_cache_check.outputs.cache-hit != 'true' ||
+      needs.changes.outputs.source == 'true'
+    name: Jammy x86_64 package [build]
     uses: ./.github/workflows/build_template.yml
     with:
       DISTR: jammy
@@ -363,14 +439,33 @@ jobs:
       cache_key: pack_jammy_x86_64
       artifact_list: "build/manticore*deb"
 
-  build_test_kit_docker:
-    name: Test Kit docker image
-    needs: pack_jammy
+  pack_jammy_cache_update:
+    name: Jammy x86_64 package [update cache]
+    needs: [pack_jammy, pack_jammy_cache_check]
     runs-on: ubuntu-22.04
-    env:
-      GHCR_USER: ${{ secrets.GHCR_USER }}
-      GHCR_PASSWORD: ${{ secrets.GHCR_PASSWORD }}
-      REPO_OWNER: ${{ github.repository_owner }}
+    if: needs.pack_jammy_cache_check.outputs.cache-hit != 'true'
+    steps:
+      - name: Checkout repository # We have to checkout to access .github/workflows/ in further steps
+        uses: actions/checkout@v3
+
+      - name: Download built x86_64 Ubuntu Jammy packages
+        uses: manticoresoftware/download_artifact_with_retries@v2
+        continue-on-error: true
+        with:
+          name: build_jammy_RelWithDebInfo_x86_64
+          path: .
+
+      - name: Save cache
+        uses: actions/cache@v4
+        with:
+          path: build
+          key: ${{ needs.pack_jammy_cache_check.outputs.cache-key }}
+
+  test_kit_docker_build:
+    name: Test Kit docker image
+    needs: [pack_jammy, pack_jammy_cache_check]
+    if: always() && needs.pack_jammy.result != 'failure'
+    runs-on: ubuntu-22.04
     outputs:
       out-build: ${{ steps.build.outputs.build_image }}
     steps:
@@ -393,7 +488,7 @@ jobs:
       - name: Building docker
         id: build
         run: |
-          BUILD_COMMIT=${{ steps.sha.outputs.sha_short }} /bin/bash dist/test_kit_docker.sh
+          BUILD_COMMIT=${{ steps.sha.outputs.sha_short }} /bin/bash dist/test_kit_docker_build.sh
           echo "build_image=ghcr.io/$REPO_OWNER/manticoresearch:test-kit-${{ steps.sha.outputs.sha_short }}" >> $GITHUB_OUTPUT
       - name: Upload docker image artifact
         uses: manticoresoftware/upload_artifact_with_retries@v3
@@ -401,10 +496,10 @@ jobs:
           name: manticore_test_kit.img
           path: manticore_test_kit.img
 
-
   clt:
     name: CLT
-    needs: build_test_kit_docker
+    needs: test_kit_docker_build
+    if: always() && needs.test_kit_docker_build.result != 'failure'
     runs-on: ubuntu-22.04
     strategy:
       fail-fast: false
@@ -414,8 +509,6 @@ jobs:
             test_prefix: |-
               test/clt-tests/core/
               test/clt-tests/expected-errors/
-          - name: Logstash
-            test_prefix: test/clt-tests/logstash/logstash- 
           - name: mysqldump
             test_prefix: |-
               test/clt-tests/mysqldump/mysql/
@@ -424,15 +517,47 @@ jobs:
             test_prefix: test/clt-tests/replication/
           - name: Plugins
             test_prefix: test/clt-tests/plugins/
+          - name: Buddy
+            test_prefix: test/clt-tests/buddy/
     steps:
-      - uses: manticoresoftware/clt@0.1.23
+      - uses: manticoresoftware/clt@0.2.3
         with:
           artifact: manticore_test_kit.img
           image: test-kit:img
           test_prefix: ${{ matrix.test-suite.test_prefix }}
           comment_mode: failures
 
+
+  test_kit_docker_push:
+    if: always() && needs.changes.outputs.source == 'true'
+    needs:
+      - changes
+      - clt
+    name: Push Test Kit docker image to repo
+    runs-on: ubuntu-22.04
+    env:
+      GHCR_USER: ${{ secrets.GHCR_USER }}
+      GHCR_PASSWORD: ${{ secrets.GHCR_PASSWORD }}
+      REPO_OWNER: ${{ github.repository_owner }}
+    steps:
+      - name: Checkout repository # We have to checkout to access .github/workflows/ in further steps
+        uses: actions/checkout@v3
+      - name: Download artifact
+        uses: manticoresoftware/download_artifact_with_retries@main
+        with:
+          name: manticore_test_kit.img
+          path: .
+      - name: Calculate short commit hash
+        id: sha
+        run: echo "sha_short=$(git rev-parse --short HEAD)" >> $GITHUB_OUTPUT
+      - name: Pushing docker image to repo
+        id: test-kit-push
+        run: |
+          TEST_RESULT=${{ needs.clt.result }} BUILD_COMMIT=${{ steps.sha.outputs.sha_short }} /bin/bash dist/test_kit_docker_push.sh
+
   build_aarch64:
+    if: needs.changes.outputs.source == 'true'
+    needs: changes
     name: Linux aarch64 build
     uses: ./.github/workflows/build_template.yml
     with:
@@ -441,21 +566,26 @@ jobs:
       cache_key: build_jammy_aarch64
 
   build_freebsd:
+    if: needs.changes.outputs.source == 'true'
+    needs: changes
     name: FreeBSD x86_64 build
     uses: ./.github/workflows/build_template.yml
     with:
       DISTR: freebsd13
-      boost: none
+      boost_url_key: none
       cmake_command: mkdir build && cd build && ctest -VV -S ../misc/ctest/justbuild.cmake -DCTEST_SOURCE_DIRECTORY=.. --no-compress-output
       cache_key: build_freebsd_x86_64
 
   build_windows:
+    if: needs.changes.outputs.source == 'true'
+    needs: changes
     name: Windows x64 build
     uses: ./.github/workflows/build_template.yml
     with:
       DISTR: windows
       arch: x64
-      sysroot: roots_apr15
+      sysroot_url_key: roots_mysql83_jul29
+      boost_url_key: boost80_zstd_zlib
       CTEST_CMAKE_GENERATOR: "Ninja Multi-Config"
       CTEST_CONFIGURATION_TYPE: Debug
       cache_key: build_windows_x64
@@ -489,7 +619,7 @@ jobs:
     needs: test_windows
     runs-on: ubuntu-22.04
     container:
-      image: manticoresearch/ubertests_ctest:3263_jammy
+      image: manticoresearch/ubertests_ctest:3263_20240920
     steps:
       - name: Checkout repository
         uses: actions/checkout@v3

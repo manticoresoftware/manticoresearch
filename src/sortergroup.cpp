@@ -416,8 +416,7 @@ public:
 			dRhs.m_hGroup2Match = std::move ( m_hGroup2Match );
 			dRhs.m_bMatchesFinalized = m_bMatchesFinalized;
 			dRhs.m_iMaxUsed = m_iMaxUsed;
-			if ( !m_bMatchesFinalized && bCopyMeta )
-				dRhs.m_tUniq = std::move(m_tUniq);
+			dRhs.m_tUniq = std::move(m_tUniq);
 
 			m_iMaxUsed = -1;
 			return;
@@ -476,31 +475,22 @@ public:
 			m_tUniq.Sort();
 			VecTraits_T<SphGroupKey_t> dStub;
 			m_tUniq.Compact(dStub);
+
+			// need to clean up matches NOT from m_dIData with current schema
+			// as after schema change data_ptr attributes will have garbage in ptr part for matches not processed by tProcessor
+			// and global sorters have differrent clean up code path that do not handle this garbage as usual sorters do
+			for ( int i = this->m_dIData.GetLength(); i < m_dData.GetLength(); i++ )
+			{
+				int iId = *(this->m_dIData.Begin()+i);
+				CSphMatch & tMatch = m_dData[iId];
+				m_pSchema->FreeDataPtrs(tMatch);
+				tMatch.ResetDynamic();
+			}
 		}
 
 		// just evaluate in heap order
 		for ( auto iMatch : this->m_dIData )
 			tProcessor.Process ( &m_dData[iMatch] );
-
-		if constexpr ( DISTINCT )
-		{
-			// need to clean up matches NOT from m_dIData with current schema
-			// as after schema change data_ptr attributes will have garbage in ptr part for matches not processed by tProcessor
-			// and global sorters have differrent clean up code path that do not handle this garbage as usual sorters do
-			if ( this->m_dIData.GetLength()!=m_iMaxUsed )
-			{
-				for ( int i=0; i<m_iMaxUsed; i++ )
-				{
-					CSphMatch & tMatch = m_dData[i];
-					if ( !tMatch.m_pStatic ) // clean up match that was in m_dIData set
-						continue;
-
-					m_pSchema->FreeDataPtrs ( tMatch );
-					tMatch.ResetDynamic ();
-				}
-			}
-		}
-
 	}
 
 	void SetMerge ( bool bMerge ) override { m_bMerge = bMerge; }
@@ -537,8 +527,9 @@ protected:
 		}
 
 		// submit actual distinct value
-		if ( DISTINCT && m_bUpdateDistinct )
-			KBufferGroupSorter::template UpdateDistinct<GROUPED> ( tEntry, uGroupKey );
+		if constexpr ( DISTINCT )
+			if ( m_bUpdateDistinct )
+				KBufferGroupSorter::template UpdateDistinct<GROUPED> ( tEntry, uGroupKey );
 
 		return false; // since it is a dupe
 	}
@@ -571,13 +562,14 @@ protected:
 			return PushIntoExistingGroup<GROUPED> ( *pMatch, tEntry, uGroupKey, pAttr );
 		}
 
+		// if we're full, let's cut off some worst groups
+		if ( Used ()==m_iSize )
+			CutWorst ( m_iLimit*(int) ( GROUPBY_FACTOR/2 ) );
+
 		// submit actual distinct value
 		if constexpr ( DISTINCT )
-			KBufferGroupSorter::template UpdateDistinct<GROUPED> ( tEntry, uGroupKey );
-
-		// if we're full, let's cut off some worst groups
-		if ( Used()==m_iSize )
-			CutWorst ( m_iLimit * (int)(GROUPBY_FACTOR/2) );
+			if ( m_bUpdateDistinct )
+				KBufferGroupSorter::template UpdateDistinct<GROUPED> ( tEntry, uGroupKey );
 
 		// do add
 		assert ( Used()<m_iSize );
@@ -599,8 +591,9 @@ protected:
 		{
 			tNew.SetAttr ( m_tLocGroupby, uGroupKey );
 			tNew.SetAttr ( tLocCount, 1 );
-			if ( DISTINCT && m_bUpdateDistinct )
-				tNew.SetAttr ( m_tLocDistinct, 0 );
+			if constexpr ( DISTINCT )
+				if ( m_bUpdateDistinct )
+					tNew.SetAttr ( m_tLocDistinct, 0 );
 
 			if ( pAttr )
 				UpdateGroupbyStr ( tNew, pAttr );
@@ -654,8 +647,9 @@ private:
 			CutWorst ( m_iLimit, true );
 		else
 		{
-			if ( DISTINCT && bCountDistinct )
-				CountDistinct();
+			if constexpr ( DISTINCT )
+				if ( bCountDistinct )
+					CountDistinct();
 
 			CalcAvg ( Avg_e::FINALIZE );
 			SortGroups();
@@ -674,8 +668,9 @@ private:
 	void CutWorst ( int iBound, bool bFinalize=false )
 	{
 		// prepare to partition - finalize distinct, avgs to provide smooth sorting
-		if ( DISTINCT && m_bSortByDistinct )
-			CountDistinct ();
+		if constexpr ( DISTINCT )
+			if ( m_bSortByDistinct )
+				CountDistinct ();
 
 		CalcAvg ( Avg_e::FINALIZE );
 
@@ -702,11 +697,12 @@ private:
 		if ( bFinalize )
 		{
 			SortGroups();
-			if ( DISTINCT && !m_bSortByDistinct ) // since they haven't counted at the top
-			{
-				RebuildHash(); // distinct uses m_hGroup2Match
-				CountDistinct();
-			}
+			if constexpr ( DISTINCT )
+				if ( !m_bSortByDistinct ) // since they haven't counted at the top
+				{
+					RebuildHash(); // distinct uses m_hGroup2Match
+					CountDistinct();
+				}
 		} else
 		{
 			// we've called CalcAvg ( Avg_e::FINALIZE ) before partitioning groups
@@ -1120,8 +1116,9 @@ protected:
 
 
 		// submit actual distinct value in all cases
-		if ( DISTINCT && m_bUpdateDistinct )
-			KBufferGroupSorter::template UpdateDistinct<GROUPED> ( tNew, uGroupKey );
+		if constexpr ( DISTINCT )
+			if ( m_bUpdateDistinct )
+				KBufferGroupSorter::template UpdateDistinct<GROUPED> ( tNew, uGroupKey );
 
 		if constexpr ( NOTIFICATIONS )
 			m_tJustPushed = RowTagged_t ( tNew );
@@ -1255,8 +1252,9 @@ private:
 
 		auto & tHeadMatch = m_dData[iHead];
 		// submit actual distinct value in all cases
-		if ( DISTINCT && m_bUpdateDistinct )
-			KBufferGroupSorter::template UpdateDistinct<GROUPED> ( tEntry, uGroupKey );
+		if constexpr ( DISTINCT )
+			if ( m_bUpdateDistinct )
+				KBufferGroupSorter::template UpdateDistinct<GROUPED> ( tEntry, uGroupKey );
 
 		// update group-wide counters
 		auto & tLocCount = m_tLocCount;
@@ -1852,8 +1850,9 @@ public:
 		if constexpr ( HAS_AGGREGATES )
 			dRhs.UpdateAggregates ( m_tData, false, true );
 
-		if ( !bCopyMeta && DISTINCT )
-			dRhs.UpdateDistinct ( m_tData );
+		if constexpr ( DISTINCT )
+			if ( !bCopyMeta  )
+				dRhs.UpdateDistinct ( m_tData );
 	}
 
 	void SetMerge ( bool bMerge ) override { m_bMerge = bMerge; }

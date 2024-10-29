@@ -169,7 +169,7 @@ By default, all attributes are returned in the `_source` array. You can use the 
 
 ```json
 {
-  "index":"test",
+  "table":"test",
   "_source":"attr*",
   "query": { "match_all": {} }
 }

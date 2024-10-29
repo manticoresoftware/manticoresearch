@@ -140,7 +140,7 @@ select * from forum where author_id=123 and forum_id in (1,3,7) order by post_da
 ```JSON
 POST /search
 {
-  "index": "forum",
+  "table": "forum",
   "query":
   {
     "match_all": {},
@@ -164,7 +164,7 @@ POST /search
 
 ```php
 $client->search([
-        'index' => 'forum',
+        'table' => 'forum',
         'query' =>
         [
             'match_all' => [],
@@ -192,7 +192,7 @@ $client->search([
 <!-- request Python -->
 
 ```python
-searchApi.search({"index":"forum","query":{"match_all":{},"bool":{"must":[{"equals":{"author_id":123}},{"in":{"forum_id":[1,3,7]}}]}},"sort":[{"post_date":"desc"}]})
+searchApi.search({"table":"forum","query":{"match_all":{},"bool":{"must":[{"equals":{"author_id":123}},{"in":{"forum_id":[1,3,7]}}]}},"sort":[{"post_date":"desc"}]})
 ```
 <!-- intro -->
 ##### Javascript:
@@ -200,7 +200,7 @@ searchApi.search({"index":"forum","query":{"match_all":{},"bool":{"must":[{"equa
 <!-- request javascript -->
 
 ```javascript
-res = await searchApi.search({"index":"forum","query":{"match_all":{},"bool":{"must":[{"equals":{"author_id":123}},{"in":{"forum_id":[1,3,7]}}]}},"sort":[{"post_date":"desc"}]});
+res = await searchApi.search({"table":"forum","query":{"match_all":{},"bool":{"must":[{"equals":{"author_id":123}},{"in":{"forum_id":[1,3,7]}}]}},"sort":[{"post_date":"desc"}]});
 ```
 <!-- intro -->
 ##### java:
@@ -564,7 +564,7 @@ select * from products where match('@title first');
 ```JSON
 POST /search
 {
-	"index": "products",
+	"table": "products",
 	"query":
 	{
 		"match": { "title": "first" }
@@ -590,7 +590,7 @@ $index->setName('products')->search('@title')->get();
 <!-- request Python -->
 
 ```python
-searchApi.search({"index":"products","query":{"match":{"title":"first"}}})
+searchApi.search({"table":"products","query":{"match":{"title":"first"}}})
 ```
 <!-- intro -->
 ##### Javascript:
@@ -598,7 +598,7 @@ searchApi.search({"index":"products","query":{"match":{"title":"first"}}})
 <!-- request javascript -->
 
 ```javascript
-res = await searchApi.search({"index":"products","query":{"match":{"title":"first"}}});
+res = await searchApi.search({"table":"products","query":{"match":{"title":"first"}}});
 ```
 <!-- intro -->
 ##### java:
@@ -801,6 +801,25 @@ table products
 <!-- end -->
 
 </details>
+
+### Storing binary data in Manticore
+
+<!-- example binary -->
+
+Manticore doesn't have a dedicated field type for binary data, but you can store it safely by using base64 encoding and the `text stored` or `string stored` field types (which are synonyms). If you don't encode the binary data, parts of it may get lost — for example, Manticore trims the end of a string if it encounters a null-byte.
+
+Here is an example where we encode the `ls` command using base64, store it in Manticore, and then decode it to verify that the MD5 checksum remains unchanged:
+
+<!-- request Example -->
+```bash
+# md5sum /bin/ls
+43d1b8a7ccda411118e2caba685f4329  /bin/ls
+# encoded_data=`base64 -i /bin/ls `
+# mysql -P9306 -h0 -e "drop table if exists test; create table test(data text stored); insert into test(data) values('$encoded_data')"
+# mysql -P9306 -h0 -NB -e "select data from test" | base64 -d > /tmp/ls | md5sum
+43d1b8a7ccda411118e2caba685f4329  -
+```
+<!-- end -->
 
 ## Integer
 
@@ -1165,7 +1184,22 @@ table products
 
 <!-- example for timestamps  -->
 
-Timestamp type represents unix timestamps which is stored as a 32-bit integer. The difference is that [time and date](../Functions/Date_and_time_functions.md) functions are available for the timestamp type.
+The timestamp type represents Unix timestamps, which are stored as 32-bit integers. Unlike basic integers, the timestamp type allows the use of [time and date](../Functions/Date_and_time_functions.md) functions. Conversion from string values follows these rules:
+
+- Numbers without delimiters, at least 10 characters long, are converted to timestamps as is.
+- `%Y-%m-%dT%H:%M:%E*S%Z`
+- `%Y-%m-%d'T'%H:%M:%S%Z`
+- `%Y-%m-%dT%H:%M:%E*S`
+- `%Y-%m-%dT%H:%M:%s`
+- `%Y-%m-%dT%H:%M`
+- `%Y-%m-%dT%H`
+- `%Y-%m-%d`
+- `%Y-%m`
+- `%Y`
+
+The meanings of these conversion specifiers are detailed in the [strptime manual](https://man7.org/linux/man-pages/man3/strptime.3.html), except for `%E*S`, which stands for milliseconds.
+
+Note that auto-conversion of timestamps is not supported in plain tables.
 
 <!-- intro -->
 ##### SQL:
@@ -1360,7 +1394,7 @@ select abs(a-b)<=0.00001 from products
 ```JSON
 POST /search
 {
-  "index": "products",
+  "table": "products",
   "query": { "match_all": {} } },
   "expressions": { "eps": "abs(a-b)" }
 }
@@ -1380,7 +1414,7 @@ $index->setName('products')->search('')->expression('eps','abs(a-b)')->get();
 <!-- request Python -->
 
 ```python
-searchApi.search({"index":"products","query":{"match_all":{}},"expressions":{"eps":"abs(a-b)"}})
+searchApi.search({"table":"products","query":{"match_all":{}},"expressions":{"eps":"abs(a-b)"}})
 ```
 
 <!-- intro -->
@@ -1389,7 +1423,7 @@ searchApi.search({"index":"products","query":{"match_all":{}},"expressions":{"ep
 <!-- request javascript -->
 
 ```javascript
-res = await searchApi.search({"index":"products","query":{"match_all":{}}},"expressions":{"eps":"abs(a-b)"}});
+res = await searchApi.search({"table":"products","query":{"match_all":{}}},"expressions":{"eps":"abs(a-b)"}});
 ```
 <!-- intro -->
 ##### java:
@@ -1443,7 +1477,7 @@ select in(ceil(attr*100),200,250,350) from products
 ```JSON
 POST /search
 {
-  "index": "products",
+  "table": "products",
   "query": { "match_all": {} } },
   "expressions": { "inc": "in(ceil(attr*100),200,250,350)" }
 }
@@ -1463,7 +1497,7 @@ $index->setName('products')->search('')->expression('inc','in(ceil(attr*100),200
 <!-- request Python -->
 
 ```python
-searchApi.search({"index":"products","query":{"match_all":{}}},"expressions":{"inc":"in(ceil(attr*100),200,250,350)"}})
+searchApi.search({"table":"products","query":{"match_all":{}}},"expressions":{"inc":"in(ceil(attr*100),200,250,350)"}})
 ```
 <!-- intro -->
 ##### Javascript:
@@ -1471,7 +1505,7 @@ searchApi.search({"index":"products","query":{"match_all":{}}},"expressions":{"i
 <!-- request javascript -->
 
 ```javascript
-res = await searchApi.search({"index":"products","query":{"match_all":{}}},"expressions":{"inc":"in(ceil(attr*100),200,250,350)"}});
+res = await searchApi.search({"table":"products","query":{"match_all":{}}},"expressions":{"inc":"in(ceil(attr*100),200,250,350)"}});
 ```
 
 <!-- intro -->
@@ -1506,6 +1540,36 @@ searchRequest.Expressions = new List<Object> {
 var searchResponse = searchApi.Search(searchRequest);
 ```
 <!-- end -->
+
+<!-- example float_accuracy -->
+Float values in Manticore are displayed with precision to ensure they reflect the exact stored value. This approach was introduced to prevent precision loss, especially for cases like geographical coordinates, where rounding to 6 decimal places caused inaccuracies.
+
+Now, Manticore first outputs a number with 6 digits, then parses and compares it to the original value. If they don't match, additional digits are added until they do.
+
+For example, if a float value was inserted as `19.45`, Manticore will display it as `19.450001` to accurately represent the stored value.
+
+<!-- request Example -->
+```sql
+insert into t(id, f) values(1, 19.45)
+--------------
+
+Query OK, 1 row affected (0.02 sec)
+
+--------------
+select * from t
+--------------
+
++------+-----------+
+| id   | f         |
++------+-----------+
+|    1 | 19.450001 |
++------+-----------+
+1 row in set (0.00 sec)
+--- 1 out of 1 results in 0ms ---
+```
+
+<!-- end -->
+
 
 ## JSON
 
@@ -1617,7 +1681,7 @@ select indexof(x>2 for x in data.intarray) from products
 ```JSON
 POST /search
 {
-  "index": "products",
+  "table": "products",
   "query": { "match_all": {} } },
   "expressions": { "idx": "indexof(x>2 for x in data.intarray)" }
 }
@@ -1637,7 +1701,7 @@ $index->setName('products')->search('')->expression('idx','indexof(x>2 for x in 
 <!-- request Python -->
 
 ```python
-searchApi.search({"index":"products","query":{"match_all":{}}},"expressions":{"idx":"indexof(x>2 for x in data.intarray)"}})
+searchApi.search({"table":"products","query":{"match_all":{}}},"expressions":{"idx":"indexof(x>2 for x in data.intarray)"}})
 ```
 <!-- intro -->
 ##### Javascript:
@@ -1645,7 +1709,7 @@ searchApi.search({"index":"products","query":{"match_all":{}}},"expressions":{"i
 <!-- request javascript -->
 
 ```javascript
-res = await searchApi.search({"index":"products","query":{"match_all":{}}},"expressions":{"idx":"indexof(x>2 for x in data.intarray)"}});
+res = await searchApi.search({"table":"products","query":{"match_all":{}}},"expressions":{"idx":"indexof(x>2 for x in data.intarray)"}});
 ```
 
 <!-- intro -->
@@ -1701,7 +1765,7 @@ select regex(data.name, 'est') as c from products where c>0
 ```JSON
 POST /search
 {
-  "index": "products",
+  "table": "products",
   "query":
   {
     "match_all": {},
@@ -1725,7 +1789,7 @@ $index->setName('products')->search('')->expression('idx',"regex(data.name, 'est
 <!-- request Python -->
 
 ```python
-searchApi.search({"index":"products","query":{"match_all":{},"range":{"c":{"gt":0}}}},"expressions":{"c":"regex(data.name, 'est')"}})
+searchApi.search({"table":"products","query":{"match_all":{},"range":{"c":{"gt":0}}}},"expressions":{"c":"regex(data.name, 'est')"}})
 ```
 <!-- intro -->
 ##### Javascript:
@@ -1733,7 +1797,7 @@ searchApi.search({"index":"products","query":{"match_all":{},"range":{"c":{"gt":
 <!-- request javascript -->
 
 ```javascript
-res = await searchApi.search({"index":"products","query":{"match_all":{},"range":{"c":{"gt":0}}}},"expressions":{"c":"regex(data.name, 'est')"}});
+res = await searchApi.search({"table":"products","query":{"match_all":{},"range":{"c":{"gt":0}}}},"expressions":{"c":"regex(data.name, 'est')"}});
 ```
 
 <!-- intro -->
@@ -1796,7 +1860,7 @@ select * from products order by double(data.myfloat) desc
 ```JSON
 POST /search
 {
-  "index": "products",
+  "table": "products",
   "query": { "match_all": {} } },
   "sort": [ { "double(data.myfloat)": { "order": "desc"} } ]
 }
@@ -1816,7 +1880,7 @@ $index->setName('products')->search('')->sort('double(data.myfloat)','desc')->ge
 <!-- request Python -->
 
 ```python
-searchApi.search({"index":"products","query":{"match_all":{}}},"sort":[{"double(data.myfloat)":{"order":"desc"}}]})
+searchApi.search({"table":"products","query":{"match_all":{}}},"sort":[{"double(data.myfloat)":{"order":"desc"}}]})
 ```
 <!-- intro -->
 ##### Javascript:
@@ -1824,7 +1888,7 @@ searchApi.search({"index":"products","query":{"match_all":{}}},"sort":[{"double(
 <!-- request javascript -->
 
 ```javascript
-res = await searchApi.search({"index":"products","query":{"match_all":{}}},"sort":[{"double(data.myfloat)":{"order":"desc"}}]});
+res = await searchApi.search({"table":"products","query":{"match_all":{}}},"sort":[{"double(data.myfloat)":{"order":"desc"}}]});
 ```
 <!-- intro -->
 ##### java:
@@ -2065,7 +2129,7 @@ select * from products where any(product_codes)=3
 ```JSON
 POST /search
 {
-  "index": "products",
+  "table": "products",
   "query":
   {
     "match_all": {},
@@ -2088,7 +2152,7 @@ $index->setName('products')->search('')->filter('any(product_codes)','equals',3)
 <!-- request Python -->
 
 ```python
-searchApi.search({"index":"products","query":{"match_all":{},"equals":{"any(product_codes)":3}}}})
+searchApi.search({"table":"products","query":{"match_all":{},"equals":{"any(product_codes)":3}}}})
 ```
 <!-- intro -->
 ##### Javascript:
@@ -2096,7 +2160,7 @@ searchApi.search({"index":"products","query":{"match_all":{},"equals":{"any(prod
 <!-- request javascript -->
 
 ```javascript
-res = await searchApi.search({"index":"products","query":{"match_all":{},"equals":{"any(product_codes)":3}}}})'
+res = await searchApi.search({"table":"products","query":{"match_all":{},"equals":{"any(product_codes)":3}}}})'
 ```
 <!-- intro -->
 ##### java:
@@ -2147,7 +2211,7 @@ select least(product_codes) l from products order by l asc
 ```JSON
 POST /search
 {
-  "index": "products",
+  "table": "products",
   "query":
   {
     "match_all": {},
@@ -2170,7 +2234,7 @@ $index->setName('products')->search('')->sort('product_codes','asc','min')->get(
 <!-- request Python -->
 
 ```python
-searchApi.search({"index":"products","query":{"match_all":{},"sort":[{"product_codes":{"order":"asc","mode":"min"}}]}})
+searchApi.search({"table":"products","query":{"match_all":{},"sort":[{"product_codes":{"order":"asc","mode":"min"}}]}})
 ```
 <!-- intro -->
 ##### Javascript:
@@ -2178,7 +2242,7 @@ searchApi.search({"index":"products","query":{"match_all":{},"sort":[{"product_c
 <!-- request javascript -->
 
 ```javascript
-res = await searchApi.search({"index":"products","query":{"match_all":{},"sort":[{"product_codes":{"order":"asc","mode":"min"}}]}});
+res = await searchApi.search({"table":"products","query":{"match_all":{},"sort":[{"product_codes":{"order":"asc","mode":"min"}}]}});
 ```
 
 <!-- intro -->
@@ -2276,7 +2340,7 @@ Query OK, 1 row affected (0.00 sec)
 ```JSON
 POST /insert
 {
-	"index":"products",
+	"table":"products",
 	"id":1,
 	"doc":
 	{
@@ -2287,7 +2351,7 @@ POST /insert
 
 POST /search
 {
-  "index": "products",
+  "table": "products",
   "query": { "match_all": {} }
 }
 ```
@@ -2387,8 +2451,8 @@ Array
 <!-- request Python -->
 
 ```python
-indexApi.insert({"index":"products","id":1,"doc":{"title":"first","product_codes":[4,2,1,3]}})
-searchApi.search({"index":"products","query":{"match_all":{}}})
+indexApi.insert({"table":"products","id":1,"doc":{"title":"first","product_codes":[4,2,1,3]}})
+searchApi.search({"table":"products","query":{"match_all":{}}})
 ```
 <!-- response Python -->
 
@@ -2396,7 +2460,7 @@ searchApi.search({"index":"products","query":{"match_all":{}}})
 {'created': True,
  'found': None,
  'id': 1,
- 'index': 'products',
+ 'table': 'products',
  'result': 'created'}
 {'hits': {'hits': [{u'_id': u'1',
                     u'_score': 1,
@@ -2413,8 +2477,8 @@ searchApi.search({"index":"products","query":{"match_all":{}}})
 <!-- request javascript -->
 
 ```javascript
-await indexApi.insert({"index":"products","id":1,"doc":{"title":"first","product_codes":[4,2,1,3]}});
-res = await searchApi.search({"index":"products","query":{"match_all":{}}});
+await indexApi.insert({"table":"products","id":1,"doc":{"title":"first","product_codes":[4,2,1,3]}});
+res = await searchApi.search({"table":"products","query":{"match_all":{}}});
 ```
 <!-- response javascript -->
 

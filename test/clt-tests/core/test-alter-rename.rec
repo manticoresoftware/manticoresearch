@@ -1,0 +1,124 @@
+––– block: ../base/start-searchd –––
+––– input –––
+mysql -h0 -P9306 -e "CREATE TABLE index2001(f text, s string); insert into index2001 values(01,'abc','string');"
+––– output –––
+––– input –––
+mysql -h0 -P9306 -e "CREATE TABLE index2002(f text, s string); insert into index2002 values(02,'def','string');"
+––– output –––
+––– input –––
+mysql -h0 -P9306 -e "CREATE TABLE index2003(f text, s string); insert into index2003 values(03,'ghi','string');"
+––– output –––
+––– input –––
+mysql -h0 -P9306 -e "CREATE TABLE index2004(f text, s string); insert into index2004 values(04,'jkl','string');"
+––– output –––
+––– input –––
+mysql -h0 -P9306 -e "SHOW TABLES"
+––– output –––
++-----------+------+
+| Table     | Type |
++-----------+------+
+| index2001 | rt   |
+| index2002 | rt   |
+| index2003 | rt   |
+| index2004 | rt   |
++-----------+------+
+––– input –––
+mysql -h0 -P9306 -e "ALTER TABLE index2001 RENAME new_index2001;"
+––– output –––
+––– input –––
+mysql -h0 -P9306 -e "ALTER TABLE index2002 RENAME new_index2002;"
+––– output –––
+––– input –––
+mysql -h0 -P9306 -e "ALTER TABLE index2003 RENAME new_index2003;"
+––– output –––
+––– input –––
+mysql -h0 -P9306 -e "ALTER TABLE index2004 RENAME new_index2004;"
+––– output –––
+––– input –––
+mysql -h0 -P9306 -e "SHOW TABLES"
+––– output –––
++---------------+------+
+| Table         | Type |
++---------------+------+
+| new_index2001 | rt   |
+| new_index2002 | rt   |
+| new_index2003 | rt   |
+| new_index2004 | rt   |
++---------------+------+
+––– input –––
+mysql -h0 -P9306 -e "CREATE TABLE index2006(f text, s string); insert into index2006 values(3,'ghi','string');"
+––– output –––
+––– input –––
+mysql -h0 -P9306 -e "CREATE TABLE index2007(f text, s string); insert into index2007 values(4,'jkl','string');"
+––– output –––
+––– input –––
+mysql -h0 -P9306 -e "CREATE TABLE dist_table type='distributed' local='index2006' local='index2007';"
+––– output –––
+––– input –––
+mysql -h0 -P9306 -e "SHOW TABLES; DESC dist_table"
+––– output –––
++---------------+-------------+
+| Table         | Type        |
++---------------+-------------+
+| dist_table    | distributed |
+| index2006     | rt          |
+| index2007     | rt          |
+| new_index2001 | rt          |
+| new_index2002 | rt          |
+| new_index2003 | rt          |
+| new_index2004 | rt          |
++---------------+-------------+
++-----------+-------+
+| Agent     | Type  |
++-----------+-------+
+| index2006 | local |
+| index2007 | local |
++-----------+-------+
+––– input –––
+mysql -h0 -P9306 -e "ALTER TABLE dist_table RENAME new_dist_table;"
+––– output –––
+ERROR 1064 (42000) at line 1: Table dist_table should be RT
+––– input –––
+mysql -h0 -P9306 -e "SHOW TABLES"
+––– output –––
++---------------+-------------+
+| Table         | Type        |
++---------------+-------------+
+| dist_table    | distributed |
+| index2006     | rt          |
+| index2007     | rt          |
+| new_index2001 | rt          |
+| new_index2002 | rt          |
+| new_index2003 | rt          |
+| new_index2004 | rt          |
++---------------+-------------+
+––– input –––
+mysql -h0 -P9306 -e "CREATE TABLE products(title text, meta json) type='pq';"
+––– output –––
+––– input –––
+mysql -h0 -P9306 -e "SHOW TABLES"
+––– output –––
++---------------+-------------+
+| Table         | Type        |
++---------------+-------------+
+| dist_table    | distributed |
+| index2006     | rt          |
+| index2007     | rt          |
+| new_index2001 | rt          |
+| new_index2002 | rt          |
+| new_index2003 | rt          |
+| new_index2004 | rt          |
+| products      | percolate   |
++---------------+-------------+
+––– input –––
+mysql -h0 -P9306 -e "ALTER TABLE products RENAME new_products;"
+––– output –––
+ERROR 1064 (42000) at line 1: Table products should be RT
+––– input –––
+mysql -h0 -P9306 -e "ALTER TABLE nonexistent RENAME new_nonexistent;"
+––– output –––
+ERROR 1064 (42000) at line 1: Source table nonexistent not exists
+––– input –––
+mysql -h0 -P9306 -e "ALTER TABLE invalid-name RENAME new_invalid_name;"
+––– output –––
+ERROR 1064 (42000) at line 1: P03: syntax error, unexpected $undefined, expecting $end near '-name RENAME new_invalid_name'

@@ -153,8 +153,7 @@ public:
 	int				ReadAny ();
 
 	/// try to peek first bytes from socket and imagine proto from this
-	/// @param bLight determines whether just look to existing (buffered) data, or also query socket, if no such data.
-	Proto_e			Probe ( bool bLight );
+	Proto_e			Probe ();
 
 	/// Ensure we have iLen bytes available in buffer. If not - read new chunk from backend.
 	/// return true on success

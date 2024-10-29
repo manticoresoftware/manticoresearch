@@ -1,0 +1,38 @@
+––– input –––
+sed -i '/data_dir = \/var\/lib\/manticore/a buddy_path = manticore-executor -n /usr/share/manticore/modules/manticore-buddy/src/main.php --debug' /etc/manticoresearch/manticore.conf
+––– output –––
+––– block: ../base/start-searchd –––
+––– input –––
+mysql -h0 -P9306 -e "CREATE TABLE test (id BIGINT, a TEXT, b TEXT);"
+––– output –––
+––– input –––
+mysql -h0 -P9306 -e "INSERT INTO test (id, a, b) VALUES (1, 'hello', 'world'), (2, 'hello', 'universe'), (3, 'goodbye', 'world');"
+––– output –––
+––– input –––
+mysql -h0 -P9306 -e "select a, b from test where match('hello world') option key1 = 1, key2 = 2;"
+––– output –––
+ERROR 1064 (42000) at line 1: unknown option 'key1'
+––– input –––
+mysql -h0 -P9306 -e "select b, a from test where match('hello world') option key1 = 1, key2 = 2;"
+––– output –––
+ERROR 1064 (42000) at line 1: unknown option 'key1'
+––– input –––
+mysql -h0 -P9306 -e "select a, b from test where match('hello world') option key1 = 1"
+––– output –––
+ERROR 1064 (42000) at line 1: unknown option 'key1'
+––– input –––
+mysql -h0 -P9306 -e "select b, a from test where match('hello world') option key2 = 2"
+––– output –––
+ERROR 1064 (42000) at line 1: unknown option 'key2'
+––– input –––
+mysql -h0 -P9306 -e "select a, b from test where match('hello world') option key1 = 1, key2 = 2, key3 = 3;"
+––– output –––
+ERROR 1064 (42000) at line 1: unknown option 'key1'
+––– input –––
+sleep 0.02; cat /var/log/manticore/searchd.log | grep 'request data' | sed 's/.*request data/request data/'
+––– output –––
+request data: {"type":"unknown sql request","error":{"message":"unknown option 'key1'","body":null},"version":3,"user":"root","message":{"path_query":"","body":"select a, b from test where match('hello world') option key1 = 1, key2 = 2","http_method":""}}
+request data: {"type":"unknown sql request","error":{"message":"unknown option 'key1'","body":null},"version":3,"user":"root","message":{"path_query":"","body":"select b, a from test where match('hello world') option key1 = 1, key2 = 2","http_method":""}}
+request data: {"type":"unknown sql request","error":{"message":"unknown option 'key1'","body":null},"version":3,"user":"root","message":{"path_query":"","body":"select a, b from test where match('hello world') option key1 = 1","http_method":""}}
+request data: {"type":"unknown sql request","error":{"message":"unknown option 'key2'","body":null},"version":3,"user":"root","message":{"path_query":"","body":"select b, a from test where match('hello world') option key2 = 2","http_method":""}}
+request data: {"type":"unknown sql request","error":{"message":"unknown option 'key1'","body":null},"version":3,"user":"root","message":{"path_query":"","body":"select a, b from test where match('hello world') option key1 = 1, key2 = 2, key3 = 3","http_method":""}}

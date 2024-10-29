@@ -37,6 +37,7 @@ $g_guesscached = false;
 $g_model	= false;
 $g_re2		= false;
 $g_icu		= false;
+$g_jieba	= false;
 $g_odbc     = false;
 $g_columnar_loaded = false;
 $g_strict	= false;
@@ -47,6 +48,7 @@ $g_ssl = false;
 $g_secondary_loaded = false;
 $g_knn_loaded = false;
 $g_tzdata_loaded = false;
+$g_zlib		= false;
 
 $windows = isset($_SERVER["WINDIR"]) || isset($_SERVER["windir"]) || isset($_SERVER["HOMEDRIVE"]);
 $action_retries			= 100;
@@ -105,13 +107,14 @@ function LoadCachedGuesses ()
 function CacheGuesses ()
 {
 	global $g_locals;
-	global $g_re2, $g_icu, $g_odbc, $g_repli, $g_ssl, $g_columnar_loaded, $g_secondary_loaded, $g_knn_loaded, $g_tzdata_loaded;
+	global $g_re2, $g_icu, $g_jieba, $g_odbc, $g_repli, $g_ssl, $g_columnar_loaded, $g_secondary_loaded, $g_knn_loaded, $g_tzdata_loaded, $g_zlib;
 
 	$guessfile = $g_locals['scriptdir'].'guess.txt';
 
 	$text = "global \$g_guesscached; \$g_guesscached = true;\n";
 	if ( $g_re2 ) $text .= "global \$g_re2; \$g_re2 = true;\n";
 	if ( $g_icu ) $text .= "global \$g_icu; \$g_icu = true;\n";
+	if ( $g_jieba ) $text .= "global \$g_jieba; \$g_jieba = true;\n";
 	if ( $g_odbc ) $text .= "global \$g_odbc; \$g_odbc = true;\n";
 	if ( $g_repli ) $text .= "global \$g_repli; \$g_repli = true;\n";
 	if ( $g_ssl ) $text .= "global \$g_ssl; \$g_ssl = true;\n";
@@ -119,6 +122,7 @@ function CacheGuesses ()
     if ( $g_secondary_loaded ) $text .= "global \$g_secondary_loaded; \$g_secondary_loaded = true;\n";
     if ( $g_knn_loaded ) $text .= "global \$g_knn_loaded; \$g_knn_loaded = true;\n";
     if ( $g_tzdata_loaded ) $text .= "global \g_tzdata_loaded; \$g_tzdata_loaded = true;\n";
+    if ( $g_zlib ) $text .= "global \$g_zlib; \$g_zlib = true;\n";
 
 	file_put_contents ( $guessfile, $text );
 }
@@ -202,6 +206,12 @@ function GuessICU ()
     $g_icu = GuessFeature ( 'test_icu.conf','no ICU support compiled');
 }
 
+function GuessJieba ()
+{
+	global $g_jieba;
+    $g_jieba = GuessFeature ( 'test_jieba.conf','no Jieba support compiled');
+}
+
 function GuessODBC ()
 {
     global $g_odbc;
@@ -274,6 +284,22 @@ function GuessSSL ()
 	}
 }
 
+function GuessZlib()
+{
+    global $g_zlib;
+    $zlib_on = 'DWITH_ZLIB=1';
+    
+	$banner = GetBanner();
+	foreach ( $banner as $line )
+	{
+		if ( strpos ( $line, $zlib_on ) !== false )
+		{
+			$g_zlib = true;
+			break;
+		}
+	}
+}
+
 function PublishLocals ( &$locals, $benchmark )
 {
 	global $g_locals, $g_site_defaults, $windows;
@@ -340,6 +366,9 @@ function PublishLocals ( &$locals, $benchmark )
 
 	if ( isset($g_locals["icu_data_dir"]))
 		putenv("ICU_DATA_DIR=$g_locals[icu_data_dir]");
+
+	if ( isset($g_locals["jieba_data_dir"]))
+    	putenv("JIEBA_DATA_DIR=$g_locals[jieba_data_dir]");
 
 	if ( isset($g_locals["full_share_dir"]))
 		putenv("FULL_SHARE_DIR=$g_locals[full_share_dir]");

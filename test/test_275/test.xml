@@ -42,6 +42,11 @@ searchd
 	select id, tag from t where knn(emp,3,(-0.11468425393104553,0.3873162567615509,-0.26252424716949463,0.007096240296959877,0.24166066944599152,-0.24653761088848114,0.060873936861753464,0.23045268654823303)) facet tag;;
 	select id, tag from t where knn(emp,3,(-0.11468425393104553,0.3873162567615509,-0.26252424716949463,0.007096240296959877,0.24166066944599152,-0.24653761088848114,0.060873936861753464,0.23045268654823303)) facet tag order by @knn_dist asc;;
 	select id, tag, knn_dist() d from t where knn(emp,3,(-0.11468425393104553,0.3873162567615509,-0.26252424716949463,0.007096240296959877,0.24166066944599152,-0.24653761088848114,0.060873936861753464,0.23045268654823303)) facet tag order by d asc;;
+
+	create table d type='distributed' agent='<agent0_address/>:t';
+	select id, knn_dist() from d where knn(emp,3,(-0.11468425393104553,0.3873162567615509,-0.26252424716949463,0.007096240296959877,0.24166066944599152,-0.24653761088848114,0.060873936861753464,0.23045268654823303));
+	
+	drop table d;
 	drop table t;
 
 	<!-- regression for inserting wrong sized knn vectors -->
@@ -65,7 +70,25 @@ searchd
 	select id, knn_dist() from test where knn ( image_vector, 5, (0.286569,-0.031816,0.066684,0.032926) );
 	flush ramchunk test;
 	select id, knn_dist() from test where knn ( image_vector, 5, (0.286569,-0.031816,0.066684,0.032926) );
+    
+    <!-- regression knn option missed at alter table -->
+    alter table test add column image_vecto2 float_vector knn_type='hnsw' knn_dims='7' hnsw_similarity='l2';
+    show create table test;
+    
 	drop table test;
+    
+    
+	<!-- RT index failed to load disk chunk with multiple knn indexes -->
+	create table t(a int, vectors float_vector knn_type='hnsw' knn_dims='8' hnsw_similarity='COSINE', bge_vector float_vector knn_type='hnsw' knn_dims='8' hnsw_similarity='COSINE');
+	insert into t values (1, 10, (0.4089451730251312,0.0306655615568161,-0.15218715369701385,-0.6105571389198303,-0.29428744316101074,-0.07567915320396423,0.3454975187778473,-0.49481201171875), (0.4089451730251312,0.0306655615568161,-0.15218715369701385,-0.6105571389198303,-0.29428744316101074,-0.07567915320396423,0.3454975187778473,-0.49481201171875) );
+	insert into t values (2, 11, (0.4089451730251312,0.0306655615568161,-0.15218715369701385,-0.6105571389198303,-0.29428744316101074,-0.07567915320396423,0.3454975187778473, 0.1), (0.4089451730251312,0.0306655615568161,-0.15218715369701385,-0.6105571389198303,-0.29428744316101074,-0.07567915320396423,0.3454975187778473, 0.1) );
+    
+    select id, knn_dist() from t where knn ( bge_vector, 5, (0.286569,-0.031816,0.066684,0.032926, 0.286569,-0.031816,0.066684,0.032926) );
+    flush ramchunk t;
+    select id, knn_dist() from t where knn ( bge_vector, 5, (0.286569,-0.031816,0.066684,0.032926, 0.286569,-0.031816,0.066684,0.032926) );
+    
+    drop table t;
+    
 </sphinxql>
 </queries>
 

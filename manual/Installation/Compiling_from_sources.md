@@ -21,14 +21,24 @@ cmake -DPACK=1 /path/to/sources
 cmake --build .
 ```
 
-For instance, to create a package for RHEL7-compatible operating systems that is similar to the official version Manticore Core Team provides, you should execute the following commands in the directory containing the Manticore Search sources. This directory is the root of a cloned repository from https://github.com/manticoresoftware/manticoresearch:
+For instance, to create a package for Ubuntu Jammy that is similar to the official version Manticore Core Team provides, you should execute the following commands in the directory containing the Manticore Search sources. This directory is the root of a cloned repository from https://github.com/manticoresoftware/manticoresearch:
 
 ```bash
-docker run -it --rm -e SYSROOT_URL=https://repo.manticoresearch.com/repository/sysroots \
--e arch=x86_64 \
--e DISTR=rhel7 \
--e boost=boost_rhel_feb17 \
+docker run -it --rm \
+-e CACHEB="../cache" \
+-e DIAGNOSTIC=1 \
+-e PACK_ICUDATA=0 \
+-e NO_TESTS=1 \
+-e DISTR=jammy \
+-e boost=boost_nov22 \
 -e sysroot=roots_nov22 \
+-e arch=x86_64 \
+-e CTEST_CMAKE_GENERATOR=Ninja \
+-e CTEST_CONFIGURATION_TYPE=RelWithDebInfo \
+-e WITH_COVERAGE=0 \
+-e SYSROOT_URL="https://repo.manticoresearch.com/repository/sysroots" \
+-e HOMEBREW_PREFIX="" \
+-e PACK_GALERA=0 \
 -v $(pwd):/manticore_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa \
 manticoresearch/external_toolchain:clang16_cmake3263 bash
 
@@ -41,7 +51,7 @@ cmake --build .
 # or if you want to build packages:
 # cmake --build . --target package
 ```
-The long source directory path is required or it may fail to build the sources.
+The long source directory path is required or it may fail to build the sources in some cases (e.g. Centos).
 
 The same process can be used to build binaries/packages not only for popular Linux distributions, but also for FreeBSD, Windows, and macOS.
 
@@ -104,7 +114,8 @@ To disable it, use `-DFOO=0`. If not explicitly noted, enabling a feature that i
 - **WITH_RE2_FORCE_STATIC** - Downloads the sources of RE2, compiles them, and links them statically, so that the final binaries will not depend on the presence of a shared  `RE2` library in your system.
 - **WITH_STEMMER** - Builds with the use of the Snowball stemming library.
 - **WITH_STEMMER_FORCE_STATIC** - Downloads the Snowball sources, compiles them, and links them statically, so that the final binaries will not depend on the presence of a shared  `libstemmer` library in your system.
-- **WITH_ICU** - Builds with the use of ICU, the International Components for Unicode library. This is used in tokenization of Chinese, for text segmentation. This is in play when morphology like `icu_chinese` is in use.
+- **WITH_ICU** -  Builds with the ICU (International Components for Unicode) library. It is used for segmenting Chinese text. It is utilized when morphology=`icu_chinese` is used.
+- **WITH_JIEBA** -  Builds with the Jieba Chinese text segmentation tool. It is used for segmenting Chinese text. It is utilized when morphology=`jieba_chinese` is used.
 - **WITH_ICU_FORCE_STATIC** - Downloads the ICU sources, compiles them, and links them statically, so that the final binaries will not depend on the presence of a shared `icu` library in your system. Also includes the ICU data file into the installation/distribution. The purpose of a statically linked ICU is to have a library of a known version, so that behavior is determined and not dependent on any system libraries. You will most likely prefer to use the system ICU instead, as it may be updated over time without the need to recompile the Manticore daemon. In this case, you need to explicitly disable this option. This will also save you some space occupied by the ICU data file (about 30M), as it will not be included in the distribution.
 - **WITH_SSL** - Used for support for HTTPS, and also encrypted MySQL connections to the daemon. The system OpenSSL library will be linked to the daemon. This implies that OpenSSL will be required to start the daemon. This is mandatory for support for HTTPS, but not strictly mandatory for the server (i.e. no SSL means no possibility to connect via HTTPS, but other protocols will work). SSL library versions starting from 1.0.2 to 1.1.1 may be used by Manticore,  however note that **for the sake of security it's highly recommended to use the freshest possible SSL
   library**. For now only v1.1.1 is supported, the rest are outdated (

@@ -110,8 +110,8 @@ FLOAT_CONSTANT      {INT}\.{INT}?{EXP}?|{INT}?\.{INT}{EXP}|{INT}{EXP}
 "COUNT"				{ YYSTOREBOUNDS; return TOK_COUNT; }
 "CREATE"			{ YYSTOREBOUNDS; return TOK_CREATE; }
 "DATABASES"			{ YYSTOREBOUNDS; return TOK_DATABASES; }
-"DATE_ADD"			{ YYSTOREBOUNDS; return TOK_DATEADD; }
-"DATE_SUB"			{ YYSTOREBOUNDS; return TOK_DATESUB; }
+"DATE_ADD"			{ YYSTOREBOUNDS; return TOK_DATE_ADD; }
+"DATE_SUB"			{ YYSTOREBOUNDS; return TOK_DATE_SUB; }
 "DAY"				{ YYSTOREBOUNDS; return TOK_DAY; }
 "DELETE"			{ YYSTOREBOUNDS; return TOK_DELETE; }
 "DESC"				{ YYSTOREBOUNDS; return TOK_DESC; }
@@ -152,6 +152,7 @@ FLOAT_CONSTANT      {INT}\.{INT}?{EXP}?|{INT}?\.{INT}{EXP}|{INT}{EXP}
 "LEFT"	    		{ YYSTOREBOUNDS; return TOK_LEFT; }
 "LIKE"				{ YYSTOREBOUNDS; return TOK_LIKE; }
 "LOGS"				{ YYSTOREBOUNDS; return TOK_LOGS; }
+"LOCKS"				{ YYSTOREBOUNDS; return TOK_LOCKS; }
 "FREEZE"			{ YYSTOREBOUNDS; return TOK_FREEZE; }
 "LIMIT"				{ YYSTOREBOUNDS; return TOK_LIMIT; }
 "MATCH"				{ YYSTOREBOUNDS; return TOK_MATCH; }
@@ -242,6 +243,7 @@ FLOAT_CONSTANT      {INT}\.{INT}?{EXP}?|{INT}?\.{INT}{EXP}|{INT}{EXP}
 {ALNUM}+    		{ YYSTOREBOUNDS; return TOK_BAD_NUMERIC; }
 @@{ID_SYS}			{ YYSTOREBOUNDS; return TOK_SYSVAR; }
 `{ID}`				{ YYSTOREBOUNDS; ++lvalp->m_iStart; --lvalp->m_iEnd; return TOK_IDENT; }
+`{ID}:{ID}`			{ YYSTOREBOUNDS; ++lvalp->m_iStart; --lvalp->m_iEnd; return TOK_IDENT; }
 `{INT}{ID}`		    { YYSTOREBOUNDS; return TOK_BACKIDENT; } // allow `123xyz` column names
 
 {SPACE}+

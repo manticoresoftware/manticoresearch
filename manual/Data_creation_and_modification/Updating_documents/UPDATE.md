@@ -2,14 +2,15 @@
 
 <!-- example update -->
 
-UPDATE changes [row-wise](../../Creating_a_table/Data_types.md#Row-wise-and-columnar-attribute-storages) attribute values of existing documents in a specified table with new values. Note that you can't update the contents of a fulltext field or a columnar attribute. If there's such a need, use [REPLACE](../../Data_creation_and_modification/Updating_documents/REPLACE.md).
+The `UPDATE` command changes [row-wise](../../Creating_a_table/Data_types.md#Row-wise-and-columnar-attribute-storages) attribute values of existing documents in a specified table with new values. Note that you can't update the contents of a fulltext field or a columnar attribute. If there's such a need, use [REPLACE](../../Data_creation_and_modification/Updating_documents/REPLACE.md).
 
-Attribute updates are supported for RT, PQ, and plain tables. All attribute types can be updated as long as they are stored in the [traditional row-wise storage](../../Creating_a_table/Data_types.md#Row-wise-and-columnar-attribute-storages).
-
+Attribute updates are supported for RT, PQ, and plain tables. All attribute types can be updated as long as they are stored in the [row-wise storage](../../Creating_a_table/Data_types.md#Row-wise-and-columnar-attribute-storages).
 
 Note that the document ID cannot be updated.
 
-Note that when you update an attribute, its [secondary index](../../Server_settings/Searchd.md#secondary_indexes) gets disabled, so consider [replacing](../../Data_creation_and_modification/Updating_documents/REPLACE.md) the document instead.
+It's important to be aware that updating an attribute disables its [secondary index](../../Server_settings/Searchd.md#secondary_indexes). If maintaining secondary index continuity is critical, consider fully or [partially replacing](../../Data_creation_and_modification/Updating_documents/REPLACE.md?client=REPLACE+SET) the document instead.
+
+Read more about `UPDATE` vs. partial `REPLACE` [here](../../Data_creation_and_modification/Updating_documents/REPLACE_vs_UPDATE.md#UPDATE-vs-partial-REPLACE).
 
 <!-- intro -->
 ##### SQL:
@@ -34,7 +35,7 @@ Query OK, 1 row affected (0.00 sec)
 POST /update
 
 {
-  "index":"products",
+  "table":"products",
   "id":10,
   "doc":
   {
@@ -77,19 +78,19 @@ Array(
 <!-- request Python -->
 ``` python
 indexApi = api = manticoresearch.IndexApi(client)
-indexApi.update({"index" : "products", "id" : 1, "doc" : {"price":10}})
+indexApi.update({"table" : "products", "id" : 1, "doc" : {"price":10}})
 ```
 
 <!-- response Python -->
 ```python
-{'id': 1, 'index': 'products', 'result': 'updated', 'updated': None}
+{'id': 1, 'table': 'products', 'result': 'updated', 'updated': None}
 ```
 <!-- intro -->
 ##### Javascript:
 
 <!-- request javascript -->
 ``` javascript
-res = await indexApi.update({"index" : "products", "id" : 1, "doc" : {"price":10}});
+res = await indexApi.update({"table" : "products", "id" : 1, "doc" : {"price":10}});
 ```
 
 <!-- response javascript -->
@@ -124,7 +125,7 @@ class UpdateResponse {
 
 <!-- request C# -->
 ``` clike
-Dictionary<string, Object> doc = new Dictionary<string, Object>(); 
+Dictionary<string, Object> doc = new Dictionary<string, Object>();
 doc.Add("price", 10);
 UpdateDocumentRequest updateRequest = new UpdateDocumentRequest(index: "products", id: 1, doc: doc);
 indexApi.Update(updateRequest);
@@ -210,7 +211,7 @@ Query OK, 148 rows affected (0.0 sec)
 ```JSON
 POST /update
 {
-  "index":"products",
+  "table":"products",
   "doc":
   {
     "price":100000000000,
@@ -267,7 +268,7 @@ Array(
 <!-- request Python -->
 ``` python
 indexApi = api = manticoresearch.IndexApi(client)
-indexApi.update({"index" : "products", "id" : 1, "doc" : {
+indexApi.update({"table" : "products", "id" : 1, "doc" : {
     "price": 100000000000,
     "coeff": 3465.23,
     "tags1": [3,6,4],
@@ -276,14 +277,14 @@ indexApi.update({"index" : "products", "id" : 1, "doc" : {
 
 <!-- response Python -->
 ```python
-{'id': 1, 'index': 'products', 'result': 'updated', 'updated': None}
+{'id': 1, 'table': 'products', 'result': 'updated', 'updated': None}
 ```
 <!-- intro -->
 ##### Javascript:
 
 <!-- request javascript -->
 ``` javascript
-res = await indexApi.update({"index" : "products", "id" : 1, "doc" : {
+res = await indexApi.update({"table" : "products", "id" : 1, "doc" : {
     "price": 100000000000,
     "coeff": 3465.23,
     "tags1": [3,6,4],
@@ -325,7 +326,7 @@ class UpdateResponse {
 
 <!-- request C# -->
 ``` clike
-Dictionary<string, Object> doc = new Dictionary<string, Object>(); 
+Dictionary<string, Object> doc = new Dictionary<string, Object>();
 doc.Add("price", 10);
 doc.Add("coeff", 3465.23);
 doc.Add("tags1", new List<int> {3,6,4});
@@ -416,7 +417,7 @@ Query OK, 1 row affected (0.00 sec)
 ```JSON
 POST /insert
 {
-	"index":"products",
+	"table":"products",
 	"id":100,
 	"doc":
 	{
@@ -429,7 +430,7 @@ POST /insert
 
 POST /update
 {
-	"index":"products",
+	"table":"products",
 	"id":100,
 	"doc":
 	{
@@ -490,13 +491,13 @@ Array(
 <!-- request Python -->
 ``` python
 indexApi = api = manticoresearch.IndexApi(client)
-indexApi.update({"index" : "products", "id" : 1, "doc" : {
+indexApi.update({"table" : "products", "id" : 1, "doc" : {
     "meta.tags[0]": 100}})
 ```
 
 <!-- response Python -->
 ```python
-{'id': 1, 'index': 'products', 'result': 'updated', 'updated': None}
+{'id': 1, 'table': 'products', 'result': 'updated', 'updated': None}
 ```
 
 <!-- intro -->
@@ -504,7 +505,7 @@ indexApi.update({"index" : "products", "id" : 1, "doc" : {
 
 <!-- request javascript -->
 ``` javascript
-res = await indexApi.update({"index" : "products", "id" : 1, "doc" : {
+res = await indexApi.update({"table" : "products", "id" : 1, "doc" : {
    "meta.tags[0]": 100}});
 ```
 
@@ -541,7 +542,7 @@ class UpdateResponse {
 
 <!-- request C# -->
 ``` clike
-Dictionary<string, Object> doc = new Dictionary<string, Object>(); 
+Dictionary<string, Object> doc = new Dictionary<string, Object>();
 doc.Add("meta.tags[0]", 100);
 UpdateDocumentRequest updateRequest = new UpdateDocumentRequest(index: "products", id: 1, doc: doc);
 indexApi.Update(updateRequest);
@@ -563,7 +564,7 @@ class UpdateResponse {
 
 <!-- request TypeScript -->
 ``` typescript
-res = await indexApi.update({"index" : "test", "id" : 1, "doc" : { "meta.tags[0]": 100} });
+res = await indexApi.update({"table" : "test", "id" : 1, "doc" : { "meta.tags[0]": 100} });
 ```
 
 <!-- response TypeScript -->
@@ -623,7 +624,7 @@ Query OK, 1 row affected (0.00 sec)
 ```JSON
 POST /insert
 {
-	"index":"products",
+	"table":"products",
 	"id":1,
 	"doc":
 	{
@@ -634,7 +635,7 @@ POST /insert
 
 POST /update
 {
-	"index":"products",
+	"table":"products",
 	"id":1,
 	"doc":
 	{
@@ -690,8 +691,8 @@ Array(
 
 <!-- request Python -->
 ``` python
-indexApi.insert({"index" : "products", "id" : 100, "doc" : {"title" : "title", "meta" : {"tags":[1,2,3]}}})
-indexApi.update({"index" : "products", "id" : 100, "doc" : {"meta" : {"tags":['one','two','three']}}})
+indexApi.insert({"table" : "products", "id" : 100, "doc" : {"title" : "title", "meta" : {"tags":[1,2,3]}}})
+indexApi.update({"table" : "products", "id" : 100, "doc" : {"meta" : {"tags":['one','two','three']}}})
 ```
 
 <!-- response Python -->
@@ -700,17 +701,17 @@ indexApi.update({"index" : "products", "id" : 100, "doc" : {"meta" : {"tags":['o
 {'created': True,
  'found': None,
  'id': 100,
- 'index': 'products',
+ 'table': 'products',
  'result': 'created'}
-{'id': 100, 'index': 'products', 'result': 'updated', 'updated': None}
+{'id': 100, 'table': 'products', 'result': 'updated', 'updated': None}
 ```
 <!-- intro -->
 ##### Javascript:
 
 <!-- request javascript -->
 ``` javascript
-res = await indexApi.insert({"index" : "products", "id" : 100, "doc" : {"title" : "title", "meta" : {"tags":[1,2,3]}}});
-res = await indexApi.update({"index" : "products", "id" : 100, "doc" : {"meta" : {"tags":['one','two','three']}}});
+res = await indexApi.insert({"table" : "products", "id" : 100, "doc" : {"title" : "title", "meta" : {"tags":[1,2,3]}}});
+res = await indexApi.update({"table" : "products", "id" : 100, "doc" : {"meta" : {"tags":['one','two','three']}}});
 ```
 
 <!-- response javascript -->
@@ -773,17 +774,17 @@ class UpdateResponse {
 
 <!-- request C# -->
 ``` clike
-Dictionary<string, Object> meta = new Dictionary<string, Object>(); 
+Dictionary<string, Object> meta = new Dictionary<string, Object>();
 meta.Add("tags", new List<int> {1,2,3});
-Dictionary<string, Object> doc = new Dictionary<string, Object>(); 
+Dictionary<string, Object> doc = new Dictionary<string, Object>();
 doc.Add("title", "title");
 doc.Add("meta", meta);
 InsertDocumentRequest newdoc = new InsertDocumentRequest(index: "products", id: 100, doc: doc);
 indexApi.Insert(newdoc);
 
 meta = new Dictionary<string, Object>();
-meta.Add("tags", new List<string> {"one","two","three"}); 
-doc = new Dictionary<string, Object>(); 
+meta.Add("tags", new List<string> {"one","two","three"});
+doc = new Dictionary<string, Object>();
 doc.Add("meta", meta);
 UpdateDocumentRequest updatedoc = new UpdateDocumentRequest(index: "products", id: 100, doc: doc);
 indexApi.Update(updatedoc);
@@ -878,7 +879,7 @@ When using replication, the table name should be prepended with `cluster_name:` 
 ```json
 {
   "cluster":"nodes4",
-  "index":"test",
+  "table":"test",
   "id":1,
   "doc":
   {
@@ -905,7 +906,7 @@ update weekly:posts set enabled=0 where id=1;
 POST /update
 {
 	"cluster":"weekly",
-	"index":"products",
+	"table":"products",
 	"id":1,
 	"doc":
 	{
@@ -928,7 +929,7 @@ $index->updateDocument(['enabled'=>0],1);
 
 <!-- request Python -->
 ``` python
-indexApi.update({"cluster":"weekly", "index" : "products", "id" : 1, "doc" : {"enabled" : 0}})
+indexApi.update({"cluster":"weekly", "table" : "products", "id" : 1, "doc" : {"enabled" : 0}})
 
 ```
 <!-- intro -->
@@ -936,7 +937,7 @@ indexApi.update({"cluster":"weekly", "index" : "products", "id" : 1, "doc" : {"e
 
 <!-- request javascript -->
 ``` javascript
-res = wait indexApi.update({"cluster":"weekly", "index" : "products", "id" : 1, "doc" : {"enabled" : 0}});
+res = wait indexApi.update({"cluster":"weekly", "table" : "products", "id" : 1, "doc" : {"enabled" : 0}});
 
 ```
 <!-- intro -->
@@ -958,7 +959,7 @@ indexApi.update(updatedoc);
 
 <!-- request C# -->
 ``` clike
-Dictionary<string, Object> doc = new Dictionary<string, Object>(); 
+Dictionary<string, Object> doc = new Dictionary<string, Object>();
 doc.Add("enabled", 0);
 UpdateDocumentRequest updatedoc = new UpdateDocumentRequest(index: "products", cluster: "weekly", id: 1, doc: doc);
 indexApi.Update(updatedoc);
@@ -1029,7 +1030,7 @@ Query OK, 1 row affected (0.00 sec)
 POST /update
 
 {
-	"index":"products",
+	"table":"products",
 	"_id":1,
 	"doc":
 	{
@@ -1069,12 +1070,12 @@ Array(
 <!-- request Python -->
 ``` python
 
-indexApi.update({"index" : "products", "id" : 1, "doc" : {"tags1": []}})
+indexApi.update({"table" : "products", "id" : 1, "doc" : {"tags1": []}})
 ```
 
 <!-- response Python -->
 ```python
-{'id': 1, 'index': 'products', 'result': 'updated', 'updated': None}
+{'id': 1, 'table': 'products', 'result': 'updated', 'updated': None}
 ```
 
 <!-- intro -->
@@ -1083,7 +1084,7 @@ indexApi.update({"index" : "products", "id" : 1, "doc" : {"tags1": []}})
 <!-- request javascript -->
 ``` javascript
 
-indexApi.update({"index" : "products", "id" : 1, "doc" : {"tags1": []}})
+indexApi.update({"table" : "products", "id" : 1, "doc" : {"tags1": []}})
 ```
 
 <!-- response javascript -->
@@ -1119,7 +1120,7 @@ class UpdateResponse {
 
 <!-- request C# -->
 ``` clike
-Dictionary<string, Object> doc = new Dictionary<string, Object>(); 
+Dictionary<string, Object> doc = new Dictionary<string, Object>();
 doc.Add("tags1", new List<int> {});
 UpdateDocumentRequest updatedoc = new UpdateDocumentRequest(index: "products", id: 1, doc: doc);
 indexApi.Update(updatedoc);
@@ -1207,7 +1208,7 @@ The server will respond with a JSON object stating if the operation was successf
 ```JSON
 POST /update
 {
-  "index":"test",
+  "table":"test",
   "id":1,
   "doc":
    {
@@ -1241,7 +1242,7 @@ The ID of the document that needs to be updated can be set directly using the `i
 POST /update
 
 {
-  "index":"test",
+  "table":"test",
   "doc":
   {
     "price" : 1000
@@ -1272,7 +1273,7 @@ The query syntax is the same as in the [/search endpoint](../../Searching/Full_t
 FLUSH ATTRIBUTES
 ```
 
-The FLUSH ATTRIBUTES command flushes all in-memory attribute updates in all the active tables to disk. It returns a tag that identifies the result on-disk state, which represents the number of actual disk attribute saves performed since the server startup.
+The FLUSH ATTRIBUTES command ensures that all in-memory attribute updates in all active tables are flushed to disk. It returns a tag that identifies the result on-disk state, which represents the number of actual disk attribute saves performed since the server startup.
 
 ```sql
 mysql> UPDATE testindex SET channel_id=1107025 WHERE id=1;
@@ -1304,8 +1305,8 @@ You can perform multiple update operations in a single call using the `/bulk` en
 ```json
 POST /bulk
 
-{ "update" : { "index" : "products", "id" : 1, "doc": { "price" : 10 } } }
-{ "update" : { "index" : "products", "id" : 2, "doc": { "price" : 20 } } }
+{ "update" : { "table" : "products", "id" : 1, "doc": { "price" : 10 } } }
+{ "update" : { "table" : "products", "id" : 2, "doc": { "price" : 20 } } }
 ```
 
 <!-- response JSON -->
@@ -1358,8 +1359,8 @@ Updates by query and deletes by query are also supported.
 ```json
 POST /bulk
 
-{ "update" : { "index" : "products", "doc": { "coeff" : 1000 }, "query": { "range": { "price": { "gte": 1000 } } } } }
-{ "update" : { "index" : "products", "doc": { "coeff" : 0 }, "query": { "range": { "price": { "lt": 1000 } } } } }
+{ "update" : { "table" : "products", "doc": { "coeff" : 1000 }, "query": { "range": { "price": { "gte": 1000 } } } } }
+{ "update" : { "table" : "products", "doc": { "coeff" : 0 }, "query": { "range": { "price": { "lt": 1000 } } } } }
 ```
 
 <!-- response JSON -->
@@ -1395,7 +1396,7 @@ POST /bulk
 
 $client->bulk([
     ['update'=>[
-            'index' => 'products',
+            'table' => 'products',
              'doc' => [
                 'coeff' => 100
             ],
@@ -1405,7 +1406,7 @@ $client->bulk([
         ]
     ],
     ['update'=>[
-            'index' => 'products',
+            'table' => 'products',
              'doc' => [
                 'coeff' => 0
             ],
@@ -1445,8 +1446,8 @@ Array(
 <!-- request Python -->
 ``` python
 docs = [ \
-            { "update" : { "index" : "products", "doc": { "coeff" : 1000 }, "query": { "range": { "price": { "gte": 1000 } } } } }, \
-            { "update" : { "index" : "products", "doc": { "coeff" : 0 }, "query": { "range": { "price": { "lt": 1000 } } } } } ]
+            { "update" : { "table" : "products", "doc": { "coeff" : 1000 }, "query": { "range": { "price": { "gte": 1000 } } } } }, \
+            { "update" : { "table" : "products", "doc": { "coeff" : 0 }, "query": { "range": { "price": { "lt": 1000 } } } } } ]
 indexApi.bulk('\n'.join(map(json.dumps,docs)))
 ```
 
@@ -1463,8 +1464,8 @@ indexApi.bulk('\n'.join(map(json.dumps,docs)))
 <!-- request javascript -->
 ``` javascript
 docs = [
-            { "update" : { "index" : "products", "doc": { "coeff" : 1000 }, "query": { "range": { "price": { "gte": 1000 } } } } },
-            { "update" : { "index" : "products", "doc": { "coeff" : 0 }, "query": { "range": { "price": { "lt": 1000 } } } } } ];
+            { "update" : { "table" : "products", "doc": { "coeff" : 1000 }, "query": { "range": { "price": { "gte": 1000 } } } } },
+            { "update" : { "table" : "products", "doc": { "coeff" : 0 }, "query": { "range": { "price": { "lt": 1000 } } } } } ];
 res =  await indexApi.bulk(docs.map(e=>JSON.stringify(e)).join('\n'));
 ```
 
@@ -1645,7 +1646,7 @@ $params = [
             'price'=>['type'=>'float']
         ]
     ],
-    'index' => 'products'
+    'table' => 'products'
 ];
 $index = new \Manticoresearch\Index($client);
 $index->create($params);

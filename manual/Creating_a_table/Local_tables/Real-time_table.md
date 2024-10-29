@@ -109,6 +109,8 @@ table products {
 
 #### _mapping API:
 
+> NOTE: The `_mapping` API requires [Manticore Buddy](../Installation/Manticore_Buddy.md). If it doesn't work, make sure Buddy is installed.
+
 <!-- example rt-mapping -->
 
 Alternatively, you can create a new table via the `_mapping` endpoint. This endpoint allows you to define an Elasticsearch-like table structure to be converted to a Manticore table.
@@ -180,16 +182,12 @@ When creating a table, Elasticsearch data types will be mapped to Manticore type
 ```JSON
 POST /your_table_name/_mapping -d '
 {
-  "test": {
-    "mappings": {
-      "properties": {
-        "price": {
-            "type": "float"
-        },
-        "title": {
-            "type": "text"
-        }
-      }
+  "properties": {
+    "price": {
+        "type": "float"
+    },
+    "title": {
+        "type": "text"
     }
   }
 }
@@ -217,6 +215,8 @@ You can create a copy of a real-time table, with or without its data. Please not
 ```sql
 CREATE TABLE table_name LIKE old_table_name [WITH DATA]
 ```
+
+> NOTE: Copying a table requires [Manticore Buddy](../Installation/Manticore_Buddy.md). If it doesn't work, make sure Buddy is installed.
 
 <!-- intro -->
 ##### Example:

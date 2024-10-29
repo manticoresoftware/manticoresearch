@@ -71,7 +71,7 @@ searchd
 <!-- query errors due to missed cluster or wrong cluster name -->
 <query d="2" endpoint="json/insert">
 {
-	"index":"rt1",
+	"table":"rt1",
 	"id":221,
 	"doc":
 	{
@@ -81,7 +81,7 @@ searchd
 </query>
 <query endpoint="json/insert" d="2">
 {
-	"index":"test:rt1",
+	"table":"test:rt1",
 	"id":221,
 	"doc":
 	{
@@ -93,7 +93,7 @@ searchd
 <query d="2" endpoint="json/insert">
 {
 	"cluster":"test",
-	"index":"rt1",
+	"table":"rt1",
 	"id":221,
 	"doc":
 	{
@@ -107,7 +107,7 @@ searchd
 <query d="1" endpoint="json/insert">
 {
 	"cluster":"test",
-	"index":"rt1",
+	"table":"rt1",
 	"id":101,
 	"doc":
 	{
@@ -121,18 +121,18 @@ searchd
 
 <sphinxql d="0" system="wait-commit" cluster="test" wait_value="4" />
 <query d="0" endpoint="json/search">
-	{ "index": "rt1", "query": { "match_all": {} } }
+	{ "table": "rt1", "query": { "match_all": {} } }
 </query>
 
 <sphinxql d="0" system="wait-commit" cluster="test" wait_value="4"/>
 <query d="2" endpoint="json/search">
-	{ "index": "rt1", "query": { "range": { "j1.fd": { "gte": 100 } } } }
+	{ "table": "rt1", "query": { "range": { "j1.fd": { "gte": 100 } } } }
 </query>
 
 <query d="1" endpoint="json/update">
 {
 	"cluster":"test",
-	"index":"rt1",
+	"table":"rt1",
 	"doc":
 	{
 	    "gid" : 1021
@@ -143,13 +143,13 @@ searchd
 
 <sphinxql d="0" system="wait-commit" cluster="test" wait_value="5"/>
 <query d="0" endpoint="json/search">
-	{ "index": "rt1", "query": { "match": { "*": "221" } } }
+	{ "table": "rt1", "query": { "match": { "*": "221" } } }
 </query>
 
 <query d="0" endpoint="json/delete">
 {
 	"cluster":"test",
-	"index":"rt1",
+	"table":"rt1",
 	"id":221
 }
 </query>
@@ -157,7 +157,7 @@ searchd
 <query d="0" endpoint="json/insert">
 {
 	"cluster":"test",
-	"index":"rt1",
+	"table":"rt1",
 	"id":501,
 	"doc":
 	{
@@ -170,12 +170,22 @@ searchd
 
 <sphinxql d="0" system="wait-commit" cluster="test" wait_value="7"/>
 <query d="1" endpoint="json/search">
-	{ "index": "rt1", "query": { "match_all": {} } }
+	{ "table": "rt1", "query": { "match_all": {} } }
 </query>
 
 <sphinxql d="0" system="wait-commit" cluster="test" wait_value="7"/>
 <query d="2" endpoint="json/search">
-	{ "index": "rt1", "query": { "range": { "j1.fd": { "gte": 100 } } } }
+	{ "table": "rt1", "query": { "range": { "j1.fd": { "gte": 100 } } } }
+</query>
+
+<!-- _bulk cluster:name format -->
+<bulk endpoint="_bulk" content="application/x-ndjson" method="POST">
+{ "index" : { "_index" : "test:rt1", "_id" : "301" } }
+{ "gid" : "301" }
+
+</bulk>
+<query endpoint="json/search">
+{ "table": "rt1", "query": { "match_all": {} } }
 </query>
 
 <!-- cleanup -->

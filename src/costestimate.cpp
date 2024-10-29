@@ -14,7 +14,7 @@
 #include "sphinxint.h"
 #include "sphinxsort.h"
 #include "columnarfilter.h"
-#include "secondarylib.h"
+#include "secondaryindex.h"
 #include "geodist.h"
 #include <math.h>
 #include "std/sys.h"
@@ -137,6 +137,7 @@ private:
 	float	CalcMTCostSI ( float fCost ) const	{ return EstimateMTCostSI ( fCost, m_tCtx.m_iThreads ); }
 
 	bool	IsGeodistFilter ( const CSphFilterSettings & tFilter ) const;
+	bool	IsPoly2dFilter ( const CSphFilterSettings & tFilter, int & iNumPoints ) const;
 	float	CalcGetFilterComplexity ( const SecondaryIndexInfo_t & tSIInfo, const CSphFilterSettings & tFilter ) const;
 	bool	NeedBitmapUnion ( int iNumIterators ) const;
 	uint32_t CalcNumSIIterators ( const CSphFilterSettings & tFilter, int64_t iDocs ) const;
@@ -176,13 +177,39 @@ int64_t CostEstimate_c::ApplyCutoff ( int64_t iDocs ) const
 
 bool CostEstimate_c::IsGeodistFilter ( const CSphFilterSettings & tFilter ) const
 {
-	auto pAttr = m_tCtx.m_tSorterSchema.GetAttr ( tFilter.m_sAttrName.cstr() );
-	if ( !pAttr || !pAttr->m_pExpr )
+	int iAttr = GetAliasedAttrIndex ( tFilter.m_sAttrName, m_tCtx.m_tQuery, m_tCtx.m_tSorterSchema );
+	if ( iAttr<0 )
+		return false;
+
+	const CSphColumnInfo & tAttr = m_tCtx.m_tSorterSchema.GetAttr(iAttr);
+	if ( !tAttr.m_pExpr )
 		return false;
 
 	std::pair<GeoDistSettings_t *, bool> tSettingsPair { nullptr, false };
-	pAttr->m_pExpr->Command ( SPH_EXPR_GET_GEODIST_SETTINGS, &tSettingsPair );
+	tAttr.m_pExpr->Command ( SPH_EXPR_GET_GEODIST_SETTINGS, &tSettingsPair );
 	return tSettingsPair.second;
+}
+
+
+bool CostEstimate_c::IsPoly2dFilter ( const CSphFilterSettings & tFilter, int & iNumPoints ) const
+{
+	int iAttr = GetAliasedAttrIndex ( tFilter.m_sAttrName, m_tCtx.m_tQuery, m_tCtx.m_tSorterSchema );
+	if ( iAttr<0 )
+		return false;
+
+	const CSphColumnInfo & tAttr = m_tCtx.m_tSorterSchema.GetAttr(iAttr);
+	if ( !tAttr.m_pExpr )
+		return false;
+
+	std::pair<Poly2dBBox_t *, bool> tSettingsPair { nullptr, false };
+	tAttr.m_pExpr->Command ( SPH_EXPR_GET_POLY2D_BBOX, &tSettingsPair );
+	if ( tSettingsPair.second )
+	{
+		iNumPoints = tSettingsPair.first->m_iNumPoints;
+		return true;
+	}
+
+	return false;
 }
 
 
@@ -190,6 +217,13 @@ float CostEstimate_c::CalcGetFilterComplexity ( const SecondaryIndexInfo_t & tSI
 {
 	if ( IsGeodistFilter(tFilter) )
 		return 3.0f;
+
+	int iNumPoints = 0;
+	if ( IsPoly2dFilter ( tFilter, iNumPoints ) )
+	{
+		const float COMPLEXITY_PER_POINT = 0.007f;
+		return 1.2f + COMPLEXITY_PER_POINT*iNumPoints;
+	}
 
 	auto pAttr = m_tCtx.m_tIndexSchema.GetAttr ( tFilter.m_sAttrName.cstr() );
 	if ( !pAttr )
@@ -337,11 +371,11 @@ bool CostEstimate_c::IsFilterOverExpr ( int iIndex ) const
 		return false;
 
 	auto & tFilter = GetFilter(iIndex);
-	auto * pAttr = m_tCtx.m_tSorterSchema.GetAttr ( tFilter.m_sAttrName.cstr() );
-	if ( !pAttr )
-		return false;
+	int iAttr = GetAliasedAttrIndex ( tFilter.m_sAttrName, m_tCtx.m_tQuery, m_tCtx.m_tSorterSchema );
+	if ( iAttr<0 )
+		return true;
 
-	return !!pAttr->m_pExpr;
+	return !!m_tCtx.m_tSorterSchema.GetAttr(iAttr).m_pExpr;
 }
 
 
@@ -434,14 +468,14 @@ float CostEstimate_c::CalcQueryCost()
 
 /////////////////////////////////////////////////////////////////////
 
-SelectIteratorCtx_t::SelectIteratorCtx_t ( const CSphQuery & tQuery, const CSphVector<CSphFilterSettings> & dFilters, const ISphSchema & tIndexSchema, const ISphSchema & tSorterSchema, const HistogramContainer_c * pHistograms, columnar::Columnar_i * pColumnar, SI::Index_i * pSI, int iCutoff, int64_t iTotalDocs, int iThreads )
+SelectIteratorCtx_t::SelectIteratorCtx_t ( const CSphQuery & tQuery, const CSphVector<CSphFilterSettings> & dFilters, const ISphSchema & tIndexSchema, const ISphSchema & tSorterSchema, const HistogramContainer_c * pHistograms, columnar::Columnar_i * pColumnar, const SIContainer_c & tSI, int iCutoff, int64_t iTotalDocs, int iThreads )
 	: m_tQuery ( tQuery )
 	, m_dFilters ( dFilters )
 	, m_tIndexSchema ( tIndexSchema )
 	, m_tSorterSchema ( tSorterSchema )
 	, m_pHistograms ( pHistograms )
 	, m_pColumnar ( pColumnar )
-	, m_pSI ( pSI )
+	, m_tSI ( tSI )
 	, m_iCutoff ( iCutoff )
 	, m_iTotalDocs ( iTotalDocs )
 	, m_iThreads ( iThreads )
@@ -450,29 +484,23 @@ SelectIteratorCtx_t::SelectIteratorCtx_t ( const CSphQuery & tQuery, const CSphV
 
 bool SelectIteratorCtx_t::IsEnabled_SI ( const CSphFilterSettings & tFilter ) const
 {
-	if ( !m_pSI )
+	if ( m_tSI.IsEmpty() )
 		return false;
 
-	if ( tFilter.m_eType!=SPH_FILTER_VALUES && tFilter.m_eType!=SPH_FILTER_STRING && tFilter.m_eType!=SPH_FILTER_STRING_LIST && tFilter.m_eType!=SPH_FILTER_RANGE && tFilter.m_eType!=SPH_FILTER_FLOATRANGE )
+	if ( tFilter.m_eType!=SPH_FILTER_VALUES && tFilter.m_eType!=SPH_FILTER_STRING && tFilter.m_eType!=SPH_FILTER_STRING_LIST && tFilter.m_eType!=SPH_FILTER_RANGE && tFilter.m_eType!=SPH_FILTER_FLOATRANGE && tFilter.m_eType!=SPH_FILTER_NULL )
 		return false;
 
 	// all(mva\string) need to scan whole row
 	if ( tFilter.m_eMvaFunc==SPH_MVAFUNC_ALL )
 		return false;
 
-	// need to handle only plain or columnar attr but not dynamic \ expressions
 	const CSphColumnInfo * pCol = m_tIndexSchema.GetAttr ( tFilter.m_sAttrName.cstr() );
-	if ( !pCol )
-		return false;
-
-	if ( pCol->m_pExpr.Ptr() && !pCol->IsColumnarExpr() )
-		return false;
 
 	// FIXME!!! warn in case force index used but index was skipped
-	if ( pCol->m_eAttrType==SPH_ATTR_STRING && m_tQuery.m_eCollation!=SPH_COLLATION_DEFAULT )
+	if ( pCol && ( pCol->m_eAttrType==SPH_ATTR_STRING && m_tQuery.m_eCollation!=SPH_COLLATION_DEFAULT ) )
 		return false;
 
-	return m_pSI->IsEnabled( tFilter.m_sAttrName.cstr() );
+	return m_tSI.IsEnabled ( tFilter.m_sAttrName );
 }
 
 

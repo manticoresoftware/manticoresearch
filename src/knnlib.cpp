@@ -90,7 +90,7 @@ bool InitKNN ( CSphString & sError )
 {
 	assert ( !g_pKNNLib );
 
-	CSphString sLibfile = TryDifferentPaths ( LIB_MANTICORE_KNN, GetKNNFullpath() );
+	CSphString sLibfile = TryDifferentPaths ( LIB_MANTICORE_KNN, GetKNNFullpath(), knn::LIB_VERSION );
 	if ( sLibfile.IsEmpty() )
 		return true;
 

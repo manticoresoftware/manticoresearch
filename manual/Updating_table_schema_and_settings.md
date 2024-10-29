@@ -218,6 +218,30 @@ mysql> show meta;
 
 <!-- end -->
 
+## Renaming a real-time table
+
+<!-- example Renaming RT tables -->
+
+You can change the name of a real-time table in RT mode.
+```sql
+ALTER TABLE table_name RENAME new_table_name;
+```
+
+> NOTE: Renaming a real-time table requires [Manticore Buddy](../Installation/Manticore_Buddy.md). If it doesn't work, make sure Buddy is installed.
+
+<!-- request Example -->
+```sql
+ALTER TABLE table_name RENAME new_table_name;
+```
+
+<!-- response Example -->
+
+```sql
+Query OK, 0 rows affected (0.00 sec)
+```
+
+<!-- end -->
+
 ## Updating table FT settings in plain mode
 
 <!-- example ALTER RECONFIGURE -->
@@ -250,7 +274,7 @@ mysql> show table rt settings;
 ```
 <!-- end -->
 
-## Rebuild secondary index
+## Rebuilding a secondary index
 
 <!-- example ALTER REBUILD SECONDARY -->
 ```sql
@@ -274,6 +298,23 @@ ALTER TABLE rt REBUILD SECONDARY;
 
 ```sql
 Query OK, 0 rows affected (0.00 sec)
+```
+
+<!-- end -->
+
+## Changing a distributed table
+
+<!-- example local_dist -->
+
+To change the list of local or remote nodes in a distributed table, follow the same syntax you used to [create the table](../Creating_a_table/Creating_a_distributed_table/Creating_a_local_distributed_table.md#Creating-a-local-distributed-table). Just replace `CREATE` with `ALTER` in the command and remove `type='distributed'`:
+
+```sql
+ALTER TABLE `distr_table_name` [[local='local_table_name'], [agent='host:port:remote_table'] ... ]
+```
+
+<!-- request Example -->
+```sql
+ALTER TABLE local_dist local='index1' local='index2' agent='127.0.0.1:9312:remote_table';
 ```
 
 <!-- end -->

@@ -94,6 +94,33 @@ index rt3
 	min_infix_len = 2
 }
 
+
+index dist1
+{
+	type = distributed
+    local = rt1
+	agent = <my_address/>:plain1
+}
+
+index dist31
+{
+	type = distributed
+    local = rt3
+}
+
+index dist32
+{
+	type = distributed
+	agent = <my_address/>:rt3
+}
+
+index dist33
+{
+	type = distributed
+    local = rt3
+	agent = <my_address/>:rt3
+}
+
 </config>
 
 <db_create>
@@ -168,11 +195,19 @@ CREATE TABLE test_table
     
     <!-- regression suggest on short words there trigrams do not work -->
     insert into rt3 (body) VALUES ('range'), ('range'), ('revenge'), ('ranger'), ('orange'), ('binge'), ('rave'), ('grave'), ('raven'), ('brave'), ('raver'), ('france'), ('randy'), ('ranch');
-    CALL SUGGEST('ravge','rt3')
+    CALL SUGGEST('ravge','rt3');
     
     <!-- new qsuggest feature to show full sentence -->
     CALL QSUGGEST ( 'tests passed well in funce', 'rt3', 1 as sentence, 1 as limit);
-	
+
+    <!-- new suggest\qsuggest for distributed index -->
+    DELETE FROM rt1 WHERE id IN (21,22,23);
+    CALL SUGGEST ( 'taster', 'dist1');
+    CALL SUGGEST ( 'благодраность', 'dist1');
+    CALL QSUGGEST ( 'tests passed well because of taster', 'dist1');
+    CALL QSUGGEST ( 'tests passed well in funce', 'dist31', 1 as sentence, 3 as limit);
+    CALL QSUGGEST ( 'tests passed well in funce', 'dist32', 1 as sentence, 3 as limit);
+    CALL QSUGGEST ( 'tests passed well in funce', 'dist33', 1 as sentence, 3 as limit);
 </sphinxql></queries>
 
 </test>

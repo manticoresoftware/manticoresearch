@@ -238,6 +238,8 @@ target_link_libraries ( lextra INTERFACE cctz::cctz )
 include ( GetxxHash )
 target_link_libraries ( lextra INTERFACE xxHash::xxhash )
 
+with_get ( jieba "Jieba" "Chinese text segmentation tool" )
+
 # Support for OpenSSL
 with_menu_comp ( OpenSSL SSL "OpenSSL" "for encrypted networking" )
 win_install_c ( OpenSSL SSL daemon )
@@ -246,6 +248,7 @@ trace ( OpenSSL::Crypto )
 
 # Support for ZLIB
 with_menu ( ZLIB "zlib" "for compressed data and networking" )
+win_install ( ZLIB common )
 
 with_menu ( ZSTD "libzstd" "for compressed networking" )
 dl_package ( ZSTD "zstd" )
@@ -412,6 +415,10 @@ cpack_add_component_group ( helpers EXPANDED )
 if (WITH_ICU)
 	cpack_add_component ( icudata )
 endif ()
+
+#if (WITH_JIEBA)
+#	cpack_add_component ( jiebadicts )
+#endif ()
 
 if (WIN32)
 	cpack_add_component ( runtime GROUP main )

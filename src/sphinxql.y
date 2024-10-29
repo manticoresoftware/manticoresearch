@@ -22,6 +22,7 @@
 %token	TOK_CONST_FLOAT 261 "float"
 %token	TOK_CONST_MVA 262	// not a real token, only placeholder
 %token	TOK_QUOTED_STRING 263 "string"
+%token	TOK_NULL 473 "null"
 %token	TOK_USERVAR "@uservar"
 %token	TOK_SYSVAR "@@sysvar"
 %token	TOK_CONST_STRINGS 269	// not a real token, only placeholder
@@ -53,8 +54,8 @@
 %token	TOK_CREATE
 %token	TOK_DATABASES
 %token	TOK_DAY
-%token	TOK_DATEADD
-%token	TOK_DATESUB
+%token	TOK_DATE_ADD
+%token	TOK_DATE_SUB
 %token	TOK_DELETE
 %token	TOK_DESC
 %token	TOK_DESCRIBE
@@ -103,6 +104,7 @@
 %token	TOK_LIKE
 %token	TOK_LIMIT
 %token	TOK_LOGS
+%token	TOK_LOCKS
 %token	TOK_MATCH
 %token	TOK_MAX
 %token	TOK_META
@@ -114,7 +116,6 @@
 %token	TOK_MULTI64
 %token	TOK_NAMES
 %token	TOK_NOT
-%token	TOK_NULL
 %token	TOK_OFFSET
 %token	TOK_ON
 %token	TOK_OPTION
@@ -272,6 +273,9 @@ reserved_no_option:
 	| TOK_SUM | TOK_TABLE | TOK_TABLES | TOK_THREADS | TOK_TO
 	| TOK_UNFREEZE | TOK_UPDATE | TOK_VALUES | TOK_VARIABLES
 	| TOK_WARNINGS | TOK_WEIGHT | TOK_WHERE | TOK_WITHIN | TOK_KILL | TOK_QUERY
+	| TOK_INTERVAL | TOK_REGEX
+	| TOK_DATE_ADD | TOK_DATE_SUB | TOK_DAY | TOK_HOUR | TOK_MINUTE | TOK_MONTH | TOK_QUARTER | TOK_SECOND | TOK_WEEK | TOK_YEAR
+	| TOK_LOCKS
 	;
 
 reserved_set_tail:
@@ -689,8 +693,20 @@ on_clause_attr:
 	| on_clause_attr TOK_SUBKEY			{ $$ = $1; $$.m_iEnd = $2.m_iEnd; }
 	;
 
+on_clause_type_cast:
+	TOK_INT			{ pParser->SetJoinOnCast(SPH_ATTR_INTEGER); }
+	| TOK_FLOAT		{ pParser->SetJoinOnCast(SPH_ATTR_FLOAT); }
+	| TOK_STRING	{ pParser->SetJoinOnCast(SPH_ATTR_STRING); }
+	;
+
+on_clause_equality:
+    idxname on_clause_attr '=' idxname on_clause_attr								{ pParser->AddOnFilter ( $1, $2, $4, $5, -1 ); }
+	| on_clause_type_cast '(' idxname on_clause_attr ')' '=' idxname on_clause_attr	{ pParser->AddOnFilter ( $3, $4, $7, $8, 0 ); }
+	| idxname on_clause_attr '=' on_clause_type_cast '(' idxname on_clause_attr	')' { pParser->AddOnFilter ( $1, $2, $6, $7, 1 ); }
+	;
+
 on_clause:
-	idxname on_clause_attr '=' idxname on_clause_attr	{ pParser->AddOnFilter ( $1, $2, $4, $5 ); }
+	on_clause_equality
 	| on_clause TOK_AND on_clause
 	;
 
@@ -1146,6 +1162,16 @@ order_clause:
 		{
 			pParser->m_pQuery->m_sOrderBy = "@random";
 		}
+	| TOK_ORDER TOK_BY TOK_COUNT '(' TOK_DISTINCT distinct_ident ')' TOK_ASC
+		{
+			if ( !pParser->AddDistinctSort ( &$6, &$3, &$7, true ) )
+				YYERROR;
+		}
+	| TOK_ORDER TOK_BY TOK_COUNT '(' TOK_DISTINCT distinct_ident ')' TOK_DESC
+		{
+			if ( !pParser->AddDistinctSort ( &$6, &$3, &$7, false ) )
+				YYERROR;
+		}
 	;
 
 order_items_list:
@@ -1257,8 +1283,8 @@ hint_list:
 	;
 
 hint_attr_list:
-	ident
-	| hint_attr_list ',' ident {TRACK_BOUNDS ( $$, $1, $3 );}
+	json_field
+	| hint_attr_list ',' json_field {TRACK_BOUNDS ( $$, $1, $3 );}
 	;
 
 hint_item:           
@@ -1366,8 +1392,8 @@ function:
 	| TOK_REMAP '(' expr ',' expr ',' '(' arglist ')' ',' '(' arglist ')' ')' { TRACK_BOUNDS ( $$, $1, $14 ); }
 	| TOK_RAND '(' ')'				{ TRACK_BOUNDS ( $$, $1, $3 ); }
 	| TOK_RAND '(' arglist ')' 		{ TRACK_BOUNDS ( $$, $1, $4 ); }
-	| TOK_DATEADD '(' expr ',' TOK_INTERVAL expr time_unit ')' { TRACK_BOUNDS ( $$, $1, $8 ); }
-	| TOK_DATESUB '(' expr ',' TOK_INTERVAL expr time_unit ')' { TRACK_BOUNDS ( $$, $1, $8 ); }
+	| TOK_DATE_ADD '(' expr ',' TOK_INTERVAL expr time_unit ')' { TRACK_BOUNDS ( $$, $1, $8 ); }
+	| TOK_DATE_SUB '(' expr ',' TOK_INTERVAL expr time_unit ')' { TRACK_BOUNDS ( $$, $1, $8 ); }
 	| accepted_funcs '(' arglist ')' { TRACK_BOUNDS ( $$, $1, $4 ); }
 	;
 
@@ -1477,6 +1503,10 @@ show_what:
 	| TOK_SETTINGS
 		{
 			pParser->m_pStmt->m_eStmt = STMT_SHOW_SETTINGS;
+		}
+	| TOK_LOCKS
+		{
+			pParser->m_pStmt->m_eStmt = STMT_SHOW_LOCKS;
 		}
 	;
 
@@ -1831,6 +1861,16 @@ subkey:
 streq:
 	expr '=' strval				{ TRACK_BOUNDS ( $$, $1, $3 ); }
 	| strval '=' expr			{ TRACK_BOUNDS ( $$, $1, $3 ); }
+	| expr TOK_NE strval			{ TRACK_BOUNDS ( $$, $1, $3 ); }
+	| strval TOK_NE expr			{ TRACK_BOUNDS ( $$, $1, $3 ); }
+	| expr '<' strval			{ TRACK_BOUNDS ( $$, $1, $3 ); }
+	| strval '<' expr			{ TRACK_BOUNDS ( $$, $1, $3 ); }
+	| expr '>' strval			{ TRACK_BOUNDS ( $$, $1, $3 ); }
+	| strval '>' expr			{ TRACK_BOUNDS ( $$, $1, $3 ); }
+	| expr TOK_LTE strval		{ TRACK_BOUNDS ( $$, $1, $3 ); }
+	| strval TOK_LTE expr		{ TRACK_BOUNDS ( $$, $1, $3 ); }
+	| expr TOK_GTE strval		{ TRACK_BOUNDS ( $$, $1, $3 ); }
+	| strval TOK_GTE expr		{ TRACK_BOUNDS ( $$, $1, $3 ); }
 	;
 
 strval:

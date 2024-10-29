@@ -103,7 +103,7 @@ jobs:
     with:
       DISTR: ${{ matrix.DISTR }}
       arch: ${{ matrix.arch }}
-      boost: boost_rhel_feb17
+      boost_url_key: boost_rhel_feb17
       cmake_command: |
         ln -s $(pwd) /builds_manticoresearch_dev_usr_src_debug_manticore_component_src_0
         cd /builds_manticoresearch_dev_usr_src_debug_manticore_component_src_0
@@ -142,7 +142,8 @@ jobs:
     with:
       DISTR: windows
       arch: x64
-      sysroot: roots_apr15
+      sysroot_url_key: roots_mysql83_jul29
+      boost_url_key: boost80_zstd_zlib
       cmake_command: |
         mkdir build
         cd build
@@ -189,6 +190,7 @@ jobs:
       && (
         (github.event_name == 'pull_request' && (contains(github.event.pull_request.labels.*.name, 'publish')))
         || (github.event_name == 'workflow_run' && github.event.workflow_run.conclusion == 'success')
+        || (github.event_name == 'push' && startsWith(github.ref, 'refs/heads/manticore-'))
       )
     steps:
       - run: echo "Ready to publish"
@@ -304,7 +306,7 @@ jobs:
         image: [ "centos:7", "almalinux:8", "almalinux:9", "oraclelinux:9", "amazonlinux:latest" ]
     runs-on: ubuntu-22.04
     steps:
-      - uses: manticoresoftware/clt@0.1.21
+      - uses: manticoresoftware/clt@0.2.3
         with:
           image: ${{ matrix.image }}
           test_prefix: test/clt-tests/installation/rhel-dev-
@@ -319,7 +321,7 @@ jobs:
         image: [ "ubuntu:bionic", "ubuntu:focal", "ubuntu:jammy", "debian:buster", "debian:bullseye", "debian:bookworm" ]
     runs-on: ubuntu-22.04
     steps:
-      - uses: manticoresoftware/clt@0.1.21
+      - uses: manticoresoftware/clt@0.2.3
         with:
           image: ${{ matrix.image }}
           test_prefix: test/clt-tests/installation/deb-dev-

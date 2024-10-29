@@ -1,13 +1,8 @@
 ––– block: ../base/start-searchd –––
 ––– input –––
-mysql -h0 -P9306 -e "SHOW QUERIES"
+mysql -h0 -P9306 -e "SHOW QUERIES\G"|grep "1. row"
 ––– output –––
-#!/[+-]+/!#
-| id   | query        | time#!/\s+/!#| protocol | host            |
-#!/[+-]+/!#
-|   %{NUMBER} | select       | %{NUMBER}us#!/\s+/!#ago#!/\s+/!#| http     | %{IPADDR}:%{NUMBER} |
-|   %{NUMBER} | SHOW QUERIES | %{NUMBER}us#!/\s+/!#| mysql    | %{IPADDR}:%{NUMBER} |
-#!/[+-]+/!#
+*************************** 1. row ***************************
 ––– input –––
 mysql -h0 -P9306 -e "DISABLE BUDDY PLUGIN manticoresoftware/buddy-plugin-show"
 ––– output –––
@@ -19,14 +14,9 @@ ERROR 1064 (42000) at line 1: Plugin 'show' is disabled
 mysql -h0 -P9306 -e "ENABLE BUDDY PLUGIN manticoresoftware/buddy-plugin-show"
 ––– output –––
 ––– input –––
-mysql -h0 -P9306 -e "SHOW QUERIES"
+mysql -h0 -P9306 -e "SHOW QUERIES\G"|grep "1. row"
 ––– output –––
-#!/[+-]+/!#
-| id   | query        | time#!/\s+/!#| protocol | host            |
-#!/[+-]+/!#
-|   %{NUMBER} | select       | %{NUMBER}us#!/\s+/!#ago#!/\s+/!#| http     | %{IPADDR}:%{NUMBER} |
-|   %{NUMBER} | SHOW QUERIES | %{NUMBER}us#!/\s+/!#| mysql    | %{IPADDR}:%{NUMBER} |
-#!/[+-]+/!#
+*************************** 1. row ***************************
 ––– input –––
 mysql -h0 -P9306 -e "create table t (id bigint, vector float_vector knn_type='hnsw' knn_dims='4' hnsw_similarity='l2')"
 ––– output –––

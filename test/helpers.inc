@@ -501,6 +501,9 @@ function CheckSearchdLog ( $error_file, &$retval )
 				// Adding an explicit check to avoid possible fails caused by the columnar library init warning
 				if ( $tag==="WARNING:" && strpos ( $line, "WARNING: Error initializing columnar storage" )!==false )
 					continue;
+				// empty binlog is not the actual warning for tests
+				if ( $tag==="WARNING:" && strpos ( $line, "WARNING: binlog: empty binlog" )!==false )
+					continue;
 				$error .= $t."\n";
 				if ( $tag!="WARNING:" )
 					$retval = 1;
@@ -874,6 +877,16 @@ function RemoveColumnarProperty ( $property )
 }
 
 
+if (!function_exists('array_key_first'))
+{
+	function array_key_first(array $arr)
+	{
+		foreach($arr as $key => $unused)
+			return $key;
+		return NULL;
+	 }
+}
+
 function CompareColumns ( $a, $b )
 {
 	return strcmp ( array_keys($a)[0], array_keys($b)[0] );
@@ -905,7 +918,7 @@ function JsonRsetFixup ( &$set, $columnar, $keep_json_ctrls )
 		$set["rows"] = $keep_json_ctrls ? $json_handler->Encode ( $rows ) : json_encode ( $rows );
 	}
 
-	if ( isset ( $set["http_endpoint"] ) && ( $set["http_endpoint"]=="sql" || $set["http_endpoint"]=="cli" ) && isset ( $set["rows"] ) )
+	if ( isset ( $set["http_endpoint"] ) && ( $set["http_endpoint"]=="sql" || $set["http_endpoint"]=="cli" || $set["http_endpoint"]=="cli_json" ) && isset ( $set["rows"] ) )
 	{
 		if ( $keep_json_ctrls )
 		{
@@ -925,6 +938,9 @@ function JsonRsetFixup ( &$set, $columnar, $keep_json_ctrls )
 						$entry["Properties"] = RemoveColumnarProperty ( $entry["Properties"] );
 				}
 			}
+
+			if ( isset ( $row["columns"] ) )
+				usort ( $row['columns'], function($a, $b) { return strcmp ( array_key_first($a), array_key_first($b) ); } );
 		}
 
 		$set["rows"] = $keep_json_ctrls ? $json_handler->Encode ( $rows ) : json_encode ( $rows );
@@ -1260,7 +1276,7 @@ function RunCurl ( $curl_desc, &$rows )
 	return $http_code;
 }
 
-function HttpQueryCurl ( $http_method, $http_endpoint, $http_content, $http_query, $use_agent, $use_ssl )
+function HttpQueryCurl ( $http_method, $http_endpoint, $http_content, $http_query, $use_agent, $use_ssl, $use_gzip, $testdir )
 {
 	global $agents;
 
@@ -1292,6 +1308,22 @@ function HttpQueryCurl ( $http_method, $http_endpoint, $http_content, $http_quer
 	if ( $http_content!==NULL )
 		$curl_desc[CURLOPT_HTTPHEADER] = array("Content-Type: ".$http_content);
 
+    if ( $use_gzip && $http_method=="POST" )
+    {
+        $cfile = file_get_contents( $testdir . "/" . $http_query );
+        $curl_desc[CURLOPT_ENCODING] = 'gzip';
+        $curl_desc[CURLOPT_POSTFIELDS] = $cfile;
+
+        $http_headers = array("Content-Encoding:gzip");
+        if ( $http_content!==NULL )
+            $http_headers[] = "Content-Type: ".$http_content;
+
+        $curl_desc[CURLOPT_HTTPHEADER] = $http_headers;
+
+        //$curl_desc[CURLOPT_VERBOSE] = 1;
+        //var_dump ( $curl_desc );
+    }
+
 	$rows = "";
 	$http_code = RunCurl( $curl_desc, $rows );
 	return array ( 'http_endpoint'=>$http_endpoint, 'http_method'=>$http_method, 'http_request'=>$http_query, 'rows'=>$rows, 'http_code'=>$http_code, 'http'=>1 );
@@ -1300,14 +1332,14 @@ function HttpQueryCurl ( $http_method, $http_endpoint, $http_content, $http_quer
 // these two used from custom tests
 function HttpQueryGet ( $http_endpoint, $http_content, $http_get, $use_agent, $use_ssl )
 {
-    $res = HttpQueryCurl ( "GET", $http_endpoint, $http_content, $http_get, $use_agent, $use_ssl );
+    $res = HttpQueryCurl ( "GET", $http_endpoint, $http_content, $http_get, $use_agent, $use_ssl, false, '' );
     unset ( $res['http'] );
     return $res;
 }
 
 function HttpQueryPost ( $http_endpoint, $http_content, $http_get, $use_agent, $use_ssl )
 {
-    $res = HttpQueryCurl ( "POST", $http_endpoint, $http_content, $http_get, $use_agent, $use_ssl );
+    $res = HttpQueryCurl ( "POST", $http_endpoint, $http_content, $http_get, $use_agent, $use_ssl, false, '' );
     unset ( $res['http'] );
     return $res;
 }
@@ -2210,7 +2242,7 @@ class SphinxConfig
                     "$1",
                     "$1 substituted"
                 ], $s );
-		
+
 		return $s;
 	}
 
@@ -2321,6 +2353,7 @@ class SphinxConfig
         $http_method=ArrVal ($attrs, "method", "POST");
         $http_content=ArrVal ($attrs, "content", NULL);
         $use_agent = ArrVal ($attrs, "d", 0);
+        $use_gzip = ArrVal ($attrs, "gzip", 0);
 
 
 		if ( !is_array($query) || !$attrs )
@@ -2338,7 +2371,7 @@ class SphinxConfig
             return false;
         }
 
-		$query_result = HttpQueryCurl ( $http_method, $http_endpoint, $http_content, $query, $use_agent, $this->Requires("https") );
+		$query_result = HttpQueryCurl ( $http_method, $http_endpoint, $http_content, $query, $use_agent, $this->Requires("https"), $use_gzip, $this->_testdir );
 
 		if ( $use_agent>0 )
 			$query_result['agent'] = $use_agent;
@@ -2378,7 +2411,7 @@ class SphinxConfig
 		if ( StrBegins ( $lower_query, $create_table ) || StrBegins ( $lower_query, $alter_table ) )
 		{
 			$matches = array();
-			$preg = preg_match_all ( "/(?:(?:wordforms|stopwords|exceptions|hitless_words)[ \t]*=[ \t]*)'([^']+)'/", $query, $matches, PREG_OFFSET_CAPTURE );
+			$preg = preg_match_all ( "/(?:(?:wordforms|stopwords|exceptions|hitless_words|global_idf)[ \t]*=[ \t]*)'([^']+)'/", $query, $matches, PREG_OFFSET_CAPTURE );
 
 			$result_str = "";
 			$prev_offset = 0;
@@ -4425,7 +4458,7 @@ function CopyDirContents ( $from, $to )
 
 function CheckConfig ( $config, $path )
 {
-	global $g_re2, $g_icu, $g_odbc, $windows, $g_locals, $mysql_simulated, $g_repli, $g_ssl, $g_columnar_loaded, $g_secondary_loaded, $g_knn_loaded, $g_tzdata_loaded;
+	global $g_re2, $g_icu, $g_jieba, $g_odbc, $windows, $g_locals, $mysql_simulated, $g_repli, $g_ssl, $g_columnar_loaded, $g_secondary_loaded, $g_knn_loaded, $g_tzdata_loaded, $g_zlib;
 
 	if ( $config->Requires("non-windows") && $windows )
 	{
@@ -4451,6 +4484,12 @@ function CheckConfig ( $config, $path )
 		return false;
 	}
 
+	if ( $config->Requires("non-secondary") && $g_secondary_loaded )
+	{
+        printf ( "SKIPPING %s, %s - explicitly non-secondary test skipped in secondary mode\n", $path, $config->Name () );
+		return false;
+	}
+
 	if ( $config->Requires("re2") && !$g_re2 )
 	{
 		printf ( "SKIPPING %s, %s - compile with regexp support to run this test\n", $path, $config->Name () );
@@ -4460,6 +4499,12 @@ function CheckConfig ( $config, $path )
 	if ( $config->Requires("icu") && !$g_icu )
 	{
 		printf ( "SKIPPING %s, %s - compile with ICU support to run this test\n", $path, $config->Name () );
+		return false;
+	}
+
+	if ( $config->Requires("jieba") && !$g_jieba )
+	{
+		printf ( "SKIPPING %s, %s - compile with Jieba support to run this test\n", $path, $config->Name () );
 		return false;
 	}
 
@@ -4531,6 +4576,12 @@ function CheckConfig ( $config, $path )
 	if ( $config->Requires("tzdata") && !$g_tzdata_loaded)
 	{
 		printf ( "SKIPPING %s, %s - timezone data is not available\n", $path, $config->Name () );
+		return false;
+	}
+
+	if ( $config->Requires("zlib") && !$g_zlib)
+	{
+		printf ( "SKIPPING %s, %s - zlib is not available\n", $path, $config->Name () );
 		return false;
 	}
 
@@ -4873,4 +4924,3 @@ function RunTest ( $test_dir, $skipdemo, $usemarks )
 
 	return array ( "tests_total"=>$total, "tests_failed"=>$nfailed, "tests_skipped"=>0 );
 }
-

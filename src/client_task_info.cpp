@@ -13,6 +13,7 @@
 
 std::atomic<int> ClientTaskInfo_t::m_iClients { 0 };
 std::atomic<int> ClientTaskInfo_t::m_iVips { 0 };
+std::atomic<int> ClientTaskInfo_t::m_iBuddy { 0 };
 
 DEFINE_RENDER ( ClientTaskInfo_t )
 {
@@ -76,6 +77,20 @@ ClientSession_c* ClientTaskInfo_t::GetClientSession()
 {
 	return m_pSession;
 }
+
+void ClientTaskInfo_t::SetBuddy ( bool bBuddy )
+{
+	// FIXME!!! remove inconsistency increase counter here but decrease at the ~ScopedClientInfo_c
+	if ( bBuddy!=m_bBuddy )
+	{
+		m_bBuddy = bBuddy;
+		if ( bBuddy )
+			m_iBuddy.fetch_add ( 1, std::memory_order_relaxed );
+		else
+			m_iBuddy.fetch_sub ( 1, std::memory_order_relaxed );
+	}
+}
+
 namespace {
 	volatile int g_iDistThreads = 0;
 }

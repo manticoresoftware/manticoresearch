@@ -298,8 +298,9 @@ private:
 	bool	MaybeAddGroupbyMagic ( bool bGotDistinct );
 	bool	AddKNNDistColumn();
 	bool	AddJoinAttrs();
+	bool	CheckJoinOnTypeCast ( const CSphString & sIdx, const CSphString & sAttr, ESphAttr eTypeCast );
 	bool	AddJoinFilterAttrs();
-	bool	AddJsonJoinOnFilter ( const CSphString & sAttr1, const CSphString & sAttr2 );
+	bool	AddJsonJoinOnFilter ( const CSphString & sAttr1, const CSphString & sAttr2, ESphAttr eTypeCast );
 	bool	AddNullBitmask();
 	bool	AddColumnarJoinOnFilter ( const CSphString & sAttr );
 	bool	CheckHavingConstraints() const;
@@ -328,8 +329,8 @@ private:
 	bool	AddColumnarAttributeExpressions();
 	void	CreateGrouperByAttr ( ESphAttr eType, const CSphColumnInfo & tGroupByAttr, bool & bGrouperUsesAttrs );
 	void	SelectStageForColumnarExpr ( CSphColumnInfo & tExprCol );
-	void	FetchDependencyChains ( IntVec_t & dDependentCols );
-	void	PropagateEvalStage ( CSphColumnInfo & tExprCol, IntVec_t & dDependentCols );
+	void	FetchDependencyChains ( StrVec_t & dDependentCols );
+	void	PropagateEvalStage ( CSphColumnInfo & tExprCol, StrVec_t & dDependentCols );
 	bool	SetupDistinctAttr();
 	bool	PredictAggregates() const;
 	bool	ReplaceWithColumnarItem ( const CSphString & sAttr, ESphEvalStage eStage );
@@ -621,6 +622,9 @@ bool QueueCreator_c::SetupGroupbySettings ( bool bHasImplicitGrouping )
 		return Err ( "group-by attribute '%s' not found", m_tQuery.m_sGroupBy.cstr() );
 
 	const CSphColumnInfo & tGroupByAttr = tSchema.GetAttr(iGroupBy);
+	if ( m_tSettings.m_bComputeItems && tGroupByAttr.m_pExpr && tGroupByAttr.m_pExpr->UsesDocstore() )
+		return Err ( "unable to group by stored field '%s'", m_tQuery.m_sGroupBy.cstr() );
+
 	ESphAttr eType = tGroupByAttr.m_eAttrType;
 	CSphAttrLocator tLoc = tGroupByAttr.m_tLocator;
 	m_bJoinedGroupSort |= IsJoinAttr ( tGroupByAttr.m_sName );
@@ -655,33 +659,32 @@ void QueueCreator_c::AssignOrderByToPresortStage ( const int * pAttrs, int iAttr
 	assert ( pAttrs );
 	assert ( m_pSorterSchema );
 
-	CSphVector<int> dCur;
+	StrVec_t dCur;
 
 	// add valid attributes to processing list
 	for ( int i=0; i<iAttrCount; ++i )
 		if ( pAttrs[i]>=0 )
-			dCur.Add ( pAttrs[i] );
+			dCur.Add ( m_pSorterSchema->GetAttr ( pAttrs[i] ).m_sName );
 
 	// collect columns which affect current expressions
-	for ( int i=0; i<dCur.GetLength(); ++i )
+	ARRAY_FOREACH ( i, dCur )
 	{
-		const CSphColumnInfo & tCol = m_pSorterSchema->GetAttr ( dCur[i] );
-		if ( tCol.m_eStage>SPH_EVAL_PRESORT && tCol.m_pExpr )
-			tCol.m_pExpr->Command ( SPH_EXPR_GET_DEPENDENT_COLS, &dCur );
+		const CSphColumnInfo * pCol = m_pSorterSchema->GetAttr ( dCur[i].cstr() );
+		assert(pCol);
+		if ( pCol->m_eStage>SPH_EVAL_PRESORT && pCol->m_pExpr )
+			pCol->m_pExpr->Command ( SPH_EXPR_GET_DEPENDENT_COLS, &dCur );
 	}
 
 	// get rid of dupes
 	dCur.Uniq();
 
 	// fix up of attributes stages
-	for ( int iAttr : dCur )
+	for ( const auto & sAttr : dCur )
 	{
-		if ( iAttr<0 )
-			continue;
-
-		auto & tCol = const_cast < CSphColumnInfo & > ( m_pSorterSchema->GetAttr ( iAttr ) );
-		if ( tCol.m_eStage==SPH_EVAL_FINAL )
-			tCol.m_eStage = SPH_EVAL_PRESORT;
+		auto pCol = const_cast<CSphColumnInfo *>( m_pSorterSchema->GetAttr ( sAttr.cstr() ) );
+		assert(pCol);
+		if ( pCol->m_eStage==SPH_EVAL_FINAL )
+			pCol->m_eStage = SPH_EVAL_PRESORT;
 	}
 }
 
@@ -692,8 +695,22 @@ void QueueCreator_c::ExtraAddSortkeys ( const int * dAttrs )
 		if ( dAttrs[i]>=0 )
 		{
 			const auto & tAttr = m_pSorterSchema->GetAttr ( dAttrs[i] );
-			m_bJoinedGroupSort |= IsJoinAttr ( tAttr.m_sName );
+			m_bJoinedGroupSort |= tAttr.IsJoined();
 			m_hExtra.Add ( tAttr.m_sName );
+
+			if ( m_tSettings.m_bComputeItems )
+			{
+				// check if dependent columns are joined
+				StrVec_t dCols;
+				dCols.Add ( tAttr.m_sName );
+				FetchDependencyChains(dCols);
+				for ( const auto & sAttr : dCols )
+				{
+					const CSphColumnInfo * pAttr = m_pSorterSchema->GetAttr ( sAttr.cstr() );
+					assert(pAttr);
+					m_bJoinedGroupSort |= pAttr->IsJoined();
+				}
+			}
 		}
 }
 
@@ -729,31 +746,44 @@ void QueueCreator_c::SelectStageForColumnarExpr ( CSphColumnInfo & tExprCol )
 }
 
 
-void QueueCreator_c::FetchDependencyChains ( IntVec_t & dDependentCols )
+void QueueCreator_c::FetchDependencyChains ( StrVec_t & dDependentCols )
 {
 	ARRAY_FOREACH ( i, dDependentCols )
 	{
-		if ( m_pSorterSchema->IsRemovedAttr ( dDependentCols[i] ) )
+		const CSphString & sAttr = dDependentCols[i];
+		int iAttr = m_pSorterSchema->GetAttrIndex ( sAttr.cstr() );
+		assert ( iAttr>=0 );
+
+		if ( m_pSorterSchema->IsRemovedAttr(iAttr) )
 			continue;
 
-		const CSphColumnInfo & tCol = m_pSorterSchema->GetAttr ( dDependentCols[i] );
+		const CSphColumnInfo & tCol = m_pSorterSchema->GetAttr(iAttr);
+
+		int iOldLen = dDependentCols.GetLength();
 
 		// handle chains of dependencies (e.g. SELECT 1+attr f1, f1-1 f2 ... WHERE f2>5)
 		if ( tCol.m_pExpr )
 			tCol.m_pExpr->Command ( SPH_EXPR_GET_DEPENDENT_COLS, &dDependentCols );
+
+		// some expressions depend on the column they are attached to (json fast key)
+		// so filter out duplicates to avoid circular dependencies
+		for ( int iNewAttr = iOldLen; iNewAttr < dDependentCols.GetLength(); iNewAttr++ )
+			if ( dDependentCols[iNewAttr]==dDependentCols[i] )
+				dDependentCols.Remove(iNewAttr);
 	}
 
 	dDependentCols.Uniq();
 }
 
 
-void QueueCreator_c::PropagateEvalStage ( CSphColumnInfo & tExprCol, IntVec_t & dDependentCols )
+void QueueCreator_c::PropagateEvalStage ( CSphColumnInfo & tExprCol, StrVec_t & dDependentCols )
 {
 	bool bWeight = false;
-	for ( auto i : dDependentCols )
+	for ( const auto & sAttr : dDependentCols )
 	{
-		const CSphColumnInfo & tCol = m_pSorterSchema->GetAttr(i);
-		bWeight |= tCol.m_bWeight;
+		const CSphColumnInfo * pCol = m_pSorterSchema->GetAttr ( sAttr.cstr() );
+		assert(pCol);
+		bWeight |= pCol->m_bWeight;
 	}
 
 	if ( bWeight )
@@ -762,11 +792,11 @@ void QueueCreator_c::PropagateEvalStage ( CSphColumnInfo & tExprCol, IntVec_t & 
 		tExprCol.m_bWeight = true;
 	}
 
-	for ( auto i : dDependentCols )
+	for ( const auto & sAttr : dDependentCols )
 	{
-		auto & tDep = const_cast < CSphColumnInfo & > ( m_pSorterSchema->GetAttr(i) );
-		if ( tDep.m_eStage > tExprCol.m_eStage )
-			tDep.m_eStage = tExprCol.m_eStage;
+		auto pDep = const_cast<CSphColumnInfo *> ( m_pSorterSchema->GetAttr ( sAttr.cstr() ) );
+		if ( pDep->m_eStage > tExprCol.m_eStage )
+			pDep->m_eStage = tExprCol.m_eStage;
 	}
 }
 
@@ -816,16 +846,22 @@ bool QueueCreator_c::SetupAggregateExpr ( CSphColumnInfo & tExprCol, const CSphS
 
 bool QueueCreator_c::SetupColumnarAggregates ( CSphColumnInfo & tExprCol )
 {
-	CSphVector<int> dDependentCols;
+	StrVec_t dDependentCols;
 	tExprCol.m_pExpr->Command ( SPH_EXPR_GET_DEPENDENT_COLS, &dDependentCols );
-	FetchDependencyChains ( dDependentCols );
+	FetchDependencyChains(dDependentCols);
 
 	if ( !dDependentCols.GetLength() )
 		return tExprCol.IsColumnarExpr();
 
-	if ( dDependentCols.GetLength()==1 && !m_pSorterSchema->IsRemovedAttr ( dDependentCols[0] ) )
+	if ( dDependentCols.GetLength()==1 )
 	{
-		const CSphColumnInfo & tColumnarAttr = m_pSorterSchema->GetAttr ( dDependentCols[0] );
+		int iAttr = m_pSorterSchema->GetAttrIndex ( dDependentCols[0].cstr() );
+		assert ( iAttr>=0 );
+
+		if ( m_pSorterSchema->IsRemovedAttr(iAttr) )
+			return false;
+
+		const CSphColumnInfo & tColumnarAttr = m_pSorterSchema->GetAttr(iAttr);
 		if ( tColumnarAttr.IsColumnarExpr() )
 		{
 			CSphString sColumnarCol;
@@ -845,15 +881,17 @@ bool QueueCreator_c::SetupColumnarAggregates ( CSphColumnInfo & tExprCol )
 void QueueCreator_c::UpdateAggregateDependencies ( CSphColumnInfo & tExprCol )
 {
 	/// update aggregate dependencies (e.g. SELECT 1+attr f1, min(f1), ...)
-	CSphVector<int> dDependentCols;
+	StrVec_t dDependentCols;
 	tExprCol.m_pExpr->Command ( SPH_EXPR_GET_DEPENDENT_COLS, &dDependentCols );
 	FetchDependencyChains ( dDependentCols );
-	ARRAY_FOREACH ( j, dDependentCols )
+	for ( const auto & sAttr : dDependentCols )
 	{
-		auto & tDep = const_cast < CSphColumnInfo & > ( m_pSorterSchema->GetAttr ( dDependentCols[j] ) );
-		bool bJoinedAttr = ExprHasJoinPrefix ( tDep.m_sName, m_tSettings.m_pJoinArgs.get() ) && tDep.m_eStage==SPH_EVAL_SORTER && tDep.m_tLocator.m_bDynamic && !tDep.m_pExpr;
-		if ( tDep.m_eStage>tExprCol.m_eStage && !bJoinedAttr )
-			tDep.m_eStage = tExprCol.m_eStage;
+		auto pDep = const_cast<CSphColumnInfo *>( m_pSorterSchema->GetAttr ( sAttr.cstr() ) );
+		assert(pDep);
+
+		bool bJoinedAttr = ExprHasJoinPrefix ( pDep->m_sName, m_tSettings.m_pJoinArgs.get() ) && pDep->m_eStage==SPH_EVAL_SORTER && pDep->m_tLocator.m_bDynamic && !pDep->m_pExpr;
+		if ( pDep->m_eStage>tExprCol.m_eStage && !bJoinedAttr )
+			pDep->m_eStage = tExprCol.m_eStage;
 	}
 }
 
@@ -914,7 +952,7 @@ void QueueCreator_c::SelectExprEvalStage ( CSphColumnInfo & tExprCol )
 			// so we are about to add a filter condition,
 			// but it might depend on some preceding columns (e.g. SELECT 1+attr f1 ... WHERE f1>5)
 			// lets detect those and move them to prefilter \ presort phase too
-			CSphVector<int> dDependentCols;
+			StrVec_t dDependentCols;
 			tExprCol.m_pExpr->Command ( SPH_EXPR_GET_DEPENDENT_COLS, &dDependentCols );
 
 			SelectStageForColumnarExpr(tExprCol);
@@ -1094,21 +1132,23 @@ bool QueueCreator_c::ParseQueryItem ( const CSphQueryItem & tItem )
 	// need to add all dependent columns for post limit expressions
 	if ( tExprCol.m_eStage==SPH_EVAL_POSTLIMIT && tExprCol.m_pExpr )
 	{
-		CSphVector<int> dCur;
+		StrVec_t dCur;
 		tExprCol.m_pExpr->Command ( SPH_EXPR_GET_DEPENDENT_COLS, &dCur );
 
 		ARRAY_FOREACH ( j, dCur )
 		{
-			const CSphColumnInfo & tCol = m_pSorterSchema->GetAttr ( dCur[j] );
-			if ( tCol.m_pExpr )
-				tCol.m_pExpr->Command ( SPH_EXPR_GET_DEPENDENT_COLS, &dCur );
+			const CSphColumnInfo * pCol = m_pSorterSchema->GetAttr ( dCur[j].cstr() );
+			if ( pCol && pCol->m_pExpr )
+				pCol->m_pExpr->Command ( SPH_EXPR_GET_DEPENDENT_COLS, &dCur );
 		}
-		dCur.Uniq ();
 
-		ARRAY_FOREACH ( j, dCur )
+		dCur.Uniq();
+
+		for ( const auto & sAttr : dCur )
 		{
-			const CSphColumnInfo & tDep = m_pSorterSchema->GetAttr ( dCur[j] );
-			m_hQueryColumns.Add ( tDep.m_sName );
+			const CSphColumnInfo * pDep = m_pSorterSchema->GetAttr ( sAttr.cstr() );
+			assert(pDep);
+			m_hQueryColumns.Add ( pDep->m_sName );
 		}
 	}
 
@@ -1506,7 +1546,7 @@ bool QueueCreator_c::ParseJoinExpr ( CSphColumnInfo & tExprCol, const CSphString
 }
 
 
-bool QueueCreator_c::AddJsonJoinOnFilter ( const CSphString & sAttr1, const CSphString & sAttr2 )
+bool QueueCreator_c::AddJsonJoinOnFilter ( const CSphString & sAttr1, const CSphString & sAttr2, ESphAttr eTypeCast )
 {
 	const CSphColumnInfo * pAttr = m_pSorterSchema->GetAttr ( sAttr1.cstr() );
 	if ( pAttr )
@@ -1538,15 +1578,25 @@ bool QueueCreator_c::AddJsonJoinOnFilter ( const CSphString & sAttr1, const CSph
 	// convert JSON fields to join attr type
 	if ( tExprCol.m_eAttrType==SPH_ATTR_JSON_FIELD )
 	{
-		auto * pJoinAttr = tSchema.GetAttr ( sAttr2.cstr() );
-		if ( !pJoinAttr )
+		// try to determine type if it was not explicitly specified
+		if ( eTypeCast==SPH_ATTR_NONE )
 		{
-			m_sError.SetSprintf ( "join-on attribute '%s' not found", sAttr2.cstr() );
-			return false;
+			auto * pJoinAttr = tSchema.GetAttr ( sAttr2.cstr() );
+			if ( !pJoinAttr )
+			{
+				if ( sphJsonNameSplit ( sAttr2.cstr() ) )
+					m_sError.SetSprintf ( "use implicit type conversion on join-on attribute '%s'", sAttr2.cstr() );
+				else
+					m_sError.SetSprintf ( "join-on attribute '%s' not found", sAttr2.cstr() );
+
+				return false;
+			}
+
+			eTypeCast = pJoinAttr->m_eAttrType;
 		}
 
 		CSphString sConverted;
-		switch ( pJoinAttr->m_eAttrType )
+		switch ( eTypeCast )
 		{
 		case SPH_ATTR_STRING:
 			sConverted.SetSprintf ( "TO_STRING(%s)", sAttr1.cstr() );
@@ -1644,6 +1694,21 @@ static ESphAttr FilterType2AttrType ( ESphFilter eFilter )
 }
 
 
+bool QueueCreator_c::CheckJoinOnTypeCast ( const CSphString & sIdx, const CSphString & sAttr, ESphAttr eTypeCast )
+{
+	if ( eTypeCast==SPH_ATTR_NONE )
+		return true;
+
+	if ( !sphJsonNameSplit ( sAttr.cstr() ) )
+	{
+		m_sError.SetSprintf ( "Explicit type conversion used on non-json attribute '%s.%s'", sIdx.cstr(), sAttr.cstr() );
+		return false;
+	}
+
+	return true;
+}
+
+
 bool QueueCreator_c::AddJoinFilterAttrs()
 {
 	if ( !m_tSettings.m_pJoinArgs )
@@ -1653,16 +1718,21 @@ bool QueueCreator_c::AddJoinFilterAttrs()
 	const CSphString & sRightIndex = m_tSettings.m_pJoinArgs->m_sIndex2;
 	for ( const auto & i : m_tQuery.m_dOnFilters )
 	{
+		if ( !CheckJoinOnTypeCast ( i.m_sIdx1, i.m_sAttr1, i.m_eTypeCast1 ) ) return false;
+		if ( !CheckJoinOnTypeCast ( i.m_sIdx2, i.m_sAttr2, i.m_eTypeCast2 ) ) return false;
+
+		ESphAttr eTypeCast = i.m_eTypeCast1!=SPH_ATTR_NONE ? i.m_eTypeCast1 : i.m_eTypeCast2;
+
 		if ( i.m_sIdx1==sLeftIndex )
 		{
-			if ( !AddJsonJoinOnFilter ( i.m_sAttr1, i.m_sAttr2 ) )	return false;
-			if ( !AddColumnarJoinOnFilter ( i.m_sAttr1 ) )			return false;
+			if ( !AddJsonJoinOnFilter ( i.m_sAttr1, i.m_sAttr2, eTypeCast ) )	return false;
+			if ( !AddColumnarJoinOnFilter ( i.m_sAttr1 ) )						return false;
 		}
 
 		if ( i.m_sIdx2==sLeftIndex )
 		{
-			if ( !AddJsonJoinOnFilter ( i.m_sAttr2, i.m_sAttr1 ) )	return false;
-			if ( !AddColumnarJoinOnFilter ( i.m_sAttr2 ) )			return false;
+			if ( !AddJsonJoinOnFilter ( i.m_sAttr2, i.m_sAttr1, eTypeCast ) )	return false;
+			if ( !AddColumnarJoinOnFilter ( i.m_sAttr2 ) )						return false;
 		}
 	}
 
@@ -1891,11 +1961,12 @@ void QueueCreator_c::ReplaceJsonWithExprs ( CSphMatchComparatorState & tState, C
 		if ( tState.m_dRemapped.BitGet ( i ) )
 			continue;
 
-		if ( dExtraExprs[i].m_tKey.m_sKey.IsEmpty() )
+		const CSphString & sKey = dExtraExprs[i].m_tKey.m_sKey;
+		if ( sKey.IsEmpty() )
 			continue;
 
 		CSphString sRemapCol;
-		sRemapCol.SetSprintf ( "%s%s", GetInternalAttrPrefix(), dExtraExprs[i].m_tKey.m_sKey.cstr() );
+		sRemapCol.SetSprintf ( "%s%s", GetInternalAttrPrefix(), sKey.cstr() );
 
 		int iRemap = tSorterSchema.GetAttrIndex ( sRemapCol.cstr() );
 		if ( iRemap==-1 )
@@ -1910,6 +1981,7 @@ void QueueCreator_c::ReplaceJsonWithExprs ( CSphMatchComparatorState & tState, C
 			CSphColumnInfo tRemapCol ( sRemapCol.cstr(), SPH_ATTR_STRINGPTR );
 			SetupRemapColJson ( tRemapCol, tState, dExtraExprs, i );
 			iRemap = tSorterSchema.GetAttrsCount();
+			ModifyExprForJoin ( tRemapCol, sKey );
 			tSorterSchema.AddAttr ( tRemapCol, true );
 		}
 
@@ -2220,7 +2292,8 @@ int QueueCreator_c::AdjustMaxMatches ( int iMaxMatches ) const
 	if ( iGroupbyAttr<0 )
 		return iMaxMatches;
 
-	int iCountDistinct = m_tSettings.m_fnGetCountDistinct ? m_tSettings.m_fnGetCountDistinct ( m_pSorterSchema->GetAttr(iGroupbyAttr).m_sName ) : -1;
+	CSphString sModifiedAttr;
+	int iCountDistinct = m_tSettings.m_fnGetCountDistinct ? m_tSettings.m_fnGetCountDistinct ( m_pSorterSchema->GetAttr(iGroupbyAttr).m_sName, sModifiedAttr ) : -1;
 	if ( iCountDistinct > m_tQuery.m_iMaxMatchThresh )
 		return iMaxMatches;
 
@@ -2231,21 +2304,21 @@ int QueueCreator_c::AdjustMaxMatches ( int iMaxMatches ) const
 bool QueueCreator_c::CanCalcFastCountDistinct() const
 {
 	bool bHasAggregates = PredictAggregates();
-	return !bHasAggregates && m_tGroupSorterSettings.m_bImplicit && m_tGroupSorterSettings.m_bDistinct && m_tQuery.m_dFilters.IsEmpty() && m_tQuery.m_sQuery.IsEmpty() && m_tQuery.m_sKNNAttr.IsEmpty();
+	return !bHasAggregates && m_tGroupSorterSettings.m_bImplicit && m_tGroupSorterSettings.m_bDistinct && m_tQuery.m_dFilters.IsEmpty() && m_tQuery.m_sQuery.IsEmpty() && m_tQuery.m_sKNNAttr.IsEmpty() && m_tQuery.m_eJoinType!=JoinType_e::INNER;
 }
 
 
 bool QueueCreator_c::CanCalcFastCountFilter() const
 {
 	bool bHasAggregates = PredictAggregates();
-	return !bHasAggregates && m_tGroupSorterSettings.m_bImplicit && !m_tGroupSorterSettings.m_bDistinct && m_tQuery.m_dFilters.GetLength()==1 && m_tQuery.m_sQuery.IsEmpty() && m_tQuery.m_sKNNAttr.IsEmpty();
+	return !bHasAggregates && m_tGroupSorterSettings.m_bImplicit && !m_tGroupSorterSettings.m_bDistinct && m_tQuery.m_dFilters.GetLength()==1 && m_tQuery.m_sQuery.IsEmpty() && m_tQuery.m_sKNNAttr.IsEmpty() && m_tQuery.m_eJoinType!=JoinType_e::INNER;
 }
 
 
 bool QueueCreator_c::CanCalcFastCount() const
 {
 	bool bHasAggregates = PredictAggregates();
-	return !bHasAggregates && m_tGroupSorterSettings.m_bImplicit && !m_tGroupSorterSettings.m_bDistinct && m_tQuery.m_dFilters.IsEmpty() && m_tQuery.m_sQuery.IsEmpty() && m_tQuery.m_sKNNAttr.IsEmpty();
+	return !bHasAggregates && m_tGroupSorterSettings.m_bImplicit && !m_tGroupSorterSettings.m_bDistinct && m_tQuery.m_dFilters.IsEmpty() && m_tQuery.m_sQuery.IsEmpty() && m_tQuery.m_sKNNAttr.IsEmpty() && m_tQuery.m_eJoinType!=JoinType_e::INNER;
 }
 
 
@@ -2256,11 +2329,11 @@ PrecalculatedSorterResults_t QueueCreator_c::FetchPrecalculatedValues() const
 	{
 		int iCountDistinctAttr = GetGroupDistinctAttrIndex();
 		if ( iCountDistinctAttr>0 && m_tSettings.m_bEnableFastDistinct )
-			tPrecalc.m_iCountDistinct = m_tSettings.m_fnGetCountDistinct ? m_tSettings.m_fnGetCountDistinct ( m_pSorterSchema->GetAttr(iCountDistinctAttr).m_sName ) : -1;
+			tPrecalc.m_iCountDistinct = m_tSettings.m_fnGetCountDistinct ? m_tSettings.m_fnGetCountDistinct ( m_pSorterSchema->GetAttr(iCountDistinctAttr).m_sName, tPrecalc.m_sAttr ) : -1;
 	}
 
 	if ( CanCalcFastCountFilter() )
-		tPrecalc.m_iCountFilter = m_tSettings.m_fnGetCountFilter ? m_tSettings.m_fnGetCountFilter ( m_tQuery.m_dFilters[0] ) : -1;
+		tPrecalc.m_iCountFilter = m_tSettings.m_fnGetCountFilter ? m_tSettings.m_fnGetCountFilter ( m_tQuery.m_dFilters[0], tPrecalc.m_sAttr ) : -1;
 
 	if ( CanCalcFastCount() )
 		tPrecalc.m_iCount = m_tSettings.m_fnGetCount ? m_tSettings.m_fnGetCount() : -1;
@@ -2477,13 +2550,16 @@ static void CreateMultiQueue ( RawVector_T<QueueCreator_c> & dCreators, const Sp
 	dCreators[0].m_bMulti = true;
 
 	// same as SetupQueue
-	dCreators[0].SetupComputeQueue ();
+	bool bSuccess = dCreators[0].SetupComputeQueue ();
 	// copy schema WO group by and internals
 	CSphRsetSchema tRefSchema = dCreators[0].SorterSchema();
 	bool bHasJson = dCreators[0].HasJson();
 	bool bJsonMixed = false;
 
-	dCreators[0].SetupGroupQueue ();
+	if ( bSuccess )
+		bSuccess &= dCreators[0].SetupGroupQueue ();
+
+	dCreators[0].m_bCreate = bSuccess;
 
 	// create rest of schemas
 	for ( int i=1; i<dSorters.GetLength(); ++i )

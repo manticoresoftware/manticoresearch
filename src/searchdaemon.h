@@ -162,7 +162,7 @@ const char* szCommand ( int );
 /// master-agent API SEARCH command protocol extensions version
 enum
 {
-	VER_COMMAND_SEARCH_MASTER = 21
+	VER_COMMAND_SEARCH_MASTER = 22
 };
 
 
@@ -181,8 +181,9 @@ enum SearchdCommandV_e : WORD
 	VER_COMMAND_PING		= 0x100,
 	VER_COMMAND_UVAR		= 0x100,
 	VER_COMMAND_CALLPQ		= 0x100,
-	VER_COMMAND_CLUSTER		= 0x108,
+	VER_COMMAND_CLUSTER		= 0x109,
 	VER_COMMAND_GETFIELD	= 0x100,
+	VER_COMMAND_SUGGEST		= 0x101,
 
 	VER_COMMAND_WRONG = 0,
 };
@@ -641,10 +642,11 @@ class QueryStatContainer_i
 public:
 	virtual								~QueryStatContainer_i() {}
 	virtual void						Add ( uint64_t uFoundRows, uint64_t uQueryTime, uint64_t uTimestamp ) = 0;
-	virtual void						GetRecord ( int iRecord, QueryStatRecord_t & tRecord ) const = 0;
+	virtual QueryStatRecord_t			GetRecord ( int iRecord ) const noexcept = 0;
 	virtual int							GetNumRecords() const = 0;
 };
 
+std::unique_ptr<QueryStatContainer_i> MakeStatsContainer();
 
 class ServedStats_c final
 {
@@ -665,8 +667,8 @@ private:
 	std::unique_ptr<QueryStatContainer_i> m_pQueryStatRecordsExact GUARDED_BY ( m_tStatsLock );
 #endif
 
-	std::unique_ptr<TDigest_i>	m_pQueryTimeDigest GUARDED_BY ( m_tStatsLock );
-	std::unique_ptr<TDigest_i>	m_pRowsFoundDigest GUARDED_BY ( m_tStatsLock );
+	TDigest_c			m_tQueryTimeDigest GUARDED_BY ( m_tStatsLock );
+	TDigest_c			m_tRowsFoundDigest GUARDED_BY ( m_tStatsLock );
 
 	uint64_t			m_uTotalFoundRowsMin GUARDED_BY ( m_tStatsLock )= UINT64_MAX;
 	uint64_t			m_uTotalFoundRowsMax GUARDED_BY ( m_tStatsLock )= 0;
@@ -678,12 +680,11 @@ private:
 
 	uint64_t			m_uTotalQueries GUARDED_BY ( m_tStatsLock ) = 0;
 
-	static void			CalcStatsForInterval ( const QueryStatContainer_i * pContainer, QueryStatElement_t & tRowResult,
-							QueryStatElement_t & tTimeResult, uint64_t uTimestamp, uint64_t uInterval, int iRecords );
-
 	void				DoStatCalcStats ( const QueryStatContainer_i * pContainer, QueryStats_t & tRowsFoundStats,
 							QueryStats_t & tQueryTimeStats ) const REQUIRES_SHARED ( m_tStatsLock );
 };
+
+void CalcSimpleStats ( const QueryStatContainer_i * pContainer, QueryStats_t & tRowsFoundStats, QueryStats_t & tQueryTimeStats );
 
 // calculate index mass based on status
 uint64_t CalculateMass ( const CSphIndexStatus & dStats );
@@ -1322,15 +1323,15 @@ public:
 
 
 // from mysqld_error.h
-enum MysqlErrors_e
+enum class EMYSQL_ERR : WORD
 {
-	MYSQL_ERR_UNKNOWN_COM_ERROR			= 1047,
-	MYSQL_ERR_SERVER_SHUTDOWN			= 1053,
-	MYSQL_ERR_PARSE_ERROR				= 1064,
-	MYSQL_ERR_NO_SUCH_THREAD			= 1094,
-	MYSQL_ERR_FIELD_SPECIFIED_TWICE		= 1110,
-	MYSQL_ERR_NO_SUCH_TABLE				= 1146,
-	MYSQL_ERR_TOO_MANY_USER_CONNECTIONS	= 1203
+	UNKNOWN_COM_ERROR			= 1047,
+	SERVER_SHUTDOWN				= 1053,
+	PARSE_ERROR					= 1064,
+	NO_SUCH_THREAD				= 1094,
+	FIELD_SPECIFIED_TWICE		= 1110,
+	NO_SUCH_TABLE				= 1146,
+	TOO_MANY_USER_CONNECTIONS	= 1203
 };
 
 class RowBuffer_i;
@@ -1342,7 +1343,7 @@ public:
 
 	virtual void Ok ( int iAffectedRows, const CSphString & sWarning, int64_t iLastInsertId ) = 0;
 	virtual void Ok ( int iAffectedRows, int nWarnings=0 ) = 0;
-	virtual void ErrorEx ( MysqlErrors_e iErr, const char * sError ) = 0;
+	virtual void ErrorEx ( EMYSQL_ERR eErr, const char * sError ) = 0;
 
 	void Error ( const char * sTemplate, ... );
 
@@ -1362,43 +1363,42 @@ std::unique_ptr<RequestBuilder_i> CreateRequestBuilder ( Str_t sQuery, const Sql
 std::unique_ptr<ReplyParser_i> CreateReplyParser ( bool bJson, int & iUpdated, int & iWarnings );
 StmtErrorReporter_i * CreateHttpErrorReporter();
 
-enum ESphHttpStatus
+enum class EHTTP_STATUS : BYTE
 {
-	SPH_HTTP_STATUS_100,
-	SPH_HTTP_STATUS_200,
-	SPH_HTTP_STATUS_206,
-	SPH_HTTP_STATUS_400,
-	SPH_HTTP_STATUS_403,
-	SPH_HTTP_STATUS_404,
-	SPH_HTTP_STATUS_405,
-	SPH_HTTP_STATUS_409,
-	SPH_HTTP_STATUS_413,
-	SPH_HTTP_STATUS_500,
-	SPH_HTTP_STATUS_501,
-	SPH_HTTP_STATUS_503,
-	SPH_HTTP_STATUS_526,
-
-	SPH_HTTP_STATUS_TOTAL
+	_100,
+	_200,
+	_206,
+	_400,
+	_403,
+	_404,
+	_405,
+	_409,
+	_413,
+	_415,
+	_500,
+	_501,
+	_503,
+	_526,
 };
 
-enum ESphHttpEndpoint
+enum class EHTTP_ENDPOINT : BYTE
 {
-	SPH_HTTP_ENDPOINT_INDEX,
-	SPH_HTTP_ENDPOINT_SQL,
-	SPH_HTTP_ENDPOINT_JSON_SEARCH,
-	SPH_HTTP_ENDPOINT_JSON_INDEX,
-	SPH_HTTP_ENDPOINT_JSON_CREATE,
-	SPH_HTTP_ENDPOINT_JSON_INSERT,
-	SPH_HTTP_ENDPOINT_JSON_REPLACE,
-	SPH_HTTP_ENDPOINT_JSON_UPDATE,
-	SPH_HTTP_ENDPOINT_JSON_DELETE,
-	SPH_HTTP_ENDPOINT_JSON_BULK,
-	SPH_HTTP_ENDPOINT_PQ,
-	SPH_HTTP_ENDPOINT_CLI,
-	SPH_HTTP_ENDPOINT_CLI_JSON,
-	SPH_HTTP_ENDPOINT_ES_BULK,
+	INDEX,
+	SQL,
+	JSON_SEARCH,
+	JSON_INDEX,
+	JSON_CREATE,
+	JSON_INSERT,
+	JSON_REPLACE,
+	JSON_UPDATE,
+	JSON_DELETE,
+	JSON_BULK,
+	PQ,
+	CLI,
+	CLI_JSON,
+	ES_BULK,
 
-	SPH_HTTP_ENDPOINT_TOTAL
+	TOTAL
 };
 
 bool CheckCommandVersion ( WORD uVer, WORD uDaemonVersion, ISphOutputBuffer & tOut );
@@ -1413,11 +1413,14 @@ void sphHandleMysqlCommitRollback ( StmtErrorReporter_i& tOut, Str_t sQuery, boo
 bool sphCheckWeCanModify ();
 bool sphCheckWeCanModify ( StmtErrorReporter_i & tOut );
 bool sphCheckWeCanModify ( RowBuffer_i& tOut );
+bool PollOptimizeRunning ( const CSphString & sIndex );
+int GetLogFD ();
+const CSphString& sphGetLogFile() noexcept;
 
 void				sphProcessHttpQueryNoResponce ( const CSphString& sEndpoint, const CSphString& sQuery, CSphVector<BYTE> & dResult );
-void				sphHttpErrorReply ( CSphVector<BYTE> & dData, ESphHttpStatus eCode, const char * szError );
+void				sphHttpErrorReply ( CSphVector<BYTE> & dData, EHTTP_STATUS eCode, const char * szError );
 void				LoadCompatHttp ( const char * sData );
-void				SaveCompatHttp ( JsonObj_c & tRoot );
+void				SaveCompatHttp ( JsonEscapedBuilder & tOut );
 void				SetupCompatHttp();
 bool				SetLogManagement ( const CSphString & sVal, CSphString & sError );
 bool				IsLogManagementEnabled ();
@@ -1436,7 +1439,7 @@ namespace session
 
 	bool Execute ( Str_t sQuery, RowBuffer_i& tOut );
 	void SetFederatedUser();
-	void SetDumpUser ( const CSphString & sUser );
+	void SetUser ( const CSphString & sUser );
 	void SetAutoCommit ( bool bAutoCommit );
 	void SetInTrans ( bool bInTrans );
 	bool IsAutoCommit();
@@ -1482,16 +1485,17 @@ void PercolateMatchDocuments ( const BlobVec_t &dDocs, const PercolateOptions_t 
 
 void SendErrorReply ( ISphOutputBuffer & tOut, const char * sTemplate, ... );
 void SetLogHttpFilter ( const CSphString & sVal );
-int HttpGetStatusCodes ( ESphHttpStatus eStatus );
-ESphHttpStatus HttpGetStatusCodes ( int iStatus );
-void HttpBuildReply ( CSphVector<BYTE> & dData, ESphHttpStatus eCode, const char * sBody, int iBodyLen, bool bHtml );
-void HttpBuildReplyHead ( CSphVector<BYTE> & dData, ESphHttpStatus eCode, const char * sBody, int iBodyLen, bool bHeadReply );
-void HttpErrorReply ( CSphVector<BYTE> & dData, ESphHttpStatus eCode, const char * szError );
+int HttpGetStatusCodes ( EHTTP_STATUS eStatus ) noexcept;
+EHTTP_STATUS HttpGetStatusCodes ( int iStatus ) noexcept;
+void HttpBuildReply ( CSphVector<BYTE> & dData, EHTTP_STATUS eCode, const char * sBody, int iBodyLen, bool bHtml );
+void HttpBuildReplyHead ( CSphVector<BYTE> & dData, EHTTP_STATUS eCode, const char * sBody, int iBodyLen, bool bHeadReply );
+void HttpErrorReply ( CSphVector<BYTE> & dData, EHTTP_STATUS eCode, const char * szError );
 
 using HttpOptionsHash_t = SmallStringHash_T<CSphString>;
 struct http_parser;
 
-void UriPercentReplace ( Str_t & sEntity, bool bAlsoPlus=true );
+enum class Replace_e : bool { NoPlus = false, WithPlus = true };
+void UriPercentReplace ( Str_t& sEntity, Replace_e ePlus = Replace_e::WithPlus );
 void DumpHttp ( int iReqType, const CSphString & sURL, Str_t sBody );
 
 enum MysqlColumnType_e
@@ -1588,7 +1592,7 @@ public:
 	inline void Eof ( bool bMoreResults ) { return Eof ( bMoreResults, 0 ); }
 	inline void Eof () { return Eof ( false ); }
 
-	virtual void Error ( const char * sError, MysqlErrors_e iErr = MYSQL_ERR_PARSE_ERROR ) = 0;
+	virtual void Error ( const char * sError, EMYSQL_ERR iErr = EMYSQL_ERR::PARSE_ERROR ) = 0;
 
 	virtual void Ok ( int iAffectedRows=0, int iWarns=0, const char * sMessage=nullptr, bool bMoreResults=false, int64_t iLastInsertId=0 ) = 0;
 
@@ -1625,6 +1629,16 @@ public:
 		PutString ( (Str_t)sMsg );
 	}
 
+	void PutStringf ( const char * szFmt, ... )
+	{
+		StringBuilder_c sRight;
+		va_list ap;
+		va_start ( ap, szFmt );
+		sRight.vSprintf ( szFmt, ap );
+		va_end ( ap );
+		PutString ( sRight );
+	}
+
 	void PutTimeAsString ( int64_t tmVal, const char* szSuffix = nullptr )
 	{
 		if ( tmVal==-1 )
@@ -1656,7 +1670,7 @@ public:
 		vsnprintf ( sBuf, sizeof(sBuf), sTemplate, ap );
 		va_end ( ap );
 
-		Error ( sBuf, MYSQL_ERR_PARSE_ERROR );
+		Error ( sBuf, EMYSQL_ERR::PARSE_ERROR );
 	}
 
 	void ErrorAbsent ( const char * sTemplate, ... )
@@ -1668,7 +1682,7 @@ public:
 		vsnprintf ( sBuf, sizeof ( sBuf ), sTemplate, ap );
 		va_end ( ap );
 
-		Error ( sBuf, MYSQL_ERR_NO_SUCH_TABLE );
+		Error ( sBuf, EMYSQL_ERR::NO_SUCH_TABLE );
 	}
 
 	// popular pattern of 2 columns of data

@@ -159,10 +159,9 @@ only_one_index:
 	;
 
 one_index:
-	ident_all { sphWarning ("%s", "got ident_all"); }
+	ident_all
 	| ident_all ':' ident_all
 		{
-			sphWarning ("%s", "got ident_all : ident_all");
 			pParser->ToString (pParser->m_pStmt->m_sCluster, $1);
 			$$ = $3;
 		}

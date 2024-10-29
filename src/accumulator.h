@@ -138,6 +138,9 @@ public:
 	bool			SetupDocstore ( const RtIndex_i & tIndex, CSphString & sError );
 	bool			IsReplace () const { return m_bReplace; }
 
+	[[nodiscard]] bool IsClusterCommand () const noexcept;
+	[[nodiscard]] bool IsUpdateCommand ( ) const noexcept;
+
 private:
 	bool								m_bReplace = false;		///< insert or replace mode (affects CleanupDuplicates() behavior)
 

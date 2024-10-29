@@ -172,8 +172,8 @@ int64_t sphGetSize64 ( const char * sValue, char ** ppErr = nullptr, int64_t iDe
 /// *ppErr, if provided, will point to parsing error, if any. By default scale is 's', seconds.
 int64_t sphGetTime64 ( const char* sValue, char** ppErr = nullptr, int64_t iDefault = -1 );
 
-int64_t GetUTC ( const CSphString & sTime, const CSphString & sFormat );
-bool ParseDateMath ( const CSphString & sMathExpr, const CSphString & sFormat, int iNow, time_t & tDateTime );
+int64_t GetUTC ( const CSphString & sTime, const char * sFormat=nullptr );
+bool ParseDateMath ( const CSphString & sMathExpr, int iNow, time_t & tDateTime );
 
 enum class DateUnit_e
 {
@@ -446,7 +446,19 @@ using FixPathAbsolute_fn = std::function<void ( CSphString & sPath )>;
 void sphConfigureCommon ( const CSphConfig & hConf, FixPathAbsolute_fn && fnPathFix = nullptr );
 
 /// my own is chinese
-bool sphIsChineseCode ( int iCode );
+FORCE_INLINE bool sphIsChineseCode ( int iCode )
+{
+	return ( ( iCode>=0x2E80 && iCode<=0x2EF3 ) ||	// CJK radicals
+		( iCode>=0x2F00 && iCode<=0x2FD5 ) ||	// Kangxi radicals
+		( iCode>=0x3000 && iCode<=0x303F ) ||	// CJK Symbols and Punctuation
+		( iCode>=0x3105 && iCode<=0x312D ) ||	// Bopomofo
+		( iCode>=0x31C0 && iCode<=0x31E3 ) ||	// CJK strokes
+		( iCode>=0x3400 && iCode<=0x4DB5 ) ||	// CJK Ideograph Extension A
+		( iCode>=0x4E00 && iCode<=0x9FFF ) ||	// Ideograph
+		( iCode>=0xF900 && iCode<=0xFAD9 ) ||	// compatibility ideographs
+		( iCode>=0xFF00 && iCode<=0xFFEF ) ||	// Halfwidth and fullwidth forms
+		( iCode>=0x20000 && iCode<=0x2FA1D ) );	// CJK Ideograph Extensions B/C/D, and compatibility ideographs
+}
 
 /// detect chinese chars in a buffer
 bool sphDetectChinese ( const BYTE * szBuffer, int iLength );
@@ -573,5 +585,10 @@ BYTE Pearson8 ( const BYTE * pBuf, int iLen );
 void		CheckWinInstall();
 CSphString	GetWinInstallDir();
 #endif
+
+
+void PauseAt ( const CSphString& sName, bool bPause );
+
+void PauseCheck ( const CSphString& sName );
 
 #endif // _sphinxutils_

@@ -2,7 +2,10 @@
 <test>
 <name>JOIN</name>
 
-<requires><force-rt/></requires>
+<requires>
+<force-rt/>
+<http/>
+</requires>
 
 <skip_indexer/>
 
@@ -316,6 +319,140 @@ select * from join1 inner join join2 on join1.string_id = join2.id where id=1 or
 
 <!-- left join with a single right filter -->
 select * from join1 left join join2 on join1.id = join2.id where join2.name = 'name1' order by id asc;
+
+<!-- multiple facet -->
+select join1.j.table, j.table from join2 join join1 on join1.id = join2.id facet join1.j.table distinct facet j.table;;
+
+<!-- precalc (fast count) sorter -->
+select id, count(*) from join1 left join join2 on join1.id=join2.id;
+
+<!-- count(*) sorter vs left join -->
+select id, * from join1 left join join2 on join1.id=join2.id;
+select id, count(*) from join1 left join join2 on join1.id=join2.id;
+
+<!-- count(*) sorter vs inner join -->
+select id, * from join1 join join2 on join1.id=join2.id;
+select id, count(*) from join1 join join2 on join1.id=join2.id;
+
+<!-- CONCAT of joined json -->
+select to_string(join2.j.table) as table2, concat(to_string(j.table), table2) as test from join1 join join2 on join1.id = join2.id;
+
+<!-- sort by CONCAT of joined json -->
+select to_string(join2.j.table) as table2, concat(to_string(j.table), table2) as test from join1 join join2 on join1.id = join2.id order by test asc;
+
+<!-- join on two json attrs (error) -->
+select * from join1 left join join2 on join1.j.a = join2.j.a;
+
+<!-- join on two json attrs -->
+select * from join1 left join join2 on int(join1.j.a) = join2.j.a;
+
+<!-- join on two json attrs -->
+select * from join1 left join join2 on join1.j.a = int(join2.j.a);
+
+<!-- type cast on non-json attr (error) -->
+select * from join1 left join join2 on join1.j.a = int(join2.id);
+</sphinxql>
+
+<query endpoint="json/search">
+{
+  "table": "join1",
+  "query": { "query_string": "title1 | title2" },
+  "join":
+  [
+    {
+      "type": "inner",
+      "table": "join2",
+      "on":
+      [
+        {
+          "left":
+          {
+            "table": "join1",
+            "field": "string_id"
+          },
+          "operator": "eq",
+          "right":
+          {
+            "table": "join2",
+            "field": "id"
+          }
+        }
+      ]
+    }
+  ]
+}
+</query>
+
+<query endpoint="json/search">
+{
+  "table": "join1",
+  "query": { "query_string": "title1 | title2" },
+  "join":
+  [
+    {
+      "type": "inner",
+      "table": "join2",
+	  "query":
+	  {
+        "query_string": "title2"
+      },
+      "on":
+      [
+        {
+          "left":
+          {
+            "table": "join1",
+            "field": "string_id"
+          },
+          "operator": "eq",
+          "right":
+          {
+            "table": "join2",
+            "field": "id"
+          }
+        }
+      ]
+    }
+  ]
+}
+</query>
+
+<sphinxql>
+<!-- cleanup -->
+drop table join1;
+drop table join2;
+
+<!-- populate tables -->
+CREATE TABLE customers (name text, email string attribute, address text );
+
+INSERT INTO customers (id, name, email, address) VALUES
+(1, 'Alice Johnson', 'alice@example.com', '123 Maple St'),
+(2, 'Bob Smith', 'bob@example.com', '456 Oak St'),
+(3, 'Carol White', 'carol@example.com', '789 Pine St');
+
+CREATE TABLE orders (customer_id bigint, product text, quantity integer, order_date string, tags multi, details json );
+
+INSERT INTO orders (id, customer_id, product, quantity, order_date, tags, details) VALUES 
+(1, 1, 'Laptop', 1, '2023-01-01', (101, 102), '{"price":1200, "warranty":"2 years"}'),
+(2, 2, 'Phone', 2, '2023-01-02', (103), '{"price":800, "warranty":"1 year"}'),
+(3, 1, 'Tablet', 1, '2023-01-03', (101, 104), '{"price":450, "warranty":"1 year"}'),
+(4, 3, 'Monitor', 1, '2023-01-04', (105), '{"price":300, "warranty":"1 year"}');
+
+<!-- group by fulltext (error) -->
+SELECT name, COUNT(*) FROM customers INNER JOIN orders ON customers.id = orders.customer_id GROUP BY name;
+
+<!-- cleanup -->
+DROP TABLE customers;
+DROP TABLE orders;
+
+<!-- populate tables -->
+create table join1;
+create table join2(j json);
+insert into join1 values(1);
+insert into join2 values(1, '{"a": "a"}');
+
+<!-- filter by json=string comparison -->
+select * from join1 left join join2 on join1.id=join2.id where join2.j.a='a';
 
 <!-- cleanup -->
 drop table join1;

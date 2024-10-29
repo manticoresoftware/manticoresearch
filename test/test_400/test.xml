@@ -221,6 +221,14 @@ searchd
 	insert into test (f1) values ('ООО "МНОГОПРОФИЛЬНЫЙ ЦЕНТР ЭКСПЕРТИЗ И ИССЛЕДОВАНИЯ ДОКУМЕНТА "ГАРАНТ"');
 	SELECT LEVENSHTEIN('ОБЩЕСТВО С ОГРАНИЧЕННОЙ ОТВЕТСТВЕННОСТЬЮ ЦЕНТР ЭКСПЕРТИЗ', f1, {normalize=1,length_delta=24}) as lev FROM test;
 	drop table test;
+
+	<!-- regression for incorrect total_relation with facet and cutoff -->
+	create table t(a int);
+	insert into t(a) values(1),(2);
+	select * from t option cutoff=1 facet a;;
+	show meta;
+	drop table t;
+    
 </sphinxql>
 </queries>
 

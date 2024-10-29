@@ -1,6 +1,6 @@
-––– block: ../base/start-searchd-test-from-issue-1335 –––
+––– block: ../base/start-searchd –––
 ––– input –––
-php ./test/clt-tests/core/issue-1335-dump.php 10000 30 800000
+php ./test/clt-tests/scripts/issue-1335-dump.php 10000 30 800000
 ––– output –––
 finished inserting
 %{NUMBER} docs per sec

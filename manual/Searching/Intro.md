@@ -14,14 +14,26 @@ Searching is a core feature of Manticore Search. You can:
 
 **SQL**:
 ```sql
-SELECT ... [OPTION <optionname>=<value> [ , ... ]]
+SELECT
+    select_expr [, select_expr] ...
+    [FROM tbl_name
+        [{INNER | LEFT} JOIN tbl2_name]
+        [WHERE where_condition]
+        [GROUP BY {col_name | expr}, ... ]
+        [HAVING where_condition]
+        [ORDER BY {col_name | expr}
+            [ASC | DESC], ... ]
+    ]
+    [LIMIT {[offset,] row_count | row_count OFFSET offset}]
+    [OPTION option1[, option2] ...]
+
 ```
 
-**HTTP**:
+**JSON**:
 ```json
 POST /search
 {   
-    "index" : "index_name",
+    "table" : "table_name",
     "options":   
     {
       ...

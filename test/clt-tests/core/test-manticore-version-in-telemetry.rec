@@ -1,0 +1,36 @@
+––– input –––
+apt-get install jq -y > /dev/null; echo $?
+––– output –––
+debconf: delaying package configuration, since apt-utils is not installed
+0
+––– input –––
+sed -i '/data_dir = \/var\/lib\/manticore/a\    buddy_path = manticore-executor -n /usr/share/manticore/modules/manticore-buddy/src/main.php --debugv --telemetry-period=5' /etc/manticoresearch/manticore.conf
+––– output –––
+––– block: ../base/start-searchd –––
+––– input –––
+timeout 60 bash -c 'grep -m 1 "labels:" <(tail -f /var/log/manticore/searchd.log) | sed "s/.*labels: //" | jq -M .'
+––– output –––
+{
+"collector": "buddy",
+"os_name": "Linux",
+"os_release_name": "Ubuntu",
+"os_release_version": "%{SEMVER} LTS (#!/[A-Za-z]+\s[A-Za-z]+/!#)",
+"machine_type": "x86_64",
+"machine_id": "#!/[0-9A-Za-z]+/!#",
+"dockerized": "#!/\b(?:unknown|yes)\b/!#",
+"official_docker": "#!/\b(?:no|yes)\b/!#",
+"buddy_version": "%{SEMVER}",
+"manticore_version": "%{SEMVER} %{COMMITDATE} dev",
+"columnar_version": "%{SEMVER} %{COMMITDATE}",
+"secondary_version": "%{SEMVER} %{COMMITDATE}",
+"knn_version": "%{SEMVER} %{COMMITDATE}",
+"manticore_mode": "#!/[A-Za-z]+/!#",
+"manticore_binlog_enabled": "#!/\b(?:no|yes)\b/!#",
+"manticore_auto_optimize_enabled": "#!/\b(?:no|yes)\b/!#",
+"manticore_query_log_format": "#!/[A-Za-z]+/!#",
+"manticore_max_allowed_packet": "%{NUMBER}",
+"manticore_pseudo_sharding_enabled": "#!/\b(?:no|yes)\b/!#",
+"manticore_secondary_indexes_enabled": "#!/\b(?:no|yes)\b/!#",
+"manticore_accurate_aggregation_enabled": "#!/\b(?:no|yes)\b/!#",
+"manticore_distinct_precision_threshold": "%{NUMBER}"
+}

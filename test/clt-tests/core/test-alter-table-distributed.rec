@@ -1,0 +1,321 @@
+––– block: ../base/start-searchd –––
+––– input –––
+mysql -h0 -P9306 -e "CREATE TABLE index201(f text, s string); insert into index201 values(1,'abc','string');"
+––– output –––
+––– input –––
+mysql -h0 -P9306 -e "CREATE TABLE index202(f text, s string); insert into index202 values(2,'def','string');"
+––– output –––
+––– input –––
+mysql -h0 -P9306 -e "CREATE TABLE index203(f text, s string); insert into index203 values(3,'ghi','string');"
+––– output –––
+––– input –––
+mysql -h0 -P9306 -e "CREATE TABLE index204(f text, s string); insert into index204 values(4,'jkl','string');"
+––– output –––
+––– input –––
+mysql -h0 -P9306 -e "CREATE TABLE dist_table type='distributed' local='index201' local='index202';"
+––– output –––
+––– input –––
+mysql -h0 -P9306 -e "DESC dist_table"
+––– output –––
++----------+-------+
+| Agent    | Type  |
++----------+-------+
+| index201 | local |
+| index202 | local |
++----------+-------+
+––– input –––
+mysql -h0 -P9306 -e "ALTER TABLE dist_table local='index201' local='index203';"
+––– output –––
+––– input –––
+mysql -h0 -P9306 -e "DESC dist_table"
+––– output –––
++----------+-------+
+| Agent    | Type  |
++----------+-------+
+| index201 | local |
+| index203 | local |
++----------+-------+
+––– input –––
+mysql -h0 -P9306 -e "ALTER TABLE dist_table agent='127.0.0.1:9312:remote_index' local='index204';"
+––– output –––
+––– input –––
+mysql -h0 -P9306 -e "DESC dist_table"
+––– output –––
++-----------------------------+----------+
+| Agent                       | Type     |
++-----------------------------+----------+
+| index204                    | local    |
+| 127.0.0.1:9312:remote_index | remote_1 |
++-----------------------------+----------+
+––– input –––
+mysql -h0 -P9306 -e "ALTER TABLE index203 local='index201' local='index203';"
+––– output –––
+––– input –––
+mysql -h0 -P9306 -e "CREATE TABLE products(title text, meta json) type='pq';"
+––– output –––
+––– input –––
+mysql -h0 -P9306 -e "SHOW TABLES"
+––– output –––
++------------+-------------+
+| Table      | Type        |
++------------+-------------+
+| dist_table | distributed |
+| index201   | rt          |
+| index202   | rt          |
+| index203   | rt          |
+| index204   | rt          |
+| products   | percolate   |
++------------+-------------+
+––– input –––
+mysql -h0 -P9306 -e "ALTER TABLE products local='index201' local='index202';"
+––– output –––
+ERROR 1064 (42000) at line 1: Table products should be distributed
+––– input –––
+mysql -h0 -P9306 -e "ALTER TABLE nonexistent local='index203' local='index204';"
+––– output –––
+ERROR 1064 (42000) at line 1: Table nonexistent doesn't exist
+––– input –––
+mysql -h0 -P9306 -e "ALTER TABLE invalid-name local='index201' local='index204';"
+––– output –––
+ERROR 1064 (42000) at line 1: P03: syntax error, unexpected $undefined, expecting $end near '-name local='index201' local='index204''
+––– input –––
+mysql -h0 -P9306 -e "ALTER TABLE @name local='index201' local='index204';"
+––– output –––
+ERROR 1064 (42000) at line 1: P03: syntax error, unexpected identifier, expecting tablename or MODIFY near '@name local='index201' local='index204''
+––– input –––
+mysql -h0 -P9306 -e "DESC products"
+––– output –––
++---------+--------+------------+
+| Field   | Type   | Properties |
++---------+--------+------------+
+| id      | bigint |            |
+| query   | string |            |
+| tags    | string |            |
+| filters | string |            |
++---------+--------+------------+
+––– input –––
+for i in $(seq 1 100); do mysql -h0 -P9306 -e "CREATE TABLE index${i}(f text, s string); INSERT INTO index${i} VALUES(${i}, 'value${i}', 'string');"; done
+––– output –––
+––– input –––
+mysql -h0 -P9306 -e "SHOW TABLES"
+––– output –––
++------------+-------------+
+| Table      | Type        |
++------------+-------------+
+| dist_table | distributed |
+| index1     | rt          |
+| index10    | rt          |
+| index100   | rt          |
+| index11    | rt          |
+| index12    | rt          |
+| index13    | rt          |
+| index14    | rt          |
+| index15    | rt          |
+| index16    | rt          |
+| index17    | rt          |
+| index18    | rt          |
+| index19    | rt          |
+| index2     | rt          |
+| index20    | rt          |
+| index201   | rt          |
+| index202   | rt          |
+| index203   | rt          |
+| index204   | rt          |
+| index21    | rt          |
+| index22    | rt          |
+| index23    | rt          |
+| index24    | rt          |
+| index25    | rt          |
+| index26    | rt          |
+| index27    | rt          |
+| index28    | rt          |
+| index29    | rt          |
+| index3     | rt          |
+| index30    | rt          |
+| index31    | rt          |
+| index32    | rt          |
+| index33    | rt          |
+| index34    | rt          |
+| index35    | rt          |
+| index36    | rt          |
+| index37    | rt          |
+| index38    | rt          |
+| index39    | rt          |
+| index4     | rt          |
+| index40    | rt          |
+| index41    | rt          |
+| index42    | rt          |
+| index43    | rt          |
+| index44    | rt          |
+| index45    | rt          |
+| index46    | rt          |
+| index47    | rt          |
+| index48    | rt          |
+| index49    | rt          |
+| index5     | rt          |
+| index50    | rt          |
+| index51    | rt          |
+| index52    | rt          |
+| index53    | rt          |
+| index54    | rt          |
+| index55    | rt          |
+| index56    | rt          |
+| index57    | rt          |
+| index58    | rt          |
+| index59    | rt          |
+| index6     | rt          |
+| index60    | rt          |
+| index61    | rt          |
+| index62    | rt          |
+| index63    | rt          |
+| index64    | rt          |
+| index65    | rt          |
+| index66    | rt          |
+| index67    | rt          |
+| index68    | rt          |
+| index69    | rt          |
+| index7     | rt          |
+| index70    | rt          |
+| index71    | rt          |
+| index72    | rt          |
+| index73    | rt          |
+| index74    | rt          |
+| index75    | rt          |
+| index76    | rt          |
+| index77    | rt          |
+| index78    | rt          |
+| index79    | rt          |
+| index8     | rt          |
+| index80    | rt          |
+| index81    | rt          |
+| index82    | rt          |
+| index83    | rt          |
+| index84    | rt          |
+| index85    | rt          |
+| index86    | rt          |
+| index87    | rt          |
+| index88    | rt          |
+| index89    | rt          |
+| index9     | rt          |
+| index90    | rt          |
+| index91    | rt          |
+| index92    | rt          |
+| index93    | rt          |
+| index94    | rt          |
+| index95    | rt          |
+| index96    | rt          |
+| index97    | rt          |
+| index98    | rt          |
+| index99    | rt          |
+| products   | percolate   |
++------------+-------------+
+––– input –––
+mysql -h0 -P9306 -e "ALTER TABLE dist_table $(for i in $(seq 1 100); do echo -n "local='index${i}'"; done | sed 's/, $//');"
+––– output –––
+––– input –––
+mysql -h0 -P9306 -e "DESC dist_table"
+––– output –––
++----------+-------+
+| Agent    | Type  |
++----------+-------+
+| index1   | local |
+| index2   | local |
+| index3   | local |
+| index4   | local |
+| index5   | local |
+| index6   | local |
+| index7   | local |
+| index8   | local |
+| index9   | local |
+| index10  | local |
+| index11  | local |
+| index12  | local |
+| index13  | local |
+| index14  | local |
+| index15  | local |
+| index16  | local |
+| index17  | local |
+| index18  | local |
+| index19  | local |
+| index20  | local |
+| index21  | local |
+| index22  | local |
+| index23  | local |
+| index24  | local |
+| index25  | local |
+| index26  | local |
+| index27  | local |
+| index28  | local |
+| index29  | local |
+| index30  | local |
+| index31  | local |
+| index32  | local |
+| index33  | local |
+| index34  | local |
+| index35  | local |
+| index36  | local |
+| index37  | local |
+| index38  | local |
+| index39  | local |
+| index40  | local |
+| index41  | local |
+| index42  | local |
+| index43  | local |
+| index44  | local |
+| index45  | local |
+| index46  | local |
+| index47  | local |
+| index48  | local |
+| index49  | local |
+| index50  | local |
+| index51  | local |
+| index52  | local |
+| index53  | local |
+| index54  | local |
+| index55  | local |
+| index56  | local |
+| index57  | local |
+| index58  | local |
+| index59  | local |
+| index60  | local |
+| index61  | local |
+| index62  | local |
+| index63  | local |
+| index64  | local |
+| index65  | local |
+| index66  | local |
+| index67  | local |
+| index68  | local |
+| index69  | local |
+| index70  | local |
+| index71  | local |
+| index72  | local |
+| index73  | local |
+| index74  | local |
+| index75  | local |
+| index76  | local |
+| index77  | local |
+| index78  | local |
+| index79  | local |
+| index80  | local |
+| index81  | local |
+| index82  | local |
+| index83  | local |
+| index84  | local |
+| index85  | local |
+| index86  | local |
+| index87  | local |
+| index88  | local |
+| index89  | local |
+| index90  | local |
+| index91  | local |
+| index92  | local |
+| index93  | local |
+| index94  | local |
+| index95  | local |
+| index96  | local |
+| index97  | local |
+| index98  | local |
+| index99  | local |
+| index100 | local |
++----------+-------+

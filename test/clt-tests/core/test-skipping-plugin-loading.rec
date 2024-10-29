@@ -1,0 +1,155 @@
+––– block: ../base/start-searchd –––
+––– input –––
+mysql -h0 -P9306 -e "SHOW BUDDY PLUGINS\G;" | grep "manticoresoftware/buddy-plugin-replace"
+––– output –––
+Package: manticoresoftware/buddy-plugin-replace
+––– input –––
+mysql -h0 -P9306 -e "DROP TABLE IF EXISTS tbl;"
+––– output –––
+––– input –––
+mysql -h0 -P9306 -e "CREATE TABLE tbl (id BIGINT, model TEXT, storage_capacity INTEGER, color string, release_year INTEGER, price FLOAT, discounted_price FLOAT, sold BOOL, date_added TIMESTAMP, product_codes MULTI, values MULTI64, additional_info JSON, vector float_vector knn_type='hnsw' knn_dims='4' hnsw_similarity='l2');"
+––– output –––
+––– input –––
+mysql -h0 -P9306 -e "SHOW TABLES;"
+––– output –––
++-------+------+
+| Table | Type |
++-------+------+
+| tbl   | rt   |
++-------+------+
+––– input –––
+./test/clt-tests/scripts/generate-1mln-records.sh 1000
+––– output –––
++-------+------+
+| Table | Type |
++-------+------+
+| tbl   | rt   |
++-------+------+
++----------+
+| count(*) |
++----------+
+|     1000 |
++----------+
+––– input –––
+mysql -h0 -P9306 -e "REPLACE INTO tbl SET model ='iPhone 15 PRO' WHERE id = 101; SELECT * FROM tbl WHERE id = 101\G"
+––– output –––
+*************************** 1. row ***************************
+id: 101
+model: iPhone 15 PRO
+storage_capacity: 256
+color: silver
+release_year: 2021
+price: 1099.989990
+discounted_price: 989.989990
+sold: 1
+date_added: 2224442480
+product_codes: 1,2,3
+values: 523456764345678976,9223372036854775807
+additional_info: {"features":["ProMotion display","A15 Bionic chip","Ceramic Shield front cover"]}
+vector: 0.773448,0.312478,0.137971,0.459821
+––– input –––
+searchd --stopwait
+––– output –––
+Manticore %{SEMVER} %{COMMITDATE}#!/(\sdev)?\s/!#(columnar %{SEMVER} %{COMMITDATE}) (secondary %{SEMVER} %{COMMITDATE}) (knn %{SEMVER} %{COMMITDATE})
+Copyright (c) 2001-2016, Andrew Aksyonoff
+Copyright (c) 2008-2016, Sphinx Technologies Inc (http://sphinxsearch.com)
+Copyright (c) 2017-%{YEAR}, Manticore Software LTD (https://manticoresearch.com)
+[#!/[0-9]{2}:[0-9]{2}.[0-9]{3}/!#] [#!/[0-9]+/!#] using config file '/etc/manticoresearch/manticore.conf' (%{NUMBER} chars)...
+[#!/[0-9]{2}:[0-9]{2}.[0-9]{3}/!#] [#!/[0-9]+/!#] stop: successfully sent SIGTERM to pid %{NUMBER}
+––– input –––
+sed -i '/data_dir = \/var\/lib\/manticore/a\    buddy_path = manticore-executor -n /usr/share/manticore/modules/manticore-buddy/src/main.php --debugv --skip=manticoresoftware/buddy-plugin-replace' /etc/manticoresearch/manticore.conf
+––– output –––
+––– block: ../base/searchd-without-table-details –––
+––– input –––
+mysql -h0 -P9306 -e "REPLACE INTO tbl SET price =15000.99 WHERE id = 117; select * from tbl WHERE id = 117;"
+––– output –––
+ERROR 1064 (42000) at line 1: P01: syntax error, unexpected SET, expecting VALUES near 'SET price =15000.99 WHERE id = 117'
+––– input –––
+mysql -h0 -P9306 -e "SHOW BUDDY PLUGINS\G;" | grep "manticoresoftware/buddy-plugin-replace"
+––– output –––
+––– input –––
+mysql -h0 -P9306 -e "SHOW BUDDY PLUGINS\G;" | grep "manticoresoftware/buddy-plugin-alter-rename-table"
+––– output –––
+Package: manticoresoftware/buddy-plugin-alter-rename-table
+––– input –––
+mysql -h0 -P9306 -e "CREATE TABLE index2001(f text, s string); insert into index2001 values(01,'abc','string');"
+––– output –––
+––– input –––
+mysql -h0 -P9306 -e "SHOW TABLES"
+––– output –––
++-----------+------+
+| Table     | Type |
++-----------+------+
+| index2001 | rt   |
+| tbl       | rt   |
++-----------+------+
+––– input –––
+mysql -h0 -P9306 -e "ALTER TABLE index2001 RENAME new_index2001;"
+––– output –––
+––– input –––
+mysql -h0 -P9306 -e "SHOW TABLES"
+––– output –––
++---------------+------+
+| Table         | Type |
++---------------+------+
+| new_index2001 | rt   |
+| tbl           | rt   |
++---------------+------+
+––– input –––
+searchd --stopwait
+––– output –––
+Manticore %{SEMVER} %{COMMITDATE}#!/(\sdev)?\s/!#(columnar %{SEMVER} %{COMMITDATE}) (secondary %{SEMVER} %{COMMITDATE}) (knn %{SEMVER} %{COMMITDATE})
+Copyright (c) 2001-2016, Andrew Aksyonoff
+Copyright (c) 2008-2016, Sphinx Technologies Inc (http://sphinxsearch.com)
+Copyright (c) 2017-%{YEAR}, Manticore Software LTD (https://manticoresearch.com)
+[#!/[0-9]{2}:[0-9]{2}.[0-9]{3}/!#] [#!/[0-9]+/!#] using config file '/etc/manticoresearch/manticore.conf' (%{NUMBER} chars)...
+[#!/[0-9]{2}:[0-9]{2}.[0-9]{3}/!#] [#!/[0-9]+/!#] stop: successfully sent SIGTERM to pid %{NUMBER}
+––– input –––
+sed -i '/buddy_path =/c\    buddy_path = manticore-executor -n /usr/share/manticore/modules/manticore-buddy/src/main.php --debugv --skip=manticoresoftware/buddy-plugin-alter-rename-table --skip=manticoresoftware/buddy-plugin-replace' /etc/manticoresearch/manticore.conf
+––– output –––
+––– block: ../base/searchd-without-table-details –––
+––– input –––
+mysql -h0 -P9306 -e "SHOW BUDDY PLUGINS\G;" | grep "manticoresoftware/buddy-plugin-alter-rename-table"
+––– output –––
+––– input –––
+mysql -h0 -P9306 -e "ALTER TABLE new_index2001 RENAME new_index2002;"
+––– output –––
+ERROR 1064 (42000) at line 1: P03: syntax error, unexpected tablename, expecting '=' near 'new_index2002'
+––– input –––
+mysql -h0 -P9306 -e "SHOW TABLES"
+––– output –––
++---------------+------+
+| Table         | Type |
++---------------+------+
+| new_index2001 | rt   |
+| tbl           | rt   |
++---------------+------+
+––– input –––
+searchd --stopwait
+––– output –––
+Manticore %{SEMVER} %{COMMITDATE}#!/(\sdev)?\s/!#(columnar %{SEMVER} %{COMMITDATE}) (secondary %{SEMVER} %{COMMITDATE}) (knn %{SEMVER} %{COMMITDATE})
+Copyright (c) 2001-2016, Andrew Aksyonoff
+Copyright (c) 2008-2016, Sphinx Technologies Inc (http://sphinxsearch.com)
+Copyright (c) 2017-%{YEAR}, Manticore Software LTD (https://manticoresearch.com)
+[#!/[0-9]{2}:[0-9]{2}.[0-9]{3}/!#] [#!/[0-9]+/!#] using config file '/etc/manticoresearch/manticore.conf' (%{NUMBER} chars)...
+[#!/[0-9]{2}:[0-9]{2}.[0-9]{3}/!#] [#!/[0-9]+/!#] stop: successfully sent SIGTERM to pid %{NUMBER}
+––– input –––
+sed -i '/buddy_path =/c\    buddy_path = manticore-executor -n /usr/share/manticore/modules/manticore-buddy/src/main.php --debugv' /etc/manticoresearch/manticore.conf
+––– output –––
+––– block: ../base/searchd-without-table-details –––
+––– input –––
+mysql -h0 -P9306 -e "SHOW BUDDY PLUGINS\G;" | grep "manticoresoftware/buddy-plugin-alter-rename-table"
+––– output –––
+Package: manticoresoftware/buddy-plugin-alter-rename-table
+––– input –––
+mysql -h0 -P9306 -e "ALTER TABLE new_index2001 RENAME new_index2002;"
+––– output –––
+––– input –––
+mysql -h0 -P9306 -e "SHOW TABLES"
+––– output –––
++---------------+------+
+| Table         | Type |
++---------------+------+
+| new_index2002 | rt   |
+| tbl           | rt   |
++---------------+------+

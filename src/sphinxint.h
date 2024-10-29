@@ -37,7 +37,7 @@
 //////////////////////////////////////////////////////////////////////////
 
 const DWORD		INDEX_MAGIC_HEADER			= 0x58485053;		///< my magic 'SPHX' header
-const DWORD		INDEX_FORMAT_VERSION		= 65;				///< added .spknn
+const DWORD		INDEX_FORMAT_VERSION		= 67;				///< added jieba
 
 const char		MAGIC_CODE_SENTENCE			= '\x02';				// emitted from tokenizer on sentence boundary
 const char		MAGIC_CODE_PARAGRAPH		= '\x03';				// emitted from stripper (and passed via tokenizer) on paragraph boundary
@@ -821,9 +821,6 @@ void			sphUnlinkIndex ( const char * sName, bool bForce );
 void			WriteSchema ( CSphWriter & fdInfo, const CSphSchema & tSchema );
 void			ReadSchema ( CSphReader & rdInfo, CSphSchema & m_tSchema, DWORD uVersion );
 void			ReadSchemaJson ( bson::Bson_c tNode, CSphSchema & tSchema );
-void			SaveIndexSettings ( Writer_i & tWriter, const CSphIndexSettings & tSettings );
-void			LoadIndexSettings ( CSphIndexSettings & tSettings, CSphReader & tReader, DWORD uVersion );
-void			LoadIndexSettingsJson ( bson::Bson_c tNode, CSphIndexSettings & tSettings );
 bool			AddFieldLens ( CSphSchema & tSchema, bool bDynamic, CSphString & sError );
 bool			LoadHitlessWords ( const CSphString & sHitlessFiles, const TokenizerRefPtr_c& pTok, const DictRefPtr_c& pDict, CSphVector<SphWordID_t> & dHitlessWords, CSphString & sError );
 void			GetSettingsFiles ( const TokenizerRefPtr_c& pTok, const DictRefPtr_c& pDict, const CSphIndexSettings& tSettings, const FilenameBuilder_i* pFilenameBuilder, StrVec_t& dFiles );
@@ -1037,12 +1034,14 @@ struct SuggestArgs_t
 	bool			m_bSentence			{ false };
 };
 
-struct SuggestResult_t
+struct SuggestResultSet_t
 {
-	// result set
 	CSphVector<BYTE>			m_dBuf;
 	CSphVector<SuggestWord_t>	m_dMatched;
+};
 
+struct SuggestResult_t : public SuggestResultSet_t
+{
 	// state
 	CSphVector<char>			m_dTrigrams;
 	int							m_iNGramLen = 3;
@@ -1096,6 +1095,7 @@ public:
 };
 
 void sphGetSuggest ( const ISphWordlistSuggest * pWordlist, int iInfixCodepointBytes, const SuggestArgs_t & tArgs, SuggestResult_t & tRes );
+void SuggestMergeDocs ( CSphVector<SuggestWord_t> & dMatched );
 
 struct ExpansionTrait_t
 {
@@ -1170,11 +1170,14 @@ struct ExpansionContext_t : public ExpansionTrait_t
 	int m_iMinInfixLen					= 0;
 	bool m_bMergeSingles				= false;
 	CSphScopedPayload * m_pPayloads		= nullptr;
-	int m_iCutoff = -1;
+	int m_iCutoff						= -1;
+	bool m_bAllowExpansion				= true;
+
 	ExpansionStats_t m_tExpansionStats;
 
 	bool								m_bOnlyTreeFix = false;
 	CSphVector<RegexTerm_t>				m_dRegexTerms;
+	bool								m_bHasWildcards = false;
 	
 	void AggregateStats ();
 };
@@ -1189,6 +1192,7 @@ struct GetKeywordsSettings_t
 	bool	m_bSortByDocs = false;
 	bool	m_bSortByHits = false;
 	int		m_iCutoff = -1;
+	bool	m_bAllowExpansion = true;
 };
 
 XQNode_t * sphExpandXQNode ( XQNode_t * pNode, ExpansionContext_t & tCtx );
@@ -1349,7 +1353,7 @@ BYTE PrereadMapping ( const char * sIndexName, const char * sFor, bool bMlock, b
 
 	auto pCur = (const BYTE*)tBuf.GetReadPtr();
 	const BYTE * pEnd = pCur + tBuf.GetLengthBytes();
-	const int iHalfPage = 2048;
+	const int iHalfPage = GetMemPageSize()/2;
 
 	g_uHash = 0xff;
 	for ( ; pCur<pEnd; pCur+=iHalfPage )

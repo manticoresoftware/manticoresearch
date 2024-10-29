@@ -159,6 +159,7 @@ enum SqlStmt_e
 	STMT_SHOW_SETTINGS,
 	STMT_ALTER_REBUILD_SI,
 	STMT_KILL,
+	STMT_SHOW_LOCKS,
 
 	STMT_TOTAL
 };
@@ -193,6 +194,7 @@ struct SqlInsert_t
 		QUOTED_STRING = 263,
 		CONST_STRINGS = 269,
 		TABLE = 378,
+		TOK_NULL = 473, // NULL is already reserved using TOK_NULL
 	};
 
 	int						m_iType = 0;
@@ -272,6 +274,7 @@ public:
 	DWORD					m_uFieldFlags = 0;
 	DWORD					m_uAttrFlags = 0;
 	int						m_iBits = -1;
+	knn::IndexSettings_t	m_tAlterKNN;
 
 	// CREATE TABLE specific
 	CreateTableSettings_t	m_tCreateTable;
@@ -356,7 +359,7 @@ public:
 	void			DefaultOk ( std::initializer_list<const char*> sList = {} );
 	void			SetIndex ( const SqlNode_t& tNode ) const;
 	void			SetIndex ( const CSphString& sIndex ) const;
-	void 			AddComment ( const SqlNode_t* tNode ) const;
+	void 			Comment ( const SqlNode_t& tNode ) const;
 
 protected:
 	CSphVector<SqlStmt_t> &	m_dStmt;

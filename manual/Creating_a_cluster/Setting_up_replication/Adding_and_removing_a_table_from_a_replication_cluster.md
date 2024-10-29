@@ -1,9 +1,9 @@
 # Adding and removing a table from a replication cluster 
 
 <!-- example adding and removing a table from a replication cluster 1 -->
-`ALTER CLUSTER <cluster_name> ADD <table_name>` adds an existing local table to the cluster. The node that receives the ALTER query sends the table to the other nodes in the cluster. All the local tables with the same name on the other nodes of the cluster are replaced with the new table.
+`ALTER CLUSTER <cluster_name> ADD <table_name>[, <table_name>]` adds one or more existing local tables to the cluster. The node that receives the ALTER query sends the table(s) to the other nodes in the cluster. All the local tables with the same name on the other nodes of the cluster are replaced with the new table(s).
 
-Once the table is replicated, write statements can be performed on any node, but the table name must be prefixed with the cluster name, like `INSERT INTO <clusterName>:<table_name>`.
+Once the tables are replicated, write statements can be performed on any node, but the table names must be prefixed with the cluster name, like `INSERT INTO <clusterName>:<table_name>`.
 
 
 <!-- intro -->
@@ -30,7 +30,7 @@ $params = [
   'cluster' => 'click_query',
   'body' => [
      'operation' => 'add',
-     'index' => 'clicks_daily_index'
+     'table' => 'clicks_daily_index'
       
   ]
 ];
@@ -86,9 +86,9 @@ utilsApi.Sql("ALTER CLUSTER click_query ADD clicks_daily_index");
 <!-- end -->
 
 <!-- example adding and removing a table from a replication cluster 2 -->
-`ALTER CLUSTER <cluster_name> DROP <table_name>` forgets about a local table, meaning it does not remove the table files on the nodes, but rather just makes it an inactive, non-replicated table.
+`ALTER CLUSTER <cluster_name> DROP <table_name>[, <table_name>]` forgets about one or more existing table(s), meaning it does not remove the table(s) files on the nodes, but rather just makes them inactive, non-replicated table(s).
 
-Once a table is removed from a cluster, it becomes a `local` table, and write statements must use just the table name, like  `INSERT INTO <table_name>`, without the cluster prefix.
+Once a table is removed from a cluster, it becomes a `local` table, and write statements must use just the table name, like `INSERT INTO <table_name>`, without the cluster prefix.
 
 
 <!-- intro -->
@@ -115,7 +115,7 @@ $params = [
   'cluster' => 'posts',
   'body' => [
      'operation' => 'drop',
-     'index' => 'weekly_index'
+     'table' => 'weekly_index'
       
   ]
 ];

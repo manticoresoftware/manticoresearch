@@ -44,7 +44,7 @@ index test_vec
 <!-- inserts -->
 <query endpoint="json/insert">
 {
-	"index":"test_rt",
+	"table":"test_rt",
 	"id":1,
 	"doc":
 	{
@@ -66,7 +66,7 @@ index test_vec
 
 <query endpoint="json/insert">
 {
-	"index":"test_rt",
+	"table":"test_rt",
 	"id":2,
 	"doc":
 	{
@@ -80,7 +80,7 @@ index test_vec
 
 <query endpoint="json/insert">
 {
-	"index":"test_rt",
+	"table":"test_rt",
 	"id":3,
 	"doc":
 	{
@@ -92,35 +92,35 @@ index test_vec
 </query>
 
 <!-- fullscan -->
-<query endpoint="json/search">{ "index": "test_rt", "query": { "match_all": {} } } }</query>
+<query endpoint="json/search">{ "table": "test_rt", "query": { "match_all": {} } } }</query>
 
 <!-- fulltext -->
-<query endpoint="json/search">{ "index": "test_rt", "query": { "match": { "*": "one" } } } }</query>
-<query endpoint="json/search">{ "index": "test_rt", "query": { "match": { "*": "two three" } } } }</query>
+<query endpoint="json/search">{ "table": "test_rt", "query": { "match": { "*": "one" } } } }</query>
+<query endpoint="json/search">{ "table": "test_rt", "query": { "match": { "*": "two three" } } } }</query>
 
 <!-- filter by json attr -->
-<query endpoint="json/search">{ "index": "test_rt", "query": { "range": { "json_col.int": { "lte": 1 } } } }</query>
-<query endpoint="json/search">{ "index": "test_rt", "query": { "range": { "json_col.int": { "gte": 2 } } } }</query>
+<query endpoint="json/search">{ "table": "test_rt", "query": { "range": { "json_col.int": { "lte": 1 } } } }</query>
+<query endpoint="json/search">{ "table": "test_rt", "query": { "range": { "json_col.int": { "gte": 2 } } } }</query>
 
 <!-- "create"=="insert" -->
 <query endpoint="json/insert">
 {
-	"index":"test_rt",
+	"table":"test_rt",
 	"id":3
 }
 </query>
 
 <query endpoint="json/create">
 {
-	"index":"test_rt",
+	"table":"test_rt",
 	"id":3
 }
 </query>
 
-<!-- "index"=="replace" -->
+<!-- "table"=="replace" -->
 <query endpoint="json/replace">
 {
-	"index":"test_rt",
+	"table":"test_rt",
 	"id":3,
 	"doc":
 	{
@@ -133,7 +133,7 @@ index test_vec
 
 <query endpoint="json/index">
 {
-	"index":"test_rt",
+	"table":"test_rt",
 	"id":4,
 	"doc":
 	{
@@ -144,12 +144,12 @@ index test_vec
 }
 </query>
 
-<query endpoint="json/search">{ "index": "test_rt", "query": { "match": { "*": "replaced" } } } }</query>
+<query endpoint="json/search">{ "table": "test_rt", "query": { "match": { "*": "replaced" } } } }</query>
 
 <!-- update -->
 <query endpoint="json/update">
 {
-	"index":"test_rt",
+	"table":"test_rt",
 	"id":3,
 	"doc":
 	{
@@ -159,12 +159,12 @@ index test_vec
 }
 </query>
 
-<query endpoint="json/search">{ "index": "test_rt", "query": { "match_all": {} } } }</query>
+<query endpoint="json/search">{ "table": "test_rt", "query": { "match_all": {} } } }</query>
 
 <!-- update json -->
 <query endpoint="json/update">
 {
-	"index":"test_rt",
+	"table":"test_rt",
 	"id":1,
 	"doc":
 	{
@@ -173,43 +173,43 @@ index test_vec
 }
 </query>
 
-<query endpoint="json/search">{ "index": "test_rt", "query": { "match_all": {} } } }</query>
+<query endpoint="json/search">{ "table": "test_rt", "query": { "match_all": {} } } }</query>
 
 <!-- delete -->
 <query endpoint="json/delete">
 {
-	"index":"test_rt",
+	"table":"test_rt",
 	"id":3
 }
 </query>
 
 <query endpoint="json/delete">
 {
-	"index":"test_rt",
+	"table":"test_rt",
 	"id":4
 }
 </query>
 
 <query endpoint="json/delete">
 {
-	"index":"test_rt",
+	"table":"test_rt",
 	"id":4
 }
 </query>
 
-<query endpoint="json/search">{ "index": "test_rt", "query": { "match_all": {} } } }</query>
+<query endpoint="json/search">{ "table": "test_rt", "query": { "match_all": {} } } }</query>
 
 <!-- update-by-query -->
 <query endpoint="json/search">
 {
-	"index":"test_rt",
+	"table":"test_rt",
 	"query":{ "range": { "int_col": { "lte": 1 } } }
 }
 </query>
 
 <query endpoint="json/update">
 {
-	"index":"test_rt",
+	"table":"test_rt",
 	"doc":
 	{
 	    "int_col" : 100,
@@ -220,19 +220,19 @@ index test_vec
 }
 </query>
 
-<query endpoint="json/search">{ "index": "test_rt", "query": { "match_all": {} } } }</query>
+<query endpoint="json/search">{ "table": "test_rt", "query": { "match_all": {} } } }</query>
 
 <!-- use fulltext here -->
 <query endpoint="json/search">
 {
-  "index":"test_rt",
+  "table":"test_rt",
   "query": { "match": { "*": "two" } } }
 }
 </query>
 
 <query endpoint="json/update">
 {
-	"index":"test_rt",
+	"table":"test_rt",
 	"doc":
 	{
 	    "int_col" : 200,
@@ -243,31 +243,31 @@ index test_vec
 }
 </query>
 
-<query endpoint="json/search">{ "index": "test_rt", "query": { "match_all": {} } } }</query>
+<query endpoint="json/search">{ "table": "test_rt", "query": { "match_all": {} } } }</query>
 
 <!-- delete-by-query -->
 <query endpoint="json/delete">
 {
-	"index":"test_rt",
+	"table":"test_rt",
 	"query": { "range": { "int_col": { "lte": 100 } } }
 }
 </query>
 
-<query endpoint="json/search">{ "index": "test_rt", "query": { "match_all": {} } } }</query>
+<query endpoint="json/search">{ "table": "test_rt", "query": { "match_all": {} } } }</query>
 
 <query endpoint="json/delete">
 {
-	"index":"test_rt",
+	"table":"test_rt",
 	"query": { "match": { "*": "two" } } }
 }
 </query>
 
-<query endpoint="json/search">{ "index": "test_rt", "query": { "match_all": {} } } }</query>
+<query endpoint="json/search">{ "table": "test_rt", "query": { "match_all": {} } } }</query>
 
 <!-- full string/json updates -->
 <query endpoint="json/create">
 {
-	"index":"test_rt",
+	"table":"test_rt",
 	"id":1,
 	"doc":
 	{
@@ -281,7 +281,7 @@ index test_vec
 
 <query endpoint="json/create">
 {
-	"index":"test_rt",
+	"table":"test_rt",
 	"id":2,
 	"doc":
 	{
@@ -293,11 +293,11 @@ index test_vec
 }
 </query>
 
-<query endpoint="json/search">{ "index": "test_rt", "query": { "match_all": {} } } }</query>
+<query endpoint="json/search">{ "table": "test_rt", "query": { "match_all": {} } } }</query>
 
 <query endpoint="json/update">
 {
-	"index":"test_rt",
+	"table":"test_rt",
 	"doc":
 	{
 	    "title" : "updated title",
@@ -308,12 +308,12 @@ index test_vec
 }
 </query>
 
-<query endpoint="json/search">{ "index": "test_rt", "query": { "match_all": {} } } }</query>
+<query endpoint="json/search">{ "table": "test_rt", "query": { "match_all": {} } } }</query>
 
 <!-- regression update for MVA attribute as array and for JSON attribute as object -->
 <query endpoint="update">
 {
-	"index":"test_rt",
+	"table":"test_rt",
 	"doc":
 	{
 		"mva_col" : [101,102,103],
@@ -323,12 +323,12 @@ index test_vec
 	"query": { "range": { "int_col": { "gte": 1 } } }
 }
 </query>
-<query endpoint="search">{ "index": "test_rt", "query": { "match_all": {} } } }</query>
+<query endpoint="search">{ "table": "test_rt", "query": { "match_all": {} } } }</query>
 
 <!-- auto id regression -->
 <query endpoint="insert">
 {
-	"index":"test_rt",
+	"table":"test_rt",
 	"doc":
 	{
 	    "int_col" : 1000,
@@ -337,11 +337,11 @@ index test_vec
 }
 </query>
 
-<query endpoint="search">{ "index": "test_rt", "query": { "match": { "*": "thousand" } } } }</query>
+<query endpoint="search">{ "table": "test_rt", "query": { "match": { "*": "thousand" } } } }</query>
 
 <query endpoint="insert">
 {
-	"index":"test_rt",
+	"table":"test_rt",
 	"id":1513686608316989453,
 	"doc":
 	{
@@ -351,12 +351,12 @@ index test_vec
 }
 </query>
 
-<query endpoint="search">{ "index": "test_rt", "query": { "match": { "*": "big" } } } }</query>
+<query endpoint="search">{ "table": "test_rt", "query": { "match": { "*": "big" } } } }</query>
 
 <!-- inserts of array into JSON and MVA columns -->
 <query endpoint="json/insert">
 {
-	"index":"test_rt",
+	"table":"test_rt",
 	"id":201,
 	"doc":
 	{
@@ -366,7 +366,7 @@ index test_vec
 </query>
 <query endpoint="json/insert">
 {
-	"index":"test_rt",
+	"table":"test_rt",
 	"id":202,
 	"doc":
 	{
@@ -376,7 +376,7 @@ index test_vec
 </query>
 <query endpoint="json/insert">
 {
-	"index":"test_rt",
+	"table":"test_rt",
 	"id":203,
 	"doc":
 	{
@@ -386,7 +386,7 @@ index test_vec
 </query>
 <query endpoint="json/insert">
 {
-	"index":"test_rt",
+	"table":"test_rt",
 	"id":204,
 	"doc":
 	{
@@ -394,7 +394,7 @@ index test_vec
 	}
 }
 </query>
-<query endpoint="search">{ "index": "test_rt", "_source": { "includes": [ "id", "mva_col", "json_col" ] }, "query": { "range": { "id": { "gt":200, "lt":300 } } }, "sort": ["id"] }</query>
+<query endpoint="search">{ "table": "test_rt", "_source": { "includes": [ "id", "mva_col", "json_col" ] }, "query": { "range": { "id": { "gt":200, "lt":300 } } }, "sort": ["id"] }</query>
 </httpqueries>
 
 <!-- inserts of array into JSON and MVA columns continue -->
@@ -408,50 +408,50 @@ index test_vec
 <httpqueries>
 <query endpoint="json/insert">
 {
-	"index":"test_rt",
+	"table":"test_rt",
 	"id":1001,
 	"doc": 	{ "int_col" : 3, "flt_col" : 3.3, "content" : "document three" }
 }
 </query>
 <query endpoint="json/insert">
 {
-	"index":"test_rt",
+	"table":"test_rt",
 	"id":1002,
 	"doc": 	{ "int_col" : 3, "flt_col" : 3.3, "content" : "document three" }
 }
 </query>
 <query endpoint="json/insert">
 {
-	"index":"test_rt",
+	"table":"test_rt",
 	"id":1003,
 	"doc": 	{ "int_col" : 3, "flt_col" : 3.3, "content" : "document three" }
 }
 </query>
 <query endpoint="json/delete">
 {
-	"index":"test_rt",
+	"table":"test_rt",
 	"id":[201,202, 204, 1,2]
 }
 </query>
-<query endpoint="search">{ "index": "test_rt", "_source": { "includes": [ "id"] }, "query": { "range": { "id": { "lt":2000 } } }, "sort": ["id"] }</query>
+<query endpoint="search">{ "table": "test_rt", "_source": { "includes": [ "id"] }, "query": { "range": { "id": { "lt":2000 } } }, "sort": ["id"] }</query>
 <!-- invalid delete with array of id - only numbers allowed -->
 <query endpoint="json/delete">
 {
-	"index":"test_rt",
+	"table":"test_rt",
 	"id":[1001,"1002", 202, 1,2]
 }
 </query>
 <!-- invalid delete id - only numbers allowed -->
 <query endpoint="json/delete">
 {
-	"index":"test_rt",
+	"table":"test_rt",
 	"id":"1002"
 }
 </query>
 <!-- inserts of empty array into JSON and MVA columns -->
 <query endpoint="json/insert">
 {
-	"index":"test_rt",
+	"table":"test_rt",
 	"id":2001,
 	"doc":
 	{
@@ -461,7 +461,7 @@ index test_vec
 </query>
 <query endpoint="json/insert">
 {
-	"index":"test_rt",
+	"table":"test_rt",
 	"id":2002,
 	"doc":
 	{
@@ -470,11 +470,11 @@ index test_vec
 }
 </query>
 
-<query endpoint="search">{ "index": "test_rt", "_source": { "includes": [ "id", "mva_col", "json_col" ] }, "query": { "range": { "id": { "gt":2000, "lt":3000 } } }, "sort": ["id"] }</query>
+<query endpoint="search">{ "table": "test_rt", "_source": { "includes": [ "id", "mva_col", "json_col" ] }, "query": { "range": { "id": { "gt":2000, "lt":3000 } } }, "sort": ["id"] }</query>
 
 <query endpoint="json/insert">
 {
-	"index":"test_vec",
+	"table":"test_vec",
 	"id": 1,
 	"doc": 	{ "title" : "doc one", "vec" : [3,2,1] }
 }
@@ -482,17 +482,17 @@ index test_vec
 
 <query endpoint="json/insert">
 {
-	"index":"test_vec",
+	"table":"test_vec",
 	"id":2,
 	"doc": 	{ "title" : "doc two", "vec" : [30.3,20.2,10.1] }
 }
 </query>
 
-<query endpoint="json/search">{ "index": "test_vec", "query": { "match_all": {} } }, "sort": ["id"] }</query>
+<query endpoint="json/search">{ "table": "test_vec", "query": { "match_all": {} } }, "sort": ["id"] }</query>
 
 <query endpoint="insert">
 {
-	"index":"test_rt",
+	"table":"test_rt",
 	"id":10001,
 	"doc":
 	{
@@ -503,7 +503,7 @@ index test_vec
 
 <query endpoint="update">
 {
-	"index":"test_rt",
+	"table":"test_rt",
 	"id":10001,
 	"doc":
 	{
@@ -511,6 +511,19 @@ index test_vec
 	}
 }
 </query>
+
+<!-- case insert unsigned int into bigint -->
+<query endpoint="insert">
+{
+	"table":"test_rt",
+	"id":10010,
+	"doc":
+	{
+		"bint_col" : 9223372036854775807
+	}
+}
+</query>
+<query endpoint="search">{ "table": "test_rt", "_source": { "includes": [ "id", "bint_col" ] }, "query": { "equals": { "id": 10010 } }, "sort": ["id"] }</query>
 
 </httpqueries>
 

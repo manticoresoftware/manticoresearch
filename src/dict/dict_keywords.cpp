@@ -681,7 +681,7 @@ bool CSphDictKeywords::SortedDictEnd ( DictHeader_t * pHeader, CSphString& sErro
 	// flush header
 	// mostly for debugging convenience
 	// primary storage is in the index wide header
-	m_wrDict.PutBytes ( "dict-header", 11 );
+	m_wrDict.PutBlob ( g_sTagDictHeader );
 	m_wrDict.ZipInt ( pHeader->m_iDictCheckpoints );
 	m_wrDict.ZipOffset ( pHeader->m_iDictCheckpointsOffset );
 	m_wrDict.ZipInt ( pHeader->m_iInfixCodepointBytes );

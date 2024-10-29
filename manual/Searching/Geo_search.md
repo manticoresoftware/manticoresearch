@@ -18,6 +18,8 @@ table myrt
 
 The coordinates can be stored as degrees or radians.
 
+If secondary indexes are generated for latitude and longitude attributes, they may automatically be used to speed up geo searches if the [Cost based optimizer](../Searching/Cost_based_optimizer.md) decides to use them.
+
 ## Performing distance сalculation
 
 To find out the distance between two points, the [GEODIST()](../Functions/Geo_spatial_functions.md#GEODIST%28%29) function can be used. `GEODIST` requires two pairs of coordinates as its first four parameters.

@@ -11,7 +11,7 @@ elif [ "$1" = "-h" -o "$1" = "--help" ]; then
 else 
     params="--new-cluster"
 fi
-systemctl set-environment _ADDITIONAL_SEARCHD_PARAMS='$params' &&  systemctl start manticore
+systemctl set-environment _ADDITIONAL_SEARCHD_PARAMS="$params" &&  systemctl start manticore
 extcode=$?
-systemctl set-environment _ADDITIONAL_SEARCHD_PARAMS=''
+systemctl set-environment _ADDITIONAL_SEARCHD_PARAMS=""
 exit $extcode

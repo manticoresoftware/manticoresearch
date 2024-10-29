@@ -1,0 +1,41 @@
+<?xml version="1.0" encoding="utf-8"?>
+<test>
+
+<name>altering index_token_filter</name>
+
+<requires>
+	<force-rt/>
+</requires>
+
+<skip_indexer/>
+
+<config>
+searchd
+{
+	<searchd_settings/>
+	data_dir = <data_path/>
+}
+</config>
+
+<queries>
+<sphinxql>
+	drop table if exists tt;
+	create table tt (t text);
+	insert into tt values (0,'bla');
+	flush ramchunk tt;
+	insert into tt values (0,'bla');
+	flush ramchunk tt;
+
+	<!-- that should not work: 'bla' is not a soname, and config has no plugin_dir param and no common section.
+	 However, it works...
+	 So, this whole test is a junk - both, this and the next lines reveals oneshot bug which will vanish once fixed.
+	 The test can be dropped then. -->
+	alter table tt index_token_filter = 'abc';
+
+	<!-- that crashed. Fixed in the commit where this test added -->
+	select * from tt where match ('bla');
+	drop table tt;
+</sphinxql>
+</queries>
+
+</test>

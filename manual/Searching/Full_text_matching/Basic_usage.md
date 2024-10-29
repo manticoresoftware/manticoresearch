@@ -101,6 +101,21 @@ By default, keywords are combined using the OR operator. However, you can change
 
 "operator" can be set to "or" or "and".
 
+The `boost` modifier can also be applied. It raises the word [IDF](../../Searching/Options.md#idf)_score by the indicated factor in ranking scores that incorporate IDF into their calculations. It does not impact the matching process in any manner.
+```json
+"query":
+{
+  "match":
+  {
+    "field1":
+    {
+      "query": "keyword",
+      "boost": 2.0
+    }
+  }
+}
+```
+
 ### match_phrase
 
 "match_phrase" is a query that matches the entire phrase. It is similar to a phrase operator in SQL. Here's an example:
@@ -147,7 +162,7 @@ Examples:
 POST /search
 -d
 '{
-    "index" : "hn_small",
+    "table" : "hn_small",
     "query":
     {
         "match":
@@ -186,7 +201,7 @@ POST /search
 POST /search
 -d
 '{
-    "index" : "hn_small",
+    "table" : "hn_small",
     "query":
     {
         "match_phrase":
@@ -224,7 +239,7 @@ POST /search
 ```json
 POST /search
 -d
-'{   "index" : "hn_small",
+'{   "table" : "hn_small",
     "query":
     {
         "query_string": "@comment_text \"find joe fast \"/2"
@@ -283,7 +298,7 @@ Python
 <!-- request Python -->
 
 ```python
-searchApi.search({"index":"hn_small","query":{"query_string":"@comment_text \"find joe fast \"/2"}, "_source": ["story_author","comment_author"], "limit":1})
+searchApi.search({"table":"hn_small","query":{"query_string":"@comment_text \"find joe fast \"/2"}, "_source": ["story_author","comment_author"], "limit":1})
 ```
 <!-- response Python -->
 ``` python
@@ -306,7 +321,7 @@ javascript
 <!-- request javascript -->
 
 ```javascript
-res = await searchApi.search({"index":"hn_small","query":{"query_string":"@comment_text \"find joe fast \"/2"}, "_source": ["story_author","comment_author"], "limit":1});
+res = await searchApi.search({"table":"hn_small","query":{"query_string":"@comment_text \"find joe fast \"/2"}, "_source": ["story_author","comment_author"], "limit":1});
 ```
 <!-- response javascript -->
 ```javascript

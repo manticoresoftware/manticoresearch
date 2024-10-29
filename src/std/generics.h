@@ -26,29 +26,29 @@ _Pragma ( "clang diagnostic ignored \"-Wunused-lambda-capture\"" )
 /////////////////////////////////////////////////////////////////////////////
 
 template<typename T>
-T Min ( T a, T b )
+constexpr T Min ( T a, T b )
 {
 	return a < b ? a : b;
 }
 template<typename T, typename U>
-typename std::common_type<T, U>::type Min ( T a, U b )
+constexpr typename std::common_type<T, U>::type Min ( T a, U b )
 {
 	using common_type = typename std::common_type<T, U>::type;
 	return static_cast<common_type>(a) < static_cast<common_type>(b) ? a : b;
 }
 template<typename T>
-T Max ( T a, T b )
+constexpr T Max ( T a, T b )
 {
 	return a < b ? b : a;
 }
 template<typename T, typename U>
-typename std::common_type<T, U>::type Max ( T a, U b )
+constexpr typename std::common_type<T, U>::type Max ( T a, U b )
 {
 	using common_type = typename std::common_type<T, U>::type;
 	return static_cast<common_type>(a) < static_cast<common_type>(b) ? b : a;
 }
 
-inline int sphRoundUp ( int iValue, int iLimit )
+inline constexpr int sphRoundUp ( int iValue, int iLimit )
 {
 	return ( iValue + iLimit - 1 ) & ~( iLimit - 1 );
 }
@@ -77,6 +77,8 @@ public:
 	ISphNoncopyable& operator= ( const ISphNoncopyable& ) = delete;
 };
 
+#define NONCOPYABLE( a ) a(const a&) = delete; a& operator= (const a&) = delete
+
 /// prevent move
 class ISphNonmovable
 {
@@ -85,6 +87,8 @@ public:
 	ISphNonmovable ( ISphNonmovable&& ) noexcept = delete;
 	ISphNonmovable& operator= ( ISphNonmovable&& ) noexcept = delete;
 };
+
+#define NONMOVABLE( a ) a(a&&) = delete; a& operator= (a&&) = delete
 
 /// prevent copy and move
 class ISphNonCopyMovable
@@ -95,6 +99,8 @@ public:
 	ISphNonCopyMovable ( ISphNonCopyMovable&& ) = delete;
 	ISphNonCopyMovable& operator= ( ISphNonCopyMovable ) = delete;
 };
+
+#define NONCOPYMOVABLE( a ) a(const a&) = delete; a (a&&) = delete; a& operator= (const a&) = delete; a& operator= (a&&) = delete
 
 // implement moving ctr and moving= using swap-and-release
 #define MOVE_BYSWAP( class_c )								\

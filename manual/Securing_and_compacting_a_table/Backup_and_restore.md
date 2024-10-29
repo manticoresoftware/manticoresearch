@@ -148,7 +148,9 @@ Manticore versions:
 
 You can also back up your data through SQL by running the simple command `BACKUP TO /path/to/backup`.
 
-Note, this command is not supported in Windows yet.
+> NOTE: `BACKUP` is not supported in Windows. Consider using [mysqldump](../Securing_and_compacting_a_table/Backup_and_restore.md#Backup-and-restore-with-mysqldump) instead.
+
+> NOTE: `BACKUP` requires [Manticore Buddy](../Installation/Manticore_Buddy.md). If it doesn't work, make sure Buddy is installed.
 
 ### General syntax of BACKUP
 
@@ -261,17 +263,35 @@ Manticore config
 ## Backup and restore with mysqldump
 
 <!-- example mysqldump_backup -->
+
+> NOTE: some versions of `mysqldump` / `mariadb-dump` require [Manticore Buddy](../../Installation/Manticore_Buddy.md). If the dump isn't working, make sure Buddy is installed.
+
 To create a backup of your Manticore Search database, you can use the `mysqldump` command. We will use the default port and host in the examples.
 
 Note, `mysqldump` is supported only for real-time tables.
 
-<!-- request SQL -->
+<!-- request Basic -->
 ```bash
 mysqldump -h0 -P9306 manticore > manticore_backup.sql
 mariadb-dump -h0 -P9306 manticore > manticore_backup.sql
 ```
 
 Executing this command will produce a backup file named `manticore_backup.sql`. This file will hold all data and table schemas.
+
+<!-- request Replace mode -->
+```bash
+mysqldump -h0 -P9306 --replace --net-buffer-length=16m -etc manticore tbl > tbl.sql
+```
+
+This will produce a backup file `tbl.sql` with `replace` commands instead of `insert`, with column names retained in each batch. Documents will be batched up to 16 megabytes large. There will be no `drop`/`create table` commands. This is useful for full-text reindexation after changing tokenization settings.
+
+<!-- request Replication mode -->
+```bash
+mysqldump -h0 -P9306 -ucluster manticore > manticore_backup.sql
+mariadb-dump -h0 -P9306 -ucluster manticore > manticore_backup.sql
+```
+
+Use the `cluster` user to enable replication mode. See the details in the notes below.
 
 <!-- end -->
 
@@ -297,15 +317,20 @@ This command enables you to restore everything from the `manticore_backup.sql` f
 
 Here are some more settings that can be used with mysqldump to tailor your backup:
 
-- `--add-drop-table`: This injects a DROP TABLE command before each CREATE TABLE command in the backup file.
-- `--no-data`: This setting omits table data from the backup, leading to a backup file that consists of only table schemas.
-- `--ignore-table=[database_name].[table_name]`: This option allows you to bypass a particular table during the backup operation. Note, the database name must be `Manticore`.
+- `-t` skips `drop`/`create` table commands. Useful for full-text reindexation of a table after changing tokenization settings.
+- `--no-data`: This setting omits table data from the backup, resulting in a backup file that consists only of table schemas.
+- `--ignore-table=[database_name].[table_name]`: This option allows you to bypass a particular table during the backup operation. Note that the database name must be `manticore`.
+- `--replace` to perform `replace` instead of `insert`. Useful for full-text reindexation of a table after changing tokenization settings.
+- `--net-buffer-length=16M` to make batches up to 16 megabytes large for faster restoration.
+- `-e` to batch up documents. Useful for faster restoration.
+- `-c` to keep column names. Useful for reindexation of a table after changing its schema (e.g., changing field order).
 
-For a comprehensive list of settings and their thorough descriptions, kindly refer to the [official MySQL documentation](https://dev.mysql.com/doc/refman/8.0/en/mysqldump.html).
+For a comprehensive list of settings and their thorough descriptions, kindly refer to the official [MySQL documentation](https://dev.mysql.com/doc/refman/8.0/en/mysqldump.html) or [MariaDB documentation](https://mariadb.com/kb/en/mariadb-dump/).
 
 ### Notes
 
-We recommend specifying the `manticore` database explicitly when you plan to back up all databases, rather than using the `--all-databases` option.
+* To create a dump in replication mode (where the dump includes `insert into <cluster_name>:<table_name>`), use the `cluster` user, for example: `mysqldump -u cluster ...` or `mariadb-dump -u cluster ...`. You can change the user name that enables replication mode for `mysqldump` by running `set global cluster_user=new_name`.
+* It's recommended to explicitly specify the `manticore` database when you plan to back up all databases, instead of using the `--all-databases` option.
+* Note that `mysqldump` does not support backing up distributed tables. Additionally, it cannot back up tables containing non-stored fields. Consider using `manticore-backup` or the `BACKUP` SQL command for these cases.
 
-Keep in mind that `mysqldump` does not support backing up distributed tables. Additionally, it cannot back up tables that contain non-stored fields (consider using `manticore-backup` or the `BACKUP` SQL command).
 <!-- proofread -->

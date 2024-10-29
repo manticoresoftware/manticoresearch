@@ -154,12 +154,25 @@ insert into test:rtc (title,mva1,gid,j1) values ('test 501', (521,522,523), 521,
 <sphinxql d="2">
 UPDATE test:rt1 SET mva10=(31,33) where id=3;
 insert into test:rt1 (id,title,mva1) values (601, 'test 201', (621,622));
+insert into `test:rt1` (id,title,mva1) values (602, 'test 383', (622,623));
 </sphinxql>
 <!-- request to node 1 -->
 <sphinxql d="1">
 	debug wait test status 15 like 'state' option 'timeout'=30;
 SELECT * FROM test:rt1 order by id asc;
 </sphinxql>
+
+<!-- request to node 0 -->
+<sphinxql d="0">
+ALTER CLUSTER test DROP rt1,rt2,rtc;
+ALTER CLUSTER test ADD rt1,rt2,rtc;
+</sphinxql>
+
+<sphinxql d="0">
+ALTER CLUSTER test DROP `rt1`,`rt2`;
+ALTER CLUSTER test ADD rt1, rt2;
+</sphinxql>
+
 
 <!-- cleanup -->
 <sphinxql d="0">

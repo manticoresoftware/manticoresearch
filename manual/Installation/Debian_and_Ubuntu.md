@@ -11,11 +11,13 @@
   * 18.04 (Bionic)
   * 20.04 (Focal)
   * 21.04 (Hirsute Hippo)
-  * 22.04 (Ubuntu Jammy)
+  * 22.04 (Jammy)
+  * 24.04 (Noble)
 
 * Mint
   * 19
   * 20
+  * 21
 
 ### APT repository
 The easiest way to install Manticore in Ubuntu/Debian/Mint is by using our APT repository.
@@ -47,7 +49,7 @@ If you prefer "Nightly" (development) versions do:
 wget https://repo.manticoresearch.com/manticore-dev-repo.noarch.deb && \
 sudo dpkg -i manticore-dev-repo.noarch.deb && \
 sudo apt -y update && \
-sudo apt -y install manticore manticore-extra manticore-common manticore-server manticore-server-core manticore-tools manticore-executor manticore-buddy manticore-backup manticore-columnar-lib manticore-server-core-dbgsym manticore-tools-dbgsym manticore-columnar-lib-dbgsym manticore-icudata-65l manticore-galera manticore-galera-dbgsym
+sudo apt -y install manticore manticore-extra manticore-common manticore-server manticore-server-core manticore-tools manticore-executor manticore-buddy manticore-backup manticore-columnar-lib manticore-server-core-dbgsym manticore-tools-dbgsym manticore-columnar-lib-dbgsym manticore-icudata-65l manticore-galera manticore-galera-dbgsym manticore-language-packs
 ```
 
 ### Standalone DEB packages
@@ -137,7 +139,7 @@ sudo make -j8 altinstall
 sudo ldconfig
 
 # install pymorphy2 and UK dictionary
-sudo pip3.9 install pymorphy2[fast]
-sudo pip3.9 install pymorphy2-dicts-uk
+sudo LD_LIBRARY_PATH=~/Python-3.9.4 pip3.9 install pymorphy2[fast]
+sudo LD_LIBRARY_PATH=~/Python-3.9.4 pip3.9 install pymorphy2-dicts-uk
 ```
 <!-- proofread -->

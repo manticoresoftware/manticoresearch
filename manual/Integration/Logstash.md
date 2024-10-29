@@ -1,8 +1,10 @@
 # Integration with Logstash
 
+> NOTE: The integration with Logstash requires [Manticore Buddy](../Installation/Manticore_Buddy.md). If it doesn't work, make sure Buddy is installed.
+
 [Logstash](https://www.elastic.co/logstash) is a log management tool that collects data from a variety of sources, transforms it on the fly, and sends it to your desired destination. It is often used as a data pipeline for Elasticsearch, an open-source analytics and search engine.
 
-Now, Manticore supports the use of Logstash as a processing pipeline. This allows the collected and transformed data to be sent to Manticore just like to Elasticsearch. Currently, all the versions >= 7.6  are supported.  
+Now, Manticore supports the use of Logstash as a processing pipeline. This allows the collected and transformed data to be sent to Manticore just like to Elasticsearch. Currently, the versions 7.6-7.15  are supported.  
 
 Let’s examine a simple example of a Logstash config file used for indexing `dpkg.log`, a standard log file of the Debian package manager. The log itself has a simple structure, as shown below:
 

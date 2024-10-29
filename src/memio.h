@@ -64,6 +64,8 @@ public:
 	void	ZipInt ( DWORD uVal ) override;
 	void	PutString ( const CSphString & sVal ) override;
 	void	PutString ( const char * szVal ) override;
+	void	PutZString ( const CSphString & sVal ) final;
+	void	PutZString ( const char * szVal ) final;
 	void	PutDword ( DWORD uVal ) override;
 	void	PutOffset ( SphOffset_t uValue ) override;
 	void	PutWord ( WORD uVal ) override;

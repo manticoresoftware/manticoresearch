@@ -1,0 +1,43 @@
+<?xml version="1.0" encoding="utf-8"?>
+<test>
+
+<name>show locks</name>
+
+<requires>
+	<force-rt/>
+</requires>
+
+<skip_indexer/>
+
+<config>
+searchd
+{
+	<searchd_settings/>
+	data_dir = <data_path/>
+	binlog_path =
+}
+</config>
+
+<queries>
+<sphinxql>
+	drop table if exists a;
+	drop table if exists b;
+	create table a;
+	create table b;
+	freeze a like 'fake';
+	show locks;
+	freeze a like 'fake';
+	show locks;
+	freeze b like 'fake';
+	show locks;
+	unfreeze a;
+	unfreeze a;
+	show locks;
+	unfreeze b;
+	show locks;
+	drop table a;
+	drop table b;
+</sphinxql>
+</queries>
+
+</test>

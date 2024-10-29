@@ -323,12 +323,28 @@ command_json: 0
 command_callpq: 0
 command_cluster: 0
 command_getfield: 0
+insert_replace_stats_ms_avg: N/A N/A N/A
+insert_replace_stats_ms_min: N/A N/A N/A
+insert_replace_stats_ms_max: N/A N/A N/A
+insert_replace_stats_ms_pct95: N/A N/A N/A
+insert_replace_stats_ms_pct99: N/A N/A N/A
+search_stats_ms_avg: N/A N/A N/A
+search_stats_ms_min: N/A N/A N/A
+search_stats_ms_max: N/A N/A N/A
+search_stats_ms_pct95: N/A N/A N/A
+search_stats_ms_pct99: N/A N/A N/A
+update_stats_ms_avg: N/A N/A N/A
+update_stats_ms_min: N/A N/A N/A
+update_stats_ms_max: N/A N/A N/A
+update_stats_ms_pct95: N/A N/A N/A
+update_stats_ms_pct99: N/A N/A N/A
 agent_connect: 1
 agent_retry: 0
 queries: 17
 dist_queries: 1
 workers_clients: 1
 workers_clients_vip: 0
+workers_clients_buddy: 0
 work_queue_length: 3
 ag_dist_1_1_connect_failures: 0
 ag_dist_1_1_network_errors: 0

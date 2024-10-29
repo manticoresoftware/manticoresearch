@@ -6,6 +6,10 @@ apt-get update -y > /dev/null; echo $?
 ––– output –––
 0
 ––– input –––
+export DEBIAN_FRONTEND=noninteractive && apt-get install -y unattended-upgrades procps gnupg2 wget mariadb-client > /dev/null 2>&1; echo $?
+––– output –––
+0
+––– input –––
 apt-get install -y gnupg2 wget mariadb-client procps > /dev/null 2>&1; echo $?
 ––– output –––
 0
@@ -35,11 +39,33 @@ Copyright (c) 2001-2016, Andrew Aksyonoff
 Copyright (c) 2008-2016, Sphinx Technologies Inc (http://sphinxsearch.com)
 Copyright (c) 2017-%{YEAR}, Manticore Software LTD (https://manticoresearch.com)
 ––– input –––
+dpkg-reconfigure unattended-upgrades > /dev/null 2>&1; echo $?
+––– output –––
+0
+––– input –––
+echo "Unattended-Upgrade::Origins-Pattern { \"origin=Debian,codename=\${distro_codename},label=Debian\"; \"origin=Debian,codename=\${distro_codename},label=Debian-Security\"; \"origin=Debian,codename=\${distro_codename}-security,label=Debian-Security\"; }; Unattended-Upgrade::Package-Blacklist { }; Unattended-Upgrade::Remove-Unused-Dependencies \"true\";" > /etc/apt/apt.conf.d/50unattended-upgrades
+––– output –––
+––– input –––
+unattended-upgrade --dry-run -d 2>/dev/null| grep manticore | grep remov
+––– output –––
+––– input –––
 manticore-executor -v
 ––– output –––
-PHP %{SEMVER} (cli) (built: #!/[a-zA-Z]{3}/!# #!/[0-9]+/!# %{YEAR} %{TIME}) (NTS)
+PHP %{SEMVER} (cli) (built: #!/[a-zA-Z]{3}/!# #!/[0-9]{1,2}/!# %{YEAR} %{TIME}) (NTS)
 Copyright (c) The PHP Group
 Zend Engine %{SEMVER}, Copyright (c) Zend Technologies
 ––– block: start-searchd-dev –––
 ––– block: check-searchd-process –––
 ––– block: check-backup –––
+––– input –––
+apt-get remove -y 'manticore*' > /dev/null 2>&1; echo $?
+––– output –––
+0
+––– input –––
+dpkg -l | grep ^rc | awk '/^rc/ && /manticore/ { print $2 }'
+––– output –––
+manticore-common
+manticore-repo
+manticore-server
+manticore-server-core
+manticore-tools

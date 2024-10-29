@@ -927,6 +927,9 @@ static KeyDesc_t g_dKeysIndex[] =
 	{ "optimize_cutoff",		0, nullptr },
 	{ "engine_default",			0, nullptr },
 	{ "knn",					0, nullptr },
+	{ "json_secondary_indexes",	0, nullptr },
+	{ "jieba_hmm",				0, nullptr },
+	{ "jieba_mode",				0, nullptr },
 	{ nullptr,					0, nullptr }
 };
 
@@ -990,6 +993,8 @@ static KeyDesc_t g_dKeysSearchd[] =
 	{ "binlog_flush",			0, NULL },
 	{ "binlog_path",			0, NULL },
 	{ "binlog_max_log_size",	0, NULL },
+	{ "binlog_filename_digits",	0, NULL },
+	{ "binlog_common",			0, NULL },
 	{ "thread_stack",			0, NULL },
 	{ "expansion_limit",		0, NULL },
 	{ "rt_flush_period",		0, NULL },
@@ -3185,19 +3190,6 @@ void sphConfigureCommon ( const CSphConfig & hConf, FixPathAbsolute_fn && fnPath
 	}
 }
 
-bool sphIsChineseCode ( int iCode )
-{
-	return ( ( iCode>=0x2E80 && iCode<=0x2EF3 ) ||	// CJK radicals
-		( iCode>=0x2F00 && iCode<=0x2FD5 ) ||	// Kangxi radicals
-		( iCode>=0x3000 && iCode<=0x303F ) ||	// CJK Symbols and Punctuation
-		( iCode>=0x3105 && iCode<=0x312D ) ||	// Bopomofo
-		( iCode>=0x31C0 && iCode<=0x31E3 ) ||	// CJK strokes
-		( iCode>=0x3400 && iCode<=0x4DB5 ) ||	// CJK Ideograph Extension A
-		( iCode>=0x4E00 && iCode<=0x9FFF ) ||	// Ideograph
-		( iCode>=0xF900 && iCode<=0xFAD9 ) ||	// compatibility ideographs
-		( iCode>=0xFF00 && iCode<=0xFFEF ) ||	// Halfwidth and fullwidth forms
-		( iCode>=0x20000 && iCode<=0x2FA1D ) );	// CJK Ideograph Extensions B/C/D, and compatibility ideographs
-}
 
 bool sphDetectChinese ( const BYTE * szBuffer, int iLength )
 {
@@ -3572,16 +3564,46 @@ BYTE Pearson8 ( const BYTE * pBuf, int iLen )
 	return iNew;
 }
 
+static const char * g_dDateTimeFormats[] = {
+	"%Y-%m-%dT%H:%M:%E*S%Z",
+	"%Y-%m-%d'T'%H:%M:%S%Z",
+	"%Y-%m-%dT%H:%M:%E*S",
+	"%Y-%m-%dT%H:%M:%s",
+	"%Y-%m-%dT%H:%M",
+	"%Y-%m-%dT%H",
+	"%Y-%m-%d",
+	"%Y-%m",
+	"%Y"
+};
 
-int64_t GetUTC ( const CSphString & sTime, const CSphString & sFormat )
+int64_t GetUTC ( const CSphString & sTime, const char * pFormat )
 {
-	std::tm tTM = {};
-	std::stringstream sTimeStream (  sTime.cstr() );
-	sTimeStream >> std::get_time ( &tTM, sFormat.cstr() );
-	if ( sTimeStream.fail() )
-		return -1;
+	if ( sTime.IsEmpty() )
+		return 0;
 
-	return std::mktime ( &tTM );
+	const char * szCur = sTime.cstr();
+	while ( isdigit(*szCur) )
+		szCur++;
+
+	// should be timestamp with only numeric values and at least 5 symbols
+	if ( !*szCur && (szCur-sTime.cstr())>4 )
+		return strtoul ( sTime.cstr(), nullptr, 10 );
+
+	time_t tConverted = 0;
+	if ( pFormat && *pFormat )
+	{
+		if ( ParseAsLocalTime ( pFormat, sTime, tConverted ) )
+			return tConverted;
+	}
+	else
+	{
+		// loop from the built-in formats from longest to shortest and try one by one
+		for ( const char * pFmt : g_dDateTimeFormats )
+			if ( ParseAsLocalTime ( pFmt, sTime, tConverted ) )
+				return tConverted;
+	}
+
+	return 0;
 }
 
 enum class DateMathOp_e
@@ -3619,20 +3641,13 @@ static bool ParseDateMath ( const Str_t & sMathExpr, time_t & tDateTime )
 
 	while ( sCur<sEnd && *sCur )
 	{
-		const int iOp = *sCur++;
-		DateMathOp_e eOp = DateMathOp_e::Mod;
-		if ( iOp=='/' )
+		DateMathOp_e eOp;
+		switch ( *sCur++ )
 		{
-			eOp = DateMathOp_e::Mod;
-		} else if ( iOp=='+' )
-		{
-			eOp = DateMathOp_e::Add;
-		} else if ( iOp=='-' )
-		{
-			eOp = DateMathOp_e::Sub;
-		} else
-		{
-			return false;
+			case '/' : eOp = DateMathOp_e::Mod; break;
+			case '+' : eOp = DateMathOp_e::Add; break;
+			case '-' : eOp = DateMathOp_e::Sub; break;
+			default: return false;
 		}
 
 		int iNum = 1;
@@ -3665,7 +3680,7 @@ static bool ParseDateMath ( const Str_t & sMathExpr, time_t & tDateTime )
 	return tDateTime;
 }
 
-bool ParseDateMath ( const CSphString & sMathExpr, const CSphString & sFormat, int iNow, time_t & tDateTime )
+bool ParseDateMath ( const CSphString & sMathExpr, int iNow, time_t & tDateTime )
 {
 	if ( sMathExpr.IsEmpty() )
 		return false;
@@ -3695,7 +3710,7 @@ bool ParseDateMath ( const CSphString & sMathExpr, const CSphString & sFormat, i
 		}
 
 		// We're going to just require ISO8601 timestamps, k?
-		tDateTime = GetUTC ( sDateOnly, sFormat );
+		tDateTime = GetUTC ( sDateOnly );
 	}
 
 	if ( IsEmpty ( sExpr ) )
@@ -3869,4 +3884,35 @@ bool HasWildcards ( const char * sWord )
 	}
 
 	return false;
+}
+
+static RwLock_t hBreaksProtect;
+static SmallStringHash_T<bool> hBreaks GUARDED_BY ( hBreaksProtect );
+
+// sleep on named pause. Put into interest clauses in the code where a race expected
+void PauseCheck ( const CSphString & sName )
+{
+	auto fnCheck = [&sName] () {
+		ScRL_t tProtect { hBreaksProtect };
+		return hBreaks.Exists ( sName );
+	};
+	if ( !fnCheck () )
+		return;
+
+	sphInfo ( "Paused '%s'", sName.cstr () );
+	auto tmStart = sphMicroTimer ();
+	while ( fnCheck () )
+		sphSleepMsec ( 20 );
+	LogInfo ( "Released '%s' in %.3t", sName.cstr (), sphMicroTimer ()-tmStart );
+}
+
+// debug pause 'id' on / debug pause 'id' off
+void PauseAt ( const CSphString& sName, bool bPause )
+{
+	ScWL_t tProtect { hBreaksProtect };
+	auto bExist = hBreaks.Exists ( sName );
+	if ( !bPause && bExist )
+		hBreaks.Delete ( sName );
+	else if ( bPause && !bExist )
+		hBreaks.Add ( true, sName );
 }

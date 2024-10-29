@@ -4,7 +4,7 @@
 ## Defining table schema in a configuration file
 
 ```ini
-table <index_name>[:<parent table name>] {
+table <table_name>[:<parent table name>] {
 ...
 }
 ```
@@ -134,7 +134,7 @@ $params = [
             'price'=>['type'=>'float']
         ]
     ],
-    'index' => 'products'
+    'table' => 'products'
 ];
 $index = new \Manticoresearch\Index($client);
 $index->create($params);
@@ -203,6 +203,92 @@ In contrast, the latter (string attribute):
 * is stored on disk and in memory
 * is stored in an uncompressed format
 * can be used for sorting, grouping, filtering, and any other actions you want to take with attributes.
+
+#### json_secondary_indexes
+
+```ini
+json_secondary_indexes = json_attr
+```
+
+<!-- example json_secondary_indexes -->
+
+By default, secondary indexes are generated for all attributes except JSON attributes. However, secondary indexes for JSON attributes can be explicitly generated using the `json_secondary_indexes` setting. When a JSON attribute is included in this option, its contents are flattened into multiple secondary indexes. These indexes can be used by the query optimizer to speed up queries.
+
+Value: A comma-separated list of JSON attributes for which secondary indexes should be generated.
+
+<!-- intro -->
+##### SQL:
+
+<!-- request SQL -->
+
+```sql
+CREATE TABLE products(title text, j json secondary_index='1')
+```
+
+<!-- request JSON -->
+
+```JSON
+POST /cli -d "
+CREATE TABLE products(title text, j json secondary_index='1')"
+```
+
+<!-- request PHP -->
+
+```php
+$params = [
+    'body' => [
+        'columns' => [
+            'title'=>['type'=>'text'],
+            'j'=>['type'=>'json', 'options' => ['secondary_index' => 1]]
+        ]
+    ],
+    'table' => 'products'
+];
+$index = new \Manticoresearch\Index($client);
+$index->create($params);
+```
+<!-- intro -->
+##### Python:
+<!-- request Python -->
+```python
+utilsApi.sql('CREATE TABLE products(title text, j json secondary_index='1')')
+```
+
+<!-- intro -->
+##### Javascript:
+
+<!-- request Javascript -->
+```javascript
+res = await utilsApi.sql('CREATE TABLE products(title text, j json secondary_index=\'1\')');
+```
+
+<!-- intro -->
+##### Java:
+<!-- request Java -->
+```java
+utilsApi.sql("CREATE TABLE products(title text, j json secondary_index='1')");
+```
+
+<!-- intro -->
+##### C#:
+<!-- request C# -->
+```clike
+utilsApi.Sql("CREATE TABLE products(title text, j json secondary_index='1')");
+```
+
+<!-- request CONFIG -->
+
+```ini
+table products {
+  json_secondary_indexes = j
+
+  type = rt
+  path = tbl
+  rt_field = title
+  rt_attr_json = j
+}
+```
+<!-- end -->
 
 ### Real-time table settings:
 
@@ -346,7 +432,7 @@ For instance, if 90MB of data is saved to a disk chunk and an additional 10MB of
 
 In real-time mode, you can adjust the size limit of RAM chunks and the maximum number of disk chunks using the `ALTER TABLE` statement. To set `rt_mem_limit` to 1 gigabyte for the table "t," run the following query: `ALTER TABLE t rt_mem_limit='1G'`. To change the maximum number of disk chunks, run the query: `ALTER TABLE t optimize_cutoff='5'`.
 
-In the plain mode, you can change the values of `rt_mem_limit` and `optimize_cutoff` by updating the table configuration or running the command `ALTER TABLE <index_name> RECONFIGURE`
+In the plain mode, you can change the values of `rt_mem_limit` and `optimize_cutoff` by updating the table configuration or running the command `ALTER TABLE <table_name> RECONFIGURE`
 
 ##### Important notes about RAM chunks
 
@@ -354,8 +440,8 @@ In the plain mode, you can change the values of `rt_mem_limit` and `optimize_cut
 * Each RAM chunk is made up of multiple segments, which are special RAM-only tables.
 * While disk chunks are stored on disk, RAM chunks are stored in memory.
 * Each transaction made to a real-time table generates a new segment, and RAM chunk segments are merged after each transaction commit. It is more efficient to perform bulk INSERTs of hundreds or thousands of documents rather than multiple separate INSERTs with one document to reduce the overhead from merging RAM chunk segments.
-* When the number of segments exceeds 32, they will be merged to keep the count below 32. 
-* Real-time tables always have one RAM chunk (which may be empty) and one or more disk chunks. 
+* When the number of segments exceeds 32, they will be merged to keep the count below 32.
+* Real-time tables always have one RAM chunk (which may be empty) and one or more disk chunks.
 * Merging larger segments takes longer, so it's best to avoid having a very large RAM chunk (and therefore `rt_mem_limit`).
 * The number of disk chunks depends on the data in the table and the `rt_mem_limit` setting.
 * Searchd flushes the RAM chunk to disk (as a persisted file, not as a disk chunk) on shutdown and periodically according to the [rt_flush_period](../../Server_settings/Searchd.md#rt_flush_period) setting. Flushing several gigabytes to disk may take some time.
@@ -386,7 +472,7 @@ killlist_target = main:kl
 
 This setting determines the table(s) to which the kill-list will be applied. Matches in the targeted table that are updated or deleted in the current table will be suppressed. In `:kl` mode, the documents to suppress are taken from the [kill-list](../../Data_creation_and_modification/Adding_data_from_external_storages/Adding_data_to_tables/Killlist_in_plain_tables.md). In `:id` mode, all document IDs from the current table are suppressed in the targeted one. If neither is specified, both modes will take effect. [Learn more about kill-lists here](../../Data_creation_and_modification/Adding_data_from_external_storages/Adding_data_to_tables/Killlist_in_plain_tables.md)
 
-Value: **not specified** (default), target_index_name:kl, target_index_name:id, target_index_name. Multiple values are allowed
+Value: **not specified** (default), target_table_name:kl, target_table_name:id, target_table_name. Multiple values are allowed
 
 #### columnar_attrs
 
@@ -672,7 +758,7 @@ table products {
 inplace_reloc_factor = 0.1
 ```
 
-The inplace_reloc_factor setting determines the size of the relocation buffer within the memory arena used during indexing. The default value is 0.1. 
+The inplace_reloc_factor setting determines the size of the relocation buffer within the memory arena used during indexing. The default value is 0.1.
 
 This option is optional and only affects the [indexer](../../Data_creation_and_modification/Adding_data_from_external_storages/Plain_tables_creation.md#Indexer-tool) tool, not the [searchd](../../Starting_the_server/Manually.md)  server.
 

@@ -32,6 +32,24 @@ index test
 	min_word_len	= 1
 	min_prefix_len	= 1
 }
+
+source srctest1
+{
+	type			= mysql
+	<sql_settings/>
+
+	sql_query_pre 	= set time_zone='+0:00'
+	sql_query		= SELECT document_id, tag, UNIX_TIMESTAMP(time) as ts, YEAR(time) as year, MONTH(time) as month, body FROM test_table
+	sql_attr_timestamp = ts
+	sql_attr_uint	= year
+	sql_attr_uint	= month
+}
+
+index test1
+{
+	source			= srctest1
+	path			= <data_path/>/test1
+}
 </config>
 
 <db_create>
@@ -97,6 +115,9 @@ INSERT INTO `test_table` VALUES
 	select time(ts),time(date_sub(ts, interval 5 second)) from test;
 	select time(ts),time(date_sub(ts, interval 5 minute)) from test;
 	select time(ts),time(date_sub(ts, interval 5 hour)) from test;
+    
+    <!-- all date and time removed from the reserved words -->
+    select id, year as year1, year, month as month1, month from test1 order by id asc;
 </sphinxql>
 </queries>
 

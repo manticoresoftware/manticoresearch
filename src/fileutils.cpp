@@ -140,27 +140,26 @@ void sphLockUn ( int iFile )
 }
 #endif
 
-bool RawFileLock ( const CSphString& sFile, int& iLockFD, CSphString& sError )
+bool RawFileLock ( const CSphString & sFile, int & iLockFD, CSphString & sError )
 {
-	if ( iLockFD < 0 )
+	if ( iLockFD<0 )
 	{
-		iLockFD = ::open ( sFile.cstr(), SPH_O_NEW, 0644 );
-		if ( iLockFD < 0 )
+		iLockFD = ::open ( sFile.cstr (), SPH_O_NEW, 0644 );
+		if ( iLockFD<0 )
 		{
-			sError.SetSprintf ( "failed to open %s: %s", sFile.cstr(), strerrorm ( errno ) );
-			sphLogDebug ( "failed to open %s: %s", sFile.cstr(), strerrorm ( errno ) );
+			sError.SetSprintf ( "failed to open '%s': %u '%s'", sFile.cstr (), errno, strerrorm ( errno ) );
+			sphLogDebug ( "failed to open '%s': %u '%s'", sFile.cstr (), errno, strerrorm ( errno ) );
 			return false;
 		}
 	}
 
 	if ( !sphLockEx ( iLockFD, false ) )
 	{
-		sError.SetSprintf ( "failed to lock %s: %s", sFile.cstr(), strerrorm ( errno ) );
-		::close ( iLockFD );
-		iLockFD = -1;
+		sError.SetSprintf ( "failed to lock '%s': %u '%s'", sFile.cstr (), errno, strerrorm ( errno ) );
+		SafeClose ( iLockFD );
 		return false;
 	}
-	sphLogDebug ( "lock %s success", sFile.cstr() );
+	sphLogDebug ( "lock %s success", sFile.cstr () );
 	return true;
 }
 
@@ -170,9 +169,8 @@ void RawFileUnLock ( const CSphString& sFile, int& iLockFD )
 		return;
 	sphLogDebug ( "File ID ok, closing lock FD %d, unlinking %s", iLockFD, sFile.cstr() );
 	sphLockUn ( iLockFD );
-	::close ( iLockFD );
+	SafeClose ( iLockFD );
 	::unlink ( sFile.cstr() );
-	iLockFD = -1;
 }
 
 //////////////////////////////////////////////////////////////////////////

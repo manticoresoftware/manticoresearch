@@ -1,5 +1,7 @@
 # Syncing with Kafka
 
+> NOTE: this functionality requires [Manticore Buddy](../Installation/Manticore_Buddy.md). If it doesn't work, make sure Buddy is installed.
+
 Manticore Search can seamlessly consume messages from a Kafka broker, allowing for real-time data indexing and search.
 
 To get started, you need to:

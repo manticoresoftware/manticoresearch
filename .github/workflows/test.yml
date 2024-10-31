@@ -13,7 +13,7 @@ on:
       - 'cmake/GetGALERA.cmake'
       - 'galera_packaging/**'
   pull_request:
-    branches: [ master ]
+    branches: [ master, update-buddy-version ]
     paths-ignore:
       - 'manual/**'
       - 'cmake/GetGALERA.cmake'
@@ -62,7 +62,7 @@ jobs:
             clt:
             - 'test/clt-tests/**'
   win_bundle:
-    if: needs.changes.outputs.source == 'true'
+    if: (needs.changes.outputs.source == 'true') && (github.event_name == 'pull_request' && github.event.pull_request.base.ref == 'update-buddy-version') != true
     needs: changes
     name: Windows supplementary files preparation
     runs-on: ubuntu-22.04
@@ -90,7 +90,7 @@ jobs:
           tar -xf boost_1_75_0.tgz
 
   build_linux_debug:
-    if: needs.changes.outputs.source == 'true'
+    if: (needs.changes.outputs.source == 'true') && (github.event_name == 'pull_request' && github.event.pull_request.base.ref == 'update-buddy-version') != true
     needs: changes
     name: Linux debug build
     uses: ./.github/workflows/build_template.yml
@@ -99,6 +99,7 @@ jobs:
       artifact_name: debug_build
 
   test_linux_debug:
+    if: (github.event_name == 'pull_request' && github.event.pull_request.base.ref == 'update-buddy-version') != true
     name: Linux debug mode tests
     needs: build_linux_debug
     uses: ./.github/workflows/test_template.yml
@@ -146,6 +147,7 @@ jobs:
       timeout: 10
 
   debug_tests_report:
+    if: (github.event_name == 'pull_request' && github.event.pull_request.base.ref == 'update-buddy-version') != true
     name: Debug mode tests summary and report
     needs: test_linux_debug
     runs-on: ubuntu-22.04
@@ -235,7 +237,7 @@ jobs:
           path: build
 
   build_linux_release:
-    if: needs.changes.outputs.source == 'true'
+    if: (needs.changes.outputs.source == 'true') && (github.event_name == 'pull_request' && github.event.pull_request.base.ref == 'update-buddy-version') != true
     needs: changes
     name: Linux release build
     uses: ./.github/workflows/build_template.yml
@@ -243,6 +245,7 @@ jobs:
       artifact_name: release_build
 
   test_linux_release:
+    if: (github.event_name == 'pull_request' && github.event.pull_request.base.ref == 'update-buddy-version') != true
     name: Linux release mode tests
     needs: build_linux_release
     uses: ./.github/workflows/test_template.yml
@@ -290,6 +293,7 @@ jobs:
       timeout: 10
 
   release_tests_report:
+    if: (github.event_name == 'pull_request' && github.event.pull_request.base.ref == 'update-buddy-version') != true
     name: Release mode tests summary and report
     needs: test_linux_release
     runs-on: ubuntu-22.04
@@ -379,6 +383,7 @@ jobs:
           path: build
 
   pack_jammy_cache_check:
+    if: (github.event_name == 'pull_request' && github.event.pull_request.base.ref == 'update-buddy-version') != true
     needs: changes
     name: Jammy x86_64 package [check cache]
     runs-on: ubuntu-22.04
@@ -424,8 +429,9 @@ jobs:
   pack_jammy:
     needs: pack_jammy_cache_check
     if: |
-      needs.pack_jammy_cache_check.outputs.cache-hit != 'true' ||
-      needs.changes.outputs.source == 'true'
+      (needs.pack_jammy_cache_check.outputs.cache-hit != 'true' ||
+      needs.changes.outputs.source == 'true') &&
+      (github.event_name == 'pull_request' && github.event.pull_request.base.ref == 'update-buddy-version') != true
     name: Jammy x86_64 package [build]
     uses: ./.github/workflows/build_template.yml
     with:
@@ -440,10 +446,10 @@ jobs:
       artifact_list: "build/manticore*deb"
 
   pack_jammy_cache_update:
+    if: (needs.pack_jammy_cache_check.outputs.cache-hit != 'true') && (github.event_name == 'pull_request' && github.event.pull_request.base.ref == 'update-buddy-version') != true
     name: Jammy x86_64 package [update cache]
     needs: [pack_jammy, pack_jammy_cache_check]
     runs-on: ubuntu-22.04
-    if: needs.pack_jammy_cache_check.outputs.cache-hit != 'true'
     steps:
       - name: Checkout repository # We have to checkout to access .github/workflows/ in further steps
         uses: actions/checkout@v3
@@ -497,9 +503,9 @@ jobs:
           path: manticore_test_kit.img
 
   clt:
+    if: always() && needs.test_kit_docker_build.result != 'failure'
     name: CLT
     needs: test_kit_docker_build
-    if: always() && needs.test_kit_docker_build.result != 'failure'
     runs-on: ubuntu-22.04
     strategy:
       fail-fast: false
@@ -556,7 +562,7 @@ jobs:
           TEST_RESULT=${{ needs.clt.result }} BUILD_COMMIT=${{ steps.sha.outputs.sha_short }} /bin/bash dist/test_kit_docker_push.sh
 
   build_aarch64:
-    if: needs.changes.outputs.source == 'true'
+    if: (needs.changes.outputs.source == 'true') && (github.event_name == 'pull_request' && github.event.pull_request.base.ref == 'update-buddy-version') != true
     needs: changes
     name: Linux aarch64 build
     uses: ./.github/workflows/build_template.yml
@@ -566,7 +572,7 @@ jobs:
       cache_key: build_jammy_aarch64
 
   build_freebsd:
-    if: needs.changes.outputs.source == 'true'
+    if: (needs.changes.outputs.source == 'true') && (github.event_name == 'pull_request' && github.event.pull_request.base.ref == 'update-buddy-version') != true
     needs: changes
     name: FreeBSD x86_64 build
     uses: ./.github/workflows/build_template.yml
@@ -577,7 +583,7 @@ jobs:
       cache_key: build_freebsd_x86_64
 
   build_windows:
-    if: needs.changes.outputs.source == 'true'
+    if: (needs.changes.outputs.source == 'true') && (github.event_name == 'pull_request' && github.event.pull_request.base.ref == 'update-buddy-version') != true
     needs: changes
     name: Windows x64 build
     uses: ./.github/workflows/build_template.yml
@@ -592,6 +598,7 @@ jobs:
       artifact_list: "build/xml build/src/Debug/indexer.exe build/src/Debug/searchd.exe build/src/Debug/tests.exe build/src/gtests/Debug/gmanticoretest.exe build/usr"
 
   test_windows:
+    if: (github.event_name == 'pull_request' && github.event.pull_request.base.ref == 'update-buddy-version') != true
     name: Windows tests
     needs: [build_windows, win_bundle]
     uses: ./.github/workflows/win_test_template.yml

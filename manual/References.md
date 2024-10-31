@@ -5,19 +5,20 @@
 * [CREATE TABLE](Creating_a_table/Local_tables/Real-time_table.md#CREATE-TABLE-command:) - Creates new table
 * [CREATE TABLE LIKE](Creating_a_table/Local_tables/Real-time_table.md#CREATE-TABLE-LIKE:) - Creates table using another one as a template
 * [CREATE TABLE LIKE ... WITH DATA](Creating_a_table/Local_tables/Real-time_table.md#CREATE-TABLE-LIKE:) - Copies a table
-* [CREATE SOURCE](Integration/Kafka.md#source) - Create Kafka consumer source
-* [CREATE MATERIALIZED VIEW](Integration/Kafka.md#materialized-view) - Data transformation from Kafka messages
-* [CREATE MV](Integration/Kafka.md#materialized-view) - The same as previous
+* [CREATE SOURCE](Integration/Kafka.md#Source) - Create Kafka consumer source
+* [CREATE MATERIALIZED VIEW](Integration/Kafka.md#Materialized-view) - Data transformation from Kafka messages
+* [CREATE MV](Integration/Kafka.md#Materialized-view) - The same as previous
 * [DESCRIBE](Listing_tables.md#DESCRIBE) - Prints out table's field list and their types
 * [ALTER TABLE](Updating_table_schema_and_settings.md) - Changes table schema / settings
 * [ALTER TABLE REBUILD SECONDARY](Updating_table_schema_and_settings.md#Rebuilding-a-secondary-index) - Updates/recovers secondary indexes
 * [ALTER TABLE type='distributed'](Updating_table_schema_and_settings.md#Changing-a-distributed-table) - Updates/recovers secondary indexes
 * [ALTER TABLE RENAME](Updating_table_schema_and_settings.md#Renaming-a-real-time-table)
+* [ALTER MATERIALIZED VIEW {name} suspended=1](Integration/Kafka.md#Altering-materialized-views) - Suspend or resume consuming from the Kafka source
 * [DROP TABLE IF EXISTS](Deleting_a_table.md#Deleting-a-table) - Deletes a table (if it exists)
 * [SHOW TABLES](Listing_tables.md#DESCRIBE) - Shows tables list
-* [SHOW SOURCES](Integration/Kafka.md#listing) - Shows list of Kafka sources
-* [SHOW MATERIALIZED VIEWS](Integration/Kafka.md#listing) - Shows list of materialized views
-* [SHOW MVS](Integration/Kafka.md#listing) - Alias of previous command
+* [SHOW SOURCES](Integration/Kafka.md#Listing) - Shows list of Kafka sources
+* [SHOW MATERIALIZED VIEWS](Integration/Kafka.md#Listing) - Shows list of materialized views
+* [SHOW MVS](Integration/Kafka.md#Listing) - Alias of previous command
 * [SHOW CREATE TABLE](Listing_tables.md#DESCRIBE) - Shows SQL command how to create the table
 * [SHOW TABLE STATUS](Node_info_and_management/Table_settings_and_status/SHOW_TABLE_STATUS.md) - Shows information about current table status
 * [SHOW TABLE SETTINGS](Node_info_and_management/Table_settings_and_status/SHOW_TABLE_SETTINGS.md) - Shows table settings

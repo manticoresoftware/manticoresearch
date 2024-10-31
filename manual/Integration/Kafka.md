@@ -252,6 +252,26 @@ SHOW MV view_table
 
 ### Altering materialized views
 
+<!-- example mv_suspend -->
+
+<!-- intro -->
+
+##### SQL:
+
+<!-- request SQL -->
+
+```sql
+ALTER MATERIALIZED VIEW view_table suspended=1
+```
+
+<!-- response -->
+
+```sql
+Query OK (0.02 sec)
+```
+
+<!-- end -->
+
 You can suspend data consumption by altering materialized views.
 
 If you remove the `source` without deleting the MV, it automatically suspends. After recreating the source, unsuspend the MV manually using the `ALTER` command.

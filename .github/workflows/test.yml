@@ -383,7 +383,6 @@ jobs:
           path: build
 
   pack_jammy_cache_check:
-    if: (github.event_name == 'pull_request' && github.event.pull_request.base.ref == 'update-buddy-version') != true
     needs: changes
     name: Jammy x86_64 package [check cache]
     runs-on: ubuntu-22.04
@@ -429,9 +428,8 @@ jobs:
   pack_jammy:
     needs: pack_jammy_cache_check
     if: |
-      (needs.pack_jammy_cache_check.outputs.cache-hit != 'true' ||
-      needs.changes.outputs.source == 'true') &&
-      (github.event_name == 'pull_request' && github.event.pull_request.base.ref == 'update-buddy-version') != true
+      needs.pack_jammy_cache_check.outputs.cache-hit != 'true' ||
+      needs.changes.outputs.source == 'true'
     name: Jammy x86_64 package [build]
     uses: ./.github/workflows/build_template.yml
     with:

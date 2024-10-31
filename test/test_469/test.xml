@@ -109,6 +109,13 @@ show meta;
 select id, in(j,'value2') as check from t where check=1 order by id asc;
 show meta;
 
+update t set j='["new_value2"]' where id=2;
+select id, in(j,'new_value2') as check from t where check=1 order by id asc;
+show meta;
+alter table t rebuild secondary;
+select id, in(j,'new_value2') as check from t where check=1 order by id asc;
+show meta;
+
 drop table t;
 
 </sphinxql></queries>

@@ -3517,7 +3517,7 @@ bool RtIndex_c::WriteAttributes ( SaveDiskDataContext_t & tCtx, CSphString & sEr
 				tWriterSPA.PutBytes ( pNewRow, (int64_t)iStrideBytes );
 
 				if ( pJsonSIBuilder )
-					pJsonSIBuilder->AddRowSize ( tTargetOffsetSize.second );
+					pJsonSIBuilder->AddRowOffsetSize ( tTargetOffsetSize );
 			}
 			else
 				tWriterSPA.PutBytes ( pRow, (int64_t)iStrideBytes );

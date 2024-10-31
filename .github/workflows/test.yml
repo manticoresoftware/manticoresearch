@@ -427,11 +427,11 @@ jobs:
           path: "build/manticore*deb"
 
   pack_jammy:
-    if: (github.event_name == 'pull_request' && github.event.pull_request.base.ref == 'update-buddy-version') != true
     needs: pack_jammy_cache_check
     if: |
-      needs.pack_jammy_cache_check.outputs.cache-hit != 'true' ||
-      needs.changes.outputs.source == 'true'
+      (needs.pack_jammy_cache_check.outputs.cache-hit != 'true' ||
+      needs.changes.outputs.source == 'true') &&
+      (github.event_name == 'pull_request' && github.event.pull_request.base.ref == 'update-buddy-version') != true
     name: Jammy x86_64 package [build]
     uses: ./.github/workflows/build_template.yml
     with:

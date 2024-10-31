@@ -446,11 +446,10 @@ jobs:
       artifact_list: "build/manticore*deb"
 
   pack_jammy_cache_update:
-    if: (github.event_name == 'pull_request' && github.event.pull_request.base.ref == 'update-buddy-version') != true
+    if: (needs.pack_jammy_cache_check.outputs.cache-hit != 'true') && (github.event_name == 'pull_request' && github.event.pull_request.base.ref == 'update-buddy-version') != true
     name: Jammy x86_64 package [update cache]
     needs: [pack_jammy, pack_jammy_cache_check]
     runs-on: ubuntu-22.04
-    if: needs.pack_jammy_cache_check.outputs.cache-hit != 'true'
     steps:
       - name: Checkout repository # We have to checkout to access .github/workflows/ in further steps
         uses: actions/checkout@v3
@@ -504,9 +503,9 @@ jobs:
           path: manticore_test_kit.img
 
   clt:
+    if: always() && needs.test_kit_docker_build.result != 'failure'
     name: CLT
     needs: test_kit_docker_build
-    if: always() && needs.test_kit_docker_build.result != 'failure'
     runs-on: ubuntu-22.04
     strategy:
       fail-fast: false
@@ -563,8 +562,7 @@ jobs:
           TEST_RESULT=${{ needs.clt.result }} BUILD_COMMIT=${{ steps.sha.outputs.sha_short }} /bin/bash dist/test_kit_docker_push.sh
 
   build_aarch64:
-    if: (github.event_name == 'pull_request' && github.event.pull_request.base.ref == 'update-buddy-version') != true
-    if: needs.changes.outputs.source == 'true'
+    if: (needs.changes.outputs.source == 'true') && (github.event_name == 'pull_request' && github.event.pull_request.base.ref == 'update-buddy-version') != true
     needs: changes
     name: Linux aarch64 build
     uses: ./.github/workflows/build_template.yml
@@ -574,8 +572,7 @@ jobs:
       cache_key: build_jammy_aarch64
 
   build_freebsd:
-    if: (github.event_name == 'pull_request' && github.event.pull_request.base.ref == 'update-buddy-version') != true
-    if: needs.changes.outputs.source == 'true'
+    if: (needs.changes.outputs.source == 'true') && (github.event_name == 'pull_request' && github.event.pull_request.base.ref == 'update-buddy-version') != true
     needs: changes
     name: FreeBSD x86_64 build
     uses: ./.github/workflows/build_template.yml
@@ -586,8 +583,7 @@ jobs:
       cache_key: build_freebsd_x86_64
 
   build_windows:
-    if: (github.event_name == 'pull_request' && github.event.pull_request.base.ref == 'update-buddy-version') != true
-    if: needs.changes.outputs.source == 'true'
+    if: (needs.changes.outputs.source == 'true') && (github.event_name == 'pull_request' && github.event.pull_request.base.ref == 'update-buddy-version') != true
     needs: changes
     name: Windows x64 build
     uses: ./.github/workflows/build_template.yml

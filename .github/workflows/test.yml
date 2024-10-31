@@ -13,7 +13,7 @@ on:
       - 'cmake/GetGALERA.cmake'
       - 'galera_packaging/**'
   pull_request:
-    branches: [ master ]
+    branches: [ master, update-buddy-version ]
     paths-ignore:
       - 'manual/**'
       - 'cmake/GetGALERA.cmake'
@@ -63,6 +63,7 @@ jobs:
             - 'test/clt-tests/**'
   win_bundle:
     if: needs.changes.outputs.source == 'true'
+    if: ${{ (github.event_name == 'pull_request' && github.event.pull_request.base.ref == 'update-buddy-version') != true }}
     needs: changes
     name: Windows supplementary files preparation
     runs-on: ubuntu-22.04
@@ -91,6 +92,7 @@ jobs:
 
   build_linux_debug:
     if: needs.changes.outputs.source == 'true'
+    if: ${{ (github.event_name == 'pull_request' && github.event.pull_request.base.ref == 'update-buddy-version') != true }}
     needs: changes
     name: Linux debug build
     uses: ./.github/workflows/build_template.yml
@@ -99,6 +101,7 @@ jobs:
       artifact_name: debug_build
 
   test_linux_debug:
+    if: ${{ (github.event_name == 'pull_request' && github.event.pull_request.base.ref == 'update-buddy-version') != true }}
     name: Linux debug mode tests
     needs: build_linux_debug
     uses: ./.github/workflows/test_template.yml
@@ -146,6 +149,7 @@ jobs:
       timeout: 10
 
   debug_tests_report:
+    if: ${{ (github.event_name == 'pull_request' && github.event.pull_request.base.ref == 'update-buddy-version') != true }}
     name: Debug mode tests summary and report
     needs: test_linux_debug
     runs-on: ubuntu-22.04
@@ -236,6 +240,7 @@ jobs:
 
   build_linux_release:
     if: needs.changes.outputs.source == 'true'
+    if: ${{ (github.event_name == 'pull_request' && github.event.pull_request.base.ref == 'update-buddy-version') != true }}
     needs: changes
     name: Linux release build
     uses: ./.github/workflows/build_template.yml
@@ -243,6 +248,7 @@ jobs:
       artifact_name: release_build
 
   test_linux_release:
+    if: ${{ (github.event_name == 'pull_request' && github.event.pull_request.base.ref == 'update-buddy-version') != true }}
     name: Linux release mode tests
     needs: build_linux_release
     uses: ./.github/workflows/test_template.yml
@@ -290,6 +296,7 @@ jobs:
       timeout: 10
 
   release_tests_report:
+    if: ${{ (github.event_name == 'pull_request' && github.event.pull_request.base.ref == 'update-buddy-version') != true }}
     name: Release mode tests summary and report
     needs: test_linux_release
     runs-on: ubuntu-22.04
@@ -379,6 +386,7 @@ jobs:
           path: build
 
   pack_jammy_cache_check:
+    if: ${{ (github.event_name == 'pull_request' && github.event.pull_request.base.ref == 'update-buddy-version') != true }}
     needs: changes
     name: Jammy x86_64 package [check cache]
     runs-on: ubuntu-22.04
@@ -422,6 +430,7 @@ jobs:
           path: "build/manticore*deb"
 
   pack_jammy:
+    if: ${{ (github.event_name == 'pull_request' && github.event.pull_request.base.ref == 'update-buddy-version') != true }}
     needs: pack_jammy_cache_check
     if: |
       needs.pack_jammy_cache_check.outputs.cache-hit != 'true' ||
@@ -440,6 +449,7 @@ jobs:
       artifact_list: "build/manticore*deb"
 
   pack_jammy_cache_update:
+    if: ${{ (github.event_name == 'pull_request' && github.event.pull_request.base.ref == 'update-buddy-version') != true }}
     name: Jammy x86_64 package [update cache]
     needs: [pack_jammy, pack_jammy_cache_check]
     runs-on: ubuntu-22.04
@@ -556,6 +566,7 @@ jobs:
           TEST_RESULT=${{ needs.clt.result }} BUILD_COMMIT=${{ steps.sha.outputs.sha_short }} /bin/bash dist/test_kit_docker_push.sh
 
   build_aarch64:
+    if: ${{ (github.event_name == 'pull_request' && github.event.pull_request.base.ref == 'update-buddy-version') != true }}
     if: needs.changes.outputs.source == 'true'
     needs: changes
     name: Linux aarch64 build
@@ -566,6 +577,7 @@ jobs:
       cache_key: build_jammy_aarch64
 
   build_freebsd:
+    if: ${{ (github.event_name == 'pull_request' && github.event.pull_request.base.ref == 'update-buddy-version') != true }}
     if: needs.changes.outputs.source == 'true'
     needs: changes
     name: FreeBSD x86_64 build
@@ -577,6 +589,7 @@ jobs:
       cache_key: build_freebsd_x86_64
 
   build_windows:
+    if: ${{ (github.event_name == 'pull_request' && github.event.pull_request.base.ref == 'update-buddy-version') != true }}
     if: needs.changes.outputs.source == 'true'
     needs: changes
     name: Windows x64 build
@@ -592,6 +605,7 @@ jobs:
       artifact_list: "build/xml build/src/Debug/indexer.exe build/src/Debug/searchd.exe build/src/Debug/tests.exe build/src/gtests/Debug/gmanticoretest.exe build/usr"
 
   test_windows:
+    if: ${{ (github.event_name == 'pull_request' && github.event.pull_request.base.ref == 'update-buddy-version') != true }}
     name: Windows tests
     needs: [build_windows, win_bundle]
     uses: ./.github/workflows/win_test_template.yml

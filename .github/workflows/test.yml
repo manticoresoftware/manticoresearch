@@ -62,8 +62,7 @@ jobs:
             clt:
             - 'test/clt-tests/**'
   win_bundle:
-    if: needs.changes.outputs.source == 'true'
-    if: ${{ (github.event_name == 'pull_request' && github.event.pull_request.base.ref == 'update-buddy-version') != true }}
+    if: (needs.changes.outputs.source == 'true') && (github.event_name == 'pull_request' && github.event.pull_request.base.ref == 'update-buddy-version') != true
     needs: changes
     name: Windows supplementary files preparation
     runs-on: ubuntu-22.04

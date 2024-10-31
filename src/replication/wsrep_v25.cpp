@@ -442,7 +442,7 @@ public:
         : BASE { pCluster, pWsrep }
     { }
 
-	bool Init ( CSphString sName, const char* szListenAddr, const char* szIncoming, const char* szPath, const char* szOptions )
+	bool Init ( CSphString sName, const char* szListenAddr, const char* szIncoming, const char* szPath, const char* szOptions, Wsrep::GlobalTid_t & tGtid )
 	{
 		if ( !m_pWsrep )
 			return false;
@@ -474,7 +474,7 @@ public:
 			void ( *m_fnSynced ) ( void* );
 
 		} tArgs = {
-			m_pCluster, m_sName.cstr(), szListenAddr, szIncoming, szPath, szOptions, 127, &m_tStateID, "", 0, WsrepLog, ViewChanged_fn // app + recv
+			m_pCluster, m_sName.cstr(), szListenAddr, szIncoming, szPath, szOptions, 127, &tGtid, "", 0, WsrepLog, ViewChanged_fn // app + recv
 			, Apply_fn // recv
 			, Commit_fn // recv
 			, Unordered_fn // recv
@@ -489,6 +489,11 @@ public:
 	Wsrep::Applier_i* GetApplier() final
 	{
 		return nullptr;
+	}
+
+	Wsrep::Cluster_i * GetCluster() final
+	{
+		return m_pCluster;
 	}
 };
 
@@ -509,7 +514,7 @@ template<>
 }
 
 
-Wsrep::Provider_i* MakeProviderV25 ( WsrepLoader_t tLoader, Wsrep::Cluster_i* pCluster, CSphString sName, const char* szListenAddr, const char* szIncoming, const char* szPath, const char* szOptions )
+Wsrep::Provider_i* MakeProviderV25 ( WsrepLoader_t tLoader, Wsrep::Cluster_i* pCluster, CSphString sName, const char* szListenAddr, const char* szIncoming, const char* szPath, const char* szOptions, Wsrep::GlobalTid_t & tGtid )
 {
-	return MakeProvider<RAW25::Provider_c>( std::move ( tLoader ), pCluster, std::move ( sName ), szListenAddr, szIncoming, szPath, szOptions );
+	return MakeProvider<RAW25::Provider_c>( std::move ( tLoader ), pCluster, std::move ( sName ), szListenAddr, szIncoming, szPath, szOptions, tGtid );
 }

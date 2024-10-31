@@ -238,7 +238,6 @@ protected:
 	CSphRefcountedPtr<WSREPWRAP> m_pWsrep;
 	Wsrep::Cluster_i* m_pCluster;
 	Wsrep::ReceiverRefPtr_c m_pReceiver;
-	Wsrep::GlobalTid_t m_tStateID;
 	CSphString m_sName;
 
 protected:
@@ -429,7 +428,7 @@ inline bool LoadWsrep ( void* pWsrep, const WsrepLoader_t& tLoader )
 }
 
 template<typename PROVIDER>
-Wsrep::Provider_i* MakeProvider ( WsrepLoader_t tLoader, Wsrep::Cluster_i* pCluster, CSphString sName, const char* szListenAddr, const char* szIncoming, const char* szPath, const char* szOptions )
+Wsrep::Provider_i* MakeProvider ( WsrepLoader_t tLoader, Wsrep::Cluster_i* pCluster, CSphString sName, const char* szListenAddr, const char* szIncoming, const char* szPath, const char* szOptions, Wsrep::GlobalTid_t & tGtid )
 {
 	using WSREPWRAP = typename PROVIDER::WSREPWRAP;
 	CSphRefcountedPtr<WSREPWRAP> pWsrepWrap { new WSREPWRAP };
@@ -444,11 +443,11 @@ Wsrep::Provider_i* MakeProvider ( WsrepLoader_t tLoader, Wsrep::Cluster_i* pClus
 		return nullptr;
 
 	auto pProvider = std::make_unique<PROVIDER> ( pCluster, pWsrepWrap );
-	if ( !pProvider->Init ( std::move ( sName ), szListenAddr, szIncoming, szPath, szOptions ) )
+	if ( !pProvider->Init ( std::move ( sName ), szListenAddr, szIncoming, szPath, szOptions, tGtid ) )
 		return nullptr;
 	return pProvider.release();
 }
 
-Wsrep::Provider_i* MakeProviderV25 ( WsrepLoader_t tLoader, Wsrep::Cluster_i* pCluster, CSphString sName, const char* szListenAddr, const char* szIncoming, const char* szPath, const char* szOptions );
+Wsrep::Provider_i* MakeProviderV25 ( WsrepLoader_t tLoader, Wsrep::Cluster_i* pCluster, CSphString sName, const char* szListenAddr, const char* szIncoming, const char* szPath, const char* szOptions, Wsrep::GlobalTid_t & tGtid );
 
-Wsrep::Provider_i* MakeProviderV31 ( WsrepLoader_t tLoader, Wsrep::Cluster_i* pCluster, CSphString sName, const char* szListenAddr, const char* szIncoming, const char* szPath, const char* szOptions );
+Wsrep::Provider_i* MakeProviderV31 ( WsrepLoader_t tLoader, Wsrep::Cluster_i* pCluster, CSphString sName, const char* szListenAddr, const char* szIncoming, const char* szPath, const char* szOptions, Wsrep::GlobalTid_t & tGtid );

@@ -80,4 +80,7 @@ bool SetIndexesClusterTOI ( const ReplicationCommand_t * pCmd );
 CSphString WaitClusterReady ( const CSphString& sCluster, int64_t iTimeoutS );
 std::pair<int,CSphString> WaitClusterCommit ( const CSphString& sCluster, int iTxn, int64_t iTimeoutS );
 
+void ReplicationBinlogStart ( const CSphString & sConfigFile, bool bDisabled );
+void ReplicationBinlogStop();
+
 #endif // _searchdreplication_

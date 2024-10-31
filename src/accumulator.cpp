@@ -122,6 +122,10 @@ void RtAccum_t::Cleanup()
 	m_dCmd.Reset();
 }
 
+void RtAccum_t::CleanReplicated()
+{
+	m_tCmdReplicated = ReplicatedCommand_t();
+}
 
 void RtAccum_t::SetupDocstore()
 {

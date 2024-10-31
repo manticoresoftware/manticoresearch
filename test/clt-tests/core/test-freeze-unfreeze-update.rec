@@ -20,32 +20,58 @@ mysql -P9315 -h0 -e "drop table if exists t; create table t(s string); insert in
 ––– input –––
 mysql -P9315 -h0 -e "select * from t;"
 ––– output –––
++------+------+
+| id   | s    |
++------+------+
+|    1 | a    |
++------+------+
 ––– input –––
 rm -f /tmp/update.sql; for n in `seq 1 10000`; do echo "update t set s='b' where id=1;" >> /tmp/update.sql; done; while true; do mysql -P9315 -h0 < /tmp/update.sql | break; done &
 ––– output –––
 [#!/[0-9]{1}/!#] %{NUMBER}
 ––– input –––
-sleep 10; mysql -P9315 -h0 -e "show queries"
-––– output –––
-––– input –––
 sleep 30; mysql -P9315 -h0 -e "select * from t;"
 ––– output –––
++------+------+
+| id   | s    |
++------+------+
+|    1 | b    |
++------+------+
 ––– input –––
-sleep 5; mysql -P9315 -h0 -e "SHOW TABLE t STATUS;"
+stdbuf -oL mysql -P9315 -h0 -e "freeze t"
 ––– output –––
++------------------------+------------------------+
+| file                   | normalized             |
++------------------------+------------------------+
+| /tmp/data/t/t.0.spa    | /tmp/data/t/t.0.spa    |
+| /tmp/data/t/t.0.spb    | /tmp/data/t/t.0.spb    |
+| /tmp/data/t/t.0.spd    | /tmp/data/t/t.0.spd    |
+| /tmp/data/t/t.0.spe    | /tmp/data/t/t.0.spe    |
+| /tmp/data/t/t.0.sph    | /tmp/data/t/t.0.sph    |
+| /tmp/data/t/t.0.sphi   | /tmp/data/t/t.0.sphi   |
+| /tmp/data/t/t.0.spi    | /tmp/data/t/t.0.spi    |
+| /tmp/data/t/t.0.spidx  | /tmp/data/t/t.0.spidx  |
+| /tmp/data/t/t.0.spm    | /tmp/data/t/t.0.spm    |
+| /tmp/data/t/t.0.spp    | /tmp/data/t/t.0.spp    |
+| /tmp/data/t/t.0.spt    | /tmp/data/t/t.0.spt    |
+| /tmp/data/t/t.meta     | /tmp/data/t/t.meta     |
+| /tmp/data/t/t.ram      | /tmp/data/t/t.ram      |
+| /tmp/data/t/t.settings | /tmp/data/t/t.settings |
++------------------------+------------------------+
 ––– input –––
-mysql -P9315 -h0 -e "DESCRIBE t"
-––– output –––
-––– input –––
-sleep 5; mysql -P9315 -h0 -e "SHOW TABLE t STATUS;"
-––– output –––
-––– input –––
-rm -f /tmp/update.sql; for n in `seq 1 100`; do echo "update t set s='c' where id=1;" >> /tmp/update.sql; done; while true; do mysql -P9315 -h0 < /tmp/update.sql | break; done &
+mysql -P9315 -h0 -e "unfreeze t"; echo $?
 ––– output –––
 0
 ––– input –––
-sleep 10; mysql -P9315 -h0 -e "show queries"
+mysql -P9315 -h0 -e "DESCRIBE t"
 ––– output –––
++-------+--------+------------+
+| Field | Type   | Properties |
++-------+--------+------------+
+| id    | bigint |            |
+| s     | string |            |
++-------+--------+------------+
 ––– input –––
-sleep 10; mysql -P9315 -h0 -e "select * from t;"
+mysql -P9315 -h0 -e "UPDATE t SET s='с' WHERE id=1; FLUSH RAMCHUNK t"; echo $?
 ––– output –––
+0

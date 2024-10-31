@@ -5625,7 +5625,7 @@ int CSphIndex_VLN::Build ( const CSphVector<CSphSource*> & dSources, int iMemory
 					return 0;
 
 				if ( pJsonSIBuilder )
-					pJsonSIBuilder->AddRowSize ( tOffsetSize.second );
+					pJsonSIBuilder->AddRowOffsetSize(tOffsetSize);
 
 				pSource->m_tDocInfo.SetAttr ( pBlobLocatorAttr->m_tLocator, tOffsetSize.first );
 			}

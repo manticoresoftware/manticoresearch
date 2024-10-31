@@ -746,14 +746,37 @@ bool Update_CheckAttributes ( const CSphAttrUpdate & tUpd, const ISphSchema & tS
 }
 
 
+static void IncUpdatePoolPos ( const CSphAttrUpdate & tUpdate, int iAttr, int & iPos )
+{
+	switch ( tUpdate.m_dAttributes[iAttr].m_eType )
+	{
+	case SPH_ATTR_UINT32SET:
+	case SPH_ATTR_INT64SET:
+	case SPH_ATTR_FLOAT_VECTOR:
+		iPos += tUpdate.m_dPool[iPos] + 1;
+		break;
+
+	case SPH_ATTR_STRING:
+	case SPH_ATTR_BIGINT:
+		iPos += 2;
+		break;
+
+	default:
+		iPos += 1;
+		break;
+	}
+}
+
+
 void UpdateContext_t::PrepareListOfUpdatedAttributes ( CSphString & sError )
 {
+	int iPoolPos = 0;
 	const auto & tUpd = *m_tUpd.m_pUpdate;
-	ARRAY_FOREACH ( i, tUpd.m_dAttributes )
+	ARRAY_FOREACH ( iAttr, tUpd.m_dAttributes )
 	{
-		const CSphString & sUpdAttrName = tUpd.m_dAttributes[i].m_sName;
-		ESphAttr eUpdAttrType = tUpd.m_dAttributes[i].m_eType;
-		UpdatedAttribute_t & tUpdAttr = m_dUpdatedAttrs[i];
+		const CSphString & sUpdAttrName = tUpd.m_dAttributes[iAttr].m_sName;
+		ESphAttr eUpdAttrType = tUpd.m_dAttributes[iAttr].m_eType;
+		UpdatedAttribute_t & tUpdAttr = m_dUpdatedAttrs[iAttr];
 
 		int iUpdAttrId = m_tSchema.GetAttrIndex ( sUpdAttrName.cstr() );
 
@@ -803,6 +826,7 @@ void UpdateContext_t::PrepareListOfUpdatedAttributes ( CSphString & sError )
 		else
 		{
 			assert ( tUpd.m_bIgnoreNonexistent ); // should be handled by Update_CheckAttributes
+			IncUpdatePoolPos ( tUpd, iAttr, iPoolPos );
 			continue;
 		}
 
@@ -815,31 +839,10 @@ void UpdateContext_t::PrepareListOfUpdatedAttributes ( CSphString & sError )
 		if ( eUpdAttrType==SPH_ATTR_INTEGER && m_tSchema.GetAttr(iUpdAttrId).m_eAttrType==SPH_ATTR_FLOAT )
 		{
 			assert ( tUpd.m_dRowOffset.IsEmpty() ); // fixme! Now we don't fixup more then 1 value
-			const_cast<CSphAttrUpdate &>(tUpd).m_dAttributes[i].m_eType = SPH_ATTR_FLOAT;
-			const_cast<CSphAttrUpdate &>(tUpd).m_dPool[i] = sphF2DW ( (float)tUpd.m_dPool[i] );
+			const_cast<CSphAttrUpdate &>(tUpd).m_dAttributes[iAttr].m_eType = SPH_ATTR_FLOAT;
+			const_cast<CSphAttrUpdate &>(tUpd).m_dPool[iPoolPos] = sphF2DW ( (float)tUpd.m_dPool[iPoolPos] );
 		}
-	}
-}
-
-
-static void IncUpdatePoolPos ( UpdateContext_t & tCtx, int iAttr, int & iPos )
-{
-	switch ( tCtx.m_tUpd.m_pUpdate->m_dAttributes[iAttr].m_eType )
-	{
-	case SPH_ATTR_UINT32SET:
-	case SPH_ATTR_INT64SET:
-	case SPH_ATTR_FLOAT_VECTOR:
-		iPos += tCtx.m_tUpd.m_pUpdate->m_dPool[iPos] + 1;
-		break;
-
-	case SPH_ATTR_STRING:
-	case SPH_ATTR_BIGINT:
-		iPos += 2;
-		break;
-
-	default:
-		iPos += 1;
-		break;
+		IncUpdatePoolPos ( tUpd, iAttr, iPoolPos );
 	}
 }
 
@@ -863,7 +866,7 @@ bool IndexSegment_c::Update_InplaceJson ( const RowsToUpdate_t& dRows, UpdateCon
 		{
 			if ( !FitsInplaceJsonUpdate ( tCtx, i ) || !tCtx.m_dUpdatedAttrs[i].m_bExisting )
 			{
-				IncUpdatePoolPos ( tCtx, i, iPos );
+				IncUpdatePoolPos ( tUpd, i, iPos );
 				continue;
 			}
 
@@ -894,7 +897,7 @@ bool IndexSegment_c::Update_InplaceJson ( const RowsToUpdate_t& dRows, UpdateCon
 					++tCtx.m_iJsonWarnings;
 			}
 
-			IncUpdatePoolPos ( tCtx, i, iPos );
+			IncUpdatePoolPos ( tUpd, i, iPos );
 		}
 	}
 
@@ -972,7 +975,7 @@ bool IndexSegment_c::Update_Blobs ( const RowsToUpdate_t& dRows, UpdateContext_t
 
 			if ( !sphIsBlobAttr(eAttr) || FitsInplaceJsonUpdate ( tCtx, iCol ) || !tCtx.m_dUpdatedAttrs[iCol].m_bExisting )
 			{
-				IncUpdatePoolPos ( tCtx, iCol, iPos );
+				IncUpdatePoolPos ( tUpd, iCol, iPos );
 				continue;
 			}
 
@@ -1011,7 +1014,7 @@ bool IndexSegment_c::Update_Blobs ( const RowsToUpdate_t& dRows, UpdateContext_t
 				break;
 
 			default:
-				IncUpdatePoolPos ( tCtx, iCol, iPos );
+				IncUpdatePoolPos ( tUpd, iCol, iPos );
 				break;
 			}
 		}
@@ -1064,7 +1067,7 @@ void IndexSegment_c::Update_Plain ( const RowsToUpdate_t& dRows, UpdateContext_t
 			// already updated?
 			if ( sphIsBlobAttr(eAttr) || tUpdAttr.m_eAttrType==SPH_ATTR_JSON || !tUpdAttr.m_bExisting )
 			{
-				IncUpdatePoolPos ( tCtx, iCol, iPos );
+				IncUpdatePoolPos ( tUpd, iCol, iPos );
 				continue;
 			}
 
@@ -1091,7 +1094,7 @@ void IndexSegment_c::Update_Plain ( const RowsToUpdate_t& dRows, UpdateContext_t
 			tCtx.m_uUpdateMask |= ATTRS_UPDATED;
 
 			// next
-			IncUpdatePoolPos ( tCtx, iCol, iPos );
+			IncUpdatePoolPos ( tUpd, iCol, iPos );
 		}
 	}
 }
@@ -5622,7 +5625,7 @@ int CSphIndex_VLN::Build ( const CSphVector<CSphSource*> & dSources, int iMemory
 					return 0;
 
 				if ( pJsonSIBuilder )
-					pJsonSIBuilder->AddRowSize ( tOffsetSize.second );
+					pJsonSIBuilder->AddRowOffsetSize(tOffsetSize);
 
 				pSource->m_tDocInfo.SetAttr ( pBlobLocatorAttr->m_tLocator, tOffsetSize.first );
 			}

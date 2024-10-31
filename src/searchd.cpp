@@ -18519,7 +18519,7 @@ bool ConfigureDistributedIndex ( std::function<bool(const CSphString&)>&& fnChec
 	bool bHaveHA = tIdx.m_dAgents.any_of ( [] ( const auto& ag ) { return ag->IsHA (); } );
 
 	// configure ha_strategy
-	if ( bSetHA && !bHaveHA )
+	if ( bSetHA && !bHaveHA && !IsConfigless() )
 		sphWarning ( "table '%s': ha_strategy defined, but no ha agents in the table", szIndexName );
 
 	return true;

@@ -26,9 +26,6 @@ mysql -h0 -P1306 -e "DROP SHARDED TABLE ${CLUSTER_NAME}:tbl1;"; echo $?;
 ––– output –––
 0
 ––– input –––
-sleep 3
-––– output –––
-––– input –––
 mysql -h0 -P1306 -e "SHOW TABLES\G"
 ––– output –––
 *************************** 1. row ***************************
@@ -41,42 +38,74 @@ Type: rt
 Table: _sharding_table
 Type: rt
 ––– input –––
-mysql -h0 -P2306 -e "select * from _sharding_queue order by id asc limit 1000;"
+mysql -h0 -P2306 -e "SHOW TABLES\G"
 ––– output –––
-+----------------+----------------+-----------------------------------------------------------------------------------------------------------------------------+-------------+-------+-----------+---------------+---------------+----------+
-| id             | node           | query                                                                                                                       | wait_for_id | tries | status    | created_at    | updated_at    | duration |
-+----------------+----------------+-----------------------------------------------------------------------------------------------------------------------------+-------------+-------+-----------+---------------+---------------+----------+
-| %{NUMBER} | 127.0.0.1:1312 | CREATE TABLE IF NOT EXISTS `tbl1_s0` (id bigint)                                                                            |           %{NUMBER} |     %{NUMBER} | processed | %{NUMBER} | %{NUMBER} |        %{NUMBER} |
-| %{NUMBER} | 127.0.0.1:1312 | CREATE TABLE IF NOT EXISTS `tbl1_s2` (id bigint)                                                                            |           %{NUMBER} |     %{NUMBER} | processed | %{NUMBER} | %{NUMBER} |        %{NUMBER} |
-| %{NUMBER} | 127.0.0.1:2312 | CREATE TABLE IF NOT EXISTS `tbl1_s1` (id bigint)                                                                            |           %{NUMBER} |     %{NUMBER} | processed | %{NUMBER} | %{NUMBER} |        %{NUMBER} |
-| %{NUMBER} | 127.0.0.1:1312 | CREATE TABLE `tbl1`
-type='distributed' local='tbl1_s0' local='tbl1_s2' agent='127.0.0.1:2312:tbl1_s1'
-|           %{NUMBER} |     %{NUMBER} | processed | %{NUMBER} | %{NUMBER} |        %{NUMBER} |
-| %{NUMBER} | 127.0.0.1:2312 | CREATE TABLE `tbl1`
-type='distributed' local='tbl1_s1' agent='127.0.0.1:1312:tbl1_s0' agent='127.0.0.1:1312:tbl1_s2'
-|           %{NUMBER} |     %{NUMBER} | processed | %{NUMBER} | %{NUMBER} |        %{NUMBER} |
-| %{NUMBER} | 127.0.0.1:2312 | DROP TABLE IF EXISTS tbl1                                                                                                   |           %{NUMBER} |     %{NUMBER} | processed | %{NUMBER} | %{NUMBER} |        %{NUMBER} |
-| %{NUMBER} | 127.0.0.1:2312 | DROP TABLE IF EXISTS tbl1_s1                                                                                                |           %{NUMBER} |     %{NUMBER} | processed | %{NUMBER} | %{NUMBER} |        %{NUMBER} |
-| %{NUMBER} | 127.0.0.1:1312 | DROP TABLE IF EXISTS tbl1                                                                                                   |           %{NUMBER} |     %{NUMBER} | processed | %{NUMBER} | %{NUMBER} |        %{NUMBER} |
-| %{NUMBER} | 127.0.0.1:1312 | DROP TABLE IF EXISTS tbl1_s0                                                                                                |           %{NUMBER} |     %{NUMBER} | processed | %{NUMBER} | %{NUMBER} |        %{NUMBER} |
-| %{NUMBER} | 127.0.0.1:1312 | DROP TABLE IF EXISTS tbl1_s2                                                                                                |           %{NUMBER} |     %{NUMBER} | processed | %{NUMBER} | %{NUMBER} |        %{NUMBER} |
-+----------------+----------------+-----------------------------------------------------------------------------------------------------------------------------+-------------+-------+-----------+---------------+---------------+----------+
+*************************** 1. row ***************************
+Table: _sharding_queue
+Type: rt
+*************************** 2. row ***************************
+Table: _sharding_state
+Type: rt
+*************************** 3. row ***************************
+Table: _sharding_table
+Type: rt
 ––– input –––
-cat /var/log/manticore-1/searchd.log
+mysql -h0 -P1306 -e "DROP SHARDED TABLE ${CLUSTER_NAME}:nonexistent_table;"
 ––– output –––
-[#!/[A-Za-z]{3}\s[A-Za-z]{3}\s{1,2}[0-9]{1,2}\s[0-9]{2}:[0-9]{2}:[0-9]{2}.[0-9]{3}\s[0-9]{4}/!#] [%{NUMBER}] watchdog: main process %{NUMBER} forked ok
-[#!/[A-Za-z]{3}\s[A-Za-z]{3}\s{1,2}[0-9]{1,2}\s[0-9]{2}:[0-9]{2}:[0-9]{2}.[0-9]{3}\s[0-9]{4}/!#] [%{NUMBER}] Using local time zone '/etc/localtime'
-[#!/[A-Za-z]{3}\s[A-Za-z]{3}\s{1,2}[0-9]{1,2}\s[0-9]{2}:[0-9]{2}:[0-9]{2}.[0-9]{3}\s[0-9]{4}/!#] [%{NUMBER}] starting daemon version '%{SEMVER} %{COMMITDATE} dev (columnar %{SEMVER} %{COMMITDATE}) (secondary %{SEMVER} %{COMMITDATE}) (knn %{SEMVER} %{COMMITDATE})' ...
-[#!/[A-Za-z]{3}\s[A-Za-z]{3}\s{1,2}[0-9]{1,2}\s[0-9]{2}:[0-9]{2}:[0-9]{2}.[0-9]{3}\s[0-9]{4}/!#] [%{NUMBER}] listening on all interfaces for mysql, port=1306
-[#!/[A-Za-z]{3}\s[A-Za-z]{3}\s{1,2}[0-9]{1,2}\s[0-9]{2}:[0-9]{2}:[0-9]{2}.[0-9]{3}\s[0-9]{4}/!#] [%{NUMBER}] listening on all interfaces for sphinx and http(s), port=1312
-[#!/[A-Za-z]{3}\s[A-Za-z]{3}\s{1,2}[0-9]{1,2}\s[0-9]{2}:[0-9]{2}:[0-9]{2}.[0-9]{3}\s[0-9]{4}/!#] [%{NUMBER}] listening on all interfaces for sphinx and http(s), port=1308
-[#!/[A-Za-z]{3}\s[A-Za-z]{3}\s{1,2}[0-9]{1,2}\s[0-9]{2}:[0-9]{2}:[0-9]{2}.[0-9]{3}\s[0-9]{4}/!#] [%{NUMBER}] prereading 0 tables
-[#!/[A-Za-z]{3}\s[A-Za-z]{3}\s{1,2}[0-9]{1,2}\s[0-9]{2}:[0-9]{2}:[0-9]{2}.[0-9]{3}\s[0-9]{4}/!#] [%{NUMBER}] preread 0 tables in #!/[0-9]{1}.[0-9]{3}/!# sec
-[#!/[A-Za-z]{3}\s[A-Za-z]{3}\s{1,2}[0-9]{1,2}\s[0-9]{2}:[0-9]{2}:[0-9]{2}.[0-9]{3}\s[0-9]{4}/!#] [%{NUMBER}] accepting connections
-[#!/[A-Za-z]{3}\s[A-Za-z]{3}\s{1,2}[0-9]{1,2}\s[0-9]{2}:[0-9]{2}:[0-9]{2}.[0-9]{3}\s[0-9]{4}/!#] [%{NUMBER}] [BUDDY] started v%{SEMVER} '/usr/share/manticore/modules/manticore-buddy/bin/manticore-buddy --listen=http://0.0.0.0:%{NUMBER} --bind=127.0.0.1  --threads=8' at http://127.0.0.1:%{NUMBER}
-[#!/[A-Za-z]{3}\s[A-Za-z]{3}\s{1,2}[0-9]{1,2}\s[0-9]{2}:[0-9]{2}:[0-9]{2}.[0-9]{3}\s[0-9]{4}/!#] [%{NUMBER}] [BUDDY] Loaded plugins:
-[#!/[A-Za-z]{3}\s[A-Za-z]{3}\s{1,2}[0-9]{1,2}\s[0-9]{2}:[0-9]{2}:[0-9]{2}.[0-9]{3}\s[0-9]{4}/!#] [%{NUMBER}] [BUDDY]   core: empty-string, backup, emulate-elastic, fuzzy, create, drop, insert, alias, select, show, cli-table, plugin, test, alter-column, alter-distributed-table, alter-rename-table, modify-table, knn, replace, queue, sharding, update, autocomplete
-[#!/[A-Za-z]{3}\s[A-Za-z]{3}\s{1,2}[0-9]{1,2}\s[0-9]{2}:[0-9]{2}:[0-9]{2}.[0-9]{3}\s[0-9]{4}/!#] [%{NUMBER}] [BUDDY]   local:
-[#!/[A-Za-z]{3}\s[A-Za-z]{3}\s{1,2}[0-9]{1,2}\s[0-9]{2}:[0-9]{2}:[0-9]{2}.[0-9]{3}\s[0-9]{4}/!#] [%{NUMBER}] [BUDDY]   extra:
-[#!/[A-Za-z]{3}\s[A-Za-z]{3}\s{1,2}[0-9]{1,2}\s[0-9]{2}:[0-9]{2}:[0-9]{2}.[0-9]{3}\s[0-9]{4}/!#] [%{NUMBER}] WARNING: No persistent state found. Bootstraping with default state
-[#!/[A-Za-z]{3}\s[A-Za-z]{3}\s{1,2}[0-9]{1,2}\s[0-9]{2}:[0-9]{2}:[0-9]{2}.[0-9]{3}\s[0-9]{4}/!#] [%{NUMBER}] [BUDDY] [i] becoming master
+ERROR 1064 (42000) at line 1: table 'nonexistent_table' is missing: DROP SHARDED TABLE failed: table 'nonexistent_table' must exists
+––– input –––
+mysql -h0 -P1306 -e "DROP SHARDED TABLE nonexistent_cluster:tbl1;"
+––– output –––
+ERROR 1064 (42000) at line 1: table 'tbl1' is missing: DROP SHARDED TABLE failed: table 'tbl1' must exists
+––– input –––
+mysql -h0 -P1306 -e "DROP SHARDED TABLE ${CLUSTER_NAME}:tbl1;"
+––– output –––
+ERROR 1064 (42000) at line 1: table 'tbl1' is missing: DROP SHARDED TABLE failed: table 'tbl1' must exists
+––– input –––
+mysql -h0 -P1306 -e "INSERT INTO ${CLUSTER_NAME}:tbl1 VALUES (1);" & sleep 1; mysql -h0 -P1306 -e "DROP SHARDED TABLE ${CLUSTER_NAME}:tbl1;"
+––– output –––
+[%{NUMBER}] %{NUMBER}
+ERROR 1064 (42000) at line 1: Cannot create table with column names missing
+[%{NUMBER}]+  Exit %{NUMBER}                  mysql -h0 -P1306 -e "INSERT INTO ${CLUSTER_NAME}:tbl1 VALUES (1);"
+ERROR 1064 (42000) at line 1: table 'tbl1' is missing: DROP SHARDED TABLE failed: table 'tbl1' must exists
+––– input –––
+for i in {1..20}; do mysql -h0 -P1306 -e "create table ${CLUSTER_NAME}:tbl${i}(id bigint) shards=3 rf=1;"; done
+––– output –––
+––– input –––
+mysql -h0 -P1306 -e "SHOW TABLES\G"
+––– output –––
+––– input –––
+for i in {1..20}; do (mysql -h0 -P1306 -e "DROP SHARDED TABLE ${CLUSTER_NAME}:tbl${i};" &); done; wait; echo "Mass delete test completed."
+––– output –––
+Mass delete test completed.
+––– input –––
+mysql -h0 -P1306 -e "SHOW TABLES\G"
+––– output –––
+––– input –––
+mysql -h0 -P1306 -e "create table ${CLUSTER_NAME}:Tbl2(id bigint) shards=3 rf=1;"; echo $?
+––– output –––
+––– input –––
+mysql -h0 -P1306 -e "DROP SHARDED TABLE ${CLUSTER_NAME}:Tbl2;"; echo $?
+––– output –––
+––– input –––
+mysql -h0 -P1306 -e "create table ${CLUSTER_NAME}:tbl_missing_type(id) shards=3 rf=1;" || echo "Error: Missing data type for column."
+––– output –––
+––– input –––
+mysql -h0 -P1306 -e "SHOW TABLES\G"
+––– output –––
+––– input –––
+LONG_TABLE_NAME=$(printf "tbl%065d" 1)
+––– output –––
+––– input –––
+mysql -h0 -P1306 -e "create table ${CLUSTER_NAME}:${LONG_TABLE_NAME}(id bigint) shards=3 rf=1;" || echo "Error: Table name too long."
+––– output –––
+
+––– input –––
+mysql -h0 -P1306 -e "SHOW TABLES\G"
+––– output –––
+––– input –––
+mysql -h0 -P1306 -e "DROP SHARDED TABLE ${CLUSTER_NAME}:${LONG_TABLE_NAME};" || echo "Error: Could not drop table with long name."
+––– output –––
+––– input –––
+mysql -h0 -P1306 -e "SHOW TABLES\G"
+––– output –––

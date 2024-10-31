@@ -4863,6 +4863,7 @@ bool ApplyOuterOrder ( AggrResult_t & tRes, const CSphQuery & tQuery )
 	// reorder (aka outer order)
 	ESphSortFunc eFunc;
 	GenericMatchSort_fn tReorder;
+	tReorder.m_fnStrCmp = GetStringCmpFunc ( tQuery.m_eCollation );
 	CSphVector<ExtraSortExpr_t> dExtraExprs;
 
 	ESortClauseParseResult eRes = sphParseSortClause ( tQuery, tQuery.m_sOuterOrderBy.cstr(), tRes.m_tSchema, eFunc, tReorder, dExtraExprs, true, nullptr, tRes.m_sError );

@@ -7822,8 +7822,9 @@ bool RtIndex_c::MultiQuery ( CSphQueryResult & tResult, const CSphQuery & tQuery
 
 	CSphVector<BYTE> dFiltered;
 	const BYTE * sModifiedQuery = (const BYTE *)tQuery.m_sQuery.cstr();
+	FieldFilterOptions_t tFFOptions { tQuery.m_eJiebaMode };
 
-	if ( m_pFieldFilter && sModifiedQuery && m_pFieldFilter->Clone()->Apply ( sModifiedQuery, dFiltered, true ) )
+	if ( m_pFieldFilter && sModifiedQuery && m_pFieldFilter->Clone ( &tFFOptions )->Apply ( sModifiedQuery, dFiltered, true ) )
 		sModifiedQuery = dFiltered.Begin();
 
 	// parse query
@@ -8012,7 +8013,9 @@ bool RtIndex_c::DoGetKeywords ( CSphVector<CSphKeywordInfo> & dKeywords, const c
 
 	CSphVector<BYTE> dFiltered;
 	const BYTE * sModifiedQuery = (const BYTE *)sQuery;
-	if ( m_pFieldFilter && sQuery && m_pFieldFilter->Clone()->Apply ( sModifiedQuery, dFiltered, true ) )
+	FieldFilterOptions_t tFFOptions { tSettings.m_eJiebaMode };
+
+	if ( m_pFieldFilter && sQuery && m_pFieldFilter->Clone ( &tFFOptions )->Apply ( sModifiedQuery, dFiltered, true ) )
 		sModifiedQuery = dFiltered.Begin();
 
 	// FIXME!!! missing bigram

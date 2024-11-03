@@ -35,49 +35,13 @@ inflating: index_data.json
 elasticdump --input=./test/clt-tests/migration-es-ms/index_mapping.json --output=http://localhost:9200/es-index --type=mapping
 ––– output –––
 #!/[A-Za-z]{3},\s+\d{2}\s+[A-Za-z]{3}\s+\d{4}\s+\d{2}:\d{2}:\d{2}\s+GMT/!# | starting dump
-(node:%{NUMBER}) [DEP%{NUMBER}] DeprecationWarning: The `punycode` module is deprecated. Please use a userland alternative instead.
-(Use `node --trace-deprecation ...` to show where the warning was created)
 #!/[A-Za-z]{3},\s+\d{2}\s+[A-Za-z]{3}\s+\d{4}\s+\d{2}:\d{2}:\d{2}\s+GMT/!# | got 1 objects from source file (offset: 0)
 #!/[A-Za-z]{3},\s+\d{2}\s+[A-Za-z]{3}\s+\d{4}\s+\d{2}:\d{2}:\d{2}\s+GMT/!# | sent 1 objects to destination elasticsearch, wrote 2
-#!/[A-Za-z]{3},\s+\d{2}\s+[A-Za-z]{3}\s+\d{4}\s+\d{2}:\d{2}:\d{2}\s+GMT/!# | got 0 objects from source file (offset: 1)
-#!/[A-Za-z]{3},\s+\d{2}\s+[A-Za-z]{3}\s+\d{4}\s+\d{2}:\d{2}:\d{2}\s+GMT/!# | Total Writes: 2
-#!/[A-Za-z]{3},\s+\d{2}\s+[A-Za-z]{3}\s+\d{4}\s+\d{2}:\d{2}:\d{2}\s+GMT/!# | dump complete
-––– input –––
-elasticdump --input=./test/clt-tests/migration-es-ms/index_data.json --output=http://localhost:9200/es-index --type=data
-––– output –––
-#!/[A-Za-z]{3},\s+\d{2}\s+[A-Za-z]{3}\s+\d{4}\s+\d{2}:\d{2}:\d{2}\s+GMT/!# | starting dump
-(node:%{NUMBER}) [DEP%{NUMBER}] DeprecationWarning: The `punycode` module is deprecated. Please use a userland alternative instead.
-(Use `node --trace-deprecation ...` to show where the warning was created)
-#!/[A-Za-z]{3},\s+\d{2}\s+[A-Za-z]{3}\s+\d{4}\s+\d{2}:\d{2}:\d{2}\s+GMT/!# | got 100 objects from source file (offset: 0)
-#!/[A-Za-z]{3},\s+\d{2}\s+[A-Za-z]{3}\s+\d{4}\s+\d{2}:\d{2}:\d{2}\s+GMT/!# | sent 100 objects to destination elasticsearch, wrote 100
-#!/[A-Za-z]{3},\s+\d{2}\s+[A-Za-z]{3}\s+\d{4}\s+\d{2}:\d{2}:\d{2}\s+GMT/!# | got 100 objects from source file (offset: 100)
-#!/[A-Za-z]{3},\s+\d{2}\s+[A-Za-z]{3}\s+\d{4}\s+\d{2}:\d{2}:\d{2}\s+GMT/!# | sent 100 objects to destination elasticsearch, wrote 100
-#!/[A-Za-z]{3},\s+\d{2}\s+[A-Za-z]{3}\s+\d{4}\s+\d{2}:\d{2}:\d{2}\s+GMT/!# | got 100 objects from source file (offset: 200)
-#!/[A-Za-z]{3},\s+\d{2}\s+[A-Za-z]{3}\s+\d{4}\s+\d{2}:\d{2}:\d{2}\s+GMT/!# | sent 100 objects to destination elasticsearch, wrote 100
-#!/[A-Za-z]{3},\s+\d{2}\s+[A-Za-z]{3}\s+\d{4}\s+\d{2}:\d{2}:\d{2}\s+GMT/!# | got 100 objects from source file (offset: 300)
-#!/[A-Za-z]{3},\s+\d{2}\s+[A-Za-z]{3}\s+\d{4}\s+\d{2}:\d{2}:\d{2}\s+GMT/!# | sent 100 objects to destination elasticsearch, wrote 100
-#!/[A-Za-z]{3},\s+\d{2}\s+[A-Za-z]{3}\s+\d{4}\s+\d{2}:\d{2}:\d{2}\s+GMT/!# | got 64 objects from source file (offset: 400)
-#!/[A-Za-z]{3},\s+\d{2}\s+[A-Za-z]{3}\s+\d{4}\s+\d{2}:\d{2}:\d{2}\s+GMT/!# | sent 64 objects to destination elasticsearch, wrote 64
-#!/[A-Za-z]{3},\s+\d{2}\s+[A-Za-z]{3}\s+\d{4}\s+\d{2}:\d{2}:\d{2}\s+GMT/!# | got 0 objects from source file (offset: 464)
-#!/[A-Za-z]{3},\s+\d{2}\s+[A-Za-z]{3}\s+\d{4}\s+\d{2}:\d{2}:\d{2}\s+GMT/!# | Total Writes: 464
-#!/[A-Za-z]{3},\s+\d{2}\s+[A-Za-z]{3}\s+\d{4}\s+\d{2}:\d{2}:\d{2}\s+GMT/!# | dump complete
-––– input –––
-elasticdump --input=http://localhost:9200/es-index --output=http://localhost:9308/ms_index  --type=mapping
-––– output –––
-#!/[A-Za-z]{3},\s+\d{2}\s+[A-Za-z]{3}\s+\d{4}\s+\d{2}:\d{2}:\d{2}\s+GMT/!# | starting dump
-(node:%{NUMBER}) [DEP%{NUMBER}] DeprecationWarning: The `punycode` module is deprecated. Please use a userland alternative instead.
-(Use `node --trace-deprecation ...` to show where the warning was created)
-#!/[A-Za-z]{3},\s+\d{2}\s+[A-Za-z]{3}\s+\d{4}\s+\d{2}:\d{2}:\d{2}\s+GMT/!# | got 1 objects from source elasticsearch (offset: 0)
-#!/[A-Za-z]{3},\s+\d{2}\s+[A-Za-z]{3}\s+\d{4}\s+\d{2}:\d{2}:\d{2}\s+GMT/!# | sent 1 objects to destination elasticsearch, wrote 2
-#!/[A-Za-z]{3},\s+\d{2}\s+[A-Za-z]{3}\s+\d{4}\s+\d{2}:\d{2}:\d{2}\s+GMT/!# | got 0 objects from source elasticsearch (offset: 1)
-#!/[A-Za-z]{3},\s+\d{2}\s+[A-Za-z]{3}\s+\d{4}\s+\d{2}:\d{2}:\d{2}\s+GMT/!# | Total Writes: 2
 #!/[A-Za-z]{3},\s+\d{2}\s+[A-Za-z]{3}\s+\d{4}\s+\d{2}:\d{2}:\d{2}\s+GMT/!# | dump complete
 ––– input –––
 elasticdump --input=http://localhost:9200/es-index   --output=http://localhost:9308/ms_index --type=data
 ––– output –––
 #!/[A-Za-z]{3},\s+\d{2}\s+[A-Za-z]{3}\s+\d{4}\s+\d{2}:\d{2}:\d{2}\s+GMT/!# | starting dump
-(node:%{NUMBER}) [DEP%{NUMBER}] DeprecationWarning: The `punycode` module is deprecated. Please use a userland alternative instead.
-(Use `node --trace-deprecation ...` to show where the warning was created)
 #!/[A-Za-z]{3},\s+\d{2}\s+[A-Za-z]{3}\s+\d{4}\s+\d{2}:\d{2}:\d{2}\s+GMT/!# | got 100 objects from source elasticsearch (offset: 0)
 #!/[A-Za-z]{3},\s+\d{2}\s+[A-Za-z]{3}\s+\d{4}\s+\d{2}:\d{2}:\d{2}\s+GMT/!# | sent 100 objects to destination elasticsearch, wrote 100
 #!/[A-Za-z]{3},\s+\d{2}\s+[A-Za-z]{3}\s+\d{4}\s+\d{2}:\d{2}:\d{2}\s+GMT/!# | got 100 objects from source elasticsearch (offset: 100)

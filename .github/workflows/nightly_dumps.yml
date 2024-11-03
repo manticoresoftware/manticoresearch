@@ -41,7 +41,7 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
-      - uses: manticoresoftware/clt@0.2.3
+      - uses: manticoresoftware/clt@0.2.2
         with:
           image: manticoresearch/dind:v1
           test_prefix: test/clt-tests/migration-es-ms/

@@ -1,26 +1,59 @@
 #!/usr/bin/php
 <?php
-// Minimum number of arguments
-if (count($argv) < 5) die("Usage: ".__FILE__." <batch size> <concurrency> <docs> <multiplier> [rt_mem_limit] [initial_id] [min_infix_len] [async]\n");
 
-// Arguments for configuration
-$rt_mem_limit = $argv[5] ?? null;
-$initial_id = $argv[6] ?? 0;
-$min_infix_len = isset($argv[7]) ? "min_infix_len='" . intval($argv[7]) . "'" : "";
-$async = isset($argv[8]) && $argv[8] == 'async';
+// Default values
+$defaults = [
+    'batch-size' => 1000,
+    'concurrency' => 4,
+    'docs' => 1000000,
+    'start-id' => 1,
+    'drop-table' => true  // Drop and create table by default
+];
 
-// Set fixed seed for random data generation
-srand(1);
+// Parse command-line arguments
+$options = [
+    'batch-size::',     // Optional argument, controlled by --batch-size=
+    'concurrency::',    // Optional argument, controlled by --concurrency=
+    'docs::',           // Optional argument, controlled by --docs=
+    'min-infix-len::',  // Optional argument, controlled by --min-infix-len=
+    'start-id::',       // Optional argument, controlled by --start-id=
+    'drop-table',       // Flag argument, controlled by --drop-table (default true)
+    'no-drop-table',    // Flag to disable dropping and creating the table
+    'help'              // Help argument
+];
+$args = getopt("", $options);
 
-// Function for deterministic data generation
-function get_name($names, $surnames, $namesCount, $surnamesCount, $index) {
-    return $names[$index % $namesCount] . ' ' . $surnames[$index % $surnamesCount];
+// Display help if --help is passed
+if (isset($args['help'])) {
+    echo "Usage: " . __FILE__ . " [options]\n";
+    echo "Options:\n";
+    echo "  --batch-size=<number>      Number of records per batch (default: {$defaults['batch-size']})\n";
+    echo "  --concurrency=<number>     Number of concurrent connections (default: {$defaults['concurrency']})\n";
+    echo "  --docs=<number>            Total number of documents to insert (default: {$defaults['docs']})\n";
+    echo "  --min-infix-len=<number>   Optional minimum infix length for table (default: none)\n";
+    echo "  --start-id=<number>        Starting ID for document insertion (default: {$defaults['start-id']})\n";
+    echo "  --drop-table               Drop and create the table before inserting data (default: true)\n";
+    echo "  --no-drop-table            Prevent the table from being dropped and created\n";
+    echo "  --help                     Show this help message\n";
+    exit(0);
 }
 
-// Function to connect to the database
+// Apply defaults for any arguments not specified
+$args = array_merge($defaults, $args);
+
+// Determine drop-table behavior
+$dropTable = !isset($args['no-drop-table']); // Drop and create table unless --no-drop-table is specified
+$batchSize = intval($args['batch-size']);
+$concurrency = intval($args['concurrency']);
+$docs = intval($args['docs']);
+$startId = intval($args['start-id']);
+$minInfixLen = isset($args['min-infix-len']) ? "min_infix_len='" . intval($args['min-infix-len']) . "'" : "";
+
+// Connect to database
 function connectDb() {
     $host = '127.0.0.1';
     $port = '9306';
+
     $m = @mysqli_connect($host, '', '', '', $port);
     if (mysqli_connect_error()) {
         die("Cannot connect to Manticore\n");
@@ -28,46 +61,8 @@ function connectDb() {
     return $m;
 }
 
-// Function to process asynchronous queries
-function process_async($query) {
-    global $all_links;
-    global $requests;
-    foreach ($all_links as $k => $link) {
-        if (@$requests[$k]) continue;
-        mysqli_query($link, $query, MYSQLI_ASYNC);
-        @$requests[$k] = microtime(true);
-        return true;
-    }
-    do {
-        $links = $errors = $reject = array();
-        foreach ($all_links as $link) {
-            $links[] = $errors[] = $reject[] = $link;
-        }
-        $count = @mysqli_poll($links, $errors, $reject, 0, 1000);
-        if ($count > 0) {
-            foreach ($links as $j => $link) {
-                $res = @mysqli_reap_async_query($link);
-                foreach ($all_links as $i => $link_orig) if ($all_links[$i] === $link) break;
-                if ($link->error) {
-                    echo "ERROR: {$link->error}\n";
-                    unset($all_links[$i]);
-                    unset($requests[$i]);
-                    return false;
-                }
-                if (is_object($res)) {
-                    mysqli_free_result($res);
-                }
-                $requests[$i] = microtime(true);
-                mysqli_query($link, $query, MYSQLI_ASYNC);
-                return true;
-            }
-        }
-    } while (true);
-    return true;
-}
-
-// Function to process synchronous queries
-function process_sync($link, $query) {
+// Execute a query
+function process($link, $query) {
     $result = mysqli_query($link, $query);
     if (!$result) {
         echo "Request Execution Error: " . mysqli_error($link) . "\n";
@@ -76,77 +71,54 @@ function process_sync($link, $query) {
     return true;
 }
 
+// Create connections
 $all_links = [];
-$requests = [];
-$c = $initial_id;
-for ($i = 0; $i < $argv[2]; $i++) {
+for ($i = 0; $i < $concurrency; $i++) {
     $all_links[] = connectDb();
 }
 
-// Table creation
-if ($initial_id == 1) {
-    $create_table_query = "CREATE TABLE IF NOT EXISTS name(username text, s string) $min_infix_len expand_keywords='1'";
-    if ($rt_mem_limit) {
-        $create_table_query .= " rt_mem_limit='{$rt_mem_limit}'";
-    }
-    mysqli_query($all_links[0], $create_table_query) or die(mysqli_error($all_links[0]));
+// Initialize table if drop-table is true
+$pdo = $all_links[0];
+if ($dropTable) {
+    mysqli_query($pdo, "DROP TABLE IF EXISTS name");
+    echo "Table 'name' dropped and recreated.\n";
+    mysqli_query($pdo, "CREATE TABLE name(id INTEGER PRIMARY KEY, username TEXT) $minInfixLen expand_keywords='1'");
 }
 
 $batch = [];
-$query_start = "INSERT INTO name(id, username, s) VALUES ";
+$query_start = "INSERT INTO name(id, username) VALUES ";
 $names = file('./test/clt-tests/scripts/names.txt', FILE_IGNORE_NEW_LINES | FILE_SKIP_EMPTY_LINES);
 $namesCount = count($names);
 $surnames = file('./test/clt-tests/scripts/surnames.txt', FILE_IGNORE_NEW_LINES | FILE_SKIP_EMPTY_LINES);
 $surnamesCount = count($surnames);
 
 echo "preparing...\n";
-$cache_file_name = '/tmp/' . md5($query_start) . '_' . $argv[1] . '_' . $argv[3] . '_from_' . $initial_id;
+srand(1); // Ensure repeatable random data
+$c = $startId; // Start at the specified start ID
 
-if (!file_exists($cache_file_name)) {
-    $batches = [];
-    while ($c < $initial_id + $argv[3]) {
-        $batch[] = "($c,'" . get_name($names, $surnames, $namesCount, $surnamesCount, $c) . "', 'a')";
-        $c++;
-        if ($c % 1000 == 0) echo "\r" . (($c - $initial_id) / $argv[3] * 100) . "%       ";
-        if (count($batch) == $argv[1]) {
-            $batches[] = $query_start . implode(',', $batch);
-            $batch = [];
-        }
+$batches = [];
+while ($c < $startId + $docs) {
+    $batch[] = "($c,'" . $names[rand(0, $namesCount - 1)] . ' ' . $surnames[rand(0, $surnamesCount - 1)] . "')";
+    $c++;
+    if (($c - $startId) % 1000 == 0) echo "\r" . (($c - $startId) / $docs * 100) . "%       ";
+    if (count($batch) == $batchSize) {
+        $batches[] = $query_start . implode(',', $batch);
+        $batch = [];
     }
-    if ($batch) $batches[] = $query_start . implode(',', $batch);
-    file_put_contents($cache_file_name, serialize($batches));
-} else {
-    echo "found in cache\n";
-    $batches = unserialize(file_get_contents($cache_file_name));
 }
-
-$batchesMulti = [];
-for ($n = 0; $n < $argv[4]; $n++) $batchesMulti = array_merge($batchesMulti, $batches);
-$batches = $batchesMulti;
+if ($batch) $batches[] = $query_start . implode(',', $batch);
 
 echo "querying...\n";
+
 $t = microtime(true);
 
 foreach ($batches as $batch) {
-    if ($async) {
-        if (!process_async($batch)) die("ERROR\n");
-    } else {
-        $link = $all_links[array_rand($all_links)];
-        if (!process_sync($link, $batch)) die("ERROR\n");
-    }
-}
-
-// Finish async queries (if async mode is enabled)
-if ($async) {
-    do {
-        $links = $errors = $reject = array();
-        foreach ($all_links as $link) $links[] = $errors[] = $reject[] = $link;
-        $count = @mysqli_poll($links, $errors, $reject, 0, 100);
-    } while (count($all_links) != count($links) + count($errors) + count($reject));
+    $link = $all_links[array_rand($all_links)];
+    if (!process($link, $batch)) die("ERROR\n");
 }
 
 echo "finished inserting\n";
 echo "Total time: " . (microtime(true) - $t) . "\n";
-echo round($argv[3] * $argv[4] / (microtime(true) - $t)) . " docs per sec\n";
+echo round($docs / (microtime(true) - $t)) . " docs per sec\n";
 
 ?>

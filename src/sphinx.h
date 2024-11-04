@@ -302,24 +302,23 @@ struct RowTagged_t
 // defined in stripper/html_stripper.h
 class CSphHTMLStripper;
 
+struct FieldFilterOptions_t
+{
+	JiebaMode_e	m_eJiebaMode = JiebaMode_e::NONE;
+};
+
 /// field filter
 class ISphFieldFilter
 {
 public:
-	virtual						~ISphFieldFilter() = default;
+	virtual			~ISphFieldFilter() = default;
 
-	virtual	int					Apply ( const BYTE * sField, int iLength, CSphVector<BYTE> & dStorage, bool bQuery ) = 0;
-	int							Apply ( const void* szField, CSphVector<BYTE>& dStorage, bool bQuery )
-	{
-		return Apply ( (const BYTE*)szField, (int) strlen ( (const char*)szField ), dStorage, bQuery );
-	}
+	virtual	int		Apply ( const BYTE * sField, int iLength, CSphVector<BYTE> & dStorage, bool bQuery ) = 0;
+	virtual	void	GetSettings ( CSphFieldFilterSettings & tSettings ) const = 0;
+	virtual std::unique_ptr<ISphFieldFilter> Clone ( const FieldFilterOptions_t * pOptions=nullptr ) const = 0;
 
-	int Apply ( ByteBlob_t sField, CSphVector<BYTE>& dStorage, bool bQuery )
-	{
-		return Apply ( sField.first, sField.second, dStorage, bQuery );
-	}
-	virtual	void				GetSettings ( CSphFieldFilterSettings & tSettings ) const = 0;
-	virtual std::unique_ptr<ISphFieldFilter>	Clone() const = 0;
+	int				Apply ( const void * szField, CSphVector<BYTE> & dStorage, bool bQuery )	{ return Apply ( (const BYTE*)szField, (int) strlen ( (const char*)szField ), dStorage, bQuery ); }
+	int				Apply ( ByteBlob_t sField, CSphVector<BYTE> & dStorage, bool bQuery )		{ return Apply ( sField.first, sField.second, dStorage, bQuery ); }
 };
 
 /// create a regexp field filter
@@ -513,6 +512,8 @@ struct CSphQuery
 	int				m_iKNNK = 0;				///< KNN K
 	int				m_iKnnEf = 0;				///< KNN ef
 	CSphVector<float> m_dKNNVec;				///< KNN anchor vector
+
+	JiebaMode_e		m_eJiebaMode = JiebaMode_e::NONE;	///< separate optional jieba mode for searches
 
 	bool			m_bSortKbuffer = false;		///< whether to use PQ or K-buffer sorting algorithm
 	bool			m_bZSlist = false;			///< whether the ranker has to fetch the zonespanlist with this query

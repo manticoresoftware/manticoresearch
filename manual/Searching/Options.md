@@ -245,6 +245,11 @@ Second, `idf=tfidf_normalized` leads to IDF drift across queries. Historically, 
 
 IDF flags can be combined; `plain` and `normalized` are mutually exclusive; `tfidf_unnormalized` and `tfidf_normalized` are also mutually exclusive; and unspecified flags in such mutually exclusive groups default to their original settings. This means `OPTION idf=plain` is the same as specifying `OPTION idf='plain,tfidf_normalized'` in its entirety.
 
+### jieba_mode
+Specifies the Jieba segmentation mode for the query.
+
+When using Jieba Chinese segmentation, it may be beneficial in some cases to use different segmentation modes for tokenizing the documents and the query. For a full list of modes see [jieba_mode](Creating_a_table/NLP_and_tokenization/Morphology.md#jieba_mode)
+
 ### index_weights
 Named integer list. Per-table user weights for ranking.
 

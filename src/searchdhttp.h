@@ -125,7 +125,7 @@ namespace bson {
 class Bson_c;
 }
 
-void ConvertJsonDataset ( const bson::Bson_c & tBson, const char * sStmt, RowBuffer_i & tOut );
+void ConvertJsonDataset ( const JsonObj_c & tRoot, const char * sStmt, RowBuffer_i & tOut );
 
 using SplitAction_fn = std::function<void(const char *, int)>;
 void SplitNdJson ( Str_t sBody, SplitAction_fn && fnAction);

@@ -1731,18 +1731,34 @@ private:
  */
 
 
-void ConvertJsonDataset ( const bson::Bson_c & tBson, const char * sStmt, RowBuffer_i & tOut )
+void ConvertJsonDataset ( const JsonObj_c & tRoot, const char * sStmt, RowBuffer_i & tOut )
 {
-	using namespace bson;
+	assert ( tRoot.IsArray() );
 
-	assert ( tBson.IsArray() );
 	int iItem = 0;
+	int iItemsCount = tRoot.Size();
+	CSphString sParseError;
 
-	for ( BsonIterator_c dItem ( tBson ); dItem; dItem.Next() )
+	for ( const auto & tItem : tRoot )
 	{
-		int iTotal = Int ( dItem.ChildByName ( "total" ) );
-		CSphString sError = String ( dItem.ChildByName ( "error" ) );
-		CSphString sWarning = String ( dItem.ChildByName ( "warning" ) );
+		int iTotal = 0;
+		CSphString sError, sWarning;
+
+		if ( !tItem.FetchIntItem ( iTotal, "total", sParseError, true ) )
+		{
+			tOut.Error ( sParseError.cstr() );
+			break;
+		}
+		if ( !tItem.FetchStrItem ( sError, "error", sParseError, true ) )
+		{
+			tOut.Error ( sParseError.cstr() );
+			break;
+		}
+		if ( !tItem.FetchStrItem ( sWarning, "warning", sParseError, true ) )
+		{
+			tOut.Error ( sParseError.cstr() );
+			break;
+		}
 
 		if ( !sError.IsEmpty() )
 		{
@@ -1760,15 +1776,19 @@ void ConvertJsonDataset ( const bson::Bson_c & tBson, const char * sStmt, RowBuf
 
 		using ColType_t = std::pair<CSphString, MysqlColumnType_e>;
 		CSphVector<ColType_t> dSqlColumns;
-		assert ( dItem.IsAssoc() );
-		auto tColumnsNode = dItem.ChildByName ( "columns" );
-		for ( BsonIterator_c tColumnNode ( tColumnsNode ); tColumnNode; tColumnNode.Next() )
+		assert ( tItem.IsObj() );
+		JsonObj_c tColumnsNode = tItem.GetArrayItem ( "columns", sParseError, true );
+		for ( const auto & tColumnNode : tColumnsNode )
 		{
-			assert ( tColumnNode.IsAssoc() ); // like {"id":{"type":"long long"}}
-			tColumnNode.ForEach( [&] ( CSphString&& sName, const NodeHandle_t& tNode ) {
-				auto eType = GetMysqlTypeByName ( String ( Bson_c ( tNode ).ChildByName ( "type" ) ) );
-				dSqlColumns.Add ( {sName,eType});
-			} );
+			assert ( tColumnNode.IsObj() ); // like {"id":{"type":"long long"}}
+			for ( const auto & tColumn : tColumnNode )
+			{
+				CSphString sType;
+				if ( !tColumn.FetchStrItem ( sType, "type", sParseError, false ) )
+					return;
+				auto eType = GetMysqlTypeByName ( sType );
+				dSqlColumns.Add ( { tColumn.Name(), eType } );
+			}
 		}
 
 
@@ -1785,24 +1805,25 @@ void ConvertJsonDataset ( const bson::Bson_c & tBson, const char * sStmt, RowBuf
 			break;
 		}
 
-		auto tDataNodes = dItem.ChildByName ( "data" );
-		assert ( bson::IsNullNode ( tDataNodes ) || IsArray ( tDataNodes ) );
-		for ( BsonIterator_c tDataRow ( tDataNodes ); tDataRow; tDataRow.Next() )
+		JsonObj_c tDataNodes = tItem.GetArrayItem ( "data", sParseError, true );
+		assert ( tDataNodes.Empty() || tDataNodes.IsArray() );
+		for ( const auto & tDataRow : tDataNodes )
 		{
-			assert ( tDataRow.IsAssoc() ); // like {"id":2,"proto":"http","state":"query","host":"127.0.0.1:50787","connid":9,"killed":"0","last cmd":"select"}
-			tDataRow.ForEach ( [&] ( const NodeHandle_t& tDataCol ) {
-				if ( IsInt ( tDataCol ) )
-					tOut.PutNumAsString ( Int ( tDataCol ) );
-				else if ( IsDouble ( tDataCol ) )
-					tOut.PutDoubleAsString( Double ( tDataCol ) );
+			assert ( tDataRow.IsObj() ); // like {"id":2,"proto":"http","state":"query","host":"127.0.0.1:50787","connid":9,"killed":"0","last cmd":"select"}
+			for ( const auto & tDataCol : tDataRow )
+			{
+				if ( tDataCol.IsInt () )
+					tOut.PutNumAsString ( tDataCol.IntVal() );
+				else if ( tDataCol.IsDbl () )
+					tOut.PutDoubleAsString ( tDataCol.DblVal() );
 				else
-					tOut.PutString ( String ( tDataCol ) );
-			} );
+					tOut.PutString ( tDataCol.StrVal() );
+			}
 			if ( !tOut.Commit() )
 				return;
 		}
 
-		tOut.Eof ( iItem+1!=dItem.NumElems(), ( sWarning.IsEmpty() ? 0 : 1 ) );
+		tOut.Eof ( iItem+1!=iItemsCount, ( sWarning.IsEmpty() ? 0 : 1 ) );
 		iItem++;
 	}
 }

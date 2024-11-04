@@ -608,41 +608,29 @@ bool IsBuddyQuery ( const OptionsHash_t & hOptions )
 
 struct BuddyReply_t
 {
-	CSphVector<BYTE> m_dParsedData;
-	bson::Bson_c m_tBJSON;
-
-	bson::NodeHandle_t m_tType { bson::nullnode };
-	bson::NodeHandle_t m_tMessage { bson::nullnode };
+	CSphString m_sType;
+	JsonObj_c m_tMessage;
 	int m_iReplyHttpCode = 0;
 };
 
-bson::NodeHandle_t GetNode ( const bson::Bson_c & tReply, const char * sName, CSphString & sError )
-{
-	bson::NodeHandle_t tNode = tReply.ChildByName ( sName );
-	if ( bson::IsNullNode ( tNode ) )
-		sError.SetSprintf ( "missed %s", sName );
-
-	return tNode;
-}
-
 static bool ParseReply ( char * sReplyRaw, BuddyReply_t & tParsed, CSphString & sError )
 {
-	if ( !sphJsonParse ( tParsed.m_dParsedData, sReplyRaw, false, false, false, sError ) )
-		return false;
-
-	tParsed.m_tBJSON = bson::Bson_c ( tParsed.m_dParsedData );
-
-	if ( tParsed.m_tBJSON.IsEmpty() || !tParsed.m_tBJSON.IsAssoc() )
+	JsonObj_c tRoot = JsonObj_c ( sReplyRaw );
+	if ( !tRoot )
 	{
-		const char * sReplyType = ( tParsed.m_tBJSON.IsEmpty() ? "empty" : "not object" );
-		sError.SetSprintf ( "wrong reply format - %s", sReplyType );
+		sError.SetSprintf ( "unable to parse: %s", tRoot.GetErrorPtr() );
 		return false;
 	}
 
-	bson::NodeHandle_t tVer = GetNode ( tParsed.m_tBJSON, "version", sError );
-	if ( bson::IsNullNode ( tVer ) )
+	if ( !tRoot.IsObj() )
+	{
+		sError.SetSprintf ( "wrong reply format - not object" );
 		return false;
-	int iVer = bson::Int ( tVer );
+	}
+
+	int iVer = 0;
+	if ( !tRoot.FetchIntItem ( iVer, "version", sError, false ) )
+		return false;
 	if ( iVer>g_iBuddyVersion )
 	{
 		sError.SetSprintf ( "buddy reply version (%d) greater daemon version (%d), upgrade daemon binary", iVer, g_iBuddyVersion );
@@ -654,14 +642,18 @@ static bool ParseReply ( char * sReplyRaw, BuddyReply_t & tParsed, CSphString & 
 		return false;
 	}
 
-	tParsed.m_tType = GetNode ( tParsed.m_tBJSON, "type", sError );
-	tParsed.m_tMessage = GetNode ( tParsed.m_tBJSON, "message", sError );
-	bson::NodeHandle_t tReplyHttpCode = GetNode ( tParsed.m_tBJSON, "error_code", sError );
-	if ( bson::IsNullNode ( tReplyHttpCode ) )
+	if ( !tRoot.FetchStrItem ( tParsed.m_sType, "type", sError, false ) )
 		return false;
-	tParsed.m_iReplyHttpCode = bson::Int ( tReplyHttpCode );
 
-	return !( bson::IsNullNode ( tParsed.m_tType ) || bson::IsNullNode ( tParsed.m_tMessage ) );
+	JsonObj_c tMessage = tRoot.GetItem ( "message" );
+	if ( tMessage.Empty() )
+		return false;
+	tParsed.m_tMessage = tMessage.Clone();
+
+	if ( !tRoot.FetchIntItem ( tParsed.m_iReplyHttpCode, "error_code", sError, false ) )
+		return false;
+
+	return true;
 }
 
 static EHTTP_STATUS GetHttpStatusCode ( int iBuddyHttpCode, EHTTP_STATUS eReqHttpCode )
@@ -726,14 +718,13 @@ bool ProcessHttpQueryBuddy ( HttpProcessResult_t & tRes, Str_t sSrcQuery, Option
 		sphWarning ( "[BUDDY] [%d] %s: %s", session::GetConnID(), sError.cstr(), tReplyRaw.second.cstr() );
 		return tRes.m_bOk;
 	}
-	if ( ( bHttpEndpoint && bson::String ( tReplyParsed.m_tType )!="json response" ) || ( !bHttpEndpoint && bson::String ( tReplyParsed.m_tType )!="sql response" ) )
+	if ( ( bHttpEndpoint && tReplyParsed.m_sType!="json response" ) || ( !bHttpEndpoint && tReplyParsed.m_sType!="sql response" ) )
 	{
-		sphWarning ( "[BUDDY] [%d] wrong response type %s: %s", session::GetConnID(), bson::String ( tReplyParsed.m_tType ).cstr(), tReplyRaw.second.cstr() );
+		sphWarning ( "[BUDDY] [%d] wrong response type %s: %s", session::GetConnID(), tReplyParsed.m_sType.cstr(), tReplyRaw.second.cstr() );
 		return tRes.m_bOk;
 	}
 
-	CSphString sDump;
-	bson::Bson_c ( tReplyParsed.m_tMessage ).BsonToJson ( sDump, false );
+	CSphString sDump = tReplyParsed.m_tMessage.AsString();
 	EHTTP_STATUS eHttpStatus = GetHttpStatusCode ( tReplyParsed.m_iReplyHttpCode, tRes.m_eReplyHttpCode );
 
 	dResult.Resize ( 0 );
@@ -741,13 +732,14 @@ bool ProcessHttpQueryBuddy ( HttpProcessResult_t & tRes, Str_t sSrcQuery, Option
 	return true;
 }
 
-static bool ConvertErrorMessage ( const char * sStmt, std::pair<int, BYTE> tSavedPos, BYTE & uPacketID, const bson::Bson_c & tMessage, GenericOutputBuffer_c & tOut )
+static bool ConvertErrorMessage ( const char * sStmt, std::pair<int, BYTE> tSavedPos, BYTE & uPacketID, const JsonObj_c & tMessage, GenericOutputBuffer_c & tOut )
 {
-	if ( !bson::IsAssoc ( tMessage ) )
+	if ( !tMessage.IsObj() )
 		return false;
 
-	CSphString sError = bson::String ( tMessage.ChildByName ( "error" ) );
-	if ( sError.IsEmpty() )
+	CSphString sTmp;
+	CSphString sMsgError;
+	if ( !tMessage.FetchStrItem ( sMsgError, "error", sTmp, false ) )
 		return false;
 
 	// reset back out buff and packet
@@ -755,10 +747,10 @@ static bool ConvertErrorMessage ( const char * sStmt, std::pair<int, BYTE> tSave
 	tOut.Rewind ( tSavedPos.first );
 	std::unique_ptr<RowBuffer_i> tBuddyRows ( CreateSqlRowBuffer ( &uPacketID, &tOut ) );
 
-	LogSphinxqlError ( sStmt, FromStr ( sError ) );
-	session::GetClientSession()->m_sError = sError;
-	session::GetClientSession()->m_tLastMeta.m_sError = sError;
-	tBuddyRows->Error ( sError.cstr() );
+	LogSphinxqlError ( sStmt, FromStr ( sMsgError ) );
+	session::GetClientSession()->m_sError = sMsgError;
+	session::GetClientSession()->m_tLastMeta.m_sError = sMsgError;
+	tBuddyRows->Error ( sMsgError.cstr() );
 	return true;
 }
 
@@ -780,21 +772,20 @@ void ProcessSqlQueryBuddy ( Str_t sSrcQuery, Str_t tError, std::pair<int, BYTE> 
 		sphWarning ( "[BUDDY] [%d] %s: %s", session::GetConnID(), sError.cstr(), tReplyRaw.second.cstr() );
 		return;
 	}
-	if ( bson::String ( tReplyParsed.m_tType )!="sql response" )
+	if ( tReplyParsed.m_sType!="sql response" )
 	{
 		LogSphinxqlError ( sSrcQuery.first, tError );
-		sphWarning ( "[BUDDY] [%d] wrong response type %s: %s", session::GetConnID(), bson::String ( tReplyParsed.m_tType ).cstr(), tReplyRaw.second.cstr() );
+		sphWarning ( "[BUDDY] [%d] wrong response type %s: %s", session::GetConnID(), tReplyParsed.m_sType.cstr(), tReplyRaw.second.cstr() );
 		return;
 	}
 
-	if ( bson::IsNullNode ( tReplyParsed.m_tMessage ) || !bson::IsArray ( tReplyParsed.m_tMessage ) )
+	if ( !tReplyParsed.m_tMessage.IsArray() )
 	{
 		if ( ConvertErrorMessage ( sSrcQuery.first, tSavedPos, uPacketID, tReplyParsed.m_tMessage, tOut ) )
 			return;
 
 		LogSphinxqlError ( sSrcQuery.first, tError );
-		const char * sReplyType = ( bson::IsNullNode ( tReplyParsed.m_tMessage ) ? "empty" : "not cli reply array" );
-		sphWarning ( "[BUDDY] [%d] wrong reply format - %s: %s", session::GetConnID(), sReplyType, tReplyRaw.second.cstr() );
+		sphWarning ( "[BUDDY] [%d] wrong reply format - not cli reply array: %s", session::GetConnID(), tReplyRaw.second.cstr() );
 		return;
 	}
 

@@ -5,7 +5,7 @@ on:
   schedule:
     - cron: '00 20 * * *'
   pull_request:
-    branches: [ '*' ]
+    branches: [ master ]
     paths:
       - 'test/clt-tests/migration-es-ms/**'       # trigger when changes are made in migration test files
       - 'test/clt-tests/mysqldump/versions/**'     # trigger when changes are made in mysqldump test files

@@ -82,7 +82,7 @@ $pdo = $all_links[0];
 if ($dropTable) {
     mysqli_query($pdo, "DROP TABLE IF EXISTS name");
     echo "Table 'name' dropped and recreated.\n";
-    mysqli_query($pdo, "CREATE TABLE name(id INTEGER PRIMARY KEY, username TEXT) $minInfixLen expand_keywords='1'");
+    mysqli_query($pdo, "CREATE TABLE name(username TEXT, s INT) $minInfixLen expand_keywords='1'");
 }
 
 $batch = [];

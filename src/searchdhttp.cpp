@@ -1805,8 +1805,7 @@ void ConvertJsonDataset ( const JsonObj_c & tRoot, const char * sStmt, RowBuffer
 			break;
 		}
 
-		JsonObj_c tDataNodes = tItem.GetArrayItem ( "data", sParseError, true );
-		assert ( tDataNodes.Empty() || tDataNodes.IsArray() );
+		JsonObj_c tDataNodes = tItem.GetItem ( "data" );
 		for ( const auto & tDataRow : tDataNodes )
 		{
 			assert ( tDataRow.IsObj() ); // like {"id":2,"proto":"http","state":"query","host":"127.0.0.1:50787","connid":9,"killed":"0","last cmd":"select"}

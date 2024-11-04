@@ -21,7 +21,7 @@ runs:
     - name: Checkout the calling repo
       uses: actions/checkout@v4
       env:
-        GH_REPOSITORY_REF: ${{ github.ref }}
+        GH_REPOSITORY_REF: ${{ github.head_ref || github.ref }}
       with:
         token: ${{ inputs.token }}
         fetch-depth: 50

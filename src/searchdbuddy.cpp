@@ -768,6 +768,65 @@ static bool ConvertErrorMessage ( const char * sStmt, std::pair<int, BYTE> tSave
 	return true;
 }
 
+template<typename T>
+bool ConvertValue ( const char * sName, const JsonObj_c & tMeta, T & tVal )
+{
+	JsonObj_c tSrcVal = tMeta.GetItem ( sName );
+	if ( !tSrcVal )
+		return false;
+
+	if ( !tSrcVal.IsStr() )
+		return false;
+
+	int64_t iVal = 0;
+	double fVal = 0.0;
+	ESphJsonType eType;
+	if ( !sphJsonStringToNumber ( tSrcVal.SzVal(), strlen ( tSrcVal.SzVal() ), eType, iVal, fVal ) )
+		return false;
+
+	if ( eType==JSON_INT64 )
+		tVal = (T)iVal;
+	else
+		tVal = (T)fVal;
+	return true;
+}
+
+static void LogBuddyQuery ( const Str_t sSrcQuery, const JsonObj_c & tBudyyReply )
+{
+	CSphFixedVector<BYTE> dBuf ( sSrcQuery.second + CSphString::GetGap() );
+	const char * sCur = sSrcQuery.first;
+	const char * sEnd = sCur + sSrcQuery.second;
+	BYTE * sDst = dBuf.Begin();
+	
+	while ( sCur<sEnd )
+		FixupSpace_t::FixupSpace ( sDst, *sCur++ );
+
+	int iDstLen = sDst - dBuf.Begin();
+	*sDst++ = '\0';
+	Str_t sLogQuery ( (const char *)dBuf.Begin(), iDstLen );
+
+	CSphString sTmpError;
+	CSphQueryResultMeta tLogMeta;
+	JsonObj_c tSrcMeta = tBudyyReply.GetObjItem ( "meta", sTmpError, true );
+	if ( tSrcMeta )
+	{
+		// total => m_iMatches
+		ConvertValue ( "total", tSrcMeta, tLogMeta.m_iMatches );
+		
+		// total_found => m_iTotalMatches
+		ConvertValue ( "total_found", tSrcMeta, tLogMeta.m_iTotalMatches );
+
+		// time => m_iQueryTime \ m_iRealQueryTime
+		float fTime = 0.0f;
+		if ( ConvertValue ( "time", tSrcMeta, fTime ) )
+			tLogMeta.m_iRealQueryTime = tLogMeta.m_iQueryTime = (int)( fTime * 1000.0f );
+
+		// total_relation => null
+	}
+
+	LogSphinxqlBuddyQuery ( sLogQuery, tLogMeta );
+}
+
 void ProcessSqlQueryBuddy ( Str_t sSrcQuery, Str_t tError, std::pair<int, BYTE> tSavedPos, BYTE & uPacketID, GenericOutputBuffer_c & tOut )
 {
 	auto tReplyRaw = BuddyQuery ( false, tError, Str_t(), sSrcQuery, HTTP_GET, VecTraits_T<BYTE>() );
@@ -809,6 +868,7 @@ void ProcessSqlQueryBuddy ( Str_t sSrcQuery, Str_t tError, std::pair<int, BYTE> 
 	std::unique_ptr<RowBuffer_i> tBuddyRows ( CreateSqlRowBuffer ( &uPacketID, &tOut ) );
 
 	ConvertJsonDataset ( tReplyParsed.m_tMessage, sSrcQuery.first, *tBuddyRows );
+	LogBuddyQuery ( sSrcQuery, tReplyParsed.m_tRoot );
 }
 
 #ifdef _WIN32

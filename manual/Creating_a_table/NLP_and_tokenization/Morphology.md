@@ -558,4 +558,100 @@ table products {
 }
 ```
 <!-- end -->
+
+## jieba_user_dict_path
+
+<!-- example jieba_user_dict_path -->
+
+```ini
+jieba_user_dict_path = path/to/stopwords/file
+```
+
+Path to the Jieba user dictionary. Optional.
+
+Jieba, a Chinese text segmentation library, uses dictionary files to assist with word segmentation. The format of these dictionary files is as follows: each line contains one word, divided into three parts separated by a space — word, word frequency, and part of speech (POS) tag. The word frequency and POS tag are optional and can be omitted. The dictionary file must be UTF-8 encoded.
+
+Example:
+
+```
+创新办 3 i
+云计算 5
+凱特琳 nz
+台中
+```
+
+`jieba_user_dict_path` should be used with `morphology = jieba_chinese`. See [Chinese, Japanese, Korean (CJK) and Thai languages](Creating_a_table/NLP_and_tokenization/Languages_with_continuous_scripts.md).
+
+<!-- request SQL -->
+
+```sql
+CREATE TABLE products(title text, price float) morphology = 'jieba_chinese' jieba_user_dict_path = '/usr/local/manticore/data/user-dict.txt'
+```
+
+<!-- request JSON -->
+
+```JSON
+POST /cli -d "
+CREATE TABLE products(title text, price float) morphology = 'jieba_chinese' jieba_user_dict_path = '/usr/local/manticore/data/user-dict.txt'"
+```
+
+<!-- request PHP -->
+
+```php
+$index = new \Manticoresearch\Index($client);
+$index->setName('products');
+$index->create([
+            'title'=>['type'=>'text'],
+            'price'=>['type'=>'float']
+        ],[
+			 'morphology' => 'jieba_chinese',
+             'jieba_user_dict_path' = '/usr/local/manticore/data/user-dict.txt'
+        ]);
+
+```
+<!-- intro -->
+##### Python:
+
+<!-- request Python -->
+
+```python
+utilsApi.sql('CREATE TABLE products(title text, price float) morphology = \'jieba_chinese\' jieba_user_dict_path = \'/usr/local/manticore/data/user-dict.txt\'')
+```
+<!-- intro -->
+##### Javascript:
+
+<!-- request javascript -->
+
+```javascript
+res = await utilsApi.sql('CREATE TABLE products(title text, price float) morphology = \'jieba_chinese\' jieba_user_dict_path = \'/usr/local/manticore/data/user-dict.txt\'');
+```
+
+<!-- intro -->
+##### Java:
+<!-- request Java -->
+```java
+utilsApi.sql("CREATE TABLE products(title text, price float) morphology = 'jieba_chinese' jieba_user_dict_path = '/usr/local/manticore/data/user-dict.txt'");
+```
+
+<!-- intro -->
+##### C#:
+<!-- request C# -->
+```clike
+utilsApi.Sql("CREATE TABLE products(title text, price float) morphology = 'jieba_chinese' jieba_user_dict_path = '/usr/local/manticore/data/user-dict.txt'");
+```
+
+<!-- request CONFIG -->
+
+```ini
+table products {
+  morphology = jieba_chinese
+  jieba_user_dict_path = /usr/local/manticore/data/user-dict.txt
+
+  type = rt
+  path = tbl
+  rt_field = title
+  rt_attr_uint = price
+}
+```
+<!-- end -->
 <!-- proofread -->

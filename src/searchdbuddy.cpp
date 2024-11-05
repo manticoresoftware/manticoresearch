@@ -725,10 +725,19 @@ bool ProcessHttpQueryBuddy ( HttpProcessResult_t & tRes, Str_t sSrcQuery, Option
 		return tRes.m_bOk;
 	}
 
-	CSphVector<BYTE> dBson;
-	bson::JsonObjToBson ( tReplyParsed.m_tMessage, dBson, true, false );
-	CSphString sDump;
-	bson::Bson_c ( dBson ).BsonToJson ( sDump, false );
+	CSphString sDumpBuf;
+	Str_t sDump;
+	if ( tReplyParsed.m_tMessage.IsStr() )
+	{
+		sDump = FromSz ( tReplyParsed.m_tMessage.SzVal() );
+
+	} else
+	{
+		CSphVector<BYTE> dBson;
+		bson::JsonObjToBson ( tReplyParsed.m_tMessage, dBson, true, false );
+		bson::Bson_c ( dBson ).BsonToJson ( sDumpBuf, false );
+		sDump = FromStr ( sDumpBuf );
+	}
 
 	EHTTP_STATUS eHttpStatus = GetHttpStatusCode ( tReplyParsed.m_iReplyHttpCode, tRes.m_eReplyHttpCode );
 

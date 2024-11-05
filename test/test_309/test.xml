@@ -27,6 +27,12 @@ CALL KEYWORDS ( '文山區長青學苑則有個十分特別的「英文歌唱班
 CALL KEYWORDS ( '文山區長青學苑則有個十分特別的「英文歌唱班」，test', 'jieba_test_accurate', 'full' as jieba_mode );
 drop table jieba_test_accurate;
 drop table jieba_test_full;
+
+create table jieba_custom_dict (title text) morphology='jieba_chinese' charset_table='cont,non_cont' jieba_user_dict_path='<this_test/>/jieba_user_dict.txt';
+insert into jieba_custom_dict values(1,'土風舞班');
+flush ramchunk jieba_custom_dict;
+select * from jieba_custom_dict;
+drop table jieba_custom_dict;
 </sphinxql>
 </queries>
 

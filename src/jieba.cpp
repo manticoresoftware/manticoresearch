@@ -24,10 +24,10 @@ STATIC_ASSERT ( WITH_JIEBA, SHOULD_NOT_BUILD_WIHTOUT_WITH_JIEBA_DEFINITION );
 class JiebaPreprocessor_c : public CJKPreprocessor_c
 {
 public:
-						JiebaPreprocessor_c ( JiebaMode_e eMode, bool bHMM );
+						JiebaPreprocessor_c ( JiebaMode_e eMode, bool bHMM, const CSphString & sJiebaUserDictPath );
 
 	bool				Init ( CSphString & sError ) override;
-	CJKPreprocessor_c * Clone ( const FieldFilterOptions_t * pOptions ) override { return new JiebaPreprocessor_c ( pOptions && pOptions->m_eJiebaMode!=JiebaMode_e::NONE ? pOptions->m_eJiebaMode : m_eMode, m_bHMM, m_pJieba ); }
+	CJKPreprocessor_c * Clone ( const FieldFilterOptions_t * pOptions ) override { return new JiebaPreprocessor_c ( pOptions && pOptions->m_eJiebaMode!=JiebaMode_e::NONE ? pOptions->m_eJiebaMode : m_eMode, m_bHMM, m_sJiebaUserDictPath, m_pJieba ); }
 
 protected:
 	void				ProcessBuffer ( const BYTE * pBuffer, int iLength ) override;
@@ -41,21 +41,24 @@ private:
 
 	JiebaMode_e					m_eMode;
 	bool						m_bHMM = true;
+	CSphString					m_sJiebaUserDictPath;
 
-						JiebaPreprocessor_c ( JiebaMode_e eMode, bool bHMM, std::shared_ptr<cppjieba::Jieba> pJieba );
+						JiebaPreprocessor_c ( JiebaMode_e eMode, bool bHMM, const CSphString & sJiebaUserDictPath, std::shared_ptr<cppjieba::Jieba> pJieba );
 };
 
 
-JiebaPreprocessor_c::JiebaPreprocessor_c ( JiebaMode_e eMode, bool bHMM )
+JiebaPreprocessor_c::JiebaPreprocessor_c ( JiebaMode_e eMode, bool bHMM, const CSphString & sJiebaUserDictPath )
 	: m_eMode ( eMode )
 	, m_bHMM ( bHMM )
+	, m_sJiebaUserDictPath ( sJiebaUserDictPath )
 {}
 
 
-JiebaPreprocessor_c::JiebaPreprocessor_c ( JiebaMode_e eMode, bool bHMM, std::shared_ptr<cppjieba::Jieba> pJieba )
-	: m_pJieba(pJieba)
+JiebaPreprocessor_c::JiebaPreprocessor_c ( JiebaMode_e eMode, bool bHMM, const CSphString & sJiebaUserDictPath, std::shared_ptr<cppjieba::Jieba> pJieba )
+	: m_pJieba ( pJieba )
 	, m_eMode ( eMode )
 	, m_bHMM ( bHMM )
+	, m_sJiebaUserDictPath ( sJiebaUserDictPath )
 {}
 
 
@@ -83,18 +86,20 @@ bool JiebaPreprocessor_c::Init ( CSphString & sError )
 		"user.dict.utf8",
 		"idf.utf8",
 		"stop_words.utf8"
-	};	
+	};
 
 	for ( auto & i : dJiebaFiles )
-	{
 		i.SetSprintf ( "%s/%s", sJiebaPath.cstr(), i.cstr() );
 
+	if ( !m_sJiebaUserDictPath.IsEmpty() )
+		dJiebaFiles[(int)JiebaFiles_e::USER_DICT] = m_sJiebaUserDictPath;
+
+	for ( auto & i : dJiebaFiles )
 		if ( !sphIsReadable ( i.cstr() ) )
 		{
 			sError.SetSprintf ( "Error initializing Jieba: unable to read '%s'", i.cstr() );
 			return false;
 		}
-	}
 
 	// fixme! jieba responds to load errors with abort() call
 	m_pJieba = std::make_shared<cppjieba::Jieba> ( dJiebaFiles[(int)JiebaFiles_e::DICT].cstr(), dJiebaFiles[(int)JiebaFiles_e::HMM].cstr(), dJiebaFiles[(int)JiebaFiles_e::USER_DICT].cstr(), dJiebaFiles[(int)JiebaFiles_e::IDF].cstr(), dJiebaFiles[(int)JiebaFiles_e::STOP_WORD].cstr() );
@@ -165,12 +170,16 @@ bool StrToJiebaMode ( JiebaMode_e & eMode, const CSphString & sValue, CSphString
 }
 
 
-bool SpawnFilterJieba ( std::unique_ptr<ISphFieldFilter> & pFieldFilter, const CSphIndexSettings & tSettings, const CSphTokenizerSettings & tTokSettings, const char * szIndex, CSphString & sError )
+bool SpawnFilterJieba ( std::unique_ptr<ISphFieldFilter> & pFieldFilter, const CSphIndexSettings & tSettings, const CSphTokenizerSettings & tTokSettings, const char * szIndex, FilenameBuilder_i * pFilenameBuilder, CSphString & sError )
 {
 	if ( tSettings.m_ePreprocessor!=Preprocessor_e::JIEBA )
 		return true;
 
-	auto pFilterICU = CreateFilterCJK ( std::move ( pFieldFilter ), std::make_unique<JiebaPreprocessor_c> ( tSettings.m_eJiebaMode, tSettings.m_bJiebaHMM ), tTokSettings.m_sBlendChars.cstr(), sError );
+	CSphString sJiebaUserDictPath = tSettings.m_sJiebaUserDictPath;
+	if ( !sJiebaUserDictPath.IsEmpty() && pFilenameBuilder )
+		sJiebaUserDictPath = pFilenameBuilder->GetFullPath(sJiebaUserDictPath);
+
+	auto pFilterICU = CreateFilterCJK ( std::move ( pFieldFilter ), std::make_unique<JiebaPreprocessor_c> ( tSettings.m_eJiebaMode, tSettings.m_bJiebaHMM, sJiebaUserDictPath ), tTokSettings.m_sBlendChars.cstr(), sError );
 	if ( !sError.IsEmpty() )
 	{
 		sError.SetSprintf ( "table '%s': Error initializing Jieba: %s", szIndex, sError.cstr() );

@@ -248,7 +248,7 @@ IDF flags can be combined; `plain` and `normalized` are mutually exclusive; `tfi
 ### jieba_mode
 Specifies the Jieba segmentation mode for the query.
 
-When using Jieba Chinese segmentation, it may be beneficial in some cases to use different segmentation modes for tokenizing the documents and the query. For a full list of modes see [jieba_mode](Creating_a_table/NLP_and_tokenization/Morphology.md#jieba_mode)
+When using Jieba Chinese segmentation, it can sometimes help to use different segmentation modes for tokenizing the documents and the query. For a complete list of modes, refer to [jieba_mode](Creating_a_table/NLP_and_tokenization/Morphology.md#jieba_mode).
 
 ### index_weights
 Named integer list. Per-table user weights for ranking.

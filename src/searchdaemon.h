@@ -1454,6 +1454,7 @@ namespace session
 }
 
 void LogSphinxqlError ( const char * sStmt, const Str_t& sError );
+void LogSphinxqlBuddyQuery ( const Str_t sQuery, const CSphQueryResultMeta & tMeta );
 int GetDaemonLogBufSize ();
 
 // that is used from sphinxql command over API

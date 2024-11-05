@@ -3422,6 +3422,30 @@ void LogSphinxqlError ( const char * sStmt, const Str_t& sError )
 	sphWrite ( g_iQueryLogFile, tBuf.cstr(), tBuf.GetLength() );
 }
 
+void LogSphinxqlBuddyQuery ( const Str_t sQuery, const CSphQueryResultMeta & tMeta )
+{
+	if ( g_eLogFormat!=LOG_FORMAT_SPHINXQL || g_iQueryLogFile<0 || IsEmpty ( sQuery ) )
+		return;
+
+	StringBuilder_c tBuf;
+
+	// time, conn id, wall, found
+	int iQueryTime = Max ( tMeta.m_iQueryTime, 0 );
+	int iRealTime = Max ( tMeta.m_iRealQueryTime, 0 );
+
+	tBuf  << "/* ";
+	FormatTimeConnClient ( tBuf );
+	tBuf << " real " << FixedFrac ( iRealTime ) << " wall " << FixedFrac ( iQueryTime );
+
+	if ( tMeta.m_iMultiplier>1 )
+		tBuf << " x" << tMeta.m_iMultiplier;
+	tBuf << " found " << tMeta.m_iTotalMatches << " */ ";
+
+	tBuf << sQuery << '\n';
+
+	sphSeek ( g_iQueryLogFile, 0, SEEK_END );
+	sphWrite ( g_iQueryLogFile, tBuf.cstr(), tBuf.GetLength() );
+}
 
 void ReportIndexesName ( int iSpanStart, int iSpandEnd, const CSphVector<SearchFailure_t> & dLog, StringBuilder_c & sOut )
 {

@@ -930,6 +930,7 @@ static KeyDesc_t g_dKeysIndex[] =
 	{ "json_secondary_indexes",	0, nullptr },
 	{ "jieba_hmm",				0, nullptr },
 	{ "jieba_mode",				0, nullptr },
+	{ "jieba_user_dict_path",	0, nullptr },
 	{ nullptr,					0, nullptr }
 };
 

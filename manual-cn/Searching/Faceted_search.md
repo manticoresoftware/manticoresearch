@@ -2,7 +2,7 @@
 
 分面搜索对于现代搜索应用程序来说，与[自动完成](../Searching/Autocomplete.md)、[拼写校正](../Searching/Spell_correction.md)和搜索关键词[高亮显示](../Searching/Highlighting.md)同样重要，尤其是在电子商务产品中。
 
-![Faceted search](faceted.png)
+![Faceted search](../../manual/Searching/faceted.png)
 
 当处理大量数据和各种相互关联的属性（如尺寸、颜色、制造商或其他因素）时，分面搜索非常有用。查询大量数据时，搜索结果往往包含许多不符合用户预期的条目。分面搜索使终端用户能够明确定义他们希望搜索结果满足的条件。
 

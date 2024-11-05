@@ -151,7 +151,7 @@ POST /search
 ### 链接
 
 * <a href="https://github.manticoresearch.com/manticoresoftware/manticoresearch?query=fature&filters%5Bcomment%5D%5B%5D=28798446&filters%5Bcommon%5D%5Brepo_id%5D%5B%5D=95614931&sort=&search=keyword-search-fuzzy-layouts">这个演示</a> 展示了模糊搜索功能：
-  ![Fuzzy search example](fuzzysearch.png){.scale-0.7}
+  ![Fuzzy search example](../../manual/Searching/fuzzysearch.png){.scale-0.7}
 * 关于模糊搜索和自动补全的博客文章 - https://manticoresearch.com/blog/new-fuzzy-search-and-autocomplete/
 
 ## CALL QSUGGEST, CALL SUGGEST
@@ -313,7 +313,7 @@ CALL QSUGGEST('bagg with tasel', 'products', 1 as result_line);
 
 * [这个互动课程](https://play.manticoresearch.com/didyoumean/) 展示了 `CALL SUGGEST` 如何在一个小型 Web 应用中工作。
 
-![CALL SUGGEST example](didyoumean.png){.scale-0.5}
+![CALL SUGGEST example](../../manual/Searching/didyoumean.png){.scale-0.5}
 
 
 <!-- proofread -->

@@ -967,7 +967,7 @@
 ### 主要新功能
 * **实时索引和全文查询的伪分片支持**。在之前的版本中，我们添加了有限的伪分片支持。从这个版本开始，您可以充分利用伪分片和多核处理器，只需启用 [searchd.pseudo_sharding](Server_settings/Searchd.md#pseudo_sharding)。最棒的是，您无需对索引或查询进行任何修改，只需启用它，如果有空闲的 CPU，就会被用来降低响应时间。它支持用于全文、过滤和分析查询的普通和实时索引。例如，启用伪分片后，可以使大多数查询的**平均响应时间降低约 10 倍**，在 [Hacker News 精选评论数据集](https://zenodo.org/record/45901/) 中，文档数量乘以 100（1.16 亿文档在普通索引中）。
 
-![Pseudo sharding on vs off in 4.2.0](4.2.0_ps_on_vs_off.png)
+![Pseudo sharding on vs off in 4.2.0](../manual/4.2.0_ps_on_vs_off.png)
 
 * [**Debian Bullseye**](https://manticoresearch.com/install/) 现在支持。
 

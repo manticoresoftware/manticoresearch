@@ -541,7 +541,7 @@ GET /cli?desc%20test
 
 <!-- request Browser -->
 
-![using /cli in browser](cli_browser.png)
+![using /cli in browser](../../manual/Connecting_to_the_server/cli_browser.png)
 
 <!-- request curl example -->
 

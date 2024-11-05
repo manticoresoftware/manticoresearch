@@ -82,23 +82,23 @@ $pdo = $all_links[0];
 if ($dropTable) {
     mysqli_query($pdo, "DROP TABLE IF EXISTS name");
     echo "Table 'name' dropped and recreated.\n";
-    mysqli_query($pdo, "CREATE TABLE name(username TEXT, s INT) $minInfixLen expand_keywords='1'");
+	mysqli_query($pdo, "CREATE TABLE name(id INTEGER, username TEXT, s STRING) $minInfixLen expand_keywords='1'");
 }
 
 $batch = [];
-$query_start = "INSERT INTO name(id, username) VALUES ";
+$query_start = "INSERT INTO name(id, username, s) VALUES ";
 $names = file('./test/clt-tests/scripts/names.txt', FILE_IGNORE_NEW_LINES | FILE_SKIP_EMPTY_LINES);
 $namesCount = count($names);
 $surnames = file('./test/clt-tests/scripts/surnames.txt', FILE_IGNORE_NEW_LINES | FILE_SKIP_EMPTY_LINES);
 $surnamesCount = count($surnames);
 
 echo "preparing...\n";
-srand(1); // Ensure repeatable random data
-$c = $startId; // Start at the specified start ID
+mt_srand(1); // Fix the seed to ensure data reproducibility
+$c = $startId; // Start from the specified start ID
 
 $batches = [];
 while ($c < $startId + $docs) {
-    $batch[] = "($c,'" . $names[rand(0, $namesCount - 1)] . ' ' . $surnames[rand(0, $surnamesCount - 1)] . "')";
+    $batch[] = "($c,'" . $names[mt_rand(0, $namesCount - 1)] . ' ' . $surnames[mt_rand(0, $surnamesCount - 1)] . "', 'a')";
     $c++;
     if (($c - $startId) % 1000 == 0) echo "\r" . (($c - $startId) / $docs * 100) . "%       ";
     if (count($batch) == $batchSize) {

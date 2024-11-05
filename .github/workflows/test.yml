@@ -624,7 +624,7 @@ jobs:
     needs: test_windows
     runs-on: ubuntu-22.04
     container:
-      image: manticoresearch/ubertests_ctest:3263_20240920
+      image: manticoresearch/ubertests_ctest:3263_20241105
     steps:
       - name: Checkout repository
         uses: actions/checkout@v3

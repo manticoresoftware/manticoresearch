@@ -116,7 +116,7 @@ CMD []
 
 # docker buildx create --name manticore_build --platform linux/amd64,linux/arm64
 # docker buildx use manticore_build
-# docker buildx build --platform linux/amd64,linux/arm64 --push -t manticoresearch/ubertests_ctest:3263_20241005 .
+# docker buildx build --no-cache --platform linux/amd64,linux/arm64 --push -t manticoresearch/ubertests_ctest:3263_20241005 .
 
 # deprecated:
 # docker build -t registry.gitlab.com/manticoresearch/dev/ubertests_ctest:3263 .

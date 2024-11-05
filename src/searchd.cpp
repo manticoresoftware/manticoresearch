@@ -62,6 +62,7 @@
 #include "schematransform.h"
 #include "frontendschema.h"
 #include "skip_cache.h"
+#include "jieba.h"
 
 // services
 #include "taskping.h"
@@ -1958,6 +1959,8 @@ void SearchRequestBuilder_c::SendQuery ( const char * sIndexes, ISphOutputBuffer
 		for ( const auto & i : q.m_dKNNVec )
 			tOut.SendFloat(i);
 	}
+
+	tOut.SendInt ( (int)q.m_eJiebaMode );	
 }
 
 
@@ -2844,6 +2847,9 @@ bool ParseSearchQuery ( InputBuffer_c & tReq, ISphOutputBuffer & tOut, CSphQuery
 				i = tReq.GetFloat();
 		}
 	}
+
+	if ( uMasterVer>=23 )
+		tQuery.m_eJiebaMode = (JiebaMode_e)tReq.GetInt();
 
 	/////////////////////
 	// additional checks
@@ -4863,6 +4869,7 @@ bool ApplyOuterOrder ( AggrResult_t & tRes, const CSphQuery & tQuery )
 	// reorder (aka outer order)
 	ESphSortFunc eFunc;
 	GenericMatchSort_fn tReorder;
+	tReorder.m_fnStrCmp = GetStringCmpFunc ( tQuery.m_eCollation );
 	CSphVector<ExtraSortExpr_t> dExtraExprs;
 
 	ESortClauseParseResult eRes = sphParseSortClause ( tQuery, tQuery.m_sOuterOrderBy.cstr(), tRes.m_tSchema, eFunc, tReorder, dExtraExprs, true, nullptr, tRes.m_sError );
@@ -8626,6 +8633,9 @@ static void HandleCommandKeywords ( ISphOutputBuffer & tOut, WORD uVer, InputBuf
 		tSettings.m_iExpansionLimit = tReq.GetInt ();
 	}
 
+	if ( uVer>=0x102 )
+		tSettings.m_eJiebaMode = (JiebaMode_e)tReq.GetInt();
+
 	CSphString sError;
 	SearchFailuresLog_c tFailureLog;
 	CSphVector < CSphKeywordInfo > dKeywords;
@@ -11692,6 +11702,7 @@ void HandleMysqlCallKeywords ( RowBuffer_i & tOut, SqlStmt_t & tStmt, CSphString
 	{
 		CSphString & sOpt = tStmt.m_dCallOptNames[i];
 		sOpt.ToLower ();
+		const auto & sVal = tStmt.m_dCallOptValues[i].m_sVal;
 		bool bEnabled = ( tStmt.m_dCallOptValues[i].GetValueInt()!=0 );
 		bool bOptInt = true;
 
@@ -11708,17 +11719,28 @@ void HandleMysqlCallKeywords ( RowBuffer_i & tOut, SqlStmt_t & tStmt, CSphString
 		else if ( sOpt=="sort_mode" )
 		{
 			// FIXME!!! add more sorting modes
-			if ( tStmt.m_dCallOptValues[i].m_sVal!="docs" && tStmt.m_dCallOptValues[i].m_sVal!="hits" )
+			if ( sVal!="docs" && sVal!="hits" )
 			{
-				sError.SetSprintf ( "unknown option %s mode '%s'", sOpt.cstr(), tStmt.m_dCallOptValues[i].m_sVal.cstr() );
+				sError.SetSprintf ( "unknown option %s mode '%s'", sOpt.cstr(), sVal.cstr() );
 				tOut.Error ( sError.cstr() );
 				return;
 			}
-			tSettings.m_bSortByDocs = ( tStmt.m_dCallOptValues[i].m_sVal=="docs" );
-			tSettings.m_bSortByHits = ( tStmt.m_dCallOptValues[i].m_sVal=="hits" );
+
+			tSettings.m_bSortByDocs = sVal=="docs";
+			tSettings.m_bSortByHits = sVal=="hits";
 			bOptInt = false;
 						
-		} else
+		}
+		else if ( sOpt=="jieba_mode" )
+		{
+			if ( !StrToJiebaMode ( tSettings.m_eJiebaMode, sVal, sError ) )
+			{
+				tOut.Error ( sError.cstr() );
+				return;
+			}
+			bOptInt = false;
+		}
+		else
 		{
 			sError.SetSprintf ( "unknown option %s", sOpt.cstr () );
 			tOut.Error ( sError.cstr() );
@@ -11810,6 +11832,7 @@ void KeywordsRequestBuilder_c::BuildRequest ( const AgentConn_t & tAgent, ISphOu
 	tOut.SendInt ( m_tSettings.m_bFoldBlended );
 	tOut.SendInt ( m_tSettings.m_bFoldWildcards );
 	tOut.SendInt ( m_tSettings.m_iExpansionLimit );
+	tOut.SendInt ( (int)m_tSettings.m_eJiebaMode );
 }
 
 KeywordsReplyParser_c::KeywordsReplyParser_c ( bool bGetStats, CSphVector<CSphKeywordInfo> & dKeywords )

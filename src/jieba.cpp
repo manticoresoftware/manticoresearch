@@ -27,7 +27,7 @@ public:
 						JiebaPreprocessor_c ( JiebaMode_e eMode, bool bHMM );
 
 	bool				Init ( CSphString & sError ) override;
-	CJKPreprocessor_c * Clone() override { return new JiebaPreprocessor_c ( m_eMode, m_bHMM, m_pJieba ); }
+	CJKPreprocessor_c * Clone ( const FieldFilterOptions_t * pOptions ) override { return new JiebaPreprocessor_c ( pOptions && pOptions->m_eJiebaMode!=JiebaMode_e::NONE ? pOptions->m_eJiebaMode : m_eMode, m_bHMM, m_pJieba ); }
 
 protected:
 	void				ProcessBuffer ( const BYTE * pBuffer, int iLength ) override;
@@ -143,6 +143,24 @@ const BYTE * JiebaPreprocessor_c::GetNextToken ( int & iTokenLen )
 
 bool CheckConfigJieba ( CSphIndexSettings & tSettings, CSphString & sError )
 {
+	return true;
+}
+
+
+bool StrToJiebaMode ( JiebaMode_e & eMode, const CSphString & sValue, CSphString & sError )
+{
+	if ( sValue=="accurate" )
+		eMode = JiebaMode_e::ACCURATE;
+	else if ( sValue=="full" )
+		eMode = JiebaMode_e::FULL;
+	else if ( sValue=="search" )
+		eMode = JiebaMode_e::SEARCH;
+	else
+	{
+		sError.SetSprintf ( "unknown jieba mode: %s", sValue.cstr() );
+		return false;
+	}
+
 	return true;
 }
 

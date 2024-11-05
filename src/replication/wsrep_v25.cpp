@@ -356,7 +356,7 @@ struct WrappedWsrep_t final : public ISphRefcountedMT
 	}
 
 public:
-	using Status_e = Status_e;
+	using Status_e_ = Status_e;
 	inline static const char* szGetStatus ( Status_e eStatus ) noexcept
 	{
 		return GetStatus ( eStatus );

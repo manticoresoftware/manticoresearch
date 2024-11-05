@@ -19,6 +19,7 @@
 #include "sphinxql_second.h"
 #include "sphinxql_extra.h"
 #include "searchdha.h"
+#include "jieba.h"
 
 extern int g_iAgentQueryTimeoutMs;	// global (default). May be override by index-scope values, if one specified
 
@@ -536,6 +537,7 @@ enum class Option_e : BYTE
 	THREADS_EX,
 	SWITCHOVER,
 	EXPANSION_LIMIT,
+	JIEBA_MODE,
 
 	INVALID_OPTION
 };
@@ -550,7 +552,7 @@ void InitParserOption()
 		"max_matches", "max_predicted_time", "max_query_time", "morphology", "rand_seed", "ranker", "retry_count",
 		"retry_delay", "reverse_scan", "sort_method", "strict", "sync", "threads", "token_filter", "token_filter_options",
 		"not_terms_only_allowed", "store", "accurate_aggregation", "max_matches_increase_threshold", "distinct_precision_threshold",
-		"threads_ex", "switchover", "expansion_limit" };
+		"threads_ex", "switchover", "expansion_limit", "jieba_mode" };
 
 	for ( BYTE i = 0u; i<(BYTE) Option_e::INVALID_OPTION; ++i )
 		g_hParseOption.Add ( (Option_e) i, dOptions[i] );
@@ -583,7 +585,8 @@ static bool CheckOption ( SqlStmt_e eStmt, Option_e eOption )
 			Option_e::MAX_QUERY_TIME, Option_e::MORPHOLOGY, Option_e::RAND_SEED, Option_e::RANKER,
 			Option_e::RETRY_COUNT, Option_e::RETRY_DELAY, Option_e::REVERSE_SCAN, Option_e::SORT_METHOD,
 			Option_e::THREADS, Option_e::TOKEN_FILTER, Option_e::NOT_ONLY_ALLOWED, Option_e::ACCURATE_AGG,
-			Option_e::MAXMATCH_THRESH, Option_e::DISTINCT_THRESH, Option_e::THREADS_EX, Option_e::EXPANSION_LIMIT };
+			Option_e::MAXMATCH_THRESH, Option_e::DISTINCT_THRESH, Option_e::THREADS_EX, Option_e::EXPANSION_LIMIT,
+			Option_e::JIEBA_MODE };
 
 	static Option_e dInsertOptions[] = { Option_e::TOKEN_FILTER_OPTIONS };
 
@@ -837,7 +840,12 @@ AddOption_e AddOption ( CSphQuery & tQuery, const CSphString & sOpt, const CSphS
 
 	case Option_e::THREADS_EX:
 		std::tie ( tQuery.m_tMainDispatcher, tQuery.m_tPseudoShardingDispatcher ) = Dispatcher::ParseTemplates ( sVal.cstr() );
-			break;
+		break;
+
+	case Option_e::JIEBA_MODE:
+		if ( !StrToJiebaMode ( tQuery.m_eJiebaMode, sVal, sError ) )
+			return FAILED(sError.cstr());
+		break;
 
 	default:
 		return AddOption_e::NOT_FOUND;

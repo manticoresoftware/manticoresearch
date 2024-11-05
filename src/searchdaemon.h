@@ -162,7 +162,7 @@ const char* szCommand ( int );
 /// master-agent API SEARCH command protocol extensions version
 enum
 {
-	VER_COMMAND_SEARCH_MASTER = 22
+	VER_COMMAND_SEARCH_MASTER = 23
 };
 
 
@@ -173,7 +173,7 @@ enum SearchdCommandV_e : WORD
 	VER_COMMAND_SEARCH		= 0x126, // 1.38
 	VER_COMMAND_EXCERPT		= 0x104,
 	VER_COMMAND_UPDATE		= 0x104,
-	VER_COMMAND_KEYWORDS	= 0x101,
+	VER_COMMAND_KEYWORDS	= 0x102,
 	VER_COMMAND_STATUS		= 0x101,
 	VER_COMMAND_FLUSHATTRS	= 0x100,
 	VER_COMMAND_SPHINXQL	= 0x100,

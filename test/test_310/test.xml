@@ -38,6 +38,7 @@ index test
 	blend_chars		= -, U+23
 
 	wordforms		= <this_test/>/wordforms.txt
+	jieba_user_dict_path = <this_test/>/jieba_user_dict.txt
 }
 </config>
 

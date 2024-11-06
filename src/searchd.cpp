@@ -3407,8 +3407,13 @@ static void LogQuery ( const CSphQuery & q, const CSphQueryResultMeta & tMeta, c
 	}
 }
 
+static void WriteQuery ( const StringBuilder_c & tBuf )
+{
+	sphSeek ( g_iQueryLogFile, 0, SEEK_END );
+	sphWrite ( g_iQueryLogFile, tBuf.cstr(), tBuf.GetLength() );
+}
 
-void LogSphinxqlError ( const char * sStmt, const Str_t& sError )
+void LogSphinxqlError ( const char * sStmt, const Str_t & sError )
 {
 	if ( g_eLogFormat!=LOG_FORMAT_SPHINXQL || g_iQueryLogFile<0 || !sStmt || IsEmpty(sError) )
 		return;
@@ -3418,8 +3423,23 @@ void LogSphinxqlError ( const char * sStmt, const Str_t& sError )
 	FormatTimeConnClient ( tBuf );
 	tBuf << " */ " << sStmt << " # error=" << sError << '\n';
 
-	sphSeek ( g_iQueryLogFile, 0, SEEK_END );
-	sphWrite ( g_iQueryLogFile, tBuf.cstr(), tBuf.GetLength() );
+	WriteQuery ( tBuf );
+}
+
+void LogSphinxqlError ( const Str_t & sStmt, const Str_t & sError )
+{
+	if ( g_eLogFormat!=LOG_FORMAT_SPHINXQL || g_iQueryLogFile<0 || IsEmpty ( sStmt ) || IsEmpty ( sError ) )
+		return;
+
+	QuotationEscapedBuilder tBuf;
+
+	tBuf << "/* ";
+	FormatTimeConnClient ( tBuf );
+	tBuf << " */ " ;
+	tBuf.AppendEscaped ( sStmt.first, EscBld::eFixupSpace, sStmt.second );
+	tBuf << " # error=" << sError << '\n';
+
+	WriteQuery ( tBuf );
 }
 
 void LogSphinxqlBuddyQuery ( const Str_t sQuery, const CSphQueryResultMeta & tMeta )
@@ -3427,7 +3447,7 @@ void LogSphinxqlBuddyQuery ( const Str_t sQuery, const CSphQueryResultMeta & tMe
 	if ( g_eLogFormat!=LOG_FORMAT_SPHINXQL || g_iQueryLogFile<0 || IsEmpty ( sQuery ) )
 		return;
 
-	StringBuilder_c tBuf;
+	QuotationEscapedBuilder tBuf;
 
 	// time, conn id, wall, found
 	int iQueryTime = Max ( tMeta.m_iQueryTime, 0 );
@@ -3441,10 +3461,10 @@ void LogSphinxqlBuddyQuery ( const Str_t sQuery, const CSphQueryResultMeta & tMe
 		tBuf << " x" << tMeta.m_iMultiplier;
 	tBuf << " found " << tMeta.m_iTotalMatches << " */ ";
 
-	tBuf << sQuery << '\n';
+	tBuf.AppendEscaped ( sQuery.first, EscBld::eFixupSpace, sQuery.second );
+	tBuf << '\n';
 
-	sphSeek ( g_iQueryLogFile, 0, SEEK_END );
-	sphWrite ( g_iQueryLogFile, tBuf.cstr(), tBuf.GetLength() );
+	WriteQuery ( tBuf );
 }
 
 void ReportIndexesName ( int iSpanStart, int iSpandEnd, const CSphVector<SearchFailure_t> & dLog, StringBuilder_c & sOut )

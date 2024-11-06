@@ -1453,7 +1453,8 @@ namespace session
 	bool GetDeprecatedEOF();
 }
 
-void LogSphinxqlError ( const char * sStmt, const Str_t& sError );
+void LogSphinxqlError ( const char * sStmt, const Str_t & sError );
+void LogSphinxqlError ( const Str_t & sStmt, const Str_t & sError );
 void LogSphinxqlBuddyQuery ( const Str_t sQuery, const CSphQueryResultMeta & tMeta );
 int GetDaemonLogBufSize ();
 

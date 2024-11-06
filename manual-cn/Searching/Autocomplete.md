@@ -15,7 +15,7 @@ Manticore 提供了一种高级的自动补全功能，在你输入时会提供�
 
 Manticore 的自动补全功能可以根据不同需求和设置进行调整，使其成为一种灵活的工具，适用于多种应用场景。
 
-![Autocomplete](../../manual/Searching/autocomplete.png)
+![Autocomplete](autocomplete.png)
 
 ## CALL AUTOCOMPLETE
 
@@ -140,7 +140,7 @@ POST /autocomplete
 
 #### 链接
 * [这个演示](https://github.manticoresearch.com/manticoresoftware/manticoresearch) 展示了自动补全功能:
-  ![Autocomplete example](../../manual/Searching/autocomplete_github_demo.png){.scale-0.7}
+  ![Autocomplete example](autocomplete_github_demo.png){.scale-0.7}
 * 关于模糊搜索和自动补全的博客文章 - https://manticoresearch.com/blog/new-fuzzy-search-and-autocomplete/
 
 ## 替代的自动补全方法

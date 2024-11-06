@@ -539,5 +539,5 @@ Variable: transformed_tree
 }
 ```
 
-![SHOW PLAN graphviz example](../../../manual/Node_info_and_management/Profiling/graphviz.png)
+![SHOW PLAN graphviz example](graphviz.png)
 <!-- proofread -->

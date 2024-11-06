@@ -17,7 +17,7 @@
 ##### 使用示例
 每个查询示例的右上角都有一个小图标 📋：
 
-![Copy example](../manual/copy_example.png)
+![Copy example](copy_example.png)
 
 您可以使用它将示例复制到剪贴板。**如果查询是 HTTP 请求，它将作为 CURL 命令被复制**。您可以按 ⚙️ 来配置主机/端口。
 

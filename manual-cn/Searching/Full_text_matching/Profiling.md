@@ -1078,7 +1078,7 @@ Variable: transformed_tree
 <!-- Example Explain_query_dot -->
 `EXPLAIN QUERY ... option format=dot` 允许以层次结构的格式显示所提供的全文查询的执行树，适用于由现有工具（例如 https://dreampuf.github.io/GraphvizOnline）进行可视化。
 
-![EXPLAIN QUERY graphviz example](../../../manual/Searching/Full_text_matching/graphviz.png)
+![EXPLAIN QUERY graphviz example](graphviz.png)
 
 <!-- intro -->
 ##### SQL:

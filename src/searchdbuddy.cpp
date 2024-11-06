@@ -746,7 +746,7 @@ bool ProcessHttpQueryBuddy ( HttpProcessResult_t & tRes, Str_t sSrcQuery, Option
 	return true;
 }
 
-static bool ConvertErrorMessage ( const char * sStmt, std::pair<int, BYTE> tSavedPos, BYTE & uPacketID, const JsonObj_c & tMessage, GenericOutputBuffer_c & tOut )
+static bool ConvertErrorMessage ( const Str_t & sStmt, std::pair<int, BYTE> tSavedPos, BYTE & uPacketID, const JsonObj_c & tMessage, GenericOutputBuffer_c & tOut )
 {
 	if ( !tMessage.IsObj() )
 		return false;
@@ -793,18 +793,6 @@ bool ConvertValue ( const char * sName, const JsonObj_c & tMeta, T & tVal )
 
 static void LogBuddyQuery ( const Str_t sSrcQuery, const JsonObj_c & tBudyyReply )
 {
-	CSphFixedVector<BYTE> dBuf ( sSrcQuery.second + CSphString::GetGap() );
-	const char * sCur = sSrcQuery.first;
-	const char * sEnd = sCur + sSrcQuery.second;
-	BYTE * sDst = dBuf.Begin();
-	
-	while ( sCur<sEnd )
-		FixupSpace_t::FixupSpace ( sDst, *sCur++ );
-
-	int iDstLen = sDst - dBuf.Begin();
-	*sDst++ = '\0';
-	Str_t sLogQuery ( (const char *)dBuf.Begin(), iDstLen );
-
 	CSphString sTmpError;
 	CSphQueryResultMeta tLogMeta;
 	JsonObj_c tSrcMeta = tBudyyReply.GetObjItem ( "meta", sTmpError, true );
@@ -824,7 +812,7 @@ static void LogBuddyQuery ( const Str_t sSrcQuery, const JsonObj_c & tBudyyReply
 		// total_relation => null
 	}
 
-	LogSphinxqlBuddyQuery ( sLogQuery, tLogMeta );
+	LogSphinxqlBuddyQuery ( sSrcQuery, tLogMeta );
 }
 
 void ProcessSqlQueryBuddy ( Str_t sSrcQuery, Str_t tError, std::pair<int, BYTE> tSavedPos, BYTE & uPacketID, GenericOutputBuffer_c & tOut )
@@ -854,7 +842,7 @@ void ProcessSqlQueryBuddy ( Str_t sSrcQuery, Str_t tError, std::pair<int, BYTE> 
 
 	if ( !tReplyParsed.m_tMessage.IsArray() )
 	{
-		if ( ConvertErrorMessage ( sSrcQuery.first, tSavedPos, uPacketID, tReplyParsed.m_tMessage, tOut ) )
+		if ( ConvertErrorMessage ( sSrcQuery, tSavedPos, uPacketID, tReplyParsed.m_tMessage, tOut ) )
 			return;
 
 		LogSphinxqlError ( sSrcQuery.first, tError );

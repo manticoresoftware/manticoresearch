@@ -266,7 +266,7 @@ By default, all text values in the `VALUES` clause are considered to be of the `
 
 If you attempt to INSERT multiple rows with different, incompatible value types for the same field, auto table creation will be canceled, and an error message will be returned. However, if the different value types are compatible, the resulting field type will be the one that accommodates all the values. Some automatic data type conversions that may occur include:
 * mva -> mva64
-* uint -> bigint -> float
+* uint -> bigint -> float (this may cause some precision loss)
 * string -> text
 
 Also, the following formats of dates will be recognized and converted to timestamps while all other date formats will be treated as strings:

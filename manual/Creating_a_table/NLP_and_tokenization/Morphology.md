@@ -569,7 +569,7 @@ jieba_user_dict_path = path/to/stopwords/file
 
 Path to the Jieba user dictionary. Optional.
 
-Jieba, a Chinese text segmentation library, uses dictionary files to assist with word segmentation. The format of these dictionary files is as follows: each line contains one word, divided into three parts separated by a space — word, word frequency, and part of speech (POS) tag. The word frequency and POS tag are optional and can be omitted. The dictionary file must be UTF-8 encoded.
+Jieba, a Chinese text segmentation library, uses dictionary files to assist with word segmentation. The format of these dictionary files is as follows: each line contains a word, split into three parts separated by spaces — the word itself, word frequency, and part of speech (POS) tag. The word frequency and POS tag are optional and can be omitted. The dictionary file must be UTF-8 encoded.
 
 Example:
 
@@ -580,7 +580,7 @@ Example:
 台中
 ```
 
-`jieba_user_dict_path` should be used with `morphology = jieba_chinese`. See [Chinese, Japanese, Korean (CJK) and Thai languages](Creating_a_table/NLP_and_tokenization/Languages_with_continuous_scripts.md).
+`jieba_user_dict_path` should be used with `morphology = jieba_chinese`. For more details, see [Chinese, Japanese, Korean (CJK), and Thai languages](Creating_a_table/NLP_and_tokenization/Languages_with_continuous_scripts.md).
 
 <!-- request SQL -->
 

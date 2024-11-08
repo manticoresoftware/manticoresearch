@@ -1257,7 +1257,7 @@ static std::unique_ptr<ISphFilter> SetupJsonExpr ( CSphRefcountedPtr<ISphExpr> &
 	if ( !bJsonExpr )
 		return nullptr;
 
-	if ( tFixedSettings.m_eType==SPH_FILTER_STRING_LIST )
+	if ( tFixedSettings.m_eType==SPH_FILTER_STRING_LIST || tFixedSettings.m_eType==SPH_FILTER_STRING )
 		return std::make_unique<ExprFilterProxy_c> ( ExprJsonIn ( tSettings.m_dStrings, pExpr ), SPH_ATTR_INTEGER );
 
 	if ( tSettings.m_eMvaFunc==SPH_MVAFUNC_ANY )

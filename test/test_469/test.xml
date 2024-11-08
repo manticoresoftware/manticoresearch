@@ -118,6 +118,20 @@ show meta;
 
 drop table t;
 
+create table t (t text, j json secondary_index='1');
+insert into t values(1,'ya', '{"names":["data1", "data2", "data3"]}');
+flush ramchunk t;
+select *, in(j['names'], 'data1') as check from t WHERE check=0; show meta;
+select *, in(j['names'], 'data1') as check from t WHERE check=1; show meta;
+drop table t;
+
+create table t (t text, j json secondary_index='1');
+insert into t values(1,'ya', '["data1", "data2", "data3"]');
+flush ramchunk t;
+select *, in(j, 'data1') as check from t WHERE check=0; show meta;
+select *, in(j, 'data1') as check from t WHERE check=1; show meta;
+drop table t;
+
 </sphinxql></queries>
 
 </test>

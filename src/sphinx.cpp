@@ -7046,8 +7046,10 @@ bool CSphIndex_VLN::AddRemoveFromDocstore ( const CSphSchema & tOldSchema, const
 	std::unique_ptr<DocstoreBuilder_i> pDocstoreBuilder;
 	if ( iNewNumStored )
 	{
+		DocstoreSettings_t tDefault;
+		const DocstoreSettings_t & tDocstoreSettings = m_pDocstore ? m_pDocstore->GetDocstoreSettings () : tDefault;
 		BuildBufferSettings_t tSettings; // use default buffer settings
-		pDocstoreBuilder = CreateDocstoreBuilder ( GetTmpFilename ( SPH_EXT_SPDS ), m_pDocstore->GetDocstoreSettings(), tSettings.m_iBufferStorage, sError );
+		pDocstoreBuilder = CreateDocstoreBuilder ( GetTmpFilename ( SPH_EXT_SPDS ), tDocstoreSettings, tSettings.m_iBufferStorage, sError );
 		if ( !pDocstoreBuilder )
 			return false;
 

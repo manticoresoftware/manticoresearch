@@ -1,0 +1,47 @@
+<?xml version="1.0" encoding="utf-8"?>
+<test>
+
+<name>add very first stored attr</name>
+
+<requires>
+	<force-rt/>
+</requires>
+
+<skip_indexer/>
+
+<config>
+searchd
+{
+	<searchd_settings/>
+	data_dir = <data_path/>
+	binlog_path =
+}
+</config>
+
+<queries>
+<sphinxql>
+	drop table if exists demo;
+	create table demo;
+	insert into demo values(1);
+	alter table demo add column fld text stored;
+	desc demo;
+	drop table demo;
+
+	create table demo;
+	insert into demo values(1);
+	flush ramchunk demo;
+	alter table demo add column fld text stored;
+	desc demo;
+	drop table demo;
+
+	create table demo;
+	insert into demo values(1);
+	flush ramchunk demo;
+	insert into demo values(2);
+	alter table demo add column fld text stored;
+	desc demo;
+	drop table demo;
+</sphinxql>
+</queries>
+
+</test>

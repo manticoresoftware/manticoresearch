@@ -3015,16 +3015,9 @@ public:
 
 		switch ( m_eStrCmpDir )
 		{
-			case EStrCmpDir::LT: return ( m_bExclude ? iCmp>=0 : iCmp<0 );
-			case EStrCmpDir::GT: return ( m_bExclude ? iCmp<=0 : iCmp>0 );
-			case EStrCmpDir::EQ:
-			{
-				if ( m_bExclude )
-					return ( iCmp!=0 );
-				else
-					return ( iCmp==0 );
-			}
-
+			case EStrCmpDir::LT: return iCmp<0 ^ m_bExclude;
+			case EStrCmpDir::GT: return iCmp>0 ^ m_bExclude;
+			case EStrCmpDir::EQ: return !iCmp ^ m_bExclude;
 			default: return 0;
 		}
 	}
@@ -7734,8 +7727,9 @@ private:
 class Expr_JsonFieldIn_c : public Expr_ArgVsConstSet_T<int64_t>
 {
 public:
-	Expr_JsonFieldIn_c ( ConstList_c * pConsts, ISphExpr * pArg )
+	Expr_JsonFieldIn_c ( ConstList_c * pConsts, ISphExpr * pArg, ESphCollation eCollation )
 		: Expr_ArgVsConstSet_T<int64_t> ( pArg, pConsts, true )
+		, m_fnHashCalc ( GetStringHashCalcFunc(eCollation) )
 	{
 		assert ( pConsts );
 
@@ -7744,6 +7738,8 @@ public:
 
 		if ( pConsts->m_bPackedStrings )
 		{
+			assert(m_fnHashCalc);
+
 			for ( int64_t iVal : m_dValues )
 			{
 				auto iOfs = GetConstStrOffset ( iVal );
@@ -7751,7 +7747,8 @@ public:
 				if ( iOfs>0 && iLen>0 && iOfs+iLen<=iExprLen )
 				{
 					auto tRes = SqlUnescapeN ( szExpr + iOfs, iLen );
-					m_dHashes.Add ( sphFNV64 ( tRes.first.cstr(), tRes.second ) );
+					int iLen = tRes.second;
+					m_dHashes.Add ( iLen ? m_fnHashCalc ( (const BYTE*)tRes.first.cstr(), iLen, SPH_FNV64_SEED ) : 0 );
 					m_dStrings.Add ( tRes.first );
 				}
 			}
@@ -7759,31 +7756,37 @@ public:
 		}
 	}
 
-	Expr_JsonFieldIn_c ( const UservarIntSet_c& pUserVar, ISphExpr * pArg )
+	Expr_JsonFieldIn_c ( const UservarIntSet_c & pUserVar, ISphExpr * pArg, ESphCollation eCollation )
 		: Expr_ArgVsConstSet_T<int64_t> ( pArg, pUserVar )
+		, m_fnHashCalc ( GetStringHashCalcFunc(eCollation) )
 	{
 		assert ( pUserVar );
 		m_dHashes.Sort();
 	}
 
-	Expr_JsonFieldIn_c ( const VecTraits_T<CSphString> & dVals, ISphExpr * pArg )
+	Expr_JsonFieldIn_c ( const VecTraits_T<CSphString> & dVals, ISphExpr * pArg, ESphCollation eCollation )
 		: Expr_ArgVsConstSet_T<int64_t> ( pArg )
+		, m_fnHashCalc ( GetStringHashCalcFunc(eCollation) )
 	{
 		m_dHashes.Resize ( dVals.GetLength() );
 		m_dStrings.Resize ( dVals.GetLength() );
 		m_uValueHash = SPH_FNV64_SEED;
+
+		assert(m_fnHashCalc);
 		ARRAY_FOREACH ( i, dVals )
 		{
 			const CSphString & sVal = dVals[i];
 			m_dStrings[i] = sVal;
-			m_dHashes[i] = sphFNV64 ( sVal.cstr() );
+			int iLen = sVal.Length();
+			m_dHashes[i] = iLen ? m_fnHashCalc ( (const BYTE*)sVal.cstr(), iLen, SPH_FNV64_SEED ) : 0;
 			m_uValueHash = sphFNV64cont ( sVal.cstr(), m_uValueHash );
 		}
 		m_dHashes.Uniq();
 	}
 
-	Expr_JsonFieldIn_c ( const VecTraits_T<int64_t> & dVals, ISphExpr * pArg )
+	Expr_JsonFieldIn_c ( const VecTraits_T<int64_t> & dVals, ISphExpr * pArg, ESphCollation eCollation )
 		: Expr_ArgVsConstSet_T<int64_t> ( pArg )
+		, m_fnHashCalc ( GetStringHashCalcFunc(eCollation) )
 	{
 		m_dValues.Resize ( dVals.GetLength() );
 		ARRAY_FOREACH ( i, dVals )
@@ -7826,6 +7829,9 @@ public:
 					return FloatEval ( sphQW2D ( iVal ) );
 				else
 					return ValueEval ( iVal  );
+
+			case JSON_TRUE:				return ValueEval(1);
+			case JSON_FALSE:			return ValueEval(0);
 
 			case JSON_MIXED_VECTOR:
 				{
@@ -7919,6 +7925,7 @@ protected:
 	const BYTE *		m_pBlobPool {nullptr};
 	CSphVector<int64_t>	m_dHashes;
 	StrVec_t			m_dStrings;
+	StrHashCalc_fn		m_fnHashCalc = nullptr;
 
 	ESphJsonType GetKey ( const BYTE ** ppKey, const CSphMatch & tMatch ) const
 	{
@@ -7966,12 +7973,14 @@ protected:
 	{
 		if ( !bValueEval )
 			sphJsonUnpackInt ( &pVal );
+
 		int iCount = bValueEval ? 1 : sphJsonUnpackInt ( &pVal );
+		assert(m_fnHashCalc);
 
 		while ( iCount-- )
 		{
 			int iLen = sphJsonUnpackInt ( &pVal );
-			if ( m_dHashes.BinarySearch ( sphFNV64 ( pVal, iLen ) ) )
+			if ( m_dHashes.BinarySearch ( iLen ? m_fnHashCalc ( pVal, iLen, SPH_FNV64_SEED ) : 0 ) )
 				return 1;
 			pVal += iLen;
 		}
@@ -8008,18 +8017,20 @@ private:
 		: Expr_ArgVsConstSet_T<int64_t> ( rhs )
 		, m_dHashes ( rhs.m_dHashes )
 		, m_dStrings ( rhs.m_dStrings )
+		, m_fnHashCalc ( rhs.m_fnHashCalc )
 	{}
 };
 
-ISphExpr * ExprJsonIn ( const VecTraits_T<CSphString> & dVals, ISphExpr * pArg )
+
+ISphExpr * ExprJsonIn ( const VecTraits_T<CSphString> & dVals, ISphExpr * pArg, ESphCollation eCollation )
 {
-	return new Expr_JsonFieldIn_c ( dVals, pArg );
+	return new Expr_JsonFieldIn_c ( dVals, pArg, eCollation );
 }
 
 
-ISphExpr * ExprJsonIn ( const VecTraits_T<int64_t> & dVals, ISphExpr * pArg )
+ISphExpr * ExprJsonIn ( const VecTraits_T<int64_t> & dVals, ISphExpr * pArg, ESphCollation eCollation )
 {
-	return new Expr_JsonFieldIn_c ( dVals, pArg );
+	return new Expr_JsonFieldIn_c ( dVals, pArg, eCollation );
 }
 
 ////////////////////////////////////////////////////////////////////
@@ -8857,7 +8868,7 @@ ISphExpr * ExprParser_t::CreateInNode ( int iNode )
 				case TOK_ATTR_MVA32:		return new Expr_MVAIn_c<DWORD> ( tLeft.m_tLocator, GetNameByLocator(tLeft), tRight.m_pConsts );
 				case TOK_ATTR_MVA64:		return new Expr_MVAIn_c<int64_t> ( tLeft.m_tLocator, GetNameByLocator(tLeft), tRight.m_pConsts );
 				case TOK_ATTR_STRING:		return new Expr_StrIn_c ( tLeft.m_tLocator, GetNameByLocator(tLeft), tRight.m_pConsts, m_eCollation );
-				case TOK_ATTR_JSON:			return new Expr_JsonFieldIn_c ( tRight.m_pConsts, CSphRefcountedPtr<ISphExpr> { CreateTree ( m_dNodes [ iNode ].m_iLeft ) } );
+				case TOK_ATTR_JSON:			return new Expr_JsonFieldIn_c ( tRight.m_pConsts, CSphRefcountedPtr<ISphExpr> { CreateTree ( m_dNodes [ iNode ].m_iLeft ) }, m_eCollation );
 				case TOK_COLUMNAR_UINT32SET:return CreateExpr_ColumnarMva32In ( GetNameByLocator(tLeft), tRight.m_pConsts );
 				case TOK_COLUMNAR_INT64SET:	return CreateExpr_ColumnarMva64In ( GetNameByLocator(tLeft), tRight.m_pConsts );
 				case TOK_COLUMNAR_STRING:	return CreateExpr_ColumnarStringIn ( GetNameByLocator(tLeft), tRight.m_pConsts, m_eCollation );
@@ -8911,7 +8922,7 @@ ISphExpr * ExprParser_t::CreateInNode ( int iNode )
 				case TOK_ATTR_MVA32:	return new Expr_MVAInU_c<DWORD> ( tLeft.m_tLocator, GetNameByLocator(tLeft), pUservar );
 				case TOK_ATTR_MVA64:	return new Expr_MVAInU_c<int64_t> ( tLeft.m_tLocator, GetNameByLocator(tLeft), pUservar );
 				case TOK_ATTR_STRING:	return new Expr_StrInU_c ( tLeft.m_tLocator, GetNameByLocator(tLeft), pUservar, m_eCollation );
-				case TOK_ATTR_JSON:		return new Expr_JsonFieldIn_c ( pUservar, CSphRefcountedPtr<ISphExpr> { CreateTree ( m_dNodes[iNode].m_iLeft ) } );
+				case TOK_ATTR_JSON:		return new Expr_JsonFieldIn_c ( pUservar, CSphRefcountedPtr<ISphExpr> { CreateTree ( m_dNodes[iNode].m_iLeft ) }, m_eCollation );
 				default:				return new Expr_InUservar_c ( CSphRefcountedPtr<ISphExpr> { CreateTree ( m_dNodes[iNode].m_iLeft ) }, pUservar );
 			}
 		}

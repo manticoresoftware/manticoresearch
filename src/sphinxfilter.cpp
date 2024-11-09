@@ -1246,7 +1246,7 @@ public:
 };
 
 
-static std::unique_ptr<ISphFilter> SetupJsonExpr ( CSphRefcountedPtr<ISphExpr> & pExpr, const CSphFilterSettings & tSettings, const CommonFilterSettings_t & tFixedSettings )
+static std::unique_ptr<ISphFilter> SetupJsonExpr ( CSphRefcountedPtr<ISphExpr> & pExpr, const CSphFilterSettings & tSettings, const CommonFilterSettings_t & tFixedSettings, ESphCollation eCollation )
 {
 	// auto-convert all JSON types except SPH_FILTER_NULL, it needs more info
 	bool bAutoConvert = false;
@@ -1258,14 +1258,14 @@ static std::unique_ptr<ISphFilter> SetupJsonExpr ( CSphRefcountedPtr<ISphExpr> &
 		return nullptr;
 
 	if ( tFixedSettings.m_eType==SPH_FILTER_STRING_LIST || tFixedSettings.m_eType==SPH_FILTER_STRING )
-		return std::make_unique<ExprFilterProxy_c> ( ExprJsonIn ( tSettings.m_dStrings, pExpr ), SPH_ATTR_INTEGER );
+		return std::make_unique<ExprFilterProxy_c> ( ExprJsonIn ( tSettings.m_dStrings, pExpr, eCollation ), SPH_ATTR_INTEGER );
 
 	if ( tSettings.m_eMvaFunc==SPH_MVAFUNC_ANY )
 	{
 		switch ( tFixedSettings.m_eType )
 		{
 		case SPH_FILTER_VALUES:
-			return std::make_unique<ExprFilterProxy_c> ( ExprJsonIn ( tSettings.m_dValues, pExpr ), SPH_ATTR_INTEGER );
+			return std::make_unique<ExprFilterProxy_c> ( ExprJsonIn ( tSettings.m_dValues, pExpr, eCollation ), SPH_ATTR_INTEGER );
 
 		case SPH_FILTER_RANGE:
 		case SPH_FILTER_FLOATRANGE:
@@ -1288,7 +1288,7 @@ static std::unique_ptr<ISphFilter> CreateFilterExpr ( ISphExpr * _pExpr, const C
 	CSphRefcountedPtr<ISphExpr> pExpr { _pExpr };
 	SafeAddRef ( _pExpr );
 
-	std::unique_ptr<ISphFilter> pRes = SetupJsonExpr ( pExpr, tSettings, tFixedSettings );
+	std::unique_ptr<ISphFilter> pRes = SetupJsonExpr ( pExpr, tSettings, tFixedSettings, eCollation );
 	if ( pRes )
 		return pRes;
 

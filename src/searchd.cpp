@@ -6580,11 +6580,51 @@ static uint64_t GetIndexMass ( const CSphString & sName )
 	return ServedIndex_c::GetIndexMass ( GetServed ( sName ) );
 }
 
+inline static bool ClusterFlavour () noexcept
+{
+	return !g_sClusterUser.IsEmpty () && session::GetClientSession ()->m_sUser==g_sClusterUser;
+}
+
+
+inline static CSphString ApplyClusterName ( const SqlStmt_t * pStmt ) noexcept
+{
+	assert ( pStmt );
+	auto sName = pStmt->m_sIndex;
+
+	if ( ClusterFlavour () )
+	{
+		auto dParts = sphSplit ( pStmt->m_sIndex.cstr (), ":" );
+		if ( dParts.GetLength ()>1 )
+			sName = dParts[1];
+	}
+	return sName;
+}
+
+inline static CSphString ExtractTableNameW ( SqlStmt_t * pStmt ) noexcept
+{
+	auto sName = ApplyClusterName ( pStmt );
+	if ( sName.EqN ( "system" ) && pStmt->m_dStringSubkeys.GetLength ()>=1 )
+	{
+		sName = SphSprintf ( "system%s", pStmt->m_dStringSubkeys[0].cstr () );
+		pStmt->m_dStringSubkeys.Remove ( 0 );
+	}
+	return sName;
+}
+
+
+inline static CSphString ExtractTableName ( const SqlStmt_t * pStmt ) noexcept
+{
+	auto sName = ApplyClusterName ( pStmt );
+	if ( sName.EqN ( "system" ) && pStmt->m_dStringSubkeys.GetLength ()>=1 )
+		sName = SphSprintf ( "system%s", pStmt->m_dStringSubkeys[0].cstr () );
+	return sName;
+}
+
 // declared to be used in ParseSysVar
 void HandleMysqlShowThreads ( RowBuffer_i & tOut, const SqlStmt_t * pStmt );
 void HandleMysqlShowTables ( RowBuffer_i & tOut, const SqlStmt_t * pStmt );
 void HandleShowSessions ( RowBuffer_i& tOut, const SqlStmt_t* pStmt );
-void HandleMysqlDescribe ( RowBuffer_i & tOut, const SqlStmt_t * pStmt );
+void HandleMysqlDescribe ( RowBuffer_i & tOut, SqlStmt_t * pStmt );
 void HandleSelectIndexStatus ( RowBuffer_i & tOut, const SqlStmt_t * pStmt );
 void HandleSelectFiles ( RowBuffer_i & tOut, const SqlStmt_t * pStmt );
 
@@ -12559,25 +12599,12 @@ void DescribeDistributedSchema ( VectorLike& dOut, const cDistributedIndexRefPtr
 	}
 }
 
-inline static bool ClusterFlavour () noexcept
-{
-	return !g_sClusterUser.IsEmpty () && session::GetClientSession ()->m_sUser==g_sClusterUser;
-}
-
-
-void HandleMysqlDescribe ( RowBuffer_i & tOut, const SqlStmt_t * pStmt )
+void HandleMysqlDescribe ( RowBuffer_i & tOut, SqlStmt_t * pStmt )
 {
 	auto & tStmt = *pStmt;
 	VectorLike dOut ( tStmt.m_sStringParam, 0 );
-	auto sName = tStmt.m_sIndex;
 
-	if ( ClusterFlavour() )
-	{
-		auto dParts = sphSplit( tStmt.m_sIndex.cstr(), ":");
-		if ( dParts.GetLength()>1 )
-			sName = dParts[1];
-	}
-
+	auto sName = ExtractTableNameW ( pStmt );
 	auto pServed = GetServed ( sName );
 	if ( pServed )
 	{

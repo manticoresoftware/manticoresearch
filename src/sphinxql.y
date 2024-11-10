@@ -1583,7 +1583,7 @@ start_transaction:
 //////////////////////////////////////////////////////////////////////////
 
 insert_into:
-	insert_or_replace TOK_INTO only_one_index opt_column_list TOK_VALUES insert_rows_list opt_option_clause
+	insert_or_replace TOK_INTO one_index_opt_subindex opt_column_list TOK_VALUES insert_rows_list opt_option_clause
 	;
 
 insert_or_replace:

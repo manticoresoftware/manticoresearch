@@ -218,7 +218,7 @@ FLOAT_CONSTANT      {INT}\.{INT}?{EXP}?|{INT}?\.{INT}{EXP}|{INT}{EXP}
 "YEAR"				{ YYSTOREBOUNDS; return TOK_YEAR; }
 
 "MANTICORE."        |
-"`MANTICORE`."      { YYSTOREBOUNDS; return TOK_MANTICORE; }
+"`MANTICORE`."      { YYSTOREBOUNDS; return TOK_MANTICORE_DOT; }
 
 "!="				{ YYSTOREBOUNDS; return TOK_NE; }
 "<>"				{ YYSTOREBOUNDS; return TOK_NE; }

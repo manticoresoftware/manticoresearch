@@ -30,7 +30,7 @@
 %token	TOK_SUBKEY
 %token	TOK_BACKTICKED_SUBKEY
 %token	TOK_DOT_NUMBER ".number"
-%token	TOK_MANTICORE "Manticore."
+%token	TOK_MANTICORE_DOT "Manticore."
 
 %token	TOK_AGENT
 %token	TOK_ALL
@@ -327,7 +327,7 @@ idxname:
 
 identidx:
 	 idxname
-	 | TOK_MANTICORE idxname {$$ = $2;}
+	 | TOK_MANTICORE_DOT idxname {$$ = $2;}
 	;
 
 one_index:

@@ -746,7 +746,10 @@ void CSphSource::BuildRegularHits ( RowID_t tRowID, bool bPayload, int & iBlende
 		} else
 		{
 			// need to count all blended part tokens to match query
-			m_tState.m_iBuildLastStep = ( m_pTokenizer->TokenIsBlendedPart() ? 1 : m_iStopwordStep );
+			if ( m_pTokenizer->TokenIsBlended() )
+				m_tState.m_iBuildLastStep = 0;
+			else
+				m_tState.m_iBuildLastStep = ( m_pTokenizer->TokenIsBlendedPart() ? 1 : m_iStopwordStep );
 		}
 	}
 

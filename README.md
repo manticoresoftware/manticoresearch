@@ -176,6 +176,11 @@ brew install manticoresoftware/tap/manticoresearch manticoresoftware/tap/mantico
 ### Windows
 See [instruction here](https://manual.manticoresearch.com/Installation/Windows).
 
+### Clouds
+
+* [Elestio](https://elest.io/open-source/manticoresearch)
+* [Hosting Ukraine](https://www.ukraine.com.ua/uk/news/hosting/manticore-search/)
+
 # Documentation and community sites
 
   * [Documentation](https://manual.manticoresearch.com)

@@ -513,6 +513,16 @@ ESortClauseParseResult sphParseSortClause ( const CSphQuery & tQuery, const char
 			return SORT_CLAUSE_ERROR;		
 	}
 
+	// fix for
+	// FACET attr ORDER BY COUNT(*)
+	// into
+	// FACET attr ORDER BY COUNT(*) DESC
+	if ( iField==0 && tQuery.m_bFacet )
+	{
+		tState.m_uAttrDesc |= 1;
+		iField++;
+	}
+
 	if ( iField==0 )
 	{
 		sError.SetSprintf ( "no sort order defined" );

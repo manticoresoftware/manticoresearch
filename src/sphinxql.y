@@ -104,6 +104,7 @@
 %token	TOK_LIKE
 %token	TOK_LIMIT
 %token	TOK_LOGS
+%token	TOK_LOCKS
 %token	TOK_MATCH
 %token	TOK_MAX
 %token	TOK_META
@@ -274,6 +275,7 @@ reserved_no_option:
 	| TOK_WARNINGS | TOK_WEIGHT | TOK_WHERE | TOK_WITHIN | TOK_KILL | TOK_QUERY
 	| TOK_INTERVAL | TOK_REGEX
 	| TOK_DATE_ADD | TOK_DATE_SUB | TOK_DAY | TOK_HOUR | TOK_MINUTE | TOK_MONTH | TOK_QUARTER | TOK_SECOND | TOK_WEEK | TOK_YEAR
+	| TOK_LOCKS
 	;
 
 reserved_set_tail:
@@ -1160,6 +1162,16 @@ order_clause:
 		{
 			pParser->m_pQuery->m_sOrderBy = "@random";
 		}
+	| TOK_ORDER TOK_BY TOK_COUNT '(' TOK_DISTINCT distinct_ident ')' TOK_ASC
+		{
+			if ( !pParser->AddDistinctSort ( &$6, &$3, &$7, true ) )
+				YYERROR;
+		}
+	| TOK_ORDER TOK_BY TOK_COUNT '(' TOK_DISTINCT distinct_ident ')' TOK_DESC
+		{
+			if ( !pParser->AddDistinctSort ( &$6, &$3, &$7, false ) )
+				YYERROR;
+		}
 	;
 
 order_items_list:
@@ -1491,6 +1503,10 @@ show_what:
 	| TOK_SETTINGS
 		{
 			pParser->m_pStmt->m_eStmt = STMT_SHOW_SETTINGS;
+		}
+	| TOK_LOCKS
+		{
+			pParser->m_pStmt->m_eStmt = STMT_SHOW_LOCKS;
 		}
 	;
 

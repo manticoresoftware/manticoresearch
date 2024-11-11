@@ -18,13 +18,17 @@
 
 
 //////////////////////////////////////////////////////////////////////////
-class TDigest_i
+class TDigest_c
 {
-public:
-	virtual ~TDigest_i() {}
+	class Impl_c;
+	std::unique_ptr<Impl_c> m_pImpl;
 
-	virtual void Add ( double fValue, int64_t iWeight = 1 ) = 0;
-	virtual double Percentile ( int iPercent ) const = 0;
+public:
+	TDigest_c();
+	~TDigest_c();
+
+	void Add ( double fValue, int64_t iWeight = 1 );
+	double Percentile ( int iPercent ) const noexcept;
 };
 
-std::unique_ptr<TDigest_i> sphCreateTDigest();
+std::unique_ptr<TDigest_c> sphCreateTDigest();

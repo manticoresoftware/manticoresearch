@@ -1,0 +1,32 @@
+<?xml version="1.0" encoding="utf-8"?>
+<test>
+
+<name>avoid optimize frozen</name>
+
+<requires>
+	<force-rt/>
+</requires>
+
+<skip_indexer/>
+
+<config>
+searchd
+{
+	<searchd_settings/>
+	data_dir = <data_path/>
+	binlog_path =
+}
+</config>
+
+<queries>
+<sphinxql>
+	drop table if exists test;
+	create table test;
+	freeze test like 'fake';
+	optimize table test option sync=1;
+	unfreeze test;
+	drop table test;
+</sphinxql>
+</queries>
+
+</test>

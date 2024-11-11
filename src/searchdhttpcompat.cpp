@@ -292,7 +292,7 @@ static bool InsertDoc ( const SqlStmt_t & tStmt, CSphString & sError )
 static bool InsertDoc ( const CSphString & sIndex, const ComplexFields_t & dFields, const nljson & tSrc, bool bReplace, const char * sId, int iVersion, CSphString & sError )
 {
 	nljson tVal;
-	tVal["index"] = sIndex.cstr();
+	tVal["table"] = sIndex.cstr();
 	tVal["id"] = GetDocID(sId);
 	tVal["doc"] = tSrc;
 	tVal["doc"]["_id"] = sId;
@@ -1050,7 +1050,9 @@ static bool DoSearch ( const CSphString & sDefaultIndex, nljson & tReq, const CS
 {
 	// expand index(es) to index list
 	CSphString sIndex = sDefaultIndex;
-	if ( tReq.contains ( "index" ) )
+	if ( tReq.contains ( "table" ) )
+		sIndex = tReq["table"].get<std::string>().c_str();
+	else if ( tReq.contains ( "index" ) )
 		sIndex = tReq["index"].get<std::string>().c_str();
 
 	CSphString sExpandedIndex;
@@ -1081,7 +1083,7 @@ static bool DoSearch ( const CSphString & sDefaultIndex, nljson & tReq, const CS
 		return true;
 	}
 
-	tReq["index"] = sExpandedIndex.cstr();
+	tReq["table"] = sExpandedIndex.cstr();
 
 	EscapeKibanaColumnNames ( dIndexes, tReq );
 	FixupKibana ( dIndexes, tReq );
@@ -1095,12 +1097,11 @@ static bool DoSearch ( const CSphString & sDefaultIndex, nljson & tReq, const CS
 	tParsedQuery.m_bProfile = false;
 	JsonObj_c tMntReq = JsonObj_c ( tQuery.m_sRawQuery.cstr() );
 
-
-	if ( !sphParseJsonQuery ( tMntReq, &tParsedQuery ) )
+	if ( !sphParseJsonQuery ( tMntReq, tParsedQuery ) )
 	{
 		const char * sError = TlsMsg::szError();
 		CompatWarning ( "%s at '%s' body '%s'", sError, sURL.cstr(), tQuery.m_sRawQuery.cstr() );
-		sRes = JsonEncodeResultError ( sError, "parse_exception", 400 );
+		sRes = JsonEncodeResultError ( sError, GetErrorTypeName ( HttpErrorType_e::Parse ), 400 );
 		return false;
 	}
 
@@ -1114,7 +1115,7 @@ static bool DoSearch ( const CSphString & sDefaultIndex, nljson & tReq, const CS
 	dAggsRes[0] = tHandler->GetResult ( 0 );
 	ARRAY_FOREACH ( i, tQuery.m_dAggs )
 		dAggsRes[i+1] = tHandler->GetResult ( i+1 );
-	sRes = sphEncodeResultJson ( dAggsRes, tQuery, nullptr, true );
+	sRes = sphEncodeResultJson ( dAggsRes, tQuery, nullptr, ResultSetFormat_e::ES );
 
 	bool bOk = true;
 	// want to see at log url and query for search error
@@ -1135,17 +1136,17 @@ bool HttpCompatHandler_c::ProcessMSearch ()
 {
 	if ( IsEmpty ( GetBody() ) )
 	{
-		ReportError ( "request body or source parameter is required", "parse_exception", EHTTP_STATUS::_400 );
+		ReportError ( "request body or source parameter is required", HttpErrorType_e::Parse, EHTTP_STATUS::_400 );
 		return false;
 	}
 	if ( !Ends ( GetBody(), "\n" ) )
 	{
-		ReportError ( "The msearch request must be terminated by a newline [\n]", "illegal_argument_exception", EHTTP_STATUS::_400 );
+		ReportError ( "The msearch request must be terminated by a newline [\n]", HttpErrorType_e::IllegalArgument, EHTTP_STATUS::_400 );
 		return false;
 	}
 
 	int64_t tmStarted = sphMicroTimer();
-	CSphString sError, sWarning;
+	CSphString sWarning;
 	//const HttpOptionsHash_t & hOpts = tParser.GetOptions();
 
 	CSphString sDefaultIndex;
@@ -1177,7 +1178,7 @@ bool HttpCompatHandler_c::ProcessMSearch ()
 
 	if ( iSourceLine<2 || !bParsedOk )
 	{
-		ReportError ( "Validation Failed: 1: no requests added;", "action_request_validation_exception", EHTTP_STATUS::_400 );
+		ReportError ( "Validation Failed: 1: no requests added;", HttpErrorType_e::ActionRequestValidation, EHTTP_STATUS::_400 );
 		return false;
 	}
 
@@ -1371,18 +1372,17 @@ bool HttpCompatHandler_c::ProcessKbnTableDoc()
 	DocstoreSession_c tSession;
 	pIndex->CreateReader ( tSession.GetUID() );
 
-	CSphString sError;
 	CSphVector<BYTE> dField;
-	if ( !GetIndexDoc ( pIndex, sId.cstr(), tSession.GetUID(), dField, sError ) )
+	if ( !GetIndexDoc ( pIndex, sId.cstr(), tSession.GetUID(), dField, m_sError ) )
 	{
-		CompatWarning ( "%s", sError.cstr() );
+		CompatWarning ( "%s", m_sError.cstr() );
 		return false;
 	}
 
 	DocIdVer_t dDocVer;
-	if ( !GetDocIds ( sIndex.cstr(), sId.cstr(), dDocVer, sError ) )
+	if ( !GetDocIds ( sIndex.cstr(), sId.cstr(), dDocVer, m_sError ) )
 	{
-		CompatWarning ( "%s", sError.cstr() );
+		CompatWarning ( "%s", m_sError.cstr() );
 		return false;
 	}
 	if ( dField.GetLength() && !dDocVer.GetLength() )
@@ -1417,13 +1417,13 @@ bool HttpCompatHandler_c::ProcessKbnTableDoc()
 	return true;
 }
 
-static nljson ReportGetDocError ( const CSphString & sError, const char * sErrorType, const CSphString & sId, const CSphString & sIndex )
+static nljson ReportGetDocError ( const CSphString & sError, HttpErrorType_e eType, const CSphString & sId, const CSphString & sIndex )
 {
 	nljson tRes = R"({})"_json;
 	tRes["_index"] = sIndex.cstr();
 	tRes["_id"] = sId.cstr();
 	nljson tResError = R"({})"_json;
-	tResError["type"] = sErrorType;
+	tResError["type"] = GetErrorTypeName ( eType );
 	tResError["reason"] = sError.cstr();
 	tResError["reason"] = sIndex.cstr();
 	tRes["error"] = tResError;
@@ -1443,17 +1443,16 @@ void HttpCompatHandler_c::ProcessKbnTableMGet()
 
 	if ( !bCaseDocs && !bCaseIds )
 	{
-		ReportError ( "unknown key for a START_ARRAY, expected [docs] or [ids]", "parsing_exception", EHTTP_STATUS::_400 );
+		ReportError ( "unknown key for a START_ARRAY, expected [docs] or [ids]", HttpErrorType_e::Parse, EHTTP_STATUS::_400 );
 		return;
 	}
 
-	CSphString sError;
 	CSphString sIndex;
 	if ( bCaseIds )
 	{
 		if ( GetUrlParts().GetLength()<2 )
 		{
-			ReportError ( "Validation Failed: 1: index is missing for doc 0;", "action_request_validation_exception", EHTTP_STATUS::_400 );
+			ReportError ( "Validation Failed: 1: index is missing for doc 0;", HttpErrorType_e::ActionRequestValidation, EHTTP_STATUS::_400 );
 			return;
 		}
 
@@ -1461,16 +1460,16 @@ void HttpCompatHandler_c::ProcessKbnTableMGet()
 
 		if ( sIndex.IsEmpty() )
 		{
-			sError.SetSprintf ( "no such index [%s]", GetUrlParts()[2].cstr() );
-			ReportError ( sError.cstr(), "index_not_found_exception", EHTTP_STATUS::_400 );
+			m_sError.SetSprintf ( "no such index [%s]", GetUrlParts()[2].cstr() );
+			ReportError ( nullptr, HttpErrorType_e::IndexNotFound, EHTTP_STATUS::_400 );
 			return;
 		}
 
 		auto tIndex ( GetServed ( sIndex ) );
 		if ( !tIndex )
 		{
-			sError.SetSprintf ( "no such index [%s]", GetUrlParts()[2].cstr() );
-			ReportError ( sError.cstr(), "index_not_found_exception", EHTTP_STATUS::_400 );
+			m_sError.SetSprintf ( "no such index [%s]", GetUrlParts()[2].cstr() );
+			ReportError ( nullptr, HttpErrorType_e::IndexNotFound, EHTTP_STATUS::_400 );
 			return;
 		}
 	}
@@ -1490,14 +1489,14 @@ void HttpCompatHandler_c::ProcessKbnTableMGet()
 		{
 			if ( !tDoc.contains ( tDocId ) )
 			{
-				sError.SetSprintf ( "Validation Failed: 1: id is missing for doc %d;", iDoc );
-				ReportError ( sError.cstr(), "action_request_validation_exception", EHTTP_STATUS::_400 );
+				m_sError.SetSprintf ( "Validation Failed: 1: id is missing for doc %d;", iDoc );
+				ReportError ( nullptr, HttpErrorType_e::ActionRequestValidation, EHTTP_STATUS::_400 );
 				return;
 			}
 			if ( !tDoc.contains ( tDocIdx ) )
 			{
-				sError.SetSprintf ( "Validation Failed: 1: index is missing for doc %d;", iDoc );
-				ReportError ( sError.cstr(), "action_request_validation_exception", EHTTP_STATUS::_400 );
+				m_sError.SetSprintf ( "Validation Failed: 1: index is missing for doc %d;", iDoc );
+				ReportError ( nullptr, HttpErrorType_e::ActionRequestValidation, EHTTP_STATUS::_400 );
 				return;
 			}
 
@@ -1506,8 +1505,9 @@ void HttpCompatHandler_c::ProcessKbnTableMGet()
 
 			if ( sIndex.IsEmpty() )
 			{
+				CSphString sError;
 				sError.SetSprintf ( "no such index [%s]", sIndex.cstr() );
-				tResDocs.push_back ( ReportGetDocError ( sError, "index_not_found_exception", sId, sIndex ) );
+				tResDocs.push_back ( ReportGetDocError ( sError, HttpErrorType_e::IndexNotFound, sId, sIndex ) );
 				continue;
 			}
 		} else
@@ -1518,8 +1518,9 @@ void HttpCompatHandler_c::ProcessKbnTableMGet()
 		auto tIndex ( GetServed ( sIndex ) );
 		if ( !tIndex )
 		{
+			CSphString sError;
 			sError.SetSprintf ( "no such index [%s]", sIndex.cstr() );
-			tResDocs.push_back ( ReportGetDocError ( sError, "index_not_found_exception", sId, sIndex ) );
+			tResDocs.push_back ( ReportGetDocError ( sError, HttpErrorType_e::IndexNotFound, sId, sIndex ) );
 			continue;
 		}
 
@@ -1852,7 +1853,7 @@ bool HttpCompatHandler_c::ProcessSearch()
 {
 	if ( IsEmpty ( GetBody() ) )
 	{
-		ReportError ( "request body or source parameter is required", "parse_exception", EHTTP_STATUS::_400 );
+		ReportError ( "request body or source parameter is required", HttpErrorType_e::Parse, EHTTP_STATUS::_400 );
 		return false;
 	}
 
@@ -1860,7 +1861,7 @@ bool HttpCompatHandler_c::ProcessSearch()
 	nljson tReq = nljson::parse ( GetBody().first, nullptr, false );
 	if ( tReq.is_discarded())
 	{
-		ReportError ( "invalid body", "parse_exception", EHTTP_STATUS::_400 );
+		ReportError ( "invalid body", HttpErrorType_e::Parse, EHTTP_STATUS::_400 );
 		return false;
 	}
 
@@ -1870,8 +1871,8 @@ bool HttpCompatHandler_c::ProcessSearch()
 	CSphString sRes;
 	if ( !DoSearch ( sIndex, tReq, GetFullURL(), sRes ) )
 	{
-		const char * sError = TlsMsg::szError();
-		ReportError ( sError, "parse_exception", EHTTP_STATUS::_400 );
+		m_sError = TlsMsg::MoveToString();
+		ReportError ( nullptr, HttpErrorType_e::Parse, EHTTP_STATUS::_400 );
 		return false;
 	}
 
@@ -1886,7 +1887,7 @@ void HttpCompatHandler_c::ProcessCount()
 {
 	if ( IsEmpty ( GetBody() ) )
 	{
-		ReportError ( "request body or source parameter is required", "parse_exception", EHTTP_STATUS::_400 );
+		ReportError ( "request body or source parameter is required", HttpErrorType_e::Parse, EHTTP_STATUS::_400 );
 		return;
 	}
 
@@ -1894,7 +1895,7 @@ void HttpCompatHandler_c::ProcessCount()
 	nljson tReq = nljson::parse ( GetBody().first, nullptr, false );
 	if ( tReq.is_discarded())
 	{
-		ReportError ( "invalid body", "parse_exception", EHTTP_STATUS::_400 );
+		ReportError ( "invalid body", HttpErrorType_e::Parse, EHTTP_STATUS::_400 );
 		return;
 	}
 
@@ -1960,12 +1961,11 @@ bool HttpCompatHandler_c::ProcessDeleteDoc()
 	}
 
 	// get document version vs _create
-	CSphString sError;
 	int iVersion = 1;
 	DocIdVer_t dIds;
-	if ( !GetDocIds ( sIndex.cstr(), sId.cstr(), dIds, sError ) )
+	if ( !GetDocIds ( sIndex.cstr(), sId.cstr(), dIds, m_sError ) )
 	{
-		CompatWarning ( "doc '%s', error: %s", sId.cstr(), sError.cstr() );
+		CompatWarning ( "doc '%s', error: %s", sId.cstr(), m_sError.cstr() );
 		return false;
 	}
 
@@ -1994,7 +1994,7 @@ bool HttpCompatHandler_c::ProcessDeleteDoc()
 		if ( pReporter->IsError() )
 		{
 			CompatWarning ( "doc '%s', error: %s", sId.cstr(), pReporter->GetError() );
-			ReportError ( "request body or source parameter is required", "parse_exception", EHTTP_STATUS::_400 );
+			ReportError ( "request body or source parameter is required", HttpErrorType_e::Parse, EHTTP_STATUS::_400 );
 			return false;
 		}
 	}
@@ -2033,7 +2033,6 @@ bool HttpCompatHandler_c::ProcessCreateTable()
 	const CSphString & sName = GetUrlParts()[0];
 
 	bool bDropExistTable = false;
-	CSphString sError;
 	{
 		auto tIndex ( GetServed ( sName ) );
 		if ( tIndex )
@@ -2042,8 +2041,8 @@ bool HttpCompatHandler_c::ProcessCreateTable()
 			bDropExistTable = !g_tKbnTable.contains ( sName.cstr() );
 			if ( !bDropExistTable )
 			{
-				sError.SetSprintf ( "index [%s] already exists", sName.cstr() );
-				ReportError ( sError.cstr(), "resource_already_exists_exception", EHTTP_STATUS::_400, sName.cstr() );
+				m_sError.SetSprintf ( "index [%s] already exists", sName.cstr() );
+				ReportError ( nullptr, HttpErrorType_e::ResourceAlreadyExists, EHTTP_STATUS::_400, sName.cstr() );
 				return true;
 			}
 		}
@@ -2051,21 +2050,21 @@ bool HttpCompatHandler_c::ProcessCreateTable()
 
 	if ( IsEmpty ( GetBody() ) )
 	{
-		ReportError ( "request body or source parameter is required", "parse_exception", EHTTP_STATUS::_400 );
+		ReportError ( "request body or source parameter is required", HttpErrorType_e::Parse, EHTTP_STATUS::_400 );
 		return false;
 	}
 
 	nljson tTbl = nljson::parse ( GetBody().first, nullptr, false );
 	if ( tTbl.is_discarded() )
 	{
-		ReportError ( "request body or source parameter is required", "parse_exception", EHTTP_STATUS::_400 );
+		ReportError ( "request body or source parameter is required", HttpErrorType_e::Parse, EHTTP_STATUS::_400 );
 		return false;
 	}
 
 	// direct create index path (wo template)
 	if ( !tTbl.contains( "mappings" ) )
 	{
-		ReportError ( "request body mappings is required", "parse_exception", EHTTP_STATUS::_400 );
+		ReportError ( "request body mappings is required", HttpErrorType_e::Parse, EHTTP_STATUS::_400 );
 		return false;
 	}
 
@@ -2077,8 +2076,8 @@ bool HttpCompatHandler_c::ProcessCreateTable()
 	CreateKbnTable ( tOpts, tTbl, dFields );
 
 	StrVec_t dWarnings;
-	if ( !CreateNewIndexConfigless ( sName, tOpts, dWarnings, sError ) )
-		CompatWarning ( "%s", sError.cstr() );
+	if ( !CreateNewIndexConfigless ( sName, tOpts, dWarnings, m_sError ) )
+		CompatWarning ( "%s", m_sError.cstr() );
 
 	for ( const CSphString & sWarn : dWarnings )
 		CompatWarning ( "%s", sWarn.cstr() );
@@ -2105,13 +2104,12 @@ bool HttpCompatHandler_c::ProcessCreateTable()
 void HttpCompatHandler_c::ProcessDeleteTable()
 {
 	const CSphString & sName = GetUrlParts()[0];
-	CSphString sError;
 	{
 		auto tIndex ( GetServed ( sName ) );
 		if ( !tIndex )
 		{
-			sError.SetSprintf ( "no such index [%s]", sName.cstr() );
-			ReportError ( sError.cstr(), "index_not_found_exception", EHTTP_STATUS::_404, sName.cstr() );
+			m_sError.SetSprintf ( "no such index [%s]", sName.cstr() );
+			ReportError ( nullptr, HttpErrorType_e::IndexNotFound, EHTTP_STATUS::_404, sName.cstr() );
 			return;
 		}
 	}
@@ -2124,7 +2122,6 @@ void HttpCompatHandler_c::ProcessDeleteTable()
 
 void HttpCompatHandler_c::ProcessRefresh ( const CSphString * pName )
 {
-	CSphString sError;
 	if ( pName )
 	{
 		auto tIndex ( GetServed ( *pName ) );
@@ -2409,34 +2406,22 @@ void HttpCompatHandler_c::EmptyReply()
 	BuildReplyHead ( FromSz ( sRes ), EHTTP_STATUS::_200 );
 }
 
-void HttpCompatBaseHandler_c::ReportError ( const char * sError, const char * sErrorType, EHTTP_STATUS eStatus, const char * sIndex )
-{
-	m_sError = sError;
-	CompatWarning ( "%s at %s", m_sError.cstr(), GetFullURL().cstr() );
-
-	int iStatus = HttpGetStatusCodes ( eStatus );
-	CSphString sReply = ( sErrorType ? JsonEncodeResultError ( m_sError, sErrorType, iStatus, sIndex ) : JsonEncodeResultError ( m_sError, iStatus ) );
-	BuildReplyHead ( FromStr ( sReply ), eStatus );
-}
-
 void HttpCompatHandler_c::ReportMissedIndex ( const CSphString & sIndex )
 {
-	CSphString sMsg;
-	sMsg.SetSprintf ( "no such index [%s]", sIndex.cstr() );
-	ReportError ( sMsg.cstr(), "index_not_found_exception", EHTTP_STATUS::_404, sIndex.cstr() );
+	m_sError.SetSprintf ( "no such index [%s]", sIndex.cstr() );
+	ReportError ( nullptr, HttpErrorType_e::IndexNotFound, EHTTP_STATUS::_404, sIndex.cstr() );
 }
 
 void HttpCompatHandler_c::ReportIncorrectMethod ( const char * sAllowed )
 {
-	CSphString sMsg;
-	sMsg.SetSprintf ( "Incorrect HTTP method for uri [%s] and method [%s], allowed: [%s]", GetFullURL().cstr(), http_method_str ( (http_method)GetRequestType() ), sAllowed );
-	ReportError ( sMsg.cstr(), nullptr, EHTTP_STATUS::_405, nullptr );
+	m_sError.SetSprintf ( "Incorrect HTTP method for uri [%s] and method [%s], allowed: [%s]", GetFullURL().cstr(), http_method_str ( (http_method)GetRequestType() ), sAllowed );
+	ReportError ( nullptr, HttpErrorType_e::Unknown, EHTTP_STATUS::_405, nullptr );
 }
 
 void HttpCompatHandler_c::ReportMissedScript ( const CSphString & sIndex )
 {
 	CompatWarning ( "missed script '%s' at '%s' body '%s'", sIndex.cstr(), GetFullURL().cstr(), GetBody().first );
-	ReportError ( "failed to execute script", "illegal_argument_exception", EHTTP_STATUS::_400 );
+	ReportError ( "failed to execute script", HttpErrorType_e::IllegalArgument, EHTTP_STATUS::_400 );
 }
 
 CSphMutex HttpCompatHandler_c::m_tReqStatLock;

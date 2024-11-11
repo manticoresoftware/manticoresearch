@@ -107,7 +107,7 @@ public:
 			memcpy ( pDyn, m_dData.data(), 4 * sizeof ( DWORD ) );
 			pDyn[0] &= 0x00ffffffUL;
 			pDyn[4] = uVal;
-			m_iDynLen = 0x80000004UL; // dynamic flag, len=5
+			m_iDynLen = 0x80000005UL; // dynamic flag, len=5
 			m_iDynLimit = 16;		  // limit=16
 			m_pDynData = pDyn;
 			return;
@@ -245,7 +245,7 @@ void InfixBuilder_c<2>::AddWord ( const BYTE* pWord, int iWordLength, int iCheck
 			CRC32_step ( uHash, *s );
 			*pKey++ = *s++; // copy another infix byte
 
-			InfixIntvec_c* pVal = LookupEntry ( sKey, uHash );
+			InfixIntvec_c * pVal = LookupEntry ( sKey, uHash );
 			if ( pVal )
 				pVal->Add ( iCheckpoint );
 			else

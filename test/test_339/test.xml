@@ -40,141 +40,141 @@ index test2
 <httpqueries>
 
 <query endpoint="json/bulk" content="application/x-ndjson">
-{ "insert" : { "index" : "test_rt", "id" : 1, "doc": { "int_col" : 1, "flt_col" : 1.1, "content" : "bulk doc one" } } }
-{ "insert" : { "index" : "test_rt", "id" : 2, "doc": { "int_col" : 2, "flt_col" : 2.2, "content" : "bulk doc two" } } }
-{ "create" : { "index" : "test_rt", "id" : 3, "doc": { "int_col" : 3, "flt_col" : 3.3, "content" : "bulk doc three" } } }
-{ "create" : { "index" : "test_rt", "id" : 4, "doc": { "int_col" : 4, "flt_col" : 4.4, "content" : "bulk doc four" } } }
+{ "insert" : { "table" : "test_rt", "id" : 1, "doc": { "int_col" : 1, "flt_col" : 1.1, "content" : "bulk doc one" } } }
+{ "insert" : { "table" : "test_rt", "id" : 2, "doc": { "int_col" : 2, "flt_col" : 2.2, "content" : "bulk doc two" } } }
+{ "create" : { "table" : "test_rt", "id" : 3, "doc": { "int_col" : 3, "flt_col" : 3.3, "content" : "bulk doc three" } } }
+{ "create" : { "table" : "test_rt", "id" : 4, "doc": { "int_col" : 4, "flt_col" : 4.4, "content" : "bulk doc four" } } }
 </query>
 
-<query endpoint="json/search">{ "index": "test_rt", "query": { "match_all": {} } } }</query>
+<query endpoint="json/search">{ "table": "test_rt", "query": { "match_all": {} } } }</query>
 
 <query endpoint="json/bulk" content="application/x-ndjson">
-{ "update" : { "index" : "test_rt", "doc": { "int_col" : 10 }, "query":{ "range": { "flt_col": { "lt": 2.5 } } } } }
-{ "update" : { "index" : "test_rt", "doc": { "int_col" : 20 }, "query":{ "range": { "flt_col": { "gt": 2.5 } } } } }
+{ "update" : { "table" : "test_rt", "doc": { "int_col" : 10 }, "query":{ "range": { "flt_col": { "lt": 2.5 } } } } }
+{ "update" : { "table" : "test_rt", "doc": { "int_col" : 20 }, "query":{ "range": { "flt_col": { "gt": 2.5 } } } } }
 </query>
 
-<query endpoint="json/search">{ "index": "test_rt", "query": { "match_all": {} } } }</query>
+<query endpoint="json/search">{ "table": "test_rt", "query": { "match_all": {} } } }</query>
 
 <query endpoint="json/bulk" content="application/x-ndjson">
-{ "delete" : { "index" : "test_rt", "id" : 1 } }
-{ "delete" : { "index" : "test_rt", "id" : 2 } }
-{ "delete" : { "index" : "test_rt", "id" : 3 } }
-{ "delete" : { "index" : "test_rt", "id" : 4 } }
-</query>
-
-<query endpoint="json/bulk" content="application/x-ndjson">
-{ "delete" : { "index" : "test_rt", "id" : 1 } }
-{ "delete" : { "index" : "test_rt", "id" : 2 } }
+{ "delete" : { "table" : "test_rt", "id" : 1 } }
+{ "delete" : { "table" : "test_rt", "id" : 2 } }
+{ "delete" : { "table" : "test_rt", "id" : 3 } }
+{ "delete" : { "table" : "test_rt", "id" : 4 } }
 </query>
 
 <query endpoint="json/bulk" content="application/x-ndjson">
-{ "insert" : { "index" : "test_rt", "id" : 1, "doc": { "int_col" : 1, "flt_col" : 1.1, "content" : "bulk doc one" } } }
-{ "insert" : { "index" : "test_rt", "id" : 2, "doc": { "int_col" : 2, "flt_col" : 2.2, "content" : "bulk doc two" } } }
-{ "insert" : { "index" : "test_rt", "id" : 3, "doc": { "int_col" : 3, "flt_col" : 3.3, "content" : "bulk doc three" } } }
-{ "insert" : { "index" : "test_rt", "id" : 4, "doc": { "int_col" : 4, "flt_col" : 4.4, "content" : "bulk doc four" } } }
-{ "insert" : { "index" : "test_rt", "id" : 5, "doc": { "int_col" : 5, "flt_col" : 5.5, "content" : "bulk doc five" } } }
-{ "insert" : { "index" : "test_rt", "id" : 6, "doc": { "int_col" : 6, "flt_col" : 6.6, "content" : "bulk doc six" } } }
-{ "insert" : { "index" : "test_rt", "id" : 7, "doc": { "int_col" : 7, "flt_col" : 7.7, "content" : "bulk doc seven" } } }
-{ "insert" : { "index" : "test_rt", "id" : 8, "doc": { "int_col" : 8, "flt_col" : 8.8, "content" : "bulk doc eight" } } }
-{ "insert" : { "index" : "test_rt", "id" : 9, "doc": { "int_col" : 9, "flt_col" : 9.9, "content" : "bulk doc nine" } } }
-{ "insert" : { "index" : "test_rt", "id" :10, "doc": { "int_col" :10, "flt_col" :10.10,"content" : "bulk doc ten" } } }
+{ "delete" : { "table" : "test_rt", "id" : 1 } }
+{ "delete" : { "table" : "test_rt", "id" : 2 } }
+</query>
+
+<query endpoint="json/bulk" content="application/x-ndjson">
+{ "insert" : { "table" : "test_rt", "id" : 1, "doc": { "int_col" : 1, "flt_col" : 1.1, "content" : "bulk doc one" } } }
+{ "insert" : { "table" : "test_rt", "id" : 2, "doc": { "int_col" : 2, "flt_col" : 2.2, "content" : "bulk doc two" } } }
+{ "insert" : { "table" : "test_rt", "id" : 3, "doc": { "int_col" : 3, "flt_col" : 3.3, "content" : "bulk doc three" } } }
+{ "insert" : { "table" : "test_rt", "id" : 4, "doc": { "int_col" : 4, "flt_col" : 4.4, "content" : "bulk doc four" } } }
+{ "insert" : { "table" : "test_rt", "id" : 5, "doc": { "int_col" : 5, "flt_col" : 5.5, "content" : "bulk doc five" } } }
+{ "insert" : { "table" : "test_rt", "id" : 6, "doc": { "int_col" : 6, "flt_col" : 6.6, "content" : "bulk doc six" } } }
+{ "insert" : { "table" : "test_rt", "id" : 7, "doc": { "int_col" : 7, "flt_col" : 7.7, "content" : "bulk doc seven" } } }
+{ "insert" : { "table" : "test_rt", "id" : 8, "doc": { "int_col" : 8, "flt_col" : 8.8, "content" : "bulk doc eight" } } }
+{ "insert" : { "table" : "test_rt", "id" : 9, "doc": { "int_col" : 9, "flt_col" : 9.9, "content" : "bulk doc nine" } } }
+{ "insert" : { "table" : "test_rt", "id" :10, "doc": { "int_col" :10, "flt_col" :10.10,"content" : "bulk doc ten" } } }
 </query>
 
 <!-- multibulk - 3 different operations to same index -->
 <query endpoint="json/bulk" content="application/x-ndjson" example="multibulk">
-{ "insert" : { "index" : "test_rt", "id" : 11, "doc": { "int_col" : 1, "flt_col" : 1.1, "content" : "bulk doc one" } } }
-{ "replace" : { "index" : "test_rt", "id" : 2, "doc": { "int_col" : 2, "flt_col" : 2.2, "content" : "bulk doc two" } } }
-{ "delete" : { "index" : "test_rt", "id" : 3 } }
+{ "insert" : { "table" : "test_rt", "id" : 11, "doc": { "int_col" : 1, "flt_col" : 1.1, "content" : "bulk doc one" } } }
+{ "replace" : { "table" : "test_rt", "id" : 2, "doc": { "int_col" : 2, "flt_col" : 2.2, "content" : "bulk doc two" } } }
+{ "delete" : { "table" : "test_rt", "id" : 3 } }
 </query>
 
 <!-- multibulk - interleave 2 indexes. Will make 4 txns - on each change of index -->
 <query endpoint="json/bulk" content="application/x-ndjson">
-{ "insert" : { "index" : "test_rt", "id" : 21, "doc": { "int_col" : 1, "flt_col" : 1.1, "content" : "bulk doc one" } } }
-{ "insert" : { "index" : "test_rt", "id" : 22, "doc": { "int_col" : 2, "flt_col" : 2.2, "content" : "bulk doc two" } } }
-{ "insert" : { "index" : "test_rt", "id" : 23, "doc": { "int_col" : 3, "flt_col" : 3.3, "content" : "bulk doc three" } } }
-{ "insert" : { "index" : "test2", "id" : 24, "doc": { "int_col" : 4, "flt_col" : 4.4, "content" : "bulk doc four" } } }
-{ "insert" : { "index" : "test2", "id" : 25, "doc": { "int_col" : 5, "flt_col" : 5.5, "content" : "bulk doc five" } } }
-{ "insert" : { "index" : "test_rt", "id" : 26, "doc": { "int_col" : 6, "flt_col" : 6.6, "content" : "bulk doc six" } } }
-{ "insert" : { "index" : "test_rt", "id" : 27, "doc": { "int_col" : 7, "flt_col" : 7.7, "content" : "bulk doc seven" } } }
-{ "insert" : { "index" : "test2", "id" : 28, "doc": { "int_col" : 8, "flt_col" : 8.8, "content" : "bulk doc eight" } } }
-{ "insert" : { "index" : "test2", "id" : 29, "doc": { "int_col" : 9, "flt_col" : 9.9, "content" : "bulk doc nine" } } }
-{ "insert" : { "index" : "test2", "id" : 30, "doc": { "int_col" :10, "flt_col" :10.10,"content" : "bulk doc ten" } } }
+{ "insert" : { "table" : "test_rt", "id" : 21, "doc": { "int_col" : 1, "flt_col" : 1.1, "content" : "bulk doc one" } } }
+{ "insert" : { "table" : "test_rt", "id" : 22, "doc": { "int_col" : 2, "flt_col" : 2.2, "content" : "bulk doc two" } } }
+{ "insert" : { "table" : "test_rt", "id" : 23, "doc": { "int_col" : 3, "flt_col" : 3.3, "content" : "bulk doc three" } } }
+{ "insert" : { "table" : "test2", "id" : 24, "doc": { "int_col" : 4, "flt_col" : 4.4, "content" : "bulk doc four" } } }
+{ "insert" : { "table" : "test2", "id" : 25, "doc": { "int_col" : 5, "flt_col" : 5.5, "content" : "bulk doc five" } } }
+{ "insert" : { "table" : "test_rt", "id" : 26, "doc": { "int_col" : 6, "flt_col" : 6.6, "content" : "bulk doc six" } } }
+{ "insert" : { "table" : "test_rt", "id" : 27, "doc": { "int_col" : 7, "flt_col" : 7.7, "content" : "bulk doc seven" } } }
+{ "insert" : { "table" : "test2", "id" : 28, "doc": { "int_col" : 8, "flt_col" : 8.8, "content" : "bulk doc eight" } } }
+{ "insert" : { "table" : "test2", "id" : 29, "doc": { "int_col" : 9, "flt_col" : 9.9, "content" : "bulk doc nine" } } }
+{ "insert" : { "table" : "test2", "id" : 30, "doc": { "int_col" :10, "flt_col" :10.10,"content" : "bulk doc ten" } } }
 </query>
 
 <!-- bulk commit with empty line - will produce couple transactions - 3 docs, then 2 docs-->
 <query endpoint="json/bulk" content="application/x-ndjson">
-{ "insert" : { "index" : "test_rt", "id" : 31, "doc": { "int_col" : 1, "flt_col" : 1.1, "content" : "bulk doc one" } } }
-{ "insert" : { "index" : "test_rt", "id" : 32, "doc": { "int_col" : 2, "flt_col" : 2.2, "content" : "bulk doc two" } } }
-{ "insert" : { "index" : "test_rt", "id" : 33, "doc": { "int_col" : 3, "flt_col" : 3.3, "content" : "bulk doc three" } } }
+{ "insert" : { "table" : "test_rt", "id" : 31, "doc": { "int_col" : 1, "flt_col" : 1.1, "content" : "bulk doc one" } } }
+{ "insert" : { "table" : "test_rt", "id" : 32, "doc": { "int_col" : 2, "flt_col" : 2.2, "content" : "bulk doc two" } } }
+{ "insert" : { "table" : "test_rt", "id" : 33, "doc": { "int_col" : 3, "flt_col" : 3.3, "content" : "bulk doc three" } } }
 
-{ "insert" : { "index" : "test_rt", "id" : 36, "doc": { "int_col" : 6, "flt_col" : 6.6, "content" : "bulk doc six" } } }
-{ "insert" : { "index" : "test_rt", "id" : 37, "doc": { "int_col" : 7, "flt_col" : 7.7, "content" : "bulk doc seven" } } }
+{ "insert" : { "table" : "test_rt", "id" : 36, "doc": { "int_col" : 6, "flt_col" : 6.6, "content" : "bulk doc six" } } }
+{ "insert" : { "table" : "test_rt", "id" : 37, "doc": { "int_col" : 7, "flt_col" : 7.7, "content" : "bulk doc seven" } } }
 </query>
 
 <!-- bulk commit with an error - will commit 3 docs, then fail on last txn -->
 <query endpoint="json/bulk" content="application/x-ndjson">
-{ "insert" : { "index" : "test_rt", "id" : 41, "doc": { "int_col" : 1, "flt_col" : 1.1, "content" : "bulk doc one" } } }
-{ "insert" : { "index" : "test_rt", "id" : 42, "doc": { "int_col" : 2, "flt_col" : 2.2, "content" : "bulk doc two" } } }
-{ "insert" : { "index" : "test_rt", "id" : 43, "doc": { "int_col" : 3, "flt_col" : 3.3, "content" : "bulk doc three" } } }
+{ "insert" : { "table" : "test_rt", "id" : 41, "doc": { "int_col" : 1, "flt_col" : 1.1, "content" : "bulk doc one" } } }
+{ "insert" : { "table" : "test_rt", "id" : 42, "doc": { "int_col" : 2, "flt_col" : 2.2, "content" : "bulk doc two" } } }
+{ "insert" : { "table" : "test_rt", "id" : 43, "doc": { "int_col" : 3, "flt_col" : 3.3, "content" : "bulk doc three" } } }
 
-{ "insert" : { "index" : "test_rt", "id" : 44, "doc": { "int_col" : 6, "flt_col" : 6.6, "content" : "bulk doc six" } } }
-{ "insert" : { "index" : "test_rt", "id" : 45s, "doc": { "int_col" : 7, "flt_col" : 7.7, "content" : "bulk doc seven" } } }
+{ "insert" : { "table" : "test_rt", "id" : 44, "doc": { "int_col" : 6, "flt_col" : 6.6, "content" : "bulk doc six" } } }
+{ "insert" : { "table" : "test_rt", "id" : 45s, "doc": { "int_col" : 7, "flt_col" : 7.7, "content" : "bulk doc seven" } } }
 </query>
 
-<query endpoint="json/search">{ "index": "test_rt", "query": { "match_all": {} }, "sort": [ "id" ] } }</query>
+<query endpoint="json/search">{ "table": "test_rt", "query": { "match_all": {} }, "sort": [ "id" ] } }</query>
 
-<query endpoint="json/search">{ "index": "test_rt", "limit": 5, "query": { "match_all": {} }, "sort": [ "id" ] } }</query>
-<query endpoint="json/search">{ "index": "test_rt", "limit": 5, "offset": 5, "query": { "match_all": {} } } }</query>
+<query endpoint="json/search">{ "table": "test_rt", "limit": 5, "query": { "match_all": {} }, "sort": [ "id" ] } }</query>
+<query endpoint="json/search">{ "table": "test_rt", "limit": 5, "offset": 5, "query": { "match_all": {} } } }</query>
 
-<query endpoint="json/search">{ "index": "test_rt", "size": 5, "query": { "match_all": {} }, "sort": [ "id" ] } }</query>
-<query endpoint="json/search">{ "index": "test_rt", "size": 5, "from": 5, "query": { "match_all": {} } } }</query>
+<query endpoint="json/search">{ "table": "test_rt", "size": 5, "query": { "match_all": {} }, "sort": [ "id" ] } }</query>
+<query endpoint="json/search">{ "table": "test_rt", "size": 5, "from": 5, "query": { "match_all": {} } } }</query>
 
 <!-- content-type with supplements -->
 <query endpoint="json/bulk" content="application/x-ndjson; charset=uft-8">
-{ "insert" : { "index" : "test_rt", "id" : 101, "doc": { "int_col" : 1, "flt_col" : 1.1, "content" : "bulk doc one" } } }
+{ "insert" : { "table" : "test_rt", "id" : 101, "doc": { "int_col" : 1, "flt_col" : 1.1, "content" : "bulk doc one" } } }
 </query>
 
 <query endpoint="json/bulk" content="application/x-ndjson charset=uft-8">
-{ "insert" : { "index" : "test_rt", "id" : 102, "doc": { "int_col" : 2, "flt_col" : 2.2, "content" : "bulk doc two" } } }
+{ "insert" : { "table" : "test_rt", "id" : 102, "doc": { "int_col" : 2, "flt_col" : 2.2, "content" : "bulk doc two" } } }
 </query>
 
 <query endpoint="json/bulk" content="application/x-ndjsonn">
-{ "create" : { "index" : "test_rt", "id" : 103, "doc": { "int_col" : 3, "flt_col" : 3.3, "content" : "bulk doc three" } } }
+{ "create" : { "table" : "test_rt", "id" : 103, "doc": { "int_col" : 3, "flt_col" : 3.3, "content" : "bulk doc three" } } }
 </query>
 
 <query endpoint="json/bulk" content="application/x-ndjson">
-{ "create" : { "index" : "test_rt", "id" : 104, "doc": { "int_col" : 4, "flt_col" : 4.4, "content" : "bulk doc four" } } }
+{ "create" : { "table" : "test_rt", "id" : 104, "doc": { "int_col" : 4, "flt_col" : 4.4, "content" : "bulk doc four" } } }
 </query>
 
 <!-- bulk with empty line but with whitespace chars -->
 <query endpoint="json/bulk" content="application/x-ndjson">
-{ "insert" : { "index" : "test_rt", "id" : 31, "doc": { "int_col" : 1, "flt_col" : 1.1, "content" : "bulk doc one" } } }
+{ "insert" : { "table" : "test_rt", "id" : 31, "doc": { "int_col" : 1, "flt_col" : 1.1, "content" : "bulk doc one" } } }
    
-{ "insert" : { "index" : "test_rt", "id" : 32, "doc": { "int_col" : 2, "flt_col" : 2.2, "content" : "bulk doc two" } } }
-{ "insert" : { "index" : "test_rt", "id" : 33, "doc": { "int_col" : 3, "flt_col" : 3.3, "content" : "bulk doc three" } } }
+{ "insert" : { "table" : "test_rt", "id" : 32, "doc": { "int_col" : 2, "flt_col" : 2.2, "content" : "bulk doc two" } } }
+{ "insert" : { "table" : "test_rt", "id" : 33, "doc": { "int_col" : 3, "flt_col" : 3.3, "content" : "bulk doc three" } } }
 </query>
 
 
 <!-- bulk with duplicate in the 3d chunk -->
 <query endpoint="json/bulk" content="application/x-ndjson">
-{ "insert" : { "index" : "test_rt", "id" : 203, "doc": { "int_col" : 4, "flt_col" : 4.4, "content" : "test" } } }
+{ "insert" : { "table" : "test_rt", "id" : 203, "doc": { "int_col" : 4, "flt_col" : 4.4, "content" : "test" } } }
 </query>
 
 <repeat count="1000" vars="i" init="1" inc="1">
     <var name="ctx"><ctx/> bulk doc three<i/></var>
 </repeat>
 <query endpoint="json/bulk" content="application/x-ndjson">
-{ "insert" : { "index" : "test_rt", "id" : 200, "doc": { "int_col" : 4, "flt_col" : 4.4, "content" : "<ctx/>" } } }
-{ "insert" : { "index" : "test_rt", "id" : 201, "doc": { "int_col" : 4, "flt_col" : 4.4, "content" : "<ctx/>" } } }
-{ "insert" : { "index" : "test_rt", "id" : 202, "doc": { "int_col" : 4, "flt_col" : 4.4, "content" : "<ctx/>" } } }
-{ "insert" : { "index" : "test_rt", "id" : 203, "doc": { "int_col" : 4, "flt_col" : 4.4, "content" : "<ctx/>" } } }
-{ "insert" : { "index" : "test_rt", "id" : 204, "doc": { "int_col" : 4, "flt_col" : 4.4, "content" : "<ctx/>" } } }
-{ "insert" : { "index" : "test_rt", "id" : 205, "doc": { "int_col" : 4, "flt_col" : 4.4, "content" : "<ctx/>" } } }
-{ "insert" : { "index" : "test_rt", "id" : 206, "doc": { "int_col" : 4, "flt_col" : 4.4, "content" : "<ctx/>" } } }
-{ "insert" : { "index" : "test_rt", "id" : 207, "doc": { "int_col" : 4, "flt_col" : 4.4, "content" : "<ctx/>" } } }
-{ "insert" : { "index" : "test_rt", "id" : 208, "doc": { "int_col" : 4, "flt_col" : 4.4, "content" : "<ctx/>" } } }
-{ "insert" : { "index" : "test_rt", "id" : 209, "doc": { "int_col" : 4, "flt_col" : 4.4, "content" : "<ctx/>" } } }
-{ "insert" : { "index" : "test_rt", "id" : 210, "doc": { "int_col" : 4, "flt_col" : 4.4, "content" : "<ctx/>" } } }
+{ "insert" : { "table" : "test_rt", "id" : 200, "doc": { "int_col" : 4, "flt_col" : 4.4, "content" : "<ctx/>" } } }
+{ "insert" : { "table" : "test_rt", "id" : 201, "doc": { "int_col" : 4, "flt_col" : 4.4, "content" : "<ctx/>" } } }
+{ "insert" : { "table" : "test_rt", "id" : 202, "doc": { "int_col" : 4, "flt_col" : 4.4, "content" : "<ctx/>" } } }
+{ "insert" : { "table" : "test_rt", "id" : 203, "doc": { "int_col" : 4, "flt_col" : 4.4, "content" : "<ctx/>" } } }
+{ "insert" : { "table" : "test_rt", "id" : 204, "doc": { "int_col" : 4, "flt_col" : 4.4, "content" : "<ctx/>" } } }
+{ "insert" : { "table" : "test_rt", "id" : 205, "doc": { "int_col" : 4, "flt_col" : 4.4, "content" : "<ctx/>" } } }
+{ "insert" : { "table" : "test_rt", "id" : 206, "doc": { "int_col" : 4, "flt_col" : 4.4, "content" : "<ctx/>" } } }
+{ "insert" : { "table" : "test_rt", "id" : 207, "doc": { "int_col" : 4, "flt_col" : 4.4, "content" : "<ctx/>" } } }
+{ "insert" : { "table" : "test_rt", "id" : 208, "doc": { "int_col" : 4, "flt_col" : 4.4, "content" : "<ctx/>" } } }
+{ "insert" : { "table" : "test_rt", "id" : 209, "doc": { "int_col" : 4, "flt_col" : 4.4, "content" : "<ctx/>" } } }
+{ "insert" : { "table" : "test_rt", "id" : 210, "doc": { "int_col" : 4, "flt_col" : 4.4, "content" : "<ctx/>" } } }
 </query>
 
 </httpqueries>

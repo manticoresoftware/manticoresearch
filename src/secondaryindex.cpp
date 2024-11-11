@@ -628,7 +628,8 @@ static bool HaveSI ( const CSphFilterSettings & tFilter, const SelectIteratorCtx
 
 	// force secondary indexes from non-default files (that would be JSON SI); at least for now
 	// the idea is that they should always be faster
-	if ( !tCtx.m_tIndexSchema.GetAttr ( tFilter.m_sAttrName.cstr() ) )
+	auto * pAttr = tCtx.m_tIndexSchema.GetAttr ( tFilter.m_sAttrName.cstr() );
+	if ( !pAttr || pAttr->m_eAttrType==SPH_ATTR_JSON )
 		bForce = true;
 
 	return true;
@@ -665,9 +666,10 @@ static void FetchHistogramInfo ( CSphVector<SecondaryIndexInfo_t> & dSIInfo, con
 		auto & tSIInfo = dSIInfo[i];
 		if ( !pHistogram )
 		{
+			auto * pAttr = tCtx.m_tIndexSchema.GetAttr ( tFilter.m_sAttrName.cstr() );
 			tSIInfo.m_iTotalValues = tCtx.m_iTotalDocs;
 			tSIInfo.m_iRsetEstimate = tCtx.m_iTotalDocs;
-			tSIInfo.m_bUsable = !tCtx.m_tIndexSchema.GetAttr ( tFilter.m_sAttrName.cstr() );
+			tSIInfo.m_bUsable = !pAttr || pAttr->m_eAttrType==SPH_ATTR_JSON;
 			continue;
 		}
 

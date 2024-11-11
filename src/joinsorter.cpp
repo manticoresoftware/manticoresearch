@@ -678,8 +678,9 @@ void JoinSorter_c::SetupAggregates()
 
 bool JoinSorter_c::SetupJoinQuery ( int iDynamicSize, CSphString & sError )
 {
-	m_pJoinQueryParser = sphCreatePlainQueryParser();
+	m_pJoinQueryParser = std::unique_ptr<QueryParser_i>( m_tQuery.m_pQueryParser->Clone() );
 	m_tJoinQuery.m_pQueryParser = m_pJoinQueryParser.get();
+	m_tJoinQuery.m_eQueryType = m_tQuery.m_eQueryType;
 	m_tJoinQuery.m_iLimit = DEFAULT_MAX_MATCHES;
 	m_tJoinQuery.m_iCutoff = 0;
 	m_tJoinQuery.m_sQuery = m_tJoinQuery.m_sRawQuery = m_tQuery.m_sJoinQuery;
@@ -789,9 +790,20 @@ void JoinSorter_c::SetupJoinAttrRemap()
 	m_bNeedToSetupRemap = false;
 }
 
+
+FORCE_INLINE void SetExprBlobPool ( const CSphVector<ContextCalcItem_t> & dItems, const BYTE * pBlobPool )
+{
+	for ( const auto & i : dItems )
+		i.m_pExpr->Command ( SPH_EXPR_SET_BLOB_POOL, (void*)pBlobPool );
+}
+
 template <typename PUSH>
 bool JoinSorter_c::PushJoinedMatches ( const CSphMatch & tEntry, PUSH && fnPush )
 {
+	SetExprBlobPool ( m_dCalcPrefilter, m_pBlobPool );
+	SetExprBlobPool ( m_dCalcPresort, m_pBlobPool );
+	SetExprBlobPool ( m_dAggregates, m_pBlobPool );
+
 	bool bAnythingPushed = false;
 	ARRAY_FOREACH ( iMatch, m_dMatches )
 	{

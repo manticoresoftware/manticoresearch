@@ -59,6 +59,7 @@
 %token <sValue>	TOK_META
 %token <sValue>	TOK_TRACE
 %token <sValue> TOK_CURL
+%token <sValue> TOK_PAUSE
 
 %type <iValue> boolpar timeint
 %type <sValue> ident szparam ident_special szparam_special
@@ -94,6 +95,7 @@ debugcommand:
 	| TOK_META		{ pParser->SetCommand ( Cmd_e::META ); }
 	| trace			{ pParser->SetCommand ( Cmd_e::TRACE ); }
 	| curl			{ pParser->SetCommand ( Cmd_e::CURL ); }
+	| pause			{ pParser->SetCommand ( Cmd_e::PAUSE ); }
 	;
 
 //////////////////////////////////////////////////////////////////////////
@@ -313,6 +315,16 @@ opt_size:
 	| TOK_CONST_INT
 	{
 		pParser->SetPar1($1);
+	}
+	;
+
+
+// command 'pause 'value' 1|0
+pause:
+	TOK_PAUSE TOK_QUOTED_STRING boolpar
+	{
+		pParser->SetSParam ($2);
+		pParser->SetPar1 ($3);
 	}
 	;
 

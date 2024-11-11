@@ -1047,7 +1047,7 @@ class QueryStatContainer_c: public QueryStatContainer_i
 {
 public:
 	void Add( uint64_t uFoundRows, uint64_t uQueryTime, uint64_t uTimestamp ) final;
-	void GetRecord( int iRecord, QueryStatRecord_t& tRecord ) const final;
+	QueryStatRecord_t GetRecord( int iRecord ) const noexcept final;
 	int GetNumRecords() const final;
 
 	QueryStatContainer_c();
@@ -1058,6 +1058,11 @@ public:
 private:
 	CircularBuffer_T<QueryStatRecord_t> m_dRecords;
 };
+
+std::unique_ptr<QueryStatContainer_i> MakeStatsContainer ()
+{
+	return std::make_unique<QueryStatContainer_c>();
+}
 
 void QueryStatContainer_c::Add( uint64_t uFoundRows, uint64_t uQueryTime, uint64_t uTimestamp )
 {
@@ -1098,9 +1103,9 @@ void QueryStatContainer_c::Add( uint64_t uFoundRows, uint64_t uQueryTime, uint64
 	tRecord.m_iCount = 1;
 }
 
-void QueryStatContainer_c::GetRecord( int iRecord, QueryStatRecord_t& tRecord ) const
+QueryStatRecord_t QueryStatContainer_c::GetRecord ( int iRecord ) const noexcept
 {
-	tRecord = m_dRecords[iRecord];
+	return m_dRecords[iRecord];
 }
 
 
@@ -1134,7 +1139,7 @@ class QueryStatContainerExact_c: public QueryStatContainer_i
 {
 public:
 	void Add( uint64_t uFoundRows, uint64_t uQueryTime, uint64_t uTimestamp ) final;
-	void GetRecord( int iRecord, QueryStatRecord_t& tRecord ) const final;
+	QueryStatRecord_t GetRecord( int iRecord ) const noexcept final;
 	int GetNumRecords() const final;
 
 	QueryStatContainerExact_c();
@@ -1172,8 +1177,9 @@ int QueryStatContainerExact_c::GetNumRecords() const
 }
 
 
-void QueryStatContainerExact_c::GetRecord( int iRecord, QueryStatRecord_t& tRecord ) const
+QueryStatRecord_t QueryStatContainerExact_c::GetRecord ( int iRecord ) const noexcept
 {
+	QueryStatRecord_t tRecord;
 	const QueryStatRecordExact_t& tExact = m_dRecords[iRecord];
 
 	tRecord.m_uQueryTimeMin = tExact.m_uQueryTime;
@@ -1185,6 +1191,7 @@ void QueryStatContainerExact_c::GetRecord( int iRecord, QueryStatRecord_t& tReco
 
 	tRecord.m_uTimestamp = tExact.m_uTimestamp;
 	tRecord.m_iCount = 1;
+	return tRecord;
 }
 
 QueryStatContainerExact_c::QueryStatContainerExact_c() = default;
@@ -1213,16 +1220,15 @@ ServedStats_c::ServedStats_c()
 #ifndef NDEBUG
 	, m_pQueryStatRecordsExact { std::make_unique<QueryStatContainerExact_c>() }
 #endif
-	, m_pQueryTimeDigest { sphCreateTDigest() }
-	, m_pRowsFoundDigest { sphCreateTDigest() }
+
 {}
 
 void ServedStats_c::AddQueryStat( uint64_t uFoundRows, uint64_t uQueryTime )
 {
 	ScWL_t wLock( m_tStatsLock );
 
-	m_pRowsFoundDigest->Add(( double ) uFoundRows );
-	m_pQueryTimeDigest->Add(( double ) uQueryTime );
+	m_tRowsFoundDigest.Add(( double ) uFoundRows );
+	m_tQueryTimeDigest.Add(( double ) uQueryTime );
 
 	uint64_t uTimeStamp = sphMicroTimer();
 	m_pQueryStatRecords->Add( uFoundRows, uQueryTime, uTimeStamp );
@@ -1269,8 +1275,7 @@ void ServedStats_c::CalculateQueryStatsExact( QueryStats_t& tRowsFoundStats, Que
 #endif // !NDEBUG
 
 
-void ServedStats_c::CalcStatsForInterval( const QueryStatContainer_i* pContainer, QueryStatElement_t& tRowResult,
-	QueryStatElement_t& tTimeResult, uint64_t uTimestamp, uint64_t uInterval, int iRecords )
+static void CalcStatsForInterval( const QueryStatContainer_i* pContainer, QueryStatElement_t& tRowResult, QueryStatElement_t& tTimeResult, uint64_t uTimestamp, uint64_t uInterval, int iRecords )
 {
 	assert ( pContainer );
 	using namespace QueryStats;
@@ -1288,12 +1293,10 @@ void ServedStats_c::CalcStatsForInterval( const QueryStatContainer_i* pContainer
 	dTime.Reserve( iRecords );
 
 	DWORD uTotalQueries = 0;
-	QueryStatRecord_t tRecord;
 
 	for ( int i = 0; i<pContainer->GetNumRecords(); ++i )
 	{
-		pContainer->GetRecord( i, tRecord );
-
+		auto tRecord = pContainer->GetRecord ( i );
 		if ( uTimestamp - tRecord.m_uTimestamp<=uInterval )
 		{
 			tRowResult.m_dData[TYPE_MIN] = Min( tRecord.m_uFoundRowsMin, tRowResult.m_dData[TYPE_MIN] );
@@ -1333,8 +1336,18 @@ void ServedStats_c::CalcStatsForInterval( const QueryStatContainer_i* pContainer
 	tTimeResult.m_dData[TYPE_99] = dTime[u99];
 }
 
-void ServedStats_c::DoStatCalcStats( const QueryStatContainer_i* pContainer,
-	QueryStats_t& tRowsFoundStats, QueryStats_t& tQueryTimeStats ) const
+void CalcSimpleStats ( const QueryStatContainer_i * pContainer, QueryStats_t & tRowsFoundStats, QueryStats_t & tQueryTimeStats )
+{
+	assert ( pContainer );
+	using namespace QueryStats;
+	auto uTimestamp = sphMicroTimer ();
+	int iRecords = pContainer->GetNumRecords ();
+	for ( int i = INTERVAL_1MIN; i<=INTERVAL_15MIN; ++i )
+		CalcStatsForInterval ( pContainer, tRowsFoundStats.m_dStats[i], tQueryTimeStats.m_dStats[i], uTimestamp, g_dStatsIntervals[i], iRecords );
+}
+
+
+void ServedStats_c::DoStatCalcStats( const QueryStatContainer_i* pContainer, QueryStats_t& tRowsFoundStats, QueryStats_t& tQueryTimeStats ) const
 {
 	assert ( pContainer );
 	using namespace QueryStats;
@@ -1343,23 +1356,22 @@ void ServedStats_c::DoStatCalcStats( const QueryStatContainer_i* pContainer,
 
 	int iRecords = m_pQueryStatRecords->GetNumRecords();
 	for ( int i = INTERVAL_1MIN; i<=INTERVAL_15MIN; ++i )
-		CalcStatsForInterval( pContainer, tRowsFoundStats.m_dStats[i], tQueryTimeStats.m_dStats[i], uTimestamp,
-							  g_dStatsIntervals[i], iRecords );
+		CalcStatsForInterval( pContainer, tRowsFoundStats.m_dStats[i], tQueryTimeStats.m_dStats[i], uTimestamp, g_dStatsIntervals[i], iRecords );
 
 	auto& tRowsAllStats = tRowsFoundStats.m_dStats[INTERVAL_ALLTIME];
 	tRowsAllStats.m_dData[TYPE_AVG] = m_uTotalQueries ? m_uTotalFoundRowsSum / m_uTotalQueries : 0;
 	tRowsAllStats.m_dData[TYPE_MIN] = m_uTotalFoundRowsMin;
 	tRowsAllStats.m_dData[TYPE_MAX] = m_uTotalFoundRowsMax;
-	tRowsAllStats.m_dData[TYPE_95] = ( uint64_t ) m_pRowsFoundDigest->Percentile( 95 );
-	tRowsAllStats.m_dData[TYPE_99] = ( uint64_t ) m_pRowsFoundDigest->Percentile( 99 );
+	tRowsAllStats.m_dData[TYPE_95] = ( uint64_t ) m_tRowsFoundDigest.Percentile( 95 );
+	tRowsAllStats.m_dData[TYPE_99] = ( uint64_t ) m_tRowsFoundDigest.Percentile( 99 );
 	tRowsAllStats.m_uTotalQueries = m_uTotalQueries;
 
 	auto& tQueryAllStats = tQueryTimeStats.m_dStats[INTERVAL_ALLTIME];
 	tQueryAllStats.m_dData[TYPE_AVG] = m_uTotalQueries ? m_uTotalQueryTimeSum / m_uTotalQueries : 0;
 	tQueryAllStats.m_dData[TYPE_MIN] = m_uTotalQueryTimeMin;
 	tQueryAllStats.m_dData[TYPE_MAX] = m_uTotalQueryTimeMax;
-	tQueryAllStats.m_dData[TYPE_95] = ( uint64_t ) m_pQueryTimeDigest->Percentile( 95 );
-	tQueryAllStats.m_dData[TYPE_99] = ( uint64_t ) m_pQueryTimeDigest->Percentile( 99 );
+	tQueryAllStats.m_dData[TYPE_95] = ( uint64_t ) m_tQueryTimeDigest.Percentile( 95 );
+	tQueryAllStats.m_dData[TYPE_99] = ( uint64_t ) m_tQueryTimeDigest.Percentile( 99 );
 	tQueryAllStats.m_uTotalQueries = m_uTotalQueries;
 }
 
@@ -1608,4 +1620,19 @@ volatile bool& sphGetSeamlessRotate() noexcept
 	static bool bSeamlessRotate = true;
 #endif
 	return bSeamlessRotate;
+}
+
+bool PollOptimizeRunning ( const CSphString & sIndex )
+{
+	while ( true )
+	{
+		Threads::Coro::SleepMsec ( 500 );
+		auto pTmpIndex = GetServed ( sIndex );
+		if ( !ServedDesc_t::IsMutable ( pTmpIndex ) )
+			return false;
+
+		RIdx_T<RtIndex_i *> pRtIndex { pTmpIndex };
+		if ( !pRtIndex->OptimizesRunning () )
+			return true;
+	}
 }

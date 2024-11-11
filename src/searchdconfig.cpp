@@ -19,6 +19,7 @@
 #include "coroutine.h"
 #include "sphinxpq.h"
 #include "binlog.h"
+#include "global_idf.h"
 
 using namespace Threads;
 
@@ -967,6 +968,23 @@ static bool CopyStopwords ( const CSphString & sSrcPath, const CSphString & sDst
 	return true;
 }
 
+
+static bool CopyJiebaDict ( const CSphString & sSrcPath, const CSphString & sDstPath, OptInt_t iPostfix, JsonObj_c & tHeader, CopiedFiles & hCopied, CSphString & sError )
+{
+	const char * szDict = "jieba_user_dict_path";
+	assert ( tHeader && tHeader.HasItem(szDict) && tHeader.GetItem(szDict).IsStr() );
+
+	CSphSavedFile tJiebaDict;
+	tJiebaDict.m_sFilename = tHeader.GetItem(szDict).StrVal();
+	if ( !CopyExternalFile ( sSrcPath, sDstPath, szDict, iPostfix, std::nullopt, tJiebaDict, hCopied, sError ) )
+		return false;
+
+	tHeader.DelItem(szDict);
+	tHeader.AddStr ( szDict, tJiebaDict.m_sFilename );
+	return true;
+}
+
+
 static std::optional<JsonObj_c> ReadJsonHeader ( const CSphString & sFilename, CSphString & sError )
 {
 	CSphAutofile tFile;
@@ -1005,7 +1023,7 @@ static bool CopyExternalsFromHeader ( const CSphString & sSrcPath, const CSphStr
 	JsonObj_c tTokSettings = tHeader.GetItem ( "tokenizer_settings" );
 	JsonObj_c tDictSettings = tHeader.GetItem ( "dictionary_settings" );
 
-	bool bHasExceptions = ( tTokSettings && tTokSettings.HasItem( "synonyms_file" ) && tTokSettings.GetItem( "synonyms_file" ).IsStr() );
+	bool bHasExceptions = tTokSettings && tTokSettings.HasItem( "synonyms_file" ) && tTokSettings.GetItem( "synonyms_file" ).IsStr();
 
 	bool bHasStopwords = false;
 	if ( tDictSettings && tDictSettings.HasItem( "stopwords_file_infos" ) )
@@ -1013,6 +1031,7 @@ static bool CopyExternalsFromHeader ( const CSphString & sSrcPath, const CSphStr
 		JsonObj_c tStopwords = tDictSettings.GetItem( "stopwords_file_infos" );
 		bHasStopwords = ( tStopwords.IsArray() && tStopwords.Size()>0 );
 	}
+
 	if ( !bHasStopwords && tDictSettings.HasItem( "stopwords" ) )
 		bHasStopwords = tDictSettings.GetItem( "stopwords" ).IsStr();
 
@@ -1023,7 +1042,9 @@ static bool CopyExternalsFromHeader ( const CSphString & sSrcPath, const CSphStr
 		bHasWordforms = ( tWordforms.IsArray() && tWordforms.Size()>0 );
 	}
 
-	if ( !bHasExceptions && !bHasStopwords && !bHasWordforms )
+	bool bHasJiebaDict = tHeader.HasItem("jieba_user_dict_path");
+
+	if ( !bHasExceptions && !bHasStopwords && !bHasWordforms && !bHasJiebaDict )
 		return true;
 
 	CSphString sDstPath = GetPathOnly ( sDstIndex );
@@ -1035,6 +1056,9 @@ static bool CopyExternalsFromHeader ( const CSphString & sSrcPath, const CSphStr
 		return false;
 
 	if ( bHasWordforms && !CopyWordforms ( GetPathOnly ( sSrcPath ), sDstPath, iPostfix, tDictSettings, hCopied, sError ) )
+		return false;
+
+	if ( bHasJiebaDict && !CopyJiebaDict ( GetPathOnly ( sSrcPath ), sDstPath, iPostfix, tHeader, hCopied, sError ) )
 		return false;
 
 	return true;
@@ -1377,6 +1401,9 @@ bool CreateNewIndexConfigless ( const CSphString & sIndex, const CreateTableSett
 	case ADD_NEEDLOAD:
 		{
 			assert ( pDesc );
+			if ( !pDesc->m_sGlobalIDFPath.IsEmpty() && !sph::PrereadGlobalIDF ( pDesc->m_sGlobalIDFPath, sError ) )
+				dWarnings.Add ( "global IDF unavailable - IGNORING" );
+
 			FixupIndexTID ( UnlockedHazardIdxFromServed ( *pDesc ), Binlog::LastTidFor ( sIndex ) );
 			if ( !PreallocNewIndex ( *pDesc, &hCfg, sIndex.cstr(), dWarnings, sError ) )
 			{

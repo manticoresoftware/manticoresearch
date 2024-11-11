@@ -37,7 +37,7 @@
 //////////////////////////////////////////////////////////////////////////
 
 const DWORD		INDEX_MAGIC_HEADER			= 0x58485053;		///< my magic 'SPHX' header
-const DWORD		INDEX_FORMAT_VERSION		= 66;				///< added .spjidx
+const DWORD		INDEX_FORMAT_VERSION		= 67;				///< added jieba
 
 const char		MAGIC_CODE_SENTENCE			= '\x02';				// emitted from tokenizer on sentence boundary
 const char		MAGIC_CODE_PARAGRAPH		= '\x03';				// emitted from stripper (and passed via tokenizer) on paragraph boundary
@@ -1034,12 +1034,14 @@ struct SuggestArgs_t
 	bool			m_bSentence			{ false };
 };
 
-struct SuggestResult_t
+struct SuggestResultSet_t
 {
-	// result set
 	CSphVector<BYTE>			m_dBuf;
 	CSphVector<SuggestWord_t>	m_dMatched;
+};
 
+struct SuggestResult_t : public SuggestResultSet_t
+{
 	// state
 	CSphVector<char>			m_dTrigrams;
 	int							m_iNGramLen = 3;
@@ -1093,6 +1095,7 @@ public:
 };
 
 void sphGetSuggest ( const ISphWordlistSuggest * pWordlist, int iInfixCodepointBytes, const SuggestArgs_t & tArgs, SuggestResult_t & tRes );
+void SuggestMergeDocs ( CSphVector<SuggestWord_t> & dMatched );
 
 struct ExpansionTrait_t
 {
@@ -1190,6 +1193,7 @@ struct GetKeywordsSettings_t
 	bool	m_bSortByHits = false;
 	int		m_iCutoff = -1;
 	bool	m_bAllowExpansion = true;
+	JiebaMode_e m_eJiebaMode = JiebaMode_e::DEFAULT;
 };
 
 XQNode_t * sphExpandXQNode ( XQNode_t * pNode, ExpansionContext_t & tCtx );

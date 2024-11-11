@@ -19,6 +19,7 @@
 #include "sphinxql_second.h"
 #include "sphinxql_extra.h"
 #include "searchdha.h"
+#include "jieba.h"
 
 extern int g_iAgentQueryTimeoutMs;	// global (default). May be override by index-scope values, if one specified
 
@@ -259,6 +260,12 @@ void SqlParserTraits_c::SetIndex ( const CSphString& sIndex ) const
 		m_pStmt->m_sIndex = sIndex;
 }
 
+
+void SqlParserTraits_c::Comment ( const SqlNode_t& tNode ) const
+{
+}
+
+
 //////////////////////////////////////////////////////////////////////////
 
 enum class Option_e : BYTE;
@@ -321,6 +328,7 @@ public:
 
 	bool			AddDistinct ( SqlNode_t * pNewExpr, SqlNode_t * pStart, SqlNode_t * pEnd );
 	void			AddDistinct ( SqlNode_t * pNewExpr );
+	bool			AddDistinctSort ( SqlNode_t * pNewExpr, SqlNode_t * pStart, SqlNode_t * pEnd, bool bSortAsc );
 	bool			MaybeAddFacetDistinct();
 	bool			SetupFacetStmt();
 
@@ -529,6 +537,7 @@ enum class Option_e : BYTE
 	THREADS_EX,
 	SWITCHOVER,
 	EXPANSION_LIMIT,
+	JIEBA_MODE,
 
 	INVALID_OPTION
 };
@@ -543,7 +552,7 @@ void InitParserOption()
 		"max_matches", "max_predicted_time", "max_query_time", "morphology", "rand_seed", "ranker", "retry_count",
 		"retry_delay", "reverse_scan", "sort_method", "strict", "sync", "threads", "token_filter", "token_filter_options",
 		"not_terms_only_allowed", "store", "accurate_aggregation", "max_matches_increase_threshold", "distinct_precision_threshold",
-		"threads_ex", "switchover", "expansion_limit" };
+		"threads_ex", "switchover", "expansion_limit", "jieba_mode" };
 
 	for ( BYTE i = 0u; i<(BYTE) Option_e::INVALID_OPTION; ++i )
 		g_hParseOption.Add ( (Option_e) i, dOptions[i] );
@@ -576,7 +585,8 @@ static bool CheckOption ( SqlStmt_e eStmt, Option_e eOption )
 			Option_e::MAX_QUERY_TIME, Option_e::MORPHOLOGY, Option_e::RAND_SEED, Option_e::RANKER,
 			Option_e::RETRY_COUNT, Option_e::RETRY_DELAY, Option_e::REVERSE_SCAN, Option_e::SORT_METHOD,
 			Option_e::THREADS, Option_e::TOKEN_FILTER, Option_e::NOT_ONLY_ALLOWED, Option_e::ACCURATE_AGG,
-			Option_e::MAXMATCH_THRESH, Option_e::DISTINCT_THRESH, Option_e::THREADS_EX, Option_e::EXPANSION_LIMIT };
+			Option_e::MAXMATCH_THRESH, Option_e::DISTINCT_THRESH, Option_e::THREADS_EX, Option_e::EXPANSION_LIMIT,
+			Option_e::JIEBA_MODE };
 
 	static Option_e dInsertOptions[] = { Option_e::TOKEN_FILTER_OPTIONS };
 
@@ -830,7 +840,12 @@ AddOption_e AddOption ( CSphQuery & tQuery, const CSphString & sOpt, const CSphS
 
 	case Option_e::THREADS_EX:
 		std::tie ( tQuery.m_tMainDispatcher, tQuery.m_tPseudoShardingDispatcher ) = Dispatcher::ParseTemplates ( sVal.cstr() );
-			break;
+		break;
+
+	case Option_e::JIEBA_MODE:
+		if ( !StrToJiebaMode ( tQuery.m_eJiebaMode, sVal, sError ) )
+			return FAILED(sError.cstr());
+		break;
 
 	default:
 		return AddOption_e::NOT_FOUND;
@@ -1107,13 +1122,15 @@ void SqlParser_c::SetGroupbyLimit ( int iLimit )
 
 bool SqlParser_c::AddDistinct ( SqlNode_t * pNewExpr, SqlNode_t * pStart, SqlNode_t * pEnd )
 {
-	if ( !m_pQuery->m_sGroupDistinct.IsEmpty() )
+	CSphString sDistinct;
+	ToString ( sDistinct, *pNewExpr );
+	if ( !m_pQuery->m_sGroupDistinct.IsEmpty() && m_pQuery->m_sGroupDistinct!=sDistinct )
 	{
 		yyerror ( this, "too many COUNT(DISTINCT) clauses" );
 		return false;
 	}
 
-	ToString ( m_pQuery->m_sGroupDistinct, *pNewExpr );
+	m_pQuery->m_sGroupDistinct = sDistinct;
 	return AddItem ( "@distinct", pStart, pEnd );
 }
 
@@ -1130,9 +1147,22 @@ void SqlParser_c::AddDistinct ( SqlNode_t * pNewExpr )
 	}
 }
 
+bool SqlParser_c::AddDistinctSort ( SqlNode_t * pNewExpr, SqlNode_t * pStart, SqlNode_t * pEnd, bool bSortAsc )
+{
+	if ( !AddDistinct ( pNewExpr, pStart, pEnd ) )
+		return false;
+
+	m_pQuery->m_sOrderBy.SetSprintf ( "@distinct %s", ( bSortAsc ? "asc" : "desc" ) );
+	return true;
+}
+
 bool SqlParser_c::MaybeAddFacetDistinct()
 {
 	if ( m_pQuery->m_sGroupDistinct.IsEmpty() )
+		return true;
+
+	// distinct could be already added by order by
+	if ( m_pQuery->m_dItems.Contains ( bind ( &CSphQueryItem::m_sExpr ), "@distinct" ) )
 		return true;
 
 	CSphQueryItem tItem;
@@ -1812,7 +1842,7 @@ static ParseResult_e ParseNext ( Str_t sQuery, CSphVector<SqlStmt_t>& dStmt, CSp
 			dStmt.Pop();
 		eRes = pParser ( sQuery, dStmt, sNewError );
 		if ( eRes != ParseResult_e::PARSE_OK )
-			sphLogDebug ( "%s", sNewError.cstr() );
+			sphLogDebugv ( "%s", sNewError.cstr() );
 		if ( eRes == ParseResult_e::PARSE_ERROR && !bKeepError )
 		{
 			sError = sNewError;
@@ -1974,10 +2004,11 @@ bool sphParseSqlQuery ( Str_t sQuery, CSphVector<SqlStmt_t> & dStmt, CSphString 
 	// cascade parsing
 	if ( iRes || dStmt.IsEmpty() )
 	{
-		sphLogDebug ( "%s", sError.cstr() );
 		auto eNext = ParseNext ( sQuery, dStmt, sError, !tParser.IsWrongSyntaxError() );
 		if ( eNext == ParseResult_e::PARSE_OK )
 			sError = "";
+		else
+			sphLogDebug ( "%s", sError.cstr () );
 		return eNext == ParseResult_e::PARSE_OK;
 	}
 

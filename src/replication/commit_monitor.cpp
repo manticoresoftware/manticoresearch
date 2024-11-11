@@ -88,6 +88,7 @@ bool CommitMonitor_c::CommitTOI()
 
 static bool DoUpdate ( AttrUpdateArgs& tUpd, const cServedIndexRefPtr_c& pDesc, int& iUpdated, bool bUpdateAPI, bool bNeedWlock )
 {
+	TRACE_CORO ( "rt", "commit_monitor::DoUpdate" );
 	if ( bUpdateAPI )
 	{
 		Debug ( bool bOk = ) [&]() {
@@ -109,6 +110,7 @@ static bool DoUpdate ( AttrUpdateArgs& tUpd, const cServedIndexRefPtr_c& pDesc, 
 
 bool CommitMonitor_c::UpdateTOI ()
 {
+	TRACE_CORO ( "rt", "commit_monitor::UpdateTOI" );
 	using namespace TlsMsg;
 	if ( m_tAcc.m_dCmd.IsEmpty ())
 		return TlsMsg::Err ( "empty accumulator" );

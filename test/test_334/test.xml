@@ -261,51 +261,51 @@ insert into test_table10 values
 
 <queries>
 <!-- simple match query -->
-<query endpoint="json/search">{ "index": "test1", "query": { "match": { "content": "first" } } } }</query>
-<query endpoint="json/search">{ "index": "test1", "query": { "match": { "content,title": "1st second" } } } }</query>
-<query endpoint="json/search">{ "index": "test1", "query": { "match": { "content, title": "1st second" } } } }</query>
-<query endpoint="json/search">{ "index": "test1", "query": { "match": { "content": "3rd fourth" } } } }</query>
-<query endpoint="json/search">{ "index": "test1", "query": { "match": { "title": "3rd fourth" } } } }</query>
+<query endpoint="json/search">{ "table": "test1", "query": { "match": { "content": "first" } } } }</query>
+<query endpoint="json/search">{ "table": "test1", "query": { "match": { "content,title": "1st second" } } } }</query>
+<query endpoint="json/search">{ "table": "test1", "query": { "match": { "content, title": "1st second" } } } }</query>
+<query endpoint="json/search">{ "table": "test1", "query": { "match": { "content": "3rd fourth" } } } }</query>
+<query endpoint="json/search">{ "table": "test1", "query": { "match": { "title": "3rd fourth" } } } }</query>
 
 <!-- old sphinx field syntax -->
-<query endpoint="json/search">{ "index": "test1", "query": { "match": { "*": "3rd fourth" } } } }</query>
+<query endpoint="json/search">{ "table": "test1", "query": { "match": { "*": "3rd fourth" } } } }</query>
 
 <!-- new sphinx field syntax -->
-<query endpoint="json/search">{ "index": "test1", "query": { "match": { "_all": "3rd fourth" } } } }</query>
+<query endpoint="json/search">{ "table": "test1", "query": { "match": { "_all": "3rd fourth" } } } }</query>
 
 <!-- fullscan/match_all -->
-<query endpoint="json/search">{ "index": "test1", "query": { "match_all": {} } } }</query>
+<query endpoint="json/search">{ "table": "test1", "query": { "match_all": {} } } }</query>
 
 <!-- index expansion -->
-<query endpoint="json/search">{ "index": "*", "query": { "match": { "_all": "first thought" } } } }</query>
-<query endpoint="json/search">{ "index": "_all", "query": { "match": { "_all": "first thought" } } } }</query>
+<query endpoint="json/search">{ "table": "*", "query": { "match": { "_all": "first thought" } } } }</query>
+<query endpoint="json/search">{ "table": "_all", "query": { "match": { "_all": "first thought" } } } }</query>
 
 <!-- match with options -->
-<query endpoint="json/search">{ "index": "test2", "query": { "match": { "content,title": { "query":"glanced on", "operator":"and" } } } }</query>
-<query endpoint="json/search">{ "index": "test2", "query": { "match": { "content,title": { "query":"glanced on", "operator":"or" } } } }</query>
+<query endpoint="json/search">{ "table": "test2", "query": { "match": { "content,title": { "query":"glanced on", "operator":"and" } } } }</query>
+<query endpoint="json/search">{ "table": "test2", "query": { "match": { "content,title": { "query":"glanced on", "operator":"or" } } } }</query>
 
 <!-- bool queries -->
 <!-- "must" -->
-<query endpoint="json/search">{ "index": "test2", "query": { "bool" : { "must" : { "match" : { "_all" : "on" } } } } }</query>
-<query endpoint="json/search">{ "index": "test2", "query": { "bool" : { "must" : { "match" : { "_all" : "to" } } } } }</query>
-<query endpoint="json/search">{ "index": "test2", "query": { "bool" : { "must": [ { "match" : { "_all" : "to" } }, { "match" : { "_all" : "on" } } ] } } }</query>
+<query endpoint="json/search">{ "table": "test2", "query": { "bool" : { "must" : { "match" : { "_all" : "on" } } } } }</query>
+<query endpoint="json/search">{ "table": "test2", "query": { "bool" : { "must" : { "match" : { "_all" : "to" } } } } }</query>
+<query endpoint="json/search">{ "table": "test2", "query": { "bool" : { "must": [ { "match" : { "_all" : "to" } }, { "match" : { "_all" : "on" } } ] } } }</query>
 
 <!-- "should" -->
-<query endpoint="json/search">{ "index": "test2", "query": { "bool" : { "should" : { "match" : { "_all" : "glanced" } } } } }</query>
-<query endpoint="json/search">{ "index": "test2", "query": { "bool" : { "should" : { "match" : { "_all" : "despite" } } } } }</query>
-<query endpoint="json/search">{ "index": "test2", "query": { "bool" : { "should": [ { "match" : { "_all" : "glanced " } }, { "match" : { "_all" : "despite" } } ] } } }</query>
+<query endpoint="json/search">{ "table": "test2", "query": { "bool" : { "should" : { "match" : { "_all" : "glanced" } } } } }</query>
+<query endpoint="json/search">{ "table": "test2", "query": { "bool" : { "should" : { "match" : { "_all" : "despite" } } } } }</query>
+<query endpoint="json/search">{ "table": "test2", "query": { "bool" : { "should": [ { "match" : { "_all" : "glanced " } }, { "match" : { "_all" : "despite" } } ] } } }</query>
 
 <!-- "must+must_not" -->
-<query endpoint="json/search">{ "index": "test2", "query": { "bool": { "must": { "match" : { "_all" : "glanced grown paean" } },	"must_not":	{ "match" : { "_all" : "irresistible" } } } } }</query>
-<query endpoint="json/search">{ "index": "test2", "query": { "bool": { "must": { "match" : { "_all" : "glanced grown paean" } }, "must_not": [ { "match" : { "_all" : "irresistible" } }, { "match" : { "_all" : "certain" } } ] } } }</query>
+<query endpoint="json/search">{ "table": "test2", "query": { "bool": { "must": { "match" : { "_all" : "glanced grown paean" } },	"must_not":	{ "match" : { "_all" : "irresistible" } } } } }</query>
+<query endpoint="json/search">{ "table": "test2", "query": { "bool": { "must": { "match" : { "_all" : "glanced grown paean" } }, "must_not": [ { "match" : { "_all" : "irresistible" } }, { "match" : { "_all" : "certain" } } ] } } }</query>
 
 <!-- must+should -->
-<query endpoint="json/search">{ "index": "test2", "query": { "bool": { "must": { "match" : { "_all" : "glanced grown" } }, "should": { "match" : { "_all" : "paean" } } } } }</query>
+<query endpoint="json/search">{ "table": "test2", "query": { "bool": { "must": { "match" : { "_all" : "glanced grown" } }, "should": { "match" : { "_all" : "paean" } } } } }</query>
 
 <!-- phrase -->
 <query endpoint="json/search">
 {
-  "index":"test2",
+  "table":"test2",
   "query":
   {
 	"match_phrase": { "_all" : "had grown quite" }
@@ -315,7 +315,7 @@ insert into test_table10 values
 
 <query endpoint="json/search">
 {
-  "index":"test2",
+  "table":"test2",
   "query":
   {
 	"match_phrase": { "_all" : "had grown not quite" }
@@ -326,7 +326,7 @@ insert into test_table10 values
 <!-- distributed -->
 <query endpoint="json/search">
 {
-  "index":"dist2",
+  "table":"dist2",
   "query":
   {
 	"match_phrase": { "_all" : "had grown quite" }
@@ -336,21 +336,21 @@ insert into test_table10 values
 
 <query endpoint="json/search">
 {
-  "index":"dist2",
+  "table":"dist2",
   "query": { "match_all": {} }
 }
 </query>
 
 <query endpoint="json/search">
 {
-  "index":"dist2"
+  "table":"dist2"
 }
 </query>
 
 <!-- query_string, mixed QL and JSON -->
 <query endpoint="json/search">
 {
-  "index": "test1",
+  "table": "test1",
   "query":
   {
     "match": { "_all": "3rd fourth" } }
@@ -360,7 +360,7 @@ insert into test_table10 values
 
 <query endpoint="json/search">
 {
-  "index": "test1",
+  "table": "test1",
   "query":
   {
     "query_string": "3rd | fourth"
@@ -371,7 +371,7 @@ insert into test_table10 values
 <!-- query_string vs bool queries -->
 <query endpoint="json/search">
 {
-  "index": "test1",
+  "table": "test1",
   "query":
   {
     "bool" :
@@ -388,7 +388,7 @@ insert into test_table10 values
 
 <query endpoint="json/search">
 {
-  "index": "test1",
+  "table": "test1",
   "query":
   {
     "bool" :
@@ -400,22 +400,22 @@ insert into test_table10 values
 }
 </query>
 
-<query endpoint="json/search">{ "index": "test_gr1", "aggs":{ "gr_small": { "terms": { "field": "gid" } }, "gr_tag": { "terms": { "field": "tag" } }} }</query>
-<query endpoint="json/search">{ "index": "dist_gr1", "aggs":{ "gr_small": { "terms": { "field": "gid" } }, "gr_tag": { "terms": { "field": "tag" } }} }</query>
-<query endpoint="json/search">{ "index": "test_gr1", "aggs":{ "gr_small": { "terms": { "field": "gid" } }, "gr_tag": { "terms": { "field": "tag" } }, "gr_dup": { "terms": { "field": "tag" } }} }</query>
-<query endpoint="json/search">{ "index": "dist_gr1", "aggs":{ "gr_small": { "terms": { "field": "gid" } }, "gr_tag": { "terms": { "field": "tag" } }, "gr_dup": { "terms": { "field": "tag" } }} }</query>
+<query endpoint="json/search">{ "table": "test_gr1", "aggs":{ "gr_small": { "terms": { "field": "gid" } }, "gr_tag": { "terms": { "field": "tag" } }} }</query>
+<query endpoint="json/search">{ "table": "dist_gr1", "aggs":{ "gr_small": { "terms": { "field": "gid" } }, "gr_tag": { "terms": { "field": "tag" } }} }</query>
+<query endpoint="json/search">{ "table": "test_gr1", "aggs":{ "gr_small": { "terms": { "field": "gid" } }, "gr_tag": { "terms": { "field": "tag" } }, "gr_dup": { "terms": { "field": "tag" } }} }</query>
+<query endpoint="json/search">{ "table": "dist_gr1", "aggs":{ "gr_small": { "terms": { "field": "gid" } }, "gr_tag": { "terms": { "field": "tag" } }, "gr_dup": { "terms": { "field": "tag" } }} }</query>
 
 <!-- facets with offset/limit -->
-<query endpoint="json/search">{ "index": "test_gr1", "offset":4, "limit":3, "aggs":{ "gr_small": { "terms": { "field": "gid", "size": 3 } }, "gr_tag": { "terms": { "field": "tag", "size": 3 } }} }</query>
+<query endpoint="json/search">{ "table": "test_gr1", "offset":4, "limit":3, "aggs":{ "gr_small": { "terms": { "field": "gid", "size": 3 } }, "gr_tag": { "terms": { "field": "tag", "size": 3 } }} }</query>
 
 <!-- regression stored field missed at facet -->
-<query endpoint="json/search">{ "index": "dist_gr2", "aggs":{ "gr_small": { "terms": { "field": "gid" } }, "gr_tag": { "terms": { "field": "tag" } }} }</query>
+<query endpoint="json/search">{ "table": "dist_gr2", "aggs":{ "gr_small": { "terms": { "field": "gid" } }, "gr_tag": { "terms": { "field": "tag" } }} }</query>
 
-<query endpoint="json/search">{"index":"test_wf","query":{"match":{"content":"quite"}}}</query>
+<query endpoint="json/search">{"table":"test_wf","query":{"match":{"content":"quite"}}}</query>
 
 <query endpoint="json/search">
 {
-  "index": "test1",
+  "table": "test1",
   "query": { "match": { "_all": "3rd fourth" } },
   "options":
   {
@@ -467,14 +467,14 @@ select * from dist_gr2 facet gid facet tag;;
 <query endpoint="sql" method="get">query=select%20id%20from%20test_gr1%20limit%201%20facet%20gid%20by%20tag</query>
 
 <!-- regression exception consumes escape char that breaks query parsing-->
-<query endpoint="json/search"> { "index": "test_exc1", "query": { "query_string": "IT\\/Tech" } } </query>
-<query endpoint="json/search"> { "index": "test_exc1", "query": { "query_string": "IT\/Tech" } } </query>
-<query endpoint="json/search"> { "index": "test_exc1", "query": { "query_string": "AT\\/Tech" } } </query>
-<query endpoint="json/search"> { "index": "test_exc1", "query": { "query_string": "AT\/Tech" } } </query>
-<query endpoint="json/search"> { "index": "test_exc0", "query": { "query_string": "IT\\/Tech" } } </query>
-<query endpoint="json/search"> { "index": "test_exc0", "query": { "query_string": "IT\/Tech" } } </query>
-<query endpoint="json/search"> { "index": "test_exc0", "query": { "query_string": "AT\\/Tech" } } </query>
-<query endpoint="json/search"> { "index": "test_exc0", "query": { "query_string": "AT\/Tech" } } </query>
+<query endpoint="json/search"> { "table": "test_exc1", "query": { "query_string": "IT\\/Tech" } } </query>
+<query endpoint="json/search"> { "table": "test_exc1", "query": { "query_string": "IT\/Tech" } } </query>
+<query endpoint="json/search"> { "table": "test_exc1", "query": { "query_string": "AT\\/Tech" } } </query>
+<query endpoint="json/search"> { "table": "test_exc1", "query": { "query_string": "AT\/Tech" } } </query>
+<query endpoint="json/search"> { "table": "test_exc0", "query": { "query_string": "IT\\/Tech" } } </query>
+<query endpoint="json/search"> { "table": "test_exc0", "query": { "query_string": "IT\/Tech" } } </query>
+<query endpoint="json/search"> { "table": "test_exc0", "query": { "query_string": "AT\\/Tech" } } </query>
+<query endpoint="json/search"> { "table": "test_exc0", "query": { "query_string": "AT\/Tech" } } </query>
 <sphinxql>select * from test_exc1 WHERE MATCH ( 'IT\\/Tech' ) order by id asc</sphinxql>
 <sphinxql>select * from test_exc1 WHERE MATCH ( 'IT\/Tech' ) order by id asc</sphinxql>
 <sphinxql>select * from test_exc1 WHERE MATCH ( 'AT\\/Tech' ) order by id asc</sphinxql>
@@ -487,15 +487,15 @@ select * from dist_gr2 facet gid facet tag;;
 <!-- facets with offset/limit -->
 <!-- FIXME!!! SphinxQL and HTTP beahavior is different -->
 <sphinxql>select * from test_gr1 limit 5,1 facet tag limit 2 facet gid;</sphinxql>
-<query endpoint="json/search">{ "index": "test_gr1", "offset":5, "limit":1, "aggs":{ "gr_small": { "terms": { "field": "tag", "size": 2 } }, "gr_tag": { "terms": { "field": "gid" } }} }</query>
+<query endpoint="json/search">{ "table": "test_gr1", "offset":5, "limit":1, "aggs":{ "gr_small": { "terms": { "field": "tag", "size": 2 } }, "gr_tag": { "terms": { "field": "gid" } }} }</query>
 
 <!-- facets with sort per aggregate -->
-<query endpoint="json/search">{ "index": "test_gr1", "aggs":{ "gr_desc": { "terms": { "field": "gid" }, "sort":[{"gid":{"order":"desc"}}, {"tag":{"order":"desc"}}] }, "gr_asc": { "terms": { "field": "gid" }, "sort":[{"gid":{"order":"asc"}}]}} }</query>
+<query endpoint="json/search">{ "table": "test_gr1", "aggs":{ "gr_desc": { "terms": { "field": "gid" }, "sort":[{"gid":{"order":"desc"}}, {"tag":{"order":"desc"}}] }, "gr_asc": { "terms": { "field": "gid" }, "sort":[{"gid":{"order":"asc"}}]}} }</query>
 
 <!-- crash on cleanup parsed query after parse error -->
 <query endpoint="json/search">
 {
-  "index": "test1",
+  "table": "test1",
   "query": {
     "bool": {
       "must": [
@@ -531,20 +531,20 @@ select * from dist_gr2 facet gid facet tag;;
 <!-- case sensitive table names -->
 <query endpoint="json/search">
 {
-  "index": "T"
+  "table": "T"
 }
 </query>
 
 <query endpoint="json/search">
 {
-  "index": "t"
+  "table": "t"
 }
 </query>
 
 <!-- error on mix of full-text with filters -->
 <query endpoint="json/search">
 {
-  "index": "test1",
+  "table": "test1",
   "query": {
     "bool": {
       "should": [
@@ -559,7 +559,7 @@ select * from dist_gr2 facet gid facet tag;;
 <!-- error on multiple full-texts at the root node without the bool node -->
 <query endpoint="json/search">
 {
-  "index": "test1",
+  "table": "test1",
   "query": {
     "match": { "*": "a" },
     "query_string": "b"
@@ -570,7 +570,7 @@ select * from dist_gr2 facet gid facet tag;;
 <!-- error on multiple filters at the root node without the bool node -->
 <query endpoint="json/search">
 {
-  "index": "test1",
+  "table": "test1",
   "query": {
     "equals": { "gid": 1 },
     "in": { "gid": [2] }
@@ -580,7 +580,7 @@ select * from dist_gr2 facet gid facet tag;;
 
 <query endpoint="json/search">
 {
-  "index": "test1",
+  "table": "test1",
   "query": {
     "query_string": "b",
     "equals": { "gid": 1 },
@@ -591,7 +591,7 @@ select * from dist_gr2 facet gid facet tag;;
 
 <query endpoint="json/search">
 {
-  "index": "test1",
+  "table": "test1",
   "query": {
     "match": { "*": "a" },
     "query_string": "b",
@@ -602,7 +602,7 @@ select * from dist_gr2 facet gid facet tag;;
 
 <query endpoint="json/search">
 {
-  "index": "test10",
+  "table": "test10",
   "query":{
     "bool":{
       "filter":[ {
@@ -619,7 +619,7 @@ select * from dist_gr2 facet gid facet tag;;
 
 <query endpoint="json/search">
 {
-  "index": "test10",
+  "table": "test10",
   "query":{
     "bool":{
       "filter":[
@@ -654,15 +654,15 @@ select * from dist_gr2 facet gid facet tag;;
 </query>
 
 <!-- facets with sort defined as order property at aggregate bucket -->
-<query endpoint="json/search">{ "index": "test_gr1", "size":0, "aggs":{ "gr_desc": { "terms": { "field": "gid", "size": 5, "order": {"gid" : "asc"} } } } }</query>
+<query endpoint="json/search">{ "table": "test_gr1", "size":0, "aggs":{ "gr_desc": { "terms": { "field": "gid", "size": 5, "order": {"gid" : "asc"} } } } }</query>
 
 <!-- facets with sort but the wrong order -->
-<query endpoint="json/search">{ "index": "test_gr1", "size":0, "aggs":{ "gr_desc": { "sort":[{"gid":{"order":"asc"}}], "terms": { "field": "gid", "size": 5 }}}}</query>
+<query endpoint="json/search">{ "table": "test_gr1", "size":0, "aggs":{ "gr_desc": { "sort":[{"gid":{"order":"asc"}}], "terms": { "field": "gid", "size": 5 }}}}</query>
 
 /* error on mix of full-text with filters with long error path */
 <query endpoint="json/search">
 {
-  "index":"test1",
+  "table":"test1",
   "query":{
     "bool":{
       "must":[
@@ -684,7 +684,7 @@ select * from dist_gr2 facet gid facet tag;;
 <!-- error on full-text vs filter order -->
 <query endpoint="json/search">
 {
-  "index": "test2",
+  "table": "test2",
   "query": {
     "equals": { "gid": 11 },
     "match": { "*": "on" }
@@ -693,13 +693,48 @@ select * from dist_gr2 facet gid facet tag;;
 </query>
 <query endpoint="json/search">
 {
-  "index": "test2",
+  "table": "test2",
   "query": {
     "match": { "*": "on" },
     "equals": { "gid": 11 }
   }
 }
 </query>
+
+<!-- boost at JSON queries -->
+<query endpoint="json/search">
+{
+  "table":"test2",
+  "query":{
+    "bool":{
+      "should":[
+        {
+          "match":{
+            "_all":"glanced now"
+          }
+        },
+        {
+          "match":{
+            "_all":{
+              "query":"despite",
+              "boost":50
+            }
+          }
+        }
+      ]
+    }
+  }
+}
+</query>
+
+<!-- docvalue_fields with date_time format to emulate es timestamp microseconds scale  -->
+<query endpoint="search">{ "table": "test_gr1", "size":0, "aggs":{ "gr_small": { "terms": { "field": "gid", "size":5 } }} }</query>
+<query endpoint="test_gr1/_search">{ "size":0, "aggs":{ "gr_small": { "terms": { "field": "gid", "size":5 } }} }</query>
+<query endpoint="test_gr1/_search">{ "size":0, "aggs":{ "gr_small": { "terms": { "field": "gid", "size":5 } }}, "docvalue_fields": [ { "field": "gid", "format": "date_time" }] }</query>
+
+<!-- facet with distinct via sql endpoint and http encoded result -->
+<sphinxql>select * from test_gr1 limit 0 facet tag distinct gid limit 10;</sphinxql>
+<query endpoint="sql">select * from test_gr1 limit 0 facet tag distinct gid limit 10;</query>
 
 </queries>
 </test>

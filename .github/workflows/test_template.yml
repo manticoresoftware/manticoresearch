@@ -40,7 +40,7 @@ jobs:
       run:
         shell: bash
     container:
-      image: manticoresearch/ubertests_ctest:3263_mar_2024
+      image: manticoresearch/ubertests_ctest:3263_20241105
       env:
         DIAGNOSTIC: 1
         CACHEB: ../cache
@@ -77,7 +77,7 @@ jobs:
       - name: 🚀 Test
         id: test
         # --timeout may be not working https://gitlab.kitware.com/cmake/cmake/-/issues/23979
-        run: ctest -V -S misc/ctest/gltest.cmake --no-compress-output --timeout 60
+        run: ctest -V -S misc/ctest/gltest.cmake --no-compress-output --timeout 600
         continue-on-error: true
 
       - name: List build files

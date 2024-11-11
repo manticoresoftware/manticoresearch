@@ -28,7 +28,6 @@ public:
 	CPqResult m_tPercolateMeta;
 	SqlStmt_e m_eLastStmt { STMT_DUMMY };
 	bool m_bFederatedUser = false;
-	bool m_bDumpUser = false;
 	CSphString m_sFederatedQuery;
 	CSphString m_sUser;
 

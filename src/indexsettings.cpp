@@ -17,6 +17,7 @@
 #include "fileutils.h"
 #include "sphinxstem.h"
 #include "icu.h"
+#include "jieba.h"
 #include "attribute.h"
 #include "knnmisc.h"
 #include "indexfiles.h"
@@ -328,7 +329,7 @@ void CSphTokenizerSettings::Setup ( const CSphConfigSection & hIndex, CSphString
 			sWarning = "ngram_chars specified, but ngram_len=0; IGNORED";
 	}
 
-	m_sCaseFolding = hIndex.GetStr ( "charset_table", "non_cjk" );
+	m_sCaseFolding = hIndex.GetStr ( "charset_table", "non_cont" );
 	m_iMinWordLen = Max ( hIndex.GetInt ( "min_word_len", 1 ), 1 );
 	m_sNgramChars = hIndex.GetStr ( "ngram_chars" );
 	m_sSynonymsFile = hIndex.GetStr ( "exceptions" ); // new option name
@@ -423,7 +424,7 @@ void CSphTokenizerSettings::Format ( SettingsFormatter_c & tOut, FilenameBuilder
 	tOut.Add ( "charset_type",		bKnownTokenizer ? "utf-8" : "unknown tokenizer (deprecated sbcs?)", !bKnownTokenizer );
 
 	// fixme! need unified default charset handling
-	tOut.Add ( "charset_table",		m_sCaseFolding,	!m_sCaseFolding.IsEmpty() && m_sCaseFolding!="non_cjk" );
+	tOut.Add ( "charset_table",		m_sCaseFolding,	!m_sCaseFolding.IsEmpty() && m_sCaseFolding!="non_cont" );
 	tOut.Add ( "min_word_len",		m_iMinWordLen,	m_iMinWordLen>1 );
 	tOut.Add ( "ngram_len",			m_iNgramLen,	m_iNgramLen && !m_sNgramChars.IsEmpty() );
 	tOut.Add ( "ngram_chars",		m_sNgramChars,	m_iNgramLen && !m_sNgramChars.IsEmpty() );
@@ -886,6 +887,56 @@ bool CSphIndexSettings::ParseDocstoreSettings ( const CSphConfigSection & hIndex
 }
 
 
+bool CSphIndexSettings::ParseCJKSegmentation ( const CSphConfigSection & hIndex, const StrVec_t & dMorphs, CSphString & sWarning, CSphString & sError )
+{
+	bool bICU = dMorphs.Contains ( "icu_chinese" );
+	bool bJieba = dMorphs.Contains ( "jieba_chinese" );
+
+	if ( bICU && bJieba )
+	{
+		sError = "ICU and Jieba cannot both be enabled at the same time";
+		return false;
+	}
+	else
+		m_ePreprocessor = bICU ? Preprocessor_e::ICU : ( bJieba ? Preprocessor_e::JIEBA : Preprocessor_e::NONE );
+
+	if ( !sphCheckConfigICU ( *this, sError ) )
+		return false;
+
+	if ( !CheckConfigJieba ( *this, sError ) )
+		return false;
+
+	if ( hIndex.Exists("jieba_hmm") && m_ePreprocessor!=Preprocessor_e::JIEBA )
+	{
+		sError = "jieba_hmm can't be used without Jieba morphology enabled";
+		return false;
+	}
+
+	if ( hIndex.Exists("jieba_mode") && m_ePreprocessor!=Preprocessor_e::JIEBA )
+	{
+		sError = "jieba_mode can't be used without Jieba morphology enabled";
+		return false;
+	}
+
+	if ( hIndex.Exists("jieba_user_dict_path") && m_ePreprocessor!=Preprocessor_e::JIEBA )
+	{
+		sError = "jieba_user_dict_path can't be used without Jieba morphology enabled";
+		return false;
+	}
+
+	m_bJiebaHMM = hIndex.GetBool ( "jieba_hmm", true );
+	CSphString sJiebaMode = hIndex.GetStr ( "jieba_mode", "accurate" );
+	if ( !StrToJiebaMode ( m_eJiebaMode , sJiebaMode, sError ) )
+		return false;
+
+	if ( m_eJiebaMode==JiebaMode_e::FULL && hIndex.Exists("jieba_hmm")  )
+		sWarning = "jieba_hmm has no effect when jieba_mode=full";
+
+	m_sJiebaUserDictPath = hIndex.GetStr("jieba_user_dict_path");
+
+	return true;
+}
+
 static const int64_t DEFAULT_ATTR_UPDATE_RESERVE = 131072;
 
 bool CSphIndexSettings::Setup ( const CSphConfigSection & hIndex, const char * szIndexName, CSphString & sWarning, CSphString & sError )
@@ -1081,9 +1132,7 @@ bool CSphIndexSettings::Setup ( const CSphConfigSection & hIndex, const char * s
 			}
 	}
 
-	m_ePreprocessor = dMorphs.Contains ( "icu_chinese" ) ? Preprocessor_e::ICU : Preprocessor_e::NONE;
-
-	if ( !sphCheckConfigICU ( *this, sError ) )
+	if ( !ParseCJKSegmentation ( hIndex, dMorphs, sWarning, sError ) )
 		return false;
 
 	// all good
@@ -1119,7 +1168,7 @@ void CSphIndexSettings::Format ( SettingsFormatter_c & tOut, FilenameBuilder_i *
 	tOut.Add ( "bigram_freq_words",		m_sBigramWords,			!m_sBigramWords.IsEmpty() );
 	tOut.Add ( "index_token_filter",	m_sIndexTokenFilter,	!m_sIndexTokenFilter.IsEmpty() );
 	tOut.Add ( "attr_update_reserve",	m_tBlobUpdateSpace,		m_tBlobUpdateSpace!=DEFAULT_ATTR_UPDATE_RESERVE );
-	tOut.Add ( "binlog",				m_bBinlog,		false );
+	tOut.Add ( "binlog",				0,						!m_bBinlog );
 
 	if ( m_eHitless==SPH_HITLESS_ALL )
 	{
@@ -1133,6 +1182,16 @@ void CSphIndexSettings::Format ( SettingsFormatter_c & tOut, FilenameBuilder_i *
 	AddEngineSettings ( m_eEngine, tOut );
 	if ( m_eEngine==AttrEngine_e::DEFAULT && m_eDefaultEngine!=GetDefaultAttrEngine() )
 		AddEngineSettings ( m_eDefaultEngine, tOut );
+
+	if ( m_eJiebaMode==JiebaMode_e::FULL )
+		tOut.Add ( "jieba_mode",		"full",					true );
+	else if ( m_eJiebaMode==JiebaMode_e::SEARCH )
+		tOut.Add ( "jieba_mode",		"search",				true );
+
+	tOut.Add ( "jieba_hmm",				0,						!m_bJiebaHMM );
+
+	CSphString sJiebaDict = FormatPath ( m_sJiebaUserDictPath, pFilenameBuilder );
+	tOut.Add ( "jieba_user_dict_path",	sJiebaDict,				!sJiebaDict.IsEmpty() );
 
 	DocstoreSettings_t::Format ( tOut, pFilenameBuilder );
 }
@@ -1187,15 +1246,15 @@ bool StrToAttrEngine ( AttrEngine_e & eEngine, AttrEngine_e eDefault, const CSph
 struct ExtFiles_t
 {
 	StrVec_t	m_dFiles;
-	bool		m_bFilesSet = false; // could be empty files string set
-	bool		m_bExtCopy = false; // should be external copied on just collected and checked
+	bool		m_bFilesSet = false;	// was this option set?
+	bool		m_bExtCopy = false;		// copy external files to table's folder?
 };
 
 class IndexSettingsContainer_c : public IndexSettingsContainer_i
 {
 public:
-	IndexSettingsContainer_c() = default;
-	~IndexSettingsContainer_c() override;
+					IndexSettingsContainer_c() = default;
+					~IndexSettingsContainer_c() override;
 
 	bool			Populate ( const CreateTableSettings_t & tCreateTable, bool bExtCopy ) override;
 	bool			Add ( const char * szName, const CSphString & sValue ) override;
@@ -1218,6 +1277,7 @@ private:
 	ExtFiles_t		m_tException;
 	ExtFiles_t		m_tWordform;
 	ExtFiles_t		m_tHitless;
+	ExtFiles_t		m_tJiebaDict;
 	StrVec_t		m_dCleanupFiles;
 
 	CSphString		m_sError;
@@ -1334,6 +1394,30 @@ bool IndexSettingsContainer_c::AddOption ( const CSphString & sName, const CSphS
 		m_tHitless.m_bFilesSet = true;
 
 		SplitArg ( sValue, m_tHitless.m_dFiles );
+
+		// will add string option after copy
+		return true;
+	}
+
+	if ( sName=="jieba_user_dict_path" )
+	{
+		// new value replaces previous
+		m_tJiebaDict.m_dFiles.Reset();
+		m_tJiebaDict.m_bExtCopy = bExtCopy;
+		m_tJiebaDict.m_bFilesSet = true;
+
+		SplitArg ( sValue, m_tJiebaDict.m_dFiles );
+
+		if ( m_tJiebaDict.m_dFiles.GetLength()>1 )
+		{
+			m_sError = "'jieba_user_dict_path' options only supports a single file";
+			return false;
+		}
+		else if ( m_tJiebaDict.m_dFiles.IsEmpty() )
+		{
+			// needs an empty value
+			m_tJiebaDict.m_dFiles.Add();
+		}
 
 		// will add string option after copy
 		return true;
@@ -1548,7 +1632,10 @@ StrVec_t IndexSettingsContainer_c::GetFiles()
 	}
 
 	for ( const auto & i : m_tHitless.m_dFiles )
-		dFiles.Add ( i );
+		dFiles.Add(i);
+
+	for ( const auto & i : m_tJiebaDict.m_dFiles )
+		dFiles.Add(i);
 
 	return dFiles;
 }
@@ -1562,7 +1649,7 @@ const CSphConfigSection & IndexSettingsContainer_c::AsCfg() const
 // TODO: read defaults from file or predefined templates
 static std::pair<const char* , const char *> g_dIndexSettingsDefaults[] =
 {
-	{ "charset_table", "non_cjk" }
+	{ "charset_table", "non_cont" }
 };
 
 void IndexSettingsContainer_c::SetDefaults()
@@ -1620,6 +1707,10 @@ bool IndexSettingsContainer_c::CopyExternalFiles ( const CSphString & sIndexPath
 
 	iFile = 0;
 	if ( !CopyExternalFiles ( m_tHitless, sIndexPath, "hitless_words", iSuffix, iFile ) )
+		return false;
+
+	iFile = 0;
+	if ( !CopyExternalFiles ( m_tJiebaDict, sIndexPath, "jieba_user_dict_path", iSuffix, iFile ) )
 		return false;
 
 	if ( m_tWordform.m_bFilesSet )
@@ -2031,6 +2122,7 @@ bool sphFixupIndexSettings ( CSphIndex * pIndex, const CSphConfigSection & hInde
 
 		CSphString sWarning;
 		sphSpawnFilterICU ( pFieldFilter, pIndex->GetSettings(), pIndex->GetTokenizer()->GetSettings(), pIndex->GetName(), sWarning );
+		SpawnFilterJieba ( pFieldFilter, pIndex->GetSettings(), pIndex->GetTokenizer()->GetSettings(), pIndex->GetName(), pFilenameBuilder, sWarning );
 		AddWarning ( dWarnings, sWarning );
 
 		pIndex->SetFieldFilter ( std::move ( pFieldFilter ) );
@@ -2405,6 +2497,7 @@ const char * GetMutableName ( MutableName_e eName )
 		case MutableName_e::READ_BUFFER_DOCS: return "read_buffer_docs";
 		case MutableName_e::READ_BUFFER_HITS: return "read_buffer_hits";
 		case MutableName_e::OPTIMIZE_CUTOFF: return "optimize_cutoff";
+		case MutableName_e::GLOBAL_IDF: return "global_idf";
 		default: assert ( 0 && "Invalid mutable option" ); return "";
 	}
 }
@@ -2605,6 +2698,18 @@ bool MutableIndexSettings_c::Load ( const char * sFileName, const char * sIndexN
 		sError = "";
 	}
 
+	JsonObj_c tGlobalIdf = tParser.GetStrItem ( "global_idf", sError, true );
+	if ( tGlobalIdf )
+	{
+		m_sGlobalIDFPath = tGlobalIdf.StrVal();
+		m_dLoaded.BitSet ( (int)MutableName_e::GLOBAL_IDF );
+	} else if ( !sError.IsEmpty() )
+	{
+		sphWarning ( "table %s: %s", sIndexName, sError.cstr() );
+		sError = "";
+	}
+
+
 	m_bNeedSave = true;
 
 	return true;
@@ -2683,6 +2788,12 @@ void MutableIndexSettings_c::Load ( const CSphConfigSection & hIndex, bool bNeed
 		m_iOptimizeCutoff = Max ( m_iOptimizeCutoff, 1 );
 		m_dLoaded.BitSet ( (int)MutableName_e::OPTIMIZE_CUTOFF );
 	}
+
+	if ( hIndex.Exists ( "global_idf" ) )
+	{
+		m_sGlobalIDFPath = hIndex.GetStr ( "global_idf" );
+		m_dLoaded.BitSet ( (int)MutableName_e::GLOBAL_IDF );
+	}
 }
 
 static void AddStr ( const CSphBitvec & dLoaded, MutableName_e eName, JsonObj_c & tRoot, const char * sVal )
@@ -2738,6 +2849,7 @@ bool MutableIndexSettings_c::Save ( CSphString & sBuf ) const
 	AddInt ( m_dLoaded, MutableName_e::READ_BUFFER_HITS, tRoot, m_tFileAccess.m_iReadBufferHitList );
 
 	AddInt ( m_dLoaded, MutableName_e::OPTIMIZE_CUTOFF, tRoot, m_iOptimizeCutoff );
+	AddStr ( m_dLoaded, MutableName_e::GLOBAL_IDF, tRoot, m_sGlobalIDFPath.cstr() );
 
 	sBuf = tRoot.AsString ( true );
 
@@ -2805,6 +2917,12 @@ void MutableIndexSettings_c::Combine ( const MutableIndexSettings_c & tOther )
 		m_iOptimizeCutoff = tOther.m_iOptimizeCutoff;
 		m_dLoaded.BitSet ( (int)MutableName_e::OPTIMIZE_CUTOFF );
 	}
+
+	if ( tOther.m_dLoaded.BitGet ( (int)MutableName_e::GLOBAL_IDF ) )
+	{
+		m_sGlobalIDFPath = tOther.m_sGlobalIDFPath;
+		m_dLoaded.BitSet ( (int)MutableName_e::GLOBAL_IDF );
+	}
 }
 
 MutableIndexSettings_c & MutableIndexSettings_c::GetDefaults ()
@@ -2847,6 +2965,8 @@ void MutableIndexSettings_c::Format ( SettingsFormatter_c & tOut, FilenameBuilde
 
 	tOut.Add ( GetMutableName ( MutableName_e::OPTIMIZE_CUTOFF ), m_iOptimizeCutoff,
 		FormatCond ( m_bNeedSave, m_dLoaded, MutableName_e::OPTIMIZE_CUTOFF, HasSettings() && m_dLoaded.BitGet ( (int)MutableName_e::OPTIMIZE_CUTOFF ) ) );
+	tOut.Add ( GetMutableName ( MutableName_e::GLOBAL_IDF ), m_sGlobalIDFPath,
+		FormatCond ( m_bNeedSave, m_dLoaded, MutableName_e::GLOBAL_IDF, HasSettings() && m_dLoaded.BitGet ( (int)MutableName_e::GLOBAL_IDF ) ) );
 }
 
 
@@ -2878,6 +2998,9 @@ void LoadIndexSettingsJson ( bson::Bson_c tNode, CSphIndexSettings & tSettings )
 	tSettings.m_sHitlessFiles = String ( tNode.ChildByName ( "hitless_files" ) );
 	tSettings.m_eEngine = (AttrEngine_e)Int ( tNode.ChildByName ( "engine" ), (DWORD)AttrEngine_e::DEFAULT );
 	tSettings.m_eDefaultEngine = (AttrEngine_e)Int ( tNode.ChildByName ( "engine_default" ), (DWORD)AttrEngine_e::ROWWISE );
+	tSettings.m_eJiebaMode = (JiebaMode_e)Int ( tNode.ChildByName ( "jieba_mode" ), (DWORD)JiebaMode_e::DEFAULT );
+	tSettings.m_bJiebaHMM = Bool ( tNode.ChildByName ( "jieba_hmm" ), true );
+	tSettings.m_sJiebaUserDictPath = String ( tNode.ChildByName ( "jieba_user_dict_path" ) );
 }
 
 
@@ -2926,6 +3049,12 @@ void LoadIndexSettings ( CSphIndexSettings & tSettings, CSphReader & tReader, DW
 
 	if ( uVersion>=63 )
 		tSettings.m_eEngine = (AttrEngine_e)tReader.GetDword();
+
+	if ( uVersion>=67 )
+	{
+		tSettings.m_eJiebaMode = (JiebaMode_e)tReader.GetDword();
+		tSettings.m_bJiebaHMM = !!tReader.GetByte();
+	}
 }
 
 
@@ -2956,6 +3085,9 @@ void SaveIndexSettings ( Writer_i & tWriter, const CSphIndexSettings & tSettings
 	tWriter.PutDword ( tSettings.m_iSkiplistBlockSize );
 	tWriter.PutString ( tSettings.m_sHitlessFiles );
 	tWriter.PutDword ( (DWORD)tSettings.m_eEngine );
+	tWriter.PutDword ( (DWORD)tSettings.m_eJiebaMode );
+	tWriter.PutByte ( tSettings.m_bJiebaHMM ? 1 : 0 );
+	tWriter.PutString ( tSettings.m_sJiebaUserDictPath );
 }
 
 
@@ -2987,6 +3119,9 @@ void operator << ( JsonEscapedBuilder & tOut, const CSphIndexSettings & tSetting
 	tOut.NamedStringNonEmpty ( "hitless_files", tSettings.m_sHitlessFiles );
 	tOut.NamedValNonDefault ( "engine", (DWORD)tSettings.m_eEngine, (DWORD)AttrEngine_e::DEFAULT );
 	tOut.NamedValNonDefault ( "engine_default", (DWORD)tSettings.m_eDefaultEngine, (DWORD)AttrEngine_e::ROWWISE );
+	tOut.NamedValNonDefault ( "jieba_mode", (DWORD)tSettings.m_eJiebaMode, (DWORD)JiebaMode_e::DEFAULT );
+	tOut.NamedValNonDefault ( "jieba_hmm", tSettings.m_bJiebaHMM, true );
+	tOut.NamedStringNonEmpty ( "jieba_user_dict_path", tSettings.m_sJiebaUserDictPath );
 }
 
 

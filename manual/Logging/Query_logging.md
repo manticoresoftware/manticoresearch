@@ -23,7 +23,7 @@ searchd {
 
 Two query log formats are supported:
 * `sphinxql` (default): Logs in SQL format. It also provides an easy way to replay logged queries.
-* `plain`: Logs full-text queries in a simple text format. Recommended if most of your queries are primarily full-text, or if you don't care about non-full-text components of your queries, such as filtering by attributes, sorting, grouping, etc. Queries logged in the `plain` format cannot be replayed.
+* `plain`: Logs full-text queries in a simple text format. This format is recommended if most of your queries are primarily full-text or if you do not need to log non-full-text components, such as filtering by attributes, sorting, or grouping. Queries logged in the `plain` format cannot be replayed. Note that queries processed through [Buddy](../Installation/Manticore_Buddy.md) are not logged in this mode.
 
 To switch between the formats, you can use the searchd setting [query_log_format](../Server_settings/Searchd.md#query_log_format).
 
@@ -57,7 +57,7 @@ The features of the Manticore SQL log format compared to the [plain format](../.
 /* Sun Apr 28 12:38:02.808 2024 conn 2 (127.0.0.1:53228) real 0.000 wall 0.000 found 0 */ SELECT * FROM test WHERE MATCH('test') OPTION ranker=proximity;
 /* Sun Apr 28 12:38:05.585 2024 conn 2 (127.0.0.1:53228) real 0.001 wall 0.001 found 0 */ SELECT * FROM test WHERE MATCH('test') GROUP BY channel_id OPTION ranker=proximity;
 /* Sun Apr 28 12:40:57.366 2024 conn 4 (127.0.0.1:53256) real 0.000 wall 0.000 found 0 */  /*{
-    "index" : "test",
+    "table" : "test",
     "query":
     {
         "match":
@@ -74,7 +74,7 @@ The features of the Manticore SQL log format compared to the [plain format](../.
 ### Plain log format
 
 <!-- example plain_log -->
-With the `plain` log format, Manticore logs all successfully executed search queries in a simple text format. Non-full-text parts of queries are not logged. JSON queries are logged as flattened to a single line.
+With the `plain` log format, Manticore logs all successfully executed search queries in a simple text format. Non-full-text parts of the queries are not logged. JSON queries are recorded as single-line entries. Queries processed through [Buddy](../Installation/Manticore_Buddy.md) are not logged.
 
 <!-- intro -->
 `query_log_format` example:
@@ -124,7 +124,7 @@ Query log example:
 [Fri Jun 29 21:17:58 2021] 0.004 sec [all/0/rel 35254 (0,20)] [lj] [ios=6 kb=111.1 ms=0.5 cpums=0.3] test
 [Sun Apr 28 15:09:38.712 2024] 0.000 sec 0.000 sec [ext2/0/ext 0 (0,20)] [test] test
 [Sun Apr 28 15:09:44.974 2024] 0.000 sec 0.000 sec [ext2/0/ext 0 (0,20) @channel_id] [test] test
-[Sun Apr 28 15:24:32.975 2024] 0.000 sec 0.000 sec [ext2/0/ext 0 (0,30)] [test] {     "index" : "test",     "query":     {         "match":         {             "*" : "test"         }     },     "_source": ["f"],     "limit": 30 }
+[Sun Apr 28 15:24:32.975 2024] 0.000 sec 0.000 sec [ext2/0/ext 0 (0,30)] [test] {     "table" : "test",     "query":     {         "match":         {             "*" : "test"         }     },     "_source": ["f"],     "limit": 30 }
 ```
 
 <!-- end -->

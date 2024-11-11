@@ -36,6 +36,11 @@ if (TARGET icu::icudata)
 	get_filename_component (ICU_DATA_DIR "${ICU_DATA}" DIRECTORY)
 endif ()
 
+if (TARGET jieba::jiebadict)
+	get_target_property ( JIEBA_DATA_DIR jieba::jiebadict INTERFACE_SOURCES )
+	diag ( JIEBA_DATA_DIR )
+endif ()
+
 if (TARGET galera::galera)
 	get_target_property (GALERA_MODULE galera::galera LOCATION)
 endif ()
@@ -186,6 +191,11 @@ foreach ( test ${tests} )
 	if ( NOT WITH_ICU AND "ICU" IN_LIST LABELS )
 		set ( ADD_TEST 0 )
 		set ( EXPLANATION "ICU" )
+	endif ()
+
+	if (NOT WITH_JIEBA AND "JIEBA" IN_LIST LABELS)
+		set ( ADD_TEST 0 )
+		set ( EXPLANATION "JIEBA" )
 	endif ()
 
 	if ( NOT WITH_GALERA AND "REPLICATION" IN_LIST LABELS )

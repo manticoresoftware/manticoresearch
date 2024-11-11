@@ -1,0 +1,17 @@
+––– input –––
+sed -i -e '/listen = 127.0.0.1:9312/d' -e '/listen = 127.0.0.1:9308:http/d' /etc/manticoresearch/manticore.conf
+––– output –––
+––– input –––
+searchd
+––– output –––
+Manticore %{SEMVER} %{COMMITDATE}#!/(\sdev)?\s/!#(columnar %{SEMVER} %{COMMITDATE}) (secondary %{SEMVER} %{COMMITDATE}) (knn %{SEMVER} %{COMMITDATE})
+Copyright (c) 2001-2016, Andrew Aksyonoff
+Copyright (c) 2008-2016, Sphinx Technologies Inc (http://sphinxsearch.com)
+Copyright (c) 2017-%{YEAR}, Manticore Software LTD (https://manticoresearch.com)
+[#!/[0-9]{2}:[0-9]{2}.[0-9]{3}/!#] [#!/[0-9]+/!#] using config file '/etc/manticoresearch/manticore.conf' (%{NUMBER} chars)...
+starting daemon version '%{SEMVER} %{COMMITDATE}#!/(\sdev)?\s/!#(columnar %{SEMVER} %{COMMITDATE}) (secondary %{SEMVER} %{COMMITDATE}) (knn %{SEMVER} %{COMMITDATE})' ...
+listening on 127.0.0.1:9306 for mysql
+––– input –––
+mysql -h0 -P9306 -e "create cluster c"
+––– output –––
+ERROR 1064 (42000) at line 1: can not create cluster 'c': no 'listen' is found, cannot set incoming addresses, replication is disabled

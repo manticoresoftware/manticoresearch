@@ -361,7 +361,7 @@ Query OK, 3 rows affected (0.01 sec)
 ```json
 POST /insert
 {
-  "index":"products",
+  "table":"products",
   "doc":
   {
     "title" : "Crossbody Bag with Tassel",
@@ -372,7 +372,7 @@ POST /insert
 
 POST /insert
 {
-  "index":"products",
+  "table":"products",
   "doc":
   {
     "title" : "microfiber sheet set",
@@ -382,7 +382,7 @@ POST /insert
 
 POST /insert
 {
-  "index":"products",
+  "table":"products",
   "doc":
   {
     "title" : "Pet Hair Remover Glove",
@@ -436,9 +436,9 @@ $index->addDocuments([
 <!-- request Python -->
 
 ``` python
-indexApi.insert({"index" : "products", "doc" : {"title" : "Crossbody Bag with Tassel", "price" : 19.85}})
-indexApi.insert({"index" : "products", "doc" : {"title" : "microfiber sheet set", "price" : 19.99}})
-indexApi.insert({"index" : "products", "doc" : {"title" : "Pet Hair Remover Glove", "price" : 7.99}})
+indexApi.insert({"table" : "products", "doc" : {"title" : "Crossbody Bag with Tassel", "price" : 19.85}})
+indexApi.insert({"table" : "products", "doc" : {"title" : "microfiber sheet set", "price" : 19.99}})
+indexApi.insert({"table" : "products", "doc" : {"title" : "Pet Hair Remover Glove", "price" : 7.99}})
 ```
 <!-- intro -->
 ##### Javascript:
@@ -446,9 +446,9 @@ indexApi.insert({"index" : "products", "doc" : {"title" : "Pet Hair Remover Glov
 <!-- request Javascript -->
 
 ``` javascript
-res = await indexApi.insert({"index" : "products", "doc" : {"title" : "Crossbody Bag with Tassel", "price" : 19.85}});
-res = await indexApi.insert({"index" : "products", "doc" : {"title" : "microfiber sheet set", "price" : 19.99}});
-res = await indexApi.insert({"index" : "products", "doc" : {"title" : "Pet Hair Remover Glove", "price" : 7.99}});
+res = await indexApi.insert({"table" : "products", "doc" : {"title" : "Crossbody Bag with Tassel", "price" : 19.85}});
+res = await indexApi.insert({"table" : "products", "doc" : {"title" : "microfiber sheet set", "price" : 19.99}});
+res = await indexApi.insert({"table" : "products", "doc" : {"title" : "Pet Hair Remover Glove", "price" : 7.99}});
 ```
 
 <!-- intro -->
@@ -591,7 +591,7 @@ select id, highlight(), price from products where match('remove hair');
 ```json
 POST /search
 {
-  "index": "products",
+  "table": "products",
   "query": { "match": { "title": "remove hair" } },
   "highlight":
   {
@@ -671,7 +671,7 @@ Python
 <!-- request Python -->
 
 ```python
-searchApi.search({"index":"products","query":{"query_string":"@title remove hair"},"highlight":{"fields":["title"]}})
+searchApi.search({"table":"products","query":{"query_string":"@title remove hair"},"highlight":{"fields":["title"]}})
 ```
 <!-- response Python -->
 ``` python
@@ -690,7 +690,7 @@ javascript
 <!-- request javascript -->
 
 ```javascript
-res = await searchApi.search({"index":"products","query":{"query_string":"@title remove hair"}"highlight":{"fields":["title"]}});
+res = await searchApi.search({"table":"products","query":{"query_string":"@title remove hair"}"highlight":{"fields":["title"]}});
 ```
 <!-- response javascript -->
 ```javascript
@@ -867,7 +867,7 @@ Query OK, 1 row affected (0.00 sec)
 ```json
 POST /update
 {
-  "index": "products",
+  "table": "products",
   "id": 1513686608316989452,
   "doc":
   {
@@ -894,7 +894,7 @@ POST /update
 ```php
 $doc = [
     'body' => [
-        'index' => 'products',
+        'table' => 'products',
         'id' => 2,
         'doc' => [
             'price' => 18.5
@@ -911,14 +911,14 @@ $response = $client->update($doc);
 <!-- request Python -->
 ``` python
 indexApi = api = manticoresearch.IndexApi(client)
-indexApi.update({"index" : "products", "id" : 1513686608316989452, "doc" : {"price":18.5}})
+indexApi.update({"table" : "products", "id" : 1513686608316989452, "doc" : {"price":18.5}})
 ```
 <!-- intro -->
 ##### Javascript:
 
 <!-- request javascript -->
 ``` javascript
-res = await indexApi.update({"index" : "products", "id" : 1513686608316989452, "doc" : {"price":18.5}});
+res = await indexApi.update({"table" : "products", "id" : 1513686608316989452, "doc" : {"price":18.5}});
 ```
 
 <!-- intro -->
@@ -993,7 +993,7 @@ Query OK, 1 row affected (0.00 sec)
 ```json
 POST /delete
 {
-  "index": "products",
+  "table": "products",
   "query":
   {
     "range":
@@ -1041,7 +1041,7 @@ Array
 
 <!-- request Python -->
 ``` python
-indexApi.delete({"index" : "products", "query": {"range":{"price":{"lte":10}}}})
+indexApi.delete({"table" : "products", "query": {"range":{"price":{"lte":10}}}})
 ```
 
 <!-- intro -->
@@ -1050,7 +1050,7 @@ indexApi.delete({"index" : "products", "query": {"range":{"price":{"lte":10}}}})
 
 <!-- request javascript -->
 ``` javascript
-res = await indexApi.delete({"index" : "products", "query": {"range":{"price":{"lte":10}}}});
+res = await indexApi.delete({"table" : "products", "query": {"range":{"price":{"lte":10}}}});
 ```
 
 <!-- intro -->

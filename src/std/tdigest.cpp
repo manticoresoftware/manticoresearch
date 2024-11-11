@@ -38,15 +38,15 @@
 #pragma warning(pop)
 #endif
 
-class TDigest_c : public TDigest_i
+class TDigest_c::Impl_c final
 {
 public:
-	TDigest_c ()
+	Impl_c ()
 	{
 		Reset();
 	}
 
-	void Add ( double fValue, int64_t iWeight ) final
+	void Add ( double fValue, int64_t iWeight )
 	{
 		if ( m_dMap.empty() )
 		{
@@ -121,7 +121,7 @@ public:
 	}
 
 
-	double Percentile ( int iPercent ) const final
+	double Percentile ( int iPercent ) const noexcept
 	{
 		assert ( iPercent>=0 && iPercent<=100 );
 
@@ -206,7 +206,27 @@ private:
 };
 
 
-std::unique_ptr<TDigest_i> sphCreateTDigest()
+TDigest_c::TDigest_c ()
+		: m_pImpl { std::make_unique<TDigest_c::Impl_c> () }
+{}
+
+
+TDigest_c::~TDigest_c () = default;
+
+
+void TDigest_c::Add ( double fValue, int64_t iWeight )
+{
+	m_pImpl->Add ( fValue, iWeight );
+}
+
+
+double TDigest_c::Percentile ( int iPercent ) const noexcept
+{
+	return m_pImpl->Percentile (iPercent);
+}
+
+
+std::unique_ptr<TDigest_c> sphCreateTDigest()
 {
 	return std::make_unique<TDigest_c>();
 }

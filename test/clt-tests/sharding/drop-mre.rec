@@ -1,0 +1,44 @@
+––– input –––
+export INSTANCE=1
+––– output –––
+––– block: ./base/flexible/start-searchd –––
+––– input –––
+export INSTANCE=2
+––– output –––
+––– block: ./base/flexible/start-searchd –––
+––– input –––
+CLUSTER_NAME=c
+––– output –––
+––– input –––
+mysql -h0 -P1306 -e "create cluster ${CLUSTER_NAME}"
+––– output –––
+––– input –––
+for n in `seq 2 $INSTANCE`; do mysql -h0 -P${n}306 -e "join cluster ${CLUSTER_NAME} at '127.0.0.1:1312'"; done;
+––– output –––
+––– input –––
+mysql -h0 -P1306 -e "create table ${CLUSTER_NAME}:tbl1(id bigint) shards=3 rf=1;"
+––– output –––
+––– input –––
+mysql -h0 -P1306 -e "DROP SHARDED TABLE ${CLUSTER_NAME}:tbl1;"
+––– output –––
+––– input –––
+sleep 3
+––– output –––
+––– input –––
+mysql -h0 -P1306 -e "SHOW TABLES\G"
+––– output –––
+*************************** 1. row ***************************
+Index: _sharding_queue
+Type: rt
+*************************** 2. row ***************************
+Index: _sharding_state
+Type: rt
+*************************** 3. row ***************************
+Index: _sharding_table
+Type: rt
+––– input –––
+mysql -h0 -P2306 -e "select * from _sharding_queue order by id asc limit 1000;"
+––– output –––
+––– input –––
+cat /var/log/manticore-1/searchd.log
+––– output –––

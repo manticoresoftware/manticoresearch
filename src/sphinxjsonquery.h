@@ -40,11 +40,17 @@ struct JsonAggr_t : public AggrSettings_t
 	CSphString GetAliasName () const;
 };
 
+struct JsonDocField_t
+{
+	CSphString m_sName;
+	bool m_bDateTime = false;
+};
+
 /// search query. Pure struct, no member functions
 struct JsonQuery_c : public CSphQuery
 {
 	StrVec_t m_dSortFields;
-	StrVec_t m_dDocFields;
+	CSphVector<JsonDocField_t> m_dDocFields;
 	CSphVector<JsonAggr_t> m_dAggs;
 };
 
@@ -56,20 +62,26 @@ struct ParsedJsonQuery_t
 	int m_iPlan = 0; // 0 - no plan, 1 - description, 2 - object, 3 - both
 };
 
-std::unique_ptr<QueryParser_i>	sphCreateJsonQueryParser();
-bool			sphParseJsonQuery ( Str_t sQuery, ParsedJsonQuery_t* pQuery );
-bool			sphParseJsonQuery ( const JsonObj_c & tRoot, ParsedJsonQuery_t* pQuery );
+std::unique_ptr<QueryParser_i> sphCreateJsonQueryParser();
+bool			sphParseJsonQuery ( Str_t sQuery, ParsedJsonQuery_t & tPJQuery );
+bool			sphParseJsonQuery ( const JsonObj_c & tRoot, ParsedJsonQuery_t & tPJQuery );
 bool			sphParseJsonInsert ( const char * szInsert, SqlStmt_t & tStmt, DocID_t & tDocId, bool bReplace, CSphString & sError );
 bool			sphParseJsonUpdate ( Str_t sUpdate, SqlStmt_t & tStmt, DocID_t & tDocId, CSphString & sError );
 bool			sphParseJsonDelete ( Str_t sDelete, SqlStmt_t & tStmt, DocID_t & tDocId, CSphString & sError );
 bool			sphParseJsonStatement ( const char * szStmt, SqlStmt_t & tStmt, CSphString & sStmt, CSphString & sQuery, DocID_t & tDocId, CSphString & sError );
 
-CSphString		sphEncodeResultJson ( const VecTraits_T<const AggrResult_t *> & dRes, const JsonQuery_c & tQuery, QueryProfile_c * pProfile, bool bCompat );
-JsonObj_c		sphEncodeInsertResultJson ( const char * szIndex, bool bReplace, DocID_t tDocId );
-JsonObj_c		sphEncodeUpdateResultJson ( const char * szIndex, DocID_t tDocId, int iAffected );
-JsonObj_c 		sphEncodeDeleteResultJson ( const char * szIndex, DocID_t tDocId, int iAffected );
-JsonObj_c		sphEncodeInsertErrorJson ( const char * szIndex, const char * szError );
-JsonObj_c		sphEncodeTxnResultJson ( const char* szIndex, DocID_t tDocId, int iInserts, int iDeletes, int iUpdates );
+enum class ResultSetFormat_e : bool
+{
+	ES,
+	MntSearch
+};
+
+CSphString		sphEncodeResultJson ( const VecTraits_T<const AggrResult_t *> & dRes, const JsonQuery_c & tQuery, QueryProfile_c * pProfile, ResultSetFormat_e eFormat );
+JsonObj_c		sphEncodeInsertResultJson ( const char * szIndex, bool bReplace, DocID_t tDocId, ResultSetFormat_e eFormat );
+JsonObj_c		sphEncodeUpdateResultJson ( const char * szIndex, DocID_t tDocId, int iAffected, ResultSetFormat_e eFormat );
+JsonObj_c 		sphEncodeDeleteResultJson ( const char * szIndex, DocID_t tDocId, int iAffected, ResultSetFormat_e eFormat );
+JsonObj_c		sphEncodeInsertErrorJson ( const char * szIndex, const char * szError, ResultSetFormat_e eFormat );
+JsonObj_c		sphEncodeTxnResultJson ( const char* szIndex, DocID_t tDocId, int iInserts, int iDeletes, int iUpdates, ResultSetFormat_e eFormat );
 
 bool			sphGetResultStats ( const char * szResult, int & iAffected, int & iWarnings, bool bUpdate );
 

@@ -337,6 +337,11 @@ select *, count(*), brand_id, j.a from multi1 facet brand_id, j.a order by id as
 select *, count(*) from multi1 group by brand_id, j.a order by id asc;;
 select *, count(*), brand_id, j.a from multi1 group by brand_id, j.a order by id asc;;
 
+<!-- facet with default desc order -->
+select id from facetdemo limit 0 facet brand_id order by count(*);;
+<!-- facet with error at the FACET part -->
+select id from facetdemo limit 0 facet brand_id order by count(missed);;
+
 </sphinxql></queries>
 
 </test>

@@ -1,4 +1,22 @@
-# Installing Manticore in Windows
+# Installing Manticore on Windows
+
+Manticore can be installed on Windows in several ways. We recommend using WSL (Windows Subsystem for Linux) because it supports replication and does not require Docker. Below are the recommended and alternative methods.
+
+### Installing or enabling WSL2
+
+To install Manticore Search on Windows, you'll first need to enable Windows Subsystem for Linux. WSL2 lets you run Linux binaries natively on Windows. For this method to work, you'll need to be running Windows 10 version 2004 and higher or Windows 11.
+
+Follow the [official Microsoft guide](https://docs.microsoft.com/en-us/windows/wsl/install) for step-by-step instructions to install WSL2.
+
+### Installing Manticore
+
+To install Manticore on Windows via WSL2, refer to the [Debian and Ubuntu Installation](../../Installation/Debian_and_Ubuntu.md) section.
+
+> NOTE: Installing Manticore via WSL2 is the recommended method as it offers better compatibility compared to using native Windows packages.
+
+## Installing Manticore as native Windows binaries
+
+Alternatively, you can install Manticore as native Windows binaries, which require Docker for [Manticore Buddy](../../Installation/Manticore_Buddy.md#Manticore-Buddy), by following these steps:
 
 1. Install Docker Desktop and start it.
 2. Download the [Manticore Search Installer](https://repo.manticoresearch.com/repository/manticoresearch_windows/release/x64/manticore-6.3.6-24080214-593045790-x64.exe) and run it. Follow the installation instructions.
@@ -6,9 +24,11 @@
 4. Select the components you want to install. We recommend installing all of them.
 5. Manticore comes with a preconfigured `manticore.conf` file in [RT mode](../Read_this_first.md#Real-time-mode-vs-plain-mode). No additional configuration is required.
 
-## Installing as a Windows service
+> NOTE: The native Windows binaries do not support [replication](../../Creating_a_cluster/Setting_up_replication/Setting_up_replication.md#Setting-up-replication).
 
-To install `searchd` (Manticore Search server) as a Windows service, run:
+### Installing as a Windows service
+
+To install Manticore Search server as a Windows service, run:
 
 ```bat
 \path\to\searchd.exe --install --config \path\to\config --servicename Manticore

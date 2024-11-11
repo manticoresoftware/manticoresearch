@@ -662,6 +662,8 @@ static EHTTP_STATUS GetHttpStatusCode ( int iBuddyHttpCode, EHTTP_STATUS eReqHtt
 	return ( iBuddyHttpCode>0 ? HttpGetStatusCodes ( iBuddyHttpCode ) : eReqHttpCode );
 }
 
+static void LogBuddyQuery ( const Str_t sSrcQuery, const JsonObj_c & tBudyyReply, BuddyQuery_e tType );
+
 // we call it ALWAYS, because even with absolutely correct result, we still might reject it for '/cli' endpoint if buddy is not available or prohibited
 bool ProcessHttpQueryBuddy ( HttpProcessResult_t & tRes, Str_t sSrcQuery, OptionsHash_t & hOptions, CSphVector<BYTE> & dResult, bool bNeedHttpResponse, http_method eRequestType )
 {
@@ -743,6 +745,9 @@ bool ProcessHttpQueryBuddy ( HttpProcessResult_t & tRes, Str_t sSrcQuery, Option
 
 	dResult.Resize ( 0 );
 	ReplyBuf ( FromStr ( sDump ), eHttpStatus, bNeedHttpResponse, dResult );
+	
+	LogBuddyQuery ( sSrcQuery, tReplyParsed.m_tRoot, BuddyQuery_e::HTTP );
+
 	return true;
 }
 
@@ -791,7 +796,7 @@ bool ConvertValue ( const char * sName, const JsonObj_c & tMeta, T & tVal )
 	return true;
 }
 
-static void LogBuddyQuery ( const Str_t sSrcQuery, const JsonObj_c & tBudyyReply )
+void LogBuddyQuery ( const Str_t sSrcQuery, const JsonObj_c & tBudyyReply, BuddyQuery_e tType )
 {
 	CSphString sTmpError;
 	CSphQueryResultMeta tLogMeta;
@@ -812,7 +817,7 @@ static void LogBuddyQuery ( const Str_t sSrcQuery, const JsonObj_c & tBudyyReply
 		// total_relation => null
 	}
 
-	LogSphinxqlBuddyQuery ( sSrcQuery, tLogMeta );
+	LogBuddyQuery ( sSrcQuery, tLogMeta, tType );
 }
 
 void ProcessSqlQueryBuddy ( Str_t sSrcQuery, Str_t tError, std::pair<int, BYTE> tSavedPos, BYTE & uPacketID, GenericOutputBuffer_c & tOut )
@@ -856,7 +861,7 @@ void ProcessSqlQueryBuddy ( Str_t sSrcQuery, Str_t tError, std::pair<int, BYTE> 
 	std::unique_ptr<RowBuffer_i> tBuddyRows ( CreateSqlRowBuffer ( &uPacketID, &tOut ) );
 
 	ConvertJsonDataset ( tReplyParsed.m_tMessage, sSrcQuery.first, *tBuddyRows );
-	LogBuddyQuery ( sSrcQuery, tReplyParsed.m_tRoot );
+	LogBuddyQuery ( sSrcQuery, tReplyParsed.m_tRoot, BuddyQuery_e::SQL );
 }
 
 #ifdef _WIN32

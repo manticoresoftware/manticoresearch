@@ -3442,7 +3442,7 @@ void LogSphinxqlError ( const Str_t & sStmt, const Str_t & sError )
 	WriteQuery ( tBuf );
 }
 
-void LogSphinxqlBuddyQuery ( const Str_t sQuery, const CSphQueryResultMeta & tMeta )
+void LogBuddyQuery ( const Str_t sQuery, const CSphQueryResultMeta & tMeta, BuddyQuery_e tType )
 {
 	if ( g_eLogFormat!=LOG_FORMAT_SPHINXQL || g_iQueryLogFile<0 || IsEmpty ( sQuery ) )
 		return;
@@ -3461,8 +3461,13 @@ void LogSphinxqlBuddyQuery ( const Str_t sQuery, const CSphQueryResultMeta & tMe
 		tBuf << " x" << tMeta.m_iMultiplier;
 	tBuf << " found " << tMeta.m_iTotalMatches << " */ ";
 
+	if ( tType==BuddyQuery_e::HTTP )
+		tBuf << "/* ";
 	tBuf.AppendEscaped ( sQuery.first, EscBld::eFixupSpace, sQuery.second );
-	tBuf << '\n';
+	if ( tType==BuddyQuery_e::HTTP )
+		tBuf << " */";
+
+	tBuf << ";\n";
 
 	WriteQuery ( tBuf );
 }

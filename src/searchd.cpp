@@ -7021,7 +7021,7 @@ static CSphVector<LocalIndex_t> CollectAllLocalIndexes ( const CSphVector<CSphNa
 // returns true = real indexes, false = sysvar (i.e. only one 'index' named from @@)
 bool SearchHandler_c::BuildIndexList ( int & iDivideLimits, VecRefPtrsAgentConn_t & dRemotes, CSphVector<DistrServedByAgent_t> & dDistrServedByAgent )
 {
-	const CSphQuery & tQuery = m_dNQueries.First ();
+	CSphQuery & tQuery = m_dNQueries.First ();
 
 	if ( tQuery.m_sIndexes=="*" )
 	{
@@ -7039,7 +7039,14 @@ bool SearchHandler_c::BuildIndexList ( int & iDivideLimits, VecRefPtrsAgentConn_
 	if ( bSysVar )
 		dIdxNames.Add ( tQuery.m_sIndexes );
 	else
+	{
 		ParseIndexList ( tQuery.m_sIndexes, dIdxNames );
+		if ( dIdxNames.GetLength()==1 && dIdxNames.First().EqN ("system") && !tQuery.m_dStringSubkeys.IsEmpty ())
+		{
+			dIdxNames[0] = SphSprintf ("system%s", tQuery.m_dStringSubkeys[0].cstr());
+			tQuery.m_dStringSubkeys.Remove(0);
+		}
+	}
 
 	const int iQueries = m_dNQueries.GetLength ();
 	CSphVector<LocalIndex_t> dLocals;

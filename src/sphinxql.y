@@ -31,6 +31,7 @@
 %token	TOK_BACKTICKED_SUBKEY
 %token	TOK_DOT_NUMBER ".number"
 %token	TOK_MANTICORE_DOT "Manticore."
+%token	TOK_SYSTEM "system"
 
 %token	TOK_AGENT
 %token	TOK_ALL
@@ -248,7 +249,7 @@ multi_stmt:
 // AND, AS, BY, DIV, FACET, FALSE, ID, IN, IS, LIMIT, MOD, NOT, NULL,
 // OR, ORDER, SELECT, TRUE
 
-/// All used keywords looking as TOK_XXX should be located here. That is mandatory
+/// All used _reserved_ keywords looking as TOK_XXX should be located here. That is mandatory
 /// and used in regexp in 'reserved.py' script to check reserved words consistency between
 /// grammar and documentation.
 ///
@@ -294,8 +295,12 @@ ident_for_set_stmt:
 // WARNING! line above is MANDATORY for consistency checking!
 //////////////////////////////////////////////////////////////////////////
 
+non_reserved_tokens:
+	TOK_SYSTEM
+	;
+
 all_set_tail:
-	names_transaction_collate
+	names_transaction_collate | non_reserved_tokens
 	;
 
 ident:

@@ -3642,6 +3642,8 @@ enum Tokh_e : BYTE
 	FUNC_DATE_RANGE,
 	FUNC_DATE_HISTOGRAM,
 
+	FUNC_UUID_SHORT,
+
 	FUNC_FUNCS_COUNT, // insert any new functions ABOVE this one
 	TOKH_TOKH_OFFSET = FUNC_FUNCS_COUNT,
 
@@ -3792,6 +3794,8 @@ const static TokhKeyVal_t g_dKeyValTokens[] = // no order is necessary, but crea
 	{ "date_range",		FUNC_DATE_RANGE		},
 	{ "date_histogram",	FUNC_DATE_HISTOGRAM	},
 
+	{ "uuid_short",		FUNC_UUID_SHORT	},
+
 	// other reserved (operators, columns, etc.)
 	{ "count",			TOKH_COUNT			},
 	{ "weight",			TOKH_WEIGHT			},
@@ -3847,7 +3851,7 @@ static Tokh_e TokHashLookup ( Str_t sKey )
 		167, 167, 167, 167, 167, 167, 167, 167, 167, 167,
 		167, 167, 167, 167, 167, 167, 167, 167, 167, 167,
 		167, 167, 167, 167, 167, 167, 167, 167, 10, 10,
-		27, 49, 8, 6, 167, 167, 167, 167, 167, 167,
+		27, 49, 9, 6, 167, 167, 167, 167, 167, 167,
 		167, 167, 167, 167, 167, 29, 64, 14, 5, 5,
 		31, 25, 64, 6, 167, 14, 41, 7, 7, 38,
 		16, 16, 20, 13, 6, 36, 75, 58, 35, 32,
@@ -3874,21 +3878,21 @@ static Tokh_e TokHashLookup ( Str_t sKey )
 	{
 		-1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
 		-1, -1, -1, -1, -1, 37, -1, -1, -1, -1,
-		103, 105, 101, -1, 29, 63, 34, 62, -1, 70,
-		4, 93, -1, 87, 65, 41, 12, 94, 98, 33,
-		9, 80, 99, 5, 52, 45, 73, 46, 44, 10,
+		104, 106, 102, -1, 29, 63, 34, 62, -1, 70,
+		4, 93, -1, 87, 65, 41, 12, 94, 99, 33,
+		9, 80, 100, 5, 52, 45, 73, 46, 44, 10,
 		6, 61, 60, 88, 76, 69, 64, 68, 1, 57,
-		100, 24, 91, 58, -1, 48, 36, -1, 95, -1,
-		49, 50, 16, 56, 104, -1, 25, 39, 59, 85,
+		101, 24, 91, 95, 58, 48, 36, -1, 96, -1,
+		49, 50, 16, 56, 105, -1, 25, 39, 59, 85,
 		30, 40, 83, 77, 15, 89, 72, 38, 71, 18,
 		81, 8, 28, 43, 55, 17, 75, 79, 26, 92,
-		42, 96, 47, 22, 27, 19, 2, 11, -1, 13,
+		42, 97, 47, 22, 27, 19, 2, 11, -1, 13,
 		-1, -1, 66, -1, 74, -1, 53, -1, -1, 78,
 		-1, -1, 90, -1, 7, 21, 0, -1, 67, 84,
-		-1, -1, 3, 51, 106, 31, -1, -1, 97, 86,
+		-1, -1, 3, 51, 107, 31, -1, -1, 98, 86,
 		82, -1, -1, 54, 23, -1, -1, -1, 14, -1,
-		35, -1, -1, -1, 20, -1, -1, -1, 102, -1,
-		-1, -1, -1, -1, -1, -1, 32,
+		35, -1, -1, -1, 20, -1, -1, -1, 103, -1,
+		-1, -1, -1, -1, -1, -1, 32
 	};
 
 	auto * s = (const BYTE*) sKey.first;
@@ -4078,6 +4082,8 @@ static FuncDesc_t g_dFuncs[FUNC_FUNCS_COUNT] = // Keep same order as in Tokh_e
 	{ /*"histogram",*/			2,	TOK_FUNC,		/*FUNC_HISTOGRAM,		*/	SPH_ATTR_INTEGER },
 	{ /*"date_range",	*/		-2,	TOK_FUNC,		/*FUNC_DATE_RANGE,		*/	SPH_ATTR_INTEGER },
 	{ /*"date_histogram",*/		2,	TOK_FUNC,		/*FUNC_DATE_HISTOGRAM,	*/	SPH_ATTR_INTEGER },
+	
+	{ /*"uuid_short",*/			0,	TOK_FUNC,		/*FUNC_UUID_SHORT,		*/	SPH_ATTR_BIGINT },
 };
 
 
@@ -4097,7 +4103,7 @@ static inline const char* FuncNameByHash ( int iFunc )
 		, "utc_time", "utc_timestamp", "timediff", "datediff", "date_add", "date_sub", "current_user"
 		, "connection_id", "all", "any", "indexof", "min_top_weight", "min_top_sortval", "atan2", "rand"
 		, "regex", "substring_index", "upper", "lower", "last_insert_id", "levenshtein", "date_format"
-		, "database", "user", "version", "range", "histogram", "date_range", "date_histogram" };
+		, "database", "user", "version", "range", "histogram", "date_range", "date_histogram", "uuid_short" };
 
 	return dNames[iFunc];
 }
@@ -6550,6 +6556,30 @@ private:
 	CSphString m_sIds;
 };
 
+class Expr_UuidShort_c : public Expr_NoLocator_c
+{
+public:
+	Expr_UuidShort_c () = default;
+
+	float Eval ( const CSphMatch & ) const final { return (float) UidShort(); }
+	int IntEval ( const CSphMatch & ) const final { return (int)UidShort(); }
+	int64_t Int64Eval ( const CSphMatch & ) const final { return UidShort(); }
+	bool IsConst () const final { return true; }
+	
+	uint64_t GetHash ( const ISphSchema & tSorterSchema, uint64_t uPrevHash, bool & bDisable ) final
+	{
+		EXPR_CLASS_NAME("Expr_UuidShort_c");
+		return CALC_DEP_HASHES();
+	}
+
+	ISphExpr * Clone () const final
+	{
+		return new Expr_UuidShort_c ( *this );
+	}
+
+private:
+	Expr_UuidShort_c ( const Expr_UuidShort_c & rhs ) {};
+};
 
 //////////////////////////////////////////////////////////////////////////
 
@@ -7089,6 +7119,8 @@ ISphExpr * ExprParser_t::CreateFuncExpr ( int iNode, VecRefPtrs_t<ISphExpr*> & d
 		}
 	}
 
+	case FUNC_UUID_SHORT: return new Expr_UuidShort_c();
+
 	default: // just make gcc happy
 		assert ( 0 && "unhandled function id" );
 	}
@@ -7145,6 +7177,7 @@ ISphExpr * ExprParser_t::CreateTree ( int iNode )
 		case FUNC_HISTOGRAM:
 		case FUNC_DATE_RANGE:
 		case FUNC_DATE_HISTOGRAM:
+		case FUNC_UUID_SHORT:
 			bSkipChildren = true;
 			break;
 		default:

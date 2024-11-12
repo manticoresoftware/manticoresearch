@@ -3442,10 +3442,12 @@ void LogSphinxqlError ( const Str_t & sStmt, const Str_t & sError )
 	WriteQuery ( tBuf );
 }
 
-void LogBuddyQuery ( const Str_t sQuery, const CSphQueryResultMeta & tMeta, BuddyQuery_e tType )
+void LogBuddyQuery ( const Str_t sQuery, BuddyQuery_e tType )
 {
 	if ( g_eLogFormat!=LOG_FORMAT_SPHINXQL || g_iQueryLogFile<0 || IsEmpty ( sQuery ) )
 		return;
+
+	const auto & tMeta = session::GetClientSession()->m_tLastMeta;
 
 	QuotationEscapedBuilder tBuf;
 

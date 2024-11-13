@@ -76,7 +76,7 @@ mysql -h0 -P9306 -e "SHOW TABLES;"
 | table2 | rt   |
 +--------+------+
 ––– input –––
-mysql -h0 -P9306 -e 'CREATE TABLE IF NOT EXISTS `table3` LIKE `table2` WITH DATA;'
+mysql -h0 -P9306 -e 'CREATE TABLE if not exists `table3` LIKE `table2` WITH DATA;'
 ––– output –––
 ––– input –––
 mysql -h0 -P9306 -e "SHOW TABLES; SELECT * FROM table3; SHOW CREATE TABLE table3;"
@@ -103,7 +103,7 @@ tag integer
 ) exceptions='/var/lib/manticore/table3/exceptions.txt' stopwords='/var/lib/manticore/table3/stopwords_0.txt' wordforms='/var/lib/manticore/table3/wordforms_0.txt' |
 +--------+------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
 ––– input –––
-mysql -h0 -P9306 -e 'CREATE TABLE IF NOT EXISTS `table4` LIKE `table1` WITH DATA;'
+mysql -h0 -P9306 -e 'CREATE TABLE if NOT exists `table4` LIKE `table1` WITH DATA;'
 ––– output –––
 ––– input –––
 mysql -h0 -P9306 -e "SHOW TABLES; SELECT * FROM table4; SHOW CREATE TABLE table4;"
@@ -126,7 +126,7 @@ tag integer
 ) exceptions='/var/lib/manticore/table4/exceptions.txt' stopwords='/var/lib/manticore/table4/stopwords_0.txt' wordforms='/var/lib/manticore/table4/wordforms_0.txt' |
 +--------+------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
 ––– input –––
-mysql -h0 -P9306 -e 'CREATE TABLE IF NOT EXISTS `table5` LIKE `table3` WITH DATA;'
+mysql -h0 -P9306 -e 'CREATE TABLE if not EXISTS `table5` LIKE `table3` WITH DATA;'
 ––– output –––
 ––– input –––
 mysql -h0 -P9306 -e "SHOW TABLES; SELECT * FROM table5; SHOW CREATE TABLE table5;"
@@ -155,7 +155,7 @@ tag integer
 ) exceptions='/var/lib/manticore/table5/exceptions.txt' stopwords='/var/lib/manticore/table5/stopwords_0.txt' wordforms='/var/lib/manticore/table5/wordforms_0.txt' |
 +--------+------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
 ––– input –––
-mysql -h0 -P9306 -e 'create table IF NOT EXISTS `table7` like `table4` with data;'
+mysql -h0 -P9306 -e 'create table iF NoT ExIstS `table7` like `table4` with data;'
 ––– output –––
 ––– input –––
 mysql -h0 -P9306 -e "SHOW TABLES; SELECT * FROM table7; SHOW CREATE TABLE table7;"
@@ -210,3 +210,7 @@ title text,
 tag integer
 ) exceptions='/var/lib/manticore/table_5/exceptions.txt' stopwords='/var/lib/manticore/table_5/stopwords_0.txt' wordforms='/var/lib/manticore/table_5/wordforms_0.txt' |
 +---------+----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
+––– input –––
+mysql -h0 -P9306 -e 'CREATE TABLE IF NOT EXISTS `table_5` LIKE `table3` WITH DATA abs;'
+––– output –––
+ERROR 1064 (42000) at line 1: P03: syntax error, unexpected tablename, expecting $end near 'WITH DATA abs'

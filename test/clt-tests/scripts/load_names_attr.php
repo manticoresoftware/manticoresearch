@@ -17,6 +17,7 @@ $options = [
     'docs::',           // Optional argument, controlled by --docs=
     'min-infix-len::',  // Optional argument, controlled by --min-infix-len=
     'start-id::',       // Optional argument, controlled by --start-id=
+    'rt-mem-limit::',   // Optional argument, controlled by --rt-mem-limit=
     'drop-table',       // Flag argument, controlled by --drop-table (default true)
     'no-drop-table',    // Flag to disable dropping and creating the table
     'help'              // Help argument
@@ -30,8 +31,9 @@ if (isset($args['help'])) {
     echo "  --batch-size=<number>      Number of records per batch (default: {$defaults['batch-size']})\n";
     echo "  --concurrency=<number>     Number of concurrent connections (default: {$defaults['concurrency']})\n";
     echo "  --docs=<number>            Total number of documents to insert (default: {$defaults['docs']})\n";
-    echo "  --min-infix-len=<number>   Optional minimum infix length for table (default: none)\n";
+    echo "  --min-infix-len=<number>   Optional minimum infix length for table (default: none, minimum: 2)\n";
     echo "  --start-id=<number>        Starting ID for document insertion (default: {$defaults['start-id']})\n";
+    echo "  --rt-mem-limit=<value>     Set the real-time memory limit (optional, default: none)\n";
     echo "  --drop-table               Drop and create the table before inserting data (default: true)\n";
     echo "  --no-drop-table            Prevent the table from being dropped and created\n";
     echo "  --help                     Show this help message\n";
@@ -41,13 +43,26 @@ if (isset($args['help'])) {
 // Apply defaults for any arguments not specified
 $args = array_merge($defaults, $args);
 
+// Validate min-infix-len argument
+if (isset($args['min-infix-len'])) {
+    $minInfixLenValue = intval($args['min-infix-len']);
+    if ($minInfixLenValue < 2) {
+        die("Error: --min-infix-len cannot be less than 2.\n");
+    }
+    $minInfixLen = "min_infix_len='" . $minInfixLenValue . "'";
+} else {
+    $minInfixLen = "";
+}
+
+// Set rt-mem-limit argument if specified
+$rtMemLimit = isset($args['rt-mem-limit']) ? "rt_mem_limit=" . $args['rt-mem-limit'] : "";
+
 // Determine drop-table behavior
 $dropTable = !isset($args['no-drop-table']); // Drop and create table unless --no-drop-table is specified
 $batchSize = intval($args['batch-size']);
 $concurrency = intval($args['concurrency']);
 $docs = intval($args['docs']);
 $startId = intval($args['start-id']);
-$minInfixLen = isset($args['min-infix-len']) ? "min_infix_len='" . intval($args['min-infix-len']) . "'" : "";
 
 // Connect to database
 function connectDb() {
@@ -82,7 +97,11 @@ $pdo = $all_links[0];
 if ($dropTable) {
     mysqli_query($pdo, "DROP TABLE IF EXISTS name");
     echo "Table 'name' dropped and recreated.\n";
-	mysqli_query($pdo, "CREATE TABLE name(id INTEGER, username TEXT, s STRING) $minInfixLen expand_keywords='1'");
+    $createTableQuery = "CREATE TABLE name(id INTEGER, username TEXT, s STRING) $minInfixLen expand_keywords='1'";
+    if ($rtMemLimit) {
+        $createTableQuery .= " $rtMemLimit";
+    }
+    mysqli_query($pdo, $createTableQuery);
 }
 
 $batch = [];
@@ -93,8 +112,8 @@ $surnames = file('./test/clt-tests/scripts/surnames.txt', FILE_IGNORE_NEW_LINES 
 $surnamesCount = count($surnames);
 
 echo "preparing...\n";
-mt_srand(1); // Fix the seed to ensure data reproducibility
-$c = $startId; // Start from the specified start ID
+srand(1); // Ensure repeatable random data
+$c = $startId; // Start at the specified start ID
 
 $batches = [];
 while ($c < $startId + $docs) {

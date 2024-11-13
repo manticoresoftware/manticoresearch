@@ -13,9 +13,18 @@ chmod +x ./test/clt-tests/scripts/load_names_attr.php > /dev/null; echo $?
 ––– output –––
 0
 ––– input –––
-php -d memory_limit=2G ./test/clt-tests/scripts/load_names_attr.php --batch-size=100000 --concurrency=4 --docs=2000000 --multiplier=1 --rt-mem-limit=6G --start-id=1 --min-infix-len=1 --drop-table > /dev/null; echo $?
+php -d memory_limit=2G ./test/clt-tests/scripts/load_names_attr.php --batch-size=100000 --concurrency=4 --docs=2000000 --start-id=1 --drop-table > /dev/null; echo $?
 ––– output –––
-0
+––– input –––
+mysqldump -h0 -P9306 --no-create-info --compact --skip-comments --skip-extended-insert manticore name > ./test/clt-tests/scripts/name_data_dump1.sql
+––– output –––
+––– input –––
+md5sum ./test/clt-tests/scripts/name_data_dump1.sql > ./test/clt-tests/scripts/md5_checksum1.txt
+––– output –––
+––– input –––
+cat ./test/clt-tests/scripts/md5_checksum1.txt
+––– output –––
+5409bb30939e20be044e38830bc7f547  ./test/clt-tests/scripts/name_data_dump1.sql
 ––– input –––
 mysql -h0 -P9306 -e "FLUSH RAMCHUNK name;"
 ––– output –––
@@ -41,9 +50,19 @@ mysql -h0 -P9306 -e "SELECT COUNT(*) FROM name;"
 |  2000000 |
 +----------+
 ––– input –––
-php -d memory_limit=2G ./test/clt-tests/scripts/load_names_attr.php --batch-size=100000 --concurrency=4 --docs=2000000 --multiplier=1 --rt-mem-limit=10G --start-id=2000001 --min-infix-len=2 --no-drop-table > /dev/null; echo $?
+php -d memory_limit=2G ./test/clt-tests/scripts/load_names_attr.php --batch-size=100000 --concurrency=4 --docs=2000000 --start-id=2000001 --no-drop-table > /dev/null; echo $?
 ––– output –––
 0
+––– input –––
+mysqldump -h0 -P9306 --no-create-info --compact --skip-comments --skip-extended-insert manticore name > ./test/clt-tests/scripts/name_data_dump2.sql
+––– output –––
+––– input –––
+md5sum ./test/clt-tests/scripts/name_data_dump2.sql > ./test/clt-tests/scripts/md5_checksum2.txt
+––– output –––
+––– input –––
+cat ./test/clt-tests/scripts/md5_checksum2.txt
+––– output –––
+608ac7915bf0dfea58e4ef26a7cd1cb2  ./test/clt-tests/scripts/name_data_dump2.sql
 ––– input –––
 mysql -h0 -P9306 -e "FLUSH RAMCHUNK name;"
 ––– output –––

@@ -9,9 +9,15 @@ apt-get install jq -y > /dev/null; echo $?
 debconf: delaying package configuration, since apt-utils is not installed
 0
 ––– input –––
-php -d memory_limit=2G ./test/clt-tests/scripts/load_names_attr.php --batch-size=1000 --concurrency=4 --docs=5000000 --multiplier=1 --rt-mem-limit=2G --start-id=1 --min-infix-len=2 > /dev/null; echo $?
+php -d memory_limit=2G ./test/clt-tests/scripts/load_names_attr.php --batch-size=1000 --concurrency=4 --docs=5000000 --start-id=1 --min-infix-len=2 > /dev/null; echo $?
 ––– output –––
 0
+––– input –––
+mysqldump -h127.0.0.1 -P9306 --no-create-info --compact --skip-comments --skip-extended-insert manticore name > /tmp/name_data_dump3.sql
+––– output –––
+––– input –––
+md5sum /tmp/name_data_dump.sql > /tmp/name_data_md3.txt
+––– output –––
 ––– input –––
 mysql -h0 -P9306 -e "SHOW CREATE TABLE name;" | grep "min_infix_len='2'" | sed "s/.*\(min_infix_len='2'\).*/\1/"
 ––– output –––
@@ -24,446 +30,26 @@ mysql -h0 -P9306 -e "SELECT COUNT(*) FROM name;"
 +----------+
 |  5000000 |
 +----------+
-––– input –––
-curl -sX POST http://localhost:9308/search -d '{"index":"name","query":{"bool":{"must":[{"match":{"*":"RICH"}}]}},"options":{"fuzzy":true},"size":10,"sort":[{"id":"asc"}]}' | jq 'del(.hits.hits[]._score, .hits.hits[]._id)'
+ ––– input –––
+mysql -h0 -P9306 -e "OPTIMIZE TABLE name OPTION sync=1;"
 ––– output –––
-{
-"took": %{NUMBER},
-"timed_out": false,
-"hits": {
-"total": 41592,
-"total_relation": "eq",
-"hits": [
-{
-"_source": {
-"username": "BRICE MULLIN",
-"s": "a"
-}
-},
-{
-"_source": {
-"username": "GRICELDA SKELTON",
-"s": "a"
-}
-},
-{
-"_source": {
-"username": "LAURICE SOLIZ",
-"s": "a"
-}
-},
-{
-"_source": {
-"username": "ERICH LLAMAS",
-"s": "a"
-}
-},
-{
-"_source": {
-"username": "LATRICE MANCILLA",
-"s": "a"
-}
-},
-{
-"_source": {
-"username": "MAURICE PRATHER",
-"s": "a"
-}
-},
-{
-"_source": {
-"username": "BRICE OLIVARES",
-"s": "a"
-}
-},
-{
-"_source": {
-"username": "PATRICE WOOD",
-"s": "a"
-}
-},
-{
-"_source": {
-"username": "JUNITA RICHARD",
-"s": "a"
-}
-},
-{
-"_source": {
-"username": "AUREA RICO",
-"s": "a"
-}
-}
-]
-}
-}
 ––– input –––
-curl -sX POST http://localhost:9308/search -d '{"index":"name","query":{"bool":{"must":[{"match":{"*":"EBGRNA"}}]}},"options":{"fuzzy":true},"size":10,"sort":[{"id":"asc"}]}' | jq 'del(.hits.hits[]._score, .hits.hits[]._id)'
+curl -sX POST http://localhost:9308/search -d '{"index":"name","query":{"bool":{"must":[{"match":{"*":"RICH"}}]}},"options":{"fuzzy":true}}' | jq -M
 ––– output –––
-{
-"took": %{NUMBER},
-"timed_out": false,
-"hits": {
-"total": 21778,
-"total_relation": "eq",
-"hits": [
-{
-"_source": {
-"username": "CONCEPTION ABERNATHY",
-"s": "a"
-}
-},
-{
-"_source": {
-"username": "BERNARDINA OSHEA",
-"s": "a"
-}
-},
-{
-"_source": {
-"username": "VERNA VITALE",
-"s": "a"
-}
-},
-{
-"_source": {
-"username": "BERNADETTE HALES",
-"s": "a"
-}
-},
-{
-"_source": {
-"username": "BERNARDINA MCMILLAN",
-"s": "a"
-}
-},
-{
-"_source": {
-"username": "ERNA ULLOA",
-"s": "a"
-}
-},
-{
-"_source": {
-"username": "SAMIRA ABERNATHY",
-"s": "a"
-}
-},
-{
-"_source": {
-"username": "JUDI BERNAL",
-"s": "a"
-}
-},
-{
-"_source": {
-"username": "MERNA GAITHER",
-"s": "a"
-}
-},
-{
-"_source": {
-"username": "BERNADINE HIBBARD",
-"s": "a"
-}
-}
-]
-}
-}
 ––– input –––
-curl -sX POST http://localhost:9308/search -d '{"index":"name","query":{"bool":{"must":[{"match":{"*":"EBGRNA"}}]}},"options":{"fuzzy":true},"size":10,"sort":[{"id":"asc"}]}' | jq 'del(.hits.hits[]._score, .hits.hits[]._id)'
+curl -sX POST http://localhost:9308/search -d '{"index":"name","query":{"bool":{"must":[{"match":{"*":"EBGRNA"}}]}},"options":{"fuzzy":true}}' | jq -M
 ––– output –––
-{
-"took": %{NUMBER},
-"timed_out": false,
-"hits": {
-"total": 21778,
-"total_relation": "eq",
-"hits": [
-{
-"_source": {
-"username": "CONCEPTION ABERNATHY",
-"s": "a"
-}
-},
-{
-"_source": {
-"username": "BERNARDINA OSHEA",
-"s": "a"
-}
-},
-{
-"_source": {
-"username": "VERNA VITALE",
-"s": "a"
-}
-},
-{
-"_source": {
-"username": "BERNADETTE HALES",
-"s": "a"
-}
-},
-{
-"_source": {
-"username": "BERNARDINA MCMILLAN",
-"s": "a"
-}
-},
-{
-"_source": {
-"username": "ERNA ULLOA",
-"s": "a"
-}
-},
-{
-"_source": {
-"username": "SAMIRA ABERNATHY",
-"s": "a"
-}
-},
-{
-"_source": {
-"username": "JUDI BERNAL",
-"s": "a"
-}
-},
-{
-"_source": {
-"username": "MERNA GAITHER",
-"s": "a"
-}
-},
-{
-"_source": {
-"username": "BERNADINE HIBBARD",
-"s": "a"
-}
-}
-]
-}
-}
 ––– input –––
-curl -sX POST http://localhost:9308/search -d '{"index":"name","query":{"bool":{"must":[{"match":{"*":"ANT"}}]}},"options":{"fuzzy":true},"size":10,"sort":[{"id":"asc"}]}' | jq 'del(.hits.hits[]._score, .hits.hits[]._id)'
+curl -sX POST http://localhost:9308/search -d '{"index":"name","query":{"bool":{"must":[{"match":{"*":"ANT"}}]}},"options":{"fuzzy":true}}' | jq -M
 ––– output –––
-{
-"took": %{NUMBER},
-"timed_out": false,
-"hits": {
-"total": 1246771,
-"total_relation": "eq",
-"hits": [
-{
-"_source": {
-"username": "DAMIAN SOMERS",
-"s": "a"
-}
-},
-{
-"_source": {
-"username": "TAMI WHELAN",
-"s": "a"
-}
-},
-{
-"_source": {
-"username": "DARCY SANDBERG",
-"s": "a"
-}
-},
-{
-"_source": {
-"username": "RANEE BROUGHTON",
-"s": "a"
-}
-},
-{
-"_source": {
-"username": "STEPHEN ALLMAN",
-"s": "a"
-}
-},
-{
-"_source": {
-"username": "AMANDA KEY",
-"s": "a"
-}
-},
-{
-"_source": {
-"username": "ELFRIEDA HANKS",
-"s": "a"
-}
-},
-{
-"_source": {
-"username": "NANNIE WILLINGHAM",
-"s": "a"
-}
-},
-{
-"_source": {
-"username": "YOULANDA TROUT",
-"s": "a"
-}
-},
-{
-"_source": {
-"username": "ANTHONY SMOOT",
-"s": "a"
-}
-}
-]
-}
-}
 ––– input –––
-curl -sX POST http://localhost:9308/search -d '{"index":"name","query":{"bool":{"must":[{"match":{"*":"tony"}}]}},"options":{"fuzzy":true},"size":10,"sort":[{"id":"asc"}]}' | jq 'del(.hits.hits[]._score, .hits.hits[]._id)'
+curl -sX POST http://localhost:9308/search -d '{"index":"name","query":{"bool":{"must":[{"match":{"*":"tony"}}]}},"options":{"fuzzy":true}}' | jq -M
 ––– output –––
-{
-"took": %{NUMBER},
-"timed_out": false,
-"hits": {
-"total": 10218,
-"total_relation": "eq",
-"hits": [
-{
-"_source": {
-"username": "KARYL TONEY",
-"s": "a"
-}
-},
-{
-"_source": {
-"username": "TONYA SHERRILL",
-"s": "a"
-}
-},
-{
-"_source": {
-"username": "LEONE TONEY",
-"s": "a"
-}
-},
-{
-"_source": {
-"username": "TONY DUPRE",
-"s": "a"
-}
-},
-{
-"_source": {
-"username": "TONEY SCHOEN",
-"s": "a"
-}
-},
-{
-"_source": {
-"username": "ROCHEL TONEY",
-"s": "a"
-}
-},
-{
-"_source": {
-"username": "TONYA PARRIS",
-"s": "a"
-}
-},
-{
-"_source": {
-"username": "TONY WEISS",
-"s": "a"
-}
-},
-{
-"_source": {
-"username": "TOBY YAZZIE",
-"s": "a"
-}
-},
-{
-"_source": {
-"username": "TOBY MCCARTY",
-"s": "a"
-}
-}
-]
-}
-}
 ––– input –––
-curl -sX POST http://localhost:9308/search -d '{"index":"name","query":{"bool":{"must":[{"match":{"*":"SMITH"}}]}},"options":{"fuzzy":true},"size":10,"sort":[{"id":"asc"}]}' | jq 'del(.hits.hits[]._score, .hits.hits[]._id)'
+curl -sX POST http://localhost:9308/search -d '{"index":"name","query":{"bool":{"must":[{"match":{"*":"SMITH"}}]}}, "sort":[{"id":"desc"},{"username":"asc"}], "options":{"fuzzy":true}}' | jq -M
 ––– output –––
-{
-"took": %{NUMBER},
-"timed_out": false,
-"hits": {
-"total": 33734,
-"total_relation": "eq",
-"hits": [
-{
-"_source": {
-"username": "MEREDITH BEASLEY",
-"s": "a"
-}
-},
-{
-"_source": {
-"username": "RUDY SOUTH",
-"s": "a"
-}
-},
-{
-"_source": {
-"username": "ADRIANA HIGGINBOTHAM",
-"s": "a"
-}
-},
-{
-"_source": {
-"username": "KEITH STILLWELL",
-"s": "a"
-}
-},
-{
-"_source": {
-"username": "BILLI HIGGINBOTHAM",
-"s": "a"
-}
-},
-{
-"_source": {
-"username": "MIGNON SOUTHERN",
-"s": "a"
-}
-},
-{
-"_source": {
-"username": "JOHNIE SMYTH",
-"s": "a"
-}
-},
-{
-"_source": {
-"username": "SCOTTIE NOE",
-"s": "a"
-}
-},
-{
-"_source": {
-"username": "RUTHANN DICKSON",
-"s": "a"
-}
-},
-{
-"_source": {
-"username": "DOROTHA BLEDSOE",
-"s": "a"
-}
-}
-]
-}
-}
 ––– input –––
-curl -sX POST http://localhost:9308/search -d '{"index":"name","query":{"bool":{"must":[{"match":{"*":"SMYTH"}}]}},"options":{"fuzzy":true},"size":10,"sort":[{"id":"asc"},{"username.keyword":"asc"}]}' | jq 'del(.hits.hits[]._score, .hits.hits[]._id)'
+curl -sX POST http://localhost:9308/search -d '{"index":"name","query":{"bool":{"must":[{"match":{"*":"SMYTH"}}]}}, "sort":[{"id":"desc"},{"username":"asc"}], "options":{"fuzzy":true}}' | jq -M
 ––– output –––
 ––– input –––
 curl -sX POST http://localhost:9308/autocomplete -d '{"table":"name","query":"jo","options":{"layouts":"us,ru"}}' | jq -M
@@ -487,5 +73,5 @@ curl -sX POST http://localhost:9308/autocomplete -d '{"table":"name","query":"jo
 curl -sX POST http://localhost:9308/autocomplete -d '{"table":"name","query":"gr","options":{"fuzziness":1,"layouts":"ru","append":1,"prepend":1}}' | jq -M
 ––– output –––
 ––– input –––
-curl -sX POST http://localhost:9308/autocomplete -d '{"table":"name","query":"jo","options":{"fuzziness":1,"sort":[{"query":"asc"},{"id":"asc"}]}}' | jq -M
+curl -sX POST http://localhost:9308/autocomplete -d '{"table":"name","query":"jo","options":{"fuzziness":1}}' | jq -M
 ––– output –––

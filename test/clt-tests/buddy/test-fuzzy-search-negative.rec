@@ -1,6 +1,6 @@
 ––– block: ../base/start-searchd –––
 ––– input –––
-php -d memory_limit=2G ./test/clt-tests/scripts/load_names_attr.php --batch-size=1000 --concurrency=4 --docs=5000000 --multiplier=1 --rt-mem-limit=2G --start-id=1 > /dev/null; echo $?
+php -d memory_limit=2G ./test/clt-tests/scripts/load_names_attr.php --batch-size=1000 --concurrency=4 --docs=5000000 --start-id=1 > /dev/null; echo $?
 ––– output –––
 0
 ––– input –––

@@ -1497,6 +1497,11 @@ show_what:
 		{
 			pParser->m_pStmt->m_eStmt = STMT_SHOW_TABLES;
 		}
+	| TOK_TABLES TOK_FROM TOK_SYSTEM like_filter
+		{
+			pParser->m_pStmt->m_iIntParam = 1;
+			pParser->m_pStmt->m_eStmt = STMT_SHOW_TABLES;
+		}
 	| TOK_DATABASES like_filter
 		{
 			pParser->m_pStmt->m_eStmt = STMT_SHOW_DATABASES;

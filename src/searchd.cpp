@@ -12716,11 +12716,18 @@ void HandleMysqlShowTables ( RowBuffer_i & tOut, const SqlStmt_t * pStmt )
 {
 	auto dIndexes = GetAllServedIndexes();
 	bool bWithClusters = ClusterFlavour();
+	auto fnFilter = [bSystem = pStmt->m_iIntParam==1] ( const NamedIndexType_t& tIdx )
+	{
+		bool bIsSystem = tIdx.m_sName.SubString ( 0, 7 ).EqN ("system.");
+		return bSystem == bIsSystem;
+	};
 
 	// output the results
 	VectorLike dTable ( pStmt->m_sStringParam, { "Table", "Type" } );
 	for ( auto& dPair : dIndexes )
 	{
+		if ( !fnFilter ( dPair ) )
+			continue;
 		if ( bWithClusters && !dPair.m_sCluster.IsEmpty ())
 			dTable.MatchTuplet ( SphSprintf ("%s:%s", dPair.m_sCluster.cstr(), dPair.m_sName.cstr()).cstr(), szIndexType ( dPair.m_eType ) );
 		else

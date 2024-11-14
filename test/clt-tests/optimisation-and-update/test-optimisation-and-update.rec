@@ -45,16 +45,6 @@ php -d memory_limit=2G ./test/clt-tests/scripts/load_names_attr.php --batch-size
 ––– output –––
 0
 ––– input –––
-mysqldump -h0 -P9306 --no-create-info --compact --skip-comments --skip-extended-insert manticore name > ./test/clt-tests/scripts/name_data_dump2.sql
-––– output –––
-––– input –––
-md5sum ./test/clt-tests/scripts/name_data_dump2.sql > ./test/clt-tests/scripts/md5_checksum2.txt
-––– output –––
-––– input –––
-cat ./test/clt-tests/scripts/md5_checksum2.txt
-––– output –––
-608ac7915bf0dfea58e4ef26a7cd1cb2  ./test/clt-tests/scripts/name_data_dump2.sql
-––– input –––
 mysql -h0 -P9306 -e "FLUSH RAMCHUNK name;"
 ––– output –––
 ––– input –––

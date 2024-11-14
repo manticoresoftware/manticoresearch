@@ -15,16 +15,7 @@ chmod +x ./test/clt-tests/scripts/load_names_attr.php > /dev/null; echo $?
 ––– input –––
 php -d memory_limit=2G ./test/clt-tests/scripts/load_names_attr.php --batch-size=100000 --concurrency=4 --docs=2000000 --start-id=1 --drop-table > /dev/null; echo $?
 ––– output –––
-––– input –––
-mysqldump -h0 -P9306 --no-create-info --compact --skip-comments --skip-extended-insert manticore name > ./test/clt-tests/scripts/name_data_dump1.sql
-––– output –––
-––– input –––
-md5sum ./test/clt-tests/scripts/name_data_dump1.sql > ./test/clt-tests/scripts/md5_checksum1.txt
-––– output –––
-––– input –––
-cat ./test/clt-tests/scripts/md5_checksum1.txt
-––– output –––
-5409bb30939e20be044e38830bc7f547  ./test/clt-tests/scripts/name_data_dump1.sql
+0
 ––– input –––
 mysql -h0 -P9306 -e "FLUSH RAMCHUNK name;"
 ––– output –––

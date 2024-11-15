@@ -42,7 +42,7 @@ sudo yum -y --enablerepo manticore-dev install manticore manticore-extra mantico
 
 ### 其他可能需要的包
 #### 对于索引器
-如果你计划使用[索引器](../Data_creation_and_modification/Adding_data_from_external_storages/Plain_tables_creation.md#Indexer-tool)从外部源创建表，需要确保安装相应的客户端库，以便能够访问所需的索引源。下面的命令将一次性安装所有必要的库；你可以按需减少，只安装所需的库（仅针对 MySQL 源，只需安装 mysql-libs 即可，unixODBC 不是必需的）。
+如果你计划使用[索引器](../Data_creation_and_modification/Adding_data_from_external_storages/Plain_tables_creation.md#Indexer-工具)从外部源创建表，需要确保安装相应的客户端库，以便能够访问所需的索引源。下面的命令将一次性安装所有必要的库；你可以按需减少，只安装所需的库（仅针对 MySQL 源，只需安装 mysql-libs 即可，unixODBC 不是必需的）。
 
 
 ```bash

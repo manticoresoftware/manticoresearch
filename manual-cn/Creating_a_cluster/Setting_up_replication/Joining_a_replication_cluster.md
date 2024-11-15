@@ -4,7 +4,7 @@
 
 要加入现有集群，您必须至少指定：
 
-- 集群的 [name](../../Creating_a_cluster/Setting_up_replication/Setting_up_replication.md#Replication-cluster)
+- 集群的 [name](../../Creating_a_cluster/Setting_up_replication/Setting_up_replication.md#复制集群)
 - 要加入的集群中另一个节点的 `host:port`
 
 <!-- intro -->
@@ -83,7 +83,7 @@ utilsApi.Sql("JOIN CLUSTER posts AT '10.12.1.35:9312'");
 <!-- end -->
 
 <!-- example joining a replication cluster 1_1 -->
-在大多数情况下，当只有一个复制集群时，上述设置已足够。然而，如果您要创建多个复制集群，还必须设置 [path](../../Creating_a_cluster/Setting_up_replication/Setting_up_replication.md#Replication-cluster) 选项，并确保该目录可用。
+在大多数情况下，当只有一个复制集群时，上述设置已足够。然而，如果您要创建多个复制集群，还必须设置 [path](../../Creating_a_cluster/Setting_up_replication/Setting_up_replication.md#复制集群) 选项，并确保该目录可用。
 
 <!-- request SQL -->
 ```sql
@@ -99,7 +99,7 @@ JOIN CLUSTER c2 at '127.0.0.1:10201' 'c2' as path
 2. `cluster_<name>_nodes_view`：该列表包含所有用于复制的活动节点，不需要手动管理。[ALTER CLUSTER ... UPDATE nodes](../../Creating_a_cluster/Setting_up_replication/Managing_replication_nodes.md) 实际上会将此节点列表复制到用于重启时重新加入的节点列表中。[集群状态](../../Creating_a_cluster/Setting_up_replication/Replication_cluster_status.md) 显示此列表为 `cluster_<name>_nodes_view`。
 
 <!-- example joining a replication cluster  2 -->
-当节点位于不同的网络段或数据中心时，可以明确设置 [nodes](../../Creating_a_cluster/Setting_up_replication/Setting_up_replication.md#Replication-cluster) 选项。这可以最小化节点之间的流量，并利用网关节点在数据中心之间进行通信。以下代码示例使用 [nodes](../../Creating_a_cluster/Setting_up_replication/Setting_up_replication.md#Replication-cluster) 选项加入现有集群。
+当节点位于不同的网络段或数据中心时，可以明确设置 [nodes](../../Creating_a_cluster/Setting_up_replication/Setting_up_replication.md#复制集群) 选项。这可以最小化节点之间的流量，并利用网关节点在数据中心之间进行通信。以下代码示例使用 [nodes](../../Creating_a_cluster/Setting_up_replication/Setting_up_replication.md#复制集群) 选项加入现有集群。
 
 > **注意：** 使用此语法时，集群的 `cluster_<name>_nodes_set` 列表不会自动更新。要更新它，请使用 [ALTER CLUSTER ... UPDATE nodes](../../Creating_a_cluster/Setting_up_replication/Managing_replication_nodes.md)。
 

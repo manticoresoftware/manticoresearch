@@ -32,7 +32,7 @@
 
 #### 实时表 vs 普通表
 * [**实时表**](Creating_a_table/Local_tables/Real-time_table.md) 允许添加、更新和删除文档，并能立即查看更改。
-* [**普通表**](Creating_a_table/Local_tables/Plain_table.md) 是一种几乎不可变的数据结构，也是实时表的基础组成部分。普通表存储一组文档及其公共词典和索引设置。一个实时表可以由多个普通表（块）组成，但**Manticore 还提供直接使用工具** [**indexer**](Data_creation_and_modification/Adding_data_from_external_storages/Plain_tables_creation.md#Indexer-tool) **构建普通表的访问**。当数据大多是不可变时，使用普通表更加合理，因此不需要实时表。
+* [**普通表**](Creating_a_table/Local_tables/Plain_table.md) 是一种几乎不可变的数据结构，也是实时表的基础组成部分。普通表存储一组文档及其公共词典和索引设置。一个实时表可以由多个普通表（块）组成，但**Manticore 还提供直接使用工具** [**indexer**](Data_creation_and_modification/Adding_data_from_external_storages/Plain_tables_creation.md#Indexer-工具) **构建普通表的访问**。当数据大多是不可变时，使用普通表更加合理，因此不需要实时表。
 
 #### 实时模式 vs 普通模式
 Manticore Search 有两种运行模式：

@@ -4,7 +4,7 @@
 2. 下载 [Manticore Search 安装程序](https://repo.manticoresearch.com/repository/manticoresearch_windows/release/x64/manticore-6.3.6-24080214-593045790-x64.exe)，并按照安装说明进行操作。
 3. 选择安装目录。
 4. 选择要安装的组件。建议安装所有组件。
-5. Manticore 自带一个预配置的 `manticore.conf` 文件，默认为 [RT 模式](../Read_this_first.md#Real-time-mode-vs-plain-mode)，无需额外配置。
+5. Manticore 自带一个预配置的 `manticore.conf` 文件，默认为 [RT 模式](../Read_this_first.md#实时模式-vs-普通模式)，无需额外配置。
 
 ## 作为 Windows 服务安装
 

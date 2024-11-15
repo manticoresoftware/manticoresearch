@@ -1,13 +1,13 @@
 # 删除文档
 
-删除文档仅在 [RT 模式](../../Read_this_first.md#Real-time-mode-vs-plain-mode) 下支持以下表类型：
+删除文档仅在 [RT 模式](../Read_this_first.md#实时模式-vs-普通模式) 下支持以下表类型：
 * [实时表](../Creating_a_table/Local_tables/Real-time_table.md)
 * [渗透表](../Creating_a_table/Local_tables/Percolate_table.md)
 * 仅包含 RT 表的分布式表作为本地或远程代理。
 
 你可以根据文档的 ID 或某些条件从表中删除现有文档。
 
-此外，[批量删除](../Data_creation_and_modification/Deleting_documents.md#Bulk-deletion) 可用于删除多个文档。
+此外，[批量删除](../Data_creation_and_modification/Deleting_documents.md#批量删除) 可用于删除多个文档。
 
 删除文档可以通过 SQL 和 JSON 接口完成。
 
@@ -72,7 +72,7 @@ POST /delete -d '
     }'
 ```
 
-* `query` 的 JSON 格式包含一个用于全文搜索的子句，语法与  [JSON/update](../Data_creation_and_modification/Updating_documents/UPDATE.md#Updates-via-HTTP-JSON) 中的相同。
+* `query` 的 JSON 格式包含一个用于全文搜索的子句，语法与  [JSON/update](../Data_creation_and_modification/Updating_documents/UPDATE.md#通过-HTTP-JSON-进行更新) 中的相同。
 
 <!-- response JSON -->
 
@@ -488,7 +488,7 @@ POST /delete -d '
       "id": 100
     }'
 ```
-* `cluster` 用于 JSON 中，表示包含所需表的[复制集群](../Creating_a_cluster/Setting_up_replication/Setting_up_replication.md#Replication-cluster)的名称。
+* `cluster` 用于 JSON 中，表示包含所需表的[复制集群](../Creating_a_cluster/Setting_up_replication/Setting_up_replication.md#复制集群)的名称。
 
 <!-- intro -->
 

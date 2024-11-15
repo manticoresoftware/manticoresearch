@@ -499,7 +499,7 @@ POST /search
 
 <!-- end -->
 
-请参见 [EXPLAIN QUERY](../../Searching/Full_text_matching/Profiling.md#Profiling-without-running-a-query)。它显示全文检索查询的执行树 **而不实际执行查询**。需要注意的是，在对实时表进行查询后使用 `SHOW PLAN` 时，结果将基于随机的磁盘/RAM块。因此，如果您最近修改了表的分词设置，或各个块在词典等方面差异很大，您可能无法得到预期的结果。在这种情况下，建议同时使用 `EXPLAIN QUERY`。
+请参见 [EXPLAIN QUERY](../../Searching/Full_text_matching/Profiling.md#不执行查询的情况下进行分析)。它显示全文检索查询的执行树 **而不实际执行查询**。需要注意的是，在对实时表进行查询后使用 `SHOW PLAN` 时，结果将基于随机的磁盘/RAM块。因此，如果您最近修改了表的分词设置，或各个块在词典等方面差异很大，您可能无法得到预期的结果。在这种情况下，建议同时使用 `EXPLAIN QUERY`。
 
 ## JSON 结果集说明
 

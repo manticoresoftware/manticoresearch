@@ -9,7 +9,7 @@ Manticore 支持按单列、多列或计算表达式对搜索结果进行分组�
 - 返回每个组中超过一行的结果
 - 对组进行过滤
 - 对组进行排序
-- 使用 [聚合函数](../Searching/Grouping.md#Aggregation-functions) 进行聚合
+- 使用 [聚合函数](../Searching/Grouping.md#聚合函数) 进行聚合
 
 <!-- intro -->
 通用语法：
@@ -58,7 +58,7 @@ JSON 查询格式目前支持基本的分组功能，能够检索聚合值及其
 - 表中的任何非全文字段：整数、浮点数、字符串、MVA（多值属性）
 - 或者，如果在 `SELECT` 列表中使用了别名，也可以按此别名进行分组
 
-您可以省略 `SELECT` 列表中的任何[聚合函数](../Searching/Grouping.md#Aggregation-functions)，查询仍然能够正常运行。
+您可以省略 `SELECT` 列表中的任何[聚合函数](../Searching/Grouping.md#聚合函数)，查询仍然能够正常运行。
 
 <!-- intro -->
 
@@ -703,7 +703,7 @@ SELECT release_year, avg(rental_rate) avg FROM films GROUP BY release_year HAVIN
 <!-- example group7 -->
 
 ##### GROUPBY()
-`GROUPBY()` 是一个返回当前组键的函数，在许多情况下非常有用，尤其是在您[按 MVA（多值属性）分组](../Searching/Grouping.md#Grouping-by-MVA-(multi-value-attributes))或[按JSON 值分组](../Searching/Grouping.md#Grouping-by-a-JSON-node)时。
+`GROUPBY()` 是一个返回当前组键的函数，在许多情况下非常有用，尤其是在您[按 MVA（多值属性）分组](../Searching/Grouping.md#Grouping-by-MVA-(multi-value-attributes))或[按JSON 值分组](../Searching/Grouping.md#按-JSON-节点分组)时。
 
 它也可以在 `HAVING` 中使用，例如，仅保留年份为 2000 和 2002 的组。
 
@@ -1377,7 +1377,7 @@ SELECT major, count(*), count(distinct age) FROM students GROUP BY major;
 <!-- example concat -->
 ##### GROUP_CONCAT(field)
 
-通常，您可能希望更好地了解每个组的内容。可以使用 [GROUP N BY](../Searching/Grouping.md#Give-me-N-rows)，但这会返回您可能不希望在输出中显示的其他行。`GROUP_CONCAT()` 可以通过将特定字段的值连接在一起来丰富您的分组。例如，使用之前的例子，可以显示每个组中的所有年龄。
+通常，您可能希望更好地了解每个组的内容。可以使用 [GROUP N BY](../Searching/Grouping.md#返回-N-行)，但这会返回您可能不希望在输出中显示的其他行。`GROUP_CONCAT()` 可以通过将特定字段的值连接在一起来丰富您的分组。例如，使用之前的例子，可以显示每个组中的所有年龄。
 
 `GROUP_CONCAT(field)` 以逗号分隔的形式返回字段值列表。
 

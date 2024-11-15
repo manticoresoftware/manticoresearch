@@ -23,7 +23,7 @@ Manticore 的复制基于 [Galera 库](https://github.com/codership/galera)，�
 
 ## 复制集群
 
-复制集群是一个写事务被复制到其他节点的节点组。复制在每个表的基础上设置，意味着一个表只能属于一个集群。一个集群可以拥有的表的数量没有限制。所有对属于集群的 `percolate` 或实时表的事务操作（如 `INSERT`、`REPLACE`、`DELETE`、`TRUNCATE`）都会复制到集群中的所有其他节点。[分布式](../../Creating_a_table/Creating_a_distributed_table/Creating_a_distributed_table.md#Creating-a-distributed-table)表也可以作为复制过程的一部分。复制是多主架构，因此对任意节点或多个节点同时写入都能正常工作。
+复制集群是一个写事务被复制到其他节点的节点组。复制在每个表的基础上设置，意味着一个表只能属于一个集群。一个集群可以拥有的表的数量没有限制。所有对属于集群的 `percolate` 或实时表的事务操作（如 `INSERT`、`REPLACE`、`DELETE`、`TRUNCATE`）都会复制到集群中的所有其他节点。[分布式](../../Creating_a_table/Creating_a_distributed_table/Creating_a_distributed_table.md#创建分布式表)表也可以作为复制过程的一部分。复制是多主架构，因此对任意节点或多个节点同时写入都能正常工作。
 
 创建集群通常可以使用 `CREATE CLUSTER <cluster name>` 命令，加入集群可以使用 `JOIN CLUSTER <cluster name> at 'host:port'` 命令。然而，在某些罕见情况下，您可能需要微调 `CREATE/JOIN CLUSTER` 的行为。可用的选项如下：
 
@@ -51,7 +51,7 @@ Manticore 的复制基于 [Galera 库](https://github.com/codership/galera)，�
 
 在 JSON 接口中，必须为集群表的所有写操作设置 `cluster` 属性以及表名。如果未设置 `cluster` 属性，将导致错误。
 
-对于集群中的表，[自动 ID](../../Data_creation_and_modification/Adding_documents_to_a_table/Adding_documents_to_a_real-time_table.md#Auto-ID) 应保持有效，只要 [server_id](../../Server_settings/Searchd.md#server_id) 配置正确。
+对于集群中的表，[自动 ID](../../Data_creation_and_modification/Adding_documents_to_a_table/Adding_documents_to_a_real-time_table.md#自动-ID) 应保持有效，只要 [server_id](../../Server_settings/Searchd.md#server_id) 配置正确。
 
 <!-- intro -->
 ##### SQL:

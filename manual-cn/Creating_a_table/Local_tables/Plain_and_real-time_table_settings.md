@@ -296,7 +296,7 @@ table products {
 
 #### optimize_cutoff
 
-实时表的最大磁盘块数量。了解更多信息 [这里](../../Securing_and_compacting_a_table/Compacting_a_table.md#Number-of-optimized-disk-chunks)。
+实时表的最大磁盘块数量。了解更多信息 [这里](../../Securing_and_compacting_a_table/Compacting_a_table.md#优化后的磁盘块数量)。
 
 #### rt_field
 
@@ -441,7 +441,7 @@ RT 表将一些数据存储在内存中，称为“RAM 块”，并维护多个�
 
 ##### 关于 RAM 块的重要说明
 
-- 实时表类似于包含多个本地表的 [分布式](../../Creating_a_table/Creating_a_distributed_table/Creating_a_local_distributed_table.md#Creating-a-local-distributed-table)，也称为磁盘块。
+- 实时表类似于包含多个本地表的 [分布式](../../Creating_a_table/Creating_a_distributed_table/Creating_a_local_distributed_table.md#创建本地分布式表)，也称为磁盘块。
 - 每个 RAM 块由多个段组成，这些段是特殊的仅在 RAM 中的表。
 - 磁盘块存储在磁盘上，而 RAM 块存储在内存中。
 - 对实时表进行的每个事务都会生成一个新的段，而 RAM 块段会在每次事务提交后合并。执行数百或数千个文档的批量 INSERT 比多次单独插入一条文档更有效，以减少合并 RAM 块段的开销。
@@ -531,7 +531,7 @@ ini复制代码columnar_attrs = *
 columnar_attrs = id, attr1, attr2, attr3
 ```
 
-此配置设置决定哪些属性应存储在 [列式存储](../../Creating_a_table/Data_types.md#Row-wise-and-columnar-attribute-storages) 中，而不是行式存储。
+此配置设置决定哪些属性应存储在 [列式存储](../../Creating_a_table/Data_types.md#行存储和列存储属性) 中，而不是行式存储。
 
 您可以设置 `columnar_attrs = *` 将所有支持的数据类型存储在列式存储中。
 
@@ -560,18 +560,18 @@ CREATE TABLE [IF NOT EXISTS] name ( <field name> <field data type> [data type op
 
 | 类型                                                         | 配置文件中的等效项                                           | 说明                                                         | 别名      |
 | ------------------------------------------------------------ | ------------------------------------------------------------ | ------------------------------------------------------------ | --------- |
-| [text](../../Creating_a_table/Data_types.md#Text)            | [rt_field](../../Creating_a_table/Local_tables/Plain_and_real-time_table_settings.md#rt_field) | 选项：indexed, stored。默认值：**both**。要仅保留文本存储但索引，请仅指定“stored”。要仅保留文本索引，请仅指定“indexed”。 | string    |
-| [integer](../../Creating_a_table/Data_types.md#Integer)      | [rt_attr_uint](../../Creating_a_table/Local_tables/Plain_and_real-time_table_settings.md#rt_attr_uint) | integer                                                      | int, uint |
-| [bigint](../../Creating_a_table/Data_types.md#Big-Integer)   | [rt_attr_bigint](../../Creating_a_table/Local_tables/Plain_and_real-time_table_settings.md#rt_attr_bigint) | big integer                                                  |           |
-| [float](../../Creating_a_table/Data_types.md#Float)          | [rt_attr_float](../../Creating_a_table/Local_tables/Plain_and_real-time_table_settings.md#rt_attr_float) | float                                                        |           |
-| [float_vector](../../Creating_a_table/Data_types.md#Float-vector) | [rt_attr_float_vector](../../Creating_a_table/Local_tables/Plain_and_real-time_table_settings.md#rt_attr_float_vector) | 浮点值向量                                                   |           |
+| [text](../../Creating_a_table/Data_types.md#文本-Text)            | [rt_field](../../Creating_a_table/Local_tables/Plain_and_real-time_table_settings.md#rt_field) | 选项：indexed, stored。默认值：**both**。要仅保留文本存储但索引，请仅指定“stored”。要仅保留文本索引，请仅指定“indexed”。 | string    |
+| [integer](../../Creating_a_table/Data_types.md#整数Integer)      | [rt_attr_uint](../../Creating_a_table/Local_tables/Plain_and_real-time_table_settings.md#rt_attr_uint) | integer                                                      | int, uint |
+| [bigint](../../Creating_a_table/Data_types.md#大整数Big-Integer)   | [rt_attr_bigint](../../Creating_a_table/Local_tables/Plain_and_real-time_table_settings.md#rt_attr_bigint) | big integer                                                  |           |
+| [float](../../Creating_a_table/Data_types.md#浮点数Float)          | [rt_attr_float](../../Creating_a_table/Local_tables/Plain_and_real-time_table_settings.md#rt_attr_float) | float                                                        |           |
+| [float_vector](../../Creating_a_table/Data_types.md#浮点向量Float-vector) | [rt_attr_float_vector](../../Creating_a_table/Local_tables/Plain_and_real-time_table_settings.md#rt_attr_float_vector) | 浮点值向量                                                   |           |
 | [multi](../../Creating_a_table/Data_types.md#Multi-value-integer-(MVA)) | [rt_attr_multi](../../Creating_a_table/Local_tables/Plain_and_real-time_table_settings.md#rt_attr_multi) | 多个整数                                                     |           |
-| [multi64](../../Creating_a_table/Data_types.md#Multi-value-big-integer) | [rt_attr_multi_64](../../Creating_a_table/Local_tables/Plain_and_real-time_table_settings.md#rt_attr_multi_64) | 多个大整数                                                   |           |
-| [bool](../../Creating_a_table/Data_types.md#Boolean)         | [rt_attr_bool](../../Creating_a_table/Local_tables/Plain_and_real-time_table_settings.md#rt_attr_bool) | 布尔值                                                       |           |
+| [multi64](../../Creating_a_table/Data_types.md#多值大整数Multi-value-big-integer) | [rt_attr_multi_64](../../Creating_a_table/Local_tables/Plain_and_real-time_table_settings.md#rt_attr_multi_64) | 多个大整数                                                   |           |
+| [bool](../../Creating_a_table/Data_types.md#布尔值Boolean)         | [rt_attr_bool](../../Creating_a_table/Local_tables/Plain_and_real-time_table_settings.md#rt_attr_bool) | 布尔值                                                       |           |
 | [json](../../Creating_a_table/Data_types.md#JSON)            | [rt_attr_json](../../Creating_a_table/Local_tables/Plain_and_real-time_table_settings.md#rt_attr_json) | JSON                                                         |           |
-| [string](../../Creating_a_table/Data_types.md#String)        | [rt_attr_string](../../Creating_a_table/Local_tables/Plain_and_real-time_table_settings.md#rt_attr_string) | 字符串。选项`indexed, attribute`将使值进行全文索引，并同时可过滤、排序和分组。 |           |
-| [timestamp](../../Creating_a_table/Data_types.md#Timestamps) | [rt_attr_timestamp](../../Creating_a_table/Local_tables/Plain_and_real-time_table_settings.md#rt_attr_timestamp) | 时间戳                                                       |           |
-| [bit(n)](../../Creating_a_table/Data_types.md#Integer)       | [rt_attr_uint field_name](../../Creating_a_table/Local_tables/Plain_and_real-time_table_settings.md#rt_attr_uint) | N是保留的最大位数                                            |           |
+| [string](../../Creating_a_table/Data_types.md#字符串String)        | [rt_attr_string](../../Creating_a_table/Local_tables/Plain_and_real-time_table_settings.md#rt_attr_string) | 字符串。选项`indexed, attribute`将使值进行全文索引，并同时可过滤、排序和分组。 |           |
+| [timestamp](../../Creating_a_table/Data_types.md#时间戳Timestamp) | [rt_attr_timestamp](../../Creating_a_table/Local_tables/Plain_and_real-time_table_settings.md#rt_attr_timestamp) | 时间戳                                                       |           |
+| [bit(n)](../../Creating_a_table/Data_types.md#整数Integer)       | [rt_attr_uint field_name](../../Creating_a_table/Local_tables/Plain_and_real-time_table_settings.md#rt_attr_uint) | N是保留的最大位数                                            |           |
 
 <!-- intro -->
 
@@ -603,7 +603,7 @@ create table ... engine='columnar';
 create table ... engine='rowwise';
 ```
 
-`engine` 设置更改表中所有属性的默认 [属性存储](../../Creating_a_table/Data_types.md#Row-wise-and-columnar-attribute-storages)。你还可以为每个属性单独指定 `engine` [设置](../../Creating_a_table/Data_types.md#How-to-switch-between-the-storages)。
+`engine` 设置更改表中所有属性的默认 [属性存储](../../Creating_a_table/Data_types.md#Row-wise-and-columnar-attribute-storages)。你还可以为每个属性单独指定 `engine` [设置](../../Creating_a_table/Data_types.md#如何在存储方式之间切换)。
 
 有关如何为普通表启用列式存储的信息，请参阅 [columnar_attrs](../../Creating_a_table/Local_tables/Plain_and_real-time_table_settings.md#columnar_attrs)。
 
@@ -646,9 +646,9 @@ Manticore 支持两种读取表数据的访问模式：seek+read 和 mmap。
 
 | 表部分                                                       | 保持在磁盘上     | 保持在内存中   | 服务器启动时缓存         | 锁定在内存中 |
 | ------------------------------------------------------------ | ---------------- | -------------- | ------------------------ | ------------ |
-| 普通属性在 [行式](../../Creating_a_table/Data_types.md#Row-wise-and-columnar-attribute-storages) 存储（非列式）中，跳过列表、字词列表、查找、已删除文档 | mmap             | mmap           | **mmap_preread**（默认） | mlock        |
+| 普通属性在 [行式](../../Creating_a_table/Data_types.md#行存储和列存储属性) 存储（非列式）中，跳过列表、字词列表、查找、已删除文档 | mmap             | mmap           | **mmap_preread**（默认） | mlock        |
 | 行式字符串、多值属性（MVA）和 JSON 属性                      | mmap             | mmap           | **mmap_preread**（默认） | mlock        |
-| [列式](../../Creating_a_table/Data_types.md#Row-wise-and-columnar-attribute-storages) 数值、字符串和多值属性 | 始终             | 仅通过操作系统 | 无                       | 不支持       |
+| [列式](../../Creating_a_table/Data_types.md#行存储和列存储属性) 数值、字符串和多值属性 | 始终             | 仅通过操作系统 | 无                       | 不支持       |
 | 文档列表                                                     | **file**（默认） | mmap           | 无                       | mlock        |
 | 命中列表                                                     | **file**（默认） | mmap           | 无                       | mlock        |
 | 字典                                                         | mmap             | mmap           | **mmap_preread**（默认） | mlock        |
@@ -656,9 +656,9 @@ Manticore 支持两种读取表数据的访问模式：seek+read 和 mmap。
 ##### 建议如下：
 
 - 为了获得**最快的搜索响应时间**并有足够的内存，使用 [行式](../../Creating_a_table/Data_types.md#JSON) 属性，并通过 `mlock` 将其锁定在内存中。此外，还应对文档列表/命中列表使用 `mlock`。
-- 如果你优先考虑**启动后无法承受较低的性能**，并愿意牺牲更长的启动时间，请使用 [--force-preread](../../Starting_the_server/Manually.md#searchd-command-line-options) 选项。如果你希望更快的 searchd 重启，请坚持使用默认的 `mmap_preread` 选项。
+- 如果你优先考虑**启动后无法承受较低的性能**，并愿意牺牲更长的启动时间，请使用 [--force-preread](../../Starting_the_server/Manually.md#searchd-命令行选项) 选项。如果你希望更快的 searchd 重启，请坚持使用默认的 `mmap_preread` 选项。
 - 如果你希望**节省内存**，同时仍然有足够的内存存储所有属性，请跳过使用 `mlock`。操作系统将决定哪些内容应保持在内存中，基于频繁的磁盘读取。
-- 如果行式属性**不适合内存**，则选择 [列式属性](../../Creating_a_table/Data_types.md#Row-wise-and-columnar-attribute-storages)。
+- 如果行式属性**不适合内存**，则选择 [列式属性](../../Creating_a_table/Data_types.md#行存储和列存储属性)。
 - 如果全文搜索**性能不是问题**，并希望节省内存，请使用 `access_doclists/access_hitlists=file`。
 
 默认模式提供了一个平衡：
@@ -758,7 +758,7 @@ inplace_enable = {0|1}
 
 索引分为两个主要阶段。在第一个阶段，文档被收集、处理并按关键字部分排序，结果中间结果被写入临时文件（.tmp*）。在第二个阶段，文档被完全排序，最终的表文件被创建。实时重建生产表需要大约 3 倍的峰值磁盘占用：首先是中间临时文件，其次是新构建的副本，最后是将在此期间服务生产查询的旧表。（中间数据的大小与最终表相当。）这对于大型数据集可能过于占用磁盘，而 `inplace_enable` 选项可以用来减少占用。当启用时，它重用临时文件，将最终数据输出回这些文件，并在完成后重命名它们。然而，这可能需要额外的临时数据块重新定位，这就是性能影响的来源。
 
-此指令对 [searchd](../../Starting_the_server/Manually.md) 没有影响，仅对 [indexer](../../Data_creation_and_modification/Adding_data_from_external_storages/Plain_tables_creation.md#Indexer-tool) 产生影响。
+此指令对 [searchd](../../Starting_the_server/Manually.md) 没有影响，仅对 [indexer](../../Data_creation_and_modification/Adding_data_from_external_storages/Plain_tables_creation.md#Indexer-工具) 产生影响。
 
 
 <!-- intro -->
@@ -786,7 +786,7 @@ inplace_hit_gap = size
 
 此选项是 [inplace_enable](../../Creating_a_table/Local_tables/Plain_and_real-time_table_settings.md#inplace_enable) 的微调选项。控制预分配的命中列表间隙大小。可选，默认值为 0。
 
-此指令仅影响 [searchd](../../Starting_the_server/Manually.md) 工具，对 [indexer](../../Data_creation_and_modification/Adding_data_from_external_storages/Plain_tables_creation.md#Indexer-tool) 没有影响。
+此指令仅影响 [searchd](../../Starting_the_server/Manually.md) 工具，对 [indexer](../../Data_creation_and_modification/Adding_data_from_external_storages/Plain_tables_creation.md#Indexer-工具) 没有影响。
 
 <!-- intro -->
 
@@ -815,7 +815,7 @@ inplace_reloc_factor = 0.1
 
 `inplace_reloc_factor` 设置决定了在索引期间使用的内存区域内重新定位缓冲区的大小。默认值为 0.1。
 
-此选项是可选的，仅影响 [indexer](../../Data_creation_and_modification/Adding_data_from_external_storages/Plain_tables_creation.md#Indexer-tool) 工具，而不影响 [searchd](../../Starting_the_server/Manually.md) 服务器。
+此选项是可选的，仅影响 [indexer](../../Data_creation_and_modification/Adding_data_from_external_storages/Plain_tables_creation.md#Indexer-工具) 工具，而不影响 [searchd](../../Starting_the_server/Manually.md) 服务器。
 
 <!-- intro -->
 
@@ -844,7 +844,7 @@ inplace_write_factor = 0.1
 
 控制索引过程中就地写入时使用的缓冲区大小。可选，默认值为 0.1。
 
-需要注意的是，此指令仅影响 [indexer](../../Data_creation_and_modification/Adding_data_from_external_storages/Plain_tables_creation.md#Indexer-tool) 工具，对 [searchd](../../Starting_the_server/Manually.md) 服务器没有影响。
+需要注意的是，此指令仅影响 [indexer](../../Data_creation_and_modification/Adding_data_from_external_storages/Plain_tables_creation.md#Indexer-工具) 工具，对 [searchd](../../Starting_the_server/Manually.md) 服务器没有影响。
 
 
 <!-- intro -->

@@ -154,7 +154,7 @@ operator 可以设置为 “or” 或 “and”。
 
 ### 将全文过滤与其他过滤器组合
 
-所有全文匹配子句都可以与 [must](../../Searching/Filters.md#must)，[must_not](../../Searching/Filters.md#must_not) 和 [should](../../Searching/Filters.md#should) 操作符组合在 [JSON bool 查询](../../Searching/Filters.md#bool-query) 中。
+所有全文匹配子句都可以与 [must](../../Searching/Filters.md#must)，[must_not](../../Searching/Filters.md#must_not) 和 [should](../../Searching/Filters.md#should) 操作符组合在 [JSON bool 查询](../../Searching/Filters.md#bool-查询) 中。
 
 <!-- intro -->
 示例：

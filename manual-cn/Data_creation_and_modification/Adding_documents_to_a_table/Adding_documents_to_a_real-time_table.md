@@ -4,13 +4,13 @@
 
 <!-- example insert -->
 
-实时添加文档仅支持[实时表](../../Creating_a_table/Local_tables/Real-time_table.md)和[预过滤表](../../Creating_a_table/Local_tables/Percolate_table.md)。相应的 SQL 命令、HTTP 端点或客户端函数将新的行（文档）插入到提供了字段值的表中。添加文档之前不需要该表已存在。如果表不存在，Manticore 将尝试自动创建它。有关更多信息，请参阅[自动模式](../../Data_creation_and_modification/Adding_documents_to_a_table/Adding_documents_to_a_real-time_table.md#Auto-schema)。
+实时添加文档仅支持[实时表](../../Creating_a_table/Local_tables/Real-time_table.md)和[预过滤表](../../Creating_a_table/Local_tables/Percolate_table.md)。相应的 SQL 命令、HTTP 端点或客户端函数将新的行（文档）插入到提供了字段值的表中。添加文档之前不需要该表已存在。如果表不存在，Manticore 将尝试自动创建它。有关更多信息，请参阅[自动模式](../../Data_creation_and_modification/Adding_documents_to_a_table/Adding_documents_to_a_real-time_table.md#自动模式)。
 
-您可以插入单个文档或[多个文档](../../Data_creation_and_modification/Adding_documents_to_a_table/Adding_documents_to_a_real-time_table.md#Bulk-adding-documents)，为表中的所有字段或仅部分字段提供值。在这种情况下，其他字段将使用其默认值（标量类型为 0，文本类型为空字符串）填充。
+您可以插入单个文档或[多个文档](../../Data_creation_and_modification/Adding_documents_to_a_table/Adding_documents_to_a_real-time_table.md#批量添加文档)，为表中的所有字段或仅部分字段提供值。在这种情况下，其他字段将使用其默认值（标量类型为 0，文本类型为空字符串）填充。
 
 `INSERT` 中当前不支持表达式，因此必须明确指定值。
 
-可以省略 ID 字段/值，因为 RT 和 PQ 表支持[自动 ID](../../Data_creation_and_modification/Adding_documents_to_a_table/Adding_documents_to_a_real-time_table.md#Auto-ID) 功能。您还可以使用 `0` 作为 id 值来强制自动生成 ID。具有重复 ID 的行不会被 `INSERT` 覆盖，您可以使用 [REPLACE](../../Data_creation_and_modification/Updating_documents/REPLACE.md) 来实现该目的。
+可以省略 ID 字段/值，因为 RT 和 PQ 表支持[自动 ID](../../Data_creation_and_modification/Adding_documents_to_a_table/Adding_documents_to_a_real-time_table.md#自动-ID) 功能。您还可以使用 `0` 作为 id 值来强制自动生成 ID。具有重复 ID 的行不会被 `INSERT` 覆盖，您可以使用 [REPLACE](../../Data_creation_and_modification/Updating_documents/REPLACE.md) 来实现该目的。
 
 使用 HTTP JSON 协议时，您可以选择两种不同的请求格式：通用的 Manticore 格式和类似 Elasticsearch 的格式。两种格式在下面的示例中都有展示。
 
@@ -522,7 +522,7 @@ var sqlresult = indexApi.Insert(newdoc);
 
 - 降低峰值内存使用，减少 OOM（内存不足）风险
 - 减少响应时间
-- 允许你绕过 [max_packet_size](../Server_settings/Searchd.md#max_packet_size) 的限制，并传输远大于 `max_packet_size`（128MB）的批量数据，例如一次传输 1GB 的数据。
+- 允许你绕过 [max_packet_size](../../Server_settings/Searchd.md#max_packet_size) 的限制，并传输远大于 `max_packet_size`（128MB）的批量数据，例如一次传输 1GB 的数据。
 
 <!-- intro -->
 ### 批量插入示例
@@ -554,7 +554,7 @@ Query OK, 3 rows affected (0.01 sec)
 ##### JSON:
 <!-- request JSON -->
 
-语法与[插入单个文档](../../Quick_start_guide.md#Add-documents)基本相同。只需为每个文档提供多行，并使用 `/bulk` 端点而不是 `/insert`。将每个文档封装在 "insert" 节点中。注意，它还需要以下条件：
+语法与[插入单个文档](../../Quick_start_guide.md#添加文档)基本相同。只需为每个文档提供多行，并使用 `/bulk` 端点而不是 `/insert`。将每个文档封装在 "insert" 节点中。注意，它还需要以下条件：
 
 - `Content-Type: application/x-ndjson`
 - 数据应格式化为换行分隔的 JSON (NDJSON)。本质上，这意味着每行应包含一个 JSON 语句，并以换行符 `\n`（可能还包括 `\r`）结束。

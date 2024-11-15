@@ -14,6 +14,6 @@ Manticore 不会直接存储文本以进行全文搜索。相反，它会提取�
 
 一种更高级的黑名单是 [双字母组合](../../Creating_a_table/NLP_and_tokenization/Low-level_tokenization.md#bigram_index)，它允许在“常见”单词和不常见单词之间创建特殊标记。这在常见单词用于短语搜索时，可以加速数倍。
 
-在索引 HTML 内容时，重要的是不要索引 HTML 标签，因为它们可能会在索引中引入大量“噪音”。可以使用 [HTML 剥离](../../Creating_a_table/NLP_and_tokenization/Advanced_HTML_tokenization.md#Stripping-HTML-tags) 功能，并可以配置为剥离，但索引某些标签属性或完全忽略某些 HTML 元素的内容。
+在索引 HTML 内容时，重要的是不要索引 HTML 标签，因为它们可能会在索引中引入大量“噪音”。可以使用 [HTML 剥离](../../Creating_a_table/NLP_and_tokenization/Advanced_HTML_tokenization.md#删除-HTML-标签) 功能，并可以配置为剥离，但索引某些标签属性或完全忽略某些 HTML 元素的内容。
 
 <!-- proofread -->

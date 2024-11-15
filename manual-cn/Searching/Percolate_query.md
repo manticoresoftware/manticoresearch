@@ -28,8 +28,8 @@ Google Alerts、AlertHN、Bloomberg Terminal 和其他允许用户订阅特定�
 | 使用文档的 ID 字段显示在结果中                               | 'id field' as docs_id（默认禁用）                  | 不可用                           |
 | 将输入文档视为 JSON                                          | 1 as docs_json（默认 1）                           | 默认启用                         |
 | 将输入文档视为纯文本                                         | 0 as docs_json（默认 1）                           | 不可用                           |
-| [稀疏分布模式](../Searching/Percolate_query.md#I-want-higher-performance-of-a-percolate-query) | 默认                                               | 默认                             |
-| [分片分布模式](../Searching/Percolate_query.md#I-want-higher-performance-of-a-percolate-query) | sharded as mode                                    | 不可用                           |
+| [稀疏分布模式](../Searching/Percolate_query.md#我想提升渗透查询的性能) | 默认                                               | 默认                             |
+| [分片分布模式](../Searching/Percolate_query.md#我想提升渗透查询的性能) | sharded as mode                                    | 不可用                           |
 | 返回匹配查询的所有信息                                       | 1 as query（默认 0）                               | 默认启用                         |
 | 跳过无效的 JSON                                              | 1 as skip_bad_json（默认 0）                       | 不可用                           |
 | 在 [SHOW META](../Node_info_and_management/SHOW_META.md) 中的扩展信息 | 1 as verbose（默认 0）                             | 不可用                           |
@@ -2040,8 +2040,8 @@ ERROR 1064 (42000): Bad JSON objects in strings: 2
 
 渗透表的分布模式以及渗透查询如何对其工作有以下两种模式：
 
-- **稀疏模式（默认）。** 适用于：大量文档，镜像PQ表。当文档集很大，而存储在PQ表中的查询集较小时，稀疏模式是有益的。在此模式下，传递的文档批次将被划分为多个代理节点处理，因此每个节点仅处理请求中的部分文档。Manticore会拆分文档集并将其分配给镜像。当代理节点完成查询处理后，Manticore会收集并合并结果，返回的最终查询集如同来自单个表一样。可以使用[复制](../References.md#Replication)来辅助此过程。
-- **分片模式。** 适用于：大量PQ规则，规则分布在多个PQ表中。在此模式下，整个文档集会广播给分布式PQ表的所有表，而无需首先拆分文档。这在推送相对较少的文档集但存储的查询数量较大时很有帮助。在这种情况下，最好在每个节点上只存储部分PQ规则，然后将不同节点处理相同文档集与不同PQ规则集的结果进行合并。该模式必须显式设置，因为它会增加网络负载，并且需要具有不同PQ规则的表，无法通过[复制](../References.md#Replication)直接完成。
+- **稀疏模式（默认）。** 适用于：大量文档，镜像PQ表。当文档集很大，而存储在PQ表中的查询集较小时，稀疏模式是有益的。在此模式下，传递的文档批次将被划分为多个代理节点处理，因此每个节点仅处理请求中的部分文档。Manticore会拆分文档集并将其分配给镜像。当代理节点完成查询处理后，Manticore会收集并合并结果，返回的最终查询集如同来自单个表一样。可以使用[复制](../References.md#复制)来辅助此过程。
+- **分片模式。** 适用于：大量PQ规则，规则分布在多个PQ表中。在此模式下，整个文档集会广播给分布式PQ表的所有表，而无需首先拆分文档。这在推送相对较少的文档集但存储的查询数量较大时很有帮助。在这种情况下，最好在每个节点上只存储部分PQ规则，然后将不同节点处理相同文档集与不同PQ规则集的结果进行合并。该模式必须显式设置，因为它会增加网络负载，并且需要具有不同PQ规则的表，无法通过[复制](../References.md#复制)直接完成。
 
 假设你有一个定义为 `pq_d2` 的表：
 

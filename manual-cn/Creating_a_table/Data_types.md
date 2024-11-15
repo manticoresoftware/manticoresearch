@@ -282,7 +282,7 @@ Manticore 支持两种属性存储类型：
 传统的行存储是默认选项，因此如果你希望所有数据都以行存储方式存储，创建表时无需做任何操作。
 
 要启用列存储，你需要：
-* 在[CREATE TABLE](../Creating_a_table/Local_tables/Plain_and_real-time_table_settings.md#Creating-a-real-time-table-online-via-CREATE-TABLE)中指定engine='columnar'，以使表的所有属性采用列存储。如果你想让某个特定属性保持行存储，则在声明该属性时需要添加engine='rowwise'。例如：
+* 在[CREATE TABLE](../Creating_a_table/Local_tables/Plain_and_real-time_table_settings.md#source)中指定engine='columnar'，以使表的所有属性采用列存储。如果你想让某个特定属性保持行存储，则在声明该属性时需要添加engine='rowwise'。例如：
 ```sql
 create table tbl(title text, type int, price float engine='rowwise') engine='columnar'
 ```
@@ -294,7 +294,7 @@ create table tbl(title text, type int, price float engine='columnar');
 ```sql
 create table tbl(title text, type int, price float engine='columnar') engine='rowwise';
 ```
-* 在[plain模式](../Read_this_first.md#Real-time-mode-vs-plain-mode)中，你需要在[columnar_attrs](../Creating_a_table/Local_tables/Plain_and_real-time_table_settings.md#columnar_attrs)中列出你希望作为列式存储的属性。
+* 在[plain模式](../Read_this_first.md#实时模式-vs-普通模式)中，你需要在[columnar_attrs](../Creating_a_table/Local_tables/Plain_and_real-time_table_settings.md#columnar_attrs)中列出你希望作为列式存储的属性。
 
 
 以下是Manticore Search支持的数据类型列表：
@@ -302,7 +302,7 @@ create table tbl(title text, type int, price float engine='columnar') engine='ro
 ## 文档 ID（Document ID）
 
 <!-- example id -->
-文档标识符是一个必需的属性，文档ID必须是**唯一的64位无符号整数**。文档ID可以显式指定，但即使不指定，它们仍然是启用的。文档ID不能被更新。请注意，当检索文档ID时，它们被视为有符号的64位整数，这意味着它们可能为负数。如有必要，可以使用[UINT64()](Functions/Type_casting_functions.md#UINT64())函数将它们转换为无符号64位整数。
+文档标识符是一个必需的属性，文档ID必须是**唯一的64位无符号整数**。文档ID可以显式指定，但即使不指定，它们仍然是启用的。文档ID不能被更新。请注意，当检索文档ID时，它们被视为有符号的64位整数，这意味着它们可能为负数。如有必要，可以使用[UINT64()](../Functions/Type_casting_functions.md#UINT64())函数将它们转换为无符号64位整数。
 
 <!-- request Explicit ID -->
 
@@ -366,8 +366,8 @@ string|text [stored|attribute] [indexed]
 
 string和text是别名，但如果你不指定任何属性，它们默认的含义不同：
 
-* 仅string默认意味着attribute（详见[下文](../Creating_a_table/Data_types.md#Text)）。
-* 仅text默认意味着stored + indexed（详见[下文](../Creating_a_table/Data_types.md#String)）。
+* 仅string默认意味着attribute（详见[下文](../Creating_a_table/Data_types.md#文本-Text)）。
+* 仅text默认意味着stored + indexed（详见[下文](../Creating_a_table/Data_types.md#字符串String)）。
 
 ### 文本 (Text)
 

@@ -4,8 +4,8 @@
 
 `WHERE` 是一个 SQL 子句，用于全文本匹配和附加过滤。支持以下操作符：
 
-- [比较操作符](../Searching/Expressions.md#Comparison-operators) `<, >, <=, >=, =, <>, BETWEEN, IN, IS NULL`
-- [布尔操作符](../Searching/Full_text_matching/Operators.md#Boolean-operators) `AND, OR, NOT`
+- [比较操作符](../Searching/Expressions.md#比较运算符) `<, >, <=, >=, =, <>, BETWEEN, IN, IS NULL`
+- [布尔操作符](../Searching/Full_text_matching/Operators.md#布尔操作符) `AND, OR, NOT`
 
 支持 `MATCH('query')`，它映射到 [全文查询](../Searching/Full_text_matching/Operators.md)。
 
@@ -45,7 +45,7 @@ POST /search
 ### bool 查询
 
 <!-- example bool -->
-`bool` 查询基于其他查询和/或过滤器的布尔组合匹配文档。查询和过滤器必须在 `must`、`should` 或 `must_not` 部分中指定，并且可以[嵌套](../Searching/Filters.md#Nested-bool-query)。
+`bool` 查询基于其他查询和/或过滤器的布尔组合匹配文档。查询和过滤器必须在 `must`、`should` 或 `must_not` 部分中指定，并且可以[嵌套](../Searching/Filters.md#嵌套布尔查询)。
 
 <!-- request JSON -->
 
@@ -67,7 +67,7 @@ POST /search
 
 <!-- example must_not -->
 ### must
-在 `must` 部分中指定的查询和过滤器必须匹配文档。如果指定了多个全文查询或过滤器，它们必须全部匹配。这等同于 SQL 中的 `AND` 查询。请注意，如果要匹配数组（[多值属性](../../Creating_a_table/Data_types.md#Multi-value-integer-(MVA))），可以多次指定该属性。只有在数组中找到所有查询的值，结果才会为正，例如：
+在 `must` 部分中指定的查询和过滤器必须匹配文档。如果指定了多个全文查询或过滤器，它们必须全部匹配。这等同于 SQL 中的 `AND` 查询。请注意，如果要匹配数组（[多值属性](../Creating_a_table/Data_types.md#多值整数（Multi-value integer 、MVA）)），可以多次指定该属性。只有在数组中找到所有查询的值，结果才会为正，例如：
 
 ```json
 "must": [
@@ -83,7 +83,7 @@ POST /search
 （见下文详细说明）。
 
 ### should
-在 `should` 部分中指定的查询和过滤器应匹配文档。如果在 `must` 或 `must_not` 中指定了一些查询，则会忽略 `should` 查询。另一方面，如果除了 `should` 没有其他查询，那么至少其中一个查询必须匹配文档，文档才能匹配该 bool 查询。这等同于 SQL 中的 `OR` 查询。请注意，如果要匹配数组（[多值属性](../../Creating_a_table/Data_types.md#Multi-value-integer-(MVA))），可以多次指定该属性，例如：
+在 `should` 部分中指定的查询和过滤器应匹配文档。如果在 `must` 或 `must_not` 中指定了一些查询，则会忽略 `should` 查询。另一方面，如果除了 `should` 没有其他查询，那么至少其中一个查询必须匹配文档，文档才能匹配该 bool 查询。这等同于 SQL 中的 `OR` 查询。请注意，如果要匹配数组（[多值属性](../Creating_a_table/Data_types.md#多值整数（Multi-value integer 、MVA）)），可以多次指定该属性，例如：
 
 ```json
 "should": [
@@ -296,7 +296,7 @@ POST /search
 
 <!-- example equals_any -->
 
-`equals` 过滤器可以应用于[多值属性](../../Creating_a_table/Data_types.md#Multi-value-integer-(MVA))，你可以使用：
+`equals` 过滤器可以应用于[多值属性](../Creating_a_table/Data_types.md#多值整数（Multi-value integer 、MVA）)，你可以使用：
 
 - `any()`，当属性中至少有一个值等于查询值时，结果为正；
 - `all()`，当属性只有一个值且它等于查询值时，结果为正。
@@ -337,7 +337,7 @@ POST /search
 
 <!-- example set_any -->
 
-当应用于[多值属性](../../Creating_a_table/Data_types.md#Multi-value-integer-(MVA))时，你可以使用：
+当应用于[多值属性](../Creating_a_table/Data_types.md#多值整数（Multi-value integer 、MVA）)时，你可以使用：
 
 - `any()`（等同于不使用函数），当属性值与查询值集中的至少一个匹配时，结果为正；
 - `all()`，当所有属性值都在查询值集中时，结果为正。

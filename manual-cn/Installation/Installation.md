@@ -51,9 +51,9 @@ brew install manticoresoftware/tap/manticoresearch manticoresoftware/tap/mantico
 1. 下载 [Manticore Search 安装程序](https://repo.manticoresearch.com/repository/manticoresearch_windows/release/x64/manticore-6.0.4-230314-1a3a4ea82-x64.exe) 并运行。按照安装说明进行操作。
 2. 选择安装目录。
 3. 选择您要安装的组件。我们建议安装所有组件。
-4. Manticore 带有预配置的 `manticore.conf` 文件，处于[RT 模式](https://manual.manticoresearch.com/Read_this_first.md#Real-time-mode-vs-plain-mode)。无需额外配置。
+4. Manticore 带有预配置的 `manticore.conf` 文件，处于[RT 模式](../Read_this_first.md#实时模式-vs-普通模式)。无需额外配置。
 
-有关安装的更多详细信息，请参阅[下文](../Installation/Windows.md#Installing-Manticore-in-Windows)。
+有关安装的更多详细信息，请参阅[下文](../Installation/Windows.md#在-Windows-上安装-Manticore)。
 
 <!-- request Docker -->
 

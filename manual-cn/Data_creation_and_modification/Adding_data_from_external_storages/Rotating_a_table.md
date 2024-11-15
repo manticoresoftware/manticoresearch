@@ -7,7 +7,7 @@
 - 对于已经加载的普通表
 - 配置中已添加但尚未加载的表
 
-在第一种情况下，`indexer` 无法将表的新版本上线，因为运行中的副本被 `searchd` 锁定并加载。此时需要使用 `indexer` 并加上 [--rotate](../../Data_creation_and_modification/Adding_data_from_external_storages/Plain_tables_creation.md#Indexer-command-line-arguments) 参数。如果使用了轮换，`indexer` 会创建带有 `.new.` 名称的新表文件，并向 `searchd` 发送 *HUP* 信号，通知其有关新版本的信息。`searchd` 将执行查找，并将新版本的表替换旧版本。在某些情况下，可能希望创建新版本的表，但不立即执行轮换。例如，可能需要先检查新表版本的健康状态。在这种情况下，`indexer` 可以使用 `--nohup` 参数来禁止向服务器发送 HUP 信号。
+在第一种情况下，`indexer` 无法将表的新版本上线，因为运行中的副本被 `searchd` 锁定并加载。此时需要使用 `indexer` 并加上 [--rotate](../../Data_creation_and_modification/Adding_data_from_external_storages/Plain_tables_creation.md#Indexer-命令行参数) 参数。如果使用了轮换，`indexer` 会创建带有 `.new.` 名称的新表文件，并向 `searchd` 发送 *HUP* 信号，通知其有关新版本的信息。`searchd` 将执行查找，并将新版本的表替换旧版本。在某些情况下，可能希望创建新版本的表，但不立即执行轮换。例如，可能需要先检查新表版本的健康状态。在这种情况下，`indexer` 可以使用 `--nohup` 参数来禁止向服务器发送 HUP 信号。
 
 可以通过轮换加载新表；然而，HUP 信号的常规处理方式是仅在配置自服务器启动以来发生更改时检查新表。如果表已经在配置中定义，则应先运行 `indexer`，而不进行轮换操作，然后执行 [RELOAD TABLES](../../Data_creation_and_modification/Adding_data_from_external_storages/Rotating_a_table.md#RELOAD-TABLES) 语句。
 

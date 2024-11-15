@@ -481,7 +481,7 @@ GROUP BY months ORDER BY months ASC;
 ### DATE_RANGE()
 <!-- example DATE_RANGE -->
 
-`DATE_RANGE(expr, {range_from='date_math', range_to='date_math'})` 接受一组范围并返回该值的桶号。表达式包括 `range_from` 值并排除 `range_to` 值。范围可以是开放的 - 仅包含 `range_from` 或仅包含 `range_to` 值。与 [RANGE()](../Functions/Arrays_and_conditions_functions.md#RANGE()) 函数的不同之处在于，`range_from` 和 `range_to` 值可以用 [Date math](../Functions/Date_and_time_functions.md#Date-math) 表达式表示。
+`DATE_RANGE(expr, {range_from='date_math', range_to='date_math'})` 接受一组范围并返回该值的桶号。表达式包括 `range_from` 值并排除 `range_to` 值。范围可以是开放的 - 仅包含 `range_from` 或仅包含 `range_to` 值。与 [RANGE()](../Functions/Arrays_and_conditions_functions.md#RANGE()) 函数的不同之处在于，`range_from` 和 `range_to` 值可以用 [Date math](../Functions/Date_and_time_functions.md#日期数学) 表达式表示。
 
 用于聚合、`FACET` 和分组。
 

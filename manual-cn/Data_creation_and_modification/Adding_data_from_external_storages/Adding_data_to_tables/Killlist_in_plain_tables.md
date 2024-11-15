@@ -22,7 +22,7 @@ sql_query_killlist = \
 
 ## 从普通表中移除文档
 
-普通表可以包含一个称为[killlist_target](../../../Creating_a_table/Local_tables/Plain_and_real-time_table_settings.md#killlist_target)的指令，用来告知服务器提供一个应该从某些现有表中删除的文档ID列表。表可以使用自己的文档ID作为此列表的来源，或者提供一个单独的[列表](../../../Data_creation_and_modification/Adding_data_from_external_storages/Adding_data_to_tables/Killlist_in_plain_tables.md#Table-kill-list)。
+普通表可以包含一个称为[killlist_target](../../../Creating_a_table/Local_tables/Plain_and_real-time_table_settings.md#killlist_target)的指令，用来告知服务器提供一个应该从某些现有表中删除的文档ID列表。表可以使用自己的文档ID作为此列表的来源，或者提供一个单独的[列表](../../../Data_creation_and_modification/Adding_data_from_external_storages/Adding_data_to_tables/Killlist_in_plain_tables.md#表级删除列表)。
 
 ### killlist_target
 
@@ -30,7 +30,7 @@ sql_query_killlist = \
 
 当你使用[普通表](../../../Creating_a_table/Local_tables/Plain_table.md)时，通常需要维护不止一个表，以便能够更快地添加/更新/删除新文档（参见[增量表更新](../../../Data_creation_and_modification/Adding_data_from_external_storages/Main_delta.md)）。为了抑制在主表中匹配的已被增量表更新或删除的文档，你需要：
 
-1. 在**增量**表中使用[sql_query_killlist](../../../Data_creation_and_modification/Adding_data_from_external_storages/Adding_data_to_tables/Killlist_in_plain_tables.md#Table-kill-list)创建一个删除列表。
+1. 在**增量**表中使用[sql_query_killlist](../../../Data_creation_and_modification/Adding_data_from_external_storages/Adding_data_to_tables/Killlist_in_plain_tables.md#表级删除列表)创建一个删除列表。
 2. 在**增量**表设置中将**主表**指定为`killlist_target`：
 
 

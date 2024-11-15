@@ -181,7 +181,7 @@ mysql> ALTER TABLE t1 CONNECTION="sphinx://NEWHOST:NEWPORT/NEWTABLENAME";
 ```sql
 ... WHERE query='test;maxquerytime=1000;';
 ```
-* groupby - 分组函数和属性。参考 [此文](../Searching/Grouping.md#Just-Grouping) 了解分组搜索结果：
+* groupby - 分组函数和属性。参考 [此文](../Searching/Grouping.md#仅分组) 了解分组搜索结果：
 ```sql
 ... WHERE query='test;groupby=day:published_ts;';
 ... WHERE query='test;groupby=attr:group_id;';
@@ -365,7 +365,7 @@ mysql> SHOW ENGINE SPHINX STATUS;
 
 ## 通过 MySQL 构建片段
 
-SphinxSE 还具有一个 UDF 函数，允许您通过 MySQL 创建片段。此功能类似于 [HIGHLIGHT()](../../Searching/Highlighting.md#Highlighting)，但可以通过 MySQL+SphinxSE 访问。
+SphinxSE 还具有一个 UDF 函数，允许您通过 MySQL 创建片段。此功能类似于 [HIGHLIGHT()](../Searching/Highlighting.md#Highlighting)，但可以通过 MySQL+SphinxSE 访问。
 
 提供 UDF 的二进制文件称为 `sphinx.so`，应与 SphinxSE 一起自动构建并安装到适当的位置。如果由于某种原因未能自动安装，请在构建目录中找到 `sphinx.so`，并将其复制到 MySQL 实例的插件目录中。完成后，使用以下语句注册 UDF：
 

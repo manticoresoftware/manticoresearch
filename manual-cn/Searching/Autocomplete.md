@@ -48,7 +48,7 @@ POST /autocomplete
 
 #### 选项
 
-- `layouts`: 一个逗号分隔的键盘布局代码字符串，用于验证和检查拼写校正。可选项：us, ru, ua, se, pt, no, it, gr, uk, fr, es, dk, de, ch, br, bg, be（更多详情请见[这里](../../Searching/Spell_correction.md#Options)）。默认：全启用
+- `layouts`: 一个逗号分隔的键盘布局代码字符串，用于验证和检查拼写校正。可选项：us, ru, ua, se, pt, no, it, gr, uk, fr, es, dk, de, ch, br, bg, be（更多详情请见[这里](../Searching/Spell_correction.md#选项)）。默认：全启用
 - `fuzziness`：`0`、`1` 或 `2`（默认值为 `2`）。用于查找拼写错误的最大 Levenshtein 距离。设置为 `0` 以禁用模糊匹配
 - `append`：布尔值（SQL 中为 0/1）。如果为 true（1），则在最后一个词之前加上星号用于前缀扩展（如 `*word`）
 - `expansion_len`：最后一个词扩展的字符数。默认值为 `10`

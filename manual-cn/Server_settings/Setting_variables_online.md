@@ -132,9 +132,9 @@ SELECT ... OPTION threads_ex='1+1';
 
 - `IOSTATS = {0 | 1}`：启用或禁用查询日志中的 I/O 操作（属性除外）报告。
 
-- `CPUSTATS= {1|0}`：启用/禁用 [CPU 时间跟踪](../Starting_the_server/Manually.md#searchd-command-line-options)。
+- `CPUSTATS= {1|0}`：启用/禁用 [CPU 时间跟踪](../Starting_the_server/Manually.md#searchd-命令行选项)。
 
-- `COREDUMP= {1|0}`：启用/禁用在崩溃时保存服务器的核心文件或小型转储。更多细节请参见 [这里](../Starting_the_server/Manually.md#searchd-command-line-options)。
+- `COREDUMP= {1|0}`：启用/禁用在崩溃时保存服务器的核心文件或小型转储。更多细节请参见 [这里](../Starting_the_server/Manually.md#searchd-命令行选项)。
 
 - `AUTO_OPTIMIZE = {1|0}`：启用/禁用 [auto_optimize](../Server_settings/Searchd.md#auto_optimize)。
 
@@ -152,9 +152,9 @@ SELECT ... OPTION threads_ex='1+1';
 
 - `distinct_precision_threshold`：为未来查询的 [distinct_precision_threshold](../Searching/Options.md#distinct_precision_threshold) 选项设置默认值。
 
-- `expansion_merge_threshold_docs`：动态更改配置的 [expansion_merge_threshold_docs](Server_settings/Searchd.md#expansion_merge_threshold_docs) 设置的值。
+- `expansion_merge_threshold_docs`：动态更改配置的 [expansion_merge_threshold_docs](../Server_settings/Searchd.md#expansion_merge_threshold_docs) 设置的值。
 
-- `expansion_merge_threshold_hits`：动态更改配置的 [expansion_merge_threshold_hits](Server_settings/Searchd.md#expansion_merge_threshold_hits) 设置的值。
+- `expansion_merge_threshold_hits`：动态更改配置的 [expansion_merge_threshold_hits](../Server_settings/Searchd.md#expansion_merge_threshold_hits) 设置的值。
 
 示例：
 

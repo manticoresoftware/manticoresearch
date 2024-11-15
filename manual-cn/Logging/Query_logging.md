@@ -46,7 +46,7 @@ query_log_format = sphinxql # default
 
 <!-- example sphixql_log2 -->
 
-Manticore SQL 日志格式的特点（相较于 [plain 格式](../../Logging/Query_logging.md#Plain-log-format)）包括：
+Manticore SQL 日志格式的特点（相较于 [plain 格式](../Logging/Query_logging.md#Plain 日志格式)）包括：
 
 - 尽可能记录完整的语句数据。
 - 错误和警告都会记录。

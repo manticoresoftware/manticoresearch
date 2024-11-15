@@ -25,7 +25,7 @@ join_condition: {
 }
 ```
 
-有关选择选项的更多信息，请参阅 [SELECT](../Searching/Intro.md#General-syntax) 部分。
+有关选择选项的更多信息，请参阅 [SELECT](../Searching/Intro.md#通用语法) 部分。
 
 当通过JSON属性的值进行连接时，您需要使用 `int()` 或 `string()` 函数显式指定值的类型。
 

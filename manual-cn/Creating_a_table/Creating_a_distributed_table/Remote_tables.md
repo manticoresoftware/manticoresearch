@@ -201,7 +201,7 @@ persistent_connections_limit = 29 # assume that each host of agents has max_conn
 
 ## 分布式片段创建
 
-分布式表的特殊情况是单个本地和多个远程，这仅用于 [分布式片段创建](../../Creating_a_table/Creating_a_distributed_table/Remote_tables.md#Distributed-snippets-creation)，当片段从文件中获取时。在这种情况下，本地表可以充当“模板”表，提供生成片段时的分词设置。
+分布式表的特殊情况是单个本地和多个远程，这仅用于 [分布式片段创建](../../Creating_a_table/Creating_a_distributed_table/Remote_tables.md#分布式片段创建)，当片段从文件中获取时。在这种情况下，本地表可以充当“模板”表，提供生成片段时的分词设置。
 
 ### snippets_file_prefix
 
@@ -217,10 +217,10 @@ snippets_file_prefix = /mnt/common/server1/
 
 您可以从多个 [预过滤](../../Creating_a_table/Local_tables/Percolate_table.md) 表创建一个分布式表。构建此类表的语法与其他分布式表相同，可以包含多个 `local` 表以及 `agents`。
 
-对于 DPQ，列出存储的查询并通过它们进行搜索的操作（使用 [CALL PQ](../../Searching/Percolate_query.md#Performing-a-percolate-query-with-CALL-PQ)）是透明的，行为就像所有表都是单个本地表一样。然而，`insert`、`replace`、`truncate` 等数据操作语句不可用。
+对于 DPQ，列出存储的查询并通过它们进行搜索的操作（使用 [CALL PQ](../../Searching/Percolate_query.md#使用-CALL-PQ-执行渗透查询)）是透明的，行为就像所有表都是单个本地表一样。然而，`insert`、`replace`、`truncate` 等数据操作语句不可用。
 
 如果在代理列表中包含非预过滤表，行为将是未定义的。如果错误的代理与 PQ 表的外部架构（id、query、tags、filters）具有相同的架构，则在列出存储的 PQ 规则时不会触发错误，但可能会通过其非 PQ 字符串污染实际存储在 PQ 表中的 PQ 规则列表。因此，必须谨慎，避免产生混淆。对此类错误代理的 `CALL PQ` 将触发错误。
 
-有关对分布式预过滤表进行查询的更多信息，请参阅 [对分布式预过滤表进行查询](../../Searching/Percolate_query.md#Performing-a-percolate-query-with-CALL-PQ)。
+有关对分布式预过滤表进行查询的更多信息，请参阅 [对分布式预过滤表进行查询](../../Searching/Percolate_query.md#使用-CALL-PQ-执行渗透查询)。
 
 <!-- proofread -->

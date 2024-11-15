@@ -7,7 +7,7 @@
 - 多个 **磁盘块** - 这些块保存到磁盘中，其结构类似于 [普通表](../../Creating_a_table/Local_tables/Plain_table.md)。
 - 一个 **内存块** - 存储在内存中，收集所有的更改。
 
-内存块的大小由 [rt_mem_limit](../../Creating_a_table/Local_tables/Plain_and_real-time_table_settings.md#rt_mem_limit) 设置控制。一旦达到此限制，内存块将被传输到磁盘作为磁盘块。如果磁盘块过多，Manticore 会 [合并部分块](../../Securing_and_compacting_a_table/Compacting_a_table.md#Number-of-optimized-disk-chunks) 以提高性能。
+内存块的大小由 [rt_mem_limit](../../Creating_a_table/Local_tables/Plain_and_real-time_table_settings.md#rt_mem_limit) 设置控制。一旦达到此限制，内存块将被传输到磁盘作为磁盘块。如果磁盘块过多，Manticore 会 [合并部分块](../../Securing_and_compacting_a_table/Compacting_a_table.md#优化后的磁盘块数量) 以提高性能。
 
 ### 创建实时表：
 
@@ -241,15 +241,15 @@ create table products LIKE old_products WITH DATA;
 
 ### 👍 你可以用实时表做的事：
 * [添加文档](../../Data_creation_and_modification/Adding_documents_to_a_table/Adding_documents_to_a_real-time_table.md)。
-* 通过 [更新](../../Quick_start_guide.md#Update) 过程更新属性和全文字段。
-* [删除文档](../../Quick_start_guide.md#Delete)。
+* 通过 [更新](../../Quick_start_guide.md#更新) 过程更新属性和全文字段。
+* [删除文档](../../Quick_start_guide.md#删除)。
 * [清空表](../../Emptying_a_table.md)。
-* 使用 `ALTER` 命令在线更改表结构，如[在线更新表结构](../../Updating_table_schema_and_settings.md#Updating-table-schema-in-RT-mode) 中所述。
+* 使用 `ALTER` 命令在线更改表结构，如[在线更新表结构](../../Updating_table_schema_and_settings.md#在实时模式下更新表结构) 中所述。
 * 按照 [定义表](../../Creating_a_table/Local_tables/Real-time_table.md) 的说明，在配置文件中定义表。
-* 使用 [UUID](../../Data_creation_and_modification/Adding_documents_to_a_table/Adding_documents_to_a_real-time_table.md#Auto-ID) 功能自动分配ID。
+* 使用 [UUID](../../Data_creation_and_modification/Adding_documents_to_a_table/Adding_documents_to_a_real-time_table.md#自动-ID) 功能自动分配ID。
 
 ### ⛔ 你不能用实时表做的事：
-* 使用 [indexer](../../Data_creation_and_modification/Adding_data_from_external_storages/Plain_tables_creation.md#Indexer-tool) 功能导入数据。
+* 使用 [indexer](../../Data_creation_and_modification/Adding_data_from_external_storages/Plain_tables_creation.md#Indexer-工具) 功能导入数据。
 * 连接到 [sources](../../Data_creation_and_modification/Adding_data_from_external_storages/Fetching_from_databases/Execution_of_fetch_queries.md) 以便从外部存储轻松索引数据。
 * 更新 [killlist_target](../../Creating_a_table/Local_tables/Plain_and_real-time_table_settings.md#killlist_target)，因为它由实时表自动管理。
 
@@ -264,6 +264,6 @@ create table products LIKE old_products WITH DATA;
 | `.meta`  | 实时表的头文件，定义了表的结构和设置。                       |
 | `.*.sp*` | 磁盘块，存储在磁盘上，格式与普通表相同。当RAM块大小超过 `rt_mem_limit` 时，创建这些文件。 |
 
-有关磁盘块结构的更多信息，请参考 [普通表文件结构](../../Creating_a_table/Local_tables/Plain_table.md#Plain-table-files-structure)。
+有关磁盘块结构的更多信息，请参考 [普通表文件结构](../../Creating_a_table/Local_tables/Plain_table.md#普通表文件结构)。
 
 <!-- proofread -->

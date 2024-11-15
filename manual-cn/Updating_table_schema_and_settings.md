@@ -27,7 +27,7 @@ ALTER TABLE table MODIFY COLUMN column_name bigint
 - `text indexed` / `string indexed` - 仅索引的全文索引字段（原始值不存储在文档存储中）
 - `text indexed attribute` / `string indexed attribute` - 全文索引字段 + 字符串属性（不存储原始值）
 - `text stored` / `string stored` - 仅存储在文档存储中的值，不进行全文索引，也不是字符串属性
-- 将 `engine='columnar'` 添加到任何属性（JSON 除外）将使其存储在 [列式存储](Creating_a_table/Data_types.md#Row-wise-and-columnar-attribute-storages) 中
+- 将 `engine='columnar'` 添加到任何属性（JSON 除外）将使其存储在 [列式存储](Creating_a_table/Data_types.md#行存储和列存储属性) 中
 
 #### 重要说明：
 
@@ -37,7 +37,7 @@ ALTER TABLE table MODIFY COLUMN column_name bigint
 * `ALTER` 不适用于分布式表和没有任何属性的表。
 * 不能删除 `id` 列。
 * 删除同时是全文字段和字符串属性的字段时，第一次 `ALTER DROP` 会删除属性，第二次会删除全文字段。
-* 添加/删除全文字段仅在 [实时模式](Read_this_first.md#Real-time-mode-vs-plain-mode) 下支持。
+* 添加/删除全文字段仅在 [实时模式](Read_this_first.md#实时模式-vs-普通模式) 下支持。
 
 <!-- request Example -->
 ```sql
@@ -139,7 +139,7 @@ mysql> desc rt;
 ALTER TABLE table ft_setting='value'[, ft_setting2='value']
 ```
 
-您可以使用 `ALTER` 来修改实时模式下表的全文设置 [RT mode](Read_this_first.md#Real-time-mode-vs-plain-mode)。但是，这只会影响新文档，而不会影响现有文档。
+您可以使用 `ALTER` 来修改实时模式下表的全文设置 [RT mode](Read_this_first.md#实时模式-vs-普通模式)。但是，这只会影响新文档，而不会影响现有文档。
 
 示例：
 
@@ -315,7 +315,7 @@ Query OK, 0 rows affected (0.00 sec)
 
 <!-- example local_dist -->
 
-要更改分布式表中本地或远程节点的列表，请使用与 [创建表](../Creating_a_table/Creating_a_distributed_table/Creating_a_local_distributed_table.md#Creating-a-local-distributed-table) 时相同的语法，只需在命令中将 `CREATE` 替换为 `ALTER` 并删除 `type='distributed'`：
+要更改分布式表中本地或远程节点的列表，请使用与 [创建表](Creating_a_table/Creating_a_distributed_table/Creating_a_local_distributed_table.md#创建本地分布式表) 时相同的语法，只需在命令中将 `CREATE` 替换为 `ALTER` 并删除 `type='distributed'`：
 
 ```sql
 ALTER TABLE `distr_table_name` [[local='local_index_name'], [agent='host:port:remote_index'] ... ]

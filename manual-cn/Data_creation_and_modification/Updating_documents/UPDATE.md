@@ -2,15 +2,15 @@
 
 <!-- example update -->
 
-`UPDATE` 命令用于修改指定表中现有文档的 [行式存储](../../Creating_a_table/Data_types.md#Row-wise-and-columnar-attribute-storages) 属性值。请注意，无法更新全文字段或列式属性的内容。如果有这样的需求，请使用 [REPLACE](../../Data_creation_and_modification/Updating_documents/REPLACE.md) 命令。
+`UPDATE` 命令用于修改指定表中现有文档的 [行式存储](../../Creating_a_table/Data_types.md#行存储和列存储属性) 属性值。请注意，无法更新全文字段或列式属性的内容。如果有这样的需求，请使用 [REPLACE](../../Data_creation_and_modification/Updating_documents/REPLACE.md) 命令。
 
-属性更新支持 RT、PQ 和普通表。只要属性存储在 [行式存储](../../Creating_a_table/Data_types.md#Row-wise-and-columnar-attribute-storages) 中，所有类型的属性都可以更新。
+属性更新支持 RT、PQ 和普通表。只要属性存储在 [行式存储](../../Creating_a_table/Data_types.md#行存储和列存储属性) 中，所有类型的属性都可以更新。
 
 需要注意的是，文档 ID 不能被更新。
 
 还需要了解的是，更新属性会禁用其 [二级索引](../../Server_settings/Searchd.md#secondary_indexes)。如果保持二级索引的连续性至关重要，请考虑完全或[部分替换](../../Data_creation_and_modification/Updating_documents/REPLACE.md?client=REPLACE+SET) 文档。
 
-更多关于 `UPDATE` 和部分 `REPLACE` 的区别可以参考 [这里](../../Data_creation_and_modification/Updating_documents/REPLACE_vs_UPDATE.md#UPDATE-vs-partial-REPLACE)。
+更多关于 `UPDATE` 和部分 `REPLACE` 的区别可以参考 [这里](../../Data_creation_and_modification/Updating_documents/REPLACE_vs_UPDATE.md#UPDATE-vs-部分-REPLACE)。
 
 <!-- intro -->
 ##### SQL:
@@ -1339,11 +1339,11 @@ POST /bulk
 
 `/bulk` 端点支持插入、替换和删除操作。每条语句都以一个操作类型开头（在这种情况下是 `update`）。以下是支持的操作列表：
 
-- `insert`：插入文档。其语法与 [/insert 端点](../../Quick_start_guide.md#Add-documents) 相同。
+- `insert`：插入文档。其语法与 [/insert 端点](../../Quick_start_guide.md#添加文档) 相同。
 - `create`：`insert` 的同义词。
 - `replace`：替换文档。其语法与 [/replace](../../Data_creation_and_modification/Updating_documents/REPLACE.md) 相同。
 - `index`：`replace` 的同义词。
-- `update`：更新文档。其语法与 [/update](../../Data_creation_and_modification/Updating_documents/UPDATE.md#Updates-via-HTTP-JSON) 相同。
+- `update`：更新文档。其语法与 [/update](../../Data_creation_and_modification/Updating_documents/UPDATE.md#通过-HTTP-JSON-进行更新) 相同。
 - `delete`：删除文档。其语法与 [/delete 端点](../../Data_creation_and_modification/Deleting_documents.md) 相同。
 
 同时支持按查询更新和按查询删除。

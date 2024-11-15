@@ -195,7 +195,7 @@ AND, OR, NOT
 
 <!-- end -->
 
-默认情况下，表达式值会包含在结果集的 `_source` 数组中。如果源选择是选择性的（参见 [源选择](../Searching/Search_results.md#Source-selection)），表达式名称可以添加到请求中的 `_source` 参数中。请注意，表达式的名称必须为小写。
+默认情况下，表达式值会包含在结果集的 `_source` 数组中。如果源选择是选择性的（参见 [源选择](../Searching/Search_results.md#源选择)），表达式名称可以添加到请求中的 `_source` 参数中。请注意，表达式的名称必须为小写。
 
 ### expressions
 

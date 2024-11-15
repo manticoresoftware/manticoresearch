@@ -43,7 +43,7 @@ table mytable {
 
 ## sql_query
 
-这是用于从SQL服务器检索文档的查询。必须声明且只能声明一个 `sql_query`。详细信息请参阅 [处理获取的数据](../../../Data_creation_and_modification/Adding_data_from_external_storages/Fetching_from_databases/Processing_fetched_data.md#Processing-fetched-data)
+这是用于从SQL服务器检索文档的查询。必须声明且只能声明一个 `sql_query`。详细信息请参阅 [处理获取的数据](../../../Data_creation_and_modification/Adding_data_from_external_storages/Fetching_from_databases/Processing_fetched_data.md#处理获取的数据)
 
 ## sql_query_pre
 

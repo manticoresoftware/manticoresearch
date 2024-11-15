@@ -349,7 +349,7 @@ SHOW META;
 
 <!-- example show meta PQ -->
 
-在执行 [CALL PQ](../Searching/Percolate_query.md#Performing-a-percolate-query-with-CALL-PQ) 语句后，可以使用 `SHOW META` 来获取不同的输出。
+在执行 [CALL PQ](../Searching/Percolate_query.md#使用-CALL-PQ-执行渗透查询) 语句后，可以使用 `SHOW META` 来获取不同的输出。
 
 `SHOW META` 在 `CALL PQ` 语句之后的输出包括：
 

@@ -57,7 +57,7 @@ PUT /pq/pq_table/doc/1
 }
 ```
 
-* SQL 格式的查询，详见 [search query syntax](../../Searching/Filters.md#Queries-in-SQL-format)
+* SQL 格式的查询，详见 [search query syntax](../../Searching/Filters.md#SQL格式的查询)
 ```json
 PUT /pq/pq_table/doc/2
 {
@@ -140,7 +140,7 @@ indexApi.Insert(newdoc);
 <!-- example noid -->
 ## 自动 ID 分配
 
-如果您没有指定 ID，则会自动分配。您可以在[这里](../../Data_creation_and_modification/Adding_documents_to_a_table/Adding_documents_to_a_real-time_table.md#Auto-ID)了解更多关于自动 ID 的信息。
+如果您没有指定 ID，则会自动分配。您可以在[这里](../../Data_creation_and_modification/Adding_documents_to_a_table/Adding_documents_to_a_real-time_table.md#自动-ID)了解更多关于自动 ID 的信息。
 
 <!-- intro -->
 ##### SQL:

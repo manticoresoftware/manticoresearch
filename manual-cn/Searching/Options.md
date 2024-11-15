@@ -292,7 +292,7 @@ IDF 标志可以组合；`plain` 和 `normalized` 互斥；`tfidf_unnormalized` 
 
 ### not_terms_only_allowed
 <!-- example not_terms_only_allowed -->
-`0` 或 `1` 允许单独使用[否定](../Searching/Full_text_matching/Operators.md#Negation-operator)运算符。默认值为 0。另请参阅相关的[全局设置](../Server_settings/Searchd.md#not_terms_only_allowed)。
+`0` 或 `1` 允许单独使用[否定](../Searching/Full_text_matching/Operators.md#否定操作符)运算符。默认值为 0。另请参阅相关的[全局设置](../Server_settings/Searchd.md#not_terms_only_allowed)。
 
 <!-- request SQL -->
 ```sql
@@ -320,7 +320,7 @@ MySQL [(none)]> select * from t where match('-donald') option not_terms_only_all
 * `expr`
 * `export`
 
-有关每个 ranker 的更多详细信息，请参阅[搜索结果排名](../Searching/Sorting_and_ranking.md#Available-built-in-rankers)。
+有关每个 ranker 的更多详细信息，请参阅[搜索结果排名](../Searching/Sorting_and_ranking.md#可用的内置排序器)。
 
 ### rand_seed
 允许您为 `ORDER BY RAND()` 查询指定一个特定的整数种子值，例如：`... OPTION rand_seed=1234`。默认情况下，系统会为每次查询自动生成一个新的不同的种子值。

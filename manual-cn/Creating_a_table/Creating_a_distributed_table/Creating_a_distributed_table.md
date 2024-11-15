@@ -40,7 +40,7 @@ CREATE TABLE distributed_index type='distributed' local='local_index' agent='127
 
 分布式表的核心是其指向的子表列表。分布式表中的子表有两种类型：
 
-1. [本地表](../../Creating_a_table/Creating_a_distributed_table/Creating_a_local_distributed_table.md#Creating-a-local-distributed-table)：这些表由与分布式表相同的服务器提供服务。列举本地表时，使用 `local =` 语法。可以通过多行 `local =` 列举多个本地表，或者将它们组合到一行中并用逗号分隔。
+1. [本地表](../../Creating_a_table/Creating_a_distributed_table/Creating_a_local_distributed_table.md#创建本地分布式表)：这些表由与分布式表相同的服务器提供服务。列举本地表时，使用 `local =` 语法。可以通过多行 `local =` 列举多个本地表，或者将它们组合到一行中并用逗号分隔。
 2. [远程表](../../Creating_a_table/Creating_a_distributed_table/Remote_tables.md#agent)：这些表由服务器以外的其他位置提供服务。列举远程表时，使用 `agent =` 语法。每行代表一个端点或代理。每个代理可以包含多个外部位置和操作选项。更多详情参见[此处](../../Creating_a_table/Creating_a_distributed_table/Remote_tables.md#agent)。需要注意的是，服务器并不了解它正在处理的表的类型，因此可能会导致错误。例如，如果你对一个远程表 `foo` 执行 `CALL PQ` 操作，而该表并不是过滤表，则可能会出现错误。
 
 <!-- proofread -->

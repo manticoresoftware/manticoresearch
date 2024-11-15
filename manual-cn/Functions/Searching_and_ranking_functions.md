@@ -131,7 +131,7 @@ SELECT * FROM (
 ```sql
 SELECT REMOVE_REPEATS((SELECT * FROM dist1), gid, 0, 10)
 ```
-请注意，`REMOVE_REPEATS` 不会影响 [查询元信息](../../Node_info_and_management/SHOW_META.md#SHOW-META) 中的 `total_found`。
+请注意，`REMOVE_REPEATS` 不会影响 [SHOW META](../Node_info_and_management/SHOW_META.md#SHOW-META) 中的 `total_found`。
 
 ### WEIGHT()
 `WEIGHT()` 函数返回计算出的匹配评分。如果没有指定排序，结果将按 `WEIGHT()` 提供的分数以降序排序。在以下示例中，我们首先按权重排序，然后按整数属性排序。

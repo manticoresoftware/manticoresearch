@@ -29,7 +29,7 @@ REPLACE INTO table
 
 > 注意：部分替换需要 [Manticore Buddy](../Installation/Manticore_Buddy.md)。如果它不起作用，请确保 Buddy 已安装。
 
-有关 `UPDATE` 与部分 `REPLACE` 的更多信息，请阅读 [此处](../../Data_creation_and_modification/Updating_documents/REPLACE_vs_UPDATE.md#UPDATE-vs-partial-REPLACE)。
+有关 `UPDATE` 与部分 `REPLACE` 的更多信息，请阅读 [此处](../../Data_creation_and_modification/Updating_documents/REPLACE_vs_UPDATE.md#UPDATE-vs-部分-REPLACE)。
 
 请参阅示例以获取更多详细信息。
 
@@ -400,7 +400,7 @@ res, _, _ := apiClient.IndexAPI.Replace(context.Background()).InsertDocumentRequ
 
 <!-- example bulk_replace -->
 
-你可以一次替换多个文档。查看[批量添加文档](../../Data_creation_and_modification/Adding_documents_to_a_table/Adding_documents_to_a_real-time_table.md#Bulk-adding-documents)以获取更多信息。
+你可以一次替换多个文档。查看[批量添加文档](../../Data_creation_and_modification/Adding_documents_to_a_table/Adding_documents_to_a_real-time_table.md#批量添加文档)以获取更多信息。
 
 <!-- intro -->
 ##### HTTP:

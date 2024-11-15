@@ -10,27 +10,27 @@
 
 ### access_blob_attrs
 
-该设置为 [access_blob_attrs](../Creating_a_table/Local_tables/Plain_and_real-time_table_settings.md#Accessing-table-files) 设置实例级默认值。可选，默认值为 `mmap_preread`。
+该设置为 [access_blob_attrs](../Creating_a_table/Local_tables/Plain_and_real-time_table_settings.md#通过CREATE-TABLE创建实时表的示例) 设置实例级默认值。可选，默认值为 `mmap_preread`。
 
-`access_blob_attrs` 指令允许您为此 searchd 实例管理的所有表定义 [access_blob_attrs](../Creating_a_table/Local_tables/Plain_and_real-time_table_settings.md#Accessing-table-files) 的默认值。每个表的指令优先级更高，并将覆盖此实例级默认值，以提供更细粒度的控制。
+`access_blob_attrs` 指令允许您为此 searchd 实例管理的所有表定义 [access_blob_attrs](../Creating_a_table/Local_tables/Plain_and_real-time_table_settings.md#通过CREATE-TABLE创建实时表的示例) 的默认值。每个表的指令优先级更高，并将覆盖此实例级默认值，以提供更细粒度的控制。
 
 ### access_doclists
 
-该设置为 [access_doclists](../Creating_a_table/Local_tables/Plain_and_real-time_table_settings.md#Accessing-table-files) 设置实例级默认值。可选，默认值为 `file`。
+该设置为 [access_doclists](../Creating_a_table/Local_tables/Plain_and_real-time_table_settings.md#通过CREATE-TABLE创建实时表的示例) 设置实例级默认值。可选，默认值为 `file`。
 
-`access_doclists` 指令允许您为此 searchd 实例管理的所有表定义 [access_doclists](../Creating_a_table/Local_tables/Plain_and_real-time_table_settings.md#Accessing-table-files) 的默认值。每个表的指令优先级更高，并将覆盖此实例级默认值，以提供更细粒度的控制。
+`access_doclists` 指令允许您为此 searchd 实例管理的所有表定义 [access_doclists](../Creating_a_table/Local_tables/Plain_and_real-time_table_settings.md#通过CREATE-TABLE创建实时表的示例) 的默认值。每个表的指令优先级更高，并将覆盖此实例级默认值，以提供更细粒度的控制。
 
 ### access_hitlists
 
-该设置为 [access_hitlists](../Creating_a_table/Local_tables/Plain_and_real-time_table_settings.md#Accessing-table-files) 设置实例级默认值。可选，默认值为 `file`。
+该设置为 [access_hitlists](../Creating_a_table/Local_tables/Plain_and_real-time_table_settings.md#通过CREATE-TABLE创建实时表的示例) 设置实例级默认值。可选，默认值为 `file`。
 
-`access_hitlists` 指令允许您为此 searchd 实例管理的所有表定义 [access_hitlists](../Creating_a_table/Local_tables/Plain_and_real-time_table_settings.md#Accessing-table-files) 的默认值。每个表的指令优先级更高，并将覆盖此实例级默认值，以提供更细粒度的控制。
+`access_hitlists` 指令允许您为此 searchd 实例管理的所有表定义 [access_hitlists](../Creating_a_table/Local_tables/Plain_and_real-time_table_settings.md#通过CREATE-TABLE创建实时表的示例) 的默认值。每个表的指令优先级更高，并将覆盖此实例级默认值，以提供更细粒度的控制。
 
 ### access_dict
 
-该设置为 [access_dict](../Creating_a_table/Local_tables/Plain_and_real-time_table_settings.md#Accessing-table-files) 设置实例级默认值。可选，默认值为 `mmap_preread`。
+该设置为 [access_dict](../Creating_a_table/Local_tables/Plain_and_real-time_table_settings.md#通过CREATE-TABLE创建实时表的示例) 设置实例级默认值。可选，默认值为 `mmap_preread`。
 
-`access_dict` 指令允许您为此 searchd 实例管理的所有表定义 [access_dict](../Creating_a_table/Local_tables/Plain_and_real-time_table_settings.md#Accessing-table-files) 的默认值。每个表的指令优先级更高，并将覆盖此实例级默认值，以提供更细粒度的控制。
+`access_dict` 指令允许您为此 searchd 实例管理的所有表定义 [access_dict](../Creating_a_table/Local_tables/Plain_and_real-time_table_settings.md#通过CREATE-TABLE创建实时表的示例) 的默认值。每个表的指令优先级更高，并将覆盖此实例级默认值，以提供更细粒度的控制。
 
 ### agent_connect_timeout
 
@@ -46,7 +46,7 @@
 
 该设置是一个整数，指定 Manticore 在报告致命查询错误之前将尝试连接和查询远程代理的次数。默认值为 0（即无重试）。您也可以在每个查询基础上使用 `OPTION retry_count=XXX` 子句设置此值。如果提供了每个查询选项，它将覆盖配置中指定的值。
 
-请注意，如果在分布式表的定义中使用了 [agent mirrors](../Creating_a_cluster/Remote_nodes/Mirroring.md#Agent-mirrors)，服务器将在每次连接尝试时根据所选的 [ha_strategy](../Creating_a_cluster/Remote_nodes/Load_balancing.md#ha_strategy) 选择不同的镜像。在这种情况下，`agent_retry_count` 将对一组中的所有镜像进行聚合。
+请注意，如果在分布式表的定义中使用了 [agent mirrors](../Creating_a_cluster/Remote_nodes/Mirroring.md#代理镜像)，服务器将在每次连接尝试时根据所选的 [ha_strategy](../Creating_a_cluster/Remote_nodes/Load_balancing.md#ha_strategy) 选择不同的镜像。在这种情况下，`agent_retry_count` 将对一组中的所有镜像进行聚合。
 
 例如，如果您有 10 个镜像并设置 `agent_retry_count=5`，服务器将尝试最多 50 次，假设对每个 10 个镜像平均尝试 5 次（使用 `ha_strategy = roundrobin` 选项时，情况就是如此）。
 
@@ -97,7 +97,7 @@ Manticore supports the automatic creation of tables that don't yet exist but are
 
 Keep in mind that the `/bulk` HTTP endpoint does not support automatic table creation.
 
-> NOTE: The [auto schema functionality](../Data_creation_and_modification/Adding_documents_to_a_table/Adding_documents_to_a_real-time_table.md#Auto-schema) requires [Manticore Buddy](../Installation/Manticore_Buddy.md). If it doesn't work, make sure Buddy is installed.
+> NOTE: The [auto schema functionality](../Data_creation_and_modification/Adding_documents_to_a_table/Adding_documents_to_a_real-time_table.md#自动模式) requires [Manticore Buddy](../Installation/Manticore_Buddy.md). If it doesn't work, make sure Buddy is installed.
 
 <!-- request Disable -->
 
@@ -307,7 +307,7 @@ Manticore 支持自动创建尚不存在但在 INSERT 语句中指定的表。�
 
 请注意，`/bulk` HTTP 端点不支持自动表创建。
 
-> 注意：[auto schema 功能](../Data_creation_and_modification/Adding_documents_to_a_table/Adding_documents_to_a_real-time_table.md#Auto-schema) 需要 [Manticore Buddy](../Installation/Manticore_Buddy.md)。如果它不工作，请确保 Buddy 已安装。
+> 注意：[auto schema 功能](../Data_creation_and_modification/Adding_documents_to_a_table/Adding_documents_to_a_real-time_table.md#自动模式) 需要 [Manticore Buddy](../Installation/Manticore_Buddy.md)。如果它不工作，请确保 Buddy 已安装。
 
 <!-- request Disable -->
 ```ini
@@ -494,7 +494,7 @@ collation_server = utf8_ci
 ### data_dir
 
 <!-- example conf data_dir -->
-指定后，此设置启用 [实时模式](../Creating_a_table/Local_tables.md#Online-schema-management-(RT-mode))，这是一种管理数据架构的必要方式。值应为要存储所有表、二进制日志以及在此模式下正常运行 Manticore Search 所需的其他内容的目录路径。 指定 `data_dir` 时，不允许对 [普通表](../Creating_a_table/Local_tables/Plain_table.md) 进行索引。有关 RT 模式和普通模式之间差异的更多信息，请参阅 [本节](../Read_this_first.md#Real-time-table-vs-plain-table)。
+指定后，此设置启用 [实时模式](../Creating_a_table/Local_tables.md#在线模式管理（实时模式）)，这是一种管理数据架构的必要方式。值应为要存储所有表、二进制日志以及在此模式下正常运行 Manticore Search 所需的其他内容的目录路径。 指定 `data_dir` 时，不允许对 [普通表](../Creating_a_table/Local_tables/Plain_table.md) 进行索引。有关 RT 模式和普通模式之间差异的更多信息，请参阅 [本节](../Read_this_first.md#实时表-vs-普通表)。
 
 <!-- intro -->
 ##### 示例：
@@ -846,7 +846,7 @@ max_batch_queries = 256
 ### max_connections
 
 <!-- example max_connections -->
-允许的最大同时客户端连接数。默认情况下没有限制。这通常在使用任何形式的持久连接时才会显现出来，例如 CLI MySQL 会话或来自远程分布式表的持久远程连接。当超过限制时，您仍然可以使用 [VIP 连接](../Connecting_to_the_server/MySQL_protocol.md#VIP-connection) 连接到服务器。VIP 连接不计入限制。
+允许的最大同时客户端连接数。默认情况下没有限制。这通常在使用任何形式的持久连接时才会显现出来，例如 CLI MySQL 会话或来自远程分布式表的持久远程连接。当超过限制时，您仍然可以使用 [VIP 连接](../Connecting_to_the_server/MySQL_protocol.md#VIP-连接) 连接到服务器。VIP 连接不计入限制。
 
 <!-- request Example -->
 ```ini
@@ -1043,7 +1043,7 @@ node_address = 10.101.0.10
 ### not_terms_only_allowed
 
 <!-- example conf not_terms_only_allowed -->
-此设置决定是否允许仅使用 [否定](../Searching/Full_text_matching/Operators.md#Negation-operator) 全文操作符的查询。可选，默认值为 0（失败仅带 NOT 操作符的查询）。
+此设置决定是否允许仅使用 [否定](../Searching/Full_text_matching/Operators.md#否定操作符) 全文操作符的查询。可选，默认值为 0（失败仅带 NOT 操作符的查询）。
 
 
 <!-- intro -->
@@ -1059,7 +1059,7 @@ not_terms_only_allowed = 1
 ### optimize_cutoff
 
 <!-- example conf optimize_cutoff -->
-设置默认表压缩阈值。更多信息请参见 [优化的磁盘块数量](../Securing_and_compacting_a_table/Compacting_a_table.md#Number-of-optimized-disk-chunks)。此设置可以通过每个查询选项 [cutoff](../Securing_and_compacting_a_table/Compacting_a_table.md#Number-of-optimized-disk-chunks) 被重写。它也可以通过 [SET GLOBAL](../Server_settings/Setting_variables_online.md#SET) 动态更改。
+设置默认表压缩阈值。更多信息请参见 [优化的磁盘块数量](../Securing_and_compacting_a_table/Compacting_a_table.md#优化后的磁盘块数量)。此设置可以通过每个查询选项 [cutoff](../Securing_and_compacting_a_table/Compacting_a_table.md#优化后的磁盘块数量) 被重写。它也可以通过 [SET GLOBAL](../Server_settings/Setting_variables_online.md#SET) 动态更改。
 
 <!-- intro -->
 ##### 示例：
@@ -1496,8 +1496,8 @@ seamless_rotate = 1
 
 此选项用于启用/禁用搜索查询的二级索引。可选，默认值为 1（启用）。注意，您不需要为索引启用它，因为只要安装了 [Manticore Columnar Library](https://github.com/manticoresoftware/columnar)，它始终处于启用状态。后者在搜索时也必须使用这些索引。可用三种模式：
 
-- `0`：禁用搜索时使用二级索引。可以使用 [分析器提示](../Searching/Options.md#Query-optimizer-hints) 为单个查询启用它们。
-- `1`：启用搜索时使用二级索引。可以使用 [分析器提示](../Searching/Options.md#Query-optimizer-hints) 为单个查询禁用它们。
+- `0`：禁用搜索时使用二级索引。可以使用 [分析器提示](../Searching/Options.md#expansion_limit) 为单个查询启用它们。
+- `1`：启用搜索时使用二级索引。可以使用 [分析器提示](../Searching/Options.md#expansion_limit) 为单个查询禁用它们。
 - `force`：与启用相同，但会报告加载二级索引时的任何错误，并且不会将整个索引加载到守护进程中。
 
 <!-- intro -->

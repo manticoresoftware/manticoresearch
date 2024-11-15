@@ -43,8 +43,8 @@ FACET {expr_list} [BY {expr_list} ] [DISTINCT {field_name}] [ORDER BY {expr | FA
 
 - `group name` 是分配给聚合的别名
 - `field` 值必须包含正在进行分面的属性或表达式的名称
-- 可选的 `size` 指定结果中包含的最大桶数。如果未指定，则继承主查询的限制。更多详细信息可以在 [分面结果大小](../Searching/Faceted_search.md#Size-of-facet-result) 部分找到。
-- 可选的 `sort` 指定属性和/或附加属性数组，语法与[主查询中的 "sort" 参数](../Searching/Sorting_and_ranking.md#Sorting-via-JSON)相同。
+- 可选的 `size` 指定结果中包含的最大桶数。如果未指定，则继承主查询的限制。更多详细信息可以在 [分面结果大小](../Searching/Faceted_search.md#SQL) 部分找到。
+- 可选的 `sort` 指定属性和/或附加属性数组，语法与[主查询中的 "sort" 参数](../Searching/Sorting_and_ranking.md#通过-JSON-进行排序)相同。
 
 结果集将包含一个带有返回分面的 `aggregations` 节点，其中 `key` 是聚合值，`doc_count` 是聚合计数。
 
@@ -1630,7 +1630,7 @@ POST /search -d '
 
 ### 在一组日期范围上进行分面。
 
-分面可以对一组日期范围进行聚合，类似于普通的范围聚合。不同之处在于，`from` 和 `to` 值可以使用 [日期运算](../Functions/Date_and_time_functions.md#Date-math) 表达式来表示。此聚合包括每个范围的 `from` 值，排除 `to` 值。将 `keyed` 属性设置为 `true` 时，响应将变为一个包含区间键的字典，而不是数组。
+分面可以对一组日期范围进行聚合，类似于普通的范围聚合。不同之处在于，`from` 和 `to` 值可以使用 [日期运算](../Functions/Date_and_time_functions.md#日期数学) 表达式来表示。此聚合包括每个范围的 `from` 值，排除 `to` 值。将 `keyed` 属性设置为 `true` 时，响应将变为一个包含区间键的字典，而不是数组。
 
 <!-- request SQL -->
 

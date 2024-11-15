@@ -34,7 +34,7 @@ SELECT REGEX(content, '(?i)box') FROM test;
 ```
 
 ### SNIPPET()
-`SNIPPET()` 函数可用于在给定文本中突出显示搜索结果。前两个参数分别是：需要突出显示的文本和查询。可将[选项](../Searching/Highlighting.md#Highlighting-options)作为第三个、第四个等参数传递给该函数。`SNIPPET()` 可以直接从表中获取要突出显示的文本。在这种情况下，第一个参数应为字段名称：
+`SNIPPET()` 函数可用于在给定文本中突出显示搜索结果。前两个参数分别是：需要突出显示的文本和查询。可将[选项](../Searching/Highlighting.md#高亮选项)作为第三个、第四个等参数传递给该函数。`SNIPPET()` 可以直接从表中获取要突出显示的文本。在这种情况下，第一个参数应为字段名称：
 
 ```sql
 SELECT SNIPPET(body, QUERY()) FROM myIndex WHERE MATCH('my.query')
@@ -54,7 +54,7 @@ SELECT id, SNIPPET(myUdf(id), 'my.query', 'limit=100') FROM myIndex WHERE MATCH(
 
 在此上下文中，`myUdf()` 是一个用户定义函数 (UDF)，它从外部存储源通过文档 ID 获取文档。`SNIPPET()` 函数被认为是“post limit” 函数，意味着片段的计算被延迟，直到整个最终结果集准备好，并且即使应用了 `LIMIT` 子句也是如此。例如，如果使用 `LIMIT 20,10` 子句，`SNIPPET()` 将被调用不超过 10 次。
 
-需要注意的是，`SNIPPET()` 不支持基于字段的限制。要实现该功能，请使用 [HIGHLIGHT()](../Searching/Highlighting.md#Highlighting-via-SQL)。
+需要注意的是，`SNIPPET()` 不支持基于字段的限制。要实现该功能，请使用 [HIGHLIGHT()](../Searching/Highlighting.md#通过-SQL-实现高亮)。
 
 ### SUBSTRING_INDEX()
 

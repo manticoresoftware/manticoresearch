@@ -21,7 +21,7 @@ DELETE BUDDY PLUGIN <username/package name on https://packagist.org/>
 
 > 注意: `DELETE BUDDY PLUGIN` 需要 [Manticore Buddy](../Installation/Manticore_Buddy.md)。如果命令无法运行，请确认 Buddy 已安装。
 
-该操作将立即且永久地从 [plugin_dir](../../Server_settings/Common.md#plugin_dir) 中移除已安装的插件。插件移除后，其功能将不再可用。
+该操作将立即且永久地从 [plugin_dir](../../../Server_settings/Common.md#plugin_dir) 中移除已安装的插件。插件移除后，其功能将不再可用。
 
 <!-- intro -->
 ### 示例

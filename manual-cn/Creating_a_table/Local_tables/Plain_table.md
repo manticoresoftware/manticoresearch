@@ -36,7 +36,7 @@ table tbl {
 <!-- end -->
 
 ### 👍 您可以使用普通表做什么：
-  * 使用[源](../../Creating_a_table/Local_tables/Plain_and_real-time_table_settings.md#source)和[索引器](../../Data_creation_and_modification/Adding_data_from_external_storages/Plain_tables_creation.md#Indexer-tool)从外部存储构建它
+  * 使用[源](../../Creating_a_table/Local_tables/Plain_and_real-time_table_settings.md#source)和[索引器](../../Data_creation_and_modification/Adding_data_from_external_storages/Plain_tables_creation.md#Indexer-工具)从外部存储构建它
   * 在[整数、浮点数、字符串和MVA属性](../../Creating_a_table/Data_types.md)上执行就地更新
   * [更新](../../Data_creation_and_modification/Adding_data_from_external_storages/Adding_data_to_tables/Killlist_in_plain_tables.md#killlist_target)其`killlist_target`
 
@@ -44,7 +44,7 @@ table tbl {
   * 在表构建后插入额外数据
   * 从表中删除数据
   * 在线创建、删除或更改表架构
-  * 使用[UUID](../../Data_creation_and_modification/Adding_documents_to_a_table/Adding_documents_to_a_real-time_table.md#Auto-ID)进行自动ID生成（来自外部存储的数据必须包含唯一标识符）
+  * 使用[UUID](../../Data_creation_and_modification/Adding_documents_to_a_table/Adding_documents_to_a_real-time_table.md#自动-ID)进行自动ID生成（来自外部存储的数据必须包含唯一标识符）
 
 数值属性，包括[MVAs](../../Creating_a_table/Data_types.md#Multi-value-integer-(MVA))，是普通表中唯一可以更新的元素。表中的所有其他数据都是不可变的。如果需要更新或添加新记录，则必须重建表。在重建过程中，现有表保持可用以处理请求，并在新版本准备好时执行称为[轮换](../../Data_creation_and_modification/Adding_data_from_external_storages/Rotating_a_table.md)的过程，将其上线并丢弃旧版本。
 
@@ -83,9 +83,9 @@ table tbl {
 
 | 扩展名     | 描述                                                         |
 | ---------- | ------------------------------------------------------------ |
-| `.spa`     | 以[行模式](../../Creating_a_table/Data_types.md#Row-wise-and-columnar-attribute-storages)存储文档属性 |
-| `.spb`     | 以[行模式](../../Creating_a_table/Data_types.md#Row-wise-and-columnar-attribute-storages)存储blob属性：字符串、MVA、json |
-| `.spc`     | 以[列模式](../../Creating_a_table/Data_types.md#Row-wise-and-columnar-attribute-storages)存储文档属性 |
+| `.spa`     | 以[行模式](../../Creating_a_table/Data_types.md#行存储和列存储属性)存储文档属性 |
+| `.spb`     | 以[行模式](../../Creating_a_table/Data_types.md#行存储和列存储属性)存储blob属性：字符串、MVA、json |
+| `.spc`     | 以[列模式](../../Creating_a_table/Data_types.md#行存储和列存储属性)存储文档属性 |
 | `.spd`     | 为每个词ID存储匹配的文档ID列表                               |
 | `.sph`     | 存储表头信息                                                 |
 | `.sphi`    | 存储属性值的直方图                                           |

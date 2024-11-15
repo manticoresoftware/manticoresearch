@@ -121,7 +121,7 @@ POST /search
 }
 ```
 
-注意：如果使用 [query_string](../../Searching/Full_text_matching/Basic_usage.md#query_string)，请注意它不支持全文操作符。查询字符串应仅包含您希望匹配的单词。
+注意：如果使用 [query_string](../Searching/Full_text_matching/Basic_usage.md#query_string)，请注意它不支持全文操作符。查询字符串应仅包含您希望匹配的单词。
 
 ### 选项
 

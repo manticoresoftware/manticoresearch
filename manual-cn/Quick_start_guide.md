@@ -67,7 +67,7 @@ brew services start manticoresearch
 docker pull manticoresearch/manticore
 docker run -e EXTRA=1 --name manticore -p9306:9306 -p9308:9308 -p9312:9312 -d manticoresearch/manticore
 ```
-要持久化您的数据目录，请阅读[如何在生产环境中使用 Manticore Docker](Starting_the_server/Docker.md#Production-use)。
+要持久化您的数据目录，请阅读[如何在生产环境中使用 Manticore Docker](Starting_the_server/Docker.md#生产环境使用)。
 <!-- end -->
 
 <!-- example connect -->
@@ -223,7 +223,7 @@ apiClient := manticoreclient.NewAPIClient(configuration)
 * title - 全文字段，用于存储产品的标题
 * price - 类型为 "float"
 
-注意，创建表时可以省略显式的创建语句。更多信息请参阅 [自动模式](Data_creation_and_modification/Adding_documents_to_a_table/Adding_documents_to_a_real-time_table.md#Auto-schema)。
+注意，创建表时可以省略显式的创建语句。更多信息请参阅 [自动模式](Data_creation_and_modification/Adding_documents_to_a_table/Adding_documents_to_a_real-time_table.md#自动模式)。
 
 关于创建表的不同方式，您可以在以下学习课程中找到更多信息：
 * [创建实时表](https://play.manticoresearch.com/rtmode/)

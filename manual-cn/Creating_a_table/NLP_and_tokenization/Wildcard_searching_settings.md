@@ -473,7 +473,7 @@ mysql> select *, weight() from t where match('running');
 ```
 <!-- end -->
 
-该指令不会对 [indexer](../../Data_creation_and_modification/Adding_data_from_external_storages/Plain_tables_creation.md#Indexer-tool) 产生任何影响，它仅对 [searchd](../../Starting_the_server/Manually.md) 有效。
+该指令不会对 [indexer](../../Data_creation_and_modification/Adding_data_from_external_storages/Plain_tables_creation.md#Indexer-工具) 产生任何影响，它仅对 [searchd](../../Starting_the_server/Manually.md) 有效。
 
 
 ## expansion_limit

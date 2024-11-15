@@ -1,6 +1,6 @@
 # 备份与恢复
 
-定期备份您的表对于在系统崩溃、硬件故障或数据损坏/丢失的情况下进行恢复至关重要。在升级到新版本的 Manticore Search 或运行 [ALTER TABLE](../Updating_table_schema_and_settings.md#Updating-table-schema-in-RT-mode) 之前，强烈建议进行备份。
+定期备份您的表对于在系统崩溃、硬件故障或数据损坏/丢失的情况下进行恢复至关重要。在升级到新版本的 Manticore Search 或运行 [ALTER TABLE](../Updating_table_schema_and_settings.md#在实时模式下更新表结构) 之前，强烈建议进行备份。
 
 备份数据库系统可以通过两种独特的方式进行：逻辑备份和物理备份。这两种方法各有优缺点，具体可能因数据库环境和需求的不同而有所差异。下面我们将深入探讨这两种备份的区别。
 
@@ -16,7 +16,7 @@
 - ➖ **备份和恢复速度较慢：** 逻辑备份通常比物理备份速度较慢，因为它们需要数据库引擎将数据转换为 SQL 语句或其他导出格式。
 - ➖ **系统负载增加：** 创建逻辑备份可能会导致系统负载增加，因为该过程需要更多的 CPU 和内存资源来处理和导出数据。
 
-Manticore Search 支持使用 [mysqldump](../Securing_and_compacting_a_table/Backup_and_restore.md#Backup-and-restore-with-mysqldump) 进行逻辑备份。
+Manticore Search 支持使用 [mysqldump](../Securing_and_compacting_a_table/Backup_and_restore.md#使用-mysqldump-进行备份和恢复) 进行逻辑备份。
 
 ### 物理备份
 
@@ -31,13 +31,13 @@ Manticore Search 支持使用 [mysqldump](../Securing_and_compacting_a_table/Bac
 - ➖ **灵活性：** 物理备份不允许选择性地恢复特定数据库对象，因为备份包含整个数据库的原始文件。
 - ➖ **兼容性：** 物理备份不能在不同的数据库管理系统或版本之间迁移数据，因为原始数据文件可能在不同的平台或软件之间不兼容。
 
-Manticore Search 提供了 [manticore-backup](../Securing_and_compacting_a_table/Backup_and_restore.md#Using-manticore-backup-command-line-tool) 命令行工具以进行物理备份。
+Manticore Search 提供了 [manticore-backup](../Securing_and_compacting_a_table/Backup_and_restore.md#使用-manticore-backup-命令行工具) 命令行工具以进行物理备份。
 
 总之，逻辑备份提供了更多的灵活性、可移植性和兼容性，但速度较慢且资源消耗较高；而物理备份速度更快、一致性更好、资源消耗较低，但在可移植性和灵活性方面可能受到限制。选择这两种备份方法将取决于您特定的数据库环境、硬件和需求。
 
 ## 使用 manticore-backup 命令行工具
 
-`manticore-backup` 工具包含在官方 Manticore Search [软件包](https://manticoresearch.com/install) 中，自动化备份运行在 [RT 模式](../Read_this_first.md#Real-time-mode-vs-plain-mode) 下的表的过程。
+`manticore-backup` 工具包含在官方 Manticore Search [软件包](https://manticoresearch.com/install) 中，自动化备份运行在 [RT 模式](../Read_this_first.md#实时模式-vs-普通模式) 下的表的过程。
 
 ### 安装
 
@@ -149,7 +149,7 @@ Manticore versions:
 
 您还可以通过运行简单命令 `BACKUP TO /path/to/backup` 进行数据备份。
 
-> 注意：`BACKUP` 在 Windows 上不受支持。请考虑使用 [mysqldump](../Securing_and_compacting_a_table/Backup_and_restore.md#Backup-and-restore-with-mysqldump) 替代。
+> 注意：`BACKUP` 在 Windows 上不受支持。请考虑使用 [mysqldump](../Securing_and_compacting_a_table/Backup_and_restore.md#使用-mysqldump-进行备份和恢复) 替代。
 
 > 注意：`BACKUP` 需要 [Manticore Buddy](../Installation/Manticore_Buddy.md)。如果它无法工作，请确保 Buddy 已安装。
 
@@ -290,7 +290,7 @@ mysqldump -h0 -P9306 --replace --net-buffer-length=16m -etc manticore tbl > tbl.
 
 如果您希望从备份文件恢复 Manticore Search 数据库，mysql 客户端是您首选的工具。
 
-请注意，如果您在 [Plain mode](../Read_this_first.md#Real-time-mode-vs-plain-mode) 下恢复，则不能直接删除和重新创建表。因此，您应该：
+请注意，如果您在 [Plain mode](../Read_this_first.md#实时模式-vs-普通模式) 下恢复，则不能直接删除和重新创建表。因此，您应该：
 
 - 使用 `mysqldump` 并加上 `-t` 选项，排除备份中的 `CREATE TABLE` 语句。
 - 在继续恢复之前手动 [TRUNCATE](../Emptying_a_table.md) 表。

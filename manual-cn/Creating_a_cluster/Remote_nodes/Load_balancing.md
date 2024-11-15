@@ -10,7 +10,7 @@ ha_strategy = {random|nodeads|noerrors|roundrobin}
 
 镜像选择策略用于负载均衡是可选的，默认设置为 `random`。
 
-此指令控制镜像选择策略，也就是在分布式表中选择特定的 [代理镜像](../../Creating_a_cluster/Remote_nodes/Mirroring.md#Agent-mirrors)。本质上，该指令控制主节点如何在配置的镜像代理节点之间进行负载均衡。实施的策略包括：
+此指令控制镜像选择策略，也就是在分布式表中选择特定的 [代理镜像](../../Creating_a_cluster/Remote_nodes/Mirroring.md#代理镜像)。本质上，该指令控制主节点如何在配置的镜像代理节点之间进行负载均衡。实施的策略包括：
 
 ### 简单随机均衡
 

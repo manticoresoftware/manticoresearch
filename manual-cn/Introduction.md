@@ -29,7 +29,7 @@ Manticore Search 采用智能查询并行化，以降低响应时间并在需要
 基于成本的查询优化器使用关于索引数据的统计数据来评估给定查询不同执行计划的相对成本。这使优化器能够确定检索所需结果的最有效计划，考虑到索引数据的大小、查询的复杂性以及可用资源等因素。
 
 #### 存储选项
-Manticore 提供[行式和列式存储选项](Creating_a_table/Data_types.md#Row-wise-and-columnar-attribute-storages) ，以适应各种大小的数据集。传统的默认行式存储选项适用于所有大小的小型、中型和大型数据集，而列式存储选项通过 Manticore 列库提供，适用于更大的数据集。这些存储选项之间的主要区别在于，行式存储要求所有属性（排除全文字段）保存在 RAM 中以实现最佳性能，而列式存储则不需要，从而提供较低的 RAM 消耗，但可能在性能上稍慢（如在 https://db-benchmarks.com/ 上的统计数据所示）。
+Manticore 提供[行式和列式存储选项](Creating_a_table/Data_types.md#行存储和列存储属性) ，以适应各种大小的数据集。传统的默认行式存储选项适用于所有大小的小型、中型和大型数据集，而列式存储选项通过 Manticore 列库提供，适用于更大的数据集。这些存储选项之间的主要区别在于，行式存储要求所有属性（排除全文字段）保存在 RAM 中以实现最佳性能，而列式存储则不需要，从而提供较低的 RAM 消耗，但可能在性能上稍慢（如在 https://db-benchmarks.com/ 上的统计数据所示）。
 
 #### 自动二级索引
 [Manticore Columnar Library](https://github.com/manticoresoftware/columnar/) 使用 [Piecewise Geometric Model index](https://github.com/gvinciguerra/PGM-index)，该索引利用了索引键与其在内存中位置之间的学习映射。该映射的简洁性，再加上独特的递归构建算法，使得 PGM 索引在空间占用方面远远优于传统索引，同时仍能提供最佳的查询和更新时间性能。所有数值字段的二级索引默认是开启的。
@@ -41,7 +41,7 @@ Manticore 的原生语法是 SQL，支持通过 HTTP 和 MySQL 协议进行 SQL 
 对于更具程序化的数据和模式管理，Manticore 提供 HTTP JSON 协议，类似于 Elasticsearch。
 
 #### 与 Elasticsearch 兼容的写入
-你可以执行与 Elasticsearch 兼容的[插入](Data_creation_and_modification/Adding_documents_to_a_table/Adding_documents_to_a_real-time_table.md#Adding-documents-to-a-real-time-table)和[替换](Data_creation_and_modification/Updating_documents/REPLACE.md#REPLACE) JSON 查询，这使得 Manticore 可以与 Logstash（版本 < 7.13）、Filebeat 及其他 Beats 工具配合使用。
+你可以执行与 Elasticsearch 兼容的[插入](Data_creation_and_modification/Adding_documents_to_a_table/Adding_documents_to_a_real-time_table.md#向实时表添加文档)和[替换](Data_creation_and_modification/Updating_documents/REPLACE.md#REPLACE) JSON 查询，这使得 Manticore 可以与 Logstash（版本 < 7.13）、Filebeat 及其他 Beats 工具配合使用。
 
 ### 声明式和命令式架构管理
 
@@ -67,7 +67,7 @@ Manticore Search 守护进程用 C++ 开发，提供快速的启动时间和高�
 数据可以分布在服务器和数据中心，任何 Manticore Search 节点都可以充当负载均衡器和数据节点。Manticore 使用 [Galera 库](https://galeracluster.com/)实现几乎同步的多主[复制](https://play.manticoresearch.com/replication/)，确保所有节点之间的数据一致性，防止数据丢失，并提供卓越的复制性能。
 
 #### 内置备份功能
-Manticore 配备了外部工具[manticore-backup](Securing_and_compacting_a_table/Backup_and_restore.md)和 [BACKUP](Securing_and_compacting_a_table/Backup_and_restore.md#BACKUP-SQL-command-reference)  SQL 命令，简化数据备份和恢复的过程。你也可以使用 [mysqldump](https://dev.mysql.com/doc/refman/8.0/en/mysqldump.html)  进行[make logical backups](../Securing_and_compacting_a_table/Backup_and_restore.md#Backup-and-restore-with-mysqldump)。
+Manticore 配备了外部工具[manticore-backup](Securing_and_compacting_a_table/Backup_and_restore.md)和 [BACKUP](Securing_and_compacting_a_table/Backup_and_restore.md#备份-SQL-命令参考)  SQL 命令，简化数据备份和恢复的过程。你也可以使用 [mysqldump](https://dev.mysql.com/doc/refman/8.0/en/mysqldump.html)  进行[make logical backups](Securing_and_compacting_a_table/Backup_and_restore.md#使用-mysqldump-进行备份和恢复)。
 
 #### 开箱即用的数据同步
 Manticore 的索引工具和全面的配置语法使得从 MySQL、PostgreSQL、ODBC 兼容数据库、XML 和 CSV 等来源同步数据变得简单。
@@ -97,7 +97,7 @@ Manticore 具有多种用例，包括：
 
 * 架构： arm64 或 x86_64
 * 操作系统： 基于 Debian（如 Debian、Ubuntu、Mint）、基于 RHEL（如 RHEL、CentOS、Alma、Oracle Linux、Amazon Linux）、Windows 或 MacOS。
-* [Manticore 列库](https://github.com/manticoresoftware/columnar)提供列式存储和[二级索引](introduction.md#Automatic-secondary-indexes)，要求 CPU 支持 SSE >= 4.2。
+* [Manticore 列库](https://github.com/manticoresoftware/columnar)提供列式存储和[二级索引](introduction.md#自动二级索引)，要求 CPU 支持 SSE >= 4.2。
 * 没有特定的磁盘空间或 RAM 要求。一个空的 Manticore Search 实例仅使用约 40MB 的 RSS RAM。
 
 <!-- proofread -->

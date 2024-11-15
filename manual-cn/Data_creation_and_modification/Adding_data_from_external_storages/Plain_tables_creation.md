@@ -68,7 +68,7 @@ systemctl start --no-block manticore-indexer@specific-table-name
 
 使用 `systemctl set-environment INDEXER_CONFIG` 命令可以用自定义配置运行 Indexer，替换默认设置。
 
-`systemctl set-environment INDEXER_ARGS` 命令允许添加自定义启动选项。有关完整的命令行选项列表，请参阅[此处](../../Data_creation_and_modification/Adding_data_from_external_storages/Plain_tables_creation.md#Indexer-command-line-arguments)。
+`systemctl set-environment INDEXER_ARGS` 命令允许添加自定义启动选项。有关完整的命令行选项列表，请参阅[此处](../../Data_creation_and_modification/Adding_data_from_external_storages/Plain_tables_creation.md#Indexer-命令行参数)。
 
 例如，要以安静模式启动 Indexer，可以运行：
 

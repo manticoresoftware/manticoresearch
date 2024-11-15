@@ -59,7 +59,7 @@
 * [4️⃣ 连接服务器](Connecting_to_the_server.md)
   * [MySQL协议](Connecting_to_the_server/MySQL_protocol.md)
   * [HTTP](Connecting_to_the_server/HTTP.md)
-  * [通过 HTTP 的 SQL](Connecting_to_the_server/HTTP.md#SQL-over-HTTP)
+  * [通过 HTTP 的 SQL](Connecting_to_the_server/HTTP.md#通过-HTTP-发送-SQL-查询)
 * [⪢ 数据创建和修改](Data_creation_and_modification/Data_creation_and_modification.md)
   * [⪢ 向表中添加文档]
     * [✔ 向实时表添加文档](Data_creation_and_modification/Adding_documents_to_a_table/Adding_documents_to_a_real-time_table.md)

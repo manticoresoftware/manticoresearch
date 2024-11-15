@@ -6,7 +6,7 @@
 
 集群状态变量的输出格式如下：`cluster_name_variable_name` `variable_value`。大多数变量在 [Galera 文档状态变量](https://galeracluster.com/library/documentation/galera-status-variables.html) 中有描述。除了这些变量，Manticore Search 还显示：
 
-- `cluster_name` - 集群的名称，如在 [复制设置](../../Creating_a_cluster/Setting_up_replication/Setting_up_replication.md#Replication-cluster) 中定义
+- `cluster_name` - 集群的名称，如在 [复制设置](../../Creating_a_cluster/Setting_up_replication/Setting_up_replication.md#复制集群) 中定义
 - `node_state` - 节点的当前状态：`closed`、`destroyed`、`joining`、`donor`、`synced`
 - `indexes_count` - 集群管理的表的数量
 - `indexes` - 集群管理的表名称列表

@@ -8,10 +8,10 @@
 - [CREATE TABLE LIKE ... WITH DATA](Creating_a_table/Local_tables/Real-time_table.md#CREATE-TABLE-LIKE:) - 复制一个表
 - [DESCRIBE](Listing_tables.md#DESCRIBE) - 打印出表的字段列表及其类型
 - [ALTER TABLE](Updating_table_schema_and_settings.md) - 更改表结构/设置
-- [ALTER TABLE REBUILD SECONDARY](Updating_table_schema_and_settings.md#Rebuilding-a-secondary-index) - 更新/恢复二级索引
-- [ALTER TABLE type='distributed'](Updating_table_schema_and_settings.md#Changing-a-distributed-table) - 更新/恢复二级索引
-- [ALTER TABLE RENAME](Updating_table_schema_and_settings.md#Renaming-a-real-time-table) - 重命名实时表
-- [DROP TABLE IF EXISTS](Deleting_a_table.md#Deleting-a-table) - 删除表（如果存在）
+- [ALTER TABLE REBUILD SECONDARY](Updating_table_schema_and_settings.md#重建二级索引) - 更新/恢复二级索引
+- [ALTER TABLE type='distributed'](Updating_table_schema_and_settings.md#修改分布式表) - 更新/恢复二级索引
+- [ALTER TABLE RENAME](Updating_table_schema_and_settings.md#重命名实时表) - 重命名实时表
+- [DROP TABLE IF EXISTS](Deleting_a_table.md#删除表) - 删除表（如果存在）
 - [SHOW TABLES](Listing_tables.md#DESCRIBE) - 显示表列表
 - [SHOW CREATE TABLE](Listing_tables.md#DESCRIBE) - 显示创建表的SQL命令
 - [SHOW TABLE STATUS](Node_info_and_management/Table_settings_and_status/SHOW_TABLE_STATUS.md) - 显示当前表的状态信息
@@ -27,11 +27,11 @@
 - [TRUNCATE TABLE](Emptying_a_table.md) - 删除表中的所有文档
 
 ##### 备份
-* [BACKUP](Securing_and_compacting_a_table/Backup_and_restore.md#BACKUP-SQL-command-reference) - 备份你的表
+* [BACKUP](Securing_and_compacting_a_table/Backup_and_restore.md#备份-SQL-命令参考) - 备份你的表
 
 ##### SELECT
 - [SELECT](Searching/Full_text_matching/Basic_usage.md#SQL) - 执行搜索
-  - [WHERE](Searching/Filters.md#Filters) - 过滤条件
+  - [WHERE](Searching/Filters.md#过滤器) - 过滤条件
   - [GROUP BY](Searching/Grouping.md) - 对搜索结果进行分组
   - [GROUP BY ORDER](Searching/Grouping.md) - 对分组结果排序
   - [GROUP BY HAVING](Searching/Grouping.md) - 对分组结果进行过滤
@@ -39,10 +39,10 @@
   - [FACET](Searching/Faceted_search.md) - 分面搜索
   - [SUB-SELECTS](Searching/Sub-selects.md) - 使用 SELECT 子查询
   - [JOIN](Searching/Joining.md) - 在 SELECT 中进行表关联
-- [EXPLAIN QUERY](Searching/Full_text_matching/Profiling.md#Profiling-without-running-a-query) - 显示查询执行计划而不运行查询
+- [EXPLAIN QUERY](Searching/Full_text_matching/Profiling.md#不执行查询的情况下进行分析) - 显示查询执行计划而不运行查询
 - [SHOW META](Node_info_and_management/SHOW_META.md) - 显示执行查询后的扩展信息
 - [SHOW PROFILE](Node_info_and_management/Profiling/Query_profile.md) - 显示已执行查询的分析信息
-- [SHOW PLAN](Searching/Full_text_matching/Profiling.md#Profiling-the-query-tree-in-SQL) - 显示执行查询后的执行计划
+- [SHOW PLAN](Searching/Full_text_matching/Profiling.md#在-SQL-中分析查询树) - 显示执行查询后的执行计划
 - [SHOW WARNINGS](Node_info_and_management/SHOW_WARNINGS.md) - 显示最新查询的警告信息
 
 ##### 刷新杂项
@@ -63,7 +63,7 @@
 ##### 复制
 - [JOIN CLUSTER](Creating_a_cluster/Setting_up_replication/Joining_a_replication_cluster.md) - 加入复制集群
 - [ALTER CLUSTER](Creating_a_cluster/Setting_up_replication/Managing_replication_nodes.md) - 向复制集群中添加/删除表
-- [SET CLUSTER](Creating_a_cluster/Setting_up_replication/Setting_up_replication.md#Cluster-parameters) - 更改复制集群设置
+- [SET CLUSTER](Creating_a_cluster/Setting_up_replication/Setting_up_replication.md#集群参数) - 更改复制集群设置
 - [DELETE CLUSTER](Creating_a_cluster/Setting_up_replication/Deleting_a_replication_cluster.md) - 删除复制集群
 
 ##### 普通表轮换
@@ -100,15 +100,15 @@
 - [SHOW VERSION](Node_info_and_management/SHOW_VERSION.md#SHOW-VERSION) - 提供实例中各种组件的详细版本信息
 
 ### HTTP 端点
-- [/sql](Connecting_to_the_server/HTTP.md#SQL-over-HTTP) - 通过 HTTP JSON 执行 SQL 语句
+- [/sql](Connecting_to_the_server/HTTP.md#通过-HTTP-发送-SQL-查询) - 通过 HTTP JSON 执行 SQL 语句
 - [/cli](Connecting_to_the_server/HTTP.md#/cli) - 提供 HTTP 命令行界面
 - [/insert](Data_creation_and_modification/Adding_documents_to_a_table/Adding_documents_to_a_real-time_table.md) - 向实时表插入文档
-- [/pq/tbl_name/doc](Data_creation_and_modification/Adding_documents_to_a_table/Adding_rules_to_a_percolate_table.md#Adding-rules-to-a-percolate-table) - 向渗透表添加 PQ 规则
-- [/update](Data_creation_and_modification/Updating_documents/UPDATE.md#Updates-via-HTTP-JSON) - 更新实时表中的文档
+- [/pq/tbl_name/doc](Data_creation_and_modification/Adding_documents_to_a_table/Adding_rules_to_a_percolate_table.md#向渗透表添加规则) - 向渗透表添加 PQ 规则
+- [/update](Data_creation_and_modification/Updating_documents/UPDATE.md#通过-HTTP-JSON-进行更新) - 更新实时表中的文档
 - [/replace](Data_creation_and_modification/Updating_documents/REPLACE.md) - 替换实时表中的现有文档，或者如果不存在则插入它
-- [/pq/tbl_name/doc/N?refresh=1](Data_creation_and_modification/Adding_documents_to_a_table/Adding_rules_to_a_percolate_table.md#Adding-rules-to-a-percolate-table) - 替换渗透表中的 PQ 规则
+- [/pq/tbl_name/doc/N?refresh=1](Data_creation_and_modification/Adding_documents_to_a_table/Adding_rules_to_a_percolate_table.md#向渗透表添加规则) - 替换渗透表中的 PQ 规则
 - [/delete](Data_creation_and_modification/Deleting_documents.md) - 从表中删除文档
-- [/bulk](Data_creation_and_modification/Updating_documents/UPDATE.md#Bulk-updates) - 在单个调用中执行多个插入、更新或删除操作。了解有关批量插入的更多信息[此处](Data_creation_and_modification/Adding_documents_to_a_table/Adding_documents_to_a_real-time_table.md)。
+- [/bulk](Data_creation_and_modification/Updating_documents/UPDATE.md#批量更新) - 在单个调用中执行多个插入、更新或删除操作。了解有关批量插入的更多信息[此处](Data_creation_and_modification/Adding_documents_to_a_table/Adding_documents_to_a_real-time_table.md)。
 - [/search](Searching/Full_text_matching/Basic_usage.md#HTTP-JSON) - 执行搜索
 - [/search -> knn](Searching/KNN.md) - 执行 KNN 向量搜索
 - [/pq/tbl_name/search](Searching/Percolate_query.md) - 在渗透表中执行反向搜索
@@ -117,8 +117,8 @@
 ### 常用操作
 * [data types](Creating_a_table/Data_types.md)
 * [engine](Creating_a_table/Data_types.md)
-* [plain mode](Read_this_first.md#Real-time-mode-vs-plain-mode)
-* [real-time mode](Read_this_first.md#Real-time-mode-vs-plain-mode)
+* [plain mode](Read_this_first.md#实时模式-vs-普通模式)
+* [real-time mode](Read_this_first.md#实时模式-vs-普通模式)
 
 ##### 通用的表设置
 * [access_plain_attrs](Server_settings/Searchd.md#access_plain_attrs)
@@ -133,9 +133,9 @@
 * [blend_mode](Creating_a_table/NLP_and_tokenization/Low-level_tokenization.md#blend_mode)
 * [charset_table](Creating_a_table/NLP_and_tokenization/Low-level_tokenization.md#charset_table)
 * [dict](Creating_a_table/NLP_and_tokenization/Low-level_tokenization.md#dict)
-* [docstore_block_size](Creating_a_table/Local_tables/Plain_and_real-time_table_settings.md#General-syntax-of-CREATE-TABLE)
-* [docstore_compression](Creating_a_table/Local_tables/Plain_and_real-time_table_settings.md#General-syntax-of-CREATE-TABLE)
-* [docstore_compression_level](Creating_a_table/Local_tables/Plain_and_real-time_table_settings.md#General-syntax-of-CREATE-TABLE)
+* [docstore_block_size](Creating_a_table/Local_tables/Plain_and_real-time_table_settings.md#killlist_target)
+* [docstore_compression](Creating_a_table/Local_tables/Plain_and_real-time_table_settings.md#killlist_target)
+* [docstore_compression_level](Creating_a_table/Local_tables/Plain_and_real-time_table_settings.md#killlist_target)
 * [embedded_limit](Creating_a_table/NLP_and_tokenization/Low-level_tokenization.md#embedded_limit)
 * [exceptions](Creating_a_table/NLP_and_tokenization/Exceptions.md#exceptions)
 * [expand_keywords](Searching/Options.md#expand_keywords)
@@ -151,13 +151,13 @@
 * [index_token_filter](Creating_a_table/NLP_and_tokenization/Low-level_tokenization.md#index_token_filter)
 * [index_zones](Creating_a_table/NLP_and_tokenization/Advanced_HTML_tokenization.md#index_zones)
 * [infix_fields](Creating_a_table/NLP_and_tokenization/Wildcard_searching_settings.md#infix_fields)
-* [inplace_enable](Creating_a_table/Local_tables/Plain_and_real-time_table_settings.md#General-syntax-of-CREATE-TABLE)
-* [inplace_hit_gap](Creating_a_table/Local_tables/Plain_and_real-time_table_settings.md#General-syntax-of-CREATE-TABLE)
-* [inplace_reloc_factor](Creating_a_table/Local_tables/Plain_and_real-time_table_settings.md#General-syntax-of-CREATE-TABLE)
-* [inplace_write_factor](Creating_a_table/Local_tables/Plain_and_real-time_table_settings.md#General-syntax-of-CREATE-TABLE)
+* [inplace_enable](Creating_a_table/Local_tables/Plain_and_real-time_table_settings.md#killlist_target)
+* [inplace_hit_gap](Creating_a_table/Local_tables/Plain_and_real-time_table_settings.md#killlist_target)
+* [inplace_reloc_factor](Creating_a_table/Local_tables/Plain_and_real-time_table_settings.md#killlist_target)
+* [inplace_write_factor](Creating_a_table/Local_tables/Plain_and_real-time_table_settings.md#killlist_target)
 * [jieba_hmm](Creating_a_table/NLP_and_tokenization/Morphology.md#jieba_hmm)
 * [jieba_mode](Creating_a_table/NLP_and_tokenization/Morphology.md#jieba_mode)
-* [killlist_target](Creating_a_table/Local_tables/Plain_and_real-time_table_settings.md#General-syntax-of-CREATE-TABLE)
+* [killlist_target](Creating_a_table/Local_tables/Plain_and_real-time_table_settings.md#killlist_target)
 * [max_substring_len](Creating_a_table/NLP_and_tokenization/Wildcard_searching_settings.md#max_substring_len)
 * [min_infix_len](Creating_a_table/NLP_and_tokenization/Wildcard_searching_settings.md#min_infix_len)
 * [min_prefix_len](Creating_a_table/NLP_and_tokenization/Wildcard_searching_settings.md#min_prefix_len)
@@ -168,26 +168,26 @@
 * [ngram_chars](Creating_a_table/NLP_and_tokenization/Low-level_tokenization.md#ngram_chars)
 * [ngram_len](Creating_a_table/NLP_and_tokenization/Low-level_tokenization.md#ngram_len)
 * [overshort_step](Creating_a_table/NLP_and_tokenization/Low-level_tokenization.md#overshort_step)
-* [path](Creating_a_table/Local_tables/Plain_and_real-time_table_settings.md#General-syntax-of-CREATE-TABLE)
+* [path](Creating_a_table/Local_tables/Plain_and_real-time_table_settings.md#killlist_target)
 * [phrase_boundary](Creating_a_table/NLP_and_tokenization/Low-level_tokenization.md#phrase_boundary)
 * [phrase_boundary_step](Creating_a_table/NLP_and_tokenization/Low-level_tokenization.md#phrase_boundary_step)
 * [prefix_fields](Creating_a_table/NLP_and_tokenization/Wildcard_searching_settings.md#prefix_fields)
-* [preopen](Creating_a_table/Local_tables/Plain_and_real-time_table_settings.md#General-syntax-of-CREATE-TABLE)
-* [read_buffer_docs](Creating_a_table/Local_tables/Plain_and_real-time_table_settings.md#General-syntax-of-CREATE-TABLE)
-* [read_buffer_hits](Creating_a_table/Local_tables/Plain_and_real-time_table_settings.md#General-syntax-of-CREATE-TABLE)
+* [preopen](Creating_a_table/Local_tables/Plain_and_real-time_table_settings.md#killlist_target)
+* [read_buffer_docs](Creating_a_table/Local_tables/Plain_and_real-time_table_settings.md#killlist_target)
+* [read_buffer_hits](Creating_a_table/Local_tables/Plain_and_real-time_table_settings.md#killlist_target)
 * [regexp_filter](Creating_a_table/NLP_and_tokenization/Low-level_tokenization.md#regexp_filter)
 * [stopwords](Creating_a_table/NLP_and_tokenization/Ignoring_stop-words.md#stopwords)
 * [stopword_step](Creating_a_table/NLP_and_tokenization/Ignoring_stop-words.md#stopword_step)
 * [stopwords_unstemmed](Creating_a_table/NLP_and_tokenization/Ignoring_stop-words.md#stopwords_unstemmed)
-* [type](Creating_a_table/Local_tables/Plain_and_real-time_table_settings.md#General-syntax-of-CREATE-TABLE)
+* [type](Creating_a_table/Local_tables/Plain_and_real-time_table_settings.md#killlist_target)
 * [wordforms](Creating_a_table/NLP_and_tokenization/Wordforms.md#wordforms)
 
 ##### 普通表设置
 * [json_secondary_indexes](Creating_a_table/Local_tables/Plain_and_real-time_table_settings.md#json_secondary_indexes)
-* [source](Creating_a_table/Local_tables/Plain_and_real-time_table_settings.md#General-syntax-of-CREATE-TABLE)
-* [stored_fields](Creating_a_table/Local_tables/Plain_and_real-time_table_settings.md#General-syntax-of-CREATE-TABLE)
-* [stored_only_fields](Creating_a_table/Local_tables/Plain_and_real-time_table_settings.md#General-syntax-of-CREATE-TABLE)
-* [columnar_attrs](Creating_a_table/Local_tables/Plain_and_real-time_table_settings.md#General-syntax-of-CREATE-TABLE)
+* [source](Creating_a_table/Local_tables/Plain_and_real-time_table_settings.md#killlist_target)
+* [stored_fields](Creating_a_table/Local_tables/Plain_and_real-time_table_settings.md#killlist_target)
+* [stored_only_fields](Creating_a_table/Local_tables/Plain_and_real-time_table_settings.md#killlist_target)
+* [columnar_attrs](Creating_a_table/Local_tables/Plain_and_real-time_table_settings.md#killlist_target)
 
 ##### 分布式表设置
 * [local](Creating_a_table/Creating_a_distributed_table/Creating_a_local_distributed_table.md)
@@ -201,47 +201,47 @@
 * [mirror_retry_count](Creating_a_table/Creating_a_distributed_table/Remote_tables.md#agent)
 
 ##### 实时表设置
-* [rt_attr_bigint](Creating_a_table/Local_tables/Plain_and_real-time_table_settings.md#General-syntax-of-CREATE-TABLE)
-* [rt_attr_bool](Creating_a_table/Local_tables/Plain_and_real-time_table_settings.md#General-syntax-of-CREATE-TABLE)
-* [rt_attr_float](Creating_a_table/Local_tables/Plain_and_real-time_table_settings.md#General-syntax-of-CREATE-TABLE)
-* [rt_attr_float_vector](Creating_a_table/Local_tables/Plain_and_real-time_table_settings.md#General-syntax-of-CREATE-TABLE)
-* [rt_attr_json](Creating_a_table/Local_tables/Plain_and_real-time_table_settings.md#General-syntax-of-CREATE-TABLE)
-* [rt_attr_multi_64](Creating_a_table/Local_tables/Plain_and_real-time_table_settings.md#General-syntax-of-CREATE-TABLE)
-* [rt_attr_multi](Creating_a_table/Local_tables/Plain_and_real-time_table_settings.md#General-syntax-of-CREATE-TABLE)
-* [rt_attr_string](Creating_a_table/Local_tables/Plain_and_real-time_table_settings.md#General-syntax-of-CREATE-TABLE)
-* [rt_attr_timestamp](Creating_a_table/Local_tables/Plain_and_real-time_table_settings.md#General-syntax-of-CREATE-TABLE)
-* [rt_attr_uint](Creating_a_table/Local_tables/Plain_and_real-time_table_settings.md#General-syntax-of-CREATE-TABLE)
-* [rt_field](Creating_a_table/Local_tables/Plain_and_real-time_table_settings.md#General-syntax-of-CREATE-TABLE)
-* [rt_mem_limit](Creating_a_table/Local_tables/Plain_and_real-time_table_settings.md#General-syntax-of-CREATE-TABLE)
+* [rt_attr_bigint](Creating_a_table/Local_tables/Plain_and_real-time_table_settings.md#killlist_target)
+* [rt_attr_bool](Creating_a_table/Local_tables/Plain_and_real-time_table_settings.md#killlist_target)
+* [rt_attr_float](Creating_a_table/Local_tables/Plain_and_real-time_table_settings.md#killlist_target)
+* [rt_attr_float_vector](Creating_a_table/Local_tables/Plain_and_real-time_table_settings.md#killlist_target)
+* [rt_attr_json](Creating_a_table/Local_tables/Plain_and_real-time_table_settings.md#killlist_target)
+* [rt_attr_multi_64](Creating_a_table/Local_tables/Plain_and_real-time_table_settings.md#killlist_target)
+* [rt_attr_multi](Creating_a_table/Local_tables/Plain_and_real-time_table_settings.md#killlist_target)
+* [rt_attr_string](Creating_a_table/Local_tables/Plain_and_real-time_table_settings.md#killlist_target)
+* [rt_attr_timestamp](Creating_a_table/Local_tables/Plain_and_real-time_table_settings.md#killlist_target)
+* [rt_attr_uint](Creating_a_table/Local_tables/Plain_and_real-time_table_settings.md#killlist_target)
+* [rt_field](Creating_a_table/Local_tables/Plain_and_real-time_table_settings.md#killlist_target)
+* [rt_mem_limit](Creating_a_table/Local_tables/Plain_and_real-time_table_settings.md#killlist_target)
 
 ## 全文搜索操作符
 
-- [OR](Searching/Full_text_matching/Operators.md#OR-operator)
-- [MAYBE](Searching/Full_text_matching/Operators.md#MAYBE-operator)
-- [NOT](Searching/Full_text_matching/Operators.md#Negation-operator) - NOT operator
-- [@field](Searching/Full_text_matching/Operators.md#Field-search-operator) - 字段搜索操作符
-- [@field%5BN%5D](Searching/Full_text_matching/Operators.md#Field-search-operator) - 字段位置限制修饰符
-- [@(field1,field2,...)](Searching/Full_text_matching/Operators.md#Field-search-operator) - 多字段搜索操作符
-- [@!field](Searching/Full_text_matching/Operators.md#Field-search-operator) - 忽略字段搜索操作符
-- [@!(field1,field2,...)](Searching/Full_text_matching/Operators.md#Field-search-operator) - 忽略多字段搜索操作符
-- [@*](Searching/Full_text_matching/Operators.md#Field-search-operator) - 全字段搜索操作符
-- ["word1 word2 ... "](Searching/Full_text_matching/Operators.md#Phrase-search-operator) - 短语搜索操作符
-- ["word1 word2 ... "~N](Searching/Full_text_matching/Operators.md#Proximity-search-operator) - 邻近搜索操作符
-- ["word1 word2 ... "/N](Searching/Full_text_matching/Operators.md#Quorum-matching-operator) - 配额匹配操作符
-- [word1 << word2 << word3](Searching/Full_text_matching/Operators.md#Strict-order-operator) - 严格顺序操作符
-- [=word1](Searching/Full_text_matching/Operators.md#Exact-form-modifier) - 精确形式修饰符
-- [^word1](Searching/Full_text_matching/Operators.md#Field-start-and-field-end-modifier) - 字段开头修饰符
-- [word2$](Searching/Full_text_matching/Operators.md#Field-start-and-field-end-modifier) - 字段结尾修饰符
+- [OR](Searching/Full_text_matching/Operators.md#OR-操作符)
+- [MAYBE](Searching/Full_text_matching/Operators.md#MAYBE-操作符)
+- [NOT](Searching/Full_text_matching/Operators.md#否定操作符) - NOT operator
+- [@field](Searching/Full_text_matching/Operators.md#字段搜索操作符) - 字段搜索操作符
+- [@field%5BN%5D](Searching/Full_text_matching/Operators.md#字段搜索操作符) - 字段位置限制修饰符
+- [@(field1,field2,...)](Searching/Full_text_matching/Operators.md#字段搜索操作符) - 多字段搜索操作符
+- [@!field](Searching/Full_text_matching/Operators.md#字段搜索操作符) - 忽略字段搜索操作符
+- [@!(field1,field2,...)](Searching/Full_text_matching/Operators.md#字段搜索操作符) - 忽略多字段搜索操作符
+- [@*](Searching/Full_text_matching/Operators.md#字段搜索操作符) - 全字段搜索操作符
+- ["word1 word2 ... "](Searching/Full_text_matching/Operators.md#短语搜索操作符) - 短语搜索操作符
+- ["word1 word2 ... "~N](Searching/Full_text_matching/Operators.md#近邻搜索操作符) - 邻近搜索操作符
+- ["word1 word2 ... "/N](Searching/Full_text_matching/Operators.md#多数匹配操作符) - 配额匹配操作符
+- [word1 << word2 << word3](Searching/Full_text_matching/Operators.md#严格顺序操作符) - 严格顺序操作符
+- [=word1](Searching/Full_text_matching/Operators.md#精确形式修饰符) - 精确形式修饰符
+- [^word1](Searching/Full_text_matching/Operators.md#字段开头与字段结尾修饰符) - 字段开头修饰符
+- [word2$](Searching/Full_text_matching/Operators.md#字段开头与字段结尾修饰符) - 字段结尾修饰符
 - [word^N](Searching/Full_text_matching/Operators.md#IDF-boost-modifier) - 关键词 IDF 提升修饰符
-- [word1 NEAR/N word2](Searching/Full_text_matching/Operators.md#NEAR-operator) - NEAR 操作符，通用邻近操作符
-- [word1 NOTNEAR/N word2](Searching/Full_text_matching/Operators.md#NOTNEAR-operator) - NOTNEAR 操作符，否定邻近操作符
-- [word1 PARAGRAPH word2 PARAGRAPH "word3 word4"](Searching/Full_text_matching/Operators.md#SENTENCE-and-PARAGRAPH-operators) - 段落操作符
-- [word1 SENTENCE word2 SENTENCE "word3 word4"](Searching/Full_text_matching/Operators.md#SENTENCE-and-PARAGRAPH-operators) - 句子操作符
-- [ZONE:(h3,h4)](Searching/Full_text_matching/Operators.md#ZONE-limit-operator) - 区域限制操作符
-- [ZONESPAN:(h2)](Searching/Full_text_matching/Operators.md#ZONESPAN-limit-operator) - 区域跨度限制操作符
-- [@@relaxed](Searching/Full_text_matching/Operators.md#Field-search-operator) - 抑制关于缺失字段的错误
-- [t?st](Searching/Full_text_matching/Operators.md#Wildcard-operators) - 通配符操作符
-- [REGEX(/pattern/)](Searching/Full_text_matching/Operators.md#REGEX-operator) - 正则表达式操作符
+- [word1 NEAR/N word2](Searching/Full_text_matching/Operators.md#NEAR-操作符) - NEAR 操作符，通用邻近操作符
+- [word1 NOTNEAR/N word2](Searching/Full_text_matching/Operators.md#NOTNEAR-操作符) - NOTNEAR 操作符，否定邻近操作符
+- [word1 PARAGRAPH word2 PARAGRAPH "word3 word4"](Searching/Full_text_matching/Operators.md#SENTENCE-和-PARAGRAPH-操作符) - 段落操作符
+- [word1 SENTENCE word2 SENTENCE "word3 word4"](Searching/Full_text_matching/Operators.md#SENTENCE-和-PARAGRAPH-操作符) - 句子操作符
+- [ZONE:(h3,h4)](Searching/Full_text_matching/Operators.md#ZONE-限制操作符) - 区域限制操作符
+- [ZONESPAN:(h2)](Searching/Full_text_matching/Operators.md#ZONESPAN-限制操作符) - 区域跨度限制操作符
+- [@@relaxed](Searching/Full_text_matching/Operators.md#字段搜索操作符) - 抑制关于缺失字段的错误
+- [t?st](Searching/Full_text_matching/Operators.md#通配符操作符) - 通配符操作符
+- [REGEX(/pattern/)](Searching/Full_text_matching/Operators.md#正则表达式操作符) - 正则表达式操作符
 
 ## 函数
 ##### 数学函数
@@ -354,44 +354,44 @@
 - [on_json_attr_error](Server_settings/Common.md#on_json_attr_error) - 发现JSON格式错误时采取的处理方式
 - [plugin_dir](Server_settings/Common.md#plugin_dir) - 动态库和UDF的位置
 
-## [Indexer](Data_creation_and_modification/Adding_data_from_external_storages/Plain_tables_creation.md#Indexer-command-line-arguments)
-`indexer` 是一个用于创建[普通表](Data_creation_and_modification/Adding_data_from_external_storages/Plain_tables_creation.md#Indexer-command-line-arguments)的工具。
+## [Indexer](Data_creation_and_modification/Adding_data_from_external_storages/Plain_tables_creation.md#Indexer-命令行参数)
+`indexer` 是一个用于创建[普通表](Data_creation_and_modification/Adding_data_from_external_storages/Plain_tables_creation.md#Indexer-命令行参数)的工具。
 
 ##### 配置文件中的索引器设置
 这些设置应放在配置文件的 `indexer {}` 部分：
-- [lemmatizer_cache](Data_creation_and_modification/Adding_data_from_external_storages/Plain_tables_creation.md#Indexer-command-line-arguments) - 词形还原器缓存大小
-- [max_file_field_buffer](Data_creation_and_modification/Adding_data_from_external_storages/Plain_tables_creation.md#Indexer-command-line-arguments) - 最大文件字段自适应缓冲区大小
-- [max_iops](Data_creation_and_modification/Adding_data_from_external_storages/Plain_tables_creation.md#Indexer-command-line-arguments) - 索引的每秒最大I/O操作数
-- [max_iosize](Data_creation_and_modification/Adding_data_from_external_storages/Plain_tables_creation.md#Indexer-command-line-arguments) - 允许的最大I/O操作大小
-- [max_xmlpipe2_field](Data_creation_and_modification/Adding_data_from_external_storages/Plain_tables_creation.md#Indexer-command-line-arguments) - XMLpipe2源类型的最大允许字段大小
-- [mem_limit](Data_creation_and_modification/Adding_data_from_external_storages/Plain_tables_creation.md#Indexer-command-line-arguments) - 索引RAM使用限制
-- [on_file_field_error](Data_creation_and_modification/Adding_data_from_external_storages/Plain_tables_creation.md#Indexer-command-line-arguments) - 如何处理文件字段中的I/O错误
-- [write_buffer](Data_creation_and_modification/Adding_data_from_external_storages/Plain_tables_creation.md#Indexer-command-line-arguments) - 写缓冲区大小
-- [ignore_non_plain](Data_creation_and_modification/Adding_data_from_external_storages/Plain_tables_creation.md#Indexer-command-line-arguments) - 忽略关于非普通表的警告
+- [lemmatizer_cache](Data_creation_and_modification/Adding_data_from_external_storages/Plain_tables_creation.md#Indexer-命令行参数) - 词形还原器缓存大小
+- [max_file_field_buffer](Data_creation_and_modification/Adding_data_from_external_storages/Plain_tables_creation.md#Indexer-命令行参数) - 最大文件字段自适应缓冲区大小
+- [max_iops](Data_creation_and_modification/Adding_data_from_external_storages/Plain_tables_creation.md#Indexer-命令行参数) - 索引的每秒最大I/O操作数
+- [max_iosize](Data_creation_and_modification/Adding_data_from_external_storages/Plain_tables_creation.md#Indexer-命令行参数) - 允许的最大I/O操作大小
+- [max_xmlpipe2_field](Data_creation_and_modification/Adding_data_from_external_storages/Plain_tables_creation.md#Indexer-命令行参数) - XMLpipe2源类型的最大允许字段大小
+- [mem_limit](Data_creation_and_modification/Adding_data_from_external_storages/Plain_tables_creation.md#Indexer-命令行参数) - 索引RAM使用限制
+- [on_file_field_error](Data_creation_and_modification/Adding_data_from_external_storages/Plain_tables_creation.md#Indexer-命令行参数) - 如何处理文件字段中的I/O错误
+- [write_buffer](Data_creation_and_modification/Adding_data_from_external_storages/Plain_tables_creation.md#Indexer-命令行参数) - 写缓冲区大小
+- [ignore_non_plain](Data_creation_and_modification/Adding_data_from_external_storages/Plain_tables_creation.md#Indexer-命令行参数) - 忽略关于非普通表的警告
 
 ##### 索引器启动参数
 ```bash
 indexer [OPTIONS] [indexname1 [indexname2 [...]]]
 ```
-- [--all](Data_creation_and_modification/Adding_data_from_external_storages/Plain_tables_creation.md#Indexer-command-line-arguments) - 从配置文件中重新构建所有表
-- [--buildstops](Data_creation_and_modification/Adding_data_from_external_storages/Plain_tables_creation.md#Indexer-command-line-arguments) - 分析表源数据，仿佛正在索引数据，生成已索引的术语列表
-- [--buildfreqs](Data_creation_and_modification/Adding_data_from_external_storages/Plain_tables_creation.md#Indexer-command-line-arguments) - 为 --buildstops 添加频率计数到表中
-- [--config, -c](Data_creation_and_modification/Adding_data_from_external_storages/Plain_tables_creation.md#Indexer-command-line-arguments) - 指定配置文件的路径
-- [--dump-rows](Data_creation_and_modification/Adding_data_from_external_storages/Plain_tables_creation.md#Indexer-command-line-arguments) - 将SQL源检索到的行导出到指定文件
-- [--help](Data_creation_and_modification/Adding_data_from_external_storages/Plain_tables_creation.md#Indexer-command-line-arguments) - 显示所有可用参数
-- [--keep-attrs](Data_creation_and_modification/Adding_data_from_external_storages/Plain_tables_creation.md#Indexer-command-line-arguments) - 在重新索引时重用现有属性
-- [--keep-attrs-names](Data_creation_and_modification/Adding_data_from_external_storages/Plain_tables_creation.md#Indexer-command-line-arguments) - 指定要从现有表中重用的属性名称
-- [--merge-dst-range](Data_creation_and_modification/Adding_data_from_external_storages/Plain_tables_creation.md#Indexer-command-line-arguments) - 在合并时应用给定的过滤范围
-- [--merge-killlists](Data_creation_and_modification/Adding_data_from_external_storages/Plain_tables_creation.md#Indexer-command-line-arguments) - 更改合并表时删除列表的处理
-- [--merge](Data_creation_and_modification/Adding_data_from_external_storages/Plain_tables_creation.md#Indexer-command-line-arguments) - 将两个普通表合并为一个
-- [--nohup](Data_creation_and_modification/Adding_data_from_external_storages/Plain_tables_creation.md#Indexer-command-line-arguments) - 启用此选项时，阻止 indexer 发送 SIGHUP 信号
-- [--noprogress](Data_creation_and_modification/Adding_data_from_external_storages/Plain_tables_creation.md#Indexer-command-line-arguments) - 隐藏进度详情
-- [--print-queries](Data_creation_and_modification/Adding_data_from_external_storages/Plain_tables_creation.md#Indexer-command-line-arguments) - 输出 indexer 发送给数据库的 SQL 查询
-- [--print-rt](Data_creation_and_modification/Adding_data_from_external_storages/Plain_tables_creation.md#Indexer-command-line-arguments) - 以 INSERT 方式显示从 SQL 源获取的数据以插入实时表
-- [--quiet](Data_creation_and_modification/Adding_data_from_external_storages/Plain_tables_creation.md#Indexer-command-line-arguments) - 抑制所有输出
-- [--rotate](Data_creation_and_modification/Adding_data_from_external_storages/Plain_tables_creation.md#Indexer-command-line-arguments) - 在所有表构建完毕后启动表轮换
-- [--sighup-each](Data_creation_and_modification/Adding_data_from_external_storages/Plain_tables_creation.md#Indexer-command-line-arguments) - 在每个表构建后触发轮换
-- [-v](Data_creation_and_modification/Adding_data_from_external_storages/Plain_tables_creation.md#Indexer-command-line-arguments) - 显示 indexer 版本
+- [--all](Data_creation_and_modification/Adding_data_from_external_storages/Plain_tables_creation.md#Indexer-命令行参数) - 从配置文件中重新构建所有表
+- [--buildstops](Data_creation_and_modification/Adding_data_from_external_storages/Plain_tables_creation.md#Indexer-命令行参数) - 分析表源数据，仿佛正在索引数据，生成已索引的术语列表
+- [--buildfreqs](Data_creation_and_modification/Adding_data_from_external_storages/Plain_tables_creation.md#Indexer-命令行参数) - 为 --buildstops 添加频率计数到表中
+- [--config, -c](Data_creation_and_modification/Adding_data_from_external_storages/Plain_tables_creation.md#Indexer-命令行参数) - 指定配置文件的路径
+- [--dump-rows](Data_creation_and_modification/Adding_data_from_external_storages/Plain_tables_creation.md#Indexer-命令行参数) - 将SQL源检索到的行导出到指定文件
+- [--help](Data_creation_and_modification/Adding_data_from_external_storages/Plain_tables_creation.md#Indexer-命令行参数) - 显示所有可用参数
+- [--keep-attrs](Data_creation_and_modification/Adding_data_from_external_storages/Plain_tables_creation.md#Indexer-命令行参数) - 在重新索引时重用现有属性
+- [--keep-attrs-names](Data_creation_and_modification/Adding_data_from_external_storages/Plain_tables_creation.md#Indexer-命令行参数) - 指定要从现有表中重用的属性名称
+- [--merge-dst-range](Data_creation_and_modification/Adding_data_from_external_storages/Plain_tables_creation.md#Indexer-命令行参数) - 在合并时应用给定的过滤范围
+- [--merge-killlists](Data_creation_and_modification/Adding_data_from_external_storages/Plain_tables_creation.md#Indexer-命令行参数) - 更改合并表时删除列表的处理
+- [--merge](Data_creation_and_modification/Adding_data_from_external_storages/Plain_tables_creation.md#Indexer-命令行参数) - 将两个普通表合并为一个
+- [--nohup](Data_creation_and_modification/Adding_data_from_external_storages/Plain_tables_creation.md#Indexer-命令行参数) - 启用此选项时，阻止 indexer 发送 SIGHUP 信号
+- [--noprogress](Data_creation_and_modification/Adding_data_from_external_storages/Plain_tables_creation.md#Indexer-命令行参数) - 隐藏进度详情
+- [--print-queries](Data_creation_and_modification/Adding_data_from_external_storages/Plain_tables_creation.md#Indexer-命令行参数) - 输出 indexer 发送给数据库的 SQL 查询
+- [--print-rt](Data_creation_and_modification/Adding_data_from_external_storages/Plain_tables_creation.md#Indexer-命令行参数) - 以 INSERT 方式显示从 SQL 源获取的数据以插入实时表
+- [--quiet](Data_creation_and_modification/Adding_data_from_external_storages/Plain_tables_creation.md#Indexer-命令行参数) - 抑制所有输出
+- [--rotate](Data_creation_and_modification/Adding_data_from_external_storages/Plain_tables_creation.md#Indexer-命令行参数) - 在所有表构建完毕后启动表轮换
+- [--sighup-each](Data_creation_and_modification/Adding_data_from_external_storages/Plain_tables_creation.md#Indexer-命令行参数) - 在每个表构建后触发轮换
+- [-v](Data_creation_and_modification/Adding_data_from_external_storages/Plain_tables_creation.md#Indexer-命令行参数) - 显示 indexer 版本
 
 ## 表转换器（适用于 Manticore v2 / Sphinx v2）
 `index_converter` 是一个用于将由 Sphinx/Manticore Search 2.x 创建的表转换为 Manticore Search 3.x 表格式的工具。
@@ -426,9 +426,9 @@ index_converter {--config /path/to/config|--path}
 - [attr_flush_period](Data_creation_and_modification/Updating_documents/UPDATE.md#attr_flush_period) - 设置更新的属性刷新到磁盘的时间间隔
 - [binlog_flush](Server_settings/Searchd.md#binlog_flush) - 二进制日志事务刷新/同步模式
 - [binlog_max_log_size](Server_settings/Searchd.md#binlog_max_log_size) - 二进制日志文件的最大大小
-- [binlog_common](Logging/Binary_logging.md#Binary-logging-strategies) - 所有表的通用二进制日志文件
-- [binlog_filename_digits](Logging/Binary_logging.md#Log-files) - 二进制日志文件名中的数字位数
-- [binlog_flush](Logging/Binary_logging.md#Binary-flushing-strategies) - 二进制日志刷新策略
+- [binlog_common](Logging/Binary_logging.md#二进制日志管理策略) - 所有表的通用二进制日志文件
+- [binlog_filename_digits](Logging/Binary_logging.md#日志文件) - 二进制日志文件名中的数字位数
+- [binlog_flush](Logging/Binary_logging.md#二进制日志刷新策略) - 二进制日志刷新策略
 - [binlog_path](Server_settings/Searchd.md#binlog_path) - 二进制日志文件路径
 - [client_timeout](Creating_a_table/Creating_a_distributed_table/Remote_tables.md#agent) - 使用持久连接时等待请求的最大时间
 - [collation_libc_locale](Server_settings/Searchd.md#collation_libc_locale) - 服务器 libc 区域设置
@@ -498,35 +498,35 @@ index_converter {--config /path/to/config|--path}
 ```bash
 searchd [OPTIONS]
 ```
-- [--config, -c](Starting_the_server/Manually.md#searchd-command-line-options) - 指定配置文件路径
-- [--console](Starting_the_server/Manually.md#searchd-command-line-options) - 强制服务器以控制台模式运行
-- [--coredump](Starting_the_server/Manually.md#searchd-command-line-options) - 启用崩溃时保存核心转储
-- [--cpustats](Starting_the_server/Manually.md#searchd-command-line-options) - 启用 CPU 时间报告
-- [--delete](Starting_the_server/Manually.md#searchd-command-line-options) - 从 Microsoft 管理控制台和注册服务的位置删除 Manticore 服务
-- [--force-preread](Starting_the_server/Manually.md#searchd-command-line-options) - 在表文件预读取之前阻止服务器处理传入连接
-- [--help, -h](Starting_the_server/Manually.md#searchd-command-line-options) - 显示所有可用参数
-- [--table (--index)](Starting_the_server/Manually.md#searchd-command-line-options) - 限制服务器仅服务指定表
-- [--install](Starting_the_server/Manually.md#searchd-command-line-options) - 将 searchd 安装为 Microsoft 管理控制台中的服务
-- [--iostats](Starting_the_server/Manually.md#searchd-command-line-options) - 启用输入/输出报告
-- [--listen, -l](Starting_the_server/Manually.md#searchd-command-line-options) - 覆盖配置文件中的 [listen](Server_settings/Searchd.md#listen)
-- [--logdebug, --logdebugv, --logdebugvv](Starting_the_server/Manually.md#searchd-command-line-options) - 启用服务器日志中的附加调试输出
-- [--logreplication](Starting_the_server/Manually.md#searchd-command-line-options) - 启用服务器日志中的额外复制调试输出
-- [--new-cluster](Starting_the_server/Manually.md#searchd-command-line-options) - 初始化复制集群并将服务器设置为具有[集群重启](Creating_a_cluster/Setting_up_replication/Restarting_a_cluster.md)保护的参考节点
-- [--new-cluster-force](Starting_the_server/Manually.md#searchd-command-line-options) - 初始化复制集群并将服务器设置为参考节点，绕过[集群重启](Creating_a_cluster/Setting_up_replication/Restarting_a_cluster.md)保护
-- [--nodetach](Starting_the_server/Manually.md#searchd-command-line-options) - 使 searchd 保持在前台运行
-- [--ntservice](Starting_the_server/Manually.md#searchd-command-line-options) - Microsoft 管理控制台用于在 Windows 平台上作为服务启动 searchd
-- [--pidfile](Starting_the_server/Manually.md#searchd-command-line-options) - 覆盖配置文件中的 [pid_file](Server_settings/Searchd.md#pid_file)
-- [--port, p](Starting_the_server/Manually.md#searchd-command-line-options) - 指定 searchd 应监听的端口，忽略配置文件中指定的端口
-- [--replay-flags](Starting_the_server/Manually.md#searchd-command-line-options) - 设置额外的二进制日志重放选项
-- [--servicename](Starting_the_server/Manually.md#searchd-command-line-options) - 将指定的名称分配给 searchd，当安装或删除服务时，在 Microsoft 管理控制台中显示
-- [--status](Starting_the_server/Manually.md#searchd-command-line-options) - 查询正在运行的搜索服务以返回其状态
-- [--stop](Starting_the_server/Manually.md#searchd-command-line-options) - 停止 Manticore 服务器
-- [--stopwait](Starting_the_server/Manually.md#searchd-command-line-options) - 优雅地停止 Manticore 服务器
-- [--strip-path](Starting_the_server/Manually.md#searchd-command-line-options) - 从表引用的所有文件名中移除路径名
-- [-v](Starting_the_server/Manually.md#searchd-command-line-options) - 显示版本信息
+- [--config, -c](Starting_the_server/Manually.md#searchd-命令行选项) - 指定配置文件路径
+- [--console](Starting_the_server/Manually.md#searchd-命令行选项) - 强制服务器以控制台模式运行
+- [--coredump](Starting_the_server/Manually.md#searchd-命令行选项) - 启用崩溃时保存核心转储
+- [--cpustats](Starting_the_server/Manually.md#searchd-命令行选项) - 启用 CPU 时间报告
+- [--delete](Starting_the_server/Manually.md#searchd-命令行选项) - 从 Microsoft 管理控制台和注册服务的位置删除 Manticore 服务
+- [--force-preread](Starting_the_server/Manually.md#searchd-命令行选项) - 在表文件预读取之前阻止服务器处理传入连接
+- [--help, -h](Starting_the_server/Manually.md#searchd-命令行选项) - 显示所有可用参数
+- [--table (--index)](Starting_the_server/Manually.md#searchd-命令行选项) - 限制服务器仅服务指定表
+- [--install](Starting_the_server/Manually.md#searchd-命令行选项) - 将 searchd 安装为 Microsoft 管理控制台中的服务
+- [--iostats](Starting_the_server/Manually.md#searchd-命令行选项) - 启用输入/输出报告
+- [--listen, -l](Starting_the_server/Manually.md#searchd-命令行选项) - 覆盖配置文件中的 [listen](Server_settings/Searchd.md#listen)
+- [--logdebug, --logdebugv, --logdebugvv](Starting_the_server/Manually.md#searchd-命令行选项) - 启用服务器日志中的附加调试输出
+- [--logreplication](Starting_the_server/Manually.md#searchd-命令行选项) - 启用服务器日志中的额外复制调试输出
+- [--new-cluster](Starting_the_server/Manually.md#searchd-命令行选项) - 初始化复制集群并将服务器设置为具有[集群重启](Creating_a_cluster/Setting_up_replication/Restarting_a_cluster.md)保护的参考节点
+- [--new-cluster-force](Starting_the_server/Manually.md#searchd-命令行选项) - 初始化复制集群并将服务器设置为参考节点，绕过[集群重启](Creating_a_cluster/Setting_up_replication/Restarting_a_cluster.md)保护
+- [--nodetach](Starting_the_server/Manually.md#searchd-命令行选项) - 使 searchd 保持在前台运行
+- [--ntservice](Starting_the_server/Manually.md#searchd-命令行选项) - Microsoft 管理控制台用于在 Windows 平台上作为服务启动 searchd
+- [--pidfile](Starting_the_server/Manually.md#searchd-命令行选项) - 覆盖配置文件中的 [pid_file](Server_settings/Searchd.md#pid_file)
+- [--port, p](Starting_the_server/Manually.md#searchd-命令行选项) - 指定 searchd 应监听的端口，忽略配置文件中指定的端口
+- [--replay-flags](Starting_the_server/Manually.md#searchd-命令行选项) - 设置额外的二进制日志重放选项
+- [--servicename](Starting_the_server/Manually.md#searchd-命令行选项) - 将指定的名称分配给 searchd，当安装或删除服务时，在 Microsoft 管理控制台中显示
+- [--status](Starting_the_server/Manually.md#searchd-命令行选项) - 查询正在运行的搜索服务以返回其状态
+- [--stop](Starting_the_server/Manually.md#searchd-命令行选项) - 停止 Manticore 服务器
+- [--stopwait](Starting_the_server/Manually.md#searchd-命令行选项) - 优雅地停止 Manticore 服务器
+- [--strip-path](Starting_the_server/Manually.md#searchd-命令行选项) - 从表引用的所有文件名中移除路径名
+- [-v](Starting_the_server/Manually.md#searchd-命令行选项) - 显示版本信息
 
 ##### Searchd 环境变量
-* [MANTICORE_TRACK_DAEMON_SHUTDOWN](Starting_the_server/Manually.md#Environment-variables) - 启用 searchd 关闭期间的详细日志记录
+* [MANTICORE_TRACK_DAEMON_SHUTDOWN](Starting_the_server/Manually.md#环境变量) - 启用 searchd 关闭期间的详细日志记录
 
 ## [Indextool](Miscellaneous_tools.md#indextool)
 多功能表维护工具，帮助进行故障排除。

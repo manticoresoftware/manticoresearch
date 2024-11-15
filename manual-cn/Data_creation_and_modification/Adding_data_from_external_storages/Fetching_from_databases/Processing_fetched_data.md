@@ -160,7 +160,7 @@ sql_joined_field = FIELD-NAME 'from'  ( 'query' | 'payload-query' | 'ranged-quer
 
 文档ID可以重复，但必须按升序排列。载荷**必须**是24位范围内的无符号整数，即从0到16777215。
 
-唯一考虑载荷的排名算法是 `proximity_bm25`（这是默认的[排名算法](../../Searching/Sorting_and_ranking.md#Available-built-in-rankers)）。在包含载荷字段的表上，它将自动切换到一个变体，该变体匹配这些字段中的关键字，计算匹配的载荷之和，并乘以字段权重，将该和加到最终的排名中。
+唯一考虑载荷的排名算法是 `proximity_bm25`（这是默认的[排名算法](../../../Searching/Sorting_and_ranking.md#可用的内置排序器)）。在包含载荷字段的表上，它将自动切换到一个变体，该变体匹配这些字段中的关键字，计算匹配的载荷之和，并乘以字段权重，将该和加到最终的排名中。
 
 请注意，对于包含复杂运算符的全文查询，载荷字段将被忽略。它仅适用于简单的词袋查询。
 

@@ -11,7 +11,7 @@ CREATE PLUGIN plugin_name TYPE 'plugin_type' SONAME 'plugin_library'
 - `index_token_filter`
 - `query_token_filter`
 
-有关编写插件的更多信息，请参考[插件](../../../Extensions/UDFs_and_Plugins/UDFs_and_Plugins.md#Plugins)文档。
+有关编写插件的更多信息，请参考[插件](../../../Extensions/UDFs_and_Plugins/UDFs_and_Plugins.md#插件)文档。
 
 ```sql
 mysql> CREATE PLUGIN myranker TYPE 'ranker' SONAME 'myplugins.so';
@@ -38,7 +38,7 @@ CREATE PLUGIN <username/package name on https://packagist.org/> TYPE 'buddy' VER
 CREATE BUDDY PLUGIN <username/package name on https://packagist.org/> VERSION <package version>
 ```
 
-此命令将安装 `show-hostname` 插件到 [plugin_dir](../../Server_settings/Common.md#plugin_dir) 中并启用它，无需重启服务器。
+此命令将安装 `show-hostname` 插件到 [plugin_dir](../../../Server_settings/Common.md#plugin_dir) 中并启用它，无需重启服务器。
 
 <!-- intro -->
 ### 示例

@@ -65,7 +65,7 @@ Manticore Search 3 包含一个新工具 - [index_converter](../Installation/Mig
 文档 ID 过去是无符号 64 位整数。现在它们是正的有符号 64 位整数。
 
 ## Manticore 3.x 中的 RT 模式
-关于 [RT 模式](../Read_this_first.md#Real-time-mode-vs-plain-mode)，请点击此处。
+关于 [RT 模式](../Read_this_first.md#实时模式-vs-普通模式)，请点击此处。
 
 ## Manticore 3.x 引入的特殊后缀
 Manticore 3.x 支持并解析特殊后缀，使得使用具有特殊意义的数值更加简便。常见格式为整数数字 + 字母，如 10k 或 100d，但不支持 40.3s（因为 40.3 不是整数），或 2d 4h（因为有两个值，而非一个）。字母不区分大小写，因此 10W 等同于 10w。目前支持两类后缀：

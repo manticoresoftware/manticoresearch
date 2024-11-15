@@ -48,11 +48,11 @@ Manticore 目前不支持某些 MySQL 数据类型，因此在使用 DBeaver 创
 - `TEXT`, `LONGTEXT`, `MEDIUMTEXT`, `TINYTEXT`, `BLOB`, `LONGBLOB`, `MEDIUMBLOB`, `TINYBLOB`  => `text`
 - `VARCHAR`, `LONG VARCHAR`, `BINARY`, `CHAR`, `VARBINARY`, `LONG VARBINARY`  => `string`
 
-您可以在[此处](Creating_a_table/Data_types.md#Data-types)找到有关 Manticore 数据类型的更多详细信息。
+您可以在[此处](../Creating_a_table/Data_types.md#数据类型)找到有关 Manticore 数据类型的更多详细信息。
 
 ### 关于日期类型
 
-Manticore 能够处理 `DATE`、`DATETIME` 和 `TIMESTAMP` 数据类型，但这需要启用 Manticore 的 [Buddy](Starting_the_server/Docker.md#Manticore-Columnar-Library-and-Manticore-Buddy)。否则，尝试操作这些类型中的任意一个将导致错误。
+Manticore 能够处理 `DATE`、`DATETIME` 和 `TIMESTAMP` 数据类型，但这需要启用 Manticore 的 [Buddy](../Starting_the_server/Docker.md#Manticore-Columnar-Library-和-Manticore-Buddy)。否则，尝试操作这些类型中的任意一个将导致错误。
 
 注意，不支持 `TIME` 类型。
 

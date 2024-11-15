@@ -10,7 +10,7 @@
 
 使用时间戳列作为拆分变量比使用 ID 更为有效，因为时间戳不仅可以跟踪新文档，还可以跟踪已修改的文档。
 
-对于可能包含已修改或已删除文档的数据集，增量表应提供受影响文档的列表，确保这些文档被抑制并从搜索查询中排除。这是通过称为“删除列表”（Kill Lists）的功能来实现的。要删除的文档 ID 可以在由 [sql_query_killlist](../../Data_creation_and_modification/Adding_data_from_external_storages/Adding_data_to_tables/Killlist_in_plain_tables.md#Table-kill-list) 定义的辅助查询中指定。增量表必须使用 [killlist_target](../../Data_creation_and_modification/Adding_data_from_external_storages/Adding_data_to_tables/Killlist_in_plain_tables.md#killlist_target) 指令来指示删除列表将应用的目标表。删除列表对目标表的影响是永久性的，这意味着即使在不使用增量表进行搜索的情况下，被抑制的文档也不会出现在搜索结果中。
+对于可能包含已修改或已删除文档的数据集，增量表应提供受影响文档的列表，确保这些文档被抑制并从搜索查询中排除。这是通过称为“删除列表”（Kill Lists）的功能来实现的。要删除的文档 ID 可以在由 [sql_query_killlist](../../Data_creation_and_modification/Adding_data_from_external_storages/Adding_data_to_tables/Killlist_in_plain_tables.md#表级删除列表) 定义的辅助查询中指定。增量表必须使用 [killlist_target](../../Data_creation_and_modification/Adding_data_from_external_storages/Adding_data_to_tables/Killlist_in_plain_tables.md#killlist_target) 指令来指示删除列表将应用的目标表。删除列表对目标表的影响是永久性的，这意味着即使在不使用增量表进行搜索的情况下，被抑制的文档也不会出现在搜索结果中。
 
 请注意，我们在增量源中重写了 `sql_query_pre`。我们必须显式包含此重写。如果不这样做，`REPLACE` 查询将在增量源的构建过程中执行，从而使其无效。
 

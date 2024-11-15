@@ -169,7 +169,7 @@ REGEX(/t.?e/)
 
 需要设置 [min_infix_len](../../Creating_a_table/NLP_and_tokenization/Wildcard_searching_settings.md#min_infix_len) 或 [min_prefix_len](../../Creating_a_table/NLP_and_tokenization/Wildcard_searching_settings.md#min_prefix_len) 和 [dict](../../Creating_a_table/NLP_and_tokenization/Low-level_tokenization.md#dict)=keywords（这是默认设置）。
 
-类似于 [通配符操作符](../../Searching/Full_text_matching/Operators.md#Wildcard-operators)，正则表达式操作符尝试找到所有与提供的模式匹配的标记，并将每个扩展记录为一个匹配结果。请注意，这可能对查询时间有显著影响，因为整个字典会被扫描，每个词条都会与正则表达式模式进行匹配。
+类似于 [通配符操作符](../../Searching/Full_text_matching/Operators.md#通配符操作符)，正则表达式操作符尝试找到所有与提供的模式匹配的标记，并将每个扩展记录为一个匹配结果。请注意，这可能对查询时间有显著影响，因为整个字典会被扫描，每个词条都会与正则表达式模式进行匹配。
 
 这些模式应符合 [RE2 语法](https://github.com/google/re2/wiki/Syntax)。正则表达式分隔符是左括号后的第一个符号。换句话说，所有文本位于左括号后紧跟分隔符和右括号之间，都被视为 RE2 表达式。 请注意，存储在字典中的词条会经过 `charset_table` 转换，这意味着例如如果根据 `charset_table` 的设置所有字符都被转为小写（默认情况下会发生这种情况），则正则表达式可能无法匹配大写字符。若要通过正则表达式成功匹配某个词条，模式必须与整个标记一致。要实现部分匹配，请在模式的开头和/或结尾添加 `.*`。
 
@@ -202,7 +202,7 @@ hello NEAR/3 world NEAR/4 "my test"
 
 `NEAR` 操作符是一个更通用的近邻操作符。其语法为 `NEAR/N`，区分大小写，不允许在 `NEAR` 关键词、斜杠符号和距离值之间有空格。
 
-虽然原始的近邻操作符仅适用于关键词集，但 `NEAR` 更加灵活，它可以接受任意子表达式作为其两个参数。当这两个子表达式在 N 个词内出现时，`NEAR` 就会匹配文档，无论它们的顺序如何。`NEAR` 是左结合的，并且具有与 [BEFORE](../../Searching/Full_text_matching/Operators.md#Strict-order-operator) 相同的（最低）优先级。
+虽然原始的近邻操作符仅适用于关键词集，但 `NEAR` 更加灵活，它可以接受任意子表达式作为其两个参数。当这两个子表达式在 N 个词内出现时，`NEAR` 就会匹配文档，无论它们的顺序如何。`NEAR` 是左结合的，并且具有与 [BEFORE](../../Searching/Full_text_matching/Operators.md#严格顺序操作符) 相同的（最低）优先级。
 
 需要注意的是，`one NEAR/7 two NEAR/7 three` 并不完全等同于 `"one two three"~7`。关键区别在于，近邻操作符允许在三个匹配词之间最多出现 6 个不匹配词，而使用 `NEAR` 的版本则更不严格：它允许 `one` 和 `two` 之间最多有 6 个词，然后 `two` 和 `three` 之间再允许最多 6 个词。
 

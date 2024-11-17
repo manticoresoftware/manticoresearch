@@ -1,0 +1,94 @@
+––– block: ../base/start-searchd –––
+––– input –––
+mysql -h0 -P9306 -e "CREATE TABLE t (id INT, value TEXT); INSERT INTO t VALUES (1, 'example'), (2, 'test');"
+––– output –––
+––– input –––
+curl "http://localhost:9308/cli?show%20version"
+––– output –––
+––– input –––
+curl "http://localhost:9308/cli?select%20*%20from%20t&buddy=true"
+––– output –––
+––– input –––
+curl "http://localhost:9308/cli_json?show%20version&buddy=true"
+––– output –––
+––– input –––
+curl "http://localhost:9308/sql?query=select%20*%20from%20t&buddy=true"
+––– output –––
+––– input –––
+curl "http://localhost:9308/sql?query=select%20*%20from%20t&buddy=true"
+––– output –––
+––– input –––
+curl "http://localhost:9308/sql?mode=raw&query=select%20*%20from%20t"
+––– output –––
+––– input –––
+curl "http://localhost:9308/sql?mode=raw&query=show%20meta&buddy=true"
+––– output –––
+––– input –––
+curl "http://localhost:9308/cli?show%20version;select%20*%20from%20t"
+––– output –––
+––– input –––
+curl "http://localhost:9308/cli_json?select%20*%20from%20t;show%20meta"
+––– output –––
+––– input –––
+curl "http://localhost:9308/sql?query=select%20*%20from%20t;show%20meta"
+––– output –––
+––– input –––
+curl "http://localhost:9308/sql?mode=raw&query=select%20*%20from%20t;show%20meta"
+––– output –––
+––– input –––
+curl "http://localhost:9308/cli?show%20unknown"
+––– output –––
+––– input –––
+curl "http://localhost:9308/sql?query=insert%20into%20non_existing_table%20values(1)"
+––– output –––
+––– input –––
+curl "http://localhost:9308/sql?query=delete%20from%20t;show%20meta"
+––– output –––
+––– input –––
+curl "http://localhost:9308/sql?mode=raw&query=drop%20table%20non_existing_table"
+––– output –––
+––– input –––
+curl "http://localhost:9308/sql?query=select%20*%20from%20t%20where%20id%20=%2010000000"
+––– output –––
+––– input –––
+curl "http://localhost:9308/cli_json?select%20from%20t"
+––– output –––
+––– input –––
+curl "http://localhost:9308/sql?query=select%20*%20from%20t%20where%20text%20=%20'manticore%20search'"
+––– output –––
+––– input –––
+curl "http://localhost:9308/cli?show%20settings"
+––– output –––
+––– input –––
+curl "http://localhost:9308/cli_json?select%20*%20from%20t%20limit%200"
+––– output –––
+––– input –––
+curl "http://localhost:9308/sql?query=select%20%2A%20from%20t%20group%20by%20category"
+––– output –––
+––– input –––
+curl "http://localhost:9308/sql?query=show%20tables"
+––– output –––
+––– input –––
+curl "http://localhost:9308/sql?query=select%20count(*)%20from%20t"
+––– output –––
+––– input –––
+curl "http://localhost:9308/cli?show%20version%20&limit=1"
+––– output –––
+––– input –––
+curl "http://localhost:9308/sql?query=select%20*%20from%20t;%20show%20tables;%20select%20count(*)%20from%20t"
+––– output –––
+––– input –––
+curl "http://localhost:9308/sql?mode=raw&query=show%20columns%20from%20t"
+––– output –––
+––– input –––
+curl "http://localhost:9308/sql?query=select%20*%20from%20t%20where%20column_name%20is%20null"
+––– output –––
+––– input –––
+curl "http://localhost:9308/sql?query=update%20t%20set%20column_name=%20'new_value'%20where%20id=1"
+––– output –––
+––– input –––
+curl "http://localhost:9308/sql?query=insert%20into%20t%20values%20(null,%20'text%20value')"
+––– output –––
+––– input –––
+curl "http://localhost:9308/cli?select%20*%20from%20t%20order%20by%20id%20desc%20limit%201"
+––– output –––

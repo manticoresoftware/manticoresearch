@@ -523,6 +523,8 @@ jobs:
             test_prefix: test/clt-tests/plugins/
           - name: Buddy
             test_prefix: test/clt-tests/buddy/
+          - name: Update
+            test_prefix: test/clt-tests/optimisation-and-update/
     steps:
       - uses: manticoresoftware/clt@0.2.3
         with:
@@ -624,7 +626,7 @@ jobs:
     needs: test_windows
     runs-on: ubuntu-22.04
     container:
-      image: manticoresearch/ubertests_ctest:3263_20240920
+      image: manticoresearch/ubertests_ctest:3263_20241105
     steps:
       - name: Checkout repository
         uses: actions/checkout@v3

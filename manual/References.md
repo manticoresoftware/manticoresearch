@@ -162,6 +162,7 @@
 * [inplace_write_factor](Creating_a_table/Local_tables/Plain_and_real-time_table_settings.md#General-syntax-of-CREATE-TABLE)
 * [jieba_hmm](Creating_a_table/NLP_and_tokenization/Morphology.md#jieba_hmm)
 * [jieba_mode](Creating_a_table/NLP_and_tokenization/Morphology.md#jieba_mode)
+* [jieba_user_dict_path](Creating_a_table/NLP_and_tokenization/Morphology.md#jieba_user_dict_path)
 * [killlist_target](Creating_a_table/Local_tables/Plain_and_real-time_table_settings.md#General-syntax-of-CREATE-TABLE)
 * [max_substring_len](Creating_a_table/NLP_and_tokenization/Wildcard_searching_settings.md#max_substring_len)
 * [min_infix_len](Creating_a_table/NLP_and_tokenization/Wildcard_searching_settings.md#min_infix_len)
@@ -342,11 +343,12 @@
 * [REGEX()](Functions/String_functions.md#REGEX%28%29) - Returns 1 if regular expression matched to string of attribute and 0 otherwise
 * [SNIPPET()](Functions/String_functions.md#SNIPPET%28%29) - Highlights search results
 * [SUBSTRING_INDEX()](Functions/String_functions.md#SUBSTRING_INDEX%28%29) - Returns a substring of the string before the specified number of delimiter occurs
-*
+
 ##### Other
 * [CONNECTION_ID()](Functions/Other_functions.md#CONNECTION_ID%28%29) - Returns the current connection ID
 * [KNN_DIST()](Functions/Other_functions.md#KNN_DIST%28%29) - Returns KNN vector search distance
 * [LAST_INSERT_ID()](Functions/Other_functions.md#LAST_INSERT_ID%28%29) - Returns ids of documents inserted or replaced by last statement in the current session
+* [UUID_SHORT()](Functions/Other_functions.md#UUID_SHORT%28%29) - Returns a "short" universal identifier following the same algorithm as for auto-id generation.
 
 ## Common settings in configuration file
 To be put to section `common {}` in configuration file:

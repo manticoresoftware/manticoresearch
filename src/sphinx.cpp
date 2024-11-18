@@ -3351,7 +3351,7 @@ void GetSettingsFiles ( const TokenizerRefPtr_c& pTok, const DictRefPtr_c& pDict
 	assert ( pDict );
 
 	StringBuilder_c sFiles ( "," );
-	sFiles << pDict->GetSettings().m_sStopwords << pTok->GetSettings().m_sSynonymsFile << tSettings.m_sHitlessFiles;
+	sFiles << pDict->GetSettings().m_sStopwords << pTok->GetSettings().m_sSynonymsFile << tSettings.m_sHitlessFiles << tSettings.m_sJiebaUserDictPath;
 	auto dFileNames = sphSplit ( sFiles.cstr(), " \t," );
 	if ( pFilenameBuilder )
 	{
@@ -7046,8 +7046,10 @@ bool CSphIndex_VLN::AddRemoveFromDocstore ( const CSphSchema & tOldSchema, const
 	std::unique_ptr<DocstoreBuilder_i> pDocstoreBuilder;
 	if ( iNewNumStored )
 	{
+		DocstoreSettings_t tDefault;
+		const DocstoreSettings_t & tDocstoreSettings = m_pDocstore ? m_pDocstore->GetDocstoreSettings () : tDefault;
 		BuildBufferSettings_t tSettings; // use default buffer settings
-		pDocstoreBuilder = CreateDocstoreBuilder ( GetTmpFilename ( SPH_EXT_SPDS ), m_pDocstore->GetDocstoreSettings(), tSettings.m_iBufferStorage, sError );
+		pDocstoreBuilder = CreateDocstoreBuilder ( GetTmpFilename ( SPH_EXT_SPDS ), tDocstoreSettings, tSettings.m_iBufferStorage, sError );
 		if ( !pDocstoreBuilder )
 			return false;
 
@@ -8843,7 +8845,7 @@ CSphIndex_VLN::LOAD_E CSphIndex_VLN::LoadHeaderJson ( const CSphString& sHeaderN
 	if ( !sphSpawnFilterICU ( pFieldFilter, m_tSettings, tTokSettings, sHeaderName.cstr(), m_sLastError ) )
 		return LOAD_E::GeneralError_e;
 
-	if ( !SpawnFilterJieba ( pFieldFilter, m_tSettings, tTokSettings, sHeaderName.cstr(), m_sLastError ) )
+	if ( !SpawnFilterJieba ( pFieldFilter, m_tSettings, tTokSettings, sHeaderName.cstr(), pFilenameBuilder, m_sLastError ) )
 		return LOAD_E::GeneralError_e;
 
 	SetFieldFilter ( std::move ( pFieldFilter ) );

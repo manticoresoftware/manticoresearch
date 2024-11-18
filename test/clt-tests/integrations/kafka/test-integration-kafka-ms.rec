@@ -626,3 +626,21 @@ docker exec manticore mysql -h0 -P9306 -e "SELECT COUNT(*) FROM destination_drop
 +----------+
 |       57 |
 +----------+
+––– input –––
+docker exec manticore mysql -h0 -P9306 -e "ALTER MATERIALIZED VIEW view_drop_source suspended=1"; echo $?
+––– output –––
+0
+––– input –––
+docker exec manticore mysql -h0 -P9306 -e "ALTER MATERIALIZED VIEW view_drop_source suspended=1"; echo $?
+––– output –––
+ERROR 1064 (42000) at line 1: Selected materialized view has already suspended
+1
+––– input –––
+docker exec manticore mysql -h0 -P9306 -e "ALTER MATERIALIZED VIEW view_drop_source suspended=0"; echo $?
+––– output –––
+0
+––– input –––
+docker exec manticore mysql -h0 -P9306 -e "ALTER MATERIALIZED VIEW view_drop_source suspended=0"; echo $?
+––– output –––
+ERROR 1064 (42000) at line 1: Selected materialized view has already resumed
+1

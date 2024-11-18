@@ -3,8 +3,9 @@
 mysql -h0 -P9306 -e "set global auto_optimize=0;"
 ––– output –––
 ––– input –––
-php -d memory_limit=-1 ./test/clt-tests/scripts/load_us_names_min_infix_len.php 10000 10 1000000 1 > /dev/null
+php -d memory_limit=-1 ./test/clt-tests/scripts/load_names_attr.php --batch-size=1000 --concurrency=1 --docs=1000000 --multiplier=1 --start-id=1 > /dev/null; echo $?
 ––– output –––
+0
 ––– input –––
 mysql -h0 -P9306 -e "select count(*) from name;"
 ––– output –––

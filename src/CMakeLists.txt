@@ -362,6 +362,9 @@ trace ( lsearchd )
 # our executables
 add_executable ( searchd searchd.cpp )
 target_link_libraries ( searchd searchd_ssl lmanticore lsearchd )
+if (WITH_RE2)
+	target_link_libraries ( searchd re2::re2 )
+endif ()
 
 if (NOT STATIC_BINARY)
 	add_executable ( indexer indexer.cpp )

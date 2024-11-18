@@ -14622,6 +14622,162 @@ static bool HandleSetLocal ( CSphString& sError, const CSphString& sName, int64_
 	return false;
 }
 
+static const char * g_dReStr[] = {
+R"([\w\.+-]+@[\w\.-]+\.[\w\.-]+)",
+R"([\w]+://[^/\s?#]+[^\s?#]+(?:\?[^\s#]*)?(?:#[^\s]*)?)",
+R"((?:(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9])\.){3}(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]))",
+R"((\d+,?)+)",
+R"((\d+?,?)+?)",
+R"((\d+,?)+)",
+R"(-?\d+(,\d+)*)",
+R"((?P<name>[-\w\d\.]+?)(?:\s+at\s+|\s*@\s*|\s*(?:[\[\]@]){3}\s*)(?P<host>[-\w\d\.]*?)\s*(?:dot|\.|(?:[\[\]dot\.]){3,5})\s*(?P<domain>\w+))",
+R"(\b([13][a-km-zA-HJ-NP-Z1-9]{25,34}|bc1[ac-hj-np-zAC-HJ-NP-Z02-9]{11,71}))",
+R"(\d{3}-\d{2}-\d{4})",
+R"([\w]+://[^/\s?#]+[^\s?#]+(?:\?[^\s#]*)?(?:#[^\s]*)?)",
+R"(\+\d{1,4}?[-.\s]?\(?\d{1,3}?\)?[-.\s]?\d{1,4}[-.\s]?\d{1,4}[-.\s]?\d{1,9})",
+
+R"([\w\.+-]+@[\w\.-]+\.[\w\.-]+)",
+R"([\w]+://[^/\s?#]+[^\s?#]+(?:\?[^\s#]*)?(?:#[^\s]*)?)",
+R"((?:(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9])\.){3}(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]))",
+R"((\d+,?)+)",
+R"((\d+?,?)+?)",
+R"((\d+,?)+)",
+R"(-?\d+(,\d+)*)",
+R"((?P<name>[-\w\d\.]+?)(?:\s+at\s+|\s*@\s*|\s*(?:[\[\]@]){3}\s*)(?P<host>[-\w\d\.]*?)\s*(?:dot|\.|(?:[\[\]dot\.]){3,5})\s*(?P<domain>\w+))",
+R"(\b([13][a-km-zA-HJ-NP-Z1-9]{25,34}|bc1[ac-hj-np-zAC-HJ-NP-Z02-9]{11,71}))",
+R"(\d{3}-\d{2}-\d{4})",
+R"([\w]+://[^/\s?#]+[^\s?#]+(?:\?[^\s#]*)?(?:#[^\s]*)?)",
+R"(\+\d{1,4}?[-.\s]?\(?\d{1,3}?\)?[-.\s]?\d{1,4}[-.\s]?\d{1,4}[-.\s]?\d{1,9})",
+R"([a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,})",
+R"([\w\.-]+@[a-z\d.-]+\.[a-z]{2,6})",
+R"([-a-z0-9~!$%^&*_=+}{\'?.]+@([a-z0-9][-a-z0-9]+\.)+[a-z]{2,5})",
+R"([^@\s]+@[^@\s]+\.[^@\s]+)",
+R"([a-z\d._%+-]+@[a-z\d.-]+\.[a-z]{2})",
+R"(\b\d{1,5}(?:[- ]\d{1,4})*\b)",
+R"(\b\d{4}-\d{4}-\d{4}-\d{4}\b)",
+R"(\b\d{9,10}\b)",
+R"(\b\d{16}\b)",
+R"(\b(?:\+?1[-.\s]?)?\(?\d{3}\)?[-.\s]?\d{3}[-.\s]?\d{4}\b)",
+R"(\b[2-9]\d{2}-\d{3}-\d{4}\b)",
+R"((?:https?|ftp):\/\/(?:www\.)?[^\s/$.?#].[^\s]*)",
+R"((https?|ftp):\/\/[^\s/$.?#].[^\s]*)",
+R"([A-Fa-f0-9]{64})",
+R"(\b[2-9]\d{2}[-.\s]?\d{3}[-.\s]?\d{4}\b)",
+R"(\d{3}-\d{2}-\d{4})",
+R"(\d{4}\s\d{6}\s\d{5})",
+R"([0-9]{2}/[0-9]{2}/[0-9]{4})",
+R"([0-9]{4}/[0-9]{2}/[0-9]{2})",
+R"([A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,4})",
+R"(^([0-9]{5})(-[0-9]{4})?$)",
+R"((?:(?:\\d{4}[- ]?){3}\\d{4}|\\d{15,16}))",
+R"((?:(?:\\+?1[-.\\s]?)?(?:\\(\\d{3}\\)|\\d{3})[-.\\s]?\\d{3}[-.\\s]?\\d{4}))",
+R"(.*\\d.*[a-z].*[A-Z].*[@#$%].{8,20})",
+R"([A-Za-z]{3,9}(\\s[A-Za-z]{3,9})?)",
+R"(!\\S(?i)(?:a(?:nd|s|ll)|but|if|in(?:to)?|of|on(?:ly)?|or|the|to|with)\\S)",
+R"([-a-z0-9~!$%^&*_=+}{\\'?]+@[a-z0-9]+\\.[a-z]{2,6})",
+R"((?:(?:[01]?\\d\\d?|2[0-4]\\d|25[0-5])\\.){3}(?:[01]?\\d\\d?|2[0-4]\\d|25[0-5]))",
+R"((?:(?:[a-zA-Z]|\\d|[$-_@.&+]|[!*\\(\\),]|(?:%[0-9a-fA-F][0-9a-fA-F]))+))",
+R"(([A-Fa-f0-9]{4}(?:\\-[A-Fa-f0-9]{4}){4}))",
+R"(\\b\\d{3}-?\\d{2}-?\\d{4}\\b)",
+R"((?:(?P<name>[^@]+)@(?P<domain>[^.]+)\\.(?P<tld>[a-z]+)))",
+R"((?:[A-Za-z0-9-]+\\.)+[A-Za-z]{2,6})",
+R"(^.*[0-9].*[a-zA-Z]([a-zA-Z0-9]+)$)",
+R"((\\b\\w+\\b)\\s*\\1)",
+R"(\\b(?:19|20)\\d{2}\\b)",
+R"(!\\d(?:(?:[01]?\\d|2[0-3]):[0-5]\\d)\\d)",
+R"((?i)\\b(?:http|https|ftp)://(?:\\S+\\.)*?\\S+\\b)",
+R"(\\b\\w+@\\w+\\.[a-z]{2,}\\b)",
+R"(!\\w\\d{1,3}(?:,\\d{3})*\\w)",
+R"(\\b\\d{10,12}\\b)",
+R"(\\b(?:[01]?\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d)?\\b)",
+R"(!\\w([a-zA-Z]\\w{0,29})\\w)",
+R"(!\\w[+-]?\\d+(\\.\\d+)?\\w)",
+R"(\\b[A-Za-z]{1,2}[0-9]{1,2}(?:[A-Za-z]{1,2})?\\d{1,4}[A-Za-z]{1,2}\\b)",
+R"(!\\w\\d{4}-\\d{2}-\\d{2}\\w)",
+R"(\\b[A-Z][a-z]+\\b)",
+R"(!\\w[+-]?\\d+(\\.\\d+)?%?\\w)",
+R"(!\\w[1-9]\\d{0,2}(,\\d{3})*\\w)",
+R"(!\\w\\d{1,5}(?:\\-\\d{1,4})?\\w)",
+R"(!\\w[+-]?\\d+(\\.\\d+)?(?:e[+-]?\\d+)?\\w)",
+R"(!\\w0[xX][a-fA-F0-9]+\\w)",
+R"(!\\w([A-Z]{2,})\\w)",
+R"(!\\w\\d{2}-\\d{7}\\w)",
+R"(!\\w[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\\.[A-Za-z]{2,6}\\w)",
+R"([\w\.+-]+@[\w\.-]+\.[\w\.-]+)",
+R"([\w]+://[^/\s?#]+[^\s?#]+(?:\?[^\s#]*)?(?:#[^\s]*)?)",
+R"((?:(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9])\.){3}(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]))",
+R"((\d+,?)+)",
+R"((\d+?,?)+?)",
+R"((\d+,?)+)",
+R"(-?\d+(,\d+)*)",
+R"((?P<name>[-\w\d\.]+?)(?:\s+at\s+|\s*@\s*|\s*(?:[\[\]@]){3}\s*)(?P<host>[-\w\d\.]*?)\s*(?:dot|\.|(?:[\[\]dot\.]){3,5})\s*(?P<domain>\w+))",
+R"(\b([13][a-km-zA-HJ-NP-Z1-9]{25,34}|bc1[ac-hj-np-zAC-HJ-NP-Z02-9]{11,71}))",
+R"(\d{3}-\d{2}-\d{4})",
+R"([\w]+://[^/\s?#]+[^\s?#]+(?:\?[^\s#]*)?(?:#[^\s]*)?)",
+R"(\+\d{1,4}?[-.\s]?\(?\d{1,3}?\)?[-.\s]?\d{1,4}[-.\s]?\d{1,4}[-.\s]?\d{1,9})",
+R"([a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,})",
+R"([\w\.-]+@[a-z\d.-]+\.[a-z]{2,6})",
+R"([-a-z0-9~!$%^&*_=+}{\'?.]+@([a-z0-9][-a-z0-9]+\.)+[a-z]{2,5})",
+R"([^@\s]+@[^@\s]+\.[^@\s]+)",
+R"([a-z\d._%+-]+@[a-z\d.-]+\.[a-z]{2})",
+R"(\b\d{1,5}(?:[- ]\d{1,4})*\b)",
+R"(\b\d{4}-\d{4}-\d{4}-\d{4}\b)",
+R"(\b\d{9,10}\b)",
+R"(\b\d{16}\b)"
+
+};
+
+#if WITH_RE2
+#include <string>
+#include <re2/re2.h>
+
+static std::vector<RE2 *> g_dRe2;
+#endif
+
+static bool RegexCreate ( CSphString & sError )
+{
+#if WITH_RE2
+	if ( !g_dRe2.empty() )
+		return true;
+
+	RE2::Options tOptions;
+	tOptions.set_encoding ( RE2::Options::Encoding::EncodingUTF8 );
+
+	for ( const char * sRe : g_dReStr )
+	{
+		RE2 * pRe = new RE2 ( sRe, tOptions );
+		g_dRe2.push_back ( pRe );
+	}
+	return true;
+#else
+	sError = "missed regex library";
+	return false;
+#endif
+}
+
+static bool g_bRegexMatch = false;
+
+static bool RegexMatched ( const char * sStmt )
+{
+	bool bMatched = false;
+	if ( !g_bRegexMatch )
+		return bMatched;
+
+#if WITH_RE2
+	int64_t tmStart = sphMicroTimer();
+
+	for ( const RE2 * pRe : g_dRe2 )
+	{
+		bMatched |= RE2::FullMatchN ( sStmt, *pRe, nullptr, 0 );
+	}
+
+	int64_t tmDelta = sphMicroTimer() - tmStart;
+	sphInfo ( "regex patterns check: %d, took: %.3f ms", g_dRe2.size(), (float)tmDelta / 1000.0f );
+#endif
+
+	return bMatched;
+}
+
 static bool HandleSetGlobal ( CSphString& sError, const CSphString& sName, int64_t iSetValue, CSphString sSetValue )
 {
 	auto& tSess = session::Info();
@@ -14909,6 +15065,12 @@ static bool HandleSetGlobal ( CSphString& sError, const CSphString& sName, int64
 	if ( sName=="cluster_user" )
 	{
 		g_sClusterUser = std::move ( sSetValue );
+		return true;
+	}
+
+	if ( sName=="regex" )
+	{
+		g_bRegexMatch = !!iSetValue;
 		return true;
 	}
 
@@ -17153,6 +17315,9 @@ bool ClientSession_c::Execute ( Str_t sQuery, RowBuffer_i & tOut )
 			tOut.SomethingWasSent();
 			if ( HandleMysqlSelect ( tOut, tHandler ) && !tOut.SomethingWasSent() )
 			{
+				if ( RegexMatched ( sQuery.first ) )
+					sphInfo ( "regex matched" ); // !COMMIT
+
 				// query just completed ok; reset out error message
 				m_sError = "";
 				AggrResult_t & tLast = tHandler.m_dAggrResults.Last();
@@ -21512,6 +21677,8 @@ int WINAPI ServiceMain ( int argc, char **argv ) EXCLUDES (MainThread)
 	}
 
 	ServeUserVars ();
+	if ( !RegexCreate ( sError ) ) // !COMMIT
+		sphWarning ( "failed to create regex user patterns: %s", sError.cstr ());
 
 	PrereadIndexes ( bForcedPreread );
 

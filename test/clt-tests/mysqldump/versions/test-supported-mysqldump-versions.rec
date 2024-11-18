@@ -24,7 +24,6 @@ docker exec manticore apt-get install jq -y > /dev/null 2>&1; echo $?
 ––– input –––
 docker exec manticore bash -c "curl -s https://hub.docker.com/v2/repositories/library/mariadb/tags/?page_size=100 | jq -r '.results[].name' | grep -E '^[0-9]{2}\.[0-9]+$' | sort -V"
 ––– output –––
-10.4
 10.5
 10.6
 10.11

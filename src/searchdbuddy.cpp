@@ -608,6 +608,8 @@ bool IsBuddyQuery ( const OptionsHash_t & hOptions )
 
 struct BuddyReply_t
 {
+	JsonObj_c m_tRoot;
+
 	CSphString m_sType;
 	JsonObj_c m_tMessage;
 	int m_iReplyHttpCode = 0;
@@ -615,21 +617,21 @@ struct BuddyReply_t
 
 static bool ParseReply ( char * sReplyRaw, BuddyReply_t & tParsed, CSphString & sError )
 {
-	JsonObj_c tRoot = JsonObj_c ( sReplyRaw );
-	if ( !tRoot )
+	tParsed.m_tRoot = JsonObj_c ( sReplyRaw );
+	if ( !tParsed.m_tRoot )
 	{
-		sError.SetSprintf ( "unable to parse: %s", tRoot.GetErrorPtr() );
+		sError.SetSprintf ( "unable to parse: %s", tParsed.m_tRoot.GetErrorPtr() );
 		return false;
 	}
 
-	if ( !tRoot.IsObj() )
+	if ( !tParsed.m_tRoot.IsObj() )
 	{
 		sError.SetSprintf ( "wrong reply format - not object" );
 		return false;
 	}
 
 	int iVer = 0;
-	if ( !tRoot.FetchIntItem ( iVer, "version", sError, false ) )
+	if ( !tParsed.m_tRoot.FetchIntItem ( iVer, "version", sError, false ) )
 		return false;
 	if ( iVer>g_iBuddyVersion )
 	{
@@ -642,15 +644,14 @@ static bool ParseReply ( char * sReplyRaw, BuddyReply_t & tParsed, CSphString & 
 		return false;
 	}
 
-	if ( !tRoot.FetchStrItem ( tParsed.m_sType, "type", sError, false ) )
+	if ( !tParsed.m_tRoot.FetchStrItem ( tParsed.m_sType, "type", sError, false ) )
 		return false;
 
-	JsonObj_c tMessage = tRoot.GetItem ( "message" );
-	if ( tMessage.Empty() )
+	tParsed.m_tMessage = tParsed.m_tRoot.GetItem ( "message" );
+	if ( tParsed.m_tMessage.Empty() )
 		return false;
-	tParsed.m_tMessage = tMessage.Clone();
 
-	if ( !tRoot.FetchIntItem ( tParsed.m_iReplyHttpCode, "error_code", sError, false ) )
+	if ( !tParsed.m_tRoot.FetchIntItem ( tParsed.m_iReplyHttpCode, "error_code", sError, false ) )
 		return false;
 
 	return true;
@@ -659,6 +660,60 @@ static bool ParseReply ( char * sReplyRaw, BuddyReply_t & tParsed, CSphString & 
 static EHTTP_STATUS GetHttpStatusCode ( int iBuddyHttpCode, EHTTP_STATUS eReqHttpCode )
 {
 	return ( iBuddyHttpCode>0 ? HttpGetStatusCodes ( iBuddyHttpCode ) : eReqHttpCode );
+}
+
+template<typename T>
+bool ConvertValue ( const char * sName, const JsonObj_c & tMeta, T & tVal )
+{
+	JsonObj_c tSrcVal = tMeta.GetItem ( sName );
+	if ( !tSrcVal )
+		return false;
+
+	if ( !tSrcVal.IsStr() )
+		return false;
+
+	int64_t iVal = 0;
+	double fVal = 0.0;
+	ESphJsonType eType;
+	if ( !sphJsonStringToNumber ( tSrcVal.SzVal(), strlen ( tSrcVal.SzVal() ), eType, iVal, fVal ) )
+		return false;
+
+	if ( eType==JSON_INT64 )
+		tVal = (T)iVal;
+	else
+		tVal = (T)fVal;
+	return true;
+}
+
+static void SetSessionMeta ( const JsonObj_c & tBudyyReply )
+{
+	CSphString sTmpError;
+	JsonObj_c tSrcMeta = tBudyyReply.GetObjItem ( "meta", sTmpError, true );
+	if ( !tSrcMeta )
+		return;
+
+	ClientSession_c * pSession = session::GetClientSession();
+	if ( !pSession )
+		return;
+
+	auto & tLastMeta = pSession->m_tLastMeta;
+	tLastMeta = CSphQueryResultMeta();
+
+	// total => m_iMatches
+	ConvertValue ( "total", tSrcMeta, tLastMeta.m_iMatches );
+		
+	// total_found => m_iTotalMatches
+	ConvertValue ( "total_found", tSrcMeta, tLastMeta.m_iTotalMatches );
+
+	// time => m_iQueryTime \ m_iRealQueryTime
+	float fTime = 0.0f;
+	if ( ConvertValue ( "time", tSrcMeta, fTime ) )
+		tLastMeta.m_iRealQueryTime = tLastMeta.m_iQueryTime = (int)( fTime * 1000.0f );
+
+	// total_relation => m_bTotalMatchesApprox
+	CSphString sRel;
+	if ( tSrcMeta.FetchStrItem ( sRel, "total_relation", sTmpError, true ) && !sRel.IsEmpty() && sRel=="gte" )
+		tLastMeta.m_bTotalMatchesApprox = true;
 }
 
 // we call it ALWAYS, because even with absolutely correct result, we still might reject it for '/cli' endpoint if buddy is not available or prohibited
@@ -724,15 +779,32 @@ bool ProcessHttpQueryBuddy ( HttpProcessResult_t & tRes, Str_t sSrcQuery, Option
 		return tRes.m_bOk;
 	}
 
-	CSphString sDump = tReplyParsed.m_tMessage.AsString();
+	CSphString sDumpBuf;
+	Str_t sDump;
+	if ( tReplyParsed.m_tMessage.IsStr() )
+	{
+		sDump = FromSz ( tReplyParsed.m_tMessage.SzVal() );
+
+	} else
+	{
+		CSphVector<BYTE> dBson;
+		bson::JsonObjToBson ( tReplyParsed.m_tMessage, dBson, true, false );
+		bson::Bson_c ( dBson ).BsonToJson ( sDumpBuf, false );
+		sDump = FromStr ( sDumpBuf );
+	}
+
 	EHTTP_STATUS eHttpStatus = GetHttpStatusCode ( tReplyParsed.m_iReplyHttpCode, tRes.m_eReplyHttpCode );
 
 	dResult.Resize ( 0 );
 	ReplyBuf ( FromStr ( sDump ), eHttpStatus, bNeedHttpResponse, dResult );
+	
+	SetSessionMeta ( tReplyParsed.m_tRoot );
+	LogBuddyQuery ( sSrcQuery, BuddyQuery_e::HTTP );
+
 	return true;
 }
 
-static bool ConvertErrorMessage ( const char * sStmt, std::pair<int, BYTE> tSavedPos, BYTE & uPacketID, const JsonObj_c & tMessage, GenericOutputBuffer_c & tOut )
+static bool ConvertErrorMessage ( const Str_t & sStmt, std::pair<int, BYTE> tSavedPos, BYTE & uPacketID, const JsonObj_c & tMessage, GenericOutputBuffer_c & tOut )
 {
 	if ( !tMessage.IsObj() )
 		return false;
@@ -781,7 +853,7 @@ void ProcessSqlQueryBuddy ( Str_t sSrcQuery, Str_t tError, std::pair<int, BYTE> 
 
 	if ( !tReplyParsed.m_tMessage.IsArray() )
 	{
-		if ( ConvertErrorMessage ( sSrcQuery.first, tSavedPos, uPacketID, tReplyParsed.m_tMessage, tOut ) )
+		if ( ConvertErrorMessage ( sSrcQuery, tSavedPos, uPacketID, tReplyParsed.m_tMessage, tOut ) )
 			return;
 
 		LogSphinxqlError ( sSrcQuery.first, tError );
@@ -795,6 +867,9 @@ void ProcessSqlQueryBuddy ( Str_t sSrcQuery, Str_t tError, std::pair<int, BYTE> 
 	std::unique_ptr<RowBuffer_i> tBuddyRows ( CreateSqlRowBuffer ( &uPacketID, &tOut ) );
 
 	ConvertJsonDataset ( tReplyParsed.m_tMessage, sSrcQuery.first, *tBuddyRows );
+
+	SetSessionMeta ( tReplyParsed.m_tRoot );
+	LogBuddyQuery ( sSrcQuery, BuddyQuery_e::SQL );
 }
 
 #ifdef _WIN32

@@ -107,6 +107,24 @@ index aot_exact
 
 }
 
+source lem_stops
+{
+	type			= mysql
+	<sql_settings/>
+	sql_query		= select * from lem_stops
+	sql_attr_uint	= gid
+}
+
+index lem_stops
+{
+	source			= lem_stops
+	path			= <data_path/>/lem_stops
+	morphology		= lemmatize_en_all
+    stopwords       = en
+    index_exact_words = 1
+}
+
+
 </config>
 
 <metaindex name='META:rt'>
@@ -152,6 +170,17 @@ CREATE TABLE test_table
 	( 8, 11, 'стали well-known как путин markieren' )
 </db_insert>
 
+<db_create>
+CREATE TABLE lem_stops
+(
+	id INTEGER PRIMARY KEY NOT NULL,
+	gid INTEGER NOT NULL,
+	title VARCHAR(255) CHARACTER SET utf8 NOT NULL
+);
+</db_create>
+<db_drop>DROP TABLE IF EXISTS lem_stops</db_drop>
+<db_insert>INSERT INTO lem_stops VALUES ( 1, 11, 'apple and b' )</db_insert>
+
 <queries><sphinxql>
 INSERT INTO META:rt VALUES ( 1, 'wives and men', 11 );
 INSERT INTO META:rt VALUES ( 2, 'wife and man', 11 );
@@ -185,6 +214,10 @@ CALL SNIPPETS ('молоко такое же молока и так же мол�
 CALL SNIPPETS ('молочная ферма', 'META:aot', 'молок*', 1 as query_mode);
 CALL SNIPPETS ('молоко такое же молока и так же молоком но не ком', 'META:aot', 'мол*', 1 as query_mode);
 CALL SNIPPETS ('много стресса. от багов.', 'META:aot', 'стресс', 1 as query_mode);
+
+<!-- aot stopword lemmas increas hitpos for next tokens -->
+SELECT * FROM lem_stops WHERE MATCH(' "apple and b" ');
+
 </sphinxql></queries>
 
 </test>

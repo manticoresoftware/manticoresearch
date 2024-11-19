@@ -17,6 +17,7 @@ on:
     branches: [ master, update-buddy-version ]
     paths-ignore:
       - 'manual/**'
+      - '!manual/References.md'
       - 'cmake/GetGALERA.cmake'
       - 'galera_packaging/**'
     types: [opened, synchronize, reopened, labeled, unlabeled]

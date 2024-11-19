@@ -53,6 +53,12 @@ static ESphEvalStage GetEarliestStage ( ESphEvalStage eStage, const CSphColumnIn
 
 ///////////////////////////////////////////////////////////////////////////////
 
+CSphQueryContext::CSphQueryContext ( const CSphQuery & tQuery )
+	: m_tQuery ( tQuery )
+{
+}
+
+
 void CSphQueryContext::ResetFilters()
 {
 	m_pFilter.reset();
@@ -350,3 +356,17 @@ void CSphQueryContext::SetupExtraData ( ISphRanker * pRanker, ISphMatchSorter * 
 	ContextExtra tExtra ( pRanker, pSorter );
 	ExprCommand ( SPH_EXPR_SET_EXTRA_DATA, &tExtra );
 }
+
+void CSphQueryContext::SetPackedFactor ( DWORD uFlags )
+{
+	m_uPackedFactorFlags = uFlags;
+	// query with the packed factors should pass the full match flow as query cache does not has these factors
+	if ( !m_bSkipQCache )
+		m_bSkipQCache = ( m_uPackedFactorFlags!=SPH_FACTOR_DISABLE );
+}
+
+DWORD CSphQueryContext::GetPackedFactor () const
+{
+	return m_uPackedFactorFlags;
+}
+

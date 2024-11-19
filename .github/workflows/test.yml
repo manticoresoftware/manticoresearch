@@ -10,6 +10,7 @@ on:
       - manticore-*
     paths-ignore:
       - 'manual/**'
+      - '!manual/References.md'
       - 'cmake/GetGALERA.cmake'
       - 'galera_packaging/**'
   pull_request:

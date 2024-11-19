@@ -640,3 +640,4 @@ AND, AS, BY, COLUMNARSCAN, CREATE, DISTINCT, DIV, DOCIDINDEX, EXPLAIN, FACET, FA
 * [6.3.4](https://manual.manticoresearch.com/manticore-6-3-4/). [Installation page](https://manticoresearch.com/install-6.3.4/)
 * [6.3.6](https://manual.manticoresearch.com/manticore-6-3-6/). [Installation page](https://manticoresearch.com/install-6.3.6/)
 <!-- proofread -->
+

@@ -114,7 +114,7 @@ constexpr int MAX_TOLERATE_LOAD_SEGMENTS		= MAX_SEGMENTS * ( SIMULTANEOUS_SAVE_L
 #define RTLOGV LOGINFO ( RTDIAGV, RTSEG )
 #define RTLOGVV LOGINFO ( RTDIAGVV, RTSEG )
 
-static bool LOG_LEVEL_RTSPLIT_QUERY = val_from_env ( "MANTICORE_LOG_RTSPLIT_QUERY", false ); // verbose logging split query events, ruled by this env variable
+static bool LOG_LEVEL_RTSPLIT_QUERY = val_from_env ( "MANTICORE_LOG_RTSPLIT_QUERY", true ); // verbose logging split query events, ruled by this env variable
 #define LOG_COMPONENT_RTQUERYINFO __LINE__ << " "
 #define RTQUERYINFO LOGINFO ( RTSPLIT_QUERY, RTQUERYINFO )
 
@@ -7146,7 +7146,7 @@ static bool QueryDiskChunks ( const CSphQuery & tQuery, CSphQueryResultMeta & tR
 	tClonableCtx.LimitConcurrency ( iThreads );
 
 	auto iStart = sphMicroTimer();
-	RTQUERYINFO << "Started: " << ( sphMicroTimer()-iStart );
+	RTQUERYINFO << "Started RT: " << (sphMicroTimer()-iStart) << " index:" << szIndexName << " comment:" << tQuery.m_sComment << " thd-arg:" << tArgs.m_iThreads << " thd-dispacher:" << iThreads << " thd-clonable:" << tClonableCtx.Concurrency ( 1000 );
 
 	std::atomic<bool> bInterrupt { false };
 	std::atomic<int> bSucceed { 1 };
@@ -7177,7 +7177,7 @@ static bool QueryDiskChunks ( const CSphQuery & tQuery, CSphQueryResultMeta & tR
 			// jobs come in ascending order from 0 up to iJobs-1.
 			// We walk over disk chunk in reverse order, from last to 0-th.
 			auto iChunk = iJobs - iJob - 1;
-			RTQUERYINFO << "QueryDiskChunks " << tJobContext.second << ", Jb/Chunk: " << iJob << "/" << iChunk;
+			RTQUERYINFO << "QueryDiskChunks " << tJobContext.second << ", Jb/Chunk: " << iJob << "/" << iChunk << " threads:" << dSplits[iChunk];
 			iJob = -1; // mark it consumed
 			myinfo::SetTaskInfo ( "%d ch %d:", Threads::Coro::NumOfRestarts(), iChunk );
 			auto & dLocalSorters = tCtx.m_dSorters;

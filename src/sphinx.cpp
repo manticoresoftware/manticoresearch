@@ -141,7 +141,7 @@ static BuildBufferSettings_t g_tMergeSettings;
 
 static int			g_iLowPriorityDivisor = 10;			// how smaller quantum low-priority tasks take comparing to normal in case of load
 
-static bool LOG_LEVEL_SPLIT_QUERY = val_from_env ( "MANTICORE_LOG_SPLIT_QUERY", false ); // verbose logging split query events, ruled by this env variable
+static bool LOG_LEVEL_SPLIT_QUERY = val_from_env ( "MANTICORE_LOG_SPLIT_QUERY", true ); // verbose logging split query events, ruled by this env variable
 #define LOG_COMPONENT_QUERYINFO __LINE__ << " "
 #define QUERYINFO LOGINFO ( SPLIT_QUERY, QUERYINFO )
 
@@ -8175,6 +8175,8 @@ bool CSphIndex_VLN::MultiScan ( CSphQueryResult & tResult, const CSphQuery & tQu
 
 	if ( CheckEarlyReject ( dTransformedFilters, tCtx.m_pFilter.get(), tQuery.m_eCollation, tMaxSorterSchema ) )
 	{
+		CSphScopedProfile tPrf7 ( tMeta.m_pProfile, SPH_QSTATE_FINALIZE7 );
+
 		PooledAttrsToPtrAttrs ( dSorters, m_tBlobAttrs.GetReadPtr(), m_pColumnar.get(), tArgs.m_bFinalizeSorters, tMeta.m_pProfile, tArgs.m_bModifySorterSchemas );
 
 		tMeta.m_iQueryTime += (int)( ( sphMicroTimer()-tmQueryStart )/1000 );
@@ -8276,6 +8278,8 @@ bool CSphIndex_VLN::MultiScan ( CSphQueryResult & tResult, const CSphQuery & tQu
 	// do final expression calculations
 	if ( tCtx.m_dCalcFinal.GetLength() )
 	{
+		CSphScopedProfile tPrf1 ( tMeta.m_pProfile, SPH_QSTATE_FINALIZE1 );
+
 		DocstoreSession_c tSession;
 		int64_t iSessionUID = tSession.GetUID();
 
@@ -8295,19 +8299,26 @@ bool CSphIndex_VLN::MultiScan ( CSphQueryResult & tResult, const CSphQuery & tQu
 				i.m_pExpr->Command ( SPH_EXPR_SET_DOCSTORE_ROWID, &tSessionInfo );
 		}
 
+		CSphScopedProfile tPrf2 ( tMeta.m_pProfile, SPH_QSTATE_FINALIZE2 );
+
 		SphFinalMatchCalc_t tFinal ( tArgs.m_iTag, tCtx );
 		dSorters.Apply ( [&] ( ISphMatchSorter * p ) { p->Finalize ( tFinal, false, false ); } );
 	}
 
+	CSphScopedProfile tPrf3 ( tMeta.m_pProfile, SPH_QSTATE_FINALIZE3 );
 	PooledAttrsToPtrAttrs ( dSorters, m_tBlobAttrs.GetReadPtr(), m_pColumnar.get(), tArgs.m_bFinalizeSorters, tMeta.m_pProfile, tArgs.m_bModifySorterSchemas );
 
+	CSphScopedProfile tPrf4 ( tMeta.m_pProfile, SPH_QSTATE_FINALIZE4 );
 	// done
 	tResult.m_pBlobPool = m_tBlobAttrs.GetReadPtr();
 	tResult.m_pDocstore = m_pDocstore ? this : nullptr;
 	tResult.m_pColumnar = m_pColumnar.get();
 
+	CSphScopedProfile tPrf5 ( tMeta.m_pProfile, SPH_QSTATE_FINALIZE5 );
 	tMeta.m_iQueryTime += (int)( ( sphMicroTimer()-tmQueryStart )/1000 );
 	tMeta.m_iCpuTime += sphTaskCpuTimer ()-tmCpuQueryStart;
+
+	CSphScopedProfile tPrf6 ( tMeta.m_pProfile, SPH_QSTATE_FINALIZE6 );
 
 	return true;
 }
@@ -10538,7 +10549,7 @@ static bool RunSplitQuery ( RUN && tRun, const CSphQuery & tQuery, CSphQueryResu
 	tClonableCtx.LimitConcurrency ( pDispatcher->GetConcurrency() );
 
 	auto iStart = sphMicroTimer();
-	QUERYINFO << " Started: " << ( sphMicroTimer()-iStart ) << " index:" << szIndexName;
+	QUERYINFO << " Started: " << ( sphMicroTimer()-iStart ) << " index:" << szIndexName << " comment:" << tQuery.m_sComment;
 
 	// because disk chunk search within the loop will switch the profiler state
 	SwitchProfile ( pProfiler, SPH_QSTATE_INIT );
@@ -10592,6 +10603,9 @@ static bool RunSplitQuery ( RUN && tRun, const CSphQuery & tQuery, CSphQueryResu
 
 			CSphQuery tQueryWithExtraFilter = tQuery;
 			SetupSplitFilter ( tQueryWithExtraFilter.m_dFilters.Add(), iJob, iJobs );
+
+			QUERYINFO << "RunSplitQuery filter:" << tQueryWithExtraFilter.m_dFilters.Last().m_iMinValue << " - " << tQueryWithExtraFilter.m_dFilters.Last().m_iMaxValue;
+
 			bool bRes = tRun ( tChunkResult, tQueryWithExtraFilter, dLocalSorters, tMultiArgs );
 			bInterrupt.store ( !bRes, std::memory_order_relaxed );
 

@@ -614,3 +614,52 @@ mysql -h0 -P9306 -e "drop table if exists t; create table t(a int);"
 mysql -h0 -P9306 -e "select * from t option fuzzy=1;"
 ––– output –––
 ERROR 1064 (42000) at line 1: unknown option 'fuzzy'
+––– input –––
+mysql -h0 -P9306 -e "drop table if exists comment_28798446; create table comment_28798446(id int, content text) min_infix_len='3';"
+––– output –––
+––– input –––
+mysql -h0 -P9306 -e "insert into comment_28798446 values (1, 'business Manticore interaction'), (2, 'buisness Manticore interation'), (3, 'other text content');"
+––– output –––
+––– input –––
+mysql -h0 -P9306 -e "SELECT id FROM comment_28798446 WHERE MATCH('buisness Manticore interation') OPTION fuzzy = 1, layouts = '';"
+––– output –––
++------+
+| id   |
++------+
+|    1 |
+|    2 |
++------+
+––– input –––
+mysql -h0 -P9306 -e "SELECT id FROM comment_28798446 WHERE MATCH('business Manticore interaction') OPTION fuzzy = 1, layouts = '';"
+––– output –––
++------+
+| id   |
++------+
+|    1 |
+|    2 |
++------+
+––– input –––
+mysql -h0 -P9306 -e "SELECT id FROM comment_28798446 WHERE MATCH('Manticore') OPTION fuzzy = 1, layouts = '';"
+––– output –––
++------+
+| id   |
++------+
+|    1 |
+|    2 |
++------+
+––– input –––
+mysql -h0 -P9306 -e "CALL AUTOCOMPLETE('bus', 'comment_28798446', 'ru,us,ua' AS layouts);"
+––– output –––
++----------+
+| query    |
++----------+
+| business |
++----------+
+––– input –––
+mysql -h0 -P9306 -e "CALL AUTOCOMPLETE('bus', 'comment_28798446', '' AS layouts);"
+––– output –––
++----------+
+| query    |
++----------+
+| business |
++----------+

@@ -161,6 +161,9 @@
 /* default name of knn search shared library */
 #cmakedefine LIB_MANTICORE_KNN "${LIB_MANTICORE_KNN}"
 
+/* default name of knn embeddings shared library */
+#cmakedefine LIB_MANTICORE_KNN_EMBEDDINGS "${LIB_MANTICORE_KNN_EMBEDDINGS}"
+
 /* define to set custom directory for shared files. Absolute as /usr/local/share/manticore */
 #define FULL_SHARE_DIR "${FULL_SHARE_DIR}"
 

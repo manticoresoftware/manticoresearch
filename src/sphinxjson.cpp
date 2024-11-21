@@ -1921,6 +1921,15 @@ bool JsonObj_c::FetchStrItem ( CSphString & sValue, const char * szName, CSphStr
 }
 
 
+bool JsonObj_c::FetchStrItem ( std::string & sValue, const char * szName, CSphString & sError, bool bIgnoreMissing ) const
+{
+	CSphString sTmp;
+	bool bRes = FetchStrItem ( sTmp, szName, sError, bIgnoreMissing );
+	sValue = sTmp.cstr();
+	return bRes;
+}
+
+
 bool JsonObj_c::HasItem ( const char * szItem ) const
 {
 	assert ( m_pRoot );

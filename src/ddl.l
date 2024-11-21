@@ -56,6 +56,7 @@ EXPONENT			[eE](\+|-)?{DIGIT}+
 "AS"				{ YYSTOREBOUNDS; return TOK_AS; }
 "AT"				{ YYSTOREBOUNDS; return TOK_AT; }
 "ATTRIBUTE"			{ YYSTOREBOUNDS; return TOK_ATTRIBUTE; }
+"API_KEY"			{ YYSTOREBOUNDS; return TOK_API_KEY; }
 "BIGINT"			{ YYSTOREBOUNDS; return TOK_BIGINT; }
 "BIT"				{ YYSTOREBOUNDS; return TOK_BIT; }
 "BOOL"				{ YYSTOREBOUNDS; return TOK_BOOL; }
@@ -68,6 +69,7 @@ EXPONENT			[eE](\+|-)?{DIGIT}+
 "ENGINE"			{ YYSTOREBOUNDS; return TOK_ENGINE; }
 "EXISTS"			{ YYSTOREBOUNDS; return TOK_EXISTS; }
 "FAST_FETCH"		{ YYSTOREBOUNDS; return TOK_FAST_FETCH; }
+"FIELD"				{ YYSTOREBOUNDS; return TOK_FIELD; }
 "FLOAT"				{ YYSTOREBOUNDS; return TOK_FLOAT; }
 "FLOAT_VECTOR"		{ YYSTOREBOUNDS; return TOK_FLOAT_VECTOR; }
 "FROM"				{ YYSTOREBOUNDS; return TOK_FROM; }
@@ -87,6 +89,7 @@ EXPONENT			[eE](\+|-)?{DIGIT}+
 "KNN_DIMS"			{ YYSTOREBOUNDS; return TOK_KNN_DIMS; }
 "KNN_TYPE"			{ YYSTOREBOUNDS; return TOK_KNN_TYPE; }
 "LIKE"				{ YYSTOREBOUNDS; return TOK_LIKE; }
+"MODEL_NAME"		{ YYSTOREBOUNDS; return TOK_MODEL_NAME; }
 "MODIFY"			{ YYSTOREBOUNDS; return TOK_MODIFY; }
 "MULTI"				{ YYSTOREBOUNDS; return TOK_MULTI; }
 "MULTI64"			{ YYSTOREBOUNDS; return TOK_MULTI64; }
@@ -107,6 +110,7 @@ EXPONENT			[eE](\+|-)?{DIGIT}+
 "TYPE"				{ YYSTOREBOUNDS; return TOK_TYPE; }
 "UINT"				{ YYSTOREBOUNDS; return TOK_UINT; }
 "UPDATE"			{ YYSTOREBOUNDS; return TOK_UPDATE; }
+"USE_GPU"			{ YYSTOREBOUNDS; return TOK_USE_GPU; }
 
 '([^'\\]|\\.|\\\\)*' { YYSTOREBOUNDS; pParser->m_pLastTokenStart = yytext; lvalp->SetValueInt ( ( (SphAttr_t)lvalp->m_iStart<<32 ) | ( lvalp->m_iEnd-lvalp->m_iStart ) ); return TOK_QUOTED_STRING; }
 

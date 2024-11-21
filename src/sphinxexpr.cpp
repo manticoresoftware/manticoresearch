@@ -3015,9 +3015,9 @@ public:
 
 		switch ( m_eStrCmpDir )
 		{
-			case EStrCmpDir::LT: return iCmp<0 ^ m_bExclude;
-			case EStrCmpDir::GT: return iCmp>0 ^ m_bExclude;
-			case EStrCmpDir::EQ: return !iCmp ^ m_bExclude;
+			case EStrCmpDir::LT: return (iCmp<0) ^ m_bExclude;
+			case EStrCmpDir::GT: return (iCmp>0) ^ m_bExclude;
+			case EStrCmpDir::EQ: return (!iCmp) ^ m_bExclude;
 			default: return 0;
 		}
 	}

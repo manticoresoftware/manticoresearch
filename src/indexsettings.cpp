@@ -1491,7 +1491,9 @@ void IndexSettingsContainer_c::SetupKNNAttrs ( const CreateTableSettings_t & tCr
 		{
 			NamedKNNSettings_t & tNamedKNN = dKNNAttrs.Add();
 			(knn::IndexSettings_t&)tNamedKNN = i.m_tKNN;
+			(knn::ModelSettings_t&)tNamedKNN = i.m_tKNNModel;
 			tNamedKNN.m_sName = i.m_tAttr.m_sName;
+			tNamedKNN.m_sField = i.m_sKNNField;
 		}
 
 	if ( !dKNNAttrs.GetLength() )

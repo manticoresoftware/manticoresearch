@@ -16,6 +16,31 @@
 #include "sphinxjson.h"
 
 
+bool TableEmbeddings_c::Load ( const CSphString & sAttr, const knn::ModelSettings_t & tSettings, CSphString & sError )
+{
+	if ( m_hModels.Exists(sAttr) )
+	{
+		sError.SetSprintf ( "Unable to load model '%s' for attribute '%s': already loaded", tSettings.m_sModelName.c_str(), sAttr.cstr() );
+		return false;
+	}
+
+	std::unique_ptr<knn::TextToEmbeddings_i> pModel = CreateTextToEmbeddings ( tSettings, sError );
+	if ( !pModel )
+		return false;
+
+	m_hModels.Add ( std::move(pModel), sAttr );
+	return true;
+}
+
+
+knn::TextToEmbeddings_i * TableEmbeddings_c::GetModel ( const CSphString & sAttr ) const
+{
+	std::unique_ptr<knn::TextToEmbeddings_i> * pFound = m_hModels(sAttr);
+	return pFound ? pFound->get() : nullptr;
+}
+
+///////////////////////////////////////////////////////////////////////////////
+
 static void NormalizeVec ( VecTraits_T<float> & dData )
 {
 	float fNorm = 0.0f;
@@ -57,10 +82,11 @@ private:
 
 
 Expr_KNNDist_c::Expr_KNNDist_c ( const CSphVector<float> & dAnchor, const CSphColumnInfo & tAttr )
-	: m_pDistCalc ( CreateKNNDistanceCalc ( tAttr.m_tKNN ) )
-	, m_dAnchor ( dAnchor )
+	: m_dAnchor ( dAnchor )
 	, m_tAttr ( tAttr )
 {
+	CSphString sError; // fixme! report it
+	m_pDistCalc = CreateKNNDistanceCalc ( tAttr.m_tKNN, sError );
 	if ( tAttr.m_tKNN.m_eHNSWSimilarity==knn::HNSWSimilarity_e::COSINE )
 		NormalizeVec(m_dAnchor);
 }
@@ -208,29 +234,39 @@ void AddKNNSettings ( StringBuilder_c & sRes, const CSphColumnInfo & tAttr )
 }
 
 
-knn::IndexSettings_t ReadKNNJson ( bson::Bson_c tRoot )
+void ReadKNNJson ( bson::Bson_c tRoot, knn::IndexSettings_t & tIS, knn::ModelSettings_t & tMS, CSphString & sKNNField )
 {
-	knn::IndexSettings_t tRes;
-	tRes.m_iDims = (int) bson::Int ( tRoot.ChildByName ( "knn_dims" ) );
-	tRes.m_eHNSWSimilarity = Str2HNSWSimilarity ( bson::String ( tRoot.ChildByName ( "hnsw_similarity" ) ) );
-	tRes.m_iHNSWM = (int) bson::Int ( tRoot.ChildByName ( "hnsw_m" ), tRes.m_iHNSWM );
-	tRes.m_iHNSWEFConstruction = (int) bson::Int ( tRoot.ChildByName ( "hnsw_ef_construction" ), tRes.m_iHNSWEFConstruction );
+	tIS.m_iDims				= (int) bson::Int ( tRoot.ChildByName ( "knn_dims" ) );
+	tIS.m_eHNSWSimilarity	= Str2HNSWSimilarity ( bson::String ( tRoot.ChildByName ( "hnsw_similarity" ) ) );
+	tIS.m_iHNSWM			= (int) bson::Int ( tRoot.ChildByName ( "hnsw_m" ), tIS.m_iHNSWM );
+	tIS.m_iHNSWEFConstruction = (int) bson::Int ( tRoot.ChildByName ( "hnsw_ef_construction" ), tIS.m_iHNSWEFConstruction );
 
-	return tRes;
+	tMS.m_sModelName		= bson::String ( tRoot.ChildByName ( "model_name" ) ).cstr();
+	tMS.m_sAPIKey			= bson::String ( tRoot.ChildByName ( "api_key" ) ).cstr();
+	tMS.m_bUseGPU			= bson::Bool ( tRoot.ChildByName ( "use_gpu" ), tMS.m_bUseGPU );
+	sKNNField = bson::String ( tRoot.ChildByName ( "field" ) );
 }
 
 
-void operator << ( JsonEscapedBuilder & tOut, const knn::IndexSettings_t & tSettings )
+void FormatKNNSettings ( JsonEscapedBuilder & tOut, const knn::IndexSettings_t & tIS, const knn::ModelSettings_t & tMS, const CSphString & sKNNField )
 {
 	auto _ = tOut.Object();
 
-	knn::IndexSettings_t tDefault;
+	knn::IndexSettings_t tDefaultIS;
 
 	tOut.NamedString ( "knn_type", "hnsw" );
-	tOut.NamedVal ( "knn_dims", tSettings.m_iDims );
-	tOut.NamedString ( "hnsw_similarity", HNSWSimilarity2Str ( tSettings.m_eHNSWSimilarity ) );
-	tOut.NamedValNonDefault ( "hnsw_m", tSettings.m_iHNSWM, tDefault.m_iHNSWM );
-	tOut.NamedValNonDefault ( "hnsw_ef_construction", tSettings.m_iHNSWEFConstruction, tDefault.m_iHNSWEFConstruction );
+	tOut.NamedVal ( "knn_dims", tIS.m_iDims );
+	tOut.NamedString ( "hnsw_similarity", HNSWSimilarity2Str ( tIS.m_eHNSWSimilarity ) );
+	tOut.NamedValNonDefault ( "hnsw_m", tIS.m_iHNSWM, tDefaultIS.m_iHNSWM );
+	tOut.NamedValNonDefault ( "hnsw_ef_construction", tIS.m_iHNSWEFConstruction, tDefaultIS.m_iHNSWEFConstruction );
+
+	if ( !tMS.m_sModelName.empty() )
+	{
+		tOut.NamedString ( "model_name", tMS.m_sModelName.c_str() );
+		tOut.NamedString ( "field", sKNNField );
+		tOut.NamedString ( "api_key", tMS.m_sAPIKey.c_str() );
+		tOut.NamedVal ( "use_gpu", tMS.m_bUseGPU );
+	}
 }
 
 
@@ -248,6 +284,15 @@ CSphString FormatKNNConfigStr ( const CSphVector<NamedKNNSettings_t> & dAttrs )
 		tObj.AddStr ( "hnsw_similarity", HNSWSimilarity2Str ( i.m_eHNSWSimilarity ) );
 		tObj.AddInt ( "hnsw_m", i.m_iHNSWM );
 		tObj.AddInt ( "hnsw_ef_construction", i.m_iHNSWEFConstruction );
+
+		if ( !i.m_sModelName.empty() )
+		{
+			tObj.AddStr ( "model_name", i.m_sModelName.c_str() );
+			tObj.AddStr ( "field", i.m_sField.cstr() );
+			tObj.AddStr ( "api_key", i.m_sAPIKey.c_str() );
+			tObj.AddBool ( "use_gpu", i.m_bUseGPU );
+		}
+
 		tArray.AddItem(tObj);
 	}
 
@@ -300,6 +345,14 @@ bool ParseKNNConfigStr ( const CSphString & sStr, CSphVector<NamedKNNSettings_t>
 		}
 			
 		tParsed.m_eHNSWSimilarity = Str2HNSWSimilarity ( sSimilarity.cstr() );
+		if ( !i.FetchStrItem ( tParsed.m_sModelName, "model_name", sError, true ) ) return false;
+
+		if ( !tParsed.m_sModelName.empty() )
+		{
+			if ( !i.FetchStrItem ( tParsed.m_sField, "field", sError, true ) ) return false;
+			if ( !i.FetchStrItem ( tParsed.m_sAPIKey, "api_key", sError, true ) ) return false;
+			if ( !i.FetchBoolItem ( tParsed.m_bUseGPU, "use_gpu", sError, true ) ) return false;
+		}
 	}
 
 	return true;

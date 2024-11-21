@@ -494,6 +494,7 @@ public:
 	bool			FetchIntItem ( int & iValue, const char * szName, CSphString & sError, bool bIgnoreMissing=false ) const;
 	bool			FetchBoolItem ( bool & bValue, const char * szName, CSphString & sError, bool bIgnoreMissing=false ) const;
 	bool			FetchStrItem ( CSphString & sValue, const char * szName, CSphString & sError, bool bIgnoreMissing=false ) const;
+	bool			FetchStrItem ( std::string & sValue, const char * szName, CSphString & sError, bool bIgnoreMissing=false ) const;
 	bool			HasItem ( const char * szName ) const;
 
 	static JsonObj_c CreateInt ( int64_t iInt );

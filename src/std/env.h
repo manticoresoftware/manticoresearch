@@ -34,6 +34,7 @@ CSphString GET_GALERA_FULLPATH();
 CSphString GetColumnarFullpath();
 CSphString GetSecondaryFullpath();
 CSphString GetKNNFullpath();
+CSphString GetKNNEmbeddingsFullpath();
 
 // return value of asked ENV, or default.
 // note, default determines the type which to return

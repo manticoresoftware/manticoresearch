@@ -20,7 +20,7 @@ include ( update_bundle )
 # Versions of API headers we are need to build with.
 set ( NEED_COLUMNAR_API 26 )
 set ( NEED_SECONDARY_API 16 )
-set ( NEED_KNN_API 3 )
+set ( NEED_KNN_API 4 )
 
 # Note: we don't build, neither link with columnar. Only thing we expect to get is a few interface headers, aka 'columnar_api'.
 # Actual usage of columnar is solely defined by availability of the module named below. That module is build (or not built)
@@ -40,6 +40,7 @@ endif()
 set ( LIB_MANTICORE_COLUMNAR "lib_manticore_columnar.${EXTENSION}" )
 set ( LIB_MANTICORE_SECONDARY "lib_manticore_secondary.${EXTENSION}" )
 set ( LIB_MANTICORE_KNN "lib_manticore_knn.${EXTENSION}" )
+set ( LIB_MANTICORE_KNN_EMBEDDINGS "lib_manticore_knn_embeddings.${EXTENSION}" )
 
 macro ( backup_paths )
 	set ( _CMAKE_FIND_ROOT_PATH "${CMAKE_FIND_ROOT_PATH}" )

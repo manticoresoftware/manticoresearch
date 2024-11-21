@@ -3876,7 +3876,7 @@ static void ReadSchemaColumnJson ( bson::Bson_c tNode, CSphColumnInfo & tCol )
 
 	NodeHandle_t tKNN = tNode.ChildByName ("knn");
 	if ( tKNN!=nullnode )
-		tCol.m_tKNN = ReadKNNJson(tKNN);
+		ReadKNNJson ( tKNN, tCol.m_tKNN, tCol.m_tKNNModel, tCol.m_sKNNField );
 }
 
 
@@ -3971,7 +3971,10 @@ void DumpAttrToJson ( JsonEscapedBuilder& tOut, const CSphColumnInfo& tCol )
 	tOut.NamedVal ( "locator", tCol.m_tLocator );
 
 	if ( tCol.IsIndexedKNN() )
-		tOut.NamedVal ( "knn", tCol.m_tKNN );
+	{
+		tOut.Named ( "knn" );
+		FormatKNNSettings ( tOut, tCol.m_tKNN, tCol.m_tKNNModel, tCol.m_sKNNField );
+	}
 }
 } // namespace
 

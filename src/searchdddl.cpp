@@ -40,10 +40,15 @@ public:
 		knn::HNSWSimilarity_e m_eHNSWSimilarity = knn::HNSWSimilarity_e::L2;
 		bool			m_bKNNDimsSpecified = false;
 		bool			m_bHNSWSimilaritySpecified = false;
+		CSphString		m_sModelName;
+		CSphString		m_sAPIKey;
+		CSphString		m_sField;
+		bool			m_bUseGPU = false;
 
 		void			Reset()	{ *this = ItemOptions_t(); }
 		DWORD			ToFlags() const;
 		knn::IndexSettings_t ToKNN() const;
+		knn::ModelSettings_t ToKNNModel() const;
 		void			CopyOptionsTo ( CreateTableAttr_t & tAttr ) const;
 	};
 
@@ -65,6 +70,10 @@ public:
 	bool	AddItemOptionHNSWSimilarity ( const SqlNode_t & tOption );
 	bool	AddItemOptionHNSWM ( const SqlNode_t & tOption );
 	bool	AddItemOptionHNSWEfConstruction ( const SqlNode_t & tOption );
+	bool	AddItemOptionModelName ( const SqlNode_t & tOption );
+	bool	AddItemOptionField ( const SqlNode_t & tOption );
+	bool	AddItemOptionAPIKey ( const SqlNode_t & tOption );
+	bool	AddItemOptionUseGPU ( const SqlNode_t & tOption );
 
 	void	AddCreateTableOption ( const SqlNode_t & tName, const SqlNode_t & tValue );
 	bool	SetupAlterTable  ( const SqlNode_t & tIndex, const SqlNode_t & tAttr, const SqlNode_t & tType, bool bModify = false );
@@ -146,6 +155,18 @@ knn::IndexSettings_t DdlParser_c::ItemOptions_t::ToKNN() const
 }
 
 
+knn::ModelSettings_t DdlParser_c::ItemOptions_t::ToKNNModel() const
+{
+	knn::ModelSettings_t tModel;
+
+	tModel.m_sModelName	= m_sModelName.cstr();
+	tModel.m_sAPIKey	= m_sAPIKey.cstr();
+	tModel.m_bUseGPU	= m_bUseGPU;
+
+	return tModel;
+}
+
+
 void DdlParser_c::ItemOptions_t::CopyOptionsTo ( CreateTableAttr_t & tAttr ) const
 {
 	tAttr.m_tAttr.m_eEngine	= m_eEngine;
@@ -220,10 +241,19 @@ bool DdlParser_c::CheckFieldFlags ( ESphAttr eAttrType, int iFlags, const CSphSt
 	}
 	else if ( eAttrType==SPH_ATTR_FLOAT_VECTOR )
 	{
-		if ( !tOpts.m_sKNNType.IsEmpty() && ( !tOpts.m_bKNNDimsSpecified || !tOpts.m_bHNSWSimilaritySpecified ) )
+		if ( !tOpts.m_sKNNType.IsEmpty() )
 		{
-			sError = "knn_dims and hnsw_similarity are required if knn_type='hnsw'";
-			return false;
+			if ( ( !tOpts.m_bKNNDimsSpecified || !tOpts.m_bHNSWSimilaritySpecified ) && tOpts.m_sModelName.IsEmpty() )
+			{
+				sError = "knn_dims and hnsw_similarity are required if knn_type='hnsw'";
+				return false;
+			}
+
+			if ( tOpts.m_bKNNDimsSpecified && !tOpts.m_sModelName.IsEmpty() )
+			{
+				sError = "knn_dims can't be used together with model_name";
+				return false;
+			}
 		}
 	}
 	else
@@ -295,11 +325,13 @@ bool DdlParser_c::AddCreateTableCol ( const SqlNode_t & tName, const SqlNode_t &
 	if ( eAttrType!=SPH_ATTR_STRING )
 	{
 		CreateTableAttr_t & tAttr = m_pStmt->m_tCreateTable.m_dAttrs.Add();
-		tAttr.m_tAttr.m_sName			= sName;
-		tAttr.m_tAttr.m_eAttrType		= eAttrType;
+		tAttr.m_tAttr.m_sName		= sName;
+		tAttr.m_tAttr.m_eAttrType	= eAttrType;
 		tOpts.CopyOptionsTo(tAttr);
-		tAttr.m_bKNN					= !tOpts.m_sKNNType.IsEmpty();
-		tAttr.m_tKNN					= tOpts.ToKNN();
+		tAttr.m_bKNN				= !tOpts.m_sKNNType.IsEmpty();
+		tAttr.m_tKNN				= tOpts.ToKNN();
+		tAttr.m_tKNNModel			= tOpts.ToKNNModel();
+		tAttr.m_sKNNField			= tOpts.m_sField;
 
 		return true;
 	}
@@ -451,6 +483,35 @@ bool DdlParser_c::AddItemOptionHNSWEfConstruction ( const SqlNode_t & tOption )
 {
 	CSphString sValue = ToStringUnescape(tOption);
 	m_tItemOptions.m_iHNSWEFConstruction = strtoull ( sValue.cstr(), NULL, 10 );
+	return true;
+}
+
+
+bool DdlParser_c::AddItemOptionModelName ( const SqlNode_t & tOption )
+{
+	m_tItemOptions.m_sModelName = ToStringUnescape(tOption);
+	return true;
+}
+
+
+bool DdlParser_c::AddItemOptionField ( const SqlNode_t & tOption )
+{
+	m_tItemOptions.m_sField = ToStringUnescape(tOption);
+	return true;
+}
+
+
+bool DdlParser_c::AddItemOptionAPIKey ( const SqlNode_t & tOption )
+{
+	m_tItemOptions.m_sAPIKey = ToStringUnescape(tOption);
+	return true;
+}
+
+
+bool DdlParser_c::AddItemOptionUseGPU ( const SqlNode_t & tOption )
+{
+	CSphString sValue = ToStringUnescape(tOption);
+	m_tItemOptions.m_bUseGPU = !!strtoull ( sValue.cstr(), NULL, 10 );
 	return true;
 }
 

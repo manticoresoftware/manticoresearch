@@ -16,14 +16,24 @@
 #include "indexsettings.h"
 #include "secondaryindex.h"
 
+class TableEmbeddings_c
+{
+public:
+	bool	Load ( const CSphString & sAttr, const knn::ModelSettings_t & tSettings, CSphString & sError );
+	knn::TextToEmbeddings_i * GetModel ( const CSphString & sAttr ) const;
+
+private:
+	SmallStringHash_T<std::unique_ptr<knn::TextToEmbeddings_i>> m_hModels;
+};
+
 const char *					GetKnnDistAttrName();
 ISphExpr *						CreateExpr_KNNDist ( const CSphVector<float> & dAnchor, const CSphColumnInfo & tAttr );
 
-void							operator << ( JsonEscapedBuilder & tOut, const knn::IndexSettings_t & tSettings );
 void							AddKNNSettings ( StringBuilder_c & sRes, const CSphColumnInfo & tAttr );
-knn::IndexSettings_t			ReadKNNJson ( bson::Bson_c tRoot );
+void							ReadKNNJson ( bson::Bson_c tRoot, knn::IndexSettings_t & tIS, knn::ModelSettings_t & tMS, CSphString & sKNNField );
 CSphString						FormatKNNConfigStr ( const CSphVector<NamedKNNSettings_t> & dAttrs );
 bool							ParseKNNConfigStr ( const CSphString & sStr, CSphVector<NamedKNNSettings_t> & dParsed, CSphString & sError );
+void							FormatKNNSettings ( JsonEscapedBuilder & tOut, const knn::IndexSettings_t & tIndexSettings, const knn::ModelSettings_t & tModelSettings, const CSphString & sKNNField );
 
 std::unique_ptr<knn::Builder_i>	BuildCreateKNN ( const ISphSchema & tSchema, int64_t iNumElements, CSphVector<PlainOrColumnar_t> & dAttrs, CSphString & sError );
 bool							BuildStoreKNN ( RowID_t tRowID, const CSphRowitem * pRow, const BYTE * pPool, CSphVector<ScopedTypedIterator_t> & dIterators, const CSphVector<PlainOrColumnar_t> & dAttrs, knn::Builder_i & tBuilder );

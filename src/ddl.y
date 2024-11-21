@@ -30,6 +30,7 @@
 
 %token	TOK_ADD
 %token	TOK_ALTER
+%token	TOK_API_KEY
 %token	TOK_AS
 %token	TOK_AT
 %token	TOK_ATTRIBUTE
@@ -45,6 +46,7 @@
 %token	TOK_ENGINE
 %token	TOK_EXISTS
 %token	TOK_FAST_FETCH
+%token	TOK_FIELD
 %token	TOK_FLOAT
 %token	TOK_FLOAT_VECTOR
 %token	TOK_FROM
@@ -64,9 +66,10 @@
 %token	TOK_KNN_DIMS
 %token	TOK_KNN_TYPE
 %token	TOK_LIKE
+%token	TOK_MODEL_NAME
+%token	TOK_MODIFY
 %token	TOK_MULTI
 %token	TOK_MULTI64
-%token	TOK_MODIFY
 %token	TOK_NOT
 %token	TOK_PLUGIN
 %token	TOK_REBUILD
@@ -84,6 +87,7 @@
 %token	TOK_TYPE
 %token	TOK_UINT
 %token	TOK_UPDATE
+%token	TOK_USE_GPU
 
 %%
 
@@ -323,6 +327,38 @@ item_option:
 	| TOK_HNSW_EF_CONSTRUCTION '=' TOK_QUOTED_STRING
 		{
 			if ( !pParser->AddItemOptionHNSWEfConstruction ( $3 ) )
+			{
+				yyerror ( pParser, pParser->GetLastError() );
+    	    	YYERROR;
+			}
+		}
+	| TOK_MODEL_NAME '=' TOK_QUOTED_STRING
+		{
+			if ( !pParser->AddItemOptionModelName ( $3 ) )
+			{
+				yyerror ( pParser, pParser->GetLastError() );
+    	    	YYERROR;
+			}
+		}
+	| TOK_FIELD '=' TOK_QUOTED_STRING
+		{
+			if ( !pParser->AddItemOptionField ( $3 ) )
+			{
+				yyerror ( pParser, pParser->GetLastError() );
+    	    	YYERROR;
+			}
+		}
+	| TOK_API_KEY '=' TOK_QUOTED_STRING
+		{
+			if ( !pParser->AddItemOptionAPIKey ( $3 ) )
+			{
+				yyerror ( pParser, pParser->GetLastError() );
+    	    	YYERROR;
+			}
+		}
+	| TOK_USE_GPU '=' TOK_QUOTED_STRING
+		{
+			if ( !pParser->AddItemOptionUseGPU ( $3 ) )
 			{
 				yyerror ( pParser, pParser->GetLastError() );
     	    	YYERROR;

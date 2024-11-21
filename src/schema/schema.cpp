@@ -570,7 +570,10 @@ void CSphSchema::SetupKNNFlags ( const CSphSourceSettings & tSettings )
 			continue;
 
 		int iId = hKNN[tAttr.m_sName];
-		tAttr.m_tKNN = tSettings.m_dKNN[iId];
+		const auto & tKNN = tSettings.m_dKNN[iId];
+		tAttr.m_tKNN		= tKNN;
+		tAttr.m_tKNNModel	= tKNN;
+		tAttr.m_sKNNField	= tKNN.m_sField;
 	}
 }
 

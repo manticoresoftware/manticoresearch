@@ -640,7 +640,7 @@ POST /bulk
 
 <!-- request Elasticsearch -->
 
-> NOTE: `_bulk` requires [Manticore Buddy](../Installation/Manticore_Buddy.md). If it doesn't work, make sure Buddy is installed.
+> NOTE: `_bulk` requires [Manticore Buddy](../Installation/Manticore_Buddy.md) if the table doesn't exist yet. If it doesn't work, make sure Buddy is installed.
 
 ```json
 POST /_bulk

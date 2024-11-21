@@ -174,7 +174,7 @@ curl -s "http://localhost:9308/cli_json" -d "SHOW STATUS"; echo
 {"Counter":"command_keywords","Value":"%{NUMBER}"},
 {"Counter":"command_persist","Value":"%{NUMBER}"},
 {"Counter":"command_status","Value":"%{NUMBER}"},
-{"Counter":"command_flushattrs","Value":"V"},
+{"Counter":"command_flushattrs","Value":"%{NUMBER}"},
 {"Counter":"command_sphinxql","Value":"%{NUMBER}"},
 {"Counter":"command_ping","Value":"%{NUMBER}"},
 {"Counter":"command_delete","Value":"%{NUMBER}"},

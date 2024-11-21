@@ -663,3 +663,73 @@ mysql -h0 -P9306 -e "CALL AUTOCOMPLETE('bus', 'comment_28798446', '' AS layouts)
 +----------+
 | business |
 +----------+
+––– input –––
+mysql -h0 -P9306 -e "DROP TABLE IF EXISTS t; CREATE TABLE t(f TEXT) min_infix_len='2';"
+––– output –––
+––– input –––
+mysql -h0 -P9306 -e "INSERT INTO t VALUES (1, 'abcdef'), (2, 'abcd efgh');"
+––– output –––
+––– input –––
+mysql -h0 -P9306 -e "SELECT * FROM t WHERE MATCH('abcdef'); SHOW META;"
+––– output –––
++------+--------+
+| id   | f      |
++------+--------+
+|    1 | abcdef |
++------+--------+
++----------------+--------+
+| Variable_name  | Value  |
++----------------+--------+
+| total          | 1      |
+| total_found    | 1      |
+| total_relation | eq     |
+| time           | #!/[0-9]{1}.[0-9]{3}/!#  |
+| keyword[0]     | abcdef |
+| docs[0]        | 1      |
+| hits[0]        | 1      |
++----------------+--------+
+––– input –––
+mysql -h0 -P9306 -e "SELECT * FROM t WHERE MATCH('abcef') OPTION fuzzy=1; SHOW META;"
+––– output –––
++------+-----------+
+| id   | f         |
++------+-----------+
+|    1 | abcdef    |
+|    2 | abcd efgh |
++------+-----------+
++----------------+-------+
+| Variable_name  | Value |
++----------------+-------+
+| total          | 2     |
+| total_found    | 2     |
+| total_relation | eq    |
+| time           | #!/[0-9]{1}.[0-9]{3}/!# |
++----------------+-------+
+––– input –––
+grep -A3 "SELECT \* FROM t WHERE MATCH('abcdef')" /var/log/manticore/query.log
+––– output –––
+/* #!/[A-Za-z]{3}\s+[A-Za-z]{3}\s+[0-9]{1,2}\s+[0-9]{2}:[0-9]{2}:[0-9]{2}\.[0-9]{3}\s+[0-9]{4}/!# conn %{NUMBER} (127.0.0.1:%{NUMBER}) real #!/[0-9]{1}.[0-9]{3}/!# wall #!/[0-9]{1}.[0-9]{3}/!# found 1 */ SELECT * FROM t WHERE MATCH('abcdef');
+/* #!/[A-Za-z]{3}\s+[A-Za-z]{3}\s+[0-9]{1,2}\s+[0-9]{2}:[0-9]{2}:[0-9]{2}\.[0-9]{3}\s+[0-9]{4}/!# conn %{NUMBER} (127.0.0.1:%{NUMBER}) real #!/[0-9]{1}.[0-9]{3}/!# wall #!/[0-9]{1}.[0-9]{3}/!# found 2 */ SELECT * FROM t WHERE MATCH('abcef') OPTION fuzzy=1;
+––– input –––
+mysql -h0 -P9306 -e "SELECT * FROM t WHERE MATCH('nonexistent'); SHOW META;"
+––– output –––
++----------------+-------------+
+| Variable_name  | Value       |
++----------------+-------------+
+| total          | 0           |
+| total_found    | 0           |
+| total_relation | eq          |
+| time           | #!/[0-9]{1}.[0-9]{3}/!#       |
+| keyword[0]     | nonexistent |
+| docs[0]        | 0           |
+| hits[0]        | 0           |
++----------------+-------------+
+––– input –––
+for i in {1..100}; do mysql -h0 -P9306 -e "SELECT * FROM t WHERE MATCH('abcdef') OPTION fuzzy=1;" & done
+––– output –––
+––– input –––
+mysql -h0 -P9306 -e "SELECT * FROM t WHERE MATCH('') OPTION fuzzy=1;"
+––– output –––
+––– input –––
+mysql -h0 -P9306 -e "SELECT * FROM t WHERE MATCH('$#@!') OPTION fuzzy=1;"
+––– output –––

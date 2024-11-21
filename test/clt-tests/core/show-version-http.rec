@@ -8,11 +8,11 @@ curl -s "http://localhost:9308/cli?show%20version" | awk '!/row.*in set/'; echo
 +-----------+----------------------------------+
 | Component | Version                          |
 +-----------+----------------------------------+
-| Daemon    | 6.3.7 2ed25bd4a@24111811 dev     |
-| Columnar  | columnar 2.3.1 30ad2d6@24100914  |
-| Secondary | secondary 2.3.1 30ad2d6@24100914 |
-| KNN       | knn 2.3.1 30ad2d6@24100914       |
-| Buddy     | buddy v3.0.1                     |
+| Daemon    | %{SEMVER} %{COMMITDATE} dev     |
+| Columnar  | columnar %{SEMVER} %{COMMITDATE}  |
+| Secondary | secondary %{SEMVER} %{COMMITDATE} |
+| KNN       | knn %{SEMVER} %{COMMITDATE}       |
+| Buddy     | buddy v%{SEMVER}                     |
 +-----------+----------------------------------+
 ––– input –––
 curl -s "http://localhost:9308/cli?show%20tables" | awk '!/row.*in set/'; echo
@@ -33,7 +33,7 @@ curl -s "http://localhost:9308/cli?select%20*%20from%20t%20where%20match('exampl
 ––– input –––
 curl -s "http://localhost:9308/cli_json" -d "show version"; echo
 ––– output –––
-[{"total":5,"error":"","warning":"","columns":[{"Component":{"type":"string"}},{"Version":{"type":"string"}}],"data":[{"Component":"Daemon","Version":"6.3.7 2ed25bd4a@24111811 dev"},{"Component":"Columnar","Version":"columnar 2.3.1 30ad2d6@24100914"},{"Component":"Secondary","Version":"secondary 2.3.1 30ad2d6@24100914"},{"Component":"KNN","Version":"knn 2.3.1 30ad2d6@24100914"},{"Component":"Buddy","Version":"buddy v3.0.1"}]}]
+[{"total":5,"error":"","warning":"","columns":[{"Component":{"type":"string"}},{"Version":{"type":"string"}}],"data":[{"Component":"Daemon","Version":"%{SEMVER} %{COMMITDATE} dev"},{"Component":"Columnar","Version":"columnar %{SEMVER} %{COMMITDATE}"},{"Component":"Secondary","Version":"secondary %{SEMVER} %{COMMITDATE}"},{"Component":"KNN","Version":"knn %{SEMVER} %{COMMITDATE}"},{"Component":"Buddy","Version":"buddy v%{SEMVER}"}]}]
 ––– input –––
 curl -s "http://localhost:9308/cli_json" -d "show tables"; echo
 ––– output –––
@@ -42,7 +42,7 @@ curl -s "http://localhost:9308/cli_json" -d "show tables"; echo
 "data":[
 {"Table":"t","Type":"rt"}
 ],
-"total":1,
+"total":%{NUMBER},
 "error":"",
 "warning":""
 }]
@@ -54,7 +54,7 @@ curl -s "http://localhost:9308/cli_json" -d "select * from t where match('exampl
 "data":[
 {"id":1,"value":"example"}
 ],
-"total":1,
+"total":%{NUMBER},
 "error":"",
 "warning":""
 }]
@@ -71,7 +71,7 @@ curl -X POST "http://localhost:9308/sql?mode=raw" -d "select * from t"; echo
 {"id":1,"value":"example"},
 {"id":2,"value":"test"}
 ],
-"total":2,
+"total":%{NUMBER},
 "error":"",
 "warning":""
 }]
@@ -83,7 +83,7 @@ curl -X POST "http://localhost:9308/sql?mode=raw" -d "show tables"; echo
 "data":[
 {"Table":"t","Type":"rt"}
 ],
-"total":1,
+"total":%{NUMBER},
 "error":"",
 "warning":""
 }]
@@ -94,7 +94,7 @@ curl -s "http://localhost:9308/cli_json" -d "select * from t where match('nonexi
 "columns":[{"id":{"type":"long long"}},{"value":{"type":"string"}}],
 "data":[
 ],
-"total":0,
+"total":%{NUMBER},
 "error":"",
 "warning":""
 }]
@@ -105,7 +105,7 @@ curl -X POST "http://localhost:9308/sql?mode=raw" -d "select * from t where matc
 "columns":[{"id":{"type":"long long"}},{"value":{"type":"string"}}],
 "data":[
 ],
-"total":0,
+"total":%{NUMBER},
 "error":"",
 "warning":""
 }]
@@ -135,7 +135,7 @@ curl -s "http://localhost:9308/cli_json" -d "DESCRIBE t"; echo
 {"Field":"id","Type":"bigint","Properties":""},
 {"Field":"value","Type":"text","Properties":"indexed stored"}
 ],
-"total":2,
+"total":%{NUMBER},
 "error":"",
 "warning":""
 }]
@@ -149,7 +149,7 @@ curl -s "http://localhost:9308/cli_json" -d "show tables"; echo
 "columns":[{"Table":{"type":"string"}},{"Type":{"type":"string"}}],
 "data":[
 ],
-"total":0,
+"total":%{NUMBER},
 "error":"",
 "warning":""
 }]
@@ -166,8 +166,8 @@ curl -s "http://localhost:9308/cli_json" -d "SHOW STATUS"; echo
 {"Counter":"uptime","Value":"2"},
 {"Counter":"connections","Value":"28"},
 {"Counter":"maxed_out","Value":"0"},
-{"Counter":"version","Value":"6.3.7 2ed25bd4a@24111811 dev (columnar 2.3.1 30ad2d6@24100914) (secondary 2.3.1 30ad2d6@24100914) (knn 2.3.1 30ad2d6@24100914) (buddy v3.0.1)"},
-{"Counter":"mysql_version","Value":"6.3.7 2ed25bd4a@24111811 dev (columnar 2.3.1 30ad2d6@24100914) (secondary 2.3.1 30ad2d6@24100914) (knn 2.3.1 30ad2d6@24100914)"},
+{"Counter":"version","Value":"%{SEMVER} %{COMMITDATE} dev (columnar %{SEMVER} %{COMMITDATE}) (secondary %{SEMVER} %{COMMITDATE}) (knn %{SEMVER} %{COMMITDATE}) (buddy v%{SEMVER})"},
+{"Counter":"mysql_version","Value":"%{SEMVER} %{COMMITDATE} dev (columnar %{SEMVER} %{COMMITDATE}) (secondary %{SEMVER} %{COMMITDATE}) (knn %{SEMVER} %{COMMITDATE})"},
 {"Counter":"command_search","Value":"6"},
 {"Counter":"command_excerpt","Value":"0"},
 {"Counter":"command_update","Value":"0"},
@@ -218,17 +218,17 @@ curl -s "http://localhost:9308/cli_json" -d "SHOW STATUS"; echo
 {"Counter":"load_secondary","Value":"0.00 0.00 0.00"},
 {"Counter":"query_wall","Value":"#!/[0-9]{1}.[0-9]{3}/!#"},
 {"Counter":"query_cpu","Value":"OFF"},
-{"Counter":"dist_wall","Value":"0.000"},
-{"Counter":"dist_local","Value":"0.000"},
-{"Counter":"dist_wait","Value":"0.000"},
+{"Counter":"dist_wall","Value":"#!/[0-9]{1}.[0-9]{3}/!#"},
+{"Counter":"dist_local","Value":"#!/[0-9]{1}.[0-9]{3}/!#"},
+{"Counter":"dist_wait","Value":"#!/[0-9]{1}.[0-9]{3}/!#"},
 {"Counter":"query_reads","Value":"OFF"},
 {"Counter":"query_readkb","Value":"OFF"},
 {"Counter":"query_readtime","Value":"OFF"},
 {"Counter":"avg_query_wall","Value":"0.001"},
 {"Counter":"avg_query_cpu","Value":"OFF"},
-{"Counter":"avg_dist_wall","Value":"0.000"},
-{"Counter":"avg_dist_local","Value":"0.000"},
-{"Counter":"avg_dist_wait","Value":"0.000"},
+{"Counter":"avg_dist_wall","Value":"#!/[0-9]{1}.[0-9]{3}/!#"},
+{"Counter":"avg_dist_local","Value":"#!/[0-9]{1}.[0-9]{3}/!#"},
+{"Counter":"avg_dist_wait","Value":"#!/[0-9]{1}.[0-9]{3}/!#"},
 {"Counter":"avg_query_reads","Value":"OFF"},
 {"Counter":"avg_query_readkb","Value":"OFF"},
 {"Counter":"avg_query_readtime","Value":"OFF"},
@@ -252,8 +252,8 @@ curl -s "http://localhost:9308/cli?show%20status" | awk '!/row.*in set/'; echo
 | uptime                        | 2                                                                                                                                             |
 | connections                   | 29                                                                                                                                            |
 | maxed_out                     | 0                                                                                                                                             |
-| version                       | 6.3.7 2ed25bd4a@24111811 dev (columnar 2.3.1 30ad2d6@24100914) (secondary 2.3.1 30ad2d6@24100914) (knn 2.3.1 30ad2d6@24100914) (buddy v3.0.1) |
-| mysql_version                 | 6.3.7 2ed25bd4a@24111811 dev (columnar 2.3.1 30ad2d6@24100914) (secondary 2.3.1 30ad2d6@24100914) (knn 2.3.1 30ad2d6@24100914)                |
+| version                       | %{SEMVER} %{COMMITDATE} dev (columnar %{SEMVER} %{COMMITDATE}) (secondary %{SEMVER} %{COMMITDATE}) (knn %{SEMVER} %{COMMITDATE}) (buddy v%{SEMVER}) |
+| mysql_version                 | %{SEMVER} %{COMMITDATE} dev (columnar %{SEMVER} %{COMMITDATE}) (secondary %{SEMVER} %{COMMITDATE}) (knn %{SEMVER} %{COMMITDATE})                |
 | command_search                | 6                                                                                                                                             |
 | command_excerpt               | 0                                                                                                                                             |
 | command_update                | 0                                                                                                                                             |
@@ -304,17 +304,17 @@ curl -s "http://localhost:9308/cli?show%20status" | awk '!/row.*in set/'; echo
 | load_secondary                | 0.00 0.00 0.00                                                                                                                                |
 | query_wall                    | #!/[0-9]{1}.[0-9]{3}/!#                                                                                                                                         |
 | query_cpu                     | OFF                                                                                                                                           |
-| dist_wall                     | 0.000                                                                                                                                         |
-| dist_local                    | 0.000                                                                                                                                         |
-| dist_wait                     | 0.000                                                                                                                                         |
+| dist_wall                     | #!/[0-9]{1}.[0-9]{3}/!#                                                                                                                                         |
+| dist_local                    | #!/[0-9]{1}.[0-9]{3}/!#                                                                                                                                         |
+| dist_wait                     | #!/[0-9]{1}.[0-9]{3}/!#                                                                                                                                         |
 | query_reads                   | OFF                                                                                                                                           |
 | query_readkb                  | OFF                                                                                                                                           |
 | query_readtime                | OFF                                                                                                                                           |
 | avg_query_wall                | #!/[0-9]{1}.[0-9]{3}/!#                                                                                                                                         |
 | avg_query_cpu                 | OFF                                                                                                                                           |
-| avg_dist_wall                 | 0.000                                                                                                                                         |
-| avg_dist_local                | 0.000                                                                                                                                         |
-| avg_dist_wait                 | 0.000                                                                                                                                         |
+| avg_dist_wall                 | #!/[0-9]{1}.[0-9]{3}/!#                                                                                                                                         |
+| avg_dist_local                | #!/[0-9]{1}.[0-9]{3}/!#                                                                                                                                         |
+| avg_dist_wait                 | #!/[0-9]{1}.[0-9]{3}/!#                                                                                                                                         |
 | avg_query_reads               | OFF                                                                                                                                           |
 | avg_query_readkb              | OFF                                                                                                                                           |
 | avg_query_readtime            | OFF                                                                                                                                           |

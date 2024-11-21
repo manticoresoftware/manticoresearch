@@ -7530,7 +7530,7 @@ static void PerformFullTextSearch ( const RtSegVec_c & dRamChunks, RtQwordSetup_
 
 		// storing segment in matches tag for finding strings attrs offset later, biased against default zero
 		int iTag = iSeg+1;
-		if ( tCtx.m_uPackedFactorFlags & SPH_FACTOR_ENABLE )
+		if ( tCtx.GetPackedFactor() & SPH_FACTOR_ENABLE )
 			pRanker->ExtraData ( EXTRA_SET_MATCHTAG, (void**)&iTag );
 
 		pRanker->ExtraData ( EXTRA_SET_BLOBPOOL, (void**)&pBlobPool );
@@ -7571,7 +7571,7 @@ static void PerformFullTextSearch ( const RtSegVec_c & dRamChunks, RtQwordSetup_
 				{
 					bNewMatch |= pSorter->Push ( tMatch );
 
-					if ( tCtx.m_uPackedFactorFlags & SPH_FACTOR_ENABLE )
+					if ( tCtx.GetPackedFactor() & SPH_FACTOR_ENABLE )
 					{
 						RowTagged_t tJustPushed = pSorter->GetJustPushed();
 						VecTraits_T<RowTagged_t> dJustPopped = pSorter->GetJustPopped();
@@ -7829,7 +7829,7 @@ bool RtIndex_c::MultiQuery ( CSphQueryResult & tResult, const CSphQuery & tQuery
 	tCtx.m_pProfile = pProfiler;
 	tCtx.m_pLocalDocs = pLocalDocs;
 	tCtx.m_iTotalDocs = iTotalDocs;
-	tCtx.m_uPackedFactorFlags = tArgs.m_uPackedFactorFlags;
+	tCtx.SetPackedFactor ( tArgs.m_uPackedFactorFlags );
 
 	// setup search terms
 	RtQwordSetup_t tTermSetup ( tGuard );

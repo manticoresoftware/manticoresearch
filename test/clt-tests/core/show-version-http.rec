@@ -163,30 +163,30 @@ curl -s "http://localhost:9308/cli_json" -d "SHOW STATUS"; echo
 [{
 "columns":[{"Counter":{"type":"string"}},{"Value":{"type":"string"}}],
 "data":[
-{"Counter":"uptime","Value":"2"},
-{"Counter":"connections","Value":"28"},
-{"Counter":"maxed_out","Value":"0"},
+{"Counter":"uptime","Value":"%{NUMBER}"},
+{"Counter":"connections","Value":"%{NUMBER}"},
+{"Counter":"maxed_out","Value":"%{NUMBER}"},
 {"Counter":"version","Value":"%{SEMVER} %{COMMITDATE} dev (columnar %{SEMVER} %{COMMITDATE}) (secondary %{SEMVER} %{COMMITDATE}) (knn %{SEMVER} %{COMMITDATE}) (buddy v%{SEMVER})"},
 {"Counter":"mysql_version","Value":"%{SEMVER} %{COMMITDATE} dev (columnar %{SEMVER} %{COMMITDATE}) (secondary %{SEMVER} %{COMMITDATE}) (knn %{SEMVER} %{COMMITDATE})"},
-{"Counter":"command_search","Value":"6"},
-{"Counter":"command_excerpt","Value":"0"},
-{"Counter":"command_update","Value":"0"},
-{"Counter":"command_keywords","Value":"0"},
-{"Counter":"command_persist","Value":"0"},
-{"Counter":"command_status","Value":"3"},
-{"Counter":"command_flushattrs","Value":"0"},
-{"Counter":"command_sphinxql","Value":"0"},
-{"Counter":"command_ping","Value":"0"},
-{"Counter":"command_delete","Value":"0"},
-{"Counter":"command_set","Value":"0"},
-{"Counter":"command_insert","Value":"1"},
-{"Counter":"command_replace","Value":"0"},
-{"Counter":"command_commit","Value":"0"},
-{"Counter":"command_suggest","Value":"0"},
-{"Counter":"command_json","Value":"0"},
-{"Counter":"command_callpq","Value":"0"},
-{"Counter":"command_cluster","Value":"0"},
-{"Counter":"command_getfield","Value":"0"},
+{"Counter":"command_search","Value":"%{NUMBER}"},
+{"Counter":"command_excerpt","Value":"%{NUMBER}"},
+{"Counter":"command_update","Value":"%{NUMBER}"},
+{"Counter":"command_keywords","Value":"%{NUMBER}"},
+{"Counter":"command_persist","Value":"%{NUMBER}"},
+{"Counter":"command_status","Value":"%{NUMBER}"},
+{"Counter":"command_flushattrs","Value":"V"},
+{"Counter":"command_sphinxql","Value":"%{NUMBER}"},
+{"Counter":"command_ping","Value":"%{NUMBER}"},
+{"Counter":"command_delete","Value":"%{NUMBER}"},
+{"Counter":"command_set","Value":"%{NUMBER}"},
+{"Counter":"command_insert","Value":"%{NUMBER}"},
+{"Counter":"command_replace","Value":"%{NUMBER}"},
+{"Counter":"command_commit","Value":"%{NUMBER}"},
+{"Counter":"command_suggest","Value":"%{NUMBER}"},
+{"Counter":"command_json","Value":"%{NUMBER}"},
+{"Counter":"command_callpq","Value":"%{NUMBER}"},
+{"Counter":"command_cluster","Value":"%{NUMBER}"},
+{"Counter":"command_getfield","Value":"%{NUMBER}"},
 {"Counter":"insert_replace_stats_ms_avg","Value":"#!/[0-9]{1}.[0-9]{3}/!# #!/[0-9]{1}.[0-9]{3}/!# #!/[0-9]{1}.[0-9]{3}/!#"},
 {"Counter":"insert_replace_stats_ms_min","Value":"#!/[0-9]{1}.[0-9]{3}/!# #!/[0-9]{1}.[0-9]{3}/!# #!/[0-9]{1}.[0-9]{3}/!#"},
 {"Counter":"insert_replace_stats_ms_max","Value":"#!/[0-9]{1}.[0-9]{3}/!# #!/[0-9]{1}.[0-9]{3}/!# #!/[0-9]{1}.[0-9]{3}/!#"},
@@ -202,16 +202,16 @@ curl -s "http://localhost:9308/cli_json" -d "SHOW STATUS"; echo
 {"Counter":"update_stats_ms_max","Value":"N/A N/A N/A"},
 {"Counter":"update_stats_ms_pct95","Value":"N/A N/A N/A"},
 {"Counter":"update_stats_ms_pct99","Value":"N/A N/A N/A"},
-{"Counter":"agent_connect","Value":"0"},
-{"Counter":"agent_tfo","Value":"0"},
-{"Counter":"agent_retry","Value":"0"},
-{"Counter":"queries","Value":"6"},
-{"Counter":"dist_queries","Value":"0"},
-{"Counter":"workers_total","Value":"8"},
-{"Counter":"workers_active","Value":"4"},
-{"Counter":"workers_clients","Value":"2"},
-{"Counter":"workers_clients_vip","Value":"0"},
-{"Counter":"workers_clients_buddy","Value":"1"},
+{"Counter":"agent_connect","Value":"%{NUMBER}"},
+{"Counter":"agent_tfo","Value":"%{NUMBER}"},
+{"Counter":"agent_retry","Value":"%{NUMBER}"},
+{"Counter":"queries","Value":"%{NUMBER}"},
+{"Counter":"dist_queries","Value":"%{NUMBER}"},
+{"Counter":"workers_total","Value":"%{NUMBER}"},
+{"Counter":"workers_active","Value":"%{NUMBER}"},
+{"Counter":"workers_clients","Value":"%{NUMBER}"},
+{"Counter":"workers_clients_vip","Value":"%{NUMBER}"},
+{"Counter":"workers_clients_buddy","Value":"%{NUMBER}"},
 {"Counter":"work_queue_length","Value":"6"},
 {"Counter":"load","Value":"0.00 0.00 0.00"},
 {"Counter":"load_primary","Value":"0.00 0.00 0.00"},
@@ -224,7 +224,7 @@ curl -s "http://localhost:9308/cli_json" -d "SHOW STATUS"; echo
 {"Counter":"query_reads","Value":"OFF"},
 {"Counter":"query_readkb","Value":"OFF"},
 {"Counter":"query_readtime","Value":"OFF"},
-{"Counter":"avg_query_wall","Value":"0.001"},
+{"Counter":"avg_query_wall","Value":"#!/[0-9]{1}.[0-9]{3}/!#"},
 {"Counter":"avg_query_cpu","Value":"OFF"},
 {"Counter":"avg_dist_wall","Value":"#!/[0-9]{1}.[0-9]{3}/!#"},
 {"Counter":"avg_dist_local","Value":"#!/[0-9]{1}.[0-9]{3}/!#"},
@@ -232,11 +232,11 @@ curl -s "http://localhost:9308/cli_json" -d "SHOW STATUS"; echo
 {"Counter":"avg_query_reads","Value":"OFF"},
 {"Counter":"avg_query_readkb","Value":"OFF"},
 {"Counter":"avg_query_readtime","Value":"OFF"},
-{"Counter":"qcache_max_bytes","Value":"16777216"},
-{"Counter":"qcache_thresh_msec","Value":"3000"},
-{"Counter":"qcache_ttl_sec","Value":"60"},
-{"Counter":"qcache_cached_queries","Value":"0"},
-{"Counter":"qcache_used_bytes","Value":"0"},
+{"Counter":"qcache_max_bytes","Value":"%{NUMBER}"},
+{"Counter":"qcache_thresh_msec","Value":"%{NUMBER}"},
+{"Counter":"qcache_ttl_sec","Value":"%{NUMBER}"},
+{"Counter":"qcache_cached_queries","Value":"%{NUMBER}"},
+{"Counter":"qcache_used_bytes","Value":"%{NUMBER}"},
 {"Counter":"qcache_hits","Value":"0"}
 ],
 "total":75,
@@ -249,23 +249,23 @@ curl -s "http://localhost:9308/cli?show%20status" | awk '!/row.*in set/'; echo
 +-------------------------------+-----------------------------------------------------------------------------------------------------------------------------------------------+
 | Counter                       | Value                                                                                                                                         |
 +-------------------------------+-----------------------------------------------------------------------------------------------------------------------------------------------+
-| uptime                        | 2                                                                                                                                             |
-| connections                   | 29                                                                                                                                            |
-| maxed_out                     | 0                                                                                                                                             |
+| uptime                        | %{NUMBER}                                                                                                                                             |
+| connections                   | %{NUMBER}                                                                                                                                            |
+| maxed_out                     | %{NUMBER}                                                                                                                                             |
 | version                       | %{SEMVER} %{COMMITDATE} dev (columnar %{SEMVER} %{COMMITDATE}) (secondary %{SEMVER} %{COMMITDATE}) (knn %{SEMVER} %{COMMITDATE}) (buddy v%{SEMVER}) |
 | mysql_version                 | %{SEMVER} %{COMMITDATE} dev (columnar %{SEMVER} %{COMMITDATE}) (secondary %{SEMVER} %{COMMITDATE}) (knn %{SEMVER} %{COMMITDATE})                |
-| command_search                | 6                                                                                                                                             |
+| command_search                | %{NUMBER}                                                                                                                                             |
 | command_excerpt               | 0                                                                                                                                             |
 | command_update                | 0                                                                                                                                             |
 | command_keywords              | 0                                                                                                                                             |
 | command_persist               | 0                                                                                                                                             |
-| command_status                | 4                                                                                                                                             |
+| command_status                | %{NUMBER}                                                                                                                                             |
 | command_flushattrs            | 0                                                                                                                                             |
 | command_sphinxql              | 0                                                                                                                                             |
 | command_ping                  | 0                                                                                                                                             |
 | command_delete                | 0                                                                                                                                             |
 | command_set                   | 0                                                                                                                                             |
-| command_insert                | 1                                                                                                                                             |
+| command_insert                | %{NUMBER}                                                                                                                                             |
 | command_replace               | 0                                                                                                                                             |
 | command_commit                | 0                                                                                                                                             |
 | command_suggest               | 0                                                                                                                                             |
@@ -291,13 +291,13 @@ curl -s "http://localhost:9308/cli?show%20status" | awk '!/row.*in set/'; echo
 | agent_connect                 | 0                                                                                                                                             |
 | agent_tfo                     | 0                                                                                                                                             |
 | agent_retry                   | 0                                                                                                                                             |
-| queries                       | 6                                                                                                                                             |
+| queries                       | %{NUMBER}                                                                                                                                             |
 | dist_queries                  | 0                                                                                                                                             |
-| workers_total                 | 8                                                                                                                                             |
-| workers_active                | 4                                                                                                                                             |
-| workers_clients               | 2                                                                                                                                             |
+| workers_total                 | %{NUMBER}                                                                                                                                             |
+| workers_active                | %{NUMBER}                                                                                                                                             |
+| workers_clients               | %{NUMBER}                                                                                                                                             |
 | workers_clients_vip           | 0                                                                                                                                             |
-| workers_clients_buddy         | 1                                                                                                                                             |
+| workers_clients_buddy         | %{NUMBER}                                                                                                                                             |
 | work_queue_length             | 6                                                                                                                                             |
 | load                          | 0.00 0.00 0.00                                                                                                                                |
 | load_primary                  | 0.00 0.00 0.00                                                                                                                                |

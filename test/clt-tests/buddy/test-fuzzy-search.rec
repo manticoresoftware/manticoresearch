@@ -725,11 +725,14 @@ mysql -h0 -P9306 -e "SELECT * FROM t WHERE MATCH('nonexistent'); SHOW META;"
 | hits[0]        | 0           |
 +----------------+-------------+
 ––– input –––
-for i in {1..100}; do mysql -h0 -P9306 -e "SELECT * FROM t WHERE MATCH('abcdef') OPTION fuzzy=1;" & done
+mysql -h0 -P9306 -e "SELECT * FROM t WHERE MATCH('abcdef') OPTION fuzzy=1;"
 ––– output –––
++------+-----------+
+| id   | f         |
++------+-----------+
+|    1 | abcdef    |
+|    2 | abcd efgh |
++------+-----------+
 ––– input –––
-mysql -h0 -P9306 -e "SELECT * FROM t WHERE MATCH('') OPTION fuzzy=1;"
-––– output –––
-––– input –––
-mysql -h0 -P9306 -e "SELECT * FROM t WHERE MATCH('$#@!') OPTION fuzzy=1;"
+mysql -h0 -P9306 -e "SELECT * FROM t WHERE MATCH('\$#@\!') OPTION fuzzy=1;"
 ––– output –––

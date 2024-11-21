@@ -1163,6 +1163,9 @@ public:
 			return;
 		}
 
+		if ( eState!=States_e::ENABLED )
+			WaitUnlockedSetState ();
+
 		assert ( Threads::IsInsideCoroutine() );
 		m_tValue.ModifyValueAndNotifyAll ( [eState] ( Value_t& t )
 		{
@@ -1212,6 +1215,31 @@ public:
 		return m_tValue.GetValueRef().m_iDisabledCounter;
 	}
 
+	// need to be run from serialized executor in order to avoid race between wait and modify
+	void WaitLockEnabledState() noexcept
+	{
+		if ( !Threads::IsInsideCoroutine () )
+			return;
+
+		if ( WaitEnabledOrShutdown () )
+			m_iSetWaiter.ModifyValue ( [] ( int & iVal ) { ++iVal; } );
+	}
+
+	void UnlockEnabledState () noexcept
+	{
+		if ( !Threads::IsInsideCoroutine () )
+			return;
+		m_iSetWaiter.ModifyValueAndNotifyAll ( [] ( int & iVal ) { --iVal; } );
+	}
+
+private:
+	void WaitUnlockedSetState ()
+	{
+		if ( !Threads::IsInsideCoroutine () )
+			return;
+		m_iSetWaiter.Wait ( [] ( int i ) { return i<=0; } );
+	}
+
 private:
 	struct Value_t
 	{
@@ -1220,6 +1248,7 @@ private:
 		bool m_bShutdown = false;
 	};
 	Coro::Waitable_T<Value_t> m_tValue;
+	Coro::Waitable_T<int> m_iSetWaiter {0};
 };
 
 enum class MergeSeg_e : BYTE
@@ -1342,6 +1371,9 @@ public:
 	void				ProhibitSave() final;
 	void				EnableSave() final;
 	void				LockFileState ( CSphVector<CSphString> & dFiles ) final;
+
+	void				WaitLockEnabledState () noexcept final;
+	void				UnlockEnabledState () noexcept final;
 
 	void				SetDebugCheck ( bool bCheckIdDups, int iCheckChunk ) final;
 
@@ -10421,6 +10453,16 @@ void RtIndex_c::LockFileState ( CSphVector<CSphString>& dFiles )
 	GetIndexFiles ( dFiles, dFiles );
 }
 
+void RtIndex_c::WaitLockEnabledState () noexcept
+{
+	ScopedScheduler_c tSerialFiber ( m_tWorkers.SerialChunkAccess () );
+	m_tSaving.WaitLockEnabledState ();
+}
+
+void RtIndex_c::UnlockEnabledState () noexcept
+{
+	m_tSaving.UnlockEnabledState ();
+}
 
 void RtIndex_c::CreateReader ( int64_t iSessionId ) const
 {

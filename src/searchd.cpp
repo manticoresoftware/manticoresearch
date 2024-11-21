@@ -16902,17 +16902,11 @@ void HandleMysqlUnfreezeIndexes ( RowBuffer_i& tOut, const CSphString& sIndexes 
 	ParseIndexList ( sIndexes, dIndexes );
 	for ( const auto& sIndex : dIndexes )
 	{
-		auto pServed = GetServed ( sIndex );
-		if ( !ServedDesc_t::IsMutable ( pServed ) )
+		auto pIndex = GetServed ( sIndex );
+		if ( !ServedDesc_t::IsMutable ( pIndex ) )
 			continue;
 
-		// here we get non-locked instance to avoid deadlock with update, that is:
-		// update may acquire w-lock and then wait until index is unfrozen to continue,
-		// but we can't unfreeze, if we need the lock for it.
-		auto * pRt = static_cast<RtIndex_i *> ( UnlockedHazardIdxFromServed ( *pServed ) );
-		if ( !pRt )
-			continue;
-
+		RIdx_T<RtIndex_i*> pRt { pIndex };
 		pRt->EnableSave ();
 		++iUnlocked;
 	}

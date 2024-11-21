@@ -181,6 +181,9 @@ public:
 	virtual void ProhibitSave() = 0;
 	virtual void EnableSave() = 0;
 	virtual void LockFileState ( CSphVector<CSphString> & dFiles ) = 0;
+
+	virtual void WaitLockEnabledState() noexcept {};
+	virtual void UnlockEnabledState () noexcept {};
 	
 	virtual bool	NeedStoreWordID () const = 0;
 	virtual	int64_t	GetMemLimit() const = 0;

@@ -1,5 +1,14 @@
 # Changelog
 
+# Version 6.3.8
+Released: November 22nd 2024
+
+Version 6.3.8 continues the 6.3 series and includes only bug fixes.
+
+### Bug fixes
+
+* [PR #2777](https://github.com/manticoresoftware/manticoresearch/pull/2777) Fixed the calculation of available threads when query concurrency is limited by the `threads` or `max_threads_per_query` settings.
+
 # manticore-extra v1.1.20
 
 Released: Oct 7 2024

@@ -51,6 +51,15 @@
 * ⚠️ BREAKING [Issue #1789](https://github.com/manticoresoftware/manticoresearch/issues/1789) Fixed incorrect error message when a node joins a cluster with the wrong replication protocol version.
 * ⚠️ BREAKING [Issue #2308](https://github.com/manticoresoftware/manticoresearch/issues/2308) Added support for multiple tables in [ALTER CLUSTER ADD and DROP](../Creating_a_cluster/Setting_up_replication/Adding_and_removing_a_table_from_a_replication_cluster.md#Adding-and-removing-a-table-from-a-replication-cluster).
 
+# Version 6.3.8
+Released: November 22nd 2024
+
+Version 6.3.8 continues the 6.3 series and includes only bug fixes.
+
+### Bug fixes
+
+* [PR #2777](https://github.com/manticoresoftware/manticoresearch/pull/2777) Fixed the calculation of available threads when query concurrency is limited by the `threads` or `max_threads_per_query` settings.
+
 # manticore-extra v1.1.20
 
 Released: Oct 7 2024

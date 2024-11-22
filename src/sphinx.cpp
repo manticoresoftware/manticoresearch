@@ -11089,7 +11089,7 @@ bool CSphIndex_VLN::ParsedMultiQuery ( const CSphQuery & tQuery, CSphQueryResult
 
 	// set blob pool for string on_sort expression fix up
 	tCtx.SetBlobPool ( m_tBlobAttrs.GetReadPtr() );
-	tCtx.m_uPackedFactorFlags = tArgs.m_uPackedFactorFlags;
+	tCtx.SetPackedFactor ( tArgs.m_uPackedFactorFlags );
 
 	// open files
 	DataReaderFactoryPtr_c pDoclist = m_pDoclistFile;
@@ -11224,7 +11224,7 @@ bool CSphIndex_VLN::ParsedMultiQuery ( const CSphQuery & tQuery, CSphQueryResult
 	bool bHaveRandom = false;
 	dSorters.Apply ( [&bHaveRandom] ( const ISphMatchSorter * p ) { bHaveRandom |= p->IsRandom(); } );
 
-	bool bUseFactors = !!( tCtx.m_uPackedFactorFlags & SPH_FACTOR_ENABLE );
+	bool bUseFactors = !!( tCtx.GetPackedFactor() & SPH_FACTOR_ENABLE );
 	bool bUseKlist = m_tDeadRowMap.HasDead();
 	bool bHasSortCalc = !tCtx.m_dCalcSort.IsEmpty();
 	bool bHasWeightFilter = !!tCtx.m_pWeightFilter;

@@ -685,22 +685,24 @@ bool ConvertValue ( const char * sName, const JsonObj_c & tMeta, T & tVal )
 	return true;
 }
 
-static void SetSessionMeta ( const JsonObj_c & tBudyyReply )
+static bool SetSessionMeta ( const JsonObj_c & tBudyyReply )
 {
-	CSphString sTmpError;
-	JsonObj_c tSrcMeta = tBudyyReply.GetObjItem ( "meta", sTmpError, true );
-	if ( !tSrcMeta )
-		return;
-
 	ClientSession_c * pSession = session::GetClientSession();
 	if ( !pSession )
-		return;
+		return false;
 
 	auto & tLastMeta = pSession->m_tLastMeta;
 	tLastMeta = CSphQueryResultMeta();
 
+	CSphString sTmpError;
+	JsonObj_c tSrcMeta = tBudyyReply.GetObjItem ( "meta", sTmpError, true );
+	if ( !tSrcMeta )
+		return false;
+
 	// total => m_iMatches
-	ConvertValue ( "total", tSrcMeta, tLastMeta.m_iMatches );
+	// if no meta.total this is not a search query - do not log it into query.log
+	if ( !ConvertValue ( "total", tSrcMeta, tLastMeta.m_iMatches ) )
+		return false;
 		
 	// total_found => m_iTotalMatches
 	ConvertValue ( "total_found", tSrcMeta, tLastMeta.m_iTotalMatches );
@@ -714,6 +716,8 @@ static void SetSessionMeta ( const JsonObj_c & tBudyyReply )
 	CSphString sRel;
 	if ( tSrcMeta.FetchStrItem ( sRel, "total_relation", sTmpError, true ) && !sRel.IsEmpty() && sRel=="gte" )
 		tLastMeta.m_bTotalMatchesApprox = true;
+
+	return true;
 }
 
 // we call it ALWAYS, because even with absolutely correct result, we still might reject it for '/cli' endpoint if buddy is not available or prohibited
@@ -798,8 +802,8 @@ bool ProcessHttpQueryBuddy ( HttpProcessResult_t & tRes, Str_t sSrcQuery, Option
 	dResult.Resize ( 0 );
 	ReplyBuf ( FromStr ( sDump ), eHttpStatus, bNeedHttpResponse, dResult );
 	
-	SetSessionMeta ( tReplyParsed.m_tRoot );
-	LogBuddyQuery ( sSrcQuery, BuddyQuery_e::HTTP );
+	if ( SetSessionMeta ( tReplyParsed.m_tRoot ) )
+		LogBuddyQuery ( sSrcQuery, BuddyQuery_e::HTTP );
 
 	return true;
 }
@@ -868,8 +872,8 @@ void ProcessSqlQueryBuddy ( Str_t sSrcQuery, Str_t tError, std::pair<int, BYTE> 
 
 	ConvertJsonDataset ( tReplyParsed.m_tMessage, sSrcQuery.first, *tBuddyRows );
 
-	SetSessionMeta ( tReplyParsed.m_tRoot );
-	LogBuddyQuery ( sSrcQuery, BuddyQuery_e::SQL );
+	if ( SetSessionMeta ( tReplyParsed.m_tRoot ) )
+		LogBuddyQuery ( sSrcQuery, BuddyQuery_e::SQL );
 }
 
 #ifdef _WIN32

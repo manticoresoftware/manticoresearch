@@ -28,7 +28,7 @@ ln -s /opt/fluent-bit/bin/fluent-bit /usr/bin/fluent-bit
 ––– input –––
 fluent-bit --version | grep 'Fluent Bit'
 ––– output –––
-Fluent Bit v#!/[0-9]{1}\.[0-9]{1}\.[0-9]{2}/!#
+Fluent Bit v#!/[0-9]{1}\.[0-9]{1}\.[0-9]{1,2}/!#
 ––– input –––
 ––– input –––
 echo -e "2023-05-31 10:42:55 status triggers-awaited ca-certificates-java:all 20190405ubuntu1.1\n2023-05-31 10:42:55 trigproc libc-bin:amd64 2.31-0ubuntu9.9 <none>\n2023-05-31 10:42:55 status half-configured libc-bin:amd64 2.31-0ubuntu9.9\n2023-05-31 10:42:55 status installed libc-bin:amd64 2.31-0ubuntu9.9\n2023-05-31 10:42:55 trigproc systemd:amd64 245.4-4ubuntu3.21 <none>" > /var/log/dpkg.log; echo $?

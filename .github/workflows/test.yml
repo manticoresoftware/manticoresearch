@@ -10,12 +10,14 @@ on:
       - manticore-*
     paths-ignore:
       - 'manual/**'
+      - '!manual/References.md'
       - 'cmake/GetGALERA.cmake'
       - 'galera_packaging/**'
   pull_request:
     branches: [ master, update-buddy-version ]
     paths-ignore:
       - 'manual/**'
+      - '!manual/References.md'
       - 'cmake/GetGALERA.cmake'
       - 'galera_packaging/**'
     types: [opened, synchronize, reopened, labeled, unlabeled]
@@ -523,6 +525,8 @@ jobs:
             test_prefix: test/clt-tests/plugins/
           - name: Buddy
             test_prefix: test/clt-tests/buddy/
+          - name: Update
+            test_prefix: test/clt-tests/optimisation-and-update/
     steps:
       - uses: manticoresoftware/clt@0.2.3
         with:

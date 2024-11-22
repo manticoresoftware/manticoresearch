@@ -112,7 +112,7 @@ Manticore Search was forked from [Sphinx 2.3.2](https://github.com/sphinxsearch/
   - [Sync from CSV](https://manual.manticoresearch.com/Adding_data_from_external_storages/Fetching_from_CSV,TSV#Fetching-from-TSV,CSV)
   - [With MySQL as a storage engine](https://manual.manticoresearch.com/Extensions/SphinxSE#Using-SphinxSE)
   - [With MySQL via FEDERATED engine](https://manual.manticoresearch.com/Extensions/FEDERATED)
-  - [ProxySQL](https://manticoresearch.com/2018/06/18/using-proxysql-to-route-inserts-in-a-distributed-realtime-index/)
+  - [ProxySQL](https://manticoresearch.com/blog/using-proxysql-to-route-inserts-in-a-distributed-realtime-index/)
   - [Apache Superset](https://manticoresearch.com/blog/manticoresearch-apache-superset-integration/)
   - [Grafana](https://manticoresearch.com/blog/manticoresearch-grafana-integration/)
   - [Fluentbit](https://manticoresearch.com/blog/integration-of-manticore-with-fluentbit/)

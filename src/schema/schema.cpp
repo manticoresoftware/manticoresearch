@@ -573,7 +573,7 @@ void CSphSchema::SetupKNNFlags ( const CSphSourceSettings & tSettings )
 		const auto & tKNN = tSettings.m_dKNN[iId];
 		tAttr.m_tKNN		= tKNN;
 		tAttr.m_tKNNModel	= tKNN;
-		tAttr.m_sKNNField	= tKNN.m_sField;
+		tAttr.m_sKNNFrom	= tKNN.m_sFrom;
 	}
 }
 

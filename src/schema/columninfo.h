@@ -25,7 +25,7 @@ class CSphReader;
 struct NamedKNNSettings_t : public knn::IndexSettings_t, public knn::ModelSettings_t
 {
 	CSphString	m_sName;
-	CSphString	m_sField;
+	CSphString	m_sFrom;
 };
 
 /// source column info
@@ -75,7 +75,7 @@ struct CSphColumnInfo
 
 	knn::IndexSettings_t m_tKNN;						///< knn index settings
 	knn::ModelSettings_t m_tKNNModel;					///< knn model settings
-	CSphString		m_sKNNField;						///< field used by the model
+	CSphString		m_sKNNFrom;							///< fields/attrs used by the model
 
 	WORD			m_uNext = 0xFFFF;					///< next in linked list for hash in CSphSchema
 

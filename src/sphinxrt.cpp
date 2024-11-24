@@ -1231,6 +1231,12 @@ enum class MergeSeg_e : BYTE
 	EXIT 	= 4,	// shutdown and exit
 };
 
+struct AttrWithModel_t
+{
+	knn::TextToEmbeddings_i *	m_pModel = nullptr;
+	CSphVector<std::pair<int,bool>> m_dFrom;
+};
+
 class RtIndex_c final : public RtIndex_i, public ISphNoncopyable, public ISphWordlist, public ISphWordlistSuggest, public IndexAlterHelper_c, public DebugCheckHelper_c
 {
 public:
@@ -1415,7 +1421,7 @@ private:
 	int							m_iAlterGeneration = 0;		// increased every time index altered
 
 	std::unique_ptr<TableEmbeddings_c> m_pEmbeddings;
-	CSphVector<std::pair<knn::TextToEmbeddings_i *, int>> m_dAttrsWithModels;
+	CSphVector<AttrWithModel_t> m_dAttrsWithModels;
 
 	bool						BindAccum ( RtAccum_t * pAccExt, CSphString* pError = nullptr ) final;
 
@@ -1902,6 +1908,66 @@ DocstoreBuilder_i::Doc_t * RtIndex_c::FetchDocFields ( DocstoreBuilder_i::Doc_t 
 }
 
 
+static const char * FetchStringFromDoc ( int iAttr, const InsertDocData_c & tDoc, const ISphSchema & tSchema )
+{
+	const char ** ppStr = tDoc.m_dStrings.Begin();
+	int iStrAttr = 0;
+
+	for ( int i=0; i < tSchema.GetAttrsCount(); ++i )
+	{
+		const CSphColumnInfo & tAttr = tSchema.GetAttr(i);
+
+		if ( tAttr.m_eAttrType!=SPH_ATTR_STRING )
+			continue;
+
+		if ( iAttr==i )
+			return ppStr[iStrAttr];
+
+		iStrAttr++;
+	}
+
+	return nullptr;
+}
+
+
+static VecTraits_T<const char> ConcatFromFields ( const InsertDocData_c & tDoc, const AttrWithModel_t & tAttr, const ISphSchema & tSchema, CSphVector<char> & dTmp )
+{
+	if ( tAttr.m_dFrom.GetLength()==1 )
+	{
+		int iAttrFieldId = tAttr.m_dFrom[0].first;
+		if ( tAttr.m_dFrom[0].second )
+			return { tDoc.m_dFields[iAttrFieldId].Begin(), tDoc.m_dFields[iAttrFieldId].GetLength() };
+		else
+		{
+			const char * szString = FetchStringFromDoc ( iAttrFieldId, tDoc, tSchema );
+			return { szString, (int64_t)( szString ? strlen(szString) : 0 ) };
+		}
+	}
+
+	dTmp.Resize(0);
+	ARRAY_FOREACH ( i, tAttr.m_dFrom )
+	{
+		auto tFrom = tAttr.m_dFrom[i];
+		int iAttrFieldId = tFrom.first;
+		VecTraits_T<const char> dSrc;
+		if ( tFrom.second )
+			dSrc = { tDoc.m_dFields[iAttrFieldId].Begin(), tDoc.m_dFields[iAttrFieldId].GetLength() };
+		else
+		{
+			const char * szString = FetchStringFromDoc ( iAttrFieldId, tDoc, tSchema );
+			dSrc = { szString, (int64_t)( szString ? strlen(szString) : 0 ) };
+		}
+
+		int iOldSize = dTmp.GetLength();
+		dTmp.Resize ( iOldSize + dSrc.GetLength() + 1 );
+		dTmp[iOldSize] = ' ';
+		memcpy ( dTmp.Begin() + iOldSize + 1, dSrc.Begin(), dSrc.GetLength() );
+	}
+
+	return dTmp;
+}
+
+
 bool RtIndex_c::FetchEmbeddings ( InsertDocData_c & tDoc, CSphString & sError )
 {
 	if ( !m_pEmbeddings )
@@ -1911,6 +1977,7 @@ bool RtIndex_c::FetchEmbeddings ( InsertDocData_c & tDoc, CSphString & sError )
 
 	std::vector<float> dEmbedding;
 	std::string sErrorSTL;
+	CSphVector<char> dTmp;
 	int iMva = 0;
 	ARRAY_FOREACH ( i, m_dAttrsWithModels )
 	{
@@ -1926,7 +1993,7 @@ bool RtIndex_c::FetchEmbeddings ( InsertDocData_c & tDoc, CSphString & sError )
 		iMva += iNumValues + 1;
 
 		auto & tAttrWithModel = m_dAttrsWithModels[i];
-		if ( !tAttrWithModel.first )
+		if ( !tAttrWithModel.m_pModel )
 		{
 			// repack old mva values
 			tStub.AddMVALength ( iNumValues, bDefault );
@@ -1942,7 +2009,8 @@ bool RtIndex_c::FetchEmbeddings ( InsertDocData_c & tDoc, CSphString & sError )
 			return false;
 		}
 
-		if ( !tAttrWithModel.first->Convert ( { tDoc.m_dFields[tAttrWithModel.second].Begin(), (size_t)tDoc.m_dFields[tAttrWithModel.second].GetLength() }, dEmbedding, sErrorSTL ) )
+		VecTraits_T<const char> dConcat = ConcatFromFields ( tDoc, tAttrWithModel, m_tSchema, dTmp );
+		if ( !tAttrWithModel.m_pModel->Convert ( { dConcat.Begin(), (size_t)dConcat.GetLength() }, dEmbedding, sErrorSTL ) )
 		{
 			sError = sErrorSTL.c_str();
 			return false;
@@ -4814,6 +4882,35 @@ bool RtIndex_c::PreallocDiskChunks ( FilenameBuilder_i * pFilenameBuilder, StrVe
 }
 
 
+static bool ParseKNNFrom ( AttrWithModel_t & tAttrWithModel, const CSphString & sFrom, const ISphSchema & tSchema, CSphString & sError )
+{
+	StrVec_t dFrom;
+	sphSplit ( dFrom, sFrom.cstr(), " \t," );
+
+	for ( const auto & i : dFrom )
+	{
+		int iAttrId = tSchema.GetAttrIndex ( i.cstr() );
+		int iFieldId = tSchema.GetFieldIndex ( i.cstr() );
+
+		if ( iFieldId==-1 && iAttrId==-1 )
+		{
+			sError.SetSprintf ( "embedding source '%s' not found", i.cstr() );
+			return false;
+		}
+
+		if ( iAttrId!=-1 && tSchema.GetAttr(iAttrId).m_eAttrType!=SPH_ATTR_STRING )
+		{
+			sError.SetSprintf ( "embedding source attribute '%s' is not a string", i.cstr() );
+			return false;
+		}
+
+		tAttrWithModel.m_dFrom.Add ( { iFieldId==-1 ? iAttrId : iFieldId, iFieldId!=-1 } );
+	}
+
+	return true;
+}
+
+
 bool RtIndex_c::LoadEmbeddingModels ( CSphString & sError )
 {
 	if ( m_pEmbeddings )
@@ -4832,15 +4929,13 @@ bool RtIndex_c::LoadEmbeddingModels ( CSphString & sError )
 	for ( int i = 0; i < m_tSchema.GetAttrsCount(); i++ )
 	{
 		const auto & tAttr = m_tSchema.GetAttr(i);
-		m_dAttrsWithModels[i] = {nullptr, 0};
+		m_dAttrsWithModels[i].m_pModel = nullptr;
 
 		if ( tAttr.m_tKNNModel.m_sModelName.empty() )
 			continue;
 
-		int iFieldId = m_tSchema.GetFieldIndex ( tAttr.m_sKNNField.cstr() );
-		if ( iFieldId==-1 )
+		if ( !ParseKNNFrom ( m_dAttrsWithModels[i], tAttr.m_sKNNFrom, m_tSchema, sError ) )
 		{
-			sError.SetSprintf ( "embedding field '%s' not found", tAttr.m_sKNNField.cstr() );
 			m_pEmbeddings.reset();
 			return false;
 		}
@@ -4854,7 +4949,7 @@ bool RtIndex_c::LoadEmbeddingModels ( CSphString & sError )
 		auto pModel = m_pEmbeddings->GetModel ( tAttr.m_sName );
 		assert(pModel);
 
-		m_dAttrsWithModels[i] = { pModel, iFieldId };
+		m_dAttrsWithModels[i].m_pModel = pModel;
 
 		// fixme! modifying the schema
 		const_cast<CSphColumnInfo&>(tAttr).m_tKNN.m_iDims = pModel->GetDims();

@@ -42,7 +42,7 @@ public:
 		bool			m_bHNSWSimilaritySpecified = false;
 		CSphString		m_sModelName;
 		CSphString		m_sAPIKey;
-		CSphString		m_sField;
+		CSphString		m_sFrom;
 		bool			m_bUseGPU = false;
 
 		void			Reset()	{ *this = ItemOptions_t(); }
@@ -71,7 +71,7 @@ public:
 	bool	AddItemOptionHNSWM ( const SqlNode_t & tOption );
 	bool	AddItemOptionHNSWEfConstruction ( const SqlNode_t & tOption );
 	bool	AddItemOptionModelName ( const SqlNode_t & tOption );
-	bool	AddItemOptionField ( const SqlNode_t & tOption );
+	bool	AddItemOptionFrom ( const SqlNode_t & tOption );
 	bool	AddItemOptionAPIKey ( const SqlNode_t & tOption );
 	bool	AddItemOptionUseGPU ( const SqlNode_t & tOption );
 
@@ -159,8 +159,8 @@ knn::ModelSettings_t DdlParser_c::ItemOptions_t::ToKNNModel() const
 {
 	knn::ModelSettings_t tModel;
 
-	tModel.m_sModelName	= m_sModelName.cstr();
-	tModel.m_sAPIKey	= m_sAPIKey.cstr();
+	tModel.m_sModelName	= m_sModelName.scstr();
+	tModel.m_sAPIKey	= m_sAPIKey.scstr();
 	tModel.m_bUseGPU	= m_bUseGPU;
 
 	return tModel;
@@ -331,7 +331,7 @@ bool DdlParser_c::AddCreateTableCol ( const SqlNode_t & tName, const SqlNode_t &
 		tAttr.m_bKNN				= !tOpts.m_sKNNType.IsEmpty();
 		tAttr.m_tKNN				= tOpts.ToKNN();
 		tAttr.m_tKNNModel			= tOpts.ToKNNModel();
-		tAttr.m_sKNNField			= tOpts.m_sField;
+		tAttr.m_sKNNFrom			= tOpts.m_sFrom;
 
 		return true;
 	}
@@ -494,9 +494,9 @@ bool DdlParser_c::AddItemOptionModelName ( const SqlNode_t & tOption )
 }
 
 
-bool DdlParser_c::AddItemOptionField ( const SqlNode_t & tOption )
+bool DdlParser_c::AddItemOptionFrom ( const SqlNode_t & tOption )
 {
-	m_tItemOptions.m_sField = ToStringUnescape(tOption);
+	m_tItemOptions.m_sFrom= ToStringUnescape(tOption);
 	return true;
 }
 

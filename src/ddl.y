@@ -46,7 +46,6 @@
 %token	TOK_ENGINE
 %token	TOK_EXISTS
 %token	TOK_FAST_FETCH
-%token	TOK_FIELD
 %token	TOK_FLOAT
 %token	TOK_FLOAT_VECTOR
 %token	TOK_FROM
@@ -340,9 +339,9 @@ item_option:
     	    	YYERROR;
 			}
 		}
-	| TOK_FIELD '=' TOK_QUOTED_STRING
+	| TOK_FROM '=' TOK_QUOTED_STRING
 		{
-			if ( !pParser->AddItemOptionField ( $3 ) )
+			if ( !pParser->AddItemOptionFrom ( $3 ) )
 			{
 				yyerror ( pParser, pParser->GetLastError() );
     	    	YYERROR;

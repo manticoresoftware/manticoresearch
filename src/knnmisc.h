@@ -30,10 +30,10 @@ const char *					GetKnnDistAttrName();
 ISphExpr *						CreateExpr_KNNDist ( const CSphVector<float> & dAnchor, const CSphColumnInfo & tAttr );
 
 void							AddKNNSettings ( StringBuilder_c & sRes, const CSphColumnInfo & tAttr );
-void							ReadKNNJson ( bson::Bson_c tRoot, knn::IndexSettings_t & tIS, knn::ModelSettings_t & tMS, CSphString & sKNNField );
+void							ReadKNNJson ( bson::Bson_c tRoot, knn::IndexSettings_t & tIS, knn::ModelSettings_t & tMS, CSphString & sKNNFrom );
 CSphString						FormatKNNConfigStr ( const CSphVector<NamedKNNSettings_t> & dAttrs );
 bool							ParseKNNConfigStr ( const CSphString & sStr, CSphVector<NamedKNNSettings_t> & dParsed, CSphString & sError );
-void							FormatKNNSettings ( JsonEscapedBuilder & tOut, const knn::IndexSettings_t & tIndexSettings, const knn::ModelSettings_t & tModelSettings, const CSphString & sKNNField );
+void							FormatKNNSettings ( JsonEscapedBuilder & tOut, const knn::IndexSettings_t & tIndexSettings, const knn::ModelSettings_t & tModelSettings, const CSphString & sKNNFrom );
 
 std::unique_ptr<knn::Builder_i>	BuildCreateKNN ( const ISphSchema & tSchema, int64_t iNumElements, CSphVector<PlainOrColumnar_t> & dAttrs, CSphString & sError );
 bool							BuildStoreKNN ( RowID_t tRowID, const CSphRowitem * pRow, const BYTE * pPool, CSphVector<ScopedTypedIterator_t> & dIterators, const CSphVector<PlainOrColumnar_t> & dAttrs, knn::Builder_i & tBuilder );

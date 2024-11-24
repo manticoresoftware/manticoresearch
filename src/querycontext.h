@@ -89,8 +89,6 @@ public:
 	int								m_iWeights = 0;					///< search query field weights count
 	int								m_dWeights [ SPH_MAX_FIELDS ];	///< search query field weights
 
-	DWORD							m_uPackedFactorFlags { SPH_FACTOR_DISABLE }; ///< whether we need to calculate packed factors (and some extra options)
-
 	std::unique_ptr<ISphFilter>		m_pFilter;
 	std::unique_ptr<ISphFilter>		m_pWeightFilter;
 
@@ -109,7 +107,7 @@ public:
 	int64_t							m_iTotalDocs = 0;
 	int64_t							m_iIndexTotalDocs = 0;
 
-	explicit CSphQueryContext ( const CSphQuery & tQuery ) : m_tQuery ( tQuery ) {}
+	explicit CSphQueryContext ( const CSphQuery & tQuery );
 			~CSphQueryContext () { 	ResetFilters(); }
 
 	void	BindWeights ( const CSphQuery & tQuery, const CSphSchema & tSchema, CSphString & sWarning );
@@ -133,8 +131,12 @@ public:
 	void	SetupExtraData ( ISphRanker * pRanker, ISphMatchSorter * pSorter );
 	void	ResetFilters();
 
+	void	SetPackedFactor ( DWORD uFlags );
+	DWORD	GetPackedFactor () const;
+
 private:
 	CSphVector<UservarIntSet_c>		m_dUserVals;
+	DWORD							m_uPackedFactorFlags { SPH_FACTOR_DISABLE }; ///< whether we need to calculate packed factors (and some extra options)
 
 	void	AddToFilterCalc ( const ContextCalcItem_t & tCalc );
 	void	AddToSortCalc ( const ContextCalcItem_t & tCalc );

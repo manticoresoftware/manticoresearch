@@ -42,6 +42,7 @@ public:
 		bool			m_bHNSWSimilaritySpecified = false;
 		CSphString		m_sModelName;
 		CSphString		m_sAPIKey;
+		CSphString		m_sCachePath;
 		CSphString		m_sFrom;
 		bool			m_bUseGPU = false;
 
@@ -72,6 +73,7 @@ public:
 	bool	AddItemOptionHNSWEfConstruction ( const SqlNode_t & tOption );
 	bool	AddItemOptionModelName ( const SqlNode_t & tOption );
 	bool	AddItemOptionFrom ( const SqlNode_t & tOption );
+	bool	AddItemOptionCachePath ( const SqlNode_t & tOption );
 	bool	AddItemOptionAPIKey ( const SqlNode_t & tOption );
 	bool	AddItemOptionUseGPU ( const SqlNode_t & tOption );
 
@@ -161,6 +163,7 @@ knn::ModelSettings_t DdlParser_c::ItemOptions_t::ToKNNModel() const
 
 	tModel.m_sModelName	= m_sModelName.scstr();
 	tModel.m_sAPIKey	= m_sAPIKey.scstr();
+	tModel.m_sCachePath = m_sCachePath.scstr();
 	tModel.m_bUseGPU	= m_bUseGPU;
 
 	return tModel;
@@ -504,6 +507,13 @@ bool DdlParser_c::AddItemOptionFrom ( const SqlNode_t & tOption )
 bool DdlParser_c::AddItemOptionAPIKey ( const SqlNode_t & tOption )
 {
 	m_tItemOptions.m_sAPIKey = ToStringUnescape(tOption);
+	return true;
+}
+
+
+bool DdlParser_c::AddItemOptionCachePath ( const SqlNode_t & tOption )
+{
+	m_tItemOptions.m_sCachePath = ToStringUnescape(tOption);
 	return true;
 }
 

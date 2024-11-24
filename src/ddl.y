@@ -37,6 +37,7 @@
 %token	TOK_BIGINT
 %token	TOK_BIT
 %token	TOK_BOOL
+%token	TOK_CACHE_PATH
 %token	TOK_CLUSTER
 %token	TOK_COLUMN
 %token	TOK_COLUMNAR
@@ -350,6 +351,14 @@ item_option:
 	| TOK_API_KEY '=' TOK_QUOTED_STRING
 		{
 			if ( !pParser->AddItemOptionAPIKey ( $3 ) )
+			{
+				yyerror ( pParser, pParser->GetLastError() );
+    	    	YYERROR;
+			}
+		}
+	| TOK_CACHE_PATH '=' TOK_QUOTED_STRING
+		{
+			if ( !pParser->AddItemOptionCachePath ( $3 ) )
 			{
 				yyerror ( pParser, pParser->GetLastError() );
     	    	YYERROR;

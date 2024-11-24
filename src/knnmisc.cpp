@@ -231,6 +231,17 @@ void AddKNNSettings ( StringBuilder_c & sRes, const CSphColumnInfo & tAttr )
 
 	if ( tKNN.m_iHNSWEFConstruction!=tDefault.m_iHNSWEFConstruction )
 		sRes << " hnsw_ef_construction='" << tKNN.m_iHNSWEFConstruction << "'";
+
+	const auto & tKNNModel = tAttr.m_tKNNModel;
+	knn::ModelSettings_t tDefaultModel;
+	if ( !tKNNModel.m_sModelName.empty() )
+		sRes << " model_name='" << tKNNModel.m_sModelName.c_str() << "'";
+
+	if ( !tKNNModel.m_sCachePath.empty() )
+		sRes << " cache_path='" << tKNNModel.m_sCachePath.c_str() << "'";
+
+	if ( tKNNModel.m_bUseGPU!=tDefaultModel.m_bUseGPU )
+		sRes << " use_gpu='" << ( tKNNModel.m_bUseGPU ? 1 : 0 ) << "'";
 }
 
 
@@ -241,9 +252,10 @@ void ReadKNNJson ( bson::Bson_c tRoot, knn::IndexSettings_t & tIS, knn::ModelSet
 	tIS.m_iHNSWM			= (int) bson::Int ( tRoot.ChildByName ( "hnsw_m" ), tIS.m_iHNSWM );
 	tIS.m_iHNSWEFConstruction = (int) bson::Int ( tRoot.ChildByName ( "hnsw_ef_construction" ), tIS.m_iHNSWEFConstruction );
 
-	tMS.m_sModelName		= bson::String ( tRoot.ChildByName ( "model_name" ) ).cstr();
-	tMS.m_sAPIKey			= bson::String ( tRoot.ChildByName ( "api_key" ) ).cstr();
-	tMS.m_bUseGPU			= bson::Bool ( tRoot.ChildByName ( "use_gpu" ), tMS.m_bUseGPU );
+	tMS.m_sModelName	= bson::String ( tRoot.ChildByName ( "model_name" ) ).cstr();
+	tMS.m_sAPIKey		= bson::String ( tRoot.ChildByName ( "api_key" ) ).cstr();
+	tMS.m_sCachePath	= bson::String ( tRoot.ChildByName ( "cache_path" ) ).cstr();
+	tMS.m_bUseGPU		= bson::Bool ( tRoot.ChildByName ( "use_gpu" ), tMS.m_bUseGPU );
 	sKNNFrom = bson::String ( tRoot.ChildByName ( "from" ) );
 }
 
@@ -264,6 +276,7 @@ void FormatKNNSettings ( JsonEscapedBuilder & tOut, const knn::IndexSettings_t &
 	{
 		tOut.NamedString ( "model_name", tMS.m_sModelName.c_str() );
 		tOut.NamedString ( "from", sKNNFrom );
+		tOut.NamedString ( "cache_path", tMS.m_sCachePath.c_str() );
 		tOut.NamedString ( "api_key", tMS.m_sAPIKey.c_str() );
 		tOut.NamedVal ( "use_gpu", tMS.m_bUseGPU );
 	}
@@ -289,6 +302,7 @@ CSphString FormatKNNConfigStr ( const CSphVector<NamedKNNSettings_t> & dAttrs )
 		{
 			tObj.AddStr ( "model_name", i.m_sModelName.c_str() );
 			tObj.AddStr ( "from", i.m_sFrom.cstr() );
+			tObj.AddStr ( "cache_path", i.m_sCachePath.c_str() );
 			tObj.AddStr ( "api_key", i.m_sAPIKey.c_str() );
 			tObj.AddBool ( "use_gpu", i.m_bUseGPU );
 		}
@@ -351,6 +365,7 @@ bool ParseKNNConfigStr ( const CSphString & sStr, CSphVector<NamedKNNSettings_t>
 		{
 			if ( !i.FetchStrItem ( tParsed.m_sFrom, "from", sError, true ) ) return false;
 			if ( !i.FetchStrItem ( tParsed.m_sAPIKey, "api_key", sError, true ) ) return false;
+			if ( !i.FetchStrItem ( tParsed.m_sCachePath, "cache_path", sError, true ) ) return false;
 			if ( !i.FetchBoolItem ( tParsed.m_bUseGPU, "use_gpu", sError, true ) ) return false;
 		}
 	}

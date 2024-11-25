@@ -642,12 +642,12 @@ POST /bulk
 
 <!-- request Elasticsearch -->
 
-> NOTE: `_bulk` requires [Manticore Buddy](../Installation/Manticore_Buddy.md). If it doesn't work, make sure Buddy is installed.
+> NOTE: `_bulk` requires [Manticore Buddy](../Installation/Manticore_Buddy.md) if the table doesn't exist yet. If it doesn't work, make sure Buddy is installed.
 
 ```json
 POST /_bulk
 -H "Content-Type: application/x-ndjson" -d '
-{ "table" : { "_index" : "products" } }
+{ "index" : { "_index" : "products" } }
 { "title" : "Yellow Bag", "price": 12 }
 { "create" : { "_index" : "products" } }
 { "title" : "Red Bag", "price": 12.5, "id": 3 }

@@ -3258,6 +3258,10 @@ static bool ParseSourceLine ( const char * sLine, const CSphString & sAction, Sq
 		tFilter.m_eType = SPH_FILTER_VALUES;
 		tFilter.m_dValues.Add ( tDocId );
 		tFilter.m_sAttrName = "id";
+	} else
+	{
+		sError.SetSprintf ( "unknown action: %s", sAction.cstr() );
+		return false;
 	}
 
 	// _bulk could have cluster:index format
@@ -3539,7 +3543,22 @@ bool HttpHandlerEsBulk_c::ProcessTnx ( const VecTraits_T<BulkTnx_t> & dTnx, VecT
 			}
 
 			if ( !bAction )
-				dErrors.Add ( { iDoc, tResult.GetItem ( "error" ).GetItem ( "type" ).StrVal() } );
+			{
+				JsonObj_c tError = JsonNull;
+				JsonObj_c tErrorType = JsonNull;
+				if ( !tResult.Empty() && tResult.HasItem( "error" ) )
+					tError = tResult.GetItem ( "error" );
+				if ( !tError.Empty() && tError.HasItem ( "type" ))
+					tErrorType = tError.GetItem ( "type" );
+
+				if ( !tErrorType.Empty() )
+					dErrors.Add ( { iDoc, tErrorType.StrVal() } );
+				else
+				{
+					dErrors.Add ( { iDoc, CSphString() } );
+					dErrors.Last().second.SetSprintf ( "unknown statement \"%s\":%s", tStmt.m_sStmt, tDoc.m_tDocLine.first );
+				}
+			}
 		}
 
 		// FIXME!!! check commit of empty accum

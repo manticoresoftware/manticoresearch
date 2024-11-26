@@ -179,6 +179,12 @@ index test1_all
 <!-- crash on update with bad arguments -->
 <query endpoint="test1_all/_update/1234" method="POST">{ "doc": { "test2: 2 } }</query>
 
+<!-- crash on wrong action name -->
+<bulk endpoint="_bulk" content="application/x-ndjson" method="POST">
+{ "table" : { "_index" : "test1", "_id" : "201" } }
+{ "title" : null }
+
+</bulk>
 
 </httpqueries>
 

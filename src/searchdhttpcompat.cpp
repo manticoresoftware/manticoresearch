@@ -65,7 +65,6 @@ private:
 	void ProcessCCR();
 	void ProcessKbnTableGet();
 	void ProcessCount();
-	void ProcessKbnTableMGet();
 	void ProcessIgnored();
 	bool ProcessCreateTable();
 	bool ProcessDeleteDoc();
@@ -1417,143 +1416,6 @@ bool HttpCompatHandler_c::ProcessKbnTableDoc()
 	return true;
 }
 
-static nljson ReportGetDocError ( const CSphString & sError, HttpErrorType_e eType, const CSphString & sId, const CSphString & sIndex )
-{
-	nljson tRes = R"({})"_json;
-	tRes["_index"] = sIndex.cstr();
-	tRes["_id"] = sId.cstr();
-	nljson tResError = R"({})"_json;
-	tResError["type"] = GetErrorTypeName ( eType );
-	tResError["reason"] = sError.cstr();
-	tResError["reason"] = sIndex.cstr();
-	tRes["error"] = tResError;
-
-	return tRes;
-}
-
-void HttpCompatHandler_c::ProcessKbnTableMGet()
-{
-	nljson tReq = nljson::parse ( GetBody().first );
-	
-	nljson::json_pointer tDocs ( "/docs" );
-	nljson::json_pointer tIds ( "/ids" );
-
-	bool bCaseDocs = ( tReq.contains ( tDocs ) );
-	bool bCaseIds = ( !bCaseDocs && tReq.contains ( tIds ) );
-
-	if ( !bCaseDocs && !bCaseIds )
-	{
-		ReportError ( "unknown key for a START_ARRAY, expected [docs] or [ids]", HttpErrorType_e::Parse, EHTTP_STATUS::_400 );
-		return;
-	}
-
-	CSphString sIndex;
-	if ( bCaseIds )
-	{
-		if ( GetUrlParts().GetLength()<2 )
-		{
-			ReportError ( "Validation Failed: 1: index is missing for doc 0;", HttpErrorType_e::ActionRequestValidation, EHTTP_STATUS::_400 );
-			return;
-		}
-
-		sIndex = GetUrlParts()[2];
-
-		if ( sIndex.IsEmpty() )
-		{
-			m_sError.SetSprintf ( "no such index [%s]", GetUrlParts()[2].cstr() );
-			ReportError ( nullptr, HttpErrorType_e::IndexNotFound, EHTTP_STATUS::_400 );
-			return;
-		}
-
-		auto tIndex ( GetServed ( sIndex ) );
-		if ( !tIndex )
-		{
-			m_sError.SetSprintf ( "no such index [%s]", GetUrlParts()[2].cstr() );
-			ReportError ( nullptr, HttpErrorType_e::IndexNotFound, EHTTP_STATUS::_400 );
-			return;
-		}
-	}
-
-	nljson tRes = R"({"docs":[]})"_json;
-	nljson & tResDocs = tRes[tDocs];
-
-	CSphVector<BYTE> dRawDoc;
-	CSphString sId;
-	int iDoc = 0;
-	nljson::json_pointer tDocId ( "/_id" );
-	nljson::json_pointer tDocIdx ( "/_index" );
-
-	for ( const nljson & tDoc : tReq[tDocs] )
-	{
-		if ( bCaseDocs )
-		{
-			if ( !tDoc.contains ( tDocId ) )
-			{
-				m_sError.SetSprintf ( "Validation Failed: 1: id is missing for doc %d;", iDoc );
-				ReportError ( nullptr, HttpErrorType_e::ActionRequestValidation, EHTTP_STATUS::_400 );
-				return;
-			}
-			if ( !tDoc.contains ( tDocIdx ) )
-			{
-				m_sError.SetSprintf ( "Validation Failed: 1: index is missing for doc %d;", iDoc );
-				ReportError ( nullptr, HttpErrorType_e::ActionRequestValidation, EHTTP_STATUS::_400 );
-				return;
-			}
-
-			sId = tDoc[tDocId].get<std::string>().c_str();
-			sIndex = tDoc[tDocIdx].get<std::string>().c_str();
-
-			if ( sIndex.IsEmpty() )
-			{
-				CSphString sError;
-				sError.SetSprintf ( "no such index [%s]", sIndex.cstr() );
-				tResDocs.push_back ( ReportGetDocError ( sError, HttpErrorType_e::IndexNotFound, sId, sIndex ) );
-				continue;
-			}
-		} else
-		{
-			sId = tDoc.get<std::string>().c_str();
-		}
-
-		auto tIndex ( GetServed ( sIndex ) );
-		if ( !tIndex )
-		{
-			CSphString sError;
-			sError.SetSprintf ( "no such index [%s]", sIndex.cstr() );
-			tResDocs.push_back ( ReportGetDocError ( sError, HttpErrorType_e::IndexNotFound, sId, sIndex ) );
-			continue;
-		}
-
-		int iVersion = 0;
-		dRawDoc.Resize ( 0 );
-		TableGetDoc ( sId, RIdx_c ( tIndex ), sIndex, dRawDoc, iVersion );
-
-		nljson tResDoc = R"({"_type": "_doc"})"_json;
-		tResDoc["_index"] = sIndex.cstr();
-		tResDoc["_id"] = sId.cstr();
-
-		if ( dRawDoc.GetLength() )
-		{
-			tResDoc["found"] = true;
-			tResDoc["_version"] = iVersion;
-			tResDoc["_seq_no"] = 1; 
-			tResDoc["_primary_term"] = 1;
-			tResDoc["_source"] = nljson::parse ( dRawDoc.Begin() );
-		} else
-		{
-			tResDoc["found"] = false;
-		}
-		tResDocs.push_back ( tResDoc );
-
-		iDoc++;
-	}
-
-	JsonEscapedBuilder tReply;
-	tReply += tRes.dump().c_str();
-
-	BuildReply ( Str_t ( tReply ), EHTTP_STATUS::_200 );
-}
-
 void HttpCompatHandler_c::ProcessIgnored()
 {
 	const char * sRes = "{\"took\":0, \"ignored\":true, \"errors\":false}";
@@ -1858,6 +1720,13 @@ bool HttpCompatHandler_c::ProcessSearch()
 	}
 
 	const CSphString & sIndex = GetUrlParts()[0];
+	if ( sIndex.Begins ( ".kibana" ) )
+	{
+		m_sError.SetSprintf ( "not supported index [%s]", sIndex.cstr() );
+		ReportError ( nullptr, HttpErrorType_e::IllegalArgument, EHTTP_STATUS::_404, sIndex.cstr() );
+		return false;
+	}
+
 	nljson tReq = nljson::parse ( GetBody().first, nullptr, false );
 	if ( tReq.is_discarded())
 	{
@@ -2215,12 +2084,6 @@ bool HttpCompatHandler_c::ProcessEndpoints()
 	if ( GetRequestType()==HTTP_POST && m_dUrlParts.GetLength()>1 && m_dUrlParts[1]=="_count" )
 	{
 		ProcessCount();
-		return true;
-	}
-
-	if ( GetRequestType()==HTTP_POST && m_dUrlParts.GetLength()>0 && m_dUrlParts[0]=="_mget" )
-	{
-		ProcessKbnTableMGet();
 		return true;
 	}
 

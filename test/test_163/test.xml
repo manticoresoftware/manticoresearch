@@ -269,6 +269,66 @@ index dist_count2
 	agent					= <my_address/>:count2
 }
 
+source src_test_gr1
+{
+	type			= mysql
+	<sql_settings/>
+	sql_query = SELECT * from test_gr1
+	sql_attr_uint	= idd
+    sql_attr_multi = uint mva from field
+}
+
+index test_gr1
+{
+	source			= src_test_gr1
+	path			= <data_path/>/test_gr1
+}
+
+source src_test_gr2
+{
+	type			= mysql
+	<sql_settings/>
+	sql_query = SELECT * from test_gr2
+	sql_attr_uint	= idd
+    sql_attr_multi = uint mva from field
+}
+
+index test_gr2
+{
+	source			= src_test_gr2
+	path			= <data_path/>/test_gr2
+}
+
+source src_test_gr3
+{
+	type			= mysql
+	<sql_settings/>
+	sql_query = SELECT * from test_gr3
+	sql_attr_uint	= idd
+    sql_attr_multi = uint mva from field
+}
+
+index test_gr3
+{
+	source			= src_test_gr3
+	path			= <data_path/>/test_gr3
+}
+
+source src_test_delta1
+{
+	type			= mysql
+	<sql_settings/>
+	sql_query = SELECT * from test_delta1
+	sql_attr_uint	= idd
+    sql_attr_multi = uint mva from field
+}
+
+index test_delta1
+{
+	source			= src_test_delta1
+	path			= <data_path/>/test_delta1
+}
+
 </agent0>
 
 <agent1>
@@ -320,6 +380,85 @@ INSERT INTO `test_table` VALUES
 ( 8, 1,		'a a',		'eats' ),
 ( 9, 3, 	'c cc',		'the' )
 </db_insert>
+
+<db_create>
+CREATE TABLE `test_gr1`
+(
+	`id` int(11) NOT NULL default '0',
+	`idd` int(11) NOT NULL default '0',
+	`body` varchar(255) NOT NULL default '',
+    `mva` varchar(255) NOT NULL default ''
+)
+</db_create>
+
+<db_drop>DROP TABLE IF EXISTS `test_gr1`</db_drop>
+
+<db_insert>
+	<var name="vals"/>
+	<repeat count="999" vars="i j" init="1 2" inc="1 1"><var name="vals" delimiter=",">(<i/>,<j/>, 'missed doc','1,2,3')</var></repeat>
+	<repeat count="3201" vars="i j" init="102001 102001" inc="1 1"><var name="vals" delimiter=",">(<i/>,<j/>, 'matched doc','1,2,3')</var></repeat>
+	INSERT INTO test_gr1 VALUES <vals/>
+</db_insert>
+
+<db_create>
+CREATE TABLE `test_gr2`
+(
+	`id` int(11) NOT NULL default '0',
+	`idd` int(11) NOT NULL default '0',
+	`body` varchar(255) NOT NULL default '',
+    `mva` varchar(255) NOT NULL default ''    
+)
+</db_create>
+
+<db_drop>DROP TABLE IF EXISTS `test_gr2`</db_drop>
+
+<db_insert>
+	<var name="vals"/>
+	<repeat count="999" vars="i j" init="102001 102002" inc="1 1"><var name="vals" delimiter=",">(<i/>,<j/>, 'missed doc','1,2,3')</var></repeat>
+    <repeat count="4801" vars="i j" init="101001 101001" inc="1 1"><var name="vals" delimiter=",">(<i/>,<j/>, 'matched doc','1,2,3')</var></repeat>
+	<repeat count="4201" vars="i j" init="150001 150002" inc="1 1"><var name="vals" delimiter=",">(<i/>,<j/>, 'matched doc','1,2,3')</var></repeat>
+	INSERT INTO test_gr2 VALUES <vals/>
+</db_insert>
+
+<db_create>
+CREATE TABLE `test_gr3`
+(
+	`id` int(11) NOT NULL default '0',
+	`idd` int(11) NOT NULL default '0',
+	`body` varchar(255) NOT NULL default '',
+    `mva` varchar(255) NOT NULL default ''    
+)
+</db_create>
+
+<db_drop>DROP TABLE IF EXISTS `test_gr3`</db_drop>
+
+<db_insert>
+	<var name="vals"/>
+	<repeat count="999" vars="i j" init="20001 20002" inc="1 1"><var name="vals" delimiter=",">(<i/>,<j/>, 'missed doc','1,2,3')</var></repeat>
+    <repeat count="4801" vars="i j" init="101001 101001" inc="1 1"><var name="vals" delimiter=",">(<i/>,<j/>, 'matched doc','1,2,3')</var></repeat>
+	<repeat count="4901" vars="i j" init="250001 250002" inc="1 1"><var name="vals" delimiter=",">(<i/>,<j/>, 'matched doc','1,2,3')</var></repeat>
+	INSERT INTO test_gr3 VALUES <vals/>
+</db_insert>
+
+<db_create>
+CREATE TABLE `test_delta1`
+(
+	`id` int(11) NOT NULL default '0',
+	`idd` int(11) NOT NULL default '0',
+	`body` varchar(255) NOT NULL default '',
+    `mva` varchar(255) NOT NULL default ''    
+)
+</db_create>
+
+<db_drop>DROP TABLE IF EXISTS `test_delta1`</db_drop>
+
+<db_insert>
+INSERT INTO `test_delta1` VALUES
+( 1, 1,		'missed doc' ),
+( 2, 1,		'missed doc' ),
+( 3, 1,		'missed doc' ),
+</db_insert>
+
 
 <queries>
 	<query select="*, count(*) as cnt, 1 as gr " groupfunc="attr" groupattr="gr" index="main"/>
@@ -400,6 +539,8 @@ INSERT INTO `test_table` VALUES
 	select idd i, count(*), idd b, count(*) c, count(distinct i) from count2  where id in (1,2);
 	select idd i, count(*), idd b, count(*) c, count(distinct i) d from count2  where id in (1,2);
 
+	<!-- crash on count distinct with increased matches -->
+    SELECT *, COUNT(DISTINCT id) AS gd FROM test_gr1 ,test_gr2 ,test_gr3 ,test_delta1 WHERE MATCH('matched') GROUP BY idd LIMIT 0,1 OPTION max_matches=1400, threads=1; 
 </sphinxql></queries>
 
 </test>

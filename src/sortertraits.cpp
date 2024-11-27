@@ -151,10 +151,13 @@ void CSphMatchQueueTraits::SwapMatchQueueTraits ( CSphMatchQueueTraits& rhs )
 	// ISphMatchSorter
 	::Swap ( m_iTotal, rhs.m_iTotal );
 
+	// MatchSorter_c
+	::Swap ( m_iMatchCapacity, rhs.m_iMatchCapacity );
+
 	// CSphMatchQueueTraits
 	m_dData.SwapData ( rhs.m_dData );
 	m_dIData.SwapData ( rhs.m_dIData );
-	assert ( m_iSize==rhs.m_iSize );
+	::Swap ( m_iSize, rhs.m_iSize );
 }
 
 

@@ -809,7 +809,7 @@ inline int HttpRequestParser_c::ParseHeaderCompleted ()
 	m_tParser.upgrade = 0;
 
 	// connection wide http options
-	m_bKeepAlive = ( http_should_keep_alive ( &m_tParser ) != 0 );
+	m_bKeepAlive = ( ( m_tParser.flags & F_CONNECTION_KEEP_ALIVE ) != 0 );
 	m_eType = (http_method)m_tParser.method;
 
 	FinishParserKeyVal();

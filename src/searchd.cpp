@@ -5898,7 +5898,8 @@ void SearchHandler_c::CalcThreadsPerIndex ( int iConcurrency )
 		iConcurrency = g_iThreads;
 
 	int iBusyWorkers = Max ( GlobalWorkPool()->CurTasks() - 1, 0 ); // ignore current task
-	int iAvailableWorkers = Max ( iConcurrency-iBusyWorkers, 1 );
+	int iAvailableWorkers = Max ( Coro::CurrentScheduler()->WorkingThreads() - iBusyWorkers, 1 );
+	iAvailableWorkers = Min ( iAvailableWorkers, iConcurrency );
 
 	CSphVector<CSphVector<int64_t>> dCountDistinct;
 	PopulateCountDistinct ( dCountDistinct );
@@ -11274,7 +11275,11 @@ void sphHandleMysqlInsert ( StmtErrorReporter_i & tOut, const SqlStmt_t & tStmt 
 	auto pServed = GetServed ( tStmt.m_sIndex );
 	if ( !ServedDesc_t::IsMutable ( pServed ) )
 	{
-		tOut.Error ( "table '%s' absent, or does not support INSERT", tStmt.m_sIndex.cstr ());
+		if ( pServed )
+			tOut.Error ( "table '%s' does not support INSERT", tStmt.m_sIndex.cstr ());
+		else
+			tOut.Error ( "table '%s' absent", tStmt.m_sIndex.cstr ());
+
 		return;
 	}
 

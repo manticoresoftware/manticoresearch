@@ -1764,19 +1764,17 @@ constexpr char dWeekdays[7][4] = { "Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sa
 constexpr char dMonths[12][4] = { "Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec" };
 }
 
-/// format current timestamp (for logging, or whatever)
-int sphFormatCurrentTime ( char* sTimeBuf, int iBufLen )
+
+int sphFormatTime ( int64_t iNow, char * sTimeBuf, int iBufLen )
 {
-	int64_t iNow = sphMicroTimer();
 	time_t ts = (time_t)( iNow / 1000000 ); // on some systems (eg. FreeBSD 6.2), tv.tv_sec has another type and we can't just pass it
 
 	cctz::civil_second tCS = ConvertTimeLocal(ts);
 	return snprintf ( sTimeBuf, iBufLen, "%.3s %.3s%3d %.2d:%.2d:%.2d.%.3d %d", dWeekdays[GetWeekDay ( tCS, true )-1], dMonths[tCS.month()-1], tCS.day(), tCS.hour(), tCS.minute(), tCS.second(), (int)( ( iNow % 1000000 ) / 1000 ), (int)tCS.year() );
 }
 
-void sphFormatCurrentTime ( StringBuilder_c& sOut )
+void sphFormatTime ( int64_t iNow, StringBuilder_c & sOut )
 {
-	int64_t iNow = sphMicroTimer();
 	time_t ts = (time_t)( iNow / 1000000 ); // on some systems (eg. FreeBSD 6.2), tv.tv_sec has another type, and we can't just pass it
 	cctz::civil_second tCS = ConvertTimeLocal(ts);
 
@@ -1785,6 +1783,17 @@ void sphFormatCurrentTime ( StringBuilder_c& sOut )
 		 << ' ' << Digits<2>(tCS.day())
 		 << ' ' << Digits<2>(tCS.hour()) << ':' << Digits<2>(tCS.minute()) << ':' << Digits<2>(tCS.second()) << '.' << FixedNum<10,3,0,'0'>( ( iNow % 1000000 ) / 1000 )
 		 << ' ' << tCS.year();
+}
+
+/// format current timestamp (for logging, or whatever)
+int sphFormatCurrentTime ( char* sTimeBuf, int iBufLen )
+{
+	return sphFormatTime ( sphMicroTimer (), sTimeBuf, iBufLen );
+}
+
+void sphFormatCurrentTime ( StringBuilder_c& sOut )
+{
+	return sphFormatTime ( sphMicroTimer (), sOut );
 }
 
 CSphString sphCurrentUtcTime()

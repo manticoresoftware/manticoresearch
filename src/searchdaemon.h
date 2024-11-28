@@ -545,7 +545,7 @@ public:
 	bool	GetDwords ( CSphVector<DWORD> & dBuffer, int & iGot, int iMax );
 	bool	GetQwords ( CSphVector<SphAttr_t> & dBuffer, int & iGot, int iMax );
 
-	inline int		HasBytes() const { return int ( m_pBuf - m_pCur + m_iLen ); }
+	inline int		HasBytes() const noexcept { return int ( m_pBuf - m_pCur + m_iLen ); }
 
 	bool			GetError() const { return m_bError; }
 	const CSphString & GetErrorMessage() const { return m_sError; }

@@ -177,7 +177,9 @@ static constexpr bool	THREAD_EX_NEEDS_VIP = false; // whether non-VIP can issue 
 static CSphVector<Listener_t>	g_dListeners;
 
 static int				g_iQueryLogFile	= -1;
+int						g_iHttpLogFile = -1;
 static CSphString		g_sQueryLogFile;
+static CSphString		g_sHttpLogFile;
 static CSphString		g_sPidFile;
 static bool				g_bPidIsMine = false;		// if PID is not mine, don't unlink it on fail
 static int				g_iPidFD		= -1;
@@ -19216,6 +19218,21 @@ void CheckReopenLogs () REQUIRES ( MainThread )
 		}
 	}
 
+	if ( g_iHttpLogFile>=0 && !isatty ( g_iHttpLogFile ) )
+	{
+		int iFD = ::open ( g_sHttpLogFile.cstr (), O_CREAT | O_RDWR | O_APPEND, S_IREAD | S_IWRITE );
+		if ( iFD<0 )
+		{
+			sphWarning ( "failed to reopen http log file '%s': %s", g_sHttpLogFile.cstr (), strerrorm ( errno ) );
+		} else
+		{
+			::close ( g_iHttpLogFile );
+			g_iHttpLogFile = iFD;
+			LogChangeMode ( g_iHttpLogFile, g_iLogFileMode );
+			sphInfo ( "http log reopened" );
+		}
+	}
+
 	g_bGotSigusr1 = 0;
 }
 
@@ -21212,6 +21229,21 @@ int WINAPI ServiceMain ( int argc, char **argv ) EXCLUDES (MainThread)
 				LogChangeMode ( g_iQueryLogFile, g_iLogFileMode );
 			}
 			g_sQueryLogFile = sQueryLog.cstr();
+		}
+
+		// create query log if required
+		if ( hSearchd.Exists ( "log_http" ) )
+		{
+			CSphString sHttpLog = hSearchd["log_http"].cstr ();
+			FixPathAbsolute ( sHttpLog );
+			g_iHttpLogFile = open ( sHttpLog.cstr (), O_CREAT | O_RDWR | O_APPEND, S_IREAD | S_IWRITE );
+			if ( g_iQueryLogFile<0 )
+				sphWarning ( "failed to open http log file '%s': %s", sHttpLog.cstr (), strerrorm ( errno ) );
+			else
+			{
+				LogChangeMode ( g_iHttpLogFile, g_iLogFileMode );
+				g_sHttpLogFile = std::move( sHttpLog );
+			}
 		}
 	}
 

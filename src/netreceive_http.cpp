@@ -17,8 +17,152 @@
 
 extern int g_iClientTimeoutS; // from searchd.cpp
 extern volatile bool g_bMaintenance;
+extern int g_iHttpLogFile; // from searchd.cpp
+
+int GetGlobalReqID () noexcept
+{
+	static std::atomic<int> iReqID { 1 };
+	return iReqID.fetch_add ( 1, std::memory_order_relaxed );
+}
+
+static void logRec ( const StringBuilder_c& sData )
+{
+	sphSeek ( g_iHttpLogFile, 0, SEEK_END );
+	sphWrite ( g_iHttpLogFile, sData.cstr (), sData.GetLength () );
+}
+
+static void logOutput ( VecTraits_T<BYTE> dData, int iReqID )
+{
+	StringBuilder_c tBuf;
+	tBuf << "[";
+	sphFormatCurrentTime ( tBuf );
+	tBuf << "] [Request-ID: " << iReqID << "] - Outgoing HTTP Response:\n";
+	auto iLine = tBuf.GetLength();
+	for ( auto i = 1; i<iLine; ++i ) tBuf << ">";
+	tBuf << "\n";
+	if ( dData.IsEmpty () )
+		tBuf << "<empty response>";
+	else
+		tBuf << Str_t { dData };
+	tBuf << "\n\n";
+	logRec ( tBuf );
+}
 
 
+static void logInput ( VecTraits_T<BYTE> sData, int iReqID, int64_t iTimestamp )
+{
+	StringBuilder_c tBuf;
+	tBuf << "[";
+	sphFormatTime ( iTimestamp, tBuf );
+	tBuf << "] [Request-ID: " << iReqID << "] - Incoming HTTP Request:\n";
+	auto iLine = tBuf.GetLength ();
+	for ( auto i = 1; i<iLine; ++i )
+		tBuf << "<";
+	tBuf << "\n";
+	if ( sData.IsEmpty () )
+		tBuf << "<empty request>";
+	else
+		tBuf.AppendRawChunk ( sData );
+	tBuf << "\n\n";
+	logRec ( tBuf );
+}
+
+class LoggingAsyncNetBuffer_c final : public AsyncNetBuffer_c
+{
+	std::unique_ptr<AsyncNetBuffer_c> m_pFrontend;
+	AsyncNetInputBuffer_c & m_tIn;
+	GenericOutputBuffer_c & m_tOut;
+	int m_iReqID;
+	int64_t m_iIncomingTimestamp;
+	CSphTightVector<BYTE> m_dInput;
+
+protected:
+	int ReadFromBackend ( int iNeed, int iSpace, bool bIntr ) final
+	{
+		int iRead = 0;
+		while ( iNeed>iRead )
+		{
+			// read raw packet
+			if ( !m_tIn.ReadFrom ( iNeed, bIntr ) )
+				return -1;
+
+			iNeed =  Clamp ( iNeed, iSpace, m_tIn.HasBytes () );
+
+			auto dChunk = AllocateBuffer ( iNeed );
+			m_tIn.GetBytes ( dChunk.begin (), iNeed );
+			iRead += iNeed;
+			m_dInput.Append ( dChunk.begin(), iNeed );
+			if ( !m_iIncomingTimestamp )
+				m_iIncomingTimestamp = sphMicroTimer ();
+		}
+		return iRead;
+	}
+
+public:
+	explicit LoggingAsyncNetBuffer_c ( std::unique_ptr<AsyncNetBuffer_c>&& pFrontend )
+			: m_pFrontend ( std::move ( pFrontend ) )
+			, m_tIn ( *m_pFrontend )
+			, m_tOut ( *m_pFrontend )
+			, m_iReqID ( 0 )
+			, m_iIncomingTimestamp ( 0 )
+	{}
+
+	void SetWTimeoutUS ( int64_t iTimeoutUS ) final
+	{
+		m_tOut.SetWTimeoutUS ( iTimeoutUS );
+	};
+
+	int64_t GetWTimeoutUS () const final
+	{
+		return m_tOut.GetWTimeoutUS ();
+	}
+
+	void SetTimeoutUS ( int64_t iTimeoutUS ) final
+	{
+		m_tIn.SetTimeoutUS ( iTimeoutUS );
+	};
+
+	int64_t GetTimeoutUS () const final
+	{
+		return m_tIn.GetTimeoutUS ();
+	}
+
+	int64_t GetTotalReceived () const final
+	{
+		return m_tIn.GetTotalReceived ();
+	}
+
+	int64_t GetTotalSent () const final
+	{
+		return m_tOut.GetTotalSent ();
+	}
+
+	void SetReqID ( int iID ) noexcept
+	{
+		m_iReqID = iID;
+	}
+
+	bool SendBuffer ( const VecTraits_T<BYTE> & dData ) final
+	{
+		logInput ( m_dInput, m_iReqID, std::exchange ( m_iIncomingTimestamp, 0 ) );
+		m_dInput.Reset();
+		logOutput ( dData, m_iReqID );
+		m_tOut.SendBytes ( dData );
+		return m_tOut.SendBuffer ( dData );
+	}
+};
+
+bool MakeLoggingLayer ( std::unique_ptr<AsyncNetBuffer_c> & pSource )
+{
+	pSource = std::make_unique<LoggingAsyncNetBuffer_c> ( std::move ( pSource ) );
+	return true;
+}
+
+bool SendReply ( GenericOutputBuffer_c & tOut, CSphVector<BYTE>& dData ) noexcept
+{
+	tOut.SwapData ( dData );
+	return tOut.Flush ();
+};
 
 void HttpServe ( std::unique_ptr<AsyncNetBuffer_c> pBuf )
 {
@@ -64,6 +208,10 @@ void HttpServe ( std::unique_ptr<AsyncNetBuffer_c> pBuf )
 	if ( bHeNeedSSL )
 		tSess.SetSsl ( MakeSecureLayer ( pBuf ) );
 
+	bool bHttpLogging = g_iHttpLogFile>=0;
+	if ( bHttpLogging )
+		MakeLoggingLayer ( pBuf );
+
 	auto& tOut = *(GenericOutputBuffer_c *) pBuf.get();
 	auto& tIn = *(AsyncNetInputBuffer_c *) pBuf.get();
 
@@ -83,8 +231,7 @@ void HttpServe ( std::unique_ptr<AsyncNetBuffer_c> pBuf )
 			LogNetError ( sMsg.first );
 			sphHttpErrorReply ( dResult, eCode, sMsg.first );
 		}
-		tOut.SwapData ( dResult );
-		return tOut.Flush();
+		return SendReply ( tOut, dResult );
 	};
 
 	do
@@ -93,6 +240,12 @@ void HttpServe ( std::unique_ptr<AsyncNetBuffer_c> pBuf )
 		tParser.Reinit();
 
 		tSess.SetKilled ( false );
+
+		if ( bHttpLogging )
+		{
+			auto pLoggingBuf = static_cast<LoggingAsyncNetBuffer_c *> (pBuf.get ());
+			pLoggingBuf->SetReqID ( GetGlobalReqID() );
+		}
 
 		// read HTTP header
 		while ( !tParser.ParseHeader ( tIn.Tail() ) )
@@ -156,8 +309,7 @@ void HttpServe ( std::unique_ptr<AsyncNetBuffer_c> pBuf )
 //		tracer.Instant ( [&tIn](StringBuilder_c& sOut) {sOut<< ",\"args\":{\"step\":"<<tIn.HasBytes()<<"}";} );
 		bOk = tParser.ProcessClientHttp ( tIn, dResult );
 
-		tOut.SwapData (dResult);
-		if ( !tOut.Flush () )
+		if ( !SendReply ( tOut, dResult ) )
 			break;
 
 		pBuf->SyncErrorState();

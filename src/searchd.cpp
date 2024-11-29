@@ -16862,7 +16862,13 @@ void HandleMysqlFreezeIndexes ( RowBuffer_i& tOut, const SqlStmt_t& tStmt, CSphS
 			continue;
 		}
 
-		RIdx_T<RtIndex_i*> pRt { pIndex };
+		// here we get non-locked instance to avoid deadlock with update.
+		// Deadlock happens by this sequence:
+		// 1. Update protects index from bein frozen.
+		// 2. We lock index here.
+		// 3. We wait until protection released.
+		// 4. Update tries to w-lock the index, locked by us.
+		auto * pRt = static_cast<RtIndex_i *> ( UnlockedHazardIdxFromServed ( *pIndex ) );
 		pRt->LockFileState ( dIndexFiles );
 	}
 
@@ -16907,17 +16913,11 @@ void HandleMysqlUnfreezeIndexes ( RowBuffer_i& tOut, const CSphString& sIndexes 
 	ParseIndexList ( sIndexes, dIndexes );
 	for ( const auto& sIndex : dIndexes )
 	{
-		auto pServed = GetServed ( sIndex );
-		if ( !ServedDesc_t::IsMutable ( pServed ) )
+		auto pIndex = GetServed ( sIndex );
+		if ( !ServedDesc_t::IsMutable ( pIndex ) )
 			continue;
 
-		// here we get non-locked instance to avoid deadlock with update, that is:
-		// update may acquire w-lock and then wait until index is unfrozen to continue,
-		// but we can't unfreeze, if we need the lock for it.
-		auto * pRt = static_cast<RtIndex_i *> ( UnlockedHazardIdxFromServed ( *pServed ) );
-		if ( !pRt )
-			continue;
-
+		RIdx_T<RtIndex_i*> pRt { pIndex };
 		pRt->EnableSave ();
 		++iUnlocked;
 	}

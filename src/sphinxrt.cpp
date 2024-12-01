@@ -1231,12 +1231,6 @@ enum class MergeSeg_e : BYTE
 	EXIT 	= 4,	// shutdown and exit
 };
 
-struct AttrWithModel_t
-{
-	knn::TextToEmbeddings_i *	m_pModel = nullptr;
-	CSphVector<std::pair<int,bool>> m_dFrom;
-};
-
 class RtIndex_c final : public RtIndex_i, public ISphNoncopyable, public ISphWordlist, public ISphWordlistSuggest, public IndexAlterHelper_c, public DebugCheckHelper_c
 {
 public:
@@ -1488,7 +1482,6 @@ private:
 	int64_t						GetMemLimit() const final { return m_iRtMemLimit; }
 
 	bool						LoadEmbeddingModels ( CSphString & sError );
-	bool						FetchEmbeddings ( InsertDocData_c & tDoc, CSphString & sError );
 	bool						VerifyKNN ( InsertDocData_c & tDoc, CSphString & sError ) const;
 
 	template<typename PRED>
@@ -1908,132 +1901,6 @@ DocstoreBuilder_i::Doc_t * RtIndex_c::FetchDocFields ( DocstoreBuilder_i::Doc_t 
 }
 
 
-static const char * FetchStringFromDoc ( int iAttr, const InsertDocData_c & tDoc, const ISphSchema & tSchema )
-{
-	const char ** ppStr = tDoc.m_dStrings.Begin();
-	int iStrAttr = 0;
-
-	for ( int i=0; i < tSchema.GetAttrsCount(); ++i )
-	{
-		const CSphColumnInfo & tAttr = tSchema.GetAttr(i);
-
-		if ( tAttr.m_eAttrType!=SPH_ATTR_STRING )
-			continue;
-
-		if ( iAttr==i )
-			return ppStr[iStrAttr];
-
-		iStrAttr++;
-	}
-
-	return nullptr;
-}
-
-
-static VecTraits_T<const char> ConcatFromFields ( const InsertDocData_c & tDoc, const AttrWithModel_t & tAttr, const ISphSchema & tSchema, CSphVector<char> & dTmp )
-{
-	if ( tAttr.m_dFrom.GetLength()==1 )
-	{
-		int iAttrFieldId = tAttr.m_dFrom[0].first;
-		if ( tAttr.m_dFrom[0].second )
-			return { tDoc.m_dFields[iAttrFieldId].Begin(), tDoc.m_dFields[iAttrFieldId].GetLength() };
-		else
-		{
-			const char * szString = FetchStringFromDoc ( iAttrFieldId, tDoc, tSchema );
-			return { szString, (int64_t)( szString ? strlen(szString) : 0 ) };
-		}
-	}
-
-	dTmp.Resize(0);
-	ARRAY_FOREACH ( i, tAttr.m_dFrom )
-	{
-		auto tFrom = tAttr.m_dFrom[i];
-		int iAttrFieldId = tFrom.first;
-		VecTraits_T<const char> dSrc;
-		if ( tFrom.second )
-			dSrc = { tDoc.m_dFields[iAttrFieldId].Begin(), tDoc.m_dFields[iAttrFieldId].GetLength() };
-		else
-		{
-			const char * szString = FetchStringFromDoc ( iAttrFieldId, tDoc, tSchema );
-			dSrc = { szString, (int64_t)( szString ? strlen(szString) : 0 ) };
-		}
-
-		int iOldSize = dTmp.GetLength();
-		dTmp.Resize ( iOldSize + dSrc.GetLength() + 1 );
-		dTmp[iOldSize] = ' ';
-		memcpy ( dTmp.Begin() + iOldSize + 1, dSrc.Begin(), dSrc.GetLength() );
-	}
-
-	return dTmp;
-}
-
-
-bool RtIndex_c::FetchEmbeddings ( InsertDocData_c & tDoc, CSphString & sError )
-{
-	if ( !m_pEmbeddings )
-		return true;
-
-	InsertDocData_c tStub ( m_tSchema );
-
-	std::vector<float> dEmbedding;
-	std::string sErrorSTL;
-	CSphVector<char> dTmp;
-	int iMva = 0;
-	ARRAY_FOREACH ( i, m_dAttrsWithModels )
-	{
-		const CSphColumnInfo & tAttr = m_tSchema.GetAttr(i);
-		if ( !IsMvaAttr ( tAttr.m_eAttrType ) )
-			continue;
-
-		// read old mva values
-		int iNumValues = 0;
-		bool bDefault = false;
-		const int64_t * pMva = tDoc.GetMVA(iMva);
-		std::tie ( iNumValues, bDefault ) = tDoc.ReadMVALength(pMva);
-		iMva += iNumValues + 1;
-
-		auto & tAttrWithModel = m_dAttrsWithModels[i];
-		if ( !tAttrWithModel.m_pModel )
-		{
-			// repack old mva values
-			tStub.AddMVALength ( iNumValues, bDefault );
-			for ( int iValue = 0; iValue < iNumValues; iValue++ )
-				tStub.AddMVAValue ( pMva[iValue] );
-
-			continue;
-		}
-
-		if ( iNumValues!=0 )
-		{
-			sError.SetSprintf ( "attribute '%s' has model_name=%s specified, but vector contents with %d values is provided", tAttr.m_sName.cstr(), tAttr.m_tKNNModel.m_sModelName.c_str(), iNumValues );
-			return false;
-		}
-
-		VecTraits_T<const char> dConcat = ConcatFromFields ( tDoc, tAttrWithModel, m_tSchema, dTmp );
-		if ( !tAttrWithModel.m_pModel->Convert ( { dConcat.Begin(), (size_t)dConcat.GetLength() }, dEmbedding, sErrorSTL ) )
-		{
-			sError = sErrorSTL.c_str();
-			return false;
-		}
-
-		if ( dEmbedding.size()!=tAttr.m_tKNN.m_iDims )
-		{
-			sError.SetSprintf ( "embedding model generated %d values; %d expected", dEmbedding.size(), tAttr.m_tKNN.m_iDims );
-			return false;
-		}
-
-		// add generated mva values
-		tStub.AddMVALength ( dEmbedding.size(), false );
-		for ( auto i : dEmbedding )
-			tStub.AddMVAValue ( sphF2DW(i) );
-	}
-
-	tDoc.SwapMVAs(tStub);
-
-	return true;
-}
-
-
 bool RtIndex_c::VerifyKNN ( InsertDocData_c & tDoc, CSphString & sError ) const
 {
 	int iMva = 0;
@@ -2052,7 +1919,15 @@ bool RtIndex_c::VerifyKNN ( InsertDocData_c & tDoc, CSphString & sError ) const
 		if ( tAttr.m_eAttrType!=SPH_ATTR_FLOAT_VECTOR || !tAttr.IsIndexedKNN() )
 			continue;
 
-		if ( !bDefault && iNumValues!=tAttr.m_tKNN.m_iDims )
+		if ( m_dAttrsWithModels[i].m_pModel )
+		{
+			if ( iNumValues!=0 )
+			{
+				sError.SetSprintf ( "attribute '%s' has model_name=%s specified, but vector contents with %d values is provided", tAttr.m_sName.cstr(), tAttr.m_tKNNModel.m_sModelName.c_str(), iNumValues );
+				return false;
+			}
+		}
+		else if ( !bDefault && iNumValues!=tAttr.m_tKNN.m_iDims )
 		{
 			sError.SetSprintf ( "KNN error: data has %d values, index '%s' needs %d values", iNumValues, tAttr.m_sName.cstr(), tAttr.m_tKNN.m_iDims );
 			return false;
@@ -2163,8 +2038,8 @@ bool RtIndex_c::AddDocument ( InsertDocData_c & tDoc, bool bReplace, const CSphS
 	ISphHits * pHits = tSrc.IterateHits ( sError );
 	pAcc->GrabLastWarning ( sWarning );
 
-	if ( !FetchEmbeddings ( tDoc, sError ) )
-		return false;
+	if ( m_pEmbeddings )
+		pAcc->FetchEmbeddingsSrc ( tDoc, m_dAttrsWithModels );
 
 	if ( !VerifyKNN ( tDoc, sError ) )
 		return false;
@@ -3032,6 +2907,15 @@ bool RtIndex_c::Commit ( int * pDeleted, RtAccum_t * pAcc, CSphString * pError )
 	pAcc->Sort();
 	CleanupHitDuplicates ( pAcc->m_dAccum );
 
+	CSphString sError;
+	if ( !pAcc->FetchEmbeddings ( m_pEmbeddings.get(), m_dAttrsWithModels, sError ) )
+	{
+		if ( pError )
+			*pError = sError;
+
+		return false;
+	}
+
 	CSphString sCreateError;
 	RtSegmentRefPtf_t pNewSeg { CreateSegment ( pAcc, m_iWordsCheckpoint, m_tSettings.m_eHitless, m_dHitlessWords, sCreateError ) };
 	if ( !pNewSeg && !sCreateError.IsEmpty() )
@@ -3055,7 +2939,6 @@ bool RtIndex_c::Commit ( int * pDeleted, RtAccum_t * pAcc, CSphString * pError )
 
 	// now on to the stuff that needs locking and recovery
 	int iKilled = 0;
-	CSphString sError;
 	if ( !CommitReplayable ( pNewSeg, pAcc->m_dAccumKlist, pAcc->m_iAccumBytes, iKilled, sError ) )
 	{
 		if ( pError )

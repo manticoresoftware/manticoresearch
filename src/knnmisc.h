@@ -26,6 +26,19 @@ private:
 	SmallStringHash_T<std::unique_ptr<knn::TextToEmbeddings_i>> m_hModels;
 };
 
+class EmbeddingsSrc_c
+{
+public:
+			EmbeddingsSrc_c ( int iAttrs );
+
+	void	Add ( int iAttr, CSphVector<char> & dSrc );
+	void	Remove ( const CSphFixedVector<RowID_t> & dRowMap );
+	const VecTraits_T<char> Get ( RowID_t tRowID, int iAttr ) const;
+
+private:
+	CSphVector<CSphVector<CSphVector<char>>> m_dStored;
+};
+
 const char *					GetKnnDistAttrName();
 ISphExpr *						CreateExpr_KNNDist ( const CSphVector<float> & dAnchor, const CSphColumnInfo & tAttr );
 

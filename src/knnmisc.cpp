@@ -41,6 +41,35 @@ knn::TextToEmbeddings_i * TableEmbeddings_c::GetModel ( const CSphString & sAttr
 
 ///////////////////////////////////////////////////////////////////////////////
 
+EmbeddingsSrc_c::EmbeddingsSrc_c ( int iAttrs )
+{
+	m_dStored.Resize(iAttrs);
+}
+
+
+void EmbeddingsSrc_c::Add ( int iAttr, CSphVector<char> & dSrc )
+{
+	auto & tNew = m_dStored[iAttr].Add();
+	tNew.SwapData(dSrc);
+}
+
+
+void EmbeddingsSrc_c::Remove ( const CSphFixedVector<RowID_t> & dRowMap )
+{
+	for ( auto & i : m_dStored  )
+		for ( auto tRowID : dRowMap )
+			if ( tRowID==INVALID_ROWID )
+				i.Remove(tRowID);
+}
+
+
+const VecTraits_T<char> EmbeddingsSrc_c::Get ( RowID_t tRowID, int iAttr ) const
+{
+	return m_dStored[iAttr][tRowID];
+}
+
+///////////////////////////////////////////////////////////////////////////////
+
 static void NormalizeVec ( VecTraits_T<float> & dData )
 {
 	float fNorm = 0.0f;

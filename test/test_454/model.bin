@@ -29,7 +29,7 @@ a:1:{i:0;a:30:{i:0;a:6:{s:13:"http_endpoint";s:10:"test1/_doc";s:11:"http_method
 { "index" : { "_index" : "test1", "_id" : null } }
 { "int_col" : "201" }
 
-";s:4:"rows";s:202:"{"items":[{"index":{"_index":"test1","_type":"doc","_id":"0","_version":1,"result":"created","_shards":{"total":1,"successful":1,"failed":0},"_seq_no":0,"_primary_term":1,"status":201}}],"errors":false}";s:9:"http_code";i:200;s:4:"http";i:1;}i:18;a:6:{s:13:"http_endpoint";s:5:"_bulk";s:11:"http_method";s:4:"POST";s:12:"http_request";s:86:"
+";s:4:"rows";s:214:"{"items":[{"index":{"_index":"test1","_type":"doc","_id":"1677721600002","_version":1,"result":"created","_shards":{"total":1,"successful":1,"failed":0},"_seq_no":0,"_primary_term":1,"status":201}}],"errors":false}";s:9:"http_code";i:200;s:4:"http";i:1;}i:18;a:6:{s:13:"http_endpoint";s:5:"_bulk";s:11:"http_method";s:4:"POST";s:12:"http_request";s:86:"
 { "index" : { "_index" : "test1", "_id" : null } }
 { "int_col" : "210", "id":2010 }
 

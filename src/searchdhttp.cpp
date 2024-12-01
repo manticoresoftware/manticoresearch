@@ -1918,7 +1918,7 @@ protected:
 		m_iUpdates = 0;
 	}
 
-	bool ProcessCommitRollback ( Str_t sIndex, DocID_t tDocId, JsonObj_c & tResult, CSphString & sError ) const
+	bool ProcessCommitRollback ( Str_t sIndex, DocID_t & tDocId, JsonObj_c & tResult, CSphString & sError ) const
 	{
 		HttpErrorReporter_c tReporter;
 		sphHandleMysqlCommitRollback ( tReporter, sIndex, true );
@@ -1943,7 +1943,7 @@ protected:
 	const ResultSetFormat_e m_eFormat = ResultSetFormat_e::MntSearch;
 };
 
-static bool ProcessInsert ( SqlStmt_t & tStmt, DocID_t tDocId, JsonObj_c & tResult, CSphString & sError, ResultSetFormat_e eFormat )
+static bool ProcessInsert ( SqlStmt_t & tStmt, DocID_t & tDocId, JsonObj_c & tResult, CSphString & sError, ResultSetFormat_e eFormat )
 {
 	HttpErrorReporter_c tReporter;
 	sphHandleMysqlInsert ( tReporter, tStmt );
@@ -2370,7 +2370,8 @@ public:
 			assert ( !sTxnIdx.IsEmpty() );
 			// We're in txn - that is, nothing committed, and we should do it right now
 			JsonObj_c tResult;
-			bResult = ProcessCommitRollback ( FromStr ( sTxnIdx ), 0, tResult, m_sError );
+			DocID_t tDocId = 0;
+			bResult = ProcessCommitRollback ( FromStr ( sTxnIdx ), tDocId, tResult, m_sError );
 			AddResult ( "bulk", tResult );
 			if ( bResult )
 				iLastTxStartLine = iCurLine;
@@ -3563,7 +3564,8 @@ bool HttpHandlerEsBulk_c::ProcessTnx ( const VecTraits_T<BulkTnx_t> & dTnx, VecT
 
 		// FIXME!!! check commit of empty accum
 		JsonObj_c tResult;
-		bool bCommited = ProcessCommitRollback ( FromStr ( sIdx ), DocID_t(), tResult, m_sError );
+		DocID_t tDocId = 0;
+		bool bCommited = ProcessCommitRollback ( FromStr ( sIdx ), tDocId, tResult, m_sError );
 		if ( bCommited )
 		{
 			if ( bUpdate && !GetLastUpdated() )

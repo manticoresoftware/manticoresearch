@@ -1,0 +1,69 @@
+––– block: ../base/start-searchd –––
+––– input –––
+mysql -P9306 -h0 -e "create table t(f text) shards=3 rf=1;"
+––– output –––
+––– input –––
+curl 0:9308/insert -d '{"table": "t", "doc": {"f": "abc"}}'; echo
+––– output –––
+{"table":"t","_id":%{NUMBER},"created":true,"result":"created","status":201}
+––– input –––
+mysql -P9306 -h0 -e "create table l(f text);"
+––– output –––
+––– input –––
+curl 0:9308/insert -d '{"table": "l", "doc": {"f": "abc"}}'; echo
+––– output –––
+{"table":"l","_id":%{NUMBER},"created":true,"result":"created","status":201}
+––– input –––
+curl 0:9308/replace -d '{"table": "t", "id": 1, "doc": {"f": "new value"}}'; echo
+––– output –––
+{"table":"t","_id":1,"created":false,"result":"updated","status":200}
+––– input –––
+curl 0:9308/update -d '{"table": "t", "id": 1, "doc": {"f": "updated value"}}'; echo
+––– output –––
+{"table":"t","_id":1,"result":"noop"}
+––– input –––
+curl 0:9308/delete -d '{"table": "t", "id": 1}'; echo
+––– output –––
+{"table":"t","_id":1,"found":true,"result":"deleted"}
+––– input –––
+curl -X POST 0:9308/_bulk --data-binary $'{"index":{"_index":"t"}}\n{"f":"first document"}\n{"index":{"_index":"t"}}\n{"f":"second document"}\n'; echo
+––– output –––
+{"took":%{NUMBER},"errors":false,"items":[{"index":{"_index":"t","_type":"doc","_id":%{NUMBER},"_version":1,"result":"created","_shards":{"total":1,"successful":1,"failed":0},"_seq_no":0,"_primary_term":1,"status":201}},{"index":{"_index":"t","_type":"doc","_id":%{NUMBER},"_version":1,"result":"created","_shards":{"total":1,"successful":1,"failed":0},"_seq_no":0,"_primary_term":1,"status":201}}]}
+––– input –––
+mysql -P9306 -h0 -e "drop table t; create table t(f text) shards=3 rf=1;"
+––– output –––
+––– input –––
+for n in `seq 1 200`; do curl -s 0:9308/insert -d "{\"table\": \"t\", \"id\": $n, \"doc\": {\"f\": \"abc\"}}" > /dev/null; done
+––– output –––
+––– input –––
+mysql -P9306 -h0 -e "select count(*) from t;"
+––– output –––
++----------+
+| count(*) |
++----------+
+|      %{NUMBER} |
++----------+
+––– input –––
+mysql -P9306 -h0 -e "select count(*) from t_s0;"
+––– output –––
++----------+
+| count(*) |
++----------+
+|       %{NUMBER} |
++----------+
+––– input –––
+mysql -P9306 -h0 -e "select count(*) from t_s1;"
+––– output –––
++----------+
+| count(*) |
++----------+
+|       %{NUMBER} |
++----------+
+––– input –––
+mysql -P9306 -h0 -e "select count(*) from t_s2;"
+––– output –––
++----------+
+| count(*) |
++----------+
+|       %{NUMBER} |
++----------+

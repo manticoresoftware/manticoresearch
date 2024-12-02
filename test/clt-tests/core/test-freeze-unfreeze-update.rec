@@ -75,3 +75,10 @@ mysql -P9315 -h0 -e "DESCRIBE t"
 mysql -P9315 -h0 -e "UPDATE t SET s='с' WHERE id=1; FLUSH RAMCHUNK t"; echo $?
 ––– output –––
 0
+––– input –––
+mysql -P9315 -h0 -e "drop table if exists t; create table t(a string); insert into t values(1, 'a'); flush ramchunk t; freeze t; update t set a='b' where id = 1;" &
+––– output –––
+[%{NUMBER}] %{NUMBER}
+––– input –––
+mysql -P9315 -h0 -e "select * from t"
+––– output –––

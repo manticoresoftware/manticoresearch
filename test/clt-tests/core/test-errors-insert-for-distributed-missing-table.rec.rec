@@ -1,0 +1,45 @@
+––– input –––
+searchd; if timeout 10 grep -qm1 'accepting' <(tail -n 1000 -f /var/log/manticore/searchd.log); then echo 'Started'; else echo 'Timeout or failed!'; fi
+––– output –––
+Manticore %{SEMVER} %{COMMITDATE}#!/(\sdev)?\s/!#(columnar %{SEMVER} %{COMMITDATE}) (secondary %{SEMVER} %{COMMITDATE}) (knn %{SEMVER} %{COMMITDATE})
+Copyright (c) 2001-2016, Andrew Aksyonoff
+Copyright (c) 2008-2016, Sphinx Technologies Inc (http://sphinxsearch.com)
+Copyright (c) 2017-%{YEAR}, Manticore Software LTD (https://manticoresearch.com)
+[#!/[0-9]{2}:[0-9]{2}.[0-9]{3}/!#] [#!/[0-9]+/!#] using config file '/etc/manticoresearch/manticore.conf' (%{NUMBER} chars)...
+starting daemon version '%{SEMVER} %{COMMITDATE}#!/(\sdev)?\s/!#(columnar %{SEMVER} %{COMMITDATE}) (secondary %{SEMVER} %{COMMITDATE}) (knn %{SEMVER} %{COMMITDATE})' ...
+listening on %{IPADDR}:9312 for sphinx and http(s)
+listening on %{IPADDR}:9306 for mysql
+listening on %{IPADDR}:9308 for sphinx and http(s)
+Started
+––– input –––
+mysql -h0 -P9306 -e "CREATE TABLE index2006(f text, s string); insert into index2006 values(3,'ghi','string');"
+––– output –––
+––– input –––
+mysql -h0 -P9306 -e "CREATE TABLE index2007(f text, s string); insert into index2007 values(4,'jkl','string');"
+––– output –––
+––– input –––
+mysql -h0 -P9306 -e "CREATE TABLE dist_table type='distributed' local='index2006' local='index2007';"
+––– output –––
+––– input –––
+mysql -h0 -P9306 -e "SHOW TABLES; DESC dist_table"
+––– output –––
++------------+-------------+
+| Table      | Type        |
++------------+-------------+
+| dist_table | distributed |
+| index2006  | rt          |
+| index2007  | rt          |
++------------+-------------+
++-----------+-------+
+| Agent     | Type  |
++-----------+-------+
+| index2006 | local |
+| index2007 | local |
++-----------+-------+
+––– input –––
+mysql -h0 -P9306 -e "INSERT INTO dist_table (id, column1, column2) VALUES (1, 'value1', 'value2'), (2, 'value3', 'value4');"
+––– output –––
+ERROR 1064 (42000) at line 1: table 'dist_table' absent
+––– input –––
+mysql -h0 -P9306 -e "INSERT INTO missing_table(f, s) VALUES('abc', 'string');"
+––– output –––

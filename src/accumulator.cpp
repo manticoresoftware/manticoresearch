@@ -117,6 +117,10 @@ bool RtAccum_t::FetchEmbeddings ( TableEmbeddings_c * pEmbeddings, const CSphVec
 	const CSphColumnInfo * pBlobLoc = tSchema.GetAttr ( sphGetBlobLocatorName() );
 	bool bRebuildColumnar = false;
 	bool bRebuildBlobs = false;
+	bool bRebuildDocstore = false;
+	CSphVector<int> dDocstoreRemap;
+	dDocstoreRemap.Resize ( dAttrsWithModels.GetLength() );
+	dDocstoreRemap.Fill(-1);
 	ARRAY_FOREACH ( i, dAttrsWithModels )
 	{
 		if ( !dAttrsWithModels[i].m_pModel )
@@ -126,6 +130,9 @@ bool RtAccum_t::FetchEmbeddings ( TableEmbeddings_c * pEmbeddings, const CSphVec
 		assert ( tAttr.m_eAttrType==SPH_ATTR_FLOAT_VECTOR );
 		bRebuildColumnar |= tAttr.IsColumnar();
 		bRebuildBlobs |= !tAttr.IsColumnar();
+		bRebuildDocstore |= tAttr.IsStored();
+
+		dDocstoreRemap[i] = ((DocstoreBuilder_i*)m_pDocstore.get())->GetFieldId ( tAttr.m_sName, DOCSTORE_ATTR );
 	}
 
 	CSphTightVector<BYTE> dNewBlobPool;
@@ -135,6 +142,13 @@ bool RtAccum_t::FetchEmbeddings ( TableEmbeddings_c * pEmbeddings, const CSphVec
 	CSphVector<ScopedTypedIterator_t> dAllIterators;
 	if ( bRebuildColumnar )
 		dAllIterators = CreateAllColumnarIterators ( pColumnar.get(), tSchema );
+
+	std::unique_ptr<DocstoreRT_i> pNewDocstoreBuilder;
+	if ( bRebuildDocstore )
+	{
+		pNewDocstoreBuilder = CreateDocstoreRT();
+		SetupDocstoreFields ( *pNewDocstoreBuilder, tSchema );
+	}
 
 	int iRowSize = tSchema.GetRowSize();
 	int iAttrWithModel = 0;
@@ -146,6 +160,12 @@ bool RtAccum_t::FetchEmbeddings ( TableEmbeddings_c * pEmbeddings, const CSphVec
 	{
 		int iBlobAttr = 0;
 		int iColumnarAttr = 0;
+		DocstoreDoc_t tDoc;
+
+		// fetch all fields and attributes without model from docstore (they will not be modified)
+		if ( pNewDocstoreBuilder )
+			tDoc = m_pDocstore->GetDoc ( tRowID, nullptr, -1, false );
+
 		ARRAY_FOREACH ( i, dAttrsWithModels )
 		{
 			const CSphColumnInfo & tAttr = tSchema.GetAttr(i);
@@ -172,6 +192,18 @@ bool RtAccum_t::FetchEmbeddings ( TableEmbeddings_c * pEmbeddings, const CSphVec
 				{
 					if ( !pNewBlobBuilder->SetAttr ( iBlobAttr, (const BYTE*)dEmbedding.data(), dEmbedding.size()*sizeof(float), sError ) )
 						return false;
+				}
+
+				if ( tAttr.IsStored() )
+				{
+					int iId = dDocstoreRemap[i];
+					tDoc.m_dFields[iId].Resize ( dEmbedding.size()*sizeof(DWORD) );
+					const BYTE * pStart = tDoc.m_dFields[iId].Begin();
+					for ( auto i : dEmbedding )
+					{
+						*(DWORD*)pStart = sphF2DW ( dEmbedding[i] );
+						pStart += sizeof(DWORD);
+					}
 				}
 			}
 			else
@@ -204,6 +236,9 @@ bool RtAccum_t::FetchEmbeddings ( TableEmbeddings_c * pEmbeddings, const CSphVec
 			assert(pBlobLoc);
 			sphSetRowAttr ( pRow, pBlobLoc->m_tLocator, pNewBlobBuilder->Flush().first );
 		}
+
+		if ( pNewDocstoreBuilder )
+			pNewDocstoreBuilder->AddDoc ( tRowID, tDoc );
 	}
 
 	if ( bRebuildBlobs )
@@ -214,6 +249,9 @@ bool RtAccum_t::FetchEmbeddings ( TableEmbeddings_c * pEmbeddings, const CSphVec
 
 	if ( bRebuildColumnar )
 		m_pColumnarBuilder = std::move(pNewColumnarBuilder);
+
+	if ( bRebuildDocstore )
+		m_pDocstore = std::move(pNewDocstoreBuilder);
 
 	return true;
 }

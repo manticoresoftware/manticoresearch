@@ -665,7 +665,7 @@ bool CSphSchema::HasStoredFields() const
 
 bool CSphSchema::HasStoredAttrs() const
 {
-	return m_dAttrs.any_of ( []( const CSphColumnInfo & tAttr ){ return tAttr.m_uAttrFlags & CSphColumnInfo::ATTR_STORED; } );
+	return m_dAttrs.any_of ( []( const CSphColumnInfo & tAttr ){ return tAttr.IsStored(); } );
 }
 
 
@@ -701,7 +701,7 @@ bool CSphSchema::IsFieldStored ( int iField ) const
 
 bool CSphSchema::IsAttrStored ( int iAttr ) const
 {
-	return !!( m_dAttrs[iAttr].m_uAttrFlags & CSphColumnInfo::ATTR_STORED );
+	return m_dAttrs[iAttr].IsStored();
 }
 
 ///////////////////////////////////////////////////////////////////////////////

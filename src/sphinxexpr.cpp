@@ -5968,7 +5968,7 @@ ISphExpr * ExprParser_t::CreateExistNode ( const ExprNode_t & tNode )
 		}
 
 		bool bColumnar = tCol.IsColumnar();
-		bool bStored = tCol.m_uAttrFlags & CSphColumnInfo::ATTR_STORED;
+		bool bStored = tCol.IsStored();
 		const CSphAttrLocator & tLoc = tCol.m_tLocator;
 		if ( tNode.m_eRetType==SPH_ATTR_FLOAT )
 		{
@@ -6630,28 +6630,28 @@ ISphExpr * ExprParser_t::CreateFieldNode ( int iField )
 ISphExpr * ExprParser_t::CreateColumnarIntNode ( int iAttr, ESphAttr eAttrType )
 {
 	const CSphColumnInfo & tAttr = m_pSchema->GetAttr(iAttr);
-	return CreateExpr_GetColumnarInt ( tAttr.m_sName, tAttr.m_uAttrFlags & CSphColumnInfo::ATTR_STORED );
+	return CreateExpr_GetColumnarInt ( tAttr.m_sName, tAttr.IsStored() );
 }
 
 
 ISphExpr * ExprParser_t::CreateColumnarFloatNode ( int iAttr )
 {
 	const CSphColumnInfo & tAttr = m_pSchema->GetAttr(iAttr);
-	return CreateExpr_GetColumnarFloat ( tAttr.m_sName, tAttr.m_uAttrFlags & CSphColumnInfo::ATTR_STORED );
+	return CreateExpr_GetColumnarFloat ( tAttr.m_sName, tAttr.IsStored() );
 }
 
 
 ISphExpr * ExprParser_t::CreateColumnarStringNode ( int iAttr )
 {
 	const CSphColumnInfo & tAttr = m_pSchema->GetAttr(iAttr);
-	return CreateExpr_GetColumnarString ( tAttr.m_sName, tAttr.m_uAttrFlags & CSphColumnInfo::ATTR_STORED );
+	return CreateExpr_GetColumnarString ( tAttr.m_sName, tAttr.IsStored() );
 }
 
 
 ISphExpr * ExprParser_t::CreateColumnarMvaNode ( int iAttr )
 {
 	const CSphColumnInfo & tAttr = m_pSchema->GetAttr(iAttr);
-	return CreateExpr_GetColumnarMva ( tAttr.m_sName, tAttr.m_uAttrFlags & CSphColumnInfo::ATTR_STORED );
+	return CreateExpr_GetColumnarMva ( tAttr.m_sName, tAttr.IsStored() );
 }
 
 //////////////////////////////////////////////////////////////////////////

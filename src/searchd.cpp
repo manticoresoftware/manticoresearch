@@ -12406,7 +12406,7 @@ static CSphString DescribeAttributeProperties ( const CSphColumnInfo & tAttr )
 	if ( tAttr.IsIndexedSI() )
 		sProps << "indexed";
 
-	if ( tAttr.m_uAttrFlags & CSphColumnInfo::ATTR_STORED )
+	if ( tAttr.IsStored() )
 		sProps << "fast_fetch";
 
 	if ( tAttr.IsColumnar() && tAttr.m_eAttrType==SPH_ATTR_STRING && !(tAttr.m_uAttrFlags & CSphColumnInfo::ATTR_COLUMNAR_HASHES) )

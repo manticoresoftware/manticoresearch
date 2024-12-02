@@ -95,6 +95,7 @@ struct CSphColumnInfo
 	bool IsIndexedKNN() const;
 	bool IsJoined() const;
 	bool IsIndexedSI() const;
+	bool IsStored() const;
 };
 
 

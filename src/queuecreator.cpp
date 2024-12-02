@@ -1922,7 +1922,7 @@ void QueueCreator_c::ReplaceStaticStringsWithExprs ( CSphMatchComparatorState & 
 			
 			CSphColumnInfo tRemapCol ( sAttrName.cstr(), SPH_ATTR_STRINGPTR );
 			tRemapCol.m_eStage = SPH_EVAL_PRESORT;
-			tRemapCol.m_pExpr = CreateExpr_GetColumnarString ( sAttrName, tAttr.m_uAttrFlags & CSphColumnInfo::ATTR_STORED );
+			tRemapCol.m_pExpr = CreateExpr_GetColumnarString ( sAttrName, tAttr.IsStored() );
 			tSorterSchema.AddAttr ( tRemapCol, true );
 
 			iRemap = tSorterSchema.GetAttrIndex ( sAttrName.cstr() );

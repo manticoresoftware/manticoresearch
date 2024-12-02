@@ -12400,6 +12400,41 @@ void HandleMysqlCallSuggest ( RowBuffer_i & tOut, SqlStmt_t & tStmt, bool bQuery
 }
 
 
+static void HandleMysqlCallUuid ( RowBuffer_i & tOut, SqlStmt_t & tStmt )
+{
+	// the only int agrument
+	int iArgs = tStmt.m_dInsertValues.GetLength ();
+	if ( iArgs!=1 )
+	{
+		tOut.Error ( "bad argument count in UUID_SHORT() call" );
+		return;
+	}
+	if ( tStmt.m_dInsertValues[0].m_iType!=SqlInsert_t::CONST_INT )
+	{
+		tOut.Error ( "bad argument type in UUID_SHORT() call" );
+		return;
+	}
+	int64_t iCount = tStmt.m_dInsertValues[0].GetValueInt();
+	if ( iCount<1 || iCount>INT_MAX )
+	{
+		tOut.Error ( "bad argument value in UUID_SHORT() call" );
+		return;
+	}
+
+	tOut.HeadBegin ();
+	tOut.HeadColumn ( "uuid_short()" );
+	tOut.HeadEnd ();
+
+	for ( int i=0; i<iCount; i++ )
+	{
+		tOut.PutNumAsString ( UidShort() );
+		tOut.Commit();
+	}
+
+	tOut.Eof();
+}
+
+
 static CSphString DescribeAttributeProperties ( const CSphColumnInfo & tAttr )
 {
 	StringBuilder_c sProps(" ");
@@ -17244,6 +17279,9 @@ bool ClientSession_c::Execute ( Str_t sQuery, RowBuffer_i & tOut )
 			HandleMysqlCallPQ ( tOut, *pStmt, m_tAcc, m_tPercolateMeta );
 			m_tPercolateMeta.m_dResult.m_sMessages.MoveWarningsTo ( m_tLastMeta.m_sWarning );
 			m_tPercolateMeta.m_dDocids.Reset ( 0 ); // free occupied mem
+		} else if ( pStmt->m_sCallProc=="UUID_SHORT" )
+		{
+			HandleMysqlCallUuid ( tOut, *pStmt );
 		} else
 		{
 			m_sError.SetSprintf ( "no such built-in procedure %s", pStmt->m_sCallProc.cstr() );

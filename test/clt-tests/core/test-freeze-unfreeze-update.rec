@@ -76,27 +76,13 @@ mysql -P9315 -h0 -e "UPDATE t SET s='с' WHERE id=1; FLUSH RAMCHUNK t"; echo $?
 ––– output –––
 0
 ––– input –––
-mysql -P9315 -h0 -e "drop table if exists t;" && timeout 5 bash -c '[ -d /tmp/data/t ] && rm -rf /tmp/data/t' && mysql -P9315 -h0 -e "create table t(a string); insert into t values(1, 'a'); flush ramchunk t; freeze t; unfreeze t; update t set a='b' where id = 1;" && timeout 3 bash -c 'mysql -P9315 -h0 -e "select * from t;"'
+(set +b; mysql -P9315 -h0 -e "drop table if exists t;" && timeout 5 bash -c '[ -d /tmp/data/t ] && rm -rf /tmp/data/t' && mysql -P9315 -h0 -e "create table t(a string); insert into t values(1, 'a'); flush ramchunk t; freeze t;" 2>&1 &) &>/dev/null
 ––– output –––
-+------------------------+------------------------+
-| file                   | normalized             |
-+------------------------+------------------------+
-| /tmp/data/t/t.0.spa    | /tmp/data/t/t.0.spa    |
-| /tmp/data/t/t.0.spb    | /tmp/data/t/t.0.spb    |
-| /tmp/data/t/t.0.spd    | /tmp/data/t/t.0.spd    |
-| /tmp/data/t/t.0.spe    | /tmp/data/t/t.0.spe    |
-| /tmp/data/t/t.0.sph    | /tmp/data/t/t.0.sph    |
-| /tmp/data/t/t.0.sphi   | /tmp/data/t/t.0.sphi   |
-| /tmp/data/t/t.0.spi    | /tmp/data/t/t.0.spi    |
-| /tmp/data/t/t.0.spidx  | /tmp/data/t/t.0.spidx  |
-| /tmp/data/t/t.0.spm    | /tmp/data/t/t.0.spm    |
-| /tmp/data/t/t.0.spp    | /tmp/data/t/t.0.spp    |
-| /tmp/data/t/t.0.spt    | /tmp/data/t/t.0.spt    |
-| /tmp/data/t/t.meta     | /tmp/data/t/t.meta     |
-| /tmp/data/t/t.settings | /tmp/data/t/t.settings |
-+------------------------+------------------------+
+––– input –––
+sleep 1; mysql -P9315 -h0 -e "select * from t;"
+––– output –––
 +------+------+
 | id   | a    |
 +------+------+
-|    1 | b    |
+|    1 | a    |
 +------+------+

@@ -1,24 +1,38 @@
 ––– block: ../base/start-searchd –––
 ––– input –––
+apt-get install -y jq > /dev/null; echo $?
+––– output –––
+debconf: delaying package configuration, since apt-utils is not installed
+0
+––– input –––
 mysql -P9306 -h0 -e "create table t(f text) shards=3 rf=1;"
 ––– output –––
 ––– input –––
-curl 0:9308/insert -d '{"table": "t", "doc": {"f": "abc"}}'; echo
+curl 0:9308/insert -d '{"table": "t", "id": 1, "doc": {"f": "abc"}}'; echo
 ––– output –––
-{"table":"t","_id":%{NUMBER},"created":true,"result":"created","status":201}
+{"table":"t","_id":1,"created":true,"result":"created","status":201}
 ––– input –––
-mysql -P9306 -h0 -e "create table l(f text);"
+mysql -P9306 -h0 -e "select * from t;"
 ––– output –––
-––– input –––
-curl 0:9308/insert -d '{"table": "l", "doc": {"f": "abc"}}'; echo
-––– output –––
-{"table":"l","_id":%{NUMBER},"created":true,"result":"created","status":201}
++------+------+
+| id   | f    |
++------+------+
+|    1 | abc  |
++------+------+
 ––– input –––
 curl 0:9308/replace -d '{"table": "t", "id": 1, "doc": {"f": "new value"}}'; echo
 ––– output –––
 {"table":"t","_id":1,"created":false,"result":"updated","status":200}
 ––– input –––
-curl 0:9308/update -d '{"table": "t", "id": 1, "doc": {"f": "updated value"}}'; echo
+mysql -P9306 -h0 -e "select * from t;"
+––– output –––
++------+-----------+
+| id   | f         |
++------+-----------+
+|    1 | new value |
++------+-----------+
+––– input –––
+curl 0:9308/update -d '{"table": "t", "id": 1, "doc": {"f": "new value"}}'; echo
 ––– output –––
 {"table":"t","_id":1,"result":"noop"}
 ––– input –––
@@ -26,14 +40,11 @@ curl 0:9308/delete -d '{"table": "t", "id": 1}'; echo
 ––– output –––
 {"table":"t","_id":1,"found":true,"result":"deleted"}
 ––– input –––
-curl -X POST 0:9308/_bulk --data-binary $'{"index":{"_index":"t"}}\n{"f":"first document"}\n{"index":{"_index":"t"}}\n{"f":"second document"}\n'; echo
+curl -X POST 0:9308/_bulk --data-binary $'{"index":{"_index":"t","_id":10001}}\n{"f":"first document"}\n{"index":{"_index":"t","_id":10002}}\n{"f":"second document"}\n'; echo
 ––– output –––
-{"took":%{NUMBER},"errors":false,"items":[{"index":{"_index":"t","_type":"doc","_id":%{NUMBER},"_version":1,"result":"created","_shards":{"total":1,"successful":1,"failed":0},"_seq_no":0,"_primary_term":1,"status":201}},{"index":{"_index":"t","_type":"doc","_id":%{NUMBER},"_version":1,"result":"created","_shards":{"total":1,"successful":1,"failed":0},"_seq_no":0,"_primary_term":1,"status":201}}]}
+{"took":%{NUMBER},"errors":false,"items":[{"index":{"_index":"t","_type":"doc","_id":10001,"_version":1,"result":"created","_shards":{"total":1,"successful":1,"failed":0},"_seq_no":0,"_primary_term":1,"status":201}},{"index":{"_index":"t","_type":"doc","_id":10002,"_version":1,"result":"created","_shards":{"total":1,"successful":1,"failed":0},"_seq_no":0,"_primary_term":1,"status":201}}]}
 ––– input –––
-mysql -P9306 -h0 -e "drop table t; create table t(f text) shards=3 rf=1;"
-––– output –––
-––– input –––
-for n in `seq 1 200`; do curl -s 0:9308/insert -d "{\"table\": \"t\", \"id\": $n, \"doc\": {\"f\": \"abc\"}}" > /dev/null; done
+for n in $(seq 1 200); do curl -s -X POST 0:9308/insert -d "{\"table\": \"t\", \"id\": $n, \"doc\": {\"f\": \"doc$n\"}}" > /dev/null; done
 ––– output –––
 ––– input –––
 mysql -P9306 -h0 -e "select count(*) from t;"
@@ -41,7 +52,7 @@ mysql -P9306 -h0 -e "select count(*) from t;"
 +----------+
 | count(*) |
 +----------+
-|      %{NUMBER} |
+|      202 |
 +----------+
 ––– input –––
 mysql -P9306 -h0 -e "select count(*) from t_s0;"
@@ -67,3 +78,146 @@ mysql -P9306 -h0 -e "select count(*) from t_s2;"
 +----------+
 |       %{NUMBER} |
 +----------+
+––– input –––
+mysql -P9306 -h0 -e "select id, f from t_s0;" | sort -n
+––– output –––
++------+--------+
++------+--------+
++------+--------+
+|  129 | doc129 |
+|  135 | doc135 |
+|  139 | doc139 |
+|  140 | doc140 |
+|  143 | doc143 |
+|  144 | doc144 |
+|  148 | doc148 |
+|   19 | doc19  |
+|   20 | doc20  |
+|   26 | doc26  |
+|   29 | doc29  |
+|   31 | doc31  |
+|   39 | doc39  |
+|   41 | doc41  |
+|   45 | doc45  |
+|   46 | doc46  |
+|   47 | doc47  |
+|   49 | doc49  |
+|    6 | doc6   |
+|    7 | doc7   |
+| id   | f      |
+––– input –––
+mysql -P9306 -h0 -e "select id, f from t_s1;" | sort -n
+––– output –––
++------+--------+
++------+--------+
++------+--------+
+|  100 | doc100 |
+|  103 | doc103 |
+|  110 | doc110 |
+|  119 | doc119 |
+|  120 | doc120 |
+|  121 | doc121 |
+|  124 | doc124 |
+|  132 | doc132 |
+|  134 | doc134 |
+|  137 | doc137 |
+|   13 | doc13  |
+|  141 | doc141 |
+|  147 | doc147 |
+|  151 | doc151 |
+|  152 | doc152 |
+|    1 | doc1   |
+|   87 | doc87  |
+|    8 | doc8   |
+|   91 | doc91  |
+|   95 | doc95  |
+| id   | f      |
+––– input –––
+mysql -P9306 -h0 -e "select id, f from t_s2;" | sort -n
+––– output –––
++-------+-----------------+
++-------+-----------------+
++-------+-----------------+
+| 10002 | second document |
+|   138 | doc138          |
+|   142 | doc142          |
+|   145 | doc145          |
+|   146 | doc146          |
+|   149 | doc149          |
+|    14 | doc14           |
+|   150 | doc150          |
+|    17 | doc17           |
+|    22 | doc22           |
+|    28 | doc28           |
+|     2 | doc2            |
+|    30 | doc30           |
+|    32 | doc32           |
+|    33 | doc33           |
+|    40 | doc40           |
+|    44 | doc44           |
+|     4 | doc4            |
+|     5 | doc5            |
+|     9 | doc9            |
+| id    | f               |
+––– input –––
+curl -s -X POST 0:9308/insert -d '{"table": "t", "id": 999}' | jq .
+––– output –––
+{
+"table": "t",
+"_id": 999,
+"created": true,
+"result": "created",
+"status": 201
+}
+––– input –––
+curl -X POST 0:9308/update -d '{"table": "t", "id": 500, "doc": {"f": "nonexistent"}}'; echo
+––– output –––
+{"error":{"type":"action_request_validation_exception","reason":"table t_s2: attribute 'f' not found","table":"t_s2","index":"t"},"status":409}
+––– input –––
+mysql -P9306 -h0 -e "select * from t where id=1;"
+––– output –––
++------+------+
+| id   | f    |
++------+------+
+|    1 | doc1 |
++------+------+
+––– input –––
+curl 0:9308/update -d '{"table": "t", "id": 1, "doc": {"f": "updated value"}}'; echo
+––– output –––
+{"error":{"type":"action_request_validation_exception","reason":"table t_s1: attribute 'f' not found","table":"t_s1","index":"t"},"status":409}
+––– input –––
+mysql -P9306 -h0 -e "select * from t where id=1;"
+––– output –––
++------+------+
+| id   | f    |
++------+------+
+|    1 | doc1 |
++------+------+
+––– input –––
+seq 1 10000 | sed 's/.*/{"index":{"_index":"t"}}\n{"f":"bulk doc &"}/' > bulk_data.json && curl -s -X POST 0:9308/_bulk --data-binary @bulk_data.json | jq '.errors'; echo
+––– output –––
+false
+––– input –––
+rm -f bulk_data.json; echo $?
+––– output –––
+0
+––– input –––
+mysql -P9306 -h0 -e "select count(*) from t;"
+––– output –––
++----------+
+| count(*) |
++----------+
+|    10203 |
++----------+
+––– input –––
+mysql -P9306 -h0 -e "select * from t where id=1;"
+––– output –––
++------+------+
+| id   | f    |
++------+------+
+|    1 | doc1 |
++------+------+
+––– input –––
+curl 0:9308/search -d '{"query": {"match": {"f": "abc"}}}'; echo
+––– output –––
+{"error":"\"table\" property missing"}

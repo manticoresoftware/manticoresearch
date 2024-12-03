@@ -104,19 +104,8 @@ static bool RepackBlob ( const CSphColumnInfo & tAttr, const CSphColumnInfo & tB
 }
 
 
-bool RtAccum_t::GenerateAndStoreEmbeddings ( RowID_t tRowID, int iAttr, int iBlobAttr, int iColumnarAttr, int iAttrWithModel, const AttrWithModel_t & tAttrWithModel, DocstoreDoc_t & tDoc, std::unique_ptr<BlobRowBuilder_i> & pNewBlobBuilder, std::unique_ptr<ColumnarBuilderRT_i> & pNewColumnarBuilder, const IntVec_t & dDocstoreRemap, std::vector<float> & dEmbedding, CSphVector<int64_t> & dTmp, CSphString & sError )
+static bool StoreEmbeddings ( const CSphSchema & tSchema, int iAttr, int iBlobAttr, int iColumnarAttr, DocstoreDoc_t & tDoc, std::unique_ptr<BlobRowBuilder_i> & pNewBlobBuilder, std::unique_ptr<ColumnarBuilderRT_i> & pNewColumnarBuilder, const IntVec_t & dDocstoreRemap, const std::vector<float> & dEmbedding, CSphVector<int64_t> & dTmp, CSphString & sError )
 {
-	const auto & dConcat = m_pEmbeddingsSrc->Get ( tRowID, iAttrWithModel );
-
-	std::string sErrorSTL;
-	if ( !tAttrWithModel.m_pModel->Convert ( { dConcat.Begin(), (size_t)dConcat.GetLength() }, dEmbedding, sErrorSTL ) )
-	{
-		sError = sErrorSTL.c_str();
-		return false;
-	}
-
-	assert(m_pIndex);
-	const CSphSchema & tSchema = m_pIndex->GetInternalSchema();
 	const CSphColumnInfo & tAttr = tSchema.GetAttr(iAttr);
 
 	if ( tAttr.IsColumnar() )
@@ -149,11 +138,10 @@ bool RtAccum_t::GenerateAndStoreEmbeddings ( RowID_t tRowID, int iAttr, int iBlo
 }
 
 
-bool RtAccum_t::RebuildStoragesForEmbeddings ( RowID_t tRowID, CSphRowitem * pRow, const CSphVector<AttrWithModel_t> & dAttrsWithModels, std::unique_ptr<BlobRowBuilder_i> & pNewBlobBuilder, std::unique_ptr<ColumnarBuilderRT_i> & pNewColumnarBuilder, std::unique_ptr<DocstoreRT_i> & pNewDocstoreBuilder, CSphVector<ScopedTypedIterator_t> & dAllIterators, const IntVec_t & dDocstoreRemap, const CSphColumnInfo * pBlobLoc, std::vector<float> & dEmbedding, CSphVector<int64_t> & dTmp, CSphString & sError )
+bool RtAccum_t::RebuildStoragesForEmbeddings ( RowID_t tRowID, CSphRowitem * pRow, const CSphVector<AttrWithModel_t> & dAttrsWithModels, std::unique_ptr<BlobRowBuilder_i> & pNewBlobBuilder, std::unique_ptr<ColumnarBuilderRT_i> & pNewColumnarBuilder, std::unique_ptr<DocstoreRT_i> & pNewDocstoreBuilder, CSphVector<ScopedTypedIterator_t> & dAllIterators, const IntVec_t & dDocstoreRemap, const CSphColumnInfo * pBlobLoc, std::vector<std::vector<std::vector<float>>> & dAllEmbeddings, CSphVector<int64_t> & dTmp, CSphString & sError )
 {
 	int iBlobAttr = 0;
 	int iColumnarAttr = 0;
-	int iAttrWithModel = 0;
 	DocstoreDoc_t tDoc;
 
 	// fetch all fields and attributes without model from docstore (they will not be modified)
@@ -170,10 +158,8 @@ bool RtAccum_t::RebuildStoragesForEmbeddings ( RowID_t tRowID, CSphRowitem * pRo
 
 		if ( tAttrWithModel.m_pModel )
 		{
-			if ( !GenerateAndStoreEmbeddings ( tRowID, i, iBlobAttr, iColumnarAttr, iAttrWithModel, tAttrWithModel, tDoc, pNewBlobBuilder, pNewColumnarBuilder, dDocstoreRemap, dEmbedding, dTmp, sError ) )
+			if ( !StoreEmbeddings ( tSchema, i, iBlobAttr, iColumnarAttr, tDoc, pNewBlobBuilder, pNewColumnarBuilder, dDocstoreRemap, dAllEmbeddings[i][tRowID], dTmp, sError ) )
 				return false;
-
-			iAttrWithModel++;
 		}
 		else
 		{
@@ -206,6 +192,36 @@ bool RtAccum_t::RebuildStoragesForEmbeddings ( RowID_t tRowID, CSphRowitem * pRo
 
 	if ( pNewDocstoreBuilder )
 		pNewDocstoreBuilder->AddDoc ( tRowID, tDoc );
+
+	return true;
+}
+
+
+bool RtAccum_t::GenerateEmbeddings ( int iAttr, int iAttrWithModel, const CSphVector<AttrWithModel_t> & dAttrsWithModels, std::vector<std::vector<std::vector<float>>> & dAllEmbeddings, CSphString & sError )
+{
+	const AttrWithModel_t & tAttrWithModel = dAttrsWithModels[iAttr];
+	if ( !tAttrWithModel.m_pModel )
+		return true;
+
+	assert(m_pIndex);
+	const CSphSchema & tSchema = m_pIndex->GetInternalSchema();
+
+	int iRowSize = tSchema.GetRowSize();
+	std::vector<std::vector<float>> & dEmbeddingsForAttr = dAllEmbeddings[iAttr];
+	std::vector<std::string_view> dTexts;
+	CSphRowitem * pRow = m_dAccumRows.Begin();
+	for ( RowID_t tRowID = 0; tRowID < m_uAccumDocs; ++tRowID, pRow += iRowSize )
+	{
+		const auto & dConcat = m_pEmbeddingsSrc->Get ( tRowID, iAttrWithModel );
+		dTexts.push_back ( { dConcat.Begin(), (size_t)dConcat.GetLength() } );
+	}
+
+	std::string sErrorSTL;
+	if ( !tAttrWithModel.m_pModel->Convert ( dTexts, dEmbeddingsForAttr, sErrorSTL ) )
+	{
+		sError = sErrorSTL.c_str();
+		return false;
+	}
 
 	return true;
 }
@@ -257,12 +273,26 @@ bool RtAccum_t::FetchEmbeddings ( TableEmbeddings_c * pEmbeddings, const CSphVec
 		SetupDocstoreFields ( *pNewDocstoreBuilder, tSchema );
 	}
 
+	// 1st pass - generate all embeddings for each attribute
 	int iRowSize = tSchema.GetRowSize();
+	int iAttrWithModel = 0;
+	std::vector<std::vector<std::vector<float>>> dAllEmbeddings;
+	dAllEmbeddings.resize ( dAttrsWithModels.GetLength() );
+	ARRAY_FOREACH ( i, dAttrsWithModels )
+	{
+		if ( !GenerateEmbeddings( i, iAttrWithModel, dAttrsWithModels, dAllEmbeddings, sError ) )
+			return false;
+
+		if ( dAttrsWithModels[i].m_pModel )
+			iAttrWithModel++;
+	}
+
+	// 2nd pass - rebuild attribute storages
 	std::vector<float> dEmbedding;
 	CSphVector<int64_t> dTmp;
 	CSphRowitem * pRow = m_dAccumRows.Begin();
 	for ( RowID_t tRowID = 0; tRowID < m_uAccumDocs; ++tRowID, pRow += iRowSize )
-		if ( !RebuildStoragesForEmbeddings ( tRowID, pRow, dAttrsWithModels, pNewBlobBuilder, pNewColumnarBuilder, pNewDocstoreBuilder, dAllIterators, dDocstoreRemap, pBlobLoc, dEmbedding, dTmp, sError ) )
+		if ( !RebuildStoragesForEmbeddings ( tRowID, pRow, dAttrsWithModels, pNewBlobBuilder, pNewColumnarBuilder, pNewDocstoreBuilder, dAllIterators, dDocstoreRemap, pBlobLoc, dAllEmbeddings, dTmp, sError ) )
 			return false;
 
 	if ( bRebuildBlobs )

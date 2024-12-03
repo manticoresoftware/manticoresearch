@@ -11277,7 +11277,13 @@ void sphHandleMysqlInsert ( StmtErrorReporter_i & tOut, const SqlStmt_t & tStmt 
 	auto pServed = GetServed ( tStmt.m_sIndex );
 	if ( !ServedDesc_t::IsMutable ( pServed ) )
 	{
-		if ( pServed )
+		bool bDistTable = false;
+		if ( !pServed )
+		{
+			bDistTable = GetDistr ( tStmt.m_sIndex );
+		}
+
+		if ( pServed || bDistTable )
 			tOut.Error ( "table '%s' does not support INSERT", tStmt.m_sIndex.cstr ());
 		else
 			tOut.Error ( "table '%s' absent", tStmt.m_sIndex.cstr ());

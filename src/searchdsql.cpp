@@ -132,13 +132,7 @@ void SqlInsert_t::CopyValueInt ( const SqlNode_t & tRhs )
 
 SqlStmt_t::SqlStmt_t()
 {
-	m_tQuery.m_eMode = SPH_MATCH_EXTENDED2; // only new and shiny matching and sorting
-	m_tQuery.m_eSort = SPH_SORT_EXTENDED;
-	m_tQuery.m_sSortBy = "@weight desc"; // default order
-	m_tQuery.m_sOrderBy = "@weight desc";
-	m_tQuery.m_iAgentQueryTimeoutMs = DEFAULT_QUERY_TIMEOUT;
-	m_tQuery.m_iRetryCount = DEFAULT_QUERY_RETRY;
-	m_tQuery.m_iRetryDelay = DEFAULT_QUERY_RETRY;
+	SetQueryDefaultsExt2 ( m_tQuery );
 }
 
 SqlStmt_t::~SqlStmt_t() = default;

@@ -5903,6 +5903,16 @@ void SearchHandler_c::CalcThreadsPerIndex ( int iConcurrency )
 	int iAvailableWorkers = Max ( Coro::CurrentScheduler()->WorkingThreads() - iBusyWorkers, 1 );
 	iAvailableWorkers = Min ( iAvailableWorkers, iConcurrency );
 
+	// this is need to obey ps dispatcher template, if it defines concurrency
+	// that will help to perform reproducable queries, see test 261
+	auto tDispatch = GetEffectivePseudoShardingDispatcherTemplate ();
+	Dispatcher::Unify ( tDispatch, m_dNQueries.First ().m_tPseudoShardingDispatcher );
+	if ( tDispatch.concurrency )
+	{
+//		sphWarning ( "correct iAvailableWorkers %d to defined %d", iAvailableWorkers, tDispatch.concurrency );
+		iAvailableWorkers = tDispatch.concurrency;
+	}
+
 	CSphVector<CSphVector<int64_t>> dCountDistinct;
 	PopulateCountDistinct ( dCountDistinct );
 

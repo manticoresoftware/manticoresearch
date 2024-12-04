@@ -1215,10 +1215,13 @@ static bool DoSearch ( const CSphString & sDefaultIndex, nljson & tReq, const CS
 	std::unique_ptr<PubSearchHandler_c> tHandler ( CreateMsearchHandler ( sphCreateJsonQueryParser(), QUERY_JSON, tQuery ) );
 	tHandler->RunQueries();
 
-	CSphFixedVector<AggrResult_t *> dAggsRes ( 1 + tQuery.m_dAggs.GetLength() );
+	CSphFixedVector<AggrResult_t *> dAggsRes ( tQuery.m_bGroupEmulation ? 1 : ( 1 + tQuery.m_dAggs.GetLength() ) );
 	dAggsRes[0] = tHandler->GetResult ( 0 );
-	ARRAY_FOREACH ( i, tQuery.m_dAggs )
-		dAggsRes[i+1] = tHandler->GetResult ( i+1 );
+	if ( !tQuery.m_bGroupEmulation )
+	{
+		ARRAY_FOREACH ( i, tQuery.m_dAggs )
+			dAggsRes[i+1] = tHandler->GetResult ( i+1 );
+	}
 	sRes = sphEncodeResultJson ( dAggsRes, tQuery, nullptr, ResultSetFormat_e::ES );
 
 	bool bOk = true;

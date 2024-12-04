@@ -41,7 +41,7 @@ public:
 	}
 
 	void SetStatement ( const SqlNode_t & tName, SqlSet_e eSet );
-	void SetStatement ( const SqlNode_t & tName, SqlSet_e eSet, const RefcountedVector_c<AttrValue_t> & dValues );
+	void SetStatement ( const SqlNode_t & tName, SqlSet_e eSet, int iValuesIdx );
 };
 
 void SqlSecondParser_c::SetStatement ( const SqlNode_t& tName, SqlSet_e eSet )
@@ -52,11 +52,12 @@ void SqlSecondParser_c::SetStatement ( const SqlNode_t& tName, SqlSet_e eSet )
 }
 
 
-void SqlSecondParser_c::SetStatement ( const SqlNode_t & tName, SqlSet_e eSet, const RefcountedVector_c<AttrValue_t> & dValues )
+void SqlSecondParser_c::SetStatement ( const SqlNode_t & tName, SqlSet_e eSet, int iValuesIdx )
 {
 	SetStatement ( tName, eSet );
 	
 	auto & dSV = m_pStmt->m_dSetValues;
+	const auto& dValues = GetMvaVec ( iValuesIdx );
 	dSV.Resize ( dValues.GetLength() );
 	ARRAY_FOREACH ( i, dValues )
 		dSV[i] = dValues[i].m_iValue;

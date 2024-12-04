@@ -24,7 +24,7 @@
 extern int g_iAgentQueryTimeoutMs;	// global (default). May be override by index-scope values, if one specified
 
 
-void SqlNode_t::SetValueInt ( int64_t iValue )
+void SqlNode_t::SetValueInt ( int64_t iValue ) noexcept
 {
 	m_uValue = abs(iValue);
 	m_bNegative = iValue<0;
@@ -32,7 +32,7 @@ void SqlNode_t::SetValueInt ( int64_t iValue )
 }
 
 
-void SqlNode_t::SetValueInt ( uint64_t uValue, bool bNegative )
+void SqlNode_t::SetValueInt ( uint64_t uValue, bool bNegative ) noexcept
 {
 	m_uValue = uValue;
 	m_bNegative = bNegative;
@@ -40,7 +40,7 @@ void SqlNode_t::SetValueInt ( uint64_t uValue, bool bNegative )
 }
 
 
-void SqlNode_t::SetValueFloat ( float fValue )
+void SqlNode_t::SetValueFloat ( float fValue ) noexcept
 {
 	m_fValue = fValue;
 	m_uValue = abs((int64_t)fValue);
@@ -48,7 +48,7 @@ void SqlNode_t::SetValueFloat ( float fValue )
 }
 
 
-int64_t SqlNode_t::GetValueInt() const
+int64_t SqlNode_t::GetValueInt() const noexcept
 {
 	if ( m_bNegative )
 	{
@@ -67,14 +67,14 @@ int64_t SqlNode_t::GetValueInt() const
 }
 
 
-uint64_t SqlNode_t::GetValueUint() const
+uint64_t SqlNode_t::GetValueUint() const noexcept
 {
 	assert ( !m_bNegative );
 	return m_uValue;
 }
 
 
-void SqlNode_t::CopyValueInt ( const SqlNode_t & tRhs )
+void SqlNode_t::CopyValueInt ( const SqlNode_t & tRhs ) noexcept
 {
 	m_uValue = tRhs.m_uValue;
 	m_bNegative = tRhs.m_bNegative;
@@ -266,6 +266,31 @@ void SqlParserTraits_c::Comment ( const SqlNode_t& tNode ) const
 }
 
 
+int SqlParserTraits_c::AddMvaVec () noexcept
+{
+	m_dMultiValues.Add();
+	return m_dMultiValues.GetLength()-1;
+}
+
+
+AttrValueVec_t & SqlParserTraits_c::GetMvaVec ( int iIdx ) const noexcept
+{
+	return m_dMultiValues[iIdx];
+}
+
+
+AttrValues_p SqlParserTraits_c::CloneMvaVecPtr ( int iIdx ) const noexcept
+{
+	if ( iIdx<0 )
+		return nullptr;
+	auto pValues = new RefcountedVector_c<AttrValue_t>;
+	const auto & dValues = GetMvaVec ( iIdx );
+	pValues->Resize ( dValues.GetLength () );
+	ARRAY_FOREACH ( i, dValues )
+		(*pValues)[i] = dValues[i];
+	return AttrValues_p { pValues };
+}
+
 //////////////////////////////////////////////////////////////////////////
 
 enum class Option_e : BYTE;
@@ -312,11 +337,11 @@ public:
 	bool			AddUservarFilter ( const SqlNode_t & tCol, const SqlNode_t & tVar, bool bExclude );
 	void			AddGroupBy ( const SqlNode_t & tGroupBy );
 	CSphFilterSettings * AddFilter ( const SqlNode_t & tCol, ESphFilter eType );
-	CSphFilterSettings * AddFilter ( const SqlNode_t & tCol, ESphFilter eType, const RefcountedVector_c<AttrValue_t> & dValues );
+	CSphFilterSettings * AddFilter ( const SqlNode_t & tCol, ESphFilter eType, int iValuesIdx );
 	bool			AddStringFilter ( const SqlNode_t & tCol, const SqlNode_t & tVal, bool bExclude );
 	bool			AddStringCmpFilter ( const SqlNode_t & tCol, const SqlNode_t & tVal, bool bExclude, EStrCmpDir eStrCmpDir );
 	CSphFilterSettings * AddValuesFilter ( const SqlNode_t & tCol ) { return AddFilter ( tCol, SPH_FILTER_VALUES ); }
-	CSphFilterSettings * AddValuesFilter ( const SqlNode_t & tCol, const RefcountedVector_c<AttrValue_t> & dValues );
+	CSphFilterSettings * AddValuesFilter ( const SqlNode_t & tCol, int iValuesIdx );
 	bool			AddStringListFilter ( const SqlNode_t & tCol, SqlNode_t & tVal, StrList_e eType, bool bInverse=false );
 	bool			AddNullFilter ( const SqlNode_t & tCol, bool bEqualsNull );
 	void			AddHaving ();
@@ -1035,7 +1060,7 @@ void SqlParser_c::AddInsval ( CSphVector<SqlInsert_t> & dVec, const SqlNode_t & 
 	tIns.m_fVal = tNode.m_fValue;
 	if ( tIns.m_iType==TOK_QUOTED_STRING )
 		tIns.m_sVal = ToStringUnescape ( tNode );
-	tIns.m_pVals = tNode.m_pValues;
+	tIns.m_pVals = CloneMvaVecPtr ( tNode.m_iValues );
 }
 
 
@@ -1274,11 +1299,11 @@ bool SqlParser_c::SetKNN ( const SqlNode_t & tAttr, const SqlNode_t & tK, const 
 	m_pQuery->m_iKNNK = tK.GetValueInt();
 	if ( pEf )
 		m_pQuery->m_iKnnEf = pEf->GetValueInt();
-	auto pValues = tValues.m_pValues;
-	if ( pValues )
+	if ( tValues.m_iValues>=0 )
 	{
-		m_pQuery->m_dKNNVec.Reserve ( pValues->GetLength() );
-		for ( auto & i : *pValues )
+		const auto & dValues = GetMvaVec ( tValues.m_iValues );
+		m_pQuery->m_dKNNVec.Reserve ( dValues.GetLength() );
+		for ( const auto & i : dValues )
 			m_pQuery->m_dKNNVec.Add( i.m_fValue );
 	}
 	
@@ -1350,11 +1375,12 @@ void SqlParser_c::UpdateMVAAttr ( const SqlNode_t & tName, const SqlNode_t & dVa
 	CSphAttrUpdate & tUpd = m_pStmt->AttrUpdate();
 	ESphAttr eType = SPH_ATTR_UINT32SET;
 
-	if ( dValues.m_pValues && dValues.m_pValues->GetLength()>0 )
+	if ( dValues.m_iValues>=0 && GetMvaVec ( dValues.m_iValues ).GetLength ()>0 )
 	{
 		bool bHaveInt64 = false;
 		bool bHaveFloat = false;
-		for ( auto tValue : *dValues.m_pValues )
+		const auto& dData = GetMvaVec ( dValues.m_iValues );
+		for ( const auto& tValue : dData )
 		{
 			bHaveInt64 |= tValue.m_iValue > UINT_MAX;
 			bHaveFloat |= tValue.m_bFloat;
@@ -1362,8 +1388,8 @@ void SqlParser_c::UpdateMVAAttr ( const SqlNode_t & tName, const SqlNode_t & dVa
 
 		eType = bHaveFloat ? SPH_ATTR_FLOAT_VECTOR : ( bHaveInt64 ? SPH_ATTR_INT64SET : SPH_ATTR_UINT32SET );
 
-		tUpd.m_dPool.Add ( dValues.m_pValues->GetLength()*2 );
-		for ( auto tValue : *dValues.m_pValues )
+		tUpd.m_dPool.Add ( dData.GetLength()*2 );
+		for ( const auto& tValue : dData )
 		{
 			if ( eType==SPH_ATTR_FLOAT_VECTOR )
 				*((int64_t*)tUpd.m_dPool.AddN(2)) = sphF2DW ( tValue.m_fValue );
@@ -1421,7 +1447,7 @@ CSphFilterSettings * SqlParser_c::AddFilter ( const SqlNode_t & tCol, ESphFilter
 }
 
 
-static void CopyValuesToFilter ( CSphFilterSettings * pFilter, const RefcountedVector_c<AttrValue_t> & dValues )
+static void CopyValuesToFilter ( CSphFilterSettings * pFilter, const VecTraits_T<AttrValue_t> dValues )
 {
 	if ( !pFilter )
 		return;
@@ -1435,9 +1461,10 @@ static void CopyValuesToFilter ( CSphFilterSettings * pFilter, const RefcountedV
 }
 
 
-CSphFilterSettings * SqlParser_c::AddFilter ( const SqlNode_t & tCol, ESphFilter eType, const RefcountedVector_c<AttrValue_t> & dValues )
+CSphFilterSettings * SqlParser_c::AddFilter ( const SqlNode_t & tCol, ESphFilter eType, int iValuesIdx )
 {
 	auto pFilter = AddFilter ( tCol, eType );
+	auto& dValues = GetMvaVec (iValuesIdx);
 	CopyValuesToFilter ( pFilter, dValues );
 	return pFilter;
 }
@@ -1561,9 +1588,10 @@ bool SqlParser_c::AddStringCmpFilter ( const SqlNode_t & tCol, const SqlNode_t &
 }
 
 
-CSphFilterSettings * SqlParser_c::AddValuesFilter ( const SqlNode_t & tCol, const RefcountedVector_c<AttrValue_t> & dValues )
+CSphFilterSettings * SqlParser_c::AddValuesFilter ( const SqlNode_t & tCol, int iValuesIdx )
 {
 	CSphFilterSettings * pFilter = AddFilter ( tCol, SPH_FILTER_VALUES );
+	auto & dValues = GetMvaVec ( iValuesIdx );
 	CopyValuesToFilter ( pFilter, dValues );
 	return pFilter;
 }
@@ -1572,18 +1600,19 @@ CSphFilterSettings * SqlParser_c::AddValuesFilter ( const SqlNode_t & tCol, cons
 bool SqlParser_c::AddStringListFilter ( const SqlNode_t & tCol, SqlNode_t & tVal, StrList_e eType, bool bInverse )
 {
 	CSphFilterSettings * pFilter = AddFilter ( tCol, SPH_FILTER_STRING_LIST );
-	if ( !pFilter || !tVal.m_pValues )
+	if ( !pFilter || tVal.m_iValues<0 )
 		return false;
 
-	pFilter->m_dStrings.Resize ( tVal.m_pValues->GetLength() );
-	ARRAY_FOREACH ( i, ( *tVal.m_pValues ) )
+	auto & dValues = GetMvaVec ( tVal.m_iValues );
+	pFilter->m_dStrings.Resize ( dValues.GetLength() );
+	ARRAY_FOREACH ( i, ( dValues ) )
 	{
-		uint64_t uVal = ( *tVal.m_pValues )[i].m_iValue;
+		uint64_t uVal = dValues[i].m_iValue;
 		int iOff = ( uVal>>32 );
 		int iLen = ( uVal & 0xffffffff );
 		pFilter->m_dStrings[i] = SqlUnescape ( m_pBuf + iOff, iLen );
 	}
-	tVal.m_pValues = nullptr;
+	tVal.m_iValues = -1;
 	pFilter->m_bExclude = bInverse;
 	assert ( pFilter->m_eMvaFunc == SPH_MVAFUNC_NONE ); // that is default for IN filter
 	if ( eType==StrList_e::STR_ANY )

@@ -21,7 +21,7 @@
 /// automatic pointer wrapper for refcounted objects
 /// construction from or assignment of a raw pointer takes over (!) the ownership
 template<typename T>
-class CSphRefcountedPtr
+class CSphRefcountedPtr final
 {
 public:
 	using ORIGTYPE = T;
@@ -108,7 +108,7 @@ public:
 		return *this;
 	}
 
-protected:
+private:
 	T* m_pPtr = nullptr;
 };
 

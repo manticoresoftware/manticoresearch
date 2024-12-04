@@ -497,7 +497,7 @@ void DdlParser_c::AddInsval ( CSphVector<SqlInsert_t> & dVec, const SqlNode_t & 
 	tIns.m_fVal = tNode.m_fValue;
 	if ( tIns.m_iType==TOK_QUOTED_STRING )
 		tIns.m_sVal = ToStringUnescape ( tNode );
-	tIns.m_pVals = tNode.m_pValues;
+	tIns.m_pVals = CloneMvaVecPtr ( tNode.m_iValues );
 }
 
 

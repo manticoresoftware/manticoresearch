@@ -63,7 +63,10 @@ void SqlSecondParser_c::SetStatement ( const SqlNode_t & tName, SqlSet_e eSet, i
 		dSV[i] = dValues[i].m_iValue;
 }
 
-#define YYSTYPE SqlNode_t
+using YYSTYPE = SqlNode_t;
+STATIC_ASSERT ( IS_TRIVIALLY_COPYABLE ( SqlNode_t ), YYSTYPE_MUST_BE_TRIVIAL_FOR_RESIZABLE_PARSER_STACK );
+# define YYSTYPE_IS_TRIVIAL 1
+# define YYSTYPE_IS_DECLARED 1
 
 // unused parameter, simply to avoid type clash between all my yylex() functions
 #define YY_DECL inline int flex_secondparser ( YYSTYPE* lvalp, void* yyscanner, SqlSecondParser_c* pParser )

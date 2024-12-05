@@ -341,11 +341,10 @@ title: List of Dell business laptops
 content: Updated Content
 gid: 2
 ––– input –––
-mysql -h0 -P1306 -e 'set global cluster_user=pavel'
+mysqldump -etc -h0 -P1306 --skip-comments manticore testrt > /tmp/manticore_backup.sql
 ––– output –––
-––– input –––
-mysqldump -u pavel -h0 -P1306 --skip-comments manticore testrt > /tmp/manticore_backup.sql
-––– output –––
+-- Warning: version string returned by server is incorrect.
+-- Warning: column statistics not supported by the server.
 ––– input –––
 mysql -h0 -P1306 -e "ALTER CLUSTER replication DROP testrt;" && for port in 1306 2306 3306 4306 5306; do mysql -h0 -P$port -e "DROP TABLE testrt;"; done && for port in 1306 2306 3306 4306 5306; do echo "Checking tables on port $port"; mysql -h0 -P$port -e "SHOW TABLES;"; done
 ––– output –––
@@ -354,6 +353,9 @@ Checking tables on port 2306
 Checking tables on port 3306
 Checking tables on port 4306
 Checking tables on port 5306
+––– input –––
+mysql -h0 -P1306 -e "CREATE TABLE testrt (title text, content text, gid uint);"
+––– output –––
 ––– input –––
 mysql -h0 -P1306 < /tmp/manticore_backup.sql && mysql -h0 -P1306 -e "ALTER CLUSTER replication ADD testrt;" && for port in 1306 2306 3306 4306 5306; do echo "Checking tables on port $port"; mysql -h0 -P$port -e "SHOW TABLES;"; mysql -h0 -P$port -e "SELECT * FROM testrt ORDER BY id ASC\G"; done
 ––– output –––

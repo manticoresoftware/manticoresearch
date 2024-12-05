@@ -1,31 +1,137 @@
 ––– input –––
 export INSTANCE=1
 ––– output –––
-––– block: ../base/replication/start-searchd-precach –––
+––– input –––
+mkdir -p /var/{run,lib,log}/manticore-${INSTANCE}/{a,b,c,d,e,f,g,h,i,j}
+––– output –––
+––– input –––
+stdbuf -oL searchd -c test/clt-tests/base/searchd-with-flexible-ports.conf | grep -v precach
+––– output –––
+Manticore %{SEMVER} %{COMMITDATE}#!/(\sdev)?\s/!#(columnar %{SEMVER} %{COMMITDATE}) (secondary %{SEMVER} %{COMMITDATE}) (knn %{SEMVER} %{COMMITDATE})
+Copyright (c) 2001-2016, Andrew Aksyonoff
+Copyright (c) 2008-2016, Sphinx Technologies Inc (http://sphinxsearch.com)
+Copyright (c) 2017-%{YEAR}, Manticore Software LTD (https://manticoresearch.com)
+[#!/[a-zA-Z]{3}\s[a-zA-Z]{3}\s+[0-9]{1,2}\s[0-9]{2}:[0-9]{2}:[0-9]{2}.[0-9]{3}\s[0-9]{4}/!#] [%{NUMBER}] using config file '/.clt/test/clt-tests/base/searchd-with-flexible-ports.conf' (%{NUMBER} chars)...
+starting daemon version '%{SEMVER} %{COMMITDATE} dev (columnar %{SEMVER} %{COMMITDATE}) (secondary %{SEMVER} %{COMMITDATE}) (knn %{SEMVER} %{COMMITDATE})' ...
+listening on all interfaces for mysql, port=%{NUMBER}
+listening on all interfaces for sphinx and http(s), port=%{NUMBER}
+listening on all interfaces for sphinx and http(s), port=%{NUMBER}
+––– input –––
+if timeout 10 grep -qm1 'accepting connections' <(tail -n 1000 -f /var/log/manticore-${INSTANCE}/searchd.log); then echo 'Accepting connections!'; else echo 'Timeout or failed!'; fi
+––– output –––
+Accepting connections!
 ––– input –––
 export INSTANCE=2
 ––– output –––
-––– block: ../base/replication/start-searchd-precach –––
+––– input –––
+mkdir -p /var/{run,lib,log}/manticore-${INSTANCE}/{a,b,c,d,e,f,g,h,i,j}
+––– output –––
+––– input –––
+stdbuf -oL searchd -c test/clt-tests/base/searchd-with-flexible-ports.conf | grep -v precach
+––– output –––
+Manticore %{SEMVER} %{COMMITDATE}#!/(\sdev)?\s/!#(columnar %{SEMVER} %{COMMITDATE}) (secondary %{SEMVER} %{COMMITDATE}) (knn %{SEMVER} %{COMMITDATE})
+Copyright (c) 2001-2016, Andrew Aksyonoff
+Copyright (c) 2008-2016, Sphinx Technologies Inc (http://sphinxsearch.com)
+Copyright (c) 2017-%{YEAR}, Manticore Software LTD (https://manticoresearch.com)
+[#!/[a-zA-Z]{3}\s[a-zA-Z]{3}\s+[0-9]{1,2}\s[0-9]{2}:[0-9]{2}:[0-9]{2}.[0-9]{3}\s[0-9]{4}/!#] [%{NUMBER}] using config file '/.clt/test/clt-tests/base/searchd-with-flexible-ports.conf' (%{NUMBER} chars)...
+starting daemon version '%{SEMVER} %{COMMITDATE} dev (columnar %{SEMVER} %{COMMITDATE}) (secondary %{SEMVER} %{COMMITDATE}) (knn %{SEMVER} %{COMMITDATE})' ...
+listening on all interfaces for mysql, port=%{NUMBER}
+listening on all interfaces for sphinx and http(s), port=%{NUMBER}
+listening on all interfaces for sphinx and http(s), port=%{NUMBER}
+––– input –––
+if timeout 10 grep -qm1 'accepting connections' <(tail -n 1000 -f /var/log/manticore-${INSTANCE}/searchd.log); then echo 'Accepting connections!'; else echo 'Timeout or failed!'; fi
+––– output –––
+Accepting connections!
 ––– input –––
 export INSTANCE=3
 ––– output –––
-––– block: ../base/replication/start-searchd-precach –––
+––– input –––
+mkdir -p /var/{run,lib,log}/manticore-${INSTANCE}/{a,b,c,d,e,f,g,h,i,j}
+––– output –––
+––– input –––
+stdbuf -oL searchd -c test/clt-tests/base/searchd-with-flexible-ports.conf | grep -v precach
+––– output –––
+Manticore %{SEMVER} %{COMMITDATE}#!/(\sdev)?\s/!#(columnar %{SEMVER} %{COMMITDATE}) (secondary %{SEMVER} %{COMMITDATE}) (knn %{SEMVER} %{COMMITDATE})
+Copyright (c) 2001-2016, Andrew Aksyonoff
+Copyright (c) 2008-2016, Sphinx Technologies Inc (http://sphinxsearch.com)
+Copyright (c) 2017-%{YEAR}, Manticore Software LTD (https://manticoresearch.com)
+[#!/[a-zA-Z]{3}\s[a-zA-Z]{3}\s+[0-9]{1,2}\s[0-9]{2}:[0-9]{2}:[0-9]{2}.[0-9]{3}\s[0-9]{4}/!#] [%{NUMBER}] using config file '/.clt/test/clt-tests/base/searchd-with-flexible-ports.conf' (%{NUMBER} chars)...
+starting daemon version '%{SEMVER} %{COMMITDATE} dev (columnar %{SEMVER} %{COMMITDATE}) (secondary %{SEMVER} %{COMMITDATE}) (knn %{SEMVER} %{COMMITDATE})' ...
+listening on all interfaces for mysql, port=%{NUMBER}
+listening on all interfaces for sphinx and http(s), port=%{NUMBER}
+listening on all interfaces for sphinx and http(s), port=%{NUMBER}
+––– input –––
+if timeout 10 grep -qm1 'accepting connections' <(tail -n 1000 -f /var/log/manticore-${INSTANCE}/searchd.log); then echo 'Accepting connections!'; else echo 'Timeout or failed!'; fi
+––– output –––
+Accepting connections!
 ––– input –––
 export INSTANCE=4
 ––– output –––
-––– block: ../base/replication/start-searchd-precach –––
+––– input –––
+mkdir -p /var/{run,lib,log}/manticore-${INSTANCE}/{a,b,c,d,e,f,g,h,i,j}
+––– output –––
+––– input –––
+stdbuf -oL searchd -c test/clt-tests/base/searchd-with-flexible-ports.conf | grep -v precach
+––– output –––
+Manticore %{SEMVER} %{COMMITDATE}#!/(\sdev)?\s/!#(columnar %{SEMVER} %{COMMITDATE}) (secondary %{SEMVER} %{COMMITDATE}) (knn %{SEMVER} %{COMMITDATE})
+Copyright (c) 2001-2016, Andrew Aksyonoff
+Copyright (c) 2008-2016, Sphinx Technologies Inc (http://sphinxsearch.com)
+Copyright (c) 2017-%{YEAR}, Manticore Software LTD (https://manticoresearch.com)
+[#!/[a-zA-Z]{3}\s[a-zA-Z]{3}\s+[0-9]{1,2}\s[0-9]{2}:[0-9]{2}:[0-9]{2}.[0-9]{3}\s[0-9]{4}/!#] [%{NUMBER}] using config file '/.clt/test/clt-tests/base/searchd-with-flexible-ports.conf' (%{NUMBER} chars)...
+starting daemon version '%{SEMVER} %{COMMITDATE} dev (columnar %{SEMVER} %{COMMITDATE}) (secondary %{SEMVER} %{COMMITDATE}) (knn %{SEMVER} %{COMMITDATE})' ...
+listening on all interfaces for mysql, port=%{NUMBER}
+listening on all interfaces for sphinx and http(s), port=%{NUMBER}
+listening on all interfaces for sphinx and http(s), port=%{NUMBER}
+––– input –––
+if timeout 10 grep -qm1 'accepting connections' <(tail -n 1000 -f /var/log/manticore-${INSTANCE}/searchd.log); then echo 'Accepting connections!'; else echo 'Timeout or failed!'; fi
+––– output –––
+Accepting connections!
 ––– input –––
 export INSTANCE=5
 ––– output –––
-––– block: ../base/replication/start-searchd-precach –––
+––– input –––
+mkdir -p /var/{run,lib,log}/manticore-${INSTANCE}/{a,b,c,d,e,f,g,h,i,j}
+––– output –––
+––– input –––
+stdbuf -oL searchd -c test/clt-tests/base/searchd-with-flexible-ports.conf | grep -v precach
+––– output –––
+Manticore %{SEMVER} %{COMMITDATE}#!/(\sdev)?\s/!#(columnar %{SEMVER} %{COMMITDATE}) (secondary %{SEMVER} %{COMMITDATE}) (knn %{SEMVER} %{COMMITDATE})
+Copyright (c) 2001-2016, Andrew Aksyonoff
+Copyright (c) 2008-2016, Sphinx Technologies Inc (http://sphinxsearch.com)
+Copyright (c) 2017-%{YEAR}, Manticore Software LTD (https://manticoresearch.com)
+[#!/[a-zA-Z]{3}\s[a-zA-Z]{3}\s+[0-9]{1,2}\s[0-9]{2}:[0-9]{2}:[0-9]{2}.[0-9]{3}\s[0-9]{4}/!#] [%{NUMBER}] using config file '/.clt/test/clt-tests/base/searchd-with-flexible-ports.conf' (%{NUMBER} chars)...
+starting daemon version '%{SEMVER} %{COMMITDATE} dev (columnar %{SEMVER} %{COMMITDATE}) (secondary %{SEMVER} %{COMMITDATE}) (knn %{SEMVER} %{COMMITDATE})' ...
+listening on all interfaces for mysql, port=%{NUMBER}
+listening on all interfaces for sphinx and http(s), port=%{NUMBER}
+listening on all interfaces for sphinx and http(s), port=%{NUMBER}
+––– input –––
+if timeout 10 grep -qm1 'accepting connections' <(tail -n 1000 -f /var/log/manticore-${INSTANCE}/searchd.log); then echo 'Accepting connections!'; else echo 'Timeout or failed!'; fi
+––– output –––
+Accepting connections!
 ––– input –––
 export CLUSTER_NAME=replication
 ––– output –––
-––– block: ../base/replication/create-cluster –––
+––– input –––
+mysql -h0 -P1306 -e "create cluster ${CLUSTER_NAME}"
+––– output –––
+––– input –––
+mysql -h0 -P1306 -e "show status like 'cluster_${CLUSTER_NAME}_status'\G"
+––– output –––
+*************************** 1. row ***************************
+Counter: cluster_#!/[a-z]+/!#_status
+Value: primary
 ––– input –––
 export CLUSTER_NAME=replication
 ––– output –––
-––– block: ../base/replication/join-cluster-on-all-nodes –––
+––– input –––
+for n in `seq 2 $INSTANCE`; do mysql -h0 -P${n}306 -e "join cluster ${CLUSTER_NAME} at '127.0.0.1:1312'"; done;
+––– output –––
+––– input –––
+mysql -h0 -P${INSTANCE}306 -e "show status like 'cluster_${CLUSTER_NAME}_status'\G"
+––– output –––
+*************************** 1. row ***************************
+Counter: cluster_#!/[a-z]+/!#_status
+Value: primary
 ––– input –––
 mysql -h0 -P1306 -e "CREATE TABLE testrt (title text, content text, gid uint);"
 ––– output –––
@@ -35,6 +141,11 @@ mysql -h0 -P1306 -e "ALTER CLUSTER replication ADD testrt;"
 ––– input –––
 mysql -h0 -P1306 -e "SHOW STATUS LIKE 'cluster_replication_indexes';"
 ––– output –––
++-----------------------------+--------+
+| Counter                     | Value  |
++-----------------------------+--------+
+| cluster_replication_indexes | testrt |
++-----------------------------+--------+
 ––– input –––
 mysql -h0 -P1306 -e "INSERT INTO replication:testrt VALUES(6775836565403860993,'List of HP business laptops','Elitebook Probook',1);"
 ––– output –––
@@ -44,6 +155,16 @@ mysql -h0 -P1306 -e "INSERT INTO replication:testrt VALUES(6775836565403860994,'
 ––– input –––
 mysql -h0 -P1306 -e "SHOW CREATE TABLE testrt;"
 ––– output –––
++--------+--------------------------------------------------------------------------+
+| Table  | Create Table                                                             |
++--------+--------------------------------------------------------------------------+
+| testrt | CREATE TABLE testrt (
+id bigint,
+title text,
+content text,
+gid integer
+) |
++--------+--------------------------------------------------------------------------+
 ––– input –––
 export INSTANCE=5
 ––– output –––

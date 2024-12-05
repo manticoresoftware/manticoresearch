@@ -6600,11 +6600,51 @@ static uint64_t GetIndexMass ( const CSphString & sName )
 	return ServedIndex_c::GetIndexMass ( GetServed ( sName ) );
 }
 
+inline static bool ClusterFlavour () noexcept
+{
+	return !g_sClusterUser.IsEmpty () && session::GetClientSession ()->m_sUser==g_sClusterUser;
+}
+
+
+inline static CSphString ApplyClusterName ( const SqlStmt_t * pStmt ) noexcept
+{
+	assert ( pStmt );
+	auto sName = pStmt->m_sIndex;
+
+	if ( ClusterFlavour () )
+	{
+		auto dParts = sphSplit ( pStmt->m_sIndex.cstr (), ":" );
+		if ( dParts.GetLength ()>1 )
+			sName = dParts[1];
+	}
+	return sName;
+}
+
+inline static CSphString ExtractTableNameW ( SqlStmt_t * pStmt ) noexcept
+{
+	auto sName = ApplyClusterName ( pStmt );
+	if ( sName.EqN ( "system" ) && pStmt->m_dStringSubkeys.GetLength ()>=1 )
+	{
+		sName = SphSprintf ( "system%s", pStmt->m_dStringSubkeys[0].cstr () );
+		pStmt->m_dStringSubkeys.Remove ( 0 );
+	}
+	return sName;
+}
+
+
+inline static CSphString ExtractTableName ( const SqlStmt_t * pStmt ) noexcept
+{
+	auto sName = ApplyClusterName ( pStmt );
+	if ( sName.EqN ( "system" ) && pStmt->m_dStringSubkeys.GetLength ()>=1 )
+		sName = SphSprintf ( "system%s", pStmt->m_dStringSubkeys[0].cstr () );
+	return sName;
+}
+
 // declared to be used in ParseSysVar
 void HandleMysqlShowThreads ( RowBuffer_i & tOut, const SqlStmt_t * pStmt );
 void HandleMysqlShowTables ( RowBuffer_i & tOut, const SqlStmt_t * pStmt );
 void HandleShowSessions ( RowBuffer_i& tOut, const SqlStmt_t* pStmt );
-void HandleMysqlDescribe ( RowBuffer_i & tOut, const SqlStmt_t * pStmt );
+void HandleMysqlDescribe ( RowBuffer_i & tOut, SqlStmt_t * pStmt );
 void HandleSelectIndexStatus ( RowBuffer_i & tOut, const SqlStmt_t * pStmt );
 void HandleSelectFiles ( RowBuffer_i & tOut, const SqlStmt_t * pStmt );
 
@@ -7001,7 +7041,7 @@ static CSphVector<LocalIndex_t> CollectAllLocalIndexes ( const CSphVector<CSphNa
 // returns true = real indexes, false = sysvar (i.e. only one 'index' named from @@)
 bool SearchHandler_c::BuildIndexList ( int & iDivideLimits, VecRefPtrsAgentConn_t & dRemotes, CSphVector<DistrServedByAgent_t> & dDistrServedByAgent )
 {
-	const CSphQuery & tQuery = m_dNQueries.First ();
+	CSphQuery & tQuery = m_dNQueries.First ();
 
 	if ( tQuery.m_sIndexes=="*" )
 	{
@@ -7019,7 +7059,14 @@ bool SearchHandler_c::BuildIndexList ( int & iDivideLimits, VecRefPtrsAgentConn_
 	if ( bSysVar )
 		dIdxNames.Add ( tQuery.m_sIndexes );
 	else
+	{
 		ParseIndexList ( tQuery.m_sIndexes, dIdxNames );
+		if ( dIdxNames.GetLength()==1 && dIdxNames.First().EqN ("system") && !tQuery.m_dStringSubkeys.IsEmpty ())
+		{
+			dIdxNames[0] = SphSprintf ("system%s", tQuery.m_dStringSubkeys[0].cstr());
+			tQuery.m_dStringSubkeys.Remove(0);
+		}
+	}
 
 	const int iQueries = m_dNQueries.GetLength ();
 	CSphVector<LocalIndex_t> dLocals;
@@ -11284,7 +11331,8 @@ void sphHandleMysqlInsert ( StmtErrorReporter_i & tOut, const SqlStmt_t & tStmt 
 
 	auto tmStart = sphMicroTimer ();
 
-	auto pServed = GetServed ( tStmt.m_sIndex );
+	auto sTable = ExtractTableName (&tStmt);
+	auto pServed = GetServed ( sTable );
 	if ( !ServedDesc_t::IsMutable ( pServed ) )
 	{
 		bool bDistTable = false;
@@ -12624,25 +12672,12 @@ void DescribeDistributedSchema ( VectorLike& dOut, const cDistributedIndexRefPtr
 	}
 }
 
-inline static bool ClusterFlavour () noexcept
-{
-	return !g_sClusterUser.IsEmpty () && session::GetClientSession ()->m_sUser==g_sClusterUser;
-}
-
-
-void HandleMysqlDescribe ( RowBuffer_i & tOut, const SqlStmt_t * pStmt )
+void HandleMysqlDescribe ( RowBuffer_i & tOut, SqlStmt_t * pStmt )
 {
 	auto & tStmt = *pStmt;
 	VectorLike dOut ( tStmt.m_sStringParam, 0 );
-	auto sName = tStmt.m_sIndex;
 
-	if ( ClusterFlavour() )
-	{
-		auto dParts = sphSplit( tStmt.m_sIndex.cstr(), ":");
-		if ( dParts.GetLength()>1 )
-			sName = dParts[1];
-	}
-
+	auto sName = ExtractTableNameW ( pStmt );
 	auto pServed = GetServed ( sName );
 	if ( pServed )
 	{
@@ -12746,11 +12781,18 @@ void HandleMysqlShowTables ( RowBuffer_i & tOut, const SqlStmt_t * pStmt )
 {
 	auto dIndexes = GetAllServedIndexes();
 	bool bWithClusters = ClusterFlavour();
+	auto fnFilter = [bSystem = pStmt->m_iIntParam==1] ( const NamedIndexType_t& tIdx )
+	{
+		bool bIsSystem = tIdx.m_sName.SubString ( 0, 7 ).EqN ("system.");
+		return bSystem == bIsSystem;
+	};
 
 	// output the results
 	VectorLike dTable ( pStmt->m_sStringParam, { "Table", "Type" } );
 	for ( auto& dPair : dIndexes )
 	{
+		if ( !fnFilter ( dPair ) )
+			continue;
 		if ( bWithClusters && !dPair.m_sCluster.IsEmpty ())
 			dTable.MatchTuplet ( SphSprintf ("%s:%s", dPair.m_sCluster.cstr(), dPair.m_sName.cstr()).cstr(), szIndexType ( dPair.m_eType ) );
 		else

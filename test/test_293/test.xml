@@ -1,0 +1,43 @@
+<?xml version="1.0" encoding="utf-8"?>
+<test>
+
+<name>system.table</name>
+
+<requires>
+	<force-rt/>
+</requires>
+
+<skip_indexer/>
+
+<config>
+searchd
+{
+	<searchd_settings/>
+	data_dir = <data_path/>
+	binlog_path =
+}
+</config>
+
+<queries>
+<sphinxql>
+	drop table if exists system.test;
+	create table system.test;
+	desc system.test;
+	show tables;
+	create table test;
+	alter table system.test add column r text;
+	alter table test add column p text;
+	insert into system.test values (1,'bla');
+	insert into test values (2,'normal');
+	desc system.test;
+	desc test;
+	select * from system.test;
+	select * from test;
+	show tables;
+	show tables from system;
+	drop table system.test;
+	drop table test;
+</sphinxql>
+</queries>
+
+</test>

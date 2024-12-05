@@ -116,6 +116,7 @@ EXPONENT			[eE](\+|-)?{DIGIT}+
 {TABLEID}           { YYSTOREBOUNDS; return TOK_TABLEIDENT; }
 `{TABLEID}`			{ YYSTOREBOUNDS; ++lvalp->m_iStart; --lvalp->m_iEnd; return TOK_TABLEIDENT; }
 `{DIGIT}+{TABLEID}`	{ YYSTOREBOUNDS; ++lvalp->m_iStart; --lvalp->m_iEnd; return TOK_TABLEIDENT; } // allow `123xyz` table names
+SYSTEM\.{TABLEID}	{ YYSTOREBOUNDS; return TOK_TABLEIDENT; }
 
 {ID}				{ YYSTOREBOUNDS; return TOK_IDENT; }
 `{ID}`				{ YYSTOREBOUNDS; ++lvalp->m_iStart; --lvalp->m_iEnd; return TOK_IDENT; }

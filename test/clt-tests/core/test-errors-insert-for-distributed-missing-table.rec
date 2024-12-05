@@ -1,5 +1,8 @@
 ––– input –––
-searchd; if timeout 10 grep -qm1 'accepting' <(tail -n 1000 -f /var/log/manticore/searchd.log); then echo 'Started'; else echo 'Timeout or failed!'; fi
+sed -i '/^searchd/a\    auto_schema = 0' /etc/manticoresearch/manticore.conf
+––– output –––
+––– input –––
+rm -f /var/log/manticore/searchd.log; searchd --stopwait > /dev/null; searchd; if timeout 10 grep -qm1 '\[BUDDY\] started' <(tail -n 1000 -f /var/log/manticore/searchd.log); then echo 'Buddy started!'; else echo 'Timeout or failed!'; cat /var/log/manticore/searchd.log;fi;
 ––– output –––
 Manticore %{SEMVER} %{COMMITDATE}#!/(\sdev)?\s/!#(columnar %{SEMVER} %{COMMITDATE}) (secondary %{SEMVER} %{COMMITDATE}) (knn %{SEMVER} %{COMMITDATE})
 Copyright (c) 2001-2016, Andrew Aksyonoff
@@ -10,7 +13,7 @@ starting daemon version '%{SEMVER} %{COMMITDATE}#!/(\sdev)?\s/!#(columnar %{SEMV
 listening on %{IPADDR}:9312 for sphinx and http(s)
 listening on %{IPADDR}:9306 for mysql
 listening on %{IPADDR}:9308 for sphinx and http(s)
-Started
+Buddy started!
 ––– input –––
 mysql -h0 -P9306 -e "CREATE TABLE index2006(f text, s string); insert into index2006 values(3,'ghi','string');"
 ––– output –––
@@ -39,7 +42,8 @@ mysql -h0 -P9306 -e "SHOW TABLES; DESC dist_table"
 ––– input –––
 mysql -h0 -P9306 -e "INSERT INTO dist_table (id, column1, column2) VALUES (1, 'value1', 'value2'), (2, 'value3', 'value4');"
 ––– output –––
-ERROR 1064 (42000) at line 1: table 'dist_table' absent
+ERROR 1064 (42000) at line 1: table 'dist_table' does not support INSERT
 ––– input –––
 mysql -h0 -P9306 -e "INSERT INTO missing_table(f, s) VALUES('abc', 'string');"
 ––– output –––
+ERROR 1064 (42000) at line 1: table 'missing_table' absent

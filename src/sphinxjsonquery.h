@@ -52,10 +52,12 @@ struct JsonQuery_c : public CSphQuery
 	StrVec_t m_dSortFields;
 	CSphVector<JsonDocField_t> m_dDocFields;
 	CSphVector<JsonAggr_t> m_dAggs;
+	bool m_bGroupEmulation = false;
 };
 
 struct ParsedJsonQuery_t
 {
+	ParsedJsonQuery_t ();
 	JsonQuery_c m_tQuery;
 	CSphString m_sWarning;
 	bool m_bProfile = false;

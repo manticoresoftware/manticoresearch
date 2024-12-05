@@ -659,7 +659,7 @@ POST /_bulk
       "table": {
         "_index": "products",
         "_type": "doc",
-        "_id": 0,
+        "_id": 1657860156022587406,
         "_version": 1,
         "result": "created",
         "_shards": {

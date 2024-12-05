@@ -50,7 +50,11 @@ SELECT * FROM test1 group by @timestamp;
   }
 }
 </query>
+
+<!-- order of the aggs and FACET result sets should match -->
 <query endpoint="search">{ "table": "test1", "aggs":{ "gr1": { "terms": { "field": "@timestamp" } }, "gr2": { "terms": { "field": "@version" } }} }</query>
+
+<sphinxql>SELECT count(*) FROM test1 LIMIT 0 FACET @timestamp as gr1 FACET @version as gr2;</sphinxql>
 
 <!-- clean up -->
 <query endpoint="sql" method="post">mode=raw&amp;query=drop table test1</query>

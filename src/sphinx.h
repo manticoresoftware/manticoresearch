@@ -623,6 +623,8 @@ struct CSphQuery
 /// parse select list string into items
 bool ParseSelectList ( CSphString &sError, CSphQuery &pResult );
 
+void SetQueryDefaultsExt2 ( CSphQuery & tQuery );
+
 /// some low-level query stats
 struct CSphQueryStats
 {

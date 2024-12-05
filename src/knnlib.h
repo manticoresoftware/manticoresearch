@@ -25,4 +25,5 @@ std::unique_ptr<knn::TextToEmbeddings_i> CreateTextToEmbeddings ( const knn::Mod
 bool			InitKNN ( CSphString & sError );
 void			ShutdownKNN();
 const char *	GetKNNVersionStr();
+const char *	GetKNNEmbeddingsVersionStr();
 bool			IsKNNLibLoaded();

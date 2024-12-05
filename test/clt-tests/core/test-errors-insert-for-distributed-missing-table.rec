@@ -1,5 +1,5 @@
 ––– input –––
-sed -i '/^searchd/a\    auto_schema = 0' /etc/manticoresearch/manticore.conf
+sed -i '/^searchd/a\    buddy_path =' /etc/manticoresearch/manticore.conf
 ––– output –––
 ––– input –––
 rm -f /var/log/manticore/searchd.log; searchd --stopwait > /dev/null; searchd

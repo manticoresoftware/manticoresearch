@@ -1054,6 +1054,13 @@ static bool DoSearch ( const CSphString & sDefaultIndex, nljson & tReq, const CS
 	else if ( tReq.contains ( "index" ) )
 		sIndex = tReq["index"].get<std::string>().c_str();
 
+	if ( sIndex.Begins ( ".kibana" ) )
+	{
+		TlsMsg::Err ( "not supported index [%s]", sIndex.cstr() );
+		sRes = JsonEncodeResultError ( TlsMsg::szError(), GetErrorTypeName ( HttpErrorType_e::IllegalArgument ), 400 );
+		return false;
+	}
+
 	CSphString sExpandedIndex;
 	StrVec_t dIndexes = ExpandIndexes ( sIndex, sExpandedIndex );
 
@@ -1720,13 +1727,6 @@ bool HttpCompatHandler_c::ProcessSearch()
 	}
 
 	const CSphString & sIndex = GetUrlParts()[0];
-	if ( sIndex.Begins ( ".kibana" ) )
-	{
-		m_sError.SetSprintf ( "not supported index [%s]", sIndex.cstr() );
-		ReportError ( nullptr, HttpErrorType_e::IllegalArgument, EHTTP_STATUS::_404, sIndex.cstr() );
-		return false;
-	}
-
 	nljson tReq = nljson::parse ( GetBody().first, nullptr, false );
 	if ( tReq.is_discarded())
 	{

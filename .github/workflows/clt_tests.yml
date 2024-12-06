@@ -45,7 +45,7 @@ jobs:
           - name: Update
             test_prefix: test/clt-tests/optimisation-and-update/
     steps:
-      - uses: manticoresoftware/clt@feature/custom-repository-to-checkout        
+      - uses: manticoresoftware/clt@0.3.3
         with:
           artifact: ${{ inputs.artifact_name }}
           image: ${{ inputs.docker_image }}

@@ -153,6 +153,21 @@ function scriptdir ($path)
 	return $g_locals['scriptdir'].$path;
 }
 
+function resdir ($testdir)
+{
+	$testid = substr ( $testdir, 5 );
+	global $ctest;
+	$prefix = "test_";
+	if ( $ctest )
+	{
+		if ( IsColumnar() )
+			$prefix = "col_";
+		elseif ( IsRt() )
+			$prefix = "rt_";
+	}
+	return scriptdir ( $prefix.$testid );
+}
+
 function GuessFeature ($config, $testmsg, $matchmsg = null)
 {
     global $g_locals;

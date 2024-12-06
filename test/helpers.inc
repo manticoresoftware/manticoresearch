@@ -4620,7 +4620,7 @@ function RunTest ( $test_dir, $skipdemo, $usemarks )
 			$sd_skip_indexer, $windows, $g_locals, $ss_log, $ss_query_log,
 			$g_pick_query;
 
-	$res_path = scriptdir($test_dir);
+	$res_path = resdir($test_dir);
 
 	$model_file = $test_dir."/model.bin";
 	$conf_dir 	= $res_path."/Conf";

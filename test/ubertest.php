@@ -314,7 +314,7 @@ $name_err = $locals['scriptdir'] . "error.txt";
 
 foreach ( $tests as $test )
 {
-	$res_path = scriptdir($test);
+	$res_path = resdir($test);
 	if ( $windows && !$sd_managed_searchd )
 	{
 		// avoid an issue with daemons stuck in exit(0) for some seconds

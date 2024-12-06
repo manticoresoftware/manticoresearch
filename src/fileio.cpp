@@ -874,13 +874,17 @@ void CSphWriter::SeekTo ( SphOffset_t iPos, bool bTruncate )
 //////////////////////////////////////////////////////////////////////////
 
 static int g_iIOpsDelay = 0;
-static int g_iMaxIOSize = 0;
+
+static const int g_iLimitIOSize = ( 1UL << 30 ); // same as write chunk limit 1GB:
+// on Linux, read()/write() will transfer at most 0x7ffff000 bytes (on both 32 and 64 bit systems).
+static int g_iMaxIOSize = g_iLimitIOSize;
+
 static std::atomic<int64_t> g_tmNextIOTime { 0 };
 
 void sphSetThrottling ( int iMaxIOps, int iMaxIOSize )
 {
 	g_iIOpsDelay = iMaxIOps ? 1000000 / iMaxIOps : iMaxIOps;
-	g_iMaxIOSize = iMaxIOSize;
+	g_iMaxIOSize = Clamp ( 1, g_iLimitIOSize, iMaxIOSize );
 }
 
 
@@ -1013,7 +1017,7 @@ size_t sphReadThrottled ( int iFD, void* pBuf, size_t iCount )
 	if ( iCount <= 0 )
 		return iCount;
 
-	auto iStep = g_iMaxIOSize ? Min ( iCount, (size_t)g_iMaxIOSize ) : iCount;
+	auto iStep = Min ( iCount, (size_t)g_iMaxIOSize ); // Now always 0 < g_iMaxIOSize < 1 GB
 	auto* p = (BYTE*)pBuf;
 	size_t nBytesToRead = iCount;
 	while ( iCount && !sphInterrupted() )

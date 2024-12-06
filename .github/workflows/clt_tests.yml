@@ -42,6 +42,14 @@ jobs:
         with:
           repository: manticoresoftware/manticoresearch
           sparse-checkout: test/clt-tests
+          path: manticoresearch
+
+      - name: Work in project directory
+        if: ${{ hashFiles('manticoresearch/test/clt-tests/**') }}
+        run: |
+          cd manticoresearch
+          pwd
+          ls -l
 
       - uses: manticoresoftware/clt@0.2.3
         with:

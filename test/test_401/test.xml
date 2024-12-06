@@ -7,7 +7,7 @@
 	<non-rt/>
 	<no_pseudo_sharding/>
 </requires>
-
+<skip_db/>
 <config>
 indexer
 {

@@ -4,7 +4,7 @@
 <name>CALL KEYWORDS options</name>
 
 <requires><lemmatizer_base/><non-rt/></requires>
-
+<skip_db/>
 <config>
 common
 {

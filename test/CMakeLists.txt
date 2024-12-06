@@ -160,6 +160,7 @@ foreach ( test ${tests} )
 	else ()
 		if (testN STREQUAL "028" ) # the only non-xml test we have
 			set ( test_name "spelldump...")
+			LIST ( APPEND LABELS "SKIP_DB" )
 		else()
 			set ( test_name "" )
 		endif()

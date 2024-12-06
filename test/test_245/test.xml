@@ -3,7 +3,7 @@
 
 <name>n best group by with packedfactors</name>
 <requires><non-rt/></requires>
-
+<skip_db/>
 <config>
 indexer
 {

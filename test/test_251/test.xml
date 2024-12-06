@@ -2,7 +2,7 @@
 <test>
 
 <name>subtree cache qpos</name>
-
+<skip_db/>
 <config>
 indexer
 {

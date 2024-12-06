@@ -6,7 +6,7 @@
 <requires>
 <columnar/>
 </requires>
-
+<skip_db/>
 <config>
 indexer
 {

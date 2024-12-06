@@ -2,9 +2,7 @@
 
 <test>
 <name>snippets vs SPZ</name>
-
-<requires>
-</requires>
+<skip_db/>
 
 <config>
 searchd
@@ -40,8 +38,6 @@ index multiform
 }
 
 </config>
-
-<db_insert>select 1;</db_insert>
 
 <custom_test><![CDATA[
 

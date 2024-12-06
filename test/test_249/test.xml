@@ -4,7 +4,7 @@
 <name>distributed index stat2 - hung of daemon</name>
 
 <requires><non-rt/></requires>
-
+<skip_db/>
 <config>
 searchd
 {

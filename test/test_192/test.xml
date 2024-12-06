@@ -2,7 +2,7 @@
 
 <test>
 <name>blend_chars vs multiforms</name>
-
+<skip_db/>
 <config>
 searchd
 {
@@ -164,8 +164,6 @@ index test20
 }
 
 </config>
-
-<db_insert>select 1;</db_insert>
 
 <queries><sphinxql>
 SELECT * FROM test WHERE MATCH('3+rd text');

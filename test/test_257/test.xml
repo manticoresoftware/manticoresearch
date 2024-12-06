@@ -2,7 +2,7 @@
 
 <test>
 <name>sv-base indexing 1</name>
-
+<skip_db/>
 <config>
 indexer
 {

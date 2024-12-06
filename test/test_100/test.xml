@@ -1,6 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <test>
 <name>snippets vs force_all_words</name>
+<skip_db/>
 <config>
 indexer
 {

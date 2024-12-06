@@ -4,7 +4,7 @@
 <name>reconfigure</name>
 
 <requires><re2/></requires>
-
+<skip_db/>
 <config>
 searchd
 {

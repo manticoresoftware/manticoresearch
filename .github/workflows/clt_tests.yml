@@ -9,7 +9,6 @@ on:
       artifact_name:
         required: false
         type: string
-        default: "manticore_test_kit.img"
         description: "Name of the docker image artifact"
 
 jobs:

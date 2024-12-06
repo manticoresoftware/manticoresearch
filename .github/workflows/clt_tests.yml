@@ -1,0 +1,46 @@
+name: CLT tests 
+on:
+  workflow_call:
+    inputs:
+      docker_image:
+        required: true
+        type: string
+        description: "Docker image to use for tests"
+      artifact_name:
+        required: false
+        type: string
+        default: "manticore_test_kit.img"
+        description: "Name of the docker image artifact"
+
+jobs:
+  clt:
+    name: CLT
+    runs-on: ubuntu-22.04
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        test-suite:
+          - name: Core
+            test_prefix: |-
+              test/clt-tests/core/
+              test/clt-tests/expected-errors/
+          - name: mysqldump
+            test_prefix: |-
+              test/clt-tests/mysqldump/mysql/
+              test/clt-tests/mysqldump/maria/
+          - name: Replication
+            test_prefix: test/clt-tests/replication/
+          - name: Plugins
+            test_prefix: test/clt-tests/plugins/
+          - name: Buddy
+            test_prefix: test/clt-tests/buddy/
+          - name: Update
+            test_prefix: test/clt-tests/optimisation-and-update/
+    steps:
+      - uses: manticoresoftware/clt@0.2.3
+        with:
+          artifact: ${{ inputs.artifact_name }}
+          image: ${{ inputs.docker_image }}
+          test_prefix: ${{ matrix.test-suite.test_prefix }}
+          comment_mode: failures

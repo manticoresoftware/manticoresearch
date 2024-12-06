@@ -510,6 +510,8 @@ jobs:
     with:
       docker_image: test-kit:img
       artifact_name: manticore_test_kit.img
+      repository: ${{ github.repository }}
+      ref: ${{ github.sha }}
 
   test_kit_docker_push:
     if: always() && needs.changes.outputs.source == 'true'

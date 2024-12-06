@@ -63,8 +63,7 @@ endif()
 include(fixup_test_name)
 
 function (_test_prop test)
-	SET_TESTS_PROPERTIES ("${test}" PROPERTIES SKIP_RETURN_CODE 42 FIXTURES_REQUIRED UBER RESOURCE_LOCK DbAccess)
-	SET_TESTS_PROPERTIES ("${test}" PROPERTIES ENVIRONMENT DbAccess)
+	SET_TESTS_PROPERTIES ("${test}" PROPERTIES SKIP_RETURN_CODE 42 FIXTURES_REQUIRED UBER )
 
 	SET_TESTS_PROPERTIES ("${test}" PROPERTIES ENVIRONMENT "INDEXER=$<TARGET_FILE:indexer>;SEARCHD=$<TARGET_FILE:searchd>")
 	# m.b. append extra properties
@@ -91,6 +90,12 @@ function (add_ubertest testN tst_name LABELS prefix label flags)
 	SET_TESTS_PROPERTIES ("${_tstn}" PROPERTIES LABELS "${_labels}")
 	if ("HEAVY" IN_LIST LABELS)
 		SET_TESTS_PROPERTIES ("${_tstn}" PROPERTIES TIMEOUT "1800")
+	endif ()
+
+	if ("SKIP_DB" IN_LIST LABELS OR "SKIP_INDEXER" IN_LIST LABELS )
+		SET_TESTS_PROPERTIES ( "${_tstn}" PROPERTIES RESOURCE_GROUPS "datadir:1" )
+	else()
+		SET_TESTS_PROPERTIES ( "${_tstn}" PROPERTIES RESOURCE_GROUPS "datadir:1,mysql:1" )
 	endif ()
 	_test_prop ("${_tstn}")
 endfunction ()
@@ -154,7 +159,14 @@ foreach ( test ${tests} )
 				STRING ( TOUPPER "${require}" require )
 				LIST (APPEND LABELS ${require})
 			endforeach ()
+		endif ()
 
+		IF ("${_test_head}" MATCHES "<skip_indexer/>")
+			LIST ( APPEND LABELS "SKIP_INDEXER" )
+		endif()
+
+		IF ("${_test_head}" MATCHES "<skip_db/>")
+			LIST ( APPEND LABELS "SKIP_DB" )
 		endif ()
 
 	else ()

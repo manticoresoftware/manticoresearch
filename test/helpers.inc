@@ -2160,22 +2160,40 @@ class SphinxConfig
 		$this->GatherNodes ( $this->_config );
 		$this->GatherEntities ( GetFirstChild ( $xml, "query_attributes" ), $this->_query_attributes );
 
-		foreach ( ChildrenArray ( $xml, "db_create" ) as $node )
-			$this->_db_create []=$node->nodeValue;
+		$has_db = false;
+		foreach ( ChildrenArray ( $xml, "db_create" ) as $node ) {
+			$this->_db_create [] = $node->nodeValue;
+			$has_db = true;
+		}
 
-		foreach ( ChildrenArray ( $xml, "db_drop" ) as $node )
-			$this->_db_drop []=$node->nodeValue;
+		foreach ( ChildrenArray ( $xml, "db_drop" ) as $node ) {
+			$this->_db_drop [] = $node->nodeValue;
+			$has_db = true;
+		}
 
-		foreach ( ChildrenArray ( $xml, "db_insert" ) as $node )
-            $this->AddDbInsert ( $node, $doc->encoding );
+		foreach ( ChildrenArray ( $xml, "db_insert" ) as $node ) {
+			$this->AddDbInsert($node, $doc->encoding);
+			$has_db = true;
+		}
 
-		foreach ( ChildrenArray ( $xml, "custom_insert" ) as $node )
-			$this->_custom_insert []=$node->nodeValue;
+		foreach ( ChildrenArray ( $xml, "custom_insert" ) as $node ) {
+			$this->_custom_insert [] = $node->nodeValue;
+			$has_db = true;
+		}
+
 
 		$this->_name			= GetFirstChildValue ( $xml, "name" );
 		$this->_query_settings	= GetFirstChildValue ( $xml, "query_settings" );
 		$this->_num_agents		= GetFirstChildValue ( $xml, "num_agents", 1 );
-		$this->_skip_indexer	= GetFirstChildValue ( $xml, "skip_indexer", GetFirstChildValue ( $xml, "skip-indexer", false ) );
+		$this->_skip_indexer	= GetFirstChildValue ( $xml, "skip_indexer", false )!==false;
+		$skip_db         		= GetFirstChildValue ( $xml, "skip_db", false )!==false;
+
+		if ( $has_db && $skip_db )
+		{
+			global $test;
+			print ( "ERROR: test \"$test\" is marked as \"skip_db\", but has non-empty db_create/db_drop/db_insert/custom_insert section(s)\n" );
+			return false;
+		}
 
 		$this->_prereqs = array();
 		$prereqs = GetFirstChild ( $xml, "requires", false );

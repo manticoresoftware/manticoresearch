@@ -521,7 +521,7 @@ jobs:
     name: Push Test Kit docker image to repo
     runs-on: ubuntu-22.04
     env:
-      GHCR_USER: ${{ secrets.GHCR_USER }}
+      GHCR_USER: ${{ vars.GHCR_USER }}
       GHCR_PASSWORD: ${{ secrets.GHCR_PASSWORD }}
       REPO_OWNER: ${{ github.repository_owner }}
     steps:

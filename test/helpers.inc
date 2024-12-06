@@ -1421,6 +1421,22 @@ function result_must_not_be_displayed ($result)
     return @$result['skip']==1;
 }
 
+function IsRt()
+{
+	global $g_locals;
+	if ( !array_key_exists ('rt_mode', $g_locals) )
+		return false;
+	return $g_locals['rt_mode'];
+}
+
+function IsColumnar()
+{
+	global $g_locals;
+	if ( !array_key_exists ('columnar_mode', $g_locals) )
+		return false;
+	return $g_locals['columnar_mode'];
+}
+
 
 class SphinxConfig
 {
@@ -1517,22 +1533,6 @@ class SphinxConfig
 	function IsNeedDB()				{ return ! ( empty ( $this->_db_drop )
 										&& empty ( $this->_db_create )
 										&& empty ( $this->_db_insert ) ); }
-	function IsRt()
-	{
-		global $g_locals;
-		if ( !array_key_exists ('rt_mode', $g_locals) )
-			return false;
-		return $g_locals['rt_mode'];
-	}
-
-	function IsColumnar()
-	{
-		global $g_locals;
-		if ( !array_key_exists ('columnar_mode', $g_locals) )
-			return false;
-		return $g_locals['columnar_mode'];
-	}
-
 	function NeedIndexerEx ()
 	{
 		return count ( $this->_indexer_runs ) > 0;
@@ -3231,9 +3231,9 @@ class SphinxConfig
 
 		// fixup floats in json via http
 		if ( isset ( $set["http"] ) && $set["http"]==1 )
-			JsonRsetFixup ( $set, $this->IsColumnar(), $keep_json_ctrls );
+			JsonRsetFixup ( $set, IsColumnar(), $keep_json_ctrls );
 		else
-			SqlRsetFixup ( $set, $this->IsColumnar() );
+			SqlRsetFixup ( $set, IsColumnar() );
 
 	    // fixup sphinxql trim
 	    if ( isset ( $set['sphinxql'] ) )
@@ -3699,7 +3699,7 @@ class SphinxConfig
 
 		// for rt case - extract the schema from the config
 		// and make the new config, making the index as rt instead
-		if ( $this->IsRt() )
+		if ( IsRt() )
 		{
 			$body = 1;
 			$srcname = 2;
@@ -4053,7 +4053,7 @@ class SphinxConfig
 					}
 				}
 
-				if ( $this->IsColumnar() )
+				if ( IsColumnar() )
 				{
 					$attr_names[] = "id";
 					$columnar_attrs = "\n\tcolumnar_attrs=".implode ( ",", array_unique($attr_names) );
@@ -4490,13 +4490,13 @@ function CheckConfig ( $config, $path )
 		return false;
 	}
 
-	if ( $config->Requires("non-rt") && $config->IsRt() )
+	if ( $config->Requires("non-rt") && IsRt() )
 	{
 		printf ( "SKIPPING %s, %s - explicitly non-RT test skipped in RT mode\n", $path, $config->Name () );
 		return false;
 	}
 
-	if ( $config->Requires("non-columnar") && $config->IsColumnar() )
+	if ( $config->Requires("non-columnar") && IsColumnar() )
 	{
 		printf ( "SKIPPING %s, %s - explicitly non-columnar test skipped in columnar mode\n", $path, $config->Name () );
 		return false;
@@ -4555,7 +4555,7 @@ function CheckConfig ( $config, $path )
 		return false;
 	}
 
-	if ( $config->NeedIndexerEx() && $config->IsRt() )
+	if ( $config->NeedIndexerEx() && IsRt() )
 	{
 		printf ( "SKIPPING %s, %s - non-RT test that uses indexer skipped in RT mode\n", $path, $config->Name () );
 		return false;
@@ -4741,7 +4741,7 @@ function RunTest ( $test_dir, $skipdemo, $usemarks )
 		if ( $config->IsSkipIndexer()===false && $sd_managed_searchd===false && $sd_skip_indexer===false )
 		{
 			// standard run
-			if ( !$config->IsRt() )
+			if ( !IsRt() )
 			{
 			$indexer_ret = RunIndexer ( $error, "--all" );
 				if ( $indexer_ret==2 )
@@ -4842,7 +4842,7 @@ function RunTest ( $test_dir, $skipdemo, $usemarks )
 			continue;
 
 		// in case of RT index - run "insert into" instead of indexer
-		if ( $config->IsRt () )
+		if ( IsRt () )
 			$config->InsertIntoIndexer ( $error );
 
         $config->ResetResults();

@@ -81,7 +81,7 @@ if ( file_exists ('localsettings.inc') )
 function GetBanner ()
 {
 	global $g_locals;
-	
+
 	exec ( $g_locals['indexer'], $output, $result );
 	if ( count($output) == 0 )
 	{
@@ -252,7 +252,7 @@ function GuessReplication()
 {
 	$repli_on = 'DWITH_GALERA=1';
 	global $g_repli;
-	
+
 	$banner = GetBanner();
 	foreach ( $banner as $line )
 	{
@@ -272,7 +272,7 @@ function GuessSSL ()
 		$g_ssl = false;
 		return;
 	}
-	
+
 	$banner = GetBanner();
 	foreach ( $banner as $line )
 	{
@@ -288,7 +288,7 @@ function GuessZlib()
 {
     global $g_zlib;
     $zlib_on = 'DWITH_ZLIB=1';
-    
+
 	$banner = GetBanner();
 	foreach ( $banner as $line )
 	{
@@ -310,7 +310,7 @@ function PublishLocals ( &$locals, $benchmark )
 		$locals['bin'] = $locals['root'] . '/src/';
 		$locals['api'] = $locals['root'] . '/api/sphinxapi.php';
 	}
-	
+
 	$text = @file_get_contents ( getenv('HOME') . '/.sphinx' );
 	if ( !$text )
 	{
@@ -318,7 +318,7 @@ function PublishLocals ( &$locals, $benchmark )
 			$path = $benchmark ? '..\\bin\\release\\' : '..\\bin\\debug\\';
 		else
 			$path = '../src/';
-	
+
 		$text = @file_get_contents ( $path . '/.sphinx' );
 	}
 	if ( $text )

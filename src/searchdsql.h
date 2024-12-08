@@ -31,32 +31,32 @@ struct AttrValue_t
 };
 
 using AttrValues_p = CSphRefcountedPtr < RefcountedVector_c<AttrValue_t> >;
+using AttrValueVec_t = CSphVector<AttrValue_t>;
 
 
 /// parser view on a generic node
 /// CAUTION, nodes get copied in the parser all the time, must keep assignment slim
-struct SqlNode_t
+struct SqlNode_t final
 {
 	int						m_iStart = 0;	///< first byte relative to m_pBuf, inclusive
 	int						m_iEnd = 0;		///< last byte relative to m_pBuf, exclusive! thus length = end - start
 	int						m_iType = 0;	///< TOK_xxx type for insert values; SPHINXQL_TOK_xxx code for special idents
 	float					m_fValue = 0.0;
-	AttrValues_p			m_pValues { nullptr };	///< filter values vector (FIXME? replace with numeric handles into parser state?)
+	int 					m_iValues = -1;    ///< filter values vector (idx of vec stored in the parser)
 	uint64_t				m_uValue = 0;
 	int						m_iParsedOp = -1;
 	bool					m_bNegative = false;	// this flag means that '-' was explicitly specified before the integer const
 
 							SqlNode_t() = default;
 
-	void					SetValueInt ( int64_t iValue );
-	void					SetValueInt ( uint64_t uValue, bool bNegative );
-	void					SetValueFloat ( float fValue );
-	int64_t					GetValueInt() const;
-	uint64_t				GetValueUint() const;
-	float					GetValueFloat() const	{ return m_fValue; }
-	void					CopyValueInt ( const SqlNode_t & tRhs );
+	void					SetValueInt ( int64_t iValue ) noexcept;
+	void					SetValueInt ( uint64_t uValue, bool bNegative ) noexcept;
+	void					SetValueFloat ( float fValue ) noexcept;
+	int64_t					GetValueInt() const noexcept;
+	uint64_t				GetValueUint() const noexcept;
+	float					GetValueFloat() const noexcept	{ return m_fValue; }
+	void					CopyValueInt ( const SqlNode_t & tRhs ) noexcept;
 };
-
 
 /// types of string-list filters.
 enum class StrList_e
@@ -360,9 +360,13 @@ public:
 	void			SetIndex ( const SqlNode_t& tNode ) const;
 	void			SetIndex ( const CSphString& sIndex ) const;
 	void 			Comment ( const SqlNode_t& tNode ) const;
+	int				AddMvaVec () noexcept;
+	AttrValueVec_t&	GetMvaVec (int iIdx) const noexcept;
+	AttrValues_p	CloneMvaVecPtr ( int iIdx ) const noexcept;
 
 protected:
 	CSphVector<SqlStmt_t> &	m_dStmt;
+	CSphVector<AttrValueVec_t> m_dMultiValues;
 
 					SqlParserTraits_c ( CSphVector<SqlStmt_t> &	dStmt, const char* szQuery, CSphString* pError );
 

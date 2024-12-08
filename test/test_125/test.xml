@@ -510,6 +510,8 @@ INSERT INTO name_table VALUES
 	SELECT id, uuid_short() as uid FROM test_name order by id asc option threads=1;
 	SELECT id, uuid_short() as uid FROM test_name order by id asc option threads=1;
 	SELECT uuid_short();
+	CALL uuid_short(1);
+	CALL uuid_short(4);
     
 </sphinxql>
 </sphqueries>

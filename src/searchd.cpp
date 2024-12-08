@@ -4925,7 +4925,7 @@ bool ApplyOuterOrder ( AggrResult_t & tRes, const CSphQuery & tQuery )
 	tReorder.m_fnStrCmp = GetStringCmpFunc ( tQuery.m_eCollation );
 	CSphVector<ExtraSortExpr_t> dExtraExprs;
 
-	ESortClauseParseResult eRes = sphParseSortClause ( tQuery, tQuery.m_sOuterOrderBy.cstr(), tRes.m_tSchema, eFunc, tReorder, dExtraExprs, true, nullptr, tRes.m_sError );
+	ESortClauseParseResult eRes = sphParseSortClause ( tQuery, tQuery.m_sOuterOrderBy.cstr(), tRes.m_tSchema, eFunc, tReorder, dExtraExprs, nullptr, tRes.m_sError );
 	if ( eRes==SORT_CLAUSE_RANDOM )
 		tRes.m_sError = "order by rand() not supported in outer select";
 
@@ -7848,7 +7848,7 @@ static const char * g_dSqlStmts[] =
 	"flush_hostnames", "flush_logs", "reload_indexes", "sysfilters", "debug", "alter_killlist_target",
 	"alter_index_settings", "join_cluster", "cluster_create", "cluster_delete", "cluster_index_add",
 	"cluster_index_delete", "cluster_update", "explain", "import_table", "freeze_indexes", "unfreeze_indexes",
-	"show_settings", "alter_rebuild_si", "kill", "show_locks"
+	"show_settings", "alter_rebuild_si", "kill", "show_locks", "show_scroll"
 };
 
 
@@ -14164,6 +14164,25 @@ void HandleMysqlMeta ( RowBuffer_i & dRows, const SqlStmt_t & tStmt, const CSphQ
 	dRows.Eof ( bMoreResultsFollow );
 }
 
+
+void HandleMysqlShowScroll ( RowBuffer_i & dRows, const SqlStmt_t & tStmt, const CSphQueryResultMeta & tLastMeta, bool bMoreResultsFollow )
+{
+	assert ( tStmt.m_eStmt==STMT_SHOW_SCROLL );
+
+	if ( !dRows.HeadOfStrings ( { "scroll_token" } ) )
+		return;
+
+	if ( !tLastMeta.m_sScroll.IsEmpty() )
+	{
+		dRows.PutString ( tLastMeta.m_sScroll.cstr() );
+		dRows.Commit();
+	}
+
+	// cleanup
+	dRows.Eof ( bMoreResultsFollow );
+}
+
+
 static std::unique_ptr<ReplicationCommand_t> MakePercolateDeleteDocumentsCommand ( CSphString sIndex, CSphString sCluster, const SqlStmt_t & tStmt, CSphString & sError )
 {
 	// prohibit double copy of filters
@@ -17103,6 +17122,91 @@ void ClientSession_c::FreezeLastMeta()
 
 static void HandleMysqlShowSettings ( const CSphConfig & hConf, RowBuffer_i & tOut );
 
+static bool FormatScrollSettings ( const AggrResult_t & tAggrRes, const SqlStmt_t * pStmt, CSphString & sSettings )
+{
+	if ( !pStmt || pStmt->m_eStmt!=STMT_SELECT )
+		return false;
+
+	if ( tAggrRes.m_dResults.GetLength()!=1 )
+		return false;
+
+	const auto & tRes = tAggrRes.m_dResults[0];
+	if ( tRes.m_dMatches.IsEmpty() )
+		return false;
+
+	ESphSortFunc eFunc = FUNC_REL_DESC;
+	CSphMatchComparatorState tState;
+	CSphVector<ExtraSortExpr_t> dExtraExprs;
+	CSphString sError;
+	ESortClauseParseResult eRes = sphParseSortClause ( pStmt->m_tQuery, pStmt->m_tQuery.m_sOrderBy.cstr(), tRes.m_tSchema, eFunc, tState, dExtraExprs, nullptr, sError );
+	if ( eRes!=SORT_CLAUSE_OK )
+		return false;
+
+	int iNumArgs = 0;
+	switch ( eFunc )
+	{
+	case FUNC_GENERIC1: iNumArgs = 1; break;
+	case FUNC_GENERIC2: iNumArgs = 2; break;
+	case FUNC_GENERIC3: iNumArgs = 3; break;
+	case FUNC_GENERIC4: iNumArgs = 4; break;
+	case FUNC_GENERIC5: iNumArgs = 5; break;
+	default: return false;
+	}
+
+	JsonObj_c tJson;
+	tJson.AddStr ( "order_by_str", pStmt->m_tQuery.m_sOrderBy );
+
+	JsonObj_c tOrderBy(true);
+
+	const CSphMatch & tMatch = tRes.m_dMatches.Last();
+
+	for ( int i = 0; i < iNumArgs; i++ )
+	{
+		bool bWeight = tState.m_eKeypart[i]==SPH_KEYPART_WEIGHT;
+		if ( !bWeight && tState.m_dAttrs[i]==-1 )
+			return false;
+
+		JsonObj_c tAttrWithOrder;
+
+		CSphString sAttr = bWeight ? "weight()" : tRes.m_tSchema.GetAttr ( tState.m_dAttrs[i] ).m_sName;
+		auto * pAttr = tRes.m_tSchema.GetAttr ( sAttr.cstr() );
+		if ( !pAttr )
+			return false;
+
+		tAttrWithOrder.AddStr ( "attr", pAttr->m_sName );
+		tAttrWithOrder.AddBool ( "desc", tState.m_uAttrDesc & ( 1<<i ) );
+
+		switch ( pAttr->m_eAttrType )
+		{
+		case SPH_ATTR_STRINGPTR:
+			tAttrWithOrder.AddStr ( "value", (const char*)tMatch.GetAttr ( pAttr->m_tLocator ) );
+			tAttrWithOrder.AddStr ( "type", "string" );
+			break;
+
+		case SPH_ATTR_FLOAT:
+			tAttrWithOrder.AddFlt ( "value", tMatch.GetAttrFloat ( pAttr->m_tLocator ) );
+			tAttrWithOrder.AddStr ( "type", "float" );
+			break;
+
+		case SPH_ATTR_DOUBLE:
+			tAttrWithOrder.AddFlt ( "value", tMatch.GetAttrDouble ( pAttr->m_tLocator ) );
+			tAttrWithOrder.AddStr ( "type", "float" );
+			break;
+
+		default:
+			tAttrWithOrder.AddUint ( "value", tMatch.GetAttr ( pAttr->m_tLocator ) );
+			tAttrWithOrder.AddStr ( "type", "int" );
+			break;
+		}
+
+		tOrderBy.AddItem(tAttrWithOrder);
+	}
+	
+	tJson.AddItem ( "order_by", tOrderBy );
+	sSettings = tJson.AsString();
+	return true;
+}
+
 // just execute one sphinxql statement
 //
 // IMPORTANT! this does NOT start or stop profiling, as there a few external
@@ -17220,6 +17324,7 @@ bool ClientSession_c::Execute ( Str_t sQuery, RowBuffer_i & tOut )
 
 			// save meta for SHOW META (profile is saved elsewhere)
 			m_tLastMeta = tHandler.m_dAggrResults.Last();
+			FormatScrollSettings ( tHandler.m_dAggrResults.Last(), pStmt, m_tLastMeta.m_sScroll );
 			return true;
 		}
 	case STMT_SHOW_WARNINGS:
@@ -17240,6 +17345,10 @@ bool ClientSession_c::Execute ( Str_t sQuery, RowBuffer_i & tOut )
 			HandleMysqlMeta ( tOut, *pStmt, m_tLastMeta, false );
 		else
 			HandleMysqlPercolateMeta ( m_tPercolateMeta, m_tLastMeta.m_sWarning, tOut );
+		return true;
+
+	case STMT_SHOW_SCROLL:
+		HandleMysqlShowScroll ( tOut, *pStmt, m_tLastMeta, false );
 		return true;
 
 	case STMT_INSERT:

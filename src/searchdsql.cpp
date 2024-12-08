@@ -382,6 +382,8 @@ public:
 
 	void			AddComment ( const SqlNode_t* tNode );
 
+	bool			SetupScroll ( CSphString & sError );
+
 private:
 	bool						m_bMatchClause = false;
 	bool						m_bJoinMatchClause = false;
@@ -560,6 +562,7 @@ enum class Option_e : BYTE
 	SWITCHOVER,
 	EXPANSION_LIMIT,
 	JIEBA_MODE,
+	SCROLL,
 
 	INVALID_OPTION
 };
@@ -574,7 +577,7 @@ void InitParserOption()
 		"max_matches", "max_predicted_time", "max_query_time", "morphology", "rand_seed", "ranker", "retry_count",
 		"retry_delay", "reverse_scan", "sort_method", "strict", "sync", "threads", "token_filter", "token_filter_options",
 		"not_terms_only_allowed", "store", "accurate_aggregation", "max_matches_increase_threshold", "distinct_precision_threshold",
-		"threads_ex", "switchover", "expansion_limit", "jieba_mode" };
+		"threads_ex", "switchover", "expansion_limit", "jieba_mode", "scroll" };
 
 	for ( BYTE i = 0u; i<(BYTE) Option_e::INVALID_OPTION; ++i )
 		g_hParseOption.Add ( (Option_e) i, dOptions[i] );
@@ -608,7 +611,7 @@ static bool CheckOption ( SqlStmt_e eStmt, Option_e eOption )
 			Option_e::RETRY_COUNT, Option_e::RETRY_DELAY, Option_e::REVERSE_SCAN, Option_e::SORT_METHOD,
 			Option_e::THREADS, Option_e::TOKEN_FILTER, Option_e::NOT_ONLY_ALLOWED, Option_e::ACCURATE_AGG,
 			Option_e::MAXMATCH_THRESH, Option_e::DISTINCT_THRESH, Option_e::THREADS_EX, Option_e::EXPANSION_LIMIT,
-			Option_e::JIEBA_MODE };
+			Option_e::JIEBA_MODE, Option_e::SCROLL };
 
 	static Option_e dInsertOptions[] = { Option_e::TOKEN_FILTER_OPTIONS };
 
@@ -764,6 +767,52 @@ AddOption_e AddOption ( CSphQuery & tQuery, const CSphString & sOpt, const CSphS
 }
 
 
+static bool ParseScroll ( CSphQuery & tQuery, const CSphString & sVal, CSphString & sError )
+{
+	JsonObj_c tRoot ( sVal.cstr() );
+	if ( !tRoot )
+	{
+		sError.SetSprintf ( "unable to parse: %s", tRoot.GetErrorPtr() );
+		return false;
+	}
+
+	ScrollSettings_t tScrollSettings;
+	if ( !tRoot.FetchStrItem ( tScrollSettings.m_sOrderBy, "order_by_str", sError ) )	return false;
+
+	JsonObj_c tOrderByVec = tRoot.GetArrayItem ( "order_by", sError );
+	if ( !tOrderByVec )
+		return false;
+
+	for ( const auto & tItem : tOrderByVec )
+	{
+		ScrollAttr_t & tNew = tScrollSettings.m_dAttrs.Add();
+		if ( !tItem.FetchStrItem ( tNew.m_sSortAttr, "attr", sError ) )	return false;
+		if ( !tItem.FetchBoolItem ( tNew.m_bDesc, "desc", sError ) )	return false;
+
+		CSphString sType;
+		if ( !tItem.FetchStrItem ( sType, "type", sError ) )			return false;
+		if ( sType=="string" )
+		{
+			if ( !tItem.FetchStrItem ( tNew.m_sValue, "value", sError ) )	return false;
+			tNew.m_eType = SPH_ATTR_STRINGPTR;
+		}
+		else if ( sType=="float" )
+		{
+			if ( !tItem.FetchFltItem ( tNew.m_fValue, "value", sError ) )	return false;
+			tNew.m_eType = SPH_ATTR_FLOAT;
+		}
+		else
+		{
+			if ( !tItem.FetchInt64Item ( tNew.m_tValue, "value", sError ) )	return false;
+			tNew.m_eType = SPH_ATTR_BIGINT;
+		}
+	}
+
+	tQuery.m_tScrollSettings = std::move(tScrollSettings);
+	return true;
+}
+
+
 AddOption_e AddOption ( CSphQuery & tQuery, const CSphString & sOpt, const CSphString & sVal, const std::function<CSphString ()> & fnGetUnescaped, SqlStmt_e eStmt, CSphString & sError )
 {
 	auto FAILED = fnFailer ( sError );
@@ -867,6 +916,11 @@ AddOption_e AddOption ( CSphQuery & tQuery, const CSphString & sOpt, const CSphS
 	case Option_e::JIEBA_MODE:
 		if ( !StrToJiebaMode ( tQuery.m_eJiebaMode, sVal, sError ) )
 			return FAILED(sError.cstr());
+		break;
+
+	case Option_e::SCROLL:
+		if ( !ParseScroll ( tQuery, sVal, sError ) )
+			return FAILED(sError.cstr());		
 		break;
 
 	default:
@@ -1346,6 +1400,81 @@ void SqlParser_c::AddComment ( const SqlNode_t* tNode )
 			SetLimit ( 0, -1 );
 		}
 	}
+}
+
+
+static void AddScrollFilter ( CSphQuery & tQuery )
+{
+	const ScrollAttr_t & tFirst = tQuery.m_tScrollSettings.m_dAttrs[0];
+	int iFilterId = tQuery.m_dFilters.GetLength();
+
+	// we don't have string range filters
+	if ( tFirst.m_eType==SPH_ATTR_STRINGPTR )
+		return;
+
+	CSphFilterSettings & tFilter = tQuery.m_dFilters.Add();
+	tFilter.m_eType = tFirst.m_eType==SPH_ATTR_FLOAT ? SPH_FILTER_FLOATRANGE : SPH_FILTER_RANGE;
+	tFilter.m_sAttrName = tFirst.m_sSortAttr=="weight()" ? "@weight" : tFirst.m_sSortAttr;
+
+	if ( tFirst.m_eType==SPH_ATTR_FLOAT )
+	{
+		if ( tFirst.m_bDesc )
+			tFilter.m_fMaxValue = tFirst.m_fValue;
+		else
+			tFilter.m_fMinValue = tFirst.m_fValue;
+	}
+	else
+	{
+		if ( tFirst.m_bDesc )
+			tFilter.m_iMaxValue = tFirst.m_tValue;
+		else
+			tFilter.m_iMinValue = tFirst.m_tValue;
+	}
+
+	if ( tQuery.m_dFilterTree.GetLength() )
+	{
+		int iRootNodeId = tQuery.m_dFilterTree.GetLength()-1;
+		FilterTreeItem_t & tFilter = tQuery.m_dFilterTree.Add();
+		tFilter.m_iFilterItem = iFilterId;
+
+		int iFilterNodeId = tQuery.m_dFilterTree.GetLength()-1;
+		FilterTreeItem_t & tAnd = tQuery.m_dFilterTree.Add();
+		tAnd.m_iLeft = iRootNodeId;
+		tAnd.m_iRight = iFilterNodeId;
+	}
+}
+
+
+bool SqlParser_c::SetupScroll ( CSphString & sError )
+{
+	for ( auto & i : m_dStmt )
+	{
+		if ( i.m_eStmt!=STMT_SELECT || !i.m_tQuery.m_tScrollSettings.m_dAttrs.GetLength() )
+			continue;
+
+		auto & tQuery = i.m_tQuery;
+
+		// replace order by with order_by_str here (if order by is default)
+		const char * szDefaultOrderBy = "@weight desc";
+		if ( tQuery.m_sOrderBy==szDefaultOrderBy )
+			tQuery.m_sOrderBy = tQuery.m_sSortBy = tQuery.m_tScrollSettings.m_sOrderBy;
+		else if ( tQuery.m_sOrderBy!=tQuery.m_tScrollSettings.m_sOrderBy )
+		{
+			sError.SetSprintf ( "order by '%s' different from scroll order by '%s'", tQuery.m_sOrderBy.cstr(), tQuery.m_tScrollSettings.m_sOrderBy.cstr() );
+			return false;
+		}
+
+		if ( !tQuery.m_tScrollSettings.m_dAttrs.any_of ( []( auto & tAttr ){ return tAttr.m_sSortAttr=="id"; } ) )
+		{
+			sError = "document id not present in scroll settings";
+			return false;
+		}
+
+		// add filter on 1st scroll attribute
+		AddScrollFilter(tQuery);
+	}
+
+	return true;
 }
 
 
@@ -2117,6 +2246,9 @@ bool sphParseSqlQuery ( Str_t sQuery, CSphVector<SqlStmt_t> & dStmt, CSphString 
 		sError = "Using the old-fashion @variables (@count, @weight, etc.) is deprecated";
 		return false;
 	}
+
+	if ( !tParser.SetupScroll(sError) )
+		return false;
 
 	if ( SetupFacets(dStmt) )
 	{

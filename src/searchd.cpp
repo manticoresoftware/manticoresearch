@@ -78,6 +78,7 @@
 #include "searchdbuddy.h"
 #include "detail/indexlink.h"
 #include "detail/expmeter.h"
+#include "auth/auth.h"
 
 extern "C"
 {
@@ -20307,7 +20308,8 @@ void ConfigureSearchd ( const CSphConfig & hConf, bool bOptPIDFile, bool bTestMo
 	SetAccurateAggregationDefault ( hSearchd.GetInt ( "accurate_aggregation", GetAccurateAggregationDefault() )!=0 );
 	SetDistinctThreshDefault ( hSearchd.GetInt ( "distinct_precision_threshold", GetDistinctThreshDefault() ) );
 
-	ConfigureMerge(hSearchd);
+	ConfigureMerge ( hSearchd );
+	AuthConfigure ( hSearchd );
 }
 
 static void DirMustWritable ( const CSphString & sDataDir )

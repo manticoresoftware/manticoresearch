@@ -174,7 +174,7 @@ set ( SEARCHD_H searchdaemon.h searchdconfig.h searchdddl.h searchdexpr.h search
 		compressed_zlib_mysql.h sphinxql_debug.h stackmock.h searchdssl.h digest_sha1.h
 		client_session.h compressed_zstd_mysql.h docs_collector.h index_rotator.h config_reloader.h searchdhttp.h timeout_queue.h
 		netpoll.h pollable_event.h netfetch.h searchdbuddy.h sphinxql_second.h sphinxql_extra.h sphinxjsonquery.h
-		frontendschema.h debug_cmds.h)
+		frontendschema.h debug_cmds.h auth/auth.h)
 
 
 # add the extra targets in the case we want on-the-fly grammar compiler
@@ -255,7 +255,7 @@ add_library ( lsearchd OBJECT searchdha.cpp http/http_parser.c searchdhttp.cpp
 		netreceive_http.cpp netreceive_ql.cpp query_status.cpp
 		sphinxql_debug.cpp sphinxql_second.cpp stackmock.cpp docs_collector.cpp index_rotator.cpp config_reloader.cpp netpoll.cpp
 		pollable_event.cpp netfetch.cpp searchdbuddy.cpp searchdhttpcompat.cpp sphinxql_extra.cpp searchdreplication.cpp sphinxjsonquery.cpp
-		frontendschema.cpp compressed_http.cpp debug_cmds.cpp )
+		frontendschema.cpp compressed_http.cpp debug_cmds.cpp auth/auth.cpp )
 target_sources ( lsearchd PUBLIC ${SEARCHD_SRCS_TESTABLE} ${SEARCHD_H} ${SEARCHD_BISON} ${SEARCHD_FLEX} )
 add_library ( digest_sha1 digest_sha1.cpp )
 target_link_libraries ( digest_sha1 PRIVATE lextra )

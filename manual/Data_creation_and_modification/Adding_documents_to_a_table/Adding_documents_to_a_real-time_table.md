@@ -499,6 +499,33 @@ var sqlresult = indexApi.Insert(newdoc);
 ```
 <!-- end -->
 
+### UUID_SHORT multi-ID generation
+
+```sql
+CALL UUID_SHORT(N)
+```
+
+`CALL UUID_SHORT(N)` statement allows for generating N unique 64-bit IDs in a single call. It is designed for batch operations, where efficiently obtaining multiple unique IDs is essential.
+
+<!-- intro -->
+##### SQL:
+<!-- request SQL -->
+
+```sql
+CALL UUID_SHORT(3)
+```
+<!-- response SQL -->
+```
++---------------------+
+| uuid_short()        |
++---------------------+
+| 1227930988733973183 |
+| 1227930988733973184 |
+| 1227930988733973185 |
++---------------------+
+```
+<!-- end -->
+
 <!-- example bulk_insert -->
 ## Bulk adding documents
 You can insert not just a single document into a real-time table, but as many as you'd like. It's perfectly fine to insert batches of tens of thousands of documents into a real-time table. However, it's important to keep the following points in mind:

@@ -509,6 +509,19 @@ You can insert not just a single document into a real-time table, but as many as
 
 Note that the `/bulk` HTTP endpoint does not support automatic creation of tables (auto schema). Only the `/_bulk` (Elasticsearch-like) HTTP endpoint and the SQL interface support this feature. The `/_bulk` (Elasticsearch-like) HTTP endpoint allows the table name to include the cluster name in the format `cluster_name:table_name`.
 
+`/_bulk` endpoint accepts document IDs in the same format as Elasticsearch, and you can also include the `id` within the document itself:
+```json
+{ "index": { "_index" : "products", "_id" : "1" } }
+{ "title" : "Crossbody Bag with Tassel", "price": 19.85 }
+```
+
+or
+
+```json
+{ "index": { "_index" : "products" } }
+{ "title" : "Crossbody Bag with Tassel", "price": 19.85, "id": "1" }
+```
+
 #### Chunked transfer in /bulk
 The `/bulk` (Manticore mode) endpoint supports [Chunked transfer encoding](https://en.wikipedia.org/wiki/Chunked_transfer_encoding). You can use it to transmit large batches. It:
 * reduces peak RAM usage, lowering the risk of OOM
@@ -744,7 +757,7 @@ res =  await indexApi.bulk(docs.map(e=>JSON.stringify(e)).join('\n'));
 ``` java
 String body = "{\"insert\": {\"index\" : \"products\", \"id\" : 1, \"doc\" : {\"title\" : \"Crossbody Bag with Tassel\", \"price\" : 19.85}}}"+"\n"+
     "{\"insert\": {\"index\" : \"products\", \"id\" : 4, \"doc\" : {\"title\" : \"microfiber sheet set\", \"price\" : 19.99}}}"+"\n"+
-    "{\"insert\": {\"index\" : \"products\", \"id\" : 5, \"doc\" : {\"title\" : \"CPet Hair Remover Glove\", \"price\" : 7.99}}}"+"\n";         
+    "{\"insert\": {\"index\" : \"products\", \"id\" : 5, \"doc\" : {\"title\" : \"CPet Hair Remover Glove\", \"price\" : 7.99}}}"+"\n";
 BulkResponse bulkresult = indexApi.bulk(body);
 ```
 
@@ -756,7 +769,7 @@ BulkResponse bulkresult = indexApi.bulk(body);
 ``` clike
 string body = "{\"insert\": {\"index\" : \"products\", \"id\" : 1, \"doc\" : {\"title\" : \"Crossbody Bag with Tassel\", \"price\" : 19.85}}}"+"\n"+
     "{\"insert\": {\"index\" : \"products\", \"id\" : 4, \"doc\" : {\"title\" : \"microfiber sheet set\", \"price\" : 19.99}}}"+"\n"+
-    "{\"insert\": {\"index\" : \"products\", \"id\" : 5, \"doc\" : {\"title\" : \"CPet Hair Remover Glove\", \"price\" : 7.99}}}"+"\n";                                 
+    "{\"insert\": {\"index\" : \"products\", \"id\" : 5, \"doc\" : {\"title\" : \"CPet Hair Remover Glove\", \"price\" : 7.99}}}"+"\n";
 BulkResponse bulkresult = indexApi.Bulk(string.Join("\n", docs));
 ```
 

@@ -148,7 +148,7 @@ public:
 		m_dInput.Reset();
 		logOutput ( dData, m_iReqID );
 		m_tOut.SendBytes ( dData );
-		return m_tOut.SendBuffer ( dData );
+		return m_tOut.Flush();
 	}
 };
 

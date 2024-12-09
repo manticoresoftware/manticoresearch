@@ -522,7 +522,7 @@ The `/bulk` (Manticore mode) endpoint supports [Chunked transfer encoding](https
 For bulk insert, simply provide more documents in brackets after `VALUES()`. The syntax is:
 
 ```sql
-INSERT INTO <table name>[(column1, column2, ...)] VALUES ()[,(value1,[value2, ...])]
+INSERT INTO <table name>[(column1, column2, ...)] VALUES(value1[, value2 , ...]), (...)
 ```
 
 The optional column name list allows you to explicitly specify values for some of the columns present in the table. All other columns will be filled with their default values (0 for scalar types, empty string for string types).

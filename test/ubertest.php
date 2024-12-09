@@ -179,20 +179,22 @@ if ( $locals['scriptdir']!=$locals['testdir'] )
 	}
 }
 
-$index_script_path = $locals['scriptdir'].$index_data_path;
+global $index_data_prefix;
+$index_script_path = $locals['scriptdir'].$index_data_prefix;
 if (!file_exists ($index_script_path))
 	mkdir ($index_script_path);
 
-$index_data_path = $locals['testdir'].$index_data_path;
+$index_data_path = $locals['testdir'].$index_data_prefix;
 
 PublishLocals ( $locals, false );
 
-$sd_log				= testdir("searchd.log");
-$ss_log				= scriptdir("searchd.log");
-$sd_query_log		= testdir("query.log");
-$ss_query_log		= scriptdir("query.log");
-$sd_pid_file		= testdir("searchd.pid");
-$ss_pid_file		= scriptdir("searchd.pid");
+global $searchd_log, $query_log, $searchd_pid;
+$sd_log				= testdir($searchd_log);
+$ss_log				= scriptdir($searchd_log);
+$sd_query_log		= testdir($query_log);
+$ss_query_log		= scriptdir($query_log);
+$sd_pid_file		= testdir($searchd_pid);
+$ss_pid_file		= scriptdir($searchd_pid);
 
 require_once ( "helpers.inc" );
 
@@ -310,7 +312,7 @@ $sd_sphinxql_port_vip_ref = $sd_sphinxql_port_vip;
 $sd_http_port_ref = $sd_http_port;
 
 $name_err_all = $locals['scriptdir'] . "error_all.txt";
-$name_err = $locals['scriptdir'] . "error.txt";
+$name_err = $locals['scriptdir'] . error_txt();
 
 foreach ( $tests as $test )
 {
@@ -396,14 +398,15 @@ foreach ( $tests as $test )
 }
 
 // cleanup
+global $config_base ;
 if ( !array_key_exists ('keep_all', $g_locals) )
 {
-	@unlink("config.conf");
-	@unlink("error.txt");
+	@unlink(config_conf());
+	@unlink(error_txt());
 
 	$nfile = 1;
-	while (file_exists("config_$nfile.conf")) {
-		@unlink("config_$nfile.conf");
+	while (file_exists("{$config_base}_$nfile.conf")) {
+		@unlink("{$config_base}_$nfile.conf");
 		$nfile++;
 	}
 

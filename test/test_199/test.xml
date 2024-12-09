@@ -103,14 +103,14 @@ $query = function ( $q, $sock )
 	{
 		$results[]  = mysql_errno( $sock ) . "; " . mysql_error ( $sock );
 	} else
-	{	
+	{
 		while ($row = @mysql_fetch_array($res, MYSQL_ASSOC))
 		{
 			if ( array_key_exists ( "Variable_name", $row ) && $row["Variable_name"]=="time" )
 			{
 				continue;
 			}
-				
+
 			if ( !array_key_exists ( "Variable_name", $row ) || !array_key_exists ( "Value", $row ) )
 			{
 				$line = "";
@@ -123,10 +123,10 @@ $query = function ( $q, $sock )
 			{
 				$results[] = $row["Variable_name"] . " = " . $row["Value"];
 			}
-		}	
+		}
 		@mysql_free_result ( $res );
 	}
-	
+
 	return $results;
 };
 
@@ -174,15 +174,15 @@ for ( $i = 102; $i < 104; $i++)
 	$results = array_merge ( $results, $query ( "SELECT * FROM idx WHERE idd IN @filter1", $sock ) );
 	$results = array_merge ( $results, $query ( "SHOW META", $sock ) );
 	$results = array_merge ( $results, $query ( "SET GLOBAL @filter1 = ( 22, $i )", $sock ) );
-		
+
 	@mysql_close($sock);
-	
-	usleep ( 50000 );	
-	StopSearchd ( 'config.conf', 'searchd.pid' );
+
 	usleep ( 50000 );
-	
+	StpSearchd ();
+	usleep ( 50000 );
+
 	$error = "";
-	$startSta = StartSearchd ( 'config.conf', 'error.txt', 'searchd.pid', $error, array() );
+	$startSta = StSearchd ( $error );
 	if ( $startSta == 0 || $startSta == 2 )
 	{
 		$results[] = "started=ok";
@@ -216,7 +216,7 @@ DROP TABLE IF EXISTS `test_table`
   </DB_Drop>
 
   <DB_Insert>
-INSERT INTO `test_table` (`id`, `text`, `idd`) VALUES 
+INSERT INTO `test_table` (`id`, `text`, `idd`) VALUES
 (1, 'test1', 101 ),
 (2, 'test2', 102 ),
 (3, 'test3', 103 ),
@@ -230,7 +230,7 @@ CREATE TABLE `stem_table` (
   `idd` int(11) DEFAULT NULL
 )
 </DB_Create>
-<DB_Drop>DROP TABLE IF EXISTS `stem_table`</DB_Drop>  
-<DB_Insert>INSERT INTO `stem_table` (`id`, `text`, `idd`) VALUES (1, 'this is the test', 11 ), (2, 'this is thes test', 22 );</DB_Insert>  
-  
+<DB_Drop>DROP TABLE IF EXISTS `stem_table`</DB_Drop>
+<DB_Insert>INSERT INTO `stem_table` (`id`, `text`, `idd`) VALUES (1, 'this is the test', 11 ), (2, 'this is thes test', 22 );</DB_Insert>
+
 </test>

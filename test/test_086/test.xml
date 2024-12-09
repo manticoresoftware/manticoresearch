@@ -68,7 +68,7 @@ unset ( $res1["time"] );
 
 $rv = 0;
 $err = "";
-exec ( $g_locals["indexer"]." --quiet --config ".testdir('config.conf')." --rotate --all", $err, $rv );
+exec ( $g_locals["indexer"]." --quiet --config ".testdir_config()." --rotate --all", $err, $rv );
 
 usleep ( 1500000 );
 $res2 = $client->Query ( "sonne", "test1" );

@@ -19,14 +19,14 @@ index rt1
 {
     type = rt
     path = <data_path/>/rt1
-    charset_table = a..z, _, A..Z->a..z	
+    charset_table = a..z, _, A..Z->a..z
     rt_field = name
     #rt_field = title
     #rt_attr_uint = count
     rt_attr_uint = idd
     morphology = stem_en
     wordforms = <this_test/>/wf1.txt
-    
+
     #stored_fields = name
 }
 </config>
@@ -43,7 +43,7 @@ $results[] = "\n" . $ql->Query ( "SELECT * FROM rt1 WHERE MATCH ( 'SOY' )" );
 $results[] = 'query TOFU';
 $results[] = "\n" . $ql->Query ( "SELECT * FROM rt1 WHERE MATCH ( 'TOFU' ) ORDER BY id ASC" );
 
-$orig_conf = file(testdir('config.conf'));
+$orig_conf = file(testdir_config());
 
 $new_conf = '';
 foreach ( $orig_conf as $line )
@@ -54,7 +54,7 @@ foreach ( $orig_conf as $line )
 	}
 	$new_conf .= $line;
 }
-file_put_contents(testdir('config.conf'), $new_conf);
+file_put_contents(testdir_config(), $new_conf);
 
 $results[] = "\n" . $ql->Query ( "ALTER TABLE rt1 RECONFIGURE" );
 
@@ -76,7 +76,7 @@ $results[] = "\n" . $ql->Query ( "SELECT * FROM rt1 WHERE MATCH ( 'TOFU' ) ORDER
 $results[] = 'DESC rt1';
 $results[] = "\n" . $ql->Query ( "DESC rt1" );
 
-$orig_conf = file(testdir('config.conf'));
+$orig_conf = file(testdir_config());
 $n1_conf = '';
 foreach ( $orig_conf as $line )
 {
@@ -87,7 +87,7 @@ foreach ( $orig_conf as $line )
 	}
 	$n1_conf .= $line;
 }
-file_put_contents(testdir('config.conf'), $n1_conf);
+file_put_contents(testdir_config(), $n1_conf);
 
 $results[] = 'TRUNCATE RTINDEX rt1 WITH RECONFIGURE';
 $results[] = "\n" . $ql->Query ( "TRUNCATE RTINDEX rt1 WITH RECONFIGURE" );

@@ -17,7 +17,7 @@ index rt
 {
     type = rt
     path = <data_path/>/rt
-    charset_table = a..z, _, A..Z->a..z	
+    charset_table = a..z, _, A..Z->a..z
     rt_field = name
     rt_attr_uint = idd
 	#min_prefix_len = 3
@@ -37,7 +37,7 @@ $results[] = "\n" . $ql->Query ( "SELECT * FROM rt WHERE MATCH ( 'test' ) ORDER 
 $results[] = 'query tes*';
 $results[] = "\n" . $ql->Query ( "SELECT * FROM rt WHERE MATCH ( 'tes*' )" );
 
-$orig_conf = file(testdir('config.conf'));
+$orig_conf = file(testdir_config());
 
 $new_conf = '';
 foreach ( $orig_conf as $line )
@@ -48,7 +48,7 @@ foreach ( $orig_conf as $line )
 	}
 	$new_conf .= $line;
 }
-file_put_contents(testdir('config.conf'), $new_conf);
+file_put_contents(testdir_config(), $new_conf);
 
 $results[] = "\n" . $ql->Query ( "ALTER RTINDEX rt RECONFIGURE" );
 

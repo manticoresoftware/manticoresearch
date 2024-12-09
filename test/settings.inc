@@ -1,37 +1,84 @@
 <?php
 
-$sd_address 		= "127.0.0.1";
-$sd_port 			= 6712;
-$sd_sphinxql_port	= 6706;
-$sd_http_port		= 6780;
-$sd_replication_port = 6720;
+/*
+CTEST_RESOURCE_GROUP_0=datadir,mysql
+CTEST_RESOURCE_GROUP_COUNT=1
+CTEST_RESOURCE_GROUP_0_MYSQL=id:test1,slots:1
+CTEST_RESOURCE_GROUP_0_DATADIR=id:data,slots:1
+ */
 
-$sd_sphinxql_port_vip = 6709;
+$dbname = "test";
+$db = getenv('CTEST_RESOURCE_GROUP_0_MYSQL');
+if ( $db )
+	$dbname = explode(":", explode(",", $db)[0])[1];
 
-$sd_log				= "searchd.log";
+$data_slot =  ['base-port' => 6706, 'name-base' => "searchd", 'config-base' => "config", 'query-log' => "query.log", 'data-path' => "data", 'error' => "error" ];
+$datadir = getenv('CTEST_RESOURCE_GROUP_0_DATADIR');
+if ($datadir) {
+	$dataname = explode(":", explode(",", $datadir)[0])[1];
+	if ( $dataname!="data" ) {
+		if (strlen($dataname) < 4)
+			$prefix = $dataname;
+		else if (substr($dataname, 0, 4) == "data")
+			$prefix = substr($dataname, 4);
+		$iprefix = (int)$prefix;
+		$x = "_{$prefix}x";
+		$data_slot =  ['base-port' => 6706+$iprefix*100, 'name-base' => "searchd$x", 'config-base' => "config$x", 'query-log' => "query$x.log", 'data-path' => "data$x", 'error' => "error$x" ];
+	}
+}
+
+
+$sd_sphinxql_port	= $data_slot['base-port']; //6706
+$agent_port_sql		= $sd_sphinxql_port+1; // 6707,6708
+$sd_sphinxql_port_vip = $agent_port_sql+2; //6709;
+$agent_port_sql_vip	= $sd_sphinxql_port_vip+1;//6710; // 6711
+$sd_port 			= $agent_port_sql_vip+2;//6712;
+$agent_port			= $sd_port+1;//6713; // 6714
+$sd_replication_port = $agent_port_sql_vip+10;//6720; // 6740, 6760
+$sd_http_port		= $sd_replication_port+60;//6780;
+$agent_port_http	= $sd_http_port+1;//6781; // +6782
+$searchd_name_base	= $data_slot['name-base']; //"searchd.log";
+$config_base		= $data_slot['config-base']; //"config.log";
+$query_log			= $data_slot['query-log']; //"query.log";
+$index_data_prefix	= $data_slot['data-path']; //"data";
+$error_base			= $data_slot['error']; // "error";
+$searchd_log		= "$searchd_name_base.log"; //"searchd.log";
+$searchd_pid		= "$searchd_name_base.pid"; //"searchd.pid";
+
 $sd_split_logs		= false; // if we want one log per agent, its easier to investigate problems!
-$sd_query_log		= "query.log";
 $sd_network_timeout	= 5;
 $sd_max_children	= 100;
-$sd_pid_file		= "searchd.pid";
+$sd_address 		= "127.0.0.1";
 
-$agent_address		= "127.0.0.1";
-$agent_port			= 6713;
-$agent_port_sql		= 6707;
-$agent_port_sql_vip	= 6710;
-$agent_port_http	= 6781;
+$g_locals = null;
+$g_site_defaults = array
+(
+	'queries'			=> 'queries.txt',
+	'qlimit'			=> null,
+	'api'				=> '../api/sphinxapi.php',
+	'mode'				=> 'aggregate',
+	'skip-searchd'		=> false,
+	'force-reindex'		=> false,
+	'malloc-scribble'	=> false,
 
-if ( array_key_exists ( "SPHINXDAEMON", $_ENV ) && $_ENV["SPHINXDAEMON"] ) 
+	'db-host'			=> '127.0.0.1',
+	'db-user'			=> 'root',
+	'db-password'		=> '',
+	'db-name'			=> $dbname,
+	'db-port'			=> 3306
+);
+
+
+if ( array_key_exists ( "SPHINXDAEMON", $_ENV ) && $_ENV["SPHINXDAEMON"] )
 	$sd_address = $_ENV["SPHINXDAEMON"];
 else if ( array_key_exists ( "SPHINXDAEMON", $_SERVER ) && $_SERVER["SPHINXDAEMON"] )
 	$sd_address = $_SERVER["SPHINXDAEMON"];
+$agent_address		= $sd_address;
 
 $agents 			= array (
 	array ( "address" => $sd_address, "port" => $sd_port, "sqlport" => $sd_sphinxql_port, "sqlport_vip" => $sd_sphinxql_port_vip, "replication_port" => $sd_replication_port, "http_port" => $sd_http_port ),
 	array ( "address" => $agent_address, "port" => $agent_port, "sqlport" => $agent_port_sql, "sqlport_vip" => $agent_port_sql_vip, "replication_port" => $sd_replication_port+20, "http_port" => $agent_port_http ),
 	array ( "address" => $agent_address, "port" => $agent_port+1, "sqlport" => $agent_port_sql+1, "sqlport_vip" => $agent_port_sql_vip+1, "replication_port" => $sd_replication_port+40, "http_port" => $agent_port_http+1 ) );
-
-$index_data_path	= "data";
 
 $g_guesscached = false;
 $g_model	= false;
@@ -54,24 +101,6 @@ $windows = isset($_SERVER["WINDIR"]) || isset($_SERVER["windir"]) || isset($_SER
 $action_retries			= 100;
 $valgrind_action_retries	= 200;
 $action_wait_timeout	= 50000;
-
-$g_locals = null;
-$g_site_defaults = array
-(
-	'queries'			=> 'queries.txt',
-	'qlimit'			=> null,
-	'api'				=> '../api/sphinxapi.php',
-	'mode'				=> 'aggregate',
-	'skip-searchd'		=> false,
-	'force-reindex'		=> false,
-	'malloc-scribble'	=> false,
-
-	'db-host'			=> '127.0.0.1',
-	'db-user'			=> 'root',
-	'db-password'		=> '',
-	'db-name'			=> 'test',
-	'db-port'			=> 3306
-);
 
 // localsettings could include dev's own parameters
 // which is not to be commited into the public repo (in opposite to this settings.inc)
@@ -138,6 +167,29 @@ function testdir ($path)
 		return $path;
 
 	return $g_locals['testdir'].$path;
+}
+
+function config_conf()
+{
+	global $config_base;
+	return "$config_base.conf";
+}
+
+function testdir_config()
+{
+	return testdir(config_conf());
+}
+
+function error_txt()
+{
+	global $error_base;
+	return "$error_base.txt";
+}
+
+function searchd_pid()
+{
+	global $searchd_pid;
+	return $searchd_pid;
 }
 
 function scriptdir ($path)

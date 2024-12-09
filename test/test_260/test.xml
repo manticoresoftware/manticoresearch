@@ -85,7 +85,7 @@ $ql->Reconnect();
 $results[] = "\nbefore rotation";
 $results[] = "\n" . $ql->Query ( "SHOW tables" );
 
-$orig_conf = file(testdir('config.conf'));
+$orig_conf = file(testdir_config());
 
 global $index_data_path;
 $new_conf = '';
@@ -99,12 +99,12 @@ foreach ( $orig_conf as $line )
 		$line = "path = $index_data_path/plain2 # replace_path2\n";
 	$new_conf .= $line;
 }
-file_put_contents(testdir('config.conf'), $new_conf);
+file_put_contents(testdir_config(), $new_conf);
 
 RunIndexer ( $errors, '--rotate plain1 plain2' );
 sleep(2);
 
-$orig_conf = file(testdir('config.conf'));
+$orig_conf = file(testdir_config());
 
 $new_conf = '';
 foreach ( $orig_conf as $line )
@@ -114,7 +114,7 @@ foreach ( $orig_conf as $line )
 		$line = "\n";
 	$new_conf .= $line;
 }
-file_put_contents(testdir('config.conf'), $new_conf);
+file_put_contents(testdir_config(), $new_conf);
 
 RunIndexer ( $errors, '--rotate plain1' );
 sleep(2);

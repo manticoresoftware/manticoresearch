@@ -15,8 +15,7 @@ searchd
 index test
 {
 	type			= rt
-	# here is intentionally 'data' vs data_path, as it is used in show status in resultset
-	path			= data/test
+	path			= <data_path/>/test
 	rt_attr_uint	= gid
 	rt_field		= text
 	stored_fields = text
@@ -31,7 +30,7 @@ index test
 	insert into test values (5,'text five',2),(6,'text six',3);
 	flush ramchunk test;
 	insert into test values (7,'text seven',3),(8,'text eight',3);
-	select id,chunk_id,base_name,indexed_documents,killed_documents from test.@status order by id asc;
+	select id,chunk_id,indexed_documents,killed_documents from test.@status order by id asc;
 
 	delete from test where id in (1,2,3) option store='@foo';
 	select * from test where id in @foo;
@@ -43,7 +42,7 @@ index test
 	select * from test.3;
 
 	debug split test 0 on @foo option sync=1;
-	select id,chunk_id,base_name,indexed_documents,killed_documents from test.@status order by id asc;
+	select id,chunk_id,indexed_documents,killed_documents from test.@status order by id asc;
 	select * from test where id in @foo;
 	select * from test where id not in @foo;
 
@@ -54,7 +53,7 @@ index test
 
 	debug merge test 1 2 option sync=1;
 
-	select id,chunk_id,base_name,indexed_documents,killed_documents from test.@status order by id asc;
+	select id,chunk_id,indexed_documents,killed_documents from test.@status order by id asc;
 	select * from test.0;
 	select * from test.1;
 	select * from test.2;
@@ -62,13 +61,13 @@ index test
 
 	set global @foo=(5,6);
 	debug split test 1 on @foo option sync=1;
-	select id,chunk_id,base_name,indexed_documents,killed_documents from test.@status order by id asc;
+	select id,chunk_id,indexed_documents,killed_documents from test.@status order by id asc;
 
 	debug split test 3 on @foo option sync=1;
-	select id,chunk_id,base_name,indexed_documents,killed_documents from test.@status order by id asc;
+	select id,chunk_id,indexed_documents,killed_documents from test.@status order by id asc;
 
 	debug split test 4 on @foo option sync=1;
-	select id,chunk_id,base_name,indexed_documents,killed_documents from test.@status order by id asc;
+	select id,chunk_id,indexed_documents,killed_documents from test.@status order by id asc;
 
 	select * from test.0;
 	select * from test.1;

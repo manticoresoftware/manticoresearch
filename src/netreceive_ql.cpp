@@ -16,6 +16,7 @@
 #include "compressed_zlib_mysql.h"
 #include "compressed_zstd_mysql.h"
 #include "searchdbuddy.h"
+#include "auth/auth.h"
 
 extern int g_iClientQlTimeoutS;    // sec
 extern volatile bool g_bMaintenance;
@@ -722,7 +723,6 @@ struct CLIENT
 // handshake package we send to client
 class HandshakeV10_c
 {
-	static constexpr BYTE AUTH_DATA_LEN = 21;
 	const BYTE m_uVersion = 0x0A; // protocol version 10
 	const BYTE m_uCharSet = MYSQL_CHARSET::utf8_general_ci;
 	const WORD m_uServerStatusFlag = MYSQL_FLAG::STATUS_AUTOCOMMIT;
@@ -730,7 +730,7 @@ class HandshakeV10_c
 
 	Str_t m_sVersionString;
 	DWORD m_uConnID;
-	std::array<char, AUTH_DATA_LEN> m_sAuthData {};
+	const MySQLAuth_t & m_tAuth;
 	DWORD m_uCapabilities = CLIENT::CONNECT_WITH_DB
 						| CLIENT::PROTOCOL_41
 						| CLIENT::RESERVED2 // deprecated
@@ -741,8 +741,9 @@ class HandshakeV10_c
 						| ( bSendOkInsteadofEOF ? CLIENT::DEPRECATE_EOF : 0 );
 
 public:
-	explicit HandshakeV10_c( DWORD uConnID )
+	explicit HandshakeV10_c( DWORD uConnID, const MySQLAuth_t & tAuth )
 		: m_uConnID ( uConnID )
+		, m_tAuth  ( tAuth )
 	{
 		static bool bExtraCapabilitiesSet = false;
 		static WORD uExtraCapabilities = 0;
@@ -753,17 +754,6 @@ public:
 		}
 		m_uCapabilities |= uExtraCapabilities;
 
-		// fill scramble auth data (random)
-		DWORD i = 0;
-		DWORD uRand = sphRand() | 0x01010101;
-		for ( ; i < AUTH_DATA_LEN - sizeof ( DWORD ); i += sizeof ( DWORD ) )
-		{
-			memcpy ( m_sAuthData.data() + i, &uRand, sizeof ( DWORD ) );
-			uRand = sphRand() | 0x01010101;
-		}
-		if ( i < AUTH_DATA_LEN )
-			memcpy ( m_sAuthData.data() + i, &uRand, AUTH_DATA_LEN - i );
-		memset ( m_sAuthData.data() + AUTH_DATA_LEN - 1, 0, 1);
 		// version string (plus 0-terminator)
 		m_sVersionString = FromStr ( g_sMySQLVersion );
 		++m_sVersionString.second; // encount also z-terminator
@@ -793,7 +783,7 @@ public:
 
 		constexpr int iFillerSize = 10;
 		const std::array<BYTE, iFillerSize> dFiller { 0 };
-		sphLogDebugv ( "Sending handshake..." );
+		sphLogDebug ( "Sending handshake..." );
 
 		SQLPacketHeader_c tHeader { tOut };
 
@@ -801,15 +791,15 @@ public:
 		tOut.SendByte ( m_uVersion );
 		tOut.SendBytes ( m_sVersionString );
 		tOut.SendLSBDword ( m_uConnID );
-		tOut.SendBytes ( m_sAuthData.data(), 8 );
+		tOut.SendBytes ( m_tAuth.m_dScramble.Begin(), 8 );
 		tOut.SendByte ( 0 );
 		tOut.SendLSBWord ( m_uCapabilities & 0xFFFF );
 		tOut.SendByte ( m_uCharSet );
 		tOut.SendLSBWord ( m_uServerStatusFlag );
 		tOut.SendLSBWord ( m_uCapabilities >> 16 );
-		tOut.SendByte ( AUTH_DATA_LEN );
+		tOut.SendByte ( m_tAuth.m_dScramble.GetLength() );
 		tOut.SendBytes ( dFiller.data(), iFillerSize );
-		tOut.SendBytes ( &m_sAuthData[8], AUTH_DATA_LEN - 8 );
+		tOut.SendBytes ( &m_tAuth.m_dScramble[8], m_tAuth.m_dScramble.GetLength() - 8 );
 		tOut.SendBytes ( m_sAuthPluginName );
 	}
 };
@@ -818,7 +808,7 @@ public:
 class HandshakeResponse41
 {
 	CSphString m_sLoginUserName;
-	CSphString m_sAuthResponse;
+	CSphFixedVector<BYTE> m_dAuthResponse { 0 };
 	CSphString m_sDatabase;
 	CSphString m_sClientPluginName;
 	SmallStringHash_T<CSphString> m_hAttributes;
@@ -829,7 +819,7 @@ class HandshakeResponse41
 
 public:
 	// see https://dev.mysql.com/doc/dev/mysql-server/latest/page_protocol_connection_phase_packets_protocol_handshake_response.html for ref
-	explicit HandshakeResponse41 ( AsyncNetInputBuffer_c& tRawIn, int iPacketLen )
+	explicit HandshakeResponse41 ( AsyncNetInputBuffer_c & tRawIn, int iPacketLen )
 	{
 		InputBuffer_c tIn { tRawIn.PopTail ( iPacketLen ) };
 		m_uCapabilities = tIn.GetLSBDword();
@@ -838,46 +828,54 @@ public:
 		m_uCharset = tIn.GetByte();
 		tIn.SetBufferPos ( tIn.GetBufferPos() + 23 );
 
-		sphLogDebugv ( "HandshakeResponse41. PackedLen=%d, hasBytes=%d", iPacketLen, tIn.HasBytes() );
+		sphLogDebug ( "HandshakeResponse41. PackedLen=%d, hasBytes=%d", iPacketLen, tIn.HasBytes() );
 		// ssl auth is finished here
 		if ( tIn.HasBytes() <=0 )
 			return;
 
 		// login name
 		m_sLoginUserName = MysqlReadSzStr ( tIn );
-		sphLogDebugv ( "User: %s", m_sLoginUserName.cstr() );
+		sphLogDebug ( "User: %s", m_sLoginUserName.cstr() );
 
 		// auth
+		int iAuthLen = 0;
 		if ( m_uCapabilities & CLIENT::PLUGIN_AUTH_LENENC_CLIENT_DATA )
-			m_sAuthResponse = MysqlReadVlStr ( tIn );
+		{
+			iAuthLen = MysqlReadPackedInt ( tIn );
+		}
 		else
 		{
-			auto uLen = tIn.GetByte();
-			m_sAuthResponse = tIn.GetRawString ( uLen );
+			iAuthLen = tIn.GetByte();
 		}
+		m_dAuthResponse.Reset ( iAuthLen );
+		if ( iAuthLen )
+			tIn.GetBytes ( m_dAuthResponse.Begin(), iAuthLen );
 
 		// db name
 		if ( m_uCapabilities & CLIENT::CONNECT_WITH_DB )
 		{
 			m_sDatabase = MysqlReadSzStr ( tIn );
-			sphLogDebugv ( "DB: %s", m_sDatabase.cstr() );
+			sphLogDebug ( "DB: %s", m_sDatabase.cstr() );
 		}
 
 		// db name
 		if ( m_uCapabilities & CLIENT::PLUGIN_AUTH )
+		{
 			m_sClientPluginName = MysqlReadSzStr ( tIn );
+			sphLogDebug ( "plugin: %s", m_sClientPluginName.cstr() );
+		}
 
 		// attributes
 		if ( m_uCapabilities & CLIENT::CONNECT_ATTRS )
 		{
 			auto iWatermark = MysqlReadPackedInt ( tIn );
-			sphLogDebugv ( "%d bytes of attrs", (int) iWatermark );
+			sphLogDebug ( "%d bytes of attrs", (int) iWatermark );
 			iWatermark = tIn.HasBytes() - iWatermark;
 			while ( iWatermark < tIn.HasBytes() )
 			{
 				auto sKey = MysqlReadVlStr ( tIn );
 				auto sVal = MysqlReadVlStr ( tIn );
-				sphLogDebugv ( "%s: %s", sKey.cstr(), sVal.cstr() );
+				sphLogDebug ( "%s: %s", sKey.cstr(), sVal.cstr() );
 				m_hAttributes.Add ( std::move ( sVal ), sKey );
 			}
 		}
@@ -921,6 +919,11 @@ public:
 	{
 		return ( m_uCapabilities & CLIENT::DEPRECATE_EOF ) != 0;
 	}
+
+	const VecTraits_T<BYTE> & GetAuthResponce() const noexcept
+	{
+		return m_dAuthResponse;
+	}
 };
 
 
@@ -936,7 +939,7 @@ static bool LoopClientMySQL ( BYTE & uPacketID, int iPacketLen, QueryProfile_c *
 	const BYTE uMysqlCmd = tIn.GetByte ();
 
 	if ( uMysqlCmd!=MYSQL_COM_QUERY )
-		sphLogDebugv ( "LoopClientMySQL command %d", uMysqlCmd );
+		sphLogDebug ( "LoopClientMySQL command %d", uMysqlCmd );
 
 	if ( uMysqlCmd==MYSQL_COM_QUIT )
 		return false;
@@ -975,7 +978,7 @@ static bool LoopClientMySQL ( BYTE & uPacketID, int iPacketLen, QueryProfile_c *
 			myinfo::SetDescription ( CSphString ( tSrcQueryReference ), tSrcQueryReference.second ); // OPTIMIZE? could be huge, but string is hazard.
 			AT_SCOPE_EXIT ( []() { myinfo::SetDescription ( {}, 0 ); } );
 			assert ( !tIn.GetError() );
-			sphLogDebugv ( "LoopClientMySQL command %d, '%s'", uMysqlCmd, myinfo::UnsafeDescription().first );
+			sphLogDebug ( "LoopClientMySQL command %d, '%s'", uMysqlCmd, myinfo::UnsafeDescription().first );
 			tSess.SetTaskState ( TaskState_e::QUERY );
 
 			SqlRowBuffer_c tRows ( &uPacketID, &tOut );
@@ -1010,7 +1013,7 @@ static bool LoopClientMySQL ( BYTE & uPacketID, int iPacketLen, QueryProfile_c *
 	if ( uBytesConsumed<iPacketLen )
 	{
 		uBytesConsumed = iPacketLen - uBytesConsumed;
-		sphLogDebugv ( "LoopClientMySQL disposing unused %d bytes", uBytesConsumed );
+		sphLogDebug ( "LoopClientMySQL disposing unused %d bytes", uBytesConsumed );
 		const BYTE* pFoo = nullptr;
 		tIn.GetBytesZerocopy (&pFoo, uBytesConsumed);
 	}
@@ -1083,7 +1086,9 @@ void SqlServe ( std::unique_ptr<AsyncNetBuffer_c> pBuf )
 	/// So, no passive probing possible.
 	// send handshake first
 	tSess.SetTaskState ( TaskState_e::HANDSHAKE );
-	HandshakeV10_c tHandshake ( iCID );
+
+	MySQLAuth_t tAuth = GetMySQLAuth();
+	HandshakeV10_c tHandshake ( iCID, tAuth );
 	tHandshake.SetCanSsl ( CheckWeCanUseSSL() ); // fixme! SSL capability must be set only if keys are valid!
 	tHandshake.SetCanZlib( bCanZlibCompression );
 	tHandshake.SetCanZstd( bCanZstdCompression );
@@ -1132,7 +1137,7 @@ void SqlServe ( std::unique_ptr<AsyncNetBuffer_c> pBuf )
 
 		// get next packet
 		// we want interruptible calls here, so that shutdowns could be honored
-		sphLogDebugv ( "Receiving command... %d bytes in buf", pIn->HasBytes() );
+		sphLogDebug ( "Receiving command... %d bytes in buf", pIn->HasBytes() );
 
 		// setup per-query profiling
 		auto pProfile = session::StartProfiling ( SPH_QSTATE_TOTAL );
@@ -1168,7 +1173,7 @@ void SqlServe ( std::unique_ptr<AsyncNetBuffer_c> pBuf )
 			uPacketID = 1+(BYTE) ( uAddon >> 24 );
 			iChunkLen = ( uAddon & MAX_PACKET_LEN );
 
-			sphLogDebugv ( "AsyncReadMySQLPacketHeader returned %d len...", iChunkLen );
+			sphLogDebug ( "AsyncReadMySQLPacketHeader returned %d len...", iChunkLen );
 			iPacketLen += iChunkLen;
 
 			if ( !bAuthed && ( uAddon == SPHINX_CLIENT_VERSION || uAddon == 0x01000000UL ) )
@@ -1221,6 +1226,15 @@ void SqlServe ( std::unique_ptr<AsyncNetBuffer_c> pBuf )
 			if ( tResponse.GetUsername() == "FEDERATED" )
 				session::SetFederatedUser();
 			session::SetUser ( tResponse.GetUsername() );
+			
+			if ( !CheckAuth ( tAuth, tResponse.GetUsername(), tResponse.GetAuthResponce(), sError ) )
+			{
+				LogNetError ( sError.cstr() );
+				SendMysqlErrorPacket ( *pOut, uPacketID, FromStr ( sError ), EMYSQL_ERR::UNKNOWN_COM_ERROR );
+				pOut->Flush ();
+				return;
+			}
+
 			SendMysqlOkPacket ( *pOut, uPacketID, session::IsAutoCommit(), session::IsInTrans ());
 			tSess.SetPersistent ( pOut->Flush () );
 			bAuthed = true;

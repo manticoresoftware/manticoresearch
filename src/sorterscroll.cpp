@@ -10,7 +10,9 @@
 
 #include "sorterscroll.h"
 
+#include "std/base64.h"
 #include "sortcomp.h"
+#include "sphinxjson.h"
 
 template <typename COMP>
 class ScrollSorter_T : public ISphMatchSorter 
@@ -59,6 +61,7 @@ public:
 private:
 	std::unique_ptr<ISphMatchSorter> m_pSorter;
 	CSphMatch						m_tRefMatch;
+	CSphVector<CSphRowitem>			m_dStatic;
 	CSphMatchComparatorState		m_tState;
 	ScrollSettings_t				m_tScroll;
 
@@ -121,27 +124,32 @@ void ScrollSorter_T<COMP>::SetupRefMatch()
 
 	FreeDataPtrAttrs();
 	m_tRefMatch.Reset ( pSchema->GetRowSize() );
+	m_dStatic.Resize ( pSchema->GetStaticSize() );
+	m_tRefMatch.m_pStatic = m_dStatic.Begin();
 
 	for ( const auto & i : m_tScroll.m_dAttrs )
 	{
-		auto pAttr = pSchema->GetAttr ( i.m_sSortAttr.cstr() );
-		assert(pAttr);
+		bool bWeight = i.m_sSortAttr=="weight()";
+		if ( bWeight )
+		{
+			m_tRefMatch.m_iWeight = i.m_tValue;
+			continue;
+		}
 
+		auto pAttr = pSchema->GetAttr ( i.m_sSortAttr.cstr() );
+		auto pRowData = pAttr->m_tLocator.m_bDynamic ? m_tRefMatch.m_pDynamic : m_dStatic.Begin();
 		switch ( i.m_eType )
 		{
 		case SPH_ATTR_STRINGPTR:
-			m_tRefMatch.SetAttr ( pAttr->m_tLocator, (SphAttr_t)sphPackPtrAttr ( { (const BYTE*)i.m_sValue.cstr(), i.m_sValue.Length() } ) );
+			sphSetRowAttr ( pRowData, pAttr->m_tLocator, (SphAttr_t)sphPackPtrAttr ( { (const BYTE*)i.m_sValue.cstr(), i.m_sValue.Length() } ) );
 			break;
 
 		case SPH_ATTR_FLOAT:
-			m_tRefMatch.SetAttr ( pAttr->m_tLocator, sphF2DW(i.m_fValue) );
+			sphSetRowAttr ( pRowData, pAttr->m_tLocator, sphF2DW(i.m_fValue) );
 			break;
 
 		default:
-			m_tRefMatch.SetAttr ( pAttr->m_tLocator, i.m_tValue );
-
-			if ( i.m_sSortAttr=="weight()" )
-				m_tRefMatch.m_iWeight = i.m_tValue;
+			sphSetRowAttr ( pRowData, pAttr->m_tLocator, i.m_tValue );
 			break;
 		}
 	}
@@ -158,6 +166,9 @@ void ScrollSorter_T<COMP>::FreeDataPtrAttrs()
 
 	for ( auto & i : m_tScroll.m_dAttrs )
 	{
+		if ( i.m_sSortAttr=="weight()" )
+			continue;
+
 		const CSphColumnInfo * pAttr = pSchema->GetAttr ( i.m_sSortAttr.cstr() );
 		assert(pAttr);
 		if ( sphIsDataPtrAttr ( pAttr->m_eAttrType ) )
@@ -200,6 +211,9 @@ static bool CanCreateScrollSorter ( bool bMulti, const ISphSchema & tSchema, con
 
 	for ( const auto & i : tScroll.m_dAttrs )
 	{
+		if ( i.m_sSortAttr=="weight()" )
+			continue;
+
 		auto pAttr = tSchema.GetAttr ( i.m_sSortAttr.cstr() );
 		if ( !pAttr )
 			return false;
@@ -239,4 +253,120 @@ ISphMatchSorter * CreateScrollSorter ( ISphMatchSorter * pSorter, const ISphSche
 	}
 
 	return pSorter;
+}
+
+
+bool ParseScroll ( CSphQuery & tQuery, const CSphString & sVal, CSphString & sError )
+{
+	CSphString sDecoded = DecodeBase64(sVal);
+	JsonObj_c tRoot ( sDecoded.cstr() );
+	if ( !tRoot )
+	{
+		sError.SetSprintf ( "unable to parse: %s", tRoot.GetErrorPtr() );
+		return false;
+	}
+
+	ScrollSettings_t tScrollSettings;
+	if ( !tRoot.FetchStrItem ( tScrollSettings.m_sSortBy, "order_by_str", sError ) )	return false;
+
+	JsonObj_c tOrderByVec = tRoot.GetArrayItem ( "order_by", sError );
+	if ( !tOrderByVec )
+		return false;
+
+	for ( const auto & tItem : tOrderByVec )
+	{
+		ScrollAttr_t & tNew = tScrollSettings.m_dAttrs.Add();
+		if ( !tItem.FetchStrItem ( tNew.m_sSortAttr, "attr", sError ) )	return false;
+		if ( !tItem.FetchBoolItem ( tNew.m_bDesc, "desc", sError ) )	return false;
+
+		CSphString sType;
+		if ( !tItem.FetchStrItem ( sType, "type", sError ) )			return false;
+		if ( sType=="string" )
+		{
+			if ( !tItem.FetchStrItem ( tNew.m_sValue, "value", sError ) )	return false;
+			tNew.m_eType = SPH_ATTR_STRINGPTR;
+		}
+		else if ( sType=="float" )
+		{
+			if ( !tItem.FetchFltItem ( tNew.m_fValue, "value", sError ) )	return false;
+			tNew.m_eType = SPH_ATTR_FLOAT;
+		}
+		else
+		{
+			if ( !tItem.FetchInt64Item ( tNew.m_tValue, "value", sError ) )	return false;
+			tNew.m_eType = SPH_ATTR_BIGINT;
+		}
+	}
+
+	tQuery.m_tScrollSettings = std::move(tScrollSettings);
+	return true;
+}
+
+
+static void AddScrollFilter ( CSphQuery & tQuery )
+{
+	const ScrollAttr_t & tFirst = tQuery.m_tScrollSettings.m_dAttrs[0];
+	int iFilterId = tQuery.m_dFilters.GetLength();
+
+	// we don't have string range filters
+	if ( tFirst.m_eType==SPH_ATTR_STRINGPTR )
+		return;
+
+	CSphFilterSettings & tFilter = tQuery.m_dFilters.Add();
+	tFilter.m_eType = tFirst.m_eType==SPH_ATTR_FLOAT ? SPH_FILTER_FLOATRANGE : SPH_FILTER_RANGE;
+	tFilter.m_sAttrName = tFirst.m_sSortAttr=="weight()" ? "@weight" : tFirst.m_sSortAttr;
+
+	if ( tFirst.m_eType==SPH_ATTR_FLOAT )
+	{
+		if ( tFirst.m_bDesc )
+			tFilter.m_fMaxValue = tFirst.m_fValue;
+		else
+			tFilter.m_fMinValue = tFirst.m_fValue;
+	}
+	else
+	{
+		if ( tFirst.m_bDesc )
+			tFilter.m_iMaxValue = tFirst.m_tValue;
+		else
+			tFilter.m_iMinValue = tFirst.m_tValue;
+	}
+
+	if ( tQuery.m_dFilterTree.GetLength() )
+	{
+		int iRootNodeId = tQuery.m_dFilterTree.GetLength()-1;
+		FilterTreeItem_t & tFilter = tQuery.m_dFilterTree.Add();
+		tFilter.m_iFilterItem = iFilterId;
+
+		int iFilterNodeId = tQuery.m_dFilterTree.GetLength()-1;
+		FilterTreeItem_t & tAnd = tQuery.m_dFilterTree.Add();
+		tAnd.m_iLeft = iRootNodeId;
+		tAnd.m_iRight = iFilterNodeId;
+	}
+}
+
+
+bool SetupScroll ( CSphQuery & tQuery, CSphString & sError )
+{
+	if ( !tQuery.m_tScrollSettings.m_dAttrs.GetLength() )
+		return true;
+
+	// replace order by with order_by_str here (if order by is default)
+	const char * szDefaultSortBy = "@weight desc";
+	if ( tQuery.m_sSortBy==szDefaultSortBy )
+		tQuery.m_sOrderBy = tQuery.m_sSortBy = tQuery.m_tScrollSettings.m_sSortBy;
+	else if ( tQuery.m_sSortBy!=tQuery.m_tScrollSettings.m_sSortBy )
+	{
+		sError.SetSprintf ( "order by '%s' different from scroll order by '%s'", tQuery.m_sSortBy.cstr(), tQuery.m_tScrollSettings.m_sSortBy.cstr() );
+		return false;
+	}
+
+	if ( !tQuery.m_tScrollSettings.m_dAttrs.any_of ( []( auto & tAttr ){ return tAttr.m_sSortAttr=="id"; } ) )
+	{
+		sError = "document id not present in scroll settings";
+		return false;
+	}
+
+	// add filter on 1st scroll attribute
+	AddScrollFilter(tQuery);
+	return true;
 }

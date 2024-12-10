@@ -18,6 +18,7 @@
 #include "searchdsql.h"
 #include "knnmisc.h"
 #include "datetime.h"
+#include "sorterscroll.h"
 
 #include "json/cJSON.h"
 
@@ -1115,7 +1116,7 @@ static bool ParseOptions ( const JsonObj_c & tRoot, CSphQuery & tQuery, CSphStri
 			}
 
 			if ( eAdd==AddOption_e::NOT_FOUND )
-				eAdd = AddOption ( tQuery, sOpt, i.StrVal(), [&i]{ return i.StrVal(); }, STMT_SELECT, sError );
+				eAdd = AddOption ( tQuery, sOpt, i.StrVal(), i.StrVal(), [&i]{ return i.StrVal(); }, STMT_SELECT, sError );
 		}
 		else if ( i.IsObj() )
 		{
@@ -1423,6 +1424,9 @@ bool sphParseJsonQuery ( const JsonObj_c & tRoot, ParsedJsonQuery_t & tPJQuery )
 	// aggs
 	JsonObj_c tAggs = tRoot.GetItem ( "aggs" );
 	if ( tAggs && !ParseAggregates ( tAggs, tQuery, sError ) )
+		return false;
+
+	if ( !SetupScroll ( tQuery, sError ) )
 		return false;
 
 	return true;
@@ -2000,8 +2004,7 @@ static const char * GetName ( const JsonDocField_t & tDF )
 }
 
 template <typename T>
-void EncodeFields ( const CSphVector<T> & dFields, const AggrResult_t & tRes, const CSphMatch & tMatch, const ISphSchema & tSchema,
-	bool bValArray, const char * sPrefix, const char * sEnd, JsonEscapedBuilder & tOut )
+void EncodeFields ( const CSphVector<T> & dFields, const AggrResult_t & tRes, const CSphMatch & tMatch, const ISphSchema & tSchema,	bool bValArray, const char * sPrefix, const char * sEnd, JsonEscapedBuilder & tOut )
 {
 	JsonEscapedBuilder tDFVal;
 
@@ -2723,6 +2726,10 @@ CSphString sphEncodeResultJson ( const VecTraits_T<const AggrResult_t *> & dRes,
 			tOut.FinishBlock ( false ); // aggregations obj
 		}
 	}
+
+	CSphString sScroll;
+	if ( dRes.GetLength() && FormatScrollSettings ( *dRes.Last(), tQuery, sScroll ) )
+		tOut.Sprintf ( R"("scroll":"%s")", sScroll.cstr() );
 
 	if ( eFormat==ResultSetFormat_e::ES )
 		tOut += R"("status": 200)";

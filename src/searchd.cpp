@@ -1962,7 +1962,19 @@ void SearchRequestBuilder_c::SendQuery ( const char * sIndexes, ISphOutputBuffer
 			tOut.SendFloat(i);
 	}
 
-	tOut.SendInt ( (int)q.m_eJiebaMode );	
+	tOut.SendInt ( (int)q.m_eJiebaMode );
+
+	tOut.SendString ( q.m_tScrollSettings.m_sSortBy.cstr() );
+	tOut.SendInt ( q.m_tScrollSettings.m_dAttrs.GetLength() );
+	for ( const auto & i : q.m_tScrollSettings.m_dAttrs )
+	{
+		tOut.SendString ( i.m_sSortAttr.cstr() );
+		tOut.SendInt ( i.m_bDesc );
+		tOut.SendInt ( (int)i.m_eType );
+		tOut.SendUint64 ( i.m_tValue );
+		tOut.SendFloat ( i.m_fValue );
+		tOut.SendString ( i.m_sValue.cstr() );
+	}
 }
 
 
@@ -2852,6 +2864,22 @@ bool ParseSearchQuery ( InputBuffer_c & tReq, ISphOutputBuffer & tOut, CSphQuery
 
 	if ( uMasterVer>=23 )
 		tQuery.m_eJiebaMode = (JiebaMode_e)tReq.GetInt();
+
+	if ( uMasterVer>=24 )
+	{
+		tQuery.m_tScrollSettings.m_sSortBy = tReq.GetString();
+		tQuery.m_tScrollSettings.m_dAttrs.Resize ( tReq.GetInt() );
+	
+		for ( auto & i : tQuery.m_tScrollSettings.m_dAttrs )
+		{
+			i.m_sSortAttr = tReq.GetString();
+			i.m_bDesc = !!tReq.GetInt();
+			i.m_eType = (ESphAttr)tReq.GetInt();
+			i.m_tValue = (SphAttr_t)tReq.GetUint64();
+			i.m_fValue = tReq.GetFloat();
+			i.m_sValue = tReq.GetString();
+		}
+	}
 
 	/////////////////////
 	// additional checks
@@ -17122,91 +17150,6 @@ void ClientSession_c::FreezeLastMeta()
 
 static void HandleMysqlShowSettings ( const CSphConfig & hConf, RowBuffer_i & tOut );
 
-static bool FormatScrollSettings ( const AggrResult_t & tAggrRes, const SqlStmt_t * pStmt, CSphString & sSettings )
-{
-	if ( !pStmt || pStmt->m_eStmt!=STMT_SELECT )
-		return false;
-
-	if ( tAggrRes.m_dResults.GetLength()!=1 )
-		return false;
-
-	const auto & tRes = tAggrRes.m_dResults[0];
-	if ( tRes.m_dMatches.IsEmpty() )
-		return false;
-
-	ESphSortFunc eFunc = FUNC_REL_DESC;
-	CSphMatchComparatorState tState;
-	CSphVector<ExtraSortExpr_t> dExtraExprs;
-	CSphString sError;
-	ESortClauseParseResult eRes = sphParseSortClause ( pStmt->m_tQuery, pStmt->m_tQuery.m_sOrderBy.cstr(), tRes.m_tSchema, eFunc, tState, dExtraExprs, nullptr, sError );
-	if ( eRes!=SORT_CLAUSE_OK )
-		return false;
-
-	int iNumArgs = 0;
-	switch ( eFunc )
-	{
-	case FUNC_GENERIC1: iNumArgs = 1; break;
-	case FUNC_GENERIC2: iNumArgs = 2; break;
-	case FUNC_GENERIC3: iNumArgs = 3; break;
-	case FUNC_GENERIC4: iNumArgs = 4; break;
-	case FUNC_GENERIC5: iNumArgs = 5; break;
-	default: return false;
-	}
-
-	JsonObj_c tJson;
-	tJson.AddStr ( "order_by_str", pStmt->m_tQuery.m_sOrderBy );
-
-	JsonObj_c tOrderBy(true);
-
-	const CSphMatch & tMatch = tRes.m_dMatches.Last();
-
-	for ( int i = 0; i < iNumArgs; i++ )
-	{
-		bool bWeight = tState.m_eKeypart[i]==SPH_KEYPART_WEIGHT;
-		if ( !bWeight && tState.m_dAttrs[i]==-1 )
-			return false;
-
-		JsonObj_c tAttrWithOrder;
-
-		CSphString sAttr = bWeight ? "weight()" : tRes.m_tSchema.GetAttr ( tState.m_dAttrs[i] ).m_sName;
-		auto * pAttr = tRes.m_tSchema.GetAttr ( sAttr.cstr() );
-		if ( !pAttr )
-			return false;
-
-		tAttrWithOrder.AddStr ( "attr", pAttr->m_sName );
-		tAttrWithOrder.AddBool ( "desc", tState.m_uAttrDesc & ( 1<<i ) );
-
-		switch ( pAttr->m_eAttrType )
-		{
-		case SPH_ATTR_STRINGPTR:
-			tAttrWithOrder.AddStr ( "value", (const char*)tMatch.GetAttr ( pAttr->m_tLocator ) );
-			tAttrWithOrder.AddStr ( "type", "string" );
-			break;
-
-		case SPH_ATTR_FLOAT:
-			tAttrWithOrder.AddFlt ( "value", tMatch.GetAttrFloat ( pAttr->m_tLocator ) );
-			tAttrWithOrder.AddStr ( "type", "float" );
-			break;
-
-		case SPH_ATTR_DOUBLE:
-			tAttrWithOrder.AddFlt ( "value", tMatch.GetAttrDouble ( pAttr->m_tLocator ) );
-			tAttrWithOrder.AddStr ( "type", "float" );
-			break;
-
-		default:
-			tAttrWithOrder.AddUint ( "value", tMatch.GetAttr ( pAttr->m_tLocator ) );
-			tAttrWithOrder.AddStr ( "type", "int" );
-			break;
-		}
-
-		tOrderBy.AddItem(tAttrWithOrder);
-	}
-	
-	tJson.AddItem ( "order_by", tOrderBy );
-	sSettings = tJson.AsString();
-	return true;
-}
-
 // just execute one sphinxql statement
 //
 // IMPORTANT! this does NOT start or stop profiling, as there a few external
@@ -17324,7 +17267,8 @@ bool ClientSession_c::Execute ( Str_t sQuery, RowBuffer_i & tOut )
 
 			// save meta for SHOW META (profile is saved elsewhere)
 			m_tLastMeta = tHandler.m_dAggrResults.Last();
-			FormatScrollSettings ( tHandler.m_dAggrResults.Last(), pStmt, m_tLastMeta.m_sScroll );
+			if ( pStmt && pStmt->m_eStmt==STMT_SELECT )
+				FormatScrollSettings ( tHandler.m_dAggrResults.Last(), pStmt->m_tQuery, m_tLastMeta.m_sScroll );
 			return true;
 		}
 	case STMT_SHOW_WARNINGS:

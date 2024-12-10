@@ -20,6 +20,8 @@
 #include "sphinxql_extra.h"
 #include "searchdha.h"
 #include "jieba.h"
+#include "sorterscroll.h"
+#include "std/base64.h"
 
 extern int g_iAgentQueryTimeoutMs;	// global (default). May be override by index-scope values, if one specified
 
@@ -767,53 +769,7 @@ AddOption_e AddOption ( CSphQuery & tQuery, const CSphString & sOpt, const CSphS
 }
 
 
-static bool ParseScroll ( CSphQuery & tQuery, const CSphString & sVal, CSphString & sError )
-{
-	JsonObj_c tRoot ( sVal.cstr() );
-	if ( !tRoot )
-	{
-		sError.SetSprintf ( "unable to parse: %s", tRoot.GetErrorPtr() );
-		return false;
-	}
-
-	ScrollSettings_t tScrollSettings;
-	if ( !tRoot.FetchStrItem ( tScrollSettings.m_sOrderBy, "order_by_str", sError ) )	return false;
-
-	JsonObj_c tOrderByVec = tRoot.GetArrayItem ( "order_by", sError );
-	if ( !tOrderByVec )
-		return false;
-
-	for ( const auto & tItem : tOrderByVec )
-	{
-		ScrollAttr_t & tNew = tScrollSettings.m_dAttrs.Add();
-		if ( !tItem.FetchStrItem ( tNew.m_sSortAttr, "attr", sError ) )	return false;
-		if ( !tItem.FetchBoolItem ( tNew.m_bDesc, "desc", sError ) )	return false;
-
-		CSphString sType;
-		if ( !tItem.FetchStrItem ( sType, "type", sError ) )			return false;
-		if ( sType=="string" )
-		{
-			if ( !tItem.FetchStrItem ( tNew.m_sValue, "value", sError ) )	return false;
-			tNew.m_eType = SPH_ATTR_STRINGPTR;
-		}
-		else if ( sType=="float" )
-		{
-			if ( !tItem.FetchFltItem ( tNew.m_fValue, "value", sError ) )	return false;
-			tNew.m_eType = SPH_ATTR_FLOAT;
-		}
-		else
-		{
-			if ( !tItem.FetchInt64Item ( tNew.m_tValue, "value", sError ) )	return false;
-			tNew.m_eType = SPH_ATTR_BIGINT;
-		}
-	}
-
-	tQuery.m_tScrollSettings = std::move(tScrollSettings);
-	return true;
-}
-
-
-AddOption_e AddOption ( CSphQuery & tQuery, const CSphString & sOpt, const CSphString & sVal, const std::function<CSphString ()> & fnGetUnescaped, SqlStmt_e eStmt, CSphString & sError )
+AddOption_e AddOption ( CSphQuery & tQuery, const CSphString & sOpt, const CSphString & sVal, const CSphString & sValOrig, const std::function<CSphString ()> & fnGetUnescaped, SqlStmt_e eStmt, CSphString & sError )
 {
 	auto FAILED = fnFailer ( sError );
 
@@ -919,7 +875,7 @@ AddOption_e AddOption ( CSphQuery & tQuery, const CSphString & sOpt, const CSphS
 		break;
 
 	case Option_e::SCROLL:
-		if ( !ParseScroll ( tQuery, sVal, sError ) )
+		if ( !ParseScroll ( tQuery, sValOrig, sError ) )
 			return FAILED(sError.cstr());		
 		break;
 
@@ -979,9 +935,10 @@ AddOption_e AddOptionRanker ( CSphQuery & tQuery, const CSphString & sOpt, const
 
 bool SqlParserTraits_c::AddOption ( const SqlNode_t & tIdent, const SqlNode_t & tValue )
 {
-	CSphString sOpt, sVal;
+	CSphString sOpt, sVal, sValOrig;
 	ToString ( sOpt, tIdent ).ToLower();
 	ToString ( sVal, tValue ).ToLower().Unquote();
+	ToString ( sValOrig, tValue ).Unquote();
 
 	auto eOpt = ParseOption ( sOpt );
 	if ( !CheckOption ( eOpt ) )
@@ -991,7 +948,7 @@ bool SqlParserTraits_c::AddOption ( const SqlNode_t & tIdent, const SqlNode_t & 
 	}
 
 	AddOption_e eAddRes;
-	eAddRes = ::AddOption ( *m_pQuery, sOpt, sVal, [this,tValue]{ return ToStringUnescape(tValue); }, m_pStmt->m_eStmt, *m_pParseError );
+	eAddRes = ::AddOption ( *m_pQuery, sOpt, sVal, sValOrig, [this,tValue]{ return ToStringUnescape(tValue); }, m_pStmt->m_eStmt, *m_pParseError );
 	if ( eAddRes==AddOption_e::FAILED )
 		return false;
 	else if ( eAddRes==AddOption_e::ADDED )
@@ -1403,75 +1360,15 @@ void SqlParser_c::AddComment ( const SqlNode_t* tNode )
 }
 
 
-static void AddScrollFilter ( CSphQuery & tQuery )
-{
-	const ScrollAttr_t & tFirst = tQuery.m_tScrollSettings.m_dAttrs[0];
-	int iFilterId = tQuery.m_dFilters.GetLength();
-
-	// we don't have string range filters
-	if ( tFirst.m_eType==SPH_ATTR_STRINGPTR )
-		return;
-
-	CSphFilterSettings & tFilter = tQuery.m_dFilters.Add();
-	tFilter.m_eType = tFirst.m_eType==SPH_ATTR_FLOAT ? SPH_FILTER_FLOATRANGE : SPH_FILTER_RANGE;
-	tFilter.m_sAttrName = tFirst.m_sSortAttr=="weight()" ? "@weight" : tFirst.m_sSortAttr;
-
-	if ( tFirst.m_eType==SPH_ATTR_FLOAT )
-	{
-		if ( tFirst.m_bDesc )
-			tFilter.m_fMaxValue = tFirst.m_fValue;
-		else
-			tFilter.m_fMinValue = tFirst.m_fValue;
-	}
-	else
-	{
-		if ( tFirst.m_bDesc )
-			tFilter.m_iMaxValue = tFirst.m_tValue;
-		else
-			tFilter.m_iMinValue = tFirst.m_tValue;
-	}
-
-	if ( tQuery.m_dFilterTree.GetLength() )
-	{
-		int iRootNodeId = tQuery.m_dFilterTree.GetLength()-1;
-		FilterTreeItem_t & tFilter = tQuery.m_dFilterTree.Add();
-		tFilter.m_iFilterItem = iFilterId;
-
-		int iFilterNodeId = tQuery.m_dFilterTree.GetLength()-1;
-		FilterTreeItem_t & tAnd = tQuery.m_dFilterTree.Add();
-		tAnd.m_iLeft = iRootNodeId;
-		tAnd.m_iRight = iFilterNodeId;
-	}
-}
-
-
 bool SqlParser_c::SetupScroll ( CSphString & sError )
 {
 	for ( auto & i : m_dStmt )
 	{
-		if ( i.m_eStmt!=STMT_SELECT || !i.m_tQuery.m_tScrollSettings.m_dAttrs.GetLength() )
+		if ( i.m_eStmt!=STMT_SELECT )
 			continue;
 
-		auto & tQuery = i.m_tQuery;
-
-		// replace order by with order_by_str here (if order by is default)
-		const char * szDefaultOrderBy = "@weight desc";
-		if ( tQuery.m_sOrderBy==szDefaultOrderBy )
-			tQuery.m_sOrderBy = tQuery.m_sSortBy = tQuery.m_tScrollSettings.m_sOrderBy;
-		else if ( tQuery.m_sOrderBy!=tQuery.m_tScrollSettings.m_sOrderBy )
-		{
-			sError.SetSprintf ( "order by '%s' different from scroll order by '%s'", tQuery.m_sOrderBy.cstr(), tQuery.m_tScrollSettings.m_sOrderBy.cstr() );
+		if ( !::SetupScroll ( i.m_tQuery, sError ) )
 			return false;
-		}
-
-		if ( !tQuery.m_tScrollSettings.m_dAttrs.any_of ( []( auto & tAttr ){ return tAttr.m_sSortAttr=="id"; } ) )
-		{
-			sError = "document id not present in scroll settings";
-			return false;
-		}
-
-		// add filter on 1st scroll attribute
-		AddScrollFilter(tQuery);
 	}
 
 	return true;
@@ -2407,4 +2304,109 @@ bool PercolateParseFilters ( const char * sFilters, ESphCollation eCollation, co
 	}
 
 	return ( iRes==0 );
+}
+
+//////////////////////////////////////////////////////////////////////////
+
+bool FormatScrollSettings ( const AggrResult_t & tAggrRes, const CSphQuery & tQuery, CSphString & sSettings )
+{
+	if ( tAggrRes.m_dResults.GetLength()!=1 )
+		return false;
+
+	const auto & tRes = tAggrRes.m_dResults[0];
+	if ( tRes.m_dMatches.IsEmpty() )
+		return false;
+
+	// scroll can't do groupby
+	if ( !tQuery.m_sGroupBy.IsEmpty() )
+		return false;
+
+	ESphSortFunc eFunc = FUNC_REL_DESC;
+	CSphMatchComparatorState tState;
+	CSphVector<ExtraSortExpr_t> dExtraExprs;
+	CSphString sError;
+	ESortClauseParseResult eRes = sphParseSortClause ( tQuery, tQuery.m_sSortBy.cstr(), tRes.m_tSchema, eFunc, tState, dExtraExprs, nullptr, sError );
+	if ( eRes!=SORT_CLAUSE_OK )
+		return false;
+
+	int iNumArgs = 0;
+	switch ( eFunc )
+	{
+	case FUNC_GENERIC1: iNumArgs = 1; break;
+	case FUNC_GENERIC2: iNumArgs = 2; break;
+	case FUNC_GENERIC3: iNumArgs = 3; break;
+	case FUNC_GENERIC4: iNumArgs = 4; break;
+	case FUNC_GENERIC5: iNumArgs = 5; break;
+	default: return false;
+	}
+
+	JsonObj_c tJson;
+	tJson.AddStr ( "order_by_str", tQuery.m_sSortBy );
+
+	JsonObj_c tOrderBy(true);
+
+	auto dMatches = tRes.m_dMatches.Slice ( tAggrRes.m_iOffset, tAggrRes.m_iCount );
+	if ( !dMatches.GetLength() )
+		return false;
+
+	bool bHaveId = false;
+	const CSphMatch & tMatch = dMatches.Last();
+	for ( int i = 0; i < iNumArgs; i++ )
+	{
+		bool bWeight = tState.m_eKeypart[i]==SPH_KEYPART_WEIGHT;
+		if ( !bWeight && tState.m_dAttrs[i]==-1 )
+			return false;
+
+		JsonObj_c tAttrWithOrder;
+
+		const CSphColumnInfo * pAttr = nullptr;
+		if ( !bWeight )
+		{
+			pAttr = &tRes.m_tSchema.GetAttr ( tState.m_dAttrs[i] );
+			bHaveId |= pAttr->m_sName=="id";
+		}
+
+		tAttrWithOrder.AddStr ( "attr", bWeight ? "weight()" : pAttr->m_sName );
+		tAttrWithOrder.AddBool ( "desc", tState.m_uAttrDesc & ( 1<<i ) );
+
+		if ( bWeight )
+		{
+			tAttrWithOrder.AddUint ( "value", tMatch.m_iWeight );
+			tAttrWithOrder.AddStr ( "type", "int" );
+		}
+		else
+		{
+			switch ( pAttr->m_eAttrType )
+			{
+			case SPH_ATTR_STRINGPTR:
+				tAttrWithOrder.AddStr ( "value", (const char*)tMatch.GetAttr ( pAttr->m_tLocator ) );
+				tAttrWithOrder.AddStr ( "type", "string" );
+				break;
+
+			case SPH_ATTR_FLOAT:
+				tAttrWithOrder.AddFlt ( "value", tMatch.GetAttrFloat ( pAttr->m_tLocator ) );
+				tAttrWithOrder.AddStr ( "type", "float" );
+				break;
+
+			case SPH_ATTR_DOUBLE:
+				tAttrWithOrder.AddFlt ( "value", tMatch.GetAttrDouble ( pAttr->m_tLocator ) );
+				tAttrWithOrder.AddStr ( "type", "float" );
+				break;
+
+			default:
+				tAttrWithOrder.AddUint ( "value", tMatch.GetAttr ( pAttr->m_tLocator ) );
+				tAttrWithOrder.AddStr ( "type", "int" );
+				break;
+			}
+		}
+
+		tOrderBy.AddItem(tAttrWithOrder);
+	}
+
+	if ( !bHaveId )
+		return false;
+	
+	tJson.AddItem ( "order_by", tOrderBy );
+	sSettings = EncodeBase64 ( tJson.AsString() );
+	return true;
 }

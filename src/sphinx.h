@@ -499,7 +499,7 @@ struct ScrollAttr_t
 
 struct ScrollSettings_t
 {
-	CSphString					m_sOrderBy;
+	CSphString					m_sSortBy;
 	CSphVector<ScrollAttr_t>	m_dAttrs;
 };
 

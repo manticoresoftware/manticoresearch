@@ -13,3 +13,5 @@
 #include "sphinxsort.h"
 
 ISphMatchSorter * CreateScrollSorter ( ISphMatchSorter * pSorter, const ISphSchema & tSchema, ESphSortFunc eSortFunc, const ScrollSettings_t & tScroll, bool bMulti );
+bool ParseScroll ( CSphQuery & tQuery, const CSphString & sVal, CSphString & sError );
+bool SetupScroll ( CSphQuery & tQuery, CSphString & sError );

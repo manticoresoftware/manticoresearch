@@ -1,0 +1,365 @@
+––– block: ../base/start-searchd –––
+––– input –––
+mysql -h0 -P9306 -e "CREATE TABLE t (id INT, value TEXT); INSERT INTO t VALUES (1, 'example'), (2, 'test');"
+––– output –––
+––– input –––
+curl -s "http://localhost:9308/cli?show%20version" | awk '!/row.*in set/'; echo
+––– output –––
++-----------+----------------------------------+
+| Component | Version                          |
++-----------+----------------------------------+
+| Daemon    | %{SEMVER} %{COMMITDATE} dev     |
+| Columnar  | columnar %{SEMVER} %{COMMITDATE}  |
+| Secondary | secondary %{SEMVER} %{COMMITDATE} |
+| KNN       | knn %{SEMVER} %{COMMITDATE}       |
+| Buddy     | buddy v%{SEMVER}                     |
++-----------+----------------------------------+
+––– input –––
+curl -s "http://localhost:9308/cli?show%20tables" | awk '!/row.*in set/'; echo
+––– output –––
++-------+------+
+| Table | Type |
++-------+------+
+| t     | rt   |
++-------+------+
+––– input –––
+curl -s "http://localhost:9308/cli?select%20*%20from%20t%20where%20match('example')" | awk '!/row.*in set/'; echo
+––– output –––
++----+---------+
+| id | value   |
++----+---------+
+| 1  | example |
++----+---------+
+––– input –––
+curl -s "http://localhost:9308/cli_json" -d "show version"; echo
+––– output –––
+[{"total":5,"error":"","warning":"","columns":[{"Component":{"type":"string"}},{"Version":{"type":"string"}}],"data":[{"Component":"Daemon","Version":"%{SEMVER} %{COMMITDATE} dev"},{"Component":"Columnar","Version":"columnar %{SEMVER} %{COMMITDATE}"},{"Component":"Secondary","Version":"secondary %{SEMVER} %{COMMITDATE}"},{"Component":"KNN","Version":"knn %{SEMVER} %{COMMITDATE}"},{"Component":"Buddy","Version":"buddy v%{SEMVER}"}]}]
+––– input –––
+curl -s "http://localhost:9308/cli_json" -d "show tables"; echo
+––– output –––
+[{
+"columns":[{"Table":{"type":"string"}},{"Type":{"type":"string"}}],
+"data":[
+{"Table":"t","Type":"rt"}
+],
+"total":%{NUMBER},
+"error":"",
+"warning":""
+}]
+––– input –––
+curl -s "http://localhost:9308/cli_json" -d "select * from t where match('example')"; echo
+––– output –––
+[{
+"columns":[{"id":{"type":"long long"}},{"value":{"type":"string"}}],
+"data":[
+{"id":1,"value":"example"}
+],
+"total":%{NUMBER},
+"error":"",
+"warning":""
+}]
+––– input –––
+curl -X POST "http://localhost:9308/sql" -d "select * from t"; echo
+––– output –––
+{"took":%{NUMBER},"timed_out":false,"hits":{"total":2,"total_relation":"eq","hits":[{"_id":1,"_score":1,"_source":{"value":"example"}},{"_id":2,"_score":1,"_source":{"value":"test"}}]}}
+––– input –––
+curl -X POST "http://localhost:9308/sql?mode=raw" -d "select * from t"; echo
+––– output –––
+[{
+"columns":[{"id":{"type":"long long"}},{"value":{"type":"string"}}],
+"data":[
+{"id":1,"value":"example"},
+{"id":2,"value":"test"}
+],
+"total":%{NUMBER},
+"error":"",
+"warning":""
+}]
+––– input –––
+curl -X POST "http://localhost:9308/sql?mode=raw" -d "show tables"; echo
+––– output –––
+[{
+"columns":[{"Table":{"type":"string"}},{"Type":{"type":"string"}}],
+"data":[
+{"Table":"t","Type":"rt"}
+],
+"total":%{NUMBER},
+"error":"",
+"warning":""
+}]
+––– input –––
+curl -s "http://localhost:9308/cli_json" -d "select * from t where match('nonexistent')"; echo
+––– output –––
+[{
+"columns":[{"id":{"type":"long long"}},{"value":{"type":"string"}}],
+"data":[
+],
+"total":%{NUMBER},
+"error":"",
+"warning":""
+}]
+––– input –––
+curl -X POST "http://localhost:9308/sql?mode=raw" -d "select * from t where match('nonexistent')"; echo
+––– output –––
+[{
+"columns":[{"id":{"type":"long long"}},{"value":{"type":"string"}}],
+"data":[
+],
+"total":%{NUMBER},
+"error":"",
+"warning":""
+}]
+––– input –––
+curl -s "http://localhost:9308/cli?show%20tables" | sed '/row.*in set/d' | sed 's/ (.*sec)//'; echo
+––– output –––
++-------+------+
+| Table | Type |
++-------+------+
+| t     | rt   |
++-------+------+
+––– input –––
+curl -s "http://localhost:9308/cli?describe%20t" | awk '!/row.*in set/'; echo
+––– output –––
++-------+--------+----------------+
+| Field | Type   | Properties     |
++-------+--------+----------------+
+| id    | bigint |                |
+| value | text   | indexed stored |
++-------+--------+----------------+
+––– input –––
+curl -s "http://localhost:9308/cli_json" -d "DESCRIBE t"; echo
+––– output –––
+[{
+"columns":[{"Field":{"type":"string"}},{"Type":{"type":"string"}},{"Properties":{"type":"string"}}],
+"data":[
+{"Field":"id","Type":"bigint","Properties":""},
+{"Field":"value","Type":"text","Properties":"indexed stored"}
+],
+"total":%{NUMBER},
+"error":"",
+"warning":""
+}]
+––– input –––
+curl -s "http://localhost:9308/cli?drop%20table%20t" | awk '!/Query OK/ && !/rows affected/'; echo
+––– output –––
+––– input –––
+curl -s "http://localhost:9308/cli_json" -d "show tables"; echo
+––– output –––
+[{
+"columns":[{"Table":{"type":"string"}},{"Type":{"type":"string"}}],
+"data":[
+],
+"total":%{NUMBER},
+"error":"",
+"warning":""
+}]
+––– input –––
+curl -s "http://localhost:9308/cli?show%20tables" | sed 's/ (.*sec)//'; echo
+––– output –––
+Empty set
+––– input –––
+curl -s "http://localhost:9308/cli_json" -d "SHOW STATUS"; echo
+––– output –––
+[{
+"columns":[{"Counter":{"type":"string"}},{"Value":{"type":"string"}}],
+"data":[
+{"Counter":"uptime","Value":"%{NUMBER}"},
+{"Counter":"connections","Value":"%{NUMBER}"},
+{"Counter":"maxed_out","Value":"%{NUMBER}"},
+{"Counter":"version","Value":"%{SEMVER} %{COMMITDATE} dev (columnar %{SEMVER} %{COMMITDATE}) (secondary %{SEMVER} %{COMMITDATE}) (knn %{SEMVER} %{COMMITDATE}) (buddy v%{SEMVER})"},
+{"Counter":"mysql_version","Value":"%{SEMVER} %{COMMITDATE} dev (columnar %{SEMVER} %{COMMITDATE}) (secondary %{SEMVER} %{COMMITDATE}) (knn %{SEMVER} %{COMMITDATE})"},
+{"Counter":"command_search","Value":"%{NUMBER}"},
+{"Counter":"command_excerpt","Value":"%{NUMBER}"},
+{"Counter":"command_update","Value":"%{NUMBER}"},
+{"Counter":"command_keywords","Value":"%{NUMBER}"},
+{"Counter":"command_persist","Value":"%{NUMBER}"},
+{"Counter":"command_status","Value":"%{NUMBER}"},
+{"Counter":"command_flushattrs","Value":"%{NUMBER}"},
+{"Counter":"command_sphinxql","Value":"%{NUMBER}"},
+{"Counter":"command_ping","Value":"%{NUMBER}"},
+{"Counter":"command_delete","Value":"%{NUMBER}"},
+{"Counter":"command_set","Value":"%{NUMBER}"},
+{"Counter":"command_insert","Value":"%{NUMBER}"},
+{"Counter":"command_replace","Value":"%{NUMBER}"},
+{"Counter":"command_commit","Value":"%{NUMBER}"},
+{"Counter":"command_suggest","Value":"%{NUMBER}"},
+{"Counter":"command_json","Value":"%{NUMBER}"},
+{"Counter":"command_callpq","Value":"%{NUMBER}"},
+{"Counter":"command_cluster","Value":"%{NUMBER}"},
+{"Counter":"command_getfield","Value":"%{NUMBER}"},
+{"Counter":"insert_replace_stats_ms_avg","Value":"#!/[0-9]{1}.[0-9]{3}/!# #!/[0-9]{1}.[0-9]{3}/!# #!/[0-9]{1}.[0-9]{3}/!#"},
+{"Counter":"insert_replace_stats_ms_min","Value":"#!/[0-9]{1}.[0-9]{3}/!# #!/[0-9]{1}.[0-9]{3}/!# #!/[0-9]{1}.[0-9]{3}/!#"},
+{"Counter":"insert_replace_stats_ms_max","Value":"#!/[0-9]{1}.[0-9]{3}/!# #!/[0-9]{1}.[0-9]{3}/!# #!/[0-9]{1}.[0-9]{3}/!#"},
+{"Counter":"insert_replace_stats_ms_pct95","Value":"#!/[0-9]{1}.[0-9]{3}/!# #!/[0-9]{1}.[0-9]{3}/!# #!/[0-9]{1}.[0-9]{3}/!#"},
+{"Counter":"insert_replace_stats_ms_pct99","Value":"#!/[0-9]{1}.[0-9]{3}/!# #!/[0-9]{1}.[0-9]{3}/!# #!/[0-9]{1}.[0-9]{3}/!#"},
+{"Counter":"search_stats_ms_avg","Value":"#!/[0-9]{1}.[0-9]{3}/!# #!/[0-9]{1}.[0-9]{3}/!# #!/[0-9]{1}.[0-9]{3}/!#"},
+{"Counter":"search_stats_ms_min","Value":"#!/[0-9]{1}.[0-9]{3}/!# #!/[0-9]{1}.[0-9]{3}/!# #!/[0-9]{1}.[0-9]{3}/!#"},
+{"Counter":"search_stats_ms_max","Value":"#!/[0-9]{1}.[0-9]{3}/!# #!/[0-9]{1}.[0-9]{3}/!# #!/[0-9]{1}.[0-9]{3}/!#"},
+{"Counter":"search_stats_ms_pct95","Value":"#!/[0-9]{1}.[0-9]{3}/!# #!/[0-9]{1}.[0-9]{3}/!# #!/[0-9]{1}.[0-9]{3}/!#"},
+{"Counter":"search_stats_ms_pct99","Value":"#!/[0-9]{1}.[0-9]{3}/!# #!/[0-9]{1}.[0-9]{3}/!# #!/[0-9]{1}.[0-9]{3}/!#"},
+{"Counter":"update_stats_ms_avg","Value":"N/A N/A N/A"},
+{"Counter":"update_stats_ms_min","Value":"N/A N/A N/A"},
+{"Counter":"update_stats_ms_max","Value":"N/A N/A N/A"},
+{"Counter":"update_stats_ms_pct95","Value":"N/A N/A N/A"},
+{"Counter":"update_stats_ms_pct99","Value":"N/A N/A N/A"},
+{"Counter":"agent_connect","Value":"%{NUMBER}"},
+{"Counter":"agent_tfo","Value":"%{NUMBER}"},
+{"Counter":"agent_retry","Value":"%{NUMBER}"},
+{"Counter":"queries","Value":"%{NUMBER}"},
+{"Counter":"dist_queries","Value":"%{NUMBER}"},
+{"Counter":"workers_total","Value":"%{NUMBER}"},
+{"Counter":"workers_active","Value":"%{NUMBER}"},
+{"Counter":"workers_clients","Value":"%{NUMBER}"},
+{"Counter":"workers_clients_vip","Value":"%{NUMBER}"},
+{"Counter":"workers_clients_buddy","Value":"%{NUMBER}"},
+{"Counter":"work_queue_length","Value":"6"},
+{"Counter":"load","Value":"0.00 0.00 0.00"},
+{"Counter":"load_primary","Value":"0.00 0.00 0.00"},
+{"Counter":"load_secondary","Value":"0.00 0.00 0.00"},
+{"Counter":"query_wall","Value":"#!/[0-9]{1}.[0-9]{3}/!#"},
+{"Counter":"query_cpu","Value":"OFF"},
+{"Counter":"dist_wall","Value":"#!/[0-9]{1}.[0-9]{3}/!#"},
+{"Counter":"dist_local","Value":"#!/[0-9]{1}.[0-9]{3}/!#"},
+{"Counter":"dist_wait","Value":"#!/[0-9]{1}.[0-9]{3}/!#"},
+{"Counter":"query_reads","Value":"OFF"},
+{"Counter":"query_readkb","Value":"OFF"},
+{"Counter":"query_readtime","Value":"OFF"},
+{"Counter":"avg_query_wall","Value":"#!/[0-9]{1}.[0-9]{3}/!#"},
+{"Counter":"avg_query_cpu","Value":"OFF"},
+{"Counter":"avg_dist_wall","Value":"#!/[0-9]{1}.[0-9]{3}/!#"},
+{"Counter":"avg_dist_local","Value":"#!/[0-9]{1}.[0-9]{3}/!#"},
+{"Counter":"avg_dist_wait","Value":"#!/[0-9]{1}.[0-9]{3}/!#"},
+{"Counter":"avg_query_reads","Value":"OFF"},
+{"Counter":"avg_query_readkb","Value":"OFF"},
+{"Counter":"avg_query_readtime","Value":"OFF"},
+{"Counter":"qcache_max_bytes","Value":"%{NUMBER}"},
+{"Counter":"qcache_thresh_msec","Value":"%{NUMBER}"},
+{"Counter":"qcache_ttl_sec","Value":"%{NUMBER}"},
+{"Counter":"qcache_cached_queries","Value":"%{NUMBER}"},
+{"Counter":"qcache_used_bytes","Value":"%{NUMBER}"},
+{"Counter":"qcache_hits","Value":"0"}
+],
+"total":75,
+"error":"",
+"warning":""
+}]
+––– input –––
+curl -s "http://localhost:9308/cli?show%20status" | awk '!/row.*in set/'; echo
+––– output –––
++-------------------------------+-----------------------------------------------------------------------------------------------------------------------------------------------+
+| Counter                       | Value                                                                                                                                         |
++-------------------------------+-----------------------------------------------------------------------------------------------------------------------------------------------+
+| uptime                        | %{NUMBER}                                                                                                                                             |
+| connections                   | %{NUMBER}                                                                                                                                            |
+| maxed_out                     | %{NUMBER}                                                                                                                                             |
+| version                       | %{SEMVER} %{COMMITDATE} dev (columnar %{SEMVER} %{COMMITDATE}) (secondary %{SEMVER} %{COMMITDATE}) (knn %{SEMVER} %{COMMITDATE}) (buddy v%{SEMVER}) |
+| mysql_version                 | %{SEMVER} %{COMMITDATE} dev (columnar %{SEMVER} %{COMMITDATE}) (secondary %{SEMVER} %{COMMITDATE}) (knn %{SEMVER} %{COMMITDATE})                |
+| command_search                | %{NUMBER}                                                                                                                                             |
+| command_excerpt               | 0                                                                                                                                             |
+| command_update                | 0                                                                                                                                             |
+| command_keywords              | 0                                                                                                                                             |
+| command_persist               | 0                                                                                                                                             |
+| command_status                | %{NUMBER}                                                                                                                                             |
+| command_flushattrs            | 0                                                                                                                                             |
+| command_sphinxql              | 0                                                                                                                                             |
+| command_ping                  | 0                                                                                                                                             |
+| command_delete                | 0                                                                                                                                             |
+| command_set                   | 0                                                                                                                                             |
+| command_insert                | %{NUMBER}                                                                                                                                             |
+| command_replace               | 0                                                                                                                                             |
+| command_commit                | 0                                                                                                                                             |
+| command_suggest               | 0                                                                                                                                             |
+| command_json                  | 0                                                                                                                                             |
+| command_callpq                | 0                                                                                                                                             |
+| command_cluster               | 0                                                                                                                                             |
+| command_getfield              | 0                                                                                                                                             |
+| insert_replace_stats_ms_avg   | #!/[0-9]{1}.[0-9]{3}/!# #!/[0-9]{1}.[0-9]{3}/!# #!/[0-9]{1}.[0-9]{3}/!#                                                                                                                             |
+| insert_replace_stats_ms_min   | #!/[0-9]{1}.[0-9]{3}/!# #!/[0-9]{1}.[0-9]{3}/!# #!/[0-9]{1}.[0-9]{3}/!#                                                                                                                             |
+| insert_replace_stats_ms_max   | #!/[0-9]{1}.[0-9]{3}/!# #!/[0-9]{1}.[0-9]{3}/!# #!/[0-9]{1}.[0-9]{3}/!#                                                                                                                             |
+| insert_replace_stats_ms_pct95 | #!/[0-9]{1}.[0-9]{3}/!# #!/[0-9]{1}.[0-9]{3}/!# #!/[0-9]{1}.[0-9]{3}/!#                                                                                                                             |
+| insert_replace_stats_ms_pct99 | #!/[0-9]{1}.[0-9]{3}/!# #!/[0-9]{1}.[0-9]{3}/!# #!/[0-9]{1}.[0-9]{3}/!#                                                                                                                             |
+| search_stats_ms_avg           | #!/[0-9]{1}.[0-9]{3}/!# #!/[0-9]{1}.[0-9]{3}/!# #!/[0-9]{1}.[0-9]{3}/!#                                                                                                                             |
+| search_stats_ms_min           | #!/[0-9]{1}.[0-9]{3}/!# #!/[0-9]{1}.[0-9]{3}/!# #!/[0-9]{1}.[0-9]{3}/!#                                                                                                                             |
+| search_stats_ms_max           | #!/[0-9]{1}.[0-9]{3}/!# #!/[0-9]{1}.[0-9]{3}/!# #!/[0-9]{1}.[0-9]{3}/!#                                                                                                                             |
+| search_stats_ms_pct95         | #!/[0-9]{1}.[0-9]{3}/!# #!/[0-9]{1}.[0-9]{3}/!# #!/[0-9]{1}.[0-9]{3}/!#                                                                                                                             |
+| search_stats_ms_pct99         | #!/[0-9]{1}.[0-9]{3}/!# #!/[0-9]{1}.[0-9]{3}/!# #!/[0-9]{1}.[0-9]{3}/!#                                                                                                                             |
+| update_stats_ms_avg           | N/A N/A N/A                                                                                                                                   |
+| update_stats_ms_min           | N/A N/A N/A                                                                                                                                   |
+| update_stats_ms_max           | N/A N/A N/A                                                                                                                                   |
+| update_stats_ms_pct95         | N/A N/A N/A                                                                                                                                   |
+| update_stats_ms_pct99         | N/A N/A N/A                                                                                                                                   |
+| agent_connect                 | 0                                                                                                                                             |
+| agent_tfo                     | 0                                                                                                                                             |
+| agent_retry                   | 0                                                                                                                                             |
+| queries                       | %{NUMBER}                                                                                                                                             |
+| dist_queries                  | 0                                                                                                                                             |
+| workers_total                 | %{NUMBER}                                                                                                                                             |
+| workers_active                | %{NUMBER}                                                                                                                                             |
+| workers_clients               | %{NUMBER}                                                                                                                                             |
+| workers_clients_vip           | 0                                                                                                                                             |
+| workers_clients_buddy         | %{NUMBER}                                                                                                                                             |
+| work_queue_length             | 6                                                                                                                                             |
+| load                          | 0.00 0.00 0.00                                                                                                                                |
+| load_primary                  | 0.00 0.00 0.00                                                                                                                                |
+| load_secondary                | 0.00 0.00 0.00                                                                                                                                |
+| query_wall                    | #!/[0-9]{1}.[0-9]{3}/!#                                                                                                                                         |
+| query_cpu                     | OFF                                                                                                                                           |
+| dist_wall                     | #!/[0-9]{1}.[0-9]{3}/!#                                                                                                                                         |
+| dist_local                    | #!/[0-9]{1}.[0-9]{3}/!#                                                                                                                                         |
+| dist_wait                     | #!/[0-9]{1}.[0-9]{3}/!#                                                                                                                                         |
+| query_reads                   | OFF                                                                                                                                           |
+| query_readkb                  | OFF                                                                                                                                           |
+| query_readtime                | OFF                                                                                                                                           |
+| avg_query_wall                | #!/[0-9]{1}.[0-9]{3}/!#                                                                                                                                         |
+| avg_query_cpu                 | OFF                                                                                                                                           |
+| avg_dist_wall                 | #!/[0-9]{1}.[0-9]{3}/!#                                                                                                                                         |
+| avg_dist_local                | #!/[0-9]{1}.[0-9]{3}/!#                                                                                                                                         |
+| avg_dist_wait                 | #!/[0-9]{1}.[0-9]{3}/!#                                                                                                                                         |
+| avg_query_reads               | OFF                                                                                                                                           |
+| avg_query_readkb              | OFF                                                                                                                                           |
+| avg_query_readtime            | OFF                                                                                                                                           |
+| qcache_max_bytes              | 16777216                                                                                                                                      |
+| qcache_thresh_msec            | 3000                                                                                                                                          |
+| qcache_ttl_sec                | 60                                                                                                                                            |
+| qcache_cached_queries         | 0                                                                                                                                             |
+| qcache_used_bytes             | 0                                                                                                                                             |
+| qcache_hits                   | 0                                                                                                                                             |
++-------------------------------+-----------------------------------------------------------------------------------------------------------------------------------------------+
+––– input –––
+mysql -h0 -P9306 -e "CREATE TABLE big_table (id INT, value TEXT);"
+––– output –––
+––– input –––
+for i in $(seq 1 1000000); do echo "INSERT INTO big_table VALUES ($i, 'value_$i');"; done | mysql -h0 -P9306
+––– output –––
+––– input –––
+curl -s "http://localhost:9308/cli?select%20*%20from%20big_table%20limit%2010" | awk '!/row.*in set/'; echo
+––– output –––
++--------+--------------+
+| id     | value        |
++--------+--------------+
+| 939142 | value_939142 |
+| 418023 | value_418023 |
+| 418022 | value_418022 |
+| 939140 | value_939140 |
+| 418021 | value_418021 |
+| 939141 | value_939141 |
+| 418020 | value_418020 |
+| 939138 | value_939138 |
+| 939139 | value_939139 |
+| 418019 | value_418019 |
++--------+--------------+
+––– input –––
+curl -s "http://localhost:9308/cli?select%20count(*)%20as%20total%20from%20big_table" | awk '!/row.*in set/'; echo
+––– output –––
++---------+
+| total   |
++---------+
+| 1000000 |
++---------+
+––– input –––
+curl -s "http://localhost:9308/cli?drop%20table%20big_table" | awk '!/Query OK/ && !/rows affected/'; echo
+––– output –––
+––– input –––
+curl -X POST "http://localhost:9308/sql" -d "EXPLAIN FORMAT=json SELECT * FROM t WHERE MATCH('example')"; echo
+––– output –––
+{"error":"P01: syntax error, unexpected '=' near '=json SELECT * FROM t WHERE MATCH('example')'"}

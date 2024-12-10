@@ -8,3 +8,4 @@ load 1.16.0+25011101-7ce70afb-dev
 ! Do not change the separator that splits this desc from the data
 This file should contain one line per package with a version lock.
 You can find proper values for each dep on https://repo.manticoresearch.com
+ou can find proper values for each dep on https://repo.manticoresearch.com

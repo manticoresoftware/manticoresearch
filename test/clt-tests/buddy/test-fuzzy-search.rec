@@ -618,7 +618,7 @@ mysql -h0 -P9306 -e "drop table if exists t; create table t(a int);"
 ––– input –––
 mysql -h0 -P9306 -e "select * from t option fuzzy=1;"
 ––– output –––
-ERROR 1064 (42000) at line 1: unknown option 'fuzzy'
+ERROR 1064 (42000) at line 1: The 'fuzzy' option requires a full-text query
 ––– input –––
 mysql -h0 -P9306 -e "drop table if exists comment_28798446; create table comment_28798446(id int, content text) min_infix_len='3';"
 ––– output –––

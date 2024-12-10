@@ -1,6 +1,8 @@
 # Setting up replication
 
-With Manticore, write transactions (such as `INSERT`, `REPLACE`, `DELETE`, `TRUNCATE`, `UPDATE`, `COMMIT`) can be replicated to other cluster nodes before the transaction is fully applied on the current node. Currently, replication is supported for `percolate`, `rt` and `distributed` tables in Linux and macOS. However, Manticore Search packages for Windows do not provide replication support.
+With Manticore, write transactions (such as `INSERT`, `REPLACE`, `DELETE`, `TRUNCATE`, `UPDATE`, `COMMIT`) can be replicated to other cluster nodes before the transaction is fully applied on the current node. Currently, replication is supported for `percolate`, `rt` and `distributed` tables in Linux and macOS.
+
+[Native Windows binaries](../../Installation/Windows.md#Installing-Manticore-as-native-Windows-binaries) for Manticore do not support replication. We recommend [installing Manticore via WSL](../../Installation/Windows.md#Installing-or-enabling-WSL2) (Windows Subsystem for Linux).
 
 Manticore's replication is powered by the [Galera library](https://github.com/codership/galera) and boasts several impressive features:
 

@@ -16,7 +16,7 @@ cp dist/build_dockers/nsis/nsisscript.nsi $NSIS_BUILD_DIR
 CI_COMMIT_SHORT_SHA=${CI_COMMIT_SHA:0:9}
 
 MANTICORE_VERSION=$(cat src/sphinxversion.h.in | grep VERNUMBERS | cut -d'"' -f2)
-MANTICORE_DATE=$(git log -1 --date=iso-strict --format=%cd)
+MANTICORE_DATE=$(TZ=UTC git log -1 --date=iso-strict-local --format=%cd)
 MANTICORE_DATE=${MANTICORE_DATE//-/}
 MANTICORE_DATE=${MANTICORE_DATE//T/}
 MANTICORE_DATE=${MANTICORE_DATE:2:8}

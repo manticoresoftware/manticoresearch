@@ -545,7 +545,7 @@ public:
 	bool	GetDwords ( CSphVector<DWORD> & dBuffer, int & iGot, int iMax );
 	bool	GetQwords ( CSphVector<SphAttr_t> & dBuffer, int & iGot, int iMax );
 
-	inline int		HasBytes() const { return int ( m_pBuf - m_pCur + m_iLen ); }
+	inline int		HasBytes() const noexcept { return int ( m_pBuf - m_pCur + m_iLen ); }
 
 	bool			GetError() const { return m_bError; }
 	const CSphString & GetErrorMessage() const { return m_sError; }
@@ -1455,8 +1455,10 @@ namespace session
 
 void LogSphinxqlError ( const char * sStmt, const Str_t & sError );
 void LogSphinxqlError ( const Str_t & sStmt, const Str_t & sError );
-void LogSphinxqlBuddyQuery ( const Str_t sQuery, const CSphQueryResultMeta & tMeta );
 int GetDaemonLogBufSize ();
+
+enum class BuddyQuery_e { SQL, HTTP };
+void LogBuddyQuery ( const Str_t sQuery, BuddyQuery_e tType );
 
 // that is used from sphinxql command over API
 void RunSingleSphinxqlCommand ( Str_t sCommand, GenericOutputBuffer_c & tOut );

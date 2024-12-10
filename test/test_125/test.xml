@@ -13,6 +13,7 @@ searchd
 {
 	<searchd_settings/>
 	thread_stack = 1200K
+	server_id = 100
 }
 
 source test
@@ -503,6 +504,15 @@ INSERT INTO name_table VALUES
 	SELECT id as foo:bar FROM test_name order by id asc;
 	SELECT id foo:bar:baz FROM test_name order by id asc;
 	SELECT id as foo:bar:baz FROM test_name order by id asc;
+    
+	<!-- uuid_short -->
+	SELECT uuid_short();
+	SELECT id, uuid_short() as uid FROM test_name order by id asc option threads=1;
+	SELECT id, uuid_short() as uid FROM test_name order by id asc option threads=1;
+	SELECT uuid_short();
+	CALL uuid_short(1);
+	CALL uuid_short(4);
+    
 </sphinxql>
 </sphqueries>
 

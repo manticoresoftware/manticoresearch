@@ -1079,6 +1079,7 @@ static KeyDesc_t g_dKeysSearchd[] =
 	{ "merge_buffer_fulltext",	0, NULL },
 	{ "merge_buffer_dict",		0, NULL },
 	{ "merge_si_memlimit",		0, NULL },
+	{ "log_http",				0, NULL },
 	{ NULL,						0, NULL }
 };
 

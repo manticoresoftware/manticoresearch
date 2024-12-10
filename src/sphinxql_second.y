@@ -204,7 +204,7 @@ one_or_more_indexes:
 set_global_stmt:
 	TOK_SET TOK_GLOBAL ident '=' '(' const_list ')'
 		{
-			pParser->SetStatement ( $3, SET_GLOBAL_UVAR, *$6.m_pValues );
+			pParser->SetStatement ( $3, SET_GLOBAL_UVAR, $6.m_iValues );
 		}
 	| TOK_SET TOK_GLOBAL ident '=' set_string_value
 		{
@@ -218,7 +218,7 @@ set_global_stmt:
 		}
 	| TOK_SET index_or_table index_id TOK_GLOBAL ident '=' '(' const_list ')'
 		{
-			pParser->SetStatement ( $5, SET_INDEX_UVAR, *$8.m_pValues );
+			pParser->SetStatement ( $5, SET_INDEX_UVAR, $8.m_iValues );
 			pParser->ToString ( pParser->m_pStmt->m_sIndex, $3 );
 		}
 	| TOK_SET TOK_CLUSTER ident_all TOK_GLOBAL TOK_QUOTED_STRING '=' set_string_value
@@ -245,13 +245,15 @@ const_list_entry:
 const_list:
 	const_list_entry
 		{
-			assert ( !$$.m_pValues );
-			$$.m_pValues = new RefcountedVector_c<AttrValue_t> ();
-			$$.m_pValues->Add ( { $1.GetValueInt(), $1.GetValueFloat() } ); 
+			assert ( $$.m_iValues<0 );
+			$$.m_iValues = pParser->AddMvaVec ();
+			auto& dVec = pParser->GetMvaVec ( $$.m_iValues );
+			dVec.Add ( { $1.GetValueInt(), $1.GetValueFloat() } );
 		}
 	| const_list ',' const_list_entry
 		{
-			$$.m_pValues->Add ( { $3.GetValueInt(), $3.GetValueFloat() } );
+			auto& dVec = pParser->GetMvaVec ( $$.m_iValues );
+			dVec.Add ( { $3.GetValueInt(), $3.GetValueFloat() } );
 		}
 	;
 

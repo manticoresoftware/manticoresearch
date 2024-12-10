@@ -2596,93 +2596,97 @@ CSphString sphEncodeResultJson ( const VecTraits_T<const AggrResult_t *> & dRes,
 
 	tOut.StartBlock ( ",", R"("hits":[)", "]" );
 
-	const CSphColumnInfo * pId = tSchema.GetAttr ( sphGetDocidName() );
-	const CSphColumnInfo * pKNNDist = tSchema.GetAttr ( GetKnnDistAttrName() );
-
-	bool bCompatId = false;
-	const CSphColumnInfo * pCompatRaw = nullptr;
-	const CSphColumnInfo * pCompatVer = nullptr;
-	if ( eFormat==ResultSetFormat_e::ES )
+	if ( !tQuery.m_bGroupEmulation )
 	{
-		const CSphColumnInfo * pCompatId = tSchema.GetAttr ( "_id" );
-		if ( pCompatId )
-		{
-			bCompatId = true;
-			pId = pCompatId;
-		}
+		const CSphColumnInfo * pId = tSchema.GetAttr ( sphGetDocidName() );
+		const CSphColumnInfo * pKNNDist = tSchema.GetAttr ( GetKnnDistAttrName() );
 
-		pCompatRaw = tSchema.GetAttr ( "_raw" );
-		pCompatVer = tSchema.GetAttr ( "_version" );
-	}
-
-	bool bTag = tRes.m_bTagsAssigned;
-	int iTag = ( bTag ? 0 : tRes.m_dResults.First().m_iTag );
-	auto dMatches = tRes.m_dResults.First ().m_dMatches.Slice ( tRes.m_iOffset, tRes.m_iCount );
-	for ( const auto & tMatch : dMatches )
-	{
-		ScopedComma_c sQueryComma ( tOut, ",", "{", "}" );
-
-		// note, that originally there is string UID, so we just output number in quotes for docid here
-		if ( bCompatId )
-		{
-			JsonObjAddAttr ( tOut, pId->m_eAttrType, "_id", tMatch, pId->m_tLocator );
-			tOut.Sprintf ( R"("_score":%d)", tMatch.m_iWeight );
-		}
-		else if ( pId )
-		{
-			DocID_t tDocID = tMatch.GetAttr ( pId->m_tLocator );
-			tOut.Sprintf ( R"("_id":%U,"_score":%d)", tDocID, tMatch.m_iWeight );
-		}
-		else
-			tOut.Sprintf ( R"("_score":%d)", tMatch.m_iWeight );
-
+		bool bCompatId = false;
+		const CSphColumnInfo * pCompatRaw = nullptr;
+		const CSphColumnInfo * pCompatVer = nullptr;
 		if ( eFormat==ResultSetFormat_e::ES )
 		{
-			tOut.Sprintf ( R"("_index":"%s")", tRes.m_dIndexNames[bTag ? tMatch.m_iTag : iTag].scstr() ); // FIXME!!! breaks for multiple indexes
-			tOut += R"("_type": "doc")";
-			if ( pCompatVer )
-				JsonObjAddAttr ( tOut, pCompatVer->m_eAttrType, "_version", tMatch, pCompatVer->m_tLocator );
-			else
-				tOut += R"("_version": 1)";
-		}
-
-		if ( pKNNDist )
-			tOut.Sprintf( R"("_knn_dist":%f)", tMatch.GetAttrFloat ( pKNNDist->m_tLocator ) );
-
-		tOut.StartBlock ( ",", "\"_source\":{", "}");
-
-		if ( pCompatRaw )
-			JsonObjAddAttr ( tOut, pCompatRaw->m_eAttrType, "_raw", tMatch, pCompatRaw->m_tLocator );
-		else
-			for ( int iAttr=0; iAttr<nSchemaAttrs; iAttr++ )
+			const CSphColumnInfo * pCompatId = tSchema.GetAttr ( "_id" );
+			if ( pCompatId )
 			{
-				if ( !tAttrsToSend.BitGet(iAttr) )
-					continue;
-
-				if ( dSkipAttrs.BitGet ( iAttr ) )
-					continue;
-
-				const CSphColumnInfo & tCol = tSchema.GetAttr(iAttr);
-				JsonObjAddAttr ( tOut, tCol.m_eAttrType, tCol.m_sName.cstr(), tMatch, tCol.m_tLocator );
+				bCompatId = true;
+				pId = pCompatId;
 			}
 
-		tOut.FinishBlock ( false ); // _source obj
+			pCompatRaw = tSchema.GetAttr ( "_raw" );
+			pCompatVer = tSchema.GetAttr ( "_version" );
+		}
 
-		if ( iHighlightAttr!=-1 )
-			EncodeHighlight ( tMatch, iHighlightAttr, tSchema, tOut );
+		bool bTag = tRes.m_bTagsAssigned;
+		int iTag = ( bTag ? 0 : tRes.m_dResults.First().m_iTag );
+		auto dMatches = tRes.m_dResults.First ().m_dMatches.Slice ( tRes.m_iOffset, tRes.m_iCount );
 
-		if ( eFormat==ResultSetFormat_e::ES )
+		for ( const auto & tMatch : dMatches )
 		{
-			if ( tQuery.m_dDocFields.GetLength() )
-				EncodeFields ( tQuery.m_dDocFields, tRes, tMatch, tSchema, false, R"("fields":{)", "}", tOut );
-			if ( tQuery.m_dSortFields.GetLength() )
-				EncodeFields ( tQuery.m_dSortFields, tRes, tMatch, tSchema, true, R"("sort":[)", "]", tOut );
+			ScopedComma_c sQueryComma ( tOut, ",", "{", "}" );
+
+			// note, that originally there is string UID, so we just output number in quotes for docid here
+			if ( bCompatId )
+			{
+				JsonObjAddAttr ( tOut, pId->m_eAttrType, "_id", tMatch, pId->m_tLocator );
+				tOut.Sprintf ( R"("_score":%d)", tMatch.m_iWeight );
+			}
+			else if ( pId )
+			{
+				DocID_t tDocID = tMatch.GetAttr ( pId->m_tLocator );
+				tOut.Sprintf ( R"("_id":%U,"_score":%d)", tDocID, tMatch.m_iWeight );
+			}
+			else
+				tOut.Sprintf ( R"("_score":%d)", tMatch.m_iWeight );
+
+			if ( eFormat==ResultSetFormat_e::ES )
+			{
+				tOut.Sprintf ( R"("_index":"%s")", tRes.m_dIndexNames[bTag ? tMatch.m_iTag : iTag].scstr() ); // FIXME!!! breaks for multiple indexes
+				tOut += R"("_type": "doc")";
+				if ( pCompatVer )
+					JsonObjAddAttr ( tOut, pCompatVer->m_eAttrType, "_version", tMatch, pCompatVer->m_tLocator );
+				else
+					tOut += R"("_version": 1)";
+			}
+
+			if ( pKNNDist )
+				tOut.Sprintf( R"("_knn_dist":%f)", tMatch.GetAttrFloat ( pKNNDist->m_tLocator ) );
+
+			tOut.StartBlock ( ",", "\"_source\":{", "}");
+
+			if ( pCompatRaw )
+				JsonObjAddAttr ( tOut, pCompatRaw->m_eAttrType, "_raw", tMatch, pCompatRaw->m_tLocator );
+			else
+				for ( int iAttr=0; iAttr<nSchemaAttrs; iAttr++ )
+				{
+					if ( !tAttrsToSend.BitGet(iAttr) )
+						continue;
+
+					if ( dSkipAttrs.BitGet ( iAttr ) )
+						continue;
+
+					const CSphColumnInfo & tCol = tSchema.GetAttr(iAttr);
+					JsonObjAddAttr ( tOut, tCol.m_eAttrType, tCol.m_sName.cstr(), tMatch, tCol.m_tLocator );
+				}
+
+			tOut.FinishBlock ( false ); // _source obj
+
+			if ( iHighlightAttr!=-1 )
+				EncodeHighlight ( tMatch, iHighlightAttr, tSchema, tOut );
+
+			if ( eFormat==ResultSetFormat_e::ES )
+			{
+				if ( tQuery.m_dDocFields.GetLength() )
+					EncodeFields ( tQuery.m_dDocFields, tRes, tMatch, tSchema, false, R"("fields":{)", "}", tOut );
+				if ( tQuery.m_dSortFields.GetLength() )
+					EncodeFields ( tQuery.m_dSortFields, tRes, tMatch, tSchema, true, R"("sort":[)", "]", tOut );
+			}
 		}
 	}
 
 	tOut.FinishBlocks ( sHitMeta, false ); // hits array, hits meta
 
-	if ( dRes.GetLength()>1 )
+	if ( tQuery.m_bGroupEmulation || dRes.GetLength()>1 )
 	{
 		sph::StringSet hDatetime;
 		if ( eFormat==ResultSetFormat_e::ES )
@@ -2703,12 +2707,23 @@ CSphString sphEncodeResultJson ( const VecTraits_T<const AggrResult_t *> & dRes,
 				return false;
 		});
 
-		assert ( dRes.GetLength()==tQuery.m_dAggs.GetLength()+1 );
-		tOut.StartBlock ( ",", R"("aggregations":{)", "}");
-		ARRAY_FOREACH ( i, tQuery.m_dAggs )
-			EncodeAggr ( tQuery.m_dAggs[i], i, *dRes[i+1], eFormat, hDatetime, tQuery.m_iNow, sDistinctName, tOut );
-		tOut.FinishBlock ( false ); // aggregations obj
+		if ( tQuery.m_bGroupEmulation )
+		{
+			tOut.StartBlock ( ",", R"("aggregations":{)", "}");
+			EncodeAggr ( tQuery.m_dAggs[0], 1, *dRes[0], eFormat, hDatetime, tQuery.m_iNow, sDistinctName, tOut );
+			tOut.FinishBlock ( false ); // aggregations obj
+
+		} else
+		{
+
+			assert ( dRes.GetLength()==tQuery.m_dAggs.GetLength()+1 );
+			tOut.StartBlock ( ",", R"("aggregations":{)", "}");
+			ARRAY_FOREACH ( i, tQuery.m_dAggs )
+				EncodeAggr ( tQuery.m_dAggs[i], i, *dRes[i+1], eFormat, hDatetime, tQuery.m_iNow, sDistinctName, tOut );
+			tOut.FinishBlock ( false ); // aggregations obj
+		}
 	}
+
 	if ( eFormat==ResultSetFormat_e::ES )
 		tOut += R"("status": 200)";
 
@@ -4070,4 +4085,9 @@ CSphString JsonAggr_t::GetAliasName () const
 	sName.SetSprintf ( "%s_%s", m_sCol.cstr(), m_sBucketName.cstr() );
 
 	return sName;
+}
+
+ParsedJsonQuery_t::ParsedJsonQuery_t()
+{
+	SetQueryDefaultsExt2 ( m_tQuery );
 }

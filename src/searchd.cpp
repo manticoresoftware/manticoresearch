@@ -177,7 +177,9 @@ static constexpr bool	THREAD_EX_NEEDS_VIP = false; // whether non-VIP can issue 
 static CSphVector<Listener_t>	g_dListeners;
 
 static int				g_iQueryLogFile	= -1;
+int						g_iHttpLogFile = -1;
 static CSphString		g_sQueryLogFile;
+static CSphString		g_sHttpLogFile;
 static CSphString		g_sPidFile;
 static bool				g_bPidIsMine = false;		// if PID is not mine, don't unlink it on fail
 static int				g_iPidFD		= -1;
@@ -3442,10 +3444,12 @@ void LogSphinxqlError ( const Str_t & sStmt, const Str_t & sError )
 	WriteQuery ( tBuf );
 }
 
-void LogSphinxqlBuddyQuery ( const Str_t sQuery, const CSphQueryResultMeta & tMeta )
+void LogBuddyQuery ( const Str_t sQuery, BuddyQuery_e tType )
 {
 	if ( g_eLogFormat!=LOG_FORMAT_SPHINXQL || g_iQueryLogFile<0 || IsEmpty ( sQuery ) )
 		return;
+
+	const auto & tMeta = session::GetClientSession()->m_tLastMeta;
 
 	QuotationEscapedBuilder tBuf;
 
@@ -3461,8 +3465,13 @@ void LogSphinxqlBuddyQuery ( const Str_t sQuery, const CSphQueryResultMeta & tMe
 		tBuf << " x" << tMeta.m_iMultiplier;
 	tBuf << " found " << tMeta.m_iTotalMatches << " */ ";
 
+	if ( tType==BuddyQuery_e::HTTP )
+		tBuf << "/* ";
 	tBuf.AppendEscaped ( sQuery.first, EscBld::eFixupSpace, sQuery.second );
-	tBuf << '\n';
+	if ( tType==BuddyQuery_e::HTTP )
+		tBuf << " */";
+
+	tBuf << ";\n";
 
 	WriteQuery ( tBuf );
 }
@@ -5891,7 +5900,18 @@ void SearchHandler_c::CalcThreadsPerIndex ( int iConcurrency )
 		iConcurrency = g_iThreads;
 
 	int iBusyWorkers = Max ( GlobalWorkPool()->CurTasks() - 1, 0 ); // ignore current task
-	int iAvailableWorkers = Max ( iConcurrency-iBusyWorkers, 1 );
+	int iAvailableWorkers = Max ( Coro::CurrentScheduler()->WorkingThreads() - iBusyWorkers, 1 );
+	iAvailableWorkers = Min ( iAvailableWorkers, iConcurrency );
+
+	// this is need to obey ps dispatcher template, if it defines concurrency
+	// that will help to perform reproducable queries, see test 261
+	auto tDispatch = GetEffectivePseudoShardingDispatcherTemplate ();
+	Dispatcher::Unify ( tDispatch, m_dNQueries.First ().m_tPseudoShardingDispatcher );
+	if ( tDispatch.concurrency )
+	{
+//		sphWarning ( "correct iAvailableWorkers %d to defined %d", iAvailableWorkers, tDispatch.concurrency );
+		iAvailableWorkers = tDispatch.concurrency;
+	}
 
 	CSphVector<CSphVector<int64_t>> dCountDistinct;
 	PopulateCountDistinct ( dCountDistinct );
@@ -11315,7 +11335,17 @@ void sphHandleMysqlInsert ( StmtErrorReporter_i & tOut, const SqlStmt_t & tStmt 
 	auto pServed = GetServed ( sTable );
 	if ( !ServedDesc_t::IsMutable ( pServed ) )
 	{
-		tOut.Error ( "table '%s' absent, or does not support INSERT", tStmt.m_sIndex.cstr ());
+		bool bDistTable = false;
+		if ( !pServed )
+		{
+			bDistTable = GetDistr ( tStmt.m_sIndex );
+		}
+
+		if ( pServed || bDistTable )
+			tOut.Error ( "table '%s' does not support INSERT", tStmt.m_sIndex.cstr ());
+		else
+			tOut.Error ( "table '%s' absent", tStmt.m_sIndex.cstr ());
+
 		return;
 	}
 
@@ -12431,6 +12461,41 @@ void HandleMysqlCallSuggest ( RowBuffer_i & tOut, SqlStmt_t & tStmt, bool bQuery
 	}
 
 	SuggestSendResult ( tArgs, tRes, tRes.m_sSentence, tOut );
+}
+
+
+static void HandleMysqlCallUuid ( RowBuffer_i & tOut, SqlStmt_t & tStmt )
+{
+	// the only int agrument
+	int iArgs = tStmt.m_dInsertValues.GetLength ();
+	if ( iArgs!=1 )
+	{
+		tOut.Error ( "bad argument count in UUID_SHORT() call" );
+		return;
+	}
+	if ( tStmt.m_dInsertValues[0].m_iType!=SqlInsert_t::CONST_INT )
+	{
+		tOut.Error ( "bad argument type in UUID_SHORT() call" );
+		return;
+	}
+	int64_t iCount = tStmt.m_dInsertValues[0].GetValueInt();
+	if ( iCount<1 || iCount>INT_MAX )
+	{
+		tOut.Error ( "bad argument value in UUID_SHORT() call" );
+		return;
+	}
+
+	tOut.HeadBegin ();
+	tOut.HeadColumn ( "uuid_short()" );
+	tOut.HeadEnd ();
+
+	for ( int i=0; i<iCount; i++ )
+	{
+		tOut.PutNumAsString ( UidShort() );
+		tOut.Commit();
+	}
+
+	tOut.Eof();
 }
 
 
@@ -16892,7 +16957,13 @@ void HandleMysqlFreezeIndexes ( RowBuffer_i& tOut, const SqlStmt_t& tStmt, CSphS
 			continue;
 		}
 
-		RIdx_T<RtIndex_i*> pRt { pIndex };
+		// here we get non-locked instance to avoid deadlock with update.
+		// Deadlock happens by this sequence:
+		// 1. Update protects index from bein frozen.
+		// 2. We lock index here.
+		// 3. We wait until protection released.
+		// 4. Update tries to w-lock the index, locked by us.
+		auto * pRt = static_cast<RtIndex_i *> ( UnlockedHazardIdxFromServed ( *pIndex ) );
 		pRt->LockFileState ( dIndexFiles );
 	}
 
@@ -16937,17 +17008,11 @@ void HandleMysqlUnfreezeIndexes ( RowBuffer_i& tOut, const CSphString& sIndexes 
 	ParseIndexList ( sIndexes, dIndexes );
 	for ( const auto& sIndex : dIndexes )
 	{
-		auto pServed = GetServed ( sIndex );
-		if ( !ServedDesc_t::IsMutable ( pServed ) )
+		auto pIndex = GetServed ( sIndex );
+		if ( !ServedDesc_t::IsMutable ( pIndex ) )
 			continue;
 
-		// here we get non-locked instance to avoid deadlock with update, that is:
-		// update may acquire w-lock and then wait until index is unfrozen to continue,
-		// but we can't unfreeze, if we need the lock for it.
-		auto * pRt = static_cast<RtIndex_i *> ( UnlockedHazardIdxFromServed ( *pServed ) );
-		if ( !pRt )
-			continue;
-
+		RIdx_T<RtIndex_i*> pRt { pIndex };
 		pRt->EnableSave ();
 		++iUnlocked;
 	}
@@ -17272,6 +17337,9 @@ bool ClientSession_c::Execute ( Str_t sQuery, RowBuffer_i & tOut )
 			HandleMysqlCallPQ ( tOut, *pStmt, m_tAcc, m_tPercolateMeta );
 			m_tPercolateMeta.m_dResult.m_sMessages.MoveWarningsTo ( m_tLastMeta.m_sWarning );
 			m_tPercolateMeta.m_dDocids.Reset ( 0 ); // free occupied mem
+		} else if ( pStmt->m_sCallProc=="UUID_SHORT" )
+		{
+			HandleMysqlCallUuid ( tOut, *pStmt );
 		} else
 		{
 			m_sError.SetSprintf ( "no such built-in procedure %s", pStmt->m_sCallProc.cstr() );
@@ -19243,6 +19311,21 @@ void CheckReopenLogs () REQUIRES ( MainThread )
 			g_iQueryLogFile = iFD;
 			LogChangeMode ( g_iQueryLogFile, g_iLogFileMode );
 			sphInfo ( "query log reopened" );
+		}
+	}
+
+	if ( g_iHttpLogFile>=0 && !isatty ( g_iHttpLogFile ) )
+	{
+		int iFD = ::open ( g_sHttpLogFile.cstr (), O_CREAT | O_RDWR | O_APPEND, S_IREAD | S_IWRITE );
+		if ( iFD<0 )
+		{
+			sphWarning ( "failed to reopen http log file '%s': %s", g_sHttpLogFile.cstr (), strerrorm ( errno ) );
+		} else
+		{
+			::close ( g_iHttpLogFile );
+			g_iHttpLogFile = iFD;
+			LogChangeMode ( g_iHttpLogFile, g_iLogFileMode );
+			sphInfo ( "http log reopened" );
 		}
 	}
 
@@ -21242,6 +21325,21 @@ int WINAPI ServiceMain ( int argc, char **argv ) EXCLUDES (MainThread)
 				LogChangeMode ( g_iQueryLogFile, g_iLogFileMode );
 			}
 			g_sQueryLogFile = sQueryLog.cstr();
+		}
+
+		// create query log if required
+		if ( hSearchd.Exists ( "log_http" ) )
+		{
+			CSphString sHttpLog = hSearchd["log_http"].cstr ();
+			FixPathAbsolute ( sHttpLog );
+			g_iHttpLogFile = open ( sHttpLog.cstr (), O_CREAT | O_RDWR | O_APPEND, S_IREAD | S_IWRITE );
+			if ( g_iQueryLogFile<0 )
+				sphWarning ( "failed to open http log file '%s': %s", sHttpLog.cstr (), strerrorm ( errno ) );
+			else
+			{
+				LogChangeMode ( g_iHttpLogFile, g_iLogFileMode );
+				g_sHttpLogFile = std::move( sHttpLog );
+			}
 		}
 	}
 

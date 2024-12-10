@@ -662,6 +662,64 @@ static EHTTP_STATUS GetHttpStatusCode ( int iBuddyHttpCode, EHTTP_STATUS eReqHtt
 	return ( iBuddyHttpCode>0 ? HttpGetStatusCodes ( iBuddyHttpCode ) : eReqHttpCode );
 }
 
+template<typename T>
+bool ConvertValue ( const char * sName, const JsonObj_c & tMeta, T & tVal )
+{
+	JsonObj_c tSrcVal = tMeta.GetItem ( sName );
+	if ( !tSrcVal )
+		return false;
+
+	if ( !tSrcVal.IsStr() )
+		return false;
+
+	int64_t iVal = 0;
+	double fVal = 0.0;
+	ESphJsonType eType;
+	if ( !sphJsonStringToNumber ( tSrcVal.SzVal(), strlen ( tSrcVal.SzVal() ), eType, iVal, fVal ) )
+		return false;
+
+	if ( eType==JSON_INT64 )
+		tVal = (T)iVal;
+	else
+		tVal = (T)fVal;
+	return true;
+}
+
+static bool SetSessionMeta ( const JsonObj_c & tBudyyReply )
+{
+	ClientSession_c * pSession = session::GetClientSession();
+	if ( !pSession )
+		return false;
+
+	auto & tLastMeta = pSession->m_tLastMeta;
+	tLastMeta = CSphQueryResultMeta();
+
+	CSphString sTmpError;
+	JsonObj_c tSrcMeta = tBudyyReply.GetObjItem ( "meta", sTmpError, true );
+	if ( !tSrcMeta )
+		return false;
+
+	// total => m_iMatches
+	// if no meta.total this is not a search query - do not log it into query.log
+	if ( !ConvertValue ( "total", tSrcMeta, tLastMeta.m_iMatches ) )
+		return false;
+		
+	// total_found => m_iTotalMatches
+	ConvertValue ( "total_found", tSrcMeta, tLastMeta.m_iTotalMatches );
+
+	// time => m_iQueryTime \ m_iRealQueryTime
+	float fTime = 0.0f;
+	if ( ConvertValue ( "time", tSrcMeta, fTime ) )
+		tLastMeta.m_iRealQueryTime = tLastMeta.m_iQueryTime = (int)( fTime * 1000.0f );
+
+	// total_relation => m_bTotalMatchesApprox
+	CSphString sRel;
+	if ( tSrcMeta.FetchStrItem ( sRel, "total_relation", sTmpError, true ) && !sRel.IsEmpty() && sRel=="gte" )
+		tLastMeta.m_bTotalMatchesApprox = true;
+
+	return true;
+}
+
 // we call it ALWAYS, because even with absolutely correct result, we still might reject it for '/cli' endpoint if buddy is not available or prohibited
 bool ProcessHttpQueryBuddy ( HttpProcessResult_t & tRes, Str_t sSrcQuery, OptionsHash_t & hOptions, CSphVector<BYTE> & dResult, bool bNeedHttpResponse, http_method eRequestType )
 {
@@ -743,6 +801,10 @@ bool ProcessHttpQueryBuddy ( HttpProcessResult_t & tRes, Str_t sSrcQuery, Option
 
 	dResult.Resize ( 0 );
 	ReplyBuf ( FromStr ( sDump ), eHttpStatus, bNeedHttpResponse, dResult );
+	
+	if ( SetSessionMeta ( tReplyParsed.m_tRoot ) )
+		LogBuddyQuery ( sSrcQuery, BuddyQuery_e::HTTP );
+
 	return true;
 }
 
@@ -766,53 +828,6 @@ static bool ConvertErrorMessage ( const Str_t & sStmt, std::pair<int, BYTE> tSav
 	session::GetClientSession()->m_tLastMeta.m_sError = sMsgError;
 	tBuddyRows->Error ( sMsgError.cstr() );
 	return true;
-}
-
-template<typename T>
-bool ConvertValue ( const char * sName, const JsonObj_c & tMeta, T & tVal )
-{
-	JsonObj_c tSrcVal = tMeta.GetItem ( sName );
-	if ( !tSrcVal )
-		return false;
-
-	if ( !tSrcVal.IsStr() )
-		return false;
-
-	int64_t iVal = 0;
-	double fVal = 0.0;
-	ESphJsonType eType;
-	if ( !sphJsonStringToNumber ( tSrcVal.SzVal(), strlen ( tSrcVal.SzVal() ), eType, iVal, fVal ) )
-		return false;
-
-	if ( eType==JSON_INT64 )
-		tVal = (T)iVal;
-	else
-		tVal = (T)fVal;
-	return true;
-}
-
-static void LogBuddyQuery ( const Str_t sSrcQuery, const JsonObj_c & tBudyyReply )
-{
-	CSphString sTmpError;
-	CSphQueryResultMeta tLogMeta;
-	JsonObj_c tSrcMeta = tBudyyReply.GetObjItem ( "meta", sTmpError, true );
-	if ( tSrcMeta )
-	{
-		// total => m_iMatches
-		ConvertValue ( "total", tSrcMeta, tLogMeta.m_iMatches );
-		
-		// total_found => m_iTotalMatches
-		ConvertValue ( "total_found", tSrcMeta, tLogMeta.m_iTotalMatches );
-
-		// time => m_iQueryTime \ m_iRealQueryTime
-		float fTime = 0.0f;
-		if ( ConvertValue ( "time", tSrcMeta, fTime ) )
-			tLogMeta.m_iRealQueryTime = tLogMeta.m_iQueryTime = (int)( fTime * 1000.0f );
-
-		// total_relation => null
-	}
-
-	LogSphinxqlBuddyQuery ( sSrcQuery, tLogMeta );
 }
 
 void ProcessSqlQueryBuddy ( Str_t sSrcQuery, Str_t tError, std::pair<int, BYTE> tSavedPos, BYTE & uPacketID, GenericOutputBuffer_c & tOut )
@@ -856,7 +871,9 @@ void ProcessSqlQueryBuddy ( Str_t sSrcQuery, Str_t tError, std::pair<int, BYTE> 
 	std::unique_ptr<RowBuffer_i> tBuddyRows ( CreateSqlRowBuffer ( &uPacketID, &tOut ) );
 
 	ConvertJsonDataset ( tReplyParsed.m_tMessage, sSrcQuery.first, *tBuddyRows );
-	LogBuddyQuery ( sSrcQuery, tReplyParsed.m_tRoot );
+
+	if ( SetSessionMeta ( tReplyParsed.m_tRoot ) )
+		LogBuddyQuery ( sSrcQuery, BuddyQuery_e::SQL );
 }
 
 #ifdef _WIN32

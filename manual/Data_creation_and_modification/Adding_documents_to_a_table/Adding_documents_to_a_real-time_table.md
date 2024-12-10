@@ -522,7 +522,7 @@ The `/bulk` (Manticore mode) endpoint supports [Chunked transfer encoding](https
 For bulk insert, simply provide more documents in brackets after `VALUES()`. The syntax is:
 
 ```sql
-INSERT INTO <table name>[(column1, column2, ...)] VALUES ()[,(value1,[value2, ...])]
+INSERT INTO <table name>[(column1, column2, ...)] VALUES(value1[, value2 , ...]), (...)
 ```
 
 The optional column name list allows you to explicitly specify values for some of the columns present in the table. All other columns will be filled with their default values (0 for scalar types, empty string for string types).
@@ -640,12 +640,12 @@ POST /bulk
 
 <!-- request Elasticsearch -->
 
-> NOTE: `_bulk` requires [Manticore Buddy](../Installation/Manticore_Buddy.md). If it doesn't work, make sure Buddy is installed.
+> NOTE: `_bulk` requires [Manticore Buddy](../Installation/Manticore_Buddy.md) if the table doesn't exist yet. If it doesn't work, make sure Buddy is installed.
 
 ```json
 POST /_bulk
 -H "Content-Type: application/x-ndjson" -d '
-{ "table" : { "_index" : "products" } }
+{ "index" : { "_index" : "products" } }
 { "title" : "Yellow Bag", "price": 12 }
 { "create" : { "_index" : "products" } }
 { "title" : "Red Bag", "price": 12.5, "id": 3 }
@@ -659,7 +659,7 @@ POST /_bulk
       "table": {
         "_index": "products",
         "_type": "doc",
-        "_id": 0,
+        "_id": 1657860156022587406,
         "_version": 1,
         "result": "created",
         "_shards": {

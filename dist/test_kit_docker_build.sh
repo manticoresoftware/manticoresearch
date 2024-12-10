@@ -59,8 +59,11 @@ do
 	# Translate package names to the ones used in the repository
 	case $package in
 		buddy)
-			package="manticore-buddy"
-			arch="all"
+			# We use github clone instead of package
+			# package="manticore-buddy"
+			# arch="all"
+			buddy_commit=$commit
+			continue
 			;;
 		backup)
 			package="manticore-backup"
@@ -107,14 +110,22 @@ docker create \
 
 # Let's list what's in the /build/ inside the container for debug purposes
 docker exec manticore-test-kit bash -c \
-	'ls -la /build/'
-	# Install deps and add manticore-executor-dev to the container
-	docker exec manticore-test-kit bash -c \
-		"apt-get -y update && apt-get -y install manticore-galera && apt-get -y remove 'manticore-repo' && rm /etc/apt/sources.list.d/manticoresearch.list && apt-get update -y && apt-get install -y --allow-downgrades /build/*.deb libxml2 libcurl4 libonig5 libzip4 librdkafka1 curl neovim git apache2-utils iproute2 bash && apt-get clean -y"
-			docker exec manticore-test-kit bash -c \
-				"curl -sSL https://getcomposer.org/download/2.7.0/composer.phar > /usr/bin/composer; chmod +x /usr/bin/composer"
+	'echo "Removing /build/manticore_*, because it may depend on manticore-buddy of a newer version while we'\''re installing Buddy via git clone"; rm /build/manticore_*.deb; ls -la /build/'
+# Install deps and add manticore-executor-dev to the container
+docker exec manticore-test-kit bash -c \
+	"apt-get -y update && apt-get -y install manticore-galera && apt-get -y remove 'manticore-repo' && rm /etc/apt/sources.list.d/manticoresearch.list && apt-get update -y && apt-get install -y --allow-downgrades /build/*.deb libxml2 libcurl4 libonig5 libzip4 librdkafka1 curl neovim git apache2-utils iproute2 bash && apt-get clean -y"
 
-			echo "Exporting image to ../manticore_test_kit.img"
+# Install composer cuz we need it for buddy from the git and also development
+docker exec manticore-test-kit bash -c \
+	"curl -sSL https://getcomposer.org/download/2.7.0/composer.phar > /usr/bin/composer; chmod +x /usr/bin/composer"
+
+# Install custom buddy from git repo
+#
+buddy_path=/usr/share/manticore/modules/manticore-buddy
+docker exec manticore-test-kit bash -c \
+	"rm -fr $buddy_path && git clone https://github.com/manticoresoftware/manticoresearch-buddy.git $buddy_path && cd $buddy_path && git checkout $buddy_commit && composer install && curl -sSL https://raw.githubusercontent.com/manticoresoftware/phar_builder/refs/heads/main/templates/sh | sed 's/__NAME__/manticore-buddy/g; s/__PACKAGE__/manticore-buddy/g' >$buddy_path/bin/manticore-buddy && chmod +x $buddy_path/bin/manticore-buddy"
+
+echo "Exporting image to ../manticore_test_kit.img"
 
 # exporting the image, it also squashes all the layers into one
 docker export manticore-test-kit > ../manticore_test_kit.img

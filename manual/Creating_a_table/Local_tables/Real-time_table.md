@@ -182,16 +182,12 @@ When creating a table, Elasticsearch data types will be mapped to Manticore type
 ```JSON
 POST /your_table_name/_mapping -d '
 {
-  "test": {
-    "mappings": {
-      "properties": {
-        "price": {
-            "type": "float"
-        },
-        "title": {
-            "type": "text"
-        }
-      }
+  "properties": {
+    "price": {
+        "type": "float"
+    },
+    "title": {
+        "type": "text"
     }
   }
 }
@@ -217,7 +213,7 @@ POST /your_table_name/_mapping -d '
 You can create a copy of a real-time table, with or without its data. Please note that if the table is large, copying it with data may take some time. Copying works in synchronous mode, but if the connection is dropped, it will continue in the background.
 
 ```sql
-CREATE TABLE table_name LIKE old_table_name [WITH DATA]
+CREATE TABLE [IF NOT EXISTS] table_name LIKE old_table_name [WITH DATA]
 ```
 
 > NOTE: Copying a table requires [Manticore Buddy](../Installation/Manticore_Buddy.md). If it doesn't work, make sure Buddy is installed.

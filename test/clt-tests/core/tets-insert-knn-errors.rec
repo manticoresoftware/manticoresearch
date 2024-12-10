@@ -1,0 +1,126 @@
+––– block: ../base/start-searchd –––
+––– input –––
+mysql -h0 -P9306 -e "CREATE TABLE knn_test (id BIGINT, model TEXT, vector float_vector)"; echo $?
+––– output –––
+0
+––– input –––
+mysql -h0 -P9306 -e "INSERT INTO knn_test (id, model, vector) VALUES (1, 'Model_1', '[0.9012, 0.2126, 0.2879, 0.7552]')"; echo $?
+––– output –––
+0
+––– input –––
+mysql -h0 -P9306 -e "SELECT count(*) FROM knn_test WHERE knn(vector, 10, 1)"; echo $?
+––– output –––
+0
+––– input –––
+mysql -h0 -P9306 -e "SHOW CREATE TABLE knn_test"
+––– output –––
++----------+----------------------------------------------------------------------+
+| Table    | Create Table                                                         |
++----------+----------------------------------------------------------------------+
+| knn_test | CREATE TABLE knn_test (
+id bigint,
+model text,
+vector float_vector
+) |
++----------+----------------------------------------------------------------------+
+––– input –––
+mysql -h0 -P9306 -e "CREATE TABLE knn_test2 (id BIGINT, model TEXT, vector float_vector)"; echo $?
+––– output –––
+0
+––– input –––
+mysql -h0 -P9306 -e "INSERT INTO knn_test2 (id, model, vector) VALUES (1, 'Model_1', (0.286569,-0.031816,0.066684,0.032926))"; echo $?
+––– output –––
+0
+––– input –––
+mysql -h0 -P9306 -e "SELECT count(*) FROM knn_test2 WHERE knn(vector, 10, 1)"
+––– output –––
+ERROR 1064 (42000) at line 1: table knn_test2: KNN index not enabled for attribute 'vector'
+––– input –––
+mysql -h0 -P9306 -e "SHOW CREATE TABLE knn_test2"
+––– output –––
++-----------+-----------------------------------------------------------------------+
+| Table     | Create Table                                                          |
++-----------+-----------------------------------------------------------------------+
+| knn_test2 | CREATE TABLE knn_test2 (
+id bigint,
+model text,
+vector float_vector
+) |
++-----------+-----------------------------------------------------------------------+
+––– input –––
+mysql -h0 -P9306 -e "CREATE TABLE knn_test3 (id BIGINT, model TEXT, vector float_vector)"; echo $?
+––– output –––
+0
+––– input –––
+mysql -h0 -P9306 -e "INSERT INTO knn_test3 (id, model, vector) VALUES (1, 'Model_1', '[0.9012, 0.2126, 0.2879, 0.7552]')"; echo $?
+––– output –––
+0
+––– input –––
+mysql -h0 -P9306 -e "SELECT count(*) FROM knn_test3 WHERE knn(vector, 10, 1)"; echo $?
+––– output –––
+0
+––– input –––
+mysql -h0 -P9306 -e "SHOW CREATE TABLE knn_test3"
+––– output –––
++-----------+-----------------------------------------------------------------------+
+| Table     | Create Table                                                          |
++-----------+-----------------------------------------------------------------------+
+| knn_test3 | CREATE TABLE knn_test3 (
+id bigint,
+model text,
+vector float_vector
+) |
++-----------+-----------------------------------------------------------------------+
+––– input –––
+mysql -h0 -P9306 -e "CREATE TABLE knn_test4 (id BIGINT, model TEXT, vector int)"; echo $?
+––– output –––
+0
+––– input –––
+mysql -h0 -P9306 -e "INSERT INTO knn_test4 (id, model, vector) VALUES (1, 'Model_1', '[0.9012, 0.2126, 0.2879, 0.7552]')"; echo $?
+––– output –––
+0
+––– input –––
+mysql -h0 -P9306 -e "SELECT count(*) FROM knn_test4 WHERE knn(vector, 10, 1)"; echo $?
+––– output –––
+0
+––– input –––
+mysql -h0 -P9306 -e "SHOW CREATE TABLE knn_test4"
+––– output –––
++-----------+------------------------------------------------------------------+
+| Table     | Create Table                                                     |
++-----------+------------------------------------------------------------------+
+| knn_test4 | CREATE TABLE knn_test4 (
+id bigint,
+model text,
+vector integer
+) |
++-----------+------------------------------------------------------------------+
+––– input –––
+––– input –––
+mysql -h0 -P9306 -e "CREATE TABLE knn_test5 (id BIGINT, model TEXT, vector float_vector knn_type='hnsw' knn_dims='4' hnsw_similarity='l2')"; echo $?
+––– output –––
+0
+––– input –––
+mysql -h0 -P9306 -e "INSERT INTO knn_test5 (id, model, vector) VALUES (1, 'Model_1', (0.9012, 0.2126, 0.2879, 0.7552))"; echo $?
+––– output –––
+0
+––– input –––
+mysql -h0 -P9306 -e "SELECT count(*) FROM knn_test5 WHERE knn(vector, 10, 1)"
+––– output –––
++----------+
+| count(*) |
++----------+
+|        1 |
++----------+
+––– input –––
+mysql -h0 -P9306 -e "SHOW CREATE TABLE knn_test5"
+––– output –––
++-----------+-------------------------------------------------------------------------------------------------------------------------+
+| Table     | Create Table                                                                                                            |
++-----------+-------------------------------------------------------------------------------------------------------------------------+
+| knn_test5 | CREATE TABLE knn_test5 (
+id bigint,
+model text,
+vector float_vector knn_type='hnsw' knn_dims='4' hnsw_similarity='L2'
+) |
++-----------+-------------------------------------------------------------------------------------------------------------------------+

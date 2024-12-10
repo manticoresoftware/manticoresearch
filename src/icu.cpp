@@ -59,7 +59,7 @@ class ICUPreprocessor_c : public CJKPreprocessor_c
 {
 public:
 	bool			Init ( CSphString & sError ) override;
-	CJKPreprocessor_c * Clone() override { return new ICUPreprocessor_c; }
+	CJKPreprocessor_c * Clone ( const FieldFilterOptions_t * pOptions ) override { return new ICUPreprocessor_c; }
 
 protected:
 	void			ProcessBuffer ( const BYTE * pBuffer, int iLength ) override;

@@ -1163,6 +1163,9 @@ public:
 			return;
 		}
 
+		if ( eState!=States_e::ENABLED )
+			WaitUnlockedSetState ();
+
 		assert ( Threads::IsInsideCoroutine() );
 		m_tValue.ModifyValueAndNotifyAll ( [eState] ( Value_t& t )
 		{
@@ -1212,6 +1215,31 @@ public:
 		return m_tValue.GetValueRef().m_iDisabledCounter;
 	}
 
+	// need to be run from serialized executor in order to avoid race between wait and modify
+	void WaitLockEnabledState() noexcept
+	{
+		if ( !Threads::IsInsideCoroutine () )
+			return;
+
+		if ( WaitEnabledOrShutdown () )
+			m_iSetWaiter.ModifyValue ( [] ( int & iVal ) { ++iVal; } );
+	}
+
+	void UnlockEnabledState () noexcept
+	{
+		if ( !Threads::IsInsideCoroutine () )
+			return;
+		m_iSetWaiter.ModifyValueAndNotifyAll ( [] ( int & iVal ) { --iVal; } );
+	}
+
+private:
+	void WaitUnlockedSetState ()
+	{
+		if ( !Threads::IsInsideCoroutine () )
+			return;
+		m_iSetWaiter.Wait ( [] ( int i ) { return i<=0; } );
+	}
+
 private:
 	struct Value_t
 	{
@@ -1220,6 +1248,7 @@ private:
 		bool m_bShutdown = false;
 	};
 	Coro::Waitable_T<Value_t> m_tValue;
+	Coro::Waitable_T<int> m_iSetWaiter {0};
 };
 
 enum class MergeSeg_e : BYTE
@@ -1342,6 +1371,9 @@ public:
 	void				ProhibitSave() final;
 	void				EnableSave() final;
 	void				LockFileState ( CSphVector<CSphString> & dFiles ) final;
+
+	void				WaitLockEnabledState () noexcept final;
+	void				UnlockEnabledState () noexcept final;
 
 	void				SetDebugCheck ( bool bCheckIdDups, int iCheckChunk ) final;
 
@@ -3517,7 +3549,7 @@ bool RtIndex_c::WriteAttributes ( SaveDiskDataContext_t & tCtx, CSphString & sEr
 				tWriterSPA.PutBytes ( pNewRow, (int64_t)iStrideBytes );
 
 				if ( pJsonSIBuilder )
-					pJsonSIBuilder->AddRowSize ( tTargetOffsetSize.second );
+					pJsonSIBuilder->AddRowOffsetSize ( tTargetOffsetSize );
 			}
 			else
 				tWriterSPA.PutBytes ( pRow, (int64_t)iStrideBytes );
@@ -7498,7 +7530,7 @@ static void PerformFullTextSearch ( const RtSegVec_c & dRamChunks, RtQwordSetup_
 
 		// storing segment in matches tag for finding strings attrs offset later, biased against default zero
 		int iTag = iSeg+1;
-		if ( tCtx.m_uPackedFactorFlags & SPH_FACTOR_ENABLE )
+		if ( tCtx.GetPackedFactor() & SPH_FACTOR_ENABLE )
 			pRanker->ExtraData ( EXTRA_SET_MATCHTAG, (void**)&iTag );
 
 		pRanker->ExtraData ( EXTRA_SET_BLOBPOOL, (void**)&pBlobPool );
@@ -7539,7 +7571,7 @@ static void PerformFullTextSearch ( const RtSegVec_c & dRamChunks, RtQwordSetup_
 				{
 					bNewMatch |= pSorter->Push ( tMatch );
 
-					if ( tCtx.m_uPackedFactorFlags & SPH_FACTOR_ENABLE )
+					if ( tCtx.GetPackedFactor() & SPH_FACTOR_ENABLE )
 					{
 						RowTagged_t tJustPushed = pSorter->GetJustPushed();
 						VecTraits_T<RowTagged_t> dJustPopped = pSorter->GetJustPopped();
@@ -7797,7 +7829,7 @@ bool RtIndex_c::MultiQuery ( CSphQueryResult & tResult, const CSphQuery & tQuery
 	tCtx.m_pProfile = pProfiler;
 	tCtx.m_pLocalDocs = pLocalDocs;
 	tCtx.m_iTotalDocs = iTotalDocs;
-	tCtx.m_uPackedFactorFlags = tArgs.m_uPackedFactorFlags;
+	tCtx.SetPackedFactor ( tArgs.m_uPackedFactorFlags );
 
 	// setup search terms
 	RtQwordSetup_t tTermSetup ( tGuard );
@@ -7822,8 +7854,9 @@ bool RtIndex_c::MultiQuery ( CSphQueryResult & tResult, const CSphQuery & tQuery
 
 	CSphVector<BYTE> dFiltered;
 	const BYTE * sModifiedQuery = (const BYTE *)tQuery.m_sQuery.cstr();
+	FieldFilterOptions_t tFFOptions { tQuery.m_eJiebaMode };
 
-	if ( m_pFieldFilter && sModifiedQuery && m_pFieldFilter->Clone()->Apply ( sModifiedQuery, dFiltered, true ) )
+	if ( m_pFieldFilter && sModifiedQuery && m_pFieldFilter->Clone ( &tFFOptions )->Apply ( sModifiedQuery, dFiltered, true ) )
 		sModifiedQuery = dFiltered.Begin();
 
 	// parse query
@@ -8012,7 +8045,9 @@ bool RtIndex_c::DoGetKeywords ( CSphVector<CSphKeywordInfo> & dKeywords, const c
 
 	CSphVector<BYTE> dFiltered;
 	const BYTE * sModifiedQuery = (const BYTE *)sQuery;
-	if ( m_pFieldFilter && sQuery && m_pFieldFilter->Clone()->Apply ( sModifiedQuery, dFiltered, true ) )
+	FieldFilterOptions_t tFFOptions { tSettings.m_eJiebaMode };
+
+	if ( m_pFieldFilter && sQuery && m_pFieldFilter->Clone ( &tFFOptions )->Apply ( sModifiedQuery, dFiltered, true ) )
 		sModifiedQuery = dFiltered.Begin();
 
 	// FIXME!!! missing bigram
@@ -10418,6 +10453,16 @@ void RtIndex_c::LockFileState ( CSphVector<CSphString>& dFiles )
 	GetIndexFiles ( dFiles, dFiles );
 }
 
+void RtIndex_c::WaitLockEnabledState () noexcept
+{
+	ScopedScheduler_c tSerialFiber ( m_tWorkers.SerialChunkAccess () );
+	m_tSaving.WaitLockEnabledState ();
+}
+
+void RtIndex_c::UnlockEnabledState () noexcept
+{
+	m_tSaving.UnlockEnabledState ();
+}
 
 void RtIndex_c::CreateReader ( int64_t iSessionId ) const
 {

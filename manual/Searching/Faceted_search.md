@@ -127,7 +127,7 @@ SELECT *, price AS aprice FROM facetdemo LIMIT 10 FACET price LIMIT 10 FACET bra
 ```json
 POST /search -d '
     {
-     "index" : "facetdemo",
+     "table" : "facetdemo",
      "query" : {"match_all" : {} },
      "limit": 5,
      "aggs" :
@@ -321,7 +321,7 @@ Array
 
 <!-- request Python -->
 ```python
-res =searchApi.search({"index":"facetdemo","query":{"match_all":{}},"limit":5,"aggs":{"group_property":{"terms":{"field":"price",}},"group_brand_id":{"terms":{"field":"brand_id"}}}})
+res =searchApi.search({"table":"facetdemo","query":{"match_all":{}},"limit":5,"aggs":{"group_property":{"terms":{"field":"price",}},"group_brand_id":{"terms":{"field":"brand_id"}}}})
 ```
 <!-- response Python -->
 ```python
@@ -398,7 +398,7 @@ res =searchApi.search({"index":"facetdemo","query":{"match_all":{}},"limit":5,"a
 
 <!-- request Javascript -->
 ```javascript
-res =  await searchApi.search({"index":"facetdemo","query":{"match_all":{}},"limit":5,"aggs":{"group_property":{"terms":{"field":"price",}},"group_brand_id":{"terms":{"field":"brand_id"}}}});
+res =  await searchApi.search({"table":"facetdemo","query":{"match_all":{}},"limit":5,"aggs":{"group_property":{"terms":{"field":"price",}},"group_brand_id":{"terms":{"field":"brand_id"}}}});
 ```
 <!-- response Javascript -->
 ```javascript
@@ -747,6 +747,84 @@ SELECT brand_name, property FROM facetdemo FACET brand_name distinct property;
 8 rows in set (0.00 sec)
 ```
 
+<!-- intro -->
+##### JSON:
+
+<!-- request JSON -->
+
+```json
+POST /sql -d 'SELECT brand_name, property FROM facetdemo FACET brand_name distinct property'
+```
+
+<!-- response JSON -->
+
+```json
+{
+  "took": 0,
+  "timed_out": false,
+  "hits": {
+    "total": 20,
+    "total_relation": "eq",
+    "hits": [
+      {
+        "_score": 1,
+        "_source": {
+          "brand_name": "Brand Nine",
+          "property": "Four"
+        }
+      },
+      {
+        "_score": 1,
+        "_source": {
+          "brand_name": "Brand Ten",
+          "property": "Four"
+        }
+      },
+ ...
+      {
+        "_score": 1,
+        "_source": {
+          "brand_name": "Brand Four",
+          "property": "Eight"
+        }
+      }
+    ]
+  },
+  "aggregations": {
+    "brand_name": {
+      "buckets": [
+        {
+          "key": "Brand Nine",
+          "doc_count": 3,
+          "count(distinct property)": 3
+        },
+        {
+          "key": "Brand Ten",
+          "doc_count": 3,
+          "count(distinct property)": 2
+        },
+...
+        {
+          "key": "Brand Two",
+          "doc_count": 1,
+          "count(distinct property)": 1
+        },
+        {
+          "key": "Brand Six",
+          "doc_count": 1,
+          "count(distinct property)": 1
+        },
+        {
+          "key": "Brand Four",
+          "doc_count": 5,
+          "count(distinct property)": 4
+        }
+      ]
+    }
+  }
+}
+```
+
 <!-- end -->
 
 <!-- example Expressions -->
@@ -788,7 +866,7 @@ SELECT * FROM facetdemo FACET INTERVAL(price,200,400,600,800) AS price_range ;
 ``` json
 POST /search -d '
     {
-     "index": "facetdemo",
+     "table": "facetdemo",
      "query":
      {
         "match_all": {}
@@ -926,7 +1004,7 @@ Array
 ```
 <!-- request Python -->
 ```python
-res =searchApi.search({"index":"facetdemo","query":{"match_all":{}},"expressions":{"price_range":"INTERVAL(price,200,400,600,800)"},"aggs":{"group_property":{"terms":{"field":"price_range"}}}})
+res =searchApi.search({"table":"facetdemo","query":{"match_all":{}},"expressions":{"price_range":"INTERVAL(price,200,400,600,800)"},"aggs":{"group_property":{"terms":{"field":"price_range"}}}})
 ```
 <!-- response Python -->
 ```python
@@ -999,7 +1077,7 @@ res =searchApi.search({"index":"facetdemo","query":{"match_all":{}},"expressions
 
 <!-- request Javascript -->
 ```javascript
-res =  await searchApi.search({"index":"facetdemo","query":{"match_all":{}},"expressions":{"price_range":"INTERVAL(price,200,400,600,800)"},"aggs":{"group_property":{"terms":{"field":"price_range"}}}});
+res =  await searchApi.search({"table":"facetdemo","query":{"match_all":{}},"expressions":{"price_range":"INTERVAL(price,200,400,600,800)"},"aggs":{"group_property":{"terms":{"field":"price_range"}}}});
 ```
 <!-- response Javascript -->
 ```javascript
@@ -1294,7 +1372,7 @@ SELECT COUNT(*), HISTOGRAM(price, {hist_interval=100}) as price_range FROM facet
 POST /search -d '
 {
   "size": 0,
-  "index": "facets",
+  "table": "facets",
   "aggs": {
     "price_range": {
       "histogram": {
@@ -1346,7 +1424,7 @@ POST /search -d '
 POST /search -d '
 {
   "size": 0,
-  "index": "facets",
+  "table": "facets",
   "aggs": {
     "price_range": {
       "histogram": {
@@ -1430,7 +1508,7 @@ SELECT count(*), DATE_HISTOGRAM(tm, {calendar_interval='month'}) AS months FROM 
 ``` json
 POST /search -d '
 {
-  "index": "idx_dates",
+  "table": "idx_dates",
   "size": 0,
   "aggs": {
     "months": {
@@ -1514,7 +1592,7 @@ SELECT COUNT(*), RANGE(price, {range_to=150},{range_from=150,range_to=300},{rang
 POST /search -d '
 {
   "size": 0,
-  "index": "facets",
+  "table": "facets",
   "aggs": {
     "price_range": {
       "range": {
@@ -1577,7 +1655,7 @@ POST /search -d '
 POST /search -d '
 {
   "size":0,
-  "index":"facets",
+  "table":"facets",
   "aggs":{
     "price_range":{
       "range":{
@@ -1655,7 +1733,7 @@ SELECT COUNT(*), DATE_RANGE(tm, {range_to='2017||+2M/M'},{range_from='2017||+2M/
 ``` json
 POST /search -d '
 {
-  "index": "idx_dates",
+  "table": "idx_dates",
   "size": 0,
   "aggs": {
     "points": {
@@ -1724,7 +1802,7 @@ POST /search -d '
 <!-- example Ordering -->
 ### Ordering in facet result
 
-Facets support the `ORDER BY` clause just like a standard query. Each facet can have its own ordering, and the facet ordering doesn't affect the main result set's ordering, which is determined by the main query's `ORDER BY`. Sorting can be done on attribute name, count (using `COUNT(*)`), or the special `FACET()` function, which provides the aggregated data values. By default, a query with `ORDER BY COUNT(*)` will sort in descending order.
+Facets support the `ORDER BY` clause just like a standard query. Each facet can have its own ordering, and the facet ordering doesn't affect the main result set's ordering, which is determined by the main query's `ORDER BY`. Sorting can be done on attribute name, count (using `COUNT(*)`, `COUNT(DISTINCT attribute_name)`), or the special `FACET()` function, which provides the aggregated data values. By default, a query with `ORDER BY COUNT(*)` will sort in descending order.
 
 
 <!-- intro -->
@@ -1809,7 +1887,7 @@ FACET brand_name BY brand_id order BY COUNT(*);
 ```json
 POST /search -d '
 {
-   "index":"table_name",
+   "table":"table_name",
    "aggs":{
       "group_property":{
          "terms":{
@@ -1968,7 +2046,7 @@ FACET brand_name BY brand_id order BY COUNT(*) DESC LIMIT 4;
 ``` json
 POST /search -d '
     {
-     "index" : "facetdemo",
+     "table" : "facetdemo",
      "query" : {"match_all" : {} },
      "limit": 5,
      "aggs" :
@@ -2111,7 +2189,7 @@ Array
 ```
 <!-- request Python -->
 ```python
-res =searchApi.search({"index":"facetdemo","query":{"match_all":{}},"limit":5,"aggs":{"group_property":{"terms":{"field":"price","size":1,}},"group_brand_id":{"terms":{"field":"brand_id","size":3}}}})
+res =searchApi.search({"table":"facetdemo","query":{"match_all":{}},"limit":5,"aggs":{"group_property":{"terms":{"field":"price","size":1,}},"group_brand_id":{"terms":{"field":"brand_id","size":3}}}})
 ```
 <!-- response Python -->
 ```python
@@ -2171,7 +2249,7 @@ res =searchApi.search({"index":"facetdemo","query":{"match_all":{}},"limit":5,"a
 ```
 <!-- request Javascript -->
 ```javascript
-res =  await searchApi.search({"index":"facetdemo","query":{"match_all":{}},"limit":5,"aggs":{"group_property":{"terms":{"field":"price","size":1,}},"group_brand_id":{"terms":{"field":"brand_id","size":3}}}});
+res =  await searchApi.search({"table":"facetdemo","query":{"match_all":{}},"limit":5,"aggs":{"group_property":{"terms":{"field":"price","size":1,}},"group_brand_id":{"terms":{"field":"brand_id","size":3}}}});
 ```
 <!-- response Javascript -->
 ```javascript

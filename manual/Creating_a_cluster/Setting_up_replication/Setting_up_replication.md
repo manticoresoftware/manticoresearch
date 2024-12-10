@@ -1,6 +1,8 @@
 # Setting up replication
 
-With Manticore, write transactions (such as `INSERT`, `REPLACE`, `DELETE`, `TRUNCATE`, `UPDATE`, `COMMIT`) can be replicated to other cluster nodes before the transaction is fully applied on the current node. Currently, replication is supported for `percolate`, `rt` and `distributed` tables in Linux and macOS. However, Manticore Search packages for Windows do not provide replication support.
+With Manticore, write transactions (such as `INSERT`, `REPLACE`, `DELETE`, `TRUNCATE`, `UPDATE`, `COMMIT`) can be replicated to other cluster nodes before the transaction is fully applied on the current node. Currently, replication is supported for `percolate`, `rt` and `distributed` tables in Linux and macOS.
+
+[Native Windows binaries](../../Installation/Windows.md#Installing-Manticore-as-native-Windows-binaries) for Manticore do not support replication. We recommend [installing Manticore via WSL](../../Installation/Windows.md#Installing-or-enabling-WSL2) (Windows Subsystem for Linux).
 
 Manticore's replication is powered by the [Galera library](https://github.com/codership/galera) and boasts several impressive features:
 
@@ -48,7 +50,7 @@ The `options` option allows you to pass additional options directly to the Galer
 ## Write statements
 
 <!-- example write statements 1 -->
-When working with a replication cluster, all write statements such as  `INSERT`, `REPLACE`, `DELETE`, `TRUNCATE`, `UPDATE` that modify the content of a cluster's table must use the`cluster_name:index_name` expression instead of the table name. This ensures that the changes are propagated to all replicas in the cluster. If the correct expression is not used, an error will be triggered.
+When working with a replication cluster, all write statements such as  `INSERT`, `REPLACE`, `DELETE`, `TRUNCATE`, `UPDATE` that modify the content of a cluster's table must use the`cluster_name:table_name` expression instead of the table name. This ensures that the changes are propagated to all replicas in the cluster. If the correct expression is not used, an error will be triggered.
 
 In the JSON interface, the `cluster` property must be set along with the `table` name for all write statements to a cluster's table. Failure to set the `cluster` property will result in an error.
 
@@ -72,7 +74,7 @@ DELETE FROM clicks:rt WHERE MATCH ('dumy') AND gid>206
 POST /insert -d '
 {
   "cluster":"posts",
-  "index":"weekly_index",
+  "table":"weekly_index",
   "doc":
   {
     "title" : "iphone case",
@@ -82,7 +84,7 @@ POST /insert -d '
 POST /delete -d '
 {
   "cluster":"posts",
-  "index": "weekly_index",
+  "table": "weekly_index",
   "id":1
 }'
 ```
@@ -102,8 +104,8 @@ $index->deleteDocument(1);
 <!-- request Python -->
 
 ``` python
-indexApi.insert({"cluster":"posts","index":"weekly_index","doc":{"title":"iphone case","price":19.85}})
-indexApi.delete({"cluster":"posts","index":"weekly_index","id":1})
+indexApi.insert({"cluster":"posts","table":"weekly_index","doc":{"title":"iphone case","price":19.85}})
+indexApi.delete({"cluster":"posts","table":"weekly_index","id":1})
 ```
 <!-- intro -->
 ##### Javascript:
@@ -111,8 +113,8 @@ indexApi.delete({"cluster":"posts","index":"weekly_index","id":1})
 <!-- request Javascript -->
 
 ``` javascript
-res = await indexApi.insert({"cluster":"posts","index":"weekly_index","doc":{"title":"iphone case","price":19.85}});
- res = await indexApi.delete({"cluster":"posts","index":"weekly_index","id":1});
+res = await indexApi.insert({"cluster":"posts","table":"weekly_index","doc":{"title":"iphone case","price":19.85}});
+ res = await indexApi.delete({"cluster":"posts","table":"weekly_index","id":1});
 ```
 
 <!-- intro -->
@@ -155,7 +157,7 @@ indexApi.Delete(deleteDocumentRequest);
 ## Read statements
 
 <!-- example write statements 2 -->
-Read statements such as `SELECT`, `CALL PQ`, `DESCRIBE` can either use regular table names that are not prepended with a cluster name, or they can use the  `cluster_name:index_name`format. If the latter is used, the `cluster_name` component is ignored.
+Read statements such as `SELECT`, `CALL PQ`, `DESCRIBE` can either use regular table names that are not prepended with a cluster name, or they can use the  `cluster_name:table_name`format. If the latter is used, the `cluster_name` component is ignored.
 
 When using the HTTP endpoint `json/search`, the `cluster` property can be specified if desired, but it can also be omitted.
 
@@ -176,12 +178,12 @@ CALL PQ('posts:weekly_index', 'document is here')
 POST /search -d '
 {
   "cluster":"posts",
-  "index":"weekly_index",
+  "table":"weekly_index",
   "query":{"match":{"title":"keyword"}}
 }'
 POST /search -d '
 {
-  "index":"weekly_index",
+  "table":"weekly_index",
   "query":{"match":{"title":"keyword"}}
 }'
 ```
@@ -359,7 +361,7 @@ $params = [
   'cluster' => 'posts',
   'body' => [
      'operation' => 'add',
-     'index' => 'pq_title'
+     'table' => 'pq_title'
 
   ]
 ];
@@ -368,7 +370,7 @@ $params = [
   'cluster' => 'posts',
   'body' => [
      'operation' => 'add',
-     'index' => 'pq_clicks'
+     'table' => 'pq_clicks'
 
   ]
 ];
@@ -504,7 +506,7 @@ INSERT INTO posts:pq_title VALUES ( 3, 'test me' )
 POST /insert -d '
 {
   "cluster":"posts",
-  "index":"pq_title",
+  "table":"pq_title",
   "id": 3
   "doc":
   {
@@ -527,7 +529,7 @@ $index->addDocuments([
 <!-- request Python -->
 
 ``` python
-indexApi.insert({"cluster":"posts","index":"pq_title","id":3"doc":{"title":"test me"}})
+indexApi.insert({"cluster":"posts","table":"pq_title","id":3"doc":{"title":"test me"}})
 
 ```
 <!-- intro -->
@@ -536,7 +538,7 @@ indexApi.insert({"cluster":"posts","index":"pq_title","id":3"doc":{"title":"test
 <!-- request Javascript -->
 
 ``` javascript
-res = await indexApi.insert({"cluster":"posts","index":"pq_title","id":3"doc":{"title":"test me"}});
+res = await indexApi.insert({"cluster":"posts","table":"pq_title","id":3"doc":{"title":"test me"}});
 ```
 
 <!-- intro -->

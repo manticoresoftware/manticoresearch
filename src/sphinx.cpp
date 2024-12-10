@@ -603,7 +603,9 @@ bool CSphTokenizerIndex::GetKeywords ( CSphVector <CSphKeywordInfo> & dKeywords,
 
 	CSphVector<BYTE> dFiltered;
 	const BYTE * sModifiedQuery = (const BYTE *)szQuery;
-	if ( m_pFieldFilter && szQuery && m_pFieldFilter->Clone()->Apply ( sModifiedQuery, dFiltered, true ) )
+	FieldFilterOptions_t tFFOptions { tSettings.m_eJiebaMode };
+
+	if ( m_pFieldFilter && szQuery && m_pFieldFilter->Clone ( &tFFOptions )->Apply ( sModifiedQuery, dFiltered, true ) )
 		sModifiedQuery = dFiltered.Begin();
 
 	pTokenizer->SetBuffer ( sModifiedQuery, (int) strlen ( (const char*)sModifiedQuery) );
@@ -746,14 +748,37 @@ bool Update_CheckAttributes ( const CSphAttrUpdate & tUpd, const ISphSchema & tS
 }
 
 
+static void IncUpdatePoolPos ( const CSphAttrUpdate & tUpdate, int iAttr, int & iPos )
+{
+	switch ( tUpdate.m_dAttributes[iAttr].m_eType )
+	{
+	case SPH_ATTR_UINT32SET:
+	case SPH_ATTR_INT64SET:
+	case SPH_ATTR_FLOAT_VECTOR:
+		iPos += tUpdate.m_dPool[iPos] + 1;
+		break;
+
+	case SPH_ATTR_STRING:
+	case SPH_ATTR_BIGINT:
+		iPos += 2;
+		break;
+
+	default:
+		iPos += 1;
+		break;
+	}
+}
+
+
 void UpdateContext_t::PrepareListOfUpdatedAttributes ( CSphString & sError )
 {
+	int iPoolPos = 0;
 	const auto & tUpd = *m_tUpd.m_pUpdate;
-	ARRAY_FOREACH ( i, tUpd.m_dAttributes )
+	ARRAY_FOREACH ( iAttr, tUpd.m_dAttributes )
 	{
-		const CSphString & sUpdAttrName = tUpd.m_dAttributes[i].m_sName;
-		ESphAttr eUpdAttrType = tUpd.m_dAttributes[i].m_eType;
-		UpdatedAttribute_t & tUpdAttr = m_dUpdatedAttrs[i];
+		const CSphString & sUpdAttrName = tUpd.m_dAttributes[iAttr].m_sName;
+		ESphAttr eUpdAttrType = tUpd.m_dAttributes[iAttr].m_eType;
+		UpdatedAttribute_t & tUpdAttr = m_dUpdatedAttrs[iAttr];
 
 		int iUpdAttrId = m_tSchema.GetAttrIndex ( sUpdAttrName.cstr() );
 
@@ -803,6 +828,7 @@ void UpdateContext_t::PrepareListOfUpdatedAttributes ( CSphString & sError )
 		else
 		{
 			assert ( tUpd.m_bIgnoreNonexistent ); // should be handled by Update_CheckAttributes
+			IncUpdatePoolPos ( tUpd, iAttr, iPoolPos );
 			continue;
 		}
 
@@ -815,31 +841,10 @@ void UpdateContext_t::PrepareListOfUpdatedAttributes ( CSphString & sError )
 		if ( eUpdAttrType==SPH_ATTR_INTEGER && m_tSchema.GetAttr(iUpdAttrId).m_eAttrType==SPH_ATTR_FLOAT )
 		{
 			assert ( tUpd.m_dRowOffset.IsEmpty() ); // fixme! Now we don't fixup more then 1 value
-			const_cast<CSphAttrUpdate &>(tUpd).m_dAttributes[i].m_eType = SPH_ATTR_FLOAT;
-			const_cast<CSphAttrUpdate &>(tUpd).m_dPool[i] = sphF2DW ( (float)tUpd.m_dPool[i] );
+			const_cast<CSphAttrUpdate &>(tUpd).m_dAttributes[iAttr].m_eType = SPH_ATTR_FLOAT;
+			const_cast<CSphAttrUpdate &>(tUpd).m_dPool[iPoolPos] = sphF2DW ( (float)tUpd.m_dPool[iPoolPos] );
 		}
-	}
-}
-
-
-static void IncUpdatePoolPos ( UpdateContext_t & tCtx, int iAttr, int & iPos )
-{
-	switch ( tCtx.m_tUpd.m_pUpdate->m_dAttributes[iAttr].m_eType )
-	{
-	case SPH_ATTR_UINT32SET:
-	case SPH_ATTR_INT64SET:
-	case SPH_ATTR_FLOAT_VECTOR:
-		iPos += tCtx.m_tUpd.m_pUpdate->m_dPool[iPos] + 1;
-		break;
-
-	case SPH_ATTR_STRING:
-	case SPH_ATTR_BIGINT:
-		iPos += 2;
-		break;
-
-	default:
-		iPos += 1;
-		break;
+		IncUpdatePoolPos ( tUpd, iAttr, iPoolPos );
 	}
 }
 
@@ -863,7 +868,7 @@ bool IndexSegment_c::Update_InplaceJson ( const RowsToUpdate_t& dRows, UpdateCon
 		{
 			if ( !FitsInplaceJsonUpdate ( tCtx, i ) || !tCtx.m_dUpdatedAttrs[i].m_bExisting )
 			{
-				IncUpdatePoolPos ( tCtx, i, iPos );
+				IncUpdatePoolPos ( tUpd, i, iPos );
 				continue;
 			}
 
@@ -894,7 +899,7 @@ bool IndexSegment_c::Update_InplaceJson ( const RowsToUpdate_t& dRows, UpdateCon
 					++tCtx.m_iJsonWarnings;
 			}
 
-			IncUpdatePoolPos ( tCtx, i, iPos );
+			IncUpdatePoolPos ( tUpd, i, iPos );
 		}
 	}
 
@@ -972,7 +977,7 @@ bool IndexSegment_c::Update_Blobs ( const RowsToUpdate_t& dRows, UpdateContext_t
 
 			if ( !sphIsBlobAttr(eAttr) || FitsInplaceJsonUpdate ( tCtx, iCol ) || !tCtx.m_dUpdatedAttrs[iCol].m_bExisting )
 			{
-				IncUpdatePoolPos ( tCtx, iCol, iPos );
+				IncUpdatePoolPos ( tUpd, iCol, iPos );
 				continue;
 			}
 
@@ -1011,7 +1016,7 @@ bool IndexSegment_c::Update_Blobs ( const RowsToUpdate_t& dRows, UpdateContext_t
 				break;
 
 			default:
-				IncUpdatePoolPos ( tCtx, iCol, iPos );
+				IncUpdatePoolPos ( tUpd, iCol, iPos );
 				break;
 			}
 		}
@@ -1064,7 +1069,7 @@ void IndexSegment_c::Update_Plain ( const RowsToUpdate_t& dRows, UpdateContext_t
 			// already updated?
 			if ( sphIsBlobAttr(eAttr) || tUpdAttr.m_eAttrType==SPH_ATTR_JSON || !tUpdAttr.m_bExisting )
 			{
-				IncUpdatePoolPos ( tCtx, iCol, iPos );
+				IncUpdatePoolPos ( tUpd, iCol, iPos );
 				continue;
 			}
 
@@ -1091,7 +1096,7 @@ void IndexSegment_c::Update_Plain ( const RowsToUpdate_t& dRows, UpdateContext_t
 			tCtx.m_uUpdateMask |= ATTRS_UPDATED;
 
 			// next
-			IncUpdatePoolPos ( tCtx, iCol, iPos );
+			IncUpdatePoolPos ( tUpd, iCol, iPos );
 		}
 	}
 }
@@ -1849,6 +1854,16 @@ int ExpandKeywords ( int iIndexOpt, QueryOption_e eQueryOpt, const CSphIndexSett
 	return iOpt;
 }
 
+void SetQueryDefaultsExt2 ( CSphQuery & tQuery )
+{
+	tQuery.m_eMode = SPH_MATCH_EXTENDED2; // only new and shiny matching and sorting
+	tQuery.m_eSort = SPH_SORT_EXTENDED;
+	tQuery.m_sSortBy = "@weight desc"; // default order
+	tQuery.m_sOrderBy = "@weight desc";
+	tQuery.m_iAgentQueryTimeoutMs = DEFAULT_QUERY_TIMEOUT;
+	tQuery.m_iRetryCount = DEFAULT_QUERY_RETRY;
+	tQuery.m_iRetryDelay = DEFAULT_QUERY_RETRY;
+}
 
 /////////////////////////////////////////////////////////////////////////////
 // QUERY STATS
@@ -3346,7 +3361,7 @@ void GetSettingsFiles ( const TokenizerRefPtr_c& pTok, const DictRefPtr_c& pDict
 	assert ( pDict );
 
 	StringBuilder_c sFiles ( "," );
-	sFiles << pDict->GetSettings().m_sStopwords << pTok->GetSettings().m_sSynonymsFile << tSettings.m_sHitlessFiles;
+	sFiles << pDict->GetSettings().m_sStopwords << pTok->GetSettings().m_sSynonymsFile << tSettings.m_sHitlessFiles << tSettings.m_sJiebaUserDictPath;
 	auto dFileNames = sphSplit ( sFiles.cstr(), " \t," );
 	if ( pFilenameBuilder )
 	{
@@ -5622,7 +5637,7 @@ int CSphIndex_VLN::Build ( const CSphVector<CSphSource*> & dSources, int iMemory
 					return 0;
 
 				if ( pJsonSIBuilder )
-					pJsonSIBuilder->AddRowSize ( tOffsetSize.second );
+					pJsonSIBuilder->AddRowOffsetSize(tOffsetSize);
 
 				pSource->m_tDocInfo.SetAttr ( pBlobLocatorAttr->m_tLocator, tOffsetSize.first );
 			}
@@ -7041,8 +7056,10 @@ bool CSphIndex_VLN::AddRemoveFromDocstore ( const CSphSchema & tOldSchema, const
 	std::unique_ptr<DocstoreBuilder_i> pDocstoreBuilder;
 	if ( iNewNumStored )
 	{
+		DocstoreSettings_t tDefault;
+		const DocstoreSettings_t & tDocstoreSettings = m_pDocstore ? m_pDocstore->GetDocstoreSettings () : tDefault;
 		BuildBufferSettings_t tSettings; // use default buffer settings
-		pDocstoreBuilder = CreateDocstoreBuilder ( GetTmpFilename ( SPH_EXT_SPDS ), m_pDocstore->GetDocstoreSettings(), tSettings.m_iBufferStorage, sError );
+		pDocstoreBuilder = CreateDocstoreBuilder ( GetTmpFilename ( SPH_EXT_SPDS ), tDocstoreSettings, tSettings.m_iBufferStorage, sError );
 		if ( !pDocstoreBuilder )
 			return false;
 
@@ -8838,7 +8855,7 @@ CSphIndex_VLN::LOAD_E CSphIndex_VLN::LoadHeaderJson ( const CSphString& sHeaderN
 	if ( !sphSpawnFilterICU ( pFieldFilter, m_tSettings, tTokSettings, sHeaderName.cstr(), m_sLastError ) )
 		return LOAD_E::GeneralError_e;
 
-	if ( !SpawnFilterJieba ( pFieldFilter, m_tSettings, tTokSettings, sHeaderName.cstr(), m_sLastError ) )
+	if ( !SpawnFilterJieba ( pFieldFilter, m_tSettings, tTokSettings, sHeaderName.cstr(), pFilenameBuilder, m_sLastError ) )
 		return LOAD_E::GeneralError_e;
 
 	SetFieldFilter ( std::move ( pFieldFilter ) );
@@ -10747,8 +10764,9 @@ bool CSphIndex_VLN::MultiQuery ( CSphQueryResult & tResult, const CSphQuery & tQ
 
 	CSphVector<BYTE> dFiltered;
 	const BYTE * sModifiedQuery = (const BYTE *)tQuery.m_sQuery.cstr();
+	FieldFilterOptions_t tFFOptions { tQuery.m_eJiebaMode };
 
-	if ( m_pFieldFilter && sModifiedQuery && m_pFieldFilter->Clone()->Apply ( sModifiedQuery, dFiltered, true ) )
+	if ( m_pFieldFilter && sModifiedQuery && m_pFieldFilter->Clone ( &tFFOptions )->Apply ( sModifiedQuery, dFiltered, true ) )
 		sModifiedQuery = dFiltered.Begin();
 
 	// parse query
@@ -11081,7 +11099,7 @@ bool CSphIndex_VLN::ParsedMultiQuery ( const CSphQuery & tQuery, CSphQueryResult
 
 	// set blob pool for string on_sort expression fix up
 	tCtx.SetBlobPool ( m_tBlobAttrs.GetReadPtr() );
-	tCtx.m_uPackedFactorFlags = tArgs.m_uPackedFactorFlags;
+	tCtx.SetPackedFactor ( tArgs.m_uPackedFactorFlags );
 
 	// open files
 	DataReaderFactoryPtr_c pDoclist = m_pDoclistFile;
@@ -11216,7 +11234,7 @@ bool CSphIndex_VLN::ParsedMultiQuery ( const CSphQuery & tQuery, CSphQueryResult
 	bool bHaveRandom = false;
 	dSorters.Apply ( [&bHaveRandom] ( const ISphMatchSorter * p ) { bHaveRandom |= p->IsRandom(); } );
 
-	bool bUseFactors = !!( tCtx.m_uPackedFactorFlags & SPH_FACTOR_ENABLE );
+	bool bUseFactors = !!( tCtx.GetPackedFactor() & SPH_FACTOR_ENABLE );
 	bool bUseKlist = m_tDeadRowMap.HasDead();
 	bool bHasSortCalc = !tCtx.m_dCalcSort.IsEmpty();
 	bool bHasWeightFilter = !!tCtx.m_pWeightFilter;
@@ -11877,7 +11895,7 @@ public:
 
 	int					Apply ( const BYTE * sField, int iLength, CSphVector<BYTE> & dStorage, bool ) final;
 	void				GetSettings ( CSphFieldFilterSettings & tSettings ) const final;
-	std::unique_ptr<ISphFieldFilter>	Clone() const final;
+	std::unique_ptr<ISphFieldFilter> Clone ( const FieldFilterOptions_t * pOptions ) const final;
 
 	void				AddRegExp ( const char * sRegExp, StringBuilder_c & sErrors );
 
@@ -11984,7 +12002,7 @@ void CSphFieldRegExps::AddRegExp ( const char * sRegExp, StringBuilder_c & sErro
 }
 
 
-std::unique_ptr<ISphFieldFilter> CSphFieldRegExps::Clone() const
+std::unique_ptr<ISphFieldFilter> CSphFieldRegExps::Clone ( const FieldFilterOptions_t * pOptions ) const
 {
 	auto pCloned = std::make_unique<CSphFieldRegExps>();
 	pCloned->m_dRegexps = m_dRegexps;

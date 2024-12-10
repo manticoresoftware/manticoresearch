@@ -247,9 +247,12 @@ enum ESphBigram : BYTE
 
 enum class JiebaMode_e
 {
+	NONE,
 	ACCURATE,
 	FULL,
-	SEARCH
+	SEARCH,
+
+	DEFAULT = ACCURATE
 };
 
 class CSphIndexSettings : public CSphSourceSettings, public DocstoreSettings_t
@@ -274,8 +277,9 @@ public:
 
 	DWORD			m_uAotFilterMask = 0;			///< lemmatize_XX_all forces us to transform queries on the index level too
 	Preprocessor_e	m_ePreprocessor = Preprocessor_e::NONE;
-	JiebaMode_e		m_eJiebaMode = JiebaMode_e::ACCURATE;
+	JiebaMode_e		m_eJiebaMode = JiebaMode_e::DEFAULT;
 	bool			m_bJiebaHMM = true;
+	CSphString		m_sJiebaUserDictPath;
 
 	CSphString		m_sIndexTokenFilter;	///< indexing time token filter spec string (pretty useless for disk, vital for RT)
 	bool 			m_bBinlog = true;
@@ -289,6 +293,7 @@ private:
 	bool			ParseKNNSettings ( const CSphConfigSection & hIndex, CSphString & sError );
 	bool			ParseSISettings ( const CSphConfigSection & hIndex, CSphString & sError );
 	bool			ParseDocstoreSettings ( const CSphConfigSection & hIndex, CSphString & sWarning, CSphString & sError );
+	bool			ParseCJKSegmentation ( const CSphConfigSection & hIndex, const StrVec_t & dMorphs, CSphString & sWarning, CSphString & sError );
 };
 
 

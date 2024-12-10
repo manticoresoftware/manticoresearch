@@ -1,5 +1,6 @@
 name: 'Create Pull Request with deps update'
 description: 'This action creates a pull request with updated dependencies'
+
 inputs:
   name:
     description: |-
@@ -20,8 +21,9 @@ runs:
     - name: Checkout the calling repo
       uses: actions/checkout@v4
       env:
-        GH_REPOSITORY_REF: ${{ github.ref }}
+        GH_REPOSITORY_REF: ${{ github.head_ref || github.ref }}
       with:
+        token: ${{ inputs.token }}
         fetch-depth: 50
         ref: ${{ env.GH_REPOSITORY_REF }}
         path: repository
@@ -32,9 +34,17 @@ runs:
         GH_ACTION_REPOSITORY: ${{ github.action_repository }}
         GH_ACTION_REF: ${{ github.action_ref }}
       with:
+        token: ${{ inputs.token }}
         repository: '${{ env.GH_ACTION_REPOSITORY }}'
         ref: '${{ env.GH_ACTION_REF }}'
         path: 'manticoresearch'
+
+    - name: Set up Git
+      shell: bash
+      run: |
+        cd manticoresearch
+        git config user.name githubmanticore 
+        git config user.email contact@manticoresearch.com
 
     - name: Get original commit
       shell: bash
@@ -50,11 +60,46 @@ runs:
         echo "original_commit=$commit" >> $GITHUB_OUTPUT
         cd ..
 
+    - name: Determine branch and target
+      id: branch
+      shell: bash
+      run: |
+        if [[ "${{ github.event_name }}" == "pull_request" ]]; then
+          echo "branch=buddy-${{ github.event.pull_request.number }}" >> $GITHUB_OUTPUT
+          echo "target=update-buddy-version" >> $GITHUB_OUTPUT
+        else
+          echo "branch=update-buddy-version" >> $GITHUB_OUTPUT
+          echo "target=master" >> $GITHUB_OUTPUT
+        fi
+
+    - name: Prepare target branch
+      shell: bash
+      run: |
+        cd manticoresearch
+        git fetch origin
+        if ! git ls-remote --exit-code --heads origin ${{ steps.branch.outputs.target }}; then
+          git checkout -b ${{ steps.branch.outputs.target }} origin/master
+          git push -u origin ${{ steps.branch.outputs.target }}
+        else
+          git checkout ${{ steps.branch.outputs.target }}
+        fi
+        cd ..
+
     - name: Update deps.txt
       id: deps
       shell: bash
       run: |
         cd manticoresearch
+
+        # Fetch branch or create it
+        git fetch origin
+        if ! git ls-remote --exit-code --heads origin ${{ steps.branch.outputs.branch }}; then
+          git checkout -b ${{ steps.branch.outputs.branch }} origin/master
+        else
+          git checkout ${{ steps.branch.outputs.branch }}
+        fi
+
+        # Update deps
         name=${{ inputs.name }}
         version_string="${{ inputs.version }}"
         echo "version_string=${version_string// /-}" >> $GITHUB_OUTPUT
@@ -70,26 +115,49 @@ runs:
         changes=$(git log --pretty=format:"[\`%h\`]($repo_url/commit/%H) %s" ${{ steps.commit.outputs.original_commit }}..HEAD)
         name=${{ inputs.name }}
         version_string="${{ inputs.version }}"
-        branch="update-${name}-version"
         title="🆕 Update ${name} version"
+        if [[ "${{ github.event_name }}" == "pull_request" ]]; then
+          title="${title} (${{ github.head_ref }})"
+        fi
         commit="Bump ${name} version to: ${version_string}"
         body_path=$(mktemp)
         echo "Update [${name}](${repo_url}) version to: ${version_string} which includes:" > "$body_path"
         echo >> "$body_path"
         echo "$changes" >> "$body_path"
-        echo "branch=$branch" >> $GITHUB_OUTPUT
         echo "title=$title" >> $GITHUB_OUTPUT
         echo "commit=$commit" >> $GITHUB_OUTPUT
         echo "body-path=$body_path" >> $GITHUB_OUTPUT
+        echo "branch=${{ steps.branch.outputs.branch }}" >> $GITHUB_OUTPUT
+
+    - name: Create or update Pull Request
+      shell: bash
+      env:
+        GITHUB_TOKEN: ${{ inputs.token }}
+        GH_TOKEN: ${{ inputs.token }}
+        GH_DEBUG: true
+        OWNER: ${{ github.repository_owner }}
+        REPO: manticoresearch
+      run: |
+        cd manticoresearch
+
+        gh auth status --show-token
+
+        if ! git diff --exit-code deps.txt> /dev/null 2>&1; then
+          git add deps.txt
+          git commit -m "${{ steps.commit-message.outputs.commit }}"
+          git push -u origin ${{ steps.branch.outputs.branch }}
+        fi
+
+        pr_number=$(gh pr list --head ${{ steps.branch.outputs.branch }} --json number --jq '.[0].number')
+        if [ -z "$pr_number" ]; then
+          gh pr create --base ${{ steps.branch.outputs.target }} --head ${{ steps.branch.outputs.branch }} \
+            --title "${{ steps.commit-message.outputs.title }}" \
+            --body-file "${{ steps.commit-message.outputs.body-path }}"
+        else
+          gh pr edit "$pr_number" \
+            --repo "$OWNER/$REPO" \
+            --title "${{ steps.commit-message.outputs.title }}" \
+            --body-file "${{ steps.commit-message.outputs.body-path }}"
+        fi
         cd ..
 
-    - name: Create Pull Request
-      uses: peter-evans/create-pull-request@v6
-      with:
-        path: manticoresearch
-        token: ${{ inputs.token }}
-        title: ${{ steps.commit-message.outputs.title }}
-        commit-message: ${{ steps.commit-message.outputs.commit }}
-        body-path: ${{ steps.commit-message.outputs.body-path }}
-        branch: ${{ steps.commit-message.outputs.branch }}
-        draft: false

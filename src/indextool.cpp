@@ -537,6 +537,8 @@ static bool MergeIDF ( const CSphString & sFilename, const StrVec_t & dFiles, CS
 			break;
 	}
 
+	tWriter.CloseFile ();
+
 	ARRAY_FOREACH ( i, dFiles )
 		SafeDeleteArray ( dBuffers[i] );
 

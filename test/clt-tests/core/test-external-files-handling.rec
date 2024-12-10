@@ -18,7 +18,7 @@ mysql -h0 -P9306 -e "INSERT INTO t_disk (id, title, tag) VALUES (3, 'srthgrth', 
 mysql -h0 -P9306 -e "SHOW TABLES; SELECT * FROM t_disk; SHOW CREATE TABLE t_disk;"
 ––– output –––
 +--------+------+
-| Index  | Type |
+| Table  | Type |
 +--------+------+
 | t_disk | rt   |
 +--------+------+

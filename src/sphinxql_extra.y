@@ -41,6 +41,7 @@
 %token	TOK_USE
 %token	TOK_WITH
 %token	TOK_WRITE
+%token	TOK_COMMENT
 
 %{
 
@@ -65,6 +66,7 @@ statement:
 	| show_fields
 	| show_triggers
 	| create_database
+	| comments
 	;
 
 //////////////////////////////////////////////////////////////////////////
@@ -167,15 +169,28 @@ unlock_tables:
 //////////////////////////////////////////////////////////////////////////
 
 lock_tables:
-	TOK_LOCK TOK_TABLES ident read_or_write
+	TOK_LOCK TOK_TABLES list_locked
 		{
 			pParser->DefaultOk();
 		}
 	;
 
+list_locked:
+	lock_table
+	| list_locked ',' lock_table
+
+lock_table:
+	ident read_or_write opt_comment
+	;
+
 read_or_write:
 	TOK_READ
 	| TOK_WRITE
+	;
+
+opt_comment:
+	// empty
+	| comment
 	;
 
 //////////////////////////////////////////////////////////////////////////
@@ -229,6 +244,17 @@ create_database:
     	}
     ;
 
+comment:
+	TOK_COMMENT
+		{
+    		pParser->Comment($1);
+    	}
+    ;
+
+comments:
+	comments comment
+	| comment
+	;
 %%
 
 #if _WIN32

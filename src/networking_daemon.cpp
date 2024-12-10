@@ -1064,7 +1064,7 @@ int AsyncNetInputBuffer_c::ReadAny ()
 }
 
 
-ByteBlob_t AsyncNetInputBuffer_c::Tail ()
+ByteBlob_t AsyncNetInputBuffer_c::Tail () const noexcept
 {
 	return { m_pCur, HasBytes ()};
 }

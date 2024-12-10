@@ -162,7 +162,7 @@ const char* szCommand ( int );
 /// master-agent API SEARCH command protocol extensions version
 enum
 {
-	VER_COMMAND_SEARCH_MASTER = 22
+	VER_COMMAND_SEARCH_MASTER = 23
 };
 
 
@@ -173,7 +173,7 @@ enum SearchdCommandV_e : WORD
 	VER_COMMAND_SEARCH		= 0x126, // 1.38
 	VER_COMMAND_EXCERPT		= 0x104,
 	VER_COMMAND_UPDATE		= 0x104,
-	VER_COMMAND_KEYWORDS	= 0x101,
+	VER_COMMAND_KEYWORDS	= 0x102,
 	VER_COMMAND_STATUS		= 0x101,
 	VER_COMMAND_FLUSHATTRS	= 0x100,
 	VER_COMMAND_SPHINXQL	= 0x100,
@@ -545,7 +545,7 @@ public:
 	bool	GetDwords ( CSphVector<DWORD> & dBuffer, int & iGot, int iMax );
 	bool	GetQwords ( CSphVector<SphAttr_t> & dBuffer, int & iGot, int iMax );
 
-	inline int		HasBytes() const { return int ( m_pBuf - m_pCur + m_iLen ); }
+	inline int		HasBytes() const noexcept { return int ( m_pBuf - m_pCur + m_iLen ); }
 
 	bool			GetError() const { return m_bError; }
 	const CSphString & GetErrorMessage() const { return m_sError; }
@@ -1413,6 +1413,9 @@ void sphHandleMysqlCommitRollback ( StmtErrorReporter_i& tOut, Str_t sQuery, boo
 bool sphCheckWeCanModify ();
 bool sphCheckWeCanModify ( StmtErrorReporter_i & tOut );
 bool sphCheckWeCanModify ( RowBuffer_i& tOut );
+bool PollOptimizeRunning ( const CSphString & sIndex );
+int GetLogFD ();
+const CSphString& sphGetLogFile() noexcept;
 
 void				sphProcessHttpQueryNoResponce ( const CSphString& sEndpoint, const CSphString& sQuery, CSphVector<BYTE> & dResult );
 void				sphHttpErrorReply ( CSphVector<BYTE> & dData, EHTTP_STATUS eCode, const char * szError );
@@ -1436,7 +1439,7 @@ namespace session
 
 	bool Execute ( Str_t sQuery, RowBuffer_i& tOut );
 	void SetFederatedUser();
-	void SetDumpUser ( const CSphString & sUser );
+	void SetUser ( const CSphString & sUser );
 	void SetAutoCommit ( bool bAutoCommit );
 	void SetInTrans ( bool bInTrans );
 	bool IsAutoCommit();
@@ -1450,8 +1453,12 @@ namespace session
 	bool GetDeprecatedEOF();
 }
 
-void LogSphinxqlError ( const char * sStmt, const Str_t& sError );
+void LogSphinxqlError ( const char * sStmt, const Str_t & sError );
+void LogSphinxqlError ( const Str_t & sStmt, const Str_t & sError );
 int GetDaemonLogBufSize ();
+
+enum class BuddyQuery_e { SQL, HTTP };
+void LogBuddyQuery ( const Str_t sQuery, BuddyQuery_e tType );
 
 // that is used from sphinxql command over API
 void RunSingleSphinxqlCommand ( Str_t sCommand, GenericOutputBuffer_c & tOut );

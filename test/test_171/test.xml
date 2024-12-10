@@ -345,6 +345,19 @@ index dist22
 	agent_query_timeout		= 3000
 }
 
+<!-- regression sub select sort by string at outer query -->
+source sub_src_10
+{
+	type			= mysql
+	<sql_settings/>
+	sql_query = SELECT id, text FROM sub_table
+	sql_attr_string	= text
+}
+index sub_loc_10
+{
+	source			= sub_src_10
+	path			= <data_path/>/sub_loc_10
+}
 
 </config>
 
@@ -573,6 +586,9 @@ select count(*) c from dist22 where id = 3;
 
 <!-- crash on implicit count distinct on multiple tables -->
 select id, count (distinct tag) from idx1, idx2;
+
+<!-- crash on order by string at outer select -->
+SELECT * FROM ( SELECT * FROM sub_loc_10 group BY text ) ORDER BY text desc;
 
 </sphinxql></queries>
 

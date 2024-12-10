@@ -54,7 +54,7 @@ bool EvalStackForTree ( const VecTraits_T<T> & dTree, int iStartNode, StackSizeT
 	if ( iCalculatedStack<=iCurStackSize )
 		return true;
 
-	if ( iCalculatedStack > Threads::GetMaxCoroStackSize() )
+	if ( iCalculatedStack > session::GetMaxStackSize () )
 	{
 		sError.SetSprintf ( "query %s too complex, not enough stack (thread_stack=%dK or higher required)", szName, (int)( ( iCalculatedStack + 1024 - ( iCalculatedStack%1024 ) ) / 1024 ) );
 		return false;

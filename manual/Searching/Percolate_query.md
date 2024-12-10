@@ -112,19 +112,19 @@ PUT /pq/products/doc/
 
 ```json
 {
-  "index": "products",
+  "table": "products",
   "type": "doc",
   "_id": 1657852401006149661,
   "result": "created"
 }
 {
-  "index": "products",
+  "table": "products",
   "type": "doc",
   "_id": 1657852401006149662,
   "result": "created"
 }
 {
-  "index": "products",
+  "table": "products",
   "type": "doc",
   "_id": 1657852401006149663,
   "result": "created"
@@ -138,7 +138,7 @@ PUT /pq/products/doc/
 ```php
 
 $index = [
-    'index' => 'products',
+    'table' => 'products',
     'body' => [
         'columns' => [
             'title' => ['type' => 'text'],
@@ -152,19 +152,19 @@ $index = [
 $client->indices()->create($index);
 
 $query = [
-    'index' => 'products',
+    'table' => 'products',
     'body' => [ 'query'=>['match'=>['title'=>'bag']]]
 ];
 $client->pq()->doc($query);
 $query = [
-    'index' => 'products',
+    'table' => 'products',
     'body' => [ 'query'=>['match'=>['title'=>'shoes']],'filters'=>"color='red'"]
 ];
 $client->pq()->doc($query);
 
 
 $query = [
-    'index' => 'products',
+    'table' => 'products',
     'body' => [ 'query'=>['match'=>['title'=>'shoes']],'filters'=>"color IN ('blue', 'green')"]
 ];
 $client->pq()->doc($query);
@@ -172,19 +172,19 @@ $client->pq()->doc($query);
 <!-- response PHP -->
 ``` php
 Array(
-  [index] => products
+  [table] => products
   [type] => doc
   [_id] => 1657852401006149661
   [result] => created
 )
 Array(
-  [index] => products
+  [table] => products
   [type] => doc
   [_id] => 1657852401006149662
   [result] => created
 )
 Array(
-  [index] => products
+  [table] => products
   [type] => doc
   [_id] => 1657852401006149663
   [result] => created
@@ -196,26 +196,26 @@ Python
 
 ```python
 utilsApi.sql('create table products(title text, color string) type=\'pq\'')
-indexApi.insert({"index" : "products", "doc" : {"query" : "@title bag" }})
-indexApi.insert({"index" : "products",  "doc" : {"query" : "@title shoes", "filters": "color='red'" }})
-indexApi.insert({"index" : "products",  "doc" : {"query" : "@title shoes","filters": "color IN ('blue', 'green')" }})
+indexApi.insert({"table" : "products", "doc" : {"query" : "@title bag" }})
+indexApi.insert({"table" : "products",  "doc" : {"query" : "@title shoes", "filters": "color='red'" }})
+indexApi.insert({"table" : "products",  "doc" : {"query" : "@title shoes","filters": "color IN ('blue', 'green')" }})
 ```
 <!-- response Python -->
 ``` python
 {'created': True,
  'found': None,
  'id': 0,
- 'index': 'products',
+ 'table': 'products',
  'result': 'created'}
 {'created': True,
  'found': None,
  'id': 0,
- 'index': 'products',
+ 'table': 'products',
  'result': 'created'}
 {'created': True,
  'found': None,
  'id': 0,
- 'index': 'products',
+ 'table': 'products',
  'result': 'created'}
 ```
 <!-- intro -->
@@ -224,9 +224,9 @@ javascript
 
 ```javascript
 res = await utilsApi.sql('create table products(title text, color string) type=\'pq\'');
-res = indexApi.insert({"index" : "products", "doc" : {"query" : "@title bag" }});
-res = indexApi.insert({"index" : "products",  "doc" : {"query" : "@title shoes", "filters": "color='red'" }});
-res = indexApi.insert({"index" : "products",  "doc" : {"query" : "@title shoes","filters": "color IN ('blue', 'green')" }});
+res = indexApi.insert({"table" : "products", "doc" : {"query" : "@title bag" }});
+res = indexApi.insert({"table" : "products",  "doc" : {"query" : "@title shoes", "filters": "color='red'" }});
+res = indexApi.insert({"table" : "products",  "doc" : {"query" : "@title shoes","filters": "color IN ('blue', 'green')" }});
 ```
 <!-- response javascript -->
 ``` javascript
@@ -508,7 +508,7 @@ PHP:
 
 ```php
 $percolate = [
-    'index' => 'products',
+    'table' => 'products',
     'body' => [
         'query' => [
             'percolate' => [
@@ -826,7 +826,7 @@ PHP:
 
 ```php
 $percolate = [
-    'index' => 'products',
+    'table' => 'products',
     'body' => [
         'query' => [
             'percolate' => [
@@ -1189,7 +1189,7 @@ PHP:
 
 ```php
 $percolate = [
-    'index' => 'products',
+    'table' => 'products',
     'body' => [
         'query' => [
             'percolate' => [
@@ -1626,7 +1626,7 @@ PHP:
 
 ```php
 $percolate = [
-    'index' => 'products',
+    'table' => 'products',
     'body' => [
         'query' => [
             'percolate' => [
@@ -2121,7 +2121,7 @@ POST /pq/pq/_search
 
 ```php
 $params = [
-    'index' => 'pq',
+    'table' => 'pq',
     'body' => [
     ]
 ];
@@ -2176,7 +2176,7 @@ Python
 <!-- request Python -->
 
 ```python
-searchApi.search({"index":"pq","query":{"match_all":{}}})
+searchApi.search({"table":"pq","query":{"match_all":{}}})
 ```
 <!-- response Python -->
 ``` python
@@ -2200,7 +2200,7 @@ javascript
 <!-- request javascript -->
 
 ```javascript
-res = await searchApi.search({"index":"pq","query":{"match_all":{}}});
+res = await searchApi.search({"table":"pq","query":{"match_all":{}}});
 ```
 <!-- response javascript -->
 ``` javascript
@@ -2224,7 +2224,7 @@ javascript
 <!-- request javascript -->
 
 ```javascript
-res = await searchApi.search({"index":"pq","query":{"match_all":{}}});
+res = await searchApi.search({"table":"pq","query":{"match_all":{}}});
 ```
 <!-- response javascript -->
 ``` javascript
@@ -2303,7 +2303,7 @@ TypeScript
 <!-- request TypeScript -->
 
 ```typescript
-res = await searchApi.search({"index":"test_pq","query":{"match_all":{}}});
+res = await searchApi.search({"table":"test_pq","query":{"match_all":{}}});
 ```
 <!-- response TypeScript -->
 ``` typescript
@@ -2465,7 +2465,7 @@ POST /pq/pq/_search -d '
 
 ```php
 $params = [
-    'index' => 'pq',
+    'table' => 'pq',
     'body' => [
         'query' => [
             'percolate' => [

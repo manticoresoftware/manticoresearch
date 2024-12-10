@@ -81,7 +81,7 @@ private:
 
 //CSphString BinToHex ( const VecTraits_T<BYTE>& dHash );
 CSphString BinToHex ( const HASH20_t& dHash );
-CSphString BinToHexx ( const BYTE* pHash, int iLen );
+CSphString BinToHex ( const BYTE* pHash, int iLen );
 CSphString CalcSHA1 ( const void* pData, int iLen );
 bool CalcSHA1 ( const CSphString& sFileName, CSphString& sRes, CSphString& sError );
 HASH20_t CalcBinarySHA1 ( const void * pData, int iLen );

@@ -1082,6 +1082,7 @@ static KeyDesc_t g_dKeysSearchd[] =
 	{ "log_http",				0, NULL },
 	{ "auth_user",				0, NULL },
 	{ "auth_pass",				0, NULL },
+	{ "auth_user_file",			0, NULL },
 	{ NULL,						0, NULL }
 };
 

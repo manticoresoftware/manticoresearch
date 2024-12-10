@@ -11,23 +11,108 @@
 //
 
 #include "digest_sha1.h"
+#include "std/base64.h"
+#include "fileutils.h"
 #include "auth.h"
 
 struct AuthUserCred_t
 {
-	CSphString				m_sUser;
-	CSphString				m_sPwd;
+	CSphString	m_sUser;
+	HASH20_t	m_tPwdHash;
 };
 
 static SmallStringHash_T<AuthUserCred_t> g_hUsers;
 
-void AuthConfigure ( const CSphConfigSection & hSearchd )
+static bool ReadAuthFile ( const CSphString & sFile, CSphString & sError )
 {
+	if ( !sphIsReadable ( sFile, &sError ) )
+		return false;
+
+	CSphAutoreader tReader;
+	if ( !tReader.Open ( sFile, sError ) )
+		return false;
+
+	CSphFixedVector<char> dBuf { 2048 };
+	CSphVector<BYTE> dHashBuf { HASH20_SIZE };
+	auto iSize = tReader.GetFilesize();
+	for ( int iLine=0; tReader.GetPos()<iSize; iLine++ )
+	{
+		auto iLineLen = tReader.GetLine ( dBuf.Begin(), (int)dBuf.GetLengthBytes() );
+		const char * pDel = (const char *)memchr ( dBuf.Begin(), ':', iLineLen );
+		if ( !pDel )
+		{
+			sphWarning ( "no delimiter found at %d line", iLine );
+			continue;
+		}
+
+		Str_t sUser ( dBuf.Begin(), pDel - dBuf.Begin() );
+		Str_t sPwdHash ( pDel + 1, iLineLen - ( pDel + 1 - dBuf.Begin() ) );
+
+		if ( IsEmpty ( sUser ) )
+		{
+			sphWarning ( "empty user name at line %d", iLine );
+			continue;
+		}
+
+		const int iSha1PrefixLen = 5;
+		if ( strncmp ( sPwdHash.first, "{SHA}", iSha1PrefixLen)!=0 )
+		{
+			sphWarning ( "only SHA-1 password hash allowed at line %d, got %.*s", iLine, iSha1PrefixLen, sPwdHash.first );
+			continue;
+		}
+		if ( sPwdHash.second<=iSha1PrefixLen )
+		{
+			sphWarning ( "empty password hash at line %d", iLine );
+			continue;
+		}
+		sPwdHash.first += iSha1PrefixLen;
+		sPwdHash.second -= iSha1PrefixLen;
+
+		dHashBuf.Resize ( 0 );
+		if ( !Base64Decode ( sPwdHash, dHashBuf ) )
+		{
+			sphWarning ( "can not decode hash at line %d", iLine );
+			continue;
+		}
+		if ( dHashBuf.GetLength()!=HASH20_SIZE )
+		{
+			sphWarning ( "wrong decoded hash size %d, expected %d at line %d", dHashBuf.GetLength(), HASH20_SIZE, iLine );
+			continue;
+		}
+
+		AuthUserCred_t tEntry;
+		tEntry.m_sUser.SetBinary ( sUser );
+		memcpy ( tEntry.m_tPwdHash.data(), dHashBuf.Begin(), HASH20_SIZE );
+		g_hUsers.Add ( tEntry, tEntry.m_sUser );
+	}
+	return true;
+}
+
+static void AddConfigEntry ( const CSphString & sUser, const CSphString & sPwd )
+{
+	if ( sUser.IsEmpty() )
+		return;
+
 	AuthUserCred_t tEntry;
-	tEntry.m_sUser = hSearchd.GetStr ( "auth_user" );
-	tEntry.m_sPwd = hSearchd.GetStr ( "auth_pass" );
+	tEntry.m_sUser = sUser;
+	tEntry.m_tPwdHash = CalcBinarySHA1 ( sPwd.cstr(), sPwd.Length() );
 
 	g_hUsers.Add ( tEntry, tEntry.m_sUser );
+}
+
+void AuthConfigure ( const CSphConfigSection & hSearchd )
+{
+	CSphString sError;
+
+	CSphString sUser = hSearchd.GetStr ( "auth_user" );
+	CSphString sPwd = hSearchd.GetStr ( "auth_pass" );
+
+	AddConfigEntry ( sUser, sPwd );
+
+	CSphString sFile = hSearchd.GetStr ( "auth_user_file" );
+
+	if ( !sFile.IsEmpty() && !ReadAuthFile ( sFile, sError ) ) // FIXME!!! handle users in case of error or warnings
+		sphWarning ( "can not read auth users from the '%s': %s", sFile.cstr(), sError.cstr() );
 }
 
 MySQLAuth_t GetMySQLAuth()
@@ -52,15 +137,6 @@ MySQLAuth_t GetMySQLAuth()
 	return tAuth;
 }
 
-
-static void printHex ( const BYTE * pBuffer, int iLen )
-{
-	printf ( "0x" );
-    for ( int i=0; i<iLen; i++ )
-        printf ( "%02x", (BYTE)(pBuffer[i]) );
-	printf ( "\n" );
-}
-
 static void Crypt ( BYTE * pBuf, const BYTE * pS1, const BYTE * pS2, int iLen )
 {
 	const BYTE * pEnd = pS1 + iLen;
@@ -70,17 +146,13 @@ static void Crypt ( BYTE * pBuf, const BYTE * pS1, const BYTE * pS2, int iLen )
 	}
 }
 
-
 static bool CheckPwd ( const MySQLAuth_t & tSalt, const AuthUserCred_t & tEntry, const VecTraits_T<BYTE> & dClientHash )
 {
-	HASH20_t tSha1 = CalcBinarySHA1 ( tEntry.m_sPwd.cstr(), tEntry.m_sPwd.Length() );
-	sphLogDebug ( "sha1:(%d)", (int)tSha1.size() );
-	printHex ( tSha1.data(), tSha1.size() );
-	sphLogDebug ( "sha1:%s", CalcSHA1 ( tEntry.m_sPwd.cstr(), tEntry.m_sPwd.Length() ).cstr() );
+	const HASH20_t & tSha1 = tEntry.m_tPwdHash;
+	sphLogDebug ( "sha1:(%d)0x%s", (int)tSha1.size(), BinToHex ( tSha1 ).cstr() );
 
 	HASH20_t tSha2 = CalcBinarySHA1 ( tSha1.data(), tSha1.size() );
-	sphLogDebug ( "sha2:(%d)", (int)tSha2.size() );
-	printHex ( tSha2.data(), tSha2.size() );
+	sphLogDebug ( "sha2:(%d)0x%s", (int)tSha2.size(), BinToHex ( tSha2 ).cstr() );
 
 	SHA1_c tSaltSha2Calc;
 	tSaltSha2Calc.Init();
@@ -88,27 +160,21 @@ static bool CheckPwd ( const MySQLAuth_t & tSalt, const AuthUserCred_t & tEntry,
 	tSaltSha2Calc.Update ( tSha2.data(), tSha2.size() );
 	HASH20_t tSha3 = tSaltSha2Calc.FinalHash();
 
-	sphLogDebug ( "sha3:(%d)", (int)tSha3.size() );
-	printHex ( tSha3.data(), tSha3.size() );
+	sphLogDebug ( "sha3:(%d)0x%s", (int)tSha3.size(), BinToHex ( tSha3 ).cstr() );
 
 	CSphFixedVector<BYTE> dRes ( tSha1.size() );
 	Crypt ( dRes.Begin(), tSha3.data(), tSha1.data(), dRes.GetLength() );
 
-	sphLogDebug ( "buf:(%d)", (int)dRes.GetLength() );
-	printHex ( dRes.Begin(), dRes.GetLength() );
+	sphLogDebug ( "buf:(%d)0x%s", (int)dRes.GetLength(), BinToHex ( dRes.Begin(), dRes.GetLength() ).cstr() );
 
 	int iCmp = memcmp ( dRes.Begin(), dClientHash.Begin(), Min ( dClientHash.GetLength(), dRes.GetLength() ) );
-
-	sphLogDebug ( "pwd:(%d) matched(%d):", dClientHash.GetLength(), iCmp );
-	printHex ( dClientHash.Begin(), dClientHash.GetLength() );
-
+	sphLogDebug ( "pwd:(%d) matched(%d):0x%s", dClientHash.GetLength(), iCmp, BinToHex ( dClientHash.Begin(), dClientHash.GetLength() ).cstr() );
 	return ( iCmp==0 );
 }
 
 bool CheckAuth ( const MySQLAuth_t & tAuth, const CSphString & sUser, const VecTraits_T<BYTE> & dClientHash, CSphString & sError )
 {
-	sphLogDebug ( "auth raw:(%d)0x", dClientHash.GetLength() );
-	printHex ( dClientHash.Begin(), dClientHash.GetLength() );
+	sphLogDebug ( "auth raw:(%d)0x%s", dClientHash.GetLength(), BinToHex ( dClientHash.Begin(), dClientHash.GetLength() ).cstr() );
 
 	if ( g_hUsers.IsEmpty() )
 	{

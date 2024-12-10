@@ -71,7 +71,7 @@ POST /insert
 {
   "table":"products",
   "id":0,
-  "doc":
+  "doc":	
   {
     "title" : "Yellow bag"
   }
@@ -268,6 +268,8 @@ If you attempt to INSERT multiple rows with different, incompatible value types 
 * mva -> mva64
 * uint -> bigint -> float (this may cause some precision loss)
 * string -> text
+
+The auto schema mechanism does not support creating [KNN](../../Searching/KNN.md#Configuring-a-table-for-KNN-search) tables, so you cannot insert `float_vector` data into an automatically created table. If you still want to store `float_vector` values in a regular table, you can insert them using the same syntax as for JSON data.
 
 Also, the following formats of dates will be recognized and converted to timestamps while all other date formats will be treated as strings:
 - `%Y-%m-%dT%H:%M:%E*S%Z`

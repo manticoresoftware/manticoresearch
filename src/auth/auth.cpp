@@ -13,6 +13,11 @@
 #include "digest_sha1.h"
 #include "std/base64.h"
 #include "fileutils.h"
+#include <filesystem>
+#include "searchdaemon.h"
+#include "searchdhttp.h"
+#include "searchdbuddy.h"
+
 #include "auth.h"
 
 struct AuthUserCred_t
@@ -23,14 +28,31 @@ struct AuthUserCred_t
 
 static SmallStringHash_T<AuthUserCred_t> g_hUsers;
 
-static bool ReadAuthFile ( const CSphString & sFile, CSphString & sError )
+/////////////////////////////////////////////////////////////////////////////
+/// auth load
+
+static void ReadAuthFile ( const CSphString & sFile )
 {
+	// ok to skip auth init if the is no filename set
+	if ( sFile.IsEmpty() )
+		return;
+	
+	// FIXME!!! add the check of the file permissions for only this OS user but not 777
+
+	CSphString sError;
 	if ( !sphIsReadable ( sFile, &sError ) )
-		return false;
+		sphFatal ( "can not read users from the '%s': %s", sFile.cstr(), sError.cstr() );
+
+	// FIXME!!! fix file permission on windows
+#if !_WIN32
+	auto tPerms = std::filesystem::status ( sFile.cstr() ).permissions();
+	if ( std::filesystem::perms::none!=( tPerms & std::filesystem::perms::all ) )
+		sphFatal ( "file '%s' has permissions to all", sFile.cstr() );
+#endif
 
 	CSphAutoreader tReader;
 	if ( !tReader.Open ( sFile, sError ) )
-		return false;
+		sphFatal ( "can not read users from the '%s': %s", sFile.cstr(), sError.cstr() );
 
 	CSphFixedVector<char> dBuf { 2048 };
 	CSphVector<BYTE> dHashBuf { HASH20_SIZE };
@@ -85,7 +107,10 @@ static bool ReadAuthFile ( const CSphString & sFile, CSphString & sError )
 		memcpy ( tEntry.m_tPwdHash.data(), dHashBuf.Begin(), HASH20_SIZE );
 		g_hUsers.Add ( tEntry, tEntry.m_sUser );
 	}
-	return true;
+
+	// should fail daemon start if file provided but no users read
+	if ( g_hUsers.IsEmpty() )
+		sphFatal ( "no users read from the file '%s'", sFile.cstr() );
 }
 
 static void AddConfigEntry ( const CSphString & sUser, const CSphString & sPwd )
@@ -102,24 +127,16 @@ static void AddConfigEntry ( const CSphString & sUser, const CSphString & sPwd )
 
 void AuthConfigure ( const CSphConfigSection & hSearchd )
 {
-	CSphString sError;
-
 	CSphString sUser = hSearchd.GetStr ( "auth_user" );
 	CSphString sPwd = hSearchd.GetStr ( "auth_pass" );
-
 	AddConfigEntry ( sUser, sPwd );
 
-	CSphString sFile = hSearchd.GetStr ( "auth_user_file" );
-
-	if ( !sFile.IsEmpty() && !ReadAuthFile ( sFile, sError ) ) // FIXME!!! handle users in case of error or warnings
-		sphWarning ( "can not read auth users from the '%s': %s", sFile.cstr(), sError.cstr() );
+	ReadAuthFile ( hSearchd.GetStr ( "auth_user_file" ) );
 }
 
 MySQLAuth_t GetMySQLAuth()
 {
 	MySQLAuth_t tAuth;
-
-	//tAuth.m_dScramble.Fill ( 0 );
 
 	// fill scramble auth data (random)
 	DWORD i = 0;
@@ -136,6 +153,9 @@ MySQLAuth_t GetMySQLAuth()
 
 	return tAuth;
 }
+
+/////////////////////////////////////////////////////////////////////////////
+/// SphixnQL
 
 static void Crypt ( BYTE * pBuf, const BYTE * pS1, const BYTE * pS2, int iLen )
 {
@@ -194,5 +214,98 @@ bool CheckAuth ( const MySQLAuth_t & tAuth, const CSphString & sUser, const VecT
 		sError.SetSprintf ( "Access denied for user '%s' (using password: YES)", sUser.cstr() );
 		return false;
 	} else
+	{
 		return true;
+	}
+}
+
+/////////////////////////////////////////////////////////////////////////////
+/// HTTP
+
+static bool CheckPwd ( const AuthUserCred_t & tEntry, const CSphString & sPwd )
+{
+	HASH20_t tPwdHash = CalcBinarySHA1 ( sPwd.cstr(), sPwd.Length() );
+
+	int iCmp = memcmp ( tEntry.m_tPwdHash.data(), tPwdHash.data(), tPwdHash.size() );
+	return ( iCmp==0 );
+}
+
+static bool FailAuth ( HttpProcessResult_t & tRes, CSphVector<BYTE> & dReply )
+{
+	tRes.m_eReplyHttpCode = EHTTP_STATUS::_401;
+	tRes.m_bSkipBuddy = true;
+	sphHttpErrorReply ( dReply, tRes.m_eReplyHttpCode, tRes.m_sError.cstr() );
+	return false;
+}
+
+bool CheckAuth ( const SmallStringHash_T<CSphString> & hOptions, HttpProcessResult_t & tRes, CSphVector<BYTE> & dReply )
+{
+	if ( g_hUsers.IsEmpty() )
+	{
+		sphLogDebug ( "no users found in config, access granted" );
+		return true;
+	}
+
+	// FIXME!!! add buddy authorization
+	if ( IsBuddyQuery ( hOptions ) )
+		return true;
+
+	const CSphString * pSrcAuth = hOptions ( "authorization" );
+	if ( !pSrcAuth )
+	{
+		tRes.m_eReplyHttpCode = EHTTP_STATUS::_401;
+		tRes.m_bSkipBuddy = true;
+		tRes.m_sError = "Authorization header field missed";
+		sphHttpErrorReply ( dReply, tRes.m_eReplyHttpCode, tRes.m_sError.cstr(), R"(WWW-Authenticate: Basic realm="Manticore daemon", charset="UTF-8")" );
+		return false;
+	}
+
+	const char sAuthPrefix[] = "Basic";
+	if ( !pSrcAuth->Begins ( sAuthPrefix ) )
+	{
+		tRes.m_sError = "Only basic authorization supported";
+		return FailAuth ( tRes, dReply );
+	}
+
+	int iSrcAuthLen = pSrcAuth->Length();
+	const char * sCur = pSrcAuth->cstr() + sizeof ( sAuthPrefix ) - 1;
+	const char * sEnd = pSrcAuth->cstr() + iSrcAuthLen;
+	while ( sCur<sEnd && isspace ( *sCur ) )
+		sCur++;
+	Str_t sSrcUserPwd ( sCur, iSrcAuthLen - ( sCur - pSrcAuth->cstr() ) );
+
+	CSphVector<BYTE> dSrcUserPwd;
+	if ( !Base64Decode ( sSrcUserPwd, dSrcUserPwd ) )
+	{
+		tRes.m_sError = "Failed to decode base64 user:password";
+		return FailAuth ( tRes, dReply );
+	}
+
+	int iDel = dSrcUserPwd.GetFirst ( []( BYTE c ) { return c==':'; } );
+	if ( iDel==-1 )
+	{
+		tRes.m_sError = "Failed to find user:password delimiter";
+		return FailAuth ( tRes, dReply );
+	}
+
+	CSphString sUser;
+	sUser.SetBinary ( (const char *)dSrcUserPwd.Begin(), iDel );
+	CSphString sPwd;
+	sPwd.SetBinary ( (const char *)dSrcUserPwd.Begin() + iDel + 1, dSrcUserPwd.GetLength()-iDel-1 );
+
+	const AuthUserCred_t * pUser = g_hUsers ( sUser );
+	if ( !pUser || sPwd.IsEmpty() )
+	{
+		tRes.m_sError.SetSprintf ( "Access denied for user '%s' (using password: NO)", sUser.cstr() );
+		return FailAuth ( tRes, dReply );
+	}
+
+	if ( !CheckPwd ( *pUser, sPwd ) )
+	{
+		tRes.m_sError.SetSprintf ( "Access denied for user '%s' (using password: YES)", sUser.cstr() );
+		return FailAuth ( tRes, dReply );
+	} else
+	{
+		return true;
+	}
 }

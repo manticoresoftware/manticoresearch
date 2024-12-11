@@ -723,9 +723,9 @@ static bool SetSessionMeta ( const JsonObj_c & tBudyyReply )
 // we call it ALWAYS, because even with absolutely correct result, we still might reject it for '/cli' endpoint if buddy is not available or prohibited
 bool ProcessHttpQueryBuddy ( HttpProcessResult_t & tRes, Str_t sSrcQuery, OptionsHash_t & hOptions, CSphVector<BYTE> & dResult, bool bNeedHttpResponse, http_method eRequestType )
 {
-	if ( tRes.m_bOk || !HasBuddy() || tRes.m_eEndpoint==EHTTP_ENDPOINT::INDEX || IsBuddyQuery ( hOptions ) )
+	if ( tRes.m_bOk || !HasBuddy() || tRes.m_eEndpoint==EHTTP_ENDPOINT::INDEX || IsBuddyQuery ( hOptions ) || tRes.m_bSkipBuddy )
 	{
-		if ( tRes.m_eEndpoint==EHTTP_ENDPOINT::CLI )
+		if ( tRes.m_eEndpoint==EHTTP_ENDPOINT::CLI && !tRes.m_bSkipBuddy )
 		{
 			if ( !HasBuddy() )
 				tRes.m_sError.SetSprintf ( "can not process /cli endpoint without buddy" );

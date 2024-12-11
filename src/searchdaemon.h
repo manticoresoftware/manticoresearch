@@ -1369,6 +1369,7 @@ enum class EHTTP_STATUS : BYTE
 	_200,
 	_206,
 	_400,
+	_401,
 	_403,
 	_404,
 	_405,
@@ -1419,6 +1420,7 @@ const CSphString& sphGetLogFile() noexcept;
 
 void				sphProcessHttpQueryNoResponce ( const CSphString& sEndpoint, const CSphString& sQuery, CSphVector<BYTE> & dResult );
 void				sphHttpErrorReply ( CSphVector<BYTE> & dData, EHTTP_STATUS eCode, const char * szError );
+void				sphHttpErrorReply ( CSphVector<BYTE> & dData, EHTTP_STATUS eCode, const char * sError, const char * sHeaderField );
 void				LoadCompatHttp ( const char * sData );
 void				SaveCompatHttp ( JsonEscapedBuilder & tOut );
 void				SetupCompatHttp();

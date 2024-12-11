@@ -26,6 +26,7 @@
 #include "searchdbuddy.h"
 #include "aggrexpr.h"
 #include "compressed_http.h"
+#include "auth/auth.h"
 
 static bool g_bLogBadHttpReq = val_from_env ( "MANTICORE_LOG_HTTP_BAD_REQ", false ); // log content of bad http requests, ruled by this env variable
 static int g_iLogHttpData = val_from_env ( "MANTICORE_LOG_HTTP_DATA", 0 ); // verbose logging of http data, ruled by this env variable
@@ -71,6 +72,7 @@ EHTTP_STATUS HttpGetStatusCodes ( int iStatus ) noexcept
 	case 200: return EHTTP_STATUS::_200;
 	case 206: return EHTTP_STATUS::_206;
 	case 400: return EHTTP_STATUS::_400;
+	case 401: return EHTTP_STATUS::_401;
 	case 403: return EHTTP_STATUS::_403;
 	case 404: return EHTTP_STATUS::_404;
 	case 405: return EHTTP_STATUS::_405;
@@ -94,6 +96,7 @@ inline constexpr const char* HttpGetStatusName ( EHTTP_STATUS eStatus ) noexcept
 	case EHTTP_STATUS::_200: return "200 OK";
 	case EHTTP_STATUS::_206: return "206 Partial Content";
 	case EHTTP_STATUS::_400: return "400 Bad Request";
+	case EHTTP_STATUS::_401: return "400 Unauthorized status";
 	case EHTTP_STATUS::_403: return "403 Forbidden";
 	case EHTTP_STATUS::_404: return "404 Not Found";
 	case EHTTP_STATUS::_405: return "405 Method Not Allowed";
@@ -475,6 +478,21 @@ void HttpBuildReply ( CSphVector<BYTE> & dData, EHTTP_STATUS eCode, Str_t sReply
 	dData.Append ( sReply );
 }
 
+void HttpBuildReply ( CSphVector<BYTE> & dData, EHTTP_STATUS eCode, Str_t sReply, const char * sHeaderField )
+{
+	StringBuilder_c sHttp;
+	sHttp.Sprintf ( "HTTP/1.1 %s\r\n", HttpGetStatusName ( eCode ) );
+	sHttp.Sprintf ( "Content-Type: application/json; charset=UTF-8\r\n" );
+	sHttp.Sprintf ( "Content-Length: %d\r\n", sReply.second );
+	if ( sHeaderField && *sHeaderField )
+		sHttp.Sprintf ( "%s\r\n", sHeaderField );
+
+	sHttp.Sprintf ( "\r\n" );
+
+	dData.Reserve ( sHttp.GetLength() + sReply.second );
+	dData.Append ( (Str_t)sHttp );
+	dData.Append ( sReply );
+}
 
 HttpRequestParser_c::HttpRequestParser_c()
 {
@@ -2616,6 +2634,8 @@ HttpProcessResult_t ProcessHttpQuery ( CharStream_c & tSource, Str_t & sSrcQuery
 
 	const CSphString & sEndpoint = hOptions["endpoint"];
 	tRes.m_eEndpoint = StrToHttpEndpoint ( sEndpoint );
+	if ( !CheckAuth ( hOptions, tRes, dResult ) )
+		return tRes;
 
 	std::unique_ptr<HttpHandler_c> pHandler = CreateHttpHandler ( tRes.m_eEndpoint, tSource, sSrcQuery, hOptions, eRequestType );
 	if ( !pHandler )
@@ -2727,6 +2747,15 @@ void sphHttpErrorReply ( CSphVector<BYTE> & dData, EHTTP_STATUS eCode, const cha
 	tErr.AddStr ( "error", szError );
 	CSphString sJsonError = tErr.AsString();
 	HttpBuildReply ( dData, eCode, FromStr (sJsonError), false );
+}
+
+void sphHttpErrorReply ( CSphVector<BYTE> & dData, EHTTP_STATUS eCode, const char * sError, const char * sHeaderField )
+{
+	JsonObj_c tErr;
+	tErr.AddStr ( "error", sError );
+	CSphString sJsonError = tErr.AsString();
+
+	HttpBuildReply ( dData, eCode, FromStr ( sJsonError ), sHeaderField );
 }
 
 static void EncodePercolateMatchResult ( const PercolateMatchResult_t & tRes, const CSphFixedVector<int64_t> & dDocids,	const CSphString & sIndex, JsonEscapedBuilder & tOut )

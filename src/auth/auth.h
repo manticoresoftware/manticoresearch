@@ -23,5 +23,11 @@ struct MySQLAuth_t
 	CSphFixedVector<char> m_dScramble { SCRAMBLE_LENGTH + 1 };
 };
 
+// SphixnQL
 MySQLAuth_t GetMySQLAuth();
 bool CheckAuth ( const MySQLAuth_t & tAuth, const CSphString & sUser, const VecTraits_T<BYTE> & dClientHash, CSphString & sError );
+
+// HTTP
+struct HttpProcessResult_t;
+
+bool CheckAuth ( const SmallStringHash_T<CSphString> & hOptions, HttpProcessResult_t & tRes, CSphVector<BYTE> & dReply );

@@ -29,7 +29,7 @@ mysql -P9315 -h0 -e "select * from t;"
 (rm -f /tmp/update.sql; for n in `seq 1 10000`; do echo "update t set s='b' where id=1;" >> /tmp/update.sql; done; for i in `seq 1 10`; do mysql -P9315 -h0 < /tmp/update.sql; done; 2>&1 &)
 ––– output –––
 ––– input –––
-sleep 30; mysql -P9315 -h0 -e "select * from t;"
+sleep 1; mysql -P9315 -h0 -e "select * from t;"
 ––– output –––
 +------+------+
 | id   | s    |

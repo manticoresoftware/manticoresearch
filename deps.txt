@@ -3,7 +3,7 @@ buddy 3.0.1 24121011 b02bf18
 mcl 2.3.1 24112219 edadc69
 executor 1.1.23 24111613 dbade9d
 tzdata 1.0.1 240904 3ba592a
-x---
+---
 ! Do not change the separator that splits this desc from the data
 This file should contain one line per package with a version lock.
 You can find proper values for each dep on https://repo.manticoresearch.com

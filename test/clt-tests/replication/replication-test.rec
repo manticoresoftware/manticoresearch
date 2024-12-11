@@ -557,24 +557,12 @@ mysql -h0 -P4306 -e "SELECT * FROM replication:testrt WHERE id=67758365654038609
 mysql -h0 -P5306 -e "SELECT * FROM replication:testrt WHERE id=6775836565403860994\G"
 ––– output –––
 ––– input –––
-mysqldump -etc -ureplication -h0 -P1306 --skip-comments manticore testrt > /tmp/manticore_backup.sql
+mysqldump -etc --replace -ureplication -h0 -P1306 --skip-comments manticore replication:testrt | mysql -P1306 -h0
 ––– output –––
 -- Warning: version string returned by server is incorrect.
 -- Warning: column statistics not supported by the server.
 ––– input –––
-mysql -h0 -P1306 -e "ALTER CLUSTER replication DROP testrt;" && for port in 1306 2306 3306 4306 5306; do mysql -h0 -P$port -e "DROP TABLE testrt;"; done && for port in 1306 2306 3306 4306 5306; do echo "Checking tables on port $port"; mysql -h0 -P$port -e "SHOW TABLES;"; done
-––– output –––
-Checking tables on port 1306
-Checking tables on port 2306
-Checking tables on port 3306
-Checking tables on port 4306
-Checking tables on port 5306
-––– input –––
-mysql -h0 -P1306 -e "CREATE TABLE testrt (id BIGINT, model TEXT, storage_capacity INTEGER, color string, release_year INTEGER, price FLOAT, discounted_price FLOAT, sold BOOL, date_added TIMESTAMP, product_codes MULTI, values MULTI64, additional_info JSON, vector float_vector knn_type='hnsw' knn_dims='4' hnsw_similarity='l2');"; echo $?
-––– output –––
-0
-––– input –––
-mysql -h0 -P1306 < /tmp/manticore_backup.sql && mysql -h0 -P1306 -e "ALTER CLUSTER replication ADD testrt;" && for port in 1306 2306 3306 4306 5306; do echo "Checking tables on port $port"; mysql -h0 -P$port -e "SHOW TABLES;"; mysql -h0 -P$port -e "SELECT * FROM testrt ORDER BY id ASC\G"; done
+for port in 1306 2306 3306 4306 5306; do echo "Checking tables on port $port"; mysql -h0 -P$port -e "SHOW TABLES;"; mysql -h0 -P$port -e "SELECT * FROM testrt ORDER BY id ASC\G"; done
 ––– output –––
 Checking tables on port 1306
 +--------+------+

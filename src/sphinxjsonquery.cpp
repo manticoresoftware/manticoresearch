@@ -1082,6 +1082,9 @@ static bool ParseLimits ( const JsonObj_c & tRoot, CSphQuery & tQuery, CSphStrin
 
 static bool ParseOptions ( const JsonObj_c & tRoot, CSphQuery & tQuery, CSphString & sError )
 {
+	// different from SQL: in sql it is requested by default
+	tQuery.m_tScrollSettings.m_bRequested = false;
+
 	JsonObj_c tOptions = tRoot.GetItem("options");
 	if ( !tOptions )
 		return true;
@@ -1096,7 +1099,7 @@ static bool ParseOptions ( const JsonObj_c & tRoot, CSphQuery & tQuery, CSphStri
 	{
 		AddOption_e eAdd = AddOption_e::NOT_FOUND;
 		CSphString sOpt = i.Name();
-		if ( i.IsInt() )
+		if ( i.IsInt() || i.IsBool() )
 			eAdd = AddOption ( tQuery, sOpt, i.StrVal(), i.IntVal(), STMT_SELECT, sError );
 		else if ( i.IsStr() )
 		{

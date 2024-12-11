@@ -500,6 +500,7 @@ struct ScrollAttr_t
 struct ScrollSettings_t
 {
 	CSphString					m_sSortBy;
+	bool						m_bRequested = true;
 	CSphVector<ScrollAttr_t>	m_dAttrs;
 };
 

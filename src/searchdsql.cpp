@@ -712,7 +712,7 @@ AddOption_e AddOption ( CSphQuery & tQuery, const CSphString & sOpt, const CSphS
 		Option_e::STRICT_, Option_e::COLUMNS, Option_e::RAND_SEED, Option_e::SYNC, Option_e::EXPAND_KEYWORDS,
 		Option_e::THREADS, Option_e::NOT_ONLY_ALLOWED, Option_e::LOW_PRIORITY, Option_e::DEBUG_NO_PAYLOAD,
 		Option_e::ACCURATE_AGG, Option_e::MAXMATCH_THRESH, Option_e::DISTINCT_THRESH, Option_e::SWITCHOVER,
-		Option_e::EXPANSION_LIMIT
+		Option_e::EXPANSION_LIMIT, Option_e::SCROLL
 	};
 
 	bool bFound = ::any_of ( dIntegerOptions, [eOpt] ( auto i ) { return i == eOpt; } );
@@ -760,6 +760,7 @@ AddOption_e AddOption ( CSphQuery & tQuery, const CSphString & sOpt, const CSphS
 	case Option_e::DISTINCT_THRESH:				tQuery.m_iDistinctThresh = iValue; tQuery.m_bExplicitDistinctThresh = true; break;
 	case Option_e::THREADS_EX:					tQuery.m_iConcurrency = (int)iValue; break;
 	case Option_e::EXPANSION_LIMIT:				tQuery.m_iExpansionLimit = (int)iValue; break;
+	case Option_e::SCROLL:						tQuery.m_tScrollSettings.m_bRequested = !!iValue; break;
 
 	default:
 		return AddOption_e::NOT_FOUND;
@@ -2310,6 +2311,9 @@ bool PercolateParseFilters ( const char * sFilters, ESphCollation eCollation, co
 
 bool FormatScrollSettings ( const AggrResult_t & tAggrRes, const CSphQuery & tQuery, CSphString & sSettings )
 {
+	if ( !tQuery.m_tScrollSettings.m_bRequested )
+		return false;
+
 	if ( tAggrRes.m_dResults.GetLength()!=1 )
 		return false;
 

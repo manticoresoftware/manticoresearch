@@ -1965,6 +1965,7 @@ void SearchRequestBuilder_c::SendQuery ( const char * sIndexes, ISphOutputBuffer
 	tOut.SendInt ( (int)q.m_eJiebaMode );
 
 	tOut.SendString ( q.m_tScrollSettings.m_sSortBy.cstr() );
+	tOut.SendInt ( q.m_tScrollSettings.m_bRequested );
 	tOut.SendInt ( q.m_tScrollSettings.m_dAttrs.GetLength() );
 	for ( const auto & i : q.m_tScrollSettings.m_dAttrs )
 	{
@@ -2868,6 +2869,7 @@ bool ParseSearchQuery ( InputBuffer_c & tReq, ISphOutputBuffer & tOut, CSphQuery
 	if ( uMasterVer>=24 )
 	{
 		tQuery.m_tScrollSettings.m_sSortBy = tReq.GetString();
+		tQuery.m_tScrollSettings.m_bRequested = !!tReq.GetInt();
 		tQuery.m_tScrollSettings.m_dAttrs.Resize ( tReq.GetInt() );
 	
 		for ( auto & i : tQuery.m_tScrollSettings.m_dAttrs )

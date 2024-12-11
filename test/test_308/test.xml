@@ -74,6 +74,10 @@ select weight(), id from test where match('the') and id>1 limit 2 option scroll=
 <query endpoint="json/search">
 { 
   "index": "test",
+  "options":
+  {
+	"scroll": true
+  },
   "query":
   {  
 	"query_string":"the",

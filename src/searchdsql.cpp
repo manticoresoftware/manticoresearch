@@ -2314,10 +2314,10 @@ bool FormatScrollSettings ( const AggrResult_t & tAggrRes, const CSphQuery & tQu
 	if ( !tQuery.m_tScrollSettings.m_bRequested )
 		return false;
 
-	if ( tAggrRes.m_dResults.GetLength()!=1 )
+	if ( tAggrRes.m_dResults.IsEmpty() )
 		return false;
 
-	const auto & tRes = tAggrRes.m_dResults[0];
+	const auto & tRes = tAggrRes.m_dResults.First();
 	if ( tRes.m_dMatches.IsEmpty() )
 		return false;
 

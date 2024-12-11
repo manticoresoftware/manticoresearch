@@ -27,7 +27,14 @@ export CLUSTER_NAME=replication
 ––– output –––
 ––– block: ../base/replication/join-cluster-on-all-nodes –––
 ––– input –––
-mysql -h0 -P1306 -e "CREATE TABLE testrt (title text, content text, gid uint);" && mysql -h0 -P1306 -e "INSERT INTO testrt VALUES(6775836565403860993,'List of HP business laptops','Elitebook Probook',1);" && mysql -h0 -P1306 -e "INSERT INTO testrt VALUES(6775836565403860994,'List of Dell business laptops','Latitude Precision Vostro',2);" && mysql -h0 -P1306 -e "ALTER CLUSTER replication ADD testrt;" && mysql -h0 -P1306 -e "SHOW STATUS LIKE 'cluster_replication_indexes';"
+mysql -h0 -P1306 -e "CREATE TABLE testrt (id BIGINT, model TEXT, storage_capacity INTEGER, color string, release_year INTEGER, price FLOAT, discounted_price FLOAT, sold BOOL, date_added TIMESTAMP, product_codes MULTI, values MULTI64, additional_info JSON, vector float_vector knn_type='hnsw' knn_dims='4' hnsw_similarity='l2');"; echo $?
+––– output –––
+0
+––– input –––
+mysql -h0 -P1306 -e "ALTER CLUSTER replication ADD testrt;"
+––– output –––
+––– input –––
+mysql -h0 -P1306 -e "SHOW STATUS LIKE 'cluster_replication_indexes';"
 ––– output –––
 +-----------------------------+--------+
 | Counter                     | Value  |
@@ -35,24 +42,41 @@ mysql -h0 -P1306 -e "CREATE TABLE testrt (title text, content text, gid uint);" 
 | cluster_replication_indexes | testrt |
 +-----------------------------+--------+
 ––– input –––
-mysql -h0 -P1306 -e "SELECT * FROM testrt ORDER BY id ASC\G"
+mysql -h0 -P1306 -e "INSERT INTO replication:testrt VALUES (6775836565403860993, 'iPhone 13 Pro', 256, 'silver', 2021, 1099.99, 989.99, 1, '1591362342000', (1,2,3), (523456764345678976, 98765409877866654098, 1109876543450987650987), '{\"features\": [\"ProMotion display\", \"A15 Bionic chip\", \"Ceramic Shield front cover\"]}', (0.773448, 0.312478, 0.137971, 0.459821));"; echo $?
 ––– output –––
-*************************** 1. row ***************************
-id: 6775836565403860993
-title: List of HP business laptops
-content: Elitebook Probook
-gid: 1
-*************************** 2. row ***************************
-id: 6775836565403860994
-title: List of Dell business laptops
-content: Latitude Precision Vostro
-gid: 2
+0
+––– input –––
+mysql -h0 -P1306 -e "INSERT INTO replication:testrt VALUES (6775836565403860994, 'Galaxy S21 Ultra', 128, 'black', 2021, 1199.99, 1099.99, 0, '1609459200000', (4,5,6), (1234567890123456789, 9876543210987654321), '{\"features\": [\"Dynamic AMOLED 2X\", \"Exynos 2100\", \"108MP camera\"]}', (0.5, 0.4, 0.3, 0.2));"; echo $?
+––– output –––
+0
+––– input –––
+mysql -h0 -P1306 -e "SHOW CREATE TABLE testrt;"
+––– output –––
++--------+-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
+| Table  | Create Table                                                                                                                                                                                                                                                                                                                  |
++--------+-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
+| testrt | CREATE TABLE testrt (
+id bigint,
+model text,
+storage_capacity integer,
+color string attribute,
+release_year integer,
+price float,
+discounted_price float,
+sold bool,
+date_added timestamp,
+product_codes multi,
+values multi64,
+additional_info json,
+vector float_vector knn_type='hnsw' knn_dims='4' hnsw_similarity='L2'
+) |
++--------+-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
 ––– input –––
 export INSTANCE=5
 ––– output –––
 ––– block: ../base/replication/stop-searchd –––
 ––– input –––
-mysql -h0 -P1306 -e "INSERT INTO replication:testrt VALUES(6775836565403860995,'List of HP business laptops','Macbook',3);"; echo $?
+mysql -h0 -P1306 -e "INSERT INTO replication:testrt VALUES (6775836565403860995, 'Google Pixel 6', 128, 'sorta seafoam', 2021, 699.99, 599.99, 1, '1635317932000', (33,34,35), (623456764345678976, 98765409877866654097, 1109876543450987650986), '{\"features\": [\"Google Tensor chip\", \"Flat OLED display\", \"Dual-camera system\"]}', (0.823448, 0.362478, 0.187971, 0.509821));"; echo $?
 ––– output –––
 0
 ––– input –––
@@ -64,25 +88,52 @@ sleep 5; mysql -h0 -P5306 -e "SELECT * FROM testrt ORDER BY id ASC\G"
 ––– output –––
 *************************** 1. row ***************************
 id: 6775836565403860993
-title: List of HP business laptops
-content: Elitebook Probook
-gid: 1
+model: iPhone 13 Pro
+storage_capacity: 256
+color: silver
+release_year: 2021
+price: 1099.989990
+discounted_price: 989.989990
+sold: 1
+date_added: 2224442480
+product_codes: 1,2,3
+values: 523456764345678976,9223372036854775807
+additional_info: {"features":["ProMotion display","A15 Bionic chip","Ceramic Shield front cover"]}
+vector: 0.773448,0.312478,0.137971,0.459821
 *************************** 2. row ***************************
 id: 6775836565403860994
-title: List of Dell business laptops
-content: Latitude Precision Vostro
-gid: 2
+model: Galaxy S21 Ultra
+storage_capacity: 128
+color: black
+release_year: 2021
+price: 1199.989990
+discounted_price: 1099.989990
+sold: 0
+date_added: 3141431296
+product_codes: 4,5,6
+values: 1234567890123456789,9223372036854775807
+additional_info: {"features":["Dynamic AMOLED 2X","Exynos 2100","108MP camera"]}
+vector: 0.500000,0.400000,0.300000,0.200000
 *************************** 3. row ***************************
 id: 6775836565403860995
-title: List of HP business laptops
-content: Macbook
-gid: 3
+model: Google Pixel 6
+storage_capacity: 128
+color: sorta seafoam
+release_year: 2021
+price: 699.989990
+discounted_price: 599.989990
+sold: 1
+date_added: 3230359520
+product_codes: 33,34,35
+values: 623456764345678976,9223372036854775807
+additional_info: {"features":["Google Tensor chip","Flat OLED display","Dual-camera system"]}
+vector: 0.823448,0.362478,0.187971,0.509821
 ––– input –––
 export INSTANCE=2
 ––– output –––
 ––– block: ../base/replication/stop-searchd –––
 ––– input –––
-mysql -h0 -P3306 -e "INSERT INTO replication:testrt VALUES(6775836565403860996,'NEW','TABLE',4);"; echo $?
+mysql -h0 -P1306 -e "INSERT INTO replication:testrt VALUES (6775836565403860996, 'OnePlus 9', 256, 'winter mist', 2021, 729.99, 629.99, 0, '1648044532000', (36,37,38), (723456764345678976, 98765409877866654096, 1109876543450987650985), '{\"features\": [\"Qualcomm Snapdragon 888\", \"Fluid AMOLED display\", \"Hasselblad Camera for Mobile\"]}', (0.021106, 0.918278, 0.261892, 0.074594));"; echo $?
 ––– output –––
 0
 ––– block: ../base/replication/start-searchd-precach –––
@@ -91,99 +142,361 @@ sleep 5;mysql -h0 -P2306 -e "SELECT * FROM testrt ORDER BY id ASC\G"
 ––– output –––
 *************************** 1. row ***************************
 id: 6775836565403860993
-title: List of HP business laptops
-content: Elitebook Probook
-gid: 1
+model: iPhone 13 Pro
+storage_capacity: 256
+color: silver
+release_year: 2021
+price: 1099.989990
+discounted_price: 989.989990
+sold: 1
+date_added: 2224442480
+product_codes: 1,2,3
+values: 523456764345678976,9223372036854775807
+additional_info: {"features":["ProMotion display","A15 Bionic chip","Ceramic Shield front cover"]}
+vector: 0.773448,0.312478,0.137971,0.459821
 *************************** 2. row ***************************
 id: 6775836565403860994
-title: List of Dell business laptops
-content: Latitude Precision Vostro
-gid: 2
+model: Galaxy S21 Ultra
+storage_capacity: 128
+color: black
+release_year: 2021
+price: 1199.989990
+discounted_price: 1099.989990
+sold: 0
+date_added: 3141431296
+product_codes: 4,5,6
+values: 1234567890123456789,9223372036854775807
+additional_info: {"features":["Dynamic AMOLED 2X","Exynos 2100","108MP camera"]}
+vector: 0.500000,0.400000,0.300000,0.200000
 *************************** 3. row ***************************
 id: 6775836565403860995
-title: List of HP business laptops
-content: Macbook
-gid: 3
+model: Google Pixel 6
+storage_capacity: 128
+color: sorta seafoam
+release_year: 2021
+price: 699.989990
+discounted_price: 599.989990
+sold: 1
+date_added: 3230359520
+product_codes: 33,34,35
+values: 623456764345678976,9223372036854775807
+additional_info: {"features":["Google Tensor chip","Flat OLED display","Dual-camera system"]}
+vector: 0.823448,0.362478,0.187971,0.509821
 *************************** 4. row ***************************
 id: 6775836565403860996
-title: NEW
-content: TABLE
-gid: 4
+model: OnePlus 9
+storage_capacity: 256
+color: winter mist
+release_year: 2021
+price: 729.989990
+discounted_price: 629.989990
+sold: 0
+date_added: 3072057632
+product_codes: 36,37,38
+values: 723456764345678976,9223372036854775807
+additional_info: {"features":["Qualcomm Snapdragon 888","Fluid AMOLED display","Hasselblad Camera for Mobile"]}
+vector: 0.021106,0.918278,0.261892,0.074594
+––– input –––
+sleep 5;mysql -h0 -P2306 -e "SELECT * FROM testrt ORDER BY id ASC\G"
+––– output –––
+*************************** 1. row ***************************
+id: 6775836565403860993
+model: iPhone 13 Pro
+storage_capacity: 256
+color: silver
+release_year: 2021
+price: 1099.989990
+discounted_price: 989.989990
+sold: 1
+date_added: 2224442480
+product_codes: 1,2,3
+values: 523456764345678976,9223372036854775807
+additional_info: {"features":["ProMotion display","A15 Bionic chip","Ceramic Shield front cover"]}
+vector: 0.773448,0.312478,0.137971,0.459821
+*************************** 2. row ***************************
+id: 6775836565403860994
+model: Galaxy S21 Ultra
+storage_capacity: 128
+color: black
+release_year: 2021
+price: 1199.989990
+discounted_price: 1099.989990
+sold: 0
+date_added: 3141431296
+product_codes: 4,5,6
+values: 1234567890123456789,9223372036854775807
+additional_info: {"features":["Dynamic AMOLED 2X","Exynos 2100","108MP camera"]}
+vector: 0.500000,0.400000,0.300000,0.200000
+*************************** 3. row ***************************
+id: 6775836565403860995
+model: Google Pixel 6
+storage_capacity: 128
+color: sorta seafoam
+release_year: 2021
+price: 699.989990
+discounted_price: 599.989990
+sold: 1
+date_added: 3230359520
+product_codes: 33,34,35
+values: 623456764345678976,9223372036854775807
+additional_info: {"features":["Google Tensor chip","Flat OLED display","Dual-camera system"]}
+vector: 0.823448,0.362478,0.187971,0.509821
+*************************** 4. row ***************************
+id: 6775836565403860996
+model: OnePlus 9
+storage_capacity: 256
+color: winter mist
+release_year: 2021
+price: 729.989990
+discounted_price: 629.989990
+sold: 0
+date_added: 3072057632
+product_codes: 36,37,38
+values: 723456764345678976,9223372036854775807
+additional_info: {"features":["Qualcomm Snapdragon 888","Fluid AMOLED display","Hasselblad Camera for Mobile"]}
+vector: 0.021106,0.918278,0.261892,0.074594
+––– input –––
+sleep 5;mysql -h0 -P2306 -e "SELECT * FROM testrt ORDER BY id ASC\G"
+––– output –––
+*************************** 1. row ***************************
+id: 6775836565403860993
+model: iPhone 13 Pro
+storage_capacity: 256
+color: silver
+release_year: 2021
+price: 1099.989990
+discounted_price: 989.989990
+sold: 1
+date_added: 2224442480
+product_codes: 1,2,3
+values: 523456764345678976,9223372036854775807
+additional_info: {"features":["ProMotion display","A15 Bionic chip","Ceramic Shield front cover"]}
+vector: 0.773448,0.312478,0.137971,0.459821
+*************************** 2. row ***************************
+id: 6775836565403860994
+model: Galaxy S21 Ultra
+storage_capacity: 128
+color: black
+release_year: 2021
+price: 1199.989990
+discounted_price: 1099.989990
+sold: 0
+date_added: 3141431296
+product_codes: 4,5,6
+values: 1234567890123456789,9223372036854775807
+additional_info: {"features":["Dynamic AMOLED 2X","Exynos 2100","108MP camera"]}
+vector: 0.500000,0.400000,0.300000,0.200000
+*************************** 3. row ***************************
+id: 6775836565403860995
+model: Google Pixel 6
+storage_capacity: 128
+color: sorta seafoam
+release_year: 2021
+price: 699.989990
+discounted_price: 599.989990
+sold: 1
+date_added: 3230359520
+product_codes: 33,34,35
+values: 623456764345678976,9223372036854775807
+additional_info: {"features":["Google Tensor chip","Flat OLED display","Dual-camera system"]}
+vector: 0.823448,0.362478,0.187971,0.509821
+*************************** 4. row ***************************
+id: 6775836565403860996
+model: OnePlus 9
+storage_capacity: 256
+color: winter mist
+release_year: 2021
+price: 729.989990
+discounted_price: 629.989990
+sold: 0
+date_added: 3072057632
+product_codes: 36,37,38
+values: 723456764345678976,9223372036854775807
+additional_info: {"features":["Qualcomm Snapdragon 888","Fluid AMOLED display","Hasselblad Camera for Mobile"]}
+vector: 0.021106,0.918278,0.261892,0.074594
 ––– input –––
 mysql -h0 -P3306 -e "SELECT * FROM testrt ORDER BY id ASC\G"
 ––– output –––
 *************************** 1. row ***************************
 id: 6775836565403860993
-title: List of HP business laptops
-content: Elitebook Probook
-gid: 1
+model: iPhone 13 Pro
+storage_capacity: 256
+color: silver
+release_year: 2021
+price: 1099.989990
+discounted_price: 989.989990
+sold: 1
+date_added: 2224442480
+product_codes: 1,2,3
+values: 523456764345678976,9223372036854775807
+additional_info: {"features":["ProMotion display","A15 Bionic chip","Ceramic Shield front cover"]}
+vector: 0.773448,0.312478,0.137971,0.459821
 *************************** 2. row ***************************
 id: 6775836565403860994
-title: List of Dell business laptops
-content: Latitude Precision Vostro
-gid: 2
+model: Galaxy S21 Ultra
+storage_capacity: 128
+color: black
+release_year: 2021
+price: 1199.989990
+discounted_price: 1099.989990
+sold: 0
+date_added: 3141431296
+product_codes: 4,5,6
+values: 1234567890123456789,9223372036854775807
+additional_info: {"features":["Dynamic AMOLED 2X","Exynos 2100","108MP camera"]}
+vector: 0.500000,0.400000,0.300000,0.200000
 *************************** 3. row ***************************
 id: 6775836565403860995
-title: List of HP business laptops
-content: Macbook
-gid: 3
+model: Google Pixel 6
+storage_capacity: 128
+color: sorta seafoam
+release_year: 2021
+price: 699.989990
+discounted_price: 599.989990
+sold: 1
+date_added: 3230359520
+product_codes: 33,34,35
+values: 623456764345678976,9223372036854775807
+additional_info: {"features":["Google Tensor chip","Flat OLED display","Dual-camera system"]}
+vector: 0.823448,0.362478,0.187971,0.509821
 *************************** 4. row ***************************
 id: 6775836565403860996
-title: NEW
-content: TABLE
-gid: 4
+model: OnePlus 9
+storage_capacity: 256
+color: winter mist
+release_year: 2021
+price: 729.989990
+discounted_price: 629.989990
+sold: 0
+date_added: 3072057632
+product_codes: 36,37,38
+values: 723456764345678976,9223372036854775807
+additional_info: {"features":["Qualcomm Snapdragon 888","Fluid AMOLED display","Hasselblad Camera for Mobile"]}
+vector: 0.021106,0.918278,0.261892,0.074594
 ––– input –––
 mysql -h0 -P4306 -e "SELECT * FROM testrt ORDER BY id ASC\G"
 ––– output –––
 *************************** 1. row ***************************
 id: 6775836565403860993
-title: List of HP business laptops
-content: Elitebook Probook
-gid: 1
+model: iPhone 13 Pro
+storage_capacity: 256
+color: silver
+release_year: 2021
+price: 1099.989990
+discounted_price: 989.989990
+sold: 1
+date_added: 2224442480
+product_codes: 1,2,3
+values: 523456764345678976,9223372036854775807
+additional_info: {"features":["ProMotion display","A15 Bionic chip","Ceramic Shield front cover"]}
+vector: 0.773448,0.312478,0.137971,0.459821
 *************************** 2. row ***************************
 id: 6775836565403860994
-title: List of Dell business laptops
-content: Latitude Precision Vostro
-gid: 2
+model: Galaxy S21 Ultra
+storage_capacity: 128
+color: black
+release_year: 2021
+price: 1199.989990
+discounted_price: 1099.989990
+sold: 0
+date_added: 3141431296
+product_codes: 4,5,6
+values: 1234567890123456789,9223372036854775807
+additional_info: {"features":["Dynamic AMOLED 2X","Exynos 2100","108MP camera"]}
+vector: 0.500000,0.400000,0.300000,0.200000
 *************************** 3. row ***************************
 id: 6775836565403860995
-title: List of HP business laptops
-content: Macbook
-gid: 3
+model: Google Pixel 6
+storage_capacity: 128
+color: sorta seafoam
+release_year: 2021
+price: 699.989990
+discounted_price: 599.989990
+sold: 1
+date_added: 3230359520
+product_codes: 33,34,35
+values: 623456764345678976,9223372036854775807
+additional_info: {"features":["Google Tensor chip","Flat OLED display","Dual-camera system"]}
+vector: 0.823448,0.362478,0.187971,0.509821
 *************************** 4. row ***************************
 id: 6775836565403860996
-title: NEW
-content: TABLE
-gid: 4
+model: OnePlus 9
+storage_capacity: 256
+color: winter mist
+release_year: 2021
+price: 729.989990
+discounted_price: 629.989990
+sold: 0
+date_added: 3072057632
+product_codes: 36,37,38
+values: 723456764345678976,9223372036854775807
+additional_info: {"features":["Qualcomm Snapdragon 888","Fluid AMOLED display","Hasselblad Camera for Mobile"]}
+vector: 0.021106,0.918278,0.261892,0.074594
 ––– input –––
 mysql -h0 -P5306 -e "SELECT * FROM testrt ORDER BY id ASC\G"
 ––– output –––
 *************************** 1. row ***************************
 id: 6775836565403860993
-title: List of HP business laptops
-content: Elitebook Probook
-gid: 1
+model: iPhone 13 Pro
+storage_capacity: 256
+color: silver
+release_year: 2021
+price: 1099.989990
+discounted_price: 989.989990
+sold: 1
+date_added: 2224442480
+product_codes: 1,2,3
+values: 523456764345678976,9223372036854775807
+additional_info: {"features":["ProMotion display","A15 Bionic chip","Ceramic Shield front cover"]}
+vector: 0.773448,0.312478,0.137971,0.459821
 *************************** 2. row ***************************
 id: 6775836565403860994
-title: List of Dell business laptops
-content: Latitude Precision Vostro
-gid: 2
+model: Galaxy S21 Ultra
+storage_capacity: 128
+color: black
+release_year: 2021
+price: 1199.989990
+discounted_price: 1099.989990
+sold: 0
+date_added: 3141431296
+product_codes: 4,5,6
+values: 1234567890123456789,9223372036854775807
+additional_info: {"features":["Dynamic AMOLED 2X","Exynos 2100","108MP camera"]}
+vector: 0.500000,0.400000,0.300000,0.200000
 *************************** 3. row ***************************
 id: 6775836565403860995
-title: List of HP business laptops
-content: Macbook
-gid: 3
+model: Google Pixel 6
+storage_capacity: 128
+color: sorta seafoam
+release_year: 2021
+price: 699.989990
+discounted_price: 599.989990
+sold: 1
+date_added: 3230359520
+product_codes: 33,34,35
+values: 623456764345678976,9223372036854775807
+additional_info: {"features":["Google Tensor chip","Flat OLED display","Dual-camera system"]}
+vector: 0.823448,0.362478,0.187971,0.509821
 *************************** 4. row ***************************
 id: 6775836565403860996
-title: NEW
-content: TABLE
-gid: 4
+model: OnePlus 9
+storage_capacity: 256
+color: winter mist
+release_year: 2021
+price: 729.989990
+discounted_price: 629.989990
+sold: 0
+date_added: 3072057632
+product_codes: 36,37,38
+values: 723456764345678976,9223372036854775807
+additional_info: {"features":["Qualcomm Snapdragon 888","Fluid AMOLED display","Hasselblad Camera for Mobile"]}
+vector: 0.021106,0.918278,0.261892,0.074594
 ––– input –––
 export INSTANCE=4
 ––– output –––
 ––– block: ../base/replication/stop-searchd –––
 ––– input –––
-sleep 5;mysql -h0 -P2306 -e "DELETE FROM replication:testrt WHERE id = 6775836565403860994"; echo $?
+sleep 5;mysql -h0 -P2306 -e "DELETE FROM replication:testrt WHERE id = 6775836565403860994;"; echo $?
 ––– output –––
 0
 ––– input –––
@@ -195,6 +508,9 @@ export INSTANCE=4
 ––– block: ../base/replication/start-searchd-precach –––
 ––– input –––
 sleep 5;mysql -h0 -P1306 -e "SELECT * FROM testrt ORDER BY id ASC" > /tmp/output_1306.txt;
+––– output –––
+––– input –––
+mysql -h0 -P2306 -e "SELECT * FROM testrt ORDER BY id ASC" > /tmp/output_2306.txt;
 ––– output –––
 ––– input –––
 mysql -h0 -P3306 -e "SELECT * FROM testrt ORDER BY id ASC" > /tmp/output_3306.txt;
@@ -222,46 +538,281 @@ diff /tmp/output_1306.txt /tmp/output_5306.txt; echo $?
 ––– output –––
 0
 ––– input –––
-mysql -h0 -P1306 -e "REPLACE INTO replication:testrt SET content='Updated Content', title='List of Dell business laptops', gid=2 WHERE id=6775836565403860994;"; echo $?
+mysql -h0 -P1306 -e "REPLACE INTO replication:testrt (id, model, storage_capacity, color, release_year, price, discounted_price, sold, date_added, product_codes, values, additional_info, vector) VALUES (6775836565403860993, 'Updated iPhone 13 Pro', 256, 'silver', 2021, 1099.99, 989.99, 1, '1591362342000', (1,2,3), (523456764345678976, 98765409877866654098, 1109876543450987650987), '{\"features\": [\"Updated ProMotion display\", \"A15 Bionic chip\", \"Ceramic Shield front cover\"]}', (0.773448, 0.312478, 0.137971, 0.459821));"; echo $?
 ––– output –––
 0
 ––– input –––
 mysql -h0 -P1306 -e "SELECT * FROM replication:testrt WHERE id=6775836565403860994\G"
 ––– output –––
-*************************** 1. row ***************************
-id: 6775836565403860994
-title: List of Dell business laptops
-content: Updated Content
-gid: 2
 ––– input –––
 mysql -h0 -P2306 -e "SELECT * FROM replication:testrt WHERE id=6775836565403860994\G"
 ––– output –––
-*************************** 1. row ***************************
-id: 6775836565403860994
-title: List of Dell business laptops
-content: Updated Content
-gid: 2
 ––– input –––
 mysql -h0 -P3306 -e "SELECT * FROM replication:testrt WHERE id=6775836565403860994\G"
 ––– output –––
-*************************** 1. row ***************************
-id: 6775836565403860994
-title: List of Dell business laptops
-content: Updated Content
-gid: 2
 ––– input –––
 mysql -h0 -P4306 -e "SELECT * FROM replication:testrt WHERE id=6775836565403860994\G"
 ––– output –––
-*************************** 1. row ***************************
-id: 6775836565403860994
-title: List of Dell business laptops
-content: Updated Content
-gid: 2
 ––– input –––
 mysql -h0 -P5306 -e "SELECT * FROM replication:testrt WHERE id=6775836565403860994\G"
 ––– output –––
+––– input –––
+mysqldump -etc -ureplication -h0 -P1306 --skip-comments manticore testrt > /tmp/manticore_backup.sql
+––– output –––
+-- Warning: version string returned by server is incorrect.
+-- Warning: column statistics not supported by the server.
+––– input –––
+mysql -h0 -P1306 -e "ALTER CLUSTER replication DROP testrt;" && for port in 1306 2306 3306 4306 5306; do mysql -h0 -P$port -e "DROP TABLE testrt;"; done && for port in 1306 2306 3306 4306 5306; do echo "Checking tables on port $port"; mysql -h0 -P$port -e "SHOW TABLES;"; done
+––– output –––
+Checking tables on port 1306
+Checking tables on port 2306
+Checking tables on port 3306
+Checking tables on port 4306
+Checking tables on port 5306
+––– input –––
+mysql -h0 -P1306 -e "CREATE TABLE testrt (id BIGINT, model TEXT, storage_capacity INTEGER, color string, release_year INTEGER, price FLOAT, discounted_price FLOAT, sold BOOL, date_added TIMESTAMP, product_codes MULTI, values MULTI64, additional_info JSON, vector float_vector knn_type='hnsw' knn_dims='4' hnsw_similarity='l2');"; echo $?
+––– output –––
+0
+––– input –––
+mysql -h0 -P1306 < /tmp/manticore_backup.sql && mysql -h0 -P1306 -e "ALTER CLUSTER replication ADD testrt;" && for port in 1306 2306 3306 4306 5306; do echo "Checking tables on port $port"; mysql -h0 -P$port -e "SHOW TABLES;"; mysql -h0 -P$port -e "SELECT * FROM testrt ORDER BY id ASC\G"; done
+––– output –––
+Checking tables on port 1306
++--------+------+
+| Table  | Type |
++--------+------+
+| testrt | rt   |
++--------+------+
 *************************** 1. row ***************************
-id: 6775836565403860994
-title: List of Dell business laptops
-content: Updated Content
-gid: 2
+id: 6775836565403860993
+model: Updated iPhone 13 Pro
+storage_capacity: 256
+color: silver
+release_year: 2021
+price: 1099.989990
+discounted_price: 989.989990
+sold: 1
+date_added: 2224442480
+product_codes: 1,2,3
+values: 523456764345678976,9223372036854775807
+additional_info: {"features":["Updated ProMotion display","A15 Bionic chip","Ceramic Shield front cover"]}
+vector: 0.773448,0.312478,0.137971,0.459821
+*************************** 2. row ***************************
+id: 6775836565403860995
+model: Google Pixel 6
+storage_capacity: 128
+color: sorta seafoam
+release_year: 2021
+price: 699.989990
+discounted_price: 599.989990
+sold: 1
+date_added: 3230359520
+product_codes: 33,34,35
+values: 623456764345678976,9223372036854775807
+additional_info: {"features":["Google Tensor chip","Flat OLED display","Dual-camera system"]}
+vector: 0.823448,0.362478,0.187971,0.509821
+*************************** 3. row ***************************
+id: 6775836565403860996
+model: OnePlus 9
+storage_capacity: 256
+color: winter mist
+release_year: 2021
+price: 729.989990
+discounted_price: 629.989990
+sold: 0
+date_added: 3072057632
+product_codes: 36,37,38
+values: 723456764345678976,9223372036854775807
+additional_info: {"features":["Qualcomm Snapdragon 888","Fluid AMOLED display","Hasselblad Camera for Mobile"]}
+vector: 0.021106,0.918278,0.261892,0.074594
+Checking tables on port 2306
++--------+------+
+| Table  | Type |
++--------+------+
+| testrt | rt   |
++--------+------+
+*************************** 1. row ***************************
+id: 6775836565403860993
+model: Updated iPhone 13 Pro
+storage_capacity: 256
+color: silver
+release_year: 2021
+price: 1099.989990
+discounted_price: 989.989990
+sold: 1
+date_added: 2224442480
+product_codes: 1,2,3
+values: 523456764345678976,9223372036854775807
+additional_info: {"features":["Updated ProMotion display","A15 Bionic chip","Ceramic Shield front cover"]}
+vector: 0.773448,0.312478,0.137971,0.459821
+*************************** 2. row ***************************
+id: 6775836565403860995
+model: Google Pixel 6
+storage_capacity: 128
+color: sorta seafoam
+release_year: 2021
+price: 699.989990
+discounted_price: 599.989990
+sold: 1
+date_added: 3230359520
+product_codes: 33,34,35
+values: 623456764345678976,9223372036854775807
+additional_info: {"features":["Google Tensor chip","Flat OLED display","Dual-camera system"]}
+vector: 0.823448,0.362478,0.187971,0.509821
+*************************** 3. row ***************************
+id: 6775836565403860996
+model: OnePlus 9
+storage_capacity: 256
+color: winter mist
+release_year: 2021
+price: 729.989990
+discounted_price: 629.989990
+sold: 0
+date_added: 3072057632
+product_codes: 36,37,38
+values: 723456764345678976,9223372036854775807
+additional_info: {"features":["Qualcomm Snapdragon 888","Fluid AMOLED display","Hasselblad Camera for Mobile"]}
+vector: 0.021106,0.918278,0.261892,0.074594
+Checking tables on port 3306
++--------+------+
+| Table  | Type |
++--------+------+
+| testrt | rt   |
++--------+------+
+*************************** 1. row ***************************
+id: 6775836565403860993
+model: Updated iPhone 13 Pro
+storage_capacity: 256
+color: silver
+release_year: 2021
+price: 1099.989990
+discounted_price: 989.989990
+sold: 1
+date_added: 2224442480
+product_codes: 1,2,3
+values: 523456764345678976,9223372036854775807
+additional_info: {"features":["Updated ProMotion display","A15 Bionic chip","Ceramic Shield front cover"]}
+vector: 0.773448,0.312478,0.137971,0.459821
+*************************** 2. row ***************************
+id: 6775836565403860995
+model: Google Pixel 6
+storage_capacity: 128
+color: sorta seafoam
+release_year: 2021
+price: 699.989990
+discounted_price: 599.989990
+sold: 1
+date_added: 3230359520
+product_codes: 33,34,35
+values: 623456764345678976,9223372036854775807
+additional_info: {"features":["Google Tensor chip","Flat OLED display","Dual-camera system"]}
+vector: 0.823448,0.362478,0.187971,0.509821
+*************************** 3. row ***************************
+id: 6775836565403860996
+model: OnePlus 9
+storage_capacity: 256
+color: winter mist
+release_year: 2021
+price: 729.989990
+discounted_price: 629.989990
+sold: 0
+date_added: 3072057632
+product_codes: 36,37,38
+values: 723456764345678976,9223372036854775807
+additional_info: {"features":["Qualcomm Snapdragon 888","Fluid AMOLED display","Hasselblad Camera for Mobile"]}
+vector: 0.021106,0.918278,0.261892,0.074594
+Checking tables on port 4306
++--------+------+
+| Table  | Type |
++--------+------+
+| testrt | rt   |
++--------+------+
+*************************** 1. row ***************************
+id: 6775836565403860993
+model: Updated iPhone 13 Pro
+storage_capacity: 256
+color: silver
+release_year: 2021
+price: 1099.989990
+discounted_price: 989.989990
+sold: 1
+date_added: 2224442480
+product_codes: 1,2,3
+values: 523456764345678976,9223372036854775807
+additional_info: {"features":["Updated ProMotion display","A15 Bionic chip","Ceramic Shield front cover"]}
+vector: 0.773448,0.312478,0.137971,0.459821
+*************************** 2. row ***************************
+id: 6775836565403860995
+model: Google Pixel 6
+storage_capacity: 128
+color: sorta seafoam
+release_year: 2021
+price: 699.989990
+discounted_price: 599.989990
+sold: 1
+date_added: 3230359520
+product_codes: 33,34,35
+values: 623456764345678976,9223372036854775807
+additional_info: {"features":["Google Tensor chip","Flat OLED display","Dual-camera system"]}
+vector: 0.823448,0.362478,0.187971,0.509821
+*************************** 3. row ***************************
+id: 6775836565403860996
+model: OnePlus 9
+storage_capacity: 256
+color: winter mist
+release_year: 2021
+price: 729.989990
+discounted_price: 629.989990
+sold: 0
+date_added: 3072057632
+product_codes: 36,37,38
+values: 723456764345678976,9223372036854775807
+additional_info: {"features":["Qualcomm Snapdragon 888","Fluid AMOLED display","Hasselblad Camera for Mobile"]}
+vector: 0.021106,0.918278,0.261892,0.074594
+Checking tables on port 5306
++--------+------+
+| Table  | Type |
++--------+------+
+| testrt | rt   |
++--------+------+
+*************************** 1. row ***************************
+id: 6775836565403860993
+model: Updated iPhone 13 Pro
+storage_capacity: 256
+color: silver
+release_year: 2021
+price: 1099.989990
+discounted_price: 989.989990
+sold: 1
+date_added: 2224442480
+product_codes: 1,2,3
+values: 523456764345678976,9223372036854775807
+additional_info: {"features":["Updated ProMotion display","A15 Bionic chip","Ceramic Shield front cover"]}
+vector: 0.773448,0.312478,0.137971,0.459821
+*************************** 2. row ***************************
+id: 6775836565403860995
+model: Google Pixel 6
+storage_capacity: 128
+color: sorta seafoam
+release_year: 2021
+price: 699.989990
+discounted_price: 599.989990
+sold: 1
+date_added: 3230359520
+product_codes: 33,34,35
+values: 623456764345678976,9223372036854775807
+additional_info: {"features":["Google Tensor chip","Flat OLED display","Dual-camera system"]}
+vector: 0.823448,0.362478,0.187971,0.509821
+*************************** 3. row ***************************
+id: 6775836565403860996
+model: OnePlus 9
+storage_capacity: 256
+color: winter mist
+release_year: 2021
+price: 729.989990
+discounted_price: 629.989990
+sold: 0
+date_added: 3072057632
+product_codes: 36,37,38
+values: 723456764345678976,9223372036854775807
+additional_info: {"features":["Qualcomm Snapdragon 888","Fluid AMOLED display","Hasselblad Camera for Mobile"]}
+vector: 0.021106,0.918278,0.261892,0.074594

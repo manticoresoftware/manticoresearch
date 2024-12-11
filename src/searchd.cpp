@@ -6606,38 +6606,51 @@ inline static bool ClusterFlavour () noexcept
 }
 
 
-inline static CSphString ApplyClusterName ( const SqlStmt_t * pStmt ) noexcept
+inline static CSphString ApplyClusterName ( const CSphString& sIndex ) noexcept
 {
-	assert ( pStmt );
-	auto sName = pStmt->m_sIndex;
+	if ( !ClusterFlavour () )
+		return sIndex;
 
-	if ( ClusterFlavour () )
-	{
-		auto dParts = sphSplit ( pStmt->m_sIndex.cstr (), ":" );
-		if ( dParts.GetLength ()>1 )
-			sName = dParts[1];
-	}
-	return sName;
+	auto dParts = sphSplit ( sIndex.cstr (), ":" );
+	if ( dParts.GetLength ()>1 )
+		return dParts[1];
+	return sIndex;
 }
 
-inline static CSphString ExtractTableNameW ( SqlStmt_t * pStmt ) noexcept
+// process system.table and remove 1-st subkey
+inline static void FixupSystemTableName ( SqlStmt_t * pStmt ) noexcept
 {
-	auto sName = ApplyClusterName ( pStmt );
-	if ( sName.EqN ( "system" ) && pStmt->m_dStringSubkeys.GetLength ()>=1 )
+	auto sName = ApplyClusterName ( pStmt->m_sIndex );
+	bool bNameFromQuery = false;
+	if ( sName.EqN ( "system" ) )
 	{
-		sName = SphSprintf ( "system%s", pStmt->m_dStringSubkeys[0].cstr () );
-		pStmt->m_dStringSubkeys.Remove ( 0 );
+		if ( !pStmt->m_dStringSubkeys.IsEmpty () )
+		{
+			sName = SphSprintf ( "system%s", pStmt->m_dStringSubkeys[0].cstr () );
+			pStmt->m_dStringSubkeys.Remove ( 0 );
+			pStmt->m_sIndex = sName;
+		}
+		else if ( !pStmt->m_tQuery.m_dStringSubkeys.IsEmpty () )
+		{
+			sName = SphSprintf ( "system%s", pStmt->m_tQuery.m_dStringSubkeys[0].cstr () );
+			pStmt->m_tQuery.m_dStringSubkeys.Remove ( 0 );
+			pStmt->m_sIndex = sName;
+			bNameFromQuery = true;
+		}
 	}
-	return sName;
+
+	if ( ApplyClusterName ( pStmt->m_tQuery.m_sIndexes ).EqN ( "system" ) && bNameFromQuery )
+		pStmt->m_tQuery.m_sIndexes = sName;
 }
 
-
-inline static CSphString ExtractTableName ( const SqlStmt_t * pStmt ) noexcept
+// process system.table
+inline static void FixupSystemTableW ( StrVec_t & dNames, CSphQuery & tQuery ) noexcept
 {
-	auto sName = ApplyClusterName ( pStmt );
-	if ( sName.EqN ( "system" ) && pStmt->m_dStringSubkeys.GetLength ()>=1 )
-		sName = SphSprintf ( "system%s", pStmt->m_dStringSubkeys[0].cstr () );
-	return sName;
+	if ( dNames.GetLength ()==1 && dNames.First ().EqN ( "system" ) && !tQuery.m_dStringSubkeys.IsEmpty () )
+	{
+		dNames[0] = SphSprintf ( "system%s", tQuery.m_dStringSubkeys[0].cstr () );
+		tQuery.m_dStringSubkeys.Remove(0);
+	}
 }
 
 // declared to be used in ParseSysVar
@@ -7061,11 +7074,7 @@ bool SearchHandler_c::BuildIndexList ( int & iDivideLimits, VecRefPtrsAgentConn_
 	else
 	{
 		ParseIndexList ( tQuery.m_sIndexes, dIdxNames );
-		if ( dIdxNames.GetLength()==1 && dIdxNames.First().EqN ("system") && !tQuery.m_dStringSubkeys.IsEmpty ())
-		{
-			dIdxNames[0] = SphSprintf ("system%s", tQuery.m_dStringSubkeys[0].cstr());
-			tQuery.m_dStringSubkeys.Remove(0);
-		}
+		FixupSystemTableW ( dIdxNames, tQuery );
 	}
 
 	const int iQueries = m_dNQueries.GetLength ();
@@ -11331,8 +11340,7 @@ void sphHandleMysqlInsert ( StmtErrorReporter_i & tOut, const SqlStmt_t & tStmt 
 
 	auto tmStart = sphMicroTimer ();
 
-	auto sTable = ExtractTableName (&tStmt);
-	auto pServed = GetServed ( sTable );
+	auto pServed = GetServed ( tStmt.m_sIndex );
 	if ( !ServedDesc_t::IsMutable ( pServed ) )
 	{
 		bool bDistTable = false;
@@ -12677,7 +12685,7 @@ void HandleMysqlDescribe ( RowBuffer_i & tOut, SqlStmt_t * pStmt )
 	auto & tStmt = *pStmt;
 	VectorLike dOut ( tStmt.m_sStringParam, 0 );
 
-	auto sName = ExtractTableNameW ( pStmt );
+	auto sName = tStmt.m_sIndex;
 	auto pServed = GetServed ( sName );
 	if ( pServed )
 	{
@@ -17185,6 +17193,7 @@ bool ClientSession_c::Execute ( Str_t sQuery, RowBuffer_i & tOut )
 		m_eLastStmt = eStmt;
 
 	SqlStmt_t * pStmt = dStmt.Begin();
+	FixupSystemTableName ( pStmt );
 	assert ( !bParsedOK || pStmt );
 
 	myinfo::SetCommand ( g_dSqlStmts[eStmt] );

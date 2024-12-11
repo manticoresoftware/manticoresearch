@@ -344,6 +344,7 @@ tablename_with_maybecluster:
 		}
 	;
 
+// .1 OR chunk 3
 chunk:
 	TOK_DOT_NUMBER
 		{
@@ -357,11 +358,13 @@ chunk:
 		}
 	;
 
+// .1.2 chunk 4
 chunks:
 	chunk
 	| chunks chunk
 	;
 
+// .subkey
 string_key:
 	TOK_SUBKEY
 		{
@@ -369,25 +372,28 @@ string_key:
     	}
     ;
 
+// .subkey1 .subkey2 ...
 string_keys:
 	string_key
 	| string_keys string_key
 	;
 
-chunk_subkeys:
+// .subkey.subkey or .1.2.subkey.4
+maybechunk_then_subkeys:
 	string_keys
 	| chunk string_keys
 	;
 
-subkey_chunks:
+// .2
+maybesubkey_then_chunks:
 	chunks
 	| string_key chunks
 	;
 
-fromkeys:
+subkeys_for_target_in_select_from:
 	// empty
-	| chunk_subkeys
-	| subkey_chunks
+	| maybechunk_then_subkeys
+	| maybesubkey_then_chunks
 	;
 
 single_tablename_with_maybecluster:
@@ -397,12 +403,12 @@ single_tablename_with_maybecluster:
 		}
 	;
 
-one_index_opt_subindex:				// used in describe (meta m.b. num or name)
+one_index_opt_subindex:				// used in describe and insert (meta m.b. num or name)
 	single_tablename_with_maybecluster
-	| single_tablename_with_maybecluster chunk_subkeys
+	| single_tablename_with_maybecluster maybechunk_then_subkeys
 	;
 
-one_index_opt_chunk:				// used in show settings, show status, update, delete
+one_index_opt_chunk:				// used in show settings, show status, update
 	single_tablename_with_maybecluster
 	| single_tablename_with_maybecluster chunks
 	| list_of_indexes
@@ -411,8 +417,21 @@ one_index_opt_chunk:				// used in show settings, show status, update, delete
     	}
 	;
 
-from_target:		// used in select ... from
-	tablename_with_maybecluster fromkeys
+target_in_update:
+	one_index_opt_chunk
+	| single_tablename_with_maybecluster string_keys
+	| single_tablename_with_maybecluster string_keys chunks
+	;
+
+target_in_delete_from:
+	single_tablename_with_maybecluster
+	| single_tablename_with_maybecluster chunks
+	| single_tablename_with_maybecluster string_keys
+	| single_tablename_with_maybecluster string_keys chunks
+	;
+
+target_in_select_from:		// used in select ... from
+	tablename_with_maybecluster subkeys_for_target_in_select_from
 		{
 			pParser->SetIndex ($1);
 			pParser->m_pQuery->m_sIndexes = pParser->m_pStmt->m_sIndex;
@@ -478,7 +497,7 @@ sysvar:					// full name in token, like var '@@session.last_insert_id', no subke
 
 sysvar_ext:				// name in token + subkeys, like var '@@session' and 1 subkey '.last_insert_id'
 	TOK_SYSVAR
-	| TOK_SYSVAR chunk_subkeys
+	| TOK_SYSVAR maybechunk_then_subkeys
 	| TOK_SYSVAR chunk
 	;
 
@@ -579,7 +598,7 @@ opt_outer_limit:
 
 select_from:
 	TOK_SELECT select_items_list
-	TOK_FROM from_target { pParser->m_pStmt->m_eStmt = STMT_SELECT; } // set stmt here to check the option below
+	TOK_FROM target_in_select_from { pParser->m_pStmt->m_eStmt = STMT_SELECT; } // set stmt here to check the option below
 	opt_join_clause
 	opt_where_clause
 	opt_group_clause
@@ -1647,7 +1666,7 @@ insert_val:
 
 delete_from:
 	TOK_DELETE { pParser->m_pStmt->m_eStmt = STMT_DELETE; }
-		TOK_FROM one_index_opt_chunk where_clause opt_option_clause
+		TOK_FROM target_in_delete_from where_clause opt_option_clause
 			{
 				pParser->GenericStatement ( &$4 );
 			}
@@ -1758,7 +1777,7 @@ describe_tok:
 
 update:
 	TOK_UPDATE { pParser->m_pStmt->m_eStmt = STMT_UPDATE; }
-		one_index_opt_chunk TOK_SET update_items_list where_clause opt_option_clause opt_hint_clause
+		target_in_update TOK_SET update_items_list where_clause opt_option_clause opt_hint_clause
 			{
 				pParser->GenericStatement ( &$3 );
 			}

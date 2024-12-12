@@ -1,7 +1,5 @@
 //
-// Copyright (c) 2017-2024, Manticore Software LTD (https://manticoresearch.com)
-// Copyright (c) 2001-2016, Andrew Aksyonoff
-// Copyright (c) 2008-2016, Sphinx Technologies Inc
+// Copyright (c) 2024, Manticore Software LTD (https://manticoresearch.com)
 // All rights reserved
 //
 // This program is free software; you can redistribute it and/or modify
@@ -10,133 +8,59 @@
 // did not, you can find it at http://www.gnu.org
 //
 
-#include "sphinxstd.h"
+
 #include "base64.h"
 
-#include "array"
+#include <boost/archive/iterators/binary_from_base64.hpp>
+#include <boost/archive/iterators/base64_from_binary.hpp>
+#include <boost/archive/iterators/transform_width.hpp>
+#include <boost/algorithm/string.hpp>
 
-//////////////////////////////////////////////////////////////////////////
 
-static const BYTE g_dDecode[] = {
-													0x64, 0x64, 0x64, 0x64, 0x64, 0x64, 0x64, 0x64, 0x64, 0x64,
-	0x64, 0x64, 0x64, 0x64, 0x64, 0x64, 0x64, 0x64, 0x64, 0x64, 0x64, 0x64, 0x64, 0x64, 0x64, 0x64, 0x64, 0x64,
-	0x64, 0x64, 0x64, 0x64, 0x64, 0x64, 0x64, 0x64, 0x64, 0x64, 0x64, 0x64, 0x64, 0x64, 0x64, 0x3E, 0x64, 0x64,
-	0x64, 0x3F, 0x34, 0x35, 0x36, 0x37, 0x38, 0x39, 0x3A, 0x3B, 0x3C, 0x3D, 0x64, 0x64, 0x64, 0x64, 0x64, 0x64,
-	0x64, 0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08, 0x09, 0x0A, 0x0B, 0x0C, 0x0D, 0x0E, 0x0F, 0x10,
-	0x11, 0x12, 0x13, 0x14, 0x15, 0x16, 0x17, 0x18, 0x19, 0x64, 0x64, 0x64, 0x64, 0x64, 0x64, 0x1A, 0x1B, 0x1C,
-	0x1D, 0x1E, 0x1F, 0x20, 0x21, 0x22, 0x23, 0x24, 0x25, 0x26, 0x27, 0x28, 0x29, 0x2A, 0x2B, 0x2C, 0x2D, 0x2E,
-	0x2F, 0x30, 0x31, 0x32, 0x33, 0x64, 0x64, 0x64, 0x64, 0x64, 0x64, 0x64, 0x64, 0x64, 0x64, 0x64, 0x64, 0x64,
-	0x64, 0x64, 0x64, 0x64, 0x64, 0x64, 0x64, 0x64, 0x64, 0x64, 0x64, 0x64, 0x64, 0x64, 0x64, 0x64, 0x64, 0x64,
-	0x64, 0x64, 0x64, 0x64, 0x64, 0x64, 0x64, 0x64, 0x64, 0x64, 0x64, 0x64, 0x64, 0x64, 0x64, 0x64, 0x64, 0x64,
-	0x64, 0x64, 0x64, 0x64, 0x64, 0x64, 0x64, 0x64, 0x64, 0x64, 0x64, 0x64, 0x64, 0x64, 0x64, 0x64, 0x64, 0x64,
-	0x64, 0x64, 0x64, 0x64, 0x64, 0x64, 0x64, 0x64, 0x64, 0x64, 0x64, 0x64, 0x64, 0x64, 0x64, 0x64, 0x64, 0x64,
-	0x64, 0x64, 0x64, 0x64, 0x64, 0x64, 0x64, 0x64, 0x64, 0x64, 0x64, 0x64, 0x64, 0x64, 0x64, 0x64, 0x64, 0x64,
-	0x64, 0x64, 0x64, 0x64, 0x64, 0x64, 0x64, 0x64, 0x64, 0x64, 0x64, 0x64, 0x64, 0x64, 0x64, 0x64, 0x64, 0x64,
-	0x64, 0x64, 0x64, 0x64, 0x64, 0x64, 0x64, 0x64, 0x64, 0x64, 0x64, 0x64
-};
-
-static BYTE IsValidChar ( BYTE uChar )
+CSphString DecodeBase64 ( const CSphString & sValue )
 {
-	BYTE uCode = g_dDecode[uChar];
-	return ( uCode!=0x64 );
+	std::string_view sVal = sValue.cstr();
+
+    using namespace boost::archive::iterators;
+    using It = transform_width<binary_from_base64<std::string_view::const_iterator>, 8, 6>;
+    return boost::algorithm::trim_right_copy_if(std::string(It(std::begin(sVal)), It(std::end(sVal))), [](char c)
+	{
+        return c == '\0';
+    }).c_str();
 }
 
-static void Decode ( BYTE uC0, BYTE uC1, BYTE uC2, BYTE uC3, BYTE * pDst )
-{
-	DWORD uBytes = ( ( g_dDecode[uC0] << 18 ) | ( g_dDecode[uC1] << 12 ) | ( g_dDecode[uC2] << 6 ) | g_dDecode[uC3] );
 
-	pDst[0] = ( ( uBytes >> 16 ) & 0b1111'1111 );
-	pDst[1] = ( ( uBytes >> 8 ) & 0b1111'1111 );
-	pDst[2] = ( uBytes & 0b1111'1111 );
+CSphString EncodeBase64 ( const CSphString & sValue )
+{
+	std::string_view sVal = sValue.cstr();
+
+    using namespace boost::archive::iterators;
+    using It = base64_from_binary<transform_width<std::string_view::const_iterator, 6, 8>>;
+    auto sTmp = std::string(It(std::begin(sVal)), It(std::end(sVal)));
+    return sTmp.append((3 - sVal.size() % 3) % 3, '=').c_str();
 }
 
-bool Base64Decode ( const Str_t & sSrc, CSphVector<BYTE> & dDst )
+void DecodeBinBase64 ( const CSphString & sSrc, CSphVector<BYTE> & dDst )
 {
-	dDst.Resize ( 0 );
-	if ( IsEmpty ( sSrc ) )
-		return true;
+	std::string_view sVal = sSrc.cstr();
+    dDst.Reserve ( dDst.GetLength() + ( ( sVal.size() + 2 ) / 3 ) * 4 );
 
-	if ( ( sSrc.second % 4 )!=0 )
-		return false;
+    using namespace boost::archive::iterators;
+    using It = transform_width<binary_from_base64<std::string_view::const_iterator>, 8, 6>;
+    for ( It tIt ( std::begin(sVal) ); tIt!=It( std::end(sVal) ); tIt++ )
+        dDst.Add ( *tIt );
 
-	dDst.Reserve ( ( ( sSrc.second + 2) / 3 ) * 4 );
-
-	const char * sCur = sSrc.first;
-	const char * sEnd = sSrc.first + sSrc.second;
-
-	for ( ; sCur<sEnd; sCur+=4 )
-	{
-		BYTE uC0 = sCur[0];
-		BYTE uC1 = sCur[1];
-		BYTE uC2 = sCur[2];
-		BYTE uC3 = sCur[3];
-
-		BYTE uValid = ( (BYTE)IsValidChar ( uC0 ) ) << 0;
-		uValid |= ( (BYTE)IsValidChar ( uC1 ) ) << 1;
-		uValid |= ( (BYTE)IsValidChar ( uC2 ) ) << 2;
-		uValid |= ( (BYTE)IsValidChar ( uC3 ) ) << 3;
-
-		if ( uValid==0x0f )
-		{
-			Decode ( uC0, uC1, uC2, uC3, dDst.AddN ( 3 ) );
-
-		} else if ( 0x03 )
-		{
-			if ( uC2=='=' )
-			{
-				Decode ( uC0, uC1, 'A', 'A', dDst.AddN ( 3 ) );
-				dDst.Resize ( dDst.GetLength()-2 );
-			} else
-			{
-				Decode ( uC0, uC1, uC2, 'A', dDst.AddN ( 3 ) );
-				dDst.Resize ( dDst.GetLength()-1 );
-			}
-		}
-	}
-
-	return true;
+    while ( dDst.GetLength() && dDst.Last()=='\0' )
+        dDst.Pop();
 }
 
-static const char g_dEncode[] = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
 
-void Base64Encode ( const VecTraits_T<BYTE> & dSrc, StringBuilder_c & sDst )
+CSphString EncodeBinBase64 ( const VecTraits_T<BYTE> & dSrc )
 {
-	const BYTE * pSrc = dSrc.Begin();
-	const BYTE * pSrcRawEnd = dSrc.Begin() + dSrc.GetLength();
-	const BYTE * pSrcEnd = pSrcRawEnd - 3;
+    std::string_view sVal { (const char *)dSrc.Begin(), (std::string_view::size_type)dSrc.GetLength() };
 
-	while ( pSrc<=pSrcEnd )
-	{
-		// Convert to big endian
-		DWORD uSrc = ( pSrc[0] << 16 ) | ( pSrc[1] << 8 ) | ( pSrc[2] );
-		pSrc += 3;
-		
-		sDst << g_dEncode [ ( uSrc & 0x00FC0000 ) >> 18 ];
-		sDst << g_dEncode [ ( uSrc & 0x0003F000 ) >> 12 ];
-		sDst << g_dEncode [ ( uSrc & 0x00000FC0 ) >> 6 ];
-		sDst << g_dEncode [ ( uSrc & 0x0000003F ) ];
-	}
-
-	// there is a tail in source data and a room for it at destination buffer
-	if ( pSrc<pSrcRawEnd && ( pSrcRawEnd-pSrc<3 ) )
-	{
-		int iLeft = ( pSrcRawEnd - pSrc ) % 3;
-		if ( iLeft==1 )
-		{
-			DWORD uSrc = pSrc[0]<<16;
-			pSrc += 1;
-			sDst << g_dEncode [ ( uSrc & 0x00FC0000 ) >> 18 ];
-			sDst << g_dEncode [ ( uSrc & 0x0003F000 ) >> 12 ];
-			sDst << '=';
-			sDst << '=';
-		} else if ( iLeft==2 )
-		{
-			DWORD uSrc = ( pSrc[0]<<16 ) | ( pSrc[1] << 8 );
-			pSrc += 2;
-			sDst << g_dEncode [ ( uSrc & 0x00FC0000 ) >> 18 ];
-			sDst << g_dEncode [ ( uSrc & 0x0003F000 ) >> 12 ];
-			sDst << g_dEncode [ ( uSrc & 0x00000FC0 ) >> 6 ];
-			sDst << '=';
-		}
-	}
+    using namespace boost::archive::iterators;
+    using It = base64_from_binary<transform_width<std::string_view::const_iterator, 6, 8>>;
+    auto sTmp = std::string(It(std::begin(sVal)), It(std::end(sVal)));
+    return sTmp.append((3 - sVal.size() % 3) % 3, '=').c_str();
 }

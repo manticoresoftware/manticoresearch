@@ -91,11 +91,7 @@ static void ReadAuthFile ( const CSphString & sFile )
 		sPwdHash.second -= iSha1PrefixLen;
 
 		dHashBuf.Resize ( 0 );
-		if ( !Base64Decode ( sPwdHash, dHashBuf ) )
-		{
-			sphWarning ( "can not decode hash at line %d", iLine );
-			continue;
-		}
+		DecodeBinBase64 ( sPwdHash, dHashBuf );
 		if ( dHashBuf.GetLength()!=HASH20_SIZE )
 		{
 			sphWarning ( "wrong decoded hash size %d, expected %d at line %d", dHashBuf.GetLength(), HASH20_SIZE, iLine );
@@ -275,11 +271,7 @@ bool CheckAuth ( const SmallStringHash_T<CSphString> & hOptions, HttpProcessResu
 	Str_t sSrcUserPwd ( sCur, iSrcAuthLen - ( sCur - pSrcAuth->cstr() ) );
 
 	CSphVector<BYTE> dSrcUserPwd;
-	if ( !Base64Decode ( sSrcUserPwd, dSrcUserPwd ) )
-	{
-		tRes.m_sError = "Failed to decode base64 user:password";
-		return FailAuth ( tRes, dReply );
-	}
+	DecodeBinBase64 ( sSrcUserPwd, dSrcUserPwd );
 
 	int iDel = dSrcUserPwd.GetFirst ( []( BYTE c ) { return c==':'; } );
 	if ( iDel==-1 )

@@ -1,7 +1,5 @@
 //
-// Copyright (c) 2017-2024, Manticore Software LTD (https://manticoresearch.com)
-// Copyright (c) 2001-2016, Andrew Aksyonoff
-// Copyright (c) 2008-2016, Sphinx Technologies Inc
+// Copyright (c) 2024, Manticore Software LTD (https://manticoresearch.com)
 // All rights reserved
 //
 // This program is free software; you can redistribute it and/or modify
@@ -12,5 +10,10 @@
 
 #pragma once
 
-bool Base64Decode ( const Str_t & sSrc, CSphVector<BYTE> & dDst );
-void Base64Encode ( const VecTraits_T<BYTE> & dSrc, StringBuilder_c & sDst );
+#include "std/string.h"
+
+CSphString EncodeBase64 ( const CSphString & sValue );
+CSphString DecodeBase64 ( const CSphString & sValue );
+
+void DecodeBinBase64 ( const CSphString & sSrc, CSphVector<BYTE> & dDst );
+CSphString EncodeBinBase64 ( const VecTraits_T<BYTE> & dSrc );

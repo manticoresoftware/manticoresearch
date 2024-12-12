@@ -70,34 +70,54 @@ protected:
 	}
 
 public:
-	std::pair<int,int> MockMeasureStack ( int iNodes )
+	std::pair<int,int> MockMeasureStack ()
 	{
-		BuildMockExprWrapper ( 0 );
+		constexpr int iMeasures = 30;
+		std::vector<std::pair<int,int>> dMeasures { iMeasures };
+		int i = 0;
 
-		int iEmptyVal = MeasureStack ();
-		int iDelta = 0;
-
-		// Find edge of stack where expr length became visible
-		// (we need quite big expr in order to touch deepest of the stack)
-		int iHeight = 0;
-		while ( iDelta<=0 )
+		int iDepth = 0;
+		int iStack = 0;
+		while ( i<iMeasures )
 		{
-			++iHeight;
-			BuildMockExprWrapper ( iHeight );
-			auto iCurStack = MeasureStack ();
-			iDelta = iCurStack - iEmptyVal;
+			BuildMockExprWrapper ( iDepth++ );
+			auto iThisStack = MeasureStack ();
+			if ( iThisStack == iStack )
+				continue;
+
+			dMeasures[i].first = iDepth-1;
+			dMeasures[i].second = iThisStack;
+			auto iDelta = iThisStack-iStack;
+			iStack = iThisStack;
+			++i;
+			if ( iStack + iDelta >= m_dMockStack.GetLengthBytes() )
+				break;
 		}
 
-		auto iStartStack = iEmptyVal + iDelta;
+		auto iValues = i;
+		std::vector<std::pair<int, int>> dDeltas { iMeasures };
+		sphLogDebug( "========= start measure ==============" );
+		std::pair<int,int> dInitial {0,0};
+		for ( i=0; i<iValues; ++i )
+		{
+			dDeltas[i].first = dMeasures[i].first-dInitial.first;
+			dDeltas[i].second = dMeasures[i].second-dInitial.second;
+			sphLogDebug( "height %d, stack %d, deltah %d, deltastack %d", dMeasures[i].first, dMeasures[i].second, dDeltas[i].first, dDeltas[i].second );
+			dInitial = dMeasures[i];
+		}
 
-		// add iNodes frames and average stack from them
-		BuildMockExprWrapper ( iHeight + iNodes );
+		int iZeroVal = dMeasures.front().second;
 
-		auto iCurStack = MeasureStack ();
-		iDelta = iCurStack-iStartStack;
-		iDelta/=iNodes;
-		iDelta = sphRoundUp ( iDelta, 16 );
-		return { iDelta, iEmptyVal };
+		iStack = 0;
+		for ( i=iValues-1; i>0; --i )
+		{
+			if ( dDeltas[i].first !=1 )
+				break;
+			iStack = Max ( iStack, dDeltas[i].second );
+		}
+
+		int iDelta = sphRoundUp ( iStack, 8 );
+		return { iDelta, iZeroVal };
 	}
 
 	virtual ~StackMeasurer_c () = default;
@@ -389,35 +409,25 @@ public:
 ATTRIBUTE_NO_SANITIZE_ADDRESS std::pair<int, int> CreateExprStackSize_c::MockMeasure()
 {
 	CreateExprStackSize_c tCreateMeter;
-	return tCreateMeter.MockMeasureStack ( 5 );
+	return tCreateMeter.MockMeasureStack ();
 }
 
 ATTRIBUTE_NO_SANITIZE_ADDRESS std::pair<int, int> EvalExprStackSize_c::MockMeasure()
 {
 	EvalExprStackSize_c tEvalMeter;
-	return tEvalMeter.MockMeasureStack ( 20 );
+	return tEvalMeter.MockMeasureStack ();
 }
 
 ATTRIBUTE_NO_SANITIZE_ADDRESS std::pair<int, int> FilterCreationMeasureStack_c::MockMeasure()
 {
 	FilterCreationMeasureStack_c tCreateMeter;
-	return tCreateMeter.MockMeasureStack ( 100 );
+	return tCreateMeter.MockMeasureStack ();
 }
 
 ATTRIBUTE_NO_SANITIZE_ADDRESS std::pair<int, int> FullTextStackSize_c::MockMeasure()
 {
 	FullTextStackSize_c tCreateMeter;
-	const int START = 128;
-	const int STEP = 64;
-	auto x = tCreateMeter.MockMeasureStack ( START );
-	for ( auto i=0; i<10; ++i )
-	{
-		if ( x.first )
-			return x;
-
-		x = tCreateMeter.MockMeasureStack ( START + STEP * i );
-	}
-	return x;
+	return tCreateMeter.MockMeasureStack ();
 }
 
 void CreateExprStackSize_c::PublishValue ( std::pair<int, int> iStack )

@@ -2428,7 +2428,7 @@ bool sphCreateFilters ( CreateFilterContext_t & tCtx, CSphString & sError, CSphS
 	if ( tCtx.m_pFilterTree && tCtx.m_pFilterTree->GetLength() )
 	{
 		const int TREE_SIZE_THRESH = 200;
-		const StackSizeTuplet_t tFilterStack = { g_iFilterStackSize, g_iFilterStackSize }; // fixme! tune eval calc
+		const StackSizeTuplet_t tFilterStack = { g_iStartFilterStackSize, g_iFilterStackSize }; // fixme! tune eval calc
 		int iStackNeeded = -1;
 		if ( !EvalStackForTree ( *tCtx.m_pFilterTree, tCtx.m_pFilterTree->GetLength()-1, tFilterStack,
 						   TREE_SIZE_THRESH, iStackNeeded, "filters", sError ) )

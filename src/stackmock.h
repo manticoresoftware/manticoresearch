@@ -42,16 +42,23 @@ template <typename T>
 bool EvalStackForTree ( const VecTraits_T<T> & dTree, int iStartNode, StackSizeTuplet_t tNodeStackSize, int iTreeSizeThresh, int & iStackNeeded, const char * szName, CSphString & sError )
 {
 	enum eStackSizePurpose { CREATE, EVAL };
+	auto iCREATE = std::get<CREATE> ( tNodeStackSize );
+	auto iEVAL = std::get<EVAL> ( tNodeStackSize );
 	iStackNeeded = -1;
-	int64_t iCalculatedStack = Threads::GetStackUsed() + (int64_t)dTree.GetLength()*std::get<EVAL>(tNodeStackSize);
+	int64_t iCalculatedStack = Threads::GetStackUsed() + (int64_t)dTree.GetLength()*iEVAL;
 	int64_t iCurStackSize = Threads::MyStackSize();
 	if ( dTree.GetLength()<=iTreeSizeThresh )
+	{
+//		sphWarning ( "early used %d, tree %d, node %d, calculated %d, current %d", Threads::GetStackUsed (),  dTree.GetLength (), iEVAL, iCalculatedStack, iCurStackSize );
 		return true;
+	}
 
 	int iMaxHeight = EvalMaxTreeHeight ( dTree, iStartNode );
-	iCalculatedStack = Threads::GetStackUsed() + iMaxHeight* std::get<CREATE> ( tNodeStackSize );
+	iCalculatedStack = Threads::GetStackUsed ()+iCREATE+iMaxHeight*iEVAL;
 
-	if ( iCalculatedStack<=iCurStackSize )
+//	sphWarning ( "used %d, height %d, node %d, start %d, calculated %d, current %d", Threads::GetStackUsed (), iMaxHeight, iEVAL, iCREATE, iCalculatedStack, iCurStackSize );
+
+	if ( ( iCalculatedStack+( iCREATE >> 1 ) )<=iCurStackSize )
 		return true;
 
 	if ( iCalculatedStack > session::GetMaxStackSize () )
@@ -64,7 +71,7 @@ bool EvalStackForTree ( const VecTraits_T<T> & dTree, int iStartNode, StackSizeT
 	iStackNeeded = sphRoundUp( iStackNeeded, GetMemPageSize() ); // round up to memory page.
 
 	// in case we're in real query processing - propagate size of stack need for evaluations (only additional part)
-	session::ExpandDesiredStack ( iMaxHeight * std::get<EVAL> ( tNodeStackSize ));
+	session::ExpandDesiredStack ( iCREATE + iMaxHeight * iEVAL );
 
 	return true;
 }

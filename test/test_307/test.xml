@@ -23,6 +23,12 @@ select * from d order by a asc, id desc limit 5;
 show scroll;
 select * from d order by a asc, id desc limit 5 option scroll='eyJvcmRlcl9ieV9zdHIiOiJhIGFzYywgaWQgZGVzYyIsIm9yZGVyX2J5IjpbeyJhdHRyIjoiYSIsImRlc2MiOmZhbHNlLCJ2YWx1ZSI6MiwidHlwZSI6ImludCJ9LHsiYXR0ciI6ImlkIiwiZGVzYyI6dHJ1ZSwidmFsdWUiOjgsInR5cGUiOiJpbnQifV19';
 
+select * from d order by id desc limit 2;
+show scroll;
+select * from d limit 2 option scroll='eyJvcmRlcl9ieV9zdHIiOiJpZCBkZXNjIiwib3JkZXJfYnkiOlt7ImF0dHIiOiJpZCIsImRlc2MiOnRydWUsInZhbHVlIjo5LCJ0eXBlIjoiaW50In1dfQ==';
+show scroll;
+select * from d limit 2 option scroll='eyJvcmRlcl9ieV9zdHIiOiJpZCBkZXNjIiwib3JkZXJfYnkiOlt7ImF0dHIiOiJpZCIsImRlc2MiOnRydWUsInZhbHVlIjo3LCJ0eXBlIjoiaW50In1dfQ==';
+
 drop table d;
 drop table t1;
 drop table t2;

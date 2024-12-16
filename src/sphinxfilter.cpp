@@ -792,6 +792,8 @@ class Filter_ProxyHeavy final : public ISphFilter
 	int m_iDesiredStack;
 
 public:
+	NONCOPYMOVABLE( Filter_ProxyHeavy );
+
 	Filter_ProxyHeavy ( std::unique_ptr<ISphFilter> pFilter, int iDesiredStack )
 			: m_pFilter ( std::move ( pFilter ) )
 			, m_iDesiredStack { iDesiredStack }
@@ -804,11 +806,9 @@ public:
 		return m_pFilter->Eval ( tMatch );
 	}
 
-	bool EvalBlock ( const DWORD *, const DWORD * ) const final
+	bool EvalBlock ( const DWORD * uVal1, const DWORD * uVal2 ) const final
 	{
-		// if block passes through the filter we can't just negate the
-		// result since it's imprecise at this point
-		return true;
+		return m_pFilter->EvalBlock ( uVal1, uVal2 );
 	}
 
 	void SetBlobStorage ( const BYTE * pBlobPool ) final

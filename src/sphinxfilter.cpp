@@ -2399,15 +2399,16 @@ static std::unique_ptr<ISphFilter> ReorderAndCombine ( CSphVector<FilterInfo_t> 
 	return pCombinedFilter;
 }
 
-static int g_iFilterStackSize = 200;
+
 static int g_iStartFilterStackSize = 6*1024;
+static int g_iFilterStackSize = 200;
 
 void SetFilterStackItemSize ( std::pair<int,int> tSize )
 {
-	if ( tSize.first>g_iFilterStackSize )
-		g_iFilterStackSize = tSize.first;
-	if ( tSize.second > g_iStartFilterStackSize )
-		g_iStartFilterStackSize = tSize.second;
+	if ( tSize.first>g_iStartFilterStackSize )
+		g_iStartFilterStackSize = tSize.first;
+	if ( tSize.second >g_iFilterStackSize )
+		g_iFilterStackSize = tSize.second;
 }
 
 int GetFilterStackItemSize()
@@ -2427,12 +2428,18 @@ bool sphCreateFilters ( CreateFilterContext_t & tCtx, CSphString & sError, CSphS
 
 	if ( tCtx.m_pFilterTree && tCtx.m_pFilterTree->GetLength() )
 	{
-		const int TREE_SIZE_THRESH = 200;
-		const StackSizeTuplet_t tFilterStack = { g_iStartFilterStackSize, g_iFilterStackSize }; // fixme! tune eval calc
 		int iStackNeeded = -1;
-		if ( !EvalStackForTree ( *tCtx.m_pFilterTree, tCtx.m_pFilterTree->GetLength()-1, tFilterStack,
-						   TREE_SIZE_THRESH, iStackNeeded, "filters", sError ) )
-			return false;
+		const int TREE_SIZE_THRESH = 200;
+		if ( tCtx.m_pFilterTree->GetLength ()>TREE_SIZE_THRESH )
+		{
+			StackSizeParams_t tParams;
+			tParams.iMaxDepth = EvalMaxTreeHeight ( *tCtx.m_pFilterTree, tCtx.m_pFilterTree->GetLength ()-1 );
+			tParams.tNodeStackSize = { g_iStartFilterStackSize, g_iFilterStackSize }; // fixme! tune eval calc
+			tParams.szName = "filters";
+			std::tie ( iStackNeeded, sError ) = EvalStackForExpr ( tParams );
+			if ( !sError.IsEmpty () )
+				return false;
+		}
 
 		return Threads::Coro::ContinueBool ( iStackNeeded, [&] { return CreateFilterTree ( tCtx, sError, sWarning ); } );
 	}

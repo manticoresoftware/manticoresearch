@@ -786,6 +786,56 @@ struct Filter_Not final : public ISphFilter
 	}
 };
 
+class Filter_ProxyHeavy final : public ISphFilter
+{
+	std::unique_ptr<ISphFilter> m_pFilter;
+	int m_iDesiredStack;
+
+public:
+	Filter_ProxyHeavy ( std::unique_ptr<ISphFilter> pFilter, int iDesiredStack )
+			: m_pFilter ( std::move ( pFilter ) )
+			, m_iDesiredStack { iDesiredStack }
+	{
+		assert ( m_pFilter );
+	}
+
+	bool Eval ( const CSphMatch & tMatch ) const final
+	{
+		return m_pFilter->Eval ( tMatch );
+	}
+
+	bool EvalBlock ( const DWORD *, const DWORD * ) const final
+	{
+		// if block passes through the filter we can't just negate the
+		// result since it's imprecise at this point
+		return true;
+	}
+
+	void SetBlobStorage ( const BYTE * pBlobPool ) final
+	{
+		m_pFilter->SetBlobStorage ( pBlobPool );
+	}
+
+	void SetColumnar ( const columnar::Columnar_i * pColumnar ) final
+	{
+		m_pFilter->SetColumnar ( pColumnar );
+	}
+
+	~Filter_ProxyHeavy() final
+	{
+		if ( !m_pFilter )
+			return;
+		if ( m_iDesiredStack<0 )
+			return;
+		auto iUsedStack = Threads::GetStackUsed ();
+		auto iMyStack = Threads::MyStackSize ();
+		if ( iUsedStack + m_iDesiredStack < iMyStack )
+			return;
+
+		Threads::Coro::Continue ( (int) m_iDesiredStack, [this] { m_pFilter.reset (); } );
+	}
+};
+
 /// impl
 
 std::unique_ptr<ISphFilter> ISphFilter::Join ( std::unique_ptr<ISphFilter> pFilter )
@@ -2385,7 +2435,7 @@ inline bool operator<( const FilterInfo_t& tA, const FilterInfo_t& tB )
 	return tA.m_iSelectivity < tB.m_iSelectivity;
 }
 
-static std::unique_ptr<ISphFilter> ReorderAndCombine ( CSphVector<FilterInfo_t> dFilters )
+static std::unique_ptr<ISphFilter> ReorderAndCombine ( CSphVector<FilterInfo_t>&& dFilters )
 {
 	if ( dFilters.GetLength()==1 )
 		return std::unique_ptr<ISphFilter> { dFilters.Begin()->m_pFilter };
@@ -2429,7 +2479,7 @@ bool sphCreateFilters ( CreateFilterContext_t & tCtx, CSphString & sError, CSphS
 	if ( tCtx.m_pFilterTree && tCtx.m_pFilterTree->GetLength() )
 	{
 		int iStackNeeded = -1;
-		const int TREE_SIZE_THRESH = 200;
+		const int TREE_SIZE_THRESH = 50;
 		if ( tCtx.m_pFilterTree->GetLength ()>TREE_SIZE_THRESH )
 		{
 			StackSizeParams_t tParams;
@@ -2441,7 +2491,15 @@ bool sphCreateFilters ( CreateFilterContext_t & tCtx, CSphString & sError, CSphS
 				return false;
 		}
 
-		return Threads::Coro::ContinueBool ( iStackNeeded, [&] { return CreateFilterTree ( tCtx, sError, sWarning ); } );
+		bool bResult = Threads::Coro::ContinueBool ( iStackNeeded, [&] { return CreateFilterTree ( tCtx, sError, sWarning ); } );
+		if ( iStackNeeded<0 )
+			return bResult;
+
+		// weight filter phase only on match path
+		if ( tCtx.m_pWeightFilter )
+			tCtx.m_pWeightFilter = std::make_unique<Filter_ProxyHeavy> ( std::move ( tCtx.m_pWeightFilter ), iStackNeeded );
+		else
+			tCtx.m_pFilter = std::make_unique<Filter_ProxyHeavy> ( std::move ( tCtx.m_pFilter ), iStackNeeded );
 	}
 
 	assert ( tCtx.m_pMatchSchema );

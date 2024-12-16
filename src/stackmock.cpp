@@ -72,7 +72,7 @@ protected:
 public:
 	std::pair<int,int> MockMeasureStack ()
 	{
-		constexpr int iMeasures = 30;
+		constexpr int iMeasures = 20;
 		std::vector<std::pair<int,int>> dMeasures { iMeasures };
 		int i = 0;
 
@@ -96,13 +96,13 @@ public:
 
 		auto iValues = i;
 		std::vector<std::pair<int, int>> dDeltas { iMeasures };
-		sphLogDebug( "========= start measure ==============" );
+		sphLogDebugv( "========= start measure ==============" );
 		std::pair<int,int> dInitial {0,0};
 		for ( i=0; i<iValues; ++i )
 		{
 			dDeltas[i].first = dMeasures[i].first-dInitial.first;
 			dDeltas[i].second = dMeasures[i].second-dInitial.second;
-			sphLogDebug( "height %d, stack %d, deltah %d, deltastack %d", dMeasures[i].first, dMeasures[i].second, dDeltas[i].first, dDeltas[i].second );
+			sphLogDebugv( "height %d, stack %d, deltah %d, deltastack %d", dMeasures[i].first, dMeasures[i].second, dDeltas[i].first, dDeltas[i].second );
 			dInitial = dMeasures[i];
 		}
 

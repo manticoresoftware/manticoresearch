@@ -312,9 +312,12 @@ static void AddScrollFilter ( CSphQuery & tQuery )
 	if ( tFirst.m_eType==SPH_ATTR_STRINGPTR )
 		return;
 
+	bool bOnlyId = tQuery.m_tScrollSettings.m_dAttrs.GetLength()==1;
+
 	CSphFilterSettings & tFilter = tQuery.m_dFilters.Add();
 	tFilter.m_eType = tFirst.m_eType==SPH_ATTR_FLOAT ? SPH_FILTER_FLOATRANGE : SPH_FILTER_RANGE;
 	tFilter.m_sAttrName = tFirst.m_sSortAttr=="weight()" ? "@weight" : tFirst.m_sSortAttr;
+	tFilter.m_bHasEqualMin = tFilter.m_bHasEqualMax = !bOnlyId;
 
 	if ( tFirst.m_eType==SPH_ATTR_FLOAT )
 	{

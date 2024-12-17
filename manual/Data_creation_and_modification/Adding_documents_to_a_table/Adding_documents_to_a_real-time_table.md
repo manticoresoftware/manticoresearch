@@ -499,17 +499,18 @@ var sqlresult = indexApi.Insert(newdoc);
 ```
 <!-- end -->
 
+<!-- example call -->
 ### UUID_SHORT multi-ID generation
 
 ```sql
 CALL UUID_SHORT(N)
 ```
 
-`CALL UUID_SHORT(N)` statement allows for generating N unique 64-bit IDs in a single call. It is designed for batch operations, where efficiently obtaining multiple unique IDs is essential.
+The `CALL UUID_SHORT(N)` statement allows for generating N unique 64-bit IDs in a single call without inserting any documents. It is particularly useful when you need to pre-generate IDs in Manticore for use in other systems or storage solutions. For example, you can generate auto-IDs in Manticore and then use them in another database, application, or workflow, ensuring consistent and unique identifiers across different environments.
 
 <!-- intro -->
-##### SQL:
-<!-- request SQL -->
+##### Example:
+<!-- request Example -->
 
 ```sql
 CALL UUID_SHORT(3)

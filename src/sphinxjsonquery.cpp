@@ -3816,12 +3816,23 @@ static bool ParseAggrDateHistogram ( const JsonObj_c & tBucket, JsonAggr_t & tIt
 {
 	AggrDateHistSetting_t & tHist = tItem.m_tDateHist;
 
-	JsonObj_c tInterval = tBucket.GetItem ( "calendar_interval" );
-	if ( tInterval.Empty() )
+	JsonObj_c tCalendar = tBucket.GetItem ( "calendar_interval" );
+	JsonObj_c tFixed = tBucket.GetItem ( "fixed_interval" );
+
+	if ( tCalendar.Empty() && tFixed.Empty() )
 	{
-		sError.SetSprintf ( "\"%s\" calendar_interval missed", tItem.m_sCol.cstr() );
+		sError.SetSprintf ( "\"%s\" calendar_interval or fixed_interval missed", tItem.m_sCol.cstr() );
 		return false;
 	}
+	if ( !tCalendar.Empty() && !tFixed.Empty() )
+	{
+		sError.SetSprintf ( "\"%s\" both calendar_interval and fixed_interval supplied", tItem.m_sCol.cstr() );
+		return false;
+	}
+
+	tHist.m_bFixed = !tFixed.Empty();
+	const JsonObj_c & tInterval = ( tHist.m_bFixed ? tFixed : tCalendar );
+
 	if ( !tInterval.IsStr() )
 	{
 		sError.SetSprintf ( "\"%s\" calendar_interval should be string", tItem.m_sCol.cstr() );

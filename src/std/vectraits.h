@@ -48,8 +48,8 @@ public:
 	FORCE_INLINE T * End() const;
 
 	/// make happy C++11 ranged for loops
-	FORCE_INLINE T * begin() const;
-	FORCE_INLINE T * end() const;
+	FORCE_INLINE T * begin() const noexcept;
+	FORCE_INLINE T * end() const noexcept;
 
 	/// get first entry
 	T& First() const;

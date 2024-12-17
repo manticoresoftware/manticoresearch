@@ -1,0 +1,194 @@
+––– block: ../base/start-searchd –––
+––– input –––
+mysql -P9306 -h0 -e "drop table if exists t; create table t(f text)"; echo $?
+––– output –––
+0
+––– input –––
+mysql -h0 -P9306 -e "INSERT INTO t(id, f) VALUES (1, 'ящик'), (2, 'коробка');"; echo $?
+––– output –––
+0
+––– input –––
+mysql -h0 -P9306 -e "SELECT * FROM t;"
+––– output –––
++------+----------------+
+| id   | f              |
++------+----------------+
+|    1 | ящик           |
+|    2 | коробка        |
++------+----------------+
+––– input –––
+curl -v "0:9308/sql?mode=raw" -d "select * from t where match('ящик') option fuzzy=1;"; echo $?
+––– output –––
+*   Trying 0.0.0.0:9308...
+* Connected to 0.0.0.0 (127.0.0.1) port 9308 (#0)
+> POST /sql?mode=raw HTTP/1.1
+> Host: 0.0.0.0:9308
+> User-Agent: curl/7.81.0
+> Accept: */*
+> Content-Length: 55
+> Content-Type: application/x-www-form-urlencoded
+>
+* Mark bundle as not supporting multiuse
+< HTTP/1.1 500 Internal Server Error
+< Server: 6.3.9 17ecd122e@24121621 dev (columnar 2.3.1 edadc69@24112219) (secondary 2.3.1 edadc69@24112219) (knn 2.3.1 edadc69@24112219) (buddy v3.0.1)
+< Content-Type: application/json; charset=UTF-8
+< Content-Length: 57
+<
+* Connection #0 to host 0.0.0.0 left intact
+{"error":"Fuzzy search requires min_infix_len to be set"}0
+––– input –––
+mysql -h0 -P9306 -e "SHOW TABLES;"
+––– output –––
++-------+------+
+| Table | Type |
++-------+------+
+| t     | rt   |
++-------+------+
+––– input –––
+curl -v "0:9308/sql?mode=raw" -d "select * from t where match('ящик') option fuzzy=1"; echo $?
+––– output –––
+*   Trying 0.0.0.0:9308...
+* Connected to 0.0.0.0 (127.0.0.1) port 9308 (#0)
+> POST /sql?mode=raw HTTP/1.1
+> Host: 0.0.0.0:9308
+> User-Agent: curl/7.81.0
+> Accept: */*
+> Content-Length: 54
+> Content-Type: application/x-www-form-urlencoded
+>
+* Mark bundle as not supporting multiuse
+< HTTP/1.1 500 Internal Server Error
+< Server: 6.3.9 17ecd122e@24121621 dev (columnar 2.3.1 edadc69@24112219) (secondary 2.3.1 edadc69@24112219) (knn 2.3.1 edadc69@24112219) (buddy v3.0.1)
+< Content-Type: application/json; charset=UTF-8
+< Content-Length: 57
+<
+* Connection #0 to host 0.0.0.0 left intact
+{"error":"Fuzzy search requires min_infix_len to be set"}0
+––– input –––
+curl -v "0:9308/sql?mode=raw" -d "select * from t where match('ящик');"; echo $?
+––– output –––
+*   Trying 0.0.0.0:9308...
+* Connected to 0.0.0.0 (127.0.0.1) port 9308 (#0)
+> POST /sql?mode=raw HTTP/1.1
+> Host: 0.0.0.0:9308
+> User-Agent: curl/7.81.0
+> Accept: */*
+> Content-Length: 40
+> Content-Type: application/x-www-form-urlencoded
+>
+* Mark bundle as not supporting multiuse
+< HTTP/1.1 200 OK
+< Server: 6.3.9 17ecd122e@24121621 dev (columnar 2.3.1 edadc69@24112219) (secondary 2.3.1 edadc69@24112219) (knn 2.3.1 edadc69@24112219) (buddy v3.0.1)
+< Content-Type: application/json; charset=UTF-8
+< Content-Length: 142
+<
+[{
+"columns":[{"id":{"type":"long long"}},{"f":{"type":"string"}}],
+"data":[
+{"id":1,"f":"ящик"}
+],
+"total":1,
+"error":"",
+"warning":""
+* Connection #0 to host 0.0.0.0 left intact
+}]0
+––– input –––
+curl "0:9308/sql?mode=raw" -d "SELECT * FROM t WHERE MATCH('ящик') OPTION fuzzy=abc;"; echo $?
+––– output –––
+{"error":"Invalid value for option 'fuzzy'"}0
+––– input –––
+mysql -h0 -P9306 -e "DROP TABLE IF EXISTS t; CREATE TABLE t(f TEXT) min_infix_len='2';"
+––– output –––
+––– input –––
+mysql -h0 -P9306 -e "INSERT INTO t(id, f) VALUES (1, 'ящик'), (2, 'коробка');"; echo $?
+––– output –––
+0
+––– input –––
+mysql -h0 -P9306 -e "SELECT * FROM t;"
+––– output –––
++------+----------------+
+| id   | f              |
++------+----------------+
+|    1 | ящик           |
+|    2 | коробка        |
++------+----------------+
+––– input –––
+curl -v "0:9308/sql?mode=raw" -d "select * from t where match('ящик') option fuzzy=1;"; echo $?
+––– output –––
+*   Trying 0.0.0.0:9308...
+* Connected to 0.0.0.0 (127.0.0.1) port 9308 (#0)
+> POST /sql?mode=raw HTTP/1.1
+> Host: 0.0.0.0:9308
+> User-Agent: curl/7.81.0
+> Accept: */*
+> Content-Length: 55
+> Content-Type: application/x-www-form-urlencoded
+>
+* Mark bundle as not supporting multiuse
+< HTTP/1.1 200 OK
+< Server: 6.3.9 17ecd122e@24121621 dev (columnar 2.3.1 edadc69@24112219) (secondary 2.3.1 edadc69@24112219) (knn 2.3.1 edadc69@24112219) (buddy v3.0.1)
+< Content-Type: application/json; charset=UTF-8
+< Content-Length: 134
+<
+* Connection #0 to host 0.0.0.0 left intact
+[{"total":1,"error":"","warning":"","columns":[{"id":{"type":"long long"}},{"f":{"type":"string"}}],"data":[{"id":1,"f":"ящик"}]}]0
+––– input –––
+mysql -h0 -P9306 -e "SHOW TABLES;"
+––– output –––
++-------+------+
+| Table | Type |
++-------+------+
+| t     | rt   |
++-------+------+
+––– input –––
+curl -v "0:9308/sql?mode=raw" -d "select * from t where match('ящик') option fuzzy=1"; echo $?
+––– output –––
+*   Trying 0.0.0.0:9308...
+* Connected to 0.0.0.0 (127.0.0.1) port 9308 (#0)
+> POST /sql?mode=raw HTTP/1.1
+> Host: 0.0.0.0:9308
+> User-Agent: curl/7.81.0
+> Accept: */*
+> Content-Length: 54
+> Content-Type: application/x-www-form-urlencoded
+>
+* Mark bundle as not supporting multiuse
+< HTTP/1.1 200 OK
+< Server: 6.3.9 17ecd122e@24121621 dev (columnar 2.3.1 edadc69@24112219) (secondary 2.3.1 edadc69@24112219) (knn 2.3.1 edadc69@24112219) (buddy v3.0.1)
+< Content-Type: application/json; charset=UTF-8
+< Content-Length: 134
+<
+* Connection #0 to host 0.0.0.0 left intact
+[{"total":1,"error":"","warning":"","columns":[{"id":{"type":"long long"}},{"f":{"type":"string"}}],"data":[{"id":1,"f":"ящик"}]}]0
+––– input –––
+curl -v "0:9308/sql?mode=raw" -d "select * from t where match('ящик');"; echo $?
+––– output –––
+*   Trying 0.0.0.0:9308...
+* Connected to 0.0.0.0 (127.0.0.1) port 9308 (#0)
+> POST /sql?mode=raw HTTP/1.1
+> Host: 0.0.0.0:9308
+> User-Agent: curl/7.81.0
+> Accept: */*
+> Content-Length: 40
+> Content-Type: application/x-www-form-urlencoded
+>
+* Mark bundle as not supporting multiuse
+< HTTP/1.1 200 OK
+< Server: 6.3.9 17ecd122e@24121621 dev (columnar 2.3.1 edadc69@24112219) (secondary 2.3.1 edadc69@24112219) (knn 2.3.1 edadc69@24112219) (buddy v3.0.1)
+< Content-Type: application/json; charset=UTF-8
+< Content-Length: 142
+<
+[{
+"columns":[{"id":{"type":"long long"}},{"f":{"type":"string"}}],
+"data":[
+{"id":1,"f":"ящик"}
+],
+"total":1,
+"error":"",
+"warning":""
+* Connection #0 to host 0.0.0.0 left intact
+}]0
+––– input –––
+curl "0:9308/sql?mode=raw" -d "SELECT * FROM t WHERE MATCH('ящик') OPTION fuzzy=abc;"; echo $?
+––– output –––
+{"error":"Invalid value for option 'fuzzy'"}0

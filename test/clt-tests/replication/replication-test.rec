@@ -841,8 +841,10 @@ mysql -h0 -P1306 -e "FLUSH RAMCHUNK testrt;"
 mysql -h0 -P1306 -e 'set global cluster_user=replication'
 ––– output –––
 ––– input –––
-mysqldump -etc --replace --column-statistics=0 -u replication -h0 -P1306 --skip-comments manticore replication:testrt | mysql -P1306 -h0
+mysqldump -etc --replace --column-statistics=0 -u replication -h0 -P1306 --skip-comments manticore replication:testrt | mysql -P1306 -h0; echo $?
 ––– output –––
+-- Warning: version string returned by server is incorrect.
+0
 ––– input –––
 for port in 1306 2306 3306 4306 5306; do echo "Checking tables on port $port"; mysql -h0 -P$port -e "SHOW TABLES;"; mysql -h0 -P$port -e "SELECT * FROM testrt ORDER BY id ASC\G"; done
 ––– output –––
@@ -1157,6 +1159,7 @@ mysql -h0 -P1306 -e "SHOW STATUS LIKE 'cluster_replication_indexes';"
 ––– input –––
 mysqldump -etc --replace --column-statistics=0 -u replication -h0 -P1306 --skip-comments manticore replication:tbl_none replication:tbl_stem_en replication:tbl_stem_ru replication:tbl_wordforms | mysql -P2306 -h0; echo $?
 ––– output –––
+-- Warning: version string returned by server is incorrect.
 0
 ––– input –––
 for port in 1306 2306 3306 4306 5306; do mysql -h0 -P$port -e "SHOW TABLES;"; done
@@ -1340,6 +1343,7 @@ mysql -h0 -P1306 -e "SHOW STATUS LIKE 'cluster_replication_indexes';"
 ––– input –––
 mysqldump -etc --replace --column-statistics=0 -u replication -h0 -P1306 --skip-comments manticore replication:tbl_plain | mysql -h0 -P2306; echo $?
 ––– output –––
+-- Warning: version string returned by server is incorrect.
 0
 ––– input –––
 for port in 1306 2306 3306 4306 5306; do mysql -h0 -P$port -e "SELECT * FROM tbl_plain;"; echo $?; done

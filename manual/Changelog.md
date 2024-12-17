@@ -39,6 +39,7 @@
 * [Issue #2001](https://github.com/manticoresoftware/manticoresearch/issues/2001) Allowed function names to be used as column names.
 * [Issue #2153](https://github.com/manticoresoftware/manticoresearch/issues/2153) Fixed daemon crash on querying table settings with unknown disk chunk.
 * [Issue #2228](https://github.com/manticoresoftware/manticoresearch/issues/2228) Removed date/time related tokens (and regex) from the reserved words.
+* [Issue #2268](https://github.com/manticoresoftware/manticoresearch/issues/2268) Improved external files renaming on copy for CREATE and ALTER TABLE statements.
 * [Issue #2447](https://github.com/manticoresoftware/manticoresearch/issues/2447) Fixed an escaping issue in [_update](../Data_creation_and_modification/Updating_documents/REPLACE.md?client=Elasticsearch-like+partial).
 * [Issue #2460](https://github.com/manticoresoftware/manticoresearch/issues/2460) Fixed indexer crash when declaring multiple attributes or fields with the same name.
 * [Issue #2467](https://github.com/manticoresoftware/manticoresearch/issues/2467) Resolved crash of daemon on incorrect transform for nested bool queries for the "compat" search related endpoints.
@@ -86,7 +87,6 @@ Version 6.3.4 continues the 6.3 series and includes only minor improvements and 
 ### Minor changes
 * [Issue #1130](https://github.com/manticoresoftware/manticoresearch/issues/1130) Added support for [DBeaver](../Integration/DBeaver.md#Integration-with-DBeaver).
 * [Issue #2146](https://github.com/manticoresoftware/manticoresearch/issues/2146) Improved escaping of delimiters in word forms and exceptions.
-* [Issue #2268](https://github.com/manticoresoftware/manticoresearch/issues/2268) Improved external files renaming on copy for CREATE and ALTER TABLE statements.
 * [Issue #2315](https://github.com/manticoresoftware/manticoresearch/issues/2315) Added string comparison operators to SELECT list expressions.
 * [Issue #2363](https://github.com/manticoresoftware/manticoresearch/issues/2363) Added support for null values in Elastic-like bulk requests.
 * [Issue #2374](https://github.com/manticoresoftware/manticoresearch/issues/2374) Added support for mysqldump version 9.

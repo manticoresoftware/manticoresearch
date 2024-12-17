@@ -64,7 +64,7 @@ private:
 	void ProcessILM();
 	void ProcessCCR();
 	void ProcessKbnTableGet();
-	void ProcessCount();
+	bool ProcessCount();
 	void ProcessIgnored();
 	bool ProcessCreateTable();
 	bool ProcessDeleteDoc();
@@ -1752,12 +1752,12 @@ bool HttpCompatHandler_c::ProcessSearch()
 	return true;
 }
 
-void HttpCompatHandler_c::ProcessCount()
+bool HttpCompatHandler_c::ProcessCount()
 {
 	if ( IsEmpty ( GetBody() ) )
 	{
 		ReportError ( "request body or source parameter is required", HttpErrorType_e::Parse, EHTTP_STATUS::_400 );
-		return;
+		return false;
 	}
 
 	const CSphString & sIndex = GetUrlParts()[0];
@@ -1765,14 +1765,14 @@ void HttpCompatHandler_c::ProcessCount()
 	if ( tReq.is_discarded())
 	{
 		ReportError ( "invalid body", HttpErrorType_e::Parse, EHTTP_STATUS::_400 );
-		return;
+		return false;
 	}
 
 	CSphString sRes;
 	if ( !DoSearch ( sIndex, tReq, GetFullURL(), sRes ) )
 	{
 		BuildReply ( FromStr ( sRes ), EHTTP_STATUS::_400 );
-		return;
+		return false;
 	}
 
 	nljson tRef = nljson::parse ( sRes.cstr(), nullptr, false );
@@ -1789,6 +1789,7 @@ void HttpCompatHandler_c::ProcessCount()
 	// filter_path and _source uri params
 	ProcessKbnResult ( GetOptions()( "_source" ), GetOptions()( "filter_path" ), sRes );
 	BuildReply ( FromStr ( sRes ), EHTTP_STATUS::_200 );
+	return true;
 }
 
 void HttpCompatHandler_c::ProcessEmptyHead ()
@@ -2082,10 +2083,7 @@ bool HttpCompatHandler_c::ProcessEndpoints()
 		return ProcessSearch();
 
 	if ( GetRequestType()==HTTP_POST && m_dUrlParts.GetLength()>1 && m_dUrlParts[1]=="_count" )
-	{
-		ProcessCount();
-		return true;
-	}
+		return ProcessCount();
 
 	if ( GetRequestType()==HTTP_PUT )
 	{

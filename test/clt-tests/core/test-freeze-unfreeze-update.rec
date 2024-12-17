@@ -14,27 +14,44 @@ listening on all interfaces for mysql, port=9315
 listening on all interfaces for sphinx and http(s), port=9316
 Buddy started!
 ––– input –––
-mysql -P9315 -h0 -e "drop table if exists t; create table t(s string); insert into t values(1, 'a'); flush ramchunk t"; echo $?
-––– output –––
-0
-––– input –––
-mysql -P9315 -h0 -e "select * from t;"
-––– output –––
-+------+------+
-| id   | s    |
-+------+------+
-|    1 | a    |
-+------+------+
-––– input –––
-(rm -f /tmp/update.sql; for n in `seq 1 10000`; do echo "update t set s='b' where id=1;" >> /tmp/update.sql; done; for i in `seq 1 10`; do mysql -P9315 -h0 < /tmp/update.sql; done; 2>&1 &)
+mysql -P9315 -h0 -e "DROP TABLE IF EXISTS t; CREATE TABLE t(id INT, s STRING);"
 ––– output –––
 ––– input –––
-sleep 1; mysql -P9315 -h0 -e "select * from t;"
+for n in `seq 1 100000`; do echo "INSERT INTO t VALUES($n, 'a');" >> /tmp/insert.sql; done; mysql -P9315 -h0 < /tmp/insert.sql; mysql -P9315 -h0 -e "FLUSH RAMCHUNK t;"
+––– output –––
+––– input –––
+mysql -P9315 -h0 -e "SELECT COUNT(*) AS total FROM t;"
+––– output –––
++---------+
+| total   |
++---------+
+| 100000  |
++---------+
+––– input –––
+rm -f /tmp/update.sql; for n in `seq 1 100000`; do echo "UPDATE t SET s='b' WHERE id=$n;" >> /tmp/update.sql; done; (for i in `seq 1 10`; do mysql -P9315 -h0 < /tmp/update.sql; done) & UPDATE_PID=$!
+––– output –––
+––– input –––
+sleep 5; mysql -P9315 -h0 -e "SELECT COUNT(*) AS updates FROM t WHERE s='b';"
+––– output –––
++---------+
+| updates |
++---------+
+| 100000  |
++---------+
+––– input –––
+kill $UPDATE_PID; wait $UPDATE_PID 2>/dev/null
+––– output –––
+––– input –––
+mysql -P9315 -h0 -e "SELECT * FROM t LIMIT 5;"
 ––– output –––
 +------+------+
 | id   | s    |
 +------+------+
 |    1 | b    |
+|    2 | b    |
+|    3 | b    |
+|    4 | b    |
+|    5 | b    |
 +------+------+
 ––– input –––
 mysql -P9315 -h0 -e "freeze t"

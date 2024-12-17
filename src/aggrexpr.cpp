@@ -84,6 +84,7 @@ protected:
 	uint64_t GetHash ( const ISphSchema & tSorterSchema, uint64_t uPrevHash, bool & bDisable ) final
 	{
 		EXPR_CLASS_NAME("AggrRangeExpr_T");
+		CALC_POD_HASH ( m_tRanges );
 		return CALC_DEP_HASHES();
 	}
 
@@ -484,7 +485,10 @@ static CSphString DumpAggrHist ( const CSphString & sCol, const AggrDateHistSett
 {
 	StringBuilder_c sRes;
 	sRes.Appendf ( "date_histogram(%s, {", sCol.cstr() );
-	sRes.Appendf ( "calendar_interval='%s'", tHist.m_sInterval.cstr() );
+	if ( tHist.m_bFixed )
+		sRes.Appendf ( "fixed_interval='%s'", tHist.m_sInterval.cstr() );
+	else
+		sRes.Appendf ( "calendar_interval='%s'", tHist.m_sInterval.cstr() );
 	sRes += "})";
 	return CSphString ( sRes );
 }
@@ -566,9 +570,12 @@ bool ParseAggrDateHistogram ( const VecTraits_T < CSphNamedVariant > & dVariants
 			return false;
 		}
 
-		if ( tPair.m_sKey=="calendar_interval" )
+		if ( tPair.m_sKey=="calendar_interval" || tPair.m_sKey=="fixed_interval" )
+		{
 			tHist.m_sInterval = tPair.m_sValue;
-		else
+			tHist.m_bFixed = ( tPair.m_sKey=="fixed_interval" );
+
+		} else
 		{
 			sError.SetSprintf ( "unknow value '%s'", tPair.m_sKey.cstr() );
 			return false;
@@ -581,7 +588,7 @@ bool ParseAggrDateHistogram ( const VecTraits_T < CSphNamedVariant > & dVariants
 		return false;
 	}
 
-	DateUnit_e eUnit = ParseDateInterval ( tHist.m_sInterval, sError );
+	DateUnit_e eUnit = ParseDateInterval ( tHist.m_sInterval, tHist.m_bFixed, sError ).first;
 	if ( eUnit==DateUnit_e::total_units )
 		return false;
 
@@ -635,6 +642,7 @@ protected:
 	uint64_t GetHash ( const ISphSchema & tSorterSchema, uint64_t uPrevHash, bool & bDisable ) final
 	{
 		EXPR_CLASS_NAME("AggrHistExpr_T");
+		CALC_POD_HASH ( m_tHist );
 		return CALC_DEP_HASHES();
 	}
 
@@ -660,19 +668,24 @@ ISphExpr * CreateExprHistogram ( ISphExpr * pAttr, const AggrHistSetting_t & tHi
 }
 
 // the aggr date histogram implementation
-class AggrDateHistExpr_c : public Expr_ArgVsSet_T<int>
+template < bool FIXED_INTERVAL >
+class AggrDateHistExpr_T : public Expr_ArgVsSet_T<int>
 {
 	AggrDateHistSetting_t m_tHist;
 	DateUnit_e m_eUnit = DateUnit_e::total_units;
+	int m_iMulti = 1;
 
 public:
-	AggrDateHistExpr_c ( ISphExpr * pAttr, const AggrDateHistSetting_t & tHist )
+	AggrDateHistExpr_T ( ISphExpr * pAttr, const AggrDateHistSetting_t & tHist )
 		: Expr_ArgVsSet_T ( pAttr )
 		, m_tHist ( tHist )
 	{
 		CSphString sError;
-		m_eUnit = ParseDateInterval ( tHist.m_sInterval, sError );
-		assert ( m_eUnit!=DateUnit_e::total_units );
+		auto[eUnit, iMulti] = ParseDateInterval ( tHist.m_sInterval, tHist.m_bFixed, sError );
+		
+		assert ( eUnit!=DateUnit_e::total_units );
+		m_eUnit = eUnit;
+		m_iMulti = iMulti;
 	}
 
 	int IntEval ( const CSphMatch & tMatch ) const final
@@ -685,31 +698,43 @@ protected:
 	int GetBucket ( const CSphMatch & tMatch ) const
 	{
 		time_t iVal = m_pArg->IntEval ( tMatch );
-		RoundDate ( m_eUnit, iVal );
+
+		if_const ( FIXED_INTERVAL ) 
+			RoundDate ( m_eUnit, m_iMulti, iVal );
+		else
+			RoundDate ( m_eUnit, iVal );
+
 		return iVal;
 	}
 
 	uint64_t GetHash ( const ISphSchema & tSorterSchema, uint64_t uPrevHash, bool & bDisable ) final
 	{
-		EXPR_CLASS_NAME("AggrDateHistExpr_c");
+		EXPR_CLASS_NAME("AggrDateHistExpr_T");
+		CALC_POD_HASH ( m_tHist );
+		CALC_POD_HASH ( m_eUnit );
+		CALC_POD_HASH ( m_iMulti );
 		return CALC_DEP_HASHES();
 	}
 
 	ISphExpr * Clone() const final
 	{
-		return new AggrDateHistExpr_c ( *this );
+		return new AggrDateHistExpr_T ( *this );
 	}
 
 private:
-	AggrDateHistExpr_c ( const AggrDateHistExpr_c & rhs )
+	AggrDateHistExpr_T ( const AggrDateHistExpr_T & rhs )
 		: Expr_ArgVsSet_T ( rhs )
 		, m_tHist ( rhs.m_tHist )
 		, m_eUnit ( rhs.m_eUnit )
+		, m_iMulti ( rhs.m_iMulti )
 	{
 	}
 };
 
 ISphExpr * CreateExprDateHistogram ( ISphExpr * pAttr, const AggrDateHistSetting_t & tHist )
 {
-	return new AggrDateHistExpr_c ( pAttr, tHist );
+	if ( tHist.m_bFixed )
+		return new AggrDateHistExpr_T<true> ( pAttr, tHist );
+	else
+		return new AggrDateHistExpr_T<false> ( pAttr, tHist );
 }

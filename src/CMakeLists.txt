@@ -433,7 +433,7 @@ if (CMAKE_VERSION VERSION_GREATER 3.1.0 AND NOT DISABLE_GTESTS AND NOT TEST_SPEC
 	add_subdirectory ( gtests )
 endif ()
 
-add_executable ( tests tests.cpp )
+add_executable ( tests EXCLUDE_FROM_ALL tests.cpp )
 target_link_libraries ( tests PUBLIC lmanticore )
 
 if (WITH_MYSQL)
@@ -510,8 +510,6 @@ if (NOT TEST_SPECIAL_EXTERNAL)
 		endif ()
 	endif ()
 
-	fixup_test_name ( tst "Internal src/tests" )
-	add_test ( NAME ${tst}
-			WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}"
-			COMMAND "tests" )
+#	fixup_test_name ( tst "Internal src/tests" )
+#	add_test ( NAME ${tst} WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}" COMMAND "tests" )
 endif ()

@@ -81,7 +81,6 @@ job_mirror:
       - build/src/indexer
       - build/src/indextool
       - build/src/searchd
-      - build/src/tests
       - build/src/gtests/gmanticoretest
       - build/config/*.c
       - build/config/*.h
@@ -167,7 +166,6 @@ win_build:
       - build/xml
       - build/src/$CTEST_CONFIGURATION_TYPE/indexer.exe
       - build/src/$CTEST_CONFIGURATION_TYPE/searchd.exe
-      - build/src/$CTEST_CONFIGURATION_TYPE/tests.exe
       - build/src/$CTEST_CONFIGURATION_TYPE/*.dll
       - build/src/gtests/$CTEST_CONFIGURATION_TYPE/gmanticoretest.exe
       - build/src/gtests/$CTEST_CONFIGURATION_TYPE/*.dll

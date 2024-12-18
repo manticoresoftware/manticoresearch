@@ -123,9 +123,6 @@ static bool LOG_LEVEL_RTSPLIT_QUERY = val_from_env ( "MANTICORE_LOG_RTSPLIT_QUER
 // GLOBALS
 //////////////////////////////////////////////////////////////////////////
 
-/// check for concurrent changes during binlog replay (used only in asserts)
-static auto&	g_bRTChangesAllowed		= RTChangesAllowed ();
-
 // optimize mode for disk chunks merge fixme! retire?
 static bool g_bProgressiveMerge = true;
 
@@ -153,45 +150,61 @@ volatile int AutoOptimizeCutoff() noexcept
 
 // Variable Length Byte (VLB) encoding
 // store int variable in as much bytes as actually needed to represent it
-template < typename T, typename P >
-static inline void ZipT_LE ( CSphVector < BYTE, P > & dOut, T uValue )
-{
-	ZipValueLE ( [&dOut] ( BYTE b ) { dOut.Add ( b ); }, uValue );
-}
 
 #define SPH_MAX_KEYWORD_LEN (3*SPH_MAX_WORD_LEN+4)
 STATIC_ASSERT ( SPH_MAX_KEYWORD_LEN<255, MAX_KEYWORD_LEN_SHOULD_FITS_BYTE );
 
 
-// Variable Length Byte (VLB) decoding
-template < typename T >
-static inline void UnzipT_LE ( T * pValue, const BYTE *& pIn )
-{
-	*pValue = UnzipValueLE<T> ( [&pIn]() mutable { return *pIn++; } );
-}
-
-template < typename T >
-static inline T UnzipT_LE ( const BYTE *& pIn )
-{
-	return UnzipValueLE<T> ( [&pIn]() mutable { return *pIn++; } );
-}
-
 // Variable Length Byte (VLB) skipping (BE/LE agnostic)
-static inline void SkipZipped ( const BYTE *& pIn )
+static inline void SkipZipped ( const BYTE *& pIn ) noexcept
 {
 	while ( *pIn & 0x80U )
 		++pIn;
 	++pIn; // jump over last one
 }
 
-#define ZipDword ZipT_LE<DWORD>
-#define ZipQword ZipT_LE<uint64_t>
-#define UnzipDword UnzipT_LE<DWORD>
-#define UnzipQword UnzipT_LE<uint64_t>
+template<typename P>
+static inline void ZipDword ( CSphVector<BYTE, P> & dOut, DWORD uValue ) noexcept
+{
+	ZipValueLE ( [&dOut] ( BYTE b ) { dOut.Add ( b ); }, uValue );
+}
 
-#define ZipDocid ZipQword
-#define ZipWordid ZipQword
-#define UnzipWordid UnzipQword
+template<typename P>
+static inline void ZipQword ( CSphVector<BYTE, P> & dOut, uint64_t uValue ) noexcept
+{
+	ZipValueLE ( [&dOut] ( BYTE b ) { dOut.Add ( b ); }, uValue );
+}
+
+static inline DWORD UnzipDword ( const BYTE *& pIn ) noexcept
+{
+	return UnzipValueLE<DWORD> ( [&pIn] () mutable { return *pIn++; } );
+}
+
+static inline void UnzipDword ( DWORD * pValue, const BYTE *& pIn ) noexcept
+{
+	*pValue = UnzipValueLE<DWORD> ( [&pIn] () mutable { return *pIn++; } );
+}
+
+static inline uint64_t UnzipQword ( const BYTE *& pIn ) noexcept
+{
+	return UnzipValueLE<uint64_t> ( [&pIn] () mutable { return *pIn++; } );
+}
+
+static inline void UnzipQword ( uint64_t * pValue, const BYTE *& pIn ) noexcept
+{
+	*pValue = UnzipValueLE<uint64_t> ( [&pIn] () mutable { return *pIn++; } );
+}
+
+template<typename P>
+static inline void ZipWordid ( CSphVector<BYTE, P> & dOut, uint64_t uValue ) noexcept
+{
+	ZipQword ( dOut, uValue );
+}
+
+static inline uint64_t UnzipWordid ( const BYTE *& pIn ) noexcept
+{
+	return UnzipQword ( pIn );
+}
 
 //////////////////////////////////////////////////////////////////////////
 
@@ -1958,7 +1971,7 @@ bool RtIndex_c::VerifyKNN ( InsertDocData_c & tDoc, CSphString & sError ) const
 
 bool RtIndex_c::AddDocument ( InsertDocData_c & tDoc, bool bReplace, const CSphString & sTokenFilterOptions, CSphString & sError, CSphString & sWarning, RtAccum_t * pAcc )
 {
-	assert ( g_bRTChangesAllowed );
+	assert ( RTChangesAllowed () );
 	assert ( m_tSchema.GetAttrIndex ( sphGetDocidName() )==0 );
 	assert ( m_tSchema.GetAttr ( sphGetDocidName() )->m_eAttrType==SPH_ATTR_BIGINT );
 
@@ -2098,7 +2111,7 @@ bool RtIndex_c::BindAccum ( RtAccum_t * pAccExt, CSphString * pError )
 
 bool RtIndex_c::AddDocument ( ISphHits * pHits, const InsertDocData_c & tDoc, bool bReplace, const DocstoreBuilder_i::Doc_t * pStoredDoc, CSphString & sError, CSphString & sWarning, RtAccum_t * pAccExt )
 {
-	assert ( g_bRTChangesAllowed );
+	assert ( RTChangesAllowed () );
 
 	auto * pAcc = (RtAccum_t *)pAccExt;
 
@@ -2891,7 +2904,7 @@ bool RtIndex_c::Commit ( int * pDeleted, RtAccum_t * pAcc, CSphString * pError )
 {
 	TRACE_CONN ( "conn", "RtIndex_c::Commit" );
 
-	assert ( g_bRTChangesAllowed );
+	assert ( RTChangesAllowed () );
 	MEMORY ( MEM_INDEX_RT );
 
 	if ( !BindAccum ( pAcc ) )
@@ -3365,7 +3378,7 @@ bool RtIndex_c::CommitReplayable ( RtSegment_t * pNewSeg, const VecTraits_T<DocI
 
 void RtIndex_c::RollBack ( RtAccum_t * pAcc )
 {
-	assert ( g_bRTChangesAllowed );
+	assert ( RTChangesAllowed () );
 
 	if ( BindAccum ( pAcc ) )
 		pAcc->Cleanup ();
@@ -3373,7 +3386,7 @@ void RtIndex_c::RollBack ( RtAccum_t * pAcc )
 
 bool RtIndex_c::DeleteDocument ( const VecTraits_T<DocID_t> & dDocs, CSphString & sError, RtAccum_t * pAcc )
 {
-	assert ( g_bRTChangesAllowed );
+	assert ( RTChangesAllowed () );
 	MEMORY ( MEM_RT_ACCUM );
 
 	if ( !BindAccum ( pAcc, &sError ) )
@@ -5790,7 +5803,7 @@ void RtIndex_c::DebugCheckRam ( DebugCheckError_i & tReporter ) NO_THREAD_SAFETY
 	}
 }
 
-constexpr int FAILS_THRESH = 100;
+constexpr int FAILS_THRESHRT = 100;
 
 class DebugCheckInternal : public DebugCheckError_i
 {
@@ -5808,7 +5821,7 @@ public:
 
 bool DebugCheckInternal::Fail ( const char* szFmt, ... )
 {
-	if ( ++m_iFails >= FAILS_THRESH )
+	if ( ++m_iFails >=FAILS_THRESHRT )
 		return false;
 
 	va_list ap;

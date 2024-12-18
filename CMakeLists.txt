@@ -1,5 +1,14 @@
 cmake_minimum_required ( VERSION 3.17 )
 
+# Support for Rust Programming Language
+include(FetchContent)
+FetchContent_Declare(
+	Corrosion
+	GIT_REPOSITORY https://github.com/corrosion-rs/corrosion.git
+	GIT_TAG v0.3.5
+)
+FetchContent_MakeAvailable(Corrosion)
+
 FOREACH (policy CMP0012 CMP0013 CMP0014 CMP0048 CMP0074 CMP0077 CMP0091 CMP0110)
 	IF (POLICY ${policy})
 		CMAKE_POLICY ( SET ${policy} NEW )
@@ -379,6 +388,7 @@ set ( CPACK_PROJECT_CONFIG_FILE "${MANTICORE_BINARY_DIR}/config/CPackOptions.cma
 set ( DEFAULT_CTEST_CONFIGURATION_TYPE "Debug" )
 include ( CTest )
 
+add_subdirectory ( rust )
 add_subdirectory ( src )
 
 if (BUILD_TESTING)
@@ -436,4 +446,3 @@ feature_summary ( WHAT ENABLED_FEATURES INCLUDE_QUIET_PACKAGES DESCRIPTION "Enab
 feature_summary ( WHAT RUNTIME_PACKAGES_FOUND INCLUDE_QUIET_PACKAGES DESCRIPTION "Available runtime features:" )
 
 #feature_summary (WHAT ALL DESCRIPTION "Enabled ALL features4:")
-

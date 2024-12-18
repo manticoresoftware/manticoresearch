@@ -64,6 +64,7 @@
 #include "skip_cache.h"
 #include "jieba.h"
 
+
 // services
 #include "taskping.h"
 #include "taskmalloctrim.h"
@@ -78,6 +79,7 @@
 #include "searchdbuddy.h"
 #include "detail/indexlink.h"
 #include "detail/expmeter.h"
+#include "rust_hello_world.h"
 
 extern "C"
 {
@@ -21730,6 +21732,15 @@ int WINAPI ServiceMain ( int argc, char **argv ) EXCLUDES (MainThread)
 	}
 } // NOLINT ServiceMain() function length
 
+#include <iostream>
+#include <vector>
+ 
+void print(std::vector<double> input)
+{
+	std::cout << input[0] << ' ';
+	std::cout << input[1] << ' ';
+}
+
 inline int mainimpl ( int argc, char **argv )
 {
 	// threads should be initialized before memory allocations
@@ -21740,6 +21751,14 @@ inline int mainimpl ( int argc, char **argv )
 	g_pLogger() = sphLog;
 	sphBacktraceSetBinaryName ( argv[0] );
 	GeodistInit();
+	hello_from_rust();
+	std::vector<double> vec;
+        vec.push_back(10.0);
+        vec.push_back(20.0);
+	std::vector<double> *v_ptr = &vec;
+	const char* text = "sample text for interop traversal";
+	const_char_ptr_to_stdout_by_rust ( text, v_ptr, vec.size() );
+	print(vec);
 
 #if _WIN32
 	int iNameIndex = -1;

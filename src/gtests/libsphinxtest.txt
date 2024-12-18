@@ -1,0 +1,16 @@
+AT&T      => AT&T
+   AT & T => AT & T  
+standarten fuehrer => Standartenfuehrer
+standarten   fuhrer  => Standartenfuehrer
+OS/2 => OS/2
+Ms-Dos => MS-DOS
+MS DOS => MS-DOS
+feat. => featuring
+U.S. => US
+U.S.A. => USA
+U.S.B. => USB
+U.S.D. => USD
+U.S.P. => USP
+U.S.A.F. => USAF
+life:) => life:)
+; => ;

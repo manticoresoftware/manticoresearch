@@ -24,8 +24,8 @@ mysql -h0 -P9306 -e "SELECT COUNT(*) FROM name;"
 +----------+
 |  1000000 |
 +----------+
-––– input –––
-mysql -h0 -P9306 -e "OPTIMIZE TABLE name OPTION cutoff=1, sync=1;"
+ ––– input –––
+mysql -h0 -P9306 -e "OPTIMIZE TABLE name OPTION sync=1;"
 ––– output –––
 ––– input –––
 mysql -h0 -P9306 -e "SELECT * FROM name WHERE MATCH('RICH') ORDER BY id ASC, username ASC OPTION fuzzy=1;"

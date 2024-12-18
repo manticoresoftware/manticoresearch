@@ -190,7 +190,7 @@ static inline uint64_t UnzipQword ( const BYTE *& pIn ) noexcept
 	return UnzipValueLE<uint64_t> ( [&pIn] () mutable { return *pIn++; } );
 }
 
-static inline void UnzipQword ( uint64_t * pValue, const BYTE *& pIn ) noexcept
+[[maybe_unused]] static inline void UnzipQword ( uint64_t * pValue, const BYTE *& pIn ) noexcept
 {
 	*pValue = UnzipValueLE<uint64_t> ( [&pIn] () mutable { return *pIn++; } );
 }

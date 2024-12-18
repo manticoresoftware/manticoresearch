@@ -20,7 +20,7 @@ PROJECT ( SPHINXCLIENT
 # our mega-lib
 add_library ( sphinxclient STATIC sphinxclient.c )
 if (CMAKE_CXX_COMPILER_ID STREQUAL "Clang" AND CMAKE_CXX_COMPILER_FRONTEND_VARIANT STREQUAL "MSVC")
-	target_compile_options ( sphinxclient PRIVATE -g3 /clang:-Wall -O0 )
+	target_compile_options ( sphinxclient PRIVATE /clang:-Wall )
 else ()
 	target_compile_options ( sphinxclient PRIVATE -g3 -Wall -O0 )
 endif ()

@@ -1162,56 +1162,6 @@ mysqldump -etc --replace --column-statistics=0 -u replication -h0 -P1306 --skip-
 -- Warning: version string returned by server is incorrect.
 0
 ––– input –––
-for port in 1306 2306 3306 4306 5306; do mysql -h0 -P$port -e "SHOW TABLES;"; done
-––– output –––
-+---------------+------+
-| Table         | Type |
-+---------------+------+
-| tbl_none      | rt   |
-| tbl_stem_en   | rt   |
-| tbl_stem_ru   | rt   |
-| tbl_wordforms | rt   |
-| testrt        | rt   |
-+---------------+------+
-+---------------+------+
-| Table         | Type |
-+---------------+------+
-| tbl_none      | rt   |
-| tbl_stem_en   | rt   |
-| tbl_stem_ru   | rt   |
-| tbl_stopwords | rt   |
-| tbl_wordforms | rt   |
-| testrt        | rt   |
-+---------------+------+
-+----------------+------+
-| Table          | Type |
-+----------------+------+
-| tbl_exceptions | rt   |
-| tbl_none       | rt   |
-| tbl_stem_en    | rt   |
-| tbl_stem_ru    | rt   |
-| tbl_wordforms  | rt   |
-| testrt         | rt   |
-+----------------+------+
-+---------------+------+
-| Table         | Type |
-+---------------+------+
-| tbl_none      | rt   |
-| tbl_stem_en   | rt   |
-| tbl_stem_ru   | rt   |
-| tbl_wordforms | rt   |
-| testrt        | rt   |
-+---------------+------+
-+---------------+------+
-| Table         | Type |
-+---------------+------+
-| tbl_none      | rt   |
-| tbl_stem_en   | rt   |
-| tbl_stem_ru   | rt   |
-| tbl_wordforms | rt   |
-| testrt        | rt   |
-+---------------+------+
-––– input –––
 for port in 1306 2306 3306 4306 5306; do mysql -h0 -P$port -e "SELECT * FROM tbl_none;"; mysql -h0 -P$port -e "SELECT * FROM tbl_stem_en;"; mysql -h0 -P$port -e "SELECT * FROM tbl_stem_ru;"; mysql -h0 -P$port -e "SELECT * FROM tbl_wordforms;"; done
 ––– output –––
 +------+--------------+------+----------+--------------------------------+-------+--------------+------+------+---------------------------------------+-------------------------------------+
@@ -1378,61 +1328,6 @@ for port in 1306 2306 3306 4306 5306; do mysql -h0 -P$port -e "SELECT * FROM tbl
 |    1 | Plain example | plain_string | 2024-12-16 12:00:00 |   42 | 3.140000 | 1,2,3 |    1 | 123456789012345678,987654321098765432 | {"key":"value"} | 0    |
 +------+---------------+--------------+---------------------+------+----------+-------+------+---------------------------------------+-----------------+------+
 0
-––– input –––
-for port in 1306 2306 3306 4306 5306; do mysql -h0 -P$port -e "SHOW TABLES;"; done
-––– output –––
-+---------------+------+
-| Table         | Type |
-+---------------+------+
-| tbl_none      | rt   |
-| tbl_plain     | rt   |
-| tbl_stem_en   | rt   |
-| tbl_stem_ru   | rt   |
-| tbl_wordforms | rt   |
-| testrt        | rt   |
-+---------------+------+
-+---------------+------+
-| Table         | Type |
-+---------------+------+
-| tbl_none      | rt   |
-| tbl_plain     | rt   |
-| tbl_stem_en   | rt   |
-| tbl_stem_ru   | rt   |
-| tbl_stopwords | rt   |
-| tbl_wordforms | rt   |
-| testrt        | rt   |
-+---------------+------+
-+----------------+------+
-| Table          | Type |
-+----------------+------+
-| tbl_exceptions | rt   |
-| tbl_none       | rt   |
-| tbl_plain      | rt   |
-| tbl_stem_en    | rt   |
-| tbl_stem_ru    | rt   |
-| tbl_wordforms  | rt   |
-| testrt         | rt   |
-+----------------+------+
-+---------------+------+
-| Table         | Type |
-+---------------+------+
-| tbl_none      | rt   |
-| tbl_plain     | rt   |
-| tbl_stem_en   | rt   |
-| tbl_stem_ru   | rt   |
-| tbl_wordforms | rt   |
-| testrt        | rt   |
-+---------------+------+
-+---------------+------+
-| Table         | Type |
-+---------------+------+
-| tbl_none      | rt   |
-| tbl_plain     | rt   |
-| tbl_stem_en   | rt   |
-| tbl_stem_ru   | rt   |
-| tbl_wordforms | rt   |
-| testrt        | rt   |
-+---------------+------+
 ––– input –––
 for port1 in 1306 2306 3306 4306 5306; do for port2 in 1306 2306 3306 4306 5306; do if [ $port1 -ne $port2 ]; then diff <(mysql -h0 -P$port1 -e "SELECT * FROM tbl_plain;") <(mysql -h0 -P$port2 -e "SELECT * FROM tbl_plain;"); fi; done; done
 ––– output –––

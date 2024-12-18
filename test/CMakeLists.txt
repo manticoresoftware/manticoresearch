@@ -53,6 +53,7 @@ find_package (PythonInterp QUIET)
 if ( NOT "${CMAKE_CURRENT_SOURCE_DIR}" STREQUAL "${CMAKE_CURRENT_BINARY_DIR}")
 	message ( STATUS "Create ubertest.php proxies" )
 	configure_file ("ubertest.php.in" "${MANTICORE_BINARY_DIR}/test/ubertest.php" @ONLY)
+	configure_file ( "clean.sh" "${MANTICORE_BINARY_DIR}/test/clean.sh" COPYONLY )
 endif()
 	
 if ( SEARCHD_CLI_EXTRA )

@@ -11,6 +11,7 @@ workflow:
 
 variables:
   VERBOSE: 1
+  UNITY_BUILD: 1
 
 stages:
   - mirroring
@@ -128,6 +129,7 @@ simple_build:
     CTEST_CMAKE_GENERATOR: "Unix Makefiles" # as Ninja fails with coverage
     CTEST_CONFIGURATION_TYPE: "Debug"
     WITH_COVERAGE: 1
+    UNITY_BUILD: 0
 
 simple_tests:
   extends: [ .tests ]
@@ -136,6 +138,7 @@ simple_tests:
     CTEST_CONFIGURATION_TYPE: "Debug"
     WITH_COVERAGE: 1
     NO_BUILD: 1
+    UNITY_BUILD: 0
 
 # ==================== Release build, then test ======================
 

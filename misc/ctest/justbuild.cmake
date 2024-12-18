@@ -5,6 +5,7 @@ set ( CTEST_BUILD_NAME "$ENV{CI_COMMIT_REF_NAME}" )
 set ( CTEST_CONFIGURATION_TYPE "$ENV{CTEST_CONFIGURATION_TYPE}" )
 set ( CTEST_CMAKE_GENERATOR "$ENV{CTEST_CMAKE_GENERATOR}" )
 set ( LIBS_BUNDLE "$ENV{LIBS_BUNDLE}" )
+set ( UNITY_BUILD "$ENV{UNITY_BUILD}" )
 set_property ( GLOBAL PROPERTY Label P$ENV{CI_PIPELINE_ID} J$ENV{CI_JOB_ID} )
 
 # platform specific options
@@ -30,6 +31,10 @@ endif ()
 
 if ( NOT CTEST_CMAKE_GENERATOR )
 	set ( CTEST_CMAKE_GENERATOR "Unix Makefiles" )
+endif ()
+
+if (UNITY_BUILD)
+	LIST ( APPEND CONFIG_OPTIONS "CMAKE_UNITY_BUILD=${UNITY_BUILD}" )
 endif ()
 
 set ( CTEST_BINARY_DIRECTORY "${CTEST_SOURCE_DIRECTORY}/build" )
@@ -60,6 +65,14 @@ set ( CTEST_CUSTOM_WARNING_EXCEPTION ".*flexsphinx.*" )
 ctest_start ( "Continuous" )
 ctest_update ()
 ctest_configure ()
+include ( ProcessorCount )
+ProcessorCount ( N )
+if (NOT N EQUAL 0)
+	if (NOT CTEST_CMAKE_GENERATOR STREQUAL "Visual Studio 16 2019")
+		set ( CTEST_BUILD_FLAGS -j${N} )
+	endif ()
+	set ( ctest_test_args ${ctest_test_args} PARALLEL_LEVEL ${N} )
+endif ()
 ctest_build ( RETURN_VALUE retcode )
 
 if ( retcode )

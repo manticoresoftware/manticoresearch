@@ -509,12 +509,12 @@ POST /search
 
 ## Query options and match weights
 
-Separate options can be specified for queries on the left table in a join and for the right table. The syntax is `OPTIONS(<table_name>)` for SQL queries and one or more subobjects under `"options"` for JSON queries.
+Separate options can be specified for queries in a join: for the left table and the right table. The syntax is `OPTION(<table_name>)` for SQL queries and one or more subobjects under `"options"` for JSON queries.
 
 
 <!-- example join_options -->
 
-Here’s an example of how to specify different field weights for a full-text query on the right table. To retrieve match weights via SQL, use the `<table_name>.weight()` expression.
+Here's an example of how to specify different field weights for a full-text query on the right table. To retrieve match weights via SQL, use the `<table_name>.weight()` expression.
 In JSON queries, this weight is represented as `<table_name>._score`.
 
 <!-- request SQL -->

@@ -1105,6 +1105,35 @@ echo 'fast, faster' > /tmp/wordforms.txt; mysql -h0 -P4306 -e "CREATE TABLE tbl_
 ––– output –––
 0
 ––– input –––
+mysql -h0 -P5306 -e "CREATE TABLE tbl_rowwise_stem_ru (id INT, f TEXT, a INT, b FLOAT, j JSON, m MULTI, s STRING, e BOOL, d TIMESTAMP, v MULTI64, fv FLOAT_VECTOR KNN_TYPE='hnsw' KNN_DIMS='4' HNSW_SIMILARITY='l2') ENGINE='rowwise' morphology='stem_ru' rt_mem_limit='256M';"; echo $?
+––– output –––
+0
+––– input –––
+mysql -h0 -P5306 -e "INSERT INTO tbl_rowwise (id, f, a, b, j, m, s, e, d, v, fv) VALUES (1, 'Rowwise example', 42, 3.14, '{\"key\":\"value\",\"list\":[1,2,3]}', (1,2,3), 'row_string', 1, '2024-12-16 12:00:00', (123456789012345678, 987654321098765432), (0.1, 0.2, 0.3, 0.4));"; echo $?
+––– output –––
+0
+––– input –––
+mysql -h0 -P5306 -e "FLUSH RAMCHUNK tbl_rowwise;"; echo $?
+––– output –––
+0
+––– input –––
+mysql -h0 -P5306 -e "ALTER CLUSTER replication ADD tbl_rowwise;"; echo $?
+––– output –––
+0
+––– input –––
+mysql -h0 -P5306 -e "SHOW STATUS LIKE 'cluster_replication_indexes';"
+––– output –––
++-----------------------------+--------------------+
+| Counter                     | Value              |
++-----------------------------+--------------------+
+| cluster_replication_indexes | testrt,tbl_rowwise |
++-----------------------------+--------------------+
+––– input –––
+mysqldump -etc --replace --column-statistics=0 -u replication -h0 -P1306 --skip-comments manticore replication:tbl_rowwise | mysql -h0 -P5306; echo $?
+––– output –––
+-- Warning: version string returned by server is incorrect.
+0
+––– input –––
 mysql -h0 -P1306 -e "INSERT INTO tbl_none (id, f, a, b, j, m, s, e, d, v, fv) VALUES (1, 'Example text', 42, 3.14, '{\"key\":\"value\",\"list\":[1,2,3]}', (1,2,3), 'string_value', 1, '2024-12-16 12:00:00', (123456789012345678, 987654321098765432), (0.1, 0.2, 0.3, 0.4));"; echo $?
 ––– output –––
 0
@@ -1151,11 +1180,11 @@ mysql -h0 -P4306 -e "ALTER CLUSTER replication ADD tbl_wordforms;"; echo $?
 ––– input –––
 mysql -h0 -P1306 -e "SHOW STATUS LIKE 'cluster_replication_indexes';"
 ––– output –––
-+-----------------------------+-------------------------------------------------------+
-| Counter                     | Value                                                 |
-+-----------------------------+-------------------------------------------------------+
-| cluster_replication_indexes | testrt,tbl_none,tbl_stem_en,tbl_stem_ru,tbl_wordforms |
-+-----------------------------+-------------------------------------------------------+
++-----------------------------+-------------------------------------------------------------------+
+| Counter                     | Value                                                             |
++-----------------------------+-------------------------------------------------------------------+
+| cluster_replication_indexes | testrt,tbl_rowwise,tbl_none,tbl_stem_en,tbl_stem_ru,tbl_wordforms |
++-----------------------------+-------------------------------------------------------------------+
 ––– input –––
 mysqldump -etc --replace --column-statistics=0 -u replication -h0 -P1306 --skip-comments manticore replication:tbl_none replication:tbl_stem_en replication:tbl_stem_ru replication:tbl_wordforms | mysql -P2306 -h0; echo $?
 ––– output –––
@@ -1285,49 +1314,31 @@ mysql -h0 -P1306 -e "ALTER CLUSTER replication ADD tbl_plain;"; echo $?
 ––– input –––
 mysql -h0 -P1306 -e "SHOW STATUS LIKE 'cluster_replication_indexes';"
 ––– output –––
-+-----------------------------+-----------------------------------------------------------------+
-| Counter                     | Value                                                           |
-+-----------------------------+-----------------------------------------------------------------+
-| cluster_replication_indexes | testrt,tbl_none,tbl_stem_en,tbl_stem_ru,tbl_wordforms,tbl_plain |
-+-----------------------------+-----------------------------------------------------------------+
++-----------------------------+-----------------------------------------------------------------------------+
+| Counter                     | Value                                                                       |
++-----------------------------+-----------------------------------------------------------------------------+
+| cluster_replication_indexes | testrt,tbl_rowwise,tbl_none,tbl_stem_en,tbl_stem_ru,tbl_wordforms,tbl_plain |
++-----------------------------+-----------------------------------------------------------------------------+
 ––– input –––
 mysqldump -etc --replace --column-statistics=0 -u replication -h0 -P1306 --skip-comments manticore replication:tbl_plain | mysql -h0 -P2306; echo $?
 ––– output –––
 -- Warning: version string returned by server is incorrect.
 0
 ––– input –––
-for port in 1306 2306 3306 4306 5306; do mysql -h0 -P$port -e "SELECT * FROM tbl_plain;"; echo $?; done
+for port in 1306 2306 3306 4306 5306; do mysql -h0 -P$port -e "SELECT * FROM replication:tbl_plain;" | md5sum > /tmp/hash_$port.txt; done; for port1 in 1306 2306 3306 4306 5306; do for port2 in 1306 2306 3306 4306 5306; do [ $port1 -ne $port2 ] && ! diff /tmp/hash_$port1.txt /tmp/hash_$port2.txt && echo "Mismatch between $port1 and $port2"; done; done
 ––– output –––
-+------+---------------+--------------+---------------------+------+----------+-------+------+---------------------------------------+-----------------+------+
-| id   | f             | s            | d                   | a    | b        | m     | e    | v                                     | j               | fv   |
-+------+---------------+--------------+---------------------+------+----------+-------+------+---------------------------------------+-----------------+------+
-|    1 | Plain example | plain_string | 2024-12-16 12:00:00 |   42 | 3.140000 | 1,2,3 |    1 | 123456789012345678,987654321098765432 | {"key":"value"} | 0    |
-+------+---------------+--------------+---------------------+------+----------+-------+------+---------------------------------------+-----------------+------+
-0
-+------+---------------+--------------+---------------------+------+----------+-------+------+---------------------------------------+-----------------+------+
-| id   | f             | s            | d                   | a    | b        | m     | e    | v                                     | j               | fv   |
-+------+---------------+--------------+---------------------+------+----------+-------+------+---------------------------------------+-----------------+------+
-|    1 | Plain example | plain_string | 2024-12-16 12:00:00 |   42 | 3.140000 | 1,2,3 |    1 | 123456789012345678,987654321098765432 | {"key":"value"} | 0    |
-+------+---------------+--------------+---------------------+------+----------+-------+------+---------------------------------------+-----------------+------+
-0
-+------+---------------+--------------+---------------------+------+----------+-------+------+---------------------------------------+-----------------+------+
-| id   | f             | s            | d                   | a    | b        | m     | e    | v                                     | j               | fv   |
-+------+---------------+--------------+---------------------+------+----------+-------+------+---------------------------------------+-----------------+------+
-|    1 | Plain example | plain_string | 2024-12-16 12:00:00 |   42 | 3.140000 | 1,2,3 |    1 | 123456789012345678,987654321098765432 | {"key":"value"} | 0    |
-+------+---------------+--------------+---------------------+------+----------+-------+------+---------------------------------------+-----------------+------+
-0
-+------+---------------+--------------+---------------------+------+----------+-------+------+---------------------------------------+-----------------+------+
-| id   | f             | s            | d                   | a    | b        | m     | e    | v                                     | j               | fv   |
-+------+---------------+--------------+---------------------+------+----------+-------+------+---------------------------------------+-----------------+------+
-|    1 | Plain example | plain_string | 2024-12-16 12:00:00 |   42 | 3.140000 | 1,2,3 |    1 | 123456789012345678,987654321098765432 | {"key":"value"} | 0    |
-+------+---------------+--------------+---------------------+------+----------+-------+------+---------------------------------------+-----------------+------+
-0
-+------+---------------+--------------+---------------------+------+----------+-------+------+---------------------------------------+-----------------+------+
-| id   | f             | s            | d                   | a    | b        | m     | e    | v                                     | j               | fv   |
-+------+---------------+--------------+---------------------+------+----------+-------+------+---------------------------------------+-----------------+------+
-|    1 | Plain example | plain_string | 2024-12-16 12:00:00 |   42 | 3.140000 | 1,2,3 |    1 | 123456789012345678,987654321098765432 | {"key":"value"} | 0    |
-+------+---------------+--------------+---------------------+------+----------+-------+------+---------------------------------------+-----------------+------+
-0
 ––– input –––
-for port1 in 1306 2306 3306 4306 5306; do for port2 in 1306 2306 3306 4306 5306; do if [ $port1 -ne $port2 ]; then diff <(mysql -h0 -P$port1 -e "SELECT * FROM tbl_plain;") <(mysql -h0 -P$port2 -e "SELECT * FROM tbl_plain;"); fi; done; done
+start_time=$(date +%s%3N); mysql -h0 -P1306 -e "INSERT INTO replication:tbl_plain (id, f, a, b, m, s, e, d, v, j, fv) VALUES (2, 'Performance test', 24, 2.71, (4,5,6), 'perf_string', 1, '2024-12-18 12:00:00', (987654321,123456789), '{\"key\":\"test\"}', (0.2,0.3,0.4,0.5));"; end_time=$(date +%s%3N); echo "INSERT took $(($end_time - $start_time)) ms"
+––– output –––
+––– input –––
+start_time=$(date +%s%3N); mysql -h0 -P1306 -e "REPLACE INTO replication:tbl_plain (id, f, a, b, m, s, e, d, v, j, fv) VALUES (2, 'Updated test', 42, 3.14, (1,2,3), 'updated_string', 0, '2024-12-18 12:00:00', (123456789,987654321), '{\"key\":\"updated\"}', (0.5,0.4,0.3,0.2));"; end_time=$(date +%s%3N); echo "REPLACE took $(($end_time - $start_time)) ms"
+––– output –––
+––– input –––
+start_time=$(date +%s%3N); mysql -h0 -P1306 -e "DELETE FROM replication:tbl_plain WHERE id=2;"; end_time=$(date +%s%3N); echo "DELETE took $(($end_time - $start_time)) ms"
+––– output –––
+––– input –––
+start_time=$(date +%s%3N); mysql -h0 -P1306 -e "FLUSH RAMCHUNK tbl_plain;"; sleep 5; end_time=$(date +%s%3N); echo "FLUSH RAMCHUNK took $(($end_time - $start_time)) ms"; for port in 1306 2306 3306 4306 5306; do mysql -h0 -P$port -e "SELECT * FROM replication:tbl_plain;" > /tmp/output_$port.txt; done && for port1 in 1306 2306 3306 4306 5306; do for port2 in 1306 2306 3306 4306 5306; do [ $port1 -ne $port2 ] && ! diff /tmp/output_$port1.txt /tmp/output_$port2.txt && echo "Mismatch between $port1 and $port2"; done; done
+––– output –––
+––– input –––
+seq 1 100 | xargs -P10 -I{} mysql -h0 -P1306 -e "REPLACE INTO replication:tbl_plain (id, f) VALUES ({}, 'test');"
 ––– output –––

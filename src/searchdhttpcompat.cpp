@@ -1771,6 +1771,7 @@ bool HttpCompatHandler_c::ProcessCount()
 	CSphString sRes;
 	if ( !DoSearch ( sIndex, tReq, GetFullURL(), sRes ) )
 	{
+		m_sError = sRes;
 		BuildReply ( FromStr ( sRes ), EHTTP_STATUS::_400 );
 		return false;
 	}

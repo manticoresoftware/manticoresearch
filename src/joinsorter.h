@@ -18,5 +18,5 @@ CSphVector<std::pair<int,bool>> FetchJoinRightTableFilters ( const CSphVector<CS
 bool				NeedToMoveMixedJoinFilters ( const CSphQuery & tQuery, const ISphSchema & tSchema );
 std::unique_ptr<ISphFilter> CreateJoinNullFilter ( const CSphFilterSettings & tSettings, const CSphAttrLocator & tNullMapLocator );
 
-ISphMatchSorter *	CreateJoinSorter ( const CSphIndex * pIndex, const CSphIndex * pJoinedIndex, const SphQueueSettings_t & tSettings, const CSphQuery & tQuery, ISphMatchSorter * pSorter, bool bJoinedGroupSort, CSphString & sError );
-bool				CreateJoinMultiSorter ( const CSphIndex * pIndex, const CSphIndex * pJoinedIndex, const SphQueueSettings_t & tSettings, const VecTraits_T<CSphQuery> & dQueries, VecTraits_T<ISphMatchSorter *> & dSorters, CSphString & sError );
+ISphMatchSorter *	CreateJoinSorter ( const CSphIndex * pIndex, const CSphIndex * pJoinedIndex, const SphQueueSettings_t & tSettings, const CSphQuery & tQuery, ISphMatchSorter * pSorter, const CSphQuery & tJoinQueryOptions, bool bJoinedGroupSort, CSphString & sError );
+bool				CreateJoinMultiSorter ( const CSphIndex * pIndex, const CSphIndex * pJoinedIndex, const SphQueueSettings_t & tSettings, const VecTraits_T<CSphQuery> & dQueries, const VecTraits_T<CSphQuery> & dJoinQueryOptions, VecTraits_T<ISphMatchSorter *> & dSorters, CSphString & sError );

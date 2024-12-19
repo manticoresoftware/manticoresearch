@@ -16,6 +16,7 @@
 #include "jsonqueryfilter.h"
 #include "attribute.h"
 #include "searchdsql.h"
+#include "searchdha.h"
 #include "knnmisc.h"
 #include "datetime.h"
 #include "sorterscroll.h"
@@ -1080,15 +1081,8 @@ static bool ParseLimits ( const JsonObj_c & tRoot, CSphQuery & tQuery, CSphStrin
 }
 
 
-static bool ParseOptions ( const JsonObj_c & tRoot, CSphQuery & tQuery, CSphString & sError )
+static bool ParseOptions ( const JsonObj_c & tOptions, CSphQuery & tQuery, CSphString & sError )
 {
-	// different from SQL: in sql it is requested by default
-	tQuery.m_tScrollSettings.m_bRequested = false;
-
-	JsonObj_c tOptions = tRoot.GetItem("options");
-	if ( !tOptions )
-		return true;
-
 	if ( !tOptions.IsObj() )
 	{	
 		sError = "\"options\" property value should be an object";
@@ -1148,6 +1142,52 @@ static bool ParseOptions ( const JsonObj_c & tRoot, CSphQuery & tQuery, CSphStri
 	}
 
 	return true;
+}
+
+
+static bool ParseOptions ( const JsonObj_c & tRoot, ParsedJsonQuery_t & tPJQuery, CSphString & sError )
+{
+	CSphQuery & tQuery = tPJQuery.m_tQuery;
+
+	// different from SQL: in sql it is requested by default
+	tQuery.m_tScrollSettings.m_bRequested = false;
+
+	JsonObj_c tOptions = tRoot.GetItem("options");
+	if ( !tOptions )
+		return true;
+
+	if ( tQuery.m_eJoinType!=JoinType_e::NONE )
+	{
+		for ( const auto & i : tOptions )
+		{
+			CSphString sTable = i.Name();
+			sTable.ToLower();
+
+			StrVec_t dQueryIndexes;
+			ParseIndexList ( tQuery.m_sIndexes, dQueryIndexes );
+
+			bool bLeftTable = false;
+			for ( const auto & i : dQueryIndexes )
+				if ( sTable==i )
+				{
+					bLeftTable = true;
+					break;
+				}
+
+			if ( bLeftTable )
+				return ParseOptions ( i, tQuery, sError );
+
+			if ( sTable==tQuery.m_sJoinIdx )
+				return ParseOptions ( i, tPJQuery.m_tJoinQueryOptions, sError );
+
+			sError.SetSprintf ( "Unknown table '%s' in OPTIONS", sTable.cstr() );
+			return false;
+		}
+
+		return true;
+	}
+
+	return ParseOptions ( tOptions, tQuery, sError );
 }
 
 
@@ -1356,7 +1396,7 @@ bool sphParseJsonQuery ( const JsonObj_c & tRoot, ParsedJsonQuery_t & tPJQuery )
 	if ( !ParseJoin ( tRoot, tQuery, sError, tPJQuery.m_sWarning ) )
 		return false;
 
-	if ( !ParseOptions ( tRoot, tQuery, sError ) )
+	if ( !ParseOptions ( tRoot, tPJQuery, sError ) )
 		return false;
 
 	if ( !tRoot.FetchBoolItem ( tPJQuery.m_bProfile, "profile", sError, true ) )
@@ -1936,6 +1976,23 @@ static bool IsHighlightAttr ( const CSphString & sName )
 }
 
 
+static CSphString GetJoinedWeightName ( const CSphQuery & tQuery )
+{
+	CSphString sWeight;
+	sWeight.SetSprintf ( "%s.weight()", tQuery.m_sJoinIdx.cstr() );
+	return sWeight;
+}
+
+
+static bool IsJoinedWeight ( const CSphString & sAttr, const CSphQuery & tQuery )
+{
+	if ( tQuery.m_sJoinIdx.IsEmpty() )
+		return false;
+
+	return sAttr==GetJoinedWeightName(tQuery);
+}
+
+
 static bool NeedToSkipAttr ( const CSphString & sName, const CSphQuery & tQuery )
 {
 	const char * szName = sName.cstr();
@@ -1945,6 +2002,7 @@ static bool NeedToSkipAttr ( const CSphString & sName, const CSphQuery & tQuery 
 	if ( sName.Begins ( GetFilterAttrPrefix() ) ) return true;
 	if ( sName.Begins ( g_szOrder ) ) return true;
 	if ( sName.Begins ( GetKnnDistAttrName() ) ) return true;
+	if ( IsJoinedWeight ( sName, tQuery ) ) return true;
 
 	if ( !tQuery.m_dIncludeItems.GetLength() && !tQuery.m_dExcludeItems.GetLength () )
 		return false;
@@ -2541,6 +2599,15 @@ CSphString HandleShowProfile ( const QueryProfile_c& p )
 }
 
 
+static void AddJoinedWeight ( JsonEscapedBuilder & tOut, const CSphQuery & tQuery, const CSphMatch & tMatch, const CSphColumnInfo * pJoinedWeightAttr )
+{
+	if ( !pJoinedWeightAttr )
+		return;
+
+	tOut.Sprintf ( R"("%s._score":%d)", tQuery.m_sJoinIdx.cstr(), (int)tMatch.GetAttr ( pJoinedWeightAttr->m_tLocator ) );
+}
+
+
 CSphString sphEncodeResultJson ( const VecTraits_T<const AggrResult_t *> & dRes, const JsonQuery_c & tQuery, QueryProfile_c * pProfile, ResultSetFormat_e eFormat )
 {
 	assert ( dRes.GetLength()>=1 );
@@ -2578,6 +2645,8 @@ CSphString sphEncodeResultJson ( const VecTraits_T<const AggrResult_t *> & dRes,
 
 	CSphBitvec tAttrsToSend;
 	sphGetAttrsToSend ( tSchema, false, true, tAttrsToSend );
+
+	const CSphColumnInfo * pJoinedWeightAttr = tQuery.m_sJoinIdx.IsEmpty() ? nullptr : tSchema.GetAttr ( GetJoinedWeightName(tQuery).cstr() );
 
 	int iHighlightAttr = -1;
 	int nSchemaAttrs = tSchema.GetAttrsCount();
@@ -2644,6 +2713,8 @@ CSphString sphEncodeResultJson ( const VecTraits_T<const AggrResult_t *> & dRes,
 			}
 			else
 				tOut.Sprintf ( R"("_score":%d)", tMatch.m_iWeight );
+
+			AddJoinedWeight ( tOut, tQuery, tMatch, pJoinedWeightAttr );
 
 			if ( eFormat==ResultSetFormat_e::ES )
 			{
@@ -4111,4 +4182,5 @@ CSphString JsonAggr_t::GetAliasName () const
 ParsedJsonQuery_t::ParsedJsonQuery_t()
 {
 	SetQueryDefaultsExt2 ( m_tQuery );
+	SetQueryDefaultsExt2 ( m_tJoinQueryOptions );
 }

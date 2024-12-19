@@ -1170,8 +1170,9 @@ void AddCompositeItems ( const CSphString & sCol, CSphVector<CSphQueryItem> & dI
 	}
 }
 
-std::unique_ptr<PubSearchHandler_c> CreateMsearchHandler ( std::unique_ptr<QueryParser_i> pQueryParser, QueryType_e eQueryType, JsonQuery_c & tQuery )
+std::unique_ptr<PubSearchHandler_c> CreateMsearchHandler ( std::unique_ptr<QueryParser_i> pQueryParser, QueryType_e eQueryType, ParsedJsonQuery_t & tParsed )
 {
+	JsonQuery_c & tQuery = tParsed.m_tQuery;
 	tQuery.m_pQueryParser = pQueryParser.get();
 
 	int iQueries = ( 1 + tQuery.m_dAggs.GetLength() );
@@ -1200,6 +1201,7 @@ std::unique_ptr<PubSearchHandler_c> CreateMsearchHandler ( std::unique_ptr<Query
 	if ( !tQuery.m_dAggs.GetLength() || eQueryType==QUERY_SQL || tQuery.m_bGroupEmulation )
 	{
 		pHandler->SetQuery ( 0, tQuery, nullptr );
+		pHandler->SetJoinQueryOptions ( 0, tParsed.m_tJoinQueryOptions );
 		return pHandler;
 	}
 
@@ -1246,6 +1248,7 @@ std::unique_ptr<PubSearchHandler_c> CreateMsearchHandler ( std::unique_ptr<Query
 
 	tQuery.m_bFacetHead = true;
 	pHandler->SetQuery ( 0, tQuery, nullptr );
+	pHandler->SetJoinQueryOptions ( 0, tParsed.m_tJoinQueryOptions );
 	int iRefLimit = tQuery.m_iLimit;
 	int iRefOffset = tQuery.m_iOffset;
 
@@ -1401,7 +1404,7 @@ public:
 		if ( IsBuddyQuery ( m_tOptions ) )
 			m_tParsed.m_tQuery.m_uDebugFlags |= QUERY_DEBUG_NO_LOG;
 
-		std::unique_ptr<PubSearchHandler_c> tHandler = CreateMsearchHandler ( std::move ( pQueryParser ), m_eQueryType, m_tParsed.m_tQuery );
+		std::unique_ptr<PubSearchHandler_c> tHandler = CreateMsearchHandler ( std::move ( pQueryParser ), m_eQueryType, m_tParsed );
 		SetStmt ( *tHandler );
 
 		QueryProfile_c tProfile;

@@ -1212,7 +1212,7 @@ static bool DoSearch ( const CSphString & sDefaultIndex, nljson & tReq, const CS
 	if ( !tParsedQuery.m_sWarning.IsEmpty() )
 		CompatWarning ( "%s", tParsedQuery.m_sWarning.cstr() );
 
-	std::unique_ptr<PubSearchHandler_c> tHandler ( CreateMsearchHandler ( sphCreateJsonQueryParser(), QUERY_JSON, tQuery ) );
+	std::unique_ptr<PubSearchHandler_c> tHandler ( CreateMsearchHandler ( sphCreateJsonQueryParser(), QUERY_JSON, tParsedQuery ) );
 	tHandler->RunQueries();
 
 	CSphFixedVector<AggrResult_t *> dAggsRes ( tQuery.m_bGroupEmulation ? 1 : ( 1 + tQuery.m_dAggs.GetLength() ) );
@@ -1329,7 +1329,8 @@ static bool GetDocIds ( const char * sIndexName, const char * sFilterID, DocIdVe
 	const char * sIdName = "_id";
 	const char * sVerName = "_version";
 
-	JsonQuery_c tQuery;
+	ParsedJsonQuery_t tParsed;
+	JsonQuery_c & tQuery = tParsed.m_tQuery;
 	CSphQueryItem & tItem = tQuery.m_dItems.Add();
 	tItem.m_sAlias = sIdName;
 	tItem.m_sExpr = sIdName;
@@ -1350,7 +1351,7 @@ static bool GetDocIds ( const char * sIndexName, const char * sFilterID, DocIdVe
 		tFilter.m_bExclude = false;
 	}
 
-	std::unique_ptr<PubSearchHandler_c> tHandler ( CreateMsearchHandler ( sphCreateJsonQueryParser(), QUERY_JSON, tQuery ) );
+	std::unique_ptr<PubSearchHandler_c> tHandler ( CreateMsearchHandler ( sphCreateJsonQueryParser(), QUERY_JSON, tParsed ) );
 	tHandler->RunQueries();
 	const AggrResult_t * pRes = tHandler->GetResult ( 0 );
 

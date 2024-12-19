@@ -57,11 +57,13 @@ struct JsonQuery_c : public CSphQuery
 
 struct ParsedJsonQuery_t
 {
-	ParsedJsonQuery_t ();
-	JsonQuery_c m_tQuery;
-	CSphString m_sWarning;
-	bool m_bProfile = false;
-	int m_iPlan = 0; // 0 - no plan, 1 - description, 2 - object, 3 - both
+				ParsedJsonQuery_t();
+
+	JsonQuery_c	m_tQuery;
+	CSphQuery	m_tJoinQueryOptions;
+	CSphString	m_sWarning;
+	bool		m_bProfile = false;
+	int			m_iPlan = 0; // 0 - no plan, 1 - description, 2 - object, 3 - both
 };
 
 std::unique_ptr<QueryParser_i> sphCreateJsonQueryParser();

@@ -227,7 +227,7 @@ struct SqlStmt_t
 
 											   // SELECT specific
 	CSphQuery				m_tQuery;
-	std::unique_ptr<ISphTableFunc>			m_pTableFunc;
+	std::unique_ptr<ISphTableFunc> m_pTableFunc;
 
 	CSphString				m_sTableFunc;
 	StrVec_t				m_dTableFuncArgs;
@@ -287,6 +287,9 @@ public:
 	int						m_iThreadsCols = -1;
 	CSphString				m_sThreadFormat;
 
+	// JOIN-specific
+	CSphQuery				m_tJoinQueryOptions;
+
 	// generic parameter, different meanings in different statements
 	// filter pattern in DESCRIBE, SHOW TABLES / META / VARIABLES
 	// target index name in ATTACH
@@ -336,8 +339,6 @@ enum class Option_e : BYTE;
 
 class SqlParserTraits_c : ISphNoncopyable
 {
-	bool m_bWrongParserSyntaxError = false;
-
 public:
 	const char *	m_pBuf;
 	CSphString *	m_pParseError;
@@ -365,14 +366,21 @@ public:
 	AttrValueVec_t&	GetMvaVec (int iIdx) const noexcept;
 	AttrValues_p	CloneMvaVecPtr ( int iIdx ) const noexcept;
 
+	void			SetDefaultTableForOptions();
+	bool			SetTableForOptions ( const SqlNode_t & tNode );
+
 protected:
-	CSphVector<SqlStmt_t> &	m_dStmt;
-	CSphVector<AttrValueVec_t> m_dMultiValues;
+	CSphVector<SqlStmt_t> &		m_dStmt;
+	CSphVector<AttrValueVec_t>	m_dMultiValues;
+	CSphQuery *					m_pQueryForOptions = nullptr;
 
 					SqlParserTraits_c ( CSphVector<SqlStmt_t> &	dStmt, const char* szQuery, CSphString* pError );
 
 	bool			CheckInteger ( const CSphString& sOpt, const CSphString& sVal ) const;
 	virtual bool	CheckOption ( Option_e eOption ) const;
+
+private:
+	bool m_bWrongParserSyntaxError = false;
 };
 
 

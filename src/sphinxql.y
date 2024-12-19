@@ -624,6 +624,7 @@ select_expr:
 	| TOK_COUNT '(' '*' ')'				{ if ( !pParser->AddItem ( "count(*)", &$1, &$4 ) ) YYERROR; }
 	| TOK_GROUPBY '(' ')'				{ if ( !pParser->AddItem ( "groupby()", &$1, &$3 ) ) YYERROR; }
 	| TOK_COUNT '(' TOK_DISTINCT distinct_ident ')' { if ( !pParser->AddDistinct ( &$4, &$1, &$5 ) ) YYERROR; }
+	| ident TOK_SUBKEY '(' ')'			{ pParser->AddJoinedWeight ( $1, $2 ); }
 	;
 
 opt_where_clause:
@@ -1222,8 +1223,22 @@ opt_option_clause:
 	;
 
 option_clause:
-	TOK_OPTION option_list
+	TOK_OPTION default_option_table_setup option_list
+	| TOK_OPTION '(' idxname ')' option_table_setup option_list
 	;
+
+default_option_table_setup:
+    {
+        pParser->SetDefaultTableForOptions();
+    }
+    ;
+
+option_table_setup:
+    {
+        if ( !pParser->SetTableForOptions($-1) )
+			YYERROR;
+    }
+    ;
 
 option_list:
 	option_item

@@ -355,6 +355,11 @@ select * from join1 left join join2 on join1.j.a = int(join2.id);
 <!-- options for the right table -->
 select id,join2.weight() from join1 left join join2 on join1.string_id = join2.id where match('title1 | name2',join2);
 select id,join2.weight() from join1 left join join2 on join1.string_id = join2.id where match('title1 | name2',join2) option(join2) field_weights=(title=1500);
+
+<!-- options for both tables -->
+select id,weight(),join2.weight() from join1 left join join2 on join1.string_id = join2.id where match('title1 | tmp2', join1) and match('title1 | name2',join2);
+select id,weight(),join2.weight() from join1 left join join2 on join1.string_id = join2.id where match('title1 | tmp2', join1) and match('title1 | name2',join2) option(join1) field_weights=(title=1000) option(join2) field_weights=(title=2000);
+
 </sphinxql>
 
 <query endpoint="json/search">

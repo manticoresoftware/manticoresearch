@@ -1223,6 +1223,11 @@ opt_option_clause:
 	;
 
 option_clause:
+	option_clause_item
+	| option_clause option_clause_item
+	;
+
+option_clause_item:
 	TOK_OPTION default_option_table_setup option_list
 	| TOK_OPTION '(' idxname ')' option_table_setup option_list
 	;

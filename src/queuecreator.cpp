@@ -1674,6 +1674,20 @@ bool QueueCreator_c::AddJoinAttrs()
 		}
 	}
 
+	if ( !m_tQuery.m_sJoinQuery.IsEmpty() )
+	{
+		CSphColumnInfo tAttr;
+		tAttr.m_sName.SetSprintf ( "%s.weight()", m_tSettings.m_pJoinArgs->m_sIndex2.cstr() );
+		tAttr.m_eAttrType = SPH_ATTR_INTEGER;
+		tAttr.m_tLocator.Reset();
+		tAttr.m_eStage = SPH_EVAL_SORTER;
+		tAttr.m_uAttrFlags = CSphColumnInfo::ATTR_JOINED;
+		m_pSorterSchema->AddAttr ( tAttr, true );
+
+		m_hQueryDups.Add ( tAttr.m_sName );
+		m_hQueryColumns.Add ( tAttr.m_sName );
+	}
+
 	return true;
 }
 

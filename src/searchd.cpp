@@ -4155,7 +4155,23 @@ bool GetIndexSchemaItems ( const ISphSchema & tSchema, const CSphVector<CSphQuer
 }
 
 
-bool GetItemsLeftInSchema ( const ISphSchema & tSchema, bool bOnlyPlain, const CSphVector<int> & dAttrs, CSphVector<int> & dAttrsInSchema )
+static bool IsJoinedWeight ( const CSphString & sAttr, const CSphQuery & tQuery )
+{
+	// don't skip this attribute in json queries as it will be used as _score
+	if ( tQuery.m_eQueryType==QUERY_JSON )
+		return false;
+
+	if ( tQuery.m_sJoinIdx.IsEmpty() )
+		return false;
+
+	CSphString sWeight;
+	sWeight.SetSprintf ( "%s.weight()", tQuery.m_sJoinIdx.cstr() );
+
+	return sAttr==sWeight;
+}
+
+
+static bool GetItemsLeftInSchema ( const ISphSchema & tSchema, const CSphQuery & tQuery, const CSphVector<int> & dAttrs, CSphVector<int> & dAttrsInSchema )
 {	
 	bool bHaveExprs = false;
 
@@ -4169,11 +4185,11 @@ bool GetItemsLeftInSchema ( const ISphSchema & tSchema, bool bOnlyPlain, const C
 
 			// need to keep post-limit expression (stored field) for multi-query \ facet
 			// also keep columnar attributes (with expressions)
-			if ( bOnlyPlain && !tAttr.m_pExpr->IsColumnar() && tAttr.m_eStage!=SPH_EVAL_POSTLIMIT )
+			if ( tQuery.m_bFacetHead && !tAttr.m_pExpr->IsColumnar() && tAttr.m_eStage!=SPH_EVAL_POSTLIMIT )
 				continue;
 		}
 
-		if ( !IsGroupbyMagic ( tAttr.m_sName ) && !IsSortStringInternal ( tAttr.m_sName ) && !dAttrs.BinarySearch(i) )
+		if ( !IsGroupbyMagic ( tAttr.m_sName ) && !IsSortStringInternal ( tAttr.m_sName ) && !IsJoinedWeight ( tAttr.m_sName, tQuery ) && !dAttrs.BinarySearch(i) )
 			dAttrsInSchema.Add(i);
 	}
 
@@ -4259,7 +4275,7 @@ void DoExpansion ( const ISphSchema & tSchema, const CSphVector<int> & dAttrsInS
 
 
 // rebuild the results itemlist expanding stars
-const CSphVector<CSphQueryItem> & ExpandAsterisk ( const ISphSchema & tSchema, const CSphVector<CSphQueryItem> & dItems, CSphVector<CSphQueryItem> & tExpanded, bool bOnlyPlain, bool & bHaveExprs )
+const CSphVector<CSphQueryItem> & ExpandAsterisk ( const ISphSchema & tSchema, const CSphVector<CSphQueryItem> & dItems, CSphVector<CSphQueryItem> & tExpanded, const CSphQuery & tQuery, bool & bHaveExprs )
 {
 	// the result schema usually is the index schema + calculated items + @-items
 	// we need to extract the index schema only
@@ -4273,7 +4289,7 @@ const CSphVector<CSphQueryItem> & ExpandAsterisk ( const ISphSchema & tSchema, c
 	// find items that are in index schema but not in our requested item list
 	// not do not include @-items
 	CSphVector<int> dAttrsLeftInSchema;
-	bHaveExprs = GetItemsLeftInSchema ( tSchema, bOnlyPlain, dIndexSchemaAttrs, dAttrsLeftInSchema );
+	bHaveExprs = GetItemsLeftInSchema ( tSchema, tQuery, dIndexSchemaAttrs, dAttrsLeftInSchema );
 
 	DoExpansion ( tSchema, dAttrsLeftInSchema, dItems, tExpanded );
 
@@ -5053,7 +5069,7 @@ bool MinimizeAggrResult ( AggrResult_t & tRes, const CSphQuery & tQuery, bool bH
 	// build a list of select items that the query asked for
 	bool bHaveExprs = false;
 	CSphVector<CSphQueryItem> tExtItems;
-	const CSphVector<CSphQueryItem> & dItems = ExpandAsterisk ( tRes.m_tSchema, dQueryItems, tExtItems, tQuery.m_bFacetHead, bHaveExprs );
+	const CSphVector<CSphQueryItem> & dItems = ExpandAsterisk ( tRes.m_tSchema, dQueryItems, tExtItems, tQuery, bHaveExprs );
 
 	// api + index without attributes + select * case
 	// can not skip aggregate filtering
@@ -5192,6 +5208,7 @@ public:
 	void							RunQueries ();					///< run all queries, get all results
 	void							RunCollect ( const CSphQuery & tQuery, const CSphString & sIndex, CSphString * pErrors, CSphVector<BYTE> * pCollectedDocs );
 	void							SetQuery ( int iQuery, const CSphQuery & tQuery, std::unique_ptr<ISphTableFunc> pTableFunc );
+	void							SetJoinQueryOptions ( int iQuery, const CSphQuery & tJoinQueryOptions ) { m_dJoinQueryOptions[iQuery] = tJoinQueryOptions; }
 	void							SetQueryParser ( std::unique_ptr<QueryParser_i> pParser, QueryType_e eQueryType );
 	void							SetProfile ( QueryProfile_c * pProfile );
 	AggrResult_t *					GetResult ( int iResult ) { return m_dAggrResults.Begin() + iResult; }
@@ -5199,6 +5216,7 @@ public:
 
 public:
 	CSphVector<CSphQuery>			m_dQueries;						///< queries which i need to search
+	CSphVector<CSphQuery>			m_dJoinQueryOptions;			///< join query options
 	CSphVector<AggrResult_t>		m_dAggrResults;					///< results which i obtained
 	CSphVector<StatsPerQuery_t>		m_dQueryIndexStats;				///< statistics for current query
 	CSphVector<SearchFailuresLog_c>	m_dFailuresSet;					///< failure logs for each query
@@ -5240,6 +5258,7 @@ protected:
 private:
 	CSphVector<CSphQueryResult>			m_dResults;
 	VecTraits_T<CSphQuery>				m_dNQueries;		///< working subset of queries
+	VecTraits_T<CSphQuery>				m_dNJoinQueryOptions;///< working subset of join query options
 	VecTraits_T<AggrResult_t>			m_dNAggrResults;	///< working subset of results
 	VecTraits_T<CSphQueryResult>		m_dNResults;		///< working subset of result pointers
 	VecTraits_T<SearchFailuresLog_c>	m_dNFailuresSet;	///< working subset of failures
@@ -5307,6 +5326,11 @@ void PubSearchHandler_c::SetQuery ( int iQuery, const CSphQuery & tQuery, std::u
 	m_pImpl->SetQuery ( iQuery, tQuery, std::move(pTableFunc) );
 }
 
+void PubSearchHandler_c::SetJoinQueryOptions ( int iQuery, const CSphQuery & tJoinQueryOptions )
+{
+	m_pImpl->SetJoinQueryOptions ( iQuery, tJoinQueryOptions );
+}
+
 void PubSearchHandler_c::SetProfile ( QueryProfile_c * pProfile )
 {
 	m_pImpl->SetProfile ( pProfile );
@@ -5337,6 +5361,7 @@ SearchHandler_c::SearchHandler_c ( int iQueries, std::unique_ptr<QueryParser_i> 
 	: m_dTables ( iQueries )
 {
 	m_dQueries.Resize ( iQueries );
+	m_dJoinQueryOptions.Resize ( iQueries );
 	m_dAggrResults.Resize ( iQueries );
 	m_dFailuresSet.Resize ( iQueries );
 	m_dAgentTimes.Resize ( iQueries );
@@ -5350,6 +5375,7 @@ SearchHandler_c::SearchHandler_c ( int iQueries, std::unique_ptr<QueryParser_i> 
 
 	// initial slices (when nothing explicitly asked)
 	m_dNQueries = m_dQueries;
+	m_dNJoinQueryOptions = m_dJoinQueryOptions;
 	m_dNAggrResults = m_dAggrResults;
 	m_dNResults = m_dResults;
 	m_dNFailuresSet = m_dFailuresSet;
@@ -5633,7 +5659,7 @@ int SearchHandler_c::CreateMultiQueryOrFacetSorters ( const CSphIndex * pIndex, 
 		return 0;
 	}
 
-	if ( m_bFacetQueue && !CreateJoinMultiSorter ( pIndex, dJoinedIndexes[0], tQueueSettings, m_dNQueries, dSorters, dErrors[0] ) )
+	if ( m_bFacetQueue && !CreateJoinMultiSorter ( pIndex, dJoinedIndexes[0], tQueueSettings, m_dNQueries, m_dNJoinQueryOptions, dSorters, dErrors[0] ) )
 	{
 		dSorters.Apply ( [] ( ISphMatchSorter *& pSorter ) { SafeDelete (pSorter); } );
 		return 0;
@@ -5659,7 +5685,7 @@ int SearchHandler_c::CreateSingleSorters ( const CSphIndex * pIndex, CSphVector<
 			continue;
 
 		// possibly create a wrapper (if we have JOIN)
-		pSorter = CreateJoinSorter ( pIndex, dJoinedIndexes[iQuery], tQueueSettings, tQuery, pSorter, tQueueRes.m_bJoinedGroupSort, dErrors[iQuery] );
+		pSorter = CreateJoinSorter ( pIndex, dJoinedIndexes[iQuery], tQueueSettings, tQuery, pSorter, m_dNJoinQueryOptions[iQuery], tQueueRes.m_bJoinedGroupSort, dErrors[iQuery] );
 		if ( !pSorter )
 			continue;
 
@@ -7264,6 +7290,7 @@ void SearchHandler_c::RunSubset ( int iStart, int iEnd )
 {
 	int iQueries = iEnd - iStart;
 	m_dNQueries = m_dQueries.Slice ( iStart, iQueries );
+	m_dNJoinQueryOptions = m_dJoinQueryOptions.Slice ( iStart, iQueries );
 	m_dNAggrResults = m_dAggrResults.Slice ( iStart, iQueries );
 	m_dNResults = m_dResults.Slice ( iStart, iQueries );
 	m_dNFailuresSet = m_dFailuresSet.Slice ( iStart, iQueries );
@@ -14560,6 +14587,7 @@ void HandleMysqlMultiStmt ( const CSphVector<SqlStmt_t> & dStmt, CSphQueryResult
 		case STMT_SELECT:
 			{
 				tHandler.SetQuery ( iSelect, tStmt.m_tQuery, std::move ( tStmt.m_pTableFunc ) );
+				tHandler.SetJoinQueryOptions ( iSelect, tStmt.m_tJoinQueryOptions );
 				++iSelect;
 				break;
 			}
@@ -17301,6 +17329,7 @@ bool ClientSession_c::Execute ( Str_t sQuery, RowBuffer_i & tOut )
 			if ( session::IsQueryLogDisabled() )
 				dStmt.Begin()->m_tQuery.m_uDebugFlags |= QUERY_DEBUG_NO_LOG;
 			tHandler.SetQuery ( 0, dStmt.Begin()->m_tQuery, std::move ( dStmt.Begin()->m_pTableFunc ) );
+			tHandler.SetJoinQueryOptions ( 0, dStmt.Begin()->m_tJoinQueryOptions );
 			tHandler.m_pStmt = pStmt;
 
 			if ( tSess.IsProfile() )

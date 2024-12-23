@@ -4293,6 +4293,7 @@ protected:
 	int						AddNodeIdent ( const char * sKey, int iLeft );
 
 	int						AddNodeWithTable ( const char * szTable, uint64_t uOffset );
+	int						AddWeightWithTable ( const char * szTable, uint64_t uOffset );
 	uint64_t				ParseAttrWithTable ( const char * szTable, uint64_t uOffset );
 
 private:
@@ -9172,7 +9173,15 @@ ISphExpr * ExprParser_t::CreateForInNode ( int iNode )
 	int iNameNode = tNode.m_iRight;
 	int iDataNode = m_dNodes[iNameNode].m_iLeft;
 
-	auto * pFunc = new Expr_ForIn_c ( CSphRefcountedPtr<ISphExpr> { CreateTree ( iDataNode )} , iFunc==FUNC_ALL, iFunc==FUNC_INDEXOF );
+	CSphRefcountedPtr<ISphExpr> pArg { CreateTree ( iDataNode )};
+	bool bConverted = false;
+	if ( !pArg->IsJson ( bConverted ) )
+	{
+		m_sCreateError.SetSprintf ( "%s() argument must be JSON", FuncNameByHash ( iFunc ) );
+		return nullptr;
+	}
+
+	auto * pFunc = new Expr_ForIn_c ( pArg, iFunc==FUNC_ALL, iFunc==FUNC_INDEXOF );
 
 	FixupIterators ( iExprNode, m_dNodes[iNameNode].m_sIdent, pFunc->GetRef() );
 	pFunc->SetExpr ( CSphRefcountedPtr<ISphExpr> { CreateTree ( iExprNode ) } );
@@ -10498,6 +10507,20 @@ int ExprParser_t::ParseJoinAttr ( const char * szTable, uint64_t uOffset )
 
 
 int	ExprParser_t::AddNodeWithTable ( const char * szTable, uint64_t uOffset )
+{
+	int iAttr = ParseJoinAttr ( szTable, uOffset );
+	if ( iAttr==-1 )
+		return -1;
+
+	YYSTYPE yylval;
+	int iType = ParseAttr ( iAttr, m_pSchema->GetAttr(iAttr).m_sName.cstr(), &yylval );
+
+	bool bColumnar = iType==TOK_COLUMNAR_INT || iType==SPH_ATTR_TIMESTAMP || iType==TOK_COLUMNAR_TIMESTAMP || iType==SPH_ATTR_FLOAT || iType==TOK_COLUMNAR_FLOAT || iType==TOK_COLUMNAR_BIGINT || iType==TOK_COLUMNAR_BOOL || iType==TOK_COLUMNAR_STRING || iType==TOK_COLUMNAR_UINT32SET || iType==TOK_COLUMNAR_INT64SET || iType==TOK_COLUMNAR_FLOATVEC;
+	return bColumnar ? AddNodeColumnar ( iType, yylval.iAttrLocator ) : AddNodeAttr ( iType, yylval.iAttrLocator );
+}
+
+
+int ExprParser_t::AddWeightWithTable ( const char * szTable, uint64_t uOffset )
 {
 	int iAttr = ParseJoinAttr ( szTable, uOffset );
 	if ( iAttr==-1 )

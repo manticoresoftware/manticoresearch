@@ -1854,6 +1854,16 @@ int ExpandKeywords ( int iIndexOpt, QueryOption_e eQueryOpt, const CSphIndexSett
 	return iOpt;
 }
 
+void SetQueryDefaultsExt2 ( CSphQuery & tQuery )
+{
+	tQuery.m_eMode = SPH_MATCH_EXTENDED2; // only new and shiny matching and sorting
+	tQuery.m_eSort = SPH_SORT_EXTENDED;
+	tQuery.m_sSortBy = "@weight desc"; // default order
+	tQuery.m_sOrderBy = "@weight desc";
+	tQuery.m_iAgentQueryTimeoutMs = DEFAULT_QUERY_TIMEOUT;
+	tQuery.m_iRetryCount = DEFAULT_QUERY_RETRY;
+	tQuery.m_iRetryDelay = DEFAULT_QUERY_RETRY;
+}
 
 /////////////////////////////////////////////////////////////////////////////
 // QUERY STATS
@@ -9732,7 +9742,7 @@ static int SPH_EXTNODE_STACK_SIZE = 160;
 // extra stack which need despite EXTNODE_STACK_SIZE
 static DWORD SPH_EXTRA_BUDGET = 0x2000;
 
-void SetExtNodeStackSize ( int iDelta, int iExtra )
+void SetExtNodeStackSize ( int iExtra, int iDelta )
 {
 	if ( iDelta )
 	{
@@ -11089,7 +11099,7 @@ bool CSphIndex_VLN::ParsedMultiQuery ( const CSphQuery & tQuery, CSphQueryResult
 
 	// set blob pool for string on_sort expression fix up
 	tCtx.SetBlobPool ( m_tBlobAttrs.GetReadPtr() );
-	tCtx.m_uPackedFactorFlags = tArgs.m_uPackedFactorFlags;
+	tCtx.SetPackedFactor ( tArgs.m_uPackedFactorFlags );
 
 	// open files
 	DataReaderFactoryPtr_c pDoclist = m_pDoclistFile;
@@ -11224,7 +11234,7 @@ bool CSphIndex_VLN::ParsedMultiQuery ( const CSphQuery & tQuery, CSphQueryResult
 	bool bHaveRandom = false;
 	dSorters.Apply ( [&bHaveRandom] ( const ISphMatchSorter * p ) { bHaveRandom |= p->IsRandom(); } );
 
-	bool bUseFactors = !!( tCtx.m_uPackedFactorFlags & SPH_FACTOR_ENABLE );
+	bool bUseFactors = !!( tCtx.GetPackedFactor() & SPH_FACTOR_ENABLE );
 	bool bUseKlist = m_tDeadRowMap.HasDead();
 	bool bHasSortCalc = !tCtx.m_dCalcSort.IsEmpty();
 	bool bHasWeightFilter = !!tCtx.m_pWeightFilter;

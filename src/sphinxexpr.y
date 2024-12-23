@@ -150,6 +150,7 @@ attr:
 	| TOK_FIELD						{ $$ = pParser->AddNodeField ( TOK_FIELD, $1 ); }
 	| '`' attr '`'					{ $$ = $2; }
 	| TOK_TABLE_NAME TOK_SUBKEY		{ $$ = pParser->AddNodeWithTable ( $1, $2 ); }
+	| TOK_TABLE_NAME TOK_SUBKEY '(' ')'	{ $$ = pParser->AddWeightWithTable ( $1, $2 ); }
 	;
 
 expr:

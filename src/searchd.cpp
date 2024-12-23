@@ -177,7 +177,9 @@ static constexpr bool	THREAD_EX_NEEDS_VIP = false; // whether non-VIP can issue 
 static CSphVector<Listener_t>	g_dListeners;
 
 static int				g_iQueryLogFile	= -1;
+int						g_iHttpLogFile = -1;
 static CSphString		g_sQueryLogFile;
+static CSphString		g_sHttpLogFile;
 static CSphString		g_sPidFile;
 static bool				g_bPidIsMine = false;		// if PID is not mine, don't unlink it on fail
 static int				g_iPidFD		= -1;
@@ -1960,7 +1962,20 @@ void SearchRequestBuilder_c::SendQuery ( const char * sIndexes, ISphOutputBuffer
 			tOut.SendFloat(i);
 	}
 
-	tOut.SendInt ( (int)q.m_eJiebaMode );	
+	tOut.SendInt ( (int)q.m_eJiebaMode );
+
+	tOut.SendString ( q.m_tScrollSettings.m_sSortBy.cstr() );
+	tOut.SendInt ( q.m_tScrollSettings.m_bRequested );
+	tOut.SendInt ( q.m_tScrollSettings.m_dAttrs.GetLength() );
+	for ( const auto & i : q.m_tScrollSettings.m_dAttrs )
+	{
+		tOut.SendString ( i.m_sSortAttr.cstr() );
+		tOut.SendInt ( i.m_bDesc );
+		tOut.SendInt ( (int)i.m_eType );
+		tOut.SendUint64 ( i.m_tValue );
+		tOut.SendFloat ( i.m_fValue );
+		tOut.SendString ( i.m_sValue.cstr() );
+	}
 }
 
 
@@ -2851,6 +2866,23 @@ bool ParseSearchQuery ( InputBuffer_c & tReq, ISphOutputBuffer & tOut, CSphQuery
 	if ( uMasterVer>=23 )
 		tQuery.m_eJiebaMode = (JiebaMode_e)tReq.GetInt();
 
+	if ( uMasterVer>=24 )
+	{
+		tQuery.m_tScrollSettings.m_sSortBy = tReq.GetString();
+		tQuery.m_tScrollSettings.m_bRequested = !!tReq.GetInt();
+		tQuery.m_tScrollSettings.m_dAttrs.Resize ( tReq.GetInt() );
+	
+		for ( auto & i : tQuery.m_tScrollSettings.m_dAttrs )
+		{
+			i.m_sSortAttr = tReq.GetString();
+			i.m_bDesc = !!tReq.GetInt();
+			i.m_eType = (ESphAttr)tReq.GetInt();
+			i.m_tValue = (SphAttr_t)tReq.GetUint64();
+			i.m_fValue = tReq.GetFloat();
+			i.m_sValue = tReq.GetString();
+		}
+	}
+
 	/////////////////////
 	// additional checks
 	/////////////////////
@@ -3442,10 +3474,12 @@ void LogSphinxqlError ( const Str_t & sStmt, const Str_t & sError )
 	WriteQuery ( tBuf );
 }
 
-void LogBuddyQuery ( const Str_t sQuery, const CSphQueryResultMeta & tMeta, BuddyQuery_e tType )
+void LogBuddyQuery ( const Str_t sQuery, BuddyQuery_e tType )
 {
 	if ( g_eLogFormat!=LOG_FORMAT_SPHINXQL || g_iQueryLogFile<0 || IsEmpty ( sQuery ) )
 		return;
+
+	const auto & tMeta = session::GetClientSession()->m_tLastMeta;
 
 	QuotationEscapedBuilder tBuf;
 
@@ -4121,7 +4155,23 @@ bool GetIndexSchemaItems ( const ISphSchema & tSchema, const CSphVector<CSphQuer
 }
 
 
-bool GetItemsLeftInSchema ( const ISphSchema & tSchema, bool bOnlyPlain, const CSphVector<int> & dAttrs, CSphVector<int> & dAttrsInSchema )
+static bool IsJoinedWeight ( const CSphString & sAttr, const CSphQuery & tQuery )
+{
+	// don't skip this attribute in json queries as it will be used as _score
+	if ( tQuery.m_eQueryType==QUERY_JSON )
+		return false;
+
+	if ( tQuery.m_sJoinIdx.IsEmpty() )
+		return false;
+
+	CSphString sWeight;
+	sWeight.SetSprintf ( "%s.weight()", tQuery.m_sJoinIdx.cstr() );
+
+	return sAttr==sWeight;
+}
+
+
+static bool GetItemsLeftInSchema ( const ISphSchema & tSchema, const CSphQuery & tQuery, const CSphVector<int> & dAttrs, CSphVector<int> & dAttrsInSchema )
 {	
 	bool bHaveExprs = false;
 
@@ -4135,11 +4185,11 @@ bool GetItemsLeftInSchema ( const ISphSchema & tSchema, bool bOnlyPlain, const C
 
 			// need to keep post-limit expression (stored field) for multi-query \ facet
 			// also keep columnar attributes (with expressions)
-			if ( bOnlyPlain && !tAttr.m_pExpr->IsColumnar() && tAttr.m_eStage!=SPH_EVAL_POSTLIMIT )
+			if ( tQuery.m_bFacetHead && !tAttr.m_pExpr->IsColumnar() && tAttr.m_eStage!=SPH_EVAL_POSTLIMIT )
 				continue;
 		}
 
-		if ( !IsGroupbyMagic ( tAttr.m_sName ) && !IsSortStringInternal ( tAttr.m_sName ) && !dAttrs.BinarySearch(i) )
+		if ( !IsGroupbyMagic ( tAttr.m_sName ) && !IsSortStringInternal ( tAttr.m_sName ) && !IsJoinedWeight ( tAttr.m_sName, tQuery ) && !dAttrs.BinarySearch(i) )
 			dAttrsInSchema.Add(i);
 	}
 
@@ -4225,7 +4275,7 @@ void DoExpansion ( const ISphSchema & tSchema, const CSphVector<int> & dAttrsInS
 
 
 // rebuild the results itemlist expanding stars
-const CSphVector<CSphQueryItem> & ExpandAsterisk ( const ISphSchema & tSchema, const CSphVector<CSphQueryItem> & dItems, CSphVector<CSphQueryItem> & tExpanded, bool bOnlyPlain, bool & bHaveExprs )
+const CSphVector<CSphQueryItem> & ExpandAsterisk ( const ISphSchema & tSchema, const CSphVector<CSphQueryItem> & dItems, CSphVector<CSphQueryItem> & tExpanded, const CSphQuery & tQuery, bool & bHaveExprs )
 {
 	// the result schema usually is the index schema + calculated items + @-items
 	// we need to extract the index schema only
@@ -4239,7 +4289,7 @@ const CSphVector<CSphQueryItem> & ExpandAsterisk ( const ISphSchema & tSchema, c
 	// find items that are in index schema but not in our requested item list
 	// not do not include @-items
 	CSphVector<int> dAttrsLeftInSchema;
-	bHaveExprs = GetItemsLeftInSchema ( tSchema, bOnlyPlain, dIndexSchemaAttrs, dAttrsLeftInSchema );
+	bHaveExprs = GetItemsLeftInSchema ( tSchema, tQuery, dIndexSchemaAttrs, dAttrsLeftInSchema );
 
 	DoExpansion ( tSchema, dAttrsLeftInSchema, dItems, tExpanded );
 
@@ -4921,7 +4971,7 @@ bool ApplyOuterOrder ( AggrResult_t & tRes, const CSphQuery & tQuery )
 	tReorder.m_fnStrCmp = GetStringCmpFunc ( tQuery.m_eCollation );
 	CSphVector<ExtraSortExpr_t> dExtraExprs;
 
-	ESortClauseParseResult eRes = sphParseSortClause ( tQuery, tQuery.m_sOuterOrderBy.cstr(), tRes.m_tSchema, eFunc, tReorder, dExtraExprs, true, nullptr, tRes.m_sError );
+	ESortClauseParseResult eRes = sphParseSortClause ( tQuery, tQuery.m_sOuterOrderBy.cstr(), tRes.m_tSchema, eFunc, tReorder, dExtraExprs, nullptr, tRes.m_sError );
 	if ( eRes==SORT_CLAUSE_RANDOM )
 		tRes.m_sError = "order by rand() not supported in outer select";
 
@@ -5019,7 +5069,7 @@ bool MinimizeAggrResult ( AggrResult_t & tRes, const CSphQuery & tQuery, bool bH
 	// build a list of select items that the query asked for
 	bool bHaveExprs = false;
 	CSphVector<CSphQueryItem> tExtItems;
-	const CSphVector<CSphQueryItem> & dItems = ExpandAsterisk ( tRes.m_tSchema, dQueryItems, tExtItems, tQuery.m_bFacetHead, bHaveExprs );
+	const CSphVector<CSphQueryItem> & dItems = ExpandAsterisk ( tRes.m_tSchema, dQueryItems, tExtItems, tQuery, bHaveExprs );
 
 	// api + index without attributes + select * case
 	// can not skip aggregate filtering
@@ -5158,6 +5208,7 @@ public:
 	void							RunQueries ();					///< run all queries, get all results
 	void							RunCollect ( const CSphQuery & tQuery, const CSphString & sIndex, CSphString * pErrors, CSphVector<BYTE> * pCollectedDocs );
 	void							SetQuery ( int iQuery, const CSphQuery & tQuery, std::unique_ptr<ISphTableFunc> pTableFunc );
+	void							SetJoinQueryOptions ( int iQuery, const CSphQuery & tJoinQueryOptions ) { m_dJoinQueryOptions[iQuery] = tJoinQueryOptions; }
 	void							SetQueryParser ( std::unique_ptr<QueryParser_i> pParser, QueryType_e eQueryType );
 	void							SetProfile ( QueryProfile_c * pProfile );
 	AggrResult_t *					GetResult ( int iResult ) { return m_dAggrResults.Begin() + iResult; }
@@ -5165,6 +5216,7 @@ public:
 
 public:
 	CSphVector<CSphQuery>			m_dQueries;						///< queries which i need to search
+	CSphVector<CSphQuery>			m_dJoinQueryOptions;			///< join query options
 	CSphVector<AggrResult_t>		m_dAggrResults;					///< results which i obtained
 	CSphVector<StatsPerQuery_t>		m_dQueryIndexStats;				///< statistics for current query
 	CSphVector<SearchFailuresLog_c>	m_dFailuresSet;					///< failure logs for each query
@@ -5206,6 +5258,7 @@ protected:
 private:
 	CSphVector<CSphQueryResult>			m_dResults;
 	VecTraits_T<CSphQuery>				m_dNQueries;		///< working subset of queries
+	VecTraits_T<CSphQuery>				m_dNJoinQueryOptions;///< working subset of join query options
 	VecTraits_T<AggrResult_t>			m_dNAggrResults;	///< working subset of results
 	VecTraits_T<CSphQueryResult>		m_dNResults;		///< working subset of result pointers
 	VecTraits_T<SearchFailuresLog_c>	m_dNFailuresSet;	///< working subset of failures
@@ -5273,6 +5326,11 @@ void PubSearchHandler_c::SetQuery ( int iQuery, const CSphQuery & tQuery, std::u
 	m_pImpl->SetQuery ( iQuery, tQuery, std::move(pTableFunc) );
 }
 
+void PubSearchHandler_c::SetJoinQueryOptions ( int iQuery, const CSphQuery & tJoinQueryOptions )
+{
+	m_pImpl->SetJoinQueryOptions ( iQuery, tJoinQueryOptions );
+}
+
 void PubSearchHandler_c::SetProfile ( QueryProfile_c * pProfile )
 {
 	m_pImpl->SetProfile ( pProfile );
@@ -5303,6 +5361,7 @@ SearchHandler_c::SearchHandler_c ( int iQueries, std::unique_ptr<QueryParser_i> 
 	: m_dTables ( iQueries )
 {
 	m_dQueries.Resize ( iQueries );
+	m_dJoinQueryOptions.Resize ( iQueries );
 	m_dAggrResults.Resize ( iQueries );
 	m_dFailuresSet.Resize ( iQueries );
 	m_dAgentTimes.Resize ( iQueries );
@@ -5316,6 +5375,7 @@ SearchHandler_c::SearchHandler_c ( int iQueries, std::unique_ptr<QueryParser_i> 
 
 	// initial slices (when nothing explicitly asked)
 	m_dNQueries = m_dQueries;
+	m_dNJoinQueryOptions = m_dJoinQueryOptions;
 	m_dNAggrResults = m_dAggrResults;
 	m_dNResults = m_dResults;
 	m_dNFailuresSet = m_dFailuresSet;
@@ -5599,7 +5659,7 @@ int SearchHandler_c::CreateMultiQueryOrFacetSorters ( const CSphIndex * pIndex, 
 		return 0;
 	}
 
-	if ( m_bFacetQueue && !CreateJoinMultiSorter ( pIndex, dJoinedIndexes[0], tQueueSettings, m_dNQueries, dSorters, dErrors[0] ) )
+	if ( m_bFacetQueue && !CreateJoinMultiSorter ( pIndex, dJoinedIndexes[0], tQueueSettings, m_dNQueries, m_dNJoinQueryOptions, dSorters, dErrors[0] ) )
 	{
 		dSorters.Apply ( [] ( ISphMatchSorter *& pSorter ) { SafeDelete (pSorter); } );
 		return 0;
@@ -5625,7 +5685,7 @@ int SearchHandler_c::CreateSingleSorters ( const CSphIndex * pIndex, CSphVector<
 			continue;
 
 		// possibly create a wrapper (if we have JOIN)
-		pSorter = CreateJoinSorter ( pIndex, dJoinedIndexes[iQuery], tQueueSettings, tQuery, pSorter, tQueueRes.m_bJoinedGroupSort, dErrors[iQuery] );
+		pSorter = CreateJoinSorter ( pIndex, dJoinedIndexes[iQuery], tQueueSettings, tQuery, pSorter, m_dNJoinQueryOptions[iQuery], tQueueRes.m_bJoinedGroupSort, dErrors[iQuery] );
 		if ( !pSorter )
 			continue;
 
@@ -5896,7 +5956,18 @@ void SearchHandler_c::CalcThreadsPerIndex ( int iConcurrency )
 		iConcurrency = g_iThreads;
 
 	int iBusyWorkers = Max ( GlobalWorkPool()->CurTasks() - 1, 0 ); // ignore current task
-	int iAvailableWorkers = Max ( iConcurrency-iBusyWorkers, 1 );
+	int iAvailableWorkers = Max ( Coro::CurrentScheduler()->WorkingThreads() - iBusyWorkers, 1 );
+	iAvailableWorkers = Min ( iAvailableWorkers, iConcurrency );
+
+	// this is need to obey ps dispatcher template, if it defines concurrency
+	// that will help to perform reproducable queries, see test 261
+	auto tDispatch = GetEffectivePseudoShardingDispatcherTemplate ();
+	Dispatcher::Unify ( tDispatch, m_dNQueries.First ().m_tPseudoShardingDispatcher );
+	if ( tDispatch.concurrency )
+	{
+//		sphWarning ( "correct iAvailableWorkers %d to defined %d", iAvailableWorkers, tDispatch.concurrency );
+		iAvailableWorkers = tDispatch.concurrency;
+	}
 
 	CSphVector<CSphVector<int64_t>> dCountDistinct;
 	PopulateCountDistinct ( dCountDistinct );
@@ -7163,6 +7234,7 @@ void SearchHandler_c::RunSubset ( int iStart, int iEnd )
 {
 	int iQueries = iEnd - iStart;
 	m_dNQueries = m_dQueries.Slice ( iStart, iQueries );
+	m_dNJoinQueryOptions = m_dJoinQueryOptions.Slice ( iStart, iQueries );
 	m_dNAggrResults = m_dAggrResults.Slice ( iStart, iQueries );
 	m_dNResults = m_dResults.Slice ( iStart, iQueries );
 	m_dNFailuresSet = m_dFailuresSet.Slice ( iStart, iQueries );
@@ -7833,7 +7905,7 @@ static const char * g_dSqlStmts[] =
 	"flush_hostnames", "flush_logs", "reload_indexes", "sysfilters", "debug", "alter_killlist_target",
 	"alter_index_settings", "join_cluster", "cluster_create", "cluster_delete", "cluster_index_add",
 	"cluster_index_delete", "cluster_update", "explain", "import_table", "freeze_indexes", "unfreeze_indexes",
-	"show_settings", "alter_rebuild_si", "kill", "show_locks"
+	"show_settings", "alter_rebuild_si", "kill", "show_locks", "show_scroll"
 };
 
 
@@ -11272,7 +11344,17 @@ void sphHandleMysqlInsert ( StmtErrorReporter_i & tOut, const SqlStmt_t & tStmt 
 	auto pServed = GetServed ( tStmt.m_sIndex );
 	if ( !ServedDesc_t::IsMutable ( pServed ) )
 	{
-		tOut.Error ( "table '%s' absent, or does not support INSERT", tStmt.m_sIndex.cstr ());
+		bool bDistTable = false;
+		if ( !pServed )
+		{
+			bDistTable = GetDistr ( tStmt.m_sIndex );
+		}
+
+		if ( pServed || bDistTable )
+			tOut.Error ( "table '%s' does not support INSERT", tStmt.m_sIndex.cstr ());
+		else
+			tOut.Error ( "table '%s' absent", tStmt.m_sIndex.cstr ());
+
 		return;
 	}
 
@@ -12388,6 +12470,41 @@ void HandleMysqlCallSuggest ( RowBuffer_i & tOut, SqlStmt_t & tStmt, bool bQuery
 	}
 
 	SuggestSendResult ( tArgs, tRes, tRes.m_sSentence, tOut );
+}
+
+
+static void HandleMysqlCallUuid ( RowBuffer_i & tOut, SqlStmt_t & tStmt )
+{
+	// the only int agrument
+	int iArgs = tStmt.m_dInsertValues.GetLength ();
+	if ( iArgs!=1 )
+	{
+		tOut.Error ( "bad argument count in UUID_SHORT() call" );
+		return;
+	}
+	if ( tStmt.m_dInsertValues[0].m_iType!=SqlInsert_t::CONST_INT )
+	{
+		tOut.Error ( "bad argument type in UUID_SHORT() call" );
+		return;
+	}
+	int64_t iCount = tStmt.m_dInsertValues[0].GetValueInt();
+	if ( iCount<1 || iCount>INT_MAX )
+	{
+		tOut.Error ( "bad argument value in UUID_SHORT() call" );
+		return;
+	}
+
+	tOut.HeadBegin ();
+	tOut.HeadColumn ( "uuid_short()" );
+	tOut.HeadEnd ();
+
+	for ( int i=0; i<iCount; i++ )
+	{
+		tOut.PutNumAsString ( UidShort() );
+		tOut.Commit();
+	}
+
+	tOut.Eof();
 }
 
 
@@ -14104,6 +14221,25 @@ void HandleMysqlMeta ( RowBuffer_i & dRows, const SqlStmt_t & tStmt, const CSphQ
 	dRows.Eof ( bMoreResultsFollow );
 }
 
+
+void HandleMysqlShowScroll ( RowBuffer_i & dRows, const SqlStmt_t & tStmt, const CSphQueryResultMeta & tLastMeta, bool bMoreResultsFollow )
+{
+	assert ( tStmt.m_eStmt==STMT_SHOW_SCROLL );
+
+	if ( !dRows.HeadOfStrings ( { "scroll_token" } ) )
+		return;
+
+	if ( !tLastMeta.m_sScroll.IsEmpty() )
+	{
+		dRows.PutString ( tLastMeta.m_sScroll.cstr() );
+		dRows.Commit();
+	}
+
+	// cleanup
+	dRows.Eof ( bMoreResultsFollow );
+}
+
+
 static std::unique_ptr<ReplicationCommand_t> MakePercolateDeleteDocumentsCommand ( CSphString sIndex, CSphString sCluster, const SqlStmt_t & tStmt, CSphString & sError )
 {
 	// prohibit double copy of filters
@@ -14401,6 +14537,7 @@ void HandleMysqlMultiStmt ( const CSphVector<SqlStmt_t> & dStmt, CSphQueryResult
 		case STMT_SELECT:
 			{
 				tHandler.SetQuery ( iSelect, tStmt.m_tQuery, std::move ( tStmt.m_pTableFunc ) );
+				tHandler.SetJoinQueryOptions ( iSelect, tStmt.m_tJoinQueryOptions );
 				++iSelect;
 				break;
 			}
@@ -16855,7 +16992,13 @@ void HandleMysqlFreezeIndexes ( RowBuffer_i& tOut, const SqlStmt_t& tStmt, CSphS
 			continue;
 		}
 
-		RIdx_T<RtIndex_i*> pRt { pIndex };
+		// here we get non-locked instance to avoid deadlock with update.
+		// Deadlock happens by this sequence:
+		// 1. Update protects index from bein frozen.
+		// 2. We lock index here.
+		// 3. We wait until protection released.
+		// 4. Update tries to w-lock the index, locked by us.
+		auto * pRt = static_cast<RtIndex_i *> ( UnlockedHazardIdxFromServed ( *pIndex ) );
 		pRt->LockFileState ( dIndexFiles );
 	}
 
@@ -16900,17 +17043,11 @@ void HandleMysqlUnfreezeIndexes ( RowBuffer_i& tOut, const CSphString& sIndexes 
 	ParseIndexList ( sIndexes, dIndexes );
 	for ( const auto& sIndex : dIndexes )
 	{
-		auto pServed = GetServed ( sIndex );
-		if ( !ServedDesc_t::IsMutable ( pServed ) )
+		auto pIndex = GetServed ( sIndex );
+		if ( !ServedDesc_t::IsMutable ( pIndex ) )
 			continue;
 
-		// here we get non-locked instance to avoid deadlock with update, that is:
-		// update may acquire w-lock and then wait until index is unfrozen to continue,
-		// but we can't unfreeze, if we need the lock for it.
-		auto * pRt = static_cast<RtIndex_i *> ( UnlockedHazardIdxFromServed ( *pServed ) );
-		if ( !pRt )
-			continue;
-
+		RIdx_T<RtIndex_i*> pRt { pIndex };
 		pRt->EnableSave ();
 		++iUnlocked;
 	}
@@ -17141,6 +17278,7 @@ bool ClientSession_c::Execute ( Str_t sQuery, RowBuffer_i & tOut )
 			if ( session::IsQueryLogDisabled() )
 				dStmt.Begin()->m_tQuery.m_uDebugFlags |= QUERY_DEBUG_NO_LOG;
 			tHandler.SetQuery ( 0, dStmt.Begin()->m_tQuery, std::move ( dStmt.Begin()->m_pTableFunc ) );
+			tHandler.SetJoinQueryOptions ( 0, dStmt.Begin()->m_tJoinQueryOptions );
 			tHandler.m_pStmt = pStmt;
 
 			if ( tSess.IsProfile() )
@@ -17160,6 +17298,8 @@ bool ClientSession_c::Execute ( Str_t sQuery, RowBuffer_i & tOut )
 
 			// save meta for SHOW META (profile is saved elsewhere)
 			m_tLastMeta = tHandler.m_dAggrResults.Last();
+			if ( pStmt && pStmt->m_eStmt==STMT_SELECT )
+				FormatScrollSettings ( tHandler.m_dAggrResults.Last(), pStmt->m_tQuery, m_tLastMeta.m_sScroll );
 			return true;
 		}
 	case STMT_SHOW_WARNINGS:
@@ -17180,6 +17320,10 @@ bool ClientSession_c::Execute ( Str_t sQuery, RowBuffer_i & tOut )
 			HandleMysqlMeta ( tOut, *pStmt, m_tLastMeta, false );
 		else
 			HandleMysqlPercolateMeta ( m_tPercolateMeta, m_tLastMeta.m_sWarning, tOut );
+		return true;
+
+	case STMT_SHOW_SCROLL:
+		HandleMysqlShowScroll ( tOut, *pStmt, m_tLastMeta, false );
 		return true;
 
 	case STMT_INSERT:
@@ -17235,6 +17379,9 @@ bool ClientSession_c::Execute ( Str_t sQuery, RowBuffer_i & tOut )
 			HandleMysqlCallPQ ( tOut, *pStmt, m_tAcc, m_tPercolateMeta );
 			m_tPercolateMeta.m_dResult.m_sMessages.MoveWarningsTo ( m_tLastMeta.m_sWarning );
 			m_tPercolateMeta.m_dDocids.Reset ( 0 ); // free occupied mem
+		} else if ( pStmt->m_sCallProc=="UUID_SHORT" )
+		{
+			HandleMysqlCallUuid ( tOut, *pStmt );
 		} else
 		{
 			m_sError.SetSprintf ( "no such built-in procedure %s", pStmt->m_sCallProc.cstr() );
@@ -19206,6 +19353,21 @@ void CheckReopenLogs () REQUIRES ( MainThread )
 			g_iQueryLogFile = iFD;
 			LogChangeMode ( g_iQueryLogFile, g_iLogFileMode );
 			sphInfo ( "query log reopened" );
+		}
+	}
+
+	if ( g_iHttpLogFile>=0 && !isatty ( g_iHttpLogFile ) )
+	{
+		int iFD = ::open ( g_sHttpLogFile.cstr (), O_CREAT | O_RDWR | O_APPEND, S_IREAD | S_IWRITE );
+		if ( iFD<0 )
+		{
+			sphWarning ( "failed to reopen http log file '%s': %s", g_sHttpLogFile.cstr (), strerrorm ( errno ) );
+		} else
+		{
+			::close ( g_iHttpLogFile );
+			g_iHttpLogFile = iFD;
+			LogChangeMode ( g_iHttpLogFile, g_iLogFileMode );
+			sphInfo ( "http log reopened" );
 		}
 	}
 
@@ -21205,6 +21367,21 @@ int WINAPI ServiceMain ( int argc, char **argv ) EXCLUDES (MainThread)
 				LogChangeMode ( g_iQueryLogFile, g_iLogFileMode );
 			}
 			g_sQueryLogFile = sQueryLog.cstr();
+		}
+
+		// create query log if required
+		if ( hSearchd.Exists ( "log_http" ) )
+		{
+			CSphString sHttpLog = hSearchd["log_http"].cstr ();
+			FixPathAbsolute ( sHttpLog );
+			g_iHttpLogFile = open ( sHttpLog.cstr (), O_CREAT | O_RDWR | O_APPEND, S_IREAD | S_IWRITE );
+			if ( g_iQueryLogFile<0 )
+				sphWarning ( "failed to open http log file '%s': %s", sHttpLog.cstr (), strerrorm ( errno ) );
+			else
+			{
+				LogChangeMode ( g_iHttpLogFile, g_iLogFileMode );
+				g_sHttpLogFile = std::move( sHttpLog );
+			}
 		}
 	}
 

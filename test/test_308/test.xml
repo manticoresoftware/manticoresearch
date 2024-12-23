@@ -1,0 +1,144 @@
+<?xml version="1.0" encoding="utf-8"?>
+<test>
+
+<name>option SCROLL</name>
+
+<requires>
+<http/>
+</requires>
+
+<config>
+indexer
+{
+	mem_limit		= 16M
+}
+
+searchd
+{
+	<searchd_settings/>
+}
+
+source test
+{
+	type			= mysql
+	<sql_settings/>
+	sql_query		= select * from test_table
+	sql_attr_uint	= gid
+}
+
+index test
+{
+	source			= test
+	path			= <data_path/>/test
+	index_field_lengths	= 1
+}
+</config>
+
+<db_create>
+CREATE TABLE test_table
+(
+	id INTEGER PRIMARY KEY NOT NULL,
+	gid INTEGER NOT NULL,
+	title VARCHAR(255) NOT NULL
+);
+</db_create>
+<db_drop>DROP TABLE IF EXISTS test_table;</db_drop>
+<db_insert>INSERT INTO test_table VALUES
+( 1, 123, 'THE document collection. Aiming for exactly 10 docs.' ),
+( 2, 123, 'the idftest2' ),
+( 3, 123, 'the idftest2 and idftest1' ),
+( 4, 123, 'the' ),
+( 5, 123, 'the' ),
+( 6, 123, 'the' ),
+( 7, 123, 'the' ),
+( 8, 123, 'the' ),
+( 9, 123, 'the' ),
+( 10, 123, 'the' )
+</db_insert>
+
+<queries>
+<sphinxql>
+select weight(), id from test where match('the') and id>1 order by weight() desc, id asc limit 2;
+show scroll;
+select weight(), id from test where match('the') and id>1 order by weight() desc, id asc limit 2 option scroll='eyJvcmRlcl9ieV9zdHIiOiJ3ZWlnaHQoKSBkZXNjLCBpZCBhc2MiLCJvcmRlcl9ieSI6W3siYXR0ciI6IndlaWdodCgpIiwiZGVzYyI6dHJ1ZSwidmFsdWUiOjEyODEsInR5cGUiOiJpbnQifSx7ImF0dHIiOiJpZCIsImRlc2MiOmZhbHNlLCJ2YWx1ZSI6MywidHlwZSI6ImludCJ9XX0=';
+show scroll;
+select weight(), id from test where match('the') and id>1 order by weight() desc, id asc limit 2 option scroll='eyJvcmRlcl9ieV9zdHIiOiJ3ZWlnaHQoKSBkZXNjLCBpZCBhc2MiLCJvcmRlcl9ieSI6W3siYXR0ciI6IndlaWdodCgpIiwiZGVzYyI6dHJ1ZSwidmFsdWUiOjEyODEsInR5cGUiOiJpbnQifSx7ImF0dHIiOiJpZCIsImRlc2MiOmZhbHNlLCJ2YWx1ZSI6NSwidHlwZSI6ImludCJ9XX0=';
+show scroll;
+select weight(), id from test where match('the') and id>1 order by weight() desc, id asc limit 2 option scroll='eyJvcmRlcl9ieV9zdHIiOiJ3ZWlnaHQoKSBkZXNjLCBpZCBhc2MiLCJvcmRlcl9ieSI6W3siYXR0ciI6IndlaWdodCgpIiwiZGVzYyI6dHJ1ZSwidmFsdWUiOjEyODEsInR5cGUiOiJpbnQifSx7ImF0dHIiOiJpZCIsImRlc2MiOmZhbHNlLCJ2YWx1ZSI6NywidHlwZSI6ImludCJ9XX0=';
+show scroll;
+select weight(), id from test where match('the') and id>1 limit 2 option scroll='eyJvcmRlcl9ieV9zdHIiOiJ3ZWlnaHQoKSBkZXNjLCBpZCBhc2MiLCJvcmRlcl9ieSI6W3siYXR0ciI6IndlaWdodCgpIiwiZGVzYyI6dHJ1ZSwidmFsdWUiOjEyODEsInR5cGUiOiJpbnQifSx7ImF0dHIiOiJpZCIsImRlc2MiOmZhbHNlLCJ2YWx1ZSI6OSwidHlwZSI6ImludCJ9XX0=';
+</sphinxql>
+</queries>
+
+<httpqueries>
+<query endpoint="json/search">
+{ 
+  "index": "test",
+  "options":
+  {
+	"scroll": true
+  },
+  "query":
+  {  
+	"query_string":"the",
+    "range":
+    { 
+      "id": { "gt": 1 } 
+    }
+  },
+  "sort":
+  [
+    { "_score":{ "order":"desc"} },
+	{ "id":{ "order":"asc"} }
+  ],
+  "track_scores": true,
+  "limit":2
+}
+</query>
+<query endpoint="json/search">
+{ 
+  "index": "test",
+  "options":
+  {
+	"scroll": "eyJvcmRlcl9ieV9zdHIiOiJAd2VpZ2h0IGRlc2MsIGlkIGFzYyIsIm9yZGVyX2J5IjpbeyJhdHRyIjoid2VpZ2h0KCkiLCJkZXNjIjp0cnVlLCJ2YWx1ZSI6MTI4MSwidHlwZSI6ImludCJ9LHsiYXR0ciI6ImlkIiwiZGVzYyI6ZmFsc2UsInZhbHVlIjozLCJ0eXBlIjoiaW50In1dfQ=="
+  },
+  "query":
+  {  
+	"query_string":"the",
+    "range":
+    { 
+      "id": { "gt": 1 } 
+    }
+  },
+  "sort":
+  [
+    { "_score":{ "order":"desc"} },
+	{ "id":{ "order":"asc"} }
+  ],
+  "track_scores": true,
+  "limit":2
+}
+</query>
+<query endpoint="json/search">
+{ 
+  "index": "test",
+  "options":
+  {
+	"scroll": "eyJvcmRlcl9ieV9zdHIiOiJAd2VpZ2h0IGRlc2MsIGlkIGFzYyIsIm9yZGVyX2J5IjpbeyJhdHRyIjoid2VpZ2h0KCkiLCJkZXNjIjp0cnVlLCJ2YWx1ZSI6MTI4MSwidHlwZSI6ImludCJ9LHsiYXR0ciI6ImlkIiwiZGVzYyI6ZmFsc2UsInZhbHVlIjo1LCJ0eXBlIjoiaW50In1dfQ=="
+  },
+  "query":
+  {  
+	"query_string":"the",
+    "range":
+    { 
+      "id": { "gt": 1 } 
+    }
+  },
+  "track_scores": true,
+  "limit":2
+}
+</query>
+
+</httpqueries>
+
+</test>

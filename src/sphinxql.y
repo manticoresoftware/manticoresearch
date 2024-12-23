@@ -133,6 +133,7 @@
 %token	TOK_REPLACE
 %token	TOK_REMAP
 %token	TOK_ROLLBACK
+%token	TOK_SCROLL
 %token	TOK_SECOND
 %token	TOK_SECONDARY
 %token	TOK_SELECT
@@ -279,7 +280,7 @@ reserved_no_option:
 	;
 
 reserved_set_tail:
-    TOK_NAMES | TOK_TRANSACTION | TOK_COLLATE | TOK_BACKIDENT
+    TOK_NAMES | TOK_TRANSACTION | TOK_COLLATE | TOK_BACKIDENT | TOK_SCROLL
     ;
 
 reserved_set:
@@ -623,6 +624,7 @@ select_expr:
 	| TOK_COUNT '(' '*' ')'				{ if ( !pParser->AddItem ( "count(*)", &$1, &$4 ) ) YYERROR; }
 	| TOK_GROUPBY '(' ')'				{ if ( !pParser->AddItem ( "groupby()", &$1, &$3 ) ) YYERROR; }
 	| TOK_COUNT '(' TOK_DISTINCT distinct_ident ')' { if ( !pParser->AddDistinct ( &$4, &$1, &$5 ) ) YYERROR; }
+	| ident TOK_SUBKEY '(' ')'			{ pParser->AddJoinedWeight ( $1, $2 ); }
 	;
 
 opt_where_clause:
@@ -750,13 +752,13 @@ filter_item:
 		}
 	| expr_ident TOK_IN '(' const_list ')'
 		{
-			CSphFilterSettings * pFilter = pParser->AddValuesFilter ( $1, *$4.m_pValues );
+			CSphFilterSettings * pFilter = pParser->AddValuesFilter ( $1, $4.m_iValues );
 			if ( !pFilter )
 				YYERROR;
 		}
 	| expr_ident TOK_NOT TOK_IN '(' const_list ')'
 		{
-			CSphFilterSettings * pFilter = pParser->AddValuesFilter ( $1, *$5.m_pValues );
+			CSphFilterSettings * pFilter = pParser->AddValuesFilter ( $1, $5.m_iValues );
 			if ( !pFilter )
 				YYERROR;
 			pFilter->m_bExclude = true;
@@ -952,13 +954,13 @@ filter_item:
 		}
 	| mva_aggr TOK_IN '(' const_list ')'
 		{
-			CSphFilterSettings * f = pParser->AddFilter ( $1, SPH_FILTER_VALUES, *$4.m_pValues );
+			CSphFilterSettings * f = pParser->AddFilter ( $1, SPH_FILTER_VALUES, $4.m_iValues );
 			f->m_eMvaFunc = ( $1.m_iType==TOK_ALL ) ? SPH_MVAFUNC_ALL : SPH_MVAFUNC_ANY;
 		}
 	| mva_aggr TOK_NOT TOK_IN '(' const_list ')'
 		{
 			// tricky bit with inversion again
-			CSphFilterSettings * f = pParser->AddFilter ( $1, SPH_FILTER_VALUES, *$5.m_pValues );
+			CSphFilterSettings * f = pParser->AddFilter ( $1, SPH_FILTER_VALUES, $5.m_iValues );
 			f->m_eMvaFunc = ( $1.m_iType==TOK_ALL ) ? SPH_MVAFUNC_ANY : SPH_MVAFUNC_ALL;
 			f->m_bExclude = true;
 		}
@@ -1066,36 +1068,42 @@ const_float_unsigned:
 const_list:
 	const_int
 		{
-			assert ( !$$.m_pValues );
-			$$.m_pValues = new RefcountedVector_c<AttrValue_t> ();
-			$$.m_pValues->Add ( { $1.GetValueInt(), $1.GetValueFloat(), false } ); 
+			assert ( $$.m_iValues<0 );
+        	$$.m_iValues = pParser->AddMvaVec ();
+        	auto& dVec = pParser->GetMvaVec ( $$.m_iValues );
+			dVec.Add ( { $1.GetValueInt(), $1.GetValueFloat(), false } );
 		}
 	| const_float
 		{
-			assert ( !$$.m_pValues );
-			$$.m_pValues = new RefcountedVector_c<AttrValue_t> ();
-			$$.m_pValues->Add ( { $1.GetValueInt(), $1.GetValueFloat(), true } ); 
+			assert ( $$.m_iValues<0 );
+        	$$.m_iValues = pParser->AddMvaVec ();
+        	auto& dVec = pParser->GetMvaVec ( $$.m_iValues );
+			dVec.Add ( { $1.GetValueInt(), $1.GetValueFloat(), true } );
 		}
 	| const_list ',' const_int
 		{
-			$$.m_pValues->Add ( { $3.GetValueInt(), $3.GetValueFloat(), false } );
+			auto& dVec = pParser->GetMvaVec ( $$.m_iValues );
+			dVec.Add ( { $3.GetValueInt(), $3.GetValueFloat(), false } );
 		}
 	| const_list ',' const_float
 		{
-			$$.m_pValues->Add ( { $3.GetValueInt(), $3.GetValueFloat(), true } );
+			auto& dVec = pParser->GetMvaVec ( $$.m_iValues );
+			dVec.Add ( { $3.GetValueInt(), $3.GetValueFloat(), true } );
 		}
 	;
 
 string_list:
 	TOK_QUOTED_STRING
 		{
-			assert ( !$$.m_pValues );
-			$$.m_pValues = new RefcountedVector_c<AttrValue_t> ();
-			$$.m_pValues->Add ( { $1.GetValueInt(), 0.0f } );
+			assert ( $$.m_iValues<0 );
+        	$$.m_iValues = pParser->AddMvaVec ();
+        	auto& dVec = pParser->GetMvaVec ( $$.m_iValues );
+			dVec.Add ( { $1.GetValueInt(), 0.0f } );
 		}
 	| string_list ',' TOK_QUOTED_STRING
 		{
-			$$.m_pValues->Add ( { $3.GetValueInt(), 0.0f } );
+			auto& dVec = pParser->GetMvaVec ( $$.m_iValues );
+			dVec.Add ( { $3.GetValueInt(), 0.0f } );
 		}
 	;
 
@@ -1215,8 +1223,27 @@ opt_option_clause:
 	;
 
 option_clause:
-	TOK_OPTION option_list
+	option_clause_item
+	| option_clause option_clause_item
 	;
+
+option_clause_item:
+	TOK_OPTION default_option_table_setup option_list
+	| TOK_OPTION '(' idxname ')' option_table_setup option_list
+	;
+
+default_option_table_setup:
+    {
+        pParser->SetDefaultTableForOptions();
+    }
+    ;
+
+option_table_setup:
+    {
+        if ( !pParser->SetTableForOptions($-1) )
+			YYERROR;
+    }
+    ;
 
 option_list:
 	option_item
@@ -1444,13 +1471,14 @@ like_filter:
 
 show_what:
 	TOK_WARNINGS				{ pParser->m_pStmt->m_eStmt = STMT_SHOW_WARNINGS; }
-	| TOK_STATUS like_filter		{ pParser->m_pStmt->m_eStmt = STMT_SHOW_STATUS; }
-	| TOK_META like_filter			{ pParser->m_pStmt->m_eStmt = STMT_SHOW_META; }
+	| TOK_STATUS like_filter	{ pParser->m_pStmt->m_eStmt = STMT_SHOW_STATUS; }
+	| TOK_META like_filter		{ pParser->m_pStmt->m_eStmt = STMT_SHOW_META; }
 	| TOK_AGENT TOK_STATUS like_filter	{ pParser->m_pStmt->m_eStmt = STMT_SHOW_AGENT_STATUS; }
 	| TOK_PROFILE				{ pParser->m_pStmt->m_eStmt = STMT_SHOW_PROFILE; }
-	| TOK_PLAN				{ pParser->m_pStmt->m_eStmt = STMT_SHOW_PLAN; }
+	| TOK_PLAN					{ pParser->m_pStmt->m_eStmt = STMT_SHOW_PLAN; }
 	| TOK_PLUGINS				{ pParser->m_pStmt->m_eStmt = STMT_SHOW_PLUGINS; }
 	| TOK_THREADS				{ pParser->m_pStmt->m_eStmt = STMT_SHOW_THREADS; }
+	| TOK_SCROLL				{ pParser->m_pStmt->m_eStmt = STMT_SHOW_SCROLL; }
 	| TOK_CREATE TOK_TABLE identidx
 		{
 			pParser->m_pStmt->m_eStmt = STMT_SHOW_CREATE_TABLE;
@@ -1623,7 +1651,7 @@ insert_val:
 	const_int				{ $$.m_iType = TOK_CONST_INT; $$.CopyValueInt ( $1 ); }
 	| const_float			{ $$.m_iType = TOK_CONST_FLOAT; $$.m_fValue = $1.m_fValue; }
 	| TOK_QUOTED_STRING		{ $$.m_iType = TOK_QUOTED_STRING; $$.m_iStart = $1.m_iStart; $$.m_iEnd = $1.m_iEnd; }
-	| '(' const_list ')'	{ $$.m_iType = TOK_CONST_MVA; $$.m_pValues = $2.m_pValues; }
+	| '(' const_list ')'	{ $$.m_iType = TOK_CONST_MVA; $$.m_iValues = $2.m_iValues; }
 	| '(' ')'				{ $$.m_iType = TOK_CONST_MVA; }
 	;
 

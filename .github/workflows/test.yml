@@ -10,12 +10,14 @@ on:
       - manticore-*
     paths-ignore:
       - 'manual/**'
+      - '!manual/References.md'
       - 'cmake/GetGALERA.cmake'
       - 'galera_packaging/**'
   pull_request:
     branches: [ master, update-buddy-version ]
     paths-ignore:
       - 'manual/**'
+      - '!manual/References.md'
       - 'cmake/GetGALERA.cmake'
       - 'galera_packaging/**'
     types: [opened, synchronize, reopened, labeled, unlabeled]
@@ -504,33 +506,12 @@ jobs:
     if: always() && needs.test_kit_docker_build.result != 'failure'
     name: CLT
     needs: test_kit_docker_build
-    runs-on: ubuntu-22.04
-    strategy:
-      fail-fast: false
-      matrix:
-        test-suite:
-          - name: Core
-            test_prefix: |-
-              test/clt-tests/core/
-              test/clt-tests/expected-errors/
-          - name: mysqldump
-            test_prefix: |-
-              test/clt-tests/mysqldump/mysql/
-              test/clt-tests/mysqldump/maria/
-          - name: Replication
-            test_prefix: test/clt-tests/replication/
-          - name: Plugins
-            test_prefix: test/clt-tests/plugins/
-          - name: Buddy
-            test_prefix: test/clt-tests/buddy/
-    steps:
-      - uses: manticoresoftware/clt@0.2.3
-        with:
-          artifact: manticore_test_kit.img
-          image: test-kit:img
-          test_prefix: ${{ matrix.test-suite.test_prefix }}
-          comment_mode: failures
-
+    uses: ./.github/workflows/clt_tests.yml
+    with:
+      docker_image: test-kit:img
+      artifact_name: manticore_test_kit.img
+      repository: ${{ github.repository }}
+      ref: ${{ github.sha }}
 
   test_kit_docker_push:
     if: always() && needs.changes.outputs.source == 'true'
@@ -540,7 +521,7 @@ jobs:
     name: Push Test Kit docker image to repo
     runs-on: ubuntu-22.04
     env:
-      GHCR_USER: ${{ secrets.GHCR_USER }}
+      GHCR_USER: ${{ vars.GHCR_USER }}
       GHCR_PASSWORD: ${{ secrets.GHCR_PASSWORD }}
       REPO_OWNER: ${{ github.repository_owner }}
     steps:

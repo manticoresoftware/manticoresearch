@@ -124,20 +124,21 @@ Integer. Max time in milliseconds to wait for remote queries to complete, see [t
 String, user comment that gets copied to a query log file.
 
 ### cutoff
-Integer. Max found matches threshold. The value is selected automatically if not specified.
-
-* `N` = 0 disables the threshold
-* `N > 0`: instructs Manticore to stop looking for results as soon as it finds `N` documents.
-* not set: Manticore will decide automatically what the value should be.
-
-In case Manticore cannot calculate the exact matching documents count, you will see `total_relation: gte` in the query [meta information](../Node_info_and_management/SHOW_META.md#SHOW-META), which means that the actual count is **Greater Than or Equal** to the total (`total_found` in `SHOW META` via SQL, `hits.total` in JSON via HTTP). If the total value is precise, you'll get `total_relation: eq`.
+Integer. Specifies the maximum number of matches to process. If not set, Manticore will select an appropriate value automatically.
 
 <!-- example cutoff_aggregation -->
-Note: Using `cutoff` in aggregation queries is not recommended, as it can produce meaningless results.
+
+* `N = 0`: Disables the limit on the number of matches.
+* `N > 0`: Instructs Manticore to stop processing results as soon as it finds `N` matching documents.
+* Not set: Manticore decides the threshold automatically.
+
+When Manticore cannot determine the exact count of matching documents, the `total_relation` field in the query [meta information](../Node_info_and_management/SHOW_META.md#SHOW-META) will show `gte`, which stands for **Greater Than or Equal to**. This indicates that the actual count of matches is at least the reported `total_found` (in SQL) or `hits.total` (in JSON). When the count is exact, `total_relation` will display `eq`.
+
+Note: Using `cutoff` in aggregation queries is not recommended because it can produce inaccurate or incomplete results.
 
 <!-- request Example -->
 
-Using cutoff in an aggregation query can lead to incorrect results
+Using `cutoff` in aggregation queries can lead to incorrect or misleading results, as shown in the following example:
 ```
 drop table if exists t
 --------------
@@ -333,6 +334,264 @@ Integer. Distributed retries count.
 
 ### retry_delay
 Integer. Distributed retry delay, in milliseconds.
+
+### scroll
+
+<!-- example scroll -->
+
+Scroll feature allows users to paginate query results using a single token, preserving both the sorting context and cursor position.
+
+**SQL**:
+
+***Initial Query with Sorting Criteria***
+
+To begin, execute an initial query with the desired sorting criteria. Note that `id` must be present in ORDER BY clause. The query response will include a scroll token to facilitate pagination.
+
+```sql
+SELECT * FROM tbl WHERE MATCH('abc') ORDER BY smth ASC, id ASC;
+```
+
+***Retrieving the Scroll Token***
+
+After executing the initial query, retrieve the scroll token by executing the `SHOW SCROLL` command.
+
+```sql
+SHOW SCROLL;
+```
+
+Example output:
+
+```sql
+| scroll_token                       |
+|------------------------------------|
+| <base64 encoded scroll token>      |
+```
+
+***Paginated Query Using scroll***
+
+To fetch the next page of results, include the scroll token in the subsequent query as an option. When the `scroll` option is provided, specifying the sort criteria becomes optional.
+
+```sql
+SELECT * FROM tbl WHERE MATCH('abc') ORDER BY smth ASC, id ASC OPTION scroll='<base64 encoded scroll token>';
+```
+
+This ensures that pagination continues seamlessly, maintaining the sorting context established in the initial query.
+
+**HTTP**:
+
+***Initial Request***
+
+In the initial request, specify `"scroll": true` in the options and the desired sorting criteria. Note that `id` must be present in the `sort` array. The response will include a scroll token, which can be used for pagination in subsequent requests.
+
+```json
+POST /search
+{ 
+  "index": "tbl",
+  "options":
+  {
+	"scroll": true
+  },
+  "query":
+  {  
+	"query_string":"abc"
+  },
+  "sort":
+  [
+    { "smth":{ "order":"asc"} },
+	{ "id":{ "order":"asc"} }
+  ]
+}
+```
+
+Example output:
+
+```json
+{
+    "timed_out": false,
+    "hits":
+	{
+		...
+    },
+    "scroll": "<base64 encoded scroll token>"
+}
+```
+
+***Paginated Request Using scroll***
+
+To continue pagination, include the scroll token obtained from the previous response within the options object of the next request. Specifying the sort criteria becomes optional.
+
+```json
+POST /search
+{ 
+  "index": "tbl",
+  "options":
+  {
+	"scroll": "<base64 encoded scroll token>"
+  },
+  "query":
+  {  
+	"query_string":"abc"
+  }
+}
+```
+
+<!-- intro -->
+SQL:
+<!-- request SQL -->
+```sql
+SELECT weight(), id FROM test WHERE match('hello')
+ORDER BY weight() desc, id asc limit 2;
+```
+
+```sql
+SHOW SCROLL;
+```
+
+```sql
+SELECT weight(), id FROM test WHERE match('hello') limit 2
+OPTION scroll='eyJvcmRlcl9ieV9zdHIiOiJ3ZWlnaHQoKSBkZXNjLCBpZCBhc2MiLCJvcmRlcl9ieSI6W3siYXR0ciI6IndlaWdodCgpIiwiZGVzYyI6dHJ1ZSwidmFsdWUiOjEyODEsInR5cGUiOiJpbnQifSx7ImF0dHIiOiJpZCIsImRlc2MiOmZhbHNlLCJ2YWx1ZSI6MiwidHlwZSI6ImludCJ9XX0=';
+```
+
+<!-- response SQL -->
+```sql
++----------+------+
+| weight() | id   |
++----------+------+
+|     1281 |    1 |
+|     1281 |    2 |
++----------+------+
+2 rows in set (0.00 sec)
+```
+
+```sql
++--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
+| scroll_token                                                                                                                                                                                                             |
++--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
+| eyJvcmRlcl9ieV9zdHIiOiJ3ZWlnaHQoKSBkZXNjLCBpZCBhc2MiLCJvcmRlcl9ieSI6W3siYXR0ciI6IndlaWdodCgpIiwiZGVzYyI6dHJ1ZSwidmFsdWUiOjEyODEsInR5cGUiOiJpbnQifSx7ImF0dHIiOiJpZCIsImRlc2MiOmZhbHNlLCJ2YWx1ZSI6MiwidHlwZSI6ImludCJ9XX0= |
++--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
+1 row in set (0.00 sec)
+```
+
+```sql
++----------+------+
+| weight() | id   |
++----------+------+
+|     1281 |    3 |
+|     1281 |    4 |
++----------+------+
+2 rows in set (0.00 sec)
+```
+
+<!-- intro -->
+JSON:
+<!-- request JSON -->
+
+```json
+POST /search
+{ 
+  "index": "test",
+  "options":
+  {
+	"scroll": true
+  },
+  "query":
+  {  
+	"query_string":"hello"
+  },
+  "sort":
+  [
+    { "_score":{ "order":"desc"} },
+	{ "id":{ "order":"asc"} }
+  ],
+  "track_scores": true,
+  "limit":2
+}
+```
+
+```json
+POST /search
+{ 
+  "index": "test",
+  "options":
+  {
+	"scroll": "eyJvcmRlcl9ieV9zdHIiOiJAd2VpZ2h0IGRlc2MsIGlkIGFzYyIsIm9yZGVyX2J5IjpbeyJhdHRyIjoid2VpZ2h0KCkiLCJkZXNjIjp0cnVlLCJ2YWx1ZSI6MTI4MSwidHlwZSI6ImludCJ9LHsiYXR0ciI6ImlkIiwiZGVzYyI6ZmFsc2UsInZhbHVlIjoyLCJ0eXBlIjoiaW50In1dfQ=="
+  },
+  "query":
+  {  
+	"query_string":"hello"
+  },
+  "track_scores": true,
+  "limit":2
+}
+```
+
+<!-- response JSON -->
+
+```json
+{
+  "took": 0,
+  "timed_out": false,
+  "hits":
+  {
+    "total": 10,
+    "total_relation": "eq",
+    "hits":
+	[
+      {
+        "_id": 1,
+        "_score": 1281,
+        "_source":
+		{
+          "title": "hello world1"
+        }
+      },
+      {
+        "_id": 2,
+        "_score": 1281,
+        "_source":
+		{
+          "title": "hello world2"
+        }
+      }
+    ]
+  },
+  "scroll": "eyJvcmRlcl9ieV9zdHIiOiJAd2VpZ2h0IGRlc2MsIGlkIGFzYyIsIm9yZGVyX2J5IjpbeyJhdHRyIjoid2VpZ2h0KCkiLCJkZXNjIjp0cnVlLCJ2YWx1ZSI6MTI4MSwidHlwZSI6ImludCJ9LHsiYXR0ciI6ImlkIiwiZGVzYyI6ZmFsc2UsInZhbHVlIjoyLCJ0eXBlIjoiaW50In1dfQ=="
+}
+```
+
+```json
+{
+  "took": 0,
+  "timed_out": false,
+  "hits":
+  {
+    "total": 8,
+    "total_relation": "eq",
+    "hits":
+   [
+      {
+        "_id": 3,
+        "_score": 1281,
+        "_source":
+        {
+          "title": "hello world3"
+        }
+      },
+      {
+        "_id": 4,
+        "_score": 1281,
+        "_source":
+        {
+          "title": "hello world4"
+        }
+      }
+    ]
+  },
+  "scroll": "eyJvcmRlcl9ieV9zdHIiOiJAd2VpZ2h0IGRlc2MsIGlkIGFzYyIsIm9yZGVyX2J5IjpbeyJhdHRyIjoid2VpZ2h0KCkiLCJkZXNjIjp0cnVlLCJ2YWx1ZSI6MTI4MSwidHlwZSI6ImludCJ9LHsiYXR0ciI6ImlkIiwiZGVzYyI6ZmFsc2UsInZhbHVlIjo0LCJ0eXBlIjoiaW50In1dfQ=="
+}
+```
+
+<!-- end -->
 
 ### sort_method
 * `pq` - priority queue, set by default

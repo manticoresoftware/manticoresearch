@@ -343,11 +343,12 @@
 * [REGEX()](Functions/String_functions.md#REGEX%28%29) - Returns 1 if regular expression matched to string of attribute and 0 otherwise
 * [SNIPPET()](Functions/String_functions.md#SNIPPET%28%29) - Highlights search results
 * [SUBSTRING_INDEX()](Functions/String_functions.md#SUBSTRING_INDEX%28%29) - Returns a substring of the string before the specified number of delimiter occurs
-*
+
 ##### Other
 * [CONNECTION_ID()](Functions/Other_functions.md#CONNECTION_ID%28%29) - Returns the current connection ID
 * [KNN_DIST()](Functions/Other_functions.md#KNN_DIST%28%29) - Returns KNN vector search distance
 * [LAST_INSERT_ID()](Functions/Other_functions.md#LAST_INSERT_ID%28%29) - Returns ids of documents inserted or replaced by last statement in the current session
+* [UUID_SHORT()](Functions/Other_functions.md#UUID_SHORT%28%29) - Returns a "short" universal identifier following the same algorithm as for auto-id generation.
 
 ## Common settings in configuration file
 To be put to section `common {}` in configuration file:

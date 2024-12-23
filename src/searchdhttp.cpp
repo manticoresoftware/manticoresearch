@@ -646,8 +646,9 @@ void HttpRequestParser_c::ParseList ( Str_t sData, OptionsHash_t & hOptions )
 {
 	HTTPINFO << "ParseList with " << sData.second << " bytes '" << Data2Log ( sData ) << "'";
 
-	const char * sCur = sData.first;
-	const char* sLast = sCur;
+	CSphString sBuf ( sData );
+	const char * sCur = sBuf.cstr();
+	const char * sLast = sCur;
 	const char * sEnd = sCur + sData.second;
 
 	Str_t sName = dEmptyStr;
@@ -727,7 +728,7 @@ inline void HttpRequestParser_c::FinishParserUrl ()
 	if ( ( tUri.field_set & uQuery )!=0 )
 	{
 		Str_t sRawGetQuery { sData.first + tUri.field_data[UF_QUERY].off, tUri.field_data[UF_QUERY].len };
-		if ( m_eType == HTTP_GET )
+		if ( m_eType==HTTP_GET )
 			DecodeAndStoreRawQuery ( m_hOptions, sRawGetQuery );
 		ParseList ( sRawGetQuery, m_hOptions );
 	}
@@ -809,7 +810,7 @@ inline int HttpRequestParser_c::ParseHeaderCompleted ()
 	m_tParser.upgrade = 0;
 
 	// connection wide http options
-	m_bKeepAlive = ( http_should_keep_alive ( &m_tParser ) != 0 );
+	m_bKeepAlive = ( ( m_tParser.flags & F_CONNECTION_KEEP_ALIVE ) != 0 );
 	m_eType = (http_method)m_tParser.method;
 
 	FinishParserKeyVal();
@@ -1169,16 +1170,38 @@ void AddCompositeItems ( const CSphString & sCol, CSphVector<CSphQueryItem> & dI
 	}
 }
 
-std::unique_ptr<PubSearchHandler_c> CreateMsearchHandler ( std::unique_ptr<QueryParser_i> pQueryParser, QueryType_e eQueryType, JsonQuery_c & tQuery )
+std::unique_ptr<PubSearchHandler_c> CreateMsearchHandler ( std::unique_ptr<QueryParser_i> pQueryParser, QueryType_e eQueryType, ParsedJsonQuery_t & tParsed )
 {
+	JsonQuery_c & tQuery = tParsed.m_tQuery;
 	tQuery.m_pQueryParser = pQueryParser.get();
 
 	int iQueries = ( 1 + tQuery.m_dAggs.GetLength() );
+
+	// make single grouper \ sorter to match plain query with only group by (wo FACET) if single aggs set and main query limit=0
+	if ( eQueryType==QueryType_e::QUERY_JSON && tQuery.m_dAggs.GetLength()==1 && tQuery.m_iLimit==0 && tQuery.m_dAggs[0].m_eAggrFunc==Aggr_e::NONE )
+	{
+		iQueries = 1;
+		tQuery.m_bGroupEmulation = true;
+		const JsonAggr_t & tAggs = tQuery.m_dAggs[0];
+		tQuery.m_iLimit = tAggs.m_iSize;
+		tQuery.m_sGroupBy = tAggs.m_sCol;
+		if ( tAggs.m_sSort.IsEmpty() )
+			tQuery.m_sGroupSortBy = tQuery.m_sOrderBy;
+		else
+			tQuery.m_sGroupSortBy = tAggs.m_sSort;
+
+		tQuery.m_dRefItems = tQuery.m_dItems;
+		CSphQueryItem & tCountItem = tQuery.m_dItems.Add();
+		tCountItem.m_sExpr = "count(*)";
+		tCountItem.m_sAlias = "count(*)";
+	}
+
 	std::unique_ptr<PubSearchHandler_c> pHandler = std::make_unique<PubSearchHandler_c> ( iQueries, std::move ( pQueryParser ), eQueryType, true );
 
-	if ( !tQuery.m_dAggs.GetLength() || eQueryType==QUERY_SQL )
+	if ( !tQuery.m_dAggs.GetLength() || eQueryType==QUERY_SQL || tQuery.m_bGroupEmulation )
 	{
 		pHandler->SetQuery ( 0, tQuery, nullptr );
+		pHandler->SetJoinQueryOptions ( 0, tParsed.m_tJoinQueryOptions );
 		return pHandler;
 	}
 
@@ -1225,6 +1248,7 @@ std::unique_ptr<PubSearchHandler_c> CreateMsearchHandler ( std::unique_ptr<Query
 
 	tQuery.m_bFacetHead = true;
 	pHandler->SetQuery ( 0, tQuery, nullptr );
+	pHandler->SetJoinQueryOptions ( 0, tParsed.m_tJoinQueryOptions );
 	int iRefLimit = tQuery.m_iLimit;
 	int iRefOffset = tQuery.m_iOffset;
 
@@ -1331,10 +1355,8 @@ std::unique_ptr<PubSearchHandler_c> CreateMsearchHandler ( std::unique_ptr<Query
 				tQuery.m_sGroupSortBy = "@groupby asc";
 				break;
 			case Aggr_e::COMPOSITE:
-				tQuery.m_sGroupSortBy = "@weight desc";
-				break;
 			default:
-				tQuery.m_sGroupSortBy = "@groupby desc";
+				tQuery.m_sGroupSortBy = tQuery.m_sOrderBy;
 				break;
 			}
 		} else
@@ -1382,7 +1404,7 @@ public:
 		if ( IsBuddyQuery ( m_tOptions ) )
 			m_tParsed.m_tQuery.m_uDebugFlags |= QUERY_DEBUG_NO_LOG;
 
-		std::unique_ptr<PubSearchHandler_c> tHandler = CreateMsearchHandler ( std::move ( pQueryParser ), m_eQueryType, m_tParsed.m_tQuery );
+		std::unique_ptr<PubSearchHandler_c> tHandler = CreateMsearchHandler ( std::move ( pQueryParser ), m_eQueryType, m_tParsed );
 		SetStmt ( *tHandler );
 
 		QueryProfile_c tProfile;
@@ -1409,10 +1431,13 @@ public:
 		if ( pRes->m_sWarning.IsEmpty() && !m_tParsed.m_sWarning.IsEmpty() )
 			pRes->m_sWarning = m_tParsed.m_sWarning;
 
-		CSphFixedVector<AggrResult_t *> dAggsRes ( iQueries );
+		CSphFixedVector<AggrResult_t *> dAggsRes ( m_tParsed.m_tQuery.m_bGroupEmulation ? 1 : iQueries );
 		dAggsRes[0] = tHandler->GetResult ( 0 );
-		ARRAY_FOREACH ( i,m_tParsed.m_tQuery.m_dAggs )
-			dAggsRes[i+1] = tHandler->GetResult ( i+1 );
+		if ( !m_tParsed.m_tQuery.m_bGroupEmulation )
+		{
+			ARRAY_FOREACH ( i,m_tParsed.m_tQuery.m_dAggs )
+				dAggsRes[i+1] = tHandler->GetResult ( i+1 );
+		}
 
 		CSphString sResult = EncodeResult ( dAggsRes, bNeedProfile ? &tProfile : nullptr );
 		BuildReply ( sResult, EHTTP_STATUS::_200 );
@@ -1918,7 +1943,7 @@ protected:
 		m_iUpdates = 0;
 	}
 
-	bool ProcessCommitRollback ( Str_t sIndex, DocID_t tDocId, JsonObj_c & tResult, CSphString & sError ) const
+	bool ProcessCommitRollback ( Str_t sIndex, DocID_t & tDocId, JsonObj_c & tResult, CSphString & sError ) const
 	{
 		HttpErrorReporter_c tReporter;
 		sphHandleMysqlCommitRollback ( tReporter, sIndex, true );
@@ -1943,7 +1968,7 @@ protected:
 	const ResultSetFormat_e m_eFormat = ResultSetFormat_e::MntSearch;
 };
 
-static bool ProcessInsert ( SqlStmt_t & tStmt, DocID_t tDocId, JsonObj_c & tResult, CSphString & sError, ResultSetFormat_e eFormat )
+static bool ProcessInsert ( SqlStmt_t & tStmt, DocID_t & tDocId, JsonObj_c & tResult, CSphString & sError, ResultSetFormat_e eFormat )
 {
 	HttpErrorReporter_c tReporter;
 	sphHandleMysqlInsert ( tReporter, tStmt );
@@ -2370,7 +2395,8 @@ public:
 			assert ( !sTxnIdx.IsEmpty() );
 			// We're in txn - that is, nothing committed, and we should do it right now
 			JsonObj_c tResult;
-			bResult = ProcessCommitRollback ( FromStr ( sTxnIdx ), 0, tResult, m_sError );
+			DocID_t tDocId = 0;
+			bResult = ProcessCommitRollback ( FromStr ( sTxnIdx ), tDocId, tResult, m_sError );
 			AddResult ( "bulk", tResult );
 			if ( bResult )
 				iLastTxStartLine = iCurLine;
@@ -3258,6 +3284,10 @@ static bool ParseSourceLine ( const char * sLine, const CSphString & sAction, Sq
 		tFilter.m_eType = SPH_FILTER_VALUES;
 		tFilter.m_dValues.Add ( tDocId );
 		tFilter.m_sAttrName = "id";
+	} else
+	{
+		sError.SetSprintf ( "unknown action: %s", sAction.cstr() );
+		return false;
 	}
 
 	// _bulk could have cluster:index format
@@ -3539,12 +3569,28 @@ bool HttpHandlerEsBulk_c::ProcessTnx ( const VecTraits_T<BulkTnx_t> & dTnx, VecT
 			}
 
 			if ( !bAction )
-				dErrors.Add ( { iDoc, tResult.GetItem ( "error" ).GetItem ( "type" ).StrVal() } );
+			{
+				JsonObj_c tError = JsonNull;
+				JsonObj_c tErrorType = JsonNull;
+				if ( !tResult.Empty() && tResult.HasItem( "error" ) )
+					tError = tResult.GetItem ( "error" );
+				if ( !tError.Empty() && tError.HasItem ( "type" ))
+					tErrorType = tError.GetItem ( "type" );
+
+				if ( !tErrorType.Empty() )
+					dErrors.Add ( { iDoc, tErrorType.StrVal() } );
+				else
+				{
+					dErrors.Add ( { iDoc, CSphString() } );
+					dErrors.Last().second.SetSprintf ( "unknown statement \"%s\":%s", tStmt.m_sStmt, tDoc.m_tDocLine.first );
+				}
+			}
 		}
 
 		// FIXME!!! check commit of empty accum
 		JsonObj_c tResult;
-		bool bCommited = ProcessCommitRollback ( FromStr ( sIdx ), DocID_t(), tResult, m_sError );
+		DocID_t tDocId = 0;
+		bool bCommited = ProcessCommitRollback ( FromStr ( sIdx ), tDocId, tResult, m_sError );
 		if ( bCommited )
 		{
 			if ( bUpdate && !GetLastUpdated() )

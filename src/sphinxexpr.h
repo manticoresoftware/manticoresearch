@@ -367,7 +367,9 @@ ISphExpr * ExprJsonIn ( const VecTraits_T<int64_t> & dVals, ISphExpr * pArg, ESp
 ISphExpr * ExprJsonRange ( const CommonFilterSettings_t & tFilter, ISphExpr * pArg );
 void FetchAttrDependencies ( StrVec_t & dAttrNames, const ISphSchema & tSchema );
 bool CanAliasedExprSetupAsFilter ( const CSphFilterSettings & tFilter, bool & bExclude );
-void SetExprNodeStackItemSize ( int iCreateSize, int iEvalSize );
+void SetExprNodeEvalStackItemSize ( std::pair<int,int> tStack );
+void SetMaxExprNodeEvalStackItemSize ( std::pair<int, int> tStack );
+void SetExprNodeParseStackItemSize ( std::pair<int, int> tStack );
 
 /// provide mysql version string
 namespace sphinxexpr {

@@ -32,7 +32,7 @@ cat /var/log/dpkg.log | wc -l
 ––– output –––
 5
 ––– input –––
-filebeat -c /filebeat.yml -strict.perms=false -e 2>/var/log/filebeat.log &
+filebeat -c /filebeat.yml --strict.perms=false -e 2>/var/log/filebeat.log &
 ––– output –––
 [1] #!/[0-9]+/!#
 ––– input –––

@@ -181,8 +181,7 @@ enum class DateUnit_e
 	total_units
 };
 void RoundDate ( DateUnit_e eUnit, time_t & tDateTime );
-void RoundDate ( DateUnit_e eUnit, int iMulti, time_t & tDateTime );
-std::pair<DateUnit_e, int> ParseDateInterval ( const CSphString & sExpr, bool bFixed, CSphString & sError );
+DateUnit_e ParseDateInterval ( const CSphString & sExpr, CSphString & sError );
 
 //////////////////////////////////////////////////////////////////////////
 

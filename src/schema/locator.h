@@ -15,30 +15,11 @@
 #include <cstdint>
 #include "sphinxdefs.h"
 
-
-struct SmallAttrLocator_t
-{
-	int m_iBitOffset = -1;
-	int m_iBitCount = -1;
-
-	SmallAttrLocator_t () = default;
-	explicit SmallAttrLocator_t ( int iBitOffset, int iBitCount = ROWITEM_BITS );
-
-	inline bool IsBitfield () const noexcept;
-
-	int CalcRowitem () const noexcept;
-
-#ifndef NDEBUG
-
-	/// get last item touched by this attr (for debugging checks only)
-	int GetMaxRowitem () const noexcept;
-
-#endif
-};
-
 /// attribute locator within the row
-struct CSphAttrLocator : public SmallAttrLocator_t
+struct CSphAttrLocator
 {
+	int				m_iBitOffset	= -1;
+	int				m_iBitCount		= -1;
 	int				m_iBlobAttrId	= -1;
 	int				m_iBlobRowOffset = 1;
 	int				m_nBlobAttrs	= 0;
@@ -48,24 +29,35 @@ struct CSphAttrLocator : public SmallAttrLocator_t
 
 	CSphAttrLocator () = default;
 
-	bool IsBlobAttr() const noexcept;
+	explicit CSphAttrLocator ( int iBitOffset, int iBitCount=ROWITEM_BITS );
+
+	inline bool IsBitfield () const;
+
+	int CalcRowitem () const;
+
+	bool IsBlobAttr() const;
 
 	void Reset();
 
 	// just sphFNV64 (&loc,sizeof(loc)) isn't correct as members are not aligned
 	uint64_t FNV ( uint64_t uHash ) const;
 
+#ifndef NDEBUG
+	/// get last item touched by this attr (for debugging checks only)
+	int GetMaxRowitem () const;
+#endif
+
 	bool operator == ( const CSphAttrLocator & rhs ) const;
 };
 
-SphAttr_t sphGetRowAttr ( const CSphRowitem* pRow, SmallAttrLocator_t tLoc );
+SphAttr_t sphGetRowAttr ( const CSphRowitem* pRow, const CSphAttrLocator& tLoc );
 
-void sphSetRowAttr ( CSphRowitem* pRow, SmallAttrLocator_t tLoc, SphAttr_t uValue );
+void sphSetRowAttr ( CSphRowitem* pRow, const CSphAttrLocator& tLoc, SphAttr_t uValue );
 
 /// add numeric value of another attribute
-void sphAddCounterAttr ( CSphRowitem* pRow, const CSphRowitem* pVal, SmallAttrLocator_t tLoc );
+void sphAddCounterAttr ( CSphRowitem* pRow, const CSphRowitem* pVal, const CSphAttrLocator& tLoc );
 
 /// add scalar value to aligned numeric attribute
-void sphAddCounterScalar ( CSphRowitem* pRow, SmallAttrLocator_t tLoc, SphAttr_t uValue );
+void sphAddCounterScalar ( CSphRowitem* pRow, const CSphAttrLocator& tLoc, SphAttr_t uValue );
 
 #include "locator_impl.h"

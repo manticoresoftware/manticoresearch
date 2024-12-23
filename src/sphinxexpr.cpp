@@ -10624,34 +10624,16 @@ struct HookCheck_fn
 };
 
 
+static int EXPR_STACK_EVAL = 160;
+static int EXPR_STACK_CREATE = 400;
 
-static int EXPR_STACK_PARSE_CREATE = 400;
-static int EXPR_STACK_PARSE = 150;
-
-void SetExprNodeParseStackItemSize ( std::pair<int, int> tSize )
+void SetExprNodeStackItemSize ( int iCreateSize, int iEvalSize )
 {
-	EXPR_STACK_PARSE_CREATE = tSize.first;
-	EXPR_STACK_PARSE = tSize.second;
-}
+	if ( iCreateSize>EXPR_STACK_CREATE )
+		EXPR_STACK_CREATE = iCreateSize;
 
-
-static int EXPR_STACK_EVAL_CREATE = 100;
-static int EXPR_STACK_EVAL = 8;
-
-
-void SetExprNodeEvalStackItemSize ( std::pair<int, int> tSize )
-{
-	EXPR_STACK_EVAL_CREATE = tSize.first;
-	EXPR_STACK_EVAL = tSize.second;
-}
-
-
-void SetMaxExprNodeEvalStackItemSize ( std::pair<int, int> tSize )
-{
-	if ( tSize.first>EXPR_STACK_EVAL_CREATE )
-		EXPR_STACK_EVAL_CREATE = tSize.first;
-	if ( tSize.second>EXPR_STACK_EVAL )
-		EXPR_STACK_EVAL = tSize.second;
+	if ( iEvalSize>EXPR_STACK_EVAL )
+		EXPR_STACK_EVAL = iEvalSize;
 }
 
 
@@ -10712,23 +10694,11 @@ ISphExpr * ExprParser_t::Parse ( const char * sExpr, const ISphSchema & tSchema,
 	// Check expression stack to fit for mutual recursive function calls.
 	// This check is an approximation, because different compilers with
 	// different settings produce code which requires different stack size.
-	int iStackNeeded = -1;
-	int iStackEval = -1;
 	const int TREE_SIZE_THRESH = 20;
-	if ( m_dNodes.GetLength ()>TREE_SIZE_THRESH )
-	{
-		StackSizeParams_t tParams;
-		tParams.iMaxDepth = EvalMaxTreeHeight ( m_dNodes, m_iParsed );
-		tParams.tNodeStackSize = { EXPR_STACK_PARSE_CREATE, EXPR_STACK_PARSE };
-		tParams.szName = "expressions";
-		std::tie ( iStackNeeded, sError ) = EvalStackForExpr ( tParams );
-		if ( !sError.IsEmpty() )
-			return nullptr;
-
-		tParams.tNodeStackSize = { EXPR_STACK_EVAL_CREATE, EXPR_STACK_EVAL };
-		tParams.szName = "eval expressions";
-		std::tie ( iStackEval, sError ) = EvalStackForExpr ( tParams );
-	}
+	const StackSizeTuplet_t tExprStack = { EXPR_STACK_CREATE, EXPR_STACK_EVAL };
+	int iStackNeeded = -1;
+	if ( !EvalStackForTree ( m_dNodes, m_iParsed, tExprStack, TREE_SIZE_THRESH, iStackNeeded, "expressions", sError ) )
+		return nullptr;
 
 	ISphExpr * pExpr = nullptr;
 
@@ -10740,10 +10710,8 @@ ISphExpr * ExprParser_t::Parse ( const char * sExpr, const ISphSchema & tSchema,
 		*pAttrType = eAttrType;
 	} );
 
-	if ( pExpr && iStackEval>0 )
+	if ( pExpr && iStackNeeded>0 )
 	{
-		// in case we're in real query processing - propagate size of stack need for evaluations (only additional part)
-		session::ExpandDesiredStack ( iStackEval );
 		auto pChildExpr = pExpr;
 		pExpr = new Expr_ProxyFat_c ( pChildExpr );
 		pChildExpr->Release();

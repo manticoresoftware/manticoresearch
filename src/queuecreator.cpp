@@ -25,7 +25,6 @@
 #include "sphinxfilter.h"
 #include "queryprofile.h"
 #include "knnmisc.h"
-#include "sorterscroll.h"
 
 static const char g_sIntAttrPrefix[] = "@int_attr_";
 static const char g_sIntJsonPrefix[] = "@groupbystr_";
@@ -2064,7 +2063,7 @@ bool QueueCreator_c::SetupMatchesSortingFunc()
 		CSphString sSortBy = m_tQuery.m_sSortBy;
 		AddKnnDistSort ( sSortBy );
 
-		ESortClauseParseResult eRes = sphParseSortClause ( m_tQuery, sSortBy.cstr(), *m_pSorterSchema, m_eMatchFunc, m_tStateMatch, m_dMatchJsonExprs, m_tSettings.m_pJoinArgs.get(), m_sError );
+		ESortClauseParseResult eRes = sphParseSortClause ( m_tQuery, sSortBy.cstr(), *m_pSorterSchema, m_eMatchFunc, m_tStateMatch, m_dMatchJsonExprs, m_tSettings.m_bComputeItems, m_tSettings.m_pJoinArgs.get(), m_sError );
 		if ( eRes==SORT_CLAUSE_ERROR )
 			return false;
 
@@ -2126,7 +2125,7 @@ bool QueueCreator_c::SetupGroupSortingFunc ( bool bGotDistinct )
 	if ( sGroupOrderBy=="@weight desc" )
 		AddKnnDistSort ( sGroupOrderBy );
 
-	ESortClauseParseResult eRes = sphParseSortClause ( m_tQuery, sGroupOrderBy.cstr(), *m_pSorterSchema, m_eGroupFunc, m_tStateGroup, m_dGroupJsonExprs, m_tSettings.m_pJoinArgs.get(), m_sError );
+	ESortClauseParseResult eRes = sphParseSortClause ( m_tQuery, sGroupOrderBy.cstr(), *m_pSorterSchema, m_eGroupFunc,	m_tStateGroup, m_dGroupJsonExprs, m_tSettings.m_bComputeItems, m_tSettings.m_pJoinArgs.get(), m_sError );
 
 	if ( eRes==SORT_CLAUSE_ERROR || eRes==SORT_CLAUSE_RANDOM )
 	{
@@ -2368,15 +2367,11 @@ ISphMatchSorter * QueueCreator_c::SpawnQueue()
 	if ( m_pProfile )
 		m_pProfile->m_iMaxMatches = iMaxMatches;
 
-	ISphMatchSorter * pPlainSorter = CreatePlainSorter ( m_eMatchFunc, m_tQuery.m_bSortKbuffer, iMaxMatches, bNeedFactors );
-	if ( !pPlainSorter )
+	ISphMatchSorter * pResult = CreatePlainSorter ( m_eMatchFunc, m_tQuery.m_bSortKbuffer, iMaxMatches, bNeedFactors );
+	if ( !pResult )
 		return nullptr;
 
-	ISphMatchSorter * pScrollSorter = CreateScrollSorter ( pPlainSorter, *m_pSorterSchema, m_eMatchFunc, m_tQuery.m_tScrollSettings, m_bMulti );
-	if ( !pScrollSorter )
-		return nullptr;
-
-	return CreateColumnarProxySorter ( pScrollSorter, iMaxMatches, *m_pSorterSchema, m_tStateMatch, m_eMatchFunc, bNeedFactors, m_tSettings.m_bComputeItems, m_bMulti );
+	return CreateColumnarProxySorter ( pResult, iMaxMatches, *m_pSorterSchema, m_tStateMatch, m_eMatchFunc, bNeedFactors, m_tSettings.m_bComputeItems, m_bMulti );
 }
 
 

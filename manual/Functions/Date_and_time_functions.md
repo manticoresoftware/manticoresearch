@@ -453,9 +453,9 @@ This example formats the current date and time, displaying the four-digit year a
 ```sql
 key_of_the_bucket = interval * floor ( value / interval )
 ```
-Intervals are specified using the unit name, such as `week` or as a single unit like `1M`. Multiple units such as `2d` are not supported for the `calendar_interval` but work for `fixed_interval`.
+Intervals are specified using the unit name, such as `week` or as a single unit like `1M`. Multiple units such as `2w` are not supported.
 
-The valid intervals for `calendar_interval` are:
+The valid intervals are:
 
 - `minute`, `1m`
 - `hour`, `1h`
@@ -463,12 +463,6 @@ The valid intervals for `calendar_interval` are:
 - `week`, `1w` (a week is the interval between the start day of the week, hour, minute, second and the next week but the same day and time of the week)
 - `month`, `1M`
 - `year`, `1y` (a year is the interval between the start day of the month, time and the next year but the same day of the month, time)
-
-The valid intervals for `fixed_interval` are:
-
-- `minute`, `2m`
-- `hour`, `3h`
-- `day`, `5d`
 
 Used in aggregation, `FACET`, and grouping.
 

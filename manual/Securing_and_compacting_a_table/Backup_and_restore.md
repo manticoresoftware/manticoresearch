@@ -287,12 +287,11 @@ This will produce a backup file `tbl.sql` with `replace` commands instead of `in
 
 <!-- request Replication mode -->
 ```bash
-mysqldump -etc --replace -h0 -P9306 -ucluster manticore cluster:tbl | mysql -P9306 -h0
-mariadb-dump -etc --replace -h0 -P9306 -ucluster manticore cluster:tbl | mysql -P9306 -h0
+mysqldump -h0 -P9306 -ucluster manticore > manticore_backup.sql
+mariadb-dump -h0 -P9306 -ucluster manticore > manticore_backup.sql
 ```
 
-In this case, `mysqldump` will generate commands like `REPLACE INTO cluster:table ...`, which will be sent directly to the Manticore instance, resulting in the documents being reinserted.
-Use the `cluster` user and the `-t` flag to enable replication mode. See the details in the notes below.
+Use the `cluster` user to enable replication mode. See the details in the notes below.
 
 <!-- end -->
 
@@ -330,11 +329,8 @@ For a comprehensive list of settings and their thorough descriptions, kindly ref
 
 ### Notes
 
-* To create a dump in replication mode (where the dump includes `INSERT/REPLACE INTO <cluster_name>:<table_name>`):
-  - Use the `cluster` user. For example: `mysqldump -u cluster ...` or `mariadb-dump -u cluster ...`. You can change the username that enables replication mode for `mysqldump` by running `SET GLOBAL cluster_user = new_name`.
-  - Use the `-t` flag.
-  - When specifying a table in replication mode, you need to follow the `cluster_name:table_name` syntax. For example: `mysqldump -P9306 -h0 -t -ucluster manticore cluster:tbl`.
+* To create a dump in replication mode (where the dump includes `insert into <cluster_name>:<table_name>`), use the `cluster` user, for example: `mysqldump -u cluster ...` or `mariadb-dump -u cluster ...`. You can change the user name that enables replication mode for `mysqldump` by running `set global cluster_user=new_name`.
 * It's recommended to explicitly specify the `manticore` database when you plan to back up all databases, instead of using the `--all-databases` option.
-* Note that `mysqldump` does not support backing up distributed tables and cannot back up tables containing non-stored fields. For such cases, consider using `manticore-backup` or the `BACKUP` SQL command. If you have distributed tables, it is recommended to always specify the tables to be dumped.
+* Note that `mysqldump` does not support backing up distributed tables. Additionally, it cannot back up tables containing non-stored fields. Consider using `manticore-backup` or the `BACKUP` SQL command for these cases.
 
 <!-- proofread -->

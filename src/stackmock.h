@@ -16,17 +16,7 @@
 #include "coroutine.h"
 #include "std/sys.h"
 
-struct StackSizeTuplet_t
-{
-	int m_iCreate;
-	int m_iEval;
-
-	StackSizeTuplet_t() = default;
-	StackSizeTuplet_t (int iCreate, int iEval)
-		: m_iCreate { iCreate }
-		, m_iEval { iEval }
-	{}
-};
+using StackSizeTuplet_t = std::pair<int,int>; // create, eval
 
 template<typename T>
 int EvalMaxTreeHeight ( const VecTraits_T<T>& dTree, int iStartNode )
@@ -48,32 +38,35 @@ int EvalMaxTreeHeight ( const VecTraits_T<T>& dTree, int iStartNode )
 	return iMaxHeight;
 }
 
-struct StackSizeParams_t
+template <typename T>
+bool EvalStackForTree ( const VecTraits_T<T> & dTree, int iStartNode, StackSizeTuplet_t tNodeStackSize, int iTreeSizeThresh, int & iStackNeeded, const char * szName, CSphString & sError )
 {
-	int iMaxDepth;
-	StackSizeTuplet_t tNodeStackSize;
-	const char* szName;
-};
+	enum eStackSizePurpose { CREATE, EVAL };
+	iStackNeeded = -1;
+	int64_t iCalculatedStack = Threads::GetStackUsed() + (int64_t)dTree.GetLength()*std::get<EVAL>(tNodeStackSize);
+	int64_t iCurStackSize = Threads::MyStackSize();
+	if ( dTree.GetLength()<=iTreeSizeThresh )
+		return true;
 
+	int iMaxHeight = EvalMaxTreeHeight ( dTree, iStartNode );
+	iCalculatedStack = Threads::GetStackUsed() + iMaxHeight* std::get<CREATE> ( tNodeStackSize );
 
-inline std::pair<int, CSphString> EvalStackForExpr ( const StackSizeParams_t & tParams ) noexcept
-{
-	const auto iCREATE = tParams.tNodeStackSize.m_iCreate;
-	const auto iEVAL = tParams.tNodeStackSize.m_iEval;
+	if ( iCalculatedStack<=iCurStackSize )
+		return true;
 
-	int64_t iCalculatedStack = iCREATE+(int64_t) tParams.iMaxDepth*iEVAL;
-	int64_t iCurStackSize = Threads::MyStackSize ();
+	if ( iCalculatedStack > session::GetMaxStackSize () )
+	{
+		sError.SetSprintf ( "query %s too complex, not enough stack (thread_stack=%dK or higher required)", szName, (int)( ( iCalculatedStack + 1024 - ( iCalculatedStack%1024 ) ) / 1024 ) );
+		return false;
+	}
 
-	//	sphWarning ( "used %d, height %d, node %d, start %d, calculated %d, current %d", Threads::GetStackUsed (), iMaxHeight, iEVAL, iCREATE, iCalculatedStack, iCurStackSize );
-	if ( ( Threads::GetStackUsed ()+iCalculatedStack+( iCREATE >> 1 ) )<=iCurStackSize )
-		return { -1, {} };
+	iStackNeeded = (int)iCalculatedStack + 32*1024;
+	iStackNeeded = sphRoundUp( iStackNeeded, GetMemPageSize() ); // round up to memory page.
 
-	auto iStackNeeded = (int) iCalculatedStack+32*1024;
-	iStackNeeded = sphRoundUp ( iStackNeeded, GetMemPageSize () ); // round up to memory page.
-	if ( iStackNeeded>session::GetMaxStackSize () )
-		return { -1, SphSprintf ( "query %s too complex, not enough stack (thread_stack=%dK or higher required)",
-								  tParams.szName, (int) ( ( iStackNeeded+1024-( iStackNeeded%1024 ) )/1024 ) ) };
-	return { iStackNeeded, {} };
+	// in case we're in real query processing - propagate size of stack need for evaluations (only additional part)
+	session::ExpandDesiredStack ( iMaxHeight * std::get<EVAL> ( tNodeStackSize ));
+
+	return true;
 }
 
 void DetermineNodeItemStackSize();

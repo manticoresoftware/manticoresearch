@@ -9742,7 +9742,7 @@ static int SPH_EXTNODE_STACK_SIZE = 160;
 // extra stack which need despite EXTNODE_STACK_SIZE
 static DWORD SPH_EXTRA_BUDGET = 0x2000;
 
-void SetExtNodeStackSize ( int iExtra, int iDelta )
+void SetExtNodeStackSize ( int iDelta, int iExtra )
 {
 	if ( iDelta )
 	{

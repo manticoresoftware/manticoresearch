@@ -462,7 +462,7 @@ bool SortStateSetup_c::Setup ( CSphString & sError )
 
 //////////////////////////////////////////////////////////////////////////
 
-ESortClauseParseResult sphParseSortClause ( const CSphQuery & tQuery, const char * szClause, const ISphSchema & tSchema, ESphSortFunc & eFunc, CSphMatchComparatorState & tState, CSphVector<ExtraSortExpr_t> & dExtraExprs, const JoinArgs_t * pJoinArgs, CSphString & sError )
+ESortClauseParseResult sphParseSortClause ( const CSphQuery & tQuery, const char * szClause, const ISphSchema & tSchema, ESphSortFunc & eFunc, CSphMatchComparatorState & tState, CSphVector<ExtraSortExpr_t> & dExtraExprs, bool bComputeItems, const JoinArgs_t * pJoinArgs, CSphString & sError )
 {
 	for ( auto & tAttr : tState.m_dAttrs )
 		tAttr = -1;

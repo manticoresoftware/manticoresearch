@@ -156,11 +156,7 @@ bool	IsNotRealAttribute ( const CSphColumnInfo & tColumn );
 inline DocID_t sphGetDocID ( const CSphRowitem * pData )
 {
 	assert ( pData );
-#if USE_LITTLE_ENDIAN
-	return *(DocID_t *) ( const_cast<CSphRowitem *>(pData) );
-#else
-	return DocID_t ( pData[0] )+( DocID_t ( pData[1] ) << ROWITEM_BITS );
-#endif
+	return sphUnalignedRead ( *(DocID_t*)(const_cast<CSphRowitem *>(pData)) );
 }
 
 const char * AttrType2Str ( ESphAttr eAttrType );

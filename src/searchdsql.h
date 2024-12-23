@@ -160,7 +160,6 @@ enum SqlStmt_e
 	STMT_ALTER_REBUILD_SI,
 	STMT_KILL,
 	STMT_SHOW_LOCKS,
-	STMT_SHOW_SCROLL,
 
 	STMT_TOTAL
 };
@@ -380,7 +379,6 @@ bool	sphParseSqlQuery ( Str_t sQuery, CSphVector<SqlStmt_t> & dStmt, CSphString 
 bool	PercolateParseFilters ( const char * sFilters, ESphCollation eCollation, const CSphSchema & tSchema, CSphVector<CSphFilterSettings> & dFilters, CSphVector<FilterTreeItem_t> & dFilterTree, CSphString & sError );
 void	SqlParser_SplitClusterIndex ( CSphString & sIndex, CSphString * pCluster );
 void	InitParserOption();
-bool	FormatScrollSettings ( const AggrResult_t & tAggrRes, const CSphQuery & tQuery, CSphString & sSettings );
 
 enum class AddOption_e
 {
@@ -389,7 +387,7 @@ enum class AddOption_e
 	FAILED
 };
 
-AddOption_e AddOption ( CSphQuery & tQuery, const CSphString & sOpt, const CSphString & sVal, const CSphString & sValOrig, const std::function<CSphString ()> & fnGetUnescaped, SqlStmt_e eStmt, CSphString & sError );
+AddOption_e AddOption ( CSphQuery & tQuery, const CSphString & sOpt, const CSphString & sVal, const std::function<CSphString ()> & fnGetUnescaped, SqlStmt_e eStmt, CSphString & sError );
 AddOption_e AddOption ( CSphQuery & tQuery, const CSphString & sOpt, const CSphString & sValue, int64_t iValue, SqlStmt_e eStmt, CSphString & sError );
 AddOption_e AddOption ( CSphQuery & tQuery, const CSphString & sOpt, CSphVector<CSphNamedInt> & dNamed, SqlStmt_e eStmt, CSphString & sError );
 AddOption_e AddOptionRanker ( CSphQuery & tQuery, const CSphString & sOpt, const CSphString & sVal, const std::function<CSphString ()> & fnGetUnescaped, SqlStmt_e eStmt, CSphString & sError );

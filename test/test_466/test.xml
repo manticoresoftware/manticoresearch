@@ -298,14 +298,5 @@ insert into table_multi1 (id,title,brand_id,j) values
 <!-- aggs.ranges with empty or open range -->
 <query endpoint="json/search">{ "table": "test_group1", "size":0, "aggs":{ "gr_1": { "range": { "field": "code", "ranges": [{}] } }} }</query>
 
-<!-- aggs.fixed_interval to line up with calendar_interval for the same units -->
-<query endpoint="json/search">{ "table": "idx_dates", "size":0, "aggs":{ "days": { "date_histogram": { "field": "tm", "keyed":true, "calendar_interval":"day" } }} }</query>
-<query endpoint="json/search">{ "table": "idx_dates", "size":0, "aggs":{ "days": { "date_histogram": { "field": "tm", "keyed":true, "fixed_interval":"day" } }} }</query>
-<sphinxql>select id, count(*), date_histogram(tm, {calendar_interval='day'}) as days from idx_dates group by days order by days asc limit 5</sphinxql>
-<sphinxql>select id, count(*), date_histogram(tm, {fixed_interval='day'}) as days from idx_dates group by days order by days asc limit 5</sphinxql>
-<!-- aggs.fixed_interval with unit multiplier -->
-<sphinxql>select id, count(*), date_histogram(tm, {fixed_interval='4day'}) as days, date_format(days, '%Y-%m-%dT%H:%M') as d from idx_dates group by days order by days asc limit 5</sphinxql>
-
-
 </queries>
 </test>

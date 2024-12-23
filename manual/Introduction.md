@@ -68,7 +68,7 @@ Manticore is equipped with an external tool [manticore-backup](Securing_and_comp
 The `indexer` tool and comprehensive configuration syntax of Manticore make it easy to sync data from sources like MySQL, PostgreSQL, ODBC-compatible databases, XML, and CSV.
 
 #### Integration options
-You can integrate Manticore Search with a MySQL/MariaDB server using the [FEDERATED engine](Extensions/FEDERATED.md) or via [ProxySQL](https://manticoresearch.com/blog/using-proxysql-to-route-inserts-in-a-distributed-realtime-index/).
+You can integrate Manticore Search with a MySQL/MariaDB server using the [FEDERATED engine](Extensions/FEDERATED.md) or via [ProxySQL](https://manticoresearch.com/2018/06/18/using-proxysql-to-route-inserts-in-a-distributed-realtime-index/).
 
 You can use [Apache Superset](https://manticoresearch.com/blog/manticoresearch-apache-superset-integration/) and [Grafana](https://manticoresearch.com/blog/manticoresearch-grafana-integration/) to visualize data stored in Manticore. Various MySQL tools can be used to develop Manticore queries interactively, such as [HeidiSQL](https://www.heidisql.com/) and [DBForge](https://www.devart.com/dbforge/).
 

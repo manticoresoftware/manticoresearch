@@ -646,9 +646,8 @@ void HttpRequestParser_c::ParseList ( Str_t sData, OptionsHash_t & hOptions )
 {
 	HTTPINFO << "ParseList with " << sData.second << " bytes '" << Data2Log ( sData ) << "'";
 
-	CSphString sBuf ( sData );
-	const char * sCur = sBuf.cstr();
-	const char * sLast = sCur;
+	const char * sCur = sData.first;
+	const char* sLast = sCur;
 	const char * sEnd = sCur + sData.second;
 
 	Str_t sName = dEmptyStr;
@@ -728,7 +727,7 @@ inline void HttpRequestParser_c::FinishParserUrl ()
 	if ( ( tUri.field_set & uQuery )!=0 )
 	{
 		Str_t sRawGetQuery { sData.first + tUri.field_data[UF_QUERY].off, tUri.field_data[UF_QUERY].len };
-		if ( m_eType==HTTP_GET )
+		if ( m_eType == HTTP_GET )
 			DecodeAndStoreRawQuery ( m_hOptions, sRawGetQuery );
 		ParseList ( sRawGetQuery, m_hOptions );
 	}

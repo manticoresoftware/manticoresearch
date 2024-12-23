@@ -134,7 +134,6 @@
 %token	TOK_REPLACE
 %token	TOK_REMAP
 %token	TOK_ROLLBACK
-%token	TOK_SCROLL
 %token	TOK_SECOND
 %token	TOK_SECONDARY
 %token	TOK_SELECT
@@ -280,8 +279,8 @@ reserved_tokens_without_option:
 	| TOK_LOCKS
 	;
 
-reserved_set_tail:
-    TOK_NAMES | TOK_TRANSACTION | TOK_COLLATE | TOK_BACKIDENT | TOK_SCROLL
+names_transaction_collate:
+    TOK_NAMES | TOK_TRANSACTION | TOK_COLLATE
     ;
 
 ident_without_option:
@@ -1475,15 +1474,14 @@ like_filter:
 
 show_what:
 	TOK_WARNINGS				{ pParser->m_pStmt->m_eStmt = STMT_SHOW_WARNINGS; }
-	| TOK_STATUS like_filter	{ pParser->m_pStmt->m_eStmt = STMT_SHOW_STATUS; }
-	| TOK_META like_filter		{ pParser->m_pStmt->m_eStmt = STMT_SHOW_META; }
+	| TOK_STATUS like_filter		{ pParser->m_pStmt->m_eStmt = STMT_SHOW_STATUS; }
+	| TOK_META like_filter			{ pParser->m_pStmt->m_eStmt = STMT_SHOW_META; }
 	| TOK_AGENT TOK_STATUS like_filter	{ pParser->m_pStmt->m_eStmt = STMT_SHOW_AGENT_STATUS; }
 	| TOK_PROFILE				{ pParser->m_pStmt->m_eStmt = STMT_SHOW_PROFILE; }
-	| TOK_PLAN					{ pParser->m_pStmt->m_eStmt = STMT_SHOW_PLAN; }
+	| TOK_PLAN				{ pParser->m_pStmt->m_eStmt = STMT_SHOW_PLAN; }
 	| TOK_PLUGINS				{ pParser->m_pStmt->m_eStmt = STMT_SHOW_PLUGINS; }
 	| TOK_THREADS				{ pParser->m_pStmt->m_eStmt = STMT_SHOW_THREADS; }
-	| TOK_SCROLL				{ pParser->m_pStmt->m_eStmt = STMT_SHOW_SCROLL; }
-	| TOK_CREATE TOK_TABLE identidx
+	| TOK_CREATE TOK_TABLE single_manticore_tablename
 		{
 			pParser->m_pStmt->m_eStmt = STMT_SHOW_CREATE_TABLE;
 			pParser->SetIndex ($3);

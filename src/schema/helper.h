@@ -60,6 +60,12 @@ void CSphSchemaHelper::CloneMatchSpecial ( CSphMatch & tDst, const CSphMatch & r
 	CopyPtrsSpecial ( tDst, rhs, dSpecials );
 }
 
+// fixme! direct reinterpreting rows is not good idea. Use sphGetAttr/sphSetAttr!
+/*
+* wide (64bit) attributes occupies 2 rows and placed order lo,high
+* On LE arch (intel) it is ok to reinterpret them back as 64-bit pointer
+* However on BE (mips) you have problems since such cast gives garbage.
+*/
 void CSphSchemaHelper::FreeDataSpecial ( CSphMatch & tMatch, const VecTraits_T<int> & dSpecials )
 {
 	if ( !tMatch.m_pDynamic )
@@ -67,10 +73,9 @@ void CSphSchemaHelper::FreeDataSpecial ( CSphMatch & tMatch, const VecTraits_T<i
 
 	for ( auto iOffset : dSpecials )
 	{
-		const SmallAttrLocator_t tLoc { iOffset*ROWITEM_BITS, ROWITEMPTR_BITS };
-		const auto * pData = (const BYTE *) sphGetRowAttr ( tMatch.m_pDynamic, tLoc );
+		BYTE*& pData = *(BYTE**)( tMatch.m_pDynamic + iOffset );
 		sphDeallocatePacked ( pData );
-		sphSetRowAttr ( tMatch.m_pDynamic, tLoc, (SphAttr_t) nullptr );
+		pData = nullptr;
 	}
 }
 
@@ -81,9 +86,8 @@ void CSphSchemaHelper::CopyPtrsSpecial ( CSphMatch & tDst, const CSphMatch & tSr
 	assert ( pSrc || dSpecials.IsEmpty() );
 	for ( auto i : dSpecials )
 	{
-		const SmallAttrLocator_t tLoc { i*ROWITEM_BITS, ROWITEMPTR_BITS };
-		const auto* pData = (const BYTE*) sphGetRowAttr ( pSrc, tLoc );
+		const BYTE* pData = *(BYTE**)( pSrc + i );
 		if ( pData )
-			sphSetRowAttr ( tDst.m_pDynamic, tLoc, (SphAttr_t) sph::CopyPackedAttr ( pData ) );
+			*(BYTE**)( tDst.m_pDynamic + i ) = sph::CopyPackedAttr ( pData );
 	}
 }

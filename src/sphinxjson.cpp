@@ -1659,13 +1659,6 @@ void JsonObj_c::AddUint ( const char * szName, uint64_t uValue )
 }
 
 
-void JsonObj_c::AddFlt ( const char * szName, double fValue )
-{
-	assert ( m_pRoot );
-	cJSON_AddItemToObject ( m_pRoot, szName, CreateDouble(fValue).Leak() );
-}
-
-
 void JsonObj_c::AddBool ( const char * szName, bool bValue )
 {
 	assert ( m_pRoot );
@@ -1808,29 +1801,14 @@ JsonObj_c JsonObj_c::GetIntItem ( const char * szName1, const char * szName2, CS
 
 
 JsonObj_c JsonObj_c::GetBoolItem ( const char * szName, CSphString & sError, bool bIgnoreMissing ) const
- {
- 	JsonObj_c tChild = GetChild ( szName, sError, bIgnoreMissing );
- 	if ( !tChild )
- 		return JsonNull;
- 
-	if ( !tChild.IsBool() )
- 	{
-		sError.SetSprintf ( R"("%s" property value should be a boolean)", szName );
- 		return JsonNull;
- 	}
-	return tChild;
-}
-
-
-JsonObj_c JsonObj_c::GetFltItem ( const char * szName, CSphString & sError, bool bIgnoreMissing ) const
 {
 	JsonObj_c tChild = GetChild ( szName, sError, bIgnoreMissing );
 	if ( !tChild )
 		return JsonNull;
 
-	if ( !tChild.IsNum() )
+	if ( !tChild.IsBool() )
 	{
-		sError.SetSprintf ( R"("%s" property value should be numeric)", szName );
+		sError.SetSprintf ( R"("%s" property value should be a boolean)", szName );
 		return JsonNull;
 	}
 
@@ -1919,35 +1897,11 @@ bool JsonObj_c::FetchIntItem ( int & iValue, const char * szName, CSphString & s
 }
 
 
-bool JsonObj_c::FetchInt64Item ( int64_t & iValue, const char * szName, CSphString & sError, bool bIgnoreMissing ) const
-{
-	JsonObj_c tItem = GetIntItem ( szName, sError, bIgnoreMissing );
-	if ( tItem )
-		iValue = tItem.IntVal();
-	else if ( !sError.IsEmpty() )
-		return false;
-
-	return true;
-}
-
-
 bool JsonObj_c::FetchBoolItem ( bool & bValue, const char * szName, CSphString & sError, bool bIgnoreMissing ) const
 {
 	JsonObj_c tItem = GetBoolItem ( szName, sError, bIgnoreMissing );
 	if ( tItem )
 		bValue = tItem.BoolVal();
-	else if ( !sError.IsEmpty() )
-		return false;
-
-	return true;
-}
-
-
-bool JsonObj_c::FetchFltItem ( float & fValue, const char * szName, CSphString & sError, bool bIgnoreMissing ) const
-{
-	JsonObj_c tItem = GetBoolItem ( szName, sError, bIgnoreMissing );
-	if ( tItem )
-		fValue = tItem.FltVal();
 	else if ( !sError.IsEmpty() )
 		return false;
 
@@ -1983,12 +1937,6 @@ JsonObj_c JsonObj_c::CreateInt ( int64_t iInt )
 JsonObj_c JsonObj_c::CreateUint ( uint64_t uInt )
 {
 	return JsonObj_c ( cJSON_CreateUInteger(uInt) );
-}
-
-
-JsonObj_c JsonObj_c::CreateDouble ( double fValue )
-{
-	return JsonObj_c ( cJSON_CreateNumber(fValue) );
 }
 
 

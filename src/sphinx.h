@@ -487,23 +487,6 @@ const int DEFAULT_QUERY_TIMEOUT = 0;
 const int DEFAULT_QUERY_RETRY = -1;
 const int DEFAULT_QUERY_EXPANSION_LIMIT = -1;
 
-struct ScrollAttr_t
-{
-	CSphString	m_sSortAttr;
-	bool		m_bDesc = true;
-	ESphAttr	m_eType = SPH_ATTR_INTEGER;
-	SphAttr_t	m_tValue = 0;
-	float		m_fValue = 0.0f;
-	CSphString	m_sValue;
-};
-
-struct ScrollSettings_t
-{
-	CSphString					m_sSortBy;
-	bool						m_bRequested = true;
-	CSphVector<ScrollAttr_t>	m_dAttrs;
-};
-
 /// search query. Pure struct, no member functions
 struct CSphQuery
 {
@@ -531,8 +514,6 @@ struct CSphQuery
 	CSphVector<float> m_dKNNVec;				///< KNN anchor vector
 
 	JiebaMode_e		m_eJiebaMode = JiebaMode_e::NONE;	///< separate optional jieba mode for searches
-
-	ScrollSettings_t m_tScrollSettings;
 
 	bool			m_bSortKbuffer = false;		///< whether to use PQ or K-buffer sorting algorithm
 	bool			m_bZSlist = false;			///< whether the ranker has to fetch the zonespanlist with this query
@@ -710,7 +691,6 @@ public:
 	CSphString				m_sError;				///< error message
 	CSphString				m_sWarning;				///< warning message
 	QueryProfile_c *		m_pProfile		= nullptr;	///< filled when query profiling is enabled; NULL otherwise
-	CSphString				m_sScroll;				///< data to continue scroll
 
 	IteratorStats_t			m_tIteratorStats;		///< iterators used while calculating the query
 	bool					m_bBigram = false;		///< whatever to remove bigram symbol on adding word to stat

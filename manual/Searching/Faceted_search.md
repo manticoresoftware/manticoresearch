@@ -1483,9 +1483,7 @@ Facets can aggregate over histogram date values, which is similar to the normal 
 key_of_the_bucket = interval * floor ( value / interval )
 ```
 
-The histogram parameter `calendar_interval` understands months to have different amounts of days.
-Unlike `calendar_interval`, the `fixed_interval` parameter uses a fixed number of units and does not deviate, regardless of where it falls on the calendar. However `fixed_interval` cannot process units such as months because a month is not a fixed quantity. Attempting to specify units like weeks or months for `fixed_interval` will result in an error.
-The accepted intervals are described in the [date_histogram](../Functions/Date_and_time_functions.md#DATE_HISTOGRAM%28%29) expression. By default, the buckets are returned as an array. The histogram argument `keyed` makes the response a dictionary with the bucket keys.
+The histogram parameter `calendar_interval` understands months to have different amounts of days. The accepted intervals are described in the [date_histogram](../Functions/Date_and_time_functions.md#DATE_HISTOGRAM%28%29) expression. By default, the buckets are returned as an array. The histogram argument `keyed` makes the response a dictionary with the bucket keys.
 
 <!-- request SQL -->
 

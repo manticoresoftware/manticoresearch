@@ -473,7 +473,7 @@ public:
 	void			AddStr ( const char * szName, const CSphString & sValue );
 	void			AddInt ( const char * szName, int64_t iValue );
 	void			AddUint ( const char * szName, uint64_t uValue );
-	void			AddFlt ( const char * szName, double fValue );
+	void			AddFlt ( const char * szName, float fValue );
 	void			AddBool ( const char * szName, bool bValue );
 	void			AddNull ( const char * szName );
 	void			AddItem ( const char * szName, JsonObj_c & tObj );
@@ -487,21 +487,17 @@ public:
 	JsonObj_c		GetIntItem ( const char * szName, CSphString & sError, bool bIgnoreMissing=false ) const;
 	JsonObj_c		GetIntItem ( const char * szName1, const char * szName2, CSphString & sError ) const;
 	JsonObj_c		GetBoolItem ( const char * szName, CSphString & sError, bool bIgnoreMissing=false ) const;
-	JsonObj_c		GetFltItem ( const char * szName, CSphString & sError, bool bIgnoreMissing=false ) const;
 	JsonObj_c		GetStrItem ( const char * szName, CSphString & sError, bool bIgnoreMissing=false ) const;
 	JsonObj_c		GetStrItem ( const char * szName1, const char * szName2, CSphString & sError ) const;
 	JsonObj_c		GetObjItem ( const char * szName, CSphString & sError, bool bIgnoreMissing=false ) const;
 	JsonObj_c		GetArrayItem ( const char * szName, CSphString & sError, bool bIgnoreMissing=false ) const;
 	bool			FetchIntItem ( int & iValue, const char * szName, CSphString & sError, bool bIgnoreMissing=false ) const;
-	bool			FetchInt64Item ( int64_t & iValue, const char * szName, CSphString & sError, bool bIgnoreMissing=false ) const;
 	bool			FetchBoolItem ( bool & bValue, const char * szName, CSphString & sError, bool bIgnoreMissing=false ) const;
-	bool			FetchFltItem ( float & fValue, const char * szName, CSphString & sError, bool bIgnoreMissing=false ) const;
 	bool			FetchStrItem ( CSphString & sValue, const char * szName, CSphString & sError, bool bIgnoreMissing=false ) const;
 	bool			HasItem ( const char * szName ) const;
 
 	static JsonObj_c CreateInt ( int64_t iInt );
 	static JsonObj_c CreateUint ( uint64_t uInt );
-	static JsonObj_c CreateDouble ( double fValue );
 	static JsonObj_c CreateStr ( const CSphString & sStr );
 
 	bool			IsInt() const;

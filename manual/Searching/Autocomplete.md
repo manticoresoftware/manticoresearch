@@ -152,7 +152,7 @@ To autocomplete a sentence, you can use [infixed search](../Creating_a_table/NLP
 * optionally using `""` for phrase matching
 * and using [result highlighting](../Searching/Highlighting.md)
 
-There is an [article about it in our blog](https://manticoresearch.com/blog/simple-autocomplete-with-manticore/) and an [interactive course](https://play.manticoresearch.com/simpleautocomplete/). A quick example is:
+There is an [article about it in our blog](https://manticoresearch.com/2020/03/31/simple-autocomplete-with-manticore/) and an [interactive course](https://play.manticoresearch.com/simpleautocomplete/). A quick example is:
 * Let's assume you have a document: `My cat loves my dog. The cat (Felis catus) is a domestic species of small carnivorous mammal.`
 * Then you can use `^`, `""`, and `*` so as the user is typing, you make queries like: `^"m*"`, `^"my *"`, `^"my c*"`, `^"my ca*"` and so on
 * It will find the document, and if you also do [highlighting](../Searching/Highlighting.md), you will get something like: `<b>My cat</b> loves my dog. The cat ( ...`

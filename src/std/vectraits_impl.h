@@ -92,13 +92,13 @@ T* VecTraits_T<T>::End() const
 
 /// make happy C++11 ranged for loops
 template<typename T>
-T* VecTraits_T<T>::begin() const noexcept
+T* VecTraits_T<T>::begin() const
 {
 	return Begin();
 }
 
 template<typename T>
-T* VecTraits_T<T>::end() const noexcept
+T* VecTraits_T<T>::end() const
 {
 	return m_iCount ? m_pData + m_iCount : nullptr;
 }

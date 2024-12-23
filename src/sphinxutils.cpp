@@ -3721,27 +3721,27 @@ bool ParseDateMath ( const CSphString & sMathExpr, int iNow, time_t & tDateTime 
 	return ParseDateMath ( sExpr, tDateTime );
 }
 
-std::pair<DateUnit_e, int> ParseDateInterval ( const CSphString & sExpr, bool bFixed, CSphString & sError )
+DateUnit_e ParseDateInterval ( const CSphString & sExpr, CSphString & sError )
 {
 	const char * sCur = sExpr.cstr();
 	const char * sEnd = sCur + sExpr.Length();
 
-	int iMulti = 1;
+	int iNum = 1;
 	if ( !sphIsDigital ( *sCur ) )
 	{
-		iMulti = 1;
+		iNum = 1;
 	} else
 	{
 		char * sNumEnd = nullptr;
-		iMulti = (int64_t)strtoull ( sCur, &sNumEnd, 10 );
+		iNum = (int64_t)strtoull ( sCur, &sNumEnd, 10 );
 		sCur = sNumEnd;
 	}
 
 	// rounding is only allowed on whole, single, units (eg M or 1M, not 0.5M or 2M)
-	if ( !bFixed && iMulti!=1 )
+	if ( iNum!=1 )
 	{
 		sError.SetSprintf ( "The supplied interval [%s] could not be parsed as a calendar interval", sExpr.cstr() );
-		return { DateUnit_e::total_units, iMulti };
+		return DateUnit_e::total_units;
 	}
 
 	const char * sUnitStart = sCur++;
@@ -3754,27 +3754,10 @@ std::pair<DateUnit_e, int> ParseDateInterval ( const CSphString & sExpr, bool bF
 	if ( !pUnit )
 	{
 		sError.SetSprintf ( "unknown interval [%s]", sExpr.cstr() );
-		return { DateUnit_e::total_units, iMulti };
+		return DateUnit_e::total_units;
 	}
 
-	if ( bFixed )
-	{
-		switch ( *pUnit )
-		{
-		case DateUnit_e::ms:
-		case DateUnit_e::sec:
-		case DateUnit_e::minute:
-		case DateUnit_e::hour:
-		case DateUnit_e::day:
-			break;
-
-		default:
-			sError.SetSprintf ( "The supplied interval [%s] could not be parsed as a fixed interval", sExpr.cstr() );
-			return { DateUnit_e::total_units, iMulti };
-		}
-	}
-
-	return { *pUnit, iMulti };
+	return *pUnit;
 }
 
 void RoundDate ( DateUnit_e eUnit, time_t & tDateTime )
@@ -3820,58 +3803,6 @@ void RoundDate ( DateUnit_e eUnit, time_t & tDateTime )
 
 	default:
 		break;
-	}
-}
-
-void RoundDate ( DateUnit_e eUnit, int iMulti, time_t & tDateTime )
-{
-	switch ( eUnit )
-	{
-		case DateUnit_e::ms:
-		{
-			// to fixed ms
-			auto tMs = tDateTime * 1000;
-			tMs -= ( tMs % iMulti);			// to nearest iMulti ms
-			tDateTime = tMs / 1000;			// back to seconds
-		}
-		break;
-
-		case DateUnit_e::sec:
-		{
-			// to fixed seconds
-			tDateTime -= ( tDateTime % iMulti );
-		}
-		break;
-
-		case DateUnit_e::minute:
-		{
-			// to fixed minutes
-			auto tMin = ( ( tDateTime / 60 ) % 60 );
-			tDateTime -= ( ( tMin % iMulti ) * 60 );
-		}
-		break;
-
-		case DateUnit_e::hour:
-		{
-			// to fixed hours
-			const int iHourSeconds = 3600;
-			auto tHours = ( ( tDateTime / iHourSeconds ) % 24 );
-			tDateTime -= ( ( tHours % iMulti ) * iHourSeconds );
-		}
-		break;
-
-		case DateUnit_e::day:
-		{
-			// to fixed days
-			const int iDaySeconds = 86400;
-			auto tDaysEpoch = ( tDateTime / iDaySeconds );
-			tDaysEpoch -= ( tDaysEpoch % iMulti );
-			tDateTime = ( tDaysEpoch * iDaySeconds );
-		}
-		break;
-
-		default:
-			break;
 	}
 }
 

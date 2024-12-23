@@ -27,7 +27,7 @@ static FORCE_INLINE void FreeDataPtrAttrs ( CSphMatch & tMatch, const CSphVector
 	{
 		const auto & tItem = dItems[i];
 
-		auto * pData = (BYTE *)tMatch.GetAttr ( tItem.m_tLoc );
+		BYTE * pData = (BYTE *)tMatch.GetAttr ( tItem.m_tLoc );
 		// delete[] pData;
 		if ( pData )
 		{

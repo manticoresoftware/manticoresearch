@@ -2547,8 +2547,13 @@ int CSphIndex_VLN::CheckThenUpdateAttributes ( AttrUpdateInc_t& tUpd, bool& bCri
 	if ( ( tCtx.m_uUpdateMask & IndexSegment_c::ATTRS_UPDATED ) || ( tCtx.m_uUpdateMask & IndexSegment_c::ATTRS_BLOB_UPDATED ) )
 	{
 		for ( const UpdatedAttribute_t & tAttr : tCtx.m_dUpdatedAttrs )
+		{
 			if ( tAttr.m_iSchemaAttr!=-1 )
-				m_tSI.ColumnUpdated ( m_tSchema.GetAttr ( tAttr.m_iSchemaAttr ).m_sName );
+			{
+				const CSphColumnInfo & tIdxAttr = m_tSchema.GetAttr ( tAttr.m_iSchemaAttr );
+				m_tSI.ColumnUpdated ( tIdxAttr.m_sName );
+			}
+		}
 	}
 
 	iUpdated = tUpd.m_iAffected - iUpdated;

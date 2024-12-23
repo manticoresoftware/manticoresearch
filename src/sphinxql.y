@@ -277,11 +277,11 @@ reserved_tokens_without_option:
 	| TOK_WARNINGS | TOK_WEIGHT | TOK_WHERE | TOK_WITHIN | TOK_KILL | TOK_QUERY
 	| TOK_INTERVAL | TOK_REGEX
 	| TOK_DATE_ADD | TOK_DATE_SUB | TOK_DAY | TOK_HOUR | TOK_MINUTE | TOK_MONTH | TOK_QUARTER | TOK_SECOND | TOK_WEEK | TOK_YEAR
-	| TOK_LOCKS
+	| TOK_LOCKS | TOK_SCROLL
 	;
 
-reserved_set_tail:
-    TOK_NAMES | TOK_TRANSACTION | TOK_COLLATE | TOK_BACKIDENT | TOK_SCROLL
+names_transaction_collate:
+    TOK_NAMES | TOK_TRANSACTION | TOK_COLLATE
     ;
 
 ident_without_option:
@@ -1253,7 +1253,7 @@ option_clause:
 
 option_clause_item:
 	TOK_OPTION default_option_table_setup option_list
-	| TOK_OPTION '(' idxname ')' option_table_setup option_list
+	| TOK_OPTION '(' single_manticore_tablename ')' option_table_setup option_list
 	;
 
 default_option_table_setup:
@@ -1503,7 +1503,7 @@ show_what:
 	| TOK_PLUGINS				{ pParser->m_pStmt->m_eStmt = STMT_SHOW_PLUGINS; }
 	| TOK_THREADS				{ pParser->m_pStmt->m_eStmt = STMT_SHOW_THREADS; }
 	| TOK_SCROLL				{ pParser->m_pStmt->m_eStmt = STMT_SHOW_SCROLL; }
-	| TOK_CREATE TOK_TABLE identidx
+	| TOK_CREATE TOK_TABLE single_manticore_tablename
 		{
 			pParser->m_pStmt->m_eStmt = STMT_SHOW_CREATE_TABLE;
 			pParser->SetIndex ($3);

@@ -1,38 +1,106 @@
 ––– input –––
-echo -e "searchd {\n    listen = 9306:mysql\n    listen = 9316\n    log = /tmp/searchd.log\n    pid_file = /tmp/searchd.pid\n    data_dir = /tmp/data\n    watchdog = 0\n}" > /tmp/watchdog-off.conf
+export INSTANCE=1
+––– output –––
+––– block: ../base/replication/start-searchd-precach –––
+––– input –––
+export INSTANCE=2
+––– output –––
+––– block: ../base/replication/start-searchd-precach –––
+––– input –––
+export INSTANCE=3
+––– output –––
+––– block: ../base/replication/start-searchd-precach –––
+––– input –––
+export CLUSTER_NAME=replication
 ––– output –––
 ––– input –––
-mkdir -p /tmp/data; rm -f /tmp/searchd.log; searchd --stopwait > /dev/null; searchd -c /tmp/watchdog-off.conf; if timeout 10 grep -qm1 '\[BUDDY\] started' <(tail -n 1000 -f /tmp/searchd.log); then echo 'Buddy started!'; else echo 'Timeout or failed!'; cat /tmp/searchd.log;fi
-––– output –––
-Manticore %{SEMVER} %{COMMITDATE}#!/(\sdev)?\s/!#(columnar %{SEMVER} %{COMMITDATE}) (secondary %{SEMVER} %{COMMITDATE}) (knn %{SEMVER} %{COMMITDATE})
-Copyright (c) 2001-2016, Andrew Aksyonoff
-Copyright (c) 2008-2016, Sphinx Technologies Inc (http://sphinxsearch.com)
-Copyright (c) 2017-%{YEAR}, Manticore Software LTD (https://manticoresearch.com)
-[#!/[0-9]{2}:[0-9]{2}.[0-9]{3}/!#] [#!/[0-9]+/!#] using config file '/tmp/watchdog-off.conf' (%{NUMBER} chars)...
-starting daemon version '%{SEMVER} %{COMMITDATE}#!/(\sdev)?\s/!#(columnar %{SEMVER} %{COMMITDATE}) (secondary %{SEMVER} %{COMMITDATE}) (knn %{SEMVER} %{COMMITDATE})' ...
-listening on all interfaces for mysql, port=9306
-listening on all interfaces for sphinx and http(s), port=9316
-Buddy started!
-––– input –––
-mysql -P9306 -h0 -e "DROP TABLE IF EXISTS t;"; rm -rf /tmp/data/t; mysql -P9306 -h0 -e "CREATE TABLE t(id INT, s STRING);"
+mysql -h0 -P1306 -e "create cluster ${CLUSTER_NAME}"
 ––– output –––
 ––– input –––
-for n in `seq 1 100000`; do echo "INSERT INTO t VALUES($n, 'a');" >> /tmp/insert.sql; done; mysql -P9306 -h0 < /tmp/insert.sql; mysql -P9306 -h0 -e "FLUSH RAMCHUNK t;"
+for n in `seq 2 $INSTANCE`; do mysql -h0 -P${n}306 -e "join cluster ${CLUSTER_NAME} at '127.0.0.1:1312'"; done;
 ––– output –––
 ––– input –––
-mysql -P9306 -h0 -e "SELECT COUNT(*) FROM t;"
+mysql -h0 -P1306 -e "SHOW STATUS LIKE 'cluster_replication_status'\G"
+––– output –––
+––– input –––
+mysql -h0 -P1306 -e "SHOW STATUS LIKE 'cluster_replication_nodes_set'\G;"
+––– output –––
+––– input –––
+mysql -h0 -P2306 -e "SHOW STATUS LIKE 'cluster_replication_status'\G"
+––– output –––
+––– input –––
+mysql -h0 -P2306 -e "SHOW STATUS LIKE 'cluster_replication_nodes_set'\G;"
+––– output –––
+––– input –––
+mysql -h0 -P3306 -e "SHOW STATUS LIKE 'cluster_replication_status'\G"
+––– output –––
+––– input –––
+mysql -h0 -P3306 -e "SHOW STATUS LIKE 'cluster_replication_nodes_set'\G;"
+––– output –––
+––– input –––
+php -d memory_limit=2G ./test/clt-tests/scripts/load_names_attr.php --batch-size=5000 --concurrency=1 --docs=1000000 --start-id=01 --rt-mem-limit=256M --min-infix-len=2 --drop-table --port=2306
+––– output –––
+––– input –––
+mysql -h0 -P2306 -e "ALTER CLUSTER replication ADD name;"
+––– output –––
+––– input –––
+mysql -P1306 -h0 -e "SELECT COUNT(*) FROM name;"
 ––– output –––
 +----------+
 | count(*) |
 +----------+
-|   100000 |
+|  1100000 |
 +----------+
 ––– input –––
-rm -f /tmp/update.sql; for n in `seq 1 100`; do echo "UPDATE t SET s='b' WHERE id=$n;" >> /tmp/update.sql; done; while true; do mysql -P9306 -h0 < /tmp/update.sql; done & UPDATE_PID=$!
+mysql -P1306 -h0 -e "DESCRIBE name;"
+––– output –––
+––– input –––
+mysql -P1306 -h0 -e "SELECT * FROM name limit 10;"
+––– output –––
+––– input –––
+mysql -P1306 -h0 -e "SELECT id, s FROM name LIMIT 10;"
+––– output –––
+––– input –––
+mysql -P1306 -h0 -e "SHOW CREATE TABLE name\G;"
+––– output –––
+––– input –––
+mysql -P2306 -h0 -e "SHOW CREATE TABLE name\G;"
+––– output –––
+––– input –––
+mysql -P3306 -h0 -e "SHOW CREATE TABLE name\G;"
+––– output –––
+––– input –––
+mysql -P1306 -h0 -e "SELECT COUNT(*) FROM name;"
+––– output –––
++----------+
+| count(*) |
++----------+
+|  1000000 |
++----------+
+––– input –––
+rm -f /tmp/update.sql; for n in `seq 01 100`; do echo "UPDATE replication:name SET s='b' WHERE id=$n;" >> /tmp/update.sql; done; while true; do mysql -P1306 -h0 < /tmp/update.sql; done & UPDATE_PID=$!
 ––– output –––
 [%{NUMBER}] %{NUMBER}
 ––– input –––
-sleep 1; mysql -P9306 -h0 -e "freeze t"
+mysql -P1306 -h0 -e "DESCRIBE name;"
+––– output –––
+––– input –––
+mysql -P1306 -h0 -e "SELECT id FROM replication:name WHERE MATCH('@s value1');"
+––– output –––
+––– input –––
+mysql -P1306 -h0 -e "SHOW CREATE TABLE replication:name\G;"
+––– output –––
+––– input –––
+sleep 10; mysql -P1306 -h0 -e "SELECT * FROM replication:name limit 10;"
+––– output –––
+––– input –––
+mysql -P2306 -h0 -e "SELECT * FROM replication:name limit 10;"
+––– output –––
+––– input –––
+mysql -P3306 -h0 -e "SELECT * FROM replication:name limit 10;"
+––– output –––
+––– input –––
+sleep 1; mysql -P9306 -h0 -e "freeze replication:name"
 ––– output –––
 +------------------------+------------------------+
 | file                   | normalized             |
@@ -53,35 +121,12 @@ sleep 1; mysql -P9306 -h0 -e "freeze t"
 | /tmp/data/t/t.settings | /tmp/data/t/t.settings |
 +------------------------+------------------------+
 ––– input –––
-sleep 1; kill $UPDATE_PID; wait $UPDATE_PID 2>/dev/null; mysql -P9306 -h0 -e "unfreeze t"; echo $?
+sleep 1; kill $UPDATE_PID; wait $UPDATE_PID 2>/dev/null;
 ––– output –––
 0
 ––– input –––
-(sleep 1; mysql -P9306 -h0 -e "drop table if exists t;" && mysql -P9306 -h0 -e "CREATE TABLE t(a string); insert into t values(1, 'a'); flush ramchunk t; freeze t"; mysql -P9306 -h0 -e "update t set a='b' where id = 1" 2>&1 &)
+(sleep 1; mysql -P1306 -h0 -e "drop table if exists replication:name;" && mysql -P1306 -h0 -e "CREATE TABLE name(a string); insert into name values(1, 'a'); flush ramchunk ; freeze t"; mysql -P1306 -h0 -e "update name set a='b' where id = 1" 2>&1 &)
 ––– output –––
-+------------------------+------------------------+
-| file                   | normalized             |
-+------------------------+------------------------+
-| /tmp/data/t/t.0.spa    | /tmp/data/t/t.0.spa    |
-| /tmp/data/t/t.0.spb    | /tmp/data/t/t.0.spb    |
-| /tmp/data/t/t.0.spd    | /tmp/data/t/t.0.spd    |
-| /tmp/data/t/t.0.spe    | /tmp/data/t/t.0.spe    |
-| /tmp/data/t/t.0.sph    | /tmp/data/t/t.0.sph    |
-| /tmp/data/t/t.0.sphi   | /tmp/data/t/t.0.sphi   |
-| /tmp/data/t/t.0.spi    | /tmp/data/t/t.0.spi    |
-| /tmp/data/t/t.0.spidx  | /tmp/data/t/t.0.spidx  |
-| /tmp/data/t/t.0.spm    | /tmp/data/t/t.0.spm    |
-| /tmp/data/t/t.0.spp    | /tmp/data/t/t.0.spp    |
-| /tmp/data/t/t.0.spt    | /tmp/data/t/t.0.spt    |
-| /tmp/data/t/t.meta     | /tmp/data/t/t.meta     |
-| /tmp/data/t/t.settings | /tmp/data/t/t.settings |
-+------------------------+------------------------+
 ––– input –––
-if timeout 5 mysql -P9306 -h0 -e 'SELECT * FROM t'; then echo 'Query executed'; else echo 'Query not executed'; fi
+if timeout 5 mysql -P1306 -h0 -e 'SELECT * FROM t'; then echo 'Query executed'; else echo 'Query not executed'; fi
 ––– output –––
-+------+------+
-| id   | a    |
-+------+------+
-|    1 | a    |
-+------+------+
-Query executed

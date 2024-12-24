@@ -7,20 +7,26 @@ $defaults = [
     'concurrency' => 4,
     'docs' => 1000000,
     'start-id' => 1,
-    'drop-table' => true  // Drop and create table by default
+    'drop-table' => true,  // Drop and create table by default
+    'shards' => 1,         // Default number of shards
+    'rf' => 1,             // Default replication factor
+    'port' => 9306         // Default port
 ];
 
 // Parse command-line arguments
 $options = [
-    'batch-size::',     // Optional argument, controlled by --batch-size=
-    'concurrency::',    // Optional argument, controlled by --concurrency=
-    'docs::',           // Optional argument, controlled by --docs=
-    'min-infix-len::',  // Optional argument, controlled by --min-infix-len=
-    'start-id::',       // Optional argument, controlled by --start-id=
-    'rt-mem-limit::',   // Optional argument, controlled by --rt-mem-limit=
-    'drop-table',       // Flag argument, controlled by --drop-table (default true)
-    'no-drop-table',    // Flag to disable dropping and creating the table
-    'help'              // Help argument
+    'batch-size::',
+    'concurrency::',
+    'docs::',
+    'min-infix-len::',
+    'start-id::',
+    'rt-mem-limit::',
+    'drop-table',
+    'no-drop-table',
+    'shards::',          // Number of shards
+    'rf::',              // Replication factor
+    'port::',            // Port number
+    'help'
 ];
 $args = getopt("", $options);
 
@@ -63,15 +69,28 @@ $batchSize = intval($args['batch-size']);
 $concurrency = intval($args['concurrency']);
 $docs = intval($args['docs']);
 $startId = intval($args['start-id']);
+$shards = intval($args['shards']);
+$rf = intval($args['rf']);
+$port = intval($args['port']);
+
+// Validate shards and rf
+if ($shards < 1 || $rf < 1) {
+    die("Error: --shards and --rf must be greater than or equal to 1.\n");
+}
+
+// Check required files
+$namesFile = './test/clt-tests/scripts/names.txt';
+$surnamesFile = './test/clt-tests/scripts/surnames.txt';
+if (!file_exists($namesFile) || !file_exists($surnamesFile)) {
+    die("Error: Required files names.txt or surnames.txt are missing.\n");
+}
 
 // Connect to database
-function connectDb() {
+function connectDb($port) {
     $host = '127.0.0.1';
-    $port = '9306';
-
     $m = @mysqli_connect($host, '', '', '', $port);
     if (mysqli_connect_error()) {
-        die("Cannot connect to Manticore\n");
+        die("Cannot connect to Manticore on port $port\n");
     }
     return $m;
 }
@@ -89,21 +108,28 @@ function process($link, $query) {
 // Create connections
 $all_links = [];
 for ($i = 0; $i < $concurrency; $i++) {
-    $all_links[] = connectDb();
+    $all_links[] = connectDb($port);
 }
 
 // Initialize table if drop-table is true
 $pdo = $all_links[0];
 if ($dropTable) {
-    mysqli_query($pdo, "DROP TABLE IF EXISTS name");
+    if (!process($pdo, "DROP TABLE IF EXISTS name")) {
+        die("Failed to drop existing table.\n");
+    }
     echo "Table 'name' dropped and recreated.\n";
-    $createTableQuery = "CREATE TABLE name(id INTEGER, username TEXT, s STRING) $minInfixLen expand_keywords='1'";
+
+	$createTableQuery = "CREATE TABLE name (id INTEGER, username TEXT, s STRING ATTRIBUTE INDEXED)";
+	    if ($minInfixLen) {
+        $createTableQuery .= " $minInfixLen";
+    }
+    $createTableQuery .= " expand_keywords='1' shards=$shards rf=$rf";
     if ($rtMemLimit) {
         $createTableQuery .= " $rtMemLimit";
     }
-    mysqli_query($pdo, $createTableQuery);
 }
 
+// Prepare data
 $batch = [];
 $query_start = "INSERT INTO name(id, username, s) VALUES ";
 $names = file('./test/clt-tests/scripts/names.txt', FILE_IGNORE_NEW_LINES | FILE_SKIP_EMPTY_LINES);
@@ -131,9 +157,9 @@ echo "querying...\n";
 
 $t = microtime(true);
 
-foreach ($batches as $batch) {
-    $link = $all_links[array_rand($all_links)];
-    if (!process($link, $batch)) die("ERROR\n");
+foreach ($batches as $index => $batch) {
+    $link = $all_links[$index % $concurrency];
+    if (!process($link, $batch)) die("Error during batch insertion.\n");
 }
 
 echo "finished inserting\n";

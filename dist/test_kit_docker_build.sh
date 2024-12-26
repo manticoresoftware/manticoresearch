@@ -69,6 +69,10 @@ do
 			package="manticore-backup"
 			arch="all"
 			;;
+		load)
+			package="manticore-load"
+			arch="all"
+			;;
 		mcl)
 			package="manticore-columnar-lib"
 			arch="amd64"
@@ -129,4 +133,3 @@ echo "Exporting image to ../manticore_test_kit.img"
 
 # exporting the image, it also squashes all the layers into one
 docker export manticore-test-kit > ../manticore_test_kit.img
-

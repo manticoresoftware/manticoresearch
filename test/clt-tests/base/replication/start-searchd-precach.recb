@@ -1,5 +1,8 @@
 ––– input –––
-mkdir -p /var/{run,lib,log}/manticore-${INSTANCE}/{a,b,c,d,e,f,g,h,i,j}
+mkdir -p /tmp/manticore-${INSTANCE}
+––– output –––
+––– input –––
+chmod -R 777 /tmp/manticore-${INSTANCE}
 ––– output –––
 ––– input –––
 stdbuf -oL searchd -c test/clt-tests/base/searchd-with-flexible-ports.conf | grep -v precach
@@ -14,6 +17,6 @@ listening on all interfaces for mysql, port=%{NUMBER}
 listening on all interfaces for sphinx and http(s), port=%{NUMBER}
 listening on all interfaces for sphinx and http(s), port=%{NUMBER}
 ––– input –––
-if timeout 10 grep -qm1 'accepting connections' <(tail -n 1000 -f /var/log/manticore-${INSTANCE}/searchd.log); then echo 'Accepting connections!'; else echo 'Timeout or failed!'; fi
+if timeout 10 grep -qm1 'accepting connections' <(tail -n 1000 -f /tmp/manticore-${INSTANCE}/searchd.log); then echo 'Accepting connections!'; else echo 'Timeout or failed!'; fi
 ––– output –––
 Accepting connections!

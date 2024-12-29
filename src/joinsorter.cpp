@@ -560,7 +560,7 @@ private:
 	CSphString						m_sErrorMessage;
 
 	const int MAX_BATCH_SIZE=1000;
-	bool							m_bCanBatch = false;
+	bool							m_bCanBatch = true;
 	CSphVector<SphAttr_t>			m_dJoinOnFilterValues;
 	CSphVector<SphAttr_t>			m_dBatchedFilterValues;
 	CSphFixedVector<CSphMatch>		m_dBatchedMatches{MAX_BATCH_SIZE};
@@ -609,7 +609,7 @@ private:
 	bool		RunJoinedQuery();
 
 	template <typename PUSH, typename MATCHES>
-	FORCE_INLINE bool AddToCacheAndPush ( const CSphMatch & tEntry, uint64_t uJoinOnFilterHash, PUSH && fnPush, MATCHES & dMatches );
+	FORCE_INLINE bool AddToCacheAndPush ( const CSphMatch & tEntry, uint64_t uJoinOnFilterHash, PUSH && fnPush, MATCHES & dMatches, bool bAddToCache );
 };
 
 
@@ -833,7 +833,7 @@ void JoinSorter_c::SetupRightStandaloneLocators()
 		auto & tFilter = m_tJoinQuery.m_dFilters[tRemap.m_iFilterId];
 		const CSphColumnInfo * pRightJoinOnAttr = pRightSchema->GetAttr ( tFilter.m_sAttrName.cstr() );
 		assert ( pRightJoinOnAttr );
-		//tRemap.m_tRightStandaloneLocator = pRightJoinOnAttr->m_tLocator;
+		tRemap.m_tRightStandaloneLocator = pRightJoinOnAttr->m_tLocator;
 	}
 }
 
@@ -871,7 +871,7 @@ void JoinSorter_c::SetupJoinAttrRemap()
 	}
 
 	SetupDependentAttrCalc(dJoinedAttrs);
-	//SetupRightStandaloneLocators();
+	SetupRightStandaloneLocators();
 	m_bNeedToSetupRemap = false;
 }
 
@@ -1046,12 +1046,17 @@ bool JoinSorter_c::RunJoinedQuery()
 }
 
 template <typename PUSH, typename MATCHES>
-bool JoinSorter_c::AddToCacheAndPush ( const CSphMatch & tEntry, uint64_t uJoinOnFilterHash, PUSH && fnPush, MATCHES & dMatches )
+bool JoinSorter_c::AddToCacheAndPush ( const CSphMatch & tEntry, uint64_t uJoinOnFilterHash, PUSH && fnPush, MATCHES & dMatches, bool bAddToCache )
 {
 	ISphMatchSorter * pSorter = m_pRightSorter.get();
-	m_tCache.SetSchema ( pSorter->GetSchema() );
-	bool bInCache = m_tCache.Add ( uJoinOnFilterHash, dMatches );
-	m_bCacheOk &= bInCache;
+
+	bool bInCache = !bAddToCache;
+	if ( bAddToCache )
+	{
+		m_tCache.SetSchema ( pSorter->GetSchema() );
+		bInCache = m_tCache.Add ( uJoinOnFilterHash, dMatches );
+		m_bCacheOk &= bInCache;
+	}
 
 	CSphRowitem * pDynamic = m_tMatch.m_pDynamic;
 	memcpy ( &m_tMatch, &tEntry, sizeof(m_tMatch) );
@@ -1141,7 +1146,7 @@ bool JoinSorter_c::RunBatch ( PUSH && fnPush )
 			}
 
 		MatchPtrVec_c dMatchesToPush(m_dMatchPtrs);
-		AddToCacheAndPush ( tLeftMatch, m_dBatchedFilterHashes[iMatch], fnPush, dMatchesToPush );
+		AddToCacheAndPush ( tLeftMatch, m_dBatchedFilterHashes[iMatch], fnPush, dMatchesToPush, true );
 	}
 
 	ClearBatch();
@@ -1158,56 +1163,23 @@ bool JoinSorter_c::Push_T ( const CSphMatch & tEntry, PUSH && fnPush )
 	if ( m_bErrorFlag )
 		return false;
 
-	bool bInCache = true;
 	uint64_t uJoinOnFilterHash = SetupJoinFilters(tEntry);
-	if ( !m_tCache.Fetch ( uJoinOnFilterHash, m_dMatches ) )
+	if ( m_tCache.Fetch ( uJoinOnFilterHash, m_dMatches ) )
+		return AddToCacheAndPush ( tEntry, uJoinOnFilterHash, fnPush, m_dMatches, false );
+
+	if ( m_bCanBatch )
 	{
-		if ( m_bCanBatch )
-		{
-			AddToBatch ( tEntry, uJoinOnFilterHash );
-			if ( !IsBatchFull() )
-				return true;
+		AddToBatch ( tEntry, uJoinOnFilterHash );
+		if ( !IsBatchFull() )
+			return true;
 
-			return RunBatch(fnPush);
-		}
-
-		if ( !RunJoinedQuery() )
-			return false;
-
-		return AddToCacheAndPush ( tEntry, uJoinOnFilterHash, fnPush, m_dMatches );
-/*		m_tCache.SetSchema ( m_pRightSorter->GetSchema() );
-		bInCache = m_tCache.Add ( uJoinOnFilterHash, m_dMatches );
-		m_bCacheOk &= bInCache;*/
+		return RunBatch(fnPush);
 	}
 
-	auto tScopedReset = AtScopeExit ( [this, bInCache]
-	{
-		if ( bInCache )
-		{
-			for ( auto & i : m_dMatches )
-				i.m_pDynamic = nullptr;
-		}
-		else
-		{
-			const ISphSchema * pTransformedRightSchema = m_pRightSorter->GetSchema();
-			for ( auto & i : m_dMatches )
-			{
-				pTransformedRightSchema->FreeDataPtrs(i);
-				i.ResetDynamic();
-			}
-		}
-	} );
+	if ( !RunJoinedQuery() )
+		return false;
 
-	CSphRowitem * pDynamic = m_tMatch.m_pDynamic;
-	memcpy ( &m_tMatch, &tEntry, sizeof(m_tMatch) );
-	m_tMatch.m_pDynamic = pDynamic;
-
-	bool bAnythingPushed = PushJoinedMatches ( tEntry, m_dMatches, fnPush );
-
-	if ( !m_dMatches.GetLength() && m_tQuery.m_eJoinType==JoinType_e::LEFT )
-		return PushLeftMatch ( tEntry, fnPush );
-
-	return bAnythingPushed;
+	return AddToCacheAndPush ( tEntry, uJoinOnFilterHash, fnPush, m_dMatches, true );
 }
 
 

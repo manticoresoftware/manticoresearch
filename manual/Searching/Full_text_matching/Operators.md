@@ -95,7 +95,7 @@ All-field search operator:
 
 The phrase operator mandates that the words be adjacent to each other.
 
-The phrase search operator can incorporate a `match any term` modifier. Within the phrase operator, terms are positionally significant. When the 'match any term' modifier is employed, the positions of the subsequent terms in that phrase query will be shifted. As a result, the 'match any' modifier does not affect search performance.
+The phrase search operator can include a `match any term` modifier. Within the phrase operator, terms are positionally significant. When the 'match any term' modifier is employed, the positions of the subsequent terms in that phrase query will be shifted. As a result, the 'match any' modifier does not affect search performance.
 
 ```sql
 "exact * phrase * * for terms"
@@ -136,7 +136,7 @@ raining =cats and =dogs
 ="exact phrase"
 ```
 
-The exact form keyword modifier matches a document only if the keyword appears in the exact form specified. By default, a document is considered a match if the stemmed/lemmatized keyword matches. For instance, the query "runs" will match both a document containing "runs" and one containing "running", because both forms stem to just "run". However, the `=runs` query will only match the first document. The exact form operator requires the [index_exact_words](../../Creating_a_table/NLP_and_tokenization/Morphology.md#index_exact_words) option to be enabled.
+The exact form keyword modifier matches a document only if the keyword appears in the exact form specified. By default, a document is considered a match if the stemmed/lemmatized keyword matches. For instance, the query "runs" will match both a document containing "runs" and one containing "running", because both forms stem to just "run". However, the `=runs` query will only match the first document. The exact form modifier requires the [index_exact_words](../../Creating_a_table/NLP_and_tokenization/Morphology.md#index_exact_words) option to be enabled.
 
 Another use case is to prevent [expanding](../../Creating_a_table/NLP_and_tokenization/Wildcard_searching_settings.md#expand_keywords) a keyword to its `*keyword*` form. For example, with `index_exact_words=1` + `expand_keywords=1/star`, `bcd` will find a document containing `abcde`, but `=bcd` will not.
 
@@ -245,7 +245,7 @@ The `ZONE limit` operator closely resembles the field limit operator but limits 
 <th>Table 2. World-wide brand awareness.</th>
 ```
 
-The `ZONE` operator influences the query until the next field or `ZONE` limit operator, or until the closing parenthesis. It functions exclusively with tables built with zone support (refer to [index_zones](../../Creating_a_table/NLP_and_tokenization/Advanced_HTML_tokenization.md#index_zones)) and will be disregarded otherwise.
+The `ZONE` operator affects the query until the next field or `ZONE` limit operator, or until the closing parenthesis. It functions exclusively with tables built with zone support (refer to [index_zones](../../Creating_a_table/NLP_and_tokenization/Advanced_HTML_tokenization.md#index_zones)) and will be disregarded otherwise.
 
 ### ZONESPAN limit operator
 

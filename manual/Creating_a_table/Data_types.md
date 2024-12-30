@@ -1575,7 +1575,7 @@ select * from t
 
 <!-- example for creating json -->
 
-This data type allows storing JSON objects, which is useful for storing schema-less data. However, it is not supported by columnar storage. However, it can be stored in traditional storage, as it's possible to combine both storage types in the same table.
+This data type allows for the storage of JSON objects, which is particularly useful for handling schema-less data. When defining JSON values, ensure that the opening and closing curly braces `{` and `}` are included. While JSON is not supported by columnar storage, it can be stored in traditional row-wise storage. It's worth noting that both storage types can be combined within the same table.
 
 <!-- intro -->
 ##### SQL:

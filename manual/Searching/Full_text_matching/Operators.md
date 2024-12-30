@@ -159,7 +159,7 @@ In addition, the following inline wildcard operators are supported:
 * `?` can match any single character: `t?st` will match `test`, but not `teast`
 * `%` can match zero or one character: `tes%` will match `tes` or `test`, but not `testing`
 
-The inline operators require `dict=keywords` and infixing enabled.
+The inline operators require `dict=keywords` (enabled by default) and prefixing/infixing enabled.
 
 ### REGEX operator
 

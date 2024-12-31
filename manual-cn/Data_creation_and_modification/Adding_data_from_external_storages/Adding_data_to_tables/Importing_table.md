@@ -1,6 +1,6 @@
 # 导入表
 
-如果你决定从[普通模式](../../../Creating_a_table/Local_tables.md#Defining-table-schema-in-config-%28Plain mode%29)迁移到[实时模式](../../../Creating_a_table/Local_tables.md#Online-schema-management-(RT-mode))或在其他情况下，可以使用`IMPORT TABLE`语句将以普通模式构建的实时表和渗透表导入到运行实时模式的Manticore中。其一般语法如下：
+如果你决定从[普通模式](../../../Creating_a_table/Local_tables.md#在配置中定义表结构（普通模式）)迁移到[实时模式](../../../Creating_a_table/Local_tables.md#在线模式管理（实时模式）)或在其他情况下，可以使用`IMPORT TABLE`语句将以普通模式构建的实时表和渗透表导入到运行实时模式的Manticore中。其一般语法如下：
 
 <!-- example import -->
 

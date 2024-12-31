@@ -286,7 +286,7 @@ index_sp = {0|1}
 
 `index_sp` 选项控制句子和段落边界的检测与索引。该选项是可选的，默认值为 0（不进行检测或索引）。
 
-此指令启用句子和段落边界的检测与索引，使 [SENTENCE](../../Searching/Full_text_matching/Operators.md#SENTENCE-and-PARAGRAPH-operators) 和 [PARAGRAPH](../../Searching/Full_text_matching/Operators.md#SENTENCE-和-PARAGRAPH-操作符) 操作符可以正常工作。句子边界的检测基于纯文本分析，只需设置 `index_sp = 1` 即可启用。段落检测则依赖于 HTML 标记，并在 [HTML 剥离过程](../../Creating_a_table/NLP_and_tokenization/Advanced_HTML_tokenization.md#html_strip) 中进行。因此，要索引段落边界，必须将 `index_sp` 和 `html_strip` 两个指令都设置为 1。
+此指令启用句子和段落边界的检测与索引，使 [SENTENCE](../../Searching/Full_text_matching/Operators.md#SENTENCE-和-PARAGRAPH-操作符) 和 [PARAGRAPH](../../Searching/Full_text_matching/Operators.md#SENTENCE-和-PARAGRAPH-操作符) 操作符可以正常工作。句子边界的检测基于纯文本分析，只需设置 `index_sp = 1` 即可启用。段落检测则依赖于 HTML 标记，并在 [HTML 剥离过程](../../Creating_a_table/NLP_and_tokenization/Advanced_HTML_tokenization.md#html_strip) 中进行。因此，要索引段落边界，必须将 `index_sp` 和 `html_strip` 两个指令都设置为 1。
 
 以下规则用于确定句子边界：
 

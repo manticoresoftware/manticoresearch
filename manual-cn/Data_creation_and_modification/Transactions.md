@@ -45,7 +45,7 @@ ROLLBACK
 
 ## `/bulk` 中的事务
 
-当使用 `/bulk` JSON 端点之一（[批量插入](../Data_creation_and_modification/Adding_documents_to_a_table/Adding_documents_to_a_real-time_table.md?client=JSON#Bulk-adding-documents)、[批量替换](../Data_creation_and_modification/Updating_documents/REPLACE.md?client=JSON#Bulk-replace)、[批量删除](../Data_creation_and_modification/Deleting_documents.md?client=JSON#Bulk-deletion)）时，您可以通过在文档后添加一个空行来强制提交一批文档。
+当使用 `/bulk` JSON 端点之一（[批量插入](../Data_creation_and_modification/Adding_documents_to_a_table/Adding_documents_to_a_real-time_table.md?client=JSON#批量添加文档)、[批量替换](../Data_creation_and_modification/Updating_documents/REPLACE.md?client=JSON#批量替换)、[批量删除](../Data_creation_and_modification/Deleting_documents.md?client=JSON#批量删除)）时，您可以通过在文档后添加一个空行来强制提交一批文档。
 
 ## 示例
 

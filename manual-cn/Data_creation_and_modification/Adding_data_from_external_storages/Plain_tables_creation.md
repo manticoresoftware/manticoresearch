@@ -127,7 +127,7 @@ systemctl restart manticore-indexer
 
   此命令会生成 `word_freq.txt` 文件，并在每个词后面列出其在表中出现的次数。
 
-* `--merge <目标表> <源表>` 用于物理合并两个表，例如在 [main+delta 方案](../../Creating_a_table/Local_tables/Plain_table.md#Main+delta-scenario) 中，主表很少更改，而增量表经常被重新构建，`--merge` 用于将两者合并。操作从右到左执行——`src-table` 的内容会与 `dst-table` 的内容合并，结果保存在 `dst-table` 中。伪代码表达如下：`dst-table += src-table`。示例：
+* `--merge <目标表> <源表>` 用于物理合并两个表，例如在 [main+delta 方案](../../Creating_a_table/Local_tables/Plain_table.md#主+增量场景) 中，主表很少更改，而增量表经常被重新构建，`--merge` 用于将两者合并。操作从右到左执行——`src-table` 的内容会与 `dst-table` 的内容合并，结果保存在 `dst-table` 中。伪代码表达如下：`dst-table += src-table`。示例：
 
   ```shell
   sudo -u manticore indexer --merge main delta --rotate

@@ -1199,7 +1199,7 @@ CRC 字典不在索引中存储原始关键字文本。相反，它们在搜索�
 
 关键字字典解决了这两个问题。它在索引中存储关键字，并在搜索时进行通配符扩展。例如，对 `test*` 前缀的搜索可以根据字典的内容在内部扩展为 'test|tests|testing' 查询。这个扩展过程对应用程序是完全不可见的，唯一的例外是所有匹配关键字的每个关键字统计信息现在也会被报告。
 
-对于子字符串（中缀）搜索，可以使用扩展通配符。特殊字符如 `?` 和 `%` 与子字符串（中缀）搜索兼容（例如，`t?st*`、`run%`、`*abc*`）。请注意，[通配符运算符](../../Searching/Full_text_matching/Operators.md#Wildcard-operators) 和 [REGEX](../../Searching/Full_text_matching/Operators.md#正则表达式操作符) 仅在 `dict=keywords` 时有效。
+对于子字符串（中缀）搜索，可以使用扩展通配符。特殊字符如 `?` 和 `%` 与子字符串（中缀）搜索兼容（例如，`t?st*`、`run%`、`*abc*`）。请注意，[通配符运算符](../../Searching/Full_text_matching/Operators.md#通配符操作符) 和 [REGEX](../../Searching/Full_text_matching/Operators.md#正则表达式操作符) 仅在 `dict=keywords` 时有效。
 
 使用关键字字典进行索引的速度大约比常规非子字符串索引慢 1.1 倍到 1.3 倍 - 但显著快于子字符串索引（无论是前缀还是中缀）。索引大小应仅比标准非子字符串表略大，总差异为 1..10% 之间。常规关键字搜索所需的时间在所有三种索引类型（CRC 非子字符串、CRC 子字符串、关键字）之间应该几乎相同或相同。子字符串搜索时间可能会根据实际匹配给定子字符串的关键字数量（即搜索术语扩展成多少关键字）显著波动。匹配关键字的最大数量受 [expansion_limit](../../Server_settings/Searchd.md#expansion_limit) 指令的限制。
 

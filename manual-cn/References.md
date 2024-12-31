@@ -2,7 +2,7 @@
 
 ### SQL 命令
 ##### 表结构管理
-[CREATE TABLE](Creating_a_table/Local_tables/Real-time_table.md#CREATE-TABLE-command:) - 创建新表
+[CREATE TABLE](Creating_a_table/Local_tables/Real-time_table.md#CREATE TABLE 命令：) - 创建新表
 
 - [CREATE TABLE LIKE](Creating_a_table/Local_tables/Real-time_table.md#CREATE-TABLE-LIKE:) - 使用另一个表作为模板创建表
 - [CREATE TABLE LIKE ... WITH DATA](Creating_a_table/Local_tables/Real-time_table.md#CREATE-TABLE-LIKE:) - 复制一个表
@@ -71,9 +71,9 @@
 * [RELOAD TABLES](Data_creation_and_modification/Adding_data_from_external_storages/Rotating_a_table.md#RELOAD-TABLE) - 轮换所有普通表
 
 ##### 事务
-* [BEGIN](Data_creation_and_modification/Transactions.md#BEGIN,-COMMIT,-and-ROLLBACK) - 开始事务
-* [COMMIT](Data_creation_and_modification/Transactions.md#BEGIN,-COMMIT,-and-ROLLBACK) - 提交事务
-* [ROLLBACK](Data_creation_and_modification/Transactions.md#BEGIN,-COMMIT,-and-ROLLBACK) - 回滚事务
+* [BEGIN](Data_creation_and_modification/Transactions.md#BEGIN、COMMIT 和 ROLLBACK) - 开始事务
+* [COMMIT](Data_creation_and_modification/Transactions.md#BEGIN、COMMIT 和 ROLLBACK) - 提交事务
+* [ROLLBACK](Data_creation_and_modification/Transactions.md#BEGIN、COMMIT 和 ROLLBACK) - 回滚事务
 
 ##### CALL
 - [CALL SUGGEST, CALL QSUGGEST](Searching/Spell_correction.md#CALL-QSUGGEST,-CALL-SUGGEST) - 提供拼写纠正的词

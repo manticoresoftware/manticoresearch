@@ -1189,7 +1189,7 @@ OPTION <optionname>=<value> [ , ... ]
 
 ### 查询优化器提示
 
-在少数情况下，Manticore 内置的查询分析器可能无法正确理解查询并确定是否应使用按 ID 查询的表。这可能导致像 `UPDATE ... WHERE id = 123` 这样的查询性能较差。 有关如何强制优化器使用 `docid` 索引的信息，请参见 [查询优化器提示](../../Searching/Options.md#Query optimizer hints)。
+在少数情况下，Manticore 内置的查询分析器可能无法正确理解查询并确定是否应使用按 ID 查询的表。这可能导致像 `UPDATE ... WHERE id = 123` 这样的查询性能较差。 有关如何强制优化器使用 `docid` 索引的信息，请参见 [查询优化器提示](../../Searching/Options.md#查询优化器提示)。
 
 ## 通过 HTTP JSON 进行更新
 

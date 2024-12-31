@@ -18,7 +18,7 @@ stopwords=path/to/stopwords/file[ path/to/another/file ...]
 
 停用词文件格式为简单的 UTF-8 编码纯文本。文件数据会根据 [charset_table](../../Creating_a_table/NLP_and_tokenization/Low-level_tokenization.md#charset_table) 设置进行标记，因此你可以使用与索引数据相同的分隔符。
 
-停用词文件可以手动创建或半自动生成。`indexer` 提供了一个模式，用于创建表的频率字典，按关键词频率排序。该字典中的前几个关键词通常可以作为停用词。有关详细信息，请参阅[--buildstops](../../Data_creation_and_modification/Adding_data_from_external_storages/Plain_tables_creation.md#Indexer-command-line-arguments) 和 [--buildfreqs](../../Data_creation_and_modification/Adding_data_from_external_storages/Plain_tables_creation.md#Indexer-命令行参数) 参数。
+停用词文件可以手动创建或半自动生成。`indexer` 提供了一个模式，用于创建表的频率字典，按关键词频率排序。该字典中的前几个关键词通常可以作为停用词。有关详细信息，请参阅[--buildstops](../../Data_creation_and_modification/Adding_data_from_external_storages/Plain_tables_creation.md#Indexer-命令行参数) 和 [--buildfreqs](../../Data_creation_and_modification/Adding_data_from_external_storages/Plain_tables_creation.md#Indexer-命令行参数) 参数。
 
 
 <!-- intro -->

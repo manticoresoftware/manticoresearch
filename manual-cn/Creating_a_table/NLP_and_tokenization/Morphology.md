@@ -39,7 +39,7 @@ Soundex 的实现与 MySQL 的一致。Metaphone 的实现基于 Double Metaphon
 
 * none：不执行任何词法处理
 * lemmatize_ru：应用俄语词元化器并选择一个根形式
-* lemmatize_uk：应用乌克兰语词元化器并选择一个根形式（首先在 [Centos](../../Installation/RHEL_and_Centos.md#Ukrainian-lemmatizer) 或 [Ubuntu/Debian](../../Installation/Debian_and_Ubuntu.md#乌克兰词形还原器) 中安装）。为确保词元化器正常工作，请确保在`charset_table` 中保留特定的乌克兰字符，因为默认情况下不会保留。要覆盖它们，可以这样设置：`charset_table='non_cont,U+0406->U+0456,U+0456,U+0407->U+0457,U+0457,U+0490->U+0491,U+0491'`。关于如何安装和使用乌克兰语词元化器，可以参考 [这里](https://play.manticoresearch.com/ua-lemmatizer/) 的互动课程。
+* lemmatize_uk：应用乌克兰语词元化器并选择一个根形式（首先在 [Centos](../../Installation/RHEL_and_Centos.md#乌克兰词形还原器) 或 [Ubuntu/Debian](../../Installation/Debian_and_Ubuntu.md#乌克兰词形还原器) 中安装）。为确保词元化器正常工作，请确保在`charset_table` 中保留特定的乌克兰字符，因为默认情况下不会保留。要覆盖它们，可以这样设置：`charset_table='non_cont,U+0406->U+0456,U+0456,U+0407->U+0457,U+0457,U+0490->U+0491,U+0491'`。关于如何安装和使用乌克兰语词元化器，可以参考 [这里](https://play.manticoresearch.com/ua-lemmatizer/) 的互动课程。
 * lemmatize_en：应用英语词元化器并选择一个根形式
 * lemmatize_de：应用德语词元化器并选择一个根形式
 * lemmatize_ru_all：应用俄语词元化器并索引所有可能的根形式

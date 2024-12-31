@@ -603,7 +603,7 @@ create table ... engine='columnar';
 create table ... engine='rowwise';
 ```
 
-`engine` 设置更改表中所有属性的默认 [属性存储](../../Creating_a_table/Data_types.md#Row-wise-and-columnar-attribute-storages)。你还可以为每个属性单独指定 `engine` [设置](../../Creating_a_table/Data_types.md#如何在存储方式之间切换)。
+`engine` 设置更改表中所有属性的默认 [属性存储](../../Creating_a_table/Data_types.md#行存储和列存储属性)。你还可以为每个属性单独指定 `engine` [设置](../../Creating_a_table/Data_types.md#如何在存储方式之间切换)。
 
 有关如何为普通表启用列式存储的信息，请参阅 [columnar_attrs](../../Creating_a_table/Local_tables/Plain_and_real-time_table_settings.md#columnar_attrs)。
 

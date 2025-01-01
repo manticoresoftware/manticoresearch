@@ -497,7 +497,7 @@ public:
 protected:
 	template <typename PUSH> FORCE_INLINE bool Push_T ( const CSphMatch & tMatch, PUSH && fnPush, bool bGrouped );
 	template <typename PUSH, typename MATCHES> FORCE_INLINE bool PushJoinedMatches ( const CSphMatch & tEntry, const MATCHES & dMatches, PUSH && fnPush, const BYTE * pBlobPool, columnar::Columnar_i *	pColumnar );
-	template <typename PUSH> FORCE_INLINE bool PushLeftMatch ( const CSphMatch & tEntry, PUSH && fnPush );
+	template <typename PUSH> FORCE_INLINE bool PushLeftMatch ( const CSphMatch & tEntry, PUSH && fnPush, const BYTE * pBlobPool, columnar::Columnar_i *	pColumnar );
 
 private:
 	struct JoinAttrNameRemap_t
@@ -593,6 +593,7 @@ private:
 	void		AddToJoinSelectList ( const CSphString & sExpr, const CSphString & sAlias );
 	void		AddToJoinSelectList ( const CSphString & sExpr, const CSphString & sAlias, const char * szRemapPrefix );
 	void		AddToJoinSelectList ( const CSphString & sExpr, const CSphString & sAlias, int iSorterAttrId, bool bConvertJsonType=false );
+	void		AddToJoinSelectListForced ( const CSphString & sJoinExpr, const CSphString & sJoinAlias );
 	void		AddOnFilterToFilterTree ( int iFilterId );
 
 	void		AddStarItemsToJoinSelectList();
@@ -903,9 +904,9 @@ FORCE_INLINE void SetExprBlobPool ( const CSphVector<ContextCalcItem_t> & dItems
 template <typename PUSH, typename MATCHES>
 bool JoinSorter_c::PushJoinedMatches ( const CSphMatch & tEntry, const MATCHES & dMatches, PUSH && fnPush, const BYTE * pBlobPool, columnar::Columnar_i * pColumnar )
 {
-	SetExprBlobPool ( m_dCalcPrefilter, m_pBlobPool );
-	SetExprBlobPool ( m_dCalcPresort, m_pBlobPool );
-	SetExprBlobPool ( m_dAggregates, m_pBlobPool );
+	SetExprBlobPool ( m_dCalcPrefilter, pBlobPool );
+	SetExprBlobPool ( m_dCalcPresort, pBlobPool );
+	SetExprBlobPool ( m_dAggregates, pBlobPool );
 
 	bool bAnythingPushed = false;
 	for ( auto & tMatchFromRset : dMatches )
@@ -946,7 +947,7 @@ bool JoinSorter_c::PushJoinedMatches ( const CSphMatch & tEntry, const MATCHES &
 }
 
 template <typename PUSH>
-bool JoinSorter_c::PushLeftMatch ( const CSphMatch & tEntry, PUSH && fnPush )
+bool JoinSorter_c::PushLeftMatch ( const CSphMatch & tEntry, PUSH && fnPush, const BYTE * pBlobPool, columnar::Columnar_i *	pColumnar )
 {
 	// no matches with null values from right table if we have a MATCH() for the right table
 	if ( !m_tQuery.m_sJoinQuery.IsEmpty() )
@@ -957,6 +958,12 @@ bool JoinSorter_c::PushLeftMatch ( const CSphMatch & tEntry, PUSH && fnPush )
 	// set NULL bitmask
 	assert(m_pAttrNullBitmask);
 	m_tMatch.SetAttr ( m_pAttrNullBitmask->m_tLocator, m_uNullMask );
+
+	if ( m_bCanBatch )
+	{
+		m_tMixedFilter.SetBlobPool(pBlobPool);
+		m_tMixedFilter.SetColumnar(pColumnar);
+	}
 
 	if ( !m_tMixedFilter.Eval(m_tMatch) )
 		return false;
@@ -1092,7 +1099,7 @@ bool JoinSorter_c::AddToCacheAndPush ( const CSphMatch & tEntry, uint64_t uJoinO
 	bool bAnythingPushed = PushJoinedMatches ( tEntry, dMatches, fnPush, pBlobPool, pColumnar );
 
 	if ( !dMatches.GetLength() && m_tQuery.m_eJoinType==JoinType_e::LEFT )
-		bAnythingPushed = PushLeftMatch ( tEntry, fnPush );
+		bAnythingPushed = PushLeftMatch ( tEntry, fnPush, pBlobPool, pColumnar );
 
 	if ( bInCache )
 	{
@@ -1483,6 +1490,19 @@ void JoinSorter_c::AddToAttrRemap ( const CSphString & sFrom, const CSphString &
 }
 
 
+void JoinSorter_c::AddToJoinSelectListForced ( const CSphString & sJoinExpr, const CSphString & sJoinAlias )
+{
+	// don't add duplicates to select list items
+	for ( const auto & i : m_tJoinQuery.m_dItems )
+		if ( i.m_sExpr==sJoinExpr && i.m_sAlias==sJoinAlias )
+			return;
+
+	auto & tItem = m_tJoinQuery.m_dItems.Add();
+	tItem.m_sExpr = sJoinExpr;
+	tItem.m_sAlias = sJoinAlias;
+}
+
+
 void JoinSorter_c::AddToJoinSelectList ( const CSphString & sExpr, const CSphString & sAlias, int iSorterAttrId, bool bConvertJsonType )
 {
 	if ( iSorterAttrId==-1 )
@@ -1517,15 +1537,7 @@ void JoinSorter_c::AddToJoinSelectList ( const CSphString & sExpr, const CSphStr
 
 	CSphString sJoinAlias = sExpr==sAlias ? sJoinExpr : sAlias;
 	AddToAttrRemap ( sJoinAlias, tSorterAttr.m_sName );
-
-	// don't add duplicates to select list items
-	for ( const auto & i : m_tJoinQuery.m_dItems )
-		if ( i.m_sExpr==sJoinExpr && i.m_sAlias==sJoinAlias )
-			return;
-
-	auto & tItem = m_tJoinQuery.m_dItems.Add();
-	tItem.m_sExpr = sJoinExpr;
-	tItem.m_sAlias = sJoinAlias;
+	AddToJoinSelectListForced ( sJoinExpr, sJoinAlias );
 }
 
 
@@ -1562,18 +1574,18 @@ void JoinSorter_c::AddStarItemsToJoinSelectList()
 {
 	const CSphSchema & tJoinedSchema = m_pJoinedIndex->GetMatchSchema();
 	bool bHaveStar = m_tQuery.m_dItems.any_of ( []( const CSphQueryItem & tItem ) { return tItem.m_sExpr=="*" || tItem.m_sAlias=="*"; } );
-	if ( bHaveStar )
-	{
-		for ( int i = 0; i < tJoinedSchema.GetAttrsCount(); i++ )
-		{
-			auto & tAttr = tJoinedSchema.GetAttr(i);
-			if ( sphIsInternalAttr(tAttr) )
-				continue;
+	if ( !bHaveStar )
+		return;
 
-			CSphString sAttrName;
-			sAttrName.SetSprintf ( "%s.%s", m_pJoinedIndex->GetName(), tAttr.m_sName.cstr() );
-			AddToJoinSelectList ( sAttrName, sAttrName );
-		}
+	for ( int i = 0; i < tJoinedSchema.GetAttrsCount(); i++ )
+	{
+		auto & tAttr = tJoinedSchema.GetAttr(i);
+		if ( sphIsInternalAttr(tAttr) )
+			continue;
+
+		CSphString sAttrName;
+		sAttrName.SetSprintf ( "%s.%s", m_pJoinedIndex->GetName(), tAttr.m_sName.cstr() );
+		AddToJoinSelectList ( sAttrName, sAttrName );
 	}
 }
 
@@ -1688,7 +1700,10 @@ void JoinSorter_c::AddBatchedFilterItemsToJoinSelectList()
 	{
 		CSphString sAttr;
 		sAttr.SetSprintf ( "%s.%s", m_pJoinedIndex->GetName(), i.m_sAttrName.cstr() );
-		AddToJoinSelectList ( sAttr, sAttr );
+
+		CSphString sJoinExpr;
+		if ( GetJoinAttrName ( sAttr, CSphString ( m_pJoinedIndex->GetName() ), &sJoinExpr ) )
+			AddToJoinSelectListForced ( sJoinExpr, sJoinExpr );
 	}
 }
 

@@ -366,8 +366,8 @@ string|text [stored|attribute] [indexed]
 
 string和text是别名，但如果你不指定任何属性，它们默认的含义不同：
 
-* 仅string默认意味着attribute（详见[下文](../Creating_a_table/Data_types.md#文本-Text)）。
-* 仅text默认意味着stored + indexed（详见[下文](../Creating_a_table/Data_types.md#字符串String)）。
+* 仅string默认意味着attribute（详见[下文](../Creating_a_table/Data_types.md#文本-Text)⛔）。
+* 仅text默认意味着stored + indexed（详见[下文](../Creating_a_table/Data_types.md#字符串String)⛔）。
 
 ### 文本 (Text)
 

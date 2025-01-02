@@ -73,7 +73,7 @@ quit
 
 ### 如何启用崩溃时保存核心转储？
 
-* 确保以 `--coredump` 运行 `searchd`。要避免修改脚本，您可以使用 [systemd 自定义启动参数](Starting_the_server/Linux#使用 systemd 自定义启动标志)。例如：
+* 确保以 `--coredump` 运行 `searchd`。要避免修改脚本，您可以使用 [systemd 自定义启动参数](Starting_the_server/Linux#使用 systemd 自定义启动标志)⛔。例如：
 
 ```
 [root@srv lib]# systemctl set-environment _ADDITIONAL_SEARCHD_PARAMS='--coredump'

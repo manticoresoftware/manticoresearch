@@ -38,7 +38,7 @@ sudo systemctl enable manticore
 sudo journalctl -u manticore
 ```
 
-### 使用 systemd 自定义启动标志
+### 使用systemd自定义启动标志
 
 `systemctl set-environment _ADDITIONAL_SEARCHD_PARAMS` 允许您指定 Manticore Search 守护进程启动时的自定义启动标志。查看完整列表 [这里](../Starting_the_server/Manually.md#searchd-命令行选项)。
 

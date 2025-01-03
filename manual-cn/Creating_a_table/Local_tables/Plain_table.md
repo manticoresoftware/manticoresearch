@@ -1,6 +1,6 @@
 # 普通表
 
-**普通表**是非[透析](../../Creating_a_table/Local_tables/Percolate_table.md)搜索的基本元素。它只能在配置文件中使用[普通模式](../../Creating_a_table/Local_tables.md#Defining-table-schema-in-config-%28Plain mode%29)⛔进行定义，并且不支持[实时模式](../../Creating_a_table/Local_tables.md#在线模式管理（实时模式）)。它通常与[源](../../Creating_a_table/Local_tables/Plain_and_real-time_table_settings.md#source)结合使用，从[外部存储](../../Data_creation_and_modification/Adding_data_from_external_storages/Plain_tables_creation.md)处理数据，并可以后来[附加](../../Data_creation_and_modification/Adding_data_from_external_storages/Adding_data_to_tables/Attaching_one_table_to_another.md)到**实时表**。
+**普通表**是非[透析](../../Creating_a_table/Local_tables/Percolate_table.md)搜索的基本元素。它只能在配置文件中使用[普通模式](../../Creating_a_table/Local_tables.md#在配置中定义表结构（普通模式）)进行定义，并且不支持[实时模式](../../Creating_a_table/Local_tables.md#在线模式管理（实时模式）)。它通常与[源](../../Creating_a_table/Local_tables/Plain_and_real-time_table_settings.md#source)结合使用，从[外部存储](../../Data_creation_and_modification/Adding_data_from_external_storages/Plain_tables_creation.md)处理数据，并可以后来[附加](../../Data_creation_and_modification/Adding_data_from_external_storages/Adding_data_to_tables/Attaching_one_table_to_another.md)到**实时表**。
 
 #### 创建普通表
 

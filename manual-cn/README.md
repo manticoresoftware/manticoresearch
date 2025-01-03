@@ -118,7 +118,7 @@
   * [• 基于成本的优化器](Searching/Cost_based_optimizer.md)
   * [• K-最近邻向量搜索](Searching/KNN.md)
 * [• 更新表结构和设置](Updating_table_schema_and_settings.md)
-  * [• 在实时模式下更新表模式](Updating_table_schema_and_settings.md#在实时模式下更新表的全文设置)⛔
+  * [• 在实时模式下更新表模式](Updating_table_schema_and_settings.md#在实时模式下更新表结构)
   * [• 在实时模式下更新表的全文搜索设置](Updating_table_schema_and_settings.md#在实时模式下更新表的全文搜索设置)
   * [• 重命名实时表](Updating_table_schema_and_settings.md#重命名实时表)
   * [• 更新普通表的全文搜索设置](Updating_table_schema_and_settings.md#更新普通表的全文搜索设置)

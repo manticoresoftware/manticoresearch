@@ -319,22 +319,22 @@ mysqldump -etc --replace --column-statistics=0 -u replication -h0 -P1306 --skip-
 -- Warning: version string returned by server is incorrect.
 0
 ––– input –––
-mysqldump -etc --replace --column-statistics=0 -u replication -h0 -P2306 --skip-comments manticore replication:tbl_stopwords | mysql -P2306 -h0; echo $?
+mysqldump -etc --replace --column-statistics=0 -u replication -h0 -P1306 --skip-comments manticore replication:tbl_stopwords | mysql -P1306 -h0; echo $?
 ––– output –––
 -- Warning: version string returned by server is incorrect.
 0
 ––– input –––
-mysqldump -etc --replace --column-statistics=0 -u replication -h0 -P3306 --skip-comments manticore replication:tbl_none | mysql -P3306 -h0; echo $?
+mysqldump -etc --replace --column-statistics=0 -u replication -h0 -P1306 --skip-comments manticore replication:tbl_none | mysql -P1306 -h0; echo $?
 ––– output –––
 -- Warning: version string returned by server is incorrect.
 0
 ––– input –––
-mysqldump -etc --replace --column-statistics=0 -u replication -h0 -P4306 --skip-comments manticore replication:tbl_wordforms | mysql -P4306 -h0; echo $?
+mysqldump -etc --replace --column-statistics=0 -u replication -h0 -P1306 --skip-comments manticore replication:tbl_wordforms | mysql -P1306 -h0; echo $?
 ––– output –––
 -- Warning: version string returned by server is incorrect.
 0
 ––– input –––
-mysqldump -etc --replace --column-statistics=0 -u replication -h0 -P5306 --skip-comments manticore replication:tbl_rowwise_stem_ru | mysql -P5306 -h0; echo $?
+mysqldump -etc --replace --column-statistics=0 -u replication -h0 -P1306 --skip-comments manticore replication:tbl_rowwise_stem_ru | mysql -P1306 -h0; echo $?
 ––– output –––
 -- Warning: version string returned by server is incorrect.
 0

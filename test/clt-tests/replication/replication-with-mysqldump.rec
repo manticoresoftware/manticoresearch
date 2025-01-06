@@ -52,6 +52,17 @@ Port 4306: Node is synced.
 Checking status for port 5306:
 Port 5306: Node is synced.
 ––– input –––
+for port in 1306 2306 3306 4306 5306; do mysql -h0 -P$port -e "SET GLOBAL cluster_user = 'replication';"; done
+––– output –––
+––– input –––
+for port in 1306 2306 3306 4306 5306; do timeout 10 bash -c "while ! mysql -h0 -P$port -e \"SHOW VARIABLES LIKE 'cluster_user';\" | grep -q '| cluster_user  | replication |'; do sleep 1; done" && echo "Port $port: cluster_user is replication." || { echo "Port $port: cluster_user is not replication."; exit 1; }; done
+––– output –––
+Port 1306: cluster_user is replication.
+Port 2306: cluster_user is replication.
+Port 3306: cluster_user is replication.
+Port 4306: cluster_user is replication.
+Port 5306: cluster_user is replication.
+––– input –––
 for port in 1306 2306 3306 4306 5306; do mysql -h0 -P$port -e "SELECT * FROM replication:testrt ORDER BY id ASC;" | md5sum > /tmp/hash_$port.txt; done && for port1 in 1306 2306 3306 4306 5306; do for port2 in 1306 2306 3306 4306 5306; do [ $port1 -ne $port2 ] && ! diff /tmp/hash_$port1.txt /tmp/hash_$port2.txt && echo "Mismatch between $port1 and $port2"; done; done
 ––– output –––
 ––– input –––
@@ -161,12 +172,6 @@ Port 5306: Node is synced.
 for port in 1306 2306 3306 4306 5306; do mysql -h0 -P$port -e "SELECT * FROM replication:testrt ORDER BY id ASC;" | md5sum > /tmp/hash_$port.txt; done && for port1 in 1306 2306 3306 4306 5306; do for port2 in 1306 2306 3306 4306 5306; do [ $port1 -ne $port2 ] && ! diff /tmp/hash_$port1.txt /tmp/hash_$port2.txt && echo "Mismatch between $port1 and $port2"; done; done
 ––– output –––
 ––– input –––
-mysql -h0 -P1306 -e "FLUSH RAMCHUNK testrt;"
-––– output –––
-––– input –––
-mysql -h0 -P1306 -e 'set global cluster_user=replication'
-––– output –––
-––– input –––
 mysqldump -etc --replace --column-statistics=0 -u replication -h0 -P1306 --skip-comments manticore replication:testrt | mysql -P1306 -h0; echo $?
 ––– output –––
 -- Warning: version string returned by server is incorrect.
@@ -200,6 +205,9 @@ mysql -h0 -P1306 -e "ALTER CLUSTER replication ADD tbl_none;"; echo $?
 ––– output –––
 0
 ––– input –––
+mysql -h0 -P1306 -e "FLUSH RAMCHUNK tbl_none;"
+––– output –––
+––– input –––
 echo 'the, and, of' > /tmp/stopwords.txt; mysql -h0 -P2306 -e "CREATE TABLE tbl_stopwords (id INT, f TEXT, a INT, b FLOAT, j JSON, m MULTI, s STRING, e BOOL, d TIMESTAMP, v MULTI64, fv FLOAT_VECTOR KNN_TYPE='hnsw' KNN_DIMS='4' HNSW_SIMILARITY='l2') ENGINE='columnar' morphology='stem_en' stopwords='/tmp/stopwords.txt' rt_mem_limit='256M';"; echo $?
 ––– output –––
 0
@@ -222,6 +230,7 @@ mysql -h0 -P3306 -e "INSERT INTO tbl_exceptions (id, f, a, b, j, m, s, e, d, v, 
 ––– input –––
 mysql -h0 -P3306 -e "ALTER CLUSTER replication ADD tbl_exceptions;"; echo $?
 ––– output –––
+0
 ––– input –––
 echo 'fast, faster' > /tmp/wordforms.txt; mysql -h0 -P4306 -e "CREATE TABLE tbl_wordforms (id INT, f TEXT, a INT, b FLOAT, j JSON, m MULTI, s STRING, e BOOL, d TIMESTAMP, v MULTI64, fv FLOAT_VECTOR KNN_TYPE='hnsw' KNN_DIMS='4' HNSW_SIMILARITY='l2') ENGINE='columnar' wordforms='/tmp/wordforms.txt' rt_mem_limit='1024M';"; echo $?
 ––– output –––
@@ -305,10 +314,39 @@ mysql -h0 -P3306 -e "FLUSH RAMCHUNK tbl_rowwise_stem_ru;"
 mysql -h0 -P4306 -e "FLUSH RAMCHUNK tbl_wordforms;"
 ––– output –––
 ––– input –––
-mysqldump -etc --replace --column-statistics=0 -u replication -h0 -P1306 --skip-comments manticore replication:tbl_none replication:tbl_stopwords replication:tbl_exceptions replication:tbl_wordforms | mysql -P2306 -h0; echo $?
+mysqldump -etc --replace --column-statistics=0 -u replication -h0 -P1306 --skip-comments manticore replication:tbl_exceptions | mysql -P1306 -h0; echo $?
 ––– output –––
 -- Warning: version string returned by server is incorrect.
 0
+––– input –––
+mysqldump -etc --replace --column-statistics=0 -u replication -h0 -P2306 --skip-comments manticore replication:tbl_stopwords | mysql -P2306 -h0; echo $?
+––– output –––
+-- Warning: version string returned by server is incorrect.
+0
+––– input –––
+mysqldump -etc --replace --column-statistics=0 -u replication -h0 -P3306 --skip-comments manticore replication:tbl_none | mysql -P3306 -h0; echo $?
+––– output –––
+-- Warning: version string returned by server is incorrect.
+0
+––– input –––
+mysqldump -etc --replace --column-statistics=0 -u replication -h0 -P4306 --skip-comments manticore replication:tbl_wordforms | mysql -P4306 -h0; echo $?
+––– output –––
+-- Warning: version string returned by server is incorrect.
+0
+––– input –––
+mysqldump -etc --replace --column-statistics=0 -u replication -h0 -P5306 --skip-comments manticore replication:tbl_rowwise_stem_ru | mysql -P5306 -h0; echo $?
+––– output –––
+-- Warning: version string returned by server is incorrect.
+0
+––– input –––
+mysql -h0 -P2306 -e "SHOW TABLES LIKE 'tbl_stopwords';"
+––– output –––
+––– input –––
+mysql -h0 -P4306 -e "SHOW TABLES LIKE 'tbl_wordforms';"
+––– output –––
+––– input –––
+mysql -h0 -P1306 -e "SHOW STATUS LIKE 'cluster_replication_indexes';"
+––– output –––
 ––– input –––
 for port in 1306 2306 3306 4306 5306; do echo "Checking status for port $port:"; timeout 10 bash -c "while ! mysql -h0 -P$port -e \"SHOW STATUS LIKE 'cluster_replication_node_state'\G\" | grep -q 'Value: synced'; do sleep 1; done" && echo "Port $port: Node is synced." || echo "Port $port: Node is not synced (Value: closed or other)."; done
 ––– output –––
@@ -340,6 +378,19 @@ mysql -h0 -P1306 -e "INSERT INTO tbl_plain (id, f, a, b, m, s, e, d, v, j, fv) V
 mysql -h0 -P1306 -e "ALTER CLUSTER replication ADD tbl_plain;"; echo $?
 ––– output –––
 0
+––– input –––
+for port in 1306 2306 3306 4306 5306; do echo "Checking status for port $port:"; timeout 10 bash -c "while ! mysql -h0 -P$port -e \"SHOW STATUS LIKE 'cluster_replication_node_state'\G\" | grep -q 'Value: synced'; do sleep 1; done" && echo "Port $port: Node is synced." || echo "Port $port: Node is not synced (Value: closed or other)."; done
+––– output –––
+Checking status for port 1306:
+Port 1306: Node is synced.
+Checking status for port 2306:
+Port 2306: Node is synced.
+Checking status for port 3306:
+Port 3306: Node is synced.
+Checking status for port 4306:
+Port 4306: Node is synced.
+Checking status for port 5306:
+Port 5306: Node is synced.
 ––– input –––
 mysql -h0 -P1306 -e "SHOW STATUS LIKE 'cluster_replication_indexes';"
 ––– output –––

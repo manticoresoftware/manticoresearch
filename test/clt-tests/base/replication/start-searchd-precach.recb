@@ -2,9 +2,6 @@
 mkdir -p /tmp/manticore-${INSTANCE}
 ––– output –––
 ––– input –––
-chmod -R 777 /tmp/manticore-${INSTANCE}
-––– output –––
-––– input –––
 stdbuf -oL searchd -c test/clt-tests/base/searchd-with-flexible-ports.conf | grep -v precach
 ––– output –––
 Manticore %{SEMVER} %{COMMITDATE}#!/(\sdev)?\s/!#(columnar %{SEMVER} %{COMMITDATE}) (secondary %{SEMVER} %{COMMITDATE}) (knn %{SEMVER} %{COMMITDATE})

@@ -1,0 +1,371 @@
+––– input –––
+export INSTANCE=1
+––– output –––
+––– block: ../base/replication/start-searchd-precach –––
+––– input –––
+export INSTANCE=2
+––– output –––
+––– block: ../base/replication/start-searchd-precach –––
+––– input –––
+export INSTANCE=3
+––– output –––
+––– block: ../base/replication/start-searchd-precach –––
+––– input –––
+export INSTANCE=4
+––– output –––
+––– block: ../base/replication/start-searchd-precach –––
+––– input –––
+export INSTANCE=5
+––– output –––
+––– block: ../base/replication/start-searchd-precach –––
+––– input –––
+export CLUSTER_NAME=replication
+––– output –––
+––– block: ../base/replication/create-cluster –––
+––– input –––
+mysql -h0 -P1306 -e "CREATE TABLE testrt (id BIGINT, model TEXT, storage_capacity INTEGER, color string, release_year INTEGER, price FLOAT, discounted_price FLOAT, sold BOOL, date_added TIMESTAMP, product_codes MULTI, values MULTI64, additional_info JSON, vector float_vector knn_type='hnsw' knn_dims='4' hnsw_similarity='l2');"; echo $?
+––– output –––
+0
+––– input –––
+mysql -h0 -P1306 -e "INSERT INTO testrt VALUES (6775836565403860993, 'iPhone 13 Pro', 256, 'silver', 2021, 1099.99, 989.99, 1, '1591362342000', (1,2,3), (523456764345678976, 98765409877866654098, 1109876543450987650987), '{\"features\": [\"ProMotion display\", \"A15 Bionic chip\", \"Ceramic Shield front cover\"]}', (0.773448, 0.312478, 0.137971, 0.459821));"; echo $?
+––– output –––
+0
+––– input –––
+mysql -h0 -P1306 -e "INSERT INTO testrt VALUES (6775836565403860994, 'Galaxy S21 Ultra', 128, 'black', 2021, 1199.99, 1099.99, 0, '1609459200000', (4,5,6), (1234567890123456789, 9876543210987654321), '{\"features\": [\"Dynamic AMOLED 2X\", \"Exynos 2100\", \"108MP camera\"]}', (0.5, 0.4, 0.3, 0.2));"; echo $?
+––– output –––
+0
+––– input –––
+mysql -h0 -P1306 -e "ALTER CLUSTER replication ADD testrt;"
+––– output –––
+––– block: ../base/replication/join-cluster-on-all-nodes –––
+––– input –––
+for port in 1306 2306 3306 4306 5306; do echo "Checking status for port $port:"; timeout 10 bash -c "while ! mysql -h0 -P$port -e \"SHOW STATUS LIKE 'cluster_replication_node_state'\G\" | grep -q 'Value: synced'; do sleep 1; done" && echo "Port $port: Node is synced." || echo "Port $port: Node is not synced (Value: closed or other)."; done
+––– output –––
+Checking status for port 1306:
+Port 1306: Node is synced.
+Checking status for port 2306:
+Port 2306: Node is synced.
+Checking status for port 3306:
+Port 3306: Node is synced.
+Checking status for port 4306:
+Port 4306: Node is synced.
+Checking status for port 5306:
+Port 5306: Node is synced.
+––– input –––
+for port in 1306 2306 3306 4306 5306; do mysql -h0 -P$port -e "SELECT * FROM replication:testrt ORDER BY id ASC;" | md5sum > /tmp/hash_$port.txt; done && for port1 in 1306 2306 3306 4306 5306; do for port2 in 1306 2306 3306 4306 5306; do [ $port1 -ne $port2 ] && ! diff /tmp/hash_$port1.txt /tmp/hash_$port2.txt && echo "Mismatch between $port1 and $port2"; done; done
+––– output –––
+––– input –––
+mysql -h0 -P1306 -e "SHOW STATUS LIKE 'cluster_replication_indexes';"
+––– output –––
++-----------------------------+--------+
+| Counter                     | Value  |
++-----------------------------+--------+
+| cluster_replication_indexes | testrt |
++-----------------------------+--------+
+––– input –––
+export INSTANCE=5
+––– output –––
+––– block: ../base/replication/stop-searchd –––
+––– input –––
+mysql -h0 -P1306 -e "INSERT INTO replication:testrt VALUES (6775836565403860995, 'Google Pixel 6', 128, 'sorta seafoam', 2021, 699.99, 599.99, 1, '1635317932000', (33,34,35), (623456764345678976, 98765409877866654097, 1109876543450987650986), '{\"features\": [\"Google Tensor chip\", \"Flat OLED display\", \"Dual-camera system\"]}', (0.823448, 0.362478, 0.187971, 0.509821));"; echo $?
+––– output –––
+0
+––– block: ../base/replication/start-searchd-precach –––
+––– input –––
+for port in 1306 2306 3306 4306 5306; do echo "Checking status for port $port:"; timeout 10 bash -c "while ! mysql -h0 -P$port -e \"SHOW STATUS LIKE 'cluster_replication_node_state'\G\" | grep -q 'Value: synced'; do sleep 1; done" && echo "Port $port: Node is synced." || echo "Port $port: Node is not synced (Value: closed or other)."; done
+––– output –––
+Checking status for port 1306:
+Port 1306: Node is synced.
+Checking status for port 2306:
+Port 2306: Node is synced.
+Checking status for port 3306:
+Port 3306: Node is synced.
+Checking status for port 4306:
+Port 4306: Node is synced.
+Checking status for port 5306:
+Port 5306: Node is synced.
+––– input –––
+for port in 1306 2306 3306 4306 5306; do mysql -h0 -P$port -e "SELECT * FROM replication:testrt ORDER BY id ASC;" | md5sum > /tmp/hash_$port.txt; done && for port1 in 1306 2306 3306 4306 5306; do for port2 in 1306 2306 3306 4306 5306; do [ $port1 -ne $port2 ] && ! diff /tmp/hash_$port1.txt /tmp/hash_$port2.txt && echo "Mismatch between $port1 and $port2"; done; done
+––– output –––
+––– input –––
+export INSTANCE=2
+––– output –––
+––– block: ../base/replication/stop-searchd –––
+––– input –––
+mysql -h0 -P1306 -e "INSERT INTO replication:testrt VALUES (6775836565403860996, 'OnePlus 9', 256, 'winter mist', 2021, 729.99, 629.99, 0, '1648044532000', (36,37,38), (723456764345678976, 98765409877866654096, 1109876543450987650985), '{\"features\": [\"Qualcomm Snapdragon 888\", \"Fluid AMOLED display\", \"Hasselblad Camera for Mobile\"]}', (0.021106, 0.918278, 0.261892, 0.074594));"; echo $?
+––– output –––
+0
+––– block: ../base/replication/start-searchd-precach –––
+––– input –––
+for port in 1306 2306 3306 4306 5306; do echo "Checking status for port $port:"; timeout 10 bash -c "while ! mysql -h0 -P$port -e \"SHOW STATUS LIKE 'cluster_replication_node_state'\G\" | grep -q 'Value: synced'; do sleep 1; done" && echo "Port $port: Node is synced." || echo "Port $port: Node is not synced (Value: closed or other)."; done
+––– output –––
+Checking status for port 1306:
+Port 1306: Node is synced.
+Checking status for port 2306:
+Port 2306: Node is synced.
+Checking status for port 3306:
+Port 3306: Node is synced.
+Checking status for port 4306:
+Port 4306: Node is synced.
+Checking status for port 5306:
+Port 5306: Node is synced.
+––– input –––
+for port in 1306 2306 3306 4306 5306; do mysql -h0 -P$port -e "SELECT * FROM replication:testrt ORDER BY id ASC;" | md5sum > /tmp/hash_$port.txt; done && for port1 in 1306 2306 3306 4306 5306; do for port2 in 1306 2306 3306 4306 5306; do [ $port1 -ne $port2 ] && ! diff /tmp/hash_$port1.txt /tmp/hash_$port2.txt && echo "Mismatch between $port1 and $port2"; done; done
+––– output –––
+––– input –––
+export INSTANCE=4
+––– output –––
+––– block: ../base/replication/stop-searchd –––
+––– input –––
+mysql -h0 -P2306 -e "DELETE FROM replication:testrt WHERE id = 6775836565403860994;"; echo $?
+––– output –––
+0
+––– input –––
+export INSTANCE=4
+––– output –––
+––– block: ../base/replication/start-searchd-precach –––
+––– input –––
+for port in 1306 2306 3306 4306 5306; do echo "Checking status for port $port:"; timeout 10 bash -c "while ! mysql -h0 -P$port -e \"SHOW STATUS LIKE 'cluster_replication_node_state'\G\" | grep -q 'Value: synced'; do sleep 1; done" && echo "Port $port: Node is synced." || echo "Port $port: Node is not synced (Value: closed or other)."; done
+––– output –––
+Checking status for port 1306:
+Port 1306: Node is synced.
+Checking status for port 2306:
+Port 2306: Node is synced.
+Checking status for port 3306:
+Port 3306: Node is synced.
+Checking status for port 4306:
+Port 4306: Node is synced.
+Checking status for port 5306:
+Port 5306: Node is synced.
+––– input –––
+for port in 1306 2306 3306 4306 5306; do mysql -h0 -P$port -e "SELECT * FROM replication:testrt ORDER BY id ASC;" | md5sum > /tmp/hash_$port.txt; done && for port1 in 1306 2306 3306 4306 5306; do for port2 in 1306 2306 3306 4306 5306; do [ $port1 -ne $port2 ] && ! diff /tmp/hash_$port1.txt /tmp/hash_$port2.txt && echo "Mismatch between $port1 and $port2"; done; done
+––– output –––
+––– input –––
+mysql -h0 -P1306 -e "REPLACE INTO replication:testrt (id, model, storage_capacity, color, release_year, price, discounted_price, sold, date_added, product_codes, values, additional_info, vector) VALUES (6775836565403860993, 'Updated iPhone 13 Pro', 256, 'silver', 2021, 1099.99, 989.99, 1, '1591362342000', (1,2,3), (523456764345678976, 98765409877866654098, 1109876543450987650987), '{\"features\": [\"Updated ProMotion display\", \"A15 Bionic chip\", \"Ceramic Shield front cover\"]}', (0.773448, 0.312478, 0.137971, 0.459821));"; echo $?
+––– output –––
+0
+––– input –––
+for port in 1306 2306 3306 4306 5306; do echo "Checking status for port $port:"; timeout 10 bash -c "while ! mysql -h0 -P$port -e \"SHOW STATUS LIKE 'cluster_replication_node_state'\G\" | grep -q 'Value: synced'; do sleep 1; done" && echo "Port $port: Node is synced." || echo "Port $port: Node is not synced (Value: closed or other)."; done
+––– output –––
+Checking status for port 1306:
+Port 1306: Node is synced.
+Checking status for port 2306:
+Port 2306: Node is synced.
+Checking status for port 3306:
+Port 3306: Node is synced.
+Checking status for port 4306:
+Port 4306: Node is synced.
+Checking status for port 5306:
+Port 5306: Node is synced.
+––– input –––
+for port in 1306 2306 3306 4306 5306; do mysql -h0 -P$port -e "SELECT * FROM replication:testrt ORDER BY id ASC;" | md5sum > /tmp/hash_$port.txt; done && for port1 in 1306 2306 3306 4306 5306; do for port2 in 1306 2306 3306 4306 5306; do [ $port1 -ne $port2 ] && ! diff /tmp/hash_$port1.txt /tmp/hash_$port2.txt && echo "Mismatch between $port1 and $port2"; done; done
+––– output –––
+––– input –––
+mysql -h0 -P1306 -e "FLUSH RAMCHUNK testrt;"
+––– output –––
+––– input –––
+mysql -h0 -P1306 -e 'set global cluster_user=replication'
+––– output –––
+––– input –––
+mysqldump -etc --replace --column-statistics=0 -u replication -h0 -P1306 --skip-comments manticore replication:testrt | mysql -P1306 -h0; echo $?
+––– output –––
+-- Warning: version string returned by server is incorrect.
+0
+––– input –––
+for port in 1306 2306 3306 4306 5306; do echo "Checking status for port $port:"; timeout 10 bash -c "while ! mysql -h0 -P$port -e \"SHOW STATUS LIKE 'cluster_replication_node_state'\G\" | grep -q 'Value: synced'; do sleep 1; done" && echo "Port $port: Node is synced." || echo "Port $port: Node is not synced (Value: closed or other)."; done
+––– output –––
+Checking status for port 1306:
+Port 1306: Node is synced.
+Checking status for port 2306:
+Port 2306: Node is synced.
+Checking status for port 3306:
+Port 3306: Node is synced.
+Checking status for port 4306:
+Port 4306: Node is synced.
+Checking status for port 5306:
+Port 5306: Node is synced.
+––– input –––
+for port in 1306 2306 3306 4306 5306; do mysql -h0 -P$port -e "SELECT * FROM testrt ORDER BY id ASC;" | md5sum | awk '{print $1}' > /tmp/hash_$port.txt; done && for port1 in 1306 2306 3306 4306 5306; do for port2 in 1306 2306 3306 4306 5306; do [ $port1 -ne $port2 ] && ! diff /tmp/hash_$port1.txt /tmp/hash_$port2.txt && echo "Mismatch between $port1 and $port2"; done; done
+––– output –––
+––– input –––
+mysql -h0 -P1306 -e "CREATE TABLE tbl_none (id INT, f TEXT, a INT, b FLOAT, j JSON, m MULTI, s STRING, e BOOL, d TIMESTAMP, v MULTI64, fv FLOAT_VECTOR KNN_TYPE='hnsw' KNN_DIMS='4' HNSW_SIMILARITY='l2') ENGINE='columnar' rt_mem_limit='128M';"; echo $?
+––– output –––
+0
+––– input –––
+mysql -h0 -P1306 -e "INSERT INTO tbl_none (id, f, a, b, j, m, s, e, d, v, fv) VALUES (1, 'Example text', 42, 3.14, '{\"key\":\"value\",\"list\":[1,2,3]}', (1,2,3), 'string_value', 1, '2024-12-16 12:00:00', (123456789012345678, 987654321098765432), (0.1, 0.2, 0.3, 0.4));"; echo $?
+––– output –––
+0
+––– input –––
+mysql -h0 -P1306 -e "ALTER CLUSTER replication ADD tbl_none;"; echo $?
+––– output –––
+0
+––– input –––
+echo 'the, and, of' > /tmp/stopwords.txt; mysql -h0 -P2306 -e "CREATE TABLE tbl_stopwords (id INT, f TEXT, a INT, b FLOAT, j JSON, m MULTI, s STRING, e BOOL, d TIMESTAMP, v MULTI64, fv FLOAT_VECTOR KNN_TYPE='hnsw' KNN_DIMS='4' HNSW_SIMILARITY='l2') ENGINE='columnar' morphology='stem_en' stopwords='/tmp/stopwords.txt' rt_mem_limit='256M';"; echo $?
+––– output –––
+0
+––– input –––
+mysql -h0 -P2306 -e "INSERT INTO tbl_stopwords (id, f, a, b, j, m, s, e, d, v, fv) VALUES (2, 'Stemmed text', 24, 1.41, '{\"key\":\"value2\",\"list\":[4,5,6]}', (4,5,6), 'another_string', 0, '2023-11-15 08:30:00', (987654321098765432, 123456789012345678), (0.4, 0.3, 0.2, 0.1));"; echo $?
+––– output –––
+0
+––– input –––
+mysql -h0 -P2306 -e "ALTER CLUSTER replication ADD tbl_stopwords;"; echo $?
+––– output –––
+0
+––– input –––
+echo 'cat => feline, dog => canine' > /tmp/exceptions.txt; mysql -h0 -P3306 -e "CREATE TABLE tbl_exceptions (id INT, f TEXT, a INT, b FLOAT, j JSON, m MULTI, s STRING, e BOOL, d TIMESTAMP, v MULTI64, fv FLOAT_VECTOR KNN_TYPE='hnsw' KNN_DIMS='4' HNSW_SIMILARITY='l2') ENGINE='columnar' exceptions='/tmp/exceptions.txt' morphology='stem_ru' rt_mem_limit='512M';"; echo $?
+––– output –––
+0
+––– input –––
+mysql -h0 -P3306 -e "INSERT INTO tbl_exceptions (id, f, a, b, j, m, s, e, d, v, fv) VALUES (3, 'Русский текст', 84, 2.71, '{\"ключ\":\"значение\",\"массив\":[7,8,9]}', (7,8,9), 'строка', 1, '2022-05-20 15:45:00', (234567890123456789, 876543210987654321), (0.6, 0.7, 0.8, 0.9));"; echo $?
+––– output –––
+0
+––– input –––
+mysql -h0 -P3306 -e "ALTER CLUSTER replication ADD tbl_exceptions;"; echo $?
+––– output –––
+––– input –––
+echo 'fast, faster' > /tmp/wordforms.txt; mysql -h0 -P4306 -e "CREATE TABLE tbl_wordforms (id INT, f TEXT, a INT, b FLOAT, j JSON, m MULTI, s STRING, e BOOL, d TIMESTAMP, v MULTI64, fv FLOAT_VECTOR KNN_TYPE='hnsw' KNN_DIMS='4' HNSW_SIMILARITY='l2') ENGINE='columnar' wordforms='/tmp/wordforms.txt' rt_mem_limit='1024M';"; echo $?
+––– output –––
+0
+––– input –––
+mysql -h0 -P4306 -e "INSERT INTO tbl_wordforms (id, f, a, b, j, m, s, e, d, v, fv) VALUES (4, 'Fast text', 99, 9.81, '{\"feature\":\"speed\",\"list\":[10,11,12]}', (10,11,12), 'quick_string', 0, '2021-01-01 00:00:00', (345678901234567890, 765432109876543210), (0.5, 0.5, 0.5, 0.5));"; echo $?
+––– output –––
+0
+––– input –––
+mysql -h0 -P4306 -e "ALTER CLUSTER replication ADD tbl_wordforms;"; echo $?
+––– output –––
+0
+––– input –––
+mysql -h0 -P5306 -e "CREATE TABLE tbl_rowwise_stem_ru (id INT, f TEXT, a INT, b FLOAT, j JSON, m MULTI, s STRING, e BOOL, d TIMESTAMP, v MULTI64, fv FLOAT_VECTOR KNN_TYPE='hnsw' KNN_DIMS='4' HNSW_SIMILARITY='l2') ENGINE='rowwise' morphology='stem_ru' rt_mem_limit='256M';"; echo $?
+––– output –––
+0
+––– input –––
+mysql -h0 -P5306 -e "INSERT INTO tbl_rowwise_stem_ru (id, f, a, b, j, m, s, e, d, v, fv) VALUES (2, 'Stemmed text', 24, 1.41, '{\"key\":\"value2\",\"list\":[4,5,6]}', (4,5,6), 'another_string', 0, '2023-11-15 08:30:00', (987654321098765432, 123456789012345678), (0.4, 0.3, 0.2, 0.1));"; echo $?
+––– output –––
+0
+––– input –––
+mysql -h0 -P5306 -e "ALTER CLUSTER replication ADD tbl_rowwise_stem_ru;"; echo $?
+––– output –––
+0
+––– input –––
+mysql -h0 -P1306 -e "SHOW STATUS LIKE 'cluster_replication_indexes';"
+––– output –––
++-----------------------------+--------------------------------------------------------------------------------+
+| Counter                     | Value                                                                          |
++-----------------------------+--------------------------------------------------------------------------------+
+| cluster_replication_indexes | testrt,tbl_none,tbl_stopwords,tbl_exceptions,tbl_wordforms,tbl_rowwise_stem_ru |
++-----------------------------+--------------------------------------------------------------------------------+
+––– input –––
+for port in 1306 2306 3306 4306 5306; do echo "Checking status for port $port:"; timeout 10 bash -c "while ! mysql -h0 -P$port -e \"SHOW STATUS LIKE 'cluster_replication_node_state'\G\" | grep -q 'Value: synced'; do sleep 1; done" && echo "Port $port: Node is synced." || echo "Port $port: Node is not synced (Value: closed or other)."; done
+––– output –––
+Checking status for port 1306:
+Port 1306: Node is synced.
+Checking status for port 2306:
+Port 2306: Node is synced.
+Checking status for port 3306:
+Port 3306: Node is synced.
+Checking status for port 4306:
+Port 4306: Node is synced.
+Checking status for port 5306:
+Port 5306: Node is synced.
+––– input –––
+for port in 1306 2306 3306 4306 5306; do mysql -h0 -P$port -e "SELECT * FROM replication:tbl_none ORDER BY id ASC;" | md5sum > /tmp/hash_$port.txt; done && for port1 in 1306 2306 3306 4306 5306; do for port2 in 1306 2306 3306 4306 5306; do [ $port1 -ne $port2 ] && ! diff /tmp/hash_$port1.txt /tmp/hash_$port2.txt && echo "Mismatch between $port1 and $port2"; done; done
+––– output –––
+––– input –––
+for port in 1306 2306 3306 4306 5306; do mysql -h0 -P$port -e "SELECT * FROM replication:tbl_exceptions ORDER BY id ASC;" | md5sum > /tmp/hash_$port.txt; done && for port1 in 1306 2306 3306 4306 5306; do for port2 in 1306 2306 3306 4306 5306; do [ $port1 -ne $port2 ] && ! diff /tmp/hash_$port1.txt /tmp/hash_$port2.txt && echo "Mismatch between $port1 and $port2"; done; done
+––– output –––
+––– input –––
+for port in 1306 2306 3306 4306 5306; do mysql -h0 -P$port -e "SELECT * FROM replication:tbl_wordforms ORDER BY id ASC;" | md5sum > /tmp/hash_$port.txt; done && for port1 in 1306 2306 3306 4306 5306; do for port2 in 1306 2306 3306 4306 5306; do [ $port1 -ne $port2 ] && ! diff /tmp/hash_$port1.txt /tmp/hash_$port2.txt && echo "Mismatch between $port1 and $port2"; done; done
+––– output –––
+––– input –––
+for port in 1306 2306 3306 4306 5306; do mysql -h0 -P$port -e "SELECT * FROM replication:tbl_rowwise_stem_ru ORDER BY id ASC;" | md5sum > /tmp/hash_$port.txt; done && for port1 in 1306 2306 3306 4306 5306; do for port2 in 1306 2306 3306 4306 5306; do [ $port1 -ne $port2 ] && ! diff /tmp/hash_$port1.txt /tmp/hash_$port2.txt && echo "Mismatch between $port1 and $port2"; done; done
+––– output –––
+––– input –––
+mysqldump -etc --replace --column-statistics=0 -u replication -h0 -P1306 --skip-comments manticore replication:tbl_rowwise_stem_ru | mysql -h0 -P5306; echo $?
+––– output –––
+-- Warning: version string returned by server is incorrect.
+0
+––– input –––
+mysql -h0 -P2306 -e "INSERT INTO tbl_stem_en (id, f, a, b, j, m, s, e, d, v, fv) VALUES (2, 'Stemmed text', 24, 1.41, '{\"key\":\"value2\",\"list\":[4,5,6]}', (4,5,6), 'another_string', 0, '2023-11-15 08:30:00', (987654321098765432, 123456789012345678), (0.4, 0.3, 0.2, 0.1));"; echo $?
+––– output –––
+0
+––– input –––
+mysql -h0 -P3306 -e "INSERT INTO tbl_stem_ru (id, f, a, b, j, m, s, e, d, v, fv) VALUES (3, 'Русский текст', 84, 2.71, '{\"ключ\":\"значение\",\"массив\":[7,8,9]}', (7,8,9), 'строка', 1, '2022-05-20 15:45:00', (234567890123456789, 876543210987654321), (0.6, 0.7, 0.8, 0.9));"; echo $?
+––– output –––
+0
+––– input –––
+mysql -h0 -P1306 -e "FLUSH RAMCHUNK testrt;"
+––– output –––
+––– input –––
+mysql -h0 -P2306 -e "FLUSH RAMCHUNK tbl_stopwords;"
+––– output –––
+––– input –––
+mysql -h0 -P3306 -e "FLUSH RAMCHUNK tbl_rowwise_stem_ru;"
+––– output –––
+––– input –––
+mysql -h0 -P4306 -e "FLUSH RAMCHUNK tbl_wordforms;"
+––– output –––
+––– input –––
+mysqldump -etc --replace --column-statistics=0 -u replication -h0 -P1306 --skip-comments manticore replication:tbl_none replication:tbl_stopwords replication:tbl_exceptions replication:tbl_wordforms | mysql -P2306 -h0; echo $?
+––– output –––
+-- Warning: version string returned by server is incorrect.
+0
+––– input –––
+for port in 1306 2306 3306 4306 5306; do echo "Checking status for port $port:"; timeout 10 bash -c "while ! mysql -h0 -P$port -e \"SHOW STATUS LIKE 'cluster_replication_node_state'\G\" | grep -q 'Value: synced'; do sleep 1; done" && echo "Port $port: Node is synced." || echo "Port $port: Node is not synced (Value: closed or other)."; done
+––– output –––
+Checking status for port 1306:
+Port 1306: Node is synced.
+Checking status for port 2306:
+Port 2306: Node is synced.
+Checking status for port 3306:
+Port 3306: Node is synced.
+Checking status for port 4306:
+Port 4306: Node is synced.
+Checking status for port 5306:
+Port 5306: Node is synced.
+––– input –––
+for port in 1306 2306 3306 4306 5306; do mysql -h0 -P$port -e "SELECT * FROM tbl_wordforms ORDER BY id ASC;" | md5sum | awk '{print $1}' > /tmp/hash_$port.txt; done && for port1 in 1306 2306 3306 4306 5306; do for port2 in 1306 2306 3306 4306 5306; do [ $port1 -ne $port2 ] && ! diff /tmp/hash_$port1.txt /tmp/hash_$port2.txt && echo "Mismatch between $port1 and $port2"; done; done
+––– output –––
+––– input –––
+export INSTANCE=1
+––– output –––
+––– input –––
+echo "index tbl_plain { type = plain; path = /var/lib/manticore/tbl_plain; rt_mem_limit = 512M; rt_field = f; rt_attr_uint = a; rt_attr_float = b; rt_attr_multi = m; rt_attr_string = s; rt_attr_bool = e; rt_attr_timestamp = d; rt_attr_multi_64 = v; rt_attr_json = j; rt_attr_vector = fv float_vector; }" > /var/lib/manticore/tbl_plain.conf; echo $?
+––– output –––
+0
+––– input –––
+mysql -h0 -P1306 -e "INSERT INTO tbl_plain (id, f, a, b, m, s, e, d, v, j, fv) VALUES (1, 'Plain example', 42, 3.14, (1,2,3), 'plain_string', 1, '2024-12-16 12:00:00', (123456789012345678, 987654321098765432), '{\"key\":\"value\"}', (0.1, 0.2, 0.3, 0.4));"; echo $?
+––– output –––
+0
+––– input –––
+mysql -h0 -P1306 -e "ALTER CLUSTER replication ADD tbl_plain;"; echo $?
+––– output –––
+0
+––– input –––
+mysql -h0 -P1306 -e "SHOW STATUS LIKE 'cluster_replication_indexes';"
+––– output –––
++-----------------------------+------------------------------------------------------------------------------------------+
+| Counter                     | Value                                                                                    |
++-----------------------------+------------------------------------------------------------------------------------------+
+| cluster_replication_indexes | testrt,tbl_none,tbl_stopwords,tbl_exceptions,tbl_wordforms,tbl_rowwise_stem_ru,tbl_plain |
++-----------------------------+------------------------------------------------------------------------------------------+
+––– input –––
+mysqldump -etc --replace --column-statistics=0 -u replication -h0 -P1306 --skip-comments manticore replication:tbl_plain | mysql -h0 -P1306; echo $?
+––– output –––
+-- Warning: version string returned by server is incorrect.
+0
+––– input –––
+for port in 1306 2306 3306 4306 5306; do echo "Checking status for port $port:"; timeout 10 bash -c "while ! mysql -h0 -P$port -e \"SHOW STATUS LIKE 'cluster_replication_node_state'\G\" | grep -q 'Value: synced'; do sleep 1; done" && echo "Port $port: Node is synced." || echo "Port $port: Node is not synced (Value: closed or other)."; done
+––– output –––
+Checking status for port 1306:
+Port 1306: Node is synced.
+Checking status for port 2306:
+Port 2306: Node is synced.
+Checking status for port 3306:
+Port 3306: Node is synced.
+Checking status for port 4306:
+Port 4306: Node is synced.
+Checking status for port 5306:
+Port 5306: Node is synced.
+––– input –––
+for port in 1306 2306 3306 4306 5306; do mysql -h0 -P$port -e "SELECT * FROM tbl_wordforms ORDER BY id ASC;" | md5sum | awk '{print $1}' > /tmp/hash_$port.txt; done && for port1 in 1306 2306 3306 4306 5306; do for port2 in 1306 2306 3306 4306 5306; do [ $port1 -ne $port2 ] && ! diff /tmp/hash_$port1.txt /tmp/hash_$port2.txt && echo "Mismatch between $port1 and $port2"; done; done
+––– output –––

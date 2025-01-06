@@ -741,3 +741,86 @@ mysql -h0 -P9306 -e "SELECT * FROM t WHERE MATCH('abcdef') OPTION fuzzy=1;"
 ––– input –––
 mysql -h0 -P9306 -e "SELECT * FROM t WHERE MATCH('\$#@\!') OPTION fuzzy=1;"
 ––– output –––
+––– input –––
+mysql -h0 -P9306 -e "DROP TABLE IF EXISTS idx; CREATE TABLE idx(f TEXT) min_infix_len='2';"
+––– output –––
+––– input –––
+mysql -h0 -P9306 -e "INSERT INTO idx VALUES (1, 'abcdef'), (2, 'abcd efgh'), (3, 'random text');"
+––– output –––
+––– input –––
+mysql -h0 -P9306 -e "SHOW TABLE idx SETTINGS;"
+––– output –––
++---------------+-------------------+
+| Variable_name | Value             |
++---------------+-------------------+
+| settings      | min_infix_len = 2 |
++---------------+-------------------+
+––– input –––
+mysql -h0 -P9306 -e "SELECT * FROM idx WHERE MATCH('abcdef') OPTION fuzzy=1;"
+––– output –––
++------+-----------+
+| id   | f         |
++------+-----------+
+|    1 | abcdef    |
+|    2 | abcd efgh |
++------+-----------+
+––– input –––
+mysql -h0 -P9306 -e "SELECT * FROM idx WHERE MATCH('abcef') OPTION fuzzy=1;"
+––– output –––
++------+-----------+
+| id   | f         |
++------+-----------+
+|    1 | abcdef    |
+|    2 | abcd efgh |
++------+-----------+
+––– input –––
+mysql -h0 -P9306 -e "SELECT * FROM idx WHERE MATCH('nonexistent') OPTION fuzzy=1;"
+––– output –––
+––– input –––
+mysql -h0 -P9306 -e "CALL AUTOCOMPLETE('abc', 'idx');"
+––– output –––
++--------+
+| query  |
++--------+
+| abcd   |
+| abcdef |
++--------+
+––– input –––
+mysql -h0 -P9306 -e "CALL AUTOCOMPLETE('ran', 'idx');"
+––– output –––
++--------+
+| query  |
++--------+
+| random |
++--------+
+––– input –––
+mysql -h0 -P9306 -e "CALL AUTOCOMPLETE('zzz', 'idx');"
+––– output –––
+––– input –––
+mysql -h0 -P9306 -e "SELECT * FROM idx WHERE MATCH('abcdef') OPTION fuzzy=0;"
+––– output –––
++------+--------+
+| id   | f      |
++------+--------+
+|    1 | abcdef |
++------+--------+
+––– input –––
+mysql -h0 -P9306 -e "SELECT * FROM idx WHERE MATCH('abcd efgh') OPTION fuzzy=0;"
+––– output –––
++------+-----------+
+| id   | f         |
++------+-----------+
+|    2 | abcd efgh |
++------+-----------+
+––– input –––
+mysql -h0 -P9306 -e "SHOW META;"
+––– output –––
++----------------+-------+
+| Variable_name  | Value |
++----------------+-------+
+| total          | 0     |
+| total_found    | 0     |
+| total_relation | eq    |
+| time           | 0.000 |
++----------------+-------+
+

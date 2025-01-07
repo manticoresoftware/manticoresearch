@@ -35,7 +35,7 @@ public:
 	template<typename TT, typename INT>
 	VecTraits_T ( const std::pair<const TT*, INT>& dData );
 
-	VecTraits_T Slice ( int64_t iBegin = 0, int64_t iCount = -1 ) const;
+	FORCE_INLINE VecTraits_T Slice ( int64_t iBegin = 0, int64_t iCount = -1 ) const;
 
 	/// accessor by forward index
 	FORCE_INLINE T & operator[] ( int64_t iIndex ) const;

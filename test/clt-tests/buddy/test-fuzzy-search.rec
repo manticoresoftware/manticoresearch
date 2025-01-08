@@ -736,3 +736,28 @@ mysql -h0 -P9306 -e "SELECT * FROM t WHERE MATCH('abcdef') OPTION fuzzy=1;"
 ––– input –––
 mysql -h0 -P9306 -e "SELECT * FROM t WHERE MATCH('\$#@\!') OPTION fuzzy=1;"
 ––– output –––
+––– input –––
+mysql -h0 -P9306 -e "DROP TABLE IF EXISTS idx1; CREATE TABLE idx1(value TEXT) min_infix_len='2';"
+––– output –––
+––– input –––
+mysql -h0 -P9306 -e "INSERT INTO idx1(value) VALUES ('340');"
+––– output –––
+––– input –––
+mysql -h0 -P9306 -e "CALL AUTOCOMPLETE('34', 'idx1');"
+––– output –––
++-------+
+| query |
++-------+
+| 340   |
++-------+
+––– input –––
+mysql -h0 -P9306 -e "CALL AUTOCOMPLETE('3', 'idx1');"
+––– output –––
+––– input –––
+mysql -h0 -P9306 -e "CALL AUTOCOMPLETE('34', 'idx1', 1 AS fuzziness);"
+––– output –––
++-------+
+| query |
++-------+
+| 340   |
++-------+

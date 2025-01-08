@@ -511,7 +511,7 @@ public:
 	void		SetMerge ( bool bMerge ) override									{ m_pSorter->SetMerge(bMerge); }
 	bool		IsPrecalc() const override											{ return false; }
 	bool		IsJoin() const override												{ return true; }
-	bool		FinalizeJoin ( CSphString & sError, CSphString & sWarning ) override;
+	bool		FinalizeJoin ( bool & bTotalMatchesNA, CSphString & sError, CSphString & sWarning ) override;
 
 	bool		GetErrorFlag() const												{ return m_bErrorFlag; }
 	const CSphString & GetErrorMessage() const										{ return m_sErrorMessage; }
@@ -596,6 +596,7 @@ private:
 	CSphVector<CSphMatch *>			m_dMatchPtrs;
 	IntVec_t						m_dRightMatchIds;
 	IntVec_t						m_dRightMatchUseCount;
+	CSphVector<uint64_t>			m_dRightMatchFilterHashes;
 	IntVec_t						m_dIntFilters;
 	IntVec_t						m_dStrFilters;
 	bool							m_bBatchSizeWarn = false;
@@ -650,7 +651,7 @@ private:
 	FORCE_INLINE void AddToBatch ( const CSphMatch & tEntry, uint64_t uFilterHash );
 	FORCE_INLINE bool IsBatchFull() const;
 	void		SetupJoinFiltersBatch();
-	FORCE_INLINE bool CheckMatchFiltersBatched ( const CSphMatch & tLeft, const CSphMatch & tRight, const ISphSchema * pRightSchema );
+	FORCE_INLINE bool CheckMatchFiltersBatched ( const BatchedMatches_t & tLeft, const CSphMatch & tRight, uint64_t & uRightHash, const ISphSchema * pRightSchema );
 	void		ClearBatch();
 	template <typename PUSH> void PushBatch ( PUSH && fnPush );
 	bool		RunJoinedQuery();
@@ -804,7 +805,6 @@ bool JoinSorter_c::SetupJoinQuery ( int iDynamicSize, CSphString & sError )
 
 	int64_t iMaxMatches = (int64_t)m_tJoinQuery.m_iMaxMatches*Max ( m_iBatchSize, 1 );
 	const int64_t MAX_MATCHES_LIMIT = 200000;
-	// fixme! warn about potential overflow
 	iMaxMatches = Min ( iMaxMatches, MAX_MATCHES_LIMIT );
 
 	m_tJoinQuery.m_iMaxMatches = (int)iMaxMatches;
@@ -1202,12 +1202,17 @@ bool JoinSorter_c::AddToCacheAndPush ( const CSphMatch & tEntry, uint64_t uJoinO
 }
 
 
-bool JoinSorter_c::CheckMatchFiltersBatched ( const CSphMatch & tLeft, const CSphMatch & tRight, const ISphSchema * pRightSchema )
+bool JoinSorter_c::CheckMatchFiltersBatched ( const BatchedMatches_t & tLeft, const CSphMatch & tRight, uint64_t & uRightHash, const ISphSchema * pRightSchema )
 {
+	// use hashes to speed up subsequent checks
+	if ( tLeft.m_uFilterHash==uRightHash )
+		return true;
+
 	for ( const auto & tRemap : m_dFilterRemap )
-		if ( tLeft.GetAttr ( tRemap.m_tLocator ) != tRight.GetAttr ( tRemap.m_tRightStandaloneLocator ) )
+		if ( tLeft.m_tMatch.GetAttr ( tRemap.m_tLocator ) != tRight.GetAttr ( tRemap.m_tRightStandaloneLocator ) )
 			return false;
 
+	uRightHash = tLeft.m_uFilterHash;
 	return true;
 }
 
@@ -1231,6 +1236,8 @@ void JoinSorter_c::PushBatch ( PUSH && fnPush )
 	m_dRightMatchIds.Resize(0);
 	m_dRightMatchUseCount.Resize ( m_dMatches.GetLength() );
 	m_dRightMatchUseCount.ZeroVec();
+	m_dRightMatchFilterHashes.Resize ( m_dMatches.GetLength() );
+	m_dRightMatchFilterHashes.ZeroVec();
 
 	int iMaxRightMatches = 0;
 	const ISphSchema * pRightSchema = m_pRightSorter->GetSchema();
@@ -1239,9 +1246,8 @@ void JoinSorter_c::PushBatch ( PUSH && fnPush )
 		auto & tLeftMatch = m_dBatchedMatches[iMatch];
 		tLeftMatch.m_iRightMatchOffset = m_dRightMatchIds.GetLength();
 
-		// fixme! store filter hash in the right match after the first CheckMatchFiltersBatched; use it for subsequent checks
 		ARRAY_FOREACH ( iRightMatch, m_dMatches )
-			if ( CheckMatchFiltersBatched ( tLeftMatch.m_tMatch, m_dMatches[iRightMatch], pRightSchema ) )
+			if ( CheckMatchFiltersBatched ( tLeftMatch, m_dMatches[iRightMatch], m_dRightMatchFilterHashes[iRightMatch], pRightSchema ) )
 			{
 				m_dRightMatchIds.Add(iRightMatch);
 				m_dRightMatchUseCount[iRightMatch]++;
@@ -1390,8 +1396,10 @@ bool JoinSorter_c::RunFinalBatch()
 }
 
 
-bool JoinSorter_c::FinalizeJoin ( CSphString & sError, CSphString & sWarning )
+bool JoinSorter_c::FinalizeJoin ( bool & bTotalMatchesNA, CSphString & sError, CSphString & sWarning )
 {
+	bTotalMatchesNA = m_bCanBatch;
+
 	if ( !RunFinalBatch() )
 		return false;
 

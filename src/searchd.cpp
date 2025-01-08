@@ -2204,6 +2204,7 @@ bool SearchReplyParser_c::ParseReply ( MemInputBuffer_c & tReq, AgentConn_t & tA
 		int iRetrieved = tReq.GetInt ();
 		tRes.m_iTotalMatches = tReq.GetInt ();
 		tRes.m_bTotalMatchesApprox = !!tReq.GetInt();
+		tRes.m_bTotalMatchesNA = !!tReq.GetInt();
 		tRes.m_iQueryTime = tReq.GetInt ();
 
 		// agents always send IO/CPU stats to master
@@ -3914,6 +3915,9 @@ void SendResult ( int iVer, ISphOutputBuffer & tOut, const AggrResult_t& tRes, b
 	tOut.SendAsDword ( tRes.m_iTotalMatches );
 	if ( bAgentMode && uMasterVer>=19 )
 		tOut.SendInt ( tRes.m_bTotalMatchesApprox ? 1 : 0 );
+
+	if ( bAgentMode && uMasterVer>=25 )
+		tOut.SendInt ( tRes.m_bTotalMatchesNA ? 1 : 0 );
 
 	tOut.SendInt ( Max ( tRes.m_iQueryTime, 0 ) );
 
@@ -5766,6 +5770,7 @@ struct LocalSearchRef_t
 			tResult.m_iCpuTime += tChild.m_iCpuTime;
 			tResult.m_iTotalMatches += tChild.m_iTotalMatches;
 			tResult.m_bTotalMatchesApprox |= tChild.m_bTotalMatchesApprox;
+			tResult.m_bTotalMatchesNA |= tChild.m_bTotalMatchesNA;
 			tResult.m_iSuccesses += tChild.m_iSuccesses;
 			tResult.m_tIOStats.Add ( tChild.m_tIOStats );
 
@@ -6210,6 +6215,7 @@ bool SearchHandler_c::SubmitSuccess ( CSphVector<ISphMatchSorter *> & dSorters, 
 		tNRes.m_iMultiplier = iNumQueries;
 		tNRes.m_iCpuTime += tMqMeta.m_iCpuTime / iNumQueries;
 		tNRes.m_bTotalMatchesApprox |= tMqMeta.m_bTotalMatchesApprox;
+		tNRes.m_bTotalMatchesNA |= tMqMeta.m_bTotalMatchesNA;
 
 		iCpuTime /= iNumQueries;
 	}
@@ -7491,6 +7497,7 @@ void SearchHandler_c::RunSubset ( int iStart, int iEnd )
 					// merge this agent's stats
 					tRes.m_iTotalMatches += tRemoteResult.m_iTotalMatches;
 					tRes.m_bTotalMatchesApprox |= tRemoteResult.m_bTotalMatchesApprox;
+					tRes.m_bTotalMatchesNA |= tRemoteResult.m_bTotalMatchesNA;
 					tRes.m_iQueryTime += tRemoteResult.m_iQueryTime;
 					tRes.m_iAgentCpuTime += tRemoteResult.m_iCpuTime;
 					tRes.m_tAgentIOStats.Add ( tRemoteResult.m_tIOStats );
@@ -9558,8 +9565,17 @@ void BuildMeta ( VectorLike & dStatus, const CSphQueryResultMeta & tMeta )
 		dStatus.MatchTuplet ( "warning", tMeta.m_sWarning.cstr () );
 
 	dStatus.MatchTupletf ( "total", "%d", tMeta.m_iMatches );
-	dStatus.MatchTupletf ( "total_found", "%l", tMeta.m_iTotalMatches );
-	dStatus.MatchTupletf ( "total_relation", "%s", tMeta.m_bTotalMatchesApprox ? "gte" : "eq" );
+	if ( tMeta.m_bTotalMatchesNA )
+	{
+		dStatus.MatchTuplet ( "total_found", "n/a" );
+		dStatus.MatchTupletf ( "total_relation", "n/a" );
+	}
+	else
+	{
+		dStatus.MatchTupletf ( "total_found", "%l", tMeta.m_iTotalMatches );
+		dStatus.MatchTupletf ( "total_relation", "%s", tMeta.m_bTotalMatchesApprox ? "gte" : "eq" );
+	}
+
 	dStatus.MatchTupletf ( "time", "%.3F", tMeta.m_iQueryTime );
 
 	if ( tMeta.m_iMultiplier>1 )
@@ -13959,12 +13975,20 @@ CSphString BuildMetaOneline ( const CSphQueryResultMeta & tMeta )
 	// --- 0 out of 1115 results in 115ms ---
 	// --- 20 out of >= 20 results in 5.123s ---
 
+	CSphString sTotalFound = "n/a";
+	CSphString sApprox = "n/a";
+	if ( !tMeta.m_bTotalMatchesNA )
+	{
+		sTotalFound.SetSprintf ( "%l", tMeta.m_iTotalMatches );
+		sApprox = tMeta.m_bTotalMatchesApprox ? ">=" : "";
+	}
+
 	StringBuilder_c sMeta;
 	// since we have us precision, printing 0 will output '0us', which is not necessary true.
 	if ( tMeta.m_iQueryTime > 0 )
-		sMeta.Sprintf ( "--- %d out of %s%l results in %.3t ---", tMeta.m_iMatches, ( tMeta.m_bTotalMatchesApprox ? ">=" : "" ), tMeta.m_iTotalMatches, (int64_t)tMeta.m_iQueryTime * 1000 );
+		sMeta.Sprintf ( "--- %d out of %s%s results in %.3t ---", tMeta.m_iMatches, sApprox.cstr(), sTotalFound.cstr(), (int64_t)tMeta.m_iQueryTime * 1000 );
 	else
-		sMeta.Sprintf ( "--- %d out of %s%l results in 0ms ---", tMeta.m_iMatches, ( tMeta.m_bTotalMatchesApprox ? ">=" : "" ), tMeta.m_iTotalMatches );
+		sMeta.Sprintf ( "--- %d out of %s%s results in 0ms ---", tMeta.m_iMatches, sApprox.cstr(), sTotalFound.cstr() );
 	return (CSphString)sMeta;
 }
 

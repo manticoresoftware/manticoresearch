@@ -14,8 +14,8 @@ searchd
 {
     <searchd_settings/>
     <dynamic>
-      <variant>join_cache_size=0</variant>
-      <variant>join_cache_size=1000</variant>
+      <variant>join_batch_size=0</variant>
+      <variant>join_batch_size=1000</variant>
     </dynamic>
     data_dir = <data_path/>
 }

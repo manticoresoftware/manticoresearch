@@ -14581,11 +14581,16 @@ void HandleMysqlMultiStmt ( const CSphVector<SqlStmt_t> & dStmt, CSphQueryResult
 	QueryProfile_c tProfile;
 
 	iSelect = 0;
-	for ( auto& tStmt: dStmt )
+	for ( auto & tStmt : dStmt )
+	{
 		switch ( tStmt.m_eStmt )
 		{
 		case STMT_SELECT:
 			{
+				// no log for search queries from the buddy in the info verbosity
+				if ( session::IsQueryLogDisabled() )
+					tStmt.m_tQuery.m_uDebugFlags |= QUERY_DEBUG_NO_LOG;
+
 				tHandler.SetQuery ( iSelect, tStmt.m_tQuery, std::move ( tStmt.m_pTableFunc ) );
 				tHandler.SetJoinQueryOptions ( iSelect, tStmt.m_tJoinQueryOptions );
 				++iSelect;
@@ -14601,6 +14606,7 @@ void HandleMysqlMultiStmt ( const CSphVector<SqlStmt_t> & dStmt, CSphQueryResult
 			}
 		default: break;
 		}
+	}
 
 	// use first meta for faceted search
 	bool bUseFirstMeta = ( tHandler.m_dQueries.GetLength()>1 && !tHandler.m_dQueries[0].m_bFacet && tHandler.m_dQueries[1].m_bFacet );

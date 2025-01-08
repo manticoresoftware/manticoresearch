@@ -564,6 +564,7 @@ struct CSphQuery
 	CSphString		m_sJoinIdx;						///< index to perform join on
 	CSphString		m_sJoinQuery;					///< fulltext query for JOIN
 	CSphVector<OnFilter_t> m_dOnFilters;			///< JOIN ON condition filters
+	int				m_iJoinBatchSize = -1;			///< join batch size (-1==default, 0==disable batching)
 
 	CSphString		m_sGroupBy;			///< group-by attribute name(s)
 	CSphString		m_sFacetBy;			///< facet-by attribute name(s)
@@ -693,6 +694,7 @@ public:
 	int						m_iMatches = 0;			///< total matches returned (upto MAX_MATCHES)
 	int64_t					m_iTotalMatches = 0;	///< total matches found (unlimited)
 	bool					m_bTotalMatchesApprox = false; ///< whether m_iTotalMatches shows exact or approximate numbers
+	bool					m_bTotalMatchesNA = false; ///< whether m_iTotalMatches is available at all
 
 	CSphIOStats				m_tIOStats;				///< i/o stats for the query
 	int64_t					m_iAgentCpuTime = 0;	///< agent cpu time (for distributed searches)

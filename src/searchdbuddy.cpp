@@ -705,7 +705,14 @@ static bool SetSessionMeta ( const JsonObj_c & tBudyyReply )
 		return false;
 		
 	// total_found => m_iTotalMatches
-	ConvertValue ( "total_found", tSrcMeta, tLastMeta.m_iTotalMatches );
+	CSphString sTotalFound;
+	if ( tSrcMeta.FetchStrItem ( sTotalFound, "total_found", sTmpError, true ) )
+	{
+		if ( sTotalFound=="n/a" )
+			tLastMeta.m_bTotalMatchesNA = true;
+		else
+			ConvertValue ( "total_found", tSrcMeta, tLastMeta.m_iTotalMatches );
+	}
 
 	// time => m_iQueryTime \ m_iRealQueryTime
 	float fTime = 0.0f;

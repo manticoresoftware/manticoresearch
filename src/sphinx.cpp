@@ -8285,7 +8285,7 @@ bool CSphIndex_VLN::MultiScan ( CSphQueryResult & tResult, const CSphQuery & tQu
 
 	SwitchProfile ( tMeta.m_pProfile, SPH_QSTATE_FINALIZE );
 
-	if ( dSorters.any_of ( [&] ( ISphMatchSorter * p ) { return !p->FinalizeJoin ( tMeta.m_bTotalMatchesNA, tMeta.m_sError, tMeta.m_sWarning ); } ) )
+	if ( dSorters.any_of ( [&] ( ISphMatchSorter * p ) { return !p->FinalizeJoin ( tMeta.m_sError, tMeta.m_sWarning ); } ) )
 		return false;
 
 	// do final expression calculations
@@ -10625,7 +10625,6 @@ static bool RunSplitQuery ( RUN && tRun, const CSphQuery & tQuery, CSphQueryResu
 				tThMeta.m_sWarning = tChunkMeta.m_sWarning;
 
 			tThMeta.m_bTotalMatchesApprox |= tChunkMeta.m_bTotalMatchesApprox;
-			tThMeta.m_bTotalMatchesNA |= tChunkMeta.m_bTotalMatchesNA;
 			tThMeta.m_tIteratorStats.Merge ( tChunkMeta.m_tIteratorStats );
 
 			if ( CheckInterrupt() && !tChunkMeta.m_sError.IsEmpty() )
@@ -11271,7 +11270,7 @@ bool CSphIndex_VLN::ParsedMultiQuery ( const CSphQuery & tQuery, CSphQueryResult
 		tMeta.m_tIteratorStats.m_iTotal = 1;
 	}
 
-	if ( dSorters.any_of ( [&] ( ISphMatchSorter * p ) { return !p->FinalizeJoin ( tMeta.m_bTotalMatchesNA, tMeta.m_sError, tMeta.m_sWarning ); } ) )
+	if ( dSorters.any_of ( [&] ( ISphMatchSorter * p ) { return !p->FinalizeJoin ( tMeta.m_sError, tMeta.m_sWarning ); } ) )
 		return false;
 
 	// adjust result sets

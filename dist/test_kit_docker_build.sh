@@ -11,6 +11,14 @@ executor_dev_path=
 # Get semver suffix in format -dev or empty string depending on version provided
 get_semver_suffix() {
 	local version="$1"
+	
+	# Check if version ends with +dev
+	if [[ "$version" == *"+dev" ]]; then
+		echo "_dev"
+		return
+	fi
+	
+	# Check if last digit is odd
 	last_digit=$(echo "$version" | awk -F. '{print $NF}')
 	if [ $(( last_digit % 2 )) -eq 0 ]; then
 		echo ""

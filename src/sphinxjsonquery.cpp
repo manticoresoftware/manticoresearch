@@ -2635,8 +2635,16 @@ CSphString sphEncodeResultJson ( const VecTraits_T<const AggrResult_t *> & dRes,
 
 	auto sHitMeta = tOut.StartBlock ( ",", R"("hits":{)", "}" );
 
-	tOut.Sprintf ( R"("total":%d)", tRes.m_iTotalMatches );
-	tOut.Sprintf ( R"("total_relation":%s)", tRes.m_bTotalMatchesApprox ? R"("gte")" : R"("eq")" );
+	if ( tRes.m_bTotalMatchesNA )
+	{
+		tOut += R"("total":"n/a")";
+		tOut += R"("total_relation":"n/a")";
+	}
+	else
+	{
+		tOut.Sprintf ( R"("total":%d)", tRes.m_iTotalMatches );
+		tOut.Sprintf ( R"("total_relation":%s)", tRes.m_bTotalMatchesApprox ? R"("gte")" : R"("eq")" );
+	}
 	if ( eFormat==ResultSetFormat_e::ES )
 		tOut += R"("max_score": null)";
 

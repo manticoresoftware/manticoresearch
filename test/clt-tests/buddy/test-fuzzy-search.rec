@@ -711,11 +711,6 @@ mysql -h0 -P9306 -e "SELECT * FROM t WHERE MATCH('abcef') OPTION fuzzy=1; SHOW M
 | time           | #!/[0-9]{1}.[0-9]{3}/!# |
 +----------------+-------+
 ––– input –––
-grep -A3 "SELECT \* FROM t WHERE MATCH('abcdef')" /var/log/manticore/query.log
-––– output –––
-/* #!/[A-Za-z]{3}\s+[A-Za-z]{3}\s+[0-9]{1,2}\s+[0-9]{2}:[0-9]{2}:[0-9]{2}\.[0-9]{3}\s+[0-9]{4}/!# conn %{NUMBER} (127.0.0.1:%{NUMBER}) real #!/[0-9]{1}.[0-9]{3}/!# wall #!/[0-9]{1}.[0-9]{3}/!# found 1 */ SELECT * FROM t WHERE MATCH('abcdef');
-/* #!/[A-Za-z]{3}\s+[A-Za-z]{3}\s+[0-9]{1,2}\s+[0-9]{2}:[0-9]{2}:[0-9]{2}\.[0-9]{3}\s+[0-9]{4}/!# conn %{NUMBER} (127.0.0.1:%{NUMBER}) real #!/[0-9]{1}.[0-9]{3}/!# wall #!/[0-9]{1}.[0-9]{3}/!# found 2 */ SELECT * FROM t WHERE MATCH('abcef') OPTION fuzzy=1;
-––– input –––
 mysql -h0 -P9306 -e "SELECT * FROM t WHERE MATCH('nonexistent'); SHOW META;"
 ––– output –––
 +----------------+-------------+
@@ -741,6 +736,31 @@ mysql -h0 -P9306 -e "SELECT * FROM t WHERE MATCH('abcdef') OPTION fuzzy=1;"
 ––– input –––
 mysql -h0 -P9306 -e "SELECT * FROM t WHERE MATCH('\$#@\!') OPTION fuzzy=1;"
 ––– output –––
+––– input –––
+mysql -h0 -P9306 -e "DROP TABLE IF EXISTS idx1; CREATE TABLE idx1(value TEXT) min_infix_len='2';"
+––– output –––
+––– input –––
+mysql -h0 -P9306 -e "INSERT INTO idx1(value) VALUES ('340');"
+––– output –––
+––– input –––
+mysql -h0 -P9306 -e "CALL AUTOCOMPLETE('34', 'idx1');"
+––– output –––
++-------+
+| query |
++-------+
+| 340   |
++-------+
+––– input –––
+mysql -h0 -P9306 -e "CALL AUTOCOMPLETE('3', 'idx1');"
+––– output –––
+––– input –––
+mysql -h0 -P9306 -e "CALL AUTOCOMPLETE('34', 'idx1', 1 AS fuzziness);"
+––– output –––
++-------+
+| query |
++-------+
+| 340   |
++-------+
 ––– input –––
 echo -e "searchd {\nlisten = 9306:mysql\nlisten = 9312\nlisten = 9308:http\nlog = /tmp/searchd.log\nquery_log = /tmp/query.log\npid_file = /tmp/searchd.pid\n}\n\nsource src_idx {\ntype = tsvpipe\ntsvpipe_command = cat /tmp/data.tsv\ntsvpipe_field_string = f\ntsvpipe_attr_bigint = id\n}\n\nindex idx_plain {\ntype = plain\nsource = src_idx\npath = /tmp/idx_plain\nmin_infix_len = 2\n}" > /tmp/manticore_idx.conf
 ––– output –––

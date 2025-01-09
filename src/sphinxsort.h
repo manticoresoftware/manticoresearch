@@ -132,7 +132,7 @@ public:
 	virtual bool		IsPrecalc() const { return false; }
 
 	virtual bool		IsJoin() const { return false; }
-	virtual bool		FinalizeJoin ( CSphString & sError, CSphString & sWarning ) { return true; }
+	virtual bool		FinalizeJoin ( bool & bTotalMatchesNA, CSphString & sError, CSphString & sWarning ) { return true; }
 
 	/// add optional description to display in meta
 	virtual void		AddDesc ( CSphVector<IteratorDesc_t> & dDesc ) const {}

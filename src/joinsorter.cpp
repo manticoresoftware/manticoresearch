@@ -492,7 +492,7 @@ public:
 	void		Push ( const VecTraits_T<const CSphMatch> & dMatches ) override;
 	bool		PushGrouped ( const CSphMatch & tEntry, bool bNewSet ) override		{ return Push_T ( tEntry, [this,bNewSet]( const CSphMatch & tMatch ){ return m_pSorter->PushGrouped ( tMatch, bNewSet ); }, true ); }
 	int			GetLength() override												{ return m_pSorter->GetLength(); }
-	int64_t		GetTotalCount() const override										{ return m_pSorter->GetTotalCount(); }
+	int64_t		GetTotalCount() const override;
 	void		Finalize ( MatchProcessor_i & tProcessor, bool bCallProcessInResultSetOrder, bool bFinalizeMatches ) override { m_pSorter->Finalize ( tProcessor, bCallProcessInResultSetOrder, bFinalizeMatches ); }
 	int			Flatten ( CSphMatch * pTo ) override								{ return m_pSorter->Flatten(pTo); }
 	const CSphMatch * GetWorst() const override										{ return m_pSorter->GetWorst(); }
@@ -511,7 +511,7 @@ public:
 	void		SetMerge ( bool bMerge ) override									{ m_pSorter->SetMerge(bMerge); }
 	bool		IsPrecalc() const override											{ return false; }
 	bool		IsJoin() const override												{ return true; }
-	bool		FinalizeJoin ( bool & bTotalMatchesNA, CSphString & sError, CSphString & sWarning ) override;
+	bool		FinalizeJoin ( CSphString & sError, CSphString & sWarning ) override;
 
 	bool		GetErrorFlag() const												{ return m_bErrorFlag; }
 	const CSphString & GetErrorMessage() const										{ return m_sErrorMessage; }
@@ -1358,6 +1358,13 @@ void JoinSorter_c::Push ( const VecTraits_T<const CSphMatch> & dMatches )
 }
 
 
+int64_t	JoinSorter_c::GetTotalCount() const
+{
+	assert ( !m_bCanBatch || !m_iBatched );
+	return m_pSorter->GetTotalCount();
+}
+
+
 void JoinSorter_c::ProduceCacheSizeWarning ( CSphString & sWarning )
 {
 	if ( !m_bCacheOk )
@@ -1396,10 +1403,8 @@ bool JoinSorter_c::RunFinalBatch()
 }
 
 
-bool JoinSorter_c::FinalizeJoin ( bool & bTotalMatchesNA, CSphString & sError, CSphString & sWarning )
+bool JoinSorter_c::FinalizeJoin ( CSphString & sError, CSphString & sWarning )
 {
-	bTotalMatchesNA = m_bCanBatch;
-
 	if ( !RunFinalBatch() )
 		return false;
 

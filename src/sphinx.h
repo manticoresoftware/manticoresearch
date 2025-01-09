@@ -694,7 +694,6 @@ public:
 	int						m_iMatches = 0;			///< total matches returned (upto MAX_MATCHES)
 	int64_t					m_iTotalMatches = 0;	///< total matches found (unlimited)
 	bool					m_bTotalMatchesApprox = false; ///< whether m_iTotalMatches shows exact or approximate numbers
-	bool					m_bTotalMatchesNA = false; ///< whether m_iTotalMatches is available at all
 
 	CSphIOStats				m_tIOStats;				///< i/o stats for the query
 	int64_t					m_iAgentCpuTime = 0;	///< agent cpu time (for distributed searches)

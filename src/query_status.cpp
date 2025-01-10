@@ -381,7 +381,7 @@ void QueryStatus ( CSphVariant * v ) REQUIRES ( MainThread )
 		NetOutputBuffer_c tOut ( iSock );
 		tOut.SendDword ( SPHINX_CLIENT_VERSION );
 		{
-			auto tHdr = APIHeader ( tOut, SEARCHD_COMMAND_STATUS, VER_COMMAND_STATUS );
+			auto tHdr = APIHeader ( tOut, SEARCHD_COMMAND_STATUS, VER_COMMAND_STATUS, ApiAuthToken_t() );
 			tOut.SendInt ( 1 ); // dummy body
 		}
 		tOut.Flush ();

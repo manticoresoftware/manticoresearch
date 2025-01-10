@@ -930,7 +930,7 @@ public:
 
 		CSphString sRequest = m_tQuery.AsString();
 
-		auto tWr = APIHeader ( tOut, SEARCHD_COMMAND_JSON, VER_COMMAND_JSON ); // API header
+		auto tWr = APIHeader ( tOut, SEARCHD_COMMAND_JSON, VER_COMMAND_JSON, tAgent.m_tAuthToken ); // API header
 		tOut.SendString ( m_sEndpoint.cstr() );
 		tOut.SendString ( sRequest.cstr() );
 	}
@@ -2630,7 +2630,7 @@ static std::unique_ptr<HttpHandler_c> CreateHttpHandler ( EHTTP_ENDPOINT eEndpoi
 	return nullptr;
 }
 
-HttpProcessResult_t ProcessHttpQuery ( CharStream_c & tSource, Str_t & sSrcQuery, OptionsHash_t & hOptions, CSphVector<BYTE> & dResult, bool bNeedHttpResponse, http_method eRequestType )
+HttpProcessResult_t ProcessHttpQuery ( CharStream_c & tSource, Str_t & sSrcQuery, OptionsHash_t & hOptions, CSphVector<BYTE> & dResult, bool bNeedHttpResponse, http_method eRequestType, bool bSkipAuth )
 {
 	TRACE_CONN ( "conn", "ProcessHttpQuery" );
 
@@ -2638,8 +2638,12 @@ HttpProcessResult_t ProcessHttpQuery ( CharStream_c & tSource, Str_t & sSrcQuery
 
 	const CSphString & sEndpoint = hOptions["endpoint"];
 	tRes.m_eEndpoint = StrToHttpEndpoint ( sEndpoint );
-	if ( !CheckAuth ( hOptions, tRes, dResult ) )
+	CSphString sUser;
+	if ( !bSkipAuth && !CheckAuth ( hOptions, tRes, dResult, sUser ) )
 		return tRes;
+
+	// should set client user to pass it further into distributed index
+	session::SetUser ( sUser );
 
 	std::unique_ptr<HttpHandler_c> pHandler = CreateHttpHandler ( tRes.m_eEndpoint, tSource, sSrcQuery, hOptions, eRequestType );
 	if ( !pHandler )
@@ -2677,6 +2681,7 @@ HttpProcessResult_t ProcessHttpQuery ( CharStream_c & tSource, Str_t & sSrcQuery
 	return tRes;
 }
 
+/// json command over API
 void sphProcessHttpQueryNoResponce ( const CSphString & sEndpoint, const CSphString & sQuery, CSphVector<BYTE> & dResult )
 {
 	OptionsHash_t hOptions;
@@ -2684,7 +2689,8 @@ void sphProcessHttpQueryNoResponce ( const CSphString & sEndpoint, const CSphStr
 
 	BlobStream_c tQuery ( sQuery );
 	Str_t sSrcQuery;
-	HttpProcessResult_t tRes = ProcessHttpQuery ( tQuery, sSrcQuery, hOptions, dResult, false, HTTP_GET );
+	// no need to issue authentification as it checked at the API interface 
+	HttpProcessResult_t tRes = ProcessHttpQuery ( tQuery, sSrcQuery, hOptions, dResult, false, HTTP_GET, true );
 	ProcessHttpQueryBuddy ( tRes, sSrcQuery, hOptions, dResult, false, HTTP_GET );
 }
 
@@ -2739,7 +2745,7 @@ bool HttpRequestParser_c::ProcessClientHttp ( AsyncNetInputBuffer_c& tIn, CSphVe
 
 	} else
 	{
-		tRes = ProcessHttpQuery ( *pSource, sSrcQuery, m_hOptions, dResult, true, m_eType );
+		tRes = ProcessHttpQuery ( *pSource, sSrcQuery, m_hOptions, dResult, true, m_eType, false );
 	}
 
 	return ProcessHttpQueryBuddy ( tRes, sSrcQuery, m_hOptions, dResult, true, m_eType );

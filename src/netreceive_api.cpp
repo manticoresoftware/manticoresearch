@@ -11,6 +11,7 @@
 //
 
 #include "netreceive_api.h"
+#include "auth/auth.h"
 
 extern int g_iClientTimeoutS; // from searchd.cpp
 extern volatile bool g_bMaintenance;
@@ -52,9 +53,9 @@ void ApiServe ( std::unique_ptr<AsyncNetBuffer_c> pBuf )
 	}
 	auto uHandshake = tIn.GetDword();
 	sphLogDebugv ( "conn %s(%d): got handshake, major v.%d", sClientIP, iCID, uHandshake );
-	if ( uHandshake!=SPHINX_CLIENT_VERSION && uHandshake!=0x01000000UL )
+	if ( uHandshake!=SPHINX_CLIENT_VERSION && uHandshake!=1 && uHandshake!=0x01000000UL )
 	{
-		sphLogDebugv ( "conn %s(%d): got handshake, major v.%d", sClientIP, iCID, uHandshake );
+		sphLogDebugv ( "conn %s(%d): got invalid handshake, major v.%d", sClientIP, iCID, uHandshake );
 		return;
 	}
 	// legacy client - sends us exactly 4 bytes of handshake, so we have to flush our handshake also before continue.
@@ -132,11 +133,40 @@ void ApiServe ( std::unique_ptr<AsyncNetBuffer_c> pBuf )
 
 		iPconnIdleS = 0;
 
+		ApiAuth_e eApiAuth = ApiAuth_e::NO_AUTH;
+		CSphFixedVector<BYTE> dApiToken ( 0 );
+		// can support old protocol version if daemon runs without auth
+		if ( uHandshake!=1 )
+		{
+			eApiAuth = (ApiAuth_e)tIn.GetByte();
+			int iApiTokenSize = GetApiTokenSize ( eApiAuth );
+			dApiToken.Reset ( iApiTokenSize );
+			if ( iApiTokenSize )
+				tIn.GetBytes ( dApiToken.Begin(), iApiTokenSize );
+		}
+
 		auto eCommand = (SearchdCommand_e)  tIn.GetWord ();
 		auto uVer = tIn.GetWord ();
 		auto iReplySize = tIn.GetInt ();
 		sphLogDebugv ( "read command %d, version %d, reply size %d", eCommand, uVer, iReplySize );
 
+		CSphString sUser;
+		// need to pass by the only commands:
+		// - PING
+		// - PERSIST
+		// - all replication
+		if ( eCommand!=SEARCHD_COMMAND_PING && eCommand!=SEARCHD_COMMAND_CLUSTER && eCommand!=SEARCHD_COMMAND_PERSIST )
+		{
+			CSphString sError;
+			if ( !CheckAuth ( eApiAuth, dApiToken, sUser, sError ) )
+			{
+				SendErrorReply ( tOut, "%s", sError.cstr() );
+				tOut.Flush(); // no need to check return code since we anyway break
+				break;
+			}
+		}
+		// should set client user to pass it further into distributed index
+		session::SetUser ( sUser );
 
 		bool bCheckLen = ( eCommand!= SEARCHD_COMMAND_CLUSTER );
 		bool bBadCommand = ( eCommand>=SEARCHD_COMMAND_WRONG );
@@ -228,4 +258,15 @@ APIBlob_c APIHeader ( ISphOutputBuffer & dBuff, WORD uCommand, WORD uVer )
 APIBlob_c APIAnswer ( ISphOutputBuffer & dBuff, WORD uVer, WORD uStatus )
 {
 	return APIHeader ( dBuff, uStatus, uVer );
+}
+
+APIBlob_c APIHeader ( ISphOutputBuffer & dBuff, WORD uCommand, WORD uVer, const ApiAuthToken_t & tToken )
+{
+	assert ( GetApiTokenSize ( tToken.m_eType )==tToken.m_dToken.GetLength() );
+
+	dBuff.SendByte ( (BYTE)tToken.m_eType );
+	if ( tToken.m_dToken.GetLength() )
+		dBuff.SendBytes ( tToken.m_dToken );
+
+	return APIHeader ( dBuff, uCommand, uVer );
 }

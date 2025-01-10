@@ -16,6 +16,7 @@
 #include "sphinxutils.h"
 
 void AuthConfigure ( const CSphConfigSection & hSearchd );
+bool IsAuthEnabled();
 
 struct MySQLAuth_t
 {
@@ -30,4 +31,25 @@ bool CheckAuth ( const MySQLAuth_t & tAuth, const CSphString & sUser, const VecT
 // HTTP
 struct HttpProcessResult_t;
 
-bool CheckAuth ( const SmallStringHash_T<CSphString> & hOptions, HttpProcessResult_t & tRes, CSphVector<BYTE> & dReply );
+bool CheckAuth ( const SmallStringHash_T<CSphString> & hOptions, HttpProcessResult_t & tRes, CSphVector<BYTE> & dReply, CSphString & sUser );
+
+// API
+enum class ApiAuth_e : BYTE
+{
+	NO_AUTH = 1,
+	SHA1,
+	SHA256
+};
+int GetApiTokenSize ( ApiAuth_e eType );
+bool CheckAuth ( ApiAuth_e eType, const VecTraits_T<BYTE> & dToken, CSphString & sUser, CSphString & sError );
+
+struct ApiAuthToken_t
+{
+	ApiAuth_e m_eType = ApiAuth_e::NO_AUTH;
+	CSphFixedVector<BYTE> m_dToken  { 0 };
+};
+
+ApiAuthToken_t GetApiAuth ( const CSphString & sUser );
+
+struct AgentConn_t;
+void SetSessionAuth ( CSphVector<AgentConn_t *> & dRemotes );

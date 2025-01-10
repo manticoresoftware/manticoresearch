@@ -1225,6 +1225,7 @@ void SqlServe ( std::unique_ptr<AsyncNetBuffer_c> pBuf )
 
 			if ( tResponse.GetUsername() == "FEDERATED" )
 				session::SetFederatedUser();
+			// should set client user to pass it further into distributed index
 			session::SetUser ( tResponse.GetUsername() );
 			
 			if ( !CheckAuth ( tAuth, tResponse.GetUsername(), tResponse.GetAuthResponce(), sError ) )

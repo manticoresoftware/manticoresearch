@@ -17,6 +17,7 @@
 #include "searchdaemon.h"
 #include "searchdhttp.h"
 #include "searchdbuddy.h"
+#include "searchdha.h"
 
 #include "auth.h"
 
@@ -24,12 +25,54 @@ struct AuthUserCred_t
 {
 	CSphString	m_sUser;
 	HASH20_t	m_tPwdHash;
+	HASH20_t	m_tApiToken;
 };
 
-static SmallStringHash_T<AuthUserCred_t> g_hUsers;
+struct ApiUserCred_t
+{
+	CSphString	m_sUser;
+	HASH20_t	m_tApiToken;
+};
+
+struct AuthUsers_t
+{
+	SmallStringHash_T<AuthUserCred_t> m_hUserToken;
+	OpenHashTable_T<int64_t, ApiUserCred_t> m_hApiToken2User;
+};
+static AuthUsers_t g_tAuth;
 
 /////////////////////////////////////////////////////////////////////////////
 /// auth load
+
+static void Crypt ( BYTE * pBuf, const BYTE * pS1, const BYTE * pS2, int iLen )
+{
+	const BYTE * pEnd = pS1 + iLen;
+	while ( pS1<pEnd )
+	{
+		*pBuf++= *pS1++ ^ *pS2++;
+	}
+}
+
+static void AddUserEntry ( const Str_t & sUser, const VecTraits_T<BYTE> & dHashBuf )
+{
+	AuthUserCred_t tEntry;
+
+	tEntry.m_sUser.SetBinary ( sUser );
+	memcpy ( tEntry.m_tPwdHash.data(), dHashBuf.Begin(), HASH20_SIZE );
+
+	SHA1_c tTokenHash;
+	tTokenHash.Init();
+	tTokenHash.Update ( (const BYTE *)tEntry.m_sUser.cstr(), tEntry.m_sUser.Length() );
+	tTokenHash.Update ( tEntry.m_tPwdHash.data(), tEntry.m_tPwdHash.size() );
+	tEntry.m_tApiToken = tTokenHash.FinalHash();
+
+	ApiUserCred_t tApiEntry;
+	tApiEntry.m_sUser = tEntry.m_sUser;
+	tApiEntry.m_tApiToken = tEntry.m_tApiToken;
+
+	g_tAuth.m_hUserToken.Add ( tEntry, tEntry.m_sUser );
+	g_tAuth.m_hApiToken2User.Add ( sphFNV64 ( tApiEntry.m_tApiToken.data(), tApiEntry.m_tApiToken.size() ), tApiEntry );
+}
 
 static void ReadAuthFile ( const CSphString & sFile )
 {
@@ -37,8 +80,6 @@ static void ReadAuthFile ( const CSphString & sFile )
 	if ( sFile.IsEmpty() )
 		return;
 	
-	// FIXME!!! add the check of the file permissions for only this OS user but not 777
-
 	CSphString sError;
 	if ( !sphIsReadable ( sFile, &sError ) )
 		sphFatal ( "can not read users from the '%s': %s", sFile.cstr(), sError.cstr() );
@@ -46,7 +87,7 @@ static void ReadAuthFile ( const CSphString & sFile )
 	// FIXME!!! fix file permission on windows
 #if !_WIN32
 	auto tPerms = std::filesystem::status ( sFile.cstr() ).permissions();
-	if ( std::filesystem::perms::none!=( tPerms & std::filesystem::perms::all ) )
+	if ( ( tPerms & ( std::filesystem::perms::group_all | std::filesystem::perms::others_all ) )!=std::filesystem::perms::none )
 		sphFatal ( "file '%s' has permissions to all", sFile.cstr() );
 #endif
 
@@ -98,14 +139,14 @@ static void ReadAuthFile ( const CSphString & sFile )
 			continue;
 		}
 
-		AuthUserCred_t tEntry;
-		tEntry.m_sUser.SetBinary ( sUser );
-		memcpy ( tEntry.m_tPwdHash.data(), dHashBuf.Begin(), HASH20_SIZE );
-		g_hUsers.Add ( tEntry, tEntry.m_sUser );
+		AddUserEntry ( sUser, dHashBuf );
+
+		const AuthUserCred_t & tEntry = g_tAuth.m_hUserToken[sUser];
+		sphLogDebug ( "user:%s, sha1:(%d)0x%s, sha1 encoded:%s, api_token:0x%s", tEntry.m_sUser.cstr(), (int)tEntry.m_tPwdHash.size(), BinToHex ( tEntry.m_tPwdHash ).cstr(), sPwdHash.first, BinToHex ( tEntry.m_tApiToken ).cstr() );
 	}
 
 	// should fail daemon start if file provided but no users read
-	if ( g_hUsers.IsEmpty() )
+	if ( g_tAuth.m_hUserToken.IsEmpty() )
 		sphFatal ( "no users read from the file '%s'", sFile.cstr() );
 }
 
@@ -114,11 +155,9 @@ static void AddConfigEntry ( const CSphString & sUser, const CSphString & sPwd )
 	if ( sUser.IsEmpty() )
 		return;
 
-	AuthUserCred_t tEntry;
-	tEntry.m_sUser = sUser;
-	tEntry.m_tPwdHash = CalcBinarySHA1 ( sPwd.cstr(), sPwd.Length() );
+	HASH20_t tBuf = CalcBinarySHA1 ( sPwd.cstr(), sPwd.Length() );
 
-	g_hUsers.Add ( tEntry, tEntry.m_sUser );
+	AddUserEntry ( FromStr ( sUser ), VecTraits_T<BYTE> ( tBuf.data(), tBuf.size() ) );
 }
 
 void AuthConfigure ( const CSphConfigSection & hSearchd )
@@ -129,6 +168,14 @@ void AuthConfigure ( const CSphConfigSection & hSearchd )
 
 	ReadAuthFile ( hSearchd.GetStr ( "auth_user_file" ) );
 }
+
+bool IsAuthEnabled()
+{
+	return g_tAuth.m_hUserToken.GetLength();
+}
+
+/////////////////////////////////////////////////////////////////////////////
+/// SphixnQL
 
 MySQLAuth_t GetMySQLAuth()
 {
@@ -148,18 +195,6 @@ MySQLAuth_t GetMySQLAuth()
 	tAuth.m_dScramble.Last()  = 0;
 
 	return tAuth;
-}
-
-/////////////////////////////////////////////////////////////////////////////
-/// SphixnQL
-
-static void Crypt ( BYTE * pBuf, const BYTE * pS1, const BYTE * pS2, int iLen )
-{
-	const BYTE * pEnd = pS1 + iLen;
-	while ( pS1<pEnd )
-	{
-		*pBuf++= *pS1++ ^ *pS2++;
-	}
 }
 
 static bool CheckPwd ( const MySQLAuth_t & tSalt, const AuthUserCred_t & tEntry, const VecTraits_T<BYTE> & dClientHash )
@@ -192,13 +227,13 @@ bool CheckAuth ( const MySQLAuth_t & tAuth, const CSphString & sUser, const VecT
 {
 	sphLogDebug ( "auth raw:(%d)0x%s", dClientHash.GetLength(), BinToHex ( dClientHash.Begin(), dClientHash.GetLength() ).cstr() );
 
-	if ( g_hUsers.IsEmpty() )
+	if ( g_tAuth.m_hUserToken.IsEmpty() )
 	{
 		sphLogDebug ( "no users found in config, user '%s' access granted", sUser.cstr() );
 		return true;
 	}
 
-	const AuthUserCred_t * pUser = g_hUsers ( sUser );
+	const AuthUserCred_t * pUser = g_tAuth.m_hUserToken ( sUser );
 	if ( !pUser || dClientHash.IsEmpty() )
 	{
 		sError.SetSprintf ( "Access denied for user '%s' (using password: NO)", sUser.cstr() );
@@ -234,9 +269,9 @@ static bool FailAuth ( HttpProcessResult_t & tRes, CSphVector<BYTE> & dReply )
 	return false;
 }
 
-bool CheckAuth ( const SmallStringHash_T<CSphString> & hOptions, HttpProcessResult_t & tRes, CSphVector<BYTE> & dReply )
+bool CheckAuth ( const SmallStringHash_T<CSphString> & hOptions, HttpProcessResult_t & tRes, CSphVector<BYTE> & dReply, CSphString & sUser )
 {
-	if ( g_hUsers.IsEmpty() )
+	if ( g_tAuth.m_hUserToken.IsEmpty() )
 	{
 		sphLogDebug ( "no users found in config, access granted" );
 		return true;
@@ -280,12 +315,11 @@ bool CheckAuth ( const SmallStringHash_T<CSphString> & hOptions, HttpProcessResu
 		return FailAuth ( tRes, dReply );
 	}
 
-	CSphString sUser;
 	sUser.SetBinary ( (const char *)dSrcUserPwd.Begin(), iDel );
 	CSphString sPwd;
 	sPwd.SetBinary ( (const char *)dSrcUserPwd.Begin() + iDel + 1, dSrcUserPwd.GetLength()-iDel-1 );
 
-	const AuthUserCred_t * pUser = g_hUsers ( sUser );
+	const AuthUserCred_t * pUser = g_tAuth.m_hUserToken ( sUser );
 	if ( !pUser || sPwd.IsEmpty() )
 	{
 		tRes.m_sError.SetSprintf ( "Access denied for user '%s' (using password: NO)", sUser.cstr() );
@@ -299,5 +333,78 @@ bool CheckAuth ( const SmallStringHash_T<CSphString> & hOptions, HttpProcessResu
 	} else
 	{
 		return true;
+	}
+}
+
+
+/////////////////////////////////////////////////////////////////////////////
+/// API
+
+int GetApiTokenSize ( ApiAuth_e eType )
+{
+	switch ( eType )
+	{
+	case ApiAuth_e::SHA1: return HASH20_SIZE; break;
+	case ApiAuth_e::SHA256: return HASH20_SIZE; break;
+
+	case ApiAuth_e::NO_AUTH:
+	default:
+		return 0;
+	}
+}
+
+bool CheckAuth ( ApiAuth_e eType, const VecTraits_T<BYTE> & dToken, CSphString & sUser, CSphString & sError )
+{
+	sphLogDebug ( "%d, token(%d):0x%s", (int)eType, dToken.GetLength(), BinToHex ( dToken.Begin(), dToken.GetLength() ).cstr() );
+
+	if ( !IsAuthEnabled() )
+		return true;
+
+	const ApiUserCred_t * pUser = g_tAuth.m_hApiToken2User.Find ( sphFNV64 ( dToken.Begin(), dToken.GetLength() ) );
+	if ( !pUser )
+	{
+		sError.SetSprintf ( "Access denied for token '%s'", BinToHex ( dToken.Begin(), dToken.GetLength() ).cstr() );
+		return false;
+	}
+	if ( dToken.GetLength()!=pUser->m_tApiToken.size() || memcmp ( dToken.Begin(), pUser->m_tApiToken.data(), dToken.GetLength() )!=0 )
+	{
+		sError.SetSprintf ( "Wrong token '%s'", BinToHex ( dToken.Begin(), dToken.GetLength() ).cstr() );
+		return false;
+	}
+
+	sphLogDebug ( "user %s passed", pUser->m_sUser.cstr() );
+
+	sUser = pUser->m_sUser;
+	return true;
+}
+
+ApiAuthToken_t GetApiAuth ( const CSphString & sUser )
+{
+	ApiAuthToken_t tToken;
+
+	if ( !IsAuthEnabled() )
+		return tToken;
+
+	const AuthUserCred_t * pUser = g_tAuth.m_hUserToken ( sUser );
+	if ( !pUser )
+		return tToken;
+
+	tToken.m_eType = ApiAuth_e::SHA1;
+	tToken.m_dToken.Reset ( pUser->m_tApiToken.size() );
+	memcpy ( tToken.m_dToken.Begin(), pUser->m_tApiToken.data(), tToken.m_dToken.GetLength() );
+
+	return tToken;
+}
+
+void SetSessionAuth ( CSphVector<AgentConn_t *> & dRemotes )
+{
+	if ( !IsAuthEnabled() )
+		return;
+
+	ApiAuthToken_t tAuthToken = GetApiAuth ( session::GetUser() );
+	for ( auto & tClient : dRemotes )
+	{
+		tClient->m_tAuthToken.m_eType = tAuthToken.m_eType;
+		tClient->m_tAuthToken.m_dToken.CopyFrom ( tAuthToken.m_dToken );
 	}
 }

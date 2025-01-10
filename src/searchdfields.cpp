@@ -74,7 +74,7 @@ struct GetFieldRequestBuilder_t : public RequestBuilder_i
 		auto * pRes = (RemoteFieldsAnswer_t *)tAgent.m_pResult.get();
 		assert ( pRes );
 
-		auto tHdr = APIHeader ( tOut, SEARCHD_COMMAND_GETFIELD, VER_COMMAND_GETFIELD );
+		auto tHdr = APIHeader ( tOut, SEARCHD_COMMAND_GETFIELD, VER_COMMAND_GETFIELD, tAgent.m_tAuthToken );
 
 		tOut.SendString ( tAgent.m_tDesc.m_sIndexes.cstr() );
 		tOut.SendDword ( m_dFieldCols.GetLength() );
@@ -119,7 +119,7 @@ struct ProxyFieldRequestBuilder_t : public RequestBuilder_i
 
 	void BuildRequest ( const AgentConn_t & tAgent, ISphOutputBuffer & tOut ) const final
 	{
-		auto tHdr = APIHeader ( tOut, SEARCHD_COMMAND_GETFIELD, VER_COMMAND_GETFIELD );
+		auto tHdr = APIHeader ( tOut, SEARCHD_COMMAND_GETFIELD, VER_COMMAND_GETFIELD, tAgent.m_tAuthToken );
 		tOut.SendString ( tAgent.m_tDesc.m_sIndexes.cstr() );
 		tOut.SendDword ( m_tArgs.m_dFieldNames.GetLength() );
 		ARRAY_FOREACH ( i, m_tArgs.m_dFieldNames )
@@ -275,7 +275,7 @@ bool GetFieldFromDist ( VecRefPtrsAgentConn_t & dRemotes, const FieldRequest_t &
 	return true;
 }
 
-bool GetFields ( const FieldRequest_t & tReq, FieldBlob_t & tRes, DocHash_t & hFetchedDocs )
+static bool GetFields ( const FieldRequest_t & tReq, FieldBlob_t & tRes, DocHash_t & hFetchedDocs )
 {
 	if ( tReq.m_dDocs.IsEmpty() )
 		return true;
@@ -300,6 +300,7 @@ bool GetFields ( const FieldRequest_t & tReq, FieldBlob_t & tRes, DocHash_t & hF
 		pDistReply = std::make_unique<GetFieldReplyParser_t>();
 
 		pDistReporter = GetObserver();
+		SetSessionAuth ( dRemotes );
 		ScheduleDistrJobs ( dRemotes, pDistReq.get(), pDistReply.get(), pDistReporter.Ptr() );
 	}
 
@@ -641,6 +642,7 @@ void RemotesGetField ( AggrResult_t & tRes, const CSphQuery & tQuery )
 	// connect to remote agents and query them
 	GetFieldRequestBuilder_t tBuilder ( dFieldCols );
 	GetFieldReplyParser_t tParser;
+	SetSessionAuth ( dAgents );
 	PerformRemoteTasks ( dAgents, &tBuilder, &tParser );
 
 	StringBuilder_c sError { "," };

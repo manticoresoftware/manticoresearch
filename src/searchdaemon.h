@@ -20,6 +20,7 @@
 #include "searchdconfig.h"
 #include "memio.h"
 #include "accumulator.h"
+#include "auth/auth.h"
 
 /////////////////////////////////////////////////////////////////////////////
 // MACHINE-DEPENDENT STUFF
@@ -456,6 +457,7 @@ public:
 
 // RAII Start Sphinx API command/request header
 APIBlob_c APIHeader ( ISphOutputBuffer & dBuff, WORD uCommand, WORD uVer = 0 /* SEARCHD_OK */ );
+APIBlob_c APIHeader ( ISphOutputBuffer & dBuff, WORD uCommand, WORD uVer, const ApiAuthToken_t & tToken );
 
 // RAII Sphinx API answer
 APIBlob_c APIAnswer ( ISphOutputBuffer & dBuff, WORD uVer = 0, WORD uStatus = 0 /* SEARCHD_OK */ );
@@ -1443,6 +1445,7 @@ namespace session
 	bool Execute ( Str_t sQuery, RowBuffer_i& tOut );
 	void SetFederatedUser();
 	void SetUser ( const CSphString & sUser );
+	const CSphString & GetUser();
 	void SetAutoCommit ( bool bAutoCommit );
 	void SetInTrans ( bool bInTrans );
 	bool IsAutoCommit();

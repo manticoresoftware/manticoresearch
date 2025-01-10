@@ -58,7 +58,7 @@ extern const char * szGIT_BRANCH_ID;
 extern const char * szGDB_SOURCE_DIR;
 
 #define SPHINX_SEARCHD_PROTO	1
-#define SPHINX_CLIENT_VERSION	1
+#define SPHINX_CLIENT_VERSION	2
 
 /////////////////////////////////////////////////////////////////////////////
 

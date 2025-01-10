@@ -27,6 +27,7 @@ bool LoadExFunctions ();
 #include "sphinxutils.h"
 #include "searchdaemon.h"
 #include "timeout_queue.h"
+#include "auth/auth.h"
 
 /////////////////////////////////////////////////////////////////////////////
 // SOME SHARED GLOBAL VARIABLES
@@ -494,6 +495,8 @@ public:
 	CSphRefcountedPtr<Reporter_i>	m_pReporter { nullptr };	///< used to report back when we're finished
 	LPKEY			m_pPollerTask = nullptr; ///< internal for poller. fixme! privatize?
 	volatile bool	m_bSuccess {false};	///< agent got processed, no need to retry
+
+	ApiAuthToken_t m_tAuthToken;
 
 public:
 	AgentConn_t () = default;

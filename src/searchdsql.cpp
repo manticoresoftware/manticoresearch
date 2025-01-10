@@ -287,6 +287,44 @@ AttrValues_p SqlParserTraits_c::CloneMvaVecPtr ( int iIdx ) const noexcept
 	return AttrValues_p { pValues };
 }
 
+
+void SqlParserTraits_c::SetDefaultTableForOptions()
+ {
+	assert(m_pStmt);
+	m_pQueryForOptions = &m_pStmt->m_tQuery;
+}
+
+
+bool SqlParserTraits_c::SetTableForOptions ( const SqlNode_t & tNode )
+{
+	assert ( m_pStmt && m_pQuery );
+	CSphString sTable;
+	ToString ( sTable, tNode );
+
+	StrVec_t dQueryIndexes;
+	bool bLeftTable = false;
+	ParseIndexList ( m_pQuery->m_sIndexes, dQueryIndexes );
+	for ( const auto & i : dQueryIndexes )
+		if ( sTable==i )
+		{
+			bLeftTable = true;
+			break;
+		}
+
+	if ( bLeftTable )
+		m_pQueryForOptions = &m_pStmt->m_tQuery;
+	else if ( sTable==m_pQuery->m_sJoinIdx )
+		m_pQueryForOptions = &m_pStmt->m_tJoinQueryOptions;
+	else
+	{
+		assert(m_pParseError);
+		m_pParseError->SetSprintf ( "Unknown table in OPTION: '%s'", sTable.cstr() );
+		return false;
+	}
+
+	return true;
+}
+
 //////////////////////////////////////////////////////////////////////////
 
 enum class Option_e : BYTE;
@@ -332,6 +370,7 @@ public:
 	bool			AddIntFilterLesser ( const SqlNode_t & tAttr, int64_t iVal, bool bHasEqual );
 	bool			AddUservarFilter ( const SqlNode_t & tCol, const SqlNode_t & tVar, bool bExclude );
 	void			AddGroupBy ( const SqlNode_t & tGroupBy );
+	void			AddJoinedWeight ( SqlNode_t & tTable, SqlNode_t & tWeight );
 	CSphFilterSettings * AddFilter ( const SqlNode_t & tCol, ESphFilter eType );
 	CSphFilterSettings * AddFilter ( const SqlNode_t & tCol, ESphFilter eType, int iValuesIdx );
 	bool			AddStringFilter ( const SqlNode_t & tCol, const SqlNode_t & tVal, bool bExclude );
@@ -565,6 +604,7 @@ enum class Option_e : BYTE
 	EXPANSION_LIMIT,
 	JIEBA_MODE,
 	SCROLL,
+	JOIN_BATCH_SIZE,
 
 	INVALID_OPTION
 };
@@ -579,7 +619,7 @@ void InitParserOption()
 		"max_matches", "max_predicted_time", "max_query_time", "morphology", "rand_seed", "ranker", "retry_count",
 		"retry_delay", "reverse_scan", "sort_method", "strict", "sync", "threads", "token_filter", "token_filter_options",
 		"not_terms_only_allowed", "store", "accurate_aggregation", "max_matches_increase_threshold", "distinct_precision_threshold",
-		"threads_ex", "switchover", "expansion_limit", "jieba_mode", "scroll" };
+		"threads_ex", "switchover", "expansion_limit", "jieba_mode", "scroll", "join_batch_size" };
 
 	for ( BYTE i = 0u; i<(BYTE) Option_e::INVALID_OPTION; ++i )
 		g_hParseOption.Add ( (Option_e) i, dOptions[i] );
@@ -613,7 +653,7 @@ static bool CheckOption ( SqlStmt_e eStmt, Option_e eOption )
 			Option_e::RETRY_COUNT, Option_e::RETRY_DELAY, Option_e::REVERSE_SCAN, Option_e::SORT_METHOD,
 			Option_e::THREADS, Option_e::TOKEN_FILTER, Option_e::NOT_ONLY_ALLOWED, Option_e::ACCURATE_AGG,
 			Option_e::MAXMATCH_THRESH, Option_e::DISTINCT_THRESH, Option_e::THREADS_EX, Option_e::EXPANSION_LIMIT,
-			Option_e::JIEBA_MODE, Option_e::SCROLL };
+			Option_e::JIEBA_MODE, Option_e::SCROLL, Option_e::JOIN_BATCH_SIZE };
 
 	static Option_e dInsertOptions[] = { Option_e::TOKEN_FILTER_OPTIONS };
 
@@ -712,7 +752,7 @@ AddOption_e AddOption ( CSphQuery & tQuery, const CSphString & sOpt, const CSphS
 		Option_e::STRICT_, Option_e::COLUMNS, Option_e::RAND_SEED, Option_e::SYNC, Option_e::EXPAND_KEYWORDS,
 		Option_e::THREADS, Option_e::NOT_ONLY_ALLOWED, Option_e::LOW_PRIORITY, Option_e::DEBUG_NO_PAYLOAD,
 		Option_e::ACCURATE_AGG, Option_e::MAXMATCH_THRESH, Option_e::DISTINCT_THRESH, Option_e::SWITCHOVER,
-		Option_e::EXPANSION_LIMIT, Option_e::SCROLL
+		Option_e::EXPANSION_LIMIT, Option_e::SCROLL, Option_e::JOIN_BATCH_SIZE
 	};
 
 	bool bFound = ::any_of ( dIntegerOptions, [eOpt] ( auto i ) { return i == eOpt; } );
@@ -761,6 +801,7 @@ AddOption_e AddOption ( CSphQuery & tQuery, const CSphString & sOpt, const CSphS
 	case Option_e::THREADS_EX:					tQuery.m_iConcurrency = (int)iValue; break;
 	case Option_e::EXPANSION_LIMIT:				tQuery.m_iExpansionLimit = (int)iValue; break;
 	case Option_e::SCROLL:						tQuery.m_tScrollSettings.m_bRequested = !!iValue; break;
+	case Option_e::JOIN_BATCH_SIZE:				tQuery.m_iJoinBatchSize = (int)iValue; break;
 
 	default:
 		return AddOption_e::NOT_FOUND;
@@ -948,14 +989,16 @@ bool SqlParserTraits_c::AddOption ( const SqlNode_t & tIdent, const SqlNode_t & 
 		return false;
 	}
 
+	assert(m_pQueryForOptions);
+
 	AddOption_e eAddRes;
-	eAddRes = ::AddOption ( *m_pQuery, sOpt, sVal, sValOrig, [this,tValue]{ return ToStringUnescape(tValue); }, m_pStmt->m_eStmt, *m_pParseError );
+	eAddRes = ::AddOption ( *m_pQueryForOptions, sOpt, sVal, sValOrig, [this,tValue]{ return ToStringUnescape(tValue); }, m_pStmt->m_eStmt, *m_pParseError );
 	if ( eAddRes==AddOption_e::FAILED )
 		return false;
 	else if ( eAddRes==AddOption_e::ADDED )
 		return true;
 	
-	eAddRes = ::AddOption ( *m_pQuery, sOpt, sVal, tValue.GetValueInt(), m_pStmt->m_eStmt, *m_pParseError );
+	eAddRes = ::AddOption ( *m_pQueryForOptions, sOpt, sVal, tValue.GetValueInt(), m_pStmt->m_eStmt, *m_pParseError );
 	if ( eAddRes==AddOption_e::FAILED )
 		return false;
 	else if ( eAddRes==AddOption_e::ADDED )
@@ -1005,7 +1048,8 @@ bool SqlParserTraits_c::AddOption ( const SqlNode_t & tIdent, const SqlNode_t & 
 		return false;
 	}
 
-	AddOption_e eAdd = ::AddOptionRanker ( *m_pQuery, sOpt, sVal, [this,tArg]{ return ToStringUnescape(tArg); }, m_pStmt->m_eStmt, *m_pParseError );
+	assert(m_pQueryForOptions);
+	AddOption_e eAdd = ::AddOptionRanker ( *m_pQueryForOptions, sOpt, sVal, [this,tArg]{ return ToStringUnescape(tArg); }, m_pStmt->m_eStmt, *m_pParseError );
 	if ( eAdd==AddOption_e::NOT_FOUND )
 		m_pParseError->SetSprintf ( "unknown option '%s' (or bad argument type)", sOpt.cstr() );
 
@@ -1024,7 +1068,8 @@ bool SqlParserTraits_c::AddOption ( const SqlNode_t & tIdent, CSphVector<CSphNam
 		return false;
 	}
 
-	AddOption_e eAdd = ::AddOption ( *m_pQuery, sOpt, dNamed, m_pStmt->m_eStmt, *m_pParseError );
+	assert(m_pQueryForOptions);
+	AddOption_e eAdd = ::AddOption ( *m_pQueryForOptions, sOpt, dNamed, m_pStmt->m_eStmt, *m_pParseError );
 	if ( eAdd==AddOption_e::NOT_FOUND )
 		m_pParseError->SetSprintf ( "unknown option '%s' (or bad argument type)", sOpt.cstr() );
 
@@ -1148,6 +1193,19 @@ void SqlParser_c::AddGroupBy ( const SqlNode_t & tGroupBy )
 		m_pQuery->m_sGroupBy.SetSprintf ( "%s, %s", m_pQuery->m_sGroupBy.cstr(), sTmp.cstr() );
 	}
 }
+
+
+void SqlParser_c::AddJoinedWeight ( SqlNode_t & tTable, SqlNode_t & tWeight )
+{
+	CSphString sTable, sWeight;
+	sTable.SetBinary ( m_pBuf + tTable.m_iStart, tTable.m_iEnd - tTable.m_iStart );
+	sWeight.SetBinary ( m_pBuf + tWeight.m_iStart, tWeight.m_iEnd - tWeight.m_iStart );
+
+	CSphQueryItem & tItem = m_pQuery->m_dItems.Add();
+	tItem.m_sExpr.SetSprintf ( "%s%s()", sTable.cstr(), sWeight.cstr() );
+	tItem.m_sAlias = tItem.m_sExpr;
+}
+
 
 void SqlParser_c::SetGroupbyLimit ( int iLimit )
 {

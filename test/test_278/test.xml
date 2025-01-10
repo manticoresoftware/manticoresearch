@@ -13,6 +13,10 @@
 searchd
 {
     <searchd_settings/>
+    <dynamic>
+      <variant>join_batch_size=0</variant>
+      <variant>join_batch_size=1000</variant>
+    </dynamic>
     data_dir = <data_path/>
 }
 </config>
@@ -351,6 +355,15 @@ select * from join1 left join join2 on join1.j.a = int(join2.j.a);
 
 <!-- type cast on non-json attr (error) -->
 select * from join1 left join join2 on join1.j.a = int(join2.id);
+
+<!-- options for the right table -->
+select id,join2.weight() from join1 left join join2 on join1.string_id = join2.id where match('title1 | name2',join2);
+select id,join2.weight() from join1 left join join2 on join1.string_id = join2.id where match('title1 | name2',join2) option(join2) field_weights=(title=1500);
+
+<!-- options for both tables -->
+select id,weight(),join2.weight() from join1 left join join2 on join1.string_id = join2.id where match('title1 | tmp2', join1) and match('title1 | name2',join2);
+select id,weight(),join2.weight() from join1 left join join2 on join1.string_id = join2.id where match('title1 | tmp2', join1) and match('title1 | name2',join2) option(join1) field_weights=(title=1000) option(join2) field_weights=(title=2000);
+
 </sphinxql>
 
 <query endpoint="json/search">
@@ -395,6 +408,82 @@ select * from join1 left join join2 on join1.j.a = int(join2.id);
 	  "query":
 	  {
         "query_string": "title2"
+      },
+      "on":
+      [
+        {
+          "left":
+          {
+            "table": "join1",
+            "field": "string_id"
+          },
+          "operator": "eq",
+          "right":
+          {
+            "table": "join2",
+            "field": "id"
+          }
+        }
+      ]
+    }
+  ]
+}
+</query>
+
+<query endpoint="json/search">
+{
+  "table": "join1",
+  "join":
+  [
+    {
+      "type": "inner",
+      "table": "join2",
+	  "query":
+	  {
+        "query_string": "title1 | name2"
+      },
+      "on":
+      [
+        {
+          "left":
+          {
+            "table": "join1",
+            "field": "string_id"
+          },
+          "operator": "eq",
+          "right":
+          {
+            "table": "join2",
+            "field": "id"
+          }
+        }
+      ]
+    }
+  ]
+}
+</query>
+
+<query endpoint="json/search">
+{
+  "table": "join1",
+  "options":
+  {
+    "join2":
+    {
+      "field_weights":
+      {
+          "title": 15000
+      }
+    }
+  },
+  "join":
+  [
+    {
+      "type": "inner",
+      "table": "join2",
+	  "query":
+	  {
+        "query_string": "title1 | name2"
       },
       "on":
       [

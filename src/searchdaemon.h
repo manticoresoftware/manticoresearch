@@ -1299,6 +1299,7 @@ public:
 
 	void				RunQueries ();					///< run all queries, get all results
 	void				SetQuery ( int iQuery, const CSphQuery & tQuery, std::unique_ptr<ISphTableFunc> pTableFunc );
+	void				SetJoinQueryOptions ( int iQuery, const CSphQuery & tJoinQueryOptions );
 	void				SetProfile ( QueryProfile_c * pProfile );
 	void				SetStmt ( SqlStmt_t & tStmt );
 	AggrResult_t *		GetResult ( int iResult );
@@ -1426,7 +1427,7 @@ void				SaveCompatHttp ( JsonEscapedBuilder & tOut );
 void				SetupCompatHttp();
 bool				SetLogManagement ( const CSphString & sVal, CSphString & sError );
 bool				IsLogManagementEnabled ();
-std::unique_ptr<PubSearchHandler_c> CreateMsearchHandler ( std::unique_ptr<QueryParser_i> pQueryParser, QueryType_e eQueryType, JsonQuery_c & tQuery );
+std::unique_ptr<PubSearchHandler_c> CreateMsearchHandler ( std::unique_ptr<QueryParser_i> pQueryParser, QueryType_e eQueryType, ParsedJsonQuery_t & tParsed );
 int64_t				GetDocID ( const char * szID );
 
 void ExecuteApiCommand ( SearchdCommand_e eCommand, WORD uCommandVer, int iLength, InputBuffer_c & tBuf, GenericOutputBuffer_c & tOut );

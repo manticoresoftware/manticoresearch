@@ -11,6 +11,14 @@ executor_dev_path=
 # Get semver suffix in format -dev or empty string depending on version provided
 get_semver_suffix() {
 	local version="$1"
+	
+	# Check if version ends with +dev
+	if [[ "$version" == *"+dev" ]]; then
+		echo "_dev"
+		return
+	fi
+	
+	# Check if last digit is odd
 	last_digit=$(echo "$version" | awk -F. '{print $NF}')
 	if [ $(( last_digit % 2 )) -eq 0 ]; then
 		echo ""
@@ -67,6 +75,10 @@ do
 			;;
 		backup)
 			package="manticore-backup"
+			arch="all"
+			;;
+		load)
+			package="manticore-load"
 			arch="all"
 			;;
 		mcl)
@@ -129,4 +141,3 @@ echo "Exporting image to ../manticore_test_kit.img"
 
 # exporting the image, it also squashes all the layers into one
 docker export manticore-test-kit > ../manticore_test_kit.img
-

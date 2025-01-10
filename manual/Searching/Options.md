@@ -335,6 +335,10 @@ Integer. Distributed retries count.
 ### retry_delay
 Integer. Distributed retry delay, in milliseconds.
 
+### scroll
+
+String. A scroll token for paginating results using the [Scroll pagination approach](../Searching/Pagination.md#Scroll-Search-Option).
+
 ### sort_method
 * `pq` - priority queue, set by default
 * `kbuffer` - provides faster sorting for already pre-sorted data, e.g., table data sorted by id

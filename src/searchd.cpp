@@ -4156,7 +4156,23 @@ bool GetIndexSchemaItems ( const ISphSchema & tSchema, const CSphVector<CSphQuer
 }
 
 
-bool GetItemsLeftInSchema ( const ISphSchema & tSchema, bool bOnlyPlain, const CSphVector<int> & dAttrs, CSphVector<int> & dAttrsInSchema )
+static bool IsJoinedWeight ( const CSphString & sAttr, const CSphQuery & tQuery )
+{
+	// don't skip this attribute in json queries as it will be used as _score
+	if ( tQuery.m_eQueryType==QUERY_JSON )
+		return false;
+
+	if ( tQuery.m_sJoinIdx.IsEmpty() )
+		return false;
+
+	CSphString sWeight;
+	sWeight.SetSprintf ( "%s.weight()", tQuery.m_sJoinIdx.cstr() );
+
+	return sAttr==sWeight;
+}
+
+
+static bool GetItemsLeftInSchema ( const ISphSchema & tSchema, const CSphQuery & tQuery, const CSphVector<int> & dAttrs, CSphVector<int> & dAttrsInSchema )
 {	
 	bool bHaveExprs = false;
 
@@ -4170,11 +4186,11 @@ bool GetItemsLeftInSchema ( const ISphSchema & tSchema, bool bOnlyPlain, const C
 
 			// need to keep post-limit expression (stored field) for multi-query \ facet
 			// also keep columnar attributes (with expressions)
-			if ( bOnlyPlain && !tAttr.m_pExpr->IsColumnar() && tAttr.m_eStage!=SPH_EVAL_POSTLIMIT )
+			if ( tQuery.m_bFacetHead && !tAttr.m_pExpr->IsColumnar() && tAttr.m_eStage!=SPH_EVAL_POSTLIMIT )
 				continue;
 		}
 
-		if ( !IsGroupbyMagic ( tAttr.m_sName ) && !IsSortStringInternal ( tAttr.m_sName ) && !dAttrs.BinarySearch(i) )
+		if ( !IsGroupbyMagic ( tAttr.m_sName ) && !IsSortStringInternal ( tAttr.m_sName ) && !IsJoinedWeight ( tAttr.m_sName, tQuery ) && !dAttrs.BinarySearch(i) )
 			dAttrsInSchema.Add(i);
 	}
 
@@ -4260,7 +4276,7 @@ void DoExpansion ( const ISphSchema & tSchema, const CSphVector<int> & dAttrsInS
 
 
 // rebuild the results itemlist expanding stars
-const CSphVector<CSphQueryItem> & ExpandAsterisk ( const ISphSchema & tSchema, const CSphVector<CSphQueryItem> & dItems, CSphVector<CSphQueryItem> & tExpanded, bool bOnlyPlain, bool & bHaveExprs )
+const CSphVector<CSphQueryItem> & ExpandAsterisk ( const ISphSchema & tSchema, const CSphVector<CSphQueryItem> & dItems, CSphVector<CSphQueryItem> & tExpanded, const CSphQuery & tQuery, bool & bHaveExprs )
 {
 	// the result schema usually is the index schema + calculated items + @-items
 	// we need to extract the index schema only
@@ -4274,7 +4290,7 @@ const CSphVector<CSphQueryItem> & ExpandAsterisk ( const ISphSchema & tSchema, c
 	// find items that are in index schema but not in our requested item list
 	// not do not include @-items
 	CSphVector<int> dAttrsLeftInSchema;
-	bHaveExprs = GetItemsLeftInSchema ( tSchema, bOnlyPlain, dIndexSchemaAttrs, dAttrsLeftInSchema );
+	bHaveExprs = GetItemsLeftInSchema ( tSchema, tQuery, dIndexSchemaAttrs, dAttrsLeftInSchema );
 
 	DoExpansion ( tSchema, dAttrsLeftInSchema, dItems, tExpanded );
 
@@ -5054,7 +5070,7 @@ bool MinimizeAggrResult ( AggrResult_t & tRes, const CSphQuery & tQuery, bool bH
 	// build a list of select items that the query asked for
 	bool bHaveExprs = false;
 	CSphVector<CSphQueryItem> tExtItems;
-	const CSphVector<CSphQueryItem> & dItems = ExpandAsterisk ( tRes.m_tSchema, dQueryItems, tExtItems, tQuery.m_bFacetHead, bHaveExprs );
+	const CSphVector<CSphQueryItem> & dItems = ExpandAsterisk ( tRes.m_tSchema, dQueryItems, tExtItems, tQuery, bHaveExprs );
 
 	// api + index without attributes + select * case
 	// can not skip aggregate filtering
@@ -5193,6 +5209,7 @@ public:
 	void							RunQueries ();					///< run all queries, get all results
 	void							RunCollect ( const CSphQuery & tQuery, const CSphString & sIndex, CSphString * pErrors, CSphVector<BYTE> * pCollectedDocs );
 	void							SetQuery ( int iQuery, const CSphQuery & tQuery, std::unique_ptr<ISphTableFunc> pTableFunc );
+	void							SetJoinQueryOptions ( int iQuery, const CSphQuery & tJoinQueryOptions ) { m_dJoinQueryOptions[iQuery] = tJoinQueryOptions; }
 	void							SetQueryParser ( std::unique_ptr<QueryParser_i> pParser, QueryType_e eQueryType );
 	void							SetProfile ( QueryProfile_c * pProfile );
 	AggrResult_t *					GetResult ( int iResult ) { return m_dAggrResults.Begin() + iResult; }
@@ -5200,6 +5217,7 @@ public:
 
 public:
 	CSphVector<CSphQuery>			m_dQueries;						///< queries which i need to search
+	CSphVector<CSphQuery>			m_dJoinQueryOptions;			///< join query options
 	CSphVector<AggrResult_t>		m_dAggrResults;					///< results which i obtained
 	CSphVector<StatsPerQuery_t>		m_dQueryIndexStats;				///< statistics for current query
 	CSphVector<SearchFailuresLog_c>	m_dFailuresSet;					///< failure logs for each query
@@ -5241,6 +5259,7 @@ protected:
 private:
 	CSphVector<CSphQueryResult>			m_dResults;
 	VecTraits_T<CSphQuery>				m_dNQueries;		///< working subset of queries
+	VecTraits_T<CSphQuery>				m_dNJoinQueryOptions;///< working subset of join query options
 	VecTraits_T<AggrResult_t>			m_dNAggrResults;	///< working subset of results
 	VecTraits_T<CSphQueryResult>		m_dNResults;		///< working subset of result pointers
 	VecTraits_T<SearchFailuresLog_c>	m_dNFailuresSet;	///< working subset of failures
@@ -5308,6 +5327,11 @@ void PubSearchHandler_c::SetQuery ( int iQuery, const CSphQuery & tQuery, std::u
 	m_pImpl->SetQuery ( iQuery, tQuery, std::move(pTableFunc) );
 }
 
+void PubSearchHandler_c::SetJoinQueryOptions ( int iQuery, const CSphQuery & tJoinQueryOptions )
+{
+	m_pImpl->SetJoinQueryOptions ( iQuery, tJoinQueryOptions );
+}
+
 void PubSearchHandler_c::SetProfile ( QueryProfile_c * pProfile )
 {
 	m_pImpl->SetProfile ( pProfile );
@@ -5338,6 +5362,7 @@ SearchHandler_c::SearchHandler_c ( int iQueries, std::unique_ptr<QueryParser_i> 
 	: m_dTables ( iQueries )
 {
 	m_dQueries.Resize ( iQueries );
+	m_dJoinQueryOptions.Resize ( iQueries );
 	m_dAggrResults.Resize ( iQueries );
 	m_dFailuresSet.Resize ( iQueries );
 	m_dAgentTimes.Resize ( iQueries );
@@ -5351,6 +5376,7 @@ SearchHandler_c::SearchHandler_c ( int iQueries, std::unique_ptr<QueryParser_i> 
 
 	// initial slices (when nothing explicitly asked)
 	m_dNQueries = m_dQueries;
+	m_dNJoinQueryOptions = m_dJoinQueryOptions;
 	m_dNAggrResults = m_dAggrResults;
 	m_dNResults = m_dResults;
 	m_dNFailuresSet = m_dFailuresSet;
@@ -5634,7 +5660,8 @@ int SearchHandler_c::CreateMultiQueryOrFacetSorters ( const CSphIndex * pIndex, 
 		return 0;
 	}
 
-	if ( m_bFacetQueue && !CreateJoinMultiSorter ( pIndex, dJoinedIndexes[0], tQueueSettings, m_dNQueries, dSorters, dErrors[0] ) )
+	int iBatchSize = m_dNQueries[0].m_iJoinBatchSize==-1 ? GetJoinBatchSize() : m_dNQueries[0].m_iJoinBatchSize;
+	if ( m_bFacetQueue && !CreateJoinMultiSorter ( pIndex, dJoinedIndexes[0], tQueueSettings, m_dNQueries, m_dNJoinQueryOptions, dSorters, iBatchSize, dErrors[0] ) )
 	{
 		dSorters.Apply ( [] ( ISphMatchSorter *& pSorter ) { SafeDelete (pSorter); } );
 		return 0;
@@ -5660,7 +5687,8 @@ int SearchHandler_c::CreateSingleSorters ( const CSphIndex * pIndex, CSphVector<
 			continue;
 
 		// possibly create a wrapper (if we have JOIN)
-		pSorter = CreateJoinSorter ( pIndex, dJoinedIndexes[iQuery], tQueueSettings, tQuery, pSorter, tQueueRes.m_bJoinedGroupSort, dErrors[iQuery] );
+		int iBatchSize = tQuery.m_iJoinBatchSize==-1 ? GetJoinBatchSize() : tQuery.m_iJoinBatchSize;
+		pSorter = CreateJoinSorter ( pIndex, dJoinedIndexes[iQuery], tQueueSettings, tQuery, pSorter, m_dNJoinQueryOptions[iQuery], tQueueRes.m_bJoinedGroupSort, iBatchSize, dErrors[iQuery] );
 		if ( !pSorter )
 			continue;
 
@@ -6631,11 +6659,64 @@ static uint64_t GetIndexMass ( const CSphString & sName )
 	return ServedIndex_c::GetIndexMass ( GetServed ( sName ) );
 }
 
+inline static bool ClusterFlavour () noexcept
+{
+	return !g_sClusterUser.IsEmpty () && session::GetClientSession ()->m_sUser==g_sClusterUser;
+}
+
+
+inline static CSphString ApplyClusterName ( const CSphString& sIndex ) noexcept
+{
+	if ( !ClusterFlavour () )
+		return sIndex;
+
+	auto dParts = sphSplit ( sIndex.cstr (), ":" );
+	if ( dParts.GetLength ()>1 )
+		return dParts[1];
+	return sIndex;
+}
+
+// process system.table and remove 1-st subkey
+inline static void FixupSystemTableName ( SqlStmt_t * pStmt ) noexcept
+{
+	auto sName = ApplyClusterName ( pStmt->m_sIndex );
+	bool bNameFromQuery = false;
+	if ( sName.EqN ( "system" ) )
+	{
+		if ( !pStmt->m_dStringSubkeys.IsEmpty () )
+		{
+			sName = SphSprintf ( "system%s", pStmt->m_dStringSubkeys[0].cstr () );
+			pStmt->m_dStringSubkeys.Remove ( 0 );
+			pStmt->m_sIndex = sName;
+		}
+		else if ( !pStmt->m_tQuery.m_dStringSubkeys.IsEmpty () )
+		{
+			sName = SphSprintf ( "system%s", pStmt->m_tQuery.m_dStringSubkeys[0].cstr () );
+			pStmt->m_tQuery.m_dStringSubkeys.Remove ( 0 );
+			pStmt->m_sIndex = sName;
+			bNameFromQuery = true;
+		}
+	}
+
+	if ( ApplyClusterName ( pStmt->m_tQuery.m_sIndexes ).EqN ( "system" ) && bNameFromQuery )
+		pStmt->m_tQuery.m_sIndexes = sName;
+}
+
+// process system.table
+inline static void FixupSystemTableW ( StrVec_t & dNames, CSphQuery & tQuery ) noexcept
+{
+	if ( dNames.GetLength ()==1 && dNames.First ().EqN ( "system" ) && !tQuery.m_dStringSubkeys.IsEmpty () )
+	{
+		dNames[0] = SphSprintf ( "system%s", tQuery.m_dStringSubkeys[0].cstr () );
+		tQuery.m_dStringSubkeys.Remove(0);
+	}
+}
+
 // declared to be used in ParseSysVar
 void HandleMysqlShowThreads ( RowBuffer_i & tOut, const SqlStmt_t * pStmt );
 void HandleMysqlShowTables ( RowBuffer_i & tOut, const SqlStmt_t * pStmt );
 void HandleShowSessions ( RowBuffer_i& tOut, const SqlStmt_t* pStmt );
-void HandleMysqlDescribe ( RowBuffer_i & tOut, const SqlStmt_t * pStmt );
+void HandleMysqlDescribe ( RowBuffer_i & tOut, SqlStmt_t * pStmt );
 void HandleSelectIndexStatus ( RowBuffer_i & tOut, const SqlStmt_t * pStmt );
 void HandleSelectFiles ( RowBuffer_i & tOut, const SqlStmt_t * pStmt );
 
@@ -7032,7 +7113,7 @@ static CSphVector<LocalIndex_t> CollectAllLocalIndexes ( const CSphVector<CSphNa
 // returns true = real indexes, false = sysvar (i.e. only one 'index' named from @@)
 bool SearchHandler_c::BuildIndexList ( int & iDivideLimits, VecRefPtrsAgentConn_t & dRemotes, CSphVector<DistrServedByAgent_t> & dDistrServedByAgent )
 {
-	const CSphQuery & tQuery = m_dNQueries.First ();
+	CSphQuery & tQuery = m_dNQueries.First ();
 
 	if ( tQuery.m_sIndexes=="*" )
 	{
@@ -7050,7 +7131,10 @@ bool SearchHandler_c::BuildIndexList ( int & iDivideLimits, VecRefPtrsAgentConn_
 	if ( bSysVar )
 		dIdxNames.Add ( tQuery.m_sIndexes );
 	else
+	{
 		ParseIndexList ( tQuery.m_sIndexes, dIdxNames );
+		FixupSystemTableW ( dIdxNames, tQuery );
+	}
 
 	const int iQueries = m_dNQueries.GetLength ();
 	CSphVector<LocalIndex_t> dLocals;
@@ -7209,6 +7293,7 @@ void SearchHandler_c::RunSubset ( int iStart, int iEnd )
 {
 	int iQueries = iEnd - iStart;
 	m_dNQueries = m_dQueries.Slice ( iStart, iQueries );
+	m_dNJoinQueryOptions = m_dJoinQueryOptions.Slice ( iStart, iQueries );
 	m_dNAggrResults = m_dAggrResults.Slice ( iStart, iQueries );
 	m_dNResults = m_dResults.Slice ( iStart, iQueries );
 	m_dNFailuresSet = m_dFailuresSet.Slice ( iStart, iQueries );
@@ -9476,6 +9561,7 @@ void BuildMeta ( VectorLike & dStatus, const CSphQueryResultMeta & tMeta )
 	dStatus.MatchTupletf ( "total", "%d", tMeta.m_iMatches );
 	dStatus.MatchTupletf ( "total_found", "%l", tMeta.m_iTotalMatches );
 	dStatus.MatchTupletf ( "total_relation", "%s", tMeta.m_bTotalMatchesApprox ? "gte" : "eq" );
+
 	dStatus.MatchTupletf ( "time", "%.3F", tMeta.m_iQueryTime );
 
 	if ( tMeta.m_iMultiplier>1 )
@@ -12655,25 +12741,12 @@ void DescribeDistributedSchema ( VectorLike& dOut, const cDistributedIndexRefPtr
 	}
 }
 
-inline static bool ClusterFlavour () noexcept
-{
-	return !g_sClusterUser.IsEmpty () && session::GetClientSession ()->m_sUser==g_sClusterUser;
-}
-
-
-void HandleMysqlDescribe ( RowBuffer_i & tOut, const SqlStmt_t * pStmt )
+void HandleMysqlDescribe ( RowBuffer_i & tOut, SqlStmt_t * pStmt )
 {
 	auto & tStmt = *pStmt;
 	VectorLike dOut ( tStmt.m_sStringParam, 0 );
+
 	auto sName = tStmt.m_sIndex;
-
-	if ( ClusterFlavour() )
-	{
-		auto dParts = sphSplit( tStmt.m_sIndex.cstr(), ":");
-		if ( dParts.GetLength()>1 )
-			sName = dParts[1];
-	}
-
 	auto pServed = GetServed ( sName );
 	if ( pServed )
 	{
@@ -12777,11 +12850,18 @@ void HandleMysqlShowTables ( RowBuffer_i & tOut, const SqlStmt_t * pStmt )
 {
 	auto dIndexes = GetAllServedIndexes();
 	bool bWithClusters = ClusterFlavour();
+	auto fnFilter = [bSystem = pStmt->m_iIntParam==1] ( const NamedIndexType_t& tIdx )
+	{
+		bool bIsSystem = tIdx.m_sName.SubString ( 0, 7 ).EqN ("system.");
+		return bSystem == bIsSystem;
+	};
 
 	// output the results
 	VectorLike dTable ( pStmt->m_sStringParam, { "Table", "Type" } );
 	for ( auto& dPair : dIndexes )
 	{
+		if ( !fnFilter ( dPair ) )
+			continue;
 		if ( bWithClusters && !dPair.m_sCluster.IsEmpty ())
 			dTable.MatchTuplet ( SphSprintf ("%s:%s", dPair.m_sCluster.cstr(), dPair.m_sName.cstr()).cstr(), szIndexType ( dPair.m_eType ) );
 		else
@@ -14505,12 +14585,18 @@ void HandleMysqlMultiStmt ( const CSphVector<SqlStmt_t> & dStmt, CSphQueryResult
 	QueryProfile_c tProfile;
 
 	iSelect = 0;
-	for ( auto& tStmt: dStmt )
+	for ( auto & tStmt : dStmt )
+	{
 		switch ( tStmt.m_eStmt )
 		{
 		case STMT_SELECT:
 			{
+				// no log for search queries from the buddy in the info verbosity
+				if ( session::IsQueryLogDisabled() )
+					tStmt.m_tQuery.m_uDebugFlags |= QUERY_DEBUG_NO_LOG;
+
 				tHandler.SetQuery ( iSelect, tStmt.m_tQuery, std::move ( tStmt.m_pTableFunc ) );
+				tHandler.SetJoinQueryOptions ( iSelect, tStmt.m_tJoinQueryOptions );
 				++iSelect;
 				break;
 			}
@@ -14524,6 +14610,7 @@ void HandleMysqlMultiStmt ( const CSphVector<SqlStmt_t> & dStmt, CSphQueryResult
 			}
 		default: break;
 		}
+	}
 
 	// use first meta for faceted search
 	bool bUseFirstMeta = ( tHandler.m_dQueries.GetLength()>1 && !tHandler.m_dQueries[0].m_bFacet && tHandler.m_dQueries[1].m_bFacet );
@@ -17193,6 +17280,7 @@ bool ClientSession_c::Execute ( Str_t sQuery, RowBuffer_i & tOut )
 		m_eLastStmt = eStmt;
 
 	SqlStmt_t * pStmt = dStmt.Begin();
+	FixupSystemTableName ( pStmt );
 	assert ( !bParsedOK || pStmt );
 
 	myinfo::SetCommand ( g_dSqlStmts[eStmt] );
@@ -17251,6 +17339,7 @@ bool ClientSession_c::Execute ( Str_t sQuery, RowBuffer_i & tOut )
 			if ( session::IsQueryLogDisabled() )
 				dStmt.Begin()->m_tQuery.m_uDebugFlags |= QUERY_DEBUG_NO_LOG;
 			tHandler.SetQuery ( 0, dStmt.Begin()->m_tQuery, std::move ( dStmt.Begin()->m_pTableFunc ) );
+			tHandler.SetJoinQueryOptions ( 0, dStmt.Begin()->m_tJoinQueryOptions );
 			tHandler.m_pStmt = pStmt;
 
 			if ( tSess.IsProfile() )
@@ -20363,7 +20452,8 @@ void ConfigureSearchd ( const CSphConfig & hConf, bool bOptPIDFile, bool bTestMo
 	SetAccurateAggregationDefault ( hSearchd.GetInt ( "accurate_aggregation", GetAccurateAggregationDefault() )!=0 );
 	SetDistinctThreshDefault ( hSearchd.GetInt ( "distinct_precision_threshold", GetDistinctThreshDefault() ) );
 
-	ConfigureMerge ( hSearchd );
+	ConfigureMerge(hSearchd);
+	SetJoinBatchSize ( hSearchd.GetInt ( "join_batch_size", GetJoinBatchSize() ) );
 	AuthConfigure ( hSearchd );
 }
 

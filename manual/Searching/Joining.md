@@ -507,6 +507,118 @@ POST /search
 
 <!-- end -->
 
+## Query options and match weights
+
+Separate options can be specified for queries in a join: for the left table and the right table. The syntax is `OPTION(<table_name>)` for SQL queries and one or more subobjects under `"options"` for JSON queries.
+
+
+<!-- example join_options -->
+
+Here's an example of how to specify different field weights for a full-text query on the right table. To retrieve match weights via SQL, use the `<table_name>.weight()` expression.
+In JSON queries, this weight is represented as `<table_name>._score`.
+
+<!-- request SQL -->
+```sql
+SELECT product, customers.email, customers.name, customers.address, customers.weight()
+FROM orders
+INNER JOIN customers
+ON customers.id = orders.customer_id
+WHERE MATCH('maple', customers)
+OPTION(customers) field_weights=(address=1500);
+```
+
+<!-- request JSON -->
+```json
+POST /search
+{
+  "table": "orders",
+  "options":
+  {
+    "customers":
+    {
+      "field_weights":
+      {
+          "address": 15000
+      }
+    }
+  },
+  "join": [
+    {
+      "type": "inner",
+      "table": "customers",
+      "query": {
+        "query_string": "maple"
+      },
+      "on": [
+        {
+          "left": {
+            "table": "orders",
+            "field": "customer_id"
+          },
+          "operator": "eq",
+          "right": {
+            "table": "customers",
+            "field": "id"
+          }
+        }
+      ]
+    }
+  ],
+  "_source": ["product", "customers.email", "customers.name", "customers.address"]
+}
+```
+
+<!-- response SQL -->
+
+```sql
++---------+-------------------+----------------+-------------------+--------------------+
+| product | customers.email   | customers.name | customers.address | customers.weight() |
++---------+-------------------+----------------+-------------------+--------------------+
+| Laptop  | alice@example.com | Alice Johnson  | 123 Maple St      |            1500680 |
+| Tablet  | alice@example.com | Alice Johnson  | 123 Maple St      |            1500680 |
++---------+-------------------+----------------+-------------------+--------------------+
+2 rows in set (0.00 sec)
+```
+
+<!-- response JSON -->
+
+```json
+{
+  "took": 0,
+  "timed_out": false,
+  "hits": {
+    "total": 2,
+    "total_relation": "eq",
+    "hits": [
+      {
+        "_id": 1,
+        "_score": 1,
+        "customers._score": 15000680,
+        "_source": {
+          "product": "Laptop",
+          "customers.email": "alice@example.com",
+          "customers.name": "Alice Johnson",
+          "customers.address": "123 Maple St"
+        }
+      },
+      {
+        "_id": 3,
+        "_score": 1,
+        "customers._score": 15000680,
+        "_source": {
+          "product": "Tablet",
+          "customers.email": "alice@example.com",
+          "customers.name": "Alice Johnson",
+          "customers.address": "123 Maple St"
+        }
+      }
+    ]
+  }
+}
+```
+<!-- end -->
+
+
 ## Caveats and Best Practices
 
 When using JOINs in Manticore Search, keep the following points in mind:

@@ -2509,7 +2509,7 @@ int sphinx_update_attributes_mva	( sphinx_client * client, const char * index, c
 	}
 
 	// alloc buffer
-	req_len = (int)( 38 + safestrlen(index) + safestrlen(attr) + num_values*4 );
+	req_len = (int)( 32 + safestrlen(index) + safestrlen(attr) + num_values*4 );
 
 	buf = malloc ( 12 + AUTH_HEADER_SIZE + req_len ); // request body length plus 12 header bytes
 	if ( !buf )

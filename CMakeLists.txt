@@ -242,6 +242,7 @@ target_link_libraries ( lextra INTERFACE xxHash::xxhash )
 with_get ( jieba "Jieba" "Chinese text segmentation tool" )
 
 # Support for OpenSSL
+include ( GetSSL )
 with_menu_comp ( OpenSSL SSL "OpenSSL" "for encrypted networking" )
 win_install_c ( OpenSSL SSL daemon )
 

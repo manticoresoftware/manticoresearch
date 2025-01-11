@@ -125,6 +125,8 @@ job_mirror:
 
 simple_build:
   extends: [ .build ]
+  before_script:
+    - export CMAKE_TOOLCHAIN_FILE=$(pwd)/dist/build_dockers/cross/linux.cmake
   variables:
     CTEST_CMAKE_GENERATOR: "Unix Makefiles" # as Ninja fails with coverage
     CTEST_CONFIGURATION_TYPE: "Debug"
@@ -144,6 +146,8 @@ simple_tests:
 
 release_build:
   extends: [ .build ]
+  before_script:
+    - export CMAKE_TOOLCHAIN_FILE=$(pwd)/dist/build_dockers/cross/linux.cmake
 
 release_tests:
   extends: [ .tests ]
@@ -215,6 +219,8 @@ build_arm:
   extends: [ .build ]
   variables:
     arch: aarch64
+  before_script:
+    - export CMAKE_TOOLCHAIN_FILE=$(pwd)/dist/build_dockers/cross/linux.cmake
   script:
     - mkdir build && cd build
     - ctest -VV -S ../misc/ctest/justbuild.cmake -DCTEST_SOURCE_DIRECTORY=.. --no-compress-output
@@ -228,6 +234,8 @@ build_bsd:
   variables:
     DISTR: freebsd13
     boost: none
+  before_script:
+    - export CMAKE_TOOLCHAIN_FILE=$(pwd)/dist/build_dockers/cross/freebsd.cmake
   script:
     - mkdir build && cd build
     - ctest -VV -S ../misc/ctest/justbuild.cmake -DCTEST_SOURCE_DIRECTORY=.. --no-compress-output

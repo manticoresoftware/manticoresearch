@@ -52,6 +52,7 @@ variables:
   variables:
     boost: boost_rhel_feb17
   before_script:
+    - export CMAKE_TOOLCHAIN_FILE=$(pwd)/dist/build_dockers/cross/linux.cmake
     - ln -s $(pwd) /builds_manticoresearch_dev_usr_src_debug_manticore_component_src_0
     - cd /builds_manticoresearch_dev_usr_src_debug_manticore_component_src_0
   artifacts:
@@ -103,6 +104,8 @@ variables:
 
 macos:
   extends: [ .build ]
+  before_script:
+    - export CMAKE_TOOLCHAIN_FILE=$(pwd)/dist/build_dockers/cross/osx.cmake
   variables:
     DISTR: macos
 
@@ -199,6 +202,8 @@ rhel9_arm:
 
 bionic:
   extends: [ .build ]
+  before_script:
+    - export CMAKE_TOOLCHAIN_FILE=$(pwd)/dist/build_dockers/cross/linux.cmake
   variables:
     DISTR: bionic
 
@@ -218,6 +223,8 @@ bionic_arm:
 
 focal:
   extends: [ .build ]
+  before_script:
+    - export CMAKE_TOOLCHAIN_FILE=$(pwd)/dist/build_dockers/cross/linux.cmake
   variables:
     DISTR: focal
 
@@ -237,6 +244,8 @@ focal_arm:
 
 buster:
   extends: [ .build ]
+  before_script:
+    - export CMAKE_TOOLCHAIN_FILE=$(pwd)/dist/build_dockers/cross/linux.cmake
   variables:
     DISTR: buster
 
@@ -256,6 +265,8 @@ buster_arm:
 
 bullseye:
   extends: [ .build ]
+  before_script:
+    - export CMAKE_TOOLCHAIN_FILE=$(pwd)/dist/build_dockers/cross/linux.cmake
   variables:
     DISTR: bullseye
 
@@ -275,6 +286,8 @@ bullseye_arm:
 
 jammy:
   extends: [ .build ]
+  before_script:
+    - export CMAKE_TOOLCHAIN_FILE=$(pwd)/dist/build_dockers/cross/linux.cmake
   variables:
     DISTR: jammy
 
@@ -294,6 +307,8 @@ jammy_arm:
 
 bookworm:
   extends: [ .build ]
+  before_script:
+    - export CMAKE_TOOLCHAIN_FILE=$(pwd)/dist/build_dockers/cross/linux.cmake
   variables:
     DISTR: bookworm
 

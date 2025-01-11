@@ -24,7 +24,7 @@ variables:
   needs: [ ]
   tags:
     - docker
-  image: manticoresearch/external_toolchain:clang16_cmake3263
+  image: registry.gitlab.com/manticoresearch/dev/external_toolchain:vcpkg331
   variables:
     CACHEB: "../cache"
     arch: x86_64

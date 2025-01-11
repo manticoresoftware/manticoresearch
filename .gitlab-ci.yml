@@ -49,7 +49,7 @@ job_mirror:
   needs: [ ]
   tags:
     - docker-free
-  image: manticoresearch/external_toolchain:clang16_cmake3263
+  image: registry.gitlab.com/manticoresearch/dev/external_toolchain:vcpkg331
   variables:
     CACHEB: "../cache"
     DIAGNOSTIC: 1 # let's set it by default forever

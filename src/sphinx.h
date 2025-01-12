@@ -564,6 +564,7 @@ struct CSphQuery
 	CSphString		m_sJoinIdx;						///< index to perform join on
 	CSphString		m_sJoinQuery;					///< fulltext query for JOIN
 	CSphVector<OnFilter_t> m_dOnFilters;			///< JOIN ON condition filters
+	int				m_iJoinBatchSize = -1;			///< join batch size (-1==default, 0==disable batching)
 
 	CSphString		m_sGroupBy;			///< group-by attribute name(s)
 	CSphString		m_sFacetBy;			///< facet-by attribute name(s)

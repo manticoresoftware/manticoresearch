@@ -84,6 +84,6 @@ void CSphSchemaHelper::CopyPtrsSpecial ( CSphMatch & tDst, const CSphMatch & tSr
 		const SmallAttrLocator_t tLoc { i*ROWITEM_BITS, ROWITEMPTR_BITS };
 		const auto* pData = (const BYTE*) sphGetRowAttr ( pSrc, tLoc );
 		if ( pData )
-			sphSetRowAttr ( tDst.m_pDynamic, tLoc, (SphAttr_t) sph::CopyPackedAttr ( pData ) );
+			sphSetRowAttr ( tDst.m_pDynamic, tLoc, (SphAttr_t) sphCopyPackedAttr ( pData ) );
 	}
 }

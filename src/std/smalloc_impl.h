@@ -28,22 +28,22 @@ inline void sph::CustomStorage_T<T>::Deallocate ( T* pData, int64_t iLimit )
 #else
 
 template<typename T>
-inline void sph::CustomStorage_T<T>::Deallocate ( T * pData )
+FORCE_INLINE void sph::CustomStorage_T<T>::Deallocate ( T * pData )
 {
 	sphDeallocateSmall ( (BYTE*)pData );
 }
 
-inline BYTE* sphAllocateSmall ( int iBytes )
+FORCE_INLINE BYTE* sphAllocateSmall ( int iBytes )
 {
 	return new BYTE[iBytes];
 };
 
-inline void sphDeallocateSmall ( const BYTE* pBlob, int )
+FORCE_INLINE void sphDeallocateSmall ( const BYTE* pBlob, int )
 {
 	delete[] pBlob;
 };
 
-inline void sphDeallocateSmall ( const BYTE* pBlob )
+FORCE_INLINE void sphDeallocateSmall ( const BYTE* pBlob )
 {
 	delete[] pBlob;
 };

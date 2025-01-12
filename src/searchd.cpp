@@ -5659,7 +5659,8 @@ int SearchHandler_c::CreateMultiQueryOrFacetSorters ( const CSphIndex * pIndex, 
 		return 0;
 	}
 
-	if ( m_bFacetQueue && !CreateJoinMultiSorter ( pIndex, dJoinedIndexes[0], tQueueSettings, m_dNQueries, m_dNJoinQueryOptions, dSorters, dErrors[0] ) )
+	int iBatchSize = m_dNQueries[0].m_iJoinBatchSize==-1 ? GetJoinBatchSize() : m_dNQueries[0].m_iJoinBatchSize;
+	if ( m_bFacetQueue && !CreateJoinMultiSorter ( pIndex, dJoinedIndexes[0], tQueueSettings, m_dNQueries, m_dNJoinQueryOptions, dSorters, iBatchSize, dErrors[0] ) )
 	{
 		dSorters.Apply ( [] ( ISphMatchSorter *& pSorter ) { SafeDelete (pSorter); } );
 		return 0;
@@ -5685,7 +5686,8 @@ int SearchHandler_c::CreateSingleSorters ( const CSphIndex * pIndex, CSphVector<
 			continue;
 
 		// possibly create a wrapper (if we have JOIN)
-		pSorter = CreateJoinSorter ( pIndex, dJoinedIndexes[iQuery], tQueueSettings, tQuery, pSorter, m_dNJoinQueryOptions[iQuery], tQueueRes.m_bJoinedGroupSort, dErrors[iQuery] );
+		int iBatchSize = tQuery.m_iJoinBatchSize==-1 ? GetJoinBatchSize() : tQuery.m_iJoinBatchSize;
+		pSorter = CreateJoinSorter ( pIndex, dJoinedIndexes[iQuery], tQueueSettings, tQuery, pSorter, m_dNJoinQueryOptions[iQuery], tQueueRes.m_bJoinedGroupSort, iBatchSize, dErrors[iQuery] );
 		if ( !pSorter )
 			continue;
 
@@ -9558,6 +9560,7 @@ void BuildMeta ( VectorLike & dStatus, const CSphQueryResultMeta & tMeta )
 	dStatus.MatchTupletf ( "total", "%d", tMeta.m_iMatches );
 	dStatus.MatchTupletf ( "total_found", "%l", tMeta.m_iTotalMatches );
 	dStatus.MatchTupletf ( "total_relation", "%s", tMeta.m_bTotalMatchesApprox ? "gte" : "eq" );
+
 	dStatus.MatchTupletf ( "time", "%.3F", tMeta.m_iQueryTime );
 
 	if ( tMeta.m_iMultiplier>1 )
@@ -14581,11 +14584,16 @@ void HandleMysqlMultiStmt ( const CSphVector<SqlStmt_t> & dStmt, CSphQueryResult
 	QueryProfile_c tProfile;
 
 	iSelect = 0;
-	for ( auto& tStmt: dStmt )
+	for ( auto & tStmt : dStmt )
+	{
 		switch ( tStmt.m_eStmt )
 		{
 		case STMT_SELECT:
 			{
+				// no log for search queries from the buddy in the info verbosity
+				if ( session::IsQueryLogDisabled() )
+					tStmt.m_tQuery.m_uDebugFlags |= QUERY_DEBUG_NO_LOG;
+
 				tHandler.SetQuery ( iSelect, tStmt.m_tQuery, std::move ( tStmt.m_pTableFunc ) );
 				tHandler.SetJoinQueryOptions ( iSelect, tStmt.m_tJoinQueryOptions );
 				++iSelect;
@@ -14601,6 +14609,7 @@ void HandleMysqlMultiStmt ( const CSphVector<SqlStmt_t> & dStmt, CSphQueryResult
 			}
 		default: break;
 		}
+	}
 
 	// use first meta for faceted search
 	bool bUseFirstMeta = ( tHandler.m_dQueries.GetLength()>1 && !tHandler.m_dQueries[0].m_bFacet && tHandler.m_dQueries[1].m_bFacet );
@@ -20443,6 +20452,7 @@ void ConfigureSearchd ( const CSphConfig & hConf, bool bOptPIDFile, bool bTestMo
 	SetDistinctThreshDefault ( hSearchd.GetInt ( "distinct_precision_threshold", GetDistinctThreshDefault() ) );
 
 	ConfigureMerge(hSearchd);
+	SetJoinBatchSize ( hSearchd.GetInt ( "join_batch_size", GetJoinBatchSize() ) );
 }
 
 static void DirMustWritable ( const CSphString & sDataDir )

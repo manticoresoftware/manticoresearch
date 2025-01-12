@@ -648,7 +648,6 @@ select_expr:
 	| TOK_COUNT '(' '*' ')'				{ if ( !pParser->AddItem ( "count(*)", &$1, &$4 ) ) YYERROR; }
 	| TOK_GROUPBY '(' ')'				{ if ( !pParser->AddItem ( "groupby()", &$1, &$3 ) ) YYERROR; }
 	| TOK_COUNT '(' TOK_DISTINCT distinct_ident ')' { if ( !pParser->AddDistinct ( &$4, &$1, &$5 ) ) YYERROR; }
-	| ident TOK_SUBKEY '(' ')'			{ pParser->AddJoinedWeight ( $1, $2 ); }
 	;
 
 opt_where_clause:
@@ -1411,6 +1410,7 @@ expr:
 	| streq
 	| json_field TOK_IS TOK_NULL			{ TRACK_BOUNDS ( $$, $1, $3 ); }
 	| json_field TOK_IS TOK_NOT TOK_NULL	{ TRACK_BOUNDS ( $$, $1, $4 ); }
+	| ident TOK_SUBKEY '(' ')'				{ TRACK_BOUNDS ( $$, $1, $4 ); }
 	;
 
 accepted_funcs:

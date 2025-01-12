@@ -599,7 +599,6 @@ private:
 	CSphVector<uint64_t>			m_dRightMatchFilterHashes;
 	IntVec_t						m_dIntFilters;
 	IntVec_t						m_dStrFilters;
-	bool							m_bBatchSizeWarn = false;
 
 	struct BatchedMatches_t
 	{
@@ -642,10 +641,10 @@ private:
 	void		AddBatchedFilterItemsToJoinSelectList();
 
 	void		SetupJoinSelectList();
+	void		IncreaseJoinedMaxMatches ( int iTotalCount );
 
 	void		RepackJsonFieldAsStr ( const CSphMatch & tSrcMatch, const CSphAttrLocator & tLocSrc, const CSphAttrLocator & tLocDst );
 	void		ProduceCacheSizeWarning ( CSphString & sWarning );
-	void		ProduceBatchSizeWarning ( CSphString & sWarning );
 	void		PopulateStoredFields();
 
 	FORCE_INLINE void AddToBatch ( const CSphMatch & tEntry, uint64_t uFilterHash );
@@ -653,8 +652,10 @@ private:
 	void		SetupJoinFiltersBatch();
 	FORCE_INLINE bool CheckMatchFiltersBatched ( const BatchedMatches_t & tLeft, const CSphMatch & tRight, uint64_t & uRightHash, const ISphSchema * pRightSchema );
 	void		ClearBatch();
+	template <typename MATCHES> void CleanupRightMatches ( MATCHES & dMatches );
 	template <typename PUSH> void PushBatch ( PUSH && fnPush );
-	bool		RunJoinedQuery();
+	bool		RunJoinedQuery ( int & iTotalCount );
+	bool		RunJoinedQueryAndAdjustMaxMatches();
 
 	template <typename PUSH, typename MATCHES>
 	FORCE_INLINE bool AddToCacheAndPush ( const CSphMatch & tEntry, uint64_t uJoinOnFilterHash, PUSH && fnPush, MATCHES & dMatches, const BYTE * pBlobPool, columnar::Columnar_i *	pColumnar, bool bAddToCache );
@@ -802,16 +803,10 @@ bool JoinSorter_c::SetupJoinQuery ( int iDynamicSize, CSphString & sError )
 	m_pJoinQueryParser = std::unique_ptr<QueryParser_i>( m_tQuery.m_pQueryParser->Clone() );
 
 	m_tJoinQuery = m_tJoinQuerySettings;
-
-	int64_t iMaxMatches = (int64_t)m_tJoinQuery.m_iMaxMatches*Max ( m_iBatchSize, 1 );
-	const int64_t MAX_MATCHES_LIMIT = 200000;
-	iMaxMatches = Min ( iMaxMatches, MAX_MATCHES_LIMIT );
-
-	m_tJoinQuery.m_iMaxMatches = (int)iMaxMatches;
 	m_tJoinQuery.m_pQueryParser = m_pJoinQueryParser.get();
-	m_tJoinQuery.m_eQueryType = m_tQuery.m_eQueryType;
-	m_tJoinQuery.m_iLimit = m_tJoinQuery.m_iMaxMatches;
-	m_tJoinQuery.m_iCutoff = 0;
+	m_tJoinQuery.m_eQueryType	= m_tQuery.m_eQueryType;
+	m_tJoinQuery.m_iLimit		= m_tJoinQuery.m_iMaxMatches;
+	m_tJoinQuery.m_iCutoff		= 0;
 	m_tJoinQuery.m_sQuery = m_tJoinQuery.m_sRawQuery = m_tQuery.m_sJoinQuery;
 
 	m_tMatch.Reset ( iDynamicSize );
@@ -835,8 +830,9 @@ bool JoinSorter_c::SetupJoinSorter ( CSphString & sError )
 {
 	SphQueueSettings_t tQueueSettings ( m_pJoinedIndex->GetMatchSchema() );
 	tQueueSettings.m_bComputeItems = true;
-	SphQueueRes_t tRes;
+	tQueueSettings.m_iMaxMatches = m_tJoinQuery.m_iMaxMatches;
 
+	SphQueueRes_t tRes;
 	m_pRightSorter = std::unique_ptr<ISphMatchSorter> ( sphCreateQueue ( tQueueSettings, m_tJoinQuery, sError, tRes ) );
 	if ( !m_pRightSorter )
 		return false;
@@ -1126,7 +1122,7 @@ void JoinSorter_c::SetupJoinFiltersBatch()
 }
 
 
-bool JoinSorter_c::RunJoinedQuery()
+bool JoinSorter_c::RunJoinedQuery ( int & iTotalCount )
 {
 	CSphQueryResultMeta tMeta;
 	CSphQueryResult tQueryResult;
@@ -1152,10 +1148,48 @@ bool JoinSorter_c::RunJoinedQuery()
 	if ( m_bNeedToSetupRemap )
 		SetupJoinAttrRemap();
 
+	iTotalCount = pSorter->GetTotalCount();
+
 	if ( pSorter->GetLength() )
 	{
 		int iCopied = pSorter->Flatten ( m_dMatches.AddN ( pSorter->GetLength() ) );
 		m_dMatches.Resize(iCopied);
+	}
+
+	return true;
+}
+
+template <typename MATCHES>
+void JoinSorter_c::CleanupRightMatches ( MATCHES & dMatches )
+{
+	const ISphSchema * pTransformedRightSchema = m_pRightSorter->GetSchema();
+	for ( auto & i : dMatches )
+	{
+		pTransformedRightSchema->FreeDataPtrs(i);
+		i.ResetDynamic();
+	}
+}
+
+
+bool JoinSorter_c::RunJoinedQueryAndAdjustMaxMatches()
+{
+	while ( true )
+	{
+		int iTotalCount = 0;
+		if ( !RunJoinedQuery(iTotalCount) )
+			return false;
+
+		bool bNeedToIncrease = m_dMatches.GetLength()==m_tJoinQuery.m_iMaxMatches && iTotalCount>m_tJoinQuery.m_iMaxMatches;
+		if ( !bNeedToIncrease )
+			break;
+
+		CleanupRightMatches(m_dMatches);
+		IncreaseJoinedMaxMatches(iTotalCount);
+		if ( !SetupJoinSorter(m_sErrorMessage) )
+		{
+			m_bErrorFlag = true;
+			return false;
+		}
 	}
 
 	return true;
@@ -1189,14 +1223,7 @@ bool JoinSorter_c::AddToCacheAndPush ( const CSphMatch & tEntry, uint64_t uJoinO
 			i.m_pDynamic = nullptr;
 	}
 	else
-	{
-		const ISphSchema * pTransformedRightSchema = m_pRightSorter->GetSchema();
-		for ( auto & i : dMatches )
-		{
-			pTransformedRightSchema->FreeDataPtrs(i);
-			i.ResetDynamic();
-		}
-	}
+		CleanupRightMatches(dMatches);
 
 	return bAnythingPushed;
 }
@@ -1310,11 +1337,8 @@ bool JoinSorter_c::RunBatch ( PUSH && fnPush )
 		return true;
 
 	SetupJoinFiltersBatch();
-	if ( !RunJoinedQuery() )
+	if ( !RunJoinedQueryAndAdjustMaxMatches() )
 		return false;
-
-	if ( m_dMatches.GetLength()==m_tJoinQuery.m_iMaxMatches )
-		m_bBatchSizeWarn = true;
 
 	PushBatch(fnPush);
 	ClearBatch();
@@ -1344,7 +1368,7 @@ bool JoinSorter_c::Push_T ( const CSphMatch & tEntry, PUSH && fnPush, bool bGrou
 		return RunBatch(fnPush);
 	}
 
-	if ( !RunJoinedQuery() )
+	if ( !RunJoinedQueryAndAdjustMaxMatches() )
 		return false;
 
 	return AddToCacheAndPush ( tEntry, uJoinOnFilterHash, fnPush, m_dMatches, m_pBlobPool, m_pColumnar, true );
@@ -1369,13 +1393,6 @@ void JoinSorter_c::ProduceCacheSizeWarning ( CSphString & sWarning )
 {
 	if ( !m_bCacheOk )
 		sWarning.SetSprintf ( "Join cache overflow detected; increase join_cache_size to improve performance" );
-}
-
-
-void JoinSorter_c::ProduceBatchSizeWarning ( CSphString & sWarning )
-{
-	if ( m_bBatchSizeWarn )
-		sWarning.SetSprintf ( "Consider reducing join_batch_size to improve join accuracy" );
 }
 
 
@@ -1412,7 +1429,6 @@ bool JoinSorter_c::FinalizeJoin ( CSphString & sError, CSphString & sWarning )
 	{
 		PopulateStoredFields();
 		ProduceCacheSizeWarning(sWarning);
-		ProduceBatchSizeWarning(sWarning);
 		if ( m_bErrorFlag )
 		{
 			sError = m_sErrorMessage;
@@ -1445,7 +1461,6 @@ bool JoinSorter_c::FinalizeJoin ( CSphString & sError, CSphString & sWarning )
 
 	PopulateStoredFields();
 	ProduceCacheSizeWarning(sWarning);
-	ProduceBatchSizeWarning(sWarning);
 
 	if ( m_bErrorFlag )
 	{
@@ -1900,6 +1915,17 @@ void JoinSorter_c::SetupJoinSelectList()
 	AddExpressionItemsToJoinSelectList();
 	AddDocidToJoinSelectList();
 	AddWeightToJoinSelectList();
+}
+
+
+void JoinSorter_c::IncreaseJoinedMaxMatches ( int iTotalCount )
+{
+	int64_t iNewLimit = sph::DefaultRelimit::Relimit ( m_tJoinQuery.m_iMaxMatches, iTotalCount );
+	if ( iNewLimit > INT_MAX )
+		return;
+
+	m_tJoinQuery.m_iMaxMatches = (int)iNewLimit;
+	m_tJoinQuery.m_iLimit = m_tJoinQuery.m_iMaxMatches;
 }
 
 //////////////////////////////////////////////////////////////////////////////////////////////////////////////////

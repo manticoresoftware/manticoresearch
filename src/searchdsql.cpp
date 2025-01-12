@@ -370,7 +370,6 @@ public:
 	bool			AddIntFilterLesser ( const SqlNode_t & tAttr, int64_t iVal, bool bHasEqual );
 	bool			AddUservarFilter ( const SqlNode_t & tCol, const SqlNode_t & tVar, bool bExclude );
 	void			AddGroupBy ( const SqlNode_t & tGroupBy );
-	void			AddJoinedWeight ( SqlNode_t & tTable, SqlNode_t & tWeight );
 	CSphFilterSettings * AddFilter ( const SqlNode_t & tCol, ESphFilter eType );
 	CSphFilterSettings * AddFilter ( const SqlNode_t & tCol, ESphFilter eType, int iValuesIdx );
 	bool			AddStringFilter ( const SqlNode_t & tCol, const SqlNode_t & tVal, bool bExclude );
@@ -1192,18 +1191,6 @@ void SqlParser_c::AddGroupBy ( const SqlNode_t & tGroupBy )
 		sphColumnToLowercase ( const_cast<char *>( sTmp.cstr() ) );
 		m_pQuery->m_sGroupBy.SetSprintf ( "%s, %s", m_pQuery->m_sGroupBy.cstr(), sTmp.cstr() );
 	}
-}
-
-
-void SqlParser_c::AddJoinedWeight ( SqlNode_t & tTable, SqlNode_t & tWeight )
-{
-	CSphString sTable, sWeight;
-	sTable.SetBinary ( m_pBuf + tTable.m_iStart, tTable.m_iEnd - tTable.m_iStart );
-	sWeight.SetBinary ( m_pBuf + tWeight.m_iStart, tWeight.m_iEnd - tWeight.m_iStart );
-
-	CSphQueryItem & tItem = m_pQuery->m_dItems.Add();
-	tItem.m_sExpr.SetSprintf ( "%s%s()", sTable.cstr(), sWeight.cstr() );
-	tItem.m_sAlias = tItem.m_sExpr;
 }
 
 

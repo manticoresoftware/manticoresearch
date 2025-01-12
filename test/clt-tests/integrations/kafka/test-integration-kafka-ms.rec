@@ -90,7 +90,7 @@ docker exec kafka chmod +x ./import.sh; docker exec kafka ./import.sh; echo $?
 ––– output –––
 0
 ––– input –––
-timeout 60 bash -c 'docker exec manticore bash -c "tail -f /var/log/manticore/searchd.log" | grep -m2 "REPLACE+INTO+destination_kafka" > /dev/null && echo "Data processing completed."' || echo "Data processing failed."
+timeout 60 bash -c 'docker exec manticore bash -c "tail -f /var/log/manticore/searchd.log" | grep -m2 "REPLACE%20INTO%20destination_kafka" > /dev/null && echo "Data processing completed."' || echo "Data processing failed."
 ––– output –––
 Data processing completed.
 ––– input –––
@@ -166,7 +166,7 @@ docker exec kafka ./import.sh; echo $?
 ––– output –––
 0
 ––– input –––
-timeout 60 bash -c 'docker exec manticore bash -c "tail -f /var/log/manticore/searchd.log" | grep -m2 "REPLACE+INTO+destination_kafka" > /dev/null && echo "Data processing completed."' || echo "Data processing failed."
+timeout 60 bash -c 'docker exec manticore bash -c "tail -f /var/log/manticore/searchd.log" | grep -m2 "REPLACE%20INTO%20destination_kafka" > /dev/null && echo "Data processing completed."' || echo "Data processing failed."
 ––– output –––
 Data processing completed.
 ––– input –––
@@ -217,7 +217,7 @@ docker exec kafka ./import.sh; echo $?
 ––– output –––
 0
 ––– input –––
-timeout 60 bash -c 'docker exec manticore bash -c "tail -f /var/log/manticore/searchd.log" | grep -m2 "REPLACE+INTO+destination_kafka_metadata" > /dev/null && echo "Data processing completed."' || echo "Data processing failed."
+timeout 60 bash -c 'docker exec manticore bash -c "tail -f /var/log/manticore/searchd.log" | grep -m2 "REPLACE%20INTO%20destination_kafka_metadata" > /dev/null && echo "Data processing completed."' || echo "Data processing failed."
 ––– output –––
 Data processing completed.
 ––– input –––
@@ -276,7 +276,7 @@ docker exec kafka ./import.sh; echo $?
 ––– output –––
 0
 ––– input –––
-timeout 60 bash -c 'docker exec manticore bash -c "tail -f /var/log/manticore/searchd.log" | grep -m2 "REPLACE+INTO+destination_kafka_tags" > /dev/null && echo "Data processing completed."' || echo "Data processing failed."
+timeout 60 bash -c 'docker exec manticore bash -c "tail -f /var/log/manticore/searchd.log" | grep -m2 "REPLACE%20INTO%20destination_kafka_tags" > /dev/null && echo "Data processing completed."' || echo "Data processing failed."
 ––– output –––
 Data processing completed.
 ––– input –––
@@ -335,7 +335,7 @@ docker exec kafka ./import.sh; echo $?
 ––– output –––
 0
 ––– input –––
-timeout 60 bash -c 'docker exec manticore bash -c "tail -f /var/log/manticore/searchd.log" | grep -m1 "REPLACE+INTO+destination_kafka_alter" > /dev/null && echo "Data processing completed."' || echo "Data processing failed."
+timeout 60 bash -c 'docker exec manticore bash -c "tail -f /var/log/manticore/searchd.log" | grep -m1 "REPLACE%20INTO%20destination_kafka_alter" > /dev/null && echo "Data processing completed."' || echo "Data processing failed."
 ––– output –––
 Data processing completed.
 ––– input –––
@@ -395,7 +395,7 @@ docker exec kafka ./import.sh; echo $?
 ––– output –––
 0
 ––– input –––
-timeout 60 bash -c 'docker exec manticore bash -c "tail -f /var/log/manticore/searchd.log" | grep -m2 "REPLACE+INTO+destination_kafka_ts" > /dev/null && echo "Data processing completed."' || echo "Data processing failed."
+timeout 60 bash -c 'docker exec manticore bash -c "tail -f /var/log/manticore/searchd.log" | grep -m2 "REPLACE%20INTO%20destination_kafka_ts" > /dev/null && echo "Data processing completed."' || echo "Data processing failed."
 ––– output –––
 Data processing completed.
 ––– input –––
@@ -454,7 +454,7 @@ docker exec kafka ./import.sh; echo $?
 ––– output –––
 0
 ––– input –––
-timeout 60 bash -c 'docker exec manticore bash -c "tail -f /var/log/manticore/searchd.log" | grep -m2 "REPLACE+INTO+destination_kafka_combined" > /dev/null && echo "Data processing completed."' || echo "Data processing failed."
+timeout 60 bash -c 'docker exec manticore bash -c "tail -f /var/log/manticore/searchd.log" | grep -m2 "REPLACE%20INTO%20destination_kafka_combined" > /dev/null && echo "Data processing completed."' || echo "Data processing failed."
 ––– output –––
 Data processing completed.
 ––– input –––
@@ -498,7 +498,7 @@ docker exec kafka ./import.sh; echo $?
 ––– output –––
 0
 ––– input –––
-timeout 60 bash -c 'docker exec manticore bash -c "tail -f -n 10000 /var/log/manticore/searchd.log" | grep -m1 "REPLACE+INTO+destination_kafka_stop" > /dev/null && echo "Data processing completed."' || echo "Data processing failed."
+timeout 60 bash -c 'docker exec manticore bash -c "tail -f -n 10000 /var/log/manticore/searchd.log" | grep -m1 "REPLACE%20INTO%20destination_kafka_stop" > /dev/null && echo "Data processing completed."' || echo "Data processing failed."
 ––– output –––
 Data processing completed.
 ––– input –––
@@ -615,7 +615,7 @@ docker exec kafka ./import.sh; echo $?
 ––– output –––
 0
 ––– input –––
-timeout 60 bash -c 'docker exec manticore bash -c "tail -f -n 10000 /var/log/manticore/searchd.log" | grep -m2 "REPLACE+INTO+destination_drop_source" > /dev/null && echo "Data processing completed."' || echo "Data processing failed."
+timeout 60 bash -c 'docker exec manticore bash -c "tail -f -n 10000 /var/log/manticore/searchd.log" | grep -m2 "REPLACE%20INTO%20destination_drop_source" > /dev/null && echo "Data processing completed."' || echo "Data processing failed."
 ––– output –––
 Data processing completed.
 ––– input –––

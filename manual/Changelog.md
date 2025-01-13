@@ -18,6 +18,7 @@
 * [Issue #2430](https://github.com/manticoresoftware/manticoresearch/issues/2430) Enhanced [binlog](../Logging/Binary_logging.md#Binary-logging) writing synchronization to prevent errors.
 * [Issue #2490](https://github.com/manticoresoftware/manticoresearch/issues/2490) msc scale for aggs at compat endpoints.
 * [Issue #268](https://github.com/manticoresoftware/manticoresearch-buddy/issues/268) Implemented autodetection of data types imported from Elasticsearch.
+* [Issue #423](https://github.com/manticoresoftware/manticoresearch-buddy/issues/423) Increased Swoole's `package_max_length` to accelerate batch queries processed with Buddy.
 * ⚠️ BREAKING [Issue #2458](https://github.com/manticoresoftware/manticoresearch/issues/2458) Incorporated zlib support in Windows packages.
 * ⚠️ BREAKING [Issue #2468](https://github.com/manticoresoftware/manticoresearch/issues/2468) [CALL SUGGEST / QSUGGEST](../Searching/Spell_correction.md#CALL-QSUGGEST,-CALL-SUGGEST) now compatible with distributed tables.
 

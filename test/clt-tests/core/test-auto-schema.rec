@@ -1,8 +1,10 @@
 ––– block: ../base/start-searchd –––
 ––– input –––
-mysql -h0 -P9306 -e "drop table test"
+mysql -h0 -P9306 -e "drop table if exists test"
 ––– output –––
-ERROR 1064 (42000) at line 1: DROP TABLE failed: unknown table 'test'
+––– input –––
+mysql -h0 -P9306 -e "drop table if exists test2"
+––– output –––
 ––– input –––
 curl -X POST "localhost:9308/sql?mode=raw" -d "insert into test(id, f, a, b, j, m, d, v) values (1, 'sample text', 42, 3.1415, '{\"key\": \"value\"}', (1, 2, 3), 1625142600, '[12345678901234, 56789012345678]')"; echo
 ––– output –––

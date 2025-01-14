@@ -57,9 +57,9 @@ docker exec manticore mysql -h0 -P9306 -e "SHOW SOURCES;"
 ––– input –––
 docker exec manticore mysql -h0 -P9306 -e "SHOW SOURCE kafka;"
 ––– output –––
-+--------+-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
-| Source | Create Table                                                                                                                                                                              |
-+--------+-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
++--------+-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
+| Source | Create Table                                                                                                                                                                                        |
++--------+-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
 | kafka  | CREATE SOURCE kafka
 (id bigint, term text, abbrev '$abbrev' text, GlossDef json)
 type='kafka'
@@ -68,7 +68,7 @@ topic_list='my-data'
 consumer_group='manticore'
 num_consumers='1'
 batch=50 |
-+--------+-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
++--------+-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
 ––– input –––
 docker exec manticore mysql -h0 -P9306 -e "SHOW MVS;"
 ––– output –––
@@ -534,8 +534,8 @@ precaching table 'system.buffer_kafka_0'
 precaching table 'destination_kafka'
 precaching table 'system.buffer_kafka_metadata_0'
 precaching table 'destination_kafka_metadata'
-precaching table '_buffer_kafka_tags_0'
 precaching table 'system.buffer_kafka_tags_0'
+precaching table 'destination_kafka_tags'
 precaching table 'system.buffer_kafka_alter_0'
 precaching table 'destination_kafka_alter'
 precaching table 'system.buffer_kafka_ts_0'

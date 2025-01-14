@@ -99,6 +99,26 @@ void SetDefaultColumnarAttr ( int iAttr, ESphAttr eType, columnar::Builder_i * p
 }
 
 
+CSphString ColumnarAttrType2Str ( common::AttrType_e eType )
+{
+	switch ( eType )
+	{
+	case common::AttrType_e::NONE:		return "none";
+	case common::AttrType_e::UINT32:	return "uint32";
+	case common::AttrType_e::TIMESTAMP:	return "timestamp";
+	case common::AttrType_e::INT64:		return "int64";
+	case common::AttrType_e::UINT64:	return "uint64";
+	case common::AttrType_e::BOOLEAN:	return "boolean";
+	case common::AttrType_e::FLOAT:		return "float";
+	case common::AttrType_e::STRING:	return "string";
+	case common::AttrType_e::UINT32SET:	return "uint32set";
+	case common::AttrType_e::INT64SET:	return "int64set";
+	case common::AttrType_e::FLOATVEC:	return "floatvec";
+	default:							return "unknown";
+	}
+}
+
+
 PlainOrColumnar_t::PlainOrColumnar_t ( const CSphColumnInfo & tAttr, int iColumnar )
 {
 	m_eType = tAttr.m_eAttrType;

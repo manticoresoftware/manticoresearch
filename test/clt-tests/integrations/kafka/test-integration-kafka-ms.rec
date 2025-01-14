@@ -35,7 +35,7 @@ docker exec kafka kafka-topics.sh --create --topic my-data --partitions 4 --boot
 ––– output –––
 Created topic my-data.
 ––– input –––
-docker exec manticore mysql -h0 -P9306 -e "CREATE SOURCE kafka (id bigint, term text, abbrev '$abbrev' text, GlossDef json) type='kafka' broker_list='kafka:9092' topic_list='my-data' consumer_group='manticore' num_consumers='1' batch=50;"; echo $?
+docker exec manticore mysql -h0 -P9306 -e "CREATE SOURCE kafka (id bigint, term text, abbrev '\$abbrev' text, GlossDef json) type='kafka' broker_list='kafka:9092' topic_list='my-data' consumer_group='manticore' num_consumers='1' batch=50;"; echo $?
 ––– output –––
 0
 ––– input –––
@@ -150,7 +150,7 @@ docker exec kafka kafka-consumer-groups.sh --bootstrap-server localhost:9092 --g
 ––– output –––
 0
 ––– input –––
-docker exec manticore mysql -h0 -P9306 -e "CREATE SOURCE kafka (id bigint, term text, abbrev '$abbrev' text, GlossDef json, location json) type='kafka' broker_list='kafka:9092' topic_list='my-data' consumer_group='manticore_destination' num_consumers='1' batch=50;"; echo $?
+docker exec manticore mysql -h0 -P9306 -e "CREATE SOURCE kafka (id bigint, term text, abbrev '\$abbrev' text, GlossDef json, location json) type='kafka' broker_list='kafka:9092' topic_list='my-data' consumer_group='manticore_destination' num_consumers='1' batch=50;"; echo $?
 ––– output –––
 0
 ––– input –––
@@ -201,7 +201,7 @@ docker exec kafka kafka-consumer-groups.sh --bootstrap-server localhost:9092 --g
 ––– output –––
 0
 ––– input –––
-docker exec manticore mysql -h0 -P9306 -e "CREATE SOURCE kafka_metadata (id bigint, term text, abbrev '$abbrev' text, GlossDef json, metadata json) type='kafka' broker_list='kafka:9092' topic_list='my-data' consumer_group='manticore_metadata' num_consumers='1' batch=50;"; echo $?
+docker exec manticore mysql -h0 -P9306 -e "CREATE SOURCE kafka_metadata (id bigint, term text, abbrev '\$abbrev' text, GlossDef json, metadata json) type='kafka' broker_list='kafka:9092' topic_list='my-data' consumer_group='manticore_metadata' num_consumers='1' batch=50;"; echo $?
 ––– output –––
 0
 ––– input –––
@@ -260,7 +260,7 @@ docker exec kafka kafka-consumer-groups.sh --bootstrap-server localhost:9092 --g
 ––– output –––
 0
 ––– input –––
-docker exec manticore mysql -h0 -P9306 -e "CREATE SOURCE kafka_tags (id bigint, term text, abbrev '$abbrev' text, GlossDef json, tags json) type='kafka' broker_list='kafka:9092' topic_list='my-data' consumer_group='manticore_tags' num_consumers='1' batch=50;"; echo $?
+docker exec manticore mysql -h0 -P9306 -e "CREATE SOURCE kafka_tags (id bigint, term text, abbrev '\$abbrev' text, GlossDef json, tags json) type='kafka' broker_list='kafka:9092' topic_list='my-data' consumer_group='manticore_tags' num_consumers='1' batch=50;"; echo $?
 ––– output –––
 0
 ––– input –––
@@ -319,7 +319,7 @@ docker exec kafka kafka-consumer-groups.sh --bootstrap-server localhost:9092 --g
 ––– output –––
 0
 ––– input –––
-docker exec manticore mysql -h0 -P9306 -e "CREATE SOURCE kafka_alter (id bigint, term text, abbrev '$abbrev' text, GlossDef json, metadata json) type='kafka' broker_list='kafka:9092' topic_list='my-data' consumer_group='manticore_alter' num_consumers='1' batch=50;"; echo $?
+docker exec manticore mysql -h0 -P9306 -e "CREATE SOURCE kafka_alter (id bigint, term text, abbrev '\$abbrev' text, GlossDef json, metadata json) type='kafka' broker_list='kafka:9092' topic_list='my-data' consumer_group='manticore_alter' num_consumers='1' batch=50;"; echo $?
 ––– output –––
 0
 ––– input –––
@@ -379,7 +379,7 @@ docker exec kafka kafka-consumer-groups.sh --bootstrap-server localhost:9092 --g
 ––– output –––
 0
 ––– input –––
-docker exec manticore mysql -h0 -P9306 -e "CREATE SOURCE kafka_ts (id bigint, term text, abbrev '$abbrev' text, GlossDef json, timestamp_unix timestamp) type='kafka' broker_list='kafka:9092' topic_list='my-data' consumer_group='manticore_ts' num_consumers='1' batch=50;"; echo $?
+docker exec manticore mysql -h0 -P9306 -e "CREATE SOURCE kafka_ts (id bigint, term text, abbrev '\$abbrev' text, GlossDef json, timestamp_unix timestamp) type='kafka' broker_list='kafka:9092' topic_list='my-data' consumer_group='manticore_ts' num_consumers='1' batch=50;"; echo $?
 ––– output –––
 0
 ––– input –––
@@ -438,7 +438,7 @@ docker exec kafka kafka-consumer-groups.sh --bootstrap-server localhost:9092 --g
 ––– output –––
 0
 ––– input –––
-docker exec manticore mysql -h0 -P9306 -e "CREATE SOURCE kafka_combined (id bigint, term text, abbrev '$abbrev' text, GlossDef json, location json, metadata json, tags json, timestamp_unix timestamp) type='kafka' broker_list='kafka:9092' topic_list='my-data' consumer_group='manticore_combined' num_consumers='1' batch=50;"; echo $?
+docker exec manticore mysql -h0 -P9306 -e "CREATE SOURCE kafka_combined (id bigint, term text, abbrev '\$abbrev' text, GlossDef json, location json, metadata json, tags json, timestamp_unix timestamp) type='kafka' broker_list='kafka:9092' topic_list='my-data' consumer_group='manticore_combined' num_consumers='1' batch=50;"; echo $?
 ––– output –––
 0
 ––– input –––
@@ -482,7 +482,7 @@ docker exec kafka kafka-consumer-groups.sh --bootstrap-server localhost:9092 --g
 ––– output –––
 0
 ––– input –––
-docker exec manticore mysql -h0 -P9306 -e "CREATE SOURCE kafka_stop (id bigint, term text, abbrev '$abbrev' text, GlossDef json, location json, metadata json, tags json, timestamp_unix timestamp) type='kafka' broker_list='kafka:9092' topic_list='my-data' consumer_group='manticore_stop' num_consumers='1' batch=50;"; echo $?
+docker exec manticore mysql -h0 -P9306 -e "CREATE SOURCE kafka_stop (id bigint, term text, abbrev '\$abbrev' text, GlossDef json, location json, metadata json, tags json, timestamp_unix timestamp) type='kafka' broker_list='kafka:9092' topic_list='my-data' consumer_group='manticore_stop' num_consumers='1' batch=50;"; echo $?
 ––– output –––
 0
 ––– input –––

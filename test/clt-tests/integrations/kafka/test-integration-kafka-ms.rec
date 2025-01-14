@@ -139,12 +139,6 @@ docker exec manticore mysql -h0 -P9306 -e "DROP table destination_kafka;"; echo 
 ––– input –––
 docker exec manticore mysql -h0 -P9306 -e "SHOW TABLES;"
 ––– output –––
-+----------+------+
-| Table    | Type |
-+----------+------+
-| _sources | rt   |
-| _views   | rt   |
-+----------+------+
 ––– input –––
 docker exec kafka kafka-consumer-groups.sh --bootstrap-server localhost:9092 --group manticore_destination --reset-offsets --to-latest --topic my-data --execute > /dev/null; echo $?
 ––– output –––
@@ -534,21 +528,21 @@ Manticore %{SEMVER} %{COMMITDATE}#!/(\sdev)?\s/!#(columnar %{SEMVER} %{COMMITDAT
 Copyright (c) 2001-2016, Andrew Aksyonoff
 Copyright (c) 2008-2016, Sphinx Technologies Inc (http://sphinxsearch.com)
 Copyright (c) 2017-%{YEAR}, Manticore Software LTD (https://manticoresearch.com)
-precaching table '_sources'
-precaching table '_views'
-precaching table '_buffer_kafka_0'
+precaching table 'system.sources'
+precaching table 'system.views'
+precaching table 'system.buffer_kafka_0'
 precaching table 'destination_kafka'
-precaching table '_buffer_kafka_metadata_0'
+recaching table 'system.buffer_kafka_metadata_0'
 precaching table 'destination_kafka_metadata'
 precaching table '_buffer_kafka_tags_0'
-precaching table 'destination_kafka_tags'
-precaching table '_buffer_kafka_alter_0'
+precaching table 'system.buffer_kafka_tags_0'
+precaching table 'system.buffer_kafka_alter_0'
 precaching table 'destination_kafka_alter'
-precaching table '_buffer_kafka_ts_0'
+precaching table 'system.buffer_kafka_ts_0'
 precaching table 'destination_kafka_ts'
-precaching table '_buffer_kafka_combined_0'
+precaching table 'system.buffer_kafka_combined_0'
 precaching table 'destination_kafka_combined'
-precaching table '_buffer_kafka_stop_0'
+precaching table 'system.buffer_kafka_stop_0'
 precaching table 'destination_kafka_stop'
 Manticore %{SEMVER} %{COMMITDATE}#!/(\sdev)?\s/!#(columnar %{SEMVER} %{COMMITDATE}) (secondary %{SEMVER} %{COMMITDATE}) (knn %{SEMVER} %{COMMITDATE})
 Copyright (c) 2001-2016, Andrew Aksyonoff

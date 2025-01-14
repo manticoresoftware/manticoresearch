@@ -1565,6 +1565,11 @@ show_what:
 		{
 			pParser->m_pStmt->m_eStmt = STMT_SHOW_LOCKS;
 		}
+	| TOK_TABLE single_manticore_tablename TOK_INDEXES like_filter
+		{
+			pParser->m_pStmt->m_eStmt = STMT_SHOW_TABLE_INDEXES;
+			pParser->SetIndex( $2 );
+		}
 	;
 
 index_or_table:

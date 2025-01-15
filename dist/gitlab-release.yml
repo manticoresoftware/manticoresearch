@@ -9,6 +9,7 @@ variables:
   DIAGNOSTIC: 1
   PACK_ICUDATA: 0
   PACK_GALERA: 0
+  CMAKE_XTRA: -DCMAKE_UNITY_BUILD=1
 
 # ==================== .helper generic build ======================
 
@@ -31,7 +32,7 @@ variables:
     sysroot: roots_nov22
   script:
     - mkdir build && cd build
-    - cmake -DPACK=1 -DBUILD_TAG=$RELEASE_TAG ..
+    - cmake -DPACK=1 -DBUILD_TAG=$RELEASE_TAG $CMAKE_XTRA ..
     - cmake --build . --target package
   cache:
     key: release_$DISTR$arch

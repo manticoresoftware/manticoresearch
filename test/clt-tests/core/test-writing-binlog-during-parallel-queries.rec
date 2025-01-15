@@ -18,7 +18,7 @@ Buddy started!
 [%{NUMBER}] %{NUMBER}
 0
 +-------+------+
-| Index | Type |
+| Table | Type |
 +-------+------+
 | t1    | rt   |
 | t2    | rt   |
@@ -50,7 +50,7 @@ Buddy started!
 [%{NUMBER}] %{NUMBER}
 0
 +-------+------+
-| Index | Type |
+| Table | Type |
 +-------+------+
 | t1    | rt   |
 | t2    | rt   |
@@ -82,7 +82,7 @@ Buddy started!
 [%{NUMBER}] %{NUMBER}
 0
 +-------+------+
-| Index | Type |
+| Table | Type |
 +-------+------+
 | t1    | rt   |
 | t2    | rt   |
@@ -114,7 +114,7 @@ Buddy started!
 [%{NUMBER}] %{NUMBER}
 0
 +-------+------+
-| Index | Type |
+| Table | Type |
 +-------+------+
 | t1    | rt   |
 | t2    | rt   |
@@ -146,7 +146,7 @@ Buddy started!
 [%{NUMBER}] %{NUMBER}
 0
 +-------+------+
-| Index | Type |
+| Table | Type |
 +-------+------+
 | t1    | rt   |
 | t2    | rt   |
@@ -178,7 +178,7 @@ Buddy started!
 [%{NUMBER}] %{NUMBER}
 0
 +-------+------+
-| Index | Type |
+| Table | Type |
 +-------+------+
 | t1    | rt   |
 | t2    | rt   |
@@ -210,7 +210,7 @@ Buddy started!
 [%{NUMBER}] %{NUMBER}
 0
 +-------+------+
-| Index | Type |
+| Table | Type |
 +-------+------+
 | t1    | rt   |
 | t2    | rt   |
@@ -242,7 +242,7 @@ Buddy started!
 [%{NUMBER}] %{NUMBER}
 0
 +-------+------+
-| Index | Type |
+| Table | Type |
 +-------+------+
 | t1    | rt   |
 | t2    | rt   |
@@ -274,7 +274,7 @@ Buddy started!
 [%{NUMBER}] %{NUMBER}
 0
 +-------+------+
-| Index | Type |
+| Table | Type |
 +-------+------+
 | t1    | rt   |
 | t2    | rt   |
@@ -306,7 +306,7 @@ Buddy started!
 [%{NUMBER}] %{NUMBER}
 0
 +-------+------+
-| Index | Type |
+| Table | Type |
 +-------+------+
 | t1    | rt   |
 | t2    | rt   |

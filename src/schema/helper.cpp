@@ -100,7 +100,7 @@ void CSphSchemaHelper::ResetSchemaHelper()
 
 void CSphSchemaHelper::CloneMatch ( CSphMatch& tDst, const CSphMatch& rhs ) const
 {
-	if ( m_dDataPtrAttrs.GetLength() )
+	if ( !m_dDataPtrAttrs.IsEmpty() )
 		CloneMatchSpecial ( tDst, rhs, m_dDataPtrAttrs );
 	else
 		tDst.Combine ( rhs, GetDynamicSize() );
@@ -133,18 +133,6 @@ CSphVector<int> CSphSchemaHelper::SubsetPtrs ( CSphVector<int>& dDiscarded ) con
 	return dFiltered;
 }
 
-// declared in sphinxstd.h
-void sphDeallocatePacked ( BYTE* pBlob )
-{
-	if ( !pBlob )
-		return;
-#if WITH_SMALLALLOC
-	const BYTE * pFoo = pBlob;
-	sphDeallocateSmall ( pBlob, sphCalcPackedLength ( UnzipIntBE ( pFoo ) ) );
-#else
-	sphDeallocateSmall ( pBlob );
-#endif
-}
 
 void CSphSchemaHelper::MovePtrsSpecial ( CSphMatch& tDst, CSphMatch& tSrc, const VecTraits_T<int>& dSpecials )
 {

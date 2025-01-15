@@ -142,7 +142,7 @@ jobs:
     with:
       DISTR: windows
       arch: x64
-      sysroot_url_key: roots_mysql83_jul29
+      sysroot_url_key: roots_mysql83_24oct12_1
       boost_url_key: boost80_zstd_zlib
       cmake_command: |
         mkdir build
@@ -306,7 +306,7 @@ jobs:
         image: [ "centos:7", "almalinux:8", "almalinux:9", "oraclelinux:9", "amazonlinux:latest" ]
     runs-on: ubuntu-22.04
     steps:
-      - uses: manticoresoftware/clt@0.1.21
+      - uses: manticoresoftware/clt@0.2.3
         with:
           image: ${{ matrix.image }}
           test_prefix: test/clt-tests/installation/rhel-dev-
@@ -321,7 +321,7 @@ jobs:
         image: [ "ubuntu:bionic", "ubuntu:focal", "ubuntu:jammy", "debian:buster", "debian:bullseye", "debian:bookworm" ]
     runs-on: ubuntu-22.04
     steps:
-      - uses: manticoresoftware/clt@0.1.21
+      - uses: manticoresoftware/clt@0.2.3
         with:
           image: ${{ matrix.image }}
           test_prefix: test/clt-tests/installation/deb-dev-

@@ -169,16 +169,16 @@ insert into table_multi1 (id,title,brand_id,j) values
 </db_insert>
 
 <queries>
-<query endpoint="json/search">{ "index": "test_group1", "size":0, "aggs":{ "gr_1": { "histogram": { "field": "code", "interval":50, "size": 40 } }} }</query>
-<query endpoint="json/search">{ "index": "test_group2", "size":0, "aggs":{ "gr_1": { "histogram": { "field": "code", "interval":50, "keyed":true, "size": 40 } }} }</query>
-<query endpoint="json/search">{ "index": "test_group1,test_group2", "size":0, "aggs":{ "gr_1": { "histogram": { "field": "code", "interval":90 } }} }</query>
-<query endpoint="json/search">{ "index": "test_group1,test_group2", "size":0, "aggs":{ "gr_1": { "histogram": { "field": "code", "interval":100, "keyed":true } }} }</query>
+<query endpoint="json/search">{ "table": "test_group1", "size":0, "aggs":{ "gr_1": { "histogram": { "field": "code", "interval":50, "size": 40 } }} }</query>
+<query endpoint="json/search">{ "table": "test_group2", "size":0, "aggs":{ "gr_1": { "histogram": { "field": "code", "interval":50, "keyed":true, "size": 40 } }} }</query>
+<query endpoint="json/search">{ "table": "test_group1,test_group2", "size":0, "aggs":{ "gr_1": { "histogram": { "field": "code", "interval":90 } }} }</query>
+<query endpoint="json/search">{ "table": "test_group1,test_group2", "size":0, "aggs":{ "gr_1": { "histogram": { "field": "code", "interval":100, "keyed":true } }} }</query>
 
 <sphinxql>select id, code, count(*), histogram(code, {hist_interval=90}) as c from test_group1,test_group2 group by c order by c asc</sphinxql>
 <sphinxql>select id, code, count(*), histogram(code, {hist_interval=100}) as c from test_group1,test_group2 group by c order by c asc</sphinxql>
 
-<query endpoint="json/search">{ "index": "test_group1,test_group2", "size":0, "aggs":{ "gr_1": { "range": { "field": "code", "ranges": [{"to":150},{"from":150, "to":300},{"from":300}] } }} }</query>
-<query endpoint="json/search">{ "index": "test_group1,test_group2", "size":0, "aggs":{
+<query endpoint="json/search">{ "table": "test_group1,test_group2", "size":0, "aggs":{ "gr_1": { "range": { "field": "code", "ranges": [{"to":150},{"from":150, "to":300},{"from":300}] } }} }</query>
+<query endpoint="json/search">{ "table": "test_group1,test_group2", "size":0, "aggs":{
 "gr_1":       { "range": { "field": "code", "keyed":true, "ranges": [{"from":150, "to":200}, {"from":200, "to":300}, {"from":300, "to":404}] } },
 "gr_outside": { "range": { "field": "code", "keyed":true, "ranges": [{"to":150},                                     {"from":404}] } }
 }}</query>
@@ -186,14 +186,14 @@ insert into table_multi1 (id,title,brand_id,j) values
 <sphinxql>select id, code, count(*), range(code, {range_to=150},{range_from=150,range_to=300},{range_from=300}) c from test_group1,test_group2 group by c order by c asc</sphinxql>
 <sphinxql>select id, code, count(*), range(code, {range_from=150,range_to=200},{range_from=200,range_to=300},{range_from=300,range_to=404}) c1, range(code, {range_to=150}, {range_from=404}) c2 from test_group1,test_group2 facet c1 as r1 order by c1 asc facet c2 as r2 order by c2 asc;</sphinxql>
 
-<query endpoint="json/search">{ "index": "test_group1,test_group2", "size":0, "aggs":{ "gr_1": { "range": { "field": "code", "ranges": [{"from":200, "to":300},{"from":400, "to":415}] } }} }</query>
+<query endpoint="json/search">{ "table": "test_group1,test_group2", "size":0, "aggs":{ "gr_1": { "range": { "field": "code", "ranges": [{"from":200, "to":300},{"from":400, "to":415}] } }} }</query>
 
 <sphinxql>select id, code, count(*), range(code, {range_from=200,range_to=300},{range_from=400,range_to=415}) c1 from test_group1,test_group2 facet c1 as r1 order by c1 asc;</sphinxql>
 
 <!-- aggs.composite  -->
 <query endpoint="json/search">
 {
-    "index": "test_group1,test_group2",
+    "table": "test_group1,test_group2",
     "size":0,
     "aggs": {
         "gr_1": {
@@ -210,7 +210,7 @@ insert into table_multi1 (id,title,brand_id,j) values
 </query>
 <query endpoint="json/search">
 {
-    "index": "test_group1,test_group2",
+    "table": "test_group1,test_group2",
     "size":0,
     "aggs": {
         "gr_1": {
@@ -230,12 +230,12 @@ insert into table_multi1 (id,title,brand_id,j) values
 }
 </query>
 
-<query endpoint="json/search">{ "index": "idx_dates", "size":0, "aggs":{ "months": { "date_histogram": { "field": "tm", "keyed":true, "calendar_interval":"month" } }} }</query>
+<query endpoint="json/search">{ "table": "idx_dates", "size":0, "aggs":{ "months": { "date_histogram": { "field": "tm", "keyed":true, "calendar_interval":"month" } }} }</query>
 <sphinxql>select id, count(*), date_histogram(tm, {calendar_interval='month'}) as months from idx_dates group by months order by months asc</sphinxql>
 
 <query endpoint="json/search">
 {
-  "index":"idx_dates",
+  "table":"idx_dates",
   "size":0,
   "aggs":{
     "points":{
@@ -258,15 +258,15 @@ insert into table_multi1 (id,title,brand_id,j) values
 <sphinxql>select count(*), date_range(tm, {range_to='2017||+2M/M'},{range_from='2017||+2M/M',range_to='2017||+4M/M'},{range_from='2017||+4M/M'}) as points from idx_dates group by points order by points asc</sphinxql>
 
 <!-- count(*) -->
-<query endpoint="json/search">{ "index": "test_group2", "size":0, "aggs":{}}</query>
+<query endpoint="json/search">{ "table": "test_group2", "size":0, "aggs":{}}</query>
 <!-- min(code) -->
-<query endpoint="json/search">{ "index": "test_group2", "size":0, "aggs":{"min_code":{"min":{"field": "code"}}}}</query>
+<query endpoint="json/search">{ "table": "test_group2", "size":0, "aggs":{"min_code":{"min":{"field": "code"}}}}</query>
 <!-- max(code) -->
-<query endpoint="json/search">{ "index": "test_group2", "size":0, "aggs":{"max_code":{"max":{"field": "code"}}}}</query>
+<query endpoint="json/search">{ "table": "test_group2", "size":0, "aggs":{"max_code":{"max":{"field": "code"}}}}</query>
 <!-- sum(code) -->
-<query endpoint="json/search">{ "index": "test_group2", "size":0, "aggs":{"sum_code":{"sum":{"field": "code"}}}}</query>
+<query endpoint="json/search">{ "table": "test_group2", "size":0, "aggs":{"sum_code":{"sum":{"field": "code"}}}}</query>
 <!-- avg(code) -->
-<query endpoint="json/search">{ "index": "test_group2", "size":0, "aggs":{"avg_code":{"avg":{"field": "code"}}},
+<query endpoint="json/search">{ "table": "test_group2", "size":0, "aggs":{"avg_code":{"avg":{"field": "code"}}},
 "query": {
     "range": {
       "code": {
@@ -279,7 +279,7 @@ insert into table_multi1 (id,title,brand_id,j) values
 <!-- aggs.composite with JSON.field  -->
 <query endpoint="json/search">
 {
-    "index": "multi1",
+    "table": "multi1",
     "size":0,
     "aggs": {
         "gr_1": {
@@ -296,7 +296,16 @@ insert into table_multi1 (id,title,brand_id,j) values
 </query>
 
 <!-- aggs.ranges with empty or open range -->
-<query endpoint="json/search">{ "index": "test_group1", "size":0, "aggs":{ "gr_1": { "range": { "field": "code", "ranges": [{}] } }} }</query>
+<query endpoint="json/search">{ "table": "test_group1", "size":0, "aggs":{ "gr_1": { "range": { "field": "code", "ranges": [{}] } }} }</query>
+
+<!-- aggs.fixed_interval to line up with calendar_interval for the same units -->
+<query endpoint="json/search">{ "table": "idx_dates", "size":0, "aggs":{ "days": { "date_histogram": { "field": "tm", "keyed":true, "calendar_interval":"day" } }} }</query>
+<query endpoint="json/search">{ "table": "idx_dates", "size":0, "aggs":{ "days": { "date_histogram": { "field": "tm", "keyed":true, "fixed_interval":"day" } }} }</query>
+<sphinxql>select id, count(*), date_histogram(tm, {calendar_interval='day'}) as days from idx_dates group by days order by days asc limit 5</sphinxql>
+<sphinxql>select id, count(*), date_histogram(tm, {fixed_interval='day'}) as days from idx_dates group by days order by days asc limit 5</sphinxql>
+<!-- aggs.fixed_interval with unit multiplier -->
+<sphinxql>select id, count(*), date_histogram(tm, {fixed_interval='4day'}) as days, date_format(days, '%Y-%m-%dT%H:%M') as d from idx_dates group by days order by days asc limit 5</sphinxql>
+
 
 </queries>
 </test>

@@ -13,7 +13,7 @@ mysql -h0 -P9306 -e "CREATE TABLE tbl (id BIGINT, model TEXT, storage_capacity I
 mysql -h0 -P9306 -e "SHOW TABLES;"
 ––– output –––
 +-------+------+
-| Index | Type |
+| Table | Type |
 +-------+------+
 | tbl   | rt   |
 +-------+------+
@@ -21,7 +21,7 @@ mysql -h0 -P9306 -e "SHOW TABLES;"
 ./test/clt-tests/scripts/generate-1mln-records.sh 1000
 ––– output –––
 +-------+------+
-| Index | Type |
+| Table | Type |
 +-------+------+
 | tbl   | rt   |
 +-------+------+
@@ -78,7 +78,7 @@ mysql -h0 -P9306 -e "CREATE TABLE index2001(f text, s string); insert into index
 mysql -h0 -P9306 -e "SHOW TABLES"
 ––– output –––
 +-----------+------+
-| Index     | Type |
+| Table     | Type |
 +-----------+------+
 | index2001 | rt   |
 | tbl       | rt   |
@@ -90,7 +90,7 @@ mysql -h0 -P9306 -e "ALTER TABLE index2001 RENAME new_index2001;"
 mysql -h0 -P9306 -e "SHOW TABLES"
 ––– output –––
 +---------------+------+
-| Index         | Type |
+| Table         | Type |
 +---------------+------+
 | new_index2001 | rt   |
 | tbl           | rt   |
@@ -119,7 +119,7 @@ ERROR 1064 (42000) at line 1: P03: syntax error, unexpected tablename, expecting
 mysql -h0 -P9306 -e "SHOW TABLES"
 ––– output –––
 +---------------+------+
-| Index         | Type |
+| Table         | Type |
 +---------------+------+
 | new_index2001 | rt   |
 | tbl           | rt   |
@@ -148,7 +148,7 @@ mysql -h0 -P9306 -e "ALTER TABLE new_index2001 RENAME new_index2002;"
 mysql -h0 -P9306 -e "SHOW TABLES"
 ––– output –––
 +---------------+------+
-| Index         | Type |
+| Table         | Type |
 +---------------+------+
 | new_index2002 | rt   |
 | tbl           | rt   |

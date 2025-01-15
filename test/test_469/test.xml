@@ -81,6 +81,8 @@ show create table t;
 create table t1 like t;
 desc t1;
 
+show table t indexes;
+
 drop table t1;
 drop table t;
 
@@ -94,6 +96,63 @@ select * from t;
 
 select id, in(j.str,'str1','str3') as check from t where check!=1 order by id asc option threads=1;
 select id, in(j.str,'str1','str3') as check from t where check!=1 order by id asc option threads=2;
+
+drop table t;
+
+create table t ( j json secondary_index='1' );
+insert into t values (1,'["value1"]');
+insert into t values (2,'["value2"]');
+insert into t values (3,'[]');
+flush ramchunk t;
+select * from t;
+
+select id, in(j,'value1') as check from t where check=1 order by id asc;
+show meta;
+select id, in(j,'value2') as check from t where check=1 order by id asc;
+show meta;
+
+update t set j='["new_value2"]' where id=2;
+select id, in(j,'new_value2') as check from t where check=1 order by id asc;
+show meta;
+alter table t rebuild secondary;
+select id, in(j,'new_value2') as check from t where check=1 order by id asc;
+show meta;
+
+drop table t;
+
+create table t (t text, j json secondary_index='1');
+insert into t values(1,'ya', '{"names":["data1", "data2", "data3"]}');
+flush ramchunk t;
+select *, in(j['names'], 'data1') as check from t WHERE check=0; show meta;
+select *, in(j['names'], 'data1') as check from t WHERE check=1; show meta;
+drop table t;
+
+create table t (t text, j json secondary_index='1');
+insert into t values(1,'ya', '["data1", "data2", "data3"]');
+flush ramchunk t;
+select *, in(j, 'data1') as check from t WHERE check=0; show meta;
+select *, in(j, 'data1') as check from t WHERE check=1; show meta;
+
+drop table t;
+
+create table t ( j json secondary_index='1' );
+insert into t values (1,'{ "price": 10.0, "factor": 1, "addresses": { "a1": { "id": "id_of_address_a1", "name": "name_of_address_a1" }, "a2": { "id":   "id_of_address_a1", "name": "name_of_address_a2" } }, "tags": { "1": "data_of_tag_1" }, "arr":["val0","val1"], "int_arr":[1,2,3], "str":"str1" }');
+flush ramchunk t;
+
+select id, j.factor from t where j['factor']=1; show meta;
+select id, j.price from t where j['str']='str1'; show meta;
+
+update t set j.factor=2 where id=1;
+
+<!-- SI disabled for JSON.field affected by update -->
+select id, j.factor from t where j['factor']=1; show meta;
+<!-- SI disabled for all JSON.fields -->
+select id, j.price from t where j['str']='str1'; show meta;
+
+<!-- SI enabled after rebuild for all JSON.fields -->
+alter table t rebuild secondary;
+select id, j.factor from t where j['factor']=2; show meta;
+select id, j.price from t where j['str']='str1'; show meta;
 
 drop table t;
 

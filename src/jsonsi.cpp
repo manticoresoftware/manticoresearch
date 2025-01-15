@@ -81,6 +81,7 @@ private:
 	CSphString		m_sOffsetFile;
 	CSphString		m_sSPBFile;
 	int64_t			m_iNumRows = 0;
+	SphOffset_t		m_tPrevOffset = 0;
 	RowID_t			m_tRowID = 0;
 	CSphVector<BYTE> m_dRow;
 };
@@ -110,10 +111,19 @@ bool JsonRowIteratorFile_c::Next()
 	if ( m_tRowID>=m_iNumRows )
 		return false;
 
+	bool bDelta = !!m_tReaderOffset.GetByte();
+	SphOffset_t tOffset = m_tReaderOffset.UnzipOffset();
+	if ( bDelta )
+		tOffset += m_tPrevOffset;
+
 	SphOffset_t tSize = m_tReaderOffset.UnzipOffset();
 	m_dRow.Resize(tSize);
+
+	m_tReaderSPB.SeekTo ( tOffset, -1 );
 	m_tReaderSPB.Read ( m_dRow.Begin(), tSize );
+
 	m_tRowID++;
+	m_tPrevOffset = tOffset;
 
 	return true;
 }
@@ -440,7 +450,7 @@ static bool BuildJsonSI ( const StrVec_t & dAttributes, const ISphSchema & tSche
 	common::Schema_t tSISchema = tDeductor.CreateSchema();
 	// FIXME!!! pass these settings to the function, don't use default
 	BuildBufferSettings_t tSettings; // use default buffer settings
-	std::unique_ptr<SI::Builder_i> pBuilder = CreateSecondaryIndexBuilder ( tSISchema, tSettings.m_iSIMemLimit, sTmpFile, tSettings.m_iBufferStorage, sError );
+ 	std::unique_ptr<SI::Builder_i> pBuilder = CreateSecondaryIndexBuilder ( tSISchema, tSettings.m_iSIMemLimit, sTmpFile, tSettings.m_iBufferStorage, sError );
 	if ( !pBuilder )
 		return false;
 
@@ -478,7 +488,7 @@ public:
 			JsonSIBuilder_c ( const ISphSchema & tSchema, const CSphString & sSPB, const CSphString & sSIFile );
 
 	bool	Setup ( CSphString & sError )			{ return m_tWriter.OpenFile ( m_sTmpOffsetFile, sError ); }
-	void	AddRowSize ( SphOffset_t tSize ) override;
+	void	AddRowOffsetSize ( std::pair<SphOffset_t,SphOffset_t> tOffsetSize ) override;
 	bool	Done ( CSphString & sError ) override;
 
 private:
@@ -487,6 +497,7 @@ private:
 	CSphString			m_sSIFile;
 	CSphString			m_sTmpOffsetFile;
 	CSphWriter			m_tWriter;
+	SphOffset_t			m_tPrevOffset = 0;
 	int64_t				m_iNumRows = 0;
 };
 
@@ -500,9 +511,22 @@ JsonSIBuilder_c::JsonSIBuilder_c ( const ISphSchema & tSchema, const CSphString 
 }
 
 
-void JsonSIBuilder_c::AddRowSize ( SphOffset_t tSize )
+void JsonSIBuilder_c::AddRowOffsetSize ( std::pair<SphOffset_t,SphOffset_t> tOffsetSize )
 {
-	m_tWriter.ZipOffset(tSize);
+	if ( tOffsetSize.first>=m_tPrevOffset )
+	{
+		m_tWriter.PutByte(1);
+		m_tWriter.ZipOffset ( tOffsetSize.first - m_tPrevOffset );
+	}
+	else
+	{
+		m_tWriter.PutByte(0);
+		m_tWriter.ZipOffset ( tOffsetSize.first );
+	}
+
+	m_tWriter.ZipOffset ( tOffsetSize.second );
+
+	m_tPrevOffset = tOffsetSize.first;
 	m_iNumRows++;
 }
 

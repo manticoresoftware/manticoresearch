@@ -21,7 +21,7 @@ chmod +x ./test/clt-tests/scripts/generate-1mln-records.sh
 total_iterations=20000 ./test/clt-tests/scripts/generate-1mln-records.sh
 ––– output –––
 +-------+------+
-| Index | Type |
+| Table | Type |
 +-------+------+
 | tbl   | rt   |
 +-------+------+
@@ -155,7 +155,7 @@ mysql -v -h0 -P9306 -e "SHOW TABLES; DROP TABLE IF EXISTS abc; create table abc(
 SHOW TABLES
 --------------
 +-------+------+
-| Index | Type |
+| Table | Type |
 +-------+------+
 | tbl   | rt   |
 +-------+------+
@@ -213,7 +213,7 @@ mysql -v -h0 -P9306 -e "SHOW TABLES; DROP TABLE IF EXISTS tbl; DROP TABLE IF EXI
 SHOW TABLES
 --------------
 +-------+------+
-| Index | Type |
+| Table | Type |
 +-------+------+
 | abc   | rt   |
 | tbl   | rt   |
@@ -237,7 +237,7 @@ chmod +x ./test/clt-tests/scripts/generate-1mln-records.sh
 total_iterations=20000 ./test/clt-tests/scripts/generate-1mln-records.sh
 ––– output –––
 +-------+------+
-| Index | Type |
+| Table | Type |
 +-------+------+
 | tbl   | rt   |
 +-------+------+
@@ -371,7 +371,7 @@ mysql -v -h0 -P9306 -e "SHOW TABLES; create table abc(id, t1 text, t2 text index
 SHOW TABLES
 --------------
 +-------+------+
-| Index | Type |
+| Table | Type |
 +-------+------+
 | tbl   | rt   |
 +-------+------+

@@ -115,7 +115,7 @@ select *, zonespanlist() l from i1 where match('( ZONESPAN:(h1)wine white 1987 )
 select *, zonespanlist() l from i1 where match('ZONESPAN:h1 hello world');
 </sphinxql>
 
-<query endpoint="json/search"> { "index": "test", "query": { "query_string": "ZONESPAN:zoneC kings and" }}</query>
+<query endpoint="json/search"> { "table": "test", "query": { "query_string": "ZONESPAN:zoneC kings and" }}</query>
 
 </queries>
 

@@ -30,7 +30,7 @@ $params = [
   'cluster' => 'click_query',
   'body' => [
      'operation' => 'add',
-     'index' => 'clicks_daily_index'
+     'table' => 'clicks_daily_index'
       
   ]
 ];
@@ -115,7 +115,7 @@ $params = [
   'cluster' => 'posts',
   'body' => [
      'operation' => 'drop',
-     'index' => 'weekly_index'
+     'table' => 'weekly_index'
       
   ]
 ];

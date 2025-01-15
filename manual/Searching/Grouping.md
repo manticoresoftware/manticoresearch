@@ -33,7 +33,7 @@ JSON query format currently supports a basic grouping that can retrieve aggregat
 
 ```json
 {
-  "index": "<index_name>",
+  "table": "<table_name>",
   "limit": 0,
   "aggs": {
     "<aggr_name>": {
@@ -86,6 +86,7 @@ In most cases, however, you'll want to obtain some aggregated data for each grou
 * `COUNT(*)` to simply get the number of elements in each group
 * or `AVG(field)` to calculate the average value of the field within the group
 
+For HTTP JSON requests, using a single `aggs` bucket with `limit=0` at the main query level works similarly to a SQL query with `GROUP BY` and `COUNT(*)`, providing equivalent behavior and performance.
 
 <!-- intro -->
 ##### Example:
@@ -127,7 +128,7 @@ SELECT release_year, AVG(rental_rate) FROM films GROUP BY release_year LIMIT 5;
 ``` json
 POST /search -d '
     {
-     "index" : "films",
+     "table" : "films",
      "limit": 0,
      "aggs" :
      {
@@ -255,7 +256,7 @@ Array
 ```
 <!-- request Python -->
 ``` python
-res =searchApi.search({"index":"films","limit":0,"aggs":{"release_year":{"terms":{"field":"release_year","size":100}}}})
+res =searchApi.search({"table":"films","limit":0,"aggs":{"release_year":{"terms":{"field":"release_year","size":100}}}})
 ```
 <!-- response Python -->
 ``` python
@@ -287,7 +288,7 @@ res =searchApi.search({"index":"films","limit":0,"aggs":{"release_year":{"terms"
 ```
 <!-- request Javascript -->
 ``` javascript
-res = await searchApi.search({"index":"films","limit":0,"aggs":{"release_year":{"terms":{"field":"release_year","size":100}}}});
+res = await searchApi.search({"table":"films","limit":0,"aggs":{"release_year":{"terms":{"field":"release_year","size":100}}}});
 ```
 <!-- response Javascript -->
 ``` javascript
@@ -540,7 +541,7 @@ SELECT category_id, release_year, count(*) FROM films GROUP BY category_id, rele
 POST /search -d '
     {
     "size": 0,
-    "index": "films",
+    "table": "films",
     "aggs": {
         "cat_release": {
             "composite": {
@@ -765,7 +766,7 @@ SELECT groupby() gb, count(*) FROM shoes GROUP BY sizes ORDER BY gb asc;
 ``` json
 POST /search -d '
     {
-     "index" : "shoes",
+     "table" : "shoes",
      "limit": 0,
      "aggs" :
      {
@@ -859,7 +860,7 @@ Array
 ```
 <!-- request Python -->
 ``` python
-res =searchApi.search({"index":"shoes","limit":0,"aggs":{"sizes":{"terms":{"field":"sizes","size":100}}}})
+res =searchApi.search({"table":"shoes","limit":0,"aggs":{"sizes":{"terms":{"field":"sizes","size":100}}}})
 ```
 <!-- response Python -->
 ``` python
@@ -874,7 +875,7 @@ res =searchApi.search({"index":"shoes","limit":0,"aggs":{"sizes":{"terms":{"fiel
 ```
 <!-- request Javascript -->
 ``` javascript
-res = await searchApi.search({"index":"shoes","limit":0,"aggs":{"sizes":{"terms":{"field":"sizes","size":100}}}});
+res = await searchApi.search({"table":"shoes","limit":0,"aggs":{"sizes":{"terms":{"field":"sizes","size":100}}}});
 ```
 <!-- response Javascript -->
 ``` javascript
@@ -1065,7 +1066,7 @@ SELECT groupby() color, count(*) from products GROUP BY meta.color;
 ``` json
 POST /search -d '
     {
-     "index" : "products",
+     "table" : "products",
      "limit": 0,
      "aggs" :
      {
@@ -1142,7 +1143,7 @@ Array
 ```
 <!-- request Python -->
 ``` python
-res =searchApi.search({"index":"products","limit":0,"aggs":{"color":{"terms":{"field":"meta.color","size":100}}}})
+res =searchApi.search({"table":"products","limit":0,"aggs":{"color":{"terms":{"field":"meta.color","size":100}}}})
 ```
 <!-- response Python -->
 ``` python
@@ -1156,7 +1157,7 @@ res =searchApi.search({"index":"products","limit":0,"aggs":{"color":{"terms":{"f
 ```
 <!-- request Javascript -->
 ``` javascript
-res = await searchApi.search({"index":"products","limit":0,"aggs":{"color":{"terms":{"field":"meta.color","size":100}}}});
+res = await searchApi.search({"table":"products","limit":0,"aggs":{"color":{"terms":{"field":"meta.color","size":100}}}});
 ```
 <!-- response Javascript -->
 ``` javascript

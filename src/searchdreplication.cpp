@@ -1452,6 +1452,7 @@ void ReplicationServiceStart ( bool bBootStrap ) EXCLUDES ( g_tClustersLock )
 	// should be lined up with PrepareClustersOnStartup
 	if ( !ReplicationEnabled() )
 	{
+		Threads::SccRL_t tLock ( g_tClustersLock );
 		if ( !g_hClusters.IsEmpty() )
 			sphWarning ( "loading %d cluster(s) but the replication disabled, %s", g_hClusters.GetLength(), g_sReplicationStartError.cstr() );
 		return;
@@ -2216,7 +2217,7 @@ bool ValidateClusterStatement ( const CSphString & sIndexName, const ServedDesc_
 	if ( !bHTTP )
 		return TlsMsg::Err ( "table '%s' is a part of cluster '%s', use '%s:%s'", sIndexName.cstr(), tDesc.m_sCluster.cstr(), tDesc.m_sCluster.cstr(), sIndexName.cstr() );
 
-	return TlsMsg::Err( R"(table '%s' is a part of cluster '%s', use "cluster":"%s" and "index":"%s" properties)", sIndexName.cstr(), tDesc.m_sCluster.cstr(), tDesc.m_sCluster.cstr(), sIndexName.cstr() );
+	return TlsMsg::Err( R"(table '%s' is a part of cluster '%s', use "cluster":"%s" and "table":"%s" properties)", sIndexName.cstr(), tDesc.m_sCluster.cstr(), tDesc.m_sCluster.cstr(), sIndexName.cstr() );
 }
 
 std::optional<CSphString> IsPartOfCluster ( const ServedDesc_t * pDesc )

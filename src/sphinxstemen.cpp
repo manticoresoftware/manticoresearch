@@ -39,6 +39,7 @@ static unsigned char vowel_map[] =
 	"\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0" // e
 	"\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0"; // f
 
+#undef is_vowel
 #define is_vowel(idx) vowel_map[word[idx]]
 
 static inline int stem_en_id ( unsigned char l )
@@ -210,6 +211,7 @@ void stem_en ( unsigned char * word, int len )
 			break;
 	r2 = i+2;
 
+#undef W
 #define W(p,c) ( word[len-p]==c )
 
 #define SUFF2(c2,c1) ( len>=2 && W(1,c1) && W(2,c2) )

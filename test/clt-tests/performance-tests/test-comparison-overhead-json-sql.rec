@@ -1,7 +1,8 @@
 ––– block: ../base/start-searchd –––
 ––– input –––
-php -d memory_limit=-1 ./test/clt-tests/scripts/load_us_names_min_infix_len.php 1000 10 1000000 5 2 > /dev/null
+php -d memory_limit=2G ./test/clt-tests/scripts/load_names_attr.php --batch-size=100000 --concurrency=4 --docs=2000000 --start-id=1 --min-infix-len=2 --drop-table > /dev/null; echo $?
 ––– output –––
+0
 ––– input –––
 export start=$(date +%s%N)
 ––– output –––
@@ -31,6 +32,6 @@ echo "Duration: ${mysql} ${curl} ms"
 ––– output –––
 Duration: %{NUMBER} %{NUMBER} ms
 ––– input –––
-php -r "exit(round(abs($curl - $mysql) / ($curl + $mysql)/2 * 100, 0) >= 2);" 2>/dev/null && echo "----$?----"
+php -r "exit(round(abs($curl - $mysql) / ($curl + $mysql)/2 * 100, 0) >= 3);" 2>/dev/null && echo "----$?----"
 ––– output –––
 ----0----

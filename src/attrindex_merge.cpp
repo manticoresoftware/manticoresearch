@@ -184,7 +184,7 @@ bool AttrMerger_c::Impl_c::CopyMixedAttributes_T ( const CSphIndex & tIndex, con
 			std::pair<SphOffset_t, SphOffset_t> tOffsetSize = m_pBlobRowBuilder->Flush ( pOldBlobRow );
 
 			if ( m_pJsonSIBuilder )
-				m_pJsonSIBuilder->AddRowSize ( tOffsetSize.second );
+				m_pJsonSIBuilder->AddRowOffsetSize ( tOffsetSize );
 
 			memcpy ( dTmpRow.Begin(), pRow, iStrideBytes );
 			sphSetRowAttr ( dTmpRow.Begin(), pBlobLocator->m_tLocator, tOffsetSize.first );
@@ -457,7 +457,7 @@ bool SiBuilder_c::ProcessMixedAttributes()
 		{
 			assert ( pBlobRow && pBlobLoc );
 			SphAttr_t tBlobRowOffset = sphGetRowAttr ( pRow, pBlobLoc->m_tLocator );
-			m_pJsonSIBuilder->AddRowSize ( sphGetBlobTotalLen ( pBlobRow+tBlobRowOffset, iNumBlobAttrs ) );
+			m_pJsonSIBuilder->AddRowOffsetSize ( { tBlobRowOffset, sphGetBlobTotalLen ( pBlobRow+tBlobRowOffset, iNumBlobAttrs ) } );
 		}
 	}
 	return true;

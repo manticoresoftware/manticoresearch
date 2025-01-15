@@ -59,11 +59,13 @@ searchd {
 
 ## SQL over HTTP
 
-Endpoints `/sql` and `/cli` allow running SQL queries via HTTP.
+Manticore provides `/sql`, `/cli`, and `/cli_json` endpoints for running SQL queries over HTTP. Each endpoint is designed for specific use cases:
 
-* `/sql` endpoint accepts only SELECT statements and returns the response in HTTP JSON format.
-* The `/sql?mode=raw` endpoint accepts any SQL query and returns the response in raw format, similar to what you would receive via mysql.
-* The `/cli` endpoint accepts any SQL query and returns the response in raw format, similar to what you would receive via mysql. Unlike the `/sql` and `/sql?mode=raw` endpoints, the `query` parameter must not be URL-encoded. This endpoint is intended for manual actions using a browser or command line HTTP clients such as curl. It is not recommended to use the `/cli` endpoint in scripts.
+* `/sql`: Suitable for programmatic usage from applications.
+  - The `/sql` endpoint accepts only SELECT statements and returns the response in HTTP JSON format.
+  - The `/sql?mode=raw` endpoint accepts any SQL query and returns the response in raw format, similar to what you would receive via mysql.
+* `/cli`: Intended **only for manual use** (e.g., via curl or browser). **Not recommended for scripts.**
+* `/cli_json`: Similar to `/cli`, but returns results in JSON format. **Not recommended for scripts.**
 
 ### /sql
 
@@ -488,6 +490,8 @@ curl localhost:9308/sql -d 'mode=raw&query=SHOW TABLES'
 
 > NOTE: `/cli` requires [Manticore Buddy](../Installation/Manticore_Buddy.md). If it doesn't work, make sure Buddy is installed.
 
+> NOTE: The `/cli` endpoint is designed for manual interaction with Manticore using tools like curl or a browser. It is not intended for use in automated scripts. Use the `/sql` endpoint instead.
+
 While the `/sql` endpoint is useful for controlling Manticore programmatically from your application, there's also the `/cli` endpoint. This makes it easier to **manually maintain a Manticore instance** using curl or your browser. It accepts both POST and GET HTTP methods. Everything inputted after `/cli?` is understood by Manticore, even if it's not manually escaped with curl or automatically encoded by the browser. No `query` parameter is required. Importantly, the `+` sign is not changed to a space, eliminating the need for encoding it. For the POST method, Manticore accepts everything exactly as it is, without any changes. The response is in tabular format, similar to an SQL result set you might see in a MySQL client.
 
 <!-- request POST -->
@@ -554,6 +558,8 @@ curl 0:9308/cli -d 'desc test'
 <!-- end -->
 
 ### /cli_json
+> NOTE: The `/cli_json` endpoint is designed for manual interaction with Manticore using tools like curl or a browser. It is not intended for use in automated scripts. Use the `/sql` endpoint instead.
+
 <!-- example cli_json -->
 The `/cli_json` endpoint provides the same functionality as `/cli`, but the response format is JSON. It includes:
 - `columns` section describing the schema.
@@ -691,7 +697,6 @@ curl 0:9308/cli_json -d 'desc test'
 
 ### Keep-alive
 
-HTTP keep-alive is supported (except for the `/cli` endpoint), which allows for stateful interactions via the HTTP JSON interface as long as the client also supports keep-alive. For instance, using the [/cli_json](../Connecting_to_the_server/HTTP.md#/cli_json) endpoint, you can execute `SHOW META` after a `SELECT` command, and it will function similarly to interactions with Manticore through a MySQL client.
-
+HTTP keep-alive is supported for the `/sql`, `/sql?mode=raw`, and `/cli_json` endpoints, but not for the `/cli` endpoint. This feature enables stateful interactions via the HTTP JSON interface, provided the client also supports keep-alive. For example, using the [/cli_json](../Connecting_to_the_server/HTTP.md#/cli_json) endpoint, you can run a `SHOW META` command after a `SELECT` query, and it will behave similarly to interactions with Manticore through a MySQL client.
 
 <!-- proofread -->

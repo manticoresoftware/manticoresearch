@@ -131,6 +131,8 @@ FLOAT_CONSTANT      ({INT}\.{INT}?|{INT}?\.{INT}){EXPONENT}?
 "WAIT"				{ STORE_BOUNDS; return TOK_WAIT; }
 "WITH"              { STORE_BOUNDS; return TOK_WITH; }
 
+"SYSTEM."           { STORE_BOUNDS; return TOK_SYSTEM_DOT; }
+
 
 {FLOAT_CONSTANT}	{ STORE_BOUNDS; lvalp->m_fValue = (float)strtod ( yytext, NULL ); return TOK_CONST_FLOAT; }
 {INT}   			{ STORE_BOUNDS; lvalp->SetValueInt ( strtoull ( yytext, NULL, 10 ), false); return TOK_CONST_INT; }

@@ -84,7 +84,7 @@ jobs:
         # --timeout may be not working https://gitlab.kitware.com/cmake/cmake/-/issues/23979
         run: |
           export CMAKE_TOOLCHAIN_FILE=$(pwd)/dist/build_dockers/cross/linux.cmake
-          ctest -V -S misc/ctest/gltest.cmake --no-compress-output --timeout 600
+          ctest -VV -S misc/ctest/gltest.cmake --no-compress-output --timeout 600
         continue-on-error: true
 
       - name: List build files

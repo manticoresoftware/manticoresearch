@@ -592,7 +592,7 @@ jobs:
       cache_key: build_windows_x64
       artifact_list: "build/xml build/src/Debug/indexer.exe build/src/Debug/searchd.exe build/src/Debug/tests.exe build/src/gtests/Debug/gmanticoretest.exe build/usr"
       cmake_command: |
-        export CMAKE_TOOLCHAIN_FILE=$(pwd)/../dist/build_dockers/cross/windows.cmake
+        export CMAKE_TOOLCHAIN_FILE=$(pwd)/dist/build_dockers/cross/windows.cmake
         ctest -VV -S misc/ctest/gltest.cmake --no-compress-output
 
   test_windows:

@@ -83,7 +83,6 @@ jobs:
     with:
       DISTR: ${{ matrix.DISTR }}
       arch: ${{ matrix.arch }}
-      UNITY_BUILD: 1
       cmake_command: |
         mkdir build
         cd build
@@ -106,7 +105,6 @@ jobs:
       DISTR: ${{ matrix.DISTR }}
       arch: ${{ matrix.arch }}
       boost_url_key: boost_rhel_feb17
-      UNITY_BUILD: 1
       cmake_command: |
         ln -s $(pwd) /builds_manticoresearch_dev_usr_src_debug_manticore_component_src_0
         cd /builds_manticoresearch_dev_usr_src_debug_manticore_component_src_0
@@ -131,7 +129,6 @@ jobs:
       DISTR: ${{ matrix.DISTR }}
       arch: ${{ matrix.arch }}
       HOMEBREW_PREFIX: /opt/homebrew
-      UNITY_BUILD: 1
       cmake_command: |
         mkdir build
         cd build
@@ -150,7 +147,6 @@ jobs:
       arch: x64
       sysroot_url_key: roots_mysql83_24oct12_1
       boost_url_key: boost80_zstd_zlib
-      UNITY_BUILD: 1
       cmake_command: |
         mkdir build
         cd build

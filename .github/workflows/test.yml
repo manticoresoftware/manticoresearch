@@ -564,6 +564,7 @@ jobs:
       DISTR: freebsd13
       boost_url_key: none
       cmake_command: |
+        find .
         mkdir build
         cd build
         export CMAKE_TOOLCHAIN_FILE=$(pwd)/dist/build_dockers/cross/freebsd.cmake

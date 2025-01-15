@@ -1,0 +1,232 @@
+––– block: ../base/start-searchd –––
+––– input –––
+apt-get install -y jq > /dev/null; echo $?
+––– output –––
+debconf: delaying package configuration, since apt-utils is not installed
+0
+––– input –––
+mysql -h0 -P9306 -e "CREATE TABLE test1 (id BIGINT, model TEXT, storage_capacity INTEGER, color string, release_year INTEGER, price FLOAT, discounted_price FLOAT, sold BOOL, date_added TIMESTAMP, product_codes MULTI, values MULTI64, additional_info JSON, vector float_vector knn_type='hnsw' knn_dims='4' hnsw_similarity='l2');"; echo $?
+––– output –––
+0
+––– input –––
+mysql -h0 -P9306 -e "INSERT INTO test1 VALUES (1, 'iPhone 13 Pro', 256, 'silver', 2021, 1099.99, 989.99, 1, '1591362342000', (1,2,3), (523456764345678976, 98765409877866654098, 1109876543450987650987), '{\"features\": [\"ProMotion display\", \"A15 Bionic chip\", \"Ceramic Shield front cover\"]}', (0.773448, 0.312478, 0.137971, 0.459821));"; echo $?
+––– output –––
+0
+––– input –––
+mysql -h0 -P9306 -e "INSERT INTO test1 VALUES (2, 'Galaxy S21 Ultra', 128, 'black', 2021, 1199.99, 1099.99, 0, '1609459200000', (4,5,6), (1234567890123456789, 9876543210987654321), '{\"features\": [\"Dynamic AMOLED 2X\", \"Exynos 2100\", \"108MP camera\"]}', (0.5, 0.4, 0.3, 0.2));"; echo $?
+––– output –––
+0
+––– input –––
+curl -X POST http://localhost:9308/insert -d '{"table": "test1", "id": 3, "doc": {"model": "Pixel 6", "storage_capacity": 128, "color": "white", "release_year": 2021, "price": 599.99, "discounted_price": 549.99, "sold": false, "date_added": 1630454400000, "product_codes": [7, 8, 9], "values": [987654321987654321, 123456789123456789], "additional_info": {"features": ["Smooth display", "Google Tensor chip", "AI-powered camera"]}, "vector": [0.8, 0.6, 0.4, 0.2]}}'; echo $?
+––– output –––
+{"table":"test1","_id":3,"created":true,"result":"created","status":201}0
+––– input –––
+mysql -P9306 -h0 -e "SHOW TABLES LIKE 't_s%';"
+––– output –––
++-------+------+
+| Table | Type |
++-------+------+
+| test1 | rt   |
++-------+------+
+––– input –––
+mysql -P9306 -h0 -e "select * from test1;"
+––– output –––
++------+------------------+------------------+--------+--------------+-------------+------------------+------+------------+---------------+-----------------------------------------+-----------------------------------------------------------------------------------+-------------------------------------+
+| id   | model            | storage_capacity | color  | release_year | price       | discounted_price | sold | date_added | product_codes | values                                  | additional_info                                                                   | vector                              |
++------+------------------+------------------+--------+--------------+-------------+------------------+------+------------+---------------+-----------------------------------------+-----------------------------------------------------------------------------------+-------------------------------------+
+|    2 | Galaxy S21 Ultra |              128 | black  |         2021 | 1199.989990 |      1099.989990 |    0 | 3141431296 | 4,5,6         | 1234567890123456789,9223372036854775807 | {"features":["Dynamic AMOLED 2X","Exynos 2100","108MP camera"]}                   | 0.500000,0.400000,0.300000,0.200000 |
+|    3 | Pixel 6          |              128 | white  |         2021 |  599.989990 |       549.989990 |    0 | 2661794816 | 7,8,9         | 123456789123456789,987654321987654321   | {"features":["Smooth display","Google Tensor chip","AI-powered camera"]}          | 0.800000,0.600000,0.400000,0.200000 |
+|    1 | iPhone 13 Pro    |              256 | silver |         2021 | 1099.989990 |       989.989990 |    1 | 2224442480 | 1,2,3         | 523456764345678976,9223372036854775807  | {"features":["ProMotion display","A15 Bionic chip","Ceramic Shield front cover"]} | 0.773448,0.312478,0.137971,0.459821 |
++------+------------------+------------------+--------+--------------+-------------+------------------+------+------------+---------------+-----------------------------------------+-----------------------------------------------------------------------------------+-------------------------------------+
+––– input –––
+curl -X POST http://localhost:9308/replace -d '{"table": "test1", "id": 1, "doc": {"model": "iPhone 13 Pro Max", "storage_capacity": 512, "color": "gold", "release_year": 2021, "price": 1299.99, "discounted_price": 1199.99, "sold": true, "date_added": 1591362342000, "product_codes": [7, 8, 9], "values": [1234567890123456789, 9876543210987654321], "additional_info": {"features": ["ProMotion display", "A15 Bionic chip", "Improved battery life"]}, "vector": [0.9, 0.8, 0.7, 0.6]}}'; echo $?
+––– output –––
+{"table":"test1","_id":1,"created":false,"result":"updated","status":200}0
+––– input –––
+mysql -P9306 -h0 -e "select * from test1;"
+––– output –––
++------+-------------------+------------------+-------+--------------+-------------+------------------+------+------------+---------------+-----------------------------------------+------------------------------------------------------------------------------+-------------------------------------+
+| id   | model             | storage_capacity | color | release_year | price       | discounted_price | sold | date_added | product_codes | values                                  | additional_info                                                              | vector                              |
++------+-------------------+------------------+-------+--------------+-------------+------------------+------+------------+---------------+-----------------------------------------+------------------------------------------------------------------------------+-------------------------------------+
+|    3 | Pixel 6           |              128 | white |         2021 |  599.989990 |       549.989990 |    0 | 2661794816 | 7,8,9         | 123456789123456789,987654321987654321   | {"features":["Smooth display","Google Tensor chip","AI-powered camera"]}     | 0.800000,0.600000,0.400000,0.200000 |
+|    1 | iPhone 13 Pro Max |              512 | gold  |         2021 | 1299.989990 |      1199.989990 |    1 | 2224442480 | 7,8,9         | 1234567890123456789                     | {"features":["ProMotion display","A15 Bionic chip","Improved battery life"]} | 0.900000,0.800000,0.700000,0.600000 |
+|    2 | Galaxy S21 Ultra  |              128 | black |         2021 | 1199.989990 |      1099.989990 |    0 | 3141431296 | 4,5,6         | 1234567890123456789,9223372036854775807 | {"features":["Dynamic AMOLED 2X","Exynos 2100","108MP camera"]}              | 0.500000,0.400000,0.300000,0.200000 |
++------+-------------------+------------------+-------+--------------+-------------+------------------+------+------------+---------------+-----------------------------------------+------------------------------------------------------------------------------+-------------------------------------+
+––– input –––
+echo -e '{"index":{"_index":"test1","_id":4}}\n{"model": "Galaxy Z Fold 3", "storage_capacity": 256, "color": "black", "release_year": 2021, "price": 1799.99, "discounted_price": 1699.99, "sold": true, "date_added": 1627776000000, "product_codes": [13, 14, 15], "values": [9876543210987654321, 1234567890123456789], "additional_info": {"features": ["Foldable display", "High performance"]}, "vector": [0.3, 0.4, 0.5, 0.6]}\n{"index":{"_index":"test1","_id":5}}\n{"model": "Pixel 7", "storage_capacity": 128, "color": "white", "release_year": 2022, "price": 699.99, "discounted_price": 649.99, "sold": false, "date_added": 1661990400000, "product_codes": [16, 17, 18], "values": [223344556677889900, 998877665544332211], "additional_info": {"features": ["Tensor G2", "120Hz display"]}, "vector": [0.4, 0.5, 0.6, 0.7]}' > bulk.json; echo $?
+––– output –––
+0
+––– input –––
+curl -H 'Content-type: application/x-ndjson' --data-binary @bulk.json http://localhost:9308/_bulk; echo $?
+––– output –––
+{"items":[{"index":{"_index":"test1","_type":"doc","_id":4,"status":400,"error":{"type":"mapper_parsing_exception","reason":"row 1, column 10: non-MVA value specified for a MVA column"}}},{"index":{"_index":"test1","_type":"doc","_id":5,"_version":1,"result":"created","_shards":{"total":1,"successful":1,"failed":0},"_seq_no":0,"_primary_term":1,"status":201}}],"errors":true,"took":1}0
+––– input –––
+mysql -P9306 -h0 -e "select * from test1;"
+––– output –––
++------+-------------------+------------------+-------+--------------+-------------+------------------+------+------------+---------------+-----------------------------------------+------------------------------------------------------------------------------+-------------------------------------+
+| id   | model             | storage_capacity | color | release_year | price       | discounted_price | sold | date_added | product_codes | values                                  | additional_info                                                              | vector                              |
++------+-------------------+------------------+-------+--------------+-------------+------------------+------+------------+---------------+-----------------------------------------+------------------------------------------------------------------------------+-------------------------------------+
+|    3 | Pixel 6           |              128 | white |         2021 |  599.989990 |       549.989990 |    0 | 2661794816 | 7,8,9         | 123456789123456789,987654321987654321   | {"features":["Smooth display","Google Tensor chip","AI-powered camera"]}     | 0.800000,0.600000,0.400000,0.200000 |
+|    1 | iPhone 13 Pro Max |              512 | gold  |         2021 | 1299.989990 |      1199.989990 |    1 | 2224442480 | 7,8,9         | 1234567890123456789                     | {"features":["ProMotion display","A15 Bionic chip","Improved battery life"]} | 0.900000,0.800000,0.700000,0.600000 |
+|    5 | Pixel 7           |              128 | white |         2022 |  699.989990 |       649.989990 |    0 | 4133023744 | 16,17,18      | 223344556677889900,998877665544332211   | {"features":["Tensor G2","120Hz display"]}                                   | 0.400000,0.500000,0.600000,0.700000 |
+|    2 | Galaxy S21 Ultra  |              128 | black |         2021 | 1199.989990 |      1099.989990 |    0 | 3141431296 | 4,5,6         | 1234567890123456789,9223372036854775807 | {"features":["Dynamic AMOLED 2X","Exynos 2100","108MP camera"]}              | 0.500000,0.400000,0.300000,0.200000 |
++------+-------------------+------------------+-------+--------------+-------------+------------------+------+------------+---------------+-----------------------------------------+------------------------------------------------------------------------------+-------------------------------------+
+––– input –––
+curl -X POST http://localhost:9308/delete -d '{"table": "test1", "id": 1}'; echo $?
+––– output –––
+{"table":"test1","_id":1,"found":true,"result":"deleted"}0
+––– input –––
+mysql -P9306 -h0 -e "select * from test1;"
+––– output –––
++------+------------------+------------------+-------+--------------+-------------+------------------+------+------------+---------------+-----------------------------------------+--------------------------------------------------------------------------+-------------------------------------+
+| id   | model            | storage_capacity | color | release_year | price       | discounted_price | sold | date_added | product_codes | values                                  | additional_info                                                          | vector                              |
++------+------------------+------------------+-------+--------------+-------------+------------------+------+------------+---------------+-----------------------------------------+--------------------------------------------------------------------------+-------------------------------------+
+|    3 | Pixel 6          |              128 | white |         2021 |  599.989990 |       549.989990 |    0 | 2661794816 | 7,8,9         | 123456789123456789,987654321987654321   | {"features":["Smooth display","Google Tensor chip","AI-powered camera"]} | 0.800000,0.600000,0.400000,0.200000 |
+|    5 | Pixel 7          |              128 | white |         2022 |  699.989990 |       649.989990 |    0 | 4133023744 | 16,17,18      | 223344556677889900,998877665544332211   | {"features":["Tensor G2","120Hz display"]}                               | 0.400000,0.500000,0.600000,0.700000 |
+|    2 | Galaxy S21 Ultra |              128 | black |         2021 | 1199.989990 |      1099.989990 |    0 | 3141431296 | 4,5,6         | 1234567890123456789,9223372036854775807 | {"features":["Dynamic AMOLED 2X","Exynos 2100","108MP camera"]}          | 0.500000,0.400000,0.300000,0.200000 |
++------+------------------+------------------+-------+--------------+-------------+------------------+------+------------+---------------+-----------------------------------------+--------------------------------------------------------------------------+-------------------------------------+
+––– input –––
+mysql -P9306 -h0 -e "DROP TABLE test1;"; echo $?
+––– output –––
+0
+––– input –––
+export INSTANCE=1
+––– output –––
+––– block: ../base/replication/start-searchd-precach –––
+––– input –––
+export INSTANCE=2
+––– output –––
+––– block: ../base/replication/start-searchd-precach –––
+––– input –––
+export INSTANCE=3
+––– output –––
+––– block: ../base/replication/start-searchd-precach –––
+––– input –––
+export INSTANCE=4
+––– output –––
+––– block: ../base/replication/start-searchd-precach –––
+––– input –––
+export INSTANCE=5
+––– output –––
+––– block: ../base/replication/start-searchd-precach –––
+––– input –––
+export INSTANCE=6
+––– output –––
+––– block: ../base/replication/start-searchd-precach –––
+––– input –––
+export CLUSTER_NAME=replication
+––– output –––
+––– block: ../base/replication/create-cluster –––
+––– block: ../base/replication/join-cluster-on-all-nodes –––
+––– input –––
+for port in 1306 2306 3306 4306 5306 6306; do echo "Checking status for port $port:"; timeout 10 bash -c "while ! mysql -h0 -P$port -e \"SHOW STATUS LIKE 'cluster_replication_node_state'\G\" | grep -q 'Value: synced'; do sleep 1; done" && echo "Port $port: Node is synced." || echo "Port $port: Node is not synced (Value: closed or other)."; done
+––– output –––
+Checking status for port 1306:
+Port 1306: Node is synced.
+Checking status for port 2306:
+Port 2306: Node is synced.
+Checking status for port 3306:
+Port 3306: Node is synced.
+Checking status for port 4306:
+Port 4306: Node is synced.
+Checking status for port 5306:
+Port 5306: Node is synced.
+Checking status for port 6306:
+Port 6306: Node is synced.
+––– input –––
+mysql -h0 -P6306 -e "create table replication:test2 (id BIGINT, model TEXT, storage_capacity INTEGER, color string, release_year INTEGER, price FLOAT, discounted_price FLOAT, sold BOOL, date_added TIMESTAMP, product_codes MULTI, values MULTI64, additional_info JSON, vector float_vector knn_type='hnsw' knn_dims='4' hnsw_similarity='l2') shards=3 rf=1;"; echo $?
+––– output –––
+0
+––– input –––
+mysql -h0 -P6306 -e "SELECT * FROM system.sharding_state;"
+––– output –––
+––– input –––
+for port in 1306 2306 3306 4306 5306 6306; do echo "Port $port:"; mysql -h0 -P$port -e "SHOW TABLES LIKE 'test2_s%';"; done
+––– output –––
+––– input –––
+mysql -h0 -P6306 -e "INSERT INTO replication:test2 VALUES (6775836565403860993, 'iPhone 13 Pro', 256, 'silver', 2021, 1099.99, 989.99, 1, '1591362342000', (1,2,3), (523456764345678976, 98765409877866654098, 1109876543450987650987), '{\"features\": [\"ProMotion display\", \"A15 Bionic chip\", \"Ceramic Shield front cover\"]}', (0.773448, 0.312478, 0.137971, 0.459821));"; echo $?
+––– output –––
+0
+––– input –––
+mysql -h0 -P6306 -e "INSERT INTO replication:test2 VALUES (6775836565403860994, 'Galaxy S21 Ultra', 128, 'black', 2021, 1199.99, 1099.99, 0, '1609459200000', (4,5,6), (1234567890123456789, 9876543210987654321), '{\"features\": [\"Dynamic AMOLED 2X\", \"Exynos 2100\", \"108MP camera\"]}', (0.5, 0.4, 0.3, 0.2));"; echo $?
+––– output –––
+0
+––– input –––
+for port in 1306 2306 3306 4306 5306 6306; do mysql -h0 -P$port -e "SELECT * FROM replication:test2 ORDER BY id ASC;" | md5sum > /tmp/hash_$port.txt; done && for port1 in 1306 2306 3306 4306 5306; do for port2 in 1306 2306 3306 4306 5306; do [ $port1 -ne $port2 ] && ! diff /tmp/hash_$port1.txt /tmp/hash_$port2.txt && echo "Mismatch between $port1 and $port2"; done; done
+––– output –––
+––– input –––
+mysql -h0 -P1306 -e "SHOW STATUS LIKE 'cluster_replication_indexes';"
+––– output –––
++-----------------------------+-------+
+| Counter                     | Value |
++-----------------------------+-------+
+| cluster_replication_indexes | test2 |
++-----------------------------+-------+
+––– input –––
+for port in 1306 2306 3306 4306 5306 6306; do echo "Checking tables on port $port:"; mysql -h0 -P$port -e "SHOW TABLES;"; done
+––– output –––
+––– input –––
+for shard in test2_s0 test2_s1 test2_s2 test2_s3; do echo "Checking data in shard $shard:"; mysql -h0 -P1306 -e "SELECT COUNT(*) FROM $shard;"; done
+––– input –––
+mysql -P1306 -h0 -e "select * from test2;"
+––– output –––
++---------------------+------------------+------------------+--------+--------------+-------------+------------------+------+------------+---------------+-----------------------------------------+-----------------------------------------------------------------------------------+-------------------------------------+
+| id                  | model            | storage_capacity | color  | release_year | price       | discounted_price | sold | date_added | product_codes | values                                  | additional_info                                                                   | vector                              |
++---------------------+------------------+------------------+--------+--------------+-------------+------------------+------+------------+---------------+-----------------------------------------+-----------------------------------------------------------------------------------+-------------------------------------+
+| 6775836565403860994 | Galaxy S21 Ultra |              128 | black  |         2021 | 1199.989990 |      1099.989990 |    0 | 3141431296 | 4,5,6         | 1234567890123456789,9223372036854775807 | {"features":["Dynamic AMOLED 2X","Exynos 2100","108MP camera"]}                   | 0.500000,0.400000,0.300000,0.200000 |
+| 6775836565403860993 | iPhone 13 Pro    |              256 | silver |         2021 | 1099.989990 |       989.989990 |    1 | 2224442480 | 1,2,3         | 523456764345678976,9223372036854775807  | {"features":["ProMotion display","A15 Bionic chip","Ceramic Shield front cover"]} | 0.773448,0.312478,0.137971,0.459821 |
++---------------------+------------------+------------------+--------+--------------+-------------+------------------+------+------------+---------------+-----------------------------------------+-----------------------------------------------------------------------------------+-------------------------------------+
+––– input –––
+seq 1 200 | awk '{printf("{\"index\":{\"_index\":\"test2\",\"_id\":%d}}\n{\"f\":\"Bulk document %d\"}\n", $1 * 10, $1)}' > bulk.json; echo $?
+––– output –––
+––– input –––
+curl -H 'Content-type: application/x-ndjson' --data-binary @bulk.json http://localhost:1308/_bulk > /dev/null; echo $?
+––– output –––
+––– input –––
+mysql -P1306 -h0 -e "SHOW TABLES LIKE 'test2_s%';"
+––– output –––
+––– input –––
+mysql -P1306 -h0 -e "select count(*) from test2;"
+––– output –––
+––– input –––
+mysql -P1306 -h0 -e "select count(*) from test2_s0;"
+––– output –––
+––– input –––
+mysql -P1306 -h0 -e "select count(*) from test2_s1;"
+––– output –––
+––– input –––
+mysql -P1306 -h0 -e "select count(*) from test2_s2;"
+––– output –––
+––– input –––
+mysql -P9306 -h0 -e "create table test3 (id bigint, f TEXT, attr INT, flag BOOL) SHARDS=4 RF=3;"; echo $?
+––– output –––
+––– input –––
+curl -X POST http://localhost:9308/insert -d '{"table": "test3", "id": 1, "doc": {"f": "Hello world", "attr": 100, "flag": false}}'; echo $?
+––– output –––
+––– input –––
+curl -X POST http://localhost:9308/update -d '{"table": "test3", "id": 1, "doc": {"attr": 200, "flag": true}}'; echo $?
+––– output –––
+––– input –––
+mysql -P9306 -h0 -e "select * from test3;"
+––– output –––
+––– input –––
+seq 1 200 | awk '{printf("{\"index\":{\"_index\":\"test3\",\"_id\":%d}}\n{\"f\":\"Bulk document %d\"}\n", $1 * 10, $1)}' > bulk.json; echo $?
+––– output –––
+––– input –––
+curl -H 'Content-type: application/x-ndjson' --data-binary @bulk.json http://localhost:9308/_bulk > /dev/null; echo $?
+––– output –––
+––– input –––
+mysql -P9306 -h0 -e "SHOW TABLES LIKE 'test3_s%';"
+––– output –––
+––– input –––
+mysql -P9306 -h0 -e "select count(*) from test3;"
+––– output –––
+––– input –––
+mysql -P9306 -h0 -e "select count(*) from test3_s0;"
+––– output –––
+––– input –––
+mysql -P9306 -h0 -e "select count(*) from test3_s1;"
+––– output –––
+––– input –––
+mysql -P9306 -h0 -e "select count(*) from test3_s2;"
+––– output –––

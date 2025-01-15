@@ -15,6 +15,10 @@ on:
         required: false
         type: number
         default: 999999
+      UNITY_BUILD:
+        required: false
+        type: number
+        default: 0
       artifact_name:
         required: true
         type: string
@@ -51,6 +55,7 @@ jobs:
         # CTEST_REGEX: test_234
         WITH_COVERAGE: ${{ inputs.WITH_COVERAGE }}
         LIBS_BUNDLE:
+        UNITY_BUILD: ${{ inputs.UNITY_BUILD }}
     steps:
       - name: Checkout repository
         uses: actions/checkout@v3
@@ -77,7 +82,9 @@ jobs:
       - name: 🚀 Test
         id: test
         # --timeout may be not working https://gitlab.kitware.com/cmake/cmake/-/issues/23979
-        run: ctest -V -S misc/ctest/gltest.cmake --no-compress-output --timeout 600
+        run: |
+          export CMAKE_TOOLCHAIN_FILE=$(pwd)/dist/build_dockers/cross/linux.cmake
+          ctest -V -S misc/ctest/gltest.cmake --no-compress-output --timeout 600
         continue-on-error: true
 
       - name: List build files

@@ -65,7 +65,7 @@ CMD []
 
 # docker buildx create --name manticore_build --platform linux/amd64,linux/arm64
 # docker buildx use manticore_build
-# docker buildx build --platform linux/amd64,linux/arm64 --push -t manticoresearch/external_toolchain:clang16_cmake3263 .
+# docker buildx build --platform linux/amd64,linux/arm64 --push -t manticoresearch/external_toolchain:vcpkg331_20250114 .
 
 # deprecated:
 # on amd:

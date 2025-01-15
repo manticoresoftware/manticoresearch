@@ -99,6 +99,9 @@ jobs:
     with:
       CTEST_CONFIGURATION_TYPE: "Debug"
       artifact_name: debug_build
+      cmake_command: |
+        export CMAKE_TOOLCHAIN_FILE=$(pwd)/dist/build_dockers/cross/linux.cmake
+        ctest -VV -S misc/ctest/gltest.cmake --no-compress-output
 
   test_linux_debug:
     if: (github.event_name == 'pull_request' && github.event.pull_request.base.ref == 'update-buddy-version') != true
@@ -245,6 +248,9 @@ jobs:
     uses: ./.github/workflows/build_template.yml
     with:
       artifact_name: release_build
+      cmake_command: |
+        export CMAKE_TOOLCHAIN_FILE=$(pwd)/dist/build_dockers/cross/linux.cmake
+        ctest -VV -S misc/ctest/gltest.cmake --no-compress-output
 
   test_linux_release:
     if: (github.event_name == 'pull_request' && github.event.pull_request.base.ref == 'update-buddy-version') != true
@@ -441,6 +447,7 @@ jobs:
         mkdir build
         cd build
         cmake -DPACK=1 ..
+        export CMAKE_TOOLCHAIN_FILE=$(pwd)/dist/build_dockers/cross/linux.cmake
         cmake --build . --target package
       cache_key: pack_jammy_x86_64
       artifact_list: "build/manticore*deb"
@@ -547,7 +554,11 @@ jobs:
     uses: ./.github/workflows/build_template.yml
     with:
       arch: aarch64
-      cmake_command: mkdir build && cd build && ctest -VV -S ../misc/ctest/justbuild.cmake -DCTEST_SOURCE_DIRECTORY=.. --no-compress-output
+      cmake_command: |
+        mkdir build
+        cd build
+        export CMAKE_TOOLCHAIN_FILE=$(pwd)/../dist/build_dockers/cross/linux.cmake
+        ctest -VV -S ../misc/ctest/justbuild.cmake -DCTEST_SOURCE_DIRECTORY=.. --no-compress-output
       cache_key: build_jammy_aarch64
 
   build_freebsd:
@@ -558,7 +569,11 @@ jobs:
     with:
       DISTR: freebsd13
       boost_url_key: none
-      cmake_command: mkdir build && cd build && ctest -VV -S ../misc/ctest/justbuild.cmake -DCTEST_SOURCE_DIRECTORY=.. --no-compress-output
+      cmake_command: |
+        mkdir build
+        cd build
+        export CMAKE_TOOLCHAIN_FILE=$(pwd)/../dist/build_dockers/cross/freebsd.cmake
+        ctest -VV -S ../misc/ctest/justbuild.cmake -DCTEST_SOURCE_DIRECTORY=.. --no-compress-output
       cache_key: build_freebsd_x86_64
 
   build_windows:

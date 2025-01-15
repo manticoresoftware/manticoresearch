@@ -23,8 +23,13 @@ Define the schema using Manticore field types like `int`, `float`, `text`, `json
 CREATE SOURCE <source name> [(column type, ...)] [source_options]
 ```
 
-All schema keys are case-insensitive, so `Products`, `products`, and `PrOdUcTs` are treated the same. They are all converted to lowercase.
+All schema keys are case-insensitive, meaning `Products`, `products`, and `PrOdUcTs` are treated the same. They are all converted to lowercase.
 
+Additionally, you can define schema mapping if you have unsupported field name syntax.
+For example, `$keyName` is a valid key in JSON but is not allowed as a field name in Manticore Search.
+In such cases, you can use the following schema syntax:
+
+```allowed_field_name 'original JSON key name with special symbols' type```
 <!-- intro -->
 
 ##### SQL:
@@ -33,7 +38,7 @@ All schema keys are case-insensitive, so `Products`, `products`, and `PrOdUcTs` 
 
 ```sql
 CREATE SOURCE kafka
-(id bigint, term text, abbrev text, GlossDef json)
+(id bigint, term text, abbrev '$abbrev' text, GlossDef json)
 type='kafka'
 broker_list='kafka:9092'
 topic_list='my-data'
@@ -129,14 +134,14 @@ Data is transferred from Kafka to Manticore Search in batches, which are cleared
 
 Here's a mapping table based on the examples above:
 
-| Kafka | Source | Buffer | MV | Destination |
-|-|-|-|-|-|
-| id | id | id | id | id |
-| term | term | term | term as name | name |
-| unnecessary key | - | - | | |
-| abbrev | abbrev | abbrev | abbrev as short_name | short_name |
-| - | - | | `UTC_TIMESTAMP()`` as received_at | received_at |
-| GlossDef | GlossDef | GlossDef | GlossDef.size as size | size |
+| Kafka           | Source   | Buffer   | MV                                | Destination |
+|-----------------|----------|----------|-----------------------------------|-------------|
+| id              | id       | id       | id                                | id          |
+| term            | term     | term     | term as name                      | name        |
+| unnecessary key | -        | -        |                                   |             |
+| $abbrev         | abbrev   | abbrev   | abbrev as short_name              | short_name  |
+| -               | -        |          | `UTC_TIMESTAMP()`` as received_at | received_at |
+| GlossDef        | GlossDef | GlossDef | GlossDef.size as size             | size        |
 
 ### Listing
 
@@ -184,18 +189,18 @@ SHOW SOURCE kafka;
 <!-- response -->
 
 ```
-+--------+---------------------------------------------------------+
-| Source | Create Table                                            |
-+--------+---------------------------------------------------------+
-| kafka  | CREATE SOURCE kafka                                     |
-|        | (id bigint, term text, abbrev text, GlossDef json)      |
-|        | type='kafka'                                            |
-|        | broker_list='kafka:9092'                                |
-|        | topic_list='my-data'                                    |
-|        | consumer_group='manticore'                              |
-|        | num_consumers='2'                                       |
-|        | batch=50                                                |
-+--------+---------------------------------------------------------+
++--------+-------------------------------------------------------------------+
+| Source | Create Table                                                      |
++--------+-------------------------------------------------------------------+
+| kafka  | CREATE SOURCE kafka                                               |
+|        | (id bigint, term text, abbrev '$abbrev' text, GlossDef json)      |
+|        | type='kafka'                                                      |
+|        | broker_list='kafka:9092'                                          |
+|        | topic_list='my-data'                                              |
+|        | consumer_group='manticore'                                        |
+|        | num_consumers='2'                                                 |
+|        | batch=50                                                          |
++--------+-------------------------------------------------------------------+
 ```
 
 <!-- end -->

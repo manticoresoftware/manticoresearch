@@ -63,6 +63,7 @@
 #include "frontendschema.h"
 #include "skip_cache.h"
 #include "jieba.h"
+#include "secondaryindex.h"
 
 // services
 #include "taskping.h"
@@ -7963,7 +7964,7 @@ static const char * g_dSqlStmts[] =
 	"flush_hostnames", "flush_logs", "reload_indexes", "sysfilters", "debug", "alter_killlist_target",
 	"alter_index_settings", "join_cluster", "cluster_create", "cluster_delete", "cluster_index_add",
 	"cluster_index_delete", "cluster_update", "explain", "import_table", "freeze_indexes", "unfreeze_indexes",
-	"show_settings", "alter_rebuild_si", "kill", "show_locks", "show_scroll"
+	"show_settings", "alter_rebuild_si", "kill", "show_locks", "show_scroll", "show_table_indexes"
 };
 
 
@@ -16256,6 +16257,89 @@ void HandleMysqlShowIndexSettings ( RowBuffer_i & tOut, const SqlStmt_t & tStmt 
 }
 
 
+static void AddTableIndexes ( RowBuffer_i & tOut, const CSphIndex & tIndex, const CSphString & sPattern, int iChunk )
+{
+	const SIContainer_c * pSI = tIndex.GetSI();
+	if ( !pSI )
+		return;
+
+	iChunk = Max ( 0, iChunk );
+
+	CheckLike tLike ( sPattern.cstr() );
+
+	std::vector<SI::IndexAttrInfo_t> dInfo;
+	pSI->GetIndexAttrInfo(dInfo);
+	for ( auto & i : dInfo )
+	{
+		const char * szName = i.m_sName.c_str();
+		CSphString sType = ColumnarAttrType2Str ( i.m_eType );
+		CSphString sEnabled = i.m_bEnabled ? "1" : "0";
+		if ( !tLike.Match(szName) && !tLike.Match ( sType.cstr() ) && !tLike.Match ( sEnabled.cstr() ) )
+			continue;
+
+		tOut.PutNumAsString(iChunk);
+		tOut.PutString(szName);
+		tOut.PutString(sType);
+		tOut.PutString(sEnabled);
+		tOut.Commit();
+	}
+}
+
+
+void HandleMysqlShowTableIndexes ( RowBuffer_i & tOut, const SqlStmt_t & tStmt )
+{
+	CSphString sError;
+	auto pServed = GetServed ( tStmt.m_sIndex );
+	if ( !pServed )
+	{
+		tOut.Error ( "SHOW TABLE INDEXES requires an existing table" );
+		return;
+	}
+
+	int iChunk = tStmt.m_iIntParam;
+	if ( tStmt.m_dIntSubkeys.GetLength ()>=1 )
+		iChunk = (int) tStmt.m_dIntSubkeys[0];
+
+	bool bWarn = pServed->m_eType == IndexType_e::RT && iChunk>=0;
+	bool bKeepIteration = true;
+	auto fnShowIndexes = [&tOut,&tStmt,iChunk,bWarn,&bKeepIteration] ( const CSphIndex* pIndex )
+	{
+		if ( !pIndex )
+		{
+			if ( bWarn )
+				tOut.Error ( "SHOW TABLE INDEXES requires an existing table" );
+
+			bKeepIteration = false;
+			return;
+		}
+
+		if ( !tOut.HeadOfStrings ( { "Chunk_id", "Name", "Type", "Enabled" } ) )
+			return;
+
+		AddTableIndexes ( tOut, *pIndex, tStmt.m_sStringParam, iChunk );
+		tOut.Eof();
+	};
+
+	if ( pServed->m_eType!=IndexType_e::RT )
+	{
+		fnShowIndexes ( RIdx_c(pServed) );
+		return;
+	}
+
+	if ( iChunk>=0 )
+		RIdx_T<const RtIndex_i*> ( pServed )->ProcessDiskChunk ( iChunk, fnShowIndexes );
+	else
+	{
+		iChunk = 0;
+		while ( bKeepIteration )
+		{
+			RIdx_T<const RtIndex_i*> ( pServed )->ProcessDiskChunk ( iChunk, fnShowIndexes );
+			iChunk++;
+		}
+	}
+}
+
+
 void HandleMysqlShowProfile ( RowBuffer_i & tOut, const QueryProfile_c & p, bool bMoreResultsFollow )
 {
 	#define SPH_QUERY_STATE(_name,_desc) _desc,
@@ -17745,6 +17829,11 @@ bool ClientSession_c::Execute ( Str_t sQuery, RowBuffer_i & tOut )
 	case STMT_SHOW_LOCKS:
 		HandleMysqlShowLocks ( tOut );
 		return true;
+
+	case STMT_SHOW_TABLE_INDEXES:
+		HandleMysqlShowTableIndexes ( tOut, *pStmt );
+		return true;
+
 
 	default:
 		m_sError.SetSprintf ( "internal error: unhandled statement type (value=%d)", eStmt );

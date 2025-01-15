@@ -214,6 +214,8 @@ json_secondary_indexes = json_attr
 
 By default, secondary indexes are generated for all attributes except JSON attributes. However, secondary indexes for JSON attributes can be explicitly generated using the `json_secondary_indexes` setting. When a JSON attribute is included in this option, its contents are flattened into multiple secondary indexes. These indexes can be used by the query optimizer to speed up queries.
 
+You can view the available secondary indexes using the [SHOW TABLE <tbl> INDEXES](../../Node_info_and_management/Table_settings_and_status/SHOW_TABLE_INDEXES.md) command.
+
 Value: A comma-separated list of JSON attributes for which secondary indexes should be generated.
 
 <!-- intro -->

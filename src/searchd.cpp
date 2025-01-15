@@ -16257,32 +16257,59 @@ void HandleMysqlShowIndexSettings ( RowBuffer_i & tOut, const SqlStmt_t & tStmt 
 }
 
 
-static void AddTableIndexes ( RowBuffer_i & tOut, const CSphIndex & tIndex, const CSphString & sPattern, int iChunk )
+static void OutputSIStats ( RowBuffer_i & tOut, const CheckLike & tLike, const SI::IndexAttrInfo_t & tInfo, float fPercent )
 {
-	const SIContainer_c * pSI = tIndex.GetSI();
-	if ( !pSI )
+	const char * szName = tInfo.m_sName.c_str();
+	CSphString sType = ColumnarAttrType2Str ( tInfo.m_eType );
+	CSphString sEnabled = tInfo.m_bEnabled ? "1" : "0";
+	if ( !tLike.Match(szName) && !tLike.Match ( sType.cstr() ) && !tLike.Match ( sEnabled.cstr() ) )
 		return;
 
-	iChunk = Max ( 0, iChunk );
+	tOut.PutString(szName);
+	tOut.PutString(sType);
+	tOut.PutString(sEnabled);
+	tOut.PutNumAsString ( (int)(fPercent*100.0f) );
+	tOut.Commit();
+}
+
+
+static bool operator == ( const SI::IndexAttrInfo_t & tA, const SI::IndexAttrInfo_t & tB )
+{
+	return tA.m_sName==tB.m_sName && tA.m_eType==tB.m_eType && tA.m_bEnabled==tB.m_bEnabled;
+}
+
+
+static void ShowTableIndexes ( RowBuffer_i & tOut, const CSphString & sPattern, std::vector<SI::IndexAttrInfo_t> & dInfo, int iNumChunks )
+{
+	assert( iNumChunks>0 );
+
+	std::sort ( dInfo.begin(), dInfo.end(), []( const auto & a, const auto & b )
+		{
+			if ( a.m_eType!=b.m_eType )
+				return a.m_eType<b.m_eType;
+
+			if ( a.m_sName!=b.m_sName )
+				return a.m_sName<b.m_sName;
+
+			return a.m_bEnabled > b.m_bEnabled;
+		}
+	);
 
 	CheckLike tLike ( sPattern.cstr() );
 
-	std::vector<SI::IndexAttrInfo_t> dInfo;
-	pSI->GetIndexAttrInfo(dInfo);
-	for ( auto & i : dInfo )
+	int iCount = 0;
+	for ( int i = 1; i < (int)dInfo.size(); i++ )
 	{
-		const char * szName = i.m_sName.c_str();
-		CSphString sType = ColumnarAttrType2Str ( i.m_eType );
-		CSphString sEnabled = i.m_bEnabled ? "1" : "0";
-		if ( !tLike.Match(szName) && !tLike.Match ( sType.cstr() ) && !tLike.Match ( sEnabled.cstr() ) )
-			continue;
-
-		tOut.PutNumAsString(iChunk);
-		tOut.PutString(szName);
-		tOut.PutString(sType);
-		tOut.PutString(sEnabled);
-		tOut.Commit();
+		if ( dInfo[i]==dInfo[i-1] )
+			iCount++;
+		else
+		{
+			OutputSIStats ( tOut, tLike, dInfo[i-1], float(iCount+1)/iNumChunks );
+			iCount = 0;
+		}
 	}
+
+	OutputSIStats ( tOut, tLike, dInfo.back(), float(iCount+1)/iNumChunks );
 }
 
 
@@ -16300,9 +16327,13 @@ void HandleMysqlShowTableIndexes ( RowBuffer_i & tOut, const SqlStmt_t & tStmt )
 	if ( tStmt.m_dIntSubkeys.GetLength ()>=1 )
 		iChunk = (int) tStmt.m_dIntSubkeys[0];
 
+	if ( !tOut.HeadOfStrings ( { "Name", "Type", "Enabled", "Percent" } ) )
+		return;
+
+	std::vector<SI::IndexAttrInfo_t> dInfo;
 	bool bWarn = pServed->m_eType == IndexType_e::RT && iChunk>=0;
 	bool bKeepIteration = true;
-	auto fnShowIndexes = [&tOut,&tStmt,iChunk,bWarn,&bKeepIteration] ( const CSphIndex* pIndex )
+	auto fnCollectIndexes = [&tOut,&bKeepIteration,&dInfo,bWarn] ( const CSphIndex* pIndex )
 	{
 		if ( !pIndex )
 		{
@@ -16313,30 +16344,31 @@ void HandleMysqlShowTableIndexes ( RowBuffer_i & tOut, const SqlStmt_t & tStmt )
 			return;
 		}
 
-		if ( !tOut.HeadOfStrings ( { "Chunk_id", "Name", "Type", "Enabled" } ) )
-			return;
-
-		AddTableIndexes ( tOut, *pIndex, tStmt.m_sStringParam, iChunk );
-		tOut.Eof();
+		const SIContainer_c * pSI = pIndex->GetSI();
+		if ( pSI )
+			pSI->GetIndexAttrInfo(dInfo);
 	};
 
-	if ( pServed->m_eType!=IndexType_e::RT )
+	if ( pServed->m_eType==IndexType_e::RT )
 	{
-		fnShowIndexes ( RIdx_c(pServed) );
-		return;
-	}
-
-	if ( iChunk>=0 )
-		RIdx_T<const RtIndex_i*> ( pServed )->ProcessDiskChunk ( iChunk, fnShowIndexes );
-	else
-	{
-		iChunk = 0;
-		while ( bKeepIteration )
+		if ( iChunk>=0 )
+			RIdx_T<const RtIndex_i*> ( pServed )->ProcessDiskChunk ( iChunk, fnCollectIndexes );
+		else
 		{
-			RIdx_T<const RtIndex_i*> ( pServed )->ProcessDiskChunk ( iChunk, fnShowIndexes );
-			iChunk++;
+			iChunk = 0;
+			while ( bKeepIteration )
+			{
+				RIdx_T<const RtIndex_i*> ( pServed )->ProcessDiskChunk ( iChunk, fnCollectIndexes );
+				if ( bKeepIteration )
+					iChunk++;
+			}
 		}
 	}
+	else
+		fnCollectIndexes ( RIdx_c(pServed) );
+
+	ShowTableIndexes ( tOut, tStmt.m_sStringParam, dInfo, Max(iChunk,1) );
+	tOut.Eof();
 }
 
 

@@ -1,5 +1,5 @@
 backup 1.5.1 24102308 ea34859
-buddy 0.363.0+25011512-390df8c2-feature/new-semver
+buddy 3.0.1 25011510 08f4471
 mcl 2.3.1 25011420 10fe2da
 executor 1.2.7 24122617 b420a52
 tzdata 1.0.1 240904 3ba592a

@@ -50,7 +50,7 @@ mysql -h0 -P1306 -e "create table replication:test1 (id BIGINT, model TEXT, stor
 for port in 1306 2306 3306 4306 5306; do echo "Checking tables on port $port:"; mysql -h0 -P$port -e "SHOW TABLES FROM system LIKE 'replication:test1%';"; done
 ––– output –––
 ––– input –––
-mysql -h0 -P1306 -e "SHOW TABLES FROM system LIKE 'replication:test1 %';"
+mysql -h0 -P1306 -e "SHOW TABLES FROM system LIKE 'test1%';"
 ––– output –––
 ––– input –––
 mysql -h0 -P1306 -e "SHOW STATUS LIKE 'cluster_replication_indexes';"
@@ -74,6 +74,9 @@ mysql -h0 -P1306 -e "INSERT INTO ae1293026570c99dea183983e531471b:system.test2_s
 mysql -h0 -P1306 -e "INSERT INTO ae1293026570c99dea183983e531471b:system.test2_s1 (id, model, storage_capacity, color, release_year , price, discounted_price , sold, date_added, product_codes, values, additional_info, vector) VALUES (6775836565403860994, 'Galaxy S21 Ultra', 128, 'black', 2021, 1199.99, 1099.99, 0, '1609459200000', (4,5,6), (1234567890123456789, 9876543210987654321), '{\"features\": [\"Dynamic AMOLED 2X\", \"Exynos 2100\", \"108MP camera\"]}', (0.5, 0.4, 0.3, 0.2));"; echo $?
 ––– output –––
 0
+––– input –––
+mysql -h0 -P1306 -e "SELECT * FROM replication:test1;"
+––– output –––
 ––– input –––
 mysql -h0 -P1306 -e "DESCRIBE system.test1_s0;"
 ––– output –––

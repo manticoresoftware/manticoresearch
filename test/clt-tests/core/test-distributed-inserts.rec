@@ -5,6 +5,10 @@ apt-get install -y jq > /dev/null; echo $?
 debconf: delaying package configuration, since apt-utils is not installed
 0
 ––– input –––
+mysql -h0 -P9306 -e "DROP TABLE IF EXISTS test1;"; echo $?
+––– output –––
+0
+––– input –––
 mysql -h0 -P9306 -e "CREATE TABLE test1 (id BIGINT, model TEXT, storage_capacity INTEGER, color string, release_year INTEGER, price FLOAT, discounted_price FLOAT, sold BOOL, date_added TIMESTAMP, product_codes MULTI, values MULTI64, additional_info JSON, vector float_vector knn_type='hnsw' knn_dims='4' hnsw_similarity='l2');"; echo $?
 ––– output –––
 0
@@ -107,6 +111,10 @@ mysql -P9306 -h0 -e "show tables from system;"; echo $?
 ––– output –––
 0
 ––– input –––
+mysql -h0 -P9306 -e "DROP TABLE IF EXISTS test2;"; echo $?
+––– output –––
+0
+––– input –––
 mysql -h0 -P9306 -e "create table test2 (id BIGINT, model TEXT, storage_capacity INTEGER, color string, release_year INTEGER, price FLOAT, discounted_price FLOAT, sold BOOL, date_added TIMESTAMP, product_codes MULTI, values MULTI64, additional_info JSON, vector float_vector knn_type='hnsw' knn_dims='4' hnsw_similarity='l2') shards=3 rf=1;"; echo $?
 ––– output –––
 0
@@ -177,7 +185,7 @@ mysql -P9306 -h0 -e "show tables from system;"
 ––– input –––
 for shard in system.test2_s0 system.test2_s1 system.test2_s2; do echo "Checking data in shard $shard:"; mysql -h0 -P9306 -e "SELECT COUNT(*) FROM $shard;"; done
 ––– output –––
- Checking data in shard system.test2_s0:
+Checking data in shard system.test2_s0:
 +----------+
 | count(*) |
 +----------+
@@ -207,6 +215,7 @@ mysql -h0 -P9306 -e "SELECT * FROM system.test2_s0;"
 curl -s -X POST http://localhost:9308/replace -d '{"table": "system.test2_s0", "id": 6775836565403860993, "doc": {"model": "Updated Model", "storage_capacity": 512, "color": "black", "release_year": 2022, "price": 1399.99, "discounted_price": 1299.99, "sold": false, "date_added": 1630454400000, "product_codes": [10, 11, 12], "values": [987654321987654321, 123456789123456789], "additional_info": {"features": ["New feature 1", "New feature 2"]}, "vector": [0.7, 0.8, 0.9, 1.0]}}' | jq '.result'; echo $?
 ––– output –––
 "updated"
++ 0
 ––– input –––
 mysql -h0 -P9306 -e "SELECT * FROM system.test2_s0;"
 ––– output –––
@@ -255,10 +264,13 @@ curl -s -X POST http://localhost:9308/delete -d '{"table": "system.test2_s2", "i
 mysql -h0 -P9306 -e "SELECT * FROM system.test2_s2;"
 ––– output –––
 ––– input –––
-echo -e '{"index": {"_index": "system.test2_s2", "_type": "doc", "_id": 4}}\n{"id": 4, "model": "iPhone 14", "storage_capacity": 256, "color": "black", "release_year": 2022, "price": 999.99, "discounted_price": 899.99, "sold": 1, "date_added": 1661990400, "product_codes": [19, 20, 21], "values": [1234567890123456789, 9876543210987654321], "additional_info": {"features": ["A16 Bionic", "Dynamic Island"]}, "vector": [0.1, 0.2, 0.3, 0.4]}\n{"index": {"_index": "system.test2_s2", "_type": "doc", "_id": 5}}\n{"id": 5, "model": "Pixel 7", "storage_capacity": 128, "color": "white", "release_year": 2022, "price": 699.99, "discounted_price": 649.99, "sold": 0, "date_added": 1661990400, "product_codes": [16, 17, 18], "values": [223344556677889900, 998877665544332211], "additional_info": {"features": ["Tensor G2", "120Hz display"]}, "vector": [0.4, 0.5, 0.6, 0.7]}' > bulk.json
+rm -f bulk_insert.json
 ––– output –––
 ––– input –––
-curl -s -H 'Content-type: application/x-ndjson' --data-binary @bulk.json http://localhost:9308/_bulk | jq '.items[] | {index: .index.result, id: .index._id}'
+echo -e '{"index": {"_index": "system.test2_s2", "_type": "doc", "_id": 4}}\n{"id": 4, "model": "iPhone 14", "storage_capacity": 256, "color": "black", "release_year": 2022, "price": 999.99, "discounted_price": 899.99, "sold": 1, "date_added": 1661990400, "product_codes": [19, 20, 21], "values": [1234567890123456789, 9876543210987654321], "additional_info": {"features": ["A16 Bionic", "Dynamic Island"]}, "vector": [0.1, 0.2, 0.3, 0.4]}\n{"index": {"_index": "system.test2_s2", "_type": "doc", "_id": 5}}\n{"id": 5, "model": "Pixel 7", "storage_capacity": 128, "color": "white", "release_year": 2022, "price": 699.99, "discounted_price": 649.99, "sold": 0, "date_added": 1661990400, "product_codes": [16, 17, 18], "values": [223344556677889900, 998877665544332211], "additional_info": {"features": ["Tensor G2", "120Hz display"]}, "vector": [0.4, 0.5, 0.6, 0.7]}' > bulk_insert.json; echo?$
+––– output –––
+––– input –––
+curl -s -H 'Content-type: application/x-ndjson' --data-binary @bulk_insert.json http://localhost:9308/_bulk | jq '.items[] | {index: .index.result, id: .index._id}'
 ––– output –––
 {
 "index": "created",
@@ -286,7 +298,10 @@ mysql -h0 -P9306 -e "SELECT * FROM system.test2_s0;"
 | 6775836565403860993 | Updated Model |              512 | black |         2022 | 1399.989990 |      1299.989990 |    0 | 2661794816 | 10,11,12      | 123456789123456789,987654321987654321 | {"features":["New feature 1","New feature 2"]} | 0.700000,0.800000,0.900000,1.000000 |
 +---------------------+---------------+------------------+-------+--------------+-------------+------------------+------+------------+---------------+---------------------------------------+------------------------------------------------+-------------------------------------+
 ––– input –––
-echo -e '{"update":{"_index":"system.test2_s0","_id":6}}\n{"doc":{"price": 799.99, "discounted_price": 749.99}}\n{"update":{"_index":"system.test2_s0","_id":7}}\n{"doc":{"price": 699.99, "discounted_price": 649.99}}' > bulk_update.json; echo $?
+rm -f bulk_insert.json
+––– output –––
+––– input –––
+echo -e '{"index":{"_index":"system.test2_s0","_id":6}}\n{"id":6,"model":"OnePlus 10","storage_capacity":256,"color":"blue","release_year":2022,"price":899.99,"discounted_price":849.99,"sold":0,"date_added":1661990400,"product_codes":[22,23,24],"values":[111222333444555666,777888999000111222],"additional_info":{"features":["Snapdragon 8","OxygenOS"]},"vector":[0.2,0.3,0.4,0.5]}\n{"index":{"_index":"system.test2_s0","_id":7}}\n{"id":7,"model":"Xiaomi 12","storage_capacity":128,"color":"gray","release_year":2022,"price":799.99,"discounted_price":749.99,"sold":1,"date_added":1661990400,"product_codes":[25,26,27],"values":[333444555666777888,999000111222333444],"additional_info":{"features":["MIUI 13","5G"]},"vector":[0.3,0.4,0.5,0.6]}' > bulk_insert.json; echo $?
 ––– output –––
 0
 ––– input –––
@@ -300,7 +315,6 @@ curl -s -H 'Content-type: application/x-ndjson' --data-binary @bulk_insert.json 
 "index": "created",
 "id": "7"
 }
-
 ––– input –––
 mysql -h0 -P9306 -e "SELECT * FROM system.test2_s0;"
 ––– output –––
@@ -426,6 +440,9 @@ mysql -h0 -P9306 -e "SELECT * FROM test2 WHERE id BETWEEN 11 AND 20;"
 |   11 | Device 1  |               64 | black |         2023 | 499.989990 |       449.989990 |    0 | 1672531200 | 1,2,3         | 1234567890123456789 | {"features":["Feature 1","Feature 2"]} | 0.100000,0.200000,0.300000,0.400000 |
 +------+-----------+------------------+-------+--------------+------------+------------------+------+------------+---------------+---------------------+----------------------------------------+-------------------------------------+
 ––– input –––
-rm -f bulk.json bulk_update.json bulk_delete.json bulk_operations.json; if [[ ! -f bulk.json && ! -f bulk_update.json && ! -f bulk_delete.json && ! -f bulk_operations.json ]]; then echo "All temporary files deleted successfully."; else echo "Error: Some temporary files were not deleted."; fi
+mysql -h0 -P9306 -e "SELECT * FROM test2 WHERE id = 100;"
+––– output –––
+––– input –––
+rm -f bulk.json bulk_insert.json bulk_update.json bulk_delete.json bulk_operations.json; if [[ ! -f bulk.json && ! -f bulk_insert.json && ! -f bulk_update.json && ! -f bulk_delete.json && ! -f bulk_operations.json ]]; then echo "All temporary files deleted successfully."; else echo "Error: Some temporary files were not deleted."; fi
 ––– output –––
 All temporary files deleted successfully.

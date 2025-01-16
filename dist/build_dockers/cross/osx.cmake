@@ -6,8 +6,6 @@ FOREACH (policy CMP0056 CMP0066 CMP0067 CMP0137)
 	ENDIF ()
 ENDFOREACH ()
 
-set (VCPKG_TRIPLET)
-
 set ( root /sysroot/root )
 set ( arch $ENV{arch} )
 if ($ENV{llvm})
@@ -23,11 +21,14 @@ if (DEFINED VCPKG_CMAKE_SYSTEM_VERSION)
 	set ( CMAKE_SYSTEM_VERSION "${VCPKG_CMAKE_SYSTEM_VERSION}" CACHE STRING "" FORCE )
 endif ()
 
+set ( VCPKG_C_FLAGS "" )
 set ( arch $ENV{arch} )
 if (arch STREQUAL "x86_64")
 	set ( VCPKG_TARGET_ARCHITECTURE "x64" )
 elseif (arch STREQUAL "arm64")
 	set ( VCPKG_TARGET_ARCHITECTURE "arm64" )
+# flags are not necessary, as target arm64-apple-darwin is actually settle to m1 processor flavour, no need to tune it manually.
+#	set ( VCPKG_C_FLAGS "-Xclang -target-cpu=apple-m1 -Xclang -target-feature=+neon -Xclang -target-feature +v8.5a -Xclang -target-feature +zcm -Xclang -target-feature +zcz" )
 endif ()
 
 #set (VCPKG_TARGET_TRIPLET "${VCPKG_TARGET_ARCHITECTURE}-osx" )
@@ -50,18 +51,20 @@ set ( CMAKE_AR "${LLVM}/bin/llvm-ar" )
 set ( CMAKE_RANLIB "${LLVM}/bin/llvm-ranlib" )
 set ( CMAKE_INSTALL_NAME_TOOL "${LLVM}/bin/llvm-install-name-tool" )
 
-set ( VCPKG_LINKER_FLAGS "-fuse-ld=lld" )
-set ( VCPKG_CXX_FLAGS "-stdlib=libc++" )
+
+set ( VCPKG_CXX_FLAGS "${VCPKG_C_FLAGS} -stdlib=libc++" )
 set ( VCPKG_CXX_FLAGS_RELEASE "${VCPKG_CXX_FLAGS}" )
+set ( VCPKG_LINKER_FLAGS "-fuse-ld=lld" )
 set ( VCPKG_LINKER_FLAGS_RELEASE "${VCPKG_LINKER_FLAGS}" )
 set ( VCPKG_LINKER_FLAGS_DEBUG "${VCPKG_LINKER_FLAGS}" )
 
-set ( CMAKE_CXX_FLAGS_INIT "-stdlib=libc++" )
+set ( CMAKE_C_FLAGS_INIT "${VCPKG_C_FLAGS}" )
+set ( CMAKE_CXX_FLAGS_INIT "${VCPKG_CXX_FLAGS}" )
 set ( CMAKE_C_COMPILER_TARGET ${OSX_TRIPLE} )
 set ( CMAKE_CXX_COMPILER_TARGET ${OSX_TRIPLE} )
-set ( CMAKE_EXE_LINKER_FLAGS_INIT "-fuse-ld=lld" )
-set ( CMAKE_MODULE_LINKER_FLAGS_INIT "-fuse-ld=lld" )
-set ( CMAKE_SHARED_LINKER_FLAGS_INIT "-fuse-ld=lld" )
+set ( CMAKE_EXE_LINKER_FLAGS_INIT "${VCPKG_LINKER_FLAGS}" )
+set ( CMAKE_MODULE_LINKER_FLAGS_INIT "${VCPKG_LINKER_FLAGS}" )
+set ( CMAKE_SHARED_LINKER_FLAGS_INIT "${VCPKG_LINKER_FLAGS}" )
 
 # search for programs in the build host directories
 set ( CMAKE_FIND_ROOT_PATH_MODE_PROGRAM NEVER )

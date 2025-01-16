@@ -121,6 +121,7 @@
 * [/tbl_name/_mapping](Creating_a_table/Local_tables/Real-time_table.md#_mapping-API:) - Creates a table schema in the Elasticsearch style
 
 ### Common things
+* [field name syntax](Creating_a_table/Data_types.md#Field-name-syntax)
 * [data types](Creating_a_table/Data_types.md)
 * [engine](Creating_a_table/Data_types.md)
 * [plain mode](Read_this_first.md#Real-time-mode-vs-plain-mode)

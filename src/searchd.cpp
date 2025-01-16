@@ -16282,6 +16282,8 @@ static bool operator == ( const SI::IndexAttrInfo_t & tA, const SI::IndexAttrInf
 static void ShowTableIndexes ( RowBuffer_i & tOut, const CSphString & sPattern, std::vector<SI::IndexAttrInfo_t> & dInfo, int iNumChunks )
 {
 	assert( iNumChunks>0 );
+	if ( dInfo.empty() )
+		return;
 
 	std::sort ( dInfo.begin(), dInfo.end(), []( const auto & a, const auto & b )
 		{

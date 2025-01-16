@@ -1,8 +1,7 @@
 # SHOW TABLE INDEXES
 
 <!-- example SHOW TABLE INDEXES -->
-
-The `SHOW TABLE INDEXES` SQL statement displays the secondary indexes available for a specified table, along with their properties.
+The `SHOW TABLE INDEXES` SQL statement displays the secondary indexes available for a specified table, along with their properties. [Secondary indexes](../../Server_settings/Searchd.md#secondary_indexes) improve query performance by creating additional data structures that speed up searches on specific columns.
 
 The syntax is:
 
@@ -12,17 +11,17 @@ SHOW TABLE table_name INDEXES
 
 The displayed properties include the following columns:
 
-* **Name**: The name of the secondary index. Can be used in index hints.
+* **Name**: The name of the secondary index. Can be used in [query optimizer hints](../../Searching/Options.md#Query-optimizer-hints).
 * **Type**: The type of data stored in the secondary index. For plain attributes, it matches the type of the original attribute. For secondary indexes generated from JSON attributes, the type is deduced by scanning all documents and determining the types of all JSON properties.
-* **Enabled**:  Indicates whether the index is currently enabled and can be used to improve search speed. When an attribute is updated, the secondary index for that attribute is disabled.
-* **Percent**:  For RT indexes and secondary indexes generated from JSON attributes, different disk chunks may contain different secondary indexes. This percentage shows how many chunks have an index with the same name, type, and enabled state.
+* **Enabled**: Indicates whether the index is currently enabled and can be used to improve search speed. When an attribute is updated, the secondary index for that attribute is temporarily disabled until the index is rebuilt. You can rebuild disabled indexes using the [ALTER TABLE ... REBUILD SECONDARY](../../Updating_table_schema_and_settings.md#Rebuilding-a-secondary-index) command.
+* **Percent**: In an RT table, different disk chunks may contain different secondary indexes especially when JSON attributes are used. This percentage shows how many chunks have an index with the same name, type, and enabled state.
 
 <!-- intro -->
 ##### SQL:
 <!-- request SQL -->
 
 ```sql
-mysql> SHOW TABLE test STATUS;
+SHOW TABLE test INDEXES;
 ```
 
 <!-- response SQL -->

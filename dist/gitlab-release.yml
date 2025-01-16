@@ -126,8 +126,8 @@ windows:
   variables:
     arch: x64
     # use roots_mysql83_jul29 for another (non-gitlab) builds
-    sysroot: roots_jul29
-    boost: boost80_zstd_zlib
+    sysroot: roots_mysql83_jan17
+    boost: boost_80
     DISTR: windows
 
 # windows build with native clang flavour

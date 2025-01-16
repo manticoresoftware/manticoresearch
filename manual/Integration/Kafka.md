@@ -25,11 +25,19 @@ CREATE SOURCE <source name> [(column type, ...)] [source_options]
 
 All schema keys are case-insensitive, meaning `Products`, `products`, and `PrOdUcTs` are treated the same. They are all converted to lowercase.
 
-Additionally, you can define schema mapping if you have unsupported field name syntax.
-For example, `$keyName` is a valid key in JSON but is not allowed as a field name in Manticore Search.
-In such cases, you can use the following schema syntax:
+If your field names don't match the [field name syntax](../../Creating_a_table/Data_types.md#Field-name-syntax) allowed in Manticore Search (for example, if they contain special characters or start with numbers), you must define a schema mapping. For instance, `$keyName` or `123field` are valid keys in JSON but not valid field names in Manticore Search. If you try to use invalid field names without proper mapping, Manticore will return an error and the source creation will fail.
 
-```allowed_field_name 'original JSON key name with special symbols' type```
+To handle such cases, use the following schema syntax to map invalid field names to valid ones:
+
+```
+allowed_field_name 'original JSON key name with special symbols' type
+```
+
+For example:
+```sql
+price_field '$price' float    -- maps JSON key '$price' to field 'price_field'
+field_123 '123field' text     -- maps JSON key '123field' to field 'field_123'
+```
 <!-- intro -->
 
 ##### SQL:
@@ -60,11 +68,11 @@ Query OK, 2 rows affected (0.02 sec)
 | Option | Accepted Values | Description |
 |-|-|-|
 | `type` | `kafka` | Sets the source type. Currently, only `kafka` is supported |
-| `broker_list` | host:port [, ...] | Specifies Kafka broker URLs |
-| `topic_list` | string [, ...] | Lists Kafka topics to consume from |
-| `consumer_group`| string | Defines the Kafka consumer group, defaulting to `manticore`. |
-| `num_consumers` | int | Number of consumers to handle messages. |
-| `batch` | int | Number of messages to process before moving on. Default is `100`; processes remaining messages on timeout otherwise |
+| `broker_list` | `host:port [, ...]` | Specifies Kafka broker URLs |
+| `topic_list` | `string [, ...]` | Lists Kafka topics to consume from |
+| `consumer_group`| `string` | Defines the Kafka consumer group, defaulting to `manticore`. |
+| `num_consumers` | `int` | Number of consumers to handle messages. |
+| `batch` | `int` | Number of messages to process before moving on. Default is `100`; processes remaining messages on timeout otherwise |
 
 ### Destination table
 
@@ -136,12 +144,12 @@ Here's a mapping table based on the examples above:
 
 | Kafka           | Source   | Buffer   | MV                                | Destination |
 |-----------------|----------|----------|-----------------------------------|-------------|
-| id              | id       | id       | id                                | id          |
-| term            | term     | term     | term as name                      | name        |
-| unnecessary key | -        | -        |                                   |             |
-| $abbrev         | abbrev   | abbrev   | abbrev as short_name              | short_name  |
-| -               | -        |          | `UTC_TIMESTAMP()`` as received_at | received_at |
-| GlossDef        | GlossDef | GlossDef | GlossDef.size as size             | size        |
+| `id`              | `id`       | `id`       | `id`                                | `id`          |
+| `term`            | `term`     | `term`     | `term as name`                      | `name`        |
+| `unnecessary_key` which we're not interested in | -        | -        |                                   |             |
+| `$abbrev`         | `abbrev`   | `abbrev`   | `abbrev` as `short_name`              | `short_name`  |
+| -                 | -        | -         | `UTC_TIMESTAMP() as received_at`  | `received_at` |
+| `GlossDef`        | `glossdef` | `glossdef` | `glossdef.size as size`             | `size`        |
 
 ### Listing
 

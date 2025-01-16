@@ -1,0 +1,102 @@
+––– input –––
+export INSTANCE=1
+––– output –––
+––– block: ../base/replication/start-searchd-precach –––
+––– input –––
+export INSTANCE=2
+––– output –––
+––– block: ../base/replication/start-searchd-precach –––
+––– input –––
+export INSTANCE=3
+––– output –––
+––– block: ../base/replication/start-searchd-precach –––
+––– input –––
+export INSTANCE=4
+––– output –––
+––– block: ../base/replication/start-searchd-precach –––
+––– input –––
+export INSTANCE=5
+––– output –––
+––– block: ../base/replication/start-searchd-precach –––
+––– input –––
+export CLUSTER_NAME=replication
+––– output –––
+––– block: ../base/replication/create-cluster –––
+––– block: ../base/replication/join-cluster-on-all-nodes –––
+––– input –––
+mysql -h0 -P1306 -e "show status like 'cluster_${CLUSTER_NAME}_status'\G"
+––– output –––
+*************************** 1. row ***************************
+Counter: cluster_#!/[a-z]+/!#_status
+Value: primary
+––– input –––
+for port in 1306 2306 3306 4306 5306; do echo "Checking status for port $port:"; timeout 10 bash -c "while ! mysql -h0 -P$port -e \"SHOW STATUS LIKE 'cluster_replication_node_state'\G\" | grep -q 'Value: synced'; do sleep 1; done" && echo "Port $port: Node is synced." || echo "Port $port: Node is not synced (Value: closed or other)."; done
+––– output –––
+Checking status for port 1306:
+Port 1306: Node is synced.
+Checking status for port 2306:
+Port 2306: Node is synced.
+Checking status for port 3306:
+Port 3306: Node is synced.
+Checking status for port 4306:
+Port 4306: Node is synced.
+Checking status for port 5306:
+Port 5306: Node is synced.
+––– input –––
+mysql -h0 -P1306 -e "create table replication:test1 (id BIGINT, model TEXT, storage_capacity INTEGER, color string, release_year INTEGER, price FLOAT, discounted_price FLOAT, sold BOOL, date_added TIMESTAMP, product_codes MULTI, values MULTI64, additional_info JSON, vector float_vector knn_type='hnsw' knn_dims='4' hnsw_similarity='l2') shards=3 rf=2 ;"; echo $?
+––– output –––
+0
+––– input –––
+for port in 1306 2306 3306 4306 5306; do echo "Checking tables on port $port:"; mysql -h0 -P$port -e "SHOW TABLES FROM system LIKE 'replication:test1%';"; done
+––– output –––
+––– input –––
+mysql -h0 -P1306 -e "SHOW TABLES FROM system LIKE 'replication:test1 %';"
+––– output –––
+––– input –––
+mysql -h0 -P1306 -e "SHOW STATUS LIKE 'cluster_replication_indexes';"
+––– output –––
++-----------------------------+-------------------------------------------------------------------+
+| Counter                     | Value                                                             |
++-----------------------------+-------------------------------------------------------------------+
+| cluster_replication_indexes | system.sharding_state,system.sharding_table,system.sharding_queue |
++-----------------------------+-------------------------------------------------------------------+
+––– input –––
+for port in 1306 2306 3306 4306 5306; do echo "Checking tables on port $port:"; mysql -h0 -P$port -e "SHOW TABLES FROM system LIKE 'test1%';"; done
+––– output –––
+––– input –––
+mysql -h0 -P1306 -e "INSERT INTO ae1293026570c99dea183983e531471b:system.test1_s0 (id, model, storage_capacity, color, release_year, price, discounted_price, sold, date_added, product_codes, values, additional_info, vector) VALUES (6775836565403860995, 'iPhone 14 Pro', 512, 'gold', 2022, 1299.99, 1199.99, 1, '1664553600000', (7,8,9), (1234567890123456789, 9876543210987654321), '{\"features\": [\"Dynamic Island\", \"A16 Bionic chip\", \"Ceramic Shield front cover\"]}', (0.6, 0.5, 0.4, 0.3));"; echo $?
+––– output –––
+––– input –––
+mysql -h0 -P1306 -e "INSERT INTO ae1293026570c99dea183983e531471b:system.test2_s0 (id, model, storage_capacity, color, release_year, price, discounted_price, sold, date_added, product_codes, values, additional_info, vector) VALUES (6775836565403860993, 'iPhone 13 Pro', 256, 'silver', 2021, 1099.99, 989.99, 1, '1591362342000', (1,2,3), (523456764345678976, 98765409877866654098, 1109876543450987650987), '{\"features\": [\"ProMotion display\", \"A15 Bionic chip\", \"Ceramic Shield front cover\"]}', (0.773448, 0.312478, 0.137971, 0.459821));"; echo $?
+––– output –––
+0
+––– input –––
+mysql -h0 -P1306 -e "INSERT INTO ae1293026570c99dea183983e531471b:system.test2_s1 (id, model, storage_capacity, color, release_year , price, discounted_price , sold, date_added, product_codes, values, additional_info, vector) VALUES (6775836565403860994, 'Galaxy S21 Ultra', 128, 'black', 2021, 1199.99, 1099.99, 0, '1609459200000', (4,5,6), (1234567890123456789, 9876543210987654321), '{\"features\": [\"Dynamic AMOLED 2X\", \"Exynos 2100\", \"108MP camera\"]}', (0.5, 0.4, 0.3, 0.2));"; echo $?
+––– output –––
+0
+––– input –––
+mysql -h0 -P1306 -e "DESCRIBE system.test1_s0;"
+––– output –––
+––– input –––
+mysql -h0 -P1306 -e "SHOW STATUS LIKE 'cluster_replication_indexes';"
+––– output –––
++-----------------------------+-------------------------------------------------------------------+
+| Counter                     | Value                                                             |
++-----------------------------+-------------------------------------------------------------------+
+| cluster_replication_indexes | system.sharding_state,system.sharding_table,system.sharding_queue |
++-----------------------------+-------------------------------------------------------------------+
+––– input –––
+for shard in system.test1_s0 system.test1_s1 system.test1_s2; do echo "Checking data in shard $shard:"; if [[ "$shard" == "system.test1_s0" ]]; then mysql -h0 -P1306 -e "SELECT COUNT(*) FROM $shard;"; elif [[ "$shard" == "system.test1_s1" ]]; then mysql -h0 -P2306 -e "SELECT COUNT(*) FROM $shard;"; elif [[ "$shard" == "system.test1_s2" ]]; then mysql -h0 -P4306 -e "SELECT COUNT(*) FROM $shard;"; fi; done
+––– output –––
+––– input –––
+mysql -h0 -P1306 -e "INSERT INTO system.test2_s0 (id, model, storage_capacity, color, release_year, price, discounted_price, sold, date_added, product_codes, values, additional_info, vector) VALUES (6775836565403860993, 'iPhone 13 Pro', 256, 'silver', 2021, 1099.99, 989.99, 1, '1591362342000', (1,2,3), (523456764345678976, 98765409877866654098, 1109876543450987650987), '{\"features\": [\"ProMotion display\", \"A15 Bionic chip\", \"Ceramic Shield front cover\"]}', (0.773448, 0.312478, 0.137971, 0.459821));"; echo $?
+––– output –––
+––– input –––
+mysql -h0 -P1306 -e "INSERT INTO system.test2_s1 (id, model, storage_capacity, color, release_year , price, discounted_price , sold, date_added, product_codes, values, additional_info, vector) VALUES (6775836565403860994, 'Galaxy S21 Ultra', 128, 'black', 2021, 1199.99, 1099.99, 0, '1609459200000', (4,5,6), (1234567890123456789, 9876543210987654321), '{\"features\": [\"Dynamic AMOLED 2X\", \"Exynos 2100\", \"108MP camera\"]}', (0.5, 0.4, 0.3, 0.2));"; echo $?
+––– output –––
+––– input –––
+for shard in system.test2_s0 system.test2_s1; do echo "Checking data in shard $shard:"; mysql -h0 -P1306 -e "SELECT COUNT(*) FROM $shard;"; done
+––– output –––
+––– input –––
+for shard in system.test1_s0 system.test1_s1 system.test1_s2; do echo "Checking data in shard $shard:"; if [[ "$shard" == "system.test1_s0" ]]; then mysql -h0 -P1306 -e "SELECT COUNT(*) FROM $shard;"; elif [[ "$shard" == "system.test1_s1" ]]; then mysql -h0 -P2306 -e "SELECT COUNT(*) FROM $shard;"; elif [[ "$shard" == "system.test1_s2" ]]; then mysql -h0 -P4306 -e "SELECT COUNT(*) FROM $shard;"; fi; done
+––– output –––

@@ -618,6 +618,13 @@ POST /search
 ```
 <!-- end -->
 
+## Join batching
+
+Table joins work by accumulating a batch of matches, which are the results of the query executed on the left table. This batch is then executed as a single query on the right table.
+
+The batch size can be adjusted using the `join_batch_size` query option. It is also configurable in the searchd section of the configuration file. The default value is 1000, and setting this option to 0 disables batching.
+
+A larger batch size may improve performance, but for some queries, it can lead to excessive memory consumption.
 
 ## Caveats and Best Practices
 

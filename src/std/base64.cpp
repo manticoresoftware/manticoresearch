@@ -19,10 +19,10 @@
 
 CSphString DecodeBase64 ( const CSphString & sValue )
 {
-	std::string sVal = sValue.cstr();
+	std::string_view sVal = sValue.cstr();
 
     using namespace boost::archive::iterators;
-    using It = transform_width<binary_from_base64<std::string::const_iterator>, 8, 6>;
+    using It = transform_width<binary_from_base64<std::string_view::const_iterator>, 8, 6>;
     return boost::algorithm::trim_right_copy_if(std::string(It(std::begin(sVal)), It(std::end(sVal))), [](char c)
 	{
         return c == '\0';
@@ -32,10 +32,35 @@ CSphString DecodeBase64 ( const CSphString & sValue )
 
 CSphString EncodeBase64 ( const CSphString & sValue )
 {
-	std::string sVal = sValue.cstr();
+	std::string_view sVal = sValue.cstr();
 
     using namespace boost::archive::iterators;
-    using It = base64_from_binary<transform_width<std::string::const_iterator, 6, 8>>;
+    using It = base64_from_binary<transform_width<std::string_view::const_iterator, 6, 8>>;
+    auto sTmp = std::string(It(std::begin(sVal)), It(std::end(sVal)));
+    return sTmp.append((3 - sVal.size() % 3) % 3, '=').c_str();
+}
+
+void DecodeBinBase64 ( const CSphString & sSrc, CSphVector<BYTE> & dDst )
+{
+	std::string_view sVal = sSrc.cstr();
+    dDst.Reserve ( dDst.GetLength() + ( ( sVal.size() + 2 ) / 3 ) * 4 );
+
+    using namespace boost::archive::iterators;
+    using It = transform_width<binary_from_base64<std::string_view::const_iterator>, 8, 6>;
+    for ( It tIt ( std::begin(sVal) ); tIt!=It( std::end(sVal) ); tIt++ )
+        dDst.Add ( *tIt );
+
+    while ( dDst.GetLength() && dDst.Last()=='\0' )
+        dDst.Pop();
+}
+
+
+CSphString EncodeBinBase64 ( const VecTraits_T<BYTE> & dSrc )
+{
+    std::string_view sVal { (const char *)dSrc.Begin(), (std::string_view::size_type)dSrc.GetLength() };
+
+    using namespace boost::archive::iterators;
+    using It = base64_from_binary<transform_width<std::string_view::const_iterator, 6, 8>>;
     auto sTmp = std::string(It(std::begin(sVal)), It(std::end(sVal)));
     return sTmp.append((3 - sVal.size() % 3) % 3, '=').c_str();
 }

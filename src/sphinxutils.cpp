@@ -1081,6 +1081,9 @@ static KeyDesc_t g_dKeysSearchd[] =
 	{ "merge_si_memlimit",		0, NULL },
 	{ "log_http",				0, NULL },
 	{ "join_batch_size",		0, NULL },
+	{ "auth_user",				0, NULL },
+	{ "auth_pass",				0, NULL },
+	{ "auth_user_file",			0, NULL },
 	{ NULL,						0, NULL }
 };
 

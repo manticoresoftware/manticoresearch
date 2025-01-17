@@ -20,6 +20,7 @@
 #include "searchdconfig.h"
 #include "memio.h"
 #include "accumulator.h"
+#include "auth/auth.h"
 
 /////////////////////////////////////////////////////////////////////////////
 // MACHINE-DEPENDENT STUFF
@@ -455,7 +456,7 @@ public:
 };
 
 // RAII Start Sphinx API command/request header
-APIBlob_c APIHeader ( ISphOutputBuffer & dBuff, WORD uCommand, WORD uVer = 0 /* SEARCHD_OK */ );
+APIBlob_c APIHeader ( ISphOutputBuffer & dBuff, WORD uCommand, WORD uVer, const ApiAuthToken_t & tToken );
 
 // RAII Sphinx API answer
 APIBlob_c APIAnswer ( ISphOutputBuffer & dBuff, WORD uVer = 0, WORD uStatus = 0 /* SEARCHD_OK */ );
@@ -1370,6 +1371,7 @@ enum class EHTTP_STATUS : BYTE
 	_200,
 	_206,
 	_400,
+	_401,
 	_403,
 	_404,
 	_405,
@@ -1398,6 +1400,7 @@ enum class EHTTP_ENDPOINT : BYTE
 	CLI,
 	CLI_JSON,
 	ES_BULK,
+	TOKEN,
 
 	TOTAL
 };
@@ -1420,6 +1423,7 @@ const CSphString& sphGetLogFile() noexcept;
 
 void				sphProcessHttpQueryNoResponce ( const CSphString& sEndpoint, const CSphString& sQuery, CSphVector<BYTE> & dResult );
 void				sphHttpErrorReply ( CSphVector<BYTE> & dData, EHTTP_STATUS eCode, const char * szError );
+void				sphHttpErrorReply ( CSphVector<BYTE> & dData, EHTTP_STATUS eCode, const char * sError, const char * sHeaderField );
 void				LoadCompatHttp ( const char * sData );
 void				SaveCompatHttp ( JsonEscapedBuilder & tOut );
 void				SetupCompatHttp();
@@ -1441,6 +1445,7 @@ namespace session
 	bool Execute ( Str_t sQuery, RowBuffer_i& tOut );
 	void SetFederatedUser();
 	void SetUser ( const CSphString & sUser );
+	const CSphString & GetUser();
 	void SetAutoCommit ( bool bAutoCommit );
 	void SetInTrans ( bool bInTrans );
 	bool IsAutoCommit();

@@ -147,19 +147,19 @@ public:
 		if ( CMD==E_CLUSTER::FILE_SEND )
 		{
 			{
-				auto tHdr = APIHeader ( tOut, SEARCHD_COMMAND_PERSIST );
+				auto tHdr = APIHeader ( tOut, SEARCHD_COMMAND_PERSIST, 0, ApiAuthToken_t() );
 				tOut.SendInt ( 1 ); // set persistent to 1
 			}
 		}
 		// API header
-		auto tReply = APIHeader ( tOut, SEARCHD_COMMAND_CLUSTER, VER_COMMAND_CLUSTER );
+		auto tReply = APIHeader ( tOut, SEARCHD_COMMAND_CLUSTER, VER_COMMAND_CLUSTER, ApiAuthToken_t() );
 		tOut.SendWord ( static_cast<WORD> ( CMD ) );
 		tOut << GetReq ( tAgent );
 
 		if ( CMD==E_CLUSTER::FILE_SEND )
 		{
 			{
-				auto tHdr = APIHeader ( tOut, SEARCHD_COMMAND_PERSIST );
+				auto tHdr = APIHeader ( tOut, SEARCHD_COMMAND_PERSIST, 0, ApiAuthToken_t() );
 				tOut.SendInt ( 0 ); // set persistent to 0
 			}
 		}

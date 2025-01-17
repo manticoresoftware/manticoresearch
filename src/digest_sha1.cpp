@@ -223,6 +223,14 @@ CSphString CalcSHA1 ( const void * pData, int iLen )
 	return BinToHex ( dHashValue );
 }
 
+HASH20_t CalcBinarySHA1 ( const void* pData, int iLen )
+{
+	SHA1_c dHasher;
+	dHasher.Init();
+	dHasher.Update ( (const BYTE*)pData, iLen );
+	return dHasher.FinalHash();
+}
+
 bool CalcSHA1 ( const CSphString & sFileName, CSphString & sRes, CSphString & sError )
 {
 	CSphAutofile tFile ( sFileName, SPH_O_READ, sError, false );

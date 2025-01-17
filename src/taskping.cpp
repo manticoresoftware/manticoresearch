@@ -25,7 +25,7 @@ public:
 	void BuildRequest ( const AgentConn_t&, ISphOutputBuffer& tOut ) const final
 	{
 		// API header
-		auto tHdr = APIHeader ( tOut, SEARCHD_COMMAND_PING, VER_COMMAND_PING );
+		auto tHdr = APIHeader ( tOut, SEARCHD_COMMAND_PING, VER_COMMAND_PING, ApiAuthToken_t() );
 		tOut.SendInt ( m_iSendCookie );
 	}
 

@@ -79,6 +79,7 @@
 #include "searchdbuddy.h"
 #include "detail/indexlink.h"
 #include "detail/expmeter.h"
+#include "auth/auth.h"
 
 extern "C"
 {
@@ -1596,7 +1597,7 @@ void SendErrorReply ( ISphOutputBuffer & tOut, const char * sTemplate, ... )
 	sError.SetSprintfVa ( sTemplate, ap );
 	va_end ( ap );
 
-	auto tHdr = APIHeader ( tOut, SEARCHD_ERROR );
+	auto tHdr = APIAnswer ( tOut, 0, SEARCHD_ERROR );
 	tOut.SendString ( sError.cstr() );
 
 	// --console logging
@@ -1982,7 +1983,7 @@ void SearchRequestBuilder_c::SendQuery ( const char * sIndexes, ISphOutputBuffer
 
 void SearchRequestBuilder_c::BuildRequest ( const AgentConn_t & tAgent, ISphOutputBuffer & tOut ) const
 {
-	auto tHdr = APIHeader ( tOut, SEARCHD_COMMAND_SEARCH, VER_COMMAND_SEARCH ); // API header
+	auto tHdr = APIHeader ( tOut, SEARCHD_COMMAND_SEARCH, VER_COMMAND_SEARCH, tAgent.m_tAuthToken ); // API header
 
 	tOut.SendInt ( VER_COMMAND_SEARCH_MASTER );
 	tOut.SendInt ( m_dQueries.GetLength() );
@@ -7397,6 +7398,7 @@ void SearchHandler_c::RunSubset ( int iStart, int iEnd )
 		tReqBuilder = std::make_unique<SearchRequestBuilder_c> ( m_dNQueries, iDivideLimits );
 		tParser = std::make_unique<SearchReplyParser_c> ( iQueries );
 		tReporter = GetObserver();
+		SetSessionAuth ( dRemotes );
 
 		// run remote queries. tReporter will tell us when they're finished.
 		// also blackholes will be removed from this flow of remotes.
@@ -8186,7 +8188,7 @@ void SnippetRemote_c::BuildRequest ( const AgentConn_t & tAgent, ISphOutputBuffe
 		tAgent.m_iStoreTag = iWorker;
 	}
 
-	auto tHdr = APIHeader ( tOut, SEARCHD_COMMAND_EXCERPT, VER_COMMAND_EXCERPT );
+	auto tHdr = APIHeader ( tOut, SEARCHD_COMMAND_EXCERPT, VER_COMMAND_EXCERPT, tAgent.m_tAuthToken );
 
 	tOut.SendInt ( 0 );
 	tOut.SendInt ( PackAPISnippetFlags ( m_tSettings, true ) );
@@ -8473,6 +8475,7 @@ static void MakeRemoteScatteredSnippets ( CSphVector<ExcerptQuery_t> & dQueries,
 	// and finally most interesting remote case with possibly scattered.
 	auto dAgents = GetDistrAgents ( pDist );
 	int iRemoteAgents = dAgents.GetLength();
+	SetSessionAuth ( dAgents );
 
 	SnippetRemote_c tRemotes ( dQueries, q );
 	tRemotes.m_dTasks.Resize ( iRemoteAgents );
@@ -8514,6 +8517,7 @@ static void MakeRemoteNonScatteredSnippets ( CSphVector<ExcerptQuery_t> & dQueri
 
 	auto dAgents = GetDistrAgents ( pDist );
 	int iRemoteAgents = dAgents.GetLength();
+	SetSessionAuth ( dAgents );
 
 	SnippetRemote_c tRemotes ( dQueries, q );
 	tRemotes.m_dTasks.Resize ( iRemoteAgents );
@@ -8889,7 +8893,7 @@ void UpdateRequestBuilder_c::BuildRequest ( const AgentConn_t & tAgent, ISphOutp
 	auto& tUpd = *m_pUpd;
 
 	// API header
-	auto tHdr = APIHeader ( tOut, SEARCHD_COMMAND_UPDATE, VER_COMMAND_UPDATE );
+	auto tHdr = APIHeader ( tOut, SEARCHD_COMMAND_UPDATE, VER_COMMAND_UPDATE, tAgent.m_tAuthToken );
 
 	tOut.SendString ( sIndexes );
 	tOut.SendInt ( tUpd.m_dAttributes.GetLength() );
@@ -9169,6 +9173,7 @@ void HandleCommandUpdate ( ISphOutputBuffer & tOut, int iVer, InputBuffer_c & tR
 			{
 				VecRefPtrsAgentConn_t dAgents;
 				pDist->GetAllHosts ( dAgents );
+				SetSessionAuth ( dAgents );
 
 				// connect to remote agents and query them
 				UpdateRequestBuilder_c tReqBuilder ( pUpd );
@@ -10030,7 +10035,7 @@ public:
 		}
 
 		const char * sIndex = tAgent.m_tDesc.m_sIndexes.cstr ();
-		auto tHdr = APIHeader ( tOut, SEARCHD_COMMAND_CALLPQ, VER_COMMAND_CALLPQ );
+		auto tHdr = APIHeader ( tOut, SEARCHD_COMMAND_CALLPQ, VER_COMMAND_CALLPQ, tAgent.m_tAuthToken );
 
 		DWORD uFlags = 0;
 		if ( m_tOpts.m_bGetDocs )
@@ -10558,6 +10563,8 @@ void PercolateMatchDocuments ( const BlobVec_t & dDocs, const PercolateOptions_t
 	CSphRefcountedPtr<RemoteAgentsObserver_i> pReporter { nullptr };
 	if ( bHaveRemotes )
 	{
+		SetSessionAuth ( dAgents );
+
 		pReqBuilder = std::make_unique<PqRequestBuilder_c> ( dDocs, tOpts, iStart, iStep );
 		iStart += iStep * dAgents.GetLength ();
 		pParser = std::make_unique<PqReplyParser_c>();
@@ -11845,6 +11852,8 @@ bool DoGetKeywords ( const CSphString & sIndex, const CSphString & sQuery, const
 		int iAgentsReply = 0;
 		if ( !dAgents.IsEmpty() )
 		{
+			SetSessionAuth ( dAgents );
+
 			// connect to remote agents and query them
 			KeywordsRequestBuilder_c tReqBuilder ( tSettings, sQuery );
 			KeywordsReplyParser_c tParser ( tSettings.m_bStats, dKeywords );
@@ -12014,7 +12023,7 @@ void KeywordsRequestBuilder_c::BuildRequest ( const AgentConn_t & tAgent, ISphOu
 {
 	const CSphString & sIndexes = tAgent.m_tDesc.m_sIndexes;
 
-	auto tHdr = APIHeader ( tOut, SEARCHD_COMMAND_KEYWORDS, VER_COMMAND_KEYWORDS );
+	auto tHdr = APIHeader ( tOut, SEARCHD_COMMAND_KEYWORDS, VER_COMMAND_KEYWORDS, tAgent.m_tAuthToken );
 
 	tOut.SendString ( m_sTerm.cstr() );
 	tOut.SendString ( sIndexes.cstr() );
@@ -12327,7 +12336,7 @@ public:
 
 	void BuildRequest ( const AgentConn_t & tAgent, ISphOutputBuffer & tOut ) const final
 	{
-		auto tHdr = APIHeader ( tOut, SEARCHD_COMMAND_SUGGEST, VER_COMMAND_SUGGEST );
+		auto tHdr = APIHeader ( tOut, SEARCHD_COMMAND_SUGGEST, VER_COMMAND_SUGGEST, tAgent.m_tAuthToken );
 
 		tOut.SendString ( tAgent.m_tDesc.m_sIndexes.cstr() );
 		tOut.SendString ( m_sWord );
@@ -12415,6 +12424,8 @@ static bool SuggestDistIndexGet ( const cDistributedIndexRefPtr_t & pDistributed
 	int iAgentsReply = 0;
 	if ( !dAgents.IsEmpty() )
 	{
+		SetSessionAuth ( dAgents );
+
 		SuggestResult_t tCur;
 		// connect to remote agents and query them
 		SuggestRequestBuilder_c tReqBuilder ( tArgs, sWord );
@@ -13436,10 +13447,10 @@ public:
 		m_iLength = pCur-m_dBuf.Begin();
 	}
 
-	void BuildRequest ( const AgentConn_t &, ISphOutputBuffer & tOut ) const final
+	void BuildRequest ( const AgentConn_t & tAgent, ISphOutputBuffer & tOut ) const final
 	{
 		// API header
-		auto tHdr = APIHeader ( tOut, SEARCHD_COMMAND_UVAR, VER_COMMAND_UVAR );
+		auto tHdr = APIHeader ( tOut, SEARCHD_COMMAND_UVAR, VER_COMMAND_UVAR, tAgent.m_tAuthToken );
 
 		tOut.SendString ( m_sName.cstr() );
 		tOut.SendInt ( m_iUserVars );
@@ -13488,6 +13499,8 @@ static bool SendUserVar ( const char * sIndex, const char * sUserVarName, CSphVe
 	// connect to remote agents and query them
 	if ( !dAgents.IsEmpty() )
 	{
+		SetSessionAuth ( dAgents );
+
 		UVarRequestBuilder_c tReqBuilder ( sUserVarName, dSetValues );
 		UVarReplyParser_c tParser;
 		PerformRemoteTasks ( dAgents, &tReqBuilder, &tParser );
@@ -13588,7 +13601,7 @@ void SphinxqlRequestBuilder_c::BuildRequest ( const AgentConn_t & tAgent, ISphOu
 	const char* sIndexes = tAgent.m_tDesc.m_sIndexes.cstr();
 
 	// API header
-	auto tHdr = APIHeader ( tOut, SEARCHD_COMMAND_SPHINXQL, VER_COMMAND_SPHINXQL );
+	auto tHdr = APIHeader ( tOut, SEARCHD_COMMAND_SPHINXQL, VER_COMMAND_SPHINXQL, tAgent.m_tAuthToken );
 	APIBlob_c dWrapper ( tOut ); // sphinxql wrapped twice, so one more length need to be written.
 	tOut.SendBytes ( m_sBegin );
 	tOut.SendBytes ( sIndexes );
@@ -13770,6 +13783,7 @@ void sphHandleMysqlUpdate ( StmtErrorReporter_i & tOut, const SqlStmt_t & tStmt,
 
 			VecRefPtrs_t<AgentConn_t *> dAgents;
 			pDist->GetAllHosts ( dAgents );
+			SetSessionAuth ( dAgents );
 
 			// connect to remote agents and query them
 			std::unique_ptr<RequestBuilder_i> pRequestBuilder = CreateRequestBuilder ( sQuery, tStmt );
@@ -14510,6 +14524,7 @@ void sphHandleMysqlDelete ( StmtErrorReporter_i & tOut, const SqlStmt_t & tStmt,
 			const DistributedIndex_t * pDist = dDistributed[iIdx];
 			VecRefPtrsAgentConn_t dAgents;
 			pDist->GetAllHosts ( dAgents );
+			SetSessionAuth ( dAgents );
 
 			int iGot = 0;
 			int iWarns = 0;
@@ -17935,6 +17950,11 @@ void session::SetUser ( const CSphString & sUser )
 	GetClientSession()->m_sUser = sUser;
 }
 
+const CSphString & session::GetUser()
+{
+	return GetClientSession()->m_sUser;
+}
+
 void session::SetAutoCommit ( bool bAutoCommit )
 {
 	GetClientSession()->m_bAutoCommit = bAutoCommit;
@@ -20576,6 +20596,7 @@ void ConfigureSearchd ( const CSphConfig & hConf, bool bOptPIDFile, bool bTestMo
 
 	ConfigureMerge(hSearchd);
 	SetJoinBatchSize ( hSearchd.GetInt ( "join_batch_size", GetJoinBatchSize() ) );
+	AuthConfigure ( hSearchd );
 }
 
 static void DirMustWritable ( const CSphString & sDataDir )

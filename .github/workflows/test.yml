@@ -569,8 +569,8 @@ jobs:
     with:
       DISTR: windows
       arch: x64
-      sysroot_url_key: roots_mysql83_jul29
-      boost_url_key: boost80_zstd_zlib
+      sysroot_url_key: roots_mysql83_jan17
+      boost_url_key: boost_80
       CTEST_CMAKE_GENERATOR: "Ninja Multi-Config"
       CTEST_CONFIGURATION_TYPE: Debug
       cache_key: build_windows_x64

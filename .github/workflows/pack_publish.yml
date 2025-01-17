@@ -142,8 +142,8 @@ jobs:
     with:
       DISTR: windows
       arch: x64
-      sysroot_url_key: roots_mysql83_24oct12_1
-      boost_url_key: boost80_zstd_zlib
+      sysroot_url_key: roots_mysql83_jan17
+      boost_url_key: boost_80
       cmake_command: |
         mkdir build
         cd build

@@ -32,6 +32,8 @@ bool CheckAuth ( const MySQLAuth_t & tAuth, const CSphString & sUser, const VecT
 struct HttpProcessResult_t;
 
 bool CheckAuth ( const SmallStringHash_T<CSphString> & hOptions, HttpProcessResult_t & tRes, CSphVector<BYTE> & dReply, CSphString & sUser );
+const CSphString & GetBuddyToken();
+const CSphString CreateSessionToken();
 
 // API
 enum class ApiAuth_e : BYTE

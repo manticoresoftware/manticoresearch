@@ -169,7 +169,7 @@ void HandleAPICommandCluster ( ISphOutputBuffer & tOut, WORD uCommandVer, InputB
 	auto szError = TlsMsg::szError();
 	sphLogDebugRpl ( "remote cluster '%s' command %s(%d), client %s - %s", sCluster.scstr(), szClusterCmd ( eClusterCmd ), (int)eClusterCmd, szClient, szError );
 
-	auto tReply = APIHeader ( tOut, SEARCHD_ERROR );
+	auto tReply = APIAnswer ( tOut, 0, SEARCHD_ERROR );
 	tOut.SendString ( SphSprintf ( "[%s] %s", szIncomingIP(), szError ).cstr() );
 
 	ReportClusterError ( sCluster, szError, szClient, eClusterCmd );

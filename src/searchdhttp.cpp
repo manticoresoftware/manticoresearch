@@ -172,7 +172,8 @@ static Endpoint_t g_dEndpoints[(size_t)EHTTP_ENDPOINT::TOTAL] =
 		{ "pq", "json/pq" },
 		{ "cli", nullptr },
 		{ "cli_json", nullptr },
-		{ "_bulk", nullptr }
+		{ "_bulk", nullptr },
+		{ "token", nullptr }
 };
 
 EHTTP_ENDPOINT StrToHttpEndpoint ( const CSphString& sEndpoint ) noexcept
@@ -2497,6 +2498,13 @@ private:
 	void ReportLogError ( const char * sError, HttpErrorType_e eType , EHTTP_STATUS eStatus, bool bLogOnly );
 };
 
+class HttpTokenHandler_c final: public HttpHandler_c, public HttpOptionTrait_t
+{
+public:
+	explicit HttpTokenHandler_c ( const OptionsHash_t & tOptions );
+	bool Process () final;
+};
+
 static std::unique_ptr<HttpHandler_c> CreateHttpHandler ( EHTTP_ENDPOINT eEndpoint, CharStream_c & tSource, Str_t & sQuery, OptionsHash_t & tOptions, http_method eRequestType )
 {
 	const CSphString * pOption = nullptr;
@@ -2615,6 +2623,9 @@ static std::unique_ptr<HttpHandler_c> CreateHttpHandler ( EHTTP_ENDPOINT eEndpoi
 			return nullptr;
 		else
 			return std::make_unique<HttpHandlerEsBulk_c> ( sQuery, eRequestType, tOptions );
+
+	case EHTTP_ENDPOINT::TOKEN:
+		return std::make_unique<HttpTokenHandler_c> ( tOptions );
 
 	case EHTTP_ENDPOINT::TOTAL:
 		SetQuery ( tSource.ReadAll() );
@@ -3716,4 +3727,21 @@ const char * GetErrorTypeName ( HttpErrorType_e eType )
 	default:
 		return nullptr;;
 	}
+}
+
+HttpTokenHandler_c::HttpTokenHandler_c ( const OptionsHash_t & tOptions )
+	: HttpOptionTrait_t ( tOptions )
+{
+}
+bool HttpTokenHandler_c::Process ()
+{
+	TRACE_CONN ( "conn", "HttpTokenHandler_c::Process" );
+
+	CSphString sToken = CreateSessionToken();
+	
+	StringBuilder_c tOut;
+	tOut.Sprintf ( R"( {"token":"%s"} )", sToken.cstr() );
+
+	BuildReply ( tOut.cstr(), EHTTP_STATUS::_200 );
+	return true;
 }

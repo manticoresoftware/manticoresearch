@@ -456,7 +456,6 @@ public:
 };
 
 // RAII Start Sphinx API command/request header
-APIBlob_c APIHeader ( ISphOutputBuffer & dBuff, WORD uCommand, WORD uVer = 0 /* SEARCHD_OK */ );
 APIBlob_c APIHeader ( ISphOutputBuffer & dBuff, WORD uCommand, WORD uVer, const ApiAuthToken_t & tToken );
 
 // RAII Sphinx API answer
@@ -1401,6 +1400,7 @@ enum class EHTTP_ENDPOINT : BYTE
 	CLI,
 	CLI_JSON,
 	ES_BULK,
+	TOKEN,
 
 	TOTAL
 };

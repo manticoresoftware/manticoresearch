@@ -38,8 +38,18 @@ struct AuthUsers_t
 {
 	SmallStringHash_T<AuthUserCred_t> m_hUserToken;
 	OpenHashTable_T<int64_t, ApiUserCred_t> m_hApiToken2User;
+	SmallStringHash_T<AuthUserCred_t> m_hHttpToken;
 };
 static AuthUsers_t g_tAuth;
+
+static const CSphString g_sBuddyName ( "system.buddy" );
+static CSphString g_sBuddyToken;
+static bool g_bBuddyAuthCheck = val_from_env ( "MANTICORE_BUDDY_AUTH_CHECK", false ); // max start timeout 3 sec
+
+VecTraits_T<BYTE> Hash20Vec ( HASH20_t & dData )
+{
+	return VecTraits_T<BYTE> ( dData.data(), dData.size() );
+}
 
 /////////////////////////////////////////////////////////////////////////////
 /// auth load
@@ -157,7 +167,45 @@ static void AddConfigEntry ( const CSphString & sUser, const CSphString & sPwd )
 
 	HASH20_t tBuf = CalcBinarySHA1 ( sPwd.cstr(), sPwd.Length() );
 
-	AddUserEntry ( FromStr ( sUser ), VecTraits_T<BYTE> ( tBuf.data(), tBuf.size() ) );
+	AddUserEntry ( FromStr ( sUser ), Hash20Vec ( tBuf ) );
+}
+
+static CSphString AddToken( const AuthUserCred_t & tAuth )
+{
+	SHA1_c tTokenHash;
+	tTokenHash.Init();
+
+	DWORD uScramble[4] = { sphRand(), sphRand(), sphRand(), sphRand() };
+	tTokenHash.Update ( (const BYTE *)&uScramble, sizeof ( uScramble ) );
+	int64_t iDT = sphMicroTimer();
+	tTokenHash.Update ( (const BYTE *)&iDT, sizeof ( iDT ) );
+	tTokenHash.Update ( (const BYTE *)tAuth.m_sUser.cstr(), tAuth.m_sUser.Length() );
+
+	HASH20_t tToken = tTokenHash.FinalHash();
+
+	CSphString sToken = EncodeBinBase64 ( Hash20Vec ( tToken ) );
+	Verify ( g_tAuth.m_hHttpToken.Add ( tAuth, sToken ) );
+
+	return sToken;
+}
+
+static void AddBuddyToken ()
+{
+	if ( !IsAuthEnabled() )
+		return;
+
+	SHA1_c tPwdHash;
+	tPwdHash.Init();
+
+	DWORD uScramble[4] = { sphRand(), sphRand(), sphRand(), sphRand() };
+	tPwdHash.Update ( (const BYTE *)&uScramble, sizeof ( uScramble ) );
+	int64_t iDT = sphMicroTimer();
+	tPwdHash.Update ( (const BYTE *)&iDT, sizeof ( iDT ) );
+
+	HASH20_t tPwd = tPwdHash.FinalHash();
+
+	AddUserEntry ( FromStr ( g_sBuddyName ), Hash20Vec ( tPwd ) );
+	g_sBuddyToken = AddToken ( g_tAuth.m_hUserToken[g_sBuddyName] );
 }
 
 void AuthConfigure ( const CSphConfigSection & hSearchd )
@@ -167,11 +215,33 @@ void AuthConfigure ( const CSphConfigSection & hSearchd )
 	AddConfigEntry ( sUser, sPwd );
 
 	ReadAuthFile ( hSearchd.GetStr ( "auth_user_file" ) );
+	AddBuddyToken();
 }
 
 bool IsAuthEnabled()
 {
 	return g_tAuth.m_hUserToken.GetLength();
+}
+
+const CSphString & GetBuddyToken()
+{
+	return g_sBuddyToken;
+}
+
+const CSphString CreateSessionToken()
+{
+	CSphString sToken;
+
+	if ( !IsAuthEnabled() )
+		return sToken;
+
+	const AuthUserCred_t * pAuth = g_tAuth.m_hUserToken ( session::GetUser() );
+	if ( !pAuth )
+		return sToken;
+
+
+	sToken = AddToken ( *pAuth );
+	return sToken;
 }
 
 /////////////////////////////////////////////////////////////////////////////
@@ -269,42 +339,19 @@ static bool FailAuth ( HttpProcessResult_t & tRes, CSphVector<BYTE> & dReply )
 	return false;
 }
 
-bool CheckAuth ( const SmallStringHash_T<CSphString> & hOptions, HttpProcessResult_t & tRes, CSphVector<BYTE> & dReply, CSphString & sUser )
+static Str_t GetTokenFromAuth ( const CSphString & sSrcAuth, int iPrefixLen )
 {
-	if ( g_tAuth.m_hUserToken.IsEmpty() )
-	{
-		sphLogDebug ( "no users found in config, access granted" );
-		return true;
-	}
-
-	// FIXME!!! add buddy authorization
-	if ( IsBuddyQuery ( hOptions ) )
-		return true;
-
-	const CSphString * pSrcAuth = hOptions ( "authorization" );
-	if ( !pSrcAuth )
-	{
-		tRes.m_eReplyHttpCode = EHTTP_STATUS::_401;
-		tRes.m_bSkipBuddy = true;
-		tRes.m_sError = "Authorization header field missed";
-		sphHttpErrorReply ( dReply, tRes.m_eReplyHttpCode, tRes.m_sError.cstr(), R"(WWW-Authenticate: Basic realm="Manticore daemon", charset="UTF-8")" );
-		return false;
-	}
-
-	const char sAuthPrefix[] = "Basic";
-	if ( !pSrcAuth->Begins ( sAuthPrefix ) )
-	{
-		tRes.m_sError = "Only basic authorization supported";
-		return FailAuth ( tRes, dReply );
-	}
-
-	int iSrcAuthLen = pSrcAuth->Length();
-	const char * sCur = pSrcAuth->cstr() + sizeof ( sAuthPrefix ) - 1;
-	const char * sEnd = pSrcAuth->cstr() + iSrcAuthLen;
+	int iSrcAuthLen = sSrcAuth.Length();
+	const char * sCur = sSrcAuth.cstr() + iPrefixLen;
+	const char * sEnd = sSrcAuth.cstr() + iSrcAuthLen;
 	while ( sCur<sEnd && isspace ( *sCur ) )
 		sCur++;
-	Str_t sSrcUserPwd ( sCur, iSrcAuthLen - ( sCur - pSrcAuth->cstr() ) );
 
+	return Str_t ( sCur, iSrcAuthLen - ( sCur - sSrcAuth.cstr() ) );
+}
+
+static bool CheckAuthBasic ( const Str_t & sSrcUserPwd, HttpProcessResult_t & tRes, CSphVector<BYTE> & dReply, CSphString & sUser )
+{
 	CSphVector<BYTE> dSrcUserPwd;
 	DecodeBinBase64 ( sSrcUserPwd, dSrcUserPwd );
 
@@ -334,6 +381,59 @@ bool CheckAuth ( const SmallStringHash_T<CSphString> & hOptions, HttpProcessResu
 	{
 		return true;
 	}
+}
+
+static bool CheckAuthBearer ( const Str_t & sToken, HttpProcessResult_t & tRes, CSphVector<BYTE> & dReply, CSphString & sUser )
+{
+	const AuthUserCred_t * pUser = g_tAuth.m_hHttpToken ( sToken );
+	if ( !pUser )
+	{
+		tRes.m_sError.SetSprintf ( "Access denied for token '%s'", sToken.first );
+		return FailAuth ( tRes, dReply );
+	}
+
+	sUser = pUser->m_sUser;
+	return true;
+}
+
+
+bool CheckAuth ( const SmallStringHash_T<CSphString> & hOptions, HttpProcessResult_t & tRes, CSphVector<BYTE> & dReply, CSphString & sUser )
+{
+	if ( g_tAuth.m_hUserToken.IsEmpty() )
+	{
+		sphLogDebug ( "no users found in config, access granted" );
+		return true;
+	}
+
+	// FIXME!!! add buddy authorization
+	if ( IsBuddyQuery ( hOptions ) && !g_bBuddyAuthCheck )
+		return true;
+
+	const CSphString * pSrcAuth = hOptions ( "authorization" );
+	if ( !pSrcAuth )
+	{
+		tRes.m_eReplyHttpCode = EHTTP_STATUS::_401;
+		tRes.m_bSkipBuddy = true;
+		tRes.m_sError = "Authorization header field missed";
+		sphHttpErrorReply ( dReply, tRes.m_eReplyHttpCode, tRes.m_sError.cstr(), R"(WWW-Authenticate: Basic realm="Manticore daemon", charset="UTF-8")" );
+		return false;
+	}
+
+	const char sAuthPrefixBasic[] = "Basic";
+	const char sAuthPrefixBearer[] = "Bearer";
+	const bool bBasicToken = ( pSrcAuth->Begins ( sAuthPrefixBasic ) );
+	const bool bBearerToken = ( !bBasicToken && pSrcAuth->Begins ( sAuthPrefixBearer ) );
+	if ( !bBasicToken && !bBearerToken )
+	{
+		tRes.m_sError = "Only Basic and Bearer authorization supported";
+		return FailAuth ( tRes, dReply );
+	}
+
+	Str_t sAuthTail = GetTokenFromAuth ( *pSrcAuth, ( bBasicToken ? sizeof( sAuthPrefixBasic )-1 : sizeof( sAuthPrefixBearer )-1 ) );
+	if ( bBasicToken )
+		return CheckAuthBasic ( sAuthTail, tRes, dReply, sUser );
+	else
+		return CheckAuthBearer ( sAuthTail, tRes, dReply, sUser );
 }
 
 

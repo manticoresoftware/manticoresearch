@@ -215,7 +215,7 @@ void ApiServe ( std::unique_ptr<AsyncNetBuffer_c> pBuf )
 		{
 			sphWarning ( "%s", g_sMaxedOutMessage.first );
 			{
-				auto tHdr = APIHeader ( tOut, SEARCHD_RETRY );
+				auto tHdr = APIAnswer ( tOut, 0, SEARCHD_RETRY );
 				tOut.SendString ( g_sMaxedOutMessage );
 			}
 			tOut.Flush(); // no need to check return code since we anyway break
@@ -247,7 +247,7 @@ void ApiServe ( std::unique_ptr<AsyncNetBuffer_c> pBuf )
 
 
 // Start Sphinx API command/request header
-APIBlob_c APIHeader ( ISphOutputBuffer & dBuff, WORD uCommand, WORD uVer )
+static APIBlob_c APIHeader ( ISphOutputBuffer & dBuff, WORD uCommand, WORD uVer )
 {
 	dBuff.SendWord ( uCommand );
 	dBuff.SendWord ( uVer );

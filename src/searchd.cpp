@@ -1597,7 +1597,7 @@ void SendErrorReply ( ISphOutputBuffer & tOut, const char * sTemplate, ... )
 	sError.SetSprintfVa ( sTemplate, ap );
 	va_end ( ap );
 
-	auto tHdr = APIHeader ( tOut, SEARCHD_ERROR );
+	auto tHdr = APIAnswer ( tOut, 0, SEARCHD_ERROR );
 	tOut.SendString ( sError.cstr() );
 
 	// --console logging

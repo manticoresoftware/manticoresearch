@@ -54,13 +54,6 @@ jobs:
           path: cache
           enableCrossOsArchive: true
           key: build_windows_x64
-      - name: Copy libraries close to the binaries
-        run: |
-          cp bundle/mysql-x64/lib/libmysql* build/src/Debug/
-          cp bundle/Expat-1.95.8-x64/Libs/libexpat* build/src/Debug/
-          cp bundle/libiconv-1.9.1-x64/lib/iconv* build/src/Debug/
-      - name: Setup Flex and Bison
-        run: Install-ChocoPackage winflexbison
       - name: Run mysql
         run: |
           C:\PROGRA~1\MySQL\"MySQL Server 8.0"\bin\mysqld.exe --initialize-insecure

@@ -589,8 +589,7 @@ jobs:
       CTEST_CMAKE_GENERATOR: "Ninja Multi-Config"
       CTEST_CONFIGURATION_TYPE: Debug
       cache_key: build_windows_x64
-      artifact_list: "build/xml build/src/Debug/indexer.exe build/src/Debug/searchd.exe build/src/Debug/tests.exe build/src/gtests/Debug/gmanticoretest.exe build/usr"
-
+      artifact_list: "build/xml build/src/Debug/indexer.exe build/src/Debug/searchd.exe build/src/gtests/Debug/gmanticoretest.exe build/src/Debug/*.dll build/src/gtests/Debug/*.dll build/config/*.c build/config/*.h"
   test_windows:
     if: (github.event_name == 'pull_request' && github.event.pull_request.base.ref == 'update-buddy-version') != true
     name: Windows tests

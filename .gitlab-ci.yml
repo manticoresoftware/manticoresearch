@@ -172,13 +172,11 @@ win_build:
       - build/xml
       - build/src/$CTEST_CONFIGURATION_TYPE/indexer.exe
       - build/src/$CTEST_CONFIGURATION_TYPE/searchd.exe
-      - build/src/$CTEST_CONFIGURATION_TYPE/*.dll
       - build/src/gtests/$CTEST_CONFIGURATION_TYPE/gmanticoretest.exe
+      - build/src/$CTEST_CONFIGURATION_TYPE/*.dll
       - build/src/gtests/$CTEST_CONFIGURATION_TYPE/*.dll
-      - build/usr
-# Commented out usually need, but not on our dev where everything is installed into system
-#      - build/src/$CTEST_CONFIGURATION_TYPE/*.dll
-#      - build/src/gtests/$CTEST_CONFIGURATION_TYPE/*.dll
+      - build/config/*.c
+      - build/config/*.h
   cache:
     key: win_test
 

@@ -23,8 +23,21 @@ Define the schema using Manticore field types like `int`, `float`, `text`, `json
 CREATE SOURCE <source name> [(column type, ...)] [source_options]
 ```
 
-All schema keys are case-insensitive, so `Products`, `products`, and `PrOdUcTs` are treated the same. They are all converted to lowercase.
+All schema keys are case-insensitive, meaning `Products`, `products`, and `PrOdUcTs` are treated the same. They are all converted to lowercase.
 
+If your field names don't match the [field name syntax](../../Creating_a_table/Data_types.md#Field-name-syntax) allowed in Manticore Search (for example, if they contain special characters or start with numbers), you must define a schema mapping. For instance, `$keyName` or `123field` are valid keys in JSON but not valid field names in Manticore Search. If you try to use invalid field names without proper mapping, Manticore will return an error and the source creation will fail.
+
+To handle such cases, use the following schema syntax to map invalid field names to valid ones:
+
+```
+allowed_field_name 'original JSON key name with special symbols' type
+```
+
+For example:
+```sql
+price_field '$price' float    -- maps JSON key '$price' to field 'price_field'
+field_123 '123field' text     -- maps JSON key '123field' to field 'field_123'
+```
 <!-- intro -->
 
 ##### SQL:
@@ -33,7 +46,7 @@ All schema keys are case-insensitive, so `Products`, `products`, and `PrOdUcTs` 
 
 ```sql
 CREATE SOURCE kafka
-(id bigint, term text, abbrev text, GlossDef json)
+(id bigint, term text, abbrev '$abbrev' text, GlossDef json)
 type='kafka'
 broker_list='kafka:9092'
 topic_list='my-data'
@@ -55,11 +68,11 @@ Query OK, 2 rows affected (0.02 sec)
 | Option | Accepted Values | Description |
 |-|-|-|
 | `type` | `kafka` | Sets the source type. Currently, only `kafka` is supported |
-| `broker_list` | host:port [, ...] | Specifies Kafka broker URLs |
-| `topic_list` | string [, ...] | Lists Kafka topics to consume from |
-| `consumer_group`| string | Defines the Kafka consumer group, defaulting to `manticore`. |
-| `num_consumers` | int | Number of consumers to handle messages. |
-| `batch` | int | Number of messages to process before moving on. Default is `100`; processes remaining messages on timeout otherwise |
+| `broker_list` | `host:port [, ...]` | Specifies Kafka broker URLs |
+| `topic_list` | `string [, ...]` | Lists Kafka topics to consume from |
+| `consumer_group`| `string` | Defines the Kafka consumer group, defaulting to `manticore`. |
+| `num_consumers` | `int` | Number of consumers to handle messages. |
+| `batch` | `int` | Number of messages to process before moving on. Default is `100`; processes remaining messages on timeout otherwise |
 
 ### Destination table
 
@@ -129,14 +142,14 @@ Data is transferred from Kafka to Manticore Search in batches, which are cleared
 
 Here's a mapping table based on the examples above:
 
-| Kafka | Source | Buffer | MV | Destination |
-|-|-|-|-|-|
-| id | id | id | id | id |
-| term | term | term | term as name | name |
-| unnecessary key | - | - | | |
-| abbrev | abbrev | abbrev | abbrev as short_name | short_name |
-| - | - | | `UTC_TIMESTAMP()`` as received_at | received_at |
-| GlossDef | GlossDef | GlossDef | GlossDef.size as size | size |
+| Kafka           | Source   | Buffer   | MV                                | Destination |
+|-----------------|----------|----------|-----------------------------------|-------------|
+| `id`              | `id`       | `id`       | `id`                                | `id`          |
+| `term`            | `term`     | `term`     | `term as name`                      | `name`        |
+| `unnecessary_key` which we're not interested in | -        | -        |                                   |             |
+| `$abbrev`         | `abbrev`   | `abbrev`   | `abbrev` as `short_name`              | `short_name`  |
+| -                 | -        | -         | `UTC_TIMESTAMP() as received_at`  | `received_at` |
+| `GlossDef`        | `glossdef` | `glossdef` | `glossdef.size as size`             | `size`        |
 
 ### Listing
 
@@ -184,18 +197,18 @@ SHOW SOURCE kafka;
 <!-- response -->
 
 ```
-+--------+---------------------------------------------------------+
-| Source | Create Table                                            |
-+--------+---------------------------------------------------------+
-| kafka  | CREATE SOURCE kafka                                     |
-|        | (id bigint, term text, abbrev text, GlossDef json)      |
-|        | type='kafka'                                            |
-|        | broker_list='kafka:9092'                                |
-|        | topic_list='my-data'                                    |
-|        | consumer_group='manticore'                              |
-|        | num_consumers='2'                                       |
-|        | batch=50                                                |
-+--------+---------------------------------------------------------+
++--------+-------------------------------------------------------------------+
+| Source | Create Table                                                      |
++--------+-------------------------------------------------------------------+
+| kafka  | CREATE SOURCE kafka                                               |
+|        | (id bigint, term text, abbrev '$abbrev' text, GlossDef json)      |
+|        | type='kafka'                                                      |
+|        | broker_list='kafka:9092'                                          |
+|        | topic_list='my-data'                                              |
+|        | consumer_group='manticore'                                        |
+|        | num_consumers='2'                                                 |
+|        | batch=50                                                          |
++--------+-------------------------------------------------------------------+
 ```
 
 <!-- end -->

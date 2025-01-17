@@ -382,7 +382,8 @@ static void FormatDate ( time_t tDate, char * sBuf, int iSize )
 	std::tm tDstDate;
 	gmtime_r ( &tDate, &tDstDate );
 
-	Verify ( strftime ( sBuf, iSize, g_sCompatDateFormat, &tDstDate )>0 );
+	[[maybe_unused]] auto tResult = strftime ( sBuf, iSize, g_sCompatDateFormat, &tDstDate );
+	assert ( tResult>0 );
 }
 
 void FormatDate ( time_t tDate, CSphString & sRes )

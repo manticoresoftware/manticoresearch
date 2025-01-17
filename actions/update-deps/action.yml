@@ -65,10 +65,10 @@ runs:
       shell: bash
       run: |
         if [[ "${{ github.event_name }}" == "pull_request" ]]; then
-          echo "branch=buddy-${{ github.event.pull_request.number }}" >> $GITHUB_OUTPUT
-          echo "target=update-buddy-version" >> $GITHUB_OUTPUT
+          echo "branch=${{ inputs.name }}-${{ github.event.pull_request.number }}" >> $GITHUB_OUTPUT
+          echo "target=update-${{ inputs.name }}-version" >> $GITHUB_OUTPUT
         else
-          echo "branch=update-buddy-version" >> $GITHUB_OUTPUT
+          echo "branch=update-${{ inputs.name }}-version" >> $GITHUB_OUTPUT
           echo "target=master" >> $GITHUB_OUTPUT
         fi
 

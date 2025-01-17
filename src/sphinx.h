@@ -1309,8 +1309,8 @@ public:
 
 	// used for query optimizer calibration
 	virtual HistogramContainer_c * Debug_GetHistograms() const { return nullptr; }
-	virtual const SIContainer_c *	Debug_GetSI() const { return nullptr; }
 
+	virtual const SIContainer_c *	GetSI() const { return nullptr; }
 	virtual Docstore_i *			GetDocstore() const { return nullptr; }
 	virtual columnar::Columnar_i *	GetColumnar() const { return nullptr; }
 	virtual const DWORD *			GetRawAttrs() const { return nullptr; }

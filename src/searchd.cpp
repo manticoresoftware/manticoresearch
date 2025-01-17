@@ -63,6 +63,7 @@
 #include "frontendschema.h"
 #include "skip_cache.h"
 #include "jieba.h"
+#include "secondaryindex.h"
 
 // services
 #include "taskping.h"
@@ -7965,7 +7966,7 @@ static const char * g_dSqlStmts[] =
 	"flush_hostnames", "flush_logs", "reload_indexes", "sysfilters", "debug", "alter_killlist_target",
 	"alter_index_settings", "join_cluster", "cluster_create", "cluster_delete", "cluster_index_add",
 	"cluster_index_delete", "cluster_update", "explain", "import_table", "freeze_indexes", "unfreeze_indexes",
-	"show_settings", "alter_rebuild_si", "kill", "show_locks", "show_scroll"
+	"show_settings", "alter_rebuild_si", "kill", "show_locks", "show_scroll", "show_table_indexes"
 };
 
 
@@ -16271,6 +16272,123 @@ void HandleMysqlShowIndexSettings ( RowBuffer_i & tOut, const SqlStmt_t & tStmt 
 }
 
 
+static void OutputSIStats ( RowBuffer_i & tOut, const CheckLike & tLike, const SI::IndexAttrInfo_t & tInfo, float fPercent )
+{
+	const char * szName = tInfo.m_sName.c_str();
+	CSphString sType = ColumnarAttrType2Str ( tInfo.m_eType );
+	CSphString sEnabled = tInfo.m_bEnabled ? "1" : "0";
+	if ( !tLike.Match(szName) && !tLike.Match ( sType.cstr() ) && !tLike.Match ( sEnabled.cstr() ) )
+		return;
+
+	tOut.PutString(szName);
+	tOut.PutString(sType);
+	tOut.PutString(sEnabled);
+	tOut.PutNumAsString ( (int)(fPercent*100.0f) );
+	tOut.Commit();
+}
+
+
+static bool operator == ( const SI::IndexAttrInfo_t & tA, const SI::IndexAttrInfo_t & tB )
+{
+	return tA.m_sName==tB.m_sName && tA.m_eType==tB.m_eType && tA.m_bEnabled==tB.m_bEnabled;
+}
+
+
+static void ShowTableIndexes ( RowBuffer_i & tOut, const CSphString & sPattern, std::vector<SI::IndexAttrInfo_t> & dInfo, int iNumChunks )
+{
+	assert( iNumChunks>0 );
+	if ( dInfo.empty() )
+		return;
+
+	std::sort ( dInfo.begin(), dInfo.end(), []( const auto & a, const auto & b )
+		{
+			if ( a.m_eType!=b.m_eType )
+				return a.m_eType<b.m_eType;
+
+			if ( a.m_sName!=b.m_sName )
+				return a.m_sName<b.m_sName;
+
+			return a.m_bEnabled > b.m_bEnabled;
+		}
+	);
+
+	CheckLike tLike ( sPattern.cstr() );
+
+	int iCount = 0;
+	for ( int i = 1; i < (int)dInfo.size(); i++ )
+	{
+		if ( dInfo[i]==dInfo[i-1] )
+			iCount++;
+		else
+		{
+			OutputSIStats ( tOut, tLike, dInfo[i-1], float(iCount+1)/iNumChunks );
+			iCount = 0;
+		}
+	}
+
+	OutputSIStats ( tOut, tLike, dInfo.back(), float(iCount+1)/iNumChunks );
+}
+
+
+void HandleMysqlShowTableIndexes ( RowBuffer_i & tOut, const SqlStmt_t & tStmt )
+{
+	CSphString sError;
+	auto pServed = GetServed ( tStmt.m_sIndex );
+	if ( !pServed )
+	{
+		tOut.Error ( "SHOW TABLE INDEXES requires an existing table" );
+		return;
+	}
+
+	int iChunk = tStmt.m_iIntParam;
+	if ( tStmt.m_dIntSubkeys.GetLength ()>=1 )
+		iChunk = (int) tStmt.m_dIntSubkeys[0];
+
+	if ( !tOut.HeadOfStrings ( { "Name", "Type", "Enabled", "Percent" } ) )
+		return;
+
+	std::vector<SI::IndexAttrInfo_t> dInfo;
+	bool bWarn = pServed->m_eType == IndexType_e::RT && iChunk>=0;
+	bool bKeepIteration = true;
+	auto fnCollectIndexes = [&tOut,&bKeepIteration,&dInfo,bWarn] ( const CSphIndex* pIndex )
+	{
+		if ( !pIndex )
+		{
+			if ( bWarn )
+				tOut.Error ( "SHOW TABLE INDEXES requires an existing table" );
+
+			bKeepIteration = false;
+			return;
+		}
+
+		const SIContainer_c * pSI = pIndex->GetSI();
+		if ( pSI )
+			pSI->GetIndexAttrInfo(dInfo);
+	};
+
+	if ( pServed->m_eType==IndexType_e::RT )
+	{
+		if ( iChunk>=0 )
+			RIdx_T<const RtIndex_i*> ( pServed )->ProcessDiskChunk ( iChunk, fnCollectIndexes );
+		else
+		{
+			iChunk = 0;
+			while ( bKeepIteration )
+			{
+				RIdx_T<const RtIndex_i*> ( pServed )->ProcessDiskChunk ( iChunk, fnCollectIndexes );
+				if ( bKeepIteration )
+					iChunk++;
+			}
+		}
+	}
+	else
+		fnCollectIndexes ( RIdx_c(pServed) );
+
+	ShowTableIndexes ( tOut, tStmt.m_sStringParam, dInfo, Max(iChunk,1) );
+	tOut.Eof();
+}
+
+
 void HandleMysqlShowProfile ( RowBuffer_i & tOut, const QueryProfile_c & p, bool bMoreResultsFollow )
 {
 	#define SPH_QUERY_STATE(_name,_desc) _desc,
@@ -17760,6 +17878,11 @@ bool ClientSession_c::Execute ( Str_t sQuery, RowBuffer_i & tOut )
 	case STMT_SHOW_LOCKS:
 		HandleMysqlShowLocks ( tOut );
 		return true;
+
+	case STMT_SHOW_TABLE_INDEXES:
+		HandleMysqlShowTableIndexes ( tOut, *pStmt );
+		return true;
+
 
 	default:
 		m_sError.SetSprintf ( "internal error: unhandled statement type (value=%d)", eStmt );

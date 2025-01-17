@@ -10522,9 +10522,16 @@ int	ExprParser_t::AddNodeWithTable ( const char * szTable, uint64_t uOffset )
 
 int ExprParser_t::AddWeightWithTable ( const char * szTable, uint64_t uOffset )
 {
-	int iAttr = ParseJoinAttr ( szTable, uOffset );
+	CSphString sAttrName;
+	sAttrName.SetBinary ( m_sExpr.first + GetConstStrOffset(uOffset), GetConstStrLength(uOffset) );
+	sAttrName.SetSprintf ( "%s.%s()", szTable, sAttrName.cstr() );
+
+	int iAttr = m_pSchema->GetAttrIndex ( sAttrName.cstr() );
 	if ( iAttr==-1 )
+	{
+		m_sParserError.SetSprintf ( "unknown attribute '%s'", sAttrName.cstr() );
 		return -1;
+	}
 
 	YYSTYPE yylval;
 	int iType = ParseAttr ( iAttr, m_pSchema->GetAttr(iAttr).m_sName.cstr(), &yylval );

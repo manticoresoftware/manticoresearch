@@ -3087,7 +3087,7 @@ static void FormatOrderBy ( StringBuilder_c * pBuf, const char * sPrefix, ESphSo
 
 static const CSphQuery g_tDefaultQuery {};
 
-static void FormatSphinxql ( const CSphQuery & q, int iCompactIN, QuotationEscapedBuilder & tBuf );
+static void FormatSphinxql ( const CSphQuery & q, const CSphQuery & tJoinOptions, int iCompactIN, QuotationEscapedBuilder & tBuf );
 static void FormatList ( const CSphVector<CSphNamedInt> & dValues, StringBuilder_c & tBuf )
 {
 	ScopedComma_c tComma ( tBuf, ", " );
@@ -3095,9 +3095,9 @@ static void FormatList ( const CSphVector<CSphNamedInt> & dValues, StringBuilder
 		tBuf << dValue;
 }
 
-static void FormatOption ( const CSphQuery & tQuery, StringBuilder_c & tBuf )
+static void FormatOption ( const CSphQuery & tQuery, StringBuilder_c & tBuf, const char * szOption )
 {
-	ScopedComma_c tOptionComma ( tBuf, ", ", " OPTION ");
+	ScopedComma_c tOptionComma ( tBuf, ", ", szOption);
 
 	if ( tQuery.m_iMaxMatches!=DEFAULT_MAX_MATCHES )
 		tBuf.Appendf ( "max_matches=%d", tQuery.m_iMaxMatches );
@@ -3267,7 +3267,7 @@ inline static void FormatTimeConnClient ( StringBuilder_c& tBuf )
 	tBuf << " conn " << session::GetConnID() << " (" << session::szClientName() << ")";
 }
 
-static void LogQuerySphinxql ( const CSphQuery & q, const CSphQueryResultMeta & tMeta, const CSphVector<int64_t> & dAgentTimes )
+static void LogQuerySphinxql ( const CSphQuery & q, const CSphQuery & tJoinOptions, const CSphQueryResultMeta & tMeta, const CSphVector<int64_t> & dAgentTimes )
 {
 	assert ( g_eLogFormat==LOG_FORMAT_SPHINXQL );
 	if ( g_iQueryLogFile<0 )
@@ -3295,7 +3295,7 @@ static void LogQuerySphinxql ( const CSphQuery & q, const CSphQueryResultMeta & 
 	if ( q.m_eQueryType==QUERY_JSON )
 		LogQueryJson ( q, tBuf );
 	else
-		FormatSphinxql ( q, iCompactIN, tBuf );
+		FormatSphinxql ( q, tJoinOptions, iCompactIN, tBuf );
 
 	///////////////
 	// query stats
@@ -3352,7 +3352,19 @@ static void LogQuerySphinxql ( const CSphQuery & q, const CSphQueryResultMeta & 
 }
 
 
-void FormatSphinxql ( const CSphQuery & q, int iCompactIN, QuotationEscapedBuilder & tBuf )
+CSphString TypeCastToStr ( ESphAttr eAttr )
+{
+	switch ( eAttr )
+	{
+	case SPH_ATTR_INTEGER:	return "INTEGER";
+	case SPH_ATTR_BIGINT:	return "BIGINT";
+	case SPH_ATTR_STRING:	return "STRING";
+	default:				return "";
+	}
+}
+
+
+void FormatSphinxql ( const CSphQuery & q, const CSphQuery & tJoinOptions, int iCompactIN, QuotationEscapedBuilder & tBuf )
 {
 	if ( q.m_bHasOuter )
 		tBuf << "SELECT * FROM (";
@@ -3362,10 +3374,40 @@ void FormatSphinxql ( const CSphQuery & q, int iCompactIN, QuotationEscapedBuild
 	else
 		tBuf << "SELECT " << RemoveBackQuotes ( q.m_sSelect.cstr() ) << " FROM " << q.m_sIndexes;
 
+	if ( q.m_eJoinType!=JoinType_e::NONE )
+	{
+		if ( q.m_eJoinType==JoinType_e::LEFT )
+			tBuf << " LEFT JOIN ";
+		else
+			tBuf << " INNER JOIN ";
+
+		tBuf << q.m_sJoinIdx << " ON ";
+
+		ARRAY_FOREACH ( i, q.m_dOnFilters )
+		{
+			const auto & tOn = q.m_dOnFilters[i];
+			CSphString sVar1, sVar2;
+			sVar1.SetSprintf ( "%s.%s", tOn.m_sIdx1.cstr(), tOn.m_sAttr1.cstr() );
+			sVar2.SetSprintf ( "%s.%s", tOn.m_sIdx2.cstr(), tOn.m_sAttr2.cstr() );
+			CSphString sCast1 = TypeCastToStr ( tOn.m_eTypeCast1 );
+			CSphString sCast2 = TypeCastToStr ( tOn.m_eTypeCast2 );
+			if ( !sCast1.IsEmpty() )
+				sVar1.SetSprintf ( "%s(%s)", sCast1.cstr(), sVar1.cstr() );
+
+			if ( !sCast2.IsEmpty() )
+				sVar2.SetSprintf ( "%s(%s)", sCast2.cstr(), sVar2.cstr() );
+
+			tBuf << sVar1 << "=" << sVar2;
+
+			if ( i < q.m_dOnFilters.GetLength()-1 )
+				tBuf << " AND ";
+		}
+	}
+
 	// WHERE clause
 	// (m_sRawQuery is empty when using MySQL handler)
 	const CSphString & sQuery = q.m_sQuery;
-	if ( !sQuery.IsEmpty() || q.m_dFilters.GetLength() )
+	if ( !sQuery.IsEmpty() || !q.m_sJoinQuery.IsEmpty() || q.m_dFilters.GetLength() )
 	{
 		ScopedComma_c sWHERE ( tBuf, " AND ", " WHERE ");
 
@@ -3373,6 +3415,14 @@ void FormatSphinxql ( const CSphQuery & q, int iCompactIN, QuotationEscapedBuild
 		{
 			ScopedComma_c sMatch (tBuf, nullptr, "MATCH(", ")");
 			tBuf.FixupSpacedAndAppendEscaped ( sQuery.cstr() );
+		}
+
+		if ( !q.m_sJoinQuery.IsEmpty() )
+		{
+			CSphString sEnd;
+			sEnd.SetSprintf ( ",%s)", q.m_sJoinIdx.cstr() );
+			ScopedComma_c sMatch (tBuf, nullptr, "MATCH(", sEnd.cstr() );
+			tBuf.FixupSpacedAndAppendEscaped ( q.m_sJoinQuery.cstr() );
 		}
 
 		FormatFiltersQL ( q.m_dFilters, q.m_dFilterTree, tBuf, iCompactIN );
@@ -3405,7 +3455,14 @@ void FormatSphinxql ( const CSphQuery & q, int iCompactIN, QuotationEscapedBuild
 		tBuf << q.m_iLimit;
 
 	// OPTION clause
-	FormatOption ( q, tBuf );
+	FormatOption ( q, tBuf, " OPTION " );
+	if ( q.m_eJoinType!=JoinType_e::NONE )
+	{
+		CSphString sJoinedOption;
+		sJoinedOption.SetSprintf ( " OPTION(%s) ", q.m_sJoinIdx.cstr() );
+		FormatOption ( tJoinOptions, tBuf, sJoinedOption.cstr() );
+	}
+	
 	FormatIndexHints ( q, tBuf );
 
 	// outer order by, limit
@@ -3424,7 +3481,7 @@ void FormatSphinxql ( const CSphQuery & q, int iCompactIN, QuotationEscapedBuild
 	tBuf << ';';
 }
 
-static void LogQuery ( const CSphQuery & q, const CSphQueryResultMeta & tMeta, const CSphVector<int64_t> & dAgentTimes )
+static void LogQuery ( const CSphQuery & q, const CSphQuery & tJoinOptions, const CSphQueryResultMeta & tMeta, const CSphVector<int64_t> & dAgentTimes )
 {
 	if ( g_iQueryLogMinMs>0 && tMeta.m_iQueryTime<g_iQueryLogMinMs )
 		return;
@@ -3436,7 +3493,7 @@ static void LogQuery ( const CSphQuery & q, const CSphQueryResultMeta & tMeta, c
 	switch ( g_eLogFormat )
 	{
 		case LOG_FORMAT_PLAIN:		LogQueryPlain ( q, tMeta ); break;
-		case LOG_FORMAT_SPHINXQL:	LogQuerySphinxql ( q, tMeta, dAgentTimes ); break;
+		case LOG_FORMAT_SPHINXQL:	LogQuerySphinxql ( q, tJoinOptions, tMeta, dAgentTimes ); break;
 	}
 }
 
@@ -5538,7 +5595,7 @@ void SearchHandler_c::RunActionQuery ( const CSphQuery & tQuery, const CSphStrin
 	g_tStats.m_iDiskReadBytes.fetch_add ( tIO.m_iReadBytes, std::memory_order_relaxed );
 
 	if ( m_bQueryLog )
-		LogQuery ( m_dQueries[0], m_dAggrResults[0], m_dAgentTimes[0] );
+		LogQuery ( m_dQueries[0], m_dJoinQueryOptions[0], m_dAggrResults[0], m_dAgentTimes[0] );
 }
 
 void SearchHandler_c::SetQuery ( int iQuery, const CSphQuery & tQuery, std::unique_ptr<ISphTableFunc> pTableFunc )
@@ -5575,7 +5632,7 @@ void SearchHandler_c::RunQueries()
 	if ( m_bQueryLog )
 	{
 		ARRAY_FOREACH ( i, m_dQueries )
-			LogQuery ( m_dQueries[i], m_dAggrResults[i], m_dAgentTimes[i] );
+			LogQuery ( m_dQueries[i], m_dJoinQueryOptions[i], m_dAggrResults[i], m_dAgentTimes[i] );
 	}
 	// no need to call OnRunFinished() as meta.matches already calculated at search
 }
@@ -13175,7 +13232,7 @@ static Str_t FormatInfo ( const PublicThreadDesc_t & tThd, ThreadInfoFormat_e eF
 		if ( tThd.m_pQuery )
 		{
 			tBuf.Clear();
-			FormatSphinxql ( *tThd.m_pQuery, 0, tBuf );
+			FormatSphinxql ( *tThd.m_pQuery, {}, 0, tBuf );
 			bGotQuery = true;
 		}
 
@@ -13805,7 +13862,7 @@ bool HandleMysqlSelect ( RowBuffer_i & dRows, SearchHandler_c & tHandler )
 		CheckQuery ( tHandler.m_dQueries[i], tHandler.m_dAggrResults[i].m_sError, tHandler.m_dQueries.GetLength() == 1 );
 		if ( !tHandler.m_dAggrResults[i].m_sError.IsEmpty() )
 		{
-			LogQuery ( tHandler.m_dQueries[i], tHandler.m_dAggrResults[i], dAgentTimes );
+			LogQuery ( tHandler.m_dQueries[i], tHandler.m_dJoinQueryOptions[i], tHandler.m_dAggrResults[i], dAgentTimes );
 			if ( tHandler.m_dQueries.GetLength()==1 )
 				sError << tHandler.m_dAggrResults[0].m_sError;
 			else

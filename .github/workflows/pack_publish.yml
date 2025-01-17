@@ -87,6 +87,7 @@ jobs:
         mkdir build
         cd build
         cmake -DPACK=1 ..
+        export CMAKE_TOOLCHAIN_FILE=$(pwd)/dist/build_dockers/cross/linux.cmake
         cmake --build . --target package
       cache_key: pack_${{ matrix.DISTR }}_${{ matrix.arch }}
       artifact_list: "build/manticore*deb"
@@ -110,6 +111,7 @@ jobs:
         mkdir build
         cd build
         cmake -DPACK=1 ..
+        export CMAKE_TOOLCHAIN_FILE=$(pwd)/dist/build_dockers/cross/linux.cmake
         cmake --build . --target package
       cache_key: pack_${{ matrix.DISTR }}_${{ matrix.arch }}
       artifact_list: "build/manticore*rpm"
@@ -131,6 +133,7 @@ jobs:
         mkdir build
         cd build
         cmake -DPACK=1 ..
+        export CMAKE_TOOLCHAIN_FILE=$(pwd)/dist/build_dockers/cross/osx.cmake
         cmake --build . --target package
       cache_key: pack_${{ matrix.DISTR }}_${{ matrix.arch }}
       artifact_list: "build/manticore*tar.gz"
@@ -148,6 +151,7 @@ jobs:
         mkdir build
         cd build
         cmake -DPACK=1 ..
+        export CMAKE_TOOLCHAIN_FILE=$(pwd)/dist/build_dockers/cross/windows.cmake
         cmake --build . --target package
       cache_key: pack_windows_x64
       artifact_list: "build/manticore*exe build/manticore*zip"

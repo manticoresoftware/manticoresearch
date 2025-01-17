@@ -23,6 +23,10 @@ on:
         required: false
         type: number
         default: 0
+      UNITY_BUILD:
+        required: false
+        type: number
+        default: 1
       cmake_command:
         required: false
         type: string
@@ -63,7 +67,7 @@ jobs:
         shell: bash
     timeout-minutes: 30
     container:
-      image: manticoresearch/external_toolchain:clang16_cmake3263
+      image: manticoresearch/external_toolchain:vcpkg331_20250114
       env:
         CACHEB: "../cache"
         DIAGNOSTIC: 1
@@ -76,6 +80,7 @@ jobs:
         CTEST_CMAKE_GENERATOR: ${{ inputs.CTEST_CMAKE_GENERATOR }}
         CTEST_CONFIGURATION_TYPE: ${{ inputs.CTEST_CONFIGURATION_TYPE }}
         WITH_COVERAGE: ${{ inputs.WITH_COVERAGE }}
+        UNITY_BUILD: ${{ inputs.UNITY_BUILD }}
         SYSROOT_URL: https://repo.manticoresearch.com/repository/sysroots
         HOMEBREW_PREFIX: ${{ inputs.HOMEBREW_PREFIX }}
         PACK_GALERA: ${{ inputs.PACK_GALERA }}
@@ -106,7 +111,8 @@ jobs:
           key: ${{ inputs.cache_key }}
 
       - name: 🚀 Build
-        run: ${{ inputs.cmake_command }}
+        run: |
+          ${{ inputs.cmake_command }}
 
       - name: Upload build artifacts
         if: success()

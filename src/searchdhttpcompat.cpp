@@ -350,7 +350,7 @@ static void CreateKbnIndexes()
 			StrVec_t dWarnings;
 			CSphString sError;
 
-			if ( !DropIndexInt ( sName, true, sError ) )
+			if ( !DropIndexInt ( sName, true, false, sError ) )
 				CompatWarning ( "%s", sError.cstr() );
 
 			CreateTableSettings_t tOpts;
@@ -1333,37 +1333,6 @@ static bool GetIndexDoc ( const CSphIndex * pIndex, const char * sID, int64_t iS
 	return true;
 }
 
-static void TableGetDoc ( const CSphString & sId, const CSphIndex * pIndex, const CSphString & sIndex, CSphVector<BYTE> & dRawDoc, int & iVersion )
-{
-	CSphString sError;
-	DocIdVer_t dDocVer;
-	if ( !GetDocIds ( sIndex.cstr(), sId.cstr(), dDocVer, sError ) )
-	{
-		CompatWarning ( "%s", sError.cstr() );
-		return;
-	}
-
-	// doc not found
-	if ( !dDocVer.GetLength() )
-		return;
-
-	if ( dDocVer.GetLength()>2 )
-	{
-		CompatWarning ( "%s multiple documents", sId.cstr() );
-		return;
-	}
-	iVersion = dDocVer[0].second;
-
-	DocstoreSession_c tSession;
-	pIndex->CreateReader ( tSession.GetUID() );
-
-	if ( !GetIndexDoc ( pIndex, sId.cstr(), tSession.GetUID(), dRawDoc, sError ) )
-	{
-		CompatWarning ( "%s", sError.cstr() );
-		return;
-	}
-}
-
 bool HttpCompatHandler_c::ProcessKbnTableDoc()
 {
 	assert ( GetUrlParts().GetLength() );
@@ -1893,7 +1862,7 @@ bool HttpCompatHandler_c::ProcessDeleteDoc()
 static void DropTable ( const CSphString & sName )
 {
 	CSphString sError;
-	if ( !DropIndexInt ( sName, true, sError ) )
+	if ( !DropIndexInt ( sName, true, false, sError ) )
 		CompatWarning ( "%s", sError.cstr() );
 
 	{
@@ -2168,7 +2137,7 @@ static void DropKbnTables()
 	CSphString sError;
 	for ( const CSphString & sName : dIdx )
 	{
-		if ( !DropIndexInt ( sName, true, sError ) )
+		if ( !DropIndexInt ( sName, true, false, sError ) )
 			CompatWarning ( "%s", sError.cstr() );
 	}
 

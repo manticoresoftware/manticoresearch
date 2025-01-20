@@ -64,6 +64,7 @@
 %token	TOK_KNN_DIMS
 %token	TOK_KNN_TYPE
 %token	TOK_LIKE
+%token	TOK_OPTION
 %token	TOK_MULTI
 %token	TOK_MULTI64
 %token	TOK_MODIFY
@@ -95,7 +96,7 @@ statement:
 	alter
 	| create_table
 	| create_table_like
-	| drop_table
+	| drop_table_with_opt
 	| create_function
 	| drop_function
 	| create_plugin
@@ -425,6 +426,10 @@ drop_table:
 		}
 	;
 
+drop_table_with_opt:
+	drop_table opt_option_clause
+	;
+
 //////////////////////////////////////////////////////////////////////////
 
 create_function:
@@ -547,6 +552,33 @@ import_table:
 			tStmt.m_sStringParam = pParser->ToStringUnescape ( $5 );
 		}
 	;
+
+//////////////////////////////////////////////////////////////////////////
+// common option clause
+
+opt_option_clause:
+	// empty
+	| TOK_OPTION option_list
+	;
+
+option_list:
+	option_item
+	| option_list ',' option_item
+	;
+
+option_item:
+	ident '=' TOK_CONST_INT
+		{
+			if ( !pParser->AddOption ( $1, $3 ) )
+				YYERROR;
+		}
+	| ident '=' TOK_QUOTED_STRING
+		{
+			if ( !pParser->AddOption ( $1, $3 ) )
+				YYERROR;
+		}
+	;
+
 
 %%
 

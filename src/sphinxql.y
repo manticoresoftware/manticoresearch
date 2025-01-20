@@ -263,7 +263,7 @@ reserved_tokens_without_option:
 	| TOK_CHARACTER | TOK_CHUNK | TOK_CLUSTER | TOK_COLLATION | TOK_COLUMN | TOK_COMMIT
 	| TOK_COUNT | TOK_CREATE | TOK_DATABASES | TOK_DELETE
 	| TOK_DESC | TOK_DESCRIBE  | TOK_DOUBLE
-	| TOK_FLOAT | TOK_FOR | TOK_FREEZE | TOK_GLOBAL | TOK_GROUP
+	| TOK_FLOAT | TOK_FOR | TOK_FORCE | TOK_FREEZE | TOK_GLOBAL | TOK_GROUP
 	| TOK_GROUP_CONCAT | TOK_GROUPBY | TOK_HAVING | TOK_HOSTNAMES | TOK_INDEX | TOK_INDEXOF | TOK_INSERT
 	| TOK_INT | TOK_INTEGER | TOK_INTO
 	| TOK_LIKE | TOK_LOGS | TOK_MATCH | TOK_MAX | TOK_META | TOK_MIN | TOK_MULTI
@@ -1780,10 +1780,7 @@ call_opt_name:
 //////////////////////////////////////////////////////////////////////////
 
 describe:
-	describe_tok one_index_opt_subindex describe_opt like_filter
-		{
-			pParser->m_pStmt->m_eStmt = STMT_DESCRIBE;
-		}
+	describe_tok { pParser->m_pStmt->m_eStmt = STMT_DESCRIBE; } one_index_opt_subindex describe_opt like_filter opt_option_clause
 	;
 
 describe_opt:

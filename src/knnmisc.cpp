@@ -187,6 +187,36 @@ static knn::HNSWSimilarity_e Str2HNSWSimilarity ( const CSphString & sSimilarity
 	return knn::HNSWSimilarity_e::L2;
 }
 
+static const char* AnnoyMetric2Str ( knn::AnnoyMetric_e eMetric )
+{
+	switch ( eMetric )
+	{
+	case knn::AnnoyMetric_e::ANGULAR: return "ANGULAR";
+	case knn::AnnoyMetric_e::EUCLIDEAN: return "EUCLIDEAN";
+	case knn::AnnoyMetric_e::MANHATTAN: return "MANHATTAN";
+	case knn::AnnoyMetric_e::DOT: return "DOT";
+	default: return nullptr;
+	}
+}
+
+static knn::AnnoyMetric_e Str2AnnoyMetric ( const CSphString& sMetric )
+{
+	CSphString sMet = sMetric;
+	sMet.ToUpper();
+
+	if ( sMet == "ANGULAR" )
+		return knn::AnnoyMetric_e::ANGULAR;
+	if ( sMet == "EUCLIDEAN" )
+		return knn::AnnoyMetric_e::EUCLIDEAN;
+	if ( sMet == "MANHATTAN" )
+		return knn::AnnoyMetric_e::MANHATTAN;
+	if ( sMet == "DOT" )
+		return knn::AnnoyMetric_e::DOT;
+
+	assert ( 0 && "Unknown similarity" );
+	return knn::AnnoyMetric_e::EUCLIDEAN;
+}
+
 
 void AddKNNSettings ( StringBuilder_c & sRes, const CSphColumnInfo & tAttr )
 {
@@ -195,9 +225,10 @@ void AddKNNSettings ( StringBuilder_c & sRes, const CSphColumnInfo & tAttr )
 
 	const auto & tKNN = tAttr.m_tKNN;
 
-	sRes << " knn_type='hnsw'";
+	sRes << " knn_type='" << (tKNN.m_eKnnType == knn::KNNType_e::HNSW ? "hnsw" : "annoy") << "'";
 	sRes << " knn_dims='" << tKNN.m_iDims << "'";
 	sRes << " hnsw_similarity='" << HNSWSimilarity2Str ( tKNN.m_eHNSWSimilarity ) << "'";
+	sRes << " annoy_metric='" << AnnoyMetric2Str ( tKNN.m_eAnnoyMetric ) << "'";
 
 	knn::IndexSettings_t tDefault;
 	if ( tKNN.m_iHNSWM!=tDefault.m_iHNSWM )
@@ -205,16 +236,22 @@ void AddKNNSettings ( StringBuilder_c & sRes, const CSphColumnInfo & tAttr )
 
 	if ( tKNN.m_iHNSWEFConstruction!=tDefault.m_iHNSWEFConstruction )
 		sRes << " hnsw_ef_construction='" << tKNN.m_iHNSWEFConstruction << "'";
+
+	if ( tKNN.m_iAnnoyNTrees != tDefault.m_iAnnoyNTrees )
+		sRes << " annoy_n_trees='" << tKNN.m_iAnnoyNTrees << "'";
 }
 
 
 knn::IndexSettings_t ReadKNNJson ( bson::Bson_c tRoot )
 {
 	knn::IndexSettings_t tRes;
+	tRes.m_eKnnType = bson::String ( tRoot.ChildByName ( "knn_type" ) ) == "hnsw" ? knn::KNNType_e::HNSW : knn::KNNType_e::ANNOY;
 	tRes.m_iDims = (int) bson::Int ( tRoot.ChildByName ( "knn_dims" ) );
 	tRes.m_eHNSWSimilarity = Str2HNSWSimilarity ( bson::String ( tRoot.ChildByName ( "hnsw_similarity" ) ) );
 	tRes.m_iHNSWM = (int) bson::Int ( tRoot.ChildByName ( "hnsw_m" ), tRes.m_iHNSWM );
 	tRes.m_iHNSWEFConstruction = (int) bson::Int ( tRoot.ChildByName ( "hnsw_ef_construction" ), tRes.m_iHNSWEFConstruction );
+	tRes.m_iAnnoyNTrees = (int) bson::Int ( tRoot.ChildByName ( "annoy_n_trees" ), tRes.m_iAnnoyNTrees );
+	tRes.m_eAnnoyMetric = Str2AnnoyMetric ( bson::String ( tRoot.ChildByName ( "annoy_metric" ) ) );
 
 	return tRes;
 }
@@ -226,11 +263,13 @@ void operator << ( JsonEscapedBuilder & tOut, const knn::IndexSettings_t & tSett
 
 	knn::IndexSettings_t tDefault;
 
-	tOut.NamedString ( "knn_type", "hnsw" );
+	tOut.NamedString ( "knn_type", tSettings.m_eKnnType == knn::KNNType_e::HNSW ? "hnsw" : "annoy" );
 	tOut.NamedVal ( "knn_dims", tSettings.m_iDims );
 	tOut.NamedString ( "hnsw_similarity", HNSWSimilarity2Str ( tSettings.m_eHNSWSimilarity ) );
 	tOut.NamedValNonDefault ( "hnsw_m", tSettings.m_iHNSWM, tDefault.m_iHNSWM );
 	tOut.NamedValNonDefault ( "hnsw_ef_construction", tSettings.m_iHNSWEFConstruction, tDefault.m_iHNSWEFConstruction );
+	tOut.NamedValNonDefault ( "annoy_n_trees", tSettings.m_iAnnoyNTrees, tDefault.m_iAnnoyNTrees );
+	tOut.NamedString ( "annoy_metric", AnnoyMetric2Str ( tSettings.m_eAnnoyMetric ) );
 }
 
 
@@ -243,11 +282,14 @@ CSphString FormatKNNConfigStr ( const CSphVector<NamedKNNSettings_t> & dAttrs )
 	{
 		JsonObj_c tObj;
 		tObj.AddStr ( "name", i.m_sName );
-		tObj.AddStr ( "type", "hnsw" );
+		tObj.AddStr ( "type", i.m_eKnnType == knn::KNNType_e::HNSW ? "hnsw" : "annoy" );
 		tObj.AddInt ( "dims", i.m_iDims );
 		tObj.AddStr ( "hnsw_similarity", HNSWSimilarity2Str ( i.m_eHNSWSimilarity ) );
 		tObj.AddInt ( "hnsw_m", i.m_iHNSWM );
 		tObj.AddInt ( "hnsw_ef_construction", i.m_iHNSWEFConstruction );
+		tObj.AddInt ( "annoy_n_trees", i.m_iAnnoyNTrees );
+		tObj.AddStr ( "annoy_metric", AnnoyMetric2Str ( i.m_eAnnoyMetric ) );
+
 		tArray.AddItem(tObj);
 	}
 
@@ -280,7 +322,15 @@ bool ParseKNNConfigStr ( const CSphString & sStr, CSphVector<NamedKNNSettings_t>
 			return false;
 
 		sType.ToUpper();
-		if ( sType!="HNSW" )
+		if ( sType == "HNSW" )
+		{
+			tParsed.m_eKnnType = knn::KNNType_e::HNSW;
+		}
+		else if ( sType == "ANNOY" )
+		{
+			tParsed.m_eKnnType = knn::KNNType_e::ANNOY;
+		}
+		else
 		{
 			sError.SetSprintf ( "Unknown knn type '%s'", sType.cstr() );
 			return false;
@@ -290,16 +340,28 @@ bool ParseKNNConfigStr ( const CSphString & sStr, CSphVector<NamedKNNSettings_t>
 		if ( !i.FetchIntItem ( tParsed.m_iDims, "dims", sError ) ) return false;
 		if ( !i.FetchIntItem ( tParsed.m_iHNSWM, "hnsw_m", sError, true ) ) return false;
 		if ( !i.FetchIntItem ( tParsed.m_iHNSWEFConstruction, "hnsw_ef_construction", sError, true ) ) return false;
+		if ( !i.FetchIntItem ( tParsed.m_iAnnoyNTrees, "annoy_n_trees", sError, true ) ) return false;
 		if ( !i.FetchStrItem ( sSimilarity, "hnsw_similarity", sError) ) return false;
 
 		sSimilarity.ToUpper();
 		if ( sSimilarity!="L2" && sSimilarity!="IP" && sSimilarity!="COSINE" )
 		{
-			sError.SetSprintf ( "Unknown knn similarity '%s'", sSimilarity.cstr() );
+			sError.SetSprintf ( "Unknown hnsw similarity '%s'", sSimilarity.cstr() );
 			return false;
 		}
 			
 		tParsed.m_eHNSWSimilarity = Str2HNSWSimilarity ( sSimilarity.cstr() );
+
+		if ( !i.FetchStrItem ( sSimilarity, "annoy_metric", sError ) ) return false;
+
+		sSimilarity.ToUpper();
+		if ( sSimilarity != "ANGULAR" && sSimilarity != "EUCLIDEAN" && sSimilarity != "MANHATTAN" && sSimilarity != "HAMMING" && sSimilarity != "DOT" )
+		{
+			sError.SetSprintf ( "Unknown annoy metric '%s'", sSimilarity.cstr() );
+			return false;
+		}
+
+		tParsed.m_eAnnoyMetric = Str2AnnoyMetric ( sSimilarity.cstr() );
 	}
 
 	return true;

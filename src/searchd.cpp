@@ -12765,8 +12765,11 @@ void DescribeLocalSchema ( VectorLike & dOut, const CSphSchema & tSchema, bool b
 }
 
 
-void DescribeDistributedSchema ( VectorLike& dOut, const cDistributedIndexRefPtr_t& pDistr )
+bool DescribeDistributedSchema ( VectorLike& dOut, const cDistributedIndexRefPtr_t & pDistr, bool bForce )
 {
+	if ( IsDistrTableHasSystem ( *pDistr, bForce ) )
+		return false;
+
 	// result set header packet
 	dOut.SetColNames ( { "Agent", "Type" } );
 
@@ -12796,6 +12799,8 @@ void DescribeDistributedSchema ( VectorLike& dOut, const cDistributedIndexRefPtr
 			dOut.MatchTupletf ( sValue.cstr (), "%s_%d", tDesc.m_bBlackhole ? "blackhole" : "remote", i+1 );
 		}
 	}
+
+	return true;
 }
 
 void HandleMysqlDescribe ( RowBuffer_i & tOut, SqlStmt_t * pStmt )
@@ -12836,7 +12841,13 @@ void HandleMysqlDescribe ( RowBuffer_i & tOut, SqlStmt_t * pStmt )
 			tOut.ErrorAbsent ( "no such table '%s'", tStmt.m_sIndex.cstr () );
 			return;
 		}
-		DescribeDistributedSchema ( dOut, pDistr );
+
+		CSphString sError;
+		if ( !DescribeDistributedSchema ( dOut, pDistr, tStmt.m_bForce ) )
+		{
+			tOut.ErrorAbsent ( "can not describe table '%s' because it contains system table", tStmt.m_sIndex.cstr() );
+			return;
+		}
 	}
 
 	tOut.DataTable ( dOut );
@@ -13139,7 +13150,7 @@ static void HandleMysqlDropTable ( RowBuffer_i & tOut, const SqlStmt_t & tStmt, 
 		return;
 	}
 
-	bool bDropped = DropIndexInt ( tStmt.m_sIndex.cstr(), tStmt.m_bIfExists, sError, &sWarning );
+	bool bDropped = DropIndexInt ( tStmt.m_sIndex.cstr(), tStmt.m_bIfExists, tStmt.m_bForce, sError, &sWarning );
 	sphLogDebug ( "dropped table %s, ok %d, error %s", tStmt.m_sIndex.cstr(), (int)bDropped, sError.scstr() ); // FIXME!!! remove
 	if ( !bDropped )
 		tOut.Error ( sError.cstr() );
@@ -13161,6 +13172,12 @@ void HandleMysqlShowCreateTable ( RowBuffer_i & tOut, const SqlStmt_t & tStmt )
 	if ( pServed && !ServedDesc_t::IsMutable ( pServed ) )
 	{
 		tOut.ErrorAbsent ( "table '%s' is not real-time or percolate", tStmt.m_sIndex.cstr () );
+		return;
+	}
+
+	if ( pDist && IsDistrTableHasSystem ( *pDist, tStmt.m_bForce ) )
+	{
+		tOut.ErrorAbsent ( "can not show table '%s' because it contains system table", tStmt.m_sIndex.cstr() );
 		return;
 	}
 

@@ -604,6 +604,7 @@ enum class Option_e : BYTE
 	JIEBA_MODE,
 	SCROLL,
 	JOIN_BATCH_SIZE,
+	FORCE,
 
 	INVALID_OPTION
 };
@@ -618,7 +619,7 @@ void InitParserOption()
 		"max_matches", "max_predicted_time", "max_query_time", "morphology", "rand_seed", "ranker", "retry_count",
 		"retry_delay", "reverse_scan", "sort_method", "strict", "sync", "threads", "token_filter", "token_filter_options",
 		"not_terms_only_allowed", "store", "accurate_aggregation", "max_matches_increase_threshold", "distinct_precision_threshold",
-		"threads_ex", "switchover", "expansion_limit", "jieba_mode", "scroll", "join_batch_size" };
+		"threads_ex", "switchover", "expansion_limit", "jieba_mode", "scroll", "join_batch_size", "force" };
 
 	for ( BYTE i = 0u; i<(BYTE) Option_e::INVALID_OPTION; ++i )
 		g_hParseOption.Add ( (Option_e) i, dOptions[i] );
@@ -662,6 +663,8 @@ static bool CheckOption ( SqlStmt_e eStmt, Option_e eOption )
 
 	static Option_e dReloadOptions[] = { Option_e::SWITCHOVER };
 
+	static Option_e dSystemOptions[] = { Option_e::FORCE };
+
 #define CHKOPT( _set, _val ) VecTraits_T<Option_e> (_set, sizeof(_set)).BinarySearch (_val)!=nullptr
 
 	switch ( eStmt )
@@ -683,6 +686,13 @@ static bool CheckOption ( SqlStmt_e eStmt, Option_e eOption )
 	case STMT_SHOW_PLAN:
 	case STMT_SHOW_THREADS:
 		return CHKOPT( dShowOptions, eOption );
+
+	case STMT_DROP_TABLE:
+	case STMT_ALTER_INDEX_SETTINGS:
+	case STMT_DESCRIBE:
+	case STMT_SHOW_CREATE_TABLE:
+		return CHKOPT( dSystemOptions, eOption );
+
 	default:
 		return false;
 	}
@@ -1023,6 +1033,10 @@ bool SqlParserTraits_c::AddOption ( const SqlNode_t & tIdent, const SqlNode_t & 
 
 	case Option_e::SWITCHOVER:
 		m_pStmt->m_iIntParam = tValue.GetValueInt() ? 1 : 0;
+		break;
+
+	case Option_e::FORCE:
+		m_pStmt->m_bForce = ( tValue.GetValueInt()==1 );
 		break;
 
 	default: //} else

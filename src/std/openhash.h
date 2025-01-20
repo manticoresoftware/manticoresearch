@@ -118,6 +118,7 @@ public:
 	FORCE_INLINE bool	IsFull() const				{ return m_iUsed==m_iMaxUsed; }
 	FORCE_INLINE int64_t GetLengthBytes() const		{ return m_iSize*sizeof(ENTRY); }
 	FORCE_INLINE int64_t GetUsedLengthBytes() const	{ return m_iUsed*sizeof(ENTRY); }
+	FORCE_INLINE int	GetEntrySize() const		{ return sizeof(ENTRY); }
 	static FORCE_INLINE float GetLoadFactor()		{ return LOAD_FACTOR; }
 
 	// move contents to another hash (possibly of larger size)

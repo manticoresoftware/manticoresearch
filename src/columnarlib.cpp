@@ -16,17 +16,20 @@
 #include "schema/columninfo.h"
 #include "schema/schema.h"
 
+namespace col {
 using CreateStorageReader_fn =	columnar::Columnar_i * (*) ( const std::string & sFilename, uint32_t uTotalDocs, std::string & sError );
 using CreateBuilder_fn =		columnar::Builder_i * (*) ( const common::Schema_t & tSchema, const std::string & sFile, size_t tBufferSize, std::string & sError );
 using CheckStorage_fn =			void (*) ( const std::string & sFilename, uint32_t uNumRows, std::function<void (const char*)> & fnError, std::function<void (const char*)> & fnProgress );
 using VersionStr_fn =			const char * (*)();
 using GetVersion_fn	=			int (*)();
+}
 
-static void *					g_pColumnarLib = nullptr;
-static CreateStorageReader_fn	g_fnCreateColumnarStorage = nullptr;
-static CreateBuilder_fn 		g_fnCreateColumnarBuilder = nullptr;
-static CheckStorage_fn			g_fnCheckColumnarStorage = nullptr;
-static VersionStr_fn			g_fnVersionStr = nullptr;
+static void *						g_pColumnarLib = nullptr;
+static col::CreateStorageReader_fn	g_fnCreateColumnarStorage = nullptr;
+static col::CreateBuilder_fn 		g_fnCreateColumnarBuilder = nullptr;
+static col::CheckStorage_fn			g_fnCheckColumnarStorage = nullptr;
+static col::VersionStr_fn			g_fnVersionColStr = nullptr;
+
 
 /////////////////////////////////////////////////////////////////////
 
@@ -148,7 +151,7 @@ bool InitColumnar ( CSphString & sError )
 
 	sphLogDebug ( "dlopen(%s)=%p", sLibfile.cstr(), tHandle.Get() );
 
-	GetVersion_fn fnGetVersion;
+	col::GetVersion_fn fnGetVersion;
 	if ( !LoadFunc ( fnGetVersion, tHandle.Get(), "GetColumnarLibVersion", sLibfile, sError ) )
 		return false;
 
@@ -162,7 +165,7 @@ bool InitColumnar ( CSphString & sError )
 	if ( !LoadFunc ( g_fnCreateColumnarStorage, tHandle.Get(), "CreateColumnarStorageReader", sLibfile, sError ) )	return false;
 	if ( !LoadFunc ( g_fnCreateColumnarBuilder, tHandle.Get(), "CreateColumnarBuilder", sLibfile, sError ) )		return false;
 	if ( !LoadFunc ( g_fnCheckColumnarStorage, tHandle.Get(), "CheckColumnarStorage", sLibfile, sError ) )			return false;
-	if ( !LoadFunc ( g_fnVersionStr, tHandle.Get(), "GetColumnarLibVersionStr", sLibfile, sError ) )				return false;
+	if ( !LoadFunc ( g_fnVersionColStr, tHandle.Get(), "GetColumnarLibVersionStr", sLibfile, sError ) )				return false;
 
 	g_pColumnarLib = tHandle.Leak();
 
@@ -192,8 +195,8 @@ const char * GetColumnarVersionStr()
 	if ( !IsColumnarLibLoaded() )
 		return nullptr;
 
-	assert ( g_fnVersionStr );
-	return g_fnVersionStr();
+	assert ( g_fnVersionColStr );
+	return g_fnVersionColStr();
 }
 
 

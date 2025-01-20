@@ -266,7 +266,7 @@ By default, all text values in the `VALUES` clause are considered to be of the `
 
 If you attempt to INSERT multiple rows with different, incompatible value types for the same field, auto table creation will be canceled, and an error message will be returned. However, if the different value types are compatible, the resulting field type will be the one that accommodates all the values. Some automatic data type conversions that may occur include:
 * mva -> mva64
-* uint -> bigint -> float
+* uint -> bigint -> float (this may cause some precision loss)
 * string -> text
 
 Also, the following formats of dates will be recognized and converted to timestamps while all other date formats will be treated as strings:
@@ -499,6 +499,34 @@ var sqlresult = indexApi.Insert(newdoc);
 ```
 <!-- end -->
 
+<!-- example call -->
+### UUID_SHORT multi-ID generation
+
+```sql
+CALL UUID_SHORT(N)
+```
+
+The `CALL UUID_SHORT(N)` statement allows for generating N unique 64-bit IDs in a single call without inserting any documents. It is particularly useful when you need to pre-generate IDs in Manticore for use in other systems or storage solutions. For example, you can generate auto-IDs in Manticore and then use them in another database, application, or workflow, ensuring consistent and unique identifiers across different environments.
+
+<!-- intro -->
+##### Example:
+<!-- request Example -->
+
+```sql
+CALL UUID_SHORT(3)
+```
+<!-- response SQL -->
+```
++---------------------+
+| uuid_short()        |
++---------------------+
+| 1227930988733973183 |
+| 1227930988733973184 |
+| 1227930988733973185 |
++---------------------+
+```
+<!-- end -->
+
 <!-- example bulk_insert -->
 ## Bulk adding documents
 You can insert not just a single document into a real-time table, but as many as you'd like. It's perfectly fine to insert batches of tens of thousands of documents into a real-time table. However, it's important to keep the following points in mind:
@@ -508,6 +536,19 @@ You can insert not just a single document into a real-time table, but as many as
 * Normally, each batch insert operation is considered a single [transaction](../../Data_creation_and_modification/Transactions.md) with atomicity guarantee, so you will either have all the new documents in the table at once or, in case of failure, none of them will be added. See more details about an empty line or switching to another table in the "JSON" example.
 
 Note that the `/bulk` HTTP endpoint does not support automatic creation of tables (auto schema). Only the `/_bulk` (Elasticsearch-like) HTTP endpoint and the SQL interface support this feature. The `/_bulk` (Elasticsearch-like) HTTP endpoint allows the table name to include the cluster name in the format `cluster_name:table_name`.
+
+`/_bulk` endpoint accepts document IDs in the same format as Elasticsearch, and you can also include the `id` within the document itself:
+```json
+{ "index": { "_index" : "products", "_id" : "1" } }
+{ "title" : "Crossbody Bag with Tassel", "price": 19.85 }
+```
+
+or
+
+```json
+{ "index": { "_index" : "products" } }
+{ "title" : "Crossbody Bag with Tassel", "price": 19.85, "id": "1" }
+```
 
 #### Chunked transfer in /bulk
 The `/bulk` (Manticore mode) endpoint supports [Chunked transfer encoding](https://en.wikipedia.org/wiki/Chunked_transfer_encoding). You can use it to transmit large batches. It:
@@ -522,7 +563,7 @@ The `/bulk` (Manticore mode) endpoint supports [Chunked transfer encoding](https
 For bulk insert, simply provide more documents in brackets after `VALUES()`. The syntax is:
 
 ```sql
-INSERT INTO <table name>[(column1, column2, ...)] VALUES ()[,(value1,[value2, ...])]
+INSERT INTO <table name>[(column1, column2, ...)] VALUES(value1[, value2 , ...]), (...)
 ```
 
 The optional column name list allows you to explicitly specify values for some of the columns present in the table. All other columns will be filled with their default values (0 for scalar types, empty string for string types).
@@ -640,12 +681,12 @@ POST /bulk
 
 <!-- request Elasticsearch -->
 
-> NOTE: `_bulk` requires [Manticore Buddy](../Installation/Manticore_Buddy.md). If it doesn't work, make sure Buddy is installed.
+> NOTE: `_bulk` requires [Manticore Buddy](../Installation/Manticore_Buddy.md) if the table doesn't exist yet. If it doesn't work, make sure Buddy is installed.
 
 ```json
 POST /_bulk
 -H "Content-Type: application/x-ndjson" -d '
-{ "table" : { "_index" : "products" } }
+{ "index" : { "_index" : "products" } }
 { "title" : "Yellow Bag", "price": 12 }
 { "create" : { "_index" : "products" } }
 { "title" : "Red Bag", "price": 12.5, "id": 3 }
@@ -659,7 +700,7 @@ POST /_bulk
       "table": {
         "_index": "products",
         "_type": "doc",
-        "_id": 0,
+        "_id": 1657860156022587406,
         "_version": 1,
         "result": "created",
         "_shards": {
@@ -744,7 +785,7 @@ res =  await indexApi.bulk(docs.map(e=>JSON.stringify(e)).join('\n'));
 ``` java
 String body = "{\"insert\": {\"index\" : \"products\", \"id\" : 1, \"doc\" : {\"title\" : \"Crossbody Bag with Tassel\", \"price\" : 19.85}}}"+"\n"+
     "{\"insert\": {\"index\" : \"products\", \"id\" : 4, \"doc\" : {\"title\" : \"microfiber sheet set\", \"price\" : 19.99}}}"+"\n"+
-    "{\"insert\": {\"index\" : \"products\", \"id\" : 5, \"doc\" : {\"title\" : \"CPet Hair Remover Glove\", \"price\" : 7.99}}}"+"\n";         
+    "{\"insert\": {\"index\" : \"products\", \"id\" : 5, \"doc\" : {\"title\" : \"CPet Hair Remover Glove\", \"price\" : 7.99}}}"+"\n";
 BulkResponse bulkresult = indexApi.bulk(body);
 ```
 
@@ -756,7 +797,7 @@ BulkResponse bulkresult = indexApi.bulk(body);
 ``` clike
 string body = "{\"insert\": {\"index\" : \"products\", \"id\" : 1, \"doc\" : {\"title\" : \"Crossbody Bag with Tassel\", \"price\" : 19.85}}}"+"\n"+
     "{\"insert\": {\"index\" : \"products\", \"id\" : 4, \"doc\" : {\"title\" : \"microfiber sheet set\", \"price\" : 19.99}}}"+"\n"+
-    "{\"insert\": {\"index\" : \"products\", \"id\" : 5, \"doc\" : {\"title\" : \"CPet Hair Remover Glove\", \"price\" : 7.99}}}"+"\n";                                 
+    "{\"insert\": {\"index\" : \"products\", \"id\" : 5, \"doc\" : {\"title\" : \"CPet Hair Remover Glove\", \"price\" : 7.99}}}"+"\n";
 BulkResponse bulkresult = indexApi.Bulk(string.Join("\n", docs));
 ```
 

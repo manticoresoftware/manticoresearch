@@ -8,50 +8,35 @@ cmake_policy (VERSION 2.6...3.18)
 get_filename_component (_IMPORT_PREFIX "${CMAKE_CURRENT_LIST_FILE}" PATH)
 message (STATUS "Using config for configuring openssl - ${_IMPORT_PREFIX}/OpenSSLConfig.cmake")
 # url is https://slproweb.com/products/Win32OpenSSL.html
-#message (NOTICE "Configure ssl installed from from https://slproweb.com/download/Win64OpenSSL-1_1_1k.msi")
+#message (NOTICE "Configure ssl installed from from https://slproweb.com/download/Win64OpenSSL-3_4_0.msi")
 
 set (MSRT MD)
 if (OPENSSL_MSVC_STATIC_RT)
 	set (MSRT MT)
 endif()
 
-set (newdistr ON)
-if (CMAKE_SIZEOF_VOID_P EQUAL 8)
-	if (newdistr)
-		message (NOTICE "Configure ssl installed from from https://slproweb.com/download/Win64OpenSSL-1_1_1k.msi")
-		set (_IMPORT_PREFIX "${_IMPORT_PREFIX}/OpenSSL-Win64")
-		set (_ssl "libssl64")
-		set (_cr "libcrypto64")
-		set (_ssldll "libssl-1_1-x64")
-		set (_crdll "libcrypto-1_1-x64")
-	else()
-		message (STATUS "Consider to use fresh ssl from https://slproweb.com/download/Win64OpenSSL-1_1_1k.msi")
-		set (_IMPORT_PREFIX "${_IMPORT_PREFIX}/openssl-x64")
-		set (_ssl "ssleay32")
-		set (_cr "libeay32")
-		set (_ssldll "ssleay32")
-		set (_crdll "libeay32")
-	endif()
-else()
-	set (_IMPORT_PREFIX "${_IMPORT_PREFIX}/openssl-x32")
-	set (_ssl "libssl32")
-	set (_cr "libcrypto32")
-	set (_ssldll "libssl-1_1")
-	set (_crdll "libcrypto-1_1")
+if (NOT CMAKE_SIZEOF_VOID_P EQUAL 8)
+	message ( FATAL_ERROR "32-bit build is not available" )
 endif ()
 
-if (OPENSSL_USE_STATIC_LIBS)
+message (NOTICE "Configure ssl installed from from https://slproweb.com/download/Win64OpenSSL-3_4_0.msi")
+set (_IMPORT_PREFIX "${_IMPORT_PREFIX}/OpenSSL-Win64")
+set (_ssl "libssl")
+set (_cr "libcrypto")
+set (_ssldll "libssl-3-x64.dll")
+set (_crdll "libcrypto-3-x64.dll")
 
+if (OPENSSL_USE_STATIC_LIBS)
 	# Create imported target OpenSSL::SSL static
 	add_library (OpenSSL::SSL STATIC IMPORTED)
 	set_target_properties (OpenSSL::SSL PROPERTIES
 			INTERFACE_INCLUDE_DIRECTORIES "${_IMPORT_PREFIX}/include"
-			INTERFACE_LINK_LIBRARIES "OpenSSL::Crypto"
+			INTERFACE_LINK_LIBRARIES "OpenSSL::Crypto;ws2_32;crypt32"
 			IMPORTED_CONFIGURATIONS "RELEASE;DEBUG"
 			IMPORTED_LINK_INTERFACE_LANGUAGES_DEBUG "C"
 			IMPORTED_LINK_INTERFACE_LANGUAGES_RELEASE "C"
-			IMPORTED_LOCATION_DEBUG "${_IMPORT_PREFIX}/lib/VC/static/${_ssl}${MSRT}d.lib"
-			IMPORTED_LOCATION_RELEASE "${_IMPORT_PREFIX}/lib/VC/static/${_ssl}${MSRT}.lib"
+			IMPORTED_LOCATION_DEBUG "${_IMPORT_PREFIX}/lib/VC/x64/${MSRT}d/${_ssl}_static.lib"
+			IMPORTED_LOCATION_RELEASE "${_IMPORT_PREFIX}/lib/VC/x64/${MSRT}/${_ssl}_static.lib"
 			MAP_IMPORTED_CONFIG_RELWITHDEBINFO Release
 			MAP_IMPORTED_CONFIG_MINSIZEREL Release
 			)
@@ -63,8 +48,8 @@ if (OPENSSL_USE_STATIC_LIBS)
 			IMPORTED_CONFIGURATIONS "RELEASE;DEBUG"
 			IMPORTED_LINK_INTERFACE_LANGUAGES_DEBUG "C"
 			IMPORTED_LINK_INTERFACE_LANGUAGES_RELEASE "C"
-			IMPORTED_LOCATION_DEBUG "${_IMPORT_PREFIX}/lib/VC/static/${_cr}${MSRT}d.lib"
-			IMPORTED_LOCATION_RELEASE "${_IMPORT_PREFIX}/lib/VC/static/${_cr}${MSRT}.lib"
+			IMPORTED_LOCATION_DEBUG "${_IMPORT_PREFIX}/lib/VC/x64/${MSRT}d/${_cr}_static.lib"
+			IMPORTED_LOCATION_RELEASE "${_IMPORT_PREFIX}/lib/VC/x64/${MSRT}/${_cr}_static.lib"
 			MAP_IMPORTED_CONFIG_RELWITHDEBINFO Release
 			MAP_IMPORTED_CONFIG_MINSIZEREL Release
 			)
@@ -78,9 +63,9 @@ else ()
 			IMPORTED_CONFIGURATIONS "RELEASE;DEBUG"
 			IMPORTED_LINK_INTERFACE_LANGUAGES_DEBUG "C"
 			IMPORTED_LINK_INTERFACE_LANGUAGES_RELEASE "C"
-			IMPORTED_IMPLIB_DEBUG "${_IMPORT_PREFIX}/lib/VC/${_ssl}${MSRT}d.lib"
-			IMPORTED_IMPLIB_RELEASE "${_IMPORT_PREFIX}/lib/VC/${_ssl}${MSRT}.lib"
-			IMPORTED_LOCATION "${_IMPORT_PREFIX}/${_ssldll}.dll"
+			IMPORTED_IMPLIB_DEBUG "${_IMPORT_PREFIX}/lib/VC/x64/${MSRT}d/${_ssl}.lib"
+			IMPORTED_IMPLIB_RELEASE "${_IMPORT_PREFIX}/lib/VC/x64/${MSRT}/${_ssl}.lib"
+			IMPORTED_LOCATION "${_IMPORT_PREFIX}/${_ssldll}"
 			MAP_IMPORTED_CONFIG_RELWITHDEBINFO Release
 			MAP_IMPORTED_CONFIG_MINSIZEREL Release
 			)
@@ -92,9 +77,9 @@ else ()
 			IMPORTED_CONFIGURATIONS "RELEASE;DEBUG"
 			IMPORTED_LINK_INTERFACE_LANGUAGES_DEBUG "C"
 			IMPORTED_LINK_INTERFACE_LANGUAGES_RELEASE "C"
-			IMPORTED_IMPLIB_DEBUG "${_IMPORT_PREFIX}/lib/VC/${_cr}${MSRT}d.lib"
-			IMPORTED_IMPLIB_RELEASE "${_IMPORT_PREFIX}/lib/VC/${_cr}${MSRT}.lib"
-			IMPORTED_LOCATION "${_IMPORT_PREFIX}/${_crdll}.dll"
+			IMPORTED_IMPLIB_DEBUG "${_IMPORT_PREFIX}/lib/VC/x64/${MSRT}d/${_cr}.lib"
+			IMPORTED_IMPLIB_RELEASE "${_IMPORT_PREFIX}/lib/VC/x64/${MSRT}/${_cr}.lib"
+			IMPORTED_LOCATION "${_IMPORT_PREFIX}/${_crdll}"
 			MAP_IMPORTED_CONFIG_RELWITHDEBINFO Release
 			MAP_IMPORTED_CONFIG_MINSIZEREL Release
 			)

@@ -28,11 +28,6 @@
 
 using namespace Threads;
 
-/// protection from concurrent changes during binlog replay
-#ifndef NDEBUG
-static auto &g_bRTChangesAllowed = RTChangesAllowed ();
-#endif
-
 //////////////////////////////////////////////////////////////////////////
 // percolate index
 
@@ -1599,7 +1594,7 @@ bool PercolateIndex_c::MatchDocuments ( RtAccum_t * pAcc, PercolateMatchResult_t
 
 void PercolateIndex_c::RollBack ( RtAccum_t * pAcc )
 {
-	assert ( g_bRTChangesAllowed );
+	assert ( RTChangesAllowed () );
 
 	if ( BindAccum ( pAcc ) )
 		pAcc->Cleanup();
@@ -2109,7 +2104,7 @@ int PercolateIndex_c::ReplayInsertAndDeleteQueries ( const VecTraits_T<StoredQue
 
 bool PercolateIndex_c::Commit ( int * pDeleted, RtAccum_t * pAcc, CSphString* )
 {
-	assert ( g_bRTChangesAllowed );
+	assert ( RTChangesAllowed () );
 
 	if ( !BindAccum ( pAcc ) )
 		return true;

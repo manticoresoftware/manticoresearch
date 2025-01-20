@@ -28,6 +28,7 @@ CSphVector<ScopedTypedIterator_t> CreateAllColumnarIterators ( const columnar::C
 
 SphAttr_t	SetColumnarAttr ( int iAttr, ESphAttr eType, columnar::Builder_i * pBuilder, std::unique_ptr<columnar::Iterator_i> & pIterator, RowID_t tRowID, CSphVector<int64_t> & dTmp );
 void		SetDefaultColumnarAttr ( int iAttr, ESphAttr eType, columnar::Builder_i * pBuilder );
+CSphString	ColumnarAttrType2Str ( common::AttrType_e eType );
 
 struct PlainOrColumnar_t
 {

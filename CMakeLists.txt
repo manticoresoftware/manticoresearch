@@ -188,7 +188,8 @@ if (CMAKE_CROSSCOMPILING)
 	if (CMAKE_SYSTEM_PROCESSOR MATCHES "^(i.86|x86(_64)?)$"
 			OR CMAKE_SYSTEM_PROCESSOR STREQUAL amd64
 			OR CMAKE_SYSTEM_PROCESSOR STREQUAL arm64
-			OR CMAKE_SYSTEM_PROCESSOR STREQUAL aarch64)
+			OR CMAKE_SYSTEM_PROCESSOR STREQUAL aarch64
+			OR CMAKE_SYSTEM_PROCESSOR STREQUAL s390x)
 		set ( UNALIGNED_RAM_ACCESS_EXITCODE "0" CACHE STRING "Result from TRY_RUN" )
 		set ( UNALIGNED_RAM_ACCESS_EXITCODE__TRYRUN_OUTPUT "" CACHE STRING "Output from TRY_RUN" )
 	endif ()
@@ -241,6 +242,8 @@ target_link_libraries ( lextra INTERFACE xxHash::xxhash )
 with_get ( jieba "Jieba" "Chinese text segmentation tool" )
 
 # Support for OpenSSL
+set ( OPENSSL_USE_STATIC_LIBS ON )
+include ( GetSSL )
 with_menu_comp ( OpenSSL SSL "OpenSSL" "for encrypted networking" )
 win_install_c ( OpenSSL SSL daemon )
 

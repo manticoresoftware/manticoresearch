@@ -124,20 +124,21 @@ Integer. Max time in milliseconds to wait for remote queries to complete, see [t
 String, user comment that gets copied to a query log file.
 
 ### cutoff
-Integer. Max found matches threshold. The value is selected automatically if not specified.
-
-* `N` = 0 disables the threshold
-* `N > 0`: instructs Manticore to stop looking for results as soon as it finds `N` documents.
-* not set: Manticore will decide automatically what the value should be.
-
-In case Manticore cannot calculate the exact matching documents count, you will see `total_relation: gte` in the query [meta information](../Node_info_and_management/SHOW_META.md#SHOW-META), which means that the actual count is **Greater Than or Equal** to the total (`total_found` in `SHOW META` via SQL, `hits.total` in JSON via HTTP). If the total value is precise, you'll get `total_relation: eq`.
+Integer. Specifies the maximum number of matches to process. If not set, Manticore will select an appropriate value automatically.
 
 <!-- example cutoff_aggregation -->
-Note: Using `cutoff` in aggregation queries is not recommended, as it can produce meaningless results.
+
+* `N = 0`: Disables the limit on the number of matches.
+* `N > 0`: Instructs Manticore to stop processing results as soon as it finds `N` matching documents.
+* Not set: Manticore decides the threshold automatically.
+
+When Manticore cannot determine the exact count of matching documents, the `total_relation` field in the query [meta information](../Node_info_and_management/SHOW_META.md#SHOW-META) will show `gte`, which stands for **Greater Than or Equal to**. This indicates that the actual count of matches is at least the reported `total_found` (in SQL) or `hits.total` (in JSON). When the count is exact, `total_relation` will display `eq`.
+
+Note: Using `cutoff` in aggregation queries is not recommended because it can produce inaccurate or incomplete results.
 
 <!-- request Example -->
 
-Using cutoff in an aggregation query can lead to incorrect results
+Using `cutoff` in aggregation queries can lead to incorrect or misleading results, as shown in the following example:
 ```
 drop table if exists t
 --------------
@@ -245,6 +246,11 @@ Second, `idf=tfidf_normalized` leads to IDF drift across queries. Historically, 
 
 IDF flags can be combined; `plain` and `normalized` are mutually exclusive; `tfidf_unnormalized` and `tfidf_normalized` are also mutually exclusive; and unspecified flags in such mutually exclusive groups default to their original settings. This means `OPTION idf=plain` is the same as specifying `OPTION idf='plain,tfidf_normalized'` in its entirety.
 
+### jieba_mode
+Specifies the Jieba segmentation mode for the query.
+
+When using Jieba Chinese segmentation, it can sometimes help to use different segmentation modes for tokenizing the documents and the query. For a complete list of modes, refer to [jieba_mode](Creating_a_table/NLP_and_tokenization/Morphology.md#jieba_mode).
+
 ### index_weights
 Named integer list. Per-table user weights for ranking.
 
@@ -328,6 +334,10 @@ Integer. Distributed retries count.
 
 ### retry_delay
 Integer. Distributed retry delay, in milliseconds.
+
+### scroll
+
+String. A scroll token for paginating results using the [Scroll pagination approach](../Searching/Pagination.md#Scroll-Search-Option).
 
 ### sort_method
 * `pq` - priority queue, set by default

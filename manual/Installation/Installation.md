@@ -53,7 +53,7 @@ Please find more details on the installation [below](../Installation/MacOS.md).
 3. Select the components you want to install. We recommend installing all of them.
 4. Manticore comes with a preconfigured `manticore.conf` file in [RT mode](https://manual.manticoresearch.com/Read_this_first.md#Real-time-mode-vs-plain-mode). No additional configuration is required.
 
-For more details on the installation, see [below](../Installation/Windows.md#Installing-Manticore-in-Windows).
+For more details on the installation, see [below](../Installation/Windows.md#Installing-Manticore-on-Windows).
 
 <!-- request Docker -->
 

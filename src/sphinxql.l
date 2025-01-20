@@ -187,6 +187,7 @@ FLOAT_CONSTANT      {INT}\.{INT}?{EXP}?|{INT}?\.{INT}{EXP}|{INT}{EXP}
 "REPLACE"			{ YYSTOREBOUNDS; return TOK_REPLACE; }
 "REMAP"				{ YYSTOREBOUNDS; return TOK_REMAP; }
 "ROLLBACK"			{ YYSTOREBOUNDS; return TOK_ROLLBACK; }
+"SCROLL"			{ YYSTOREBOUNDS; return TOK_SCROLL; }
 "SECOND"			{ YYSTOREBOUNDS; return TOK_SECOND; }
 "SECONDARYINDEX"	{ YYSTOREBOUNDS; return TOK_HINT_SECONDARY; }
 "SELECT"			{ YYSTOREBOUNDS; return TOK_SELECT; }
@@ -218,7 +219,8 @@ FLOAT_CONSTANT      {INT}\.{INT}?{EXP}?|{INT}?\.{INT}{EXP}|{INT}{EXP}
 "YEAR"				{ YYSTOREBOUNDS; return TOK_YEAR; }
 
 "MANTICORE."        |
-"`MANTICORE`."      { YYSTOREBOUNDS; return TOK_MANTICORE; }
+"`MANTICORE`."      { YYSTOREBOUNDS; return TOK_MANTICORE_DOT; }
+ "SYSTEM"            { YYSTOREBOUNDS; return TOK_SYSTEM; } /* leading space excludes token from list of reserved words */
 
 "!="				{ YYSTOREBOUNDS; return TOK_NE; }
 "<>"				{ YYSTOREBOUNDS; return TOK_NE; }

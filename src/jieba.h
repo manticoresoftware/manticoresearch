@@ -15,8 +15,8 @@
 #if WITH_JIEBA
 
 bool CheckConfigJieba ( CSphIndexSettings & tSettings, CSphString & sError );
-
-bool SpawnFilterJieba ( std::unique_ptr<ISphFieldFilter> & pFieldFilter, const CSphIndexSettings & m_tSettings, const CSphTokenizerSettings & tTokSettings, const char * szIndex, CSphString & sError );
+bool StrToJiebaMode ( JiebaMode_e & eMode, const CSphString & sValue, CSphString & sError );
+bool SpawnFilterJieba ( std::unique_ptr<ISphFieldFilter> & pFieldFilter, const CSphIndexSettings & tSettings, const CSphTokenizerSettings & tTokSettings, const char * szIndex, FilenameBuilder_i * pFilenameBuilder, CSphString & sError );
 
 #else
 

@@ -321,16 +321,21 @@ if (TARGET perfetto)
 endif()
 
 # stub library for all except daemon - to avoid link with openssl
-add_library ( stub_ssl searchdssl.cpp )
+add_library ( stub_ssl searchdssl_stub.cpp )
 target_link_libraries ( stub_ssl PRIVATE lextra )
 
 # support for ssl. Actual only for physical daemon
 add_library ( searchd_ssl searchdssl.cpp )
 target_link_libraries ( searchd_ssl PUBLIC lextra )
 if (WITH_SSL)
-	target_compile_definitions ( searchd_ssl PRIVATE DAEMON )
 	target_link_libraries ( searchd_ssl PRIVATE OpenSSL::SSL )
+	target_link_libraries ( searchd_ssl PRIVATE OpenSSL::Crypto )
 	target_link_libraries ( digest_sha1 PRIVATE OpenSSL::SSL )
+	target_link_libraries ( digest_sha1 PRIVATE OpenSSL::Crypto )
+	if (${CMAKE_SYSTEM_NAME} STREQUAL "Linux" OR ${CMAKE_SYSTEM_NAME} STREQUAL "FreeBSD")
+		target_link_options ( searchd_ssl INTERFACE $<${ONLYGNUCLANGC_CXX}:-Wl,--exclude-libs,libssl.a,--exclude-libs,libcrypto.a> )
+		target_link_options ( digest_sha1 INTERFACE $<${ONLYGNUCLANGC_CXX}:-Wl,--exclude-libs,libssl.a,--exclude-libs,libcrypto.a> )
+	endif()
 	target_compile_options ( searchd_ssl PRIVATE "$<$<COMPILE_LANG_AND_ID:CXX,GNU>:-Wno-deprecated-declarations>" )
 	include ( CheckFunctionExists )
 	set ( CMAKE_REQUIRED_LIBRARIES "OpenSSL::SSL" )

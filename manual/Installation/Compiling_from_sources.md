@@ -39,11 +39,13 @@ docker run -it --rm \
 -e SYSROOT_URL="https://repo.manticoresearch.com/repository/sysroots" \
 -e HOMEBREW_PREFIX="" \
 -e PACK_GALERA=0 \
+-e UNITY_BUILD=1 \
 -v $(pwd):/manticore_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa \
-manticoresearch/external_toolchain:clang16_cmake3263 bash
+manticoresearch/external_toolchain:vcpkg331_20250114 bash
 
 # following is to be run inside docker shell
 cd /manticore_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/
+export CMAKE_TOOLCHAIN_FILE=$(pwd)/dist/build_dockers/cross/linux.cmake
 mkdir build && cd build
 cmake -DPACK=1 ..
 

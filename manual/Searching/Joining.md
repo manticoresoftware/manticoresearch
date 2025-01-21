@@ -626,6 +626,17 @@ The batch size can be adjusted using the `join_batch_size` query option. It is a
 
 A larger batch size may improve performance, but for some queries, it can lead to excessive memory consumption.
 
+## Join caching
+
+Each query executed on the right table is defined by specific JOIN ON conditions, meaning that these conditions determine the result set retrieved from the right table.
+
+If there are only a few unique JOIN ON conditions, it may be beneficial to reuse the results instead of repeatedly executing queries on the right table. To achieve this, the result sets are stored in a cache.
+
+The size of this cache can be configured using the `join_cache_size` option in the searchd section of the configuration file. The default value is 20MB.
+Note that each thread maintains its own cache, so you should account for the number of threads executing queries when estimating total memory usage.
+
+Setting `join_cache_size=0` disables caching.
+
 ## Caveats and Best Practices
 
 When using JOINs in Manticore Search, keep the following points in mind:

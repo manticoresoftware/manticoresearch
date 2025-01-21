@@ -56,7 +56,7 @@ job_mirror:
     NO_TESTS: 1
     CTEST_CMAKE_GENERATOR: Ninja
     CTEST_CONFIGURATION_TYPE: RelWithDebInfo # most common default
-    DISTR: bionic # our default build for tests
+    DISTR: jammy # our default build for tests
     arch: x86_64
     boost: boost_nov22
     sysroot: roots_nov22
@@ -71,7 +71,7 @@ job_mirror:
   cache:
     paths:
       - cache
-    key: bionic_test
+    key: jammy_test
   artifacts:
     when: on_success
     expire_in: 12 hrs
@@ -83,8 +83,9 @@ job_mirror:
       - build/src/indextool
       - build/src/searchd
       - build/src/gtests/gmanticoretest
-      - build/config/*.c
-      - build/config/*.h
+      - build/**/*.h
+      - build/**/*.c
+      - build/**/*.cxx
       - build/**/*.gcno
 
 # ==================== .helper testing ======================
@@ -94,7 +95,7 @@ job_mirror:
   needs: [ ]
   tags:
     - specdocker
-  image: manticoresearch/ubertests_ctest:3263
+  image: registry.gitlab.com/manticoresearch/dev/ubertests_public:331
   variables:
     DIAGNOSTIC: 1 # let's set it by default forever
     CACHEB: "../cache"
@@ -105,7 +106,7 @@ job_mirror:
     - cp -r Testing/2*/Test.xml .
     - xsltproc -o junit_tests.xml ../misc/junit/ctest2junit.xsl Test.xml
   cache:
-    key: bionic_test
+    key: jammy_test
     paths:
       - cache
   artifacts:
@@ -116,8 +117,10 @@ job_mirror:
     paths:
       - build/junit_tests.xml
       - build/test/test_*/report.*
+      - build/test/rt_*/report.*
+      - build/test/col_*/report.*
       - build/test/error*.txt
-      - build/test/searchd.log
+      - build/test/searchd*.log
   retry: 1
 
 
@@ -205,8 +208,10 @@ win_tests:
     paths:
       - build/xml
       - build/test/test_*/report.*
+      - build/test/rt_*/report.*
+      - build/test/col_*/report.*
       - build/test/error*.txt
-      - build/test/searchd.log
+      - build/test/searchd*.log
   cache: { }
 
 
@@ -246,7 +251,7 @@ convert_win_junit:
   stage: publish
   tags:
     - docker
-  image: manticoresearch/ubertests_ctest:3263
+  image: registry.gitlab.com/manticoresearch/dev/ubertests_public:331
   needs:
     - win_tests
   variables:

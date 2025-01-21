@@ -95,7 +95,7 @@ job_mirror:
   needs: [ ]
   tags:
     - specdocker
-  image: registry.gitlab.com/manticoresearch/dev/ubertests_public:331
+  image: manticoresearch/ubertests_public:331
   variables:
     DIAGNOSTIC: 1 # let's set it by default forever
     CACHEB: "../cache"
@@ -251,7 +251,7 @@ convert_win_junit:
   stage: publish
   tags:
     - docker
-  image: registry.gitlab.com/manticoresearch/dev/ubertests_public:331
+  image: manticoresearch/ubertests_public:331
   needs:
     - win_tests
   variables:

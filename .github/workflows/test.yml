@@ -457,7 +457,7 @@ jobs:
     needs: test_windows
     runs-on: ubuntu-22.04
     container:
-      image: registry.gitlab.com/manticoresearch/dev/ubertests_public:331
+      image: manticoresearch/ubertests_public:331
     steps:
       - name: Checkout repository
         uses: actions/checkout@v3

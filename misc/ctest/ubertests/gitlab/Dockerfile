@@ -87,3 +87,5 @@ ENTRYPOINT ["bash", "/entry_point.sh"]
 CMD []
 
 # docker build -t registry.gitlab.com/manticoresearch/dev/ubertests_public:331 .
+# docker tag registry.gitlab.com/manticoresearch/dev/ubertests_public:331 manticoresearch/ubertests_public:331
+# docker push manticoresearch/ubertests_public:331

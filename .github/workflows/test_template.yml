@@ -44,7 +44,7 @@ jobs:
       run:
         shell: bash
     container:
-      image: registry.gitlab.com/manticoresearch/dev/ubertests_public:331
+      image: manticoresearch/ubertests_public:331
       env:
         DIAGNOSTIC: 1
         CACHEB: ../cache

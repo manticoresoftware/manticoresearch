@@ -2,7 +2,7 @@
 #Run the very same test suite as run on gitlab CI, but locally
 
 BUILD_DOCKER=manticoresearch/external_toolchain:clang16_cmake3263
-TEST_DOCKER=registry.gitlab.com/manticoresearch/dev/ubertests_public:331
+TEST_DOCKER=manticoresearch/ubertests_public:331
 boost=boost_nov22
 sysroot=roots_nov22
 CONFIG=Debug

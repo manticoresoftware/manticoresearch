@@ -1,0 +1,41 @@
+# This test checks the functionality of the percolate index in Manticore Search.
+# A percolate index allows storing queries and checking which ones match incoming documents.
+#
+# Test steps:
+# 1. Drop the table `pq` if it exists.
+# 2. Create a table `pq` with the type 'percolate'.
+# 3. Insert a percolate query with id=1 and text 'abc'.
+# 4. Execute a percolate query for the document `{"f": "abc"}`.
+# 5. Check the metadata to ensure the query was executed correctly.
+#
+# Expected result:
+# - The document `{"f": "abc"}` should match the query with id=1.
+# - The metadata should show:
+#   - queries_matched = 1 (one query matched),
+#   - document_matched = 1 (one document matched),
+#   - total_queries_stored = 1 (one query stored in the index).
+
+––– block: ../base/start-searchd –––
+––– input –––
+mysql -h0 -P9306 -e "drop table if exists pq;"; echo $?
+––– output –––
+0
+––– input –––
+mysql -h0 -P9306 -e "create table pq(f text) type='percolate'; insert into pq(id, query) values(1, 'abc'); call pq('pq', '{\"f\": \"abc\"}'); show meta;"
+––– output –––
++------+
+| id   |
++------+
+|    1 |
++------+
++-----------------------+-----------+
+| Variable name         | Value     |
++-----------------------+-----------+
+| total                 | #!/[0-9]{1}.[0-9]{3}/!# sec |
+| queries_matched       | 1         |
+| queries_failed        | 0         |
+| document_matched      | 1         |
+| total_queries_stored  | 1         |
+| term_only_queries     | 1         |
+| fast_rejected_queries | 0         |
++-----------------------+-----------+

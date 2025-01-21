@@ -10902,16 +10902,16 @@ void HandleMysqlPercolateMeta ( const CPqResult &tResult, const CSphString & sWa
 	// shortcuts
 	const PercolateMatchResult_t &tMeta = tResult.m_dResult;
 
-	tOut.HeadTuplet ( "Name", "Value" );
-	tOut.DataTupletf ( "Total", "%.3D sec", tMeta.m_tmTotal / 1000 );
+	tOut.HeadTuplet ( "Variable name", "Value" );
+	tOut.DataTupletf ( "total", "%.3D sec", tMeta.m_tmTotal / 1000 );
 	if ( tMeta.m_tmSetup && tMeta.m_tmSetup>0 )
-		tOut.DataTupletf ( "Setup", "%.3D sec", tMeta.m_tmSetup / 1000 );
-	tOut.DataTuplet ( "Queries matched", tMeta.m_iQueriesMatched );
-	tOut.DataTuplet ( "Queries failed", tMeta.m_iQueriesFailed );
-	tOut.DataTuplet ( "Document matched", tMeta.m_iDocsMatched );
-	tOut.DataTuplet ( "Total queries stored", tMeta.m_iTotalQueries );
-	tOut.DataTuplet ( "Term only queries", tMeta.m_iOnlyTerms );
-	tOut.DataTuplet ( "Fast rejected queries", tMeta.m_iEarlyOutQueries );
+		tOut.DataTupletf ( "setup", "%.3D sec", tMeta.m_tmSetup / 1000 );
+	tOut.DataTuplet ( "queries_matched", tMeta.m_iQueriesMatched );
+	tOut.DataTuplet ( "queries_failed", tMeta.m_iQueriesFailed );
+	tOut.DataTuplet ( "document_matched", tMeta.m_iDocsMatched );
+	tOut.DataTuplet ( "total_queries_stored", tMeta.m_iTotalQueries );
+	tOut.DataTuplet ( "term_only_queries", tMeta.m_iOnlyTerms );
+	tOut.DataTuplet ( "fast_rejected_queries", tMeta.m_iEarlyOutQueries );
 
 	if ( !tMeta.m_dQueryDT.IsEmpty() )
 	{
@@ -10923,11 +10923,11 @@ void HandleMysqlPercolateMeta ( const CPqResult &tResult, const CSphString & sWa
 			sList.Sprintf ( "%d", tmQuery );
 			tmMatched += tmQuery;
 		}
-		tOut.DataTuplet ( "Time per query", sList.cstr() );
-		tOut.DataTuplet ( "Time of matched queries", tmMatched );
+		tOut.DataTuplet ( "time_per_query", sList.cstr() );
+		tOut.DataTuplet ( "time_of_matched_queries", tmMatched );
 	}
 	if ( !sWarning.IsEmpty() )
-		tOut.DataTuplet ( "Warning", sWarning.cstr() );
+		tOut.DataTuplet ( "warning", sWarning.cstr() );
 
 	tOut.Eof();
 }

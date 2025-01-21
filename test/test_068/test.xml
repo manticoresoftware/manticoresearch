@@ -220,6 +220,20 @@ index year
     killlist_target = archive, ancient
 }
 
+source src_csv3
+{
+	type = csvpipe
+	csvpipe_command = cat <this_test/>/data3.csv
+	csvpipe_field = f
+}
+
+index csv3
+{
+	source = src_csv3
+	path = <data_path/>/csv3
+}
+
+
 </config>
 
 <queries>
@@ -277,6 +291,10 @@ index year
 <sphinxql>select * from archive</sphinxql>
 <sphinxql>select * from ancient</sphinxql>
 <sphinxql>select * from `year`</sphinxql>
+
+<!-- field with position limits -->
+<sphinxql>select * from csv3 where match ('@f[1] b') </sphinxql>
+<sphinxql>select * from csv3 where match ('@f[2] b') </sphinxql>
 
 </queries>
 

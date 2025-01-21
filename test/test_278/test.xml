@@ -364,6 +364,13 @@ select id,join2.weight() from join1 left join join2 on join1.string_id = join2.i
 select id,weight(),join2.weight() from join1 left join join2 on join1.string_id = join2.id where match('title1 | tmp2', join1) and match('title1 | name2',join2);
 select id,weight(),join2.weight() from join1 left join join2 on join1.string_id = join2.id where match('title1 | tmp2', join1) and match('title1 | name2',join2) option(join1) field_weights=(title=1000) option(join2) field_weights=(title=2000);
 
+<!-- right table weight in expressions -->
+select id,join2.weight()*2 from join1 left join join2 on join1.string_id = join2.id where match('title1 | name2',join2);
+select id,join2.weight() as jw from join1 left join join2 on join1.string_id = join2.id where match('title1 | name2',join2);
+
+<!-- right table weight vs fullscan -->
+select id,join2.weight() as jw from join1 join join2 on join1.string_id = join2.id;
+
 </sphinxql>
 
 <query endpoint="json/search">

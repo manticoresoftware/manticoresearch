@@ -20,6 +20,7 @@
 * [SHOW MATERIALIZED VIEWS](Integration/Kafka.md#Listing) - Shows list of materialized views
 * [SHOW MVS](Integration/Kafka.md#Listing) - Alias of previous command
 * [SHOW CREATE TABLE](Listing_tables.md#DESCRIBE) - Shows SQL command how to create the table
+* [SHOW TABLE INDEXES](Node_info_and_management/Table_settings_and_status/SHOW_TABLE_INDEXES.md) - Displays information about the available secondary indexes for the table
 * [SHOW TABLE STATUS](Node_info_and_management/Table_settings_and_status/SHOW_TABLE_STATUS.md) - Shows information about current table status
 * [SHOW TABLE SETTINGS](Node_info_and_management/Table_settings_and_status/SHOW_TABLE_SETTINGS.md) - Shows table settings
 * [SHOW LOCKS](Securing_and_compacting_a_table/Freezing_a_table.md#SHOW-LOCKS) - Shows information about frozen tables
@@ -120,6 +121,7 @@
 * [/tbl_name/_mapping](Creating_a_table/Local_tables/Real-time_table.md#_mapping-API:) - Creates a table schema in the Elasticsearch style
 
 ### Common things
+* [field name syntax](Creating_a_table/Data_types.md#Field-name-syntax)
 * [data types](Creating_a_table/Data_types.md)
 * [engine](Creating_a_table/Data_types.md)
 * [plain mode](Read_this_first.md#Real-time-mode-vs-plain-mode)
@@ -629,7 +631,7 @@ AND, AS, BY, COLUMNARSCAN, DISTINCT, DIV, DOCIDINDEX, EXPLAIN, FACET, FALSE, FOR
 * [3.5.4](https://manual.manticoresearch.com/manticore-3-5-4/)
 * [4.0.2](https://manual.manticoresearch.com/manticore-4-0-2/)
 * [4.2.0](https://manual.manticoresearch.com/manticore-4-2-0/)
-* [5.0.2](https://manual.manticoresearch.com/manticore-5-0-2/). [Installation page](https://manticoresearch.com/install-5.0.2/)
+* [5.0.2](https://manual.manticoresearch.com/manticore-5-0-2/). [Installation page](https://manticoresearch.com/install-5.0.0/)
 * [6.0.0](https://manual.manticoresearch.com/manticore-6-0-0/). [Installation page](https://manticoresearch.com/install-6.0.0/)
 * [6.0.2](https://manual.manticoresearch.com/manticore-6-0-2/). [Installation page](https://manticoresearch.com/install-6.0.2/)
 * [6.0.4](https://manual.manticoresearch.com/manticore-6-0-4/). [Installation page](https://manticoresearch.com/install-6.0.4/)

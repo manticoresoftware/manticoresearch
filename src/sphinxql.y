@@ -309,7 +309,7 @@ ident:
 	;
 
 option_name:
-	ident_without_option | all_set_tail
+	ident_without_option | all_set_tail | TOK_FORCE 
 	;
 
 
@@ -648,7 +648,6 @@ select_expr:
 	| TOK_COUNT '(' '*' ')'				{ if ( !pParser->AddItem ( "count(*)", &$1, &$4 ) ) YYERROR; }
 	| TOK_GROUPBY '(' ')'				{ if ( !pParser->AddItem ( "groupby()", &$1, &$3 ) ) YYERROR; }
 	| TOK_COUNT '(' TOK_DISTINCT distinct_ident ')' { if ( !pParser->AddDistinct ( &$4, &$1, &$5 ) ) YYERROR; }
-	| ident TOK_SUBKEY '(' ')'			{ pParser->AddJoinedWeight ( $1, $2 ); }
 	;
 
 opt_where_clause:
@@ -1411,6 +1410,7 @@ expr:
 	| streq
 	| json_field TOK_IS TOK_NULL			{ TRACK_BOUNDS ( $$, $1, $3 ); }
 	| json_field TOK_IS TOK_NOT TOK_NULL	{ TRACK_BOUNDS ( $$, $1, $4 ); }
+	| ident TOK_SUBKEY '(' ')'				{ TRACK_BOUNDS ( $$, $1, $4 ); }
 	;
 
 accepted_funcs:
@@ -1526,6 +1526,11 @@ show_what:
 	| index_or_table one_index_opt_chunk TOK_SETTINGS
 		{
 			pParser->m_pStmt->m_eStmt = STMT_SHOW_INDEX_SETTINGS;
+			pParser->SetIndex( $2 );
+		}
+	| index_or_table one_index_opt_chunk TOK_INDEXES like_filter 
+		{
+			pParser->m_pStmt->m_eStmt = STMT_SHOW_TABLE_INDEXES;
 			pParser->SetIndex( $2 );
 		}
 	| TOK_TABLE TOK_STATUS like_filter
@@ -1775,10 +1780,7 @@ call_opt_name:
 //////////////////////////////////////////////////////////////////////////
 
 describe:
-	describe_tok one_index_opt_subindex describe_opt like_filter
-		{
-			pParser->m_pStmt->m_eStmt = STMT_DESCRIBE;
-		}
+	describe_tok { pParser->m_pStmt->m_eStmt = STMT_DESCRIBE; } one_index_opt_subindex describe_opt like_filter opt_option_clause
 	;
 
 describe_opt:

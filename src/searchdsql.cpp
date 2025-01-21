@@ -370,7 +370,6 @@ public:
 	bool			AddIntFilterLesser ( const SqlNode_t & tAttr, int64_t iVal, bool bHasEqual );
 	bool			AddUservarFilter ( const SqlNode_t & tCol, const SqlNode_t & tVar, bool bExclude );
 	void			AddGroupBy ( const SqlNode_t & tGroupBy );
-	void			AddJoinedWeight ( SqlNode_t & tTable, SqlNode_t & tWeight );
 	CSphFilterSettings * AddFilter ( const SqlNode_t & tCol, ESphFilter eType );
 	CSphFilterSettings * AddFilter ( const SqlNode_t & tCol, ESphFilter eType, int iValuesIdx );
 	bool			AddStringFilter ( const SqlNode_t & tCol, const SqlNode_t & tVal, bool bExclude );
@@ -605,6 +604,7 @@ enum class Option_e : BYTE
 	JIEBA_MODE,
 	SCROLL,
 	JOIN_BATCH_SIZE,
+	FORCE,
 
 	INVALID_OPTION
 };
@@ -619,7 +619,7 @@ void InitParserOption()
 		"max_matches", "max_predicted_time", "max_query_time", "morphology", "rand_seed", "ranker", "retry_count",
 		"retry_delay", "reverse_scan", "sort_method", "strict", "sync", "threads", "token_filter", "token_filter_options",
 		"not_terms_only_allowed", "store", "accurate_aggregation", "max_matches_increase_threshold", "distinct_precision_threshold",
-		"threads_ex", "switchover", "expansion_limit", "jieba_mode", "scroll", "join_batch_size" };
+		"threads_ex", "switchover", "expansion_limit", "jieba_mode", "scroll", "join_batch_size", "force" };
 
 	for ( BYTE i = 0u; i<(BYTE) Option_e::INVALID_OPTION; ++i )
 		g_hParseOption.Add ( (Option_e) i, dOptions[i] );
@@ -663,6 +663,8 @@ static bool CheckOption ( SqlStmt_e eStmt, Option_e eOption )
 
 	static Option_e dReloadOptions[] = { Option_e::SWITCHOVER };
 
+	static Option_e dSystemOptions[] = { Option_e::FORCE };
+
 #define CHKOPT( _set, _val ) VecTraits_T<Option_e> (_set, sizeof(_set)).BinarySearch (_val)!=nullptr
 
 	switch ( eStmt )
@@ -684,6 +686,13 @@ static bool CheckOption ( SqlStmt_e eStmt, Option_e eOption )
 	case STMT_SHOW_PLAN:
 	case STMT_SHOW_THREADS:
 		return CHKOPT( dShowOptions, eOption );
+
+	case STMT_DROP_TABLE:
+	case STMT_ALTER_INDEX_SETTINGS:
+	case STMT_DESCRIBE:
+	case STMT_SHOW_CREATE_TABLE:
+		return CHKOPT( dSystemOptions, eOption );
+
 	default:
 		return false;
 	}
@@ -1026,6 +1035,10 @@ bool SqlParserTraits_c::AddOption ( const SqlNode_t & tIdent, const SqlNode_t & 
 		m_pStmt->m_iIntParam = tValue.GetValueInt() ? 1 : 0;
 		break;
 
+	case Option_e::FORCE:
+		m_pStmt->m_bForce = ( tValue.GetValueInt()==1 );
+		break;
+
 	default: //} else
 		m_pParseError->SetSprintf ( "unknown option '%s' (or bad argument type)", sOpt.cstr() );
 		return false;
@@ -1192,18 +1205,6 @@ void SqlParser_c::AddGroupBy ( const SqlNode_t & tGroupBy )
 		sphColumnToLowercase ( const_cast<char *>( sTmp.cstr() ) );
 		m_pQuery->m_sGroupBy.SetSprintf ( "%s, %s", m_pQuery->m_sGroupBy.cstr(), sTmp.cstr() );
 	}
-}
-
-
-void SqlParser_c::AddJoinedWeight ( SqlNode_t & tTable, SqlNode_t & tWeight )
-{
-	CSphString sTable, sWeight;
-	sTable.SetBinary ( m_pBuf + tTable.m_iStart, tTable.m_iEnd - tTable.m_iStart );
-	sWeight.SetBinary ( m_pBuf + tWeight.m_iStart, tWeight.m_iEnd - tWeight.m_iStart );
-
-	CSphQueryItem & tItem = m_pQuery->m_dItems.Add();
-	tItem.m_sExpr.SetSprintf ( "%s%s()", sTable.cstr(), sWeight.cstr() );
-	tItem.m_sAlias = tItem.m_sExpr;
 }
 
 

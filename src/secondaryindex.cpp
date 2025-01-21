@@ -1345,6 +1345,13 @@ bool SIContainer_c::IsEnabled ( const CSphString & sAttr ) const
 }
 
 
+void SIContainer_c::GetIndexAttrInfo ( std::vector<SI::IndexAttrInfo_t> & dInfo ) const
+{
+	for ( auto & i : m_dIndexes )
+		i.m_pIndex->GetAttrInfo(dInfo);
+}
+
+
 RowIteratorsWithEstimates_t SIContainer_c::CreateSecondaryIndexIterator ( CSphVector<SecondaryIndexInfo_t> & dSIInfo, const CSphVector<CSphFilterSettings> & dFilters, ESphCollation eCollation, const ISphSchema & tSchema, RowID_t uRowsCount, int iCutoff ) const
 {
 	// don't use cutoff if we have more than one instance of SecondaryIndex/ColumnarScan

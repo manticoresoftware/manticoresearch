@@ -81,6 +81,8 @@ show create table t;
 create table t1 like t;
 desc t1;
 
+show table t indexes;
+
 drop table t1;
 drop table t;
 

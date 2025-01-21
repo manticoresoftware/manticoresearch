@@ -63,6 +63,7 @@
 #include "frontendschema.h"
 #include "skip_cache.h"
 #include "jieba.h"
+#include "secondaryindex.h"
 
 // services
 #include "taskping.h"
@@ -2204,7 +2205,6 @@ bool SearchReplyParser_c::ParseReply ( MemInputBuffer_c & tReq, AgentConn_t & tA
 		int iRetrieved = tReq.GetInt ();
 		tRes.m_iTotalMatches = tReq.GetInt ();
 		tRes.m_bTotalMatchesApprox = !!tReq.GetInt();
-		tRes.m_bTotalMatchesNA = !!tReq.GetInt();
 		tRes.m_iQueryTime = tReq.GetInt ();
 
 		// agents always send IO/CPU stats to master
@@ -3087,7 +3087,7 @@ static void FormatOrderBy ( StringBuilder_c * pBuf, const char * sPrefix, ESphSo
 
 static const CSphQuery g_tDefaultQuery {};
 
-static void FormatSphinxql ( const CSphQuery & q, int iCompactIN, QuotationEscapedBuilder & tBuf );
+static void FormatSphinxql ( const CSphQuery & q, const CSphQuery & tJoinOptions, int iCompactIN, QuotationEscapedBuilder & tBuf );
 static void FormatList ( const CSphVector<CSphNamedInt> & dValues, StringBuilder_c & tBuf )
 {
 	ScopedComma_c tComma ( tBuf, ", " );
@@ -3095,9 +3095,9 @@ static void FormatList ( const CSphVector<CSphNamedInt> & dValues, StringBuilder
 		tBuf << dValue;
 }
 
-static void FormatOption ( const CSphQuery & tQuery, StringBuilder_c & tBuf )
+static void FormatOption ( const CSphQuery & tQuery, StringBuilder_c & tBuf, const char * szOption )
 {
-	ScopedComma_c tOptionComma ( tBuf, ", ", " OPTION ");
+	ScopedComma_c tOptionComma ( tBuf, ", ", szOption);
 
 	if ( tQuery.m_iMaxMatches!=DEFAULT_MAX_MATCHES )
 		tBuf.Appendf ( "max_matches=%d", tQuery.m_iMaxMatches );
@@ -3267,7 +3267,7 @@ inline static void FormatTimeConnClient ( StringBuilder_c& tBuf )
 	tBuf << " conn " << session::GetConnID() << " (" << session::szClientName() << ")";
 }
 
-static void LogQuerySphinxql ( const CSphQuery & q, const CSphQueryResultMeta & tMeta, const CSphVector<int64_t> & dAgentTimes )
+static void LogQuerySphinxql ( const CSphQuery & q, const CSphQuery & tJoinOptions, const CSphQueryResultMeta & tMeta, const CSphVector<int64_t> & dAgentTimes )
 {
 	assert ( g_eLogFormat==LOG_FORMAT_SPHINXQL );
 	if ( g_iQueryLogFile<0 )
@@ -3295,7 +3295,7 @@ static void LogQuerySphinxql ( const CSphQuery & q, const CSphQueryResultMeta & 
 	if ( q.m_eQueryType==QUERY_JSON )
 		LogQueryJson ( q, tBuf );
 	else
-		FormatSphinxql ( q, iCompactIN, tBuf );
+		FormatSphinxql ( q, tJoinOptions, iCompactIN, tBuf );
 
 	///////////////
 	// query stats
@@ -3352,7 +3352,19 @@ static void LogQuerySphinxql ( const CSphQuery & q, const CSphQueryResultMeta & 
 }
 
 
-void FormatSphinxql ( const CSphQuery & q, int iCompactIN, QuotationEscapedBuilder & tBuf )
+CSphString TypeCastToStr ( ESphAttr eAttr )
+{
+	switch ( eAttr )
+	{
+	case SPH_ATTR_INTEGER:	return "INTEGER";
+	case SPH_ATTR_BIGINT:	return "BIGINT";
+	case SPH_ATTR_STRING:	return "STRING";
+	default:				return "";
+	}
+}
+
+
+void FormatSphinxql ( const CSphQuery & q, const CSphQuery & tJoinOptions, int iCompactIN, QuotationEscapedBuilder & tBuf )
 {
 	if ( q.m_bHasOuter )
 		tBuf << "SELECT * FROM (";
@@ -3362,10 +3374,40 @@ void FormatSphinxql ( const CSphQuery & q, int iCompactIN, QuotationEscapedBuild
 	else
 		tBuf << "SELECT " << RemoveBackQuotes ( q.m_sSelect.cstr() ) << " FROM " << q.m_sIndexes;
 
+	if ( q.m_eJoinType!=JoinType_e::NONE )
+	{
+		if ( q.m_eJoinType==JoinType_e::LEFT )
+			tBuf << " LEFT JOIN ";
+		else
+			tBuf << " INNER JOIN ";
+
+		tBuf << q.m_sJoinIdx << " ON ";
+
+		ARRAY_FOREACH ( i, q.m_dOnFilters )
+		{
+			const auto & tOn = q.m_dOnFilters[i];
+			CSphString sVar1, sVar2;
+			sVar1.SetSprintf ( "%s.%s", tOn.m_sIdx1.cstr(), tOn.m_sAttr1.cstr() );
+			sVar2.SetSprintf ( "%s.%s", tOn.m_sIdx2.cstr(), tOn.m_sAttr2.cstr() );
+			CSphString sCast1 = TypeCastToStr ( tOn.m_eTypeCast1 );
+			CSphString sCast2 = TypeCastToStr ( tOn.m_eTypeCast2 );
+			if ( !sCast1.IsEmpty() )
+				sVar1.SetSprintf ( "%s(%s)", sCast1.cstr(), sVar1.cstr() );
+
+			if ( !sCast2.IsEmpty() )
+				sVar2.SetSprintf ( "%s(%s)", sCast2.cstr(), sVar2.cstr() );
+
+			tBuf << sVar1 << "=" << sVar2;
+
+			if ( i < q.m_dOnFilters.GetLength()-1 )
+				tBuf << " AND ";
+		}
+	}
+
 	// WHERE clause
 	// (m_sRawQuery is empty when using MySQL handler)
 	const CSphString & sQuery = q.m_sQuery;
-	if ( !sQuery.IsEmpty() || q.m_dFilters.GetLength() )
+	if ( !sQuery.IsEmpty() || !q.m_sJoinQuery.IsEmpty() || q.m_dFilters.GetLength() )
 	{
 		ScopedComma_c sWHERE ( tBuf, " AND ", " WHERE ");
 
@@ -3373,6 +3415,14 @@ void FormatSphinxql ( const CSphQuery & q, int iCompactIN, QuotationEscapedBuild
 		{
 			ScopedComma_c sMatch (tBuf, nullptr, "MATCH(", ")");
 			tBuf.FixupSpacedAndAppendEscaped ( sQuery.cstr() );
+		}
+
+		if ( !q.m_sJoinQuery.IsEmpty() )
+		{
+			CSphString sEnd;
+			sEnd.SetSprintf ( ",%s)", q.m_sJoinIdx.cstr() );
+			ScopedComma_c sMatch (tBuf, nullptr, "MATCH(", sEnd.cstr() );
+			tBuf.FixupSpacedAndAppendEscaped ( q.m_sJoinQuery.cstr() );
 		}
 
 		FormatFiltersQL ( q.m_dFilters, q.m_dFilterTree, tBuf, iCompactIN );
@@ -3405,7 +3455,14 @@ void FormatSphinxql ( const CSphQuery & q, int iCompactIN, QuotationEscapedBuild
 		tBuf << q.m_iLimit;
 
 	// OPTION clause
-	FormatOption ( q, tBuf );
+	FormatOption ( q, tBuf, " OPTION " );
+	if ( q.m_eJoinType!=JoinType_e::NONE )
+	{
+		CSphString sJoinedOption;
+		sJoinedOption.SetSprintf ( " OPTION(%s) ", q.m_sJoinIdx.cstr() );
+		FormatOption ( tJoinOptions, tBuf, sJoinedOption.cstr() );
+	}
+	
 	FormatIndexHints ( q, tBuf );
 
 	// outer order by, limit
@@ -3424,7 +3481,7 @@ void FormatSphinxql ( const CSphQuery & q, int iCompactIN, QuotationEscapedBuild
 	tBuf << ';';
 }
 
-static void LogQuery ( const CSphQuery & q, const CSphQueryResultMeta & tMeta, const CSphVector<int64_t> & dAgentTimes )
+static void LogQuery ( const CSphQuery & q, const CSphQuery & tJoinOptions, const CSphQueryResultMeta & tMeta, const CSphVector<int64_t> & dAgentTimes )
 {
 	if ( g_iQueryLogMinMs>0 && tMeta.m_iQueryTime<g_iQueryLogMinMs )
 		return;
@@ -3436,7 +3493,7 @@ static void LogQuery ( const CSphQuery & q, const CSphQueryResultMeta & tMeta, c
 	switch ( g_eLogFormat )
 	{
 		case LOG_FORMAT_PLAIN:		LogQueryPlain ( q, tMeta ); break;
-		case LOG_FORMAT_SPHINXQL:	LogQuerySphinxql ( q, tMeta, dAgentTimes ); break;
+		case LOG_FORMAT_SPHINXQL:	LogQuerySphinxql ( q, tJoinOptions, tMeta, dAgentTimes ); break;
 	}
 }
 
@@ -3915,9 +3972,6 @@ void SendResult ( int iVer, ISphOutputBuffer & tOut, const AggrResult_t& tRes, b
 	tOut.SendAsDword ( tRes.m_iTotalMatches );
 	if ( bAgentMode && uMasterVer>=19 )
 		tOut.SendInt ( tRes.m_bTotalMatchesApprox ? 1 : 0 );
-
-	if ( bAgentMode && uMasterVer>=25 )
-		tOut.SendInt ( tRes.m_bTotalMatchesNA ? 1 : 0 );
 
 	tOut.SendInt ( Max ( tRes.m_iQueryTime, 0 ) );
 
@@ -5541,7 +5595,7 @@ void SearchHandler_c::RunActionQuery ( const CSphQuery & tQuery, const CSphStrin
 	g_tStats.m_iDiskReadBytes.fetch_add ( tIO.m_iReadBytes, std::memory_order_relaxed );
 
 	if ( m_bQueryLog )
-		LogQuery ( m_dQueries[0], m_dAggrResults[0], m_dAgentTimes[0] );
+		LogQuery ( m_dQueries[0], m_dJoinQueryOptions[0], m_dAggrResults[0], m_dAgentTimes[0] );
 }
 
 void SearchHandler_c::SetQuery ( int iQuery, const CSphQuery & tQuery, std::unique_ptr<ISphTableFunc> pTableFunc )
@@ -5578,7 +5632,7 @@ void SearchHandler_c::RunQueries()
 	if ( m_bQueryLog )
 	{
 		ARRAY_FOREACH ( i, m_dQueries )
-			LogQuery ( m_dQueries[i], m_dAggrResults[i], m_dAgentTimes[i] );
+			LogQuery ( m_dQueries[i], m_dJoinQueryOptions[i], m_dAggrResults[i], m_dAgentTimes[i] );
 	}
 	// no need to call OnRunFinished() as meta.matches already calculated at search
 }
@@ -5770,7 +5824,6 @@ struct LocalSearchRef_t
 			tResult.m_iCpuTime += tChild.m_iCpuTime;
 			tResult.m_iTotalMatches += tChild.m_iTotalMatches;
 			tResult.m_bTotalMatchesApprox |= tChild.m_bTotalMatchesApprox;
-			tResult.m_bTotalMatchesNA |= tChild.m_bTotalMatchesNA;
 			tResult.m_iSuccesses += tChild.m_iSuccesses;
 			tResult.m_tIOStats.Add ( tChild.m_tIOStats );
 
@@ -6215,7 +6268,6 @@ bool SearchHandler_c::SubmitSuccess ( CSphVector<ISphMatchSorter *> & dSorters, 
 		tNRes.m_iMultiplier = iNumQueries;
 		tNRes.m_iCpuTime += tMqMeta.m_iCpuTime / iNumQueries;
 		tNRes.m_bTotalMatchesApprox |= tMqMeta.m_bTotalMatchesApprox;
-		tNRes.m_bTotalMatchesNA |= tMqMeta.m_bTotalMatchesNA;
 
 		iCpuTime /= iNumQueries;
 	}
@@ -7497,7 +7549,6 @@ void SearchHandler_c::RunSubset ( int iStart, int iEnd )
 					// merge this agent's stats
 					tRes.m_iTotalMatches += tRemoteResult.m_iTotalMatches;
 					tRes.m_bTotalMatchesApprox |= tRemoteResult.m_bTotalMatchesApprox;
-					tRes.m_bTotalMatchesNA |= tRemoteResult.m_bTotalMatchesNA;
 					tRes.m_iQueryTime += tRemoteResult.m_iQueryTime;
 					tRes.m_iAgentCpuTime += tRemoteResult.m_iCpuTime;
 					tRes.m_tAgentIOStats.Add ( tRemoteResult.m_tIOStats );
@@ -7970,7 +8021,7 @@ static const char * g_dSqlStmts[] =
 	"flush_hostnames", "flush_logs", "reload_indexes", "sysfilters", "debug", "alter_killlist_target",
 	"alter_index_settings", "join_cluster", "cluster_create", "cluster_delete", "cluster_index_add",
 	"cluster_index_delete", "cluster_update", "explain", "import_table", "freeze_indexes", "unfreeze_indexes",
-	"show_settings", "alter_rebuild_si", "kill", "show_locks", "show_scroll"
+	"show_settings", "alter_rebuild_si", "kill", "show_locks", "show_scroll", "show_table_indexes"
 };
 
 
@@ -9565,16 +9616,8 @@ void BuildMeta ( VectorLike & dStatus, const CSphQueryResultMeta & tMeta )
 		dStatus.MatchTuplet ( "warning", tMeta.m_sWarning.cstr () );
 
 	dStatus.MatchTupletf ( "total", "%d", tMeta.m_iMatches );
-	if ( tMeta.m_bTotalMatchesNA )
-	{
-		dStatus.MatchTuplet ( "total_found", "n/a" );
-		dStatus.MatchTupletf ( "total_relation", "n/a" );
-	}
-	else
-	{
-		dStatus.MatchTupletf ( "total_found", "%l", tMeta.m_iTotalMatches );
-		dStatus.MatchTupletf ( "total_relation", "%s", tMeta.m_bTotalMatchesApprox ? "gte" : "eq" );
-	}
+	dStatus.MatchTupletf ( "total_found", "%l", tMeta.m_iTotalMatches );
+	dStatus.MatchTupletf ( "total_relation", "%s", tMeta.m_bTotalMatchesApprox ? "gte" : "eq" );
 
 	dStatus.MatchTupletf ( "time", "%.3F", tMeta.m_iQueryTime );
 
@@ -12722,8 +12765,11 @@ void DescribeLocalSchema ( VectorLike & dOut, const CSphSchema & tSchema, bool b
 }
 
 
-void DescribeDistributedSchema ( VectorLike& dOut, const cDistributedIndexRefPtr_t& pDistr )
+bool DescribeDistributedSchema ( VectorLike& dOut, const cDistributedIndexRefPtr_t & pDistr, bool bForce )
 {
+	if ( IsDistrTableHasSystem ( *pDistr, bForce ) )
+		return false;
+
 	// result set header packet
 	dOut.SetColNames ( { "Agent", "Type" } );
 
@@ -12753,6 +12799,8 @@ void DescribeDistributedSchema ( VectorLike& dOut, const cDistributedIndexRefPtr
 			dOut.MatchTupletf ( sValue.cstr (), "%s_%d", tDesc.m_bBlackhole ? "blackhole" : "remote", i+1 );
 		}
 	}
+
+	return true;
 }
 
 void HandleMysqlDescribe ( RowBuffer_i & tOut, SqlStmt_t * pStmt )
@@ -12793,7 +12841,13 @@ void HandleMysqlDescribe ( RowBuffer_i & tOut, SqlStmt_t * pStmt )
 			tOut.ErrorAbsent ( "no such table '%s'", tStmt.m_sIndex.cstr () );
 			return;
 		}
-		DescribeDistributedSchema ( dOut, pDistr );
+
+		CSphString sError;
+		if ( !DescribeDistributedSchema ( dOut, pDistr, tStmt.m_bForce ) )
+		{
+			tOut.ErrorAbsent ( "can not describe table '%s' because it contains system table", tStmt.m_sIndex.cstr() );
+			return;
+		}
 	}
 
 	tOut.DataTable ( dOut );
@@ -13096,7 +13150,7 @@ static void HandleMysqlDropTable ( RowBuffer_i & tOut, const SqlStmt_t & tStmt, 
 		return;
 	}
 
-	bool bDropped = DropIndexInt ( tStmt.m_sIndex.cstr(), tStmt.m_bIfExists, sError, &sWarning );
+	bool bDropped = DropIndexInt ( tStmt.m_sIndex.cstr(), tStmt.m_bIfExists, tStmt.m_bForce, sError, &sWarning );
 	sphLogDebug ( "dropped table %s, ok %d, error %s", tStmt.m_sIndex.cstr(), (int)bDropped, sError.scstr() ); // FIXME!!! remove
 	if ( !bDropped )
 		tOut.Error ( sError.cstr() );
@@ -13118,6 +13172,12 @@ void HandleMysqlShowCreateTable ( RowBuffer_i & tOut, const SqlStmt_t & tStmt )
 	if ( pServed && !ServedDesc_t::IsMutable ( pServed ) )
 	{
 		tOut.ErrorAbsent ( "table '%s' is not real-time or percolate", tStmt.m_sIndex.cstr () );
+		return;
+	}
+
+	if ( pDist && IsDistrTableHasSystem ( *pDist, tStmt.m_bForce ) )
+	{
+		tOut.ErrorAbsent ( "can not show table '%s' because it contains system table", tStmt.m_sIndex.cstr() );
 		return;
 	}
 
@@ -13189,7 +13249,7 @@ static Str_t FormatInfo ( const PublicThreadDesc_t & tThd, ThreadInfoFormat_e eF
 		if ( tThd.m_pQuery )
 		{
 			tBuf.Clear();
-			FormatSphinxql ( *tThd.m_pQuery, 0, tBuf );
+			FormatSphinxql ( *tThd.m_pQuery, {}, 0, tBuf );
 			bGotQuery = true;
 		}
 
@@ -13819,7 +13879,7 @@ bool HandleMysqlSelect ( RowBuffer_i & dRows, SearchHandler_c & tHandler )
 		CheckQuery ( tHandler.m_dQueries[i], tHandler.m_dAggrResults[i].m_sError, tHandler.m_dQueries.GetLength() == 1 );
 		if ( !tHandler.m_dAggrResults[i].m_sError.IsEmpty() )
 		{
-			LogQuery ( tHandler.m_dQueries[i], tHandler.m_dAggrResults[i], dAgentTimes );
+			LogQuery ( tHandler.m_dQueries[i], tHandler.m_dJoinQueryOptions[i], tHandler.m_dAggrResults[i], dAgentTimes );
 			if ( tHandler.m_dQueries.GetLength()==1 )
 				sError << tHandler.m_dAggrResults[0].m_sError;
 			else
@@ -13975,20 +14035,12 @@ CSphString BuildMetaOneline ( const CSphQueryResultMeta & tMeta )
 	// --- 0 out of 1115 results in 115ms ---
 	// --- 20 out of >= 20 results in 5.123s ---
 
-	CSphString sTotalFound = "n/a";
-	CSphString sApprox = "n/a";
-	if ( !tMeta.m_bTotalMatchesNA )
-	{
-		sTotalFound.SetSprintf ( "%l", tMeta.m_iTotalMatches );
-		sApprox = tMeta.m_bTotalMatchesApprox ? ">=" : "";
-	}
-
 	StringBuilder_c sMeta;
 	// since we have us precision, printing 0 will output '0us', which is not necessary true.
 	if ( tMeta.m_iQueryTime > 0 )
-		sMeta.Sprintf ( "--- %d out of %s%s results in %.3t ---", tMeta.m_iMatches, sApprox.cstr(), sTotalFound.cstr(), (int64_t)tMeta.m_iQueryTime * 1000 );
+		sMeta.Sprintf ( "--- %d out of %s%l results in %.3t ---", tMeta.m_iMatches, ( tMeta.m_bTotalMatchesApprox ? ">=" : "" ), tMeta.m_iTotalMatches, (int64_t)tMeta.m_iQueryTime * 1000 );
 	else
-		sMeta.Sprintf ( "--- %d out of %s%s results in 0ms ---", tMeta.m_iMatches, sApprox.cstr(), sTotalFound.cstr() );
+		sMeta.Sprintf ( "--- %d out of %s%l results in 0ms ---", tMeta.m_iMatches, ( tMeta.m_bTotalMatchesApprox ? ">=" : "" ), tMeta.m_iTotalMatches );
 	return (CSphString)sMeta;
 }
 
@@ -16279,6 +16331,123 @@ void HandleMysqlShowIndexSettings ( RowBuffer_i & tOut, const SqlStmt_t & tStmt 
 }
 
 
+static void OutputSIStats ( RowBuffer_i & tOut, const CheckLike & tLike, const SI::IndexAttrInfo_t & tInfo, float fPercent )
+{
+	const char * szName = tInfo.m_sName.c_str();
+	CSphString sType = ColumnarAttrType2Str ( tInfo.m_eType );
+	CSphString sEnabled = tInfo.m_bEnabled ? "1" : "0";
+	if ( !tLike.Match(szName) && !tLike.Match ( sType.cstr() ) && !tLike.Match ( sEnabled.cstr() ) )
+		return;
+
+	tOut.PutString(szName);
+	tOut.PutString(sType);
+	tOut.PutString(sEnabled);
+	tOut.PutNumAsString ( (int)(fPercent*100.0f) );
+	tOut.Commit();
+}
+
+
+static bool operator == ( const SI::IndexAttrInfo_t & tA, const SI::IndexAttrInfo_t & tB )
+{
+	return tA.m_sName==tB.m_sName && tA.m_eType==tB.m_eType && tA.m_bEnabled==tB.m_bEnabled;
+}
+
+
+static void ShowTableIndexes ( RowBuffer_i & tOut, const CSphString & sPattern, std::vector<SI::IndexAttrInfo_t> & dInfo, int iNumChunks )
+{
+	assert( iNumChunks>0 );
+	if ( dInfo.empty() )
+		return;
+
+	std::sort ( dInfo.begin(), dInfo.end(), []( const auto & a, const auto & b )
+		{
+			if ( a.m_eType!=b.m_eType )
+				return a.m_eType<b.m_eType;
+
+			if ( a.m_sName!=b.m_sName )
+				return a.m_sName<b.m_sName;
+
+			return a.m_bEnabled > b.m_bEnabled;
+		}
+	);
+
+	CheckLike tLike ( sPattern.cstr() );
+
+	int iCount = 0;
+	for ( int i = 1; i < (int)dInfo.size(); i++ )
+	{
+		if ( dInfo[i]==dInfo[i-1] )
+			iCount++;
+		else
+		{
+			OutputSIStats ( tOut, tLike, dInfo[i-1], float(iCount+1)/iNumChunks );
+			iCount = 0;
+		}
+	}
+
+	OutputSIStats ( tOut, tLike, dInfo.back(), float(iCount+1)/iNumChunks );
+}
+
+
+void HandleMysqlShowTableIndexes ( RowBuffer_i & tOut, const SqlStmt_t & tStmt )
+{
+	CSphString sError;
+	auto pServed = GetServed ( tStmt.m_sIndex );
+	if ( !pServed )
+	{
+		tOut.Error ( "SHOW TABLE INDEXES requires an existing table" );
+		return;
+	}
+
+	int iChunk = tStmt.m_iIntParam;
+	if ( tStmt.m_dIntSubkeys.GetLength ()>=1 )
+		iChunk = (int) tStmt.m_dIntSubkeys[0];
+
+	if ( !tOut.HeadOfStrings ( { "Name", "Type", "Enabled", "Percent" } ) )
+		return;
+
+	std::vector<SI::IndexAttrInfo_t> dInfo;
+	bool bWarn = pServed->m_eType == IndexType_e::RT && iChunk>=0;
+	bool bKeepIteration = true;
+	auto fnCollectIndexes = [&tOut,&bKeepIteration,&dInfo,bWarn] ( const CSphIndex* pIndex )
+	{
+		if ( !pIndex )
+		{
+			if ( bWarn )
+				tOut.Error ( "SHOW TABLE INDEXES requires an existing table" );
+
+			bKeepIteration = false;
+			return;
+		}
+
+		const SIContainer_c * pSI = pIndex->GetSI();
+		if ( pSI )
+			pSI->GetIndexAttrInfo(dInfo);
+	};
+
+	if ( pServed->m_eType==IndexType_e::RT )
+	{
+		if ( iChunk>=0 )
+			RIdx_T<const RtIndex_i*> ( pServed )->ProcessDiskChunk ( iChunk, fnCollectIndexes );
+		else
+		{
+			iChunk = 0;
+			while ( bKeepIteration )
+			{
+				RIdx_T<const RtIndex_i*> ( pServed )->ProcessDiskChunk ( iChunk, fnCollectIndexes );
+				if ( bKeepIteration )
+					iChunk++;
+			}
+		}
+	}
+	else
+		fnCollectIndexes ( RIdx_c(pServed) );
+
+	ShowTableIndexes ( tOut, tStmt.m_sStringParam, dInfo, Max(iChunk,1) );
+	tOut.Eof();
+}
+
+
 void HandleMysqlShowProfile ( RowBuffer_i & tOut, const QueryProfile_c & p, bool bMoreResultsFollow )
 {
 	#define SPH_QUERY_STATE(_name,_desc) _desc,
@@ -17768,6 +17937,11 @@ bool ClientSession_c::Execute ( Str_t sQuery, RowBuffer_i & tOut )
 	case STMT_SHOW_LOCKS:
 		HandleMysqlShowLocks ( tOut );
 		return true;
+
+	case STMT_SHOW_TABLE_INDEXES:
+		HandleMysqlShowTableIndexes ( tOut, *pStmt );
+		return true;
+
 
 	default:
 		m_sError.SetSprintf ( "internal error: unhandled statement type (value=%d)", eStmt );

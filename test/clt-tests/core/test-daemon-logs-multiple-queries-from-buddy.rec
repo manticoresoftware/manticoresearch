@@ -1,0 +1,67 @@
+––– block: ../base/start-searchd –––
+––– input –––
+mysql -h0 -P9306 -e "create table test (id BIGINT, model TEXT);"; echo $?
+––– output –––
+0
+––– input –––
+curl -X POST http://localhost:9308/insert -d '{"index":"test","id":1,"doc":{"model":"Test message"}}'; echo $?
+––– output –––
+{"table":"test","_id":1,"created":true,"result":"created","status":201}0
+––– input –––
+curl -H 'User-agent: Manticore Buddy/1.0.0' -d 'query=select * from test' 'localhost:9308/sql?mode=raw'; echo $?
+––– output –––
+[{
+"columns":[{"id":{"type":"long long"}},{"model":{"type":"string"}}],
+"data":[
+{"id":1,"model":"Test message"}
+],
+"total":1,
+"error":"",
+"warning":""
+}]0
+––– input –––
+curl -H 'User-agent: Manticore Buddy/1.0.0' -d 'query=select * from test; show meta' 'localhost:9308/sql?mode=raw'; echo $?
+––– output –––
+[{
+"columns":[{"id":{"type":"long long"}},{"model":{"type":"string"}}],
+"data":[
+{"id":1,"model":"Test message"}
+],
+"total":1,
+"error":"",
+"warning":""
+},
+{
+"columns":[{"Variable_name":{"type":"string"}},{"Value":{"type":"string"}}],
+"data":[
+{"Variable_name":"total","Value":"1"},
+{"Variable_name":"total_found","Value":"1"},
+{"Variable_name":"total_relation","Value":"eq"},
+{"Variable_name":"time","Value":"0.000"}
+],
+"total":4,
+"error":"",
+"warning":""
+}]0
+––– input –––
+grep -i "Manticore Buddy" /var/log/manticore/query.log
+––– output –––
+––– input –––
+grep -E "select \* from test|show meta" /var/log/manticore/query.log
+––– output –––
+––– input –––
+curl -d 'query=select * from test' 'localhost:9308/sql?mode=raw'; echo $?
+––– output –––
+[{
+"columns":[{"id":{"type":"long long"}},{"model":{"type":"string"}}],
+"data":[
+{"id":1,"model":"Test message"}
+],
+"total":1,
+"error":"",
+"warning":""
+}]0
+––– input –––
+grep "\* FROM test;" /var/log/manticore/query.log
+––– output –––
+/* #!/[A-Za-z]{3}\s+[A-Za-z]{3}\s+[0-9]{1,2}\s+[0-9]{2}:[0-9]{2}:[0-9]{2}\.[0-9]{3}\s+[0-9]{4}/!# conn %{NUMBER} (127.0.0.1:%{NUMBER}) real 0.000 wall 0.000 found 1 */ SELECT * FROM test;

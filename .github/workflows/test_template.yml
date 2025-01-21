@@ -44,7 +44,7 @@ jobs:
       run:
         shell: bash
     container:
-      image: manticoresearch/ubertests_ctest:3263_20241105
+      image: registry.gitlab.com/manticoresearch/dev/ubertests_public:331
       env:
         DIAGNOSTIC: 1
         CACHEB: ../cache
@@ -83,7 +83,7 @@ jobs:
         id: test
         # --timeout may be not working https://gitlab.kitware.com/cmake/cmake/-/issues/23979
         run: |
-          ctest -VV -S misc/ctest/gltest.cmake --no-compress-output --timeout 600
+          ctest -V -S misc/ctest/gltest.cmake --no-compress-output --timeout 600
         continue-on-error: true
 
       - name: List build files
@@ -106,4 +106,4 @@ jobs:
         uses: manticoresoftware/upload_artifact_with_retries@v3
         with:
           name: ${{ inputs.artifact_name }}
-          path: "build/xml build/test/test_*/report* build/junit*.xml build/test/error*.txt build/test/*log build/status*"
+          path: "build/xml build/junit*.xml build/status* build/test/error*.txt build/test/*log build/test/test_*/report* build/test/rt_*/report* build/test/col_*/report*"

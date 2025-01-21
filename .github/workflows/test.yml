@@ -111,37 +111,10 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        name: [1_100, 101_200, 201_330, 331_400, 401_500, 501_600, 601_700, 701_800, 801_870, 871_and_on]
+        name: [1_and_on]
         include:
-          - name: 1_100
+          - name: 1_and_on
             start: 1
-            end: 100
-          - name: 101_200
-            start: 101
-            end: 200
-          - name: 201_330
-            start: 201
-            end: 330
-          - name: 331_400
-            start: 331
-            end: 400
-          - name: 401_500
-            start: 401
-            end: 500
-          - name: 501_600
-            start: 501
-            end: 600
-          - name: 601_700
-            start: 601
-            end: 700
-          - name: 701_800
-            start: 701
-            end: 800
-          - name: 801_870
-            start: 801
-            end: 870
-          - name: 871_and_on
-            start: 871
             end: 999999
     with:
       CTEST_START: ${{ matrix.start }}
@@ -159,65 +132,11 @@ jobs:
     steps:
       - name: Checkout repository # We have to checkout to access .github/workflows/ in further steps
         uses: actions/checkout@v3
-      - name: Download test report artifacts 1_100
+      - name: Download test report artifacts 1_and_on
         uses: manticoresoftware/download_artifact_with_retries@v2
         continue-on-error: true
         with:
-          name: debug_test_1_100
-          path: .
-      - name: Download test report artifacts 101_200
-        uses: manticoresoftware/download_artifact_with_retries@v2
-        continue-on-error: true
-        with:
-          name: debug_test_101_200
-          path: .
-      - name: Download test report artifacts 201_330
-        uses: manticoresoftware/download_artifact_with_retries@v2
-        continue-on-error: true
-        with:
-          name: debug_test_201_330
-          path: .
-      - name: Download test report artifacts 331_400
-        uses: manticoresoftware/download_artifact_with_retries@v2
-        continue-on-error: true
-        with:
-          name: debug_test_331_400
-          path: .
-      - name: Download test report artifacts 401_500
-        uses: manticoresoftware/download_artifact_with_retries@v2
-        continue-on-error: true
-        with:
-          name: debug_test_401_500
-          path: .
-      - name: Download test report artifacts 501_600
-        uses: manticoresoftware/download_artifact_with_retries@v2
-        continue-on-error: true
-        with:
-          name: debug_test_501_600
-          path: .
-      - name: Download test report artifacts 601_700
-        uses: manticoresoftware/download_artifact_with_retries@v2
-        continue-on-error: true
-        with:
-          name: debug_test_601_700
-          path: .
-      - name: Download test report artifacts 701_800
-        uses: manticoresoftware/download_artifact_with_retries@v2
-        continue-on-error: true
-        with:
-          name: debug_test_701_800
-          path: .
-      - name: Download test report artifacts 801_870
-        uses: manticoresoftware/download_artifact_with_retries@v2
-        continue-on-error: true
-        with:
-          name: debug_test_801_870
-          path: .
-      - name: Download test report artifacts 871_and_on
-        uses: manticoresoftware/download_artifact_with_retries@v2
-        continue-on-error: true
-        with:
-          name: debug_test_871_and_on
+          name: debug_test_1_and_on
           path: .
       - name: Publish test results
         uses: manticoresoftware/publish-unit-test-result-action@v2
@@ -228,10 +147,10 @@ jobs:
           compare_to_earlier_commit: false
           comment_mode: failures
       - name: Per-test results
-        # IMPORTANT: The value of 10 below should correspond to the test shard count, needs.<job_name>.strategy.job-total doesn't work
+        # IMPORTANT: The value of 1 below should correspond to the test shard count, needs.<job_name>.strategy.job-total doesn't work
         run: |
           for file in build/status*; do echo -n "$file: "; cat "$file"; done
-          grep -o "success" build/status* | wc -l | awk '{if ($1==10) exit 0; else {print "Found only "$1" successful runs out of 10"; exit 1}}'
+          grep -o "success" build/status* | wc -l | awk '{if ($1==1) exit 0; else {print "Found only "$1" successful runs out of 1"; exit 1}}'
         shell: bash
       - name: Upload combined artifacts
         if: always()
@@ -260,37 +179,10 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        name: [1_100, 101_200, 201_330, 331_400, 401_500, 501_600, 601_700, 701_800, 801_870, 871_and_on]
+        name: [1_and_on]
         include:
-          - name: 1_100
+          - name: 1_and_on
             start: 1
-            end: 100
-          - name: 101_200
-            start: 101
-            end: 200
-          - name: 201_330
-            start: 201
-            end: 330
-          - name: 331_400
-            start: 331
-            end: 400
-          - name: 401_500
-            start: 401
-            end: 500
-          - name: 501_600
-            start: 501
-            end: 600
-          - name: 601_700
-            start: 601
-            end: 700
-          - name: 701_800
-            start: 701
-            end: 800
-          - name: 801_870
-            start: 801
-            end: 870
-          - name: 871_and_on
-            start: 871
             end: 999999
     with:
       CTEST_START: ${{ matrix.start }}
@@ -308,65 +200,11 @@ jobs:
     steps:
       - name: Checkout repository # We have to checkout to access .github/workflows/ in further steps
         uses: actions/checkout@v3
-      - name: Download test report artifacts 1_100
+      - name: Download test report artifacts 1_and_on
         uses: manticoresoftware/download_artifact_with_retries@v2
         continue-on-error: true
         with:
-          name: release_test_1_100
-          path: .
-      - name: Download test report artifacts 101_200
-        uses: manticoresoftware/download_artifact_with_retries@v2
-        continue-on-error: true
-        with:
-          name: release_test_101_200
-          path: .
-      - name: Download test report artifacts 201_330
-        uses: manticoresoftware/download_artifact_with_retries@v2
-        continue-on-error: true
-        with:
-          name: release_test_201_330
-          path: .
-      - name: Download test report artifacts 331_400
-        uses: manticoresoftware/download_artifact_with_retries@v2
-        continue-on-error: true
-        with:
-          name: release_test_331_400
-          path: .
-      - name: Download test report artifacts 401_500
-        uses: manticoresoftware/download_artifact_with_retries@v2
-        continue-on-error: true
-        with:
-          name: release_test_401_500
-          path: .
-      - name: Download test report artifacts 501_600
-        uses: manticoresoftware/download_artifact_with_retries@v2
-        continue-on-error: true
-        with:
-          name: release_test_501_600
-          path: .
-      - name: Download test report artifacts 601_700
-        uses: manticoresoftware/download_artifact_with_retries@v2
-        continue-on-error: true
-        with:
-          name: release_test_601_700
-          path: .
-      - name: Download test report artifacts 701_800
-        uses: manticoresoftware/download_artifact_with_retries@v2
-        continue-on-error: true
-        with:
-          name: release_test_701_800
-          path: .
-      - name: Download test report artifacts 801_870
-        uses: manticoresoftware/download_artifact_with_retries@v2
-        continue-on-error: true
-        with:
-          name: release_test_801_870
-          path: .
-      - name: Download test report artifacts 871_and_on
-        uses: manticoresoftware/download_artifact_with_retries@v2
-        continue-on-error: true
-        with:
-          name: release_test_871_and_on
+          name: release_test_1_and_on
           path: .
       - name: Publish test results
         uses: manticoresoftware/publish-unit-test-result-action@v2
@@ -377,10 +215,10 @@ jobs:
           compare_to_earlier_commit: false
           comment_mode: failures
       - name: Per-test results
-        # IMPORTANT: The value of 10 below should correspond to the test shard count, needs.<job_name>.strategy.job-total doesn't work
+        # IMPORTANT: The value of 1 below should correspond to the test shard count, needs.<job_name>.strategy.job-total doesn't work
         run: |
           for file in build/status*; do echo -n "$file: "; cat "$file"; done
-          grep -o "success" build/status* | wc -l | awk '{if ($1==10) exit 0; else {print "Found only "$1" successful runs out of 10"; exit 1}}'
+          grep -o "success" build/status* | wc -l | awk '{if ($1==1) exit 0; else {print "Found only "$1" successful runs out of 1"; exit 1}}'
         shell: bash
       - name: Upload combined artifacts
         if: always()
@@ -619,7 +457,7 @@ jobs:
     needs: test_windows
     runs-on: ubuntu-22.04
     container:
-      image: manticoresearch/ubertests_ctest:3263_20241105
+      image: registry.gitlab.com/manticoresearch/dev/ubertests_public:331
     steps:
       - name: Checkout repository
         uses: actions/checkout@v3

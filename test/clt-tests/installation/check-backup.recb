@@ -2,4 +2,4 @@
 manticore-backup --version
 ––– output –––
 Copyright (c) #!/\d{4}(?:-\d{4})?/!#, Manticore Software LTD (https://manticoresearch.com)
-Manticore Backup version: %{SEMVER}
+Manticore Backup version: #!/[0-9]{1,2}\.[0-9]{1,2}\.[0-9]{1,2}\+[0-9]{8}-[0-9a-z]{8}/!#

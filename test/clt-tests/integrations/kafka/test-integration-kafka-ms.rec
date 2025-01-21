@@ -1,3 +1,23 @@
+# This test validates the integration of Manticore Search with Kafka, focusing on the creation and management of Kafka sources,
+# materialized views, and tables. It ensures that data from Kafka topics is correctly processed, transformed, and stored in Manticore tables.
+#
+# Test steps:
+# 1. Create a Docker network `app-network` to enable communication between containers.
+# 2. Start a Manticore container (`manticore`) and a Kafka container (`kafka`) within the `app-network`.
+# 3. Configure Manticore to connect to Kafka and create a Kafka source (`kafka`) to consume data from the `my-data` topic.
+# 4. Create a table (`destination_kafka`) and a materialized view (`view_table`) to transform and store data from the Kafka source.
+# 5. Import data into Kafka using the `import.sh` script and verify that Manticore processes the data correctly.
+# 6. Perform various operations, such as altering materialized views, dropping sources, and re-creating them, to ensure proper functionality.
+# 7. Verify the data in the destination tables and ensure that the materialized views are correctly suspended and resumed.
+#
+# Expected result:
+# - The Kafka source should successfully consume data from the `my-data` topic.
+# - The materialized view should correctly transform and store the data in the destination table.
+# - The data in the destination table should match the expected results after processing.
+# - Materialized views should be able to be suspended and resumed without errors.
+# - Dropping and re-creating Kafka sources should not cause issues with the associated materialized views.
+# - The test should complete successfully, with all data processing steps verified and no errors encountered.
+
 ––– block: ../../base/dind/init –––
 ––– input –––
 docker network create app-network --driver bridge > /dev/null; echo $?

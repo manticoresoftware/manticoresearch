@@ -460,6 +460,44 @@ The jobs_queue_size setting defines how many "jobs" can be in the queue at the s
 
 In most cases, a "job" means one query to a single local table (plain table or a disk chunk of a real-time table). For example, if you have a distributed table consisting of 2 local tables or a real-time table with 2 disk chunks, a search query to either of them will mostly put 2 jobs in the queue. Then, the thread pool (whose size is defined by [threads](../Server_settings/Searchd.md#threads) will process them. However, in some cases, if the query is too complex, more jobs can be created. Changing this setting is recommended when [max_connections](../Server_settings/Searchd.md#max_connections) and [threads](../Server_settings/Searchd.md#threads) are not enough to find a balance between the desired performance.
 
+### join_batch_size
+
+Table joins work by accumulating a batch of matches, which are the results of the query executed on the left table. This batch is then processed as a single query on the right table.
+
+This option allows you to adjust the batch size. The default value is 1000, and setting this option to 0 disables batching.
+
+A larger batch size may improve performance; however, for some queries, it can lead to excessive memory consumption.
+
+<!-- intro -->
+##### Example:
+
+<!-- request Example -->
+
+```ini
+join_batch_size = 2000
+```
+<!-- end -->
+
+### join_cache_size
+
+Each query executed on the right table is defined by specific JOIN ON conditions, which determine the result set retrieved from the right table.
+
+If there are only a few unique JOIN ON conditions, reusing the results can be more efficient than repeatedly executing queries on the right table. To enable this, the result sets are stored in a cache.
+
+This option allows you to configure the size of this cache. The default value is 20 MB, and setting this option to 0 disables caching.
+
+Note that each thread maintains its own cache, so you should account for the number of threads executing queries when estimating total memory usage.
+
+<!-- intro -->
+##### Example:
+
+<!-- request Example -->
+
+```ini
+join_cache_size = 10M
+```
+<!-- end -->
+
 ### listen_backlog
 
 <!-- example conf listen_backlog -->

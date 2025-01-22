@@ -1,7 +1,5 @@
 # Joining tables
 
-**WARNING: This functionality is in beta stage. Use it with caution.**
-
 Table joins in Manticore Search enable you to combine documents from two tables by matching related columns. This functionality allows for more complex queries and enhanced data retrieval across multiple tables.
 
 ## General syntax

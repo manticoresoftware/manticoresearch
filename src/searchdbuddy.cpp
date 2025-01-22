@@ -883,18 +883,6 @@ static CSphString g_sDefaultBuddyName ( "manticore-buddy/bin/manticore-buddy" );
 #endif
 static CSphString g_sDefaultBuddyDockerImage ( "manticoresearch/manticore-executor:" BUDDY_EXECUTOR_VERNUM );
 
-static CSphString GetFullBuddyPath ( const CSphString & sExecPath, const CSphString & sBuddyPath )
-{
-#ifdef _WIN32
-		assert ( !sExecPath.IsEmpty() );
-		CSphString sFullPath;
-		sFullPath.SetSprintf ( "\"%s\" \"%s\"", sExecPath.cstr(), sBuddyPath.cstr() );
-		return sFullPath;
-#else
-		return sBuddyPath.cstr();
-#endif
-}
-
 #ifdef _WIN32
 CSphString BuddyGetPath ( const CSphString & sConfigPath, const CSphString & , bool bHasBuddyPath, int iHostPort, const CSphString & sDataDir )
 {
@@ -920,21 +908,28 @@ CSphString BuddyGetPath ( const CSphString & sConfigPath, const CSphString & sPl
 	if ( bHasBuddyPath )
 		return sConfigPath;
 
-	CSphString sExecPath;
+	const char * sExecutor = "manticore-executor";
+	CSphString sFullPath;
 	CSphString sPathToDaemon = GetPathOnly ( GetExecutablePath() );
 
 	CSphString sPathBuddy2Module;
 	sPathBuddy2Module.SetSprintf ( "%s/%s", GET_MANTICORE_MODULES(), g_sDefaultBuddyName.cstr() );
 	if ( sphFileExists ( sPathBuddy2Module.cstr() ) )
-		return GetFullBuddyPath ( sExecPath, sPathBuddy2Module );
+	{
+		sFullPath.SetSprintf ( "%s %s", sExecutor, sPathBuddy2Module.cstr() );
+		return sFullPath;
+	}
 
 	// check at the daemon location / cwd
 	CSphString sPathBuddy2Cwd;
 	sPathBuddy2Cwd.SetSprintf ( "%s%s", sPathToDaemon.cstr(), g_sDefaultBuddyName.cstr() );
 	if ( sphFileExists ( sPathBuddy2Cwd.cstr() ) )
-		return GetFullBuddyPath ( sExecPath, sPathBuddy2Cwd );
+	{
+		sFullPath.SetSprintf ( "%s %s", sExecutor, sPathBuddy2Cwd.cstr() );
+		return sFullPath;
+	}
 
 	sphWarning ( "[BUDDY] no %s found at '%s', disabled", g_sDefaultBuddyName.cstr(), sPathBuddy2Module.cstr() );
-	return CSphString();
+	return sFullPath;
 }
 #endif

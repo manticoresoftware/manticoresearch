@@ -33,6 +33,7 @@
 # The module uses these variables:
 #   MYSQL_ROOT_DIR path to the MySQL bundle (where mysql is installed)
 #	MYSQL_USE_STATIC_LIBS look and link with static library
+#   MYSQL_LIBRARY_LOCATION explicit path to the MySQL library (optional)
 #
 # On exit the module will set these variables:
 #
@@ -53,28 +54,35 @@ endfunction ()
 
 function ( _find_library VAR _names _suffixes )
 	if (NOT ${VAR})
+        # If MYSQL_LIBRARY_LOCATION is set, use it and skip searching
+        if (MYSQL_LIBRARY_LOCATION)
+			set ( ${VAR} ${MYSQL_LIBRARY_LOCATION} PARENT_SCOPE )
+			return()
+        else ()
 		set ( CMAKE_FIND_LIBRARY_SUFFIXES ${_suffixes} )
-		find_library ( ${VAR} NAMES ${_names}
-				HINTS
-				${MYSQL_LIB_HINT}
-				PATHS
-				${MYSQL_ROOT_DIR}/lib
-				${MYSQL_ROOT_DIR}/lib/mysql
-				$ENV{MYSQL_ROOT_DIR}/lib
-				$ENV{MYSQL_ROOT_DIR}/lib/mysql
-				/usr/lib/mysql
-				/usr/local/lib/mysql
-				/usr/local/mysql/lib
-				/usr/local/mysql/lib/mysql
-				/opt/mysql/mysql/lib
-				/opt/mysql/mysql/lib/mysql
-				/opt/mysql-client/lib
-				ENV MYSQL_DIR
-				PATH_SUFFIXES
-				/libmysql_r/.libs
-				/lib
-				/lib/mysql
-				)
+            # Otherwise, continue searching
+			find_library ( ${VAR} NAMES ${_names}
+					HINTS
+					${MYSQL_LIB_HINT}
+					PATHS
+					${MYSQL_ROOT_DIR}/lib
+					${MYSQL_ROOT_DIR}/lib/mysql
+					$ENV{MYSQL_ROOT_DIR}/lib
+					$ENV{MYSQL_ROOT_DIR}/lib/mysql
+					/usr/lib/mysql
+					/usr/local/lib/mysql
+					/usr/local/mysql/lib
+					/usr/local/mysql/lib/mysql
+					/opt/mysql/mysql/lib
+					/opt/mysql/mysql/lib/mysql
+					/opt/mysql-client/lib
+					ENV MYSQL_DIR
+					PATH_SUFFIXES
+					/libmysql_r/.libs
+					/lib
+					/lib/mysql
+					)
+		endif ()
 	endif ()
 	SET ( ${VAR} ${${VAR}} PARENT_SCOPE )
 endfunction ()

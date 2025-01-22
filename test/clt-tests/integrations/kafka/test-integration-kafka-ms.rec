@@ -127,26 +127,26 @@ docker exec manticore mysql -h0 -P9306 -e "SELECT * FROM destination_kafka ORDER
 +------+---------------------------------------------+-----------------+---------------------+----------+-----------+
 | id   | name                                        | short_name      | received_at         | size     | is_active |
 +------+---------------------------------------------+-----------------+---------------------+----------+-----------+
-|    1 | The Quick Brown Fox                         | ISO 12345:6789  | 2025-01-21 19:21:28 | 20,25,30 |         1 |
-|    2 | Jumped Over The Lazy Dog                    | ISO 98765:4321  | 2025-01-21 19:21:28 | 20,25,30 |         0 |
-|    3 | A Stitch In Time Saves Nine                 | ISO 24680:1357  | 2025-01-21 19:21:28 | 20,25,30 |         1 |
-|    4 | An Apple A Day Keeps The Doctor Away        | ISO 97531:86420 | 2025-01-21 19:21:28 | 20,25,30 |         0 |
-|    5 | Actions Speak Louder Than Words             | ISO 56789:12345 | 2025-01-21 19:21:28 | 20,25,30 |         1 |
-|    6 | Every Cloud Has A Silver Lining             | ISO 86420:97531 | 2025-01-21 19:21:28 | 20,25,30 |         0 |
-|    7 | Beauty Is In The Eye Of The Beholder        | ISO 13579:86420 | 2025-01-21 19:21:28 | 20,25,30 |         1 |
-|    8 | Birds Of A Feather Flock Together           | ISO 97531:24680 | 2025-01-21 19:21:28 | 20,25,30 |         0 |
-|    9 | You Can't Judge A Book By Its Cover         | ISO 56789:86420 | 2025-01-21 19:21:28 | 20,25,30 |         1 |
-|   10 | Two Heads Are Better Than One               | ISO 86420:97531 | 2025-01-21 19:21:28 | 20,25,30 |         0 |
-|   11 | The Early Bird Catches The Worm             | ISO 97531:86420 | 2025-01-21 19:21:28 | 20,25,30 |         1 |
-|   12 | All That Glitters Is Not Gold               | ISO 24680:1357  | 2025-01-21 19:21:28 | 2,3,20   |         0 |
-|   13 | A Penny For Your Thoughts                   | ISO 97531:86420 | 2025-01-21 19:21:28 | 20,25,30 |         1 |
-|   14 | Bite The Bullet                             | ISO 13579:86420 | 2025-01-21 19:21:28 | 20,25,30 |         0 |
-|   15 | Break A Leg                                 | ISO 56789:12345 | 2025-01-21 19:21:28 | 20,25,30 |         1 |
-|   16 | A Picture Is Worth A Thousand Words         | ISO 86420:97531 | 2025-01-21 19:21:28 | 20,25,30 |         0 |
-|   17 | Curiosity Killed The Cat                    | ISO 13579:86420 | 2025-01-21 19:21:28 | 20,25,30 |         1 |
-|   18 | Don't Count Your Chickens Before They Hatch | ISO 97531:24680 | 2025-01-21 19:21:28 | 20,25,30 |         0 |
-|   19 | Every Dog Has His Day                       | ISO 56789:86420 | 2025-01-21 19:21:28 | 20,25,30 |         1 |
-|   20 | Haste Makes Waste                           | ISO 86420:97531 | 2025-01-21 19:21:28 | 20,25,30 |         0 |
+|    1 | The Quick Brown Fox                         | ISO 12345:6789  | %{DATETIME} | 20,25,30 |         1 |
+|    2 | Jumped Over The Lazy Dog                    | ISO 98765:4321  | %{DATETIME} | 20,25,30 |         0 |
+|    3 | A Stitch In Time Saves Nine                 | ISO 24680:1357  | %{DATETIME} | 20,25,30 |         1 |
+|    4 | An Apple A Day Keeps The Doctor Away        | ISO 97531:86420 | %{DATETIME} | 20,25,30 |         0 |
+|    5 | Actions Speak Louder Than Words             | ISO 56789:12345 | %{DATETIME} | 20,25,30 |         1 |
+|    6 | Every Cloud Has A Silver Lining             | ISO 86420:97531 | %{DATETIME} | 20,25,30 |         0 |
+|    7 | Beauty Is In The Eye Of The Beholder        | ISO 13579:86420 | %{DATETIME} | 20,25,30 |         1 |
+|    8 | Birds Of A Feather Flock Together           | ISO 97531:24680 | %{DATETIME} | 20,25,30 |         0 |
+|    9 | You Can't Judge A Book By Its Cover         | ISO 56789:86420 | %{DATETIME} | 20,25,30 |         1 |
+|   10 | Two Heads Are Better Than One               | ISO 86420:97531 | %{DATETIME} | 20,25,30 |         0 |
+|   11 | The Early Bird Catches The Worm             | ISO 97531:86420 | %{DATETIME} | 20,25,30 |         1 |
+|   12 | All That Glitters Is Not Gold               | ISO 24680:1357  | %{DATETIME} | 2,3,20   |         0 |
+|   13 | A Penny For Your Thoughts                   | ISO 97531:86420 | %{DATETIME} | 20,25,30 |         1 |
+|   14 | Bite The Bullet                             | ISO 13579:86420 | %{DATETIME} | 20,25,30 |         0 |
+|   15 | Break A Leg                                 | ISO 56789:12345 | %{DATETIME} | 20,25,30 |         1 |
+|   16 | A Picture Is Worth A Thousand Words         | ISO 86420:97531 | %{DATETIME} | 20,25,30 |         0 |
+|   17 | Curiosity Killed The Cat                    | ISO 13579:86420 | %{DATETIME} | 20,25,30 |         1 |
+|   18 | Don't Count Your Chickens Before They Hatch | ISO 97531:24680 | %{DATETIME} | 20,25,30 |         0 |
+|   19 | Every Dog Has His Day                       | ISO 56789:86420 | %{DATETIME} | 20,25,30 |         1 |
+|   20 | Haste Makes Waste                           | ISO 86420:97531 | %{DATETIME} | 20,25,30 |         0 |
 +------+---------------------------------------------+-----------------+---------------------+----------+-----------+
 ––– input –––
 docker exec manticore mysql -h0 -P9306 -e "DROP SOURCE kafka;"; echo $?
@@ -189,26 +189,26 @@ docker exec manticore mysql -h0 -P9306 -e "SELECT id, name, short_name, received
 +------+---------------------------------------------+-----------------+---------------------+----------+-----------+-----------+----------+
 | id   | name                                        | short_name      | received_at         | size     | lat       | lon       | distance |
 +------+---------------------------------------------+-----------------+---------------------+----------+-----------+-----------+----------+
-|    1 | The Quick Brown Fox                         | ISO 12345:6789  | 2025-01-21 19:21:46 | 20,25,30 | 49.000000 |  3.000000 |        1 |
-|    2 | Jumped Over The Lazy Dog                    | ISO 98765:4321  | 2025-01-21 19:21:46 | 20,25,30 | 50.000000 |  4.000000 |        0 |
-|    3 | A Stitch In Time Saves Nine                 | ISO 24680:1357  | 2025-01-21 19:21:46 | 20,25,30 | 51.000000 |  5.000000 |        1 |
-|    4 | An Apple A Day Keeps The Doctor Away        | ISO 97531:86420 | 2025-01-21 19:21:46 | 20,25,30 | 52.000000 |  6.000000 |        0 |
-|    5 | Actions Speak Louder Than Words             | ISO 56789:12345 | 2025-01-21 19:21:46 | 20,25,30 | 53.000000 |  7.000000 |        1 |
-|    6 | Every Cloud Has A Silver Lining             | ISO 86420:97531 | 2025-01-21 19:21:46 | 20,25,30 | 54.000000 |  8.000000 |        0 |
-|    7 | Beauty Is In The Eye Of The Beholder        | ISO 13579:86420 | 2025-01-21 19:21:46 | 20,25,30 | 55.000000 |  9.000000 |        1 |
-|    8 | Birds Of A Feather Flock Together           | ISO 97531:24680 | 2025-01-21 19:21:46 | 20,25,30 | 56.000000 | 10.000000 |        0 |
-|    9 | You Can't Judge A Book By Its Cover         | ISO 56789:86420 | 2025-01-21 19:21:46 | 20,25,30 | 57.000000 | 11.000000 |        1 |
-|   10 | Two Heads Are Better Than One               | ISO 86420:97531 | 2025-01-21 19:21:46 | 20,25,30 | 48.000000 |  2.000000 |        0 |
-|   11 | The Early Bird Catches The Worm             | ISO 97531:86420 | 2025-01-21 19:21:46 | 20,25,30 | 49.000000 |  3.000000 |        1 |
-|   12 | All That Glitters Is Not Gold               | ISO 24680:1357  | 2025-01-21 19:21:46 | 2,3,20   | 50.000000 |  4.000000 |        0 |
-|   13 | A Penny For Your Thoughts                   | ISO 97531:86420 | 2025-01-21 19:21:46 | 20,25,30 | 51.000000 |  5.000000 |        1 |
-|   14 | Bite The Bullet                             | ISO 13579:86420 | 2025-01-21 19:21:46 | 20,25,30 | 52.000000 |  6.000000 |        0 |
-|   15 | Break A Leg                                 | ISO 56789:12345 | 2025-01-21 19:21:46 | 20,25,30 | 53.000000 |  7.000000 |        1 |
-|   16 | A Picture Is Worth A Thousand Words         | ISO 86420:97531 | 2025-01-21 19:21:46 | 20,25,30 | 54.000000 |  8.000000 |        0 |
-|   17 | Curiosity Killed The Cat                    | ISO 13579:86420 | 2025-01-21 19:21:46 | 20,25,30 | 55.000000 |  9.000000 |        1 |
-|   18 | Don't Count Your Chickens Before They Hatch | ISO 97531:24680 | 2025-01-21 19:21:46 | 20,25,30 | 56.000000 | 10.000000 |        0 |
-|   19 | Every Dog Has His Day                       | ISO 56789:86420 | 2025-01-21 19:21:46 | 20,25,30 | 57.000000 | 11.000000 |        1 |
-|   20 | Haste Makes Waste                           | ISO 86420:97531 | 2025-01-21 19:21:46 | 20,25,30 | 48.000000 |  2.000000 |        0 |
+|    1 | The Quick Brown Fox                         | ISO 12345:6789  | %{DATETIME} | 20,25,30 | 49.000000 |  3.000000 |        1 |
+|    2 | Jumped Over The Lazy Dog                    | ISO 98765:4321  | %{DATETIME} | 20,25,30 | 50.000000 |  4.000000 |        0 |
+|    3 | A Stitch In Time Saves Nine                 | ISO 24680:1357  | %{DATETIME} | 20,25,30 | 51.000000 |  5.000000 |        1 |
+|    4 | An Apple A Day Keeps The Doctor Away        | ISO 97531:86420 | %{DATETIME} | 20,25,30 | 52.000000 |  6.000000 |        0 |
+|    5 | Actions Speak Louder Than Words             | ISO 56789:12345 | %{DATETIME} | 20,25,30 | 53.000000 |  7.000000 |        1 |
+|    6 | Every Cloud Has A Silver Lining             | ISO 86420:97531 | %{DATETIME} | 20,25,30 | 54.000000 |  8.000000 |        0 |
+|    7 | Beauty Is In The Eye Of The Beholder        | ISO 13579:86420 | %{DATETIME} | 20,25,30 | 55.000000 |  9.000000 |        1 |
+|    8 | Birds Of A Feather Flock Together           | ISO 97531:24680 | %{DATETIME} | 20,25,30 | 56.000000 | 10.000000 |        0 |
+|    9 | You Can't Judge A Book By Its Cover         | ISO 56789:86420 | %{DATETIME} | 20,25,30 | 57.000000 | 11.000000 |        1 |
+|   10 | Two Heads Are Better Than One               | ISO 86420:97531 | %{DATETIME} | 20,25,30 | 48.000000 |  2.000000 |        0 |
+|   11 | The Early Bird Catches The Worm             | ISO 97531:86420 | %{DATETIME} | 20,25,30 | 49.000000 |  3.000000 |        1 |
+|   12 | All That Glitters Is Not Gold               | ISO 24680:1357  | %{DATETIME} | 2,3,20   | 50.000000 |  4.000000 |        0 |
+|   13 | A Penny For Your Thoughts                   | ISO 97531:86420 | %{DATETIME} | 20,25,30 | 51.000000 |  5.000000 |        1 |
+|   14 | Bite The Bullet                             | ISO 13579:86420 | %{DATETIME} | 20,25,30 | 52.000000 |  6.000000 |        0 |
+|   15 | Break A Leg                                 | ISO 56789:12345 | %{DATETIME} | 20,25,30 | 53.000000 |  7.000000 |        1 |
+|   16 | A Picture Is Worth A Thousand Words         | ISO 86420:97531 | %{DATETIME} | 20,25,30 | 54.000000 |  8.000000 |        0 |
+|   17 | Curiosity Killed The Cat                    | ISO 13579:86420 | %{DATETIME} | 20,25,30 | 55.000000 |  9.000000 |        1 |
+|   18 | Don't Count Your Chickens Before They Hatch | ISO 97531:24680 | %{DATETIME} | 20,25,30 | 56.000000 | 10.000000 |        0 |
+|   19 | Every Dog Has His Day                       | ISO 56789:86420 | %{DATETIME} | 20,25,30 | 57.000000 | 11.000000 |        1 |
+|   20 | Haste Makes Waste                           | ISO 86420:97531 | %{DATETIME} | 20,25,30 | 48.000000 |  2.000000 |        0 |
 +------+---------------------------------------------+-----------------+---------------------+----------+-----------+-----------+----------+
 ––– input –––
 docker exec kafka kafka-consumer-groups.sh --bootstrap-server localhost:9092 --group manticore_metadata --reset-offsets --to-latest --topic my-data --execute > /dev/null; echo $?

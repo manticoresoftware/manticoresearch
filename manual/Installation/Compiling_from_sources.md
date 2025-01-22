@@ -45,10 +45,9 @@ manticoresearch/external_toolchain:vcpkg331_20250114 bash
 
 # following is to be run inside docker shell
 cd /manticore_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/
-export CMAKE_TOOLCHAIN_FILE=$(pwd)/dist/build_dockers/cross/linux.cmake
 mkdir build && cd build
 cmake -DPACK=1 ..
-
+export CMAKE_TOOLCHAIN_FILE=$(pwd)/dist/build_dockers/cross/linux.cmake
 cmake --build .
 # or if you want to build packages:
 # cmake --build . --target package

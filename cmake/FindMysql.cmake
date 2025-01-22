@@ -33,7 +33,7 @@
 # The module uses these variables:
 #   MYSQL_ROOT_DIR path to the MySQL bundle (where mysql is installed)
 #	MYSQL_USE_STATIC_LIBS look and link with static library
-#   MYSQL_LIBRARY_LOCATION explicit path to the MySQL library (optional)
+#   MYSQL_LIBRARY_LOCATION explicit path to the MySQL library (optional, can be set via env var or CMake variable)
 #
 # On exit the module will set these variables:
 #
@@ -53,10 +53,19 @@ function ( _MYSQL_CONFIG VAR _opt )
 endfunction ()
 
 function ( _find_library VAR _names _suffixes )
-	if (NOT ${VAR})
+    if (NOT ${VAR})
+        # Check if MYSQL_LIBRARY_LOCATION is set via CMake parameter or environment variable
+        if (DEFINED MYSQL_LIBRARY_LOCATION)
+            # If set via CMake parameter, use it
+            set ( _library_location ${MYSQL_LIBRARY_LOCATION} )
+        elseif (DEFINED ENV{MYSQL_LIBRARY_LOCATION})
+            # If set via environment variable, use it
+            set ( _library_location $ENV{MYSQL_LIBRARY_LOCATION} )
+        endif ()
+
         # If MYSQL_LIBRARY_LOCATION is set, use it and skip searching
-        if (MYSQL_LIBRARY_LOCATION)
-			set ( ${VAR} ${MYSQL_LIBRARY_LOCATION} PARENT_SCOPE )
+        if (DEFINED _library_location)
+			set ( ${VAR} ${_library_location} PARENT_SCOPE )
 			return()
         else ()
 		set ( CMAKE_FIND_LIBRARY_SUFFIXES ${_suffixes} )

@@ -1,0 +1,13 @@
+––– block: ../base/start-searchd –––
+––– input –––
+curl -X POST "http://localhost:9308/sql?mode=raw" -d "query=show%20queries"; echo
+––– output –––
+––– input –––
+curl "http://localhost:9308/sql?mode=raw&query=SHOW%20QUERIES"; echo
+––– output –––
+––– input –––
+curl -X POST "http://localhost:9308/sql?mode=raw" -d "query=SHOW TABLES"; echo
+––– output –––
+––– input –––
+curl "http://localhost:9308/sql?mode=raw&query=SHOW+TABLES"; echo
+––– output –––

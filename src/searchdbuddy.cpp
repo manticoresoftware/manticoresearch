@@ -68,9 +68,9 @@ static CSphString BuddyGetPath ( const CSphString & sPath, const CSphString & sP
 static void BuddyStop ();
 
 #if _WIN32
-static CSphString g_sBuddyBind = "0.0.0.0:9999"; // It does not matter for docker
+static CSphString g_sBuddyBind = "--bind=0.0.0.0:9999";
 #else
-static CSphString g_sBuddyBind = "127.0.0.1";
+static CSphString g_sBuddyBind = "";
 #endif
 
 #if _WIN32
@@ -471,10 +471,10 @@ void BuddyStart ( const CSphString & sConfigPath, const CSphString & sPluginDir,
 	g_dLogBuf.Resize ( 0 );
 	g_sPath = sPath;
 
-	g_sStartArgs.SetSprintf ( "%s --listen=%s --bind=%s %s --threads=%d",
+	g_sStartArgs.SetSprintf ( "%s --listen=%s %s %s --threads=%d",
 		g_sPath.cstr(),
 		g_sListener4Buddy.cstr(),
-		g_sBuddyBind.cstr(),
+		g_sBuddyBind.scstr(),
 		( bTelemetry ? "" : "--disable-telemetry" ),
 		iThreads );
 
@@ -877,28 +877,24 @@ void ProcessSqlQueryBuddy ( Str_t sSrcQuery, Str_t tError, std::pair<int, BYTE> 
 }
 
 #ifdef _WIN32
-static CSphString g_sDefaultBuddyName ( "manticore-buddy" );
-#else
-static CSphString g_sDefaultBuddyName ( "manticore-buddy/bin/manticore-buddy" );
-#endif
-static CSphString g_sDefaultBuddyDockerImage ( "manticoresearch/manticore-executor:" BUDDY_EXECUTOR_VERNUM );
-
-#ifdef _WIN32
 CSphString BuddyGetPath ( const CSphString & sConfigPath, const CSphString & , bool bHasBuddyPath, int iHostPort, const CSphString & sDataDir )
 {
 	if ( bHasBuddyPath )
 		return sConfigPath;
 
+	const char * sDefaultBuddyName ( "manticore-buddy" );
+	const char * sDefaultBuddyDockerImage ( "manticoresearch/manticore-executor:" BUDDY_EXECUTOR_VERNUM );
+
 	StringBuilder_c sCmd ( " " );
 	sCmd.Appendf ( "docker run --rm" ); // the head of the docker start command
 	sCmd.Appendf ( "-p %d:9999", iHostPort ); // port mapping
-	sCmd.Appendf ( "-v \"%s/%s\":/buddy", GET_MANTICORE_MODULES(), g_sDefaultBuddyName.cstr() ); // volume for buddy modules
+	sCmd.Appendf ( "-v \"%s/%s\":/buddy", GET_MANTICORE_MODULES(), sDefaultBuddyName ); // volume for buddy modules
 	sCmd.Appendf ( "-v manticore-usr_local_lib_manticore:/usr/local/lib/manticore -e PLUGIN_DIR=/usr/local/lib/manticore" ); // pesistent volume for buddy data
 	if ( !sDataDir.IsEmpty() ) // volume for data dir into container
 		sCmd.Appendf ( "-v \"%s\":/var/lib/manticore -e DATA_DIR=/var/lib/manticore", sDataDir.cstr() );
 	sCmd.Appendf ( "-w /buddy" ); // workdir is buddy root dir
 	sCmd.Appendf ( "--name %s", g_sContainerName.cstr() ); // the name of the buddy container is the hash of the config
-	sCmd.Appendf ( "%s /buddy/src/main.php", g_sDefaultBuddyDockerImage.cstr() ); // docker image and the buddy start command
+	sCmd.Appendf ( "%s /buddy/src/main.php", sDefaultBuddyDockerImage ); // docker image and the buddy start command
 
 	return CSphString ( sCmd );
 }
@@ -909,11 +905,13 @@ CSphString BuddyGetPath ( const CSphString & sConfigPath, const CSphString & sPl
 		return sConfigPath;
 
 	const char * sExecutor = "manticore-executor";
+	const char * sDefaultBuddyName = "manticore-buddy/src/main.php";
+
 	CSphString sFullPath;
 	CSphString sPathToDaemon = GetPathOnly ( GetExecutablePath() );
 
 	CSphString sPathBuddy2Module;
-	sPathBuddy2Module.SetSprintf ( "%s/%s", GET_MANTICORE_MODULES(), g_sDefaultBuddyName.cstr() );
+	sPathBuddy2Module.SetSprintf ( "%s/%s", GET_MANTICORE_MODULES(), sDefaultBuddyName );
 	if ( sphFileExists ( sPathBuddy2Module.cstr() ) )
 	{
 		sFullPath.SetSprintf ( "%s %s", sExecutor, sPathBuddy2Module.cstr() );
@@ -922,14 +920,14 @@ CSphString BuddyGetPath ( const CSphString & sConfigPath, const CSphString & sPl
 
 	// check at the daemon location / cwd
 	CSphString sPathBuddy2Cwd;
-	sPathBuddy2Cwd.SetSprintf ( "%s%s", sPathToDaemon.cstr(), g_sDefaultBuddyName.cstr() );
+	sPathBuddy2Cwd.SetSprintf ( "%s%s", sPathToDaemon.cstr(), sDefaultBuddyName );
 	if ( sphFileExists ( sPathBuddy2Cwd.cstr() ) )
 	{
 		sFullPath.SetSprintf ( "%s %s", sExecutor, sPathBuddy2Cwd.cstr() );
 		return sFullPath;
 	}
 
-	sphWarning ( "[BUDDY] no %s found at '%s', disabled", g_sDefaultBuddyName.cstr(), sPathBuddy2Module.cstr() );
+	sphWarning ( "[BUDDY] no %s found at '%s', disabled", sDefaultBuddyName, sPathBuddy2Module.cstr() );
 	return sFullPath;
 }
 #endif

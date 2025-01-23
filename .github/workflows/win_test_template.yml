@@ -34,7 +34,7 @@ jobs:
       - name: Checkout repository # We have to checkout to access .github/workflows/ in further steps
         uses: actions/checkout@v3
       - name: Download build artifacts
-        uses: manticoresoftware/download_artifact_with_retries@v2
+        uses: manticoresoftware/download_artifact_with_retries@v3
         with:
           name: build_windows_Debug_x64
           path: .
@@ -88,7 +88,7 @@ jobs:
       - name: Upload test artifacts
         if: always()
         continue-on-error: true
-        uses: manticoresoftware/upload_artifact_with_retries@v3
+        uses: manticoresoftware/upload_artifact_with_retries@v4
         with:
           name: ${{ inputs.artifact_name }}
           path: "build/xml* build/test_*/test_*/report* build/test_*/error*.txt build/test_*/*log build/status*"

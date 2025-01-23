@@ -464,7 +464,7 @@ In most cases, a "job" means one query to a single local table (plain table or a
 
 Table joins work by accumulating a batch of matches, which are the results of the query executed on the left table. This batch is then processed as a single query on the right table.
 
-This option allows you to adjust the batch size. The default value is 1000, and setting this option to 0 disables batching.
+This option allows you to adjust the batch size. The default value is `1000`, and setting this option to `0` disables batching.
 
 A larger batch size may improve performance; however, for some queries, it can lead to excessive memory consumption.
 
@@ -484,7 +484,7 @@ Each query executed on the right table is defined by specific JOIN ON conditions
 
 If there are only a few unique JOIN ON conditions, reusing the results can be more efficient than repeatedly executing queries on the right table. To enable this, the result sets are stored in a cache.
 
-This option allows you to configure the size of this cache. The default value is 20 MB, and setting this option to 0 disables caching.
+This option allows you to configure the size of this cache. The default value is `20 MB`, and setting this option to 0 disables caching.
 
 Note that each thread maintains its own cache, so you should account for the number of threads executing queries when estimating total memory usage.
 

@@ -2,12 +2,30 @@
 ––– input –––
 curl -X POST "http://localhost:9308/sql?mode=raw" -d "query=show%20queries"; echo
 ––– output –––
+[{"total":3,"error":"","warning":"","columns":[{"id":{"type":"long long"}},{"query":{"type":"string"}},{"time":{"type":"string"}},{"protocol":{"type":"string"}},{"host":{"type":"string"}}],"data":[{"id":5,"query":"show queries","time":"%{NUMBER}#!/[a-z]+/!# ago","protocol":"http","host":"127.0.0.1:%{NUMBER}"},{"id":6,"query":"select","time":"%{NUMBER}#!/[a-z]+/!# ago","protocol":"http","host":"127.0.0.1:%{NUMBER}"},{"id":4,"query":"show_settings","time":"%{NUMBER}#!/[a-z]+/!#","protocol":"http","host":"127.0.0.1:%{NUMBER}"}]}]
 ––– input –––
 curl "http://localhost:9308/sql?mode=raw&query=SHOW%20QUERIES"; echo
 ––– output –––
+{"error":"P01: syntax error, unexpected identifier, expecting VARIABLES near 'QUERIES'"}
 ––– input –––
 curl -X POST "http://localhost:9308/sql?mode=raw" -d "query=SHOW TABLES"; echo
 ––– output –––
+[{
+"columns":[{"Table":{"type":"string"}},{"Type":{"type":"string"}}],
+"data":[
+],
+"total":0,
+"error":"",
+"warning":""
+}]
 ––– input –––
 curl "http://localhost:9308/sql?mode=raw&query=SHOW+TABLES"; echo
 ––– output –––
+[{
+"columns":[{"Table":{"type":"string"}},{"Type":{"type":"string"}}],
+"data":[
+],
+"total":0,
+"error":"",
+"warning":""
+}]

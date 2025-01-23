@@ -27,14 +27,16 @@ Manticore Search is an easy-to-use, open-source, and fast database designed for 
   <a href="https://github.com/manticoresoftware/manticoresearch/discussions/categories/feedback">User feedback</a>
 </h3>
 
-[![License: GPLv3 or later](https://img.shields.io/badge/license-GPL%20V3%2B-green?style=plastic)](LICENSE)
-[![GitHub Actions Workflow Status](https://img.shields.io/github/actions/workflow/status/manticoresoftware/manticoresearch/test.yml?branch=master&style=plastic&color=green)](https://github.com/manticoresoftware/manticoresearch/actions/workflows/test.yml?query=branch%3Amaster)
-[![Twitter Follow](https://img.shields.io/twitter/follow/manticoresearch?color=green&logo=Twitter&style=plastic)](https://twitter.com/manticoresearch)
-[![Slack](https://img.shields.io/badge/slack-manticoresearch-green.svg?logo=slack&style=plastic)](http://slack.manticoresearch.com/)
-[![Docker pulls](https://img.shields.io/docker/pulls/manticoresearch/manticore?color=green&style=plastic)](https://github.com/manticoresoftware/docker)
-[![Newsletter](https://img.shields.io/badge/newsletter-green?style=plastic)](https://eepurl.com/dkUTHv)
-[![Activity](https://img.shields.io/github/commit-activity/m/manticoresoftware/manticoresearch?color=green&style=plastic)](https://github.com/manticoresoftware/manticoresearch/graphs/commit-activity)
-[![GitHub closed issues](https://img.shields.io/github/issues-closed/manticoresoftware/manticoresearch?color=green&style=plastic)](https://github.com/manticoresoftware/manticoresearch/issues?q=is%3Aissue+is%3Aclosed)
+<p align="center">
+<a href="LICENSE"><img alt="License: GPLv3 or later" src="https://img.shields.io/badge/license-GPL%20V3%2B-green?style=plastic"></a>
+<a href="https://github.com/manticoresoftware/manticoresearch/actions/workflows/test.yml?query=branch%3Amaster"><img alt="GitHub Actions Workflow Status" src="https://img.shields.io/github/actions/workflow/status/manticoresoftware/manticoresearch/test.yml?branch=master&style=plastic&color=green"></a>
+<a href="https://twitter.com/manticoresearch"><img alt="Twitter Follow" src="https://img.shields.io/twitter/follow/manticoresearch?color=green&logo=Twitter&style=plastic"></a>
+<a href="http://slack.manticoresearch.com/"><img alt="Slack" src="https://img.shields.io/badge/slack-manticoresearch-green.svg?logo=slack&style=plastic"></a>
+<a href="https://github.com/manticoresoftware/docker"><img alt="Docker pulls" src="https://img.shields.io/docker/pulls/manticoresearch/manticore?color=green&style=plastic"></a>
+<a href="https://eepurl.com/dkUTHv"><img alt="Newsletter" src="https://img.shields.io/badge/newsletter-green?style=plastic"></a>
+<a href="https://github.com/manticoresoftware/manticoresearch/graphs/commit-activity"><img alt="Activity" src="https://img.shields.io/github/commit-activity/m/manticoresoftware/manticoresearch?color=green&style=plastic"></a>
+<a href="https://github.com/manticoresoftware/manticoresearch/issues?q=is%3Aissue+is%3Aclosed"><img alt="GitHub closed issues" src="https://img.shields.io/github/issues-closed/manticoresoftware/manticoresearch?color=green&style=plastic"></a>
+</p>
 
 # Introduction
 

@@ -4,6 +4,15 @@
   </a>
 </p>
 
+<h3 align="center"><strong>Easy to use open source fast database for search</strong></h3>
+<p align="center">
+Manticore Search is an easy-to-use, open-source, and fast database designed for search. It is a great alternative to Elasticsearch.
+</p>
+
+<div align="center">
+<a href="https://trendshift.io/repositories/3537" target="_blank"><img src="https://trendshift.io/api/badge/repositories/3537" alt="manticoresoftware%2Fmanticoresearch | Trendshift" style="width: 250px; height: 55px;" width="250" height="55"/></a>
+</div>
+
 <h3 align="center">
   <a href="https://manticoresearch.com">Website</a> •
   <a href="https://manticoresearch.com/install/">Downloads</a> •
@@ -18,11 +27,8 @@
   <a href="https://github.com/manticoresoftware/manticoresearch/discussions/categories/feedback">User feedback</a>
 </h3>
 
-<p>&nbsp;</p>
-
-# Introduction
-
 [![License: GPLv3 or later](https://img.shields.io/badge/license-GPL%20V3%2B-green?style=plastic)](LICENSE)
+[![GitHub Actions Workflow Status](https://img.shields.io/github/actions/workflow/status/manticoresoftware/manticoresearch/test.yml?branch=master&style=plastic&color=green)](https://github.com/manticoresoftware/manticoresearch/actions/workflows/test.yml?query=branch%3Amaster)
 [![Twitter Follow](https://img.shields.io/twitter/follow/manticoresearch?color=green&logo=Twitter&style=plastic)](https://twitter.com/manticoresearch)
 [![Slack](https://img.shields.io/badge/slack-manticoresearch-green.svg?logo=slack&style=plastic)](http://slack.manticoresearch.com/)
 [![Docker pulls](https://img.shields.io/docker/pulls/manticoresearch/manticore?color=green&style=plastic)](https://github.com/manticoresoftware/docker)
@@ -30,9 +36,11 @@
 [![Activity](https://img.shields.io/github/commit-activity/m/manticoresoftware/manticoresearch?color=green&style=plastic)](https://github.com/manticoresoftware/manticoresearch/graphs/commit-activity)
 [![GitHub closed issues](https://img.shields.io/github/issues-closed/manticoresoftware/manticoresearch?color=green&style=plastic)](https://github.com/manticoresoftware/manticoresearch/issues?q=is%3Aissue+is%3Aclosed)
 
+# Introduction
+
 **❗Read recent [blog post about Manticore vs Elasticsearch](https://manticoresearch.com/blog/manticore-alternative-to-elasticsearch/)❗**
 
-Manticore Search is an easy to use open source fast database for search. Good alternative for Elasticsearch. What distinguishes it from other solutions is:
+What distinguishes it from other solutions is:
 * It's very fast and therefore more cost-efficient than alternatives, for example Manticore is:
   - **182x faster** than MySQL for [small data](https://db-benchmarks.com/test-hn-small/#mysql-vs-manticore-search) ([reproducible](https://github.com/db-benchmarks/db-benchmarks#get-started)❗)
   - **29x faster** than Elasticsearch for [log analytics](https://db-benchmarks.com/test-logs10m/#elasticsearch-with-no-tuning-vs-manticore-search-default-row-wise-storage) ([reproducible](https://github.com/db-benchmarks/db-benchmarks#get-started)❗)

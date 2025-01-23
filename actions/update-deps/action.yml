@@ -66,9 +66,11 @@ runs:
       run: |
         if [[ "${{ github.event_name }}" == "pull_request" ]]; then
           echo "branch=${{ inputs.name }}-${{ github.event.pull_request.number }}" >> $GITHUB_OUTPUT
+          echo "source_branch=${{ github.head_ref }}" >> $GITHUB_OUTPUT
           echo "target=update-${{ inputs.name }}-version" >> $GITHUB_OUTPUT
         else
           echo "branch=update-${{ inputs.name }}-version" >> $GITHUB_OUTPUT
+          echo "source_branch=" >> $GITHUB_OUTPUT
           echo "target=master" >> $GITHUB_OUTPUT
         fi
 
@@ -84,6 +86,30 @@ runs:
           git checkout ${{ steps.branch.outputs.target }}
         fi
         cd ..
+
+    - name: Check and merge source branch
+      if: steps.branch.outputs.source_branch != ''
+      shell: bash
+      run: |
+        cd manticoresearch
+        # Check if the source branch exists in current repository
+        if git ls-remote --exit-code origin ${{ steps.branch.outputs.source_branch }}; then
+          echo "Source branch ${{ steps.branch.outputs.source_branch }} found in current repository"
+
+          git fetch origin ${{ steps.branch.outputs.source_branch }}
+          git cherry-pick origin/${{ steps.branch.outputs.source_branch }}
+          if [ $? -eq 0 ]; then
+            echo "Successfully cherry-picked changes from ${{ steps.branch.outputs.source_branch }}"
+          else
+            echo "Cherry-pick failed. Manual intervention required."
+            git cherry-pick --abort
+            exit 1
+          fi
+        else
+          echo "Source branch ${{ steps.branch.outputs.source_branch }} not found in current repository"
+        fi
+        cd ..
+
 
     - name: Update deps.txt
       id: deps

@@ -8,11 +8,11 @@ curl -s "http://localhost:9308/cli?show%20version" | awk '!/row.*in set/'; echo
 +-----------+----------------------------------+
 | Component | Version                          |
 +-----------+----------------------------------+
-| Daemon    | %{VERSION}      |
-| Columnar  | columnar %{VERSION}  |
-| Secondary | secondary %{VERSION} |
-| KNN       | knn %{VERSION}       |
-| Buddy     | buddy %{VERSION}                     |
+| Daemon    | %{VERSION} #!/\s*/!#|
+| Columnar  | columnar %{VERSION} #!/\s*/!#|
+| Secondary | secondary %{VERSION} #!/\s*/!#|
+| KNN       | knn %{VERSION} #!/\s*/!#|
+| Buddy     | buddy %{VERSION} #!/\s*/!#|
 +-----------+----------------------------------+
 ––– input –––
 curl -s "http://localhost:9308/cli_json" -d "show version"; echo

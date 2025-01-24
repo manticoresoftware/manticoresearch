@@ -22,12 +22,12 @@
 
 ## 表类型和模式
 
-| 表类型                                                       | 实时模式 | 普通模式 |
-| ------------------------------------------------------------ | -------- | -------- |
-| [实时表](./Local_tables\Real-time_table.md)                  | 支持     | 支持     |
-| [普通表](./Local_tables\Plain_table.md)                      | 不支持   | 支持     |
-| [渗透表](./Local_tables\Percolate_table.md)                  | 支持     | 支持     |
-| [分布式表](./Creating_a_distributed_table\Creating_a_distributed_table.md) | 支持     | 支持     |
-| [模板表](./Local_tables\Template_table.md)                   | 不支持   | 支持     |
+| 表类型   | 实时模式 | 普通模式 |
+| -------- | ------ | ------ |
+| 实时表   | 支持     | 支持    |
+| 普通表   | 不支持   | 支持    |
+| 渗透表   | 支持     | 支持    |
+| 分布式表 | 支持     | 支持    |
+| 模板表   | 不支持   | 支持    |
 
 <!-- proofread -->

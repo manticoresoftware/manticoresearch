@@ -67,7 +67,7 @@ POST /search
 
 <!-- example must_not -->
 ### must
-在 `must` 部分中指定的查询和过滤器必须匹配文档。如果指定了多个全文查询或过滤器，它们必须全部匹配。这等同于 SQL 中的 `AND` 查询。请注意，如果要匹配数组（[多值属性](../Creating_a_table/Data_types.md#多值整数（Multi-value integer 、MVA）)），可以多次指定该属性。只有在数组中找到所有查询的值，结果才会为正，例如：
+在 `must` 部分中指定的查询和过滤器必须匹配文档。如果指定了多个全文查询或过滤器，它们必须全部匹配。这等同于 SQL 中的 `AND` 查询。请注意，如果要匹配数组（[多值属性](../Creating_a_table/Data_types.md#多值整数-%28Multi-value-integer-、MVA%29)），可以多次指定该属性。只有在数组中找到所有查询的值，结果才会为正，例如：
 
 ```json
 "must": [
@@ -83,7 +83,7 @@ POST /search
 （见下文详细说明）。
 
 ### should
-在 `should` 部分中指定的查询和过滤器应匹配文档。如果在 `must` 或 `must_not` 中指定了一些查询，则会忽略 `should` 查询。另一方面，如果除了 `should` 没有其他查询，那么至少其中一个查询必须匹配文档，文档才能匹配该 bool 查询。这等同于 SQL 中的 `OR` 查询。请注意，如果要匹配数组（[多值属性](../Creating_a_table/Data_types.md#多值整数（Multi-value integer 、MVA）)），可以多次指定该属性，例如：
+在 `should` 部分中指定的查询和过滤器应匹配文档。如果在 `must` 或 `must_not` 中指定了一些查询，则会忽略 `should` 查询。另一方面，如果除了 `should` 没有其他查询，那么至少其中一个查询必须匹配文档，文档才能匹配该 bool 查询。这等同于 SQL 中的 `OR` 查询。请注意，如果要匹配数组（[多值属性](../Creating_a_table/Data_types.md#多值整数（Multi-value integer 、MVA）)⛔），可以多次指定该属性，例如：
 
 ```json
 "should": [

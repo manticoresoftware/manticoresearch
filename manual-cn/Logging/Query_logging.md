@@ -133,24 +133,6 @@ query_log_format = plain
 
 注意：`SPH*` 模式特定于 `sphinx` 的旧接口。在 SQL 和 JSON 接口中，大多数情况下，`match-mode` 记录为 `ext2`，`sort-mode` 记录为 `ext` 或 `rel`。
 
-查询日志示例：
-
-```
-ini复制代码[Fri Jun 29 21:17:58 2021] 0.004 sec [all/0/rel 35254 (0,20)] [lj] [ios=6 kb=111.1 ms=0.5] test
-[Fri Jun 29 21:17:58 2021] 0.004 sec [all/0/rel 35254 (0,20)] [lj] [ios=6 kb=111.1 ms=0.5 cpums=0.3] test
-[Sun Apr 28 15:09:38.712 2024] 0.000 sec 0.000 sec [ext2/0/ext 0 (0,20)] [test] test
-[Sun Apr 28 15:09:44.974 2024] 0.000 sec 0.000 sec [ext2/0/ext 0 (0,20) @channel_id] [test] test
-[Sun Apr 28 15:24:32.975 2024] 0.000 sec 0.000 sec [ext2/0/ext 0 (0,30)] [test] {     "index" : "test",     "query":     {         "match":         {             "*" : "test"         }     },     "_source": ["f"],     "limit": 30 }
-```
-
-### 仅记录慢查询
-
-<!-- example query_log_min_msec -->
-
-默认情况下，所有查询都会被记录。如果您只希望记录执行时间超过指定限制的查询，可以使用 `query_log_min_msec` 指令。
-
-单位默认为毫秒，但也可以使用时间后缀表达式。
-
 <!-- intro -->
 查询日志示例：
 <!-- request Example -->

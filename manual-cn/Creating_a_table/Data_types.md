@@ -299,7 +299,7 @@ create table tbl(title text, type int, price float engine='columnar') engine='ro
 
 以下是Manticore Search支持的数据类型列表：
 
-## 文档 ID（Document ID）
+## 文档 ID (Document ID)
 
 <!-- example id -->
 文档标识符是一个必需的属性，文档ID必须是**唯一的64位无符号整数**。文档ID可以显式指定，但即使不指定，它们仍然是启用的。文档ID不能被更新。请注意，当检索文档ID时，它们被视为有符号的64位整数，这意味着它们可能为负数。如有必要，可以使用[UINT64()](../Functions/Type_casting_functions.md#UINT64())函数将它们转换为无符号64位整数。
@@ -366,8 +366,8 @@ string|text [stored|attribute] [indexed]
 
 string和text是别名，但如果你不指定任何属性，它们默认的含义不同：
 
-* 仅string默认意味着attribute（详见[下文](../Creating_a_table/Data_types.md#文本-Text)）。
-* 仅text默认意味着stored + indexed（详见[下文](../Creating_a_table/Data_types.md#字符串String)）。
+* 仅string默认意味着attribute（详见[下文](../Creating_a_table/Data_types.md#文本-%28Text%29)）。
+* 仅text默认意味着stored + indexed（详见[下文](../Creating_a_table/Data_types.md##文本-%28Text%29)⛔)。
 
 ### 文本 (Text)
 
@@ -623,7 +623,7 @@ utilsApi.Sql("CREATE TABLE products(title text indexed)");
 
 <!-- end -->
 
-### 字符串（String）
+### 字符串 (String)
 
 <!-- example for string attributes  -->
 
@@ -826,7 +826,7 @@ Manticore 没有专门的二进制数据字段类型，但你可以通过使用 
 ```
 <!-- end -->
 
-## 整数（Integer）
+## 整数 (Integer)
 
 <!-- example for integers  -->
 
@@ -1006,7 +1006,7 @@ table products
 
 <!-- end -->
 
-## 大整数（Big Integer）
+## 大整数 (Big Integer)
 
 <!-- example for bigints  -->
 
@@ -1096,7 +1096,7 @@ table products
 
 <!-- end -->
 
-## 布尔值（Boolean）
+## 布尔值 (Boolean)
 
 <!-- example for boolean  -->
 
@@ -1186,7 +1186,7 @@ table products
 
 <!-- end -->
 
-## 时间戳（Timestamp）
+## 时间戳 (Timestamp)
 
 <!-- example for timestamps  -->
 
@@ -1305,7 +1305,7 @@ table products
 
 <!-- end -->
 
-## 浮点数（Float）
+## 浮点数 (Float)
 
 <!-- example for float -->
 实数存储为32位IEEE 754单精度浮点数。
@@ -1945,7 +1945,7 @@ var searchResponse = searchApi.Search(searchRequest);
 
 <!-- end -->
 
-## 浮点向量（Float vector）
+## 浮点向量 (Float vector)
 
 <!-- example for creating float_vector -->
 
@@ -2040,7 +2040,7 @@ table products
 
 <!-- end -->
 
-## 多值整数（Multi-value integer 、MVA）
+## 多值整数 (Multi-value integer 、MVA)
 
 <!-- example for creating MVA32 -->
 
@@ -2578,7 +2578,7 @@ class SearchResponse {
 <!-- end -->
 
 
-## 多值大整数（Multi-value big integer）
+## 多值大整数 (Multi-value big integer)
 
 <!-- example for creating MVA64 -->
 

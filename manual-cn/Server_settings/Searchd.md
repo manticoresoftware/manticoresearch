@@ -61,7 +61,7 @@
 
 <!-- example conf attr_flush_period -->auto_optimize
 
-<!-- example conf auto_optimize -->
+<!-- example conf auto_optimize -->⛔
 This setting controls the automatic [OPTIMIZE](../Securing_and_compacting_a_table/Compacting_a_table.md#OPTIMIZE-TABLE) process for table compaction.
 
 By default table compaction occurs automatically. You can modify this behavior with the `auto_optimize` setting:
@@ -92,7 +92,7 @@ auto_optimize = 2 # OPTIMIZE starts at 16 chunks (on 4 cpu cores server)
 
 ### auto_schema
 
-<!-- example conf auto_schema -->
+<!-- example conf auto_schema -->⛔
 Manticore supports the automatic creation of tables that don't yet exist but are specified in INSERT statements. This feature is enabled by default. To disable it, set `auto_schema = 0` explicitly in your configuration. To re-enable it, set `auto_schema = 1` or remove the `auto_schema` setting from the configuration.
 
 Keep in mind that the `/bulk` HTTP endpoint does not support automatic table creation.
@@ -115,7 +115,7 @@ auto_schema = 1 # enable automatic table creation
 
 ### binlog_flush
 
-<!-- example conf binlog_flush -->
+<!-- example conf binlog_flush -->⛔
 This setting controls the binary log transaction flush/sync mode. It is optional, with a default value of 2 (flush every transaction, sync every second).
 
 The directive determines how frequently the binary log will be flushed to the OS and synced to disk. There are three supported modes:
@@ -141,7 +141,7 @@ binlog_flush = 1 # ultimate safety, low speed
 
 ### binlog_max_log_size
 
-<!-- example conf binlog_max_log_size -->
+<!-- example conf binlog_max_log_size -->⛔
 This setting controls the maximum binary log file size. It is optional, with a default value of 256 MB.
 
 A new binlog file will be forcibly opened once the current binlog file reaches this size limit. This results in a finer granularity of logs and can lead to more efficient binlog disk usage under certain borderline workloads. A value of 0 indicates that the binlog file should not be reopened based on size.
@@ -162,7 +162,7 @@ binlog_max_log_size = 16M
 
 ### binlog_path
 
-<!-- example conf binlog_path -->
+<!-- example conf binlog_path -->⛔
 This setting determines the path for binary log (also known as transaction log) files. It is optional, with a default value of the build-time configured data directory (e.g., `/var/lib/manticore/data/binlog.*` in Linux).
 
 Binary logs are used for crash recovery of RT table data and for attribute updates of plain disk indices that would otherwise only be stored in RAM until flush. When logging is enabled, every transaction COMMIT-ted into an RT table is written into a log file. Logs are then automatically replayed on startup after an unclean shutdown, recovering the logged changes.
@@ -188,7 +188,7 @@ binlog_path = /var/lib/manticore/data # /var/lib/manticore/data/binlog.001 etc w
 
 ### buddy_path
 
-<!-- example conf buddy_path -->
+<!-- example conf buddy_path -->⛔
 This setting determines the path to the Manticore Buddy binary. It is optional, with a default value being the build-time configured path, which varies across different operating systems. Typically, you don't need to modify this setting. However, it may be useful if you wish to run Manticore Buddy in debug mode, make changes to Manticore Buddy, or implement a new plugin. In the latter case, you can `git clone` Buddy from https://github.com/manticoresoftware/manticoresearch-buddy, add a new plugin to the directory `./plugins/`, and run `composer install --prefer-source` for easier development after you change the directory to the Buddy source.
 
 To ensure you can run `composer`, your machine must have PHP 8.2 or higher installed with the following extensions:
@@ -233,7 +233,7 @@ buddy_path = manticore-executor -n /Users/username/manticoresearch-buddy/src/mai
 
 ### client_timeout
 
-<!-- example conf client_timeout -->
+<!-- example conf client_timeout -->⛔
 This setting determines the maximum time to wait between requests (in seconds or [special_suffixes](../Server_settings/Special_suffixes.md)) when using persistent connections. It is optional, with a default value of five minutes.
 
 
@@ -252,7 +252,7 @@ client_timeout = 1h
 
 ### collation_libc_locale
 
-<!-- example conf collation_libc_locale -->
+<!-- example conf collation_libc_locale -->⛔
 服务器 libc 语言环境。可选，默认值为 C。
 
 指定 libc 语言环境，影响基于 libc 的排序。有关详细信息，请参阅 [collations](../Searching/Collations.md) 部分。
@@ -272,7 +272,7 @@ attr_flush_period = 900 # persist updates to disk every 15 minutes
 
 ### auto_optimize
 
-<!-- example conf auto_optimize -->
+<!-- example conf auto_optimize -->⛔
 
 该设置控制表压缩的自动 [OPTIMIZE](../Securing_and_compacting_a_table/Compacting_a_table.md#OPTIMIZE-TABLE) 过程。
 
@@ -301,7 +301,7 @@ auto_optimize = 2 # OPTIMIZE starts at 16 chunks (on 4 cpu cores server)
 
 ### auto_schema
 
-<!-- example conf auto_schema -->
+<!-- example conf auto_schema -->⛔
 
 Manticore 支持自动创建尚不存在但在 INSERT 语句中指定的表。该功能默认启用。要禁用它，请在配置中显式设置 `auto_schema = 0`。要重新启用它，请设置 `auto_schema = 1` 或从配置中移除 `auto_schema` 设置。
 
@@ -323,7 +323,7 @@ auto_schema = 1 # enable automatic table creation
 
 ### binlog_flush
 
-<!-- example conf binlog_flush -->
+<!-- example conf binlog_flush -->⛔
 
 该设置控制二进制日志事务的刷新/同步模式。可选，默认值为 2（每个事务刷新，每秒同步一次）。
 
@@ -348,7 +348,7 @@ binlog_flush = 1 # ultimate safety, low speed
 
 ### binlog_max_log_size
 
-<!-- example conf binlog_max_log_size -->
+<!-- example conf binlog_max_log_size -->⛔
 
 该设置控制最大二进制日志文件大小。可选，默认值为 256 MB。
 
@@ -368,7 +368,7 @@ binlog_max_log_size = 16M
 
 ### binlog_path
 
-<!-- example conf binlog_path -->
+<!-- example conf binlog_path -->⛔
 
 该设置确定二进制日志（也称为事务日志）文件的路径。可选，默认值为构建时配置的数据目录路径（例如，在 Linux 中为 `/var/lib/manticore/data/binlog.*`）。
 
@@ -393,7 +393,7 @@ binlog_path = /var/lib/manticore/data # /var/lib/manticore/data/binlog.001 etc w
 
 ### buddy_path
 
-<!-- example conf buddy_path -->
+<!-- example conf buddy_path -->⛔
 
 该设置确定 Manticore Buddy 二进制文件的路径。可选，默认值为构建时配置的路径，该路径在不同操作系统之间有所不同。通常情况下，您不需要修改此设置。但是，如果您希望以调试模式运行 Manticore Buddy、对 Manticore Buddy 进行更改或实现新插件，则可能会有用。在后者的情况下，您可以从 https://github.com/manticoresoftware/manticoresearch-buddy 克隆 Buddy，将新插件添加到目录 `./plugins/`，并在更改目录到 Buddy 源之后运行 `composer install --prefer-source` 以方便开发。
 
@@ -437,7 +437,7 @@ buddy_path = manticore-executor -n /Users/username/manticoresearch-buddy/src/mai
 
 ### client_timeout
 
-<!-- example conf client_timeout -->
+<!-- example conf client_timeout -->⛔
 该设置确定在使用持久连接时请求之间的最大等待时间（以秒或 [special_suffixes](../Server_settings/Special_suffixes.md) 为单位）。可选，默认值为五分钟。
 
 
@@ -454,7 +454,7 @@ client_timeout = 1h
 
 ### collation_libc_locale
 
-<!-- example conf collation_libc_locale -->
+<!-- example conf collation_libc_locale -->⛔
 服务器 libc 语言环境。可选，默认值为 C。
 
 指定 libc 语言环境，影响基于 libc 的排序。有关详细信息，请参阅 [collations](../Searching/Collations.md) 部分。

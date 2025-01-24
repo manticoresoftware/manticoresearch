@@ -17,7 +17,7 @@
 ##### 使用示例
 每个查询示例的右上角都有一个小图标 📋：
 
-![Copy example](copy_example.png)
+![Copy example](copy_example.png)⛔
 
 您可以使用它将示例复制到剪贴板。**如果查询是 HTTP 请求，它将作为 CURL 命令被复制**。您可以按 ⚙️ 来配置主机/端口。
 
@@ -25,7 +25,7 @@
 
 我们热爱搜索，并尽最大努力使在本手册中搜索尽可能方便。当然，这背后使用的是 Manticore Search。除了使用需要先打开手册的搜索栏之外，还有一种非常简单的方法，只需打开 **mnt.cr/your-search-keyword** 即可找到您需要的内容：
 
-![mnt.cr quick manual search](mnt.cr.gif)
+![mnt.cr quick manual search](mnt.cr.gif)⛔
 
 ## 最佳实践
 了解以下一些关于 Manticore Search 的要点可以帮助您遵循最佳实践并更好地使用它。

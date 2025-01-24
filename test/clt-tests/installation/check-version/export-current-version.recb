@@ -1,19 +1,19 @@
 ––– input –––
 export current_version_searchd=$(searchd --version | head -n 1 | cut -d" " -f2); echo $current_version_searchd
 ––– output –––
-%{SEMVER}
+%{VERSION}
 ––– input –––
 export current_version_columnar=$(searchd --version | head -n 1 | cut -d" " -f5); echo $current_version_columnar
 ––– output –––
-%{SEMVER}
+%{VERSION}
 ––– input –––
 export current_version_secondary=$(searchd --version | head -n 1 | cut -d" " -f8); echo $current_version_secondary
 ––– output –––
-%{SEMVER}
+%{VERSION}
 ––– input –––
 export current_version_knn=$(searchd --version | head -n 1 | cut -d" " -f11); echo $current_version_knn
 ––– output –––
-%{SEMVER}
+%{VERSION}
 ––– input –––
 export current_version_galera=$(strings /usr/share/manticore/modules/libgalera_manticore.so|grep -i -E "[0-9]{1}\.[0-9]{2}\([a-z0-9]+\)" | cut -d"(" -f1); echo $current_version_galera
 ––– output –––

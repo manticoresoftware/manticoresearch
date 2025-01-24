@@ -1,7 +1,7 @@
 # Changelog
 
 # Version 7.0.0
-Released: January ?? 2025
+Released: January 24th 2025
 
 ### Major changes
 * [Issue #1497](https://github.com/manticoresoftware/manticoresearch/issues/1497) Added new [Fuzzy Search](../Searching/Spell_correction.md#Fuzzy-Search) and [Autocomplete](../Searching/Autocomplete.md#CALL-AUTOCOMPLETE) functionality for easier searching.

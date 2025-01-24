@@ -179,6 +179,7 @@
 * [⪢ Integration]
     * [Logstash](Integration/Logstash.md)
     * [Filebeat](Integration/Filebeat.md)
+    * [Kibana](Integration/Kibana.md)
     * [Kafka](Integration/Kafka.md)
     * [DBeaver](Integration/DBeaver.md)
     * [Apache Superset](Integration/Apache_Superset.md)

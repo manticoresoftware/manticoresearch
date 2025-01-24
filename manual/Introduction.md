@@ -76,6 +76,8 @@ You can integrate Manticore Search with a MySQL/MariaDB server using the [FEDERA
 
 You can use [Apache Superset](https://manticoresearch.com/blog/manticoresearch-apache-superset-integration/), Kibana and [Grafana](https://manticoresearch.com/blog/manticoresearch-grafana-integration/) to visualize data stored in Manticore. Various MySQL tools can be used to develop Manticore queries interactively, such as [HeidiSQL](https://www.heidisql.com/) and [DBForge](https://www.devart.com/dbforge/).
 
+You can use Manticore Search with [Kibana](Integration/Kibana.md).
+
 #### Stream filtering made easy
 Manticore offers a special table type, the "[percolate](Creating_a_table/Local_tables/Percolate_table.md)" table, which allows you to search queries instead of data, making it an efficient tool for filtering full-text data streams. Simply store your queries in the table, process your data stream by sending each batch of documents to Manticore Search, and receive only the results that match your stored queries.
 

@@ -313,6 +313,27 @@ f text indexed stored
 ```
 <!-- end -->
 
+Notice: you can set variable `SQL_QUOTE_SHOW_CREATE`. In this case name of the table and columns will be quoted with backticks.
+
+<!-- request SQL -->
+
+```sql
+SET SQL_QUOTE_SHOW_CREATE=1;
+SHOW CREATE TABLE tbl\G
+```
+
+<!-- response SQL -->
+
+```sql
+       Table: tbl
+Create Table: CREATE TABLE `tbl` (
+`f` text indexed stored
+) charset_table='non_cont,cont' morphology='icu_chinese'
+1 row in set (0.00 sec)
+```
+
+<!-- end -->
+
 ### Percolate table schemas
 
 If you use the `DESC` statement on a percolate table, it will display the outer table schema, which is the schema of stored queries. This schema is static and the same for all local percolate tables:
@@ -356,4 +377,3 @@ mysql> desc pq table like '%title%';
 +-------+------+----------------+
 1 row in set (0.00 sec)
 ```
-<!-- proofread -->

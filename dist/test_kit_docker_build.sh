@@ -170,10 +170,7 @@ docker exec manticore-test-kit bash -c \
 	git config --global --add safe.directory $buddy_path && \
 	cd $buddy_path && \
 	git checkout $buddy_commit && \
-	composer install && \
-	curl -sSL https://raw.githubusercontent.com/manticoresoftware/phar_builder/refs/heads/main/templates/sh | \
-	sed 's/__NAME__/manticore-buddy/g; s/__PACKAGE__/manticore-buddy/g' >$buddy_path/bin/manticore-buddy && \
-	chmod +x $buddy_path/bin/manticore-buddy"
+	composer install"
 
 echo "Exporting image to ../manticore_test_kit.img"
 

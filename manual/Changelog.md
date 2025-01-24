@@ -78,7 +78,7 @@ Released: January ?? 2025
 * [Commit edad](https://github.com/manticoresoftware/columnar/commit/edadc694c68d6022bdd13134263667430a42cc1d) Fixed the inversion issue in the bitmap iterator which caused a crash.
 * [Commit fc30](https://github.com/manticoresoftware/executor/commit/fc302ff1117b0b835a6f5a3c07057baf5fba14d9) Fixed issue where some Manticore packages were automatically removed by `unattended-upgrades`.
 * [Issue #1019](https://github.com/manticoresoftware/manticoresearch/issues/1019) Improved handling of queries from DbForge MySQL tool.
-* [Issue #1107](https://github.com/manticoresoftware/manticoresearch/issues/1107) Fixed escaping of special characters in `CREATE TABLE` and `ALTER TABLE`.
+* [Issue #1107](https://github.com/manticoresoftware/manticoresearch/issues/1107) Fixed escaping of special characters in `CREATE TABLE` and `ALTER TABLE`.  ❤️ Thank you, [@subnix](https://github.com/subnix) for the PR.
 * [Issue #116](https://github.com/manticoresoftware/manticoresearch-backup/issues/116#issuecomment-2216597206) Fixed a deadlock when updating a blob attribute in a frozen index. The deadlock occurred due to conflicting locks while trying to unfreeze the index. It could cause a failure in manticore-backup too.
 * [Issue #1818](https://github.com/manticoresoftware/manticoresearch/issues/1818) `OPTIMIZE` now throws an error when the table is frozen.
 * [Issue #2001](https://github.com/manticoresoftware/manticoresearch/issues/2001) Allowed function names to be used as column names.
@@ -89,7 +89,7 @@ Released: January ?? 2025
 * [Issue #2265](https://github.com/manticoresoftware/manticoresearch/issues/2265) Fixed failure to restore `mysqldump` with `index_field_lengths` enabled.
 * [Issue #2291](https://github.com/manticoresoftware/manticoresearch/issues/2291) Fixed crash when executing `ALTER TABLE` command.
 * [Issue #2333](https://github.com/manticoresoftware/manticoresearch/issues/2333) Fixed MySQL DLL in the Windows package for the indexer to work properly.
-* [Issue #2393](https://github.com/manticoresoftware/manticoresearch/issues/2393) Fixed GCC compilation error.
+* [Issue #2393](https://github.com/manticoresoftware/manticoresearch/issues/2393) Fixed GCC compilation error. ❤️ Thank you, [@animetosho](https://github.com/animetosho) for the PR.
 * [Issue #2447](https://github.com/manticoresoftware/manticoresearch/issues/2447) Fixed an escaping issue in [_update](../Data_creation_and_modification/Updating_documents/REPLACE.md?client=Elasticsearch-like+partial).
 * [Issue #2460](https://github.com/manticoresoftware/manticoresearch/issues/2460) Fixed indexer crash when declaring multiple attributes or fields with the same name.
 * [Issue #2467](https://github.com/manticoresoftware/manticoresearch/issues/2467) Resolved crash of daemon on incorrect transform for nested bool queries for the "compat" search related endpoints.
@@ -116,7 +116,7 @@ Released: January ?? 2025
 * [Issue #2835](https://github.com/manticoresoftware/manticoresearch/issues/2835) Fixed crash in complex `SELECT` queries.
 * [Issue #2872](https://github.com/manticoresoftware/manticoresearch/issues/2872) Added error message if `ALL` or `ANY` argument in `IN` expression is not a JSON attribute.
 * [Issue #2882](https://github.com/manticoresoftware/manticoresearch/issues/2882) Fixed daemon crash on updating MVA in large tables.
-* [Issue #2888](https://github.com/manticoresoftware/manticoresearch/issues/2888) Fixed crash on tokenization failure with `libstemmer`.
+* [Issue #2888](https://github.com/manticoresoftware/manticoresearch/issues/2888) Fixed crash on tokenization failure with `libstemmer`.  ❤️ Thank you, [@subnix](https://github.com/subnix) for the PR.
 * [Issue #2919](https://github.com/manticoresoftware/manticoresearch/issues/2919) Fixed an issue where the joined weight from the right table was not working correctly in expressions.
 * [Issue #2919](https://github.com/manticoresoftware/manticoresearch/issues/2919) Fixed issue where right-joined table weight does not work in expressions.
 * [Issue #325](https://github.com/manticoresoftware/manticoresearch-buddy/issues/325) Fixed `CREATE TABLE IF NOT EXISTS ... WITH DATA` failure when the table already exists.

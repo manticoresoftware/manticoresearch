@@ -285,6 +285,26 @@ mysqldump -h0 -P9306 --replace --net-buffer-length=16m -etc manticore tbl > tbl.
 
 This will produce a backup file `tbl.sql` with `replace` commands instead of `insert`, with column names retained in each batch. Documents will be batched up to 16 megabytes large. There will be no `drop`/`create table` commands. This is useful for full-text reindexation after changing tokenization settings.
 
+<!-- request Replication mode -->
+```bash
+mysqldump -etc --replace -h0 -P9306 -ucluster manticore cluster:tbl | mysql -P9306 -h0
+mariadb-dump -etc --replace -h0 -P9306 -ucluster manticore cluster:tbl | mysql -P9306 -h0
+```
+
+In this case, `mysqldump` will generate commands like `REPLACE INTO cluster:table ...`, which will be sent directly to the Manticore instance, resulting in the documents being reinserted.
+Use the `cluster` user and the `-t` flag to enable replication mode. See the details in the notes below.
+
+<!-- end -->
+
+<!-- example mysqldump_restore -->
+### Restore
+
+If you're looking to restore a Manticore Search database from a backup file, the mysql client is your tool of choice.
+
+Note, if you are restoring in [Plain mode](../Read_this_first.md#Real-time-mode-vs-plain-mode), you cannot drop and recreate tables directly. Therefore, you should:
+- Use `mysqldump` with the `-t` option to exclude `CREATE TABLE` statements from your backup.
+- Manually [TRUNCATE](../Emptying_a_table.md) the tables before proceeding with the restoration.
+
 <!-- request SQL -->
 ```bash
 mysql -h0 -P9306 < manticore_backup.sql
@@ -310,6 +330,10 @@ For a comprehensive list of settings and their thorough descriptions, kindly ref
 
 ### Notes
 
+* To create a dump in replication mode (where the dump includes `INSERT/REPLACE INTO <cluster_name>:<table_name>`):
+  - Use the `cluster` user. For example: `mysqldump -u cluster ...` or `mariadb-dump -u cluster ...`. You can change the username that enables replication mode for `mysqldump` by running `SET GLOBAL cluster_user = new_name`.
+  - Use the `-t` flag.
+  - When specifying a table in replication mode, you need to follow the `cluster_name:table_name` syntax. For example: `mysqldump -P9306 -h0 -t -ucluster manticore cluster:tbl`.
 * It's recommended to explicitly specify the `manticore` database when you plan to back up all databases, instead of using the `--all-databases` option.
 * Note that `mysqldump` does not support backing up distributed tables and cannot back up tables containing non-stored fields. For such cases, consider using `manticore-backup` or the `BACKUP` SQL command. If you have distributed tables, it is recommended to always specify the tables to be dumped.
 

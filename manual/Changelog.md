@@ -4,10 +4,11 @@
 Released: January ?? 2025
 
 ### Major changes
-* [Issue #1497](https://github.com/manticoresoftware/manticoresearch/issues/1497) Added new [Fuzzy Search](../Searching/Spell_correction.md#Fuzzy-Search) and [Autocomplete](../Searching/Autocomplete.md#CALL-AUTOCOMPLETE) functionality.
+* [Issue #1497](https://github.com/manticoresoftware/manticoresearch/issues/1497) Added new [Fuzzy Search](../Searching/Spell_correction.md#Fuzzy-Search) and [Autocomplete](../Searching/Autocomplete.md#CALL-AUTOCOMPLETE) functionality for easier searching.
 * [Issue #1500](https://github.com/manticoresoftware/manticoresearch/issues/1500) [Integration with Kafka](../Integration/Kafka.md#Syncing-with-Kafka).
 * [Issue #1928](https://github.com/manticoresoftware/manticoresearch/issues/1928) Introduced [secondary indexes for JSON](../Creating_a_table/Local_tables/Plain_and_real-time_table_settings.md#json_secondary_indexes).
 * [Issue #2361](https://github.com/manticoresoftware/manticoresearch/issues/2361) Updates and searches during updates are no longer blocked by chunk merging.
+* [Issue #2811](https://github.com/manticoresoftware/manticoresearch/issues/2811) [Scroll](../Searching/Pagination.md#Scroll-Search-Option) option for easier pagination.
 * [Issue #832](https://github.com/manticoresoftware/manticoresearch/issues/832) Integration with Kibana for easier and more efficient data visualization.
 * [Issue #931](https://github.com/manticoresoftware/manticoresearch/issues/931) Integration with [Jieba](https://github.com/fxsjy/jieba) for better [Chinese tokenization](../Creating_a_table/NLP_and_tokenization/Languages_with_continuous_scripts.md).
 
@@ -23,7 +24,6 @@ Released: January ?? 2025
   - Then, start the node that was stopped last with `--new-cluster`, using the tool `manticore_new_cluster` in Linux.
   - Read about [restarting a cluster](Creating_a_cluster/Setting_up_replication/Restarting_a_cluster.md#Restarting-a-cluster) for more details.
 * ⚠️ BREAKING [Issue #2308](https://github.com/manticoresoftware/manticoresearch/issues/2308) Added support for multiple tables in [`ALTER CLUSTER ADD` and `DROP`](../Creating_a_cluster/Setting_up_replication/Adding_and_removing_a_table_from_a_replication_cluster.md#Adding-and-removing-a-table-from-a-replication-cluster). This change also affects the replication protocol. Refer to the previous section for guidance on handling this update.
-.
 * [Commit cfc8](https://github.com/manticoresoftware/manticoresearch/commit/cfc87ecb6e33a8163c2235243b6b40e699dbf526) Added `COUNT(DISTINCT)` support for `ORDER BY` in `FACET` and `GROUP BY`.
 * [Issue #1103](https://github.com/manticoresoftware/manticoresearch/issues/1103) Improved clarity in [logging](../Logging/Server_logging.md#Server-logging) chunk merging.
 * [Issue #1130](https://github.com/manticoresoftware/manticoresearch/issues/1130) Added support for [DBeaver](../Integration/DBeaver.md).
@@ -54,7 +54,6 @@ Released: January ?? 2025
 * [Issue #2790](https://github.com/manticoresoftware/manticoresearch/issues/2790) Added `CALL uuid_short` statement to generate sequences with multiple `uuid_short` values.
 * [Issue #2803](https://github.com/manticoresoftware/manticoresearch/issues/2803) Added separate options for the right table in the JOIN operation.
 * [Issue #2810](https://github.com/manticoresoftware/manticoresearch/issues/2810) Improved HTTP JSON aggregation performance to match `GROUP BY` in SphinxQL.
-* [Issue #2811](https://github.com/manticoresoftware/manticoresearch/issues/2811) Implemented the `scroll` option.
 * [Issue #2854](https://github.com/manticoresoftware/manticoresearch/issues/2854) Added support for `fixed_interval` in Kibana date-related requests.
 * [Issue #2909](https://github.com/manticoresoftware/manticoresearch/issues/2909) Implemented batching for JOIN queries, which improves the performance of certain JOIN queries by hundreds or even thousands of times.
 * [Issue #2937](https://github.com/manticoresoftware/manticoresearch/issues/2937) Enabled the use of joined table weight in fullscan queries.

@@ -1,17 +1,23 @@
-# Test: Check that requests from User-Agent ‘Manticore Buddy’ are not logged in the request log,
-# while requests from other User-Agents (including an empty User-Agent) are logged.
-# This test covers:
-# 1. Creating a table and inserting test data.
-# 2. Sending requests with User-Agent ‘Manticore Buddy’ and ensuring that they are not logged.
-# 3. Sending queries with other User-Agents (including an empty User-Agent) and ensuring that they are registered.
-# 4. Verifying that the request log does not contain entries for ‘Manticore Buddy’ requests,
-# but does contain entries for requests from other User-Agents.
-
-––– block: ../base/start-searchd –––
+Test: Check that requests from User-Agent ‘Manticore Buddy’ are not logged in the request log,
+while requests from other User-Agents (including an empty User-Agent) are logged.
+This test covers:
+1. Creating a table and inserting test data.
+2. Sending requests with User-Agent ‘Manticore Buddy’ and ensuring that they are not logged.
+3. Sending queries with other User-Agents (including an empty User-Agent) and ensuring that they are registered.
+4. Verifying that the request log does not contain entries for ‘Manticore Buddy’ requests,
+but does contain entries for requests from other User-Agents.
+––– input –––
+echo -e "searchd {\n    listen = 127.0.0.1:9312\n    listen = 127.0.0.1:9306:mysql\n    listen = 127.0.0.1:9308:http\n    log = /var/log/manticore/searchd.log\n    query_log = /var/log/manticore/query.log\n    pid_file = /var/run/manticore/searchd.pid\n    data_dir = /var/lib/manticore\n    buddy_path = # disables Manticore Buddy\n}" > nobuddy.conf
+––– output –––
+––– input –––
+cat nobuddy.conf
+––– output –––
+––– input –––
+rm -f /var/log/manticore/searchd.log; searchd --stopwait > /dev/null; searchd -c nobuddy.conf; if timeout 10 grep -qm1 '\[BUDDY\] started' <(tail -n 1000 -f /var/log/manticore/searchd.log); then echo 'Buddy started!'; else echo 'Timeout or failed!'; cat /var/log/manticore/searchd.log;fi
+––– output –––
 ––– input –––
 mysql -h0 -P9306 -e "create table test (id BIGINT, model TEXT);"; echo $?
 ––– output –––
-0
 ––– input –––
 curl -X POST http://localhost:9308/insert -d '{"index":"test","id":1,"doc":{"model":"Test message"}}' > /dev/null 2>&1; echo $?
 ––– output –––
@@ -37,7 +43,6 @@ curl -H 'User-agent: Other-Agent/1.0' -d 'query=select * from test' 'localhost:9
 ––– input –––
 grep "Other-Agent" /var/log/manticore/query.log
 ––– output –––
-[Expected output: Log entry with "Other-Agent"]
 ––– input –––
 curl -H 'User-agent: Manticore Buddy/1.0.0' -d 'query=delete from test where id=1' 'localhost:9308/sql?mode=raw' > /dev/null 2>&1; echo $?
 ––– output –––
@@ -58,4 +63,7 @@ curl -H 'User-agent: Manticore Buddy/1.0.0' -d 'query=select * from non_existent
 0
 ––– input –––
 grep "non_existent_table" /var/log/manticore/query.log
+––– output –––
+––– input –––
+rm -f nobuddy.conf
 ––– output –––

@@ -341,12 +341,27 @@ mysqldump -etc --replace --column-statistics=0 -u replication -h0 -P1306 --skip-
 ––– input –––
 mysql -h0 -P2306 -e "SHOW TABLES LIKE 'tbl_stopwords';"
 ––– output –––
++---------------+------+
+| Table         | Type |
++---------------+------+
+| tbl_stopwords | rt   |
++---------------+------+
 ––– input –––
 mysql -h0 -P4306 -e "SHOW TABLES LIKE 'tbl_wordforms';"
 ––– output –––
++---------------+------+
+| Table         | Type |
++---------------+------+
+| tbl_wordforms | rt   |
++---------------+------+
 ––– input –––
 mysql -h0 -P1306 -e "SHOW STATUS LIKE 'cluster_replication_indexes';"
 ––– output –––
++-----------------------------+--------------------------------------------------------------------------------+
+| Counter                     | Value                                                                          |
++-----------------------------+--------------------------------------------------------------------------------+
+| cluster_replication_indexes | testrt,tbl_none,tbl_stopwords,tbl_exceptions,tbl_wordforms,tbl_rowwise_stem_ru |
++-----------------------------+--------------------------------------------------------------------------------+
 ––– input –––
 for port in 1306 2306 3306 4306 5306; do echo "Checking status for port $port:"; timeout 10 bash -c "while ! mysql -h0 -P$port -e \"SHOW STATUS LIKE 'cluster_replication_node_state'\G\" | grep -q 'Value: synced'; do sleep 1; done" && echo "Port $port: Node is synced." || echo "Port $port: Node is not synced (Value: closed or other)."; done
 ––– output –––

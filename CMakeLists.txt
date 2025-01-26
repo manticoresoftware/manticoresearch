@@ -185,10 +185,12 @@ target_compile_options ( lextra INTERFACE $<${CLANGCXX}:
 
 # Checking for unaligned RAM access
 if (CMAKE_CROSSCOMPILING)
-	if (CMAKE_SYSTEM_PROCESSOR MATCHES "^(i.86|x86(_64)?)$"
-			OR CMAKE_SYSTEM_PROCESSOR STREQUAL amd64
-			OR CMAKE_SYSTEM_PROCESSOR STREQUAL arm64
-			OR CMAKE_SYSTEM_PROCESSOR STREQUAL aarch64)
+	string ( TOLOWER "${CMAKE_SYSTEM_PROCESSOR}" _PROC )
+	if (_PROC MATCHES "^(i.86|x86(_64)?)$"
+			OR _PROC STREQUAL amd64
+			OR _PROC STREQUAL arm64
+			OR _PROC STREQUAL aarch64
+			OR _PROC STREQUAL s390x)
 		set ( UNALIGNED_RAM_ACCESS_EXITCODE "0" CACHE STRING "Result from TRY_RUN" )
 		set ( UNALIGNED_RAM_ACCESS_EXITCODE__TRYRUN_OUTPUT "" CACHE STRING "Output from TRY_RUN" )
 	endif ()
@@ -241,6 +243,8 @@ target_link_libraries ( lextra INTERFACE xxHash::xxhash )
 with_get ( jieba "Jieba" "Chinese text segmentation tool" )
 
 # Support for OpenSSL
+set ( OPENSSL_USE_STATIC_LIBS ON )
+include ( GetSSL )
 with_menu_comp ( OpenSSL SSL "OpenSSL" "for encrypted networking" )
 win_install_c ( OpenSSL SSL daemon )
 
@@ -287,6 +291,23 @@ if (WITH_STATIC_MYSQL)
 endif ()
 with_menu ( Mysql "mysql" "for indexing mysql sources with indexer" )
 dl_package ( Mysql "mysql" )
+
+# roll-back to 'unversioned' mysql dylib on macos (#2997)
+if (CMAKE_SYSTEM_NAME STREQUAL Darwin)
+	if (TARGET Mysql::Mysql_ld)
+		if ( DL_MYSQL )
+			GET_FILENAME_COMPONENT ( __mysql_21_dylib_name ${MYSQL_LIB} NAME  )
+			get_target_property ( _mysql_dylib Mysql::Mysql LOCATION )
+			GET_FILENAME_COMPONENT ( __mysql_dylib_name ${_mysql_dylib} NAME )
+			if ( NOT __mysql_21_dylib_name STREQUAL ${__mysql_dylib_name} )
+				GET_FILENAME_COMPONENT ( __mysql_dir ${MYSQL_LIB} DIRECTORY )
+				set ( MYSQL_LIB "${__mysql_dir}/${__mysql_dylib_name}" CACHE FILEPATH "Library file of Mysql" FORCE )
+				infomsg ( "Mysql lib name fixed from ${__mysql_21_dylib_name} to ${__mysql_dylib_name} (${MYSQL_LIB})" )
+			endif()
+		endif ()
+	endif ()
+endif ()
+
 win_install ( Mysql indexer )
 
 # PostgreSQL and it's dynamic linking

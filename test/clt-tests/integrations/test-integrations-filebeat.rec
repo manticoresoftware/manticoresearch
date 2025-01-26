@@ -32,7 +32,7 @@ cat /var/log/dpkg.log | wc -l
 ––– output –––
 5
 ––– input –––
-filebeat -c /filebeat.yml -strict.perms=false -e 2>/var/log/filebeat.log &
+filebeat -c /filebeat.yml --strict.perms=false -e 2>/var/log/filebeat.log &
 ––– output –––
 [1] #!/[0-9]+/!#
 ––– input –––
@@ -46,7 +46,7 @@ filebeat version #!/[0-9]{1}\.[0-9]{2}\.[0-9]{1}/!# (amd64), libbeat #!/[0-9]{1}
 ––– input –––
 curl -s localhost:9308/cli_json -d 'describe dpkg_log' | jq -cM '.[].data | sort_by(.Field)'
 ––– output –––
-[{"Field":"@timestamp","Type":"timestamp","Properties":""},{"Field":"agent","Type":"json","Properties":""},{"Field":"ecs","Type":"json","Properties":""},{"Field":"host","Type":"json","Properties":""},{"Field":"id","Type":"bigint","Properties":""},{"Field":"input","Type":"json","Properties":""},{"Field":"log","Type":"json","Properties":""},{"Field":"message","Type":"text","Properties":"indexed stored"}]
+[{"Field":"@timestamp","Type":"timestamp","Properties":""},{"Field":"agent","Type":"json","Properties":"indexed"},{"Field":"ecs","Type":"json","Properties":"indexed"},{"Field":"host","Type":"json","Properties":"indexed"},{"Field":"id","Type":"bigint","Properties":""},{"Field":"input","Type":"json","Properties":"indexed"},{"Field":"log","Type":"json","Properties":"indexed"},{"Field":"message","Type":"string","Properties":"indexed attribute"}]
 ––– input –––
 mysql -P9306 -h0 -N -e "SHOW TABLES\G; SELECT COUNT(*) FROM dpkg_log\G; SELECT message FROM dpkg_log\G;"  | grep -v '^*'
 ––– output –––

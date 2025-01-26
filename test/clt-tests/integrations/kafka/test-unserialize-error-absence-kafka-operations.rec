@@ -1,0 +1,103 @@
+––– block: ../../base/start-searchd –––
+––– input –––
+seq 1 5 | xargs -I{} bash -c "mysql -h0 -P9306 -e 'DROP MATERIALIZED VIEW view_table;' || true; mysql -h0 -P9306 -e 'DROP SOURCE kafka;' || true; mysql -h0 -P9306 -e 'DROP TABLE kafka_test;' || true; mysql -h0 -P9306 -e \"CREATE SOURCE kafka (id bigint, term text, abbrev '$abbrev' text, GlossDef json) type=\\\"kafka\\\" broker_list=\\\"kafka:9092\\\" topic_list=\\\"my-data\\\" consumer_group=\\\"manticore\\\" num_consumers=\\\"2\\\" batch=50; CREATE TABLE kafka_test (id bigint, name text, short_name text, received_at text, size multi); CREATE MATERIALIZED VIEW view_table TO kafka_test AS SELECT id, term as name, abbrev as short_name, UTC_TIMESTAMP() as received_at, GlossDef.size as size FROM kafka; SHOW SOURCES; SHOW TABLES; SHOW MVS;\""
+––– output –––
+ERROR 1064 (42000) at line 1: DROP TABLE failed: unknown table 'kafka_test'
++-------+
+| name  |
++-------+
+| kafka |
++-------+
++-----------------+------+
+| Table           | Type |
++-----------------+------+
+| _buffer_kafka_0 | rt   |
+| _buffer_kafka_1 | rt   |
+| _sources        | rt   |
+| _views          | rt   |
+| kafka_test      | rt   |
++-----------------+------+
++------------+
+| name       |
++------------+
+| view_table |
++------------+
++-------+
+| name  |
++-------+
+| kafka |
++-------+
++-----------------+------+
+| Table           | Type |
++-----------------+------+
+| _buffer_kafka_0 | rt   |
+| _buffer_kafka_1 | rt   |
+| _sources        | rt   |
+| _views          | rt   |
+| kafka_test      | rt   |
++-----------------+------+
++------------+
+| name       |
++------------+
+| view_table |
++------------+
++-------+
+| name  |
++-------+
+| kafka |
++-------+
++-----------------+------+
+| Table           | Type |
++-----------------+------+
+| _buffer_kafka_0 | rt   |
+| _buffer_kafka_1 | rt   |
+| _sources        | rt   |
+| _views          | rt   |
+| kafka_test      | rt   |
++-----------------+------+
++------------+
+| name       |
++------------+
+| view_table |
++------------+
++-------+
+| name  |
++-------+
+| kafka |
++-------+
++-----------------+------+
+| Table           | Type |
++-----------------+------+
+| _buffer_kafka_0 | rt   |
+| _buffer_kafka_1 | rt   |
+| _sources        | rt   |
+| _views          | rt   |
+| kafka_test      | rt   |
++-----------------+------+
++------------+
+| name       |
++------------+
+| view_table |
++------------+
++-------+
+| name  |
++-------+
+| kafka |
++-------+
++-----------------+------+
+| Table           | Type |
++-----------------+------+
+| _buffer_kafka_0 | rt   |
+| _buffer_kafka_1 | rt   |
+| _sources        | rt   |
+| _views          | rt   |
+| kafka_test      | rt   |
++-----------------+------+
++------------+
+| name       |
++------------+
+| view_table |
++------------+
+––– input –––
+tail -n 1000 /var/log/manticore/searchd.log | grep -i "unserialize"
+––– output –––

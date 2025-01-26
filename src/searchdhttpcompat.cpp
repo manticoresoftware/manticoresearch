@@ -10,30 +10,15 @@
 // did not, you can find it at http://www.gnu.org/
 //
 
-#include "sphinx.h"
-#include "sphinxint.h"
-#include "sphinxjson.h"
-#include "sphinxjsonquery.h"
-
-#include "http/http_parser.h"
-#include "searchdaemon.h"
-#include "searchdha.h"
 #include "searchdsql.h"
 #include "searchdhttp.h"
-#include "client_session.h"
 
-//#undef snprintf
-//#undef strtoull
-//#undef strtoll
 #include "nlohmann/json.hpp"
 
 #include <iostream>
 
 using nljson = nlohmann::json;
 #include "http/log_management.h"
-
-static SmallStringHash_T<CSphString> g_hAlias;
-static RwLock_t g_tLockAlias;
 
 static RwLock_t g_tLockKbnTable;
 static nljson g_tKbnTable = "{}"_json;
@@ -76,24 +61,15 @@ private:
 
 	void ProcessEmptyHead();
 	bool ProcessKbnTableDoc();
-	void ProcessCat();
-	void ProcessAliasGet();
 	void ProcessILM();
 	void ProcessCCR();
 	void ProcessKbnTableGet();
-	void ProcessCount();
-	bool ProcessInsert();
-	void ProcessInsertIntoIdx ( const CompatInsert_t & tIns );
-	void ProcessKbnTableMGet();
-	void ProcessPutTemplate();
+	bool ProcessCount();
 	void ProcessIgnored();
 	bool ProcessCreateTable();
 	bool ProcessDeleteDoc();
-	bool ProcessUpdateDoc();
 	void ProcessDeleteTable();
-	void ProcessAliasSet();
 	void ProcessRefresh ( const CSphString * pName );
-	void ProcessFields();
 
 	static CSphMutex m_tReqStatLock;
 	static SmallStringHash_T<int> m_tReqStat;
@@ -358,27 +334,6 @@ static void InsertIntoKbnTable ( const CSphString & sIndex, const nljson & tTbl,
 	//sphInfo ( "kibana table '%s' docs: inserted %d, failed %d", sIndex.cstr(), (int)iDocs-iFailed, iFailed ); // !COMMIT
 }
 
-static void CreateAliases()
-{
-	ScRL_t tLockTbl ( g_tLockKbnTable );
-	for ( auto & tTbl : g_tKbnTable.items() )
-	{
-		if ( !tTbl.value().is_object() || !tTbl.value().contains( "aliases" ) )
-			continue;
-
-		CSphString sName = tTbl.key().c_str();
-
-		ScWL_t tLock ( g_tLockAlias );
-		for ( auto & tAlias : tTbl.value()["aliases"].items() )
-		{
-			CSphString sAlias = tAlias.key().c_str();
-			g_hAlias.Add ( sName, sAlias );
-		}
-	}
-
-	COMPATINFO << "created " << g_hAlias.GetLength() << " aliases, tables " << g_tKbnTable.size();
-}
-
 static void CreateKbnIndexes()
 {
 	ScRL_t tLockTbl ( g_tLockKbnTable );
@@ -395,7 +350,7 @@ static void CreateKbnIndexes()
 			StrVec_t dWarnings;
 			CSphString sError;
 
-			if ( !DropIndexInt ( sName, true, sError ) )
+			if ( !DropIndexInt ( sName, true, false, sError ) )
 				CompatWarning ( "%s", sError.cstr() );
 
 			CreateTableSettings_t tOpts;
@@ -418,20 +373,8 @@ static void CreateKbnIndexes()
 	}
 }
 
-static void CreateScripts();
-static void CatColumnsSetup();
-
 void SetupCompatHttp()
 {
-	if ( !IsLogManagementEnabled() )
-		return;
-
-	Threads::CallCoroutine ( [] { 
-	CreateAliases();
-
-	CreateScripts();
-	CatColumnsSetup();
-	} );
 }
 
 void LoadCompatHttp ( const char * sData )
@@ -528,12 +471,6 @@ static StrVec_t SplitURL ( const CSphString & sURL )
 	);
 
 	return dParts;
-}
-
-static bool IsEq ( const HttpOptionsHash_t & hOpts, const CSphString & sName, const CSphString & sVal )
-{
-	const CSphString * pVal = hOpts ( sName );
-	return ( pVal && *pVal==sVal );
 }
 
 void DumpNLJson ( const nljson & tVal, int iTabs )
@@ -900,12 +837,6 @@ static bool IsKibanTable ( const VecTraits_T<CSphString> & dIndexes )
 		ScRL_t tLockTbl ( g_tLockKbnTable );
 		bKbnTable = ( dIndexes.any_of ( [] ( const CSphString & tVal ) { return g_tKbnTable.contains ( tVal.cstr() ); } ) );
 	}
-	if ( !bKbnTable )
-	{
-		ScRL_t tLock ( g_tLockAlias );
-		bKbnTable = ( g_hAlias.Exists ( dIndexes[0] ) );
-	}
-
 	return bKbnTable;
 }
 
@@ -973,11 +904,6 @@ static void FixupKibana ( const StrVec_t & dIndexes, nljson & tFullQuery )
 				ScRL_t tLockTbl ( g_tLockKbnTable );
 				bKbnTable = ( dIndexes.any_of ( [] ( const CSphString & tVal ) { return g_tKbnTable.contains ( tVal.cstr() ); } ) );
 			}
-			if ( !bKbnTable )
-			{
-				ScRL_t tLock ( g_tLockAlias );
-				bKbnTable = ( g_hAlias.Exists ( dIndexes[0] ) );
-			}
 
 			if ( !bKbnTable )
 				CompatWarning ( "removed sort[_script] property at query to not kibana index '%s'", dIndexes[0].cstr() );
@@ -995,43 +921,12 @@ static StrVec_t ExpandIndexes ( const CSphString & sSrcIndexes, CSphString & sRe
 	{
 		if ( !HasWildcard ( sName.cstr() ) )
 		{
-			// look for alias
-			const CSphString * pAliasIndex = g_hAlias ( sName );
-			const CSphString * pIndexName = ( pAliasIndex ? pAliasIndex : &sName );
-			
 			// then look for local index
-			auto pServed ( GetServed ( *pIndexName ) );
+			auto pServed ( GetServed ( sName ) );
 			if ( pServed )
-				dLocalIndexes.Add ( *pIndexName );
+				dLocalIndexes.Add ( sName );
 		} else
 		{
-			StrVec_t dIndexName;
-
-			// look for alias
-			// scope for alias hash lock
-			{
-				ScRL_t tLock ( g_tLockAlias );
-				for  ( const auto & tAliasIt : g_hAlias )
-				{
-					const CSphString & sAliasIndex = tAliasIt.second;
-					if ( !sphWildcardMatch ( sAliasIndex.cstr(), sName.cstr() ) )
-						continue;
-
-					dIndexName.Add ( sAliasIndex );
-				}
-			}
-
-			// look for local indexes from alias
-			if ( dIndexName.GetLength() )
-			{
-				for ( const CSphString & sIndexName : dIndexName )
-				{
-					auto pServed ( GetServed ( sIndexName ) );
-					if ( pServed )
-						dLocalIndexes.Add ( sIndexName );
-				}
-			}
-
 			// look for local indexes from wildcards
 			ServedSnap_t hLocal = g_pLocalIndexes->GetHash();
 			for ( const auto & tIt : *hLocal )
@@ -1159,6 +1054,13 @@ static bool DoSearch ( const CSphString & sDefaultIndex, nljson & tReq, const CS
 	else if ( tReq.contains ( "index" ) )
 		sIndex = tReq["index"].get<std::string>().c_str();
 
+	if ( sIndex.Begins ( ".kibana" ) )
+	{
+		TlsMsg::Err ( "not supported index [%s]", sIndex.cstr() );
+		sRes = JsonEncodeResultError ( TlsMsg::szError(), GetErrorTypeName ( HttpErrorType_e::IllegalArgument ), 400 );
+		return false;
+	}
+
 	CSphString sExpandedIndex;
 	StrVec_t dIndexes = ExpandIndexes ( sIndex, sExpandedIndex );
 
@@ -1212,13 +1114,16 @@ static bool DoSearch ( const CSphString & sDefaultIndex, nljson & tReq, const CS
 	if ( !tParsedQuery.m_sWarning.IsEmpty() )
 		CompatWarning ( "%s", tParsedQuery.m_sWarning.cstr() );
 
-	std::unique_ptr<PubSearchHandler_c> tHandler ( CreateMsearchHandler ( sphCreateJsonQueryParser(), QUERY_JSON, tQuery ) );
+	std::unique_ptr<PubSearchHandler_c> tHandler ( CreateMsearchHandler ( sphCreateJsonQueryParser(), QUERY_JSON, tParsedQuery ) );
 	tHandler->RunQueries();
 
-	CSphFixedVector<AggrResult_t *> dAggsRes ( 1 + tQuery.m_dAggs.GetLength() );
+	CSphFixedVector<AggrResult_t *> dAggsRes ( tQuery.m_bGroupEmulation ? 1 : ( 1 + tQuery.m_dAggs.GetLength() ) );
 	dAggsRes[0] = tHandler->GetResult ( 0 );
-	ARRAY_FOREACH ( i, tQuery.m_dAggs )
-		dAggsRes[i+1] = tHandler->GetResult ( i+1 );
+	if ( !tQuery.m_bGroupEmulation )
+	{
+		ARRAY_FOREACH ( i, tQuery.m_dAggs )
+			dAggsRes[i+1] = tHandler->GetResult ( i+1 );
+	}
 	sRes = sphEncodeResultJson ( dAggsRes, tQuery, nullptr, ResultSetFormat_e::ES );
 
 	bool bOk = true;
@@ -1326,7 +1231,8 @@ static bool GetDocIds ( const char * sIndexName, const char * sFilterID, DocIdVe
 	const char * sIdName = "_id";
 	const char * sVerName = "_version";
 
-	JsonQuery_c tQuery;
+	ParsedJsonQuery_t tParsed;
+	JsonQuery_c & tQuery = tParsed.m_tQuery;
 	CSphQueryItem & tItem = tQuery.m_dItems.Add();
 	tItem.m_sAlias = sIdName;
 	tItem.m_sExpr = sIdName;
@@ -1347,7 +1253,7 @@ static bool GetDocIds ( const char * sIndexName, const char * sFilterID, DocIdVe
 		tFilter.m_bExclude = false;
 	}
 
-	std::unique_ptr<PubSearchHandler_c> tHandler ( CreateMsearchHandler ( sphCreateJsonQueryParser(), QUERY_JSON, tQuery ) );
+	std::unique_ptr<PubSearchHandler_c> tHandler ( CreateMsearchHandler ( sphCreateJsonQueryParser(), QUERY_JSON, tParsed ) );
 	tHandler->RunQueries();
 	const AggrResult_t * pRes = tHandler->GetResult ( 0 );
 
@@ -1427,50 +1333,12 @@ static bool GetIndexDoc ( const CSphIndex * pIndex, const char * sID, int64_t iS
 	return true;
 }
 
-static void TableGetDoc ( const CSphString & sId, const CSphIndex * pIndex, const CSphString & sIndex, CSphVector<BYTE> & dRawDoc, int & iVersion )
-{
-	CSphString sError;
-	DocIdVer_t dDocVer;
-	if ( !GetDocIds ( sIndex.cstr(), sId.cstr(), dDocVer, sError ) )
-	{
-		CompatWarning ( "%s", sError.cstr() );
-		return;
-	}
-
-	// doc not found
-	if ( !dDocVer.GetLength() )
-		return;
-
-	if ( dDocVer.GetLength()>2 )
-	{
-		CompatWarning ( "%s multiple documents", sId.cstr() );
-		return;
-	}
-	iVersion = dDocVer[0].second;
-
-	DocstoreSession_c tSession;
-	pIndex->CreateReader ( tSession.GetUID() );
-
-	if ( !GetIndexDoc ( pIndex, sId.cstr(), tSession.GetUID(), dRawDoc, sError ) )
-	{
-		CompatWarning ( "%s", sError.cstr() );
-		return;
-	}
-}
-
 bool HttpCompatHandler_c::ProcessKbnTableDoc()
 {
 	assert ( GetUrlParts().GetLength() );
 	const CSphString & sId = GetUrlParts().Last();
 
 	CSphString sIndex = GetUrlParts()[0];
-	{
-		ScRL_t tLock ( g_tLockAlias );
-		const CSphString * pAliasIndex = g_hAlias ( sIndex );
-		if ( pAliasIndex )
-			sIndex = *pAliasIndex;
-	}
-
 	auto tServed ( GetServed ( sIndex ) );
 	if ( !tServed )
 	{
@@ -1526,174 +1394,6 @@ bool HttpCompatHandler_c::ProcessKbnTableDoc()
 	BuildReplyHead ( Str_t ( tReply ), EHTTP_STATUS::_200 );
 
 	return true;
-}
-
-static nljson ReportGetDocError ( const CSphString & sError, HttpErrorType_e eType, const CSphString & sId, const CSphString & sIndex )
-{
-	nljson tRes = R"({})"_json;
-	tRes["_index"] = sIndex.cstr();
-	tRes["_id"] = sId.cstr();
-	nljson tResError = R"({})"_json;
-	tResError["type"] = GetErrorTypeName ( eType );
-	tResError["reason"] = sError.cstr();
-	tResError["reason"] = sIndex.cstr();
-	tRes["error"] = tResError;
-
-	return tRes;
-}
-
-void HttpCompatHandler_c::ProcessKbnTableMGet()
-{
-	nljson tReq = nljson::parse ( GetBody().first );
-	
-	nljson::json_pointer tDocs ( "/docs" );
-	nljson::json_pointer tIds ( "/ids" );
-
-	bool bCaseDocs = ( tReq.contains ( tDocs ) );
-	bool bCaseIds = ( !bCaseDocs && tReq.contains ( tIds ) );
-
-	if ( !bCaseDocs && !bCaseIds )
-	{
-		ReportError ( "unknown key for a START_ARRAY, expected [docs] or [ids]", HttpErrorType_e::Parse, EHTTP_STATUS::_400 );
-		return;
-	}
-
-	CSphString sIndex;
-	if ( bCaseIds )
-	{
-		if ( GetUrlParts().GetLength()<2 )
-		{
-			ReportError ( "Validation Failed: 1: index is missing for doc 0;", HttpErrorType_e::ActionRequestValidation, EHTTP_STATUS::_400 );
-			return;
-		}
-
-		sIndex = GetUrlParts()[2];
-		ScRL_t tLock ( g_tLockAlias );
-		const CSphString * pAliasIndex = g_hAlias ( sIndex );
-		if ( pAliasIndex )
-			sIndex = *pAliasIndex;
-
-		if ( sIndex.IsEmpty() )
-		{
-			m_sError.SetSprintf ( "no such index [%s]", GetUrlParts()[2].cstr() );
-			ReportError ( nullptr, HttpErrorType_e::IndexNotFound, EHTTP_STATUS::_400 );
-			return;
-		}
-
-		auto tIndex ( GetServed ( sIndex ) );
-		if ( !tIndex )
-		{
-			m_sError.SetSprintf ( "no such index [%s]", GetUrlParts()[2].cstr() );
-			ReportError ( nullptr, HttpErrorType_e::IndexNotFound, EHTTP_STATUS::_400 );
-			return;
-		}
-	}
-
-	nljson tRes = R"({"docs":[]})"_json;
-	nljson & tResDocs = tRes[tDocs];
-
-	CSphVector<BYTE> dRawDoc;
-	CSphString sId;
-	int iDoc = 0;
-	nljson::json_pointer tDocId ( "/_id" );
-	nljson::json_pointer tDocIdx ( "/_index" );
-
-	for ( const nljson & tDoc : tReq[tDocs] )
-	{
-		if ( bCaseDocs )
-		{
-			if ( !tDoc.contains ( tDocId ) )
-			{
-				m_sError.SetSprintf ( "Validation Failed: 1: id is missing for doc %d;", iDoc );
-				ReportError ( nullptr, HttpErrorType_e::ActionRequestValidation, EHTTP_STATUS::_400 );
-				return;
-			}
-			if ( !tDoc.contains ( tDocIdx ) )
-			{
-				m_sError.SetSprintf ( "Validation Failed: 1: index is missing for doc %d;", iDoc );
-				ReportError ( nullptr, HttpErrorType_e::ActionRequestValidation, EHTTP_STATUS::_400 );
-				return;
-			}
-
-			sId = tDoc[tDocId].get<std::string>().c_str();
-			sIndex = tDoc[tDocIdx].get<std::string>().c_str();
-
-			{
-				ScRL_t tLock ( g_tLockAlias );
-				const CSphString * pAliasIndex = g_hAlias ( sIndex );
-				if ( pAliasIndex )
-					sIndex = *pAliasIndex;
-			}
-
-			if ( sIndex.IsEmpty() )
-			{
-				CSphString sError;
-				sError.SetSprintf ( "no such index [%s]", sIndex.cstr() );
-				tResDocs.push_back ( ReportGetDocError ( sError, HttpErrorType_e::IndexNotFound, sId, sIndex ) );
-				continue;
-			}
-		} else
-		{
-			sId = tDoc.get<std::string>().c_str();
-		}
-
-		auto tIndex ( GetServed ( sIndex ) );
-		if ( !tIndex )
-		{
-			CSphString sError;
-			sError.SetSprintf ( "no such index [%s]", sIndex.cstr() );
-			tResDocs.push_back ( ReportGetDocError ( sError, HttpErrorType_e::IndexNotFound, sId, sIndex ) );
-			continue;
-		}
-
-		int iVersion = 0;
-		dRawDoc.Resize ( 0 );
-		TableGetDoc ( sId, RIdx_c ( tIndex ), sIndex, dRawDoc, iVersion );
-
-		nljson tResDoc = R"({"_type": "_doc"})"_json;
-		tResDoc["_index"] = sIndex.cstr();
-		tResDoc["_id"] = sId.cstr();
-
-		if ( dRawDoc.GetLength() )
-		{
-			tResDoc["found"] = true;
-			tResDoc["_version"] = iVersion;
-			tResDoc["_seq_no"] = 1; 
-			tResDoc["_primary_term"] = 1;
-			tResDoc["_source"] = nljson::parse ( dRawDoc.Begin() );
-		} else
-		{
-			tResDoc["found"] = false;
-		}
-		tResDocs.push_back ( tResDoc );
-
-		iDoc++;
-	}
-
-	JsonEscapedBuilder tReply;
-	tReply += tRes.dump().c_str();
-
-	BuildReply ( Str_t ( tReply ), EHTTP_STATUS::_200 );
-}
-
-void HttpCompatHandler_c::ProcessPutTemplate()
-{
-	assert ( GetUrlParts().GetLength() );
-	const CSphString & sTblName = GetUrlParts()[1];
-
-	nljson tTbl = nljson::parse ( GetBody().first );
-	if ( !tTbl.contains ( "order" ) )
-		tTbl["order"] = 0;
-	if ( !tTbl.contains ( "version" ) )
-		tTbl["version"] = 1;
-
-	{
-		ScWL_t tLockTbl ( g_tLockKbnTable ); 
-		g_tKbnTable["templates"][sTblName.cstr()] = tTbl;
-	}
-
-	const char * sRes = "{\"acknowledged\":true}";
-	BuildReply ( FromSz  ( sRes ), EHTTP_STATUS::_200 );
 }
 
 void HttpCompatHandler_c::ProcessIgnored()
@@ -1787,15 +1487,7 @@ void HttpCompatHandler_c::ProcessKbnTableGet()
 	{
 		ScRL_t tLockTbl ( g_tLockKbnTable );
 		if ( g_tKbnTable.contains ( sSrcIndexName.cstr() ) )
-		{
 			tTblName /= sSrcIndexName.cstr();
-		} else
-		{
-			ScRL_t tLock ( g_tLockAlias );
-			const CSphString * pAliasIndex = g_hAlias ( sSrcIndexName );
-			if ( pAliasIndex )
-				tTblName /= pAliasIndex->cstr();
-		}
 
 		if ( tTblName.empty() || !g_tKbnTable.contains ( tTblName ) )
 		{
@@ -2033,12 +1725,12 @@ bool HttpCompatHandler_c::ProcessSearch()
 	return true;
 }
 
-void HttpCompatHandler_c::ProcessCount()
+bool HttpCompatHandler_c::ProcessCount()
 {
 	if ( IsEmpty ( GetBody() ) )
 	{
 		ReportError ( "request body or source parameter is required", HttpErrorType_e::Parse, EHTTP_STATUS::_400 );
-		return;
+		return false;
 	}
 
 	const CSphString & sIndex = GetUrlParts()[0];
@@ -2046,14 +1738,15 @@ void HttpCompatHandler_c::ProcessCount()
 	if ( tReq.is_discarded())
 	{
 		ReportError ( "invalid body", HttpErrorType_e::Parse, EHTTP_STATUS::_400 );
-		return;
+		return false;
 	}
 
 	CSphString sRes;
 	if ( !DoSearch ( sIndex, tReq, GetFullURL(), sRes ) )
 	{
+		m_sError = sRes;
 		BuildReply ( FromStr ( sRes ), EHTTP_STATUS::_400 );
-		return;
+		return false;
 	}
 
 	nljson tRef = nljson::parse ( sRes.cstr(), nullptr, false );
@@ -2070,343 +1763,7 @@ void HttpCompatHandler_c::ProcessCount()
 	// filter_path and _source uri params
 	ProcessKbnResult ( GetOptions()( "_source" ), GetOptions()( "filter_path" ), sRes );
 	BuildReply ( FromStr ( sRes ), EHTTP_STATUS::_200 );
-}
-
-static void CatAliases ( bool bJson, StringBuilder_c & sRes )
-{
-	nljson tJsonRes = R"([])"_json;
-
-	{
-		ScRL_t tLock ( g_tLockAlias );
-		for ( const auto & tAliasIt : g_hAlias )
-		{
-			const CSphString & sIndex = tAliasIt.second;
-			const CSphString & sAlias = tAliasIt.first;
-
-			if ( bJson )
-			{
-				nljson tItem = 
-R"({
-		"filter": "-", 
-		"routing.index": "-", 
-		"routing.search": "-", 
-		"is_write_index": "-"
-})"_json;
-
-				tItem["alias"] = sAlias.cstr();
-				tItem["index"] = sIndex.cstr();
-
-				tJsonRes.push_back ( tItem );
-			} else
-			{
-				sRes.Appendf ( "%s %s  - - - -\n", sAlias.cstr(), sIndex.cstr() );
-			}
-		}
-	}
-	if ( bJson )
-		sRes += tJsonRes.dump().c_str();
-}
-
-static void CatMaster ( bool bJson, StringBuilder_c & sRes )
-{
-	ScRL_t tLockTbl ( g_tLockKbnTable );
-	const nljson & tMasterTbl = g_tKbnTable["master"];
-	if ( bJson )
-	{
-		nljson tJsonRes = R"([])"_json;
-		tJsonRes.push_back ( tMasterTbl );
-		sRes += tJsonRes.dump().c_str();
-	} else
-	{
-		sRes.Appendf ( "%s %s %s %s", tMasterTbl["id"].get<std::string>().c_str(), tMasterTbl["host"].get<std::string>().c_str(), tMasterTbl["ip"].get<std::string>().c_str(), tMasterTbl["node"].get<std::string>().c_str() );
-	}
-}
-
-static void CatTemplates ( bool bJson, const char * sFilter, StringBuilder_c & sRes )
-{
-	nljson tJsonRes = R"([])"_json;
-	StringBuilder_c sTmp;
-
-	ScRL_t tLockTbl ( g_tLockKbnTable );
-	const nljson & tTemplates = g_tKbnTable["templates"];
-	for ( const auto & tIt : tTemplates.items() )
-	{
-		const std::string & sName = tIt.key();
-
-		if ( sFilter && !sphWildcardMatch ( sName.c_str(), sFilter ) )
-			continue;
-
-		const nljson & tPattern = tIt.value()["index_patterns"];
-		const nljson & tOrder = tIt.value()["order"];
-		const nljson & tVersion = tIt.value()["version"];
-
-		sTmp.Clear();
-		sTmp.StartBlock ( ", ", "[", "]" );
-		for ( const auto & tItPattern : tPattern.items() )
-			sTmp += tItPattern.value().get<std::string>().c_str();
-		sTmp.FinishBlock ( false );
-
-		if ( bJson )
-		{
-			nljson tItem;
-
-			tItem["name"] = sName;
-			tItem["index_patterns"] = sTmp.cstr();
-			tItem["order"] = tOrder;
-			tItem["version"] = tVersion;
-
-			tJsonRes.push_back ( tItem );
-		} else
-		{
-			sRes.Appendf ( "%s %s %s %s\n", sName.c_str(), sTmp.cstr(), tOrder.get<std::string>().c_str(), tVersion.get<std::string>().c_str() );
-		}
-	}
-
-	if ( bJson )
-		sRes += tJsonRes.dump().c_str();
-}
-
-struct CatIndexDesc_t
-{
-	CSphString m_sName;
-	int64_t m_iDocs;
-	int64_t m_iSize;
-};
-
-// FIXME!!! add support of another 120 column names and shortcuts
-enum class CatColumns_e
-{
-	HEALTH = 0, 
-	STATUS, 
-	INDEX, 
-	UUID, 
-	PRI, 
-	REP, 
-	DOCS_COUNT, 
-	DOCS_DEL, 
-	STORE_SIZE, 
-	PRI_SIZE,
-
-	TOTAL
-};
-
-static const char * g_sCatColumnNames[(int)CatColumns_e::TOTAL] = {
-	"health,h",
-	"status,s", 
-	"index,i,idx", 
-	"id,uuid", 
-	"pri,p,shards.primary,shardsPrimary", 
-	"rep,r,shards.replica,shardsReplica", 
-	"docs.count,dc,docsCount", 
-	"docs.deleted,dd,docsDeleted", 
-	"store.size,ss,storeSize", 
-	"pri.store.size"
-};
-
-static SmallStringHash_T<CatColumns_e> g_hCatColumnNames;
-
-static void CatColumnsSetup()
-{
-	StrVec_t dNames;
-	for ( int i=0; i<(int)CatColumns_e::TOTAL; i++ )
-	{
-		dNames = sphSplit ( g_sCatColumnNames[i], "," );
-		for ( const CSphString & sName : dNames )
-			g_hCatColumnNames.Add ( (CatColumns_e)i, sName );
-	}
-}
-
-static CSphVector<CSphNamedInt> GetCatIndexesColumns ( const CSphString * pColumns )
-{
-	CSphVector<CSphNamedInt> dCol;
-	if ( !pColumns )
-	{
-		dCol.Resize ( (int)CatColumns_e::TOTAL );
-		for ( int i=0; i<(int)CatColumns_e::TOTAL; i++ )
-		{
-			dCol[i].second = i;
-			const char * sName = g_sCatColumnNames[i];
-			const char * sDel = strchr ( sName, ',' );
-			if ( sDel )
-				dCol[i].first.SetBinary ( sName, sDel-sName );
-			else
-				dCol[i].first = sName;
-		}
-	} else
-	{
-		StrVec_t dParsed = sphSplit ( pColumns->cstr(), "," );
-		ARRAY_FOREACH ( i, dParsed )
-		{
-			const CatColumns_e * pCol = g_hCatColumnNames ( dParsed[i] );
-			if ( pCol )
-				dCol.Add ( std::make_pair ( dParsed[i], (int)( *pCol ) ) );
-		}
-	}
-
-	return dCol;
-}
-
-static void CatPrintColumn ( bool bJson, const CSphNamedInt & tCol, const CatIndexDesc_t & tDesc, nljson & tJsonItem, StringBuilder_c & sRes )
-{
-	switch ( (CatColumns_e)tCol.second )
-	{
-	case CatColumns_e::HEALTH: 
-		if ( bJson )
-			tJsonItem[tCol.first.cstr()] = "green";
-		else
-			sRes << "green";
-	break;
-
-	case CatColumns_e::STATUS:
-		if ( bJson )
-			tJsonItem[tCol.first.cstr()] = "open";
-		else
-			sRes << "open";
-	break;
-
-	case CatColumns_e::INDEX:
-		if ( bJson )
-			tJsonItem[tCol.first.cstr()] = tDesc.m_sName.cstr();
-		else
-			sRes << tDesc.m_sName;
-	break;
-
-	case CatColumns_e::UUID:
-	{
-		CSphString sBuf;
-		sBuf.SetSprintf ( "%016" PRIx64, sphFNV64 ( tDesc.m_sName.cstr() ) );
-		if ( bJson )
-			tJsonItem[tCol.first.cstr()] = sBuf.cstr();
-		else
-			sRes << sBuf;
-	}
-	break;
-
-	case CatColumns_e::PRI:
-		if ( bJson )
-			tJsonItem[tCol.first.cstr()] = 1;
-		else
-			sRes << 1;
-	break;
-
-	case CatColumns_e::REP:
-		if ( bJson )
-			tJsonItem[tCol.first.cstr()] = 0;
-		else
-			sRes << 0;
-	break;
-
-	case CatColumns_e::DOCS_COUNT:
-		if ( bJson )
-			tJsonItem[tCol.first.cstr()] = tDesc.m_iDocs;
-		else
-			sRes << tDesc.m_iDocs;
-	break;
-
-	case CatColumns_e::DOCS_DEL:
-		if ( bJson )
-			tJsonItem[tCol.first.cstr()] = 0;
-		else
-			sRes << 0;
-	break;
-
-	case CatColumns_e::STORE_SIZE:
-		if ( bJson )
-			tJsonItem[tCol.first.cstr()] = tDesc.m_iSize;
-		else
-			sRes << tDesc.m_iSize;
-	break;
-
-	case CatColumns_e::PRI_SIZE:
-		if ( bJson )
-			tJsonItem[tCol.first.cstr()] = tDesc.m_iSize;
-		else
-			sRes << tDesc.m_iSize;
-	break;
-
-	default: break;
-	}
-}
-
-// FXIME!!! add support of 'v' option - column names
-static void CatIndexes ( bool bJson, const char * sFilter, const CSphString * pColumns, StringBuilder_c & sRes )
-{
-	nljson tJsonRes = R"([])"_json;
-
-	CSphVector<CatIndexDesc_t> dDesc;
-	ServedSnap_t hLocal = g_pLocalIndexes->GetHash();
-	for ( const auto & tIt : *hLocal )
-	{
-		if ( !tIt.second )
-			continue;
-
-		if ( sFilter && !sphWildcardMatch ( tIt.first.cstr(), sFilter ) )
-			continue;
-
-		RIdx_c tIdx ( tIt.second );
-
-		CatIndexDesc_t & tDesc = dDesc.Add();
-		tDesc.m_sName = tIt.first;
-		const CSphSourceStats & tStat = tIdx->GetStats();
-		tDesc.m_iDocs = tStat.m_iTotalDocuments;
-		CSphIndexStatus tStatus;
-		tIdx->GetStatus ( &tStatus );
-		tDesc.m_iSize = tStatus.m_iDiskUse;
-	}
-
-	auto dCol = GetCatIndexesColumns ( pColumns );
-
-	nljson tJsonItem = R"({})"_json;
-	for ( const CatIndexDesc_t & tDesc : dDesc )
-	{
-		if ( bJson )
-			tJsonItem = R"({})"_json;
-		else
-			sRes.StartBlock ( " " );
-
-		for ( const auto & tCol : dCol )
-			CatPrintColumn ( bJson, tCol, tDesc, tJsonItem, sRes );
-
-		if ( bJson )
-			tJsonRes.push_back ( tJsonItem );
-		else
-		{
-			sRes.FinishBlock ( false );
-			sRes += "\n";
-		}
-	}
-
-	if ( bJson )
-		sRes += tJsonRes.dump().c_str();
-}
-
-void HttpCompatHandler_c::ProcessCat()
-{
-	assert ( GetUrlParts().GetLength()>=2 );
-	bool bJson = IsEq ( GetOptions(), "format", "json" );
-
-	StringBuilder_c sRes;
-
-	if ( GetUrlParts()[1]=="aliases" )
-	{
-		CatAliases ( bJson, sRes );
-	} else if ( GetUrlParts()[1]=="master" )
-	{
-		CatMaster ( bJson, sRes );
-	} else if ( GetUrlParts()[1]=="templates" )
-	{
-		CatTemplates ( bJson, ( GetUrlParts().GetLength()>=3 ? GetUrlParts()[2].cstr() : nullptr ), sRes );
-	} else if ( GetUrlParts()[1]=="indices" )
-	{
-		CatIndexes ( bJson, ( GetUrlParts().GetLength()>=3 ? GetUrlParts()[2].cstr() : nullptr ), GetOptions() ( "h" ), sRes );
-	} else
-	{
-		sRes.Sprintf ( "Incorrect HTTP method for uri [%s] and method [GET], allowed: [POST]", GetFullURL().cstr() );
-		HttpErrorReply ( GetResult(), EHTTP_STATUS::_405, sRes.cstr() );
-		return;
-	}
-
-	BuildReplyHead ( Str_t ( sRes ), EHTTP_STATUS::_200 );
+	return true;
 }
 
 void HttpCompatHandler_c::ProcessEmptyHead ()
@@ -2433,185 +1790,6 @@ void HttpCompatHandler_c::ProcessEmptyHead ()
 
 	std::string sRes = tJsonRes.dump();
 	BuildReplyHead ( FromStd ( sRes ), EHTTP_STATUS::_200 );
-}
-
-static bool GetIndexComplexFields ( const CSphString & sIndex, ComplexFields_t & dFields )
-{
-	auto tIndex ( GetServed ( sIndex ) );
-	if ( !tIndex )
-	{
-		CompatWarning ( "unknown kibana table %s", sIndex.cstr() );
-		return false;
-	}
-
-	const CSphSchema & tSchema = RIdx_c( tIndex )->GetMatchSchema();
-	for ( const CSphColumnInfo & tField : tSchema.GetFields() )
-		AddComplexField ( tField.m_sName.cstr(), dFields );
-
-	return true;
-}
-
-struct CompatInsert_t
-{
-	Str_t m_sBody;
-	const CSphString & m_sIndex;
-	const bool m_bReplace;
-	const char * m_sId { nullptr };
-
-	CompatInsert_t ( Str_t sBody, const CSphString & sIndex, bool bReplace )
-		: m_sBody ( sBody ), m_sIndex ( sIndex ), m_bReplace ( bReplace )
-	{}
-};
-
-void HttpCompatHandler_c::ProcessInsertIntoIdx ( const CompatInsert_t & tIns )
-{
-	SqlStmt_t tStmt;
-	tStmt.m_eStmt = ( tIns.m_bReplace ? STMT_REPLACE : STMT_INSERT );
-
-	tStmt.m_sIndex = tIns.m_sIndex;
-	tStmt.m_tQuery.m_sIndexes = tIns.m_sIndex;
-
-	tStmt.m_dInsertSchema.Add ( sphGetDocidName() );
-	SqlInsert_t & tId = tStmt.m_dInsertValues.Add();
-	tId.m_iType = SqlInsert_t::CONST_INT;
-	if ( tIns.m_sId )
-		tId.SetValueInt ( strtoull ( tIns.m_sId, NULL, 10 ), false );
-
-	JsonObj_c tSource ( tIns.m_sBody.first );
-
-	bool bInserted = ( ParseJsonInsertSource ( tSource, tStmt, tIns.m_bReplace, m_sError ) && InsertDoc ( tStmt, m_sError ) );
-
-	if ( !bInserted )
-	{
-		ReportError ( nullptr, HttpErrorType_e::ContentParse, EHTTP_STATUS::_400, tIns.m_sIndex.cstr() );
-	} else
-	{
-		DocID_t tLastDoc = 0;
-		if ( session::LastIds().GetLength() )
-			tLastDoc = session::LastIds().Last();
-
-		nljson tRes;
-		tRes["_index"] = tIns.m_sIndex.cstr();
-		tRes["_type"] = "_doc";
-		tRes["_id"] = tLastDoc;
-		tRes["_version"] = 1;
-		tRes["_seq_no"] = 0;
-		tRes["_primary_term"] = 1;
-		tRes["result"] = ( ( tIns.m_bReplace && tIns.m_sId ) ? "updated" : "created" );
-		tRes["_shards"] = R"( { "total": 1, "successful": 1, "failed": 0 } )"_json;
-
-		std::string sRes = tRes.dump();
-		BuildReply ( FromStd ( sRes ), EHTTP_STATUS::_200 );
-	}
-}
-
-bool HttpCompatHandler_c::ProcessInsert()
-{
-	if ( IsEmpty ( GetBody() ) )
-	{
-		ReportError ( "request body or source parameter is required", HttpErrorType_e::Parse, EHTTP_STATUS::_400 );
-		return true;
-	}
-
-	bool bDocReq = ( GetUrlParts()[1]=="_doc" );
-
-	CSphString sIndex;
-	StrVec_t dIndexes = ExpandIndexes ( GetUrlParts()[0], sIndex );
-
-	if ( sIndex.IsEmpty() )
-	{
-		ReportMissedIndex ( GetUrlParts()[0] );
-		return true;
-	}
-
-	CompatInsert_t tIns ( GetBody(), sIndex, bDocReq );
-	if ( GetUrlParts().GetLength()>2 )
-		tIns.m_sId = GetUrlParts()[2].cstr();
-
-	// index/_doc without id allowed only for POST
-	if ( bDocReq && tIns.m_sId==nullptr && GetRequestType()!=HTTP_POST )
-	{
-		ReportIncorrectMethod ( "POST" );
-		return true;
-	}
-
-	// index/_create without id not allowed
-	if ( !bDocReq && tIns.m_sId==nullptr )
-	{
-		if ( GetRequestType()==HTTP_POST )
-		{
-			m_sError.SetSprintf ( "Rejecting mapping update to [%s] as the final mapping would have more than 1 type: [_doc, _create]", sIndex.cstr() );
-			ReportError ( nullptr, HttpErrorType_e::IllegalArgument, EHTTP_STATUS::_400 );
-		} else
-		{
-			ReportIncorrectMethod ( "POST" );
-		}
-		return true;
-	}
-
-	if ( !IsKibanTable ( dIndexes ) )
-	{
-		 ProcessInsertIntoIdx ( tIns );
-		 return true;
-	}
-
-	nljson tSrc = nljson::parse ( GetBody().first );
-	int iVersion = 1;
-
-	// check \ get document version vs _create \ _doc
-	DocIdVer_t dIds;
-	if ( !GetDocIds ( sIndex.cstr(), tIns.m_sId, dIds, m_sError ) )
-	{
-		CompatWarning ( "doc '%s', error: %s", tIns.m_sId, m_sError.cstr() );
-		return false;
-	}
-	if ( dIds.GetLength() )
-	{
-		if ( dIds.GetLength()!=1 )
-		{
-			CompatWarning ( "multiple (%d) docs '%s' found", dIds.GetLength(), tIns.m_sId );
-			return false;
-		}
-
-		iVersion = dIds[0].second + 1;
-		if ( !tIns.m_bReplace )
-		{
-			m_sError.SetSprintf ( "[%s]: version conflict, document already exists (current version [%d])", tIns.m_sId, iVersion );
-			ReportError ( nullptr, HttpErrorType_e::VersionConflictEngine, EHTTP_STATUS::_409, sIndex.cstr() );
-			return true;
-		}
-	}
-
-	ComplexFields_t dFields;
-	if ( !GetIndexComplexFields ( sIndex, dFields ) )
-		return false;
-
-	bool bInserted = InsertDoc ( sIndex, dFields, tSrc, tIns.m_bReplace, tIns.m_sId, iVersion, m_sError );
-	
-	if ( !bInserted )
-		CompatWarning ( "doc '%s', error: %s", tIns.m_sId, m_sError.cstr() );
-
-	if ( !bInserted )
-	{
-		m_sError.SetSprintf ( "[%s]: version conflict, document already exists (current version [%d])", tIns.m_sId, iVersion );
-		ReportError ( nullptr, HttpErrorType_e::VersionConflictEngine, EHTTP_STATUS::_409, sIndex.cstr() );
-	} else
-	{
-		nljson tRes;
-		tRes["_index"] = sIndex.cstr();
-		tRes["_type"] = "_doc";
-		tRes["_id"] = tIns.m_sId;
-		tRes["_version"] = iVersion;
-		tRes["_seq_no"] = 0;
-		tRes["_primary_term"] = 1;
-		tRes["result"] = ( ( GetUrlParts()[1]=="_create" || iVersion==1 ) ? "created" : "updated" );
-		tRes["_shards"] = R"( { "total": 1, "successful": 1, "failed": 0 } )"_json;
-
-		std::string sRes = tRes.dump();
-		BuildReply ( FromStd ( sRes ), EHTTP_STATUS::_200 );
-	}
-
-	return true;
 }
 
 bool HttpCompatHandler_c::ProcessDeleteDoc()
@@ -2661,7 +1839,7 @@ bool HttpCompatHandler_c::ProcessDeleteDoc()
 		{
 			CompatWarning ( "doc '%s', error: %s", sId.cstr(), pReporter->GetError() );
 			ReportError ( "request body or source parameter is required", HttpErrorType_e::Parse, EHTTP_STATUS::_400 );
-			return true;
+			return false;
 		}
 	}
 
@@ -2681,295 +1859,11 @@ bool HttpCompatHandler_c::ProcessDeleteDoc()
 	return true;
 }
 
-typedef bool ( *fnScript ) ( const nljson & tParams, int & iVersion, nljson & tDoc, CSphString & sError );
-
-static bool fnScriptUpdate1 ( const nljson & tParams, int & iVersion, nljson & tDoc, CSphString & sError )
-{
-	nljson::json_pointer tParamType ( "/type" );
-	nljson::json_pointer tParamCntName ( "/counterFieldName" );
-	nljson::json_pointer tParamCnt ( "/count" );
-	nljson::json_pointer tParamTime ( "/time" );
-	if ( !tParams.contains ( tParamType ) || !tParams.contains ( tParamCntName ) || !tParams.contains ( tParamCnt ) || !tParams.contains ( tParamTime ) )
-	{
-		sError.SetSprintf ( "missed parameter: %s=%d,  %s=%d,  %s=%d,  %s=%d",
-			tParamType.to_string().c_str(), (int)tParams.contains ( tParamType ),
-			tParamCntName.to_string().c_str(), (int)tParams.contains ( tParamCntName ), 
-			tParamCnt.to_string().c_str(), (int)tParams.contains ( tParamCnt ), 
-			tParamTime.to_string().c_str(), (int)tParams.contains ( tParamTime ) );
-		return false;
-	}
-
-	std::string sValType = tParams[tParamType];
-	std::string sValCntName = tParams[tParamCntName];
-	int iValCnt = tParams[tParamCnt];
-
-	if ( !tDoc.contains ( sValType ) ||! tDoc[sValType].contains ( sValCntName ) )
-	{
-		tDoc[sValType][sValCntName] = iValCnt;
-	} else
-	{
-		int iPrevCnt = tDoc[sValType][sValCntName];
-		tDoc[sValType][sValCntName] = iPrevCnt + iValCnt;
-	}
-
-	tDoc["updated_at"] = tParams[tParamTime];
-
-	return true;
-}
-
-static std::pair < const char *, fnScript >  g_sScripts[] = {
-	{ R"(
-if (ctx._source[params.type][params.counterFieldName] == null)
-{
-	ctx._source[params.type][params.counterFieldName] = params.count;
-} else {
-	ctx._source[params.type][params.counterFieldName] += params.count;
-}
-ctx._source.updated_at = params.time;
-		)", fnScriptUpdate1 },
-	{ nullptr, nullptr }
-};
-
-static SmallStringHash_T< fnScript > g_hScripts;
-
-static void StripSpaces ( char * sBuf )
-{
-	char * sDst = sBuf;
-	char * sSrc = sBuf;
-	while ( *sSrc )
-	{
-		if ( sphIsSpace ( *sSrc ) )
-			sSrc++;
-		else
-			*sDst++ = *sSrc++;
-	}
-
-	*sDst = '\0';
-}
-
-void CreateScripts()
-{
-	int iScript = 0;
-	for ( const auto & tItem : g_sScripts )
-	{
-		if ( !tItem.first )
-			break;
-
-		CSphString sScript = tItem.first;
-		StripSpaces ( const_cast<char *>( sScript.cstr() ) );
-		
-		if ( !g_hScripts.Add ( tItem.second, sScript ) )
-			CompatWarning ( "duplicate script %d found %s", iScript, tItem.first );
-
-		iScript++;
-	}
-}
-
-static void ReportUpated ( const char * sId, int iVersion, const char * sIndex, const char * sOperation, const nljson & tDoc, CSphVector<BYTE> & dResult )
-{
-	nljson tRes;
-	tRes["_index"] = sIndex;
-	tRes["_type"] = "_doc";
-	tRes["_id"] = sId;
-	tRes["_version"] = iVersion;
-	tRes["result"] = sOperation;
-	tRes["_shards"] = R"( { "total": 1, "successful": 1, "failed": 0 } )"_json;
-	tRes["_seq_no"] = 0;
-	tRes["_primary_term"] = 1;
-
-	nljson tGet;
-	tGet["_seq_no"] = 0;
-	tGet["_primary_term"] = 1;
-	tGet["found"] = true;
-	tGet["_source"] = tDoc;
-
-	tRes["get"] = tGet;
-
-	std::string sRes = tRes.dump();
-	HttpBuildReply ( dResult, EHTTP_STATUS::_200, sRes.c_str(), sRes.length(), false );
-}
-
-bool HttpCompatHandler_c::ProcessUpdateDoc()
-{
-	CSphString sIndex;
-	ExpandIndexes ( GetUrlParts()[0], sIndex );
-	const CSphString & sId = GetUrlParts()[2];
-
-	if ( sIndex.IsEmpty() )
-	{
-		ReportMissedIndex ( GetUrlParts()[0] );
-		return false;
-	}
-	if ( IsEmpty ( GetBody() ) )
-	{
-		ReportError ( "Validation Failed: 1: script or doc is missing", HttpErrorType_e::ContentParse, EHTTP_STATUS::_400 );
-		return false;
-	}
-
-	nljson tUpd = nljson::parse ( GetBody().first, nullptr, false );
-	if ( tUpd.is_discarded() )
-	{
-		ReportError ( "invalid body", HttpErrorType_e::ContentParse, EHTTP_STATUS::_400 );
-		return false;
-	}
-
-	bool bHasScript = tUpd.contains ( "script" );
-
-	nljson::json_pointer tScriptName ( "/script/source" );
-	nljson::json_pointer tScriptParamsName ( "/script/params" );
-	if ( bHasScript &&( !tUpd.contains ( tScriptName ) || !tUpd.contains ( tScriptParamsName )  ) )
-	{
-		ReportMissedScript ( sIndex );
-		return false;
-	}
-
-	fnScript * pUpdateScript = nullptr;
-	if ( bHasScript )
-	{
-		// compact script by removing space characters and get script function
-		CSphString sScript = tUpd[tScriptName].get<std::string>().c_str();
-		StripSpaces ( const_cast<char *>( sScript.cstr() ) );
-		pUpdateScript = g_hScripts ( sScript );
-		if ( !pUpdateScript )
-		{
-			ReportMissedScript ( sIndex );
-			return false;
-		}
-	}
-
-	DocIdVer_t dIds;
-	if ( !GetDocIds ( sIndex.cstr(), sId.cstr(), dIds, m_sError ) )
-	{
-		CompatWarning ( "%s", m_sError.cstr() );
-		return false;
-	}
-
-	// validate document source for insert new document
-	nljson::json_pointer tSrcName ( "/upsert" );
-	if ( !dIds.GetLength() && !tUpd.contains ( tSrcName ) )
-	{
-		CompatWarning ( "doc '%s' source '%s' missed", sId.cstr(), tSrcName.to_string().c_str() );
-		m_sError.SetSprintf ( "[_doc][%s]: document missing", sId.cstr() );
-		ReportError ( nullptr, HttpErrorType_e::DocumentMissing, EHTTP_STATUS::_404 );
-		return true;
-	}
-
-	int iVersion = 1;
-
-	ComplexFields_t dComplexFields;
-	if ( !GetIndexComplexFields ( sIndex, dComplexFields ) )
-		return false;
-
-	// create new document
-	if ( !dIds.GetLength() )
-	{
-		const nljson & tSrc = tUpd[tSrcName];
-		if ( !InsertDoc ( sIndex, dComplexFields, tSrc, false, sId.cstr(), iVersion, m_sError ) )
-		{
-			CompatWarning ( "doc '%s', error: %s", sId.cstr(), m_sError.cstr() );
-
-			m_sError.SetSprintf ( "[%s]: version conflict, document already exists (current version [%d])", sId.cstr(), iVersion );
-			ReportError ( nullptr, HttpErrorType_e::VersionConflictEngine, EHTTP_STATUS::_409, sIndex.cstr() );
-			return true;
-		} else
-		{
-			ReportUpated ( sId.cstr(), iVersion, sIndex.cstr(), "created", tSrc, GetResult() );
-			return true;
-		}
-	}
-
-	if ( dIds.GetLength()!=1 )
-	{
-		CompatWarning ( "multiple %d documents found for '%s'", dIds.GetLength(), sId.cstr() );
-		ReportError ( "failed to execute script", HttpErrorType_e::IllegalArgument, EHTTP_STATUS::_400 );
-		return false;
-	}
-	if ( dIds[0].first!=sId )
-	{
-		CompatWarning ( "wrong document found '%s' for '%s'", dIds[0].first.cstr(), sId.cstr() );
-		ReportError ( "failed to execute script", HttpErrorType_e::IllegalArgument, EHTTP_STATUS::_400 );
-		return false;
-	}
-
-	auto tServed ( GetServed ( sIndex ) );
-	if ( !tServed )
-	{
-		ReportMissedIndex ( sIndex );
-		return false;
-	}
-
-	RIdx_c pIndex ( tServed );
-
-	DocstoreSession_c tSession;
-	pIndex->CreateReader ( tSession.GetUID() );
-	CSphVector<BYTE> dRawDoc;
-
-	//const auto & tDocId = dIds[0];
-	iVersion = dIds[0].second + 1;
-	if ( !GetIndexDoc ( pIndex, sId.cstr(), tSession.GetUID(), dRawDoc, m_sError ) )
-	{
-		CompatWarning ( "%s", m_sError.cstr() );
-		return false;
-	}
-
-	nljson tSrc = nljson::parse ( dRawDoc.Begin() );
-
-	// update raw source document
-	if ( bHasScript )
-	{
-		assert ( pUpdateScript );
-		if ( !((*pUpdateScript)( tUpd[tScriptParamsName], iVersion, tSrc, m_sError ) ) )
-		{
-			CompatWarning ( "%s", m_sError.cstr() );
-			ReportError ( "failed to execute script", HttpErrorType_e::IllegalArgument, EHTTP_STATUS::_400 );
-			return true;
-		}
-	} else if ( tUpd.contains ( "doc" ) )
-	{
-		const nljson & tDocUpd = tUpd["doc"];
-		tSrc.update ( tDocUpd );
-	} else
-	{
-		CompatWarning ( "doc '%s' source 'doc' missed", sId.cstr() );
-		m_sError.SetSprintf ( "[_doc][%s]: document missing", sId.cstr() );
-		ReportError ( nullptr, HttpErrorType_e::DocumentMissing, EHTTP_STATUS::_404 );
-		return true;
-	}
-
-	// reinsert updated document
-	if ( !InsertDoc ( sIndex, dComplexFields, tSrc, true, sId.cstr(), iVersion, m_sError ) )
-	{
-			CompatWarning ( "doc '%s', error: %s", sId.cstr(), m_sError.cstr() );
-
-			m_sError.SetSprintf ( "[%s]: version conflict, document already exists (current version [%d])", sId.cstr(), iVersion );
-			ReportError ( nullptr, HttpErrorType_e::VersionConflictEngine, EHTTP_STATUS::_409, sIndex.cstr() );
-			return true;
-	}
-
-
-	ReportUpated ( sId.cstr(), iVersion, sIndex.cstr(), "updated", tSrc, GetResult() );
-	return true;
-}
-
 static void DropTable ( const CSphString & sName )
 {
 	CSphString sError;
-	if ( !DropIndexInt ( sName, true, sError ) )
+	if ( !DropIndexInt ( sName, true, false, sError ) )
 		CompatWarning ( "%s", sError.cstr() );
-
-	{
-		CSphVector<CSphString> dIndexes;
-		ScWL_t tLock ( g_tLockAlias );
-		for ( auto tIt : g_hAlias )
-		{
-			const CSphString & sAliasIndex = tIt.second;
-			if ( sName==sAliasIndex )
-				dIndexes.Add ( tIt.first );
-		}
-
-		for ( const auto & sIndex : dIndexes )
-			g_hAlias.Delete ( sIndex );
-	}
 
 	{
 		ScWL_t tLockTbl ( g_tLockKbnTable );
@@ -3038,7 +1932,6 @@ bool HttpCompatHandler_c::ProcessCreateTable()
 	}
 
 	COMPATINFO << "created table '" << sName.cstr() << "'";
-	CreateAliases(); // FIXME!!! create only this table alias
 
 	nljson tRes = R"(
 {
@@ -3066,139 +1959,6 @@ void HttpCompatHandler_c::ProcessDeleteTable()
 	}
 
 	DropTable ( sName );
-
-	const char * sRes = "{ \"acknowledged\": true }";
-	BuildReply ( FromSz ( sRes ), EHTTP_STATUS::_200 );
-}
-
-void HttpCompatHandler_c::ProcessAliasGet()
-{
-	CSphString sIndex;
-	StrVec_t dFilters;
-	if ( GetUrlParts().GetLength()>=2 && GetUrlParts()[1]=="_alias" )
-	{
-		sIndex = GetUrlParts()[0];
-		if ( GetUrlParts().GetLength()>=3 )
-			sphSplit ( dFilters, GetUrlParts()[2].cstr(), "," );
-	} else if ( GetUrlParts().GetLength()>=2 && GetUrlParts()[0]=="_alias" )
-	{
-		sphSplit ( dFilters, GetUrlParts()[1].cstr(), "," );
-	}
-	dFilters.Apply ( [] ( CSphString & sItem ) {
-		if ( sItem=="_all" )
-			sItem = "*";
-		});
-
-	nljson tRes = R"({})"_json;
-	{
-		ScRL_t tLock ( g_tLockAlias );
-		for ( const auto & tIt : g_hAlias )
-		{
-			const CSphString & sAliasName = tIt.first;
-			const CSphString & sAliasIndex = tIt.second;
-
-			if ( !sIndex.IsEmpty() && !sphWildcardMatch ( sAliasIndex.cstr(), sIndex.cstr() ) )
-				continue;
-
-			if ( dFilters.GetLength() && !dFilters.any_of ( [&] ( const CSphString & sFilter ) { return sphWildcardMatch ( sAliasName.cstr(), sFilter.cstr() ); } ) )
-				continue;
-
-			if ( !tRes.contains ( sAliasIndex.cstr() ) )
-				tRes[sAliasIndex.cstr()] = R"({ "aliases": {} })"_json;
-
-			tRes[sAliasIndex.cstr()]["aliases"][sAliasName.cstr()] = R"({})"_json;
-		}
-	}
-
-	std::string sRes = tRes.dump();
-	BuildReplyHead ( FromStd ( sRes ), EHTTP_STATUS::_200 );
-}
-
-// FIXME!!! add support of these forms too
-// PUT /<index>/_alias/<alias>
-// POST /<index>/_alias/<alias>
-// PUT /<index>/_aliases/<alias>
-// POST /<index>/_aliases/<alias>
-
-void HttpCompatHandler_c::ProcessAliasSet()
-{
-	nljson tAliases = nljson::parse ( GetBody().first );
-	if ( tAliases.contains( "actions" ) )
-	{
-		// FIXME!!! add support of aliases and indices options
-		nljson::json_pointer tIndexName ( "/index" );
-		nljson::json_pointer tAliasName ( "/alias" );
-		for ( const auto & tIt : tAliases["actions"].items() )
-		{
-			const auto & tItem = tIt.value().cbegin();
-			if ( !tItem.value().contains ( tIndexName ) || !tItem.value().contains ( tAliasName )  )
-			{
-				ReportError ( "[aliases] failed to parse field [actions]", HttpErrorType_e::ContentParse, EHTTP_STATUS::_400 );
-				return;
-			}
-
-			CSphString sIndex = tItem.value()[tIndexName].get<std::string>().c_str();
-			CSphString sAlias = tItem.value()[tAliasName].get<std::string>().c_str();
-
-			{
-				auto tIndex ( GetServed ( sIndex ) );
-				if ( !tIndex )
-				{
-					ReportMissedIndex ( sIndex );
-					return;
-				}
-			}
-
-
-			if ( tItem.key()=="add" )
-			{
-				{
-					ScWL_t tLock ( g_tLockAlias );
-					g_hAlias.Add ( sIndex, sAlias );
-				}
-				{
-					ScWL_t tLock ( g_tLockKbnTable );
-					if ( g_tKbnTable.contains ( sIndex.cstr() ) )
-					{
-						nljson & tIdx = g_tKbnTable[sIndex.cstr()];
-						if ( !tIdx.contains ( "aliases" ) )
-							tIdx["aliases"] = R"({})"_json;
-
-						tIdx["aliases"][sAlias.cstr()] = R"({})"_json;
-					}
-				}
-			} else if ( tItem.key()=="remove" )
-			{
-				{
-					ScWL_t tLock ( g_tLockAlias );
-					if ( !g_hAlias.Delete ( sAlias ) )
-					{
-						CSphString sError;
-						sError.SetSprintf ( "aliases [%s] missing", sAlias.cstr() );
-						ReportError ( sError.cstr(), HttpErrorType_e::AliasesNotFound, EHTTP_STATUS::_404 );
-						return;
-					}
-				}
-
-				{
-					ScWL_t tLock ( g_tLockKbnTable );
-					if ( g_tKbnTable.contains ( sIndex.cstr() ) )
-					{
-						nljson & tIdx = g_tKbnTable[sIndex.cstr()];
-						if ( tIdx.contains ( "aliases" ) )
-							tIdx["aliases"].erase ( sAlias.cstr() );
-					}
-				}
-			} else if ( tItem.key()=="remove_index" )
-			{
-				DropTable ( sIndex );
-			} else
-			{
-				ReportError ( "[aliases] failed to parse field [actions]", HttpErrorType_e::ContentParse, EHTTP_STATUS::_400 );
-				return;
-			}
-		}
-	}
 
 	const char * sRes = "{ \"acknowledged\": true }";
 	BuildReply ( FromSz ( sRes ), EHTTP_STATUS::_200 );
@@ -3248,159 +2008,6 @@ void HttpCompatHandler_c::ProcessILM()
 	BuildReplyHead ( FromStd ( sRes ), EHTTP_STATUS::_200 );
 }
 
-static nljson GetFieldDesc ( const CSphColumnInfo & tCol, bool bField )
-{
-	nljson tField = R"({"searchable":false, "aggregatable": false})"_json;
-	if ( bField )
-	{
-		tField["type"] = "text";
-		tField["searchable"] = true;
-	} else if ( tCol.m_eAttrType!=SPH_ATTR_NONE )
-	{
-		switch ( tCol.m_eAttrType )
-		{
-		case SPH_ATTR_TIMESTAMP:
-			tField["type"] = "date";
-			tField["aggregatable"] = true;
-			tField["searchable"] = true;
-		break;
-
-		case SPH_ATTR_INTEGER:
-		case SPH_ATTR_BOOL:
-			tField["type"] = "integer";
-			tField["aggregatable"] = true;
-			tField["searchable"] = true;
-		break;
-
-		case SPH_ATTR_FLOAT:
-			tField["type"] = "float";
-			tField["searchable"] = true;
-		break;
-
-		case SPH_ATTR_BIGINT:
-			tField["type"] = "long";
-			tField["aggregatable"] = true;
-			tField["searchable"] = true;
-		break;
-
-		case SPH_ATTR_STRING:
-			tField["type"] = "keyword";
-			tField["aggregatable"] = true;
-			tField["searchable"] = true;
-		break;
-
-		case SPH_ATTR_JSON:
-			tField["type"] = "object";
-			tField["searchable"] = true;
-		break;
-
-		default:
-			break;
-		}
-	}
-
-	return tField;
-}
-
-static bool CheckFieldDesc ( const nljson & tFields, const char * sColName, const nljson & tDesc, const CSphString & sIndex, StringBuilder_c & sError )
-{
-	if ( !tDesc.contains ( "type" ) )
-	{
-		sError.Appendf ( "index '%s' has unmapped column '%s'", sIndex.cstr(), sColName );
-		return false;
-	}
-
-	if ( !tFields.contains ( sColName ) )
-		return true;
-
-	assert ( tDesc.contains ( "type" ) );
-	if ( tFields[sColName].contains ( tDesc["type"] ) )
-		return true;
-
-	const nljson & tField = tFields[sColName];
-	sError.Appendf ( "'%s' already has type '%s' but index '%s' type is '%s'", sColName, tField.cbegin().key().c_str(), sIndex.cstr(), tDesc["type"].get<std::string>().c_str() );
-
-	return false;
-}
-
-static void AddSpecialColumns ( nljson & tFields )
-{
-	tFields["_index"] = R"( { "_index": { "type": "_index", "searchable": false, "aggregatable": false } } )"_json;
-	tFields["_feature"] = R"( { "_feature": { "type": "_feature", "searchable": false, "aggregatable": false } } )"_json;
-	tFields["_ignored"] = R"( { "_ignored": { "type": "_ignored", "searchable": false, "aggregatable": false } } )"_json;
-	tFields["_version"] = R"( { "_version": { "type": "_version", "searchable": false, "aggregatable": false } } )"_json;
-	tFields["_type"] = R"( { "_type": { "type": "_type", "searchable": false, "aggregatable": false } } )"_json;
-	tFields["_seq_no"] = R"( { "_seq_no": { "type": "_seq_no", "searchable": false, "aggregatable": false } } )"_json;
-	tFields["_field_names"] = R"( { "_field_names": { "type": "_field_names", "searchable": false, "aggregatable": false } } )"_json;
-	tFields["_source"] = R"( { "_source": { "type": "_source", "searchable": false, "aggregatable": false } } )"_json;
-	tFields["_id"] = R"( { "_id": { "type": "_id", "searchable": false, "aggregatable": false } } )"_json;
-}
-
-// FIXME!!! add support of Elastic \ Kibana tables
-void HttpCompatHandler_c::ProcessFields()
-{
-	const CSphString & sIndex = GetUrlParts()[0];
-
-	nljson tRes = R"({"indices":[], "fields":{}})"_json;
-
-	StringBuilder_c sError ( "," );
-	ServedSnap_t hLocal = g_pLocalIndexes->GetHash();
-	for ( const auto & tIt : *hLocal )
-	{
-		if ( !tIt.second )
-			continue;
-
-		if ( !sIndex.IsEmpty() && !sphWildcardMatch ( tIt.first.cstr(), sIndex.cstr() ) )
-			continue;
-
-		RIdx_c tIdx ( tIt.second );
-
-		tRes["indices"].push_back ( tIt.first.cstr() );
-
-		const CSphSchema & tSchema = tIdx->GetMatchSchema();
-		for ( const CSphColumnInfo & tCol : tSchema.GetFields() )
-		{
-			// field-string types will be processed at attributes
-			if ( tSchema.GetAttr ( tCol.m_sName.cstr() ) )
-				continue;
-
-			const char * sColName = tCol.m_sName.cstr();
-
-			nljson tField = GetFieldDesc ( tCol, true );
-			if ( !CheckFieldDesc ( tRes["fields"], sColName, tField, sIndex, sError ) )
-				continue;
-
-			tRes["fields"][sColName][tField["type"].get<std::string>()] = tField;
-		}
-
-		for ( int i=0; i<tSchema.GetAttrsCount(); i++ )
-		{
-			const CSphColumnInfo & tCol = tSchema.GetAttr ( i );
-
-			// skip special only manticore related attributes and tokecounts types
-			if ( tCol.m_sName=="@version" || tCol.m_sName==sphGetBlobLocatorName() || tCol.m_eAttrType==SPH_ATTR_TOKENCOUNT )
-				continue;
-
-			bool bField = ( tSchema.GetField ( tCol.m_sName.cstr() ) );
-
-			nljson tField = GetFieldDesc ( tCol, bField );
-			if ( !CheckFieldDesc ( tRes["fields"], tCol.m_sName.cstr(), tField, sIndex, sError ) )
-				continue;
-
-			tRes["fields"][tCol.m_sName.cstr()][tField["type"].get<std::string>()] = tField;
-		}
-	}
-
-	// add special only elastic related attributes
-	AddSpecialColumns ( tRes["fields"] );
-
-	if ( !sError.IsEmpty() )
-		CompatWarning ( "%s", sError.cstr() );
-
-	std::string sRes = tRes.dump();
-	BuildReply ( FromStd ( sRes ), EHTTP_STATUS::_200 );
-}
-
 bool HttpCompatHandler_c::ProcessEndpoints()
 {
 	if ( m_dUrlParts.GetLength() && m_dUrlParts.Last().Ends ( "_msearch" ) )
@@ -3419,18 +2026,6 @@ bool HttpCompatHandler_c::ProcessEndpoints()
 			( m_dUrlParts[0]==g_sKbnTableName || m_dUrlParts[0]==g_sKbnTableAlias ) &&
 			ProcessKbnTableDoc() )
 				return true;
-
-		if ( m_dUrlParts.GetLength()>=2 && m_dUrlParts[0]=="_cat" )
-		{
-			ProcessCat();
-			return true;
-		}
-
-		if ( ( m_dUrlParts.GetLength() && m_dUrlParts[0]=="_alias" ) || ( m_dUrlParts.GetLength()>=2 && m_dUrlParts[1]=="_alias" ) )
-		{
-			ProcessAliasGet();
-			return true;
-		}
 
 		if ( ( m_dUrlParts.GetLength() && m_dUrlParts[0]=="_rollup" ) || ( m_dUrlParts.GetLength()>=2 && m_dUrlParts[1]=="_rollup" )
 			|| ( m_dUrlParts.GetLength() && m_dUrlParts[0]=="_ingest" ) )
@@ -3462,30 +2057,10 @@ bool HttpCompatHandler_c::ProcessEndpoints()
 		return ProcessSearch();
 
 	if ( GetRequestType()==HTTP_POST && m_dUrlParts.GetLength()>1 && m_dUrlParts[1]=="_count" )
-	{
-		ProcessCount();
-		return true;
-	}
-
-	if ( ( GetRequestType()==HTTP_POST || GetRequestType()==HTTP_PUT )
-		&& m_dUrlParts.GetLength()>1 && ( m_dUrlParts[1]=="_doc" || m_dUrlParts[1]=="_create" )
-		&& ProcessInsert() )
-		return true;
-
-	if ( GetRequestType()==HTTP_POST && m_dUrlParts.GetLength()>0 && m_dUrlParts[0]=="_mget" )
-	{
-		ProcessKbnTableMGet();
-		return true;
-	}
+		return ProcessCount();
 
 	if ( GetRequestType()==HTTP_PUT )
 	{
-		if ( m_dUrlParts.GetLength()>1 && ( m_dUrlParts[0]=="_template" || m_dUrlParts[0]=="_monitoring" ) )
-		{
-			ProcessPutTemplate();
-			return true;
-		}
-
 		if ( m_dUrlParts.GetLength() && m_dUrlParts[0]=="_monitoring" )
 		{
 			ProcessIgnored();
@@ -3493,26 +2068,16 @@ bool HttpCompatHandler_c::ProcessEndpoints()
 		}
 
 		if ( m_dUrlParts.GetLength() )
-			return ProcessCreateTable();
+			return	ProcessCreateTable();
 	}
 
 	if ( GetRequestType()==HTTP_DELETE && m_dUrlParts.GetLength()>2 && m_dUrlParts[1]=="_doc" 
 		&& ProcessDeleteDoc() )
 		return true;
 
-
-	if ( GetRequestType()==HTTP_POST && m_dUrlParts.GetLength()>2 && m_dUrlParts[1]=="_update" )
-		return ProcessUpdateDoc();
-
 	if ( GetRequestType()==HTTP_DELETE && m_dUrlParts.GetLength()==1 )
 	{
 		ProcessDeleteTable();
-		return true;
-	}
-
-	if ( GetRequestType()==HTTP_POST && m_dUrlParts.GetLength()>0 && m_dUrlParts[0]=="_aliases" )
-	{
-		ProcessAliasSet();
 		return true;
 	}
 
@@ -3524,12 +2089,6 @@ bool HttpCompatHandler_c::ProcessEndpoints()
 	if ( GetRequestType()==HTTP_POST && m_dUrlParts.GetLength()>=1 && m_dUrlParts[0]=="_refresh" )
 	{
 		ProcessRefresh ( nullptr );
-		return true;
-	}
-
-	if ( GetRequestType()==HTTP_POST && m_dUrlParts.GetLength()>=2 && m_dUrlParts[1]=="_field_caps" )
-	{
-		ProcessFields();
 		return true;
 	}
 
@@ -3555,10 +2114,6 @@ static void DropKbnTables()
 		ScWL_t tLock ( g_tLockKbnTable );
 		g_tKbnTable = "{}"_json;
 	}
-	{
-		ScWL_t tLock ( g_tLockAlias );
-		g_hAlias.Reset();
-	}
 
 	// look for local indexes with kibana names
 	ServedSnap_t hLocal = g_pLocalIndexes->GetHash();
@@ -3582,7 +2137,7 @@ static void DropKbnTables()
 	CSphString sError;
 	for ( const CSphString & sName : dIdx )
 	{
-		if ( !DropIndexInt ( sName, true, sError ) )
+		if ( !DropIndexInt ( sName, true, false, sError ) )
 			CompatWarning ( "%s", sError.cstr() );
 	}
 
@@ -3600,7 +2155,6 @@ bool SetLogManagement ( const CSphString & sVal, CSphString & sError )
 		nljson tSys = GetSystemTable();
 		g_tKbnTable.update ( tSys );
 		CreateKbnIndexes();
-		CreateAliases();
 	}
 
 	return true;

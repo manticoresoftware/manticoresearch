@@ -4,6 +4,20 @@
 
 Manticore's data types can be split into two categories: full-text fields and attributes.
 
+### Field name syntax
+
+Field names in Manticore must follow these rules:
+
+* Can contain letters (a-z, A-Z), numbers (0-9), and hyphens (-)
+* Must start with a letter
+* Numbers can only appear after letters
+* Underscore (`_`) is the only allowed special character
+* Field names are case-insensitive
+
+For example:
+* Valid field names: `title`, `product_id`, `user_name_2`
+* Invalid field names: `2title`, `-price`, `user@name`
+
 ### Full-text fields
 
 Full-text fields:
@@ -1455,7 +1469,6 @@ searchRequest.Expressions = new List<Object>{
     new Dictionary<string, string> { {"ebs", "abs(a-b)"} }
 };
 var searchResponse = searchApi.Search(searchRequest);
-
 ```
 <!-- end -->
 
@@ -1575,7 +1588,7 @@ select * from t
 
 <!-- example for creating json -->
 
-This data type allows storing JSON objects, which is useful for storing schema-less data. However, it is not supported by columnar storage. However, it can be stored in traditional storage, as it's possible to combine both storage types in the same table.
+This data type allows for the storage of JSON objects, which is particularly useful for handling schema-less data. When defining JSON values, ensure that the opening and closing curly braces `{` and `}` are included for objects, or square brackets `[` and `]` for arrays. While JSON is not supported by columnar storage, it can be stored in traditional row-wise storage. It's worth noting that both storage types can be combined within the same table.
 
 <!-- intro -->
 ##### SQL:
@@ -1701,7 +1714,7 @@ $index->setName('products')->search('')->expression('idx','indexof(x>2 for x in 
 <!-- request Python -->
 
 ```python
-searchApi.search({"table":"products","query":{"match_all":{}}},"expressions":{"idx":"indexof(x>2 for x in data.intarray)"}})
+searchApi.search({"table":"products","query":{"match_all":{}},"expressions":{"idx":"indexof(x>2 for x in data.intarray)"}})
 ```
 <!-- intro -->
 ##### Javascript:
@@ -1709,7 +1722,7 @@ searchApi.search({"table":"products","query":{"match_all":{}}},"expressions":{"i
 <!-- request javascript -->
 
 ```javascript
-res = await searchApi.search({"table":"products","query":{"match_all":{}}},"expressions":{"idx":"indexof(x>2 for x in data.intarray)"}});
+res = await searchApi.search({"table":"products","query":{"match_all":{}},"expressions":{"idx":"indexof(x>2 for x in data.intarray)"}});
 ```
 
 <!-- intro -->
@@ -1797,7 +1810,7 @@ searchApi.search({"table":"products","query":{"match_all":{},"range":{"c":{"gt":
 <!-- request javascript -->
 
 ```javascript
-res = await searchApi.search({"table":"products","query":{"match_all":{},"range":{"c":{"gt":0}}}},"expressions":{"c":"regex(data.name, 'est')"}});
+res = await searchApi.search({"table":"products","query":{"match_all":{},"range":{"c":{"gt":0}}}},"expressions":{"c":"regex(data.name, 'est')"}}});
 ```
 
 <!-- intro -->

@@ -30,7 +30,8 @@
 %token	TOK_SUBKEY
 %token	TOK_BACKTICKED_SUBKEY
 %token	TOK_DOT_NUMBER ".number"
-%token	TOK_MANTICORE "Manticore."
+%token	TOK_MANTICORE_DOT "Manticore."
+%token	TOK_SYSTEM "system"
 
 %token	TOK_AGENT
 %token	TOK_ALL
@@ -133,6 +134,7 @@
 %token	TOK_REPLACE
 %token	TOK_REMAP
 %token	TOK_ROLLBACK
+%token	TOK_SCROLL
 %token	TOK_SECOND
 %token	TOK_SECONDARY
 %token	TOK_SELECT
@@ -248,14 +250,14 @@ multi_stmt:
 // AND, AS, BY, DIV, FACET, FALSE, ID, IN, IS, LIMIT, MOD, NOT, NULL,
 // OR, ORDER, SELECT, TRUE
 
-/// All used keywords looking as TOK_XXX should be located here. That is mandatory
+/// All used _reserved_ keywords looking as TOK_XXX should be located here. That is mandatory
 /// and used in regexp in 'reserved.py' script to check reserved words consistency between
 /// grammar and documentation.
 ///
 /// Line below starts the list, that is MANDATORY, don't remove/change it!
 /// *** ALL_IDENT_LIST ***
 
-reserved_no_option:
+reserved_tokens_without_option:
 	TOK_AGENT | TOK_ALL | TOK_ANY | TOK_ASC
 	| TOK_AVG | TOK_BEGIN | TOK_BETWEEN | TOK_BIGINT | TOK_CALL
 	| TOK_CHARACTER | TOK_CHUNK | TOK_CLUSTER | TOK_COLLATION | TOK_COLUMN | TOK_COMMIT
@@ -275,37 +277,40 @@ reserved_no_option:
 	| TOK_WARNINGS | TOK_WEIGHT | TOK_WHERE | TOK_WITHIN | TOK_KILL | TOK_QUERY
 	| TOK_INTERVAL | TOK_REGEX
 	| TOK_DATE_ADD | TOK_DATE_SUB | TOK_DAY | TOK_HOUR | TOK_MINUTE | TOK_MONTH | TOK_QUARTER | TOK_SECOND | TOK_WEEK | TOK_YEAR
-	| TOK_LOCKS
+	| TOK_LOCKS | TOK_SCROLL
 	;
 
-reserved_set_tail:
-    TOK_NAMES | TOK_TRANSACTION | TOK_COLLATE | TOK_BACKIDENT
+names_transaction_collate:
+    TOK_NAMES | TOK_TRANSACTION | TOK_COLLATE
     ;
 
-reserved_set:
-	reserved_no_option | TOK_OPTION
+ident_without_option:
+	TOK_IDENT | reserved_tokens_without_option
 	;
 
-reserved_set_full:
-    reserved_set | reserved_set_tail
-    ;
-
-
-ident_set:
-	TOK_IDENT | reserved_set
-	;
-
-ident:
-	TOK_IDENT | reserved_set_full
-	;
-
-ident_no_option:
-	TOK_IDENT | reserved_no_option | reserved_set_tail
+ident_for_set_stmt:
+	TOK_OPTION | ident_without_option
 	;
 
 /// *** ALL_IDENT_LIST_END ***
 // WARNING! line above is MANDATORY for consistency checking!
 //////////////////////////////////////////////////////////////////////////
+
+non_reserved_tokens:
+	TOK_SYSTEM
+	;
+
+all_set_tail:
+	names_transaction_collate | non_reserved_tokens
+	;
+
+ident:
+	ident_for_set_stmt | all_set_tail | TOK_BACKIDENT
+	;
+
+option_name:
+	ident_without_option | all_set_tail | TOK_FORCE 
+	;
 
 
 /// id of columns
@@ -315,37 +320,32 @@ identcol:
 	;
 
 /// indexes
-idxname:
+single_tablename:
 	TOK_BACKIDENT
 	{
 		$$ = $1;
 		++$$.m_iStart;
 		--$$.m_iEnd;
 	}
-	| ident_set | TOK_NAMES | TOK_TRANSACTION | TOK_COLLATE
+	| ident_for_set_stmt | all_set_tail
 	;
 
-identidx:
-	 idxname
-	 | TOK_MANTICORE idxname {$$ = $2;}
+// table or Manticore.table
+single_manticore_tablename:
+	 single_tablename
+	 | TOK_MANTICORE_DOT single_tablename {$$ = $2;}
 	;
 
-one_index:
-	identidx
-	| ident ':' identidx
+tablename_with_maybecluster:
+	single_manticore_tablename
+	| ident ':' single_manticore_tablename
 		{
 			pParser->ToString (pParser->m_pStmt->m_sCluster, $1);
 			$$ = $3;
 		}
 	;
 
-only_one_index:
-	one_index
-		{
-			pParser->SetIndex ($1);
-		}
-	;
-
+// .1 OR chunk 3
 chunk:
 	TOK_DOT_NUMBER
 		{
@@ -359,11 +359,13 @@ chunk:
 		}
 	;
 
+// .1.2 chunk 4
 chunks:
 	chunk
 	| chunks chunk
 	;
 
+// .subkey
 string_key:
 	TOK_SUBKEY
 		{
@@ -371,45 +373,68 @@ string_key:
     	}
     ;
 
+// .subkey1 .subkey2 ...
 string_keys:
 	string_key
 	| string_keys string_key
 	;
 
-chunk_subkeys:
+// .subkey.subkey or .1.2.subkey.4
+maybechunk_then_subkeys:
 	string_keys
 	| chunk string_keys
 	;
 
-subkey_chunks:
+// .2
+maybesubkey_then_chunks:
 	chunks
 	| string_key chunks
 	;
 
-fromkeys:
+subkeys_for_target_in_select_from:
 	// empty
-	| chunk_subkeys
-	| subkey_chunks
+	| maybechunk_then_subkeys
+	| maybesubkey_then_chunks
 	;
 
-
-one_index_opt_subindex:				// used in describe (meta m.b. num or name)
-	only_one_index
-	| only_one_index chunk_subkeys
+single_tablename_with_maybecluster:
+	tablename_with_maybecluster
+		{
+			pParser->SetIndex ($1);
+		}
 	;
 
-one_index_opt_chunk:				// used in show settings, show status, update, delete
-	only_one_index
-	| only_one_index chunks
+one_index_opt_subindex:				// used in describe and insert (meta m.b. num or name)
+	single_tablename_with_maybecluster
+	| single_tablename_with_maybecluster maybechunk_then_subkeys
+	;
+
+one_index_opt_chunk:				// used in show settings, show status, update
+	single_tablename_with_maybecluster
+	| single_tablename_with_maybecluster chunks
 	| list_of_indexes
     	{
     		pParser->ToString (pParser->m_pQuery->m_sIndexes, $1);
     	}
 	;
 
-from_target:		// used in select ... from
-	only_one_index fromkeys
+target_in_update:
+	one_index_opt_chunk
+	| single_tablename_with_maybecluster string_keys
+	| single_tablename_with_maybecluster string_keys chunks
+	;
+
+target_in_delete_from:
+	single_tablename_with_maybecluster
+	| single_tablename_with_maybecluster chunks
+	| single_tablename_with_maybecluster string_keys
+	| single_tablename_with_maybecluster string_keys chunks
+	;
+
+target_in_select_from:		// used in select ... from
+	tablename_with_maybecluster subkeys_for_target_in_select_from
 		{
+			pParser->SetIndex ($1);
 			pParser->m_pQuery->m_sIndexes = pParser->m_pStmt->m_sIndex;
 			pParser->SwapSubkeys();
 		}
@@ -425,11 +450,11 @@ from_target:		// used in select ... from
 	;
 
 list_of_indexes:
-	one_index ',' one_index
+	tablename_with_maybecluster ',' tablename_with_maybecluster
 		{
     		TRACK_BOUNDS ( $$, $1, $3 );
     	}
-	| list_of_indexes ',' one_index
+	| list_of_indexes ',' tablename_with_maybecluster
 		{
 			TRACK_BOUNDS ( $$, $1, $3 );
 		}
@@ -473,7 +498,7 @@ sysvar:					// full name in token, like var '@@session.last_insert_id', no subke
 
 sysvar_ext:				// name in token + subkeys, like var '@@session' and 1 subkey '.last_insert_id'
 	TOK_SYSVAR
-	| TOK_SYSVAR chunk_subkeys
+	| TOK_SYSVAR maybechunk_then_subkeys
 	| TOK_SYSVAR chunk
 	;
 
@@ -574,7 +599,7 @@ opt_outer_limit:
 
 select_from:
 	TOK_SELECT select_items_list
-	TOK_FROM from_target { pParser->m_pStmt->m_eStmt = STMT_SELECT; } // set stmt here to check the option below
+	TOK_FROM target_in_select_from { pParser->m_pStmt->m_eStmt = STMT_SELECT; } // set stmt here to check the option below
 	opt_join_clause
 	opt_where_clause
 	opt_group_clause
@@ -652,7 +677,7 @@ where_item:
 			if ( !pParser->SetMatch($3) )
 				YYERROR;
 		}
-	| TOK_MATCH '(' TOK_QUOTED_STRING ',' idxname ')'
+	| TOK_MATCH '(' TOK_QUOTED_STRING ',' single_tablename ')'
 		{
 			if ( !pParser->AddMatch($3,$5) )
 				YYERROR;
@@ -662,7 +687,7 @@ where_item:
 			if ( !pParser->SetMatch($4) )
 				YYERROR;
 		}
-	| '(' TOK_MATCH '(' TOK_QUOTED_STRING  ',' idxname ')' ')'
+	| '(' TOK_MATCH '(' TOK_QUOTED_STRING  ',' single_tablename ')' ')'
 		{
 			if ( !pParser->AddMatch($4,$6) )
 				YYERROR;
@@ -681,7 +706,7 @@ join_type:
 	;
 
 join_clause:
-	join_type TOK_JOIN idxname TOK_ON on_clause
+	join_type TOK_JOIN single_tablename TOK_ON on_clause
 		{
 			if ( !pParser->SetJoin($3) )
 				YYERROR;
@@ -700,9 +725,9 @@ on_clause_type_cast:
 	;
 
 on_clause_equality:
-    idxname on_clause_attr '=' idxname on_clause_attr								{ pParser->AddOnFilter ( $1, $2, $4, $5, -1 ); }
-	| on_clause_type_cast '(' idxname on_clause_attr ')' '=' idxname on_clause_attr	{ pParser->AddOnFilter ( $3, $4, $7, $8, 0 ); }
-	| idxname on_clause_attr '=' on_clause_type_cast '(' idxname on_clause_attr	')' { pParser->AddOnFilter ( $1, $2, $6, $7, 1 ); }
+    single_tablename on_clause_attr '=' single_tablename on_clause_attr				{ pParser->AddOnFilter ( $1, $2, $4, $5, -1 ); }
+	| on_clause_type_cast '(' single_tablename on_clause_attr ')' '=' single_tablename on_clause_attr	{ pParser->AddOnFilter ( $3, $4, $7, $8, 0 ); }
+	| single_tablename on_clause_attr '=' on_clause_type_cast '(' single_tablename on_clause_attr	')' { pParser->AddOnFilter ( $1, $2, $6, $7, 1 ); }
 	;
 
 on_clause:
@@ -750,13 +775,13 @@ filter_item:
 		}
 	| expr_ident TOK_IN '(' const_list ')'
 		{
-			CSphFilterSettings * pFilter = pParser->AddValuesFilter ( $1, *$4.m_pValues );
+			CSphFilterSettings * pFilter = pParser->AddValuesFilter ( $1, $4.m_iValues );
 			if ( !pFilter )
 				YYERROR;
 		}
 	| expr_ident TOK_NOT TOK_IN '(' const_list ')'
 		{
-			CSphFilterSettings * pFilter = pParser->AddValuesFilter ( $1, *$5.m_pValues );
+			CSphFilterSettings * pFilter = pParser->AddValuesFilter ( $1, $5.m_iValues );
 			if ( !pFilter )
 				YYERROR;
 			pFilter->m_bExclude = true;
@@ -952,13 +977,13 @@ filter_item:
 		}
 	| mva_aggr TOK_IN '(' const_list ')'
 		{
-			CSphFilterSettings * f = pParser->AddFilter ( $1, SPH_FILTER_VALUES, *$4.m_pValues );
+			CSphFilterSettings * f = pParser->AddFilter ( $1, SPH_FILTER_VALUES, $4.m_iValues );
 			f->m_eMvaFunc = ( $1.m_iType==TOK_ALL ) ? SPH_MVAFUNC_ALL : SPH_MVAFUNC_ANY;
 		}
 	| mva_aggr TOK_NOT TOK_IN '(' const_list ')'
 		{
 			// tricky bit with inversion again
-			CSphFilterSettings * f = pParser->AddFilter ( $1, SPH_FILTER_VALUES, *$5.m_pValues );
+			CSphFilterSettings * f = pParser->AddFilter ( $1, SPH_FILTER_VALUES, $5.m_iValues );
 			f->m_eMvaFunc = ( $1.m_iType==TOK_ALL ) ? SPH_MVAFUNC_ANY : SPH_MVAFUNC_ALL;
 			f->m_bExclude = true;
 		}
@@ -1066,36 +1091,42 @@ const_float_unsigned:
 const_list:
 	const_int
 		{
-			assert ( !$$.m_pValues );
-			$$.m_pValues = new RefcountedVector_c<AttrValue_t> ();
-			$$.m_pValues->Add ( { $1.GetValueInt(), $1.GetValueFloat(), false } ); 
+			assert ( $$.m_iValues<0 );
+        	$$.m_iValues = pParser->AddMvaVec ();
+        	auto& dVec = pParser->GetMvaVec ( $$.m_iValues );
+			dVec.Add ( { $1.GetValueInt(), $1.GetValueFloat(), false } );
 		}
 	| const_float
 		{
-			assert ( !$$.m_pValues );
-			$$.m_pValues = new RefcountedVector_c<AttrValue_t> ();
-			$$.m_pValues->Add ( { $1.GetValueInt(), $1.GetValueFloat(), true } ); 
+			assert ( $$.m_iValues<0 );
+        	$$.m_iValues = pParser->AddMvaVec ();
+        	auto& dVec = pParser->GetMvaVec ( $$.m_iValues );
+			dVec.Add ( { $1.GetValueInt(), $1.GetValueFloat(), true } );
 		}
 	| const_list ',' const_int
 		{
-			$$.m_pValues->Add ( { $3.GetValueInt(), $3.GetValueFloat(), false } );
+			auto& dVec = pParser->GetMvaVec ( $$.m_iValues );
+			dVec.Add ( { $3.GetValueInt(), $3.GetValueFloat(), false } );
 		}
 	| const_list ',' const_float
 		{
-			$$.m_pValues->Add ( { $3.GetValueInt(), $3.GetValueFloat(), true } );
+			auto& dVec = pParser->GetMvaVec ( $$.m_iValues );
+			dVec.Add ( { $3.GetValueInt(), $3.GetValueFloat(), true } );
 		}
 	;
 
 string_list:
 	TOK_QUOTED_STRING
 		{
-			assert ( !$$.m_pValues );
-			$$.m_pValues = new RefcountedVector_c<AttrValue_t> ();
-			$$.m_pValues->Add ( { $1.GetValueInt(), 0.0f } );
+			assert ( $$.m_iValues<0 );
+        	$$.m_iValues = pParser->AddMvaVec ();
+        	auto& dVec = pParser->GetMvaVec ( $$.m_iValues );
+			dVec.Add ( { $1.GetValueInt(), 0.0f } );
 		}
 	| string_list ',' TOK_QUOTED_STRING
 		{
-			$$.m_pValues->Add ( { $3.GetValueInt(), 0.0f } );
+			auto& dVec = pParser->GetMvaVec ( $$.m_iValues );
+			dVec.Add ( { $3.GetValueInt(), 0.0f } );
 		}
 	;
 
@@ -1215,8 +1246,27 @@ opt_option_clause:
 	;
 
 option_clause:
-	TOK_OPTION option_list
+	option_clause_item
+	| option_clause option_clause_item
 	;
+
+option_clause_item:
+	TOK_OPTION default_option_table_setup option_list
+	| TOK_OPTION '(' single_manticore_tablename ')' option_table_setup option_list
+	;
+
+default_option_table_setup:
+    {
+        pParser->SetDefaultTableForOptions();
+    }
+    ;
+
+option_table_setup:
+    {
+        if ( !pParser->SetTableForOptions($-1) )
+			YYERROR;
+    }
+    ;
 
 option_list:
 	option_item
@@ -1224,28 +1274,28 @@ option_list:
 	;
 
 option_item:
-	ident_no_option '=' identcol
+	option_name '=' identcol
 		{
 			if ( !pParser->AddOption ( $1, $3 ) )
 				YYERROR;
 		}
-	| ident_no_option '=' TOK_CONST_INT
+	| option_name '=' TOK_CONST_INT
 		{
 			if ( !pParser->AddOption ( $1, $3 ) )
 				YYERROR;
 		}
-	| ident_no_option '=' '(' named_const_list ')'
+	| option_name '=' '(' named_const_list ')'
 		{
 			if ( !pParser->AddOption ( $1, pParser->GetNamedVec ( $4.GetValueInt() ) ) )
 				YYERROR;
 			pParser->FreeNamedVec ( $4.GetValueInt() );
 		}
-	| ident_no_option '=' identcol '(' TOK_QUOTED_STRING ')'
+	| option_name '=' identcol '(' TOK_QUOTED_STRING ')'
 		{
 			if ( !pParser->AddOption ( $1, $3, $5 ) )
 				YYERROR;
 		}
-	| ident_no_option '=' TOK_QUOTED_STRING
+	| option_name '=' TOK_QUOTED_STRING
 		{
 			if ( !pParser->AddOption ( $1, $3 ) )
 				YYERROR;
@@ -1360,6 +1410,7 @@ expr:
 	| streq
 	| json_field TOK_IS TOK_NULL			{ TRACK_BOUNDS ( $$, $1, $3 ); }
 	| json_field TOK_IS TOK_NOT TOK_NULL	{ TRACK_BOUNDS ( $$, $1, $4 ); }
+	| ident TOK_SUBKEY '(' ')'				{ TRACK_BOUNDS ( $$, $1, $4 ); }
 	;
 
 accepted_funcs:
@@ -1444,14 +1495,15 @@ like_filter:
 
 show_what:
 	TOK_WARNINGS				{ pParser->m_pStmt->m_eStmt = STMT_SHOW_WARNINGS; }
-	| TOK_STATUS like_filter		{ pParser->m_pStmt->m_eStmt = STMT_SHOW_STATUS; }
-	| TOK_META like_filter			{ pParser->m_pStmt->m_eStmt = STMT_SHOW_META; }
+	| TOK_STATUS like_filter	{ pParser->m_pStmt->m_eStmt = STMT_SHOW_STATUS; }
+	| TOK_META like_filter		{ pParser->m_pStmt->m_eStmt = STMT_SHOW_META; }
 	| TOK_AGENT TOK_STATUS like_filter	{ pParser->m_pStmt->m_eStmt = STMT_SHOW_AGENT_STATUS; }
 	| TOK_PROFILE				{ pParser->m_pStmt->m_eStmt = STMT_SHOW_PROFILE; }
-	| TOK_PLAN				{ pParser->m_pStmt->m_eStmt = STMT_SHOW_PLAN; }
+	| TOK_PLAN					{ pParser->m_pStmt->m_eStmt = STMT_SHOW_PLAN; }
 	| TOK_PLUGINS				{ pParser->m_pStmt->m_eStmt = STMT_SHOW_PLUGINS; }
 	| TOK_THREADS				{ pParser->m_pStmt->m_eStmt = STMT_SHOW_THREADS; }
-	| TOK_CREATE TOK_TABLE identidx
+	| TOK_SCROLL				{ pParser->m_pStmt->m_eStmt = STMT_SHOW_SCROLL; }
+	| TOK_CREATE TOK_TABLE single_manticore_tablename
 		{
 			pParser->m_pStmt->m_eStmt = STMT_SHOW_CREATE_TABLE;
 			pParser->SetIndex ($3);
@@ -1461,7 +1513,7 @@ show_what:
 			pParser->m_pStmt->m_eStmt = STMT_SHOW_AGENT_STATUS;
 			pParser->SetIndex(pParser->ToStringUnescape ( $2 ));
 		}
-	| TOK_AGENT only_one_index TOK_STATUS like_filter
+	| TOK_AGENT tablename_with_maybecluster TOK_STATUS like_filter
 		{
 			pParser->m_pStmt->m_eStmt = STMT_SHOW_AGENT_STATUS;
 			pParser->SetIndex( $2 );
@@ -1474,6 +1526,11 @@ show_what:
 	| index_or_table one_index_opt_chunk TOK_SETTINGS
 		{
 			pParser->m_pStmt->m_eStmt = STMT_SHOW_INDEX_SETTINGS;
+			pParser->SetIndex( $2 );
+		}
+	| index_or_table one_index_opt_chunk TOK_INDEXES like_filter 
+		{
+			pParser->m_pStmt->m_eStmt = STMT_SHOW_TABLE_INDEXES;
 			pParser->SetIndex( $2 );
 		}
 	| TOK_TABLE TOK_STATUS like_filter
@@ -1490,6 +1547,11 @@ show_what:
 		}
 	| TOK_TABLES like_filter
 		{
+			pParser->m_pStmt->m_eStmt = STMT_SHOW_TABLES;
+		}
+	| TOK_TABLES TOK_FROM TOK_SYSTEM like_filter
+		{
+			pParser->m_pStmt->m_iIntParam = 1;
 			pParser->m_pStmt->m_eStmt = STMT_SHOW_TABLES;
 		}
 	| TOK_DATABASES like_filter
@@ -1518,17 +1580,17 @@ index_or_table:
 //////////////////////////////////////////////////////////////////////////
 
 set_stmt:
-	TOK_SET ident_set '=' bool_or_integer_value
+	TOK_SET ident_for_set_stmt '=' bool_or_integer_value
 		{
 			pParser->SetLocalStatement ( $2 );
 			pParser->m_pStmt->m_iSetValue = $4.GetValueInt();
 		}
-	| TOK_SET ident_set '=' set_string_value
+	| TOK_SET ident_for_set_stmt '=' set_string_value
 		{
 			pParser->SetLocalStatement ( $2 );
 			pParser->ToString ( pParser->m_pStmt->m_sSetValue, $4 );
 		}
-	| TOK_SET ident_set '=' TOK_NULL
+	| TOK_SET ident_for_set_stmt '=' TOK_NULL
 		{
 			pParser->SetLocalStatement ( $2 );
 		}
@@ -1583,7 +1645,7 @@ start_transaction:
 //////////////////////////////////////////////////////////////////////////
 
 insert_into:
-	insert_or_replace TOK_INTO only_one_index opt_column_list TOK_VALUES insert_rows_list opt_option_clause
+	insert_or_replace TOK_INTO one_index_opt_subindex opt_column_list TOK_VALUES insert_rows_list opt_option_clause
 	;
 
 insert_or_replace:
@@ -1623,7 +1685,7 @@ insert_val:
 	const_int				{ $$.m_iType = TOK_CONST_INT; $$.CopyValueInt ( $1 ); }
 	| const_float			{ $$.m_iType = TOK_CONST_FLOAT; $$.m_fValue = $1.m_fValue; }
 	| TOK_QUOTED_STRING		{ $$.m_iType = TOK_QUOTED_STRING; $$.m_iStart = $1.m_iStart; $$.m_iEnd = $1.m_iEnd; }
-	| '(' const_list ')'	{ $$.m_iType = TOK_CONST_MVA; $$.m_pValues = $2.m_pValues; }
+	| '(' const_list ')'	{ $$.m_iType = TOK_CONST_MVA; $$.m_iValues = $2.m_iValues; }
 	| '(' ')'				{ $$.m_iType = TOK_CONST_MVA; }
 	;
 
@@ -1631,7 +1693,7 @@ insert_val:
 
 delete_from:
 	TOK_DELETE { pParser->m_pStmt->m_eStmt = STMT_DELETE; }
-		TOK_FROM one_index_opt_chunk where_clause opt_option_clause
+		TOK_FROM target_in_delete_from where_clause opt_option_clause
 			{
 				pParser->GenericStatement ( &$4 );
 			}
@@ -1718,10 +1780,7 @@ call_opt_name:
 //////////////////////////////////////////////////////////////////////////
 
 describe:
-	describe_tok one_index_opt_subindex describe_opt like_filter
-		{
-			pParser->m_pStmt->m_eStmt = STMT_DESCRIBE;
-		}
+	describe_tok { pParser->m_pStmt->m_eStmt = STMT_DESCRIBE; } one_index_opt_subindex describe_opt like_filter opt_option_clause
 	;
 
 describe_opt:
@@ -1742,7 +1801,7 @@ describe_tok:
 
 update:
 	TOK_UPDATE { pParser->m_pStmt->m_eStmt = STMT_UPDATE; }
-		one_index_opt_chunk TOK_SET update_items_list where_clause opt_option_clause opt_hint_clause
+		target_in_update TOK_SET update_items_list where_clause opt_option_clause opt_hint_clause
 			{
 				pParser->GenericStatement ( &$3 );
 			}
@@ -1827,7 +1886,7 @@ global_or_session:
 
 optimize_index:
 	TOK_OPTIMIZE  { pParser->m_pStmt->m_eStmt = STMT_OPTIMIZE_INDEX; }
-		index_or_table identidx opt_option_clause
+		index_or_table single_manticore_tablename opt_option_clause
 			{
 				pParser->SetIndex( $4 );
 			}

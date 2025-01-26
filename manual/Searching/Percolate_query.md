@@ -2842,18 +2842,18 @@ CALL PQ('products', ('{"title": "nice pair of shoes", "color": "blue"}', '{"titl
 | 1657852401006149646 |
 +---------------------+
 +-------------------------+-----------+
-| Name                    | Value     |
+| Variable name           | Value     |
 +-------------------------+-----------+
-| Total                   | 0.000 sec |
-| Setup                   | 0.000 sec |
-| Queries matched         | 2         |
-| Queries failed          | 0         |
-| Document matched        | 2         |
-| Total queries stored    | 3         |
-| Term only queries       | 3         |
-| Fast rejected queries   | 0         |
-| Time per query          | 27, 10    |
-| Time of matched queries | 37        |
+| total                   | 0.000 sec |
+| setup                   | 0.000 sec |
+| queries_matched         | 2         |
+| queries_failed          | 0         |
+| document_matched        | 2         |
+| total_queries_stored    | 3         |
+| term_only_queries       | 3         |
+| fast_rejected_queries   | 0         |
+| time_per_query          | 27, 10    |
+| time_of_matched_queries | 37        |
 +-------------------------+-----------+
 ```
 <!-- intro -->
@@ -2873,15 +2873,15 @@ CALL PQ('products', ('{"title": "nice pair of shoes", "color": "blue"}', '{"titl
 | 1657852401006149646 |
 +---------------------+
 +-----------------------+-----------+
-| Name                  | Value     |
+| Variable name         | Value     |
 +-----------------------+-----------+
-| Total                 | 0.000 sec |
-| Queries matched       | 2         |
-| Queries failed        | 0         |
-| Document matched      | 2         |
-| Total queries stored  | 3         |
-| Term only queries     | 3         |
-| Fast rejected queries | 0         |
+| total                 | 0.000 sec |
+| queries_matched       | 2         |
+| queries_failed        | 0         |
+| document_matched      | 2         |
+| total_queries_stored  | 3         |
+| term_only_queries     | 3         |
+| fast_rejected_queries | 0         |
 +-----------------------+-----------+
 ```
 <!-- end -->

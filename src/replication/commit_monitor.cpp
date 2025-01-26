@@ -86,9 +86,34 @@ bool CommitMonitor_c::CommitTOI()
 }
 
 
+class EnabledSaveGuard_c
+{
+	RtIndex_i * m_pRt;
+
+public:
+	NONCOPYMOVABLE( EnabledSaveGuard_c );
+
+	explicit EnabledSaveGuard_c ( RtIndex_i * pRt ) noexcept
+			: m_pRt { pRt }
+	{
+		if ( m_pRt )
+			m_pRt->WaitLockEnabledState ();
+	}
+
+	~EnabledSaveGuard_c () noexcept
+	{
+		if ( m_pRt )
+			m_pRt->UnlockEnabledState ();
+	}
+};
+
 static bool DoUpdate ( AttrUpdateArgs& tUpd, const cServedIndexRefPtr_c& pDesc, int& iUpdated, bool bUpdateAPI, bool bNeedWlock )
 {
 	TRACE_CORO ( "rt", "commit_monitor::DoUpdate" );
+
+	RtIndex_i * pRt = ( pDesc->m_eType==IndexType_e::RT ) ? static_cast<RtIndex_i *> ( UnlockedHazardIdxFromServed ( *pDesc ) ) : nullptr;
+	EnabledSaveGuard_c tSaveEnabled { pRt };
+
 	if ( bUpdateAPI )
 	{
 		Debug ( bool bOk = ) [&]() {

@@ -151,7 +151,7 @@ void TransformedSchemaBuilder_c::Finalize()
 	if ( !pOld )
 		return;
 
-	const CSphColumnInfo * pNew = m_tNewSchema.GetAttr ( GetNullMaskAttrName() );
+	[[maybe_unused]] const CSphColumnInfo * pNew = m_tNewSchema.GetAttr ( GetNullMaskAttrName() );
 	assert(!pNew);
 
 	CSphColumnInfo tAttr ( GetNullMaskAttrName(), DetermineNullMaskType ( m_tNewSchema.GetAttrsCount() ) );

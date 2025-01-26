@@ -1,0 +1,65 @@
+<?xml version="1.0" encoding="utf-8"?>
+<test>
+
+<name>system.table</name>
+
+<requires>
+	<force-rt/>
+	<replication/>
+	<non-windows/>
+</requires>
+
+<skip_indexer/>
+
+<config>
+searchd
+{
+	<searchd_settings/>
+	data_dir = <data_path/>
+	binlog_path =
+}
+</config>
+
+<queries>
+<sphinxql>
+	drop table if exists system.test;
+	create table system.test;
+	desc system.test;
+	show tables;
+	create table test;
+	alter table system.test add column r text;
+	alter table test add column p text;
+	insert into system.test values (1,'bla');
+	insert into test values (2,'normal');
+	desc system.test;
+	desc test;
+	select * from system.test;
+	select * from test;
+	show tables;
+	show tables from system;
+	alter table system.test add column x integer;
+	show fields from system.test;
+	show fields from `system.test`;
+	show fields from test;
+	show fields from `test`;
+	create cluster test;
+	alter cluster test add system.test;
+	insert into test:system.test values (3,'bla',0);
+	update test:system.test set x=10 where id=3;
+	show fields from test:system.test;
+	show fields from `test:system.test`;
+	select * from system.test;
+	delete from test:system.test where id=3;
+	alter cluster test add test;
+	show fields from test:test;
+	show fields from `test:test`;
+	alter cluster test drop system.test;
+	alter cluster test drop test;
+	delete cluster test;
+	select * from system.test;
+	drop table system.test;
+	drop table test;
+</sphinxql>
+</queries>
+
+</test>

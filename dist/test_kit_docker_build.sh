@@ -11,6 +11,8 @@ executor_dev_path=
 # Get semver suffix in format -dev or empty string depending on version provided
 get_semver_suffix() {
 	local version="$1"
+
+	# Check if last digit is odd
 	last_digit=$(echo "$version" | awk -F. '{print $NF}')
 	if [ $(( last_digit % 2 )) -eq 0 ]; then
 		echo ""
@@ -22,12 +24,21 @@ get_semver_suffix() {
 # Downloads a package from a repository by given package name, version, date, commit, and architecture
 download_package() {
 	package="$1"
-	version="$2"
-	date="$3"
-	commit="$4"
-	arch="$5"
+	version_string="$2" # Now accepts full version string instead of separate components
+	arch="$3"
 
-	file_name="${package}_${version}-${date}-${commit}_${arch}.deb"
+	# If version_string contains '+', it's a full version identifier
+	if [[ "$version_string" == *"+"* ]]; then
+		file_name="${package}_${version_string}_${arch}.deb"
+	else
+		# Old format with separate components
+		version="$version_string"
+		date="$3"
+		commit="$4"
+		arch="$5"
+		file_name="${package}_${version}-${date}-${commit}_${arch}.deb"
+	fi
+
 	file_url="${repo_url}/${file_name}"
 	echo "Wgetting from $file_url"
 	wget -q -O "../build/${file_name}" "$file_url"
@@ -54,7 +65,25 @@ do
 		break
 	fi
 
-	IFS=' ' read -r package version date commit <<< "$line"
+    if [[ "$line" =~ ^([^[:space:]]+)[[:space:]]+([^[:space:]]+)\+([0-9]+)-([a-f0-9]+)-?([a-zA-Z0-9]+)?$ ]]; then
+        # Format: <package> <version>+<date>-<commit>-<optional_suffix>
+        package="${BASH_REMATCH[1]}"
+        version_string="${BASH_REMATCH[2]}+${BASH_REMATCH[3]}-${BASH_REMATCH[4]}"
+        if [ -n "${BASH_REMATCH[5]}" ]; then
+            version_string="${version_string}-${BASH_REMATCH[5]}"
+        fi
+        suffix="${BASH_REMATCH[5]}" # Optional suffix without leading "-"
+    elif [[ "$line" =~ ^([^[:space:]]+)[[:space:]]+([^[:space:]]+)[[:space:]]+([^[:space:]]+)[[:space:]]+([^[:space:]]+)$ ]]; then
+        # Old format: <package> <version> <date> <commit>
+        package="${BASH_REMATCH[1]}"
+        version="${BASH_REMATCH[2]}"
+        date="${BASH_REMATCH[3]}"
+        commit="${BASH_REMATCH[4]}"
+        suffix=""
+    else
+        echo "ERROR: Unable to parse line: $line" >&2
+        exit 1
+    fi
 
 	# Translate package names to the ones used in the repository
 	case $package in
@@ -67,6 +96,10 @@ do
 			;;
 		backup)
 			package="manticore-backup"
+			arch="all"
+			;;
+		load)
+			package="manticore-load"
 			arch="all"
 			;;
 		mcl)
@@ -87,10 +120,19 @@ do
 			;;
 	esac
 
-	suffix=$(get_semver_suffix "$version")
-	repo_url="https://repo.manticoresearch.com/repository/manticoresearch_jammy${suffix}/dists/jammy/main/binary-amd64"
+	# Update suffix logic
+	if [ "$suffix" = "dev" ]; then
+		repo_suffix="_dev"
+	else
+		repo_suffix=$(get_semver_suffix "$version")
+	fi
+	repo_url="https://repo.manticoresearch.com/repository/manticoresearch_jammy${repo_suffix}/dists/jammy/main/binary-amd64"
 
-	download_package "${package}" "${version}" "${date}" "${commit}" "${arch}"
+	if [[ "$line" =~ ^([^[:space:]]+)[[:space:]]+([^[:space:]]+)\+([0-9]+)-([a-f0-9]+) ]]; then
+		download_package "${package}" "${version_string}" "${arch}"
+	else
+		download_package "${package}" "${version}" "${date}" "${commit}" "${arch}"
+	fi
 done < ../deps.txt
 
 # we want to build the image based on specific packages, copying them from a directory coming from an artifact of a previous job
@@ -123,10 +165,14 @@ docker exec manticore-test-kit bash -c \
 #
 buddy_path=/usr/share/manticore/modules/manticore-buddy
 docker exec manticore-test-kit bash -c \
-	"rm -fr $buddy_path && git clone https://github.com/manticoresoftware/manticoresearch-buddy.git $buddy_path && cd $buddy_path && git checkout $buddy_commit && composer install && curl -sSL https://raw.githubusercontent.com/manticoresoftware/phar_builder/refs/heads/main/templates/sh | sed 's/__NAME__/manticore-buddy/g; s/__PACKAGE__/manticore-buddy/g' >$buddy_path/bin/manticore-buddy && chmod +x $buddy_path/bin/manticore-buddy"
+	"rm -fr $buddy_path && \
+	git clone https://github.com/manticoresoftware/manticoresearch-buddy.git $buddy_path && \
+	git config --global --add safe.directory $buddy_path && \
+	cd $buddy_path && \
+	git checkout $buddy_commit && \
+	composer install"
 
 echo "Exporting image to ../manticore_test_kit.img"
 
 # exporting the image, it also squashes all the layers into one
 docker export manticore-test-kit > ../manticore_test_kit.img
-

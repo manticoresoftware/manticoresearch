@@ -1,3 +1,23 @@
+# This test validates the integration of Manticore Search with Kafka, focusing on the creation and management of Kafka sources,
+# materialized views, and tables. It ensures that data from Kafka topics is correctly processed, transformed, and stored in Manticore tables.
+#
+# Test steps:
+# 1. Create a Docker network `app-network` to enable communication between containers.
+# 2. Start a Manticore container (`manticore`) and a Kafka container (`kafka`) within the `app-network`.
+# 3. Configure Manticore to connect to Kafka and create a Kafka source (`kafka`) to consume data from the `my-data` topic.
+# 4. Create a table (`destination_kafka`) and a materialized view (`view_table`) to transform and store data from the Kafka source.
+# 5. Import data into Kafka using the `import.sh` script and verify that Manticore processes the data correctly.
+# 6. Perform various operations, such as altering materialized views, dropping sources, and re-creating them, to ensure proper functionality.
+# 7. Verify the data in the destination tables and ensure that the materialized views are correctly suspended and resumed.
+#
+# Expected result:
+# - The Kafka source should successfully consume data from the `my-data` topic.
+# - The materialized view should correctly transform and store the data in the destination table.
+# - The data in the destination table should match the expected results after processing.
+# - Materialized views should be able to be suspended and resumed without errors.
+# - Dropping and re-creating Kafka sources should not cause issues with the associated materialized views.
+# - The test should complete successfully, with all data processing steps verified and no errors encountered.
+
 ––– block: ../../base/dind/init –––
 ––– input –––
 docker network create app-network --driver bridge > /dev/null; echo $?
@@ -14,15 +34,15 @@ docker exec manticore sed -i '/data_dir = \/var\/lib\/manticore/a\    buddy_path
 docker exec manticore searchd
 ––– output –––
 [#!/[a-zA-Z]{3}\s[a-zA-Z]{3}\s+[0-9]{1,2}\s[0-9]{2}:[0-9]{2}:[0-9]{2}.[0-9]{3}\s[0-9]{4}/!#] [%{NUMBER}] using config file '/etc/manticoresearch/manticore.conf' (%{NUMBER} chars)...
-Manticore %{SEMVER} %{COMMITDATE}#!/(\sdev)?\s/!#(columnar %{SEMVER} %{COMMITDATE}) (secondary %{SEMVER} %{COMMITDATE}) (knn %{SEMVER} %{COMMITDATE})
+Manticore %{VERSION} (columnar %{VERSION}) (secondary %{VERSION}) (knn %{VERSION})
 Copyright (c) 2001-2016, Andrew Aksyonoff
 Copyright (c) 2008-2016, Sphinx Technologies Inc (http://sphinxsearch.com)
 Copyright (c) 2017-%{YEAR}, Manticore Software LTD (https://manticoresearch.com)
-starting daemon version '%{SEMVER} %{COMMITDATE}#!/(\sdev)?\s/!#(columnar %{SEMVER} %{COMMITDATE}) (secondary %{SEMVER} %{COMMITDATE}) (knn %{SEMVER} %{COMMITDATE})' ...
+starting daemon version '%{VERSION} (columnar %{VERSION}) (secondary %{VERSION}) (knn %{VERSION})' ...
 listening on %{IPADDR}:9312 for sphinx and http(s)
 listening on %{IPADDR}:9306 for mysql
 listening on %{IPADDR}:9308 for sphinx and http(s)
-Manticore %{SEMVER} %{COMMITDATE}#!/(\sdev)?\s/!#(columnar %{SEMVER} %{COMMITDATE}) (secondary %{SEMVER} %{COMMITDATE}) (knn %{SEMVER} %{COMMITDATE})
+Manticore %{VERSION} (columnar %{VERSION}) (secondary %{VERSION}) (knn %{VERSION})
 Copyright (c) 2001-2016, Andrew Aksyonoff
 Copyright (c) 2008-2016, Sphinx Technologies Inc (http://sphinxsearch.com)
 Copyright (c) 2017-%{YEAR}, Manticore Software LTD (https://manticoresearch.com)
@@ -35,15 +55,15 @@ docker exec kafka kafka-topics.sh --create --topic my-data --partitions 4 --boot
 ––– output –––
 Created topic my-data.
 ––– input –––
-docker exec manticore mysql -h0 -P9306 -e "CREATE SOURCE kafka (id bigint, term text, abbrev text, GlossDef json) type='kafka' broker_list='kafka:9092' topic_list='my-data' consumer_group='manticore' num_consumers='1' batch=50;"; echo $?
+docker exec manticore mysql -h0 -P9306 -e "CREATE SOURCE kafka (id bigint, term text, abbrev '\$abbrev' text, GlossDef json, is_active bool) type='kafka' broker_list='kafka:9092' topic_list='my-data' consumer_group='manticore' num_consumers='1' batch=50;"; echo $?
 ––– output –––
 0
 ––– input –––
-docker exec manticore mysql -h0 -P9306 -e "CREATE TABLE destination_kafka (id bigint, name text, short_name text, received_at text, size multi);"; echo $?
+docker exec manticore mysql -h0 -P9306 -e "CREATE TABLE destination_kafka (id bigint, name text, short_name text, received_at text, size multi, is_active bool);"; echo $?
 ––– output –––
 0
 ––– input –––
-docker exec manticore mysql -h0 -P9306 -e "CREATE MATERIALIZED VIEW view_table TO destination_kafka AS SELECT id, term as name, abbrev as short_name, UTC_TIMESTAMP() as received_at, GlossDef.size as size FROM kafka"; echo $?
+docker exec manticore mysql -h0 -P9306 -e "CREATE MATERIALIZED VIEW view_table TO destination_kafka AS SELECT id, term as name, abbrev as short_name, UTC_TIMESTAMP() as received_at, GlossDef.size as size, is_active FROM kafka;"; echo $?
 ––– output –––
 0
 ––– input –––
@@ -57,18 +77,18 @@ docker exec manticore mysql -h0 -P9306 -e "SHOW SOURCES;"
 ––– input –––
 docker exec manticore mysql -h0 -P9306 -e "SHOW SOURCE kafka;"
 ––– output –––
-+--------+-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
-| Source | Create Table                                                                                                                                                                              |
-+--------+-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
++--------+---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
+| Source | Create Table                                                                                                                                                                                                        |
++--------+---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
 | kafka  | CREATE SOURCE kafka
-(id bigint, term text, abbrev text, GlossDef json)
+(id bigint, term text, abbrev '$abbrev' text, GlossDef json, is_active bool)
 type='kafka'
 broker_list='kafka:9092'
 topic_list='my-data'
 consumer_group='manticore'
 num_consumers='1'
 batch=50 |
-+--------+-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
++--------+---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
 ––– input –––
 docker exec manticore mysql -h0 -P9306 -e "SHOW MVS;"
 ––– output –––
@@ -80,17 +100,17 @@ docker exec manticore mysql -h0 -P9306 -e "SHOW MVS;"
 ––– input –––
 docker exec manticore mysql -h0 -P9306 -e "SHOW MV view_table;"
 ––– output –––
-+------------+-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------+-----------+
-| View       | Create Table                                                                                                                                                                | suspended |
-+------------+-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------+-----------+
-| view_table | CREATE MATERIALIZED VIEW view_table TO destination_kafka AS SELECT id, term as name, abbrev as short_name, UTC_TIMESTAMP() as received_at, GlossDef.size as size FROM kafka | 0         |
-+------------+-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------+-----------+
++------------+----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+-----------+
+| View       | Create Table                                                                                                                                                                           | suspended |
++------------+----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+-----------+
+| view_table | CREATE MATERIALIZED VIEW view_table TO destination_kafka AS SELECT id, term as name, abbrev as short_name, UTC_TIMESTAMP() as received_at, GlossDef.size as size, is_active FROM kafka | 0         |
++------------+----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+-----------+
 ––– input –––
 docker exec kafka chmod +x ./import.sh; docker exec kafka ./import.sh; echo $?
 ––– output –––
 0
 ––– input –––
-timeout 60 bash -c 'docker exec manticore bash -c "tail -f /var/log/manticore/searchd.log" | grep -m2 "REPLACE+INTO+destination_kafka" > /dev/null && echo "Data processing completed."' || echo "Data processing failed."
+timeout 60 bash -c 'docker exec manticore bash -c "tail -f /var/log/manticore/searchd.log" | grep -m2 "REPLACE%20INTO%20destination_kafka" > /dev/null && echo "Data processing completed."' || echo "Data processing failed."
 ––– output –––
 Data processing completed.
 ––– input –––
@@ -104,30 +124,30 @@ docker exec manticore mysql -h0 -P9306 -e "SELECT COUNT(*) FROM destination_kafk
 ––– input –––
 docker exec manticore mysql -h0 -P9306 -e "SELECT * FROM destination_kafka ORDER BY id ASC;"
 ––– output –––
-+------+---------------------------------------------+-----------------+---------------------+----------+
-| id   | name                                        | short_name      | received_at         | size     |
-+------+---------------------------------------------+-----------------+---------------------+----------+
-|    1 | The Quick Brown Fox                         | ISO 12345:6789  | %{DATETIME} | 20,25,30 |
-|    2 | Jumped Over The Lazy Dog                    | ISO 98765:4321  | %{DATETIME} | 20,25,30 |
-|    3 | A Stitch In Time Saves Nine                 | ISO 24680:1357  | %{DATETIME} | 20,25,30 |
-|    4 | An Apple A Day Keeps The Doctor Away        | ISO 97531:86420 | %{DATETIME} | 20,25,30 |
-|    5 | Actions Speak Louder Than Words             | ISO 56789:12345 | %{DATETIME} | 20,25,30 |
-|    6 | Every Cloud Has A Silver Lining             | ISO 86420:97531 | %{DATETIME} | 20,25,30 |
-|    7 | Beauty Is In The Eye Of The Beholder        | ISO 13579:86420 | %{DATETIME} | 20,25,30 |
-|    8 | Birds Of A Feather Flock Together           | ISO 97531:24680 | %{DATETIME} | 20,25,30 |
-|    9 | You Can't Judge A Book By Its Cover         | ISO 56789:86420 | %{DATETIME} | 20,25,30 |
-|   10 | Two Heads Are Better Than One               | ISO 86420:97531 | %{DATETIME} | 20,25,30 |
-|   11 | The Early Bird Catches The Worm             | ISO 97531:86420 | %{DATETIME} | 20,25,30 |
-|   12 | All That Glitters Is Not Gold               | ISO 24680:1357  | %{DATETIME} | 2,3,20   |
-|   13 | A Penny For Your Thoughts                   | ISO 97531:86420 | %{DATETIME} | 20,25,30 |
-|   14 | Bite The Bullet                             | ISO 13579:86420 | %{DATETIME} | 20,25,30 |
-|   15 | Break A Leg                                 | ISO 56789:12345 | %{DATETIME} | 20,25,30 |
-|   16 | A Picture Is Worth A Thousand Words         | ISO 86420:97531 | %{DATETIME} | 20,25,30 |
-|   17 | Curiosity Killed The Cat                    | ISO 13579:86420 | %{DATETIME} | 20,25,30 |
-|   18 | Don't Count Your Chickens Before They Hatch | ISO 97531:24680 | %{DATETIME} | 20,25,30 |
-|   19 | Every Dog Has His Day                       | ISO 56789:86420 | %{DATETIME} | 20,25,30 |
-|   20 | Haste Makes Waste                           | ISO 86420:97531 | %{DATETIME} | 20,25,30 |
-+------+---------------------------------------------+-----------------+---------------------+----------+
++------+---------------------------------------------+-----------------+---------------------+----------+-----------+
+| id   | name                                        | short_name      | received_at         | size     | is_active |
++------+---------------------------------------------+-----------------+---------------------+----------+-----------+
+|    1 | The Quick Brown Fox                         | ISO 12345:6789  | %{DATETIME} | 20,25,30 |         1 |
+|    2 | Jumped Over The Lazy Dog                    | ISO 98765:4321  | %{DATETIME} | 20,25,30 |         0 |
+|    3 | A Stitch In Time Saves Nine                 | ISO 24680:1357  | %{DATETIME} | 20,25,30 |         1 |
+|    4 | An Apple A Day Keeps The Doctor Away        | ISO 97531:86420 | %{DATETIME} | 20,25,30 |         0 |
+|    5 | Actions Speak Louder Than Words             | ISO 56789:12345 | %{DATETIME} | 20,25,30 |         1 |
+|    6 | Every Cloud Has A Silver Lining             | ISO 86420:97531 | %{DATETIME} | 20,25,30 |         0 |
+|    7 | Beauty Is In The Eye Of The Beholder        | ISO 13579:86420 | %{DATETIME} | 20,25,30 |         1 |
+|    8 | Birds Of A Feather Flock Together           | ISO 97531:24680 | %{DATETIME} | 20,25,30 |         0 |
+|    9 | You Can't Judge A Book By Its Cover         | ISO 56789:86420 | %{DATETIME} | 20,25,30 |         1 |
+|   10 | Two Heads Are Better Than One               | ISO 86420:97531 | %{DATETIME} | 20,25,30 |         0 |
+|   11 | The Early Bird Catches The Worm             | ISO 97531:86420 | %{DATETIME} | 20,25,30 |         1 |
+|   12 | All That Glitters Is Not Gold               | ISO 24680:1357  | %{DATETIME} | 2,3,20   |         0 |
+|   13 | A Penny For Your Thoughts                   | ISO 97531:86420 | %{DATETIME} | 20,25,30 |         1 |
+|   14 | Bite The Bullet                             | ISO 13579:86420 | %{DATETIME} | 20,25,30 |         0 |
+|   15 | Break A Leg                                 | ISO 56789:12345 | %{DATETIME} | 20,25,30 |         1 |
+|   16 | A Picture Is Worth A Thousand Words         | ISO 86420:97531 | %{DATETIME} | 20,25,30 |         0 |
+|   17 | Curiosity Killed The Cat                    | ISO 13579:86420 | %{DATETIME} | 20,25,30 |         1 |
+|   18 | Don't Count Your Chickens Before They Hatch | ISO 97531:24680 | %{DATETIME} | 20,25,30 |         0 |
+|   19 | Every Dog Has His Day                       | ISO 56789:86420 | %{DATETIME} | 20,25,30 |         1 |
+|   20 | Haste Makes Waste                           | ISO 86420:97531 | %{DATETIME} | 20,25,30 |         0 |
++------+---------------------------------------------+-----------------+---------------------+----------+-----------+
 ––– input –––
 docker exec manticore mysql -h0 -P9306 -e "DROP SOURCE kafka;"; echo $?
 ––– output –––
@@ -139,26 +159,20 @@ docker exec manticore mysql -h0 -P9306 -e "DROP table destination_kafka;"; echo 
 ––– input –––
 docker exec manticore mysql -h0 -P9306 -e "SHOW TABLES;"
 ––– output –––
-+----------+------+
-| Table    | Type |
-+----------+------+
-| _sources | rt   |
-| _views   | rt   |
-+----------+------+
 ––– input –––
 docker exec kafka kafka-consumer-groups.sh --bootstrap-server localhost:9092 --group manticore_destination --reset-offsets --to-latest --topic my-data --execute > /dev/null; echo $?
 ––– output –––
 0
 ––– input –––
-docker exec manticore mysql -h0 -P9306 -e "CREATE SOURCE kafka (id bigint, term text, abbrev text, GlossDef json, location json) type='kafka' broker_list='kafka:9092' topic_list='my-data' consumer_group='manticore_destination' num_consumers='1' batch=50;"; echo $?
+docker exec manticore mysql -h0 -P9306 -e "CREATE SOURCE kafka (id bigint, term text, abbrev '\$abbrev' text, GlossDef json, location json, is_active bool) type='kafka' broker_list='kafka:9092' topic_list='my-data' consumer_group='manticore_destination' num_consumers='1' batch=50;"; echo $?
 ––– output –––
 0
 ––– input –––
-docker exec manticore mysql -h0 -P9306 -e "CREATE TABLE destination_kafka (id bigint, name text, short_name text, received_at text, size multi, lat float, lon float, distance float);"; echo $?
+docker exec manticore mysql -h0 -P9306 -e "CREATE TABLE destination_kafka (id bigint, name text, short_name text, received_at text, size multi, lat float, lon float, distance float, is_active bool);"; echo $?
 ––– output –––
 0
 ––– input –––
-docker exec manticore mysql -h0 -P9306 -e "CREATE MATERIALIZED VIEW view_table_destination TO destination_kafka AS SELECT id, term as name, abbrev as short_name, UTC_TIMESTAMP() as received_at, GlossDef.size as size, location.lat as lat, location.lon as lon, GEODIST(lat, lon, 49.0, 3.0) AS distance FROM kafka"; echo $?
+docker exec manticore mysql -h0 -P9306 -e "CREATE MATERIALIZED VIEW view_table_destination TO destination_kafka AS SELECT id, term as name, abbrev as short_name, UTC_TIMESTAMP() as received_at, GlossDef.size as size, location.lat as lat, location.lon as lon, GEODIST(lat, lon, 49.0, 3.0) AS distance, is_active FROM kafka"; echo $?
 ––– output –––
 0
 ––– input –––
@@ -166,42 +180,42 @@ docker exec kafka ./import.sh; echo $?
 ––– output –––
 0
 ––– input –––
-timeout 60 bash -c 'docker exec manticore bash -c "tail -f /var/log/manticore/searchd.log" | grep -m2 "REPLACE+INTO+destination_kafka" > /dev/null && echo "Data processing completed."' || echo "Data processing failed."
+timeout 60 bash -c 'docker exec manticore bash -c "tail -f /var/log/manticore/searchd.log" | grep -m2 "REPLACE%20INTO%20destination_kafka" > /dev/null && echo "Data processing completed."' || echo "Data processing failed."
 ––– output –––
 Data processing completed.
 ––– input –––
-docker exec manticore mysql -h0 -P9306 -e "SELECT id, name, short_name, received_at, size, lat, lon AS distance FROM destination_kafka ORDER BY id ASC;"
+docker exec manticore mysql -h0 -P9306 -e "SELECT id, name, short_name, received_at, size, lat, lon, is_active AS distance FROM destination_kafka ORDER BY id ASC;"
 ––– output –––
-+------+---------------------------------------------+-----------------+---------------------+----------+-----------+-----------+
-| id   | name                                        | short_name      | received_at         | size     | lat       | distance  |
-+------+---------------------------------------------+-----------------+---------------------+----------+-----------+-----------+
-|    1 | The Quick Brown Fox                         | ISO 12345:6789  | %{DATETIME} | 20,25,30 | 49.000000 |  3.000000 |
-|    2 | Jumped Over The Lazy Dog                    | ISO 98765:4321  | %{DATETIME} | 20,25,30 | 50.000000 |  4.000000 |
-|    3 | A Stitch In Time Saves Nine                 | ISO 24680:1357  | %{DATETIME} | 20,25,30 | 51.000000 |  5.000000 |
-|    4 | An Apple A Day Keeps The Doctor Away        | ISO 97531:86420 | %{DATETIME} | 20,25,30 | 52.000000 |  6.000000 |
-|    5 | Actions Speak Louder Than Words             | ISO 56789:12345 | %{DATETIME} | 20,25,30 | 53.000000 |  7.000000 |
-|    6 | Every Cloud Has A Silver Lining             | ISO 86420:97531 | %{DATETIME} | 20,25,30 | 54.000000 |  8.000000 |
-|    7 | Beauty Is In The Eye Of The Beholder        | ISO 13579:86420 | %{DATETIME} | 20,25,30 | 55.000000 |  9.000000 |
-|    8 | Birds Of A Feather Flock Together           | ISO 97531:24680 | %{DATETIME} | 20,25,30 | 56.000000 | 10.000000 |
-|    9 | You Can't Judge A Book By Its Cover         | ISO 56789:86420 | %{DATETIME} | 20,25,30 | 57.000000 | 11.000000 |
-|   10 | Two Heads Are Better Than One               | ISO 86420:97531 | %{DATETIME} | 20,25,30 | 48.000000 |  2.000000 |
-|   11 | The Early Bird Catches The Worm             | ISO 97531:86420 | %{DATETIME} | 20,25,30 | 49.000000 |  3.000000 |
-|   12 | All That Glitters Is Not Gold               | ISO 24680:1357  | %{DATETIME} | 2,3,20   | 50.000000 |  4.000000 |
-|   13 | A Penny For Your Thoughts                   | ISO 97531:86420 | %{DATETIME} | 20,25,30 | 51.000000 |  5.000000 |
-|   14 | Bite The Bullet                             | ISO 13579:86420 | %{DATETIME} | 20,25,30 | 52.000000 |  6.000000 |
-|   15 | Break A Leg                                 | ISO 56789:12345 | %{DATETIME} | 20,25,30 | 53.000000 |  7.000000 |
-|   16 | A Picture Is Worth A Thousand Words         | ISO 86420:97531 | %{DATETIME} | 20,25,30 | 54.000000 |  8.000000 |
-|   17 | Curiosity Killed The Cat                    | ISO 13579:86420 | %{DATETIME} | 20,25,30 | 55.000000 |  9.000000 |
-|   18 | Don't Count Your Chickens Before They Hatch | ISO 97531:24680 | %{DATETIME} | 20,25,30 | 56.000000 | 10.000000 |
-|   19 | Every Dog Has His Day                       | ISO 56789:86420 | %{DATETIME} | 20,25,30 | 57.000000 | 11.000000 |
-|   20 | Haste Makes Waste                           | ISO 86420:97531 | %{DATETIME} | 20,25,30 | 48.000000 |  2.000000 |
-+------+---------------------------------------------+-----------------+---------------------+----------+-----------+-----------+
++------+---------------------------------------------+-----------------+---------------------+----------+-----------+-----------+----------+
+| id   | name                                        | short_name      | received_at         | size     | lat       | lon       | distance |
++------+---------------------------------------------+-----------------+---------------------+----------+-----------+-----------+----------+
+|    1 | The Quick Brown Fox                         | ISO 12345:6789  | %{DATETIME} | 20,25,30 | 49.000000 |  3.000000 |        1 |
+|    2 | Jumped Over The Lazy Dog                    | ISO 98765:4321  | %{DATETIME} | 20,25,30 | 50.000000 |  4.000000 |        0 |
+|    3 | A Stitch In Time Saves Nine                 | ISO 24680:1357  | %{DATETIME} | 20,25,30 | 51.000000 |  5.000000 |        1 |
+|    4 | An Apple A Day Keeps The Doctor Away        | ISO 97531:86420 | %{DATETIME} | 20,25,30 | 52.000000 |  6.000000 |        0 |
+|    5 | Actions Speak Louder Than Words             | ISO 56789:12345 | %{DATETIME} | 20,25,30 | 53.000000 |  7.000000 |        1 |
+|    6 | Every Cloud Has A Silver Lining             | ISO 86420:97531 | %{DATETIME} | 20,25,30 | 54.000000 |  8.000000 |        0 |
+|    7 | Beauty Is In The Eye Of The Beholder        | ISO 13579:86420 | %{DATETIME} | 20,25,30 | 55.000000 |  9.000000 |        1 |
+|    8 | Birds Of A Feather Flock Together           | ISO 97531:24680 | %{DATETIME} | 20,25,30 | 56.000000 | 10.000000 |        0 |
+|    9 | You Can't Judge A Book By Its Cover         | ISO 56789:86420 | %{DATETIME} | 20,25,30 | 57.000000 | 11.000000 |        1 |
+|   10 | Two Heads Are Better Than One               | ISO 86420:97531 | %{DATETIME} | 20,25,30 | 48.000000 |  2.000000 |        0 |
+|   11 | The Early Bird Catches The Worm             | ISO 97531:86420 | %{DATETIME} | 20,25,30 | 49.000000 |  3.000000 |        1 |
+|   12 | All That Glitters Is Not Gold               | ISO 24680:1357  | %{DATETIME} | 2,3,20   | 50.000000 |  4.000000 |        0 |
+|   13 | A Penny For Your Thoughts                   | ISO 97531:86420 | %{DATETIME} | 20,25,30 | 51.000000 |  5.000000 |        1 |
+|   14 | Bite The Bullet                             | ISO 13579:86420 | %{DATETIME} | 20,25,30 | 52.000000 |  6.000000 |        0 |
+|   15 | Break A Leg                                 | ISO 56789:12345 | %{DATETIME} | 20,25,30 | 53.000000 |  7.000000 |        1 |
+|   16 | A Picture Is Worth A Thousand Words         | ISO 86420:97531 | %{DATETIME} | 20,25,30 | 54.000000 |  8.000000 |        0 |
+|   17 | Curiosity Killed The Cat                    | ISO 13579:86420 | %{DATETIME} | 20,25,30 | 55.000000 |  9.000000 |        1 |
+|   18 | Don't Count Your Chickens Before They Hatch | ISO 97531:24680 | %{DATETIME} | 20,25,30 | 56.000000 | 10.000000 |        0 |
+|   19 | Every Dog Has His Day                       | ISO 56789:86420 | %{DATETIME} | 20,25,30 | 57.000000 | 11.000000 |        1 |
+|   20 | Haste Makes Waste                           | ISO 86420:97531 | %{DATETIME} | 20,25,30 | 48.000000 |  2.000000 |        0 |
++------+---------------------------------------------+-----------------+---------------------+----------+-----------+-----------+----------+
 ––– input –––
 docker exec kafka kafka-consumer-groups.sh --bootstrap-server localhost:9092 --group manticore_metadata --reset-offsets --to-latest --topic my-data --execute > /dev/null; echo $?
 ––– output –––
 0
 ––– input –––
-docker exec manticore mysql -h0 -P9306 -e "CREATE SOURCE kafka_metadata (id bigint, term text, abbrev text, GlossDef json, metadata json) type='kafka' broker_list='kafka:9092' topic_list='my-data' consumer_group='manticore_metadata' num_consumers='1' batch=50;"; echo $?
+docker exec manticore mysql -h0 -P9306 -e "CREATE SOURCE kafka_metadata (id bigint, term text, abbrev '\$abbrev' text, GlossDef json, metadata json) type='kafka' broker_list='kafka:9092' topic_list='my-data' consumer_group='manticore_metadata' num_consumers='1' batch=50;"; echo $?
 ––– output –––
 0
 ––– input –––
@@ -217,7 +231,7 @@ docker exec kafka ./import.sh; echo $?
 ––– output –––
 0
 ––– input –––
-timeout 60 bash -c 'docker exec manticore bash -c "tail -f /var/log/manticore/searchd.log" | grep -m2 "REPLACE+INTO+destination_kafka_metadata" > /dev/null && echo "Data processing completed."' || echo "Data processing failed."
+timeout 60 bash -c 'docker exec manticore bash -c "tail -f /var/log/manticore/searchd.log" | grep -m2 "REPLACE%20INTO%20destination_kafka_metadata" > /dev/null && echo "Data processing completed."' || echo "Data processing failed."
 ––– output –––
 Data processing completed.
 ––– input –––
@@ -260,7 +274,7 @@ docker exec kafka kafka-consumer-groups.sh --bootstrap-server localhost:9092 --g
 ––– output –––
 0
 ––– input –––
-docker exec manticore mysql -h0 -P9306 -e "CREATE SOURCE kafka_tags (id bigint, term text, abbrev text, GlossDef json, tags json) type='kafka' broker_list='kafka:9092' topic_list='my-data' consumer_group='manticore_tags' num_consumers='1' batch=50;"; echo $?
+docker exec manticore mysql -h0 -P9306 -e "CREATE SOURCE kafka_tags (id bigint, term text, abbrev '\$abbrev' text, GlossDef json, tags json) type='kafka' broker_list='kafka:9092' topic_list='my-data' consumer_group='manticore_tags' num_consumers='1' batch=50;"; echo $?
 ––– output –––
 0
 ––– input –––
@@ -276,7 +290,7 @@ docker exec kafka ./import.sh; echo $?
 ––– output –––
 0
 ––– input –––
-timeout 60 bash -c 'docker exec manticore bash -c "tail -f /var/log/manticore/searchd.log" | grep -m2 "REPLACE+INTO+destination_kafka_tags" > /dev/null && echo "Data processing completed."' || echo "Data processing failed."
+timeout 60 bash -c 'docker exec manticore bash -c "tail -f /var/log/manticore/searchd.log" | grep -m2 "REPLACE%20INTO%20destination_kafka_tags" > /dev/null && echo "Data processing completed."' || echo "Data processing failed."
 ––– output –––
 Data processing completed.
 ––– input –––
@@ -319,7 +333,7 @@ docker exec kafka kafka-consumer-groups.sh --bootstrap-server localhost:9092 --g
 ––– output –––
 0
 ––– input –––
-docker exec manticore mysql -h0 -P9306 -e "CREATE SOURCE kafka_alter (id bigint, term text, abbrev text, GlossDef json, metadata json) type='kafka' broker_list='kafka:9092' topic_list='my-data' consumer_group='manticore_alter' num_consumers='1' batch=50;"; echo $?
+docker exec manticore mysql -h0 -P9306 -e "CREATE SOURCE kafka_alter (id bigint, term text, abbrev '\$abbrev' text, GlossDef json, metadata json) type='kafka' broker_list='kafka:9092' topic_list='my-data' consumer_group='manticore_alter' num_consumers='1' batch=50;"; echo $?
 ––– output –––
 0
 ––– input –––
@@ -335,7 +349,7 @@ docker exec kafka ./import.sh; echo $?
 ––– output –––
 0
 ––– input –––
-timeout 60 bash -c 'docker exec manticore bash -c "tail -f /var/log/manticore/searchd.log" | grep -m1 "REPLACE+INTO+destination_kafka_alter" > /dev/null && echo "Data processing completed."' || echo "Data processing failed."
+timeout 60 bash -c 'docker exec manticore bash -c "tail -f /var/log/manticore/searchd.log" | grep -m1 "REPLACE%20INTO%20destination_kafka_alter" > /dev/null && echo "Data processing completed."' || echo "Data processing failed."
 ––– output –––
 Data processing completed.
 ––– input –––
@@ -379,7 +393,7 @@ docker exec kafka kafka-consumer-groups.sh --bootstrap-server localhost:9092 --g
 ––– output –––
 0
 ––– input –––
-docker exec manticore mysql -h0 -P9306 -e "CREATE SOURCE kafka_ts (id bigint, term text, abbrev text, GlossDef json, timestamp_unix timestamp) type='kafka' broker_list='kafka:9092' topic_list='my-data' consumer_group='manticore_ts' num_consumers='1' batch=50;"; echo $?
+docker exec manticore mysql -h0 -P9306 -e "CREATE SOURCE kafka_ts (id bigint, term text, abbrev '\$abbrev' text, GlossDef json, timestamp_unix timestamp) type='kafka' broker_list='kafka:9092' topic_list='my-data' consumer_group='manticore_ts' num_consumers='1' batch=50;"; echo $?
 ––– output –––
 0
 ––– input –––
@@ -395,7 +409,7 @@ docker exec kafka ./import.sh; echo $?
 ––– output –––
 0
 ––– input –––
-timeout 60 bash -c 'docker exec manticore bash -c "tail -f /var/log/manticore/searchd.log" | grep -m2 "REPLACE+INTO+destination_kafka_ts" > /dev/null && echo "Data processing completed."' || echo "Data processing failed."
+timeout 60 bash -c 'docker exec manticore bash -c "tail -f /var/log/manticore/searchd.log" | grep -m2 "REPLACE%20INTO%20destination_kafka_ts" > /dev/null && echo "Data processing completed."' || echo "Data processing failed."
 ––– output –––
 Data processing completed.
 ––– input –––
@@ -438,7 +452,7 @@ docker exec kafka kafka-consumer-groups.sh --bootstrap-server localhost:9092 --g
 ––– output –––
 0
 ––– input –––
-docker exec manticore mysql -h0 -P9306 -e "CREATE SOURCE kafka_combined (id bigint, term text, abbrev text, GlossDef json, location json, metadata json, tags json, timestamp_unix timestamp) type='kafka' broker_list='kafka:9092' topic_list='my-data' consumer_group='manticore_combined' num_consumers='1' batch=50;"; echo $?
+docker exec manticore mysql -h0 -P9306 -e "CREATE SOURCE kafka_combined (id bigint, term text, abbrev '\$abbrev' text, GlossDef json, location json, metadata json, tags json, timestamp_unix timestamp) type='kafka' broker_list='kafka:9092' topic_list='my-data' consumer_group='manticore_combined' num_consumers='1' batch=50;"; echo $?
 ––– output –––
 0
 ––– input –––
@@ -454,7 +468,7 @@ docker exec kafka ./import.sh; echo $?
 ––– output –––
 0
 ––– input –––
-timeout 60 bash -c 'docker exec manticore bash -c "tail -f /var/log/manticore/searchd.log" | grep -m2 "REPLACE+INTO+destination_kafka_combined" > /dev/null && echo "Data processing completed."' || echo "Data processing failed."
+timeout 60 bash -c 'docker exec manticore bash -c "tail -f /var/log/manticore/searchd.log" | grep -m2 "REPLACE%20INTO%20destination_kafka_combined" > /dev/null && echo "Data processing completed."' || echo "Data processing failed."
 ––– output –––
 Data processing completed.
 ––– input –––
@@ -482,7 +496,7 @@ docker exec kafka kafka-consumer-groups.sh --bootstrap-server localhost:9092 --g
 ––– output –––
 0
 ––– input –––
-docker exec manticore mysql -h0 -P9306 -e "CREATE SOURCE kafka_stop (id bigint, term text, abbrev text, GlossDef json, location json, metadata json, tags json, timestamp_unix timestamp) type='kafka' broker_list='kafka:9092' topic_list='my-data' consumer_group='manticore_stop' num_consumers='1' batch=50;"; echo $?
+docker exec manticore mysql -h0 -P9306 -e "CREATE SOURCE kafka_stop (id bigint, term text, abbrev '\$abbrev' text, GlossDef json, location json, metadata json, tags json, timestamp_unix timestamp) type='kafka' broker_list='kafka:9092' topic_list='my-data' consumer_group='manticore_stop' num_consumers='1' batch=50;"; echo $?
 ––– output –––
 0
 ––– input –––
@@ -498,7 +512,7 @@ docker exec kafka ./import.sh; echo $?
 ––– output –––
 0
 ––– input –––
-timeout 60 bash -c 'docker exec manticore bash -c "tail -f -n 10000 /var/log/manticore/searchd.log" | grep -m1 "REPLACE+INTO+destination_kafka_stop" > /dev/null && echo "Data processing completed."' || echo "Data processing failed."
+timeout 60 bash -c 'docker exec manticore bash -c "tail -f /var/log/manticore/searchd.log" | grep -m1 "REPLACE%20INTO%20destination_kafka_stop" > /dev/null && echo "Data processing completed."' || echo "Data processing failed."
 ––– output –––
 Data processing completed.
 ––– input –––
@@ -514,7 +528,7 @@ sleep 1; docker exec manticore searchd --stopwait
 ––– output –––
 [#!/[a-zA-Z]{3}\s[a-zA-Z]{3}\s+[0-9]{1,2}\s[0-9]{2}:[0-9]{2}:[0-9]{2}.[0-9]{3}\s[0-9]{4}/!#] [%{NUMBER}] using config file '/etc/manticoresearch/manticore.conf' (%{NUMBER} chars)...
 [#!/[a-zA-Z]{3}\s[a-zA-Z]{3}\s+[0-9]{1,2}\s[0-9]{2}:[0-9]{2}:[0-9]{2}.[0-9]{3}\s[0-9]{4}/!#] [%{NUMBER}] stop: successfully sent SIGTERM to pid %{NUMBER}
-Manticore %{SEMVER} %{COMMITDATE}#!/(\sdev)?\s/!#(columnar %{SEMVER} %{COMMITDATE}) (secondary %{SEMVER} %{COMMITDATE}) (knn %{SEMVER} %{COMMITDATE})
+Manticore %{VERSION} (columnar %{VERSION}) (secondary %{VERSION}) (knn %{VERSION})
 Copyright (c) 2001-2016, Andrew Aksyonoff
 Copyright (c) 2008-2016, Sphinx Technologies Inc (http://sphinxsearch.com)
 Copyright (c) 2017-%{YEAR}, Manticore Software LTD (https://manticoresearch.com)
@@ -522,35 +536,35 @@ Copyright (c) 2017-%{YEAR}, Manticore Software LTD (https://manticoresearch.com)
 sleep 1; docker exec manticore searchd
 ––– output –––
 [#!/[a-zA-Z]{3}\s[a-zA-Z]{3}\s+[0-9]{1,2}\s[0-9]{2}:[0-9]{2}:[0-9]{2}.[0-9]{3}\s[0-9]{4}/!#] [%{NUMBER}] using config file '/etc/manticoresearch/manticore.conf' (%{NUMBER} chars)...
-Manticore %{SEMVER} %{COMMITDATE}#!/(\sdev)?\s/!#(columnar %{SEMVER} %{COMMITDATE}) (secondary %{SEMVER} %{COMMITDATE}) (knn %{SEMVER} %{COMMITDATE})
+Manticore %{VERSION} (columnar %{VERSION}) (secondary %{VERSION}) (knn %{VERSION})
 Copyright (c) 2001-2016, Andrew Aksyonoff
 Copyright (c) 2008-2016, Sphinx Technologies Inc (http://sphinxsearch.com)
 Copyright (c) 2017-%{YEAR}, Manticore Software LTD (https://manticoresearch.com)
-starting daemon version '%{SEMVER} %{COMMITDATE}#!/(\sdev)?\s/!#(columnar %{SEMVER} %{COMMITDATE}) (secondary %{SEMVER} %{COMMITDATE}) (knn %{SEMVER} %{COMMITDATE})' ...
+starting daemon version '%{VERSION} (columnar %{VERSION}) (secondary %{VERSION}) (knn %{VERSION})' ...
 listening on %{IPADDR}:9312 for sphinx and http(s)
 listening on %{IPADDR}:9306 for mysql
 listening on %{IPADDR}:9308 for sphinx and http(s)
-Manticore %{SEMVER} %{COMMITDATE}#!/(\sdev)?\s/!#(columnar %{SEMVER} %{COMMITDATE}) (secondary %{SEMVER} %{COMMITDATE}) (knn %{SEMVER} %{COMMITDATE})
+Manticore %{VERSION} (columnar %{VERSION}) (secondary %{VERSION}) (knn %{VERSION})
 Copyright (c) 2001-2016, Andrew Aksyonoff
 Copyright (c) 2008-2016, Sphinx Technologies Inc (http://sphinxsearch.com)
 Copyright (c) 2017-%{YEAR}, Manticore Software LTD (https://manticoresearch.com)
-precaching table '_sources'
-precaching table '_views'
-precaching table '_buffer_kafka_0'
+precaching table 'system.sources'
+precaching table 'system.views'
+precaching table 'system.buffer_kafka_0'
 precaching table 'destination_kafka'
-precaching table '_buffer_kafka_metadata_0'
+precaching table 'system.buffer_kafka_metadata_0'
 precaching table 'destination_kafka_metadata'
-precaching table '_buffer_kafka_tags_0'
+precaching table 'system.buffer_kafka_tags_0'
 precaching table 'destination_kafka_tags'
-precaching table '_buffer_kafka_alter_0'
+precaching table 'system.buffer_kafka_alter_0'
 precaching table 'destination_kafka_alter'
-precaching table '_buffer_kafka_ts_0'
+precaching table 'system.buffer_kafka_ts_0'
 precaching table 'destination_kafka_ts'
-precaching table '_buffer_kafka_combined_0'
+precaching table 'system.buffer_kafka_combined_0'
 precaching table 'destination_kafka_combined'
-precaching table '_buffer_kafka_stop_0'
+precaching table 'system.buffer_kafka_stop_0'
 precaching table 'destination_kafka_stop'
-Manticore %{SEMVER} %{COMMITDATE}#!/(\sdev)?\s/!#(columnar %{SEMVER} %{COMMITDATE}) (secondary %{SEMVER} %{COMMITDATE}) (knn %{SEMVER} %{COMMITDATE})
+Manticore %{VERSION} (columnar %{VERSION}) (secondary %{VERSION}) (knn %{VERSION})
 Copyright (c) 2001-2016, Andrew Aksyonoff
 Copyright (c) 2008-2016, Sphinx Technologies Inc (http://sphinxsearch.com)
 Copyright (c) 2017-%{YEAR}, Manticore Software LTD (https://manticoresearch.com)
@@ -615,7 +629,7 @@ docker exec kafka ./import.sh; echo $?
 ––– output –––
 0
 ––– input –––
-timeout 60 bash -c 'docker exec manticore bash -c "tail -f -n 10000 /var/log/manticore/searchd.log" | grep -m2 "REPLACE+INTO+destination_drop_source" > /dev/null && echo "Data processing completed."' || echo "Data processing failed."
+timeout 60 bash -c 'docker exec manticore bash -c "tail -f /var/log/manticore/searchd.log" | grep -m2 "REPLACE%20INTO%20destination_drop_source" > /dev/null && echo "Data processing completed."' || echo "Data processing failed."
 ––– output –––
 Data processing completed.
 ––– input –––

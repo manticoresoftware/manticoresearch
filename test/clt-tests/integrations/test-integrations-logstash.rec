@@ -47,7 +47,7 @@ logstash -f logstash.conf > /dev/null 2>&1; echo $?
 ––– input –––
 curl -s localhost:9308/cli_json -d 'describe dpkg_log' | jq -cM '.[].data | sort_by(.Field)'
 ––– output –––
-[{"Field":"@timestamp","Type":"timestamp","Properties":""},{"Field":"@version","Type":"text","Properties":"indexed stored"},{"Field":"host","Type":"text","Properties":"indexed stored"},{"Field":"id","Type":"bigint","Properties":""},{"Field":"message","Type":"text","Properties":"indexed stored"},{"Field":"path","Type":"text","Properties":"indexed stored"}]
+[{"Field":"@timestamp","Type":"timestamp","Properties":""},{"Field":"@version","Type":"string","Properties":"indexed attribute"},{"Field":"host","Type":"string","Properties":"indexed attribute"},{"Field":"id","Type":"bigint","Properties":""},{"Field":"message","Type":"string","Properties":"indexed attribute"},{"Field":"path","Type":"string","Properties":"indexed attribute"}]
 ––– input –––
 mysql -P9306 -h0 -N -e "SHOW TABLES\G; SELECT COUNT(*) FROM dpkg_log\G; SELECT message FROM dpkg_log\G;" | sort -r | grep -v '^[+*]'
 ––– output –––

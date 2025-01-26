@@ -162,7 +162,7 @@ const char* szCommand ( int );
 /// master-agent API SEARCH command protocol extensions version
 enum
 {
-	VER_COMMAND_SEARCH_MASTER = 23
+	VER_COMMAND_SEARCH_MASTER = 24
 };
 
 
@@ -545,7 +545,7 @@ public:
 	bool	GetDwords ( CSphVector<DWORD> & dBuffer, int & iGot, int iMax );
 	bool	GetQwords ( CSphVector<SphAttr_t> & dBuffer, int & iGot, int iMax );
 
-	inline int		HasBytes() const { return int ( m_pBuf - m_pCur + m_iLen ); }
+	inline int		HasBytes() const noexcept { return int ( m_pBuf - m_pCur + m_iLen ); }
 
 	bool			GetError() const { return m_bError; }
 	const CSphString & GetErrorMessage() const { return m_sError; }
@@ -1299,6 +1299,7 @@ public:
 
 	void				RunQueries ();					///< run all queries, get all results
 	void				SetQuery ( int iQuery, const CSphQuery & tQuery, std::unique_ptr<ISphTableFunc> pTableFunc );
+	void				SetJoinQueryOptions ( int iQuery, const CSphQuery & tJoinQueryOptions );
 	void				SetProfile ( QueryProfile_c * pProfile );
 	void				SetStmt ( SqlStmt_t & tStmt );
 	AggrResult_t *		GetResult ( int iResult );
@@ -1424,7 +1425,7 @@ void				SaveCompatHttp ( JsonEscapedBuilder & tOut );
 void				SetupCompatHttp();
 bool				SetLogManagement ( const CSphString & sVal, CSphString & sError );
 bool				IsLogManagementEnabled ();
-std::unique_ptr<PubSearchHandler_c> CreateMsearchHandler ( std::unique_ptr<QueryParser_i> pQueryParser, QueryType_e eQueryType, JsonQuery_c & tQuery );
+std::unique_ptr<PubSearchHandler_c> CreateMsearchHandler ( std::unique_ptr<QueryParser_i> pQueryParser, QueryType_e eQueryType, ParsedJsonQuery_t & tParsed );
 int64_t				GetDocID ( const char * szID );
 
 void ExecuteApiCommand ( SearchdCommand_e eCommand, WORD uCommandVer, int iLength, InputBuffer_c & tBuf, GenericOutputBuffer_c & tOut );

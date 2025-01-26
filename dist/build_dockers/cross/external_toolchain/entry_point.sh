@@ -26,6 +26,6 @@ cd /sysroot/root
 echo "Fetching and unpacking sysroot..."
 curl -s -L $SYSROOT_URL/$sysroot/sysroot_${DISTR}_${arch}.tar.xz | tar -xJ
 echo "Preparing boost and sysroot done"
-echo 'PS1="\[\e]0;\u@\h: \w\a\]${debian_chroot:+($debian_chroot)}\u@\h:\w \[\033[1;31m\][llvm-${llvm} ${DISTR} ${arch}]\[\033[0m\]\$ "' >> ~/.bashrc
+export debian_chroot="$DISTR $arch"
 exec "$@"
 wait

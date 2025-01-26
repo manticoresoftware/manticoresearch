@@ -83,7 +83,10 @@ private:
 	static bool CheckFieldFlags ( ESphAttr eAttrType, int iFlags, const CSphString & sName, const ItemOptions_t & tOpts, CSphString & sError );
 };
 
-#define YYSTYPE SqlNode_t
+using YYSTYPE = SqlNode_t;
+STATIC_ASSERT ( IS_TRIVIALLY_COPYABLE ( SqlNode_t ), YYSTYPE_MUST_BE_TRIVIAL_FOR_RESIZABLE_PARSER_STACK );
+# define YYSTYPE_IS_TRIVIAL 1
+# define YYSTYPE_IS_DECLARED 1
 
 // unused parameter, simply to avoid type clash between all my yylex() functions
 #define YY_DECL static int my_lex ( YYSTYPE * lvalp, void * yyscanner, DdlParser_c * pParser )
@@ -165,6 +168,7 @@ DdlParser_c::DdlParser_c ( CSphVector<SqlStmt_t> & dStmt, const char* szQuery, C
 		m_pStmt = &m_dStmt.Last();
 	assert ( m_dStmt.GetLength()==1 );
 	m_sErrorHeader = "P03:";
+	SetDefaultTableForOptions();
 }
 
 
@@ -497,7 +501,7 @@ void DdlParser_c::AddInsval ( CSphVector<SqlInsert_t> & dVec, const SqlNode_t & 
 	tIns.m_fVal = tNode.m_fValue;
 	if ( tIns.m_iType==TOK_QUOTED_STRING )
 		tIns.m_sVal = ToStringUnescape ( tNode );
-	tIns.m_pVals = tNode.m_pValues;
+	tIns.m_pVals = CloneMvaVecPtr ( tNode.m_iValues );
 }
 
 

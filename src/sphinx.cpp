@@ -1049,7 +1049,7 @@ CSphRowitem* UpdateContext_t::GetDocinfo ( RowID_t iRowID ) const
 	assert ( iRowID != INVALID_ROWID );
 	assert ( m_pAttrPool );
 	assert ( m_iStride );
-	return m_pAttrPool + iRowID * m_iStride;
+	return m_pAttrPool + (int64_t)iRowID * m_iStride;
 }
 
 
@@ -1246,7 +1246,7 @@ public:
 	Bson_t				ExplainQuery ( const CSphString & sQuery ) const final;
 
 	HistogramContainer_c * Debug_GetHistograms() const override { return m_pHistograms; }
-	const SIContainer_c * Debug_GetSI() const override { return &m_tSI; }
+	const SIContainer_c * GetSI() const override { return &m_tSI; }
 
 	bool				CheckEarlyReject ( const CSphVector<CSphFilterSettings> & dFilters, const ISphFilter * pFilter, ESphCollation eCollation, const ISphSchema & tSchema ) const;
 	std::pair<int64_t,int> GetPseudoShardingMetric ( const VecTraits_T<const CSphQuery> & dQueries, const VecTraits_T<int64_t> & dMaxCountDistinct, int iThreads, bool & bForceSingleThread ) const override;
@@ -1854,6 +1854,16 @@ int ExpandKeywords ( int iIndexOpt, QueryOption_e eQueryOpt, const CSphIndexSett
 	return iOpt;
 }
 
+void SetQueryDefaultsExt2 ( CSphQuery & tQuery )
+{
+	tQuery.m_eMode = SPH_MATCH_EXTENDED2; // only new and shiny matching and sorting
+	tQuery.m_eSort = SPH_SORT_EXTENDED;
+	tQuery.m_sSortBy = "@weight desc"; // default order
+	tQuery.m_sOrderBy = "@weight desc";
+	tQuery.m_iAgentQueryTimeoutMs = DEFAULT_QUERY_TIMEOUT;
+	tQuery.m_iRetryCount = DEFAULT_QUERY_RETRY;
+	tQuery.m_iRetryDelay = DEFAULT_QUERY_RETRY;
+}
 
 /////////////////////////////////////////////////////////////////////////////
 // QUERY STATS
@@ -2537,8 +2547,13 @@ int CSphIndex_VLN::CheckThenUpdateAttributes ( AttrUpdateInc_t& tUpd, bool& bCri
 	if ( ( tCtx.m_uUpdateMask & IndexSegment_c::ATTRS_UPDATED ) || ( tCtx.m_uUpdateMask & IndexSegment_c::ATTRS_BLOB_UPDATED ) )
 	{
 		for ( const UpdatedAttribute_t & tAttr : tCtx.m_dUpdatedAttrs )
+		{
 			if ( tAttr.m_iSchemaAttr!=-1 )
-				m_tSI.ColumnUpdated ( m_tSchema.GetAttr ( tAttr.m_iSchemaAttr ).m_sName );
+			{
+				const CSphColumnInfo & tIdxAttr = m_tSchema.GetAttr ( tAttr.m_iSchemaAttr );
+				m_tSI.ColumnUpdated ( tIdxAttr.m_sName );
+			}
+		}
 	}
 
 	iUpdated = tUpd.m_iAffected - iUpdated;
@@ -9732,7 +9747,7 @@ static int SPH_EXTNODE_STACK_SIZE = 160;
 // extra stack which need despite EXTNODE_STACK_SIZE
 static DWORD SPH_EXTRA_BUDGET = 0x2000;
 
-void SetExtNodeStackSize ( int iDelta, int iExtra )
+void SetExtNodeStackSize ( int iExtra, int iDelta )
 {
 	if ( iDelta )
 	{

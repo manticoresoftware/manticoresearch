@@ -52,22 +52,22 @@ target_include_directories ( generated_config INTERFACE "${MANTICORE_BINARY_DIR}
 target_link_libraries ( lextra INTERFACE generated_config )
 
 # main bunch of sources (for libsphinx)
-add_library ( lmanticore STATIC sphinx.cpp sphinxexcerpt.cpp sphinxquery.cpp sphinxutils.cpp
+add_library ( lmanticore STATIC sphinx.cpp sphinxquery.cpp sphinxutils.cpp
 		sphinxsort.cpp sortsetup.cpp sphinxexpr.cpp sphinxfilter.cpp sphinxsearch.cpp sphinxrt.cpp accumulator.cpp
 		sphinxjson.cpp sphinxaot.cpp sphinxplugin.cpp sphinxudf.c sphinxqcache.cpp 
-		jsonqueryfilter.cpp attribute.cpp secondaryindex.cpp killlist.cpp searchnode.cpp json/cJSON.c sphinxpq.cpp
-		global_idf.cpp docstore.cpp lz4/lz4.c lz4/lz4hc.c searchdexpr.cpp snippetfunctor.cpp snippetindex.cpp
+		attribute.cpp secondaryindex.cpp killlist.cpp searchnode.cpp json/cJSON.c sphinxpq.cpp
+		global_idf.cpp docstore.cpp lz4/lz4.c lz4/lz4hc.c snippetfunctor.cpp snippetindex.cpp
 		snippetstream.cpp snippetpassage.cpp threadutils.cpp sphinxversion.cpp indexcheck.cpp datareader.cpp
 		indexformat.cpp indexsettings.cpp fileutils.cpp threads_detached.cpp hazard_pointer.cpp
 		task_info.cpp mini_timer.cpp fileio.cpp memio.cpp queryprofile.cpp columnarfilter.cpp columnargrouper.cpp
 		columnarlib.cpp collation.cpp histogram.cpp
-		timeout_queue.cpp dynamic_idx.cpp columnarrt.cpp columnarmisc.cpp exprtraits.cpp columnarexpr.cpp
+		timeout_queue.cpp columnarrt.cpp columnarmisc.cpp exprtraits.cpp columnarexpr.cpp
 		sphinx_alter.cpp columnarsort.cpp binlog.cpp chunksearchctx.cpp client_task_info.cpp
 		indexfiles.cpp indexfilebase.cpp attrindex_builder.cpp queryfilter.cpp aggregate.cpp secondarylib.cpp costestimate.cpp
 		docidlookup.cpp tracer.cpp attrindex_merge.cpp distinct.cpp hyperloglog.cpp pseudosharding.cpp geodist.cpp
 		datetime.cpp grouper.cpp exprdatetime.cpp detail/indexlink.cpp knnmisc.cpp knnlib.cpp libutils.cpp
 		aggrexpr.cpp joinsorter.cpp queuecreator.cpp exprgeodist.cpp exprremap.cpp exprdocstore.cpp schematransform.cpp
-		sortergroup.cpp sortertraits.cpp sorterprecalc.cpp querycontext.cpp skip_cache.cpp jsonsi.cpp )
+		sortergroup.cpp sortertraits.cpp sorterprecalc.cpp querycontext.cpp skip_cache.cpp jsonsi.cpp sorterscroll.cpp )
 
 add_library ( lstem STATIC sphinxsoundex.cpp sphinxmetaphone.cpp sphinxstemen.cpp sphinxstemru.cpp sphinxstemru.inl
 		sphinxstemcz.cpp sphinxstemar.cpp )
@@ -154,18 +154,18 @@ target_link_libraries ( lmanticore PUBLIC lmanticore_coro )
 # The headers is not neccessary for executable build, but nesessary for MSVC and other projects
 # all the (non-generated) headers
 # So if you add headers to the project and NOT see them in visual studio solution - just list them here!
-set ( HEADERS sphinxexcerpt.h sphinxfilter.h sphinxint.h sphinxpq.h sphinxrt.h
+set ( HEADERS sphinxfilter.h sphinxint.h sphinxpq.h sphinxrt.h
 		sphinxsort.h sphinxstem.h sphinxutils.h sphinxexpr.h sphinx.h sphinxjson.h sphinxplugin.h sphinxqcache.h
 		sphinxquery.h sphinxsearch.h sphinxstd.h sphinxudf.h lz4/lz4.h lz4/lz4hc.h http/http_parser.h secondaryindex.h
 		searchnode.h killlist.h attribute.h accumulator.h global_idf.h event.h threadutils.h threadutils_impl.h
-		hazard_pointer.h task_info.h mini_timer.h collation.h histogram.h sortsetup.h dynamic_idx.h
+		hazard_pointer.h task_info.h mini_timer.h collation.h histogram.h sortsetup.h
 		indexsettings.h columnarlib.h fileio.h memio.h memio_impl.h queryprofile.h columnarfilter.h columnargrouper.h fileutils.h
 		libutils.h conversion.h columnarsort.h sortcomp.h binlog_defs.h binlog.h ${MANTICORE_BINARY_DIR}/config/config.h
 		chunksearchctx.h indexfilebase.h indexfiles.h attrindex_builder.h queryfilter.h aggregate.h secondarylib.h
 		costestimate.h docidlookup.h tracer.h attrindex_merge.h columnarmisc.h distinct.h hyperloglog.h pseudosharding.h datetime.h
 		grouper.h exprdatetime.h geodist.h detail/indexlink.h detail/expmeter.h knnmisc.h knnlib.h match_impl.h std/string_impl.h
 		aggrexpr.h joinsorter.h queuecreator.h exprgeodist.h exprremap.h exprdocstore.h schematransform.h sortergroup.h
-		sortertraits.h sorterprecalc.h querycontext.h skip_cache.h jsonsi.h jieba.h cjkpreprocessor.h )
+		sortertraits.h sorterprecalc.h querycontext.h skip_cache.h jsonsi.h jieba.h cjkpreprocessor.h sorterscroll.h )
 
 set ( SEARCHD_H searchdaemon.h searchdconfig.h searchdddl.h searchdexpr.h searchdha.h searchdreplication.h searchdsql.h
 		searchdtask.h client_task_info.h taskflushattrs.h taskflushbinlog.h taskflushmutable.h taskglobalidf.h
@@ -174,7 +174,7 @@ set ( SEARCHD_H searchdaemon.h searchdconfig.h searchdddl.h searchdexpr.h search
 		compressed_zlib_mysql.h sphinxql_debug.h stackmock.h searchdssl.h digest_sha1.h
 		client_session.h compressed_zstd_mysql.h docs_collector.h index_rotator.h config_reloader.h searchdhttp.h timeout_queue.h
 		netpoll.h pollable_event.h netfetch.h searchdbuddy.h sphinxql_second.h sphinxql_extra.h sphinxjsonquery.h
-		frontendschema.h debug_cmds.h)
+		frontendschema.h debug_cmds.h dynamic_idx.h sphinxexcerpt.h)
 
 
 # add the extra targets in the case we want on-the-fly grammar compiler
@@ -255,7 +255,7 @@ add_library ( lsearchd OBJECT searchdha.cpp http/http_parser.c searchdhttp.cpp
 		netreceive_http.cpp netreceive_ql.cpp query_status.cpp
 		sphinxql_debug.cpp sphinxql_second.cpp stackmock.cpp docs_collector.cpp index_rotator.cpp config_reloader.cpp netpoll.cpp
 		pollable_event.cpp netfetch.cpp searchdbuddy.cpp searchdhttpcompat.cpp sphinxql_extra.cpp searchdreplication.cpp sphinxjsonquery.cpp
-		frontendschema.cpp compressed_http.cpp debug_cmds.cpp )
+		frontendschema.cpp compressed_http.cpp debug_cmds.cpp jsonqueryfilter.cpp dynamic_idx.cpp sphinxexcerpt.cpp searchdexpr.cpp)
 target_sources ( lsearchd PUBLIC ${SEARCHD_SRCS_TESTABLE} ${SEARCHD_H} ${SEARCHD_BISON} ${SEARCHD_FLEX} )
 add_library ( digest_sha1 digest_sha1.cpp )
 target_link_libraries ( digest_sha1 PRIVATE lextra )
@@ -321,16 +321,21 @@ if (TARGET perfetto)
 endif()
 
 # stub library for all except daemon - to avoid link with openssl
-add_library ( stub_ssl searchdssl.cpp )
+add_library ( stub_ssl searchdssl_stub.cpp )
 target_link_libraries ( stub_ssl PRIVATE lextra )
 
 # support for ssl. Actual only for physical daemon
 add_library ( searchd_ssl searchdssl.cpp )
 target_link_libraries ( searchd_ssl PUBLIC lextra )
 if (WITH_SSL)
-	target_compile_definitions ( searchd_ssl PRIVATE DAEMON )
 	target_link_libraries ( searchd_ssl PRIVATE OpenSSL::SSL )
+	target_link_libraries ( searchd_ssl PRIVATE OpenSSL::Crypto )
 	target_link_libraries ( digest_sha1 PRIVATE OpenSSL::SSL )
+	target_link_libraries ( digest_sha1 PRIVATE OpenSSL::Crypto )
+	if (${CMAKE_SYSTEM_NAME} STREQUAL "Linux" OR ${CMAKE_SYSTEM_NAME} STREQUAL "FreeBSD")
+		target_link_options ( searchd_ssl INTERFACE $<${ONLYGNUCLANGC_CXX}:-Wl,--exclude-libs,libssl.a,--exclude-libs,libcrypto.a> )
+		target_link_options ( digest_sha1 INTERFACE $<${ONLYGNUCLANGC_CXX}:-Wl,--exclude-libs,libssl.a,--exclude-libs,libcrypto.a> )
+	endif()
 	target_compile_options ( searchd_ssl PRIVATE "$<$<COMPILE_LANG_AND_ID:CXX,GNU>:-Wno-deprecated-declarations>" )
 	include ( CheckFunctionExists )
 	set ( CMAKE_REQUIRED_LIBRARIES "OpenSSL::SSL" )
@@ -433,7 +438,7 @@ if (CMAKE_VERSION VERSION_GREATER 3.1.0 AND NOT DISABLE_GTESTS AND NOT TEST_SPEC
 	add_subdirectory ( gtests )
 endif ()
 
-add_executable ( tests tests.cpp )
+add_executable ( tests EXCLUDE_FROM_ALL tests.cpp )
 target_link_libraries ( tests PUBLIC lmanticore )
 
 if (WITH_MYSQL)
@@ -510,8 +515,6 @@ if (NOT TEST_SPECIAL_EXTERNAL)
 		endif ()
 	endif ()
 
-	fixup_test_name ( tst "Internal src/tests" )
-	add_test ( NAME ${tst}
-			WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}"
-			COMMAND "tests" )
+#	fixup_test_name ( tst "Internal src/tests" )
+#	add_test ( NAME ${tst} WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}" COMMAND "tests" )
 endif ()

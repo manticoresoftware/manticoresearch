@@ -74,9 +74,7 @@ The `indexer` tool and comprehensive configuration syntax of Manticore make it e
 #### Integration options
 You can integrate Manticore Search with a MySQL/MariaDB server using the [FEDERATED engine](Extensions/FEDERATED.md) or via [ProxySQL](https://manticoresearch.com/blog/using-proxysql-to-route-inserts-in-a-distributed-realtime-index/).
 
-You can use [Apache Superset](https://manticoresearch.com/blog/manticoresearch-apache-superset-integration/), Kibana and [Grafana](https://manticoresearch.com/blog/manticoresearch-grafana-integration/) to visualize data stored in Manticore. Various MySQL tools can be used to develop Manticore queries interactively, such as [HeidiSQL](https://www.heidisql.com/) and [DBForge](https://www.devart.com/dbforge/).
-
-You can use Manticore Search with [Kibana](Integration/Kibana.md).
+You can use [Apache Superset](https://manticoresearch.com/blog/manticoresearch-apache-superset-integration/) and [Grafana](https://manticoresearch.com/blog/manticoresearch-grafana-integration/) to visualize data stored in Manticore. Various MySQL tools can be used to develop Manticore queries interactively, such as [HeidiSQL](https://www.heidisql.com/) and [DBForge](https://www.devart.com/dbforge/).
 
 #### Stream filtering made easy
 Manticore offers a special table type, the "[percolate](Creating_a_table/Local_tables/Percolate_table.md)" table, which allows you to search queries instead of data, making it an efficient tool for filtering full-text data streams. Simply store your queries in the table, process your data stream by sending each batch of documents to Manticore Search, and receive only the results that match your stored queries.
@@ -92,7 +90,7 @@ Manticore Search is versatile and can be applied in various scenarios, including
   - Ingest data into Manticore Search using [Beats/Logstash](https://manticoresearch.com/blog/integration-of-manticore-with-logstash-filebeat/), [Vector.dev](https://manticoresearch.com/blog/integration-of-manticore-with-vectordev/), [Fluentbit](https://manticoresearch.com/blog/integration-of-manticore-with-fluentbit/).
   - Analyze large datasets efficiently using Manticore's columnar storage and OLAP capabilities.
   - Perform complex queries on terabytes of data with minimal latency.
-  - Visualize data using Kibana, [Grafana](https://manticoresearch.com/blog/manticoresearch-grafana-integration/), or [Apache Superset](https://manticoresearch.com/blog/manticoresearch-apache-superset-integration/).
+  - Visualize data using [Grafana](https://manticoresearch.com/blog/manticoresearch-grafana-integration/), or [Apache Superset](https://manticoresearch.com/blog/manticoresearch-apache-superset-integration/).
 
 - **Faceted Search**:
   - Enable users to filter search results by categories, such as price, brand, or date, for a more refined search experience.

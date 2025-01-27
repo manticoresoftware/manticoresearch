@@ -9,7 +9,6 @@ Released: January 24th 2025
 * [Issue #1928](https://github.com/manticoresoftware/manticoresearch/issues/1928) Introduced [secondary indexes for JSON](../Creating_a_table/Local_tables/Plain_and_real-time_table_settings.md#json_secondary_indexes).
 * [Issue #2361](https://github.com/manticoresoftware/manticoresearch/issues/2361) Updates and searches during updates are no longer blocked by chunk merging.
 * [Issue #2811](https://github.com/manticoresoftware/manticoresearch/issues/2811) [Scroll](../Searching/Pagination.md#Scroll-Search-Option) option for easier pagination.
-* [Issue #832](https://github.com/manticoresoftware/manticoresearch/issues/832) Integration with Kibana for easier and more efficient data visualization.
 * [Issue #931](https://github.com/manticoresoftware/manticoresearch/issues/931) Integration with [Jieba](https://github.com/fxsjy/jieba) for better [Chinese tokenization](../Creating_a_table/NLP_and_tokenization/Languages_with_continuous_scripts.md).
 
 ### Minor changes

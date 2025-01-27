@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <Test>
-  <Name>SphinxQL: additional stuff over rt index</Name>
+  <Name>SphinxQL: additional stuff over rt index, columnar</Name>
 	<requires>
 		<force-rt/>
 		<columnar/>

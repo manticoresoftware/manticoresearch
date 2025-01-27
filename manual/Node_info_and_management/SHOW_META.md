@@ -354,11 +354,11 @@ SHOW META;
 
 `SHOW META` following a `CALL PQ` statement includes:
 
-* `Total` - Total time spent on matching the document(s)
-* `Queries matched` - Number of stored queries that match the document(s)
-* `Document matches` - Number of documents that matched the queries stored in the table
-* `Total queries stored` - Total number of queries stored in the table
-* `Term only queries` - Number of queries in the table that have terms; the remaining queries use extended query syntax.
+* `total` - Total time spent on matching the document(s)
+* `queries_matched` - Number of stored queries that match the document(s)
+* `document_matches` - Number of documents that matched the queries stored in the table
+* `total_queries_stored` - Total number of queries stored in the table
+* `term_only_queries` - Number of queries in the table that have terms; the remaining queries use extended query syntax.
 
 <!-- intro -->
 ##### SQL:
@@ -379,15 +379,15 @@ CALL PQ ('pq', ('{"title":"angry", "gid":3 }')); SHOW META;
 1 row in set (0.00 sec)
 
 +-----------------------+-----------+
-| Name                  | Value     |
+| Variable name         | Value     |
 +-----------------------+-----------+
-| Total                 | 0.000 sec |
-| Queries matched       | 1         |
-| Queries failed        | 0         |
-| Document matched      | 1         |
-| Total queries stored  | 2         |
-| Term only queries     | 2         |
-| Fast rejected queries | 1         |
+| total                 | 0.000 sec |
+| queries_matched       | 1         |
+| queries_failed        | 0         |
+| document_matched      | 1         |
+| total_queries_stored  | 2         |
+| term_only_queries     | 2         |
+| fast_rejected_queries | 1         |
 +-----------------------+-----------+
 7 rows in set (0.00 sec)
 ```
@@ -426,18 +426,18 @@ CALL PQ ('pq', ('{"title":"angry", "gid":3 }'), 1 as verbose); SHOW META;
 1 row in set (0.00 sec)
 
 +-------------------------+-----------+
-| Name                    | Value     |
+| Variable name           | Value     |
 +-------------------------+-----------+
-| Total                   | 0.000 sec |
-| Setup                   | 0.000 sec |
-| Queries matched         | 1         |
-| Queries failed          | 0         |
-| Document matched        | 1         |
-| Total queries stored    | 2         |
-| Term only queries       | 2         |
-| Fast rejected queries   | 1         |
-| Time per query          | 69        |
-| Time of matched queries | 69        |
+| total                   | 0.000 sec |
+| setup                   | 0.000 sec |
+| queries_matched         | 1         |
+| queries_failed          | 0         |
+| document_matched        | 1         |
+| total_queries_stored    | 2         |
+| term_only_queries       | 2         |
+| fast_rejected_queries   | 1         |
+| time_per_query          | 69        |
+| time_of_matched_queries | 69        |
 +-------------------------+-----------+
 10 rows in set (0.00 sec)
 ```

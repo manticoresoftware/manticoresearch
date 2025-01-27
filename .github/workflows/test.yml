@@ -99,6 +99,9 @@ jobs:
     with:
       CTEST_CONFIGURATION_TYPE: "Debug"
       artifact_name: debug_build
+      cmake_command: |
+        export CMAKE_TOOLCHAIN_FILE=$(pwd)/dist/build_dockers/cross/linux.cmake
+        ctest -VV -S misc/ctest/gltest.cmake --no-compress-output
 
   test_linux_debug:
     if: (github.event_name == 'pull_request' && github.event.pull_request.base.ref == 'update-buddy-version') != true
@@ -157,61 +160,61 @@ jobs:
       - name: Checkout repository # We have to checkout to access .github/workflows/ in further steps
         uses: actions/checkout@v3
       - name: Download test report artifacts 1_100
-        uses: manticoresoftware/download_artifact_with_retries@v2
+        uses: manticoresoftware/download_artifact_with_retries@v3
         continue-on-error: true
         with:
           name: debug_test_1_100
           path: .
       - name: Download test report artifacts 101_200
-        uses: manticoresoftware/download_artifact_with_retries@v2
+        uses: manticoresoftware/download_artifact_with_retries@v3
         continue-on-error: true
         with:
           name: debug_test_101_200
           path: .
       - name: Download test report artifacts 201_330
-        uses: manticoresoftware/download_artifact_with_retries@v2
+        uses: manticoresoftware/download_artifact_with_retries@v3
         continue-on-error: true
         with:
           name: debug_test_201_330
           path: .
       - name: Download test report artifacts 331_400
-        uses: manticoresoftware/download_artifact_with_retries@v2
+        uses: manticoresoftware/download_artifact_with_retries@v3
         continue-on-error: true
         with:
           name: debug_test_331_400
           path: .
       - name: Download test report artifacts 401_500
-        uses: manticoresoftware/download_artifact_with_retries@v2
+        uses: manticoresoftware/download_artifact_with_retries@v3
         continue-on-error: true
         with:
           name: debug_test_401_500
           path: .
       - name: Download test report artifacts 501_600
-        uses: manticoresoftware/download_artifact_with_retries@v2
+        uses: manticoresoftware/download_artifact_with_retries@v3
         continue-on-error: true
         with:
           name: debug_test_501_600
           path: .
       - name: Download test report artifacts 601_700
-        uses: manticoresoftware/download_artifact_with_retries@v2
+        uses: manticoresoftware/download_artifact_with_retries@v3
         continue-on-error: true
         with:
           name: debug_test_601_700
           path: .
       - name: Download test report artifacts 701_800
-        uses: manticoresoftware/download_artifact_with_retries@v2
+        uses: manticoresoftware/download_artifact_with_retries@v3
         continue-on-error: true
         with:
           name: debug_test_701_800
           path: .
       - name: Download test report artifacts 801_870
-        uses: manticoresoftware/download_artifact_with_retries@v2
+        uses: manticoresoftware/download_artifact_with_retries@v3
         continue-on-error: true
         with:
           name: debug_test_801_870
           path: .
       - name: Download test report artifacts 871_and_on
-        uses: manticoresoftware/download_artifact_with_retries@v2
+        uses: manticoresoftware/download_artifact_with_retries@v3
         continue-on-error: true
         with:
           name: debug_test_871_and_on
@@ -233,7 +236,7 @@ jobs:
       - name: Upload combined artifacts
         if: always()
         continue-on-error: true
-        uses: manticoresoftware/upload_artifact_with_retries@v3
+        uses: manticoresoftware/upload_artifact_with_retries@v4
         with:
           name: debug_test_resuls
           path: build
@@ -245,6 +248,9 @@ jobs:
     uses: ./.github/workflows/build_template.yml
     with:
       artifact_name: release_build
+      cmake_command: |
+        export CMAKE_TOOLCHAIN_FILE=$(pwd)/dist/build_dockers/cross/linux.cmake
+        ctest -VV -S misc/ctest/gltest.cmake --no-compress-output
 
   test_linux_release:
     if: (github.event_name == 'pull_request' && github.event.pull_request.base.ref == 'update-buddy-version') != true
@@ -303,61 +309,61 @@ jobs:
       - name: Checkout repository # We have to checkout to access .github/workflows/ in further steps
         uses: actions/checkout@v3
       - name: Download test report artifacts 1_100
-        uses: manticoresoftware/download_artifact_with_retries@v2
+        uses: manticoresoftware/download_artifact_with_retries@v3
         continue-on-error: true
         with:
           name: release_test_1_100
           path: .
       - name: Download test report artifacts 101_200
-        uses: manticoresoftware/download_artifact_with_retries@v2
+        uses: manticoresoftware/download_artifact_with_retries@v3
         continue-on-error: true
         with:
           name: release_test_101_200
           path: .
       - name: Download test report artifacts 201_330
-        uses: manticoresoftware/download_artifact_with_retries@v2
+        uses: manticoresoftware/download_artifact_with_retries@v3
         continue-on-error: true
         with:
           name: release_test_201_330
           path: .
       - name: Download test report artifacts 331_400
-        uses: manticoresoftware/download_artifact_with_retries@v2
+        uses: manticoresoftware/download_artifact_with_retries@v3
         continue-on-error: true
         with:
           name: release_test_331_400
           path: .
       - name: Download test report artifacts 401_500
-        uses: manticoresoftware/download_artifact_with_retries@v2
+        uses: manticoresoftware/download_artifact_with_retries@v3
         continue-on-error: true
         with:
           name: release_test_401_500
           path: .
       - name: Download test report artifacts 501_600
-        uses: manticoresoftware/download_artifact_with_retries@v2
+        uses: manticoresoftware/download_artifact_with_retries@v3
         continue-on-error: true
         with:
           name: release_test_501_600
           path: .
       - name: Download test report artifacts 601_700
-        uses: manticoresoftware/download_artifact_with_retries@v2
+        uses: manticoresoftware/download_artifact_with_retries@v3
         continue-on-error: true
         with:
           name: release_test_601_700
           path: .
       - name: Download test report artifacts 701_800
-        uses: manticoresoftware/download_artifact_with_retries@v2
+        uses: manticoresoftware/download_artifact_with_retries@v3
         continue-on-error: true
         with:
           name: release_test_701_800
           path: .
       - name: Download test report artifacts 801_870
-        uses: manticoresoftware/download_artifact_with_retries@v2
+        uses: manticoresoftware/download_artifact_with_retries@v3
         continue-on-error: true
         with:
           name: release_test_801_870
           path: .
       - name: Download test report artifacts 871_and_on
-        uses: manticoresoftware/download_artifact_with_retries@v2
+        uses: manticoresoftware/download_artifact_with_retries@v3
         continue-on-error: true
         with:
           name: release_test_871_and_on
@@ -379,7 +385,7 @@ jobs:
       - name: Upload combined artifacts
         if: always()
         continue-on-error: true
-        uses: manticoresoftware/upload_artifact_with_retries@v3
+        uses: manticoresoftware/upload_artifact_with_retries@v4
         with:
           name: release_test_resuls
           path: build
@@ -422,7 +428,7 @@ jobs:
 
       - name: Upload build artifacts from cache
         if: ${{ steps.cache.outputs.cache-hit == 'true' }}
-        uses: manticoresoftware/upload_artifact_with_retries@v3
+        uses: manticoresoftware/upload_artifact_with_retries@v4
         with:
           name: build_jammy_RelWithDebInfo_x86_64
           path: "build/manticore*deb"
@@ -441,6 +447,7 @@ jobs:
         mkdir build
         cd build
         cmake -DPACK=1 ..
+        export CMAKE_TOOLCHAIN_FILE=$(pwd)/dist/build_dockers/cross/linux.cmake
         cmake --build . --target package
       cache_key: pack_jammy_x86_64
       artifact_list: "build/manticore*deb"
@@ -455,7 +462,7 @@ jobs:
         uses: actions/checkout@v3
 
       - name: Download built x86_64 Ubuntu Jammy packages
-        uses: manticoresoftware/download_artifact_with_retries@v2
+        uses: manticoresoftware/download_artifact_with_retries@v3
         continue-on-error: true
         with:
           name: build_jammy_RelWithDebInfo_x86_64
@@ -478,7 +485,7 @@ jobs:
       - name: Checkout repository # We have to checkout to access .github/workflows/ in further steps
         uses: actions/checkout@v3
       - name: Download built x86_64 Ubuntu Jammy packages
-        uses: manticoresoftware/download_artifact_with_retries@v2
+        uses: manticoresoftware/download_artifact_with_retries@v3
         continue-on-error: true
         with:
           name: build_jammy_RelWithDebInfo_x86_64
@@ -497,7 +504,7 @@ jobs:
           BUILD_COMMIT=${{ steps.sha.outputs.sha_short }} /bin/bash dist/test_kit_docker_build.sh
           echo "build_image=ghcr.io/$REPO_OWNER/manticoresearch:test-kit-${{ steps.sha.outputs.sha_short }}" >> $GITHUB_OUTPUT
       - name: Upload docker image artifact
-        uses: manticoresoftware/upload_artifact_with_retries@v3
+        uses: manticoresoftware/upload_artifact_with_retries@v4
         with:
           name: manticore_test_kit.img
           path: manticore_test_kit.img
@@ -547,7 +554,11 @@ jobs:
     uses: ./.github/workflows/build_template.yml
     with:
       arch: aarch64
-      cmake_command: mkdir build && cd build && ctest -VV -S ../misc/ctest/justbuild.cmake -DCTEST_SOURCE_DIRECTORY=.. --no-compress-output
+      cmake_command: |
+        mkdir build
+        cd build
+        export CMAKE_TOOLCHAIN_FILE=$(pwd)/../dist/build_dockers/cross/linux.cmake
+        ctest -VV -S ../misc/ctest/justbuild.cmake -DCTEST_SOURCE_DIRECTORY=.. --no-compress-output
       cache_key: build_jammy_aarch64
 
   build_freebsd:
@@ -558,7 +569,11 @@ jobs:
     with:
       DISTR: freebsd13
       boost_url_key: none
-      cmake_command: mkdir build && cd build && ctest -VV -S ../misc/ctest/justbuild.cmake -DCTEST_SOURCE_DIRECTORY=.. --no-compress-output
+      cmake_command: |
+        mkdir build
+        cd build
+        export CMAKE_TOOLCHAIN_FILE=$(pwd)/../dist/build_dockers/cross/freebsd.cmake
+        ctest -VV -S ../misc/ctest/justbuild.cmake -DCTEST_SOURCE_DIRECTORY=.. --no-compress-output
       cache_key: build_freebsd_x86_64
 
   build_windows:
@@ -569,13 +584,12 @@ jobs:
     with:
       DISTR: windows
       arch: x64
-      sysroot_url_key: roots_mysql83_jul29
-      boost_url_key: boost80_zstd_zlib
+      sysroot_url_key: roots_mysql83_jan17
+      boost_url_key: boost_80
       CTEST_CMAKE_GENERATOR: "Ninja Multi-Config"
       CTEST_CONFIGURATION_TYPE: Debug
       cache_key: build_windows_x64
-      artifact_list: "build/xml build/src/Debug/indexer.exe build/src/Debug/searchd.exe build/src/Debug/tests.exe build/src/gtests/Debug/gmanticoretest.exe build/usr"
-
+      artifact_list: "build/xml build/src/Debug/indexer.exe build/src/Debug/searchd.exe build/src/gtests/Debug/gmanticoretest.exe build/src/Debug/*.dll build/src/gtests/Debug/*.dll build/config/*.c build/config/*.h"
   test_windows:
     if: (github.event_name == 'pull_request' && github.event.pull_request.base.ref == 'update-buddy-version') != true
     name: Windows tests
@@ -610,19 +624,19 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v3
       - name: Download test report artifacts 1_400
-        uses: manticoresoftware/download_artifact_with_retries@v2
+        uses: manticoresoftware/download_artifact_with_retries@v3
         continue-on-error: true
         with:
           name: windows_test_1_400
           path: .
       - name: Download test report artifacts 401_650
-        uses: manticoresoftware/download_artifact_with_retries@v2
+        uses: manticoresoftware/download_artifact_with_retries@v3
         continue-on-error: true
         with:
           name: windows_test_401_650
           path: .
       - name: Download test report artifacts 651_and_on
-        uses: manticoresoftware/download_artifact_with_retries@v2
+        uses: manticoresoftware/download_artifact_with_retries@v3
         continue-on-error: true
         with:
           name: windows_test_651_and_on
@@ -646,7 +660,7 @@ jobs:
       - name: Upload combined artifacts
         if: always()
         continue-on-error: true
-        uses: manticoresoftware/upload_artifact_with_retries@v3
+        uses: manticoresoftware/upload_artifact_with_retries@v4
         with:
           name: windows_test_resuls
           path: build

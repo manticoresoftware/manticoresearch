@@ -27,7 +27,7 @@ timeout 30 grep -m2 "Plugin ready for connections" <(docker logs -f mysql 2>&1)
 ––– input –––
 docker run --network=t_network --platform linux/x86_64 --name manticore -v ./test/clt-tests/indexer-latest-mysql-postgres/min_mysql.conf:/min_mysql.conf ghcr.io/manticoresoftware/manticoresearch:test-kit-latest indexer --all -c /min_mysql.conf
 ––– output –––
-Manticore %{SEMVER} %{COMMITDATE}#!/(\sdev)?\s/!#(columnar %{SEMVER} %{COMMITDATE}) (secondary %{SEMVER} %{COMMITDATE}) (knn %{SEMVER} %{COMMITDATE})
+Manticore %{VERSION} (columnar %{VERSION}) (secondary %{VERSION}) (knn %{VERSION})
 Copyright (c) 2001-2016, Andrew Aksyonoff
 Copyright (c) 2008-2016, Sphinx Technologies Inc (http://sphinxsearch.com)
 Copyright (c) 2017-%{YEAR}, Manticore Software LTD (https://manticoresearch.com)
@@ -53,7 +53,7 @@ timeout 30 grep -m2 'database system is ready to accept connections' <(docker lo
 ––– input –––
 docker run --network=t_network --platform linux/x86_64 --name manticore2 -v ./test/clt-tests/indexer-latest-mysql-postgres/min_postgres.sql:/min_postgres.sql ghcr.io/manticoresoftware/manticoresearch:test-kit-latest indexer --all -c /min_postgres.sql
 ––– output –––
-Manticore %{SEMVER} %{COMMITDATE}#!/(\sdev)?\s/!#(columnar %{SEMVER} %{COMMITDATE}) (secondary %{SEMVER} %{COMMITDATE}) (knn %{SEMVER} %{COMMITDATE})
+Manticore %{VERSION} (columnar %{VERSION}) (secondary %{VERSION}) (knn %{VERSION})
 Copyright (c) 2001-2016, Andrew Aksyonoff
 Copyright (c) 2008-2016, Sphinx Technologies Inc (http://sphinxsearch.com)
 Copyright (c) 2017-%{YEAR}, Manticore Software LTD (https://manticoresearch.com)

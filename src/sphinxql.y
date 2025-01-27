@@ -309,7 +309,7 @@ ident:
 	;
 
 option_name:
-	ident_without_option | all_set_tail
+	ident_without_option | all_set_tail | TOK_FORCE 
 	;
 
 
@@ -1528,6 +1528,11 @@ show_what:
 			pParser->m_pStmt->m_eStmt = STMT_SHOW_INDEX_SETTINGS;
 			pParser->SetIndex( $2 );
 		}
+	| index_or_table one_index_opt_chunk TOK_INDEXES like_filter 
+		{
+			pParser->m_pStmt->m_eStmt = STMT_SHOW_TABLE_INDEXES;
+			pParser->SetIndex( $2 );
+		}
 	| TOK_TABLE TOK_STATUS like_filter
 		{
 			pParser->m_pStmt->m_eStmt = STMT_SHOW_FEDERATED_INDEX_STATUS;
@@ -1775,10 +1780,7 @@ call_opt_name:
 //////////////////////////////////////////////////////////////////////////
 
 describe:
-	describe_tok one_index_opt_subindex describe_opt like_filter
-		{
-			pParser->m_pStmt->m_eStmt = STMT_DESCRIBE;
-		}
+	describe_tok { pParser->m_pStmt->m_eStmt = STMT_DESCRIBE; } one_index_opt_subindex describe_opt like_filter opt_option_clause
 	;
 
 describe_opt:

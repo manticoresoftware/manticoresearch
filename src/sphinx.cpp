@@ -1246,7 +1246,7 @@ public:
 	Bson_t				ExplainQuery ( const CSphString & sQuery ) const final;
 
 	HistogramContainer_c * Debug_GetHistograms() const override { return m_pHistograms; }
-	const SIContainer_c * Debug_GetSI() const override { return &m_tSI; }
+	const SIContainer_c * GetSI() const override { return &m_tSI; }
 
 	bool				CheckEarlyReject ( const CSphVector<CSphFilterSettings> & dFilters, const ISphFilter * pFilter, ESphCollation eCollation, const ISphSchema & tSchema ) const;
 	std::pair<int64_t,int> GetPseudoShardingMetric ( const VecTraits_T<const CSphQuery> & dQueries, const VecTraits_T<int64_t> & dMaxCountDistinct, int iThreads, bool & bForceSingleThread ) const override;

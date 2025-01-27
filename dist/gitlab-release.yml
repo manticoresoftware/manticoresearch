@@ -24,7 +24,7 @@ variables:
   needs: [ ]
   tags:
     - docker
-  image: manticoresearch/external_toolchain:clang16_cmake3263
+  image: manticoresearch/external_toolchain:vcpkg331_20250114
   variables:
     CACHEB: "../cache"
     arch: x86_64
@@ -52,6 +52,7 @@ variables:
   variables:
     boost: boost_rhel_feb17
   before_script:
+    - export CMAKE_TOOLCHAIN_FILE=$(pwd)/dist/build_dockers/cross/linux.cmake
     - ln -s $(pwd) /builds_manticoresearch_dev_usr_src_debug_manticore_component_src_0
     - cd /builds_manticoresearch_dev_usr_src_debug_manticore_component_src_0
   artifacts:
@@ -103,6 +104,8 @@ variables:
 
 macos:
   extends: [ .build ]
+  before_script:
+    - export CMAKE_TOOLCHAIN_FILE=$(pwd)/dist/build_dockers/cross/osx.cmake
   variables:
     DISTR: macos
 
@@ -122,9 +125,8 @@ windows:
   extends: [ .build ]
   variables:
     arch: x64
-    # use roots_mysql83_jul29 for another (non-gitlab) builds
-    sysroot: roots_jul29
-    boost: boost80_zstd_zlib
+    sysroot: roots_mysql83_jan17
+    boost: boost_80
     DISTR: windows
 
 # windows build with native clang flavour
@@ -199,6 +201,8 @@ rhel9_arm:
 
 bionic:
   extends: [ .build ]
+  before_script:
+    - export CMAKE_TOOLCHAIN_FILE=$(pwd)/dist/build_dockers/cross/linux.cmake
   variables:
     DISTR: bionic
 
@@ -218,6 +222,8 @@ bionic_arm:
 
 focal:
   extends: [ .build ]
+  before_script:
+    - export CMAKE_TOOLCHAIN_FILE=$(pwd)/dist/build_dockers/cross/linux.cmake
   variables:
     DISTR: focal
 
@@ -237,6 +243,8 @@ focal_arm:
 
 buster:
   extends: [ .build ]
+  before_script:
+    - export CMAKE_TOOLCHAIN_FILE=$(pwd)/dist/build_dockers/cross/linux.cmake
   variables:
     DISTR: buster
 
@@ -256,6 +264,8 @@ buster_arm:
 
 bullseye:
   extends: [ .build ]
+  before_script:
+    - export CMAKE_TOOLCHAIN_FILE=$(pwd)/dist/build_dockers/cross/linux.cmake
   variables:
     DISTR: bullseye
 
@@ -275,6 +285,8 @@ bullseye_arm:
 
 jammy:
   extends: [ .build ]
+  before_script:
+    - export CMAKE_TOOLCHAIN_FILE=$(pwd)/dist/build_dockers/cross/linux.cmake
   variables:
     DISTR: jammy
 
@@ -294,6 +306,8 @@ jammy_arm:
 
 bookworm:
   extends: [ .build ]
+  before_script:
+    - export CMAKE_TOOLCHAIN_FILE=$(pwd)/dist/build_dockers/cross/linux.cmake
   variables:
     DISTR: bookworm
 

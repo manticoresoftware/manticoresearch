@@ -8,17 +8,17 @@ curl -s "http://localhost:9308/cli?show%20version" | awk '!/row.*in set/'; echo
 +-----------+----------------------------------+
 | Component | Version                          |
 +-----------+----------------------------------+
-| Daemon    | %{SEMVER} %{COMMITDATE} dev     |
-| Columnar  | columnar %{SEMVER} %{COMMITDATE}  |
-| Secondary | secondary %{SEMVER} %{COMMITDATE} |
-| KNN       | knn %{SEMVER} %{COMMITDATE}       |
-| Buddy     | buddy v%{SEMVER}                     |
+| Daemon    | %{VERSION} #!/\s*/!#|
+| Columnar  | columnar %{VERSION} #!/\s*/!#|
+| Secondary | secondary %{VERSION} #!/\s*/!#|
+| KNN       | knn %{VERSION} #!/\s*/!#|
+| Buddy     | buddy %{VERSION} #!/\s*/!#|
 +-----------+----------------------------------+
 ––– input –––
 curl -s "http://localhost:9308/cli_json" -d "show version"; echo
 ––– output –––
-[{"total":%{NUMBER},"error":"","warning":"","columns":[{"Component":{"type":"string"}},{"Version":{"type":"string"}}],"data":[{"Component":"Daemon","Version":"%{SEMVER} %{COMMITDATE} dev"},{"Component":"Columnar","Version":"columnar %{SEMVER} %{COMMITDATE}"},{"Component":"Secondary","Version":"secondary %{SEMVER} %{COMMITDATE}"},{"Component":"KNN","Version":"knn %{SEMVER} %{COMMITDATE}"},{"Component":"Buddy","Version":"buddy v%{SEMVER}"}]}]
+[{"total":%{NUMBER},"error":"","warning":"","columns":[{"Component":{"type":"string"}},{"Version":{"type":"string"}}],"data":[{"Component":"Daemon","Version":"%{VERSION}"},{"Component":"Columnar","Version":"columnar %{VERSION}"},{"Component":"Secondary","Version":"secondary %{VERSION}"},{"Component":"KNN","Version":"knn %{VERSION}"},{"Component":"Buddy","Version":"buddy %{VERSION}"}]}]
 ––– input –––
 curl -s "http://localhost:9308/sql?mode=raw" -d "show version"; echo
 ––– output –––
-[{"total":%{NUMBER},"error":"","warning":"","columns":[{"Component":{"type":"string"}},{"Version":{"type":"string"}}],"data":[{"Component":"Daemon","Version":"%{SEMVER} %{COMMITDATE} dev"},{"Component":"Columnar","Version":"columnar %{SEMVER} %{COMMITDATE}"},{"Component":"Secondary","Version":"secondary %{SEMVER} %{COMMITDATE}"},{"Component":"KNN","Version":"knn %{SEMVER} %{COMMITDATE}"},{"Component":"Buddy","Version":"buddy v%{SEMVER}"}]}]
+[{"total":%{NUMBER},"error":"","warning":"","columns":[{"Component":{"type":"string"}},{"Version":{"type":"string"}}],"data":[{"Component":"Daemon","Version":"%{VERSION}"},{"Component":"Columnar","Version":"columnar %{VERSION}"},{"Component":"Secondary","Version":"secondary %{VERSION}"},{"Component":"KNN","Version":"knn %{VERSION}"},{"Component":"Buddy","Version":"buddy %{VERSION}"}]}]

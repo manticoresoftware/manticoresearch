@@ -1,14 +1,10 @@
 # Joining tables
 
-**WARNING: This functionality is in beta stage. Use it with caution.**
-
 Table joins in Manticore Search enable you to combine documents from two tables by matching related columns. This functionality allows for more complex queries and enhanced data retrieval across multiple tables.
 
 ## General syntax
 
 ### SQL
-
-<!--example join_sql_json_type -->
 
 ```sql
 SELECT
@@ -26,6 +22,8 @@ join_condition: {
 ```
 
 For more information on select options, refer to the [SELECT](../Searching/Intro.md#General-syntax) section.
+
+<!--example join_sql_json_type -->
 
 When joining by a value from a JSON attribute, you need to explicitly specify the value's type using the `int()` or `string()` function.
 
@@ -85,7 +83,7 @@ on.type: {
 ```
 Note, there is the `type` field in the `left` operand section which you should use when joining two tables using json attributes. The allowed values are `string` and `int`.
 
-## Types of Joins
+## Types of joins
 
 Manticore Search supports two types of joins:
 
@@ -359,7 +357,9 @@ POST /search
 
 <!-- end -->
 
-### Complex Join with Faceting
+### Example: Complex JOIN with faceting
+
+Building on the previous examples, let's explore a more advanced scenario where we combine table joins with faceting. This allows us to not only retrieve joined data but also aggregate and analyze it in meaningful ways.
 
 <!-- example basic_complex -->
 
@@ -507,7 +507,7 @@ POST /search
 
 <!-- end -->
 
-## Query options and match weights
+## Search options and match weights
 
 Separate options can be specified for queries in a join: for the left table and the right table. The syntax is `OPTION(<table_name>)` for SQL queries and one or more subobjects under `"options"` for JSON queries.
 
@@ -532,19 +532,16 @@ OPTION(customers) field_weights=(address=1500);
 POST /search
 {
   "table": "orders",
-  "options":
-  {
-    "customers":
-    {
-      "field_weights":
-      {
-          "address": 15000
+  "options": {
+    "customers": {
+      "field_weights": {
+        "address": 1500
       }
     }
   },
   "join": [
     {
-      "type": "inner",
+      "type": "inner", 
       "table": "customers",
       "query": {
         "query_string": "maple"
@@ -618,8 +615,46 @@ POST /search
 ```
 <!-- end -->
 
+## Join batching
 
-## Caveats and Best Practices
+When performing table joins, Manticore Search processes the results in batches to optimize performance and resource usage. Here's how it works:
+
+- **How Batching Works**: 
+  - The query on the left table is executed first, and the results are accumulated into a batch.
+  - This batch is then used as input for the query on the right table, which is executed as a single operation.
+  - This approach minimizes the number of queries sent to the right table, improving efficiency.
+
+- **Configuring Batch Size**:
+  - The size of the batch can be adjusted using the `join_batch_size` search option.
+  - It is also [configurable](../../Server_settings/Searchd.md#join_batch_size) in the `searchd` section of the configuration file.
+  - The default batch size is `1000`, but you can increase or decrease it depending on your use case.
+  - Setting `join_batch_size=0` disables batching entirely, which may be useful for debugging or specific scenarios.
+
+- **Performance Considerations**:
+  - A larger batch size can improve performance by reducing the number of queries executed on the right table.
+  - However, larger batches may consume more memory, especially for complex queries or large datasets.
+  - Experiment with different batch sizes to find the optimal balance between performance and resource usage.
+
+## Join caching
+
+To further optimize join operations, Manticore Search employs a caching mechanism for queries executed on the right table. Here's what you need to know:
+
+- **How Caching Works**:
+  - Each query on the right table is defined by the `JOIN ON` conditions.
+  - If the same `JOIN ON` conditions are repeated across multiple queries, the results are cached and reused.
+  - This avoids redundant queries and speeds up subsequent join operations.
+
+- **Configuring Cache Size**:
+  - The size of the join cache can be configured using the [join_cache_size](../../Server_settings/Searchd.md#join_cache_size) option in the `searchd` section of the configuration file.
+  - The default cache size is `20MB`, but you can adjust it based on your workload and available memory.
+  - Setting `join_cache_size=0` disables caching entirely.
+
+- **Memory Considerations**:
+  - Each thread maintains its own cache, so the total memory usage depends on the number of threads and the cache size.
+  - Ensure your server has sufficient memory to accommodate the cache, especially for high-concurrency environments.
+
+
+## Caveats and best practices
 
 When using JOINs in Manticore Search, keep the following points in mind:
 
@@ -640,7 +675,22 @@ When using JOINs in Manticore Search, keep the following points in mind:
 
 4. **Filtering on aliased expressions**: You cannot use aliases for expressions involving fields from both tables in the WHERE clause.
 
-5. **Using ANY with MVA**: When using the `ANY()` function with multi-valued attributes in JOINs, alias the multi-valued attribute from the joined table:
+5. **JSON attributes**: When joining on JSON attributes, you must explicitly cast the values to the appropriate type:
+   ```sql
+   -- Correct:
+   SELECT * FROM t1 LEFT JOIN t2 ON int(t1.json_attr.id) = t2.json_attr.id
+   
+   -- Incorrect:
+   SELECT * FROM t1 LEFT JOIN t2 ON t1.json_attr.id = t2.json_attr.id
+   ```
+
+6. **NULL handling**: You can use IS NULL and IS NOT NULL conditions on joined fields:
+   ```sql
+   SELECT * FROM t1 LEFT JOIN t2 ON t1.id = t2.id WHERE t2.name IS NULL
+   SELECT * FROM t1 LEFT JOIN t2 ON t1.id = t2.id WHERE t2.name IS NOT NULL
+   ```
+
+7. **Using ANY with MVA**: When using the `ANY()` function with multi-valued attributes in JOINs, alias the multi-valued attribute from the joined table:
    ```sql
    SELECT *, t2.m AS alias
    FROM t

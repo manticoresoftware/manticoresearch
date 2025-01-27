@@ -4,6 +4,15 @@
   </a>
 </p>
 
+<h3 align="center"><strong>Easy to use open source fast database for search</strong></h3>
+<p align="center">
+Manticore Search is an easy-to-use, open-source, and fast database designed for search. It is a great alternative to Elasticsearch.
+</p>
+
+<div align="center">
+<a href="https://trendshift.io/repositories/3537" target="_blank"><img src="https://trendshift.io/api/badge/repositories/3537" alt="manticoresoftware%2Fmanticoresearch | Trendshift" style="width: 250px; height: 55px;" width="250" height="55"/></a>
+</div>
+
 <h3 align="center">
   <a href="https://manticoresearch.com">Website</a> •
   <a href="https://manticoresearch.com/install/">Downloads</a> •
@@ -18,21 +27,22 @@
   <a href="https://github.com/manticoresoftware/manticoresearch/discussions/categories/feedback">User feedback</a>
 </h3>
 
-<p>&nbsp;</p>
+<p align="center">
+<a href="LICENSE"><img alt="License: GPLv3 or later" src="https://img.shields.io/badge/license-GPL%20V3%2B-green?style=plastic"></a>
+<a href="https://github.com/manticoresoftware/manticoresearch/actions/workflows/test.yml?query=branch%3Amaster"><img alt="GitHub Actions Workflow Status" src="https://img.shields.io/github/actions/workflow/status/manticoresoftware/manticoresearch/test.yml?branch=master&style=plastic&color=green"></a>
+<a href="https://twitter.com/manticoresearch"><img alt="Twitter Follow" src="https://img.shields.io/twitter/follow/manticoresearch?color=green&logo=Twitter&style=plastic"></a>
+<a href="http://slack.manticoresearch.com/"><img alt="Slack" src="https://img.shields.io/badge/slack-manticoresearch-green.svg?logo=slack&style=plastic"></a>
+<a href="https://github.com/manticoresoftware/docker"><img alt="Docker pulls" src="https://img.shields.io/docker/pulls/manticoresearch/manticore?color=green&style=plastic"></a>
+<a href="https://eepurl.com/dkUTHv"><img alt="Newsletter" src="https://img.shields.io/badge/newsletter-green?style=plastic"></a>
+<a href="https://github.com/manticoresoftware/manticoresearch/graphs/commit-activity"><img alt="Activity" src="https://img.shields.io/github/commit-activity/m/manticoresoftware/manticoresearch?color=green&style=plastic"></a>
+<a href="https://github.com/manticoresoftware/manticoresearch/issues?q=is%3Aissue+is%3Aclosed"><img alt="GitHub closed issues" src="https://img.shields.io/github/issues-closed/manticoresoftware/manticoresearch?color=green&style=plastic"></a>
+</p>
 
 # Introduction
 
-[![License: GPLv3 or later](https://img.shields.io/badge/license-GPL%20V3%2B-green?style=plastic)](LICENSE)
-[![Twitter Follow](https://img.shields.io/twitter/follow/manticoresearch?color=green&logo=Twitter&style=plastic)](https://twitter.com/manticoresearch)
-[![Slack](https://img.shields.io/badge/slack-manticoresearch-green.svg?logo=slack&style=plastic)](http://slack.manticoresearch.com/)
-[![Docker pulls](https://img.shields.io/docker/pulls/manticoresearch/manticore?color=green&style=plastic)](https://github.com/manticoresoftware/docker)
-[![Newsletter](https://img.shields.io/badge/newsletter-green?style=plastic)](https://eepurl.com/dkUTHv)
-[![Activity](https://img.shields.io/github/commit-activity/m/manticoresoftware/manticoresearch?color=green&style=plastic)](https://github.com/manticoresoftware/manticoresearch/graphs/commit-activity)
-[![GitHub closed issues](https://img.shields.io/github/issues-closed/manticoresoftware/manticoresearch?color=green&style=plastic)](https://github.com/manticoresoftware/manticoresearch/issues?q=is%3Aissue+is%3Aclosed)
-
 **❗Read recent [blog post about Manticore vs Elasticsearch](https://manticoresearch.com/blog/manticore-alternative-to-elasticsearch/)❗**
 
-Manticore Search is an easy to use open source fast database for search. Good alternative for Elasticsearch. What distinguishes it from other solutions is:
+What distinguishes it from other solutions is:
 * It's very fast and therefore more cost-efficient than alternatives, for example Manticore is:
   - **182x faster** than MySQL for [small data](https://db-benchmarks.com/test-hn-small/#mysql-vs-manticore-search) ([reproducible](https://github.com/db-benchmarks/db-benchmarks#get-started)❗)
   - **29x faster** than Elasticsearch for [log analytics](https://db-benchmarks.com/test-logs10m/#elasticsearch-with-no-tuning-vs-manticore-search-default-row-wise-storage) ([reproducible](https://github.com/db-benchmarks/db-benchmarks#get-started)❗)
@@ -44,18 +54,18 @@ Manticore Search is an easy to use open source fast database for search. Good al
 * The powerful and speedy full-text search works seamlessly with both small and large datasets.
 * Row-wise storage for small, medium and big size datasets.
 * For even larger datasets, Manticore offers columnar storage support through the [Manticore Columnar Library](https://github.com/manticoresoftware/columnar/), capable of handling datasets too big to fit in RAM.
-* Performant secondary indexes are automatically created, saving you time and effort.
-* The cost-based query optimizer optimizes search queries for optimal performance.
+* Performant secondary indexes are automatically created using the PGM-index (Piecewise Geometric Model index), which provides efficient mapping between indexed keys and their memory locations.
+* The cost-based query optimizer uses statistical data about indexed data to evaluate and determine the most efficient execution plan.
 * Manticore is SQL-first, utilizing SQL as its native syntax, and offers compatibility with the MySQL protocol, allowing you to use your preferred MySQL client.
 * With clients available in [PHP](https://github.com/manticoresoftware/manticoresearch-php), [Python](https://github.com/manticoresoftware/manticoresearch-python), [JavaScript](https://github.com/manticoresoftware/manticoresearch-javascript), [Typescript](https://github.com/manticoresoftware/manticoresearch-typescript), [Java](https://github.com/manticoresoftware/manticoresearch-java), [Elixir](https://github.com/manticoresoftware/manticoresearch-elixir), and [Go](https://github.com/manticoresoftware/manticoresearch-go), integration with Manticore Search becomes easy.
-* Manticore also provides a programmatic HTTP JSON protocol for more versatile data and schema management.
-* Built in C++, Manticore Search starts quickly and uses minimal RAM, with low-level optimizations contributing to its impressive performance.
-* With real-time inserts, newly added documents are immediately accessible.
+* Manticore also provides a programmatic HTTP JSON protocol for more versatile data and schema management, with Elasticsearch-compatible writes support.
+* Built in C++, Manticore Search starts quickly and uses minimal RAM (around 40MB RSS for an empty instance), with low-level optimizations contributing to its impressive performance.
+* With real-time inserts, newly added or updated documents are immediately accessible.
 * Interactive courses are available through [Interactive courses](https://play.manticoresearch.com/) to make learning a breeze.
-* Manticore also boasts built-in replication and load balancing for added reliability.
+* Manticore also boasts built-in virtually synchronous multi-master replication using the Galera library and load balancing capabilities.
 * Data can be synced from sources such as MySQL, PostgreSQL, ODBC, xml, and csv with ease.
-* While not fully ACID-compliant, Manticore still supports transactions and binlog to ensure safe writes.
-* Effortless data backup and recovery with built-in tools and SQL commands
+* While not fully ACID-compliant, Manticore supports isolated transactions and binary logging for safe writes.
+* Effortless data backup and recovery with built-in tools like manticore-backup and SQL BACKUP command
 
 [Craigslist](https://www.craigslist.org/), [Socialgist](https://socialgist.com/), [PubChem](https://pubchem.ncbi.nlm.nih.gov/), [Rozetka](https://rozetka.com.ua/) and many others use Manticore for efficient searching and stream filtering.
 
@@ -67,12 +77,13 @@ Manticore Search was forked from [Sphinx 2.3.2](https://github.com/sphinxsearch/
   - Custom ranking
 * Other search capabilities:
   - [Rich filtering functionality](https://manual.manticoresearch.com/Searching/Full_text_matching/Operators)
+  - [Fuzzy search](https://manual.manticoresearch.com/dev/Searching/Spell_correction#Fuzzy-Search)
   - [Faceted search](https://play.manticoresearch.com/faceting/)
   - [Geo-spatial search](https://play.manticoresearch.com/geosearch/)
   - [Vector search](https://manual.manticoresearch.com/Searching/KNN)
   - [Joining tables](https://manual.manticoresearch.com/Searching/Joining)
   - [Spelling correction](https://play.manticoresearch.com/didyoumean/)
-  - [Autocomplete](https://play.manticoresearch.com/simpleautocomplete/)
+  - [Autocomplete](https://manual.manticoresearch.com/dev/Searching/Autocomplete#Autocomplete)
   - A wide range of functions for filtering and data manipulation
 * Natural language processing (NLP):
   - [Stemming](https://manual.manticoresearch.com/Creating_a_table/NLP_and_tokenization/Morphology)
@@ -83,7 +94,9 @@ Manticore Search was forked from [Sphinx 2.3.2](https://github.com/sphinxsearch/
   - [Advanced tokenization at character and word level](https://manual.manticoresearch.com/Creating_a_table/NLP_and_tokenization/Low-level_tokenization#charset_table)
   - [Proper Chinese segmentation](https://play.manticoresearch.com/icu-chinese/)
   - [Text highlighting](https://play.manticoresearch.com/highlighting/)
-* Stream filtering [using a "percolate" table](https://play.manticoresearch.com/pq/)
+* Stream filtering:
+  - [using a "percolate" table](https://play.manticoresearch.com/pq/)
+  - or the [Kafka integration](https://manual.manticoresearch.com/dev/Integration/Kafka)
 * High-availability:
   - Data can be distributed across servers and data-centers
   - [Synchronous replication](https://play.manticoresearch.com/replication/)
@@ -110,6 +123,9 @@ Manticore Search was forked from [Sphinx 2.3.2](https://github.com/sphinxsearch/
   - [Sync from MySQL and PostgreSQL](https://manual.manticoresearch.com/Creating_a_table/Local_tables/Plain_table#Plain-table)
   - [Sync from XML](https://manual.manticoresearch.com/Adding_data_from_external_storages/Fetching_from_XML_streams#XML-file-format)
   - [Sync from CSV](https://manual.manticoresearch.com/Adding_data_from_external_storages/Fetching_from_CSV,TSV#Fetching-from-TSV,CSV)
+  - [Sync from ODBC](https://manual.manticoresearch.com/dev/Data_creation_and_modification/Adding_data_from_external_storages/Fetching_from_databases/Introduction#Introduction)
+  - [Sync from MS SQL](https://manual.manticoresearch.com/dev/Data_creation_and_modification/Adding_data_from_external_storages/Fetching_from_databases/Introduction#Introduction)
+  - [Sync from Kafka](https://manual.manticoresearch.com/dev/Integration/Kafka)
   - [With MySQL as a storage engine](https://manual.manticoresearch.com/Extensions/SphinxSE#Using-SphinxSE)
   - [With MySQL via FEDERATED engine](https://manual.manticoresearch.com/Extensions/FEDERATED)
   - [ProxySQL](https://manticoresearch.com/blog/using-proxysql-to-route-inserts-in-a-distributed-realtime-index/)

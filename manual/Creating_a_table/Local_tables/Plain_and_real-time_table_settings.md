@@ -168,6 +168,22 @@ utilsApi.sql("CREATE TABLE products(title text, content text stored indexed, nam
 utilsApi.Sql("CREATE TABLE products(title text, content text stored indexed, name text indexed, price float)");
 ```
 
+<!-- intro -->
+##### Typescript:
+
+<!-- request Typescript -->
+```typescript
+res = await utilsApi.sql('CREATE TABLE products(title text, content text stored indexed, name text indexed, price float)');
+```
+
+<!-- intro -->
+##### Go:
+
+<!-- request Go -->
+```go
+utilsAPI.Sql(context.Background()).Body("CREATE TABLE products(title text, content text stored indexed, name text indexed, price float)").Execute()
+```
+
 <!-- request CONFIG -->
 
 ```ini
@@ -213,6 +229,8 @@ json_secondary_indexes = json_attr
 <!-- example json_secondary_indexes -->
 
 By default, secondary indexes are generated for all attributes except JSON attributes. However, secondary indexes for JSON attributes can be explicitly generated using the `json_secondary_indexes` setting. When a JSON attribute is included in this option, its contents are flattened into multiple secondary indexes. These indexes can be used by the query optimizer to speed up queries.
+
+You can view the available secondary indexes using the [SHOW TABLE <tbl> INDEXES](../../Node_info_and_management/Table_settings_and_status/SHOW_TABLE_INDEXES.md) command.
 
 Value: A comma-separated list of JSON attributes for which secondary indexes should be generated.
 
@@ -275,6 +293,23 @@ utilsApi.sql("CREATE TABLE products(title text, j json secondary_index='1')");
 ```clike
 utilsApi.Sql("CREATE TABLE products(title text, j json secondary_index='1')");
 ```
+
+<!-- intro -->
+##### Typescript:
+
+<!-- request Typescript -->
+```typescript
+res = await utilsApi.sql('CREATE TABLE products(title text, j json secondary_index=\'1\')');
+```
+
+<!-- intro -->
+##### Go:
+
+<!-- request Go -->
+```go
+utilsAPI.Sql(context.Background()).Body("CREATE TABLE products(title text, j json secondary_index='1')").Execute()
+```
+
 
 <!-- request CONFIG -->
 

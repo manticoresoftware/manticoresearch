@@ -1,0 +1,12 @@
+––– input –––
+export INSTANCE=1
+––– output –––
+––– block: ../base/replication/start-searchd-precach –––
+––– input –––
+export CLUSTER_NAME=c
+––– output –––
+––– block: ../base/replication/create-cluster –––
+––– input –––
+mysql -h0 -P1306 -e "create table c:e(id bigint) shards=10 rf=2"
+––– output –––
+ERROR 1064 (42000) at line 1: The node count for cluster c is too low: 1. You can create local sharded table.

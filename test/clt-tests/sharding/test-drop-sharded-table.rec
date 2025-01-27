@@ -1,0 +1,59 @@
+––– block: ../base/start-searchd –––
+––– input –––
+mysql -h0 -P9306 -e "DROP SHARDED TABLE a;"
+––– output –––
+ERROR 1064 (42000) at line 1: Failed to parse query
+––– input –––
+mysql -h0 -P9306 -e "DROP SHARDED TABLE IF EXISTS a;"
+––– output –––
+ERROR 1064 (42000) at line 1: Failed to parse query
+––– input –––
+mysql -h0 -P9306 -e "create table a(id bigint) shards=3 rf=1;"; echo $?;
+––– output –––
+0
+––– input –––
+mysql -h0 -P9306 -e "SHOW TABLES\G"
+––– output –––
+*************************** 1. row ***************************
+Table: a
+Type: distributed
+––– input –––
+mysql -h0 -P9306 -e "DROP SHARDED TABLE a;"; echo $?;
+––– output –––
+ERROR 1064 (42000) at line 1: Failed to parse query
+1
+––– input –––
+mysql -h0 -P9306 -e "SHOW TABLES\G"
+––– output –––
+*************************** 1. row ***************************
+Table: a
+Type: distributed
+––– input –––
+mysql -h0 -P9306 -e "DROP SHARDED TABLE nonexistent_table;"
+––– output –––
+ERROR 1064 (42000) at line 1: Failed to parse query
+––– input –––
+mysql -h0 -P9306 -e "create table a(id bigint);"; echo $?;
+––– output –––
+ERROR 1064 (42000) at line 1: table 'a': CREATE TABLE failed: table 'a' already exists
+1
+––– input –––
+mysql -h0 -P9306 -e "DROP SHARDED TABLE a;"
+––– output –––
+ERROR 1064 (42000) at line 1: Failed to parse query
+––– input –––
+mysql -h0 -P9306 -e "create table a(id bigint) shards=3 rf=1;"; echo $?;
+––– output –––
+ERROR 1064 (42000) at line 1: table 'a': CREATE TABLE failed: table 'a' already exists
+1
+––– input –––
+mysql -h0 -P9306 -e "SHOW TABLES\G"
+––– output –––
+*************************** 1. row ***************************
+Table: a
+Type: distributed
+––– input –––
+mysql -h0 -P9306 -e "drop sharded table if exists a;"; echo $?;
+––– output –––
+ERROR 1064 (42000) at line 1: Failed to parse query
+1

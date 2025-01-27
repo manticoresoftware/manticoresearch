@@ -2701,10 +2701,11 @@ CSphString sphEncodeResultJson ( const VecTraits_T<const AggrResult_t *> & dRes,
 			ScopedComma_c sQueryComma ( tOut, ",", "{", "}" );
 
 			// note, that originally there is string UID, so we just output number in quotes for docid here
+			// number in quotes in compat mode or just number for _id
 			if ( bCompatId )
 			{
-				JsonObjAddAttr ( tOut, pId->m_eAttrType, "_id", tMatch, pId->m_tLocator );
-				tOut.Sprintf ( R"("_score":%d)", tMatch.m_iWeight );
+				DocID_t tDocID = tMatch.GetAttr ( pId->m_tLocator );
+				tOut.Sprintf ( R"("_id":"%llu,"_score":%d)", tDocID, tMatch.m_iWeight );
 			}
 			else if ( pId )
 			{

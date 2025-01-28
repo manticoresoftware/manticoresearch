@@ -1,19 +1,19 @@
 ––– input –––
 if [[ "$new_version_searchd" > "$current_version_searchd" ]]; then echo "Upgrade successful. New version searchd: $new_version_searchd"; else echo "Upgrade failed. Current version searchd: $current_version_searchd, new version: $new_version_searchd"; fi
 ––– output –––
-Upgrade successful. New version searchd: %{SEMVER}
+Upgrade successful. New version searchd: %{VERSION}
 ––– input –––
 if [[ "$new_version_columnar" > "$current_version_columnar" ]]; then echo "Upgrade successful. New version columnar: $new_version_columnar"; else echo "Upgrade failed. Current version columnar: $current_version_columnar, new version: $new_version_columnar"; fi
 ––– output –––
-Upgrade successful. New version columnar: %{SEMVER}
+Upgrade successful. New version columnar: %{VERSION}
 ––– input –––
 if [[ "$new_version_secondary" > "$current_version_secondary" ]]; then echo "Upgrade successful. New version secondary: $new_version_secondary"; else echo "Upgrade failed. Current version secondary: $current_version_knn, new version: $new_version_secondary"; fi
 ––– output –––
-Upgrade successful. New version secondary: %{SEMVER}
+Upgrade successful. New version secondary: %{VERSION}
 ––– input –––
 if [[ "$new_version_knn" > "$current_version_knn" ]]; then echo "Upgrade successful. New version knn: $new_version_knn"; else echo "Upgrade failed. Current version knn: $current_version_knn, new version: $new_version_knn"; fi
 ––– output –––
-Upgrade successful. New version knn: %{SEMVER}
+Upgrade successful. New version knn: %{VERSION}
 ––– input –––
 if [[ "$new_version_galera" > "$current_version_galera" ]] || [[ "$new_version_galera" == "$current_version_galera" ]]; then echo "Upgrade successful. New version galera: $new_version_galera"; else echo "Upgrade failed. Current version galera: $current_version_galera, new version: $new_version_galera"; fi
 ––– output –––
@@ -21,4 +21,4 @@ Upgrade successful. New version galera: #!/[0-9]{1}\.[0-9]{2}/!#
 ––– input –––
 if [[ "$new_version_buddy" > "$current_version_buddy" ]]; then echo "Upgrade successful. New version buddy: $new_version_buddy"; else echo "Upgrade failed. Current version buddy: $current_version_buddy, new version: $new_version_buddy"; fi
 ––– output –––
-Upgrade successful. New version buddy: #!/[0-9]{1,2}\.[0-9]{1,2}\.[0-9]{1,2}/!#
+Upgrade successful. New version buddy: #!/[0-9]{1,2}\.[0-9]{1,2}\.[0-9]{1,2}\+[0-9]{8}-[0-9a-z]{8}.*/!#

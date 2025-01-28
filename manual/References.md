@@ -447,6 +447,8 @@ To be put in the `searchd {}` section of the configuration file:
   * [ha_ping_interval](Creating_a_cluster/Remote_nodes/Load_balancing.md#ha_ping_interval) - Interval between agent mirror pings
   * [hostname_lookup](Creating_a_table/Creating_a_distributed_table/Remote_tables.md#agent) - Hostnames renew strategy
   * [jobs_queue_size](Server_settings/Searchd.md#jobs_queue_size) - Defines the maximum number of "jobs" allowed in the queue simultaneously
+  * [join_batch_size](Searching/Joining.md#Join-batching) - Defines batch size for table joins to balance performance and memory usage
+  * [join_cache_size](Searching/Joining.md#Join-caching) - Defines cache size for reusing JOIN query results
   * [listen](Server_settings/Searchd.md#listen) - Specifies IP address and port or Unix-domain socket path for searchd to listen on
   * [listen_backlog](Server_settings/Searchd.md#listen_backlog) - TCP listen backlog
   * [listen_tfo](Creating_a_table/Creating_a_distributed_table/Remote_tables.md#agent) - Enables TCP_FASTOPEN flag for all listeners

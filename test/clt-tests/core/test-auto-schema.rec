@@ -5,102 +5,59 @@ mysql -h0 -P9306 -e "drop table if exists test"
 ––– input –––
 mysql -h0 -P9306 -e "drop table if exists test2"
 ––– output –––
+ERROR 1064 (42000) at line 1: DROP TABLE failed: unknown table 'test'
 ––– input –––
-mysql -h0 -P9306 -e "drop table if exists test3"
+curl -X POST "localhost:9308/sql?mode=raw" -d "insert into test(id, f, a, b, j, m, d, v) values (1, 'sample text', 42, 3.1415, '{\"key\": \"value\"}', (1, 2, 3), 1625142600, '[12345678901234, 56789012345678]')"; echo
 ––– output –––
-––– input –––
-curl -X POST "localhost:9308/sql?mode=raw" -d "INSERT INTO test (id, model, storage_capacity, color, release_year, price, discounted_price, sold, date_added, product_codes, values, additional_info, vector) VALUES (6775836565403860993, 'iPhone 13 Pro', 256, 'silver', 2021, 1099.99, 989.99, 1, '1591362342000', '[1,2,3]', '[523456764345678976, 98765409877866654098, 1109876543450987650987]', '{\"features\": [\"ProMotion display\", \"A15 Bionic chip\", \"Ceramic Shield front cover\"]}', (12345678901234, 56789012345678));"; echo $?
-––– output –––
-[{"total":1,"error":"","warning":""}]0
+[{"total":1,"error":"","warning":""}]
 ––– input –––
 mysql -h0 -P9306 -e "select * from test"
 ––– output –––
-+---------------------+---------------+--------+---------------+------------------+--------------+-------------+------------------+------+---------------+--------------------------------------------------------------+-----------------------------------------------------------------------------------+-------------------------------+
-| id                  | model         | color  | date_added    | storage_capacity | release_year | price       | discounted_price | sold | product_codes | values                                                       | additional_info                                                                   | vector                        |
-+---------------------+---------------+--------+---------------+------------------+--------------+-------------+------------------+------+---------------+--------------------------------------------------------------+-----------------------------------------------------------------------------------+-------------------------------+
-| 6775836565403860993 | iPhone 13 Pro | silver | 1591362342000 |              256 |         2021 | 1099.989990 |       989.989990 |    1 | [1,2,3]       | [523456764345678976,9223372036854775807,9223372036854775807] | {"features":["ProMotion display","A15 Bionic chip","Ceramic Shield front cover"]} | 12345678901234,56789012345678 |
-+---------------------+---------------+--------+---------------+------------------+--------------+-------------+------------------+------+---------------+--------------------------------------------------------------+-----------------------------------------------------------------------------------+-------------------------------+
++------+-------------+------+----------+-----------------+-------+------------+---------------------------------+
+| id   | f           | a    | b        | j               | m     | d          | v                               |
++------+-------------+------+----------+-----------------+-------+------------+---------------------------------+
+|    1 | sample text |   42 | 3.141500 | {"key":"value"} | 1,2,3 | 1625142600 | [12345678901234,56789012345678] |
++------+-------------+------+----------+-----------------+-------+------------+---------------------------------+
 ––– input –––
-mysql -P9306 -h0 -e "DESCRIBE test OPTION force=1;"
+mysql -h0 -P9306 -e "describe test"
 ––– output –––
-+------------------+--------+----------------+
-| Field            | Type   | Properties     |
-+------------------+--------+----------------+
-| id               | bigint |                |
-| model            | text   | indexed stored |
-| color            | text   | indexed stored |
-| date_added       | text   | indexed stored |
-| storage_capacity | uint   |                |
-| release_year     | uint   |                |
-| price            | float  |                |
-| discounted_price | float  |                |
-| sold             | uint   |                |
-| product_codes    | json   |                |
-| values           | json   |                |
-| additional_info  | json   |                |
-| vector           | mva64  |                |
-+------------------+--------+----------------+
++-------+--------+----------------+
+| Field | Type   | Properties     |
++-------+--------+----------------+
+| id    | bigint |                |
+| f     | text   | indexed stored |
+| a     | uint   |                |
+| b     | float  |                |
+| j     | json   |                |
+| m     | mva    |                |
+| d     | uint   |                |
+| v     | json   |                |
++-------+--------+----------------+
 ––– input –––
-curl -X POST "localhost:9308/sql?mode=raw" -d "INSERT INTO test2 (id, model, storage_capacity, color, release_year, price, discounted_price, sold, date_added, product_codes, values, additional_info, vector) VALUES (6775836565403860993, 'iPhone 13 Pro', 256, 'silver', 2021, 1099.99, 989.99, 1, '1591362342000', '[1,2,3]', '[523456764345678976, 98765409877866654098, 1109876543450987650987]', '{\"features\": [\"ProMotion display\", \"A15 Bionic chip\", \"Ceramic Shield front cover\"]}', '[0.773448, 0.312478, 0.137971, 0.459821]');"; echo $?
+curl -X POST "localhost:9308/sql?mode=raw" -d "insert into test2(id, model, sold, date_added, storage_capacity, price, additional_info, vector) VALUES (1, 'Model_1', 1, 1620590570251, 512, 654.19, '{\"features\": [\"Feature_1\", \"Feature_2\"]}', '[0.1, 0.2, 0.3, 0.4]'), (2, 'Model_2', 1, 1689374130160, 128, 663.70, '{\"features\": [\"Feature_1\", \"Feature_2\"]}', '[0.5, -0.3, 0.9, -0.1]')"; echo
 ––– output –––
-[{"total":1,"error":"","warning":""}]0
+[{"total":2,"error":"","warning":""}]
 ––– input –––
 mysql -h0 -P9306 -e "select * from test2"
 ––– output –––
-+---------------------+---------------+--------+---------------+------------------+--------------+-------------+------------------+------+---------------+--------------------------------------------------------------+-----------------------------------------------------------------------------------+---------------------------------------+
-| id                  | model         | color  | date_added    | storage_capacity | release_year | price       | discounted_price | sold | product_codes | values                                                       | additional_info                                                                   | vector                                |
-+---------------------+---------------+--------+---------------+------------------+--------------+-------------+------------------+------+---------------+--------------------------------------------------------------+-----------------------------------------------------------------------------------+---------------------------------------+
-| 6775836565403860993 | iPhone 13 Pro | silver | 1591362342000 |              256 |         2021 | 1099.989990 |       989.989990 |    1 | [1,2,3]       | [523456764345678976,9223372036854775807,9223372036854775807] | {"features":["ProMotion display","A15 Bionic chip","Ceramic Shield front cover"]} | [0.773448,0.312478,0.137971,0.459821] |
-+---------------------+---------------+--------+---------------+------------------+--------------+-------------+------------------+------+---------------+--------------------------------------------------------------+-----------------------------------------------------------------------------------+---------------------------------------+
++------+---------+------+---------------+------------------+------------+----------------------------------------+-----------------------------------------+
+| id   | model   | sold | date_added    | storage_capacity | price      | additional_info                        | vector                                  |
++------+---------+------+---------------+------------------+------------+----------------------------------------+-----------------------------------------+
+|    1 | Model_1 |    1 | 1620590570251 |              512 | 654.190002 | {"features":["Feature_1","Feature_2"]} | [0.100000,0.200000,0.300000,0.400000]   |
+|    2 | Model_2 |    1 | 1689374130160 |              128 | 663.700012 | {"features":["Feature_1","Feature_2"]} | [0.500000,-0.300000,0.900000,-0.100000] |
++------+---------+------+---------------+------------------+------------+----------------------------------------+-----------------------------------------+
 ––– input –––
-mysql -P9306 -h0 -e "DESCRIBE test2 OPTION force=1;"
+mysql -h0 -P9306 -e "describe test2"
 ––– output –––
 +------------------+--------+----------------+
 | Field            | Type   | Properties     |
 +------------------+--------+----------------+
 | id               | bigint |                |
 | model            | text   | indexed stored |
-| color            | text   | indexed stored |
-| date_added       | text   | indexed stored |
-| storage_capacity | uint   |                |
-| release_year     | uint   |                |
-| price            | float  |                |
-| discounted_price | float  |                |
 | sold             | uint   |                |
-| product_codes    | json   |                |
-| values           | json   |                |
+| date_added       | bigint |                |
+| storage_capacity | uint   |                |
+| price            | float  |                |
 | additional_info  | json   |                |
 | vector           | json   |                |
-+------------------+--------+----------------+
-––– input –––
-curl -X POST "localhost:9308/sql?mode=raw" -d "INSERT INTO test3 (id, model, storage_capacity, color, release_year, price, discounted_price, sold, date_added, product_codes, values, additional_info, vector) VALUES (6775836565403860993, 'iPhone 13 Pro', 256, 'silver', 2021, 1099.99, 989.99, 1, '1591362342000', '[1,2,3]', '[523456764345678976, 98765409877866654098, 1109876543450987650987]', '{\"features\": [\"ProMotion display\", \"A15 Bionic chip\", \"Ceramic Shield front cover\"]}', 'null');"; echo $?
-––– output –––
-[{"total":1,"error":"","warning":""}]0
-––– input –––
-mysql -h0 -P9306 -e "select * from test3"
-––– output –––
-+---------------------+---------------+--------+---------------+--------+------------------+--------------+-------------+------------------+------+---------------+--------------------------------------------------------------+-----------------------------------------------------------------------------------+
-| id                  | model         | color  | date_added    | vector | storage_capacity | release_year | price       | discounted_price | sold | product_codes | values                                                       | additional_info                                                                   |
-+---------------------+---------------+--------+---------------+--------+------------------+--------------+-------------+------------------+------+---------------+--------------------------------------------------------------+-----------------------------------------------------------------------------------+
-| 6775836565403860993 | iPhone 13 Pro | silver | 1591362342000 | null   |              256 |         2021 | 1099.989990 |       989.989990 |    1 | [1,2,3]       | [523456764345678976,9223372036854775807,9223372036854775807] | {"features":["ProMotion display","A15 Bionic chip","Ceramic Shield front cover"]} |
-+---------------------+---------------+--------+---------------+--------+------------------+--------------+-------------+------------------+------+---------------+--------------------------------------------------------------+-----------------------------------------------------------------------------------+
-––– input –––
-mysql -P9306 -h0 -e "DESCRIBE test3 OPTION force=1;"
-––– output –––
-+------------------+--------+----------------+
-| Field            | Type   | Properties     |
-+------------------+--------+----------------+
-| id               | bigint |                |
-| model            | text   | indexed stored |
-| color            | text   | indexed stored |
-| date_added       | text   | indexed stored |
-| vector           | text   | indexed stored |
-| storage_capacity | uint   |                |
-| release_year     | uint   |                |
-| price            | float  |                |
-| discounted_price | float  |                |
-| sold             | uint   |                |
-| product_codes    | json   |                |
-| values           | json   |                |
-| additional_info  | json   |                |
 +------------------+--------+----------------+

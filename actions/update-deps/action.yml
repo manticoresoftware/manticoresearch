@@ -64,15 +64,33 @@ runs:
       id: branch
       shell: bash
       run: |
-        echo "branch=update-${{ inputs.name }}-version" >> $GITHUB_OUTPUT
-        echo "source_branch=${{ github.head_ref }}" >> $GITHUB_OUTPUT
-        echo "target=master" >> $GITHUB_OUTPUT
+        if [[ "${{ github.event_name }}" == "pull_request" ]]; then
+          echo "branch=${{ inputs.name }}-${{ github.event.pull_request.number }}" >> $GITHUB_OUTPUT
+          echo "target=update-${{ inputs.name }}-version" >> $GITHUB_OUTPUT
+        else
+          echo "branch=update-${{ inputs.name }}-version" >> $GITHUB_OUTPUT
+          echo "target=master" >> $GITHUB_OUTPUT
+        fi
 
-    - name: Prepare update version branch
+    - name: Prepare target branch
       shell: bash
       run: |
         cd manticoresearch
-        #
+        git fetch origin
+        if ! git ls-remote --exit-code --heads origin ${{ steps.branch.outputs.target }}; then
+          git checkout -b ${{ steps.branch.outputs.target }} origin/master
+          git push -u origin ${{ steps.branch.outputs.target }}
+        else
+          git checkout ${{ steps.branch.outputs.target }}
+        fi
+        cd ..
+
+    - name: Update deps.txt
+      id: deps
+      shell: bash
+      run: |
+        cd manticoresearch
+
         # Fetch branch or create it
         git fetch origin
         if ! git ls-remote --exit-code --heads origin ${{ steps.branch.outputs.branch }}; then
@@ -80,40 +98,6 @@ runs:
         else
           git checkout ${{ steps.branch.outputs.branch }}
         fi
-
-        cd ..
-
-    - name: Check and merge source branch
-      if: steps.branch.outputs.source_branch != ''
-      shell: bash
-      run: |
-        cd manticoresearch
-        # Check if the source branch exists in current repository
-        if git ls-remote --exit-code origin ${{ steps.branch.outputs.source_branch }}; then
-          echo "Source branch ${{ steps.branch.outputs.source_branch }} found in current repository"
-
-          git fetch origin ${{ steps.branch.outputs.source_branch }}
-          git cherry-pick origin/${{ steps.branch.outputs.source_branch }}
-          if [ $? -eq 0 ]; then
-            echo "Successfully cherry-picked changes from ${{ steps.branch.outputs.source_branch }}"
-            git push -u origin ${{ steps.branch.outputs.branch }}
-            git push origin :${{ steps.branch.outputs.source_branch }}
-          else
-            echo "Cherry-pick failed. Manual intervention required."
-            git cherry-pick --abort
-            exit 1
-          fi
-        else
-          echo "Source branch ${{ steps.branch.outputs.source_branch }} not found in current repository"
-        fi
-        cd ..
-
-
-    - name: Update deps.txt
-      id: deps
-      shell: bash
-      run: |
-        cd manticoresearch
 
         # Update deps
         name=${{ inputs.name }}
@@ -132,6 +116,9 @@ runs:
         name=${{ inputs.name }}
         version_string="${{ inputs.version }}"
         title="🆕 Update ${name} version"
+        if [[ "${{ github.event_name }}" == "pull_request" ]]; then
+          title="${title} (${{ github.head_ref }})"
+        fi
         commit="Bump ${name} version to: ${version_string}"
         body_path=$(mktemp)
         echo "Update [${name}](${repo_url}) version to: ${version_string} which includes:" > "$body_path"

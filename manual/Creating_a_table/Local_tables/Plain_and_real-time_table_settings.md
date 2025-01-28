@@ -168,22 +168,6 @@ utilsApi.sql("CREATE TABLE products(title text, content text stored indexed, nam
 utilsApi.Sql("CREATE TABLE products(title text, content text stored indexed, name text indexed, price float)");
 ```
 
-<!-- intro -->
-##### Typescript:
-
-<!-- request Typescript -->
-```typescript
-res = await utilsApi.sql('CREATE TABLE products(title text, content text stored indexed, name text indexed, price float)');
-```
-
-<!-- intro -->
-##### Go:
-
-<!-- request Go -->
-```go
-utilsAPI.Sql(context.Background()).Body("CREATE TABLE products(title text, content text stored indexed, name text indexed, price float)").Execute()
-```
-
 <!-- request CONFIG -->
 
 ```ini
@@ -293,23 +277,6 @@ utilsApi.sql("CREATE TABLE products(title text, j json secondary_index='1')");
 ```clike
 utilsApi.Sql("CREATE TABLE products(title text, j json secondary_index='1')");
 ```
-
-<!-- intro -->
-##### Typescript:
-
-<!-- request Typescript -->
-```typescript
-res = await utilsApi.sql('CREATE TABLE products(title text, j json secondary_index=\'1\')');
-```
-
-<!-- intro -->
-##### Go:
-
-<!-- request Go -->
-```go
-utilsAPI.Sql(context.Background()).Body("CREATE TABLE products(title text, j json secondary_index='1')").Execute()
-```
-
 
 <!-- request CONFIG -->
 

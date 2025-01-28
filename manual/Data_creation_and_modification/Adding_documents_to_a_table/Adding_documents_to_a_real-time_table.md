@@ -71,7 +71,7 @@ POST /insert
 {
   "table":"products",
   "id":0,
-  "doc":	
+  "doc":
   {
     "title" : "Yellow bag"
   }
@@ -269,7 +269,7 @@ If you attempt to INSERT multiple rows with different, incompatible value types 
 * uint -> bigint -> float (this may cause some precision loss)
 * string -> text
 
-The auto schema mechanism does not support creating [KNN](../../Searching/KNN.md#Configuring-a-table-for-KNN-search) tables, so you cannot insert `float_vector` data into an automatically created table. If you still want to store `float_vector` values in a regular table, you can insert them using the same syntax as for JSON data.
+The auto schema mechanism does not support creating tables with vector fields (fields of type `float_vector`) used for [KNN](../../Searching/KNN.md#Configuring-a-table-for-KNN-search) (K-Nearest Neighbors) similarity search. To use vector fields in your table, you must explicitly create the table with a schema that defines these fields. If you need to store vector data in a regular table without KNN search capability, you can store it as a JSON array using the standard JSON syntax, for example: `INSERT INTO table_name (vector_field) VALUES ('[1.0, 2.0, 3.0]')`.
 
 Also, the following formats of dates will be recognized and converted to timestamps while all other date formats will be treated as strings:
 - `%Y-%m-%dT%H:%M:%E*S%Z`

@@ -349,17 +349,14 @@ jobs:
       matrix:
         name: [1_400, 401_650, 651_and_on]
         include:
-          - name: 1_350
+          - name: 1_400
             start: 1
-            end: 350
-          - name: 351_570
-            start: 351
-            end: 570
-          - name: 571_790
-            start: 571
-            end: 790
-          - name: 791_and_on
-            start: 791
+            end: 400
+          - name: 401_650
+            start: 401
+            end: 650
+          - name: 651_and_on
+            start: 651
             end: 999999
     with:
       CTEST_START: ${{ matrix.start }}

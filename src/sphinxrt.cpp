@@ -10050,7 +10050,7 @@ int RtIndex_c::ClassicOptimize ()
 	return iAffected;
 }
 
-static int GetCutOff ( const MutableIndexSettings_c & tSettings, bool bKNN = false )
+static int GetCutOff ( const MutableIndexSettings_c & tSettings, bool bKNN )
 {
 	if ( tSettings.IsSet ( MutableName_e::OPTIMIZE_CUTOFF ) )
 		return tSettings.m_iOptimizeCutoff;
@@ -10064,7 +10064,7 @@ int RtIndex_c::ProgressiveOptimize ( int iCutoff )
 
 	int iAffected = 0;
 	if ( !iCutoff )
-		iCutoff = GetCutOff ( m_tMutableSettings );
+		iCutoff = GetCutOff ( m_tMutableSettings, m_tSchema.HasKNNAttrs() );
 
 	bool bWork = true;
 	while ( bWork &= MergeCanRun() )

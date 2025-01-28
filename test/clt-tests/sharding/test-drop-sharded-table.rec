@@ -1,0 +1,52 @@
+––– block: ../base/start-searchd –––
+––– input –––
+mysql -h0 -P9306 -e "DROP TABLE a;"
+––– output –––
+ERROR 1064 (42000) at line 1: DROP TABLE failed: unknown table 'a'
+––– input –––
+mysql -h0 -P9306 -e "DROP TABLE IF EXISTS a;"; echo $?;
+––– output –––
+0
+––– input –––
+mysql -h0 -P9306 -e "create table a(id bigint) shards=3 rf=1;"; echo $?;
+––– output –––
+0
+––– input –––
+mysql -h0 -P9306 -e "SHOW TABLES\G"
+––– output –––
+*************************** 1. row ***************************
+Table: a
+Type: distributed
+––– input –––
+mysql -h0 -P9306 -e "DROP TABLE a;"; echo $?;
+––– output –––
+0
+––– input –––
+mysql -h0 -P9306 -e "SHOW TABLES\G"
+––– output –––
+––– input –––
+mysql -h0 -P9306 -e "create table a(id bigint) shards=3 rf=1;"; echo $?;
+––– output –––
+0
+––– input –––
+mysql -h0 -P9306 -e "drop table if exists a;"; echo $?;
+––– output –––
+0
+––– input –––
+mysql -h0 -P9306 -e "SHOW TABLES\G"
+––– output –––
+––– input –––
+mysql -h0 -P9306 -e "create table a(id bigint);"; echo $?;
+––– output –––
+0
+––– input –––
+mysql -h0 -P9306 -e "DROP TABLE a;"; echo $?;
+––– output –––
+0
+––– input –––
+mysql -h0 -P9306 -e "DROP TABLE nonexistent_table;"
+––– output –––
+ERROR 1064 (42000) at line 1: DROP TABLE failed: unknown table 'nonexistent_table'
+––– input –––
+mysql -h0 -P9306 -e "SHOW TABLES\G"
+––– output –––

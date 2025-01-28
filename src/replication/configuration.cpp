@@ -38,10 +38,7 @@ bool SetReplicationListener ( const VecTraits_T<ListenerDesc_t> & dListeners, CS
 		const bool bBadCount = ( tListen.m_iPortsCount<2 );
 		const bool bBadRange = ( ( tListen.m_iPortsCount%2 )!=0 && ( tListen.m_iPortsCount-1 )<2 );
 		if ( bBadCount || bBadRange )
-		{
-			sphWarning ( "invalid replication ports count %d, should be at least 2", tListen.m_iPortsCount );
-			continue;
-		}
+			sphFatal ( "invalid replication ports count %d, should be at least 2", tListen.m_iPortsCount );
 
 		// can not use 0.0.0.0 due to Galera error at ReplicatorSMM::InitConfig::InitConfig
 		if ( tListen.m_uIP != 0 )

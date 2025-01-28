@@ -781,12 +781,12 @@ indexer --all --config /tmp/manticore_idx.conf > /dev/null 2>&1
 ––– input –––
 rm -f /tmp/searchd.log; searchd --stopwait > /dev/null; searchd -c /tmp/manticore_idx.conf; if timeout 10 grep -qm1 '\[BUDDY\] started' <(tail -n 1000 -f /var/log/manticore/searchd.log); then echo 'Buddy started!'; else echo 'Timeout or failed!'; cat /var/log/manticore/searchd.log;fi
 ––– output –––
-Manticore %{SEMVER} %{COMMITDATE}#!/(\sdev)?\s/!#(columnar %{SEMVER} %{COMMITDATE}) (secondary %{SEMVER} %{COMMITDATE}) (knn %{SEMVER} %{COMMITDATE})
+Manticore %{VERSION} (columnar %{VERSION}) (secondary %{VERSION}) (knn %{VERSION})
 Copyright (c) 2001-2016, Andrew Aksyonoff
 Copyright (c) 2008-2016, Sphinx Technologies Inc (http://sphinxsearch.com)
 Copyright (c) 2017-%{YEAR}, Manticore Software LTD (https://manticoresearch.com)
 [#!/[0-9]{2}:[0-9]{2}.[0-9]{3}/!#] [#!/[0-9]+/!#] using config file '/tmp/manticore_idx.conf' (%{NUMBER} chars)...
-starting daemon version '%{SEMVER} %{COMMITDATE}#!/(\sdev)?\s/!#(columnar %{SEMVER} %{COMMITDATE}) (secondary %{SEMVER} %{COMMITDATE}) (knn %{SEMVER} %{COMMITDATE})' ...
+starting daemon version '%{VERSION} (columnar %{VERSION}) (secondary %{VERSION}) (knn %{VERSION})' ...
 listening on all interfaces for mysql, port=9306
 listening on all interfaces for sphinx and http(s), port=9312
 listening on all interfaces for sphinx and http(s), port=9308
@@ -814,19 +814,19 @@ mysql -h0 -P9306 -e "show version\G;"
 ––– output –––
 *************************** 1. row ***************************
 Component: Daemon
-Version: %{SEMVER} %{COMMITDATE} dev
+Version: %{VERSION} 
 *************************** 2. row ***************************
 Component: Columnar
-Version: columnar %{SEMVER} %{COMMITDATE}
+Version: columnar %{VERSION}
 *************************** 3. row ***************************
 Component: Secondary
-Version: secondary %{SEMVER} %{COMMITDATE}
+Version: secondary %{VERSION}
 *************************** 4. row ***************************
 Component: KNN
-Version: knn %{SEMVER} %{COMMITDATE}
+Version: knn %{VERSION}
 *************************** 5. row ***************************
 Component: Buddy
-Version: buddy v%{SEMVER}
+Version: buddy %{VERSION}
 ––– input –––
 mysql -h0 -P9306 -e "SELECT * FROM idx_plain WHERE MATCH('abcdef') OPTION fuzzy=1;"
 ––– output –––

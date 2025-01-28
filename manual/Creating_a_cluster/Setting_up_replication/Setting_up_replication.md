@@ -4,6 +4,8 @@ With Manticore, write transactions (such as `INSERT`, `REPLACE`, `DELETE`, `TRUN
 
 [Native Windows binaries](../../Installation/Windows.md#Installing-Manticore-as-native-Windows-binaries) for Manticore do not support replication. We recommend [installing Manticore via WSL](../../Installation/Windows.md#Installing-or-enabling-WSL2) (Windows Subsystem for Linux).
 
+On [macOS](../../Installation/MacOS.md), replication has limited support and is recommended only for development purposes.
+
 Manticore's replication is powered by the [Galera library](https://github.com/codership/galera) and boasts several impressive features:
 
 * True multi-master: read and write to any node at any time.

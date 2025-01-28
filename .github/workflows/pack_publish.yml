@@ -188,7 +188,7 @@ jobs:
   publish:
     name: OK to publish?
     runs-on: ubuntu-22.04
-    needs: [pack_debian_ubuntu, pack_rhel, pack_macos, pack_windows]
+    needs: [pack_debian_ubuntu, pack_rhel, pack_macos, build_nsis]
     if: |
       (github.repository == 'manticoresoftware/manticoresearch')
       && (

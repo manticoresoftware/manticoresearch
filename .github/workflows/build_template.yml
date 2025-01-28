@@ -46,7 +46,7 @@ on:
       artifact_list:
         required: false
         type: string
-        default: "build/xml build/CMakeFiles/CMake*.log build/api/libsphinxclient/testcli build/src/indexer build/src/indextool build/src/searchd build/src/tests build/src/gtests/gmanticoretest build/config/*.c build/config/*.h build/**/*.gcno"
+        default: "build/xml build/CMakeFiles/CMake*.log build/api/libsphinxclient/testcli build/src/indexer build/src/indextool build/src/searchd build/src/tests build/src/gtests/gmanticoretest build/config/*.c build/config/*.h build/**/*.cxx build/**/*.gcno"
       artifact_name:
         required: false
         type: string
@@ -116,7 +116,7 @@ jobs:
 
       - name: Upload build artifacts
         if: success()
-        uses: manticoresoftware/upload_artifact_with_retries@v3
+        uses: manticoresoftware/upload_artifact_with_retries@v4
         with:
           name: ${{ steps.artifact_name.outputs.value }}
           path: ${{ inputs.artifact_list }}

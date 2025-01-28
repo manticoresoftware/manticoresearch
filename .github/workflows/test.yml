@@ -48,7 +48,7 @@ jobs:
       clt: ${{ steps.filter.outputs.clt }}
     steps:
       - uses: actions/checkout@v4
-      - uses: dorny/paths-filter@v3
+      - uses: manticoresoftware/paths-filter@v3
         id: filter
         with:
           filters: |

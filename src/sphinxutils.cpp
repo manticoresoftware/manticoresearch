@@ -931,6 +931,8 @@ static KeyDesc_t g_dKeysIndex[] =
 	{ "jieba_hmm",				0, nullptr },
 	{ "jieba_mode",				0, nullptr },
 	{ "jieba_user_dict_path",	0, nullptr },
+	{ "diskchunk_flush_write_timeout",		0, nullptr },
+	{ "diskchunk_flush_search_timeout",		0, nullptr },
 	{ nullptr,					0, nullptr }
 };
 
@@ -1081,6 +1083,8 @@ static KeyDesc_t g_dKeysSearchd[] =
 	{ "merge_si_memlimit",		0, NULL },
 	{ "log_http",				0, NULL },
 	{ "join_batch_size",		0, NULL },
+	{ "diskchunk_flush_write_timeout",		0, nullptr },
+	{ "diskchunk_flush_search_timeout",		0, nullptr },
 	{ NULL,						0, NULL }
 };
 

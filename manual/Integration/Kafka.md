@@ -1,4 +1,4 @@
-# Syncing with Kafka
+# Syncing from Kafka
 
 > NOTE: this functionality requires [Manticore Buddy](../Installation/Manticore_Buddy.md). If it doesn't work, make sure Buddy is installed.
 

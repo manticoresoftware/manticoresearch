@@ -305,6 +305,38 @@ data_dir = /var/lib/manticore
 ```
 <!-- end -->
 
+### diskchunk_flush_write_timeout
+
+<!-- example conf diskchunk_flush_write_timeout -->
+The timeout for auto-flushing a RAM chunk if there are no writes to it. The time in seconds to wait without a write before auto-flushing the RAM chunk to disk. It is optional, with a default value of 1 second.
+If no write occurs in the RAM chunk within `diskchunk_flush_write_timeout` seconds, the chunk will be flushed to disk. Works in conjunction with `diskchunk_flush_search_timeout`. To disable auto-flush, set `diskchunk_flush_write_timeout = -1` explicitly in your configuration. [Per-table](../Creating_a_table/Local_tables/Plain_and_real-time_table_settings.md#diskchunk_flush_write_timeout) directives have higher priority and will override this instance-wide default, providing more fine-grained control.
+
+<!-- intro -->
+##### Example:
+
+<!-- request Example -->
+
+```ini
+diskchunk_flush_write_timeout = 60
+```
+<!-- end -->
+
+#### diskchunk_flush_search_timeout
+
+<!-- example conf diskchunk_flush_search_timeout -->
+The timeout for preventing auto-flushing a RAM chunk if there are no searches in the table. The time in seconds to check for searches before determining whether to auto-flush. It is optional, with a default value of 30 seconds.
+Auto-flushing will occur only if there has been at least one search in the table within the last `diskchunk_flush_search_timeout` seconds. Works in conjunction with `diskchunk_flush_write_timeout`. [Per-table](../Creating_a_table/Local_tables/Plain_and_real-time_table_settings.md#diskchunk_flush_search_timeout) directives have higher priority and will override this instance-wide default, providing more fine-grained control.
+
+<!-- intro -->
+##### Example:
+
+<!-- request Example -->
+
+```ini
+diskchunk_flush_search_timeout = 120
+```
+<!-- end -->
+
 ### docstore_cache_size
 
 <!-- example conf docstore_cache_size -->
@@ -464,7 +496,7 @@ In most cases, a "job" means one query to a single local table (plain table or a
 
 Table joins work by accumulating a batch of matches, which are the results of the query executed on the left table. This batch is then processed as a single query on the right table.
 
-This option allows you to adjust the batch size. The default value is 1000, and setting this option to 0 disables batching.
+This option allows you to adjust the batch size. The default value is `1000`, and setting this option to `0` disables batching.
 
 A larger batch size may improve performance; however, for some queries, it can lead to excessive memory consumption.
 
@@ -484,7 +516,7 @@ Each query executed on the right table is defined by specific JOIN ON conditions
 
 If there are only a few unique JOIN ON conditions, reusing the results can be more efficient than repeatedly executing queries on the right table. To enable this, the result sets are stored in a cache.
 
-This option allows you to configure the size of this cache. The default value is 20 MB, and setting this option to 0 disables caching.
+This option allows you to configure the size of this cache. The default value is `20 MB`, and setting this option to 0 disables caching.
 
 Note that each thread maintains its own cache, so you should account for the number of threads executing queries when estimating total memory usage.
 

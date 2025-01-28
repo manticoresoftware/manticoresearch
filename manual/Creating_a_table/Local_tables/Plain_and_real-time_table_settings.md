@@ -168,6 +168,22 @@ utilsApi.sql("CREATE TABLE products(title text, content text stored indexed, nam
 utilsApi.Sql("CREATE TABLE products(title text, content text stored indexed, name text indexed, price float)");
 ```
 
+<!-- intro -->
+##### Typescript:
+
+<!-- request Typescript -->
+```typescript
+res = await utilsApi.sql('CREATE TABLE products(title text, content text stored indexed, name text indexed, price float)');
+```
+
+<!-- intro -->
+##### Go:
+
+<!-- request Go -->
+```go
+utilsAPI.Sql(context.Background()).Body("CREATE TABLE products(title text, content text stored indexed, name text indexed, price float)").Execute()
+```
+
 <!-- request CONFIG -->
 
 ```ini
@@ -277,6 +293,23 @@ utilsApi.sql("CREATE TABLE products(title text, j json secondary_index='1')");
 ```clike
 utilsApi.Sql("CREATE TABLE products(title text, j json secondary_index='1')");
 ```
+
+<!-- intro -->
+##### Typescript:
+
+<!-- request Typescript -->
+```typescript
+res = await utilsApi.sql('CREATE TABLE products(title text, j json secondary_index=\'1\')');
+```
+
+<!-- intro -->
+##### Go:
+
+<!-- request Go -->
+```go
+utilsAPI.Sql(context.Background()).Body("CREATE TABLE products(title text, j json secondary_index='1')").Execute()
+```
+
 
 <!-- request CONFIG -->
 
@@ -429,6 +462,15 @@ The `rt_mem_limit` is never exceeded, but the actual RAM chunk size can be signi
 * The rate is reset to 50% each time you restart the searchd.
 
 For instance, if 90MB of data is saved to a disk chunk and an additional 10MB of data arrives while the save is in progress, the rate would be 90%. Next time, the RT table will collect up to 90% of `rt_mem_limit` before flushing the data. The faster the insertion pace, the lower the `rt_mem_limit` rate. The rate varies between 33.3% to 95%. You can view the current rate of a table using the [SHOW TABLE <tbl> STATUS](../../Node_info_and_management/Table_settings_and_status/SHOW_TABLE_STATUS.md) command.
+
+#### diskchunk_flush_write_timeout
+
+The timeout for auto-flushing a RAM chunk if there are no writes to it. Learn more [here](../../Server_settings/Searchd.md#diskchunk_flush_write_timeout).
+
+#### diskchunk_flush_search_timeout
+
+The timeout for preventing auto-flushing a RAM chunk if there are no searches in the table. Learn more [here](../../Server_settings/Searchd.md#diskchunk_flush_search_timeout).
+
 
 ##### How to change rt_mem_limit and optimize_cutoff
 

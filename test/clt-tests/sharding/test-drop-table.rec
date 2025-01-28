@@ -1,3 +1,6 @@
+This test checks creation and deletion of tables in MySQL-protocol Manticore Search.
+The test includes commands to handle errors when deleting non-existent tables and to check correctness of creating sharded and RT tables.
+
 ––– block: ../base/start-searchd –––
 ––– input –––
 mysql -h0 -P9306 -e "DROP TABLE a;"
@@ -39,6 +42,12 @@ mysql -h0 -P9306 -e "SHOW TABLES\G"
 mysql -h0 -P9306 -e "create table a(id bigint);"; echo $?;
 ––– output –––
 0
+––– input –––
+mysql -h0 -P9306 -e "SHOW TABLES\G"
+––– output –––
+*************************** 1. row ***************************
+Table: a
+Type: rt
 ––– input –––
 mysql -h0 -P9306 -e "DROP TABLE a;"; echo $?;
 ––– output –––

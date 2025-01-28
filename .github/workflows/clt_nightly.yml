@@ -33,6 +33,8 @@ jobs:
     name: Commit info
     runs-on: ubuntu-22.04
     steps:
+      - name: Checkout repository
+        uses: actions/checkout@v3
       - run: |
           echo "# Nightly tests of latest release" >> $GITHUB_STEP_SUMMARY
           echo "* Attempt: ${{ github.run_attempt }}" >> $GITHUB_STEP_SUMMARY
@@ -142,6 +144,8 @@ jobs:
             image: manticoresearch/dind:v1
             test_prefix: test/clt-tests/integrations/kafka/test-integration-
     steps:
+      - name: Checkout repository
+        uses: actions/checkout@v3
       - uses: manticoresoftware/clt@0.2.3
         with:
           test_prefix: ${{ matrix.test_prefix }}
@@ -229,6 +233,8 @@ jobs:
             image: ubuntu:noble
             test_prefix: test/clt-tests/installation/deb-dev-update
     steps:
+      - name: Checkout repository
+        uses: actions/checkout@v3
       - uses: manticoresoftware/clt@0.2.3
         with:
           test_prefix: ${{ matrix.test_prefix }}

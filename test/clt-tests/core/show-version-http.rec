@@ -8,10 +8,10 @@ curl -s "http://localhost:9308/cli?show%20version" | awk '!/row.*in set/'; echo
 +-----------+----------------------------------+
 | Component | Version                          |
 +-----------+----------------------------------+
-| Daemon    | %{SEMVER} %{COMMITDATE} dev     |
-| Columnar  | columnar %{SEMVER} %{COMMITDATE}  |
-| Secondary | secondary %{SEMVER} %{COMMITDATE} |
-| KNN       | knn %{SEMVER} %{COMMITDATE}       |
+| Daemon    | %{     |
+| Columnar  | columnar %{VERSION}  |
+| Secondary | secondary %{VERSION} |
+| KNN       | knn %{VERSION}       |
 | Buddy     | buddy v%{SEMVER}                     |
 +-----------+----------------------------------+
 ––– input –––
@@ -33,7 +33,7 @@ curl -s "http://localhost:9308/cli?select%20*%20from%20t%20where%20match('exampl
 ––– input –––
 curl -s "http://localhost:9308/cli_json" -d "show version"; echo
 ––– output –––
-[{"total":5,"error":"","warning":"","columns":[{"Component":{"type":"string"}},{"Version":{"type":"string"}}],"data":[{"Component":"Daemon","Version":"%{SEMVER} %{COMMITDATE} dev"},{"Component":"Columnar","Version":"columnar %{SEMVER} %{COMMITDATE}"},{"Component":"Secondary","Version":"secondary %{SEMVER} %{COMMITDATE}"},{"Component":"KNN","Version":"knn %{SEMVER} %{COMMITDATE}"},{"Component":"Buddy","Version":"buddy v%{SEMVER}"}]}]
+[{"total":5,"error":"","warning":"","columns":[{"Component":{"type":"string"}},{"Version":{"type":"string"}}],"data":[{"Component":"Daemon","Version":"%{VERSION}"},{"Component":"Columnar","Version":"columnar %{VERSION}"},{"Component":"Secondary","Version":"secondary %{VERSION}"},{"Component":"KNN","Version":"knn %{VERSION}"},{"Component":"Buddy","Version":"buddy v%{SEMVER}"}]}]
 ––– input –––
 curl -s "http://localhost:9308/cli_json" -d "show tables"; echo
 ––– output –––
@@ -166,8 +166,8 @@ curl -s "http://localhost:9308/cli_json" -d "SHOW STATUS"; echo
 {"Counter":"uptime","Value":"%{NUMBER}"},
 {"Counter":"connections","Value":"%{NUMBER}"},
 {"Counter":"maxed_out","Value":"%{NUMBER}"},
-{"Counter":"version","Value":"%{SEMVER} %{COMMITDATE} dev (columnar %{SEMVER} %{COMMITDATE}) (secondary %{SEMVER} %{COMMITDATE}) (knn %{SEMVER} %{COMMITDATE}) (buddy v%{SEMVER})"},
-{"Counter":"mysql_version","Value":"%{SEMVER} %{COMMITDATE} dev (columnar %{SEMVER} %{COMMITDATE}) (secondary %{SEMVER} %{COMMITDATE}) (knn %{SEMVER} %{COMMITDATE})"},
+{"Counter":"version","Value":"%{VERSION} (columnar %{VERSION}) (secondary %{VERSION}) (knn %{VERSION}) (buddy v%{SEMVER})"},
+{"Counter":"mysql_version","Value":"%{VERSION} (columnar %{VERSION}) (secondary %{VERSION}) (knn %{VERSION})"},
 {"Counter":"command_search","Value":"%{NUMBER}"},
 {"Counter":"command_excerpt","Value":"%{NUMBER}"},
 {"Counter":"command_update","Value":"%{NUMBER}"},
@@ -252,8 +252,8 @@ curl -s "http://localhost:9308/cli?show%20status" | awk '!/row.*in set/'; echo
 | uptime                        | %{NUMBER}                                                                                                                                             |
 | connections                   | %{NUMBER}                                                                                                                                            |
 | maxed_out                     | %{NUMBER}                                                                                                                                             |
-| version                       | %{SEMVER} %{COMMITDATE} dev (columnar %{SEMVER} %{COMMITDATE}) (secondary %{SEMVER} %{COMMITDATE}) (knn %{SEMVER} %{COMMITDATE}) (buddy v%{SEMVER}) |
-| mysql_version                 | %{SEMVER} %{COMMITDATE} dev (columnar %{SEMVER} %{COMMITDATE}) (secondary %{SEMVER} %{COMMITDATE}) (knn %{SEMVER} %{COMMITDATE})                |
+| version                       | %{VERSION} (columnar %{VERSION}) (secondary %{VERSION}) (knn %{VERSION}) (buddy v%{SEMVER}) |
+| mysql_version                 | %{VERSION} (columnar %{VERSION}) (secondary %{VERSION}) (knn %{VERSION})                |
 | command_search                | %{NUMBER}                                                                                                                                             |
 | command_excerpt               | 0                                                                                                                                             |
 | command_update                | 0                                                                                                                                             |

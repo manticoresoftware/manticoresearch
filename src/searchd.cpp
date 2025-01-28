@@ -20630,8 +20630,10 @@ void ConfigureSearchd ( const CSphConfig & hConf, bool bOptPIDFile, bool bTestMo
 
 	AllowOnlyNot ( hSearchd.GetInt ( "not_terms_only_allowed", 0 )!=0 );
 	ConfigureDaemonLog ( hSearchd.GetStr ( "query_log_commands" ) );
+
 	g_iAutoOptimizeCutoffMultiplier = hSearchd.GetInt ( "auto_optimize", 1 );
 	MutableIndexSettings_c::GetDefaults().m_iOptimizeCutoff = hSearchd.GetInt ( "optimize_cutoff", AutoOptimizeCutoff() );
+	MutableIndexSettings_c::GetDefaults().m_iOptimizeCutoffKNN = hSearchd.GetInt ( "optimize_cutoff", AutoOptimizeCutoffKNN() );
 
 	SetPseudoSharding ( hSearchd.GetInt ( "pseudo_sharding", 1 )!=0 );
 	SetOptionSI ( hSearchd, bTestMode );

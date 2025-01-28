@@ -353,6 +353,7 @@ public:
 	bool		m_bPreopen = false;
 	FileAccessSettings_t m_tFileAccess;
 	int			m_iOptimizeCutoff;
+	int			m_iOptimizeCutoffKNN;
 	CSphString	m_sGlobalIDFPath;
 	// flush check periods, in seconds
 	int			m_iFlushWrite;

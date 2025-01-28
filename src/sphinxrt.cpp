@@ -145,6 +145,11 @@ volatile int AutoOptimizeCutoff() noexcept
 	return iAutoOptimizeCutoff;
 }
 
+volatile int AutoOptimizeCutoffKNN() noexcept
+{
+	static int iAutoOptimizeCutoffKNN = Max ( GetNumPhysicalCPUs() / 2, 1 );
+	return iAutoOptimizeCutoffKNN;
+}
 
 //////////////////////////////////////////////////////////////////////////
 
@@ -9237,11 +9242,14 @@ int64_t RtIndex_c::GetCount() const
 
  std::pair<int64_t,int> RtIndex_c::GetPseudoShardingMetric ( const VecTraits_T<const CSphQuery> & dQueries, const VecTraits_T<int64_t> & dMaxCountDistinct, int iThreads, bool & bForceSingleThread ) const
 {
-	 if ( MustRunInSingleThread ( dQueries, false, dMaxCountDistinct, bForceSingleThread ) )
-		 return { 0, 1 };
+	if ( MustRunInSingleThread ( dQueries, false, dMaxCountDistinct, bForceSingleThread ) )
+		return { 0, 1 };
+
+	bool bHaveKNN = dQueries.any_of ( []( auto & tQuery ){ return !tQuery.m_sKNNAttr.IsEmpty(); } );	 
 
 	auto tGuard = RtGuard();
-	int iThreadCap = GetPseudoSharding() ? 0 : tGuard.m_dDiskChunks.GetLength();
+	int iDiskChunks = tGuard.m_dDiskChunks.GetLength();
+	int iThreadCap = GetPseudoSharding() ? ( bHaveKNN ? iDiskChunks : 0 ) : iDiskChunks;
 	return { GetStats().m_iTotalDocuments, iThreadCap };
 }
 
@@ -10042,12 +10050,12 @@ int RtIndex_c::ClassicOptimize ()
 	return iAffected;
 }
 
-static int GetCutOff ( const MutableIndexSettings_c & tSettings )
+static int GetCutOff ( const MutableIndexSettings_c & tSettings, bool bKNN = false )
 {
 	if ( tSettings.IsSet ( MutableName_e::OPTIMIZE_CUTOFF ) )
 		return tSettings.m_iOptimizeCutoff;
 	else
-		return MutableIndexSettings_c::GetDefaults().m_iOptimizeCutoff;
+		return bKNN ? MutableIndexSettings_c::GetDefaults().m_iOptimizeCutoffKNN : MutableIndexSettings_c::GetDefaults().m_iOptimizeCutoff;
 }
 
 int RtIndex_c::ProgressiveOptimize ( int iCutoff )
@@ -10140,7 +10148,7 @@ void RtIndex_c::CheckStartAutoOptimize()
 	if ( !iCutoff )
 		return;
 
-	iCutoff *= GetCutOff ( m_tMutableSettings );
+	iCutoff *= GetCutOff ( m_tMutableSettings, m_tSchema.HasKNNAttrs() );
 
 	if ( m_tRtChunks.GetDiskChunksCount()<=iCutoff )
 		return;

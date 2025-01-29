@@ -996,6 +996,7 @@ static std::optional<JsonObj_c> ReadJsonHeader ( const CSphString & sFilename, C
 	if ( !tFile.Read ( sMeta.Begin(), iSize, sError ) )
 		return std::nullopt;
 
+	sMeta[iSize] = sMeta[iSize + 1] = '\0';
 	JsonObj_c tMeta ( sMeta );
 	if ( tMeta.GetError ( sMeta.Begin(), iSize, sError ) )
 		return std::nullopt;

@@ -138,6 +138,9 @@ public:
 	/// forcibly save RAM chunk as a new disk chunk
 	virtual bool ForceDiskChunk () = 0;
 
+	/// forcibly save RAM chunk as a new disk chunk by the conditions (has new data and has recent searches)
+	virtual void ForceDiskChunk ( int iFlushWrite, int iFlushSearch ) {};
+
 	/// attach a disk chunk to current index
 	virtual bool AttachDiskIndex ( CSphIndex * pIndex, bool bTruncate, bool & bFatal, CSphString & sError ) { return true; }
 
@@ -458,5 +461,6 @@ volatile bool &RTChangesAllowed () noexcept;
 // Get global flag of autooptimize
 volatile int & AutoOptimizeCutoffMultiplier() noexcept;
 volatile int AutoOptimizeCutoff() noexcept;
+volatile int AutoOptimizeCutoffKNN() noexcept;
 
 #endif // _sphinxrt_

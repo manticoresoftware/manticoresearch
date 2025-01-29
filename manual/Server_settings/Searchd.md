@@ -84,7 +84,11 @@ This setting controls the automatic [OPTIMIZE](../Securing_and_compacting_a_tabl
 By default table compaction occurs automatically. You can modify this behavior with the `auto_optimize` setting:
 * 0 to disable automatic table compaction (you can still call `OPTIMIZE` manually)
 * 1 to explicitly enable it
-* N to enable it, but allow OPTIMIZE to start when the number of disk chunks is greater than `# of CPU cores * 2 * N`
+* to enable it while multiplying the optimization threshold by 2.
+
+By default, OPTIMIZE runs until the number of disk chunks is less than or equal to the number of logical CPU cores multiplied by 2.
+
+However, if the table has attributes with KNN indexes, this threshold is different. In this case, it is set to the number of physical CPU cores divided by 2 to improve KNN search performance.
 
 Note that toggling `auto_optimize` on or off doesn't prevent you from running [OPTIMIZE TABLE](../Securing_and_compacting_a_table/Compacting_a_table.md#OPTIMIZE-TABLE) manually.
 
@@ -302,6 +306,38 @@ Indexing of [plain tables](../Creating_a_table/Local_tables/Plain_table.md) is n
 
 ```ini
 data_dir = /var/lib/manticore
+```
+<!-- end -->
+
+### diskchunk_flush_write_timeout
+
+<!-- example conf diskchunk_flush_write_timeout -->
+The timeout for auto-flushing a RAM chunk if there are no writes to it. The time in seconds to wait without a write before auto-flushing the RAM chunk to disk. It is optional, with a default value of 1 second.
+If no write occurs in the RAM chunk within `diskchunk_flush_write_timeout` seconds, the chunk will be flushed to disk. Works in conjunction with `diskchunk_flush_search_timeout`. To disable auto-flush, set `diskchunk_flush_write_timeout = -1` explicitly in your configuration. [Per-table](../Creating_a_table/Local_tables/Plain_and_real-time_table_settings.md#diskchunk_flush_write_timeout) directives have higher priority and will override this instance-wide default, providing more fine-grained control.
+
+<!-- intro -->
+##### Example:
+
+<!-- request Example -->
+
+```ini
+diskchunk_flush_write_timeout = 60
+```
+<!-- end -->
+
+#### diskchunk_flush_search_timeout
+
+<!-- example conf diskchunk_flush_search_timeout -->
+The timeout for preventing auto-flushing a RAM chunk if there are no searches in the table. The time in seconds to check for searches before determining whether to auto-flush. It is optional, with a default value of 30 seconds.
+Auto-flushing will occur only if there has been at least one search in the table within the last `diskchunk_flush_search_timeout` seconds. Works in conjunction with `diskchunk_flush_write_timeout`. [Per-table](../Creating_a_table/Local_tables/Plain_and_real-time_table_settings.md#diskchunk_flush_search_timeout) directives have higher priority and will override this instance-wide default, providing more fine-grained control.
+
+<!-- intro -->
+##### Example:
+
+<!-- request Example -->
+
+```ini
+diskchunk_flush_search_timeout = 120
 ```
 <!-- end -->
 

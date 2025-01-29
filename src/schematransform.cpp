@@ -92,26 +92,24 @@ void RemapNullMask ( VecTraits_T<CSphMatch> & dMatches, const CSphSchema & tOldS
 	const CSphColumnInfo * pNew = tNewSchema.GetAttr ( GetNullMaskAttrName() );
 	assert(pNew);
 
-	int iNumDynamicAttrs = tNewSchema.GetAttrsCount()-1; // one is null mask which we exclude
-	// we assume that we don't change null mask type
-	assert ( pNew->m_eAttrType==DetermineNullMaskType(iNumDynamicAttrs) );
-
 	IntVec_t dNullRemap = SetupNullMaskRemap ( tOldSchema, tNewSchema );
 
-	if ( pOld->m_eAttrType==SPH_ATTR_STRINGPTR )
-	{
-		for ( auto & i : dMatches )
-		{
-			BYTE * pOldMask = (BYTE *)i.GetAttr ( pOld->m_tLocator );
-			BYTE * pNewMask = RepackNullMaskStr ( pOldMask, iNumDynamicAttrs, dNullRemap );
-			SafeDeleteArray(pOldMask);
-			i.SetAttr ( pNew->m_tLocator, (SphAttr_t)pNewMask );
-		}
-	}
-	else
+	if ( ( pOld->m_eAttrType==SPH_ATTR_INTEGER || pOld->m_eAttrType==SPH_ATTR_BIGINT ) && ( pNew->m_eAttrType==SPH_ATTR_INTEGER || pNew->m_eAttrType==SPH_ATTR_BIGINT ) )
 	{
 		for ( auto & i : dMatches )
 			i.SetAttr ( pNew->m_tLocator, RepackNullMaskInt ( i.GetAttr ( pOld->m_tLocator ), dNullRemap ) );
+	}
+	else
+	{
+		assert ( pOld->m_eAttrType==SPH_ATTR_STRINGPTR && pNew->m_eAttrType==SPH_ATTR_STRINGPTR );
+
+		for ( auto & i : dMatches )
+		{
+			BYTE * pOldMask = (BYTE *)i.GetAttr ( pOld->m_tLocator );
+			BYTE * pNewMask = RepackNullMaskStr ( pOldMask, tNewSchema.GetAttrsCount(), dNullRemap );
+			SafeDeleteArray(pOldMask);
+			i.SetAttr ( pNew->m_tLocator, (SphAttr_t)pNewMask );
+		}
 	}
 }
 

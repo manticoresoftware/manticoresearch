@@ -554,6 +554,18 @@ select * from join1 left join join2 on join1.id=join2.id where join2.j.a='a';
 drop table join1;
 drop table join2;
 
+<!-- regression of null mask remap with more that 32 attrs -->
+create table join1 ( id bigint, str1 string indexed attribute, str2 string indexed attribute, str3 string indexed attribute, str4 string indexed attribute, str5 string indexed attribute, str6 string indexed attribute, str7 string indexed attribute, str8 string indexed attribute, str9 string indexed attribute, str10 string indexed attribute, str11 string indexed attribute, str12 string indexed attribute, str13 string indexed attribute, str14 string indexed attribute, str15 string indexed attribute, bool1 bool, str16 string attribute, int1 integer, int2 integer, int3 integer, int4 integer, int5 integer, int6 integer, int7 integer, int8 integer, bool2 bool, int9 integer, int10 integer, str17 string attribute, int11 integer, mva1 multi, int12 integer, int13 integer, int14 integer, int15 integer, bigint1 bigint, bigint2 bigint, bigint3 bigint, bigint4 bigint, bigint5 bigint, bigint6 bigint, str18 string attribute, str19 string attribute, bool3 bool, bool4 bool, bool5 bool, bool6 bool, json1 json ) min_infix_len='2' index_exact_words='1' charset_table='non_cjk,U+0026,U+002D' morphology='stem_en';
+create table join2 ( id bigint, bool1 bool, str1 string attribute, int1 integer, int2 integer, int3 integer, int4 integer );
+insert into join1 values ( 1, 'str1', 'str2', 'str3', 'str4', 'str5', 'str6', 'str7', 'str8', 'str9', 'str10', 'str11', '2017', 'str13', 'str14', 'str15', 1, '2023-10-02T13:15:42.407', 230000, 2, 8, 19, 0, 100, 200, 300, 1, 1, 0, 'vendor', 1, (1), 1, 1, 1, 0, 0, 0, 100, 0, 0, '', '', 1, 0, 0, 0, 0, '{}');
+
+select id, int1, int2, int3, int4, int5, int6, int7, int8, int9, int10, int11, int12, int13, int14, int15, str1, str2, str3, str4, str5, str6, str7, str8, str9, str10, str11, bool1, bool2, bool3, str12, join2.int1 from join1 left join join2 on join1.int2=join2.int2 and join1.int3=join2.int3;
+select id, int1, int2, int3, int4, int5, int6, int7, int8, int9, int10, int11, int12, int13, int14, int15, str1, str2, str3, str4, str5, str6, str7, str8, str9, str10, str11, bool1, bool2, bool3, bool4, str12, join2.int1 from join1 left join join2 on join1.int2=join2.int2 and join1.int3=join2.int3;
+
+<!-- cleanup -->
+drop table join1;
+drop table join2;
+
 </sphinxql>
 </queries>
 

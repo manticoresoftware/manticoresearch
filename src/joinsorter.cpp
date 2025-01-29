@@ -576,6 +576,8 @@ private:
 	CSphVector<ContextCalcItem_t>	m_dCalcPrefilter;
 	CSphVector<ContextCalcItem_t>	m_dCalcPresort;
 	CSphVector<ContextCalcItem_t>	m_dAggregates;
+	IntVec_t						m_dCalcPrefilterPtrAttrs;
+	IntVec_t						m_dCalcPresortPtrAttrs;
 	bool							m_bSorterSchemaHasDataPtrs = false;
 
 	MatchCache_c					m_tCache;
@@ -869,10 +871,14 @@ void JoinSorter_c::SetupDependentAttrCalc ( const IntVec_t & dJoinedAttrs )
 		{
 		case SPH_EVAL_PREFILTER:
 			m_dCalcPrefilter.Add ( { tAttr.m_tLocator, tAttr.m_eAttrType, tAttr.m_pExpr } );
+			if ( sphIsDataPtrAttr ( tAttr.m_eAttrType ) )
+				m_dCalcPrefilterPtrAttrs.Add ( m_dCalcPrefilter.GetLength()-1 );
 			break;
 
 		case SPH_EVAL_PRESORT:
 			m_dCalcPresort.Add ( { tAttr.m_tLocator, tAttr.m_eAttrType, tAttr.m_pExpr } );
+			if ( sphIsDataPtrAttr ( tAttr.m_eAttrType ) )
+				m_dCalcPresortPtrAttrs.Add ( m_dCalcPresort.GetLength()-1 );
 			break;
 
 		default:
@@ -972,11 +978,17 @@ bool JoinSorter_c::PushJoinedMatches ( const CSphMatch & tEntry, const MATCHES &
 		}
 
 		if ( !m_tMixedFilter.Eval(m_tMatch) )
+		{
+			FreeDataPtrAttrs ( m_tMatch, m_dCalcPrefilter, m_dCalcPrefilterPtrAttrs );
 			continue;
+		}
 
 		CalcContextItems ( m_tMatch, m_dCalcPresort );
 		CalcContextItems ( m_tMatch, m_dAggregates );
 		bAnythingPushed |= fnPush(m_tMatch);
+
+		FreeDataPtrAttrs ( m_tMatch, m_dCalcPrefilter, m_dCalcPrefilterPtrAttrs );
+		FreeDataPtrAttrs ( m_tMatch, m_dCalcPresort, m_dCalcPresortPtrAttrs );
 
 		// clear repacked json
 		for ( auto & i : m_dJoinRemap )

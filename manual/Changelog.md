@@ -1,13 +1,14 @@
 # Changelog
 
 # Version 7.0.0
-Released: January 29th 2025
+Released: January 30th 2025
 
 ### Major changes
 * [Issue #1497](https://github.com/manticoresoftware/manticoresearch/issues/1497) Added new [Fuzzy Search](../Searching/Spell_correction.md#Fuzzy-Search) and [Autocomplete](../Searching/Autocomplete.md#CALL-AUTOCOMPLETE) functionality for easier searching.
 * [Issue #1500](https://github.com/manticoresoftware/manticoresearch/issues/1500) [Integration with Kafka](../Integration/Kafka.md#Syncing-from-Kafka).
 * [Issue #1928](https://github.com/manticoresoftware/manticoresearch/issues/1928) Introduced [secondary indexes for JSON](../Creating_a_table/Local_tables/Plain_and_real-time_table_settings.md#json_secondary_indexes).
 * [Issue #2361](https://github.com/manticoresoftware/manticoresearch/issues/2361) Updates and searches during updates are no longer blocked by chunk merging.
+* [Issue #2787](https://github.com/manticoresoftware/manticoresearch/issues/2787) Automatic [disk chunk flush](../Server_settings/Searchd.md#diskchunk_flush_write_timeout) for RT table to improve performance; now, we automatically flush a RAM chunk to a disk chunk, preventing performance issues caused by the lack of optimizations in RAM chunks, which could sometimes lead to instability depending on chunk size.
 * [Issue #2811](https://github.com/manticoresoftware/manticoresearch/issues/2811) [Scroll](../Searching/Pagination.md#Scroll-Search-Option) option for easier pagination.
 * [Issue #931](https://github.com/manticoresoftware/manticoresearch/issues/931) Integration with [Jieba](https://github.com/fxsjy/jieba) for better [Chinese tokenization](../Creating_a_table/NLP_and_tokenization/Languages_with_continuous_scripts.md).
 
@@ -60,7 +61,6 @@ Released: January 29th 2025
 * [Issue #2937](https://github.com/manticoresoftware/manticoresearch/issues/2937) Enabled the use of joined table weight in fullscan queries.
 * [Issue #2953](https://github.com/manticoresoftware/manticoresearch/issues/2953) Fixed logging for join queries.
 * [Issue #337](https://github.com/manticoresoftware/manticoresearch-buddy/issues/337) Hid Buddy exceptions from `searchd` log in non-debug mode.
-* [Issue #2787](https://github.com/manticoresoftware/manticoresearch/issues/2787) Automatic disk chunk flush for RT table for better performance.
 * [Issue #2931](https://github.com/manticoresoftware/manticoresearch/issues/2931) Daemon shutdown with error message if user sets wrong ports for replication listener.
 
 ### Bug fixes

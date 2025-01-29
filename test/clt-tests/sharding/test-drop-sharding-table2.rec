@@ -1,0 +1,75 @@
+––– input –––
+export INSTANCE=1
+––– output –––
+––– block: ./base/flexible/start-searchd –––
+––– input –––
+export INSTANCE=2
+––– output –––
+––– block: ./base/flexible/start-searchd –––
+––– input –––
+CLUSTER_NAME=c
+––– output –––
+––– input –––
+mysql -h0 -P1306 -e "create cluster ${CLUSTER_NAME}"; echo $?;
+––– output –––
+0
+––– input –––
+for n in `seq 2 $INSTANCE`; do mysql -h0 -P${n}306 -e "join cluster ${CLUSTER_NAME} at '127.0.0.1:1312'"; done; echo $?;
+––– output –––
+0
+––– input –––
+mysql -h0 -P1306 -e "create table ${CLUSTER_NAME}:tbl1(id bigint) shards=3 rf=2;"; echo $?;
+––– output –––
+0
+––– input –––
+mysql -h0 -P1306 -e "DROP TABLE ${CLUSTER_NAME}:tbl1;"; echo $?;
+––– output –––
+0
+––– input –––
+mysql -h0 -P1306 -e "SHOW TABLES\G"
+––– output –––
+––– input –––
+mysql -h0 -P2306 -e "SHOW TABLES\G"
+––– output –––
+––– input –––
+mysql -h0 -P1306 -e "DROP TABLE ${CLUSTER_NAME}:nonexistent_table;"
+––– output –––
+––– input –––
+mysql -h0 -P1306 -e "DROP TABLE nonexistent_cluster:tbl1;"
+––– output –––
+––– input –––
+mysql -h0 -P1306 -e "DROP TABLE ${CLUSTER_NAME}:tbl1;"
+––– output –––
+ERROR 1064 (42000) at line 1: table 'tbl1' is missing: DROP TABLE failed: table 'tbl1' must exists
+––– input –––
+mysql -h0 -P1306 -e "INSERT INTO ${CLUSTER_NAME}:tbl1 VALUES (1);" & sleep 1; mysql -h0 -P1306 -e "DROP TABLE ${CLUSTER_NAME}:tbl1;"
+––– input –––
+mysql -h0 -P1306 -e "SHOW TABLES\G"
+––– output –––
+––– input –––
+mysql -h0 -P1306 -e "create table ${CLUSTER_NAME}:Tbl2(id bigint) shards=3 rf=1;"; echo $?
+––– output –––
+––– input –––
+mysql -h0 -P1306 -e "DROP TABLE ${CLUSTER_NAME}:Tbl2;"; echo $?
+––– output –––
+––– input –––
+mysql -h0 -P1306 -e "create table ${CLUSTER_NAME}:tbl_missing_type(id) shards=3 rf=1;" || echo "Error: Missing data type for column."
+––– output –––
+––– input –––
+mysql -h0 -P1306 -e "SHOW TABLES\G"
+––– output –––
+––– input –––
+LONG_TABLE_NAME=$(printf "tbl%065d" 1)
+––– output –––
+––– input –––
+mysql -h0 -P1306 -e "create table ${CLUSTER_NAME}:${LONG_TABLE_NAME}(id bigint) shards=3 rf=1;" || echo "Error: Table name too long."
+––– output –––
+––– input –––
+mysql -h0 -P1306 -e "SHOW TABLES\G"
+––– output –––
+––– input –––
+mysql -h0 -P1306 -e "DROP TABLE ${CLUSTER_NAME}:${LONG_TABLE_NAME};" || echo "Error: Could not drop table with long name."
+––– output –––
+––– input –––
+mysql -h0 -P1306 -e "SHOW TABLES\G"
+––– output –––

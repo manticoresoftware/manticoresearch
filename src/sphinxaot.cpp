@@ -1470,6 +1470,7 @@ public:
 			pDict->DisableWordforms();
 		}
 		m_bIndexExact = bIndexExact;
+		*(DWORD*)m_sForm = 0; // fix valgrind on test 463: Conditional jump or move depends on uninitialised value
 	}
 
 

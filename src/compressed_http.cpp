@@ -39,7 +39,7 @@ bool GzipDecompress ( const ByteBlob_t sIn, CSphVector<BYTE> & dRes, CSphString 
 
 	while ( tInflate.avail_out==0 )
 	{
-		dRes.Resize ( iDecompressed + iBufSize );
+		dRes.Resize ( iDecompressed + iBufSize + 1 );
 
 		tInflate.next_out = dRes.Begin() + iDecompressed;
 		tInflate.avail_out = iBufSize;
@@ -56,7 +56,8 @@ bool GzipDecompress ( const ByteBlob_t sIn, CSphVector<BYTE> & dRes, CSphString 
 	}
 
 	inflateEnd ( &tInflate );
-	dRes.Resize ( iDecompressed );
+	dRes.Resize ( iDecompressed + 1);
+	dRes[iDecompressed] = 0; // zero-terminate, as it may be processed by cjson
 	return true;
 
 #else

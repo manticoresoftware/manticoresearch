@@ -2442,7 +2442,7 @@ bool FormatScrollSettings ( const AggrResult_t & tAggrRes, const CSphQuery & tQu
 			switch ( pAttr->m_eAttrType )
 			{
 			case SPH_ATTR_STRINGPTR:
-				tAttrWithOrder.AddStr ( "value", (const char*)tMatch.GetAttr ( pAttr->m_tLocator ) );
+				tAttrWithOrder.AddStr ( "value", B2S ( sphUnpackPtrAttr ( (const BYTE*)tMatch.GetAttr ( pAttr->m_tLocator ) ) ) );
 				tAttrWithOrder.AddStr ( "type", "string" );
 				break;
 

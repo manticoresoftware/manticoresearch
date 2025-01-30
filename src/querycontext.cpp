@@ -18,25 +18,6 @@
 #include "docstore.h"
 
 
-static FORCE_INLINE void FreeDataPtrAttrs ( CSphMatch & tMatch, const CSphVector<ContextCalcItem_t> & dItems, const IntVec_t & dItemIndexes )
-{
-	if ( !tMatch.m_pDynamic )
-		return;
-
-	for ( auto i : dItemIndexes )
-	{
-		const auto & tItem = dItems[i];
-
-		auto * pData = (BYTE *)tMatch.GetAttr ( tItem.m_tLoc );
-		// delete[] pData;
-		if ( pData )
-		{
-			sphDeallocatePacked ( pData );
-			tMatch.SetAttr ( tItem.m_tLoc, 0 );
-		}
-	}
-}
-
 static ESphEvalStage GetEarliestStage ( ESphEvalStage eStage, const CSphColumnInfo & tIn, const CSphVector<const ISphSchema *> & dSchemas )
 {
 	for ( const auto * pSchema : dSchemas )

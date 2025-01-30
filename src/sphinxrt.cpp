@@ -1606,6 +1606,8 @@ RtIndex_c::RtIndex_c ( CSphString sIndexName, CSphString sPath, CSphSchema tSche
 
 RtIndex_c::~RtIndex_c ()
 {
+	sphLogDebug ( "deleted %p %s", this, GetFilebase() );
+
 	if ( IsInsideCoroutine())
 	{
 		// From serial worker resuming on Wait() will happen after whole merger coroutine finished.
@@ -9858,6 +9860,8 @@ bool RtIndex_c::MergeTwoChunks ( int iAID, int iBID, int* pAffected, CSphString*
 		pB->CastIdx().ResetPostponedUpdates();
 	} );
 
+	sphLogDebug ( "common merge exit check %d", tMonitor.NeedStop() );
+
 	// check forced exit after long operation (that is - after merge)
 	if ( !pMerged || tMonitor.NeedStop() )
 		return false;
@@ -9866,6 +9870,8 @@ bool RtIndex_c::MergeTwoChunks ( int iAID, int iBID, int* pAffected, CSphString*
 		return false;
 
 	CSphIndex& tMerged = pMerged->CastIdx(); // const breakage is ok since we don't yet published the index
+
+	sphLogDebug ( "optimizing new=%s", tMerged.GetFilebase() );
 
 	// going to modify list of chunks; so fall into serial fiber
 	TRACE_CORO ( "rt", "RtIndex_c::MergeTwoChunks_workserial" );
@@ -10099,6 +10105,7 @@ int RtIndex_c::ProgressiveOptimize ( int iCutoff )
 			Swap ( chB, chA );
 
 		RTDLOG << "Optimize: merge chunks " << chA.m_iId << " and " << chB.m_iId;
+		sphSleepMsec ( 10000 );
 
 		CSphString sLog;
 		bWork &= MergeTwoChunks ( chA.m_iId, chB.m_iId, &iAffected, &sLog );

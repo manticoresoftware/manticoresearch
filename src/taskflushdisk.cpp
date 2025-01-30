@@ -54,8 +54,6 @@ void ScheduleRtFlushDisk()
 
 void RtFlushDisk()
 {
-	sphLogDebug ( "RT flush disk" );
-
 	auto pDesc = PublishSystemInfo ( "RT flush disk" );
 
 	ServedSnap_t hLocals = g_pLocalIndexes->GetHash();

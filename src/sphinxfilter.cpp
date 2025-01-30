@@ -2507,6 +2507,13 @@ bool sphCreateFilters ( CreateFilterContext_t & tCtx, CSphString & sError, CSphS
 
 	assert ( tCtx.m_pMatchSchema );
 	CSphVector<FilterInfo_t> dFilters, dWeightFilters;
+	bool bFiltersOk = false;
+	AT_SCOPE_EXIT ([&bFiltersOk, &dFilters, dWeightFilters ] {
+		if ( bFiltersOk )
+			return;
+		dFilters.for_each ( [] (auto& i) { SafeDelete ( i.m_pFilter); } );
+		dWeightFilters.for_each ( [] (auto& i) { SafeDelete ( i.m_pFilter); } );
+	});
 
 	bool bSingleFilter = tCtx.m_pFilters->GetLength()==1;
 
@@ -2570,6 +2577,7 @@ bool sphCreateFilters ( CreateFilterContext_t & tCtx, CSphString & sError, CSphS
 	tCtx.m_pFilter = ReorderAndCombine ( std::move ( dFilters ) );
 	tCtx.m_pWeightFilter = ReorderAndCombine ( std::move ( dWeightFilters ) );
 
+	bFiltersOk = true;
 	return true;
 }
 

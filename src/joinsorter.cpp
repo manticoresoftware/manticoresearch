@@ -289,8 +289,7 @@ bool MatchCache_c::Add ( uint64_t uHash, const MATCHES & dMatches )
 
 	m_uCurSize += m_hCache.GetEntrySize();
 
-	m_hCache.Add ( uHash, dStoredMatches );
-	return true;
+	return m_hCache.Add ( uHash, dStoredMatches );
 }
 
 

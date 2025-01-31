@@ -674,7 +674,7 @@ mysql -h0 -P9306 -e "DROP TABLE IF EXISTS t; DEBUG SLEEP 2; CREATE TABLE t(f TEX
 +---------+--------+
 | command | result |
 +---------+--------+
-| sleep   | #![0-9]{1}.[0-9]{3}!#  |
+| sleep   | #!/[0-9]{1}.[0-9]{3}/!#  |
 +---------+--------+
 ––– input –––
 mysql -h0 -P9306 -e "INSERT INTO t VALUES (1, 'abcdef'), (2, 'abcd efgh');"

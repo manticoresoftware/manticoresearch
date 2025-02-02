@@ -1,7 +1,7 @@
 # Changelog
 
 # Version 7.0.0
-Released: January 24th 2025
+Released: January 29th 2025
 
 ### Major changes
 * [Issue #1497](https://github.com/manticoresoftware/manticoresearch/issues/1497) Added new [Fuzzy Search](../Searching/Spell_correction.md#Fuzzy-Search) and [Autocomplete](../Searching/Autocomplete.md#CALL-AUTOCOMPLETE) functionality for easier searching.
@@ -24,6 +24,7 @@ Released: January 24th 2025
   - Read about [restarting a cluster](Creating_a_cluster/Setting_up_replication/Restarting_a_cluster.md#Restarting-a-cluster) for more details.
 * ⚠️ BREAKING [Issue #2308](https://github.com/manticoresoftware/manticoresearch/issues/2308) Added support for multiple tables in [`ALTER CLUSTER ADD` and `DROP`](../Creating_a_cluster/Setting_up_replication/Adding_and_removing_a_table_from_a_replication_cluster.md#Adding-and-removing-a-table-from-a-replication-cluster). This change also affects the replication protocol. Refer to the previous section for guidance on handling this update.
 * [Issue #2997](https://github.com/manticoresoftware/manticoresearch/issues/2997) Fixed dlopen issue on Macos.
+* [Commit 4954](https://github.com/manticoresoftware/manticoresearch/commit/4954b5de7341a29902a9b8fbb9a040f7942c77c4) Changed the default cutoff for OPTIMIZE TABLE on tables with KNN indexes to improve search performance.
 * [Commit cfc8](https://github.com/manticoresoftware/manticoresearch/commit/cfc87ecb6e33a8163c2235243b6b40e699dbf526) Added `COUNT(DISTINCT)` support for `ORDER BY` in `FACET` and `GROUP BY`.
 * [Issue #1103](https://github.com/manticoresoftware/manticoresearch/issues/1103) Improved clarity in [logging](../Logging/Server_logging.md#Server-logging) chunk merging.
 * [Issue #1130](https://github.com/manticoresoftware/manticoresearch/issues/1130) Added support for [DBeaver](../Integration/DBeaver.md).
@@ -59,8 +60,11 @@ Released: January 24th 2025
 * [Issue #2937](https://github.com/manticoresoftware/manticoresearch/issues/2937) Enabled the use of joined table weight in fullscan queries.
 * [Issue #2953](https://github.com/manticoresoftware/manticoresearch/issues/2953) Fixed logging for join queries.
 * [Issue #337](https://github.com/manticoresoftware/manticoresearch-buddy/issues/337) Hid Buddy exceptions from `searchd` log in non-debug mode.
+* [Issue #2787](https://github.com/manticoresoftware/manticoresearch/issues/2787) Automatic disk chunk flush for RT table for better performance.
+* [Issue #2931](https://github.com/manticoresoftware/manticoresearch/issues/2931) Daemon shutdown with error message if user sets wrong ports for replication listener.
 
 ### Bug fixes
+* [Commit 0c6b](https://github.com/manticoresoftware/manticoresearch/commit/0c6bdaf41ea3684e05952e1a8273893535b923f5) Fixed: Incorrect results returned in JOIN queries with more than 32 columns.
 * [Issue #2335](https://github.com/manticoresoftware/manticoresearch/issues/2335) Resolved an issue where table join failed when two json attributes were used in the condition.
 * [Issue #2338](https://github.com/manticoresoftware/manticoresearch/issues/2338) Fixed incorrect total_relation in multiqueries with [cutoff](../Searching/Options.md#cutoff).
 * [Issue #2366](https://github.com/manticoresoftware/manticoresearch/issues/2366) Corrected filtering by `json.string` in the right table on [table join](../Searching/Joining.md).

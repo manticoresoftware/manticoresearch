@@ -9197,8 +9197,8 @@ ISphExpr * ExprParser_t::CreateExprDateAdd ( int iNode, bool bAdd )
 	int iExprNode1 = tNode.m_iLeft;
 	int iExprNode2 = tNode.m_iRight;
 
-	auto pExpr1 = CreateTree ( iExprNode1 );
-	auto pExpr2 = CreateTree ( iExprNode2 );
+	CSphRefcountedPtr<ISphExpr> pExpr1 { CreateTree ( iExprNode1 ) };
+	CSphRefcountedPtr<ISphExpr> pExpr2 { CreateTree ( iExprNode2 ) };
 
 	// This is a hack ala REMAP
 	int iUnit = m_dNodes [ iNode-1 ].m_iConst;

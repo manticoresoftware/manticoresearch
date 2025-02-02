@@ -73,6 +73,16 @@ This setup will enable the Manticore Columnar Library and Manticore Buddy, and r
 
 Read more about production use [in the documentation](https://github.com/manticoresoftware/docker#production-use).
 
+<!-- request Kubernetes -->
+
+``` bash
+helm repo add manticoresearch https://helm.manticoresearch.com
+# Update values.yaml if needed
+helm install manticore -n manticore --create-namespace manticoresearch/manticoresearch
+```
+
+You can find more information about installing the Helm chart [in the documentation](https://github.com/manticoresoftware/manticoresearch-helm#installation).
+
 <!-- end -->
 
 <!-- proofread -->

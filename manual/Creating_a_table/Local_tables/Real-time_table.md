@@ -93,6 +93,23 @@ utilsApi.Sql("CREATE TABLE forum(title text, price float)");
 ```
 
 <!-- intro -->
+##### Typescript:
+
+<!-- request Typescript -->
+```typescript
+res = await utilsApi.sql('CREATE TABLE forum(title text, price float)');
+```
+
+<!-- intro -->
+##### Go:
+
+<!-- request Go -->
+```go
+utilsAPI.Sql(context.Background()).Body("CREATE TABLE forum(title text, price float)").Execute()
+```
+
+
+<!-- intro -->
 ##### Creating a real-time table via a configuration file:
 <!-- request CONFIG -->
 

@@ -79,6 +79,7 @@
 #include "searchdbuddy.h"
 #include "detail/indexlink.h"
 #include "detail/expmeter.h"
+#include "taskflushdisk.h"
 
 extern "C"
 {
@@ -12808,6 +12809,8 @@ void HandleMysqlDescribe ( RowBuffer_i & tOut, SqlStmt_t * pStmt )
 	auto & tStmt = *pStmt;
 	VectorLike dOut ( tStmt.m_sStringParam, 0 );
 
+	MaybeFixupIndexNameFromMysqldump ( tStmt );
+	FixupSystemTableName (&tStmt);
 	auto sName = tStmt.m_sIndex;
 	auto pServed = GetServed ( sName );
 	if ( pServed )
@@ -14058,7 +14061,7 @@ static bool IsNullSet ( const CSphMatch	& tMatch, int iAttr, SphAttr_t tNullMask
 	}
 
 	assert ( iAttr < 64 );
-	return !!( tNullMask & ( 1 << iAttr ) );
+	return !!( tNullMask & ( 1ULL << iAttr ) );
 }
 
 
@@ -19935,7 +19938,7 @@ BOOL WINAPI CtrlHandler ( DWORD )
 static char g_sNameBuf[512] = { 0 };
 static char g_sPid[30] = { 0 };
 
-// returns 'true' only once - at the very start, to show it beatiful way.
+// returns 'true' only once - at the very start, to show it beautiful way.
 bool SetWatchDog ( int iDevNull ) REQUIRES ( MainThread )
 {
 	InitSharedBuffer ();
@@ -20627,8 +20630,10 @@ void ConfigureSearchd ( const CSphConfig & hConf, bool bOptPIDFile, bool bTestMo
 
 	AllowOnlyNot ( hSearchd.GetInt ( "not_terms_only_allowed", 0 )!=0 );
 	ConfigureDaemonLog ( hSearchd.GetStr ( "query_log_commands" ) );
+
 	g_iAutoOptimizeCutoffMultiplier = hSearchd.GetInt ( "auto_optimize", 1 );
 	MutableIndexSettings_c::GetDefaults().m_iOptimizeCutoff = hSearchd.GetInt ( "optimize_cutoff", AutoOptimizeCutoff() );
+	MutableIndexSettings_c::GetDefaults().m_iOptimizeCutoffKNN = hSearchd.GetInt ( "optimize_cutoff", AutoOptimizeCutoffKNN() );
 
 	SetPseudoSharding ( hSearchd.GetInt ( "pseudo_sharding", 1 )!=0 );
 	SetOptionSI ( hSearchd, bTestMode );
@@ -20650,6 +20655,7 @@ void ConfigureSearchd ( const CSphConfig & hConf, bool bOptPIDFile, bool bTestMo
 
 	ConfigureMerge(hSearchd);
 	SetJoinBatchSize ( hSearchd.GetInt ( "join_batch_size", GetJoinBatchSize() ) );
+	SetRtFlushDiskPeriod ( hSearchd.GetSTimeS ( "diskchunk_flush_write_timeout", GetRtFlushDiskWrite() ), hSearchd.GetSTimeS ( "diskchunk_flush_search_timeout", GetRtFlushDiskSearch() ) );
 }
 
 static void DirMustWritable ( const CSphString & sDataDir )
@@ -21043,7 +21049,7 @@ static void SetUidShort ( bool bTestMode )
 namespace { // static
 
 // implement '--stop' and '--stopwait' (connect and stop another instance by pid file from config)
-void StopOrStopWaitAnother ( CSphVariant * v, bool bWait ) REQUIRES ( MainThread )
+int StopOrStopWaitAnother ( CSphVariant * v, bool bWait ) REQUIRES ( MainThread )
 {
 	if ( !v )
 		sphFatal ( "stop: option 'pid_file' not found in '%s' section 'searchd'", g_sConfigFile.cstr () );
@@ -21109,7 +21115,7 @@ void StopOrStopWaitAnother ( CSphVariant * v, bool bWait ) REQUIRES ( MainThread
 	if ( bTerminatedOk )
 	{
 		sphInfo ( "stop: successfully terminated pid %d", iPid );
-		exit ( 0 );
+		return 0;
 	} else
 		sphFatal ( "stop: error terminating pid %d", iPid );
 #else
@@ -21185,7 +21191,7 @@ void StopOrStopWaitAnother ( CSphVariant * v, bool bWait ) REQUIRES ( MainThread
 	if ( fdPipe>=0 )
 		::close ( fdPipe );
 
-	exit ( iExitCode );
+	return iExitCode;
 #endif
 }
 } // static namespace
@@ -21327,6 +21333,9 @@ int WINAPI ServiceMain ( int argc, char **argv ) EXCLUDES (MainThread)
 
 	if ( !sError.IsEmpty() )
 		sError = "";
+
+	if ( !sKNNError.IsEmpty() )
+		sKNNError = "";
 
 	CSphString sTZWarning;
 	{
@@ -21501,11 +21510,7 @@ int WINAPI ServiceMain ( int argc, char **argv ) EXCLUDES (MainThread)
 	////////////////////////
 
 	if ( bOptStop )
-	{
-		StopOrStopWaitAnother ( hSearchdpre ( "pid_file" ), bOptStopWait );
-		assert ( 0 && "StopOrStopWaitAnother should not return " );
-		exit ( 0 );
-	}
+		return StopOrStopWaitAnother ( hSearchdpre ( "pid_file" ), bOptStopWait );
 
 	////////////////////////////////
 	// query running searchd status
@@ -21514,7 +21519,7 @@ int WINAPI ServiceMain ( int argc, char **argv ) EXCLUDES (MainThread)
 	if ( bOptStatus )
 	{
 		QueryStatus ( hSearchdpre("listen") );
-		exit ( 0 );
+		return 0;
 	}
 
 	/////////////////////
@@ -21659,7 +21664,7 @@ int WINAPI ServiceMain ( int argc, char **argv ) EXCLUDES (MainThread)
 
 			default:
 			// tty-controlled parent
-			exit ( 0 );
+			return 0;
 		}
 	}
 #endif
@@ -21930,6 +21935,7 @@ int WINAPI ServiceMain ( int argc, char **argv ) EXCLUDES (MainThread)
 	StartRtBinlogFlushing();
 
 	ScheduleFlushAttrs();
+	ScheduleRtFlushDisk();
 	SetupCompatHttp();
 
 	InitSearchdStats();

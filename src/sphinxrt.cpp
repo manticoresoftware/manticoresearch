@@ -145,6 +145,11 @@ volatile int AutoOptimizeCutoff() noexcept
 	return iAutoOptimizeCutoff;
 }
 
+volatile int AutoOptimizeCutoffKNN() noexcept
+{
+	static int iAutoOptimizeCutoffKNN = Max ( GetNumPhysicalCPUs() / 2, 1 );
+	return iAutoOptimizeCutoffKNN;
+}
 
 //////////////////////////////////////////////////////////////////////////
 
@@ -1287,6 +1292,7 @@ public:
 	void				ForceRamFlush ( const char * szReason ) final;
 	bool				IsFlushNeed() const final;
 	bool				ForceDiskChunk() final;
+	void				ForceDiskChunk ( int iFlushWrite, int iFlushSearch ) final;
 	bool				AttachDiskIndex ( CSphIndex * pIndex, bool bTruncate, bool & bFatal, CSphString & sError ) final;
 	bool				AttachRtIndex ( RtIndex_i * pIndex, bool bTruncate, bool & bFatal, CSphString & sError ) final;
 	bool				Truncate ( CSphString & sError, Truncate_e eAction ) final;
@@ -1439,6 +1445,8 @@ private:
 	int64_t						m_iSavedTID = 0;
 	int64_t						m_tmSaved;
 	mutable DWORD				m_uDiskAttrStatus = 0;
+	std::atomic<int64_t>		m_tmDataWriten = 0;
+	std::atomic<int64_t>		m_tmDataSearched = 0;
 
 	bool						m_bKeywordDict;
 	int							m_iWordsCheckpoint = RTDICT_CHECKPOINT_V5;
@@ -1483,7 +1491,7 @@ private:
 	void						SaveMeta ();
 	bool						SaveDiskHeader ( SaveDiskDataContext_t & tCtx, const ChunkStats_t & tStats, CSphString & sError ) const;
 	bool						SaveDiskData ( const char * szFilename, const ConstRtSegmentSlice_t & tSegs, const ChunkStats_t & tStats, CSphString & sError ) const;
-	bool						SaveDiskChunk ( bool bForced, bool bEmergent=false, bool bBootstrap=false ) REQUIRES ( m_tWorkers.SerialChunkAccess() );
+	bool						SaveDiskChunk ( bool bForced, bool bEmergent=false ) REQUIRES ( m_tWorkers.SerialChunkAccess() );
 	std::unique_ptr<CSphIndex>	PreallocDiskChunk ( const CSphString& sChunk, int iChunk, FilenameBuilder_i * pFilenameBuilder, StrVec_t & dWarnings, CSphString & sError, const char * szName=nullptr ) const;
 	bool						LoadRamChunk ( DWORD uVersion, bool bRebuildInfixes, bool bFixup = true );
 	bool						SaveRamChunk ();
@@ -2966,6 +2974,8 @@ bool RtIndex_c::Commit ( int * pDeleted, RtAccum_t * pAcc, CSphString * pError )
 	if ( pDeleted )
 		*pDeleted = iKilled;
 
+	m_tmDataWriten.store ( sphMicroTimer() );
+
 	// done; cleanup accum
 	pAcc->Cleanup();
 
@@ -3415,6 +3425,38 @@ bool RtIndex_c::ForceDiskChunk()
 
 	ScopedScheduler_c tSerialFiber ( m_tWorkers.SerialChunkAccess() );
 	return SaveDiskChunk ( true );
+}
+
+void RtIndex_c::ForceDiskChunk ( int iFlushWrite, int iFlushSearch )
+{
+	if ( iFlushWrite<0 && GetMutableSettings().m_iFlushWrite<0 )
+		return;
+
+	// skip table without either writes or searches
+	if ( !m_tmDataWriten || !m_tmDataSearched )
+		return;
+
+	if ( m_tRtChunks.RamSegs()->IsEmpty() )
+		return;
+
+	int64_t tmFlushWrite = ( GetMutableSettings().m_iFlushWrite<0 ? iFlushWrite : GetMutableSettings().m_iFlushWrite );
+	tmFlushWrite *= 1000000;
+	int64_t tmFlushSearch = ( GetMutableSettings().m_iFlushSearch<0 ? iFlushSearch : GetMutableSettings().m_iFlushSearch );
+	tmFlushSearch *= 1000000;
+	int64_t tmNow = sphMicroTimer();
+
+	// recent write disables auto-flush
+	// no need to interrupt write stream with auto-flush
+	if ( ( tmNow-m_tmDataWriten.load() )<tmFlushWrite )
+		return;
+
+	// no recent search disables auto-flush
+	// means post only or archived table
+	if ( ( tmNow-m_tmDataSearched.load() )>tmFlushSearch )
+		return;
+
+	ScopedScheduler_c tSerialFiber ( m_tWorkers.SerialChunkAccess() );
+	SaveDiskChunk ( true );
 }
 
 
@@ -4168,14 +4210,14 @@ int64_t RtIndex_c::GetMemCount ( PRED&& fnPred ) const
 }
 
 // i.e. create new disk chunk from ram segments
-bool RtIndex_c::SaveDiskChunk ( bool bForced, bool bEmergent, bool bBootstrap ) REQUIRES ( m_tWorkers.SerialChunkAccess() )
+bool RtIndex_c::SaveDiskChunk ( bool bForced, bool bEmergent ) REQUIRES ( m_tWorkers.SerialChunkAccess() )
 {
 	if ( !m_tSaving.WaitEnabledOrShutdown() )
-		return !bBootstrap;
+		return true;
 
 	assert ( Coro::CurrentScheduler() == m_tWorkers.SerialChunkAccess() );
 
-	RTSAVELOG << "SaveDiskChunk (" << ( bForced ? "forced, " : "not forced, " ) << ( bEmergent ? "emergent, " : "not emergent, " ) << ( bBootstrap ? "bootstrap" : "usual" ) << ")";
+	RTSAVELOG << "SaveDiskChunk (" << ( bForced ? "forced, " : "not forced, " ) << ( bEmergent ? "emergent, " : "not emergent " ) << ")";
 
 	m_tNSavesNow.Wait ( [] ( int iVal ) { return iVal < SIMULTANEOUS_SAVE_LIMIT; } );
 
@@ -4221,7 +4263,7 @@ bool RtIndex_c::SaveDiskChunk ( bool bForced, bool bEmergent, bool bBootstrap ) 
 	RTSAVELOG << "SaveDiskChunk process " << dSegments.GetLength() << " segments. Active jobs " << m_tNSavesNow.GetValue() << ", op " << iSaveOp
 		<< " RAM visible+retired/locked/acquired " << iNotMyOpRAM + iMyOpRAM << "+" << m_iRamChunksAllocatedRAM.load ( std::memory_order_relaxed )- iNotMyOpRAM - iMyOpRAM << "/" << iNotMyOpRAM << "/" << iMyOpRAM;
 	if ( dSegments.IsEmpty() )
-		return !bBootstrap;
+		return true;
 
 	auto iTID = m_iTID;
 	m_tSaveTIDS.ModifyValue ( [iTID] ( CSphVector<int64_t>& dSaves ) { dSaves.Add ( iTID ); } );
@@ -4350,10 +4392,6 @@ bool RtIndex_c::SaveDiskChunk ( bool bForced, bool bEmergent, bool bBootstrap ) 
 		iDiskChunks = tNewSet.m_pNewDiskChunks->GetLength();
 	}
 	// from this point all readers will see new state of the index.
-
-	// if saving caused from loading .ram - we're done (DON't need to abandon .ram file!)
-	if ( bBootstrap )
-		return true;
 
 	// abandon .ram file
 	UnlinkRAMChunk ( "SaveDiskChunk" );
@@ -7726,6 +7764,8 @@ bool RtIndex_c::MultiQuery ( CSphQueryResult & tResult, const CSphQuery & tQuery
 	dAllSorters.Apply ([&dSorters] ( ISphMatchSorter* p ) { if ( p ) dSorters.Add(p); });
 	auto& tMeta = *tResult.m_pMeta;
 
+	AT_SCOPE_EXIT ( [this]() { const_cast<std::atomic<int64_t> &> ( m_tmDataSearched ).store ( sphMicroTimer() ); } );
+
 	// if we have anything to work with
 	if ( dSorters.IsEmpty() )
 	{
@@ -9202,11 +9242,14 @@ int64_t RtIndex_c::GetCount() const
 
  std::pair<int64_t,int> RtIndex_c::GetPseudoShardingMetric ( const VecTraits_T<const CSphQuery> & dQueries, const VecTraits_T<int64_t> & dMaxCountDistinct, int iThreads, bool & bForceSingleThread ) const
 {
-	 if ( MustRunInSingleThread ( dQueries, false, dMaxCountDistinct, bForceSingleThread ) )
-		 return { 0, 1 };
+	if ( MustRunInSingleThread ( dQueries, false, dMaxCountDistinct, bForceSingleThread ) )
+		return { 0, 1 };
+
+	bool bHaveKNN = dQueries.any_of ( []( auto & tQuery ){ return !tQuery.m_sKNNAttr.IsEmpty(); } );	 
 
 	auto tGuard = RtGuard();
-	int iThreadCap = GetPseudoSharding() ? 0 : tGuard.m_dDiskChunks.GetLength();
+	int iDiskChunks = tGuard.m_dDiskChunks.GetLength();
+	int iThreadCap = GetPseudoSharding() ? ( bHaveKNN ? iDiskChunks : 0 ) : iDiskChunks;
 	return { GetStats().m_iTotalDocuments, iThreadCap };
 }
 
@@ -10007,12 +10050,12 @@ int RtIndex_c::ClassicOptimize ()
 	return iAffected;
 }
 
-static int GetCutOff ( const MutableIndexSettings_c & tSettings )
+static int GetCutOff ( const MutableIndexSettings_c & tSettings, bool bKNN )
 {
 	if ( tSettings.IsSet ( MutableName_e::OPTIMIZE_CUTOFF ) )
 		return tSettings.m_iOptimizeCutoff;
 	else
-		return MutableIndexSettings_c::GetDefaults().m_iOptimizeCutoff;
+		return bKNN ? MutableIndexSettings_c::GetDefaults().m_iOptimizeCutoffKNN : MutableIndexSettings_c::GetDefaults().m_iOptimizeCutoff;
 }
 
 int RtIndex_c::ProgressiveOptimize ( int iCutoff )
@@ -10021,7 +10064,7 @@ int RtIndex_c::ProgressiveOptimize ( int iCutoff )
 
 	int iAffected = 0;
 	if ( !iCutoff )
-		iCutoff = GetCutOff ( m_tMutableSettings );
+		iCutoff = GetCutOff ( m_tMutableSettings, m_tSchema.HasKNNAttrs() );
 
 	bool bWork = true;
 	while ( bWork &= MergeCanRun() )
@@ -10105,7 +10148,7 @@ void RtIndex_c::CheckStartAutoOptimize()
 	if ( !iCutoff )
 		return;
 
-	iCutoff *= GetCutOff ( m_tMutableSettings );
+	iCutoff *= GetCutOff ( m_tMutableSettings, m_tSchema.HasKNNAttrs() );
 
 	if ( m_tRtChunks.GetDiskChunksCount()<=iCutoff )
 		return;

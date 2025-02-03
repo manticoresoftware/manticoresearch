@@ -7173,6 +7173,10 @@ static int64_t CalcMaxCountDistinct ( const CSphQuery & tQuery, const RtGuard_t 
 
 static bool CalcDiskChunkSplits ( IntVec_t & dThreads, int iJobs, const CSphQuery & tQuery, const CSphMultiQueryArgs & tArgs, const RtGuard_t & tGuard )
 {
+	// less threads than jobs; no need to calculate anything. just use 1 thread per job.
+	if ( tArgs.m_iThreads<=iJobs )
+		return true;
+
 	CSphVector<SplitData_t> dSplitData ( iJobs );
 
 	int iMaxThreadsPerIndex = CalcMaxThreadsPerIndex ( tArgs.m_iThreads, iJobs );

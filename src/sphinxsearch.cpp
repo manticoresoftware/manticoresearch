@@ -2807,7 +2807,7 @@ struct Expr_BM25F_T : public Expr_NoLocator_c
 
 		// compute avg length per field
 		m_dAvgDocFieldLens.Fill ( 0.0f );
-		if ( m_pState->m_pFieldLens )
+		if ( m_pState->m_pFieldLens && m_pState->m_iTotalDocuments )
 			for ( int i=0; i<m_pState->m_iFields; i++ )
 				m_dAvgDocFieldLens[i] = m_pState->m_pFieldLens[i] / m_pState->m_iTotalDocuments; // FIXME? Total of documents with non empty field value is actually needed here
 	}

@@ -437,7 +437,7 @@ mysql -h0 -P1306 -e "SHOW STATUS LIKE 'cluster_c_indexes';"
 | cluster_c_indexes | testrt,tbl_none,tbl_stopwords,tbl_exceptions,tbl_wordforms,tbl_rowwise_stem_ru,tbl_plain |
 +-------------------+------------------------------------------------------------------------------------------+
 ––– input –––
-mysqldump -etc --replace --column-statistics=0 -u user3 -h0 -P1306 --skip-comments manticore c:tbl_plain | mysql -h0 -P1306; echo $?
+mysqldump -etc --replace --net-buffer-length=16M --column-statistics=0 -u user3 -h0 -P1306 --skip-comments manticore c:tbl_plain | mysql -h0 -P1306; echo $?
 ––– output –––
 -- Warning: version string returned by server is incorrect.
 0
@@ -456,4 +456,46 @@ Checking status for port 5306:
 Port 5306: Node is synced.
 ––– input –––
 for port in 1306 2306 3306 4306 5306; do mysql -h0 -P$port -e "SELECT * FROM tbl_wordforms ORDER BY id ASC;" | md5sum | awk '{print $1}' > /tmp/hash_$port.txt; done && for port1 in 1306 2306 3306 4306 5306; do for port2 in 1306 2306 3306 4306 5306; do [ $port1 -ne $port2 ] && ! diff /tmp/hash_$port1.txt /tmp/hash_$port2.txt && echo "Mismatch between $port1 and $port2"; done; done
+––– output –––
+––– input –––
+for port in 1306 2306 3306 4306 5306; do mysql -h0 -P$port -e "SHOW TABLES LIKE 'tbl_stopwords';" | grep -q 'tbl_stopwords' && echo "Port $port: tbl_stopwords EXISTS" || echo "Port $port: tbl_stopwords NOT FOUND"; done
+––– output –––
+Port 1306: tbl_stopwords EXISTS
+Port 2306: tbl_stopwords EXISTS
+Port 3306: tbl_stopwords EXISTS
+Port 4306: tbl_stopwords EXISTS
+Port 5306: tbl_stopwords EXISTS
+––– input –––
+mysqldump -etc --replace --ignore-table=manticore.tbl_stopwords --column-statistics=0 -u user3 -h0 -P1306 --skip-comments manticore > dump.sql
+––– output –––
+-- Warning: version string returned by server is incorrect.
+––– input –––
+mysql -h0 -P1306 -e "ALTER CLUSTER c DROP tbl_stopwords;"; echo $?
+––– output –––
+0
+––– input –––
+for port in 1306 2306 3306 4306 5306; do mysql -h0 -P$port -e "DROP TABLE tbl_stopwords;"; done
+––– output –––
+––– input –––
+for port in 1306 2306 3306 4306 5306; do mysql -h0 -P$port -e "SHOW TABLES LIKE 'tbl_stopwords';" | grep -q 'tbl_stopwords' && echo "Port $port: tbl_stopwords EXISTS" || echo "Port $port: tbl_stopwords NOT FOUND"; done
+––– output –––
+Port 1306: tbl_stopwords NOT FOUND
+Port 2306: tbl_stopwords NOT FOUND
+Port 3306: tbl_stopwords NOT FOUND
+Port 4306: tbl_stopwords NOT FOUND
+Port 5306: tbl_stopwords NOT FOUND
+––– input –––
+mysql -h0 -P1306 -u user3 < dump.sql
+––– output –––
+ERROR 1064 (42000) at line 39: table 'tbl_stopwords' absent
+––– input –––
+for port in 1306 2306 3306 4306 5306; do mysql -h0 -P$port -e "SHOW TABLES LIKE 'tbl_stopwords';" | grep -q 'tbl_stopwords' && echo "Port $port: tbl_stopwords EXISTS" || echo "Port $port: tbl_stopwords NOT FOUND"; done
+––– output –––
+Port 1306: tbl_stopwords NOT FOUND
+Port 2306: tbl_stopwords NOT FOUND
+Port 3306: tbl_stopwords NOT FOUND
+Port 4306: tbl_stopwords NOT FOUND
+Port 5306: tbl_stopwords NOT FOUND
+––– input –––
+rm -f dump.sql
 ––– output –––

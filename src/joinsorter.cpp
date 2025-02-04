@@ -1404,10 +1404,10 @@ bool JoinSorter_c::Push_T ( const CSphMatch & tEntry, PUSH && fnPush, bool bGrou
 	if ( m_bCanBatch && !bGrouped )
 	{
 		AddToBatch ( tEntry, uJoinOnFilterHash );
-		if ( !IsBatchFull() )
-			return true;
+		if ( IsBatchFull() )
+			RunBatch(fnPush);
 
-		return RunBatch(fnPush);
+		return false; // always return false so that cutoff/implicit cutoff won't work
 	}
 
 	if ( !RunJoinedQueryAndAdjustMaxMatches() )

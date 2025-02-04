@@ -371,6 +371,9 @@ select id,join2.weight() as jw from join1 left join join2 on join1.string_id = j
 <!-- right table weight vs fullscan -->
 select id,join2.weight() as jw from join1 join join2 on join1.string_id = join2.id;
 
+<!-- implicit cutoff vs join batching -->
+select * from join1 left join join2 on join1.string_id = join2.id where join2.id=2 limit 1;
+
 </sphinxql>
 
 <query endpoint="json/search">

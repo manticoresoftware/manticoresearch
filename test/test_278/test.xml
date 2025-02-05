@@ -90,7 +90,7 @@ select id, join2.j.a x, x*id from join1 inner join join2 on join1.string_id=join
 <!-- join expression alias -->
 select id, integer(join2.j.a) x, x*id from join1 inner join join2 on join1.string_id=join2.id order by id asc;
 
-<!-- FIXME! does not work for now; returns error  -->
+<!-- FIXME! DOES NOT WORK CORRECTLY -->
 select id, join2.id, (join2.j.a+50)*string_id from join1 inner join join2 on join1.string_id=join2.id order by join2.name desc;
 
 <!-- join expression alias -->
@@ -367,6 +367,10 @@ select id,weight(),join2.weight() from join1 left join join2 on join1.string_id 
 <!-- right table weight in expressions -->
 select id,join2.weight()*2 from join1 left join join2 on join1.string_id = join2.id where match('title1 | name2',join2);
 select id,join2.weight() as jw from join1 left join join2 on join1.string_id = join2.id where match('title1 | name2',join2);
+select id,join2.weight()+id from join1 left join join2 on join1.string_id = join2.id where match('title1 | title2 | name1 | name2',join2);
+
+<!-- right table index weight -->
+select id,join2.weight()+id from join1 left join join2 on join1.string_id = join2.id where match('title1 | title2 | name1 | name2',join2) option(join2) index_weights=(join2=100);
 
 <!-- right table weight vs fullscan -->
 select id,join2.weight() as jw from join1 join join2 on join1.string_id = join2.id;

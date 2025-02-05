@@ -2419,8 +2419,9 @@ public:
 			auto tf = (float)m_dTF[iWord]; // OPTIMIZE? remove this vector, hook into m_uMatchHits somehow?
 			float idf = m_dIDF[iWord];
 #if defined( __aarch64__ )
-			// direct calculation produces on arm64 different result, so provide explicitly 2 steps
-			const float sum = tf / (tf + m_fParamK1*(1 - m_fParamB + m_fParamB*dl/m_fAvgDocLen)) * idf;
+			// direct calculation produces on arm64 different result, so provide explicitly 3 steps
+			const float paramK1 = m_fParamK1 * ( 1 - m_fParamB + m_fParamB * dl / m_fAvgDocLen );
+			const float sum = tf / ( tf + paramK1 ) * idf;
 			m_fDocBM25A += sum;
 #else
 			m_fDocBM25A += tf / (tf + m_fParamK1*(1 - m_fParamB + m_fParamB*dl/m_fAvgDocLen)) * idf;

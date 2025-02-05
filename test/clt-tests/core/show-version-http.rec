@@ -12,7 +12,7 @@ curl -s "http://localhost:9308/cli?show%20version" | awk '!/row.*in set/'; echo
 | Columnar  | columnar %{VERSION}  |
 | Secondary | secondary %{VERSION} |
 | KNN       | knn %{VERSION}       |
-| Buddy     | buddy %{VERSION}                  |
+| Buddy     | buddy %{VERSION}            |
 +-----------+----------------------------------+
 ––– input –––
 curl -s "http://localhost:9308/cli?show%20tables" | awk '!/row.*in set/'; echo
@@ -166,7 +166,7 @@ curl -s "http://localhost:9308/cli_json" -d "SHOW STATUS"; echo
 {"Counter":"uptime","Value":"%{NUMBER}"},
 {"Counter":"connections","Value":"%{NUMBER}"},
 {"Counter":"maxed_out","Value":"%{NUMBER}"},
-{"Counter":"version","Value":"%{VERSION} (columnar %{VERSION}) (secondary %{VERSION}) (knn %{VERSION}) (buddy %{SEMVER})"},
+{"Counter":"version","Value":"%{VERSION} (columnar %{VERSION}) (secondary %{VERSION}) (knn %{VERSION}) (buddy %{VERSION})"},
 {"Counter":"mysql_version","Value":"%{VERSION} (columnar %{VERSION}) (secondary %{VERSION}) (knn %{VERSION})"},
 {"Counter":"command_search","Value":"%{NUMBER}"},
 {"Counter":"command_excerpt","Value":"%{NUMBER}"},
@@ -244,9 +244,9 @@ curl -s "http://localhost:9308/cli_json" -d "SHOW STATUS"; echo
 "warning":""
 }]
 ––– input –––
-curl -s "http://localhost:9308/cli?show%20status" | grep "rows in set"
+curl -s "http://localhost:9308/cli?show%20status" | awk -F "rows in set" '{print $1}'
 ––– output –––
-%{NUMBER} rows in set
+%{NUMBER}
 ––– input –––
 mysql -h0 -P9306 -e "CREATE TABLE big_table (id INT, value TEXT);"
 ––– output –––

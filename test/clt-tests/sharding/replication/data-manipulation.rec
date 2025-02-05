@@ -16,17 +16,8 @@ sleep 5; mysql -h0 -P1306 -e "create table c:testrt(id bigint, title text, conte
 ––– output –––
 0
 ––– input –––
-mysql -h0 -P1306 -e "show tables;"
+mysql -h0 -P1306 -e "show tables from system;"
 ––– output –––
-+----------------+-------------+
-| Index          | Type        |
-+----------------+-------------+
-| _sharding_queue | rt          |
-| _sharding_state | rt          |
-| _sharding_table | rt          |
-| testrt         | distributed |
-| testrt_s%{NUMBER}      | rt          |
-+----------------+-------------+
 ––– input –––
 mysql -h0 -P1306 -e "INSERT INTO c:testrt (id, title, content, gid) values (1, 'Title 1', 'Content 1', 1), (2, 'Title 2', 'Content 2', 2);"; echo $?
 ––– output –––

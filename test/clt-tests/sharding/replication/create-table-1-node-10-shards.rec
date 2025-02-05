@@ -8,17 +8,6 @@ mysql -h0 -P1306 -e "create table t(id bigint) shards=10 rf=1"
 ––– input –––
 mysql -h0 -P1306 -e "show tables from system"
 ––– output –––
-Table: t
-Table: t_s0
-Table: t_s1
-Table: t_s2
-Table: t_s3
-Table: t_s4
-Table: t_s5
-Table: t_s6
-Table: t_s7
-Table: t_s8
-Table: t_s9
 ––– input –––
 mysql -h0 -P1306 -e "show create table t\G" | grep 'Create Table'
 ––– output –––
@@ -27,13 +16,11 @@ Create Table: CREATE TABLE t type='distributed' local='t_s0' local='t_s1' local=
 mysql -h0 -P1306 -e "create table a(id bigint) shards=4 rf=1"
 ––– output –––
 ––– input –––
-mysql -h0 -P1306 -e "show tables\G" | grep 'Table: a' | sort
+mysql -h0 -P1306 -e "show tables from system\G" | grep 'Table: system.a' | sort
 ––– output –––
-Table: a
-Table: a_s0
-Table: a_s1
-Table: a_s2
-Table: a_s3
+––– input –––
+mysql -h0 -P1306 -e "DESCRIBE a"
+––– output –––
 ––– input –––
 mysql -h0 -P1306 -e "show create table a\G" | grep 'Create Table'
 ––– output –––

@@ -12,7 +12,7 @@ curl -s "http://localhost:9308/cli?show%20version" | awk '!/row.*in set/'; echo
 | Columnar  | columnar %{VERSION}  |
 | Secondary | secondary %{VERSION} |
 | KNN       | knn %{VERSION}       |
-| Buddy     | buddy %{VERSION}                     |
+| Buddy     | buddy %{VERSION}                  |
 +-----------+----------------------------------+
 ––– input –––
 curl -s "http://localhost:9308/cli?show%20tables" | awk '!/row.*in set/'; echo
@@ -33,7 +33,7 @@ curl -s "http://localhost:9308/cli?select%20*%20from%20t%20where%20match('exampl
 ––– input –––
 curl -s "http://localhost:9308/cli_json" -d "show version"; echo
 ––– output –––
-[{"total":5,"error":"","warning":"","columns":[{"Component":{"type":"string"}},{"Version":{"type":"string"}}],"data":[{"Component":"Daemon","Version":"%{VERSION}"},{"Component":"Columnar","Version":"columnar %{VERSION}"},{"Component":"Secondary","Version":"secondary %{VERSION}"},{"Component":"KNN","Version":"knn %{VERSION}"},{"Component":"Buddy","Version":"buddy %{SEMVER}"}]}]
+[{"total":5,"error":"","warning":"","columns":[{"Component":{"type":"string"}},{"Version":{"type":"string"}}],"data":[{"Component":"Daemon","Version":"%{VERSION}"},{"Component":"Columnar","Version":"columnar %{VERSION}"},{"Component":"Secondary","Version":"secondary %{VERSION}"},{"Component":"KNN","Version":"knn %{VERSION}"},{"Component":"Buddy","Version":"buddy %{VERSION}"}]}]
 ––– input –––
 curl -s "http://localhost:9308/cli_json" -d "show tables"; echo
 ––– output –––

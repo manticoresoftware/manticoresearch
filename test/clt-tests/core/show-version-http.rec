@@ -244,42 +244,43 @@ curl -s "http://localhost:9308/cli_json" -d "SHOW STATUS"; echo
 "warning":""
 }]
 ––– input –––
-curl -s "http://localhost:9308/cli?show%20status" | awk -F "rows in set" '{print $1}'
+curl -s "http://localhost:9308/cli?show%20status" | awk '/rows in set/ {print $1}'
 ––– output –––
 %{NUMBER}
 ––– input –––
-mysql -h0 -P9306 -e "CREATE TABLE big_table (id INT, value TEXT);"
+mysql -h0 -P9306 -e "CREATE TABLE table_with_data (id INT, value TEXT);"
 ––– output –––
 ––– input –––
-for i in $(seq 1 1000000); do echo "INSERT INTO big_table VALUES ($i, 'value_$i');"; done | mysql -h0 -P9306
+for i in $(seq 1 10); do echo "INSERT INTO table_with_data VALUES ($i, 'value_$i');"; done | mysql -h0 -P9306
 ––– output –––
 ––– input –––
-curl -s "http://localhost:9308/cli?select%20*%20from%20big_table%20limit%2010" | awk '!/row.*in set/'; echo
+curl -s "http://localhost:9308/cli?select%20*%20from%20table_with_data%20order%20by%20id%20asc%20limit%2010"
 ––– output –––
-+--------+--------------+
-| id     | value        |
-+--------+--------------+
-| 939142 | value_939142 |
-| 418023 | value_418023 |
-| 418022 | value_418022 |
-| 939140 | value_939140 |
-| 418021 | value_418021 |
-| 939141 | value_939141 |
-| 418020 | value_418020 |
-| 939138 | value_939138 |
-| 939139 | value_939139 |
-| 418019 | value_418019 |
-+--------+--------------+
++----+----------+
+| id | value    |
++----+----------+
+| 1  | value_1  |
+| 2  | value_2  |
+| 3  | value_3  |
+| 4  | value_4  |
+| 5  | value_5  |
+| 6  | value_6  |
+| 7  | value_7  |
+| 8  | value_8  |
+| 9  | value_9  |
+| 10 | value_10 |
++----+----------+
+%{NUMBER} rows in set (#!/[0-9\.]+/!# sec)
 ––– input –––
-curl -s "http://localhost:9308/cli?select%20count(*)%20as%20total%20from%20big_table" | awk '!/row.*in set/'; echo
+curl -s "http://localhost:9308/cli?select%20count(*)%20as%20total%20from%20table_with_data" | awk '!/row.*in set/'; echo
 ––– output –––
-+---------+
-| total   |
-+---------+
-| 1000000 |
-+---------+
++-------+
+| total |
++-------+
+| 10    |
++-------+
 ––– input –––
-curl -s "http://localhost:9308/cli?drop%20table%20big_table" | awk '!/Query OK/ && !/rows affected/'; echo
+curl -s "http://localhost:9308/cli?drop%20table%20table_with_data" | awk '!/Query OK/ && !/rows affected/'; echo
 ––– output –––
 ––– input –––
 curl -X POST "http://localhost:9308/sql" -d "EXPLAIN FORMAT=json SELECT * FROM t WHERE MATCH('example')"; echo

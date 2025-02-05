@@ -131,21 +131,55 @@ lrwxrwxrwx. 1 root root 27 Nov  9 10:42 /usr/lib/debug/.build-id/2c/582e9f564ea1
 
 ### Uploading your data
 
+<!-- example s3 -->
 To fix your bug, developers often need to reproduce it locally. To do this, they need your configuration file, table files, binlog (if present), and sometimes source data (such as data from external storages or XML/CSV files) and queries.
 
-Attach your data when you [create a ticket on Github](https://github.com/manticoresoftware/manticoresearch/issues/new). If the data is too large or sensitive, you can upload it to our write-only S3 storage at  `s3://s3.manticoresearch.com/write-only/`. Here's how you can do it using the Minio client:
-1. Install the client https://min.io/docs/minio/linux/reference/minio-mc.html#install-mc
-For example on 64-bit Linux:
+Attach your data when you [create a ticket on Github](https://github.com/manticoresoftware/manticoresearch/issues/new). If the data is too large or sensitive, you can upload it to our write-only S3 storage at  `s3://s3.manticoresearch.com/write-only/`. Here's how you can do it:
+1. Navigate to the directory containing the files you want to upload and run:
+   ```
+   docker run --rm -v $(pwd):/upload manticoresearch/upload
+   ```
+2. This will:
+   - Upload **all files in the current directory** to our write-only S3 storage
+   - At the end, you will see an upload path. Please share this path with the developers.
 
+<!-- intro -->
+Example:
+
+<!-- request Example -->
+```bash
+docker run --rm -v $(pwd):/upload manticoresearch/upload
 ```
-curl https://dl.min.io/client/mc/release/linux-amd64/mc \
-  --create-dirs \
-  -o $HOME/minio-binaries/mc
-chmod +x $HOME/minio-binaries/mc
-export PATH=$PATH:$HOME/minio-binaries/
+
+<!-- response Example -->
 ```
-2. Add our s3 host (use full path to executable or change into its directory): `cd $HOME/minio-binaries` and then `./mc config host add manticore http://s3.manticoresearch.com:9000 manticore manticore`
-3. Copy your files (use full path to executable or change into its directory): `cd $HOME/minio-binaries` and then `./mc cp -r issue-1234/ manticore/write-only/issue-1234` . Make sure the folder name is unique and best if it corresponds to the issue on GitHub where you described the bug.
+Added `manticore` successfully.
+`/upload/1.tgz` -> `manticore/write-only/issue-2025-02-05_11-09/upload/1.tgz`
+`/upload/1` -> `manticore/write-only/issue-2025-02-05_11-09/upload/1`
+`/upload/manticore/_t/_t.lock` -> `manticore/write-only/issue-2025-02-05_11-09/upload/manticore/_t/_t.lock`
+`/upload/manticore/s_s0/s_s0.lock` -> `manticore/write-only/issue-2025-02-05_11-09/upload/manticore/s_s0/s_s0.lock`
+`/upload/manticore/s_s1/s_s1.lock` -> `manticore/write-only/issue-2025-02-05_11-09/upload/manticore/s_s1/s_s1.lock`
+`/upload/manticore/sharding_table/sharding_table.lock` -> `manticore/write-only/issue-2025-02-05_11-09/upload/manticore/sharding_table/sharding_table.lock`
+`/upload/manticore/state.sql` -> `manticore/write-only/issue-2025-02-05_11-09/upload/manticore/state.sql`
+`/upload/manticore/surnames/surnames.lock` -> `manticore/write-only/issue-2025-02-05_11-09/upload/manticore/surnames/surnames.lock`
+`/upload/manticore/strings/strings.lock` -> `manticore/write-only/issue-2025-02-05_11-09/upload/manticore/strings/strings.lock`
+`/upload/manticore/strtest/strtest.lock` -> `manticore/write-only/issue-2025-02-05_11-09/upload/manticore/strtest/strtest.lock`
+`/upload/manticore/system.abc/system.abc.lock` -> `manticore/write-only/issue-2025-02-05_11-09/upload/manticore/system.abc/system.abc.lock`
+`/upload/manticore/strtext/strtext.lock` -> `manticore/write-only/issue-2025-02-05_11-09/upload/manticore/strtext/strtext.lock`
+`/upload/manticore/stop.txt` -> `manticore/write-only/issue-2025-02-05_11-09/upload/manticore/stop.txt`
+`/upload/manticore/system.abc/system.abc.meta` -> `manticore/write-only/issue-2025-02-05_11-09/upload/manticore/system.abc/system.abc.meta`
+`/upload/manticore/system.abc/system.abc.ram` -> `manticore/write-only/issue-2025-02-05_11-09/upload/manticore/system.abc/system.abc.ram`
+`/upload/manticore/wftest/wftest.lock` -> `manticore/write-only/issue-2025-02-05_11-09/upload/manticore/wftest/wftest.lock`
+`/upload/manticore/system.abc/system.abc.settings` -> `manticore/write-only/issue-2025-02-05_11-09/upload/manticore/system.abc/system.abc.settings`
+`/upload/script` -> `manticore/write-only/issue-2025-02-05_11-09/upload/script`
+`/upload/manticore/wordforms1.txt` -> `manticore/write-only/issue-2025-02-05_11-09/upload/manticore/wordforms1.txt`
+`/upload/manticore/words/words.lock` -> `manticore/write-only/issue-2025-02-05_11-09/upload/manticore/words/words.lock`
+`/upload/manticore/xxx/xxx.lock` -> `manticore/write-only/issue-2025-02-05_11-09/upload/manticore/xxx/xxx.lock`
+Total: 680 B, Transferred: 680 B, Speed: 2.20 KiB/s
+Upload complete. Please share the following path with the developers:
+s3://s3.manticoresearch.com/write-only/issue-2025-02-05_11-09
+```
+<!-- end -->
 
 ### DEBUG
 

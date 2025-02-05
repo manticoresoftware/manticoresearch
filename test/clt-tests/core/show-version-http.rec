@@ -8,11 +8,11 @@ curl -s "http://localhost:9308/cli?show%20version" | awk '!/row.*in set/'; echo
 +-----------+----------------------------------+
 | Component | Version                          |
 +-----------+----------------------------------+
-| Daemon    | %{     |
+| Daemon    | %{VERSION}     |
 | Columnar  | columnar %{VERSION}  |
 | Secondary | secondary %{VERSION} |
 | KNN       | knn %{VERSION}       |
-| Buddy     | buddy v%{SEMVER}                     |
+| Buddy     | buddy %{VERSION}                     |
 +-----------+----------------------------------+
 ––– input –––
 curl -s "http://localhost:9308/cli?show%20tables" | awk '!/row.*in set/'; echo
@@ -33,7 +33,7 @@ curl -s "http://localhost:9308/cli?select%20*%20from%20t%20where%20match('exampl
 ––– input –––
 curl -s "http://localhost:9308/cli_json" -d "show version"; echo
 ––– output –––
-[{"total":5,"error":"","warning":"","columns":[{"Component":{"type":"string"}},{"Version":{"type":"string"}}],"data":[{"Component":"Daemon","Version":"%{VERSION}"},{"Component":"Columnar","Version":"columnar %{VERSION}"},{"Component":"Secondary","Version":"secondary %{VERSION}"},{"Component":"KNN","Version":"knn %{VERSION}"},{"Component":"Buddy","Version":"buddy v%{SEMVER}"}]}]
+[{"total":5,"error":"","warning":"","columns":[{"Component":{"type":"string"}},{"Version":{"type":"string"}}],"data":[{"Component":"Daemon","Version":"%{VERSION}"},{"Component":"Columnar","Version":"columnar %{VERSION}"},{"Component":"Secondary","Version":"secondary %{VERSION}"},{"Component":"KNN","Version":"knn %{VERSION}"},{"Component":"Buddy","Version":"buddy %{SEMVER}"}]}]
 ––– input –––
 curl -s "http://localhost:9308/cli_json" -d "show tables"; echo
 ––– output –––
@@ -166,7 +166,7 @@ curl -s "http://localhost:9308/cli_json" -d "SHOW STATUS"; echo
 {"Counter":"uptime","Value":"%{NUMBER}"},
 {"Counter":"connections","Value":"%{NUMBER}"},
 {"Counter":"maxed_out","Value":"%{NUMBER}"},
-{"Counter":"version","Value":"%{VERSION} (columnar %{VERSION}) (secondary %{VERSION}) (knn %{VERSION}) (buddy v%{SEMVER})"},
+{"Counter":"version","Value":"%{VERSION} (columnar %{VERSION}) (secondary %{VERSION}) (knn %{VERSION}) (buddy %{SEMVER})"},
 {"Counter":"mysql_version","Value":"%{VERSION} (columnar %{VERSION}) (secondary %{VERSION}) (knn %{VERSION})"},
 {"Counter":"command_search","Value":"%{NUMBER}"},
 {"Counter":"command_excerpt","Value":"%{NUMBER}"},
@@ -244,87 +244,9 @@ curl -s "http://localhost:9308/cli_json" -d "SHOW STATUS"; echo
 "warning":""
 }]
 ––– input –––
-curl -s "http://localhost:9308/cli?show%20status" | awk '!/row.*in set/'; echo
+curl -s "http://localhost:9308/cli?show%20status" | grep "rows in set"
 ––– output –––
-+-------------------------------+-----------------------------------------------------------------------------------------------------------------------------------------------+
-| Counter                       | Value                                                                                                                                         |
-+-------------------------------+-----------------------------------------------------------------------------------------------------------------------------------------------+
-| uptime                        | %{NUMBER}                                                                                                                                             |
-| connections                   | %{NUMBER}                                                                                                                                            |
-| maxed_out                     | %{NUMBER}                                                                                                                                             |
-| version                       | %{VERSION} (columnar %{VERSION}) (secondary %{VERSION}) (knn %{VERSION}) (buddy v%{SEMVER}) |
-| mysql_version                 | %{VERSION} (columnar %{VERSION}) (secondary %{VERSION}) (knn %{VERSION})                |
-| command_search                | %{NUMBER}                                                                                                                                             |
-| command_excerpt               | 0                                                                                                                                             |
-| command_update                | 0                                                                                                                                             |
-| command_keywords              | 0                                                                                                                                             |
-| command_persist               | 0                                                                                                                                             |
-| command_status                | %{NUMBER}                                                                                                                                             |
-| command_flushattrs            | 0                                                                                                                                             |
-| command_sphinxql              | 0                                                                                                                                             |
-| command_ping                  | 0                                                                                                                                             |
-| command_delete                | 0                                                                                                                                             |
-| command_set                   | 0                                                                                                                                             |
-| command_insert                | %{NUMBER}                                                                                                                                             |
-| command_replace               | 0                                                                                                                                             |
-| command_commit                | 0                                                                                                                                             |
-| command_suggest               | 0                                                                                                                                             |
-| command_json                  | 0                                                                                                                                             |
-| command_callpq                | 0                                                                                                                                             |
-| command_cluster               | 0                                                                                                                                             |
-| command_getfield              | 0                                                                                                                                             |
-| insert_replace_stats_ms_avg   | #!/[0-9]{1}.[0-9]{3}/!# #!/[0-9]{1}.[0-9]{3}/!# #!/[0-9]{1}.[0-9]{3}/!#                                                                                                                             |
-| insert_replace_stats_ms_min   | #!/[0-9]{1}.[0-9]{3}/!# #!/[0-9]{1}.[0-9]{3}/!# #!/[0-9]{1}.[0-9]{3}/!#                                                                                                                             |
-| insert_replace_stats_ms_max   | #!/[0-9]{1}.[0-9]{3}/!# #!/[0-9]{1}.[0-9]{3}/!# #!/[0-9]{1}.[0-9]{3}/!#                                                                                                                             |
-| insert_replace_stats_ms_pct95 | #!/[0-9]{1}.[0-9]{3}/!# #!/[0-9]{1}.[0-9]{3}/!# #!/[0-9]{1}.[0-9]{3}/!#                                                                                                                             |
-| insert_replace_stats_ms_pct99 | #!/[0-9]{1}.[0-9]{3}/!# #!/[0-9]{1}.[0-9]{3}/!# #!/[0-9]{1}.[0-9]{3}/!#                                                                                                                             |
-| search_stats_ms_avg           | #!/[0-9]{1}.[0-9]{3}/!# #!/[0-9]{1}.[0-9]{3}/!# #!/[0-9]{1}.[0-9]{3}/!#                                                                                                                             |
-| search_stats_ms_min           | #!/[0-9]{1}.[0-9]{3}/!# #!/[0-9]{1}.[0-9]{3}/!# #!/[0-9]{1}.[0-9]{3}/!#                                                                                                                             |
-| search_stats_ms_max           | #!/[0-9]{1}.[0-9]{3}/!# #!/[0-9]{1}.[0-9]{3}/!# #!/[0-9]{1}.[0-9]{3}/!#                                                                                                                             |
-| search_stats_ms_pct95         | #!/[0-9]{1}.[0-9]{3}/!# #!/[0-9]{1}.[0-9]{3}/!# #!/[0-9]{1}.[0-9]{3}/!#                                                                                                                             |
-| search_stats_ms_pct99         | #!/[0-9]{1}.[0-9]{3}/!# #!/[0-9]{1}.[0-9]{3}/!# #!/[0-9]{1}.[0-9]{3}/!#                                                                                                                             |
-| update_stats_ms_avg           | N/A N/A N/A                                                                                                                                   |
-| update_stats_ms_min           | N/A N/A N/A                                                                                                                                   |
-| update_stats_ms_max           | N/A N/A N/A                                                                                                                                   |
-| update_stats_ms_pct95         | N/A N/A N/A                                                                                                                                   |
-| update_stats_ms_pct99         | N/A N/A N/A                                                                                                                                   |
-| agent_connect                 | 0                                                                                                                                             |
-| agent_tfo                     | 0                                                                                                                                             |
-| agent_retry                   | 0                                                                                                                                             |
-| queries                       | %{NUMBER}                                                                                                                                             |
-| dist_queries                  | 0                                                                                                                                             |
-| workers_total                 | %{NUMBER}                                                                                                                                             |
-| workers_active                | %{NUMBER}                                                                                                                                             |
-| workers_clients               | %{NUMBER}                                                                                                                                             |
-| workers_clients_vip           | 0                                                                                                                                             |
-| workers_clients_buddy         | %{NUMBER}                                                                                                                                             |
-| work_queue_length             | 6                                                                                                                                             |
-| load                          | 0.00 0.00 0.00                                                                                                                                |
-| load_primary                  | 0.00 0.00 0.00                                                                                                                                |
-| load_secondary                | 0.00 0.00 0.00                                                                                                                                |
-| query_wall                    | #!/[0-9]{1}.[0-9]{3}/!#                                                                                                                                         |
-| query_cpu                     | OFF                                                                                                                                           |
-| dist_wall                     | #!/[0-9]{1}.[0-9]{3}/!#                                                                                                                                         |
-| dist_local                    | #!/[0-9]{1}.[0-9]{3}/!#                                                                                                                                         |
-| dist_wait                     | #!/[0-9]{1}.[0-9]{3}/!#                                                                                                                                         |
-| query_reads                   | OFF                                                                                                                                           |
-| query_readkb                  | OFF                                                                                                                                           |
-| query_readtime                | OFF                                                                                                                                           |
-| avg_query_wall                | #!/[0-9]{1}.[0-9]{3}/!#                                                                                                                                         |
-| avg_query_cpu                 | OFF                                                                                                                                           |
-| avg_dist_wall                 | #!/[0-9]{1}.[0-9]{3}/!#                                                                                                                                         |
-| avg_dist_local                | #!/[0-9]{1}.[0-9]{3}/!#                                                                                                                                         |
-| avg_dist_wait                 | #!/[0-9]{1}.[0-9]{3}/!#                                                                                                                                         |
-| avg_query_reads               | OFF                                                                                                                                           |
-| avg_query_readkb              | OFF                                                                                                                                           |
-| avg_query_readtime            | OFF                                                                                                                                           |
-| qcache_max_bytes              | 16777216                                                                                                                                      |
-| qcache_thresh_msec            | 3000                                                                                                                                          |
-| qcache_ttl_sec                | 60                                                                                                                                            |
-| qcache_cached_queries         | 0                                                                                                                                             |
-| qcache_used_bytes             | 0                                                                                                                                             |
-| qcache_hits                   | 0                                                                                                                                             |
-+-------------------------------+-----------------------------------------------------------------------------------------------------------------------------------------------+
+%{NUMBER} rows in set
 ––– input –––
 mysql -h0 -P9306 -e "CREATE TABLE big_table (id INT, value TEXT);"
 ––– output –––

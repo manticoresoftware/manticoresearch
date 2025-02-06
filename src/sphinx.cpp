@@ -11626,7 +11626,7 @@ Bson_t Explain ( ExplainQueryArgs_t & tArgs )
 		return EmptyBson ();
 	}
 
-	sphTransformExtendedQuery ( &tParsed.m_pRoot, *tArgs.m_pSettings, false, nullptr );
+	sphTransformExtendedQuery ( &tParsed.m_pRoot, *tArgs.m_pSettings, false ); // fixme! m.b. explain boolean-simplified?
 
 	bool bWordDict = tArgs.m_pDict->GetSettings().m_bWordDict;
 	int iExpandKeywords = ExpandKeywords ( tArgs.m_iExpandKeywords, QUERY_OPT_DEFAULT, *tArgs.m_pSettings, bWordDict );

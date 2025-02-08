@@ -24,7 +24,7 @@ The table below lists all supported languages and indicates how to enable:
 | Bulgarian | charset_table=non_cont | bg | - | |
 | Catalan | charset_table=non_cont | ca | morphology=libstemmer_ca | |
 | Chinese using [ICU](https://icu.unicode.org/) | charset_table=chinese | zh | morphology=icu_chinese | More accurate than using ngrams |
-| Chinese using [Jieba](https://github.com/fxsjy/jieba) | charset_table=chinese | zh | morphology=jieba_chinese | More accurate than using ngrams |
+| Chinese using [Jieba](https://github.com/fxsjy/jieba) | charset_table=chinese | zh | morphology=jieba_chinese, requires package `manticore-language-packs` | More accurate than using ngrams |
 | Chinese using ngrams| ngram_chars=chinese | zh | ngram_chars=1 | Faster indexing, but the search performance might not be as good |
 | Croatian | charset_table=non_cont | hr | - | |
 | Kurdish | charset_table=non_cont | ckb | - | |

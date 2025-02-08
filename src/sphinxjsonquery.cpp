@@ -1157,9 +1157,11 @@ static bool ParseOptions ( const JsonObj_c & tRoot, ParsedJsonQuery_t & tPJQuery
 		return true;
 
 	if ( tQuery.m_eJoinType!=JoinType_e::NONE )
-	{
 		for ( const auto & i : tOptions )
 		{
+			if ( !i.IsObj() )
+				continue;
+
 			CSphString sTable = i.Name();
 			sTable.ToLower();
 
@@ -1183,9 +1185,6 @@ static bool ParseOptions ( const JsonObj_c & tRoot, ParsedJsonQuery_t & tPJQuery
 			sError.SetSprintf ( "Unknown table '%s' in OPTIONS", sTable.cstr() );
 			return false;
 		}
-
-		return true;
-	}
 
 	return ParseOptions ( tOptions, tQuery, sError );
 }

@@ -520,6 +520,40 @@ select * from join1 left join join2 on join1.string_id = join2.id where join2.id
 }
 </query>
 
+<query endpoint="json/search">
+{
+  "table": "join1",
+  "query": { "query_string": "title1 | title2" },
+  "options":
+  {
+	"cutoff": 1
+  },
+  "join":
+  [
+    {
+      "type": "inner",
+      "table": "join2",
+      "on":
+      [
+        {
+          "left":
+          {
+            "table": "join1",
+            "field": "string_id"
+          },
+          "operator": "eq",
+          "right":
+          {
+            "table": "join2",
+            "field": "id"
+          }
+        }
+      ]
+    }
+  ]
+}
+</query>
+
 <sphinxql>
 <!-- cleanup -->
 drop table join1;

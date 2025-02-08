@@ -273,10 +273,7 @@ function ( GET_SONAME RAWLIB OUTVAR )
 					OUTPUT_STRIP_TRAILING_WHITESPACE )
 
 			STRING ( REGEX REPLACE ".*:\n" "" _CONTENT "${_CONTENT}" )
-			if ( EXISTS "${_CONTENT}" )
-				set ( "${OUTVAR}" "${_CONTENT}" PARENT_SCOPE )
-				return ()
-			endif()
+			set ( "${OUTVAR}" "${_CONTENT}" PARENT_SCOPE )
 		else ()
 			execute_process ( COMMAND "${CMAKE_OBJDUMP}" -p "${RAWLIB}"
 					WORKING_DIRECTORY "${SOURCE_DIR}"

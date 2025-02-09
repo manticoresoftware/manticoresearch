@@ -27,7 +27,6 @@ docker exec manticore bash -c "curl -s https://hub.docker.com/v2/repositories/li
 10.5
 10.6
 10.11
-11.1
 11.2
 11.4
 11.5

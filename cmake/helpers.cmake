@@ -273,7 +273,11 @@ function ( GET_SONAME RAWLIB OUTVAR )
 					OUTPUT_STRIP_TRAILING_WHITESPACE )
 
 			STRING ( REGEX REPLACE ".*:\n" "" _CONTENT "${_CONTENT}" )
-			set ( "${OUTVAR}" "${_CONTENT}" PARENT_SCOPE )
+			GET_FILENAME_COMPONENT ( EXTNAME "${_CONTENT}" LAST_EXT )
+			if (EXTNAME STREQUAL ".dylib")
+				set ( "${OUTVAR}" "${_CONTENT}" PARENT_SCOPE )
+				return ()
+			endif ()
 		else ()
 			execute_process ( COMMAND "${CMAKE_OBJDUMP}" -p "${RAWLIB}"
 					WORKING_DIRECTORY "${SOURCE_DIR}"

@@ -1,31 +1,42 @@
 ––– block: ../base/start-searchd –––
 ––– input –––
-curl -X POST "http://localhost:9308/sql?mode=raw" -d "query=show%20queries"; echo
+apt-get install jq -y > /dev/null; echo $?
 ––– output –––
-[{"total":3,"error":"","warning":"","columns":[{"id":{"type":"long long"}},{"query":{"type":"string"}},{"time":{"type":"string"}},{"protocol":{"type":"string"}},{"host":{"type":"string"}}],"data":[{"id":5,"query":"show queries","time":"%{NUMBER}#!/[a-z]+/!# ago","protocol":"http","host":"127.0.0.1:%{NUMBER}"},{"id":6,"query":"select","time":"%{NUMBER}#!/[a-z]+/!# ago","protocol":"http","host":"127.0.0.1:%{NUMBER}"},{"id":4,"query":"show_settings","time":"%{NUMBER}#!/[a-z]+/!#","protocol":"http","host":"127.0.0.1:%{NUMBER}"}]}]
+debconf: delaying package configuration, since apt-utils is not installed
+0
 ––– input –––
-curl "http://localhost:9308/sql?mode=raw&query=SHOW%20QUERIES"; echo
+diff <(curl -s -X POST "http://localhost:9308/sql?mode=raw" -d "query=SHOW%20TABLES") <(curl -s "http://localhost:9308/sql?mode=raw&query=SHOW%20TABLES") && echo "Test 1: SHOW TABLES - PASSED" || echo "Test 1: SHOW TABLES - FAILED"
 ––– output –––
-[{"total":3,"error":"","warning":"","columns":[{"id":{"type":"long long"}},{"query":{"type":"string"}},{"time":{"type":"string"}},{"protocol":{"type":"string"}},{"host":{"type":"string"}}],"data":[{"id":6,"query":"select","time":"%{NUMBER}#!/[a-z]+/!# ago","protocol":"http","host":"127.0.0.1:%{NUMBER}"},{"id":7,"query":"SHOW QUERIES","time":"%{NUMBER}#!/[a-z]+/!# ago","protocol":"http","host":"127.0.0.1:%{NUMBER}"},{"id":4,"query":"show_settings","time":"%{NUMBER}#!/[a-z]+/!#","protocol":"http","host":"127.0.0.1:%{NUMBER}"}]}]
 ––– input –––
-curl -X POST "http://localhost:9308/sql?mode=raw" -d "query=SHOW TABLES"; echo
+diff <(curl -s -X POST "http://localhost:9308/sql?mode=raw" -d "query=SHOW%20VARIABLES") <(curl -s "http://localhost:9308/sql?mode=raw&query=SHOW%20VARIABLES") && echo "Test 2: SHOW VARIABLES - PASSED" || echo "Test 2: SHOW VARIABLES - FAILED"
 ––– output –––
-[{
-"columns":[{"Table":{"type":"string"}},{"Type":{"type":"string"}}],
-"data":[
-],
-"total":0,
-"error":"",
-"warning":""
-}]
 ––– input –––
-curl "http://localhost:9308/sql?mode=raw&query=SHOW+TABLES"; echo
+diff <(curl -s -X POST "http://localhost:9308/sql?mode=raw" -d "query=SHOW%20STATUS" | jq 'walk(if type == "object" then del(.Value) else . end)') <(curl -s "http://localhost:9308/sql?mode=raw&query=SHOW%20STATUS" | jq 'walk(if type == "object" then del(.Value) else . end)') && echo "Test 3: SHOW STATUS - PASSED" || echo "Test 3: SHOW STATUS - FAILED"
 ––– output –––
-[{
-"columns":[{"Table":{"type":"string"}},{"Type":{"type":"string"}}],
-"data":[
-],
-"total":0,
-"error":"",
-"warning":""
-}]
+––– input –––
+diff <(curl -s -X POST "http://localhost:9308/sql?mode=raw" -d "query=SHOW%20META") <(curl -s "http://localhost:9308/sql?mode=raw&query=SHOW%20META") && echo "Test 4: SHOW META - PASSED" || echo "Test 4: SHOW META - FAILED"
+––– output –––
+––– input –––
+diff <(curl -s -X POST "http://localhost:9308/sql?raw_response=true" -d "query=SHOW%20TABLES") <(curl -s "http://localhost:9308/sql?raw_response=true&query=SHOW%20TABLES") && echo "Test 5: SHOW TABLES - PASSED" || echo "Test 1: SHOW TABLES - FAILED"
+––– output –––
+––– input –––
+diff <(curl -s -X POST "http://localhost:9308/sql?raw_response=true" -d "query=SHOW%20VARIABLES") <(curl -s "http://localhost:9308/sql?raw_response=true&query=SHOW%20VARIABLES") && echo "Test 6: SHOW VARIABLES - PASSED" || echo "Test 2: SHOW VARIABLES - FAILED"
+––– output –––
+––– input –––
+diff <(curl -s -X POST "http://localhost:9308/sql?raw_response=true" -d "query=SHOW%20STATUS" | jq 'walk(if type == "object" then del(.Value) else . end)') <(curl -s "http://localhost:9308/sql?raw_response=true&query=SHOW%20STATUS" | jq 'walk(if type == "object" then del(.Value) else . end)') && echo "Test 7: SHOW STATUS - PASSED" || echo "Test 3: SHOW STATUS - FAILED"
+––– output –––
+––– input –––
+diff <(curl -s -X POST "http://localhost:9308/sql?raw_response=true" -d "query=SHOW%20META") <(curl -s "http://localhost:9308/sql?raw_response=true&query=SHOW%20META") && echo "Test 4: SHOW META - PASSED" || echo "Test 8: SHOW META - FAILED"
+––– output –––
+––– input –––
+diff <(curl -s -X POST "http://localhost:9308/sql?mode=raw" -d "query=SHOW%20QUERIES" | jq 'map(del(.time))') <(curl -s "http://localhost:9308/sql?mode=raw&query=SHOW%20QUERIES" | jq 'map(del(.time))')
+––– output –––
+––– input –––
+diff <(curl -s -X POST "http://localhost:9308/sql?raw_response=true" -d "query=SHOW%20QUERIES" | jq 'if type == "array" then .[0].data[] |= del(.time) else empty end') <(curl -s "http://localhost:9308/sql?raw_response=true&query=SHOW%20QUERIES" | jq 'if type == "array" then .[0].data[] |= del(.time) else empty end') && echo "Test 10: SHOW QUERIES - PASSED" || echo "Test 10: SHOW QUERIES - FAILED"
+––– output –––
+––– input –––
+curl -s -X POST "http://localhost:9308/sql?raw_response=true" -d "query=SHOW%20QUERIES"; echo
+––– output –––
+––– input –––
+curl -s "http://localhost:9308/sql?raw_response=true&query=SHOW%20QUERIES"; echo
+––– output –––

@@ -11662,13 +11662,20 @@ static void CommitAcc ( const SqlStmt_t & tStmt, cServedIndexRefPtr_c & pServed,
 	if ( bCommit )
 	{
 		RtAccum_t * pAccum = pSession->m_tAcc.GetAcc();
-		RIdx_T<RtIndex_i *> pIndex { pServed };
-		assert ( pSession->m_tAcc.GetAcc ( pIndex, sError )==pAccum );
+		// scoped lock only for assert
+		{
+			RIdx_T<RtIndex_i *> pIndex { pServed };
+			assert ( pSession->m_tAcc.GetAcc ( pIndex, sError )==pAccum );
+		}
 
 		if ( !HandleCmdReplicate ( *pAccum ) )
 		{
 			TlsMsg::MoveError ( sError );
-			pIndex->RollBack ( pAccum ); // clean up collected data
+			// scoped lock for rollback call on index
+			{
+				RIdx_T<RtIndex_i *> pIndex { pServed };
+				pIndex->RollBack ( pAccum ); // clean up collected data
+			}
 			tOut.Error ( "%s", sError.cstr() );
 			return;
 		}

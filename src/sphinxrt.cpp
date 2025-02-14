@@ -3439,10 +3439,13 @@ void RtIndex_c::ForceDiskChunk ( int iFlushWrite, int iFlushSearch )
 	if ( m_tRtChunks.RamSegs()->IsEmpty() )
 		return;
 
-	int64_t tmFlushWrite = ( GetMutableSettings().m_iFlushWrite<0 ? iFlushWrite : GetMutableSettings().m_iFlushWrite );
+	int64_t tmFlushWrite = ( GetMutableSettings().IsSet ( MutableName_e::DISKCHUNK_FLUSH_WRITE_TIMEOUT ) ? GetMutableSettings().m_iFlushWrite : iFlushWrite );
 	tmFlushWrite *= 1000000;
-	int64_t tmFlushSearch = ( GetMutableSettings().m_iFlushSearch<0 ? iFlushSearch : GetMutableSettings().m_iFlushSearch );
+	int64_t tmFlushSearch = ( GetMutableSettings().IsSet ( MutableName_e::DISKCHUNK_FLUSH_SEARCH_TIMEOUT ) ? GetMutableSettings().m_iFlushSearch : iFlushSearch );
 	tmFlushSearch *= 1000000;
+	if ( tmFlushWrite<0 )
+		return;
+
 	int64_t tmNow = sphMicroTimer();
 
 	// recent write disables auto-flush

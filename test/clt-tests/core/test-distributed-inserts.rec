@@ -45,7 +45,7 @@ curl -s -X POST http://localhost:9308/insert -d '{"table": "test2", "id": 1, "do
 ––– output –––
 true
 ––– input –––
-curl -s -X POST http://localhost:9308/insert -d '{"table": "test2", "id": 2, "doc": {"model": "Galaxy S21 Ultra", "storage_capacity": 128, "color": "black", "release_year": 2021, "price": 1199.99, "discounted_price": 1099.99, "sold": 1, "date_added": 1609459200000, "product_codes": [4,5,6], "values": [1234567890123456789,9876543210987654321], "additional_info": {"features": ["Dynamic AMOLED 2X", "Exynos 2100", "108MP camera"]}, "vector": [0.5,0.4,0.3,0.2]}}'; echo
+curl -s -X POST http://localhost:9308/insert -d '{"table": "test2", "id": 2, "doc": {"model": "Galaxy S21 Ultra", "storage_capacity": 128, "color": "black", "release_year": 2021, "price": 1199.99, "discounted_price": 1099.99, "sold": 1, "date_added": 1609459200000, "product_codes": [4,5,6], "values": [1234567890123456789,9876543210987654321], "additional_info": {"features": ["Dynamic AMOLED 2X", "Exynos 2100", "108MP camera"]}, "vector": [0.5,0.4,0.3,0.2]}}' | jq '.created'
 ––– output –––
 true
 ––– input –––

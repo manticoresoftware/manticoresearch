@@ -16,6 +16,9 @@ mysql -h0 -P1306 -e "create table ${CLUSTER_NAME}:tbl1(id bigint) shards=3 rf=2;
 ––– output –––
 0
 ––– input –––
+mysql -h0 -P1306 -e "SHOW TABLES\G"
+––– output –––
+––– input –––
 mysql -h0 -P1306 -e "DROP TABLE ${CLUSTER_NAME}:tbl1;"; echo $?;
 ––– output –––
 0
@@ -47,7 +50,7 @@ mysql -h0 -P1306 -e "create table ${CLUSTER_NAME}:Tbl2(id bigint) shards=3 rf=1;
 mysql -h0 -P1306 -e "DROP TABLE ${CLUSTER_NAME}:Tbl2;"; echo $?
 ––– output –––
 ––– input –––
-mysql -h0 -P1306 -e "create table ${CLUSTER_NAME}:tbl_missing_type(id) shards=3 rf=1;" || echo "Error: Missing data type for column."
+mysql -h0 -P1306 -e "create table ${CLUSTER_NAME}:tbl_missing_type(id) shards=3 rf=1;"
 ––– output –––
 ––– input –––
 mysql -h0 -P1306 -e "SHOW TABLES\G"
@@ -56,13 +59,13 @@ mysql -h0 -P1306 -e "SHOW TABLES\G"
 LONG_TABLE_NAME=$(printf "tbl%065d" 1)
 ––– output –––
 ––– input –––
-mysql -h0 -P1306 -e "create table ${CLUSTER_NAME}:${LONG_TABLE_NAME}(id bigint) shards=3 rf=1;" || echo "Error: Table name too long."
+mysql -h0 -P1306 -e "create table ${CLUSTER_NAME}:${LONG_TABLE_NAME}(id bigint) shards=3 rf=1;"
 ––– output –––
 ––– input –––
 mysql -h0 -P1306 -e "SHOW TABLES\G"
 ––– output –––
 ––– input –––
-mysql -h0 -P1306 -e "DROP TABLE ${CLUSTER_NAME}:${LONG_TABLE_NAME};" || echo "Error: Could not drop table with long name."
+mysql -h0 -P1306 -e "DROP TABLE c:${LONG_TABLE_NAME};"
 ––– output –––
 ––– input –––
 mysql -h0 -P1306 -e "SHOW TABLES\G"

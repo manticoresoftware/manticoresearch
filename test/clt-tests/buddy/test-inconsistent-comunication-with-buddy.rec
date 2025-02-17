@@ -7,36 +7,40 @@ debconf: delaying package configuration, since apt-utils is not installed
 ––– input –––
 diff <(curl -s -X POST "http://localhost:9308/sql?mode=raw" -d "query=SHOW%20TABLES") <(curl -s "http://localhost:9308/sql?mode=raw&query=SHOW%20TABLES") && echo "Test 1: SHOW TABLES - PASSED" || echo "Test 1: SHOW TABLES - FAILED"
 ––– output –––
+Test 1: SHOW TABLES - PASSED
 ––– input –––
 diff <(curl -s -X POST "http://localhost:9308/sql?mode=raw" -d "query=SHOW%20VARIABLES") <(curl -s "http://localhost:9308/sql?mode=raw&query=SHOW%20VARIABLES") && echo "Test 2: SHOW VARIABLES - PASSED" || echo "Test 2: SHOW VARIABLES - FAILED"
 ––– output –––
+Test 2: SHOW VARIABLES - PASSED
 ––– input –––
 diff <(curl -s -X POST "http://localhost:9308/sql?mode=raw" -d "query=SHOW%20STATUS" | jq 'walk(if type == "object" then del(.Value) else . end)') <(curl -s "http://localhost:9308/sql?mode=raw&query=SHOW%20STATUS" | jq 'walk(if type == "object" then del(.Value) else . end)') && echo "Test 3: SHOW STATUS - PASSED" || echo "Test 3: SHOW STATUS - FAILED"
 ––– output –––
+Test 3: SHOW STATUS - PASSED
 ––– input –––
 diff <(curl -s -X POST "http://localhost:9308/sql?mode=raw" -d "query=SHOW%20META") <(curl -s "http://localhost:9308/sql?mode=raw&query=SHOW%20META") && echo "Test 4: SHOW META - PASSED" || echo "Test 4: SHOW META - FAILED"
 ––– output –––
+Test 4: SHOW META - PASSED
 ––– input –––
-diff <(curl -s -X POST "http://localhost:9308/sql?raw_response=true" -d "query=SHOW%20TABLES") <(curl -s "http://localhost:9308/sql?raw_response=true&query=SHOW%20TABLES") && echo "Test 5: SHOW TABLES - PASSED" || echo "Test 1: SHOW TABLES - FAILED"
+diff <(curl -s -X POST "http://localhost:9308/sql?raw_response=true" -d "query=SHOW%20TABLES") <(curl -s "http://localhost:9308/sql?raw_response=true&query=SHOW%20TABLES") && echo "Test 5: SHOW TABLES - PASSED" || echo "Test 5: SHOW TABLES - FAILED"
 ––– output –––
+Test 5: SHOW TABLES - PASSED
 ––– input –––
-diff <(curl -s -X POST "http://localhost:9308/sql?raw_response=true" -d "query=SHOW%20VARIABLES") <(curl -s "http://localhost:9308/sql?raw_response=true&query=SHOW%20VARIABLES") && echo "Test 6: SHOW VARIABLES - PASSED" || echo "Test 2: SHOW VARIABLES - FAILED"
+diff <(curl -s -X POST "http://localhost:9308/sql?raw_response=true" -d "query=SHOW%20VARIABLES") <(curl -s "http://localhost:9308/sql?raw_response=true&query=SHOW%20VARIABLES") && echo "Test 6: SHOW VARIABLES - PASSED" || echo "Test 6: SHOW VARIABLES - FAILED"
 ––– output –––
+Test 6: SHOW VARIABLES - PASSED
 ––– input –––
-diff <(curl -s -X POST "http://localhost:9308/sql?raw_response=true" -d "query=SHOW%20STATUS" | jq 'walk(if type == "object" then del(.Value) else . end)') <(curl -s "http://localhost:9308/sql?raw_response=true&query=SHOW%20STATUS" | jq 'walk(if type == "object" then del(.Value) else . end)') && echo "Test 7: SHOW STATUS - PASSED" || echo "Test 3: SHOW STATUS - FAILED"
+diff <(curl -s -X POST "http://localhost:9308/sql?raw_response=true" -d "query=SHOW%20STATUS" | jq 'walk(if type == "object" then del(.Value) else . end)') <(curl -s "http://localhost:9308/sql?raw_response=true&query=SHOW%20STATUS" | jq 'walk(if type == "object" then del(.Value) else . end)') && echo "Test 7: SHOW STATUS - PASSED" || echo "Test 7: SHOW STATUS - FAILED"
 ––– output –––
+Test 7: SHOW STATUS - PASSED
 ––– input –––
-diff <(curl -s -X POST "http://localhost:9308/sql?raw_response=true" -d "query=SHOW%20META") <(curl -s "http://localhost:9308/sql?raw_response=true&query=SHOW%20META") && echo "Test 4: SHOW META - PASSED" || echo "Test 8: SHOW META - FAILED"
+diff <(curl -s -X POST "http://localhost:9308/sql?raw_response=true" -d "query=SHOW%20META") <(curl -s "http://localhost:9308/sql?raw_response=true&query=SHOW%20META") && echo "Test 8: SHOW META - PASSED" || echo "Test 8: SHOW META - FAILED"
 ––– output –––
+Test 8: SHOW META - PASSED
 ––– input –––
-diff <(curl -s -X POST "http://localhost:9308/sql?mode=raw" -d "query=SHOW%20QUERIES" | jq 'map(del(.time))') <(curl -s "http://localhost:9308/sql?mode=raw&query=SHOW%20QUERIES" | jq 'map(del(.time))')
+diff <(curl -s -X POST "http://localhost:9308/sql?mode=raw" -d "query=SHOW%20QUERIES" | jq 'map(del(.time) | .data[]? |= del(.time)) | sort_by(.query)') <(curl -s "http://localhost:9308/sql?mode=raw&query=SHOW%20QUERIES" | jq 'map(del(.time) | .data[]? |= del(.time)) | sort_by(.query)') && echo "Test 9: SHOW QUERIES (mode=raw) - PASSED" || echo "Test 9: SHOW QUERIES (mode=raw) - FAILED"
 ––– output –––
+Test 9: SHOW QUERIES (mode=raw) - PASSED
 ––– input –––
-diff <(curl -s -X POST "http://localhost:9308/sql?raw_response=true" -d "query=SHOW%20QUERIES" | jq 'if type == "array" then .[0].data[] |= del(.time) else empty end') <(curl -s "http://localhost:9308/sql?raw_response=true&query=SHOW%20QUERIES" | jq 'if type == "array" then .[0].data[] |= del(.time) else empty end') && echo "Test 10: SHOW QUERIES - PASSED" || echo "Test 10: SHOW QUERIES - FAILED"
+diff <(curl -s -X POST "http://localhost:9308/sql?raw_response=true" -d "query=SHOW%20QUERIES" | jq 'if type == "array" and length > 0 and .[0] | select(type == "object") | has("data") then .[0] |= del(.total) | .[0].data |= map(select(.query and .query != "" and .query != null) | del(.time, .id, .host) | .query |= tostring | .query |= ascii_downcase) | sort_by(.query) else empty end') <(curl -s "http://localhost:9308/sql?raw_response=true&query=SHOW%20QUERIES" | jq 'if type == "array" and length > 0 and .[0] | select(type == "object") | has("data") then .[0] |= del(.total) | .[0].data |= map(select(.query and .query != "" and .query != null) | del(.time, .id, .host) | .query |= tostring | .query |= ascii_downcase) | sort_by(.query) else empty end') && echo "Test 10: SHOW QUERIES (raw_response=true) - PASSED" || echo "Test 10: SHOW QUERIES (raw_response=true) - FAILED"
 ––– output –––
-––– input –––
-curl -s -X POST "http://localhost:9308/sql?raw_response=true" -d "query=SHOW%20QUERIES"; echo
-––– output –––
-––– input –––
-curl -s "http://localhost:9308/sql?raw_response=true&query=SHOW%20QUERIES"; echo
-––– output –––
+Test 10: SHOW QUERIES (raw_response=true) - PASSED

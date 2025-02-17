@@ -753,10 +753,17 @@ bool ProcessHttpQueryBuddy ( HttpProcessResult_t & tRes, Str_t sSrcQuery, Option
 		{
 			sSrcQuery = FromStr ( *pRawQuery );
 
-			// need also to skip the head chars "query="
+			// need also to skip the head chars
+			const char sRawHead[] = "mode=raw&query=";
+			const int sRawHeadLen = sizeof ( sRawHead )-1;
 			const char sQueryHead[] = "query=";
 			const int iQueryHeadLen = sizeof ( sQueryHead )-1;
-			if ( pRawQuery->Begins( sQueryHead ) )
+			if ( pRawQuery->Begins( sRawHead ) )
+			{
+				sSrcQuery.first +=sRawHeadLen ;
+				sSrcQuery.second -= sRawHeadLen;
+
+			} else if ( pRawQuery->Begins( sQueryHead ) )
 			{
 				sSrcQuery.first +=iQueryHeadLen ;
 				sSrcQuery.second -= iQueryHeadLen;

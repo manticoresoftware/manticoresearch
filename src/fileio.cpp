@@ -884,7 +884,7 @@ static std::atomic<int64_t> g_tmNextIOTime { 0 };
 void sphSetThrottling ( int iMaxIOps, int iMaxIOSize )
 {
 	g_iIOpsDelay = iMaxIOps ? 1000000 / iMaxIOps : iMaxIOps;
-	g_iMaxIOSize = Clamp ( 1, g_iLimitIOSize, iMaxIOSize );
+	g_iMaxIOSize = iMaxIOSize ? Clamp ( 1, g_iLimitIOSize, iMaxIOSize ) : g_iLimitIOSize;
 }
 
 

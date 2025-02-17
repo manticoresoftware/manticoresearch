@@ -4,16 +4,16 @@ mysql -h0 -P9306 -e "show version\G;"
 ––– output –––
 *************************** 1. row ***************************
 Component: Daemon
-Version: %{SEMVER} %{COMMITDATE} dev
+Version: %{VERSION} 
 *************************** 2. row ***************************
 Component: Columnar
-Version: columnar %{SEMVER} %{COMMITDATE}
+Version: columnar %{VERSION}
 *************************** 3. row ***************************
 Component: Secondary
-Version: secondary %{SEMVER} %{COMMITDATE}
+Version: secondary %{VERSION}
 *************************** 4. row ***************************
 Component: KNN
-Version: knn %{SEMVER} %{COMMITDATE}
+Version: knn %{VERSION}
 *************************** 5. row ***************************
 Component: Buddy
-Version: buddy v%{SEMVER}
+Version: buddy %{VERSION}

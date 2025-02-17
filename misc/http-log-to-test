@@ -1,0 +1,215 @@
+#!/usr/bin/env manticore-executor
+<?php declare(strict_types=1);
+
+// Copyright (c) 2017-2025, Manticore Software LTD (https://manticoresearch.com)
+// Copyright (c) 2001-2016, Andrew Aksyonoff
+// Copyright (c) 2008-2016, Sphinx Technologies Inc
+// All rights reserved
+//
+// This program is free software; you can redistribute it and/or modify
+// it under the terms of the GNU General Public License. You should have
+// received a copy of the GPL license along with this program; if you
+// did not, you can find it at http://www.gnu.org/
+
+function parseLogFile(string $filename): array {
+	$result = [];
+	$currentEntry = null;
+	$isRequest = false;
+	$isResponse = false;
+
+	// Open file for reading
+	$handle = fopen($filename, 'r');
+	if (!$handle) {
+		throw new Exception("Unable to open file: $filename");
+	}
+
+	while (($line = fgets($handle)) !== false) {
+		// Remove trailing whitespace
+		$line = rtrim($line);
+
+		// Check for new entry
+		if (preg_match('/^\[.*\] \[Request-ID: (\d+)\] - (Incoming HTTP Request|Outgoing HTTP Response):/', $line, $matches)) {
+			// Start new entry if it's a request
+			if (strpos($line, 'Incoming HTTP Request') !== false) {
+				if ($currentEntry && shouldIncludeEntry($currentEntry)) {
+					$result[] = $currentEntry;
+				}
+				$currentEntry = [
+					'request_id' => $matches[1],
+					'timestamp' => extractTimestamp($line),
+					'request' => [],
+					'response' => []
+				];
+				$isRequest = true;
+				$isResponse = false;
+			} elseif (strpos($line, 'Outgoing HTTP Response') !== false) {
+				$isRequest = false;
+				$isResponse = true;
+			}
+
+			continue;
+		}
+
+		// Skip delimiter lines
+		if (preg_match('/^[<>]{10,}$/', $line)) {
+			continue;
+		}
+
+		// Add content to current entry
+		if ($currentEntry && !empty($line)) {
+			if ($isRequest) {
+				$row = parseHttpRequestLine($line);
+				$currentEntry['request'] = mergeEntry($currentEntry['request'], $row);
+			} elseif ($isResponse) {
+				$row = parseHttpResponseLine($line);
+				$currentEntry['response'] = mergeEntry($currentEntry['response'], $row);
+			}
+		}
+	}
+
+	// Process last entry from the list
+	if ($currentEntry && shouldIncludeEntry($currentEntry)) {
+		$result[] = $currentEntry;
+	}
+
+	fclose($handle);
+	return $result;
+}
+
+/**
+ * Parse a single HTTP request line into a struct
+ * @param string $line
+ * @return array
+ */
+function parseHttpRequestLine(string $line): array {
+	static $isBody = false;
+	$line = trim($line);
+
+	// Return empty if line is empty
+	if (empty($line)) {
+		$isBody = true;
+		return [];
+	}
+
+	// Check if it's the request line (first line)
+	if (preg_match('/^(GET|POST|PUT|DELETE|HEAD|OPTIONS|PATCH)\s+(\S+)\s+HTTP\/([\d.]+)$/i', $line, $matches)) {
+		return [
+			'http:method' => $matches[1],
+			'http:path' => $matches[2],
+			'http:version' => $matches[3],
+		];
+	}
+
+	// Header line check
+	if (!$isBody && strpos($line, ':') !== false && preg_match('/^[\w\-]+:\s*.+$/', $line)) {
+		list($key, $value) = array_map('trim', explode(':', $line, 2));
+		return ["header:$key" => $value];
+	}
+
+	// If it's not a header and not the first line, treat it as body
+	return [
+		'body' => $line
+	];
+}
+
+/**
+ * Parse a single HTTP response line into a struct
+ * @param string $line
+ * @return array<string,string>
+ */
+function parseHttpResponseLine(string $line): array {
+	static $isBody = false;
+	$line = trim($line);
+	// Empty line check
+	if (empty($line)) {
+		$isBody = true;
+		return [];
+	}
+
+	// First line check (HTTP status line)
+	if (preg_match('/^HTTP\/(\d\.\d)\s+(\d{3})\s+(.*)$/', $line, $matches)) {
+		$isBody = false;
+		return [
+			'http:version' => $matches[1],
+			'http:code' => (int)$matches[2],
+			'http:message' => $matches[3],
+		];
+	}
+
+	// Header line check
+	if (!$isBody && strpos($line, ':') !== false && preg_match('/^[\w\-]+:\s*.+$/', $line)) {
+		list($key, $value) = array_map('trim', explode(':', $line, 2));
+		return ["header:$key" => $value];
+	}
+
+	// If none of the above, return the line as is
+	return ['body' => $line];
+}
+
+function mergeEntry(array $entry, array $newEntry): array {
+	foreach ($newEntry as $key => $value) {
+		if ($key === 'body') {
+			$entry[$key] = ($entry[$key] ?? '') . $value;
+		} else {
+			$entry[$key] = $value;
+		}
+	}
+	return $entry;
+}
+
+/**
+ * Check if the current entry should be included in the output
+ * We are excluding all requests from Buddy that are still logged into the file
+ * @param array $entry
+ * @return bool
+ */
+function shouldIncludeEntry(array $entry): bool {
+	return !str_starts_with($entry['request']['header:User-Agent'], 'Manticore Buddy');
+}
+
+function extractTimestamp($line) {
+	if (preg_match('/^\[(.*?)\]/', $line, $matches)) {
+		return $matches[1];
+	}
+	return null;
+}
+
+function printCLTTest(array $logEntries) {
+	foreach ($logEntries as $entry) {
+		$url = escapeshellarg($entry['request']['header:Host'] . $entry['request']['http:path']);
+		unset($entry['request']['header:Host']);
+		$args = [];
+		foreach ($entry['request'] as $key => $value) {
+			if (!str_starts_with($key, 'header:')) {
+				continue;
+			}
+			$args[] = '-H ' . escapeshellarg(substr($key, 7) . ': ' . $value);
+		}
+		$method = $entry['request']['http:method'];
+		if ($method === 'POST') {
+			$args[] = '-d ' . escapeshellarg($entry['request']['body']);
+		}
+		$argLine = implode(' ', $args);
+		echo "––– input –––\n";
+		echo "curl -X {$entry['request']['http:method']} {$argLine} {$url}\n";
+		echo "––– output –––\n";
+		echo "{$entry['response']['body']}\n";
+	}
+}
+
+try {
+	if (!isset($argv[1])) {
+		die("Usage: http-log-to-test <log-file>\n");
+	}
+
+	$logFile = $argv[1];
+	if (!file_exists($logFile)) {
+		die("Error: Log file '$logFile' not found.\n");
+	}
+
+	$logEntries = parseLogFile($logFile);
+	printCLTTest($logEntries);
+} catch (Exception $e) {
+	fwrite(STDERR, "Error: " . $e->getMessage() . "\n");
+	exit(1);
+}

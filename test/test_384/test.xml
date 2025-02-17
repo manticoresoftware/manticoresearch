@@ -20,6 +20,7 @@ searchd
 	<searchd_settings/>
 	data_dir = <data_path path="data0" />
 	server_id = <agent_id/>
+    diskchunk_flush_write_timeout = -1
 }
 </agent0>
 <agent1>
@@ -28,6 +29,7 @@ searchd
 	<searchd_settings/>
 	data_dir = <data_path path="data1"/>
 	server_id = <agent_id/>
+    diskchunk_flush_write_timeout = -1
 }
 </agent1>
 <agent2>
@@ -36,6 +38,7 @@ searchd
 	<searchd_settings/>
 	data_dir = <data_path path="data2"/>
 	server_id = <agent_id/>
+    diskchunk_flush_write_timeout = -1
 }
 </agent2>
 </config>

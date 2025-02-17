@@ -265,7 +265,7 @@ static bool InsertDoc ( Str_t sSrc, bool bReplace, CSphString & sError )
 {
 	DocID_t tTmpID;
 	SqlStmt_t tStmt;
-	if ( !sphParseJsonInsert ( sSrc.first, tStmt, tTmpID, false, sError ) )
+	if ( !sphParseJsonInsert ( sSrc, tStmt, tTmpID, false, sError ) )
 		return false;
 
 	assert ( tTmpID>=0 );

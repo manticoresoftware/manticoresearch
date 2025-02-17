@@ -37,7 +37,7 @@ diff <(curl -s -X POST "http://localhost:9308/sql?raw_response=true" -d "query=S
 ––– output –––
 Test 8: SHOW META - PASSED
 ––– input –––
-diff <(curl -s -X POST "http://localhost:9308/sql?mode=raw" -d "query=SHOW%20QUERIES" | jq 'map(del(.time, .id, .host) | .data[]? |= del(.time, .id, .host)) | sort_by(.query // "")') <(curl -s "http://localhost:9308/sql?mode=raw&query=SHOW%20QUERIES" | jq 'map(del(.time, .id, .host) | .data[]? |= del(.time, .id, .host)) | sort_by(.query // "")') && echo "Test 9: SHOW QUERIES (mode=raw) - PASSED" || echo "Test 9: SHOW QUERIES (mode=raw) - FAILED"
+if ! diff <(curl -s -X POST "http://localhost:9308/sql?mode=raw" -d "query=SHOW%20QUERIES" | jq 'map(del(.time, .id, .host) | .data[]? |= del(.time, .id, .host)) | sort_by(.query // "")') <(curl -s "http://localhost:9308/sql?mode=raw&query=SHOW%20QUERIES" | jq 'map(del(.time, .id, .host) | .data[]? |= del(.time, .id, .host)) | sort_by(.query // "")'); then echo "Test 9: SHOW QUERIES (mode=raw) - FAILED"; echo "Differences:"; diff <(curl -s -X POST "http://localhost:9308/sql?mode=raw" -d "query=SHOW%20QUERIES" | jq 'map(del(.time, .id, .host) | .data[]? |= del(.time, .id, .host)) | sort_by(.query // "")') <(curl -s "http://localhost:9308/sql?mode=raw&query=SHOW%20QUERIES" | jq 'map(del(.time, .id, .host) | .data[]? |= del(.time, .id, .host)) | sort_by(.query // "")'); else echo "Test 9: SHOW QUERIES (mode=raw) - PASSED"; fi
 ––– output –––
 Test 9: SHOW QUERIES (mode=raw) - PASSED
 ––– input –––

@@ -5,42 +5,270 @@ apt-get install jq -y > /dev/null; echo $?
 debconf: delaying package configuration, since apt-utils is not installed
 0
 ––– input –––
-diff <(curl -s -X POST "http://localhost:9308/sql?mode=raw" -d "query=SHOW%20TABLES") <(curl -s "http://localhost:9308/sql?mode=raw&query=SHOW%20TABLES") && echo "Test 1: SHOW TABLES - PASSED" || echo "Test 1: SHOW TABLES - FAILED"
+curl -s -X POST "http://localhost:9308/sql?mode=raw" -d "query=SHOW TABLES"; echo
 ––– output –––
-Test 1: SHOW TABLES - PASSED
+[{
+"columns":[{"Table":{"type":"string"}},{"Type":{"type":"string"}}],
+"data":[
+],
+"total":%{NUMBER},
+"error":"",
+"warning":""
+}]
 ––– input –––
-diff <(curl -s -X POST "http://localhost:9308/sql?mode=raw" -d "query=SHOW%20VARIABLES") <(curl -s "http://localhost:9308/sql?mode=raw&query=SHOW%20VARIABLES") && echo "Test 2: SHOW VARIABLES - PASSED" || echo "Test 2: SHOW VARIABLES - FAILED"
+curl -s "http://localhost:9308/sql?mode=raw&query=SHOW%20TABLES"; echo
 ––– output –––
-Test 2: SHOW VARIABLES - PASSED
+[{
+"columns":[{"Table":{"type":"string"}},{"Type":{"type":"string"}}],
+"data":[
+],
+"total":%{NUMBER},
+"error":"",
+"warning":""
+}]
 ––– input –––
-diff <(curl -s -X POST "http://localhost:9308/sql?mode=raw" -d "query=SHOW%20STATUS" | jq 'walk(if type == "object" then del(.Value) else . end)') <(curl -s "http://localhost:9308/sql?mode=raw&query=SHOW%20STATUS" | jq 'walk(if type == "object" then del(.Value) else . end)') && echo "Test 3: SHOW STATUS - PASSED" || echo "Test 3: SHOW STATUS - FAILED"
+curl -s -X POST "http://localhost:9308/sql?raw_response=true" -d "query=SHOW TABLES"; echo
 ––– output –––
-Test 3: SHOW STATUS - PASSED
+[{
+"columns":[{"Table":{"type":"string"}},{"Type":{"type":"string"}}],
+"data":[
+],
+"total":%{NUMBER},
+"error":"",
+"warning":""
+}]
 ––– input –––
-diff <(curl -s -X POST "http://localhost:9308/sql?mode=raw" -d "query=SHOW%20META") <(curl -s "http://localhost:9308/sql?mode=raw&query=SHOW%20META") && echo "Test 4: SHOW META - PASSED" || echo "Test 4: SHOW META - FAILED"
+curl -s "http://localhost:9308/sql?raw_response=true&query=SHOW%20TABLES"; echo
 ––– output –––
-Test 4: SHOW META - PASSED
+[{
+"columns":[{"Table":{"type":"string"}},{"Type":{"type":"string"}}],
+"data":[
+],
+"total":%{NUMBER},
+"error":"",
+"warning":""
+}]
 ––– input –––
-diff <(curl -s -X POST "http://localhost:9308/sql?raw_response=true" -d "query=SHOW%20TABLES") <(curl -s "http://localhost:9308/sql?raw_response=true&query=SHOW%20TABLES") && echo "Test 5: SHOW TABLES - PASSED" || echo "Test 5: SHOW TABLES - FAILED"
+curl -s -X POST "http://localhost:9308/sql?mode=raw" -d "query=SHOW VARIABLES"; echo
 ––– output –––
-Test 5: SHOW TABLES - PASSED
+[{
+"columns":[{"Variable_name":{"type":"string"}},{"Value":{"type":"string"}}],
+"data":[
+{"Variable_name":"autocommit","Value":"1"},
+{"Variable_name":"auto_optimize","Value":"1"},
+{"Variable_name":"optimize_cutoff","Value":"16"},
+{"Variable_name":"collation_connection","Value":"libc_ci"},
+{"Variable_name":"query_log_format","Value":"sphinxql"},
+{"Variable_name":"session_read_only","Value":"0"},
+{"Variable_name":"log_level","Value":"info"},
+{"Variable_name":"max_allowed_packet","Value":"134217728"},
+{"Variable_name":"character_set_client","Value":"utf8"},
+{"Variable_name":"character_set_connection","Value":"utf8"},
+{"Variable_name":"grouping_in_utc","Value":"0"},
+{"Variable_name":"timezone","Value":"/etc/localtime"},
+{"Variable_name":"last_insert_id","Value":""},
+{"Variable_name":"pseudo_sharding","Value":"1"},
+{"Variable_name":"secondary_indexes","Value":"1"},
+{"Variable_name":"accurate_aggregation","Value":"0"},
+{"Variable_name":"distinct_precision_threshold","Value":"3500"},
+{"Variable_name":"threads_ex_effective","Value":""},
+{"Variable_name":"cluster_user","Value":"cluster"},
+{"Variable_name":"thread_stack","Value":"1048576"},
+{"Variable_name":"threads_ex","Value":""},
+{"Variable_name":"user","Value":""}
+],
+"total":%{NUMBER},
+"error":"",
+"warning":""
+}]
 ––– input –––
-diff <(curl -s -X POST "http://localhost:9308/sql?raw_response=true" -d "query=SHOW%20VARIABLES") <(curl -s "http://localhost:9308/sql?raw_response=true&query=SHOW%20VARIABLES") && echo "Test 6: SHOW VARIABLES - PASSED" || echo "Test 6: SHOW VARIABLES - FAILED"
+curl -s "http://localhost:9308/sql?mode=raw&query=SHOW%20VARIABLES"; echo
 ––– output –––
-Test 6: SHOW VARIABLES - PASSED
+[{
+"columns":[{"Variable_name":{"type":"string"}},{"Value":{"type":"string"}}],
+"data":[
+{"Variable_name":"autocommit","Value":"1"},
+{"Variable_name":"auto_optimize","Value":"1"},
+{"Variable_name":"optimize_cutoff","Value":"16"},
+{"Variable_name":"collation_connection","Value":"libc_ci"},
+{"Variable_name":"query_log_format","Value":"sphinxql"},
+{"Variable_name":"session_read_only","Value":"0"},
+{"Variable_name":"log_level","Value":"info"},
+{"Variable_name":"max_allowed_packet","Value":"134217728"},
+{"Variable_name":"character_set_client","Value":"utf8"},
+{"Variable_name":"character_set_connection","Value":"utf8"},
+{"Variable_name":"grouping_in_utc","Value":"0"},
+{"Variable_name":"timezone","Value":"/etc/localtime"},
+{"Variable_name":"last_insert_id","Value":""},
+{"Variable_name":"pseudo_sharding","Value":"1"},
+{"Variable_name":"secondary_indexes","Value":"1"},
+{"Variable_name":"accurate_aggregation","Value":"0"},
+{"Variable_name":"distinct_precision_threshold","Value":"3500"},
+{"Variable_name":"threads_ex_effective","Value":""},
+{"Variable_name":"cluster_user","Value":"cluster"},
+{"Variable_name":"thread_stack","Value":"1048576"},
+{"Variable_name":"threads_ex","Value":""},
+{"Variable_name":"user","Value":""}
+],
+"total":%{NUMBER},
+"error":"",
+"warning":""
+}]
 ––– input –––
-diff <(curl -s -X POST "http://localhost:9308/sql?raw_response=true" -d "query=SHOW%20STATUS" | jq 'walk(if type == "object" then del(.Value) else . end)') <(curl -s "http://localhost:9308/sql?raw_response=true&query=SHOW%20STATUS" | jq 'walk(if type == "object" then del(.Value) else . end)') && echo "Test 7: SHOW STATUS - PASSED" || echo "Test 7: SHOW STATUS - FAILED"
+curl -s -X POST "http://localhost:9308/sql?raw_response=true" -d "query=SHOW VARIABLES"; echo
 ––– output –––
-Test 7: SHOW STATUS - PASSED
+[{
+"columns":[{"Variable_name":{"type":"string"}},{"Value":{"type":"string"}}],
+"data":[
+{"Variable_name":"autocommit","Value":"1"},
+{"Variable_name":"auto_optimize","Value":"1"},
+{"Variable_name":"optimize_cutoff","Value":"16"},
+{"Variable_name":"collation_connection","Value":"libc_ci"},
+{"Variable_name":"query_log_format","Value":"sphinxql"},
+{"Variable_name":"session_read_only","Value":"0"},
+{"Variable_name":"log_level","Value":"info"},
+{"Variable_name":"max_allowed_packet","Value":"134217728"},
+{"Variable_name":"character_set_client","Value":"utf8"},
+{"Variable_name":"character_set_connection","Value":"utf8"},
+{"Variable_name":"grouping_in_utc","Value":"0"},
+{"Variable_name":"timezone","Value":"/etc/localtime"},
+{"Variable_name":"last_insert_id","Value":""},
+{"Variable_name":"pseudo_sharding","Value":"1"},
+{"Variable_name":"secondary_indexes","Value":"1"},
+{"Variable_name":"accurate_aggregation","Value":"0"},
+{"Variable_name":"distinct_precision_threshold","Value":"3500"},
+{"Variable_name":"threads_ex_effective","Value":""},
+{"Variable_name":"cluster_user","Value":"cluster"},
+{"Variable_name":"thread_stack","Value":"1048576"},
+{"Variable_name":"threads_ex","Value":""},
+{"Variable_name":"user","Value":""}
+],
+"total":%{NUMBER},
+"error":"",
+"warning":""
+}]
 ––– input –––
-diff <(curl -s -X POST "http://localhost:9308/sql?raw_response=true" -d "query=SHOW%20META") <(curl -s "http://localhost:9308/sql?raw_response=true&query=SHOW%20META") && echo "Test 8: SHOW META - PASSED" || echo "Test 8: SHOW META - FAILED"
+curl -s "http://localhost:9308/sql?raw_response=true&query=SHOW%20VARIABLES"; echo
 ––– output –––
-Test 8: SHOW META - PASSED
+[{
+"columns":[{"Variable_name":{"type":"string"}},{"Value":{"type":"string"}}],
+"data":[
+{"Variable_name":"autocommit","Value":"1"},
+{"Variable_name":"auto_optimize","Value":"1"},
+{"Variable_name":"optimize_cutoff","Value":"16"},
+{"Variable_name":"collation_connection","Value":"libc_ci"},
+{"Variable_name":"query_log_format","Value":"sphinxql"},
+{"Variable_name":"session_read_only","Value":"0"},
+{"Variable_name":"log_level","Value":"info"},
+{"Variable_name":"max_allowed_packet","Value":"134217728"},
+{"Variable_name":"character_set_client","Value":"utf8"},
+{"Variable_name":"character_set_connection","Value":"utf8"},
+{"Variable_name":"grouping_in_utc","Value":"0"},
+{"Variable_name":"timezone","Value":"/etc/localtime"},
+{"Variable_name":"last_insert_id","Value":""},
+{"Variable_name":"pseudo_sharding","Value":"1"},
+{"Variable_name":"secondary_indexes","Value":"1"},
+{"Variable_name":"accurate_aggregation","Value":"0"},
+{"Variable_name":"distinct_precision_threshold","Value":"3500"},
+{"Variable_name":"threads_ex_effective","Value":""},
+{"Variable_name":"cluster_user","Value":"cluster"},
+{"Variable_name":"thread_stack","Value":"1048576"},
+{"Variable_name":"threads_ex","Value":""},
+{"Variable_name":"user","Value":""}
+],
+"total":%{NUMBER},
+"error":"",
+"warning":""
+}]
 ––– input –––
-if ! diff <(curl -s -X POST "http://localhost:9308/sql?mode=raw" -d "query=SHOW%20QUERIES" | jq 'map(del(.time, .id, .host) | .data[]? |= del(.time, .id, .host)) | sort_by(.query // "")') <(curl -s "http://localhost:9308/sql?mode=raw&query=SHOW%20QUERIES" | jq 'map(del(.time, .id, .host) | .data[]? |= del(.time, .id, .host)) | sort_by(.query // "")'); then echo "Test 9: SHOW QUERIES (mode=raw) - FAILED"; echo "Differences:"; diff <(curl -s -X POST "http://localhost:9308/sql?mode=raw" -d "query=SHOW%20QUERIES" | jq 'map(del(.time, .id, .host) | .data[]? |= del(.time, .id, .host)) | sort_by(.query // "")') <(curl -s "http://localhost:9308/sql?mode=raw&query=SHOW%20QUERIES" | jq 'map(del(.time, .id, .host) | .data[]? |= del(.time, .id, .host)) | sort_by(.query // "")'); else echo "Test 9: SHOW QUERIES (mode=raw) - PASSED"; fi
+curl -s -X POST "http://localhost:9308/sql?mode=raw" -d "query=SHOW META"; echo
 ––– output –––
-Test 9: SHOW QUERIES (mode=raw) - PASSED
+[{
+"columns":[{"Variable_name":{"type":"string"}},{"Value":{"type":"string"}}],
+"data":[
+{"Variable_name":"total","Value":"0"},
+{"Variable_name":"total_found","Value":"0"},
+{"Variable_name":"total_relation","Value":"eq"},
+{"Variable_name":"time","Value":"#!/[0-9]{1}.[0-9]{3}/!#"}
+],
+"total":%{NUMBER},
+"error":"",
+"warning":""
+}]
 ––– input –––
-diff <(curl -s -X POST "http://localhost:9308/sql?raw_response=true" -d "query=SHOW%20QUERIES" | jq 'if type == "array" and length > 0 and .[0] | select(type == "object") | has("data") then .[0] |= del(.total) | .[0].data |= map(select(.query and .query != "" and .query != null) | del(.time, .id, .host) | .query |= tostring | .query |= ascii_downcase) | sort_by(.query) else empty end') <(curl -s "http://localhost:9308/sql?raw_response=true&query=SHOW%20QUERIES" | jq 'if type == "array" and length > 0 and .[0] | select(type == "object") | has("data") then .[0] |= del(.total) | .[0].data |= map(select(.query and .query != "" and .query != null) | del(.time, .id, .host) | .query |= tostring | .query |= ascii_downcase) | sort_by(.query) else empty end') && echo "Test 10: SHOW QUERIES (raw_response=true) - PASSED" || echo "Test 10: SHOW QUERIES (raw_response=true) - FAILED"
+curl -s "http://localhost:9308/sql?mode=raw&query=SHOW%20META"; echo
 ––– output –––
-Test 10: SHOW QUERIES (raw_response=true) - PASSED
+[{
+"columns":[{"Variable_name":{"type":"string"}},{"Value":{"type":"string"}}],
+"data":[
+{"Variable_name":"total","Value":"0"},
+{"Variable_name":"total_found","Value":"0"},
+{"Variable_name":"total_relation","Value":"eq"},
+{"Variable_name":"time","Value":"#!/[0-9]{1}.[0-9]{3}/!#"}
+],
+"total":%{NUMBER},
+"error":"",
+"warning":""
+}]
+––– input –––
+curl -s -X POST "http://localhost:9308/sql?raw_response=true" -d "query=SHOW META"; echo
+––– output –––
+[{
+"columns":[{"Variable_name":{"type":"string"}},{"Value":{"type":"string"}}],
+"data":[
+{"Variable_name":"total","Value":"0"},
+{"Variable_name":"total_found","Value":"0"},
+{"Variable_name":"total_relation","Value":"eq"},
+{"Variable_name":"time","Value":"#!/[0-9]{1}.[0-9]{3}/!#"}
+],
+"total":%{NUMBER},
+"error":"",
+"warning":""
+}]
+––– input –––
+curl -s "http://localhost:9308/sql?raw_response=true&query=SHOW%20META"; echo
+––– output –––
+[{
+"columns":[{"Variable_name":{"type":"string"}},{"Value":{"type":"string"}}],
+"data":[
+{"Variable_name":"total","Value":"0"},
+{"Variable_name":"total_found","Value":"0"},
+{"Variable_name":"total_relation","Value":"eq"},
+{"Variable_name":"time","Value":"#!/[0-9]{1}.[0-9]{3}/!#"}
+],
+"total":%{NUMBER},
+"error":"",
+"warning":""
+}]
+––– input –––
+curl -s -X POST "http://localhost:9308/sql?mode=raw" -d "query=SHOW QUERIES"; echo
+––– output –––
+[{"total":%{NUMBER},"error":"","warning":"","columns":[{"id":{"type":"long long"}},{"query":{"type":"string"}},{"time":{"type":"string"}},{"protocol":{"type":"string"}},{"host":{"type":"string"}}],"data":[{"id":%{NUMBER},"query":"SHOW QUERIES","time":"%{NUMBER}ms ago","protocol":"http","host":"127.0.0.1:%{NUMBER}"},{"id":%{NUMBER},"query":"select","time":"%{NUMBER}ms ago","protocol":"http","host":"127.0.0.1:%{NUMBER}"},{"id":%{NUMBER},"query":"show_settings","time":"%{NUMBER}us","protocol":"http","host":"127.0.0.1:%{NUMBER}"}]}]
+––– input –––
+curl -s "http://localhost:9308/sql?mode=raw&query=SHOW%20QUERIES"; echo
+––– output –––
+[{"total":%{NUMBER},"error":"","warning":"","columns":[{"id":{"type":"long long"}},{"query":{"type":"string"}},{"time":{"type":"string"}},{"protocol":{"type":"string"}},{"host":{"type":"string"}}],"data":[{"id":%{NUMBER},"query":"select","time":"%{NUMBER}us ago","protocol":"http","host":"127.0.0.1:%{NUMBER}"},{"id":%{NUMBER},"query":"SHOW QUERIES","time":"%{NUMBER}ms ago","protocol":"http","host":"127.0.0.1:%{NUMBER}"},{"id":%{NUMBER},"query":"show_settings","time":"%{NUMBER}us","protocol":"http","host":"127.0.0.1:%{NUMBER}"}]}]
+––– input –––
+curl -s -X POST "http://localhost:9308/sql?raw_response=true" -d "query=SHOW QUERIES"; echo
+––– output –––
+[{"total":%{NUMBER},"error":"","warning":"","columns":[{"id":{"type":"long long"}},{"query":{"type":"string"}},{"time":{"type":"string"}},{"protocol":{"type":"string"}},{"host":{"type":"string"}}],"data":[{"id":%{NUMBER},"query":"select","time":"%{NUMBER}us ago","protocol":"http","host":"127.0.0.1:%{NUMBER}"},{"id":%{NUMBER},"query":"SHOW QUERIES","time":"%{NUMBER}us ago","protocol":"http","host":"127.0.0.1:%{NUMBER}"},{"id":%{NUMBER},"query":"show_settings","time":"%{NUMBER}us","protocol":"http","host":"127.0.0.1:%{NUMBER}"}]}]
+––– input –––
+curl -s "http://localhost:9308/sql?raw_response=true&query=SHOW%20QUERIES"; echo
+––– output –––
+[{"total":%{NUMBER},"error":"","warning":"","columns":[{"id":{"type":"long long"}},{"query":{"type":"string"}},{"time":{"type":"string"}},{"protocol":{"type":"string"}},{"host":{"type":"string"}}],"data":[{"id":%{NUMBER},"query":"select","time":"%{NUMBER}us ago","protocol":"http","host":"127.0.0.1:%{NUMBER}"},{"id":%{NUMBER},"query":"SHOW QUERIES","time":"%{NUMBER}us ago","protocol":"http","host":"127.0.0.1:%{NUMBER}"},{"id":%{NUMBER},"query":"show_settings","time":"%{NUMBER}us","protocol":"http","host":"127.0.0.1:%{NUMBER}"}]}]
+––– input –––
+curl -s -X POST "http://localhost:9308/sql?mode=raw" -d "query=SHOW VERSION"; echo
+––– output –––
+[{"total":%{NUMBER},"error":"","warning":"","columns":[{"Component":{"type":"string"}},{"Version":{"type":"string"}}],"data":[{"Component":"Daemon","Version":"%{VERSION}"},{"Component":"Columnar","Version":"columnar %{VERSION}"},{"Component":"Secondary","Version":"secondary %{VERSION}"},{"Component":"KNN","Version":"knn %{VERSION}"},{"Component":"Buddy","Version":"buddy %{VERSION}"}]}]
+––– input –––
+curl -s "http://localhost:9308/sql?mode=raw&query=SHOW%20VERSION"; echo
+––– output –––
+[{"total":%{NUMBER},"error":"","warning":"","columns":[{"Component":{"type":"string"}},{"Version":{"type":"string"}}],"data":[{"Component":"Daemon","Version":"%{VERSION}"},{"Component":"Columnar","Version":"columnar %{VERSION}"},{"Component":"Secondary","Version":"secondary %{VERSION}"},{"Component":"KNN","Version":"knn %{VERSION}"},{"Component":"Buddy","Version":"buddy %{VERSION}"}]}]
+––– input –––
+curl -s -X POST "http://localhost:9308/sql?raw_response=true" -d "query=SHOW VERSION"; echo
+––– output –––
+[{"total":%{NUMBER},"error":"","warning":"","columns":[{"Component":{"type":"string"}},{"Version":{"type":"string"}}],"data":[{"Component":"Daemon","Version":"%{VERSION}"},{"Component":"Columnar","Version":"columnar %{VERSION}"},{"Component":"Secondary","Version":"secondary %{VERSION}"},{"Component":"KNN","Version":"knn %{VERSION}"},{"Component":"Buddy","Version":"buddy %{VERSION}"}]}]
+––– input –––
+curl -s "http://localhost:9308/sql?raw_response=true&query=SHOW%20VERSION"; echo
+––– output –––
+[{"total":%{NUMBER},"error":"","warning":"","columns":[{"Component":{"type":"string"}},{"Version":{"type":"string"}}],"data":[{"Component":"Daemon","Version":"%{VERSION}"},{"Component":"Columnar","Version":"columnar %{VERSION}"},{"Component":"Secondary","Version":"secondary %{VERSION}"},{"Component":"KNN","Version":"knn %{VERSION}"},{"Component":"Buddy","Version":"buddy %{VERSION}"}]}]

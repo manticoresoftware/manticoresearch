@@ -2373,7 +2373,7 @@ POST /search
 
 ```JSON
 {
-   "_index":"products",
+   "table":"products",
    "_id":1,
    "created":true,
    "result":"created",

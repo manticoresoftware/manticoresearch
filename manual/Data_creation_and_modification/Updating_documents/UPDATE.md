@@ -47,7 +47,7 @@ POST /update
 <!-- response JSON -->
 ```JSON
 {
-  "_index":"products",
+  "table":"products",
   "updated":1
 }
 ```
@@ -95,7 +95,7 @@ res = await indexApi.update({"table" : "products", "id" : 1, "doc" : {"price":10
 
 <!-- response javascript -->
 ```javascript
-{"_index":"products","_id":1,"result":"updated"}
+{"table":"products","_id":1,"result":"updated"}
 ```
 <!-- intro -->
 ##### java:
@@ -152,7 +152,7 @@ res = await indexApi.update({ index: "test", id: 1, doc: { cat: 10 } });
 <!-- response TypeScript -->
 ```typescript
 {
-	"_index":"test",
+	"table":"test",
 	"_id":1,
 	"result":"updated"
 }
@@ -172,7 +172,7 @@ res, _, _ = apiClient.IndexAPI.Update(context.Background()).UpdateDocumentReques
 <!-- response Go -->
 ```go
 {
-	"_index":"test",
+	"table":"test",
 	"_id":1,
 	"result":"updated"
 }
@@ -230,7 +230,7 @@ POST /update
 <!-- response JSON -->
 ```JSON
 {
-  "_index":"products",
+  "table":"products",
   "updated":148
 }
 ```
@@ -293,7 +293,7 @@ res = await indexApi.update({"table" : "products", "id" : 1, "doc" : {
 
 <!-- response javascript -->
 ```javascript
-{"_index":"products","_id":1,"result":"updated"}
+{"table":"products","_id":1,"result":"updated"}
 ```
 <!-- intro -->
 ##### java:
@@ -357,7 +357,7 @@ res = await indexApi.update({ index: "test", id: 1, doc: { name: "Doc 21", cat: 
 <!-- response TypeScript -->
 ```go
 {
-  "_index":"test",
+  "table":"test",
   "_id":1,
   "result":"updated"
 }
@@ -377,7 +377,7 @@ res, _, _ = apiClient.IndexAPI.Update(context.Background()).UpdateDocumentReques
 <!-- response Go -->
 ```go
 {
-  "_index":"test",
+  "table":"test",
   "_id":1,
   "result":"updated"
 }
@@ -442,7 +442,7 @@ POST /update
 <!-- response JSON -->
 ```JSON
 {
-   "_index":"products",
+   "table":"products",
    "_id":100,
    "created":true,
    "result":"created",
@@ -450,7 +450,7 @@ POST /update
 }
 
 {
-  "_index":"products",
+  "table":"products",
   "updated":1
 }
 ```
@@ -511,7 +511,7 @@ res = await indexApi.update({"table" : "products", "id" : 1, "doc" : {
 
 <!-- response javascript -->
 ```javascript
-{"_index":"products","_id":1,"result":"updated"}
+{"table":"products","_id":1,"result":"updated"}
 ```
 
 <!-- intro -->
@@ -569,7 +569,7 @@ res = await indexApi.update({"table" : "test", "id" : 1, "doc" : { "meta.tags[0]
 
 <!-- response TypeScript -->
 ```typescript
-{"_index":"test","_id":1,"result":"updated"}
+{"table":"test","_id":1,"result":"updated"}
 ```
 
 <!-- intro -->
@@ -586,7 +586,7 @@ res, _, _ = apiClient.IndexAPI.Update(context.Background()).UpdateDocumentReques
 <!-- response Go -->
 ```go
 {
-	"_index":"test",
+	"table":"test",
 	"_id":1,
 	"result":"updated"
 }
@@ -647,7 +647,7 @@ POST /update
 <!-- response JSON -->
 ```JSON
 {
-  "_index":"products",
+  "table":"products",
   "updated":1
 }
 ```
@@ -716,8 +716,8 @@ res = await indexApi.update({"table" : "products", "id" : 100, "doc" : {"meta" :
 
 <!-- response javascript -->
 ```javascript
-{"_index":"products","_id":100,"created":true,"result":"created"}
-{"_index":"products","_id":100,"result":"updated"}
+{"table":"products","_id":100,"created":true,"result":"created"}
+{"table":"products","_id":100,"result":"updated"}
 
 ```
 
@@ -824,14 +824,14 @@ res = await indexApi.update({ index: 'test', id: 1, doc: { meta: { tags:['one','
 <!-- response TypeScript -->
 ```typescript
 {
-	"_index":"test",
+	"table":"test",
 	"_id":1,
 	"created":true,
 	"result":"created"
 }
 
 {
-	"_index":"test",
+	"table":"test",
 	"_id":1,
 	"result":"updated"
 }
@@ -857,14 +857,14 @@ res, _, _ = apiClient.IndexAPI.Update(context.Background()).UpdateDocumentReques
 <!-- response Go -->
 ```go
 {
-	"_index":"test",
+	"table":"test",
 	"_id":1,
 	"created":true,
 	"result":"created"
 }
 
 {
-	"_index":"test",
+	"table":"test",
 	"_id":1,
 	"result":"updated"
 }
@@ -1042,7 +1042,7 @@ POST /update
 <!-- response JSON -->
 ```JSON
 {
-  "_index":"products",
+  "table":"products",
   "updated":1
 }
 ```
@@ -1089,7 +1089,7 @@ indexApi.update({"table" : "products", "id" : 1, "doc" : {"tags1": []}})
 
 <!-- response javascript -->
 ```javascript
-{"_index":"products","_id":1,"result":"updated"}
+{"table":"products","_id":1,"result":"updated"}
 ```
 <!-- intro -->
 ##### java:
@@ -1147,7 +1147,7 @@ res = await indexApi.update({ index: 'test', id: 1, doc: { cat: 10 } });
 <!-- response TypeScript -->
 ```typescript
 {
-	"_index":"test",
+	"table":"test",
 	"_id":1,
 	"result":"updated"
 }
@@ -1167,7 +1167,7 @@ res, _, _ = apiClient.IndexAPI.Update(context.Background()).UpdateDocumentReques
 <!-- response Go -->
 ```go
 {
-	"_index":"test",
+	"table":"test",
 	"_id":1,
 	"result":"updated"
 }
@@ -1221,7 +1221,7 @@ POST /update
 <!-- response JSON -->
 ``` JSON
 {
-  "_index": "test",
+  "table": "test",
   "_id": 1,
   "result": "updated"
 }
@@ -1258,7 +1258,7 @@ POST /update
 
 ```json
 {
-  "_index":"products",
+  "table":"products",
   "updated":1
 }
 ```
@@ -1318,7 +1318,7 @@ POST /bulk
       {
          "update":
          {
-            "_index":"products",
+            "table":"products",
             "_id":1,
             "result":"updated"
          }
@@ -1326,7 +1326,7 @@ POST /bulk
       {
          "update":
          {
-            "_index":"products",
+            "table":"products",
             "_id":2,
             "result":"updated"
          }
@@ -1372,14 +1372,14 @@ POST /bulk
     {
       "update":
       {
-        "_index":"products",
+        "table":"products",
         "updated":1
       }
     },
     {
       "update":
       {
-        "_index":"products",
+        "table":"products",
         "updated":3
       }
     }
@@ -1454,8 +1454,8 @@ indexApi.bulk('\n'.join(map(json.dumps,docs)))
 <!-- response Python -->
 ```python
 {'error': None,
- 'items': [{u'update': {u'_index': u'products', u'updated': 1}},
-           {u'update': {u'_index': u'products', u'updated': 3}}]}
+ 'items': [{u'update': {u'table': u'products', u'updated': 1}},
+           {u'update': {u'table': u'products', u'updated': 3}}]}
 
 ```
 <!-- intro -->
@@ -1471,7 +1471,7 @@ res =  await indexApi.bulk(docs.map(e=>JSON.stringify(e)).join('\n'));
 
 <!-- response javascript -->
 ```javascript
-{"items":[{"update":{"_index":"products","updated":1}},{"update":{"_index":"products","updated":3}}],"errors":false}
+{"items":[{"update":{"table":"products","updated":1}},{"update":{"table":"products","updated":3}}],"errors":false}
 
 ```
 
@@ -1546,14 +1546,14 @@ res = await indexApi.bulk(
     {
       "update":
       {
-        "_index":"test",
+        "table":"test",
         "updated":1
       }
     },
     {
       "update":
       {
-        "_index":"test",
+        "table":"test",
         "updated":1
       }
     }
@@ -1578,14 +1578,14 @@ res, _, _ := apiClient.IndexAPI.Bulk(context.Background()).Body(body).Execute()
     {
       "update":
       {
-        "_index":"test",
+        "table":"test",
         "updated":1
       }
     },
     {
       "update":
       {
-        "_index":"test",
+        "table":"test",
         "updated":1
       }
     }

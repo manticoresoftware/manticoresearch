@@ -877,7 +877,7 @@ Released: May 18th 2022
   < Content-Length: 434
   <
   * Connection #0 to host localhost left intact
-  {"items":[{"insert":{"_index":"user","_id":2811798918248005633,"created":true,"result":"created","status":201}},{"insert":{"_index":"user","_id":2811798918248005634,"created":true,"result":"created","status":201}},{"insert":{"_index":"user","_id":2811798918248005635,"created":true,"result":"created","status":201}},{"insert":{"_index":"user","_id":2811798918248005636,"created":true,"result":"created","status":201}}],"errors":false}
+  {"items":[{"insert":{"table":"user","_id":2811798918248005633,"created":true,"result":"created","status":201}},{"insert":{"table":"user","_id":2811798918248005634,"created":true,"result":"created","status":201}},{"insert":{"table":"user","_id":2811798918248005635,"created":true,"result":"created","status":201}},{"insert":{"table":"user","_id":2811798918248005636,"created":true,"result":"created","status":201}}],"errors":false}
   real	0m1.022s
   user	0m0.001s
   sys	0m0.010s
@@ -910,7 +910,7 @@ Released: May 18th 2022
   < Content-Length: 147
   <
   * Connection #0 to host localhost left intact
-  {"items":[{"bulk":{"_index":"user","_id":2811798919590182916,"created":4,"deleted":0,"updated":0,"result":"created","status":201}}],"errors":false}
+  {"items":[{"bulk":{"table":"user","_id":2811798919590182916,"created":4,"deleted":0,"updated":0,"result":"created","status":201}}],"errors":false}
   real	0m0.015s
   user	0m0.005s
   sys	0m0.004s

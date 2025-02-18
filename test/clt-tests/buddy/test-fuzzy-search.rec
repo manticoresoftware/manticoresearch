@@ -24,7 +24,7 @@ mysql -h0 -P9306 -e "SELECT COUNT(*) FROM name;"
 +----------+
 |  1000000 |
 +----------+
- ––– input –––
+––– input –––
 mysql -h0 -P9306 -e "OPTIMIZE TABLE name OPTION sync=1;"
 ––– output –––
 ––– input –––
@@ -819,7 +819,7 @@ mysql -h0 -P9306 -e "show version\G;"
 ––– output –––
 *************************** 1. row ***************************
 Component: Daemon
-Version: %{VERSION} 
+Version: %{VERSION}
 *************************** 2. row ***************************
 Component: Columnar
 Version: columnar %{VERSION}

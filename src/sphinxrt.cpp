@@ -2987,7 +2987,8 @@ bool RtIndex_c::Commit ( int * pDeleted, RtAccum_t * pAcc, CSphString * pError )
 	pAcc->CleanupPart();
 
 	// sort accum klist, too
-	pAcc->m_dAccumKlist.Uniq ();
+	pAcc->m_dAccumKlist.Sort ( Lesser ( [] ( DocID_t a, DocID_t b ) { return (uint64_t)a < (uint64_t)b; } ) );
+	pAcc->m_dAccumKlist.Uniq (false);
 
 	// now on to the stuff that needs locking and recovery
 	int iKilled = 0;
@@ -9518,6 +9519,8 @@ Binlog::CheckTnxResult_t RtIndex_c::ReplayCommit ( CSphReader & tReader, CSphStr
 		// actually replay
 		FakeRL_t _ ( pSeg.operator RtSegment_t*()->m_tLock);
 		int iKilled = 0;
+
+//		dKlist.Sort ( Lesser ( [] ( DocID_t a, DocID_t b ) { return (uint64_t)a < (uint64_t)b; } ) ); // should already be sorted
 		CommitReplayable ( pSeg, dKlist, iAddTotalBytes, iKilled, sError );
 		tRes.m_bApply = true;
 	}

@@ -53,7 +53,7 @@ jobs:
           - name: Indexer
             test_prefix: test/clt-tests/indexer/
     steps:
-      - uses: manticoresoftware/clt@0.3.5
+      - uses: manticoresoftware/clt@0.5.1
         with:
           artifact: ${{ inputs.artifact_name }}
           image: ${{ inputs.docker_image }}

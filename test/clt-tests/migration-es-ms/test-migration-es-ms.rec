@@ -4,7 +4,7 @@ docker pull -q ghcr.io/manticoresoftware/manticoresearch:test-kit-latest > /dev/
 ––– output –––
 0
 ––– input –––
-docker pull elasticsearch:7.17.13 > /dev/null 2>&1; echo $?
+docker pull docker.elastic.co/elasticsearch/elasticsearch:8.17.2 > /dev/null 2>&1; echo $?
 ––– output –––
 0
 ––– input –––
@@ -28,7 +28,7 @@ docker run -it --privileged --network=test_network --entrypoint=docker-entrypoin
 ––– output –––
 0
 ––– input –––
-docker run -d --name elasticsearch --platform linux/amd64 --net test_network -p 9200:9200 -p 9300:9300 -e "discovery.type=single-node" elasticsearch:7.17.13 > /dev/null 2>&1; echo $?
+docker run -d --network=test_network --name elastic -p 127.0.0.1:9200:9200 -e discovery.type=single-node -e xpack.security.enabled=false docker.elastic.co/elasticsearch/elasticsearch:8.17.2 > /dev/null 2>&1; echo $?
 ––– output –––
 0
 ––– input –––
@@ -146,7 +146,7 @@ v6.118.0
 v6.119.0
 latest
 ––– input –––
-unzip ./test/clt-tests/migration-es-ms/index.zip -d ./test/clt-tests/migration-es-ms/
+unzip -o ./test/clt-tests/migration-es-ms/index.zip -d ./test/clt-tests/migration-es-ms/
 ––– output –––
 Archive:  ./test/clt-tests/migration-es-ms/index.zip
 inflating: index_mapping.json

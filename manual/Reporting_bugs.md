@@ -136,10 +136,11 @@ To fix your bug, developers often need to reproduce it locally. To do this, they
 
 Attach your data when you [create a ticket on Github](https://github.com/manticoresoftware/manticoresearch/issues/new). If the data is too large or sensitive, you can upload it to our write-only S3 storage at  `s3://s3.manticoresearch.com/write-only/`. Here's how you can do it:
 1. Navigate to the directory containing the files you want to upload and run:
-   ```
-   docker run --rm -v $(pwd):/upload manticoresearch/upload
+   ```bash
+   docker run -it --rm -v $(pwd):/upload manticoresearch/upload
    ```
 2. This will:
+   - Ask you to enter the related issue URL/number
    - Upload **all files in the current directory** to our write-only S3 storage
    - At the end, you will see an upload path. Please share this path with the developers.
 
@@ -152,20 +153,77 @@ docker run -it --rm -v $(pwd):/upload manticoresearch/upload
 ```
 
 <!-- response Example -->
-```
-Added `manticore` successfully.
-`/upload/1.tgz` -> `manticore/write-only/issue-2025-02-05_11-09/upload/1.tgz`
-`/upload/1` -> `manticore/write-only/issue-2025-02-05_11-09/upload/1`
-`/upload/manticore/state.sql` -> `manticore/write-only/issue-2025-02-05_11-09/upload/manticore/state.sql`
-`/upload/manticore/system.abc/system.abc.meta` -> `manticore/write-only/issue-2025-02-05_11-09/upload/manticore/system.abc/system.abc.meta`
-`/upload/manticore/system.abc/system.abc.ram` -> `manticore/write-only/issue-2025-02-05_11-09/upload/manticore/system.abc/system.abc.ram`
-Total: 680 B, Transferred: 680 B, Speed: 2.20 KiB/s
-Upload complete. Please share the following path with the developers:
-s3://s3.manticoresearch.com/write-only/issue-2025-02-05_11-09
+```bash
+🚀 Welcome to Manticore Search Upload Tool! 🚀
+
+📂 Files to be uploaded:
+  tt (800)
+
+🔗 Please enter the related issue URL/number
+(e.g., https://github.com/manticoresoftware/manticoresearch/issues/123 or just 123):
+123
+
+📤 Starting upload process...
+INFO: Cache file not found or empty, creating/populating it.
+INFO: Compiling list of local files...
+INFO: Running stat() and reading/calculating MD5 values on 23 files, this may take some time...
+INFO: Summary: 23 local files to upload
+upload: './tt/tt.0.spa' -> 's3://write-only/issue-20250219-123/tt/tt.0.spa'  [1 of 23]
+ 40 of 40   100% in    2s    15.03 B/s  done
+upload: './tt/tt.0.spd' -> 's3://write-only/issue-20250219-123/tt/tt.0.spd'  [2 of 23]
+ 1 of 1   100% in    0s     1.99 B/s  done
+upload: './tt/tt.0.spe' -> 's3://write-only/issue-20250219-123/tt/tt.0.spe'  [3 of 23]
+ 1 of 1   100% in    0s     2.02 B/s  done
+upload: './tt/tt.0.sph' -> 's3://write-only/issue-20250219-123/tt/tt.0.sph'  [4 of 23]
+ 420 of 420   100% in    0s   895.32 B/s  done
+upload: './tt/tt.0.sphi' -> 's3://write-only/issue-20250219-123/tt/tt.0.sphi'  [5 of 23]
+ 66 of 66   100% in    0s   142.67 B/s  done
+upload: './tt/tt.0.spi' -> 's3://write-only/issue-20250219-123/tt/tt.0.spi'  [6 of 23]
+ 18 of 18   100% in    0s    39.13 B/s  done
+upload: './tt/tt.0.spidx' -> 's3://write-only/issue-20250219-123/tt/tt.0.spidx'  [7 of 23]
+ 145 of 145   100% in    0s   313.38 B/s  done
+upload: './tt/tt.0.spm' -> 's3://write-only/issue-20250219-123/tt/tt.0.spm'  [8 of 23]
+ 4 of 4   100% in    0s     8.36 B/s  done
+upload: './tt/tt.0.spp' -> 's3://write-only/issue-20250219-123/tt/tt.0.spp'  [9 of 23]
+ 1 of 1   100% in    0s     2.15 B/s  done
+upload: './tt/tt.0.spt' -> 's3://write-only/issue-20250219-123/tt/tt.0.spt'  [10 of 23]
+ 36 of 36   100% in    0s    78.35 B/s  done
+upload: './tt/tt.1.spa' -> 's3://write-only/issue-20250219-123/tt/tt.1.spa'  [11 of 23]
+ 48 of 48   100% in    0s    81.35 B/s  done
+upload: './tt/tt.1.spd' -> 's3://write-only/issue-20250219-123/tt/tt.1.spd'  [12 of 23]
+ 1 of 1   100% in    0s     1.65 B/s  done
+upload: './tt/tt.1.spe' -> 's3://write-only/issue-20250219-123/tt/tt.1.spe'  [13 of 23]
+ 1 of 1   100% in    0s     1.95 B/s  done
+upload: './tt/tt.1.sph' -> 's3://write-only/issue-20250219-123/tt/tt.1.sph'  [14 of 23]
+ 420 of 420   100% in    0s   891.58 B/s  done
+upload: './tt/tt.1.sphi' -> 's3://write-only/issue-20250219-123/tt/tt.1.sphi'  [15 of 23]
+ 82 of 82   100% in    0s   166.42 B/s  done
+upload: './tt/tt.1.spi' -> 's3://write-only/issue-20250219-123/tt/tt.1.spi'  [16 of 23]
+ 18 of 18   100% in    0s    39.46 B/s  done
+upload: './tt/tt.1.spidx' -> 's3://write-only/issue-20250219-123/tt/tt.1.spidx'  [17 of 23]
+ 183 of 183   100% in    0s   374.04 B/s  done
+upload: './tt/tt.1.spm' -> 's3://write-only/issue-20250219-123/tt/tt.1.spm'  [18 of 23]
+ 4 of 4   100% in    0s     8.42 B/s  done
+upload: './tt/tt.1.spp' -> 's3://write-only/issue-20250219-123/tt/tt.1.spp'  [19 of 23]
+ 1 of 1   100% in    0s     1.28 B/s  done
+upload: './tt/tt.1.spt' -> 's3://write-only/issue-20250219-123/tt/tt.1.spt'  [20 of 23]
+ 50 of 50   100% in    1s    34.60 B/s  done
+upload: './tt/tt.lock' -> 's3://write-only/issue-20250219-123/tt/tt.lock'  [21 of 23]
+ 0 of 0     0% in    0s     0.00 B/s  done
+upload: './tt/tt.meta' -> 's3://write-only/issue-20250219-123/tt/tt.meta'  [22 of 23]
+ 456 of 456   100% in    0s   923.34 B/s  done
+upload: './tt/tt.settings' -> 's3://write-only/issue-20250219-123/tt/tt.settings'  [23 of 23]
+ 3 of 3   100% in    0s     6.41 B/s  done
+
+✅ Upload complete!
+📋 Please share this path with the developers:
+issue-20250219-123
+
+💡 Tip: Make sure to include this path when communicating with the Manticore team
 ```
 <!-- end -->
 
-Alternatively, you can use the Minio client to do the same:
+Alternatively, you can use the S3 [Minio client](https://min.io/docs/minio/linux/reference/minio-mc.html) or the Amazon [s3cmd](https://s3tools.org/s3cmd) tool to do the same, e.g.:
 
 1. Install the client https://min.io/docs/minio/linux/reference/minio-mc.html#install-mc
 For example on 64-bit Linux:

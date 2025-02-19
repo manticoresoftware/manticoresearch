@@ -327,6 +327,22 @@ table products {
 
 ### Real-time table settings:
 
+#### diskchunk_flush_search_timeout
+
+```ini
+diskchunk_flush_search_timeout = 10s
+```
+
+The timeout for preventing auto-flushing a RAM chunk if there are no searches in the table. Learn more [here](../../Server_settings/Searchd.md#diskchunk_flush_search_timeout).
+
+#### diskchunk_flush_write_timeout
+
+```ini
+diskchunk_flush_write_timeout = 60s
+```
+
+The timeout for auto-flushing a RAM chunk if there are no writes to it. Learn more [here](../../Server_settings/Searchd.md#diskchunk_flush_write_timeout).
+
 #### optimize_cutoff
 
 The maximum number of disk chunks for the RT table. Learn more [here](../../Securing_and_compacting_a_table/Compacting_a_table.md#Number-of-optimized-disk-chunks).
@@ -463,15 +479,6 @@ The `rt_mem_limit` is never exceeded, but the actual RAM chunk size can be signi
 
 For instance, if 90MB of data is saved to a disk chunk and an additional 10MB of data arrives while the save is in progress, the rate would be 90%. Next time, the RT table will collect up to 90% of `rt_mem_limit` before flushing the data. The faster the insertion pace, the lower the `rt_mem_limit` rate. The rate varies between 33.3% to 95%. You can view the current rate of a table using the [SHOW TABLE <tbl> STATUS](../../Node_info_and_management/Table_settings_and_status/SHOW_TABLE_STATUS.md) command.
 
-#### diskchunk_flush_write_timeout
-
-The timeout for auto-flushing a RAM chunk if there are no writes to it. Learn more [here](../../Server_settings/Searchd.md#diskchunk_flush_write_timeout).
-
-#### diskchunk_flush_search_timeout
-
-The timeout for preventing auto-flushing a RAM chunk if there are no searches in the table. Learn more [here](../../Server_settings/Searchd.md#diskchunk_flush_search_timeout).
-
-
 ##### How to change rt_mem_limit and optimize_cutoff
 
 In real-time mode, you can adjust the size limit of RAM chunks and the maximum number of disk chunks using the `ALTER TABLE` statement. To set `rt_mem_limit` to 1 gigabyte for the table "t," run the following query: `ALTER TABLE t rt_mem_limit='1G'`. To change the maximum number of disk chunks, run the query: `ALTER TABLE t optimize_cutoff='5'`.
@@ -494,10 +501,10 @@ In the plain mode, you can change the values of `rt_mem_limit` and `optimize_cut
 * The RAM chunk may be slightly slower than a disk chunk.
 * Although the RAM chunk itself doesn't take up more memory than `rt_mem_limit` Manticore may take up more memory in some cases, such as when you start a transaction to insert data and don't commit it for a while. In this case, the data you have already transmitted within the transaction will remain in memory.
 
-In addition to `rt_mem_limit`, the flushing behavior of RAM chunks is also influenced by the following settings: `diskchunk_flush_write_timeout` and `diskchunk_flush_search_timeout`.
+In addition to `rt_mem_limit`, the flushing behavior of RAM chunks is also influenced by the following settings: [diskchunk_flush_write_timeout](../../Server_settings/Searchd.md#diskchunk_flush_write_timeout) and [diskchunk_flush_search_timeout](../../Server_settings/Searchd.md#diskchunk_flush_search_timeout).
 
-* `diskchunk_flush_write_timeout`: This option defines the timeout (in seconds) for auto-flushing a RAM chunk if there are no writes to it.  If no write occurs within this time, the chunk will be flushed to disk.  A value of `-1` disables auto-flushing based on write activity. The default value is 1 second.
-* `diskchunk_flush_search_timeout`: This option sets the timeout (in seconds) for preventing auto-flushing a RAM chunk if there are no searches in the table. Auto-flushing will only occur if there has been at least one search within this time. The default value is 30 seconds.
+* `diskchunk_flush_write_timeout`: This option defines the timeout for auto-flushing a RAM chunk if there are no writes to it.  If no write occurs within this time, the chunk will be flushed to disk.  Setting it to `-1` disables auto-flushing based on write activity. The default value is 1 second.
+* `diskchunk_flush_search_timeout`: This option sets the timeout for preventing auto-flushing a RAM chunk if there are no searches in the table. Auto-flushing will only occur if there has been at least one search within this time. The default value is 30 seconds.
 
 These timeouts work in conjunction.  A RAM chunk will be flushed if *either* timeout is reached.  This ensures that even if there are no writes, the data will eventually be persisted to disk, and conversely, even if there are constant writes but no searches, the data will also be persisted.  These settings provide more granular control over how frequently RAM chunks are flushed, balancing the need for data durability with performance considerations.  Per-table directives for these settings have higher priority and will override the instance-wide defaults.
 

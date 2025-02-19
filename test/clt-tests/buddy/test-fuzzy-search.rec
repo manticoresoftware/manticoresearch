@@ -669,8 +669,13 @@ mysql -h0 -P9306 -e "CALL AUTOCOMPLETE('bus', 'comment_28798446', '' AS layouts)
 | business |
 +----------+
 ––– input –––
-mysql -h0 -P9306 -e "DROP TABLE IF EXISTS t; CREATE TABLE t(f TEXT) min_infix_len='2';"
+mysql -h0 -P9306 -e "DROP TABLE IF EXISTS t; DEBUG SLEEP 2; CREATE TABLE t(f TEXT) min_infix_len='2';"
 ––– output –––
++---------+--------+
+| command | result |
++---------+--------+
+| sleep   | #!/[0-9]{1}.[0-9]{3}/!#  |
++---------+--------+
 ––– input –––
 mysql -h0 -P9306 -e "INSERT INTO t VALUES (1, 'abcdef'), (2, 'abcd efgh');"
 ––– output –––

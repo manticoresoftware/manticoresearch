@@ -2418,7 +2418,14 @@ public:
 
 			auto tf = (float)m_dTF[iWord]; // OPTIMIZE? remove this vector, hook into m_uMatchHits somehow?
 			float idf = m_dIDF[iWord];
+#if defined( __aarch64__ )
+			// direct calculation produces on arm64 different result, so provide explicitly 3 steps
+			const float paramK1 = m_fParamK1 * ( 1 - m_fParamB + m_fParamB * dl / m_fAvgDocLen );
+			const float sum = tf / ( tf + paramK1 ) * idf;
+			m_fDocBM25A += sum;
+#else
 			m_fDocBM25A += tf / (tf + m_fParamK1*(1 - m_fParamB + m_fParamB*dl/m_fAvgDocLen)) * idf;
+#endif
 		}
 		m_fDocBM25A += 0.5f; // map to [0..1] range
 	}
@@ -2807,7 +2814,7 @@ struct Expr_BM25F_T : public Expr_NoLocator_c
 
 		// compute avg length per field
 		m_dAvgDocFieldLens.Fill ( 0.0f );
-		if ( m_pState->m_pFieldLens )
+		if ( m_pState->m_pFieldLens && m_pState->m_iTotalDocuments )
 			for ( int i=0; i<m_pState->m_iFields; i++ )
 				m_dAvgDocFieldLens[i] = m_pState->m_pFieldLens[i] / m_pState->m_iTotalDocuments; // FIXME? Total of documents with non empty field value is actually needed here
 	}

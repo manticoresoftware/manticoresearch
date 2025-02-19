@@ -1590,7 +1590,7 @@ JsonObj_c::JsonObj_c ( const char * szJson )
 
 JsonObj_c::JsonObj_c ( Str_t sJson )
 {
-	m_pRoot = cJSON_Parse ( sJson.first );
+	m_pRoot = cJSON_ParseWithLen ( sJson.first, sJson.second );
 }
 
 

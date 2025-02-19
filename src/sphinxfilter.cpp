@@ -1307,19 +1307,22 @@ static std::unique_ptr<ISphFilter> SetupJsonExpr ( CSphRefcountedPtr<ISphExpr> &
 	if ( !bJsonExpr )
 		return nullptr;
 
+	ISphExpr* pFoo = nullptr;
+	AT_SCOPE_EXIT ( [&pFoo] { if (pFoo) pFoo->Release(); } );
+
 	if ( tFixedSettings.m_eType==SPH_FILTER_STRING_LIST || tFixedSettings.m_eType==SPH_FILTER_STRING )
-		return std::make_unique<ExprFilterProxy_c> ( ExprJsonIn ( tSettings.m_dStrings, pExpr, eCollation ), SPH_ATTR_INTEGER );
+		return std::make_unique<ExprFilterProxy_c> ( pFoo = ExprJsonIn ( tSettings.m_dStrings, pExpr, eCollation ), SPH_ATTR_INTEGER );
 
 	if ( tSettings.m_eMvaFunc==SPH_MVAFUNC_ANY )
 	{
 		switch ( tFixedSettings.m_eType )
 		{
 		case SPH_FILTER_VALUES:
-			return std::make_unique<ExprFilterProxy_c> ( ExprJsonIn ( tSettings.m_dValues, pExpr, eCollation ), SPH_ATTR_INTEGER );
+			return std::make_unique<ExprFilterProxy_c> ( pFoo = ExprJsonIn ( tSettings.m_dValues, pExpr, eCollation ), SPH_ATTR_INTEGER );
 
 		case SPH_FILTER_RANGE:
 		case SPH_FILTER_FLOATRANGE:
-			return std::make_unique<ExprFilterProxy_c> ( ExprJsonRange ( tFixedSettings, pExpr ), SPH_ATTR_INTEGER );
+			return std::make_unique<ExprFilterProxy_c> ( pFoo = ExprJsonRange ( tFixedSettings, pExpr ), SPH_ATTR_INTEGER );
 
 		default:
 			break;
@@ -2504,6 +2507,13 @@ bool sphCreateFilters ( CreateFilterContext_t & tCtx, CSphString & sError, CSphS
 
 	assert ( tCtx.m_pMatchSchema );
 	CSphVector<FilterInfo_t> dFilters, dWeightFilters;
+	bool bFiltersOk = false;
+	AT_SCOPE_EXIT ([&bFiltersOk, &dFilters, dWeightFilters ] {
+		if ( bFiltersOk )
+			return;
+		dFilters.for_each ( [] (auto& i) { SafeDelete ( i.m_pFilter); } );
+		dWeightFilters.for_each ( [] (auto& i) { SafeDelete ( i.m_pFilter); } );
+	});
 
 	bool bSingleFilter = tCtx.m_pFilters->GetLength()==1;
 
@@ -2567,6 +2577,7 @@ bool sphCreateFilters ( CreateFilterContext_t & tCtx, CSphString & sError, CSphS
 	tCtx.m_pFilter = ReorderAndCombine ( std::move ( dFilters ) );
 	tCtx.m_pWeightFilter = ReorderAndCombine ( std::move ( dWeightFilters ) );
 
+	bFiltersOk = true;
 	return true;
 }
 

@@ -30,6 +30,21 @@ index test1
 	source			= test1
 	path			= <data_path/>/test1
 }
+
+source test3
+{
+	type				= mysql
+	<sql_settings/>
+	sql_query			= select id, gid, title from test_table where id=0
+	sql_attr_uint	    = gid
+}
+
+index test3
+{
+	source				= test3
+	path				= <data_path/>/test3
+    index_field_lengths = 1
+}
 </config>
 
 <db_create>
@@ -69,6 +84,9 @@ select id, weight() w, spam, title, body from test1 where match('program flow') 
 select id, weight() w, spam, title, body from test1 where match('program flow') order by w desc, id asc option field_weights=(body=2, spam=-2);
 select id, weight() w, spam, title, body from test1 where match('program flow') order by w desc, id asc option field_weights=(body=2, spam=-10), ranker=proximity_bm25;
 select id, weight() w, spam, title, body from test1 where match('program flow') order by w desc, id asc option field_weights=(body=2, spam=-10), ranker=wordcount;
+
+<!-- crash on empty index -->
+select id from test3 where match('title') option ranker=expr('bm25f(1.2, 0.8, {title=10}) * 1000');
 
 </sphinxql></queries>
 

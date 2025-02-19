@@ -18,12 +18,18 @@ on:
         required: false
         type: string
         description: "Ref to checkout"
+      continue_on_error:
+        required: false
+        type: boolean
+        description: "Continue on error"
+        default: false
 
 jobs:
   clt:
     name: CLT
     runs-on: ubuntu-22.04
     timeout-minutes: 15
+    continue-on-error: ${{ inputs.continue_on_error }}
     strategy:
       fail-fast: false
       matrix:

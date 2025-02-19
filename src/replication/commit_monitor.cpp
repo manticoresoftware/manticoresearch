@@ -40,9 +40,17 @@ bool CommitMonitor_c::Commit ()
 
 	// truncate needs wlocked index
 	if ( ServedDesc_t::IsMutable ( pServed ) )
-		return bTruncate
-				 ? CommitNonEmptyCmds ( WIdx_T<RtIndex_i*> ( pServed ), tCmd, bOnlyTruncate )
-				 : CommitNonEmptyCmds ( RIdx_T<RtIndex_i*> ( pServed ), tCmd, bOnlyTruncate );
+	{
+		if ( bTruncate )
+		{
+			WIdx_T<RtIndex_i*> tLocked ( pServed );
+			return CommitNonEmptyCmds ( tLocked, tCmd, bOnlyTruncate );
+		} else
+		{
+			RIdx_T<RtIndex_i*> tLocked ( pServed );
+			return CommitNonEmptyCmds ( tLocked, tCmd, bOnlyTruncate );
+		}
+	}
 
 	return Err ( "requires an existing RT or percolate table" );
 }
@@ -117,9 +125,15 @@ static bool DoUpdate ( AttrUpdateArgs& tUpd, const cServedIndexRefPtr_c& pDesc, 
 	if ( bUpdateAPI )
 	{
 		Debug ( bool bOk = ) [&]() {
-			return bNeedWlock
-				 ? HandleUpdateAPI ( tUpd, WIdx_c ( pDesc ), iUpdated )
-				 : HandleUpdateAPI ( tUpd, RWIdx_c ( pDesc ), iUpdated );
+			if ( bNeedWlock )
+			{
+				WIdx_c tLocked ( pDesc );
+				return HandleUpdateAPI ( tUpd, tLocked, iUpdated );
+			} else
+			{
+				RWIdx_c tLocked ( pDesc );
+				return HandleUpdateAPI ( tUpd, tLocked, iUpdated );
+			}
 		}();
 		assert ( bOk ); // fixme! handle this
 		return ( iUpdated >= 0 );

@@ -1,20 +1,20 @@
 # Changelog
 
 # Version 7.0.0
-Released: January 29th 2025
+Released: January 30th 2025
 
 ### Major changes
 * [Issue #1497](https://github.com/manticoresoftware/manticoresearch/issues/1497) Added new [Fuzzy Search](../Searching/Spell_correction.md#Fuzzy-Search) and [Autocomplete](../Searching/Autocomplete.md#CALL-AUTOCOMPLETE) functionality for easier searching.
 * [Issue #1500](https://github.com/manticoresoftware/manticoresearch/issues/1500) [Integration with Kafka](../Integration/Kafka.md#Syncing-from-Kafka).
 * [Issue #1928](https://github.com/manticoresoftware/manticoresearch/issues/1928) Introduced [secondary indexes for JSON](../Creating_a_table/Local_tables/Plain_and_real-time_table_settings.md#json_secondary_indexes).
 * [Issue #2361](https://github.com/manticoresoftware/manticoresearch/issues/2361) Updates and searches during updates are no longer blocked by chunk merging.
+* [Issue #2787](https://github.com/manticoresoftware/manticoresearch/issues/2787) Automatic [disk chunk flush](../Server_settings/Searchd.md#diskchunk_flush_write_timeout) for RT table to improve performance; now, we automatically flush a RAM chunk to a disk chunk, preventing performance issues caused by the lack of optimizations in RAM chunks, which could sometimes lead to instability depending on chunk size.
 * [Issue #2811](https://github.com/manticoresoftware/manticoresearch/issues/2811) [Scroll](../Searching/Pagination.md#Scroll-Search-Option) option for easier pagination.
 * [Issue #931](https://github.com/manticoresoftware/manticoresearch/issues/931) Integration with [Jieba](https://github.com/fxsjy/jieba) for better [Chinese tokenization](../Creating_a_table/NLP_and_tokenization/Languages_with_continuous_scripts.md).
 
 ### Minor changes
 * ⚠️ BREAKING [Issue #1111](https://github.com/manticoresoftware/manticoresearch/issues/1111) Fixed support for `global_idf` in RT tables. Requires table recreation.
 * ⚠️ BREAKING [Issue #2103](https://github.com/manticoresoftware/manticoresearch/issues/2103) Removed Thai characters from internal `cjk` charset. Update your charset definitions accordingly: if you have `cjk,non_cjk` and Thai characters are important for you, change it to `cjk,thai,non_cjk`, or `cont,non_cjk`, where `cont` is the new designation for all continuous-script languages (i.e., `cjk` + `thai`). Modify existing tables using [ALTER TABLE](../Updating_table_schema_and_settings.md#Updating-table-FT-settings-in-RT-mode).
-* ⚠️ BREAKING [Issue #2458](https://github.com/manticoresoftware/manticoresearch/issues/2458) Incorporated zlib support in Windows packages.
 * ⚠️ BREAKING [Issue #2468](https://github.com/manticoresoftware/manticoresearch/issues/2468) [CALL SUGGEST / QSUGGEST](../Searching/Spell_correction.md#CALL-QSUGGEST,-CALL-SUGGEST) now compatible with distributed tables. This increases the master/agent protocol version. If you are running Manticore Search in a distributed environment with multiple instances, make sure to first upgrade the agents, then the masters.
 * ⚠️ BREAKING [Issue #2889](https://github.com/manticoresoftware/manticoresearch/issues/2889) Changed column name from `Name` to `Variable name` for PQ [SHOW META](../Node_info_and_management/SHOW_META.md#SHOW-META-for-PQ-tables).
 * ⚠️ BREAKING [Issue #879](https://github.com/manticoresoftware/manticoresearch/issues/879) Introduced [per-table binlog](../Logging/Binary_logging.md#Per-table-binary-logging-configuration) with new options: [binlog_common](../Logging/Binary_logging.md#Binary-logging-strategies), [binlog](../Logging/Binary_logging.md#Per-table-binary-logging-configuration) for `create table` / `alter table`. You need to make a clean shutdown of the Manticore instance before upgrading to the new version.
@@ -39,6 +39,7 @@ Released: January 29th 2025
 * [Issue #2402](https://github.com/manticoresoftware/manticoresearch/issues/2402) Updated [searchd.max_packet_size](../Server_settings/Searchd.md#max_packet_size) default to 128MB.
 * [Issue #2419](https://github.com/manticoresoftware/manticoresearch/issues/2419) Added support for [IDF boost modifier](../Searching/Full_text_matching/Operators.md#IDF-boost-modifier) in JSON ["match"](../Searching/Full_text_matching/Basic_usage.md#match).
 * [Issue #2430](https://github.com/manticoresoftware/manticoresearch/issues/2430) Enhanced [binlog](../Logging/Binary_logging.md#Binary-logging) writing synchronization to prevent errors.
+* [Issue #2458](https://github.com/manticoresoftware/manticoresearch/issues/2458) Incorporated zlib support in Windows packages.
 * [Issue #2479](https://github.com/manticoresoftware/manticoresearch/issues/2479) Added support for SHOW TABLE INDEXES command.
 * [Issue #2485](https://github.com/manticoresoftware/manticoresearch/issues/2485) Set session metadata for Buddy replies.
 * [Issue #2490](https://github.com/manticoresoftware/manticoresearch/issues/2490) Millisecond resolution for aggregations at compatibility endpoints.
@@ -60,7 +61,6 @@ Released: January 29th 2025
 * [Issue #2937](https://github.com/manticoresoftware/manticoresearch/issues/2937) Enabled the use of joined table weight in fullscan queries.
 * [Issue #2953](https://github.com/manticoresoftware/manticoresearch/issues/2953) Fixed logging for join queries.
 * [Issue #337](https://github.com/manticoresoftware/manticoresearch-buddy/issues/337) Hid Buddy exceptions from `searchd` log in non-debug mode.
-* [Issue #2787](https://github.com/manticoresoftware/manticoresearch/issues/2787) Automatic disk chunk flush for RT table for better performance.
 * [Issue #2931](https://github.com/manticoresoftware/manticoresearch/issues/2931) Daemon shutdown with error message if user sets wrong ports for replication listener.
 
 ### Bug fixes
@@ -877,7 +877,7 @@ Released: May 18th 2022
   < Content-Length: 434
   <
   * Connection #0 to host localhost left intact
-  {"items":[{"insert":{"_index":"user","_id":2811798918248005633,"created":true,"result":"created","status":201}},{"insert":{"_index":"user","_id":2811798918248005634,"created":true,"result":"created","status":201}},{"insert":{"_index":"user","_id":2811798918248005635,"created":true,"result":"created","status":201}},{"insert":{"_index":"user","_id":2811798918248005636,"created":true,"result":"created","status":201}}],"errors":false}
+  {"items":[{"insert":{"table":"user","_id":2811798918248005633,"created":true,"result":"created","status":201}},{"insert":{"table":"user","_id":2811798918248005634,"created":true,"result":"created","status":201}},{"insert":{"table":"user","_id":2811798918248005635,"created":true,"result":"created","status":201}},{"insert":{"table":"user","_id":2811798918248005636,"created":true,"result":"created","status":201}}],"errors":false}
   real	0m1.022s
   user	0m0.001s
   sys	0m0.010s
@@ -910,7 +910,7 @@ Released: May 18th 2022
   < Content-Length: 147
   <
   * Connection #0 to host localhost left intact
-  {"items":[{"bulk":{"_index":"user","_id":2811798919590182916,"created":4,"deleted":0,"updated":0,"result":"created","status":201}}],"errors":false}
+  {"items":[{"bulk":{"table":"user","_id":2811798919590182916,"created":4,"deleted":0,"updated":0,"result":"created","status":201}}],"errors":false}
   real	0m0.015s
   user	0m0.005s
   sys	0m0.004s

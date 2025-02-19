@@ -82,7 +82,7 @@ POST /insert
 
 ```json
 {
-	"_index":"test",
+	"table":"test",
 	"_id":1,
 	"created":true,
 	"result":"created",
@@ -90,7 +90,7 @@ POST /insert
 }
 
 {
-	"_index":"test",
+	"table":"test",
 	"_id":2,
 	"created":true,
 	"result":"created",

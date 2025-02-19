@@ -11662,13 +11662,20 @@ static void CommitAcc ( const SqlStmt_t & tStmt, cServedIndexRefPtr_c & pServed,
 	if ( bCommit )
 	{
 		RtAccum_t * pAccum = pSession->m_tAcc.GetAcc();
-		RIdx_T<RtIndex_i *> pIndex { pServed };
-		assert ( pSession->m_tAcc.GetAcc ( pIndex, sError )==pAccum );
+		// scoped lock only for assert
+		{
+			RIdx_T<RtIndex_i *> pIndex { pServed };
+			assert ( pSession->m_tAcc.GetAcc ( pIndex, sError )==pAccum );
+		}
 
 		if ( !HandleCmdReplicate ( *pAccum ) )
 		{
 			TlsMsg::MoveError ( sError );
-			pIndex->RollBack ( pAccum ); // clean up collected data
+			// scoped lock for rollback call on index
+			{
+				RIdx_T<RtIndex_i *> pIndex { pServed };
+				pIndex->RollBack ( pAccum ); // clean up collected data
+			}
 			tOut.Error ( "%s", sError.cstr() );
 			return;
 		}
@@ -19938,7 +19945,7 @@ BOOL WINAPI CtrlHandler ( DWORD )
 static char g_sNameBuf[512] = { 0 };
 static char g_sPid[30] = { 0 };
 
-// returns 'true' only once - at the very start, to show it beatiful way.
+// returns 'true' only once - at the very start, to show it beautiful way.
 bool SetWatchDog ( int iDevNull ) REQUIRES ( MainThread )
 {
 	InitSharedBuffer ();
@@ -21049,7 +21056,7 @@ static void SetUidShort ( bool bTestMode )
 namespace { // static
 
 // implement '--stop' and '--stopwait' (connect and stop another instance by pid file from config)
-void StopOrStopWaitAnother ( CSphVariant * v, bool bWait ) REQUIRES ( MainThread )
+int StopOrStopWaitAnother ( CSphVariant * v, bool bWait ) REQUIRES ( MainThread )
 {
 	if ( !v )
 		sphFatal ( "stop: option 'pid_file' not found in '%s' section 'searchd'", g_sConfigFile.cstr () );
@@ -21115,7 +21122,7 @@ void StopOrStopWaitAnother ( CSphVariant * v, bool bWait ) REQUIRES ( MainThread
 	if ( bTerminatedOk )
 	{
 		sphInfo ( "stop: successfully terminated pid %d", iPid );
-		exit ( 0 );
+		return 0;
 	} else
 		sphFatal ( "stop: error terminating pid %d", iPid );
 #else
@@ -21191,7 +21198,7 @@ void StopOrStopWaitAnother ( CSphVariant * v, bool bWait ) REQUIRES ( MainThread
 	if ( fdPipe>=0 )
 		::close ( fdPipe );
 
-	exit ( iExitCode );
+	return iExitCode;
 #endif
 }
 } // static namespace
@@ -21333,6 +21340,9 @@ int WINAPI ServiceMain ( int argc, char **argv ) EXCLUDES (MainThread)
 
 	if ( !sError.IsEmpty() )
 		sError = "";
+
+	if ( !sKNNError.IsEmpty() )
+		sKNNError = "";
 
 	CSphString sTZWarning;
 	{
@@ -21507,11 +21517,7 @@ int WINAPI ServiceMain ( int argc, char **argv ) EXCLUDES (MainThread)
 	////////////////////////
 
 	if ( bOptStop )
-	{
-		StopOrStopWaitAnother ( hSearchdpre ( "pid_file" ), bOptStopWait );
-		assert ( 0 && "StopOrStopWaitAnother should not return " );
-		exit ( 0 );
-	}
+		return StopOrStopWaitAnother ( hSearchdpre ( "pid_file" ), bOptStopWait );
 
 	////////////////////////////////
 	// query running searchd status
@@ -21520,7 +21526,7 @@ int WINAPI ServiceMain ( int argc, char **argv ) EXCLUDES (MainThread)
 	if ( bOptStatus )
 	{
 		QueryStatus ( hSearchdpre("listen") );
-		exit ( 0 );
+		return 0;
 	}
 
 	/////////////////////
@@ -21665,7 +21671,7 @@ int WINAPI ServiceMain ( int argc, char **argv ) EXCLUDES (MainThread)
 
 			default:
 			// tty-controlled parent
-			exit ( 0 );
+			return 0;
 		}
 	}
 #endif

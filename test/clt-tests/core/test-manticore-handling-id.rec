@@ -1,0 +1,52 @@
+––– block: ../base/start-searchd –––
+––– input –––
+apt-get install jq -y > /dev/null; echo $?
+––– output –––
+debconf: delaying package configuration, since apt-utils is not installed
+0
+––– input –––
+mysql -P9306 -h0 -e "drop table if exists test; create table test; insert into test values(1)" > /dev/null; echo $?
+––– output –––
+0
+––– input –––
+mysql -P9306 -h0 -e "show tables; select * from test;"
+––– output –––
++-------+------+
+| Table | Type |
++-------+------+
+| test  | rt   |
++-------+------+
++------+
+| id   |
++------+
+|    1 |
++------+
+––– input –––
+curl -s localhost:9308/test/_search -d '{}' |jq .
+––– output –––
+{
+"took": %{NUMBER},
+"timed_out": false,
+"_shards": {
+"total": 1,
+"successful": 1,
+"skipped": 0,
+"failed": 0
+},
+"hits": {
+"total": 1,
+"total_relation": "eq",
+"max_score": null,
+"hits": [
+{
+"_id": "1",
+"_score": 1,
+"_index": "test",
+"_type": "doc",
+"_version": 1,
+"_source": {}
+}
+]
+},
+"status": 200
+}

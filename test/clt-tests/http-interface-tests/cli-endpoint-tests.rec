@@ -1,0 +1,172 @@
+––– block: ../base/start-searchd –––
+––– input –––
+curl -s "http://localhost:9308/cli?show%20version" | awk '!/row.*in set/'; echo
+––– output –––
++-----------+----------------------------------+
+| Component | Version                          |
++-----------+----------------------------------+
+| Daemon    | %{VERSION}     |
+| Columnar  | columnar %{VERSION}  |
+| Secondary | secondary %{VERSION} |
+| KNN       | knn %{VERSION}       |
+| Buddy     | buddy %{VERSION}            |
++-----------+----------------------------------+
+––– input –––
+mysql -h0 -P9306 -e "CREATE TABLE t (id INT, value TEXT, value_attr STRING) min_infix_len = '3' min_prefix_len = '3'; INSERT INTO t VALUES (1, 'example', 'example'), (2, 'test', 'test');"
+––– output –––
+––– input –––
+mysql -h0 -P9306 -e "SHOW CREATE TABLE t;"
+––– output –––
++-------+------------------------------------------------------------------------------------------------------------+
+| Table | Create Table                                                                                               |
++-------+------------------------------------------------------------------------------------------------------------+
+| t     | CREATE TABLE t (
+id bigint,
+value text,
+value_attr string attribute
+) min_prefix_len='3' min_infix_len='3' |
++-------+------------------------------------------------------------------------------------------------------------+
+––– input –––
+curl -s "http://localhost:9308/cli?select%20*%20from%20t" | awk '!/row.*in set/'; echo
+––– output –––
++----+---------+------------+
+| id | value   | value_attr |
++----+---------+------------+
+| 1  | example | example    |
+| 2  | test    | test       |
++----+---------+------------+
+––– input –––
+curl -s "http://localhost:9308/cli?show%20tables" | awk '!/row.*in set/'; echo
+––– output –––
++-------+------+
+| Table | Type |
++-------+------+
+| t     | rt   |
++-------+------+
+––– input –––
+curl -s "http://localhost:9308/cli?describe%20t" | awk '!/row.*in set/'; echo
+––– output –––
++------------+--------+----------------+
+| Field      | Type   | Properties     |
++------------+--------+----------------+
+| id         | bigint |                |
+| value      | text   | indexed stored |
+| value_attr | string |                |
++------------+--------+----------------+
+––– input –––
+curl -s "http://localhost:9308/cli?select%20*%20from%20t%20where%20match('example')" | awk '!/row.*in set/'; echo
+––– output –––
++----+---------+------------+
+| id | value   | value_attr |
++----+---------+------------+
+| 1  | example | example    |
++----+---------+------------+
+––– input –––
+curl -s "http://localhost:9308/cli?show%20meta" | awk '!/row.*in set/'; echo
+––– output –––
++----------------+---------+
+| Variable_name  | Value   |
++----------------+---------+
+| total          | 1       |
+| total_found    | 1       |
+| total_relation | eq      |
+| time           | #!/[0-9]{1}.[0-9]{3}/!#   |
+| keyword[0]     | example |
+| docs[0]        | 1       |
+| hits[0]        | 1       |
++----------------+---------+
+––– input –––
+curl -s "http://localhost:9308/cli?SELECT%20*%20FROM%20t%20WHERE%20MATCH%28%27example%27%29%20OPTION%20ranker%3Dbm25" | awk '!/row.*in set/'; echo
+––– output –––
++----+---------+------------+
+| id | value   | value_attr |
++----+---------+------------+
+| 1  | example | example    |
++----+---------+------------+
+––– input –––
+curl -s "http://localhost:9308/cli?SELECT%20*%20FROM%20t%20WHERE%20MATCH%28%27exa%2A%27%29" | awk '!/row.*in set/'; echo
+––– output –––
++----+---------+------------+
+| id | value   | value_attr |
++----+---------+------------+
+| 1  | example | example    |
++----+---------+------------+
+––– input –––
+mysql -h0 -P9306 -e "SELECT * FROM t WHERE MATCH('exa*');"
+––– output –––
++------+---------+------------+
+| id   | value   | value_attr |
++------+---------+------------+
+|    1 | example | example    |
++------+---------+------------+
+––– input –––
+curl -s "http://localhost:9308/cli?show%20meta" | awk '!/row.*in set/'; echo
+––– output –––
++----------------+-------+
+| Variable_name  | Value |
++----------------+-------+
+| total          | 1     |
+| total_found    | 1     |
+| total_relation | eq    |
+| time           | #!/[0-9]{1}.[0-9]{3}/!# |
+| keyword[0]     | exa*  |
+| docs[0]        | 1     |
+| hits[0]        | 1     |
++----------------+-------+
+––– input –––
+curl -s "http://localhost:9308/cli?select%20*%20from%20t%20order%20by%20id%20desc%20limit%201" | awk '!/row.*in set/'; echo
+––– output –––
++----+-------+------------+
+| id | value | value_attr |
++----+-------+------------+
+| 2  | test  | test       |
++----+-------+------------+
+––– input –––
+curl -s "http://localhost:9308/cli?select%20*%20from%20t%20order%20by%20id%20asc%20limit%201" | awk '!/row.*in set/'; echo
+––– output –––
++----+---------+------------+
+| id | value   | value_attr |
++----+---------+------------+
+| 1  | example | example    |
++----+---------+------------+
+––– input –––
+curl -s "http://localhost:9308/cli?select%20*%20from%20t%20limit%201%20offset%201" | awk '!/row.*in set/'; echo
+––– output –––
++----+-------+------------+
+| id | value | value_attr |
++----+-------+------------+
+| 2  | test  | test       |
++----+-------+------------+
+––– input –––
+curl -s "http://localhost:9308/cli?select%20count(*)%20as%20cnt,id%20from%20t%20group%20by%20id" | awk '!/row.*in set/'; echo
+––– output –––
++-----+----+
+| cnt | id |
++-----+----+
+| 1   | 1  |
+| 1   | 2  |
++-----+----+
+––– input –––
+curl -s "http://localhost:9308/cli?select%20count(*)%20as%20cnt,value_attr%20from%20t%20group%20by%20value_attr" | awk '!/row.*in set/'; echo
+––– output –––
++-----+------------+
+| cnt | value_attr |
++-----+------------+
+| 1   | example    |
+| 1   | test       |
++-----+------------+
+––– input –––
+curl -s "http://localhost:9308/cli?show%20meta" | awk '!/row.*in set/'; echo
+––– output –––
++----------------+-------+
+| Variable_name  | Value |
++----------------+-------+
+| total          | 2     |
+| total_found    | 2     |
+| total_relation | eq    |
+| time           | #!/[0-9]{1}.[0-9]{3}/!# |
++----------------+-------+
+––– input –––
+curl -s "http://localhost:9308/cli?select%20*%20from%20nonexistent_table" | awk '!/row.*in set/'; echo
+––– output –––
+ERROR: unknown local table(s) 'nonexistent_table' in search request

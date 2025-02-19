@@ -148,7 +148,7 @@ Example:
 
 <!-- request Example -->
 ```bash
-docker run --rm -v $(pwd):/upload manticoresearch/upload
+docker run -it --rm -v $(pwd):/upload manticoresearch/upload
 ```
 
 <!-- response Example -->

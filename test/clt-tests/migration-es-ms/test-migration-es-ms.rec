@@ -4,29 +4,149 @@ docker pull -q ghcr.io/manticoresoftware/manticoresearch:test-kit-latest > /dev/
 ––– output –––
 0
 ––– input –––
-docker pull docker.elastic.co/elasticsearch/elasticsearch:7.5.2 > /dev/null
+docker pull docker.elastic.co/elasticsearch/elasticsearch:8.17.2 > /dev/null 2>&1; echo $?
 ––– output –––
+0
 ––– input –––
 apk add npm > /dev/null 2>&1; echo $?
 ––– output –––
 0
 ––– input –––
-npm install elasticdump -g elasticdump > /dev/null 2>&1; echo $?
+npm install elasticdump -g > /dev/null 2>&1; echo $?
 ––– output –––
 0
 ––– input –––
-docker network create test_network > /dev/null
+elasticdump --version
 ––– output –––
+6.119.0
+––– input –––
+docker network create test_network > /dev/null 2>&1; echo $?
+––– output –––
+0
 ––– input –––
 docker run -it --privileged --network=test_network --entrypoint=docker-entrypoint.sh --platform linux/amd64 --name manticore -p 9306:9306 -p 9308:9308 -d ghcr.io/manticoresoftware/manticoresearch:test-kit-latest searchd -c /etc/manticoresearch/manticore.conf.sh --nodetach > /dev/null; echo $?
 ––– output –––
 0
 ––– input –––
-docker run -d --name elasticsearch --platform linux/amd64 --net test_network -p 9200:9200 -p 9300:9300 -e "discovery.type=single-node" elasticsearch:7.5.2 > /dev/null 2>&1; echo $?
+docker run -d --network=test_network --name elastic -p 127.0.0.1:9200:9200 -e discovery.type=single-node -e xpack.security.enabled=false docker.elastic.co/elasticsearch/elasticsearch:8.17.2 > /dev/null 2>&1; echo $?
 ––– output –––
 0
 ––– input –––
-unzip ./test/clt-tests/migration-es-ms/index.zip -d ./test/clt-tests/migration-es-ms/
+docker exec manticore apt-get install jq -y > /dev/null 2>&1; echo $?
+––– output –––
+0
+––– input –––
+docker exec manticore bash -c 'curl -s https://hub.docker.com/v2/repositories/library/elasticsearch/tags/?page_size=100 | jq -r ".results[].name" | grep -E "^[0-9]+\.[0-9]+\.[0-9]+$" | awk -F. '\''($1==7 && $2==17 && $3>=13) || ($1>7)'\'' | sort -V'
+––– output –––
+7.17.13
+7.17.14
+7.17.15
+7.17.16
+7.17.17
+7.17.18
+7.17.19
+7.17.20
+7.17.21
+7.17.22
+7.17.23
+7.17.24
+7.17.25
+7.17.26
+7.17.27
+8.0.0
+8.0.1
+8.1.0
+8.1.1
+8.1.2
+8.1.3
+8.2.0
+8.2.1
+8.2.2
+8.2.3
+8.3.1
+8.3.2
+8.3.3
+8.4.0
+8.4.1
+8.4.2
+8.4.3
+8.5.0
+8.5.1
+8.5.2
+8.5.3
+8.6.0
+8.6.1
+8.6.2
+8.7.0
+8.7.1
+8.8.0
+8.8.1
+8.8.2
+8.9.0
+8.9.1
+8.9.2
+8.10.1
+8.10.2
+8.10.3
+8.10.4
+8.11.0
+8.11.1
+8.11.2
+8.11.3
+8.11.4
+8.12.0
+8.12.1
+8.12.2
+8.13.0
+8.13.3
+8.13.4
+8.14.0
+8.14.1
+8.14.2
+8.14.3
+8.15.0
+8.15.1
+8.15.2
+8.15.3
+8.15.4
+8.15.5
+8.16.0
+8.16.1
+8.16.2
+8.16.3
+8.16.4
+8.17.0
+8.17.1
+8.17.2
+––– input –––
+docker exec manticore bash -c "curl -s https://hub.docker.com/v2/repositories/elasticdump/elasticsearch-dump/tags/?page_size=100 | jq -r '.results[].name' | grep -E '^v[0-9]{1}.[0-9]{3}.[0-9]+$' | grep -v '^latest$' | sort -V && echo 'latest'"
+––– output –––
+v6.100.0
+v6.101.1
+v6.102.0
+v6.103.0
+v6.103.1
+v6.104.0
+v6.104.1
+v6.104.2
+v6.105.0
+v6.106.0
+v6.107.0
+v6.108.1
+v6.109.0
+v6.109.1
+v6.110.0
+v6.111.0
+v6.112.0
+v6.113.0
+v6.114.0
+v6.115.0
+v6.117.0
+v6.118.0
+v6.119.0
+latest
+––– input –––
+unzip -o ./test/clt-tests/migration-es-ms/index.zip -d ./test/clt-tests/migration-es-ms/
 ––– output –––
 Archive:  ./test/clt-tests/migration-es-ms/index.zip
 inflating: index_mapping.json

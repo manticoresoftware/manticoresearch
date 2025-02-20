@@ -313,20 +313,13 @@ Below is the list of data types supported by Manticore Search:
 
 ## Document ID
 
-<!-- example id -->
-The document identifier is a mandatory attribute, and document IDs must be **unique 64-bit unsigned integers**. Document IDs can be explicitly specified, but if not, they are still enabled. Document IDs cannot be updated. Note that when retrieving document IDs, they are treated as signed 64-bit integers, which means they may be negative. Use the [UINT64()](Functions/Type_casting_functions.md#UINT64%28%29) function to cast them to unsigned 64-bit integers if necessary.
+The document identifier is a mandatory attribute that must be a unique 64-bit unsigned integer. Document IDs can be explicitly specified when creating a table, but they are always enabled even if not specified. Document IDs cannot be updated.
 
-<!-- request Explicit ID -->
-
-When you create a table, you can specify ID explicitly, but no matter what data type you use, it will be always as said previously - a signed 64-bit integer.
+When you create a table, you can specify ID explicitly, but regardless of the data type you use, it will always behave as described above - stored as unsigned 64-bit but exposed as signed 64-bit integer.
 
 ```sql
-CREATE TABLE tbl(id bigint, content text);
+mysql> CREATE TABLE tbl(id bigint, content text);
 DESC tbl;
-```
-
-<!-- response Explicit ID -->
-```sql
 +---------+--------+----------------+
 | Field   | Type   | Properties     |
 +---------+--------+----------------+
@@ -335,28 +328,83 @@ DESC tbl;
 +---------+--------+----------------+
 2 rows in set (0.00 sec)
 ```
-
-<!-- request Implicit ID -->
 
 You can also omit specifying ID at all, it will be enabled automatically.
-
 ```sql
-CREATE TABLE tbl(content text);
+mysql> CREATE TABLE tbl(content text);
 DESC tbl;
-```
-
-<!-- response Implicit ID -->
-```sql
 +---------+--------+----------------+
 | Field   | Type   | Properties     |
 +---------+--------+----------------+
 | id      | bigint |                |
 | content | text   | indexed stored |
 +---------+--------+----------------+
-2 rows in set (0.00 sec)
+2 rows in set (0.00 sec) 
 ```
 
-<!-- end -->
+When working with document IDs, it's important to know that they are stored internally as unsigned 64-bit integers but are exposed as signed 64-bit integers in queries and results. This means:
+
+* IDs greater than 2^63-1 will appear as negative numbers.
+* When filtering by such large IDs, you must use their signed representation.
+* Use the [UINT64()](Functions/Type_casting_functions.md#UINT64%28%29) function to view the actual unsigned value.
+
+For example, let's create a table and insert some values around 2^63:
+```sql
+mysql> create table t(id_text string)
+Query OK, 0 rows affected (0.01 sec)
+
+mysql> insert into t values(9223372036854775807, '2 ^ 63 - 1'),(9223372036854775808, '2 ^ 63')
+Query OK, 2 rows affected (0.00 sec)
+```
+
+Some IDs appear as negative numbers in the results because they exceed 2^63-1. However, using `UINT64(id)` can reveal their actual unsigned values:
+```sql
+mysql> select *, uint64(id) from t
++----------------------+------------+---------------------+
+| id                   | id_text    | uint64(id)          |
++----------------------+------------+---------------------+
+|  9223372036854775807 | 2 ^ 63 - 1 | 9223372036854775807 |
+| -9223372036854775808 | 2 ^ 63     | 9223372036854775808 |
++----------------------+------------+---------------------+
+2 rows in set (0.00 sec)
+--- 2 out of 2 results in 0ms ---
+```
+
+For querying documents with IDs less than 2^63, you can use the unsigned value directly:
+```sql
+mysql> select * from t where id = 9223372036854775807
++---------------------+------------+
+| id                  | id_text    |
++---------------------+------------+
+| 9223372036854775807 | 2 ^ 63 - 1 |
++---------------------+------------+
+1 row in set (0.00 sec)
+--- 1 out of 1 results in 0ms ---
+```
+
+However, for IDs starting from 2^63, you need to use the signed value:
+```sql
+mysql> select * from t where id = -9223372036854775808
++----------------------+---------+
+| id                   | id_text |
++----------------------+---------+
+| -9223372036854775808 | 2 ^ 63  |
++----------------------+---------+
+1 row in set (0.00 sec)
+--- 1 out of 1 results in 0ms ---
+```
+
+If you use an unsigned value instead, you might get incorrect results:
+```sql
+mysql> select * from t where id = 9223372036854775808
++---------------------+------------+
+| id                  | id_text    |
++---------------------+------------+
+| 9223372036854775807 | 2 ^ 63 - 1 |
++---------------------+------------+
+1 row in set (0.00 sec)
+--- 1 out of 1 results in 0ms ---
+```
 
 ## Character data types
 
@@ -1437,7 +1485,7 @@ searchApi.search({"table":"products","query":{"match_all":{}},"expressions":{"ep
 <!-- request javascript -->
 
 ```javascript
-res = await searchApi.search({"table":"products","query":{"match_all":{}}},"expressions":{"eps":"abs(a-b)"}});
+res = await searchApi.search({"table":"products","query":{"match_all":{}},"expressions":{"eps":"abs(a-b)"}});
 ```
 <!-- intro -->
 ##### java:

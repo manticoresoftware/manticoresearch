@@ -1827,7 +1827,7 @@ std::unique_ptr<StoredQuery_i> PercolateIndex_c::CreateQuery ( PercolateQueryArg
 	}
 
 	// FIXME!!! provide segments list instead index
-	sphTransformExtendedQuery ( &tParsed->m_pRoot, m_tSettings, false, nullptr );
+	sphTransformExtendedQuery ( &tParsed->m_pRoot, m_tSettings );
 
 	bool bWordDict = m_pDict->GetSettings().m_bWordDict;
 	if ( m_tMutableSettings.m_iExpandKeywords!=KWE_DISABLED )

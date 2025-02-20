@@ -85,15 +85,14 @@ void ISphQueryFilter::GetKeywords ( CSphVector<CSphKeywordInfo> & dKeywords, Exp
 				}
 			}
 
-			if ( !bExpanded || !tWordlist.m_dExpanded.GetLength() )
-			{
-				CSphKeywordInfo& tInfo = dKeywords.Add();
-				tInfo.m_sTokenized = (const char*)sWord;
-				tInfo.m_sNormalized = (const char*)sWord;
-				tInfo.m_iDocs = iDocs;
-				tInfo.m_iHits = iHits;
-				tInfo.m_iQpos = iQpos;
-			}
+			// lets keep original term to get the same result from empty disk chunks of the RT index or chunks wo matches
+			CSphKeywordInfo& tInfo = dKeywords.Add();
+			tInfo.m_sTokenized = (const char*)sWord;
+			tInfo.m_sNormalized = (const char*)sWord;
+			tInfo.m_iDocs = iDocs;
+			tInfo.m_iHits = iHits;
+			tInfo.m_iQpos = iQpos;
+
 		} else
 		{
 			AddKeywordStats ( sWord, sTokenized, iQpos, dKeywords );

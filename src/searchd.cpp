@@ -19906,6 +19906,7 @@ void ShowHelp ()
 		"--pidfile\t\tforce using the PID file (useful with --console)\n"
 		"--safetrace\t\tonly use system backtrace() call in crash reports\n"
 		"--coredump\t\tsave core dump file on crash\n"
+		"--mockstack\t\tdump safe stack sizes and exit\n"
 		"\n"
 		"Examples:\n"
 		"searchd --config /usr/local/sphinx/etc/manticore.conf\n"
@@ -21374,6 +21375,7 @@ int WINAPI ServiceMain ( int argc, char **argv ) EXCLUDES (MainThread)
 	bool			bNewClusterForce = false;
 	bool			bForcePseudoSharding = false;
 	const char*		szCmdConfigFile = nullptr;
+	bool			bMeasureStack = false;
 
 	DWORD			uReplayFlags = 0;
 
@@ -21397,6 +21399,7 @@ int WINAPI ServiceMain ( int argc, char **argv ) EXCLUDES (MainThread)
 		OPT1 ( "--pidfile" )		bOptPIDFile = true;
 		OPT1 ( "--iostats" )		g_bIOStats = true;
 		OPT1 ( "--cpustats" )		g_bCpuStats = true;
+		OPT1 ( "--mockstack" )		{ bMeasureStack = true; g_bOptNoLock = true; g_bOptNoDetach = true; }
 #if _WIN32
 		OPT1 ( "--install" )		{ if ( !g_bService ) { ServiceInstall ( argc, argv ); return 0; } }
 		OPT1 ( "--delete" )			{ if ( !g_bService ) { ServiceDelete (); return 0; } }
@@ -21445,6 +21448,20 @@ int WINAPI ServiceMain ( int argc, char **argv ) EXCLUDES (MainThread)
 	if ( i!=argc )
 		sphFatal ( "malformed or unknown option near '%s'; use '-h' or '--help' to see available options.", argv[i] );
 
+	StringBuilder_c sStack;
+	DetermineNodeItemStackSize ( sStack );
+	DetermineFilterItemStackSize ( sStack );
+	DetermineMatchStackSize ( sStack );
+
+	if ( bMeasureStack )
+	{
+		if ( !g_bService )
+			{
+			sStack << "export NO_STACK_CALCULATION=1\n";
+			fprintf ( stdout, "%s", sStack.cstr() );
+		}
+		return 0;
+	}
 	SetupLemmatizerBase();
 	g_sConfigFile = sphGetConfigFile ( szCmdConfigFile );
 #if _WIN32
@@ -21743,10 +21760,6 @@ int WINAPI ServiceMain ( int argc, char **argv ) EXCLUDES (MainThread)
 	ScheduleMallocTrim();
 
 	CacheCPUInfo();
-
-	DetermineNodeItemStackSize();
-	DetermineFilterItemStackSize();
-	DetermineMatchStackSize();
 
 	// initialize timeouts since hook will use them
 	auto iRtFlushPeriodUs = hSearchd.GetUsTime64S ( "rt_flush_period", 36000000000ll ); // 10h

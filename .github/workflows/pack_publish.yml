@@ -48,6 +48,8 @@ jobs:
         run: |
           brew install --cask docker
           brew install docker-buildx colima
-          colima start || cat /Users/runner/.colima/_lima/colima/ha.stderr.log
+          LIMACTL_PATH=$(brew --prefix)/bin/limactl
+          sudo curl -L -o $LIMACTL_PATH https://github.com/mikekazakov/lima-nohvf/raw/master/limactl && sudo chmod +x $LIMACTL_PATH
+          colima start --network-address --arch arm64 --vm-type=qemu || cat /Users/runner/.colima/_lima/colima/ha.stderr.log
       - name: Building docker
         run: CI_COMMIT_SHORT_SHA=${{ steps.sha.outputs.sha_short }} /bin/bash dist/dockerhub_deploy.sh

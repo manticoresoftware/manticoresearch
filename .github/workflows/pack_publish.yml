@@ -31,7 +31,7 @@ jobs:
 
   build_docker:
     name: Building and pushing docker
-    runs-on: macos-15
+    runs-on: macos-14
     env:
       DOCKER_USER: ${{ secrets.DOCKER_USER }}
       DOCKER_PASSWORD: ${{ secrets.DOCKER_PASSWORD }}

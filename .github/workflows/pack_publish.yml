@@ -44,9 +44,11 @@ jobs:
         id: sha
         run: echo "sha_short=$(git rev-parse --short HEAD)" >> $GITHUB_OUTPUT
       - name: Install and start docker
+        continue-on-error: true
         run: |
           brew install --cask docker
           brew install docker-buildx colima
           colima start
+          cat /Users/runner/.colima/_lima/colima/ha.stderr.log
       - name: Building docker
         run: CI_COMMIT_SHORT_SHA=${{ steps.sha.outputs.sha_short }} /bin/bash dist/dockerhub_deploy.sh

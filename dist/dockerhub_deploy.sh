@@ -24,8 +24,6 @@ BUILD_FAILED=false
 
 if [[ ! $(docker ps | grep manticore_build) ]]; then
     echo "Buildx builder not found. Registering."
-    docker --help
-    docker buildx install
     docker buildx create --name manticore_build --platform linux/amd64,linux/arm64
     docker buildx use manticore_build
 #    docker run --rm --privileged multiarch/qemu-user-static --reset -p yes

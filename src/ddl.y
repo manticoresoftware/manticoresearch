@@ -70,6 +70,7 @@
 %token	TOK_MODIFY
 %token	TOK_NOT
 %token	TOK_PLUGIN
+%token	TOK_QUANTIZATION
 %token	TOK_REBUILD
 %token	TOK_RECONFIGURE
 %token	TOK_RETURNS
@@ -333,6 +334,14 @@ item_option:
 	| TOK_HNSW_EF_CONSTRUCTION '=' TOK_QUOTED_STRING
 		{
 			if ( !pParser->AddItemOptionHNSWEfConstruction ( $3 ) )
+			{
+				yyerror ( pParser, pParser->GetLastError() );
+    	    	YYERROR;
+			}
+		}
+	| TOK_QUANTIZATION '=' TOK_QUOTED_STRING
+		{
+			if ( !pParser->AddItemOptionQuantization ( $3 ) )
 			{
 				yyerror ( pParser, pParser->GetLastError() );
     	    	YYERROR;

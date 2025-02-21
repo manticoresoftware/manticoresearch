@@ -68,7 +68,8 @@ Expr_KNNDist_c::Expr_KNNDist_c ( const CSphVector<float> & dAnchor, const CSphCo
 
 float Expr_KNNDist_c::Eval ( const CSphMatch & tMatch ) const
 {
-	if ( m_pStart ) // use precalculated data
+	 // use precalculated data on non-quantized vectors (if available)
+	if ( m_pStart && m_tAttr.m_tKNN.m_eQuantization==knn::Quantization_e::NONE )
 	{
 		const knn::DocDist_t * pEnd = m_dData.end();
 		const knn::DocDist_t * pPtr = std::lower_bound ( m_pStart, pEnd, tMatch.m_tRowID, []( auto & tEntry, RowID_t tValue ){ return tEntry.m_tRowID < tValue; } );
@@ -174,17 +175,81 @@ static const char * HNSWSimilarity2Str ( knn::HNSWSimilarity_e eSim )
 }
 
 
-static knn::HNSWSimilarity_e Str2HNSWSimilarity ( const CSphString & sSimilarity )
+static const char * Quantization2Str ( knn::Quantization_e eQuant )
+{
+	switch ( eQuant )
+	{
+	case knn::Quantization_e::BIT1: return "1BIT";
+	case knn::Quantization_e::BIT4: return "4BIT";
+	case knn::Quantization_e::BIT8: return "8BIT";
+	default: return nullptr;
+	}
+}
+
+
+bool Str2HNSWSimilarity ( const CSphString & sSimilarity, knn::HNSWSimilarity_e & eSimilarity, CSphString * pError )
 {
 	CSphString sSim = sSimilarity;
 	sSim.ToUpper();
 
-	if ( sSim=="L2" )		return knn::HNSWSimilarity_e::L2;
-	if ( sSim=="IP" )		return knn::HNSWSimilarity_e::IP;
-	if ( sSim=="COSINE" )	return knn::HNSWSimilarity_e::COSINE;
+	if ( sSim=="L2" )
+	{
+		eSimilarity = knn::HNSWSimilarity_e::L2;
+		return true;
+	}
 
-	assert ( 0 && "Unknown similarity");
-	return knn::HNSWSimilarity_e::L2;
+	if ( sSim=="IP" )
+	{
+		eSimilarity = knn::HNSWSimilarity_e::IP;
+		return true;
+	}
+
+	if ( sSim=="COSINE" )
+	{
+		eSimilarity = knn::HNSWSimilarity_e::COSINE;
+		return true;
+	}
+
+	if ( pError )
+		pError->SetSprintf ( "Unknown knn similarity '%s'", sSimilarity.cstr() );
+
+	return false;
+}
+
+
+bool Str2Quantization ( const CSphString & sQuantization, knn::Quantization_e & eQuantization, CSphString * pError )
+{
+	CSphString sQuant = sQuantization;
+	sQuant.ToUpper();
+
+	if ( sQuant=="NONE" )
+	{
+		eQuantization = knn::Quantization_e::NONE;
+		return true;
+	}
+
+	if ( sQuant=="1BIT" )
+	{
+		eQuantization = knn::Quantization_e::BIT1;
+		return true;
+	}
+
+	if ( sQuant=="4BIT" )
+	{
+		eQuantization = knn::Quantization_e::BIT4;
+		return true;
+	}
+
+	if ( sQuant=="8BIT" )
+	{
+		eQuantization = knn::Quantization_e::BIT8;
+		return true;
+	}
+
+	if ( pError )
+		pError->SetSprintf ( "Unknown quantization '%s'", sQuantization.cstr() );
+
+	return false;
 }
 
 
@@ -205,6 +270,9 @@ void AddKNNSettings ( StringBuilder_c & sRes, const CSphColumnInfo & tAttr )
 
 	if ( tKNN.m_iHNSWEFConstruction!=tDefault.m_iHNSWEFConstruction )
 		sRes << " hnsw_ef_construction='" << tKNN.m_iHNSWEFConstruction << "'";
+
+	if ( tKNN.m_eQuantization!=tDefault.m_eQuantization )
+		sRes << " quantization='" << Quantization2Str ( tKNN.m_eQuantization ) << "'";
 }
 
 
@@ -212,9 +280,10 @@ knn::IndexSettings_t ReadKNNJson ( bson::Bson_c tRoot )
 {
 	knn::IndexSettings_t tRes;
 	tRes.m_iDims = (int) bson::Int ( tRoot.ChildByName ( "knn_dims" ) );
-	tRes.m_eHNSWSimilarity = Str2HNSWSimilarity ( bson::String ( tRoot.ChildByName ( "hnsw_similarity" ) ) );
+	Str2HNSWSimilarity ( bson::String ( tRoot.ChildByName ( "hnsw_similarity" ) ), tRes.m_eHNSWSimilarity );
 	tRes.m_iHNSWM = (int) bson::Int ( tRoot.ChildByName ( "hnsw_m" ), tRes.m_iHNSWM );
 	tRes.m_iHNSWEFConstruction = (int) bson::Int ( tRoot.ChildByName ( "hnsw_ef_construction" ), tRes.m_iHNSWEFConstruction );
+	Str2Quantization ( bson::String ( tRoot.ChildByName ( "quantization" ) ), tRes.m_eQuantization );
 
 	return tRes;
 }
@@ -231,6 +300,7 @@ void operator << ( JsonEscapedBuilder & tOut, const knn::IndexSettings_t & tSett
 	tOut.NamedString ( "hnsw_similarity", HNSWSimilarity2Str ( tSettings.m_eHNSWSimilarity ) );
 	tOut.NamedValNonDefault ( "hnsw_m", tSettings.m_iHNSWM, tDefault.m_iHNSWM );
 	tOut.NamedValNonDefault ( "hnsw_ef_construction", tSettings.m_iHNSWEFConstruction, tDefault.m_iHNSWEFConstruction );
+	tOut.NamedString ( "quantization", Quantization2Str ( tSettings.m_eQuantization ) );
 }
 
 
@@ -248,6 +318,7 @@ CSphString FormatKNNConfigStr ( const CSphVector<NamedKNNSettings_t> & dAttrs )
 		tObj.AddStr ( "hnsw_similarity", HNSWSimilarity2Str ( i.m_eHNSWSimilarity ) );
 		tObj.AddInt ( "hnsw_m", i.m_iHNSWM );
 		tObj.AddInt ( "hnsw_ef_construction", i.m_iHNSWEFConstruction );
+		tObj.AddStr ( "quantization", Quantization2Str ( i.m_eQuantization ) );
 		tArray.AddItem(tObj);
 	}
 
@@ -286,20 +357,18 @@ bool ParseKNNConfigStr ( const CSphString & sStr, CSphVector<NamedKNNSettings_t>
 			return false;
 		}
 
-		CSphString sSimilarity;
+		CSphString sSimilarity, sQuantization;
 		if ( !i.FetchIntItem ( tParsed.m_iDims, "dims", sError ) ) return false;
 		if ( !i.FetchIntItem ( tParsed.m_iHNSWM, "hnsw_m", sError, true ) ) return false;
 		if ( !i.FetchIntItem ( tParsed.m_iHNSWEFConstruction, "hnsw_ef_construction", sError, true ) ) return false;
 		if ( !i.FetchStrItem ( sSimilarity, "hnsw_similarity", sError) ) return false;
+		if ( !i.FetchStrItem ( sQuantization, "quantization", sError) ) return false;
 
-		sSimilarity.ToUpper();
-		if ( sSimilarity!="L2" && sSimilarity!="IP" && sSimilarity!="COSINE" )
-		{
-			sError.SetSprintf ( "Unknown knn similarity '%s'", sSimilarity.cstr() );
+		if ( !Str2HNSWSimilarity ( sSimilarity.cstr(), tParsed.m_eHNSWSimilarity, &sError ) )
 			return false;
-		}
-			
-		tParsed.m_eHNSWSimilarity = Str2HNSWSimilarity ( sSimilarity.cstr() );
+
+		if ( !Str2Quantization ( sQuantization.cstr(), tParsed.m_eQuantization, &sError ) )
+			return false;
 	}
 
 	return true;
@@ -327,7 +396,8 @@ std::unique_ptr<knn::Builder_i> BuildCreateKNN ( const ISphSchema & tSchema, int
 }
 
 
-bool BuildStoreKNN ( RowID_t tRowID, const CSphRowitem * pRow, const BYTE * pPool, CSphVector<ScopedTypedIterator_t> & dIterators, const CSphVector<PlainOrColumnar_t> & dAttrs, knn::Builder_i & tBuilder )
+template <typename ACTION>
+static bool BuildProcessKNN ( RowID_t tRowID, const CSphRowitem * pRow, const BYTE * pPool, CSphVector<ScopedTypedIterator_t> & dIterators, const CSphVector<PlainOrColumnar_t> & dAttrs, ACTION && fnAction )
 {
 	int iKNNAttrIndex = 0;
 	for ( auto & i : dAttrs )
@@ -337,13 +407,25 @@ bool BuildStoreKNN ( RowID_t tRowID, const CSphRowitem * pRow, const BYTE * pPoo
 		int iBytes = i.Get ( tRowID, pRow, pPool, dIterators, pSrc );
 		int iValues = iBytes / sizeof(float);
 
-		if ( !tBuilder.SetAttr ( iKNNAttrIndex, { (float*)pSrc, (size_t)iValues } ) )
+		if ( !fnAction ( iKNNAttrIndex, { (float*)pSrc, (size_t)iValues } ) )
 			return false;
 
 		iKNNAttrIndex++;
 	}
 
 	return true;
+}
+
+
+void BuildTrainKNN ( RowID_t tRowID, const CSphRowitem * pRow, const BYTE * pPool, CSphVector<ScopedTypedIterator_t> & dIterators, const CSphVector<PlainOrColumnar_t> & dAttrs, knn::Builder_i & tBuilder )
+{
+	BuildProcessKNN ( tRowID, pRow, pPool, dIterators, dAttrs, [&tBuilder]( int iAttr, const util::Span_T<float> & tValues ) { tBuilder.Train ( iAttr, tValues ); return true; } );
+}
+
+
+bool BuildStoreKNN ( RowID_t tRowID, const CSphRowitem * pRow, const BYTE * pPool, CSphVector<ScopedTypedIterator_t> & dIterators, const CSphVector<PlainOrColumnar_t> & dAttrs, knn::Builder_i & tBuilder )
+{
+	return BuildProcessKNN ( tRowID, pRow, pPool, dIterators, dAttrs, [&tBuilder]( int iAttr, const util::Span_T<float> & tValues ) { return tBuilder.SetAttr ( iAttr, tValues ); } );
 }
 
 

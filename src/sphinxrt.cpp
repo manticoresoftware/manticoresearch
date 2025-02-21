@@ -3670,15 +3670,33 @@ bool RtIndex_c::WriteAttributes ( SaveDiskDataContext_t & tCtx, CSphString & sEr
 				pDocstoreBuilder->AddDoc ( tNextRowID, tSeg.m_pDocstore->GetDoc ( tRowID, nullptr, -1, false ) );
 			}
 
-			if ( pKNNBuilder && !BuildStoreKNN ( tRowID, pRow, tSeg.m_dBlobs.Begin(), dColumnarIterators, dAttrsForKNN, *pKNNBuilder ) )
-			{
-				sError = pKNNBuilder->GetError().c_str();
-				return false;
-			}
+			if ( pKNNBuilder )
+				BuildTrainKNN ( tRowID, pRow, tSeg.m_dBlobs.Begin(), dColumnarIterators, dAttrsForKNN, *pKNNBuilder );
 
 			tCtx.m_dRowMaps[i][tRowID] = tNextRowID++;
 		}
 	}
+
+	if ( pKNNBuilder )
+		ARRAY_FOREACH ( i, tCtx.m_tRamSegments )
+		{
+			const auto & tSeg = *tCtx.m_tRamSegments[i];
+
+			SccRL_t rLock ( tSeg.m_tLock );
+			tSeg.m_bAttrsBusy.store ( true, std::memory_order_release );
+
+			auto dColumnarIterators = CreateAllColumnarIterators ( tSeg.m_pColumnar.get(), m_tSchema );
+
+			for ( auto tRowID : RtLiveRows_c(tSeg) )
+			{
+				const CSphRowitem * pRow = tSeg.m_dRows.Begin() + (int64_t)tRowID*iStride;
+				if ( !BuildStoreKNN ( tRowID, pRow, tSeg.m_dBlobs.Begin(), dColumnarIterators, dAttrsForKNN, *pKNNBuilder ) )
+				{
+					sError = pKNNBuilder->GetError().c_str();
+					return false;
+				}
+			}
+		}
 
 	// rows could be killed during index save and tNextRowID could be less than tCtx.m_iTotalDocuments \ initial count
 	assert ( tNextRowID<=(RowID_t)dRawLookup.GetLength() );

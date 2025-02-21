@@ -226,14 +226,33 @@ bool AttrMerger_c::Impl_c::CopyMixedAttributes_T ( const CSphIndex & tIndex, con
 		}
 
 		if constexpr ( WITH_KNN )
-			if ( !BuildStoreKNN ( tRowID, pRow, tIndex.GetRawBlobAttrs(), dColumnarIterators, m_dAttrsForKNN, *m_pKNNBuilder ) )
-		{
-			m_sError = m_pKNNBuilder->GetError().c_str();
-			return false;
-		}
+			BuildTrainKNN ( tRowID, pRow, tIndex.GetRawBlobAttrs(), dColumnarIterators, m_dAttrsForKNN, *m_pKNNBuilder );
 
 		m_dDocidLookup[m_tResultRowID] = { tDocID, m_tResultRowID };
 		++m_tResultRowID;
+	}
+
+	if constexpr ( WITH_KNN )
+	{
+		auto dColumnarIterators2ndPass = CreateAllColumnarIterators ( tIndex.GetColumnar(), tIndex.GetMatchSchema() );
+
+		pRow = tIndex.GetRawAttrs();
+		for ( RowID_t tRowID = 0, tRows = (RowID_t)dRowMap.GetLength64(); tRowID < tRows; ++tRowID, pRow += PURE_COLUMNAR ? 0 : iStride )
+		{
+			if ( dRowMap[tRowID] == INVALID_ROWID )
+				continue;
+
+			m_tMonitor.SetEvent ( MergeCb_c::E_MERGEATTRS_PULSE, iChunk );
+
+			if ( m_tMonitor.NeedStop() )
+				return false;
+
+			if ( !BuildStoreKNN ( tRowID, pRow, tIndex.GetRawBlobAttrs(), dColumnarIterators2ndPass, m_dAttrsForKNN, *m_pKNNBuilder ) )
+			{
+				m_sError = m_pKNNBuilder->GetError().c_str();
+				return false;
+			}
+		}
 	}
 
 	return true;

@@ -423,7 +423,7 @@ Specifying at least one property overrides all the default ones (see below), i.e
 
 **No properties specified:**
 
-`string` and `text` are aliases, but if you don’t specify any properties, they by default mean different things:
+`string` and `text` are aliases, but if you don't specify any properties, they by default mean different things:
 
 * just `string` by default means `attribute` (see details [below](../Creating_a_table/Data_types.md#Text)).
 * just `text` by default means `stored` + `indexed` (see details [below](../Creating_a_table/Data_types.md#String)).
@@ -1987,12 +1987,25 @@ var searchResponse = searchApi.Search(searchRequest);
 ## Float vector
 
 <!-- example for creating float_vector -->
+Float vector attributes allow storing variable-length lists of floats, primarily used for machine learning applications and similarity searches. This type differs from multi-valued attributes (MVAs) in several important ways:
+- Preserves the exact order of values (unlike MVAs which may reorder)
+- Retains duplicate values (unlike MVAs which deduplicate)
+- No additional processing during insertion (unlike MVAs which sort and deduplicate)
 
-Float vector attributes allow storing variable-length lists of floats. It's important to note that this concept differs from multi-valued attributes. Multi-valued attributes (MVAs) are essentially sets; they do not preserve value order, and duplicate values are not retained. In contrast, float vectors perform no additional processing on values during insertion.
+### Usage and Limitations
+- Currently only supported in real-time tables
+- Can only be utilized in KNN (k-nearest neighbor) searches
+- Not supported in plain tables or other functions/expressions
+- When used with KNN settings, you cannot `UPDATE` `float_vector` values. Use `REPLACE` instead
+- When used without KNN settings, you can `UPDATE` `float_vector` values
+- Float vectors cannot be used in regular filters or sorting
+- The only way to filter by `float_vector` values is through vector search operations (KNN)
 
-Float vector attributes can be used in k-nearest neighbor searches; see [KNN search](../Searching/KNN.md).
-
-** Currently, `float_vector` fields can only be utilized in KNN search within real-time tables and the data type is not supported in any other functions or expressions, nor is it supported in plain tables. **
+### Common Use Cases
+- Image embeddings for similarity search
+- Text embeddings for semantic search
+- Feature vectors for machine learning
+- Recommendation system vectors
 
 <!-- intro -->
 ##### SQL:
@@ -2078,6 +2091,8 @@ table products
 ```
 
 <!-- end -->
+
+For information about using float vectors in searches, see [KNN search](../Searching/KNN.md).
 
 ## Multi-value integer (MVA)
 
@@ -2334,7 +2349,7 @@ var searchRequest = new SearchRequest("forum", query);
 searchRequest.Sort = new List<Object> {
     new SortMVA("product_codes", SortOrder.OrderEnum.Asc, SortMVA.ModeEnum.Min)
 };
-searchResponse = searchApi.search(searchRequest);
+searchResponse = searchApi.Search(searchRequest);
 ```
 
 <!-- end -->

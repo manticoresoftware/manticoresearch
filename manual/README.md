@@ -64,7 +64,7 @@
     * [⪢ Adding documents to a table]
         * [✔ Adding documents to a real-time table](Data_creation_and_modification/Adding_documents_to_a_table/Adding_documents_to_a_real-time_table.md)
         * [Adding rules to a percolate table](Data_creation_and_modification/Adding_documents_to_a_table/Adding_rules_to_a_percolate_table.md)
-    * [⪢ Adding data from external storages]
+    * [⪢ Adding data from external storages](Data_creation_and_modification/Adding_data_from_external_storages.md)
         * [Plain tables creation](Data_creation_and_modification/Adding_data_from_external_storages/Plain_tables_creation.md)
         * [⪢ Fetching from databases]
             * [Introduction](Data_creation_and_modification/Adding_data_from_external_storages/Fetching_from_databases/Introduction.md)
@@ -165,6 +165,7 @@
         * [• Query profiling](Node_info_and_management/Profiling/Query_profile.md)
         * [• Query plan](Node_info_and_management/Profiling/Query_plan.md)
     * [⪢ Table settings and status]
+        * [• SHOW TABLE INDEXES](Node_info_and_management/Table_settings_and_status/SHOW_TABLE_INDEXES.md)
         * [• SHOW TABLE STATUS](Node_info_and_management/Table_settings_and_status/SHOW_TABLE_STATUS.md)
         * [• SHOW TABLE SETTINGS](Node_info_and_management/Table_settings_and_status/SHOW_TABLE_SETTINGS.md)
 * [⪢ Server settings]
@@ -178,6 +179,7 @@
 * [⪢ Integration]
     * [Logstash](Integration/Logstash.md)
     * [Filebeat](Integration/Filebeat.md)
+    * [Kafka](Integration/Kafka.md)
     * [DBeaver](Integration/DBeaver.md)
     * [Apache Superset](Integration/Apache_Superset.md)
 * [⪢ Extensions]

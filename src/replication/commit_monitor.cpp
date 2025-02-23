@@ -44,21 +44,23 @@ bool CommitMonitor_c::Commit ()
 		return Err ( "requires an existing table" );
 
 	// truncate needs wlocked index
-	if ( !ServedDesc_t::IsMutable ( pServed ) )
-		return Err ( "requires an existing RT or percolate table" );
-
-	bool bOk = false;
-	m_tAcc.m_tCmdReplicated = tCmd;
-	if ( bTruncate )
-	{
-		WIdx_T<RtIndex_i*> pIndex ( pServed );
-		bOk = CommitNonEmptyCmds ( pIndex, tCmd, bOnlyTruncate );
-		m_tAcc.m_tCmdReplicated.m_iTID = pIndex->m_iTID;
-	} else
-	{
-		RIdx_T<RtIndex_i*> pIndex ( pServed );
-		bOk = CommitNonEmptyCmds ( pIndex, tCmd, bOnlyTruncate );
-		m_tAcc.m_tCmdReplicated.m_iTID = pIndex->m_iTID;
+if ( ServedDesc_t::IsMutable ( pServed ) )
+{
+    bool bOk = false;
+    m_tAcc.m_tCmdReplicated = tCmd;
+    if ( bTruncate )
+    {
+        WIdx_T<RtIndex_i*> tLocked ( pServed );
+        bOk = CommitNonEmptyCmds ( tLocked, tCmd, bOnlyTruncate );
+        m_tAcc.m_tCmdReplicated.m_iTID = tLocked->m_iTID;
+    } else
+    {
+        RIdx_T<RtIndex_i*> tLocked ( pServed );
+        bOk = CommitNonEmptyCmds ( tLocked, tCmd, bOnlyTruncate );
+        m_tAcc.m_tCmdReplicated.m_iTID = tLocked->m_iTID;
+    }
+    return bOk;
+}
 	}
 
 	return bOk;
@@ -103,15 +105,46 @@ bool CommitMonitor_c::CommitTOI()
 }
 
 
+class EnabledSaveGuard_c
+{
+	RtIndex_i * m_pRt;
+
+public:
+	NONCOPYMOVABLE( EnabledSaveGuard_c );
+
+	explicit EnabledSaveGuard_c ( RtIndex_i * pRt ) noexcept
+			: m_pRt { pRt }
+	{
+		if ( m_pRt )
+			m_pRt->WaitLockEnabledState ();
+	}
+
+	~EnabledSaveGuard_c () noexcept
+	{
+		if ( m_pRt )
+			m_pRt->UnlockEnabledState ();
+	}
+};
+
 static bool DoUpdate ( AttrUpdateArgs& tUpd, const cServedIndexRefPtr_c& pDesc, int& iUpdated, bool bUpdateAPI, bool bNeedWlock )
 {
 	TRACE_CORO ( "rt", "commit_monitor::DoUpdate" );
+
+	RtIndex_i * pRt = ( pDesc->m_eType==IndexType_e::RT ) ? static_cast<RtIndex_i *> ( UnlockedHazardIdxFromServed ( *pDesc ) ) : nullptr;
+	EnabledSaveGuard_c tSaveEnabled { pRt };
+
 	if ( bUpdateAPI )
 	{
 		Debug ( bool bOk = ) [&]() {
-			return bNeedWlock
-				 ? HandleUpdateAPI ( tUpd, WIdx_c ( pDesc ), iUpdated )
-				 : HandleUpdateAPI ( tUpd, RWIdx_c ( pDesc ), iUpdated );
+			if ( bNeedWlock )
+			{
+				WIdx_c tLocked ( pDesc );
+				return HandleUpdateAPI ( tUpd, tLocked, iUpdated );
+			} else
+			{
+				RWIdx_c tLocked ( pDesc );
+				return HandleUpdateAPI ( tUpd, tLocked, iUpdated );
+			}
 		}();
 		assert ( bOk ); // fixme! handle this
 		return ( iUpdated >= 0 );

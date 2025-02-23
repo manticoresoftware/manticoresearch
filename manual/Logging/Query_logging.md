@@ -23,7 +23,7 @@ searchd {
 
 Two query log formats are supported:
 * `sphinxql` (default): Logs in SQL format. It also provides an easy way to replay logged queries.
-* `plain`: Logs full-text queries in a simple text format. Recommended if most of your queries are primarily full-text, or if you don't care about non-full-text components of your queries, such as filtering by attributes, sorting, grouping, etc. Queries logged in the `plain` format cannot be replayed.
+* `plain`: Logs full-text queries in a simple text format. This format is recommended if most of your queries are primarily full-text or if you do not need to log non-full-text components, such as filtering by attributes, sorting, or grouping. Queries logged in the `plain` format cannot be replayed. Note that queries processed through [Buddy](../Installation/Manticore_Buddy.md) are not logged in this mode.
 
 To switch between the formats, you can use the searchd setting [query_log_format](../Server_settings/Searchd.md#query_log_format).
 
@@ -74,7 +74,7 @@ The features of the Manticore SQL log format compared to the [plain format](../.
 ### Plain log format
 
 <!-- example plain_log -->
-With the `plain` log format, Manticore logs all successfully executed search queries in a simple text format. Non-full-text parts of queries are not logged. JSON queries are logged as flattened to a single line.
+With the `plain` log format, Manticore logs all successfully executed search queries in a simple text format. Non-full-text parts of the queries are not logged. JSON queries are recorded as single-line entries. Queries processed through [Buddy](../Installation/Manticore_Buddy.md) are not logged.
 
 <!-- intro -->
 `query_log_format` example:

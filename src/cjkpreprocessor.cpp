@@ -160,10 +160,10 @@ std::unique_ptr<ISphFieldFilter> CreateFilterCJK ( std::unique_ptr<ISphFieldFilt
 }
 
 
-std::unique_ptr<ISphFieldFilter> FieldFilterCJK_c::Clone() const
+std::unique_ptr<ISphFieldFilter> FieldFilterCJK_c::Clone ( const FieldFilterOptions_t * pOptions ) const
 {
-	std::unique_ptr<ISphFieldFilter> pClonedParent { m_pParent ? m_pParent->Clone() : nullptr };
-	std::unique_ptr<CJKPreprocessor_c> pClonedPreprocessor { m_pPreprocessor->Clone() };
+	std::unique_ptr<ISphFieldFilter> pClonedParent { m_pParent ? m_pParent->Clone(pOptions) : nullptr };
+	std::unique_ptr<CJKPreprocessor_c> pClonedPreprocessor { m_pPreprocessor->Clone(pOptions) };
 
 	CSphString sError;
 	auto pFilter = CreateFilterCJK ( std::move(pClonedParent), std::move(pClonedPreprocessor), m_sBlendChars.cstr(), sError );

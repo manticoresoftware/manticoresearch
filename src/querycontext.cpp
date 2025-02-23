@@ -18,25 +18,6 @@
 #include "docstore.h"
 
 
-static FORCE_INLINE void FreeDataPtrAttrs ( CSphMatch & tMatch, const CSphVector<ContextCalcItem_t> & dItems, const IntVec_t & dItemIndexes )
-{
-	if ( !tMatch.m_pDynamic )
-		return;
-
-	for ( auto i : dItemIndexes )
-	{
-		const auto & tItem = dItems[i];
-
-		BYTE * pData = (BYTE *)tMatch.GetAttr ( tItem.m_tLoc );
-		// delete[] pData;
-		if ( pData )
-		{
-			sphDeallocatePacked ( pData );
-			tMatch.SetAttr ( tItem.m_tLoc, 0 );
-		}
-	}
-}
-
 static ESphEvalStage GetEarliestStage ( ESphEvalStage eStage, const CSphColumnInfo & tIn, const CSphVector<const ISphSchema *> & dSchemas )
 {
 	for ( const auto * pSchema : dSchemas )
@@ -52,6 +33,12 @@ static ESphEvalStage GetEarliestStage ( ESphEvalStage eStage, const CSphColumnIn
 }
 
 ///////////////////////////////////////////////////////////////////////////////
+
+CSphQueryContext::CSphQueryContext ( const CSphQuery & tQuery )
+	: m_tQuery ( tQuery )
+{
+}
+
 
 void CSphQueryContext::ResetFilters()
 {
@@ -350,3 +337,17 @@ void CSphQueryContext::SetupExtraData ( ISphRanker * pRanker, ISphMatchSorter * 
 	ContextExtra tExtra ( pRanker, pSorter );
 	ExprCommand ( SPH_EXPR_SET_EXTRA_DATA, &tExtra );
 }
+
+void CSphQueryContext::SetPackedFactor ( DWORD uFlags )
+{
+	m_uPackedFactorFlags = uFlags;
+	// query with the packed factors should pass the full match flow as query cache does not has these factors
+	if ( !m_bSkipQCache )
+		m_bSkipQCache = ( m_uPackedFactorFlags!=SPH_FACTOR_DISABLE );
+}
+
+DWORD CSphQueryContext::GetPackedFactor () const
+{
+	return m_uPackedFactorFlags;
+}
+

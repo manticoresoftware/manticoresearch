@@ -1507,6 +1507,7 @@ void ReplicationServiceStart ( bool bBootStrap ) EXCLUDES ( g_tClustersLock )
 	// should be lined up with PrepareClustersOnStartup
 	if ( !ReplicationEnabled() )
 	{
+		Threads::SccRL_t tLock ( g_tClustersLock );
 		if ( !g_hClusters.IsEmpty() )
 			sphWarning ( "loading %d cluster(s) but the replication disabled, %s", g_hClusters.GetLength(), g_sReplicationStartError.cstr() );
 		return;

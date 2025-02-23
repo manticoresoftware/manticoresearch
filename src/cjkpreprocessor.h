@@ -21,7 +21,7 @@ public:
 	virtual					~CJKPreprocessor_c() = default;
 
 	virtual bool			Init ( CSphString & sError ) = 0;
-	virtual CJKPreprocessor_c * Clone() = 0;
+	virtual CJKPreprocessor_c * Clone ( const FieldFilterOptions_t * pOptions ) = 0;
 
 	bool					Process ( const BYTE * pBuffer, int iLength, CSphVector<BYTE> & dOut, bool bQuery );
 	bool					SetBlendChars ( const char * szBlendChars, CSphString & sError );
@@ -74,7 +74,7 @@ public:
 	bool	Init ( CSphString & sError );
 	int		Apply ( const BYTE * sField, int iLength, CSphVector<BYTE> & dStorage, bool bQuery ) final;
 	void	GetSettings ( CSphFieldFilterSettings & tSettings ) const final;
-	std::unique_ptr<ISphFieldFilter> Clone() const final;
+	std::unique_ptr<ISphFieldFilter> Clone ( const FieldFilterOptions_t * pOptions ) const final;
 
 	bool	SetBlendChars ( const char * szBlendChars, CSphString & sError );
 	void	Setup ( std::unique_ptr<ISphFieldFilter> pParent );

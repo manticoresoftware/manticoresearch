@@ -170,7 +170,7 @@ public:
 	bool			IsIntr () const { return m_bIntr; }
 
 	/// look what is in buf, but NOT pop
-	ByteBlob_t 		Tail ();
+	ByteBlob_t 		Tail () const noexcept;
 
 	/// take part or whole unused content of the buf
 	ByteBlob_t		PopTail ( int iSize=-1 );

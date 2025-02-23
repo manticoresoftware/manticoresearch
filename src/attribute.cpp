@@ -1032,10 +1032,6 @@ ByteBlob_t sphUnpackPtrAttr ( const BYTE * pData )
 	return { pData, iLen };
 }
 
-BYTE * sph::CopyPackedAttr ( const BYTE* pData )
-{
-	return sphPackPtrAttr ( sphUnpackPtrAttr ( pData ));
-}
 
 ESphAttr sphPlainAttrToPtrAttr ( ESphAttr eAttrType )
 {

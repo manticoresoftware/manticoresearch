@@ -54,7 +54,7 @@ FREEZE t;
 
 The `file` column indicates the table's file paths within the [data_dir](../Server_settings/Searchd.md#data_dir) of the running instance. The `normalized` column displays the absolute paths for the same files. To back up a table, simply copy the provided files without additional preparation.
 
-When a table is frozen, you cannot execute `UPDATE` queries; they will fail with the error message "index is locked now, try again later."
+When a table is frozen, you cannot execute `UPDATE` queries; they will wait until the table is unfrozen.
 
 Also, `DELETE` and `REPLACE` queries have some restrictions while the table is frozen:
 * If `DELETE` affects a document in the current RAM chunk - it is permitted.

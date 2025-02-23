@@ -261,7 +261,7 @@ res =  await indexApi.insert(store_query);
 ```
 <!-- response Javascript -->
 ```javascript
-{"_index":"test_pq","_id":1657843905795719198,"created":true,"result":"created"}
+{"table":"test_pq","_id":1657843905795719198,"created":true,"result":"created"}
 
 ```
 

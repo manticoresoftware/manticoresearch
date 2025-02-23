@@ -162,7 +162,7 @@ const char* szCommand ( int );
 /// master-agent API SEARCH command protocol extensions version
 enum
 {
-	VER_COMMAND_SEARCH_MASTER = 22
+	VER_COMMAND_SEARCH_MASTER = 24
 };
 
 
@@ -173,7 +173,7 @@ enum SearchdCommandV_e : WORD
 	VER_COMMAND_SEARCH		= 0x126, // 1.38
 	VER_COMMAND_EXCERPT		= 0x104,
 	VER_COMMAND_UPDATE		= 0x104,
-	VER_COMMAND_KEYWORDS	= 0x101,
+	VER_COMMAND_KEYWORDS	= 0x102,
 	VER_COMMAND_STATUS		= 0x101,
 	VER_COMMAND_FLUSHATTRS	= 0x100,
 	VER_COMMAND_SPHINXQL	= 0x100,
@@ -545,7 +545,7 @@ public:
 	bool	GetDwords ( CSphVector<DWORD> & dBuffer, int & iGot, int iMax );
 	bool	GetQwords ( CSphVector<SphAttr_t> & dBuffer, int & iGot, int iMax );
 
-	inline int		HasBytes() const { return int ( m_pBuf - m_pCur + m_iLen ); }
+	inline int		HasBytes() const noexcept { return int ( m_pBuf - m_pCur + m_iLen ); }
 
 	bool			GetError() const { return m_bError; }
 	const CSphString & GetErrorMessage() const { return m_sError; }
@@ -1299,6 +1299,7 @@ public:
 
 	void				RunQueries ();					///< run all queries, get all results
 	void				SetQuery ( int iQuery, const CSphQuery & tQuery, std::unique_ptr<ISphTableFunc> pTableFunc );
+	void				SetJoinQueryOptions ( int iQuery, const CSphQuery & tJoinQueryOptions );
 	void				SetProfile ( QueryProfile_c * pProfile );
 	void				SetStmt ( SqlStmt_t & tStmt );
 	AggrResult_t *		GetResult ( int iResult );
@@ -1424,7 +1425,7 @@ void				SaveCompatHttp ( JsonEscapedBuilder & tOut );
 void				SetupCompatHttp();
 bool				SetLogManagement ( const CSphString & sVal, CSphString & sError );
 bool				IsLogManagementEnabled ();
-std::unique_ptr<PubSearchHandler_c> CreateMsearchHandler ( std::unique_ptr<QueryParser_i> pQueryParser, QueryType_e eQueryType, JsonQuery_c & tQuery );
+std::unique_ptr<PubSearchHandler_c> CreateMsearchHandler ( std::unique_ptr<QueryParser_i> pQueryParser, QueryType_e eQueryType, ParsedJsonQuery_t & tParsed );
 int64_t				GetDocID ( const char * szID );
 
 void ExecuteApiCommand ( SearchdCommand_e eCommand, WORD uCommandVer, int iLength, InputBuffer_c & tBuf, GenericOutputBuffer_c & tOut );
@@ -1453,8 +1454,12 @@ namespace session
 	bool GetDeprecatedEOF();
 }
 
-void LogSphinxqlError ( const char * sStmt, const Str_t& sError );
+void LogSphinxqlError ( const char * sStmt, const Str_t & sError );
+void LogSphinxqlError ( const Str_t & sStmt, const Str_t & sError );
 int GetDaemonLogBufSize ();
+
+enum class BuddyQuery_e { SQL, HTTP };
+void LogBuddyQuery ( const Str_t sQuery, BuddyQuery_e tType );
 
 // that is used from sphinxql command over API
 void RunSingleSphinxqlCommand ( Str_t sCommand, GenericOutputBuffer_c & tOut );

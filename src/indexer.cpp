@@ -1073,7 +1073,7 @@ bool DoIndex ( const CSphConfigSection & hIndex, const char * szIndexName, const
 	if ( !sphSpawnFilterICU ( pFieldFilter, tSettings, tTokSettings, szIndexName, sError ) )
 		sphDie ( "%s", sError.cstr() );
 
-	if ( !SpawnFilterJieba ( pFieldFilter, tSettings, tTokSettings, szIndexName, sError ) )
+	if ( !SpawnFilterJieba ( pFieldFilter, tSettings, tTokSettings, szIndexName, nullptr, sError ) )
 		sphDie ( "%s", sError.cstr() );
 
 	// boundary

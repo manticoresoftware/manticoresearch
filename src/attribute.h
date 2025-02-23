@@ -133,11 +133,8 @@ ESphAttr			sphPlainAttrToPtrAttr ( ESphAttr eAttrType );
 // is this a data ptr attribute?
 bool				sphIsDataPtrAttr ( ESphAttr eAttrType );
 
-namespace sph {
-	// just repack (matter of optimizing)
-	BYTE * CopyPackedAttr ( const BYTE * pData );
-}
-
+// just repack (matter of optimizing)
+FORCE_INLINE BYTE * sphCopyPackedAttr ( const BYTE * pData ) { return sphPackPtrAttr ( sphUnpackPtrAttr ( pData ) ); }
 
 //////////////////////////////////////////////////////////////////////////
 // misc attribute-related
@@ -152,11 +149,26 @@ void	sphPackedFloatVec2Str ( const BYTE * pData, StringBuilder_c & dStr );
 /// check if tColumn is actually stored field (so, can't be used in filters/expressions)
 bool	IsNotRealAttribute ( const CSphColumnInfo & tColumn );
 
-
-inline DocID_t sphGetDocID ( const CSphRowitem * pData )
+FORCE_INLINE DocID_t sphGetDocID ( const CSphRowitem * pData )
 {
 	assert ( pData );
-	return sphUnalignedRead ( *(DocID_t*)(const_cast<CSphRowitem *>(pData)) );
+#if USE_LITTLE_ENDIAN
+	return *(DocID_t *) ( const_cast<CSphRowitem *>(pData) );
+#else
+	return DocID_t ( pData[0] )+( DocID_t ( pData[1] ) << ROWITEM_BITS );
+#endif
+}
+
+FORCE_INLINE void sphDeallocatePacked ( const BYTE* pBlob )
+{
+	if ( !pBlob )
+		return;
+#if WITH_SMALLALLOC
+	const BYTE * pFoo = pBlob;
+	sphDeallocateSmall ( pBlob, sphCalcPackedLength ( UnzipIntBE ( pFoo ) ) );
+#else
+	sphDeallocateSmall ( pBlob );
+#endif
 }
 
 const char * AttrType2Str ( ESphAttr eAttrType );

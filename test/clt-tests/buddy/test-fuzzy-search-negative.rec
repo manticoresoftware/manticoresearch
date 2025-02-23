@@ -1,14 +1,15 @@
 ––– block: ../base/start-searchd –––
 ––– input –––
-php -d memory_limit=-1 ./test/clt-tests/scripts/load_us_names_min_infix_len.php 1000 10 1000000 5 > /dev/null
+php -d memory_limit=2G ./test/clt-tests/scripts/load_names_attr.php --batch-size=1000 --concurrency=4 --docs=5000000 --start-id=1 > /dev/null; echo $?
 ––– output –––
+0
 ––– input –––
 mysql -h0 -P9306 -e "SELECT COUNT(*) FROM name;"
 ––– output –––
 +----------+
 | count(*) |
 +----------+
-|  1000000 |
+|  5000000 |
 +----------+
 ––– input –––
 mysql -h0 -P9306 -e "SELECT * FROM name WHERE MATCH('RICH') OPTION fuzzy=-1;"

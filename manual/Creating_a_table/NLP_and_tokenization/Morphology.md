@@ -26,9 +26,11 @@ Manticore comes with built-in morphological preprocessors for:
 * Chinese word breaking algorithm
 * Snowball (libstemmer) stemmers for more than [15 other languages](../../Creating_a_table/NLP_and_tokenization/Supported_languages.md) are also available.
 
-Lemmatizers require dictionary `.pak` files that can be [downloaded from the Manticore website](https://manticoresearch.com/install/#other-downloads). The dictionaries need to be put in the directory specified by [lemmatizer_base](../../Server_settings/Common.md#lemmatizer_base). Additionally, the [lemmatizer_cache](../../Data_creation_and_modification/Adding_data_from_external_storages/Plain_tables_creation.md#lemmatizer_cache) setting can be used to speed up lemmatizing by spending more RAM for an uncompressed dictionary cache.
+Lemmatizers require dictionary `.pak` files that can be installed using the `manticore-language-packs` packages or [downloaded from the Manticore website](https://manticoresearch.com/install/#other-downloads). In the latter case the dictionaries need to be put in the directory specified by [lemmatizer_base](../../Server_settings/Common.md#lemmatizer_base). 
 
-The Chinese language segmentation can be done using [ICU](http://site.icu-project.org/) or [Jieba](https://github.com/yanyiwu/cppjieba). Both libraries provide more accurate segmentation than n-grams, but are slightly slower. The [charset_table](../../Creating_a_table/NLP_and_tokenization/Low-level_tokenization.md#charset_table) must include all Chinese characters, which can be done using the `cont`, `cjk` or `chinese` character sets. When you set `morphology=icu_chinese` or `morphology=jieba_chinese`, the documents are first pre-processed by ICU or Jieba. Then, the tokenizer processes the result according to the charset_table, and finally, other morphology processors from the `morphology` option are applied. Only those parts of the text that contain Chinese are passed to ICU/Jieba for segmentation, while the other parts can be modified by different means such as different morphologies or `charset_table`.
+Additionally, the [lemmatizer_cache](../../Data_creation_and_modification/Adding_data_from_external_storages/Plain_tables_creation.md#lemmatizer_cache) setting can be used to speed up lemmatizing by spending more RAM for an uncompressed dictionary cache.
+
+The Chinese language segmentation can be done using [ICU](http://site.icu-project.org/) or [Jieba](https://github.com/yanyiwu/cppjieba) (requires package `manticore-language-packs`). Both libraries provide more accurate segmentation than n-grams, but are slightly slower. The [charset_table](../../Creating_a_table/NLP_and_tokenization/Low-level_tokenization.md#charset_table) must include all Chinese characters, which can be done using the `cont`, `cjk` or `chinese` character sets. When you set `morphology=icu_chinese` or `morphology=jieba_chinese`, the documents are first pre-processed by ICU or Jieba. Then, the tokenizer processes the result according to the charset_table, and finally, other morphology processors from the `morphology` option are applied. Only those parts of the text that contain Chinese are passed to ICU/Jieba for segmentation, while the other parts can be modified by different means such as different morphologies or `charset_table`.
 
 Built-in English and Russian stemmers are faster than their libstemmer counterparts but may produce slightly different results
 
@@ -52,7 +54,7 @@ To use the `morphology` option, specify one or multiple of the built-in options,
 * soundex - replace keywords with their SOUNDEX code
 * metaphone - replace keywords with their METAPHONE code
 * icu_chinese - apply Chinese text segmentation using ICU
-* jieba_chinese - apply Chinese text segmentation using Jieba
+* jieba_chinese - apply Chinese text segmentation using Jieba (requires package `manticore-language-packs`)
 * libstemmer_* . Refer to the [list of supported languages](../../Creating_a_table/NLP_and_tokenization/Supported_languages.md) for details
 
 Multiple stemmers can be specified, separated by commas. They will be applied to incoming words in the order they are listed, and the processing will stop once one of the stemmers modifies the word. Additionally, when [wordforms](../../Creating_a_table/NLP_and_tokenization/Wordforms.md#wordforms) feature is enabled, the word will be looked up in the word forms dictionary first. If there is a matching entry in the dictionary, stemmers will not be applied at all.  [wordforms](../../Creating_a_table/NLP_and_tokenization/Wordforms.md#wordforms) сan be used to implement stemming exceptions.
@@ -550,6 +552,102 @@ utilsApi.Sql("CREATE TABLE products(title text, price float) morphology = 'jieba
 table products {
   morphology = jieba_chinese
   jieba_mode = full
+
+  type = rt
+  path = tbl
+  rt_field = title
+  rt_attr_uint = price
+}
+```
+<!-- end -->
+
+## jieba_user_dict_path
+
+<!-- example jieba_user_dict_path -->
+
+```ini
+jieba_user_dict_path = path/to/stopwords/file
+```
+
+Path to the Jieba user dictionary. Optional.
+
+Jieba, a Chinese text segmentation library, uses dictionary files to assist with word segmentation. The format of these dictionary files is as follows: each line contains a word, split into three parts separated by spaces — the word itself, word frequency, and part of speech (POS) tag. The word frequency and POS tag are optional and can be omitted. The dictionary file must be UTF-8 encoded.
+
+Example:
+
+```
+创新办 3 i
+云计算 5
+凱特琳 nz
+台中
+```
+
+`jieba_user_dict_path` should be used with `morphology = jieba_chinese`. For more details, see [Chinese, Japanese, Korean (CJK), and Thai languages](Creating_a_table/NLP_and_tokenization/Languages_with_continuous_scripts.md).
+
+<!-- request SQL -->
+
+```sql
+CREATE TABLE products(title text, price float) morphology = 'jieba_chinese' jieba_user_dict_path = '/usr/local/manticore/data/user-dict.txt'
+```
+
+<!-- request JSON -->
+
+```JSON
+POST /cli -d "
+CREATE TABLE products(title text, price float) morphology = 'jieba_chinese' jieba_user_dict_path = '/usr/local/manticore/data/user-dict.txt'"
+```
+
+<!-- request PHP -->
+
+```php
+$index = new \Manticoresearch\Index($client);
+$index->setName('products');
+$index->create([
+            'title'=>['type'=>'text'],
+            'price'=>['type'=>'float']
+        ],[
+			 'morphology' => 'jieba_chinese',
+             'jieba_user_dict_path' = '/usr/local/manticore/data/user-dict.txt'
+        ]);
+
+```
+<!-- intro -->
+##### Python:
+
+<!-- request Python -->
+
+```python
+utilsApi.sql('CREATE TABLE products(title text, price float) morphology = \'jieba_chinese\' jieba_user_dict_path = \'/usr/local/manticore/data/user-dict.txt\'')
+```
+<!-- intro -->
+##### Javascript:
+
+<!-- request javascript -->
+
+```javascript
+res = await utilsApi.sql('CREATE TABLE products(title text, price float) morphology = \'jieba_chinese\' jieba_user_dict_path = \'/usr/local/manticore/data/user-dict.txt\'');
+```
+
+<!-- intro -->
+##### Java:
+<!-- request Java -->
+```java
+utilsApi.sql("CREATE TABLE products(title text, price float) morphology = 'jieba_chinese' jieba_user_dict_path = '/usr/local/manticore/data/user-dict.txt'");
+```
+
+<!-- intro -->
+##### C#:
+<!-- request C# -->
+```clike
+utilsApi.Sql("CREATE TABLE products(title text, price float) morphology = 'jieba_chinese' jieba_user_dict_path = '/usr/local/manticore/data/user-dict.txt'");
+```
+
+<!-- request CONFIG -->
+
+```ini
+table products {
+  morphology = jieba_chinese
+  jieba_user_dict_path = /usr/local/manticore/data/user-dict.txt
 
   type = rt
   path = tbl

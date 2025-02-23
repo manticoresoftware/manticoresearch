@@ -79,7 +79,7 @@ POST /delete -d '
 
 ``` json
 {
-    "_index":"test",
+    "table":"test",
     "deleted":2,
 }
 ```    
@@ -124,7 +124,7 @@ res = await indexApi.delete({"table" : "test", "query": { "match": { "*": "test 
 
 <!-- response javascript -->
 ```javascript
-{"_index":"test","deleted":5}
+{"table":"test","deleted":5}
 ```
 
 <!-- intro -->
@@ -192,7 +192,7 @@ res = await indexApi.delete({
 
 <!-- response TypeScript -->
 ```json
-{"_index":"test","deleted":5}
+{"table":"test","deleted":5}
 ```
 
 <!-- intro -->
@@ -209,7 +209,7 @@ deleteRequest.SetQuery(deleteQuery)
 
 <!-- response Go -->
 ```json
-{"_index":"test","deleted":5}
+{"table":"test","deleted":5}
 ```
 
 <!-- end -->
@@ -244,7 +244,7 @@ POST /delete -d '
 
 ``` json
 {
-    "_index": "test",
+    "table": "test",
     "_id": 1,
     "found": true,
     "result": "deleted"      
@@ -293,7 +293,7 @@ res = await indexApi.delete({"table" : "test", "id" : 1});
 
 <!-- response javascript -->
 ```javascript
-{"_index":"test","_id":1,"result":"deleted"}
+{"table":"test","_id":1,"result":"deleted"}
 ```
 
 <!-- intro -->
@@ -348,7 +348,7 @@ res = await indexApi.delete({ index: 'test', id: 1 });
 
 <!-- response TypeScript -->
 ```json
-{"_index":"test","_id":1,"result":"deleted"}
+{"table":"test","_id":1,"result":"deleted"}
 ```
 
 <!-- intro -->
@@ -363,7 +363,7 @@ deleteRequest.SetId(1)
 
 <!-- response Go -->
 ```json
-{"_index":"test","_id":1,"result":"deleted"}
+{"table":"test","_id":1,"result":"deleted"}
 ```
 
 <!-- end -->
@@ -404,7 +404,7 @@ POST /delete -d '
 
 ``` json
     {
-        "_index":"test",
+        "table":"test",
         "_id":1,
         "found":true,
         "result":"deleted"      
@@ -535,7 +535,7 @@ indexApi.delete({"cluster":"cluster_1","table" : "test", "id" : 1})
 
 <!-- response javascript -->
 ```javascript
-{"_index":"test","_id":1,"result":"deleted"}
+{"table":"test","_id":1,"result":"deleted"}
 ```
 
 <!-- intro -->
@@ -590,7 +590,7 @@ res = await indexApi.delete({ cluster: 'cluster_1', index: 'test', id: 1 });
 
 <!-- response TypeScript -->
 ```json
-{"_index":"test","_id":1,"result":"deleted"}
+{"table":"test","_id":1,"result":"deleted"}
 ```
 
 <!-- intro -->
@@ -606,7 +606,7 @@ deleteRequest.SetId(1)
 
 <!-- response Go -->
 ```json
-{"_index":"test","_id":1,"result":"deleted"}
+{"table":"test","_id":1,"result":"deleted"}
 ```
 
 <!-- end -->
@@ -640,7 +640,7 @@ POST /bulk
       {
          "bulk":
          {
-            "_index":"test",
+            "table":"test",
             "_id":0,
             "created":0,
             "deleted":2,
@@ -724,7 +724,7 @@ indexApi.bulk('\n'.join(map(json.dumps,docs)))
 ```python
 {
     'error': None,
-    'items': [{u'delete': {u'_index': test', u'deleted': 2}}]
+    'items': [{u'delete': {u'table': test', u'deleted': 2}}]
 }
 
 ```
@@ -741,7 +741,7 @@ res =  await indexApi.bulk(docs.map(e=>JSON.stringify(e)).join('\n'));
 
 <!-- response javascript -->
 ```javascript
-{"items":[{"delete":{"_index":"test","deleted":2}}],"errors":false}
+{"items":[{"delete":{"table":"test","deleted":2}}],"errors":false}
 
 ```
 
@@ -800,7 +800,7 @@ res = await indexApi.bulk(body);
 
 <!-- response TypeScript -->
 ```json
-{"items":[{"delete":{"_index":"test","deleted":2}}],"errors":false}
+{"items":[{"delete":{"table":"test","deleted":2}}],"errors":false}
 
 ```
 
@@ -820,7 +820,7 @@ resp, httpRes, err := manticoreclient.IndexAPI.Bulk(context.Background()).Body(b
 
 <!-- response Go -->
 ```json
-{"items":[{"delete":{"_index":"test","deleted":2}}],"errors":false}
+{"items":[{"delete":{"table":"test","deleted":2}}],"errors":false}
 ```
 
 <!-- end -->

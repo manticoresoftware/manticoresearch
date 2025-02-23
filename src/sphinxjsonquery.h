@@ -52,20 +52,24 @@ struct JsonQuery_c : public CSphQuery
 	StrVec_t m_dSortFields;
 	CSphVector<JsonDocField_t> m_dDocFields;
 	CSphVector<JsonAggr_t> m_dAggs;
+	bool m_bGroupEmulation = false;
 };
 
 struct ParsedJsonQuery_t
 {
-	JsonQuery_c m_tQuery;
-	CSphString m_sWarning;
-	bool m_bProfile = false;
-	int m_iPlan = 0; // 0 - no plan, 1 - description, 2 - object, 3 - both
+				ParsedJsonQuery_t();
+
+	JsonQuery_c	m_tQuery;
+	CSphQuery	m_tJoinQueryOptions;
+	CSphString	m_sWarning;
+	bool		m_bProfile = false;
+	int			m_iPlan = 0; // 0 - no plan, 1 - description, 2 - object, 3 - both
 };
 
 std::unique_ptr<QueryParser_i> sphCreateJsonQueryParser();
 bool			sphParseJsonQuery ( Str_t sQuery, ParsedJsonQuery_t & tPJQuery );
 bool			sphParseJsonQuery ( const JsonObj_c & tRoot, ParsedJsonQuery_t & tPJQuery );
-bool			sphParseJsonInsert ( const char * szInsert, SqlStmt_t & tStmt, DocID_t & tDocId, bool bReplace, CSphString & sError );
+bool			sphParseJsonInsert ( Str_t sInsert, SqlStmt_t & tStmt, DocID_t & tDocId, bool bReplace, CSphString & sError );
 bool			sphParseJsonUpdate ( Str_t sUpdate, SqlStmt_t & tStmt, DocID_t & tDocId, CSphString & sError );
 bool			sphParseJsonDelete ( Str_t sDelete, SqlStmt_t & tStmt, DocID_t & tDocId, CSphString & sError );
 bool			sphParseJsonStatement ( const char * szStmt, SqlStmt_t & tStmt, CSphString & sStmt, CSphString & sQuery, DocID_t & tDocId, CSphString & sError );

@@ -1193,6 +1193,7 @@ struct GetKeywordsSettings_t
 	bool	m_bSortByHits = false;
 	int		m_iCutoff = -1;
 	bool	m_bAllowExpansion = true;
+	JiebaMode_e m_eJiebaMode = JiebaMode_e::DEFAULT;
 };
 
 XQNode_t * sphExpandXQNode ( XQNode_t * pNode, ExpansionContext_t & tCtx );
@@ -1411,6 +1412,9 @@ public:
 	// will restore saved crash query to current TLS
 	void RestoreCrashQuery () const;
 };
+
+int sphFormatTime ( int64_t iNow, char * sTimeBuf, int iBufLen );
+void sphFormatTime ( int64_t iNow, StringBuilder_c & sOut );
 
 int sphFormatCurrentTime ( char* sTimeBuf, int iBufLen );
 void sphFormatCurrentTime ( StringBuilder_c& sOut );

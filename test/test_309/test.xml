@@ -1,0 +1,39 @@
+<?xml version="1.0" encoding="utf-8"?>
+<test>
+<name>jieba_mode</name>
+<skip_indexer/>
+
+<requires>
+<jieba/>
+</requires>
+
+<config>
+searchd
+{
+	<searchd_settings/>
+	data_dir = <data_path path="data0"/>
+}
+</config>
+
+<queries>
+<sphinxql>
+create table jieba_test_accurate (title text) morphology='jieba_chinese' jieba_mode='accurate' charset_table='cont,non_cont';
+insert into jieba_test_accurate values(1,'土風舞班');
+create table jieba_test_full (title text) morphology='jieba_chinese' jieba_mode='full' charset_table='cont,non_cont';
+insert into jieba_test_full values(1,'土風舞班');
+select * from jieba_test_full where match('土風') option jieba_mode='accurate';
+select * from jieba_test_accurate where match('土風') option jieba_mode='accurate';
+CALL KEYWORDS ( '文山區長青學苑則有個十分特別的「英文歌唱班」，test', 'jieba_test_accurate', 'accurate' as jieba_mode );
+CALL KEYWORDS ( '文山區長青學苑則有個十分特別的「英文歌唱班」，test', 'jieba_test_accurate', 'full' as jieba_mode );
+drop table jieba_test_accurate;
+drop table jieba_test_full;
+
+create table jieba_custom_dict (title text) morphology='jieba_chinese' charset_table='cont,non_cont' jieba_user_dict_path='<this_test/>/jieba_user_dict.txt';
+insert into jieba_custom_dict values(1,'土風舞班');
+flush ramchunk jieba_custom_dict;
+select * from jieba_custom_dict;
+drop table jieba_custom_dict;
+</sphinxql>
+</queries>
+
+</test>

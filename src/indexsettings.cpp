@@ -887,6 +887,56 @@ bool CSphIndexSettings::ParseDocstoreSettings ( const CSphConfigSection & hIndex
 }
 
 
+bool CSphIndexSettings::ParseCJKSegmentation ( const CSphConfigSection & hIndex, const StrVec_t & dMorphs, CSphString & sWarning, CSphString & sError )
+{
+	bool bICU = dMorphs.Contains ( "icu_chinese" );
+	bool bJieba = dMorphs.Contains ( "jieba_chinese" );
+
+	if ( bICU && bJieba )
+	{
+		sError = "ICU and Jieba cannot both be enabled at the same time";
+		return false;
+	}
+	else
+		m_ePreprocessor = bICU ? Preprocessor_e::ICU : ( bJieba ? Preprocessor_e::JIEBA : Preprocessor_e::NONE );
+
+	if ( !sphCheckConfigICU ( *this, sError ) )
+		return false;
+
+	if ( !CheckConfigJieba ( *this, sError ) )
+		return false;
+
+	if ( hIndex.Exists("jieba_hmm") && m_ePreprocessor!=Preprocessor_e::JIEBA )
+	{
+		sError = "jieba_hmm can't be used without Jieba morphology enabled";
+		return false;
+	}
+
+	if ( hIndex.Exists("jieba_mode") && m_ePreprocessor!=Preprocessor_e::JIEBA )
+	{
+		sError = "jieba_mode can't be used without Jieba morphology enabled";
+		return false;
+	}
+
+	if ( hIndex.Exists("jieba_user_dict_path") && m_ePreprocessor!=Preprocessor_e::JIEBA )
+	{
+		sError = "jieba_user_dict_path can't be used without Jieba morphology enabled";
+		return false;
+	}
+
+	m_bJiebaHMM = hIndex.GetBool ( "jieba_hmm", true );
+	CSphString sJiebaMode = hIndex.GetStr ( "jieba_mode", "accurate" );
+	if ( !StrToJiebaMode ( m_eJiebaMode , sJiebaMode, sError ) )
+		return false;
+
+	if ( m_eJiebaMode==JiebaMode_e::FULL && hIndex.Exists("jieba_hmm")  )
+		sWarning = "jieba_hmm has no effect when jieba_mode=full";
+
+	m_sJiebaUserDictPath = hIndex.GetStr("jieba_user_dict_path");
+
+	return true;
+}
+
 static const int64_t DEFAULT_ATTR_UPDATE_RESERVE = 131072;
 
 bool CSphIndexSettings::Setup ( const CSphConfigSection & hIndex, const char * szIndexName, CSphString & sWarning, CSphString & sError )
@@ -1082,51 +1132,8 @@ bool CSphIndexSettings::Setup ( const CSphConfigSection & hIndex, const char * s
 			}
 	}
 
-	bool bICU = dMorphs.Contains ( "icu_chinese" );
-	bool bJieba = dMorphs.Contains ( "jieba_chinese" );
-
-	if ( bICU && bJieba )
-	{
-		sError = "ICU and Jieba cannot both be enabled at the same time";
+	if ( !ParseCJKSegmentation ( hIndex, dMorphs, sWarning, sError ) )
 		return false;
-	}
-	else
-		m_ePreprocessor = bICU ? Preprocessor_e::ICU : ( bJieba ? Preprocessor_e::JIEBA : Preprocessor_e::NONE );
-
-	if ( !sphCheckConfigICU ( *this, sError ) )
-		return false;
-
-	if ( !CheckConfigJieba ( *this, sError ) )
-		return false;
-
-	if ( hIndex.Exists("jieba_hmm") && m_ePreprocessor!=Preprocessor_e::JIEBA )
-	{
-		sError = "jieba_hmm can't be used without Jieba morphology enabled";
-		return false;
-	}
-
-	if ( hIndex.Exists("jieba_mode") && m_ePreprocessor!=Preprocessor_e::JIEBA )
-	{
-		sError = "jieba_mode can't be used without Jieba morphology enabled";
-		return false;
-	}
-
-	m_bJiebaHMM = hIndex.GetBool ( "jieba_hmm", true );
-	CSphString sJiebaMode = hIndex.GetStr ( "jieba_mode", "accurate" );
-	if ( sJiebaMode=="accurate" )
-		m_eJiebaMode = JiebaMode_e::ACCURATE;
-	else if ( sJiebaMode=="full" )
-		m_eJiebaMode = JiebaMode_e::FULL;
-	else if ( sJiebaMode=="search" )
-		m_eJiebaMode = JiebaMode_e::SEARCH;
-	else
-	{
-		sError.SetSprintf ( "Unknown jieba_mode value '%s'", sJiebaMode.cstr() );
-		return false;
-	}
-
-	if ( m_eJiebaMode==JiebaMode_e::FULL && hIndex.Exists("jieba_hmm")  )
-		sWarning = "jieba_hmm has no effect when jieba_mode=full";
 
 	// all good
 	return true;
@@ -1183,6 +1190,9 @@ void CSphIndexSettings::Format ( SettingsFormatter_c & tOut, FilenameBuilder_i *
 
 	tOut.Add ( "jieba_hmm",				0,						!m_bJiebaHMM );
 
+	CSphString sJiebaDict = FormatPath ( m_sJiebaUserDictPath, pFilenameBuilder );
+	tOut.Add ( "jieba_user_dict_path",	sJiebaDict,				!sJiebaDict.IsEmpty() );
+
 	DocstoreSettings_t::Format ( tOut, pFilenameBuilder );
 }
 
@@ -1236,15 +1246,15 @@ bool StrToAttrEngine ( AttrEngine_e & eEngine, AttrEngine_e eDefault, const CSph
 struct ExtFiles_t
 {
 	StrVec_t	m_dFiles;
-	bool		m_bFilesSet = false; // could be empty files string set
-	bool		m_bExtCopy = false; // should be external copied on just collected and checked
+	bool		m_bFilesSet = false;	// was this option set?
+	bool		m_bExtCopy = false;		// copy external files to table's folder?
 };
 
 class IndexSettingsContainer_c : public IndexSettingsContainer_i
 {
 public:
-	IndexSettingsContainer_c() = default;
-	~IndexSettingsContainer_c() override;
+					IndexSettingsContainer_c() = default;
+					~IndexSettingsContainer_c() override;
 
 	bool			Populate ( const CreateTableSettings_t & tCreateTable, bool bExtCopy ) override;
 	bool			Add ( const char * szName, const CSphString & sValue ) override;
@@ -1267,6 +1277,7 @@ private:
 	ExtFiles_t		m_tException;
 	ExtFiles_t		m_tWordform;
 	ExtFiles_t		m_tHitless;
+	ExtFiles_t		m_tJiebaDict;
 	StrVec_t		m_dCleanupFiles;
 
 	CSphString		m_sError;
@@ -1383,6 +1394,30 @@ bool IndexSettingsContainer_c::AddOption ( const CSphString & sName, const CSphS
 		m_tHitless.m_bFilesSet = true;
 
 		SplitArg ( sValue, m_tHitless.m_dFiles );
+
+		// will add string option after copy
+		return true;
+	}
+
+	if ( sName=="jieba_user_dict_path" )
+	{
+		// new value replaces previous
+		m_tJiebaDict.m_dFiles.Reset();
+		m_tJiebaDict.m_bExtCopy = bExtCopy;
+		m_tJiebaDict.m_bFilesSet = true;
+
+		SplitArg ( sValue, m_tJiebaDict.m_dFiles );
+
+		if ( m_tJiebaDict.m_dFiles.GetLength()>1 )
+		{
+			m_sError = "'jieba_user_dict_path' options only supports a single file";
+			return false;
+		}
+		else if ( m_tJiebaDict.m_dFiles.IsEmpty() )
+		{
+			// needs an empty value
+			m_tJiebaDict.m_dFiles.Add();
+		}
 
 		// will add string option after copy
 		return true;
@@ -1597,7 +1632,10 @@ StrVec_t IndexSettingsContainer_c::GetFiles()
 	}
 
 	for ( const auto & i : m_tHitless.m_dFiles )
-		dFiles.Add ( i );
+		dFiles.Add(i);
+
+	for ( const auto & i : m_tJiebaDict.m_dFiles )
+		dFiles.Add(i);
 
 	return dFiles;
 }
@@ -1669,6 +1707,10 @@ bool IndexSettingsContainer_c::CopyExternalFiles ( const CSphString & sIndexPath
 
 	iFile = 0;
 	if ( !CopyExternalFiles ( m_tHitless, sIndexPath, "hitless_words", iSuffix, iFile ) )
+		return false;
+
+	iFile = 0;
+	if ( !CopyExternalFiles ( m_tJiebaDict, sIndexPath, "jieba_user_dict_path", iSuffix, iFile ) )
 		return false;
 
 	if ( m_tWordform.m_bFilesSet )
@@ -2080,7 +2122,7 @@ bool sphFixupIndexSettings ( CSphIndex * pIndex, const CSphConfigSection & hInde
 
 		CSphString sWarning;
 		sphSpawnFilterICU ( pFieldFilter, pIndex->GetSettings(), pIndex->GetTokenizer()->GetSettings(), pIndex->GetName(), sWarning );
-		SpawnFilterJieba ( pFieldFilter, pIndex->GetSettings(), pIndex->GetTokenizer()->GetSettings(), pIndex->GetName(), sWarning );
+		SpawnFilterJieba ( pFieldFilter, pIndex->GetSettings(), pIndex->GetTokenizer()->GetSettings(), pIndex->GetName(), pFilenameBuilder, sWarning );
 		AddWarning ( dWarnings, sWarning );
 
 		pIndex->SetFieldFilter ( std::move ( pFieldFilter ) );
@@ -2456,6 +2498,8 @@ const char * GetMutableName ( MutableName_e eName )
 		case MutableName_e::READ_BUFFER_HITS: return "read_buffer_hits";
 		case MutableName_e::OPTIMIZE_CUTOFF: return "optimize_cutoff";
 		case MutableName_e::GLOBAL_IDF: return "global_idf";
+		case MutableName_e::DISKCHUNK_FLUSH_WRITE_TIMEOUT: return "diskchunk_flush_write_timeout";
+		case MutableName_e::DISKCHUNK_FLUSH_SEARCH_TIMEOUT: return "diskchunk_flush_search_timeout";
 		default: assert ( 0 && "Invalid mutable option" ); return "";
 	}
 }
@@ -2528,6 +2572,9 @@ MutableIndexSettings_c::MutableIndexSettings_c()
 	: m_iExpandKeywords { KWE_DISABLED }
 	, m_iMemLimit { DEFAULT_RT_MEM_LIMIT }
 	, m_iOptimizeCutoff ( g_iOptimizeCutoff )
+	, m_iOptimizeCutoffKNN ( g_iOptimizeCutoff )
+	, m_iFlushWrite ( -1 )
+	, m_iFlushSearch ( -1 )
 	, m_dLoaded ( (int)MutableName_e::TOTAL )
 {
 #if !_WIN32
@@ -2583,37 +2630,25 @@ bool MutableIndexSettings_c::Load ( const char * sFileName, const char * sIndexN
 
 	// read values
 
-	JsonObj_c tExpand = tParser.GetStrItem ( "expand_keywords", sError, true );
+	JsonObj_c tExpand = tParser.GetStrItem ( GetMutableName ( MutableName_e::EXPAND_KEYWORDS ), sError, true );
 	if ( tExpand )
 	{
 		m_iExpandKeywords = ParseKeywordExpansion ( tExpand.StrVal().cstr() );
 		m_dLoaded.BitSet ( (int)MutableName_e::EXPAND_KEYWORDS );
-	} else if ( !sError.IsEmpty() )
-	{
-		sphWarning ( "table %s: %s", sIndexName, sError.cstr() );
-		sError = "";
 	}
 
-	JsonObj_c tMemLimit = tParser.GetIntItem ( "rt_mem_limit", sError, true );
+	JsonObj_c tMemLimit = tParser.GetIntItem ( GetMutableName ( MutableName_e::RT_MEM_LIMIT ), sError, true );
 	if ( tMemLimit )
 	{
 		m_iMemLimit = GetMemLimit ( tMemLimit.IntVal(), nullptr );
 		m_dLoaded.BitSet ( (int)MutableName_e::RT_MEM_LIMIT );
-	} else if ( !sError.IsEmpty() )
-	{
-		sphWarning ( "table %s: %s", sIndexName, sError.cstr() );
-		sError = "";
 	}
 
-	JsonObj_c tPreopen = tParser.GetBoolItem ( "preopen", sError, true );
+	JsonObj_c tPreopen = tParser.GetBoolItem ( GetMutableName ( MutableName_e::PREOPEN ), sError, true );
 	if ( tPreopen )
 	{
 		m_bPreopen = tPreopen.BoolVal() || MutableIndexSettings_c::GetDefaults().m_bPreopen;
 		m_dLoaded.BitSet ( (int)MutableName_e::PREOPEN );
-	} else if ( !sError.IsEmpty() )
-	{
-		sphWarning ( "table %s: %s", sIndexName, sError.cstr() );
-		sError = "";
 	}
 
 	GetFileAccess( tParser, MutableName_e::ACCESS_PLAIN_ATTRS, false, m_tFileAccess.m_eAttr, m_dLoaded );
@@ -2622,51 +2657,51 @@ bool MutableIndexSettings_c::Load ( const char * sFileName, const char * sIndexN
 	GetFileAccess( tParser, MutableName_e::ACCESS_HITLISTS, true, m_tFileAccess.m_eHitlist, m_dLoaded );
 	GetFileAccess( tParser, MutableName_e::ACCESS_DICT, false, m_tFileAccess.m_eDict, m_dLoaded );
 
-	JsonObj_c tReadBuffer = tParser.GetIntItem ( "read_buffer_docs", sError, true );
+	JsonObj_c tReadBuffer = tParser.GetIntItem ( GetMutableName ( MutableName_e::READ_BUFFER_DOCS ), sError, true );
 	if ( tReadBuffer )
 	{
 		m_tFileAccess.m_iReadBufferDocList = GetReadBuffer ( tReadBuffer.IntVal() );
 		m_dLoaded.BitSet ( (int)MutableName_e::READ_BUFFER_DOCS );
-	} else if ( !sError.IsEmpty() )
-	{
-		sphWarning ( "table %s: %s", sIndexName, sError.cstr() );
-		sError = "";
 	}
 
-	tReadBuffer = tParser.GetIntItem ( "read_buffer_hits", sError, true );
+	tReadBuffer = tParser.GetIntItem ( GetMutableName ( MutableName_e::READ_BUFFER_HITS ), sError, true );
 	if ( tReadBuffer )
 	{
 		m_tFileAccess.m_iReadBufferHitList = GetReadBuffer ( tReadBuffer.IntVal() );
 		m_dLoaded.BitSet ( (int)MutableName_e::READ_BUFFER_HITS );
-	} else if ( !sError.IsEmpty() )
-	{
-		sphWarning ( "table %s: %s", sIndexName, sError.cstr() );
-		sError = "";
 	}
 
-	JsonObj_c tOptimizeCutoff = tParser.GetIntItem ( "optimize_cutoff", sError, true );
+	JsonObj_c tOptimizeCutoff = tParser.GetIntItem ( GetMutableName ( MutableName_e::OPTIMIZE_CUTOFF ), sError, true );
 	if ( tOptimizeCutoff )
 	{
 		m_iOptimizeCutoff = tOptimizeCutoff.IntVal();
 		m_iOptimizeCutoff = Max ( m_iOptimizeCutoff, 1 );
 		m_dLoaded.BitSet ( (int)MutableName_e::OPTIMIZE_CUTOFF );
-	} else if ( !sError.IsEmpty() )
-	{
-		sphWarning ( "table %s: %s", sIndexName, sError.cstr() );
-		sError = "";
 	}
 
-	JsonObj_c tGlobalIdf = tParser.GetStrItem ( "global_idf", sError, true );
+	JsonObj_c tGlobalIdf = tParser.GetStrItem ( GetMutableName ( MutableName_e::GLOBAL_IDF ), sError, true );
 	if ( tGlobalIdf )
 	{
 		m_sGlobalIDFPath = tGlobalIdf.StrVal();
 		m_dLoaded.BitSet ( (int)MutableName_e::GLOBAL_IDF );
-	} else if ( !sError.IsEmpty() )
-	{
-		sphWarning ( "table %s: %s", sIndexName, sError.cstr() );
-		sError = "";
 	}
 
+	JsonObj_c tFlushWrite = tParser.GetIntItem ( GetMutableName ( MutableName_e::DISKCHUNK_FLUSH_WRITE_TIMEOUT ), sError, true );
+	if ( tFlushWrite )
+	{
+		m_iFlushWrite = tFlushWrite.IntVal();
+		m_dLoaded.BitSet ( (int)MutableName_e::DISKCHUNK_FLUSH_WRITE_TIMEOUT );
+	}
+
+	JsonObj_c tFlushSearch = tParser.GetIntItem ( GetMutableName ( MutableName_e::DISKCHUNK_FLUSH_SEARCH_TIMEOUT ), sError, true );
+	if ( tFlushSearch )
+	{
+		m_iFlushSearch = tFlushSearch.IntVal();
+		m_dLoaded.BitSet ( (int)MutableName_e::DISKCHUNK_FLUSH_SEARCH_TIMEOUT );
+	}
+	
+	if ( !sError.IsEmpty() )
+		sphWarning ( "table %s: %s", sIndexName, sError.cstr() );
 
 	m_bNeedSave = true;
 
@@ -2677,22 +2712,22 @@ void MutableIndexSettings_c::Load ( const CSphConfigSection & hIndex, bool bNeed
 {
 	m_bNeedSave |= bNeedSave;
 
-	if ( hIndex.Exists ( "expand_keywords" ) )
+	if ( hIndex.Exists ( GetMutableName ( MutableName_e::EXPAND_KEYWORDS ) ) )
 	{
-		m_iExpandKeywords = ParseKeywordExpansion ( hIndex.GetStr( "expand_keywords" ).cstr() );
+		m_iExpandKeywords = ParseKeywordExpansion ( hIndex.GetStr( GetMutableName ( MutableName_e::EXPAND_KEYWORDS ) ).cstr() );
 		m_dLoaded.BitSet ( (int)MutableName_e::EXPAND_KEYWORDS );
 	}
 
 	// RAM chunk size
-	if ( hIndex.Exists ( "rt_mem_limit" ) )
+	if ( hIndex.Exists ( GetMutableName ( MutableName_e::RT_MEM_LIMIT ) ) )
 	{
-		m_iMemLimit = GetMemLimit ( hIndex.GetSize64 ( "rt_mem_limit", DEFAULT_RT_MEM_LIMIT ), pWarnings );
+		m_iMemLimit = GetMemLimit ( hIndex.GetSize64 ( GetMutableName ( MutableName_e::RT_MEM_LIMIT ), DEFAULT_RT_MEM_LIMIT ), pWarnings );
 		m_dLoaded.BitSet ( (int)MutableName_e::RT_MEM_LIMIT );
 	}
 
-	if (  hIndex.Exists ( "preopen" )  )
+	if (  hIndex.Exists ( GetMutableName ( MutableName_e::PREOPEN ) )  )
 	{
-		m_bPreopen = hIndex.GetBool ( "preopen", false ) || MutableIndexSettings_c::GetDefaults().m_bPreopen;
+		m_bPreopen = hIndex.GetBool ( GetMutableName ( MutableName_e::PREOPEN ), false ) || MutableIndexSettings_c::GetDefaults().m_bPreopen;
 		m_dLoaded.BitSet ( (int)MutableName_e::PREOPEN );
 	}
 
@@ -2728,30 +2763,43 @@ void MutableIndexSettings_c::Load ( const CSphConfigSection & hIndex, bool bNeed
 	GetFileAccess( hIndex, MutableName_e::ACCESS_HITLISTS, true, m_tFileAccess.m_eHitlist, m_dLoaded );
 	GetFileAccess( hIndex, MutableName_e::ACCESS_DICT, false, m_tFileAccess.m_eDict, m_dLoaded );
 
-	if ( hIndex.Exists ( "read_buffer_docs" ) )
+	if ( hIndex.Exists ( GetMutableName ( MutableName_e::READ_BUFFER_DOCS ) ) )
 	{
-		m_tFileAccess.m_iReadBufferDocList = GetReadBuffer ( hIndex.GetSize ( "read_buffer_docs", m_tFileAccess.m_iReadBufferDocList ) );
+		m_tFileAccess.m_iReadBufferDocList = GetReadBuffer ( hIndex.GetSize ( GetMutableName ( MutableName_e::READ_BUFFER_DOCS ), m_tFileAccess.m_iReadBufferDocList ) );
 		m_dLoaded.BitSet ( (int)MutableName_e::READ_BUFFER_DOCS );
 	}
 
-	if ( hIndex.Exists ( "read_buffer_hits" ) )
+	if ( hIndex.Exists ( GetMutableName ( MutableName_e::READ_BUFFER_HITS ) ) )
 	{
-		m_tFileAccess.m_iReadBufferHitList = GetReadBuffer ( hIndex.GetSize ( "read_buffer_hits", m_tFileAccess.m_iReadBufferHitList ) );
+		m_tFileAccess.m_iReadBufferHitList = GetReadBuffer ( hIndex.GetSize ( GetMutableName ( MutableName_e::READ_BUFFER_HITS ), m_tFileAccess.m_iReadBufferHitList ) );
 		m_dLoaded.BitSet ( (int)MutableName_e::READ_BUFFER_HITS );
 	}
 
-	if ( hIndex.Exists ( "optimize_cutoff" ) )
+	if ( hIndex.Exists ( GetMutableName ( MutableName_e::OPTIMIZE_CUTOFF ) ) )
 	{
-		m_iOptimizeCutoff = hIndex.GetInt ( "optimize_cutoff", g_iOptimizeCutoff );
+		m_iOptimizeCutoff = hIndex.GetInt ( GetMutableName ( MutableName_e::OPTIMIZE_CUTOFF ), g_iOptimizeCutoff );
 		m_iOptimizeCutoff = Max ( m_iOptimizeCutoff, 1 );
 		m_dLoaded.BitSet ( (int)MutableName_e::OPTIMIZE_CUTOFF );
 	}
 
-	if ( hIndex.Exists ( "global_idf" ) )
+	if ( hIndex.Exists ( GetMutableName ( MutableName_e::GLOBAL_IDF ) ) )
 	{
-		m_sGlobalIDFPath = hIndex.GetStr ( "global_idf" );
+		m_sGlobalIDFPath = hIndex.GetStr ( GetMutableName ( MutableName_e::GLOBAL_IDF ) );
 		m_dLoaded.BitSet ( (int)MutableName_e::GLOBAL_IDF );
 	}
+
+	if ( hIndex.Exists ( GetMutableName ( MutableName_e::DISKCHUNK_FLUSH_WRITE_TIMEOUT ) ) )
+	{
+		m_iFlushWrite = hIndex.GetInt ( GetMutableName ( MutableName_e::DISKCHUNK_FLUSH_WRITE_TIMEOUT ) );
+		m_dLoaded.BitSet ( (int)MutableName_e::DISKCHUNK_FLUSH_WRITE_TIMEOUT );
+	}
+
+	if ( hIndex.Exists ( GetMutableName ( MutableName_e::DISKCHUNK_FLUSH_SEARCH_TIMEOUT ) ) )
+	{
+		m_iFlushSearch = hIndex.GetInt ( GetMutableName ( MutableName_e::DISKCHUNK_FLUSH_SEARCH_TIMEOUT ) );
+		m_dLoaded.BitSet ( (int)MutableName_e::DISKCHUNK_FLUSH_SEARCH_TIMEOUT );
+	}
+
 }
 
 static void AddStr ( const CSphBitvec & dLoaded, MutableName_e eName, JsonObj_c & tRoot, const char * sVal )
@@ -2808,6 +2856,8 @@ bool MutableIndexSettings_c::Save ( CSphString & sBuf ) const
 
 	AddInt ( m_dLoaded, MutableName_e::OPTIMIZE_CUTOFF, tRoot, m_iOptimizeCutoff );
 	AddStr ( m_dLoaded, MutableName_e::GLOBAL_IDF, tRoot, m_sGlobalIDFPath.cstr() );
+	AddInt ( m_dLoaded, MutableName_e::DISKCHUNK_FLUSH_WRITE_TIMEOUT, tRoot, m_iFlushWrite );
+	AddInt ( m_dLoaded, MutableName_e::DISKCHUNK_FLUSH_SEARCH_TIMEOUT, tRoot, m_iFlushSearch );
 
 	sBuf = tRoot.AsString ( true );
 
@@ -2881,6 +2931,17 @@ void MutableIndexSettings_c::Combine ( const MutableIndexSettings_c & tOther )
 		m_sGlobalIDFPath = tOther.m_sGlobalIDFPath;
 		m_dLoaded.BitSet ( (int)MutableName_e::GLOBAL_IDF );
 	}
+
+	if ( tOther.m_dLoaded.BitGet ( (int)MutableName_e::DISKCHUNK_FLUSH_WRITE_TIMEOUT ) )
+	{
+		m_iFlushWrite = tOther.m_iFlushWrite;
+		m_dLoaded.BitSet ( (int)MutableName_e::DISKCHUNK_FLUSH_WRITE_TIMEOUT );
+	}
+	if ( tOther.m_dLoaded.BitGet ( (int)MutableName_e::DISKCHUNK_FLUSH_SEARCH_TIMEOUT ) )
+	{
+		m_iFlushSearch = tOther.m_iFlushSearch;
+		m_dLoaded.BitSet ( (int)MutableName_e::DISKCHUNK_FLUSH_SEARCH_TIMEOUT );
+	}
 }
 
 MutableIndexSettings_c & MutableIndexSettings_c::GetDefaults ()
@@ -2889,42 +2950,40 @@ MutableIndexSettings_c & MutableIndexSettings_c::GetDefaults ()
 	return tMutableDefaults;
 }
 
-static bool FormatCond ( bool bNeedSave, const CSphBitvec & dLoaded, MutableName_e eName, bool bNotEq )
+static bool FormatCond ( const MutableIndexSettings_c * pOpt, MutableName_e eName, bool bNotEq )
 {
-	return ( ( bNeedSave && dLoaded.BitGet ( (int)eName ) ) || ( !bNeedSave && bNotEq ) );
+	assert ( pOpt );
+	const bool bNeedSave = pOpt->NeedSave();
+	return ( ( bNeedSave && pOpt->IsSet ( eName ) ) || ( !bNeedSave && bNotEq ) );
+}
+
+template <typename T>
+void FormatSetting ( const MutableIndexSettings_c * pOpt, SettingsFormatter_c & tOut, MutableName_e eName, const T & tVal, bool bNotEq )
+{
+	tOut.Add ( GetMutableName ( eName ), tVal, FormatCond ( pOpt, eName, bNotEq ) );
 }
 
 void MutableIndexSettings_c::Format ( SettingsFormatter_c & tOut, FilenameBuilder_i * ) const
 {
 	const MutableIndexSettings_c & tDefaults = GetDefaults ();
 
-	tOut.Add ( GetMutableName ( MutableName_e::EXPAND_KEYWORDS ), GetExpandKwName ( m_iExpandKeywords ),
-		FormatCond ( m_bNeedSave, m_dLoaded, MutableName_e::EXPAND_KEYWORDS, m_iExpandKeywords!=tDefaults.m_iExpandKeywords ) );
-	tOut.Add ( GetMutableName ( MutableName_e::RT_MEM_LIMIT ), m_iMemLimit,
-		FormatCond ( m_bNeedSave, m_dLoaded, MutableName_e::RT_MEM_LIMIT, m_iMemLimit!=tDefaults.m_iMemLimit ) );
-	tOut.Add ( GetMutableName ( MutableName_e::PREOPEN ), m_bPreopen,
-		FormatCond ( m_bNeedSave, m_dLoaded, MutableName_e::PREOPEN, m_bPreopen!=tDefaults.m_bPreopen ) );
+	FormatSetting ( this, tOut, MutableName_e::EXPAND_KEYWORDS, GetExpandKwName ( m_iExpandKeywords ), m_iExpandKeywords!=tDefaults.m_iExpandKeywords );
+	FormatSetting ( this, tOut, MutableName_e::RT_MEM_LIMIT, m_iMemLimit, m_iMemLimit!=tDefaults.m_iMemLimit );
+	FormatSetting ( this, tOut, MutableName_e::PREOPEN, m_bPreopen, m_bPreopen!=tDefaults.m_bPreopen );
 
-	tOut.Add ( GetMutableName ( MutableName_e::ACCESS_PLAIN_ATTRS ), FileAccessName ( m_tFileAccess.m_eAttr ),
-		FormatCond ( m_bNeedSave, m_dLoaded, MutableName_e::ACCESS_PLAIN_ATTRS, m_tFileAccess.m_eAttr!=tDefaults.m_tFileAccess.m_eAttr ) );
-	tOut.Add ( GetMutableName ( MutableName_e::ACCESS_BLOB_ATTRS ), FileAccessName ( m_tFileAccess.m_eBlob ),
-		FormatCond ( m_bNeedSave, m_dLoaded, MutableName_e::ACCESS_BLOB_ATTRS, m_tFileAccess.m_eBlob!=tDefaults.m_tFileAccess.m_eBlob ) );
-	tOut.Add ( GetMutableName ( MutableName_e::ACCESS_DOCLISTS ), FileAccessName ( m_tFileAccess.m_eDoclist ),
-		FormatCond ( m_bNeedSave, m_dLoaded, MutableName_e::ACCESS_DOCLISTS, m_tFileAccess.m_eDoclist!=tDefaults.m_tFileAccess.m_eDoclist ) );
-	tOut.Add ( GetMutableName ( MutableName_e::ACCESS_HITLISTS ), FileAccessName ( m_tFileAccess.m_eHitlist ),
-		FormatCond ( m_bNeedSave, m_dLoaded, MutableName_e::ACCESS_HITLISTS, m_tFileAccess.m_eHitlist!=tDefaults.m_tFileAccess.m_eHitlist ) );
-	tOut.Add ( GetMutableName ( MutableName_e::ACCESS_DICT ), FileAccessName ( m_tFileAccess.m_eDict ),
-		FormatCond ( m_bNeedSave, m_dLoaded, MutableName_e::ACCESS_DICT, m_tFileAccess.m_eDict!=tDefaults.m_tFileAccess.m_eDict ) );
+	FormatSetting ( this, tOut, MutableName_e::ACCESS_PLAIN_ATTRS, FileAccessName ( m_tFileAccess.m_eAttr ), m_tFileAccess.m_eAttr!=tDefaults.m_tFileAccess.m_eAttr );
+	FormatSetting ( this, tOut, MutableName_e::ACCESS_BLOB_ATTRS, FileAccessName ( m_tFileAccess.m_eBlob ), m_tFileAccess.m_eBlob!=tDefaults.m_tFileAccess.m_eBlob );
+	FormatSetting ( this, tOut, MutableName_e::ACCESS_DOCLISTS, FileAccessName ( m_tFileAccess.m_eDoclist ), m_tFileAccess.m_eDoclist!=tDefaults.m_tFileAccess.m_eDoclist );
+	FormatSetting ( this, tOut, MutableName_e::ACCESS_HITLISTS, FileAccessName ( m_tFileAccess.m_eHitlist ), m_tFileAccess.m_eHitlist!=tDefaults.m_tFileAccess.m_eHitlist );
+	FormatSetting ( this, tOut, MutableName_e::ACCESS_DICT, FileAccessName ( m_tFileAccess.m_eDict ), m_tFileAccess.m_eDict!=tDefaults.m_tFileAccess.m_eDict );
 
-	tOut.Add ( GetMutableName ( MutableName_e::READ_BUFFER_DOCS ), m_tFileAccess.m_iReadBufferDocList,
-		FormatCond ( m_bNeedSave, m_dLoaded, MutableName_e::READ_BUFFER_DOCS, m_tFileAccess.m_iReadBufferDocList!=tDefaults.m_tFileAccess.m_iReadBufferDocList ) );
-	tOut.Add ( GetMutableName ( MutableName_e::READ_BUFFER_HITS ), m_tFileAccess.m_iReadBufferHitList,
-		FormatCond ( m_bNeedSave, m_dLoaded, MutableName_e::READ_BUFFER_HITS, m_tFileAccess.m_iReadBufferHitList!=tDefaults.m_tFileAccess.m_iReadBufferHitList ) );
+	FormatSetting ( this, tOut, MutableName_e::READ_BUFFER_DOCS, m_tFileAccess.m_iReadBufferDocList, m_tFileAccess.m_iReadBufferDocList!=tDefaults.m_tFileAccess.m_iReadBufferDocList );
+	FormatSetting ( this, tOut, MutableName_e::READ_BUFFER_HITS, m_tFileAccess.m_iReadBufferHitList, m_tFileAccess.m_iReadBufferHitList!=tDefaults.m_tFileAccess.m_iReadBufferHitList );
 
-	tOut.Add ( GetMutableName ( MutableName_e::OPTIMIZE_CUTOFF ), m_iOptimizeCutoff,
-		FormatCond ( m_bNeedSave, m_dLoaded, MutableName_e::OPTIMIZE_CUTOFF, HasSettings() && m_dLoaded.BitGet ( (int)MutableName_e::OPTIMIZE_CUTOFF ) ) );
-	tOut.Add ( GetMutableName ( MutableName_e::GLOBAL_IDF ), m_sGlobalIDFPath,
-		FormatCond ( m_bNeedSave, m_dLoaded, MutableName_e::GLOBAL_IDF, HasSettings() && m_dLoaded.BitGet ( (int)MutableName_e::GLOBAL_IDF ) ) );
+	FormatSetting ( this, tOut, MutableName_e::OPTIMIZE_CUTOFF, m_iOptimizeCutoff, IsSet ( MutableName_e::OPTIMIZE_CUTOFF ) );
+	FormatSetting ( this, tOut, MutableName_e::GLOBAL_IDF, m_sGlobalIDFPath, IsSet ( MutableName_e::GLOBAL_IDF ) );
+	FormatSetting ( this, tOut, MutableName_e::DISKCHUNK_FLUSH_WRITE_TIMEOUT, m_iFlushWrite, false );
+	FormatSetting ( this, tOut, MutableName_e::DISKCHUNK_FLUSH_SEARCH_TIMEOUT, m_iFlushSearch, false );
 }
 
 
@@ -2956,8 +3015,9 @@ void LoadIndexSettingsJson ( bson::Bson_c tNode, CSphIndexSettings & tSettings )
 	tSettings.m_sHitlessFiles = String ( tNode.ChildByName ( "hitless_files" ) );
 	tSettings.m_eEngine = (AttrEngine_e)Int ( tNode.ChildByName ( "engine" ), (DWORD)AttrEngine_e::DEFAULT );
 	tSettings.m_eDefaultEngine = (AttrEngine_e)Int ( tNode.ChildByName ( "engine_default" ), (DWORD)AttrEngine_e::ROWWISE );
-	tSettings.m_eJiebaMode = (JiebaMode_e)Int ( tNode.ChildByName ( "jieba_mode" ), (DWORD)JiebaMode_e::ACCURATE );
+	tSettings.m_eJiebaMode = (JiebaMode_e)Int ( tNode.ChildByName ( "jieba_mode" ), (DWORD)JiebaMode_e::DEFAULT );
 	tSettings.m_bJiebaHMM = Bool ( tNode.ChildByName ( "jieba_hmm" ), true );
+	tSettings.m_sJiebaUserDictPath = String ( tNode.ChildByName ( "jieba_user_dict_path" ) );
 }
 
 
@@ -3044,6 +3104,7 @@ void SaveIndexSettings ( Writer_i & tWriter, const CSphIndexSettings & tSettings
 	tWriter.PutDword ( (DWORD)tSettings.m_eEngine );
 	tWriter.PutDword ( (DWORD)tSettings.m_eJiebaMode );
 	tWriter.PutByte ( tSettings.m_bJiebaHMM ? 1 : 0 );
+	tWriter.PutString ( tSettings.m_sJiebaUserDictPath );
 }
 
 
@@ -3075,8 +3136,9 @@ void operator << ( JsonEscapedBuilder & tOut, const CSphIndexSettings & tSetting
 	tOut.NamedStringNonEmpty ( "hitless_files", tSettings.m_sHitlessFiles );
 	tOut.NamedValNonDefault ( "engine", (DWORD)tSettings.m_eEngine, (DWORD)AttrEngine_e::DEFAULT );
 	tOut.NamedValNonDefault ( "engine_default", (DWORD)tSettings.m_eDefaultEngine, (DWORD)AttrEngine_e::ROWWISE );
-	tOut.NamedValNonDefault ( "jieba_mode", (DWORD)tSettings.m_eJiebaMode, (DWORD)JiebaMode_e::ACCURATE );
+	tOut.NamedValNonDefault ( "jieba_mode", (DWORD)tSettings.m_eJiebaMode, (DWORD)JiebaMode_e::DEFAULT );
 	tOut.NamedValNonDefault ( "jieba_hmm", tSettings.m_bJiebaHMM, true );
+	tOut.NamedStringNonEmpty ( "jieba_user_dict_path", tSettings.m_sJiebaUserDictPath );
 }
 
 

@@ -7,7 +7,9 @@ on:
   pull_request:
     branches: [ master ]
     paths:
-      - 'test/clt-tests/mysqldump/versions/**'
+      - 'test/clt-tests/migration-es-ms/**'       # trigger when changes are made in migration test files
+      - 'test/clt-tests/mysqldump/versions/**'     # trigger when changes are made in mysqldump test files
+      - '.github/workflows/nightly_dumps.yml'      # trigger when changes are made in the workflow config
 
 # cancels the previous workflow run when a new one appears in the same branch (e.g. master or a PR's branch)
 concurrency:

@@ -53,7 +53,7 @@ Please find more details on the installation [below](../Installation/MacOS.md).
 3. Select the components you want to install. We recommend installing all of them.
 4. Manticore comes with a preconfigured `manticore.conf` file in [RT mode](https://manual.manticoresearch.com/Read_this_first.md#Real-time-mode-vs-plain-mode). No additional configuration is required.
 
-For more details on the installation, see [below](../Installation/Windows.md#Installing-Manticore-in-Windows).
+For more details on the installation, see [below](../Installation/Windows.md#Installing-Manticore-on-Windows).
 
 <!-- request Docker -->
 
@@ -72,6 +72,16 @@ docker run -e EXTRA=1 --name manticore -v $(pwd)/data:/var/lib/manticore -p 127.
 This setup will enable the Manticore Columnar Library and Manticore Buddy, and run Manticore on ports 9306 for MySQL connections and 9308 for all other connections, using `./data/` as the designated data directory.
 
 Read more about production use [in the documentation](https://github.com/manticoresoftware/docker#production-use).
+
+<!-- request Kubernetes -->
+
+``` bash
+helm repo add manticoresearch https://helm.manticoresearch.com
+# Update values.yaml if needed
+helm install manticore -n manticore --create-namespace manticoresearch/manticoresearch
+```
+
+You can find more information about installing the Helm chart [in the documentation](https://github.com/manticoresoftware/manticoresearch-helm#installation).
 
 <!-- end -->
 

@@ -181,6 +181,7 @@ uint64_t Expr_Columnar_StringIn_c::GetHash ( const ISphSchema & tSorterSchema, u
 
 Expr_Columnar_StringIn_c::Expr_Columnar_StringIn_c ( const Expr_Columnar_StringIn_c & rhs )
 	: BASE (rhs)
+	, m_sName ( rhs.m_sName )
 	, m_fnHashCalc ( rhs.m_fnHashCalc )
 	, m_dHashes ( rhs.m_dHashes )
 {}

@@ -86,6 +86,7 @@ In most cases, however, you'll want to obtain some aggregated data for each grou
 * `COUNT(*)` to simply get the number of elements in each group
 * or `AVG(field)` to calculate the average value of the field within the group
 
+For HTTP JSON requests, using a single `aggs` bucket with `limit=0` at the main query level works similarly to a SQL query with `GROUP BY` and `COUNT(*)`, providing equivalent behavior and performance.
 
 <!-- intro -->
 ##### Example:

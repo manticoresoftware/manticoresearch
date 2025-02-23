@@ -56,6 +56,29 @@ drop table test1;
 drop table test2;
 drop table test3;
 drop table test10;
+
+<!-- regression attach whole table failed for the same non embeded exceptions \ stopwords \ wordforms -->
+create table test1 ( title text ) exceptions = '<this_test/>/exceptions.txt';
+create table test2 ( title text ) exceptions = '<this_test/>/exceptions.txt';
+insert into test2 values(2, 'def');
+attach table test1 to table test2;
+drop table test1;
+drop table test2;
+
+create table test1 ( title text ) stopwords = '<this_test/>/stops.txt';
+create table test2 ( title text ) stopwords = '<this_test/>/stops.txt';
+insert into test2 values(2, 'def');
+attach table test1 to table test2;
+drop table test1;
+drop table test2;
+
+create table test1 ( title text ) wordforms = '<this_test/>/wordforms.txt';
+create table test2 ( title text ) wordforms = '<this_test/>/wordforms.txt';
+insert into test2 values(2, 'def');
+attach table test1 to table test2;
+drop table test1;
+drop table test2;
+
 </sphinxql></queries>
 
 </test>

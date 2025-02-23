@@ -104,6 +104,10 @@ struct RussianAlphabetUTF8_t
 
 #include "sphinxstemru.inl" // NOLINT 2nd include
 
+#undef RUS
+#undef LOC_PREFIX
+#undef LOC_CHAR_TYPE
+
 /////////////////////////////////////////////////////////////////////////////
 
 void stem_ru_init ()

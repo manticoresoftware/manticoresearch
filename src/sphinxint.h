@@ -1413,6 +1413,9 @@ public:
 	void RestoreCrashQuery () const;
 };
 
+int sphFormatTime ( int64_t iNow, char * sTimeBuf, int iBufLen );
+void sphFormatTime ( int64_t iNow, StringBuilder_c & sOut );
+
 int sphFormatCurrentTime ( char* sTimeBuf, int iBufLen );
 void sphFormatCurrentTime ( StringBuilder_c& sOut );
 

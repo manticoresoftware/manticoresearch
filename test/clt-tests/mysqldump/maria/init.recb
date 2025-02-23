@@ -9,4 +9,4 @@ apt -yqq install mariadb-server > /dev/null 2>&1; echo $?
 ––– input –––
 mysqldump --version
 ––– output –––
-mysqldump  Ver %{NUMBER}.%{NUMBER} Distrib %{SEMVER}-MariaDB, for debian-linux-gnu (x86_64)
+mysqldump  Ver %{NUMBER}.%{NUMBER} Distrib %{VERSION}-MariaDB, for debian-linux-gnu (x86_64)

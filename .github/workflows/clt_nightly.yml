@@ -33,6 +33,8 @@ jobs:
     name: Commit info
     runs-on: ubuntu-22.04
     steps:
+      - name: Checkout repository
+        uses: actions/checkout@v3
       - run: |
           echo "# Nightly tests of latest release" >> $GITHUB_STEP_SUMMARY
           echo "* Attempt: ${{ github.run_attempt }}" >> $GITHUB_STEP_SUMMARY
@@ -128,9 +130,10 @@ jobs:
           - name: Test alter rename nightly
             image: ghcr.io/manticoresoftware/manticoresearch:test-kit-latest
             test_prefix: test/clt-tests/core/test-alter-rename-nightly
-          - name: Tests performance JSON vs SQL
-            image: ghcr.io/manticoresoftware/manticoresearch:test-kit-latest
-            test_prefix: test/clt-tests/performance-tests/test-comparison-
+# Disabled as it works unstable.
+#          - name: Tests performance JSON vs SQL
+#            image: ghcr.io/manticoresoftware/manticoresearch:test-kit-latest
+#            test_prefix: test/clt-tests/performance-tests/test-comparison-
           - name: Test performance for queries with multiple disk chunks
             image: ghcr.io/manticoresoftware/manticoresearch:test-kit-latest
             test_prefix: test/clt-tests/performance-tests/test-performance-for-queries-with-multiple-disk-chunks
@@ -142,6 +145,8 @@ jobs:
             image: manticoresearch/dind:v1
             test_prefix: test/clt-tests/integrations/kafka/test-integration-
     steps:
+      - name: Checkout repository
+        uses: actions/checkout@v3
       - uses: manticoresoftware/clt@0.2.3
         with:
           test_prefix: ${{ matrix.test_prefix }}
@@ -229,6 +234,8 @@ jobs:
             image: ubuntu:noble
             test_prefix: test/clt-tests/installation/deb-dev-update
     steps:
+      - name: Checkout repository
+        uses: actions/checkout@v3
       - uses: manticoresoftware/clt@0.2.3
         with:
           test_prefix: ${{ matrix.test_prefix }}

@@ -105,6 +105,15 @@ searchd
 	replace into t values(1, 'xx.xxx.xxx.xx'),(2,'xx.xxx.xx.xx'),(1, 'xx.xxx.xxx.xx');
 	select * from t order by id asc;
 	drop table t;
+
+	<!-- regression for a crash on columnar IN expression cloning -->
+	create table t (columnar_str string engine='columnar' );
+	insert into t values(0,'');
+	insert into t values(0,'');
+	insert into t values(0,'');
+	flush ramchunk t;
+	select in(columnar_str,'0','1','2','3','4') as a from t where a=1;
+	drop table t;
 </sphinxql>
 </queries>
 

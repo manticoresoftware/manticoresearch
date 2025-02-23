@@ -48,6 +48,12 @@ constexpr typename std::common_type<T, U>::type Max ( T a, U b )
 	return static_cast<common_type>(a) < static_cast<common_type>(b) ? b : a;
 }
 
+template<typename T, typename U, typename V>
+constexpr typename std::common_type<T, U, V>::type Clamp ( T tMin, U tMax, V tValue )
+{
+	return Max ( tMin, Min ( tMax, tValue ) );
+}
+
 inline constexpr int sphRoundUp ( int iValue, int iLimit )
 {
 	return ( iValue + iLimit - 1 ) & ~( iLimit - 1 );

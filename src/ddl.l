@@ -94,6 +94,7 @@ EXPONENT			[eE](\+|-)?{DIGIT}+
 "MULTI"				{ YYSTOREBOUNDS; return TOK_MULTI; }
 "MULTI64"			{ YYSTOREBOUNDS; return TOK_MULTI64; }
 "NOT"				{ YYSTOREBOUNDS; return TOK_NOT; }
+"OPTION"			{ YYSTOREBOUNDS; return TOK_OPTION; }
 "PLUGIN"			{ YYSTOREBOUNDS; return TOK_PLUGIN; }
 "REBUILD"			{ YYSTOREBOUNDS; return TOK_REBUILD; }
 "RECONFIGURE"		{ YYSTOREBOUNDS; return TOK_RECONFIGURE; }
@@ -120,6 +121,7 @@ EXPONENT			[eE](\+|-)?{DIGIT}+
 {TABLEID}           { YYSTOREBOUNDS; return TOK_TABLEIDENT; }
 `{TABLEID}`			{ YYSTOREBOUNDS; ++lvalp->m_iStart; --lvalp->m_iEnd; return TOK_TABLEIDENT; }
 `{DIGIT}+{TABLEID}`	{ YYSTOREBOUNDS; ++lvalp->m_iStart; --lvalp->m_iEnd; return TOK_TABLEIDENT; } // allow `123xyz` table names
+SYSTEM\.{TABLEID}	{ YYSTOREBOUNDS; return TOK_TABLEIDENT; }
 
 {ID}				{ YYSTOREBOUNDS; return TOK_IDENT; }
 `{ID}`				{ YYSTOREBOUNDS; ++lvalp->m_iStart; --lvalp->m_iEnd; return TOK_IDENT; }

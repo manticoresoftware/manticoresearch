@@ -244,8 +244,8 @@ function ( dl_package Package NAME )
 	set ( ${PACKAGE}_LIB "${_lib}" CACHE FILEPATH "Library file of ${NAME}" )
 	__make_dl_lib ( ${Package}::${Package} )
 
-	GET_FILENAME_COMPONENT ( _FNAME ${_lib} NAME )
-	infomsg ( "${PACKAGE} will be loaded dynamically in runtime as ${_FNAME} (${_lib})" )
+	GET_FILENAME_COMPONENT ( _FNAME ${${PACKAGE}_LIB} NAME )
+	infomsg ( "${PACKAGE} will be loaded dynamically in runtime as ${_FNAME} (${${PACKAGE}_LIB})" )
 	trace ( ${Package}::${Package}_ld )
 	bannervar ( DL_${PACKAGE} )
 	bannervar ( ${PACKAGE}_LIB )
@@ -273,7 +273,11 @@ function ( GET_SONAME RAWLIB OUTVAR )
 					OUTPUT_STRIP_TRAILING_WHITESPACE )
 
 			STRING ( REGEX REPLACE ".*:\n" "" _CONTENT "${_CONTENT}" )
-			set ( "${OUTVAR}" "${_CONTENT}" PARENT_SCOPE )
+			GET_FILENAME_COMPONENT ( EXTNAME "${_CONTENT}" LAST_EXT )
+			if (EXTNAME STREQUAL ".dylib")
+				set ( "${OUTVAR}" "${_CONTENT}" PARENT_SCOPE )
+				return ()
+			endif ()
 		else ()
 			execute_process ( COMMAND "${CMAKE_OBJDUMP}" -p "${RAWLIB}"
 					WORKING_DIRECTORY "${SOURCE_DIR}"

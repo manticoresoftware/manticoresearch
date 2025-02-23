@@ -1248,10 +1248,16 @@ bool TemplateDictTraits_c::StemById ( BYTE* pWord, int iStemmer ) const
 #if WITH_STEMMER
 		if ( iStemmer >= (int)EMORPH::LIBSTEMMER_FIRST && iStemmer < (int)EMORPH::LIBSTEMMER_LAST )
 		{
-			auto* pStemmer = (sb_stemmer*)m_dStemmers[iStemmer - (int)EMORPH::LIBSTEMMER_FIRST];
+			auto iStemmerPos = iStemmer - (int)EMORPH::LIBSTEMMER_FIRST;
+			auto* pStemmer = (sb_stemmer*)m_dStemmers[iStemmerPos];
 			assert ( pStemmer );
 
 			const sb_symbol* sStemmed = sb_stemmer_stem ( pStemmer, (sb_symbol*)pWord, (int)strlen ( (const char*)pWord ) );
+			if ( sStemmed == nullptr ) {
+				const CSphString& sDescStemmer = m_dDescStemmers[iStemmerPos];
+				sphWarn ( "libstemmer_%s returned an unexpected result (probably a bug or an out-of-memory error) during token processing: %s", sDescStemmer.cstr(), pWord );
+				return false;
+			}
 			int iStemmedLen = sb_stemmer_length ( pStemmer );
 
 			memcpy ( pWord, sStemmed, iStemmedLen );

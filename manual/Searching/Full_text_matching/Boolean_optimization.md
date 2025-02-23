@@ -12,6 +12,8 @@ Queries can be automatically optimized if `OPTION boolean_simplify=1` is specifi
 * Common OR NOT: `((A !(N | N1)) | (B !(N | N2)))` becomes `(( (A !N1) | (B !N2) ) !N)`
 Note that optimizing queries consumes CPU time, so for simple queries or hand-optimized queries, you'll achieve better results with the default `boolean_simplify=0` value. Simplifications often benefit complex queries or algorithmically generated queries.
 
+> NOTE: This is an experimental functionality and should be used with caution. It is recommended to verify that a query returns the same documents with and without adding `OPTION boolean_simplify=1`. While this optimization can simplify and improve the performance of complex or algorithmically generated queries, it also consumes additional CPU time. For simpler or manually optimized queries, the default `boolean_simplify=0` value might yield better results.
+
 Queries like `-dog`, which could potentially include all documents from the collection are not allowed by default. To allow them, you must specify `not_terms_only_allowed=1` either as a [global setting](../../Server_settings/Searchd.md#not_terms_only_allowed) or as a [search option](../../Server_settings/Searchd.md#not_terms_only_allowed).
 
 <!-- proofread -->

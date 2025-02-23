@@ -6,6 +6,7 @@ add_library ( manticore_std OBJECT
 		at_scope_exit.h
 		attrstub.h
 		autoevent.h
+		base64.h
 		binarysearch.h
 		binarysearch_impl.h
 		bitcount.h
@@ -107,6 +108,7 @@ add_library ( manticore_std OBJECT
 		zip_impl.h
 
 		autoevent.cpp
+		base64.cpp
 		checks.cpp
 		crc32.cpp
 		env.cpp

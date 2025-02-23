@@ -40,9 +40,17 @@ bool CommitMonitor_c::Commit ()
 
 	// truncate needs wlocked index
 	if ( ServedDesc_t::IsMutable ( pServed ) )
-		return bTruncate
-				 ? CommitNonEmptyCmds ( WIdx_T<RtIndex_i*> ( pServed ), tCmd, bOnlyTruncate )
-				 : CommitNonEmptyCmds ( RIdx_T<RtIndex_i*> ( pServed ), tCmd, bOnlyTruncate );
+	{
+		if ( bTruncate )
+		{
+			WIdx_T<RtIndex_i*> tLocked ( pServed );
+			return CommitNonEmptyCmds ( tLocked, tCmd, bOnlyTruncate );
+		} else
+		{
+			RIdx_T<RtIndex_i*> tLocked ( pServed );
+			return CommitNonEmptyCmds ( tLocked, tCmd, bOnlyTruncate );
+		}
+	}
 
 	return Err ( "requires an existing RT or percolate table" );
 }
@@ -86,15 +94,46 @@ bool CommitMonitor_c::CommitTOI()
 }
 
 
+class EnabledSaveGuard_c
+{
+	RtIndex_i * m_pRt;
+
+public:
+	NONCOPYMOVABLE( EnabledSaveGuard_c );
+
+	explicit EnabledSaveGuard_c ( RtIndex_i * pRt ) noexcept
+			: m_pRt { pRt }
+	{
+		if ( m_pRt )
+			m_pRt->WaitLockEnabledState ();
+	}
+
+	~EnabledSaveGuard_c () noexcept
+	{
+		if ( m_pRt )
+			m_pRt->UnlockEnabledState ();
+	}
+};
+
 static bool DoUpdate ( AttrUpdateArgs& tUpd, const cServedIndexRefPtr_c& pDesc, int& iUpdated, bool bUpdateAPI, bool bNeedWlock )
 {
 	TRACE_CORO ( "rt", "commit_monitor::DoUpdate" );
+
+	RtIndex_i * pRt = ( pDesc->m_eType==IndexType_e::RT ) ? static_cast<RtIndex_i *> ( UnlockedHazardIdxFromServed ( *pDesc ) ) : nullptr;
+	EnabledSaveGuard_c tSaveEnabled { pRt };
+
 	if ( bUpdateAPI )
 	{
 		Debug ( bool bOk = ) [&]() {
-			return bNeedWlock
-				 ? HandleUpdateAPI ( tUpd, WIdx_c ( pDesc ), iUpdated )
-				 : HandleUpdateAPI ( tUpd, RWIdx_c ( pDesc ), iUpdated );
+			if ( bNeedWlock )
+			{
+				WIdx_c tLocked ( pDesc );
+				return HandleUpdateAPI ( tUpd, tLocked, iUpdated );
+			} else
+			{
+				RWIdx_c tLocked ( pDesc );
+				return HandleUpdateAPI ( tUpd, tLocked, iUpdated );
+			}
 		}();
 		assert ( bOk ); // fixme! handle this
 		return ( iUpdated >= 0 );

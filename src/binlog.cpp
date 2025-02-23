@@ -134,7 +134,7 @@ private:
 using namespace Binlog;
 class Binlog_c;
 
-enum class FlushAction_e : int
+enum class FlushAction_e : BYTE
 {
 	ACTION_NONE = 0,
 	ACTION_FSYNC = 1,
@@ -155,7 +155,7 @@ enum class BinlogFileState_e
 using BinlogMutex_t = Threads::Coro::Mutex_c;
 using ScopedBinlogMutex_t = Threads::ScopedCoroMutex_t;
 
-class SingleBinlog_c final
+class SingleBinlog_c final : public ISphRefcountedMT
 {
 	Binlog_c * m_pOwner;
 
@@ -165,16 +165,16 @@ class SingleBinlog_c final
 	CSphVector<BinlogFileDesc_t> m_dLogFiles GUARDED_BY ( m_tLogFilesAccess ); // active log files
 	Threads::Coro::Waitable_T<int> m_tFlushRunning { 0 };
 
+	~SingleBinlog_c () final;
 public:
 	NONCOPYMOVABLE( SingleBinlog_c );
 
 	explicit SingleBinlog_c ( Binlog_c* pOwner ) noexcept
 		: m_pOwner { pOwner } {}
 
-	~SingleBinlog_c ();
 	void Deinit();
 
-	std::pair<int, SingleBinlog_c*> DoFlush ( FlushAction_e eAction ) EXCLUDES ( m_tWriteAccess );
+	std::pair<int, CSphRefcountedPtr<SingleBinlog_c>> DoFlush ( FlushAction_e eAction ) EXCLUDES ( m_tWriteAccess );
 	void DoFsync ( int iFd );
 	void CollectBinlogFiles ( CSphVector<int>& tOutput ) const noexcept EXCLUDES ( m_tLogFilesAccess );
 	bool BinlogCommit ( int64_t * pTID, const char* szIndexName, FnWriteCommit fnSaver, CSphString & sError ) EXCLUDES ( m_tWriteAccess );
@@ -194,10 +194,10 @@ private:
 	void CheckDoRestart () REQUIRES ( m_tWriteAccess );
 	bool CheckDoFlush () REQUIRES ( m_tWriteAccess );
 	void SaveMeta () EXCLUDES ( m_tLogFilesAccess ) ;
-	void FixNofFiles ( int iFiles );
+	void FixNofFiles ( int iFiles ) const;
 };
 
-using SingleBinlogPtr = std::unique_ptr<SingleBinlog_c>;
+using SingleBinlogPtr = CSphRefcountedPtr<SingleBinlog_c>;
 
 class Binlog_c : public ISphNoncopyable
 {
@@ -259,7 +259,7 @@ private:
 	SingleBinlog_c *		GetWriteIndexBinlog ( const char* szIndexName, bool bOpenNewLog=true ) EXCLUDES ( m_tHashAccess );
 	SingleBinlog_c * 		GetSingleWriteIndexBinlog ( bool bOpenNewLog ) EXCLUDES ( m_tHashAccess );
 
-	SingleBinlog_c *		GetFlushIndexBinlog ( const char * szIndexName ) REQUIRES ( m_tHashAccess );
+	SingleBinlog_c *		GetFlushIndexBinlog ( const char * szIndexName ) const REQUIRES ( m_tHashAccess );
 
 	void					LoadMeta ();
 	enum SaveMeta_e : bool { eNoForce, eForce };
@@ -272,7 +272,7 @@ private:
 
 	void					LockBinlog ();
 	void					UnlockBinlog ();
-	void					RemoveFile ( int iExt );
+	void					RemoveFile ( int iExt ) const;
 
 	BinlogFileState_e		ReplayBinlog ( BinlogReplayFileDesc_t & tLog, const SmallStringHash_T<CSphIndex*> & hIndexes );
 	bool					ReplayTxn ( const BinlogReplayFileDesc_t & tLog, BinlogReader_c & tReader ) const;
@@ -568,12 +568,13 @@ void SingleBinlog_c::Deinit () NO_THREAD_SAFETY_ANALYSIS
 }
 
 
-std::pair<int, SingleBinlog_c*> SingleBinlog_c::DoFlush ( FlushAction_e eAction )
+std::pair<int, CSphRefcountedPtr<SingleBinlog_c>> SingleBinlog_c::DoFlush ( FlushAction_e eAction )
 {
 	MEMORY ( MEM_BINLOG );
 
 	ScopedBinlogMutex_t tLock ( m_tWriteAccess );
-	std::pair<int, SingleBinlog_c *> tRes { -1, this };
+	std::pair<int, CSphRefcountedPtr<SingleBinlog_c>> tRes { -1, this };
+	AddRef();
 	if ( eAction==FlushAction_e::ACTION_NONE && m_tWriter.HasUnwrittenData () )
 	{
 		if ( !m_tWriter.Write () )
@@ -964,7 +965,7 @@ void SingleBinlog_c::SaveMeta ()
 }
 
 
-void SingleBinlog_c::FixNofFiles ( int iFiles )
+void SingleBinlog_c::FixNofFiles ( int iFiles ) const
 {
 	m_pOwner->FixNofFiles (iFiles);
 }
@@ -982,32 +983,32 @@ SingleBinlog_c* Binlog_c::GetWriteIndexBinlog ( const char* szIndexName, bool bO
 		pVal = m_hBinlogs ( szIndexName );
 	}
 	if ( pVal )
-		return pVal->get();
+		return pVal->Ptr();
 
 	bool bLocked = false;
 	{
 		Threads::SccWL_t tLock ( m_tHashAccess );
 		pVal = m_hBinlogs ( szIndexName );
 		if ( pVal ) // the value arrived while we acquired w-lock
-			return pVal->get ();
+			return pVal->Ptr ();
 
-		m_hBinlogs.Add ( std::make_unique<SingleBinlog_c> (this), szIndexName );
+		m_hBinlogs.Add ( SingleBinlogPtr { new SingleBinlog_c (this) }, szIndexName );
 		pVal = m_hBinlogs ( szIndexName );
 		if ( bOpenNewLog )
 		{
-			pVal->get ()->LockWriter ();
+			pVal->Ptr ()->LockWriter ();
 			bLocked = true;
 		}
 	}
 	assert ( pVal );
 	// OpenNewLog invokes SaveMeta, which excludes m_tHashAccess
 	if ( bOpenNewLog )
-		pVal->get ()->OpenNewLog ();
+		pVal->Ptr ()->OpenNewLog ();
 
 	if ( bLocked )
-		pVal->get ()->UnlockWriter ();
+		pVal->Ptr ()->UnlockWriter ();
 
-	return pVal->get ();
+	return pVal->Ptr ();
 }
 
 
@@ -1023,7 +1024,7 @@ SingleBinlog_c * Binlog_c::GetSingleWriteIndexBinlog ( bool bOpenNewLog ) NO_THR
 			pVal = &Iter->second;
 	}
 	if ( pVal )
-		return pVal->get ();
+		return pVal->Ptr ();
 
 	bool bLocked = false;
 	{
@@ -1033,29 +1034,29 @@ SingleBinlog_c * Binlog_c::GetSingleWriteIndexBinlog ( bool bOpenNewLog ) NO_THR
 			pVal = &Iter->second;
 
 		if ( pVal ) // the value arrived while we acquired w-lock
-			return pVal->get ();
+			return pVal->Ptr ();
 
-		m_hBinlogs.Add ( std::make_unique<SingleBinlog_c> ( this ), "common" );
+		m_hBinlogs.Add ( SingleBinlogPtr{new SingleBinlog_c ( this )}, "common" );
 		pVal = &m_hBinlogs.begin ()->second;
 		if ( bOpenNewLog )
 		{
-			pVal->get()->LockWriter();
+			pVal->Ptr()->LockWriter();
 			bLocked = true;
 		}
 	}
 	assert ( pVal );
 	// OpenNewLog invokes SaveMeta, which excludes m_tHashAccess
 	if ( bOpenNewLog )
-		pVal->get ()->OpenNewLog ();
+		pVal->Ptr ()->OpenNewLog ();
 
 	if ( bLocked )
-		pVal->get ()->UnlockWriter();
+		pVal->Ptr ()->UnlockWriter();
 
-	return pVal->get ();
+	return pVal->Ptr ();
 }
 
 
-SingleBinlog_c * Binlog_c::GetFlushIndexBinlog ( const char * szIndexName ) REQUIRES ( m_tHashAccess )
+SingleBinlog_c * Binlog_c::GetFlushIndexBinlog ( const char * szIndexName ) const REQUIRES ( m_tHashAccess )
 {
 	SingleBinlogPtr * pVal = nullptr;
 	if ( !m_bCommonBinlog )
@@ -1069,7 +1070,7 @@ SingleBinlog_c * Binlog_c::GetFlushIndexBinlog ( const char * szIndexName ) REQU
 
 	if ( !pVal )
 		return nullptr;
-	return pVal->get ();
+	return pVal->Ptr ();
 }
 
 
@@ -1095,7 +1096,7 @@ CSphString Binlog_c::MakeBinlogName ( int iExt ) const noexcept
 	return SphSprintf ( m_sBinlogFileNameTemplate.scstr(), iExt );
 }
 
-void Binlog_c::RemoveFile ( int iExt ) NO_THREAD_SAFETY_ANALYSIS
+void Binlog_c::RemoveFile ( int iExt ) const NO_THREAD_SAFETY_ANALYSIS
 {
 	auto sLog = MakeBinlogName ( iExt );
 	::unlink ( sLog.cstr () );
@@ -1215,7 +1216,7 @@ void Binlog_c::DoFlush ()
 
 	m_iLastFlushed.store ( sphMicroTimer (), std::memory_order_relaxed );
 
-	CSphVector<std::pair<int, SingleBinlog_c *>> dToFsync;
+	CSphVector<std::pair<int, SingleBinlogPtr>> dToFsync;
 	{
 		Threads::SccRL_t tLock ( m_tHashAccess );
 		for ( auto& tBinlog : m_hBinlogs )

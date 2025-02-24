@@ -1157,9 +1157,11 @@ static bool ParseOptions ( const JsonObj_c & tRoot, ParsedJsonQuery_t & tPJQuery
 		return true;
 
 	if ( tQuery.m_eJoinType!=JoinType_e::NONE )
-	{
 		for ( const auto & i : tOptions )
 		{
+			if ( !i.IsObj() )
+				continue;
+
 			CSphString sTable = i.Name();
 			sTable.ToLower();
 
@@ -1183,9 +1185,6 @@ static bool ParseOptions ( const JsonObj_c & tRoot, ParsedJsonQuery_t & tPJQuery
 			sError.SetSprintf ( "Unknown table '%s' in OPTIONS", sTable.cstr() );
 			return false;
 		}
-
-		return true;
-	}
 
 	return ParseOptions ( tOptions, tQuery, sError );
 }
@@ -1576,9 +1575,9 @@ bool ParseJsonInsertSource ( const JsonObj_c & tSource, SqlStmt_t & tStmt, bool 
 }
 
 
-bool sphParseJsonInsert ( const char * szInsert, SqlStmt_t & tStmt, DocID_t & tDocId, bool bReplace, CSphString & sError )
+bool sphParseJsonInsert ( Str_t sInsert, SqlStmt_t & tStmt, DocID_t & tDocId, bool bReplace, CSphString & sError )
 {
-	JsonObj_c tRoot ( szInsert );
+	JsonObj_c tRoot ( sInsert );
 	return ParseJsonInsert ( tRoot, tStmt, tDocId, bReplace, sError );
 }
 
@@ -2702,10 +2701,10 @@ CSphString sphEncodeResultJson ( const VecTraits_T<const AggrResult_t *> & dRes,
 
 			// note, that originally there is string UID, so we just output number in quotes for docid here
 			// number in quotes in compat mode or just number for _id
-			if ( bCompatId )
+			if ( bCompatId || ( eFormat==ResultSetFormat_e::ES ) )
 			{
 				DocID_t tDocID = tMatch.GetAttr ( pId->m_tLocator );
-				tOut.Sprintf ( R"("_id":"%llu,"_score":%d)", tDocID, tMatch.m_iWeight );
+				tOut.Sprintf ( R"("_id":"%llu","_score":%d)", tDocID, tMatch.m_iWeight );
 			}
 			else if ( pId )
 			{

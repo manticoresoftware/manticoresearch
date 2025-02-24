@@ -919,6 +919,9 @@ void QueueCreator_c::ModifyExprForJoin ( CSphColumnInfo & tExprCol, const CSphSt
 	if ( !ExprHasJoinPrefix ( tExprCol.m_sName, m_tSettings.m_pJoinArgs.get() ) && !ExprHasJoinPrefix ( sExpr, m_tSettings.m_pJoinArgs.get() ) )
 		return;
 
+	if ( ExprHasLeftTableAttrs ( tExprCol.m_sName, *m_pSorterSchema ) || ExprHasLeftTableAttrs ( sExpr, *m_pSorterSchema ) )
+		return;
+
 	// we receive already precalculated JSON field expressions from JOIN
 	// we don't need to evaluate them once again
 	tExprCol.m_eAttrType = sphPlainAttrToPtrAttr ( tExprCol.m_eAttrType );

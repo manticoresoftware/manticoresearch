@@ -16,6 +16,8 @@ The displayed properties include the following columns:
 * **Enabled**: Indicates whether the index is currently enabled and can be used to improve search speed. When an attribute is updated, the secondary index for that attribute is temporarily disabled until the index is rebuilt. You can rebuild disabled indexes using the [ALTER TABLE ... REBUILD SECONDARY](../../Updating_table_schema_and_settings.md#Rebuilding-a-secondary-index) command.
 * **Percent**: In an RT table, different disk chunks may contain different secondary indexes especially when JSON attributes are used. This percentage shows how many chunks have an index with the same name, type, and enabled state.
 
+> **Note:** For RT tables, secondary indexes are only created for disk chunks, not for data in RAM segments. When you first insert data into an RT table, it stays in RAM and no secondary indexes will be shown. The indexes become visible only after the data is flushed to disk chunks, which by default happens automatically when the table becomes active (receives both inserts and searches).
+
 <!-- intro -->
 ##### SQL:
 <!-- request SQL -->

@@ -77,13 +77,13 @@ Manticore Search was forked from [Sphinx 2.3.2](https://github.com/sphinxsearch/
   - Custom ranking
 * Other search capabilities:
   - [Rich filtering functionality](https://manual.manticoresearch.com/Searching/Full_text_matching/Operators)
-  - [Fuzzy search](https://manual.manticoresearch.com/dev/Searching/Spell_correction#Fuzzy-Search)
+  - [Fuzzy search](https://manual.manticoresearch.com/Searching/Spell_correction#Fuzzy-Search)
   - [Faceted search](https://play.manticoresearch.com/faceting/)
   - [Geo-spatial search](https://play.manticoresearch.com/geosearch/)
   - [Vector search](https://manual.manticoresearch.com/Searching/KNN)
   - [Joining tables](https://manual.manticoresearch.com/Searching/Joining)
   - [Spelling correction](https://play.manticoresearch.com/didyoumean/)
-  - [Autocomplete](https://manual.manticoresearch.com/dev/Searching/Autocomplete#Autocomplete)
+  - [Autocomplete](https://manual.manticoresearch.com/Searching/Autocomplete#Autocomplete)
   - A wide range of functions for filtering and data manipulation
 * Natural language processing (NLP):
   - [Stemming](https://manual.manticoresearch.com/Creating_a_table/NLP_and_tokenization/Morphology)
@@ -96,7 +96,7 @@ Manticore Search was forked from [Sphinx 2.3.2](https://github.com/sphinxsearch/
   - [Text highlighting](https://play.manticoresearch.com/highlighting/)
 * Stream filtering:
   - [using a "percolate" table](https://play.manticoresearch.com/pq/)
-  - or the [Kafka integration](https://manual.manticoresearch.com/dev/Integration/Kafka)
+  - or the [Kafka integration](https://manual.manticoresearch.com/Integration/Kafka)
 * High-availability:
   - Data can be distributed across servers and data-centers
   - [Synchronous replication](https://play.manticoresearch.com/replication/)
@@ -123,9 +123,9 @@ Manticore Search was forked from [Sphinx 2.3.2](https://github.com/sphinxsearch/
   - [Sync from MySQL and PostgreSQL](https://manual.manticoresearch.com/Creating_a_table/Local_tables/Plain_table#Plain-table)
   - [Sync from XML](https://manual.manticoresearch.com/Adding_data_from_external_storages/Fetching_from_XML_streams#XML-file-format)
   - [Sync from CSV](https://manual.manticoresearch.com/Adding_data_from_external_storages/Fetching_from_CSV,TSV#Fetching-from-TSV,CSV)
-  - [Sync from ODBC](https://manual.manticoresearch.com/dev/Data_creation_and_modification/Adding_data_from_external_storages/Fetching_from_databases/Introduction#Introduction)
-  - [Sync from MS SQL](https://manual.manticoresearch.com/dev/Data_creation_and_modification/Adding_data_from_external_storages/Fetching_from_databases/Introduction#Introduction)
-  - [Sync from Kafka](https://manual.manticoresearch.com/dev/Integration/Kafka)
+  - [Sync from ODBC](https://manual.manticoresearch.com/Data_creation_and_modification/Adding_data_from_external_storages/Fetching_from_databases/Introduction#Introduction)
+  - [Sync from MS SQL](https://manual.manticoresearch.com/Data_creation_and_modification/Adding_data_from_external_storages/Fetching_from_databases/Introduction#Introduction)
+  - [Sync from Kafka](https://manual.manticoresearch.com/Integration/Kafka)
   - [With MySQL as a storage engine](https://manual.manticoresearch.com/Extensions/SphinxSE#Using-SphinxSE)
   - [With MySQL via FEDERATED engine](https://manual.manticoresearch.com/Extensions/FEDERATED)
   - [ProxySQL](https://manticoresearch.com/blog/using-proxysql-to-route-inserts-in-a-distributed-realtime-index/)

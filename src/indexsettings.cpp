@@ -2572,6 +2572,7 @@ MutableIndexSettings_c::MutableIndexSettings_c()
 	: m_iExpandKeywords { KWE_DISABLED }
 	, m_iMemLimit { DEFAULT_RT_MEM_LIMIT }
 	, m_iOptimizeCutoff ( g_iOptimizeCutoff )
+	, m_iOptimizeCutoffKNN ( g_iOptimizeCutoff )
 	, m_iFlushWrite ( -1 )
 	, m_iFlushSearch ( -1 )
 	, m_dLoaded ( (int)MutableName_e::TOTAL )

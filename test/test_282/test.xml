@@ -19,11 +19,18 @@ searchd
 
 <queries>
 <sphinxql>
-	drop table if exists t;
 	create table tt;
 	replace into tt values (10000000000000000000), (2);
 	flush ramchunk tt;
 	replace into tt values (10000000000000000000);
+	select * from tt;
+	drop table tt;
+
+	<!-- regression with wrong-sorted klist in replace -->
+	create table tt;
+	replace into tt values(2);
+	flush ramchunk tt;
+	replace into tt values(10000000000000000000),(2);
 	select * from tt;
 	drop table tt;
 </sphinxql>

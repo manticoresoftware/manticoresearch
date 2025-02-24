@@ -1354,8 +1354,8 @@ void SIContainer_c::GetIndexAttrInfo ( std::vector<SI::IndexAttrInfo_t> & dInfo 
 
 RowIteratorsWithEstimates_t SIContainer_c::CreateSecondaryIndexIterator ( CSphVector<SecondaryIndexInfo_t> & dSIInfo, const CSphVector<CSphFilterSettings> & dFilters, ESphCollation eCollation, const ISphSchema & tSchema, RowID_t uRowsCount, int iCutoff ) const
 {
-	// don't use cutoff if we have more than one instance of SecondaryIndex/ColumnarScan
-	int iNumIterators = dSIInfo.count_of ( []( auto & tSI ){ return tSI.m_eType==SecondaryIndexType_e::INDEX || tSI.m_eType==SecondaryIndexType_e::ANALYZER; } );
+	// don't use cutoff if we have more than one instance of SecondaryIndex/ColumnarScan/Filter
+	int iNumIterators = dSIInfo.count_of ( []( auto & tSI ){ return tSI.m_eType!=SecondaryIndexType_e::NONE; } );
 	if ( iNumIterators > 1 )
 		iCutoff = -1;
 

@@ -5,7 +5,7 @@
 <requires>
 <non-windows/>
 </requires>
-
+<skip_db/>
 <config>
 indexer
 {
@@ -15,7 +15,7 @@ indexer
 searchd
 {
 	<searchd_settings/>
-	listen 					= <testdir/>data/searchd-test-241.sock
+	listen 					= <data_path/>/searchd-test-241.sock
 }
 
 source src1
@@ -60,7 +60,7 @@ index dist
 	type					= distributed
 	local					= idx1
 	agent					= <my_address/>:idx2
-	agent 					= <testdir/>data/searchd-test-241.sock:idx3
+	agent 					= <data_path/>/searchd-test-241.sock:idx3
 	agent_connect_timeout	= 1000
 	agent_query_timeout		= 3000
 }

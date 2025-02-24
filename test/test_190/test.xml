@@ -4,7 +4,7 @@
 <name>distributed snippets with load_files, load_files_scattered</name>
 
 <num_agents>3</num_agents>
-
+<skip_db/>
 <config>
 indexer
 {
@@ -117,18 +117,5 @@ CALL SNIPPETS (('allfiles/text1.txt','allfiles/text2.txt','allfiles/text3.txt','
 CALL SNIPPETS (('scatteredfiles/text1.txt','scatteredfiles/text2.txt','scatteredfiles/text3.txt','scatteredfiles/text4.txt','scatteredfiles/text5.txt','scatteredfiles/text6.txt'),'dist','"Sphinxsearch dot com"',1 AS load_files,1 AS load_files_scattered);
 
 </sphinxql></queries>
-
-<db_create>
-CREATE TABLE test_table
-(
-	id INTEGER AUTO_INCREMENT PRIMARY KEY NOT NULL,
-	title VARCHAR(10) NOT NULL
-);
-</db_create>
-<db_insert>
-INSERT INTO `test_table` VALUES
-( 1, 'dummy' )
-</db_insert>
-<db_drop>DROP TABLE IF EXISTS test_table</db_drop>
 
 </test>

@@ -3,21 +3,19 @@
 # must be run from tests dir
 if test ! -f ubertest.php; then exit 0; fi
 
-# clean subdirs
-for i in test_*
-do
-	if test ! -f "$i/test.xml"; then continue; fi
-	rm -f "$i/report.txt"
-	rm -fr "$i/Conf/"
-done
+# not suitable for in-source run
+if test ! -f CTestTestfile.cmake; then exit 0; fi
 
 # clean test index data files
-rm -f data/*.sp*
-rm -f data/*.mvp
-rm -f data/*.meta data/*.lock data/*.kill data/*.ram
-rm -f data/binlog.*
+rm -rf data*
+rm -rf test_*
+rm -rf rt_*
+rm -rf indextool*
 
 # clean test runs logs
+rm error*
 rm -f *.log
-rm -f searchd.pid error.txt config.conf
-rm -f guess.txt
+rm -f config*
+rm -f searchd.pid
+rm -f guess.txt report.txt examples.txt
+

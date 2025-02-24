@@ -6,7 +6,7 @@
 <requires>
 <non-rt/>
 </requires>
-
+<skip_db/>
 <config>
 
 searchd
@@ -36,7 +36,7 @@ index rt_stem
 	rt_field		= title
 	morphology 		= stem_en
 	dict			= crc
-} 
+}
 
 </config>
 
@@ -45,11 +45,11 @@ index rt_stem
 $restartDaemon = function ( $client )
 {
 	$results = array ();
-	StopSearchd ( "config.conf", "searchd.pid" );
+	StpSearchd ();
 	usleep ( 50000 );
 
 	$error = "";
-	$startSta = StartSearchd ( "config.conf", "error.txt", "searchd.pid", $error, array() );
+	$startSta = StSearchd ( $error );
 	if ( $startSta == 0 || $startSta == 2 )
 	{
 		$results[] = "started=ok";
@@ -59,7 +59,6 @@ $restartDaemon = function ( $client )
 	{
 		$results[] = sprintf("start.err=%d; local=%s; client=%s;", $startSta, $error, $client->GetLastError());
 	}
-		
 	return $results;
 };
 
@@ -71,14 +70,14 @@ $query = function ( $q, $sock )
 	{
 		$results[]  = mysql_errno( $sock ) . "; " . mysql_error ( $sock );
 	} else
-	{	
+	{
 		while ($row = @mysql_fetch_array($res, MYSQL_ASSOC))
 		{
 			if ( array_key_exists ( "Variable_name", $row ) && $row["Variable_name"]=="time" )
 			{
 				continue;
 			}
-				
+
 			if ( !array_key_exists ( "Variable_name", $row ) || !array_key_exists ( "Value", $row ) )
 			{
 				$line = "";
@@ -91,10 +90,10 @@ $query = function ( $q, $sock )
 			{
 				$results[] = $row["Variable_name"] . " = " . $row["Value"];
 			}
-		}	
+		}
 		@mysql_free_result ( $res );
 	}
-	
+
 	return $results;
 };
 
@@ -115,12 +114,12 @@ $insert = function ( $idx, $from, $to, $query, $sock )
 			$content .= "test700";
 		} else if ( ( $doc%19 )==0 )
 		{
-			$content .= "test1800";		
+			$content .= "test1800";
 		}
-		
+
 		$insert .= " ( $doc, 111, \'$content\' ),";
 	}
-	
+
 	$res = $query ( substr ( $insert, 0, -1 ), $sock ); // remove trailing ,
 	return array();
 };

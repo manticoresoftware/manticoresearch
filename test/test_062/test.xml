@@ -3,7 +3,7 @@
 <test>
 
 <name>snippets vs query highlighting</name>
-
+<skip_db/>
 <config>
 indexer
 {
@@ -72,8 +72,6 @@ index test_utf
 }
 
 </config>
-
-<db_insert>select 1;</db_insert>
 
 <custom_test><![CDATA[
 

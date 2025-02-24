@@ -7,7 +7,7 @@
 searchd
 {
 <searchd_settings/>
-	binlog_path = data
+	binlog_path = <data_path/>
     rt_flush_period = 3s
 }
 

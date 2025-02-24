@@ -49,7 +49,6 @@ npm install elasticdump -g > /dev/null 2>&1; echo $?
 elasticdump --version
 ––– output –––
 6.#!/[0-9]{3}.[0-9]{1,2}/!#
-
 ––– input –––
 unzip -o ./test/clt-tests/migration-es-ms/index.zip -d ./test/clt-tests/migration-es-ms/
 ––– output –––

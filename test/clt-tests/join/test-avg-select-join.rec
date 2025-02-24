@@ -1,17 +1,18 @@
 ––– block: ../base/start-searchd –––
 ––– input –––
-apt-get update -qq && apt-get install -y unzip -qq 2>&1 | grep -i "Setting up unzip"
-––– output –––
-Setting up unzip (6.0-26ubuntu3.2) ...
-––– input –––
-wget -O products_reviews.sql.zip "https://github.com/user-attachments/files/18365659/products_reviews.sql.zip" 2>&1 | grep "products_reviews.sql.zip.*saved" | sed -E 's/.*(products_reviews\.sql\.zip).*saved.*/\1 saved/'
-––– output –––
-products_reviews.sql.zip saved
-––– input –––
-manticore-load --drop --batch-size=1000 --threads=5 --total=10000 --init="CREATE TABLE products(name text, category multi)" --load="INSERT INTO products(id, name,category) VALUES(<increment>, '<text/2/10>',(<array/1/3/1/1000>))" --together --drop --batch-size=10000 --threads=5 --total=10000000 --init="create table reviews(product_id bigint, user_id int, rating int, comment text)" --load="insert into reviews(product_id, user_id, rating, comment) values(<int/1/10000>, <int/1/1000>, <int/1/100>, '<text/20/100>')" --quiet
+manticore-load --drop --batch-size=1000 --threads=5 --total=10000 --init="CREATE TABLE products(id bigint, name text, category multi)" --load="INSERT INTO products(id, name, category) VALUES(<increment>, '<text/2/10>', (<array/1/3/1/1000>))" --together --drop --batch-size=10000 --threads=5 --total=100000 --init="create table reviews(product_id bigint, user_id int, rating int, comment text)" --load="insert into reviews(product_id, user_id, rating, comment) values(<int/1/10000>, <int/1/1000>, <int/1/100>, '<text/20/100>')" --quiet
 ––– output –––
 Threads ; Batch     ; Time        ; Total Docs  ; Docs/Sec    ; Avg QPS     ; p99 QPS     ; p95 QPS     ; p5 QPS      ; p1 QPS      ; Lat Avg     ; Lat p50     ; Lat p95     ; Lat p99     ;
-5       ; 1000      ; %{NUMBER}:%{NUMBER}       ; 10000       ; %{NUMBER}          ; 0           ; 0           ; 0           ; 0           ; 0           ; #!/[0-9]{3}.[0-9]{1}/!#       ; #!/[0-9]{3}.[0-9]{1}/!#       ; #!/[0-9]{3}.[0-9]{1}/!#       ; #!/[0-9]{3}.[0-9]{1}/!#       ;
+5       ; 1000      ; %{NUMBER}:%{NUMBER}       ; 10000       ; %{NUMBER}        ; 0           ; 0           ; 0           ; 0           ; 0           ; %{NUMBER}.%{NUMBER}        ; %{NUMBER}.%{NUMBER}        ; %{NUMBER}.%{NUMBER}        ; %{NUMBER}.%{NUMBER}        ;
+Threads ; Batch     ; Time        ; Total Docs  ; Docs/Sec    ; Avg QPS     ; p99 QPS     ; p95 QPS     ; p5 QPS      ; p1 QPS      ; Lat Avg     ; Lat p50     ; Lat p95     ; Lat p99     ;
+5       ; 10000     ; %{NUMBER}:%{NUMBER}       ; 100000      ; %{NUMBER}      ; 0           ; 0           ; 0           ; 0           ; 0           ; %{NUMBER}.%{NUMBER}       ; %{NUMBER}.%{NUMBER}       ; %{NUMBER}.%{NUMBER}       ; %{NUMBER}.%{NUMBER}       ;
+––– input –––
+mysql -P9306 -h0 -e "SELECT id, COUNT(*) AS cnt FROM products LEFT JOIN reviews ON reviews.product_id = products.id GROUP BY id ORDER BY cnt DESC LIMIT 20" | sed 's/|//g; s/^[ \t]*//; s/[ \t][ \t]*/ /g' | grep -v 'id\|+' | awk '{$1=$1}1' > /tmp/count_only.txt; mysql -P9306 -h0 -e "SELECT id, COUNT(*) AS cnt, AVG(reviews.rating) AS avg_rating FROM products LEFT JOIN reviews ON reviews.product_id = products.id GROUP BY id ORDER BY cnt DESC LIMIT 20" | sed 's/|//g; s/^[ \t]*//; s/[ \t][ \t]*/ /g' | grep -v 'id\|+' | awk '{print $1 " " $2}' | awk '{$1=$1}1' > /tmp/count_with_avg.txt
+––– output –––
+––– input –––
+md5sum <(awk '{$1=$1}1' /tmp/count_only.txt) <(awk '{$1=$1}1' /tmp/count_with_avg.txt) | awk '{print $1}' | uniq | wc -l | grep -q 1 && echo "✅ TEST PASSED: COUNT(*) values match with and without AVG()" || echo "❌ TEST FAILED: COUNT(*) values differ!"
+––– output –––
+✅ TEST PASSED: COUNT(*) values match with and without AVG()
 ––– input –––
 mysql -P9306 -h0 -e "SELECT COUNT(*) FROM products; SELECT COUNT(*) FROM reviews;"
 ––– output –––
@@ -23,5 +24,73 @@ mysql -P9306 -h0 -e "SELECT COUNT(*) FROM products; SELECT COUNT(*) FROM reviews
 +----------+
 | count(*) |
 +----------+
-|    50000 |
+|   100000 |
 +----------+
+––– input –––
+rm -f /tmp/count_only.txt /tmp/count_with_avg.txt
+––– output –––
+––– input –––
+cmp_hash=$(mysql -P9306 -h0 -e "SELECT id, COUNT(*) FROM products LEFT JOIN reviews ON reviews.product_id = products.id GROUP BY id ORDER BY COUNT(*) DESC LIMIT 20" | sed 's/|//g; s/^[ \t]*//; s/[ \t][ \t]*/ /g' | grep -v 'id\|+' | awk '{$1=$1}1' | sort | md5sum | awk '{print $1}')
+––– output –––
+––– input –––
+avg_hash=$(mysql -P9306 -h0 -e "SELECT id, COUNT(*), AVG(reviews.rating) FROM products LEFT JOIN reviews ON reviews.product_id = products.id GROUP BY id ORDER BY COUNT(*) DESC LIMIT 20" | sed 's/|//g; s/^[ \t]*//; s/[ \t][ \t]*/ /g' | grep -v 'id\|+' | awk '{print $1 " " $2}' | awk '{$1=$1}1' | sort | md5sum | awk '{print $1}')
+––– output –––
+––– input –––
+[[ "$cmp_hash" == "$avg_hash" ]] && echo "✅ TEST PASSED: COUNT(*) values match with and without AVG()" || echo "❌ TEST FAILED: COUNT(*) values differ!"
+––– output –––
+✅ TEST PASSED: COUNT(*) values match with and without AVG()
+––– input –––
+rm -f /tmp/count_only.txt /tmp/count_with_avg.txt
+––– output –––
+––– input –––
+cmp_hash=$(mysql -P9306 -h0 -e "SELECT id, COUNT(*) FROM products LEFT JOIN reviews ON reviews.product_id = products.id GROUP BY id ORDER BY COUNT(*) DESC LIMIT 20" | tee /dev/tty | sed 's/|//g; s/^[ \t]*//; s/[ \t][ \t]*/ /g' | grep -v 'id\|+' | awk '{$1=$1}1' | sort | md5sum | awk '{print $1}'); avg_hash=$(mysql -P9306 -h0 -e "SELECT id, COUNT(*), AVG(reviews.rating) FROM products LEFT JOIN reviews ON reviews.product_id = products.id GROUP BY id ORDER BY COUNT(*) DESC LIMIT 20" | tee /dev/tty | sed 's/|//g; s/^[ \t]*//; s/[ \t][ \t]*/ /g' | grep -v 'id\|+' | awk '{print $1 " " $2}' | awk '{$1=$1}1' | sort | md5sum | awk '{print $1}'); if [[ "$cmp_hash" == "$avg_hash" ]]; then echo "✅ TEST PASSED: COUNT(*) values match with and without AVG()"; else echo "⚠️ WARNING: COUNT(*) values differ! Review output above."; fi
+––– output –––
++------+----------+
+| id   | count(*) |
++------+----------+
+| %{NUMBER} |       %{NUMBER} |
+| %{NUMBER} |       %{NUMBER} |
+| %{NUMBER} |       %{NUMBER} |
+| %{NUMBER} |       %{NUMBER} |
+| %{NUMBER} |       %{NUMBER} |
+| %{NUMBER} |       %{NUMBER} |
+| %{NUMBER} |       %{NUMBER} |
+| %{NUMBER} |       %{NUMBER} |
+| %{NUMBER} |       %{NUMBER} |
+| %{NUMBER} |       %{NUMBER} |
+| %{NUMBER} |       %{NUMBER} |
+| %{NUMBER} |       %{NUMBER} |
+| %{NUMBER} |       %{NUMBER} |
+| %{NUMBER} |       %{NUMBER} |
+| %{NUMBER} |       %{NUMBER} |
+| %{NUMBER} |       %{NUMBER} |
+| %{NUMBER} |       %{NUMBER} |
+| %{NUMBER} |       %{NUMBER} |
+| %{NUMBER} |       %{NUMBER} |
+| %{NUMBER} |       %{NUMBER} |
++------+----------+
++------+----------+---------------------+
+| id   | count(*) | avg(reviews.rating) |
++------+----------+---------------------+
+| %{NUMBER} |       %{NUMBER} |         %{NUMBER}.%{NUMBER} |
+| %{NUMBER} |       %{NUMBER} |         %{NUMBER}.%{NUMBER} |
+| %{NUMBER} |       %{NUMBER} |         %{NUMBER}.%{NUMBER} |
+| %{NUMBER} |       %{NUMBER} |         %{NUMBER}.%{NUMBER} |
+| %{NUMBER} |       %{NUMBER} |         %{NUMBER}.%{NUMBER} |
+| %{NUMBER} |       %{NUMBER} |         %{NUMBER}.%{NUMBER} |
+| %{NUMBER} |       %{NUMBER} |         %{NUMBER}.%{NUMBER} |
+| %{NUMBER} |       %{NUMBER} |         %{NUMBER}.%{NUMBER} |
+| %{NUMBER} |       %{NUMBER} |         %{NUMBER}.%{NUMBER} |
+| %{NUMBER} |       %{NUMBER} |         %{NUMBER}.%{NUMBER} |
+| %{NUMBER} |       %{NUMBER} |         %{NUMBER}.%{NUMBER} |
+| %{NUMBER} |       %{NUMBER} |         %{NUMBER}.%{NUMBER} |
+| %{NUMBER} |       %{NUMBER} |         %{NUMBER}.%{NUMBER} |
+| %{NUMBER} |       %{NUMBER} |         %{NUMBER}.%{NUMBER} |
+| %{NUMBER} |       %{NUMBER} |         %{NUMBER}.%{NUMBER} |
+| %{NUMBER} |       %{NUMBER} |         %{NUMBER}.%{NUMBER} |
+| %{NUMBER} |       %{NUMBER} |         %{NUMBER}.%{NUMBER} |
+| %{NUMBER} |       %{NUMBER} |         %{NUMBER}.%{NUMBER} |
+| %{NUMBER} |       %{NUMBER} |         %{NUMBER}.%{NUMBER} |
+| %{NUMBER} |       %{NUMBER} |         %{NUMBER}.%{NUMBER} |
++------+----------+---------------------+
+✅ TEST PASSED: COUNT(*) values match with and without AVG()

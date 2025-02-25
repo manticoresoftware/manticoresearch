@@ -1029,9 +1029,9 @@ bool PercolateQwordSetup_c::QwordSetup ( ISphQword * pQword ) const
 	return bWordSet;
 }
 
-ISphQword * PercolateQwordSetup_c::ScanSpawn() const
+ISphQword * PercolateQwordSetup_c::ScanSpawn ( int iAtomPos ) const
 {
-	return new QwordScan_c ( m_pSeg->m_uRows );
+	return new QwordScan_c ( m_pSeg->m_uRows, iAtomPos, SPH_MAX_FIELDS );
 }
 
 SphWordID_t PercolateDictProxy_c::GetWordID ( BYTE * pWord )

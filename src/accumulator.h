@@ -84,6 +84,18 @@ struct ReplicationCommand_t
 	const CSphQuery * m_pUpdateCond = nullptr;
 };
 
+struct ReplicatedCommand_t
+{
+	ReplCmd_e m_eCommand { ReplCmd_e::TOTAL };
+	CSphString				m_sIndex;
+	CSphString				m_sCluster;
+
+	// index TID after operation for cluster binlog
+	int64_t					m_iTID = -1;
+
+	ReplicatedCommand_t & operator = ( const ReplicationCommand_t & tOther );
+};
+
 std::unique_ptr<ReplicationCommand_t> MakeReplicationCommand ( ReplCmd_e eCommand, CSphString sIndex, CSphString sCluster = CSphString() );
 
 class RtIndex_i;
@@ -101,6 +113,7 @@ public:
 	CSphTightVector<BYTE>			m_dBlobs;
 	CSphVector<DWORD>				m_dPerDocHitsCount;
 	CSphVector<std::unique_ptr<ReplicationCommand_t>> m_dCmd;
+	ReplicatedCommand_t				m_tCmdReplicated;
 
 	bool						m_bKeywordDict = false;
 	DictRefPtr_c				m_pDict;
@@ -112,6 +125,7 @@ public:
 
 	void			CleanupPart();
 	void			Cleanup();
+	void			CleanReplicated();
 
 	void			AddDocument ( ISphHits * pHits, const InsertDocData_c & tDoc, bool bReplace, int iRowSize, const DocstoreBuilder_i::Doc_t * pStoredDoc );
 	void			CleanupDuplicates ( int iRowSize );

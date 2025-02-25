@@ -1,0 +1,41 @@
+––– input –––
+export INSTANCE=1
+––– output –––
+––– block: ../../base/replication/start-searchd-precach –––
+––– input –––
+export INSTANCE=2
+––– output –––
+––– block: ../../base/replication/start-searchd-precach –––
+––– input –––
+export CLUSTER_NAME=c
+––– output –––
+––– block: ../../base/replication/create-cluster –––
+––– block: ../../base/replication/join-cluster-on-all-nodes –––
+––– input –––
+mysql -h0 -P1306 -e "create table c:t(id bigint) shards=4 rf=2"
+––– output –––
+––– input –––
+for i in 1 2; do mysql -h0 -P${i}306 -e "show tables from system\G"; done | grep 'Table: system.t' | sort -V
+––– output –––
+Table: system.t_s0
+Table: system.t_s0
+Table: system.t_s1
+Table: system.t_s1
+Table: system.t_s2
+Table: system.t_s2
+Table: system.t_s3
+Table: system.t_s3
+––– input –––
+for i in 1 2; do mysql -h0 -P${i}306 -e "show create table t\G" | grep 'Create Table'; done
+––– output –––
+- Create Table: CREATE TABLE t type='distributed' %{DISTRIBUTED_TABLE_T_SHARD} %{DISTRIBUTED_TABLE_T_SHARD} %{DISTRIBUTED_TABLE_T_SHARD} %{DISTRIBUTED_TABLE_T_SHARD}
++ ERROR 1064 (42000) at line 1: You have an error in your query. Please, double-check it.
+- Create Table: CREATE TABLE t type='distributed' %{DISTRIBUTED_TABLE_T_SHARD} %{DISTRIBUTED_TABLE_T_SHARD} %{DISTRIBUTED_TABLE_T_SHARD} %{DISTRIBUTED_TABLE_T_SHARD}
++ ERROR 1064 (42000) at line 1: You have an error in your query. Please, double-check it.
+––– input –––
+for i in 1 2; do mysql -h0 -P${i}306 -e "show tables\G" | grep 'Table: t_' | wc -l; done
+––– output –––
+- 4
++ 0
+- 4
++ 0

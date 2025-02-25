@@ -337,10 +337,30 @@ static void FixupDegenerates ( XQNode_t * pNode, CSphString & sWarning )
 		FixupDegenerates ( pNode->m_dChildren[i], sWarning );
 }
 
+static int GetMaxAtomPos ( const XQNode_t * pNode )
+{
+	int iMaxAtomPos = -1;
+	if ( !pNode )
+		return iMaxAtomPos;
+
+	for ( const auto & tWord : pNode->m_dWords )
+		iMaxAtomPos = Max ( iMaxAtomPos, tWord.m_iAtomPos );
+
+	for ( const XQNode_t * pItem : pNode->m_dChildren )
+		iMaxAtomPos = GetMaxAtomPos ( pItem );
+
+	return iMaxAtomPos;
+}
+
 static XQNode_t * TransformOnlyNot ( XQNode_t * pNode, CSphVector<XQNode_t *> & dSpawned )
 {
 	XQNode_t * pScan = new XQNode_t ( pNode->m_dSpec );
 	pScan->SetOp ( SPH_QUERY_SCAN );
+	// set the last atom pos for the spawned scan term
+	pScan->m_iAtomPos = GetMaxAtomPos ( pNode );
+	if ( pScan->m_iAtomPos!=-1 )
+		pScan->m_iAtomPos++;
+
 	dSpawned.Add ( pScan );
 
 	XQNode_t * pAnd = new XQNode_t ( pNode->m_dSpec );

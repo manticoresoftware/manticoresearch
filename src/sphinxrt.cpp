@@ -6318,8 +6318,8 @@ private:
 class RtScanQword_t final : public QwordScan_c
 {
 public:
-	explicit RtScanQword_t ( int iRowsTotal )
-		: QwordScan_c ( iRowsTotal )
+	explicit RtScanQword_t ( int iRowsTotal, int iAtomPos, int iFieldsCount )
+		: QwordScan_c ( iRowsTotal, iAtomPos, iFieldsCount )
 	{
 	}
 
@@ -6335,7 +6335,6 @@ public:
 		m_iRowsCount = pSegment->m_uRows;
 		m_iDocs = m_iRowsCount;
 		m_bDone = ( m_iRowsCount==0 );
-		m_dQwordFields.SetAll();
 		m_pKilled = &pSegment->m_tDeadRowMap;
 
 		return ( pSegment->m_tAliveRows.load(std::memory_order_relaxed)>0 );
@@ -6359,7 +6358,7 @@ public:
 	ISphQword *	QwordSpawn ( const XQKeyword_t & ) const final;
 	bool		QwordSetup ( ISphQword * pQword ) const final;
 	void				SetSegment ( int iSegment ) { m_iSeg = iSegment; }
-	ISphQword *			ScanSpawn() const final;
+	ISphQword *			ScanSpawn ( int iAtomPos ) const final;
 
 private:
 	const RtGuard_t&	m_tGuard;
@@ -6408,9 +6407,9 @@ bool RtIndex_c::EarlyReject ( CSphQueryContext * pCtx, CSphMatch & tMatch ) cons
 	return false;
 }
 
-ISphQword * RtQwordSetup_t::ScanSpawn () const
+ISphQword * RtQwordSetup_t::ScanSpawn ( int iAtomPos ) const
 {
-	return new RtScanQword_t ( (int)m_pIndex->GetStats().m_iTotalDocuments );
+	return new RtScanQword_t ( (int)m_pIndex->GetStats().m_iTotalDocuments, iAtomPos, m_pIndex->GetMatchSchema().GetFieldsCount() );
 }
 
 

@@ -1,0 +1,43 @@
+––– input –––
+export INSTANCE=1
+––– output –––
+––– block: ../../base/replication/start-searchd-precach –––
+––– input –––
+export INSTANCE=2
+––– output –––
+––– block: ../../base/replication/start-searchd-precach –––
+––– input –––
+export CLUSTER_NAME=c
+––– output –––
+––– block: ../../base/replication/create-cluster –––
+––– block: ../../base/replication/join-cluster-on-all-nodes –––
+––– input –––
+sleep 5; mysql -h0 -P1306 -e "create table c:testrt(id bigint, title text, content text, gid uint) shards=2 rf=1;"; echo $?
+––– output –––
+0
+––– input –––
+mysql -h0 -P1306 -e "show tables from system;"
+––– output –––
+––– input –––
+mysql -h0 -P1306 -e "INSERT INTO c:testrt (id, title, content, gid) values (1, 'Title 1', 'Content 1', 1), (2, 'Title 2', 'Content 2', 2);"; echo $?
+––– output –––
+0
+––– input –––
+mysql -h0 -P1306 -e "INSERT INTO c:testrt (id, title, content, gid) values (3, 'Title 3', 'Content 3', 3);"; echo $?
+––– output –––
+0
+––– input –––
+mysql -h0 -P1306 -e "INSERT INTO c:testrt (id, title, content, gid) values (4, 'Title 4', 'Content 4', 4);"; echo $?
+––– output –––
+0
+––– input –––
+mysql -h0 -P1306 -e "SELECT * FROM c:testrt WHERE id IN (1, 2, 3, 4) ORDER BY id ASC;"
+––– output –––
++------+---------+-----------+------+
+| id   | title   | content   | gid  |
++------+---------+-----------+------+
+|    1 | Title 1 | Content 1 |    1 |
+|    2 | Title 2 | Content 2 |    2 |
+|    3 | Title 3 | Content 3 |    3 |
+|    4 | Title 4 | Content 4 |    4 |
++------+---------+-----------+------+

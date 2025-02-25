@@ -1905,7 +1905,7 @@ static cJSON *get_object_item(const cJSON * const object, const char * const nam
     current_element = object->child;
     if (case_sensitive)
     {
-        while ((current_element != NULL) && (strcmp(name, current_element->string) != 0))
+        while ((current_element != NULL) && (current_element->string != NULL) && (strcmp(name, current_element->string) != 0))
         {
             current_element = current_element->next;
         }
@@ -1918,6 +1918,10 @@ static cJSON *get_object_item(const cJSON * const object, const char * const nam
         }
     }
 
+    if ((current_element == NULL) || (current_element->string == NULL)) {
+        return NULL;
+    }
+    
     return current_element;
 }
 

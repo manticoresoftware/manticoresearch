@@ -7,12 +7,56 @@ Threads ; Batch     ; Time        ; Total Docs  ; Docs/Sec    ; Avg QPS     ; p9
 Threads ; Batch     ; Time        ; Total Docs  ; Docs/Sec    ; Avg QPS     ; p99 QPS     ; p95 QPS     ; p5 QPS      ; p1 QPS      ; Lat Avg     ; Lat p50     ; Lat p95     ; Lat p99     ;
 5       ; 10000     ; %{NUMBER}:%{NUMBER}       ; 100000      ; %{NUMBER}      ; 0           ; 0           ; 0           ; 0           ; 0           ; %{NUMBER}.%{NUMBER}       ; %{NUMBER}.%{NUMBER}       ; %{NUMBER}.%{NUMBER}       ; %{NUMBER}.%{NUMBER}       ;
 ––– input –––
-mysql -P9306 -h0 -e "SELECT id, COUNT(*) AS cnt FROM products LEFT JOIN reviews ON reviews.product_id = products.id GROUP BY id ORDER BY cnt DESC LIMIT 20" | sed 's/|//g; s/^[ \t]*//; s/[ \t][ \t]*/ /g' | grep -v 'id\|+' | awk '{$1=$1}1' > /tmp/count_only.txt; mysql -P9306 -h0 -e "SELECT id, COUNT(*) AS cnt, AVG(reviews.rating) AS avg_rating FROM products LEFT JOIN reviews ON reviews.product_id = products.id GROUP BY id ORDER BY cnt DESC LIMIT 20" | sed 's/|//g; s/^[ \t]*//; s/[ \t][ \t]*/ /g' | grep -v 'id\|+' | awk '{print $1 " " $2}' | awk '{$1=$1}1' > /tmp/count_with_avg.txt
+mysql -P9306 -h0 -e "select id, count(*), avg(reviews.rating) avg_rating from products left join reviews on reviews.product_id = products.id group by id order by count(*) desc; select id, count(*) from products left join reviews on reviews.product_id = products.id group by id order by count(*) desc"
 ––– output –––
-––– input –––
-md5sum <(awk '{$1=$1}1' /tmp/count_only.txt) <(awk '{$1=$1}1' /tmp/count_with_avg.txt) | awk '{print $1}' | uniq | wc -l | grep -q 1 && echo "✅ TEST PASSED: COUNT(*) values match with and without AVG()" || echo "❌ TEST FAILED: COUNT(*) values differ!"
-––– output –––
-✅ TEST PASSED: COUNT(*) values match with and without AVG()
++------+----------+-------------+
+| id   | count(*) | avg_rating  |
++------+----------+-------------+
+|  370 |       23 | 42.73913043 |
+|  499 |       23 | 49.86956522 |
+| 2553 |       23 | 52.26086957 |
+| 2083 |       22 | 53.13636364 |
+| 3197 |       22 |   65.000000 |
+| 3538 |       22 | 54.72727273 |
+| 4848 |       22 | 49.54545455 |
+| 2850 |       22 | 59.40909091 |
+| 9903 |       22 | 40.90909091 |
+| 7947 |       22 | 56.77272727 |
+| 5986 |       22 | 45.09090909 |
+| 1145 |       21 | 51.28571429 |
+| 9245 |       21 | 46.28571429 |
+| 9432 |       21 | 48.14285714 |
+| 4445 |       21 | 47.28571429 |
+|  559 |       21 | 66.61904762 |
+|  677 |       21 | 57.47619048 |
+| 6688 |       21 | 47.47619048 |
+| 5714 |       21 | 59.90476190 |
+|  124 |       20 |   48.500000 |
++------+----------+-------------+
++------+----------+
+| id   | count(*) |
++------+----------+
+|  370 |       23 |
+|  499 |       23 |
+| 2553 |       23 |
+| 2083 |       22 |
+| 3197 |       22 |
+| 3538 |       22 |
+| 4848 |       22 |
+| 2850 |       22 |
+| 9903 |       22 |
+| 7947 |       22 |
+| 5986 |       22 |
+| 1145 |       21 |
+| 9245 |       21 |
+| 9432 |       21 |
+| 4445 |       21 |
+|  559 |       21 |
+|  677 |       21 |
+| 6688 |       21 |
+| 5714 |       21 |
+|  124 |       20 |
++------+----------+
 ––– input –––
 mysql -P9306 -h0 -e "SELECT COUNT(*) FROM products; SELECT COUNT(*) FROM reviews;"
 ––– output –––
@@ -26,71 +70,3 @@ mysql -P9306 -h0 -e "SELECT COUNT(*) FROM products; SELECT COUNT(*) FROM reviews
 +----------+
 |   100000 |
 +----------+
-––– input –––
-rm -f /tmp/count_only.txt /tmp/count_with_avg.txt
-––– output –––
-––– input –––
-cmp_hash=$(mysql -P9306 -h0 -e "SELECT id, COUNT(*) FROM products LEFT JOIN reviews ON reviews.product_id = products.id GROUP BY id ORDER BY COUNT(*) DESC LIMIT 20" | sed 's/|//g; s/^[ \t]*//; s/[ \t][ \t]*/ /g' | grep -v 'id\|+' | awk '{$1=$1}1' | sort | md5sum | awk '{print $1}')
-––– output –––
-––– input –––
-avg_hash=$(mysql -P9306 -h0 -e "SELECT id, COUNT(*), AVG(reviews.rating) FROM products LEFT JOIN reviews ON reviews.product_id = products.id GROUP BY id ORDER BY COUNT(*) DESC LIMIT 20" | sed 's/|//g; s/^[ \t]*//; s/[ \t][ \t]*/ /g' | grep -v 'id\|+' | awk '{print $1 " " $2}' | awk '{$1=$1}1' | sort | md5sum | awk '{print $1}')
-––– output –––
-––– input –––
-[[ "$cmp_hash" == "$avg_hash" ]] && echo "✅ TEST PASSED: COUNT(*) values match with and without AVG()" || echo "❌ TEST FAILED: COUNT(*) values differ!"
-––– output –––
-✅ TEST PASSED: COUNT(*) values match with and without AVG()
-––– input –––
-rm -f /tmp/count_only.txt /tmp/count_with_avg.txt
-––– output –––
-––– input –––
-cmp_hash=$(mysql -P9306 -h0 -e "SELECT id, COUNT(*) FROM products LEFT JOIN reviews ON reviews.product_id = products.id GROUP BY id ORDER BY COUNT(*) DESC LIMIT 20" | tee /dev/tty | sed 's/|//g; s/^[ \t]*//; s/[ \t][ \t]*/ /g' | grep -v 'id\|+' | awk '{$1=$1}1' | sort | md5sum | awk '{print $1}'); avg_hash=$(mysql -P9306 -h0 -e "SELECT id, COUNT(*), AVG(reviews.rating) FROM products LEFT JOIN reviews ON reviews.product_id = products.id GROUP BY id ORDER BY COUNT(*) DESC LIMIT 20" | tee /dev/tty | sed 's/|//g; s/^[ \t]*//; s/[ \t][ \t]*/ /g' | grep -v 'id\|+' | awk '{print $1 " " $2}' | awk '{$1=$1}1' | sort | md5sum | awk '{print $1}'); if [[ "$cmp_hash" == "$avg_hash" ]]; then echo "✅ TEST PASSED: COUNT(*) values match with and without AVG()"; else echo "⚠️ WARNING: COUNT(*) values differ! Review output above."; fi
-––– output –––
-+------+----------+
-| id   | count(*) |
-+------+----------+
-| %{NUMBER} |       %{NUMBER} |
-| %{NUMBER} |       %{NUMBER} |
-| %{NUMBER} |       %{NUMBER} |
-| %{NUMBER} |       %{NUMBER} |
-| %{NUMBER} |       %{NUMBER} |
-| %{NUMBER} |       %{NUMBER} |
-| %{NUMBER} |       %{NUMBER} |
-| %{NUMBER} |       %{NUMBER} |
-| %{NUMBER} |       %{NUMBER} |
-| %{NUMBER} |       %{NUMBER} |
-| %{NUMBER} |       %{NUMBER} |
-| %{NUMBER} |       %{NUMBER} |
-| %{NUMBER} |       %{NUMBER} |
-| %{NUMBER} |       %{NUMBER} |
-| %{NUMBER} |       %{NUMBER} |
-| %{NUMBER} |       %{NUMBER} |
-| %{NUMBER} |       %{NUMBER} |
-| %{NUMBER} |       %{NUMBER} |
-| %{NUMBER} |       %{NUMBER} |
-| %{NUMBER} |       %{NUMBER} |
-+------+----------+
-+------+----------+---------------------+
-| id   | count(*) | avg(reviews.rating) |
-+------+----------+---------------------+
-| %{NUMBER} |       %{NUMBER} |         %{NUMBER}.%{NUMBER} |
-| %{NUMBER} |       %{NUMBER} |         %{NUMBER}.%{NUMBER} |
-| %{NUMBER} |       %{NUMBER} |         %{NUMBER}.%{NUMBER} |
-| %{NUMBER} |       %{NUMBER} |         %{NUMBER}.%{NUMBER} |
-| %{NUMBER} |       %{NUMBER} |         %{NUMBER}.%{NUMBER} |
-| %{NUMBER} |       %{NUMBER} |         %{NUMBER}.%{NUMBER} |
-| %{NUMBER} |       %{NUMBER} |         %{NUMBER}.%{NUMBER} |
-| %{NUMBER} |       %{NUMBER} |         %{NUMBER}.%{NUMBER} |
-| %{NUMBER} |       %{NUMBER} |         %{NUMBER}.%{NUMBER} |
-| %{NUMBER} |       %{NUMBER} |         %{NUMBER}.%{NUMBER} |
-| %{NUMBER} |       %{NUMBER} |         %{NUMBER}.%{NUMBER} |
-| %{NUMBER} |       %{NUMBER} |         %{NUMBER}.%{NUMBER} |
-| %{NUMBER} |       %{NUMBER} |         %{NUMBER}.%{NUMBER} |
-| %{NUMBER} |       %{NUMBER} |         %{NUMBER}.%{NUMBER} |
-| %{NUMBER} |       %{NUMBER} |         %{NUMBER}.%{NUMBER} |
-| %{NUMBER} |       %{NUMBER} |         %{NUMBER}.%{NUMBER} |
-| %{NUMBER} |       %{NUMBER} |         %{NUMBER}.%{NUMBER} |
-| %{NUMBER} |       %{NUMBER} |         %{NUMBER}.%{NUMBER} |
-| %{NUMBER} |       %{NUMBER} |         %{NUMBER}.%{NUMBER} |
-| %{NUMBER} |       %{NUMBER} |         %{NUMBER}.%{NUMBER} |
-+------+----------+---------------------+
-✅ TEST PASSED: COUNT(*) values match with and without AVG()

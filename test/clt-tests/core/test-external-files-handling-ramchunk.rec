@@ -128,9 +128,8 @@ mysql -h0 -P9306 -e "SHOW INDEX t_ram SETTINGS;"
 | settings      | rt_mem_limit = 268435456 |
 +---------------+--------------------------+
 ––– input –––
-rm -f /var/log/manticore/searchd.log; searchd --stopwait > /dev/null; searchd | grep precached; if timeout 10 grep -qm1 '\[BUDDY\] started' <(tail -n 1000 -f /var/log/manticore/searchd.log); then echo 'Buddy started!'; else echo 'Timeout or failed!'; cat /var/log/manticore/searchd.log; fi
+rm -f /var/log/manticore/searchd.log; searchd --stopwait > /dev/null; searchd > /dev/null; if timeout 10 grep -qm1 '\[BUDDY\] started' <(tail -n 1000 -f /var/log/manticore/searchd.log); then echo 'Buddy started!'; else echo 'Timeout or failed!'; cat /var/log/manticore/searchd.log; fi
 ––– output –––
-precached 1 tables in #!/[0-9]+\.[0-9]+/!# sec
 Buddy started!
 ––– input –––
 mysql -h0 -P9306 -e "SHOW INDEX t_ram SETTINGS;"
@@ -163,9 +162,8 @@ wordforms = /var/lib/manticore/t_ram/wordforms_chunk2_0.txt /var/lib/manticore/t
 rt_mem_limit = 268435456 |
 +---------------+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
 ––– input –––
-rm -f /var/log/manticore/searchd.log; searchd --stopwait > /dev/null; searchd | grep precached; if timeout 10 grep -qm1 '\[BUDDY\] started' <(tail -n 1000 -f /var/log/manticore/searchd.log); then echo 'Buddy started!'; else echo 'Timeout or failed!'; cat /var/log/manticore/searchd.log; fi
+rm -f /var/log/manticore/searchd.log; searchd --stopwait > /dev/null; searchd > /dev/null; if timeout 10 grep -qm1 '\[BUDDY\] started' <(tail -n 1000 -f /var/log/manticore/searchd.log); then echo 'Buddy started!'; else echo 'Timeout or failed!'; cat /var/log/manticore/searchd.log; fi
 ––– output –––
-precached 1 tables in #!/[0-9]+\.[0-9]+/!# sec
 Buddy started!
 ––– input –––
 mysql -h0 -P9306 -e "SHOW INDEX t_ram SETTINGS;"

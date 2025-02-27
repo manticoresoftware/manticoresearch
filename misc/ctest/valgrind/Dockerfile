@@ -101,6 +101,6 @@ WORKDIR /work
 ENTRYPOINT ["/bin/bash", "/entry_point.sh"]
 CMD []
 
-# docker build -t manticore_valgrind:jammy
-# docker tag manticore_valgrind:jammy manticoresearch/manticore_valgrind:jammy
+# docker build -t manticore_valgrind:jammy .
+# docker image tag manticore_valgrind:jammy manticoresearch/manticore_valgrind:jammy
 # docker push manticoresearch/manticore_valgrind:jammy

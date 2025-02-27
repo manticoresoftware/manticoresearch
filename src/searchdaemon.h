@@ -20,7 +20,6 @@
 #include "searchdconfig.h"
 #include "memio.h"
 #include "accumulator.h"
-#include "auth/auth.h"
 
 /////////////////////////////////////////////////////////////////////////////
 // MACHINE-DEPENDENT STUFF
@@ -454,6 +453,8 @@ public:
 		m_dOut.WriteInt ( m_iPos, (int) iBlobLen );
 	}
 };
+
+struct ApiAuthToken_t;
 
 // RAII Start Sphinx API command/request header
 APIBlob_c APIHeader ( ISphOutputBuffer & dBuff, WORD uCommand, WORD uVer, const ApiAuthToken_t & tToken );
@@ -1327,6 +1328,7 @@ public:
 // from mysqld_error.h
 enum class EMYSQL_ERR : WORD
 {
+	ACCESS_DENIED_ERROR			= 1045,
 	UNKNOWN_COM_ERROR			= 1047,
 	SERVER_SHUTDOWN				= 1053,
 	PARSE_ERROR					= 1064,

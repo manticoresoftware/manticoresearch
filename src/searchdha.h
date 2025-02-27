@@ -27,7 +27,7 @@ bool LoadExFunctions ();
 #include "sphinxutils.h"
 #include "searchdaemon.h"
 #include "timeout_queue.h"
-#include "auth/auth.h"
+#include "auth/auth_proto_api.h"
 
 /////////////////////////////////////////////////////////////////////////////
 // SOME SHARED GLOBAL VARIABLES

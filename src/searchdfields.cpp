@@ -10,6 +10,7 @@
 
 #include "sphinxstd.h"
 #include "searchdha.h"
+#include "auth/auth.h"
 
 struct FieldRequest_t
 {
@@ -595,6 +596,9 @@ void HandleCommandGetField ( ISphOutputBuffer & tOut, WORD uVer, InputBuffer_c &
 		SendErrorReply ( tOut, "invalid or truncated request" );
 		return;
 	}
+
+	if ( !ApiCheckPerms ( session::GetUser(), AuthAction_e::READ, tRequest.m_sIndexes, tOut ) )
+		return;
 
 	// fetch stored fields
 	DocHash_t tFetched ( tRequest.m_dDocs.GetLength() );

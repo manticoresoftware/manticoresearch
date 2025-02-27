@@ -175,7 +175,7 @@ set ( SEARCHD_H searchdaemon.h searchdconfig.h searchdddl.h searchdexpr.h search
 		client_session.h compressed_zstd_mysql.h docs_collector.h index_rotator.h config_reloader.h searchdhttp.h timeout_queue.h
 		netpoll.h pollable_event.h netfetch.h searchdbuddy.h sphinxql_second.h sphinxql_extra.h sphinxjsonquery.h
 		frontendschema.h debug_cmds.h dynamic_idx.h sphinxexcerpt.h taskflushdisk.h
-		auth/auth.h)
+		auth/auth.h auth/auth_common.h auth/auth_proto_http.h auth/auth_proto_mysql.h auth/auth_proto_api.h digest_sha256.h auth/auth_perms.h)
 
 
 # add the extra targets in the case we want on-the-fly grammar compiler
@@ -257,12 +257,14 @@ add_library ( lsearchd OBJECT searchdha.cpp http/http_parser.c searchdhttp.cpp
 		sphinxql_debug.cpp sphinxql_second.cpp stackmock.cpp docs_collector.cpp index_rotator.cpp config_reloader.cpp netpoll.cpp
 		pollable_event.cpp netfetch.cpp searchdbuddy.cpp searchdhttpcompat.cpp sphinxql_extra.cpp searchdreplication.cpp sphinxjsonquery.cpp
 		frontendschema.cpp compressed_http.cpp debug_cmds.cpp jsonqueryfilter.cpp dynamic_idx.cpp sphinxexcerpt.cpp searchdexpr.cpp taskflushdisk.cpp
-		auth/auth.cpp)
+		auth/auth.cpp auth/auth_common.cpp auth/auth_proto_http.cpp auth/auth_proto_mysql.cpp auth/auth_proto_api.cpp auth/auth_perms.cpp)
 		
 target_sources ( lsearchd PUBLIC ${SEARCHD_SRCS_TESTABLE} ${SEARCHD_H} ${SEARCHD_BISON} ${SEARCHD_FLEX} )
 add_library ( digest_sha1 digest_sha1.cpp )
+add_library ( digest_sha256 digest_sha256.cpp )
 target_link_libraries ( digest_sha1 PRIVATE lextra )
-target_link_libraries ( lsearchd PUBLIC digest_sha1 lextra nlohmann_json::nlohmann_json )
+target_link_libraries ( digest_sha256 PRIVATE lextra )
+target_link_libraries ( lsearchd PUBLIC digest_sha1 digest_sha256 lextra nlohmann_json::nlohmann_json )
 target_link_libraries ( lsearchd INTERFACE Boost::filesystem )
 
 function (stackmock processors compiler versions config values)
@@ -335,9 +337,11 @@ if (WITH_SSL)
 	target_link_libraries ( searchd_ssl PRIVATE OpenSSL::Crypto )
 	target_link_libraries ( digest_sha1 PRIVATE OpenSSL::SSL )
 	target_link_libraries ( digest_sha1 PRIVATE OpenSSL::Crypto )
+	target_link_libraries ( digest_sha256 PRIVATE OpenSSL::SSL )
+	target_link_libraries ( digest_sha256 PRIVATE OpenSSL::Crypto )
 	if (${CMAKE_SYSTEM_NAME} STREQUAL "Linux" OR ${CMAKE_SYSTEM_NAME} STREQUAL "FreeBSD")
 		target_link_options ( searchd_ssl INTERFACE $<${ONLYGNUCLANGC_CXX}:-Wl,--exclude-libs,libssl.a,--exclude-libs,libcrypto.a> )
-		target_link_options ( digest_sha1 INTERFACE $<${ONLYGNUCLANGC_CXX}:-Wl,--exclude-libs,libssl.a,--exclude-libs,libcrypto.a> )
+		target_link_options ( digest_sha1 digest_sha256 INTERFACE $<${ONLYGNUCLANGC_CXX}:-Wl,--exclude-libs,libssl.a,--exclude-libs,libcrypto.a> )
 	endif()
 	target_compile_options ( searchd_ssl PRIVATE "$<$<COMPILE_LANG_AND_ID:CXX,GNU>:-Wno-deprecated-declarations>" )
 	include ( CheckFunctionExists )

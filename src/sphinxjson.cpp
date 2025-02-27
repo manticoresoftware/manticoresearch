@@ -3108,9 +3108,14 @@ bool Bson_c::BsonToBson ( CSphVector<BYTE> &dOutput ) const
 }
 
 
-const char * Bson_c::sError () const
+const char * Bson_c::Error () const
 {
 	return m_sError.cstr();
+}
+
+bool Bson_c::HasError () const
+{
+	return !m_sError.IsEmpty();
 }
 
 BsonIterator_c::BsonIterator_c ( const NodeHandle_t &dParent )

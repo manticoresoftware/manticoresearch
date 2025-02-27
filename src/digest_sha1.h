@@ -85,3 +85,4 @@ CSphString BinToHex ( const BYTE* pHash, int iLen );
 CSphString CalcSHA1 ( const void* pData, int iLen );
 bool CalcSHA1 ( const CSphString& sFileName, CSphString& sRes, CSphString& sError );
 HASH20_t CalcBinarySHA1 ( const void * pData, int iLen );
+inline BYTE HexChar ( unsigned char c ) noexcept;

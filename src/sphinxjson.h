@@ -658,7 +658,8 @@ public:
 	// helpers
 	inline ESphJsonType GetType() const { return m_dData.second; }
 	operator NodeHandle_t () const { return m_dData; }
-	const char * sError () const;
+	const char * Error () const;
+	bool HasError () const;
 };
 
 // iterate over Bson_c

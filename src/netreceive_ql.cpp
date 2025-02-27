@@ -16,7 +16,7 @@
 #include "compressed_zlib_mysql.h"
 #include "compressed_zstd_mysql.h"
 #include "searchdbuddy.h"
-#include "auth/auth.h"
+#include "auth/auth_proto_mysql.h"
 
 extern int g_iClientQlTimeoutS;    // sec
 extern volatile bool g_bMaintenance;

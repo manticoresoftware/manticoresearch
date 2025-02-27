@@ -24,6 +24,8 @@
 
 #include "netfetch.h"
 #include "searchdbuddy.h"
+#include "auth/auth.h"
+#include "auth/auth_proto_http.h"
 
 static std::unique_ptr<boost::process::child> g_pBuddy;
 static CSphString g_sPath;

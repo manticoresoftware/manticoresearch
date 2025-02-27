@@ -81,6 +81,7 @@
 #include "detail/expmeter.h"
 #include "taskflushdisk.h"
 #include "auth/auth.h"
+#include "auth/auth_proto_mysql.h"
 
 extern "C"
 {
@@ -7829,6 +7830,12 @@ void HandleCommandSearch ( ISphOutputBuffer & tOut, WORD uVer, InputBuffer_c & t
 		if ( !ParseSearchQuery ( tReq, tOut, dQuery, uVer, uMasterVer ) )
 			return;
 
+	CSphString sTmpIndex;
+	const CSphString & sIndex = ( tHandler.m_dQueries.IsEmpty() ? sTmpIndex.scstr() : tHandler.m_dQueries[0].m_sIndexes );
+	// assumes the multiple queries are to the same index
+	if ( !ApiCheckPerms ( session::GetUser(), AuthAction_e::READ, sIndex, tOut ) )
+		return;
+
 	if ( !tHandler.m_dQueries.IsEmpty() )
 	{
 		QueryType_e eQueryType = tHandler.m_dQueries[0].m_eQueryType;
@@ -8024,7 +8031,7 @@ static const char * g_dSqlStmts[] =
 	"flush_hostnames", "flush_logs", "reload_indexes", "sysfilters", "debug", "alter_killlist_target",
 	"alter_index_settings", "join_cluster", "cluster_create", "cluster_delete", "cluster_index_add",
 	"cluster_index_delete", "cluster_update", "explain", "import_table", "freeze_indexes", "unfreeze_indexes",
-	"show_settings", "alter_rebuild_si", "kill", "show_locks", "show_scroll", "show_table_indexes"
+	"show_settings", "alter_rebuild_si", "kill", "show_locks", "show_scroll", "show_table_indexes", "reload_auth"
 };
 
 
@@ -8825,6 +8832,10 @@ void HandleCommandExcerpt ( ISphOutputBuffer & tOut, int iVer, InputBuffer_c & t
 			return;
 		}
 	}
+
+	if ( !ApiCheckPerms ( session::GetUser(), AuthAction_e::READ, sIndex, tOut ) )
+		return;
+
 	myinfo::SetTaskInfo ( R"(api-snippet datasize=%.1Dk query="%s")", GetSnippetDataSize ( dQueries ), q.m_sQuery.scstr ());
 
 	if ( !MakeSnippets ( sIndex, dQueries, q, sError ) )
@@ -8877,6 +8888,9 @@ static void HandleCommandKeywords ( ISphOutputBuffer & tOut, WORD uVer, InputBuf
 
 	if ( uVer>=0x102 )
 		tSettings.m_eJiebaMode = (JiebaMode_e)tReq.GetInt();
+
+	if ( !ApiCheckPerms ( session::GetUser(), AuthAction_e::READ, sIndex, tOut ) )
+		return;
 
 	CSphString sError;
 	SearchFailuresLog_c tFailureLog;
@@ -9184,6 +9198,9 @@ void HandleCommandUpdate ( ISphOutputBuffer & tOut, int iVer, InputBuffer_c & tR
 
 	if ( tReq.GetError() )
 		return SendErrorReply ( tOut, "invalid or truncated request" );
+
+	if ( !ApiCheckPerms ( session::GetUser(), AuthAction_e::WRITE, sIndexes, tOut ) )
+		return;
 
 	// check index names
 	StrVec_t dIndexNames;
@@ -9690,6 +9707,9 @@ void HandleCommandStatus ( ISphOutputBuffer & tOut, WORD uVer, InputBuffer_c & t
 
 	bool bGlobalStat = tReq.GetDword ()!=0;
 
+	if ( !ApiCheckPerms ( session::GetUser(), AuthAction_e::SCHEMA, "", tOut ) )
+		return;
+
 	VectorLike dStatus;
 
 	if ( bGlobalStat )
@@ -9720,6 +9740,9 @@ void HandleCommandStatus ( ISphOutputBuffer & tOut, WORD uVer, InputBuffer_c & t
 void HandleCommandFlush ( ISphOutputBuffer & tOut, WORD uVer )
 {
 	if ( !CheckCommandVersion ( uVer, VER_COMMAND_FLUSHATTRS, tOut ) )
+		return;
+
+	if ( !ApiCheckPerms ( session::GetUser(), AuthAction_e::WRITE, "", tOut ) )
 		return;
 
 	int iTag = CommandFlush ();
@@ -10712,6 +10735,9 @@ void HandleCommandCallPq ( ISphOutputBuffer &tOut, WORD uVer, InputBuffer_c &tRe
 			SendErrorReply ( tOut, "Can't retrieve doc from input buffer" );
 			return;
 		}
+
+	if ( !ApiCheckPerms ( session::GetUser(), AuthAction_e::READ, tOpts.m_sIndex, tOut ) )
+		return;
 
 	// working
 	CSphSessionAccum tAcc;
@@ -12373,6 +12399,9 @@ void HandleCommandSuggest ( ISphOutputBuffer & tOut, WORD uVer, InputBuffer_c & 
 		return;
 	}
 
+	if ( !ApiCheckPerms ( session::GetUser(), AuthAction_e::READ, sIndex, tOut ) )
+		return;
+
 	auto pServed = GetServed ( sIndex );
 	if ( !pServed )
 	{
@@ -13615,6 +13644,9 @@ void HandleCommandUserVar ( ISphOutputBuffer & tOut, WORD uVer, InputBuffer_c & 
 		SendErrorReply ( tOut, "invalid or truncated request" );
 		return;
 	}
+
+	if ( !ApiCheckPerms ( session::GetUser(), AuthAction_e::WRITE, sUserVar, tOut ) )
+		return;
 
 	SphAttr_t iLast = 0;
 	const BYTE * pCur = dBuf.Begin();
@@ -17514,6 +17546,13 @@ bool ClientSession_c::Execute ( Str_t sQuery, RowBuffer_i & tOut )
 		}
 	}
 
+	if ( bParsedOK && !SqlCheckPerms ( session::GetUser(), dStmt, m_sError ) )
+	{
+		FreezeLastMeta();
+		tOut.Error ( m_sError.cstr(), EMYSQL_ERR::ACCESS_DENIED_ERROR );
+		return true;
+	}
+
 	// handle multi SQL query
 	if ( bParsedOK && dStmt.GetLength()>1 )
 	{
@@ -17967,6 +18006,12 @@ bool ClientSession_c::Execute ( Str_t sQuery, RowBuffer_i & tOut )
 		HandleMysqlShowTableIndexes ( tOut, *pStmt );
 		return true;
 
+	case STMT_RELOAD_AUTH:
+		if ( AuthReload ( m_sError ) )
+			tOut.Ok();
+		else
+			tOut.Error ( m_sError.cstr() );
+		return true;
 
 	default:
 		m_sError.SetSprintf ( "internal error: unhandled statement type (value=%d)", eStmt );

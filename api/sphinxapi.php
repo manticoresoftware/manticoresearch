@@ -1935,8 +1935,8 @@ class SphinxClient
 	{
 		$this->user = $user;
 		
-		$pwd_hash = sha1 ( $password, true );
-		$pwd_hash = sha1 ( $user . $pwd_hash, true );
+		$password_hash = hash ( "sha256", $password, true );
+		$pwd_hash = hash ( "sha256", $user . $password_hash, true );
 		$this->user_token = $pwd_hash;
 	}
 	
@@ -1948,7 +1948,7 @@ class SphinxClient
 			$data .= pack ( "C", AUTH_NO );
 		} else
 		{
-			$data .= pack ( "C", AUTH_SHA1 );
+			$data .= pack ( "C", AUTH_SHA256 );
 			$data .= $this->user_token;
 		}
 		

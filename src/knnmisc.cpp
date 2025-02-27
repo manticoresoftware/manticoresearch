@@ -16,7 +16,7 @@
 #include "sphinxjson.h"
 
 
-static void NormalizeVec ( VecTraits_T<float> & dData )
+void NormalizeVec ( VecTraits_T<float> & dData )
 {
 	float fNorm = 0.0f;
 	for ( auto i : dData )
@@ -51,7 +51,6 @@ private:
 	std::unique_ptr<columnar::Iterator_i> m_pIterator;
 
 	util::Span_T<const  knn::DocDist_t>	m_dData;
-	mutable CSphVector<float>			m_dTmp;
 	mutable const knn::DocDist_t *		m_pStart = nullptr;
 };
 
@@ -68,8 +67,7 @@ Expr_KNNDist_c::Expr_KNNDist_c ( const CSphVector<float> & dAnchor, const CSphCo
 
 float Expr_KNNDist_c::Eval ( const CSphMatch & tMatch ) const
 {
-	 // use precalculated data on non-quantized vectors (if available)
-	if ( m_pStart && m_tAttr.m_tKNN.m_eQuantization==knn::Quantization_e::NONE )
+	if ( m_pStart ) // use precalculated data
 	{
 		const knn::DocDist_t * pEnd = m_dData.end();
 		const knn::DocDist_t * pPtr = std::lower_bound ( m_pStart, pEnd, tMatch.m_tRowID, []( auto & tEntry, RowID_t tValue ){ return tEntry.m_tRowID < tValue; } );
@@ -80,7 +78,6 @@ float Expr_KNNDist_c::Eval ( const CSphMatch & tMatch ) const
 	else // calculate distance
 	{
 		// this code path is used when no iterator is available, i.e. in ram chunk
-		// so performance is not critical
 		ByteBlob_t tRes;
 		if ( m_tAttr.IsColumnar() )
 			tRes.second = m_pIterator->Get ( tMatch.m_tRowID, tRes.first );
@@ -88,14 +85,6 @@ float Expr_KNNDist_c::Eval ( const CSphMatch & tMatch ) const
 			tRes = tMatch.FetchAttrData ( m_tAttr.m_tLocator, m_pBlobPool );
 
 		VecTraits_T<float> dData ( (float*)tRes.first, tRes.second / sizeof(float) );
-		if ( m_tAttr.m_tKNN.m_eHNSWSimilarity==knn::HNSWSimilarity_e::COSINE )
-		{
-			m_dTmp.Resize ( dData.GetLength() );
-			memcpy ( m_dTmp.Begin(), dData.Begin(), dData.GetLengthBytes() );
-			NormalizeVec(m_dTmp);
-			dData = m_dTmp;
-		}
-
 		if ( dData.GetLength()!=m_tAttr.m_tKNN.m_iDims )
 			return FLT_MAX;
 

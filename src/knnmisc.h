@@ -18,6 +18,7 @@
 
 const char *					GetKnnDistAttrName();
 ISphExpr *						CreateExpr_KNNDist ( const CSphVector<float> & dAnchor, const CSphColumnInfo & tAttr );
+void							NormalizeVec ( VecTraits_T<float> & dData );
 
 void							operator << ( JsonEscapedBuilder & tOut, const knn::IndexSettings_t & tSettings );
 void							AddKNNSettings ( StringBuilder_c & sRes, const CSphColumnInfo & tAttr );

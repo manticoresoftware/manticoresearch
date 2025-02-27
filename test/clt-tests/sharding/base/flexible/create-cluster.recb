@@ -1,0 +1,9 @@
+––– input –––
+mysql -h0 -P1306 -e "create cluster ${CLUSTER_NAME}"
+––– output –––
+––– input –––
+mysql -h0 -P1306 -e "show status like 'cluster_${CLUSTER_NAME}_status'\G"
+––– output –––
+*************************** 1. row ***************************
+Counter: cluster_#!/[a-z]+/!#_status
+Value: primary

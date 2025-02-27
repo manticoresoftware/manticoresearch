@@ -1,0 +1,74 @@
+––– block: ../base/init –––
+––– input –––
+export INSTANCE=1
+––– output –––
+––– block: ../base/flexible/start-searchd –––
+––– input –––
+export INSTANCE=2
+––– output –––
+––– block: ../base/flexible/start-searchd –––
+––– input –––
+export INSTANCE=3
+––– output –––
+––– block: ../base/flexible/start-searchd –––
+––– input –––
+export INSTANCE=4
+––– output –––
+––– block: ../base/flexible/start-searchd –––
+––– input –––
+export INSTANCE=5
+––– output –––
+––– block: ../base/flexible/start-searchd –––
+––– input –––
+mysql -h0 -P1306 -e "CREATE TABLE tbl1"; echo $?
+––– output –––
+0
+––– input –––
+mysql -h0 -P1306 -e "create table tbl2(id bigint) shards=10 rf=1;"; echo $?
+––– output –––
+0
+––– input –––
+mysql -h0 -P1306 -e "create table tbl3 shards=10 rf=1;"; echo $?
+––– output –––
+0
+––– input –––
+mysql -h0 -P2306 -e "create table tbl4(id bigint) shards=4 rf=1;"; echo $?
+––– output –––
+0
+––– input –––
+mysql -h0 -P2306 -e "create table tbl5(id bigint) shards=10 rf=1;"; echo $?
+––– output –––
+0
+––– input –––
+export CLUSTER_NAME=c
+––– output –––
+––– input –––
+mysql -h0 -P1306 -e "create cluster ${CLUSTER_NAME}"
+––– output –––
+––– input –––
+for n in `seq 2 $INSTANCE`; do mysql -h0 -P${n}306 -e "join cluster ${CLUSTER_NAME} at '127.0.0.1:1312'"; done;
+––– output –––
+––– input –––
+mysql -h0 -P3306 -e "create table ${CLUSTER_NAME}:tbl7(id bigint) shards=10 rf=1;"; echo $?
+––– output –––
+––– input –––
+mysql -h0 -P3306 -e "create table ${CLUSTER_NAME}:tbl8(id bigint) shards=10 rf=2;"; echo $?
+––– output –––
+––– input –––
+mysql -h0 -P3306 -e "create table ${CLUSTER_NAME}:tbl9(id bigint) shards=10 rf=3;"; echo $?
+––– output –––
+––– input –––
+mysql -h0 -P3306 -e "create table tbl8(id bigint) shards=10 rf=1;"; echo $?
+––– output –––
+––– input –––
+mysql -h0 -P3306 -e "create table ${CLUSTER_NAME}:tbl10(id bigint) shards=10 rf=4;"; echo $?
+––– output –––
+––– input –––
+mysql -h0 -P4306 -e "create table tbl10(id bigint) rf=1 shards=11;"; echo $?
+––– output –––
+––– input –––
+mysql -h0 -P4306 -e "create table ${CLUSTER_NAME}:tbl12(id bigint) rf=1 shards=10;"; echo $?
+––– output –––
+––– input –––
+mysql -h0 -P4306 -e "create table ${CLUSTER_NAME}:tbl13(id bigint) shards=1 rf=10;"; echo $?
+––– output –––

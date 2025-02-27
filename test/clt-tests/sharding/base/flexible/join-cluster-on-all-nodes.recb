@@ -1,0 +1,9 @@
+––– input –––
+for n in `seq 2 $INSTANCE`; do mysql -h0 -P${n}306 -e "join cluster ${CLUSTER_NAME} at '127.0.0.1:1312'"; done;
+––– output –––
+––– input –––
+mysql -h0 -P${INSTANCE}306 -e "show status like 'cluster_${CLUSTER_NAME}_status'\G"
+––– output –––
+*************************** 1. row ***************************
+Counter: cluster_#!/[a-z]+/!#_status
+Value: primary

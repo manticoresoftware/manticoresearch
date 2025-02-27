@@ -10,6 +10,7 @@ cd build
 [[ ! -e "${CACHEB}" ]] && mkdir -p ${CACHEB}
 [[ -z "${uid}" ]] && export uid=`id -u`
 [[ -z "${gid}" ]] && export gid=`id -g`
+trap "chown -R $uid:$gid ." EXIT
 
 export CTEST_CONFIGURATION_TYPE=RelWithDebInfo
 export CTEST_CMAKE_GENERATOR=Ninja
@@ -26,4 +27,3 @@ export NO_TESTS=0
 rm -f Testing/Temporary/MemoryChecker.*.log
 time ctest -V -S ../misc/ctest/memcheck.cmake
 find Testing/Temporary/MemoryChecker.*.log -size 0 -delete
-chown -R $uid:$gid .

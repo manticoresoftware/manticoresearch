@@ -1,5 +1,5 @@
 name: Nightly tests
-run-name: Nightly tests ${{ github.sha }}
+run-name: 🌙 Nightly tests ${{ github.sha }}
 
 on:
   schedule:

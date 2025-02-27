@@ -1,5 +1,5 @@
 name: CLT testing of supported versions of mysqldump
-run-name: CLT testing of supported versions of mysqldump ${{ github.sha }}
+run-name: 🌙 CLT testing of supported versions of mysqldump ${{ github.sha }}
 
 on:
   schedule:

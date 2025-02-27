@@ -1,7 +1,8 @@
 #!/bin/bash
 #Run shell in valgrind docker
 
-BUILD_DOCKER=manticore_valgrind:jammy
+# Use environment variable BUILD_DOCKER if set, otherwise use default value
+BUILD_DOCKER=${BUILD_DOCKER:-manticoresearch/manticore_valgrind:jammy}
 CONFIG=RelWithDebInfo
 WORKDIR=/work
 

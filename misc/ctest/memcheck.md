@@ -20,7 +20,7 @@ It is recommended to clean the `/manticore/source/dir/build` folder. This may no
 
 After running, you may notice the text near the end of the output:
 ```
-MemCheck log files can be found here: (<#> corresponds to the test number)
+MemCheck log files can be found here: (<#> corresponds to test number)
 /manticore/source/dir/build/Testing/Temporary/MemoryChecker.<#>.log
 ```
 

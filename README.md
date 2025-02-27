@@ -145,7 +145,7 @@ Docker image is available on [Docker Hub](https://dockr.ly/33biV0U).
 To experiment with Manticore Search in Docker just run:
 
 ```
-docker run -e EXTRA=1 --name manticore --rm -d manticoresearch/manticore && until docker logs manticore 2>&1 | grep -q "accepting connections"; do sleep 1; done && docker exec -it manticore mysql && docker stop manticore
+docker run --name manticore --rm -d manticoresearch/manticore && until docker logs manticore 2>&1 | grep -q "accepting connections"; do sleep 1; done && docker exec -it manticore mysql && docker stop manticore
 ```
 
 You can then: create a table, add data and run searches. For example:

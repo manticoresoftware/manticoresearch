@@ -24,7 +24,7 @@ docker network create app-network --driver bridge > /dev/null; echo $?
 ––– output –––
 0
 ––– input –––
-docker run -it -e EXTRA=1 --network=app-network --platform linux/amd64 --name manticore -d ghcr.io/manticoresoftware/manticoresearch:test-kit-latest bash > /dev/null 2>&1; echo $?
+docker run -it --network=app-network --platform linux/amd64 --name manticore -d ghcr.io/manticoresoftware/manticoresearch:test-kit-latest bash > /dev/null 2>&1; echo $?
 ––– output –––
 0
 ––– input –––

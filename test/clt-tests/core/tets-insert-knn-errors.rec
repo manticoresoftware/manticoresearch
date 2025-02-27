@@ -96,7 +96,6 @@ vector integer
 ) |
 +-----------+------------------------------------------------------------------+
 ––– input –––
-––– input –––
 mysql -h0 -P9306 -e "CREATE TABLE knn_test5 (id BIGINT, model TEXT, vector float_vector knn_type='hnsw' knn_dims='4' hnsw_similarity='l2')"; echo $?
 ––– output –––
 0

@@ -1,0 +1,21 @@
+#!/usr/bin/env bash
+
+set -e
+record=$(cat "$1")
+replay=$(cat "$2")
+
+for r in $record; do
+	found=0
+	for p in $replay; do
+		if [ "$r" = "$p" ]; then
+			found=1
+			break
+		fi
+	done
+	if [ $found -eq 0 ]; then
+		echo "Record '$r' not found in replay"
+		exit 1
+	fi
+done
+echo "All records match with replay"
+

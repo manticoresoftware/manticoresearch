@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <Test>
-  <Name>SphinxQL: additional stuff over rt index</Name>
+  <Name>SphinxQL: additional stuff over rt index, non-columnar</Name>
 	<requires>
 		<force-rt/>
 		<non-columnar/>
@@ -22,6 +22,15 @@ index indexrt
 	stored_fields = text
 }
 
+index check
+{
+	type			= rt
+	path 			= <data_path/>/check
+	rt_field		= text
+	stored_fields = text
+	index_field_lengths = 1
+}
+
 </Config>
 
 <queries>
@@ -32,6 +41,7 @@ index indexrt
 	insert into indexrt values (5,'text five',2),(6,'text six',3);
 	flush ramchunk indexrt;
 	insert into indexrt values (7,'text seven',3),(8,'text eight',3);
+	insert into check values (7,'text seven'),(8,'text eight');
 
 <!-- stuff from mysqldump in usual mode -->
 /*!40100 SET @@SQL_MODE='' */;
@@ -90,6 +100,14 @@ SET SESSION character_set_results = 'utf8mb4';
 SET SESSION character_set_results = 'binary';
 SELECT COLUMN_NAME,                       JSON_EXTRACT(HISTOGRAM, '$."number-of-buckets-specified"')                FROM information_schema.COLUMN_STATISTICS                WHERE SCHEMA_NAME = 'manticore' AND TABLE_NAME = 'indexrt';
 
+
+show create table `check`;
+show fields from `check`;
+SELECT /*!40001 SQL_NO_CACHE */ * FROM `check`;
+SELECT * FROM `check`;
+
+/*M!999999\- enable the sandbox mode */
+/*!40101 SET @OLD_CHARACTER_SET_CLIENT=@@CHARACTER_SET_CLIENT */;
 
 </sphinxql>
 </queries>

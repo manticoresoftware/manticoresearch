@@ -33,7 +33,7 @@ SELECT
 ```json
 POST /search
 {   
-    "index" : "index_name",
+    "table" : "table_name",
     "options":   
     {
       ...

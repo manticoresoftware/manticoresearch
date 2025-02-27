@@ -250,6 +250,12 @@ select GROUP_CONCAT(CONCAT(str,',',to_string(bint))) from test GROUP BY bint;
 select CONCAT(str,',',to_string(bint)) a, GROUP_CONCAT(a) from test GROUP BY bint;
 select id, concat(str) as g, group_concat(g) as grp from test group 2 by str;
 
+<!-- case PackedFactors missed for the query from the query cache -->
+set global qcache_max_bytes=10000;
+set global qcache_thresh_msec=0;
+set global qcache_ttl_sec=1;
+select id, packedfactors() pf from test where match('title') order by id asc OPTION ranker=expr('1');
+select id, packedfactors() pf from test where match('title') order by id asc OPTION ranker=expr('1');
 
 <!-- fixme: NOT TESTED 
 Expr_Udf_c

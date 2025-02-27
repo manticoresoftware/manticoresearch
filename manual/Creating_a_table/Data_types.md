@@ -4,6 +4,20 @@
 
 Manticore's data types can be split into two categories: full-text fields and attributes.
 
+### Field name syntax
+
+Field names in Manticore must follow these rules:
+
+* Can contain letters (a-z, A-Z), numbers (0-9), and hyphens (-)
+* Must start with a letter
+* Numbers can only appear after letters
+* Underscore (`_`) is the only allowed special character
+* Field names are case-insensitive
+
+For example:
+* Valid field names: `title`, `product_id`, `user_name_2`
+* Invalid field names: `2title`, `-price`, `user@name`
+
 ### Full-text fields
 
 Full-text fields:
@@ -140,7 +154,7 @@ select * from forum where author_id=123 and forum_id in (1,3,7) order by post_da
 ```JSON
 POST /search
 {
-  "index": "forum",
+  "table": "forum",
   "query":
   {
     "match_all": {},
@@ -164,7 +178,7 @@ POST /search
 
 ```php
 $client->search([
-        'index' => 'forum',
+        'table' => 'forum',
         'query' =>
         [
             'match_all' => [],
@@ -192,7 +206,7 @@ $client->search([
 <!-- request Python -->
 
 ```python
-searchApi.search({"index":"forum","query":{"match_all":{},"bool":{"must":[{"equals":{"author_id":123}},{"in":{"forum_id":[1,3,7]}}]}},"sort":[{"post_date":"desc"}]})
+searchApi.search({"table":"forum","query":{"match_all":{},"bool":{"must":[{"equals":{"author_id":123}},{"in":{"forum_id":[1,3,7]}}]}},"sort":[{"post_date":"desc"}]})
 ```
 <!-- intro -->
 ##### Javascript:
@@ -200,7 +214,7 @@ searchApi.search({"index":"forum","query":{"match_all":{},"bool":{"must":[{"equa
 <!-- request javascript -->
 
 ```javascript
-res = await searchApi.search({"index":"forum","query":{"match_all":{},"bool":{"must":[{"equals":{"author_id":123}},{"in":{"forum_id":[1,3,7]}}]}},"sort":[{"post_date":"desc"}]});
+res = await searchApi.search({"table":"forum","query":{"match_all":{},"bool":{"must":[{"equals":{"author_id":123}},{"in":{"forum_id":[1,3,7]}}]}},"sort":[{"post_date":"desc"}]});
 ```
 <!-- intro -->
 ##### java:
@@ -299,20 +313,13 @@ Below is the list of data types supported by Manticore Search:
 
 ## Document ID
 
-<!-- example id -->
-The document identifier is a mandatory attribute, and document IDs must be **unique 64-bit unsigned integers**. Document IDs can be explicitly specified, but if not, they are still enabled. Document IDs cannot be updated. Note that when retrieving document IDs, they are treated as signed 64-bit integers, which means they may be negative. Use the [UINT64()](Functions/Type_casting_functions.md#UINT64%28%29) function to cast them to unsigned 64-bit integers if necessary.
+The document identifier is a mandatory attribute that must be a unique 64-bit unsigned integer. Document IDs can be explicitly specified when creating a table, but they are always enabled even if not specified. Document IDs cannot be updated.
 
-<!-- request Explicit ID -->
-
-When you create a table, you can specify ID explicitly, but no matter what data type you use, it will be always as said previously - a signed 64-bit integer.
+When you create a table, you can specify ID explicitly, but regardless of the data type you use, it will always behave as described above - stored as unsigned 64-bit but exposed as signed 64-bit integer.
 
 ```sql
-CREATE TABLE tbl(id bigint, content text);
+mysql> CREATE TABLE tbl(id bigint, content text);
 DESC tbl;
-```
-
-<!-- response Explicit ID -->
-```sql
 +---------+--------+----------------+
 | Field   | Type   | Properties     |
 +---------+--------+----------------+
@@ -321,28 +328,83 @@ DESC tbl;
 +---------+--------+----------------+
 2 rows in set (0.00 sec)
 ```
-
-<!-- request Implicit ID -->
 
 You can also omit specifying ID at all, it will be enabled automatically.
-
 ```sql
-CREATE TABLE tbl(content text);
+mysql> CREATE TABLE tbl(content text);
 DESC tbl;
-```
-
-<!-- response Implicit ID -->
-```sql
 +---------+--------+----------------+
 | Field   | Type   | Properties     |
 +---------+--------+----------------+
 | id      | bigint |                |
 | content | text   | indexed stored |
 +---------+--------+----------------+
-2 rows in set (0.00 sec)
+2 rows in set (0.00 sec) 
 ```
 
-<!-- end -->
+When working with document IDs, it's important to know that they are stored internally as unsigned 64-bit integers but are exposed as signed 64-bit integers in queries and results. This means:
+
+* IDs greater than 2^63-1 will appear as negative numbers.
+* When filtering by such large IDs, you must use their signed representation.
+* Use the [UINT64()](Functions/Type_casting_functions.md#UINT64%28%29) function to view the actual unsigned value.
+
+For example, let's create a table and insert some values around 2^63:
+```sql
+mysql> create table t(id_text string)
+Query OK, 0 rows affected (0.01 sec)
+
+mysql> insert into t values(9223372036854775807, '2 ^ 63 - 1'),(9223372036854775808, '2 ^ 63')
+Query OK, 2 rows affected (0.00 sec)
+```
+
+Some IDs appear as negative numbers in the results because they exceed 2^63-1. However, using `UINT64(id)` can reveal their actual unsigned values:
+```sql
+mysql> select *, uint64(id) from t
++----------------------+------------+---------------------+
+| id                   | id_text    | uint64(id)          |
++----------------------+------------+---------------------+
+|  9223372036854775807 | 2 ^ 63 - 1 | 9223372036854775807 |
+| -9223372036854775808 | 2 ^ 63     | 9223372036854775808 |
++----------------------+------------+---------------------+
+2 rows in set (0.00 sec)
+--- 2 out of 2 results in 0ms ---
+```
+
+For querying documents with IDs less than 2^63, you can use the unsigned value directly:
+```sql
+mysql> select * from t where id = 9223372036854775807
++---------------------+------------+
+| id                  | id_text    |
++---------------------+------------+
+| 9223372036854775807 | 2 ^ 63 - 1 |
++---------------------+------------+
+1 row in set (0.00 sec)
+--- 1 out of 1 results in 0ms ---
+```
+
+However, for IDs starting from 2^63, you need to use the signed value:
+```sql
+mysql> select * from t where id = -9223372036854775808
++----------------------+---------+
+| id                   | id_text |
++----------------------+---------+
+| -9223372036854775808 | 2 ^ 63  |
++----------------------+---------+
+1 row in set (0.00 sec)
+--- 1 out of 1 results in 0ms ---
+```
+
+If you use an unsigned value instead, you might get incorrect results:
+```sql
+mysql> select * from t where id = 9223372036854775808
++---------------------+------------+
+| id                  | id_text    |
++---------------------+------------+
+| 9223372036854775807 | 2 ^ 63 - 1 |
++---------------------+------------+
+1 row in set (0.00 sec)
+--- 1 out of 1 results in 0ms ---
+```
 
 ## Character data types
 
@@ -361,7 +423,7 @@ Specifying at least one property overrides all the default ones (see below), i.e
 
 **No properties specified:**
 
-`string` and `text` are aliases, but if you don’t specify any properties, they by default mean different things:
+`string` and `text` are aliases, but if you don't specify any properties, they by default mean different things:
 
 * just `string` by default means `attribute` (see details [below](../Creating_a_table/Data_types.md#Text)).
 * just `text` by default means `stored` + `indexed` (see details [below](../Creating_a_table/Data_types.md#String)).
@@ -564,7 +626,7 @@ select * from products where match('@title first');
 ```JSON
 POST /search
 {
-	"index": "products",
+	"table": "products",
 	"query":
 	{
 		"match": { "title": "first" }
@@ -590,7 +652,7 @@ $index->setName('products')->search('@title')->get();
 <!-- request Python -->
 
 ```python
-searchApi.search({"index":"products","query":{"match":{"title":"first"}}})
+searchApi.search({"table":"products","query":{"match":{"title":"first"}}})
 ```
 <!-- intro -->
 ##### Javascript:
@@ -598,7 +660,7 @@ searchApi.search({"index":"products","query":{"match":{"title":"first"}}})
 <!-- request javascript -->
 
 ```javascript
-res = await searchApi.search({"index":"products","query":{"match":{"title":"first"}}});
+res = await searchApi.search({"table":"products","query":{"match":{"title":"first"}}});
 ```
 <!-- intro -->
 ##### java:
@@ -801,6 +863,25 @@ table products
 <!-- end -->
 
 </details>
+
+### Storing binary data in Manticore
+
+<!-- example binary -->
+
+Manticore doesn't have a dedicated field type for binary data, but you can store it safely by using base64 encoding and the `text stored` or `string stored` field types (which are synonyms). If you don't encode the binary data, parts of it may get lost — for example, Manticore trims the end of a string if it encounters a null-byte.
+
+Here is an example where we encode the `ls` command using base64, store it in Manticore, and then decode it to verify that the MD5 checksum remains unchanged:
+
+<!-- request Example -->
+```bash
+# md5sum /bin/ls
+43d1b8a7ccda411118e2caba685f4329  /bin/ls
+# encoded_data=`base64 -i /bin/ls `
+# mysql -P9306 -h0 -e "drop table if exists test; create table test(data text stored); insert into test(data) values('$encoded_data')"
+# mysql -P9306 -h0 -NB -e "select data from test" | base64 -d > /tmp/ls | md5sum
+43d1b8a7ccda411118e2caba685f4329  -
+```
+<!-- end -->
 
 ## Integer
 
@@ -1375,7 +1456,7 @@ select abs(a-b)<=0.00001 from products
 ```JSON
 POST /search
 {
-  "index": "products",
+  "table": "products",
   "query": { "match_all": {} } },
   "expressions": { "eps": "abs(a-b)" }
 }
@@ -1395,7 +1476,7 @@ $index->setName('products')->search('')->expression('eps','abs(a-b)')->get();
 <!-- request Python -->
 
 ```python
-searchApi.search({"index":"products","query":{"match_all":{}},"expressions":{"eps":"abs(a-b)"}})
+searchApi.search({"table":"products","query":{"match_all":{}},"expressions":{"eps":"abs(a-b)"}})
 ```
 
 <!-- intro -->
@@ -1404,7 +1485,7 @@ searchApi.search({"index":"products","query":{"match_all":{}},"expressions":{"ep
 <!-- request javascript -->
 
 ```javascript
-res = await searchApi.search({"index":"products","query":{"match_all":{}}},"expressions":{"eps":"abs(a-b)"}});
+res = await searchApi.search({"table":"products","query":{"match_all":{}},"expressions":{"eps":"abs(a-b)"}});
 ```
 <!-- intro -->
 ##### java:
@@ -1436,7 +1517,6 @@ searchRequest.Expressions = new List<Object>{
     new Dictionary<string, string> { {"ebs", "abs(a-b)"} }
 };
 var searchResponse = searchApi.Search(searchRequest);
-
 ```
 <!-- end -->
 
@@ -1458,7 +1538,7 @@ select in(ceil(attr*100),200,250,350) from products
 ```JSON
 POST /search
 {
-  "index": "products",
+  "table": "products",
   "query": { "match_all": {} } },
   "expressions": { "inc": "in(ceil(attr*100),200,250,350)" }
 }
@@ -1478,7 +1558,7 @@ $index->setName('products')->search('')->expression('inc','in(ceil(attr*100),200
 <!-- request Python -->
 
 ```python
-searchApi.search({"index":"products","query":{"match_all":{}}},"expressions":{"inc":"in(ceil(attr*100),200,250,350)"}})
+searchApi.search({"table":"products","query":{"match_all":{}}},"expressions":{"inc":"in(ceil(attr*100),200,250,350)"}})
 ```
 <!-- intro -->
 ##### Javascript:
@@ -1486,7 +1566,7 @@ searchApi.search({"index":"products","query":{"match_all":{}}},"expressions":{"i
 <!-- request javascript -->
 
 ```javascript
-res = await searchApi.search({"index":"products","query":{"match_all":{}}},"expressions":{"inc":"in(ceil(attr*100),200,250,350)"}});
+res = await searchApi.search({"table":"products","query":{"match_all":{}}},"expressions":{"inc":"in(ceil(attr*100),200,250,350)"}});
 ```
 
 <!-- intro -->
@@ -1522,11 +1602,41 @@ var searchResponse = searchApi.Search(searchRequest);
 ```
 <!-- end -->
 
+<!-- example float_accuracy -->
+Float values in Manticore are displayed with precision to ensure they reflect the exact stored value. This approach was introduced to prevent precision loss, especially for cases like geographical coordinates, where rounding to 6 decimal places caused inaccuracies.
+
+Now, Manticore first outputs a number with 6 digits, then parses and compares it to the original value. If they don't match, additional digits are added until they do.
+
+For example, if a float value was inserted as `19.45`, Manticore will display it as `19.450001` to accurately represent the stored value.
+
+<!-- request Example -->
+```sql
+insert into t(id, f) values(1, 19.45)
+--------------
+
+Query OK, 1 row affected (0.02 sec)
+
+--------------
+select * from t
+--------------
+
++------+-----------+
+| id   | f         |
++------+-----------+
+|    1 | 19.450001 |
++------+-----------+
+1 row in set (0.00 sec)
+--- 1 out of 1 results in 0ms ---
+```
+
+<!-- end -->
+
+
 ## JSON
 
 <!-- example for creating json -->
 
-This data type allows storing JSON objects, which is useful for storing schema-less data. However, it is not supported by columnar storage. However, it can be stored in traditional storage, as it's possible to combine both storage types in the same table.
+This data type allows for the storage of JSON objects, which is particularly useful for handling schema-less data. When defining JSON values, ensure that the opening and closing curly braces `{` and `}` are included for objects, or square brackets `[` and `]` for arrays. While JSON is not supported by columnar storage, it can be stored in traditional row-wise storage. It's worth noting that both storage types can be combined within the same table.
 
 <!-- intro -->
 ##### SQL:
@@ -1632,7 +1742,7 @@ select indexof(x>2 for x in data.intarray) from products
 ```JSON
 POST /search
 {
-  "index": "products",
+  "table": "products",
   "query": { "match_all": {} } },
   "expressions": { "idx": "indexof(x>2 for x in data.intarray)" }
 }
@@ -1652,7 +1762,7 @@ $index->setName('products')->search('')->expression('idx','indexof(x>2 for x in 
 <!-- request Python -->
 
 ```python
-searchApi.search({"index":"products","query":{"match_all":{}}},"expressions":{"idx":"indexof(x>2 for x in data.intarray)"}})
+searchApi.search({"table":"products","query":{"match_all":{}},"expressions":{"idx":"indexof(x>2 for x in data.intarray)"}})
 ```
 <!-- intro -->
 ##### Javascript:
@@ -1660,7 +1770,7 @@ searchApi.search({"index":"products","query":{"match_all":{}}},"expressions":{"i
 <!-- request javascript -->
 
 ```javascript
-res = await searchApi.search({"index":"products","query":{"match_all":{}}},"expressions":{"idx":"indexof(x>2 for x in data.intarray)"}});
+res = await searchApi.search({"table":"products","query":{"match_all":{}},"expressions":{"idx":"indexof(x>2 for x in data.intarray)"}});
 ```
 
 <!-- intro -->
@@ -1716,7 +1826,7 @@ select regex(data.name, 'est') as c from products where c>0
 ```JSON
 POST /search
 {
-  "index": "products",
+  "table": "products",
   "query":
   {
     "match_all": {},
@@ -1740,7 +1850,7 @@ $index->setName('products')->search('')->expression('idx',"regex(data.name, 'est
 <!-- request Python -->
 
 ```python
-searchApi.search({"index":"products","query":{"match_all":{},"range":{"c":{"gt":0}}}},"expressions":{"c":"regex(data.name, 'est')"}})
+searchApi.search({"table":"products","query":{"match_all":{},"range":{"c":{"gt":0}}}},"expressions":{"c":"regex(data.name, 'est')"}})
 ```
 <!-- intro -->
 ##### Javascript:
@@ -1748,7 +1858,7 @@ searchApi.search({"index":"products","query":{"match_all":{},"range":{"c":{"gt":
 <!-- request javascript -->
 
 ```javascript
-res = await searchApi.search({"index":"products","query":{"match_all":{},"range":{"c":{"gt":0}}}},"expressions":{"c":"regex(data.name, 'est')"}});
+res = await searchApi.search({"table":"products","query":{"match_all":{},"range":{"c":{"gt":0}}}},"expressions":{"c":"regex(data.name, 'est')"}}});
 ```
 
 <!-- intro -->
@@ -1811,7 +1921,7 @@ select * from products order by double(data.myfloat) desc
 ```JSON
 POST /search
 {
-  "index": "products",
+  "table": "products",
   "query": { "match_all": {} } },
   "sort": [ { "double(data.myfloat)": { "order": "desc"} } ]
 }
@@ -1831,7 +1941,7 @@ $index->setName('products')->search('')->sort('double(data.myfloat)','desc')->ge
 <!-- request Python -->
 
 ```python
-searchApi.search({"index":"products","query":{"match_all":{}}},"sort":[{"double(data.myfloat)":{"order":"desc"}}]})
+searchApi.search({"table":"products","query":{"match_all":{}}},"sort":[{"double(data.myfloat)":{"order":"desc"}}]})
 ```
 <!-- intro -->
 ##### Javascript:
@@ -1839,7 +1949,7 @@ searchApi.search({"index":"products","query":{"match_all":{}}},"sort":[{"double(
 <!-- request javascript -->
 
 ```javascript
-res = await searchApi.search({"index":"products","query":{"match_all":{}}},"sort":[{"double(data.myfloat)":{"order":"desc"}}]});
+res = await searchApi.search({"table":"products","query":{"match_all":{}}},"sort":[{"double(data.myfloat)":{"order":"desc"}}]});
 ```
 <!-- intro -->
 ##### java:
@@ -1877,12 +1987,25 @@ var searchResponse = searchApi.Search(searchRequest);
 ## Float vector
 
 <!-- example for creating float_vector -->
+Float vector attributes allow storing variable-length lists of floats, primarily used for machine learning applications and similarity searches. This type differs from multi-valued attributes (MVAs) in several important ways:
+- Preserves the exact order of values (unlike MVAs which may reorder)
+- Retains duplicate values (unlike MVAs which deduplicate)
+- No additional processing during insertion (unlike MVAs which sort and deduplicate)
 
-Float vector attributes allow storing variable-length lists of floats. It's important to note that this concept differs from multi-valued attributes. Multi-valued attributes (MVAs) are essentially sets; they do not preserve value order, and duplicate values are not retained. In contrast, float vectors perform no additional processing on values during insertion.
+### Usage and Limitations
+- Currently only supported in real-time tables
+- Can only be utilized in KNN (k-nearest neighbor) searches
+- Not supported in plain tables or other functions/expressions
+- When used with KNN settings, you cannot `UPDATE` `float_vector` values. Use `REPLACE` instead
+- When used without KNN settings, you can `UPDATE` `float_vector` values
+- Float vectors cannot be used in regular filters or sorting
+- The only way to filter by `float_vector` values is through vector search operations (KNN)
 
-Float vector attributes can be used in k-nearest neighbor searches; see [KNN search](../Searching/KNN.md).
-
-** Currently, `float_vector` fields can only be utilized in KNN search within real-time tables and the data type is not supported in any other functions or expressions, nor is it supported in plain tables. **
+### Common Use Cases
+- Image embeddings for similarity search
+- Text embeddings for semantic search
+- Feature vectors for machine learning
+- Recommendation system vectors
 
 <!-- intro -->
 ##### SQL:
@@ -1968,6 +2091,8 @@ table products
 ```
 
 <!-- end -->
+
+For information about using float vectors in searches, see [KNN search](../Searching/KNN.md).
 
 ## Multi-value integer (MVA)
 
@@ -2080,7 +2205,7 @@ select * from products where any(product_codes)=3
 ```JSON
 POST /search
 {
-  "index": "products",
+  "table": "products",
   "query":
   {
     "match_all": {},
@@ -2103,7 +2228,7 @@ $index->setName('products')->search('')->filter('any(product_codes)','equals',3)
 <!-- request Python -->
 
 ```python
-searchApi.search({"index":"products","query":{"match_all":{},"equals":{"any(product_codes)":3}}}})
+searchApi.search({"table":"products","query":{"match_all":{},"equals":{"any(product_codes)":3}}}})
 ```
 <!-- intro -->
 ##### Javascript:
@@ -2111,7 +2236,7 @@ searchApi.search({"index":"products","query":{"match_all":{},"equals":{"any(prod
 <!-- request javascript -->
 
 ```javascript
-res = await searchApi.search({"index":"products","query":{"match_all":{},"equals":{"any(product_codes)":3}}}})'
+res = await searchApi.search({"table":"products","query":{"match_all":{},"equals":{"any(product_codes)":3}}}})'
 ```
 <!-- intro -->
 ##### java:
@@ -2162,7 +2287,7 @@ select least(product_codes) l from products order by l asc
 ```JSON
 POST /search
 {
-  "index": "products",
+  "table": "products",
   "query":
   {
     "match_all": {},
@@ -2185,7 +2310,7 @@ $index->setName('products')->search('')->sort('product_codes','asc','min')->get(
 <!-- request Python -->
 
 ```python
-searchApi.search({"index":"products","query":{"match_all":{},"sort":[{"product_codes":{"order":"asc","mode":"min"}}]}})
+searchApi.search({"table":"products","query":{"match_all":{},"sort":[{"product_codes":{"order":"asc","mode":"min"}}]}})
 ```
 <!-- intro -->
 ##### Javascript:
@@ -2193,7 +2318,7 @@ searchApi.search({"index":"products","query":{"match_all":{},"sort":[{"product_c
 <!-- request javascript -->
 
 ```javascript
-res = await searchApi.search({"index":"products","query":{"match_all":{},"sort":[{"product_codes":{"order":"asc","mode":"min"}}]}});
+res = await searchApi.search({"table":"products","query":{"match_all":{},"sort":[{"product_codes":{"order":"asc","mode":"min"}}]}});
 ```
 
 <!-- intro -->
@@ -2224,7 +2349,7 @@ var searchRequest = new SearchRequest("forum", query);
 searchRequest.Sort = new List<Object> {
     new SortMVA("product_codes", SortOrder.OrderEnum.Asc, SortMVA.ModeEnum.Min)
 };
-searchResponse = searchApi.search(searchRequest);
+searchResponse = searchApi.Search(searchRequest);
 ```
 
 <!-- end -->
@@ -2291,7 +2416,7 @@ Query OK, 1 row affected (0.00 sec)
 ```JSON
 POST /insert
 {
-	"index":"products",
+	"table":"products",
 	"id":1,
 	"doc":
 	{
@@ -2302,7 +2427,7 @@ POST /insert
 
 POST /search
 {
-  "index": "products",
+  "table": "products",
   "query": { "match_all": {} }
 }
 ```
@@ -2311,7 +2436,7 @@ POST /search
 
 ```JSON
 {
-   "_index":"products",
+   "table":"products",
    "_id":1,
    "created":true,
    "result":"created",
@@ -2402,8 +2527,8 @@ Array
 <!-- request Python -->
 
 ```python
-indexApi.insert({"index":"products","id":1,"doc":{"title":"first","product_codes":[4,2,1,3]}})
-searchApi.search({"index":"products","query":{"match_all":{}}})
+indexApi.insert({"table":"products","id":1,"doc":{"title":"first","product_codes":[4,2,1,3]}})
+searchApi.search({"table":"products","query":{"match_all":{}}})
 ```
 <!-- response Python -->
 
@@ -2411,7 +2536,7 @@ searchApi.search({"index":"products","query":{"match_all":{}}})
 {'created': True,
  'found': None,
  'id': 1,
- 'index': 'products',
+ 'table': 'products',
  'result': 'created'}
 {'hits': {'hits': [{u'_id': u'1',
                     u'_score': 1,
@@ -2428,8 +2553,8 @@ searchApi.search({"index":"products","query":{"match_all":{}}})
 <!-- request javascript -->
 
 ```javascript
-await indexApi.insert({"index":"products","id":1,"doc":{"title":"first","product_codes":[4,2,1,3]}});
-res = await searchApi.search({"index":"products","query":{"match_all":{}}});
+await indexApi.insert({"table":"products","id":1,"doc":{"title":"first","product_codes":[4,2,1,3]}});
+res = await searchApi.search({"table":"products","query":{"match_all":{}}});
 ```
 <!-- response javascript -->
 

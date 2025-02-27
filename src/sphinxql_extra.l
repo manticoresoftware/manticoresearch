@@ -57,15 +57,21 @@ INT                 {DIGIT}+
 FLOAT_CONSTANT      ({INT}\.{INT}?|{INT}?\.{INT}){EXPONENT}?
 
 %x ccomment
+%x acomment
 %x QSTR
 
 %%
 
 "/*"         		{ BEGIN(ccomment); }
-<ccomment>"*/"		{ BEGIN(INITIAL); }
+<ccomment>"*/"		{ BEGIN(INITIAL); return TOK_COMMENT; }
 <ccomment>[^*\n]+
 <ccomment>"*"[^/]
 <ccomment>"\n"
+
+^"--"         		{ BEGIN(acomment); }
+<acomment>"\n"		{ BEGIN(INITIAL); return TOK_COMMENT; }
+<acomment><<EOF>>   { BEGIN(INITIAL); return TOK_COMMENT; }
+<acomment>[^*\n]+
 
 '	                { Q_START; BEGIN (QSTR); }
 <QSTR>[^'\n\\]+
@@ -100,6 +106,9 @@ FLOAT_CONSTANT      ({INT}\.{INT}?|{INT}?\.{INT}){EXPONENT}?
 {ID}				{ STORE_BOUNDS; return TOK_IDENT; }
 `{ID}`				{ STORE_BOUNDS; ++lvalp->m_iStart; --lvalp->m_iEnd; return TOK_IDENT; }
 `{DIGIT}+{ID}`		{ STORE_BOUNDS; ++lvalp->m_iStart; --lvalp->m_iEnd; return TOK_IDENT; } // allow `123xyz` column names
+`{ID}:{ID}`			{ STORE_BOUNDS; ++lvalp->m_iStart; --lvalp->m_iEnd; return TOK_TABLE_IDENT; } // specific for table names
+`{ID}.{ID}`			{ STORE_BOUNDS; ++lvalp->m_iStart; --lvalp->m_iEnd; return TOK_TABLE_IDENT; }
+`{ID}:{ID}.{ID}`	{ STORE_BOUNDS; ++lvalp->m_iStart; --lvalp->m_iEnd; return TOK_TABLE_IDENT; }
 
 {SPACE}+
 .					{  return yytext[0]; }

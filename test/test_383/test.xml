@@ -19,6 +19,7 @@ searchd
 	<searchd_settings/>
 	data_dir = <data_path path="data0"/>
 	server_id = <agent_id/>
+    diskchunk_flush_write_timeout = -1
 }
 </agent0>
 <agent1>
@@ -27,6 +28,7 @@ searchd
 	<searchd_settings/>
 	data_dir = <data_path path="data1"/>
 	server_id = <agent_id/>
+    diskchunk_flush_write_timeout = -1
 }
 </agent1>
 <agent2>
@@ -35,6 +37,7 @@ searchd
 	<searchd_settings/>
 	data_dir = <data_path path="data2"/>
 	server_id = <agent_id/>
+    diskchunk_flush_write_timeout = -1
 }
 </agent2>
 
@@ -154,6 +157,7 @@ insert into test:rtc (title,mva1,gid,j1) values ('test 501', (521,522,523), 521,
 <sphinxql d="2">
 UPDATE test:rt1 SET mva10=(31,33) where id=3;
 insert into test:rt1 (id,title,mva1) values (601, 'test 201', (621,622));
+insert into `test:rt1` (id,title,mva1) values (602, 'test 383', (622,623));
 </sphinxql>
 <!-- request to node 1 -->
 <sphinxql d="1">

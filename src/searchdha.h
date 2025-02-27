@@ -703,12 +703,18 @@ inline cDistributedIndexRefPtr_t GetDistr ( const CSphString& sName )
 	return g_pDistIndexes->Get ( sName );
 }
 
+struct GuardedQueryStatContainer_t
+{
+	mutable RwLock_t m_tStatsLock;
+	std::unique_ptr<QueryStatContainer_i> m_tStats GUARDED_BY ( m_tStatsLock );
+};
+
 struct SearchdStats_t
 {
 	DWORD					m_uStarted;
 	std::atomic<int64_t>	m_iConnections;
 	std::atomic<int64_t>	m_iMaxedOut;
-	std::atomic<int64_t>	m_iCommandCount[SEARCHD_COMMAND_TOTAL];
+	std::array<std::atomic<int64_t>, SEARCHD_COMMAND_TOTAL>	m_iCommandCount;
 	std::atomic<int64_t>	m_iAgentConnect;
 	std::atomic<int64_t>	m_iAgentConnectTFO;
 	std::atomic<int64_t>	m_iAgentRetry;
@@ -729,8 +735,13 @@ struct SearchdStats_t
 	std::atomic<int64_t>	m_iPredictedTime;	///< total agent predicted query time
 	std::atomic<int64_t>	m_iAgentPredictedTime;	///< total agent predicted query time
 
-	void Init();
+	enum EDETAILS : BYTE { eUpdate, eReplace, eSearch, eTotal };
+	std::array<GuardedQueryStatContainer_t, eTotal> m_dDetailedStats;
 };
+
+void InitSearchdStats ();
+void StatCountCommandDetails ( SearchdStats_t::EDETAILS eCmd, uint64_t uFoundRows, uint64_t tmStart );
+void FormatCmdStats ( VectorLike & dStatus, const char * szPrefix, SearchdStats_t::EDETAILS eCmd );
 
 SearchdStats_t&	gStats();
 

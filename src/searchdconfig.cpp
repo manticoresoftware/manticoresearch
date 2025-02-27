@@ -19,6 +19,7 @@
 #include "coroutine.h"
 #include "sphinxpq.h"
 #include "binlog.h"
+#include "global_idf.h"
 
 using namespace Threads;
 
@@ -967,6 +968,23 @@ static bool CopyStopwords ( const CSphString & sSrcPath, const CSphString & sDst
 	return true;
 }
 
+
+static bool CopyJiebaDict ( const CSphString & sSrcPath, const CSphString & sDstPath, OptInt_t iPostfix, JsonObj_c & tHeader, CopiedFiles & hCopied, CSphString & sError )
+{
+	const char * szDict = "jieba_user_dict_path";
+	assert ( tHeader && tHeader.HasItem(szDict) && tHeader.GetItem(szDict).IsStr() );
+
+	CSphSavedFile tJiebaDict;
+	tJiebaDict.m_sFilename = tHeader.GetItem(szDict).StrVal();
+	if ( !CopyExternalFile ( sSrcPath, sDstPath, szDict, iPostfix, std::nullopt, tJiebaDict, hCopied, sError ) )
+		return false;
+
+	tHeader.DelItem(szDict);
+	tHeader.AddStr ( szDict, tJiebaDict.m_sFilename );
+	return true;
+}
+
+
 static std::optional<JsonObj_c> ReadJsonHeader ( const CSphString & sFilename, CSphString & sError )
 {
 	CSphAutofile tFile;
@@ -978,6 +996,7 @@ static std::optional<JsonObj_c> ReadJsonHeader ( const CSphString & sFilename, C
 	if ( !tFile.Read ( sMeta.Begin(), iSize, sError ) )
 		return std::nullopt;
 
+	sMeta[iSize] = sMeta[iSize + 1] = '\0';
 	JsonObj_c tMeta ( sMeta );
 	if ( tMeta.GetError ( sMeta.Begin(), iSize, sError ) )
 		return std::nullopt;
@@ -1005,7 +1024,7 @@ static bool CopyExternalsFromHeader ( const CSphString & sSrcPath, const CSphStr
 	JsonObj_c tTokSettings = tHeader.GetItem ( "tokenizer_settings" );
 	JsonObj_c tDictSettings = tHeader.GetItem ( "dictionary_settings" );
 
-	bool bHasExceptions = ( tTokSettings && tTokSettings.HasItem( "synonyms_file" ) && tTokSettings.GetItem( "synonyms_file" ).IsStr() );
+	bool bHasExceptions = tTokSettings && tTokSettings.HasItem( "synonyms_file" ) && tTokSettings.GetItem( "synonyms_file" ).IsStr();
 
 	bool bHasStopwords = false;
 	if ( tDictSettings && tDictSettings.HasItem( "stopwords_file_infos" ) )
@@ -1013,6 +1032,7 @@ static bool CopyExternalsFromHeader ( const CSphString & sSrcPath, const CSphStr
 		JsonObj_c tStopwords = tDictSettings.GetItem( "stopwords_file_infos" );
 		bHasStopwords = ( tStopwords.IsArray() && tStopwords.Size()>0 );
 	}
+
 	if ( !bHasStopwords && tDictSettings.HasItem( "stopwords" ) )
 		bHasStopwords = tDictSettings.GetItem( "stopwords" ).IsStr();
 
@@ -1023,7 +1043,9 @@ static bool CopyExternalsFromHeader ( const CSphString & sSrcPath, const CSphStr
 		bHasWordforms = ( tWordforms.IsArray() && tWordforms.Size()>0 );
 	}
 
-	if ( !bHasExceptions && !bHasStopwords && !bHasWordforms )
+	bool bHasJiebaDict = tHeader.HasItem("jieba_user_dict_path");
+
+	if ( !bHasExceptions && !bHasStopwords && !bHasWordforms && !bHasJiebaDict )
 		return true;
 
 	CSphString sDstPath = GetPathOnly ( sDstIndex );
@@ -1035,6 +1057,9 @@ static bool CopyExternalsFromHeader ( const CSphString & sSrcPath, const CSphStr
 		return false;
 
 	if ( bHasWordforms && !CopyWordforms ( GetPathOnly ( sSrcPath ), sDstPath, iPostfix, tDictSettings, hCopied, sError ) )
+		return false;
+
+	if ( bHasJiebaDict && !CopyJiebaDict ( GetPathOnly ( sSrcPath ), sDstPath, iPostfix, tHeader, hCopied, sError ) )
 		return false;
 
 	return true;
@@ -1377,6 +1402,9 @@ bool CreateNewIndexConfigless ( const CSphString & sIndex, const CreateTableSett
 	case ADD_NEEDLOAD:
 		{
 			assert ( pDesc );
+			if ( !pDesc->m_sGlobalIDFPath.IsEmpty() && !sph::PrereadGlobalIDF ( pDesc->m_sGlobalIDFPath, sError ) )
+				dWarnings.Add ( "global IDF unavailable - IGNORING" );
+
 			FixupIndexTID ( UnlockedHazardIdxFromServed ( *pDesc ), Binlog::LastTidFor ( sIndex ) );
 			if ( !PreallocNewIndex ( *pDesc, &hCfg, sIndex.cstr(), dWarnings, sError ) )
 			{
@@ -1454,7 +1482,7 @@ bool AddExistingIndexConfigless ( const CSphString & sIndex, IndexType_e eType, 
 }
 
 
-static bool DropDistrIndex ( const CSphString & sIndex, CSphString & sError )
+static bool DropDistrIndex ( const CSphString & sIndex, bool bForce, CSphString & sError )
 {
 	assert ( IsConfigless() );
 	auto pDistr = GetDistr(sIndex);
@@ -1463,6 +1491,13 @@ static bool DropDistrIndex ( const CSphString & sIndex, CSphString & sError )
 		sError.SetSprintf ( "DROP TABLE failed: unknown distributed table '%s'", sIndex.cstr() );
 		return false;
 	}
+
+	if ( IsDistrTableHasSystem ( *pDistr, bForce ) )
+	{
+		sError.SetSprintf ( "can not drop table '%s' because it contains system table", sIndex.cstr() );
+		return false;
+	}
+
 
 	if ( !pDistr->m_sCluster.IsEmpty() )
 	{
@@ -1575,14 +1610,14 @@ static bool DropLocalIndex ( const CSphString & sIndex, CSphString & sError, CSp
 }
 
 
-bool DropIndexInt ( const CSphString & sIndex, bool bIfExists, CSphString & sError, CSphString * pWarning )
+bool DropIndexInt ( const CSphString & sIndex, bool bIfExists, bool bForce, CSphString & sError, CSphString * pWarning )
 {
 	assert ( IsConfigless() );
 	bool bLocal = GetServed ( sIndex );
 	bool bDistr = GetDistr ( sIndex );
 	if ( bDistr )
 	{
-		if ( !DropDistrIndex ( sIndex, sError ) )
+		if ( !DropDistrIndex ( sIndex, bForce, sError ) )
 			return false;
 	}
 	else if ( bLocal )
@@ -1645,3 +1680,27 @@ IndexDescDistr_t GetDistributedDesc ( const DistributedIndex_t & tDist )
 	return tIndex;
 }
 
+static const char * g_sTableNameSystem = "system.";
+
+bool IsDistrTableHasSystem ( const DistributedIndex_t & tDistr, bool bForce )
+{
+	if ( bForce )
+		return false;
+
+	for ( const auto & sName : tDistr.m_dLocal )
+	{
+		if ( sName.Begins ( g_sTableNameSystem ) )
+			return true;
+	}
+
+	for ( const auto & pAgent : tDistr.m_dAgents )
+	{
+		for ( const AgentDesc_t & tDesc : *pAgent )
+		{
+			if ( strstr ( tDesc.m_sIndexes.cstr(), g_sTableNameSystem )!=nullptr )
+				return true;
+		}
+	}
+
+	return false;
+}

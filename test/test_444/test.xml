@@ -124,6 +124,23 @@ index i12
 	source			= src12
 	path			= <data_path/>/i12
 }
+
+source src21
+{
+	type			= mysql
+	<sql_settings/>
+	sql_attr_uint = tag
+	sql_attr_uint = gr
+    sql_attr_uint = brand
+    sql_attr_uint = idd
+	sql_query		= SELECT * FROM test_table2
+}
+
+index i21
+{
+	source			= src21
+	path			= <data_path/>/i21
+}
 </config>
 
 <queries>
@@ -167,6 +184,17 @@ select a, count(distinct id) from idx2 group by a;
 
 select id, count(distinct tag) from i11, i12 group by gr limit 10 option max_matches = 100;
 select id, count(distinct tag) from i11, i12 group by gr limit 10 option max_matches = 1000;
+
+<!-- sort by count distinct -->
+select tag, count(*) as c from i21 group by tag order by count (distinct gr) desc;
+select id, tag from i21 order by id desc limit 1 facet tag order by count (distinct gr) desc;;
+select id, tag, gr from i21 order by id desc limit 1 facet tag order by count (distinct gr) desc facet brand order by count (distinct gr) desc;;
+select id, tag from i21 order by id desc limit 1 facet tag distinct gr order by count (distinct gr) desc;;
+
+<!-- error for multiple count distinct -->
+select tag, count(*) as c, count (distinct idd) cd from i21 group by tag order by count (distinct gr) desc;
+select tag, gr, count(*) as c from i21 facet tag order by count (distinct gr) desc facet brand order by count (distinct idd) desc;;
+select tag, count(*) as c from i21 facet tag distinct idd order by count (distinct gr) desc;;
 
 </sphinxql>
 </queries>
@@ -217,6 +245,35 @@ DROP TABLE IF EXISTS `test_table1`
 	<var name="vals"/>
 	<repeat count="1000" vars="id tag gr" init="1000 200 1200" inc="1 23 33"><var name="vals" delimiter=",">(<id/>,<tag/>,<gr/>, 'test 12')</var></repeat>
 	INSERT INTO test_table1 VALUES <vals/>
+</db_insert>
+
+<db_drop>
+DROP TABLE IF EXISTS `test_table2`
+</db_drop>
+
+<db_create>
+CREATE TABLE `test_table2`
+(
+	`document_id` int(11) NOT NULL default '0',
+	`tag` int(11) NOT NULL default '0',
+	`gr` int(11) NOT NULL default '0',
+	`brand` int(11) NOT NULL default '0',
+	`idd` int(11) NOT NULL default '0'
+)
+</db_create>
+
+<db_insert>
+INSERT INTO `test_table2` (document_id, tag, gr, brand, idd) VALUES 
+(1, 1, 1, 1, 1), (2, 9, 108, 54, 106), (3, 10, 104, 53, 101), (4, 10, 106, 57, 104), (5, 1, 103, 59, 101),
+(6, 2, 104, 58, 107), (7, 1, 105, 60, 104), (8, 6, 104, 53, 107), (9, 4, 105, 57, 105), (10, 2, 104, 60, 102),
+(11, 3, 104, 58, 105), (12, 7, 104, 55, 106), (13, 3, 104, 58, 105), (14, 5, 110, 59, 105), (15, 7, 104, 60, 106),
+(16, 7, 104, 52, 104), (17, 2, 105, 59, 104), (18, 2, 108, 52, 104), (19, 8, 106, 52, 103), (20, 9, 105, 60, 104),
+(21, 10, 105, 60, 110), (22, 4, 107, 51, 104), (23, 9, 105, 58, 106), (24, 1, 106, 58, 105), (25, 2, 105, 53, 105),
+(26, 9, 110, 59, 104), (27, 1, 106, 52, 101), (28, 2, 105, 51, 105), (29, 3, 106, 52, 106), (30, 9, 107, 60, 103),
+(31, 10, 104, 51, 105), (32, 7, 104, 53, 110), (33, 8, 106, 54, 109), (34, 1, 101, 58, 106), (35, 9, 106, 57, 104),
+(36, 7, 106, 59, 106), (37, 2, 106, 56, 106), (38, 2, 103, 59, 106), (39, 10, 105, 51, 106), (40, 3, 106, 57, 109),
+(41, 1, 106, 52, 101), (42, 9, 105, 53, 104), (43, 10, 106, 59, 104), (44, 10, 102, 57, 106), (45, 9, 105, 52, 106),
+(46, 9, 109, 52, 104), (47, 7, 107, 57, 102), (48, 1, 105, 58, 105), (49, 4, 105, 57, 106)
 </db_insert>
 
 </test>

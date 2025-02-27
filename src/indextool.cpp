@@ -537,6 +537,8 @@ static bool MergeIDF ( const CSphString & sFilename, const StrVec_t & dFiles, CS
 			break;
 	}
 
+	tWriter.CloseFile ();
+
 	ARRAY_FOREACH ( i, dFiles )
 		SafeDeleteArray ( dBuffers[i] );
 
@@ -1212,8 +1214,24 @@ static void PreallocIndex ( const char * szIndex, bool bStripPath, CSphIndex * p
 		fprintf ( stdout, "WARNING: table %s: %s\n", szIndex, i.cstr() );
 }
 
+static void Init()
+{
+	// threads should be initialized before memory allocations
+	char cTopOfMainStack;
+	Threads::Init();
+	Threads::PrepareMainThread ( &cTopOfMainStack );
+	auto iThreads = GetNumLogicalCPUs();
+	//		iThreads = 1; // uncomment if want to run all coro tests in single thread
+	SetMaxChildrenThreads ( iThreads );
+	StartGlobalWorkPool();
+	WipeGlobalSchedulerOnShutdownAndFork();
+}
+
 int main ( int argc, char ** argv )
 {
+	Init();
+	AT_SCOPE_EXIT ( []() { StopGlobalWorkPool(); });
+
 	CSphString sError, sErrorSI, sErrorKNN;
 	bool bColumnarError = !InitColumnar ( sError );
 	bool bSecondaryError = !InitSecondary ( sErrorSI );
@@ -1489,13 +1507,14 @@ int main ( int argc, char ** argv )
 		if ( !pIndex )
 			sphDie ( "table '%s': failed to create (%s)", sIndex.cstr(), sError.cstr() );
 
-		if ( g_eCommand != IndextoolCmd_e::DUMPDOCIDS )
+		if ( g_eCommand!=IndextoolCmd_e::DUMPDOCIDS && g_eCommand!=IndextoolCmd_e::DUMPDICT )
 			pIndex->SetDebugCheck ( bCheckIdDups, iCheckChunk );
 
+		Threads::CallCoroutine ( [&] {
 		PreallocIndex ( sIndex.cstr(), bStripPath, pIndex.get() );
 
 		if ( g_eCommand==IndextoolCmd_e::MORPH )
-			break;
+			return;
 
 		if ( !(g_eCommand==IndextoolCmd_e::CHECK || g_eCommand==IndextoolCmd_e::EXTRACT ))
 			pIndex->Preread();
@@ -1516,6 +1535,7 @@ int main ( int argc, char ** argv )
 
 			pIndex->Setup ( tSettings );
 		}
+		});
 
 		break;
 	}
@@ -1581,11 +1601,13 @@ int main ( int argc, char ** argv )
 
 				pIndex->Preread();
 			} else
+			{
 				fprintf ( stdout, "dumping dictionary for table '%s'...\n", sIndex.cstr() );
+			}
 
 			if ( bStats )
 				fprintf ( stdout, "total-documents: " INT64_FMT "\n", pIndex->GetStats().m_iTotalDocuments );
-			pIndex->DebugDumpDict ( stdout );
+			pIndex->DebugDumpDict ( stdout, false );
 			break;
 		}
 
@@ -1649,7 +1671,10 @@ int main ( int argc, char ** argv )
 			sphDie ( "INTERNAL ERROR: unhandled command (id=%d)", (int)g_eCommand );
 	}
 
-	pIndex = nullptr; // need to reset index prior to release of the libraries
+	Threads::CallCoroutine ( [&] {
+		pIndex = nullptr; // need to reset index prior to release of the libraries
+	});
+
 	ShutdownColumnar();
 	ShutdownSecondary();
 	ShutdownKNN();

@@ -59,7 +59,7 @@ else ()
 endif ()
 
 # that is once populate cache to cmake prefix path
-append_prefix ( "${CACHE_BUILDS}" )
+prepend_prefix ( "${CACHE_BUILDS}" )
 
 # get path for build folder. In case with HAVE_BBUILD it will be suffixed with /arch/name flag.
 function ( GET_BUILD RESULT NAME )

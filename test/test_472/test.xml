@@ -1,0 +1,57 @@
+<test>
+<name>global idf in RT mode</name>
+
+<requires><force-rt/></requires>
+<skip_indexer/>
+
+<config>
+
+searchd
+{
+	<searchd_settings/>
+    data_dir = <data_path/>    
+}
+</config>
+
+<queries>
+<sphinxql>
+CREATE TABLE rt_no_idf(title text, brand text) index_field_lengths='1' index_exact_words = '1' morphology = 'stem_ru,stem_en';
+CREATE TABLE rt_idf(title text, brand text) index_field_lengths='1' index_exact_words = '1' morphology = 'stem_ru,stem_en' global_idf = '<this_test/>/global.idf';
+    
+INSERT INTO rt_no_idf VALUES
+(1, 'Crossbody Bag with Tassel', 'Burberry'),
+(2, 'Some other bag', 'Gucci'),
+(3, 'Шла собока по рояле', 'Ризеншнауцер'),
+(4, 'Шлите апельсины', 'Марокко');
+
+INSERT INTO rt_idf VALUES
+(1, 'Crossbody Bag with Tassel', 'Burberry'),
+(2, 'Some other bag', 'Gucci'),
+(3, 'Шла собока по рояле', 'Ризеншнауцер'),
+(4, 'Шлите апельсины', 'Марокко');
+
+SELECT id, weight() as score FROM rt_no_idf WHERE MATCH('burberry') LIMIT 0,200 OPTION ranker=expr('sum(min_idf)*1000'), idf='plain,tfidf_unnormalized'; show meta;
+SELECT id, weight() as score FROM rt_idf WHERE MATCH('burberry') LIMIT 0,200 OPTION global_idf=1, ranker=expr('sum(min_idf)*1000'), idf='plain,tfidf_unnormalized'; show meta;
+
+FLUSH RAMCHUNK rt_no_idf;
+FLUSH RAMCHUNK rt_idf;
+
+SELECT id, weight() as score FROM rt_no_idf WHERE MATCH('burberry') LIMIT 0,200 OPTION ranker=expr('sum(min_idf)*1000'), idf='plain,tfidf_unnormalized'; show meta;
+SELECT id, weight() as score FROM rt_idf WHERE MATCH('burberry') LIMIT 0,200 OPTION global_idf=1, ranker=expr('sum(min_idf)*1000'), idf='plain,tfidf_unnormalized'; show meta;
+
+</sphinxql>
+
+<sphinxql system="restart-daemon"/>
+
+<sphinxql>
+SELECT id, weight() as score FROM rt_no_idf WHERE MATCH('burberry') LIMIT 0,200 OPTION ranker=expr('sum(min_idf)*1000'), idf='plain,tfidf_unnormalized'; show meta;
+SELECT id, weight() as score FROM rt_idf WHERE MATCH('burberry') LIMIT 0,200 OPTION global_idf=1, ranker=expr('sum(min_idf)*1000'), idf='plain,tfidf_unnormalized'; show meta;
+
+drop table rt_no_idf;
+drop table rt_idf;
+
+</sphinxql>
+
+</queries>
+
+</test>

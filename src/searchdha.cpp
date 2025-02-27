@@ -963,32 +963,99 @@ const char * Agent_e_Name ( Agent_e eState )
 	return "UNKNOWN_STATE";
 }
 
-void SearchdStats_t::Init()
+void InitSearchdStats() NO_THREAD_SAFETY_ANALYSIS
 {
-	m_uStarted = (DWORD)time ( nullptr );
-	m_iConnections = 0;
-	m_iMaxedOut = 0;
-	m_iAgentConnect = 0;
-	m_iAgentConnectTFO = 0;
+	SearchdStats_t& tStats = gStats();
+	tStats.m_uStarted = (DWORD)time ( nullptr );
+	tStats.m_iConnections = 0;
+	tStats.m_iMaxedOut = 0;
+	tStats.m_iAgentConnect = 0;
+	tStats.m_iAgentConnectTFO = 0;
 
-	m_iQueries = 0;
-	m_iQueryTime = 0;
-	m_iQueryCpuTime = 0;
+	tStats.m_iQueries = 0;
+	tStats.m_iQueryTime = 0;
+	tStats.m_iQueryCpuTime = 0;
 
-	m_iDistQueries = 0;
-	m_iDistWallTime = 0;
-	m_iDistLocalTime = 0;
-	m_iDistWaitTime = 0;
+	tStats.m_iDistQueries = 0;
+	tStats.m_iDistWallTime = 0;
+	tStats.m_iDistLocalTime = 0;
+	tStats.m_iDistWaitTime = 0;
 
-	m_iDiskReads = 0;
-	m_iDiskReadBytes = 0;
-	m_iDiskReadTime = 0;
+	tStats.m_iDiskReads = 0;
+	tStats.m_iDiskReadBytes = 0;
+	tStats.m_iDiskReadTime = 0;
 
-	m_iPredictedTime = 0;
-	m_iAgentPredictedTime = 0;
+	tStats.m_iPredictedTime = 0;
+	tStats.m_iAgentPredictedTime = 0;
 
-	for ( auto & i : m_iCommandCount )
+	for ( auto & i : tStats.m_iCommandCount )
 		i = 0;
+
+	for ( auto & i: tStats.m_dDetailedStats )
+		i.m_tStats = MakeStatsContainer ();
+}
+
+
+void StatCountCommandDetails ( SearchdStats_t::EDETAILS eCmd, uint64_t uFoundRows, uint64_t tmStart )
+{
+	auto tmNow = sphMicroTimer ();
+	auto & tDetail = gStats ().m_dDetailedStats[eCmd];
+	ScWL_t wLock ( tDetail.m_tStatsLock );
+	tDetail.m_tStats->Add ( uFoundRows, tmNow-tmStart, tmNow );
+}
+
+static void CalculateCommandStats ( SearchdStats_t::EDETAILS eCmd, QueryStats_t & tRowsFoundStats, QueryStats_t & tQueryTimeStats )
+{
+	auto & tDetail = gStats ().m_dDetailedStats[eCmd];
+	ScRL_t rLock ( tDetail.m_tStatsLock );
+	CalcSimpleStats ( tDetail.m_tStats.get (), tRowsFoundStats, tQueryTimeStats );
+}
+
+void FormatCmdStats ( VectorLike & dStatus, const char * szPrefix, SearchdStats_t::EDETAILS eCmd )
+{
+	using namespace QueryStats;
+	static std::array<const char *, TYPE_TOTAL> dStatTypeNames = { "avg", "min", "max", "pct95", "pct99" };
+
+	QueryStats_t tRowStats, tTimeStats;
+	bool bCalculated = false;
+	int iNulls = 0;
+
+	for ( int j = 0; j<TYPE_TOTAL; ++j )
+	{
+		if ( !dStatus.MatchAddf ( "%s_stats_ms_%s", szPrefix, dStatTypeNames[j] ) )
+			continue;
+
+		if ( !bCalculated )
+		{
+			CalculateCommandStats ( eCmd, tRowStats, tTimeStats );
+			iNulls = 0;
+			if ( UINT64_MAX==tTimeStats.m_dStats[INTERVAL_15MIN].m_dData[TYPE_MIN] )
+				iNulls = 3;
+			else if ( UINT64_MAX==tTimeStats.m_dStats[INTERVAL_5MIN].m_dData[TYPE_MIN] )
+				iNulls = 2;
+			else if ( UINT64_MAX==tTimeStats.m_dStats[INTERVAL_1MIN].m_dData[TYPE_MIN] )
+				iNulls = 1;
+			bCalculated = true;
+		}
+
+		StringBuilder_c sBuf;
+		switch ( iNulls )
+		{
+		case 0:
+			sBuf.Sprintf ( "%0.3D %0.3D %0.3D", tTimeStats.m_dStats[INTERVAL_1MIN].m_dData[j], tTimeStats.m_dStats[INTERVAL_5MIN].m_dData[j], tTimeStats.m_dStats[INTERVAL_15MIN].m_dData[j] );
+			break;
+		case 1:
+			sBuf.Sprintf ( "N/A %0.3D %0.3D", tTimeStats.m_dStats[INTERVAL_5MIN].m_dData[j], tTimeStats.m_dStats[INTERVAL_15MIN].m_dData[j] );
+			break;
+		case 2:
+			sBuf.Sprintf ( "N/A N/A %0.3D", tTimeStats.m_dStats[INTERVAL_15MIN].m_dData[j] );
+			break;
+		case 3:
+			sBuf << "N/A N/A N/A";
+		}
+
+		dStatus.Add ( sBuf.cstr () );
+	}
 }
 
 namespace {

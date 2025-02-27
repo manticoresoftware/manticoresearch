@@ -64,7 +64,7 @@ When using JSON libraries or functions that convert data structures to JSON stri
 
 ## In clients
 
-The [new official clients](https://github.com/manticoresoftware/) (which use the HTTP protocol) utilize common JSON libraries/functions available in their respective programming languages under the hood. The same rules for escaping mentioned earlier apply.
+The [official clients](https://github.com/manticoresoftware/) utilize common JSON libraries/functions available in their respective programming languages under the hood. The same rules for escaping mentioned earlier apply.
 
 
 ## Escaping asterisk

@@ -1,0 +1,51 @@
+Manticore 6.3.0 173d2b9@24052308
+Copyright (c) 2001-2016, Andrew Aksyonoff
+Copyright (c) 2008-2016, Sphinx Technologies Inc (http://sphinxsearch.com)
+Copyright (c) 2017-2024, Manticore Software LTD (https://manticoresearch.com)
+
+using config file '/etc/manticoresearch/manticore.conf'...
+dumping dictionary file 'products.0.spi'...
+WARNING: secondary library not loaded; secondary index(es) disabled
+total-documents: 6
+keyword,docs,hits,offset
+another,1,1,1
+bag,3,3,6
+burberry,2,2,19
+crossbody,1,1,28
+gucci,1,1,33
+other,1,1,38
+some,1,1,43
+tassel,2,2,48
+with,1,1,57
+without,1,1,62
+апельсины,1,1,67
+краснодар,1,1,72
+марокко,1,1,77
+по,1,1,82
+ризеншнауцер,1,1,87
+рояле,1,1,92
+собока,1,1,97
+шла,1,1,102
+шлите,2,2,107
+яблоки,1,1,116
+another,1,1,121
+bag,3,3,126
+burberry,2,2,139
+crossbody,1,1,148
+guccus,1,1,153
+other,1,1,158
+some,1,1,163
+tassel,2,2,168
+with,1,1,177
+without,1,1,182
+апельсин,1,1,187
+идти,1,1,192
+краснодар,1,1,197
+марокко,1,1,202
+по,1,1,207
+ризеншнауцер,1,1,212
+рояль,1,1,217
+слать,2,2,222
+собока,1,1,231
+собокий,1,1,236
+яблоко,1,1,241

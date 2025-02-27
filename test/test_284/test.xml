@@ -19,22 +19,22 @@ searchd
 
 <queries>
 <sphinxql>
-	drop table if exists t;
-	create table t (t text);
-	insert into t values (0,'bla');
-	flush ramchunk t;
-	insert into t values (0,'bla');
-	flush ramchunk t;
+	drop table if exists tt;
+	create table tt (t text);
+	insert into tt values (0,'bla');
+	flush ramchunk tt;
+	insert into tt values (0,'bla');
+	flush ramchunk tt;
 
 	<!-- that should not work: 'bla' is not a soname, and config has no plugin_dir param and no common section.
 	 However, it works...
 	 So, this whole test is a junk - both, this and the next lines reveals oneshot bug which will vanish once fixed.
 	 The test can be dropped then. -->
-	alter table t index_token_filter = 'abc';
+	alter table tt index_token_filter = 'abc';
 
 	<!-- that crashed. Fixed in the commit where this test added -->
-	select * from t where match ('bla');
-	drop table t;
+	select * from tt where match ('bla');
+	drop table tt;
 </sphinxql>
 </queries>
 

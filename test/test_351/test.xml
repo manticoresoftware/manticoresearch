@@ -52,7 +52,7 @@ for ( $commit=0; $commit<4; $commit++ )
 	$rows = "";
 	for ( $row=0; $row<10; $row++ )
 	{
-		$rows .= json_encode ( array ( "create"=>array("index"=>"test_rt", "id"=>$id, "doc"=>array( "gid"=>$id, "dummy"=>"test".$id, "title"=>RandomWordsTest351 ( 10000, $id ) ))) );
+		$rows .= json_encode ( array ( "create"=>array("table"=>"test_rt", "id"=>$id, "doc"=>array( "gid"=>$id, "dummy"=>"test".$id, "title"=>RandomWordsTest351 ( 10000, $id ) ))) );
 		$rows .= "\n";
 		$id++;
 	}
@@ -73,7 +73,7 @@ for ( $commit=0; $commit<4; $commit++ )
 
 $q = <<<'EOD'
 {
-  "index":"test_rt",
+  "table":"test_rt",
   "query":
   {
     "bool":

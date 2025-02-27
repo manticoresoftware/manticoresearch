@@ -19,10 +19,10 @@ searchd
 
 <queries>
 <sphinxql>
-	drop table if exists t;
-	create table t(f text) charset_table='non_cjk, y->x';
-	call keywords('yx', 't');
-	drop table t;
+	drop table if exists tt;
+	create table tt(f text) charset_table='non_cjk, y->x';
+	call keywords('yx', 'tt');
+	drop table tt;
 </sphinxql>
 </queries>
 

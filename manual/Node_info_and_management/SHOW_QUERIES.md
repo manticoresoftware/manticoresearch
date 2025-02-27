@@ -5,6 +5,8 @@
 SHOW QUERIES
 ```
 
+> NOTE: `SHOW QUERIES` requires [Manticore Buddy](../Installation/Manticore_Buddy.md). If it doesn't work, make sure Buddy is installed.
+
 `SHOW QUERIES` returns information about all currently running queries. The output is a table with the following structure:
 
 - `id`: Query ID that can be used in [KILL](../Node_info_and_management/KILL.md) to terminate the query

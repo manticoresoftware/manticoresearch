@@ -19,6 +19,8 @@ Query OK, 0 rows affected (0.00 sec)
 DELETE BUDDY PLUGIN <username/package name on https://packagist.org/>
 ```
 
+> NOTE: `DELETE BUDDY PLUGIN` requires [Manticore Buddy](../Installation/Manticore_Buddy.md). If it doesn't work, make sure Buddy is installed.
+
 This action instantly and permanently removes the installed plugin from the [plugin_dir](../../Server_settings/Common.md#plugin_dir). Once removed, the plugin's features will no longer be available.
 
 <!-- intro -->

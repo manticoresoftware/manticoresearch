@@ -59,6 +59,4 @@ namespace sph {
 template<typename T>
 using TightPackedVec_T = sph::Vector_T<T, sph::DefaultCopy_T<T>, sph::TightRelimit, sph::CustomStorage_T<T>>;
 
-void sphDeallocatePacked ( BYTE * pBlob );
-
 #include "smalloc_impl.h"

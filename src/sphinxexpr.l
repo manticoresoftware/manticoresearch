@@ -108,8 +108,11 @@ EXP     			[eE]{SIGN}{INT}
 \>=			{ return TOK_GTE; }
 ==?			{ return TOK_EQ; }
 
-{ALPHA}		|
-{ALPHA}{ALNUM}+	{ return pParser->ProcessRawToken ( yytext,yyleng,lvalp ); }
+{ALPHA} |
+{ALPHA}{ALNUM}+	{ lvalp->iTrailingBr = 0; return pParser->ProcessRawToken ( yytext,yyleng,lvalp ); }
+
+{ALPHA}{ALNUM}*/"("	{ lvalp->iTrailingBr = 1; return pParser->ProcessRawToken ( yytext,yyleng,lvalp ); }
+{ALPHA}{ALNUM}*{SPACE}+/"(" { lvalp->iTrailingBr = 2; return pParser->ProcessRawToken ( yytext,yyleng,lvalp ); }
 
 
 `	                { BEGIN (BACK); STRING_BEGIN; lvalp->iConst+=yyleng; } // ++ to skip backtick
@@ -125,6 +128,7 @@ EXP     			[eE]{SIGN}{INT}
 							BEGIN(INITIAL);
 							auto pText = pParser->m_sExpr.first + lvalp->iConst;
                             int iLen =  yytext + yyleng - pText - 1;
+                            lvalp->iTrailingBr = 0;
 							return pParser->ProcessRawToken (pText,iLen,lvalp);
 					}
 

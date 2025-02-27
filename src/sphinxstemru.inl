@@ -465,6 +465,14 @@ void LOC_PREFIX(stem_ru) ( LOC_CHAR_TYPE * word )
 	for ( i=-1; i<len-1; ++i ) if ( IV(word[i]) && !IV(word[i+1]) ) { r1 = i+2; break; }
 	for ( i=r1; i<len-1; ++i ) if ( IV(word[i]) && !IV(word[i+1]) ) { r2 = i+2; break; }
 
+	#undef C
+	#undef W
+	#undef XSUFF2
+	#undef XSUFF3
+	#undef XSUFF4
+	#undef XSUFF5
+	#undef BRK
+	#undef CHK
 	#define C(p) word[len-p]
 	#define W(p,c) ( C(p)==c )
 	#define XSUFF2(c2,c1) ( W(1,c1) && W(2,c2) )
@@ -537,7 +545,23 @@ void LOC_PREFIX(stem_ru) ( LOC_CHAR_TYPE * word )
 	*((unsigned char*)(word+len)) = '\0';
 }
 
-// undefine externally defined stuff
-#undef LOC_CHAR_TYPE
-#undef LOC_PREFIX
-#undef RUS
+// keep clean after yourself
+#undef CHK
+#undef BRK
+#undef XSUFF5
+#undef XSUFF4
+#undef XSUFF3
+#undef XSUFF2
+#undef W
+#undef C
+#undef NEOW
+#undef IV
+#undef STEM_RU_FUNC_I
+#undef STEM_RU_FUNC
+#undef TS5
+#undef TS4
+#undef TS3
+#undef TS2
+#undef TS1
+#undef LOC_TABLE_ENTRY
+#undef LOC_TABLE_INDEX

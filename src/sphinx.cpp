@@ -26,6 +26,7 @@
 #include "sphinxplugin.h"
 #include "sphinxqcache.h"
 #include "icu.h"
+#include "jieba.h"
 #include "attribute.h"
 #include "secondaryindex.h"
 #include "docidlookup.h"
@@ -58,6 +59,7 @@
 #include "dict/infix/infix_builder.h"
 #include "skip_cache.h"
 #include "jsonsi.h"
+#include "tracer.h"
 
 #include <errno.h>
 #include <ctype.h>
@@ -208,7 +210,7 @@ public:
 	ISphQword *			QwordSpawn ( const XQKeyword_t & tWord ) const final;
 	bool				QwordSetup ( ISphQword * ) const final;
 	bool				Setup ( ISphQword * ) const;
-	ISphQword *			ScanSpawn() const final;
+	ISphQword *			ScanSpawn ( int iAtomPos ) const final;
 
 private:
 	DataReaderFactoryPtr_c		m_pDoclist;
@@ -601,7 +603,9 @@ bool CSphTokenizerIndex::GetKeywords ( CSphVector <CSphKeywordInfo> & dKeywords,
 
 	CSphVector<BYTE> dFiltered;
 	const BYTE * sModifiedQuery = (const BYTE *)szQuery;
-	if ( m_pFieldFilter && szQuery && m_pFieldFilter->Clone()->Apply ( sModifiedQuery, dFiltered, true ) )
+	FieldFilterOptions_t tFFOptions { tSettings.m_eJiebaMode };
+
+	if ( m_pFieldFilter && szQuery && m_pFieldFilter->Clone ( &tFFOptions )->Apply ( sModifiedQuery, dFiltered, true ) )
 		sModifiedQuery = dFiltered.Begin();
 
 	pTokenizer->SetBuffer ( sModifiedQuery, (int) strlen ( (const char*)sModifiedQuery) );
@@ -744,14 +748,37 @@ bool Update_CheckAttributes ( const CSphAttrUpdate & tUpd, const ISphSchema & tS
 }
 
 
+static void IncUpdatePoolPos ( const CSphAttrUpdate & tUpdate, int iAttr, int & iPos )
+{
+	switch ( tUpdate.m_dAttributes[iAttr].m_eType )
+	{
+	case SPH_ATTR_UINT32SET:
+	case SPH_ATTR_INT64SET:
+	case SPH_ATTR_FLOAT_VECTOR:
+		iPos += tUpdate.m_dPool[iPos] + 1;
+		break;
+
+	case SPH_ATTR_STRING:
+	case SPH_ATTR_BIGINT:
+		iPos += 2;
+		break;
+
+	default:
+		iPos += 1;
+		break;
+	}
+}
+
+
 void UpdateContext_t::PrepareListOfUpdatedAttributes ( CSphString & sError )
 {
+	int iPoolPos = 0;
 	const auto & tUpd = *m_tUpd.m_pUpdate;
-	ARRAY_FOREACH ( i, tUpd.m_dAttributes )
+	ARRAY_FOREACH ( iAttr, tUpd.m_dAttributes )
 	{
-		const CSphString & sUpdAttrName = tUpd.m_dAttributes[i].m_sName;
-		ESphAttr eUpdAttrType = tUpd.m_dAttributes[i].m_eType;
-		UpdatedAttribute_t & tUpdAttr = m_dUpdatedAttrs[i];
+		const CSphString & sUpdAttrName = tUpd.m_dAttributes[iAttr].m_sName;
+		ESphAttr eUpdAttrType = tUpd.m_dAttributes[iAttr].m_eType;
+		UpdatedAttribute_t & tUpdAttr = m_dUpdatedAttrs[iAttr];
 
 		int iUpdAttrId = m_tSchema.GetAttrIndex ( sUpdAttrName.cstr() );
 
@@ -801,6 +828,7 @@ void UpdateContext_t::PrepareListOfUpdatedAttributes ( CSphString & sError )
 		else
 		{
 			assert ( tUpd.m_bIgnoreNonexistent ); // should be handled by Update_CheckAttributes
+			IncUpdatePoolPos ( tUpd, iAttr, iPoolPos );
 			continue;
 		}
 
@@ -813,31 +841,10 @@ void UpdateContext_t::PrepareListOfUpdatedAttributes ( CSphString & sError )
 		if ( eUpdAttrType==SPH_ATTR_INTEGER && m_tSchema.GetAttr(iUpdAttrId).m_eAttrType==SPH_ATTR_FLOAT )
 		{
 			assert ( tUpd.m_dRowOffset.IsEmpty() ); // fixme! Now we don't fixup more then 1 value
-			const_cast<CSphAttrUpdate &>(tUpd).m_dAttributes[i].m_eType = SPH_ATTR_FLOAT;
-			const_cast<CSphAttrUpdate &>(tUpd).m_dPool[i] = sphF2DW ( (float)tUpd.m_dPool[i] );
+			const_cast<CSphAttrUpdate &>(tUpd).m_dAttributes[iAttr].m_eType = SPH_ATTR_FLOAT;
+			const_cast<CSphAttrUpdate &>(tUpd).m_dPool[iPoolPos] = sphF2DW ( (float)tUpd.m_dPool[iPoolPos] );
 		}
-	}
-}
-
-
-static void IncUpdatePoolPos ( UpdateContext_t & tCtx, int iAttr, int & iPos )
-{
-	switch ( tCtx.m_tUpd.m_pUpdate->m_dAttributes[iAttr].m_eType )
-	{
-	case SPH_ATTR_UINT32SET:
-	case SPH_ATTR_INT64SET:
-	case SPH_ATTR_FLOAT_VECTOR:
-		iPos += tCtx.m_tUpd.m_pUpdate->m_dPool[iPos] + 1;
-		break;
-
-	case SPH_ATTR_STRING:
-	case SPH_ATTR_BIGINT:
-		iPos += 2;
-		break;
-
-	default:
-		iPos += 1;
-		break;
+		IncUpdatePoolPos ( tUpd, iAttr, iPoolPos );
 	}
 }
 
@@ -861,7 +868,7 @@ bool IndexSegment_c::Update_InplaceJson ( const RowsToUpdate_t& dRows, UpdateCon
 		{
 			if ( !FitsInplaceJsonUpdate ( tCtx, i ) || !tCtx.m_dUpdatedAttrs[i].m_bExisting )
 			{
-				IncUpdatePoolPos ( tCtx, i, iPos );
+				IncUpdatePoolPos ( tUpd, i, iPos );
 				continue;
 			}
 
@@ -892,7 +899,7 @@ bool IndexSegment_c::Update_InplaceJson ( const RowsToUpdate_t& dRows, UpdateCon
 					++tCtx.m_iJsonWarnings;
 			}
 
-			IncUpdatePoolPos ( tCtx, i, iPos );
+			IncUpdatePoolPos ( tUpd, i, iPos );
 		}
 	}
 
@@ -970,7 +977,7 @@ bool IndexSegment_c::Update_Blobs ( const RowsToUpdate_t& dRows, UpdateContext_t
 
 			if ( !sphIsBlobAttr(eAttr) || FitsInplaceJsonUpdate ( tCtx, iCol ) || !tCtx.m_dUpdatedAttrs[iCol].m_bExisting )
 			{
-				IncUpdatePoolPos ( tCtx, iCol, iPos );
+				IncUpdatePoolPos ( tUpd, iCol, iPos );
 				continue;
 			}
 
@@ -1009,7 +1016,7 @@ bool IndexSegment_c::Update_Blobs ( const RowsToUpdate_t& dRows, UpdateContext_t
 				break;
 
 			default:
-				IncUpdatePoolPos ( tCtx, iCol, iPos );
+				IncUpdatePoolPos ( tUpd, iCol, iPos );
 				break;
 			}
 		}
@@ -1042,7 +1049,7 @@ CSphRowitem* UpdateContext_t::GetDocinfo ( RowID_t iRowID ) const
 	assert ( iRowID != INVALID_ROWID );
 	assert ( m_pAttrPool );
 	assert ( m_iStride );
-	return m_pAttrPool + iRowID * m_iStride;
+	return m_pAttrPool + (int64_t)iRowID * m_iStride;
 }
 
 
@@ -1062,7 +1069,7 @@ void IndexSegment_c::Update_Plain ( const RowsToUpdate_t& dRows, UpdateContext_t
 			// already updated?
 			if ( sphIsBlobAttr(eAttr) || tUpdAttr.m_eAttrType==SPH_ATTR_JSON || !tUpdAttr.m_bExisting )
 			{
-				IncUpdatePoolPos ( tCtx, iCol, iPos );
+				IncUpdatePoolPos ( tUpd, iCol, iPos );
 				continue;
 			}
 
@@ -1089,7 +1096,7 @@ void IndexSegment_c::Update_Plain ( const RowsToUpdate_t& dRows, UpdateContext_t
 			tCtx.m_uUpdateMask |= ATTRS_UPDATED;
 
 			// next
-			IncUpdatePoolPos ( tCtx, iCol, iPos );
+			IncUpdatePoolPos ( tUpd, iCol, iPos );
 		}
 	}
 }
@@ -1099,6 +1106,7 @@ bool IndexSegment_c::Update_UpdateAttributes ( const RowsToUpdate_t& dRows, Upda
 	// FIXME! FIXME! FIXME! overwriting just-freed blocks might hurt concurrent searchers;
 	// should implement a simplistic MVCC-style delayed-free to avoid that
 
+	TRACE_CORO ( "rt", "IndexSegment_c::Update_UpdateAttributes" );
 	// first pass, if needed
 	if ( tCtx.m_tUpd.m_pUpdate->m_bStrict )
 		if ( !Update_InplaceJson ( dRows, tCtx, sError, true ) )
@@ -1153,7 +1161,7 @@ public:
 	void				DebugDumpHeader ( FILE * fp, const CSphString& sHeaderName, bool bConfig ) final;
 	void				DebugDumpDocids ( FILE * fp ) final;
 	void				DebugDumpHitlist ( FILE * fp, const char * sKeyword, bool bID ) final;
-	void				DebugDumpDict ( FILE * fp ) final;
+	void				DebugDumpDict ( FILE * fp, bool bDumpOnly ) final;
 	void				SetDebugCheck ( bool bCheckIdDups, int iCheckChunk ) final;
 	int					DebugCheck ( DebugCheckError_i & , FilenameBuilder_i * pFilenameBuilder ) final;
 	template <class Qword> void		DumpHitlist ( FILE * fp, const char * sKeyword, bool bID );
@@ -1183,7 +1191,7 @@ public:
 	template <class QWORD>
 	static bool			DeleteField ( const CSphIndex_VLN * pIndex, CSphHitBuilder * pHitBuilder, CSphString & sError, CSphSourceStats & tStat, int iKillField );
 
-	int					CheckThenUpdateAttributes ( AttrUpdateInc_t& tUpd, bool& bCritical, CSphString& sError, CSphString& sWarning, BlockerFn&& fnWatcher ) final;
+	int					CheckThenUpdateAttributes ( AttrUpdateInc_t& tUpd, bool& bCritical, CSphString& sError, CSphString& sWarning ) final;
 	void				UpdateAttributesOffline ( VecTraits_T<PostponedUpdate_t> & dPostUpdates ) final;
 
 	// the only txn we can replay is 'update attributes', but it is processed by dedicated branch in binlog, so we have nothing to do here.
@@ -1238,7 +1246,7 @@ public:
 	Bson_t				ExplainQuery ( const CSphString & sQuery ) const final;
 
 	HistogramContainer_c * Debug_GetHistograms() const override { return m_pHistograms; }
-	const SIContainer_c * Debug_GetSI() const override { return &m_tSI; }
+	const SIContainer_c * GetSI() const override { return &m_tSI; }
 
 	bool				CheckEarlyReject ( const CSphVector<CSphFilterSettings> & dFilters, const ISphFilter * pFilter, ESphCollation eCollation, const ISphSchema & tSchema ) const;
 	std::pair<int64_t,int> GetPseudoShardingMetric ( const VecTraits_T<const CSphQuery> & dQueries, const VecTraits_T<int64_t> & dMaxCountDistinct, int iThreads, bool & bForceSingleThread ) const override;
@@ -1364,7 +1372,7 @@ private:
 	bool						IsQueryFast ( const CSphQuery & tQuery, const CSphVector<SecondaryIndexInfo_t> & dEnabledIndexes, float fCost ) const;
 	CSphVector<SecondaryIndexInfo_t> GetEnabledIndexes ( const CSphQuery & tQuery, bool bFT, float & fCost, int iThreads ) const;
 
-	bool						SetupFiltersAndContext ( CSphQueryContext & tCtx, CreateFilterContext_t & tFlx, CSphQueryResultMeta & tMeta, const ISphSchema * & pMaxSorterSchema, CSphVector<CSphFilterSettings> & dTransformedFilters, CSphVector<FilterTreeItem_t> & dTransformedFilterTree, const VecTraits_T<ISphMatchSorter *> & dSorters, const CSphMultiQueryArgs & tArgs ) const;
+	bool						SetupFiltersAndContext ( CSphQueryContext & tCtx, CreateFilterContext_t & tFlx, CSphQueryResultMeta & tMeta, const ISphSchema * & pMaxSorterSchema, CSphVector<CSphFilterSettings> & dTransformedFilters, CSphVector<FilterTreeItem_t> & dTransformedFilterTree, std::unique_ptr<ISphSchema> & pModifiedMatchSchema, const VecTraits_T<ISphMatchSorter *> & dSorters, const CSphMultiQueryArgs & tArgs ) const;
 
 	Docstore_i *				GetDocstore() const override { return m_pDocstore.get(); }
 	columnar::Columnar_i *		GetColumnar() const override { return m_pColumnar.get(); }
@@ -1846,6 +1854,16 @@ int ExpandKeywords ( int iIndexOpt, QueryOption_e eQueryOpt, const CSphIndexSett
 	return iOpt;
 }
 
+void SetQueryDefaultsExt2 ( CSphQuery & tQuery )
+{
+	tQuery.m_eMode = SPH_MATCH_EXTENDED2; // only new and shiny matching and sorting
+	tQuery.m_eSort = SPH_SORT_EXTENDED;
+	tQuery.m_sSortBy = "@weight desc"; // default order
+	tQuery.m_sOrderBy = "@weight desc";
+	tQuery.m_iAgentQueryTimeoutMs = DEFAULT_QUERY_TIMEOUT;
+	tQuery.m_iRetryCount = DEFAULT_QUERY_RETRY;
+	tQuery.m_iRetryDelay = DEFAULT_QUERY_RETRY;
+}
 
 /////////////////////////////////////////////////////////////////////////////
 // QUERY STATS
@@ -1992,6 +2010,11 @@ float CSphIndex::GetGlobalIDF ( const CSphString & sWord, int64_t iDocsLocal, bo
 	return pIDFer->GetIDF ( sWord, iDocsLocal, bPlainIDF );
 }
 
+bool CSphIndex::HasGlobalIDF() const
+{
+	return ( !m_sGlobalIDFPath.IsEmpty() && sph::GetIDFer ( m_sGlobalIDFPath ) );
+}
+
 
 int CSphIndex::UpdateAttributes ( AttrUpdateSharedPtr_t pUpd, bool & bCritical, CSphString & sError, CSphString & sWarning )
 {
@@ -2001,7 +2024,7 @@ int CSphIndex::UpdateAttributes ( AttrUpdateSharedPtr_t pUpd, bool & bCritical, 
 
 int CSphIndex::UpdateAttributes ( AttrUpdateInc_t& tUpd, bool& bCritical, CSphString& sError, CSphString& sWarning )
 {
-	return CheckThenUpdateAttributes ( tUpd, bCritical, sError, sWarning, nullptr );
+	return CheckThenUpdateAttributes ( tUpd, bCritical, sError, sWarning );
 }
 
 CSphVector<SphAttr_t> CSphIndex::BuildDocList () const
@@ -2219,6 +2242,7 @@ private:
 // fill collect rows which will be updated in this index
 RowsToUpdateData_t CSphIndex_VLN::Update_CollectRowPtrs ( const UpdateContext_t & tCtx )
 {
+	TRACE_CORO ( "sph", "CSphIndex_VLN::Update_CollectRowPtrs" );
 	RowsToUpdateData_t dRowsToUpdate;
 	const auto & dDocids = tCtx.m_tUpd.m_pUpdate->m_dDocids;
 
@@ -2392,6 +2416,7 @@ void CSphIndex_VLN::Update_MinMax ( const RowsToUpdate_t& dRows, const UpdateCon
 // postponed updates (it might happen be more than one update during the operation)
 void CSphIndex_VLN::MaybeAddPostponedUpdate ( RowsToUpdateData_t& dRows, const UpdateContext_t& tCtx )
 {
+	TRACE_CORO ( "sph", "CSphIndex_VLN::MaybeAddPostponedUpdate" );
 	if ( !m_bAttrsBusy.load ( std::memory_order_acquire ) )
 		return;
 
@@ -2404,6 +2429,7 @@ void CSphIndex_VLN::MaybeAddPostponedUpdate ( RowsToUpdateData_t& dRows, const U
 
 bool CSphIndex_VLN::DoUpdateAttributes ( const RowsToUpdate_t& dRows, UpdateContext_t& tCtx, bool& bCritical, CSphString& sError )
 {
+	TRACE_CORO ( "sph", "CSphIndex_VLN::DoUpdateAttributes" );
 	if ( dRows.IsEmpty() )
 		return true;
 
@@ -2494,8 +2520,9 @@ Binlog::CheckTnxResult_t CSphIndex_VLN::ReplayTxn ( CSphReader & tReader, CSphSt
 	return {};
 }
 
-int CSphIndex_VLN::CheckThenUpdateAttributes ( AttrUpdateInc_t& tUpd, bool& bCritical, CSphString& sError, CSphString& sWarning, BlockerFn&& fnWatcher )
+int CSphIndex_VLN::CheckThenUpdateAttributes ( AttrUpdateInc_t& tUpd, bool& bCritical, CSphString& sError, CSphString& sWarning )
 {
+	TRACE_CORO ( "sph", "CSphIndex_VLN::CheckThenUpdateAttributes" );
 	assert ( tUpd.m_pUpdate->m_dRowOffset.IsEmpty() || tUpd.m_pUpdate->m_dDocids.GetLength()==tUpd.m_pUpdate->m_dRowOffset.GetLength() );
 
 	// check if we have to
@@ -2506,9 +2533,6 @@ int CSphIndex_VLN::CheckThenUpdateAttributes ( AttrUpdateInc_t& tUpd, bool& bCri
 	int iUpdated = tUpd.m_iAffected;
 
 	auto dRowsToUpdate = Update_CollectRowPtrs ( tCtx );
-
-	if ( fnWatcher && !fnWatcher() )
-		return -1;
 
 	if ( !DoUpdateAttributes ( dRowsToUpdate, tCtx, bCritical, sError ))
 		return -1;
@@ -2523,8 +2547,13 @@ int CSphIndex_VLN::CheckThenUpdateAttributes ( AttrUpdateInc_t& tUpd, bool& bCri
 	if ( ( tCtx.m_uUpdateMask & IndexSegment_c::ATTRS_UPDATED ) || ( tCtx.m_uUpdateMask & IndexSegment_c::ATTRS_BLOB_UPDATED ) )
 	{
 		for ( const UpdatedAttribute_t & tAttr : tCtx.m_dUpdatedAttrs )
+		{
 			if ( tAttr.m_iSchemaAttr!=-1 )
-				m_tSI.ColumnUpdated ( m_tSchema.GetAttr ( tAttr.m_iSchemaAttr ).m_sName );
+			{
+				const CSphColumnInfo & tIdxAttr = m_tSchema.GetAttr ( tAttr.m_iSchemaAttr );
+				m_tSI.ColumnUpdated ( tIdxAttr.m_sName );
+			}
+		}
 	}
 
 	iUpdated = tUpd.m_iAffected - iUpdated;
@@ -3337,7 +3366,7 @@ void GetSettingsFiles ( const TokenizerRefPtr_c& pTok, const DictRefPtr_c& pDict
 	assert ( pDict );
 
 	StringBuilder_c sFiles ( "," );
-	sFiles << pDict->GetSettings().m_sStopwords << pTok->GetSettings().m_sSynonymsFile << tSettings.m_sHitlessFiles;
+	sFiles << pDict->GetSettings().m_sStopwords << pTok->GetSettings().m_sSynonymsFile << tSettings.m_sHitlessFiles << tSettings.m_sJiebaUserDictPath;
 	auto dFileNames = sphSplit ( sFiles.cstr(), " \t," );
 	if ( pFilenameBuilder )
 	{
@@ -5613,7 +5642,7 @@ int CSphIndex_VLN::Build ( const CSphVector<CSphSource*> & dSources, int iMemory
 					return 0;
 
 				if ( pJsonSIBuilder )
-					pJsonSIBuilder->AddRowSize ( tOffsetSize.second );
+					pJsonSIBuilder->AddRowOffsetSize(tOffsetSize);
 
 				pSource->m_tDocInfo.SetAttr ( pBlobLocatorAttr->m_tLocator, tOffsetSize.first );
 			}
@@ -6623,6 +6652,7 @@ bool CSphIndex_VLN::Merge ( CSphIndex * pSource, const VecTraits_T<CSphFilterSet
 
 std::pair<DWORD,DWORD> CSphIndex_VLN::CreateRowMapsAndCountTotalDocs ( const CSphIndex_VLN* pSrcIndex, const CSphIndex_VLN* pDstIndex, CSphFixedVector<RowID_t>& dSrcRowMap, CSphFixedVector<RowID_t>& dDstRowMap, const ISphFilter* pFilter, bool bSupressDstDocids, MergeCb_c& tMonitor )
 {
+	TRACE_CORO ( "sph", "CSphIndex_VLN::CreateRowMapsAndCountTotalDocs" );
 	if ( pSrcIndex!=pDstIndex )
 		dSrcRowMap.Reset ( pSrcIndex->m_iDocinfo );
 	dDstRowMap.Reset ( pDstIndex->m_iDocinfo );
@@ -6649,6 +6679,7 @@ std::pair<DWORD,DWORD> CSphIndex_VLN::CreateRowMapsAndCountTotalDocs ( const CSp
 
 	// say to observer we're going to collect alive rows from dst index
 	// (kills directed to that index must be collected to reapply at the finish)
+	BEGIN_CORO ( "sph", "collect dst rowmap");
 	tMonitor.SetEvent ( MergeCb_c::E_COLLECT_START, pDstIndex->m_iChunk );
 	for ( RowID_t i = 0; i < dDstRowMap.GetLength(); ++i, pRow+=iStride )
 	{
@@ -6664,11 +6695,13 @@ std::pair<DWORD,DWORD> CSphIndex_VLN::CreateRowMapsAndCountTotalDocs ( const CSp
 		dDstRowMap[i] = (RowID_t)iTotalDocs++;
 	}
 	tMonitor.SetEvent ( MergeCb_c::E_COLLECT_FINISHED, pDstIndex->m_iChunk );
+	END_CORO ( "sph" );
 	tPerIndexDocs.first = (DWORD)iTotalDocs;
 	if ( dSrcRowMap.IsEmpty() )
 		return tPerIndexDocs;
 
 	// say to observer we're going to collect alive rows from src index (again, issue to kills).
+	BEGIN_CORO ( "sph", "collect src rowmap" );
 	tMonitor.SetEvent ( MergeCb_c::E_COLLECT_START, pSrcIndex->m_iChunk );
 	for ( int i = 0; i < dSrcRowMap.GetLength(); ++i )
 	{
@@ -6679,12 +6712,14 @@ std::pair<DWORD,DWORD> CSphIndex_VLN::CreateRowMapsAndCountTotalDocs ( const CSp
 	}
 	tMonitor.SetEvent ( MergeCb_c::E_COLLECT_FINISHED, pSrcIndex->m_iChunk );
 	tPerIndexDocs.second = DWORD ( iTotalDocs - tPerIndexDocs.first );
+	END_CORO ( "sph" );
 	return tPerIndexDocs;
 }
 
 
 bool CSphIndex_VLN::DoMerge ( const CSphIndex_VLN * pDstIndex, const CSphIndex_VLN * pSrcIndex, const ISphFilter * pFilter, CSphString & sError, CSphIndexProgress & tProgress,	bool bSrcSettings, bool bSupressDstDocids )
 {
+	TRACE_CORO ( "sph", "CSphIndex_VLN::DoMerge" );
 	auto & tMonitor = tProgress.GetMergeCb();
 	assert ( pDstIndex && pSrcIndex );
 
@@ -6768,6 +6803,7 @@ bool CSphIndex_VLN::DoMerge ( const CSphIndex_VLN * pDstIndex, const CSphIndex_V
 	// FIXME? is this magic dict block constant any good?..
 	pDict->SortedDictBegin ( tDict, g_tMergeSettings.m_iBufferDict, iInfixCodepointBytes );
 
+	BEGIN_CORO ( "sph", "merge dicts, doclists and hitlists" );
 	// merge dictionaries, doclists and hitlists
 	if ( pDict->GetSettings().m_bWordDict )
 	{
@@ -6784,6 +6820,8 @@ bool CSphIndex_VLN::DoMerge ( const CSphIndex_VLN * pDstIndex, const CSphIndex_V
 					return false;
 		));
 	}
+
+	END_CORO ( "sph" );
 
 	if ( tMonitor.NeedStop () || !sError.IsEmpty() )
 		return false;
@@ -6821,6 +6859,7 @@ bool CSphIndex_VLN::DoMerge ( const CSphIndex_VLN * pDstIndex, const CSphIndex_V
 
 bool sphMerge ( const CSphIndex * pDst, const CSphIndex * pSrc, VecTraits_T<CSphFilterSettings> dFilters, CSphIndexProgress & tProgress, CSphString& sError )
 {
+	TRACE_CORO ( "sph", "sphMerge" );
 	auto pDstIndex = (const CSphIndex_VLN*) pDst;
 	auto pSrcIndex = (const CSphIndex_VLN*) pSrc;
 
@@ -7022,8 +7061,10 @@ bool CSphIndex_VLN::AddRemoveFromDocstore ( const CSphSchema & tOldSchema, const
 	std::unique_ptr<DocstoreBuilder_i> pDocstoreBuilder;
 	if ( iNewNumStored )
 	{
+		DocstoreSettings_t tDefault;
+		const DocstoreSettings_t & tDocstoreSettings = m_pDocstore ? m_pDocstore->GetDocstoreSettings () : tDefault;
 		BuildBufferSettings_t tSettings; // use default buffer settings
-		pDocstoreBuilder = CreateDocstoreBuilder ( GetTmpFilename ( SPH_EXT_SPDS ), m_pDocstore->GetDocstoreSettings(), tSettings.m_iBufferStorage, sError );
+		pDocstoreBuilder = CreateDocstoreBuilder ( GetTmpFilename ( SPH_EXT_SPDS ), tDocstoreSettings, tSettings.m_iBufferStorage, sError );
 		if ( !pDocstoreBuilder )
 			return false;
 
@@ -8045,7 +8086,7 @@ static bool AreAllFiltersExpressions ( const CSphVector<CSphFilterSettings> & dF
 }
 
 
-bool CSphIndex_VLN::SetupFiltersAndContext ( CSphQueryContext & tCtx, CreateFilterContext_t & tFlx, CSphQueryResultMeta & tMeta, const ISphSchema * & pMaxSorterSchema, CSphVector<CSphFilterSettings> & dTransformedFilters, CSphVector<FilterTreeItem_t> & dTransformedFilterTree, const VecTraits_T<ISphMatchSorter *> & dSorters, const CSphMultiQueryArgs & tArgs ) const
+bool CSphIndex_VLN::SetupFiltersAndContext ( CSphQueryContext & tCtx, CreateFilterContext_t & tFlx, CSphQueryResultMeta & tMeta, const ISphSchema * & pMaxSorterSchema, CSphVector<CSphFilterSettings> & dTransformedFilters, CSphVector<FilterTreeItem_t> & dTransformedFilterTree, std::unique_ptr<ISphSchema> & pModifiedMatchSchema, const VecTraits_T<ISphMatchSorter *> & dSorters, const CSphMultiQueryArgs & tArgs ) const
 {
 	// select the sorter with max schema
 	int iMaxSchemaIndex = GetMaxSchemaIndexAndMatchCapacity ( dSorters ).first;
@@ -8069,14 +8110,17 @@ bool CSphIndex_VLN::SetupFiltersAndContext ( CSphQueryContext & tCtx, CreateFilt
 	tFlx.m_sJoinIdx		= tQuery.m_sJoinIdx;
 
 	// may modify eval stages in schema; needs to be before SetupCalc
-	if ( !TransformFilters ( tFlx, dTransformedFilters, dTransformedFilterTree, tQuery.m_dItems, tMeta.m_sError ) )
+	if ( !TransformFilters ( tFlx, dTransformedFilters, dTransformedFilterTree, pModifiedMatchSchema, tQuery.m_dItems, tMeta.m_sError ) )
 		return false;
+
+	if ( pModifiedMatchSchema )
+		tFlx.m_pMatchSchema = pModifiedMatchSchema.get();
 
 	tFlx.m_pFilters = &dTransformedFilters;
 	tFlx.m_pFilterTree = dTransformedFilterTree.GetLength() ? &dTransformedFilterTree : nullptr;
 
 	// setup calculations and result schema
-	if ( !tCtx.SetupCalc ( tMeta, *pMaxSorterSchema, m_tSchema, m_tBlobAttrs.GetReadPtr(), m_pColumnar.get(), dSorterSchemas ) )
+	if ( !tCtx.SetupCalc ( tMeta, *tFlx.m_pMatchSchema, m_tSchema, m_tBlobAttrs.GetReadPtr(), m_pColumnar.get(), dSorterSchemas ) )
 		return false;
 
 	// set blob pool for string on_sort expression fix up
@@ -8137,7 +8181,8 @@ bool CSphIndex_VLN::MultiScan ( CSphQueryResult & tResult, const CSphQuery & tQu
 	const ISphSchema * pMaxSorterSchema = nullptr;
 	CSphVector<CSphFilterSettings> dTransformedFilters; // holds filter settings if they were modified. filters hold pointers to those settings
 	CSphVector<FilterTreeItem_t> dTransformedFilterTree;
-	if ( !SetupFiltersAndContext ( tCtx, tFlx, tMeta, pMaxSorterSchema, dTransformedFilters, dTransformedFilterTree, dSorters, tArgs ) )
+	std::unique_ptr<ISphSchema> pModifiedMatchSchema; // may contain same schema but with modified eval stages
+	if ( !SetupFiltersAndContext ( tCtx, tFlx, tMeta, pMaxSorterSchema, dTransformedFilters, dTransformedFilterTree, pModifiedMatchSchema, dSorters, tArgs ) )
 		return false;
 
 	assert(pMaxSorterSchema);
@@ -8452,7 +8497,15 @@ bool DiskIndexQwordSetup_c::Setup ( ISphQword * pWord ) const
 	return true;
 }
 
-QwordScan_c::QwordScan_c ( int iRowsCount )
+static DWORD Fields2Mask ( int iFields )
+{
+    if ( iFields>31 )
+        return 0xFFFFFFFF;
+    
+    return ( ( 1U<<iFields ) - 1 );
+}
+
+QwordScan_c::QwordScan_c ( int iRowsCount, int iAtomPos, int iFieldsCount )
 	: m_iRowsCount ( iRowsCount )
 {
 	m_bDone = ( m_iRowsCount==0 );
@@ -8460,8 +8513,23 @@ QwordScan_c::QwordScan_c ( int iRowsCount )
 	m_iDocs = m_iRowsCount;
 	m_sWord = "";
 	m_sDictWord = "";
-	m_bExcluded = true;
-	m_dQwordFields.SetAll();
+	m_iAtomPos = iAtomPos;
+	m_iFieldsCount = iFieldsCount;
+	SetFieldMask();
+}
+
+void QwordScan_c::SetFieldMask ()
+{
+	if ( m_iFieldsCount<32 )
+		m_dQwordFields.Assign32 ( Fields2Mask ( m_iFieldsCount ) );
+	else
+		m_dQwordFields.SetAll();
+}
+
+void QwordScan_c::Reset ()
+{
+	ISphQword::Reset();
+	SetFieldMask();
 }
 
 const CSphMatch & QwordScan_c::GetNextDoc()
@@ -8494,9 +8562,9 @@ const CSphMatch & QwordScan_c::GetNextDoc()
 	return m_tDoc;
 }
 
-ISphQword * DiskIndexQwordSetup_c::ScanSpawn() const
+ISphQword * DiskIndexQwordSetup_c::ScanSpawn ( int iAtomPos ) const
 {
-	return new QwordScan_c ( m_iRowsCount );
+	return new QwordScan_c ( m_iRowsCount, iAtomPos, m_pIndex->GetMatchSchema().GetFieldsCount() );
 }
 
 //////////////////////////////////////////////////////////////////////////////
@@ -8815,6 +8883,9 @@ CSphIndex_VLN::LOAD_E CSphIndex_VLN::LoadHeaderJson ( const CSphString& sHeaderN
 	if ( !sphSpawnFilterICU ( pFieldFilter, m_tSettings, tTokSettings, sHeaderName.cstr(), m_sLastError ) )
 		return LOAD_E::GeneralError_e;
 
+	if ( !SpawnFilterJieba ( pFieldFilter, m_tSettings, tTokSettings, sHeaderName.cstr(), pFilenameBuilder, m_sLastError ) )
+		return LOAD_E::GeneralError_e;
+
 	SetFieldFilter ( std::move ( pFieldFilter ) );
 
 	auto tIndexFieldsLenNode = tBson.ChildByName ( "index_fields_lens" );
@@ -9058,14 +9129,16 @@ void CSphIndex_VLN::DumpHitlist ( FILE * fp, const char * sKeyword, bool bID )
 }
 
 
-void CSphIndex_VLN::DebugDumpDict ( FILE * fp )
+void CSphIndex_VLN::DebugDumpDict ( FILE * fp, bool bDumpOnly )
 {
 	if ( !m_pDict->GetSettings().m_bWordDict )
 	{
 		sphDie ( "DebugDumpDict() only supports dict=keywords for now" );
 	}
 
-	fprintf ( fp, "keyword,docs,hits,offset\n" );
+	if ( !bDumpOnly )
+		fprintf ( fp, "keyword,docs,hits,offset\n" );
+
 	m_tWordlist.DebugPopulateCheckpoints();
 	ARRAY_FOREACH ( i, m_tWordlist.m_dCheckpoints )
 	{
@@ -9697,7 +9770,7 @@ static int SPH_EXTNODE_STACK_SIZE = 160;
 // extra stack which need despite EXTNODE_STACK_SIZE
 static DWORD SPH_EXTRA_BUDGET = 0x2000;
 
-void SetExtNodeStackSize ( int iDelta, int iExtra )
+void SetExtNodeStackSize ( int iExtra, int iDelta )
 {
 	if ( iDelta )
 	{
@@ -10719,8 +10792,9 @@ bool CSphIndex_VLN::MultiQuery ( CSphQueryResult & tResult, const CSphQuery & tQ
 
 	CSphVector<BYTE> dFiltered;
 	const BYTE * sModifiedQuery = (const BYTE *)tQuery.m_sQuery.cstr();
+	FieldFilterOptions_t tFFOptions { tQuery.m_eJiebaMode };
 
-	if ( m_pFieldFilter && sModifiedQuery && m_pFieldFilter->Clone()->Apply ( sModifiedQuery, dFiltered, true ) )
+	if ( m_pFieldFilter && sModifiedQuery && m_pFieldFilter->Clone ( &tFFOptions )->Apply ( sModifiedQuery, dFiltered, true ) )
 		sModifiedQuery = dFiltered.Begin();
 
 	// parse query
@@ -11044,7 +11118,8 @@ bool CSphIndex_VLN::ParsedMultiQuery ( const CSphQuery & tQuery, CSphQueryResult
 	const ISphSchema * pMaxSorterSchema = nullptr;
 	CSphVector<CSphFilterSettings> dTransformedFilters; // holds filter settings if they were modified. filters hold pointers to those settings
 	CSphVector<FilterTreeItem_t> dTransformedFilterTree;
-	if ( !SetupFiltersAndContext ( tCtx, tFlx, tMeta, pMaxSorterSchema, dTransformedFilters, dTransformedFilterTree, dSorters, tArgs ) )
+	std::unique_ptr<ISphSchema> pModifiedMatchSchema; // may contain same schema but with modified eval stages
+	if ( !SetupFiltersAndContext ( tCtx, tFlx, tMeta, pMaxSorterSchema, dTransformedFilters, dTransformedFilterTree, pModifiedMatchSchema, dSorters, tArgs ) )
 		return false;
 
 	assert(pMaxSorterSchema);
@@ -11052,7 +11127,7 @@ bool CSphIndex_VLN::ParsedMultiQuery ( const CSphQuery & tQuery, CSphQueryResult
 
 	// set blob pool for string on_sort expression fix up
 	tCtx.SetBlobPool ( m_tBlobAttrs.GetReadPtr() );
-	tCtx.m_uPackedFactorFlags = tArgs.m_uPackedFactorFlags;
+	tCtx.SetPackedFactor ( tArgs.m_uPackedFactorFlags );
 
 	// open files
 	DataReaderFactoryPtr_c pDoclist = m_pDoclistFile;
@@ -11187,7 +11262,7 @@ bool CSphIndex_VLN::ParsedMultiQuery ( const CSphQuery & tQuery, CSphQueryResult
 	bool bHaveRandom = false;
 	dSorters.Apply ( [&bHaveRandom] ( const ISphMatchSorter * p ) { bHaveRandom |= p->IsRandom(); } );
 
-	bool bUseFactors = !!( tCtx.m_uPackedFactorFlags & SPH_FACTOR_ENABLE );
+	bool bUseFactors = !!( tCtx.GetPackedFactor() & SPH_FACTOR_ENABLE );
 	bool bUseKlist = m_tDeadRowMap.HasDead();
 	bool bHasSortCalc = !tCtx.m_dCalcSort.IsEmpty();
 	bool bHasWeightFilter = !!tCtx.m_pWeightFilter;
@@ -11848,7 +11923,7 @@ public:
 
 	int					Apply ( const BYTE * sField, int iLength, CSphVector<BYTE> & dStorage, bool ) final;
 	void				GetSettings ( CSphFieldFilterSettings & tSettings ) const final;
-	std::unique_ptr<ISphFieldFilter>	Clone() const final;
+	std::unique_ptr<ISphFieldFilter> Clone ( const FieldFilterOptions_t * pOptions ) const final;
 
 	void				AddRegExp ( const char * sRegExp, StringBuilder_c & sErrors );
 
@@ -11955,7 +12030,7 @@ void CSphFieldRegExps::AddRegExp ( const char * sRegExp, StringBuilder_c & sErro
 }
 
 
-std::unique_ptr<ISphFieldFilter> CSphFieldRegExps::Clone() const
+std::unique_ptr<ISphFieldFilter> CSphFieldRegExps::Clone ( const FieldFilterOptions_t * pOptions ) const
 {
 	auto pCloned = std::make_unique<CSphFieldRegExps>();
 	pCloned->m_dRegexps = m_dRegexps;
@@ -12347,7 +12422,7 @@ static int DecodeUtf8 ( const BYTE * sWord, int * pBuf )
 }
 
 
-bool SuggestResult_t::SetWord ( const char * sWord, const TokenizerRefPtr_c& pTok, bool bUseLastWord, bool bSetSentence )
+bool SuggestResult_t::SetWord ( const char * sWord, const TokenizerRefPtr_c & pTok, bool bUseLastWord, bool bSetSentence )
 {
 	assert ( pTok->IsQueryTok() );
 	TokenizerRefPtr_c pTokenizer = pTok->Clone ( SPH_CLONE );
@@ -12501,7 +12576,7 @@ struct CmpSuggestOrder_fn
 };
 
 
-static void SuggestMergeDocs ( CSphVector<SuggestWord_t> & dMatched )
+void SuggestMergeDocs ( CSphVector<SuggestWord_t> & dMatched )
 {
 	if ( !dMatched.GetLength() )
 		return;

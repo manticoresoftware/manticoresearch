@@ -462,7 +462,7 @@ bool SortStateSetup_c::Setup ( CSphString & sError )
 
 //////////////////////////////////////////////////////////////////////////
 
-ESortClauseParseResult sphParseSortClause ( const CSphQuery & tQuery, const char * szClause, const ISphSchema & tSchema, ESphSortFunc & eFunc, CSphMatchComparatorState & tState, CSphVector<ExtraSortExpr_t> & dExtraExprs, bool bComputeItems, const JoinArgs_t * pJoinArgs, CSphString & sError )
+ESortClauseParseResult sphParseSortClause ( const CSphQuery & tQuery, const char * szClause, const ISphSchema & tSchema, ESphSortFunc & eFunc, CSphMatchComparatorState & tState, CSphVector<ExtraSortExpr_t> & dExtraExprs, const JoinArgs_t * pJoinArgs, CSphString & sError )
 {
 	for ( auto & tAttr : tState.m_dAttrs )
 		tAttr = -1;
@@ -511,6 +511,16 @@ ESortClauseParseResult sphParseSortClause ( const CSphQuery & tQuery, const char
 		SortStateSetup_c tSetup ( pTok, tTok, tState, dExtraExprs, iField, tSchema, tQuery, pJoinArgs );
 		if ( !tSetup.Setup(sError) )
 			return SORT_CLAUSE_ERROR;		
+	}
+
+	// fix for
+	// FACET attr ORDER BY COUNT(*)
+	// into
+	// FACET attr ORDER BY COUNT(*) DESC
+	if ( iField==0 && tQuery.m_bFacet )
+	{
+		tState.m_uAttrDesc |= 1;
+		iField++;
 	}
 
 	if ( iField==0 )

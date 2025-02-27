@@ -20,6 +20,7 @@
 	uint64_t		iAttrLocator;	// attribute locator (rowitem for int/float; offset+size for bits)
 	int				iFunc;			// function id
 	int				iNode;			// node, or uservar, or udf index
+	int				iTrailingBr;	// TOKEN = 0, TOKEN( = 1, TOKEN  ( = 2 - whether lexer token has trailing bracket
 	const char *	sIdent;			// generic identifier (token does NOT own ident storage; ie values are managed by parser)
 };
 
@@ -149,6 +150,7 @@ attr:
 	| TOK_FIELD						{ $$ = pParser->AddNodeField ( TOK_FIELD, $1 ); }
 	| '`' attr '`'					{ $$ = $2; }
 	| TOK_TABLE_NAME TOK_SUBKEY		{ $$ = pParser->AddNodeWithTable ( $1, $2 ); }
+	| TOK_TABLE_NAME TOK_SUBKEY '(' ')'	{ $$ = pParser->AddWeightWithTable ( $1, $2 ); }
 	;
 
 expr:

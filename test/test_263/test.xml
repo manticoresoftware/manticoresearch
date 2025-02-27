@@ -39,7 +39,7 @@ index csv
 
 <queries>
 	<sphinxql>select * from csv</sphinxql>
-	<query endpoint="search" method="post">{"index": "csv"}</query>
+	<query endpoint="search" method="post">{"table": "csv"}</query>
 </queries>
 
 </test>

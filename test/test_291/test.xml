@@ -1,0 +1,80 @@
+<?xml version="1.0" encoding="utf-8"?>
+<test>
+
+<name>lost uniq hash values</name>
+
+<requires>
+	<force-rt/>
+</requires>
+
+<skip_indexer/>
+
+<config>
+searchd
+{
+	<searchd_settings/>
+	data_dir = <data_path/>
+	binlog_path =
+}
+</config>
+
+<queries>
+<sphinxql>
+	drop table if exists parts;
+	CREATE TABLE parts (id bigint, title text indexed, tid string attribute, cid integer, gid integer);
+	insert into parts (id, title, tid, cid, gid) values
+	(1,'bla','a',1,1399901),
+	(2,'bla','b',2,1399902),
+	(3,'bla','c',3,1399903),
+	(4,'bla','d',14,1399904),
+	(5,'bla','e',15,1399905),
+	(6,'bla','f', 16,4299506),
+	(7,'bla','g', 17,3299507),
+	(8,'bla','h', 18,3299508),
+	(9,'bla','i', 19,3299509);
+	flush ramchunk parts;
+
+	drop table if exists partsinventory;
+	CREATE TABLE partsinventory (id bigint, title text indexed, tid string attribute, cid integer, gid integer);
+	insert into partsinventory (id, title, tid, cid, gid) values
+	(10,'bla','j', 20,3299510),
+	(11,'bla','k', 21,3299511),
+	(12,'bla','l', 17,4299512),
+	(13,'bla','m',4,1399901),
+	(14,'bla','ma',41,1399902),
+	(15,'bla','ma',42,1399903),
+	(16,'bla','ma',43,1399904),
+	(17,'bla','ma',44,1399905),
+	(18,'bla','ma',45,1399906),
+	(19,'bla','ma',46,1399907),
+	(20,'bla','ma',47,1399908),
+	(21,'bla','ma',48,1399909),
+	(22,'bla','ma',49,13999010),
+	(23,'bla','ma',50,13999011),
+	(24,'bla','ma',51,13999012),
+	(25,'bla','ma',52,13999013);
+	flush ramchunk partsinventory;
+
+	drop table if exists partsprivate;
+	CREATE TABLE partsprivate (id bigint, title text indexed, tid string attribute, cid integer, gid integer);
+	drop table if exists alldist;
+	CREATE TABLE alldist type='distributed' local='parts' local='partsprivate' local='partsinventory';
+
+	SELECT cid as value, count(distinct tid) FROM alldist where match ('bla') GROUP BY gid option max_matches=5;
+
+	drop table alldist;
+	drop table partsprivate;
+	drop table partsinventory;
+	drop table parts;
+</sphinxql>
+</queries>
+	<!-- ft 'match' ensures code flow via matching (not via fullscan).
+	'cid as value' ensures we have 'final stage' expressions, which will cause sorter to finalize matches
+	count(distinct) ensures, uniq counters is in game.
+	and combo of 3 locals one of which is empty, second has 16 docs ensures The Scenario:
+	merging result with empty one just moves the matches. But, by mistake, doesn't move uniqs. From this moment we have matches which are NOT in uniq hash.
+	merging next ensures pushing matches one-by-one. Uniq group for 5 matches has place for 20, 5 of them are already filled,
+	and we push 16 extra. This causes cleaning, which select best 5 from pushed 21, and throw away 16.
+	Unfortunately, that 16 includes matches lost from uniq hash.
+	Test will fail assert on Debug build, and may behave strange (infinite loop, crash, etc.) on release building -->
+</test>

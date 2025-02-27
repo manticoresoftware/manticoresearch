@@ -16,8 +16,10 @@
 #include "jsonqueryfilter.h"
 #include "attribute.h"
 #include "searchdsql.h"
+#include "searchdha.h"
 #include "knnmisc.h"
 #include "datetime.h"
+#include "sorterscroll.h"
 
 #include "json/cJSON.h"
 
@@ -271,6 +273,7 @@ public:
 	bool	IsFullscan ( const CSphQuery & tQuery ) const final;
 	bool	IsFullscan ( const XQQuery_t & tQuery ) const final;
 	bool	ParseQuery ( XQQuery_t & tParsed, const char * sQuery, const CSphQuery * pQuery, TokenizerRefPtr_c pQueryTokenizer, TokenizerRefPtr_c pQueryTokenizerJson, const CSphSchema * pSchema, const DictRefPtr_c& pDict, const CSphIndexSettings & tSettings, const CSphBitvec * pMorphFields ) const final;
+	QueryParser_i * Clone() const final { return new QueryParserJson_c; }
 
 private:
 	XQNode_t *		ConstructMatchNode ( const JsonObj_c & tJson, bool bPhrase, bool bTerms, bool bSingleTerm, QueryTreeBuilder_c & tBuilder ) const;
@@ -939,9 +942,15 @@ static bool ParseIndex ( const JsonObj_c & tRoot, SqlStmt_t & tStmt, CSphString 
 		return false;
 	}
 
-	JsonObj_c tIndex = tRoot.GetStrItem ( "index", sError );
+	JsonObj_c tIndex = tRoot.GetStrItem ( "table", sError );
 	if ( !tIndex )
-		return false;
+	{
+		tIndex = tRoot.GetStrItem ( "index", sError, true );
+		if ( !tIndex )
+			return false;
+		
+		sError = "";
+	}
 
 	tStmt.m_sIndex = tIndex.StrVal();
 	tStmt.m_tQuery.m_sIndexes = tStmt.m_sIndex;
@@ -1072,19 +1081,19 @@ static bool ParseLimits ( const JsonObj_c & tRoot, CSphQuery & tQuery, CSphStrin
 }
 
 
-static bool ParseOptions ( const JsonObj_c & tRoot, CSphQuery & tQuery, CSphString & sError )
+static bool ParseOptions ( const JsonObj_c & tOptions, CSphQuery & tQuery, CSphString & sError )
 {
-	if ( !tRoot.IsObj() )
+	if ( !tOptions.IsObj() )
 	{	
 		sError = "\"options\" property value should be an object";
 		return false;
 	}
 
-	for ( const auto & i : tRoot )
+	for ( const auto & i : tOptions )
 	{
 		AddOption_e eAdd = AddOption_e::NOT_FOUND;
 		CSphString sOpt = i.Name();
-		if ( i.IsInt() )
+		if ( i.IsInt() || i.IsBool() )
 			eAdd = AddOption ( tQuery, sOpt, i.StrVal(), i.IntVal(), STMT_SELECT, sError );
 		else if ( i.IsStr() )
 		{
@@ -1104,7 +1113,7 @@ static bool ParseOptions ( const JsonObj_c & tRoot, CSphQuery & tQuery, CSphStri
 			}
 
 			if ( eAdd==AddOption_e::NOT_FOUND )
-				eAdd = AddOption ( tQuery, sOpt, i.StrVal(), [&i]{ return i.StrVal(); }, STMT_SELECT, sError );
+				eAdd = AddOption ( tQuery, sOpt, i.StrVal(), i.StrVal(), [&i]{ return i.StrVal(); }, STMT_SELECT, sError );
 		}
 		else if ( i.IsObj() )
 		{
@@ -1133,6 +1142,51 @@ static bool ParseOptions ( const JsonObj_c & tRoot, CSphQuery & tQuery, CSphStri
 	}
 
 	return true;
+}
+
+
+static bool ParseOptions ( const JsonObj_c & tRoot, ParsedJsonQuery_t & tPJQuery, CSphString & sError )
+{
+	CSphQuery & tQuery = tPJQuery.m_tQuery;
+
+	// different from SQL: in sql it is requested by default
+	tQuery.m_tScrollSettings.m_bRequested = false;
+
+	JsonObj_c tOptions = tRoot.GetItem("options");
+	if ( !tOptions )
+		return true;
+
+	if ( tQuery.m_eJoinType!=JoinType_e::NONE )
+		for ( const auto & i : tOptions )
+		{
+			if ( !i.IsObj() )
+				continue;
+
+			CSphString sTable = i.Name();
+			sTable.ToLower();
+
+			StrVec_t dQueryIndexes;
+			ParseIndexList ( tQuery.m_sIndexes, dQueryIndexes );
+
+			bool bLeftTable = false;
+			for ( const auto & i : dQueryIndexes )
+				if ( sTable==i )
+				{
+					bLeftTable = true;
+					break;
+				}
+
+			if ( bLeftTable )
+				return ParseOptions ( i, tQuery, sError );
+
+			if ( sTable==tQuery.m_sJoinIdx )
+				return ParseOptions ( i, tPJQuery.m_tJoinQueryOptions, sError );
+
+			sError.SetSprintf ( "Unknown table '%s' in OPTIONS", sTable.cstr() );
+			return false;
+		}
+
+	return ParseOptions ( tOptions, tQuery, sError );
 }
 
 
@@ -1170,27 +1224,151 @@ static bool ParseKNNQuery ( const JsonObj_c & tJson, CSphQuery & tQuery, CSphStr
 }
 
 
-bool sphParseJsonQuery ( Str_t sQuery, ParsedJsonQuery_t* pQuery )
+static bool ParseOnCond ( const JsonObj_c & tRoot, CSphString & sIdx, CSphString & sAttr, ESphAttr & eType, CSphString & sError )
 {
-	assert ( pQuery );
-	JsonObj_c tRoot ( sQuery );
-	pQuery->m_tQuery.m_sRawQuery = sQuery;
+	CSphString sType;
+	if ( !tRoot.FetchStrItem ( sIdx, "table", sError ) ) return false;
+	if ( !tRoot.FetchStrItem ( sAttr, "field", sError ) ) return false;
+	if ( !tRoot.FetchStrItem ( sType, "type", sError, true ) ) return false;
 
-	return sphParseJsonQuery ( tRoot, pQuery );
+	if ( !sType.IsEmpty() )
+	{
+		if ( sType=="int" || sType=="integer" )
+			eType = SPH_ATTR_INTEGER;
+		else if ( sType=="float" )
+			eType = SPH_ATTR_FLOAT;
+		else if ( sType=="string" )
+			eType = SPH_ATTR_STRING;
+		else
+		{
+			sError.SetSprintf ( "unknown \"type\" value: \"%s\"", sType.cstr() );
+			return false;
+		}
+	}
+
+	return true;
 }
 
-bool sphParseJsonQuery ( const JsonObj_c & tRoot, ParsedJsonQuery_t* pQuery )
+
+static bool ParseOnFilter ( const JsonObj_c & tRoot, OnFilter_t & tOnFilter, CSphString & sError )
+{
+	if ( !tRoot.IsObj() )
+	{
+		sError = "\"on\" items should be objects";
+		return false;
+	}
+
+	CSphString sOp;
+	if ( !tRoot.FetchStrItem ( sOp, "operator", sError ) )
+		return false;
+
+	if ( sOp!="eq" )
+	{
+		sError = "Unknown \"operator\" value";
+		return false;
+	}
+
+	JsonObj_c tLeft = tRoot.GetObjItem ( "left", sError );
+	if ( !tLeft )
+		return false;
+
+	JsonObj_c tRight = tRoot.GetObjItem ( "right", sError );
+	if ( !tRight )
+		return false;
+
+	if ( !ParseOnCond ( tLeft, tOnFilter.m_sIdx1, tOnFilter.m_sAttr1, tOnFilter.m_eTypeCast1, sError ) )
+		return false;
+
+	if ( !ParseOnCond ( tRight, tOnFilter.m_sIdx2, tOnFilter.m_sAttr2, tOnFilter.m_eTypeCast2, sError ) )
+		return false;
+
+	return true;
+}
+
+
+static bool ParseJoin ( const JsonObj_c & tRoot, CSphQuery & tQuery, CSphString & sError, CSphString & sWarning )
+{
+	JsonObj_c tJoin = tRoot.GetArrayItem ( "join", sError, true );
+	if ( !tJoin )
+		return true;
+
+	int iNumJoins = 0;
+	for ( const auto & tJoinItem : tJoin )
+	{
+		if ( iNumJoins>0 )
+		{
+			sError = "Only single table joins are currently supported";
+			return false;
+		}
+
+		CSphString sJoinType;
+		if ( !tJoinItem.FetchStrItem ( sJoinType, "type", sError ) )
+			return false;
+
+		if ( sJoinType=="inner" )
+			tQuery.m_eJoinType = JoinType_e::INNER;
+		else if ( sJoinType=="left" )
+			tQuery.m_eJoinType = JoinType_e::LEFT;
+		else
+		{	
+			sError.SetSprintf ( "unknown join type '%s'", sJoinType.cstr() );
+			return false;
+		}
+
+		if ( !tJoinItem.FetchStrItem ( tQuery.m_sJoinIdx, "table", sError ) )
+			return false;
+
+		JsonObj_c tMatchQuery = tJoinItem.GetObjItem ( "query", sError, true );
+		if ( tMatchQuery )
+			tQuery.m_sJoinQuery = tMatchQuery.AsString();
+		
+		JsonObj_c tOn = tJoinItem.GetArrayItem ( "on", sError );
+		if ( !tOn )
+			return false;
+
+		for ( const auto & tCond : tOn )
+		{
+			OnFilter_t tOnFilter;
+			if ( !ParseOnFilter ( tCond, tOnFilter, sError ) )
+				return false;
+
+			tQuery.m_dOnFilters.Add(tOnFilter);
+		}
+
+		iNumJoins++;
+	}
+
+	return true;
+}
+
+
+bool sphParseJsonQuery ( Str_t sQuery, ParsedJsonQuery_t & tPJQuery )
+{
+	JsonObj_c tRoot ( sQuery );
+	tPJQuery.m_tQuery.m_sRawQuery = sQuery;
+
+	return sphParseJsonQuery ( tRoot, tPJQuery );
+}
+
+
+bool sphParseJsonQuery ( const JsonObj_c & tRoot, ParsedJsonQuery_t & tPJQuery )
 {
 	TlsMsg::ResetErr();
 	if ( !tRoot )
 		return TlsMsg::Err ( "unable to parse: %s", tRoot.GetErrorPtr() );
 
 	TLS_MSG_STRING ( sError );
-	JsonObj_c tIndex = tRoot.GetStrItem ( "index", sError );
+	JsonObj_c tIndex = tRoot.GetStrItem ( "table", sError );
 	if ( !tIndex )
-		return false;
+	{
+		tIndex = tRoot.GetStrItem ( "index", sError, true );
+		if ( !tIndex )
+			return false;
 
-	auto& tQuery = pQuery->m_tQuery;
+		sError = "";
+	}
+
+	auto & tQuery = tPJQuery.m_tQuery;
 
 	tQuery.m_sIndexes = tIndex.StrVal();
 	if ( tQuery.m_sIndexes==g_szAll )
@@ -1205,23 +1383,25 @@ bool sphParseJsonQuery ( const JsonObj_c & tRoot, ParsedJsonQuery_t* pQuery )
 		return TlsMsg::Err ( "\"query\" can't be used together with \"knn\"" );
 
 	// common code used by search queries and update/delete by query
-	if ( !ParseJsonQueryFilters ( tJsonQuery, tQuery, sError, pQuery->m_sWarning ) )
+	if ( !ParseJsonQueryFilters ( tJsonQuery, tQuery, sError, tPJQuery.m_sWarning ) )
 		return false;
 
-	if ( !ParseKNNQuery ( tKNNQuery, tQuery, sError, pQuery->m_sWarning ) )
+	if ( !ParseKNNQuery ( tKNNQuery, tQuery, sError, tPJQuery.m_sWarning ) )
 		return false;
 
-	if ( tKNNQuery && !ParseJsonQueryFilters ( tKNNQuery, tQuery, sError, pQuery->m_sWarning ) )
+	if ( tKNNQuery && !ParseJsonQueryFilters ( tKNNQuery, tQuery, sError, tPJQuery.m_sWarning ) )
 		return false;
 
-	JsonObj_c tOptions = tRoot.GetItem("options");
-	if ( tOptions && !ParseOptions ( tOptions, tQuery, sError ) )
+	if ( !ParseJoin ( tRoot, tQuery, sError, tPJQuery.m_sWarning ) )
 		return false;
 
-	if ( !tRoot.FetchBoolItem ( pQuery->m_bProfile, "profile", sError, true ) )
+	if ( !ParseOptions ( tRoot, tPJQuery, sError ) )
 		return false;
 
-	if ( !tRoot.FetchIntItem ( pQuery->m_iPlan, "plan", sError, true ) )
+	if ( !tRoot.FetchBoolItem ( tPJQuery.m_bProfile, "profile", sError, true ) )
+		return false;
+
+	if ( !tRoot.FetchIntItem ( tPJQuery.m_iPlan, "plan", sError, true ) )
 		return false;
 
 	// expression columns go first to select list
@@ -1253,7 +1433,7 @@ bool sphParseJsonQuery ( const JsonObj_c & tRoot, ParsedJsonQuery_t* pQuery )
 	if ( tSort )
 	{
 		bool bGotWeight = false;
-		if ( !ParseSort ( tSort, tQuery, bGotWeight, sError, pQuery->m_sWarning ) )
+		if ( !ParseSort ( tSort, tQuery, bGotWeight, sError, tPJQuery.m_sWarning ) )
 			return false;
 
 		JsonObj_c tTrackScore = tRoot.GetBoolItem ( "track_scores", sError, true );
@@ -1286,6 +1466,9 @@ bool sphParseJsonQuery ( const JsonObj_c & tRoot, ParsedJsonQuery_t* pQuery )
 	// aggs
 	JsonObj_c tAggs = tRoot.GetItem ( "aggs" );
 	if ( tAggs && !ParseAggregates ( tAggs, tQuery, sError ) )
+		return false;
+
+	if ( !SetupScroll ( tQuery, sError ) )
 		return false;
 
 	return true;
@@ -1392,9 +1575,9 @@ bool ParseJsonInsertSource ( const JsonObj_c & tSource, SqlStmt_t & tStmt, bool 
 }
 
 
-bool sphParseJsonInsert ( const char * szInsert, SqlStmt_t & tStmt, DocID_t & tDocId, bool bReplace, CSphString & sError )
+bool sphParseJsonInsert ( Str_t sInsert, SqlStmt_t & tStmt, DocID_t & tDocId, bool bReplace, CSphString & sError )
 {
-	JsonObj_c tRoot ( szInsert );
+	JsonObj_c tRoot ( sInsert );
 	return ParseJsonInsert ( tRoot, tStmt, tDocId, bReplace, sError );
 }
 
@@ -1655,7 +1838,7 @@ static void PackedFloatVec2Json ( StringBuilder_c & tOut, const BYTE * pFV )
 }
 
 
-static void JsonObjAddAttr ( JsonEscapedBuilder & tOut, ESphAttr eAttrType, const CSphMatch & tMatch, const CSphAttrLocator & tLoc )
+static void JsonObjAddAttr ( JsonEscapedBuilder & tOut, ESphAttr eAttrType, const CSphMatch & tMatch, const CSphAttrLocator & tLoc, int iMulti=1 )
 {
 	switch ( eAttrType )
 	{
@@ -1663,19 +1846,19 @@ static void JsonObjAddAttr ( JsonEscapedBuilder & tOut, ESphAttr eAttrType, cons
 	case SPH_ATTR_TIMESTAMP:
 	case SPH_ATTR_TOKENCOUNT:
 	case SPH_ATTR_BIGINT:
-		tOut.NtoA ( tMatch.GetAttr(tLoc) );
+		tOut.NtoA ( tMatch.GetAttr(tLoc) * iMulti );
 		break;
 
 	case SPH_ATTR_UINT64:
-		tOut.NtoA ( (uint64_t)tMatch.GetAttr(tLoc) );
+		tOut.NtoA ( (uint64_t)tMatch.GetAttr(tLoc) * iMulti  );
 		break;
 
 	case SPH_ATTR_FLOAT:
-		tOut.FtoA ( tMatch.GetAttrFloat(tLoc) );
+		tOut.FtoA ( tMatch.GetAttrFloat(tLoc) * iMulti );
 		break;
 
 	case SPH_ATTR_DOUBLE:
-		tOut.DtoA ( tMatch.GetAttrDouble(tLoc) );
+		tOut.DtoA ( tMatch.GetAttrDouble(tLoc) * iMulti  );
 		break;
 
 	case SPH_ATTR_BOOL:
@@ -1792,6 +1975,23 @@ static bool IsHighlightAttr ( const CSphString & sName )
 }
 
 
+static CSphString GetJoinedWeightName ( const CSphQuery & tQuery )
+{
+	CSphString sWeight;
+	sWeight.SetSprintf ( "%s.weight()", tQuery.m_sJoinIdx.cstr() );
+	return sWeight;
+}
+
+
+static bool IsJoinedWeight ( const CSphString & sAttr, const CSphQuery & tQuery )
+{
+	if ( tQuery.m_sJoinIdx.IsEmpty() )
+		return false;
+
+	return sAttr==GetJoinedWeightName(tQuery);
+}
+
+
 static bool NeedToSkipAttr ( const CSphString & sName, const CSphQuery & tQuery )
 {
 	const char * szName = sName.cstr();
@@ -1801,6 +2001,7 @@ static bool NeedToSkipAttr ( const CSphString & sName, const CSphQuery & tQuery 
 	if ( sName.Begins ( GetFilterAttrPrefix() ) ) return true;
 	if ( sName.Begins ( g_szOrder ) ) return true;
 	if ( sName.Begins ( GetKnnDistAttrName() ) ) return true;
+	if ( IsJoinedWeight ( sName, tQuery ) ) return true;
 
 	if ( !tQuery.m_dIncludeItems.GetLength() && !tQuery.m_dExcludeItems.GetLength () )
 		return false;
@@ -1852,15 +2053,25 @@ void EncodeHighlight ( const CSphMatch & tMatch, int iAttr, const ISphSchema & t
 	}
 }
 
-static void EncodeFields ( const StrVec_t & dFields, const AggrResult_t & tRes, const CSphMatch & tMatch, const ISphSchema & tSchema,
-	bool bValArray, const char * sPrefix, const char * sEnd, JsonEscapedBuilder & tOut )
+static const char * GetName ( const CSphString & sName )
+{
+	return sName.cstr();
+}
+
+static const char * GetName ( const JsonDocField_t & tDF )
+{
+	return tDF.m_sName.cstr();
+}
+
+template <typename T>
+void EncodeFields ( const CSphVector<T> & dFields, const AggrResult_t & tRes, const CSphMatch & tMatch, const ISphSchema & tSchema,	bool bValArray, const char * sPrefix, const char * sEnd, JsonEscapedBuilder & tOut )
 {
 	JsonEscapedBuilder tDFVal;
 
 	tOut.StartBlock ( ",", sPrefix, sEnd );
-	for ( const CSphString & sDF : dFields )
+	for ( const T & tDF : dFields )
 	{
-		const CSphColumnInfo * pCol = tSchema.GetAttr ( sDF.cstr() );
+		const CSphColumnInfo * pCol = tSchema.GetAttr ( GetName ( tDF ) );
 		if ( !pCol )
 		{
 			tOut += R"("Default")";
@@ -1874,7 +2085,7 @@ static void EncodeFields ( const StrVec_t & dFields, const AggrResult_t & tRes, 
 		if ( bValArray )
 			tOut.Sprintf ( "%s", tDFVal.cstr() );
 		else
-			tOut.Sprintf ( R"("%s":["%s"])", sDF.cstr(), tDFVal.cstr() );
+			tOut.Sprintf ( R"("%s":["%s"])", GetName ( tDF ), tDFVal.cstr() );
 	}
 	tOut.FinishBlock ( false ); // close obj
 }
@@ -1995,7 +2206,7 @@ static const char * GetBucketPrefix ( const AggrKeyTrait_t & tKey, Aggr_e eAggrF
 	return sPrefix;
 }
 
-static void PrintKey ( const AggrKeyTrait_t & tKey, Aggr_e eAggrFunc, const RangeKeyDesc_t * pRange, const CSphMatch & tMatch, bool bCompat, JsonEscapedBuilder & tBuf, JsonEscapedBuilder & tOut )
+static void PrintKey ( const AggrKeyTrait_t & tKey, Aggr_e eAggrFunc, const RangeKeyDesc_t * pRange, const CSphMatch & tMatch, ResultSetFormat_e eFormat, const sph::StringSet & hDatetime, JsonEscapedBuilder & tBuf, JsonEscapedBuilder & tOut )
 {
 	if ( eAggrFunc==Aggr_e::DATE_RANGE )
 	{
@@ -2032,14 +2243,19 @@ static void PrintKey ( const AggrKeyTrait_t & tKey, Aggr_e eAggrFunc, const Rang
 		for ( const auto & tItem : tKey.m_dCompositeKeys )
 			JsonObjAddAttr ( tOut, tItem.m_eAttrType, tItem.m_sName, tMatch, tItem.m_tLocator );
 
-	} else if ( !bCompat )
+	} else if ( eFormat==ResultSetFormat_e::MntSearch )
 	{
 		JsonObjAddAttr ( tOut, tKey.m_pKey->m_eAttrType, "key", tMatch, tKey.m_pKey->m_tLocator );
 
 	} else
 	{
+		// FIXME!!! remove after proper data type added but now need to multiple datatime values by 1000 for compat aggs result set
+		int iMulti = 1;
+		if ( eFormat==ResultSetFormat_e::ES && hDatetime [ tKey.m_pKey->m_sName ] )
+			iMulti = 1000;
+
 		tBuf.Clear();
-		JsonObjAddAttr ( tBuf, tKey.m_pKey->m_eAttrType, tMatch, tKey.m_pKey->m_tLocator );
+		JsonObjAddAttr ( tBuf, tKey.m_pKey->m_eAttrType, tMatch, tKey.m_pKey->m_tLocator, iMulti );
 		tOut.Sprintf ( R"("key":%s)", tBuf.cstr() );
 
 		if ( tKey.m_pKey->m_eAttrType==SPH_ATTR_STRINGPTR )
@@ -2078,7 +2294,7 @@ static bool IsSingleValue ( Aggr_e eAggr )
 	return ( eAggr==Aggr_e::MIN || eAggr==Aggr_e::MAX || eAggr==Aggr_e::SUM || eAggr==Aggr_e::AVG );
 }
 
-static void EncodeAggr ( const JsonAggr_t & tAggr, int iAggrItem, const AggrResult_t & tRes, bool bCompat, int iNow, JsonEscapedBuilder & tOut )
+static void EncodeAggr ( const JsonAggr_t & tAggr, int iAggrItem, const AggrResult_t & tRes, ResultSetFormat_e eFormat, const sph::StringSet & hDatetime, int iNow, const CSphString & sDistinctName, JsonEscapedBuilder & tOut )
 {
 	if ( tAggr.m_eAggrFunc==Aggr_e::COUNT )
 		return;
@@ -2086,6 +2302,9 @@ static void EncodeAggr ( const JsonAggr_t & tAggr, int iAggrItem, const AggrResu
 	const CSphColumnInfo * pCount = tRes.m_tSchema.GetAttr ( "count(*)" );
 	AggrKeyTrait_t tKey;
 	bool bHasKey = GetAggrKey ( tAggr, tRes.m_tSchema, iAggrItem, iNow, tKey );
+	const CSphColumnInfo * pDistinct = nullptr;
+	if ( !sDistinctName.IsEmpty() )
+		pDistinct = tRes.m_tSchema.GetAttr ( sDistinctName.cstr() );
 
 	// might be null for empty result set
 	auto dMatches = GetResultMatches ( tRes.m_dResults.First().m_dMatches, tRes.m_tSchema, tRes.m_iOffset, tRes.m_iCount, tAggr );
@@ -2142,7 +2361,7 @@ static void EncodeAggr ( const JsonAggr_t & tAggr, int iAggrItem, const AggrResu
 				// bucket item is array item or dict item
 				const char * sBucketPrefix = GetBucketPrefix ( tKey, tAggr.m_eAggrFunc, pRange, tMatch, tPrefixBucketBlock );
 				ScopedComma_c sBucketBlock ( tOut, ",", sBucketPrefix, "}" );
-				PrintKey ( tKey, tAggr.m_eAggrFunc, pRange, tMatch, bCompat, tBufMatch, tOut );
+				PrintKey ( tKey, tAggr.m_eAggrFunc, pRange, tMatch, eFormat, hDatetime, tBufMatch, tOut );
 
 				JsonObjAddAttr ( tOut, pCount->m_eAttrType, "doc_count", tMatch, pCount->m_tLocator );
 				// FIXME!!! add support
@@ -2151,6 +2370,8 @@ static void EncodeAggr ( const JsonAggr_t & tAggr, int iAggrItem, const AggrResu
 					tOut.Sprintf ( R"("score":0.001)" );
 					JsonObjAddAttr ( tOut, pCount->m_eAttrType, "bg_count", tMatch, pCount->m_tLocator );
 				}
+				if ( pDistinct )
+					JsonObjAddAttr ( tOut, pDistinct->m_eAttrType, pDistinct->m_sName.cstr(), tMatch, pDistinct->m_tLocator );
 			}
 		}
 	
@@ -2304,7 +2525,7 @@ static CSphString JsonEncodeResultError ( const CSphString & sError, const char 
 
 	if ( sIndex )
 	{
-		tOut.AppendName ( "index" );
+		tOut.AppendName ( "table" );
 		tOut.AppendEscaped ( sIndex, EscBld::eEscape );
 	}
 
@@ -2377,7 +2598,16 @@ CSphString HandleShowProfile ( const QueryProfile_c& p )
 }
 
 
-CSphString sphEncodeResultJson ( const VecTraits_T<const AggrResult_t *> & dRes, const JsonQuery_c & tQuery, QueryProfile_c * pProfile, bool bCompat )
+static void AddJoinedWeight ( JsonEscapedBuilder & tOut, const CSphQuery & tQuery, const CSphMatch & tMatch, const CSphColumnInfo * pJoinedWeightAttr )
+{
+	if ( !pJoinedWeightAttr )
+		return;
+
+	tOut.Sprintf ( R"("%s._score":%d)", tQuery.m_sJoinIdx.cstr(), (int)tMatch.GetAttr ( pJoinedWeightAttr->m_tLocator ) );
+}
+
+
+CSphString sphEncodeResultJson ( const VecTraits_T<const AggrResult_t *> & dRes, const JsonQuery_c & tQuery, QueryProfile_c * pProfile, ResultSetFormat_e eFormat )
 {
 	assert ( dRes.GetLength()>=1 );
 	assert ( dRes[0]!=nullptr );
@@ -2399,14 +2629,14 @@ CSphString sphEncodeResultJson ( const VecTraits_T<const AggrResult_t *> & dRes,
 		tOut.FinishBlock ( false );
 	}
 
-	if ( bCompat )
+	if ( eFormat==ResultSetFormat_e::ES )
 		tOut += R"("_shards":{ "total": 1, "successful": 1, "skipped": 0, "failed": 0 })";
 
 	auto sHitMeta = tOut.StartBlock ( ",", R"("hits":{)", "}" );
 
 	tOut.Sprintf ( R"("total":%d)", tRes.m_iTotalMatches );
 	tOut.Sprintf ( R"("total_relation":%s)", tRes.m_bTotalMatchesApprox ? R"("gte")" : R"("eq")" );
-	if ( bCompat )
+	if ( eFormat==ResultSetFormat_e::ES )
 		tOut += R"("max_score": null)";
 
 	const ISphSchema & tSchema = tRes.m_tSchema;
@@ -2414,6 +2644,8 @@ CSphString sphEncodeResultJson ( const VecTraits_T<const AggrResult_t *> & dRes,
 
 	CSphBitvec tAttrsToSend;
 	sphGetAttrsToSend ( tSchema, false, true, tAttrsToSend );
+
+	const CSphColumnInfo * pJoinedWeightAttr = tQuery.m_sJoinIdx.IsEmpty() ? nullptr : tSchema.GetAttr ( GetJoinedWeightName(tQuery).cstr() );
 
 	int iHighlightAttr = -1;
 	int nSchemaAttrs = tSchema.GetAttrsCount();
@@ -2432,107 +2664,148 @@ CSphString sphEncodeResultJson ( const VecTraits_T<const AggrResult_t *> & dRes,
 		if ( NeedToSkipAttr ( sName, tQuery ) )
 			dSkipAttrs.BitSet ( iAttr );
 
-		if ( bCompat && tCol.m_eAttrType==SPH_ATTR_TOKENCOUNT )
+		if ( eFormat==ResultSetFormat_e::ES && tCol.m_eAttrType==SPH_ATTR_TOKENCOUNT )
 			dSkipAttrs.BitSet ( iAttr );
 	}
 
 	tOut.StartBlock ( ",", R"("hits":[)", "]" );
 
-	const CSphColumnInfo * pId = tSchema.GetAttr ( sphGetDocidName() );
-	const CSphColumnInfo * pKNNDist = tSchema.GetAttr ( GetKnnDistAttrName() );
-
-	bool bCompatId = false;
-	const CSphColumnInfo * pCompatRaw = nullptr;
-	const CSphColumnInfo * pCompatVer = nullptr;
-	if ( bCompat )
+	if ( !tQuery.m_bGroupEmulation )
 	{
-		const CSphColumnInfo * pCompatId = tSchema.GetAttr ( "_id" );
-		if ( pCompatId )
+		const CSphColumnInfo * pId = tSchema.GetAttr ( sphGetDocidName() );
+		const CSphColumnInfo * pKNNDist = tSchema.GetAttr ( GetKnnDistAttrName() );
+
+		bool bCompatId = false;
+		const CSphColumnInfo * pCompatRaw = nullptr;
+		const CSphColumnInfo * pCompatVer = nullptr;
+		if ( eFormat==ResultSetFormat_e::ES )
 		{
-			bCompatId = true;
-			pId = pCompatId;
-		}
-
-		pCompatRaw = tSchema.GetAttr ( "_raw" );
-		pCompatVer = tSchema.GetAttr ( "_version" );
-	}
-
-	bool bTag = tRes.m_bTagsAssigned;
-	int iTag = ( bTag ? 0 : tRes.m_dResults.First().m_iTag );
-	auto dMatches = tRes.m_dResults.First ().m_dMatches.Slice ( tRes.m_iOffset, tRes.m_iCount );
-	for ( const auto & tMatch : dMatches )
-	{
-		ScopedComma_c sQueryComma ( tOut, ",", "{", "}" );
-
-		// note, that originally there is string UID, so we just output number in quotes for docid here
-		if ( bCompatId )
-		{
-			JsonObjAddAttr ( tOut, pId->m_eAttrType, "_id", tMatch, pId->m_tLocator );
-			tOut.Sprintf ( R"("_score":%d)", tMatch.m_iWeight );
-		}
-		else if ( pId )
-		{
-			DocID_t tDocID = tMatch.GetAttr ( pId->m_tLocator );
-			tOut.Sprintf ( R"("_id":%U,"_score":%d)", tDocID, tMatch.m_iWeight );
-		}
-		else
-			tOut.Sprintf ( R"("_score":%d)", tMatch.m_iWeight );
-
-		if ( bCompat )
-		{
-			tOut.Sprintf ( R"("_index":"%s")", tRes.m_dIndexNames[bTag ? tMatch.m_iTag : iTag].scstr() ); // FIXME!!! breaks for multiple indexes
-			tOut += R"("_type": "doc")";
-			if ( pCompatVer )
-				JsonObjAddAttr ( tOut, pCompatVer->m_eAttrType, "_version", tMatch, pCompatVer->m_tLocator );
-			else
-				tOut += R"("_version": 1)";
-		}
-
-		if ( pKNNDist )
-			tOut.Sprintf( R"("_knn_dist":%f)", tMatch.GetAttrFloat ( pKNNDist->m_tLocator ) );
-
-		tOut.StartBlock ( ",", "\"_source\":{", "}");
-
-		if ( pCompatRaw )
-			JsonObjAddAttr ( tOut, pCompatRaw->m_eAttrType, "_raw", tMatch, pCompatRaw->m_tLocator );
-		else
-			for ( int iAttr=0; iAttr<nSchemaAttrs; iAttr++ )
+			const CSphColumnInfo * pCompatId = tSchema.GetAttr ( "_id" );
+			if ( pCompatId )
 			{
-				if ( !tAttrsToSend.BitGet(iAttr) )
-					continue;
-
-				if ( dSkipAttrs.BitGet ( iAttr ) )
-					continue;
-
-				const CSphColumnInfo & tCol = tSchema.GetAttr(iAttr);
-				JsonObjAddAttr ( tOut, tCol.m_eAttrType, tCol.m_sName.cstr(), tMatch, tCol.m_tLocator );
+				bCompatId = true;
+				pId = pCompatId;
 			}
 
-		tOut.FinishBlock ( false ); // _source obj
+			pCompatRaw = tSchema.GetAttr ( "_raw" );
+			pCompatVer = tSchema.GetAttr ( "_version" );
+		}
 
-		if ( iHighlightAttr!=-1 )
-			EncodeHighlight ( tMatch, iHighlightAttr, tSchema, tOut );
+		bool bTag = tRes.m_bTagsAssigned;
+		int iTag = ( bTag ? 0 : tRes.m_dResults.First().m_iTag );
+		auto dMatches = tRes.m_dResults.First ().m_dMatches.Slice ( tRes.m_iOffset, tRes.m_iCount );
 
-		if ( bCompat )
+		for ( const auto & tMatch : dMatches )
 		{
-			if ( tQuery.m_dDocFields.GetLength() )
-				EncodeFields ( tQuery.m_dDocFields, tRes, tMatch, tSchema, false, R"("fields":{)", "}", tOut );
-			if ( tQuery.m_dSortFields.GetLength() )
-				EncodeFields ( tQuery.m_dSortFields, tRes, tMatch, tSchema, true, R"("sort":[)", "]", tOut );
+			ScopedComma_c sQueryComma ( tOut, ",", "{", "}" );
+
+			// note, that originally there is string UID, so we just output number in quotes for docid here
+			// number in quotes in compat mode or just number for _id
+			if ( bCompatId || ( eFormat==ResultSetFormat_e::ES ) )
+			{
+				DocID_t tDocID = tMatch.GetAttr ( pId->m_tLocator );
+				tOut.Sprintf ( R"("_id":"%llu","_score":%d)", tDocID, tMatch.m_iWeight );
+			}
+			else if ( pId )
+			{
+				DocID_t tDocID = tMatch.GetAttr ( pId->m_tLocator );
+				tOut.Sprintf ( R"("_id":%U,"_score":%d)", tDocID, tMatch.m_iWeight );
+			}
+			else
+				tOut.Sprintf ( R"("_score":%d)", tMatch.m_iWeight );
+
+			AddJoinedWeight ( tOut, tQuery, tMatch, pJoinedWeightAttr );
+
+			if ( eFormat==ResultSetFormat_e::ES )
+			{
+				tOut.Sprintf ( R"("_index":"%s")", tRes.m_dIndexNames[bTag ? tMatch.m_iTag : iTag].scstr() ); // FIXME!!! breaks for multiple indexes
+				tOut += R"("_type": "doc")";
+				if ( pCompatVer )
+					JsonObjAddAttr ( tOut, pCompatVer->m_eAttrType, "_version", tMatch, pCompatVer->m_tLocator );
+				else
+					tOut += R"("_version": 1)";
+			}
+
+			if ( pKNNDist )
+				tOut.Sprintf( R"("_knn_dist":%f)", tMatch.GetAttrFloat ( pKNNDist->m_tLocator ) );
+
+			tOut.StartBlock ( ",", "\"_source\":{", "}");
+
+			if ( pCompatRaw )
+				JsonObjAddAttr ( tOut, pCompatRaw->m_eAttrType, "_raw", tMatch, pCompatRaw->m_tLocator );
+			else
+				for ( int iAttr=0; iAttr<nSchemaAttrs; iAttr++ )
+				{
+					if ( !tAttrsToSend.BitGet(iAttr) )
+						continue;
+
+					if ( dSkipAttrs.BitGet ( iAttr ) )
+						continue;
+
+					const CSphColumnInfo & tCol = tSchema.GetAttr(iAttr);
+					JsonObjAddAttr ( tOut, tCol.m_eAttrType, tCol.m_sName.cstr(), tMatch, tCol.m_tLocator );
+				}
+
+			tOut.FinishBlock ( false ); // _source obj
+
+			if ( iHighlightAttr!=-1 )
+				EncodeHighlight ( tMatch, iHighlightAttr, tSchema, tOut );
+
+			if ( eFormat==ResultSetFormat_e::ES )
+			{
+				if ( tQuery.m_dDocFields.GetLength() )
+					EncodeFields ( tQuery.m_dDocFields, tRes, tMatch, tSchema, false, R"("fields":{)", "}", tOut );
+				if ( tQuery.m_dSortFields.GetLength() )
+					EncodeFields ( tQuery.m_dSortFields, tRes, tMatch, tSchema, true, R"("sort":[)", "]", tOut );
+			}
 		}
 	}
 
 	tOut.FinishBlocks ( sHitMeta, false ); // hits array, hits meta
 
-	if ( dRes.GetLength()>1 )
+	if ( tQuery.m_bGroupEmulation || dRes.GetLength()>1 )
 	{
-		assert ( dRes.GetLength()==tQuery.m_dAggs.GetLength()+1 );
-		tOut.StartBlock ( ",", R"("aggregations":{)", "}");
-		ARRAY_FOREACH ( i, tQuery.m_dAggs )
-			EncodeAggr ( tQuery.m_dAggs[i], i, *dRes[i+1], bCompat, tQuery.m_iNow, tOut );
-		tOut.FinishBlock ( false ); // aggregations obj
+		sph::StringSet hDatetime;
+		if ( eFormat==ResultSetFormat_e::ES )
+		{
+			tQuery.m_dDocFields.for_each ( [&hDatetime]( const auto & tDocfield )
+			{
+					if ( tDocfield.m_bDateTime )
+						hDatetime.Add ( tDocfield.m_sName );
+			});
+		}
+		CSphString sDistinctName;
+		tQuery.m_dItems.any_of ( [&]( const CSphQueryItem & tItem ) {
+			if ( tItem.m_sExpr=="@distinct" )
+			{
+				sDistinctName = tItem.m_sAlias;
+				return true;
+			} else
+				return false;
+		});
+
+		if ( tQuery.m_bGroupEmulation )
+		{
+			tOut.StartBlock ( ",", R"("aggregations":{)", "}");
+			EncodeAggr ( tQuery.m_dAggs[0], 1, *dRes[0], eFormat, hDatetime, tQuery.m_iNow, sDistinctName, tOut );
+			tOut.FinishBlock ( false ); // aggregations obj
+
+		} else
+		{
+
+			assert ( dRes.GetLength()==tQuery.m_dAggs.GetLength()+1 );
+			tOut.StartBlock ( ",", R"("aggregations":{)", "}");
+			ARRAY_FOREACH ( i, tQuery.m_dAggs )
+				EncodeAggr ( tQuery.m_dAggs[i], i, *dRes[i+1], eFormat, hDatetime, tQuery.m_iNow, sDistinctName, tOut );
+			tOut.FinishBlock ( false ); // aggregations obj
+		}
 	}
-	if ( bCompat )
+
+	CSphString sScroll;
+	if ( dRes.GetLength() && FormatScrollSettings ( *dRes.Last(), tQuery, sScroll ) )
+		tOut.Sprintf ( R"("scroll":"%s")", sScroll.cstr() );
+
+	if ( eFormat==ResultSetFormat_e::ES )
 		tOut += R"("status": 200)";
 
 	if ( pProfile && pProfile->m_bNeedProfile )
@@ -2555,11 +2828,11 @@ CSphString sphEncodeResultJson ( const VecTraits_T<const AggrResult_t *> & dRes,
 }
 
 
-JsonObj_c sphEncodeInsertResultJson ( const char * szIndex, bool bReplace, DocID_t tDocId )
+JsonObj_c sphEncodeInsertResultJson ( const char * szIndex, bool bReplace, DocID_t tDocId, ResultSetFormat_e eFormat )
 {
 	JsonObj_c tObj;
 
-	tObj.AddStr ( "_index", szIndex );
+	tObj.AddStr ( ( eFormat==ResultSetFormat_e::ES ? "_index" : "table" ), szIndex );
 	tObj.AddUint ( "_id", tDocId );
 	tObj.AddBool ( "created", !bReplace );
 	tObj.AddStr ( "result", bReplace ? "updated" : "created" );
@@ -2568,11 +2841,11 @@ JsonObj_c sphEncodeInsertResultJson ( const char * szIndex, bool bReplace, DocID
 	return tObj;
 }
 
-JsonObj_c sphEncodeTxnResultJson ( const char* szIndex, DocID_t tDocId, int iInserts, int iDeletes, int iUpdates )
+JsonObj_c sphEncodeTxnResultJson ( const char* szIndex, DocID_t tDocId, int iInserts, int iDeletes, int iUpdates, ResultSetFormat_e eFormat )
 {
 	JsonObj_c tObj;
 
-	tObj.AddStr ( "_index", szIndex );
+	tObj.AddStr ( ( eFormat==ResultSetFormat_e::ES ? "_index" : "table" ), szIndex );
 	tObj.AddInt ( "_id", tDocId );
 	tObj.AddInt ( "created", iInserts );
 	tObj.AddInt ( "deleted", iDeletes );
@@ -2585,11 +2858,11 @@ JsonObj_c sphEncodeTxnResultJson ( const char* szIndex, DocID_t tDocId, int iIns
 }
 
 
-JsonObj_c sphEncodeUpdateResultJson ( const char * szIndex, DocID_t tDocId, int iAffected )
+JsonObj_c sphEncodeUpdateResultJson ( const char * szIndex, DocID_t tDocId, int iAffected, ResultSetFormat_e eFormat )
 {
 	JsonObj_c tObj;
 
-	tObj.AddStr ( "_index", szIndex );
+	tObj.AddStr ( ( eFormat==ResultSetFormat_e::ES ? "_index" : "table" ), szIndex );
 
 	if ( !tDocId )
 		tObj.AddInt ( "updated", iAffected );
@@ -2603,11 +2876,11 @@ JsonObj_c sphEncodeUpdateResultJson ( const char * szIndex, DocID_t tDocId, int 
 }
 
 
-JsonObj_c sphEncodeDeleteResultJson ( const char * szIndex, DocID_t tDocId, int iAffected )
+JsonObj_c sphEncodeDeleteResultJson ( const char * szIndex, DocID_t tDocId, int iAffected, ResultSetFormat_e eFormat )
 {
 	JsonObj_c tObj;
 
-	tObj.AddStr ( "_index", szIndex );
+	tObj.AddStr ( ( eFormat==ResultSetFormat_e::ES ? "_index" : "table" ), szIndex );
 
 	if ( !tDocId )
 		tObj.AddInt ( "deleted", iAffected );
@@ -2622,12 +2895,12 @@ JsonObj_c sphEncodeDeleteResultJson ( const char * szIndex, DocID_t tDocId, int 
 }
 
 
-JsonObj_c sphEncodeInsertErrorJson ( const char * szIndex, const char * szError )
+JsonObj_c sphEncodeInsertErrorJson ( const char * szIndex, const char * szError, ResultSetFormat_e eFormat )
 {
 	JsonObj_c tObj, tErr;
 
 	tErr.AddStr ( "type", szError );
-	tErr.AddStr ( "index", szIndex );
+	tErr.AddStr ( ( eFormat==ResultSetFormat_e::ES ? "_index" : "table" ), szIndex );
 
 	tObj.AddItem ( "error", tErr );
 	tObj.AddInt ( "status", HttpGetStatusCodes ( EHTTP_STATUS::_409 ) );
@@ -3351,7 +3624,13 @@ bool ParseDocFields ( const JsonObj_c & tDocFields, JsonQuery_c & tQuery, CSphSt
 			tDFItem.m_sAlias = sFieldName;
 		}
 
-		tQuery.m_dDocFields.Add ( sFieldName );
+		// FIXME!!! collect format type
+		bool bDateTime = false;
+		CSphString sFormat;
+		if ( tItem.FetchStrItem ( sFormat, "format", sError, true ) )
+			bDateTime = ( sFormat=="date_time" );
+
+		tQuery.m_dDocFields.Add ( { sFieldName, bDateTime } );
 	}
 
 	return true;
@@ -3608,12 +3887,23 @@ static bool ParseAggrDateHistogram ( const JsonObj_c & tBucket, JsonAggr_t & tIt
 {
 	AggrDateHistSetting_t & tHist = tItem.m_tDateHist;
 
-	JsonObj_c tInterval = tBucket.GetItem ( "calendar_interval" );
-	if ( tInterval.Empty() )
+	JsonObj_c tCalendar = tBucket.GetItem ( "calendar_interval" );
+	JsonObj_c tFixed = tBucket.GetItem ( "fixed_interval" );
+
+	if ( tCalendar.Empty() && tFixed.Empty() )
 	{
-		sError.SetSprintf ( "\"%s\" calendar_interval missed", tItem.m_sCol.cstr() );
+		sError.SetSprintf ( "\"%s\" calendar_interval or fixed_interval missed", tItem.m_sCol.cstr() );
 		return false;
 	}
+	if ( !tCalendar.Empty() && !tFixed.Empty() )
+	{
+		sError.SetSprintf ( "\"%s\" both calendar_interval and fixed_interval supplied", tItem.m_sCol.cstr() );
+		return false;
+	}
+
+	tHist.m_bFixed = !tFixed.Empty();
+	const JsonObj_c & tInterval = ( tHist.m_bFixed ? tFixed : tCalendar );
+
 	if ( !tInterval.IsStr() )
 	{
 		sError.SetSprintf ( "\"%s\" calendar_interval should be string", tItem.m_sCol.cstr() );
@@ -3887,4 +4177,10 @@ CSphString JsonAggr_t::GetAliasName () const
 	sName.SetSprintf ( "%s_%s", m_sCol.cstr(), m_sBucketName.cstr() );
 
 	return sName;
+}
+
+ParsedJsonQuery_t::ParsedJsonQuery_t()
+{
+	SetQueryDefaultsExt2 ( m_tQuery );
+	SetQueryDefaultsExt2 ( m_tJoinQueryOptions );
 }

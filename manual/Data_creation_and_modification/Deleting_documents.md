@@ -65,7 +65,7 @@ mysql> SELECT * FROM TEST;
 ``` json
 POST /delete -d '
     {
-        "index":"test",
+        "table":"test",
         "query":
         {
             "match": { "*": "test document" }
@@ -79,7 +79,7 @@ POST /delete -d '
 
 ``` json
 {
-    "_index":"test",
+    "table":"test",
     "deleted":2,
 }
 ```    
@@ -106,12 +106,12 @@ Array(
 
 <!-- request Python -->
 ``` python
-indexApi.delete({"index" : "test", "query": { "match": { "*": "test document" }}})
+indexApi.delete({"table" : "test", "query": { "match": { "*": "test document" }}})
 ```
 
 <!-- response Python -->
 ```python
-{'deleted': 5, 'id': None, 'index': 'test', 'result': None}
+{'deleted': 5, 'id': None, 'table': 'test', 'result': None}
 ```
 <!-- intro -->
 
@@ -119,12 +119,12 @@ indexApi.delete({"index" : "test", "query": { "match": { "*": "test document" }}
 
 <!-- request javascript -->
 ``` javascript
-res = await indexApi.delete({"index" : "test", "query": { "match": { "*": "test document" }}});
+res = await indexApi.delete({"table" : "test", "query": { "match": { "*": "test document" }}});
 ```
 
 <!-- response javascript -->
 ```javascript
-{"_index":"test","deleted":5}
+{"table":"test","deleted":5}
 ```
 
 <!-- intro -->
@@ -192,7 +192,7 @@ res = await indexApi.delete({
 
 <!-- response TypeScript -->
 ```json
-{"_index":"test","deleted":5}
+{"table":"test","deleted":5}
 ```
 
 <!-- intro -->
@@ -209,7 +209,7 @@ deleteRequest.SetQuery(deleteQuery)
 
 <!-- response Go -->
 ```json
-{"_index":"test","deleted":5}
+{"table":"test","deleted":5}
 ```
 
 <!-- end -->
@@ -233,7 +233,7 @@ Query OK, 1 rows affected (0.00 sec)
 ``` json
 POST /delete -d '
     {
-        "index": "test",
+        "table": "test",
         "id": 1
     }'
 ```
@@ -244,7 +244,7 @@ POST /delete -d '
 
 ``` json
 {
-    "_index": "test",
+    "table": "test",
     "_id": 1,
     "found": true,
     "result": "deleted"      
@@ -275,12 +275,12 @@ Array(
 
 <!-- request Python -->
 ``` python
-indexApi.delete({"index" : "test", "id" : 1})
+indexApi.delete({"table" : "test", "id" : 1})
 ```
 
 <!-- response Python -->
 ```python
-{'deleted': None, 'id': 1, 'index': 'test', 'result': 'deleted'}
+{'deleted': None, 'id': 1, 'table': 'test', 'result': 'deleted'}
 ```
 <!-- intro -->
 
@@ -288,12 +288,12 @@ indexApi.delete({"index" : "test", "id" : 1})
 
 <!-- request javascript -->
 ``` javascript
-res = await indexApi.delete({"index" : "test", "id" : 1});
+res = await indexApi.delete({"table" : "test", "id" : 1});
 ```
 
 <!-- response javascript -->
 ```javascript
-{"_index":"test","_id":1,"result":"deleted"}
+{"table":"test","_id":1,"result":"deleted"}
 ```
 
 <!-- intro -->
@@ -348,7 +348,7 @@ res = await indexApi.delete({ index: 'test', id: 1 });
 
 <!-- response TypeScript -->
 ```json
-{"_index":"test","_id":1,"result":"deleted"}
+{"table":"test","_id":1,"result":"deleted"}
 ```
 
 <!-- intro -->
@@ -363,7 +363,7 @@ deleteRequest.SetId(1)
 
 <!-- response Go -->
 ```json
-{"_index":"test","_id":1,"result":"deleted"}
+{"table":"test","_id":1,"result":"deleted"}
 ```
 
 <!-- end -->
@@ -395,7 +395,7 @@ Query OK, 2 rows affected (0.00 sec)
 ``` json
 POST /delete -d '
     {
-        "index":"test",
+        "table":"test",
         "id": [1,2]
     }'
 ```
@@ -404,7 +404,7 @@ POST /delete -d '
 
 ``` json
     {
-        "_index":"test",
+        "table":"test",
         "_id":1,
         "found":true,
         "result":"deleted"      
@@ -485,7 +485,7 @@ delete from cluster:test where id=100;
 POST /delete -d '
     {
       "cluster": "cluster",
-      "index": "test",
+      "table": "test",
       "id": 100
     }'
 ```
@@ -517,12 +517,12 @@ Array(
 
 <!-- request Python -->
 ``` python
-indexApi.delete({"cluster":"cluster","index" : "test", "id" : 1})
+indexApi.delete({"cluster":"cluster","table" : "test", "id" : 1})
 ```
 
 <!-- response Python -->
 ```python
-{'deleted': None, 'id': 1, 'index': 'test', 'result': 'deleted'}
+{'deleted': None, 'id': 1, 'table': 'test', 'result': 'deleted'}
 ```
 <!-- intro -->
 
@@ -530,12 +530,12 @@ indexApi.delete({"cluster":"cluster","index" : "test", "id" : 1})
 
 <!-- request javascript -->
 ``` javascript
-indexApi.delete({"cluster":"cluster_1","index" : "test", "id" : 1})
+indexApi.delete({"cluster":"cluster_1","table" : "test", "id" : 1})
 ```
 
 <!-- response javascript -->
 ```javascript
-{"_index":"test","_id":1,"result":"deleted"}
+{"table":"test","_id":1,"result":"deleted"}
 ```
 
 <!-- intro -->
@@ -590,7 +590,7 @@ res = await indexApi.delete({ cluster: 'cluster_1', index: 'test', id: 1 });
 
 <!-- response TypeScript -->
 ```json
-{"_index":"test","_id":1,"result":"deleted"}
+{"table":"test","_id":1,"result":"deleted"}
 ```
 
 <!-- intro -->
@@ -606,7 +606,7 @@ deleteRequest.SetId(1)
 
 <!-- response Go -->
 ```json
-{"_index":"test","_id":1,"result":"deleted"}
+{"table":"test","_id":1,"result":"deleted"}
 ```
 
 <!-- end -->
@@ -627,8 +627,8 @@ You can also perform multiple delete operations in a single call using the `/bul
 ```json
 POST /bulk
 
-{ "delete" : { "index" : "test", "id" : 1 } }
-{ "delete" : { "index" : "test", "query": { "equals": { "int_data" : 20 } } } }
+{ "delete" : { "table" : "test", "id" : 1 } }
+{ "delete" : { "table" : "test", "query": { "equals": { "int_data" : 20 } } } }
 ```
 
 <!-- response JSON -->
@@ -640,7 +640,7 @@ POST /bulk
       {
          "bulk":
          {
-            "_index":"test",
+            "table":"test",
             "_id":0,
             "created":0,
             "deleted":2,
@@ -663,12 +663,12 @@ POST /bulk
 
 $client->bulk([
     ['delete' => [
-            'index' => 'test',
+            'table' => 'test',
             'id' => 1
         ]
     ],
     ['delete'=>[
-            'index' => 'test',
+            'table' => 'test',
             'query' => [
                 'equals' => ['int_data' => 20]
             ]
@@ -715,8 +715,8 @@ Array(
 <!-- request Python -->
 ``` python
 docs = [ \
-            { "delete" : { "index" : "test", "id": 1 } }, \
-            { "delete" : { "index" : "test", "query": { "equals": { "int_data": 20 } } } } ]
+            { "delete" : { "table" : "test", "id": 1 } }, \
+            { "delete" : { "table" : "test", "query": { "equals": { "int_data": 20 } } } } ]
 indexApi.bulk('\n'.join(map(json.dumps,docs)))
 ```
 
@@ -724,7 +724,7 @@ indexApi.bulk('\n'.join(map(json.dumps,docs)))
 ```python
 {
     'error': None,
-    'items': [{u'delete': {u'_index': test', u'deleted': 2}}]
+    'items': [{u'delete': {u'table': test', u'deleted': 2}}]
 }
 
 ```
@@ -734,14 +734,14 @@ indexApi.bulk('\n'.join(map(json.dumps,docs)))
 <!-- request javascript -->
 ``` javascript
 docs = [
-            { "delete" : { "index" : "test", "id": 1 } },
-            { "delete" : { "index" : "test", "query": { "equals": { "int_data": 20 } } } } ];
+            { "delete" : { "table" : "test", "id": 1 } },
+            { "delete" : { "table" : "test", "query": { "equals": { "int_data": 20 } } } } ];
 res =  await indexApi.bulk(docs.map(e=>JSON.stringify(e)).join('\n'));
 ```
 
 <!-- response javascript -->
 ```javascript
-{"items":[{"delete":{"_index":"test","deleted":2}}],"errors":false}
+{"items":[{"delete":{"table":"test","deleted":2}}],"errors":false}
 
 ```
 
@@ -750,8 +750,8 @@ res =  await indexApi.bulk(docs.map(e=>JSON.stringify(e)).join('\n'));
 
 <!-- request Java -->
 ``` java
-String   body = "{ "delete" : { "index" : "test", "id": 1 } } "+"\n"+
-    "{ "delete" : { "index" : "test", "query": { "equals": { "int_data": 20 } } } }"+"\n";         
+String   body = "{ "delete" : { "table" : "test", "id": 1 } } "+"\n"+
+    "{ "delete" : { "table" : "test", "query": { "equals": { "int_data": 20 } } } }"+"\n";         
 indexApi.bulk(body);
 ```
 
@@ -769,8 +769,8 @@ class BulkResponse {
 
 <!-- request C# -->
 ``` clike
-string   body = "{ "delete" : { "index" : "test", "id": 1 } } "+"\n"+
-    "{ "delete" : { "index" : "test", "query": { "equals": { "int_data": 20 } } } }"+"\n";         
+string   body = "{ "delete" : { "table" : "test", "id": 1 } } "+"\n"+
+    "{ "delete" : { "table" : "test", "query": { "equals": { "int_data": 20 } } } }"+"\n";         
 indexApi.Bulk(body);
 ```
 
@@ -789,8 +789,8 @@ class BulkResponse {
 <!-- request TypeScript -->
 ``` typescript
 docs = [
-  { "delete" : { "index" : "test", "id": 1 } },
-  { "delete" : { "index" : "test", "query": { "equals": { "int_data": 20 } } } }
+  { "delete" : { "table" : "test", "id": 1 } },
+  { "delete" : { "table" : "test", "query": { "equals": { "int_data": 20 } } } }
 ];
 body = await indexApi.bulk(
   docs.map((e) => JSON.stringify(e)).join("\n")
@@ -800,7 +800,7 @@ res = await indexApi.bulk(body);
 
 <!-- response TypeScript -->
 ```json
-{"items":[{"delete":{"_index":"test","deleted":2}}],"errors":false}
+{"items":[{"delete":{"table":"test","deleted":2}}],"errors":false}
 
 ```
 
@@ -811,8 +811,8 @@ res = await indexApi.bulk(body);
 <!-- request Go -->
 ```go
 docs = []string {
-  `{ "delete" : { "index" : "test", "id": 1 } }`,
-  `{ "delete" : { "index" : "test", "query": { "equals": { "int_data": 20 } } } }`
+  `{ "delete" : { "table" : "test", "id": 1 } }`,
+  `{ "delete" : { "table" : "test", "query": { "equals": { "int_data": 20 } } } }`
 ]
 body = strings.Join(docs, "\n")
 resp, httpRes, err := manticoreclient.IndexAPI.Bulk(context.Background()).Body(body).Execute()
@@ -820,7 +820,7 @@ resp, httpRes, err := manticoreclient.IndexAPI.Bulk(context.Background()).Body(b
 
 <!-- response Go -->
 ```json
-{"items":[{"delete":{"_index":"test","deleted":2}}],"errors":false}
+{"items":[{"delete":{"table":"test","deleted":2}}],"errors":false}
 ```
 
 <!-- end -->

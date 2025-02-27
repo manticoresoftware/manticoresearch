@@ -327,6 +327,7 @@ loop_end:
     {
         if ( !has_minus )
         {
+            errno = 0;
             number_uint = strtoull((const char*)number_c_string, (char**)&after_end, 10);
             if ( errno == ERANGE )
                 is_float = 1;
@@ -343,6 +344,7 @@ loop_end:
         }
         else
         {
+            errno = 0;
             number_int = strtoll((const char*)number_c_string, (char**)&after_end, 10);
             if (errno == ERANGE)
                 is_float = 1;
@@ -1102,7 +1104,7 @@ static parse_buffer *skip_utf8_bom(parse_buffer * const buffer)
 }
 
 /* Parse an object - create a new root, and populate. */
-CJSON_PUBLIC(cJSON *) cJSON_ParseWithOpts(const char *value, const char **return_parse_end, cJSON_bool require_null_terminated)
+CJSON_PUBLIC(cJSON *) cJSON_ParseWithOpts(const char *value, const char **return_parse_end, cJSON_bool require_null_terminated, int len)
 {
     parse_buffer buffer = { 0, 0, 0, 0, { 0, 0, 0 } };
     cJSON *item = NULL;
@@ -1117,7 +1119,7 @@ CJSON_PUBLIC(cJSON *) cJSON_ParseWithOpts(const char *value, const char **return
     }
 
     buffer.content = (const unsigned char*)value;
-    buffer.length = strlen((const char*)value) + sizeof("");
+    buffer.length = len;
     buffer.offset = 0;
     buffer.hooks = global_hooks;
 
@@ -1184,8 +1186,17 @@ fail:
 /* Default options for cJSON_Parse */
 CJSON_PUBLIC(cJSON *) cJSON_Parse(const char *value)
 {
-    return cJSON_ParseWithOpts(value, 0, 0);
+    int len = 0;
+    if ( value )
+        len = strlen((const char*)value) + sizeof("");
+    return cJSON_ParseWithOpts(value, 0, 0, len);
 }
+
+CJSON_PUBLIC(cJSON *) cJSON_ParseWithLen(const char *value, int len)
+{
+    return cJSON_ParseWithOpts(value, 0, 0, len);
+}
+
 
 #define cjson_min(a, b) ((a < b) ? a : b)
 
@@ -1894,7 +1905,7 @@ static cJSON *get_object_item(const cJSON * const object, const char * const nam
     current_element = object->child;
     if (case_sensitive)
     {
-        while ((current_element != NULL) && (strcmp(name, current_element->string) != 0))
+        while ((current_element != NULL) && (current_element->string != NULL) && (strcmp(name, current_element->string) != 0))
         {
             current_element = current_element->next;
         }
@@ -1907,6 +1918,10 @@ static cJSON *get_object_item(const cJSON * const object, const char * const nam
         }
     }
 
+    if ((current_element == NULL) || (current_element->string == NULL)) {
+        return NULL;
+    }
+    
     return current_element;
 }
 

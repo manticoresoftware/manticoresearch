@@ -1,0 +1,93 @@
+<?xml version="1.0" encoding="utf-8"?>
+<test>
+
+<name>CJK via Jieba (mysql)</name>
+
+<requires>
+<jieba/>
+<heavy/>
+</requires>
+
+<config>
+indexer
+{
+	mem_limit			= 16M
+}
+
+searchd
+{
+	<searchd_settings/>
+}
+
+source test
+{
+	type				= mysql
+	<sql_settings/>
+	sql_query_pre		= set names utf8
+	sql_query			= select * from test_table
+}
+
+index test
+{
+	source			= test
+	path			= <data_path/>/test
+
+	charset_table	= cont, non_cont			
+	morphology 		= jieba_chinese, stem_enru
+	
+	blend_chars		= -, U+23
+
+	wordforms		= <this_test/>/wordforms.txt
+	jieba_user_dict_path = <this_test/>/jieba_user_dict.txt
+}
+</config>
+
+<db_create>
+CREATE TABLE test_table
+(
+	id INTEGER PRIMARY KEY NOT NULL,
+	content VARCHAR(255) CHARACTER SET 'utf8' NOT NULL
+)
+</db_create>
+<db_drop>DROP TABLE IF EXISTS test_table</db_drop>
+<db_insert>SET NAMES utf8</db_insert>
+<db_insert>
+INSERT INTO test_table VALUES
+( 100, 'this is some mixed text in english. and some blended aaa-bbb' ),
+( 101, '許多社區長青學苑多開設有書法、插花、土風舞班，' ),
+( 102, 'а это - текст на русском. mixed in fact. test tested. more blended aaa-bbb' ),
+( 103, '文山區長青學苑則有個十分特別的「英文歌唱班」，test; mixed blended aaa-bbb' ),
+( 104, '成員年齡均超過六十歲，tested' ),
+( 105, '這群白髮蒼蒼，test2' ),
+( 106, '這群白髮蒼蒼 RUINED 這群白髮蒼蒼' ),
+( 107, '&lt;div class="msgCnt"&gt;说说&lt;a href="http://k.t.qq.com/k/%E4%BB%8A%E5%A4%A9%E7%9A%84%E5%BF%83%E6%83%85"&gt;#今天的心情#&lt;/a&gt;：&lt;/div&gt;' ),
+( 108, '這群白inbetween1這群白' ),
+( 109, '#abc #中国地理' )
+</db_insert>
+
+<queries><sphinxql>
+select * from test;
+select * from test where match('mix');
+select * from test where match('русский');
+select * from test where match('test');
+select * from test where match('test2');
+select * from test where match('許多');
+select * from test where match('社區長');
+select * from test where match('來');
+select * from test where match('這群白髮蒼蒼，');
+select * from test where match('ruin');
+select * from test where match('aaa');
+select * from test where match('bbb');
+select * from test where match('aaa-bbb');
+select * from test where match('msgCnt');
+select * from test where match('今天的心情');
+select * from test where match('@content 則有');
+select * from test where match('querymapped');
+
+CALL KEYWORDS ( '許多社區長青學苑多開設有書法、插花、土風舞班，', 'test' );
+CALL KEYWORDS ( '买新的Apple电脑', 'test' );
+CALL KEYWORDS ( '文山區長青學苑則有個十分特別的「英文歌唱班」，test; mixed blended aaa-bbb', 'test' );
+
+</sphinxql></queries>
+
+</test>

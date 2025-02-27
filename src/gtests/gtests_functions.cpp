@@ -34,10 +34,11 @@ protected:
 	void SetUp() override
 	{
 		sphSrand ( 0 );
-		pDigest = sphCreateTDigest ();
+		pDigest = &tDigest;
 	}
 
-	std::unique_ptr<TDigest_i> pDigest;
+	TDigest_c tDigest;
+	TDigest_c* pDigest;
 };
 
 TEST_F ( TDigest, simple )

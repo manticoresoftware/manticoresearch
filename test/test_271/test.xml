@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <test>
-<name>French stemmer and exact words (clonning stemmers on parallel)</name>
+<name>libstemmer cases</name>
 <requires>
 	<force-rt/>
 </requires>
@@ -16,6 +16,7 @@ searchd
 </config>
 
 <queries>
+    <!-- French stemmer and exact words (clonning stemmers on parallel) -->
 	<sphinxql>create table t(f text) morphology='libstemmer_fr' index_exact_words='1';
 	</sphinxql>
 
@@ -25,7 +26,15 @@ searchd
 			CALL SNIPPETS(('test text 1','test text 2','test text 3','test text 4'), 't', 'php developer');
 		</sphinxql>
 	</repeat>
-	<sphinxql>drop table t;
-	</sphinxql>
+	<sphinxql>drop table t</sphinxql>
+
+<!-- crash on Greek stemmer created well but failed to tokenize word and crashed daemon or indexer -->
+<sphinxql>    
+CREATE TABLE test (data text indexed) morphology='libstemmer_el' charset_table='non_cjk';
+INSERT INTO test (id, data) VALUES (1,'ισαισα');
+select * from test where match('ισαισα');
+</sphinxql>
+<sphinxql>drop table test</sphinxql>
+
 </queries>
 </test>

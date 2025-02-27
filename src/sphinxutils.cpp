@@ -928,6 +928,11 @@ static KeyDesc_t g_dKeysIndex[] =
 	{ "engine_default",			0, nullptr },
 	{ "knn",					0, nullptr },
 	{ "json_secondary_indexes",	0, nullptr },
+	{ "jieba_hmm",				0, nullptr },
+	{ "jieba_mode",				0, nullptr },
+	{ "jieba_user_dict_path",	0, nullptr },
+	{ "diskchunk_flush_write_timeout",		0, nullptr },
+	{ "diskchunk_flush_search_timeout",		0, nullptr },
 	{ nullptr,					0, nullptr }
 };
 
@@ -1076,6 +1081,10 @@ static KeyDesc_t g_dKeysSearchd[] =
 	{ "merge_buffer_fulltext",	0, NULL },
 	{ "merge_buffer_dict",		0, NULL },
 	{ "merge_si_memlimit",		0, NULL },
+	{ "log_http",				0, NULL },
+	{ "join_batch_size",		0, NULL },
+	{ "diskchunk_flush_write_timeout",		0, nullptr },
+	{ "diskchunk_flush_search_timeout",		0, nullptr },
 	{ NULL,						0, NULL }
 };
 
@@ -3188,19 +3197,6 @@ void sphConfigureCommon ( const CSphConfig & hConf, FixPathAbsolute_fn && fnPath
 	}
 }
 
-bool sphIsChineseCode ( int iCode )
-{
-	return ( ( iCode>=0x2E80 && iCode<=0x2EF3 ) ||	// CJK radicals
-		( iCode>=0x2F00 && iCode<=0x2FD5 ) ||	// Kangxi radicals
-		( iCode>=0x3000 && iCode<=0x303F ) ||	// CJK Symbols and Punctuation
-		( iCode>=0x3105 && iCode<=0x312D ) ||	// Bopomofo
-		( iCode>=0x31C0 && iCode<=0x31E3 ) ||	// CJK strokes
-		( iCode>=0x3400 && iCode<=0x4DB5 ) ||	// CJK Ideograph Extension A
-		( iCode>=0x4E00 && iCode<=0x9FFF ) ||	// Ideograph
-		( iCode>=0xF900 && iCode<=0xFAD9 ) ||	// compatibility ideographs
-		( iCode>=0xFF00 && iCode<=0xFFEF ) ||	// Halfwidth and fullwidth forms
-		( iCode>=0x20000 && iCode<=0x2FA1D ) );	// CJK Ideograph Extensions B/C/D, and compatibility ideographs
-}
 
 bool sphDetectChinese ( const BYTE * szBuffer, int iLength )
 {
@@ -3730,27 +3726,27 @@ bool ParseDateMath ( const CSphString & sMathExpr, int iNow, time_t & tDateTime 
 	return ParseDateMath ( sExpr, tDateTime );
 }
 
-DateUnit_e ParseDateInterval ( const CSphString & sExpr, CSphString & sError )
+std::pair<DateUnit_e, int> ParseDateInterval ( const CSphString & sExpr, bool bFixed, CSphString & sError )
 {
 	const char * sCur = sExpr.cstr();
 	const char * sEnd = sCur + sExpr.Length();
 
-	int iNum = 1;
+	int iMulti = 1;
 	if ( !sphIsDigital ( *sCur ) )
 	{
-		iNum = 1;
+		iMulti = 1;
 	} else
 	{
 		char * sNumEnd = nullptr;
-		iNum = (int64_t)strtoull ( sCur, &sNumEnd, 10 );
+		iMulti = (int64_t)strtoull ( sCur, &sNumEnd, 10 );
 		sCur = sNumEnd;
 	}
 
 	// rounding is only allowed on whole, single, units (eg M or 1M, not 0.5M or 2M)
-	if ( iNum!=1 )
+	if ( !bFixed && iMulti!=1 )
 	{
 		sError.SetSprintf ( "The supplied interval [%s] could not be parsed as a calendar interval", sExpr.cstr() );
-		return DateUnit_e::total_units;
+		return { DateUnit_e::total_units, iMulti };
 	}
 
 	const char * sUnitStart = sCur++;
@@ -3763,10 +3759,27 @@ DateUnit_e ParseDateInterval ( const CSphString & sExpr, CSphString & sError )
 	if ( !pUnit )
 	{
 		sError.SetSprintf ( "unknown interval [%s]", sExpr.cstr() );
-		return DateUnit_e::total_units;
+		return { DateUnit_e::total_units, iMulti };
 	}
 
-	return *pUnit;
+	if ( bFixed )
+	{
+		switch ( *pUnit )
+		{
+		case DateUnit_e::ms:
+		case DateUnit_e::sec:
+		case DateUnit_e::minute:
+		case DateUnit_e::hour:
+		case DateUnit_e::day:
+			break;
+
+		default:
+			sError.SetSprintf ( "The supplied interval [%s] could not be parsed as a fixed interval", sExpr.cstr() );
+			return { DateUnit_e::total_units, iMulti };
+		}
+	}
+
+	return { *pUnit, iMulti };
 }
 
 void RoundDate ( DateUnit_e eUnit, time_t & tDateTime )
@@ -3812,6 +3825,58 @@ void RoundDate ( DateUnit_e eUnit, time_t & tDateTime )
 
 	default:
 		break;
+	}
+}
+
+void RoundDate ( DateUnit_e eUnit, int iMulti, time_t & tDateTime )
+{
+	switch ( eUnit )
+	{
+		case DateUnit_e::ms:
+		{
+			// to fixed ms
+			auto tMs = tDateTime * 1000;
+			tMs -= ( tMs % iMulti);			// to nearest iMulti ms
+			tDateTime = tMs / 1000;			// back to seconds
+		}
+		break;
+
+		case DateUnit_e::sec:
+		{
+			// to fixed seconds
+			tDateTime -= ( tDateTime % iMulti );
+		}
+		break;
+
+		case DateUnit_e::minute:
+		{
+			// to fixed minutes
+			auto tMin = ( ( tDateTime / 60 ) % 60 );
+			tDateTime -= ( ( tMin % iMulti ) * 60 );
+		}
+		break;
+
+		case DateUnit_e::hour:
+		{
+			// to fixed hours
+			const int iHourSeconds = 3600;
+			auto tHours = ( ( tDateTime / iHourSeconds ) % 24 );
+			tDateTime -= ( ( tHours % iMulti ) * iHourSeconds );
+		}
+		break;
+
+		case DateUnit_e::day:
+		{
+			// to fixed days
+			const int iDaySeconds = 86400;
+			auto tDaysEpoch = ( tDateTime / iDaySeconds );
+			tDaysEpoch -= ( tDaysEpoch % iMulti );
+			tDateTime = ( tDaysEpoch * iDaySeconds );
+		}
+		break;
+
+		default:
+			break;
 	}
 }
 
@@ -3895,4 +3960,35 @@ bool HasWildcards ( const char * sWord )
 	}
 
 	return false;
+}
+
+static RwLock_t hBreaksProtect;
+static SmallStringHash_T<bool> hBreaks GUARDED_BY ( hBreaksProtect );
+
+// sleep on named pause. Put into interest clauses in the code where a race expected
+void PauseCheck ( const CSphString & sName )
+{
+	auto fnCheck = [&sName] () {
+		ScRL_t tProtect { hBreaksProtect };
+		return hBreaks.Exists ( sName );
+	};
+	if ( !fnCheck () )
+		return;
+
+	sphInfo ( "Paused '%s'", sName.cstr () );
+	auto tmStart = sphMicroTimer ();
+	while ( fnCheck () )
+		sphSleepMsec ( 20 );
+	LogInfo ( "Released '%s' in %.3t", sName.cstr (), sphMicroTimer ()-tmStart );
+}
+
+// debug pause 'id' on / debug pause 'id' off
+void PauseAt ( const CSphString& sName, bool bPause )
+{
+	ScWL_t tProtect { hBreaksProtect };
+	auto bExist = hBreaks.Exists ( sName );
+	if ( !bPause && bExist )
+		hBreaks.Delete ( sName );
+	else if ( bPause && !bExist )
+		hBreaks.Add ( true, sName );
 }

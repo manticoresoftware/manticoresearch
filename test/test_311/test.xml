@@ -1,0 +1,76 @@
+<?xml version="1.0" encoding="utf-8"?>
+<test>
+
+<name>CJK via Jieba</name>
+
+<requires>
+<jieba/>
+<heavy/>
+<non-rt/>
+</requires>
+
+<config>
+indexer
+{
+	mem_limit			= 16M
+}
+
+searchd
+{
+	<searchd_settings/>
+}
+
+source test_xml
+{
+	type = xmlpipe2
+	xmlpipe_command = cat <this_test/>/data.xml
+}
+
+index test_xml
+{
+	source			= test_xml
+	path			= <data_path/>/test_xml
+
+	charset_table	= 0..9, A..Z->a..z, _, a..z, U+410..U+42F->U+430..U+44F, U+430..U+44F, \
+			U+2E80..U+2EF3, U+2F00..U+2FD5, U+3105..U+312D, U+31C0..U+31E3, U+3400..U+4DB5, U+4E00..U+9FCC, \
+			U+F900..U+FAD9, U+20000..U+2FA1D
+			
+	morphology 		= jieba_chinese, stem_enru
+
+    <dynamic>
+      <variant>	jieba_hmm = 0</variant>
+      <variant>	jieba_hmm = 1</variant>
+    </dynamic>
+
+    <dynamic>
+      <variant>	jieba_mode = accurate</variant>
+      <variant>	jieba_mode = full</variant>
+      <variant>	jieba_mode = search</variant>
+    </dynamic>
+
+	blend_chars		= -, U+23
+}
+</config>
+
+<queries><sphinxql>
+select * from test_xml where match('mix');
+select * from test_xml where match('русский');
+select * from test_xml where match('test');
+select * from test_xml where match('test2');
+select * from test_xml where match('許多');
+select * from test_xml where match('則有');
+select * from test_xml where match('有個');
+select * from test_xml where match('來');
+select * from test_xml where match('這群白髮蒼蒼，');
+select * from test_xml where match('ruin');
+select * from test_xml where match('aaa');
+select * from test_xml where match('bbb');
+select * from test_xml where match('aaa-bbb');
+select * from test_xml where match('msgCnt');
+select * from test_xml where match('今天的心情');
+select * from test_xml where match('@content 則有');
+select * from test_xml where match('@content 有個');
+call keywords('文山區長青學苑則有個十分特別的「英文歌唱班」，test; mixed blended aaa-bbb','test_xml');
+</sphinxql></queries>
+
+</test>

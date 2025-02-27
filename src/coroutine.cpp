@@ -556,7 +556,7 @@ void Go ( Handler&& fnHandler, Scheduler_i * pScheduler )
 }
 
 // start secondary subtasks (parallel search, pq processing, etc)
-void Co ( Handler&& fnHandler, Waiter_t tSignaller)
+void Co ( Handler&& fnHandler, Waiter_t tSignaller )
 {
 	auto pScheduler = CurrentScheduler ();
 	if ( !pScheduler )
@@ -679,10 +679,8 @@ bool CallCoroutineRes ( Predicate fnHandler )
 }
 
 // start secondary subtasks (parallel search, pq processing, etc)
-void StartJob ( Handler fnHandler )
+void StartJob ( Handler fnHandler, Scheduler_i * pScheduler )
 {
-	auto pScheduler = GlobalWorkPool();
-
 	assert ( pScheduler );
 	Coro::Worker_c::StartPrimary ( std::move ( fnHandler ), pScheduler, false );
 }
@@ -969,7 +967,7 @@ bool WaitQueue_c::SuspendAndWaitUntil ( sph::Spinlock_lock& tLock, Worker_c* pAc
 	});
 
 	// resumed. Check if deadline is reached
-	if ( sph::TimeExceeded ( iTimestamp ) )
+	if ( sph::TimeExceeded ( iTimestamp ) || sphInterrupted () )
 	{
 		tLock.lock();
 		// remove from waiting-queue
@@ -978,6 +976,7 @@ bool WaitQueue_c::SuspendAndWaitUntil ( sph::Spinlock_lock& tLock, Worker_c* pAc
 		tLock.unlock();
 		return false;
 	}
+	assert ( !w.is_linked () );
 	return true;
 }
 
@@ -1064,7 +1063,6 @@ Debug (static constexpr DWORD uxFE = ~ux01;)		   // mask for w-lock flag (0xFFFF
 void RWLock_c::ReadLock()
 {
 	while ( true ) {
-		// store this task in order to be resumed later
 		sph::Spinlock_lock tLock { m_tInternalMutex };
 		if ( !( m_uState & ux01 ) && m_tWaitWQueue.Empty() )
 		{
@@ -1104,6 +1102,18 @@ void RWLock_c::Unlock()
 	else
 		m_tWaitRQueue.NotifyAll();
 }
+
+// returns true if there are single read-lock, and pending write-lock
+bool RWLock_c::TestNextWlock () const noexcept
+{
+	sph::Spinlock_lock tLock { m_tInternalMutex };
+
+	if ( m_uState != ux02 )
+		return false;
+
+	return !m_tWaitWQueue.Empty ();
+}
+
 
 } // namespace Coro
 } // namespace Threads

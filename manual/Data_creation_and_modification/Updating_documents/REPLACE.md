@@ -24,6 +24,9 @@ REPLACE INTO table
     WHERE id = <id>
 ```
 Note, you can filter only by id in this mode.
+
+> NOTE: Partial replace requires [Manticore Buddy](../Installation/Manticore_Buddy.md). If it doesn't work, make sure Buddy is installed.
+
 Read more about `UPDATE` vs. partial `REPLACE` [here](../../Data_creation_and_modification/Updating_documents/REPLACE_vs_UPDATE.md#UPDATE-vs-partial-REPLACE).
 
 See the examples for more details.
@@ -34,7 +37,7 @@ See the examples for more details.
   ```
   POST /replace
   {
-    "index": "<table name>",
+    "table": "<table name>",
     "id": <document id>,
     "doc":
     {
@@ -54,15 +57,19 @@ See the examples for more details.
     "<fieldN>": <valueN>
   }
   ```
+  > NOTE: Elasticsearch-like replace requires [Manticore Buddy](../Installation/Manticore_Buddy.md). If it doesn't work, make sure Buddy is installed.
 * Partial replace:
-```
-POST /<table name>/_update/<id>
-{
-  "<field1>": <value1>,
-  ...
-  "<fieldN>": <valueN>
-}
-```
+  ```
+  POST /<{table | cluster:table}>/_update/<id>
+  {
+    "<field1>": <value1>,
+    ...
+    "<fieldN>": <valueN>
+  }
+  ```
+  The `<table name>` can either be just the table name or in the format `cluster:table`. This allows for updates across a specific cluster if needed.
+
+  > NOTE: Partial replace requires [Manticore Buddy](../Installation/Manticore_Buddy.md). If it doesn't work, make sure Buddy is installed.
 
 See the examples for more details.
 
@@ -103,7 +110,7 @@ Query OK, 1 row affected (0.00 sec)
 POST /replace
 -H "Content-Type: application/x-ndjson" -d '
 {
-  "index":"products",
+  "table":"products",
   "id":1,
   "doc":
   {
@@ -118,7 +125,7 @@ POST /replace
 <!-- response JSON -->
 ```json
 {
-  "_index":"products",
+  "table":"products",
   "_id":1,
   "created":false,
   "result":"updated",
@@ -131,6 +138,8 @@ POST /replace
 ##### Elasticsearch-like
 
 <!-- request Elasticsearch-like -->
+
+> NOTE: Elasticsearch-like replace requires [Manticore Buddy](../Installation/Manticore_Buddy.md). If it doesn't work, make sure Buddy is installed.
 
 ```json
 PUT /products/_doc/2
@@ -150,7 +159,7 @@ POST /products/_doc/3
 ```json
 {
 "_id":2,
-"_index":"products",
+"table":"products",
 "_primary_term":1,
 "_seq_no":0,
 "_shards":{
@@ -165,7 +174,7 @@ POST /products/_doc/3
 
 {
 "_id":3,
-"_index":"products",
+"table":"products",
 "_primary_term":1,
 "_seq_no":0,
 "_shards":{
@@ -184,6 +193,8 @@ POST /products/_doc/3
 
 <!-- request Elasticsearch-like partial -->
 
+> NOTE: Partial replace requires [Manticore Buddy](../Installation/Manticore_Buddy.md). If it doesn't work, make sure Buddy is installed.
+
 ```json
 POST /products/_update/55
 {
@@ -197,11 +208,33 @@ POST /products/_update/55
 <!-- response Elasticsearch-like partial -->
 ```json
 {
-"_index":"products",
+"table":"products",
 "updated":1
 }
 ```
 
+<!-- intro -->
+##### Elasticsearch-like partial replace in cluster:
+
+<!-- request Elasticsearch-like partial in cluster -->
+
+```json
+POST /cluster_name:products/_update/55
+{
+  "doc": {
+    "description": "HUAWEI Matebook 15",
+    "price": 10
+  }
+}
+```
+
+<!-- response Elasticsearch-like partial in cluster -->
+```json
+{
+"table":"products",
+"updated":1
+}
+```
 
 <!-- intro -->
 ##### PHP:
@@ -231,7 +264,7 @@ Array(
 
 <!-- request Python -->
 ``` python
-indexApi.replace({"index" : "products", "id" : 1, "doc" : {"title" : "document one","price":10}})
+indexApi.replace({"table" : "products", "id" : 1, "doc" : {"title" : "document one","price":10}})
 ```
 
 <!-- response Python -->
@@ -239,7 +272,7 @@ indexApi.replace({"index" : "products", "id" : 1, "doc" : {"title" : "document o
 {'created': False,
  'found': None,
  'id': 1,
- 'index': 'products',
+ 'table': 'products',
  'result': 'updated'}
 ```
 <!-- intro -->
@@ -248,12 +281,12 @@ indexApi.replace({"index" : "products", "id" : 1, "doc" : {"title" : "document o
 
 <!-- request javascript -->
 ``` javascript
-res = await indexApi.replace({"index" : "products", "id" : 1, "doc" : {"title" : "document one","price":10}});
+res = await indexApi.replace({"table" : "products", "id" : 1, "doc" : {"title" : "document one","price":10}});
 ```
 
 <!-- response javascript -->
 ```javascript
-{"_index":"products","_id":1,"result":"updated"}
+{"table":"products","_id":1,"result":"updated"}
 ```
 
 <!-- intro -->
@@ -324,7 +357,7 @@ res = await indexApi.replace({
 <!-- response TypeScript -->
 ```json
 {
-    "_index":"test",
+    "table":"test",
     "_id":1,
     "created":false
     "result":"updated"
@@ -347,7 +380,7 @@ res, _, _ := apiClient.IndexAPI.Replace(context.Background()).InsertDocumentRequ
 <!-- response Go -->
 ```go
 {
-    "_index":"test",
+    "table":"test",
     "_id":1,
     "created":false
     "result":"updated"
@@ -387,8 +420,8 @@ Query OK, 2 rows affected (0.00 sec)
 ```json
 POST /bulk
 -H "Content-Type: application/x-ndjson" -d '
-{ "replace" : { "index" : "products", "id":1, "doc": { "title": "doc one", "tag" : 10 } } }
-{ "replace" : { "index" : "products", "id":2, "doc": { "title": "doc two", "tag" : 20 } } }
+{ "replace" : { "table" : "products", "id":1, "doc": { "title": "doc one", "tag" : 10 } } }
+{ "replace" : { "table" : "products", "id":2, "doc": { "title": "doc two", "tag" : 20 } } }
 '
 ```
 
@@ -401,7 +434,7 @@ POST /bulk
     {
       "replace":
       {
-        "_index":"products",
+        "table":"products",
         "_id":1,
         "created":false,
         "result":"updated",
@@ -411,7 +444,7 @@ POST /bulk
     {
       "replace":
       {
-        "_index":"products",
+        "table":"products",
         "_id":2,
         "created":false,
         "result":"updated",
@@ -429,12 +462,12 @@ POST /bulk
 
 ```php
 $index->replaceDocuments([
-    [   
+    [
         'id' => 1,
         'title' => 'document one',
         'tag' => 10
     ],
-    [   
+    [
         'id' => 2,
         'title' => 'document one',
         'tag' => 20
@@ -470,8 +503,8 @@ Array(
 ``` python
 indexApi = manticoresearch.IndexApi(client)
 docs = [ \
-    {"replace": {"index" : "products", "id" : 1, "doc" : {"title" : "document one"}}}, \
-    {"replace": {"index" : "products", "id" : 2, "doc" : {"title" : "document two"}}} ]
+    {"replace": {"table" : "products", "id" : 1, "doc" : {"title" : "document one"}}}, \
+    {"replace": {"table" : "products", "id" : 2, "doc" : {"title" : "document two"}}} ]
 api_resp = indexApi.bulk('\n'.join(map(json.dumps,docs)))
 ```
 
@@ -479,12 +512,12 @@ api_resp = indexApi.bulk('\n'.join(map(json.dumps,docs)))
 ```python
 {'error': None,
  'items': [{u'replace': {u'_id': 1,
-                         u'_index': u'products',
+                         u'table': u'products',
                          u'created': False,
                          u'result': u'updated',
                          u'status': 200}},
            {u'replace': {u'_id': 2,
-                         u'_index': u'products',
+                         u'table': u'products',
                          u'created': False,
                          u'result': u'updated',
                          u'status': 200}}]}
@@ -494,14 +527,14 @@ api_resp = indexApi.bulk('\n'.join(map(json.dumps,docs)))
 
 ``` javascript
 docs = [
-    {"replace": {"index" : "products", "id" : 1, "doc" : {"title" : "document one"}}},
-    {"replace": {"index" : "products", "id" : 2, "doc" : {"title" : "document two"}}} ];
+    {"replace": {"table" : "products", "id" : 1, "doc" : {"title" : "document one"}}},
+    {"replace": {"table" : "products", "id" : 2, "doc" : {"title" : "document two"}}} ];
 res =  await indexApi.bulk(docs.map(e=>JSON.stringify(e)).join('\n'));
 ```
 
 <!-- response javascript -->
 ```javascript
-{"items":[{"replace":{"_index":"products","_id":1,"created":false,"result":"updated","status":200}},{"replace":{"_index":"products","_id":2,"created":false,"result":"updated","status":200}}],"errors":false}
+{"items":[{"replace":{"table":"products","_id":1,"created":false,"result":"updated","status":200}},{"replace":{"table":"products","_id":2,"created":false,"result":"updated","status":200}}],"errors":false}
 
 ```
 
@@ -509,7 +542,7 @@ res =  await indexApi.bulk(docs.map(e=>JSON.stringify(e)).join('\n'));
 
 ``` java
 body = "{\"replace\": {\"index\" : \"products\", \"id\" : 1, \"doc\" : {\"title\" : \"document one\"}}}" +"\n"+
-    "{\"replace\": {\"index\" : \"products\", \"id\" : 2, \"doc\" : {\"title\" : \"document two\"}}}"+"\n" ;         
+    "{\"replace\": {\"index\" : \"products\", \"id\" : 2, \"doc\" : {\"title\" : \"document two\"}}}"+"\n" ;
 indexApi.bulk(body);
 ```
 
@@ -526,7 +559,7 @@ class BulkResponse {
 
 ``` clike
 string body = "{\"replace\": {\"index\" : \"products\", \"id\" : 1, \"doc\" : {\"title\" : \"document one\"}}}" +"\n"+
-    "{\"replace\": {\"index\" : \"products\", \"id\" : 2, \"doc\" : {\"title\" : \"document two\"}}}"+"\n" ;         
+    "{\"replace\": {\"index\" : \"products\", \"id\" : 2, \"doc\" : {\"title\" : \"document two\"}}}"+"\n" ;
 indexApi.Bulk(body);
 ```
 
@@ -572,7 +605,7 @@ res = await indexApi.bulk(
     {
       "replace":
       {
-        "_index":"test",
+        "table":"test",
         "_id":1,
         "created":false,
         "result":"updated",
@@ -582,7 +615,7 @@ res = await indexApi.bulk(
     {
       "replace":
       {
-        "_index":"test",
+        "table":"test",
         "_id":2,
         "created":false,
         "result":"updated",
@@ -610,7 +643,7 @@ res, _, _ := apiClient.IndexAPI.Bulk(context.Background()).Body(body).Execute()
     {
       "replace":
       {
-        "_index":"test",
+        "table":"test",
         "_id":1,
         "created":false,
         "result":"updated",
@@ -620,7 +653,7 @@ res, _, _ := apiClient.IndexAPI.Bulk(context.Background()).Body(body).Execute()
     {
       "replace":
       {
-        "_index":"test",
+        "table":"test",
         "_id":2,
         "created":false,
         "result":"updated",

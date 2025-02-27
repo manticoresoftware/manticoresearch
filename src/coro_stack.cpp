@@ -44,6 +44,7 @@ CoroStack_t AllocateStack ( size_t iStack )
 		}
 	default:
 		assert(false && "should not be here");
+		return {}; // just to suppress a warning
 	}
 }
 

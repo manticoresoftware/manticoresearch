@@ -35,7 +35,7 @@ Query OK, 1 row affected (0.00 sec)
 POST /update
 
 {
-  "index":"products",
+  "table":"products",
   "id":10,
   "doc":
   {
@@ -47,7 +47,7 @@ POST /update
 <!-- response JSON -->
 ```JSON
 {
-  "_index":"products",
+  "table":"products",
   "updated":1
 }
 ```
@@ -78,24 +78,24 @@ Array(
 <!-- request Python -->
 ``` python
 indexApi = api = manticoresearch.IndexApi(client)
-indexApi.update({"index" : "products", "id" : 1, "doc" : {"price":10}})
+indexApi.update({"table" : "products", "id" : 1, "doc" : {"price":10}})
 ```
 
 <!-- response Python -->
 ```python
-{'id': 1, 'index': 'products', 'result': 'updated', 'updated': None}
+{'id': 1, 'table': 'products', 'result': 'updated', 'updated': None}
 ```
 <!-- intro -->
 ##### Javascript:
 
 <!-- request javascript -->
 ``` javascript
-res = await indexApi.update({"index" : "products", "id" : 1, "doc" : {"price":10}});
+res = await indexApi.update({"table" : "products", "id" : 1, "doc" : {"price":10}});
 ```
 
 <!-- response javascript -->
 ```javascript
-{"_index":"products","_id":1,"result":"updated"}
+{"table":"products","_id":1,"result":"updated"}
 ```
 <!-- intro -->
 ##### java:
@@ -152,7 +152,7 @@ res = await indexApi.update({ index: "test", id: 1, doc: { cat: 10 } });
 <!-- response TypeScript -->
 ```typescript
 {
-	"_index":"test",
+	"table":"test",
 	"_id":1,
 	"result":"updated"
 }
@@ -172,7 +172,7 @@ res, _, _ = apiClient.IndexAPI.Update(context.Background()).UpdateDocumentReques
 <!-- response Go -->
 ```go
 {
-	"_index":"test",
+	"table":"test",
 	"_id":1,
 	"result":"updated"
 }
@@ -211,7 +211,7 @@ Query OK, 148 rows affected (0.0 sec)
 ```JSON
 POST /update
 {
-  "index":"products",
+  "table":"products",
   "doc":
   {
     "price":100000000000,
@@ -230,7 +230,7 @@ POST /update
 <!-- response JSON -->
 ```JSON
 {
-  "_index":"products",
+  "table":"products",
   "updated":148
 }
 ```
@@ -268,7 +268,7 @@ Array(
 <!-- request Python -->
 ``` python
 indexApi = api = manticoresearch.IndexApi(client)
-indexApi.update({"index" : "products", "id" : 1, "doc" : {
+indexApi.update({"table" : "products", "id" : 1, "doc" : {
     "price": 100000000000,
     "coeff": 3465.23,
     "tags1": [3,6,4],
@@ -277,14 +277,14 @@ indexApi.update({"index" : "products", "id" : 1, "doc" : {
 
 <!-- response Python -->
 ```python
-{'id': 1, 'index': 'products', 'result': 'updated', 'updated': None}
+{'id': 1, 'table': 'products', 'result': 'updated', 'updated': None}
 ```
 <!-- intro -->
 ##### Javascript:
 
 <!-- request javascript -->
 ``` javascript
-res = await indexApi.update({"index" : "products", "id" : 1, "doc" : {
+res = await indexApi.update({"table" : "products", "id" : 1, "doc" : {
     "price": 100000000000,
     "coeff": 3465.23,
     "tags1": [3,6,4],
@@ -293,7 +293,7 @@ res = await indexApi.update({"index" : "products", "id" : 1, "doc" : {
 
 <!-- response javascript -->
 ```javascript
-{"_index":"products","_id":1,"result":"updated"}
+{"table":"products","_id":1,"result":"updated"}
 ```
 <!-- intro -->
 ##### java:
@@ -357,7 +357,7 @@ res = await indexApi.update({ index: "test", id: 1, doc: { name: "Doc 21", cat: 
 <!-- response TypeScript -->
 ```go
 {
-  "_index":"test",
+  "table":"test",
   "_id":1,
   "result":"updated"
 }
@@ -377,7 +377,7 @@ res, _, _ = apiClient.IndexAPI.Update(context.Background()).UpdateDocumentReques
 <!-- response Go -->
 ```go
 {
-  "_index":"test",
+  "table":"test",
   "_id":1,
   "result":"updated"
 }
@@ -417,7 +417,7 @@ Query OK, 1 row affected (0.00 sec)
 ```JSON
 POST /insert
 {
-	"index":"products",
+	"table":"products",
 	"id":100,
 	"doc":
 	{
@@ -430,7 +430,7 @@ POST /insert
 
 POST /update
 {
-	"index":"products",
+	"table":"products",
 	"id":100,
 	"doc":
 	{
@@ -442,7 +442,7 @@ POST /update
 <!-- response JSON -->
 ```JSON
 {
-   "_index":"products",
+   "table":"products",
    "_id":100,
    "created":true,
    "result":"created",
@@ -450,7 +450,7 @@ POST /update
 }
 
 {
-  "_index":"products",
+  "table":"products",
   "updated":1
 }
 ```
@@ -491,13 +491,13 @@ Array(
 <!-- request Python -->
 ``` python
 indexApi = api = manticoresearch.IndexApi(client)
-indexApi.update({"index" : "products", "id" : 1, "doc" : {
+indexApi.update({"table" : "products", "id" : 1, "doc" : {
     "meta.tags[0]": 100}})
 ```
 
 <!-- response Python -->
 ```python
-{'id': 1, 'index': 'products', 'result': 'updated', 'updated': None}
+{'id': 1, 'table': 'products', 'result': 'updated', 'updated': None}
 ```
 
 <!-- intro -->
@@ -505,13 +505,13 @@ indexApi.update({"index" : "products", "id" : 1, "doc" : {
 
 <!-- request javascript -->
 ``` javascript
-res = await indexApi.update({"index" : "products", "id" : 1, "doc" : {
+res = await indexApi.update({"table" : "products", "id" : 1, "doc" : {
    "meta.tags[0]": 100}});
 ```
 
 <!-- response javascript -->
 ```javascript
-{"_index":"products","_id":1,"result":"updated"}
+{"table":"products","_id":1,"result":"updated"}
 ```
 
 <!-- intro -->
@@ -564,12 +564,12 @@ class UpdateResponse {
 
 <!-- request TypeScript -->
 ``` typescript
-res = await indexApi.update({"index" : "test", "id" : 1, "doc" : { "meta.tags[0]": 100} });
+res = await indexApi.update({"table" : "test", "id" : 1, "doc" : { "meta.tags[0]": 100} });
 ```
 
 <!-- response TypeScript -->
 ```typescript
-{"_index":"test","_id":1,"result":"updated"}
+{"table":"test","_id":1,"result":"updated"}
 ```
 
 <!-- intro -->
@@ -586,7 +586,7 @@ res, _, _ = apiClient.IndexAPI.Update(context.Background()).UpdateDocumentReques
 <!-- response Go -->
 ```go
 {
-	"_index":"test",
+	"table":"test",
 	"_id":1,
 	"result":"updated"
 }
@@ -624,7 +624,7 @@ Query OK, 1 row affected (0.00 sec)
 ```JSON
 POST /insert
 {
-	"index":"products",
+	"table":"products",
 	"id":1,
 	"doc":
 	{
@@ -635,7 +635,7 @@ POST /insert
 
 POST /update
 {
-	"index":"products",
+	"table":"products",
 	"id":1,
 	"doc":
 	{
@@ -647,7 +647,7 @@ POST /update
 <!-- response JSON -->
 ```JSON
 {
-  "_index":"products",
+  "table":"products",
   "updated":1
 }
 ```
@@ -691,8 +691,8 @@ Array(
 
 <!-- request Python -->
 ``` python
-indexApi.insert({"index" : "products", "id" : 100, "doc" : {"title" : "title", "meta" : {"tags":[1,2,3]}}})
-indexApi.update({"index" : "products", "id" : 100, "doc" : {"meta" : {"tags":['one','two','three']}}})
+indexApi.insert({"table" : "products", "id" : 100, "doc" : {"title" : "title", "meta" : {"tags":[1,2,3]}}})
+indexApi.update({"table" : "products", "id" : 100, "doc" : {"meta" : {"tags":['one','two','three']}}})
 ```
 
 <!-- response Python -->
@@ -701,23 +701,23 @@ indexApi.update({"index" : "products", "id" : 100, "doc" : {"meta" : {"tags":['o
 {'created': True,
  'found': None,
  'id': 100,
- 'index': 'products',
+ 'table': 'products',
  'result': 'created'}
-{'id': 100, 'index': 'products', 'result': 'updated', 'updated': None}
+{'id': 100, 'table': 'products', 'result': 'updated', 'updated': None}
 ```
 <!-- intro -->
 ##### Javascript:
 
 <!-- request javascript -->
 ``` javascript
-res = await indexApi.insert({"index" : "products", "id" : 100, "doc" : {"title" : "title", "meta" : {"tags":[1,2,3]}}});
-res = await indexApi.update({"index" : "products", "id" : 100, "doc" : {"meta" : {"tags":['one','two','three']}}});
+res = await indexApi.insert({"table" : "products", "id" : 100, "doc" : {"title" : "title", "meta" : {"tags":[1,2,3]}}});
+res = await indexApi.update({"table" : "products", "id" : 100, "doc" : {"meta" : {"tags":['one','two','three']}}});
 ```
 
 <!-- response javascript -->
 ```javascript
-{"_index":"products","_id":100,"created":true,"result":"created"}
-{"_index":"products","_id":100,"result":"updated"}
+{"table":"products","_id":100,"created":true,"result":"created"}
+{"table":"products","_id":100,"result":"updated"}
 
 ```
 
@@ -824,14 +824,14 @@ res = await indexApi.update({ index: 'test', id: 1, doc: { meta: { tags:['one','
 <!-- response TypeScript -->
 ```typescript
 {
-	"_index":"test",
+	"table":"test",
 	"_id":1,
 	"created":true,
 	"result":"created"
 }
 
 {
-	"_index":"test",
+	"table":"test",
 	"_id":1,
 	"result":"updated"
 }
@@ -857,14 +857,14 @@ res, _, _ = apiClient.IndexAPI.Update(context.Background()).UpdateDocumentReques
 <!-- response Go -->
 ```go
 {
-	"_index":"test",
+	"table":"test",
 	"_id":1,
 	"created":true,
 	"result":"created"
 }
 
 {
-	"_index":"test",
+	"table":"test",
 	"_id":1,
 	"result":"updated"
 }
@@ -879,7 +879,7 @@ When using replication, the table name should be prepended with `cluster_name:` 
 ```json
 {
   "cluster":"nodes4",
-  "index":"test",
+  "table":"test",
   "id":1,
   "doc":
   {
@@ -906,7 +906,7 @@ update weekly:posts set enabled=0 where id=1;
 POST /update
 {
 	"cluster":"weekly",
-	"index":"products",
+	"table":"products",
 	"id":1,
 	"doc":
 	{
@@ -929,7 +929,7 @@ $index->updateDocument(['enabled'=>0],1);
 
 <!-- request Python -->
 ``` python
-indexApi.update({"cluster":"weekly", "index" : "products", "id" : 1, "doc" : {"enabled" : 0}})
+indexApi.update({"cluster":"weekly", "table" : "products", "id" : 1, "doc" : {"enabled" : 0}})
 
 ```
 <!-- intro -->
@@ -937,7 +937,7 @@ indexApi.update({"cluster":"weekly", "index" : "products", "id" : 1, "doc" : {"e
 
 <!-- request javascript -->
 ``` javascript
-res = wait indexApi.update({"cluster":"weekly", "index" : "products", "id" : 1, "doc" : {"enabled" : 0}});
+res = wait indexApi.update({"cluster":"weekly", "table" : "products", "id" : 1, "doc" : {"enabled" : 0}});
 
 ```
 <!-- intro -->
@@ -1030,7 +1030,7 @@ Query OK, 1 row affected (0.00 sec)
 POST /update
 
 {
-	"index":"products",
+	"table":"products",
 	"_id":1,
 	"doc":
 	{
@@ -1042,7 +1042,7 @@ POST /update
 <!-- response JSON -->
 ```JSON
 {
-  "_index":"products",
+  "table":"products",
   "updated":1
 }
 ```
@@ -1070,12 +1070,12 @@ Array(
 <!-- request Python -->
 ``` python
 
-indexApi.update({"index" : "products", "id" : 1, "doc" : {"tags1": []}})
+indexApi.update({"table" : "products", "id" : 1, "doc" : {"tags1": []}})
 ```
 
 <!-- response Python -->
 ```python
-{'id': 1, 'index': 'products', 'result': 'updated', 'updated': None}
+{'id': 1, 'table': 'products', 'result': 'updated', 'updated': None}
 ```
 
 <!-- intro -->
@@ -1084,12 +1084,12 @@ indexApi.update({"index" : "products", "id" : 1, "doc" : {"tags1": []}})
 <!-- request javascript -->
 ``` javascript
 
-indexApi.update({"index" : "products", "id" : 1, "doc" : {"tags1": []}})
+indexApi.update({"table" : "products", "id" : 1, "doc" : {"tags1": []}})
 ```
 
 <!-- response javascript -->
 ```javascript
-{"_index":"products","_id":1,"result":"updated"}
+{"table":"products","_id":1,"result":"updated"}
 ```
 <!-- intro -->
 ##### java:
@@ -1147,7 +1147,7 @@ res = await indexApi.update({ index: 'test', id: 1, doc: { cat: 10 } });
 <!-- response TypeScript -->
 ```typescript
 {
-	"_index":"test",
+	"table":"test",
 	"_id":1,
 	"result":"updated"
 }
@@ -1167,7 +1167,7 @@ res, _, _ = apiClient.IndexAPI.Update(context.Background()).UpdateDocumentReques
 <!-- response Go -->
 ```go
 {
-	"_index":"test",
+	"table":"test",
 	"_id":1,
 	"result":"updated"
 }
@@ -1208,7 +1208,7 @@ The server will respond with a JSON object stating if the operation was successf
 ```JSON
 POST /update
 {
-  "index":"test",
+  "table":"test",
   "id":1,
   "doc":
    {
@@ -1221,7 +1221,7 @@ POST /update
 <!-- response JSON -->
 ``` JSON
 {
-  "_index": "test",
+  "table": "test",
   "_id": 1,
   "result": "updated"
 }
@@ -1242,7 +1242,7 @@ The ID of the document that needs to be updated can be set directly using the `i
 POST /update
 
 {
-  "index":"test",
+  "table":"test",
   "doc":
   {
     "price" : 1000
@@ -1258,7 +1258,7 @@ POST /update
 
 ```json
 {
-  "_index":"products",
+  "table":"products",
   "updated":1
 }
 ```
@@ -1305,8 +1305,8 @@ You can perform multiple update operations in a single call using the `/bulk` en
 ```json
 POST /bulk
 
-{ "update" : { "index" : "products", "id" : 1, "doc": { "price" : 10 } } }
-{ "update" : { "index" : "products", "id" : 2, "doc": { "price" : 20 } } }
+{ "update" : { "table" : "products", "id" : 1, "doc": { "price" : 10 } } }
+{ "update" : { "table" : "products", "id" : 2, "doc": { "price" : 20 } } }
 ```
 
 <!-- response JSON -->
@@ -1318,7 +1318,7 @@ POST /bulk
       {
          "update":
          {
-            "_index":"products",
+            "table":"products",
             "_id":1,
             "result":"updated"
          }
@@ -1326,7 +1326,7 @@ POST /bulk
       {
          "update":
          {
-            "_index":"products",
+            "table":"products",
             "_id":2,
             "result":"updated"
          }
@@ -1359,8 +1359,8 @@ Updates by query and deletes by query are also supported.
 ```json
 POST /bulk
 
-{ "update" : { "index" : "products", "doc": { "coeff" : 1000 }, "query": { "range": { "price": { "gte": 1000 } } } } }
-{ "update" : { "index" : "products", "doc": { "coeff" : 0 }, "query": { "range": { "price": { "lt": 1000 } } } } }
+{ "update" : { "table" : "products", "doc": { "coeff" : 1000 }, "query": { "range": { "price": { "gte": 1000 } } } } }
+{ "update" : { "table" : "products", "doc": { "coeff" : 0 }, "query": { "range": { "price": { "lt": 1000 } } } } }
 ```
 
 <!-- response JSON -->
@@ -1372,14 +1372,14 @@ POST /bulk
     {
       "update":
       {
-        "_index":"products",
+        "table":"products",
         "updated":1
       }
     },
     {
       "update":
       {
-        "_index":"products",
+        "table":"products",
         "updated":3
       }
     }
@@ -1396,7 +1396,7 @@ POST /bulk
 
 $client->bulk([
     ['update'=>[
-            'index' => 'products',
+            'table' => 'products',
              'doc' => [
                 'coeff' => 100
             ],
@@ -1406,7 +1406,7 @@ $client->bulk([
         ]
     ],
     ['update'=>[
-            'index' => 'products',
+            'table' => 'products',
              'doc' => [
                 'coeff' => 0
             ],
@@ -1446,16 +1446,16 @@ Array(
 <!-- request Python -->
 ``` python
 docs = [ \
-            { "update" : { "index" : "products", "doc": { "coeff" : 1000 }, "query": { "range": { "price": { "gte": 1000 } } } } }, \
-            { "update" : { "index" : "products", "doc": { "coeff" : 0 }, "query": { "range": { "price": { "lt": 1000 } } } } } ]
+            { "update" : { "table" : "products", "doc": { "coeff" : 1000 }, "query": { "range": { "price": { "gte": 1000 } } } } }, \
+            { "update" : { "table" : "products", "doc": { "coeff" : 0 }, "query": { "range": { "price": { "lt": 1000 } } } } } ]
 indexApi.bulk('\n'.join(map(json.dumps,docs)))
 ```
 
 <!-- response Python -->
 ```python
 {'error': None,
- 'items': [{u'update': {u'_index': u'products', u'updated': 1}},
-           {u'update': {u'_index': u'products', u'updated': 3}}]}
+ 'items': [{u'update': {u'table': u'products', u'updated': 1}},
+           {u'update': {u'table': u'products', u'updated': 3}}]}
 
 ```
 <!-- intro -->
@@ -1464,14 +1464,14 @@ indexApi.bulk('\n'.join(map(json.dumps,docs)))
 <!-- request javascript -->
 ``` javascript
 docs = [
-            { "update" : { "index" : "products", "doc": { "coeff" : 1000 }, "query": { "range": { "price": { "gte": 1000 } } } } },
-            { "update" : { "index" : "products", "doc": { "coeff" : 0 }, "query": { "range": { "price": { "lt": 1000 } } } } } ];
+            { "update" : { "table" : "products", "doc": { "coeff" : 1000 }, "query": { "range": { "price": { "gte": 1000 } } } } },
+            { "update" : { "table" : "products", "doc": { "coeff" : 0 }, "query": { "range": { "price": { "lt": 1000 } } } } } ];
 res =  await indexApi.bulk(docs.map(e=>JSON.stringify(e)).join('\n'));
 ```
 
 <!-- response javascript -->
 ```javascript
-{"items":[{"update":{"_index":"products","updated":1}},{"update":{"_index":"products","updated":3}}],"errors":false}
+{"items":[{"update":{"table":"products","updated":1}},{"update":{"table":"products","updated":3}}],"errors":false}
 
 ```
 
@@ -1546,14 +1546,14 @@ res = await indexApi.bulk(
     {
       "update":
       {
-        "_index":"test",
+        "table":"test",
         "updated":1
       }
     },
     {
       "update":
       {
-        "_index":"test",
+        "table":"test",
         "updated":1
       }
     }
@@ -1578,14 +1578,14 @@ res, _, _ := apiClient.IndexAPI.Bulk(context.Background()).Body(body).Execute()
     {
       "update":
       {
-        "_index":"test",
+        "table":"test",
         "updated":1
       }
     },
     {
       "update":
       {
-        "_index":"test",
+        "table":"test",
         "updated":1
       }
     }
@@ -1646,7 +1646,7 @@ $params = [
             'price'=>['type'=>'float']
         ]
     ],
-    'index' => 'products'
+    'table' => 'products'
 ];
 $index = new \Manticoresearch\Index($client);
 $index->create($params);

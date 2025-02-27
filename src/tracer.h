@@ -26,6 +26,7 @@ PERFETTO_DEFINE_CATEGORIES (
 	perfetto::Category ( "conn" ).SetDescription ( "One connection scope" ),
 	perfetto::Category ( "wait" ).SetDescription ( "Time spent idle" ),
 	perfetto::Category ( "mem" ).SetDescription ( "Memory counters" ),
+	perfetto::Category ( "sph" ).SetDescription ( "Common disk routines" ),
 	);
 
 
@@ -73,6 +74,9 @@ PERFETTO_DEFINE_CATEGORIES (
 // track of current scheduler
 #define SCHED_TRACK perfetto::Track::FromPointer ( Threads::Coro::CurrentScheduler() )
 
+// track of current coro
+#define SCHED_CORO perfetto::Track::FromPointer ( Threads::Coro::CurrentWorker() )
+
 // track of current connection
 #define CONN_TRACK perfetto::Track ( session::GetConnID() )
 
@@ -116,6 +120,13 @@ inline void Stop() {};
 #define TRACE_SCHED_ID( category, name, id, ... ) SCOPED_TRACEP ( category, name, PERF_TRACK ( id, SCHED_TRACK ), ##__VA_ARGS__ )
 // use instead of TRACE_SCHED_ID when id is local variable, and 'error: reference to local variable 'iId' declared in enclosing' happens
 #define TRACE_SCHED_VARID( category, name, id, ... ) SCOPED_TRACE_LOCAL ( category, name, PERF_TRACK ( id, SCHED_TRACK ), ##__VA_ARGS__ )
+
+#define BEGIN_CORO( category, name, ... ) TRACE_EVENT_BEGIN ( category, name, SCHED_CORO, ##__VA_ARGS__ )
+#define END_CORO( category, ... ) TRACE_EVENT_END ( category, SCHED_CORO, ##__VA_ARGS__ )
+#define TRACE_CORO( category, name, ... ) SCOPED_TRACEP ( category, name, SCHED_CORO, ##__VA_ARGS__ )
+#define TRACE_CORO_ID( category, name, id, ... ) SCOPED_TRACEP ( category, name, PERF_TRACK ( id, SCHED_CORO ), ##__VA_ARGS__ )
+// use instead of TRACE_SCHED_ID when id is local variable, and 'error: reference to local variable 'iId' declared in enclosing' happens
+#define TRACE_CORO_VARID( category, name, id, ... ) SCOPED_TRACE_LOCAL ( category, name, PERF_TRACK ( id, SCHED_CORO ), ##__VA_ARGS__ )
 
 #define BEGIN_CONN( category, name, ... ) TRACE_EVENT_BEGIN ( category, name, CONN_TRACK, ##__VA_ARGS__ )
 #define END_CONN( category, ... ) TRACE_EVENT_END ( category, CONN_TRACK, ##__VA_ARGS__ )

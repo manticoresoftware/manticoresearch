@@ -28,11 +28,6 @@
 
 using namespace Threads;
 
-/// protection from concurrent changes during binlog replay
-#ifndef NDEBUG
-static auto &g_bRTChangesAllowed = RTChangesAllowed ();
-#endif
-
 //////////////////////////////////////////////////////////////////////////
 // percolate index
 
@@ -83,7 +78,7 @@ public:
 
 static FileAccessSettings_t g_tDummyFASettings;
 
-class PercolateIndex_c : public PercolateIndex_i
+class PercolateIndex_c final : public PercolateIndex_i
 {
 public:
 	PercolateIndex_c ( CSphString sIndexName, CSphString sPath, CSphSchema tSchema );
@@ -173,6 +168,7 @@ private:
 
 public:
 	PercolateMatchContext_t * CreateMatchContext ( const RtSegment_t * pSeg, const SegmentReject_t &tReject );
+	int GetNumOfLocks () const noexcept final;
 
 private:
 	int ReplayInsertAndDeleteQueries ( const VecTraits_T<StoredQuery_i*>& dNewQueries, const VecTraits_T<int64_t>& dDeleteQueries, const VecTraits_T<uint64_t>& dDeleteTags ) EXCLUDES ( m_tLock );
@@ -1033,9 +1029,9 @@ bool PercolateQwordSetup_c::QwordSetup ( ISphQword * pQword ) const
 	return bWordSet;
 }
 
-ISphQword * PercolateQwordSetup_c::ScanSpawn() const
+ISphQword * PercolateQwordSetup_c::ScanSpawn ( int iAtomPos ) const
 {
-	return new QwordScan_c ( m_pSeg->m_uRows );
+	return new QwordScan_c ( m_pSeg->m_uRows, iAtomPos, SPH_MAX_FIELDS );
 }
 
 SphWordID_t PercolateDictProxy_c::GetWordID ( BYTE * pWord )
@@ -1598,7 +1594,7 @@ bool PercolateIndex_c::MatchDocuments ( RtAccum_t * pAcc, PercolateMatchResult_t
 
 void PercolateIndex_c::RollBack ( RtAccum_t * pAcc )
 {
-	assert ( g_bRTChangesAllowed );
+	assert ( RTChangesAllowed () );
 
 	if ( BindAccum ( pAcc ) )
 		pAcc->Cleanup();
@@ -1639,7 +1635,7 @@ void PercolateIndex_c::GetStatus ( CSphIndexStatus * pRes ) const
 		ScRL_t rLock { m_tLock };
 		iRamUse = m_hQueries.GetLengthBytes();
 		iRamUse += m_dHitlessWords.GetLengthBytes64() + m_dLoadedQueries.GetLengthBytes64();
-		iRamUse = m_pQueries->GetLengthBytes64 ();
+		iRamUse += m_pQueries->GetLengthBytes64 ();
 		for ( auto & pItem : *m_pQueries )
 		{
 			iMaxStack = Max ( iMaxStack, pItem->m_iStackRequired );
@@ -1659,7 +1655,7 @@ void PercolateIndex_c::GetStatus ( CSphIndexStatus * pRes ) const
 	pRes->m_iRamUse = iRamUse;
 	pRes->m_iStackNeed = iMaxStack;
 	pRes->m_iStackBase = StoredQuery_t::m_iStackBaseRequired;
-	pRes->m_iLockCount = m_iDisabledCounter;
+	pRes->m_iLockCount = GetNumOfLocks();
 }
 
 class XQTreeCompressor_t
@@ -2108,7 +2104,7 @@ int PercolateIndex_c::ReplayInsertAndDeleteQueries ( const VecTraits_T<StoredQue
 
 bool PercolateIndex_c::Commit ( int * pDeleted, RtAccum_t * pAcc, CSphString* )
 {
-	assert ( g_bRTChangesAllowed );
+	assert ( RTChangesAllowed () );
 
 	if ( !BindAccum ( pAcc ) )
 		return true;
@@ -3063,7 +3059,12 @@ bool PercolateIndex_c::ForceDiskChunk()
 
 bool PercolateIndex_c::IsSaveDisabled() const noexcept
 {
-	return m_iDisabledCounter > 0;
+	return GetNumOfLocks() > 0;
+}
+
+int PercolateIndex_c::GetNumOfLocks () const noexcept
+{
+	return m_iDisabledCounter;
 }
 
 void PercolateIndex_c::ProhibitSave()

@@ -138,7 +138,7 @@ insert into test_rt1 values (101, '101th', 'STR' ), (102, '102th', 'str' );
 <httpqueries>
 <query endpoint="json/search">
 {
-  "index":"META:all",
+  "table":"META:all",
   "query":
   {
     "bool":
@@ -154,7 +154,7 @@ insert into test_rt1 values (101, '101th', 'STR' ), (102, '102th', 'str' );
 </query>
 <query endpoint="json/search">
 {
-  "index":"META:all",
+  "table":"META:all",
   "query":
   {
     "bool":
@@ -170,7 +170,7 @@ insert into test_rt1 values (101, '101th', 'STR' ), (102, '102th', 'str' );
 </query>
 <query endpoint="json/search">
 {
-  "index":"META:all",
+  "table":"META:all",
   "query":
   {
     "bool":
@@ -186,7 +186,7 @@ insert into test_rt1 values (101, '101th', 'STR' ), (102, '102th', 'str' );
 </query>
 <query endpoint="json/search">
 {
-  "index":"META:all",
+  "table":"META:all",
   "query":
   {
     "bool":
@@ -203,7 +203,7 @@ insert into test_rt1 values (101, '101th', 'STR' ), (102, '102th', 'str' );
 
 <query endpoint="json/search">
 {
-  "index":"META:all",
+  "table":"META:all",
   "query":
   {
     "bool":
@@ -220,7 +220,7 @@ insert into test_rt1 values (101, '101th', 'STR' ), (102, '102th', 'str' );
 
 <query endpoint="json/search">
 {
-  "index":"META:all",
+  "table":"META:all",
   "query":
   {
     "bool":
@@ -237,7 +237,7 @@ insert into test_rt1 values (101, '101th', 'STR' ), (102, '102th', 'str' );
 
 <query endpoint="json/search">
 {
-  "index":"META:all",
+  "table":"META:all",
   "query":
   {
     "bool":
@@ -253,7 +253,7 @@ insert into test_rt1 values (101, '101th', 'STR' ), (102, '102th', 'str' );
 
 <query endpoint="json/search">
 {
-  "index":"META:all",
+  "table":"META:all",
   "query":
   {
     "range": { "int_col": { "lte": 11 } }
@@ -263,7 +263,7 @@ insert into test_rt1 values (101, '101th', 'STR' ), (102, '102th', 'str' );
 
 <query endpoint="json/search">
 {
-  "index":"META:all",
+  "table":"META:all",
   "query":
   {
     "bool":
@@ -279,7 +279,7 @@ insert into test_rt1 values (101, '101th', 'STR' ), (102, '102th', 'str' );
 
 <query endpoint="json/search">
 {
-  "index":"META:all",
+  "table":"META:all",
   "query":
   {
     "bool":
@@ -296,7 +296,7 @@ insert into test_rt1 values (101, '101th', 'STR' ), (102, '102th', 'str' );
 
 <query endpoint="json/search">
 {
-  "index":"META:all",
+  "table":"META:all",
   "query":
   {
     "bool":
@@ -313,7 +313,7 @@ insert into test_rt1 values (101, '101th', 'STR' ), (102, '102th', 'str' );
 
 <query endpoint="json/search">
 {
-  "index":"META:all",
+  "table":"META:all",
   "query":
   {
     "bool":
@@ -330,7 +330,7 @@ insert into test_rt1 values (101, '101th', 'STR' ), (102, '102th', 'str' );
 
 <query endpoint="json/search">
 {
-  "index":"META:all",
+  "table":"META:all",
   "query":
   {
     "bool":
@@ -347,7 +347,7 @@ insert into test_rt1 values (101, '101th', 'STR' ), (102, '102th', 'str' );
 
 <query endpoint="json/search">
 {
-  "index":"META:all",
+  "table":"META:all",
   "query":
   {
 	"equals": { "int_col": 12 }
@@ -357,7 +357,7 @@ insert into test_rt1 values (101, '101th', 'STR' ), (102, '102th', 'str' );
 
 <query endpoint="json/search">
 {
-  "index":"META:all",
+  "table":"META:all",
   "query":
   {
 	"equals": { "str_col": "str6" }
@@ -367,7 +367,7 @@ insert into test_rt1 values (101, '101th', 'STR' ), (102, '102th', 'str' );
 
 <query endpoint="json/search">
 {
-  "index":"META:all",
+  "table":"META:all",
   "query":
   {
     "bool":
@@ -384,7 +384,7 @@ insert into test_rt1 values (101, '101th', 'STR' ), (102, '102th', 'str' );
 
 <query endpoint="json/search">
 {
-  "index":"META:all",
+  "table":"META:all",
   "query":
   {
     "in": { "int_col": [11,13] }
@@ -395,7 +395,7 @@ insert into test_rt1 values (101, '101th', 'STR' ), (102, '102th', 'str' );
 
 <query endpoint="json/search">
 {
-  "index":"META:all",
+  "table":"META:all",
   "query":
   {
     "in": { "str_col": ["str4","str5"] }
@@ -406,20 +406,20 @@ insert into test_rt1 values (101, '101th', 'STR' ), (102, '102th', 'str' );
 <!-- regression all any MVA -->
 <query endpoint="json/search">
 {
-  "index":"test_mva",
+  "table":"test_mva",
   "query": { "equals": { "any(tags)": 1 } }
 }
 </query>
 <query endpoint="json/search">
 {
-  "index":"test_mva",
+  "table":"test_mva",
   "query": { "equals": { "all(tags)": 15 } }
 }
 </query>
 
 <query endpoint="json/search">
 {
-  "index":"test_mva",
+  "table":"test_mva",
   "query":
   {
     "bool":
@@ -434,20 +434,20 @@ insert into test_rt1 values (101, '101th', 'STR' ), (102, '102th', 'str' );
 </query>
 <query endpoint="json/search">
 {
-  "index":"test_mva",
+  "table":"test_mva",
   "query": { "in": { "any(tags)": [2,1,3] } }
 }
 </query>
 <query endpoint="json/search">
 {
-  "index":"test_mva",
+  "table":"test_mva",
   "query": { "in": { "all(tags)": [4,3,40] } }
 }
 </query>
 
 <query endpoint="json/search">
 {
-  "index":"META:all",
+  "table":"META:all",
   "query":
   {
     "bool":
@@ -462,35 +462,35 @@ insert into test_rt1 values (101, '101th', 'STR' ), (102, '102th', 'str' );
 </query>
 
 <query endpoint="json/search">
-{ "index":"test_bigint", "query": { "bool": { "must": [ { "range": { "id": { "gt": 2333444555 } } } ] } } }
+{ "table":"test_bigint", "query": { "bool": { "must": [ { "range": { "id": { "gt": 2333444555 } } } ] } } }
 </query>
 
 <query endpoint="json/search">
-{ "index":"test_bigint", "query": { "bool": { "must": [ { "range": { "id": { "lt": 2333444555 } } } ] } } }
+{ "table":"test_bigint", "query": { "bool": { "must": [ { "range": { "id": { "lt": 2333444555 } } } ] } } }
 </query>
 
 <query endpoint="json/search">
-{ "index":"test_bigint", "query": { "bool": { "must": [ { "range": { "id": { "gt": 140739821799883 } } } ] } } }
+{ "table":"test_bigint", "query": { "bool": { "must": [ { "range": { "id": { "gt": 140739821799883 } } } ] } } }
 </query>
 
 <query endpoint="json/search">
-{ "index":"test_bigint", "query": { "bool": { "must": [ { "range": { "id": { "lt": 140739821799885 } } } ] } } }
+{ "table":"test_bigint", "query": { "bool": { "must": [ { "range": { "id": { "lt": 140739821799885 } } } ] } } }
 </query>
 
 <!-- regression filter collation -->
 <query endpoint="json/search">
-{ "index":"test_rt1", "query": { "equals": {  "str_col": "str" } } }
+{ "table":"test_rt1", "query": { "equals": {  "str_col": "str" } } }
 </query>
 <query endpoint="json/search">
-{ "index":"test_rt1", "query": { "equals": {  "str_col": "STR" } } }
+{ "table":"test_rt1", "query": { "equals": {  "str_col": "STR" } } }
 </query>
 
 <!-- lt lte gt gte vaiants of string comparsions -->
-<query endpoint="json/search">{ "index":"test1", "_source": { "includes":["id", "str_col"] }, "query": { "range": { "str_col": {"lt":"str2" } } } }</query>
-<query endpoint="json/search">{ "index":"test1", "_source": { "includes":["id", "str_col"] }, "query": { "range": { "str_col": {"lte":"str1" } } } }</query>
-<query endpoint="json/search">{ "index":"test1", "_source": { "includes":["id", "str_col"] }, "query": { "range": { "str_col": {"gt":"str5" } } } }</query>
-<query endpoint="json/search">{ "index":"test1", "_source": { "includes":["id", "str_col"] }, "query": { "range": { "str_col": {"gte":"str5" } } } }</query>
-<query endpoint="json/search">{ "index":"test1", "_source": { "includes":["id", "str_col"] }, "query": { "range": { "str_col": {"gte":"str2", "lt":"str5" } } } }</query>
+<query endpoint="json/search">{ "table":"test1", "_source": { "includes":["id", "str_col"] }, "query": { "range": { "str_col": {"lt":"str2" } } } }</query>
+<query endpoint="json/search">{ "table":"test1", "_source": { "includes":["id", "str_col"] }, "query": { "range": { "str_col": {"lte":"str1" } } } }</query>
+<query endpoint="json/search">{ "table":"test1", "_source": { "includes":["id", "str_col"] }, "query": { "range": { "str_col": {"gt":"str5" } } } }</query>
+<query endpoint="json/search">{ "table":"test1", "_source": { "includes":["id", "str_col"] }, "query": { "range": { "str_col": {"gte":"str5" } } } }</query>
+<query endpoint="json/search">{ "table":"test1", "_source": { "includes":["id", "str_col"] }, "query": { "range": { "str_col": {"gte":"str2", "lt":"str5" } } } }</query>
 
 </httpqueries>
 

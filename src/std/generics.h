@@ -26,29 +26,35 @@ _Pragma ( "clang diagnostic ignored \"-Wunused-lambda-capture\"" )
 /////////////////////////////////////////////////////////////////////////////
 
 template<typename T>
-T Min ( T a, T b )
+constexpr T Min ( T a, T b )
 {
 	return a < b ? a : b;
 }
 template<typename T, typename U>
-typename std::common_type<T, U>::type Min ( T a, U b )
+constexpr typename std::common_type<T, U>::type Min ( T a, U b )
 {
 	using common_type = typename std::common_type<T, U>::type;
 	return static_cast<common_type>(a) < static_cast<common_type>(b) ? a : b;
 }
 template<typename T>
-T Max ( T a, T b )
+constexpr T Max ( T a, T b )
 {
 	return a < b ? b : a;
 }
 template<typename T, typename U>
-typename std::common_type<T, U>::type Max ( T a, U b )
+constexpr typename std::common_type<T, U>::type Max ( T a, U b )
 {
 	using common_type = typename std::common_type<T, U>::type;
 	return static_cast<common_type>(a) < static_cast<common_type>(b) ? b : a;
 }
 
-inline int sphRoundUp ( int iValue, int iLimit )
+template<typename T, typename U, typename V>
+constexpr typename std::common_type<T, U, V>::type Clamp ( T tMin, U tMax, V tValue )
+{
+	return Max ( tMin, Min ( tMax, tValue ) );
+}
+
+inline constexpr int sphRoundUp ( int iValue, int iLimit )
 {
 	return ( iValue + iLimit - 1 ) & ~( iLimit - 1 );
 }

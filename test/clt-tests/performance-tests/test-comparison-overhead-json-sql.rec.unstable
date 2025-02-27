@@ -1,0 +1,37 @@
+––– block: ../base/start-searchd –––
+––– input –––
+php -d memory_limit=2G ./test/clt-tests/scripts/load_names_attr.php --batch-size=100000 --concurrency=4 --docs=2000000 --start-id=1 --min-infix-len=2 --drop-table > /dev/null; echo $?
+––– output –––
+0
+––– input –––
+export start=$(date +%s%N)
+––– output –––
+––– input –––
+for n in `seq 1 100`; do curl -sX POST http://localhost:9308/search -d '{"index" : "name", "query" : {"match" : {"_all": "on"} }, "limit": 0}'; done > /dev/null
+––– output –––
+––– input –––
+export end=$(date +%s%N)
+––– output –––
+––– input –––
+export curl=$(( (end - start) / 1000000 ))
+––– output –––
+––– input –––
+export start=$(date +%s%N)
+––– output –––
+––– input –––
+for n in `seq 1 100`; do mysql -P9306 -h0 -e "select * from name where match('on'); show meta;"; done > /dev/null
+––– output –––
+––– input –––
+export end=$(date +%s%N)
+––– output –––
+––– input –––
+export mysql=$(( (end - start) / 1000000 ))
+––– output –––
+––– input –––
+echo "Duration: ${mysql} ${curl} ms"
+––– output –––
+Duration: %{NUMBER} %{NUMBER} ms
+––– input –––
+php -r "exit(round(abs($curl - $mysql) / ($curl + $mysql)/2 * 100, 0) >= 3);" 2>/dev/null && echo "----$?----"
+––– output –––
+----0----

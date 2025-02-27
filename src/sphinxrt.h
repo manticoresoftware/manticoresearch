@@ -77,7 +77,6 @@ struct OptimizeTask_t
 	int m_iTo		=	-1;
 	bool m_bByOrder = false;
 	CSphString m_sUvarFilter;
-	CSphString m_sIndex;
 };
 
 struct CSphReconfigureSettings
@@ -139,6 +138,9 @@ public:
 	/// forcibly save RAM chunk as a new disk chunk
 	virtual bool ForceDiskChunk () = 0;
 
+	/// forcibly save RAM chunk as a new disk chunk by the conditions (has new data and has recent searches)
+	virtual void ForceDiskChunk ( int iFlushWrite, int iFlushSearch ) {};
+
 	/// attach a disk chunk to current index
 	virtual bool AttachDiskIndex ( CSphIndex * pIndex, bool bTruncate, bool & bFatal, CSphString & sError ) { return true; }
 
@@ -150,6 +152,10 @@ public:
 	virtual bool Truncate ( CSphString & sError, Truncate_e eAction ) = 0;
 
 	virtual void Optimize ( OptimizeTask_t tTask ) {}
+	virtual bool StartOptimize ( OptimizeTask_t tTask ) { return true; }
+	virtual int OptimizesRunning () const noexcept { return 0; }
+
+	virtual int GetNumOfLocks () const noexcept { return 0; }
 
 	/// check settings vs current and return back tokenizer and dictionary in case of difference
 	virtual bool IsSameSettings ( CSphReconfigureSettings & tSettings, CSphReconfigureSetup & tSetup, StrVec_t & dWarnings, CSphString & sError ) const = 0;
@@ -178,6 +184,9 @@ public:
 	virtual void ProhibitSave() = 0;
 	virtual void EnableSave() = 0;
 	virtual void LockFileState ( CSphVector<CSphString> & dFiles ) = 0;
+
+	virtual void WaitLockEnabledState() noexcept {};
+	virtual void UnlockEnabledState () noexcept {};
 	
 	virtual bool	NeedStoreWordID () const = 0;
 	virtual	int64_t	GetMemLimit() const = 0;
@@ -452,8 +461,6 @@ volatile bool &RTChangesAllowed () noexcept;
 // Get global flag of autooptimize
 volatile int & AutoOptimizeCutoffMultiplier() noexcept;
 volatile int AutoOptimizeCutoff() noexcept;
-
-using OptimizeExecutorFnPtr = void (*) ( OptimizeTask_t );
-volatile OptimizeExecutorFnPtr& OptimizeExecutor() noexcept;
+volatile int AutoOptimizeCutoffKNN() noexcept;
 
 #endif // _sphinxrt_

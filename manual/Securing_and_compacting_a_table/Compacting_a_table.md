@@ -8,7 +8,7 @@ Beginning with Manticore 4, this process occurs [automatically by default](../Se
 
 <!-- example optimize -->
 ```sql
-OPTIMIZE TABLE index_name [OPTION opt_name = opt_value [,...]]
+OPTIMIZE TABLE table_name [OPTION opt_name = opt_value [,...]]
 ```
 
 `OPTIMIZE` statement adds an RT table to the optimization queue, which will be processed in a background thread.
@@ -27,7 +27,11 @@ OPTIMIZE TABLE rt;
 
 <!-- example optimize_cutoff -->
 
-By default, OPTIMIZE merges the RT table's disk chunks down to a number equal to `# of CPU cores * 2`. You can control the number of optimized disk chunks using the `cutoff` option.
+By default, OPTIMIZE merges the RT table's disk chunks down to a number less than or equal to the number of logical CPU cores multiplied by 2.
+
+However, if the table has attributes with KNN indexes, this threshold is different. In this case, it is set to the number of physical CPU cores divided by 2 to improve KNN search performance.
+
+You can also control the number of optimized disk chunks manually using the `cutoff` option.
 
 Additional options include:
 * Server setting [optimize_cutoff](../Server_settings/Searchd.md#optimize_cutoff) for overriding the default threshold

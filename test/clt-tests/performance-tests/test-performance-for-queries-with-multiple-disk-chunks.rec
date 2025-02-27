@@ -1,0 +1,65 @@
+––– block: ../base/start-searchd –––
+––– input –––
+mysql -h0 -P9306 -e "set global auto_optimize=0;"
+––– output –––
+––– input –––
+php -d memory_limit=-1 ./test/clt-tests/scripts/load_names_attr.php --batch-size=1000 --concurrency=1 --docs=1000000 --multiplier=1 --start-id=1 > /dev/null; echo $?
+––– output –––
+0
+––– input –––
+mysql -h0 -P9306 -e "select count(*) from name;"
+––– output –––
++----------+
+| count(*) |
++----------+
+|  1000000 |
++----------+
+––– input –––
+export start=$(date +%s%N)
+––– output –––
+––– input –––
+mysql -h0 -P9306 -e "select * from name where match('*on*');" > /dev/null; echo $?
+––– output –––
+0
+––– input –––
+export end=$(date +%s%N)
+––– output –––
+––– input –––
+export multiple_disk_chunks=$(( (end - start) / 1000000 ))
+––– output –––
+––– input –––
+mysql -P9306 -h0 -e "select count(*) from name.@status;"
+––– output –––
++----------+
+| count(*) |
++----------+
+|        %{NUMBER} |
++----------+
+––– input –––
+mysql -h0 -P9306 -e "OPTIMIZE TABLE name OPTION cutoff=1, sync=1;"
+––– output –––
+––– input –––
+mysql -h0 -P9306 -e "show table name status" | grep "disk_chunks"
+––– output –––
+| disk_chunks                 | 1                                                                                                      |
+––– input –––
+export start=$(date +%s%N)
+––– output –––
+––– input –––
+mysql -h0 -P9306 -e "select * from name where match('*on*');" > /dev/null; echo $?
+––– output –––
+0
+––– input –––
+export end=$(date +%s%N)
+––– output –––
+––– input –––
+export optimize=$(( (end - start) / 1000000 ))
+––– output –––
+––– input –––
+echo "Duration: ${optimize} ${multiple_disk_chunks} ms"
+––– output –––
+Duration: %{NUMBER} %{NUMBER} ms
+––– input –––
+php -r "exit(round(abs($multiple_disk_chunks - $optimize) / ($multiple_disk_chunks + $optimize)/2 * 100, 0) >= 15);" 2>\dev\null && echo "----$?----"
+––– output –––
+----0----

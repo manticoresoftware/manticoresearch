@@ -34,7 +34,7 @@ SELECT HIGHLIGHT() FROM books WHERE MATCH('try');
 ```json
 POST /search
 {
-  "index": "books",
+  "table": "books",
   "query":  {  "match": { "*" : "try" }  },
   "highlight": {}
 }
@@ -110,7 +110,7 @@ Highlight for content:
 
 <!-- request Python -->
 ``` python
-res = searchApi.search({"index":"books","query":{"match":{"*":"try"}},"highlight":{}})
+res = searchApi.search({"table":"books","query":{"match":{"*":"try"}},"highlight":{}})
 ```
 <!-- response Python -->
 ``` python
@@ -130,7 +130,7 @@ res = searchApi.search({"index":"books","query":{"match":{"*":"try"}},"highlight
 
 <!-- request Javascript -->
 ``` javascript
-res =  await searchApi.search({"index":"books","query":{"match":{"*":"try"}},"highlight":{}});
+res =  await searchApi.search({"table":"books","query":{"match":{"*":"try"}},"highlight":{}});
 ```
 <!-- response Javascript -->
 ``` javascript
@@ -370,7 +370,7 @@ SELECT HIGHLIGHT({limit=50}) FROM books WHERE MATCH('try|gets|down|said');
 ```json
 POST /search
 {
-  "index": "books",
+  "table": "books",
   "query": {"query_string": "try|gets|down|said"},
   "highlight": { "limit":50 }
 }
@@ -508,7 +508,7 @@ Highlight for content:
 
 <!-- request Python -->
 ``` python
-res = searchApi.search({"index":"books","query":{"match":{"*":"try"}},"highlight":{"limit":50}})
+res = searchApi.search({"table":"books","query":{"match":{"*":"try"}},"highlight":{"limit":50}})
 ```
 <!-- response Python -->
 ``` python
@@ -528,7 +528,7 @@ res = searchApi.search({"index":"books","query":{"match":{"*":"try"}},"highlight
 
 <!-- request Javascript -->
 ``` javascript
-res =  await searchApi.search({"index":"books","query":{"query_string":"try|gets|down|said"},"highlight":{"limit":50}});
+res =  await searchApi.search({"table":"books","query":{"query_string":"try|gets|down|said"},"highlight":{"limit":50}});
 ```
 <!-- response Javascript -->
 ``` javascript
@@ -924,7 +924,7 @@ Highlighted snippets are returned in the `highlight` property of the `hits` arra
 ```json
 POST /search
 {
-  "index": "books",
+  "table": "books",
   "query": { "match": { "*": "one|robots" } },
   "highlight":
   {
@@ -1001,7 +1001,7 @@ Highlight for content:
 ```
 <!-- request Python -->
 ``` python
-res = searchApi.search({"index":"books","query":{"match":{"*":"one|robots"}},"highlight":{"fields":["content"]}}))
+res = searchApi.search({"table":"books","query":{"match":{"*":"one|robots"}},"highlight":{"fields":["content"]}}))
 ```
 <!-- response Python -->
 ``` python
@@ -1021,7 +1021,7 @@ res = searchApi.search({"index":"books","query":{"match":{"*":"one|robots"}},"hi
 ```
 <!-- request Javascript -->
 ``` javascript
-res =  await searchApi.search({"index":"books","query":{"match":{"*":"one|robots"}},"highlight":{"fields":["content"]}});
+res =  await searchApi.search({"table":"books","query":{"match":{"*":"one|robots"}},"highlight":{"fields":["content"]}});
 ```
 <!-- response Javascript -->
 ``` javascript
@@ -1188,7 +1188,7 @@ To highlight all possible fields, pass an empty object as the `highlight` proper
 ```json
 POST /search
 {
-  "index": "books",
+  "table": "books",
   "query": { "match": { "*": "one|robots" } },
   "highlight": {}
 }
@@ -1267,7 +1267,7 @@ Highlight for content:
 ```
 <!-- request Python -->
 ``` python
-res = searchApi.search({"index":"books","query":{"match":{"*":"one|robots"}},"highlight":{}})
+res = searchApi.search({"table":"books","query":{"match":{"*":"one|robots"}},"highlight":{}})
 ```
 <!-- response Python -->
 ``` python
@@ -1288,7 +1288,7 @@ res = searchApi.search({"index":"books","query":{"match":{"*":"one|robots"}},"hi
 ```
 <!-- request Javascript -->
 ``` javascript
-res =  await searchApi.search({"index":"books","query":{"match":{"*":"one|robots"}},"highlight":{}});
+res =  await searchApi.search({"table":"books","query":{"match":{"*":"one|robots"}},"highlight":{}});
 ```
 <!-- response Javascript -->
 ``` javascript
@@ -1472,7 +1472,7 @@ The `highlight_query` option allows you to highlight against a query other than 
 ```json
 POST /search
 {
-  "index": "books",
+  "table": "books",
   "query": { "match": { "content": "one|robots" } },
   "highlight":
   {
@@ -1512,7 +1512,7 @@ foreach($results as $doc)
 
 <!-- request Python -->
 ``` python
-res = searchApi.search({"index":"books","query":{"match":{"content":"one|robots"}},"highlight":{"fields":["content"],"highlight_query":{"match":{"*":"polite distance"}}}})
+res = searchApi.search({"table":"books","query":{"match":{"content":"one|robots"}},"highlight":{"fields":["content"],"highlight_query":{"match":{"*":"polite distance"}}}})
 ```
 <!-- response Python -->
 ``` python
@@ -1531,7 +1531,7 @@ res = searchApi.search({"index":"books","query":{"match":{"content":"one|robots"
 
 <!-- request Javascript -->
 ``` javascript
-res =  await searchApi.search({"index":"books","query":{"match":{"content":"one|robots"}},"highlight":{"fields":["content"],"highlight_query":{"match":{"*":"polite distance"}}}});
+res =  await searchApi.search({"table":"books","query":{"match":{"content":"one|robots"}},"highlight":{"fields":["content"],"highlight_query":{"match":{"*":"polite distance"}}}});
 ```
 <!-- response Javascript -->
 ``` javascript
@@ -1690,7 +1690,7 @@ res, _, _ := apiClient.SearchAPI.Search(context.Background()).SearchRequest(*sea
 ```json
 POST /search
 {
-  "index": "books",
+  "table": "books",
   "query": { "match": { "*": "one|robots" } },
   "highlight":
   {
@@ -1743,7 +1743,7 @@ Highlight for title:
 ```
 <!-- request Python -->
 ``` python
-res = searchApi.search({"index":"books","query":{"match":{"*":"one|robots"}},"highlight":{"fields":["content","title"],"pre_tags":"before_","post_tags":"_after"}})
+res = searchApi.search({"table":"books","query":{"match":{"*":"one|robots"}},"highlight":{"fields":["content","title"],"pre_tags":"before_","post_tags":"_after"}})
 ```
 <!-- response Python -->
 ``` python
@@ -1765,7 +1765,7 @@ res = searchApi.search({"index":"books","query":{"match":{"*":"one|robots"}},"hi
 
 <!-- request Javascript -->
 ``` javascript
-res =  await searchApi.search({"index":"books","query":{"match":{"*":"one|robots"}},"highlight":{"fields":["content","title"],"pre_tags":"before_","post_tags":"_after"}});
+res =  await searchApi.search({"table":"books","query":{"match":{"*":"one|robots"}},"highlight":{"fields":["content","title"],"pre_tags":"before_","post_tags":"_after"}});
 ```
 <!-- response Javascript -->
 ``` javascript
@@ -1910,7 +1910,7 @@ res, _, _ := apiClient.SearchAPI.Search(context.Background()).SearchRequest(*sea
 ```json
 POST /search
 {
-  "index": "books",
+  "table": "books",
   "query": { "match": { "*": "one|robots" } },
   "highlight":
   {
@@ -1961,7 +1961,7 @@ Highlight for title:
 ```
 <!-- request Python -->
 ``` python
-res = searchApi.search({"index":"books","query":{"match":{"*":"one|robots"}},"highlight":{"fields":["content","title"],"no_match_size":0}})
+res = searchApi.search({"table":"books","query":{"match":{"*":"one|robots"}},"highlight":{"fields":["content","title"],"no_match_size":0}})
 ```
 <!-- response Python -->
 ``` python
@@ -1983,7 +1983,7 @@ res = searchApi.search({"index":"books","query":{"match":{"*":"one|robots"}},"hi
 
 <!-- request Javascript -->
 ``` javascript
-res =  await searchApi.search({"index":"books","query":{"match":{"*":"one|robots"}},"highlight":{"fields":["content","title"],"no_match_size":0}});
+res =  await searchApi.search({"table":"books","query":{"match":{"*":"one|robots"}},"highlight":{"fields":["content","title"],"no_match_size":0}});
 ```
 <!-- response Javascript -->
 ``` javascript
@@ -2122,7 +2122,7 @@ res, _, _ := apiClient.SearchAPI.Search(context.Background()).SearchRequest(*sea
 ```json
 POST /search
 {
-  "index": "books",
+  "table": "books",
   "query": { "match": { "*": "one|robots" } },
   "highlight":
   {
@@ -2171,7 +2171,7 @@ Highlight for title:
 ```
 <!-- request Python -->
 ``` python
-res = searchApi.search({"index":"books","query":{"match":{"*":"one|robots"}},"highlight":{"fields":["content","title"],"order":"score"}})
+res = searchApi.search({"table":"books","query":{"match":{"*":"one|robots"}},"highlight":{"fields":["content","title"],"order":"score"}})
 ```
 <!-- response Python -->
 ``` python
@@ -2193,7 +2193,7 @@ res = searchApi.search({"index":"books","query":{"match":{"*":"one|robots"}},"hi
 
 <!-- request Javascript -->
 ``` javascript
-res =  await searchApi.search({"index":"books","query":{"match":{"*":"one|robots"}},"highlight":{"fields":["content","title"],"order":"score"}});
+res =  await searchApi.search({"table":"books","query":{"match":{"*":"one|robots"}},"highlight":{"fields":["content","title"],"order":"score"}});
 ```
 <!-- response Javascript -->
 ``` javascript
@@ -2333,7 +2333,7 @@ res, _, _ := apiClient.SearchAPI.Search(context.Background()).SearchRequest(*sea
 ```json
 POST /search
 {
-  "index": "books",
+  "table": "books",
   "query": { "match": { "*": "one|robots" } },
   "highlight":
   {
@@ -2380,7 +2380,7 @@ Highlight for title:
 ```
 <!-- request Python -->
 ``` python
-res = searchApi.search({"index":"books","query":{"match":{"*":"one|robots"}},"highlight":{"fields":["content","title"],"fragment_size":100}})
+res = searchApi.search({"table":"books","query":{"match":{"*":"one|robots"}},"highlight":{"fields":["content","title"],"fragment_size":100}})
 ```
 <!-- response Python -->
 ``` python
@@ -2401,7 +2401,7 @@ res = searchApi.search({"index":"books","query":{"match":{"*":"one|robots"}},"hi
 
 <!-- request Javascript -->
 ``` javascript
-res =  await searchApi.search({"index":"books","query":{"match":{"*":"one|robots"}},"highlight":{"fields":["content","title"],"fragment_size":100}});
+res =  await searchApi.search({"table":"books","query":{"match":{"*":"one|robots"}},"highlight":{"fields":["content","title"],"fragment_size":100}});
 ```
 <!-- response Javascript -->
 ``` javascript
@@ -2538,7 +2538,7 @@ res, _, _ := apiClient.SearchAPI.Search(context.Background()).SearchRequest(*sea
 ```json
 POST /search
 {
-  "index": "books",
+  "table": "books",
   "query": { "match": { "*": "one|robots"  } },
   "highlight":
   {
@@ -2588,7 +2588,7 @@ Highlight for title:
 
 <!-- request Python -->
 ``` python
-res =searchApi.search({"index":"books","query":{"match":{"*":"one|robots"}},"highlight":{"fields":["content","title"],"number_of_fragments":10}})
+res =searchApi.search({"table":"books","query":{"match":{"*":"one|robots"}},"highlight":{"fields":["content","title"],"number_of_fragments":10}})
 ```
 <!-- response Python -->
 ``` python
@@ -2610,7 +2610,7 @@ res =searchApi.search({"index":"books","query":{"match":{"*":"one|robots"}},"hig
 
 <!-- request Javascript -->
 ``` javascript
-res =  await searchApi.search({"index":"books","query":{"match":{"*":"one|robots"}},"highlight":{"fields":["content","title"],"number_of_fragments":10}});
+res =  await searchApi.search({"table":"books","query":{"match":{"*":"one|robots"}},"highlight":{"fields":["content","title"],"number_of_fragments":10}});
 ```
 <!-- response Javascript -->
 ``` javascript
@@ -2749,7 +2749,7 @@ Options like `limit`, `limit_words`, and `limit_snippets` can be set as global o
 ```json
 POST /search
 {
-  "index": "books",
+  "table": "books",
   "query": { "match": { "*": "one|robots"  } },
       "highlight":
       {
@@ -2798,7 +2798,7 @@ Highlight for title:
 ```
 <!-- request Python -->
 ``` python
-res =searchApi.search({"index":"books","query":{"match":{"*":"one|robots"}},"highlight":{"fields":{"title":{},"content":{"limit":50}}}})
+res =searchApi.search({"table":"books","query":{"match":{"*":"one|robots"}},"highlight":{"fields":{"title":{},"content":{"limit":50}}}})
 ```
 <!-- response Python -->
 ``` python
@@ -2818,7 +2818,7 @@ res =searchApi.search({"index":"books","query":{"match":{"*":"one|robots"}},"hig
 
 <!-- request Javascript -->
 ``` javascript
-res =  await searchApi.search({"index":"books","query":{"match":{"*":"one|robots"}},"highlight":{"fields":{"title":{},"content":{"limit":50}}}});
+res =  await searchApi.search({"table":"books","query":{"match":{"*":"one|robots"}},"highlight":{"fields":{"title":{},"content":{"limit":50}}}});
 ```
 <!-- response Javascript -->
 ``` javascript
@@ -2969,7 +2969,7 @@ Global limits can also be enforced by specifying `limits_per_field=0`. Setting t
 ```json
 POST /search
 {
-  "index": "books",
+  "table": "books",
   "query": { "match": { "content": "and first" } },
       "highlight":
       {
@@ -3016,7 +3016,7 @@ Highlight for content:
 ```
 <!-- request Python -->
 ``` python
-res =searchApi.search({"index":"books","query":{"match":{"content":"and first"}},"highlight":{"fields":{"content":{"limit":50}},"limits_per_field":False}})
+res =searchApi.search({"table":"books","query":{"match":{"content":"and first"}},"highlight":{"fields":{"content":{"limit":50}},"limits_per_field":False}})
 ```
 <!-- response Python -->
 ``` python
@@ -3036,7 +3036,7 @@ res =searchApi.search({"index":"books","query":{"match":{"content":"and first"}}
 
 <!-- request Javascript -->
 ``` javascript
-res =  await searchApi.search({"index":"books","query":{"match":{"content":"and first"}},"highlight":{"fields":{"content":{"limit":50}},"limits_per_field":false}});
+res =  await searchApi.search({"table":"books","query":{"match":{"content":"and first"}},"highlight":{"fields":{"content":{"limit":50}},"limits_per_field":false}});
 ```
 <!-- response Javascript -->
 ``` javascript

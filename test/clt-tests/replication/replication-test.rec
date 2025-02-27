@@ -221,3 +221,47 @@ diff /tmp/output_1306.txt /tmp/output_4306.txt; echo $?
 diff /tmp/output_1306.txt /tmp/output_5306.txt; echo $?
 ––– output –––
 0
+––– input –––
+mysql -h0 -P1306 -e "REPLACE INTO replication:testrt SET content='Updated Content', title='List of Dell business laptops', gid=2 WHERE id=6775836565403860994;"; echo $?
+––– output –––
+0
+––– input –––
+mysql -h0 -P1306 -e "SELECT * FROM replication:testrt WHERE id=6775836565403860994\G"
+––– output –––
+*************************** 1. row ***************************
+id: 6775836565403860994
+title: List of Dell business laptops
+content: Updated Content
+gid: 2
+––– input –––
+mysql -h0 -P2306 -e "SELECT * FROM replication:testrt WHERE id=6775836565403860994\G"
+––– output –––
+*************************** 1. row ***************************
+id: 6775836565403860994
+title: List of Dell business laptops
+content: Updated Content
+gid: 2
+––– input –––
+mysql -h0 -P3306 -e "SELECT * FROM replication:testrt WHERE id=6775836565403860994\G"
+––– output –––
+*************************** 1. row ***************************
+id: 6775836565403860994
+title: List of Dell business laptops
+content: Updated Content
+gid: 2
+––– input –––
+mysql -h0 -P4306 -e "SELECT * FROM replication:testrt WHERE id=6775836565403860994\G"
+––– output –––
+*************************** 1. row ***************************
+id: 6775836565403860994
+title: List of Dell business laptops
+content: Updated Content
+gid: 2
+––– input –––
+mysql -h0 -P5306 -e "SELECT * FROM replication:testrt WHERE id=6775836565403860994\G"
+––– output –––
+*************************** 1. row ***************************
+id: 6775836565403860994
+title: List of Dell business laptops
+content: Updated Content
+gid: 2

@@ -125,18 +125,19 @@ namespace bson {
 class Bson_c;
 }
 
-void ConvertJsonDataset ( const bson::Bson_c & tBson, const char * sStmt, RowBuffer_i & tOut );
+void ConvertJsonDataset ( const JsonObj_c & tRoot, const char * sStmt, RowBuffer_i & tOut );
 
 using SplitAction_fn = std::function<void(const char *, int)>;
 void SplitNdJson ( Str_t sBody, SplitAction_fn && fnAction);
 bool HttpSetLogVerbosity ( const CSphString & sVal );
 void LogReplyStatus100();
 bool Ends ( const Str_t tVal, const char * sSuffix );
+enum class HttpErrorType_e;
 
 class HttpHandler_c
 {
 public:
-
+	HttpHandler_c() = default;
 	virtual ~HttpHandler_c() = default;
 	virtual bool Process () = 0;
 	void SetErrorFormat ( bool bNeedHttpResponse );
@@ -158,6 +159,7 @@ protected:
 	void BuildReply ( Str_t sResult, EHTTP_STATUS eStatus );
 	void BuildReply ( const StringBuilder_c & sResult, EHTTP_STATUS eStatus );
 	bool CheckValid ( const ServedIndex_c* pServed, const CSphString& sIndex, IndexType_e eType );
+	void ReportError ( const char * sError, HttpErrorType_e eType, EHTTP_STATUS eStatus, const char * sIndex=nullptr );
 };
 
 class HttpCompatBaseHandler_c : public HttpHandler_c
@@ -174,7 +176,6 @@ protected:
 
 	bool IsHead() { return GetRequestType()==HTTP_HEAD; }
 	void BuildReplyHead ( Str_t sRes, EHTTP_STATUS eStatus );
-	void ReportError ( const char * sError, const char * sErrorType, EHTTP_STATUS eStatus, const char * sIndex=nullptr );
 
 	Str_t m_sBody;
 	int m_iReqType { 0 };
@@ -183,3 +184,19 @@ protected:
 };
 
 std::unique_ptr<HttpHandler_c> CreateCompatHandler ( Str_t sBody, int iReqType, const SmallStringHash_T<CSphString> & hOpts );
+
+enum class HttpErrorType_e
+{
+	Unknown,
+	Parse,
+	IllegalArgument,
+	ActionRequestValidation,
+	IndexNotFound,
+	ContentParse,
+	VersionConflictEngine,
+	DocumentMissing,
+	ResourceAlreadyExists,
+	AliasesNotFound
+};
+
+const char * GetErrorTypeName ( HttpErrorType_e eType );

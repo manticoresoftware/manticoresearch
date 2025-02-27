@@ -1,0 +1,41 @@
+<?xml version="1.0" encoding="utf-8"?>
+<test>
+
+<name>reject altering column type of not int-to-bigint</name>
+
+<requires>
+	<force-rt/>
+</requires>
+
+<skip_indexer/>
+
+<config>
+searchd
+{
+	<searchd_settings/>
+	data_dir = <data_path/>
+	binlog_path =
+}
+</config>
+
+<queries>
+<sphinxql>
+	drop table if exists demo;
+	create table demo (info string);
+	alter table demo modify column info text;
+
+	drop table demo;
+	create table demo (info string);
+	insert into demo (info) values ('test 1');
+	alter table demo modify column info text;
+
+	drop table demo;
+	create table demo (info string);
+	insert into demo (info) values ('test 1');
+	flush ramchunk demo;
+	alter table demo modify column info text;
+	drop table demo;
+</sphinxql>
+</queries>
+
+</test>

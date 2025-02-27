@@ -191,13 +191,13 @@ CALL PQ ('pq_d3', ('{"title":"filter test doc2", "gid":13}'), 1 as docs, 1 as qu
 
 
 <!-- list queries. It works via usual json/search, not via json/pq/<idx>/search endpoint! -->
-<query endpoint="json/search">{ "index": "pq"}</query>
-<query endpoint="json/search">{ "index": "pq1"}</query>
-<query endpoint="json/search">{ "index": "pl_d1"}</query>
-<query endpoint="json/search">{ "index": "pq_d1"}</query>
-<query endpoint="json/search">{ "index": "pl_d2"}</query>
-<query endpoint="json/search">{ "index": "pm_d2"}</query>
-<query endpoint="json/search">{ "index": "pq_d2"}</query>
+<query endpoint="json/search">{ "table": "pq"}</query>
+<query endpoint="json/search">{ "table": "pq1"}</query>
+<query endpoint="json/search">{ "table": "pl_d1"}</query>
+<query endpoint="json/search">{ "table": "pq_d1"}</query>
+<query endpoint="json/search">{ "table": "pl_d2"}</query>
+<query endpoint="json/search">{ "table": "pm_d2"}</query>
+<query endpoint="json/search">{ "table": "pq_d2"}</query>
 
 </queries>
 

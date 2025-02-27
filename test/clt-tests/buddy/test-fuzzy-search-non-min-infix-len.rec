@@ -1,0 +1,21 @@
+––– block: ../base/start-searchd –––
+––– input –––
+mysql -h0 -P9306 -e "create table test (id bigint, value text);"
+––– output –––
+––– input –––
+mysql -h0 -P9306 -e "CALL AUTOCOMPLETE('jo', 'test', 'us' AS layouts);"
+––– output –––
+ERROR 1064 (42000) at line 1: Autocomplete requires min_infix_len to be set
+––– input –––
+mysql -h0 -P9306 -e "SELECT * FROM test WHERE MATCH('RICH') OPTION fuzzy=1;"
+––– output –––
+ERROR 1064 (42000) at line 1: Fuzzy search requires min_infix_len to be set
+––– input –––
+mysql -h0 -P9306 -e "ALTER TABLE test min_infix_len='2';"
+––– output –––
+––– input –––
+sleep 30; mysql -h0 -P9306 -e "CALL AUTOCOMPLETE('jo', 'test', 'us' AS layouts);"
+––– output –––
+––– input –––
+mysql -h0 -P9306 -e "SELECT * FROM test WHERE MATCH('RICH') OPTION fuzzy=1;"
+––– output –––

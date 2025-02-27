@@ -162,7 +162,7 @@ Examples:
 POST /search
 -d
 '{
-    "index" : "hn_small",
+    "table" : "hn_small",
     "query":
     {
         "match":
@@ -201,7 +201,7 @@ POST /search
 POST /search
 -d
 '{
-    "index" : "hn_small",
+    "table" : "hn_small",
     "query":
     {
         "match_phrase":
@@ -239,7 +239,7 @@ POST /search
 ```json
 POST /search
 -d
-'{   "index" : "hn_small",
+'{   "table" : "hn_small",
     "query":
     {
         "query_string": "@comment_text \"find joe fast \"/2"
@@ -298,7 +298,7 @@ Python
 <!-- request Python -->
 
 ```python
-searchApi.search({"index":"hn_small","query":{"query_string":"@comment_text \"find joe fast \"/2"}, "_source": ["story_author","comment_author"], "limit":1})
+searchApi.search({"table":"hn_small","query":{"query_string":"@comment_text \"find joe fast \"/2"}, "_source": ["story_author","comment_author"], "limit":1})
 ```
 <!-- response Python -->
 ``` python
@@ -321,7 +321,7 @@ javascript
 <!-- request javascript -->
 
 ```javascript
-res = await searchApi.search({"index":"hn_small","query":{"query_string":"@comment_text \"find joe fast \"/2"}, "_source": ["story_author","comment_author"], "limit":1});
+res = await searchApi.search({"table":"hn_small","query":{"query_string":"@comment_text \"find joe fast \"/2"}, "_source": ["story_author","comment_author"], "limit":1});
 ```
 <!-- response javascript -->
 ```javascript

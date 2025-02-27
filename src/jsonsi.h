@@ -17,7 +17,7 @@ class JsonSIBuilder_i
 public:
 	virtual			~JsonSIBuilder_i() = default;
 
-	virtual void	AddRowSize ( SphOffset_t tSize ) = 0;
+	virtual void	AddRowOffsetSize ( std::pair<SphOffset_t,SphOffset_t> tOffsetSize ) = 0;
 	virtual bool	Done ( CSphString & sError ) = 0;
 };
 

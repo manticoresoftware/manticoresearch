@@ -22,14 +22,143 @@ There are a few ways spell correction can be done, but it's important to note th
 * Not just dictionary-based, but also context-aware, e.g., "white ber" would be corrected to "white bear," while "dark ber" would be corrected to "dark beer." The context might not just be a neighboring word in your query, but also your location, time of day, the current sentence's grammar (to change "there" to "their" or not), your search history, and virtually any other factors that can affect your intent.
 * Another classic approach is to use previous search queries as the dataset for spell correction. This is even more utilized in [autocomplete](../Searching/Autocomplete.md) functionality but makes sense for autocorrect too. The idea is that users are mostly right with spelling, so we can use words from their search history as a source of truth, even if we don't have the words in our documents or use an external dictionary. Context-awareness is also possible here.
 
-Manticore provides the commands `CALL QSUGGEST` and `CALL SUGGEST` that can be used for automatic spell correction purposes.
+Manticore provides the fuzzy search option and the commands `CALL QSUGGEST` and `CALL SUGGEST` that can be used for automatic spell correction purposes.
 
-### CALL QSUGGEST, CALL SUGGEST
+# Fuzzy Search
 
-Both commands are available via SQL only, and the general syntax is:
+The Fuzzy Search feature allows for more flexible matching by accounting for slight variations or misspellings in the search query. It works similarly to a normal `SELECT` SQL statement or a `/search` JSON request but provides additional parameters to control the fuzzy matching behavior.
+
+> NOTE: The `fuzzy` option requires [Manticore Buddy](../Installation/Manticore_Buddy.md). If it doesn't work, make sure Buddy is installed.
+
+## General syntax
+
+### SQL
+
+<!-- example Fuzzy_Search_SQL -->
+
 ```sql
-CALL QSUGGEST(word, table [,options])
-CALL SUGGEST(word, table [,options])
+SELECT
+  ...
+  MATCH('...')
+  ...
+  OPTION fuzzy={0|1}
+  [, distance=N]
+  [, layouts='{be,bg,br,ch,de,dk,es,fr,uk,gr,it,no,pt,ru,se,ua,us}']
+}
+```
+
+Note: When conducting a fuzzy search via SQL, the MATCH clause should not contain any full-text operators except the [phrase search operator](../Searching/Full_text_matching/Operators.md#Phrase-search-operator) and should only include the words you intend to match.
+
+<!-- intro -->
+##### SQL:
+
+<!-- request SQL -->
+
+```sql
+SELECT * FROM mytable WHERE MATCH('someting') OPTION fuzzy=1, layouts='us,ua', distance=2;
+```
+
+<!-- request SQL with additional filters -->
+Example of a more complex Fuzzy search query with additional filters:
+
+```sql
+SELECT * FROM mytable WHERE MATCH('someting') OPTION fuzzy=1 AND (category='books' AND price < 20);
+```
+
+<!-- request JSON -->
+
+```json
+POST /search
+{
+  "table": "test",
+  "query": {
+    "bool": {
+      "must": [
+        {
+          "match": {
+            "*": "ghbdtn"
+          }
+        }
+      ]
+    }
+  },
+  "options": {
+    "fuzzy": true,
+    "layouts": ["us", "ru"],
+    "distance": 2
+  }
+}
+```
+
+<!-- response SQL -->
+
+```sql
++------+-------------+
+| id   | content     |
++------+-------------+
+|    1 | something   |
+|    2 | some thing  |
++------+-------------+
+2 rows in set (0.00 sec)
+```
+
+<!-- end -->
+
+### JSON
+
+```json
+POST /search
+{
+  "table": "table_name",
+  "query": {
+    <full-text query>
+  },
+  "options": {
+    "fuzzy": {true|false}
+    [,"layouts": ["be","bg","br","ch","de","dk","es","fr","uk","gr","it","no","pt","ru","se","ua","us"]]
+    [,"distance": N]
+  }
+}
+```
+
+Note: If you use the [query_string](../../Searching/Full_text_matching/Basic_usage.md#query_string), be aware that it does not support full-text operators except the [phrase search operator](../Searching/Full_text_matching/Operators.md#Phrase-search-operator). The query string should consist solely of the words you wish to match.
+
+### Options
+
+- `fuzzy`: Turn fuzzy search on or off.
+- `distance`: Set the Levenshtein distance for matching. The default is `2`.
+- `layouts`: Keyboard layouts to check for typing errors. All layouts are used by default. Use an empty string `''` (SQL) or array `[]` (JSON) to turn this off. Supported layouts include:
+  - `be` - Belgian AZERTY layout
+  - `bg` - Standard Bulgarian layout
+  - `br` - Brazilian QWERTY layout
+  - `ch` - Swiss QWERTZ layout
+  - `de` - German QWERTZ layout
+  - `dk` - Danish QWERTY layout
+  - `es` - Spanish QWERTY layout
+  - `fr` - French AZERTY layout
+  - `uk` - British QWERTY layout
+  - `gr` - Greek QWERTY layout
+  - `it` - Italian QWERTY layout
+  - `no` - Norwegian QWERTY layout
+  - `pt` - Portuguese QWERTY layout
+  - `ru` - Russian JCUKEN layout
+  - `se` - Swedish QWERTY layout
+  - `ua` - Ukrainian JCUKEN layout
+  - `us` - American QWERTY layout
+
+
+### Links
+
+* <a href="https://github.manticoresearch.com/manticoresoftware/manticoresearch?query=fature&filters%5Bcomment%5D%5B%5D=28798446&filters%5Bcommon%5D%5Brepo_id%5D%5B%5D=95614931&sort=&search=keyword-search-fuzzy-layouts">This demo</a> demonstrates the fuzzy search functionality:
+  ![Fuzzy search example](fuzzysearch.png){.scale-0.7}
+* Blog post about Fuzzy Search and Autocomplete - https://manticoresearch.com/blog/new-fuzzy-search-and-autocomplete/
+
+## CALL QSUGGEST, CALL SUGGEST
+
+Both commands are accessible via SQL and support querying both local (plain and real-time) and distributed tables. The syntax is as follows:
+```sql
+CALL QSUGGEST(<word or words>, <table name> [,options])
+CALL SUGGEST(<word or words>, <table name> [,options])
 
 options: N as option_name[, M as another_option, ...]
 ```
@@ -177,9 +306,11 @@ CALL QSUGGEST('bagg with tasel', 'products', 1 as result_line);
 ```
 <!-- end -->
 
-### Interactive course
+### Demo
 
-[This interactive course](https://play.manticoresearch.com/didyoumean/) demonstrates online how the spell correction feature works on a web page and experiment with different examples.
+* [This interactive course](https://play.manticoresearch.com/didyoumean/) shows how `CALL SUGGEST` works in a little web app.
 
-![Typical flow with Manticore and a database](didyoumean.png){.scale-0.5}
+![CALL SUGGEST example](didyoumean.png){.scale-0.5}
+
+
 <!-- proofread -->

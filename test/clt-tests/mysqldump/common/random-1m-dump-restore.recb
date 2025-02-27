@@ -5,7 +5,7 @@
 mysql -h0 -P9306 -e 'show tables'
 ––– output –––
 +-------+------+
-| Index | Type |
+| Table | Type |
 +-------+------+
 | t     | rt   |
 +-------+------+
@@ -74,7 +74,7 @@ mysql -h0 -P9306 < /tmp/all-databases.sql
 mysql -h0 -P9306 -e 'show tables'
 ––– output –––
 +-------+------+
-| Index | Type |
+| Table | Type |
 +-------+------+
 | t     | rt   |
 +-------+------+

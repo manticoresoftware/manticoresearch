@@ -57,7 +57,7 @@ mysql -h0 -P9306 -e "CREATE TABLE products(title text, meta json) type='pq';"
 mysql -h0 -P9306 -e "SHOW TABLES"
 ––– output –––
 +------------+-------------+
-| Index      | Type        |
+| Table      | Type        |
 +------------+-------------+
 | dist_table | distributed |
 | index201   | rt          |
@@ -100,7 +100,7 @@ for i in $(seq 1 100); do mysql -h0 -P9306 -e "CREATE TABLE index${i}(f text, s 
 mysql -h0 -P9306 -e "SHOW TABLES"
 ––– output –––
 +------------+-------------+
-| Index      | Type        |
+| Table      | Type        |
 +------------+-------------+
 | dist_table | distributed |
 | index1     | rt          |

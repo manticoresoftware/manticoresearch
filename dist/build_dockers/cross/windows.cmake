@@ -193,7 +193,7 @@ endif ()
 
 set ( CMAKE_C_COMPILER ${LLVM}/bin/clang )
 set ( CMAKE_CXX_COMPILER ${LLVM}/bin/clang++ )
-set ( CMAKE_RC_COMPILER ${LLVM}/bin/clang-rc )
+set ( CMAKE_RC_COMPILER ${LLVM}/bin/llvm-rc )
 set ( CMAKE_LINKER ${LLVM}/bin/lld-link )
 set ( CMAKE_AR ${LLVM}/bin/llvm-ar )
 
@@ -232,6 +232,7 @@ endif ()
 string ( REPLACE ";" " " COMPILE_FLAGS "${COMPILE_FLAGS}" )
 set ( CMAKE_C_FLAGS_INIT "${COMPILE_FLAGS}" )
 set ( CMAKE_CXX_FLAGS_INIT "${COMPILE_FLAGS}" )
+set ( CMAKE_RC_FLAGS_INIT "${COMPILE_FLAGS}" )
 
 set ( LINK_FLAGS
         -L"${MSVC_LIB}/${WINSDK_ARCH}"

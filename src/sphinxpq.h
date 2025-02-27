@@ -159,7 +159,7 @@ public:
 
 	ISphQword * QwordSpawn ( const XQKeyword_t & ) const final;
 	bool QwordSetup ( ISphQword * pQword ) const final;
-	ISphQword * ScanSpawn() const final;
+	ISphQword * ScanSpawn ( int iAtomPos ) const final;
 
 private:
 	const RtSegment_t * m_pSeg;

@@ -3,6 +3,7 @@
 # This script can be run on the host, or in the docker
 
 chmod +x valgrind
+mkdir -p build
 cd build
 
 [[ ! -z "${CACHEB}" ]] && export CACHEB=../cache

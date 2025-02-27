@@ -7,6 +7,7 @@ cd build
 
 [[ ! -z "${CACHEB}" ]] && export CACHEB=../cache
 [[ ! -z "${uid}" ]] && export uid=`id -u`
+[[ ! -z "${gid}" ]] && export gid=`id -g`
 
 export CTEST_CONFIGURATION_TYPE=RelWithDebInfo
 export CTEST_CMAKE_GENERATOR=Ninja
@@ -22,4 +23,5 @@ export MANTICORE_THREADS_EX='2/1+2/1'
 export NO_TESTS=0
 rm -f Testing/Temporary/MemoryChecker.*.log
 time ctest -V -S ../misc/ctest/memcheck.cmake
-chown -R $uid .
+find Testing/Temporary/MemoryChecker.*.log -size 0 -delete
+chown -R $uid:$gid .

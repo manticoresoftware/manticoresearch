@@ -3,13 +3,12 @@
 
 BUILD_DOCKER=manticore_valgrind:jammy
 CONFIG=RelWithDebInfo
-CACHEB=../cache
 WORKDIR=/work
-uid=`id -u`
 
 docker run --rm -it \
 -v $(pwd):$WORKDIR \
--e uid=$uid \
+-e uid=`id -u` \
+-e gid=`id -g` \
 -e DIAGNOSTIC=1 \
 -e VERBOSE=1 \
 -e CACHEB=$CACHEB \

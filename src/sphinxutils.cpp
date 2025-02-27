@@ -1085,6 +1085,9 @@ static KeyDesc_t g_dKeysSearchd[] =
 	{ "join_batch_size",		0, NULL },
 	{ "diskchunk_flush_write_timeout",		0, nullptr },
 	{ "diskchunk_flush_search_timeout",		0, nullptr },
+	{ "auth_user",				0, NULL },
+	{ "auth_pass",				0, NULL },
+	{ "auth_user_file",			0, NULL },	
 	{ NULL,						0, NULL }
 };
 

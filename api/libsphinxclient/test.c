@@ -155,10 +155,11 @@ void test_excerpt ( sphinx_client * client )
 		g_failed += ( res==NULL );
 		if ( !g_smoke )
 			die ( "query failed: %s", sphinx_error(client) );
+	} else
+	{
+		for ( i=0; i<ndocs; i++ )
+			printf ( "n=%d, res=%s\n", 1+i, res[i] );
 	}
-
-	for ( i=0; i<ndocs; i++ )
-		printf ( "n=%d, res=%s\n", 1+i, res[i] );
 }
 
 
@@ -205,11 +206,18 @@ void test_excerpt_spz ( sphinx_client * client )
 
 		res = sphinx_build_excerpts ( client, ndocs, (const char **)docs, index, words, &opts );
 		if ( !res )
-			die ( "query failed: %s", sphinx_error(client) );
+		{
+			if ( !g_smoke )
+				die ( "query failed: %s", sphinx_error(client) );
+			else
+				printf ( "query failed: %s", sphinx_error(client) );
 
-		for ( i=0; i<ndocs; i++ )
-			printf ( "n=%d, res=%s\n", 1+i, res[i] );
-		printf ( "\n" );
+		} else
+		{
+			for ( i=0; i<ndocs; i++ )
+				printf ( "n=%d, res=%s\n", 1+i, res[i] );
+			printf ( "\n" );
+		}
 	}
 }
 
@@ -426,17 +434,32 @@ void title ( const char * name )
 
 int main ( int argc, char ** argv )
 {
-	int i, port = 0;
+	int i, port = 9312;
 	sphinx_client * client;
 //	sphinx_uint64_t override_docid = 2;
 //	unsigned int override_value = 2000;
+	const char * user = NULL;
+	const char * password = NULL;
 
 	for ( i=1; i<argc; i++ )
 	{
 		if ( strcmp ( argv[i], "--smoke" )==0 )
 			g_smoke = SPH_TRUE;
 		else if ( strcmp ( argv[i], "--port" )==0 && i+1<argc )
+		{
 			port = (int)strtoul ( argv[i+1], NULL, 10 );
+			i++;
+		}
+		else if ( strcmp ( argv[i], "--user" )==0 && i+1<argc )
+		{
+			user = argv[i+1];
+			i++;
+		}
+		else if ( strcmp ( argv[i], "--password" )==0 && i+1<argc )
+		{
+			password = argv[i+1];
+			i++;
+		}
 	}
 
 	net_init ();
@@ -447,6 +470,8 @@ int main ( int argc, char ** argv )
 
 	if ( port )
 		sphinx_set_server ( client, "127.0.0.1", port );
+	if ( user )
+		sphinx_set_user ( client, user, password );
 
 	sphinx_set_match_mode ( client, SPH_MATCH_EXTENDED2 );
 	sphinx_set_sort_mode ( client, SPH_SORT_RELEVANCE, NULL );
@@ -495,6 +520,8 @@ int main ( int argc, char ** argv )
 	test_query ( client, "is", "test1" );
 
 	sphinx_cleanup ( client );
+	if ( user )
+		sphinx_set_user ( client, user, password );
 
 	// group_by (attr; mva) + filter + post update
 	title ( "group_by (attr; mva) +  filter + post update" );

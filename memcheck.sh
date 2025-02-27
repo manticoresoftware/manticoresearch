@@ -6,9 +6,10 @@ chmod +x valgrind
 mkdir -p build
 cd build
 
-[[ ! -z "${CACHEB}" ]] && export CACHEB=../cache
-[[ ! -z "${uid}" ]] && export uid=`id -u`
-[[ ! -z "${gid}" ]] && export gid=`id -g`
+[[ -z "${CACHEB}" ]] && export CACHEB=../cache
+[[ ! -e "${CACHEB}" ]] && mkdir -p ${CACHEB}
+[[ -z "${uid}" ]] && export uid=`id -u`
+[[ -z "${gid}" ]] && export gid=`id -g`
 
 export CTEST_CONFIGURATION_TYPE=RelWithDebInfo
 export CTEST_CMAKE_GENERATOR=Ninja

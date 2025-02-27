@@ -996,6 +996,7 @@ static std::optional<JsonObj_c> ReadJsonHeader ( const CSphString & sFilename, C
 	if ( !tFile.Read ( sMeta.Begin(), iSize, sError ) )
 		return std::nullopt;
 
+	sMeta[iSize] = sMeta[iSize + 1] = '\0';
 	JsonObj_c tMeta ( sMeta );
 	if ( tMeta.GetError ( sMeta.Begin(), iSize, sError ) )
 		return std::nullopt;
@@ -1481,7 +1482,7 @@ bool AddExistingIndexConfigless ( const CSphString & sIndex, IndexType_e eType, 
 }
 
 
-static bool DropDistrIndex ( const CSphString & sIndex, CSphString & sError )
+static bool DropDistrIndex ( const CSphString & sIndex, bool bForce, CSphString & sError )
 {
 	assert ( IsConfigless() );
 	auto pDistr = GetDistr(sIndex);
@@ -1490,6 +1491,13 @@ static bool DropDistrIndex ( const CSphString & sIndex, CSphString & sError )
 		sError.SetSprintf ( "DROP TABLE failed: unknown distributed table '%s'", sIndex.cstr() );
 		return false;
 	}
+
+	if ( IsDistrTableHasSystem ( *pDistr, bForce ) )
+	{
+		sError.SetSprintf ( "can not drop table '%s' because it contains system table", sIndex.cstr() );
+		return false;
+	}
+
 
 	if ( !pDistr->m_sCluster.IsEmpty() )
 	{
@@ -1602,14 +1610,14 @@ static bool DropLocalIndex ( const CSphString & sIndex, CSphString & sError, CSp
 }
 
 
-bool DropIndexInt ( const CSphString & sIndex, bool bIfExists, CSphString & sError, CSphString * pWarning )
+bool DropIndexInt ( const CSphString & sIndex, bool bIfExists, bool bForce, CSphString & sError, CSphString * pWarning )
 {
 	assert ( IsConfigless() );
 	bool bLocal = GetServed ( sIndex );
 	bool bDistr = GetDistr ( sIndex );
 	if ( bDistr )
 	{
-		if ( !DropDistrIndex ( sIndex, sError ) )
+		if ( !DropDistrIndex ( sIndex, bForce, sError ) )
 			return false;
 	}
 	else if ( bLocal )
@@ -1672,3 +1680,27 @@ IndexDescDistr_t GetDistributedDesc ( const DistributedIndex_t & tDist )
 	return tIndex;
 }
 
+static const char * g_sTableNameSystem = "system.";
+
+bool IsDistrTableHasSystem ( const DistributedIndex_t & tDistr, bool bForce )
+{
+	if ( bForce )
+		return false;
+
+	for ( const auto & sName : tDistr.m_dLocal )
+	{
+		if ( sName.Begins ( g_sTableNameSystem ) )
+			return true;
+	}
+
+	for ( const auto & pAgent : tDistr.m_dAgents )
+	{
+		for ( const AgentDesc_t & tDesc : *pAgent )
+		{
+			if ( strstr ( tDesc.m_sIndexes.cstr(), g_sTableNameSystem )!=nullptr )
+				return true;
+		}
+	}
+
+	return false;
+}

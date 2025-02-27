@@ -172,6 +172,9 @@ select * from test4 where tag in (2010) order by id desc /*+ SecondaryIndex(tag)
 <sphinxql>select id,tag from test1 where tag not in (1) /*+ SecondaryIndex(tag) */; show meta</sphinxql>
 <sphinxql>select id,tag from test1 where tag not in (2) /*+ SecondaryIndex(tag) */; show meta</sphinxql>
 
+<!-- regression for implicit cutoff vs SI -->
+<sphinxql>select id,tag from test4 where id>100 and tag>40 limit 1 option threads=1 /*+ SecondaryIndex(tag) */; show meta</sphinxql>
+
 <!-- extra SI on poly2d -->
 <sphinxql>SELECT * FROM testpoly order by id asc</sphinxql>
 <sphinxql>SELECT x,y,CONTAINS(POLY2D(1,1,1,7,7,7,7,1),x,y) a FROM testpoly WHERE a=1 order by id asc /*+ No_SecondaryIndex(x,y) */; show meta</sphinxql>

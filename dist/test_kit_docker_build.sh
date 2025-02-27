@@ -11,7 +11,7 @@ executor_dev_path=
 # Get semver suffix in format -dev or empty string depending on version provided
 get_semver_suffix() {
 	local version="$1"
-		
+
 	# Check if last digit is odd
 	last_digit=$(echo "$version" | awk -F. '{print $NF}')
 	if [ $(( last_digit % 2 )) -eq 0 ]; then
@@ -155,7 +155,7 @@ docker exec manticore-test-kit bash -c \
 	'echo "Removing /build/manticore_*, because it may depend on manticore-buddy of a newer version while we'\''re installing Buddy via git clone"; rm /build/manticore_*.deb; ls -la /build/'
 # Install deps and add manticore-executor-dev to the container
 docker exec manticore-test-kit bash -c \
-	"apt-get -y update && apt-get -y install manticore-galera && apt-get -y remove 'manticore-repo' && rm /etc/apt/sources.list.d/manticoresearch.list && apt-get update -y && apt-get install -y --allow-downgrades /build/*.deb libxml2 libcurl4 libonig5 libzip4 librdkafka1 curl neovim git apache2-utils iproute2 bash && apt-get clean -y"
+	'echo "apt list before update" && apt list --installed|grep manticore && apt-get -y update && echo "apt list after update" && apt list --installed|grep manticore && apt-get -y install manticore-galera && apt-get -y remove manticore-repo && rm /etc/apt/sources.list.d/manticoresearch.list && apt-get update -y && apt-get install -y --allow-downgrades /build/*.deb libxml2 libcurl4 libonig5 libzip4 librdkafka1 curl neovim git apache2-utils iproute2 bash && apt-get clean -y'
 
 # Install composer cuz we need it for buddy from the git and also development
 docker exec manticore-test-kit bash -c \
@@ -165,7 +165,12 @@ docker exec manticore-test-kit bash -c \
 #
 buddy_path=/usr/share/manticore/modules/manticore-buddy
 docker exec manticore-test-kit bash -c \
-	"rm -fr $buddy_path && git clone https://github.com/manticoresoftware/manticoresearch-buddy.git $buddy_path && cd $buddy_path && git checkout $buddy_commit && composer install && curl -sSL https://raw.githubusercontent.com/manticoresoftware/phar_builder/refs/heads/main/templates/sh | sed 's/__NAME__/manticore-buddy/g; s/__PACKAGE__/manticore-buddy/g' >$buddy_path/bin/manticore-buddy && chmod +x $buddy_path/bin/manticore-buddy"
+	"rm -fr $buddy_path && \
+	git clone https://github.com/manticoresoftware/manticoresearch-buddy.git $buddy_path && \
+	git config --global --add safe.directory $buddy_path && \
+	cd $buddy_path && \
+	git checkout $buddy_commit && \
+	composer install"
 
 echo "Exporting image to ../manticore_test_kit.img"
 

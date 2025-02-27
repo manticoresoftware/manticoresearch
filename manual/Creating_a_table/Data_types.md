@@ -313,20 +313,13 @@ Below is the list of data types supported by Manticore Search:
 
 ## Document ID
 
-<!-- example id -->
-The document identifier is a mandatory attribute, and document IDs must be **unique 64-bit unsigned integers**. Document IDs can be explicitly specified, but if not, they are still enabled. Document IDs cannot be updated. Note that when retrieving document IDs, they are treated as signed 64-bit integers, which means they may be negative. Use the [UINT64()](Functions/Type_casting_functions.md#UINT64%28%29) function to cast them to unsigned 64-bit integers if necessary.
+The document identifier is a mandatory attribute that must be a unique 64-bit unsigned integer. Document IDs can be explicitly specified when creating a table, but they are always enabled even if not specified. Document IDs cannot be updated.
 
-<!-- request Explicit ID -->
-
-When you create a table, you can specify ID explicitly, but no matter what data type you use, it will be always as said previously - a signed 64-bit integer.
+When you create a table, you can specify ID explicitly, but regardless of the data type you use, it will always behave as described above - stored as unsigned 64-bit but exposed as signed 64-bit integer.
 
 ```sql
-CREATE TABLE tbl(id bigint, content text);
+mysql> CREATE TABLE tbl(id bigint, content text);
 DESC tbl;
-```
-
-<!-- response Explicit ID -->
-```sql
 +---------+--------+----------------+
 | Field   | Type   | Properties     |
 +---------+--------+----------------+
@@ -335,28 +328,83 @@ DESC tbl;
 +---------+--------+----------------+
 2 rows in set (0.00 sec)
 ```
-
-<!-- request Implicit ID -->
 
 You can also omit specifying ID at all, it will be enabled automatically.
-
 ```sql
-CREATE TABLE tbl(content text);
+mysql> CREATE TABLE tbl(content text);
 DESC tbl;
-```
-
-<!-- response Implicit ID -->
-```sql
 +---------+--------+----------------+
 | Field   | Type   | Properties     |
 +---------+--------+----------------+
 | id      | bigint |                |
 | content | text   | indexed stored |
 +---------+--------+----------------+
-2 rows in set (0.00 sec)
+2 rows in set (0.00 sec) 
 ```
 
-<!-- end -->
+When working with document IDs, it's important to know that they are stored internally as unsigned 64-bit integers but are exposed as signed 64-bit integers in queries and results. This means:
+
+* IDs greater than 2^63-1 will appear as negative numbers.
+* When filtering by such large IDs, you must use their signed representation.
+* Use the [UINT64()](Functions/Type_casting_functions.md#UINT64%28%29) function to view the actual unsigned value.
+
+For example, let's create a table and insert some values around 2^63:
+```sql
+mysql> create table t(id_text string)
+Query OK, 0 rows affected (0.01 sec)
+
+mysql> insert into t values(9223372036854775807, '2 ^ 63 - 1'),(9223372036854775808, '2 ^ 63')
+Query OK, 2 rows affected (0.00 sec)
+```
+
+Some IDs appear as negative numbers in the results because they exceed 2^63-1. However, using `UINT64(id)` can reveal their actual unsigned values:
+```sql
+mysql> select *, uint64(id) from t
++----------------------+------------+---------------------+
+| id                   | id_text    | uint64(id)          |
++----------------------+------------+---------------------+
+|  9223372036854775807 | 2 ^ 63 - 1 | 9223372036854775807 |
+| -9223372036854775808 | 2 ^ 63     | 9223372036854775808 |
++----------------------+------------+---------------------+
+2 rows in set (0.00 sec)
+--- 2 out of 2 results in 0ms ---
+```
+
+For querying documents with IDs less than 2^63, you can use the unsigned value directly:
+```sql
+mysql> select * from t where id = 9223372036854775807
++---------------------+------------+
+| id                  | id_text    |
++---------------------+------------+
+| 9223372036854775807 | 2 ^ 63 - 1 |
++---------------------+------------+
+1 row in set (0.00 sec)
+--- 1 out of 1 results in 0ms ---
+```
+
+However, for IDs starting from 2^63, you need to use the signed value:
+```sql
+mysql> select * from t where id = -9223372036854775808
++----------------------+---------+
+| id                   | id_text |
++----------------------+---------+
+| -9223372036854775808 | 2 ^ 63  |
++----------------------+---------+
+1 row in set (0.00 sec)
+--- 1 out of 1 results in 0ms ---
+```
+
+If you use an unsigned value instead, you might get incorrect results:
+```sql
+mysql> select * from t where id = 9223372036854775808
++---------------------+------------+
+| id                  | id_text    |
++---------------------+------------+
+| 9223372036854775807 | 2 ^ 63 - 1 |
++---------------------+------------+
+1 row in set (0.00 sec)
+--- 1 out of 1 results in 0ms ---
+```
 
 ## Character data types
 
@@ -375,7 +423,7 @@ Specifying at least one property overrides all the default ones (see below), i.e
 
 **No properties specified:**
 
-`string` and `text` are aliases, but if you don’t specify any properties, they by default mean different things:
+`string` and `text` are aliases, but if you don't specify any properties, they by default mean different things:
 
 * just `string` by default means `attribute` (see details [below](../Creating_a_table/Data_types.md#Text)).
 * just `text` by default means `stored` + `indexed` (see details [below](../Creating_a_table/Data_types.md#String)).
@@ -1437,7 +1485,7 @@ searchApi.search({"table":"products","query":{"match_all":{}},"expressions":{"ep
 <!-- request javascript -->
 
 ```javascript
-res = await searchApi.search({"table":"products","query":{"match_all":{}}},"expressions":{"eps":"abs(a-b)"}});
+res = await searchApi.search({"table":"products","query":{"match_all":{}},"expressions":{"eps":"abs(a-b)"}});
 ```
 <!-- intro -->
 ##### java:
@@ -1939,12 +1987,25 @@ var searchResponse = searchApi.Search(searchRequest);
 ## Float vector
 
 <!-- example for creating float_vector -->
+Float vector attributes allow storing variable-length lists of floats, primarily used for machine learning applications and similarity searches. This type differs from multi-valued attributes (MVAs) in several important ways:
+- Preserves the exact order of values (unlike MVAs which may reorder)
+- Retains duplicate values (unlike MVAs which deduplicate)
+- No additional processing during insertion (unlike MVAs which sort and deduplicate)
 
-Float vector attributes allow storing variable-length lists of floats. It's important to note that this concept differs from multi-valued attributes. Multi-valued attributes (MVAs) are essentially sets; they do not preserve value order, and duplicate values are not retained. In contrast, float vectors perform no additional processing on values during insertion.
+### Usage and Limitations
+- Currently only supported in real-time tables
+- Can only be utilized in KNN (k-nearest neighbor) searches
+- Not supported in plain tables or other functions/expressions
+- When used with KNN settings, you cannot `UPDATE` `float_vector` values. Use `REPLACE` instead
+- When used without KNN settings, you can `UPDATE` `float_vector` values
+- Float vectors cannot be used in regular filters or sorting
+- The only way to filter by `float_vector` values is through vector search operations (KNN)
 
-Float vector attributes can be used in k-nearest neighbor searches; see [KNN search](../Searching/KNN.md).
-
-** Currently, `float_vector` fields can only be utilized in KNN search within real-time tables and the data type is not supported in any other functions or expressions, nor is it supported in plain tables. **
+### Common Use Cases
+- Image embeddings for similarity search
+- Text embeddings for semantic search
+- Feature vectors for machine learning
+- Recommendation system vectors
 
 <!-- intro -->
 ##### SQL:
@@ -2030,6 +2091,8 @@ table products
 ```
 
 <!-- end -->
+
+For information about using float vectors in searches, see [KNN search](../Searching/KNN.md).
 
 ## Multi-value integer (MVA)
 
@@ -2286,7 +2349,7 @@ var searchRequest = new SearchRequest("forum", query);
 searchRequest.Sort = new List<Object> {
     new SortMVA("product_codes", SortOrder.OrderEnum.Asc, SortMVA.ModeEnum.Min)
 };
-searchResponse = searchApi.search(searchRequest);
+searchResponse = searchApi.Search(searchRequest);
 ```
 
 <!-- end -->
@@ -2373,7 +2436,7 @@ POST /search
 
 ```JSON
 {
-   "_index":"products",
+   "table":"products",
    "_id":1,
    "created":true,
    "result":"created",

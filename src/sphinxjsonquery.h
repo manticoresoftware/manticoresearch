@@ -69,7 +69,7 @@ struct ParsedJsonQuery_t
 std::unique_ptr<QueryParser_i> sphCreateJsonQueryParser();
 bool			sphParseJsonQuery ( Str_t sQuery, ParsedJsonQuery_t & tPJQuery );
 bool			sphParseJsonQuery ( const JsonObj_c & tRoot, ParsedJsonQuery_t & tPJQuery );
-bool			sphParseJsonInsert ( const char * szInsert, SqlStmt_t & tStmt, DocID_t & tDocId, bool bReplace, CSphString & sError );
+bool			sphParseJsonInsert ( Str_t sInsert, SqlStmt_t & tStmt, DocID_t & tDocId, bool bReplace, CSphString & sError );
 bool			sphParseJsonUpdate ( Str_t sUpdate, SqlStmt_t & tStmt, DocID_t & tDocId, CSphString & sError );
 bool			sphParseJsonDelete ( Str_t sDelete, SqlStmt_t & tStmt, DocID_t & tDocId, CSphString & sError );
 bool			sphParseJsonStatement ( const char * szStmt, SqlStmt_t & tStmt, CSphString & sStmt, CSphString & sQuery, DocID_t & tDocId, CSphString & sError );

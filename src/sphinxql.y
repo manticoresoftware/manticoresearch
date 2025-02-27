@@ -309,7 +309,7 @@ ident:
 	;
 
 option_name:
-	ident_without_option | all_set_tail
+	ident_without_option | all_set_tail | TOK_FORCE 
 	;
 
 
@@ -1780,10 +1780,7 @@ call_opt_name:
 //////////////////////////////////////////////////////////////////////////
 
 describe:
-	describe_tok one_index_opt_subindex describe_opt like_filter
-		{
-			pParser->m_pStmt->m_eStmt = STMT_DESCRIBE;
-		}
+	describe_tok { pParser->m_pStmt->m_eStmt = STMT_DESCRIBE; } one_index_opt_subindex describe_opt like_filter opt_option_clause
 	;
 
 describe_opt:

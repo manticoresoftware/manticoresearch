@@ -49,7 +49,7 @@ job_mirror:
   needs: [ ]
   tags:
     - docker-free
-  image: manticoresearch/external_toolchain:clang16_cmake3263
+  image: manticoresearch/external_toolchain:vcpkg331_20250114
   variables:
     CACHEB: "../cache"
     DIAGNOSTIC: 1 # let's set it by default forever
@@ -125,6 +125,8 @@ job_mirror:
 
 simple_build:
   extends: [ .build ]
+  before_script:
+    - export CMAKE_TOOLCHAIN_FILE=$(pwd)/dist/build_dockers/cross/linux.cmake
   variables:
     CTEST_CMAKE_GENERATOR: "Unix Makefiles" # as Ninja fails with coverage
     CTEST_CONFIGURATION_TYPE: "Debug"
@@ -144,6 +146,8 @@ simple_tests:
 
 release_build:
   extends: [ .build ]
+  before_script:
+    - export CMAKE_TOOLCHAIN_FILE=$(pwd)/dist/build_dockers/cross/linux.cmake
 
 release_tests:
   extends: [ .tests ]
@@ -159,9 +163,8 @@ win_build:
   variables:
     DISTR: windows
     arch: x64
-    # use roots_mysql83_jul29 for another (non-gitlab) tests
-    sysroot: roots_jul29
-    boost: boost80_zstd_zlib
+    sysroot: roots_mysql83_jan17
+    boost: boost_80
     CTEST_CMAKE_GENERATOR: "Ninja Multi-Config"
     CTEST_CONFIGURATION_TYPE: Debug
   artifacts:
@@ -169,13 +172,11 @@ win_build:
       - build/xml
       - build/src/$CTEST_CONFIGURATION_TYPE/indexer.exe
       - build/src/$CTEST_CONFIGURATION_TYPE/searchd.exe
-      - build/src/$CTEST_CONFIGURATION_TYPE/*.dll
       - build/src/gtests/$CTEST_CONFIGURATION_TYPE/gmanticoretest.exe
+      - build/src/$CTEST_CONFIGURATION_TYPE/*.dll
       - build/src/gtests/$CTEST_CONFIGURATION_TYPE/*.dll
-      - build/usr
-# Commented out usually need, but not on our dev where everything is installed into system
-#      - build/src/$CTEST_CONFIGURATION_TYPE/*.dll
-#      - build/src/gtests/$CTEST_CONFIGURATION_TYPE/*.dll
+      - build/config/*.c
+      - build/config/*.h
   cache:
     key: win_test
 
@@ -215,6 +216,8 @@ build_arm:
   extends: [ .build ]
   variables:
     arch: aarch64
+  before_script:
+    - export CMAKE_TOOLCHAIN_FILE=$(pwd)/dist/build_dockers/cross/linux.cmake
   script:
     - mkdir build && cd build
     - ctest -VV -S ../misc/ctest/justbuild.cmake -DCTEST_SOURCE_DIRECTORY=.. --no-compress-output
@@ -228,6 +231,8 @@ build_bsd:
   variables:
     DISTR: freebsd13
     boost: none
+  before_script:
+    - export CMAKE_TOOLCHAIN_FILE=$(pwd)/dist/build_dockers/cross/freebsd.cmake
   script:
     - mkdir build && cd build
     - ctest -VV -S ../misc/ctest/justbuild.cmake -DCTEST_SOURCE_DIRECTORY=.. --no-compress-output

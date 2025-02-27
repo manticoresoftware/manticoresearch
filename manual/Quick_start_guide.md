@@ -394,7 +394,7 @@ POST /insert
 
 ```json
 {
-  "_index": "products",
+  "table": "products",
   "_id": 0,
   "created": true,
   "result": "created",
@@ -402,7 +402,7 @@ POST /insert
 }
 
 {
-  "_index": "products",
+  "table": "products",
   "_id": 0,
   "created": true,
   "result": "created",
@@ -410,7 +410,7 @@ POST /insert
 }
 
 {
-  "_index": "products",
+  "table": "products",
   "_id": 0,
   "created": true,
   "result": "created",
@@ -880,7 +880,7 @@ POST /update
 
 ```json
 {
-  "_index": "products",
+  "table": "products",
   "_id": 1513686608316989452,
   "result": "updated"
 }
@@ -1011,7 +1011,7 @@ POST /delete
 
 ```json
 {
-  "_index": "products",
+  "table": "products",
   "deleted": 1
 }
 ```

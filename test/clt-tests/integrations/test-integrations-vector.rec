@@ -46,7 +46,7 @@ vector -c vector.toml > /var/log/vector.log 2>&1 &
 ––– input –––
 sleep 3; curl -s localhost:9308/cli_json -d 'describe dpkg_log' | jq -cM '.[].data | sort_by(.Field)'
 ––– output –––
-[{"Field":"file","Type":"text","Properties":"indexed stored"},{"Field":"host","Type":"text","Properties":"indexed stored"},{"Field":"id","Type":"bigint","Properties":""},{"Field":"message","Type":"text","Properties":"indexed stored"},{"Field":"source_type","Type":"text","Properties":"indexed stored"},{"Field":"vec_timestamp","Type":"text","Properties":"indexed stored"}]
+[{"Field":"file","Type":"string","Properties":"indexed attribute"},{"Field":"host","Type":"string","Properties":"indexed attribute"},{"Field":"id","Type":"bigint","Properties":""},{"Field":"message","Type":"string","Properties":"indexed attribute"},{"Field":"source_type","Type":"string","Properties":"indexed attribute"},{"Field":"vec_timestamp","Type":"string","Properties":"indexed attribute"}]
 ––– input –––
 mysql -P9306 -h0 -Ne "SHOW TABLES\G; SELECT COUNT(*) FROM dpkg_log\G; SELECT message FROM dpkg_log\G;" | grep -v '^*'
 ––– output –––

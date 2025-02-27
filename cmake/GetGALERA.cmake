@@ -58,6 +58,10 @@ if (TARGET galera::galera)
 	return ()
 endif ()
 
+if (NOT BUILD_TESTING)
+	return ()
+endif ()
+
 # not found. Populate and build cache package for now and future usage.
 select_nearest_url ( GALERA_PLACE "galera" ${GALERA_BUNDLE} ${GALERA_GITHUB} )
 select_nearest_url ( WSREP_PLACE "wsrep" ${WSREP_BUNDLE} ${WSREP_GITHUB} ) # WSREP_PATH provides path to galera-imported for build

@@ -96,7 +96,7 @@ get_build ( COLUMNAR_BUILD "mcl/${AUTO_TAG}" )
 # store prev find paths to avoid polishing global scope
 backup_paths()
 
-append_prefix ( "${COLUMNAR_BUILD}" )
+prepend_prefix ( "${COLUMNAR_BUILD}" )
 
 find_package ( columnar "${NEED_API_NUMERIC_VERSION}" EXACT COMPONENTS columnar_api secondary_api knn_api CONFIG )
 return_if_all_api_found ()

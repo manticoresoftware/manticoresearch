@@ -105,7 +105,6 @@ mysql -h0 -P9306 -e "select * from name ORDER BY id ASC LIMIT 5;"
 ––– input –––
 start_optimize=$(date +%s); time mysql -h0 -P9306 -e "OPTIMIZE TABLE name OPTION sync=1, cutoff=1;" &
 ––– output –––
-[%{NUMBER}] %{NUMBER}
 ––– input –––
 sleep 2 && start_update=$(date +%s); time_taken_update=$( { time mysql -h0 -P9306 -e "UPDATE name SET s='b' WHERE id=1;" > /dev/null 2>&1; } 2>&1 | grep real | awk '{print $2}'); update_duration=$(echo "$time_taken_update" | awk -F'm' '{print ($1 * 60) + $2}'); if (( $(echo "$update_duration > 1" | bc -l) )); then echo "FAIL: Update took longer than 1 second!"; exit 1; else echo "Update completed within acceptable time."; fi
 ––– output –––

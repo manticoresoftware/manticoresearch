@@ -1,7 +1,7 @@
 ––– input –––
 export INSTANCE=1
 ––– output –––
-––– block: ../base/replication/start-searchd-precach –––
+––– block: ../../base/replication/start-searchd-precach –––
 ––– input –––
 mysql -h0 -P1306 -e "create table tbl1 random=5"
 ––– output –––

@@ -1,0 +1,54 @@
+––– input –––
+export INSTANCE=1
+––– output –––
+––– block: ../../base/replication/start-searchd-precach –––
+––– input –––
+export INSTANCE=2
+––– output –––
+––– block: ../../base/replication/start-searchd-precach –––
+––– input –––
+export INSTANCE=3
+––– output –––
+––– block: ../../base/replication/start-searchd-precach –––
+––– input –––
+mysql -h0 -P1306 -e "create table tbl1(id bigint) shards=5 rf=2"
+––– output –––
+ERROR 1064 (42000) at line 1: You cannot set rf greater than 1 when creating single node sharded table.
+––– input –––
+export CLUSTER_NAME=replication
+––– output –––
+––– block: ../../base/replication/create-cluster –––
+––– block: ../../base/replication/join-cluster-on-all-nodes –––
+––– input –––
+for port in 1306 2306 3306; do timeout 30 mysql -h0 -P$port -e "SHOW STATUS LIKE 'cluster_replication_status'\G" > /tmp/status_$port.log && grep -q "Value: primary" /tmp/status_$port.log && echo "Port $port: Node synced"; done && cat /tmp/status_1306.log
+––– output –––
+Port 1306: Node synced
+Port 2306: Node synced
+Port 3306: Node synced
+*************************** 1. row ***************************
+Counter: cluster_replication_status
+Value: primary
+––– input –––
+mysql -h0 -P1306 -e "create table c:tbl1 shards=10 rf=2"
+––– output –––
+ERROR 1064 (42000) at line 1: Cluster 'c' does not exist
+––– input –––
+mysql -h0 -P1306 -e "create table ${CLUSTER_NAME}:tbl2(id bigint) shards=3"
+––– output –––
+ERROR 1064 (42000) at line 1: Sharded table requires `rf=n`
+––– input –––
+mysql -h0 -P2306 -e "CREATE TABLE tbl3 shards=5 rf12;"
+––– output –––
+ERROR 1064 (42000) at line 1: Sharded table requires `rf=n`
+––– input –––
+mysql -h0 -P1306 -e "CREATE TABLE tbl4 shards=1000 rf=1000;"
+––– output –––
+ERROR 1064 (42000) at line 1: You cannot set rf greater than 1 when creating single node sharded table.
+––– input –––
+mysql -h0 -P1306 -e "create table ${CLUSTER_NAME}:tbl5(id bigint) shards=3 rf=4"
+––– output –––
+ERROR 1064 (42000) at line 1: The node count (3) is lower than replication factor (4)
+––– input –––
+mysql -h0 -P1306 -e "create table ${CLUSTER_NAME}:tbl6(id bigint) shards=10 rf=10"
+––– output –––
+ERROR 1064 (42000) at line 1: The node count (3) is lower than replication factor (10)

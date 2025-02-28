@@ -346,18 +346,25 @@ bool ParseKNNConfigStr ( const CSphString & sStr, CSphVector<NamedKNNSettings_t>
 			return false;
 		}
 
-		CSphString sSimilarity, sQuantization;
+		CSphString sSimilarity;
 		if ( !i.FetchIntItem ( tParsed.m_iDims, "dims", sError ) ) return false;
 		if ( !i.FetchIntItem ( tParsed.m_iHNSWM, "hnsw_m", sError, true ) ) return false;
 		if ( !i.FetchIntItem ( tParsed.m_iHNSWEFConstruction, "hnsw_ef_construction", sError, true ) ) return false;
 		if ( !i.FetchStrItem ( sSimilarity, "hnsw_similarity", sError) ) return false;
-		if ( !i.FetchStrItem ( sQuantization, "quantization", sError) ) return false;
 
 		if ( !Str2HNSWSimilarity ( sSimilarity.cstr(), tParsed.m_eHNSWSimilarity, &sError ) )
 			return false;
 
-		if ( !Str2Quantization ( sQuantization.cstr(), tParsed.m_eQuantization, &sError ) )
+		JsonObj_c tQuantization = tRoot.GetStrItem ( "quantization", sError, true );
+		if ( !sError.IsEmpty() )
 			return false;
+
+		if ( tQuantization )
+		{
+			CSphString sQuantization = tQuantization.StrVal();
+			if ( !Str2Quantization ( sQuantization.cstr(), tParsed.m_eQuantization, &sError ) )
+				return false;
+		}
 	}
 
 	return true;

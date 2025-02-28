@@ -983,7 +983,7 @@ BYTE * sphPackedBlob ( ByteBlob_t dBlob )
 // allocate buf and pack blob tBlob into it, return pointer to buf
 BYTE * sphPackPtrAttr ( ByteBlob_t dBlob )
 {
-	if ( !dBlob.second )
+	if ( !dBlob.second || !dBlob.first )
 		return nullptr;
 
 	assert ( dBlob.first );

@@ -51,8 +51,11 @@ class AttrMerger_c::Impl_c
 	CSphVector<ESphExt> 					m_dCreatedFiles;
 
 private:
-	template<bool WITH_BLOB, bool WITH_STRIDE, bool WITH_DOCSTORE, bool WITH_SI, bool WITH_KNN, bool PURE_COLUMNAR>
-	bool CopyMixedAttributes_T ( const CSphIndex & tIndex, const VecTraits_T<RowID_t>& dRowMap );
+	template <bool WITH_BLOB, bool WITH_STRIDE, bool WITH_DOCSTORE, bool WITH_SI, bool WITH_KNN, bool PURE_COLUMNAR>
+	bool CopyMixedAttributes_T ( const CSphIndex & tIndex, const VecTraits_T<RowID_t> & dRowMap );
+
+	bool AnalyzeMixedAttributes ( const CSphIndex & tIndex, const VecTraits_T<RowID_t> & dRowMap );
+
 	CSphString GetTmpFilename ( const CSphIndex* pIdx, ESphExt eExt )
 	{
 		m_dCreatedFiles.Add ( eExt );
@@ -69,6 +72,7 @@ public:
 	{}
 
 	bool Prepare ( const CSphIndex * pSrcIndex, const CSphIndex * pDstIndex );
+	bool AnalyzeAttributes ( const CSphIndex & tIndex, const VecTraits_T<RowID_t>& dRowMap, DWORD uAlive );
 	bool CopyAttributes ( const CSphIndex & tIndex, const VecTraits_T<RowID_t>& dRowMap, DWORD uAlive );
 	bool FinishMergeAttributes ( const CSphIndex * pDstIndex, BuildHeader_t& tBuildHeader, StrVec_t* pCreatedFiles );
 
@@ -227,16 +231,56 @@ bool AttrMerger_c::Impl_c::CopyMixedAttributes_T ( const CSphIndex & tIndex, con
 
 		if constexpr ( WITH_KNN )
 			if ( !BuildStoreKNN ( tRowID, pRow, tIndex.GetRawBlobAttrs(), dColumnarIterators, m_dAttrsForKNN, *m_pKNNBuilder ) )
-		{
-			m_sError = m_pKNNBuilder->GetError().c_str();
-			return false;
-		}
+			{
+				m_sError = m_pKNNBuilder->GetError().c_str();
+				return false;
+			}
 
 		m_dDocidLookup[m_tResultRowID] = { tDocID, m_tResultRowID };
 		++m_tResultRowID;
 	}
 
 	return true;
+}
+
+
+bool AttrMerger_c::Impl_c::AnalyzeMixedAttributes ( const CSphIndex & tIndex, const VecTraits_T<RowID_t> & dRowMap )
+{
+	if ( !m_pKNNBuilder )
+		return true;
+
+	auto dColumnarIterators = CreateAllColumnarIterators ( tIndex.GetColumnar(), tIndex.GetMatchSchema() );
+
+	const CSphRowitem * pRow = tIndex.GetRawAttrs ();
+	int iStride = tIndex.GetMatchSchema().GetRowSize();
+	int iChunk = tIndex.m_iChunk;
+	if ( !tIndex.GetRawAttrs() )
+		iStride = 0;
+
+	m_tMonitor.SetEvent ( MergeCb_c::E_MERGEATTRS_START, iChunk );
+	AT_SCOPE_EXIT ( [this, iChunk] { m_tMonitor.SetEvent ( MergeCb_c::E_MERGEATTRS_FINISHED, iChunk ); } );
+	for ( RowID_t tRowID = 0, tRows = (RowID_t)dRowMap.GetLength64(); tRowID < tRows; ++tRowID, pRow += iStride )
+	{
+		if ( dRowMap[tRowID]==INVALID_ROWID )
+			continue;
+
+		m_tMonitor.SetEvent ( MergeCb_c::E_MERGEATTRS_PULSE, iChunk );
+		if ( m_tMonitor.NeedStop() )
+			return false;
+
+		BuildTrainKNN ( tRowID, pRow, tIndex.GetRawBlobAttrs(), dColumnarIterators, m_dAttrsForKNN, *m_pKNNBuilder );
+	}
+
+	return true;
+}
+
+
+bool AttrMerger_c::Impl_c::AnalyzeAttributes ( const CSphIndex & tIndex, const VecTraits_T<RowID_t> & dRowMap, DWORD uAlive )
+{
+	if ( !uAlive )
+		return true;
+
+	return AnalyzeMixedAttributes ( tIndex, dRowMap );
 }
 
 
@@ -349,6 +393,12 @@ bool AttrMerger_c::Prepare ( const CSphIndex* pSrcIndex, const CSphIndex* pDstIn
 {
 	TRACE_CORO ( "sph", "AttrMerger_c::Prepare" );
 	return m_pImpl->Prepare ( pSrcIndex, pDstIndex );
+}
+
+bool AttrMerger_c::AnalyzeAttributes ( const CSphIndex& tIndex, const VecTraits_T<RowID_t>& dRowMap, DWORD uAlive )
+{
+	TRACE_CORO ( "sph", "AttrMerger_c::AnalyzeAttributes" );
+	return m_pImpl->AnalyzeAttributes ( tIndex, dRowMap, uAlive );
 }
 
 bool AttrMerger_c::CopyAttributes ( const CSphIndex& tIndex, const VecTraits_T<RowID_t>& dRowMap, DWORD uAlive )

@@ -50,6 +50,7 @@
 #include "config_reloader.h"
 #include "secondarylib.h"
 #include "knnlib.h"
+#include "knnmisc.h"
 #include "task_dispatcher.h"
 #include "tracer.h"
 #include "netfetch.h"
@@ -11054,6 +11055,7 @@ private:
 
 	StringPtrTraits_t 		m_tStrings;
 	StrVec_t				m_dTmpFieldStorage;
+	CSphVector<float>		m_dTmpFloats;
 	CSphVector<int>			m_dColumnarRemap;
 
 	CSphString &			m_sError;
@@ -11176,8 +11178,23 @@ bool AttributeConverter_c::CheckMVA ( const CSphColumnInfo & tCol, const SqlInse
 	if ( tCol.m_eAttrType==SPH_ATTR_FLOAT_VECTOR )
 	{
 		AddMVALength ( tAddVals.GetLength() );
-		for ( const auto & i : tAddVals )
-			AddMVAValue ( sphF2DW ( i.m_fValue ) );
+
+		if ( tCol.IsIndexedKNN() && tCol.m_tKNN.m_eHNSWSimilarity==knn::HNSWSimilarity_e::COSINE && tAddVals.GetLength() )
+		{
+			m_dTmpFloats.Resize ( tAddVals.GetLength() );
+			ARRAY_FOREACH ( i, m_dTmpFloats )
+				m_dTmpFloats[i] = tAddVals[i].m_fValue;
+
+			NormalizeVec(m_dTmpFloats);
+
+			for ( const auto & i : m_dTmpFloats )
+				AddMVAValue ( sphF2DW(i) );
+		}
+		else
+		{
+			for ( const auto & i : tAddVals )
+				AddMVAValue ( sphF2DW ( i.m_fValue ) );
+		}
 
 		return true;
 	}

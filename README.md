@@ -132,6 +132,7 @@ Manticore Search was forked from [Sphinx 2.3.2](https://github.com/sphinxsearch/
   - [Apache Superset](https://manticoresearch.com/blog/manticoresearch-apache-superset-integration/)
   - [Grafana](https://manticoresearch.com/blog/manticoresearch-grafana-integration/)
   - [Fluentbit](https://manticoresearch.com/blog/integration-of-manticore-with-fluentbit/)
+  - [Kibana](https://manual.manticoresearch.com/Integration/Kibana#Integration-of-Manticore-with-Kibana) ([Demo](https://github.com/manticoresoftware/kibana-demo))
   - [Logstash/Filebeat](https://manticoresearch.com/blog/integration-of-manticore-with-logstash-filebeat/)
   - [Vector.dev](https://manticoresearch.com/blog/integration-of-manticore-with-vectordev/)
   - [Mysqldump](https://manual.manticoresearch.com/Securing_and_compacting_a_table/Backup_and_restore#Backup-and-restore-with-mysqldump)

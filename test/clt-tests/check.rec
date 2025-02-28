@@ -1,0 +1,7 @@
+––– input –––
+ls -lt ; pwd
+––– output –––
+––– input –––
+whoami
+––– output: contains –––
+root

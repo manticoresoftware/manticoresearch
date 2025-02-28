@@ -38,7 +38,7 @@
 - Go to **Management > Kibana** to customize settings like default time zones and visualization preferences.
 
 ## Limitations
-- Currently, version 7.6.0 is tested and recommended. Other 7.x versions may work but could introduce issues. Version 8.x is not supported.
+- Currently, Kibana version 7.6.0 is tested and recommended. Other 7.x versions may work but could cause issues. Versions 8.x are not supported.
 - The following Elasticsearch-specific field types are not supported:
   - [Spatial data types](https://www.elastic.co/guide/en/elasticsearch/reference/current/mapping-types.html#spatial_datatypes)
   - [Structured data types](https://www.elastic.co/guide/en/elasticsearch/reference/current/mapping-types.html#structured-data-types)
@@ -46,6 +46,18 @@
   - [Text search types](https://www.elastic.co/guide/en/elasticsearch/reference/current/mapping-types.html#text-search-types) (except for plain 'text')
   - [Relational data types](https://www.elastic.co/guide/en/elasticsearch/reference/current/mapping-types.html#object-types)
 - Metric aggregation functions are limited to [those supported by Manticore](../Searching/Grouping.md#Aggregation-functions).
+- The following Kibana tools are not supported:
+  - [Canvas](https://www.elastic.co/guide/en/kibana/7.6/canvas.html) – A visualization and presentation tool for combining data with colors and images.
+  - [Elastic Maps](https://www.elastic.co/guide/en/kibana/7.6/maps.html) – A tool for analyzing geographical data.
+  - [Metrics](https://www.elastic.co/guide/en/kibana/7.6/xpack-infra.html) – An app for monitoring infrastructure metrics.
+  - [Logs](https://www.elastic.co/guide/en/kibana/7.6/xpack-logs.html) – A console-like display for exploring logs from common services.
+  - Monitoring:
+    - [Uptime](https://www.elastic.co/guide/en/kibana/7.6/xpack-uptime.html) – Monitors the status of network endpoints via HTTP/S, TCP, and ICMP.
+    - [APM (Application Performance Monitoring)](https://www.elastic.co/guide/en/kibana/7.6/xpack-apm.html) – Collects in-depth performance metrics from applications.
+    - [SIEM (Security Information and Event Management)](https://www.elastic.co/guide/en/kibana/7.6/xpack-siem.html) – An interactive workspace for security teams to triage events and conduct initial investigations.
+    - [ILM (Index lifecycle management)](https://www.elastic.co/guide/en/elasticsearch/reference/7.6/index-lifecycle-management.html) - Automatically manage indices according to performance, resiliency, and retention requirements.
+    - [Stack Monitoring](https://www.elastic.co/guide/en/kibana/7.6/xpack-monitoring.html) – Provides visualizations of monitoring data across the Elastic Stack.
+  - [Elasticsearch Management](https://www.elastic.co/guide/en/kibana/7.6/management.html) – A UI for managing Elastic Stack objects, including ILM (Index Lifecycle Management), etc.
 
 ## Data Ingestion and Exploration
 Integrate Manticore with tools like [Logstash](../Integration/Logstash.md), [Filebeat](../Integration/Filebeat.md), [Fluentbit](https://manticoresearch.com/blog/integration-of-manticore-with-fluentbit/), or [Vector.dev](https://manticoresearch.com/blog/integration-of-manticore-with-vectordev/) to ingest data from sources like web logs. Once the data is loaded into Manticore, you can explore and visualize it in Kibana.

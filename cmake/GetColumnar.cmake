@@ -102,13 +102,46 @@ find_package ( columnar "${NEED_API_NUMERIC_VERSION}" EXACT COMPONENTS columnar_
 return_if_all_api_found ()
 
 # Not found. get columnar src, extract columnar_api.
+set(COLUMNAR_LOCATOR "")
+
+# Check sources in order of priority
 if (DEFINED ENV{COLUMNAR_LOCATOR})
 	set ( COLUMNAR_LOCATOR $ENV{COLUMNAR_LOCATOR} )
 elseif (EXISTS "${MANTICORE_SOURCE_DIR}/local_columnar_src.txt")
 	file ( STRINGS "${MANTICORE_SOURCE_DIR}/local_columnar_src.txt" COLUMNAR_LOCATOR LIMIT_COUNT 1 )
 else ()
-	file ( STRINGS "${MANTICORE_SOURCE_DIR}/columnar_src.txt" COLUMNAR_LOCATOR LIMIT_COUNT 1)
-endif ()
+	# Get default columnar locator
+	file ( STRINGS "${MANTICORE_SOURCE_DIR}/columnar_src.txt" DEFAULT_COLUMNAR_LOCATOR LIMIT_COUNT 1)
+	
+	# Extract repository URL from default locator
+	string(REGEX MATCH "^(.+)@([^@]+)$" _ ${DEFAULT_COLUMNAR_LOCATOR})
+	set(COLUMNAR_REPO ${CMAKE_MATCH_1})
+	set(DEFAULT_BRANCH ${CMAKE_MATCH_2})
+	
+	# Try to use matching branch if exists
+	execute_process(
+		COMMAND git rev-parse --abbrev-ref HEAD
+		WORKING_DIRECTORY ${MANTICORE_SOURCE_DIR}
+		OUTPUT_VARIABLE CURRENT_BRANCH
+		OUTPUT_STRIP_TRAILING_WHITESPACE
+	)
+	
+	# Check if branch exists in columnar repository
+	execute_process(
+		COMMAND git ls-remote --heads ${COLUMNAR_REPO} ${CURRENT_BRANCH}
+		OUTPUT_VARIABLE BRANCH_EXISTS
+		OUTPUT_STRIP_TRAILING_WHITESPACE
+	)
+	
+	# Set locator based on branch existence
+	if (BRANCH_EXISTS)
+		set(COLUMNAR_LOCATOR "${COLUMNAR_REPO}@${CURRENT_BRANCH}")
+		message(STATUS "Using matching columnar branch: ${CURRENT_BRANCH}")
+	else()
+		set(COLUMNAR_LOCATOR ${DEFAULT_COLUMNAR_LOCATOR})
+		message(STATUS "No matching columnar branch found, using default: ${DEFAULT_BRANCH}")
+	endif()
+endif()
 
 string ( CONFIGURE "${COLUMNAR_LOCATOR}" COLUMNAR_LOCATOR ) # that is to expand possible inside variables
 

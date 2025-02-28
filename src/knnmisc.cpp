@@ -355,7 +355,7 @@ bool ParseKNNConfigStr ( const CSphString & sStr, CSphVector<NamedKNNSettings_t>
 		if ( !Str2HNSWSimilarity ( sSimilarity.cstr(), tParsed.m_eHNSWSimilarity, &sError ) )
 			return false;
 
-		JsonObj_c tQuantization = tRoot.GetStrItem ( "quantization", sError, true );
+		JsonObj_c tQuantization = i.GetStrItem ( "quantization", sError, true );
 		if ( !sError.IsEmpty() )
 			return false;
 

@@ -10,7 +10,7 @@ Released: February 28th 2025
 * [Issue #1727](https://github.com/manticoresoftware/manticoresearch/issues/1727) Fixed floating-point precision differences between arm64 and x86_64.
 * [Issue #2995](https://github.com/manticoresoftware/manticoresearch/issues/2995) Implemented performance optimizations for join batching.
 * [Issue #3039](https://github.com/manticoresoftware/manticoresearch/issues/3039) Implemented performance optimizations for EstimateValues in histograms.
-* [Issue #3099](https://github.com/manticoresoftware/manticoresearch/issues/3099) Build fails with Boost 1.87.0 due to use of removed io_service.
+* [Issue #3099](https://github.com/manticoresoftware/manticoresearch/issues/3099) Added support for Boost 1.87.0. ❤️ Thank you, [@cho-m](https://github.com/cho-m) for the PR.
 * [Issue #77](https://github.com/manticoresoftware/columnar/issues/77) Optimized block data reuse when creating filters with multiple values; added min/max to attribute metadata; implemented pre-filtering of filter values based on min/max.
 
 ### Bugfixes
@@ -27,7 +27,7 @@ Released: February 28th 2025
 * [Issue #3087](https://github.com/manticoresoftware/manticoresearch/issues/3087) Setting `diskchunk_flush_write_timeout=-1` per table did not disable index flushing; this is now fixed.
 * [Issue #3088](https://github.com/manticoresoftware/manticoresearch/issues/3088) Resolved duplicate entries after bulk replacing large IDs.
 * [Issue #3126](https://github.com/manticoresoftware/manticoresearch/issues/3126) Fixed a daemon crash caused by a full-text query with a single `NOT` operator and an expression ranker.
-* [Issue #3128](https://github.com/manticoresoftware/manticoresearch/pull/3128) Fixed a potential vulnerability in the CJSON library.
+* [Issue #3128](https://github.com/manticoresoftware/manticoresearch/pull/3128) Fixed a potential vulnerability in the CJSON library. ❤️ Thank you, [@tabudz](https://github.com/tabudz) for the PR.
 
 # Version 7.0.0
 Released: January 30th 2025

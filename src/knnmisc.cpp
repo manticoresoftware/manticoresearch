@@ -56,10 +56,13 @@ private:
 
 
 Expr_KNNDist_c::Expr_KNNDist_c ( const CSphVector<float> & dAnchor, const CSphColumnInfo & tAttr )
-	: m_pDistCalc ( CreateKNNDistanceCalc ( tAttr.m_tKNN ) )
-	, m_dAnchor ( dAnchor )
+	: m_dAnchor ( dAnchor )
 	, m_tAttr ( tAttr )
 {
+	knn::IndexSettings_t tDistSettings = tAttr.m_tKNN;
+	tDistSettings.m_eQuantization = knn::Quantization_e::NONE; // we operate on non-quantized data
+	m_pDistCalc = CreateKNNDistanceCalc(tDistSettings);
+
 	if ( tAttr.m_tKNN.m_eHNSWSimilarity==knn::HNSWSimilarity_e::COSINE )
 		NormalizeVec(m_dAnchor);
 }

@@ -104,7 +104,7 @@ jobs:
           echo "value=${USER_INPUT:-"build_${{ inputs.DISTR }}_${{ inputs.CTEST_CONFIGURATION_TYPE }}_${{ inputs.arch }}"}" >> "$GITHUB_OUTPUT"
 
       - name: Check out cache before building
-        uses: actions/cache@v3.3.1
+        uses: actions/cache@v4
         with:
           path: cache
           enableCrossOsArchive: true

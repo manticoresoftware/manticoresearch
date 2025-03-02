@@ -21,11 +21,11 @@ export INSTANCE=5
 ––– input –––
 export CLUSTER_NAME=c
 ––– output –––
-––– block: ../base/replication/create-cluster –––
+––– block: ../../base/replication/create-cluster –––
 ––– input –––
 export CLUSTER_NAME=c
 ––– output –––
-––– block: ../base/replication/join-cluster-on-all-nodes –––
+––– block: ../../base/replication/join-cluster-on-all-nodes –––
 ––– input –––
 apt-get install -y jq 1> /dev/null 2>&1 ; echo $?
 ––– output –––

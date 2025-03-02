@@ -1,4 +1,4 @@
-––– block: ../../base/dind/init –––
+––– block: ../base/dind/init –––
 ––– input –––
 docker network create manticore_network > /dev/null; echo $?
 ––– output –––

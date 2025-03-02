@@ -99,6 +99,7 @@ jobs:
     with:
       CTEST_CONFIGURATION_TYPE: "Debug"
       artifact_name: debug_build
+      cache_key: build_linux_debug_x86_64
       cmake_command: |
         export CMAKE_TOOLCHAIN_FILE=$(pwd)/dist/build_dockers/cross/linux.cmake
         ctest -VV -S misc/ctest/gltest.cmake --no-compress-output
@@ -248,6 +249,7 @@ jobs:
     uses: ./.github/workflows/build_template.yml
     with:
       artifact_name: release_build
+      cache_key: build_linux_release_x86_64
       cmake_command: |
         export CMAKE_TOOLCHAIN_FILE=$(pwd)/dist/build_dockers/cross/linux.cmake
         ctest -VV -S misc/ctest/gltest.cmake --no-compress-output

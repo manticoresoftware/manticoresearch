@@ -132,6 +132,7 @@ Manticore Search was forked from [Sphinx 2.3.2](https://github.com/sphinxsearch/
   - [Apache Superset](https://manticoresearch.com/blog/manticoresearch-apache-superset-integration/)
   - [Grafana](https://manticoresearch.com/blog/manticoresearch-grafana-integration/)
   - [Fluentbit](https://manticoresearch.com/blog/integration-of-manticore-with-fluentbit/)
+  - [Kibana](https://manual.manticoresearch.com/Integration/Kibana#Integration-of-Manticore-with-Kibana) ([Demo](https://github.com/manticoresoftware/kibana-demo))
   - [Logstash/Filebeat](https://manticoresearch.com/blog/integration-of-manticore-with-logstash-filebeat/)
   - [Vector.dev](https://manticoresearch.com/blog/integration-of-manticore-with-vectordev/)
   - [Mysqldump](https://manual.manticoresearch.com/Securing_and_compacting_a_table/Backup_and_restore#Backup-and-restore-with-mysqldump)
@@ -145,7 +146,7 @@ Docker image is available on [Docker Hub](https://dockr.ly/33biV0U).
 To experiment with Manticore Search in Docker just run:
 
 ```
-docker run -e EXTRA=1 --name manticore --rm -d manticoresearch/manticore && until docker logs manticore 2>&1 | grep -q "accepting connections"; do sleep 1; done && docker exec -it manticore mysql && docker stop manticore
+docker run --name manticore --rm -d manticoresearch/manticore && until docker logs manticore 2>&1 | grep -q "accepting connections"; do sleep 1; done && docker exec -it manticore mysql && docker stop manticore
 ```
 
 You can then: create a table, add data and run searches. For example:

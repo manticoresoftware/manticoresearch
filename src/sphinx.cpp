@@ -210,7 +210,7 @@ public:
 	ISphQword *			QwordSpawn ( const XQKeyword_t & tWord ) const final;
 	bool				QwordSetup ( ISphQword * ) const final;
 	bool				Setup ( ISphQword * ) const;
-	ISphQword *			ScanSpawn() const final;
+	ISphQword *			ScanSpawn ( int iAtomPos ) const final;
 
 private:
 	DataReaderFactoryPtr_c		m_pDoclist;
@@ -8497,7 +8497,15 @@ bool DiskIndexQwordSetup_c::Setup ( ISphQword * pWord ) const
 	return true;
 }
 
-QwordScan_c::QwordScan_c ( int iRowsCount )
+static DWORD Fields2Mask ( int iFields )
+{
+    if ( iFields>31 )
+        return 0xFFFFFFFF;
+    
+    return ( ( 1U<<iFields ) - 1 );
+}
+
+QwordScan_c::QwordScan_c ( int iRowsCount, int iAtomPos, int iFieldsCount )
 	: m_iRowsCount ( iRowsCount )
 {
 	m_bDone = ( m_iRowsCount==0 );
@@ -8505,8 +8513,23 @@ QwordScan_c::QwordScan_c ( int iRowsCount )
 	m_iDocs = m_iRowsCount;
 	m_sWord = "";
 	m_sDictWord = "";
-	m_bExcluded = true;
-	m_dQwordFields.SetAll();
+	m_iAtomPos = iAtomPos;
+	m_iFieldsCount = iFieldsCount;
+	SetFieldMask();
+}
+
+void QwordScan_c::SetFieldMask ()
+{
+	if ( m_iFieldsCount<32 )
+		m_dQwordFields.Assign32 ( Fields2Mask ( m_iFieldsCount ) );
+	else
+		m_dQwordFields.SetAll();
+}
+
+void QwordScan_c::Reset ()
+{
+	ISphQword::Reset();
+	SetFieldMask();
 }
 
 const CSphMatch & QwordScan_c::GetNextDoc()
@@ -8539,9 +8562,9 @@ const CSphMatch & QwordScan_c::GetNextDoc()
 	return m_tDoc;
 }
 
-ISphQword * DiskIndexQwordSetup_c::ScanSpawn() const
+ISphQword * DiskIndexQwordSetup_c::ScanSpawn ( int iAtomPos ) const
 {
-	return new QwordScan_c ( m_iRowsCount );
+	return new QwordScan_c ( m_iRowsCount, iAtomPos, m_pIndex->GetMatchSchema().GetFieldsCount() );
 }
 
 //////////////////////////////////////////////////////////////////////////////

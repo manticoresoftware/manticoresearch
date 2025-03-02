@@ -807,15 +807,39 @@ mysql -h0 -P9306 -e "SHOW TABLE idx_plain SETTINGS;"
 ––– input –––
 mysql -h0 -P9306 -e "show version\G;"
 ––– output –––
-ERROR 1064 (42000) at line 1: P01: syntax error, unexpected identifier, expecting VARIABLES near 'version'
+*************************** 1. row ***************************
+Component: Daemon
+Version: %{VERSION}
+*************************** 2. row ***************************
+Component: Columnar
+Version: columnar %{VERSION}
+*************************** 3. row ***************************
+Component: Secondary
+Version: secondary %{VERSION}
+*************************** 4. row ***************************
+Component: KNN
+Version: knn %{VERSION}
+*************************** 5. row ***************************
+Component: Buddy
+Version: buddy v%{VERSION}
 ––– input –––
 mysql -h0 -P9306 -e "SELECT * FROM idx_plain WHERE MATCH('abcdef') OPTION fuzzy=1;"
 ––– output –––
-ERROR 1064 (42000) at line 1: unknown option 'fuzzy'
++------+-----------+
+| id   | f         |
++------+-----------+
+|    1 | abcdef    |
+|    2 | abcd efgh |
++------+-----------+
 ––– input –––
 mysql -h0 -P9306 -e "SELECT * FROM idx_plain WHERE MATCH('abcef') OPTION fuzzy=1;"
 ––– output –––
-ERROR 1064 (42000) at line 1: unknown option 'fuzzy'
++------+-----------+
+| id   | f         |
++------+-----------+
+|    1 | abcdef    |
+|    2 | abcd efgh |
++------+-----------+
 ––– input –––
 mysql -h0 -P9306 -e "SELECT * FROM idx_plain WHERE MATCH('nonexistent') OPTION fuzzy=1;"
 ––– output –––

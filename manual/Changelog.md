@@ -1,21 +1,49 @@
 # Changelog
 
+# Version 7.4.6
+Released: February 28th 2025
+
+### Major changes
+* [Issue #832](https://github.com/manticoresoftware/manticoresearch/issues/832) Integration with [Kibana](../Integration/Kibana.md) for easier and more efficient data visualization.
+
+### Minor changes
+* [Issue #1727](https://github.com/manticoresoftware/manticoresearch/issues/1727) Fixed floating-point precision differences between arm64 and x86_64.
+* [Issue #2995](https://github.com/manticoresoftware/manticoresearch/issues/2995) Implemented performance optimizations for join batching.
+* [Issue #3039](https://github.com/manticoresoftware/manticoresearch/issues/3039) Implemented performance optimizations for EstimateValues in histograms.
+* [Issue #3099](https://github.com/manticoresoftware/manticoresearch/issues/3099) Added support for Boost 1.87.0. ❤️ Thank you, [@cho-m](https://github.com/cho-m) for the PR.
+* [Issue #77](https://github.com/manticoresoftware/columnar/issues/77) Optimized block data reuse when creating filters with multiple values; added min/max to attribute metadata; implemented pre-filtering of filter values based on min/max.
+
+### Bugfixes
+* [Commit 73ac](https://github.com/manticoresoftware/manticoresearch/commit/73ac22f358a7a0e734b332c3943c86e6294c06c3) Fixed handling of expressions in joined queries when attributes from both the left and right tables are used; fixed the index_weights option for the right table.
+* [Issue #2915](https://github.com/manticoresoftware/manticoresearch/issues/2915) Using `avg()` in a `SELECT ... JOIN` query could lead to incorrect results; this is now fixed.
+* [Issue #2996](https://github.com/manticoresoftware/manticoresearch/issues/2996) Fixed an incorrect result set caused by the implicit cutoff when join batching was enabled.
+* [Issue #3031](https://github.com/manticoresoftware/manticoresearch/issues/3031) Fixed a crash in the daemon during shutdown when an active chunk merge was in progress.
+* [Issue #3037](http://github.com/manticoresoftware/manticoresearch/issues/3037) Fixed an issue where `IN(...)` could produce incorrect results.
+* [Issue #3038](https://github.com/manticoresoftware/manticoresearch/issues/3038) Setting `max_iops` / `max_iosize` in version 7.0.0 could degrade indexing performance; this is now fixed.
+* [Issue #3042](https://github.com/manticoresoftware/manticoresearch/issues/3042) Fixed a memory leak in the join query cache.
+* [Issue #3052](https://github.com/manticoresoftware/manticoresearch/issues/3052) Fixed the handling of query options in joined JSON queries.
+* [Issue #3054](https://github.com/manticoresoftware/manticoresearch/issues/3054) Fixed an issue with the ATTACH TABLE command.
+* [Issue #3079](https://github.com/manticoresoftware/manticoresearch/issues/3079) Fixed inconsistencies in error messages.
+* [Issue #3087](https://github.com/manticoresoftware/manticoresearch/issues/3087) Setting `diskchunk_flush_write_timeout=-1` per table did not disable index flushing; this is now fixed.
+* [Issue #3088](https://github.com/manticoresoftware/manticoresearch/issues/3088) Resolved duplicate entries after bulk replacing large IDs.
+* [Issue #3126](https://github.com/manticoresoftware/manticoresearch/issues/3126) Fixed a daemon crash caused by a full-text query with a single `NOT` operator and an expression ranker.
+* [Issue #3128](https://github.com/manticoresoftware/manticoresearch/pull/3128) Fixed a potential vulnerability in the CJSON library. ❤️ Thank you, [@tabudz](https://github.com/tabudz) for the PR.
+
 # Version 7.0.0
-Released: January 24th 2025
+Released: January 30th 2025
 
 ### Major changes
 * [Issue #1497](https://github.com/manticoresoftware/manticoresearch/issues/1497) Added new [Fuzzy Search](../Searching/Spell_correction.md#Fuzzy-Search) and [Autocomplete](../Searching/Autocomplete.md#CALL-AUTOCOMPLETE) functionality for easier searching.
 * [Issue #1500](https://github.com/manticoresoftware/manticoresearch/issues/1500) [Integration with Kafka](../Integration/Kafka.md#Syncing-from-Kafka).
 * [Issue #1928](https://github.com/manticoresoftware/manticoresearch/issues/1928) Introduced [secondary indexes for JSON](../Creating_a_table/Local_tables/Plain_and_real-time_table_settings.md#json_secondary_indexes).
 * [Issue #2361](https://github.com/manticoresoftware/manticoresearch/issues/2361) Updates and searches during updates are no longer blocked by chunk merging.
+* [Issue #2787](https://github.com/manticoresoftware/manticoresearch/issues/2787) Automatic [disk chunk flush](../Server_settings/Searchd.md#diskchunk_flush_write_timeout) for RT table to improve performance; now, we automatically flush a RAM chunk to a disk chunk, preventing performance issues caused by the lack of optimizations in RAM chunks, which could sometimes lead to instability depending on chunk size.
 * [Issue #2811](https://github.com/manticoresoftware/manticoresearch/issues/2811) [Scroll](../Searching/Pagination.md#Scroll-Search-Option) option for easier pagination.
-* [Issue #832](https://github.com/manticoresoftware/manticoresearch/issues/832) Integration with Kibana for easier and more efficient data visualization.
 * [Issue #931](https://github.com/manticoresoftware/manticoresearch/issues/931) Integration with [Jieba](https://github.com/fxsjy/jieba) for better [Chinese tokenization](../Creating_a_table/NLP_and_tokenization/Languages_with_continuous_scripts.md).
 
 ### Minor changes
 * ⚠️ BREAKING [Issue #1111](https://github.com/manticoresoftware/manticoresearch/issues/1111) Fixed support for `global_idf` in RT tables. Requires table recreation.
 * ⚠️ BREAKING [Issue #2103](https://github.com/manticoresoftware/manticoresearch/issues/2103) Removed Thai characters from internal `cjk` charset. Update your charset definitions accordingly: if you have `cjk,non_cjk` and Thai characters are important for you, change it to `cjk,thai,non_cjk`, or `cont,non_cjk`, where `cont` is the new designation for all continuous-script languages (i.e., `cjk` + `thai`). Modify existing tables using [ALTER TABLE](../Updating_table_schema_and_settings.md#Updating-table-FT-settings-in-RT-mode).
-* ⚠️ BREAKING [Issue #2458](https://github.com/manticoresoftware/manticoresearch/issues/2458) Incorporated zlib support in Windows packages.
 * ⚠️ BREAKING [Issue #2468](https://github.com/manticoresoftware/manticoresearch/issues/2468) [CALL SUGGEST / QSUGGEST](../Searching/Spell_correction.md#CALL-QSUGGEST,-CALL-SUGGEST) now compatible with distributed tables. This increases the master/agent protocol version. If you are running Manticore Search in a distributed environment with multiple instances, make sure to first upgrade the agents, then the masters.
 * ⚠️ BREAKING [Issue #2889](https://github.com/manticoresoftware/manticoresearch/issues/2889) Changed column name from `Name` to `Variable name` for PQ [SHOW META](../Node_info_and_management/SHOW_META.md#SHOW-META-for-PQ-tables).
 * ⚠️ BREAKING [Issue #879](https://github.com/manticoresoftware/manticoresearch/issues/879) Introduced [per-table binlog](../Logging/Binary_logging.md#Per-table-binary-logging-configuration) with new options: [binlog_common](../Logging/Binary_logging.md#Binary-logging-strategies), [binlog](../Logging/Binary_logging.md#Per-table-binary-logging-configuration) for `create table` / `alter table`. You need to make a clean shutdown of the Manticore instance before upgrading to the new version.
@@ -25,6 +53,7 @@ Released: January 24th 2025
   - Read about [restarting a cluster](Creating_a_cluster/Setting_up_replication/Restarting_a_cluster.md#Restarting-a-cluster) for more details.
 * ⚠️ BREAKING [Issue #2308](https://github.com/manticoresoftware/manticoresearch/issues/2308) Added support for multiple tables in [`ALTER CLUSTER ADD` and `DROP`](../Creating_a_cluster/Setting_up_replication/Adding_and_removing_a_table_from_a_replication_cluster.md#Adding-and-removing-a-table-from-a-replication-cluster). This change also affects the replication protocol. Refer to the previous section for guidance on handling this update.
 * [Issue #2997](https://github.com/manticoresoftware/manticoresearch/issues/2997) Fixed dlopen issue on Macos.
+* [Commit 4954](https://github.com/manticoresoftware/manticoresearch/commit/4954b5de7341a29902a9b8fbb9a040f7942c77c4) Changed the default cutoff for OPTIMIZE TABLE on tables with KNN indexes to improve search performance.
 * [Commit cfc8](https://github.com/manticoresoftware/manticoresearch/commit/cfc87ecb6e33a8163c2235243b6b40e699dbf526) Added `COUNT(DISTINCT)` support for `ORDER BY` in `FACET` and `GROUP BY`.
 * [Issue #1103](https://github.com/manticoresoftware/manticoresearch/issues/1103) Improved clarity in [logging](../Logging/Server_logging.md#Server-logging) chunk merging.
 * [Issue #1130](https://github.com/manticoresoftware/manticoresearch/issues/1130) Added support for [DBeaver](../Integration/DBeaver.md).
@@ -39,6 +68,7 @@ Released: January 24th 2025
 * [Issue #2402](https://github.com/manticoresoftware/manticoresearch/issues/2402) Updated [searchd.max_packet_size](../Server_settings/Searchd.md#max_packet_size) default to 128MB.
 * [Issue #2419](https://github.com/manticoresoftware/manticoresearch/issues/2419) Added support for [IDF boost modifier](../Searching/Full_text_matching/Operators.md#IDF-boost-modifier) in JSON ["match"](../Searching/Full_text_matching/Basic_usage.md#match).
 * [Issue #2430](https://github.com/manticoresoftware/manticoresearch/issues/2430) Enhanced [binlog](../Logging/Binary_logging.md#Binary-logging) writing synchronization to prevent errors.
+* [Issue #2458](https://github.com/manticoresoftware/manticoresearch/issues/2458) Incorporated zlib support in Windows packages.
 * [Issue #2479](https://github.com/manticoresoftware/manticoresearch/issues/2479) Added support for SHOW TABLE INDEXES command.
 * [Issue #2485](https://github.com/manticoresoftware/manticoresearch/issues/2485) Set session metadata for Buddy replies.
 * [Issue #2490](https://github.com/manticoresoftware/manticoresearch/issues/2490) Millisecond resolution for aggregations at compatibility endpoints.
@@ -60,8 +90,10 @@ Released: January 24th 2025
 * [Issue #2937](https://github.com/manticoresoftware/manticoresearch/issues/2937) Enabled the use of joined table weight in fullscan queries.
 * [Issue #2953](https://github.com/manticoresoftware/manticoresearch/issues/2953) Fixed logging for join queries.
 * [Issue #337](https://github.com/manticoresoftware/manticoresearch-buddy/issues/337) Hid Buddy exceptions from `searchd` log in non-debug mode.
+* [Issue #2931](https://github.com/manticoresoftware/manticoresearch/issues/2931) Daemon shutdown with error message if user sets wrong ports for replication listener.
 
 ### Bug fixes
+* [Commit 0c6b](https://github.com/manticoresoftware/manticoresearch/commit/0c6bdaf41ea3684e05952e1a8273893535b923f5) Fixed: Incorrect results returned in JOIN queries with more than 32 columns.
 * [Issue #2335](https://github.com/manticoresoftware/manticoresearch/issues/2335) Resolved an issue where table join failed when two json attributes were used in the condition.
 * [Issue #2338](https://github.com/manticoresoftware/manticoresearch/issues/2338) Fixed incorrect total_relation in multiqueries with [cutoff](../Searching/Options.md#cutoff).
 * [Issue #2366](https://github.com/manticoresoftware/manticoresearch/issues/2366) Corrected filtering by `json.string` in the right table on [table join](../Searching/Joining.md).
@@ -874,7 +906,7 @@ Released: May 18th 2022
   < Content-Length: 434
   <
   * Connection #0 to host localhost left intact
-  {"items":[{"insert":{"_index":"user","_id":2811798918248005633,"created":true,"result":"created","status":201}},{"insert":{"_index":"user","_id":2811798918248005634,"created":true,"result":"created","status":201}},{"insert":{"_index":"user","_id":2811798918248005635,"created":true,"result":"created","status":201}},{"insert":{"_index":"user","_id":2811798918248005636,"created":true,"result":"created","status":201}}],"errors":false}
+  {"items":[{"insert":{"table":"user","_id":2811798918248005633,"created":true,"result":"created","status":201}},{"insert":{"table":"user","_id":2811798918248005634,"created":true,"result":"created","status":201}},{"insert":{"table":"user","_id":2811798918248005635,"created":true,"result":"created","status":201}},{"insert":{"table":"user","_id":2811798918248005636,"created":true,"result":"created","status":201}}],"errors":false}
   real	0m1.022s
   user	0m0.001s
   sys	0m0.010s
@@ -907,7 +939,7 @@ Released: May 18th 2022
   < Content-Length: 147
   <
   * Connection #0 to host localhost left intact
-  {"items":[{"bulk":{"_index":"user","_id":2811798919590182916,"created":4,"deleted":0,"updated":0,"result":"created","status":201}}],"errors":false}
+  {"items":[{"bulk":{"table":"user","_id":2811798919590182916,"created":4,"deleted":0,"updated":0,"result":"created","status":201}}],"errors":false}
   real	0m0.015s
   user	0m0.005s
   sys	0m0.004s

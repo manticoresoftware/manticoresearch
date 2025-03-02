@@ -21,4 +21,4 @@ export current_version_galera=$(strings /usr/share/manticore/modules/libgalera_m
 ––– input –––
 export current_version_buddy=$(mysql -h0 -P9306 -e "SHOW STATUS LIKE 'version'\G" | awk -F'[ v()]+' '/buddy v/{print $(NF-1)}'); echo $current_version_buddy
 ––– output –––
-#!/[0-9]{1,2}\.[0-9]{1,2}\.[0-9]{1,2}/!#
+%{VERSION}

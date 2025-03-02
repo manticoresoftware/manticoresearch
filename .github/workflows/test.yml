@@ -3,6 +3,7 @@ run-name: 🔬 Test ${{ github.sha }}
 
 #on: workflow_call
 
+
 on:
   push:
     branches:
@@ -48,7 +49,7 @@ jobs:
       clt: ${{ steps.filter.outputs.clt }}
     steps:
       - uses: actions/checkout@v4
-      - uses: dorny/paths-filter@v3
+      - uses: manticoresoftware/paths-filter@v3
         id: filter
         with:
           filters: |
@@ -71,7 +72,7 @@ jobs:
     steps:
       - name: Check out cache
         id: cache
-        uses: actions/cache@v3.3.1
+        uses: actions/cache@v4
         with:
           path: |
             bundle
@@ -99,6 +100,7 @@ jobs:
     with:
       CTEST_CONFIGURATION_TYPE: "Debug"
       artifact_name: debug_build
+      cache_key: build_linux_debug_x86_64
       cmake_command: |
         export CMAKE_TOOLCHAIN_FILE=$(pwd)/dist/build_dockers/cross/linux.cmake
         ctest -VV -S misc/ctest/gltest.cmake --no-compress-output
@@ -248,6 +250,7 @@ jobs:
     uses: ./.github/workflows/build_template.yml
     with:
       artifact_name: release_build
+      cache_key: build_linux_release_x86_64
       cmake_command: |
         export CMAKE_TOOLCHAIN_FILE=$(pwd)/dist/build_dockers/cross/linux.cmake
         ctest -VV -S misc/ctest/gltest.cmake --no-compress-output
@@ -427,14 +430,14 @@ jobs:
           fi
 
       - name: Upload build artifacts from cache
-        if: ${{ steps.cache.outputs.cache-hit == 'true' }}
+        if: ${{ steps.override-cache-hit.outputs.cache-hit == 'true' }}
         uses: manticoresoftware/upload_artifact_with_retries@v4
         with:
           name: build_jammy_RelWithDebInfo_x86_64
           path: "build/manticore*deb"
 
   pack_jammy:
-    needs: pack_jammy_cache_check
+    needs: [pack_jammy_cache_check, changes]
     if: |
       needs.pack_jammy_cache_check.outputs.cache-hit != 'true' ||
       needs.changes.outputs.source == 'true'

@@ -64,8 +64,8 @@ int64_t sph::LastTimestamp()
 
 /// timer thread context
 static ThreadRole TimerThread;
-static bool g_bTimerCreated = false;
-static bool g_bTimerActive = false;
+static std::atomic<bool> g_bTimerCreated { false };
+static std::atomic<bool> g_bTimerActive { false };
 
 class TinyTimer_c
 {

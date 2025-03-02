@@ -230,9 +230,9 @@ res = indexApi.insert({"table" : "products",  "doc" : {"query" : "@title shoes",
 ```
 <!-- response javascript -->
 ``` javascript
-"_index":"products","_id":0,"created":true,"result":"created"}
-{"_index":"products","_id":0,"created":true,"result":"created"}
-{"_index":"products","_id":0,"created":true,"result":"created"}
+"table":"products","_id":0,"created":true,"result":"created"}
+{"table":"products","_id":0,"created":true,"result":"created"}
+{"table":"products","_id":0,"created":true,"result":"created"}
 ```
 <!-- intro -->
 java
@@ -363,19 +363,19 @@ res = indexApi.insert({
 <!-- response TypeScript -->
 ``` typescript
 {
-	"_index":"test_pq",
+	"table":"test_pq",
 	"_id":1657852401006149661,
 	"created":true,
 	"result":"created"
 }
 {
-	"_index":"test_pq",
+	"table":"test_pq",
 	"_id":1657852401006149662,
 	"created":true,
 	"result":"created"
 }
 {
-	"_index":"test_pq",
+	"table":"test_pq",
 	"_id":1657852401006149663,
 	"created":true,
 	"result":"created"
@@ -403,19 +403,19 @@ apiClient.IndexAPI.Insert(context.Background()).InsertDocumentRequest(*indexReq)
 <!-- response Go -->
 ``` go
 {
-	"_index":"test_pq",
+	"table":"test_pq",
 	"_id":1657852401006149661,
 	"created":true,
 	"result":"created"
 }
 {
-	"_index":"test_pq",
+	"table":"test_pq",
 	"_id":1657852401006149662,
 	"created":true,
 	"result":"created"
 }
 {
-	"_index":"test_pq",
+	"table":"test_pq",
 	"_id":1657852401006149663,
 	"created":true,
 	"result":"created"
@@ -483,7 +483,7 @@ POST /pq/products/_search
     "max_score": 1,
     "hits": [
       {
-        "_index": "products",
+        "table": "products",
         "_type": "doc",
         "_id": 1657852401006149644,
         "_score": "1",
@@ -573,7 +573,7 @@ searchApi.percolate('products',{"query":{"percolate":{"document":{"title":"What 
 <!-- response Python -->
 ``` python
 {'hits': {'hits': [{u'_id': u'2811025403043381480',
-                    u'_index': u'products',
+                    u'table': u'products',
                     u'_score': u'1',
                     u'_source': {u'query': {u'ql': u'@title bag'}},
                     u'_type': u'doc',
@@ -599,7 +599,7 @@ res = await searchApi.percolate('products',{"query":{"percolate":{"document":{"t
     "total": 1,
     "hits": [
       {
-        "_index": "products",
+        "table": "products",
         "_type": "doc",
         "_id": 2811045522851233808,
         "_score": "1",
@@ -694,7 +694,7 @@ res = await searchApi.percolate('test_pq', { query: { percolate: { document : { 
     "total": 1,
     "hits": [
       {
-        "_index": "test_pq",
+        "table": "test_pq",
         "_type": "doc",
         "_id": 1657852401006149661,
         "_score": "1",
@@ -734,7 +734,7 @@ res, _, _ := apiClient.SearchAPI.Percolate(context.Background(), "test_pq").Perc
     "total": 1,
     "hits": [
       {
-        "_index": "test_pq",
+        "table": "test_pq",
         "_type": "doc",
         "_id": 1657852401006149661,
         "_score": "1",
@@ -801,7 +801,7 @@ POST /pq/products/_search
     "max_score": 1,
     "hits": [
       {
-        "_index": "products",
+        "table": "products",
         "_type": "doc",
         "_id": 1657852401006149644,
         "_score": "1",
@@ -892,7 +892,7 @@ searchApi.percolate('products',{"query":{"percolate":{"document":{"title":"What 
 <!-- response Python -->
 ``` python
 {'hits': {'hits': [{u'_id': u'2811025403043381480',
-                    u'_index': u'products',
+                    u'table': u'products',
                     u'_score': u'1',
                     u'_source': {u'query': {u'ql': u'@title bag'}},
                     u'_type': u'doc',
@@ -918,7 +918,7 @@ res = await searchApi.percolate('products',{"query":{"percolate":{"document":{"t
     "total": 1,
     "hits": [
       {
-        "_index": "products",
+        "table": "products",
         "_type": "doc",
         "_id": 2811045522851233808,
         "_score": "1",
@@ -1014,7 +1014,7 @@ res = await searchApi.percolate('test_pq', { query: { percolate: { document : { 
     "total": 1,
     "hits": [
       {
-        "_index": "test_pq",
+        "table": "test_pq",
         "_type": "doc",
         "_id": 1657852401006149661,
         "_score": "1",
@@ -1054,7 +1054,7 @@ res, _, _ := apiClient.SearchAPI.Percolate(context.Background(), "test_pq").Perc
     "total": 1,
     "hits": [
       {
-        "_index": "test_pq",
+        "table": "test_pq",
         "_type": "doc",
         "_id": 1657852401006149661,
         "_score": "1",
@@ -1148,7 +1148,7 @@ POST /pq/products/_search
     "max_score": 1,
     "hits": [
       {
-        "_index": "products",
+        "table": "products",
         "_type": "doc",
         "_id": 1657852401006149644,
         "_score": "1",
@@ -1164,7 +1164,7 @@ POST /pq/products/_search
         }
       },
       {
-        "_index": "products",
+        "table": "products",
         "_type": "doc",
         "_id": 1657852401006149646,
         "_score": "1",
@@ -1279,13 +1279,13 @@ searchApi.percolate('products',{"query":{"percolate":{"documents":[{"title":"nic
 <!-- response Python -->
 ``` python
 {'hits': {'hits': [{u'_id': u'2811025403043381494',
-                    u'_index': u'products',
+                    u'table': u'products',
                     u'_score': u'1',
                     u'_source': {u'query': {u'ql': u'@title bag'}},
                     u'_type': u'doc',
                     u'fields': {u'_percolator_document_slot': [2]}},
                    {u'_id': u'2811025403043381496',
-                    u'_index': u'products',
+                    u'table': u'products',
                     u'_score': u'1',
                     u'_source': {u'query': {u'ql': u'@title shoes'}},
                     u'_type': u'doc',
@@ -1312,7 +1312,7 @@ res = await searchApi.percolate('products',{"query":{"percolate":{"documents":[{
     "total": 2,
     "hits": [
       {
-        "_index": "products",
+        "table": "products",
         "_type": "doc",
         "_id": 2811045522851233808,
         "_score": "1",
@@ -1328,7 +1328,7 @@ res = await searchApi.percolate('products',{"query":{"percolate":{"documents":[{
         }
       },
       {
-        "_index": "products",
+        "table": "products",
         "_type": "doc",
         "_id": 2811045522851233810,
         "_score": "1",
@@ -1439,7 +1439,7 @@ res = await searchApi.percolate('test_pq', { query: { percolate: { documents : d
     "total": 2,
     "hits": [
       {
-        "_index": "test_pq",
+        "table": "test_pq",
         "_type": "doc",
         "_id": 1657852401006149661,
         "_score": "1",
@@ -1455,7 +1455,7 @@ res = await searchApi.percolate('test_pq', { query: { percolate: { documents : d
         }
       },
       {
-        "_index": "test_pq",
+        "table": "test_pq",
         "_type": "doc",
         "_id": 1657852401006149662,
         "_score": "1",
@@ -1497,7 +1497,7 @@ res, _, _ := apiClient.SearchAPI.Percolate(context.Background(), "test_pq").Perc
     "total": 2,
     "hits": [
       {
-        "_index": "test_pq",
+        "table": "test_pq",
         "_type": "doc",
         "_id": 1657852401006149661,
         "_score": "1",
@@ -1513,7 +1513,7 @@ res, _, _ := apiClient.SearchAPI.Percolate(context.Background(), "test_pq").Perc
         }
       },
       {
-        "_index": "test_pq",
+        "table": "test_pq",
         "_type": "doc",
         "_id": 1657852401006149662,
         "_score": "1",
@@ -1585,7 +1585,7 @@ POST /pq/products/_search
     "max_score": 1,
     "hits": [
       {
-        "_index": "products",
+        "table": "products",
         "_type": "doc",
         "_id": 1657852401006149644,
         "_score": "1",
@@ -1601,7 +1601,7 @@ POST /pq/products/_search
         }
       },
       {
-        "_index": "products",
+        "table": "products",
         "_type": "doc",
         "_id": 1657852401006149646,
         "_score": "1",
@@ -1716,13 +1716,13 @@ searchApi.percolate('products',{"query":{"percolate":{"documents":[{"title":"nic
 <!-- response Python -->
 ``` python
 {'hits': {'hits': [{u'_id': u'2811025403043381494',
-                    u'_index': u'products',
+                    u'table': u'products',
                     u'_score': u'1',
                     u'_source': {u'query': {u'ql': u'@title bag'}},
                     u'_type': u'doc',
                     u'fields': {u'_percolator_document_slot': [2]}},
                    {u'_id': u'2811025403043381496',
-                    u'_index': u'products',
+                    u'table': u'products',
                     u'_score': u'1',
                     u'_source': {u'query': {u'ql': u'@title shoes'}},
                     u'_type': u'doc',
@@ -1749,7 +1749,7 @@ res = await searchApi.percolate('products',{"query":{"percolate":{"documents":[{
     "total": 2,
     "hits": [
       {
-        "_index": "products",
+        "table": "products",
         "_type": "doc",
         "_id": 2811045522851233808,
         "_score": "1",
@@ -1765,7 +1765,7 @@ res = await searchApi.percolate('products',{"query":{"percolate":{"documents":[{
         }
       },
       {
-        "_index": "products",
+        "table": "products",
         "_type": "doc",
         "_id": 2811045522851233810,
         "_score": "1",
@@ -1874,7 +1874,7 @@ res = await searchApi.percolate('test_pq', { query: { percolate: { documents : d
     "total": 2,
     "hits": [
       {
-        "_index": "test_pq",
+        "table": "test_pq",
         "_type": "doc",
         "_id": 1657852401006149661,
         "_score": "1",
@@ -1890,7 +1890,7 @@ res = await searchApi.percolate('test_pq', { query: { percolate: { documents : d
         }
       },
       {
-        "_index": "test_pq",
+        "table": "test_pq",
         "_type": "doc",
         "_id": 1657852401006149662,
         "_score": "1",
@@ -1932,7 +1932,7 @@ res, _, _ := apiClient.SearchAPI.Percolate(context.Background(), "test_pq").Perc
     "total": 2,
     "hits": [
       {
-        "_index": "test_pq",
+        "table": "test_pq",
         "_type": "doc",
         "_id": 1657852401006149661,
         "_score": "1",
@@ -1948,7 +1948,7 @@ res, _, _ := apiClient.SearchAPI.Percolate(context.Background(), "test_pq").Perc
         }
       },
       {
-        "_index": "test_pq",
+        "table": "test_pq",
         "_type": "doc",
         "_id": 1657852401006149662,
         "_score": "1",
@@ -2558,13 +2558,13 @@ searchApi.percolate('pq',{"percolate":{"documents":[{"title":"angry test","gid":
 <!-- response Python -->
 ``` python
 {'hits': {'hits': [{u'_id': u'2811025403043381480',
-                    u'_index': u'pq',
+                    u'table': u'pq',
                     u'_score': u'1',
                     u'_source': {u'query': {u'ql': u'angry'},u'tags':u'',u'filters':u"gid>=10 OR gid<=3"},
                     u'_type': u'doc',
                     u'fields': {u'_percolator_document_slot': [1]}},
                     {u'_id': u'2811025403043381501',
-                    u'_index': u'pq',
+                    u'table': u'pq',
                     u'_score': u'1',
                     u'_source': {u'query': {u'ql': u'filter test'},u'tags':u'',u'filters':u"gid>=10"},
                     u'_type': u'doc',
@@ -2584,13 +2584,13 @@ res = await searchApi.percolate('pq',{"percolate":{"documents":[{"title":"angry 
 <!-- response javascript -->
 ``` javascript
 {'hits': {'hits': [{u'_id': u'2811025403043381480',
-                    u'_index': u'pq',
+                    u'table': u'pq',
                     u'_score': u'1',
                     u'_source': {u'query': {u'ql': u'angry'},u'tags':u'',u'filters':u"gid>=10 OR gid<=3"},
                     u'_type': u'doc',
                     u'fields': {u'_percolator_document_slot': [1]}},
                     {u'_id': u'2811025403043381501',
-                    u'_index': u'pq',
+                    u'table': u'pq',
                     u'_score': u'1',
                     u'_source': {u'query': {u'ql': u'filter test'},u'tags':u'',u'filters':u"gid>=10"},
                     u'_type': u'doc',
@@ -2689,7 +2689,7 @@ res = await searchApi.percolate('test_pq', { query: { percolate: { documents : d
     "total": 2,
     "hits": [
       {
-        "_index": "test_pq",
+        "table": "test_pq",
         "_type": "doc",
         "_id": 1657852401006149661,
         "_score": "1",
@@ -2705,7 +2705,7 @@ res = await searchApi.percolate('test_pq', { query: { percolate: { documents : d
         }
       },
       {
-        "_index": "test_pq",
+        "table": "test_pq",
         "_type": "doc",
         "_id": 1657852401006149662,
         "_score": "1",
@@ -2747,7 +2747,7 @@ res, _, _ := apiClient.SearchAPI.Percolate(context.Background(), "test_pq").Perc
     "total": 2,
     "hits": [
       {
-        "_index": "test_pq",
+        "table": "test_pq",
         "_type": "doc",
         "_id": 1657852401006149661,
         "_score": "1",
@@ -2763,7 +2763,7 @@ res, _, _ := apiClient.SearchAPI.Percolate(context.Background(), "test_pq").Perc
         }
       },
       {
-        "_index": "test_pq",
+        "table": "test_pq",
         "_type": "doc",
         "_id": 1657852401006149662,
         "_score": "1",

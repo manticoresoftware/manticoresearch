@@ -1,0 +1,52 @@
+––– block: ../base/start-searchd –––
+––– input –––
+mysql -h0 -P9306 -e "CREATE TABLE tbl1;"; echo $?
+––– output –––
+0
+––– input –––
+mysql -h0 -P9306 -e "CREATE TABLE tbl2 SHARDS=3 RF=1;"; echo $?
+––– output –––
+0
+––– input –––
+mysql -h0 -P9306 -e "CREATE TABLE tbl3(id bigint) shards=4 rf=1;"; echo $?
+––– output –––
+0
+––– input –––
+mysql -h0 -P9306 -e "CREATE TABLE tbl4 shards=3 RF=1;"; echo $?
+––– output –––
+0
+––– input –––
+mysql -h0 -P9306 -e "CREATE TABLE tbl5 SHARDS=3 rf=1;"; echo $?
+––– output –––
+0
+––– input –––
+mysql -h0 -P9306 -e "create table tbl6 shards=3 rf=1;"; echo $?
+––– output –––
+0
+––– input –––
+mysql -h0 -P9306 -e "CREATE TABLE tbl7 shards=1000 rf=1;"; echo $?
+––– output –––
+0
+––– input –––
+mysql -h0 -P9306 -e "CREATE TABLE tbl8 shards = 3 rf = 1;"; echo $?
+––– output –––
+0
+––– input –––
+mysql -h0 -P9306 -e "CREATE TaBle tbl9(id bigint) ShaRDS=4 rf=1;"; echo $?
+––– output –––
+0
+––– input –––
+mysql -h0 -P9306 -e "SHOW TABLES" | tail -n +2 | sort -t'l' -k2n
+––– output –––
++-------+-------------+
++-------+-------------+
+| Table | Type        |
+| tbl1  | rt          |
+| tbl2  | distributed |
+| tbl3  | distributed |
+| tbl4  | distributed |
+| tbl5  | distributed |
+| tbl6  | distributed |
+| tbl7  | distributed |
+| tbl8  | distributed |
+| tbl9  | distributed |

@@ -5,21 +5,22 @@ export INSTANCE=1
 ––– input –––
 mysql -h0 -P1306 -e "SHOW SETTINGS;"
 ––– output –––
-+----------------------------+------------------------------------------------------------+
-| Setting_name               | Value                                                      |
-+----------------------------+------------------------------------------------------------+
-| configuration_file         | /.clt/test/clt-tests/base/searchd-with-flexible-ports.conf |
-| worker_pid                 | %{NUMBER}                                                         |
-| searchd.listen             | 1306:mysql41                                               |
-| searchd.listen             | 1312                                                       |
-| searchd.listen             | 1308:http                                                  |
-| searchd.log                | /tmp/manticore-1/searchd.log                               |
-| searchd.query_log          | /tmp/manticore-1/query.log                                 |
-| searchd.pid_file           | /tmp/manticore-1/searchd.pid                               |
-| searchd.data_dir           | /tmp/manticore-1                                           |
-| searchd.query_log_format   | sphinxql                                                   |
-| searchd.query_log_commands | 1                                                          |
-| searchd.binlog_path        | /tmp/manticore-1/binlog                                    |
-| common.plugin_dir          | /usr/local/lib/manticore                                   |
-| common.lemmatizer_base     | /usr/share/manticore/morph/                                |
-+----------------------------+------------------------------------------------------------+
++---------------------------------------+------------------------------------------------------------+
+| Setting_name                          | Value                                                      |
++---------------------------------------+------------------------------------------------------------+
+| configuration_file                    | /.clt/test/clt-tests/base/searchd-with-flexible-ports.conf |
+| worker_pid                            | %{NUMBER}                                                         |
+| searchd.listen                        | %{IPADDR}:%{NUMBER}:mysql41                                     |
+| searchd.listen                        | %{IPADDR}:%{NUMBER}                                             |
+| searchd.listen                        | %{IPADDR}:%{NUMBER}:http                                        |
+| searchd.log                           | /var/log/manticore-1/searchd.log                           |
+| searchd.query_log                     | /var/log/manticore-1/query.log                             |
+| searchd.pid_file                      | /var/log/manticore-1/searchd.pid                           |
+| searchd.data_dir                      | /var/log/manticore-1                                       |
+| searchd.query_log_format              | sphinxql                                                   |
+| searchd.query_log_commands            | 1                                                          |
+| searchd.diskchunk_flush_write_timeout | -1                                                         |
+| searchd.binlog_path                   | /var/log/manticore-1/binlog                                |
+| common.plugin_dir                     | /usr/local/lib/manticore                                   |
+| common.lemmatizer_base                | /usr/share/manticore/morph/                                |
++---------------------------------------+------------------------------------------------------------+

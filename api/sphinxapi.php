@@ -510,7 +510,7 @@ class SphinxClient
 		$this->_fieldweights= array();
 		$this->_overrides 	= array();
 		$this->_select		= "*";
-		$this->_query_flags = sphSetBit ( 0, 6, true ); // default idf=tfidf_normalized
+		$this->_query_flags = sphSetBit ( 0, 6, true ) | sphSetBit ( 0, 3, true ); // default idf=tfidf_normalized, boolean_simplify=true
 		$this->_predictedtime = 0;
 		$this->_outerorderby = "";
 		$this->_outeroffset = 0;

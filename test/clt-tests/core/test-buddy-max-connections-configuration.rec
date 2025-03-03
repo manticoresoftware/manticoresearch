@@ -65,10 +65,6 @@ Buddy started!
 ––– input –––
 for n in 1 2; do mysql -P9306 -h0 -e "CREATE TABLE IF NOT EXISTS b${n} (id INT);" ; done; sleep 1; for n in 1 2; do mysql -P9306 -h0 -e "INSERT INTO b${n} (id) VALUES(0)" & pids="$pids $!"; done; for pid in $pids; do wait $pid; done; mysql -P9306 -h0 -e "show queries\G;"
 ––– output –––
-[1] %{NUMBER}
-[2] %{NUMBER}
-[1]-  Done                    mysql -P9306 -h0 -e "INSERT INTO b${n} (id) VALUES(0)"
-[2]+  Done                    mysql -P9306 -h0 -e "INSERT INTO b${n} (id) VALUES(0)"
 *************************** 1. row ***************************
 id: %{NUMBER}
 query: show queries

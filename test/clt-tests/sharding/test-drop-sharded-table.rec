@@ -65,9 +65,7 @@ mysql -h0 -P9306 -e "DROP TABLE nonexistent_table;"
  ––– input –––
 mysql -h0 -P9306 -e "INSERT INTO tbl1 VALUES (1);" & sleep 1; mysql -h0 -P9306 -e "DROP TABLE tbl1;"
 ––– output –––
-[%{NUMBER}] %{NUMBER}
 ERROR 1064 (42000) at line 1: Cannot create table with column names missing
-[1]+  Exit 1                  mysql -h0 -P9306 -e "INSERT INTO tbl1 VALUES (1);"
 ERROR 1064 (42000) at line 1: DROP TABLE failed: unknown table 'tbl1'
 ––– input –––
 LONG_TABLE_NAME=$(printf "tbl%065d" 1)

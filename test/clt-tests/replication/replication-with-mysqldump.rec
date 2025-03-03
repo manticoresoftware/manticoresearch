@@ -11,491 +11,343 @@ export INSTANCE=3
 ––– output –––
 ––– block: ../base/replication/start-searchd-precach –––
 ––– input –––
-export INSTANCE=4
-––– output –––
-––– block: ../base/replication/start-searchd-precach –––
-––– input –––
-export INSTANCE=5
-––– output –––
-––– block: ../base/replication/start-searchd-precach –––
-––– input –––
 export CLUSTER_NAME=c
 ––– output –––
 ––– block: ../base/replication/create-cluster –––
 ––– input –––
-mysql -h0 -P1306 -e "CREATE TABLE testrt (id BIGINT, model TEXT, storage_capacity INTEGER, color string, release_year INTEGER, price FLOAT, discounted_price FLOAT, sold BOOL, date_added TIMESTAMP, product_codes MULTI, values MULTI64, additional_info JSON, vector float_vector knn_type='hnsw' knn_dims='4' hnsw_similarity='l2');"; echo $?
+echo 'the, and, of' > /tmp/stopwords.txt
+––– output –––
+––– input –––
+echo 'cat => feline' > /tmp/exceptions.txt
+––– output –––
+––– input –––
+mysql -h0 -P1306 -e "CREATE TABLE tbl1 (id BIGINT, f TEXT, a INT, b FLOAT, j JSON, m MULTI, s STRING, e BOOL, d TIMESTAMP, v MULTI64, fv FLOAT_VECTOR KNN_TYPE='hnsw' KNN_DIMS='4' HNSW_SIMILARITY='l2') ENGINE='columnar' morphology='stem_en' stopwords='/tmp/stopwords.txt' exceptions='/tmp/exceptions.txt' rt_mem_limit='256M';"; echo $?
 ––– output –––
 0
 ––– input –––
-mysql -h0 -P1306 -e "INSERT INTO testrt VALUES (6775836565403860993, 'iPhone 13 Pro', 256, 'silver', 2021, 1099.99, 989.99, 1, '1591362342000', (1,2,3), (523456764345678976, 98765409877866654098, 1109876543450987650987), '{\"features\": [\"ProMotion display\", \"A15 Bionic chip\", \"Ceramic Shield front cover\"]}', (0.773448, 0.312478, 0.137971, 0.459821));"; echo $?
+mysql -h0 -P1306 -e "INSERT INTO tbl1 VALUES (1, 'The cat runs', 42, 3.14, '{\"key\":\"value\"}', (1,2,3), 'test', 1, '2024-12-16 12:00:00', (123456789012345678, 987654321098765432), (0.1, 0.2, 0.3, 0.4));"; echo $?
 ––– output –––
 0
 ––– input –––
-mysql -h0 -P1306 -e "INSERT INTO testrt VALUES (6775836565403860994, 'Galaxy S21 Ultra', 128, 'black', 2021, 1199.99, 1099.99, 0, '1609459200000', (4,5,6), (1234567890123456789, 9876543210987654321), '{\"features\": [\"Dynamic AMOLED 2X\", \"Exynos 2100\", \"108MP camera\"]}', (0.5, 0.4, 0.3, 0.2));"; echo $?
+mysql -h0 -P1306 -e "ALTER CLUSTER c ADD tbl1;"
+––– output –––
+––– input –––
+for n in `seq 2 $INSTANCE`; do mysql -h0 -P${n}306 -e "join cluster ${CLUSTER_NAME} at '127.0.0.1:1312'"; done;
+––– output –––
+––– input –––
+mysql -h0 -P${INSTANCE}306 -e "show status like 'cluster_${CLUSTER_NAME}_status'\G"
+––– output –––
+*************************** 1. row ***************************
+Counter: cluster_#!/[a-z]+/!#_status
+Value: primary
+––– input –––
+echo 'fast => faster' > /tmp/wordforms.txt
+––– output –––
+––– input –––
+mysql -h0 -P2306 -e "CREATE TABLE tbl2 (id BIGINT, f TEXT, a INT, b FLOAT, j JSON, m MULTI, s STRING, e BOOL, d TIMESTAMP, v MULTI64, fv FLOAT_VECTOR KNN_TYPE='hnsw' KNN_DIMS='4' HNSW_SIMILARITY='l2') ENGINE='rowwise' morphology='stem_ru' wordforms='/tmp/wordforms.txt' rt_mem_limit='512M';"; echo $?
 ––– output –––
 0
 ––– input –––
-mysql -h0 -P1306 -e "ALTER CLUSTER c ADD testrt;"
-––– output –––
-––– block: ../base/replication/join-cluster-on-all-nodes –––
-––– input –––
-for port in 1306 2306 3306 4306 5306; do echo "Checking status for port $port:"; timeout 10 bash -c "while ! mysql -h0 -P$port -e \"SHOW STATUS LIKE 'cluster_c_node_state'\G\" | grep -q 'Value: synced'; do sleep 1; done" && echo "Port $port: Node is synced." || echo "Port $port: Node is not synced (Value: closed or other)."; done
-––– output –––
-Checking status for port 1306:
-Port 1306: Node is synced.
-Checking status for port 2306:
-Port 2306: Node is synced.
-Checking status for port 3306:
-Port 3306: Node is synced.
-Checking status for port 4306:
-Port 4306: Node is synced.
-Checking status for port 5306:
-Port 5306: Node is synced.
-––– input –––
-for port in 1306 2306 3306 4306 5306; do mysql -h0 -P$port -e "SET GLOBAL cluster_user = 'user1';"; done
-––– output –––
-––– input –––
-for port in 1306 2306 3306 4306 5306; do timeout 10 bash -c "while ! mysql -h0 -P$port -e \"SHOW VARIABLES LIKE 'cluster_user';\" | grep -q '| cluster_user  | user1 |'; do sleep 1; done" && echo "Port $port: cluster_user is user1." || { echo "Port $port: cluster_user is not user1."; exit 1; }; done
-––– output –––
-Port 1306: cluster_user is user1.
-Port 2306: cluster_user is user1.
-Port 3306: cluster_user is user1.
-Port 4306: cluster_user is user1.
-Port 5306: cluster_user is user1.
-––– input –––
-for port in 1306 2306 3306 4306 5306; do mysql -h0 -P$port -e "SELECT * FROM c:testrt ORDER BY id ASC;" | md5sum > /tmp/hash_$port.txt; done && for port1 in 1306 2306 3306 4306 5306; do for port2 in 1306 2306 3306 4306 5306; do [ $port1 -ne $port2 ] && ! diff /tmp/hash_$port1.txt /tmp/hash_$port2.txt && echo "Mismatch between $port1 and $port2"; done; done
-––– output –––
-––– input –––
-mysql -h0 -P1306 -e "SHOW STATUS LIKE 'cluster_c_indexes';"
-––– output –––
-+-------------------+--------+
-| Counter           | Value  |
-+-------------------+--------+
-| cluster_c_indexes | testrt |
-+-------------------+--------+
-––– input –––
-export INSTANCE=5
-––– output –––
-––– block: ../base/replication/stop-searchd –––
-––– input –––
-mysql -h0 -P1306 -e "INSERT INTO c:testrt VALUES (6775836565403860995, 'Google Pixel 6', 128, 'sorta seafoam', 2021, 699.99, 599.99, 1, '1635317932000', (33,34,35), (623456764345678976, 98765409877866654097, 1109876543450987650986), '{\"features\": [\"Google Tensor chip\", \"Flat OLED display\", \"Dual-camera system\"]}', (0.823448, 0.362478, 0.187971, 0.509821));"; echo $?
-––– output –––
-0
-––– block: ../base/replication/start-searchd-precach –––
-––– input –––
-for port in 1306 2306 3306 4306 5306; do echo "Checking status for port $port:"; timeout 10 bash -c "while ! mysql -h0 -P$port -e \"SHOW STATUS LIKE 'cluster_c_node_state'\G\" | grep -q 'Value: synced'; do sleep 1; done" && echo "Port $port: Node is synced." || echo "Port $port: Node is not synced (Value: closed or other)."; done
-––– output –––
-Checking status for port 1306:
-Port 1306: Node is synced.
-Checking status for port 2306:
-Port 2306: Node is synced.
-Checking status for port 3306:
-Port 3306: Node is synced.
-Checking status for port 4306:
-Port 4306: Node is synced.
-Checking status for port 5306:
-Port 5306: Node is synced.
-––– input –––
-for port in 1306 2306 3306 4306 5306; do mysql -h0 -P$port -e "SELECT * FROM replication:testrt ORDER BY id ASC;" | md5sum > /tmp/hash_$port.txt; done && for port1 in 1306 2306 3306 4306 5306; do for port2 in 1306 2306 3306 4306 5306; do [ $port1 -ne $port2 ] && ! diff /tmp/hash_$port1.txt /tmp/hash_$port2.txt && echo "Mismatch between $port1 and $port2"; done; done
-––– output –––
-––– input –––
-export INSTANCE=2
-––– output –––
-––– block: ../base/replication/stop-searchd –––
-––– input –––
-mysql -h0 -P1306 -e "INSERT INTO c:testrt VALUES (6775836565403860996, 'OnePlus 9', 256, 'winter mist', 2021, 729.99, 629.99, 0, '1648044532000', (36,37,38), (723456764345678976, 98765409877866654096, 1109876543450987650985), '{\"features\": [\"Qualcomm Snapdragon 888\", \"Fluid AMOLED display\", \"Hasselblad Camera for Mobile\"]}', (0.021106, 0.918278, 0.261892, 0.074594));"; echo $?
-––– output –––
-0
-––– block: ../base/replication/start-searchd-precach –––
-––– input –––
-for port in 1306 2306 3306 4306 5306; do echo "Checking status for port $port:"; timeout 10 bash -c "while ! mysql -h0 -P$port -e \"SHOW STATUS LIKE 'cluster_c_node_state'\G\" | grep -q 'Value: synced'; do sleep 1; done" && echo "Port $port: Node is synced." || echo "Port $port: Node is not synced (Value: closed or other)."; done
-––– output –––
-Checking status for port 1306:
-Port 1306: Node is synced.
-Checking status for port 2306:
-Port 2306: Node is synced.
-Checking status for port 3306:
-Port 3306: Node is synced.
-Checking status for port 4306:
-Port 4306: Node is synced.
-Checking status for port 5306:
-Port 5306: Node is synced.
-––– input –––
-for port in 1306 2306 3306 4306 5306; do mysql -h0 -P$port -e "SELECT * FROM c:testrt ORDER BY id ASC;" | md5sum > /tmp/hash_$port.txt; done && for port1 in 1306 2306 3306 4306 5306; do for port2 in 1306 2306 3306 4306 5306; do [ $port1 -ne $port2 ] && ! diff /tmp/hash_$port1.txt /tmp/hash_$port2.txt && echo "Mismatch between $port1 and $port2"; done; done
-––– output –––
-––– input –––
-export INSTANCE=4
-––– output –––
-––– block: ../base/replication/stop-searchd –––
-––– input –––
-mysql -h0 -P2306 -e "DELETE FROM c:testrt WHERE id = 6775836565403860994;"; echo $?
+mysql -h0 -P2306 -e "INSERT INTO tbl2 VALUES (1, 'Русский fast текст', 84, 2.71, '{\"ключ\":\"значение\"}', (4,5,6), 'строка', 0, '2023-11-15 08:30:00', (987654321098765432, 123456789012345678), (0.4, 0.3, 0.2, 0.1));"; echo $?
 ––– output –––
 0
 ––– input –––
-export INSTANCE=4
-––– output –––
-––– block: ../base/replication/start-searchd-precach –––
-––– input –––
-for port in 1306 2306 3306 4306 5306; do echo "Checking status for port $port:"; timeout 10 bash -c "while ! mysql -h0 -P$port -e \"SHOW STATUS LIKE 'cluster_c_node_state'\G\" | grep -q 'Value: synced'; do sleep 1; done" && echo "Port $port: Node is synced." || echo "Port $port: Node is not synced (Value: closed or other)."; done
-––– output –––
-Checking status for port 1306:
-Port 1306: Node is synced.
-Checking status for port 2306:
-Port 2306: Node is synced.
-Checking status for port 3306:
-Port 3306: Node is synced.
-Checking status for port 4306:
-Port 4306: Node is synced.
-Checking status for port 5306:
-Port 5306: Node is synced.
-––– input –––
-for port in 1306 2306 3306 4306 5306; do mysql -h0 -P$port -e "SELECT * FROM c:testrt ORDER BY id ASC;" | md5sum > /tmp/hash_$port.txt; done && for port1 in 1306 2306 3306 4306 5306; do for port2 in 1306 2306 3306 4306 5306; do [ $port1 -ne $port2 ] && ! diff /tmp/hash_$port1.txt /tmp/hash_$port2.txt && echo "Mismatch between $port1 and $port2"; done; done
-––– output –––
-––– input –––
-mysql -h0 -P1306 -e "REPLACE INTO c:testrt (id, model, storage_capacity, color, release_year, price, discounted_price, sold, date_added, product_codes, values, additional_info, vector) VALUES (6775836565403860993, 'Updated iPhone 13 Pro', 256, 'silver', 2021, 1099.99, 989.99, 1, '1591362342000', (1,2,3), (523456764345678976, 98765409877866654098, 1109876543450987650987), '{\"features\": [\"Updated ProMotion display\", \"A15 Bionic chip\", \"Ceramic Shield front cover\"]}', (0.773448, 0.312478, 0.137971, 0.459821));"; echo $?
+mysql -h0 -P2306 -e "INSERT INTO tbl2 VALUES (2, 'Быстрый прыжок', 19, 1.62, '{\"действие\":\"прыжок\",\"число\":3}', (7,8,9), 'пример', 1, '2024-06-10 15:45:00', (345678901234567890, 567890123456789012), (0.8, 0.7, 0.6, 0.5));"; echo $?
 ––– output –––
 0
 ––– input –––
-for port in 1306 2306 3306 4306 5306; do echo "Checking status for port $port:"; timeout 10 bash -c "while ! mysql -h0 -P$port -e \"SHOW STATUS LIKE 'cluster_c_node_state'\G\" | grep -q 'Value: synced'; do sleep 1; done" && echo "Port $port: Node is synced." || echo "Port $port: Node is not synced (Value: closed or other)."; done
-––– output –––
-Checking status for port 1306:
-Port 1306: Node is synced.
-Checking status for port 2306:
-Port 2306: Node is synced.
-Checking status for port 3306:
-Port 3306: Node is synced.
-Checking status for port 4306:
-Port 4306: Node is synced.
-Checking status for port 5306:
-Port 5306: Node is synced.
-––– input –––
-for port in 1306 2306 3306 4306 5306; do mysql -h0 -P$port -e "SELECT * FROM c:testrt ORDER BY id ASC;" | md5sum > /tmp/hash_$port.txt; done && for port1 in 1306 2306 3306 4306 5306; do for port2 in 1306 2306 3306 4306 5306; do [ $port1 -ne $port2 ] && ! diff /tmp/hash_$port1.txt /tmp/hash_$port2.txt && echo "Mismatch between $port1 and $port2"; done; done
+mysql -h0 -P2306 -e "ALTER CLUSTER c ADD tbl2;"
 ––– output –––
 ––– input –––
-mysqldump -etc --replace --column-statistics=0 -u user1 -h0 -P1306 --skip-comments manticore c:testrt | mysql -P1306 -h0; echo $?
-––– output –––
--- Warning: version string returned by server is incorrect.
-0
-––– input –––
-for port in 1306 2306 3306 4306 5306; do echo "Checking status for port $port:"; timeout 10 bash -c "while ! mysql -h0 -P$port -e \"SHOW STATUS LIKE 'cluster_c_node_state'\G\" | grep -q 'Value: synced'; do sleep 1; done" && echo "Port $port: Node is synced." || echo "Port $port: Node is not synced (Value: closed or other)."; done
-––– output –––
-Checking status for port 1306:
-Port 1306: Node is synced.
-Checking status for port 2306:
-Port 2306: Node is synced.
-Checking status for port 3306:
-Port 3306: Node is synced.
-Checking status for port 4306:
-Port 4306: Node is synced.
-Checking status for port 5306:
-Port 5306: Node is synced.
-––– input –––
-for port in 1306 2306 3306 4306 5306; do mysql -h0 -P$port -e "SELECT * FROM testrt ORDER BY id ASC;" | md5sum | awk '{print $1}' > /tmp/hash_$port.txt; done && for port1 in 1306 2306 3306 4306 5306; do for port2 in 1306 2306 3306 4306 5306; do [ $port1 -ne $port2 ] && ! diff /tmp/hash_$port1.txt /tmp/hash_$port2.txt && echo "Mismatch between $port1 and $port2"; done; done
-––– output –––
-––– input –––
-for port in 1306 2306 3306 4306 5306; do mysql -h0 -P$port -e "SET GLOBAL cluster_user = 'user2';"; done
-––– output –––
-––– input –––
-for port in 1306 2306 3306 4306 5306; do timeout 10 bash -c "while ! mysql -h0 -P$port -e \"SHOW VARIABLES LIKE 'cluster_user';\" | grep -q '| cluster_user  | user2 |'; do sleep 1; done" && echo "Port $port: cluster_user is user2." || { echo "Port $port: cluster_user is not user2."; exit 1; }; done
-––– output –––
-Port 1306: cluster_user is user2.
-Port 2306: cluster_user is user2.
-Port 3306: cluster_user is user2.
-Port 4306: cluster_user is user2.
-Port 5306: cluster_user is user2.
-––– input –––
-mysql -h0 -P1306 -e "CREATE TABLE tbl_none (id INT, f TEXT, a INT, b FLOAT, j JSON, m MULTI, s STRING, e BOOL, d TIMESTAMP, v MULTI64, fv FLOAT_VECTOR KNN_TYPE='hnsw' KNN_DIMS='4' HNSW_SIMILARITY='l2') ENGINE='columnar' rt_mem_limit='128M';"; echo $?
+mysql -h0 -P3306 -e "CREATE TABLE tbl3 (id BIGINT, f TEXT, a INT, b FLOAT, j JSON, m MULTI, s STRING, e BOOL, d TIMESTAMP, v MULTI64, fv FLOAT_VECTOR KNN_TYPE='hnsw' KNN_DIMS='4' HNSW_SIMILARITY='l2') ENGINE='rowwise' rt_mem_limit='512M';"; echo $?
 ––– output –––
 0
 ––– input –––
-mysql -h0 -P1306 -e "INSERT INTO tbl_none (id, f, a, b, j, m, s, e, d, v, fv) VALUES (1, 'Example text', 42, 3.14, '{\"key\":\"value\",\"list\":[1,2,3]}', (1,2,3), 'string_value', 1, '2024-12-16 12:00:00', (123456789012345678, 987654321098765432), (0.1, 0.2, 0.3, 0.4));"; echo $?
+mysql -h0 -P3306 -e "INSERT INTO tbl3 (id, f, a, b, j, m, s, e, d, v, fv) VALUES (1, 'Plain example', 42, 3.14, '{\"key\":\"value\"}', (1,2,3), 'plain_string', 1, '2024-12-16 12:00:00', (123456789012345678, 987654321098765432), (0.1, 0.2, 0.3, 0.4));"; echo $?
 ––– output –––
 0
 ––– input –––
-mysql -h0 -P1306 -e "ALTER CLUSTER c ADD tbl_none;"; echo $?
-––– output –––
-0
-––– input –––
-mysql -h0 -P1306 -e "FLUSH RAMCHUNK tbl_none;"
-––– output –––
-––– input –––
-echo 'the, and, of' > /tmp/stopwords.txt; mysql -h0 -P2306 -e "CREATE TABLE tbl_stopwords (id INT, f TEXT, a INT, b FLOAT, j JSON, m MULTI, s STRING, e BOOL, d TIMESTAMP, v MULTI64, fv FLOAT_VECTOR KNN_TYPE='hnsw' KNN_DIMS='4' HNSW_SIMILARITY='l2') ENGINE='columnar' morphology='stem_en' stopwords='/tmp/stopwords.txt' rt_mem_limit='256M';"; echo $?
-––– output –––
-0
-––– input –––
-mysql -h0 -P2306 -e "INSERT INTO tbl_stopwords (id, f, a, b, j, m, s, e, d, v, fv) VALUES (2, 'Stemmed text', 24, 1.41, '{\"key\":\"value2\",\"list\":[4,5,6]}', (4,5,6), 'another_string', 0, '2023-11-15 08:30:00', (987654321098765432, 123456789012345678), (0.4, 0.3, 0.2, 0.1));"; echo $?
-––– output –––
-0
-––– input –––
-mysql -h0 -P2306 -e "ALTER CLUSTER c ADD tbl_stopwords;"; echo $?
-––– output –––
-0
-––– input –––
-echo 'cat => feline, dog => canine' > /tmp/exceptions.txt; mysql -h0 -P3306 -e "CREATE TABLE tbl_exceptions (id INT, f TEXT, a INT, b FLOAT, j JSON, m MULTI, s STRING, e BOOL, d TIMESTAMP, v MULTI64, fv FLOAT_VECTOR KNN_TYPE='hnsw' KNN_DIMS='4' HNSW_SIMILARITY='l2') ENGINE='columnar' exceptions='/tmp/exceptions.txt' morphology='stem_ru' rt_mem_limit='512M';"; echo $?
-––– output –––
-0
-––– input –––
-mysql -h0 -P3306 -e "INSERT INTO tbl_exceptions (id, f, a, b, j, m, s, e, d, v, fv) VALUES (3, 'Русский текст', 84, 2.71, '{\"ключ\":\"значение\",\"массив\":[7,8,9]}', (7,8,9), 'строка', 1, '2022-05-20 15:45:00', (234567890123456789, 876543210987654321), (0.6, 0.7, 0.8, 0.9));"; echo $?
-––– output –––
-0
-––– input –––
-mysql -h0 -P3306 -e "ALTER CLUSTER c ADD tbl_exceptions;"; echo $?
-––– output –––
-0
-––– input –––
-echo 'fast, faster' > /tmp/wordforms.txt; mysql -h0 -P4306 -e "CREATE TABLE tbl_wordforms (id INT, f TEXT, a INT, b FLOAT, j JSON, m MULTI, s STRING, e BOOL, d TIMESTAMP, v MULTI64, fv FLOAT_VECTOR KNN_TYPE='hnsw' KNN_DIMS='4' HNSW_SIMILARITY='l2') ENGINE='columnar' wordforms='/tmp/wordforms.txt' rt_mem_limit='1024M';"; echo $?
-––– output –––
-0
-––– input –––
-mysql -h0 -P4306 -e "INSERT INTO tbl_wordforms (id, f, a, b, j, m, s, e, d, v, fv) VALUES (4, 'Fast text', 99, 9.81, '{\"feature\":\"speed\",\"list\":[10,11,12]}', (10,11,12), 'quick_string', 0, '2021-01-01 00:00:00', (345678901234567890, 765432109876543210), (0.5, 0.5, 0.5, 0.5));"; echo $?
-––– output –––
-0
-––– input –––
-mysql -h0 -P4306 -e "ALTER CLUSTER c ADD tbl_wordforms;"; echo $?
-––– output –––
-0
-––– input –––
-mysql -h0 -P5306 -e "CREATE TABLE tbl_rowwise_stem_ru (id INT, f TEXT, a INT, b FLOAT, j JSON, m MULTI, s STRING, e BOOL, d TIMESTAMP, v MULTI64, fv FLOAT_VECTOR KNN_TYPE='hnsw' KNN_DIMS='4' HNSW_SIMILARITY='l2') ENGINE='rowwise' morphology='stem_ru' rt_mem_limit='256M';"; echo $?
-––– output –––
-0
-––– input –––
-mysql -h0 -P5306 -e "INSERT INTO tbl_rowwise_stem_ru (id, f, a, b, j, m, s, e, d, v, fv) VALUES (2, 'Stemmed text', 24, 1.41, '{\"key\":\"value2\",\"list\":[4,5,6]}', (4,5,6), 'another_string', 0, '2023-11-15 08:30:00', (987654321098765432, 123456789012345678), (0.4, 0.3, 0.2, 0.1));"; echo $?
-––– output –––
-0
-––– input –––
-mysql -h0 -P5306 -e "ALTER CLUSTER c ADD tbl_rowwise_stem_ru;"; echo $?
+mysql -h0 -P3306 -e "ALTER CLUSTER c ADD tbl3;"; echo $?
 ––– output –––
 0
 ––– input –––
 mysql -h0 -P1306 -e "SHOW STATUS LIKE 'cluster_c_indexes';"
 ––– output –––
-+-------------------+--------------------------------------------------------------------------------+
-| Counter           | Value                                                                          |
-+-------------------+--------------------------------------------------------------------------------+
-| cluster_c_indexes | testrt,tbl_none,tbl_stopwords,tbl_exceptions,tbl_wordforms,tbl_rowwise_stem_ru |
-+-------------------+--------------------------------------------------------------------------------+
++-------------------+----------------+
+| Counter           | Value          |
++-------------------+----------------+
+| cluster_c_indexes | tbl1,tbl2,tbl3 |
++-------------------+----------------+
 ––– input –––
-for port in 1306 2306 3306 4306 5306; do echo "Checking status for port $port:"; timeout 10 bash -c "while ! mysql -h0 -P$port -e \"SHOW STATUS LIKE 'cluster_c_node_state'\G\" | grep -q 'Value: synced'; do sleep 1; done" && echo "Port $port: Node is synced." || echo "Port $port: Node is not synced (Value: closed or other)."; done
+for port in 1306 2306 3306; do echo "Data from c:tbl1 on port $port:"; mysql -h0 -P$port -e "SELECT * FROM c:tbl1 ORDER BY id ASC;"; done
 ––– output –––
-Checking status for port 1306:
-Port 1306: Node is synced.
-Checking status for port 2306:
-Port 2306: Node is synced.
-Checking status for port 3306:
-Port 3306: Node is synced.
-Checking status for port 4306:
-Port 4306: Node is synced.
-Checking status for port 5306:
-Port 5306: Node is synced.
+Data from c:tbl1 on port 1306:
++------+--------------+------+----------+-----------------+-------+------+------+------+---------------------------------------+-------------------------------------+
+| id   | f            | a    | b        | j               | m     | s    | e    | d    | v                                     | fv                                  |
++------+--------------+------+----------+-----------------+-------+------+------+------+---------------------------------------+-------------------------------------+
+|    1 | The cat runs |   42 | 3.140000 | {"key":"value"} | 1,2,3 | test |    1 |    0 | 123456789012345678,987654321098765432 | 0.100000,0.200000,0.300000,0.400000 |
++------+--------------+------+----------+-----------------+-------+------+------+------+---------------------------------------+-------------------------------------+
+Data from c:tbl1 on port 2306:
++------+--------------+------+----------+-----------------+-------+------+------+------+---------------------------------------+-------------------------------------+
+| id   | f            | a    | b        | j               | m     | s    | e    | d    | v                                     | fv                                  |
++------+--------------+------+----------+-----------------+-------+------+------+------+---------------------------------------+-------------------------------------+
+|    1 | The cat runs |   42 | 3.140000 | {"key":"value"} | 1,2,3 | test |    1 |    0 | 123456789012345678,987654321098765432 | 0.100000,0.200000,0.300000,0.400000 |
++------+--------------+------+----------+-----------------+-------+------+------+------+---------------------------------------+-------------------------------------+
+Data from c:tbl1 on port 3306:
++------+--------------+------+----------+-----------------+-------+------+------+------+---------------------------------------+-------------------------------------+
+| id   | f            | a    | b        | j               | m     | s    | e    | d    | v                                     | fv                                  |
++------+--------------+------+----------+-----------------+-------+------+------+------+---------------------------------------+-------------------------------------+
+|    1 | The cat runs |   42 | 3.140000 | {"key":"value"} | 1,2,3 | test |    1 |    0 | 123456789012345678,987654321098765432 | 0.100000,0.200000,0.300000,0.400000 |
++------+--------------+------+----------+-----------------+-------+------+------+------+---------------------------------------+-------------------------------------+
 ––– input –––
-for port in 1306 2306 3306 4306 5306; do mysql -h0 -P$port -e "SELECT * FROM c:tbl_none ORDER BY id ASC;" | md5sum > /tmp/hash_$port.txt; done && for port1 in 1306 2306 3306 4306 5306; do for port2 in 1306 2306 3306 4306 5306; do [ $port1 -ne $port2 ] && ! diff /tmp/hash_$port1.txt /tmp/hash_$port2.txt && echo "Mismatch between $port1 and $port2"; done; done
+for port in 1306 2306 3306; do echo "Data from c:tbl2 on port $port:"; mysql -h0 -P$port -e "SELECT * FROM c:tbl2 ORDER BY id ASC;"; done
 ––– output –––
+Data from c:tbl2 on port 1306:
++------+--------------------------------+------+----------+----------------------------------------------------+-------+--------------+------+------+---------------------------------------+-------------------------------------+
+| id   | f                              | a    | b        | j                                                  | m     | s            | e    | d    | v                                     | fv                                  |
++------+--------------------------------+------+----------+----------------------------------------------------+-------+--------------+------+------+---------------------------------------+-------------------------------------+
+|    1 | Русский fast текст             |   84 | 2.710000 | {"ключ":"значение"}                                | 4,5,6 | строка       |    0 |    0 | 123456789012345678,987654321098765432 | 0.400000,0.300000,0.200000,0.100000 |
+|    2 | Быстрый прыжок                 |   19 | 1.620000 | {"действие":"прыжок","число":3}                    | 7,8,9 | пример       |    1 |    0 | 345678901234567890,567890123456789012 | 0.800000,0.700000,0.600000,0.500000 |
++------+--------------------------------+------+----------+----------------------------------------------------+-------+--------------+------+------+---------------------------------------+-------------------------------------+
+Data from c:tbl2 on port 2306:
++------+--------------------------------+------+----------+----------------------------------------------------+-------+--------------+------+------+---------------------------------------+-------------------------------------+
+| id   | f                              | a    | b        | j                                                  | m     | s            | e    | d    | v                                     | fv                                  |
++------+--------------------------------+------+----------+----------------------------------------------------+-------+--------------+------+------+---------------------------------------+-------------------------------------+
+|    1 | Русский fast текст             |   84 | 2.710000 | {"ключ":"значение"}                                | 4,5,6 | строка       |    0 |    0 | 123456789012345678,987654321098765432 | 0.400000,0.300000,0.200000,0.100000 |
+|    2 | Быстрый прыжок                 |   19 | 1.620000 | {"действие":"прыжок","число":3}                    | 7,8,9 | пример       |    1 |    0 | 345678901234567890,567890123456789012 | 0.800000,0.700000,0.600000,0.500000 |
++------+--------------------------------+------+----------+----------------------------------------------------+-------+--------------+------+------+---------------------------------------+-------------------------------------+
+Data from c:tbl2 on port 3306:
++------+--------------------------------+------+----------+----------------------------------------------------+-------+--------------+------+------+---------------------------------------+-------------------------------------+
+| id   | f                              | a    | b        | j                                                  | m     | s            | e    | d    | v                                     | fv                                  |
++------+--------------------------------+------+----------+----------------------------------------------------+-------+--------------+------+------+---------------------------------------+-------------------------------------+
+|    1 | Русский fast текст             |   84 | 2.710000 | {"ключ":"значение"}                                | 4,5,6 | строка       |    0 |    0 | 123456789012345678,987654321098765432 | 0.400000,0.300000,0.200000,0.100000 |
+|    2 | Быстрый прыжок                 |   19 | 1.620000 | {"действие":"прыжок","число":3}                    | 7,8,9 | пример       |    1 |    0 | 345678901234567890,567890123456789012 | 0.800000,0.700000,0.600000,0.500000 |
++------+--------------------------------+------+----------+----------------------------------------------------+-------+--------------+------+------+---------------------------------------+-------------------------------------+
 ––– input –––
-for port in 1306 2306 3306 4306 5306; do mysql -h0 -P$port -e "SELECT * FROM c:tbl_exceptions ORDER BY id ASC;" | md5sum > /tmp/hash_$port.txt; done && for port1 in 1306 2306 3306 4306 5306; do for port2 in 1306 2306 3306 4306 5306; do [ $port1 -ne $port2 ] && ! diff /tmp/hash_$port1.txt /tmp/hash_$port2.txt && echo "Mismatch between $port1 and $port2"; done; done
+for port in 1306 2306 3306; do echo "Data from c:tbl3 on port $port:"; mysql -h0 -P$port -e "SELECT * FROM c:tbl3 ORDER BY id ASC;"; done
 ––– output –––
+Data from c:tbl3 on port 1306:
++------+---------------+------+----------+-----------------+-------+--------------+------+------+---------------------------------------+-------------------------------------+
+| id   | f             | a    | b        | j               | m     | s            | e    | d    | v                                     | fv                                  |
++------+---------------+------+----------+-----------------+-------+--------------+------+------+---------------------------------------+-------------------------------------+
+|    1 | Plain example |   42 | 3.140000 | {"key":"value"} | 1,2,3 | plain_string |    1 |    0 | 123456789012345678,987654321098765432 | 0.100000,0.200000,0.300000,0.400000 |
++------+---------------+------+----------+-----------------+-------+--------------+------+------+---------------------------------------+-------------------------------------+
+Data from c:tbl3 on port 2306:
++------+---------------+------+----------+-----------------+-------+--------------+------+------+---------------------------------------+-------------------------------------+
+| id   | f             | a    | b        | j               | m     | s            | e    | d    | v                                     | fv                                  |
++------+---------------+------+----------+-----------------+-------+--------------+------+------+---------------------------------------+-------------------------------------+
+|    1 | Plain example |   42 | 3.140000 | {"key":"value"} | 1,2,3 | plain_string |    1 |    0 | 123456789012345678,987654321098765432 | 0.100000,0.200000,0.300000,0.400000 |
++------+---------------+------+----------+-----------------+-------+--------------+------+------+---------------------------------------+-------------------------------------+
+Data from c:tbl3 on port 3306:
++------+---------------+------+----------+-----------------+-------+--------------+------+------+---------------------------------------+-------------------------------------+
+| id   | f             | a    | b        | j               | m     | s            | e    | d    | v                                     | fv                                  |
++------+---------------+------+----------+-----------------+-------+--------------+------+------+---------------------------------------+-------------------------------------+
+|    1 | Plain example |   42 | 3.140000 | {"key":"value"} | 1,2,3 | plain_string |    1 |    0 | 123456789012345678,987654321098765432 | 0.100000,0.200000,0.300000,0.400000 |
++------+---------------+------+----------+-----------------+-------+--------------+------+------+---------------------------------------+-------------------------------------+
 ––– input –––
-for port in 1306 2306 3306 4306 5306; do mysql -h0 -P$port -e "SELECT * FROM c:tbl_wordforms ORDER BY id ASC;" | md5sum > /tmp/hash_$port.txt; done && for port1 in 1306 2306 3306 4306 5306; do for port2 in 1306 2306 3306 4306 5306; do [ $port1 -ne $port2 ] && ! diff /tmp/hash_$port1.txt /tmp/hash_$port2.txt && echo "Mismatch between $port1 and $port2"; done; done
+mysql -h0 -P1306 -e "REPLACE INTO c:tbl1 VALUES (1, 'Updated feline runs', 42, 3.14, '{\"key\":\"updated\"}', (1,2,3), 'test', 1, '2024-12-16 12:00:00', (123456789012345678, 987654321098765432), (0.1, 0.2, 0.3, 0.4));"; echo $?
 ––– output –––
+0
 ––– input –––
-for port in 1306 2306 3306 4306 5306; do mysql -h0 -P$port -e "SELECT * FROM c:tbl_rowwise_stem_ru ORDER BY id ASC;" | md5sum > /tmp/hash_$port.txt; done && for port1 in 1306 2306 3306 4306 5306; do for port2 in 1306 2306 3306 4306 5306; do [ $port1 -ne $port2 ] && ! diff /tmp/hash_$port1.txt /tmp/hash_$port2.txt && echo "Mismatch between $port1 and $port2"; done; done
-––– output –––
-––– input –––
-mysqldump -etc --replace --column-statistics=0 -u user2 -h0 -P1306 --skip-comments manticore c:tbl_rowwise_stem_ru | mysql -h0 -P5306; echo $?
+mysqldump -etc --replace -u cluster -h0 -P1306 --skip-comments manticore c:tbl1 | mysql -h0 -P1306; echo $?
 ––– output –––
 -- Warning: version string returned by server is incorrect.
+-- Warning: column statistics not supported by the server.
 0
 ––– input –––
-mysql -h0 -P2306 -e "INSERT INTO tbl_stem_en (id, f, a, b, j, m, s, e, d, v, fv) VALUES (2, 'Stemmed text', 24, 1.41, '{\"key\":\"value2\",\"list\":[4,5,6]}', (4,5,6), 'another_string', 0, '2023-11-15 08:30:00', (987654321098765432, 123456789012345678), (0.4, 0.3, 0.2, 0.1));"; echo $?
+for port in 1306 2306 3306; do echo "Data from c:tbl1 on port $port:"; mysql -h0 -P$port -e "SELECT * FROM c:tbl1 ORDER BY id ASC;"; done
+––– output –––
+Data from c:tbl1 on port 1306:
++------+---------------------+------+----------+-------------------+-------+------+------+------+---------------------------------------+-------------------------------------+
+| id   | f                   | a    | b        | j                 | m     | s    | e    | d    | v                                     | fv                                  |
++------+---------------------+------+----------+-------------------+-------+------+------+------+---------------------------------------+-------------------------------------+
+|    1 | Updated feline runs |   42 | 3.140000 | {"key":"updated"} | 1,2,3 | test |    1 |    0 | 123456789012345678,987654321098765432 | 0.100000,0.200000,0.300000,0.400000 |
++------+---------------------+------+----------+-------------------+-------+------+------+------+---------------------------------------+-------------------------------------+
+Data from c:tbl1 on port 2306:
++------+---------------------+------+----------+-------------------+-------+------+------+------+---------------------------------------+-------------------------------------+
+| id   | f                   | a    | b        | j                 | m     | s    | e    | d    | v                                     | fv                                  |
++------+---------------------+------+----------+-------------------+-------+------+------+------+---------------------------------------+-------------------------------------+
+|    1 | Updated feline runs |   42 | 3.140000 | {"key":"updated"} | 1,2,3 | test |    1 |    0 | 123456789012345678,987654321098765432 | 0.100000,0.200000,0.300000,0.400000 |
++------+---------------------+------+----------+-------------------+-------+------+------+------+---------------------------------------+-------------------------------------+
+Data from c:tbl1 on port 3306:
++------+---------------------+------+----------+-------------------+-------+------+------+------+---------------------------------------+-------------------------------------+
+| id   | f                   | a    | b        | j                 | m     | s    | e    | d    | v                                     | fv                                  |
++------+---------------------+------+----------+-------------------+-------+------+------+------+---------------------------------------+-------------------------------------+
+|    1 | Updated feline runs |   42 | 3.140000 | {"key":"updated"} | 1,2,3 | test |    1 |    0 | 123456789012345678,987654321098765432 | 0.100000,0.200000,0.300000,0.400000 |
++------+---------------------+------+----------+-------------------+-------+------+------+------+---------------------------------------+-------------------------------------+
+––– input –––
+for port in 1306 2306 3306; do mysql -h0 -P$port -e "SET GLOBAL cluster_user = 'new_username';"; done
+––– output –––
+––– input –––
+for port in 1306 2306 3306; do timeout 10 bash -c "while ! mysql -h0 -P$port -e \"SHOW VARIABLES LIKE 'cluster_user';\" | grep -q '| cluster_user  | new_username |'; do sleep 1; done" && echo "Port $port: cluster_user is new_username." || { echo "Port $port: cluster_user is not new_username."; exit 1; }; done
+––– output –––
+Port 1306: cluster_user is new_username.
+Port 2306: cluster_user is new_username.
+Port 3306: cluster_user is new_username.
+––– input –––
+mysql -h0 -P2306 -e "DELETE FROM c:tbl2 WHERE id = 2;"; echo $?
 ––– output –––
 0
 ––– input –––
-mysql -h0 -P3306 -e "INSERT INTO tbl_stem_ru (id, f, a, b, j, m, s, e, d, v, fv) VALUES (3, 'Русский текст', 84, 2.71, '{\"ключ\":\"значение\",\"массив\":[7,8,9]}', (7,8,9), 'строка', 1, '2022-05-20 15:45:00', (234567890123456789, 876543210987654321), (0.6, 0.7, 0.8, 0.9));"; echo $?
+mysql -h0 -P3306 -e "INSERT INTO c:tbl3 (id, f, a, b, j, m, s, e, d, v, fv) VALUES (2, 'New plain entry', 50, 5.5, '{\"new\":\"entry\"}', (10,11,12), 'new_string', 0, '2025-03-02 10:00:00', (111222333444555666, 777888999000111222), (0.6, 0.7, 0.8, 0.9));"; echo $?
 ––– output –––
 0
 ––– input –––
-mysql -h0 -P1306 -e "FLUSH RAMCHUNK testrt;"
-––– output –––
-––– input –––
-mysql -h0 -P2306 -e "FLUSH RAMCHUNK tbl_stopwords;"
-––– output –––
-––– input –––
-mysql -h0 -P3306 -e "FLUSH RAMCHUNK tbl_rowwise_stem_ru;"
-––– output –––
-––– input –––
-mysql -h0 -P4306 -e "FLUSH RAMCHUNK tbl_wordforms;"
-––– output –––
-––– input –––
-for port in 1306 2306 3306 4306 5306; do mysql -h0 -P$port -e "SET GLOBAL cluster_user = 'user3';"; done
-––– output –––
-––– input –––
-for port in 1306 2306 3306 4306 5306; do timeout 10 bash -c "while ! mysql -h0 -P$port -e \"SHOW VARIABLES LIKE 'cluster_user';\" | grep -q '| cluster_user  | user3 |'; do sleep 1; done" && echo "Port $port: cluster_user is user3." || { echo "Port $port: cluster_user is not user3."; exit 1; }; done
-––– output –––
-Port 1306: cluster_user is user3.
-Port 2306: cluster_user is user3.
-Port 3306: cluster_user is user3.
-Port 4306: cluster_user is user3.
-Port 5306: cluster_user is user3.
-––– input –––
-mysqldump -etc --replace --column-statistics=0 -u user3 -h0 -P1306 --skip-comments manticore c:tbl_exceptions | mysql -P1306 -h0; echo $?
+mysqldump -etc --replace --net-buffer-length=16M -u new_username -h0 -P2306 --skip-comments manticore c:tbl1 c:tbl2 c:tbl3 | mysql -h0 -P3306; echo $?
 ––– output –––
 -- Warning: version string returned by server is incorrect.
+-- Warning: column statistics not supported by the server.
 0
 ––– input –––
-mysqldump -etc --replace --column-statistics=0 -u user3 -h0 -P1306 --skip-comments manticore c:tbl_stopwords | mysql -P1306 -h0; echo $?
+for port in 1306 2306 3306; do echo "Data from c:tbl1 on port $port:"; mysql -h0 -P$port -e "SELECT * FROM c:tbl1 ORDER BY id ASC;"; done
 ––– output –––
--- Warning: version string returned by server is incorrect.
-0
+Data from c:tbl1 on port 1306:
++------+---------------------+------+----------+-------------------+-------+------+------+------+---------------------------------------+-------------------------------------+
+| id   | f                   | a    | b        | j                 | m     | s    | e    | d    | v                                     | fv                                  |
++------+---------------------+------+----------+-------------------+-------+------+------+------+---------------------------------------+-------------------------------------+
+|    1 | Updated feline runs |   42 | 3.140000 | {"key":"updated"} | 1,2,3 | test |    1 |    0 | 123456789012345678,987654321098765432 | 0.100000,0.200000,0.300000,0.400000 |
++------+---------------------+------+----------+-------------------+-------+------+------+------+---------------------------------------+-------------------------------------+
+Data from c:tbl1 on port 2306:
++------+---------------------+------+----------+-------------------+-------+------+------+------+---------------------------------------+-------------------------------------+
+| id   | f                   | a    | b        | j                 | m     | s    | e    | d    | v                                     | fv                                  |
++------+---------------------+------+----------+-------------------+-------+------+------+------+---------------------------------------+-------------------------------------+
+|    1 | Updated feline runs |   42 | 3.140000 | {"key":"updated"} | 1,2,3 | test |    1 |    0 | 123456789012345678,987654321098765432 | 0.100000,0.200000,0.300000,0.400000 |
++------+---------------------+------+----------+-------------------+-------+------+------+------+---------------------------------------+-------------------------------------+
+Data from c:tbl1 on port 3306:
++------+---------------------+------+----------+-------------------+-------+------+------+------+---------------------------------------+-------------------------------------+
+| id   | f                   | a    | b        | j                 | m     | s    | e    | d    | v                                     | fv                                  |
++------+---------------------+------+----------+-------------------+-------+------+------+------+---------------------------------------+-------------------------------------+
+|    1 | Updated feline runs |   42 | 3.140000 | {"key":"updated"} | 1,2,3 | test |    1 |    0 | 123456789012345678,987654321098765432 | 0.100000,0.200000,0.300000,0.400000 |
++------+---------------------+------+----------+-------------------+-------+------+------+------+---------------------------------------+-------------------------------------+
 ––– input –––
-mysqldump -etc --replace --column-statistics=0 -u user3 -h0 -P1306 --skip-comments manticore c:tbl_none | mysql -P1306 -h0; echo $?
+for port in 1306 2306 3306; do echo "Data from c:tbl2 on port $port:"; mysql -h0 -P$port -e "SELECT * FROM c:tbl2 ORDER BY id ASC;"; done
 ––– output –––
--- Warning: version string returned by server is incorrect.
-0
+Data from c:tbl2 on port 1306:
++------+--------------------------------+------+----------+---------------------------------+-------+--------------+------+------+---------------------------------------+-------------------------------------+
+| id   | f                              | a    | b        | j                               | m     | s            | e    | d    | v                                     | fv                                  |
++------+--------------------------------+------+----------+---------------------------------+-------+--------------+------+------+---------------------------------------+-------------------------------------+
+|    1 | Русский fast текст             |   84 | 2.710000 | {"ключ":"значение"}             | 4,5,6 | строка       |    0 |    0 | 123456789012345678,987654321098765432 | 0.400000,0.300000,0.200000,0.100000 |
++------+--------------------------------+------+----------+---------------------------------+-------+--------------+------+------+---------------------------------------+-------------------------------------+
+Data from c:tbl2 on port 2306:
++------+--------------------------------+------+----------+---------------------------------+-------+--------------+------+------+---------------------------------------+-------------------------------------+
+| id   | f                              | a    | b        | j                               | m     | s            | e    | d    | v                                     | fv                                  |
++------+--------------------------------+------+----------+---------------------------------+-------+--------------+------+------+---------------------------------------+-------------------------------------+
+|    1 | Русский fast текст             |   84 | 2.710000 | {"ключ":"значение"}             | 4,5,6 | строка       |    0 |    0 | 123456789012345678,987654321098765432 | 0.400000,0.300000,0.200000,0.100000 |
++------+--------------------------------+------+----------+---------------------------------+-------+--------------+------+------+---------------------------------------+-------------------------------------+
+Data from c:tbl2 on port 3306:
++------+--------------------------------+------+----------+---------------------------------+-------+--------------+------+------+---------------------------------------+-------------------------------------+
+| id   | f                              | a    | b        | j                               | m     | s            | e    | d    | v                                     | fv                                  |
++------+--------------------------------+------+----------+---------------------------------+-------+--------------+------+------+---------------------------------------+-------------------------------------+
+|    1 | Русский fast текст             |   84 | 2.710000 | {"ключ":"значение"}             | 4,5,6 | строка       |    0 |    0 | 123456789012345678,987654321098765432 | 0.400000,0.300000,0.200000,0.100000 |
++------+--------------------------------+------+----------+---------------------------------+-------+--------------+------+------+---------------------------------------+-------------------------------------+
 ––– input –––
-mysqldump -etc --replace --column-statistics=0 -u user3 -h0 -P1306 --skip-comments manticore c:tbl_wordforms | mysql -P1306 -h0; echo $?
+for port in 1306 2306 3306; do echo "Data from c:tbl3 on port $port:"; mysql -h0 -P$port -e "SELECT * FROM c:tbl3 ORDER BY id ASC;"; done
 ––– output –––
--- Warning: version string returned by server is incorrect.
-0
-––– input –––
-mysqldump -etc --replace --column-statistics=0 -u user3 -h0 -P1306 --skip-comments manticore c:tbl_rowwise_stem_ru | mysql -P1306 -h0; echo $?
-––– output –––
--- Warning: version string returned by server is incorrect.
-0
-––– input –––
-mysql -h0 -P2306 -e "SHOW TABLES LIKE 'tbl_stopwords';"
-––– output –––
-+---------------+------+
-| Table         | Type |
-+---------------+------+
-| tbl_stopwords | rt   |
-+---------------+------+
-––– input –––
-mysql -h0 -P4306 -e "SHOW TABLES LIKE 'tbl_wordforms';"
-––– output –––
-+---------------+------+
-| Table         | Type |
-+---------------+------+
-| tbl_wordforms | rt   |
-+---------------+------+
+Data from c:tbl3 on port 1306:
++------+-----------------+------+----------+-----------------+----------+--------------+------+------+---------------------------------------+-------------------------------------+
+| id   | f               | a    | b        | j               | m        | s            | e    | d    | v                                     | fv                                  |
++------+-----------------+------+----------+-----------------+----------+--------------+------+------+---------------------------------------+-------------------------------------+
+|    1 | Plain example   |   42 | 3.140000 | {"key":"value"} | 1,2,3    | plain_string |    1 |    0 | 123456789012345678,987654321098765432 | 0.100000,0.200000,0.300000,0.400000 |
+|    2 | New plain entry |   50 | 5.500000 | {"new":"entry"} | 10,11,12 | new_string   |    0 |    0 | 111222333444555666,777888999000111222 | 0.600000,0.700000,0.800000,0.900000 |
++------+-----------------+------+----------+-----------------+----------+--------------+------+------+---------------------------------------+-------------------------------------+
+Data from c:tbl3 on port 2306:
++------+-----------------+------+----------+-----------------+----------+--------------+------+------+---------------------------------------+-------------------------------------+
+| id   | f               | a    | b        | j               | m        | s            | e    | d    | v                                     | fv                                  |
++------+-----------------+------+----------+-----------------+----------+--------------+------+------+---------------------------------------+-------------------------------------+
+|    1 | Plain example   |   42 | 3.140000 | {"key":"value"} | 1,2,3    | plain_string |    1 |    0 | 123456789012345678,987654321098765432 | 0.100000,0.200000,0.300000,0.400000 |
+|    2 | New plain entry |   50 | 5.500000 | {"new":"entry"} | 10,11,12 | new_string   |    0 |    0 | 111222333444555666,777888999000111222 | 0.600000,0.700000,0.800000,0.900000 |
++------+-----------------+------+----------+-----------------+----------+--------------+------+------+---------------------------------------+-------------------------------------+
+Data from c:tbl3 on port 3306:
++------+-----------------+------+----------+-----------------+----------+--------------+------+------+---------------------------------------+-------------------------------------+
+| id   | f               | a    | b        | j               | m        | s            | e    | d    | v                                     | fv                                  |
++------+-----------------+------+----------+-----------------+----------+--------------+------+------+---------------------------------------+-------------------------------------+
+|    1 | Plain example   |   42 | 3.140000 | {"key":"value"} | 1,2,3    | plain_string |    1 |    0 | 123456789012345678,987654321098765432 | 0.100000,0.200000,0.300000,0.400000 |
+|    2 | New plain entry |   50 | 5.500000 | {"new":"entry"} | 10,11,12 | new_string   |    0 |    0 | 111222333444555666,777888999000111222 | 0.600000,0.700000,0.800000,0.900000 |
++------+-----------------+------+----------+-----------------+----------+--------------+------+------+---------------------------------------+-------------------------------------+
 ––– input –––
 mysql -h0 -P1306 -e "SHOW STATUS LIKE 'cluster_c_indexes';"
 ––– output –––
-+-------------------+--------------------------------------------------------------------------------+
-| Counter           | Value                                                                          |
-+-------------------+--------------------------------------------------------------------------------+
-| cluster_c_indexes | testrt,tbl_none,tbl_stopwords,tbl_exceptions,tbl_wordforms,tbl_rowwise_stem_ru |
-+-------------------+--------------------------------------------------------------------------------+
++-------------------+----------------+
+| Counter           | Value          |
++-------------------+----------------+
+| cluster_c_indexes | tbl1,tbl2,tbl3 |
++-------------------+----------------+
 ––– input –––
-for port in 1306 2306 3306 4306 5306; do echo "Checking status for port $port:"; timeout 10 bash -c "while ! mysql -h0 -P$port -e \"SHOW STATUS LIKE 'cluster_c_node_state'\G\" | grep -q 'Value: synced'; do sleep 1; done" && echo "Port $port: Node is synced." || echo "Port $port: Node is not synced (Value: closed or other)."; done
-––– output –––
-Checking status for port 1306:
-Port 1306: Node is synced.
-Checking status for port 2306:
-Port 2306: Node is synced.
-Checking status for port 3306:
-Port 3306: Node is synced.
-Checking status for port 4306:
-Port 4306: Node is synced.
-Checking status for port 5306:
-Port 5306: Node is synced.
-––– input –––
-for port in 1306 2306 3306 4306 5306; do mysql -h0 -P$port -e "SELECT * FROM tbl_wordforms ORDER BY id ASC;" | md5sum | awk '{print $1}' > /tmp/hash_$port.txt; done && for port1 in 1306 2306 3306 4306 5306; do for port2 in 1306 2306 3306 4306 5306; do [ $port1 -ne $port2 ] && ! diff /tmp/hash_$port1.txt /tmp/hash_$port2.txt && echo "Mismatch between $port1 and $port2"; done; done
-––– output –––
-––– input –––
-export INSTANCE=1
-––– output –––
-––– input –––
-echo "index tbl_plain { type = plain; path = /var/lib/manticore/tbl_plain; rt_mem_limit = 512M; rt_field = f; rt_attr_uint = a; rt_attr_float = b; rt_attr_multi = m; rt_attr_string = s; rt_attr_bool = e; rt_attr_timestamp = d; rt_attr_multi_64 = v; rt_attr_json = j; rt_attr_vector = fv float_vector; }" > /var/lib/manticore/tbl_plain.conf; echo $?
-––– output –––
-0
-––– input –––
-mysql -h0 -P1306 -e "INSERT INTO tbl_plain (id, f, a, b, m, s, e, d, v, j, fv) VALUES (1, 'Plain example', 42, 3.14, (1,2,3), 'plain_string', 1, '2024-12-16 12:00:00', (123456789012345678, 987654321098765432), '{\"key\":\"value\"}', (0.1, 0.2, 0.3, 0.4));"; echo $?
-––– output –––
-0
-––– input –––
-mysql -h0 -P1306 -e "ALTER CLUSTER c ADD tbl_plain;"; echo $?
-––– output –––
-0
-––– input –––
-for port in 1306 2306 3306 4306 5306; do echo "Checking status for port $port:"; timeout 10 bash -c "while ! mysql -h0 -P$port -e \"SHOW STATUS LIKE 'cluster_c_node_state'\G\" | grep -q 'Value: synced'; do sleep 1; done" && echo "Port $port: Node is synced." || echo "Port $port: Node is not synced (Value: closed or other)."; done
-––– output –––
-Checking status for port 1306:
-Port 1306: Node is synced.
-Checking status for port 2306:
-Port 2306: Node is synced.
-Checking status for port 3306:
-Port 3306: Node is synced.
-Checking status for port 4306:
-Port 4306: Node is synced.
-Checking status for port 5306:
-Port 5306: Node is synced.
-––– input –––
-mysql -h0 -P1306 -e "SHOW STATUS LIKE 'cluster_c_indexes';"
-––– output –––
-+-------------------+------------------------------------------------------------------------------------------+
-| Counter           | Value                                                                                    |
-+-------------------+------------------------------------------------------------------------------------------+
-| cluster_c_indexes | testrt,tbl_none,tbl_stopwords,tbl_exceptions,tbl_wordforms,tbl_rowwise_stem_ru,tbl_plain |
-+-------------------+------------------------------------------------------------------------------------------+
-––– input –––
-mysqldump -etc --replace --net-buffer-length=16M --column-statistics=0 -u user3 -h0 -P1306 --skip-comments manticore c:tbl_plain | mysql -h0 -P1306; echo $?
+mysqldump -etc --replace --ignore-table=manticore.tbl2 --net-buffer-length=16M -u new_username -h0 -P2306 --skip-comments manticore c:tbl1 c:tbl2 c:tbl3 > dump.sql
 ––– output –––
 -- Warning: version string returned by server is incorrect.
-0
+-- Warning: column statistics not supported by the server.
 ––– input –––
-for port in 1306 2306 3306 4306 5306; do echo "Checking status for port $port:"; timeout 10 bash -c "while ! mysql -h0 -P$port -e \"SHOW STATUS LIKE 'cluster_c_node_state'\G\" | grep -q 'Value: synced'; do sleep 1; done" && echo "Port $port: Node is synced." || echo "Port $port: Node is not synced (Value: closed or other)."; done
-––– output –––
-Checking status for port 1306:
-Port 1306: Node is synced.
-Checking status for port 2306:
-Port 2306: Node is synced.
-Checking status for port 3306:
-Port 3306: Node is synced.
-Checking status for port 4306:
-Port 4306: Node is synced.
-Checking status for port 5306:
-Port 5306: Node is synced.
-––– input –––
-for port in 1306 2306 3306 4306 5306; do mysql -h0 -P$port -e "SELECT * FROM tbl_wordforms ORDER BY id ASC;" | md5sum | awk '{print $1}' > /tmp/hash_$port.txt; done && for port1 in 1306 2306 3306 4306 5306; do for port2 in 1306 2306 3306 4306 5306; do [ $port1 -ne $port2 ] && ! diff /tmp/hash_$port1.txt /tmp/hash_$port2.txt && echo "Mismatch between $port1 and $port2"; done; done
-––– output –––
-––– input –––
-for port in 1306 2306 3306 4306 5306; do mysql -h0 -P$port -e "SHOW TABLES LIKE 'tbl_stopwords';" | grep -q 'tbl_stopwords' && echo "Port $port: tbl_stopwords EXISTS" || echo "Port $port: tbl_stopwords NOT FOUND"; done
-––– output –––
-Port 1306: tbl_stopwords EXISTS
-Port 2306: tbl_stopwords EXISTS
-Port 3306: tbl_stopwords EXISTS
-Port 4306: tbl_stopwords EXISTS
-Port 5306: tbl_stopwords EXISTS
-––– input –––
-mysqldump -etc --replace --ignore-table=manticore.tbl_stopwords --column-statistics=0 -u user3 -h0 -P1306 --skip-comments manticore > dump.sql
-––– output –––
--- Warning: version string returned by server is incorrect.
-––– input –––
-mysql -h0 -P1306 -e "ALTER CLUSTER c DROP tbl_stopwords;"; echo $?
+mysql -h0 -P1306 -e "ALTER CLUSTER c DROP tbl2;"; echo $?
 ––– output –––
 0
 ––– input –––
-for port in 1306 2306 3306 4306 5306; do mysql -h0 -P$port -e "DROP TABLE tbl_stopwords;"; done
+for port in 1306 2306 3306; do mysql -h0 -P$port -e "DROP TABLE tbl2;"; done
 ––– output –––
 ––– input –––
-for port in 1306 2306 3306 4306 5306; do mysql -h0 -P$port -e "SHOW TABLES LIKE 'tbl_stopwords';" | grep -q 'tbl_stopwords' && echo "Port $port: tbl_stopwords EXISTS" || echo "Port $port: tbl_stopwords NOT FOUND"; done
+for port in 1306 2306 3306; do mysql -h0 -P$port -e "SHOW TABLES LIKE 'tbl2';" | grep -q 'tbl2' && echo "Port $port: tbl2 EXISTS" || echo "Port $port: tbl2 NOT FOUND"; done
 ––– output –––
-Port 1306: tbl_stopwords NOT FOUND
-Port 2306: tbl_stopwords NOT FOUND
-Port 3306: tbl_stopwords NOT FOUND
-Port 4306: tbl_stopwords NOT FOUND
-Port 5306: tbl_stopwords NOT FOUND
+Port 1306: tbl2 NOT FOUND
+Port 2306: tbl2 NOT FOUND
+Port 3306: tbl2 NOT FOUND
 ––– input –––
-mysql -h0 -P1306 -u user3 < dump.sql
+mysql -h0 -P1306 -u new_username < dump.sql
 ––– output –––
-ERROR 1064 (42000) at line 39: table 'tbl_stopwords' absent
+ERROR 1064 (42000) at line 21: table 'tbl2' absent
 ––– input –––
-for port in 1306 2306 3306 4306 5306; do mysql -h0 -P$port -e "SHOW TABLES LIKE 'tbl_stopwords';" | grep -q 'tbl_stopwords' && echo "Port $port: tbl_stopwords EXISTS" || echo "Port $port: tbl_stopwords NOT FOUND"; done
+for port in 1306 2306 3306; do echo "Data from c:tbl1 on port $port:"; mysql -h0 -P$port -e "SELECT * FROM c:tbl1 ORDER BY id ASC;"; done
 ––– output –––
-Port 1306: tbl_stopwords NOT FOUND
-Port 2306: tbl_stopwords NOT FOUND
-Port 3306: tbl_stopwords NOT FOUND
-Port 4306: tbl_stopwords NOT FOUND
-Port 5306: tbl_stopwords NOT FOUND
+Data from c:tbl1 on port 1306:
++------+---------------------+------+----------+-------------------+-------+------+------+------+---------------------------------------+-------------------------------------+
+| id   | f                   | a    | b        | j                 | m     | s    | e    | d    | v                                     | fv                                  |
++------+---------------------+------+----------+-------------------+-------+------+------+------+---------------------------------------+-------------------------------------+
+|    1 | Updated feline runs |   42 | 3.140000 | {"key":"updated"} | 1,2,3 | test |    1 |    0 | 123456789012345678,987654321098765432 | 0.100000,0.200000,0.300000,0.400000 |
++------+---------------------+------+----------+-------------------+-------+------+------+------+---------------------------------------+-------------------------------------+
+Data from c:tbl1 on port 2306:
++------+---------------------+------+----------+-------------------+-------+------+------+------+---------------------------------------+-------------------------------------+
+| id   | f                   | a    | b        | j                 | m     | s    | e    | d    | v                                     | fv                                  |
++------+---------------------+------+----------+-------------------+-------+------+------+------+---------------------------------------+-------------------------------------+
+|    1 | Updated feline runs |   42 | 3.140000 | {"key":"updated"} | 1,2,3 | test |    1 |    0 | 123456789012345678,987654321098765432 | 0.100000,0.200000,0.300000,0.400000 |
++------+---------------------+------+----------+-------------------+-------+------+------+------+---------------------------------------+-------------------------------------+
+Data from c:tbl1 on port 3306:
++------+---------------------+------+----------+-------------------+-------+------+------+------+---------------------------------------+-------------------------------------+
+| id   | f                   | a    | b        | j                 | m     | s    | e    | d    | v                                     | fv                                  |
++------+---------------------+------+----------+-------------------+-------+------+------+------+---------------------------------------+-------------------------------------+
+|    1 | Updated feline runs |   42 | 3.140000 | {"key":"updated"} | 1,2,3 | test |    1 |    0 | 123456789012345678,987654321098765432 | 0.100000,0.200000,0.300000,0.400000 |
++------+---------------------+------+----------+-------------------+-------+------+------+------+---------------------------------------+-------------------------------------+
 ––– input –––
-rm -f dump.sql
+for port in 1306 2306 3306; do echo "Data from c:tbl2 on port $port:"; mysql -h0 -P$port -e "SELECT * FROM c:tbl2 ORDER BY id ASC;"; done
+––– output –––
+Data from c:tbl2 on port 1306:
+ERROR 1064 (42000) at line 1: unknown local table(s) 'tbl2' in search request
+Data from c:tbl2 on port 2306:
+ERROR 1064 (42000) at line 1: unknown local table(s) 'tbl2' in search request
+Data from c:tbl2 on port 3306:
+ERROR 1064 (42000) at line 1: unknown local table(s) 'tbl2' in search request
+––– input –––
+for port in 1306 2306 3306; do echo "Data from c:tbl3 on port $port:"; mysql -h0 -P$port -e "SELECT * FROM c:tbl3 ORDER BY id ASC;"; done
+––– output –––
+Data from c:tbl3 on port 1306:
++------+-----------------+------+----------+-----------------+----------+--------------+------+------+---------------------------------------+-------------------------------------+
+| id   | f               | a    | b        | j               | m        | s            | e    | d    | v                                     | fv                                  |
++------+-----------------+------+----------+-----------------+----------+--------------+------+------+---------------------------------------+-------------------------------------+
+|    1 | Plain example   |   42 | 3.140000 | {"key":"value"} | 1,2,3    | plain_string |    1 |    0 | 123456789012345678,987654321098765432 | 0.100000,0.200000,0.300000,0.400000 |
+|    2 | New plain entry |   50 | 5.500000 | {"new":"entry"} | 10,11,12 | new_string   |    0 |    0 | 111222333444555666,777888999000111222 | 0.600000,0.700000,0.800000,0.900000 |
++------+-----------------+------+----------+-----------------+----------+--------------+------+------+---------------------------------------+-------------------------------------+
+Data from c:tbl3 on port 2306:
++------+-----------------+------+----------+-----------------+----------+--------------+------+------+---------------------------------------+-------------------------------------+
+| id   | f               | a    | b        | j               | m        | s            | e    | d    | v                                     | fv                                  |
++------+-----------------+------+----------+-----------------+----------+--------------+------+------+---------------------------------------+-------------------------------------+
+|    1 | Plain example   |   42 | 3.140000 | {"key":"value"} | 1,2,3    | plain_string |    1 |    0 | 123456789012345678,987654321098765432 | 0.100000,0.200000,0.300000,0.400000 |
+|    2 | New plain entry |   50 | 5.500000 | {"new":"entry"} | 10,11,12 | new_string   |    0 |    0 | 111222333444555666,777888999000111222 | 0.600000,0.700000,0.800000,0.900000 |
++------+-----------------+------+----------+-----------------+----------+--------------+------+------+---------------------------------------+-------------------------------------+
+Data from c:tbl3 on port 3306:
++------+-----------------+------+----------+-----------------+----------+--------------+------+------+---------------------------------------+-------------------------------------+
+| id   | f               | a    | b        | j               | m        | s            | e    | d    | v                                     | fv                                  |
++------+-----------------+------+----------+-----------------+----------+--------------+------+------+---------------------------------------+-------------------------------------+
+|    1 | Plain example   |   42 | 3.140000 | {"key":"value"} | 1,2,3    | plain_string |    1 |    0 | 123456789012345678,987654321098765432 | 0.100000,0.200000,0.300000,0.400000 |
+|    2 | New plain entry |   50 | 5.500000 | {"new":"entry"} | 10,11,12 | new_string   |    0 |    0 | 111222333444555666,777888999000111222 | 0.600000,0.700000,0.800000,0.900000 |
++------+-----------------+------+----------+-----------------+----------+--------------+------+------+---------------------------------------+-------------------------------------+
+––– input –––
+rm -f /tmp/stopwords.txt /tmp/exceptions.txt /tmp/wordforms.txt /var/lib/manticore/tbl3.conf dump.sql
 ––– output –––

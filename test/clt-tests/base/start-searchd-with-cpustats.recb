@@ -1,5 +1,5 @@
 ––– input –––
-searchd --cpustats
+stdbuf -oL searchd --cpustats
 ––– output –––
 Manticore %{VERSION} (columnar %{VERSION}) (secondary %{VERSION}) (knn %{VERSION})
 Copyright (c) 2001-2016, Andrew Aksyonoff

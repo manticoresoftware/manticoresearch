@@ -1,5 +1,5 @@
 ––– input –––
-searchd --stopwait -c test/clt-tests/base/searchd-with-flexible-ports.conf
+stdbuf -oL searchd --stopwait -c test/clt-tests/base/searchd-with-flexible-ports.conf
 ––– output –––
 Manticore %{VERSION} (columnar %{VERSION}) (secondary %{VERSION}) (knn %{VERSION})
 Copyright (c) 2001-2016, Andrew Aksyonoff

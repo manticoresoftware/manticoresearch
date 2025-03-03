@@ -3,7 +3,7 @@ apt-get -y remove 'manticore-buddy' > /dev/null; echo $?
 ––– output –––
 0
 ––– input –––
-searchd
+stdbuf -oL searchd
 ––– output –––
 Manticore %{VERSION} #!/[a-z0-9]{7,9}@[0-9]{8}/!# dev (columnar %{VERSION}) (secondary %{VERSION}) (knn %{VERSION})
 Copyright (c) 2001-2016, Andrew Aksyonoff

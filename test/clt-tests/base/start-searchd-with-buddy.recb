@@ -1,5 +1,5 @@
 ––– input –––
-searchd; if timeout 10 grep -qm1 'accepting' <(tail -n 1000 -f /var/log/manticore/searchd.log); then echo 'Started'; else echo 'Timeout or failed!'; fi
+stdbuf -oL searchd; if timeout 10 grep -qm1 'accepting' <(tail -n 1000 -f /var/log/manticore/searchd.log); then echo 'Started'; else echo 'Timeout or failed!'; fi
 ––– output –––
 Manticore %{VERSION} (columnar %{VERSION}) (secondary %{VERSION}) (knn %{VERSION})
 Copyright (c) 2001-2016, Andrew Aksyonoff

@@ -2,7 +2,7 @@
 sed -i '/^searchd/a\    buddy_path =' /etc/manticoresearch/manticore.conf
 ––– output –––
 ––– input –––
-rm -f /var/log/manticore/searchd.log; searchd --stopwait > /dev/null; searchd
+rm -f /var/log/manticore/searchd.log; stdbuf -oL searchd --stopwait > /dev/null; stdbuf -oL searchd
 ––– output –––
 Manticore %{VERSION} (columnar %{VERSION}) (secondary %{VERSION}) (knn %{VERSION})
 Copyright (c) 2001-2016, Andrew Aksyonoff

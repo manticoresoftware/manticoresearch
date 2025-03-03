@@ -2,7 +2,7 @@
 set -b +m; sed -i '/data_dir = \/var\/lib\/manticore/a\    binlog_common = 1\n' /etc/manticoresearch/manticore.conf
 ––– output –––
 ––– input –––
-for i in {1..10}; do rm -f /var/log/manticore/searchd.log; searchd --stopwait > /dev/null; searchd; if timeout 10 grep -qm1 '\[BUDDY\] started' <(tail -n 1000 -f /var/log/manticore/searchd.log); then echo 'Buddy started!'; else echo 'Timeout or failed!'; cat /var/log/manticore/searchd.log;fi; mysql -P9306 -h0 -e "drop table if exists t1"; mysql -P9306 -h0 -e "drop table if exists t2"; for n in 1 2; do mysql -P9306 -h0 -e "create table t${n}"; done; sleep 1; for n in 1 2; do mysql -P9306 -h0 -e "insert into t${n} values(0)" & done; wait 5>/dev/null 2>&1; echo $?; mysql -P9306 -h0 -e "show tables; select * from t1; select * from t2;"; mysql -P9306 -h0 -e "flush logs"; done
+for i in {1..10}; do rm -f /var/log/manticore/searchd.log; stdbuf -oL searchd --stopwait > /dev/null; stdbuf -oL searchd; if timeout 10 grep -qm1 '\[BUDDY\] started' <(tail -n 1000 -f /var/log/manticore/searchd.log); then echo 'Buddy started!'; else echo 'Timeout or failed!'; cat /var/log/manticore/searchd.log;fi; mysql -P9306 -h0 -e "drop table if exists t1"; mysql -P9306 -h0 -e "drop table if exists t2"; for n in 1 2; do mysql -P9306 -h0 -e "create table t${n}"; done; sleep 1; for n in 1 2; do mysql -P9306 -h0 -e "insert into t${n} values(0)" & done; wait 5>/dev/null 2>&1; echo $?; mysql -P9306 -h0 -e "show tables; select * from t1; select * from t2;"; mysql -P9306 -h0 -e "flush logs"; done
 ––– output –––
 Manticore %{VERSION} (columnar %{VERSION}) (secondary %{VERSION}) (knn %{VERSION})
 Copyright (c) 2001-2016, Andrew Aksyonoff

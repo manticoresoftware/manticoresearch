@@ -2,7 +2,7 @@
 echo -e "searchd {\n    listen = 9315:mysql\n    listen = 9316\n    log = /tmp/searchd.log\n    pid_file = /tmp/searchd.pid\n    data_dir = /tmp/data\n    watchdog = 0\n}" > /tmp/116.conf
 ––– output –––
 ––– input –––
-mkdir -p /tmp/data; rm -f /tmp/searchd.log; searchd --stopwait > /dev/null; stdbuf -oL searchd -c /tmp/116.conf; if timeout 10 grep -qm1 '\[BUDDY\] started' <(tail -n 1000 -f /tmp/searchd.log); then echo 'Buddy started!'; else echo 'Timeout or failed!'; cat /tmp/searchd.log;fi
+mkdir -p /tmp/data; rm -f /tmp/searchd.log; stdbuf -oL searchd --stopwait > /dev/null; stdbuf -oL searchd -c /tmp/116.conf; if timeout 10 grep -qm1 '\[BUDDY\] started' <(tail -n 1000 -f /tmp/searchd.log); then echo 'Buddy started!'; else echo 'Timeout or failed!'; cat /tmp/searchd.log;fi
 ––– output –––
 Manticore %{VERSION} (columnar %{VERSION}) (secondary %{VERSION}) (knn %{VERSION})
 Copyright (c) 2001-2016, Andrew Aksyonoff

@@ -784,7 +784,7 @@ mkdir -p /tmp/idx_plain && chmod 777 /tmp/idx_plain
 indexer --all --config /tmp/manticore_idx.conf > /dev/null 2>&1
 ––– output –––
 ––– input –––
-rm -f /tmp/searchd.log; searchd --stopwait > /dev/null; stdbuf -oL searchd -c /tmp/manticore_idx.conf; if timeout 10 grep -qm1 '\[BUDDY\] started' <(tail -n 1000 -f /var/log/manticore/searchd.log); then echo 'Buddy started!'; else echo 'Timeout or failed!'; cat /var/log/manticore/searchd.log;fi
+rm -f /tmp/searchd.log; stdbuf -oL searchd --stopwait > /dev/null; stdbuf -oL searchd -c /tmp/manticore_idx.conf; if timeout 10 grep -qm1 '\[BUDDY\] started' <(tail -n 1000 -f /var/log/manticore/searchd.log); then echo 'Buddy started!'; else echo 'Timeout or failed!'; cat /var/log/manticore/searchd.log;fi
 ––– output –––
 Manticore %{VERSION} (columnar %{VERSION}) (secondary %{VERSION}) (knn %{VERSION})
 Copyright (c) 2001-2016, Andrew Aksyonoff

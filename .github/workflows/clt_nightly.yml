@@ -156,7 +156,7 @@ jobs:
           
   clt-arm64:
     name: CLT-Arm64
-    runs-on: macos-14
+    runs-on: macos-15
     strategy:
       fail-fast: false 
       matrix:

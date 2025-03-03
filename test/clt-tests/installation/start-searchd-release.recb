@@ -2,7 +2,7 @@
 mkdir -p /var/run/manticore
 ––– output –––
 ––– input –––
-strdbuf -oL searchd
+stdbuf -oL searchd
 ––– output –––
 Manticore %{VERSION} (columnar %{VERSION}) (secondary %{VERSION}) (knn %{VERSION})
 Copyright (c) 2001-2016, Andrew Aksyonoff

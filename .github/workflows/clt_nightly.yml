@@ -6,6 +6,7 @@ on:
     - cron: '00 20 * * *'
   push:
     paths:
+      - '.github/workflows/clt_nightly.yml'
       - 'test/clt-tests/**'
     branches:
       - manticore-6.2.12

@@ -2,7 +2,7 @@
 echo -e 'common {\n\tplugin_dir = /usr/local/lib/manticore\n\tlemmatizer_base = /usr/share/manticore/morph/\n}\n\nsearchd {\n\tlisten = 9306:mysql41\n\tlisten = 9312\n\tlisten = 9308:http\n\tlog = /var/log/manticore/searchd.log\n\tquery_log = /var/log/manticore/query.log\n\tpid_file = /var/log/manticore/searchd.pid\n\tdata_dir = /var/log/manticore\n\tquery_log_format = sphinxql\n\tquery_log_commands = 1\n\tbuddy_path =\n}\n' > manticore.conf
 ––– output –––
 ––– input –––
-searchd --config ./manticore.conf
+stdbuf -oL searchd --config ./manticore.conf
 ––– output –––
 Manticore %{VERSION} (columnar %{VERSION}) (secondary %{VERSION}) (knn %{VERSION})
 Copyright (c) 2001-2016, Andrew Aksyonoff

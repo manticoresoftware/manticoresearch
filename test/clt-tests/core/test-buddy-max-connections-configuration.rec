@@ -36,7 +36,7 @@ time: %{NUMBER}us
 protocol: http
 host: %{IPADDR}:%{NUMBER}
 ––– input –––
-searchd --stopwait
+stdbuf -oL searchd --stopwait
 ––– output –––
 Manticore %{VERSION} (columnar %{VERSION}) (secondary %{VERSION}) (knn %{VERSION})
 Copyright (c) 2001-2016, Andrew Aksyonoff

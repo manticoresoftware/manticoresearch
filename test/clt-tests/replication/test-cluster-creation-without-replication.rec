@@ -2,7 +2,7 @@
 sed -i -e '/listen = 127.0.0.1:9312/d' -e '/listen = 127.0.0.1:9308:http/d' /etc/manticoresearch/manticore.conf
 ––– output –––
 ––– input –––
-searchd
+stdbuf -oL searchd
 ––– output –––
 Manticore %{VERSION} (columnar %{VERSION}) (secondary %{VERSION}) (knn %{VERSION})
 Copyright (c) 2001-2016, Andrew Aksyonoff

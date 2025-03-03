@@ -48,7 +48,7 @@ values: 523456764345678976,9223372036854775807
 additional_info: {"features":["ProMotion display","A15 Bionic chip","Ceramic Shield front cover"]}
 vector: 0.773448,0.312478,0.137971,0.459821
 ––– input –––
-searchd --stopwait
+stdbuf -oL searchd --stopwait
 ––– output –––
 Manticore %{VERSION} (columnar %{VERSION}) (secondary %{VERSION}) (knn %{VERSION})
 Copyright (c) 2001-2016, Andrew Aksyonoff
@@ -96,7 +96,7 @@ mysql -h0 -P9306 -e "SHOW TABLES"
 | tbl           | rt   |
 +---------------+------+
 ––– input –––
-searchd --stopwait
+stdbuf -oL searchd --stopwait
 ––– output –––
 Manticore %{VERSION} (columnar %{VERSION}) (secondary %{VERSION}) (knn %{VERSION})
 Copyright (c) 2001-2016, Andrew Aksyonoff
@@ -125,7 +125,7 @@ mysql -h0 -P9306 -e "SHOW TABLES"
 | tbl           | rt   |
 +---------------+------+
 ––– input –––
-searchd --stopwait
+stdbuf -oL searchd --stopwait
 ––– output –––
 Manticore %{VERSION} (columnar %{VERSION}) (secondary %{VERSION}) (knn %{VERSION})
 Copyright (c) 2001-2016, Andrew Aksyonoff

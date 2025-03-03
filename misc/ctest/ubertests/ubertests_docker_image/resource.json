@@ -1,0 +1,68 @@
+{
+  "version": {
+    "major": 1,
+    "minor": 0
+  },
+  "local": [
+    {
+      "mysql": [
+        {
+          "id": "test1"
+        },
+        {
+          "id": "test2"
+        },
+        {
+          "id": "test3"
+        },
+        {
+          "id": "test4"
+        },
+        {
+          "id": "test5"
+        },
+        {
+          "id": "test6"
+        },
+        {
+          "id": "test7"
+        },
+        {
+          "id": "test8"
+        },
+        {
+          "id": "test9"
+        }
+      ],
+      "datadir": [
+        {
+          "id": "data"
+        },
+        {
+          "id": "data1"
+        },
+        {
+          "id": "data2"
+        },
+        {
+          "id": "data3"
+        },
+        {
+          "id": "data4"
+        },
+        {
+          "id": "data5"
+        },
+        {
+          "id": "data6"
+        },
+        {
+          "id": "data7"
+        },
+        {
+          "id": "data8"
+        }
+      ]
+    }
+  ]
+}

@@ -5,7 +5,7 @@
 <requires>
 <non-rt/>
 </requires>
-
+<skip_db/>
 <config>
 indexer
 {
@@ -45,8 +45,6 @@ index delta
 	path			= <data_path/>/delta
 }
 </config>
-
-<db_insert>select 1;</db_insert>
 
 <indexer>
 <run>--merge empty delta</run>

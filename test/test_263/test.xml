@@ -7,7 +7,7 @@
 <http/>
 <keep_json_ctrls/>
 </requires>
-
+<skip_db/>
 <config>
 indexer
 {

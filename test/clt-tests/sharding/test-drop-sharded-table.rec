@@ -62,7 +62,7 @@ mysql -h0 -P9306 -e "SHOW TABLES\G"; echo $?;
 mysql -h0 -P9306 -e "DROP TABLE nonexistent_table;"
 ––– output –––
  ERROR 1064 (42000) at line 1: DROP TABLE failed: unknown table 'nonexistent_table'
- ––– input –––
+––– input –––
 mysql -h0 -P9306 -e "INSERT INTO tbl1 VALUES (1);" & sleep 1; mysql -h0 -P9306 -e "DROP TABLE tbl1;"
 ––– output –––
 ERROR 1064 (42000) at line 1: Cannot create table with column names missing

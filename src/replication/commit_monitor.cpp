@@ -44,23 +44,21 @@ bool CommitMonitor_c::Commit ()
 		return Err ( "requires an existing table" );
 
 	// truncate needs wlocked index
-if ( ServedDesc_t::IsMutable ( pServed ) )
-{
-    bool bOk = false;
-    m_tAcc.m_tCmdReplicated = tCmd;
-    if ( bTruncate )
-    {
-        WIdx_T<RtIndex_i*> tLocked ( pServed );
-        bOk = CommitNonEmptyCmds ( tLocked, tCmd, bOnlyTruncate );
-        m_tAcc.m_tCmdReplicated.m_iTID = tLocked->m_iTID;
-    } else
-    {
-        RIdx_T<RtIndex_i*> tLocked ( pServed );
-        bOk = CommitNonEmptyCmds ( tLocked, tCmd, bOnlyTruncate );
-        m_tAcc.m_tCmdReplicated.m_iTID = tLocked->m_iTID;
-    }
-    return bOk;
-}
+	if ( !ServedDesc_t::IsMutable ( pServed ) )
+		return Err ( "requires an existing RT or percolate table" );
+
+	bool bOk = false;
+	m_tAcc.m_tCmdReplicated = tCmd;
+	if ( bTruncate )
+	{
+		WIdx_T<RtIndex_i*> pIndex ( pServed );
+		bOk = CommitNonEmptyCmds ( pIndex, tCmd, bOnlyTruncate );
+		m_tAcc.m_tCmdReplicated.m_iTID = pIndex->m_iTID;
+	} else
+	{
+		RIdx_T<RtIndex_i*> pIndex ( pServed );
+		bOk = CommitNonEmptyCmds ( pIndex, tCmd, bOnlyTruncate );
+		m_tAcc.m_tCmdReplicated.m_iTID = pIndex->m_iTID;
 	}
 
 	return bOk;

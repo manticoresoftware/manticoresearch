@@ -7,11 +7,16 @@ export INSTANCE=2
 ––– output –––
 ––– block: ../base/replication/start-searchd-precach –––
 ––– input –––
-export CLUSTER_NAME=c
+mysql -h0 -P1306 -e "create cluster c"
 ––– output –––
-––– block: ../base/replication/create-cluster –––
+––– input –––
+mysql -h0 -P1306 -e "show status like 'cluster_c_status'\G"
+––– output –––
+*************************** 1. row ***************************
+Counter: cluster_#!/[a-z]+/!#_status
+Value: primary
 ––– block: ../base/replication/join-cluster-on-all-nodes –––
 ––– input –––
-mysql -h0 -P1306 -e "create table ${CLUSTER_NAME}:tbl1(id bigint) shards=3 rf=2 timeout=5;"; echo $?;
+mysql -h0 -P1306 -e "create table c:tbl1(id bigint) shards=3 rf=2 timeout=5"; echo $?;
 ––– output –––
 0

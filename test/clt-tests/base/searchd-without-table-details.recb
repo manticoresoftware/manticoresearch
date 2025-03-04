@@ -10,12 +10,4 @@ starting daemon version '%{VERSION} (columnar %{VERSION}) (secondary %{VERSION})
 listening on 127.0.0.1:9312 for sphinx and http(s)
 listening on 127.0.0.1:9306 for mysql
 listening on 127.0.0.1:9308 for sphinx and http(s)
-Manticore %{VERSION} (columnar %{VERSION}) (secondary %{VERSION}) (knn %{VERSION})
-Copyright (c) 2001-2016, Andrew Aksyonoff
-Copyright (c) 2008-2016, Sphinx Technologies Inc (http://sphinxsearch.com)
-Copyright (c) 2017-%{YEAR}, Manticore Software LTD (https://manticoresearch.com)
-Manticore %{VERSION} (columnar %{VERSION}) (secondary %{VERSION}) (knn %{VERSION})
-Copyright (c) 2001-2016, Andrew Aksyonoff
-Copyright (c) 2008-2016, Sphinx Technologies Inc (http://sphinxsearch.com)
-Copyright (c) 2017-%{YEAR}, Manticore Software LTD (https://manticoresearch.com)
 Buddy started!

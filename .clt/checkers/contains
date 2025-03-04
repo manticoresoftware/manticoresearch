@@ -27,17 +27,28 @@ TARGET_CONTENT=$(cat "$TARGET_FILE")
 all_found=true
 
 # Process each line in the patterns file
-while IFS= read -r pattern; do
+while IFS= read -r line; do
 	# Skip empty lines
-	if [ -z "$pattern" ]; then
+	if [ -z "$line" ]; then
 		continue
 	fi
 
-# Check if the pattern is contained in the target file
-if ! echo "$TARGET_CONTENT" | grep -q "$pattern"; then
-	echo "Pattern not found: '$pattern'"
-	all_found=false
-fi
+	# Split the line into multiple patterns (separated by spaces)
+	read -ra patterns <<< "$line"
+
+	# For each line in the patterns file, check all patterns in that line
+	line_match=true
+	for pattern in "${patterns[@]}"; do
+		if ! echo "$TARGET_CONTENT" | grep -q "$pattern"; then
+			echo "Pattern not found: '$pattern'"
+			line_match=false
+			all_found=false
+		fi
+	done
+
+	if [ "$line_match" = false ]; then
+		echo "Not all patterns from line '$line' were found"
+	fi
 done < "$PATTERNS_FILE"
 
 # Exit with appropriate status
@@ -48,3 +59,4 @@ else
 	echo "Some patterns were not found"
 	exit 1
 fi
+

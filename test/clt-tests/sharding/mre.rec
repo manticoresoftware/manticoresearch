@@ -1,11 +1,21 @@
 ––– input –––
 export INSTANCE=1
 ––– output –––
-––– block: ../base/replication/start-searchd-precach –––
+––– input –––
+mkdir -p /var/{run,lib,log}/manticore-${INSTANCE}
+––– output –––
+––– input –––
+stdbuf -oL searchd -c test/clt-tests/base/searchd-with-flexible-ports.conf  --logreplication > /dev/null 2>&1
+––– output –––
 ––– input –––
 export INSTANCE=2
 ––– output –––
-––– block: ../base/replication/start-searchd-precach –––
+––– input –––
+mkdir -p /var/{run,lib,log}/manticore-${INSTANCE}
+––– output –––
+––– input –––
+stdbuf -oL searchd -c test/clt-tests/base/searchd-with-flexible-ports.conf  --logreplication > /dev/null 2>&1
+––– output –––
 ––– input –––
 mysql -h0 -P1306 -e "create cluster c"
 ––– output –––
@@ -16,3 +26,9 @@ mysql -h0 -P2306 -e "join cluster c at '127.0.0.1:1312'"
 mysql -h0 -P1306 -e "create table c:tbl1(id bigint) shards=2 rf=2 timeout=5"; echo $?;
 ––– output –––
 0
+--- input ---
+cat  /var/log/manticore-1/query.log
+--- output ---
+--- input ---
+cat  /var/log/manticore-1/query.log
+--- output ---

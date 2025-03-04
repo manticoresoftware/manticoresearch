@@ -12,5 +12,5 @@ jobs:
         uses: actions/checkout@v3
       - uses: manticoresoftware/clt@0.2.3
         with:
-          test_prefix: test/clt-tests/sharding/mre.rec
+          test_prefix: test/clt-tests/sharding/mre
           image: ghcr.io/manticoresoftware/manticoresearch:test-kit-latest

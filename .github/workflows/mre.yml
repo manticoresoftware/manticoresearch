@@ -5,6 +5,7 @@ on:
     branches: [ master ]
     paths:
       - 'test/clt-tests/sharding/mre.rec'
+    types: [opened, synchronize, reopened, labeled, unlabeled]
 
 jobs:
   mre:

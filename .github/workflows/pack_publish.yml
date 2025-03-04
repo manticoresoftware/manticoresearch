@@ -209,7 +209,7 @@ jobs:
     runs-on: ubuntu-22.04
     name: ${{ matrix.DISTR }} ${{ matrix.arch }} publishing
     steps:
-      - uses: manticoresoftware/publish_to_repo@main
+      - uses: manticoresoftware/publish_to_repo@debug
         with:
           ssh_key: ${{ secrets.REPO_SSH_KEY }}
           distr: ${{ matrix.DISTR }}
@@ -228,7 +228,7 @@ jobs:
     runs-on: ubuntu-22.04
     name: RHEL ${{ matrix.DISTR }} ${{ matrix.arch }} publishing
     steps:
-      - uses: manticoresoftware/publish_to_repo@main
+      - uses: manticoresoftware/publish_to_repo@debug
         with:
           ssh_key: ${{ secrets.REPO_SSH_KEY }}
           distr: ${{ matrix.DISTR }}
@@ -246,7 +246,7 @@ jobs:
         arch: [x86_64, arm64]
     runs-on: ubuntu-22.04
     steps:
-      - uses: manticoresoftware/publish_to_repo@main
+      - uses: manticoresoftware/publish_to_repo@debug
         with:
           ssh_key: ${{ secrets.REPO_SSH_KEY }}
           distr: macos
@@ -260,7 +260,7 @@ jobs:
     needs: publish
     runs-on: ubuntu-22.04
     steps:
-      - uses: manticoresoftware/publish_to_repo@main
+      - uses: manticoresoftware/publish_to_repo@debug
         with:
           ssh_key: ${{ secrets.REPO_SSH_KEY }}
           distr: windows
@@ -274,7 +274,7 @@ jobs:
     needs: publish_windows
     runs-on: ubuntu-22.04
     steps:
-      - uses: manticoresoftware/publish_to_repo@main
+      - uses: manticoresoftware/publish_to_repo@debug
         with:
           ssh_key: ${{ secrets.REPO_SSH_KEY }}
           distr:

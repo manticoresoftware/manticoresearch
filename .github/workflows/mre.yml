@@ -1,9 +1,8 @@
 name: MRE
 
 on:
-  pull_request:
-    branches: [ master ]
-    types: [opened, synchronize, reopened, labeled, unlabeled]
+  push:
+    branches: [ test/test-drop-sharded-table ]
 
 jobs:
   mre:

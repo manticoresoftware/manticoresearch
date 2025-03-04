@@ -1,8 +1,8 @@
 name: MRE
 
 on:
-  push:
-    branches: [ test/test-drop-sharded-table ]
+  pull_request:
+    branches: [ master ]
     paths:
       - 'test/clt-tests/sharding/mre.rec'
 

@@ -1,4 +1,7 @@
 ––– input –––
+set -b +m
+––– output –––
+––– input –––
 export INSTANCE=1
 ––– output –––
 ––– block: ../../base/replication/start-searchd-precach –––
@@ -49,7 +52,7 @@ mysql -h0 -P3306 -e "join cluster b at '127.0.0.1:1312' 'b' as path" &
 ––– output –––
 [4] %{NUMBER}
 ––– input –––
-wait %1 && mysql -h0 -P1306 -e "alter cluster d add t4" &
+wait && mysql -h0 -P1306 -e "alter cluster d add t4" &
 ––– output –––
 [5] %{NUMBER}
 ––– input –––
@@ -83,4 +86,5 @@ Table: t2
 Table: t2
 Table: t3
 Table: t3
+Table: t4
 Table: t4

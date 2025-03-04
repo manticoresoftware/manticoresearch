@@ -11,14 +11,6 @@ export INSTANCE=3
 ––– output –––
 ––– block: ../../base/replication/start-searchd-precach –––
 ––– input –––
-mysql -h0 -P1306 -e "CREATE TABLE tbl1"; echo $?
-––– output –––
-0
-––– input –––
-mysql -h0 -P1306 -e "create table tbl2(id bigint) shards=3 rf=1"; echo $?
-––– output –––
-0
-––– input –––
 export CLUSTER_NAME=replication
 ––– output –––
 ––– block: ../../base/replication/create-cluster –––
@@ -33,26 +25,26 @@ Port 3306: Node synced
 Counter: cluster_replication_status
 Value: primary
 ––– input –––
-mysql -h0 -P1306 -e "create table ${CLUSTER_NAME}:tbl3(id bigint) shards=5 rf=2"; echo $?
+mysql -h0 -P1306 -e "create table ${CLUSTER_NAME}:tbl1(id bigint) shards=5 rf=2"; echo $?
 ––– output –––
 0
 ––– input –––
-mysql -h0 -P2306 -e "create table ${CLUSTER_NAME}:tbl4(id bigint) shards=1 rf=1"; echo $?
+mysql -h0 -P1306 -e "create table ${CLUSTER_NAME}:tbl2(id bigint) shards=1 rf=1"; echo $?
 ––– output –––
 0
 ––– input –––
-mysql -h0 -P3306 -e "create table ${CLUSTER_NAME}:tbl10(id bigint) shards=4 rf=2"; echo $?
+mysql -h0 -P1306 -e "create table ${CLUSTER_NAME}:tbl3(id bigint) shards=4 rf=2"; echo $?
 ––– output –––
 0
 ––– input –––
-mysql -h0 -P1306 -e "DROP TABLE ${CLUSTER_NAME}:tbl4"; echo $?
+mysql -h0 -P1306 -e "DROP TABLE ${CLUSTER_NAME}:tbl3"; echo $?
 ––– output –––
 0
 ––– input –––
-mysql -h0 -P1306 -e "create table ${CLUSTER_NAME}:tbl4(id bigint) shards=1 rf=1"; echo $?
+mysql -h0 -P1306 -e "create table ${CLUSTER_NAME}:tbl3(id bigint) shards=1 rf=1"; echo $?
 ––– output –––
 0
 ––– input –––
-mysql -h0 -P2306 -e "create table ${CLUSTER_NAME}:tbl11(id bigint) shards=9999999999 rf=3"; echo $?
+mysql -h0 -P1306 -e "create table ${CLUSTER_NAME}:tbl4(id bigint) shards=9999999999 rf=3"; echo $?
 ––– output –––
 0

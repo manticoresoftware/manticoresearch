@@ -1,4 +1,7 @@
 ––– input –––
+set -b +m
+––– output –––
+––– input –––
 export INSTANCE=1
 ––– output –––
 ––– block: ../../base/replication/start-searchd-precach –––

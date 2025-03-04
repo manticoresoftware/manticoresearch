@@ -21,38 +21,34 @@ jobs:
     steps:
       - name: Create manticore-1
         run: |
-          mkdir -p /var/{run,lib,log}/manticore-1
-          cat << EOF > /tmp/1.conf
+          mkdir -p /tmp/1/data
+          cat << EOF > /tmp/1/manticore.conf
           searchd {
             listen = 1306:mysql41
             listen = 1312
             listen = 1308:http
-            log = /var/log/manticore-1/searchd.log
-            query_log = /var/log/manticore-1/query.log
-            pid_file = /var/log/manticore-1/searchd.pid
-            data_dir = /var/log/manticore-1
-            query_log_format = sphinxql
-            query_log_commands = 1
+            log = /tmp/1/searchd.log
+            pid_file = /tmp/1/searchd.pid
+            data_dir = /tmp/1/data
+            query_log = /tmp/1/query.log
           }
           EOF
-          searchd -c /tmp/1.conf  --logreplication
-          mkdir -p /var/{run,lib,log}/manticore-2
-          cat << EOF > /tmp/2.conf
+          searchd -c /tmp/1/manticore.conf  --logreplication
+          mkdir -p /tmp/2/data
+          cat << EOF > /tmp/2/manticore.conf
           searchd {
             listen = 2306:mysql41
             listen = 2312
             listen = 2308:http
-            log = /var/log/manticore-2/searchd.log
-            query_log = /var/log/manticore-2/query.log
-            pid_file = /var/log/manticore-2/searchd.pid
-            data_dir = /var/log/manticore-2
-            query_log_format = sphinxql
-            query_log_commands = 1
+            log = /tmp/2/searchd.log
+            pid_file = /tmp/2/searchd.pid
+            data_dir = /tmp/2/data
+            query_log = /tmp/2/query.log
           }
           EOF
-          searchd -c /tmp/2.conf  --logreplication
+          searchd -c /tmp/2/manticore.conf  --logreplication
           mysql -h0 -P1306 -e "create cluster c"
           mysql -h0 -P2306 -e "join cluster c at '127.0.0.1:1312'"
           mysql -h0 -P1306 -e "create table c:tbl1(id bigint) shards=2 rf=2 timeout=5";
-          cat  /var/log/manticore-1/query.log
-          cat  /var/log/manticore-1/query.log
+          cat  /tmp/1/query.log
+          cat  /tmp/2/query.log

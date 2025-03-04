@@ -3,9 +3,6 @@ name: MRE
 on:
   pull_request:
     branches: [ master ]
-    paths:
-      - 'test/clt-tests/sharding/mre.rec'
-      - '.github/workflows/mre.yml'
     types: [opened, synchronize, reopened, labeled, unlabeled]
 
 jobs:

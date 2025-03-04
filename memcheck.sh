@@ -31,7 +31,7 @@ find Testing/Temporary/MemoryChecker.*.log -size 0 -delete
 # Analysis of memory leak reports
 echo "Analyzing memory leak reports..."
 LEAK_FOUND=0
-LEAK_PATTERNS=("definitely lost")
+LEAK_PATTERNS=(definitely invalid uninitialized)
 
 # Function to check for memory leaks in a file
 check_leaks() {
@@ -40,13 +40,8 @@ check_leaks() {
     
     for pattern in "${LEAK_PATTERNS[@]}"; do
         if grep -i "$pattern" "$file" > /dev/null; then
-            echo "===================================================================="
-            echo "MEMORY LEAK DETECTED in test_$test_num"
-            echo "Pattern found: $pattern"
-            echo "===================================================================="
-            echo "Full log content:"
+            echo "$pattern DETECTED in test_$test_num"
             cat "$file"
-            echo "===================================================================="
             LEAK_FOUND=1
         fi
     done

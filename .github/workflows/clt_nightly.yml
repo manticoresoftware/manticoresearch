@@ -130,6 +130,10 @@ jobs:
           - name: Test alter rename nightly
             image: ghcr.io/manticoresoftware/manticoresearch:test-kit-latest
             test_prefix: test/clt-tests/core/test-alter-rename-nightly
+          - name: Test alter rename nightly
+            image: manticoresearch/dind:v1
+            test_prefix: test/clt-tests/tables-interaction/test-tables-interaction
+
 # Disabled as it works unstable.
 #          - name: Tests performance JSON vs SQL
 #            image: ghcr.io/manticoresoftware/manticoresearch:test-kit-latest

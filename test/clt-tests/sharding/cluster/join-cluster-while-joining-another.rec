@@ -11,26 +11,31 @@ export INSTANCE=3
 ––– output –––
 ––– block: ../../base/replication/start-searchd-precach –––
 ––– input –––
-mysql -h0 -P1306 -e "create cluster a"
+mkdir /var/{lib,log}/manticore-{1,2,3}/{a,b,c}
 ––– output –––
 ––– input –––
-mysql -h0 -P2306 -e "create cluster b"
+mysql -h0 -P1306 -e "CREATE CLUSTER a 'a' as path"
 ––– output –––
 ––– input –––
-mysql -h0 -P3306 -e "create cluster c"
-––– output –––
-––– input –––
-mysql -h0 -P2306 -e "join cluster a at '127.0.0.1:1312'" &
+mysql -h0 -P2306 -e "create cluster b 'b' as path" &
 ––– output –––
 [1] %{NUMBER}
 ––– input –––
-mysql -h0 -P3306 -e "join cluster b at '127.0.0.1:2312'" &
+mysql -h0 -P3306 -e "create cluster c 'c' as path" &
 ––– output –––
 [2] %{NUMBER}
 ––– input –––
-mysql -h0 -P1306 -e "join cluster c at '127.0.0.1:3312'" &
+mysql -h0 -P2306 -e "join cluster a at '127.0.0.1:1312'" &
 ––– output –––
 [3] %{NUMBER}
+––– input –––
+mysql -h0 -P3306 -e "join cluster b at '127.0.0.1:2312'" &
+––– output –––
+[4] %{NUMBER}
+––– input –––
+mysql -h0 -P1306 -e "join cluster c at '127.0.0.1:3312'" &
+––– output –––
+[5] %{NUMBER}
 ––– input –––
 wait 1>/dev/null 2>&1; echo $?
 ––– output –––

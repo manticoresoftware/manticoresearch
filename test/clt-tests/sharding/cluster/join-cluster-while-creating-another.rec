@@ -11,24 +11,21 @@ export INSTANCE=3
 ––– output –––
 ––– block: ../../base/replication/start-searchd-precach –––
 ––– input –––
-mkdir -p /var/lib/manticore/a /var/lib/manticore/b
+mkdir /var/{lib,log}/manticore-{1,2,3}/{a,b}
 ––– output –––
 ––– input –––
-chown manticore:manticore /var/lib/manticore/{a,b}
+mysql -h0 -P1306 -e "CREATE CLUSTER a 'a' as path"
 ––– output –––
 ––– input –––
-mysql -h0 -P1306 -e "CREATE CLUSTER a"
-––– output –––
-––– input –––
-sleep 5; mysql -h0 -P1306 -e "CREATE CLUSTER b" &
+mysql -h0 -P1306 -e "create cluster b 'b' as path" &
 ––– output –––
 [%{NUMBER}] %{NUMBER}
 ––– input –––
-mysql -h0 -P2306 -e "JOIN CLUSTER a AT '127.0.0.1:1312'" &
+mysql -h0 -P2306 -e "join cluster a at '127.0.0.1:1312' 'a' as path" &
 ––– output –––
 [%{NUMBER}] %{NUMBER}
 ––– input –––
-mysql -h0 -P3306 -e "JOIN CLUSTER a AT '127.0.0.1:1312'" &
+mysql -h0 -P3306 -e "join cluster a at '127.0.0.1:1312' 'a' as path" &
 ––– output –––
 [%{NUMBER}] %{NUMBER}
 ––– input –––
@@ -42,8 +39,8 @@ for i in 1 2 3; do grep -q 'FATAL:' /var/log/manticore-${i}/searchd.log ; echo "
 #2 – 1
 #3 – 1
 ––– input –––
-for i in 1 2 3; do mysql -h0 -P${i}306 -e "SHOW STATUS LIKE 'cluster_a_nodes_view'\G" | grep Value | sed 's/Value: //' | tr ',' '\n' | sort | tr '\n' ',' | sed 's/,$/\n/' | sed 's/^/Value: /'; done
+for i in 1 2 3; do mysql -h0 -P${i}306 -e "show status like 'cluster_a_nodes_view'\G" | grep Value; done
 ––– output –––
-Value:   127.0.0.1:1312,127.0.0.1:1322:replication,127.0.0.1:2312,127.0.0.1:2322:replication,127.0.0.1:3312,127.0.0.1:3322:replication
-Value:   127.0.0.1:1312,127.0.0.1:1322:replication,127.0.0.1:2312,127.0.0.1:2322:replication,127.0.0.1:3312,127.0.0.1:3322:replication
-Value:   127.0.0.1:1312,127.0.0.1:1322:replication,127.0.0.1:2312,127.0.0.1:2322:replication,127.0.0.1:3312,127.0.0.1:3322:replication
+Value: 127.0.0.1:1312,127.0.0.1:1322:replication,127.0.0.1:2312,127.0.0.1:2322:replication,127.0.0.1:3312,127.0.0.1:3322:replication
+Value: 127.0.0.1:1312,127.0.0.1:1322:replication,127.0.0.1:2312,127.0.0.1:2322:replication,127.0.0.1:3312,127.0.0.1:3322:replication
+Value: 127.0.0.1:1312,127.0.0.1:1322:replication,127.0.0.1:2312,127.0.0.1:2322:replication,127.0.0.1:3312,127.0.0.1:3322:replication

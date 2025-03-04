@@ -18,7 +18,6 @@ jobs:
           searchd {
             listen = 1306:mysql41
             listen = 1312
-            listen = 1308:http
             log = /tmp/1/searchd.log
             pid_file = /tmp/1/searchd.pid
             data_dir = /tmp/1/data
@@ -31,7 +30,6 @@ jobs:
           searchd {
             listen = 2306:mysql41
             listen = 2312
-            listen = 2308:http
             log = /tmp/2/searchd.log
             pid_file = /tmp/2/searchd.pid
             data_dir = /tmp/2/data
@@ -41,6 +39,6 @@ jobs:
           searchd -c /tmp/2/manticore.conf  --logreplication
           mysql -h0 -P1306 -e "create cluster c"
           mysql -h0 -P2306 -e "join cluster c at '127.0.0.1:1312'"
-          mysql -h0 -P1306 -e "create table c:tbl1(id bigint) shards=2 rf=2 timeout=5";
+          mysql -h0 -P1306 -e "create table c:tbl1(id bigint) shards=2 rf=2 timeout=5" || true
           cat  /tmp/1/query.log
           cat  /tmp/2/query.log

@@ -13,6 +13,7 @@ jobs:
     steps:
       - name: Create manticore-1
         run: |
+          set -x
           mkdir -p /tmp/1/data
           cat << EOF > /tmp/1/manticore.conf
           searchd {

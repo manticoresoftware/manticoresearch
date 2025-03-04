@@ -1,0 +1,223 @@
+––– input –––
+export INSTANCE=1
+––– output –––
+––– block: ../../base/replication/start-searchd-precach –––
+––– input –––
+export INSTANCE=2
+––– output –––
+––– block: ../../base/replication/start-searchd-precach –––
+––– input –––
+export INSTANCE=3
+––– output –––
+––– block: ../../base/replication/start-searchd-precach –––
+––– input –––
+export INSTANCE=4
+––– output –––
+––– block: ../../base/replication/start-searchd-precach –––
+––– input –––
+export INSTANCE=5
+––– output –––
+––– block: ../../base/replication/start-searchd-precach –––
+––– input –––
+export CLUSTER_NAME=c
+––– output –––
+––– block: ../base/replication/create-cluster –––
+––– input –––
+export CLUSTER_NAME=c
+––– output –––
+––– block: ../base/replication/join-cluster-on-all-nodes –––
+––– input –––
+apt-get install -y jq 1> /dev/null 2>&1 ; echo $?
+––– output –––
+0
+––– input –––
+mysql -h0 -P1306 -e "create table c:t(id bigint) shards=5 rf=3 timeout=120" >/dev/null
+––– output –––
+––– input –––
+grep 'started v' /var/log/manticore-{1,2,3,4,5}/searchd.log | cut -d\' -f3 | cut -d: -f3 | wc -l
+––– output –––
+5
+––– input –––
+for i in 1 2 3 4 5; do echo "#{$i}"; cat /var/lib/manticore-$i/manticore.json | jq -M '.indexes.t'; done
+––– output –––
+#{1}
+{
+"type": "distributed",
+"locals": [
+"t_s0",
+"t_s1",
+"t_s3"
+],
+"agents": [
+{
+"config": "127.0.0.1:2312:t_s2|127.0.0.1:3312:t_s2|127.0.0.1:4312:t_s2",
+"blackhole": false,
+"persistent": false
+},
+{
+"config": "127.0.0.1:2312:t_s4|127.0.0.1:3312:t_s4|127.0.0.1:5312:t_s4",
+"blackhole": false,
+"persistent": false
+}
+],
+"divide_remote_ranges": false,
+"ha_strategy": "random"
+}
+#{2}
+{
+"type": "distributed",
+"locals": [
+"t_s1",
+"t_s2",
+"t_s4"
+],
+"agents": [
+{
+"config": "127.0.0.1:1312:t_s0|127.0.0.1:3312:t_s0|127.0.0.1:5312:t_s0",
+"blackhole": false,
+"persistent": false
+},
+{
+"config": "127.0.0.1:1312:t_s3|127.0.0.1:4312:t_s3|127.0.0.1:5312:t_s3",
+"blackhole": false,
+"persistent": false
+}
+],
+"divide_remote_ranges": false,
+"ha_strategy": "random"
+}
+#{3}
+{
+"type": "distributed",
+"locals": [
+"t_s0",
+"t_s2",
+"t_s4"
+],
+"agents": [
+{
+"config": "127.0.0.1:1312:t_s1|127.0.0.1:2312:t_s1|127.0.0.1:4312:t_s1",
+"blackhole": false,
+"persistent": false
+},
+{
+"config": "127.0.0.1:1312:t_s3|127.0.0.1:4312:t_s3|127.0.0.1:5312:t_s3",
+"blackhole": false,
+"persistent": false
+}
+],
+"divide_remote_ranges": false,
+"ha_strategy": "random"
+}
+#{4}
+{
+"type": "distributed",
+"locals": [
+"t_s1",
+"t_s2",
+"t_s3"
+],
+"agents": [
+{
+"config": "127.0.0.1:1312:t_s0|127.0.0.1:3312:t_s0|127.0.0.1:5312:t_s0",
+"blackhole": false,
+"persistent": false
+},
+{
+"config": "127.0.0.1:2312:t_s4|127.0.0.1:3312:t_s4|127.0.0.1:5312:t_s4",
+"blackhole": false,
+"persistent": false
+}
+],
+"divide_remote_ranges": false,
+"ha_strategy": "random"
+}
+#{5}
+{
+"type": "distributed",
+"locals": [
+"t_s0",
+"t_s3",
+"t_s4"
+],
+"agents": [
+{
+"config": "127.0.0.1:1312:t_s1|127.0.0.1:2312:t_s1|127.0.0.1:4312:t_s1",
+"blackhole": false,
+"persistent": false
+},
+{
+"config": "127.0.0.1:2312:t_s2|127.0.0.1:3312:t_s2|127.0.0.1:4312:t_s2",
+"blackhole": false,
+"persistent": false
+}
+],
+"divide_remote_ranges": false,
+"ha_strategy": "random"
+}
+––– input –––
+mysql -h0 -P1306 -e "select * from _sharding_queue where status = 'error' order by id asc limit 10000\G"
+––– output –––
+––– input –––
+mysql -h0 -P1306 -e "select * from _sharding_queue where status = 'created' order by id asc limit 10000\G"
+––– output –––
+––– input –––
+mysql -h0 -P1306 -e "select * from _sharding_queue order by id asc limit 10000\G" | grep 'distributed'
+––– output –––
+type='distributed' local='t_s0' local='t_s1' local='t_s3' agent='127.0.0.1:2312:t_s2|127.0.0.1:3312:t_s2|127.0.0.1:4312:t_s2' agent='127.0.0.1:2312:t_s4|127.0.0.1:3312:t_s4|127.0.0.1:5312:t_s4'
+type='distributed' local='t_s1' local='t_s2' local='t_s4' agent='127.0.0.1:1312:t_s0|127.0.0.1:3312:t_s0|127.0.0.1:5312:t_s0' agent='127.0.0.1:1312:t_s3|127.0.0.1:4312:t_s3|127.0.0.1:5312:t_s3'
+type='distributed' local='t_s0' local='t_s2' local='t_s4' agent='127.0.0.1:1312:t_s1|127.0.0.1:2312:t_s1|127.0.0.1:4312:t_s1' agent='127.0.0.1:1312:t_s3|127.0.0.1:4312:t_s3|127.0.0.1:5312:t_s3'
+type='distributed' local='t_s1' local='t_s2' local='t_s3' agent='127.0.0.1:1312:t_s0|127.0.0.1:3312:t_s0|127.0.0.1:5312:t_s0' agent='127.0.0.1:2312:t_s4|127.0.0.1:3312:t_s4|127.0.0.1:5312:t_s4'
+type='distributed' local='t_s0' local='t_s3' local='t_s4' agent='127.0.0.1:1312:t_s1|127.0.0.1:2312:t_s1|127.0.0.1:4312:t_s1' agent='127.0.0.1:2312:t_s2|127.0.0.1:3312:t_s2|127.0.0.1:4312:t_s2'
+––– input –––
+for i in 1 2 3 4 5; do echo "#{$i}"; grep -m 1 'Queue query: CREATE TABLE `t`' -A 2 /var/log/manticore-$i/searchd.log | awk '{sub(/.*\[BUDDY\]/, "")}1' | tr -d $'\n' | cut -d: -f 3-; done
+––– output –––
+#{1}
+CREATE TABLE `t` 			type='distributed' local='t_s0' local='t_s1' local='t_s3' agent='127.0.0.1:2312:t_s2|127.0.0.1:3312:t_s2|127.0.0.1:4312:t_s2' agent='127.0.0.1:2312:t_s4|127.0.0.1:3312:t_s4|127.0.0.1:5312:t_s4'
+#{2}
+CREATE TABLE `t` 			type='distributed' local='t_s1' local='t_s2' local='t_s4' agent='127.0.0.1:1312:t_s0|127.0.0.1:3312:t_s0|127.0.0.1:5312:t_s0' agent='127.0.0.1:1312:t_s3|127.0.0.1:4312:t_s3|127.0.0.1:5312:t_s3'
+#{3}
+CREATE TABLE `t` 			type='distributed' local='t_s0' local='t_s2' local='t_s4' agent='127.0.0.1:1312:t_s1|127.0.0.1:2312:t_s1|127.0.0.1:4312:t_s1' agent='127.0.0.1:1312:t_s3|127.0.0.1:4312:t_s3|127.0.0.1:5312:t_s3'
+#{4}
+CREATE TABLE `t` 			type='distributed' local='t_s1' local='t_s2' local='t_s3' agent='127.0.0.1:1312:t_s0|127.0.0.1:3312:t_s0|127.0.0.1:5312:t_s0' agent='127.0.0.1:2312:t_s4|127.0.0.1:3312:t_s4|127.0.0.1:5312:t_s4'
+#{5}
+CREATE TABLE `t` 			type='distributed' local='t_s0' local='t_s3' local='t_s4' agent='127.0.0.1:1312:t_s1|127.0.0.1:2312:t_s1|127.0.0.1:4312:t_s1' agent='127.0.0.1:2312:t_s2|127.0.0.1:3312:t_s2|127.0.0.1:4312:t_s2'
+––– input –––
+for i in 1 2 3 4 5; do mysql -h0 -P${i}306 -e "show tables\G"; done | grep 'Index: t' | sort -V
+––– output –––
+Index: t
+Index: t
+Index: t
+Index: t
+Index: t
+Index: t_s0
+Index: t_s0
+Index: t_s0
+Index: t_s1
+Index: t_s1
+Index: t_s1
+Index: t_s2
+Index: t_s2
+Index: t_s2
+Index: t_s3
+Index: t_s3
+Index: t_s3
+Index: t_s4
+Index: t_s4
+Index: t_s4
+––– input –––
+for i in 1 2 3 4 5; do echo -n "#{$i}: "; mysql -h0 -P${i}306 -e "show create table t\G" | grep 'Create Table' | grep -o "t_s[0-9]*" | sort -uV | paste -sd' ' -; done
+––– output –––
+#{1}: t_s0 t_s1 t_s2 t_s3 t_s4
+#{2}: t_s0 t_s1 t_s2 t_s3 t_s4
+#{3}: t_s0 t_s1 t_s2 t_s3 t_s4
+#{4}: t_s0 t_s1 t_s2 t_s3 t_s4
+#{5}: t_s0 t_s1 t_s2 t_s3 t_s4
+––– input –––
+for i in 1 2 3 4 5; do mysql -h0 -P${i}306 -e "show tables\G" | grep 'Index: t_' | wc -l; done
+––– output –––
+3
+3
+3
+3
+3

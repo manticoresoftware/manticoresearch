@@ -556,6 +556,7 @@ precaching table 'system.buffer_kafka_combined_0'
 precaching table 'destination_kafka_combined'
 precaching table 'system.buffer_kafka_stop_0'
 precaching table 'destination_kafka_stop'
+precached %{NUMBER} tables in #!/[0-9]+\.[0-9]+/!# sec
 ––– input –––
 timeout 120 bash -c 'while [[ $(docker exec manticore mysql -h0 -P9306 -e "SELECT COUNT(*) FROM destination_kafka_stop;" | grep -o "[0-9]*") -ne 57 ]]; do sleep 1; done && echo "Data processing completed."'
 ––– output –––

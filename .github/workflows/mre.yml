@@ -23,6 +23,8 @@ jobs:
             pid_file = /tmp/1/searchd.pid
             data_dir = /tmp/1/data
             query_log = /tmp/1/query.log
+            buddy_path = manticore-executor -n /usr/share/manticore/modules/manticore-buddy/src/main.php --debug
+            log_http = /tmp/1/http.log
           }
           EOF
           searchd -c /tmp/1/manticore.conf  --logreplication
@@ -35,6 +37,8 @@ jobs:
             pid_file = /tmp/2/searchd.pid
             data_dir = /tmp/2/data
             query_log = /tmp/2/query.log
+            buddy_path = manticore-executor -n /usr/share/manticore/modules/manticore-buddy/src/main.php --debug
+            log_http = /tmp/2/http.log
           }
           EOF
           searchd -c /tmp/2/manticore.conf  --logreplication
@@ -49,3 +53,7 @@ jobs:
           cat  /tmp/1/searchd.log
           echo "--------------------------------"
           cat  /tmp/2/searchd.log
+          echo "--------------------------------"
+          cat  /tmp/1/http.log
+          echo "--------------------------------"
+          cat  /tmp/2/http.log

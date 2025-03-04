@@ -923,6 +923,17 @@ bool HandleCmdReplicated ( RtAccum_t & tAcc )
 	if ( tAcc.m_dCmd.IsEmpty() )
 		return TlsMsg::Err ( "empty accumulator" );
 
+	// Increment active replication operations counter if the index is an RT index
+	auto pIndex = (RtIndex_c*)tAcc.m_pIndex;
+	if ( pIndex )
+		pIndex->m_iActiveReplicationOperations.fetch_add(1, std::memory_order_release);
+
+	// Ensure we decrement the counter when we leave this function
+	auto tCleanup = AtScopeExit([pIndex]() {
+		if ( pIndex )
+			pIndex->m_iActiveReplicationOperations.fetch_sub(1, std::memory_order_release);
+	});
+
 	const ReplicationCommand_t & tCmd = *tAcc.m_dCmd[0];
 	bool bCmdCluster = ( tAcc.m_dCmd.GetLength()==1
 		&& ( tCmd.m_eCommand==ReplCmd_e::CLUSTER_ALTER_ADD || tCmd.m_eCommand==ReplCmd_e::CLUSTER_ALTER_DROP ) );
@@ -1129,6 +1140,17 @@ static bool HandleRealCmdReplicate ( RtAccum_t & tAcc, CommitMonitor_c && tMonit
 static bool HandleCmdReplicateImpl ( RtAccum_t & tAcc, int * pDeletedCount, CSphString * pWarning, int * pUpdated ) EXCLUDES ( g_tClustersLock )
 {
 	TRACE_CORO ( "sph", "HandleCmdReplicateImpl" );
+
+	// Increment active replication operations counter if the index is an RT index
+	auto pIndex = (RtIndex_c*)tAcc.m_pIndex;
+	if ( pIndex )
+		pIndex->m_iActiveReplicationOperations.fetch_add(1, std::memory_order_release);
+
+	// Ensure we decrement the counter when we leave this function
+	auto tCleanup = AtScopeExit([pIndex]() {
+		if ( pIndex )
+			pIndex->m_iActiveReplicationOperations.fetch_sub(1, std::memory_order_release);
+	});
 
 	CommitMonitor_c tMonitor ( tAcc, pDeletedCount, pWarning, pUpdated );
 

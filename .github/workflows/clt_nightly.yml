@@ -235,8 +235,6 @@ jobs:
             image: ubuntu:noble
             test_prefix: test/clt-tests/installation/deb-dev-update
     steps:
-      - name: Update bash
-        run: brew install bash
       - name: Checkout repository
         uses: actions/checkout@v3
       - uses: manticoresoftware/clt@0.2.3

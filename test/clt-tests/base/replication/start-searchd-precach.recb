@@ -14,6 +14,6 @@ listening on %{IPADDR}:%{NUMBER} for mysql
 listening on %{IPADDR}:%{NUMBER} for sphinx and http(s)
 listening on %{IPADDR}:%{NUMBER} for sphinx and http(s)
 ––– input –––
-if timeout 10 grep -qm1 '\[BUDDY\] started' <(tail -n 1000 -f /var/log/manticore-${INSTANCE}/searchd.log); then echo 'Buddy started!'; else echo 'Timeout or failed!'; cat /var/log/manticore/searchd.log;fi
+if timeout 10 grep -qm1 '\[BUDDY\] started' <(tail -n 1000 -f /var/log/manticore-${INSTANCE}/searchd.log); then echo 'Buddy started!'; else echo 'Timeout or failed!'; cat /var/log/manticore-${INSTANCE}/searchd.log;fi
 ––– output –––
 Buddy started!

@@ -145,84 +145,57 @@ mysql -h0 -P9306 -e "SELECT * FROM name WHERE MATCH('tony') ORDER BY id ASC, use
 ––– input –––
 mysql -h0 -P9306 -e "SELECT * FROM name WHERE MATCH('SMITH') ORDER BY id DESC, username ASC OPTION fuzzy=1;"
 ––– output –––
-+--------+----------------------+------+
-| id     | username             | s    |
-+--------+----------------------+------+
-| 999992 | FARAH RUTHERFORD     | a    |
-| 999921 | VICKI SOUTHARD       | a    |
-| 999873 | ZENAIDA SEITZ        | a    |
-| 999737 | KEITH STUMP          | a    |
-| 999626 | SHERMAN HIGGINBOTHAM | a    |
-| 999391 | NELIDA HIGGINBOTHAM  | a    |
-| 999039 | KEITH JAMIESON       | a    |
-| 999025 | RUTHANN STONER       | a    |
-| 998882 | SCOTTY DICKINSON     | a    |
-| 998501 | VERTIE SCOTT         | a    |
-| 998500 | SETH PHUNG           | a    |
-| 998490 | SCOTTIE HENRY        | a    |
-| 998234 | SCOTTY MENENDEZ      | a    |
-| 997975 | SCOTTIE HERRING      | a    |
-| 997763 | SCOTTIE MCCOMBS      | a    |
-| 997317 | RUTHANNE GALVAN      | a    |
-| 997274 | SCOTTIE DAVIDSON     | a    |
-| 997027 | MELLIE HIGGINBOTHAM  | a    |
-| 996507 | SETH LYMAN           | a    |
-| 996439 | KEITHA CARBAJAL      | a    |
-+--------+----------------------+------+
-––– input –––
-mysql -h0 -P9306 -e "SELECT * FROM name WHERE MATCH('SMITH') ORDER BY id DESC, username ASC OPTION fuzzy=1;"
-––– output –––
-+--------+----------------------+------+
-| id     | username             | s    |
-+--------+----------------------+------+
-| 999992 | FARAH RUTHERFORD     | a    |
-| 999921 | VICKI SOUTHARD       | a    |
-| 999873 | ZENAIDA SEITZ        | a    |
-| 999737 | KEITH STUMP          | a    |
-| 999626 | SHERMAN HIGGINBOTHAM | a    |
-| 999391 | NELIDA HIGGINBOTHAM  | a    |
-| 999039 | KEITH JAMIESON       | a    |
-| 999025 | RUTHANN STONER       | a    |
-| 998882 | SCOTTY DICKINSON     | a    |
-| 998501 | VERTIE SCOTT         | a    |
-| 998500 | SETH PHUNG           | a    |
-| 998490 | SCOTTIE HENRY        | a    |
-| 998234 | SCOTTY MENENDEZ      | a    |
-| 997975 | SCOTTIE HERRING      | a    |
-| 997763 | SCOTTIE MCCOMBS      | a    |
-| 997317 | RUTHANNE GALVAN      | a    |
-| 997274 | SCOTTIE DAVIDSON     | a    |
-| 997027 | MELLIE HIGGINBOTHAM  | a    |
-| 996507 | SETH LYMAN           | a    |
-| 996439 | KEITHA CARBAJAL      | a    |
-+--------+----------------------+------+
++--------+-----------------+------+
+| id     | username        | s    |
++--------+-----------------+------+
+| 999737 | KEITH STUMP     | a    |
+| 999039 | KEITH JAMIESON  | a    |
+| 996439 | KEITHA CARBAJAL | a    |
+| 995770 | KEITH GONZALES  | a    |
+| 990882 | MINH SANTANA    | a    |
+| 990643 | KEITH MENDES    | a    |
+| 989972 | KEITHA WALTERS  | a    |
+| 989954 | GWENN SMYTH     | a    |
+| 989444 | KEITH KEATON    | a    |
+| 988755 | SHERRON SMYTH   | a    |
+| 988366 | LAVONIA SMYTH   | a    |
+| 988254 | MAYOLA KEITH    | a    |
+| 987106 | KEITH FAULK     | a    |
+| 986580 | DARNELL SMYTH   | a    |
+| 984012 | KEITH CORONEL   | a    |
+| 982759 | MORGAN KEITH    | a    |
+| 982421 | KEITH SHIFFLETT | a    |
+| 982223 | TELMA KEITH     | a    |
+| 982056 | RENITA KEITH    | a    |
+| 981115 | KATIE SMYTH     | a    |
++--------+-----------------+------+
 ––– input –––
 mysql -h0 -P9306 -e "SELECT * FROM name WHERE MATCH('SMYTH') ORDER BY id DESC, username ASC OPTION fuzzy=1;"
 ––– output –––
-+--------+----------------+------+
-| id     | username       | s    |
-+--------+----------------+------+
-| 998829 | EDYTHE VACA    | a    |
-| 998500 | SETH PHUNG     | a    |
-| 996507 | SETH LYMAN     | a    |
-| 995119 | EDYTHE JOHN    | a    |
-| 993455 | EDYTH ROSADO   | a    |
-| 992097 | EDYTH RAGAN    | a    |
-| 989954 | GWENN SMYTH    | a    |
-| 988823 | SETH WHITTAKER | a    |
-| 988755 | SHERRON SMYTH  | a    |
-| 988366 | LAVONIA SMYTH  | a    |
-| 986580 | DARNELL SMYTH  | a    |
-| 986231 | EDYTH BLODGETT | a    |
-| 985595 | SETH BACON     | a    |
-| 982423 | SETH CHATMAN   | a    |
-| 981115 | KATIE SMYTH    | a    |
-| 979541 | EDYTHE CLAYTON | a    |
-| 979093 | SETH BURROUGHS | a    |
-| 978812 | EDYTH GULLEY   | a    |
-| 975994 | SETH PARHAM    | a    |
-| 975841 | ALEIDA SMYTH   | a    |
-+--------+----------------+------+
++--------+--------------------+------+
+| id     | username           | s    |
++--------+--------------------+------+
+| 999921 | VICKI SOUTHARD     | a    |
+| 998829 | EDYTHE VACA        | a    |
+| 998500 | SETH PHUNG         | a    |
+| 996507 | SETH LYMAN         | a    |
+| 995690 | ROBERTO SOUTHARD   | a    |
+| 995663 | CHUNG SOUTH        | a    |
+| 995119 | EDYTHE JOHN        | a    |
+| 993455 | EDYTH ROSADO       | a    |
+| 993278 | LAKITA SOUTHARD    | a    |
+| 992097 | EDYTH RAGAN        | a    |
+| 989954 | GWENN SMYTH        | a    |
+| 988936 | LARISA SOUTHERLAND | a    |
+| 988823 | SETH WHITTAKER     | a    |
+| 988759 | LIEN SOUTHARD      | a    |
+| 988755 | SHERRON SMYTH      | a    |
+| 988366 | LAVONIA SMYTH      | a    |
+| 987165 | TULA SOUTHARD      | a    |
+| 987136 | LUANN SOUTHARD     | a    |
+| 986847 | JORDAN SOUTHERN    | a    |
+| 986711 | MARLIN SOUTHERN    | a    |
++--------+--------------------+------+
 ––– input –––
 mysql -h0 -P9306 -e "SELECT * FROM name WHERE MATCH('SMITH') ORDER BY id DESC, username ASC OPTION fuzzy=\"1\";"
 ––– output –––
@@ -276,10 +249,10 @@ mysql -h0 -P9306 -e "SELECT * FROM name WHERE MATCH('jane') AND id BETWEEN 10000
 | 10978 | JANAE KELSO          | a    |
 | 11064 | JANETH BOWIE         | a    |
 | 11266 | MARIELLE ALEJANDRO   | a    |
-| 11267 | JENEVA SANDERS       | a    |
 | 11342 | JANAE DELAGARZA      | a    |
-| 11525 | JENEVA JENSON        | a    |
-| 11615 | JENETTE SESSIONS     | a    |
+| 11875 | TYLER LUJAN          | a    |
+| 11925 | DINAH JANES          | a    |
+| 11997 | JANETH BROWNING      | a    |
 +-------+----------------------+------+
 ––– input –––
 mysql -h0 -P9306 -e "SELECT * FROM name WHERE MATCH('EBGRNA') AND id BETWEEN 1000 AND 2000 ORDER BY username ASC OPTION fuzzy=1;"
@@ -805,65 +778,21 @@ mysql -h0 -P9306 -e "SHOW TABLE idx_plain SETTINGS;"
 | settings      | min_infix_len = 2 |
 +---------------+-------------------+
 ––– input –––
-mysql -h0 -P9306 -e "show version\G;"
-––– output –––
-*************************** 1. row ***************************
-Component: Daemon
-Version: %{VERSION}
-*************************** 2. row ***************************
-Component: Columnar
-Version: columnar %{VERSION}
-*************************** 3. row ***************************
-Component: Secondary
-Version: secondary %{VERSION}
-*************************** 4. row ***************************
-Component: KNN
-Version: knn %{VERSION}
-*************************** 5. row ***************************
-Component: Buddy
-Version: buddy v%{VERSION}
-––– input –––
-mysql -h0 -P9306 -e "SELECT * FROM idx_plain WHERE MATCH('abcdef') OPTION fuzzy=1;"
-––– output –––
-+------+-----------+
-| id   | f         |
-+------+-----------+
-|    1 | abcdef    |
-|    2 | abcd efgh |
-+------+-----------+
-––– input –––
-mysql -h0 -P9306 -e "SELECT * FROM idx_plain WHERE MATCH('abcef') OPTION fuzzy=1;"
-––– output –––
-+------+-----------+
-| id   | f         |
-+------+-----------+
-|    1 | abcdef    |
-|    2 | abcd efgh |
-+------+-----------+
-––– input –––
 mysql -h0 -P9306 -e "SELECT * FROM idx_plain WHERE MATCH('nonexistent') OPTION fuzzy=1;"
 ––– output –––
+ERROR 1064 (42000) at line 1: unknown option 'fuzzy'
 ––– input –––
 mysql -h0 -P9306 -e "CALL AUTOCOMPLETE('abc', 'idx_plain');"
 ––– output –––
-+--------+
-| query  |
-+--------+
-| abcd   |
-| abcdef |
-+--------+
+ERROR 1064 (42000) at line 1: no such built-in procedure AUTOCOMPLETE
 ––– input –––
 mysql -h0 -P9306 -e "CALL AUTOCOMPLETE('ran', 'idx_plain');"
 ––– output –––
-+--------+
-| query  |
-+--------+
-| random |
-+--------+
+ERROR 1064 (42000) at line 1: no such built-in procedure AUTOCOMPLETE
 ––– input –––
 mysql -h0 -P9306 -e "CALL AUTOCOMPLETE('zzz', 'idx_plain');"; echo $?
 ––– output –––
-0
+ERROR 1064 (42000) at line 1: no such built-in procedure AUTOCOMPLETE
 ––– input –––
 mysql -h0 -P9306 -e "SELECT * FROM idx_plain WHERE MATCH('abcdef') OPTION fuzzy=0;"
 ––– output –––

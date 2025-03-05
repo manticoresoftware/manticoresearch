@@ -64,11 +64,11 @@ jobs:
         run: bash /entry_point.sh &
 
       - name: Check out cache before building
-        uses: actions/cache@v3.3.1
+        uses: actions/cache@v4
         with:
           path: cache
           enableCrossOsArchive: true
-          key: build_linux_x86_64
+          key: build_linux_debug_x86_64
 
       - name: Download build artifacts
         uses: manticoresoftware/download_artifact_with_retries@v3

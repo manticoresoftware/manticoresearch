@@ -100,7 +100,8 @@ int Expr_GetStored_T<POSTLIMIT>::StringEval ( const CSphMatch & tMatch, const BY
 {
 	DocstoreDoc_t tDoc;
 	VecTraits_T<const BYTE> tRes = GetBlob ( tDoc, tMatch );
-	*ppStr = tDoc.m_dFields[0].LeakData();
+	if ( tDoc.m_dFields.GetLength() )
+		*ppStr = tDoc.m_dFields[0].LeakData();
 	return tRes.GetLength();
 }
 
@@ -135,10 +136,13 @@ VecTraits_T<const BYTE>	Expr_GetStored_T<POSTLIMIT>::GetBlob ( DocstoreDoc_t & t
 		return { nullptr, 0 };
 
 	DocID_t tDocID = sphGetDocID ( tMatch.m_pDynamic ? tMatch.m_pDynamic : tMatch.m_pStatic );
-	if ( m_tSessionDocID.m_pDocstore->GetDoc ( tDoc, tDocID, &m_dFieldIds, m_tSessionDocID.m_iSessionId, false ) )
-		return tDoc.m_dFields[0];
+	if ( !m_tSessionDocID.m_pDocstore->GetDoc ( tDoc, tDocID, &m_dFieldIds, m_tSessionDocID.m_iSessionId, false ) )
+		return { nullptr, 0 };
 
-	return { nullptr, 0 };
+	if ( tDoc.m_dFields.GetLength() )
+		return tDoc.m_dFields[0];
+	else
+		return { nullptr, 0 };
 }
 
 template <bool POSTLIMIT>
@@ -149,10 +153,13 @@ const BYTE * Expr_GetStored_T<POSTLIMIT>::GetBlobPacked ( const CSphMatch & tMat
 
 	DocID_t tDocID = sphGetDocID ( tMatch.m_pDynamic ? tMatch.m_pDynamic : tMatch.m_pStatic );
 	DocstoreDoc_t tDoc;
-	if ( m_tSessionDocID.m_pDocstore->GetDoc ( tDoc, tDocID, &m_dFieldIds, m_tSessionDocID.m_iSessionId, true ) )
-		return tDoc.m_dFields[0].LeakData();
+	if ( !m_tSessionDocID.m_pDocstore->GetDoc ( tDoc, tDocID, &m_dFieldIds, m_tSessionDocID.m_iSessionId, true ) )
+		return nullptr;
 
-	return nullptr;
+	if ( tDoc.m_dFields.GetLength() )
+		return tDoc.m_dFields[0].LeakData();
+	else
+		return nullptr;
 }
 
 template <bool POSTLIMIT>
@@ -203,7 +210,10 @@ VecTraits_T<const BYTE>	Expr_GetStored_T<false>::GetBlob ( DocstoreDoc_t & tDoc,
 		return { nullptr, 0 };
 
 	tDoc = m_tSessionRowID.m_pDocstore->GetDoc ( tMatch.m_tRowID, &m_dFieldIds, m_tSessionRowID.m_iSessionId, false );
-	return tDoc.m_dFields[0];
+	if ( tDoc.m_dFields.GetLength() )
+		return tDoc.m_dFields[0];
+	else
+		return { nullptr, 0 };
 }
 
 template <>
@@ -213,7 +223,10 @@ const BYTE * Expr_GetStored_T<false>::GetBlobPacked ( const CSphMatch & tMatch )
 		return nullptr;
 
 	DocstoreDoc_t tDoc = m_tSessionRowID.m_pDocstore->GetDoc ( tMatch.m_tRowID, &m_dFieldIds, m_tSessionRowID.m_iSessionId, true );
-	return tDoc.m_dFields[0].LeakData();
+	if ( tDoc.m_dFields.GetLength() )
+		return tDoc.m_dFields[0].LeakData();
+	else
+		return nullptr;
 }
 
 ///////////////////////////////////////////////////////////////////////////////

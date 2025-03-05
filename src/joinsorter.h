@@ -19,6 +19,7 @@ int					GetJoinBatchSize();
 
 CSphVector<std::pair<int,bool>> FetchJoinRightTableFilters ( const CSphVector<CSphFilterSettings> & dFilters, const ISphSchema & tSchema, const char * szJoinedIndex );
 bool				NeedToMoveMixedJoinFilters ( const CSphQuery & tQuery, const ISphSchema & tSchema );
+bool				ExprHasLeftTableAttrs ( const CSphString & sAttr, const ISphSchema & tLeftSchema );
 std::unique_ptr<ISphFilter> CreateJoinNullFilter ( const CSphFilterSettings & tSettings, const CSphAttrLocator & tNullMapLocator );
 
 ISphMatchSorter *	CreateJoinSorter ( const CSphIndex * pIndex, const CSphIndex * pJoinedIndex, const SphQueueSettings_t & tSettings, const CSphQuery & tQuery, ISphMatchSorter * pSorter, const CSphQuery & tJoinQueryOptions, bool bJoinedGroupSort, int iBatchSize, CSphString & sError );

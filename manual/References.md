@@ -221,6 +221,9 @@
 * [rt_attr_uint](Creating_a_table/Local_tables/Plain_and_real-time_table_settings.md#General-syntax-of-CREATE-TABLE)
 * [rt_field](Creating_a_table/Local_tables/Plain_and_real-time_table_settings.md#General-syntax-of-CREATE-TABLE)
 * [rt_mem_limit](Creating_a_table/Local_tables/Plain_and_real-time_table_settings.md#General-syntax-of-CREATE-TABLE)
+* [diskchunk_flush_write_timeout](Creating_a_table/Local_tables/Plain_and_real-time_table_settings.md#General-syntax-of-CREATE-TABLE)
+* [diskchunk_flush_search_timeout](Creating_a_table/Local_tables/Plain_and_real-time_table_settings.md#General-syntax-of-CREATE-TABLE)
+
 
 ## Full-text search operators
 * [OR](Searching/Full_text_matching/Operators.md#OR-operator)
@@ -440,6 +443,8 @@ To be put in the `searchd {}` section of the configuration file:
   * [collation_libc_locale](Server_settings/Searchd.md#collation_libc_locale) - Server libc locale
   * [collation_server](Server_settings/Searchd.md#collation_server) - Default server collation
   * [data_dir](Server_settings/Searchd.md#data_dir) - Path to data directory where Manticore stores everything ([RT mode](Creating_a_table/Local_tables.md#Online-schema-management-%28RT-mode%29))
+  * [diskchunk_flush_write_timeout](Server_settings/Searchd.md#diskchunk_flush_write_timeout) - Timeout for auto-flushing a RAM chunk if there are no writes to it
+  * [diskchunk_flush_search_timeout](Server_settings/Searchd.md#diskchunk_flush_search_timeout) - Timeout for preventing auto-flushing a RAM chunk if there are no searches in the table
   * [docstore_cache_size](Server_settings/Searchd.md#docstore_cache_size) - Maximum size of document blocks from document storage held in memory
   * [expansion_limit](Creating_a_table/NLP_and_tokenization/Wildcard_searching_settings.md#expansion_limit) - Maximum number of expanded keywords for a single wildcard
   * [grouping_in_utc](Server_settings/Searchd.md#grouping_in_utc) - Enables using UTC timezone for grouping time fields
@@ -643,4 +648,7 @@ AND, AS, BY, COLUMNARSCAN, DISTINCT, DIV, DOCIDINDEX, EXPLAIN, FACET, FALSE, FOR
 * [6.3.2](https://manual.manticoresearch.com/manticore-6-3-2/). [Installation page](https://manticoresearch.com/install-6.3.2/)
 * [6.3.4](https://manual.manticoresearch.com/manticore-6-3-4/). [Installation page](https://manticoresearch.com/install-6.3.4/)
 * [6.3.6](https://manual.manticoresearch.com/manticore-6-3-6/). [Installation page](https://manticoresearch.com/install-6.3.6/)
+* [6.3.8](https://manual.manticoresearch.com/manticore-6-3-8/). [Installation page](https://manticoresearch.com/install-6.3.8/)
+* [7.0.0](https://manual.manticoresearch.com/manticore-7-0-0/). [Installation page](https://manticoresearch.com/install-7.0.0/)
+* [7.4.6](https://manual.manticoresearch.com/manticore-7-4-6/). [Installation page](https://manticoresearch.com/install-7.4.6/)
 <!-- proofread -->

@@ -125,7 +125,7 @@ POST /replace
 <!-- response JSON -->
 ```json
 {
-  "_index":"products",
+  "table":"products",
   "_id":1,
   "created":false,
   "result":"updated",
@@ -159,7 +159,7 @@ POST /products/_doc/3
 ```json
 {
 "_id":2,
-"_index":"products",
+"table":"products",
 "_primary_term":1,
 "_seq_no":0,
 "_shards":{
@@ -174,7 +174,7 @@ POST /products/_doc/3
 
 {
 "_id":3,
-"_index":"products",
+"table":"products",
 "_primary_term":1,
 "_seq_no":0,
 "_shards":{
@@ -208,7 +208,7 @@ POST /products/_update/55
 <!-- response Elasticsearch-like partial -->
 ```json
 {
-"_index":"products",
+"table":"products",
 "updated":1
 }
 ```
@@ -231,7 +231,7 @@ POST /cluster_name:products/_update/55
 <!-- response Elasticsearch-like partial in cluster -->
 ```json
 {
-"_index":"products",
+"table":"products",
 "updated":1
 }
 ```
@@ -286,7 +286,7 @@ res = await indexApi.replace({"table" : "products", "id" : 1, "doc" : {"title" :
 
 <!-- response javascript -->
 ```javascript
-{"_index":"products","_id":1,"result":"updated"}
+{"table":"products","_id":1,"result":"updated"}
 ```
 
 <!-- intro -->
@@ -357,7 +357,7 @@ res = await indexApi.replace({
 <!-- response TypeScript -->
 ```json
 {
-    "_index":"test",
+    "table":"test",
     "_id":1,
     "created":false
     "result":"updated"
@@ -380,7 +380,7 @@ res, _, _ := apiClient.IndexAPI.Replace(context.Background()).InsertDocumentRequ
 <!-- response Go -->
 ```go
 {
-    "_index":"test",
+    "table":"test",
     "_id":1,
     "created":false
     "result":"updated"
@@ -434,7 +434,7 @@ POST /bulk
     {
       "replace":
       {
-        "_index":"products",
+        "table":"products",
         "_id":1,
         "created":false,
         "result":"updated",
@@ -444,7 +444,7 @@ POST /bulk
     {
       "replace":
       {
-        "_index":"products",
+        "table":"products",
         "_id":2,
         "created":false,
         "result":"updated",
@@ -512,12 +512,12 @@ api_resp = indexApi.bulk('\n'.join(map(json.dumps,docs)))
 ```python
 {'error': None,
  'items': [{u'replace': {u'_id': 1,
-                         u'_index': u'products',
+                         u'table': u'products',
                          u'created': False,
                          u'result': u'updated',
                          u'status': 200}},
            {u'replace': {u'_id': 2,
-                         u'_index': u'products',
+                         u'table': u'products',
                          u'created': False,
                          u'result': u'updated',
                          u'status': 200}}]}
@@ -534,7 +534,7 @@ res =  await indexApi.bulk(docs.map(e=>JSON.stringify(e)).join('\n'));
 
 <!-- response javascript -->
 ```javascript
-{"items":[{"replace":{"_index":"products","_id":1,"created":false,"result":"updated","status":200}},{"replace":{"_index":"products","_id":2,"created":false,"result":"updated","status":200}}],"errors":false}
+{"items":[{"replace":{"table":"products","_id":1,"created":false,"result":"updated","status":200}},{"replace":{"table":"products","_id":2,"created":false,"result":"updated","status":200}}],"errors":false}
 
 ```
 
@@ -605,7 +605,7 @@ res = await indexApi.bulk(
     {
       "replace":
       {
-        "_index":"test",
+        "table":"test",
         "_id":1,
         "created":false,
         "result":"updated",
@@ -615,7 +615,7 @@ res = await indexApi.bulk(
     {
       "replace":
       {
-        "_index":"test",
+        "table":"test",
         "_id":2,
         "created":false,
         "result":"updated",
@@ -643,7 +643,7 @@ res, _, _ := apiClient.IndexAPI.Bulk(context.Background()).Body(body).Execute()
     {
       "replace":
       {
-        "_index":"test",
+        "table":"test",
         "_id":1,
         "created":false,
         "result":"updated",
@@ -653,7 +653,7 @@ res, _, _ := apiClient.IndexAPI.Bulk(context.Background()).Body(body).Execute()
     {
       "replace":
       {
-        "_index":"test",
+        "table":"test",
         "_id":2,
         "created":false,
         "result":"updated",

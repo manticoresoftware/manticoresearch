@@ -2021,7 +2021,7 @@ public:
 		TRACE_CONN ( "conn", "HttpHandler_JsonInsert_c::Process" );
 		SqlStmt_t tStmt;
 		DocID_t tDocId = 0;
-		if ( !sphParseJsonInsert ( m_sQuery.first, tStmt, tDocId, m_bReplace, m_sError ) )
+		if ( !sphParseJsonInsert ( m_sQuery, tStmt, tDocId, m_bReplace, m_sError ) )
 		{
 			ReportError ( nullptr, HttpErrorType_e::Parse, EHTTP_STATUS::_400, tStmt.m_sIndex.cstr() );
 			return false;

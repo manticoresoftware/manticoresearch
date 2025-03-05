@@ -418,6 +418,13 @@ Declares a vector of floating-point values.
 
 Value: field name. Multiple records allowed.
 
+To set KNN attributes for rt_attr_float_vector add 
+```ini
+rt_attr_float_vector = image_vector
+rt_attr_float_vector = text_vector
+knn = {"attrs":[{"name":"image_vector","type":"hnsw","dims":768,"hnsw_similarity":"COSINE","hnsw_m":16,"hnsw_ef_construction":200},{"name":"text_vector","type":"hnsw","dims":768,"hnsw_similarity":"COSINE","hnsw_m":16,"hnsw_ef_construction":200}]}
+```
+
 #### rt_attr_bool
 
 ```ini

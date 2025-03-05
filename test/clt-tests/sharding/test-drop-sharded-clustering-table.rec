@@ -122,7 +122,5 @@ ERROR 1064 (42000) at line 1: table 'tbl1' is missing: DROP TABLE failed: table 
 ––– input –––
 mysql -h0 -P1306 -e "INSERT INTO ${CLUSTER_NAME}:tbl1 VALUES (1);" & sleep 1; mysql -h0 -P1306 -e "DROP TABLE ${CLUSTER_NAME}:tbl1;"
 ––– output –––
-[%{NUMBER}] %{NUMBER}
 ERROR 1064 (42000) at line 1: Cannot create table with column names missing
-[%{NUMBER}]+  Exit %{NUMBER}                  mysql -h0 -P1306 -e "INSERT INTO ${CLUSTER_NAME}:tbl1 VALUES (1);"
 ERROR 1064 (42000) at line 1: table 'tbl1' is missing: DROP TABLE failed: table 'tbl1' must exist

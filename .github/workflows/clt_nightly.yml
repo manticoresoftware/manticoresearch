@@ -157,7 +157,7 @@ jobs:
           
   clt-arm64:
     name: CLT-Arm64
-    runs-on: macos-15
+    runs-on: ubuntu-24.04-arm
     strategy:
       fail-fast: false 
       matrix:
@@ -235,8 +235,6 @@ jobs:
             image: ubuntu:noble
             test_prefix: test/clt-tests/installation/deb-dev-update
     steps:
-      - name: Update bash
-        run: brew install bash
       - name: Checkout repository
         uses: actions/checkout@v3
       - uses: manticoresoftware/clt@0.2.3

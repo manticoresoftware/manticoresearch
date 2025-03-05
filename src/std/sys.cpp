@@ -131,6 +131,25 @@ bool IsSSE42Supported()
 }
 
 
+static bool IsPOPCNTSupportedImpl()
+{
+#if defined(__x86_64__) || defined(__i386__)
+	uint32_t dInfo[4];
+	__cpuid ( 1, dInfo[0], dInfo[1], dInfo[2], dInfo[3] );
+	return (dInfo[2] & (1 << 23)) != 0;
+#else
+	return true;	// assumes that it's ARM and simde is used
+#endif
+}
+
+
+bool IsPOPCNTSupported()
+{
+	static bool bPopcnt = IsPOPCNTSupportedImpl();
+	return bPopcnt;
+}
+
+
 static int GetMemPageSizeImpl()
 {
 #if _WIN32

@@ -6775,6 +6775,12 @@ bool CSphIndex_VLN::DoMerge ( const CSphIndex_VLN * pDstIndex, const CSphIndex_V
 		if ( !tAttrMerger.Prepare ( pSrcIndex, pDstIndex ) )
 			return false;
 
+		if ( !tAttrMerger.AnalyzeAttributes ( *pDstIndex, dDstRows, tTotalDocs.first ) )
+			return false;
+
+		if ( !bCompress && !tAttrMerger.AnalyzeAttributes ( *pSrcIndex, dSrcRows, tTotalDocs.second ) )
+			return false;
+
 		if ( !tAttrMerger.CopyAttributes ( *pDstIndex, dDstRows, tTotalDocs.first ) )
 			return false;
 

@@ -6,22 +6,22 @@ if [ $# -ne 2 ]; then
 	exit 1
 fi
 
-PATTERNS_FILE=$1
-TARGET_FILE=$2
+REC_FILE=$1
+REP_FILE=$2
 
 # Check if files exist
-if [ ! -f "$PATTERNS_FILE" ]; then
-	echo "Error: Patterns file '$PATTERNS_FILE' does not exist"
+if [ ! -f "$REC_FILE" ]; then
+	echo "Error: Patterns file '$REC_FILE' does not exist"
 	exit 1
 fi
 
-if [ ! -f "$TARGET_FILE" ]; then
-	echo "Error: Target file '$TARGET_FILE' does not exist"
+if [ ! -f "$REP_FILE" ]; then
+	echo "Error: Target file '$REP_FILE' does not exist"
 	exit 1
 fi
 
 # Read the target file content once
-TARGET_CONTENT=$(cat "$TARGET_FILE")
+REP_CONTENT=$(cat "$REP_FILE")
 
 # Flag to track if all patterns are found
 all_found=true
@@ -39,7 +39,7 @@ while IFS= read -r line; do
 	# For each line in the patterns file, check all patterns in that line
 	line_match=true
 	for pattern in "${patterns[@]}"; do
-		if ! echo "$TARGET_CONTENT" | grep -q "$pattern"; then
+		if ! echo "$REP_CONTENT" | grep -q "$pattern"; then
 			echo "Pattern not found: '$pattern'"
 			line_match=false
 			all_found=false
@@ -49,7 +49,7 @@ while IFS= read -r line; do
 	if [ "$line_match" = false ]; then
 		echo "Not all patterns from line '$line' were found"
 	fi
-done < "$PATTERNS_FILE"
+done < "$REC_FILE"
 
 # Exit with appropriate status
 if [ "$all_found" = true ]; then

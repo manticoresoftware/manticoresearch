@@ -1,0 +1,10 @@
+#!/usr/bin/env bash
+
+# Check if two arguments are provided
+if [ $# -ne 2 ]; then
+	echo "Usage: $0 <patterns_file> <target_file>"
+	exit 1
+fi
+
+exit 0
+

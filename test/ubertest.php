@@ -108,7 +108,6 @@ for ( $i=0; $i<count($args); $i++ )
 	else if ( $arg=="--ctest" )						{ $locals['ctest'] = true; $ctest = true; $force_guess = false; }
 	else if ( $arg=="--rt" )						$locals['rt_mode'] = true;
 	else if ( $arg=="--columnar" )					$locals['columnar_mode'] = true;
-	else if ( $arg=="--test-thd-pool" )				$locals['use_pool'] = true;
 	else if ( $arg=="--strict" )					$g_strict = true;
 	else if ( $arg=="--strict-verbose" )			{ $g_strict = true; $g_strictverbose = true; }
 	else if ( $arg=="--valgrind-searchd" )			$locals['valgrindsearchd'] = true;

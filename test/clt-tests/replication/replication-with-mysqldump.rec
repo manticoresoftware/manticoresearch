@@ -25,6 +25,16 @@ mysql -h0 -P1306 -e "CREATE TABLE tbl1 (id BIGINT, f TEXT, a INT, b FLOAT, j JSO
 ––– output –––
 0
 ––– input –––
+mysql -h0 -P1306 -e "SHOW TABLE tbl1 SETTINGS\G;"
+––– output –––
+*************************** 1. row ***************************
+Variable_name: settings
+Value: engine = columnar
+exceptions = /var/log/manticore-1/tbl1/exceptions_chunk0_0.txt
+morphology = stem_en
+stopwords = /var/log/manticore-1/tbl1/stopwords_chunk0_0.txt
+rt_mem_limit = 268435456
+––– input –––
 mysql -h0 -P1306 -e "INSERT INTO tbl1 VALUES (1, 'The cat runs', 42, 3.14, '{\"key\":\"value\"}', (1,2,3), 'test', 1, '2024-12-16 12:00:00', (123456789012345678, 987654321098765432), (0.1, 0.2, 0.3, 0.4));"; echo $?
 ––– output –––
 0
@@ -48,6 +58,15 @@ mysql -h0 -P2306 -e "CREATE TABLE tbl2 (id BIGINT, f TEXT, a INT, b FLOAT, j JSO
 ––– output –––
 0
 ––– input –––
+mysql -h0 -P2306 -e "SHOW TABLE tbl2 SETTINGS\G;"
+––– output –––
+*************************** 1. row ***************************
+Variable_name: settings
+Value: engine = rowwise
+morphology = stem_ru
+wordforms = /var/log/manticore-2/tbl2/wordforms_chunk0_0.txt
+rt_mem_limit = 536870912
+––– input –––
 mysql -h0 -P2306 -e "INSERT INTO tbl2 VALUES (1, 'Русский fast текст', 84, 2.71, '{\"ключ\":\"значение\"}', (4,5,6), 'строка', 0, '2023-11-15 08:30:00', (987654321098765432, 123456789012345678), (0.4, 0.3, 0.2, 0.1));"; echo $?
 ––– output –––
 0
@@ -62,6 +81,13 @@ mysql -h0 -P2306 -e "ALTER CLUSTER c ADD tbl2;"
 mysql -h0 -P3306 -e "CREATE TABLE tbl3 (id BIGINT, f TEXT, a INT, b FLOAT, j JSON, m MULTI, s STRING, e BOOL, d TIMESTAMP, v MULTI64, fv FLOAT_VECTOR KNN_TYPE='hnsw' KNN_DIMS='4' HNSW_SIMILARITY='l2') ENGINE='rowwise' rt_mem_limit='512M';"; echo $?
 ––– output –––
 0
+––– input –––
+mysql -h0 -P3306 -e "SHOW TABLE tbl3 SETTINGS\G;"
+––– output –––
+*************************** 1. row ***************************
+Variable_name: settings
+Value: engine = rowwise
+rt_mem_limit = 536870912
 ––– input –––
 mysql -h0 -P3306 -e "INSERT INTO tbl3 (id, f, a, b, j, m, s, e, d, v, fv) VALUES (1, 'Plain example', 42, 3.14, '{\"key\":\"value\"}', (1,2,3), 'plain_string', 1, '2024-12-16 12:00:00', (123456789012345678, 987654321098765432), (0.1, 0.2, 0.3, 0.4));"; echo $?
 ––– output –––
@@ -265,6 +291,124 @@ Data from c:tbl3 on port 3306:
 |    2 | New plain entry |   50 | 5.500000 | {"new":"entry"} | 10,11,12 | new_string   |    0 |    0 | 111222333444555666,777888999000111222 | 0.600000,0.700000,0.800000,0.900000 |
 +------+-----------------+------+----------+-----------------+----------+--------------+------+------+---------------------------------------+-------------------------------------+
 ––– input –––
+for port in 1306 2306 3306; do echo "SHOW TABLE c:tbl3 on port $port:"; mysql -h0 -P$port -e "SHOW TABLE c:tbl1 SETTINGS\G;"; done
+––– output –––
+SHOW TABLE c:tbl3 on port 1306:
+*************************** 1. row ***************************
+Variable_name: settings
+Value: engine = columnar
+exceptions = /var/log/manticore-1/tbl1/exceptions_chunk0_0.txt
+morphology = stem_en
+stopwords = /var/log/manticore-1/tbl1/stopwords_chunk0_0.txt
+rt_mem_limit = 268435456
+SHOW TABLE c:tbl3 on port 2306:
+*************************** 1. row ***************************
+Variable_name: settings
+Value: engine = columnar
+exceptions = /var/log/manticore-2/tbl1/exceptions_chunk0_0.txt
+morphology = stem_en
+stopwords = /var/log/manticore-2/tbl1/stopwords_chunk0_0.txt
+rt_mem_limit = 268435456
+SHOW TABLE c:tbl3 on port 3306:
+*************************** 1. row ***************************
+Variable_name: settings
+Value: engine = columnar
+exceptions = /var/log/manticore-3/tbl1/exceptions_chunk0_0.txt
+morphology = stem_en
+stopwords = /var/log/manticore-3/tbl1/stopwords_chunk0_0.txt
+rt_mem_limit = 268435456
+––– input –––
+for port in 1306 2306 3306; do echo "SHOW TABLE c:tbl2 on port $port:"; mysql -h0 -P$port -e "SHOW TABLE c:tbl2 SETTINGS\G;"; done
+––– output –––
+SHOW TABLE c:tbl2 on port 1306:
+*************************** 1. row ***************************
+Variable_name: settings
+Value: engine = rowwise
+morphology = stem_ru
+wordforms = /var/log/manticore-1/tbl2/wordforms_chunk0_0.txt
+rt_mem_limit = 536870912
+SHOW TABLE c:tbl2 on port 2306:
+*************************** 1. row ***************************
+Variable_name: settings
+Value: engine = rowwise
+morphology = stem_ru
+wordforms = /var/log/manticore-2/tbl2/wordforms_chunk0_0.txt
+rt_mem_limit = 536870912
+SHOW TABLE c:tbl2 on port 3306:
+*************************** 1. row ***************************
+Variable_name: settings
+Value: engine = rowwise
+morphology = stem_ru
+wordforms = /var/log/manticore-3/tbl2/wordforms_chunk0_0.txt
+rt_mem_limit = 536870912
+––– input –––
+for port in 1306 2306 3306; do echo "SHOW TABLE c:tbl3 on port $port:"; mysql -h0 -P$port -e "SHOW TABLE c:tbl3 SETTINGS\G;"; done
+––– output –––
+SHOW TABLE c:tbl3 on port 1306:
+*************************** 1. row ***************************
+Variable_name: settings
+Value: engine = rowwise
+rt_mem_limit = 536870912
+SHOW TABLE c:tbl3 on port 2306:
+*************************** 1. row ***************************
+Variable_name: settings
+Value: engine = rowwise
+rt_mem_limit = 536870912
+SHOW TABLE c:tbl3 on port 3306:
+*************************** 1. row ***************************
+Variable_name: settings
+Value: engine = rowwise
+rt_mem_limit = 536870912
+––– input –––
+mysql -h0 -P1306 -e "SELECT * FROM c:tbl1 WHERE MATCH('feline') ORDER BY id ASC;"
+––– output –––
++------+---------------------+------+----------+-------------------+-------+------+------+------+---------------------------------------+-------------------------------------+
+| id   | f                   | a    | b        | j                 | m     | s    | e    | d    | v                                     | fv                                  |
++------+---------------------+------+----------+-------------------+-------+------+------+------+---------------------------------------+-------------------------------------+
+|    1 | Updated feline runs |   42 | 3.140000 | {"key":"updated"} | 1,2,3 | test |    1 |    0 | 123456789012345678,987654321098765432 | 0.100000,0.200000,0.300000,0.400000 |
++------+---------------------+------+----------+-------------------+-------+------+------+------+---------------------------------------+-------------------------------------+
+––– input –––
+mysql -h0 -P1306 -e "SELECT * FROM c:tbl1 WHERE MATCH('the') ORDER BY id ASC;"
+––– output –––
+––– input –––
+mysql -h0 -P1306 -e "SELECT * FROM c:tbl1 WHERE MATCH('runs') ORDER BY id ASC;"
+––– output –––
++------+---------------------+------+----------+-------------------+-------+------+------+------+---------------------------------------+-------------------------------------+
+| id   | f                   | a    | b        | j                 | m     | s    | e    | d    | v                                     | fv                                  |
++------+---------------------+------+----------+-------------------+-------+------+------+------+---------------------------------------+-------------------------------------+
+|    1 | Updated feline runs |   42 | 3.140000 | {"key":"updated"} | 1,2,3 | test |    1 |    0 | 123456789012345678,987654321098765432 | 0.100000,0.200000,0.300000,0.400000 |
++------+---------------------+------+----------+-------------------+-------+------+------+------+---------------------------------------+-------------------------------------+
+––– input –––
+mysql -h0 -P1306 -e "SELECT * FROM c:tbl3 WHERE MATCH('example') ORDER BY id ASC;"
+––– output –––
++------+---------------+------+----------+-----------------+-------+--------------+------+------+---------------------------------------+-------------------------------------+
+| id   | f             | a    | b        | j               | m     | s            | e    | d    | v                                     | fv                                  |
++------+---------------+------+----------+-----------------+-------+--------------+------+------+---------------------------------------+-------------------------------------+
+|    1 | Plain example |   42 | 3.140000 | {"key":"value"} | 1,2,3 | plain_string |    1 |    0 | 123456789012345678,987654321098765432 | 0.100000,0.200000,0.300000,0.400000 |
++------+---------------+------+----------+-----------------+-------+--------------+------+------+---------------------------------------+-------------------------------------+
+––– input –––
+mysql -h0 -P2306 -e "SELECT * FROM c:tbl1 WHERE MATCH('feline') ORDER BY id ASC;"
+––– output –––
++------+---------------------+------+----------+-------------------+-------+------+------+------+---------------------------------------+-------------------------------------+
+| id   | f                   | a    | b        | j                 | m     | s    | e    | d    | v                                     | fv                                  |
++------+---------------------+------+----------+-------------------+-------+------+------+------+---------------------------------------+-------------------------------------+
+|    1 | Updated feline runs |   42 | 3.140000 | {"key":"updated"} | 1,2,3 | test |    1 |    0 | 123456789012345678,987654321098765432 | 0.100000,0.200000,0.300000,0.400000 |
++------+---------------------+------+----------+-------------------+-------+------+------+------+---------------------------------------+-------------------------------------+
+––– input –––
+mysql -h0 -P2306 -e "SELECT * FROM c:tbl1 WHERE MATCH('the') ORDER BY id ASC;"
+––– output –––
+––– input –––
+mysql -h0 -P3306 -e "SELECT * FROM c:tbl1 WHERE MATCH('feline') ORDER BY id ASC;"
+––– output –––
++------+---------------------+------+----------+-------------------+-------+------+------+------+---------------------------------------+-------------------------------------+
+| id   | f                   | a    | b        | j                 | m     | s    | e    | d    | v                                     | fv                                  |
++------+---------------------+------+----------+-------------------+-------+------+------+------+---------------------------------------+-------------------------------------+
+|    1 | Updated feline runs |   42 | 3.140000 | {"key":"updated"} | 1,2,3 | test |    1 |    0 | 123456789012345678,987654321098765432 | 0.100000,0.200000,0.300000,0.400000 |
++------+---------------------+------+----------+-------------------+-------+------+------+------+---------------------------------------+-------------------------------------+
+––– input –––
+mysql -h0 -P3306 -e "SELECT * FROM c:tbl1 WHERE MATCH('the') ORDER BY id ASC;"
+––– output –––
+––– input –––
 mysql -h0 -P1306 -e "SHOW STATUS LIKE 'cluster_c_indexes';"
 ––– output –––
 +-------------------+----------------+
@@ -294,6 +438,16 @@ Port 3306: tbl2 NOT FOUND
 mysql -h0 -P1306 -u new_username < dump.sql
 ––– output –––
 ERROR 1064 (42000) at line 21: table 'tbl2' absent
+––– input –––
+mysql -h0 -P1306 -e "SHOW TABLE c:tbl1 SETTINGS\G;"
+––– output –––
+*************************** 1. row ***************************
+Variable_name: settings
+Value: engine = columnar
+exceptions = /var/log/manticore-1/tbl1/exceptions_chunk0_0.txt
+morphology = stem_en
+stopwords = /var/log/manticore-1/tbl1/stopwords_chunk0_0.txt
+rt_mem_limit = 268435456
 ––– input –––
 for port in 1306 2306 3306; do echo "Data from c:tbl1 on port $port:"; mysql -h0 -P$port -e "SELECT * FROM c:tbl1 ORDER BY id ASC;"; done
 ––– output –––

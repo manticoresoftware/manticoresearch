@@ -2,7 +2,7 @@
 
 <test>
 <name>snippets vs boundaries, utf-8</name>
-
+<skip_db/>
 <config>
 searchd
 {
@@ -31,8 +31,6 @@ index index_utf8
 
 }
 </config>
-
-<db_insert>select 1;</db_insert>
 
 <custom_test><![CDATA[
 

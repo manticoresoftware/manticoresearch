@@ -104,7 +104,7 @@ $results[] = "\n" . $ql->Query ( "SELECT * FROM plain3" );
 $results[] = 'plain4';
 $results[] = "\n" . $ql->Query ( "SELECT * FROM plain4" );
 
-$orig_conf = file(testdir('config.conf'));
+$orig_conf = file(testdir_config());
 
 $new_conf = '';
 foreach ( $orig_conf as $line )
@@ -115,10 +115,10 @@ foreach ( $orig_conf as $line )
 	$got4path = strpos ( $line, 'plain_old_location_4' );
 	if ( $got4path )
 		$line = substr ( $line, 0, $got4path ) . 'plain_new_location_4' . "\n";
-	
+
 	$new_conf .= $line;
 }
-file_put_contents(testdir('config.conf'), $new_conf);
+file_put_contents(testdir_config(), $new_conf);
 
 global $this_test, $index_data_path;
 

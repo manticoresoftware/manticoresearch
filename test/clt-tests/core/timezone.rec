@@ -1,0 +1,61 @@
+––– block: ../base/start-searchd –––
+––– input –––
+mysql -h0 -P9306 -e "show variables like 'timezone'\G" | grep Value
+––– output –––
+Value: #!/[0-9a-zA-Z]\w+/!#
+––– input –––
+mysql -h0 -P9306 -e "select now()\G" | awk 'NR>1 {print $2}' > /tmp/utc.txt
+––– output –––
+––– input –––
+cat /tmp/utc.txt
+––– output –––
+#!/\d+/!#
+––– input –––
+mysql -h0 -P9306 -e "select now(), curtime(), curdate(), utc_time(), utc_timestamp();"
+––– output –––
++------------+-----------+------------+------------+---------------------+
+| now()      | curtime() | curdate()  | utc_time() | utc_timestamp()     |
++------------+-----------+------------+------------+---------------------+
+| #!/\d+/!# | #!/\d{2}:\d{2}:\d{2}/!#  | #!/\d{4}-\d{2}-\d{2}/!# | #!/\d{2}:\d{2}:\d{2}/!#   | #!/\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}/!# |
++------------+-----------+------------+------------+---------------------+
+––– input –––
+mysql -h0 -P9306 -e "set global timezone='UTC';"
+––– output –––
+––– input –––
+mysql -h0 -P9306 -e "show variables like 'timezone'\G" | grep Value
+––– output –––
+Value: UTC
+––– input –––
+mysql -h0 -P9306 -e "select now(), curtime(), curdate(), utc_time(), utc_timestamp();"
+––– output –––
++------------+-----------+------------+------------+---------------------+
+| now()      | curtime() | curdate()  | utc_time() | utc_timestamp()     |
++------------+-----------+------------+------------+---------------------+
+| #!/\d+/!# | #!/\d{2}:\d{2}:\d{2}/!#  | #!/\d{4}-\d{2}-\d{2}/!# | #!/\d{2}:\d{2}:\d{2}/!#   | #!/\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}/!# |
++------------+-----------+------------+------------+---------------------+
+––– input –––
+mysql -h0 -P9306 -e "set global timezone='Asia/Bangkok';"
+––– output –––
+––– input –––
+mysql -h0 -P9306 -e "select now()\G" | awk 'NR>1 {print $2}' > /tmp/bkk.txt
+––– output –––
+––– input –––
+cat /tmp/bkk.txt
+––– output –––
+#!/\d+/!#
+––– input –––
+mysql -h0 -P9306 -e "show variables like 'timezone'\G" | grep Value
+––– output –––
+Value: Asia/Bangkok
+––– input –––
+mysql -h0 -P9306 -e "select now(), curtime(), curdate(), utc_time(), utc_timestamp();"
+––– output –––
++------------+-----------+------------+------------+---------------------+
+| now()      | curtime() | curdate()  | utc_time() | utc_timestamp()     |
++------------+-----------+------------+------------+---------------------+
+| #!/\d+/!# | #!/\d{2}:\d{2}:\d{2}/!#  | #!/\d{4}-\d{2}-\d{2}/!# | #!/\d{2}:\d{2}:\d{2}/!#   | #!/\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}/!# |
++------------+-----------+------------+------------+---------------------+
+––– input –––
+[ $(($(cat /tmp/bkk.txt) - $(cat /tmp/utc.txt))) -gt 25200 ] && echo "Bangkok is ahead of UTC by 7 hours" || echo "Invalid hours difference $(cat /tmp/bkk.txt) - $(cat /tmp/utc.txt) < 25200"
+––– output –––
+

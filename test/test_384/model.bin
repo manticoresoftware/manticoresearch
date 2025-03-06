@@ -22,7 +22,7 @@ a:1:{i:0;a:34:{i:0;a:2:{s:8:"sphinxql";s:87:"create table rt1 (title text indexe
 	    "j1" : "{\"data\":\"test 221\", \"fd\":221}",
 	    "title" : "test 221"
 	}
-}";s:4:"rows";s:72:"{"table":"rt1","_id":221,"created":true,"result":"created","status":201}";s:9:"http_code";i:200;s:4:"http";i:1;s:5:"agent";s:1:"2";}i:14;a:7:{s:13:"http_endpoint";s:11:"json/insert";s:11:"http_method";s:4:"POST";s:12:"http_request";s:158:"{
+}";s:4:"rows";s:71:"{"table":"rt1","id":221,"created":true,"result":"created","status":201}";s:9:"http_code";i:200;s:4:"http";i:1;s:5:"agent";s:1:"2";}i:14;a:7:{s:13:"http_endpoint";s:11:"json/insert";s:11:"http_method";s:4:"POST";s:12:"http_request";s:158:"{
 	"cluster":"test",
 	"table":"rt1",
 	"id":101,
@@ -32,7 +32,7 @@ a:1:{i:0;a:34:{i:0;a:2:{s:8:"sphinxql";s:87:"create table rt1 (title text indexe
 	    "j1" : "{\"data\":\"test 101\", \"fd\":101}",
 	    "title" : "test 101"
 	}
-}";s:4:"rows";s:72:"{"table":"rt1","_id":101,"created":true,"result":"created","status":201}";s:9:"http_code";i:200;s:4:"http";i:1;s:5:"agent";s:1:"1";}i:15;a:1:{s:8:"sphinxql";s:37:"/* wait-commit => state | 4
+}";s:4:"rows";s:71:"{"table":"rt1","id":101,"created":true,"result":"created","status":201}";s:9:"http_code";i:200;s:4:"http";i:1;s:5:"agent";s:1:"1";}i:15;a:1:{s:8:"sphinxql";s:37:"/* wait-commit => state | 4
 1 rows */";}i:16;a:6:{s:13:"http_endpoint";s:11:"json/search";s:11:"http_method";s:4:"POST";s:12:"http_request";s:48:"{ "table": "rt1", "query": { "match_all": {} } }";s:4:"rows";s:644:"{"timed_out":false,"hits":{"total":7,"total_relation":"eq","hits":[{"_id":221,"_score":1,"_source":{"mva1":[],"gid":221,"j1":{"data":"test 221","fd":221}}},{"_id":5,"_score":1,"_source":{"mva1":[51,52,53],"gid":51,"j1":{"data":"test 5","fd":51}}},{"_id":101,"_score":1,"_source":{"mva1":[],"gid":101,"j1":{"data":"test 101","fd":101}}},{"_id":2,"_score":1,"_source":{"mva1":[21,22,23],"gid":21,"j1":null}},{"_id":1,"_score":1,"_source":{"mva1":[61,62,63],"gid":61,"j1":{"data":"test 6","fd":16}}},{"_id":7,"_score":1,"_source":{"mva1":[],"gid":71,"j1":null}},{"_id":3,"_score":1,"_source":{"mva1":[],"gid":31,"j1":{"data":"test 3","fd":31}}}]}}";s:9:"http_code";i:200;s:4:"http";i:1;}i:17;a:1:{s:8:"sphinxql";s:37:"/* wait-commit => state | 4
 1 rows */";}i:18;a:7:{s:13:"http_endpoint";s:11:"json/search";s:11:"http_method";s:4:"POST";s:12:"http_request";s:69:"{ "table": "rt1", "query": { "range": { "j1.fd": { "gte": 100 } } } }";s:4:"rows";s:247:"{"timed_out":false,"hits":{"total":2,"total_relation":"eq","hits":[{"_id":101,"_score":1,"_source":{"mva1":[],"gid":101,"j1":{"data":"test 101","fd":101}}},{"_id":221,"_score":1,"_source":{"mva1":[],"gid":221,"j1":{"data":"test 221","fd":221}}}]}}";s:9:"http_code";i:200;s:4:"http";i:1;s:5:"agent";s:1:"2";}i:19;a:7:{s:13:"http_endpoint";s:11:"json/update";s:11:"http_method";s:4:"POST";s:12:"http_request";s:110:"{
 	"cluster":"test",
@@ -47,7 +47,7 @@ a:1:{i:0;a:34:{i:0;a:2:{s:8:"sphinxql";s:87:"create table rt1 (title text indexe
 	"cluster":"test",
 	"table":"rt1",
 	"id":221
-}";s:4:"rows";s:57:"{"table":"rt1","_id":221,"found":true,"result":"deleted"}";s:9:"http_code";i:200;s:4:"http";i:1;}i:23;a:6:{s:13:"http_endpoint";s:11:"json/insert";s:11:"http_method";s:4:"POST";s:12:"http_request";s:158:"{
+}";s:4:"rows";s:56:"{"table":"rt1","id":221,"found":true,"result":"deleted"}";s:9:"http_code";i:200;s:4:"http";i:1;}i:23;a:6:{s:13:"http_endpoint";s:11:"json/insert";s:11:"http_method";s:4:"POST";s:12:"http_request";s:158:"{
 	"cluster":"test",
 	"table":"rt1",
 	"id":501,
@@ -57,7 +57,7 @@ a:1:{i:0;a:34:{i:0;a:2:{s:8:"sphinxql";s:87:"create table rt1 (title text indexe
 	    "j1" : "{\"data\":\"test 501\", \"fd\":501}",
 	    "title" : "test 501"
 	}
-}";s:4:"rows";s:72:"{"table":"rt1","_id":501,"created":true,"result":"created","status":201}";s:9:"http_code";i:200;s:4:"http";i:1;}i:24;a:1:{s:8:"sphinxql";s:37:"/* wait-commit => state | 7
+}";s:4:"rows";s:71:"{"table":"rt1","id":501,"created":true,"result":"created","status":201}";s:9:"http_code";i:200;s:4:"http";i:1;}i:24;a:1:{s:8:"sphinxql";s:37:"/* wait-commit => state | 7
 1 rows */";}i:25;a:7:{s:13:"http_endpoint";s:11:"json/search";s:11:"http_method";s:4:"POST";s:12:"http_request";s:48:"{ "table": "rt1", "query": { "match_all": {} } }";s:4:"rows";s:644:"{"timed_out":false,"hits":{"total":7,"total_relation":"eq","hits":[{"_id":101,"_score":1,"_source":{"mva1":[],"gid":101,"j1":{"data":"test 101","fd":101}}},{"_id":5,"_score":1,"_source":{"mva1":[51,52,53],"gid":51,"j1":{"data":"test 5","fd":51}}},{"_id":501,"_score":1,"_source":{"mva1":[],"gid":501,"j1":{"data":"test 501","fd":501}}},{"_id":2,"_score":1,"_source":{"mva1":[21,22,23],"gid":21,"j1":null}},{"_id":1,"_score":1,"_source":{"mva1":[61,62,63],"gid":61,"j1":{"data":"test 6","fd":16}}},{"_id":7,"_score":1,"_source":{"mva1":[],"gid":71,"j1":null}},{"_id":3,"_score":1,"_source":{"mva1":[],"gid":31,"j1":{"data":"test 3","fd":31}}}]}}";s:9:"http_code";i:200;s:4:"http";i:1;s:5:"agent";s:1:"1";}i:26;a:1:{s:8:"sphinxql";s:37:"/* wait-commit => state | 7
 1 rows */";}i:27;a:7:{s:13:"http_endpoint";s:11:"json/search";s:11:"http_method";s:4:"POST";s:12:"http_request";s:69:"{ "table": "rt1", "query": { "range": { "j1.fd": { "gte": 100 } } } }";s:4:"rows";s:247:"{"timed_out":false,"hits":{"total":2,"total_relation":"eq","hits":[{"_id":501,"_score":1,"_source":{"mva1":[],"gid":501,"j1":{"data":"test 501","fd":501}}},{"_id":101,"_score":1,"_source":{"mva1":[],"gid":101,"j1":{"data":"test 101","fd":101}}}]}}";s:9:"http_code";i:200;s:4:"http";i:1;s:5:"agent";s:1:"2";}i:28;a:6:{s:13:"http_endpoint";s:5:"_bulk";s:11:"http_method";s:4:"POST";s:12:"http_request";s:75:"
 { "index" : { "_index" : "test:rt1", "_id" : "301" } }

@@ -102,7 +102,7 @@ find_package ( columnar "${NEED_API_NUMERIC_VERSION}" EXACT COMPONENTS columnar_
 return_if_all_api_found ()
 
 # Not found. get columnar src, extract columnar_api.
-if (DEFINED ENV{COLUMNAR_LOCATOR})
+if (DEFINED ENV{COLUMNAR_LOCATOR} AND NOT "$ENV{COLUMNAR_LOCATOR}" STREQUAL "")
 	set ( COLUMNAR_LOCATOR $ENV{COLUMNAR_LOCATOR} )
 elseif (EXISTS "${MANTICORE_SOURCE_DIR}/local_columnar_src.txt")
 	file ( STRINGS "${MANTICORE_SOURCE_DIR}/local_columnar_src.txt" COLUMNAR_LOCATOR LIMIT_COUNT 1 )

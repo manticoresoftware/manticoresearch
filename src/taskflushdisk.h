@@ -17,7 +17,7 @@
 #include "sphinxstd.h"
 
 void SetRtFlushDiskPeriod ( int iFlushWrite, int iFlushSearch );
-int GetRtFlushDiskWrite();
+int GetRtFlushDiskWrite(bool bTestMode);
 int GetRtFlushDiskSearch();
 
 void ScheduleRtFlushDisk();

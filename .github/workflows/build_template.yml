@@ -58,7 +58,11 @@ on:
         required: false
         type: number
         default: 0
-
+      COLUMNAR_LOCATOR:
+        required: false
+        type: string
+        default: ""
+  
 jobs:
   build:
     runs-on: ubuntu-22.04
@@ -84,6 +88,7 @@ jobs:
         SYSROOT_URL: https://repo.manticoresearch.com/repository/sysroots
         HOMEBREW_PREFIX: ${{ inputs.HOMEBREW_PREFIX }}
         PACK_GALERA: ${{ inputs.PACK_GALERA }}
+        COLUMNAR_LOCATOR: ${{ inputs.COLUMNAR_LOCATOR }}
     steps:
       - name: Checkout repository
         uses: actions/checkout@v3

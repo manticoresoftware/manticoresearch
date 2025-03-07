@@ -37,7 +37,7 @@ jobs:
           token: ${{ secrets.GITHUB_TOKEN }}
           set-safe-directory: true
       - name: Check out cache before building
-        uses: actions/cache/restore@v3.3.1
+        uses: actions/cache/restore@v4
         with:
           path: cache
           key: build_linux_debug_x86_64

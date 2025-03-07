@@ -128,7 +128,7 @@ jobs:
 
   build_linux_debug:
     if: (needs.changes.outputs.source == 'true') && (github.event_name == 'pull_request' && github.event.pull_request.base.ref == 'update-buddy-version') != true
-    needs: changes
+    needs: [changes, check_branch]
     name: Linux debug build
     uses: ./.github/workflows/build_template.yml
     with:
@@ -280,7 +280,7 @@ jobs:
 
   build_linux_release:
     if: (needs.changes.outputs.source == 'true') && (github.event_name == 'pull_request' && github.event.pull_request.base.ref == 'update-buddy-version') != true
-    needs: changes
+    needs: [changes, check_branch]
     name: Linux release build
     uses: ./.github/workflows/build_template.yml
     with:
@@ -617,7 +617,7 @@ jobs:
 
   build_windows:
     if: (needs.changes.outputs.source == 'true') && (github.event_name == 'pull_request' && github.event.pull_request.base.ref == 'update-buddy-version') != true
-    needs: changes
+    needs: [changes, check_branch]
     name: Windows x64 build
     uses: ./.github/workflows/build_template.yml
     with:

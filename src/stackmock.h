@@ -76,6 +76,6 @@ inline std::pair<int, CSphString> EvalStackForExpr ( const StackSizeParams_t & t
 	return { iStackNeeded, {} };
 }
 
-void DetermineNodeItemStackSize();
-void DetermineFilterItemStackSize();
-void DetermineMatchStackSize();
+void DetermineNodeItemStackSize ( StringBuilder_c& sExport );
+void DetermineFilterItemStackSize ( StringBuilder_c& sExport );
+void DetermineMatchStackSize ( StringBuilder_c& sExport );

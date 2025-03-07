@@ -104,10 +104,13 @@ return_if_all_api_found ()
 # Not found. get columnar src, extract columnar_api.
 if (DEFINED ENV{COLUMNAR_LOCATOR} AND NOT "$ENV{COLUMNAR_LOCATOR}" STREQUAL "")
 	set ( COLUMNAR_LOCATOR $ENV{COLUMNAR_LOCATOR} )
+	message(STATUS "Using COLUMNAR_LOCATOR from environment variable: ${COLUMNAR_LOCATOR}")
 elseif (EXISTS "${MANTICORE_SOURCE_DIR}/local_columnar_src.txt")
 	file ( STRINGS "${MANTICORE_SOURCE_DIR}/local_columnar_src.txt" COLUMNAR_LOCATOR LIMIT_COUNT 1 )
+	message(STATUS "Using COLUMNAR_LOCATOR from local_columnar_src.txt: ${COLUMNAR_LOCATOR}")
 else ()
 	file ( STRINGS "${MANTICORE_SOURCE_DIR}/columnar_src.txt" COLUMNAR_LOCATOR LIMIT_COUNT 1)
+	message(STATUS "Using COLUMNAR_LOCATOR from columnar_src.txt: ${COLUMNAR_LOCATOR}")
 endif ()
 
 string ( CONFIGURE "${COLUMNAR_LOCATOR}" COLUMNAR_LOCATOR ) # that is to expand possible inside variables

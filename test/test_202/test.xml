@@ -83,7 +83,7 @@ insert into test_table values
 ( 3, 'third',  1 ),
 ( 4, 'fourth', 1 ),
 ( 5, 'fifth',  1 ),
- 
+
 ( 1, 'one',    2 ),
 ( 2, 'two',    2 ),
 ( 3, 'three',  2 ),
@@ -103,7 +103,7 @@ $query = function ( $client, $index )
 
 global $index_data_path;
 
-StopSearchd ('config.conf', 'searchd.pid');
+StpSearchd ();
 $exts = array ( 'spa', 'spb', 'spd', 'spe', 'spi', 'spk', 'spm', 'spp', 'spt', 'sph' );
 foreach ( $exts as $ext )
 {
@@ -113,7 +113,7 @@ foreach ( $exts as $ext )
 	if ( file_exists ( $path ) )
 		print 'error';
 }
-$state = StartSearchd ('config.conf', 'error.txt', 'searchd.pid', $error, array());
+$state = StSearchd ( $error );
 
 
 $results[] = $query ( $client, 'plain3' );

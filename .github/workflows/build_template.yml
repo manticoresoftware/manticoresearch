@@ -46,7 +46,7 @@ on:
       artifact_list:
         required: false
         type: string
-        default: "build/xml build/CMakeFiles/CMake*.log build/api/libsphinxclient/testcli build/src/indexer build/src/indextool build/src/searchd build/src/tests build/src/gtests/gmanticoretest build/config/*.c build/config/*.h build/**/*.gcno"
+        default: "build/xml build/CMakeFiles/CMake*.log build/api/libsphinxclient/testcli build/src/indexer build/src/indextool build/src/searchd build/src/tests build/src/gtests/gmanticoretest build/config/*.c build/config/*.h build/**/*.cxx build/**/*.gcno"
       artifact_name:
         required: false
         type: string

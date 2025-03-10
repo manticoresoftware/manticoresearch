@@ -4,6 +4,7 @@
 <name>malformed docstore with dupes</name>
 <requires>
 <non-rt/>
+<skip_db/>
 </requires>
 
 <config>

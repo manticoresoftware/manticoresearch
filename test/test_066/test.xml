@@ -10,7 +10,6 @@ searchd
 {
 <Searchd_Settings/>
 	binlog_path		=
-    diskchunk_flush_write_timeout = -1
 }
 
 index test

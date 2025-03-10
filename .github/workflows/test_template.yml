@@ -33,6 +33,10 @@ on:
         required: false
         type: string
         default: "cd build; cp -r Testing/2*/Test.xml .; xsltproc -o junit_tests.xml ../misc/junit/ctest2junit.xsl Test.xml"
+      COLUMNAR_LOCATOR:
+        required: false
+        type: string
+        default: ""
 
 jobs:
   test:
@@ -56,6 +60,7 @@ jobs:
         WITH_COVERAGE: ${{ inputs.WITH_COVERAGE }}
         LIBS_BUNDLE:
         UNITY_BUILD: ${{ inputs.UNITY_BUILD }}
+        MANTICORE_LOCATOR: ${{ inputs.COLUMNAR_LOCATOR }}
     steps:
       - name: Checkout repository
         uses: actions/checkout@v3

@@ -13,4 +13,4 @@
 #include "std/string.h"
 
 CSphString EncodeBase64 ( const CSphString & sValue );
-CSphString DecodeBase64 ( const CSphString & sValue );
+bool DecodeBase64 ( const CSphString & sValue, CSphString & sResult );

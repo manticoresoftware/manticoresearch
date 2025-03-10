@@ -589,11 +589,12 @@ jobs:
 
   build_aarch64:
     if: (needs.changes.outputs.source == 'true') && (github.event_name == 'pull_request' && github.event.pull_request.base.ref == 'update-buddy-version') != true
-    needs: changes
+    needs: [changes, check_branch]
     name: Linux aarch64 build
     uses: ./.github/workflows/build_template.yml
     with:
       arch: aarch64
+      COLUMNAR_LOCATOR: ${{ needs.check_branch.outputs.columnar_locator }}
       cmake_command: |
         mkdir build
         cd build
@@ -603,11 +604,12 @@ jobs:
 
   build_freebsd:
     if: (needs.changes.outputs.source == 'true') && (github.event_name == 'pull_request' && github.event.pull_request.base.ref == 'update-buddy-version') != true
-    needs: changes
+    needs: [changes, check_branch]
     name: FreeBSD x86_64 build
     uses: ./.github/workflows/build_template.yml
     with:
       DISTR: freebsd13
+      COLUMNAR_LOCATOR: ${{ needs.check_branch.outputs.columnar_locator }}
       boost_url_key: none
       cmake_command: |
         mkdir build

@@ -20679,7 +20679,7 @@ void ConfigureSearchd ( const CSphConfig & hConf, bool bOptPIDFile, bool bTestMo
 
 	ConfigureMerge(hSearchd);
 	SetJoinBatchSize ( hSearchd.GetInt ( "join_batch_size", GetJoinBatchSize() ) );
-	SetRtFlushDiskPeriod ( hSearchd.GetSTimeS ( "diskchunk_flush_write_timeout", GetRtFlushDiskWrite() ), hSearchd.GetSTimeS ( "diskchunk_flush_search_timeout", GetRtFlushDiskSearch() ) );
+	SetRtFlushDiskPeriod ( hSearchd.GetSTimeS ( "diskchunk_flush_write_timeout", GetRtFlushDiskWrite(bTestMode) ), hSearchd.GetSTimeS ( "diskchunk_flush_search_timeout", GetRtFlushDiskSearch() ) );
 }
 
 static void DirMustWritable ( const CSphString & sDataDir )
@@ -21427,7 +21427,6 @@ int WINAPI ServiceMain ( int argc, char **argv ) EXCLUDES (MainThread)
 		OPT1 ( "--logreplication" )	g_eLogLevel = Max ( g_eLogLevel, SPH_LOG_RPL_DEBUG );
 		OPT1 ( "--safetrace" )		g_bSafeTrace = true;
 		OPT1 ( "--test" )			{ g_bWatchdog = false; bTestMode = true; } // internal option, do NOT document
-		OPT1 ( "--test-thd-pool" )	{ g_bWatchdog = false; bTestMode = true; } // internal option, do NOT document
 		OPT1 ( "--force-pseudo-sharding" ) { bForcePseudoSharding = true; } // internal option, do NOT document
 		OPT1 ( "--strip-path" )		g_bStripPath = true;
 		OPT1 ( "--vtune" )			g_bVtune = true;

@@ -633,9 +633,6 @@ function StartSearchd ( $config_file, $error_file, $pidfile, &$error, $requireme
 	if ( !$no_pseudo_sharding )
 		$extra_params .= ' --force-pseudo-sharding';
 
-	if ( isset ( $g_locals['use_pool'] ) && $g_locals['use_pool'] )
-		$extra_params .= ' --test-thd-pool';
-
 	if ( isset ( $g_locals['extra_searchd_options'] ) )
 		$extra_params .= ' ' . $g_locals['extra_searchd_options'];
 

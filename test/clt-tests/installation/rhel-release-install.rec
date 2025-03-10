@@ -14,7 +14,7 @@ yum install -y -q manticore manticore-extra > /dev/null 2>&1; echo $?
 ––– output –––
 0
 ––– input –––
-searchd --version
+stdbuf -oL searchd --version
 ––– output –––
 Manticore %{VERSION} (columnar %{VERSION}) (secondary %{VERSION}) (knn %{VERSION})
 Copyright (c) 2001-2016, Andrew Aksyonoff

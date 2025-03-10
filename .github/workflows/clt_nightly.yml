@@ -6,6 +6,7 @@ on:
     - cron: '00 20 * * *'
   push:
     paths:
+      - '.github/workflows/clt_nightly.yml'
       - 'test/clt-tests/**'
     branches:
       - manticore-6.2.12
@@ -147,7 +148,7 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v3
-      - uses: manticoresoftware/clt@0.2.3
+      - uses: manticoresoftware/clt@0.6.3
         with:
           test_prefix: ${{ matrix.test_prefix }}
           image: ${{ matrix.image }}
@@ -156,7 +157,7 @@ jobs:
           
   clt-arm64:
     name: CLT-Arm64
-    runs-on: macos-14
+    runs-on: ubuntu-24.04-arm
     strategy:
       fail-fast: false 
       matrix:
@@ -236,7 +237,7 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v3
-      - uses: manticoresoftware/clt@0.2.3
+      - uses: manticoresoftware/clt@0.6.3
         with:
           test_prefix: ${{ matrix.test_prefix }}
           image: ${{ matrix.image }}

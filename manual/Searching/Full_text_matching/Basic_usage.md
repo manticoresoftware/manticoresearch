@@ -10,14 +10,27 @@ There must be at most one `MATCH()` in the `SELECT` clause.
 
 Using the [full-text query syntax](../../Searching/Full_text_matching/Operators.md), matching is performed across all indexed text fields of a document, unless the expression requires a match within a field (like phrase search) or is limited by field operators.
 
+When using [JOIN](../../Searching/Joining.md) queries, `MATCH()` can accept an optional second parameter that specifies which table the full-text search should be applied to. By default, the full-text query is applied to the left table in the `JOIN` operation:
+
+```sql
+SELECT * FROM table1 LEFT JOIN table2 ON table1.id = table2.id WHERE MATCH('search query', table2);
+```
+
+This allows you to perform full-text searches on specific tables in a join operation. For more details on using MATCH with JOINs, see the [Joining tables](../../Searching/Joining.md) section.
+
 ## SQL
+
 <!-- example Example_1 -->
 
 ```sql
-SELECT * FROM myindex WHERE MATCH('cats|birds');
+MATCH('search query' [, table_name])
 ```
+- `'search query'`: The full-text search query string, which can include various [full-text operators](../../Searching/Full_text_matching/Operators.md).
+- `table_name`: (Optional) The name of the table to apply the full-text search to, used in `JOIN` queries to specify a different table than the default left table.
+
 
 The [SELECT](../../Searching/Full_text_matching/Basic_usage.md#SQL) statement uses a [MATCH](../../Searching/Full_text_matching/Basic_usage.md) clause, which must come after WHERE, for performing full-text searches. `MATCH()` accepts an input string in which all [full-text operators](../../Searching/Full_text_matching/Operators.md) are available.
+
 
 <!-- intro -->
 ##### SQL:

@@ -1391,7 +1391,6 @@ public:
 	bool				IsSameSettings ( CSphReconfigureSettings & tSettings, CSphReconfigureSetup & tSetup, StrVec_t & dWarnings, CSphString & sError ) const final;
 	bool				Reconfigure ( CSphReconfigureSetup & tSetup ) final;
 	int64_t				GetLastFlushTimestamp() const final;
-	void				IndexDeleted() final { m_bIndexDeleted = true; }
 	void				ProhibitSave() final;
 	void				EnableSave() final;
 	void				LockFileState ( CSphVector<CSphString> & dFiles ) final;
@@ -1445,8 +1444,6 @@ private:
 	Coro::Waitable_T<int>		m_tNSavesNow { 0 };			// N of merge segment routines running right now
 
 	Coro::Waitable_T<int>		m_tBackgroundRoutines { 0 };
-
-	bool						m_bIndexDeleted = false;
 
 	int64_t						m_iSavedTID = 0;
 	int64_t						m_tmSaved;

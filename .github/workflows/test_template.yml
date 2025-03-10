@@ -25,6 +25,9 @@ on:
       build_artifact_name:
         required: true
         type: string
+      results_name:
+        required: true
+        type: string
       timeout:
         required: false
         type: number
@@ -33,6 +36,10 @@ on:
         required: false
         type: string
         default: "cd build; cp -r Testing/2*/Test.xml .; xsltproc -o junit_tests.xml ../misc/junit/ctest2junit.xsl Test.xml"
+      COLUMNAR_LOCATOR:
+        required: false
+        type: string
+        default: ""
 
 jobs:
   test:
@@ -44,7 +51,7 @@ jobs:
       run:
         shell: bash
     container:
-      image: manticoresearch/ubertests_ctest:3263_20241105
+      image: manticoresearch/ubertests_public:331
       env:
         DIAGNOSTIC: 1
         CACHEB: ../cache
@@ -56,6 +63,7 @@ jobs:
         WITH_COVERAGE: ${{ inputs.WITH_COVERAGE }}
         LIBS_BUNDLE:
         UNITY_BUILD: ${{ inputs.UNITY_BUILD }}
+        COLUMNAR_LOCATOR: ${{ inputs.COLUMNAR_LOCATOR }}
     steps:
       - name: Checkout repository
         uses: actions/checkout@v3
@@ -82,18 +90,23 @@ jobs:
       - name: 🚀 Test
         id: test
         # --timeout may be not working https://gitlab.kitware.com/cmake/cmake/-/issues/23979
+        # use -VV instead of -V to get more verbose output
         run: |
-          ctest -VV -S misc/ctest/gltest.cmake --no-compress-output --timeout 600
+          ctest -V -S misc/ctest/gltest.cmake --no-compress-output --timeout 600
         continue-on-error: true
 
+      - name: Check test results
+        if: always()
+        run: |
+          if [ "${{ steps.test.outcome }}" == "failure" ]; then
+            echo "❌ Tests failed ❌"
+            exit 1
+          fi
+          
       - name: List build files
         if: always()
         run: find build
         continue-on-error: true
-
-      - name: Remember status
-        if: always()
-        run: echo "${{ steps.test.outcome }}" > build/status_${{ inputs.artifact_name }}
 
       - name: Prepare test report xmls
         if: always()
@@ -106,4 +119,15 @@ jobs:
         uses: manticoresoftware/upload_artifact_with_retries@v4
         with:
           name: ${{ inputs.artifact_name }}
-          path: "build/xml build/test/test_*/report* build/junit*.xml build/test/error*.txt build/test/*log build/status*"
+          path: "build/xml build/junit*.xml build/status* build/test/error*.txt build/test/*log build/test/test_*/report* build/test/rt_*/report* build/test/col_*/report*"
+
+      - name: Publish test results
+        if: always()
+        continue-on-error: true
+        uses: manticoresoftware/publish-unit-test-result-action@v2
+        with:
+          check_name: ${{ inputs.results_name }}
+          files: build/junit*.xml
+          compare_to_earlier_commit: false
+          comment_mode: failures
+  

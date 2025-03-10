@@ -8,6 +8,7 @@
 // did not, you can find it at http://www.gnu.org/
 //
 
+#include <algorithm>
 #include "knnmisc.h"
 #include "knnlib.h"
 #include "exprtraits.h"

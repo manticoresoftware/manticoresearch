@@ -448,6 +448,9 @@ static bool BuildJsonSI ( const StrVec_t & dAttributes, const ISphSchema & tSche
 	}
 
 	common::Schema_t tSISchema = tDeductor.CreateSchema();
+	if ( tSISchema.empty() )
+		return true;
+
 	// FIXME!!! pass these settings to the function, don't use default
 	BuildBufferSettings_t tSettings; // use default buffer settings
  	std::unique_ptr<SI::Builder_i> pBuilder = CreateSecondaryIndexBuilder ( tSISchema, tSettings.m_iSIMemLimit, sTmpFile, tSettings.m_iBufferStorage, sError );

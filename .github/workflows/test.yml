@@ -143,7 +143,7 @@ jobs:
   test_linux_debug:
     if: (github.event_name == 'pull_request' && github.event.pull_request.base.ref == 'update-buddy-version') != true
     name: Linux debug mode tests
-    needs: build_linux_debug
+    needs: [build_linux_debug, check_branch]
     uses: ./.github/workflows/test_template.yml
     strategy:
       fail-fast: false
@@ -183,6 +183,7 @@ jobs:
     with:
       CTEST_START: ${{ matrix.start }}
       CTEST_END: ${{ matrix.end }}
+      COLUMNAR_LOCATOR: ${{ needs.check_branch.outputs.columnar_locator }}
       build_artifact_name: debug_build
       artifact_name: debug_test_${{ matrix.name }}
       xml_command: "cd build; cp -r Testing/2*/Test.xml .; xsltproc -o junit_tests_${{ matrix.name }}.xml ../misc/junit/ctest2junit.xsl Test.xml"
@@ -294,7 +295,7 @@ jobs:
   test_linux_release:
     if: (github.event_name == 'pull_request' && github.event.pull_request.base.ref == 'update-buddy-version') != true
     name: Linux release mode tests
-    needs: build_linux_release
+    needs: [build_linux_release, check_branch]
     uses: ./.github/workflows/test_template.yml
     strategy:
       fail-fast: false
@@ -334,6 +335,7 @@ jobs:
     with:
       CTEST_START: ${{ matrix.start }}
       CTEST_END: ${{ matrix.end }}
+      COLUMNAR_LOCATOR: ${{ needs.check_branch.outputs.columnar_locator }}
       build_artifact_name: release_build
       artifact_name: release_test_${{ matrix.name }}
       xml_command: "cd build; cp -r Testing/2*/Test.xml .; xsltproc -o junit_tests_${{ matrix.name }}.xml ../misc/junit/ctest2junit.xsl Test.xml"
@@ -637,7 +639,7 @@ jobs:
   test_windows:
     if: (github.event_name == 'pull_request' && github.event.pull_request.base.ref == 'update-buddy-version') != true
     name: Windows tests
-    needs: [build_windows, win_bundle]
+    needs: [build_windows, win_bundle, check_branch]
     uses: ./.github/workflows/win_test_template.yml
     strategy:
       fail-fast: false
@@ -656,6 +658,7 @@ jobs:
     with:
       CTEST_START: ${{ matrix.start }}
       CTEST_END: ${{ matrix.end }}
+      COLUMNAR_LOCATOR: ${{ needs.check_branch.outputs.columnar_locator }}
       artifact_name: windows_test_${{ matrix.name }}
 
   windows_tests_report:

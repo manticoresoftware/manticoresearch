@@ -925,7 +925,7 @@ class ReadOnlyHash_T
 {
 public:
 	using Hash_t = cRefCountedHashOfRefcnt_T<T>;
-	using cRefPtrHash_t = cRefCountedRefPtr_T<cRefCountedHashOfRefcnt_T<T>>;
+	using cRefPtrHash_t = cRefCountedRefPtr_T<Hash_t>;
 	using cRefCountedRefPtr_t = cRefCountedRefPtr_T<T>;
 	using RefCountedRefPtr_t = RefCountedRefPtr_T<T>;
 	using Snapshot_t = std::pair<cRefPtrHash_t, int64_t>;

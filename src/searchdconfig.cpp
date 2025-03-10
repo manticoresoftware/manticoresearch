@@ -95,13 +95,13 @@ void ModifyDaemonPaths ( CSphConfigSection & hSearchd, FixPathAbsolute_fn && fnP
 		hSearchd.AddEntry ( szBinlogKey, sBinlogDir.cstr() );
 	}
 
-	if ( fnPathFix && hSearchd.Exists ( szBinlogKey ) )
-	{
-		CSphString sBinlogPath ( hSearchd.GetStr( szBinlogKey ) );
-		fnPathFix ( sBinlogPath );
-		hSearchd.Delete ( szBinlogKey );
-		hSearchd.AddEntry ( szBinlogKey, sBinlogPath.cstr() );
-	}
+	if ( !fnPathFix )
+		return;
+
+	CSphString sBinlogPath ( hSearchd.GetStr( szBinlogKey ) );
+	fnPathFix ( sBinlogPath );
+	hSearchd.Delete ( szBinlogKey );
+	hSearchd.AddEntry ( szBinlogKey, sBinlogPath.cstr() );
 }
 
 

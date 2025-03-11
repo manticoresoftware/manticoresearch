@@ -171,7 +171,6 @@ static int				g_iBacklog			= SEARCHD_BACKLOG;
 static int				g_iThdQueueMax		= 0;
 static auto&			g_iTFO = sphGetTFO ();
 static int				g_iServerID = 0;
-static bool				g_bServerID = false;
 static bool				g_bJsonConfigLoadedOk = false;
 static auto&			g_iAutoOptimizeCutoffMultiplier = AutoOptimizeCutoffMultiplier();
 static constexpr bool	AUTOOPTIMIZE_NEEDS_VIP = false; // whether non-VIP can issue 'SET GLOBAL auto_optimize = X'
@@ -20640,7 +20639,6 @@ void ConfigureSearchd ( const CSphConfig & hConf, bool bOptPIDFile, bool bTestMo
 	if ( hSearchd ( "server_id" ) )
 	{
 		g_iServerID = hSearchd.GetInt ( "server_id", g_iServerID );
-		g_bServerID = true;
 		const int iServerMask = 0x7f;
 		if ( g_iServerID>iServerMask )
 		{
@@ -21056,7 +21054,8 @@ static void SetUidShort ( bool bTestMode )
 			sphWarning ( "failed to get MAC address, using random number %s", sMAC.cstr()  );
 		}
 		// fold MAC into 1 byte
-		iServerId = Pearson8 ( (const BYTE *)sMAC.cstr(), sMAC.Length() );
+		iServerId = Pearson8 ( (const BYTE *)sMAC.cstr(), sMAC.Length(), iServerId );
+		iServerId = Pearson8 ( (const BYTE *)g_sPidFile.cstr(), g_sPidFile.Length(), iServerId );
 		iServerId &= iServerMask;
 	}
 

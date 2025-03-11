@@ -3517,6 +3517,7 @@ struct UUID_t
 
 static UUID_t g_tUidShort;
 static UUID_t g_tIndexUid;
+static int g_iUidShortServerId = 0;
 
 int64_t UidShort()
 {
@@ -3530,11 +3531,17 @@ int64_t GetIndexUid()
 
 void UidShortSetup ( int iServer, int iStarted )
 {
+	g_iUidShortServerId = iServer;
 	int64_t iSeed = ( (int64_t)iServer & 0x7f ) << 56;
 	iSeed += ((int64_t)iStarted ) << 24;
 	g_tUidShort.m_iUidBase = iSeed;
 	g_tIndexUid.m_iUidBase = iSeed;
 	sphLogDebug ( "uid-short server_id %d, started %d, seed " INT64_FMT, iServer, iStarted, iSeed );
+}
+
+int GetUidShortServerId ()
+{
+	return g_iUidShortServerId;
 }
 
 // RNG of the integers 0-255
@@ -3557,10 +3564,10 @@ static BYTE g_dPearsonRNG[256] = {
 		43,119,224, 71,122,142, 42,160,104, 48,247,103, 15, 11,138,239  // 16
 };
 
-BYTE Pearson8 ( const BYTE * pBuf, int iLen )
+BYTE Pearson8 ( const BYTE * pBuf, int iLen, BYTE uPrev )
 {
 	const BYTE * pEnd = pBuf + iLen;
-	BYTE iNew = 0;
+	BYTE iNew = uPrev;
 
 	while ( pBuf<pEnd )
 	{

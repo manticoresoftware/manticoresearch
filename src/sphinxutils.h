@@ -579,8 +579,9 @@ int64_t GetIndexUid();
 // server - is server id used as iServer & 0x7f
 // started - is a server start time \ Unix timestamp in seconds
 void		UidShortSetup ( int iServer, int iStarted );
+int			GetUidShortServerId ();
 
-BYTE Pearson8 ( const BYTE * pBuf, int iLen );
+BYTE Pearson8 ( const BYTE * pBuf, int iLen, BYTE uPrev=0 );
 
 #if _WIN32
 void		CheckWinInstall();

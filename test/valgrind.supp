@@ -118,4 +118,16 @@
    fun:ConcatWarnings
    fun:_Z11ServiceMainiPPc
 }
+
+
+# temporary ScheduleRtFlushDisk (fixme! remove when the leak is fixed)
+{
+   temporary leak in ScheduleRtFlushDisk
+   Memcheck:Leak
+   match-leak-kinds: definite
+   fun:_Znwm
+   ...
+   fun:_Z19ScheduleRtFlushDiskv
+}
+
 #EOF

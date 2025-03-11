@@ -41,7 +41,6 @@ trap "chown -R $uid:$gid /build/dev/$BUILD_DIR" EXIT
 cd /build/dev
 rm -rf $BUILD_DIR
 ctest -VV -S misc/ctest/gltest.cmake
-chmod -R a+rw $BUILD_DIR
 cd $BUILD_DIR
 chmod -R a+rw $CACHEB
 tar -cf build.tar api/libsphinxclient/testcli src/indexer src/indextool src/searchd src/gtests/gmanticoretest

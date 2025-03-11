@@ -36,11 +36,11 @@ prepend_prefix ( ${_VCACHE} )
 unset ( vcpkg_params )
 if (CMAKE_CROSSCOMPILING)
 	set ( vcpkg_params "--triplet=${_VCARCH}-${_TARGET}" )
+	set ( ENV{VCPKG_OVERLAY_TRIPLETS} "${MANTICORE_SOURCE_DIR}/dist/build_dockers/cross/triplets" )
 endif()
 
 set ( ENV{MANTICORE_SOURCE_DIR} "${MANTICORE_SOURCE_DIR}" )
 set ( ENV{VCPKG_DEFAULT_BINARY_CACHE} "${CACHEB}/vcpkg" )
-set ( ENV{VCPKG_OVERLAY_TRIPLETS} "${MANTICORE_SOURCE_DIR}/dist/build_dockers/cross/triplets" )
 
 if (NOT EXISTS ENV{VCPKG_DEFAULT_BINARY_CACHE})
 	file ( MAKE_DIRECTORY "$ENV{VCPKG_DEFAULT_BINARY_CACHE}" )

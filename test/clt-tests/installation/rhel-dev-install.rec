@@ -14,7 +14,7 @@ yum install --enablerepo manticore-dev -y -q manticore manticore-extra > /dev/nu
 ––– output –––
 0
 ––– input –––
-searchd --version
+stdbuf -oL searchd --version
 ––– output –––
 Manticore %{VERSION} (columnar %{VERSION}) (secondary %{VERSION}) (knn %{VERSION})
 Copyright (c) 2001-2016, Andrew Aksyonoff

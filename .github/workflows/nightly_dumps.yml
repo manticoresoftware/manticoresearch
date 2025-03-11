@@ -1,5 +1,5 @@
 name: Nightly testing of supported versions of mysqldump and elasticdump
-run-name: Nightly tests of mysqldump and elasticdump ${{ github.sha }}
+run-name: 🌙 Nightly tests of mysqldump and elasticdump ${{ github.sha }}
 
 on:
   schedule:

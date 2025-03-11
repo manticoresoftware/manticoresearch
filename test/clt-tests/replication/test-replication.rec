@@ -1,0 +1,267 @@
+––– input –––
+export INSTANCE=1
+––– output –––
+––– block: ../base/replication/start-searchd-precach –––
+––– input –––
+export INSTANCE=2
+––– output –––
+––– block: ../base/replication/start-searchd-precach –––
+––– input –––
+export INSTANCE=3
+––– output –––
+––– block: ../base/replication/start-searchd-precach –––
+––– input –––
+export INSTANCE=4
+––– output –––
+––– block: ../base/replication/start-searchd-precach –––
+––– input –––
+export INSTANCE=5
+––– output –––
+––– block: ../base/replication/start-searchd-precach –––
+––– input –––
+export CLUSTER_NAME=replication
+––– output –––
+––– block: ../base/replication/create-cluster –––
+––– input –––
+export CLUSTER_NAME=replication
+––– output –––
+––– block: ../base/replication/join-cluster-on-all-nodes –––
+––– input –––
+mysql -h0 -P1306 -e "CREATE TABLE testrt (title text, content text, gid uint);" && mysql -h0 -P1306 -e "INSERT INTO testrt VALUES(6775836565403860993,'List of HP business laptops','Elitebook Probook',1);" && mysql -h0 -P1306 -e "INSERT INTO testrt VALUES(6775836565403860994,'List of Dell business laptops','Latitude Precision Vostro',2);" && mysql -h0 -P1306 -e "ALTER CLUSTER replication ADD testrt;" && mysql -h0 -P1306 -e "SHOW STATUS LIKE 'cluster_replication_indexes';"
+––– output –––
++-----------------------------+--------+
+| Counter                     | Value  |
++-----------------------------+--------+
+| cluster_replication_indexes | testrt |
++-----------------------------+--------+
+––– input –––
+mysql -h0 -P1306 -e "SELECT * FROM testrt ORDER BY id ASC\G"
+––– output –––
+*************************** 1. row ***************************
+id: 6775836565403860993
+title: List of HP business laptops
+content: Elitebook Probook
+gid: 1
+*************************** 2. row ***************************
+id: 6775836565403860994
+title: List of Dell business laptops
+content: Latitude Precision Vostro
+gid: 2
+––– input –––
+export INSTANCE=5
+––– output –––
+––– block: ../base/replication/stop-searchd –––
+––– input –––
+mysql -h0 -P1306 -e "INSERT INTO replication:testrt VALUES(6775836565403860995,'List of HP business laptops','Macbook',3);"; echo $?
+––– output –––
+0
+––– input –––
+export INSTANCE=5
+––– output –––
+––– block: ../base/replication/start-searchd-precach –––
+––– input –––
+sleep 5; mysql -h0 -P5306 -e "SELECT * FROM testrt ORDER BY id ASC\G"
+––– output –––
+*************************** 1. row ***************************
+id: 6775836565403860993
+title: List of HP business laptops
+content: Elitebook Probook
+gid: 1
+*************************** 2. row ***************************
+id: 6775836565403860994
+title: List of Dell business laptops
+content: Latitude Precision Vostro
+gid: 2
+*************************** 3. row ***************************
+id: 6775836565403860995
+title: List of HP business laptops
+content: Macbook
+gid: 3
+––– input –––
+export INSTANCE=2
+––– output –––
+––– block: ../base/replication/stop-searchd –––
+––– input –––
+mysql -h0 -P3306 -e "INSERT INTO replication:testrt VALUES(6775836565403860996,'NEW','TABLE',4);"; echo $?
+––– output –––
+0
+––– block: ../base/replication/start-searchd-precach –––
+––– input –––
+sleep 5;mysql -h0 -P2306 -e "SELECT * FROM testrt ORDER BY id ASC\G"
+––– output –––
+*************************** 1. row ***************************
+id: 6775836565403860993
+title: List of HP business laptops
+content: Elitebook Probook
+gid: 1
+*************************** 2. row ***************************
+id: 6775836565403860994
+title: List of Dell business laptops
+content: Latitude Precision Vostro
+gid: 2
+*************************** 3. row ***************************
+id: 6775836565403860995
+title: List of HP business laptops
+content: Macbook
+gid: 3
+*************************** 4. row ***************************
+id: 6775836565403860996
+title: NEW
+content: TABLE
+gid: 4
+––– input –––
+mysql -h0 -P3306 -e "SELECT * FROM testrt ORDER BY id ASC\G"
+––– output –––
+*************************** 1. row ***************************
+id: 6775836565403860993
+title: List of HP business laptops
+content: Elitebook Probook
+gid: 1
+*************************** 2. row ***************************
+id: 6775836565403860994
+title: List of Dell business laptops
+content: Latitude Precision Vostro
+gid: 2
+*************************** 3. row ***************************
+id: 6775836565403860995
+title: List of HP business laptops
+content: Macbook
+gid: 3
+*************************** 4. row ***************************
+id: 6775836565403860996
+title: NEW
+content: TABLE
+gid: 4
+––– input –––
+mysql -h0 -P4306 -e "SELECT * FROM testrt ORDER BY id ASC\G"
+––– output –––
+*************************** 1. row ***************************
+id: 6775836565403860993
+title: List of HP business laptops
+content: Elitebook Probook
+gid: 1
+*************************** 2. row ***************************
+id: 6775836565403860994
+title: List of Dell business laptops
+content: Latitude Precision Vostro
+gid: 2
+*************************** 3. row ***************************
+id: 6775836565403860995
+title: List of HP business laptops
+content: Macbook
+gid: 3
+*************************** 4. row ***************************
+id: 6775836565403860996
+title: NEW
+content: TABLE
+gid: 4
+––– input –––
+mysql -h0 -P5306 -e "SELECT * FROM testrt ORDER BY id ASC\G"
+––– output –––
+*************************** 1. row ***************************
+id: 6775836565403860993
+title: List of HP business laptops
+content: Elitebook Probook
+gid: 1
+*************************** 2. row ***************************
+id: 6775836565403860994
+title: List of Dell business laptops
+content: Latitude Precision Vostro
+gid: 2
+*************************** 3. row ***************************
+id: 6775836565403860995
+title: List of HP business laptops
+content: Macbook
+gid: 3
+*************************** 4. row ***************************
+id: 6775836565403860996
+title: NEW
+content: TABLE
+gid: 4
+––– input –––
+export INSTANCE=4
+––– output –––
+––– block: ../base/replication/stop-searchd –––
+––– input –––
+sleep 5;mysql -h0 -P2306 -e "DELETE FROM replication:testrt WHERE id = 6775836565403860994"; echo $?
+––– output –––
+0
+––– input –––
+mysql -h0 -P2306 -e "SELECT * FROM testrt ORDER BY id ASC" > /tmp/output_2306.txt;
+––– output –––
+––– input –––
+export INSTANCE=4
+––– output –––
+––– block: ../base/replication/start-searchd-precach –––
+––– input –––
+sleep 5;mysql -h0 -P1306 -e "SELECT * FROM testrt ORDER BY id ASC" > /tmp/output_1306.txt;
+––– output –––
+––– input –––
+mysql -h0 -P3306 -e "SELECT * FROM testrt ORDER BY id ASC" > /tmp/output_3306.txt;
+––– output –––
+––– input –––
+mysql -h0 -P4306 -e "SELECT * FROM testrt ORDER BY id ASC" > /tmp/output_4306.txt;
+––– output –––
+––– input –––
+mysql -h0 -P5306 -e "SELECT * FROM testrt ORDER BY id ASC" > /tmp/output_5306.txt;
+––– output –––
+––– input –––
+diff /tmp/output_1306.txt /tmp/output_2306.txt; echo $?
+––– output –––
+0
+––– input –––
+diff /tmp/output_1306.txt /tmp/output_3306.txt; echo $?
+––– output –––
+0
+––– input –––
+diff /tmp/output_1306.txt /tmp/output_4306.txt; echo $?
+––– output –––
+0
+––– input –––
+diff /tmp/output_1306.txt /tmp/output_5306.txt; echo $?
+––– output –––
+0
+––– input –––
+mysql -h0 -P1306 -e "REPLACE INTO replication:testrt SET content='Updated Content', title='List of Dell business laptops', gid=2 WHERE id=6775836565403860994;"; echo $?
+––– output –––
+0
+––– input –––
+mysql -h0 -P1306 -e "SELECT * FROM replication:testrt WHERE id=6775836565403860994\G"
+––– output –––
+*************************** 1. row ***************************
+id: 6775836565403860994
+title: List of Dell business laptops
+content: Updated Content
+gid: 2
+––– input –––
+mysql -h0 -P2306 -e "SELECT * FROM replication:testrt WHERE id=6775836565403860994\G"
+––– output –––
+*************************** 1. row ***************************
+id: 6775836565403860994
+title: List of Dell business laptops
+content: Updated Content
+gid: 2
+––– input –––
+mysql -h0 -P3306 -e "SELECT * FROM replication:testrt WHERE id=6775836565403860994\G"
+––– output –––
+*************************** 1. row ***************************
+id: 6775836565403860994
+title: List of Dell business laptops
+content: Updated Content
+gid: 2
+––– input –––
+mysql -h0 -P4306 -e "SELECT * FROM replication:testrt WHERE id=6775836565403860994\G"
+––– output –––
+*************************** 1. row ***************************
+id: 6775836565403860994
+title: List of Dell business laptops
+content: Updated Content
+gid: 2
+––– input –––
+mysql -h0 -P5306 -e "SELECT * FROM replication:testrt WHERE id=6775836565403860994\G"
+––– output –––
+*************************** 1. row ***************************
+id: 6775836565403860994
+title: List of Dell business laptops
+content: Updated Content
+gid: 2

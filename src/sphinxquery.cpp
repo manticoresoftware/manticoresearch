@@ -2896,9 +2896,7 @@ private:
 CSphTransformation::CSphTransformation ( XQNode_t ** ppRoot, const ISphKeywordsStat * pKeywords )
 	: m_pKeywords ( pKeywords )
 	, m_ppRoot ( ppRoot )
-{
-	assert ( m_pKeywords!=NULL );
-}
+{}
 
 
 
@@ -2939,6 +2937,9 @@ bool CSphTransformation::CollectInfo ( XQNode_t * pParent, Checker_fn pfnChecker
 void CSphTransformation::SetCosts ( XQNode_t * pNode, const CSphVector<XQNode_t *> & dNodes )
 {
 	assert ( pNode || dNodes.GetLength() );
+
+	if ( !m_pKeywords )
+		return;
 
 	CSphVector<XQNode_t*> dChildren ( dNodes.GetLength() + 1 );
 	dChildren[dNodes.GetLength()] = pNode;

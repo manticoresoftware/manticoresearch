@@ -1,0 +1,204 @@
+––– input –––
+apt-get update -y> /dev/null; echo $?
+––– output –––
+0
+––– input –––
+apt-get install -y iproute2 procps > /dev/null; echo $?
+––– output –––
+0
+––– input –––
+export INSTANCE=1
+––– output –––
+––– input –––
+mkdir -p /var/{run,lib,log}/manticore-${INSTANCE}
+––– output –––
+––– input –––
+stdbuf -oL searchd --logreplication -c test/clt-tests/base/searchd-with-flexible-ports.conf | grep -E "Manticore|Copyright|listening|starting daemon"
+––– output –––
+Manticore %{VERSION} (columnar %{VERSION}) (secondary %{VERSION}) (knn %{VERSION})
+Copyright (c) 2001-2016, Andrew Aksyonoff
+Copyright (c) 2008-2016, Sphinx Technologies Inc (http://sphinxsearch.com)
+Copyright (c) 2017-2024, Manticore Software LTD (https://manticoresearch.com)
+starting daemon version '%{VERSION} (columnar %{VERSION}) (secondary %{VERSION}) (knn %{VERSION})' ...
+listening on %{IPADDR}:1306 for mysql
+listening on %{IPADDR}:1312 for sphinx and http(s)
+listening on %{IPADDR}:1308 for sphinx and http(s)
+––– input –––
+if timeout 10 grep -qm1 '\[BUDDY\] started' <(tail -n 1000 -f /var/log/manticore-${INSTANCE}/searchd.log); then echo 'Buddy started!'; else echo 'Timeout or failed!'; cat /var/log/manticore-${INSTANCE}/searchd.log;fi
+––– output –––
+Buddy started!
+––– input –––
+export INSTANCE=2
+––– output –––
+––– input –––
+mkdir -p /var/{run,lib,log}/manticore-${INSTANCE}
+––– output –––
+––– input –––
+stdbuf -oL searchd --logreplication -c test/clt-tests/base/searchd-with-flexible-ports.conf | grep -E "Manticore|listening|starting daemon"
+––– output –––
+Manticore %{VERSION} (columnar %{VERSION}) (secondary %{VERSION}) (knn %{VERSION})
+Copyright (c) 2017-2024, Manticore Software LTD (https://manticoresearch.com)
+starting daemon version '%{VERSION} (columnar %{VERSION}) (secondary %{VERSION}) (knn %{VERSION})' ...
+listening on %{IPADDR}:2306 for mysql
+listening on %{IPADDR}:2312 for sphinx and http(s)
+listening on %{IPADDR}:2308 for sphinx and http(s)
+––– input –––
+if timeout 10 grep -qm1 '\[BUDDY\] started' <(tail -n 1000 -f /var/log/manticore-${INSTANCE}/searchd.log); then echo 'Buddy started!'; else echo 'Timeout or failed!'; cat /var/log/manticore-${INSTANCE}/searchd.log;fi
+––– output –––
+Buddy started!
+––– input –––
+export INSTANCE=3
+––– output –––
+––– input –––
+mkdir -p /var/{run,lib,log}/manticore-${INSTANCE}
+––– output –––
+––– input –––
+stdbuf -oL searchd --logreplication -c test/clt-tests/base/searchd-with-flexible-ports.conf | grep -E "Manticore|listening|starting daemon"
+––– output –––
+Manticore %{VERSION} (columnar %{VERSION}) (secondary %{VERSION}) (knn %{VERSION})
+Copyright (c) 2017-2024, Manticore Software LTD (https://manticoresearch.com)
+starting daemon version '%{VERSION} (columnar %{VERSION}) (secondary %{VERSION}) (knn %{VERSION})' ...
+listening on %{IPADDR}:3306 for mysql
+listening on %{IPADDR}:3312 for sphinx and http(s)
+listening on %{IPADDR}:3308 for sphinx and http(s)
+––– input –––
+if timeout 10 grep -qm1 '\[BUDDY\] started' <(tail -n 1000 -f /var/log/manticore-${INSTANCE}/searchd.log); then echo 'Buddy started!'; else echo 'Timeout or failed!'; cat /var/log/manticore-${INSTANCE}/searchd.log;fi
+––– output –––
+Buddy started!
+––– input –––
+export CLUSTER_NAME=test
+––– output –––
+––– block: ../base/replication/create-cluster –––
+––– input –––
+export CLUSTER_NAME=test
+––– output –––
+––– input –––
+for n in `seq 2 $INSTANCE`; do mysql -h0 -P${n}306 -e "join cluster ${CLUSTER_NAME} at '127.0.0.1:1312'"; done;
+––– output –––
+––– input –––
+for port in 1306 2306 3306; do timeout 30 mysql -h0 -P$port -e "SHOW STATUS LIKE 'cluster_test_status'\G" > /tmp/status_$port.log && grep -q "Value: primary" /tmp/status_$port.log && echo "Port $port: Node synced"; done && cat /tmp/status_1306.log
+––– output –––
+Port 1306: Node synced
+Port 2306: Node synced
+Port 3306: Node synced
+*************************** 1. row ***************************
+Counter: cluster_test_status
+Value: primary
+––– input –––
+mysql -h0 -P1306 -e "CREATE TABLE tbl1 (id, attr1 INT) min_infix_len = '3' min_prefix_len = '3';"; echo $?
+––– output –––
+0
+––– input –––
+mysql -h0 -P1306 -e "ALTER CLUSTER ${CLUSTER_NAME} ADD tbl1;"; echo $?
+––– output –––
+0
+––– input –––
+mysql -h0 -P1306 -e "SHOW CREATE TABLE tbl1;"
+––– output –––
++-------+-------------------------------------------------------------------------------------+
+| Table | Create Table                                                                        |
++-------+-------------------------------------------------------------------------------------+
+| tbl1  | CREATE TABLE tbl1 (
+id bigint,
+attr1 integer
+) min_prefix_len='3' min_infix_len='3' |
++-------+-------------------------------------------------------------------------------------+
+––– input –––
+mysql -h0 -P1306 -e "REPLACE INTO test:tbl1 (id, attr1) VALUES (11, 100);"; echo $?
+––– output –––
+0
+––– input –––
+pid=$(ss -tulnpH | grep -w 1306 | awk '{print $7}' | cut -d= -f2 | cut -d, -f1 | head -1) && echo "PID node1: ${pid:-NOT_FOUND}"
+––– output –––
+PID node1: %{NUMBER}
+––– input –––
+kill -s SIGILL $pid && echo "Daemon on node1 killed with SIGILL!"
+––– output –––
+Daemon on node1 killed with SIGILL!
+––– input –––
+export INSTANCE=1
+––– output –––
+––– input –––
+stdbuf -oL searchd --logreplication -c test/clt-tests/base/searchd-with-flexible-ports.conf >/dev/null 2>&1 & disown && echo "Daemon on node1 restarted!"
+––– output –––
+[1] %{NUMBER}
+Daemon on node1 restarted!
+––– input –––
+timeout 30 grep -qm1 '\[BUDDY\] started' <(tail -n 1000 -f /var/log/manticore-1/searchd.log) && echo "Node1: Buddy restarted!"
+––– output –––
+Node1: Buddy restarted!
+––– input –––
+for i in 1 2 3; do if grep -q "falling back to SST" /var/log/manticore-$i/searchd.log; then echo "SST detected on manticore-$i!" && exit 1; else echo "No SST on manticore-$i"; fi; done
+––– output –––
+No SST on manticore-1
+No SST on manticore-2
+No SST on manticore-3
+––– input –––
+for port in 1306 2306 3306; do timeout 30 mysql -h0 -P$port -e "SHOW STATUS LIKE 'cluster_test_status'\G" > /tmp/status_$port.log && grep -q "Value: primary" /tmp/status_$port.log && echo "Port $port: Node synced"; done && cat /tmp/status_1306.log
+––– output –––
+Port 1306: Node synced
+Port 2306: Node synced
+Port 3306: Node synced
+*************************** 1. row ***************************
+Counter: cluster_test_status
+Value: primary
+––– input –––
+mysql -h0 -P1306 -e "SHOW STATUS LIKE 'cluster_test_indexes'\G"
+––– output –––
+*************************** 1. row ***************************
+Counter: cluster_test_indexes
+Value: tbl1
+––– input –––
+mysql -h0 -P2306 -e "SHOW STATUS LIKE 'cluster_test_indexes'\G"
+––– output –––
+*************************** 1. row ***************************
+Counter: cluster_test_indexes
+Value:
+––– input –––
+mysql -h0 -P3306 -e "SHOW STATUS LIKE 'cluster_test_indexes'\G"
+––– output –––
+*************************** 1. row ***************************
+Counter: cluster_test_indexes
+Value:
+––– input –––
+mysql -h0 -P2306 -e "REPLACE INTO test:tbl1 (id, attr1) VALUES (12, 200);"
+––– output –––
+––– input –––
+pid=$(ss -tulnpH | grep -w 3306 | awk '{print $7}' | grep -oP '\d+(?=,|$)') && echo "PID node3: ${pid:-NOT_FOUND}" && [ -n "$pid" ]
+––– output –––
+PID node3: %{NUMBER}
+––– input –––
+kill -s SIGILL $pid && echo "Daemon on node3 killed with SIGILL!"
+––– output –––
+Daemon on node3 killed with SIGILL!
+––– input –––
+timeout 10 bash -c "while kill -0 $pid 2>/dev/null; do sleep 1; done" && echo "Process on node3 is completed!"
+––– output –––
+Process on node3 is completed!
+––– input –––
+export INSTANCE=3
+––– output –––
+––– input –––
+searchd --logreplication -c test/clt-tests/base/searchd-with-flexible-ports.conf >/dev/null 2>&1 & disown && echo "Daemon on node3 restarted!"
+––– output –––
+[1] %{NUMBER}
+Daemon on node3 restarted!
+––– input –––
+timeout 30 grep -qm2 '\[BUDDY\] started' <(tail -n 1000 -f /var/log/manticore-3/searchd.log) && echo "Node3: Buddy restarted!"
+––– output –––
+Node3: Buddy restarted!
+––– input –––
+for i in 1 2 3; do if grep -q "falling back to SST" /var/log/manticore-$i/searchd.log; then echo "SST detected on manticore-$i!" && exit 1; else echo "No SST on manticore-$i"; fi; done
+––– output –––
+No SST on manticore-1
+No SST on manticore-2
+No SST on manticore-3
+––– input –––
+for port in 1306 2306 3306; do timeout 30 mysql -h0 -P$port -e "SHOW STATUS LIKE 'cluster_test_status'\G" > /tmp/status_$port.log && grep -q "Value: primary" /tmp/status_$port.log && echo "Port $port: Node synced"; done && cat /tmp/status_1306.log
+––– output –––
+Port 1306: Node synced
+Port 2306: Node synced
+Port 3306: Node synced
+*************************** 1. row ***************************
+Counter: cluster_test_status
+Value: primary

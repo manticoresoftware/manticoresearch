@@ -375,10 +375,12 @@ The generated ID value is guaranteed to be unique under the following conditions
 
 The auto ID generator creates a 64-bit integer for a document ID and uses the following schema:
 * Bits 0 to 23 form a counter that gets incremented on every call to the auto ID generator
-* Bits 24 to 55 represent the Unix timestamp of the server start
+* Bits 24 to 55 represent a timestamp composed of:
+  * Bits 24 to 35: Lower 12 bits of microsecond fraction of server start time
+  * Bits 36 to 55: Seconds since May 1, 2019 of server start time
 * Bits 56 to 63 correspond to the server_id
 
-This schema ensures that the generated ID is unique among all nodes in the cluster and that data inserted into different cluster nodes does not create collisions between the nodes.
+This schema ensures that the generated ID is unique among all nodes in the cluster and that data inserted into different cluster nodes does not create collisions between the nodes. The microsecond precision in the timestamp component makes it extremely unlikely for two instances started on the same server to generate the same IDs, even if they start at the same second.
 
 As a result, the first ID from the generator used for auto ID is NOT 1 but a larger number. Additionally, the document stream inserted into a table might have non-sequential ID values if inserts into other tables occur between calls, as the ID generator is singular in the server and shared between all its tables.
 

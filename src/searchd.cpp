@@ -21043,6 +21043,7 @@ static void SetUidShort ( bool bTestMode )
 
 	const int iServerMask = 0x7f;
 	uint64_t uStartedSec = 0;
+	uint32_t uTimeComponent = 0;
 
 	// server id as high part of counter
 	if ( !iServerId )
@@ -21060,14 +21061,21 @@ static void SetUidShort ( bool bTestMode )
 		iServerId &= iServerMask;
 	}
 
-	// start time Unix timestamp as middle part of counter
-	uStartedSec = sphMicroTimer() / 1000000;
+	// Get time in microseconds
+	uint64_t uStartedMicro = sphMicroTimer();
+	uStartedSec = uStartedMicro / 1000000;
+	uint64_t uMicroFraction = uStartedMicro % 1000000;
+
 	// base timestamp is 01 May of 2019
 	const uint64_t uBaseSec = 1556668800;
 	if ( uStartedSec>uBaseSec )
 		uStartedSec -= uBaseSec;
 
-	UidShortSetup ( iServerId, (int)uStartedSec );
+	// Combine seconds with a portion of microseconds
+	// Use 20 bits for seconds (enough for ~30 years) and 12 bits for microsecond fraction
+	uTimeComponent = ((uint32_t)uStartedSec << 12) | ((uint32_t)(uMicroFraction & 0xFFF));
+
+	UidShortSetup ( iServerId, uTimeComponent );
 }
 
 namespace { // static

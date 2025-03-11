@@ -413,7 +413,6 @@ public:
 	void			SetGroupbyLimit ( int iLimit );
 	void			SetLimit ( int iOffset, int iLimit );
 
-	float			ToFloat ( const SqlNode_t & tNode ) const;
 	int64_t			DotGetInt ( const SqlNode_t & tNode ) const;
 
 	void 			AddStringSubkey ( const SqlNode_t & tNode ) const;
@@ -530,11 +529,6 @@ static bool CheckInteger ( const CSphString & sOpt, const CSphString & sVal, CSp
 bool SqlParserTraits_c::CheckInteger ( const CSphString & sOpt, const CSphString & sVal ) const
 {
 	return ::CheckInteger ( sOpt, sVal, *m_pParseError );
-}
-
-float SqlParser_c::ToFloat ( const SqlNode_t & tNode ) const
-{
-	return (float) strtod ( m_pBuf+tNode.m_iStart, nullptr );
 }
 
 int64_t SqlParser_c::DotGetInt ( const SqlNode_t & tNode ) const

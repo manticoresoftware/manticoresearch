@@ -19,12 +19,12 @@ using namespace Threads;
 static int g_iFlushWrite = 1LL;
 static int g_iFlushSearch = 30LL;
 
-int GetRtFlushDiskWrite()
+int GetRtFlushDiskWrite ( bool bTestMode )
 {
-	return g_iFlushWrite;
+	return bTestMode ? -1 : g_iFlushWrite;
 }
 
-int GetRtFlushDiskSearch()
+int GetRtFlushDiskSearch ()
 {
 	return g_iFlushSearch;
 }

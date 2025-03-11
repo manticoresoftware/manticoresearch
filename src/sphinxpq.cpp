@@ -121,7 +121,6 @@ public:
 	const CSphSourceStats &	GetStats () const override { return m_tStat; }
 	void				GetStatus ( CSphIndexStatus* pRes ) const final;
 
-	void				IndexDeleted() override { m_bIndexDeleted = true; }
 	void				ProhibitSave() final;
 	void				EnableSave() final;
 	void				LockFileState ( CSphVector<CSphString> & dFiles ) final;
@@ -148,7 +147,6 @@ private:
 	int64_t							m_tmSaved = 0;
 	int								m_iDisabledCounter = 0;
 	bool							m_bHasFiles = false;
-	bool							m_bIndexDeleted = false;
 
 	StoredQuerySharedPtrVecSharedPtr_t	m_pQueries GUARDED_BY ( m_tLock );
 	OpenHashTable_T<int64_t, int>		m_hQueries GUARDED_BY ( m_tLock ); // QUID -> query
@@ -1827,7 +1825,7 @@ std::unique_ptr<StoredQuery_i> PercolateIndex_c::CreateQuery ( PercolateQueryArg
 	}
 
 	// FIXME!!! provide segments list instead index
-	sphTransformExtendedQuery ( &tParsed->m_pRoot, m_tSettings, false, nullptr );
+	sphTransformExtendedQuery ( &tParsed->m_pRoot, m_tSettings );
 
 	bool bWordDict = m_pDict->GetSettings().m_bWordDict;
 	if ( m_tMutableSettings.m_iExpandKeywords!=KWE_DISABLED )

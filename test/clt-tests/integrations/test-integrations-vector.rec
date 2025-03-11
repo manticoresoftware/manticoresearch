@@ -42,7 +42,6 @@ echo -e "[sources.test_file]\ntype = \"file\"\ninclude = [ \"/var/log/dpkg.log\"
 ––– input –––
 vector -c vector.toml > /var/log/vector.log 2>&1 &
 ––– output –––
-[1] #!/[0-9]+/!#
 ––– input –––
 sleep 3; curl -s localhost:9308/cli_json -d 'describe dpkg_log' | jq -cM '.[].data | sort_by(.Field)'
 ––– output –––

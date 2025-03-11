@@ -6775,6 +6775,12 @@ bool CSphIndex_VLN::DoMerge ( const CSphIndex_VLN * pDstIndex, const CSphIndex_V
 		if ( !tAttrMerger.Prepare ( pSrcIndex, pDstIndex ) )
 			return false;
 
+		if ( !tAttrMerger.AnalyzeAttributes ( *pDstIndex, dDstRows, tTotalDocs.first ) )
+			return false;
+
+		if ( !bCompress && !tAttrMerger.AnalyzeAttributes ( *pSrcIndex, dSrcRows, tTotalDocs.second ) )
+			return false;
+
 		if ( !tAttrMerger.CopyAttributes ( *pDstIndex, dDstRows, tTotalDocs.first ) )
 			return false;
 
@@ -11649,7 +11655,7 @@ Bson_t Explain ( ExplainQueryArgs_t & tArgs )
 		return EmptyBson ();
 	}
 
-	sphTransformExtendedQuery ( &tParsed.m_pRoot, *tArgs.m_pSettings, false, nullptr );
+	sphTransformExtendedQuery ( &tParsed.m_pRoot, *tArgs.m_pSettings, false ); // fixme! m.b. explain boolean-simplified?
 
 	bool bWordDict = tArgs.m_pDict->GetSettings().m_bWordDict;
 	int iExpandKeywords = ExpandKeywords ( tArgs.m_iExpandKeywords, QUERY_OPT_DEFAULT, *tArgs.m_pSettings, bWordDict );

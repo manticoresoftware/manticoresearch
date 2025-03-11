@@ -13889,8 +13889,9 @@ void sphHandleMysqlUpdate ( StmtErrorReporter_i & tOut, const SqlStmt_t & tStmt,
 		return;
 	} else
 	{
-		int64_t tmRealTime = sphMicroTimer() - tmStart;
-		LogStatementSphinxql ( sQuery, (int)( tmRealTime / 1000 ) );
+		int64_t tmRealTimeMs = ( sphMicroTimer() - tmStart ) / 1000;
+		if ( !g_iQueryLogMinMs || tmRealTimeMs>g_iQueryLogMinMs )
+			LogStatementSphinxql ( sQuery, (int)( tmRealTimeMs ) );
 	}
 
 	tOut.Ok ( iUpdated, iWarns );

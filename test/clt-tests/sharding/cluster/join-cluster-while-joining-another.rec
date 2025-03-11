@@ -22,22 +22,23 @@ mysql -h0 -P1306 -e "CREATE CLUSTER a 'a' as path"
 ––– input –––
 mysql -h0 -P2306 -e "create cluster b 'b' as path" &
 ––– output –––
+[%{NUMBER}] %{NUMBER}
 ––– input –––
 mysql -h0 -P3306 -e "create cluster c 'c' as path" &
 ––– output –––
-[2] %{NUMBER}
+[%{NUMBER}] %{NUMBER}
 ––– input –––
-mysql -h0 -P2306 -e "join cluster a at '127.0.0.1:1312'" &
+mysql -h0 -P2306 -e "join cluster a at '127.0.0.1:1312' 'a' as path" &
 ––– output –––
-[3] %{NUMBER}
+[%{NUMBER}] %{NUMBER}
 ––– input –––
-mysql -h0 -P3306 -e "join cluster b at '127.0.0.1:2312'" &
+mysql -h0 -P3306 -e "join cluster b at '127.0.0.1:2312' 'b' as path" &
 ––– output –––
-[4] %{NUMBER}
+[%{NUMBER}] %{NUMBER}
 ––– input –––
-mysql -h0 -P1306 -e "join cluster c at '127.0.0.1:3312'" &
+mysql -h0 -P1306 -e "join cluster c at '127.0.0.1:3312' 'c' as path" &
 ––– output –––
-[5] %{NUMBER}
+[%{NUMBER}] %{NUMBER}
 ––– input –––
 wait 1>/dev/null 2>&1; echo $?
 ––– output –––

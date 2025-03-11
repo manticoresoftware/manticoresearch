@@ -38,28 +38,35 @@ mysql -h0 -P1306 -e "create table t1; create table t2; create table t3; create t
 ––– input –––
 mysql -h0 -P2306 -e "join cluster c at '127.0.0.1:1312' 'c' as path" &
 ––– output –––
+[%{NUMBER}] %{NUMBER}
 ––– input –––
 mysql -h0 -P1306 -e "join cluster d at '127.0.0.1:2312' 'd' as path" &
 ––– output –––
+[%{NUMBER}] %{NUMBER}
 ––– input –––
 mysql -h0 -P2306 -e "join cluster a at '127.0.0.1:1312' 'a' as path" &
 ––– output –––
+[%{NUMBER}] %{NUMBER}
 ––– input –––
 mysql -h0 -P3306 -e "join cluster b at '127.0.0.1:1312' 'b' as path" &
 ––– output –––
+[%{NUMBER}] %{NUMBER}
 ––– input –––
 wait && mysql -h0 -P1306 -e "alter cluster d add t4" &
 ––– output –––
+[%{NUMBER}] %{NUMBER}
 ––– input –––
 mysql -h0 -P1306 -e "alter cluster c add t3" &
 ––– output –––
+[%{NUMBER}] %{NUMBER}
 ––– input –––
 mysql -h0 -P1306 -e "alter cluster b add t2" &
 ––– output –––
+[%{NUMBER}] %{NUMBER}
 ––– input –––
 mysql -h0 -P1306 -e "alter cluster a add t1" &
 ––– output –––
-[8] %{NUMBER}
+[%{NUMBER}] %{NUMBER}
 ––– input –––
 wait 1>/dev/null 2>&1; echo $?
 ––– output –––

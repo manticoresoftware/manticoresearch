@@ -55,12 +55,12 @@ for ( $i = 0; $i < 4; $i++)
 	else
 		$results[] = sprintf("up.err=%s", $client->GetLastError());
 
-	KillSearchd ( 'config.conf', 'searchd.pid', 'KILL', false );
+	KillSearchd ( config_conf(), searchd_pid(), 'KILL', false );
 
 	usleep ( 50000 );
 
 	$error = "";
-	$startSta = StartSearchd ( 'config.conf', 'error.txt', 'searchd.pid', $error, array() );
+	$startSta = StSearchd ( $error );
 	if ( $startSta == 0 || $startSta == 2 )
 	{
 		$results[] = "started=ok";
@@ -83,11 +83,11 @@ if ( $up >= 0 )
 else
 	$results[] = sprintf("up.err=%s", $client->GetLastError());
 
-KillSearchd ( 'config.conf', 'searchd.pid', 'KILL', false );
+KillSearchd ( config_conf(), searchd_pid(), 'KILL', false );
 usleep ( 100000 );
 
 $error = "";
-$startSta = StartSearchd ( 'config.conf', 'error.txt', 'searchd.pid', $error, array() );
+$startSta = StSearchd ( $error );
 if ( $startSta == 0 || $startSta == 2 )
 {
 	$results[] = "started=ok";
@@ -104,7 +104,7 @@ $g_ignore_weights = false;
 // final fixup; we don't want to compare times
 for ( $i=0; $i<count($results); $i++ )
 	$this->CompareResultSetFixup ( $results[$i], 0, true, false );
-	
+
 $g_ignore_weights = $ignore_old;
 
 ]]></custom_test>

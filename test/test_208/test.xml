@@ -2,7 +2,7 @@
 
 <test>
 <name>snippets vs wildcard matches - sphinxql</name>
-
+<skip_db/>
 <config>
 indexer
 {
@@ -18,7 +18,7 @@ source srctest
 {
 	type = mysql
 	<sql_settings/>
-	sql_query = SELECT id, body FROM test_table
+	sql_query = SELECT 1, 'test' AS body
 }
 
 index test_idx
@@ -30,22 +30,6 @@ index test_idx
 }
 
 </config>
-
-<db_create>
-CREATE TABLE `test_table`
-(
-	`id` int(11) NOT NULL default '0',
-	`body` varchar(255) NOT NULL default ''
-)
-</db_create>
-
-<db_drop>
-DROP TABLE IF EXISTS `test_table`
-</db_drop>
-
-<db_insert>
-INSERT INTO `test_table` VALUES ( 1, 'test' )
-</db_insert>
 
 <queries>
 <sphinxql>

@@ -1,0 +1,55 @@
+name: Nightly memleak tests
+run-name: 🌙 Nightly memleak tests ${{ github.sha }}
+
+on:
+  schedule:
+    - cron: '00 20 * * *'
+  push:
+    paths:
+      - '.github/workflows/nightly_memleaks.yml'    
+      
+  
+# cancels the previous workflow run when a new one appears in the same branch (e.g. master or a PR's branch)
+concurrency:
+  group: nightly_memleaks_${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  memleaks:
+    name: Memleak tests
+    runs-on: ubuntu-22.04
+    defaults:
+      run:
+        shell: bash
+    timeout-minutes: 300
+    container:
+      image: manticoresearch/manticore_valgrind:jammy
+      env:
+        DIAGNOSTIC: 1
+        VERBOSE: 1
+        CTEST_CONFIGURATION_TYPE: "RelWithDebInfo"
+        UNITY_BUILD: 1
+        CACHEB: "../cache"
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v3
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          set-safe-directory: true
+      - name: Check out cache before building
+        uses: actions/cache/restore@v4
+        with:
+          path: cache
+          key: build_linux_debug_x86_64
+      - name: memcheck.sh
+        run: |
+          mysqld &
+          bash memcheck.sh
+      - name: Upload build artifacts
+        if: always()
+        continue-on-error: true
+        uses: manticoresoftware/upload_artifact_with_retries@v4
+        with:
+          name: memleaks_${{ github.sha }}
+          path: build/Testing
+  

@@ -12,7 +12,7 @@
 searchd
 {
     <searchd_settings/>
-	binlog_path = data
+	binlog_path = <data_path/>
 }
 
 index rt1

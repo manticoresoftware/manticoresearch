@@ -189,6 +189,8 @@ mysql -h0 -P1306 -e "REPLACE INTO c:tbl1 VALUES (1, 'Updated feline runs', 42, 3
 ––– input –––
 mysqldump -etc --replace -u cluster -h0 -P1306 --skip-comments manticore c:tbl1 | mysql -h0 -P1306; echo $?
 ––– output –––
+-- Warning: version string returned by server is incorrect.
+-- Warning: column statistics not supported by the server.
 0
 ––– input –––
 for port in 1306 2306 3306; do echo "Data from c:tbl1 on port $port:"; mysql -h0 -P$port -e "SELECT * FROM c:tbl1 ORDER BY id ASC;"; done
@@ -231,6 +233,8 @@ mysql -h0 -P3306 -e "INSERT INTO c:tbl3 (id, f, a, b, j, m, s, e, d, v, fv) VALU
 ––– input –––
 mysqldump -etc --replace --net-buffer-length=16M -u new_username -h0 -P2306 --skip-comments manticore c:tbl1 c:tbl2 c:tbl3 | mysql -h0 -P3306; echo $?
 ––– output –––
+-- Warning: version string returned by server is incorrect.
+-- Warning: column statistics not supported by the server.
 0
 ––– input –––
 for port in 1306 2306 3306; do echo "Data from c:tbl1 on port $port:"; mysql -h0 -P$port -e "SELECT * FROM c:tbl1 ORDER BY id ASC;"; done
@@ -473,6 +477,8 @@ rt_mem_limit = 536870912
 ––– input –––
 mysqldump -etc --replace -u new_username -h0 -P2306 --skip-comments manticore tbl2 | mysql -P2306 -h0; echo $?
 ––– output –––
+-- Warning: version string returned by server is incorrect.
+-- Warning: column statistics not supported by the server.
 0
 ––– input –––
 mysql -h0 -P2306 -e "ALTER CLUSTER c ADD tbl2;"; echo $?

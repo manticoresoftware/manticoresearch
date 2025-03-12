@@ -1,4 +1,7 @@
 ––– input –––
+export LANG=en_US.UTF-8
+––– output –––
+––– input –––
 export INSTANCE=1
 ––– output –––
 ––– block: ../base/replication/start-searchd-precach –––

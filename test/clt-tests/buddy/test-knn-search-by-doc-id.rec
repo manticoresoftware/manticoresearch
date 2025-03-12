@@ -1,4 +1,4 @@
-––– block: ../base/start-searchd –––
+––– block: ../base/start-searchd-with-buddy –––
 ––– input –––
 curl -s localhost:9308/cli -d "create table test ( test_vector float_vector knn_type='hnsw' knn_dims='2' hnsw_similarity='l2' )" > /dev/null 2>&1; echo $?
 ––– output –––

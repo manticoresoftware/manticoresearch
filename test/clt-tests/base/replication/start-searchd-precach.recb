@@ -2,7 +2,7 @@
 mkdir -p /var/{run,lib,log}/manticore-${INSTANCE}
 ––– output –––
 ––– input –––
-stdbuf -oL searchd -c test/clt-tests/base/searchd-with-flexible-ports.conf > /dev/null | grep -v precach
+stdbuf -oL searchd -c test/clt-tests/base/searchd-with-flexible-ports.conf > /dev/null
 ––– output –––
 ––– input –––
 if timeout 10 grep -qm1 'accepting connections' <(tail -n 1000 -f /var/log/manticore-${INSTANCE}/searchd.log); then echo 'Accepting connections!'; else echo 'Timeout or failed!'; fi

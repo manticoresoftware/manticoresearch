@@ -448,7 +448,7 @@ function from_utf8 ( $to, $text )
 
 function RunIndexerOnce ( &$error, $params )
 {
-	global $g_locals;
+	global $g_locals, $config_base;
 
 	$path = $g_locals['indexer'];
 
@@ -459,7 +459,7 @@ function RunIndexerOnce ( &$error, $params )
 	}
 
 	$retval = 0;
-	exec ( "$path --quiet --config ".testdir('config.conf')." $params", $error, $retval );
+	exec ( "$path --quiet --config ".testdir(config_conf())." $params", $error, $retval );
 
 	// Not considering warnings as errors here to avoid possible fails caused by the columnar library init warning
 	$error = join ( "\n", array_filter ( $error, function( $errLine ) {
@@ -636,9 +636,6 @@ function StartSearchd ( $config_file, $error_file, $pidfile, &$error, $requireme
 	if ( !$no_pseudo_sharding )
 		$extra_params .= ' --force-pseudo-sharding';
 
-	if ( isset ( $g_locals['use_pool'] ) && $g_locals['use_pool'] )
-		$extra_params .= ' --test-thd-pool';
-
 	if ( isset ( $g_locals['extra_searchd_options'] ) )
 		$extra_params .= ' ' . $g_locals['extra_searchd_options'];
 
@@ -754,6 +751,10 @@ function StartSearchd ( $config_file, $error_file, $pidfile, &$error, $requireme
 	return $retval;
 }
 
+function StSearchd ( &$error )
+{
+	return StartSearchd ( config_conf(), error_txt(), searchd_pid(), $error, array() );
+}
 
 function StopSearchd ( $config, $pidfile )
 {
@@ -781,6 +782,11 @@ function StopSearchd ( $config, $pidfile )
 	return $ret;
 }
 
+function StpSearchd ( )
+{
+	return StopSearchd ( config_conf(), searchd_pid() );
+}
+
 function StopWaitSearchd ( $config, $pidfile )
 {
 	return StopSearchd ( $config, $pidfile );
@@ -788,10 +794,11 @@ function StopWaitSearchd ( $config, $pidfile )
 
 function RestartDaemon ($no_warnings=false)
 {
-	$stop = StopWaitSearchd ('config.conf', 'searchd.pid');
+	global $config_base;
+	$stop = StopWaitSearchd (config_conf(), searchd_pid());
 	$status = 'stop=' . ( $stop==0 ? 'ok' : 'error' ) . ', return code=' . $stop;
 
-	$start = StartSearchd ( 'config.conf', 'error.txt', 'searchd.pid', $error, array() );
+	$start = StartSearchd ( config_conf(), error_txt(), searchd_pid(), $error, array() );
 	if ( $start == 0 || $start == 2 )
 	{
 	    if ($no_warnings)
@@ -1430,6 +1437,22 @@ function result_must_not_be_displayed ($result)
     return @$result['skip']==1;
 }
 
+function IsRt()
+{
+	global $g_locals;
+	if ( !array_key_exists ('rt_mode', $g_locals) )
+		return false;
+	return $g_locals['rt_mode'];
+}
+
+function IsColumnar()
+{
+	global $g_locals;
+	if ( !array_key_exists ('columnar_mode', $g_locals) )
+		return false;
+	return $g_locals['columnar_mode'];
+}
+
 
 class SphinxConfig
 {
@@ -1526,22 +1549,6 @@ class SphinxConfig
 	function IsNeedDB()				{ return ! ( empty ( $this->_db_drop )
 										&& empty ( $this->_db_create )
 										&& empty ( $this->_db_insert ) ); }
-	function IsRt()
-	{
-		global $g_locals;
-		if ( !array_key_exists ('rt_mode', $g_locals) )
-			return false;
-		return $g_locals['rt_mode'];
-	}
-
-	function IsColumnar()
-	{
-		global $g_locals;
-		if ( !array_key_exists ('columnar_mode', $g_locals) )
-			return false;
-		return $g_locals['columnar_mode'];
-	}
-
 	function NeedIndexerEx ()
 	{
 		return count ( $this->_indexer_runs ) > 0;
@@ -1606,11 +1613,12 @@ class SphinxConfig
 	{
 		if ( !is_array ( $agent ) )
 			return;
+		global $searchd_name_base;
 
 		if ( $i>0 )
-		    $this->_sd_log = "searchd$i.log";
+		    $this->_sd_log = testdir("$searchd_name_base$i.log");
 		else
-            $this->_sd_log = "searchd.log";
+            $this->_sd_log = testdir("$searchd_name_base.log");
 		$this->_sd_address = $agent ["address"];
 		$this->_sd_port = $agent ["port"];
 		$this->_sd_sphinxql_port = $agent ["sqlport"];
@@ -2169,22 +2177,40 @@ class SphinxConfig
 		$this->GatherNodes ( $this->_config );
 		$this->GatherEntities ( GetFirstChild ( $xml, "query_attributes" ), $this->_query_attributes );
 
-		foreach ( ChildrenArray ( $xml, "db_create" ) as $node )
-			$this->_db_create []=$node->nodeValue;
+		$has_db = false;
+		foreach ( ChildrenArray ( $xml, "db_create" ) as $node ) {
+			$this->_db_create [] = $node->nodeValue;
+			$has_db = true;
+		}
 
-		foreach ( ChildrenArray ( $xml, "db_drop" ) as $node )
-			$this->_db_drop []=$node->nodeValue;
+		foreach ( ChildrenArray ( $xml, "db_drop" ) as $node ) {
+			$this->_db_drop [] = $node->nodeValue;
+			$has_db = true;
+		}
 
-		foreach ( ChildrenArray ( $xml, "db_insert" ) as $node )
-            $this->AddDbInsert ( $node, $doc->encoding );
+		foreach ( ChildrenArray ( $xml, "db_insert" ) as $node ) {
+			$this->AddDbInsert($node, $doc->encoding);
+			$has_db = true;
+		}
 
-		foreach ( ChildrenArray ( $xml, "custom_insert" ) as $node )
-			$this->_custom_insert []=$node->nodeValue;
+		foreach ( ChildrenArray ( $xml, "custom_insert" ) as $node ) {
+			$this->_custom_insert [] = $node->nodeValue;
+			$has_db = true;
+		}
+
 
 		$this->_name			= GetFirstChildValue ( $xml, "name" );
 		$this->_query_settings	= GetFirstChildValue ( $xml, "query_settings" );
 		$this->_num_agents		= GetFirstChildValue ( $xml, "num_agents", 1 );
-		$this->_skip_indexer	= GetFirstChildValue ( $xml, "skip_indexer", GetFirstChildValue ( $xml, "skip-indexer", false ) );
+		$this->_skip_indexer	= GetFirstChildValue ( $xml, "skip_indexer", false )!==false;
+		$skip_db         		= GetFirstChildValue ( $xml, "skip_db", false )!==false;
+
+		if ( $has_db && $skip_db )
+		{
+			global $test;
+			print ( "ERROR: test \"$test\" is marked as \"skip_db\", but has non-empty db_create/db_drop/db_insert/custom_insert section(s)\n" );
+			return false;
+		}
 
 		$this->_prereqs = array();
 		$prereqs = GetFirstChild ( $xml, "requires", false );
@@ -3227,9 +3253,9 @@ class SphinxConfig
 
 		// fixup floats in json via http
 		if ( isset ( $set["http"] ) && $set["http"]==1 )
-			JsonRsetFixup ( $set, $this->IsColumnar(), $keep_json_ctrls );
+			JsonRsetFixup ( $set, IsColumnar(), $keep_json_ctrls );
 		else
-			SqlRsetFixup ( $set, $this->IsColumnar() );
+			SqlRsetFixup ( $set, IsColumnar() );
 
 	    // fixup sphinxql trim
 	    if ( isset ( $set['sphinxql'] ) )
@@ -3672,7 +3698,7 @@ class SphinxConfig
 
 	function WriteConfig ( $filename, $agentid, &$msg, $collectdata = true )
 	{
-		global $g_locals;
+		global $g_locals, $index_data_path;
 		$fp = fopen ( $filename, 'w' );
 		if ( !$fp )
 		{
@@ -3695,7 +3721,7 @@ class SphinxConfig
 
 		// for rt case - extract the schema from the config
 		// and make the new config, making the index as rt instead
-		if ( $this->IsRt() )
+		if ( IsRt() )
 		{
 			$body = 1;
 			$srcname = 2;
@@ -4049,7 +4075,7 @@ class SphinxConfig
 					}
 				}
 
-				if ( $this->IsColumnar() )
+				if ( IsColumnar() )
 				{
 					$attr_names[] = "id";
 					$columnar_attrs = "\n\tcolumnar_attrs=".implode ( ",", array_unique($attr_names) );
@@ -4076,7 +4102,7 @@ class SphinxConfig
 		else // for rt indexes we need to clean up all index files before the run.
 		{
 			// remove binlog files if any
-			$this->EraseIndexFiles ( 'data/binlog' );
+			$this->EraseIndexFiles ( "{$index_data_path}/binlog" );
 
 			$pattern = "/.*?index\s+\S*?(\s*\:\s*\S*?)?\s*\{(.*?)\}.*?/s";
 			preg_match_all ( $pattern, $config, $matches, PREG_SET_ORDER | PREG_OFFSET_CAPTURE );
@@ -4492,13 +4518,13 @@ function CheckConfig ( $config, $path )
 		return false;
 	}
 
-	if ( $config->Requires("non-rt") && $config->IsRt() )
+	if ( $config->Requires("non-rt") && IsRt() )
 	{
 		printf ( "SKIPPING %s, %s - explicitly non-RT test skipped in RT mode\n", $path, $config->Name () );
 		return false;
 	}
 
-	if ( $config->Requires("non-columnar") && $config->IsColumnar() )
+	if ( $config->Requires("non-columnar") && IsColumnar() )
 	{
 		printf ( "SKIPPING %s, %s - explicitly non-columnar test skipped in columnar mode\n", $path, $config->Name () );
 		return false;
@@ -4557,7 +4583,7 @@ function CheckConfig ( $config, $path )
 		return false;
 	}
 
-	if ( $config->NeedIndexerEx() && $config->IsRt() )
+	if ( $config->NeedIndexerEx() && IsRt() )
 	{
 		printf ( "SKIPPING %s, %s - non-RT test that uses indexer skipped in RT mode\n", $path, $config->Name () );
 		return false;
@@ -4620,9 +4646,9 @@ function RunTest ( $test_dir, $skipdemo, $usemarks )
 {
 	global	$index_data_path, $agents, $ss_pid_file, $sd_managed_searchd,
 			$sd_skip_indexer, $windows, $g_locals, $ss_log, $ss_query_log,
-			$g_pick_query;
+			$g_pick_query, $config_base, $searchd_name_base, $error_base;
 
-	$res_path = scriptdir($test_dir);
+	$res_path = resdir($test_dir);
 
 	$model_file = $test_dir."/model.bin";
 	$conf_dir 	= $res_path."/Conf";
@@ -4674,7 +4700,7 @@ function RunTest ( $test_dir, $skipdemo, $usemarks )
 		mkdir ( $conf_dir );
 
 	if ( $config->Requires ( "replication" ) )
-		EraseDirContents ( testdir ( "data/" ), true );
+		EraseDirContents ( testdir ( "{$index_data_path}/" ), true );
 
 	$report_path = "$res_path/report";
 	$report_file = "$report_path.txt";
@@ -4732,18 +4758,18 @@ function RunTest ( $test_dir, $skipdemo, $usemarks )
 			print ("Interrupted, $msg\n");
 			continue;
 		}
-		$config->WriteConfig ( scriptdir("config.conf"), "all", $msg, $config->NumAgents () < 2 );
+		$config->WriteConfig ( scriptdir(config_conf()), "all", $msg, $config->NumAgents () < 2 );
 
 		if ( !$sd_skip_indexer )
 			EraseDirContents ( $index_data_path );
 
 		if ( $config->Requires( "pre_copy_ref" ) )
-			CopyDirContents ( $test_dir . "/refdata/", testdir("data/") );
+			CopyDirContents ( $test_dir . "/refdata/", "$index_data_path/" );
 
 		if ( $config->IsSkipIndexer()===false && $sd_managed_searchd===false && $sd_skip_indexer===false )
 		{
 			// standard run
-			if ( !$config->IsRt() )
+			if ( !IsRt() )
 			{
 			$indexer_ret = RunIndexer ( $error, "--all" );
 				if ( $indexer_ret==2 )
@@ -4777,15 +4803,15 @@ function RunTest ( $test_dir, $skipdemo, $usemarks )
 		if ( $config->NumAgents () == 1 )
 		{
 
-            $agents[0]["daemon"] = array ( "config"=>"config.conf", "error"=>"error.txt", "pid"=>$ss_pid_file,
+            $agents[0]["daemon"] = array ( "config"=>config_conf(), "error"=>error_txt(), "pid"=>$ss_pid_file,
                 "requirements"=>$config->GetSearchdRequirements(), "address"=>false, "port"=>false );
 
 			if ( $sd_managed_searchd )
 				$searchd_ret = 0;
 			else
-				$searchd_ret = StartSearchd ( "config.conf", "error.txt", $ss_pid_file, $error, $config->GetSearchdRequirements() );
+				$searchd_ret = StartSearchd ( config_conf(), error_txt(), $ss_pid_file, $error, $config->GetSearchdRequirements() );
 
-			$stop[scriptdir("config.conf")] = $ss_pid_file;
+			$stop[scriptdir(config_conf())] = $ss_pid_file;
 
 			if ( $searchd_ret == 1 )
 			{
@@ -4805,13 +4831,13 @@ function RunTest ( $test_dir, $skipdemo, $usemarks )
 				static $agent_id = 0;
 				$agent_id++;
 
-				$config_file = "config_".$agent_id.".conf";
-				$pid_file = "searchd_".$agent_id.".pid";
+				$config_file = "{$config_base}_".$agent_id.".conf";
+				$pid_file = "{$searchd_name_base}_".$agent_id.".pid";
 				$abs_config_file = scriptdir($config_file);
 				$abs_pid_file = scriptdir($pid_file);
 				$stop[$abs_config_file] = $abs_pid_file;
 				$msg = '';
-				$error_agent = "error_".$agent_id.".txt";
+				$error_agent = "{$error_base}_".$agent_id.".txt";
 				$config->SetAgent ( $agents [$i], $i );
 				$config->SetPIDFile ( $abs_pid_file );
 				if ( !$config->WriteConfig ( $abs_config_file, $i, $msg ) )
@@ -4844,7 +4870,7 @@ function RunTest ( $test_dir, $skipdemo, $usemarks )
 			continue;
 
 		// in case of RT index - run "insert into" instead of indexer
-		if ( $config->IsRt () )
+		if ( IsRt () )
 			$config->InsertIntoIndexer ( $error );
 
         $config->ResetResults();

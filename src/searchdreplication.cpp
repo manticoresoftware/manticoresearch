@@ -1471,7 +1471,7 @@ static void CoPrepareClustersOnStartup ( bool bForce ) EXCLUDES ( g_tClustersLoc
 		if ( !ClusterDescOk ( tDesc, bForce ) )
 			continue;
 
-		if ( !CheckRemotesVersions ( tDesc ) )
+		if ( !CheckRemotesVersions ( tDesc, false ) )
 		{
 			sphWarning ( "%s", TlsMsg::szError() );
 			continue;
@@ -1633,7 +1633,7 @@ bool ClusterJoin ( const CSphString & sCluster, const StrVec_t & dNames, const C
 	// need to clean up Galera system files left from previous cluster
 	CleanClusterFiles ( GetDatadirPath ( tDesc->m_sPath ) );
 
-	if ( !CheckRemotesVersions ( tDesc.value() ) )
+	if ( !CheckRemotesVersions ( tDesc.value(), true ) )
 		return false;
 
 	ReplicationClusterRefPtr_c pCluster { MakeCluster ( tDesc.value(), BOOTSTRAP_E::NO ) };

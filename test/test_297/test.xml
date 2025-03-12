@@ -1,0 +1,50 @@
+<?xml version="1.0" encoding="utf-8"?>
+<test>
+
+<name>malformed docstore with dupes</name>
+<requires>
+<non-rt/>
+<skip_db/>
+</requires>
+
+<config>
+indexer
+{
+	mem_limit		= 16M
+}
+
+searchd
+{
+	<searchd_settings/>
+}
+
+source srcmain
+{
+	type = mysql
+	<sql_settings/>
+	sql_query = select 1, 'first' text UNION select 1, 'second' text UNION select 3, 'third' text
+}
+
+index main
+{
+	source			= srcmain
+	path			= <data_path/>/main
+}
+
+index main_d
+{
+	type = distributed
+	agent = <my_address/>:main
+	agent_connect_timeout	= 1000
+	agent_query_timeout		= 3000
+}
+</config>
+
+<queries>
+<sphinxql>
+	select * from main order by id asc;
+	select * from main_d order by id asc;
+</sphinxql>
+</queries>
+
+</test>

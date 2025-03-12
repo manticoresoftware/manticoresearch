@@ -19,7 +19,6 @@ mysql -h0 -P1306 -e "create table t"
 ––– input –––
 mysql -h0 -P2306 -e "join cluster a at '127.0.0.1:1312' 'a' as path" &
 ––– output –––
-[1] %{NUMBER}
 ––– input –––
 mysql -h0 -P1306 -e "alter cluster a add t" &
 ––– output –––

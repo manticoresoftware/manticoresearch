@@ -10,11 +10,6 @@
 <skip_indexer/>
 
 <config>
-indexer
-{
-	mem_limit		= 16M
-}
-
 searchd
 {
 	<searchd_settings/>
@@ -38,7 +33,7 @@ index test_1
 <custom_test><![CDATA[
 $results = [];
 global $g_locals;
-exec ( $g_locals['indexer']." -c ".testdir('config.conf')." test_1", $out, $retval );
+exec ( $g_locals['indexer']." -c ".testdir_config()." test_1", $out, $retval );
 foreach ($out as $line) if (strstr($line, 'ERROR')) $results[] = $line;
 $results[] = "exit code: $retval";
 ]]></custom_test>

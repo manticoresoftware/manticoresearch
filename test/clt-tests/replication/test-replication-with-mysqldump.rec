@@ -54,6 +54,15 @@ Value: primary
 echo 'fast => faster' > /tmp/wordforms.txt
 ––– output –––
 ––– input –––
+iconv -f UTF-8 -t UTF-8 -c /tmp/stopwords.txt -o /tmp/stopwords.txt; iconv -f UTF-8 -t UTF-8 -c /tmp/exceptions.txt -o /tmp/exceptions.txt;iconv -f UTF-8 -t UTF-8 -c /tmp/wordforms.txt -o /tmp/wordforms.txt
+––– output –––
+––– input –––
+grep -axv '.*' /tmp/stopwords.txt && echo "stopwords.txt: НЕ UTF-8" || echo "stopwords.txt: UTF-8"; grep -axv '.*' /tmp/exceptions.txt && echo "exceptions.txt: НЕ UTF-8" || echo "exceptions.txt: UTF-8"; grep -axv '.*' /tmp/wordforms.txt && echo "wordforms.txt: НЕ UTF-8" || echo "wordforms.txt: UTF-8"
+––– output –––
+stopwords.txt: UTF-8
+exceptions.txt: UTF-8
+wordforms.txt: UTF-8
+––– input –––
 mysql -h0 -P2306 -e "CREATE TABLE tbl2 (id BIGINT, f TEXT, a INT, b FLOAT, j JSON, m MULTI, s STRING, e BOOL, d TIMESTAMP, v MULTI64, fv FLOAT_VECTOR KNN_TYPE='hnsw' KNN_DIMS='4' HNSW_SIMILARITY='l2') ENGINE='rowwise' morphology='stem_ru' wordforms='/tmp/wordforms.txt' rt_mem_limit='512M';"; echo $?
 ––– output –––
 0

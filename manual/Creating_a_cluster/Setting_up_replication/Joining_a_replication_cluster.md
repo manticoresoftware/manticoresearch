@@ -2,7 +2,7 @@
 
 <!-- example joining a replication cluster 1 -->
 To join an existing cluster, you must specify at least:
-* The [name](../../Creating_a_cluster/Setting_up_replication/Setting_up_replication.md#Replication-cluster)of the cluster
+* The [name](../../Creating_a_cluster/Setting_up_replication/Setting_up_replication.md#Replication-cluster) of the cluster
 * The `host:port` of another node in the cluster you are joining
 
 <!-- intro -->
@@ -176,4 +176,6 @@ utilsApi.Sql("JOIN CLUSTER click_query 'clicks_mirror1:9312;clicks_mirror2:9312;
 <!-- end -->
 
 The `JOIN CLUSTER` command works synchronously and completes as soon as the node receives all data from the other nodes in the cluster and is in sync with them.
+
+The `JOIN CLUSTER` operation can fail with an error message indicating a duplicate [server_id](../../Server_settings/Searchd.md#server_id). This occurs when the joining node has the same `server_id` as an existing node in the cluster. To resolve this issue, ensure that each node in the replication cluster has a unique [server_id](../../Server_settings/Searchd.md#server_id). You can change the default [server_id](../../Server_settings/Searchd.md#server_id) in the "searchd" section of your configuration file to a unique value before attempting to join the cluster.
 <!-- proofread -->

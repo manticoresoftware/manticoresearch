@@ -95,13 +95,13 @@ void ModifyDaemonPaths ( CSphConfigSection & hSearchd, FixPathAbsolute_fn && fnP
 		hSearchd.AddEntry ( szBinlogKey, sBinlogDir.cstr() );
 	}
 
-	if ( fnPathFix && hSearchd.Exists ( szBinlogKey ) )
-	{
-		CSphString sBinlogPath ( hSearchd.GetStr( szBinlogKey ) );
-		fnPathFix ( sBinlogPath );
-		hSearchd.Delete ( szBinlogKey );
-		hSearchd.AddEntry ( szBinlogKey, sBinlogPath.cstr() );
-	}
+	if ( !fnPathFix )
+		return;
+
+	CSphString sBinlogPath ( hSearchd.GetStr( szBinlogKey ) );
+	fnPathFix ( sBinlogPath );
+	hSearchd.Delete ( szBinlogKey );
+	hSearchd.AddEntry ( szBinlogKey, sBinlogPath.cstr() );
 }
 
 
@@ -1327,13 +1327,13 @@ static void DeleteExtraIndexFiles ( CSphIndex * pIndex, const StrVec_t * pExtFil
 }
 
 
-static void DeleteRtIndex ( CSphIndex * pIdx, const StrVec_t * pExtFiles )
+static void DeleteRtIndex ( CSphIndex * pIdx, const StrVec_t * pExtFiles, Handler fnOnDestroy )
 {
 	assert ( IsConfigless() );
 	if ( !pIdx->IsRT() && !pIdx->IsPQ() )
 		return;
 	auto pRt = static_cast<RtIndex_i*> ( pIdx );
-	pRt->IndexDeleted();
+	pRt->IndexDeleted ( std::move ( fnOnDestroy ) );
 	DeleteExtraIndexFiles ( pRt, pExtFiles );
 }
 
@@ -1352,7 +1352,7 @@ static void RemoveAndDeleteRtIndex ( const CSphString& sIndex )
 		return;
 
 	WIdx_c pIdx { pServed };
-	DeleteRtIndex ( pIdx, nullptr );
+	DeleteRtIndex ( pIdx, nullptr, nullptr );
 	g_pLocalIndexes->Delete ( sIndex );
 }
 
@@ -1408,7 +1408,7 @@ bool CreateNewIndexConfigless ( const CSphString & sIndex, const CreateTableSett
 			FixupIndexTID ( UnlockedHazardIdxFromServed ( *pDesc ), Binlog::LastTidFor ( sIndex ) );
 			if ( !PreallocNewIndex ( *pDesc, &hCfg, sIndex.cstr(), dWarnings, sError ) )
 			{
-				DeleteRtIndex ( UnlockedHazardIdxFromServed ( *pDesc ), nullptr );
+				DeleteRtIndex ( UnlockedHazardIdxFromServed ( *pDesc ), nullptr, nullptr );
 				return false;
 			}
 		}
@@ -1562,7 +1562,7 @@ static bool ReportEmptyDir ( const CSphString & sIndexName, CSphString * pMsg )
 	return false;
 }
 
-static bool DropLocalIndex ( const CSphString & sIndex, CSphString & sError, CSphString * pWarning )
+static bool DropLocalIndexWithCb ( const CSphString & sIndex, CSphString & sError, CSphString * pWarning, Handler fnOnDestroy=nullptr )
 {
 	assert ( IsConfigless() );
 	auto pServed = GetServed(sIndex);
@@ -1601,11 +1601,23 @@ static bool DropLocalIndex ( const CSphString & sIndex, CSphString & sError, CSp
 		if ( !pRt->Truncate(sError, RtIndex_i::DROP ) )
 			return false;
 
-		DeleteRtIndex ( pRt, &dExtFiles );
+		DeleteRtIndex ( pRt, &dExtFiles, std::move ( fnOnDestroy ) );
 		RemoveConfigIndex ( sIndex );
 	}
 
 	ReportEmptyDir ( sIndex, pWarning );
+	return true;
+}
+
+static bool DropLocalIndex ( const CSphString& sIndex, CSphString& sError, CSphString* pWarning )
+{
+	if ( !IsInsideCoroutine() )
+		return DropLocalIndexWithCb ( sIndex, sError, pWarning );
+
+	Coro::Waitable_T<bool> bDestroyed { false };
+	if ( !DropLocalIndexWithCb ( sIndex, sError, pWarning, [&bDestroyed] { bDestroyed.SetValueAndNotifyOne ( true ); } ) )
+		return false;
+	bDestroyed.Wait ( [] ( bool bVal ) { return bVal; } );
 	return true;
 }
 

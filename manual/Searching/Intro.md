@@ -26,6 +26,7 @@ SELECT
     ]
     [LIMIT {[offset,] row_count | row_count OFFSET offset}]
     [OPTION option1[, option2] ...]
+    [FACET {expr_list} [BY {expr_list}] [DISTINCT {field_name}] [ORDER BY {expr | FACET()} {ASC | DESC}] [LIMIT [offset,] count]]
 
 ```
 

@@ -30,4 +30,4 @@ using ClusterNodesStatesVec_t = CSphVector<RemoteNodeClusterState_t>;
 ClusterNodesStatesVec_t GetStatesFromRemotes ( const ClusterDesc_t & tDesc );
 bool ClusterGetState ( const CSphString & sCluster, RemoteNodeClusterState_t & tState );
 
-bool CheckRemotesVersions ( const ClusterDesc_t & tDesc );
+bool CheckRemotesVersions ( const ClusterDesc_t & tDesc, bool bWithServerId );

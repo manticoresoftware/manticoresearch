@@ -2,7 +2,7 @@
 
 <test>
 <name>xmlpipe2 string and wordcount attributes, defined in schema or in config</name>
-
+<skip_db/>
 <config>
 indexer
 {

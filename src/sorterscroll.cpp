@@ -258,7 +258,13 @@ ISphMatchSorter * CreateScrollSorter ( ISphMatchSorter * pSorter, const ISphSche
 
 bool ParseScroll ( CSphQuery & tQuery, const CSphString & sVal, CSphString & sError )
 {
-	CSphString sDecoded = DecodeBase64(sVal);
+	CSphString sDecoded;
+	if ( !DecodeBase64 ( sVal, sDecoded ) )
+	{
+		sError.SetSprintf ( "unable to decode BASE64: %s", sVal.cstr() );
+		return false;
+	}
+
 	JsonObj_c tRoot ( sDecoded.cstr() );
 	if ( !tRoot )
 	{

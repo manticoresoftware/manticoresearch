@@ -2,7 +2,7 @@
 
 <test>
 <name>snippets vs index_exact_words</name>
-
+<skip_db/>
 <config>
 searchd
 {
@@ -53,8 +53,6 @@ index test2
 }
 
 </config>
-
-<db_insert>select 1;</db_insert>
 
 <queries><sphinxql>
 CALL SNIPPETS('Check vs Checking', 'test', 'check', 1 AS query_mode );

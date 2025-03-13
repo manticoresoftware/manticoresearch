@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2017-2024, Manticore Software LTD (https://manticoresearch.com)
+// Copyright (c) 2017-2025, Manticore Software LTD (https://manticoresearch.com)
 // All rights reserved
 //
 // This program is free software; you can redistribute it and/or modify
@@ -44,6 +44,7 @@ CoroStack_t AllocateStack ( size_t iStack )
 		}
 	default:
 		assert(false && "should not be here");
+		return {}; // just to suppress a warning
 	}
 }
 

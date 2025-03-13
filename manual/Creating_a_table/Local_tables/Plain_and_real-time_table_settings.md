@@ -168,6 +168,22 @@ utilsApi.sql("CREATE TABLE products(title text, content text stored indexed, nam
 utilsApi.Sql("CREATE TABLE products(title text, content text stored indexed, name text indexed, price float)");
 ```
 
+<!-- intro -->
+##### Typescript:
+
+<!-- request Typescript -->
+```typescript
+res = await utilsApi.sql('CREATE TABLE products(title text, content text stored indexed, name text indexed, price float)');
+```
+
+<!-- intro -->
+##### Go:
+
+<!-- request Go -->
+```go
+utilsAPI.Sql(context.Background()).Body("CREATE TABLE products(title text, content text stored indexed, name text indexed, price float)").Execute()
+```
+
 <!-- request CONFIG -->
 
 ```ini
@@ -213,6 +229,8 @@ json_secondary_indexes = json_attr
 <!-- example json_secondary_indexes -->
 
 By default, secondary indexes are generated for all attributes except JSON attributes. However, secondary indexes for JSON attributes can be explicitly generated using the `json_secondary_indexes` setting. When a JSON attribute is included in this option, its contents are flattened into multiple secondary indexes. These indexes can be used by the query optimizer to speed up queries.
+
+You can view the available secondary indexes using the [SHOW TABLE <tbl> INDEXES](../../Node_info_and_management/Table_settings_and_status/SHOW_TABLE_INDEXES.md) command.
 
 Value: A comma-separated list of JSON attributes for which secondary indexes should be generated.
 
@@ -276,6 +294,23 @@ utilsApi.sql("CREATE TABLE products(title text, j json secondary_index='1')");
 utilsApi.Sql("CREATE TABLE products(title text, j json secondary_index='1')");
 ```
 
+<!-- intro -->
+##### Typescript:
+
+<!-- request Typescript -->
+```typescript
+res = await utilsApi.sql('CREATE TABLE products(title text, j json secondary_index=\'1\')');
+```
+
+<!-- intro -->
+##### Go:
+
+<!-- request Go -->
+```go
+utilsAPI.Sql(context.Background()).Body("CREATE TABLE products(title text, j json secondary_index='1')").Execute()
+```
+
+
 <!-- request CONFIG -->
 
 ```ini
@@ -291,6 +326,22 @@ table products {
 <!-- end -->
 
 ### Real-time table settings:
+
+#### diskchunk_flush_search_timeout
+
+```ini
+diskchunk_flush_search_timeout = 10s
+```
+
+The timeout for preventing auto-flushing a RAM chunk if there are no searches in the table. Learn more [here](../../Server_settings/Searchd.md#diskchunk_flush_search_timeout).
+
+#### diskchunk_flush_write_timeout
+
+```ini
+diskchunk_flush_write_timeout = 60s
+```
+
+The timeout for auto-flushing a RAM chunk if there are no writes to it. Learn more [here](../../Server_settings/Searchd.md#diskchunk_flush_write_timeout).
 
 #### optimize_cutoff
 
@@ -449,6 +500,13 @@ In the plain mode, you can change the values of `rt_mem_limit` and `optimize_cut
 * The RAM chunk is backed up by a [binary log](../../Logging/Binary_logging.md) until it is flushed to disk, and a larger `rt_mem_limit`, setting will increase the time it takes to replay the binary log and recover the RAM chunk.
 * The RAM chunk may be slightly slower than a disk chunk.
 * Although the RAM chunk itself doesn't take up more memory than `rt_mem_limit` Manticore may take up more memory in some cases, such as when you start a transaction to insert data and don't commit it for a while. In this case, the data you have already transmitted within the transaction will remain in memory.
+
+In addition to `rt_mem_limit`, the flushing behavior of RAM chunks is also influenced by the following settings: [diskchunk_flush_write_timeout](../../Server_settings/Searchd.md#diskchunk_flush_write_timeout) and [diskchunk_flush_search_timeout](../../Server_settings/Searchd.md#diskchunk_flush_search_timeout).
+
+* `diskchunk_flush_write_timeout`: This option defines the timeout for auto-flushing a RAM chunk if there are no writes to it.  If no write occurs within this time, the chunk will be flushed to disk.  Setting it to `-1` disables auto-flushing based on write activity. The default value is 1 second.
+* `diskchunk_flush_search_timeout`: This option sets the timeout for preventing auto-flushing a RAM chunk if there are no searches in the table. Auto-flushing will only occur if there has been at least one search within this time. The default value is 30 seconds.
+
+These timeouts work in conjunction.  A RAM chunk will be flushed if *either* timeout is reached.  This ensures that even if there are no writes, the data will eventually be persisted to disk, and conversely, even if there are constant writes but no searches, the data will also be persisted.  These settings provide more granular control over how frequently RAM chunks are flushed, balancing the need for data durability with performance considerations.  Per-table directives for these settings have higher priority and will override the instance-wide defaults.
 
 ### Plain table settings:
 

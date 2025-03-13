@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2017-2024, Manticore Software LTD (https://manticoresearch.com)
+// Copyright (c) 2017-2025, Manticore Software LTD (https://manticoresearch.com)
 // Copyright (c) 2001-2016, Andrew Aksyonoff
 // Copyright (c) 2008-2016, Sphinx Technologies Inc
 // All rights reserved
@@ -931,6 +931,8 @@ static KeyDesc_t g_dKeysIndex[] =
 	{ "jieba_hmm",				0, nullptr },
 	{ "jieba_mode",				0, nullptr },
 	{ "jieba_user_dict_path",	0, nullptr },
+	{ "diskchunk_flush_write_timeout",		0, nullptr },
+	{ "diskchunk_flush_search_timeout",		0, nullptr },
 	{ nullptr,					0, nullptr }
 };
 
@@ -1080,6 +1082,10 @@ static KeyDesc_t g_dKeysSearchd[] =
 	{ "merge_buffer_dict",		0, NULL },
 	{ "merge_si_memlimit",		0, NULL },
 	{ "log_http",				0, NULL },
+	{ "join_batch_size",		0, NULL },
+	{ "diskchunk_flush_write_timeout",		0, nullptr },
+	{ "diskchunk_flush_search_timeout",		0, nullptr },
+	{ "kibana_version_string",		0, NULL },
 	{ NULL,						0, NULL }
 };
 
@@ -3512,6 +3518,7 @@ struct UUID_t
 
 static UUID_t g_tUidShort;
 static UUID_t g_tIndexUid;
+static int g_iUidShortServerId = 0;
 
 int64_t UidShort()
 {
@@ -3525,11 +3532,17 @@ int64_t GetIndexUid()
 
 void UidShortSetup ( int iServer, int iStarted )
 {
+	g_iUidShortServerId = iServer;
 	int64_t iSeed = ( (int64_t)iServer & 0x7f ) << 56;
 	iSeed += ((int64_t)iStarted ) << 24;
 	g_tUidShort.m_iUidBase = iSeed;
 	g_tIndexUid.m_iUidBase = iSeed;
 	sphLogDebug ( "uid-short server_id %d, started %d, seed " INT64_FMT, iServer, iStarted, iSeed );
+}
+
+int GetUidShortServerId ()
+{
+	return g_iUidShortServerId;
 }
 
 // RNG of the integers 0-255
@@ -3552,10 +3565,10 @@ static BYTE g_dPearsonRNG[256] = {
 		43,119,224, 71,122,142, 42,160,104, 48,247,103, 15, 11,138,239  // 16
 };
 
-BYTE Pearson8 ( const BYTE * pBuf, int iLen )
+BYTE Pearson8 ( const BYTE * pBuf, int iLen, BYTE uPrev )
 {
 	const BYTE * pEnd = pBuf + iLen;
-	BYTE iNew = 0;
+	BYTE iNew = uPrev;
 
 	while ( pBuf<pEnd )
 	{
@@ -3721,27 +3734,27 @@ bool ParseDateMath ( const CSphString & sMathExpr, int iNow, time_t & tDateTime 
 	return ParseDateMath ( sExpr, tDateTime );
 }
 
-DateUnit_e ParseDateInterval ( const CSphString & sExpr, CSphString & sError )
+std::pair<DateUnit_e, int> ParseDateInterval ( const CSphString & sExpr, bool bFixed, CSphString & sError )
 {
 	const char * sCur = sExpr.cstr();
 	const char * sEnd = sCur + sExpr.Length();
 
-	int iNum = 1;
+	int iMulti = 1;
 	if ( !sphIsDigital ( *sCur ) )
 	{
-		iNum = 1;
+		iMulti = 1;
 	} else
 	{
 		char * sNumEnd = nullptr;
-		iNum = (int64_t)strtoull ( sCur, &sNumEnd, 10 );
+		iMulti = (int64_t)strtoull ( sCur, &sNumEnd, 10 );
 		sCur = sNumEnd;
 	}
 
 	// rounding is only allowed on whole, single, units (eg M or 1M, not 0.5M or 2M)
-	if ( iNum!=1 )
+	if ( !bFixed && iMulti!=1 )
 	{
 		sError.SetSprintf ( "The supplied interval [%s] could not be parsed as a calendar interval", sExpr.cstr() );
-		return DateUnit_e::total_units;
+		return { DateUnit_e::total_units, iMulti };
 	}
 
 	const char * sUnitStart = sCur++;
@@ -3754,10 +3767,27 @@ DateUnit_e ParseDateInterval ( const CSphString & sExpr, CSphString & sError )
 	if ( !pUnit )
 	{
 		sError.SetSprintf ( "unknown interval [%s]", sExpr.cstr() );
-		return DateUnit_e::total_units;
+		return { DateUnit_e::total_units, iMulti };
 	}
 
-	return *pUnit;
+	if ( bFixed )
+	{
+		switch ( *pUnit )
+		{
+		case DateUnit_e::ms:
+		case DateUnit_e::sec:
+		case DateUnit_e::minute:
+		case DateUnit_e::hour:
+		case DateUnit_e::day:
+			break;
+
+		default:
+			sError.SetSprintf ( "The supplied interval [%s] could not be parsed as a fixed interval", sExpr.cstr() );
+			return { DateUnit_e::total_units, iMulti };
+		}
+	}
+
+	return { *pUnit, iMulti };
 }
 
 void RoundDate ( DateUnit_e eUnit, time_t & tDateTime )
@@ -3803,6 +3833,58 @@ void RoundDate ( DateUnit_e eUnit, time_t & tDateTime )
 
 	default:
 		break;
+	}
+}
+
+void RoundDate ( DateUnit_e eUnit, int iMulti, time_t & tDateTime )
+{
+	switch ( eUnit )
+	{
+		case DateUnit_e::ms:
+		{
+			// to fixed ms
+			auto tMs = tDateTime * 1000;
+			tMs -= ( tMs % iMulti);			// to nearest iMulti ms
+			tDateTime = tMs / 1000;			// back to seconds
+		}
+		break;
+
+		case DateUnit_e::sec:
+		{
+			// to fixed seconds
+			tDateTime -= ( tDateTime % iMulti );
+		}
+		break;
+
+		case DateUnit_e::minute:
+		{
+			// to fixed minutes
+			auto tMin = ( ( tDateTime / 60 ) % 60 );
+			tDateTime -= ( ( tMin % iMulti ) * 60 );
+		}
+		break;
+
+		case DateUnit_e::hour:
+		{
+			// to fixed hours
+			const int iHourSeconds = 3600;
+			auto tHours = ( ( tDateTime / iHourSeconds ) % 24 );
+			tDateTime -= ( ( tHours % iMulti ) * iHourSeconds );
+		}
+		break;
+
+		case DateUnit_e::day:
+		{
+			// to fixed days
+			const int iDaySeconds = 86400;
+			auto tDaysEpoch = ( tDateTime / iDaySeconds );
+			tDaysEpoch -= ( tDaysEpoch % iMulti );
+			tDateTime = ( tDaysEpoch * iDaySeconds );
+		}
+		break;
+
+		default:
+			break;
 	}
 }
 

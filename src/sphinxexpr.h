@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2017-2024, Manticore Software LTD (https://manticoresearch.com)
+// Copyright (c) 2017-2025, Manticore Software LTD (https://manticoresearch.com)
 // Copyright (c) 2001-2016, Andrew Aksyonoff
 // Copyright (c) 2008-2016, Sphinx Technologies Inc
 // All rights reserved
@@ -367,7 +367,9 @@ ISphExpr * ExprJsonIn ( const VecTraits_T<int64_t> & dVals, ISphExpr * pArg, ESp
 ISphExpr * ExprJsonRange ( const CommonFilterSettings_t & tFilter, ISphExpr * pArg );
 void FetchAttrDependencies ( StrVec_t & dAttrNames, const ISphSchema & tSchema );
 bool CanAliasedExprSetupAsFilter ( const CSphFilterSettings & tFilter, bool & bExclude );
-void SetExprNodeStackItemSize ( int iCreateSize, int iEvalSize );
+void SetExprNodeEvalStackItemSize ( std::pair<int,int> tStack );
+void SetMaxExprNodeEvalStackItemSize ( std::pair<int, int> tStack );
+void SetExprNodeParseStackItemSize ( std::pair<int, int> tStack );
 
 /// provide mysql version string
 namespace sphinxexpr {

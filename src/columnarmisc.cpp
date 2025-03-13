@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2021-2024, Manticore Software LTD (https://manticoresearch.com)
+// Copyright (c) 2021-2025, Manticore Software LTD (https://manticoresearch.com)
 // All rights reserved
 //
 // This program is free software; you can redistribute it and/or modify
@@ -95,6 +95,26 @@ void SetDefaultColumnarAttr ( int iAttr, ESphAttr eType, columnar::Builder_i * p
 	default:
 		pBuilder->SetAttr ( iAttr, 0 );
 		break;
+	}
+}
+
+
+CSphString ColumnarAttrType2Str ( common::AttrType_e eType )
+{
+	switch ( eType )
+	{
+	case common::AttrType_e::NONE:		return "none";
+	case common::AttrType_e::UINT32:	return "uint32";
+	case common::AttrType_e::TIMESTAMP:	return "timestamp";
+	case common::AttrType_e::INT64:		return "int64";
+	case common::AttrType_e::UINT64:	return "uint64";
+	case common::AttrType_e::BOOLEAN:	return "boolean";
+	case common::AttrType_e::FLOAT:		return "float";
+	case common::AttrType_e::STRING:	return "string";
+	case common::AttrType_e::UINT32SET:	return "uint32set";
+	case common::AttrType_e::INT64SET:	return "int64set";
+	case common::AttrType_e::FLOATVEC:	return "floatvec";
+	default:							return "unknown";
 	}
 }
 

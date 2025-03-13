@@ -1,0 +1,59 @@
+a:1:{i:0;a:12:{i:0;a:3:{s:8:"sphinxql";s:96:"select weight(), id from test where match('the') and id>1 order by weight() desc, id asc limit 2";s:10:"total_rows";i:2;s:4:"rows";a:2:{i:0;a:2:{s:8:"weight()";s:4:"1281";s:2:"id";s:1:"2";}i:1;a:2:{s:8:"weight()";s:4:"1281";s:2:"id";s:1:"3";}}}i:1;a:3:{s:8:"sphinxql";s:11:"show scroll";s:10:"total_rows";i:1;s:4:"rows";a:1:{i:0;a:1:{s:12:"scroll_token";s:216:"eyJvcmRlcl9ieV9zdHIiOiJ3ZWlnaHQoKSBkZXNjLCBpZCBhc2MiLCJvcmRlcl9ieSI6W3siYXR0ciI6IndlaWdodCgpIiwiZGVzYyI6dHJ1ZSwidmFsdWUiOjEyODEsInR5cGUiOiJpbnQifSx7ImF0dHIiOiJpZCIsImRlc2MiOmZhbHNlLCJ2YWx1ZSI6MywidHlwZSI6ImludCJ9XX0=";}}}i:2;a:3:{s:8:"sphinxql";s:329:"select weight(), id from test where match('the') and id>1 order by weight() desc, id asc limit 2 option scroll='eyJvcmRlcl9ieV9zdHIiOiJ3ZWlnaHQoKSBkZXNjLCBpZCBhc2MiLCJvcmRlcl9ieSI6W3siYXR0ciI6IndlaWdodCgpIiwiZGVzYyI6dHJ1ZSwidmFsdWUiOjEyODEsInR5cGUiOiJpbnQifSx7ImF0dHIiOiJpZCIsImRlc2MiOmZhbHNlLCJ2YWx1ZSI6MywidHlwZSI6ImludCJ9XX0='";s:10:"total_rows";i:2;s:4:"rows";a:2:{i:0;a:2:{s:8:"weight()";s:4:"1281";s:2:"id";s:1:"4";}i:1;a:2:{s:8:"weight()";s:4:"1281";s:2:"id";s:1:"5";}}}i:3;a:3:{s:8:"sphinxql";s:11:"show scroll";s:10:"total_rows";i:1;s:4:"rows";a:1:{i:0;a:1:{s:12:"scroll_token";s:216:"eyJvcmRlcl9ieV9zdHIiOiJ3ZWlnaHQoKSBkZXNjLCBpZCBhc2MiLCJvcmRlcl9ieSI6W3siYXR0ciI6IndlaWdodCgpIiwiZGVzYyI6dHJ1ZSwidmFsdWUiOjEyODEsInR5cGUiOiJpbnQifSx7ImF0dHIiOiJpZCIsImRlc2MiOmZhbHNlLCJ2YWx1ZSI6NSwidHlwZSI6ImludCJ9XX0=";}}}i:4;a:3:{s:8:"sphinxql";s:329:"select weight(), id from test where match('the') and id>1 order by weight() desc, id asc limit 2 option scroll='eyJvcmRlcl9ieV9zdHIiOiJ3ZWlnaHQoKSBkZXNjLCBpZCBhc2MiLCJvcmRlcl9ieSI6W3siYXR0ciI6IndlaWdodCgpIiwiZGVzYyI6dHJ1ZSwidmFsdWUiOjEyODEsInR5cGUiOiJpbnQifSx7ImF0dHIiOiJpZCIsImRlc2MiOmZhbHNlLCJ2YWx1ZSI6NSwidHlwZSI6ImludCJ9XX0='";s:10:"total_rows";i:2;s:4:"rows";a:2:{i:0;a:2:{s:8:"weight()";s:4:"1281";s:2:"id";s:1:"6";}i:1;a:2:{s:8:"weight()";s:4:"1281";s:2:"id";s:1:"7";}}}i:5;a:3:{s:8:"sphinxql";s:11:"show scroll";s:10:"total_rows";i:1;s:4:"rows";a:1:{i:0;a:1:{s:12:"scroll_token";s:216:"eyJvcmRlcl9ieV9zdHIiOiJ3ZWlnaHQoKSBkZXNjLCBpZCBhc2MiLCJvcmRlcl9ieSI6W3siYXR0ciI6IndlaWdodCgpIiwiZGVzYyI6dHJ1ZSwidmFsdWUiOjEyODEsInR5cGUiOiJpbnQifSx7ImF0dHIiOiJpZCIsImRlc2MiOmZhbHNlLCJ2YWx1ZSI6NywidHlwZSI6ImludCJ9XX0=";}}}i:6;a:3:{s:8:"sphinxql";s:329:"select weight(), id from test where match('the') and id>1 order by weight() desc, id asc limit 2 option scroll='eyJvcmRlcl9ieV9zdHIiOiJ3ZWlnaHQoKSBkZXNjLCBpZCBhc2MiLCJvcmRlcl9ieSI6W3siYXR0ciI6IndlaWdodCgpIiwiZGVzYyI6dHJ1ZSwidmFsdWUiOjEyODEsInR5cGUiOiJpbnQifSx7ImF0dHIiOiJpZCIsImRlc2MiOmZhbHNlLCJ2YWx1ZSI6NywidHlwZSI6ImludCJ9XX0='";s:10:"total_rows";i:2;s:4:"rows";a:2:{i:0;a:2:{s:8:"weight()";s:4:"1281";s:2:"id";s:1:"8";}i:1;a:2:{s:8:"weight()";s:4:"1281";s:2:"id";s:1:"9";}}}i:7;a:3:{s:8:"sphinxql";s:11:"show scroll";s:10:"total_rows";i:1;s:4:"rows";a:1:{i:0;a:1:{s:12:"scroll_token";s:216:"eyJvcmRlcl9ieV9zdHIiOiJ3ZWlnaHQoKSBkZXNjLCBpZCBhc2MiLCJvcmRlcl9ieSI6W3siYXR0ciI6IndlaWdodCgpIiwiZGVzYyI6dHJ1ZSwidmFsdWUiOjEyODEsInR5cGUiOiJpbnQifSx7ImF0dHIiOiJpZCIsImRlc2MiOmZhbHNlLCJ2YWx1ZSI6OSwidHlwZSI6ImludCJ9XX0=";}}}i:8;a:3:{s:8:"sphinxql";s:298:"select weight(), id from test where match('the') and id>1 limit 2 option scroll='eyJvcmRlcl9ieV9zdHIiOiJ3ZWlnaHQoKSBkZXNjLCBpZCBhc2MiLCJvcmRlcl9ieSI6W3siYXR0ciI6IndlaWdodCgpIiwiZGVzYyI6dHJ1ZSwidmFsdWUiOjEyODEsInR5cGUiOiJpbnQifSx7ImF0dHIiOiJpZCIsImRlc2MiOmZhbHNlLCJ2YWx1ZSI6OSwidHlwZSI6ImludCJ9XX0='";s:10:"total_rows";i:1;s:4:"rows";a:1:{i:0;a:2:{s:8:"weight()";s:4:"1281";s:2:"id";s:2:"10";}}}i:9;a:6:{s:13:"http_endpoint";s:11:"json/search";s:11:"http_method";s:4:"POST";s:12:"http_request";s:275:"{ 
+  "index": "test",
+  "options":
+  {
+	"scroll": true
+  },
+  "query":
+  {  
+	"query_string":"the",
+    "range":
+    { 
+      "id": { "gt": 1 } 
+    }
+  },
+  "sort":
+  [
+    { "_score":{ "order":"desc"} },
+	{ "id":{ "order":"asc"} }
+  ],
+  "track_scores": true,
+  "limit":2
+}";s:4:"rows";s:476:"{"timed_out":false,"hits":{"total":9,"total_relation":"eq","hits":[{"_id":2,"_score":1281,"_source":{"title":"the idftest2","gid":123,"title_len":2}},{"_id":3,"_score":1281,"_source":{"title":"the idftest2 and idftest1","gid":123,"title_len":4}}]},"scroll":"eyJvcmRlcl9ieV9zdHIiOiJAd2VpZ2h0IGRlc2MsIGlkIGFzYyIsIm9yZGVyX2J5IjpbeyJhdHRyIjoid2VpZ2h0KCkiLCJkZXNjIjp0cnVlLCJ2YWx1ZSI6MTI4MSwidHlwZSI6ImludCJ9LHsiYXR0ciI6ImlkIiwiZGVzYyI6ZmFsc2UsInZhbHVlIjozLCJ0eXBlIjoiaW50In1dfQ=="}";s:9:"http_code";i:200;s:4:"http";i:1;}i:10;a:6:{s:13:"http_endpoint";s:11:"json/search";s:11:"http_method";s:4:"POST";s:12:"http_request";s:489:"{ 
+  "index": "test",
+  "options":
+  {
+	"scroll": "eyJvcmRlcl9ieV9zdHIiOiJAd2VpZ2h0IGRlc2MsIGlkIGFzYyIsIm9yZGVyX2J5IjpbeyJhdHRyIjoid2VpZ2h0KCkiLCJkZXNjIjp0cnVlLCJ2YWx1ZSI6MTI4MSwidHlwZSI6ImludCJ9LHsiYXR0ciI6ImlkIiwiZGVzYyI6ZmFsc2UsInZhbHVlIjozLCJ0eXBlIjoiaW50In1dfQ=="
+  },
+  "query":
+  {  
+	"query_string":"the",
+    "range":
+    { 
+      "id": { "gt": 1 } 
+    }
+  },
+  "sort":
+  [
+    { "_score":{ "order":"desc"} },
+	{ "id":{ "order":"asc"} }
+  ],
+  "track_scores": true,
+  "limit":2
+}";s:4:"rows";s:445:"{"timed_out":false,"hits":{"total":7,"total_relation":"eq","hits":[{"_id":4,"_score":1281,"_source":{"title":"the","gid":123,"title_len":1}},{"_id":5,"_score":1281,"_source":{"title":"the","gid":123,"title_len":1}}]},"scroll":"eyJvcmRlcl9ieV9zdHIiOiJAd2VpZ2h0IGRlc2MsIGlkIGFzYyIsIm9yZGVyX2J5IjpbeyJhdHRyIjoid2VpZ2h0KCkiLCJkZXNjIjp0cnVlLCJ2YWx1ZSI6MTI4MSwidHlwZSI6ImludCJ9LHsiYXR0ciI6ImlkIiwiZGVzYyI6ZmFsc2UsInZhbHVlIjo1LCJ0eXBlIjoiaW50In1dfQ=="}";s:9:"http_code";i:200;s:4:"http";i:1;}i:11;a:6:{s:13:"http_endpoint";s:11:"json/search";s:11:"http_method";s:4:"POST";s:12:"http_request";s:407:"{ 
+  "index": "test",
+  "options":
+  {
+	"scroll": "eyJvcmRlcl9ieV9zdHIiOiJAd2VpZ2h0IGRlc2MsIGlkIGFzYyIsIm9yZGVyX2J5IjpbeyJhdHRyIjoid2VpZ2h0KCkiLCJkZXNjIjp0cnVlLCJ2YWx1ZSI6MTI4MSwidHlwZSI6ImludCJ9LHsiYXR0ciI6ImlkIiwiZGVzYyI6ZmFsc2UsInZhbHVlIjo1LCJ0eXBlIjoiaW50In1dfQ=="
+  },
+  "query":
+  {  
+	"query_string":"the",
+    "range":
+    { 
+      "id": { "gt": 1 } 
+    }
+  },
+  "track_scores": true,
+  "limit":2
+}";s:4:"rows";s:445:"{"timed_out":false,"hits":{"total":5,"total_relation":"eq","hits":[{"_id":6,"_score":1281,"_source":{"title":"the","gid":123,"title_len":1}},{"_id":7,"_score":1281,"_source":{"title":"the","gid":123,"title_len":1}}]},"scroll":"eyJvcmRlcl9ieV9zdHIiOiJAd2VpZ2h0IGRlc2MsIGlkIGFzYyIsIm9yZGVyX2J5IjpbeyJhdHRyIjoid2VpZ2h0KCkiLCJkZXNjIjp0cnVlLCJ2YWx1ZSI6MTI4MSwidHlwZSI6ImludCJ9LHsiYXR0ciI6ImlkIiwiZGVzYyI6ZmFsc2UsInZhbHVlIjo3LCJ0eXBlIjoiaW50In1dfQ=="}";s:9:"http_code";i:200;s:4:"http";i:1;}}}

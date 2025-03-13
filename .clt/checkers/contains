@@ -1,0 +1,62 @@
+#!/usr/bin/env bash
+
+# Check if two arguments are provided
+if [ $# -ne 2 ]; then
+	echo "Usage: $0 <patterns_file> <target_file>"
+	exit 1
+fi
+
+REC_FILE=$1
+REP_FILE=$2
+
+# Check if files exist
+if [ ! -f "$REC_FILE" ]; then
+	echo "Error: Patterns file '$REC_FILE' does not exist"
+	exit 1
+fi
+
+if [ ! -f "$REP_FILE" ]; then
+	echo "Error: Target file '$REP_FILE' does not exist"
+	exit 1
+fi
+
+# Read the target file content once
+REP_CONTENT=$(cat "$REP_FILE")
+
+# Flag to track if all patterns are found
+all_found=true
+
+# Process each line in the patterns file
+while IFS= read -r line; do
+	# Skip empty lines
+	if [ -z "$line" ]; then
+		continue
+	fi
+
+	# Split the line into multiple patterns (separated by spaces)
+	read -ra patterns <<< "$line"
+
+	# For each line in the patterns file, check all patterns in that line
+	line_match=true
+	for pattern in "${patterns[@]}"; do
+		if ! echo "$REP_CONTENT" | grep -q "$pattern"; then
+			echo "Pattern not found: '$pattern'"
+			line_match=false
+			all_found=false
+		fi
+	done
+
+	if [ "$line_match" = false ]; then
+		echo "Not all patterns from line '$line' were found"
+	fi
+done < "$REC_FILE"
+
+# Exit with appropriate status
+if [ "$all_found" = true ]; then
+	echo "All patterns found successfully"
+	exit 0
+else
+	echo "Some patterns were not found"
+	exit 1
+fi
+

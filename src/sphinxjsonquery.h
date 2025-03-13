@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2017-2024, Manticore Software LTD (https://manticoresearch.com)
+// Copyright (c) 2017-2025, Manticore Software LTD (https://manticoresearch.com)
 // All rights reserved
 //
 // This program is free software; you can redistribute it and/or modify
@@ -57,17 +57,19 @@ struct JsonQuery_c : public CSphQuery
 
 struct ParsedJsonQuery_t
 {
-	ParsedJsonQuery_t ();
-	JsonQuery_c m_tQuery;
-	CSphString m_sWarning;
-	bool m_bProfile = false;
-	int m_iPlan = 0; // 0 - no plan, 1 - description, 2 - object, 3 - both
+				ParsedJsonQuery_t();
+
+	JsonQuery_c	m_tQuery;
+	CSphQuery	m_tJoinQueryOptions;
+	CSphString	m_sWarning;
+	bool		m_bProfile = false;
+	int			m_iPlan = 0; // 0 - no plan, 1 - description, 2 - object, 3 - both
 };
 
 std::unique_ptr<QueryParser_i> sphCreateJsonQueryParser();
 bool			sphParseJsonQuery ( Str_t sQuery, ParsedJsonQuery_t & tPJQuery );
 bool			sphParseJsonQuery ( const JsonObj_c & tRoot, ParsedJsonQuery_t & tPJQuery );
-bool			sphParseJsonInsert ( const char * szInsert, SqlStmt_t & tStmt, DocID_t & tDocId, bool bReplace, CSphString & sError );
+bool			sphParseJsonInsert ( Str_t sInsert, SqlStmt_t & tStmt, DocID_t & tDocId, bool bReplace, CSphString & sError );
 bool			sphParseJsonUpdate ( Str_t sUpdate, SqlStmt_t & tStmt, DocID_t & tDocId, CSphString & sError );
 bool			sphParseJsonDelete ( Str_t sDelete, SqlStmt_t & tStmt, DocID_t & tDocId, CSphString & sError );
 bool			sphParseJsonStatement ( const char * szStmt, SqlStmt_t & tStmt, CSphString & sStmt, CSphString & sQuery, DocID_t & tDocId, CSphString & sError );

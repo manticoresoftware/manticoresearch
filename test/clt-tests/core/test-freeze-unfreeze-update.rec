@@ -14,8 +14,12 @@ export INSTANCE=3
 export CLUSTER_NAME=replication
 ––– output –––
 ––– input –––
-mysql -h0 -P1306 -e "create cluster ${CLUSTER_NAME}"
+mkdir -p /tmp/data; rm -f /tmp/searchd.log; stdbuf -oL searchd --stopwait > /dev/null; stdbuf -oL searchd -c /tmp/116.conf > /dev/null
 ––– output –––
+––– input –––
+if timeout 10 grep -qm1 '\[BUDDY\] started' <(tail -n 1000 -f /tmp/searchd.log); then echo 'Buddy started!'; else echo 'Timeout or failed!'; cat /tmp/searchd.log;fi
+––– output –––
+Buddy started!
 ––– input –––
 for n in `seq 2 $INSTANCE`; do mysql -h0 -P${n}306 -e "join cluster ${CLUSTER_NAME} at '127.0.0.1:1312'"; done;
 ––– output –––
@@ -23,7 +27,7 @@ for n in `seq 2 $INSTANCE`; do mysql -h0 -P${n}306 -e "join cluster ${CLUSTER_NA
 mysql -h0 -P1306 -e "SHOW STATUS LIKE 'cluster_replication_status'\G"
 ––– output –––
 ––– input –––
-mysql -h0 -P1306 -e "SHOW STATUS LIKE 'cluster_replication_nodes_set'\G;"
+(rm -f /tmp/update.sql; for n in `seq 1 10000`; do echo "update t set s='b' where id=1;" >> /tmp/update.sql; done; nohup sh -c "while true; do mysql -P9315 -h0 < /tmp/update.sql | break; done" &>/dev/null &) 2>/dev/null
 ––– output –––
 ––– input –––
 mysql -h0 -P2306 -e "SHOW STATUS LIKE 'cluster_replication_status'\G"

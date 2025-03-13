@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2017-2024, Manticore Software LTD (https://manticoresearch.com)
+// Copyright (c) 2017-2025, Manticore Software LTD (https://manticoresearch.com)
 // Copyright (c) 2001-2016, Andrew Aksyonoff
 // Copyright (c) 2008-2016, Sphinx Technologies Inc
 // All rights reserved
@@ -646,8 +646,9 @@ void HttpRequestParser_c::ParseList ( Str_t sData, OptionsHash_t & hOptions )
 {
 	HTTPINFO << "ParseList with " << sData.second << " bytes '" << Data2Log ( sData ) << "'";
 
-	const char * sCur = sData.first;
-	const char* sLast = sCur;
+	CSphString sBuf ( sData );
+	const char * sCur = sBuf.cstr();
+	const char * sLast = sCur;
 	const char * sEnd = sCur + sData.second;
 
 	Str_t sName = dEmptyStr;
@@ -727,7 +728,7 @@ inline void HttpRequestParser_c::FinishParserUrl ()
 	if ( ( tUri.field_set & uQuery )!=0 )
 	{
 		Str_t sRawGetQuery { sData.first + tUri.field_data[UF_QUERY].off, tUri.field_data[UF_QUERY].len };
-		if ( m_eType == HTTP_GET )
+		if ( m_eType==HTTP_GET )
 			DecodeAndStoreRawQuery ( m_hOptions, sRawGetQuery );
 		ParseList ( sRawGetQuery, m_hOptions );
 	}
@@ -1169,8 +1170,9 @@ void AddCompositeItems ( const CSphString & sCol, CSphVector<CSphQueryItem> & dI
 	}
 }
 
-std::unique_ptr<PubSearchHandler_c> CreateMsearchHandler ( std::unique_ptr<QueryParser_i> pQueryParser, QueryType_e eQueryType, JsonQuery_c & tQuery )
+std::unique_ptr<PubSearchHandler_c> CreateMsearchHandler ( std::unique_ptr<QueryParser_i> pQueryParser, QueryType_e eQueryType, ParsedJsonQuery_t & tParsed )
 {
+	JsonQuery_c & tQuery = tParsed.m_tQuery;
 	tQuery.m_pQueryParser = pQueryParser.get();
 
 	int iQueries = ( 1 + tQuery.m_dAggs.GetLength() );
@@ -1199,6 +1201,7 @@ std::unique_ptr<PubSearchHandler_c> CreateMsearchHandler ( std::unique_ptr<Query
 	if ( !tQuery.m_dAggs.GetLength() || eQueryType==QUERY_SQL || tQuery.m_bGroupEmulation )
 	{
 		pHandler->SetQuery ( 0, tQuery, nullptr );
+		pHandler->SetJoinQueryOptions ( 0, tParsed.m_tJoinQueryOptions );
 		return pHandler;
 	}
 
@@ -1245,6 +1248,7 @@ std::unique_ptr<PubSearchHandler_c> CreateMsearchHandler ( std::unique_ptr<Query
 
 	tQuery.m_bFacetHead = true;
 	pHandler->SetQuery ( 0, tQuery, nullptr );
+	pHandler->SetJoinQueryOptions ( 0, tParsed.m_tJoinQueryOptions );
 	int iRefLimit = tQuery.m_iLimit;
 	int iRefOffset = tQuery.m_iOffset;
 
@@ -1400,7 +1404,7 @@ public:
 		if ( IsBuddyQuery ( m_tOptions ) )
 			m_tParsed.m_tQuery.m_uDebugFlags |= QUERY_DEBUG_NO_LOG;
 
-		std::unique_ptr<PubSearchHandler_c> tHandler = CreateMsearchHandler ( std::move ( pQueryParser ), m_eQueryType, m_tParsed.m_tQuery );
+		std::unique_ptr<PubSearchHandler_c> tHandler = CreateMsearchHandler ( std::move ( pQueryParser ), m_eQueryType, m_tParsed );
 		SetStmt ( *tHandler );
 
 		QueryProfile_c tProfile;
@@ -2017,7 +2021,7 @@ public:
 		TRACE_CONN ( "conn", "HttpHandler_JsonInsert_c::Process" );
 		SqlStmt_t tStmt;
 		DocID_t tDocId = 0;
-		if ( !sphParseJsonInsert ( m_sQuery.first, tStmt, tDocId, m_bReplace, m_sError ) )
+		if ( !sphParseJsonInsert ( m_sQuery, tStmt, tDocId, m_bReplace, m_sError ) )
 		{
 			ReportError ( nullptr, HttpErrorType_e::Parse, EHTTP_STATUS::_400, tStmt.m_sIndex.cstr() );
 			return false;

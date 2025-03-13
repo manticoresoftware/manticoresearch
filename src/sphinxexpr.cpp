@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2017-2024, Manticore Software LTD (https://manticoresearch.com)
+// Copyright (c) 2017-2025, Manticore Software LTD (https://manticoresearch.com)
 // Copyright (c) 2001-2016, Andrew Aksyonoff
 // Copyright (c) 2008-2016, Sphinx Technologies Inc
 // All rights reserved
@@ -3482,7 +3482,11 @@ protected:
 	};
 
 DECLARE_TERNARY ( Expr_If_c,	( EVALFIRST!=0.0f ) ? EVALSECOND : EVALTHIRD,	INTFIRST ? INTSECOND : INTTHIRD,	INT64FIRST ? INT64SECOND : INT64THIRD )
-DECLARE_TERNARY ( Expr_Madd_c,	EVALFIRST*EVALSECOND+EVALTHIRD,					INTFIRST*INTSECOND + INTTHIRD,		INT64FIRST*INT64SECOND + INT64THIRD )
+#if defined (__aarch64__)
+DECLARE_TERNARY ( Expr_Madd_c,	[this](const CSphMatch& tMatch){return EVALFIRST*EVALSECOND;}(tMatch)+EVALTHIRD,					INTFIRST*INTSECOND + INTTHIRD,		INT64FIRST*INT64SECOND + INT64THIRD )
+#else
+DECLARE_TERNARY ( Expr_Madd_c, EVALFIRST* EVALSECOND + EVALTHIRD, INTFIRST* INTSECOND + INTTHIRD, INT64FIRST* INT64SECOND + INT64THIRD )
+#endif
 DECLARE_TERNARY ( Expr_Mul3_c,	EVALFIRST*EVALSECOND*EVALTHIRD,					INTFIRST*INTSECOND*INTTHIRD,		INT64FIRST*INT64SECOND*INT64THIRD )
 
 //////////////////////////////////////////////////////////////////////////
@@ -4293,6 +4297,7 @@ protected:
 	int						AddNodeIdent ( const char * sKey, int iLeft );
 
 	int						AddNodeWithTable ( const char * szTable, uint64_t uOffset );
+	int						AddWeightWithTable ( const char * szTable, uint64_t uOffset );
 	uint64_t				ParseAttrWithTable ( const char * szTable, uint64_t uOffset );
 
 private:
@@ -9172,7 +9177,15 @@ ISphExpr * ExprParser_t::CreateForInNode ( int iNode )
 	int iNameNode = tNode.m_iRight;
 	int iDataNode = m_dNodes[iNameNode].m_iLeft;
 
-	auto * pFunc = new Expr_ForIn_c ( CSphRefcountedPtr<ISphExpr> { CreateTree ( iDataNode )} , iFunc==FUNC_ALL, iFunc==FUNC_INDEXOF );
+	CSphRefcountedPtr<ISphExpr> pArg { CreateTree ( iDataNode )};
+	bool bConverted = false;
+	if ( !pArg->IsJson ( bConverted ) )
+	{
+		m_sCreateError.SetSprintf ( "%s() argument must be JSON", FuncNameByHash ( iFunc ) );
+		return nullptr;
+	}
+
+	auto * pFunc = new Expr_ForIn_c ( pArg, iFunc==FUNC_ALL, iFunc==FUNC_INDEXOF );
 
 	FixupIterators ( iExprNode, m_dNodes[iNameNode].m_sIdent, pFunc->GetRef() );
 	pFunc->SetExpr ( CSphRefcountedPtr<ISphExpr> { CreateTree ( iExprNode ) } );
@@ -9188,8 +9201,8 @@ ISphExpr * ExprParser_t::CreateExprDateAdd ( int iNode, bool bAdd )
 	int iExprNode1 = tNode.m_iLeft;
 	int iExprNode2 = tNode.m_iRight;
 
-	auto pExpr1 = CreateTree ( iExprNode1 );
-	auto pExpr2 = CreateTree ( iExprNode2 );
+	CSphRefcountedPtr<ISphExpr> pExpr1 { CreateTree ( iExprNode1 ) };
+	CSphRefcountedPtr<ISphExpr> pExpr2 { CreateTree ( iExprNode2 ) };
 
 	// This is a hack ala REMAP
 	int iUnit = m_dNodes [ iNode-1 ].m_iConst;
@@ -10511,6 +10524,27 @@ int	ExprParser_t::AddNodeWithTable ( const char * szTable, uint64_t uOffset )
 }
 
 
+int ExprParser_t::AddWeightWithTable ( const char * szTable, uint64_t uOffset )
+{
+	CSphString sAttrName;
+	sAttrName.SetBinary ( m_sExpr.first + GetConstStrOffset(uOffset), GetConstStrLength(uOffset) );
+	sAttrName.SetSprintf ( "%s.%s()", szTable, sAttrName.cstr() );
+
+	int iAttr = m_pSchema->GetAttrIndex ( sAttrName.cstr() );
+	if ( iAttr==-1 )
+	{
+		m_sParserError.SetSprintf ( "unknown attribute '%s'", sAttrName.cstr() );
+		return -1;
+	}
+
+	YYSTYPE yylval;
+	int iType = ParseAttr ( iAttr, m_pSchema->GetAttr(iAttr).m_sName.cstr(), &yylval );
+
+	bool bColumnar = iType==TOK_COLUMNAR_INT || iType==SPH_ATTR_TIMESTAMP || iType==TOK_COLUMNAR_TIMESTAMP || iType==SPH_ATTR_FLOAT || iType==TOK_COLUMNAR_FLOAT || iType==TOK_COLUMNAR_BIGINT || iType==TOK_COLUMNAR_BOOL || iType==TOK_COLUMNAR_STRING || iType==TOK_COLUMNAR_UINT32SET || iType==TOK_COLUMNAR_INT64SET || iType==TOK_COLUMNAR_FLOATVEC;
+	return bColumnar ? AddNodeColumnar ( iType, yylval.iAttrLocator ) : AddNodeAttr ( iType, yylval.iAttrLocator );
+}
+
+
 uint64_t ExprParser_t::ParseAttrWithTable ( const char * szTable, uint64_t uOffset )
 {
 	int iAttr = ParseJoinAttr ( szTable, uOffset );
@@ -10624,16 +10658,34 @@ struct HookCheck_fn
 };
 
 
-static int EXPR_STACK_EVAL = 160;
-static int EXPR_STACK_CREATE = 400;
 
-void SetExprNodeStackItemSize ( int iCreateSize, int iEvalSize )
+static int EXPR_STACK_PARSE_CREATE = 400;
+static int EXPR_STACK_PARSE = 150;
+
+void SetExprNodeParseStackItemSize ( std::pair<int, int> tSize )
 {
-	if ( iCreateSize>EXPR_STACK_CREATE )
-		EXPR_STACK_CREATE = iCreateSize;
+	EXPR_STACK_PARSE_CREATE = tSize.first;
+	EXPR_STACK_PARSE = tSize.second;
+}
 
-	if ( iEvalSize>EXPR_STACK_EVAL )
-		EXPR_STACK_EVAL = iEvalSize;
+
+static int EXPR_STACK_EVAL_CREATE = 100;
+static int EXPR_STACK_EVAL = 8;
+
+
+void SetExprNodeEvalStackItemSize ( std::pair<int, int> tSize )
+{
+	EXPR_STACK_EVAL_CREATE = tSize.first;
+	EXPR_STACK_EVAL = tSize.second;
+}
+
+
+void SetMaxExprNodeEvalStackItemSize ( std::pair<int, int> tSize )
+{
+	if ( tSize.first>EXPR_STACK_EVAL_CREATE )
+		EXPR_STACK_EVAL_CREATE = tSize.first;
+	if ( tSize.second>EXPR_STACK_EVAL )
+		EXPR_STACK_EVAL = tSize.second;
 }
 
 
@@ -10694,11 +10746,23 @@ ISphExpr * ExprParser_t::Parse ( const char * sExpr, const ISphSchema & tSchema,
 	// Check expression stack to fit for mutual recursive function calls.
 	// This check is an approximation, because different compilers with
 	// different settings produce code which requires different stack size.
-	const int TREE_SIZE_THRESH = 20;
-	const StackSizeTuplet_t tExprStack = { EXPR_STACK_CREATE, EXPR_STACK_EVAL };
 	int iStackNeeded = -1;
-	if ( !EvalStackForTree ( m_dNodes, m_iParsed, tExprStack, TREE_SIZE_THRESH, iStackNeeded, "expressions", sError ) )
-		return nullptr;
+	int iStackEval = -1;
+	const int TREE_SIZE_THRESH = 20;
+	if ( m_dNodes.GetLength ()>TREE_SIZE_THRESH )
+	{
+		StackSizeParams_t tParams;
+		tParams.iMaxDepth = EvalMaxTreeHeight ( m_dNodes, m_iParsed );
+		tParams.tNodeStackSize = { EXPR_STACK_PARSE_CREATE, EXPR_STACK_PARSE };
+		tParams.szName = "expressions";
+		std::tie ( iStackNeeded, sError ) = EvalStackForExpr ( tParams );
+		if ( !sError.IsEmpty() )
+			return nullptr;
+
+		tParams.tNodeStackSize = { EXPR_STACK_EVAL_CREATE, EXPR_STACK_EVAL };
+		tParams.szName = "eval expressions";
+		std::tie ( iStackEval, sError ) = EvalStackForExpr ( tParams );
+	}
 
 	ISphExpr * pExpr = nullptr;
 
@@ -10710,8 +10774,10 @@ ISphExpr * ExprParser_t::Parse ( const char * sExpr, const ISphSchema & tSchema,
 		*pAttrType = eAttrType;
 	} );
 
-	if ( pExpr && iStackNeeded>0 )
+	if ( pExpr && iStackEval>0 )
 	{
+		// in case we're in real query processing - propagate size of stack need for evaluations (only additional part)
+		session::ExpandDesiredStack ( iStackEval );
 		auto pChildExpr = pExpr;
 		pExpr = new Expr_ProxyFat_c ( pChildExpr );
 		pChildExpr->Release();

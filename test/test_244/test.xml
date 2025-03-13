@@ -103,6 +103,11 @@ CREATE TABLE test_table
 	select * from test where any(tags)=4;
 	select * from test where any(tags)=40 and any(tags)=4;
 	select * from test where tags=40 and tags=4;
+
+	<!-- any(),all() with MVA do not work at the select list expr for ... in -->
+	select *, any(x=4 for x in tags) as cnd from test;
+	select *, all(x>6 for x in tags) as cnd from test;
+
 </sphinxql></queries>
 
 </test>

@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2017-2024, Manticore Software LTD (https://manticoresearch.com)
+// Copyright (c) 2017-2025, Manticore Software LTD (https://manticoresearch.com)
 // All rights reserved
 //
 // This program is free software; you can redistribute it and/or modify
@@ -1032,10 +1032,6 @@ ByteBlob_t sphUnpackPtrAttr ( const BYTE * pData )
 	return { pData, iLen };
 }
 
-BYTE * sph::CopyPackedAttr ( const BYTE* pData )
-{
-	return sphPackPtrAttr ( sphUnpackPtrAttr ( pData ));
-}
 
 ESphAttr sphPlainAttrToPtrAttr ( ESphAttr eAttrType )
 {

@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2017-2024, Manticore Software LTD (https://manticoresearch.com)
+// Copyright (c) 2017-2025, Manticore Software LTD (https://manticoresearch.com)
 // Copyright (c) 2001-2016, Andrew Aksyonoff
 // Copyright (c) 2008-2016, Sphinx Technologies Inc
 // All rights reserved
@@ -27,11 +27,6 @@
 #include <atomic>
 
 using namespace Threads;
-
-/// protection from concurrent changes during binlog replay
-#ifndef NDEBUG
-static auto &g_bRTChangesAllowed = RTChangesAllowed ();
-#endif
 
 //////////////////////////////////////////////////////////////////////////
 // percolate index
@@ -126,7 +121,6 @@ public:
 	const CSphSourceStats &	GetStats () const override { return m_tStat; }
 	void				GetStatus ( CSphIndexStatus* pRes ) const final;
 
-	void				IndexDeleted() override { m_bIndexDeleted = true; }
 	void				ProhibitSave() final;
 	void				EnableSave() final;
 	void				LockFileState ( CSphVector<CSphString> & dFiles ) final;
@@ -153,7 +147,6 @@ private:
 	int64_t							m_tmSaved = 0;
 	int								m_iDisabledCounter = 0;
 	bool							m_bHasFiles = false;
-	bool							m_bIndexDeleted = false;
 
 	StoredQuerySharedPtrVecSharedPtr_t	m_pQueries GUARDED_BY ( m_tLock );
 	OpenHashTable_T<int64_t, int>		m_hQueries GUARDED_BY ( m_tLock ); // QUID -> query
@@ -1034,9 +1027,9 @@ bool PercolateQwordSetup_c::QwordSetup ( ISphQword * pQword ) const
 	return bWordSet;
 }
 
-ISphQword * PercolateQwordSetup_c::ScanSpawn() const
+ISphQword * PercolateQwordSetup_c::ScanSpawn ( int iAtomPos ) const
 {
-	return new QwordScan_c ( m_pSeg->m_uRows );
+	return new QwordScan_c ( m_pSeg->m_uRows, iAtomPos, SPH_MAX_FIELDS );
 }
 
 SphWordID_t PercolateDictProxy_c::GetWordID ( BYTE * pWord )
@@ -1599,7 +1592,7 @@ bool PercolateIndex_c::MatchDocuments ( RtAccum_t * pAcc, PercolateMatchResult_t
 
 void PercolateIndex_c::RollBack ( RtAccum_t * pAcc )
 {
-	assert ( g_bRTChangesAllowed );
+	assert ( RTChangesAllowed () );
 
 	if ( BindAccum ( pAcc ) )
 		pAcc->Cleanup();
@@ -1832,7 +1825,7 @@ std::unique_ptr<StoredQuery_i> PercolateIndex_c::CreateQuery ( PercolateQueryArg
 	}
 
 	// FIXME!!! provide segments list instead index
-	sphTransformExtendedQuery ( &tParsed->m_pRoot, m_tSettings, false, nullptr );
+	sphTransformExtendedQuery ( &tParsed->m_pRoot, m_tSettings );
 
 	bool bWordDict = m_pDict->GetSettings().m_bWordDict;
 	if ( m_tMutableSettings.m_iExpandKeywords!=KWE_DISABLED )
@@ -2109,7 +2102,7 @@ int PercolateIndex_c::ReplayInsertAndDeleteQueries ( const VecTraits_T<StoredQue
 
 bool PercolateIndex_c::Commit ( int * pDeleted, RtAccum_t * pAcc, CSphString* )
 {
-	assert ( g_bRTChangesAllowed );
+	assert ( RTChangesAllowed () );
 
 	if ( !BindAccum ( pAcc ) )
 		return true;

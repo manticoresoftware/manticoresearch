@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2017-2024, Manticore Software LTD (https://manticoresearch.com)
+// Copyright (c) 2017-2025, Manticore Software LTD (https://manticoresearch.com)
 // Copyright (c) 2001-2016, Andrew Aksyonoff
 // Copyright (c) 2008-2016, Sphinx Technologies Inc
 // All rights reserved
@@ -14,7 +14,7 @@
 #include "netreceive_ql.h"
 #include "client_session.h"
 
-#include <boost/asio/io_service.hpp>
+#include <boost/asio/io_context.hpp>
 #include <boost/asio/read_until.hpp>
 #include <boost/process.hpp>
 #if _WIN32
@@ -32,7 +32,7 @@ static CSphString g_sUrlBuddy;
 static CSphString g_sStartArgs;
 
 static const int PIPE_BUF_SIZE = 2048;
-static std::unique_ptr<boost::asio::io_service> g_pIOS;
+static std::unique_ptr<boost::asio::io_context> g_pIOS;
 static std::vector<char> g_dPipeBuf ( PIPE_BUF_SIZE );
 static CSphVector<char> g_dLogBuf ( PIPE_BUF_SIZE );
 static std::unique_ptr<boost::process::async_pipe> g_pPipe;
@@ -68,9 +68,9 @@ static CSphString BuddyGetPath ( const CSphString & sPath, const CSphString & sP
 static void BuddyStop ();
 
 #if _WIN32
-static CSphString g_sBuddyBind = "0.0.0.0:9999"; // It does not matter for docker
+static CSphString g_sBuddyBind = "--bind=0.0.0.0:9999";
 #else
-static CSphString g_sBuddyBind = "127.0.0.1";
+static CSphString g_sBuddyBind = "";
 #endif
 
 #if _WIN32
@@ -357,7 +357,7 @@ BuddyState_e TryToStart ( const char * sArgs, CSphString & sError )
 	g_pPipe.reset();
 	g_pIOS.reset();
 
-	g_pIOS.reset ( new boost::asio::io_service );
+	g_pIOS.reset ( new boost::asio::io_context );
 	g_pPipe.reset ( new boost::process::async_pipe ( *g_pIOS ) );
 
 	std::unique_ptr<boost::process::child> pBuddy;
@@ -471,10 +471,10 @@ void BuddyStart ( const CSphString & sConfigPath, const CSphString & sPluginDir,
 	g_dLogBuf.Resize ( 0 );
 	g_sPath = sPath;
 
-	g_sStartArgs.SetSprintf ( "%s --listen=%s --bind=%s %s --threads=%d",
+	g_sStartArgs.SetSprintf ( "%s --listen=%s %s %s --threads=%d",
 		g_sPath.cstr(),
 		g_sListener4Buddy.cstr(),
-		g_sBuddyBind.cstr(),
+		g_sBuddyBind.scstr(),
 		( bTelemetry ? "" : "--disable-telemetry" ),
 		iThreads );
 
@@ -753,13 +753,15 @@ bool ProcessHttpQueryBuddy ( HttpProcessResult_t & tRes, Str_t sSrcQuery, Option
 		{
 			sSrcQuery = FromStr ( *pRawQuery );
 
-			// need also to skip the head chars "query="
 			const char sQueryHead[] = "query=";
 			const int iQueryHeadLen = sizeof ( sQueryHead )-1;
-			if ( pRawQuery->Begins( sQueryHead ) )
+
+			const char * sHead = strstr ( pRawQuery->cstr(), sQueryHead );
+			if ( sHead )
 			{
-				sSrcQuery.first +=iQueryHeadLen ;
-				sSrcQuery.second -= iQueryHeadLen;
+				const char * sOnlyQuery = sHead + iQueryHeadLen;
+				int iLen = strlen ( sOnlyQuery );
+				sSrcQuery = Str_t ( sOnlyQuery, iLen );
 			}
 		}
 	}
@@ -877,40 +879,24 @@ void ProcessSqlQueryBuddy ( Str_t sSrcQuery, Str_t tError, std::pair<int, BYTE> 
 }
 
 #ifdef _WIN32
-static CSphString g_sDefaultBuddyName ( "manticore-buddy" );
-#else
-static CSphString g_sDefaultBuddyName ( "manticore-buddy/bin/manticore-buddy" );
-#endif
-static CSphString g_sDefaultBuddyDockerImage ( "manticoresearch/manticore-executor:" BUDDY_EXECUTOR_VERNUM );
-
-static CSphString GetFullBuddyPath ( const CSphString & sExecPath, const CSphString & sBuddyPath )
-{
-#ifdef _WIN32
-		assert ( !sExecPath.IsEmpty() );
-		CSphString sFullPath;
-		sFullPath.SetSprintf ( "\"%s\" \"%s\"", sExecPath.cstr(), sBuddyPath.cstr() );
-		return sFullPath;
-#else
-		return sBuddyPath.cstr();
-#endif
-}
-
-#ifdef _WIN32
 CSphString BuddyGetPath ( const CSphString & sConfigPath, const CSphString & , bool bHasBuddyPath, int iHostPort, const CSphString & sDataDir )
 {
 	if ( bHasBuddyPath )
 		return sConfigPath;
 
+	const char * sDefaultBuddyName ( "manticore-buddy" );
+	const char * sDefaultBuddyDockerImage ( "manticoresearch/manticore-executor:" BUDDY_EXECUTOR_VERNUM );
+
 	StringBuilder_c sCmd ( " " );
 	sCmd.Appendf ( "docker run --rm" ); // the head of the docker start command
 	sCmd.Appendf ( "-p %d:9999", iHostPort ); // port mapping
-	sCmd.Appendf ( "-v \"%s/%s\":/buddy", GET_MANTICORE_MODULES(), g_sDefaultBuddyName.cstr() ); // volume for buddy modules
+	sCmd.Appendf ( "-v \"%s/%s\":/buddy", GET_MANTICORE_MODULES(), sDefaultBuddyName ); // volume for buddy modules
 	sCmd.Appendf ( "-v manticore-usr_local_lib_manticore:/usr/local/lib/manticore -e PLUGIN_DIR=/usr/local/lib/manticore" ); // pesistent volume for buddy data
 	if ( !sDataDir.IsEmpty() ) // volume for data dir into container
 		sCmd.Appendf ( "-v \"%s\":/var/lib/manticore -e DATA_DIR=/var/lib/manticore", sDataDir.cstr() );
 	sCmd.Appendf ( "-w /buddy" ); // workdir is buddy root dir
 	sCmd.Appendf ( "--name %s", g_sContainerName.cstr() ); // the name of the buddy container is the hash of the config
-	sCmd.Appendf ( "%s /buddy/src/main.php", g_sDefaultBuddyDockerImage.cstr() ); // docker image and the buddy start command
+	sCmd.Appendf ( "%s /buddy/src/main.php", sDefaultBuddyDockerImage ); // docker image and the buddy start command
 
 	return CSphString ( sCmd );
 }
@@ -920,21 +906,30 @@ CSphString BuddyGetPath ( const CSphString & sConfigPath, const CSphString & sPl
 	if ( bHasBuddyPath )
 		return sConfigPath;
 
-	CSphString sExecPath;
+	const char * sExecutor = "manticore-executor";
+	const char * sDefaultBuddyName = "manticore-buddy/src/main.php";
+
+	CSphString sFullPath;
 	CSphString sPathToDaemon = GetPathOnly ( GetExecutablePath() );
 
 	CSphString sPathBuddy2Module;
-	sPathBuddy2Module.SetSprintf ( "%s/%s", GET_MANTICORE_MODULES(), g_sDefaultBuddyName.cstr() );
+	sPathBuddy2Module.SetSprintf ( "%s/%s", GET_MANTICORE_MODULES(), sDefaultBuddyName );
 	if ( sphFileExists ( sPathBuddy2Module.cstr() ) )
-		return GetFullBuddyPath ( sExecPath, sPathBuddy2Module );
+	{
+		sFullPath.SetSprintf ( "%s %s", sExecutor, sPathBuddy2Module.cstr() );
+		return sFullPath;
+	}
 
 	// check at the daemon location / cwd
 	CSphString sPathBuddy2Cwd;
-	sPathBuddy2Cwd.SetSprintf ( "%s%s", sPathToDaemon.cstr(), g_sDefaultBuddyName.cstr() );
+	sPathBuddy2Cwd.SetSprintf ( "%s%s", sPathToDaemon.cstr(), sDefaultBuddyName );
 	if ( sphFileExists ( sPathBuddy2Cwd.cstr() ) )
-		return GetFullBuddyPath ( sExecPath, sPathBuddy2Cwd );
+	{
+		sFullPath.SetSprintf ( "%s %s", sExecutor, sPathBuddy2Cwd.cstr() );
+		return sFullPath;
+	}
 
-	sphWarning ( "[BUDDY] no %s found at '%s', disabled", g_sDefaultBuddyName.cstr(), sPathBuddy2Module.cstr() );
-	return CSphString();
+	sphWarning ( "[BUDDY] no %s found at '%s', disabled", sDefaultBuddyName, sPathBuddy2Module.cstr() );
+	return sFullPath;
 }
 #endif

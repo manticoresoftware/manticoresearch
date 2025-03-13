@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2017-2024, Manticore Software LTD (https://manticoresearch.com)
+// Copyright (c) 2017-2025, Manticore Software LTD (https://manticoresearch.com)
 // Copyright (c) 2001-2016, Andrew Aksyonoff
 // Copyright (c) 2008-2016, Sphinx Technologies Inc
 // All rights reserved
@@ -181,7 +181,8 @@ enum class DateUnit_e
 	total_units
 };
 void RoundDate ( DateUnit_e eUnit, time_t & tDateTime );
-DateUnit_e ParseDateInterval ( const CSphString & sExpr, CSphString & sError );
+void RoundDate ( DateUnit_e eUnit, int iMulti, time_t & tDateTime );
+std::pair<DateUnit_e, int> ParseDateInterval ( const CSphString & sExpr, bool bFixed, CSphString & sError );
 
 //////////////////////////////////////////////////////////////////////////
 
@@ -578,8 +579,9 @@ int64_t GetIndexUid();
 // server - is server id used as iServer & 0x7f
 // started - is a server start time \ Unix timestamp in seconds
 void		UidShortSetup ( int iServer, int iStarted );
+int			GetUidShortServerId ();
 
-BYTE Pearson8 ( const BYTE * pBuf, int iLen );
+BYTE Pearson8 ( const BYTE * pBuf, int iLen, BYTE uPrev=0 );
 
 #if _WIN32
 void		CheckWinInstall();

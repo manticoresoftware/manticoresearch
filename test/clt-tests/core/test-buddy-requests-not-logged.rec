@@ -1,0 +1,59 @@
+Test: Check that requests from User-Agent ‘Manticore Buddy’ are not logged in the request log,
+while requests from other User-Agents (including an empty User-Agent) are logged.
+This test covers:
+1. Creating a table and inserting test data.
+2. Sending requests with User-Agent ‘Manticore Buddy’ and ensuring that they are not logged.
+3. Sending queries with other User-Agents (including an empty User-Agent) and ensuring that they are registered.
+4. Verifying that the request log does not contain entries for ‘Manticore Buddy’ requests,
+but does contain entries for requests from other User-Agents.
+5. Ensuring that error queries (e.g., querying a non-existent table) are logged regardless of the User-Agent.
+6. Verifying that multiple queries in a single request (e.g., "select * from test; show meta") are not logged when sent with the User-Agent ‘Manticore Buddy’.
+
+––– block: ../base/start-searchd –––
+––– input –––
+TMPLOG=$(mktemp) && cp /var/log/manticore/query.log "$TMPLOG"
+––– output –––
+––– input –––
+mysql -h0 -P9306 -e "create table test (id BIGINT, model TEXT);" || echo "ERROR: Failed to create table"
+––– output –––
+––– input –––
+curl -s -X  POST http://localhost:9308/insert -d '{"index":"test","id":1,"doc":{"model":"Test message"}}' > /dev/null 2>&1 || echo "ERROR: Failed to insert data"
+––– output –––
+––– input –––
+curl -s -H 'User-agent: Manticore Buddy/1.0.0' -d 'query=select * from test' 'localhost:9308/sql?mode=raw' > /dev/null 2>&1
+––– output –––
+––– input –––
+sync && cp /var/log/manticore/query.log "$TMPLOG-diff" && [ "$(diff "$TMPLOG" "$TMPLOG-diff" | wc -l)" -eq 0 ] && echo "Test passed: SELECT query was NOT logged as expected" || echo "ERROR: SELECT query was logged when it should not have been!"
+––– output –––
+Test passed: SELECT query was NOT logged as expected
+––– input –––
+curl -s -H 'User-agent: Manticore Buddy/1.0.0' -d 'query=select * from test; show meta' 'localhost:9308/sql?mode=raw' > /dev/null 2>&1
+––– output –––
+––– input –––
+sync && cp /var/log/manticore/query.log "$TMPLOG-diff" && [ "$(diff "$TMPLOG" "$TMPLOG-diff" | wc -l)" -eq 0 ] && echo "Test passed: SHOW META query was NOT logged as expected" || echo "ERROR: SHOW META query was logged when it should not have been!"
+––– output –––
+Test passed: SHOW META query was NOT logged as expected
+––– input –––
+curl -s -H 'User-agent: Manticore Buddy/1.0.0' -d 'query=delete from test where id=1' 'localhost:9308/sql?mode=raw' > /dev/null 2>&1
+––– output –––
+––– input –––
+sync && cp /var/log/manticore/query.log "$TMPLOG-diff" && [ "$(diff "$TMPLOG" "$TMPLOG-diff" | wc -l)" -eq 0 ] && echo "Test passed: DELETE query was NOT logged as expected" || echo "ERROR: DELETE query was logged when it should not have been!"
+––– output –––
+Test passed: DELETE query was NOT logged as expected
+––– input –––
+curl -s -H 'User-agent:' -d 'query=select * from test' 'localhost:9308/sql?mode=raw' > /dev/null 2>&1
+––– output –––
+––– input –––
+sync && cp /var/log/manticore/query.log "$TMPLOG-diff" && [ "$(diff "$TMPLOG" "$TMPLOG-diff" | wc -l)" -gt 0 ] && echo "Test passed: Query without User-Agent was logged" || echo "ERROR: Query without User-Agent was NOT logged!"
+––– output –––
+Test passed: Query without User-Agent was logged
+––– input –––
+curl -s -H 'User-agent: Manticore Buddy/1.0.0' -d 'query=select * from non_existent_table' 'localhost:9308/sql?mode=raw' > /dev/null 2>&1
+––– output –––
+––– input –––
+sync && cp /var/log/manticore/query.log "$TMPLOG-diff" && [ "$(diff "$TMPLOG" "$TMPLOG-diff" | wc -l)" -gt 0 ] && echo "Test passed: Error query was logged" || echo "ERROR: Error query was NOT logged!"
+––– output –––
+Test passed: Error query was logged
+––– input –––
+rm -f "$TMPLOG" "$TMPLOG-diff"
+––– output –––

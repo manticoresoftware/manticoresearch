@@ -19,8 +19,8 @@ include ( update_bundle )
 
 # Versions of API headers we are need to build with.
 set ( NEED_COLUMNAR_API 26 )
-set ( NEED_SECONDARY_API 16 )
-set ( NEED_KNN_API 3 )
+set ( NEED_SECONDARY_API 17 )
+set ( NEED_KNN_API 4 )
 
 # Note: we don't build, neither link with columnar. Only thing we expect to get is a few interface headers, aka 'columnar_api'.
 # Actual usage of columnar is solely defined by availability of the module named below. That module is build (or not built)
@@ -96,18 +96,21 @@ get_build ( COLUMNAR_BUILD "mcl/${AUTO_TAG}" )
 # store prev find paths to avoid polishing global scope
 backup_paths()
 
-append_prefix ( "${COLUMNAR_BUILD}" )
+prepend_prefix ( "${COLUMNAR_BUILD}" )
 
 find_package ( columnar "${NEED_API_NUMERIC_VERSION}" EXACT COMPONENTS columnar_api secondary_api knn_api CONFIG )
 return_if_all_api_found ()
 
 # Not found. get columnar src, extract columnar_api.
-if (DEFINED ENV{COLUMNAR_LOCATOR})
+if (DEFINED ENV{COLUMNAR_LOCATOR} AND NOT "$ENV{COLUMNAR_LOCATOR}" STREQUAL "")
 	set ( COLUMNAR_LOCATOR $ENV{COLUMNAR_LOCATOR} )
+	message(STATUS "Using COLUMNAR_LOCATOR from environment variable: ${COLUMNAR_LOCATOR}")
 elseif (EXISTS "${MANTICORE_SOURCE_DIR}/local_columnar_src.txt")
 	file ( STRINGS "${MANTICORE_SOURCE_DIR}/local_columnar_src.txt" COLUMNAR_LOCATOR LIMIT_COUNT 1 )
+	message(STATUS "Using COLUMNAR_LOCATOR from local_columnar_src.txt: ${COLUMNAR_LOCATOR}")
 else ()
 	file ( STRINGS "${MANTICORE_SOURCE_DIR}/columnar_src.txt" COLUMNAR_LOCATOR LIMIT_COUNT 1)
+	message(STATUS "Using COLUMNAR_LOCATOR from columnar_src.txt: ${COLUMNAR_LOCATOR}")
 endif ()
 
 string ( CONFIGURE "${COLUMNAR_LOCATOR}" COLUMNAR_LOCATOR ) # that is to expand possible inside variables

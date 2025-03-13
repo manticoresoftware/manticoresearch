@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2017-2024, Manticore Software LTD (https://manticoresearch.com)
+// Copyright (c) 2017-2025, Manticore Software LTD (https://manticoresearch.com)
 // Copyright (c) 2001-2016, Andrew Aksyonoff
 // Copyright (c) 2008-2016, Sphinx Technologies Inc
 // All rights reserved
@@ -148,7 +148,7 @@ public:
 		m_dInput.Reset();
 		logOutput ( dData, m_iReqID );
 		m_tOut.SendBytes ( dData );
-		return m_tOut.SendBuffer ( dData );
+		return m_tOut.Flush();
 	}
 };
 

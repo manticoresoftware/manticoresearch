@@ -10,3 +10,6 @@ apt -yqq install mariadb-server > /dev/null 2>&1; echo $?
 mysqldump --version
 ––– output –––
 mysqldump  Ver %{NUMBER}.%{NUMBER} Distrib %{SEMVER}-MariaDB, for debian-linux-gnu (x86_64)
+––– input –––
+echo '[mysql]'$'\n''table=TRUE' >> ~/.my.cnf
+––– output –––

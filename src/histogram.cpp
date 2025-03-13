@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2018-2024, Manticore Software LTD (https://manticoresearch.com)
+// Copyright (c) 2018-2025, Manticore Software LTD (https://manticoresearch.com)
 // All rights reserved
 //
 // This program is free software; you can redistribute it and/or modify
@@ -189,7 +189,7 @@ private:
     void				Push ( T tValue, int iCount );
 	void				Aggregate ( int iBins );
 	int					GetBucket ( T tValue, bool bCounterLess ) const;
-	int					LerpCounter ( int iBucket, T tVal ) const;
+	FORCE_INLINE int	LerpCounter ( int iBucket, T tVal ) const;
 	HSBucketTrait_t		GetBucket ( T tValue ) const;
 
 	HistogramRset_t		EstimateValues ( bool bExclude, const VecTraits_T<SphAttr_t>& dValues ) const;
@@ -198,6 +198,7 @@ private:
 	HistogramRset_t		EstimateInterval ( T tMin, T tMax, bool bHasEqualMin, bool bHasEqualMax, bool bOpenLeft, bool bOpenRight ) const;
 	bool				IsOutdated ( SphAttr_t tAttr ) const;
 	void				UpdateMinMax();
+	FORCE_INLINE void	UpdateBucketForValue ( HSBucketTrait_t & tItem, SphAttr_t tValue ) const;
 };
 
 
@@ -589,13 +590,34 @@ bool HistogramStreamed_T<T>::EstimateRsetSize ( const CSphFilterSettings & tFilt
 }
 
 template<typename T>
+void HistogramStreamed_T<T>::UpdateBucketForValue ( HSBucketTrait_t & tItem, SphAttr_t tValue ) const
+{
+	int iBucket = tItem.m_iBucket;
+	if ( iBucket==-1 )
+	{
+		tItem = GetBucket(tValue);
+		return;
+	}
+
+	if ( ( tValue<m_tMinValue && iBucket==0 ) || ( tValue>m_tMinValue && iBucket==m_iSize-1 ) )
+		return;
+
+	if ( iBucket<m_iSize-1 && m_dBuckets[iBucket].m_tCentroid <= tValue && tValue < m_dBuckets[iBucket+1].m_tCentroid )
+		tItem.m_iCount = LerpCounter ( iBucket, tValue );
+	else
+		tItem = GetBucket(tValue);
+}
+
+template<typename T>
 HistogramRset_t HistogramStreamed_T<T>::EstimateValues ( bool bExclude, const VecTraits_T<SphAttr_t> & dValues ) const
 {
 	HistogramRset_t tRes;
 	int iPrevBucket = INT_MIN;
+	HSBucketTrait_t tItem = {-1, 0};
 	for ( auto tValue : dValues )
 	{
-		HSBucketTrait_t tItem = GetBucket ( tValue );
+		UpdateBucketForValue ( tItem, tValue );
+
 		if ( tItem.m_iBucket!=iPrevBucket )
 		{
 			tRes.m_iTotal += tItem.m_iCount;

@@ -5,7 +5,7 @@
 .\"    Source: Manticore Search
 .\"  Language: English
 .\"
-.TH "INDEXER" "1" "04/01/2024" "Manticore Search" ""
+.TH "INDEXER" "1" "28/01/2025" "Manticore Search" ""
 .SH "NAME"
 indexer \- Manticore Search Indexer Tool
 .SH "SYNOPSIS"
@@ -65,8 +65,9 @@ The exit codes for indexer are as follows:
 .IP \(bu 2
 2: indexing went OK, but the \fB\fC\-\-rotate\fR attempt failed
 .RE
+.SS Indexer systemd service
 .PP
-Also, you can run \fB\fCindexer\fR via a systemctl unit file:
+You can also start \fB\fCindexer\fR using the following systemctl unit file:
 .PP
 .RS
 .nf
@@ -82,7 +83,21 @@ systemctl start \-\-no\-block manticore\-indexer@specific\-table\-name
 .fi
 .RE
 .PP
-Find more information about scheduling \fB\fCindexer\fR via systemd below.
+Use the \fB\fCsystemctl set\-environment INDEXER_CONFIG\fR command to run the Indexer with a custom configuration, which replaces the default settings.
+.PP
+The \fB\fCsystemctl set\-environment INDEXER_ARGS\fR command lets you add custom startup options for the Indexer. For a complete list of command\-line options, see \fB\fChere\fR\&.
+.PP
+For instance, to start the Indexer in quiet mode, run:
+\fB\fCbash
+systemctl set\-environment INDEXER_ARGS='\-\-quiet'
+systemctl restart manticore\-indexer
+\fR
+.PP
+To revert the changes, run:
+\fB\fCbash
+systemctl set\-environment INDEXER_ARGS=''
+systemctl restart manticore\-indexer
+\fR
 .SH OPTIONS
 .RS
 .IP \(bu 2
@@ -236,7 +251,7 @@ into the specified file, in a MySQL compatible syntax. The resulting dumps are t
 Manticore Software LTD (https://manticoresearch\&.com)
 .SH "COPYRIGHT"
 .PP
-Copyright 2017\-2024 Manticore Software LTD (https://manticoresearch\&.com), 2008\-2016 Sphinx Technologies Inc (http://sphinxsearch\&.com), 2001\-2016 Andrew Aksyonoff
+Copyright 2017\-2025 Manticore Software LTD (https://manticoresearch\&.com), 2008\-2016 Sphinx Technologies Inc (http://sphinxsearch\&.com), 2001\-2016 Andrew Aksyonoff
 .PP
 Permission is granted to copy, distribute and/or modify this document under the terms of the GNU General Public License, Version 3 or any later version published by the Free Software Foundation\&.
 .SH "SEE ALSO"

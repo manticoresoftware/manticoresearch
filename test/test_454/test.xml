@@ -50,26 +50,6 @@ index test1_all
 
 <httpqueries>
 
-<query endpoint="test1/_doc" content="application/json" method="POST">
-{  "int_col" : 1, "content" : "bulk doc 10" }</query>
-<query endpoint="test1/_doc/11" content="application/json" method="POST">
-{  "int_col" : 1, "content" : "bulk doc 11" }</query>
-<query endpoint="test1/_doc" content="application/json" method="PUT">
-{  "int_col" : 1, "content" : "bulk doc 20" }</query>
-<query endpoint="test1/_doc/21" content="application/json" method="PUT">
-{  "int_col" : 1, "content" : "bulk doc 21" }</query>
-
-<query endpoint="test1/_create" content="application/json" method="POST">
-{  "int_col" : 1, "content" : "bulk doc 30" }</query>
-<query endpoint="test1/_create/31" content="application/json" method="POST">
-{  "int_col" : 1, "content" : "bulk doc 31" }</query>
-<query endpoint="test1/_create" content="application/json" method="PUT">
-{  "int_col" : 1, "content" : "bulk doc 40" }</query>
-<query endpoint="test1/_create/41" content="application/json" method="PUT">
-{  "int_col" : 1, "content" : "bulk doc 41" }</query>
-
-<query endpoint="search">{ "table": "test1", "query": { "match_all": {} } } }</query>
-
 <bulk endpoint="_bulk" content="application/x-ndjson" method="POST">
 { "index" : { "_index" : "test1", "_id" : "101" } }</bulk>
 
@@ -176,9 +156,6 @@ index test1_all
 
 </bulk>
 <query endpoint="search">{ "table": "test1_all", "query": { "match_all": {} } } }</query>
-
-<!-- crash on update with bad arguments -->
-<query endpoint="test1_all/_update/1234" method="POST">{ "doc": { "test2: 2 } }</query>
 
 <!-- crash on wrong action name -->
 <bulk endpoint="_bulk" content="application/x-ndjson" method="POST">

@@ -1,9 +1,9 @@
 ––– input –––
-searchd --stop
+stdbuf -oL searchd --stop
 ––– output –––
-Manticore %{SEMVER} %{COMMITDATE} dev (columnar %{SEMVER} %{COMMITDATE}) (secondary %{SEMVER} %{COMMITDATE}) (knn %{SEMVER} %{COMMITDATE})
+Manticore %{VERSION} (columnar %{VERSION}) (secondary %{VERSION}) (knn %{VERSION})
 Copyright (c) 2001-2016, Andrew Aksyonoff
 Copyright (c) 2008-2016, Sphinx Technologies Inc (http://sphinxsearch.com)
 Copyright (c) 2017-%{YEAR}, Manticore Software LTD (https://manticoresearch.com)
-[#!/[0-9]{2}:[0-9]{2}.[0-9]{3}/!#] [%{NUMBER}] using config file '%{PATH}' (%{NUMBER} chars)...
-[#!/[0-9]{2}:[0-9]{2}.[0-9]{3}/!#] [%{NUMBER}] stop: successfully sent SIGTERM to pid %{NUMBER}
+[#!/[0-9a-zA-Z\:\.\s]+/!#] [%{NUMBER}] using config file '%{PATH}' (%{NUMBER} chars)...
+[#!/[0-9a-zA-Z\:\.\s]+/!#] [%{NUMBER}] stop: successfully sent SIGTERM to pid %{NUMBER}

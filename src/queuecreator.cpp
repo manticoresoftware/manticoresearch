@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2017-2024, Manticore Software LTD (https://manticoresearch.com)
+// Copyright (c) 2017-2025, Manticore Software LTD (https://manticoresearch.com)
 // Copyright (c) 2001-2016, Andrew Aksyonoff
 // Copyright (c) 2008-2016, Sphinx Technologies Inc
 // All rights reserved
@@ -25,6 +25,7 @@
 #include "sphinxfilter.h"
 #include "queryprofile.h"
 #include "knnmisc.h"
+#include "sorterscroll.h"
 
 static const char g_sIntAttrPrefix[] = "@int_attr_";
 static const char g_sIntJsonPrefix[] = "@groupbystr_";
@@ -607,7 +608,7 @@ bool QueueCreator_c::SetupGroupbySettings ( bool bHasImplicitGrouping )
 		ISphExprRefPtr_c pExpr { sphExprParse ( m_tQuery.m_sGroupBy.cstr(), tSchema, m_tSettings.m_pJoinArgs ? &(m_tSettings.m_pJoinArgs->m_sIndex2) : nullptr, m_sError, tExprArgs ) };
 		m_tGroupSorterSettings.m_pGrouper = CreateGrouperJsonField ( tSchema.GetAttr(iAttr).m_tLocator, pExpr );
 		m_tGroupSorterSettings.m_bJson = true;
-		m_bJoinedGroupSort |= bJoined;
+		m_bJoinedGroupSort |= IsJoinAttr(sJsonColumn);
 		return true;
 	}
 
@@ -916,6 +917,9 @@ void QueueCreator_c::ModifyExprForJoin ( CSphColumnInfo & tExprCol, const CSphSt
 
 	// check expr and its alias
 	if ( !ExprHasJoinPrefix ( tExprCol.m_sName, m_tSettings.m_pJoinArgs.get() ) && !ExprHasJoinPrefix ( sExpr, m_tSettings.m_pJoinArgs.get() ) )
+		return;
+
+	if ( ExprHasLeftTableAttrs ( tExprCol.m_sName, *m_pSorterSchema ) || ExprHasLeftTableAttrs ( sExpr, *m_pSorterSchema ) )
 		return;
 
 	// we receive already precalculated JSON field expressions from JOIN
@@ -1673,6 +1677,17 @@ bool QueueCreator_c::AddJoinAttrs()
 		}
 	}
 
+	CSphColumnInfo tAttr;
+	tAttr.m_sName.SetSprintf ( "%s.weight()", m_tSettings.m_pJoinArgs->m_sIndex2.cstr() );
+	tAttr.m_eAttrType = SPH_ATTR_INTEGER;
+	tAttr.m_tLocator.Reset();
+	tAttr.m_eStage = SPH_EVAL_SORTER;
+	tAttr.m_uAttrFlags = CSphColumnInfo::ATTR_JOINED;
+	m_pSorterSchema->AddAttr ( tAttr, true );
+
+	m_hQueryDups.Add ( tAttr.m_sName );
+	m_hQueryColumns.Add ( tAttr.m_sName );
+
 	return true;
 }
 
@@ -2063,7 +2078,7 @@ bool QueueCreator_c::SetupMatchesSortingFunc()
 		CSphString sSortBy = m_tQuery.m_sSortBy;
 		AddKnnDistSort ( sSortBy );
 
-		ESortClauseParseResult eRes = sphParseSortClause ( m_tQuery, sSortBy.cstr(), *m_pSorterSchema, m_eMatchFunc, m_tStateMatch, m_dMatchJsonExprs, m_tSettings.m_bComputeItems, m_tSettings.m_pJoinArgs.get(), m_sError );
+		ESortClauseParseResult eRes = sphParseSortClause ( m_tQuery, sSortBy.cstr(), *m_pSorterSchema, m_eMatchFunc, m_tStateMatch, m_dMatchJsonExprs, m_tSettings.m_pJoinArgs.get(), m_sError );
 		if ( eRes==SORT_CLAUSE_ERROR )
 			return false;
 
@@ -2125,7 +2140,7 @@ bool QueueCreator_c::SetupGroupSortingFunc ( bool bGotDistinct )
 	if ( sGroupOrderBy=="@weight desc" )
 		AddKnnDistSort ( sGroupOrderBy );
 
-	ESortClauseParseResult eRes = sphParseSortClause ( m_tQuery, sGroupOrderBy.cstr(), *m_pSorterSchema, m_eGroupFunc,	m_tStateGroup, m_dGroupJsonExprs, m_tSettings.m_bComputeItems, m_tSettings.m_pJoinArgs.get(), m_sError );
+	ESortClauseParseResult eRes = sphParseSortClause ( m_tQuery, sGroupOrderBy.cstr(), *m_pSorterSchema, m_eGroupFunc, m_tStateGroup, m_dGroupJsonExprs, m_tSettings.m_pJoinArgs.get(), m_sError );
 
 	if ( eRes==SORT_CLAUSE_ERROR || eRes==SORT_CLAUSE_RANDOM )
 	{
@@ -2367,11 +2382,15 @@ ISphMatchSorter * QueueCreator_c::SpawnQueue()
 	if ( m_pProfile )
 		m_pProfile->m_iMaxMatches = iMaxMatches;
 
-	ISphMatchSorter * pResult = CreatePlainSorter ( m_eMatchFunc, m_tQuery.m_bSortKbuffer, iMaxMatches, bNeedFactors );
-	if ( !pResult )
+	ISphMatchSorter * pPlainSorter = CreatePlainSorter ( m_eMatchFunc, m_tQuery.m_bSortKbuffer, iMaxMatches, bNeedFactors );
+	if ( !pPlainSorter )
 		return nullptr;
 
-	return CreateColumnarProxySorter ( pResult, iMaxMatches, *m_pSorterSchema, m_tStateMatch, m_eMatchFunc, bNeedFactors, m_tSettings.m_bComputeItems, m_bMulti );
+	ISphMatchSorter * pScrollSorter = CreateScrollSorter ( pPlainSorter, *m_pSorterSchema, m_eMatchFunc, m_tQuery.m_tScrollSettings, m_bMulti );
+	if ( !pScrollSorter )
+		return nullptr;
+
+	return CreateColumnarProxySorter ( pScrollSorter, iMaxMatches, *m_pSorterSchema, m_tStateMatch, m_eMatchFunc, bNeedFactors, m_tSettings.m_bComputeItems, m_bMulti );
 }
 
 

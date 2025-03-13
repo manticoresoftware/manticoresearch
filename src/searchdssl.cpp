@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2017-2024, Manticore Software LTD (https://manticoresearch.com)
+// Copyright (c) 2017-2025, Manticore Software LTD (https://manticoresearch.com)
 // Copyright (c) 2001-2016, Andrew Aksyonoff
 // Copyright (c) 2008-2016, Sphinx Technologies Inc
 // All rights reserved
@@ -13,7 +13,6 @@
 #include "searchdssl.h"
 
 #if WITH_SSL
-#ifdef DAEMON
 #include "sphinxstd.h"
 #include <openssl/ssl.h>
 #include <openssl/err.h>
@@ -559,17 +558,4 @@ bool MakeSecureLayer ( std::unique_ptr<AsyncNetBuffer_c>& pSource )
 	pSource = std::make_unique<AsyncSSBufferedSocket_c> ( std::move ( pFrontEnd ) );
 	return true;
 }
-#else
-
-// these stubs for non-daemon (i.e. for tests)
-void SetServerSSLKeys ( const CSphString & ,  const CSphString & ,  const CSphString & ) {}
-bool CheckWeCanUseSSL ( CSphString * pError )
-{
-	if ( pError )
-		*pError="daemon built without SSL support";
-	return false;
-}
-bool MakeSecureLayer ( std::unique_ptr<AsyncNetBuffer_c> & ) { return false; }
-
-#endif
 #endif

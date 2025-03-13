@@ -2,7 +2,7 @@
 
 <test>
 <name>snippets vs SPZ</name>
-
+<skip_db/>
 <config>
 searchd
 {
@@ -66,8 +66,6 @@ index test3
 
 
 </config>
-
-<db_insert>select 1;</db_insert>
 
 <custom_test><![CDATA[
 

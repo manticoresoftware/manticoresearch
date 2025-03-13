@@ -23,6 +23,10 @@ on:
         required: false
         type: number
         default: 0
+      UNITY_BUILD:
+        required: false
+        type: number
+        default: 1
       cmake_command:
         required: false
         type: string
@@ -42,7 +46,7 @@ on:
       artifact_list:
         required: false
         type: string
-        default: "build/xml build/CMakeFiles/CMake*.log build/api/libsphinxclient/testcli build/src/indexer build/src/indextool build/src/searchd build/src/tests build/src/gtests/gmanticoretest build/config/*.c build/config/*.h build/**/*.gcno"
+        default: "build/xml build/CMakeFiles/CMake*.log build/api/libsphinxclient/testcli build/src/indexer build/src/indextool build/src/searchd build/src/tests build/src/gtests/gmanticoretest build/config/*.c build/config/*.h build/**/*.cxx build/**/*.gcno"
       artifact_name:
         required: false
         type: string
@@ -54,7 +58,11 @@ on:
         required: false
         type: number
         default: 0
-
+      COLUMNAR_LOCATOR:
+        required: false
+        type: string
+        default: ""
+  
 jobs:
   build:
     runs-on: ubuntu-22.04
@@ -63,7 +71,7 @@ jobs:
         shell: bash
     timeout-minutes: 30
     container:
-      image: manticoresearch/external_toolchain:clang16_cmake3263
+      image: manticoresearch/external_toolchain:vcpkg331_20250114
       env:
         CACHEB: "../cache"
         DIAGNOSTIC: 1
@@ -76,9 +84,11 @@ jobs:
         CTEST_CMAKE_GENERATOR: ${{ inputs.CTEST_CMAKE_GENERATOR }}
         CTEST_CONFIGURATION_TYPE: ${{ inputs.CTEST_CONFIGURATION_TYPE }}
         WITH_COVERAGE: ${{ inputs.WITH_COVERAGE }}
+        UNITY_BUILD: ${{ inputs.UNITY_BUILD }}
         SYSROOT_URL: https://repo.manticoresearch.com/repository/sysroots
         HOMEBREW_PREFIX: ${{ inputs.HOMEBREW_PREFIX }}
         PACK_GALERA: ${{ inputs.PACK_GALERA }}
+        COLUMNAR_LOCATOR: ${{ inputs.COLUMNAR_LOCATOR }}
     steps:
       - name: Checkout repository
         uses: actions/checkout@v3
@@ -99,18 +109,19 @@ jobs:
           echo "value=${USER_INPUT:-"build_${{ inputs.DISTR }}_${{ inputs.CTEST_CONFIGURATION_TYPE }}_${{ inputs.arch }}"}" >> "$GITHUB_OUTPUT"
 
       - name: Check out cache before building
-        uses: actions/cache@v3.3.1
+        uses: actions/cache@v4
         with:
           path: cache
           enableCrossOsArchive: true
           key: ${{ inputs.cache_key }}
 
       - name: 🚀 Build
-        run: ${{ inputs.cmake_command }}
+        run: |
+          ${{ inputs.cmake_command }}
 
       - name: Upload build artifacts
         if: success()
-        uses: manticoresoftware/upload_artifact_with_retries@v3
+        uses: manticoresoftware/upload_artifact_with_retries@v4
         with:
           name: ${{ steps.artifact_name.outputs.value }}
           path: ${{ inputs.artifact_list }}

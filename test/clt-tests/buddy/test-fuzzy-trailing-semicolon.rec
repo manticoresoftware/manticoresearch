@@ -1,0 +1,24 @@
+––– block: ../base/start-searchd –––
+––– input –––
+mysql -P9306 -h0 -e "drop table if exists t; create table t(f text);"; echo $?
+––– output –––
+0
+––– input –––
+mysql -h0 -P9306 -e "INSERT INTO t(id, f) VALUES (1, 'ящик'), (2, 'коробка');"; echo $?
+––– output –––
+0
+––– input –––
+curl -s "0:9308/sql?mode=raw" -d "select * from t where match('ящик') option fuzzy=1;"; echo $?
+––– output –––
+{"error":"Fuzzy search requires min_infix_len to be set"}0
+––– input –––
+mysql -h0 -P9306 -e "DROP TABLE IF EXISTS t; CREATE TABLE t(f TEXT) min_infix_len='2';"
+––– output –––
+––– input –––
+mysql -h0 -P9306 -e "INSERT INTO t(id, f) VALUES (1, 'ящик'), (2, 'коробка');"; echo $?
+––– output –––
+0
+––– input –––
+curl -s "0:9308/sql?mode=raw" -d "select * from t where match('ящик') option fuzzy=1;"; echo $?
+––– output –––
+[{"total":1,"error":"","warning":"","columns":[{"id":{"type":"long long"}},{"f":{"type":"string"}}],"data":[{"id":1,"f":"ящик"}]}]0

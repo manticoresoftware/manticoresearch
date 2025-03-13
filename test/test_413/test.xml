@@ -107,5 +107,8 @@ flush ramchunk rt2;
 REPLACE INTO rt2 (id, title) VALUES ( 1, 'hello world' ),( 4, 'hello hallo world' );
 select id from rt2 where match ('-hi') order by id asc;
 
+<!-- disk chunk vs expr ranker -->
+select id from rt2 where match('-hi') order by id asc option ranker=expr('1'), not_terms_only_allowed=1;
+
 </sphinxql></queries>
 </test>

@@ -17,29 +17,34 @@ if (MYSQL_USE_STATIC_LIBS)
 	# Create imported target Mysql::Mysql as static
 	add_library (Mysql::Mysql STATIC IMPORTED)
 	set_target_properties (Mysql::Mysql PROPERTIES
-			IMPORTED_LOCATION_RELEASE "${_IMPORT_PREFIX}/lib/opt/mysqlclient.lib"
-			IMPORTED_LOCATION_DEBUG "${_IMPORT_PREFIX}/lib/debug/mysqlclient.lib"
+			IMPORTED_LOCATION_RELEASE "${_IMPORT_PREFIX}/lib/mysqlclient.lib"
 			)
 else()
 
 	# Create imported target Mysql::Mysql as shared
 	add_library (Mysql::Mysql SHARED IMPORTED)
 	set_target_properties (Mysql::Mysql PROPERTIES
-			IMPORTED_IMPLIB_RELEASE "${_IMPORT_PREFIX}/lib/opt/libmysql.lib"
-			IMPORTED_IMPLIB_DEBUG "${_IMPORT_PREFIX}/lib/debug/libmysql.lib"
-			IMPORTED_LOCATION_RELEASE "${_IMPORT_PREFIX}/lib/opt/libmysql.dll"
-			IMPORTED_LOCATION_DEBUG "${_IMPORT_PREFIX}/lib/debug/libmysql.dll"
+			IMPORTED_IMPLIB_RELEASE "${_IMPORT_PREFIX}/lib/libmysql.lib"
+			IMPORTED_LOCATION_RELEASE "${_IMPORT_PREFIX}/lib/libmysql.dll"
 			)
 endif()
 
 set_target_properties (Mysql::Mysql PROPERTIES
 		INTERFACE_INCLUDE_DIRECTORIES "${_IMPORT_PREFIX}/include"
-		IMPORTED_CONFIGURATIONS "RELEASE;DEBUG"
+		INTERFACE_LINK_LIBRARIES "Mysql::SSL;Mysql::Crypto"
+		IMPORTED_CONFIGURATIONS "RELEASE"
 		IMPORTED_LINK_INTERFACE_LANGUAGES_RELEASE "C"
-		IMPORTED_LINK_INTERFACE_LANGUAGES_DEBUG "C"
 		MAP_IMPORTED_CONFIG_RELWITHDEBINFO Release
 		MAP_IMPORTED_CONFIG_MINSIZEREL Release
+		MAP_IMPORTED_CONFIG_DEBUG Release
 		)
+
+# Dependencies - have to be installed together
+add_library ( Mysql::SSL INTERFACE IMPORTED )
+set_target_properties ( Mysql::SSL PROPERTIES LOCATION "${_IMPORT_PREFIX}/bin/libssl-3-x64.dll" )
+
+add_library ( Mysql::Crypto INTERFACE IMPORTED )
+set_target_properties ( Mysql::Crypto PROPERTIES LOCATION "${_IMPORT_PREFIX}/bin/libcrypto-3-x64.dll" )
 
 if (CMAKE_VERSION VERSION_LESS 3.1.0)
 	message (FATAL_ERROR "This file relies on consumers using CMake 3.1.0 or greater.")

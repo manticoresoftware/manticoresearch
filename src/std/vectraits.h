@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2017-2024, Manticore Software LTD (https://manticoresearch.com)
+// Copyright (c) 2017-2025, Manticore Software LTD (https://manticoresearch.com)
 // Copyright (c) 2001-2016, Andrew Aksyonoff
 // Copyright (c) 2008-2016, Sphinx Technologies Inc
 // All rights reserved
@@ -35,7 +35,7 @@ public:
 	template<typename TT, typename INT>
 	VecTraits_T ( const std::pair<const TT*, INT>& dData );
 
-	VecTraits_T Slice ( int64_t iBegin = 0, int64_t iCount = -1 ) const;
+	FORCE_INLINE VecTraits_T Slice ( int64_t iBegin = 0, int64_t iCount = -1 ) const;
 
 	/// accessor by forward index
 	FORCE_INLINE T & operator[] ( int64_t iIndex ) const;
@@ -48,8 +48,8 @@ public:
 	FORCE_INLINE T * End() const;
 
 	/// make happy C++11 ranged for loops
-	FORCE_INLINE T * begin() const;
-	FORCE_INLINE T * end() const;
+	FORCE_INLINE T * begin() const noexcept;
+	FORCE_INLINE T * end() const noexcept;
 
 	/// get first entry
 	T& First() const;

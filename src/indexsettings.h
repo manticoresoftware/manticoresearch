@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2017-2024, Manticore Software LTD (https://manticoresearch.com)
+// Copyright (c) 2017-2025, Manticore Software LTD (https://manticoresearch.com)
 // Copyright (c) 2001-2016, Andrew Aksyonoff
 // Copyright (c) 2008-2016, Sphinx Technologies Inc
 // All rights reserved
@@ -320,6 +320,8 @@ enum class MutableName_e
 	READ_BUFFER_HITS,
 	OPTIMIZE_CUTOFF,
 	GLOBAL_IDF,
+	DISKCHUNK_FLUSH_WRITE_TIMEOUT,
+	DISKCHUNK_FLUSH_SEARCH_TIMEOUT,
 
 	TOTAL
 };
@@ -351,7 +353,11 @@ public:
 	bool		m_bPreopen = false;
 	FileAccessSettings_t m_tFileAccess;
 	int			m_iOptimizeCutoff;
+	int			m_iOptimizeCutoffKNN;
 	CSphString	m_sGlobalIDFPath;
+	// flush check periods, in seconds
+	int			m_iFlushWrite;
+	int			m_iFlushSearch;
 	
 	MutableIndexSettings_c();
 

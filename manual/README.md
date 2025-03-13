@@ -165,6 +165,7 @@
         * [• Query profiling](Node_info_and_management/Profiling/Query_profile.md)
         * [• Query plan](Node_info_and_management/Profiling/Query_plan.md)
     * [⪢ Table settings and status]
+        * [• SHOW TABLE INDEXES](Node_info_and_management/Table_settings_and_status/SHOW_TABLE_INDEXES.md)
         * [• SHOW TABLE STATUS](Node_info_and_management/Table_settings_and_status/SHOW_TABLE_STATUS.md)
         * [• SHOW TABLE SETTINGS](Node_info_and_management/Table_settings_and_status/SHOW_TABLE_SETTINGS.md)
 * [⪢ Server settings]
@@ -178,6 +179,7 @@
 * [⪢ Integration]
     * [Logstash](Integration/Logstash.md)
     * [Filebeat](Integration/Filebeat.md)
+    * [Kibana](Integration/Kibana.md)
     * [Kafka](Integration/Kafka.md)
     * [DBeaver](Integration/DBeaver.md)
     * [Apache Superset](Integration/Apache_Superset.md)

@@ -7,7 +7,7 @@
 //
 // Copyright (c) 2001-2016, Andrew Aksyonoff
 // Copyright (c) 2008-2016, Sphinx Technologies Inc
-// Copyright (c) 2019-2024, Manticore Software LTD (https://manticoresearch.com)
+// Copyright (c) 2019-2025, Manticore Software LTD (https://manticoresearch.com)
 // All rights reserved
 //
 // This program is free software; you can redistribute it and/or modify
@@ -510,7 +510,7 @@ class SphinxClient
 		$this->_fieldweights= array();
 		$this->_overrides 	= array();
 		$this->_select		= "*";
-		$this->_query_flags = sphSetBit ( 0, 6, true ); // default idf=tfidf_normalized
+		$this->_query_flags = sphSetBit ( 0, 6, true ) | sphSetBit ( 0, 3, true ); // default idf=tfidf_normalized, boolean_simplify=true
 		$this->_predictedtime = 0;
 		$this->_outerorderby = "";
 		$this->_outeroffset = 0;

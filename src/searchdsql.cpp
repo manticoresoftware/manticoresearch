@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2017-2024, Manticore Software LTD (https://manticoresearch.com)
+// Copyright (c) 2017-2025, Manticore Software LTD (https://manticoresearch.com)
 // Copyright (c) 2001-2016, Andrew Aksyonoff
 // Copyright (c) 2008-2016, Sphinx Technologies Inc
 // All rights reserved
@@ -20,6 +20,8 @@
 #include "sphinxql_extra.h"
 #include "searchdha.h"
 #include "jieba.h"
+#include "sorterscroll.h"
+#include "std/base64.h"
 
 extern int g_iAgentQueryTimeoutMs;	// global (default). May be override by index-scope values, if one specified
 
@@ -285,6 +287,44 @@ AttrValues_p SqlParserTraits_c::CloneMvaVecPtr ( int iIdx ) const noexcept
 	return AttrValues_p { pValues };
 }
 
+
+void SqlParserTraits_c::SetDefaultTableForOptions()
+ {
+	assert(m_pStmt);
+	m_pQueryForOptions = &m_pStmt->m_tQuery;
+}
+
+
+bool SqlParserTraits_c::SetTableForOptions ( const SqlNode_t & tNode )
+{
+	assert ( m_pStmt && m_pQuery );
+	CSphString sTable;
+	ToString ( sTable, tNode );
+
+	StrVec_t dQueryIndexes;
+	bool bLeftTable = false;
+	ParseIndexList ( m_pQuery->m_sIndexes, dQueryIndexes );
+	for ( const auto & i : dQueryIndexes )
+		if ( sTable==i )
+		{
+			bLeftTable = true;
+			break;
+		}
+
+	if ( bLeftTable )
+		m_pQueryForOptions = &m_pStmt->m_tQuery;
+	else if ( sTable==m_pQuery->m_sJoinIdx )
+		m_pQueryForOptions = &m_pStmt->m_tJoinQueryOptions;
+	else
+	{
+		assert(m_pParseError);
+		m_pParseError->SetSprintf ( "Unknown table in OPTION: '%s'", sTable.cstr() );
+		return false;
+	}
+
+	return true;
+}
+
 //////////////////////////////////////////////////////////////////////////
 
 enum class Option_e : BYTE;
@@ -373,7 +413,6 @@ public:
 	void			SetGroupbyLimit ( int iLimit );
 	void			SetLimit ( int iOffset, int iLimit );
 
-	float			ToFloat ( const SqlNode_t & tNode ) const;
 	int64_t			DotGetInt ( const SqlNode_t & tNode ) const;
 
 	void 			AddStringSubkey ( const SqlNode_t & tNode ) const;
@@ -381,6 +420,8 @@ public:
 	void			AddDotIntSubkey ( const SqlNode_t & tNode ) const;
 
 	void			AddComment ( const SqlNode_t* tNode );
+
+	bool			SetupScroll ( CSphString & sError );
 
 private:
 	bool						m_bMatchClause = false;
@@ -490,11 +531,6 @@ bool SqlParserTraits_c::CheckInteger ( const CSphString & sOpt, const CSphString
 	return ::CheckInteger ( sOpt, sVal, *m_pParseError );
 }
 
-float SqlParser_c::ToFloat ( const SqlNode_t & tNode ) const
-{
-	return (float) strtod ( m_pBuf+tNode.m_iStart, nullptr );
-}
-
 int64_t SqlParser_c::DotGetInt ( const SqlNode_t & tNode ) const
 {
 	return (int64_t) strtoull ( m_pBuf+tNode.m_iStart+1, nullptr, 10 );
@@ -560,6 +596,9 @@ enum class Option_e : BYTE
 	SWITCHOVER,
 	EXPANSION_LIMIT,
 	JIEBA_MODE,
+	SCROLL,
+	JOIN_BATCH_SIZE,
+	FORCE,
 
 	INVALID_OPTION
 };
@@ -574,7 +613,7 @@ void InitParserOption()
 		"max_matches", "max_predicted_time", "max_query_time", "morphology", "rand_seed", "ranker", "retry_count",
 		"retry_delay", "reverse_scan", "sort_method", "strict", "sync", "threads", "token_filter", "token_filter_options",
 		"not_terms_only_allowed", "store", "accurate_aggregation", "max_matches_increase_threshold", "distinct_precision_threshold",
-		"threads_ex", "switchover", "expansion_limit", "jieba_mode" };
+		"threads_ex", "switchover", "expansion_limit", "jieba_mode", "scroll", "join_batch_size", "force" };
 
 	for ( BYTE i = 0u; i<(BYTE) Option_e::INVALID_OPTION; ++i )
 		g_hParseOption.Add ( (Option_e) i, dOptions[i] );
@@ -608,7 +647,7 @@ static bool CheckOption ( SqlStmt_e eStmt, Option_e eOption )
 			Option_e::RETRY_COUNT, Option_e::RETRY_DELAY, Option_e::REVERSE_SCAN, Option_e::SORT_METHOD,
 			Option_e::THREADS, Option_e::TOKEN_FILTER, Option_e::NOT_ONLY_ALLOWED, Option_e::ACCURATE_AGG,
 			Option_e::MAXMATCH_THRESH, Option_e::DISTINCT_THRESH, Option_e::THREADS_EX, Option_e::EXPANSION_LIMIT,
-			Option_e::JIEBA_MODE };
+			Option_e::JIEBA_MODE, Option_e::SCROLL, Option_e::JOIN_BATCH_SIZE };
 
 	static Option_e dInsertOptions[] = { Option_e::TOKEN_FILTER_OPTIONS };
 
@@ -617,6 +656,8 @@ static bool CheckOption ( SqlStmt_e eStmt, Option_e eOption )
 	static Option_e dShowOptions[] = { Option_e::COLUMNS, Option_e::FORMAT };
 
 	static Option_e dReloadOptions[] = { Option_e::SWITCHOVER };
+
+	static Option_e dSystemOptions[] = { Option_e::FORCE };
 
 #define CHKOPT( _set, _val ) VecTraits_T<Option_e> (_set, sizeof(_set)).BinarySearch (_val)!=nullptr
 
@@ -639,6 +680,13 @@ static bool CheckOption ( SqlStmt_e eStmt, Option_e eOption )
 	case STMT_SHOW_PLAN:
 	case STMT_SHOW_THREADS:
 		return CHKOPT( dShowOptions, eOption );
+
+	case STMT_DROP_TABLE:
+	case STMT_ALTER_INDEX_SETTINGS:
+	case STMT_DESCRIBE:
+	case STMT_SHOW_CREATE_TABLE:
+		return CHKOPT( dSystemOptions, eOption );
+
 	default:
 		return false;
 	}
@@ -707,7 +755,7 @@ AddOption_e AddOption ( CSphQuery & tQuery, const CSphString & sOpt, const CSphS
 		Option_e::STRICT_, Option_e::COLUMNS, Option_e::RAND_SEED, Option_e::SYNC, Option_e::EXPAND_KEYWORDS,
 		Option_e::THREADS, Option_e::NOT_ONLY_ALLOWED, Option_e::LOW_PRIORITY, Option_e::DEBUG_NO_PAYLOAD,
 		Option_e::ACCURATE_AGG, Option_e::MAXMATCH_THRESH, Option_e::DISTINCT_THRESH, Option_e::SWITCHOVER,
-		Option_e::EXPANSION_LIMIT
+		Option_e::EXPANSION_LIMIT, Option_e::SCROLL, Option_e::JOIN_BATCH_SIZE
 	};
 
 	bool bFound = ::any_of ( dIntegerOptions, [eOpt] ( auto i ) { return i == eOpt; } );
@@ -755,6 +803,8 @@ AddOption_e AddOption ( CSphQuery & tQuery, const CSphString & sOpt, const CSphS
 	case Option_e::DISTINCT_THRESH:				tQuery.m_iDistinctThresh = iValue; tQuery.m_bExplicitDistinctThresh = true; break;
 	case Option_e::THREADS_EX:					tQuery.m_iConcurrency = (int)iValue; break;
 	case Option_e::EXPANSION_LIMIT:				tQuery.m_iExpansionLimit = (int)iValue; break;
+	case Option_e::SCROLL:						tQuery.m_tScrollSettings.m_bRequested = !!iValue; break;
+	case Option_e::JOIN_BATCH_SIZE:				tQuery.m_iJoinBatchSize = (int)iValue; break;
 
 	default:
 		return AddOption_e::NOT_FOUND;
@@ -764,7 +814,7 @@ AddOption_e AddOption ( CSphQuery & tQuery, const CSphString & sOpt, const CSphS
 }
 
 
-AddOption_e AddOption ( CSphQuery & tQuery, const CSphString & sOpt, const CSphString & sVal, const std::function<CSphString ()> & fnGetUnescaped, SqlStmt_e eStmt, CSphString & sError )
+AddOption_e AddOption ( CSphQuery & tQuery, const CSphString & sOpt, const CSphString & sVal, const CSphString & sValOrig, const std::function<CSphString ()> & fnGetUnescaped, SqlStmt_e eStmt, CSphString & sError )
 {
 	auto FAILED = fnFailer ( sError );
 
@@ -869,6 +919,11 @@ AddOption_e AddOption ( CSphQuery & tQuery, const CSphString & sOpt, const CSphS
 			return FAILED(sError.cstr());
 		break;
 
+	case Option_e::SCROLL:
+		if ( !ParseScroll ( tQuery, sValOrig, sError ) )
+			return FAILED(sError.cstr());		
+		break;
+
 	default:
 		return AddOption_e::NOT_FOUND;
 	}
@@ -925,9 +980,10 @@ AddOption_e AddOptionRanker ( CSphQuery & tQuery, const CSphString & sOpt, const
 
 bool SqlParserTraits_c::AddOption ( const SqlNode_t & tIdent, const SqlNode_t & tValue )
 {
-	CSphString sOpt, sVal;
+	CSphString sOpt, sVal, sValOrig;
 	ToString ( sOpt, tIdent ).ToLower();
 	ToString ( sVal, tValue ).ToLower().Unquote();
+	ToString ( sValOrig, tValue ).Unquote();
 
 	auto eOpt = ParseOption ( sOpt );
 	if ( !CheckOption ( eOpt ) )
@@ -936,14 +992,16 @@ bool SqlParserTraits_c::AddOption ( const SqlNode_t & tIdent, const SqlNode_t & 
 		return false;
 	}
 
+	assert(m_pQueryForOptions);
+
 	AddOption_e eAddRes;
-	eAddRes = ::AddOption ( *m_pQuery, sOpt, sVal, [this,tValue]{ return ToStringUnescape(tValue); }, m_pStmt->m_eStmt, *m_pParseError );
+	eAddRes = ::AddOption ( *m_pQueryForOptions, sOpt, sVal, sValOrig, [this,tValue]{ return ToStringUnescape(tValue); }, m_pStmt->m_eStmt, *m_pParseError );
 	if ( eAddRes==AddOption_e::FAILED )
 		return false;
 	else if ( eAddRes==AddOption_e::ADDED )
 		return true;
 	
-	eAddRes = ::AddOption ( *m_pQuery, sOpt, sVal, tValue.GetValueInt(), m_pStmt->m_eStmt, *m_pParseError );
+	eAddRes = ::AddOption ( *m_pQueryForOptions, sOpt, sVal, tValue.GetValueInt(), m_pStmt->m_eStmt, *m_pParseError );
 	if ( eAddRes==AddOption_e::FAILED )
 		return false;
 	else if ( eAddRes==AddOption_e::ADDED )
@@ -971,6 +1029,10 @@ bool SqlParserTraits_c::AddOption ( const SqlNode_t & tIdent, const SqlNode_t & 
 		m_pStmt->m_iIntParam = tValue.GetValueInt() ? 1 : 0;
 		break;
 
+	case Option_e::FORCE:
+		m_pStmt->m_bForce = ( tValue.GetValueInt()==1 );
+		break;
+
 	default: //} else
 		m_pParseError->SetSprintf ( "unknown option '%s' (or bad argument type)", sOpt.cstr() );
 		return false;
@@ -993,7 +1055,8 @@ bool SqlParserTraits_c::AddOption ( const SqlNode_t & tIdent, const SqlNode_t & 
 		return false;
 	}
 
-	AddOption_e eAdd = ::AddOptionRanker ( *m_pQuery, sOpt, sVal, [this,tArg]{ return ToStringUnescape(tArg); }, m_pStmt->m_eStmt, *m_pParseError );
+	assert(m_pQueryForOptions);
+	AddOption_e eAdd = ::AddOptionRanker ( *m_pQueryForOptions, sOpt, sVal, [this,tArg]{ return ToStringUnescape(tArg); }, m_pStmt->m_eStmt, *m_pParseError );
 	if ( eAdd==AddOption_e::NOT_FOUND )
 		m_pParseError->SetSprintf ( "unknown option '%s' (or bad argument type)", sOpt.cstr() );
 
@@ -1012,7 +1075,8 @@ bool SqlParserTraits_c::AddOption ( const SqlNode_t & tIdent, CSphVector<CSphNam
 		return false;
 	}
 
-	AddOption_e eAdd = ::AddOption ( *m_pQuery, sOpt, dNamed, m_pStmt->m_eStmt, *m_pParseError );
+	assert(m_pQueryForOptions);
+	AddOption_e eAdd = ::AddOption ( *m_pQueryForOptions, sOpt, dNamed, m_pStmt->m_eStmt, *m_pParseError );
 	if ( eAdd==AddOption_e::NOT_FOUND )
 		m_pParseError->SetSprintf ( "unknown option '%s' (or bad argument type)", sOpt.cstr() );
 
@@ -1136,6 +1200,7 @@ void SqlParser_c::AddGroupBy ( const SqlNode_t & tGroupBy )
 		m_pQuery->m_sGroupBy.SetSprintf ( "%s, %s", m_pQuery->m_sGroupBy.cstr(), sTmp.cstr() );
 	}
 }
+
 
 void SqlParser_c::SetGroupbyLimit ( int iLimit )
 {
@@ -1346,6 +1411,21 @@ void SqlParser_c::AddComment ( const SqlNode_t* tNode )
 			SetLimit ( 0, -1 );
 		}
 	}
+}
+
+
+bool SqlParser_c::SetupScroll ( CSphString & sError )
+{
+	for ( auto & i : m_dStmt )
+	{
+		if ( i.m_eStmt!=STMT_SELECT )
+			continue;
+
+		if ( !::SetupScroll ( i.m_tQuery, sError ) )
+			return false;
+	}
+
+	return true;
 }
 
 
@@ -2118,6 +2198,9 @@ bool sphParseSqlQuery ( Str_t sQuery, CSphVector<SqlStmt_t> & dStmt, CSphString 
 		return false;
 	}
 
+	if ( !tParser.SetupScroll(sError) )
+		return false;
+
 	if ( SetupFacets(dStmt) )
 	{
 		if ( !SetupFacetDistinct ( dStmt, sError ) )
@@ -2275,4 +2358,112 @@ bool PercolateParseFilters ( const char * sFilters, ESphCollation eCollation, co
 	}
 
 	return ( iRes==0 );
+}
+
+//////////////////////////////////////////////////////////////////////////
+
+bool FormatScrollSettings ( const AggrResult_t & tAggrRes, const CSphQuery & tQuery, CSphString & sSettings )
+{
+	if ( !tQuery.m_tScrollSettings.m_bRequested )
+		return false;
+
+	if ( tAggrRes.m_dResults.IsEmpty() )
+		return false;
+
+	const auto & tRes = tAggrRes.m_dResults.First();
+	if ( tRes.m_dMatches.IsEmpty() )
+		return false;
+
+	// scroll can't do groupby
+	if ( !tQuery.m_sGroupBy.IsEmpty() )
+		return false;
+
+	ESphSortFunc eFunc = FUNC_REL_DESC;
+	CSphMatchComparatorState tState;
+	CSphVector<ExtraSortExpr_t> dExtraExprs;
+	CSphString sError;
+	ESortClauseParseResult eRes = sphParseSortClause ( tQuery, tQuery.m_sSortBy.cstr(), tRes.m_tSchema, eFunc, tState, dExtraExprs, nullptr, sError );
+	if ( eRes!=SORT_CLAUSE_OK )
+		return false;
+
+	int iNumArgs = 0;
+	switch ( eFunc )
+	{
+	case FUNC_GENERIC1: iNumArgs = 1; break;
+	case FUNC_GENERIC2: iNumArgs = 2; break;
+	case FUNC_GENERIC3: iNumArgs = 3; break;
+	case FUNC_GENERIC4: iNumArgs = 4; break;
+	case FUNC_GENERIC5: iNumArgs = 5; break;
+	default: return false;
+	}
+
+	JsonObj_c tJson;
+	tJson.AddStr ( "order_by_str", tQuery.m_sSortBy );
+
+	JsonObj_c tOrderBy(true);
+
+	auto dMatches = tRes.m_dMatches.Slice ( tAggrRes.m_iOffset, tAggrRes.m_iCount );
+	if ( !dMatches.GetLength() )
+		return false;
+
+	bool bHaveId = false;
+	const CSphMatch & tMatch = dMatches.Last();
+	for ( int i = 0; i < iNumArgs; i++ )
+	{
+		bool bWeight = tState.m_eKeypart[i]==SPH_KEYPART_WEIGHT;
+		if ( !bWeight && tState.m_dAttrs[i]==-1 )
+			return false;
+
+		JsonObj_c tAttrWithOrder;
+
+		const CSphColumnInfo * pAttr = nullptr;
+		if ( !bWeight )
+		{
+			pAttr = &tRes.m_tSchema.GetAttr ( tState.m_dAttrs[i] );
+			bHaveId |= pAttr->m_sName=="id";
+		}
+
+		tAttrWithOrder.AddStr ( "attr", bWeight ? "weight()" : pAttr->m_sName );
+		tAttrWithOrder.AddBool ( "desc", tState.m_uAttrDesc & ( 1<<i ) );
+
+		if ( bWeight )
+		{
+			tAttrWithOrder.AddUint ( "value", tMatch.m_iWeight );
+			tAttrWithOrder.AddStr ( "type", "int" );
+		}
+		else
+		{
+			switch ( pAttr->m_eAttrType )
+			{
+			case SPH_ATTR_STRINGPTR:
+				tAttrWithOrder.AddStr ( "value", B2S ( sphUnpackPtrAttr ( (const BYTE*)tMatch.GetAttr ( pAttr->m_tLocator ) ) ) );
+				tAttrWithOrder.AddStr ( "type", "string" );
+				break;
+
+			case SPH_ATTR_FLOAT:
+				tAttrWithOrder.AddFlt ( "value", tMatch.GetAttrFloat ( pAttr->m_tLocator ) );
+				tAttrWithOrder.AddStr ( "type", "float" );
+				break;
+
+			case SPH_ATTR_DOUBLE:
+				tAttrWithOrder.AddFlt ( "value", tMatch.GetAttrDouble ( pAttr->m_tLocator ) );
+				tAttrWithOrder.AddStr ( "type", "float" );
+				break;
+
+			default:
+				tAttrWithOrder.AddUint ( "value", tMatch.GetAttr ( pAttr->m_tLocator ) );
+				tAttrWithOrder.AddStr ( "type", "int" );
+				break;
+			}
+		}
+
+		tOrderBy.AddItem(tAttrWithOrder);
+	}
+
+	if ( !bHaveId )
+		return false;
+	
+	tJson.AddItem ( "order_by", tOrderBy );
+	sSettings = EncodeBase64 ( tJson.AsString() );
+	return true;
 }

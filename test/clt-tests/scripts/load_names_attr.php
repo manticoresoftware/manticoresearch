@@ -137,8 +137,11 @@ $namesCount = count($names);
 $surnames = file('./test/clt-tests/scripts/surnames.txt', FILE_IGNORE_NEW_LINES | FILE_SKIP_EMPTY_LINES);
 $surnamesCount = count($surnames);
 
+// Ensure repeatable random data
+srand(42);
+mt_srand(42);
+
 echo "preparing...\n";
-srand(1); // Ensure repeatable random data
 $c = $startId; // Start at the specified start ID
 
 $batches = [];

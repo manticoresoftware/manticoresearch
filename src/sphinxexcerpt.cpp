@@ -300,10 +300,10 @@ public:
 		return true;
 	}
 
-	ISphQword * ScanSpawn() const override
+	ISphQword * ScanSpawn ( int iAtomPos ) const override
 	{
 		int iDocs = ( m_tIndex.GetDocHits().GetLength() ? 1 : 0 );
-		return new QwordScan_c ( iDocs );
+		return new QwordScan_c ( iDocs, iAtomPos, SPH_MAX_FIELDS );
 	}
 
 private:

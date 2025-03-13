@@ -1,6 +1,5 @@
 //
-//
-// Copyright (c) 2017-2024, Manticore Software LTD (https://manticoresearch.com)
+// Copyright (c) 2017-2025, Manticore Software LTD (https://manticoresearch.com)
 // Copyright (c) 2001-2016, Andrew Aksyonoff
 // Copyright (c) 2008-2016, Sphinx Technologies Inc
 // All rights reserved
@@ -210,7 +209,7 @@ public:
 	ISphQword *			QwordSpawn ( const XQKeyword_t & tWord ) const final;
 	bool				QwordSetup ( ISphQword * ) const final;
 	bool				Setup ( ISphQword * ) const;
-	ISphQword *			ScanSpawn() const final;
+	ISphQword *			ScanSpawn ( int iAtomPos ) const final;
 
 private:
 	DataReaderFactoryPtr_c		m_pDoclist;
@@ -1049,7 +1048,7 @@ CSphRowitem* UpdateContext_t::GetDocinfo ( RowID_t iRowID ) const
 	assert ( iRowID != INVALID_ROWID );
 	assert ( m_pAttrPool );
 	assert ( m_iStride );
-	return m_pAttrPool + iRowID * m_iStride;
+	return m_pAttrPool + (int64_t)iRowID * m_iStride;
 }
 
 
@@ -1246,7 +1245,7 @@ public:
 	Bson_t				ExplainQuery ( const CSphString & sQuery ) const final;
 
 	HistogramContainer_c * Debug_GetHistograms() const override { return m_pHistograms; }
-	const SIContainer_c * Debug_GetSI() const override { return &m_tSI; }
+	const SIContainer_c * GetSI() const override { return &m_tSI; }
 
 	bool				CheckEarlyReject ( const CSphVector<CSphFilterSettings> & dFilters, const ISphFilter * pFilter, ESphCollation eCollation, const ISphSchema & tSchema ) const;
 	std::pair<int64_t,int> GetPseudoShardingMetric ( const VecTraits_T<const CSphQuery> & dQueries, const VecTraits_T<int64_t> & dMaxCountDistinct, int iThreads, bool & bForceSingleThread ) const override;
@@ -2547,8 +2546,13 @@ int CSphIndex_VLN::CheckThenUpdateAttributes ( AttrUpdateInc_t& tUpd, bool& bCri
 	if ( ( tCtx.m_uUpdateMask & IndexSegment_c::ATTRS_UPDATED ) || ( tCtx.m_uUpdateMask & IndexSegment_c::ATTRS_BLOB_UPDATED ) )
 	{
 		for ( const UpdatedAttribute_t & tAttr : tCtx.m_dUpdatedAttrs )
+		{
 			if ( tAttr.m_iSchemaAttr!=-1 )
-				m_tSI.ColumnUpdated ( m_tSchema.GetAttr ( tAttr.m_iSchemaAttr ).m_sName );
+			{
+				const CSphColumnInfo & tIdxAttr = m_tSchema.GetAttr ( tAttr.m_iSchemaAttr );
+				m_tSI.ColumnUpdated ( tIdxAttr.m_sName );
+			}
+		}
 	}
 
 	iUpdated = tUpd.m_iAffected - iUpdated;
@@ -6770,6 +6774,12 @@ bool CSphIndex_VLN::DoMerge ( const CSphIndex_VLN * pDstIndex, const CSphIndex_V
 		if ( !tAttrMerger.Prepare ( pSrcIndex, pDstIndex ) )
 			return false;
 
+		if ( !tAttrMerger.AnalyzeAttributes ( *pDstIndex, dDstRows, tTotalDocs.first ) )
+			return false;
+
+		if ( !bCompress && !tAttrMerger.AnalyzeAttributes ( *pSrcIndex, dSrcRows, tTotalDocs.second ) )
+			return false;
+
 		if ( !tAttrMerger.CopyAttributes ( *pDstIndex, dDstRows, tTotalDocs.first ) )
 			return false;
 
@@ -8492,7 +8502,15 @@ bool DiskIndexQwordSetup_c::Setup ( ISphQword * pWord ) const
 	return true;
 }
 
-QwordScan_c::QwordScan_c ( int iRowsCount )
+static DWORD Fields2Mask ( int iFields )
+{
+    if ( iFields>31 )
+        return 0xFFFFFFFF;
+    
+    return ( ( 1U<<iFields ) - 1 );
+}
+
+QwordScan_c::QwordScan_c ( int iRowsCount, int iAtomPos, int iFieldsCount )
 	: m_iRowsCount ( iRowsCount )
 {
 	m_bDone = ( m_iRowsCount==0 );
@@ -8500,8 +8518,23 @@ QwordScan_c::QwordScan_c ( int iRowsCount )
 	m_iDocs = m_iRowsCount;
 	m_sWord = "";
 	m_sDictWord = "";
-	m_bExcluded = true;
-	m_dQwordFields.SetAll();
+	m_iAtomPos = iAtomPos;
+	m_iFieldsCount = iFieldsCount;
+	SetFieldMask();
+}
+
+void QwordScan_c::SetFieldMask ()
+{
+	if ( m_iFieldsCount<32 )
+		m_dQwordFields.Assign32 ( Fields2Mask ( m_iFieldsCount ) );
+	else
+		m_dQwordFields.SetAll();
+}
+
+void QwordScan_c::Reset ()
+{
+	ISphQword::Reset();
+	SetFieldMask();
 }
 
 const CSphMatch & QwordScan_c::GetNextDoc()
@@ -8534,9 +8567,9 @@ const CSphMatch & QwordScan_c::GetNextDoc()
 	return m_tDoc;
 }
 
-ISphQword * DiskIndexQwordSetup_c::ScanSpawn() const
+ISphQword * DiskIndexQwordSetup_c::ScanSpawn ( int iAtomPos ) const
 {
-	return new QwordScan_c ( m_iRowsCount );
+	return new QwordScan_c ( m_iRowsCount, iAtomPos, m_pIndex->GetMatchSchema().GetFieldsCount() );
 }
 
 //////////////////////////////////////////////////////////////////////////////
@@ -9742,7 +9775,7 @@ static int SPH_EXTNODE_STACK_SIZE = 160;
 // extra stack which need despite EXTNODE_STACK_SIZE
 static DWORD SPH_EXTRA_BUDGET = 0x2000;
 
-void SetExtNodeStackSize ( int iDelta, int iExtra )
+void SetExtNodeStackSize ( int iExtra, int iDelta )
 {
 	if ( iDelta )
 	{
@@ -11621,7 +11654,7 @@ Bson_t Explain ( ExplainQueryArgs_t & tArgs )
 		return EmptyBson ();
 	}
 
-	sphTransformExtendedQuery ( &tParsed.m_pRoot, *tArgs.m_pSettings, false, nullptr );
+	sphTransformExtendedQuery ( &tParsed.m_pRoot, *tArgs.m_pSettings, false ); // fixme! m.b. explain boolean-simplified?
 
 	bool bWordDict = tArgs.m_pDict->GetSettings().m_bWordDict;
 	int iExpandKeywords = ExpandKeywords ( tArgs.m_iExpandKeywords, QUERY_OPT_DEFAULT, *tArgs.m_pSettings, bWordDict );

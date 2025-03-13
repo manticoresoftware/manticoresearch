@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2017-2024, Manticore Software LTD (https://manticoresearch.com)
+// Copyright (c) 2017-2025, Manticore Software LTD (https://manticoresearch.com)
 // Copyright (c) 2001-2016, Andrew Aksyonoff
 // Copyright (c) 2008-2016, Sphinx Technologies Inc
 // All rights reserved
@@ -14,22 +14,22 @@
 
 #include "std/fnv64.h"
 
-inline CSphAttrLocator::CSphAttrLocator ( int iBitOffset, int iBitCount )
+inline SmallAttrLocator_t::SmallAttrLocator_t ( int iBitOffset, int iBitCount )
 	: m_iBitOffset ( iBitOffset )
 	, m_iBitCount ( iBitCount )
 {}
 
-inline bool CSphAttrLocator::IsBitfield() const
+inline bool SmallAttrLocator_t::IsBitfield() const noexcept
 {
 	return ( m_iBitCount < ROWITEM_BITS || ( m_iBitOffset % ROWITEM_BITS ) != 0 );
 }
 
-inline int CSphAttrLocator::CalcRowitem() const
+inline int SmallAttrLocator_t::CalcRowitem() const noexcept
 {
 	return IsBitfield() ? -1 : ( m_iBitOffset / ROWITEM_BITS );
 }
 
-inline bool CSphAttrLocator::IsBlobAttr() const
+inline bool CSphAttrLocator::IsBlobAttr() const noexcept
 {
 	return m_iBlobAttrId >= 0;
 }
@@ -68,7 +68,7 @@ inline uint64_t CSphAttrLocator::FNV ( uint64_t uHash ) const
 
 #ifndef NDEBUG
 /// get last item touched by this attr (for debugging checks only)
-inline int CSphAttrLocator::GetMaxRowitem() const
+inline int SmallAttrLocator_t::GetMaxRowitem() const noexcept
 {
 	return ( m_iBitOffset + m_iBitCount - 1 ) / ROWITEM_BITS;
 }
@@ -82,7 +82,7 @@ inline bool CSphAttrLocator::operator== ( const CSphAttrLocator& rhs ) const
 		return m_bDynamic == rhs.m_bDynamic && m_iBlobAttrId == rhs.m_iBlobAttrId && m_nBlobAttrs == rhs.m_nBlobAttrs;
 }
 
-FORCE_INLINE SphAttr_t sphGetRowAttr ( const CSphRowitem * pRow, const CSphAttrLocator & tLoc )
+FORCE_INLINE SphAttr_t sphGetRowAttr ( const CSphRowitem * pRow, SmallAttrLocator_t tLoc )
 {
 	assert(pRow);
 	assert ( tLoc.m_iBitCount );
@@ -106,7 +106,7 @@ FORCE_INLINE SphAttr_t sphGetRowAttr ( const CSphRowitem * pRow, const CSphAttrL
 }
 
 
-FORCE_INLINE void sphSetRowAttr ( CSphRowitem * pRow, const CSphAttrLocator & tLoc, SphAttr_t uValue )
+FORCE_INLINE void sphSetRowAttr ( CSphRowitem * pRow, SmallAttrLocator_t tLoc, SphAttr_t uValue )
 {
 	assert(pRow);
 	assert ( tLoc.m_iBitCount );
@@ -135,7 +135,7 @@ FORCE_INLINE void sphSetRowAttr ( CSphRowitem * pRow, const CSphAttrLocator & tL
 }
 
 /// add numeric value of another attribute
-inline void sphAddCounterAttr ( CSphRowitem * pRow, const CSphRowitem * pVal, const CSphAttrLocator & tLoc )
+inline void sphAddCounterAttr ( CSphRowitem * pRow, const CSphRowitem * pVal, SmallAttrLocator_t tLoc )
 {
 	assert( pRow && pVal);
 	int iItem = tLoc.m_iBitOffset >> ROWITEM_SHIFT;
@@ -164,7 +164,7 @@ inline void sphAddCounterAttr ( CSphRowitem * pRow, const CSphRowitem * pVal, co
 }
 
 /// add scalar value to aligned numeric attribute
-inline void sphAddCounterScalar ( CSphRowitem * pRow, const CSphAttrLocator & tLoc, SphAttr_t uValue )
+inline void sphAddCounterScalar ( CSphRowitem * pRow, SmallAttrLocator_t tLoc, SphAttr_t uValue )
 {
 	assert( pRow );
 	int iItem = tLoc.m_iBitOffset >> ROWITEM_SHIFT;

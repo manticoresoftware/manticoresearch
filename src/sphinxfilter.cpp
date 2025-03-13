@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2017-2024, Manticore Software LTD (https://manticoresearch.com)
+// Copyright (c) 2017-2025, Manticore Software LTD (https://manticoresearch.com)
 // Copyright (c) 2001-2016, Andrew Aksyonoff
 // Copyright (c) 2008-2016, Sphinx Technologies Inc
 // All rights reserved
@@ -786,6 +786,56 @@ struct Filter_Not final : public ISphFilter
 	}
 };
 
+class Filter_ProxyHeavy final : public ISphFilter
+{
+	std::unique_ptr<ISphFilter> m_pFilter;
+	int m_iDesiredStack;
+
+public:
+	NONCOPYMOVABLE( Filter_ProxyHeavy );
+
+	Filter_ProxyHeavy ( std::unique_ptr<ISphFilter> pFilter, int iDesiredStack )
+			: m_pFilter ( std::move ( pFilter ) )
+			, m_iDesiredStack { iDesiredStack }
+	{
+		assert ( m_pFilter );
+	}
+
+	bool Eval ( const CSphMatch & tMatch ) const final
+	{
+		return m_pFilter->Eval ( tMatch );
+	}
+
+	bool EvalBlock ( const DWORD * uVal1, const DWORD * uVal2 ) const final
+	{
+		return m_pFilter->EvalBlock ( uVal1, uVal2 );
+	}
+
+	void SetBlobStorage ( const BYTE * pBlobPool ) final
+	{
+		m_pFilter->SetBlobStorage ( pBlobPool );
+	}
+
+	void SetColumnar ( const columnar::Columnar_i * pColumnar ) final
+	{
+		m_pFilter->SetColumnar ( pColumnar );
+	}
+
+	~Filter_ProxyHeavy() final
+	{
+		if ( !m_pFilter )
+			return;
+		if ( m_iDesiredStack<0 )
+			return;
+		auto iUsedStack = Threads::GetStackUsed ();
+		auto iMyStack = Threads::MyStackSize ();
+		if ( iUsedStack + m_iDesiredStack < iMyStack )
+			return;
+
+		Threads::Coro::Continue ( (int) m_iDesiredStack, [this] { m_pFilter.reset (); } );
+	}
+};
+
 /// impl
 
 std::unique_ptr<ISphFilter> ISphFilter::Join ( std::unique_ptr<ISphFilter> pFilter )
@@ -1257,19 +1307,22 @@ static std::unique_ptr<ISphFilter> SetupJsonExpr ( CSphRefcountedPtr<ISphExpr> &
 	if ( !bJsonExpr )
 		return nullptr;
 
+	ISphExpr* pFoo = nullptr;
+	AT_SCOPE_EXIT ( [&pFoo] { if (pFoo) pFoo->Release(); } );
+
 	if ( tFixedSettings.m_eType==SPH_FILTER_STRING_LIST || tFixedSettings.m_eType==SPH_FILTER_STRING )
-		return std::make_unique<ExprFilterProxy_c> ( ExprJsonIn ( tSettings.m_dStrings, pExpr, eCollation ), SPH_ATTR_INTEGER );
+		return std::make_unique<ExprFilterProxy_c> ( pFoo = ExprJsonIn ( tSettings.m_dStrings, pExpr, eCollation ), SPH_ATTR_INTEGER );
 
 	if ( tSettings.m_eMvaFunc==SPH_MVAFUNC_ANY )
 	{
 		switch ( tFixedSettings.m_eType )
 		{
 		case SPH_FILTER_VALUES:
-			return std::make_unique<ExprFilterProxy_c> ( ExprJsonIn ( tSettings.m_dValues, pExpr, eCollation ), SPH_ATTR_INTEGER );
+			return std::make_unique<ExprFilterProxy_c> ( pFoo = ExprJsonIn ( tSettings.m_dValues, pExpr, eCollation ), SPH_ATTR_INTEGER );
 
 		case SPH_FILTER_RANGE:
 		case SPH_FILTER_FLOATRANGE:
-			return std::make_unique<ExprFilterProxy_c> ( ExprJsonRange ( tFixedSettings, pExpr ), SPH_ATTR_INTEGER );
+			return std::make_unique<ExprFilterProxy_c> ( pFoo = ExprJsonRange ( tFixedSettings, pExpr ), SPH_ATTR_INTEGER );
 
 		default:
 			break;
@@ -2385,7 +2438,7 @@ inline bool operator<( const FilterInfo_t& tA, const FilterInfo_t& tB )
 	return tA.m_iSelectivity < tB.m_iSelectivity;
 }
 
-static std::unique_ptr<ISphFilter> ReorderAndCombine ( CSphVector<FilterInfo_t> dFilters )
+static std::unique_ptr<ISphFilter> ReorderAndCombine ( CSphVector<FilterInfo_t>&& dFilters )
 {
 	if ( dFilters.GetLength()==1 )
 		return std::unique_ptr<ISphFilter> { dFilters.Begin()->m_pFilter };
@@ -2399,15 +2452,16 @@ static std::unique_ptr<ISphFilter> ReorderAndCombine ( CSphVector<FilterInfo_t> 
 	return pCombinedFilter;
 }
 
-static int g_iFilterStackSize = 200;
+
 static int g_iStartFilterStackSize = 6*1024;
+static int g_iFilterStackSize = 200;
 
 void SetFilterStackItemSize ( std::pair<int,int> tSize )
 {
-	if ( tSize.first>g_iFilterStackSize )
-		g_iFilterStackSize = tSize.first;
-	if ( tSize.second > g_iStartFilterStackSize )
-		g_iStartFilterStackSize = tSize.second;
+	if ( tSize.first>g_iStartFilterStackSize )
+		g_iStartFilterStackSize = tSize.first;
+	if ( tSize.second >g_iFilterStackSize )
+		g_iFilterStackSize = tSize.second;
 }
 
 int GetFilterStackItemSize()
@@ -2427,18 +2481,39 @@ bool sphCreateFilters ( CreateFilterContext_t & tCtx, CSphString & sError, CSphS
 
 	if ( tCtx.m_pFilterTree && tCtx.m_pFilterTree->GetLength() )
 	{
-		const int TREE_SIZE_THRESH = 200;
-		const StackSizeTuplet_t tFilterStack = { g_iFilterStackSize, g_iFilterStackSize }; // fixme! tune eval calc
 		int iStackNeeded = -1;
-		if ( !EvalStackForTree ( *tCtx.m_pFilterTree, tCtx.m_pFilterTree->GetLength()-1, tFilterStack,
-						   TREE_SIZE_THRESH, iStackNeeded, "filters", sError ) )
-			return false;
+		const int TREE_SIZE_THRESH = 50;
+		if ( tCtx.m_pFilterTree->GetLength ()>TREE_SIZE_THRESH )
+		{
+			StackSizeParams_t tParams;
+			tParams.iMaxDepth = EvalMaxTreeHeight ( *tCtx.m_pFilterTree, tCtx.m_pFilterTree->GetLength ()-1 );
+			tParams.tNodeStackSize = { g_iStartFilterStackSize, g_iFilterStackSize }; // fixme! tune eval calc
+			tParams.szName = "filters";
+			std::tie ( iStackNeeded, sError ) = EvalStackForExpr ( tParams );
+			if ( !sError.IsEmpty () )
+				return false;
+		}
 
-		return Threads::Coro::ContinueBool ( iStackNeeded, [&] { return CreateFilterTree ( tCtx, sError, sWarning ); } );
+		bool bResult = Threads::Coro::ContinueBool ( iStackNeeded, [&] { return CreateFilterTree ( tCtx, sError, sWarning ); } );
+		if ( iStackNeeded<0 )
+			return bResult;
+
+		// weight filter phase only on match path
+		if ( tCtx.m_pWeightFilter )
+			tCtx.m_pWeightFilter = std::make_unique<Filter_ProxyHeavy> ( std::move ( tCtx.m_pWeightFilter ), iStackNeeded );
+		else
+			tCtx.m_pFilter = std::make_unique<Filter_ProxyHeavy> ( std::move ( tCtx.m_pFilter ), iStackNeeded );
 	}
 
 	assert ( tCtx.m_pMatchSchema );
 	CSphVector<FilterInfo_t> dFilters, dWeightFilters;
+	bool bFiltersOk = false;
+	AT_SCOPE_EXIT ([&bFiltersOk, &dFilters, dWeightFilters ] {
+		if ( bFiltersOk )
+			return;
+		dFilters.for_each ( [] (auto& i) { SafeDelete ( i.m_pFilter); } );
+		dWeightFilters.for_each ( [] (auto& i) { SafeDelete ( i.m_pFilter); } );
+	});
 
 	bool bSingleFilter = tCtx.m_pFilters->GetLength()==1;
 
@@ -2502,6 +2577,7 @@ bool sphCreateFilters ( CreateFilterContext_t & tCtx, CSphString & sError, CSphS
 	tCtx.m_pFilter = ReorderAndCombine ( std::move ( dFilters ) );
 	tCtx.m_pWeightFilter = ReorderAndCombine ( std::move ( dWeightFilters ) );
 
+	bFiltersOk = true;
 	return true;
 }
 

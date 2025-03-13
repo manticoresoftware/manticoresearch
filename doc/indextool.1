@@ -5,7 +5,7 @@
 .\"    Source: Manticore Search
 .\"  Language: English
 .\"
-.TH "INDEXTOOL" "1" "29/08/2023" "Manticore Search" ""
+.TH "INDEXTOOL" "1" "28/02/2025" "Manticore Search" ""
 .SH "NAME"
 indextool
 .SH "SYNOPSIS"
@@ -81,12 +81,51 @@ Here are the available commands:
 .IP \(bu 2
 \fB\fC\-\-apply\-killlists\fR loads and applies kill\-lists for all tables listed in the config file. Changes are saved in .SPM files. Kill\-list files (.SPK) are removed. This can be handy if you want to shift the application of tables from server startup to indexing stage.
 .RE
+.SS Important Consideration for RT Table Checking
+.PP
+\fB\fCindextool\fR cannot fully check an RT table that is currently served by the daemon. When attempting to check an active RT table, you may encounter the following warning:
+.PP
+.RS
+.nf
+WARNING: failed to load RAM chunks, checking only N disk chunks
+.fi
+.RE
+.PP
+To avoid these warning and ensure a proper check of an RT table, consider the following approaches:
+.RS
+.IP \(bu 2
+stop the daemon before running \fB\fCindextool \-\-check\fR\&.
+.br
+.IP \(bu 2
+ensure that the RT table is not actively served by the daemon.
+.br
+.IP \(bu 2
+check a separate copy of the RT table instead of the live one.
+.br
+.RE
+.PP
+If stopping the daemon is not an option, you can prevent unintended modifications to the RT table by executing the following MySQL statement before running \fB\fCindextool \-\-check\fR:
+.PP
+.RS
+.nf
+SET GLOBAL AUTO_OPTIMIZE=0;
+.fi
+.RE
+.PP
+This command prevents the daemon from performing auto\-optimization, ensuring that RT table files remain unchanged. After executing this statement, wait until the optimization thread has completely stopped before proceeding with \fB\fCindextool \-\-check\fR\&. This ensures that no disk chunks are unintentionally modified or removed during the check process.
+If auto\-optimize was previously enabled, you should manually re\-enable it after the check is complete by running:
+.PP
+.RS
+.nf
+SET GLOBAL AUTO_OPTIMIZE=1;
+.fi
+.RE
 .SH "AUTHOR"
 .PP
 Manticore Software LTD (https://manticoresearch\&.com)
 .SH "COPYRIGHT"
 .PP
-Copyright 2017\-2024 Manticore Software LTD (https://manticoresearch\&.com), 2008\-2016 Sphinx Technologies Inc (http://sphinxsearch\&.com), 2001\-2016 Andrew Aksyonoff
+Copyright 2017\-2025 Manticore Software LTD (https://manticoresearch\&.com), 2008\-2016 Sphinx Technologies Inc (http://sphinxsearch\&.com), 2001\-2016 Andrew Aksyonoff
 .PP
 Permission is granted to copy, distribute and/or modify this document under the terms of the GNU General Public License, Version 3 or any later version published by the Free Software Foundation\&.
 .SH "SEE ALSO"

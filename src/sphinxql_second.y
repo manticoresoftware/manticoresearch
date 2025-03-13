@@ -67,6 +67,7 @@
 %token  TOK_RELOAD
 %token  TOK_SONAME
 %token  TOK_TRUNCATE
+%token	TOK_SYSTEM_DOT "system."
 
 
 %{
@@ -150,20 +151,28 @@ indexes_or_tables:
 	| TOK_TABLES
 	;
 
+index_id:
+	ident_all
+	| TOK_SYSTEM_DOT ident_all
+		{
+			TRACK_BOUNDS ( $$, $1, $2 );
+		}
+	;
+
+one_index:
+	index_id
+	| ident_all ':' index_id
+		{
+			pParser->ToString (pParser->m_pStmt->m_sCluster, $1);
+			$$ = $3;
+		}
+	;
+
 /// indexes
 only_one_index:
 	one_index
 		{
 			pParser->SetIndex ($1);
-		}
-	;
-
-one_index:
-	ident_all
-	| ident_all ':' ident_all
-		{
-			pParser->ToString (pParser->m_pStmt->m_sCluster, $1);
-			$$ = $3;
 		}
 	;
 
@@ -207,7 +216,7 @@ set_global_stmt:
 			pParser->SetStatement ( $3, SET_GLOBAL_SVAR );
 			pParser->m_pStmt->m_iSetValue = $5.GetValueInt();
 		}
-	| TOK_SET index_or_table ident_all TOK_GLOBAL ident '=' '(' const_list ')'
+	| TOK_SET index_or_table index_id TOK_GLOBAL ident '=' '(' const_list ')'
 		{
 			pParser->SetStatement ( $5, SET_INDEX_UVAR, $8.m_iValues );
 			pParser->ToString ( pParser->m_pStmt->m_sIndex, $3 );
@@ -326,7 +335,7 @@ opt_with_reconfigure:
 ////////////////////////////////////////////////////////////
 
 attach_index:
-	TOK_ATTACH index_or_table ident_all TOK_TO rtindex ident_all opt_with_truncate
+	TOK_ATTACH index_or_table ident_all TOK_TO rtindex index_id opt_with_truncate
 		{
 			SqlStmt_t & tStmt = *pParser->m_pStmt;
 			tStmt.m_eStmt = STMT_ATTACH_INDEX;
@@ -345,7 +354,7 @@ opt_with_truncate:
 //////////////////////////////////////////////////////////////////////////
 
 flush_rtindex:
-	TOK_FLUSH rtindex ident_all
+	TOK_FLUSH rtindex index_id
 		{
 			SqlStmt_t & tStmt = *pParser->m_pStmt;
 			tStmt.m_eStmt = STMT_FLUSH_RTINDEX;
@@ -354,7 +363,7 @@ flush_rtindex:
 	;
 
 flush_ramchunk:
-	TOK_FLUSH TOK_RAMCHUNK ident_all
+	TOK_FLUSH TOK_RAMCHUNK index_id
 		{
 			SqlStmt_t & tStmt = *pParser->m_pStmt;
 			tStmt.m_eStmt = STMT_FLUSH_RAMCHUNK;

@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2017-2024, Manticore Software LTD (https://manticoresearch.com)
+// Copyright (c) 2017-2025, Manticore Software LTD (https://manticoresearch.com)
 // Copyright (c) 2001-2016, Andrew Aksyonoff
 // Copyright (c) 2008-2016, Sphinx Technologies Inc
 // All rights reserved
@@ -160,6 +160,8 @@ enum SqlStmt_e
 	STMT_ALTER_REBUILD_SI,
 	STMT_KILL,
 	STMT_SHOW_LOCKS,
+	STMT_SHOW_SCROLL,
+	STMT_SHOW_TABLE_INDEXES,
 
 	STMT_TOTAL
 };
@@ -226,7 +228,7 @@ struct SqlStmt_t
 
 											   // SELECT specific
 	CSphQuery				m_tQuery;
-	std::unique_ptr<ISphTableFunc>			m_pTableFunc;
+	std::unique_ptr<ISphTableFunc> m_pTableFunc;
 
 	CSphString				m_sTableFunc;
 	StrVec_t				m_dTableFuncArgs;
@@ -286,6 +288,9 @@ public:
 	int						m_iThreadsCols = -1;
 	CSphString				m_sThreadFormat;
 
+	// JOIN-specific
+	CSphQuery				m_tJoinQueryOptions;
+
 	// generic parameter, different meanings in different statements
 	// filter pattern in DESCRIBE, SHOW TABLES / META / VARIABLES
 	// target index name in ATTACH
@@ -303,6 +308,7 @@ public:
 
 	CSphVector<CSphString>	m_dStringSubkeys;
 	CSphVector<int64_t>		m_dIntSubkeys;
+	bool					m_bForce = false;
 
 	std::unique_ptr<DebugCmd::DebugCommand_t> m_pDebugCmd;
 
@@ -335,8 +341,6 @@ enum class Option_e : BYTE;
 
 class SqlParserTraits_c : ISphNoncopyable
 {
-	bool m_bWrongParserSyntaxError = false;
-
 public:
 	const char *	m_pBuf;
 	CSphString *	m_pParseError;
@@ -364,14 +368,21 @@ public:
 	AttrValueVec_t&	GetMvaVec (int iIdx) const noexcept;
 	AttrValues_p	CloneMvaVecPtr ( int iIdx ) const noexcept;
 
+	void			SetDefaultTableForOptions();
+	bool			SetTableForOptions ( const SqlNode_t & tNode );
+
 protected:
-	CSphVector<SqlStmt_t> &	m_dStmt;
-	CSphVector<AttrValueVec_t> m_dMultiValues;
+	CSphVector<SqlStmt_t> &		m_dStmt;
+	CSphVector<AttrValueVec_t>	m_dMultiValues;
+	CSphQuery *					m_pQueryForOptions = nullptr;
 
 					SqlParserTraits_c ( CSphVector<SqlStmt_t> &	dStmt, const char* szQuery, CSphString* pError );
 
 	bool			CheckInteger ( const CSphString& sOpt, const CSphString& sVal ) const;
 	virtual bool	CheckOption ( Option_e eOption ) const;
+
+private:
+	bool m_bWrongParserSyntaxError = false;
 };
 
 
@@ -379,6 +390,7 @@ bool	sphParseSqlQuery ( Str_t sQuery, CSphVector<SqlStmt_t> & dStmt, CSphString 
 bool	PercolateParseFilters ( const char * sFilters, ESphCollation eCollation, const CSphSchema & tSchema, CSphVector<CSphFilterSettings> & dFilters, CSphVector<FilterTreeItem_t> & dFilterTree, CSphString & sError );
 void	SqlParser_SplitClusterIndex ( CSphString & sIndex, CSphString * pCluster );
 void	InitParserOption();
+bool	FormatScrollSettings ( const AggrResult_t & tAggrRes, const CSphQuery & tQuery, CSphString & sSettings );
 
 enum class AddOption_e
 {
@@ -387,7 +399,7 @@ enum class AddOption_e
 	FAILED
 };
 
-AddOption_e AddOption ( CSphQuery & tQuery, const CSphString & sOpt, const CSphString & sVal, const std::function<CSphString ()> & fnGetUnescaped, SqlStmt_e eStmt, CSphString & sError );
+AddOption_e AddOption ( CSphQuery & tQuery, const CSphString & sOpt, const CSphString & sVal, const CSphString & sValOrig, const std::function<CSphString ()> & fnGetUnescaped, SqlStmt_e eStmt, CSphString & sError );
 AddOption_e AddOption ( CSphQuery & tQuery, const CSphString & sOpt, const CSphString & sValue, int64_t iValue, SqlStmt_e eStmt, CSphString & sError );
 AddOption_e AddOption ( CSphQuery & tQuery, const CSphString & sOpt, CSphVector<CSphNamedInt> & dNamed, SqlStmt_e eStmt, CSphString & sError );
 AddOption_e AddOptionRanker ( CSphQuery & tQuery, const CSphString & sOpt, const CSphString & sVal, const std::function<CSphString ()> & fnGetUnescaped, SqlStmt_e eStmt, CSphString & sError );

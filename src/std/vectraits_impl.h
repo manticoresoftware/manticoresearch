@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2017-2024, Manticore Software LTD (https://manticoresearch.com)
+// Copyright (c) 2017-2025, Manticore Software LTD (https://manticoresearch.com)
 // Copyright (c) 2001-2016, Andrew Aksyonoff
 // Copyright (c) 2008-2016, Sphinx Technologies Inc
 // All rights reserved
@@ -92,13 +92,13 @@ T* VecTraits_T<T>::End() const
 
 /// make happy C++11 ranged for loops
 template<typename T>
-T* VecTraits_T<T>::begin() const
+T* VecTraits_T<T>::begin() const noexcept
 {
 	return Begin();
 }
 
 template<typename T>
-T* VecTraits_T<T>::end() const
+T* VecTraits_T<T>::end() const noexcept
 {
 	return m_iCount ? m_pData + m_iCount : nullptr;
 }

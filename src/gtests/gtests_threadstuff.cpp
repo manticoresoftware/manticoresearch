@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2019-2024, Manticore Software LTD (https://manticoresearch.com)
+// Copyright (c) 2019-2025, Manticore Software LTD (https://manticoresearch.com)
 // All rights reserved
 //
 // This program is free software; you can redistribute it and/or modify
@@ -205,7 +205,7 @@ struct essence_t
 	int iRefs = 0;
 };
 
-struct thread_t
+struct tstthread_t
 {
 	Threads::RoledSchedulerSharedPtr_t strandr;
 	std::atomic<int> iWorks {0};
@@ -216,7 +216,7 @@ static const int NUMS = 10;
 
 const char* names[NWORKERS] = {"w1","w2","w3","w4","w5"};
 
-void print_owners ( thread_t * pthreads )
+void print_owners ( tstthread_t * pthreads )
 {
 	std::cout << "[";
 	for ( int i = 0; i<NWORKERS; ++i )
@@ -224,7 +224,7 @@ void print_owners ( thread_t * pthreads )
 	std::cout << "]";
 }
 
-int getworker ( int N, thread_t* pthreads )
+int getworker ( int N, tstthread_t* pthreads )
 {
 	using namespace Threads;
 	int iIdx=0;
@@ -247,7 +247,7 @@ int getworker ( int N, thread_t* pthreads )
 	return iIdx;
 }
 
-void bind_resource ( int N, essence_t* presource, int iResource, thread_t * pthreads, int iWorker )
+void bind_resource ( int N, essence_t* presource, int iResource, tstthread_t * pthreads, int iWorker )
 {
 	auto& resource = presource[iResource];
 	if ( resource.iOwner!=iWorker )

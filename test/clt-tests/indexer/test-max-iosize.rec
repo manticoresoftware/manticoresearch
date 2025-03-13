@@ -1,0 +1,27 @@
+––– block: ../base/start-searchd –––
+––– input –––
+for n in $(seq 1 10000); do echo "$n,abc"; done > /tmp/csv
+––– output –––
+––– input –––
+echo -e 'indexer {\n    max_iops = 100\n}\nsource src {\n    type = csvpipe\n    csvpipe_command = cat /tmp/csv\n    csvpipe_field = f\n}\n\nindex idx {\n    type = plain\n    source = src\n    path = /tmp/idx\n}' > plain_min.conf
+––– output –––
+––– input –––
+cat plain_min.conf
+––– output –––
+ indexer {
+ max_iops = 100
+ }
+ source src {
+ type = csvpipe
+ csvpipe_command = cat /tmp/csv
+ csvpipe_field = f
+ }
+ index idx {
+ type = plain
+ source = src
+ path = /tmp/idx
+ }
+––– input –––
+indexer -c plain_min.conf idx|grep reads|awk '{print $2}'
+––– output –––
+ 3

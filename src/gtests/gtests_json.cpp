@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2017-2024, Manticore Software LTD (https://manticoresearch.com)
+// Copyright (c) 2017-2025, Manticore Software LTD (https://manticoresearch.com)
 // All rights reserved
 //
 // This program is free software; you can redistribute it and/or modify
@@ -1147,7 +1147,7 @@ TEST ( Bson_iterate, _string )
 }
 
 // function placed in searchd.cpp, near line 2700. Here is direct copy-paste for testing only.
-namespace {
+namespace tst {
 CSphString RemoveBackQuotes ( const char * pSrc )
 {
 	CSphString sResult;
@@ -1182,29 +1182,29 @@ CSphString RemoveBackQuotes ( const char * pSrc )
 
 TEST (b, backquote)
 {
-	ASSERT_STREQ( "", RemoveBackQuotes ( nullptr ).scstr () );
+	ASSERT_STREQ( "", tst::RemoveBackQuotes ( nullptr ).scstr () );
 	char c = '\0';
-	ASSERT_STREQ( "", RemoveBackQuotes ( &c ).scstr () );
-	ASSERT_STREQ( "", RemoveBackQuotes ( "" ).scstr () );
-	ASSERT_STREQ( "", RemoveBackQuotes ( "`" ).scstr () );
-	ASSERT_STREQ( "", RemoveBackQuotes ( "``" ).scstr () );
-	ASSERT_STREQ( "", RemoveBackQuotes ( "```" ).scstr () );
+	ASSERT_STREQ( "", tst::RemoveBackQuotes ( &c ).scstr () );
+	ASSERT_STREQ( "", tst::RemoveBackQuotes ( "" ).scstr () );
+	ASSERT_STREQ( "", tst::RemoveBackQuotes ( "`" ).scstr () );
+	ASSERT_STREQ( "", tst::RemoveBackQuotes ( "``" ).scstr () );
+	ASSERT_STREQ( "", tst::RemoveBackQuotes ( "```" ).scstr () );
 
-	ASSERT_STREQ( "a", RemoveBackQuotes ( "a" ).scstr () );
-	ASSERT_STREQ( "a", RemoveBackQuotes ( "a`" ).scstr () );
-	ASSERT_STREQ( "a", RemoveBackQuotes ( "a``" ).scstr () );
-	ASSERT_STREQ( "a", RemoveBackQuotes ( "a```" ).scstr () );
+	ASSERT_STREQ( "a", tst::RemoveBackQuotes ( "a" ).scstr () );
+	ASSERT_STREQ( "a", tst::RemoveBackQuotes ( "a`" ).scstr () );
+	ASSERT_STREQ( "a", tst::RemoveBackQuotes ( "a``" ).scstr () );
+	ASSERT_STREQ( "a", tst::RemoveBackQuotes ( "a```" ).scstr () );
 
-	ASSERT_STREQ( "aa", RemoveBackQuotes ( "a`a" ).scstr () );
-	ASSERT_STREQ( "aa", RemoveBackQuotes ( "a``a" ).scstr () );
-	ASSERT_STREQ( "aa", RemoveBackQuotes ( "a```a" ).scstr () );
+	ASSERT_STREQ( "aa", tst::RemoveBackQuotes ( "a`a" ).scstr () );
+	ASSERT_STREQ( "aa", tst::RemoveBackQuotes ( "a``a" ).scstr () );
+	ASSERT_STREQ( "aa", tst::RemoveBackQuotes ( "a```a" ).scstr () );
 
-	ASSERT_STREQ( "a", RemoveBackQuotes ( "`a" ).scstr () );
-	ASSERT_STREQ( "a", RemoveBackQuotes ( "``a" ).scstr () );
-	ASSERT_STREQ( "a", RemoveBackQuotes ( "```a" ).scstr () );
+	ASSERT_STREQ( "a", tst::RemoveBackQuotes ( "`a" ).scstr () );
+	ASSERT_STREQ( "a", tst::RemoveBackQuotes ( "``a" ).scstr () );
+	ASSERT_STREQ( "a", tst::RemoveBackQuotes ( "```a" ).scstr () );
 
-	ASSERT_STREQ( "a", RemoveBackQuotes ( "``a`" ).scstr () );
-	ASSERT_STREQ( "a", RemoveBackQuotes ( "```a``" ).scstr () );
+	ASSERT_STREQ( "a", tst::RemoveBackQuotes ( "``a`" ).scstr () );
+	ASSERT_STREQ( "a", tst::RemoveBackQuotes ( "```a``" ).scstr () );
 }
 
 class TBson : public ::testing::Test

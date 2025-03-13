@@ -1,0 +1,126 @@
+––– input –––
+export INSTANCE=1
+––– output –––
+––– block: ../base/replication/start-searchd-precach –––
+––– input –––
+export INSTANCE=2
+––– output –––
+––– block: ../base/replication/start-searchd-precach –––
+––– input –––
+export CLUSTER_NAME=c
+––– output –––
+––– block: ../base/replication/create-cluster –––
+––– block: ../base/replication/join-cluster-on-all-nodes –––
+––– input –––
+mysql -h0 -P1306 -e "create table ${CLUSTER_NAME}:tbl1(id bigint) shards=3 rf=2;"; echo $?;
+––– output –––
+0
+––– input –––
+echo "=== Node 1306 ==="; mysql -h0 -P1306 -e "SHOW TABLES\G" || echo "Node 1306 failed!"; echo "=== Node 2306 ==="; mysql -h0 -P2306 -e "SHOW TABLES\G" || echo "Node 2306 failed!"
+––– output –––
+=== Node 1306 ===
+*************************** 1. row ***************************
+Table: tbl1
+Type: distributed
+=== Node 2306 ===
+*************************** 1. row ***************************
+Table: tbl1
+Type: distributed
+––– input –––
+mysql -h0 -P1306 -e "DROP TABLE ${CLUSTER_NAME}:tbl1;"; echo $?;
+––– output –––
+0
+––– input –––
+echo "=== Node 1306 ==="; mysql -h0 -P1306 -e "SHOW TABLES\G" || echo "Node 1306 failed!"; echo "=== Node 2306 ==="; mysql -h0 -P2306 -e "SHOW TABLES\G" || echo "Node 2306 failed!"
+––– output –––
+=== Node 1306 ===
+=== Node 2306 ===
+––– input –––
+mysql -h0 -P1306 -e "create table ${CLUSTER_NAME}:Tbl2(id bigint) shards=3 rf=1;"; echo $?
+––– output –––
+0
+––– input –––
+echo "=== Node 1306 ==="; mysql -h0 -P1306 -e "SHOW TABLES\G" || echo "Node 1306 failed!"; echo "=== Node 2306 ==="; mysql -h0 -P2306 -e "SHOW TABLES\G" || echo "Node 2306 failed!"
+––– output –––
+=== Node 1306 ===
+*************************** 1. row ***************************
+Table: tbl2
+Type: distributed
+=== Node 2306 ===
+*************************** 1. row ***************************
+Table: tbl2
+Type: distributed
+––– input –––
+mysql -h0 -P1306 -e "DROP TABLE ${CLUSTER_NAME}:Tbl2;"; echo $?
+––– output –––
+0
+––– input –––
+echo "=== Node 1306 ==="; mysql -h0 -P1306 -e "SHOW TABLES\G" || echo "Node 1306 failed!"; echo "=== Node 2306 ==="; mysql -h0 -P2306 -e "SHOW TABLES\G" || echo "Node 2306 failed!"
+––– output –––
+=== Node 1306 ===
+=== Node 2306 ===
+––– input –––
+mysql -h0 -P1306 -e "create table ${CLUSTER_NAME}:tbl_missing_type(id) shards=3 rf=1;"
+––– output –––
+––– input –––
+echo "=== Node 1306 ==="; mysql -h0 -P1306 -e "SHOW TABLES\G" || echo "Node 1306 failed!"; echo "=== Node 2306 ==="; mysql -h0 -P2306 -e "SHOW TABLES\G" || echo "Node 2306 failed!"
+––– output –––
+=== Node 1306 ===
+*************************** 1. row ***************************
+Table: tbl_missing_type
+Type: distributed
+=== Node 2306 ===
+*************************** 1. row ***************************
+Table: tbl_missing_type
+Type: distributed
+––– input –––
+mysql -h0 -P1306 -e "DROP TABLE ${CLUSTER_NAME}:tbl_missing_type;"; echo $?
+––– output –––
+0
+––– input –––
+echo "=== Node 1306 ==="; mysql -h0 -P1306 -e "SHOW TABLES\G" || echo "Node 1306 failed!"; echo "=== Node 2306 ==="; mysql -h0 -P2306 -e "SHOW TABLES\G" || echo "Node 2306 failed!"
+––– output –––
+=== Node 1306 ===
+=== Node 2306 ===
+––– input –––
+LONG_TABLE_NAME=$(printf "tbl%065d" 1)
+––– output –––
+––– input –––
+mysql -h0 -P1306 -e "create table ${CLUSTER_NAME}:${LONG_TABLE_NAME}(id bigint) shards=3 rf=1;"
+––– output –––
+––– input –––
+echo "=== Node 1306 ==="; mysql -h0 -P1306 -e "SHOW TABLES\G" || echo "Node 1306 failed!"; echo "=== Node 2306 ==="; mysql -h0 -P2306 -e "SHOW TABLES\G" || echo "Node 2306 failed!"
+––– output –––
+=== Node 1306 ===
+*************************** 1. row ***************************
+Table: tbl00000000000000000000000000000000000000000000000000000000000000001
+Type: distributed
+=== Node 2306 ===
+*************************** 1. row ***************************
+Table: tbl00000000000000000000000000000000000000000000000000000000000000001
+Type: distributed
+––– input –––
+mysql -h0 -P1306 -e "DROP TABLE ${CLUSTER_NAME}:${LONG_TABLE_NAME};"
+––– output –––
+––– input –––
+echo "=== Node 1306 ==="; mysql -h0 -P1306 -e "SHOW TABLES\G" || echo "Node 1306 failed!"; echo "=== Node 2306 ==="; mysql -h0 -P2306 -e "SHOW TABLES\G" || echo "Node 2306 failed!"
+––– output –––
+=== Node 1306 ===
+=== Node 2306 ===
+––– input –––
+mysql -h0 -P1306 -e "DROP TABLE ${CLUSTER_NAME}:nonexistent_table;"
+––– output –––
+ERROR 1064 (42000) at line 1: table 'nonexistent_table' is missing: DROP TABLE failed: table 'nonexistent_table' must exist
+––– input –––
+mysql -h0 -P1306 -e "DROP TABLE nonexistent_cluster:tbl1;"
+––– output –––
+ERROR 1064 (42000) at line 1: table 'tbl1' is missing: DROP TABLE failed: table 'tbl1' must exist
+––– input –––
+mysql -h0 -P1306 -e "DROP TABLE ${CLUSTER_NAME}:tbl1;"
+––– output –––
+ERROR 1064 (42000) at line 1: table 'tbl1' is missing: DROP TABLE failed: table 'tbl1' must exist
+––– input –––
+mysql -h0 -P1306 -e "INSERT INTO ${CLUSTER_NAME}:tbl1 VALUES (1);" & sleep 1; mysql -h0 -P1306 -e "DROP TABLE ${CLUSTER_NAME}:tbl1;"
+––– output –––
+ERROR 1064 (42000) at line 1: Cannot create table with column names missing
+ERROR 1064 (42000) at line 1: table 'tbl1' is missing: DROP TABLE failed: table 'tbl1' must exist

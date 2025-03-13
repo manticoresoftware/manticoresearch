@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2017-2024, Manticore Software LTD (https://manticoresearch.com)
+// Copyright (c) 2017-2025, Manticore Software LTD (https://manticoresearch.com)
 // Copyright (c) 2001-2016, Andrew Aksyonoff
 // Copyright (c) 2008-2016, Sphinx Technologies Inc
 // All rights reserved
@@ -487,6 +487,23 @@ const int DEFAULT_QUERY_TIMEOUT = 0;
 const int DEFAULT_QUERY_RETRY = -1;
 const int DEFAULT_QUERY_EXPANSION_LIMIT = -1;
 
+struct ScrollAttr_t
+{
+	CSphString	m_sSortAttr;
+	bool		m_bDesc = true;
+	ESphAttr	m_eType = SPH_ATTR_INTEGER;
+	SphAttr_t	m_tValue = 0;
+	float		m_fValue = 0.0f;
+	CSphString	m_sValue;
+};
+
+struct ScrollSettings_t
+{
+	CSphString					m_sSortBy;
+	bool						m_bRequested = true;
+	CSphVector<ScrollAttr_t>	m_dAttrs;
+};
+
 /// search query. Pure struct, no member functions
 struct CSphQuery
 {
@@ -515,9 +532,11 @@ struct CSphQuery
 
 	JiebaMode_e		m_eJiebaMode = JiebaMode_e::NONE;	///< separate optional jieba mode for searches
 
+	ScrollSettings_t m_tScrollSettings;
+
 	bool			m_bSortKbuffer = false;		///< whether to use PQ or K-buffer sorting algorithm
 	bool			m_bZSlist = false;			///< whether the ranker has to fetch the zonespanlist with this query
-	bool			m_bSimplify = false;		///< whether to apply boolean simplification
+	bool			m_bSimplify = true;			///< whether to apply boolean simplification
 	bool			m_bPlainIDF = false;		///< whether to use PlainIDF=log(N/n) or NormalizedIDF=log((N-n+1)/n)
 	bool			m_bGlobalIDF = false;		///< whether to use local indexes or a global idf file
 	bool			m_bNormalizedTFIDF = true;	///< whether to scale IDFs by query word count, so that TF*IDF is normalized
@@ -545,6 +564,7 @@ struct CSphQuery
 	CSphString		m_sJoinIdx;						///< index to perform join on
 	CSphString		m_sJoinQuery;					///< fulltext query for JOIN
 	CSphVector<OnFilter_t> m_dOnFilters;			///< JOIN ON condition filters
+	int				m_iJoinBatchSize = -1;			///< join batch size (-1==default, 0==disable batching)
 
 	CSphString		m_sGroupBy;			///< group-by attribute name(s)
 	CSphString		m_sFacetBy;			///< facet-by attribute name(s)
@@ -691,6 +711,7 @@ public:
 	CSphString				m_sError;				///< error message
 	CSphString				m_sWarning;				///< warning message
 	QueryProfile_c *		m_pProfile		= nullptr;	///< filled when query profiling is enabled; NULL otherwise
+	CSphString				m_sScroll;				///< data to continue scroll
 
 	IteratorStats_t			m_tIteratorStats;		///< iterators used while calculating the query
 	bool					m_bBigram = false;		///< whatever to remove bigram symbol on adding word to stat
@@ -1288,8 +1309,8 @@ public:
 
 	// used for query optimizer calibration
 	virtual HistogramContainer_c * Debug_GetHistograms() const { return nullptr; }
-	virtual const SIContainer_c *	Debug_GetSI() const { return nullptr; }
 
+	virtual const SIContainer_c *	GetSI() const { return nullptr; }
 	virtual Docstore_i *			GetDocstore() const { return nullptr; }
 	virtual columnar::Columnar_i *	GetColumnar() const { return nullptr; }
 	virtual const DWORD *			GetRawAttrs() const { return nullptr; }

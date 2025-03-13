@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2017-2024, Manticore Software LTD (https://manticoresearch.com)
+// Copyright (c) 2017-2025, Manticore Software LTD (https://manticoresearch.com)
 // Copyright (c) 2001-2016, Andrew Aksyonoff
 // Copyright (c) 2008-2016, Sphinx Technologies Inc
 // All rights reserved
@@ -161,7 +161,7 @@ uint64_t ISphTokenizer::GetSettingsFNV() const noexcept
 	uHash = sphFNV64 ( &m_tSettings.m_iNgramLen, sizeof ( m_tSettings.m_iNgramLen ), uHash );
 
 	if ( !m_tSynFileInfo.m_sFilename.IsEmpty() )
-		uHash = sphFNV64 ( m_tSynFileInfo.m_sFilename.cstr(), m_tSynFileInfo.m_sFilename.Length(), uHash );
+		uHash = sphFNV64 ( &m_tSynFileInfo.m_uCRC32, sizeof ( m_tSynFileInfo.m_uCRC32 ), uHash );
 
 	return uHash;
 }

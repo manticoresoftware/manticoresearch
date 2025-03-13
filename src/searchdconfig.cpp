@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2017-2024, Manticore Software LTD (https://manticoresearch.com)
+// Copyright (c) 2017-2025, Manticore Software LTD (https://manticoresearch.com)
 // All rights reserved
 //
 // This program is free software; you can redistribute it and/or modify
@@ -95,13 +95,13 @@ void ModifyDaemonPaths ( CSphConfigSection & hSearchd, FixPathAbsolute_fn && fnP
 		hSearchd.AddEntry ( szBinlogKey, sBinlogDir.cstr() );
 	}
 
-	if ( fnPathFix && hSearchd.Exists ( szBinlogKey ) )
-	{
-		CSphString sBinlogPath ( hSearchd.GetStr( szBinlogKey ) );
-		fnPathFix ( sBinlogPath );
-		hSearchd.Delete ( szBinlogKey );
-		hSearchd.AddEntry ( szBinlogKey, sBinlogPath.cstr() );
-	}
+	if ( !fnPathFix )
+		return;
+
+	CSphString sBinlogPath ( hSearchd.GetStr( szBinlogKey ) );
+	fnPathFix ( sBinlogPath );
+	hSearchd.Delete ( szBinlogKey );
+	hSearchd.AddEntry ( szBinlogKey, sBinlogPath.cstr() );
 }
 
 
@@ -996,6 +996,7 @@ static std::optional<JsonObj_c> ReadJsonHeader ( const CSphString & sFilename, C
 	if ( !tFile.Read ( sMeta.Begin(), iSize, sError ) )
 		return std::nullopt;
 
+	sMeta[iSize] = sMeta[iSize + 1] = '\0';
 	JsonObj_c tMeta ( sMeta );
 	if ( tMeta.GetError ( sMeta.Begin(), iSize, sError ) )
 		return std::nullopt;
@@ -1326,13 +1327,13 @@ static void DeleteExtraIndexFiles ( CSphIndex * pIndex, const StrVec_t * pExtFil
 }
 
 
-static void DeleteRtIndex ( CSphIndex * pIdx, const StrVec_t * pExtFiles )
+static void DeleteRtIndex ( CSphIndex * pIdx, const StrVec_t * pExtFiles, Handler fnOnDestroy )
 {
 	assert ( IsConfigless() );
 	if ( !pIdx->IsRT() && !pIdx->IsPQ() )
 		return;
 	auto pRt = static_cast<RtIndex_i*> ( pIdx );
-	pRt->IndexDeleted();
+	pRt->IndexDeleted ( std::move ( fnOnDestroy ) );
 	DeleteExtraIndexFiles ( pRt, pExtFiles );
 }
 
@@ -1351,7 +1352,7 @@ static void RemoveAndDeleteRtIndex ( const CSphString& sIndex )
 		return;
 
 	WIdx_c pIdx { pServed };
-	DeleteRtIndex ( pIdx, nullptr );
+	DeleteRtIndex ( pIdx, nullptr, nullptr );
 	g_pLocalIndexes->Delete ( sIndex );
 }
 
@@ -1407,7 +1408,7 @@ bool CreateNewIndexConfigless ( const CSphString & sIndex, const CreateTableSett
 			FixupIndexTID ( UnlockedHazardIdxFromServed ( *pDesc ), Binlog::LastTidFor ( sIndex ) );
 			if ( !PreallocNewIndex ( *pDesc, &hCfg, sIndex.cstr(), dWarnings, sError ) )
 			{
-				DeleteRtIndex ( UnlockedHazardIdxFromServed ( *pDesc ), nullptr );
+				DeleteRtIndex ( UnlockedHazardIdxFromServed ( *pDesc ), nullptr, nullptr );
 				return false;
 			}
 		}
@@ -1481,7 +1482,7 @@ bool AddExistingIndexConfigless ( const CSphString & sIndex, IndexType_e eType, 
 }
 
 
-static bool DropDistrIndex ( const CSphString & sIndex, CSphString & sError )
+static bool DropDistrIndex ( const CSphString & sIndex, bool bForce, CSphString & sError )
 {
 	assert ( IsConfigless() );
 	auto pDistr = GetDistr(sIndex);
@@ -1490,6 +1491,13 @@ static bool DropDistrIndex ( const CSphString & sIndex, CSphString & sError )
 		sError.SetSprintf ( "DROP TABLE failed: unknown distributed table '%s'", sIndex.cstr() );
 		return false;
 	}
+
+	if ( IsDistrTableHasSystem ( *pDistr, bForce ) )
+	{
+		sError.SetSprintf ( "can not drop table '%s' because it contains system table", sIndex.cstr() );
+		return false;
+	}
+
 
 	if ( !pDistr->m_sCluster.IsEmpty() )
 	{
@@ -1554,7 +1562,7 @@ static bool ReportEmptyDir ( const CSphString & sIndexName, CSphString * pMsg )
 	return false;
 }
 
-static bool DropLocalIndex ( const CSphString & sIndex, CSphString & sError, CSphString * pWarning )
+static bool DropLocalIndexWithCb ( const CSphString & sIndex, CSphString & sError, CSphString * pWarning, Handler fnOnDestroy=nullptr )
 {
 	assert ( IsConfigless() );
 	auto pServed = GetServed(sIndex);
@@ -1593,7 +1601,7 @@ static bool DropLocalIndex ( const CSphString & sIndex, CSphString & sError, CSp
 		if ( !pRt->Truncate(sError, RtIndex_i::DROP ) )
 			return false;
 
-		DeleteRtIndex ( pRt, &dExtFiles );
+		DeleteRtIndex ( pRt, &dExtFiles, std::move ( fnOnDestroy ) );
 		RemoveConfigIndex ( sIndex );
 	}
 
@@ -1601,15 +1609,27 @@ static bool DropLocalIndex ( const CSphString & sIndex, CSphString & sError, CSp
 	return true;
 }
 
+static bool DropLocalIndex ( const CSphString& sIndex, CSphString& sError, CSphString* pWarning )
+{
+	if ( !IsInsideCoroutine() )
+		return DropLocalIndexWithCb ( sIndex, sError, pWarning );
 
-bool DropIndexInt ( const CSphString & sIndex, bool bIfExists, CSphString & sError, CSphString * pWarning )
+	Coro::Waitable_T<bool> bDestroyed { false };
+	if ( !DropLocalIndexWithCb ( sIndex, sError, pWarning, [&bDestroyed] { bDestroyed.SetValueAndNotifyOne ( true ); } ) )
+		return false;
+	bDestroyed.Wait ( [] ( bool bVal ) { return bVal; } );
+	return true;
+}
+
+
+bool DropIndexInt ( const CSphString & sIndex, bool bIfExists, bool bForce, CSphString & sError, CSphString * pWarning )
 {
 	assert ( IsConfigless() );
 	bool bLocal = GetServed ( sIndex );
 	bool bDistr = GetDistr ( sIndex );
 	if ( bDistr )
 	{
-		if ( !DropDistrIndex ( sIndex, sError ) )
+		if ( !DropDistrIndex ( sIndex, bForce, sError ) )
 			return false;
 	}
 	else if ( bLocal )
@@ -1672,3 +1692,27 @@ IndexDescDistr_t GetDistributedDesc ( const DistributedIndex_t & tDist )
 	return tIndex;
 }
 
+static const char * g_sTableNameSystem = "system.";
+
+bool IsDistrTableHasSystem ( const DistributedIndex_t & tDistr, bool bForce )
+{
+	if ( bForce )
+		return false;
+
+	for ( const auto & sName : tDistr.m_dLocal )
+	{
+		if ( sName.Begins ( g_sTableNameSystem ) )
+			return true;
+	}
+
+	for ( const auto & pAgent : tDistr.m_dAgents )
+	{
+		for ( const AgentDesc_t & tDesc : *pAgent )
+		{
+			if ( strstr ( tDesc.m_sIndexes.cstr(), g_sTableNameSystem )!=nullptr )
+				return true;
+		}
+	}
+
+	return false;
+}

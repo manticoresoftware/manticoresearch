@@ -1,4 +1,4 @@
-––– block: ../base/start-searchd –––
+––– block: ../base/start-searchd-with-buddy –––
 ––– input –––
 apt-get install jq -y > /dev/null; echo $?
 ––– output –––

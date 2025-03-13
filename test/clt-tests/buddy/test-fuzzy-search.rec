@@ -1,4 +1,4 @@
-––– block: ../base/start-searchd –––
+––– block: ../base/start-searchd-with-buddy –––
 ––– input –––
 apt-get update -y > /dev/null; echo $?
 ––– output –––
@@ -9,13 +9,20 @@ apt-get install jq -y > /dev/null; echo $?
 debconf: delaying package configuration, since apt-utils is not installed
 0
 ––– input –––
-php -d memory_limit=2G ./test/clt-tests/scripts/load_names_attr.php --batch-size=100000 --concurrency=4 --docs=1000000 --start-id=1 --min-infix-len=2 > /dev/null; echo $?
+php -d memory_limit=2G ./test/clt-tests/scripts/load_names_attr.php --batch-size=100000 --concurrency=1 --docs=1000000 --start-id=1 --min-infix-len=2 > /dev/null; echo $?
 ––– output –––
 0
 ––– input –––
-mysql -h0 -P9306 -e "SHOW CREATE TABLE name;" | grep "min_infix_len='2'" | sed "s/.*\(min_infix_len='2'\).*/\1/"
+mysql -h0 -P9306 -e "SELECT * FROM name ORDER BY id ASC LIMIT 1000000 OPTION max_matches=1000000;" > /tmp/name_data.txt
 ––– output –––
-min_infix_len='2'
+––– input –––
+md5sum /tmp/name_data.txt
+––– output –––
+1995eec70e60c584bc35ff0688556b94  /tmp/name_data.txt
+––– input –––
+mysql -h0 -P9306 -e "SHOW CREATE TABLE name;" | grep "min_infix_len='2'" | sed "s/.\(min_infix_len='2'\)./\1/"
+––– output –––
+)min_infix_len='2'expand_keywords='1' |
 ––– input –––
 mysql -h0 -P9306 -e "SELECT COUNT(*) FROM name;"
 ––– output –––
@@ -30,564 +37,593 @@ mysql -h0 -P9306 -e "OPTIMIZE TABLE name OPTION sync=1;"
 ––– input –––
 mysql -h0 -P9306 -e "SELECT * FROM name WHERE MATCH('RICH') ORDER BY id ASC, username ASC OPTION fuzzy=1;"
 ––– output –––
-+------+-------------------+------+
-| id   | username          | s    |
-+------+-------------------+------+
-|  196 | BRICE MULLIN      | a    |
-|  307 | GRICELDA SKELTON  | a    |
-|  363 | LAURICE SOLIZ     | a    |
-|  478 | ERICH LLAMAS      | a    |
-|  490 | LATRICE MANCILLA  | a    |
-|  608 | MAURICE PRATHER   | a    |
-|  659 | BRICE OLIVARES    | a    |
-|  697 | PATRICE WOOD      | a    |
-|  822 | JUNITA RICHARD    | a    |
-|  835 | AUREA RICO        | a    |
-|  854 | ROXANNE BRICE     | a    |
-| 1122 | RICH MOLL         | a    |
-| 1134 | JOELLA RICHARD    | a    |
-| 1160 | MINDY HEINRICH    | a    |
-| 1224 | YADIRA RICHARDSON | a    |
-| 1379 | BRICE ALLMAN      | a    |
-| 1574 | RICO VALENZUELA   | a    |
-| 1602 | BEATRICE LOVE     | a    |
-| 1822 | RICHELLE ROE      | a    |
-| 2136 | CHIQUITA RICHTER  | a    |
-+------+-------------------+------+
++------+---------------------+------+
+| id   | username            | s    |
++------+---------------------+------+
+|   43 | KOURTNEY RICHARDSON | a    |
+|  125 | ELAINA RICHARDSON   | a    |
+|  226 | RICHARD ZAMARRIPA   | a    |
+|  363 | MAYRA RICO          | a    |
+|  840 | RICO MCFADDEN       | a    |
+|  855 | RICHARD ALDRIDGE    | a    |
+|  934 | VALERY RICH         | a    |
+|  948 | REGINE ALDRICH      | a    |
+| 1017 | HEE TRICE           | a    |
+| 1624 | OLEVIA RICHARDS     | a    |
+| 1816 | MAURICE BARCLAY     | a    |
+| 2228 | THERESIA RICHARDS   | a    |
+| 2670 | JULIANA GRICE       | a    |
+| 2918 | GRICELDA WHELAN     | a    |
+| 3012 | RICHARD MCCURDY     | a    |
+| 3147 | MERRILEE ALDRICH    | a    |
+| 3262 | FONDA RICHEY        | a    |
+| 3431 | MELANY RICHARD      | a    |
+| 3438 | JOVAN ALDRICH       | a    |
+| 3517 | BRICE LONGORIA      | a    |
++------+---------------------+------+
 ––– input –––
 mysql -h0 -P9306 -e "SELECT * FROM name WHERE MATCH('EBGRNA') ORDER BY id ASC, username ASC OPTION fuzzy=1;"
 ––– output –––
 +------+----------------------+------+
 | id   | username             | s    |
 +------+----------------------+------+
-|  675 | CONCEPTION ABERNATHY | a    |
-|  964 | BERNARDINA OSHEA     | a    |
-| 1354 | VERNA VITALE         | a    |
-| 1784 | BERNADETTE HALES     | a    |
-| 1839 | BERNARDINA MCMILLAN  | a    |
-| 1864 | ERNA ULLOA           | a    |
-| 1948 | SAMIRA ABERNATHY     | a    |
-| 2238 | JUDI BERNAL          | a    |
-| 2446 | MERNA GAITHER        | a    |
-| 3065 | BERNADINE HIBBARD    | a    |
-| 3195 | BERNADETTE SHELTON   | a    |
-| 3688 | VERNA GASTON         | a    |
-| 3781 | BERNARDINE WILKINS   | a    |
-| 4370 | ERNA VITALE          | a    |
-| 4637 | TARSHA HERNANDEZ     | a    |
-| 4662 | FERNANDO HOUCK       | a    |
-| 5044 | CONSTANCE ABERNATHY  | a    |
-| 5580 | LAVERNA GORMAN       | a    |
-| 5582 | FERNANDE ISRAEL      | a    |
-| 5798 | LAVERNA STORM        | a    |
+|   20 | BERNARDO DUGGAN      | a    |
+|   27 | BERNARDINE BREWER    | a    |
+|  209 | KATLYN SERNA         | a    |
+| 1292 | LAVERNA CLARK        | a    |
+| 1414 | BENNY FERNANDEZ      | a    |
+| 1638 | JULENE BERNAL        | a    |
+| 2021 | LAVERNA JEFFERSON    | a    |
+| 2169 | MERNA ORNELAS        | a    |
+| 2471 | BERNADINE SCANLON    | a    |
+| 2843 | BERNADINE NAPOLITANO | a    |
+| 3177 | FERNANDA FRYER       | a    |
+| 3199 | FERNANDO FRANCISCO   | a    |
+| 3455 | FERNANDE MERRITT     | a    |
+| 3539 | BERNADINE HILLER     | a    |
+| 3862 | FERNANDO MACDONALD   | a    |
+| 4022 | JOHNSON HERNANDES    | a    |
+| 4484 | SYBIL HERNANDES      | a    |
+| 5159 | MARTINA BERNARD      | a    |
+| 5793 | BERNA TALBOTT        | a    |
+| 6506 | FERNANDO FREELAND    | a    |
 +------+----------------------+------+
 ––– input –––
 mysql -h0 -P9306 -e "SELECT * FROM name WHERE MATCH('ANT') ORDER BY id ASC, username ASC OPTION fuzzy=1;"
 ––– output –––
-+------+-------------------+------+
-| id   | username          | s    |
-+------+-------------------+------+
-|    8 | DAMIAN SOMERS     | a    |
-|   16 | TAMI WHELAN       | a    |
-|   19 | DARCY SANDBERG    | a    |
-|   20 | RANEE BROUGHTON   | a    |
-|   21 | STEPHEN ALLMAN    | a    |
-|   30 | AMANDA KEY        | a    |
-|   37 | ELFRIEDA HANKS    | a    |
-|   41 | NANNIE WILLINGHAM | a    |
-|   42 | YOULANDA TROUT    | a    |
-|   44 | ANTHONY SMOOT     | a    |
-|   47 | FRANCIE BUNDY     | a    |
-|   51 | LATASHA POLAND    | a    |
-|   53 | SHEMEKA DURAND    | a    |
-|   54 | LATANYA ARNDT     | a    |
-|   56 | JANELLE LASTER    | a    |
-|   57 | NANNIE HANNON     | a    |
-|   58 | GRANVILLE VALDEZ  | a    |
-|   59 | DEDE SPANN        | a    |
-|   60 | DANIEL MERRITT    | a    |
-|   63 | SAUL HOWLAND      | a    |
-+------+-------------------+------+
-––– input –––
-mysql -h0 -P9306 -e "SELECT * FROM name WHERE MATCH('tony') ORDER BY id ASC, username ASC OPTION fuzzy=1;"
-––– output –––
 +------+--------------------+------+
 | id   | username           | s    |
 +------+--------------------+------+
-|  118 | ANTONIA VANWINKLE  | a    |
-|  220 | ANTONIA MELGAR     | a    |
-|  391 | KARYL TONEY        | a    |
-|  761 | TONYA SHERRILL     | a    |
-| 1527 | LEONE TONEY        | a    |
-| 2132 | TONIA RAPP         | a    |
-| 2195 | TONIE HOANG        | a    |
-| 2333 | LATONIA VILLASENOR | a    |
-| 2357 | TONIE BARNHILL     | a    |
-| 2430 | TONIA BOSTICK      | a    |
-| 2584 | TONI SPENCE        | a    |
-| 2725 | ANTONIETTA CINTRON | a    |
-| 2881 | ANTONINA HASKELL   | a    |
-| 3318 | TONY DUPRE         | a    |
-| 3582 | ANTONIETTA BAEZ    | a    |
-| 3858 | TONEY SCHOEN       | a    |
-| 4366 | ROCHEL TONEY       | a    |
-| 4608 | ANTONIA DRISCOLL   | a    |
-| 4657 | TONYA PARRIS       | a    |
-| 4800 | TONY WEISS         | a    |
+|    6 | KESHIA RANDAZZO    | a    |
+|   12 | TRESA ESCALANTE    | a    |
+|   20 | BERNARDO DUGGAN    | a    |
+|   31 | DEMETRIA IBANEZ    | a    |
+|   32 | PAMELIA SANDLIN    | a    |
+|   34 | ANJANETTE MINTON   | a    |
+|   40 | ANTONIO RIOS       | a    |
+|   62 | ANDRES NATION      | a    |
+|   64 | MERI MEDRANO       | a    |
+|   65 | JANINA FLANIGAN    | a    |
+|   72 | TALISHA SWAN       | a    |
+|   75 | JANAY BONNER       | a    |
+|   80 | DEMETRIA STANFIELD | a    |
+|   81 | RALEIGH SANDBERG   | a    |
+|   82 | KRISTIAN MEYER     | a    |
+|   83 | JANN HEATH         | a    |
+|   87 | RANDEE QUINTERO    | a    |
+|   99 | DEAN GUO           | a    |
+|  103 | DEAN DEAL          | a    |
+|  110 | CONSTANCE REES     | a    |
 +------+--------------------+------+
 ––– input –––
-mysql -h0 -P9306 -e "SELECT * FROM name WHERE MATCH('SMITH') ORDER BY id DESC, username ASC OPTION fuzzy=1;"
+mysql -h0 -P9306 -e "SELECT * FROM name WHERE MATCH('tony') ORDER BY id ASC, username ASC OPTION fuzzy=1;"
 ––– output –––
-+--------+-------------------+------+
-| id     | username          | s    |
-+--------+-------------------+------+
-| 999973 | KEITH SNOW        | a    |
-| 999855 | DOROTHA WISEMAN   | a    |
-| 999723 | SCOTT OLSON       | a    |
-| 999264 | RUTHANN GREENE    | a    |
-| 999250 | MINH LANDERS      | a    |
-| 999127 | MALENA RUTHERFORD | a    |
-| 999120 | RUTHANNE CARDOSO  | a    |
-| 998893 | IRWIN SOUTHARD    | a    |
-| 998691 | MITCHELL SEITZ    | a    |
-| 998539 | ELSA SEITZ        | a    |
-| 998526 | SCOTT CARRION     | a    |
-| 997945 | RUTHE SCHENK      | a    |
-| 997815 | MINH GOODWIN      | a    |
-| 997558 | ARTIE SOUTH       | a    |
-| 997189 | BETTY SOUTHERN    | a    |
-| 997187 | SUSAN SCOTT       | a    |
-| 997098 | OTHA FAJARDO      | a    |
-| 997074 | SCOTT FLANDERS    | a    |
-| 996804 | SCOTT ENOS        | a    |
-| 996461 | EDRA HIGGINBOTHAM | a    |
-+--------+-------------------+------+
++-------+------------------+------+
+| id    | username         | s    |
++-------+------------------+------+
+|   688 | SHERIE STORY     | a    |
+|  1422 | TOBY CARO        | a    |
+|  1627 | RUPERT STORY     | a    |
+|  1721 | JOE TONG         | a    |
+|  2154 | TONY GREY        | a    |
+|  3759 | TOBY GILCHRIST   | a    |
+|  5292 | TONA VALENTIN    | a    |
+|  5687 | TONY EASTERLING  | a    |
+|  5835 | TOBY ROBERSON    | a    |
+|  6281 | TOBY ARAIZA      | a    |
+|  6962 | TONA DAVIDSON    | a    |
+|  7311 | ANTONY STOVALL   | a    |
+|  7475 | TOBY REINHART    | a    |
+|  8174 | TONA CARRILLO    | a    |
+|  8700 | TONA FLETCHER    | a    |
+|  8828 | TONYA CALLAHAN   | a    |
+|  9251 | TOBY LANGFORD    | a    |
+|  9293 | ZENA STORY       | a    |
+|  9619 | TONY WHITTINGTON | a    |
+| 10167 | LANA STORY       | a    |
++-------+------------------+------+
 ––– input –––
 mysql -h0 -P9306 -e "SELECT * FROM name WHERE MATCH('SMITH') ORDER BY id DESC, username ASC OPTION fuzzy=1;"
 ––– output –––
-+--------+-------------------+------+
-| id     | username          | s    |
-+--------+-------------------+------+
-| 999973 | KEITH SNOW        | a    |
-| 999855 | DOROTHA WISEMAN   | a    |
-| 999723 | SCOTT OLSON       | a    |
-| 999264 | RUTHANN GREENE    | a    |
-| 999250 | MINH LANDERS      | a    |
-| 999127 | MALENA RUTHERFORD | a    |
-| 999120 | RUTHANNE CARDOSO  | a    |
-| 998893 | IRWIN SOUTHARD    | a    |
-| 998691 | MITCHELL SEITZ    | a    |
-| 998539 | ELSA SEITZ        | a    |
-| 998526 | SCOTT CARRION     | a    |
-| 997945 | RUTHE SCHENK      | a    |
-| 997815 | MINH GOODWIN      | a    |
-| 997558 | ARTIE SOUTH       | a    |
-| 997189 | BETTY SOUTHERN    | a    |
-| 997187 | SUSAN SCOTT       | a    |
-| 997098 | OTHA FAJARDO      | a    |
-| 997074 | SCOTT FLANDERS    | a    |
-| 996804 | SCOTT ENOS        | a    |
-| 996461 | EDRA HIGGINBOTHAM | a    |
-+--------+-------------------+------+
++--------+-----------------+------+
+| id     | username        | s    |
++--------+-----------------+------+
+| 999737 | KEITH STUMP     | a    |
+| 999039 | KEITH JAMIESON  | a    |
+| 996439 | KEITHA CARBAJAL | a    |
+| 995770 | KEITH GONZALES  | a    |
+| 990882 | MINH SANTANA    | a    |
+| 990643 | KEITH MENDES    | a    |
+| 989972 | KEITHA WALTERS  | a    |
+| 989954 | GWENN SMYTH     | a    |
+| 989444 | KEITH KEATON    | a    |
+| 988755 | SHERRON SMYTH   | a    |
+| 988366 | LAVONIA SMYTH   | a    |
+| 988254 | MAYOLA KEITH    | a    |
+| 987106 | KEITH FAULK     | a    |
+| 986580 | DARNELL SMYTH   | a    |
+| 984012 | KEITH CORONEL   | a    |
+| 982759 | MORGAN KEITH    | a    |
+| 982421 | KEITH SHIFFLETT | a    |
+| 982223 | TELMA KEITH     | a    |
+| 982056 | RENITA KEITH    | a    |
+| 981115 | KATIE SMYTH     | a    |
++--------+-----------------+------+
 ––– input –––
 mysql -h0 -P9306 -e "SELECT * FROM name WHERE MATCH('SMYTH') ORDER BY id DESC, username ASC OPTION fuzzy=1;"
 ––– output –––
-+--------+-------------------+------+
-| id     | username          | s    |
-+--------+-------------------+------+
-| 999973 | KEITH SNOW        | a    |
-| 999964 | CANDACE BOOTH     | a    |
-| 999855 | DOROTHA WISEMAN   | a    |
-| 999723 | SCOTT OLSON       | a    |
-| 999264 | RUTHANN GREENE    | a    |
-| 999197 | HEATH MCNAMARA    | a    |
-| 999127 | MALENA RUTHERFORD | a    |
-| 999120 | RUTHANNE CARDOSO  | a    |
-| 999013 | HEATHER HAMMOCK   | a    |
-| 998893 | IRWIN SOUTHARD    | a    |
-| 998526 | SCOTT CARRION     | a    |
-| 998000 | EDYTH CARLISLE    | a    |
-| 997945 | RUTHE SCHENK      | a    |
-| 997558 | ARTIE SOUTH       | a    |
-| 997544 | HEATHER CLAUSEN   | a    |
-| 997189 | BETTY SOUTHERN    | a    |
-| 997187 | SUSAN SCOTT       | a    |
-| 997098 | OTHA FAJARDO      | a    |
-| 997074 | SCOTT FLANDERS    | a    |
-| 996804 | SCOTT ENOS        | a    |
-+--------+-------------------+------+
++--------+--------------------+------+
+| id     | username           | s    |
++--------+--------------------+------+
+| 999921 | VICKI SOUTHARD     | a    |
+| 998829 | EDYTHE VACA        | a    |
+| 998500 | SETH PHUNG         | a    |
+| 996507 | SETH LYMAN         | a    |
+| 995690 | ROBERTO SOUTHARD   | a    |
+| 995663 | CHUNG SOUTH        | a    |
+| 995119 | EDYTHE JOHN        | a    |
+| 993455 | EDYTH ROSADO       | a    |
+| 993278 | LAKITA SOUTHARD    | a    |
+| 992097 | EDYTH RAGAN        | a    |
+| 989954 | GWENN SMYTH        | a    |
+| 988936 | LARISA SOUTHERLAND | a    |
+| 988823 | SETH WHITTAKER     | a    |
+| 988759 | LIEN SOUTHARD      | a    |
+| 988755 | SHERRON SMYTH      | a    |
+| 988366 | LAVONIA SMYTH      | a    |
+| 987165 | TULA SOUTHARD      | a    |
+| 987136 | LUANN SOUTHARD     | a    |
+| 986847 | JORDAN SOUTHERN    | a    |
+| 986711 | MARLIN SOUTHERN    | a    |
++--------+--------------------+------+
 ––– input –––
-mysql -h0 -P9306 -e "SELECT * FROM name WHERE MATCH('SMITH') ORDER BY id DESC, username ASC OPTION fuzzy="1";"
+mysql -h0 -P9306 -e "SELECT * FROM name WHERE MATCH('SMITH') ORDER BY id DESC, username ASC OPTION fuzzy=\"1\";"
 ––– output –––
-+--------+-------------------+------+
-| id     | username          | s    |
-+--------+-------------------+------+
-| 999973 | KEITH SNOW        | a    |
-| 999855 | DOROTHA WISEMAN   | a    |
-| 999723 | SCOTT OLSON       | a    |
-| 999264 | RUTHANN GREENE    | a    |
-| 999250 | MINH LANDERS      | a    |
-| 999127 | MALENA RUTHERFORD | a    |
-| 999120 | RUTHANNE CARDOSO  | a    |
-| 998893 | IRWIN SOUTHARD    | a    |
-| 998691 | MITCHELL SEITZ    | a    |
-| 998539 | ELSA SEITZ        | a    |
-| 998526 | SCOTT CARRION     | a    |
-| 997945 | RUTHE SCHENK      | a    |
-| 997815 | MINH GOODWIN      | a    |
-| 997558 | ARTIE SOUTH       | a    |
-| 997189 | BETTY SOUTHERN    | a    |
-| 997187 | SUSAN SCOTT       | a    |
-| 997098 | OTHA FAJARDO      | a    |
-| 997074 | SCOTT FLANDERS    | a    |
-| 996804 | SCOTT ENOS        | a    |
-| 996461 | EDRA HIGGINBOTHAM | a    |
-+--------+-------------------+------+
+ERROR 1064 (42000) at line 1: P01: syntax error, unexpected $undefined near '"1"'
 ––– input –––
 mysql -h0 -P9306 -e "SELECT * FROM name WHERE MATCH('john') ORDER BY id DESC, username ASC OPTION fuzzy=1;"
 ––– output –––
-+--------+------------------------+------+
-| id     | username               | s    |
-+--------+------------------------+------+
-| 999961 | JONELL ENRIGHT         | a    |
-| 999932 | JONELL NIX             | a    |
-| 999926 | JONAH BURNSIDE         | a    |
-| 999922 | LAVONNA JONAS          | a    |
-| 999860 | JOHNETTA DO            | a    |
-| 999552 | JOHNNY CARNES          | a    |
-| 999548 | JOHNATHAN PEPPER       | a    |
-| 999509 | JOHNATHAN STUBBLEFIELD | a    |
-| 999171 | JOHNNY ABRAMS          | a    |
-| 999033 | AGNUS STJOHN           | a    |
-| 998835 | SCARLETT JONAS         | a    |
-| 998798 | JOHNATHON READ         | a    |
-| 998467 | JOHNSON JEAN           | a    |
-| 998393 | JOHN BACH              | a    |
-| 998306 | JOHNNY TAFOYA          | a    |
-| 998304 | JONG SAUER             | a    |
-| 998303 | JONATHON DUPRE         | a    |
-| 998278 | JOHNNIE LOR            | a    |
-| 998181 | JONA ELROD             | a    |
-| 998154 | JONG YORK              | a    |
-+--------+------------------------+------+
++--------+--------------------+------+
+| id     | username           | s    |
++--------+--------------------+------+
+| 999971 | RONNA JOHNSON      | a    |
+| 999879 | CHARLEY STJOHN     | a    |
+| 999685 | JOAN KOESTER       | a    |
+| 999655 | JOHN WAINWRIGHT    | a    |
+| 999555 | JON MOSIER         | a    |
+| 999440 | JOHN LEONG         | a    |
+| 999170 | JONELLE HARDING    | a    |
+| 999075 | JOHNIE DURAN       | a    |
+| 999020 | JONAS HASAN        | a    |
+| 998802 | RENETTA LITTLEJOHN | a    |
+| 998721 | REY JOHNSTON       | a    |
+| 998368 | JONIE MILTON       | a    |
+| 998367 | LEENA JOHNSTON     | a    |
+| 998128 | SHARILYN JOHNSTON  | a    |
+| 997788 | JOANNIE HENSON     | a    |
+| 997670 | DENNY JONES        | a    |
+| 997623 | JOHNETTA DELATORRE | a    |
+| 997577 | JONA CORRAL        | a    |
+| 997563 | JONE FOLSOM        | a    |
+| 997512 | JOAN CALKINS       | a    |
++--------+--------------------+------+
 ––– input –––
 mysql -h0 -P9306 -e "SELECT * FROM name WHERE MATCH('jane') AND id BETWEEN 10000 AND 20000 ORDER BY username ASC OPTION fuzzy=1;"
 ––– output –––
-+-------+--------------------+------+
-| id    | username           | s    |
-+-------+--------------------+------+
-| 10028 | ANJANETTE PORTILLO | a    |
-| 10056 | JANETTE LYNCH      | a    |
-| 10629 | LANETTE SWAIN      | a    |
-| 10874 | JANESSA MONTEZ     | a    |
-| 10977 | RUTHANN LANEY      | a    |
-| 11038 | DESIRE LANE        | a    |
-| 11056 | LANELLE WATTS      | a    |
-| 11397 | MELITA LANE        | a    |
-| 11415 | MARYJANE HOLTZ     | a    |
-| 11569 | JANETH SELBY       | a    |
-| 11758 | JANETTE GANTT      | a    |
-| 11834 | JANELLE DRIGGERS   | a    |
-| 12100 | JAE COBLE          | a    |
-| 12171 | JAE MEARS          | a    |
-| 12185 | JANESSA BALTAZAR   | a    |
-| 12237 | JANENE APODACA     | a    |
-| 12490 | LANELLE ARNDT      | a    |
-| 12536 | JANENE WALDRON     | a    |
-| 12540 | ANJANETTE STAGGS   | a    |
-| 12642 | HERSHEL LANEY      | a    |
-+-------+--------------------+------+
++-------+----------------------+------+
+| id    | username             | s    |
++-------+----------------------+------+
+| 10119 | JANIECE GIBSON       | a    |
+| 10159 | JANNA MIXON          | a    |
+| 10200 | ELANE LOPES          | a    |
+| 10205 | JANETTA ZHOU         | a    |
+| 10381 | EULALIA LANE         | a    |
+| 10465 | JANIE PAXTON         | a    |
+| 10492 | JANINA JOE           | a    |
+| 10507 | JANNA EDDY           | a    |
+| 10635 | JANESSA GOODIN       | a    |
+| 10637 | JACQUELYNN JANKOWSKI | a    |
+| 10824 | ALEJANDRINA LAUGHLIN | a    |
+| 10831 | CLYDE JANES          | a    |
+| 10926 | JANNET GOODEN        | a    |
+| 10978 | JANAE KELSO          | a    |
+| 11064 | JANETH BOWIE         | a    |
+| 11266 | MARIELLE ALEJANDRO   | a    |
+| 11342 | JANAE DELAGARZA      | a    |
+| 11875 | TYLER LUJAN          | a    |
+| 11925 | DINAH JANES          | a    |
+| 11997 | JANETH BROWNING      | a    |
++-------+----------------------+------+
 ––– input –––
 mysql -h0 -P9306 -e "SELECT * FROM name WHERE MATCH('EBGRNA') AND id BETWEEN 1000 AND 2000 ORDER BY username ASC OPTION fuzzy=1;"
 ––– output –––
-+------+---------------------+------+
-| id   | username            | s    |
-+------+---------------------+------+
-| 1354 | VERNA VITALE        | a    |
-| 1784 | BERNADETTE HALES    | a    |
-| 1839 | BERNARDINA MCMILLAN | a    |
-| 1864 | ERNA ULLOA          | a    |
-| 1948 | SAMIRA ABERNATHY    | a    |
-+------+---------------------+------+
++------+-----------------+------+
+| id   | username        | s    |
++------+-----------------+------+
+| 1292 | LAVERNA CLARK   | a    |
+| 1414 | BENNY FERNANDEZ | a    |
+| 1638 | JULENE BERNAL   | a    |
++------+-----------------+------+
 ––– input –––
 mysql -h0 -P9306 -e "SELECT * FROM name WHERE MATCH('SARA') ORDER BY id ASC, username ASC OPTION fuzzy=1;"
 ––– output –––
-+------+------------------+------+
-| id   | username         | s    |
-+------+------------------+------+
-|  188 | LARA KIRK        | a    |
-|  207 | CLARA MORRIS     | a    |
-|  351 | KLARA DONALDSON  | a    |
-|  990 | ELAINE SARABIA   | a    |
-| 1409 | LARA FREDERICK   | a    |
-| 1661 | SARA GARNER      | a    |
-| 1831 | SARAI ESPINAL    | a    |
-| 2074 | VALENTIN SARABIA | a    |
-| 2930 | LARA CINTRON     | a    |
-| 3045 | KLARA ANDRES     | a    |
-| 3373 | KLARA NORTON     | a    |
-| 3741 | CRUZ SARABIA     | a    |
-| 3780 | RUSSEL LARA      | a    |
-| 4700 | HEE SARABIA      | a    |
-| 4933 | KLARA GOODING    | a    |
-| 5830 | SARAI LINDLEY    | a    |
-| 5865 | SARAN KNAPP      | a    |
-| 5918 | SARA WAITE       | a    |
-| 6635 | CLARA BEALE      | a    |
-| 6836 | CLARA BAZAN      | a    |
-+------+------------------+------+
++------+----------------------+------+
+| id   | username             | s    |
++------+----------------------+------+
+|   73 | CLARA NGUYEN         | a    |
+| 1285 | CLARA CARTAGENA      | a    |
+| 1515 | KLARA ALARCON        | a    |
+| 1709 | FREDDA LARA          | a    |
+| 2217 | LORIANN DELROSARIO   | a    |
+| 2305 | SARA AVILA           | a    |
+| 2631 | ROSARIA DELONG       | a    |
+| 3245 | LARA MASTERSON       | a    |
+| 3267 | LARA MOREAU          | a    |
+| 3553 | SARAN CHANG          | a    |
+| 3880 | SARAN HOOK           | a    |
+| 3980 | GEORGETTA DELROSARIO | a    |
+| 4517 | SARAI EASLEY         | a    |
+| 5708 | ASA ROSARIO          | a    |
+| 5731 | SARITA ANDERS        | a    |
+| 6100 | CHANTELL SARABIA     | a    |
+| 6165 | SARA HALLMAN         | a    |
+| 6480 | SARAH NEILL          | a    |
+| 6488 | SARAN PARTIN         | a    |
+| 6802 | KLARA ROLLER         | a    |
++------+----------------------+------+
 ––– input –––
 mysql -h0 -P9306 -e "CALL AUTOCOMPLETE('jo', 'name', 1 AS fuzziness);" | tail -n +4 | sort
 ––– output –––
-+---------+
-| joe     |
-| john    |
-| johnie  |
-| johnson |
-| jordan  |
-| jose    |
-| joseph  |
-| joshua  |
-| joy     |
-| joyce   |
++--------+
+| joe    |
+| joey   |
+| john   |
+| jon    |
+| jordan |
+| jose   |
+| joseph |
+| joy    |
+| joyce  |
+| major  |
 ––– input –––
 mysql -h0 -P9306 -e "CALL AUTOCOMPLETE('jo', 'name', 'us,ru' AS layouts);" | tail -n +4 | sort
 ––– output –––
-+---------+
-| joe     |
-| john    |
-| johnie  |
-| johnson |
-| jordan  |
-| jose    |
-| joseph  |
-| joshua  |
-| joy     |
-| joyce   |
++--------+
+| joe    |
+| joey   |
+| john   |
+| jon    |
+| jordan |
+| jose   |
+| joseph |
+| joy    |
+| joyce  |
+| major  |
 ––– input –––
 mysql -h0 -P9306 -e "CALL AUTOCOMPLETE('jo', 'name', 1 AS append);" | tail -n +4 | sort
 ––– output –––
-+---------+
-| joe     |
-| john    |
-| johnie  |
-| johnson |
-| jordan  |
-| jose    |
-| joseph  |
-| joshua  |
-| joy     |
-| joyce   |
++--------+
+| joe    |
+| joey   |
+| john   |
+| jon    |
+| jordan |
+| jose   |
+| joseph |
+| joy    |
+| joyce  |
+| major  |
 ––– input –––
 mysql -h0 -P9306 -e "CALL AUTOCOMPLETE('jo', 'name', 0 AS prepend);" | tail -n +4 | sort
 ––– output –––
-+---------+
-| joe     |
-| john    |
-| johnson |
-| jonas   |
-| jordan  |
-| jose    |
-| joseph  |
-| joshua  |
-| joy     |
-| joyce   |
++--------+
+| joe    |
+| joey   |
+| john   |
+| johnny |
+| jon    |
+| jordan |
+| jose   |
+| joseph |
+| joy    |
+| joyce  |
 ––– input –––
 mysql -h0 -P9306 -e "CALL AUTOCOMPLETE('jo', 'name', 1 AS prepend, 1 AS append);" | tail -n +4 | sort
 ––– output –––
-+---------+
-| joe     |
-| john    |
-| johnie  |
-| johnson |
-| jordan  |
-| jose    |
-| joseph  |
-| joshua  |
-| joy     |
-| joyce   |
++--------+
+| joe    |
+| joey   |
+| john   |
+| jon    |
+| jordan |
+| jose   |
+| joseph |
+| joy    |
+| joyce  |
+| major  |
 ––– input –––
 mysql -h0 -P9306 -e "CALL AUTOCOMPLETE('jo', 'name', 1 AS fuzziness, '' AS layouts, 1 AS append, 1 AS prepend);" | tail -n +4 | sort
 ––– output –––
-+---------+
-| joe     |
-| john    |
-| johnie  |
-| johnson |
-| jordan  |
-| jose    |
-| joseph  |
-| joshua  |
-| joy     |
-| joyce   |
++--------+
+| joe    |
+| joey   |
+| john   |
+| jon    |
+| jordan |
+| jose   |
+| joseph |
+| joy    |
+| joyce  |
+| major  |
 ––– input –––
 mysql -h0 -P9306 -e "CALL AUTOCOMPLETE('jo', 'name', 2 AS fuzziness, 'us,ru' AS layouts, 1 AS append, 1 AS prepend, 2 AS expansion_len);" | tail -n +4 | sort
 ––– output –––
 +-------+
 | joe   |
+| joey  |
 | john  |
+| jon   |
 | jose  |
 | joy   |
 ––– input –––
 mysql -h0 -P9306 -e "CALL AUTOCOMPLETE('jo', 'name', 1 AS append);" | tail -n +4 | sort
 ––– output –––
-+---------+
-| joe     |
-| john    |
-| johnie  |
-| johnson |
-| jordan  |
-| jose    |
-| joseph  |
-| joshua  |
-| joy     |
-| joyce   |
++--------+
+| joe    |
+| joey   |
+| john   |
+| jon    |
+| jordan |
+| jose   |
+| joseph |
+| joy    |
+| joyce  |
+| major  |
 ––– input –––
 mysql -h0 -P9306 -e "CALL AUTOCOMPLETE('jo', 'name', 1 AS prepend);" | tail -n +4 | sort
 ––– output –––
-+---------+
-| joe     |
-| john    |
-| johnie  |
-| johnson |
-| jordan  |
-| jose    |
-| joseph  |
-| joshua  |
-| joy     |
-| joyce   |
++--------+
+| joe    |
+| joey   |
+| john   |
+| jon    |
+| jordan |
+| jose   |
+| joseph |
+| joy    |
+| joyce  |
+| major  |
 ––– input –––
 mysql -h0 -P9306 -e "CALL AUTOCOMPLETE('jo', 'name', 1 AS append, 1 AS prepend);" | tail -n +4 | sort
 ––– output –––
-+---------+
-| joe     |
-| john    |
-| johnie  |
-| johnson |
-| jordan  |
-| jose    |
-| joseph  |
-| joshua  |
-| joy     |
-| joyce   |
++--------+
+| joe    |
+| joey   |
+| john   |
+| jon    |
+| jordan |
+| jose   |
+| joseph |
+| joy    |
+| joyce  |
+| major  |
 ––– input –––
 mysql -h0 -P9306 -e "CALL AUTOCOMPLETE('jo', 'name', 'us' AS layouts);" | tail -n +4 | sort
 ––– output –––
-+---------+
-| joe     |
-| john    |
-| johnie  |
-| johnson |
-| jordan  |
-| jose    |
-| joseph  |
-| joshua  |
-| joy     |
-| joyce   |
++--------+
+| joe    |
+| joey   |
+| john   |
+| jon    |
+| jordan |
+| jose   |
+| joseph |
+| joy    |
+| joyce  |
+| major  |
 ––– input –––
 mysql -h0 -P9306 -e "CALL AUTOCOMPLETE('jo', 'name', 'ru' AS layouts);" | tail -n +4 | sort
 ––– output –––
-+---------+
-| joe     |
-| john    |
-| johnie  |
-| johnson |
-| jordan  |
-| jose    |
-| joseph  |
-| joshua  |
-| joy     |
-| joyce   |
++--------+
+| joe    |
+| joey   |
+| john   |
+| jon    |
+| jordan |
+| jose   |
+| joseph |
+| joy    |
+| joyce  |
+| major  |
 ––– input –––
 mysql -h0 -P9306 -e "CALL AUTOCOMPLETE('al', 'name', 0 AS fuzziness);" | tail -n +4 | sort
 ––– output –––
 +-----------+
 | albert    |
 | alexander |
-| allen     |
+| ali       |
 | dale      |
-| dallas    |
-| donald    |
 | gale      |
 | kendall   |
 | marshall  |
+| palma     |
+| valentine |
 | walter    |
 ––– input –––
 mysql -h0 -P9306 -e "CALL AUTOCOMPLETE('mi', 'name', 0 AS append, 1 AS prepend);" | tail -n +4 | sort
 ––– output –––
-+---------+
-| ami     |
-| britni  |
-| brittni |
-| cami    |
-| choi    |
-| darci   |
-| eleni   |
-| jami    |
-| jani    |
-| jeni    |
-| joi     |
-| kaci    |
-| kami    |
-| kimi    |
-| laci    |
-| lani    |
-| luci    |
-| mancini |
-| marci   |
-| martini |
-| melani  |
-| muoi    |
-| nanci   |
-| neomi   |
-| noemi   |
-| nohemi  |
-| ricci   |
-| shani   |
-| staci   |
-| tammi   |
-| toi     |
-| tomi    |
-| traci   |
++----------+
+| britni   |
+| brittani |
+| cami     |
+| choi     |
+| darci    |
+| jenni    |
+| joi      |
+| kaci     |
+| kami     |
+| kimi     |
+| laci     |
+| leilani  |
+| luci     |
+| mancini  |
+| marci    |
+| mi       |
+| muoi     |
+| nanci    |
+| naomi    |
+| neomi    |
+| nohemi   |
+| penni    |
+| ricci    |
+| roni     |
+| shani    |
+| staci    |
+| stefani  |
+| tami     |
+| tammi    |
+| tiffani  |
+| toi      |
+| tomi     |
+| traci    |
 ––– input –––
 mysql -h0 -P9306 -e "CALL AUTOCOMPLETE('ch', 'name', 1 AS fuzziness, 3 AS expansion_len);" | tail -n +4 | sort
 ––– output –––
 +-------+
 | chang |
-| chi   |
 | chong |
 | chung |
 ––– input –––
 mysql -h0 -P9306 -e "CALL AUTOCOMPLETE('зф', 'name', 'us,ru' AS layouts);" | tail -n +4 | sort
 ––– output –––
-+---------+
-| page    |
-| paige   |
-| palma   |
-| palmer  |
-| paris   |
-| parker  |
-| pat     |
-| patrick |
-| paul    |
-| paz     |
++----------+
+| page     |
+| paige    |
+| palma    |
+| paris    |
+| parker   |
+| pat      |
+| patricia |
+| patrick  |
+| paul     |
+| paz      |
 ––– input –––
 mysql -h0 -P9306 -e "CALL AUTOCOMPLETE('зф', 'name', 'us' AS layouts);" | tail -n +4 | sort
 ––– output –––
 ––– input –––
 mysql -h0 -P9306 -e "CALL AUTOCOMPLETE('gr', 'name', 1 AS fuzziness, 'ru' AS layouts, 1 AS append, 1 AS prepend);" | tail -n +4 | sort
 ––– output –––
-+------------+
-| grace      |
-| gracia     |
-| grady      |
-| graham     |
-| grant      |
-| gregg      |
-| gregory    |
-| griffin    |
-| grover     |
-| montenegro |
++---------+
+| grace   |
+| gracia  |
+| grady   |
+| graham  |
+| grant   |
+| gregg   |
+| gregory |
+| grey    |
+| grogan  |
+| grover  |
+––– input –––
+mysql -h0 -P9306 -e "drop table if exists t; create table t(f text) min_infix_len='2'; insert into t values(1, 'something'), (2, 'some thing'); select * from t where match('somethin') option fuzzy=0;"
+––– output –––
+––– input –––
+mysql -h0 -P9306 -e "select * from t where match('somethin') option fuzzy=0;"
+––– output –––
+––– input –––
+mysql -P9306 -h0 -e "drop table if exists t; create table t(f text) min_infix_len='2'; insert into t values(1, 'something'), (2, 'some thing'); call autocomplete('some', 't');"
+––– output –––
++-----------+
+| query     |
++-----------+
+| some      |
+| something |
++-----------+
+––– input –––
+mysql -P9306 -h0 -e "drop table if exists t; create table t(f text) min_infix_len='2'; insert into t values(1, 'something'), (2, 'some thing'); call autocomplete('some', 't');"
+––– output –––
++-----------+
+| query     |
++-----------+
+| some      |
+| something |
++-----------+
+––– input –––
+mysql -h0 -P9306 -e "drop table if exists t; create table t(a int);"
+––– output –––
+––– input –––
+mysql -h0 -P9306 -e "select * from t option fuzzy=1;"
+––– output –––
+ERROR 1064 (42000) at line 1: The 'fuzzy' option requires a full-text query
+––– input –––
+mysql -h0 -P9306 -e "drop table if exists comment_28798446; create table comment_28798446(id int, content text) min_infix_len='3';"
+––– output –––
+––– input –––
+mysql -h0 -P9306 -e "insert into comment_28798446 values (1, 'business Manticore interaction'), (2, 'buisness Manticore interation'), (3, 'other text content');"
+––– output –––
+––– input –––
+mysql -h0 -P9306 -e "SELECT id FROM comment_28798446 WHERE MATCH('buisness Manticore interation') OPTION fuzzy = 1, layouts = '';"
+––– output –––
++------+
+| id   |
++------+
+|    1 |
+|    2 |
++------+
+––– input –––
+mysql -h0 -P9306 -e "SELECT id FROM comment_28798446 WHERE MATCH('business Manticore interaction') OPTION fuzzy = 1, layouts = '';"
+––– output –––
++------+
+| id   |
++------+
+|    1 |
+|    2 |
++------+
+––– input –––
+mysql -h0 -P9306 -e "SELECT id FROM comment_28798446 WHERE MATCH('Manticore') OPTION fuzzy = 1, layouts = '';"
+––– output –––
++------+
+| id   |
++------+
+|    1 |
+|    2 |
++------+
+––– input –––
+mysql -h0 -P9306 -e "CALL AUTOCOMPLETE('bus', 'comment_28798446', 'ru,us,ua' AS layouts);"
+––– output –––
++----------+
+| query    |
++----------+
+| business |
++----------+
+––– input –––
+mysql -h0 -P9306 -e "CALL AUTOCOMPLETE('bus', 'comment_28798446', '' AS layouts);"
+––– output –––
++----------+
+| query    |
++----------+
+| business |
++----------+
 ––– input –––
 mysql -h0 -P9306 -e "drop table if exists t; create table t(f text) min_infix_len='2'; insert into t values(1, 'something'), (2, 'some thing'); select * from t where match('somethin') option fuzzy=0;"
 ––– output –––
@@ -747,11 +783,13 @@ mysql -h0 -P9306 -e "SELECT * FROM t WHERE MATCH('abcdef') OPTION fuzzy=1;"
 mysql -h0 -P9306 -e "SELECT * FROM t WHERE MATCH('\$#@\!') OPTION fuzzy=1;"
 ––– output –––
 ––– input –––
-mysql -h0 -P9306 -e "DROP TABLE IF EXISTS idx1; CREATE TABLE idx1(value TEXT) min_infix_len='2';"
+mysql -h0 -P9306 -e "DROP TABLE IF EXISTS idx1; CREATE TABLE idx1(value TEXT) min_infix_len='2';"; echo $?
 ––– output –––
+0
 ––– input –––
-mysql -h0 -P9306 -e "INSERT INTO idx1(value) VALUES ('340');"
+mysql -h0 -P9306 -e "INSERT INTO idx1(value) VALUES ('340');"; echo $?
 ––– output –––
+0
 ––– input –––
 mysql -h0 -P9306 -e "CALL AUTOCOMPLETE('34', 'idx1');"
 ––– output –––
@@ -761,8 +799,9 @@ mysql -h0 -P9306 -e "CALL AUTOCOMPLETE('34', 'idx1');"
 | 340   |
 +-------+
 ––– input –––
-mysql -h0 -P9306 -e "CALL AUTOCOMPLETE('3', 'idx1');"
+mysql -h0 -P9306 -e "CALL AUTOCOMPLETE('3', 'idx1');"; echo $?
 ––– output –––
+0
 ––– input –––
 mysql -h0 -P9306 -e "CALL AUTOCOMPLETE('34', 'idx1', 1 AS fuzziness);"
 ––– output –––
@@ -772,29 +811,24 @@ mysql -h0 -P9306 -e "CALL AUTOCOMPLETE('34', 'idx1', 1 AS fuzziness);"
 | 340   |
 +-------+
 ––– input –––
-echo -e "searchd {\nlisten = 9306:mysql\nlisten = 9312\nlisten = 9308:http\nlog = /tmp/searchd.log\nquery_log = /tmp/query.log\npid_file = /tmp/searchd.pid\n}\n\nsource src_idx {\ntype = tsvpipe\ntsvpipe_command = cat /tmp/data.tsv\ntsvpipe_field_string = f\ntsvpipe_attr_bigint = id\n}\n\nindex idx_plain {\ntype = plain\nsource = src_idx\npath = /tmp/idx_plain\nmin_infix_len = 2\n}" > /tmp/manticore_idx.conf
+echo -e "searchd {\nlisten = 9306:mysql\nlisten = 9312\nlisten = 9308:http\nlog = /tmp/searchd.log\nquery_log = /tmp/query.log\npid_file = /tmp/searchd.pid\n}\n\nsource src_idx {\ntype = tsvpipe\ntsvpipe_command = cat /tmp/data.tsv\ntsvpipe_field_string = f\ntsvpipe_attr_bigint = id\n}\n\nindex idx_plain {\ntype = plain\nsource = src_idx\npath = /tmp/idx_plain\nmin_infix_len = 2\n}" > /tmp/manticore_idx.conf; echo $?
 ––– output –––
+0
 ––– input –––
-echo -e "1\tabcdef\n2\tabcd efgh\n3\trandom text" > /tmp/data.tsv
+echo -e "1\tabcdef\n2\tabcd efgh\n3\trandom text" > /tmp/data.tsv; echo $?
 ––– output –––
+0
 ––– input –––
-mkdir -p /tmp/idx_plain && chmod 777 /tmp/idx_plain
+mkdir -p /tmp/idx_plain && chmod 777 /tmp/idx_plain; echo $?
 ––– output –––
+0
 ––– input –––
-indexer --all --config /tmp/manticore_idx.conf > /dev/null 2>&1
+indexer --all --config /tmp/manticore_idx.conf > /dev/null 2>&1; echo $?
 ––– output –––
+0
 ––– input –––
-rm -f /tmp/searchd.log; stdbuf -oL searchd --stopwait > /dev/null; stdbuf -oL searchd -c /tmp/manticore_idx.conf; if timeout 10 grep -qm1 '\[BUDDY\] started' <(tail -n 1000 -f /var/log/manticore/searchd.log); then echo 'Buddy started!'; else echo 'Timeout or failed!'; cat /var/log/manticore/searchd.log;fi
+rm -f /tmp/searchd.log; stdbuf -oL searchd --stopwait > /dev/null; (stdbuf -oL searchd -c /tmp/manticore_idx.conf 2>&1 | tee /tmp/searchd.log | grep -i precach & disown); sleep 0.5; if timeout 10 grep -qm1 '\[BUDDY\] started' /tmp/searchd.log; then echo 'Buddy started!'; else echo 'Timeout or failed!'; cat /tmp/searchd.log; fi
 ––– output –––
-Manticore %{VERSION} (columnar %{VERSION}) (secondary %{VERSION}) (knn %{VERSION})
-Copyright (c) 2001-2016, Andrew Aksyonoff
-Copyright (c) 2008-2016, Sphinx Technologies Inc (http://sphinxsearch.com)
-Copyright (c) 2017-%{YEAR}, Manticore Software LTD (https://manticoresearch.com)
-[#!/[0-9a-zA-Z\:\.\s]+/!#] [#!/[0-9]+/!#] using config file '/tmp/manticore_idx.conf' (%{NUMBER} chars)...
-starting daemon version '%{VERSION} (columnar %{VERSION}) (secondary %{VERSION}) (knn %{VERSION})' ...
-listening on all interfaces for mysql, port=9306
-listening on all interfaces for sphinx and http(s), port=9312
-listening on all interfaces for sphinx and http(s), port=9308
 precaching table 'idx_plain'
 precached 1 tables in #!/[0-9]{1,2}.[0-9]+/!# sec
 Buddy started!
@@ -814,24 +848,6 @@ mysql -h0 -P9306 -e "SHOW TABLE idx_plain SETTINGS;"
 +---------------+-------------------+
 | settings      | min_infix_len = 2 |
 +---------------+-------------------+
-––– input –––
-mysql -h0 -P9306 -e "show version\G;"
-––– output –––
-*************************** 1. row ***************************
-Component: Daemon
-Version: %{VERSION}
-*************************** 2. row ***************************
-Component: Columnar
-Version: columnar %{VERSION}
-*************************** 3. row ***************************
-Component: Secondary
-Version: secondary %{VERSION}
-*************************** 4. row ***************************
-Component: KNN
-Version: knn %{VERSION}
-*************************** 5. row ***************************
-Component: Buddy
-Version: buddy %{VERSION}
 ––– input –––
 mysql -h0 -P9306 -e "SELECT * FROM idx_plain WHERE MATCH('abcdef') OPTION fuzzy=1;"
 ––– output –––
@@ -871,8 +887,9 @@ mysql -h0 -P9306 -e "CALL AUTOCOMPLETE('ran', 'idx_plain');"
 | random |
 +--------+
 ––– input –––
-mysql -h0 -P9306 -e "CALL AUTOCOMPLETE('zzz', 'idx_plain');"
+mysql -h0 -P9306 -e "CALL AUTOCOMPLETE('zzz', 'idx_plain');"; echo $?
 ––– output –––
+0
 ––– input –––
 mysql -h0 -P9306 -e "SELECT * FROM idx_plain WHERE MATCH('abcdef') OPTION fuzzy=0;"
 ––– output –––

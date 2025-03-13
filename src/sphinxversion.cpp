@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2019-2024, Manticore Software LTD (https://manticoresearch.com)
+// Copyright (c) 2019-2025, Manticore Software LTD (https://manticoresearch.com)
 // All rights reserved
 //
 // This program is free software; you can redistribute it and/or modify
@@ -30,7 +30,7 @@
 #define PRODUCT_NAME			"Manticore " PRODUCT_VERSION
 #define PRODUCT_BANNER_TEXT		"\nCopyright (c) 2001-2016, Andrew Aksyonoff\n" \
 	"Copyright (c) 2008-2016, Sphinx Technologies Inc (http://sphinxsearch.com)\n" \
-	"Copyright (c) 2017-2024, Manticore Software LTD (https://manticoresearch.com)\n\n"
+	"Copyright (c) 2017-2025, Manticore Software LTD (https://manticoresearch.com)\n\n"
 
 #define PRODUCT_BANNER            PRODUCT_NAME PRODUCT_BANNER_TEXT
 

@@ -12,14 +12,14 @@ Once the tables are replicated, write statements can be performed on any node, b
 <!-- request SQL -->
 
 ```sql
-ALTER CLUSTER click_query ADD clicks_daily_index
+ALTER CLUSTER click_query ADD clicks_daily_table
 ```
 
 <!-- request JSON -->
 
 ```json
 POST /cli -d "
-ALTER CLUSTER click_query ADD clicks_daily_index
+ALTER CLUSTER click_query ADD clicks_daily_table
 "
 ```
 
@@ -30,7 +30,7 @@ $params = [
   'cluster' => 'click_query',
   'body' => [
      'operation' => 'add',
-     'table' => 'clicks_daily_index'
+     'table' => 'clicks_daily_table'
       
   ]
 ];
@@ -44,7 +44,7 @@ $response = $client->cluster()->alter($params);
 <!-- request Python -->
 
 ```python
-utilsApi.sql('ALTER CLUSTER click_query ADD clicks_daily_index')
+utilsApi.sql('ALTER CLUSTER click_query ADD clicks_daily_table')
 ```
 
 <!-- response Python -->
@@ -57,7 +57,7 @@ utilsApi.sql('ALTER CLUSTER click_query ADD clicks_daily_index')
 <!-- request javascript -->
 
 ```javascript
-res = await utilsApi.sql('ALTER CLUSTER click_query ADD clicks_daily_index');
+res = await utilsApi.sql('ALTER CLUSTER click_query ADD clicks_daily_table');
 ```
 
 <!-- response javascript -->
@@ -71,7 +71,7 @@ res = await utilsApi.sql('ALTER CLUSTER click_query ADD clicks_daily_index');
 <!-- request Java -->
 
 ```java
-utilsApi.sql("ALTER CLUSTER click_query ADD clicks_daily_index");
+utilsApi.sql("ALTER CLUSTER click_query ADD clicks_daily_table");
 ```
 
 <!-- intro -->
@@ -80,7 +80,7 @@ utilsApi.sql("ALTER CLUSTER click_query ADD clicks_daily_index");
 <!-- request C# -->
 
 ```clike
-utilsApi.Sql("ALTER CLUSTER click_query ADD clicks_daily_index");
+utilsApi.Sql("ALTER CLUSTER click_query ADD clicks_daily_table");
 ```
 
 <!-- end -->

@@ -174,7 +174,7 @@
     * [• Special suffixes](Server_settings/Special_suffixes.md)
     * [• Scripted configuration](Server_settings/Scripted_configuration.md)
     * [• Comments](Server_settings/Comments.md)
-    * [• Inheritance of table and source declarations](Server_settings/Inheritance_of_index_and_source_declarations.md)
+    * [• Inheritance of table and source declarations](Server_settings/Inheritance_of_table_and_source_declarations.md)
     * [• Setting variables online](Server_settings/Setting_variables_online.md)
 * [⪢ Integration]
     * [Logstash](Integration/Logstash.md)

@@ -514,17 +514,17 @@ sqlresult = indexApi.Insert(insertDocumentRequest);
 
 ``` typescript
 res = await indexApi.insert({
-  index: 'test',
+  table: 'test',
   id: 1,
   doc: { content: 'Text 1', name: 'Doc 1', cat: 1 },
 });
 res = await indexApi.insert({
-  index: 'test',
+  table: 'test',
   id: 2,
   doc: { content: 'Text 2', name: 'Doc 2', cat: 2 },
 });
 res = await indexApi.insert({
-  index: 'test',
+  table: 'test',
   id: 3,
   doc: { content: 'Text 3', name: 'Doc 3', cat: 7 },
 });
@@ -632,7 +632,7 @@ POST /search
 <!-- request PHP -->
 
 ```php
-$result = $index->search('@title remove hair')->highlight(['title'])->get();
+$result = $table->search('@title remove hair')->highlight(['title'])->get();
 foreach($result as $doc)
 {
     echo "Doc ID: ".$doc->getId()."\n";
@@ -713,7 +713,7 @@ java
 query = new HashMap<String,Object>();
 query.put("query_string","@title remove hair");
 searchRequest = new SearchRequest();
-searchRequest.setIndex("forum");
+searchRequest.setTable("forum");
 searchRequest.setQuery(query);
 HashMap<String,Object> highlight = new HashMap<String,Object>(){{
     put("fields",new String[] {"title"});
@@ -772,7 +772,7 @@ TypeScript
 
 ```typescript
 res = await searchApi.search({
-  index: 'test',
+  table: 'test',
   query: { query_string: {'text 1'} },
   highlight: {'fields': ['content'] }
 });
@@ -930,7 +930,7 @@ UpdateDocumentRequest updateRequest = new UpdateDocumentRequest();
 doc = new HashMap<String,Object >(){{
     put("price",18.5);
 }};
-updateRequest.index("products").id(1513686608316989452L).setDoc(doc);
+updateRequest.table("products").id(1513686608316989452L).setDoc(doc);
 indexApi.update(updateRequest);
 ```
 
@@ -950,7 +950,7 @@ indexApi.Update(updateDocumentRequest);
 
 <!-- request TypeScript -->
 ``` typescript
-res = await indexApi.update({ index: "test", id: 1, doc: { cat: 10 } });
+res = await indexApi.update({ table: "test", id: 1, doc: { cat: 10 } });
 ```
 
 <!-- intro -->
@@ -1022,7 +1022,7 @@ POST /delete
 <!-- request PHP -->
 
 ```php
-$result = $index->deleteDocuments(new \Manticoresearch\Query\Range('price',['lte'=>10]));
+$result = $table->deleteDocuments(new \Manticoresearch\Query\Range('price',['lte'=>10]));
 
 ```
 <!-- response PHP -->
@@ -1066,7 +1066,7 @@ query.put("range",new HashMap<String,Object>(){{
         put("lte",10);
     }});
 }});
-deleteRequest.index("products").setQuery(query);
+deleteRequest.table("products").setQuery(query);
 indexApi.delete(deleteRequest);
 
 ```
@@ -1081,7 +1081,7 @@ Dictionary<string, Object> price = new Dictionary<string, Object>();
 price.Add("lte", 10);
 Dictionary<string, Object> range = new Dictionary<string, Object>();
 range.Add("price", price);
-DeleteDocumentRequest deleteDocumentRequest = new DeleteDocumentRequest(index: "products", range: range);
+DeleteDocumentRequest deleteDocumentRequest = new DeleteDocumentRequest(table: "products", range: range);
 indexApi.Delete(deleteDocumentRequest);
 ```
 
@@ -1092,7 +1092,7 @@ indexApi.Delete(deleteDocumentRequest);
 <!-- request TypeScript -->
 ``` typescript
 res = await indexApi.delete({
-  index: 'test',
+  table: 'test',
   query: { match: { '*': 'Text 1' } },
 });
 ```

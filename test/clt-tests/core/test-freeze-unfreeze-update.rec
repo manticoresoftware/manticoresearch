@@ -1,5 +1,17 @@
 ––– input –––
-echo -e "searchd {\n    listen = 9315:mysql\n    listen = 9316\n    log = /tmp/searchd.log\n    pid_file = /tmp/searchd.pid\n    data_dir = /tmp/data\n    watchdog = 0\n}" > /tmp/116.conf
+export INSTANCE=1
+––– output –––
+––– block: ../base/replication/start-searchd-precach –––
+––– input –––
+export INSTANCE=2
+––– output –––
+––– block: ../base/replication/start-searchd-precach –––
+––– input –––
+export INSTANCE=3
+––– output –––
+––– block: ../base/replication/start-searchd-precach –––
+––– input –––
+export CLUSTER_NAME=replication
 ––– output –––
 ––– input –––
 mkdir -p /tmp/data; rm -f /tmp/searchd.log; stdbuf -oL searchd --stopwait > /dev/null; stdbuf -oL searchd -c /tmp/116.conf > /dev/null
@@ -9,30 +21,90 @@ if timeout 10 grep -qm1 '\[BUDDY\] started' <(tail -n 1000 -f /tmp/searchd.log);
 ––– output –––
 Buddy started!
 ––– input –––
-mysql -P9315 -h0 -e "drop table if exists t; create table t(s string); insert into t values(1, 'a'); flush ramchunk t"; echo $?
+for n in `seq 2 $INSTANCE`; do mysql -h0 -P${n}306 -e "join cluster ${CLUSTER_NAME} at '127.0.0.1:1312'"; done;
 ––– output –––
-0
 ––– input –––
-mysql -P9315 -h0 -e "select * from t;"
+mysql -h0 -P1306 -e "SHOW STATUS LIKE 'cluster_replication_status'\G"
 ––– output –––
-+------+------+
-| id   | s    |
-+------+------+
-|    1 | a    |
-+------+------+
 ––– input –––
 (rm -f /tmp/update.sql; for n in `seq 1 10000`; do echo "update t set s='b' where id=1;" >> /tmp/update.sql; done; nohup sh -c "while true; do mysql -P9315 -h0 < /tmp/update.sql | break; done" &>/dev/null &) 2>/dev/null
 ––– output –––
 ––– input –––
-sleep 30; mysql -P9315 -h0 -e "select * from t;"
+mysql -h0 -P2306 -e "SHOW STATUS LIKE 'cluster_replication_status'\G"
 ––– output –––
-+------+------+
-| id   | s    |
-+------+------+
-|    1 | b    |
-+------+------+
 ––– input –––
-stdbuf -oL mysql -P9315 -h0 -e "freeze t"
+mysql -h0 -P2306 -e "SHOW STATUS LIKE 'cluster_replication_nodes_set'\G;"
+––– output –––
+––– input –––
+mysql -h0 -P3306 -e "SHOW STATUS LIKE 'cluster_replication_status'\G"
+––– output –––
+––– input –––
+mysql -h0 -P3306 -e "SHOW STATUS LIKE 'cluster_replication_nodes_set'\G;"
+––– output –––
+––– input –––
+php -d memory_limit=2G ./test/clt-tests/scripts/load_names_attr.php --batch-size=5000 --concurrency=1 --docs=1000000 --start-id=01 --rt-mem-limit=256M --min-infix-len=2 --drop-table --port=2306
+––– output –––
+––– input –––
+mysql -h0 -P2306 -e "ALTER CLUSTER replication ADD name;"
+––– output –––
+––– input –––
+mysql -P1306 -h0 -e "SELECT COUNT(*) FROM name;"
+––– output –––
++----------+
+| count(*) |
++----------+
+|  1100000 |
++----------+
+––– input –––
+mysql -P1306 -h0 -e "DESCRIBE name;"
+––– output –––
+––– input –––
+mysql -P1306 -h0 -e "SELECT * FROM name limit 10;"
+––– output –––
+––– input –––
+mysql -P1306 -h0 -e "SELECT id, s FROM name LIMIT 10;"
+––– output –––
+––– input –––
+mysql -P1306 -h0 -e "SHOW CREATE TABLE name\G;"
+––– output –––
+––– input –––
+mysql -P2306 -h0 -e "SHOW CREATE TABLE name\G;"
+––– output –––
+––– input –––
+mysql -P3306 -h0 -e "SHOW CREATE TABLE name\G;"
+––– output –––
+––– input –––
+mysql -P1306 -h0 -e "SELECT COUNT(*) FROM name;"
+––– output –––
++----------+
+| count(*) |
++----------+
+|  1000000 |
++----------+
+––– input –––
+rm -f /tmp/update.sql; for n in `seq 01 100`; do echo "UPDATE replication:name SET s='b' WHERE id=$n;" >> /tmp/update.sql; done; while true; do mysql -P1306 -h0 < /tmp/update.sql; done & UPDATE_PID=$!
+––– output –––
+[%{NUMBER}] %{NUMBER}
+––– input –––
+mysql -P1306 -h0 -e "DESCRIBE name;"
+––– output –––
+––– input –––
+mysql -P1306 -h0 -e "SELECT id FROM replication:name WHERE MATCH('@s value1');"
+––– output –––
+––– input –––
+mysql -P1306 -h0 -e "SHOW CREATE TABLE replication:name\G;"
+––– output –––
+––– input –––
+sleep 10; mysql -P1306 -h0 -e "SELECT * FROM replication:name limit 10;"
+––– output –––
+––– input –––
+mysql -P2306 -h0 -e "SELECT * FROM replication:name limit 10;"
+––– output –––
+––– input –––
+mysql -P3306 -h0 -e "SELECT * FROM replication:name limit 10;"
+––– output –––
+––– input –––
+sleep 1; mysql -P9306 -h0 -e "freeze replication:name"
 ––– output –––
 +------------------------+------------------------+
 | file                   | normalized             |
@@ -53,19 +125,12 @@ stdbuf -oL mysql -P9315 -h0 -e "freeze t"
 | /tmp/data/t/t.settings | /tmp/data/t/t.settings |
 +------------------------+------------------------+
 ––– input –––
-mysql -P9315 -h0 -e "unfreeze t"; echo $?
+sleep 1; kill $UPDATE_PID; wait $UPDATE_PID 2>/dev/null;
 ––– output –––
 0
 ––– input –––
-mysql -P9315 -h0 -e "DESCRIBE t"
+(sleep 1; mysql -P1306 -h0 -e "drop table if exists replication:name;" && mysql -P1306 -h0 -e "CREATE TABLE name(a string); insert into name values(1, 'a'); flush ramchunk ; freeze t"; mysql -P1306 -h0 -e "update name set a='b' where id = 1" 2>&1 &)
 ––– output –––
-+-------+--------+------------+
-| Field | Type   | Properties |
-+-------+--------+------------+
-| id    | bigint |            |
-| s     | string |            |
-+-------+--------+------------+
 ––– input –––
-mysql -P9315 -h0 -e "UPDATE t SET s='с' WHERE id=1; FLUSH RAMCHUNK t"; echo $?
+if timeout 5 mysql -P1306 -h0 -e 'SELECT * FROM t'; then echo 'Query executed'; else echo 'Query not executed'; fi
 ––– output –––
-0

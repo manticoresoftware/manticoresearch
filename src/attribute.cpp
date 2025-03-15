@@ -677,30 +677,131 @@ int64_t sphCopyBlobRow ( CSphTightVector<BYTE> & dDstPool, const CSphTightVector
 }
 
 
-void sphAddAttrToBlobRow ( const CSphRowitem * pDocinfo, CSphTightVector<BYTE> & dBlobRow, const BYTE * pPool, int nBlobs, const CSphAttrLocator * pOldBlobRowLoc )
+static void AddAttrToBlobRowNoData ( const CSphRowitem * pDocinfo, CSphTightVector<BYTE> & dBlobRow, const BYTE * pPool, int iNumBlobs, const CSphAttrLocator & tOldBlobRowLoc )
 {
-	dBlobRow.Resize ( 0 );
-	if ( nBlobs )
+	const BYTE * pOldRow = pPool + sphGetRowAttr ( pDocinfo, tOldBlobRowLoc );
+	DWORD uOldBlobLen = sphGetBlobTotalLen ( pOldRow, iNumBlobs );
+	DWORD uLenSize = RowFlagsToLen ( *pOldRow );
+	dBlobRow.Resize ( uOldBlobLen + uLenSize );
+	BYTE * pNewRow = dBlobRow.Begin();
+	DWORD uAttrLengthSize = uLenSize*iNumBlobs+1;		// old blob lengths + flags
+	memcpy ( pNewRow, pOldRow, uAttrLengthSize );
+	pNewRow += uAttrLengthSize;
+	pOldRow += uAttrLengthSize;
+	memcpy ( pNewRow, pOldRow-uLenSize, uLenSize );		// new attr length (last cumulative length)
+	pNewRow += uLenSize;
+	memcpy ( pNewRow, pOldRow, uOldBlobLen-uAttrLengthSize );
+}
+
+
+static void AddAttrToBlobRowWithData ( const CSphRowitem * pDocinfo, CSphTightVector<BYTE> & dBlobRow, const BYTE * pPool, int iNumBlobs, const CSphAttrLocator & tOldBlobRowLoc, const BYTE * pData, DWORD uDataLen )
+{
+	const BYTE * pOldRow = pPool + sphGetRowAttr ( pDocinfo, tOldBlobRowLoc );
+	BYTE uFlags = *pOldRow;
+	CSphVector<DWORD> dAttrLengths;
+	dAttrLengths.Reserve ( iNumBlobs+1 );
+	for ( int i = 0; i < iNumBlobs; i++ )
+		switch ( uFlags )
+		{
+		case BLOB_ROW_LEN_BYTE:		dAttrLengths.Add ( GetBlobAttrLen<BYTE> ( i, pOldRow+1 ) ); break;
+		case BLOB_ROW_LEN_WORD:		dAttrLengths.Add ( GetBlobAttrLen<WORD> ( i, pOldRow+1 ) );	break;
+		case BLOB_ROW_LEN_DWORD:	dAttrLengths.Add ( GetBlobAttrLen<DWORD> ( i, pOldRow+1 ) ); break;
+		default: break;
+		}
+
+	dAttrLengths.Add(uDataLen);
+
+	DWORD uTotalLength = 0;
+	for ( auto i : dAttrLengths )
+		uTotalLength += i;
+
+	BYTE uNewFlags = CalcBlobRowFlags ( uTotalLength );
+	dBlobRow.Resize ( 1 + (iNumBlobs+1)*RowFlagsToLen(uNewFlags) + uTotalLength );
+	BYTE * pNewRow = dBlobRow.Begin();
+	*pNewRow++ = uNewFlags;
+
+	// attribute lengths
+	DWORD uCumulativeLength = 0;
+	for ( auto i : dAttrLengths )
+	{
+		uCumulativeLength += i;
+
+		switch ( uNewFlags )
+		{
+		case BLOB_ROW_LEN_BYTE:
+			sphUnalignedWrite ( pNewRow, (BYTE)uCumulativeLength );
+			pNewRow += sizeof(BYTE);
+			break;
+
+		case BLOB_ROW_LEN_WORD:
+			sphUnalignedWrite ( pNewRow, (WORD)uCumulativeLength );
+			pNewRow += sizeof(WORD);
+			break;
+
+		case BLOB_ROW_LEN_DWORD:
+			sphUnalignedWrite ( pNewRow, (DWORD)uCumulativeLength );
+			pNewRow += sizeof(DWORD);
+			break;
+
+		default:
+			break;
+		}
+	}
+
+	// old attribute data
+	for ( int i = 0; i < iNumBlobs; i++ )
+	{
+		int iLengthBytes = 0;
+		const BYTE * pBlob = GetBlobAttr ( pOldRow, i, iNumBlobs, iLengthBytes );
+		memcpy ( pNewRow, pBlob, iLengthBytes );
+		pNewRow += iLengthBytes;
+	}
+
+	// new attr data
+	memcpy ( pNewRow, pData, uDataLen );
+}
+
+
+static void AddAttrToBlobRowFirst ( CSphTightVector<BYTE> & dBlobRow, const BYTE * pData, DWORD uDataLen )
+{
+	BYTE uFlags = CalcBlobRowFlags(uDataLen);
+	DWORD uLenSize = RowFlagsToLen(uFlags);
+	dBlobRow.Add(uFlags);
+	BYTE * pAdded = dBlobRow.AddN ( uLenSize+uDataLen );
+
+	switch ( uFlags )
+	{
+	case BLOB_ROW_LEN_BYTE:
+		*pAdded = (BYTE)uDataLen;
+		break;
+
+	case BLOB_ROW_LEN_WORD:
+		sphUnalignedWrite ( pAdded, (WORD)uDataLen );
+		break;
+
+	case BLOB_ROW_LEN_DWORD:
+		sphUnalignedWrite ( pAdded, (DWORD)uDataLen );
+		break;
+	}
+
+	pAdded += uLenSize;
+	memcpy ( pAdded, pData, uDataLen );
+}
+
+
+void sphAddAttrToBlobRow ( const CSphRowitem * pDocinfo, CSphTightVector<BYTE> & dBlobRow, const BYTE * pPool, int iNumBlobs, const CSphAttrLocator * pOldBlobRowLoc, const BYTE * pData, DWORD uDataLen )
+{
+	dBlobRow.Resize(0);
+	if ( iNumBlobs )
 	{
 		assert(pOldBlobRowLoc);
-		const BYTE * pOldRow = pPool + sphGetRowAttr ( pDocinfo, *pOldBlobRowLoc );
-		DWORD uOldBlobLen = sphGetBlobTotalLen ( pOldRow, nBlobs );
-		DWORD uLenSize = RowFlagsToLen ( *pOldRow );
-		dBlobRow.Resize ( uOldBlobLen + uLenSize );
-		BYTE * pNewRow = dBlobRow.Begin();
-		DWORD uAttrLengthSize = uLenSize*nBlobs+1;			// old blob lengths + flags
-		memcpy ( pNewRow, pOldRow, uAttrLengthSize );
-		pNewRow += uAttrLengthSize;
-		pOldRow += uAttrLengthSize;
-		memcpy ( pNewRow, pOldRow-uLenSize, uLenSize );		// new attr length (last cumulative length)
-		pNewRow += uLenSize;
-		memcpy ( pNewRow, pOldRow, uOldBlobLen-uAttrLengthSize );
+		if ( pData )
+			AddAttrToBlobRowWithData ( pDocinfo, dBlobRow, pPool, iNumBlobs, *pOldBlobRowLoc, pData, uDataLen );
+		else
+			AddAttrToBlobRowNoData ( pDocinfo, dBlobRow, pPool, iNumBlobs, *pOldBlobRowLoc );
 	}
 	else
-	{
-		dBlobRow.Add ( CalcBlobRowFlags(0) );	// 1-byte flags
-		dBlobRow.Add ( 0 );						// 1-byte length
-	}
+		AddAttrToBlobRowFirst ( dBlobRow, pData, uDataLen );
 }
 
 

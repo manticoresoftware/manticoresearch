@@ -3590,13 +3590,17 @@ bool RtIndex_c::WriteAttributes ( SaveDiskDataContext_t & tCtx, CSphString & sEr
 	for ( const auto & i : tCtx.m_tRamSegments )
 		tCtx.m_iTotalDocuments += i->m_tAliveRows.load ( std::memory_order_relaxed );
 
+	CSphVector<std::pair<PlainOrColumnar_t,int>> dAllAttrsForKNN;
 	CSphVector<PlainOrColumnar_t> dAttrsForKNN;
 	std::unique_ptr<knn::Builder_i> pKNNBuilder;
 	if ( m_tSchema.HasKNNAttrs() )
 	{
-		pKNNBuilder = BuildCreateKNN ( m_tSchema, tCtx.m_iTotalDocuments, dAttrsForKNN, sError );
+		pKNNBuilder = BuildCreateKNN ( m_tSchema, tCtx.m_iTotalDocuments, dAllAttrsForKNN, sError );
 		if ( !pKNNBuilder )
 			return false;
+
+		for ( const auto & i : dAllAttrsForKNN )
+			dAttrsForKNN.Add ( i.first );
 	}
 
 	CSphFixedVector<DocidRowidPair_t> dRawLookup ( tCtx.m_iTotalDocuments );

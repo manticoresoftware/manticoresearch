@@ -7157,6 +7157,7 @@ bool CSphIndex_VLN::AddRemoveFromKNN ( const CSphSchema & tOldSchema, const CSph
 			}
 		}
 
+		pRow = GetRawAttrs();
 		for ( RowID_t tRowID = 0; tRowID < RowID_t(m_iDocinfo); ++tRowID, pRow += iStride )
 		{
 			BuildStoreKNN ( tRowID, pRow, pBlobs, dColumnarIterators, dOldAttrsForKNN, *pKNNBuilder );

@@ -6,7 +6,7 @@
 <requires>
 	<non-rt/>
 </requires>
-
+<skip_db/>
 <config>
 searchd
 {
@@ -58,7 +58,7 @@ indexer
 <custom_test><![CDATA[
 $results = [];
 global $g_locals;
-exec ( $g_locals['indexer']." -c ".testdir('config.conf')." index dist --rotate", $out, $retval );
+exec ( $g_locals['indexer']." -c ".testdir_config()." index dist --rotate", $out, $retval );
 foreach ($out as $line) if (strstr($line, 'WARNING')) $results[] = $line;
 $results[] = "exit code: $retval";
 ]]></custom_test>

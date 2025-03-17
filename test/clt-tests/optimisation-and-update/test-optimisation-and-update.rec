@@ -69,17 +69,8 @@ mysql -h0 -P9306 -e "SELECT COUNT(*) FROM name;"
 |  4000000 |
 +----------+
 ––– input –––
-rm -f /var/log/manticore/searchd.log; searchd --stopwait > /dev/null; searchd; if timeout 10 grep -qm1 '\[BUDDY\] started' <(tail -n 1000 -f /var/log/manticore/searchd.log); then echo 'Buddy started!'; else echo 'Timeout or failed!'; cat /var/log/manticore/searchd.log;fi
+rm -f /var/log/manticore/searchd.log; stdbuf -oL searchd --stopwait > /dev/null; (stdbuf -oL searchd 2>&1 | tee /var/log/manticore/searchd.log | grep -i precach & disown); sleep 0.5; if timeout 10 grep -qm1 '\[BUDDY\] started' <(tail -n 1000 -f /var/log/manticore/searchd.log); then echo 'Buddy started!'; else echo 'Timeout or failed!'; cat /var/log/manticore/searchd.log; fi
 ––– output –––
-Manticore %{VERSION} (columnar %{VERSION}) (secondary %{VERSION}) (knn %{VERSION})
-Copyright (c) 2001-2016, Andrew Aksyonoff
-Copyright (c) 2008-2016, Sphinx Technologies Inc (http://sphinxsearch.com)
-Copyright (c) 2017-%{YEAR}, Manticore Software LTD (https://manticoresearch.com)
-[#!/[0-9]{2}:[0-9]{2}.[0-9]{3}/!#] [#!/[0-9]+/!#] using config file '/etc/manticoresearch/manticore.conf' (%{NUMBER} chars)...
-starting daemon version '%{VERSION} (columnar %{VERSION}) (secondary %{VERSION}) (knn %{VERSION})' ...
-listening on %{IPADDR}:9312 for sphinx and http(s)
-listening on %{IPADDR}:9306 for mysql
-listening on %{IPADDR}:9308 for sphinx and http(s)
 precaching table 'name'
 precached 1 tables in #!/[0-9]{1}.[0-9]{3}/!# sec
 Buddy started!
@@ -104,19 +95,18 @@ mysql -h0 -P9306 -e "show table name status like '%chunk%';"
 ––– input –––
 mysql -h0 -P9306 -e "select * from name ORDER BY id ASC LIMIT 5;"
 ––– output –––
-+------+----------------+------+
-| id   | username       | s    |
-+------+----------------+------+
-|    1 | TARRA NORTH    | a    |
-|    2 | CARSON BALL    | a    |
-|    3 | TALIA TEAGUE   | a    |
-|    4 | ALAYNA KIMBALL | a    |
-|    5 | ZULMA RINEHART | a    |
-+------+----------------+------+
++------+------------------+------+
+| id   | username         | s    |
++------+------------------+------+
+|    1 | CIRA HINOJOSA    | a    |
+|    2 | DENICE HATTON    | a    |
+|    3 | JOAQUIN FOLEY    | a    |
+|    4 | REBEKAH CARLISLE | a    |
+|    5 | EVE GUAJARDO     | a    |
++------+------------------+------+
 ––– input –––
 start_optimize=$(date +%s); time mysql -h0 -P9306 -e "OPTIMIZE TABLE name OPTION sync=1, cutoff=1;" &
 ––– output –––
-[%{NUMBER}] %{NUMBER}
 ––– input –––
 sleep 2 && start_update=$(date +%s); time_taken_update=$( { time mysql -h0 -P9306 -e "UPDATE name SET s='b' WHERE id=1;" > /dev/null 2>&1; } 2>&1 | grep real | awk '{print $2}'); update_duration=$(echo "$time_taken_update" | awk -F'm' '{print ($1 * 60) + $2}'); if (( $(echo "$update_duration > 1" | bc -l) )); then echo "FAIL: Update took longer than 1 second!"; exit 1; else echo "Update completed within acceptable time."; fi
 ––– output –––
@@ -124,11 +114,11 @@ Update completed within acceptable time.
 ––– input –––
 mysql -h0 -P9306 -e "SELECT * FROM name WHERE s='b' ORDER BY id ASC LIMIT 5;"
 ––– output –––
-+------+-------------+------+
-| id   | username    | s    |
-+------+-------------+------+
-|    1 | TARRA NORTH | b    |
-+------+-------------+------+
++------+---------------+------+
+| id   | username      | s    |
++------+---------------+------+
+|    1 | CIRA HINOJOSA | b    |
++------+---------------+------+
 ––– input –––
 start_update=$(date +%s); time_taken_update=$( { time mysql -h0 -P9306 -e "UPDATE name SET s=123 WHERE id=1;" > /dev/null 2>&1; } 2>&1 | grep real | awk '{print $2}'); update_duration=$(echo "$time_taken_update" | awk -F'm' '{print ($1 * 60) + $2}'); if (( $(echo "$update_duration > 1" | bc -l) )); then echo "FAIL: Update took longer than 1 second!"; exit 1; else echo "Update completed within acceptable time."; fi
 ––– output –––
@@ -136,11 +126,11 @@ Update completed within acceptable time.
 ––– input –––
 mysql -h0 -P9306 -e "SELECT * FROM name WHERE s='b' ORDER BY id ASC LIMIT 5;"
 ––– output –––
-+------+-------------+------+
-| id   | username    | s    |
-+------+-------------+------+
-|    1 | TARRA NORTH | b    |
-+------+-------------+------+
++------+---------------+------+
+| id   | username      | s    |
++------+---------------+------+
+|    1 | CIRA HINOJOSA | b    |
++------+---------------+------+
 ––– input –––
 start_update=$(date +%s); time_taken_update=$( { time mysql -h0 -P9306 -e "UPDATE name SET s='b' WHERE id > 0;" > /dev/null 2>&1; } 2>&1 | grep real | awk '{print $2}'); update_duration=$(echo "$time_taken_update" | awk -F'm' '{print ($1 * 60) + $2}'); if (( $(echo "$update_duration > 3" | bc -l) )); then echo "FAIL: Update took longer than 3 seconds!"; false; else echo "Update completed within acceptable time."; fi
 ––– output –––
@@ -148,15 +138,15 @@ Update completed within acceptable time.
 ––– input –––
 mysql -h0 -P9306 -e "SELECT * FROM name WHERE s='b' ORDER BY id ASC LIMIT 5;"
 ––– output –––
-+------+----------------+------+
-| id   | username       | s    |
-+------+----------------+------+
-|    1 | TARRA NORTH    | b    |
-|    2 | CARSON BALL    | b    |
-|    3 | TALIA TEAGUE   | b    |
-|    4 | ALAYNA KIMBALL | b    |
-|    5 | ZULMA RINEHART | b    |
-+------+----------------+------+
++------+------------------+------+
+| id   | username         | s    |
++------+------------------+------+
+|    1 | CIRA HINOJOSA    | b    |
+|    2 | DENICE HATTON    | b    |
+|    3 | JOAQUIN FOLEY    | b    |
+|    4 | REBEKAH CARLISLE | b    |
+|    5 | EVE GUAJARDO     | b    |
++------+------------------+------+
 ––– input –––
 start_update=$(date +%s); time_taken_update=$(mysql -h0 -P9306 -e "UPDATE name SET unknown='b' WHERE id=1;" 2>&1); update_duration=$(( $(date +%s) - start_update )); [[ "$time_taken_update" == *"ERROR"* ]] && echo "$time_taken_update"; if (( update_duration <= 1 )); then echo "The command is completed within a reasonable time frame."; else echo "FAIL: Update took longer than 1 second!"; false; fi
 ––– output –––
@@ -165,15 +155,15 @@ The command is completed within a reasonable time frame.
 ––– input –––
 mysql -h0 -P9306 -e "SELECT * FROM name WHERE s='b' ORDER BY id ASC LIMIT 5;"
 ––– output –––
-+------+----------------+------+
-| id   | username       | s    |
-+------+----------------+------+
-|    1 | TARRA NORTH    | b    |
-|    2 | CARSON BALL    | b    |
-|    3 | TALIA TEAGUE   | b    |
-|    4 | ALAYNA KIMBALL | b    |
-|    5 | ZULMA RINEHART | b    |
-+------+----------------+------+
++------+------------------+------+
+| id   | username         | s    |
++------+------------------+------+
+|    1 | CIRA HINOJOSA    | b    |
+|    2 | DENICE HATTON    | b    |
+|    3 | JOAQUIN FOLEY    | b    |
+|    4 | REBEKAH CARLISLE | b    |
+|    5 | EVE GUAJARDO     | b    |
++------+------------------+------+
 ––– input –––
 { command time wait > /dev/null 2>&1; } 2>&1 | grep -v "real" | grep -v "user" | grep -v "sys"; end_optimize=$(date +%s); optimize_duration=$((end_optimize - start_optimize)); echo "OPTIMIZE duration: $optimize_duration seconds"
 ––– output –––

@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2017-2024, Manticore Software LTD (https://manticoresearch.com)
+// Copyright (c) 2017-2025, Manticore Software LTD (https://manticoresearch.com)
 // Copyright (c) 2001-2016, Andrew Aksyonoff
 // Copyright (c) 2008-2016, Sphinx Technologies Inc
 // All rights reserved
@@ -549,7 +549,7 @@ ATTRIBUTE_NO_SANITIZE_ADDRESS StackSizeTuplet_t FullTextStackSize_c::MockMeasure
 
 
 template<typename MOCK, int FRAMEVAL=0, int INITVAL=0>
-ATTRIBUTE_NO_SANITIZE_ADDRESS void DetermineStackSize ()
+ATTRIBUTE_NO_SANITIZE_ADDRESS void DetermineStackSize (StringBuilder_c& sExport)
 {
 	int iFrameSize = FRAMEVAL;
 	int iInitSize = INITVAL;
@@ -573,8 +573,10 @@ ATTRIBUTE_NO_SANITIZE_ADDRESS void DetermineStackSize ()
 #endif
 		}
 		iFrameSize = tNewSize.m_iEval;
-		if ( bMocked )
+		if ( bMocked ) {
 			sphLogDebug ( "Frame %s is %d (mocked, as no env MANTICORE_%s=%d found)", szReport, iFrameSize, szEnv, iFrameSize );
+			sExport.Sprint ( "export MANTICORE_", szEnv, "=", iFrameSize, "\n" );
+		}
 		else
 			sphLogDebug ( "Frame %s %d (from env MANTICORE_%s)", szReport, iFrameSize, szEnv );
 	} else
@@ -598,8 +600,10 @@ ATTRIBUTE_NO_SANITIZE_ADDRESS void DetermineStackSize ()
 #endif
 		}
 		iInitSize = tNewSize.m_iCreate;
-		if ( bMocked )
+		if ( bMocked ) {
 			sphLogDebug ( "Starting %s is %d (mocked, as no env MANTICORE_START_%s=%d found)", szReport, iInitSize, szEnv, iInitSize );
+			sExport.Sprint ( "export MANTICORE_START_", szEnv, "=", iInitSize, "\n");
+		}
 		else
 			sphLogDebug ( "Starting %s %d (from env MANTICORE_START_%s)", szReport, iInitSize, szEnv );
 	} else
@@ -611,7 +615,7 @@ ATTRIBUTE_NO_SANITIZE_ADDRESS void DetermineStackSize ()
 }
 
 
-void DetermineNodeItemStackSize()
+void DetermineNodeItemStackSize( StringBuilder_c& sExport )
 {
 	// some values for x86_64: clang 12.0.1 relwithdebinfo = 768, debug = 4208. gcc 9.3 relwithdebinfo = 16, debug = 256
 #ifdef KNOWN_CREATE_SIZE
@@ -619,7 +623,7 @@ void DetermineNodeItemStackSize()
 #else
 	DetermineStackSize<CreateExprStackSize_c>
 #endif
-		();
+		(sExport);
 
 	// some values for x86_64: clang 12.0.1 relwithdebinfo = 32, debug = 48. gcc 9.3 relwithdebinfo = 48, debug = 48
 #ifdef KNOWN_EXPR_SIZE
@@ -627,11 +631,11 @@ void DetermineNodeItemStackSize()
 #else
 	DetermineStackSize<EvalExprStackSize_c>
 #endif
-		();
-	DetermineStackSize<DeleteExprStackSize_c>();
+		(sExport);
+	DetermineStackSize<DeleteExprStackSize_c>(sExport);
 }
 
-void DetermineFilterItemStackSize ()
+void DetermineFilterItemStackSize ( StringBuilder_c& sExport )
 {
 	// some values for x86_64: clang 12.0.1 relwithdebinfo = 208, debug = 400. gcc 9.3 relwithdebinfo = 240, debug = 272
 #ifdef KNOWN_FILTER_SIZE
@@ -639,10 +643,10 @@ void DetermineFilterItemStackSize ()
 #else
 	DetermineStackSize<FilterCreationMeasureStack_c>
 #endif
-		();
+		(sExport);
 }
 
-void DetermineMatchStackSize()
+void DetermineMatchStackSize(StringBuilder_c& sExport)
 {
 #ifdef KNOWN_MATCH_SIZE
 #ifdef START_KNOWN_MATCH_SIZE
@@ -653,6 +657,6 @@ void DetermineMatchStackSize()
 #else
 	DetermineStackSize<FullTextStackSize_c, 0>
 #endif
-		();
+		(sExport);
 }
 

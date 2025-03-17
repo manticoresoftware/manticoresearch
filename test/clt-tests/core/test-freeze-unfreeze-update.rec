@@ -1,105 +1,26 @@
+––– block: ../base/start-searchd-with-buddy –––
 ––– input –––
-echo -e "searchd {\n    listen = 9315:mysql\n    listen = 9316\n    log = /tmp/searchd.log\n    pid_file = /tmp/searchd.pid\n    data_dir = /tmp/data\n    watchdog = 0\n}" > /tmp/116.conf
+manticore-load --quiet --init="CREATE TABLE test (id bigint, usertest text stored indexed, category string, age int, salary float, discount float, is_active bool, last_login timestamp, product_codes multi, large_values multi64, additional_info json, location_vector float_vector)" --load="INSERT INTO test (id, usertest, category, age, salary, discount, is_active, last_login, product_codes, large_values, additional_info, location_vector) VALUES (<increment>, '<text/5/20>', '<text/5/10>', <int/1/100>, <float/1.0/100.0>, <float/0.0/10.0>, <int/0/1>, <int/1609459200/1704067200>, (<array/1/10/1/100>), (<array/1/10/-100000/100000>), '{\"key\":\"value\"}', (<array/4/4/1.0/10.0>))" --batch-size=10000 --threads=4 --total=1000000
+––– output –––
+Threads ; Batch     ; Time        ; Total Docs  ; Docs/Sec    ; Avg QPS     ; p99 QPS     ; p95 QPS     ; p5 QPS      ; p1 QPS      ; Lat Avg     ; Lat p50     ; Lat p95     ; Lat p99     ;
+4       ; 10000     ; %{NUMBER}:%{NUMBER}       ; 1000000     ; %{NUMBER}      ; %{NUMBER}          ; %{NUMBER}          ; %{NUMBER}          ; %{NUMBER}          ; %{NUMBER}          ; %{NUMBER}.%{NUMBER}       ; %{NUMBER}.%{NUMBER}       ; %{NUMBER}.%{NUMBER}       ; %{NUMBER}.%{NUMBER}       ;
+––– input –––
+mysql -h0 -P9306 -e "SELECT * FROM test ORDER BY id ASC LIMIT 100000 OPTION max_matches=100000;" > /tmp/test_data.txt
 ––– output –––
 ––– input –––
-mkdir -p /tmp/data; rm -f /tmp/searchd.log; stdbuf -oL searchd --stopwait > /dev/null; stdbuf -oL searchd -c /tmp/116.conf > /dev/null
+md5sum /tmp/test_data.txt
 ––– output –––
+99494585e9f5bad83f5f6ec41a62d292  /tmp/test_data.txt
 ––– input –––
-if timeout 10 grep -qm1 '\[BUDDY\] started' <(tail -n 1000 -f /tmp/searchd.log); then echo 'Buddy started!'; else echo 'Timeout or failed!'; cat /tmp/searchd.log;fi
-––– output –––
-Buddy started!
-––– input –––
-mysql -P9315 -h0 -e "unfreeze t; drop table if exists t; create table t(a string); insert into t values(1, 'a'); flush ramchunk t; freeze t; update t set a='b' where id = 1;" &
-––– output –––
-[%{NUMBER}] %{NUMBER}
-––– input –––
-(rm -f /tmp/update.sql; for n in `seq 1 10000`; do echo "update t set s='b' where id=1;" >> /tmp/update.sql; done; nohup sh -c "while true; do mysql -P9315 -h0 < /tmp/update.sql | break; done" &>/dev/null &) 2>/dev/null
-––– output –––
-+------------------------+------------------------+
-| file                   | normalized             |
-+------------------------+------------------------+
-| /tmp/data/t/t.0.spa    | /tmp/data/t/t.0.spa    |
-| /tmp/data/t/t.0.spb    | /tmp/data/t/t.0.spb    |
-| /tmp/data/t/t.0.spd    | /tmp/data/t/t.0.spd    |
-| /tmp/data/t/t.0.spe    | /tmp/data/t/t.0.spe    |
-| /tmp/data/t/t.0.sph    | /tmp/data/t/t.0.sph    |
-| /tmp/data/t/t.0.sphi   | /tmp/data/t/t.0.sphi   |
-| /tmp/data/t/t.0.spi    | /tmp/data/t/t.0.spi    |
-| /tmp/data/t/t.0.spidx  | /tmp/data/t/t.0.spidx  |
-| /tmp/data/t/t.0.spm    | /tmp/data/t/t.0.spm    |
-| /tmp/data/t/t.0.spp    | /tmp/data/t/t.0.spp    |
-| /tmp/data/t/t.0.spt    | /tmp/data/t/t.0.spt    |
-| /tmp/data/t/t.meta     | /tmp/data/t/t.meta     |
-| /tmp/data/t/t.settings | /tmp/data/t/t.settings |
-+------------------------+------------------------+
-––– input –––
-export INSTANCE=1
-––– output –––
-––– block: ../base/replication/start-searchd-precach –––
-––– input –––
-export INSTANCE=2
-––– output –––
-––– block: ../base/replication/start-searchd-precach –––
-––– input –––
-export INSTANCE=3
-––– output –––
-––– block: ../base/replication/start-searchd-precach –––
-––– input –––
-export CLUSTER_NAME=replication
-––– output –––
-––– input –––
-mysql -h0 -P1306 -e "create cluster ${CLUSTER_NAME}"
-––– output –––
-––– input –––
-mysql -h0 -P1306 -e "show status like 'cluster_${CLUSTER_NAME}_status'\G"
-––– output –––
-*************************** 1. row ***************************
-Counter: cluster_#!/[a-z]+/!#_status
-Value: primary
-––– input –––
-for n in `seq 2 $INSTANCE`; do mysql -h0 -P${n}306 -e "join cluster ${CLUSTER_NAME} at '127.0.0.1:1312'"; done;
-––– output –––
-––– input –––
-mysql -h0 -P1306 -e "SHOW STATUS LIKE 'cluster_replication_status'\G"
-––– output –––
-*************************** 1. row ***************************
-Counter: cluster_replication_status
-Value: primary
-––– input –––
-mysql -h0 -P2306 -e "SHOW STATUS LIKE 'cluster_replication_status'\G"
-––– output –––
-*************************** 1. row ***************************
-Counter: cluster_replication_status
-Value: primary
-––– input –––
-mysql -h0 -P3306 -e "SHOW STATUS LIKE 'cluster_replication_status'\G"
-––– output –––
-*************************** 1. row ***************************
-Counter: cluster_replication_status
-Value: primary
-––– input –––
-php -d memory_limit=2G ./test/clt-tests/scripts/load_names_attr.php --batch-size=100000 --concurrency=4 --docs=1000000 --start-id=1 --port=2306 > /dev/null
-––– output –––
-––– input –––
-mysql -h0 -P2306 -e "SELECT * FROM name ORDER BY id ASC LIMIT 1000000 OPTION max_matches=1000000;" > /tmp/name_data.txt
-––– output –––
-––– input –––
-md5sum /tmp/name_data.txt
-––– output –––
-85c098de3fcf2065d57d61f47ef68fae  /tmp/name_data.txt
-––– input –––
-mysql -h0 -P2306 -e "SHOW TABLES"
+mysql -h0 -P9306 -e "SHOW TABLES"
 ––– output –––
 +-------+------+
 | Table | Type |
 +-------+------+
-| name  | rt   |
+| test  | rt   |
 +-------+------+
 ––– input –––
-mysql -h0 -P2306 -e "ALTER CLUSTER replication ADD name;"
-––– output –––
-––– input –––
-mysql -P1306 -h0 -e "SELECT COUNT(*) FROM name;"
+mysql -P9306 -h0 -e "SELECT COUNT(*) FROM test;"
 ––– output –––
 +----------+
 | count(*) |
@@ -107,14 +28,14 @@ mysql -P1306 -h0 -e "SELECT COUNT(*) FROM name;"
 |  1000000 |
 +----------+
 ––– input –––
-mysql -P1306 -h0 -e "DESCRIBE name;"
+mysql -P9306 -h0 -e "DESCRIBE test;"
 ––– output –––
 +-----------------+--------------+----------------+
 | Field           | Type         | Properties     |
 +-----------------+--------------+----------------+
 | id              | bigint       |                |
-| username        | text         | indexed stored |
-| gender          | string       |                |
+| usertest        | text         | indexed stored |
+| category        | string       |                |
 | age             | uint         |                |
 | salary          | float        |                |
 | discount        | float        |                |
@@ -123,47 +44,37 @@ mysql -P1306 -h0 -e "DESCRIBE name;"
 | product_codes   | mva          |                |
 | large_values    | mva64        |                |
 | additional_info | json         |                |
-| location_vector | float_vector | knn            |
+| location_vector | float_vector |                |
 +-----------------+--------------+----------------+
 ––– input –––
-mysql -P1306 -h0 -e "SELECT * FROM name ORDER BY id ASC LIMIT 10;"
+mysql -h0 -P9306 -e "SELECT * FROM test ORDER BY id ASC LIMIT 10;"
 ––– output –––
-+------+-----------------------+--------+------+---------------+-----------+-----------+------------+---------------+-----------------+---------------------------------------+------------------------------------------+
-| id   | username              | gender | age  | salary        | discount  | is_active | last_login | product_codes | large_values    | additional_info                       | location_vector                          |
-+------+-----------------------+--------+------+---------------+-----------+-----------+------------+---------------+-----------------+---------------------------------------+------------------------------------------+
-|    1 | JOHN JOHNSON          | male   |   24 |  38055.761719 | 46.259998 |         1 | 1697454371 | 924,950       | 4991378,7837113 | {"city":"New York","hobby":"reading"} | 90.099998,-100.690002,0.737000,0.125000  |
-|    2 | ROBERT WILLIAMS       | female |   25 |  44777.058594 | 25.760000 |         1 | 1699072085 | 113,999       | 3989541,4344769 | {"city":"London","hobby":"gaming"}    | -85.809998,113.800003,0.070000,0.924000  |
-|    3 | MICHAEL BROWN         | male   |   23 |  49227.390625 | 23.320000 |         0 | 1697808827 | 677,922       | 3427519,4751707 | {"city":"Tokyo","hobby":"sports"}     | -49.570000,17.930000,0.915000,0.134000   |
-|    4 | WILLIAM JONES         | female |   63 |  92842.390625 | 10.990000 |         1 | 1698885389 | 508,978       | 6898630,9385266 | {"city":"Moscow","hobby":"traveling"} | -53.400002,145.610001,0.963000,0.037000  |
-|    5 | DAVID GARCIA          | male   |   61 | 107581.773438 | 21.840000 |         1 | 1697813613 | 283,309       | 1196507,1440558 | {"city":"Sydney","hobby":"cooking"}   | -47.860001,-112.639999,0.934000,0.032000 |
-|    6 | RICHARD MILLER        | female |   20 | 117996.281250 | 38.330002 |         1 | 1698340704 | 265,889       | 2675141,3102645 | {"city":"New York","hobby":"reading"} | -11.610000,-8.360000,0.096000,0.582000   |
-|    7 | CHARLES DAVIS         | male   |   27 | 107813.171875 | 27.049999 |         1 | 1698120145 | 238,295       | 3072391,8481934 | {"city":"London","hobby":"gaming"}    | 49.900002,-142.800003,0.351000,0.224000  |
-|    8 | JOSEPH RODRIGUEZ      | female |   54 |  47691.359375 | 47.459999 |         0 | 1699347893 | 265,792       | 1604539,7192251 | {"city":"Tokyo","hobby":"sports"}     | -32.320000,-117.800003,0.839000,0.001000 |
-|    9 | THOMAS MARTINEZ       | male   |   50 |  47102.101562 | 22.389999 |         0 | 1699290974 | 219,635       | 2380170,7472382 | {"city":"Moscow","hobby":"traveling"} | -2.320000,-63.779999,0.695000,0.625000   |
-|   10 | CHRISTOPHER HERNANDEZ | female |   28 |  75799.773438 |  9.530000 |         0 | 1699751633 | 180,966       | 5045063,5375947 | {"city":"Sydney","hobby":"cooking"}   | 31.280001,-120.220001,0.578000,0.544000  |
-+------+-----------------------+--------+------+---------------+-----------+-----------+------------+---------------+-----------------+---------------------------------------+------------------------------------------+
++------+-------------------------------------------------------------------------------------------------------------------------+-----------------------------------------------------------------------------------+------+-----------+----------+-----------+------------+--------------------------+----------------------------------------------------------------+-----------------+---------------------------------------+
+| id   | usertest                                                                                                                | category                                                                          | age  | salary    | discount | is_active | last_login | product_codes            | large_values                                                   | additional_info | location_vector                       |
++------+-------------------------------------------------------------------------------------------------------------------------+-----------------------------------------------------------------------------------+------+-----------+----------+-----------+------------+--------------------------+----------------------------------------------------------------+-----------------+---------------------------------------+
+|    1 | Incorrectly heavy soft carefully late sit; put draw afraid; gave hardly.                                                | Been vaguely 1000 this at understood gave always east fake.                       |    8 | 20.299999 | 1.500000 |         0 | 1676104873 | 10,16,40,71,85,87,100    | -88054,-30114,-15979,5487,72220,72277,91879,93074,97442        | {"key":"value"} | 2.000000,8.000000,10.000000,5.000000  |
+|    2 | Called, afraid foolish! happy? busy taken dead shall make seen privately understood short universally.                  | Was? seen feel economically beautiful legally.                                    |   30 | 86.900002 | 4.900000 |         1 | 1697110603 | 1,40,47,48,52,66,80,93   | -87441,-74083,-38090,-21342,-13596,49456,57513,90976,92580     | {"key":"value"} | 6.000000,10.000000,6.000000,3.000000  |
+|    3 | Calm incorrectly modern obviously soft certainly, quietly need tell poor spring evening drove young? lost.              | Probably came knew felt has.                                                      |   47 | 21.600000 | 6.700000 |         0 | 1678595569 | 3                        | 26497,73063,73768,87840                                        | {"key":"value"} | 10.000000,5.000000,9.000000,10.000000 |
+|    4 | Cruel; emotionally beautiful modern the. Thirsty do poor dead; lazy let sick; kept angry politically closed understand. | Regularly became? fell. Brought with stand south.                                 |    3 |  4.200000 | 7.600000 |         0 | 1650601281 | 24,28,62                 | -99076                                                         | {"key":"value"} | 4.000000,8.000000,8.000000,3.000000   |
+|    5 | Scientifically sad afraid, meet positively! were spent hard.                                                            | Get wrote excited deep suddenly foolish they unsuccessfully.                      |   34 |  4.600000 | 5.700000 |         1 | 1672897587 | 7,9,10,16,29,36,52,82,99 | 23225,29377                                                    | {"key":"value"} | 10.000000,2.000000,7.000000,1.000000  |
+|    6 | Happy certainly, carelessly scientifically lie saw grew, hurt hot full monthly cut may calm be sharp.                   | Cut serious; day! harshly regionally bitter happy quickly stale the.              |   65 | 92.599998 | 4.500000 |         0 | 1699959055 | 3,20,74,92               | -58459,-31703,-8868,-8398,1620,24456,76572,79957,86553,95523   | {"key":"value"} | 7.000000,10.000000,8.000000,3.000000  |
+|    7 | Easily often set hot new it become.                                                                                     | Be quiet cold nightly poor.                                                       |   59 | 19.400000 | 6.000000 |         1 | 1685126023 | 6,11,34,35,47,60,86,98   | -54811,-28523,-16029,-8383,266,6217,31166,67799,99092          | {"key":"value"} | 9.000000,2.000000,5.000000,5.000000   |
+|    8 | Politically grew rich loud tried seen. Nowhere am salty dawn quietly? gentle permanently gone? drew kept.               | Big specifically weak held she; constantly send down spiritually.                 |   15 | 34.700001 | 1.000000 |         0 | 1647818588 | 77,86                    | -55160,-5014,31069,31847,34334,36035,61084,62322,81203,95016   | {"key":"value"} | 4.000000,7.000000,4.000000,7.000000   |
+|    9 | Far, usually light west educationally. Fake wet salty wrong maybe! does went usually? humble send are.                  | Economically commonly wrote specifically healthy wrong culturally? 4, small rich. |   51 |  4.400000 | 0.500000 |         1 | 1611948425 | 2,5,16,18,35,38,44,79,95 | -77137,-67602,-19932,-10666,3139,22804,45013,65922,71495,87473 | {"key":"value"} | 1.000000,5.000000,4.000000,10.000000  |
+|   10 | We nowhere bad hold! happily.                                                                                           | Unusually hold clever that! sometimes illegally real late suddenly.               |    6 | 70.699997 | 0.800000 |         0 | 1689780079 | 14,94                    | -91152,-66001,-52476,-36462,6015,35599,50917,92421             | {"key":"value"} | 3.000000,6.000000,4.000000,9.000000   |
++------+-------------------------------------------------------------------------------------------------------------------------+-----------------------------------------------------------------------------------+------+-----------+----------+-----------+------------+--------------------------+----------------------------------------------------------------+-----------------+---------------------------------------+
 ––– input –––
-mysql -P1306 -h0 -e "FLUSH RAMCHUNK name"
-––– output –––
-––– input –––
-mysql -P1306 -h0 -e "FREEZE replication:name"
-––– output –––
-+-----------------------------------------+-----------------------------------------+
-| file                                    | normalized                              |
-+-----------------------------------------+-----------------------------------------+
-| /var/log/manticore-1/name/name.meta     | /var/log/manticore-1/name/name.meta     |
-| /var/log/manticore-1/name/name.ram      | /var/log/manticore-1/name/name.ram      |
-| /var/log/manticore-1/name/name.settings | /var/log/manticore-1/name/name.settings |
-+-----------------------------------------+-----------------------------------------+
-––– input –––
-rm -f /tmp/update.sql; for n in `seq 1 100`; do echo "UPDATE name SET gender='updated' WHERE id=$n;" >> /tmp/update.sql; done; mysql -P1306 -h0 -e "source /tmp/update.sql"
+mysql -h0 -P9306 -e "flush ramchunk test; freeze test; `for n in \`seq 1 100\`; do echo UPDATE test SET category='updated' WHERE id=$n; done`" &
 ––– output –––
 ––– input –––
-sleep 10; mysql -P1306 -h0 -e "SELECT * FROM name ORDER BY id ASC LIMIT 10;"
+mysql -h0 -P9306 -e "SELECT * FROM test ORDER BY id ASC LIMIT 5;"
 ––– output –––
-––– input –––
-sleep 1; if timeout 5 mysql -P1306 -h0 -e "SELECT * FROM name ORDER BY id ASC LIMIT 1"; then echo 'Query executed (issue fixed)'; else echo 'Query blocked (issue not fixed)'; fi
-––– output –––
-––– input –––
-sleep 1; kill $UPDATE_PID; wait $UPDATE_PID 2>/dev/null
-––– output –––
++------+-------------------------------------------------------------------------------------------------------------------------+--------------------------------------------------------------+------+-----------+----------+-----------+------------+--------------------------+------------------------------------------------------------+-----------------+---------------------------------------+
+| id   | usertest                                                                                                                | category                                                     | age  | salary    | discount | is_active | last_login | product_codes            | large_values                                               | additional_info | location_vector                       |
++------+-------------------------------------------------------------------------------------------------------------------------+--------------------------------------------------------------+------+-----------+----------+-----------+------------+--------------------------+------------------------------------------------------------+-----------------+---------------------------------------+
+|    1 | Incorrectly heavy soft carefully late sit; put draw afraid; gave hardly.                                                | Been vaguely 1000 this at understood gave always east fake.  |    8 | 20.299999 | 1.500000 |         0 | 1676104873 | 10,16,40,71,85,87,100    | -88054,-30114,-15979,5487,72220,72277,91879,93074,97442    | {"key":"value"} | 2.000000,8.000000,10.000000,5.000000  |
+|    2 | Called, afraid foolish! happy? busy taken dead shall make seen privately understood short universally.                  | Was? seen feel economically beautiful legally.               |   30 | 86.900002 | 4.900000 |         1 | 1697110603 | 1,40,47,48,52,66,80,93   | -87441,-74083,-38090,-21342,-13596,49456,57513,90976,92580 | {"key":"value"} | 6.000000,10.000000,6.000000,3.000000  |
+|    3 | Calm incorrectly modern obviously soft certainly, quietly need tell poor spring evening drove young? lost.              | Probably came knew felt has.                                 |   47 | 21.600000 | 6.700000 |         0 | 1678595569 | 3                        | 26497,73063,73768,87840                                    | {"key":"value"} | 10.000000,5.000000,9.000000,10.000000 |
+|    4 | Cruel; emotionally beautiful modern the. Thirsty do poor dead; lazy let sick; kept angry politically closed understand. | Regularly became? fell. Brought with stand south.            |    3 |  4.200000 | 7.600000 |         0 | 1650601281 | 24,28,62                 | -99076                                                     | {"key":"value"} | 4.000000,8.000000,8.000000,3.000000   |
+|    5 | Scientifically sad afraid, meet positively! were spent hard.                                                            | Get wrote excited deep suddenly foolish they unsuccessfully. |   34 |  4.600000 | 5.700000 |         1 | 1672897587 | 7,9,10,16,29,36,52,82,99 | 23225,29377                                                | {"key":"value"} | 10.000000,2.000000,7.000000,1.000000  |
++------+-------------------------------------------------------------------------------------------------------------------------+--------------------------------------------------------------+------+-----------+----------+-----------+------------+--------------------------+------------------------------------------------------------+-----------------+---------------------------------------+

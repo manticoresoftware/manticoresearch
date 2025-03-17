@@ -1,0 +1,54 @@
+––– input –––
+mkdir -p /var/{run,lib,log}/manticore; echo -e "common {\n\tplugin_dir = /usr/local/lib/manticore\n\tlemmatizer_base = /usr/share/manticore/morph/\n}\nsearchd {\n\tlisten = 127.0.0.1:9306:mysql41\n\tlisten = 127.0.0.1:9312\n\tlisten = 127.0.0.1:9308:http\n\tlog = /var/log/manticore/searchd.log\n\tquery_log = /var/log/manticore/query.log\n\tpid_file = /var/log/manticore/searchd.pid\n\tdata_dir = /var/log/manticore\n\tquery_log_format = sphinxql\n\tquery_log_min_msec = 500\n}" > /tmp/manticore.conf
+––– output –––
+––– input –––
+cat /tmp/manticore.conf
+––– output –––
+common {
+plugin_dir = /usr/local/lib/manticore
+lemmatizer_base = /usr/share/manticore/morph/
+}
+searchd {
+listen = 127.0.0.1:9306:mysql41
+listen = 127.0.0.1:9312
+listen = 127.0.0.1:9308:http
+log = /var/log/manticore/searchd.log
+query_log = /var/log/manticore/query.log
+pid_file = /var/log/manticore/searchd.pid
+data_dir = /var/log/manticore
+query_log_format = sphinxql
+query_log_min_msec = 500
+}
+––– input –––
+stdbuf -oL searchd -c /tmp/manticore.conf > /dev/null
+––– output –––
+––– input –––
+if timeout 10 grep -qm1 'accepting connections' <(tail -n 1000 -f /var/log/manticore/searchd.log); then echo 'Accepting connections!'; else echo 'Timeout or failed!'; fi
+––– output –––
+Accepting connections!
+––– input –––
+mysql -h0 -P9306 -e "DROP TABLE IF EXISTS t; CREATE TABLE t(a int); INSERT INTO t VALUES(1, 1); UPDATE t SET a = 2 WHERE id = 1; SELECT * FROM t WHERE id = 1"
+––– output –––
++------+------+
+| id   | a    |
++------+------+
+|    1 |    2 |
++------+------+
+––– input –––
+mysql -h0 -P9306 -e "SELECT * FROM t WHERE id = 1" > /tmp/select_result.log
+––– output –––
+––– input –––
+if grep -q "2" /tmp/select_result.log; then echo "SELECT shows updated value: a = 2"; else echo "SELECT failed to show updated value!"; exit 1; fi
+––– output –––
+SELECT shows updated value: a = 2
+––– input –––
+if grep -q "UPDATE t SET a = 2 WHERE id = 1" /var/log/manticore/query.log && grep -q "real 0\.[0-4][0-9][0-9]" /var/log/manticore/query.log; then
+echo "Fast UPDATE (real < 0.500 sec) is still logged despite query_log_min_msec = 500"
+tail -n 5 /var/log/manticore/query.log
+exit 1
+else
+echo "Fast UPDATE is not logged as expected with query_log_min_msec = 500"
+tail -n 5 /var/log/manticore/query.log
+fi
+––– output –––
+Fast UPDATE is not logged as expected with query_log_min_msec = 500

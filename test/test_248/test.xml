@@ -87,7 +87,7 @@ insert into test_table values
 ( 3, 'third',  1 ),
 ( 4, 'fourth', 1 ),
 ( 5, 'fifth',  1 ),
- 
+
 ( 10, 'one',    2 ),
 ( 11, 'two',    2 ),
 ( 12, 'three',  2 )
@@ -102,7 +102,7 @@ $results[] = 'all index presents';
 $results[] = "\n" . $ql->Query ( "SHOW tables" );
 $results[] = "\n" . $ql->Query ( "SELECT * FROM plain1, plain2" );
 
-$orig_conf = file(testdir('config.conf'));
+$orig_conf = file(testdir_config());
 
 $new_conf = '';
 $got_idx2 = false;
@@ -118,7 +118,7 @@ foreach ( $orig_conf as $line )
 	}
 	$new_conf .= $line;
 }
-file_put_contents(testdir('config.conf'), $new_conf);
+file_put_contents(testdir_config(), $new_conf);
 
 RunIndexer ( $errors, '--rotate plain1' ); // just to send SIGHUP to daemon
 sleep(2);
@@ -126,7 +126,7 @@ sleep(2);
 $results[] = 'plain2 disabled';
 $results[] = "\n" . $ql->Query ( "SHOW tables" );
 
-file_put_contents(testdir('config.conf'), $orig_conf);
+file_put_contents(testdir_config(), $orig_conf);
 RunIndexer ( $errors, '--rotate plain1' ); // just to send SIGHUP to daemon
 sleep(2);
 

@@ -4,7 +4,7 @@
 <name>distributed index stat2 - hung of daemon</name>
 
 <requires><non-rt/></requires>
-
+<skip_db/>
 <config>
 searchd
 {
@@ -77,7 +77,7 @@ $results[] = 'all index presents';
 $results[] = "\n" . $ql->Query ( "SHOW tables" );
 $results[] = "\n" . $ql->Query ( "SELECT * FROM i112, i110" );
 
-$orig_conf = file(testdir('config.conf'));
+$orig_conf = file(testdir_config());
 
 $new_conf = '';
 $got_idx2 = false;
@@ -93,7 +93,7 @@ foreach ( $orig_conf as $line )
 	}
 	$new_conf .= $line;
 }
-file_put_contents(testdir('config.conf'), $new_conf);
+file_put_contents(testdir_config(), $new_conf);
 
 RunIndexer ( $errors, '--rotate i112' ); // just to send SIGHUP to daemon
 sleep(2);

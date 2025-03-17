@@ -32,6 +32,12 @@ select * from d limit 2 option scroll='eyJvcmRlcl9ieV9zdHIiOiJpZCBkZXNjIiwib3JkZ
 drop table d;
 drop table t1;
 drop table t2;
+
+<!-- crash on incorrect base64 -->
+create table t;
+select * from t option scroll = '!';
+drop table t;
+
 </sphinxql>
 </queries>
 

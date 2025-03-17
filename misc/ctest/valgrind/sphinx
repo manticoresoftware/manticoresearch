@@ -1,0 +1,6 @@
+(
+    "db-host"=>"127.0.0.1",
+    "db-user"=>"test",
+    'lemmatizer_base'=>'/aot',
+    'odbc_driver'=>'/mysql-connector-odbc-8.3.0-linux-glibc2.28-x86-64bit/lib/libmyodbc8w.so;CHARSET=utf8'
+)

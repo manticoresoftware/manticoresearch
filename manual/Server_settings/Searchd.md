@@ -1348,7 +1348,7 @@ secondary_indexes = 1
 ### server_id
 
 <!-- example conf server_id -->
-Integer number that serves as a server identifier used as a seed to generate a unique short UUID for nodes that are part of a replication cluster. The server_id must be unique across the nodes of a cluster and in the range from 0 to 127. If server_id is not set, the MAC address or a random number will be used as a seed for the short UUID.
+Integer number that serves as a server identifier used as a seed to generate a unique short UUID for nodes that are part of a replication cluster. The server_id must be unique across the nodes of a cluster and in the range from 0 to 127. If server_id is not set, it is calculated as a hash of the MAC address and the path to the PID file or a random number will be used as a seed for the short UUID.
 
 
 <!-- intro -->

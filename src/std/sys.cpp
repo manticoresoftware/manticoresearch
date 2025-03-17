@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2017-2024, Manticore Software LTD (https://manticoresearch.com)
+// Copyright (c) 2017-2025, Manticore Software LTD (https://manticoresearch.com)
 // Copyright (c) 2001-2016, Andrew Aksyonoff
 // Copyright (c) 2008-2016, Sphinx Technologies Inc
 // All rights reserved
@@ -128,6 +128,25 @@ bool IsSSE42Supported()
 {
 	static bool bSSE = IsSSE42SupportedImpl();
 	return bSSE;
+}
+
+
+static bool IsPOPCNTSupportedImpl()
+{
+#if defined(__x86_64__) || defined(__i386__)
+	uint32_t dInfo[4];
+	__cpuid ( 1, dInfo[0], dInfo[1], dInfo[2], dInfo[3] );
+	return (dInfo[2] & (1 << 23)) != 0;
+#else
+	return true;	// assumes that it's ARM and simde is used
+#endif
+}
+
+
+bool IsPOPCNTSupported()
+{
+	static bool bPopcnt = IsPOPCNTSupportedImpl();
+	return bPopcnt;
 }
 
 

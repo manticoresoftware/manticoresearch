@@ -51,21 +51,21 @@ index rt1
 	path			= <data_path/>/rt1
 	docinfo			= extern
 	dict 			= keywords
-	
+
 	rt_field		= title
 	rt_attr_uint	= idd
 }
 
-index rt2 									
-{											
+index rt2
+{
 	type			= rt					#delete2
 	path			= <data_path/>/rt2      #delete2
-	docinfo			= extern                
-	dict 			= keywords              
-	                                        
-	rt_field		= title                 
-	rt_attr_uint	= idd                   
-}			                                
+	docinfo			= extern
+	dict 			= keywords
+
+	rt_field		= title
+	rt_attr_uint	= idd
+}
 
 </config>
 
@@ -79,7 +79,7 @@ $results  	= array();
 $results[] 	= $ql->Query ( 'SHOW TABLES' );
 $results[]	= $ql->Query ( 'SHOW INDEX idx2 STATUS' );
 
-$config = file(testdir('config.conf'));
+$config = file(testdir_config());
 $updatedConfig = '';
 foreach ( $config as $line ) {
 	if ( strpos ( $line, 'index idx1') !== false) {
@@ -87,9 +87,9 @@ foreach ( $config as $line ) {
 	}
 	$updatedConfig .= $line;
 }
-file_put_contents(testdir('config.conf'), $updatedConfig);
+file_put_contents(testdir_config(), $updatedConfig);
 
-RunIndexer ( $errors, '--rotate dummy' ); 
+RunIndexer ( $errors, '--rotate dummy' );
 sleep(1);
 
 $results[] = 'Indexes reloaded';
@@ -105,7 +105,7 @@ $results[] 	= $ql->Query ( "INSERT INTO rt2 VALUES ( 1, 'test', 11)" );
 $results[] = "flush rt1";
 $results[] 	= $ql->Query ( "FLUSH RTINDEX rt1" );
 
-$config = file(testdir('config.conf'));
+$config = file(testdir_config());
 $updatedConfig = '';
 foreach ( $config as $line ) {
 	if ( strpos ( $line, '#delete2') !== false) {
@@ -113,9 +113,9 @@ foreach ( $config as $line ) {
 	}
 	$updatedConfig .= $line;
 }
-file_put_contents(testdir('config.conf'), $updatedConfig);
+file_put_contents(testdir_config(), $updatedConfig);
 
-RunIndexer ( $errors, '--rotate dummy' ); 
+RunIndexer ( $errors, '--rotate dummy' );
 sleep(1);
 
 $results[] = "inserting into rt1";

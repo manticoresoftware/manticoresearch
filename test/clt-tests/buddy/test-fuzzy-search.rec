@@ -292,6 +292,114 @@ mysql -h0 -P9306 -e "SELECT * FROM name WHERE MATCH('SARA') ORDER BY id ASC, use
 | 6802 | KLARA ROLLER         | a    |
 +------+----------------------+------+
 ––– input –––
+mysql -h0 -P9306 -e "SELECT username FROM name WHERE MATCH('SMITH') OPTION cutoff=0, ranker=expr('sum((4*lcs+2*(min_hit_pos=1)+exact_hit)*user_weight)*1000+bm25'), field_weights=(username=1), fuzzy=1;"
+––– output –––
++----------------+
+| username       |
++----------------+
+| MINH FENNELL   |
+| MINH MAZUR     |
+| MINH VILLEGAS  |
+| MINH TILLER    |
+| MINH VOGT      |
+| MINH SHAW      |
+| MINH STEADMAN  |
+| MINH PEAK      |
+| MINH ROOT      |
+| MINH PATTERSON |
+| MINH BURDETTE  |
+| MINH ABNEY     |
+| MINH DOLAN     |
+| MINH RUDD      |
+| MINH TOLBERT   |
+| MINH CRANDALL  |
+| MINH JAIME     |
+| MINH ISAACSON  |
+| MINH BONILLA   |
+| MINH WAHL      |
++----------------+
+––– input –––
+mysql -h0 -P9306 -e "SELECT username FROM name WHERE MATCH('SMITH') OPTION cutoff=0, field_weights=(username=1), fuzzy=1;"
+––– output –––
++-----------------+
+| username        |
++-----------------+
+| SYDNEY SMYTH    |
+| CHERILYN SMYTH  |
+| SATURNINA SMYTH |
+| LYNN SMYTH      |
+| STEVEN SMYTH    |
+| JASMIN SMYTH    |
+| BERYL SMYTH     |
+| JACK SMYTH      |
+| CAROLEE SMYTH   |
+| CARON SMYTH     |
+| ALFREDO SMYTH   |
+| ALTA SMYTH      |
+| VIKI SMYTH      |
+| CHANA SMYTH     |
+| HYUN SMYTH      |
+| ROGER SMYTH     |
+| LINDSEY SMYTH   |
+| WILFORD SMYTH   |
+| ARLINE SMYTH    |
+| APRYL SMYTH     |
++-----------------+
+––– input –––
+mysql -h0 -P9306 -e "SELECT username FROM name WHERE MATCH('SMITH') OPTION cutoff=0, ranker=expr('sum((4*lcs+2*(min_hit_pos=1)+exact_hit)*user_weight)*1000+bm25'), fuzzy=1;"
+––– output –––
++----------------+
+| username       |
++----------------+
+| MINH FENNELL   |
+| MINH MAZUR     |
+| MINH VILLEGAS  |
+| MINH TILLER    |
+| MINH VOGT      |
+| MINH SHAW      |
+| MINH STEADMAN  |
+| MINH PEAK      |
+| MINH ROOT      |
+| MINH PATTERSON |
+| MINH BURDETTE  |
+| MINH ABNEY     |
+| MINH DOLAN     |
+| MINH RUDD      |
+| MINH TOLBERT   |
+| MINH CRANDALL  |
+| MINH JAIME     |
+| MINH ISAACSON  |
+| MINH BONILLA   |
+| MINH WAHL      |
++----------------+
+––– input –––
+mysql -h0 -P9306 -e "SELECT username FROM name WHERE MATCH('SMITH') OPTION cutoff=0, fuzzy=1;"
+––– output –––
++-----------------+
+| username        |
++-----------------+
+| SYDNEY SMYTH    |
+| CHERILYN SMYTH  |
+| SATURNINA SMYTH |
+| LYNN SMYTH      |
+| STEVEN SMYTH    |
+| JASMIN SMYTH    |
+| BERYL SMYTH     |
+| JACK SMYTH      |
+| CAROLEE SMYTH   |
+| CARON SMYTH     |
+| ALFREDO SMYTH   |
+| ALTA SMYTH      |
+| VIKI SMYTH      |
+| CHANA SMYTH     |
+| HYUN SMYTH      |
+| ROGER SMYTH     |
+| LINDSEY SMYTH   |
+| WILFORD SMYTH   |
+| ARLINE SMYTH    |
+| APRYL SMYTH     |
++-----------------+
+––– input –––
 mysql -h0 -P9306 -e "CALL AUTOCOMPLETE('jo', 'name', 1 AS fuzziness);" | tail -n +4 | sort
 ––– output –––
 +--------+

@@ -12573,7 +12573,7 @@ bool SuggestResult_t::SetWord ( const char * sWord, const TokenizerRefPtr_c & pT
 	m_iCodepoints = DecodeUtf8 ( (const BYTE *)m_sWord.cstr(), m_dCodepoints );
 	m_bUtf8 = ( m_iCodepoints!=m_iLen );
 
-	bool bValidWord = ( m_iCodepoints>=3 );
+	bool bValidWord = ( m_iCodepoints>=2 );
 	if ( bValidWord )
 	{
 		// lets generate bigrams for short words as trigrams for 5char word could all contain the same wrong symbol

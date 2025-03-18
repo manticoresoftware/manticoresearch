@@ -221,6 +221,7 @@ bool AddRemoveCtx_c::AddRowwiseAttr()
 	bool bBlob = sphIsBlobAttr ( *pNewAttr );
 
 	const CSphRowitem * pNextDocinfo = nullptr;
+	CSphVector<float> dFakeKNN;
 
 	for ( RowID_t tRowID = 0; tRowID<m_uNumRows; tRowID++ )
 	{
@@ -234,7 +235,17 @@ bool AddRemoveCtx_c::AddRowwiseAttr()
 
 		if ( bBlob && !m_tMinMaxer.Alter_IsMinMax ( m_pDocinfo, m_iOldStride ) )
 		{
-			sphAddAttrToBlobRow ( m_pDocinfo, m_dBlobRow, m_pBlobPool, m_iNumOldBlobs, m_pOldBlobRowLocator ? &m_pOldBlobRowLocator->m_tLocator : nullptr );
+			if ( pNewAttr->m_eAttrType==SPH_ATTR_FLOAT_VECTOR && pNewAttr->IsIndexedKNN() )
+			{
+				int iOldLen = dFakeKNN.GetLength();
+				dFakeKNN.Resize ( pNewAttr->m_tKNN.m_iDims );
+				if ( dFakeKNN.GetLength()>iOldLen )
+					dFakeKNN.ZeroVec();
+
+				sphAddAttrToBlobRow ( m_pDocinfo, m_dBlobRow, m_pBlobPool, m_iNumOldBlobs, m_pOldBlobRowLocator ? &m_pOldBlobRowLocator->m_tLocator : nullptr, (const BYTE*)dFakeKNN.Begin(), dFakeKNN.GetLengthBytes() );
+			}
+			else
+				sphAddAttrToBlobRow ( m_pDocinfo, m_dBlobRow, m_pBlobPool, m_iNumOldBlobs, m_pOldBlobRowLocator ? &m_pOldBlobRowLocator->m_tLocator : nullptr );
 
 			SphOffset_t tRowOffset = m_tSPBWriter.GetPos();
 			m_tSPBWriter.PutBytes ( m_dBlobRow.Begin(), m_dBlobRow.GetLength() );
@@ -379,7 +390,7 @@ bool IndexAlterHelper_c::Alter_AddRemoveColumnar ( bool bAdd, const ISphSchema &
 {
 	std::string sErrorSTL;
 
-	CSphVector<std::pair<std::unique_ptr<columnar::Iterator_i>,ESphAttr>> dIterators;
+	CSphVector<std::pair<std::unique_ptr<columnar::Iterator_i>,const CSphColumnInfo *>> dIterators;
 	for ( int i = 0; i < tNewSchema.GetAttrsCount(); i++ )
 	{
 		const CSphColumnInfo & tNewAttr = tNewSchema.GetAttr(i);
@@ -389,7 +400,7 @@ bool IndexAlterHelper_c::Alter_AddRemoveColumnar ( bool bAdd, const ISphSchema &
 		const CSphColumnInfo * pOldAttr = tOldSchema.GetAttr ( tNewAttr.m_sName.cstr() );
 		if ( !pOldAttr )
 		{
-			dIterators.Add ( { nullptr, tNewAttr.m_eAttrType } );
+			dIterators.Add ( { nullptr, &tNewAttr } );
 			continue;
 		}
 
@@ -401,7 +412,7 @@ bool IndexAlterHelper_c::Alter_AddRemoveColumnar ( bool bAdd, const ISphSchema &
 			return false;
 		}
 
-		dIterators.Add ( { std::move (pIterator), pOldAttr->m_eAttrType } );
+		dIterators.Add ( { std::move (pIterator), pOldAttr } );
 	}
 
 	CSphVector<int64_t> dTmp;
@@ -410,10 +421,11 @@ bool IndexAlterHelper_c::Alter_AddRemoveColumnar ( bool bAdd, const ISphSchema &
 		for ( int iColumnarAttr = 0; iColumnarAttr < dIterators.GetLength(); iColumnarAttr++ )
 		{
 			auto & tIterator = dIterators[iColumnarAttr];
+			assert(tIterator.second);
 			if ( tIterator.first )
-				SetColumnarAttr ( iColumnarAttr, tIterator.second, pBuilder, tIterator.first, tRowID, dTmp );
+				SetColumnarAttr ( iColumnarAttr, tIterator.second->m_eAttrType, pBuilder, tIterator.first, tRowID, dTmp );
 			else
-				SetDefaultColumnarAttr ( iColumnarAttr, tIterator.second, pBuilder );
+				SetDefaultColumnarAttr ( iColumnarAttr, *tIterator.second, pBuilder, dTmp );
 		}
 	}
 

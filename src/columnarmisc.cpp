@@ -79,9 +79,9 @@ SphAttr_t SetColumnarAttr ( int iAttr, ESphAttr eType, columnar::Builder_i * pBu
 }
 
 
-void SetDefaultColumnarAttr ( int iAttr, ESphAttr eType, columnar::Builder_i * pBuilder )
+void SetDefaultColumnarAttr ( int iAttr, const CSphColumnInfo & tAttr, columnar::Builder_i * pBuilder, CSphVector<int64_t> & dTmp )
 {
-	switch ( eType )
+	switch ( tAttr.m_eAttrType )
 	{
 	case SPH_ATTR_UINT32SET:
 	case SPH_ATTR_INT64SET:
@@ -90,6 +90,17 @@ void SetDefaultColumnarAttr ( int iAttr, ESphAttr eType, columnar::Builder_i * p
 
 	case SPH_ATTR_STRING:
 		pBuilder->SetAttr ( iAttr, (const uint8_t *)0, 0 );
+		break;
+
+	case SPH_ATTR_FLOAT_VECTOR:
+		if ( tAttr.IsIndexedKNN() )
+		{
+			dTmp.Resize ( tAttr.m_tKNN.m_iDims );
+			dTmp.ZeroVec();
+			pBuilder->SetAttr ( iAttr, dTmp.Begin(), dTmp.GetLength() );
+		}
+		else
+			pBuilder->SetAttr ( iAttr, (const uint8_t *)0, 0 );
 		break;
 
 	default:

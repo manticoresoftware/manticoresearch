@@ -22,15 +22,12 @@ mysql -h0 -P1306 -e "CREATE CLUSTER a 'a' as path"
 ––– input –––
 mysql -h0 -P1306 -e "create cluster b 'b' as path" &
 ––– output –––
-[%{NUMBER}] %{NUMBER}
 ––– input –––
 mysql -h0 -P2306 -e "join cluster a at '127.0.0.1:1312'" &
 ––– output –––
-[%{NUMBER}] %{NUMBER}
 ––– input –––
 mysql -h0 -P3306 -e "join cluster b at '127.0.0.1:1312'" &
 ––– output –––
-[%{NUMBER}] %{NUMBER}
 ––– input –––
 wait 1>/dev/null 2>&1; echo $?
 ––– output –––

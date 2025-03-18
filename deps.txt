@@ -3,7 +3,7 @@ buddy 3.26.1+25031419-267e357b-dev
 mcl 4.1.2 25031206 15bbcc7
 executor 1.3.1 25011510 1856ac9
 tzdata 1.0.1 240904 3ba592a
-load 1.17.1+25031722-16481004-dev
+load 1.18.0+25031816-ecbb7e88-dev
 ---
 ! Do not change the separator that splits this desc from the data
 This file should contain one line per package with a version lock.

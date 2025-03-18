@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2017-2024, Manticore Software LTD (https://manticoresearch.com)
+// Copyright (c) 2017-2025, Manticore Software LTD (https://manticoresearch.com)
 // Copyright (c) 2001-2016, Andrew Aksyonoff
 // Copyright (c) 2008-2016, Sphinx Technologies Inc
 // All rights reserved
@@ -1228,6 +1228,11 @@ public:
 		}
 	}
 
+	bool IsInterrupted() const noexcept
+	{
+		return m_tValue.GetValue().m_bShutdown || sphInterrupted();
+	}
+
 	int GetNumOfLocks() const noexcept
 	{
 		return m_tValue.GetValueRef().m_iDisabledCounter;
@@ -1386,7 +1391,6 @@ public:
 	bool				IsSameSettings ( CSphReconfigureSettings & tSettings, CSphReconfigureSetup & tSetup, StrVec_t & dWarnings, CSphString & sError ) const final;
 	bool				Reconfigure ( CSphReconfigureSetup & tSetup ) final;
 	int64_t				GetLastFlushTimestamp() const final;
-	void				IndexDeleted() final { m_bIndexDeleted = true; }
 	void				ProhibitSave() final;
 	void				EnableSave() final;
 	void				LockFileState ( CSphVector<CSphString> & dFiles ) final;
@@ -1435,12 +1439,11 @@ private:
 	WorkerSchedulers_c			m_tWorkers;
 	Coro::Waitable_T<int>		m_tUnLockedSegments { 0 }; // how many segments are not participating in any locked ops (like merge, save to disk).
 	Coro::Waitable_T<MergeSeg_e> m_eSegMergeQueued { MergeSeg_e::NEWSEG };
-	Coro::Waitable_T<bool>		m_bSegMergeWorking { false };
 	Coro::Waitable_T<CSphVector<int64_t>> m_tSaveTIDS { 0 }; // save operations performing now, and their TIDs
 	int							m_iSaveGeneration = 0;		// SaveDiskChunk() increases generation on finish
 	Coro::Waitable_T<int>		m_tNSavesNow { 0 };			// N of merge segment routines running right now
 
-	bool						m_bIndexDeleted = false;
+	Coro::Waitable_T<int>		m_tBackgroundRoutines { 0 };
 
 	int64_t						m_iSavedTID = 0;
 	int64_t						m_tmSaved;
@@ -1469,6 +1472,10 @@ private:
 	bool						BindAccum ( RtAccum_t * pAccExt, CSphString* pError = nullptr ) final;
 
 	int							CompareWords ( const RtWord_t * pWord1, const RtWord_t * pWord2 ) const;
+
+	void						StartRoutine();
+	void						StopRoutine();
+	void						WaitAllRoutinesFinished() const noexcept;
 
 	CSphFixedVector<RowID_t>	CopyAttributesFromAliveDocs ( RtSegment_t& tDstSeg, const RtSegment_t & tSrcSeg, RtAttrMergeContext_t & tCtx ) const REQUIRES ( tDstSeg.m_tLock ) REQUIRES (m_tWorkers.SerialChunkAccess());
 	void						MergeKeywords ( RtSegment_t & tSeg, const RtSegment_t & tSeg1, const RtSegment_t & tSeg2, const VecTraits_T<RowID_t> & dRowMap1, const VecTraits_T<RowID_t> & dRowMap2 ) const;
@@ -1526,7 +1533,7 @@ private:
 	bool						MergeSegmentsStep( MergeSeg_e eVal ) REQUIRES ( m_tWorkers.SerialChunkAccess() );
 	void						RunMergeSegmentsWorker();
 	void						StartMergeSegments ( MergeSeg_e eMergeWhat, bool bNotify=true ) REQUIRES ( m_tWorkers.SerialChunkAccess() );
-	void						StopMergeSegmentsWorker() REQUIRES ( m_tWorkers.SerialChunkAccess() );
+	void						StopMergeSegmentsWorker();
 	bool						NeedStoreWordID () const override;
 	int64_t						GetMemLimit() const final { return m_iRtMemLimit; }
 	bool						VerifyKNN ( InsertDocData_c & tDoc, CSphString & sError ) const;
@@ -1603,21 +1610,39 @@ RtIndex_c::RtIndex_c ( CSphString sIndexName, CSphString sPath, CSphSchema tSche
 	}
 }
 
+class OptimizeGuard_c final
+{
+	RtIndex_c& m_tIndex;
+	const bool m_bPreviousOptimizeState;
+
+public:
+	NONCOPYMOVABLE ( OptimizeGuard_c );
+
+	explicit OptimizeGuard_c (  RtIndex_c& tIndex )
+		: m_tIndex { tIndex }
+		, m_bPreviousOptimizeState { tIndex.StopOptimize() }
+	{}
+
+	~OptimizeGuard_c()
+	{
+		m_tIndex.m_bOptimizeStop.store ( m_bPreviousOptimizeState, std::memory_order_relaxed );
+	}
+};
 
 RtIndex_c::~RtIndex_c ()
 {
-	if ( IsInsideCoroutine())
+	if ( Threads::IsInsideCoroutine())
 	{
 		// From serial worker resuming on Wait() will happen after whole merger coroutine finished.
 		ScopedScheduler_c tSerialFiber { m_tWorkers.SerialChunkAccess() };
 		TRACE_SCHED ( "rt", "~RtIndex_c" );
-		m_tSaving.SetShutdownFlag ();
-		if ( Threads::IsInsideCoroutine() )
-		{
-			Threads::Coro::Reschedule();
-			StopMergeSegmentsWorker();
-		}
-		m_tNSavesNow.Wait ( [] ( int iVal ) { return iVal==0; } );
+
+		m_tSaving.SetShutdownFlag();
+		StopMergeSegmentsWorker();
+		m_tNSavesNow.Wait ( [] ( int iVal ) { return iVal == 0; } );
+		OptimizeGuard_c tStopOptimize ( *this );
+		Threads::Coro::Reschedule();
+		WaitAllRoutinesFinished();
 	}
 
 	int64_t tmSave = sphMicroTimer();
@@ -2959,7 +2984,8 @@ bool RtIndex_c::Commit ( int * pDeleted, RtAccum_t * pAcc, CSphString * pError )
 	pAcc->CleanupPart();
 
 	// sort accum klist, too
-	pAcc->m_dAccumKlist.Uniq ();
+	pAcc->m_dAccumKlist.Sort ( Lesser ( [] ( DocID_t a, DocID_t b ) { return (uint64_t)a < (uint64_t)b; } ) );
+	pAcc->m_dAccumKlist.Uniq (false);
 
 	// now on to the stuff that needs locking and recovery
 	int iKilled = 0;
@@ -3167,11 +3193,10 @@ void RtIndex_c::StartMergeSegments ( MergeSeg_e eMergeWhat, bool bNotify ) REQUI
 		m_eSegMergeQueued.NotifyOne();
 }
 
-void RtIndex_c::StopMergeSegmentsWorker() REQUIRES ( m_tWorkers.SerialChunkAccess() )
+void RtIndex_c::StopMergeSegmentsWorker()
 {
 	TRACE_SCHED ( "rt", "StopMergeSegmentsWorker" );
 	m_eSegMergeQueued.SetValueAndNotifyOne ( MergeSeg_e::EXIT );
-	m_bSegMergeWorking.Wait ( [] ( bool bVal ) { return !bVal; } );
 }
 
 bool RtIndex_c::MergeSegmentsStep ( MergeSeg_e eVal ) REQUIRES ( m_tWorkers.SerialChunkAccess() )
@@ -3214,8 +3239,10 @@ bool RtIndex_c::MergeSegmentsStep ( MergeSeg_e eVal ) REQUIRES ( m_tWorkers.Seri
 			return true;
 		}
 
+		StartRoutine();
 		Coro::Go ( [this, eMergeAction]() REQUIRES ( m_tWorkers.SerialChunkAccess() ) {
 			SaveDiskChunk ( false, eMergeAction == CheckMerge_e::FLUSH_EM );
+			StopRoutine();
 		}, m_tWorkers.SerialChunkAccess() );
 		return false; // exit into idle
 	}
@@ -3287,11 +3314,11 @@ bool RtIndex_c::MergeSegmentsStep ( MergeSeg_e eVal ) REQUIRES ( m_tWorkers.Seri
 
 void RtIndex_c::RunMergeSegmentsWorker()
 {
+	StartRoutine();
 	Coro::Go ( [this]() REQUIRES ( m_tWorkers.SerialChunkAccess() )
 	{
 		TRACE_SCHED ( "rt", "RunMergeSegmentsWorker-lambda" );
-		m_bSegMergeWorking.SetValueAndNotifyOne ( true );
-		auto tResetSegMergeWorking = AtScopeExit ( [this] { m_bSegMergeWorking.SetValueAndNotifyOne ( false ); } );
+		auto tResetSegMergeWorking = AtScopeExit ( [this] { StopRoutine(); } );
 
 		while (true)
 		{
@@ -3439,10 +3466,13 @@ void RtIndex_c::ForceDiskChunk ( int iFlushWrite, int iFlushSearch )
 	if ( m_tRtChunks.RamSegs()->IsEmpty() )
 		return;
 
-	int64_t tmFlushWrite = ( GetMutableSettings().m_iFlushWrite<0 ? iFlushWrite : GetMutableSettings().m_iFlushWrite );
+	int64_t tmFlushWrite = ( GetMutableSettings().IsSet ( MutableName_e::DISKCHUNK_FLUSH_WRITE_TIMEOUT ) ? GetMutableSettings().m_iFlushWrite : iFlushWrite );
 	tmFlushWrite *= 1000000;
-	int64_t tmFlushSearch = ( GetMutableSettings().m_iFlushSearch<0 ? iFlushSearch : GetMutableSettings().m_iFlushSearch );
+	int64_t tmFlushSearch = ( GetMutableSettings().IsSet ( MutableName_e::DISKCHUNK_FLUSH_SEARCH_TIMEOUT ) ? GetMutableSettings().m_iFlushSearch : iFlushSearch );
 	tmFlushSearch *= 1000000;
+	if ( tmFlushWrite<0 )
+		return;
+
 	int64_t tmNow = sphMicroTimer();
 
 	// recent write disables auto-flush
@@ -3560,13 +3590,17 @@ bool RtIndex_c::WriteAttributes ( SaveDiskDataContext_t & tCtx, CSphString & sEr
 	for ( const auto & i : tCtx.m_tRamSegments )
 		tCtx.m_iTotalDocuments += i->m_tAliveRows.load ( std::memory_order_relaxed );
 
+	CSphVector<std::pair<PlainOrColumnar_t,int>> dAllAttrsForKNN;
 	CSphVector<PlainOrColumnar_t> dAttrsForKNN;
 	std::unique_ptr<knn::Builder_i> pKNNBuilder;
 	if ( m_tSchema.HasKNNAttrs() )
 	{
-		pKNNBuilder = BuildCreateKNN ( m_tSchema, tCtx.m_iTotalDocuments, dAttrsForKNN, sError );
+		pKNNBuilder = BuildCreateKNN ( m_tSchema, tCtx.m_iTotalDocuments, dAllAttrsForKNN, sError );
 		if ( !pKNNBuilder )
 			return false;
+
+		for ( const auto & i : dAllAttrsForKNN )
+			dAttrsForKNN.Add ( i.first );
 	}
 
 	CSphFixedVector<DocidRowidPair_t> dRawLookup ( tCtx.m_iTotalDocuments );
@@ -3637,15 +3671,33 @@ bool RtIndex_c::WriteAttributes ( SaveDiskDataContext_t & tCtx, CSphString & sEr
 				pDocstoreBuilder->AddDoc ( tNextRowID, tSeg.m_pDocstore->GetDoc ( tRowID, nullptr, -1, false ) );
 			}
 
-			if ( pKNNBuilder && !BuildStoreKNN ( tRowID, pRow, tSeg.m_dBlobs.Begin(), dColumnarIterators, dAttrsForKNN, *pKNNBuilder ) )
-			{
-				sError = pKNNBuilder->GetError().c_str();
-				return false;
-			}
+			if ( pKNNBuilder )
+				BuildTrainKNN ( tRowID, pRow, tSeg.m_dBlobs.Begin(), dColumnarIterators, dAttrsForKNN, *pKNNBuilder );
 
 			tCtx.m_dRowMaps[i][tRowID] = tNextRowID++;
 		}
 	}
+
+	if ( pKNNBuilder )
+		ARRAY_FOREACH ( i, tCtx.m_tRamSegments )
+		{
+			const auto & tSeg = *tCtx.m_tRamSegments[i];
+
+			SccRL_t rLock ( tSeg.m_tLock );
+			tSeg.m_bAttrsBusy.store ( true, std::memory_order_release );
+
+			auto dColumnarIterators = CreateAllColumnarIterators ( tSeg.m_pColumnar.get(), m_tSchema );
+
+			for ( auto tRowID : RtLiveRows_c(tSeg) )
+			{
+				const CSphRowitem * pRow = tSeg.m_dRows.Begin() + (int64_t)tRowID*iStride;
+				if ( !BuildStoreKNN ( tRowID, pRow, tSeg.m_dBlobs.Begin(), dColumnarIterators, dAttrsForKNN, *pKNNBuilder ) )
+				{
+					sError = pKNNBuilder->GetError().c_str();
+					return false;
+				}
+			}
+		}
 
 	// rows could be killed during index save and tNextRowID could be less than tCtx.m_iTotalDocuments \ initial count
 	assert ( tNextRowID<=(RowID_t)dRawLookup.GetLength() );
@@ -6267,8 +6319,8 @@ private:
 class RtScanQword_t final : public QwordScan_c
 {
 public:
-	explicit RtScanQword_t ( int iRowsTotal )
-		: QwordScan_c ( iRowsTotal )
+	explicit RtScanQword_t ( int iRowsTotal, int iAtomPos, int iFieldsCount )
+		: QwordScan_c ( iRowsTotal, iAtomPos, iFieldsCount )
 	{
 	}
 
@@ -6284,7 +6336,6 @@ public:
 		m_iRowsCount = pSegment->m_uRows;
 		m_iDocs = m_iRowsCount;
 		m_bDone = ( m_iRowsCount==0 );
-		m_dQwordFields.SetAll();
 		m_pKilled = &pSegment->m_tDeadRowMap;
 
 		return ( pSegment->m_tAliveRows.load(std::memory_order_relaxed)>0 );
@@ -6308,7 +6359,7 @@ public:
 	ISphQword *	QwordSpawn ( const XQKeyword_t & ) const final;
 	bool		QwordSetup ( ISphQword * pQword ) const final;
 	void				SetSegment ( int iSegment ) { m_iSeg = iSegment; }
-	ISphQword *			ScanSpawn() const final;
+	ISphQword *			ScanSpawn ( int iAtomPos ) const final;
 
 private:
 	const RtGuard_t&	m_tGuard;
@@ -6357,9 +6408,9 @@ bool RtIndex_c::EarlyReject ( CSphQueryContext * pCtx, CSphMatch & tMatch ) cons
 	return false;
 }
 
-ISphQword * RtQwordSetup_t::ScanSpawn () const
+ISphQword * RtQwordSetup_t::ScanSpawn ( int iAtomPos ) const
 {
-	return new RtScanQword_t ( (int)m_pIndex->GetStats().m_iTotalDocuments );
+	return new RtScanQword_t ( (int)m_pIndex->GetStats().m_iTotalDocuments, iAtomPos, m_pIndex->GetMatchSchema().GetFieldsCount() );
 }
 
 
@@ -8427,25 +8478,6 @@ bool RtIndex_c::SaveAttributes ( CSphString & sError ) const
 	return bAllSaved;
 }
 
-
-class OptimizeGuard_c final
-{
-	RtIndex_c & m_tIndex;
-	const bool m_bPreviousOptimizeState;
-
-public:
-	NONCOPYMOVABLE (OptimizeGuard_c);
-
-	explicit OptimizeGuard_c ( RtIndex_c & tIndex )
-			: m_tIndex { tIndex }, m_bPreviousOptimizeState { tIndex.StopOptimize () }
-	{}
-
-	~OptimizeGuard_c ()
-	{
-		m_tIndex.m_bOptimizeStop.store ( m_bPreviousOptimizeState, std::memory_order_relaxed );
-	}
-};
-
 // fixme! is NOT lru-safe, ensure index locked exclusively!
 // (last is true as it w-locked before 'alter' called, however optimize call need special glance!)
 bool RtIndex_c::AddRemoveColumnarAttr ( RtGuard_t & tGuard, bool bAdd, const CSphString & sAttrName, ESphAttr eAttrType, const CSphSchema & tOldSchema, const CSphSchema & tNewSchema, CSphString & sError )
@@ -9505,6 +9537,8 @@ Binlog::CheckTnxResult_t RtIndex_c::ReplayCommit ( CSphReader & tReader, CSphStr
 		// actually replay
 		FakeRL_t _ ( pSeg.operator RtSegment_t*()->m_tLock);
 		int iKilled = 0;
+
+//		dKlist.Sort ( Lesser ( [] ( DocID_t a, DocID_t b ) { return (uint64_t)a < (uint64_t)b; } ) ); // should already be sorted
 		CommitReplayable ( pSeg, dKlist, iAddTotalBytes, iKilled, sError );
 		tRes.m_bApply = true;
 	}
@@ -9928,6 +9962,24 @@ bool RtIndex_c::StopOptimize()
 	return bPrevOptimizeValue;
 }
 
+void RtIndex_c::StartRoutine()
+{
+	m_tBackgroundRoutines.ModifyValue ( [] ( int& i ) { ++i; } );
+}
+
+void RtIndex_c::StopRoutine()
+{
+	if ( Threads::IsInsideCoroutine() )
+		m_tBackgroundRoutines.ModifyValueAndNotifyAll ( [] ( int& i ) { --i; } );
+	else
+		m_tBackgroundRoutines.ModifyValue ( [] ( int& i ) { --i; } );
+}
+
+void RtIndex_c::WaitAllRoutinesFinished() const noexcept
+{
+	if ( Threads::IsInsideCoroutine() )
+		m_tBackgroundRoutines.Wait ( [] ( int iVal ) { return iVal==0; } );
+}
 
 bool RtIndex_c::CheckValidateChunk ( int& iChunk, int iChunks, bool bByOrder ) const
 {
@@ -9983,10 +10035,12 @@ bool RtIndex_c::StartOptimize ( OptimizeTask_t tTask )
 	if ( GetNumOfLocks ()>0 )
 		return false;
 
+	StartRoutine();
 	Threads::StartJob ( [tTask = std::move ( tTask ), this] () {
 		// want to track optimize only at work
 		auto pDesc = PublishSystemInfo ( "OPTIMIZE" );
 		Optimize ( std::move ( tTask ) );
+		StopRoutine();
 	} );
 	return true;
 }
@@ -10012,10 +10066,10 @@ void RtIndex_c::Optimize ( OptimizeTask_t tTask )
 
 	RTDLOG << "Optimize checked with " << tTask;
 
-	if ( m_tOptimizeRuns.GetValue() > 0 )
+	if ( OptimizesRunning() > 0 )
 	{
-		RTDLOG << "Escape optimize as " << m_tOptimizeRuns.GetValue() << " tasks is already running";
-		sphLogDebug ( "Escape optimize as %d tasks is already running", m_tOptimizeRuns.GetValue() );
+		RTDLOG << "Escape optimize as " << OptimizesRunning() << " tasks is already running";
+		sphLogDebug ( "Escape optimize as %d tasks is already running", OptimizesRunning() );
 		return;
 	}
 
@@ -10032,7 +10086,7 @@ void RtIndex_c::Optimize ( OptimizeTask_t tTask )
 	int64_t tmPass = sphMicroTimer() - tmStart;
 	int iDiskChunks = m_tRtChunks.GetDiskChunksCount();
 
-	if ( sphInterrupted() )
+	if ( m_tSaving.IsInterrupted() )
 		LogWarning ( "rt: table %s: optimization terminated chunk(s) %d ( left %d ) in %.3t", GetName(), iChunks, iDiskChunks, tmPass );
 	else if ( iChunks > 0 )
 		LogInfo ( "rt: table %s: optimized %s chunk(s) %d ( left %d ) in %.3t", GetName(), g_bProgressiveMerge ? "progressive" : "regular", iChunks, iDiskChunks, tmPass );
@@ -10040,7 +10094,7 @@ void RtIndex_c::Optimize ( OptimizeTask_t tTask )
 
 bool RtIndex_c::MergeCanRun() const
 {
-	return !sphInterrupted() && !m_bOptimizeStop.load(std::memory_order_relaxed);
+	return !m_tSaving.IsInterrupted() && !m_bOptimizeStop.load(std::memory_order_relaxed);
 }
 
 int RtIndex_c::ClassicOptimize ()

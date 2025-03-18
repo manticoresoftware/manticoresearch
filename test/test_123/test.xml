@@ -2,7 +2,7 @@
 
 <test>
 <name>snippets vs blend_chars</name>
-
+<skip_db/>
 <config>
 searchd
 {
@@ -24,8 +24,6 @@ index test
 	blend_chars 		= +, -, ., U+23,U+40
 }
 </config>
-
-<db_insert>select 1;</db_insert>
 
 <custom_test><![CDATA[
 

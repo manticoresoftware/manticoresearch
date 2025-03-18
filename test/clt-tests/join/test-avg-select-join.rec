@@ -1,0 +1,72 @@
+––– block: ../base/start-searchd –––
+––– input –––
+manticore-load --drop --batch-size=1000 --threads=5 --total=10000 --init="CREATE TABLE products(id bigint, name text, category multi)" --load="INSERT INTO products(id, name, category) VALUES(<increment>, '<text/2/10>', (<array/1/3/1/1000>))" --together --drop --batch-size=10000 --threads=5 --total=100000 --init="create table reviews(product_id bigint, user_id int, rating int, comment text)" --load="insert into reviews(product_id, user_id, rating, comment) values(<int/1/10000>, <int/1/1000>, <int/1/100>, '<text/20/100>')" --quiet
+––– output –––
+Threads ; Batch     ; Time        ; Total Docs  ; Docs/Sec    ; Avg QPS     ; p99 QPS     ; p95 QPS     ; p5 QPS      ; p1 QPS      ; Lat Avg     ; Lat p50     ; Lat p95     ; Lat p99     ;
+5       ; 1000      ; %{NUMBER}:%{NUMBER}       ; 10000       ; %{NUMBER}        ; 0           ; 0           ; 0           ; 0           ; 0           ; %{NUMBER}.%{NUMBER}        ; %{NUMBER}.%{NUMBER}        ; %{NUMBER}.%{NUMBER}        ; %{NUMBER}.%{NUMBER}        ;
+Threads ; Batch     ; Time        ; Total Docs  ; Docs/Sec    ; Avg QPS     ; p99 QPS     ; p95 QPS     ; p5 QPS      ; p1 QPS      ; Lat Avg     ; Lat p50     ; Lat p95     ; Lat p99     ;
+5       ; 10000     ; %{NUMBER}:%{NUMBER}       ; 100000      ; %{NUMBER}      ; 0           ; 0           ; 0           ; 0           ; 0           ; %{NUMBER}.%{NUMBER}       ; %{NUMBER}.%{NUMBER}       ; %{NUMBER}.%{NUMBER}       ; %{NUMBER}.%{NUMBER}       ;
+––– input –––
+mysql -P9306 -h0 -e "select id, count(*), avg(reviews.rating) avg_rating from products left join reviews on reviews.product_id = products.id group by id order by count(*) desc; select id, count(*) from products left join reviews on reviews.product_id = products.id group by id order by count(*) desc"
+––– output –––
++------+----------+-------------+
+| id   | count(*) | avg_rating  |
++------+----------+-------------+
+|  370 |       23 | 42.73913043 |
+|  499 |       23 | 49.86956522 |
+| 2553 |       23 | 52.26086957 |
+| 2083 |       22 | 53.13636364 |
+| 3197 |       22 |   65.000000 |
+| 3538 |       22 | 54.72727273 |
+| 4848 |       22 | 49.54545455 |
+| 2850 |       22 | 59.40909091 |
+| 9903 |       22 | 40.90909091 |
+| 7947 |       22 | 56.77272727 |
+| 5986 |       22 | 45.09090909 |
+| 1145 |       21 | 51.28571429 |
+| 9245 |       21 | 46.28571429 |
+| 9432 |       21 | 48.14285714 |
+| 4445 |       21 | 47.28571429 |
+|  559 |       21 | 66.61904762 |
+|  677 |       21 | 57.47619048 |
+| 6688 |       21 | 47.47619048 |
+| 5714 |       21 | 59.90476190 |
+|  124 |       20 |   48.500000 |
++------+----------+-------------+
++------+----------+
+| id   | count(*) |
++------+----------+
+|  370 |       23 |
+|  499 |       23 |
+| 2553 |       23 |
+| 2083 |       22 |
+| 3197 |       22 |
+| 3538 |       22 |
+| 4848 |       22 |
+| 2850 |       22 |
+| 9903 |       22 |
+| 7947 |       22 |
+| 5986 |       22 |
+| 1145 |       21 |
+| 9245 |       21 |
+| 9432 |       21 |
+| 4445 |       21 |
+|  559 |       21 |
+|  677 |       21 |
+| 6688 |       21 |
+| 5714 |       21 |
+|  124 |       20 |
++------+----------+
+––– input –––
+mysql -P9306 -h0 -e "SELECT COUNT(*) FROM products; SELECT COUNT(*) FROM reviews;"
+––– output –––
++----------+
+| count(*) |
++----------+
+|    10000 |
++----------+
++----------+
+| count(*) |
++----------+
+|   100000 |
++----------+

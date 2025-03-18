@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2017-2024, Manticore Software LTD (https://manticoresearch.com)
+// Copyright (c) 2017-2025, Manticore Software LTD (https://manticoresearch.com)
 // Copyright (c) 2001-2016, Andrew Aksyonoff
 // Copyright (c) 2008-2016, Sphinx Technologies Inc
 // All rights reserved
@@ -177,11 +177,11 @@ enum SearchdCommandV_e : WORD
 	VER_COMMAND_STATUS		= 0x101,
 	VER_COMMAND_FLUSHATTRS	= 0x100,
 	VER_COMMAND_SPHINXQL	= 0x100,
-	VER_COMMAND_JSON		= 0x100,
+	VER_COMMAND_JSON		= 0x101,
 	VER_COMMAND_PING		= 0x100,
 	VER_COMMAND_UVAR		= 0x100,
 	VER_COMMAND_CALLPQ		= 0x100,
-	VER_COMMAND_CLUSTER		= 0x109,
+	VER_COMMAND_CLUSTER		= 0x10A,
 	VER_COMMAND_GETFIELD	= 0x100,
 	VER_COMMAND_SUGGEST		= 0x101,
 
@@ -925,7 +925,7 @@ class ReadOnlyHash_T
 {
 public:
 	using Hash_t = cRefCountedHashOfRefcnt_T<T>;
-	using cRefPtrHash_t = cRefCountedRefPtr_T<cRefCountedHashOfRefcnt_T<T>>;
+	using cRefPtrHash_t = cRefCountedRefPtr_T<Hash_t>;
 	using cRefCountedRefPtr_t = cRefCountedRefPtr_T<T>;
 	using RefCountedRefPtr_t = RefCountedRefPtr_T<T>;
 	using Snapshot_t = std::pair<cRefPtrHash_t, int64_t>;

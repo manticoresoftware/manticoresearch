@@ -23,7 +23,7 @@ pid_file = searchd.pid
 binlog_path =
 }
 ––– input –––
-mkdir -p data; rm -f searchd.log; searchd --stopwait > /dev/null; searchd -c /replication.conf > /dev/null
+mkdir -p data; rm -f searchd.log; stdbuf -oL searchd --stopwait > /dev/null; stdbuf -oL searchd -c /replication.conf > /dev/null
 ––– output –––
 ––– input –––
 grep 'FATAL: invalid replication ports count 1, should be at least 2' searchd.log |wc -l

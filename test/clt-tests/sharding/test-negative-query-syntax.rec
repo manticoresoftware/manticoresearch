@@ -1,0 +1,20 @@
+––– input –––
+export INSTANCE=1
+––– output –––
+––– block: ../base/replication/start-searchd-precach –––
+––– input –––
+mysql -h0 -P1306 -e "create table tbl1 random=5"
+––– output –––
+ERROR 1064 (42000) at line 1: P03: syntax error, unexpected integer, expecting string near '5'
+––– input –––
+mysql -h0 -P1306 -e "create table tbl2(id bigint) shards=a rf=b"
+––– output –––
+ERROR 1064 (42000) at line 1: P03: syntax error, unexpected tablename, expecting string near 'a rf=b'
+––– input –––
+mysql -h0 -P1306 -e "create table tbl3(id bigint) shards=-10 rf=-1"
+––– output –––
+ERROR 1064 (42000) at line 1: P03: syntax error, unexpected $undefined, expecting string near '-10 rf=-1'
+––– input –––
+mysql -h0 -P1306 -e "CREATE TABLE tbl4 shards=abc rf=1;"
+––– output –––
+ERROR 1064 (42000) at line 1: P03: syntax error, unexpected tablename, expecting string near 'abc rf=1'

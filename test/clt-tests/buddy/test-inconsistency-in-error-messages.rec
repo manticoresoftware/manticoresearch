@@ -1,0 +1,17 @@
+––– input –––
+echo -e 'common {\n\tplugin_dir = /usr/local/lib/manticore\n\tlemmatizer_base = /usr/share/manticore/morph/\n}\n\nsearchd {\n\tlisten = 9306:mysql41\n\tlisten = 9312\n\tlisten = 9308:http\n\tlog = /var/log/manticore/searchd.log\n\tquery_log = /var/log/manticore/query.log\n\tpid_file = /var/log/manticore/searchd.pid\n\tdata_dir = /var/log/manticore\n\tquery_log_format = sphinxql\n\tquery_log_commands = 1\n\tbuddy_path =\n}\n' > manticore.conf
+––– output –––
+––– input –––
+stdbuf -oL searchd --config ./manticore.conf > /dev/null
+––– output –––
+––– input –––
+if timeout 10 grep -qm1 'accepting connections' <(tail -n 1000 -f /var/log/manticore/searchd.log); then echo 'Accepting connections!'; else echo 'Timeout or failed!'; fi
+––– output –––
+Accepting connections!
+––– input –––
+mysql -h0 -P9306 -e "drop table if exists a; drop table if exists test; create table a (id BIGINT, model TEXT, storage_capacity INTEGER, color string, release_year INTEGER, price FLOAT, discounted_price FLOAT, sold BOOL, date_added TIMESTAMP, product_codes MULTI, values MULTI64, additional_info JSON, vector float_vector knn_type='hnsw' knn_dims='4' hnsw_similarity='l2');create table test type='distributed' local='a';"
+––– output –––
+––– input –––
+for i in {1..100}; do response=$(curl -s -X POST http://localhost:9308/insert -d '{"table": "test", "id": 1, "doc": {"model": "iPhone 13 Pro", "storage_capacity": 256, "color": "silver", "release_year": 2021, "price": 1099.99, "discounted_price": 989.99, "sold": 1, "date_added": 1591362342000, "product_codes": [1,2,3], "values": [523456764345678976,98765409877866654098,1109876543450987650987], "additional_info": {"features": ["ProMotion display", "A15 Bionic chip", "Ceramic Shield front cover"]}, "vector": [0.773448,0.312478,0.137971,0.459821]}}'); if [[ "$response" != *'"error":{"type":"action_request_validation_exception","reason":"table '\''test'\'' does not support INSERT","table":"test"},"status":409'* ]]; then echo "Mismatch found at iteration $i: $response"; exit 1; fi; done; echo "All 100 requests returned the same error"
+––– output –––
+All 100 requests returned the same error

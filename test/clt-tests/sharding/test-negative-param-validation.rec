@@ -1,0 +1,28 @@
+––– input –––
+export INSTANCE=1
+––– output –––
+––– block: ../base/replication/start-searchd-precach –––
+––– input –––
+export INSTANCE=2
+––– output –––
+––– block: ../base/replication/start-searchd-precach –––
+––– input –––
+export INSTANCE=3
+––– output –––
+––– block: ../base/replication/start-searchd-precach –––
+––– input –––
+export CLUSTER_NAME=replication
+––– output –––
+––– block: ../base/replication/create-cluster –––
+––– input –––
+export CLUSTER_NAME=replication
+––– output –––
+––– block: ../base/replication/join-cluster-on-all-nodes –––
+––– input –––
+mysql -h0 -P1306 -e "create table ${CLUSTER_NAME}:tbl1(id bigint) shards=3"
+––– output –––
+ERROR 1064 (42000) at line 1: Sharded table requires `rf=n`
+––– input –––
+mysql -h0 -P2306 -e "CREATE TABLE tbl2 shards=5 rf12;"
+––– output –––
+ERROR 1064 (42000) at line 1: Sharded table requires `rf=n`

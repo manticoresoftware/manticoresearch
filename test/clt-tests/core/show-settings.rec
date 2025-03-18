@@ -10,9 +10,9 @@ mysql -h0 -P1306 -e "SHOW SETTINGS;"
 +----------------------------+------------------------------------------------------------+
 | configuration_file         | /.clt/test/clt-tests/base/searchd-with-flexible-ports.conf |
 | worker_pid                 | %{NUMBER}                                                         |
-| searchd.listen             | 1306:mysql41                                               |
-| searchd.listen             | 1312                                                       |
-| searchd.listen             | 1308:http                                                  |
+| searchd.listen             | %{IPADDR}:%{NUMBER}:mysql41                                     |
+| searchd.listen             | %{IPADDR}:%{NUMBER}                                             |
+| searchd.listen             | %{IPADDR}:%{NUMBER}:http                                        |
 | searchd.log                | /var/log/manticore-1/searchd.log                           |
 | searchd.query_log          | /var/log/manticore-1/query.log                             |
 | searchd.pid_file           | /var/log/manticore-1/searchd.pid                           |
@@ -21,5 +21,5 @@ mysql -h0 -P1306 -e "SHOW SETTINGS;"
 | searchd.query_log_commands | 1                                                          |
 | searchd.binlog_path        | /var/log/manticore-1/binlog                                |
 | common.plugin_dir          | /usr/local/lib/manticore                                   |
-| common.lemmatizer_base     | /usr/share/manticore/morph/                                |
+| common.lemmatizer_base     | /usr/share/manticore/                                      |
 +----------------------------+------------------------------------------------------------+

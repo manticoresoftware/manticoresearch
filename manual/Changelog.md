@@ -1,5 +1,34 @@
 # Changelog
 
+# Version 7.4.6
+Released: February 28th 2025
+
+### Major changes
+* [Issue #832](https://github.com/manticoresoftware/manticoresearch/issues/832) Integration with [Kibana](../Integration/Kibana.md) for easier and more efficient data visualization.
+
+### Minor changes
+* [Issue #1727](https://github.com/manticoresoftware/manticoresearch/issues/1727) Fixed floating-point precision differences between arm64 and x86_64.
+* [Issue #2995](https://github.com/manticoresoftware/manticoresearch/issues/2995) Implemented performance optimizations for join batching.
+* [Issue #3039](https://github.com/manticoresoftware/manticoresearch/issues/3039) Implemented performance optimizations for EstimateValues in histograms.
+* [Issue #3099](https://github.com/manticoresoftware/manticoresearch/issues/3099) Added support for Boost 1.87.0. ❤️ Thank you, [@cho-m](https://github.com/cho-m) for the PR.
+* [Issue #77](https://github.com/manticoresoftware/columnar/issues/77) Optimized block data reuse when creating filters with multiple values; added min/max to attribute metadata; implemented pre-filtering of filter values based on min/max.
+
+### Bugfixes
+* [Commit 73ac](https://github.com/manticoresoftware/manticoresearch/commit/73ac22f358a7a0e734b332c3943c86e6294c06c3) Fixed handling of expressions in joined queries when attributes from both the left and right tables are used; fixed the index_weights option for the right table.
+* [Issue #2915](https://github.com/manticoresoftware/manticoresearch/issues/2915) Using `avg()` in a `SELECT ... JOIN` query could lead to incorrect results; this is now fixed.
+* [Issue #2996](https://github.com/manticoresoftware/manticoresearch/issues/2996) Fixed an incorrect result set caused by the implicit cutoff when join batching was enabled.
+* [Issue #3031](https://github.com/manticoresoftware/manticoresearch/issues/3031) Fixed a crash in the daemon during shutdown when an active chunk merge was in progress.
+* [Issue #3037](http://github.com/manticoresoftware/manticoresearch/issues/3037) Fixed an issue where `IN(...)` could produce incorrect results.
+* [Issue #3038](https://github.com/manticoresoftware/manticoresearch/issues/3038) Setting `max_iops` / `max_iosize` in version 7.0.0 could degrade indexing performance; this is now fixed.
+* [Issue #3042](https://github.com/manticoresoftware/manticoresearch/issues/3042) Fixed a memory leak in the join query cache.
+* [Issue #3052](https://github.com/manticoresoftware/manticoresearch/issues/3052) Fixed the handling of query options in joined JSON queries.
+* [Issue #3054](https://github.com/manticoresoftware/manticoresearch/issues/3054) Fixed an issue with the ATTACH TABLE command.
+* [Issue #3079](https://github.com/manticoresoftware/manticoresearch/issues/3079) Fixed inconsistencies in error messages.
+* [Issue #3087](https://github.com/manticoresoftware/manticoresearch/issues/3087) Setting `diskchunk_flush_write_timeout=-1` per table did not disable index flushing; this is now fixed.
+* [Issue #3088](https://github.com/manticoresoftware/manticoresearch/issues/3088) Resolved duplicate entries after bulk replacing large IDs.
+* [Issue #3126](https://github.com/manticoresoftware/manticoresearch/issues/3126) Fixed a daemon crash caused by a full-text query with a single `NOT` operator and an expression ranker.
+* [Issue #3128](https://github.com/manticoresoftware/manticoresearch/pull/3128) Fixed a potential vulnerability in the CJSON library. ❤️ Thank you, [@tabudz](https://github.com/tabudz) for the PR.
+
 # Version 7.0.0
 Released: January 30th 2025
 
@@ -877,7 +906,7 @@ Released: May 18th 2022
   < Content-Length: 434
   <
   * Connection #0 to host localhost left intact
-  {"items":[{"insert":{"_index":"user","_id":2811798918248005633,"created":true,"result":"created","status":201}},{"insert":{"_index":"user","_id":2811798918248005634,"created":true,"result":"created","status":201}},{"insert":{"_index":"user","_id":2811798918248005635,"created":true,"result":"created","status":201}},{"insert":{"_index":"user","_id":2811798918248005636,"created":true,"result":"created","status":201}}],"errors":false}
+  {"items":[{"insert":{"table":"user","_id":2811798918248005633,"created":true,"result":"created","status":201}},{"insert":{"table":"user","_id":2811798918248005634,"created":true,"result":"created","status":201}},{"insert":{"table":"user","_id":2811798918248005635,"created":true,"result":"created","status":201}},{"insert":{"table":"user","_id":2811798918248005636,"created":true,"result":"created","status":201}}],"errors":false}
   real	0m1.022s
   user	0m0.001s
   sys	0m0.010s
@@ -910,7 +939,7 @@ Released: May 18th 2022
   < Content-Length: 147
   <
   * Connection #0 to host localhost left intact
-  {"items":[{"bulk":{"_index":"user","_id":2811798919590182916,"created":4,"deleted":0,"updated":0,"result":"created","status":201}}],"errors":false}
+  {"items":[{"bulk":{"table":"user","_id":2811798919590182916,"created":4,"deleted":0,"updated":0,"result":"created","status":201}}],"errors":false}
   real	0m0.015s
   user	0m0.005s
   sys	0m0.004s

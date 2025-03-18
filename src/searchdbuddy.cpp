@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2017-2024, Manticore Software LTD (https://manticoresearch.com)
+// Copyright (c) 2017-2025, Manticore Software LTD (https://manticoresearch.com)
 // Copyright (c) 2001-2016, Andrew Aksyonoff
 // Copyright (c) 2008-2016, Sphinx Technologies Inc
 // All rights reserved
@@ -14,7 +14,7 @@
 #include "netreceive_ql.h"
 #include "client_session.h"
 
-#include <boost/asio/io_service.hpp>
+#include <boost/asio/io_context.hpp>
 #include <boost/asio/read_until.hpp>
 #include <boost/process.hpp>
 #if _WIN32
@@ -32,7 +32,7 @@ static CSphString g_sUrlBuddy;
 static CSphString g_sStartArgs;
 
 static const int PIPE_BUF_SIZE = 2048;
-static std::unique_ptr<boost::asio::io_service> g_pIOS;
+static std::unique_ptr<boost::asio::io_context> g_pIOS;
 static std::vector<char> g_dPipeBuf ( PIPE_BUF_SIZE );
 static CSphVector<char> g_dLogBuf ( PIPE_BUF_SIZE );
 static std::unique_ptr<boost::process::async_pipe> g_pPipe;
@@ -357,7 +357,7 @@ BuddyState_e TryToStart ( const char * sArgs, CSphString & sError )
 	g_pPipe.reset();
 	g_pIOS.reset();
 
-	g_pIOS.reset ( new boost::asio::io_service );
+	g_pIOS.reset ( new boost::asio::io_context );
 	g_pPipe.reset ( new boost::process::async_pipe ( *g_pIOS ) );
 
 	std::unique_ptr<boost::process::child> pBuddy;
@@ -753,20 +753,15 @@ bool ProcessHttpQueryBuddy ( HttpProcessResult_t & tRes, Str_t sSrcQuery, Option
 		{
 			sSrcQuery = FromStr ( *pRawQuery );
 
-			// need also to skip the head chars
-			const char sRawHead[] = "mode=raw&query=";
-			const int sRawHeadLen = sizeof ( sRawHead )-1;
 			const char sQueryHead[] = "query=";
 			const int iQueryHeadLen = sizeof ( sQueryHead )-1;
-			if ( pRawQuery->Begins( sRawHead ) )
-			{
-				sSrcQuery.first +=sRawHeadLen ;
-				sSrcQuery.second -= sRawHeadLen;
 
-			} else if ( pRawQuery->Begins( sQueryHead ) )
+			const char * sHead = strstr ( pRawQuery->cstr(), sQueryHead );
+			if ( sHead )
 			{
-				sSrcQuery.first +=iQueryHeadLen ;
-				sSrcQuery.second -= iQueryHeadLen;
+				const char * sOnlyQuery = sHead + iQueryHeadLen;
+				int iLen = strlen ( sOnlyQuery );
+				sSrcQuery = Str_t ( sOnlyQuery, iLen );
 			}
 		}
 	}

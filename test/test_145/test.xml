@@ -2,7 +2,7 @@
 
 <test>
 <name>snippets vs stopwords</name>
-
+<skip_db/>
 <config>
 searchd
 {
@@ -48,8 +48,6 @@ index stop1
 } 
 
 </config>
-
-<db_insert>select 1;</db_insert>
 
 <queries>
 <sphinxql>

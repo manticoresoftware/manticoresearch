@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2017-2024, Manticore Software LTD (https://manticoresearch.com)
+// Copyright (c) 2017-2025, Manticore Software LTD (https://manticoresearch.com)
 // Copyright (c) 2001-2016, Andrew Aksyonoff
 // Copyright (c) 2008-2016, Sphinx Technologies Inc
 // All rights reserved
@@ -121,9 +121,13 @@ bool AttrMerger_c::Impl_c::Prepare ( const CSphIndex * pSrcIndex, const CSphInde
 
 	if ( tDstSchema.HasKNNAttrs() )
 	{
-		m_pKNNBuilder = BuildCreateKNN ( tDstSchema, m_iTotalDocs, m_dAttrsForKNN, m_sError );
+		CSphVector<std::pair<PlainOrColumnar_t,int>> dAllKNNAttrs;
+		m_pKNNBuilder = BuildCreateKNN ( tDstSchema, m_iTotalDocs, dAllKNNAttrs, m_sError );
 		if ( !m_pKNNBuilder )
 			return false;
+
+		for ( const auto & i : dAllKNNAttrs )
+			m_dAttrsForKNN.Add ( i.first );
 	}
 
 	if ( tDstSchema.HasJsonSIAttrs() )

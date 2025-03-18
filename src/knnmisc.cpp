@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2023-2024, Manticore Software LTD (https://manticoresearch.com)
+// Copyright (c) 2023-2025, Manticore Software LTD (https://manticoresearch.com)
 // All rights reserved
 //
 // This program is free software; you can redistribute it and/or modify
@@ -375,7 +375,7 @@ bool ParseKNNConfigStr ( const CSphString & sStr, CSphVector<NamedKNNSettings_t>
 }
 
 
-std::unique_ptr<knn::Builder_i> BuildCreateKNN ( const ISphSchema & tSchema, int64_t iNumElements, CSphVector<PlainOrColumnar_t> & dAttrs, CSphString & sError )
+std::unique_ptr<knn::Builder_i> BuildCreateKNN ( const ISphSchema & tSchema, int64_t iNumElements, CSphVector<std::pair<PlainOrColumnar_t,int>> & dAttrs, CSphString & sError )
 {
 	std::unique_ptr<knn::Builder_i> pBuilder = CreateKNNBuilder ( tSchema, iNumElements, sError );
 	if ( !pBuilder )
@@ -386,7 +386,7 @@ std::unique_ptr<knn::Builder_i> BuildCreateKNN ( const ISphSchema & tSchema, int
 	{
 		const CSphColumnInfo & tAttr = tSchema.GetAttr(i);
 		if ( tAttr.IsIndexedKNN() )
-			dAttrs.Add ( PlainOrColumnar_t ( tAttr, iColumnar ) );
+			dAttrs.Add ( { PlainOrColumnar_t ( tAttr, iColumnar ), i } );
 
 		if ( tAttr.IsColumnar() )
 			iColumnar++;
@@ -399,18 +399,15 @@ std::unique_ptr<knn::Builder_i> BuildCreateKNN ( const ISphSchema & tSchema, int
 template <typename ACTION>
 static bool BuildProcessKNN ( RowID_t tRowID, const CSphRowitem * pRow, const BYTE * pPool, CSphVector<ScopedTypedIterator_t> & dIterators, const CSphVector<PlainOrColumnar_t> & dAttrs, ACTION && fnAction )
 {
-	int iKNNAttrIndex = 0;
-	for ( auto & i : dAttrs )
+	ARRAY_FOREACH ( i, dAttrs )
 	{
-		assert ( i.m_eType==SPH_ATTR_FLOAT_VECTOR );
+		assert ( dAttrs[i].m_eType==SPH_ATTR_FLOAT_VECTOR );
 		const BYTE * pSrc = nullptr;
-		int iBytes = i.Get ( tRowID, pRow, pPool, dIterators, pSrc );
+		int iBytes = dAttrs[i].Get ( tRowID, pRow, pPool, dIterators, pSrc );
 		int iValues = iBytes / sizeof(float);
 
-		if ( !fnAction ( iKNNAttrIndex, { (float*)pSrc, (size_t)iValues } ) )
+		if ( !fnAction ( i, { (float*)pSrc, (size_t)iValues } ) )
 			return false;
-
-		iKNNAttrIndex++;
 	}
 
 	return true;

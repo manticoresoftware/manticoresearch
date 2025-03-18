@@ -29,22 +29,42 @@ mysql -h0 -P1306 -e "create table ${CLUSTER_NAME}:tbl1(id bigint) shards=5 rf=2"
 ––– output –––
 0
 ––– input –––
-mysql -h0 -P1306 -e "create table ${CLUSTER_NAME}:tbl2(id bigint) shards=1 rf=1"; echo $?
+total_shards=$(for n in 1 2 3; do mysql -h0 -P$((n * 1000 + 306)) -e "SHOW TABLES FROM SYSTEM;"; done | grep -c "tbl1_s"); echo "Total shards: $total_shards"
+––– output –––
+Total shards: 10
+––– input –––
+mysql -h0 -P2306 -e "create table ${CLUSTER_NAME}:tbl2(id bigint) shards=4 rf=1"; echo $?
 ––– output –––
 0
 ––– input –––
-mysql -h0 -P1306 -e "create table ${CLUSTER_NAME}:tbl3(id bigint) shards=4 rf=2"; echo $?
+total_shards=$(for n in 1 2 3; do mysql -h0 -P$((n * 1000 + 306)) -e "SHOW TABLES FROM SYSTEM;"; done | grep -c "tbl2_s"); echo "Total shards: $total_shards"
+––– output –––
+Total shards: 4
+––– input –––
+mysql -h0 -P3306 -e "create table ${CLUSTER_NAME}:tbl3(id bigint) shards=4 rf=2"; echo $?
 ––– output –––
 0
 ––– input –––
-mysql -h0 -P1306 -e "DROP TABLE ${CLUSTER_NAME}:tbl3"; echo $?
+total_shards=$(for n in 1 2 3; do mysql -h0 -P$((n * 1000 + 306)) -e "SHOW TABLES FROM SYSTEM;"; done | grep -c "tbl3_s"); echo "Total shards: $total_shards"
+––– output –––
+Total shards: 8
+––– input –––
+mysql -h0 -P3306 -e "DROP TABLE ${CLUSTER_NAME}:tbl3"; echo $?
 ––– output –––
 0
 ––– input –––
-mysql -h0 -P1306 -e "create table ${CLUSTER_NAME}:tbl3(id bigint) shards=1 rf=1"; echo $?
+mysql -h0 -P3306 -e "create table ${CLUSTER_NAME}:tbl3(id bigint) shards=10 rf=1"; echo $?
 ––– output –––
 0
 ––– input –––
-mysql -h0 -P1306 -e "create table ${CLUSTER_NAME}:tbl4(id bigint) shards=9999999999 rf=3"; echo $?
+total_shards=$(for n in 1 2 3; do mysql -h0 -P$((n * 1000 + 306)) -e "SHOW TABLES FROM SYSTEM;"; done | grep -c "tbl3_s"); echo "Total shards: $total_shards"
+––– output –––
+Total shards: 10
+––– input –––
+mysql -h0 -P3306 -e "create table ${CLUSTER_NAME}:tbl4(id bigint) shards=999 rf=1"; echo $?
 ––– output –––
 0
+––– input –––
+total_shards=$(for n in 1 2 3; do mysql -h0 -P$((n * 1000 + 306)) -e "SHOW TABLES FROM SYSTEM;"; done | grep -c "tbl4_s"); echo "Total shards: $total_shards"
+––– output –––
+Total shards: 999

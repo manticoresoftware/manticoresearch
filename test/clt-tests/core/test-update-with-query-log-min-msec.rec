@@ -37,7 +37,7 @@ cat /var/log/manticore/query.log
 mysql -h0 -P9306 -e "set global query_log_min_msec=0"
 ––– output –––
 ––– input –––
-mysql -h0 -P9306 -e "DROP TABLE IF EXISTS t; CREATE TABLE t(a int); INSERT INTO t VALUES(1, 1); UPDATE t SET a = 2 WHERE id = 1;"; echo $?
+mysql -h0 -P9306 -e "UPDATE t SET a = 2 WHERE id = 1;"; echo $?
 ––– output –––
 0
 ––– input –––

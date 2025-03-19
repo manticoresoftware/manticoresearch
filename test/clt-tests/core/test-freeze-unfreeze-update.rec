@@ -1,9 +1,27 @@
 ––– block: ../base/start-searchd-with-buddy –––
 ––– input –––
-manticore-load --quiet --init="CREATE TABLE test (id bigint, usertest text stored indexed, category string, age int, salary float, discount float, is_active bool, last_login timestamp, product_codes multi, large_values multi64, additional_info json, location_vector float_vector)" --load="INSERT INTO test (id, usertest, category, age, salary, discount, is_active, last_login, product_codes, large_values, additional_info, location_vector) VALUES (<increment>, '<text/5/20>', '<text/5/10>', <int/1/100>, <float/1.0/100.0>, <float/0.0/10.0>, <int/0/1>, <int/1609459200/1704067200>, (<array/1/10/1/100>), (<array/1/10/-100000/100000>), '{\"key\":\"value\"}', (<array/4/4/1.0/10.0>))" --batch-size=10000 --threads=4 --total=1000000
+manticore-load --quiet --json --init="CREATE TABLE test (id bigint, usertest text stored indexed, category string, age int, salary float, discount float, is_active bool, last_login timestamp, product_codes multi, large_values multi64, additional_info json, location_vector float_vector)" --load="INSERT INTO test (id, usertest, category, age, salary, discount, is_active, last_login, product_codes, large_values, additional_info, location_vector) VALUES (<increment>, '<text/5/20>', '<text/5/10>', <int/1/100>, <float/1.0/100.0>, <float/0.0/10.0>, <int/0/1>, <int/1609459200/1704067200>, (<array/1/10/1/100>), (<array/1/10/-100000/100000>), '{\"key\":\"value\"}', (<array/4/4/1.0/10.0>))" --batch-size=10000 --threads=4 --total=1000000
 ––– output –––
-Threads ; Batch     ; Time        ; Total Docs  ; Docs/Sec    ; Avg QPS     ; p99 QPS     ; p95 QPS     ; p5 QPS      ; p1 QPS      ; Lat Avg     ; Lat p50     ; Lat p95     ; Lat p99     ;
-4       ; 10000     ; %{NUMBER}:%{NUMBER}       ; %{NUMBER}     ; %{NUMBER}      ; %{NUMBER}          ; %{NUMBER}          ; %{NUMBER}          ; %{NUMBER}          ; %{NUMBER}          ; %{NUMBER}.%{NUMBER}       ; %{NUMBER}.%{NUMBER}       ; %{NUMBER}.%{NUMBER}       ; %{NUMBER}.%{NUMBER}       ;
+{
+"threads": %{NUMBER},
+"batch_size": %{NUMBER},
+"time": "%{NUMBER}:%{NUMBER}",
+"total_operations": %{NUMBER},
+"operations_per_second": %{NUMBER},
+"qps": {
+"avg": %{NUMBER},
+"p99": %{NUMBER},
+"p95": %{NUMBER},
+"p5": %{NUMBER},
+"p1": %{NUMBER}
+},
+"latency": {
+"avg": %{NUMBER}.%{NUMBER},
+"p50": %{NUMBER},
+"p95": %{NUMBER},
+"p99": %{NUMBER}
+}
+}
 ––– input –––
 mysql -h0 -P9306 -e "SELECT * FROM test ORDER BY id ASC LIMIT 100000 OPTION max_matches=100000;" > /tmp/test_data.txt
 ––– output –––

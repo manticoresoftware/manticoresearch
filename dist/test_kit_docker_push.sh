@@ -70,7 +70,7 @@ docker import ./manticore_test_kit.img "$img_url"
 
 # pusing to ghcr.io
 [ -n "$GHCR_USER" ] && for img in "${images[@]}"; do
-	docker push "$img" \
+	docker push --all-tags "$img" \
 	  && echo "❗ Pushed the image to $img" \
       && echo "Pushed test-kit to $img" >> "$GITHUB_STEP_SUMMARY" \
 	  || echo "❗ Couldn't push the image to $img"

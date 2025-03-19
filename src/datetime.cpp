@@ -127,7 +127,6 @@ static void SetTimeZoneLocal ( StrVec_t & dWarnings )
 	}
 #endif
 
-	g_hTimeZoneLocal = cctz::local_time_zone();
 	g_hTimeZone = g_hTimeZoneLocal;
 	CheckForUTC();
 }

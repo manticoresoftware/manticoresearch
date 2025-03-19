@@ -285,7 +285,7 @@ index_sp = {0|1}
 
 Controls detection and indexing of sentence and paragraph boundaries. Optional, default is 0 (no detection or indexing).
 
-This directive enables the detection and indexing of sentence and paragraph boundaries, making it possible for the [SENTENCE](../../Searching/Full_text_matching/Operators.md#SENTENCE-and-PARAGRAPH-operators)  and [PARAGRAPH](../../Searching/Full_text_matching/Operators.md#SENTENCE-and-PARAGRAPH-operators)  operators to work. Sentence boundary detection is based on plain text analysis, and only requires setting `index_sp = 1` to enable it. Paragraph detection, however, relies on HTML markup and occurs during the [HTML stripping process](../../Creating_a_table/NLP_and_tokenization/Advanced_HTML_tokenization.md#html_strip. As such, to index paragraph boundaries, both the index_sp directive and the html_strip directive must be set to 1.
+This directive enables the detection and indexing of sentence and paragraph boundaries, making it possible for the [SENTENCE](../../Searching/Full_text_matching/Operators.md#SENTENCE-and-PARAGRAPH-operators)  and [PARAGRAPH](../../Searching/Full_text_matching/Operators.md#SENTENCE-and-PARAGRAPH-operators)  operators to work. Sentence boundary detection is based on plain text analysis, and only requires setting `index_sp = 1` to enable it. Paragraph detection, however, relies on HTML markup and occurs during the [HTML stripping process](../../Creating_a_table/NLP_and_tokenization/Advanced_HTML_tokenization.md#html_strip). As such, to index paragraph boundaries, both the index_sp directive and the html_strip directive must be set to 1.
 
 The following rules are used to determine sentence boundaries:
 

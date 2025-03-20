@@ -154,8 +154,7 @@ void ApiServe ( std::unique_ptr<AsyncNetBuffer_c> pBuf )
 		// need to pass by the only commands:
 		// - PING
 		// - PERSIST
-		// - all replication
-		if ( eCommand!=SEARCHD_COMMAND_PING && eCommand!=SEARCHD_COMMAND_CLUSTER && eCommand!=SEARCHD_COMMAND_PERSIST )
+		if ( eCommand!=SEARCHD_COMMAND_PING && eCommand!=SEARCHD_COMMAND_PERSIST )
 		{
 			CSphString sError;
 			if ( !CheckAuth ( eApiAuth, dApiToken, sUser, sError ) )

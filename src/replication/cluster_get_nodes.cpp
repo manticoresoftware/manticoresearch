@@ -58,7 +58,7 @@ StrVec_t RemoteClusterGetNodes ( VectorAgentConn_t & dAgents )
 }
 
 // command to all remote nodes at cluster to get actual nodes list
-StrVec_t QueryNodeListFromRemotes ( const VecTraits_T<CSphString>& dClusterNodes, const CSphString& sCluster )
+StrVec_t QueryNodeListFromRemotes ( const VecTraits_T<CSphString>& dClusterNodes, const CSphString& sCluster, const CSphString & sUser )
 {
 	StrVec_t dNodes;
 	TlsMsg::ResetErr();
@@ -76,7 +76,7 @@ StrVec_t QueryNodeListFromRemotes ( const VecTraits_T<CSphString>& dClusterNodes
 	ClusterRequest_t dRequest;
 	dRequest.m_sCluster = sCluster;
 
-	VecRefPtrs_t<AgentConn_t*> dAgents = ClusterGetNodes_c::MakeAgents ( dDesc, ReplicationTimeoutAnyNode(), dRequest );
+	VecRefPtrs_t<AgentConn_t*> dAgents = ClusterGetNodes_c::MakeAgents ( dDesc, sUser, ReplicationTimeoutAnyNode(), dRequest );
 	dNodes = RemoteClusterGetNodes ( dAgents );
 
 	ScopedComma_c tColon ( TlsMsg::Err(), ";" );
@@ -105,9 +105,9 @@ void ReceiveClusterGetNodes ( ISphOutputBuffer& tOut, InputBuffer_c& tBuf, CSphS
 		ClusterGetNodes_c::BuildReply ( tOut, dNodes );
 }
 
-StrVec_t GetNodeListFromRemotes ( const ClusterDesc_t& tDesc )
+StrVec_t GetNodeListFromRemotes ( const ClusterDesc_t & tDesc )
 {
-	auto dNodes = QueryNodeListFromRemotes ( tDesc.m_dClusterNodes, tDesc.m_sName );
+	auto dNodes = QueryNodeListFromRemotes ( tDesc.m_dClusterNodes, tDesc.m_sName, tDesc.m_sUser );
 	if ( dNodes.IsEmpty() )
 		TlsMsg::Err ( "cluster '%s', no nodes available(%s), error: %s", tDesc.m_sName.cstr(), StrVec2Str( tDesc.m_dClusterNodes ).cstr(),  TlsMsg::szError() );
 	else
@@ -146,12 +146,12 @@ void operator>> ( InputBuffer_c & tIn, ClusterNodesStatesReply_t & tReq )
 	tState.m_sHash = tIn.GetString();
 }
 
-static bool SendClusterNodesStates ( const CSphString & sCluster, const VecTraits_T<CSphString> & dNodes, ClusterNodesStatesVec_t & dStates )
+static bool SendClusterNodesStates ( const CSphString & sCluster, const CSphString & sUser, const VecTraits_T<CSphString> & dNodes, ClusterNodesStatesVec_t & dStates )
 {
 	ClusterNodeState_c::REQUEST_T tReq;
 	tReq.m_sCluster = sCluster;
 
-	auto dAgents = ClusterNodeState_c::MakeAgents ( GetDescAPINodes ( dNodes, Resolve_e::SLOW ), ReplicationTimeoutQuery(), tReq );
+	auto dAgents = ClusterNodeState_c::MakeAgents ( GetDescAPINodes ( dNodes, Resolve_e::SLOW ), sUser, ReplicationTimeoutQuery(), tReq );
 	// no nodes left seems a valid case
 	if ( dAgents.IsEmpty() )
 		return true;
@@ -172,7 +172,7 @@ static bool SendClusterNodesStates ( const CSphString & sCluster, const VecTrait
 ClusterNodesStatesVec_t GetStatesFromRemotes ( const ClusterDesc_t & tDesc )
 {
 	ClusterNodesStatesVec_t dStates;
-	SendClusterNodesStates ( tDesc.m_sName, tDesc.m_dClusterNodes, dStates );
+	SendClusterNodesStates ( tDesc.m_sName, tDesc.m_sUser, tDesc.m_dClusterNodes, dStates );
 	return dStates;
 }
 
@@ -267,10 +267,10 @@ bool CheckRemotesVersions ( const ClusterDesc_t & tDesc, bool bWithServerId )
 	VecRefPtrs_t<AgentConn_t*> dAgents;
 	if ( !bWithServerId )
 	{
-		dAgents = ClusterNodeVer_c::MakeAgents ( GetDescAPINodes ( tDesc.m_dClusterNodes, Resolve_e::QUICK ), ReplicationTimeoutAnyNode(), tReqVer );
+		dAgents = ClusterNodeVer_c::MakeAgents ( GetDescAPINodes ( tDesc.m_dClusterNodes, Resolve_e::QUICK ), tDesc.m_sUser, ReplicationTimeoutAnyNode(), tReqVer );
 	} else
 	{
-		dAgents = ClusterNodeVerId_c::MakeAgents ( GetDescAPINodes ( tDesc.m_dClusterNodes, Resolve_e::QUICK ), ReplicationTimeoutAnyNode(), tReqId );
+		dAgents = ClusterNodeVerId_c::MakeAgents ( GetDescAPINodes ( tDesc.m_dClusterNodes, Resolve_e::QUICK ), tDesc.m_sUser, ReplicationTimeoutAnyNode(), tReqId );
 	}
 	// no nodes left seems a valid case
 	if ( dAgents.IsEmpty() )

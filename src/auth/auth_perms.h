@@ -38,3 +38,4 @@ struct UserPerm_t
 using UserPerms_t = CSphVector<UserPerm_t>;
 
 bool CheckPerms ( const CSphString & sUser, AuthAction_e eAction, const CSphString & sTarget, CSphString & sError );
+const char * GetActionName (  AuthAction_e eAction );

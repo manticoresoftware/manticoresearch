@@ -32,13 +32,17 @@ static void AddBuddyToken ( const AuthUserCred_t * pSrcBuddy, AuthUsers_t & tDst
 
 void AuthConfigure ( const CSphConfigSection & hSearchd )
 {
-	g_sAuthFile = RealPath ( hSearchd.GetStr ( "auth_user_file" ) );
+	CSphString sFile = hSearchd.GetStr ( "auth_user_file" );
+	if ( sFile.IsEmpty() )
+		return;
+
+	g_sAuthFile = RealPath ( sFile );
 	CSphString sError;
 	AuthUsersPtr_t tAuth = ReadAuthFile ( g_sAuthFile, sError );
-	AddBuddyToken ( nullptr, *tAuth );
-
 	if ( !tAuth )
 		sphFatal ( "%s", sError.cstr() );
+
+	AddBuddyToken ( nullptr, *tAuth );
 	
 	ScopedMutex_t tLock ( g_tAuthLock );
 	g_tAuth = tAuth;

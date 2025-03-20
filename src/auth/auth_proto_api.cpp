@@ -55,40 +55,65 @@ bool CheckAuth ( ApiAuth_e eType, const VecTraits_T<BYTE> & dToken, CSphString &
 	return true;
 }
 
-ApiAuthToken_t GetApiAuth ( const CSphString & sUser )
+static void SetAuth ( const char * sBearerSha256, int iLen, AgentConn_t * pAgent )
 {
-	ApiAuthToken_t tToken;
+	assert ( sBearerSha256 && iLen>0 );
+
+	pAgent->m_tAuthToken.m_eType = ApiAuth_e::SHA256;
+	pAgent->m_tAuthToken.m_dToken.Reset ( iLen );
+	memcpy ( pAgent->m_tAuthToken.m_dToken.Begin(), sBearerSha256, iLen );
+}
+
+
+void SetAuth ( const CSphString & sUser, AgentConn_t * pAgent )
+{
+	if ( sUser.IsEmpty() || !pAgent )
+		return;
 
 	if ( !IsAuthEnabled() )
-		return tToken;
+		return;
 
 	AuthUsersPtr_t pUsers = GetAuth();
 	const AuthUserCred_t * pUser = pUsers->m_hUserToken ( sUser );
 	if ( !pUser )
-		return tToken;
+		return;
 
-	tToken.m_eType = ApiAuth_e::SHA256;
-	tToken.m_dToken.Reset ( pUser->m_sBearerSha256.Length() );
-	memcpy ( tToken.m_dToken.Begin(), pUser->m_sBearerSha256.cstr(), tToken.m_dToken.GetLength() );
+	SetAuth ( pUser->m_sBearerSha256.cstr(), pUser->m_sBearerSha256.Length(), pAgent );
+}
 
-	return tToken;
+void SetAuth ( const CSphString & sUser, CSphVector<AgentConn_t *> & dRemotes )
+{
+	if ( sUser.IsEmpty() || dRemotes.IsEmpty() )
+		return;
+
+	if ( !IsAuthEnabled() )
+		return;
+
+	AuthUsersPtr_t pUsers = GetAuth();
+	const AuthUserCred_t * pUser = pUsers->m_hUserToken ( sUser );
+	if ( !pUser )
+		return;
+
+	// FIXME!!! replace by FixedVector
+	int iTokenLen = pUser->m_sBearerSha256.Length();
+	const char * sBearerSha256 = pUser->m_sBearerSha256.cstr();
+	for ( auto & tClient : dRemotes )
+		SetAuth ( sBearerSha256, iTokenLen, tClient );
 }
 
 void SetSessionAuth ( CSphVector<AgentConn_t *> & dRemotes )
 {
-	if ( !IsAuthEnabled() )
-		return;
-
-	ApiAuthToken_t tAuthToken = GetApiAuth ( session::GetUser() );
-	for ( auto & tClient : dRemotes )
-	{
-		tClient->m_tAuthToken.m_eType = tAuthToken.m_eType;
-		tClient->m_tAuthToken.m_dToken.CopyFrom ( tAuthToken.m_dToken );
-	}
+	SetAuth ( session::GetUser(), dRemotes );
 }
 
 bool ApiCheckPerms ( const CSphString & sUser, AuthAction_e eAction, const CSphString & sTarget, ISphOutputBuffer & tOut )
 {
+	if ( !IsAuthEnabled() )
+	{
+		sphLogDebug ( "no users found in config, permission granted" );
+		return true;
+	}
+
 	CSphString sError;
 	if ( CheckPerms ( sUser, eAction, sTarget, sError ) )
 		return true;

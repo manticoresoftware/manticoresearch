@@ -31,5 +31,4 @@ struct ApiAuthToken_t
 	CSphFixedVector<BYTE> m_dToken  { 0 };
 };
 
-ApiAuthToken_t GetApiAuth ( const CSphString & sUser );
 bool ApiCheckPerms ( const CSphString & sUser, AuthAction_e eAction, const CSphString & sTarget, ISphOutputBuffer & tOut );

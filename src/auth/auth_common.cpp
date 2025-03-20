@@ -16,6 +16,7 @@
 #include "std/base64.h"
 #include "std/fnv64.h"
 #include "sphinxjson.h"
+#include <filesystem>
 
 #include "auth_perms.h"
 #include "auth_common.h"
@@ -139,7 +140,7 @@ bool ReadUsers ( const CSphString & sFile, bson::Bson_c & tBson, AuthUsersPtr_t 
 	CSphVector<BYTE> dHashBuf { HASH256_SIZE };
 	sph::StringSet hSalts;
 
-	bson::Bson_c ( tBson.ChildByName ( "users" ) ).ForEach ( [&] ( CSphString & , const bson::NodeHandle_t & tHandle )
+	bson::Bson_c ( tBson.ChildByName ( "users" ) ).ForEach ( [&] ( const bson::NodeHandle_t & tHandle )
 	{
 		bson::Bson_c tNode { tHandle };
 
@@ -218,6 +219,21 @@ static AuthAction_e ReadAction ( Str_t sAction )
 		return AuthAction_e::UNKNOWN;
 }
 
+const char * GetActionName (  AuthAction_e eAction )
+{
+	switch ( eAction )
+	{
+	case AuthAction_e::READ: return "read";
+	case AuthAction_e::WRITE: return "write";
+	case AuthAction_e::SCHEMA: return "schema";
+	case AuthAction_e::REPLICATION: return "replication";
+	case AuthAction_e::ADMIN: return "admin";
+	default:
+		return "unknown";
+		break;
+	}
+}
+
 struct CmpPerm_fn
 {
 	static inline bool IsLess ( const UserPerm_t & tA, const UserPerm_t & tB )
@@ -243,7 +259,7 @@ struct CmpPerm_fn
 
 bool ReadPerms ( const CSphString & sFile, bson::Bson_c & tBson, AuthUsersPtr_t & tAuth, CSphString & sError )
 {
-	bson::Bson_c ( tBson.ChildByName ( "permissions" ) ).ForEach ( [&] ( CSphString & sName, const bson::NodeHandle_t & tHandle )
+	bson::Bson_c ( tBson.ChildByName ( "permissions" ) ).ForEach ( [&] ( const bson::NodeHandle_t & tHandle )
 	{
 		bson::Bson_c tNode { tHandle };
 		

@@ -27,3 +27,7 @@ bool CheckAuth ( const MySQLAuth_t & tAuth, const CSphString & sUser, const VecT
 
 struct SqlStmt_t;
 bool SqlCheckPerms ( const CSphString & sUser, const CSphVector<SqlStmt_t> & dStmt, CSphString & sError );
+
+void HandleMysqlShowPerms ( RowBuffer_i & tOut );
+void HandleMysqlShowUsers ( RowBuffer_i & tOut );
+void HandleMysqlShowToken ( const CSphString & sUser, RowBuffer_i & tOut );

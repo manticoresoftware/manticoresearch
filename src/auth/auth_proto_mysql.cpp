@@ -13,6 +13,7 @@
 #include "sphinxutils.h"
 
 #include "searchdsql.h"
+#include "searchdaemon.h"
 #include "auth_common.h"
 #include "auth_proto_mysql.h"
 #include "auth.h"
@@ -209,6 +210,9 @@ bool SqlCheckPerms ( const CSphString & sUser, const CSphVector<SqlStmt_t> & dSt
 
 	case STMT_RELOAD_AUTH:
 	case STMT_DEBUG:
+	case STMT_SHOW_USERS:
+	case STMT_SHOW_PERMISSIONS:
+	case STMT_SHOW_TOKEN:
 		 return CheckPerms ( sUser, AuthAction_e::ADMIN, tStmt.m_sIndex, sError );
 
 	default:
@@ -218,4 +222,84 @@ bool SqlCheckPerms ( const CSphString & sUser, const CSphVector<SqlStmt_t> & dSt
 	// FIXME!!! skip buddy for that failed query
 	sError.SetSprintf ( "Permission denied for user '%s'", sUser.cstr() );
 	return false;
+}
+
+void HandleMysqlShowPerms ( RowBuffer_i & tOut )
+{
+	tOut.HeadBegin ();
+	tOut.HeadColumn ( "Username" );
+	tOut.HeadColumn ( "action" );
+	tOut.HeadColumn ( "Target" );
+	tOut.HeadColumn ( "Allow" );
+	tOut.HeadColumn ( "Budget" );
+	if ( !tOut.HeadEnd () )
+		return;
+
+	if ( IsAuthEnabled() )
+	{
+		AuthUsersPtr_t pUsers = GetAuth();
+		for ( const auto & tUser : pUsers->m_hUserPerms )
+		{
+			for ( const auto & tPerm : tUser.second )
+			{
+				tOut.PutString ( tUser.first );
+				tOut.PutString ( GetActionName ( tPerm.m_eAction ) );
+				tOut.PutString ( tPerm.m_sTarget );
+				tOut.PutString ( tPerm.m_bAllow ? "true" : "false" );
+				tOut.PutString ( "" );
+				if ( !tOut.Commit () )
+					return;
+			}
+		}
+	}
+
+	tOut.Eof ( false );
+}
+
+void HandleMysqlShowUsers ( RowBuffer_i & tOut )
+{
+	tOut.HeadBegin ();
+	tOut.HeadColumn ( "Username" );
+	if ( !tOut.HeadEnd () )
+		return;
+
+	if ( IsAuthEnabled() )
+	{
+		AuthUsersPtr_t pUsers = GetAuth();
+		for ( const auto & tUser : pUsers->m_hUserToken )
+		{
+			tOut.PutString ( tUser.first );
+			if ( !tOut.Commit () )
+				return;
+		}
+	}
+
+	tOut.Eof ( false );
+}
+
+void HandleMysqlShowToken ( const CSphString & sUser, RowBuffer_i & tOut )
+{
+	tOut.HeadBegin ();
+	tOut.HeadColumn ( "Username" );
+	tOut.HeadColumn ( "Token" );
+	if ( !tOut.HeadEnd () )
+		return;
+
+	if ( IsAuthEnabled() )
+	{
+		AuthUsersPtr_t pUsers = GetAuth();
+		const AuthUserCred_t * pUser = pUsers->m_hUserToken ( sUser );
+
+		if ( pUser )
+		{
+			tOut.PutString ( sUser );
+			tOut.PutString ( pUser->m_sRawBearerSha256 );
+
+			if ( !tOut.Commit () )
+				return;
+		}
+	}
+
+	tOut.Eof ( false );
+
 }

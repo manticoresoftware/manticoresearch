@@ -31,13 +31,13 @@ void operator>> ( InputBuffer_c& tIn, UpdateNodesRequest_t& tReq )
 	tReq.m_eKindNodes = (NODES_E)( tIn.GetByte() ? 1 : 0 );
 }
 
-bool SendClusterUpdateNodes ( const CSphString& sCluster, NODES_E eNodes, const VecTraits_T<CSphString>& dNodes )
+bool SendClusterUpdateNodes ( const CSphString & sCluster, const CSphString & sUser, NODES_E eNodes, const VecTraits_T<CSphString>& dNodes )
 {
 	ClusterUpdateNodes_c::REQUEST_T tRequest;
 	tRequest.m_sCluster = sCluster;
 	tRequest.m_eKindNodes = eNodes;
 
-	auto dAgents = ClusterUpdateNodes_c::MakeAgents ( GetDescAPINodes ( dNodes, Resolve_e::SLOW ), ReplicationTimeoutQuery(), tRequest );
+	auto dAgents = ClusterUpdateNodes_c::MakeAgents ( GetDescAPINodes ( dNodes, Resolve_e::SLOW ), sUser, ReplicationTimeoutQuery(), tRequest );
 	// no nodes left seems a valid case
 	if ( dAgents.IsEmpty() )
 		return true;

@@ -20,4 +20,6 @@ bool IsAuthEnabled();
 
 struct AgentConn_t;
 void SetSessionAuth ( CSphVector<AgentConn_t *> & dRemotes );
+void SetAuth ( const CSphString & sUser, CSphVector<AgentConn_t *> & dRemotes );
+void SetAuth ( const CSphString & sUser, AgentConn_t * pAgent );
 bool AuthReload ( CSphString & sError );

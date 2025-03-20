@@ -50,10 +50,10 @@ void operator>> ( InputBuffer_c& tIn, ClusterSyncedRequest_t& tReq )
 using ClusterSynced_c = ClusterCommand_T<E_CLUSTER::SYNCED, ClusterSyncedRequest_t>;
 
 // API command to remote node to issue cluster synced callback
-bool SendClusterSynced ( const VecAgentDesc_t& dDesc, const ClusterSyncedRequest_t& tRequest )
+bool SendClusterSynced ( const VecAgentDesc_t & dDesc, const ClusterSyncedRequest_t & tRequest, const CSphString & sUser )
 {
 	ClusterSynced_c tReq;
-	auto dNodes = tReq.MakeAgents ( dDesc, ReplicationTimeoutQuery(), tRequest );
+	auto dNodes = tReq.MakeAgents ( dDesc, sUser, ReplicationTimeoutQuery(), tRequest );
 	return PerformRemoteTasksWrap ( dNodes, tReq, tReq, true );
 }
 

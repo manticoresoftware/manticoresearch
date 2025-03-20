@@ -1,5 +1,5 @@
-name: Nightly memleaks tests
-run-name: 🌙 Nightly memleaks tests ${{ github.sha }}
+name: Nightly memleak tests
+run-name: 🌙 Nightly memleak tests ${{ github.sha }}
 
 on:
   schedule:

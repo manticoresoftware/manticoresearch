@@ -8,7 +8,7 @@ authorAndCopyright=$(cat <<-END
 Manticore Software LTD (https://manticoresearch\&.com)
 .SH "COPYRIGHT"
 .PP
-Copyright 2017\-2024 Manticore Software LTD (https://manticoresearch\&.com), 2008\-2016 Sphinx Technologies Inc (http://sphinxsearch\&.com), 2001\-2016 Andrew Aksyonoff
+Copyright 2017\-2025 Manticore Software LTD (https://manticoresearch\&.com), 2008\-2016 Sphinx Technologies Inc (http://sphinxsearch\&.com), 2001\-2016 Andrew Aksyonoff
 .PP
 Permission is granted to copy, distribute and/or modify this document under the terms of the GNU General Public License, Version 3 or any later version published by the Free Software Foundation\&.
 END

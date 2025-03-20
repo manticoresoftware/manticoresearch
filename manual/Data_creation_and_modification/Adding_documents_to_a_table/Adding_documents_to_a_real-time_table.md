@@ -167,13 +167,23 @@ POST /products/_create/
 
 ```php
 $index->addDocuments([
-        ['id' => 1, 'title' => 'Crossbody Bag with Tassel', 'price' => 19.85]
+        ['id' => 1, 'title' => 'Crossbody Bag with Tassel', 'price' => 19.85],
+        ['id' => 2, 'title' => 'microfiber sheet set', 'price' => 19.99],
+        ['id' => 3, 'title' => 'Pet Hair Remover Glove', 'price' => 7.99]
 ]);
+```
+
+For replicated tables, set the cluster name before adding documents:
+
+```php
+// Set the cluster name
+$index->setName('weekly_table')->setCluster('posts');
+
+// Then add documents in bulk
 $index->addDocuments([
-        ['id' => 2, 'title' => 'Crossbody Bag with Tassel']
-]);
-$index->addDocuments([
-        ['id' => 0, 'title' => 'Yellow bag']
+        ['id' => 1, 'title' => 'Crossbody Bag with Tassel', 'price' => 19.85],
+        ['id' => 2, 'title' => 'microfiber sheet set', 'price' => 19.99],
+        ['id' => 3, 'title' => 'Pet Hair Remover Glove', 'price' => 7.99]
 ]);
 ```
 
@@ -182,20 +192,49 @@ $index->addDocuments([
 
 <!-- request Python -->
 
-``` python
-indexApi.insert({"table" : "test", "id" : 1, "doc" : {"title" : "Crossbody Bag with Tassel", "price" : 19.85}})
-indexApi.insert({"table" : "test", "id" : 2, "doc" : {"title" : "Crossbody Bag with Tassel"}})
-indexApi.insert({"table" : "test", "id" : 0, "doc" : {{"title" : "Yellow bag"}})
+```python
+docs = [ \
+    {"insert": {"table" : "products", "id" : 1, "doc" : {"title" : "Crossbody Bag with Tassel", "price" : 19.85}}}, \
+    {"insert": {"table" : "products", "id" : 2, "doc" : {"title" : "microfiber sheet set", "price" : 19.99}}}, \
+    {"insert": {"table" : "products", "id" : 3, "doc" : {"title" : "Pet Hair Remover Glove", "price" : 7.99}}}
+]
+res = indexApi.bulk('\n'.join(map(json.dumps,docs)))
 ```
+
+For replicated tables, include the cluster property in each document:
+
+```python
+docs = [ \
+    {"insert": {"cluster" : "posts", "table" : "weekly_table", "id" : 1, "doc" : {"title" : "Crossbody Bag with Tassel", "price" : 19.85}}}, \
+    {"insert": {"cluster" : "posts", "table" : "weekly_table", "id" : 2, "doc" : {"title" : "microfiber sheet set", "price" : 19.99}}}, \
+    {"insert": {"cluster" : "posts", "table" : "weekly_table", "id" : 3, "doc" : {"title" : "Pet Hair Remover Glove", "price" : 7.99}}}
+]
+res = indexApi.bulk('\n'.join(map(json.dumps,docs)))
+```
+
 <!-- intro -->
 ##### Javascript:
 
 <!-- request Javascript -->
 
-``` javascript
-res = await indexApi.insert({"table" : "test", "id" : 1, "doc" : {"title" : "Crossbody Bag with Tassel", "price" : 19.85}});
-res = await indexApi.insert({"table" : "test", "id" : 2, "doc" : {"title" : "Crossbody Bag with Tassel"}});
-res = await indexApi.insert({"table" : "test", "id" : 0, "doc" : {{"title" : "Yellow bag"}});
+```javascript
+let docs = [
+    {"insert": {"table" : "products", "id" : 3, "doc" : {"title" : "Crossbody Bag with Tassel", "price" : 19.85}}},
+    {"insert": {"table" : "products", "id" : 4, "doc" : {"title" : "microfiber sheet set", "price" : 19.99}}},
+    {"insert": {"table" : "products", "id" : 5, "doc" : {"title" : "Pet Hair Remover Glove", "price" : 7.99}}}
+];
+res =  await indexApi.bulk(docs.map(e=>JSON.stringify(e)).join('\n'));
+```
+
+For replicated tables, include the cluster property in each document:
+
+```javascript
+let docs = [
+    {"insert": {"cluster" : "posts", "table" : "weekly_table", "id" : 3, "doc" : {"title" : "Crossbody Bag with Tassel", "price" : 19.85}}},
+    {"insert": {"cluster" : "posts", "table" : "weekly_table", "id" : 4, "doc" : {"title" : "microfiber sheet set", "price" : 19.99}}},
+    {"insert": {"cluster" : "posts", "table" : "weekly_table", "id" : 5, "doc" : {"title" : "Pet Hair Remover Glove", "price" : 7.99}}}
+];
+res =  await indexApi.bulk(docs.map(e=>JSON.stringify(e)).join('\n'));
 ```
 
 <!-- intro -->
@@ -204,28 +243,19 @@ res = await indexApi.insert({"table" : "test", "id" : 0, "doc" : {{"title" : "Ye
 <!-- request Java -->
 
 ``` java
-InsertDocumentRequest newdoc = new InsertDocumentRequest();
-HashMap<String,Object> doc = new HashMap<String,Object>(){{
-    put("title","Crossbody Bag with Tassel");
-    put("price",19.85);
-}};
-newdoc.index("products").id(1L).setDoc(doc);
-sqlresult = indexApi.insert(newdoc);
+String body = "{\"insert\": {\"index\" : \"products\", \"id\" : 1, \"doc\" : {\"title\" : \"Crossbody Bag with Tassel\", \"price\" : 19.85}}}"+"\n"+
+    "{\"insert\": {\"index\" : \"products\", \"id\" : 4, \"doc\" : {\"title\" : \"microfiber sheet set\", \"price\" : 19.99}}}"+"\n"+
+    "{\"insert\": {\"index\" : \"products\", \"id\" : 5, \"doc\" : {\"title\" : \"Pet Hair Remover Glove\", \"price\" : 7.99}}}"+"\n";
+BulkResponse bulkresult = indexApi.bulk(body);
+```
 
-newdoc = new InsertDocumentRequest();
-HashMap<String,Object> doc = new HashMap<String,Object>(){{
-    put("title","Crossbody Bag with Tassel");
-}};
-newdoc.index("products").id(2L).setDoc(doc);
-sqlresult = indexApi.insert(newdoc);
+For replicated tables, include the cluster property in each document:
 
-newdoc = new InsertDocumentRequest();
-HashMap<String,Object> doc = new HashMap<String,Object>(){{
-    put("title","Yellow bag");
- }};
-newdoc.index("products").id(0L).setDoc(doc);
-sqlresult = indexApi.insert(newdoc);
-
+``` java
+String body = "{\"insert\": {\"cluster\" : \"posts\", \"table\" : \"weekly_table\", \"id\" : 1, \"doc\" : {\"title\" : \"Crossbody Bag with Tassel\", \"price\" : 19.85}}}"+"\n"+
+    "{\"insert\": {\"cluster\" : \"posts\", \"table\" : \"weekly_table\", \"id\" : 4, \"doc\" : {\"title\" : \"microfiber sheet set\", \"price\" : 19.99}}}"+"\n"+
+    "{\"insert\": {\"cluster\" : \"posts\", \"table\" : \"weekly_table\", \"id\" : 5, \"doc\" : {\"title\" : \"Pet Hair Remover Glove\", \"price\" : 7.99}}}"+"\n";
+BulkResponse bulkresult = indexApi.bulk(body);
 ```
 
 <!-- intro -->
@@ -234,24 +264,176 @@ sqlresult = indexApi.insert(newdoc);
 <!-- request C# -->
 
 ``` clike
+string body = "{\"insert\": {\"index\" : \"products\", \"id\" : 1, \"doc\" : {\"title\" : \"Crossbody Bag with Tassel\", \"price\" : 19.85}}}"+"\n"+
+    "{\"insert\": {\"index\" : \"products\", \"id\" : 4, \"doc\" : {\"title\" : \"microfiber sheet set\", \"price\" : 19.99}}}"+"\n"+
+    "{\"insert\": {\"index\" : \"products\", \"id\" : 5, \"doc\" : {\"title\" : \"Pet Hair Remover Glove\", \"price\" : 7.99}}}"+"\n";
+BulkResponse bulkresult = indexApi.Bulk(string.Join("\n", docs));
+```
+
+For replicated tables, include the cluster property in each document:
+
+``` clike
+string body = "{\"insert\": {\"cluster\" : \"posts\", \"table\" : \"weekly_table\", \"id\" : 1, \"doc\" : {\"title\" : \"Crossbody Bag with Tassel\", \"price\" : 19.85}}}"+"\n"+
+    "{\"insert\": {\"cluster\" : \"posts\", \"table\" : \"weekly_table\", \"id\" : 4, \"doc\" : {\"title\" : \"microfiber sheet set\", \"price\" : 19.99}}}"+"\n"+
+    "{\"insert\": {\"cluster\" : \"posts\", \"table\" : \"weekly_table\", \"id\" : 5, \"doc\" : {\"title\" : \"Pet Hair Remover Glove\", \"price\" : 7.99}}}"+"\n";
+BulkResponse bulkresult = indexApi.Bulk(string.Join("\n", docs));
+```
+
+<!-- end -->
+
+## Adding documents to replicated tables
+<!-- example replicated_insert -->
+When working with [replicated tables](../../Creating_a_cluster/Setting_up_replication/Setting_up_replication.md), you must use a special syntax to ensure that write operations are properly propagated to all nodes in the cluster.
+
+For all write operations (INSERT, REPLACE, DELETE, TRUNCATE, UPDATE) on replicated tables, you must:
+* In SQL: Use the `cluster_name:table_name` format instead of just the table name
+* In JSON: Include the `cluster` property along with the `table` property
+
+If you don't use the correct syntax, the operation will fail with an error.
+
+<!-- intro -->
+##### SQL:
+<!-- request SQL -->
+
+```sql
+INSERT INTO posts:weekly_table(title,price) VALUES ('Crossbody Bag with Tassel', 19.85);
+INSERT INTO posts:weekly_table VALUES (0,'Yellow bag', 4.95);
+```
+<!-- response SQL -->
+
+```sql
+Query OK, 1 rows affected (0.00 sec)
+Query OK, 1 rows affected (0.00 sec)
+```
+
+<!-- intro -->
+##### JSON:
+
+<!-- request JSON -->
+
+```json
+POST /insert
+{
+  "cluster":"posts",
+  "table":"weekly_table",
+  "id":1,
+  "doc":
+  {
+    "title" : "Crossbody Bag with Tassel",
+    "price" : 19.85
+  }
+}
+
+POST /insert
+{
+  "cluster":"posts",
+  "table":"weekly_table",
+  "id":0,
+  "doc":
+  {
+    "title" : "Yellow bag",
+    "price" : 4.95
+  }
+}
+```
+
+<!-- response JSON -->
+
+```json
+{
+  "table": "weekly_table",
+  "_id": 1,
+  "created": true,
+  "result": "created",
+  "status": 201
+}
+{
+  "table": "weekly_table",
+  "_id": 1657860156022587406,
+  "created": true,
+  "result": "created",
+  "status": 201
+}
+```
+
+<!-- intro -->
+##### PHP:
+
+<!-- request PHP -->
+
+```php
+// Set the cluster name
+$index->setName('weekly_table')->setCluster('posts');
+
+// Then add documents
+$index->addDocuments([
+        ['id' => 1, 'title' => 'Crossbody Bag with Tassel', 'price' => 19.85],
+        ['id' => 2, 'title' => 'microfiber sheet set', 'price' => 19.99],
+        ['id' => 3, 'title' => 'Pet Hair Remover Glove', 'price' => 7.99]
+]);
+```
+
+<!-- intro -->
+##### Python:
+
+<!-- request Python -->
+
+```python
+indexApi.insert({"cluster":"posts", "table":"weekly_table", "id":1, "doc":{"title":"Crossbody Bag with Tassel", "price":19.85}})
+indexApi.insert({"cluster":"posts", "table":"weekly_table", "id":0, "doc":{"title":"Yellow bag", "price":4.95}})
+```
+
+<!-- intro -->
+##### Javascript:
+
+<!-- request Javascript -->
+
+```javascript
+res = await indexApi.insert({"cluster":"posts", "table":"weekly_table", "id":1, "doc":{"title":"Crossbody Bag with Tassel", "price":19.85}});
+res = await indexApi.insert({"cluster":"posts", "table":"weekly_table", "id":0, "doc":{"title":"Yellow bag", "price":4.95}});
+```
+
+<!-- intro -->
+##### Java:
+
+<!-- request Java -->
+
+```java
+InsertDocumentRequest newdoc = new InsertDocumentRequest();
+HashMap<String,Object> doc = new HashMap<String,Object>(){{
+    put("title","Crossbody Bag with Tassel");
+    put("price",19.85);
+}};
+newdoc.table("weekly_table").cluster("posts").id(1L).setDoc(doc);
+sqlresult = indexApi.insert(newdoc);
+
+newdoc = new InsertDocumentRequest();
+HashMap<String,Object> doc2 = new HashMap<String,Object>(){{
+    put("title","Yellow bag");
+    put("price",4.95);
+}};
+newdoc.table("weekly_table").cluster("posts").id(0L).setDoc(doc2);
+sqlresult = indexApi.insert(newdoc);
+```
+
+<!-- intro -->
+##### C#:
+
+<!-- request C# -->
+
+```clike
 Dictionary<string, Object> doc = new Dictionary<string, Object>();
 doc.Add("title", "Crossbody Bag with Tassel");
 doc.Add("price", 19.85);
-InsertDocumentRequest newdoc = new InsertDocumentRequest(index: "products", id: 1, doc: doc);
+InsertDocumentRequest newdoc = new InsertDocumentRequest(table: "weekly_table", cluster: "posts", id: 1, doc: doc);
 var sqlresult = indexApi.Insert(newdoc);
 
 doc = new Dictionary<string, Object>();
-doc.Add("title", "Crossbody Bag with Tassel");
-newdoc = new InsertDocumentRequest(index: "products", id: 2, doc: doc);
-sqlresult = indexApi.Insert(newdoc);
-
-doc = new Dictionary<string, Object>();
 doc.Add("title", "Yellow bag");
-newdoc = new InsertDocumentRequest(index: "products", id: 0, doc: doc);
+doc.Add("price", 4.95);
+newdoc = new InsertDocumentRequest(table: "weekly_table", cluster: "posts", id: 0, doc: doc);
 sqlresult = indexApi.Insert(newdoc);
-
 ```
-
 <!-- end -->
 
 ## Auto schema
@@ -278,7 +460,7 @@ Also, the following formats of dates will be recognized and converted to timesta
 - `%Y-%m-%dT%H`
 
 
-Keep in mind that the `/bulk` HTTP endpoint does not support automatic table creation (auto schema). Only the `/_bulk` (Elasticsearch-like) HTTP endpoint and the SQL interface support this feature.
+Keep in mind that the `/bulk` HTTP endpoint does not support automatic table creation (auto schema). Only the `/_bulk` (Elasticsearch-like) endpoint and the SQL interface support this feature.
 
 <!-- intro -->
 ##### SQL:
@@ -378,7 +560,7 @@ The auto ID generator creates a 64-bit integer for a document ID and uses the fo
 * Bits 24 to 55 represent the Unix timestamp of the server start
 * Bits 56 to 63 correspond to the server_id
 
-This schema ensures that the generated ID is unique among all nodes in the cluster and that data inserted into different cluster nodes does not create collisions between the nodes.
+This schema ensures that the generated ID is unique among all nodes in the cluster and that data inserted into different cluster nodes does not create collisions between the nodes. This is particularly important when working with replicated tables, as it guarantees that auto-generated IDs will be unique across all nodes in the replication cluster.
 
 As a result, the first ID from the generator used for auto ID is NOT 1 but a larger number. Additionally, the document stream inserted into a table might have non-sequential ID values if inserts into other tables occur between calls, as the ID generator is singular in the server and shared between all its tables.
 
@@ -535,19 +717,19 @@ You can insert not just a single document into a real-time table, but as many as
 * You might want to increase the [max_packet_size](../../Server_settings/Searchd.md#max_packet_size) value to allow for larger batches
 * Normally, each batch insert operation is considered a single [transaction](../../Data_creation_and_modification/Transactions.md) with atomicity guarantee, so you will either have all the new documents in the table at once or, in case of failure, none of them will be added. See more details about an empty line or switching to another table in the "JSON" example.
 
-Note that the `/bulk` HTTP endpoint does not support automatic creation of tables (auto schema). Only the `/_bulk` (Elasticsearch-like) HTTP endpoint and the SQL interface support this feature. The `/_bulk` (Elasticsearch-like) HTTP endpoint allows the table name to include the cluster name in the format `cluster_name:table_name`.
+Note that the `/bulk` HTTP endpoint does not support automatic creation of tables (auto schema). Only the `/_bulk` (Elasticsearch-like) endpoint and the SQL interface support this feature. The `/_bulk` (Elasticsearch-like) HTTP endpoint allows the table name to include the cluster name in the format `cluster_name:table_name`.
 
 `/_bulk` endpoint accepts document IDs in the same format as Elasticsearch, and you can also include the `id` within the document itself:
 ```json
-{ "index": { "table" : "products", "_id" : "1" } }
-{ "title" : "Crossbody Bag with Tassel", "price": 19.85 }
+{ "index": { "table": "products", "_id": "1" } }
+{ "title": "Crossbody Bag with Tassel", "price": 19.85 }
 ```
 
 or
 
 ```json
-{ "index": { "table" : "products" } }
-{ "title" : "Crossbody Bag with Tassel", "price": 19.85, "id": "1" }
+{ "index": { "table": "products" } }
+{ "title": "Crossbody Bag with Tassel", "price": 19.85, "id": "1" }
 ```
 
 #### Chunked transfer in /bulk
@@ -614,69 +796,15 @@ POST /bulk
 '
 ```
 
-<!-- response JSON -->
-```json
-{
-  "items": [
-    {
-      "bulk": {
-        "table": "products",
-        "_id": 2,
-        "created": 2,
-        "deleted": 0,
-        "updated": 0,
-        "result": "created",
-        "status": 201
-      }
-    }
-  ],
-  "current_line": 4,
-  "skipped_lines": 0,
-  "errors": false,
-  "error": ""
-}
+For replicated tables, include the `cluster` property in each operation:
 
-{
-  "items": [
-    {
-      "bulk": {
-        "table": "test1",
-        "_id": 22,
-        "created": 2,
-        "deleted": 0,
-        "updated": 0,
-        "result": "created",
-        "status": 201
-      }
-    },
-    {
-      "bulk": {
-        "table": "test1",
-        "_id": 23,
-        "created": 1,
-        "deleted": 0,
-        "updated": 0,
-        "result": "created",
-        "status": 201
-      }
-    },
-    {
-      "bulk": {
-        "table": "test2",
-        "_id": 25,
-        "created": 2,
-        "deleted": 0,
-        "updated": 0,
-        "result": "created",
-        "status": 201
-      }
-    }
-  ],
-  "current_line": 8,
-  "skipped_lines": 0,
-  "errors": false,
-  "error": ""
-}
+```json
+POST /bulk
+-H "Content-Type: application/x-ndjson" -d '
+{"insert": {"cluster":"posts", "table":"weekly_table", "id":1, "doc":  {"title":"Crossbody Bag with Tassel","price":19.85}}}
+{"insert": {"cluster":"posts", "table":"weekly_table", "id":2, "doc":  {"title":"microfiber sheet set","price":19.99}}}
+{"insert": {"cluster":"posts", "table":"weekly_table", "id":3, "doc":  {"title":"Pet Hair Remover Glove","price":7.99}}}
+'
 ```
 
 <!-- request Elasticsearch -->
@@ -736,12 +864,38 @@ POST /_bulk
 }
 ```
 
+For replicated tables, include the cluster name in the table name using the format `cluster_name:table_name`:
+
+```json
+POST /_bulk
+-H "Content-Type: application/x-ndjson" -d '
+{ "index" : { "table" : "posts:weekly_table" } }
+{ "title" : "Yellow Bag", "price": 12 }
+{ "create" : { "table" : "posts:weekly_table" } }
+{ "title" : "Red Bag", "price": 12.5, "id": 3 }
+'
+```
+
 <!-- intro -->
 ##### PHP:
 <!-- request PHP -->
 Use method addDocuments():
 
 ```php
+$index->addDocuments([
+        ['id' => 1, 'title' => 'Crossbody Bag with Tassel', 'price' => 19.85],
+        ['id' => 2, 'title' => 'microfiber sheet set', 'price' => 19.99],
+        ['id' => 3, 'title' => 'Pet Hair Remover Glove', 'price' => 7.99]
+]);
+```
+
+For replicated tables, set the cluster name before adding documents:
+
+```php
+// Set the cluster name
+$index->setName('weekly_table')->setCluster('posts');
+
+// Then add documents in bulk
 $index->addDocuments([
         ['id' => 1, 'title' => 'Crossbody Bag with Tassel', 'price' => 19.85],
         ['id' => 2, 'title' => 'microfiber sheet set', 'price' => 19.99],
@@ -758,11 +912,21 @@ $index->addDocuments([
 docs = [ \
     {"insert": {"table" : "products", "id" : 1, "doc" : {"title" : "Crossbody Bag with Tassel", "price" : 19.85}}}, \
     {"insert": {"table" : "products", "id" : 2, "doc" : {"title" : "microfiber sheet set", "price" : 19.99}}}, \
-    {"insert": {"table" : "products", "id" : 3, "doc" : {"title" : "CPet Hair Remover Glove", "price" : 7.99}}}
+    {"insert": {"table" : "products", "id" : 3, "doc" : {"title" : "Pet Hair Remover Glove", "price" : 7.99}}}
 ]
 res = indexApi.bulk('\n'.join(map(json.dumps,docs)))
 ```
 
+For replicated tables, include the cluster property in each document:
+
+```python
+docs = [ \
+    {"insert": {"cluster" : "posts", "table" : "weekly_table", "id" : 1, "doc" : {"title" : "Crossbody Bag with Tassel", "price" : 19.85}}}, \
+    {"insert": {"cluster" : "posts", "table" : "weekly_table", "id" : 2, "doc" : {"title" : "microfiber sheet set", "price" : 19.99}}}, \
+    {"insert": {"cluster" : "posts", "table" : "weekly_table", "id" : 3, "doc" : {"title" : "Pet Hair Remover Glove", "price" : 7.99}}}
+]
+res = indexApi.bulk('\n'.join(map(json.dumps,docs)))
+```
 
 <!-- intro -->
 ##### Javascript:
@@ -773,10 +937,22 @@ res = indexApi.bulk('\n'.join(map(json.dumps,docs)))
 let docs = [
     {"insert": {"table" : "products", "id" : 3, "doc" : {"title" : "Crossbody Bag with Tassel", "price" : 19.85}}},
     {"insert": {"table" : "products", "id" : 4, "doc" : {"title" : "microfiber sheet set", "price" : 19.99}}},
-    {"insert": {"table" : "products", "id" : 5, "doc" : {"title" : "CPet Hair Remover Glove", "price" : 7.99}}}
+    {"insert": {"table" : "products", "id" : 5, "doc" : {"title" : "Pet Hair Remover Glove", "price" : 7.99}}}
 ];
 res =  await indexApi.bulk(docs.map(e=>JSON.stringify(e)).join('\n'));
 ```
+
+For replicated tables, include the cluster property in each document:
+
+```javascript
+let docs = [
+    {"insert": {"cluster" : "posts", "table" : "weekly_table", "id" : 3, "doc" : {"title" : "Crossbody Bag with Tassel", "price" : 19.85}}},
+    {"insert": {"cluster" : "posts", "table" : "weekly_table", "id" : 4, "doc" : {"title" : "microfiber sheet set", "price" : 19.99}}},
+    {"insert": {"cluster" : "posts", "table" : "weekly_table", "id" : 5, "doc" : {"title" : "Pet Hair Remover Glove", "price" : 7.99}}}
+];
+res =  await indexApi.bulk(docs.map(e=>JSON.stringify(e)).join('\n'));
+```
+
 <!-- intro -->
 ##### java:
 
@@ -785,7 +961,16 @@ res =  await indexApi.bulk(docs.map(e=>JSON.stringify(e)).join('\n'));
 ``` java
 String body = "{\"insert\": {\"index\" : \"products\", \"id\" : 1, \"doc\" : {\"title\" : \"Crossbody Bag with Tassel\", \"price\" : 19.85}}}"+"\n"+
     "{\"insert\": {\"index\" : \"products\", \"id\" : 4, \"doc\" : {\"title\" : \"microfiber sheet set\", \"price\" : 19.99}}}"+"\n"+
-    "{\"insert\": {\"index\" : \"products\", \"id\" : 5, \"doc\" : {\"title\" : \"CPet Hair Remover Glove\", \"price\" : 7.99}}}"+"\n";
+    "{\"insert\": {\"index\" : \"products\", \"id\" : 5, \"doc\" : {\"title\" : \"Pet Hair Remover Glove\", \"price\" : 7.99}}}"+"\n";
+BulkResponse bulkresult = indexApi.bulk(body);
+```
+
+For replicated tables, include the cluster property in each document:
+
+``` java
+String body = "{\"insert\": {\"cluster\" : \"posts\", \"table\" : \"weekly_table\", \"id\" : 1, \"doc\" : {\"title\" : \"Crossbody Bag with Tassel\", \"price\" : 19.85}}}"+"\n"+
+    "{\"insert\": {\"cluster\" : \"posts\", \"table\" : \"weekly_table\", \"id\" : 4, \"doc\" : {\"title\" : \"microfiber sheet set\", \"price\" : 19.99}}}"+"\n"+
+    "{\"insert\": {\"cluster\" : \"posts\", \"table\" : \"weekly_table\", \"id\" : 5, \"doc\" : {\"title\" : \"Pet Hair Remover Glove\", \"price\" : 7.99}}}"+"\n";
 BulkResponse bulkresult = indexApi.bulk(body);
 ```
 
@@ -797,7 +982,16 @@ BulkResponse bulkresult = indexApi.bulk(body);
 ``` clike
 string body = "{\"insert\": {\"index\" : \"products\", \"id\" : 1, \"doc\" : {\"title\" : \"Crossbody Bag with Tassel\", \"price\" : 19.85}}}"+"\n"+
     "{\"insert\": {\"index\" : \"products\", \"id\" : 4, \"doc\" : {\"title\" : \"microfiber sheet set\", \"price\" : 19.99}}}"+"\n"+
-    "{\"insert\": {\"index\" : \"products\", \"id\" : 5, \"doc\" : {\"title\" : \"CPet Hair Remover Glove\", \"price\" : 7.99}}}"+"\n";
+    "{\"insert\": {\"index\" : \"products\", \"id\" : 5, \"doc\" : {\"title\" : \"Pet Hair Remover Glove\", \"price\" : 7.99}}}"+"\n";
+BulkResponse bulkresult = indexApi.Bulk(string.Join("\n", docs));
+```
+
+For replicated tables, include the cluster property in each document:
+
+``` clike
+string body = "{\"insert\": {\"cluster\" : \"posts\", \"table\" : \"weekly_table\", \"id\" : 1, \"doc\" : {\"title\" : \"Crossbody Bag with Tassel\", \"price\" : 19.85}}}"+"\n"+
+    "{\"insert\": {\"cluster\" : \"posts\", \"table\" : \"weekly_table\", \"id\" : 4, \"doc\" : {\"title\" : \"microfiber sheet set\", \"price\" : 19.99}}}"+"\n"+
+    "{\"insert\": {\"cluster\" : \"posts\", \"table\" : \"weekly_table\", \"id\" : 5, \"doc\" : {\"title\" : \"Pet Hair Remover Glove\", \"price\" : 7.99}}}"+"\n";
 BulkResponse bulkresult = indexApi.Bulk(string.Join("\n", docs));
 ```
 

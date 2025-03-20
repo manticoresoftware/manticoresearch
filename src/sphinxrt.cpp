@@ -917,54 +917,54 @@ public:
 
 	~RtData_c () = default;
 
-	ConstDiskChunkRefPtr_t DiskChunkByID ( int iChunkID ) const
+	ConstDiskChunkRefPtr_t DiskChunkByID ( int iChunkID ) const EXCLUDES ( m_tLock )
 	{
 		ScRL_t rLock ( m_tLock );
 		for ( auto& pChunk : *m_pChunks )
 			if ( pChunk->Cidx().m_iChunk == iChunkID )
 				return pChunk;
-		return ConstDiskChunkRefPtr_t (nullptr);
+		return { nullptr };
 	}
 
-	ConstDiskChunkRefPtr_t DiskChunkByIdx ( int iChunk ) const
+	ConstDiskChunkRefPtr_t DiskChunkByIdx ( int iChunk ) const EXCLUDES ( m_tLock )
 	{
 		ScRL_t rLock ( m_tLock );
 		if ( iChunk < 0 || iChunk >= m_pChunks->GetLength() )
-			return ConstDiskChunkRefPtr_t ( nullptr );
+			return { nullptr };
 		return ( *m_pChunks )[iChunk];
 	}
 
-	ConstDiskChunkVecRefPtr_t DiskChunks () const
+	ConstDiskChunkVecRefPtr_t DiskChunks () const EXCLUDES ( m_tLock )
 	{
 		ScRL_t rLock ( m_tLock );
 		return m_pChunks;
 	}
 
-	ConstRtSegVecRefPtr_t RamSegs () const
+	ConstRtSegVecRefPtr_t RamSegs () const EXCLUDES ( m_tLock )
 	{
 		ScRL_t rLock ( m_tLock );
 		return m_pSegments;
 	}
 
-	ConstRtData RtData () const
+	ConstRtData RtData () const EXCLUDES ( m_tLock )
 	{
 		ScRL_t rLock ( m_tLock );
 		return { m_pChunks, m_pSegments };
 	}
 
-	bool IsEmpty() const
+	bool IsEmpty() const EXCLUDES ( m_tLock )
 	{
 		ScRL_t rLock ( m_tLock );
 		return m_pChunks->IsEmpty() && m_pSegments->IsEmpty();
 	}
 
-	int GetRamSegmentsCount() const
+	int GetRamSegmentsCount() const EXCLUDES ( m_tLock )
 	{
 		ScRL_t rLock ( m_tLock );
 		return m_pSegments->GetLength();
 	}
 
-	int GetDiskChunksCount () const
+	int GetDiskChunksCount () const EXCLUDES ( m_tLock )
 	{
 		ScRL_t rLock ( m_tLock );
 		return m_pChunks->GetLength ();
@@ -1004,7 +1004,7 @@ public:
 		, m_fnOnRamSegsChanged { std::move ( fnOnRamSegsChanged ) }
 	{}
 
-	~RtWriter_c()
+	~RtWriter_c() EXCLUDES ( m_tOwner.m_tLock )
 	{
 		if ( !m_pNewDiskChunks && !m_pNewRamSegs )
 			return;
@@ -1041,22 +1041,6 @@ public:
 		auto pChunks = m_tOwner.DiskChunks();
 		for ( const auto & pChunk : *pChunks )
 			m_pNewDiskChunks->Add ( pChunk );
-	}
-
-	ConstDiskChunkRefPtr_t PopDiskChunk () EXCLUDES ( m_tOwner.m_tLock )
-	{
-		InitDiskChunks ( empty );
-		auto pChunks = m_tOwner.DiskChunks();
-		if ( !pChunks->GetLength() )
-			return ConstDiskChunkRefPtr_t();
-
-		auto pHeadChunk = pChunks->First();
-		for ( int i=1; i<pChunks->GetLength(); i++ )
-		{
-			m_pNewDiskChunks->Add ( pChunks->At ( i ) );
-		}
-
-		return pHeadChunk;
 	}
 
 };
@@ -8960,8 +8944,13 @@ ConstDiskChunkRefPtr_t RtIndex_c::PopDiskChunk()
 	ScopedScheduler_c tSerialFiber ( m_tWorkers.SerialChunkAccess() );
 
 	auto tNewSet = RtWriter();
-	tNewSet.InitDiskChunks ( RtWriter_c::empty );
-	return tNewSet.PopDiskChunk();
+	tNewSet.InitDiskChunks ( RtWriter_c::copy );
+	if ( tNewSet.m_pNewDiskChunks->IsEmpty() )
+		return {};
+
+	auto pHeadChunk = tNewSet.m_pNewDiskChunks->First();
+	tNewSet.m_pNewDiskChunks->Remove(0);
+	return pHeadChunk;
 }
 
 //////////////////////////////////////////////////////////////////////////

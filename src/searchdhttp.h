@@ -80,7 +80,8 @@ private:
 	http_parser m_tParser;
 };
 
-void HttpBuildReply ( CSphVector<BYTE>& dData, EHTTP_STATUS eCode, Str_t sReply, bool bHtml );
+void HttpBuildReply ( CSphVector<BYTE> & dData, EHTTP_STATUS eCode, Str_t sReply, bool bHtml );
+void HttpBuildReply ( CSphVector<BYTE> & dData, EHTTP_STATUS eCode, Str_t sReply, const StrVec_t & dHeaderFields );
 
 ///////////////////////////////////////////////////////////////////////
 /// Stream reader
@@ -114,12 +115,15 @@ struct HttpProcessResult_t
 {
 	EHTTP_ENDPOINT m_eEndpoint { EHTTP_ENDPOINT::TOTAL };
 	EHTTP_STATUS m_eReplyHttpCode = EHTTP_STATUS::_200;
+	
 	bool m_bOk { false };
+	bool m_bSkipBuddy { false }; // auth error should not pass into buddy but only to client
+
 	CSphString m_sError;
 };
 
 void ReplyBuf ( Str_t sResult, EHTTP_STATUS eStatus, bool bNeedHttpResponse, CSphVector<BYTE> & dData );
-HttpProcessResult_t ProcessHttpQuery ( CharStream_c & tSource, Str_t & sSrcQuery, OptionsHash_t & hOptions, CSphVector<BYTE> & dResult, bool bNeedHttpResponse, http_method eRequestType );
+HttpProcessResult_t ProcessHttpQuery ( CharStream_c & tSource, Str_t & sSrcQuery, OptionsHash_t & hOptions, CSphVector<BYTE> & dResult, bool bNeedHttpResponse, http_method eRequestType, bool bSkipAuth );
 
 namespace bson {
 class Bson_c;

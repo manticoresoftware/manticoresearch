@@ -2,20 +2,9 @@
 set -b +m; sed -i '/data_dir = \/var\/lib\/manticore/a\    binlog_common = 1\n' /etc/manticoresearch/manticore.conf
 ––– output –––
 ––– input –––
-for i in {1..10}; do rm -f /var/log/manticore/searchd.log; searchd --stopwait > /dev/null; searchd; if timeout 10 grep -qm1 '\[BUDDY\] started' <(tail -n 1000 -f /var/log/manticore/searchd.log); then echo 'Buddy started!'; else echo 'Timeout or failed!'; cat /var/log/manticore/searchd.log;fi; mysql -P9306 -h0 -e "drop table if exists t1"; mysql -P9306 -h0 -e "drop table if exists t2"; for n in 1 2; do mysql -P9306 -h0 -e "create table t${n}"; done; sleep 1; for n in 1 2; do mysql -P9306 -h0 -e "insert into t${n} values(0)" & done; wait 5>/dev/null 2>&1; echo $?; mysql -P9306 -h0 -e "show tables; select * from t1; select * from t2;"; mysql -P9306 -h0 -e "flush logs"; done
+for i in {1..10}; do rm -f /var/log/manticore/searchd.log; stdbuf -oL searchd --stopwait > /dev/null; stdbuf -oL searchd > /dev/null; if timeout 10 grep -qm1 'accepting connections' <(tail -n 1000 -f /var/log/manticore/searchd.log); then echo 'Accepting connections!'; else echo 'Timeout or failed!'; fi; mysql -P9306 -h0 -e "drop table if exists t1"; mysql -P9306 -h0 -e "drop table if exists t2"; for n in 1 2; do mysql -P9306 -h0 -e "create table t${n}"; done; sleep 1; for n in 1 2; do mysql -P9306 -h0 -e "insert into t${n} values(0)" &>/dev/null; done; wait 5>/dev/null 2>&1; echo $?; mysql -P9306 -h0 -e "show tables; select * from t1; select * from t2;"; mysql -P9306 -h0 -e "flush logs"; done
 ––– output –––
-Manticore %{VERSION} (columnar %{VERSION}) (secondary %{VERSION}) (knn %{VERSION})
-Copyright (c) 2001-2016, Andrew Aksyonoff
-Copyright (c) 2008-2016, Sphinx Technologies Inc (http://sphinxsearch.com)
-Copyright (c) 2017-%{YEAR}, Manticore Software LTD (https://manticoresearch.com)
-[#!/[0-9]{2}:[0-9]{2}.[0-9]{3}/!#] [#!/[0-9]+/!#] using config file '/etc/manticoresearch/manticore.conf' (%{NUMBER} chars)...
-starting daemon version '%{VERSION} (columnar %{VERSION}) (secondary %{VERSION}) (knn %{VERSION})' ...
-listening on %{IPADDR}:9312 for sphinx and http(s)
-listening on %{IPADDR}:9306 for mysql
-listening on %{IPADDR}:9308 for sphinx and http(s)
-Buddy started!
-[%{NUMBER}] %{NUMBER}
-[%{NUMBER}] %{NUMBER}
+Accepting connections!
 0
 +-------+------+
 | Table | Type |
@@ -33,21 +22,7 @@ Buddy started!
 +---------------------+
 | %{NUMBER} |
 +---------------------+
-Manticore %{VERSION} (columnar %{VERSION}) (secondary %{VERSION}) (knn %{VERSION})
-Copyright (c) 2001-2016, Andrew Aksyonoff
-Copyright (c) 2008-2016, Sphinx Technologies Inc (http://sphinxsearch.com)
-Copyright (c) 2017-%{YEAR}, Manticore Software LTD (https://manticoresearch.com)
-[#!/[0-9]{2}:[0-9]{2}.[0-9]{3}/!#] [#!/[0-9]+/!#] using config file '/etc/manticoresearch/manticore.conf' (%{NUMBER} chars)...
-starting daemon version '%{VERSION} (columnar %{VERSION}) (secondary %{VERSION}) (knn %{VERSION})' ...
-listening on %{IPADDR}:9312 for sphinx and http(s)
-listening on %{IPADDR}:9306 for mysql
-listening on %{IPADDR}:9308 for sphinx and http(s)
-precaching table 't1'
-precaching table 't2'
-precached 2 tables in #!/[0-9]{1}.[0-9]{3}/!# sec
-Buddy started!
-[%{NUMBER}] %{NUMBER}
-[%{NUMBER}] %{NUMBER}
+Accepting connections!
 0
 +-------+------+
 | Table | Type |
@@ -65,21 +40,7 @@ Buddy started!
 +---------------------+
 | %{NUMBER} |
 +---------------------+
-Manticore %{VERSION} (columnar %{VERSION}) (secondary %{VERSION}) (knn %{VERSION})
-Copyright (c) 2001-2016, Andrew Aksyonoff
-Copyright (c) 2008-2016, Sphinx Technologies Inc (http://sphinxsearch.com)
-Copyright (c) 2017-%{YEAR}, Manticore Software LTD (https://manticoresearch.com)
-[#!/[0-9]{2}:[0-9]{2}.[0-9]{3}/!#] [#!/[0-9]+/!#] using config file '/etc/manticoresearch/manticore.conf' (%{NUMBER} chars)...
-starting daemon version '%{VERSION} (columnar %{VERSION}) (secondary %{VERSION}) (knn %{VERSION})' ...
-listening on %{IPADDR}:9312 for sphinx and http(s)
-listening on %{IPADDR}:9306 for mysql
-listening on %{IPADDR}:9308 for sphinx and http(s)
-precaching table 't1'
-precaching table 't2'
-precached 2 tables in #!/[0-9]{1}.[0-9]{3}/!# sec
-Buddy started!
-[%{NUMBER}] %{NUMBER}
-[%{NUMBER}] %{NUMBER}
+Accepting connections!
 0
 +-------+------+
 | Table | Type |
@@ -97,21 +58,7 @@ Buddy started!
 +---------------------+
 | %{NUMBER} |
 +---------------------+
-Manticore %{VERSION} (columnar %{VERSION}) (secondary %{VERSION}) (knn %{VERSION})
-Copyright (c) 2001-2016, Andrew Aksyonoff
-Copyright (c) 2008-2016, Sphinx Technologies Inc (http://sphinxsearch.com)
-Copyright (c) 2017-%{YEAR}, Manticore Software LTD (https://manticoresearch.com)
-[#!/[0-9]{2}:[0-9]{2}.[0-9]{3}/!#] [#!/[0-9]+/!#] using config file '/etc/manticoresearch/manticore.conf' (%{NUMBER} chars)...
-starting daemon version '%{VERSION} (columnar %{VERSION}) (secondary %{VERSION}) (knn %{VERSION})' ...
-listening on %{IPADDR}:9312 for sphinx and http(s)
-listening on %{IPADDR}:9306 for mysql
-listening on %{IPADDR}:9308 for sphinx and http(s)
-precaching table 't1'
-precaching table 't2'
-precached 2 tables in #!/[0-9]{1}.[0-9]{3}/!# sec
-Buddy started!
-[%{NUMBER}] %{NUMBER}
-[%{NUMBER}] %{NUMBER}
+Accepting connections!
 0
 +-------+------+
 | Table | Type |
@@ -129,21 +76,7 @@ Buddy started!
 +---------------------+
 | %{NUMBER} |
 +---------------------+
-Manticore %{VERSION} (columnar %{VERSION}) (secondary %{VERSION}) (knn %{VERSION})
-Copyright (c) 2001-2016, Andrew Aksyonoff
-Copyright (c) 2008-2016, Sphinx Technologies Inc (http://sphinxsearch.com)
-Copyright (c) 2017-%{YEAR}, Manticore Software LTD (https://manticoresearch.com)
-[#!/[0-9]{2}:[0-9]{2}.[0-9]{3}/!#] [#!/[0-9]+/!#] using config file '/etc/manticoresearch/manticore.conf' (%{NUMBER} chars)...
-starting daemon version '%{VERSION} (columnar %{VERSION}) (secondary %{VERSION}) (knn %{VERSION})' ...
-listening on %{IPADDR}:9312 for sphinx and http(s)
-listening on %{IPADDR}:9306 for mysql
-listening on %{IPADDR}:9308 for sphinx and http(s)
-precaching table 't1'
-precaching table 't2'
-precached 2 tables in #!/[0-9]{1}.[0-9]{3}/!# sec
-Buddy started!
-[%{NUMBER}] %{NUMBER}
-[%{NUMBER}] %{NUMBER}
+Accepting connections!
 0
 +-------+------+
 | Table | Type |
@@ -161,21 +94,7 @@ Buddy started!
 +---------------------+
 | %{NUMBER} |
 +---------------------+
-Manticore %{VERSION} (columnar %{VERSION}) (secondary %{VERSION}) (knn %{VERSION})
-Copyright (c) 2001-2016, Andrew Aksyonoff
-Copyright (c) 2008-2016, Sphinx Technologies Inc (http://sphinxsearch.com)
-Copyright (c) 2017-%{YEAR}, Manticore Software LTD (https://manticoresearch.com)
-[#!/[0-9]{2}:[0-9]{2}.[0-9]{3}/!#] [#!/[0-9]+/!#] using config file '/etc/manticoresearch/manticore.conf' (%{NUMBER} chars)...
-starting daemon version '%{VERSION} (columnar %{VERSION}) (secondary %{VERSION}) (knn %{VERSION})' ...
-listening on %{IPADDR}:9312 for sphinx and http(s)
-listening on %{IPADDR}:9306 for mysql
-listening on %{IPADDR}:9308 for sphinx and http(s)
-precaching table 't1'
-precaching table 't2'
-precached 2 tables in #!/[0-9]{1}.[0-9]{3}/!# sec
-Buddy started!
-[%{NUMBER}] %{NUMBER}
-[%{NUMBER}] %{NUMBER}
+Accepting connections!
 0
 +-------+------+
 | Table | Type |
@@ -193,21 +112,7 @@ Buddy started!
 +---------------------+
 | %{NUMBER} |
 +---------------------+
-Manticore %{VERSION} (columnar %{VERSION}) (secondary %{VERSION}) (knn %{VERSION})
-Copyright (c) 2001-2016, Andrew Aksyonoff
-Copyright (c) 2008-2016, Sphinx Technologies Inc (http://sphinxsearch.com)
-Copyright (c) 2017-%{YEAR}, Manticore Software LTD (https://manticoresearch.com)
-[#!/[0-9]{2}:[0-9]{2}.[0-9]{3}/!#] [#!/[0-9]+/!#] using config file '/etc/manticoresearch/manticore.conf' (%{NUMBER} chars)...
-starting daemon version '%{VERSION} (columnar %{VERSION}) (secondary %{VERSION}) (knn %{VERSION})' ...
-listening on %{IPADDR}:9312 for sphinx and http(s)
-listening on %{IPADDR}:9306 for mysql
-listening on %{IPADDR}:9308 for sphinx and http(s)
-precaching table 't1'
-precaching table 't2'
-precached 2 tables in #!/[0-9]{1}.[0-9]{3}/!# sec
-Buddy started!
-[%{NUMBER}] %{NUMBER}
-[%{NUMBER}] %{NUMBER}
+Accepting connections!
 0
 +-------+------+
 | Table | Type |
@@ -225,21 +130,7 @@ Buddy started!
 +---------------------+
 | %{NUMBER} |
 +---------------------+
-Manticore %{VERSION} (columnar %{VERSION}) (secondary %{VERSION}) (knn %{VERSION})
-Copyright (c) 2001-2016, Andrew Aksyonoff
-Copyright (c) 2008-2016, Sphinx Technologies Inc (http://sphinxsearch.com)
-Copyright (c) 2017-%{YEAR}, Manticore Software LTD (https://manticoresearch.com)
-[#!/[0-9]{2}:[0-9]{2}.[0-9]{3}/!#] [#!/[0-9]+/!#] using config file '/etc/manticoresearch/manticore.conf' (%{NUMBER} chars)...
-starting daemon version '%{VERSION} (columnar %{VERSION}) (secondary %{VERSION}) (knn %{VERSION})' ...
-listening on %{IPADDR}:9312 for sphinx and http(s)
-listening on %{IPADDR}:9306 for mysql
-listening on %{IPADDR}:9308 for sphinx and http(s)
-precaching table 't1'
-precaching table 't2'
-precached 2 tables in #!/[0-9]{1}.[0-9]{3}/!# sec
-Buddy started!
-[%{NUMBER}] %{NUMBER}
-[%{NUMBER}] %{NUMBER}
+Accepting connections!
 0
 +-------+------+
 | Table | Type |
@@ -257,21 +148,7 @@ Buddy started!
 +---------------------+
 | %{NUMBER} |
 +---------------------+
-Manticore %{VERSION} (columnar %{VERSION}) (secondary %{VERSION}) (knn %{VERSION})
-Copyright (c) 2001-2016, Andrew Aksyonoff
-Copyright (c) 2008-2016, Sphinx Technologies Inc (http://sphinxsearch.com)
-Copyright (c) 2017-%{YEAR}, Manticore Software LTD (https://manticoresearch.com)
-[#!/[0-9]{2}:[0-9]{2}.[0-9]{3}/!#] [#!/[0-9]+/!#] using config file '/etc/manticoresearch/manticore.conf' (%{NUMBER} chars)...
-starting daemon version '%{VERSION} (columnar %{VERSION}) (secondary %{VERSION}) (knn %{VERSION})' ...
-listening on %{IPADDR}:9312 for sphinx and http(s)
-listening on %{IPADDR}:9306 for mysql
-listening on %{IPADDR}:9308 for sphinx and http(s)
-precaching table 't1'
-precaching table 't2'
-precached 2 tables in #!/[0-9]{1}.[0-9]{3}/!# sec
-Buddy started!
-[%{NUMBER}] %{NUMBER}
-[%{NUMBER}] %{NUMBER}
+Accepting connections!
 0
 +-------+------+
 | Table | Type |
@@ -289,21 +166,7 @@ Buddy started!
 +---------------------+
 | %{NUMBER} |
 +---------------------+
-Manticore %{VERSION} (columnar %{VERSION}) (secondary %{VERSION}) (knn %{VERSION})
-Copyright (c) 2001-2016, Andrew Aksyonoff
-Copyright (c) 2008-2016, Sphinx Technologies Inc (http://sphinxsearch.com)
-Copyright (c) 2017-%{YEAR}, Manticore Software LTD (https://manticoresearch.com)
-[#!/[0-9]{2}:[0-9]{2}.[0-9]{3}/!#] [#!/[0-9]+/!#] using config file '/etc/manticoresearch/manticore.conf' (%{NUMBER} chars)...
-starting daemon version '%{VERSION} (columnar %{VERSION}) (secondary %{VERSION}) (knn %{VERSION})' ...
-listening on %{IPADDR}:9312 for sphinx and http(s)
-listening on %{IPADDR}:9306 for mysql
-listening on %{IPADDR}:9308 for sphinx and http(s)
-precaching table 't1'
-precaching table 't2'
-precached 2 tables in #!/[0-9]{1}.[0-9]{3}/!# sec
-Buddy started!
-[%{NUMBER}] %{NUMBER}
-[%{NUMBER}] %{NUMBER}
+Accepting connections!
 0
 +-------+------+
 | Table | Type |

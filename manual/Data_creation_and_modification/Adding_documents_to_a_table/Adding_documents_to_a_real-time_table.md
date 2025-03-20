@@ -83,22 +83,22 @@ POST /insert
 
 ```json
 {
-  "_index": "products",
+  "table": "products",
   "_id": 1,
   "created": true,
   "result": "created",
   "status": 201
 }
 {
-  "_index": "products",
+  "table": "products",
   "_id": 2,
   "created": true,
   "result": "created",
   "status": 201
 }
 {
-  "_index": "products",
-  "_id": 0,
+  "table": "products",
+  "_id": 1657860156022587406,
   "created": true,
   "result": "created",
   "status": 201
@@ -132,7 +132,7 @@ POST /products/_create/
 ```json
 {
 "_id":3,
-"_index":"products",
+"table":"products",
 "_primary_term":1,
 "_seq_no":0,
 "_shards":{
@@ -146,7 +146,7 @@ POST /products/_create/
 }
 {
 "_id":2235747273424240642,
-"_index":"products",
+"table":"products",
 "_primary_term":1,
 "_seq_no":0,
 "_shards":{
@@ -361,7 +361,7 @@ POST /insert  -d
 <!-- response JSON -->
 
 ```json
-{"_index":"t","_id":2,"created":true,"result":"created","status":201}
+{"table":"t","_id":2,"created":true,"result":"created","status":201}
 ```
 
 <!-- end -->
@@ -541,14 +541,14 @@ Note that the `/bulk` HTTP endpoint does not support automatic creation of table
 
 `/_bulk` endpoint accepts document IDs in the same format as Elasticsearch, and you can also include the `id` within the document itself:
 ```json
-{ "index": { "_index" : "products", "_id" : "1" } }
+{ "index": { "table" : "products", "_id" : "1" } }
 { "title" : "Crossbody Bag with Tassel", "price": 19.85 }
 ```
 
 or
 
 ```json
-{ "index": { "_index" : "products" } }
+{ "index": { "table" : "products" } }
 { "title" : "Crossbody Bag with Tassel", "price": 19.85, "id": "1" }
 ```
 
@@ -622,7 +622,7 @@ POST /bulk
   "items": [
     {
       "bulk": {
-        "_index": "products",
+        "table": "products",
         "_id": 2,
         "created": 2,
         "deleted": 0,
@@ -642,7 +642,7 @@ POST /bulk
   "items": [
     {
       "bulk": {
-        "_index": "test1",
+        "table": "test1",
         "_id": 22,
         "created": 2,
         "deleted": 0,
@@ -653,7 +653,7 @@ POST /bulk
     },
     {
       "bulk": {
-        "_index": "test1",
+        "table": "test1",
         "_id": 23,
         "created": 1,
         "deleted": 0,
@@ -664,7 +664,7 @@ POST /bulk
     },
     {
       "bulk": {
-        "_index": "test2",
+        "table": "test2",
         "_id": 25,
         "created": 2,
         "deleted": 0,
@@ -688,9 +688,9 @@ POST /bulk
 ```json
 POST /_bulk
 -H "Content-Type: application/x-ndjson" -d '
-{ "index" : { "_index" : "products" } }
+{ "index" : { "table" : "products" } }
 { "title" : "Yellow Bag", "price": 12 }
-{ "create" : { "_index" : "products" } }
+{ "create" : { "table" : "products" } }
 { "title" : "Red Bag", "price": 12.5, "id": 3 }
 '
 ```
@@ -700,7 +700,7 @@ POST /_bulk
   "items": [
     {
       "table": {
-        "_index": "products",
+        "table": "products",
         "_type": "doc",
         "_id": 1657860156022587406,
         "_version": 1,
@@ -717,7 +717,7 @@ POST /_bulk
     },
     {
       "create": {
-        "_index": "products",
+        "table": "products",
         "_type": "doc",
         "_id": 3,
         "_version": 1,

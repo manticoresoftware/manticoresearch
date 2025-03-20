@@ -6,7 +6,7 @@
 <requires>
 <non-rt/>
 </requires>
-
+<skip_db/>
 <config>
 indexer
 {

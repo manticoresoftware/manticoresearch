@@ -34,7 +34,6 @@ cat /var/log/dpkg.log | wc -l
 ––– input –––
 filebeat -c /filebeat.yml --strict.perms=false -e 2>/var/log/filebeat.log &
 ––– output –––
-[1] #!/[0-9]+/!#
 ––– input –––
 if timeout 60 grep -qm1 'Non-zero metrics in the last 30s' <(tail -n 0 -f /var/log/filebeat.log); then echo 'Done'; else echo 'Timeout or failed'; cat /var/log/filebeat.log; cat /var/log/manticore/searchd.log; fi
 ––– output –––

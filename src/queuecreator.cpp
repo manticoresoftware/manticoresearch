@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2017-2024, Manticore Software LTD (https://manticoresearch.com)
+// Copyright (c) 2017-2025, Manticore Software LTD (https://manticoresearch.com)
 // Copyright (c) 2001-2016, Andrew Aksyonoff
 // Copyright (c) 2008-2016, Sphinx Technologies Inc
 // All rights reserved
@@ -917,6 +917,9 @@ void QueueCreator_c::ModifyExprForJoin ( CSphColumnInfo & tExprCol, const CSphSt
 
 	// check expr and its alias
 	if ( !ExprHasJoinPrefix ( tExprCol.m_sName, m_tSettings.m_pJoinArgs.get() ) && !ExprHasJoinPrefix ( sExpr, m_tSettings.m_pJoinArgs.get() ) )
+		return;
+
+	if ( ExprHasLeftTableAttrs ( tExprCol.m_sName, *m_pSorterSchema ) || ExprHasLeftTableAttrs ( sExpr, *m_pSorterSchema ) )
 		return;
 
 	// we receive already precalculated JSON field expressions from JOIN

@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2017-2024, Manticore Software LTD (https://manticoresearch.com)
+// Copyright (c) 2017-2025, Manticore Software LTD (https://manticoresearch.com)
 // All rights reserved
 //
 // This program is free software; you can redistribute it and/or modify
@@ -346,10 +346,9 @@ FieldRequest_t ParseAPICommandGetfield ( InputBuffer_c & tReq )
 }
 
 void SendAPICommandGetfieldAnswer ( ISphOutputBuffer & tOut, FieldRequest_t& tRequest,
-		const FieldBlob_t& tRes, const DocHash_t& _tFetched )
+		const FieldBlob_t& tRes, const DocHash_t& tFetched )
 {
 	auto tReply = APIAnswer ( tOut, VER_COMMAND_GETFIELD );
-	auto & tFetched = const_cast<DocHash_t &>(_tFetched); // non-const need for Acquire()
 	auto iDocsCount = tFetched.Count();
 	if ( !iDocsCount )
 	{
@@ -361,24 +360,30 @@ void SendAPICommandGetfieldAnswer ( ISphOutputBuffer & tOut, FieldRequest_t& tRe
 
 	auto& dDocs = tRequest.m_dDocs;
 
-	// send doclist and simultaneously wipe out absend docs
-	// note that because of wiping doc's order will be broken!
+	// wipe out absent docs
+	ARRAY_FOREACH ( i, dDocs )
+		if ( !tFetched.Exists ( dDocs[i] ) )
+			dDocs.RemoveFast ( i-- );
+
+	if ( iDocsCount != dDocs.GetLength() )
+		dDocs.Uniq();
+
+	assert ( iDocsCount==dDocs.GetLength () );
 	tOut.SendDword ( iDocsCount );
 	ARRAY_FOREACH ( i, dDocs )
 	{
-		if ( tFetched.Exists ( dDocs[i] ) )
-			tOut.SendUint64 ( dDocs[i] );
-		else
-			dDocs.RemoveFast(i--);
+		assert ( tFetched.Exists ( dDocs[i] ) );
+		tOut.SendUint64 ( dDocs[i] );
 	}
-
-	assert ( iDocsCount==dDocs.GetLength () );
 
 	auto iFields = tRequest.m_dFieldNames.GetLength ();
 	tOut.SendDword ( iDocsCount * iFields );
 	for ( DocID_t tDoc : dDocs )
 	{
-		int iOff = tFetched.Acquire ( tDoc );
+		auto pDoc = tFetched.Find ( tDoc );
+		if (!pDoc)
+			continue;
+		const int iOff = *pDoc;
 		for ( int i=0; i<iFields; ++i )
 		{
 			tOut.SendDword ( tRes.m_dLocs[iOff+i].m_iOff );

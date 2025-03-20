@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2017-2024, Manticore Software LTD (https://manticoresearch.com)
+// Copyright (c) 2017-2025, Manticore Software LTD (https://manticoresearch.com)
 // Copyright (c) 2001-2016, Andrew Aksyonoff
 // Copyright (c) 2008-2016, Sphinx Technologies Inc
 // All rights reserved
@@ -3482,7 +3482,11 @@ protected:
 	};
 
 DECLARE_TERNARY ( Expr_If_c,	( EVALFIRST!=0.0f ) ? EVALSECOND : EVALTHIRD,	INTFIRST ? INTSECOND : INTTHIRD,	INT64FIRST ? INT64SECOND : INT64THIRD )
-DECLARE_TERNARY ( Expr_Madd_c,	EVALFIRST*EVALSECOND+EVALTHIRD,					INTFIRST*INTSECOND + INTTHIRD,		INT64FIRST*INT64SECOND + INT64THIRD )
+#if defined (__aarch64__)
+DECLARE_TERNARY ( Expr_Madd_c,	[this](const CSphMatch& tMatch){return EVALFIRST*EVALSECOND;}(tMatch)+EVALTHIRD,					INTFIRST*INTSECOND + INTTHIRD,		INT64FIRST*INT64SECOND + INT64THIRD )
+#else
+DECLARE_TERNARY ( Expr_Madd_c, EVALFIRST* EVALSECOND + EVALTHIRD, INTFIRST* INTSECOND + INTTHIRD, INT64FIRST* INT64SECOND + INT64THIRD )
+#endif
 DECLARE_TERNARY ( Expr_Mul3_c,	EVALFIRST*EVALSECOND*EVALTHIRD,					INTFIRST*INTSECOND*INTTHIRD,		INT64FIRST*INT64SECOND*INT64THIRD )
 
 //////////////////////////////////////////////////////////////////////////

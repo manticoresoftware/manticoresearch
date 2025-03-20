@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2017-2024, Manticore Software LTD (https://manticoresearch.com)
+// Copyright (c) 2017-2025, Manticore Software LTD (https://manticoresearch.com)
 // Copyright (c) 2001-2016, Andrew Aksyonoff
 // Copyright (c) 2008-2016, Sphinx Technologies Inc
 // All rights reserved
@@ -53,6 +53,9 @@ bool CreateSynonymsFile ( const char * sMagic = nullptr )
 
 class Environment : public ::testing::Environment
 {
+	const char* m_szDict = nullptr;
+	CSphString m_sTmp;
+	CSphString m_sTmp2;
 public:
 	// Override this to define how to set up the environment.
 	void SetUp () override
@@ -61,8 +64,17 @@ public:
 		Threads::Init ();
 		Threads::PrepareMainThread ( &cTopOfMainStack );
 		Tracer::Init();
-		CreateSynonymsFile ();
-		CreateSynonymsFile ( g_sMagic );
+		m_szDict = getenv ( "GTEST_DICT" );
+		if ( m_szDict )
+		{
+			m_sTmp2 = SphSprintf ( "%s/libsphinxtest2.txt", m_szDict );
+			m_sTmp = SphSprintf ( "%s/libsphinxtest.txt", m_szDict );
+			g_sMagickTmpfile = m_sTmp2.cstr ();
+			g_sTmpfile = m_sTmp.cstr ();
+		} else {
+			CreateSynonymsFile ();
+			CreateSynonymsFile ( g_sMagic );
+		}
 		auto iThreads = GetNumLogicalCPUs();
 		//		iThreads = 1; // uncomment if want to run all coro tests in single thread
 		SetMaxChildrenThreads ( iThreads );
@@ -83,8 +95,11 @@ public:
 	// Override this to define how to tear down the environment.
 	void TearDown () override
 	{
-		unlink ( g_sTmpfile );
-		unlink ( g_sMagickTmpfile );
+		if ( !m_szDict )
+		{
+			unlink ( g_sTmpfile );
+			unlink ( g_sMagickTmpfile );
+		}
 		StopGlobalWorkPool();
 	}
 };

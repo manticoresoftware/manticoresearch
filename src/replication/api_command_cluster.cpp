@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2019-2024, Manticore Software LTD (https://manticoresearch.com)
+// Copyright (c) 2019-2025, Manticore Software LTD (https://manticoresearch.com)
 // Copyright (c) 2001-2016, Andrew Aksyonoff
 // Copyright (c) 2008-2016, Sphinx Technologies Inc
 // All rights reserved
@@ -106,8 +106,10 @@ void HandleAPICommandCluster ( ISphOutputBuffer & tOut, WORD uCommandVer, InputB
 {
 	auto eClusterCmd = (E_CLUSTER)tBuf.GetWord();
 
+	bool bNodeVer = ( eClusterCmd==E_CLUSTER::GET_NODE_VER || eClusterCmd==E_CLUSTER::GET_NODE_VER_ID );
+
 	// GET_NODE_VER should skip version check and provide both VER_COMMAND_CLUSTER and VER_COMMAND_REPLICATE
-	if ( eClusterCmd!=E_CLUSTER::GET_NODE_VER && !CheckCommandVersion ( uCommandVer, VER_COMMAND_CLUSTER, tOut ) )
+	if ( !bNodeVer && !CheckCommandVersion ( uCommandVer, VER_COMMAND_CLUSTER, tOut ) )
 		return;
 
 	if ( eClusterCmd!=E_CLUSTER::FILE_SEND )
@@ -153,7 +155,11 @@ void HandleAPICommandCluster ( ISphOutputBuffer & tOut, WORD uCommandVer, InputB
 		break;
 
 	case E_CLUSTER::GET_NODE_VER:
-		ReceiveClusterGetVer ( tOut );
+		ReceiveClusterGetVer ( false, tOut );
+		break;
+
+	case E_CLUSTER::GET_NODE_VER_ID:
+		ReceiveClusterGetVer ( true, tOut );
 		break;
 
 	default:

@@ -1,6 +1,6 @@
 //
 //
-// Copyright (c) 2024, Manticore Software LTD (https://manticoresearch.com)
+// Copyright (c) 2024-2025, Manticore Software LTD (https://manticoresearch.com)
 // All rights reserved
 //
 // This program is free software; you can redistribute it and/or modify
@@ -46,15 +46,60 @@ int	GetJoinBatchSize()
 }
 
 
-static bool GetJoinAttrName ( const CSphString & sAttr, const CSphString & sJoinedIndex, CSphString * pModified = nullptr )
+bool ExprHasLeftTableAttrs ( const CSphString & sAttr, const ISphSchema & tLeftSchema )
+{
+	const char * szAttr = sAttr.cstr();
+	const int MAX_ATTR_NAME_LEN = 512;
+	char dAttrName[MAX_ATTR_NAME_LEN+1];
+	int iPos = 0;
+	while ( *szAttr )
+	{
+		if ( sphIsAlphaOnly(*szAttr) || *szAttr=='.' || *szAttr=='_' )
+		{
+			if ( iPos==MAX_ATTR_NAME_LEN-1 )
+				break;
+
+            dAttrName[iPos++] = *szAttr;
+        }
+		else
+		{
+            if (iPos)
+			{
+                dAttrName[iPos] = '\0';
+				if ( !strchr ( dAttrName, '.' ) && tLeftSchema.GetAttrIndex(dAttrName)!=-1 )
+					return true;
+
+                iPos = 0;
+            }
+        }
+
+        szAttr++;
+    }
+
+    if (iPos)
+	{
+        dAttrName[iPos] = '\0';
+		if ( !strchr ( dAttrName, '.' ) && tLeftSchema.GetAttrIndex(dAttrName)!=-1 )
+			return true;
+    }
+
+	return false;
+}
+
+
+static bool GetJoinAttrName ( const CSphString & sAttr, const CSphString & sJoinedIndex, const ISphSchema & tLeftSchema, CSphString * pModified = nullptr )
 {
 	CSphString sPrefix;
 	sPrefix.SetSprintf ( "%s.", sJoinedIndex.cstr() );
 	int iPrefixLen = sPrefix.Length();
 
+	if ( ExprHasLeftTableAttrs ( sAttr, tLeftSchema ) )
+		return false;
+
 	bool bRightTable = false;
 	CSphString sMod = sAttr;
 	const char * szStart = sMod.cstr();
+
 	while ( true )
 	{
 		const char * szFound = strstr ( sMod.cstr(), sPrefix.cstr() );
@@ -816,7 +861,7 @@ void JoinSorter_c::SetupAggregates()
 	for ( int i = 0; i < m_pSorterSchema->GetAttrsCount(); i++ )
 	{
 		const auto & tAttr = m_pSorterSchema->GetAttr(i);
-		if ( tAttr.m_eAggrFunc!=SPH_AGGR_NONE && tAttr.m_eStage==SPH_EVAL_SORTER && GetJoinAttrName ( tAttr.m_sName, CSphString ( m_pJoinedIndex->GetName() ) ) )
+		if ( tAttr.m_eAggrFunc!=SPH_AGGR_NONE && tAttr.m_eStage==SPH_EVAL_SORTER && GetJoinAttrName ( tAttr.m_sName, CSphString ( m_pJoinedIndex->GetName() ), *m_pSorterSchema ) )
 			m_dAggregates.Add ( { tAttr.m_tLocator, tAttr.m_eAttrType, tAttr.m_pExpr } );
 	}
 }
@@ -1156,6 +1201,16 @@ void JoinSorter_c::SetupJoinFiltersBatch()
 }
 
 
+static int GetIndexWeight ( const CSphQuery & tQuery, const CSphString & sIdxName )
+{
+	for ( const auto & i : tQuery.m_dIndexWeights )
+		if ( i.first==sIdxName )
+			return i.second;
+
+	return 1;
+}
+
+
 bool JoinSorter_c::RunJoinedQuery ( int & iTotalCount )
 {
 	CSphQueryResultMeta tMeta;
@@ -1166,7 +1221,7 @@ bool JoinSorter_c::RunJoinedQuery ( int & iTotalCount )
 	// FIXME!!!! make a SetSchema that does not take ownership of the schema
 	m_pRightSorter->SetSchema ( m_pRightSorterRsetSchema->CloneMe(), true );
 
-	CSphMultiQueryArgs tArgs(1);
+	CSphMultiQueryArgs tArgs ( GetIndexWeight ( m_tJoinQuery, m_tQuery.m_sJoinIdx ) );
 	ISphMatchSorter * pSorter = m_pRightSorter.get();
 	if ( !m_pJoinedIndex->MultiQuery ( tQueryResult, m_tJoinQuery, { &pSorter, 1 }, tArgs ) )
 	{
@@ -1404,10 +1459,10 @@ bool JoinSorter_c::Push_T ( const CSphMatch & tEntry, PUSH && fnPush, bool bGrou
 	if ( m_bCanBatch && !bGrouped )
 	{
 		AddToBatch ( tEntry, uJoinOnFilterHash );
-		if ( !IsBatchFull() )
-			return true;
+		if ( IsBatchFull() )
+			RunBatch(fnPush);
 
-		return RunBatch(fnPush);
+		return false; // always return false so that cutoff/implicit cutoff won't work
 	}
 
 	if ( !RunJoinedQueryAndAdjustMaxMatches() )
@@ -1779,7 +1834,7 @@ void JoinSorter_c::AddToJoinSelectList ( const CSphString & sExpr, const CSphStr
 		return;
 
 	CSphString sJoinExpr;
-	if ( !GetJoinAttrName ( sExpr, CSphString ( m_pJoinedIndex->GetName() ), &sJoinExpr ) )
+	if ( !GetJoinAttrName ( sExpr, CSphString ( m_pJoinedIndex->GetName() ), *m_pSorterSchema, &sJoinExpr ) )
 		return;
 
 	const CSphColumnInfo & tSorterAttr = m_pSorterSchema->GetAttr(iSorterAttrId);
@@ -1912,7 +1967,7 @@ void JoinSorter_c::AddExpressionItemsToJoinSelectList()
 		}
 
 		CSphString sJoinedAttr;
-		if ( GetJoinAttrName ( i.m_sAttrName, CSphString ( m_pJoinedIndex->GetName() ), &sJoinedAttr ) )
+		if ( GetJoinAttrName ( i.m_sAttrName, CSphString ( m_pJoinedIndex->GetName() ), *m_pSorterSchema, &sJoinedAttr ) )
 		{
 			const CSphColumnInfo * pAttr = tJoinedSchema.GetAttr ( sJoinedAttr.cstr() );
 			if ( pAttr && pAttr->IsColumnar() )
@@ -1953,7 +2008,7 @@ void JoinSorter_c::AddBatchedFilterItemsToJoinSelectList()
 		sAttr.SetSprintf ( "%s.%s", m_pJoinedIndex->GetName(), i.m_sAttrName.cstr() );
 
 		CSphString sJoinExpr;
-		if ( !GetJoinAttrName ( sAttr, CSphString ( m_pJoinedIndex->GetName() ), &sJoinExpr ) )
+		if ( !GetJoinAttrName ( sAttr, CSphString ( m_pJoinedIndex->GetName() ), *m_pSorterSchema, &sJoinExpr ) )
 			continue;
 
 		CSphString sJoinAlias;

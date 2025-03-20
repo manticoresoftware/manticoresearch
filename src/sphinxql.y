@@ -1055,6 +1055,7 @@ expr_ident:
 	| TOK_DOUBLE '(' json_expr ')'	{ TRACK_BOUNDS ( $$, $1, $4 ); }
 	| TOK_BIGINT '(' json_expr ')'	{ TRACK_BOUNDS ( $$, $1, $4 ); }
 	| TOK_FACET '(' ')'
+	| ident TOK_SUBKEY '(' ')'		{ TRACK_BOUNDS ( $$, $1, $4 ); }
 	;
 
 mva_aggr:

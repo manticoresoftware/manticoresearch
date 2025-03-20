@@ -1540,6 +1540,7 @@ private:
 
 	// internal helpers/hooks
 	inline RtWriter_c			RtWriter() { return { m_tRtChunks, [this] { UpdateUnlockedCount(); } }; }
+	inline void					CopyChunksTo ( RtWriter_c& tWriter ) REQUIRES ( m_tWorkers.SerialChunkAccess() ) { tWriter.InitDiskChunks ( RtWriter_c::copy ); }
 
 	// set of my rt; suitable for any usage
 	inline RtGuard_t			RtGuard() const { return RtGuard_t { RtData() }; }
@@ -4406,7 +4407,7 @@ bool RtIndex_c::SaveDiskChunk ( bool bForced, bool bEmergent ) REQUIRES ( m_tWor
 	// now new disk chunk is loaded, kills and updates applied - we ready to change global index state now.
 	{
 		auto tNewSet = RtWriter();
-		tNewSet.InitDiskChunks ( RtWriter_c::copy );
+		CopyChunksTo ( tNewSet );
 		tNewSet.m_pNewDiskChunks->Add ( DiskChunk_c::make ( std::move ( pNewChunk ) ) );
 		SaveMeta ( iTID, GetChunkIds ( *tNewSet.m_pNewDiskChunks ) );
 
@@ -8750,7 +8751,7 @@ bool RtIndex_c::AttachDiskIndex ( CSphIndex * pIndex, bool bTruncate, bool & bFa
 
 	{	// update disk chunk list
 		auto tNewSet = RtWriter();
-		tNewSet.InitDiskChunks ( RtWriter_c::copy );
+		CopyChunksTo ( tNewSet );
 		tNewSet.m_pNewDiskChunks->Add ( DiskChunk_c::make ( pIndex ) );
 	}
 
@@ -8888,7 +8889,7 @@ bool RtIndex_c::AttachRtIndex ( RtIndex_i * pSrcIndex, bool bTruncate, bool & bF
 
 		// collect all disk chunks from the source RT index in the brand new structure
 		auto tNewSet = RtWriter();
-		tNewSet.InitDiskChunks ( RtWriter_c::copy );
+		CopyChunksTo ( tNewSet );
 		// need to reset m_bFinallyUnlink flag for the disk chunks moved here after all finishes well
 		int iUnlinkIndex = tNewSet.m_pNewDiskChunks->GetLength();
 
@@ -8944,7 +8945,7 @@ ConstDiskChunkRefPtr_t RtIndex_c::PopDiskChunk()
 	ScopedScheduler_c tSerialFiber ( m_tWorkers.SerialChunkAccess() );
 
 	auto tNewSet = RtWriter();
-	tNewSet.InitDiskChunks ( RtWriter_c::copy );
+	CopyChunksTo ( tNewSet );
 	if ( tNewSet.m_pNewDiskChunks->IsEmpty() )
 		return {};
 

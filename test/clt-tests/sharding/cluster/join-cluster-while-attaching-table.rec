@@ -1,4 +1,7 @@
 ––– input –––
+set -b +m
+––– output –––
+––– input –––
 export INSTANCE=1
 ––– output –––
 ––– block: ../../base/replication/start-searchd-precach –––
@@ -11,22 +14,20 @@ export INSTANCE=3
 ––– output –––
 ––– block: ../../base/replication/start-searchd-precach –––
 ––– input –––
-mysql -h0 -P1306 -e "create cluster a 'a' as path"
+mysql -h0 -P1306 -e "create cluster a"
 ––– output –––
 ––– input –––
 mysql -h0 -P1306 -e "create table t"
 ––– output –––
 ––– input –––
-mysql -h0 -P2306 -e "join cluster a at '127.0.0.1:1312' 'a' as path" &
+mysql -h0 -P2306 -e "join cluster a at '127.0.0.1:1312'" &
 ––– output –––
 ––– input –––
 mysql -h0 -P1306 -e "alter cluster a add t" &
 ––– output –––
-[2] %{NUMBER}
 ––– input –––
-mysql -h0 -P3306 -e "join cluster a at '127.0.0.1:1312' 'a' as path" &
+mysql -h0 -P3306 -e "join cluster a at '127.0.0.1:1312'" &
 ––– output –––
-[3] %{NUMBER}
 ––– input –––
 wait 1>/dev/null 2>&1; echo $?
 ––– output –––

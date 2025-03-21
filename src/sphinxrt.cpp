@@ -4353,6 +4353,8 @@ bool RtIndex_c::SaveDiskChunk ( bool bForced, bool bEmergent ) REQUIRES ( m_tWor
 		break;
 	}
 
+	assert ( Coro::CurrentScheduler() == m_tWorkers.SerialChunkAccess() );
+
 	// here we back into serial fiber. As we're switched, we can't rely on m_iTID and index stats anymore
 	if ( !pNewChunk )
 	{

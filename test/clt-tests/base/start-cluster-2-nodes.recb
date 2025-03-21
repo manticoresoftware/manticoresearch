@@ -1,0 +1,13 @@
+––– input –––
+export INSTANCE=1
+––– output –––
+––– block: ./replication/start-searchd-precach –––
+––– input –––
+export INSTANCE=2
+––– output –––
+––– block: ./replication/start-searchd-precach –––
+––– input –––
+export CLUSTER_NAME=c
+––– output –––
+––– block: ./replication/create-cluster –––
+––– block: ./replication/join-cluster-on-all-nodes –––

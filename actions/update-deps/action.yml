@@ -128,7 +128,28 @@ runs:
       run: |
         cd repository
         repo_url=${{ github.server_url }}/${{ github.repository }}
-        changes=$(git log --pretty=format:"[\`%h\`]($repo_url/commit/%H) %s" ${{ steps.commit.outputs.original_commit }}..HEAD)
+        if [ "${{ github.event_name }}" == "pull_request" ]; then
+          echo "Using pull request comparison: $base_sha...$head_sha"
+          base_sha="${{ github.event.pull_request.base.sha }}"
+          head_sha="${{ github.event.pull_request.head.sha }}"
+          changes=$(git log --pretty=format:"[\`%h\`]($repo_url/commit/%H) %s" $base_sha...$head_sha)
+        else
+          echo "Using push event comparison"
+          head_sha="${{ github.sha }}"
+          # For merge commits, get the actual changes by comparing with parents
+          if [[ $(git cat-file -p $head_sha | grep -c "^parent ") -gt 1 ]]; then
+            parent_sha=$(git cat-file -p $head_sha | grep "^parent " | tail -n 1 | awk '{print $2}')
+            merge_base=$(git merge-base $head_sha^ $parent_sha)
+            echo "Merge commit detected, comparing $merge_base...$parent_sha"
+            changes=$(git log --pretty=format:"[\`%h\`]($repo_url/commit/%H) %s" $merge_base..$parent_sha)
+          else # For regular commits, get the last commit
+            echo "Regular commit, showing the latest commit"
+            changes=$(git log -1 --pretty=format:"[\`%h\`]($repo_url/commit/%H) %s" $head_sha)
+          fi
+        fi
+        echo "Changes detected:"
+        echo "$changes"
+
         name=${{ inputs.name }}
         version_string="${{ inputs.version }}"
         title="🆕 Update ${name} version"

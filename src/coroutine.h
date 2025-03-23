@@ -480,6 +480,16 @@ public:
 	~ScopedScheduler_c () RELEASE();
 };
 
+class KeeperScheduler_c
+{
+	Scheduler_i* m_pKeepSched;
+
+public:
+	NONCOPYMOVABLE ( KeeperScheduler_c );
+	KeeperScheduler_c();
+	~KeeperScheduler_c() noexcept;
+};
+
 inline void CheckAcquiredSched ( SchedRole R ) ACQUIRE( R ) NO_THREAD_SAFETY_ANALYSIS
 {
 //	assert ( !Coro::CurrentScheduler () || R==Coro::CurrentScheduler() );

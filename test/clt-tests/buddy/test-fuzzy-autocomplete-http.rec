@@ -1,0 +1,1282 @@
+
+––– block: ../base/start-searchd-with-buddy –––
+––– input –––
+apt-get update -y > /dev/null; echo $?
+––– output –––
+0
+––– input –––
+apt-get install jq -y > /dev/null; echo $?
+––– output –––
+debconf: delaying package configuration, since apt-utils is not installed
+0
+––– input –––
+php -d memory_limit=2G ./test/clt-tests/scripts/load_names_attr.php --batch-size=100000 --concurrency=1 --docs=1000000 --start-id=1 --min-infix-len=2 > /dev/null; echo $?
+––– output –––
+0
+––– input –––
+mysql -h0 -P9306 -e "SELECT * FROM name ORDER BY id ASC LIMIT 1000000 OPTION max_matches=1000000;" > /tmp/name_data.txt
+––– output –––
+––– input –––
+md5sum /tmp/name_data.txt
+––– output –––
+1995eec70e60c584bc35ff0688556b94  /tmp/name_data.txt
+––– input –––
+mysql -h0 -P9306 -e "SHOW CREATE TABLE name;" | grep "min_infix_len='2'" | sed "s/.\(min_infix_len='2'\)./\1/"
+––– output –––
+)min_infix_len='2'expand_keywords='1' |
+––– input –––
+mysql -h0 -P9306 -e "SELECT COUNT(*) FROM name;"
+––– output –––
++----------+
+| count(*) |
++----------+
+|  1000000 |
++----------+
+––– input –––
+mysql -h0 -P9306 -e "OPTIMIZE TABLE name OPTION sync=1;"
+––– output –––
+––– input –––
+curl -sX POST http://localhost:9308/search -d '{"index":"name","query":{"bool":{"must":[{"match":{"*":"EBGRNA"}}]}},"options":{"fuzzy":true}}' | jq -M
+––– output –––
+{
+"took": %{NUMBER},
+"timed_out": false,
+"hits": {
+"total": 4300,
+"total_relation": "eq",
+"hits": [
+{
+"_id": 100610,
+"_score": 2555,
+"_source": {
+"username": "BERNARDINE BERNAL",
+"s": "a"
+}
+},
+{
+"_id": 82019,
+"_score": 2547,
+"_source": {
+"username": "BERNARDA HERNANDES",
+"s": "a"
+}
+},
+{
+"_id": 283145,
+"_score": 2547,
+"_source": {
+"username": "BERNARDINE HERNANDES",
+"s": "a"
+}
+},
+{
+"_id": 803455,
+"_score": 1596,
+"_source": {
+"username": "BERNA PFEIFFER",
+"s": "a"
+}
+},
+{
+"_id": 806796,
+"_score": 1596,
+"_source": {
+"username": "BERNA SAGE",
+"s": "a"
+}
+},
+{
+"_id": 806801,
+"_score": 1596,
+"_source": {
+"username": "BERNA PANG",
+"s": "a"
+}
+},
+{
+"_id": 808007,
+"_score": 1596,
+"_source": {
+"username": "BERNA STOLTZFUS",
+"s": "a"
+}
+},
+{
+"_id": 823479,
+"_score": 1596,
+"_source": {
+"username": "BERNA HALVERSON",
+"s": "a"
+}
+},
+{
+"_id": 835281,
+"_score": 1596,
+"_source": {
+"username": "BERNA PLASCENCIA",
+"s": "a"
+}
+},
+{
+"_id": 839460,
+"_score": 1596,
+"_source": {
+"username": "BERNA CALLAWAY",
+"s": "a"
+}
+},
+{
+"_id": 841134,
+"_score": 1596,
+"_source": {
+"username": "BERNA STONER",
+"s": "a"
+}
+},
+{
+"_id": 845181,
+"_score": 1596,
+"_source": {
+"username": "BERNA MARSH",
+"s": "a"
+}
+},
+{
+"_id": 852425,
+"_score": 1596,
+"_source": {
+"username": "BERNA LEI",
+"s": "a"
+}
+},
+{
+"_id": 863448,
+"_score": 1596,
+"_source": {
+"username": "BERNA SOUSA",
+"s": "a"
+}
+},
+{
+"_id": 868495,
+"_score": 1596,
+"_source": {
+"username": "BERNA LIAO",
+"s": "a"
+}
+},
+{
+"_id": 875373,
+"_score": 1596,
+"_source": {
+"username": "BERNA TROTTER",
+"s": "a"
+}
+},
+{
+"_id": 880282,
+"_score": 1596,
+"_source": {
+"username": "BERNA VALDOVINOS",
+"s": "a"
+}
+},
+{
+"_id": 884675,
+"_score": 1596,
+"_source": {
+"username": "BERNA VALLE",
+"s": "a"
+}
+},
+{
+"_id": 887986,
+"_score": 1596,
+"_source": {
+"username": "BERNA ELKINS",
+"s": "a"
+}
+},
+{
+"_id": 891400,
+"_score": 1596,
+"_source": {
+"username": "BERNA HURD",
+"s": "a"
+}
+}
+]
+}
+}
+––– input –––
+curl -sX POST http://localhost:9308/search -d '{"index":"name","query":{"bool":{"must":[{"match":{"*":"ANT"}}]}},"options":{"fuzzy":true}}' | jq -M
+––– output –––
+{
+"took": %{NUMBER},
+"timed_out": false,
+"hits": {
+"total": 248249,
+"total_relation": "eq",
+"hits": [
+{
+"_id": 91532,
+"_score": 2503,
+"_source": {
+"username": "AN GANT",
+"s": "a"
+}
+},
+{
+"_id": 108119,
+"_score": 2503,
+"_source": {
+"username": "KEENAN GANT",
+"s": "a"
+}
+},
+{
+"_id": 213976,
+"_score": 2503,
+"_source": {
+"username": "FRANK GANT",
+"s": "a"
+}
+},
+{
+"_id": 241083,
+"_score": 2503,
+"_source": {
+"username": "MARYANNA GANT",
+"s": "a"
+}
+},
+{
+"_id": 275719,
+"_score": 2503,
+"_source": {
+"username": "RYANN GANT",
+"s": "a"
+}
+},
+{
+"_id": 359068,
+"_score": 2503,
+"_source": {
+"username": "ANNALEE GANT",
+"s": "a"
+}
+},
+{
+"_id": 456416,
+"_score": 2503,
+"_source": {
+"username": "SANTOS GANT",
+"s": "a"
+}
+},
+{
+"_id": 477232,
+"_score": 2503,
+"_source": {
+"username": "SUSANNA GANT",
+"s": "a"
+}
+},
+{
+"_id": 523489,
+"_score": 2503,
+"_source": {
+"username": "ANNEMARIE GANT",
+"s": "a"
+}
+},
+{
+"_id": 527307,
+"_score": 2503,
+"_source": {
+"username": "SANTOS GANT",
+"s": "a"
+}
+},
+{
+"_id": 667223,
+"_score": 2503,
+"_source": {
+"username": "MARIANNA GANT",
+"s": "a"
+}
+},
+{
+"_id": 750725,
+"_score": 2503,
+"_source": {
+"username": "SUZANN GANT",
+"s": "a"
+}
+},
+{
+"_id": 70778,
+"_score": 2502,
+"_source": {
+"username": "JEANICE GANT",
+"s": "a"
+}
+},
+{
+"_id": 123892,
+"_score": 2502,
+"_source": {
+"username": "JOLANDA GANT",
+"s": "a"
+}
+},
+{
+"_id": 178241,
+"_score": 2502,
+"_source": {
+"username": "FRANCES GANTT",
+"s": "a"
+}
+},
+{
+"_id": 179715,
+"_score": 2502,
+"_source": {
+"username": "CHANG GANTT",
+"s": "a"
+}
+},
+{
+"_id": 306143,
+"_score": 2502,
+"_source": {
+"username": "MANDI GANT",
+"s": "a"
+}
+},
+{
+"_id": 311941,
+"_score": 2502,
+"_source": {
+"username": "RANA GANTT",
+"s": "a"
+}
+},
+{
+"_id": 346214,
+"_score": 2502,
+"_source": {
+"username": "JANELLE GANT",
+"s": "a"
+}
+},
+{
+"_id": 358849,
+"_score": 2502,
+"_source": {
+"username": "STEPHANI GANT",
+"s": "a"
+}
+}
+]
+}
+}
+––– input –––
+curl -sX POST http://localhost:9308/search -d '{"index":"name","query":{"bool":{"must":[{"match":{"*":"tony"}}]}},"options":{"fuzzy":true}}' | jq -M
+––– output –––
+{
+"took": %{NUMBER},
+"timed_out": false,
+"hits": {
+"total": 2200,
+"total_relation": "eq",
+"hits": [
+{
+"_id": 1721,
+"_score": 1531,
+"_source": {
+"username": "JOE TONG",
+"s": "a"
+}
+},
+{
+"_id": 5292,
+"_score": 1531,
+"_source": {
+"username": "TONA VALENTIN",
+"s": "a"
+}
+},
+{
+"_id": 6962,
+"_score": 1531,
+"_source": {
+"username": "TONA DAVIDSON",
+"s": "a"
+}
+},
+{
+"_id": 8174,
+"_score": 1531,
+"_source": {
+"username": "TONA CARRILLO",
+"s": "a"
+}
+},
+{
+"_id": 8700,
+"_score": 1531,
+"_source": {
+"username": "TONA FLETCHER",
+"s": "a"
+}
+},
+{
+"_id": 11975,
+"_score": 1531,
+"_source": {
+"username": "CAMILLA TONG",
+"s": "a"
+}
+},
+{
+"_id": 15241,
+"_score": 1531,
+"_source": {
+"username": "TONA FENG",
+"s": "a"
+}
+},
+{
+"_id": 15914,
+"_score": 1531,
+"_source": {
+"username": "TONA POINDEXTER",
+"s": "a"
+}
+},
+{
+"_id": 16361,
+"_score": 1531,
+"_source": {
+"username": "TONA HIGGS",
+"s": "a"
+}
+},
+{
+"_id": 17120,
+"_score": 1531,
+"_source": {
+"username": "TONA ARCHER",
+"s": "a"
+}
+},
+{
+"_id": 18205,
+"_score": 1531,
+"_source": {
+"username": "KIMBRA TONG",
+"s": "a"
+}
+},
+{
+"_id": 19344,
+"_score": 1531,
+"_source": {
+"username": "JOSEF TONG",
+"s": "a"
+}
+},
+{
+"_id": 23070,
+"_score": 1531,
+"_source": {
+"username": "TONA YUN",
+"s": "a"
+}
+},
+{
+"_id": 25266,
+"_score": 1531,
+"_source": {
+"username": "TONA OVIEDO",
+"s": "a"
+}
+},
+{
+"_id": 27082,
+"_score": 1531,
+"_source": {
+"username": "ROZELLA TONG",
+"s": "a"
+}
+},
+{
+"_id": 31839,
+"_score": 1531,
+"_source": {
+"username": "MELANI TONG",
+"s": "a"
+}
+},
+{
+"_id": 36735,
+"_score": 1531,
+"_source": {
+"username": "KANESHA TONG",
+"s": "a"
+}
+},
+{
+"_id": 39741,
+"_score": 1531,
+"_source": {
+"username": "TONA GRAFF",
+"s": "a"
+}
+},
+{
+"_id": 41701,
+"_score": 1531,
+"_source": {
+"username": "KARISA TONG",
+"s": "a"
+}
+},
+{
+"_id": 53822,
+"_score": 1531,
+"_source": {
+"username": "ROSALINDA TONG",
+"s": "a"
+}
+}
+]
+}
+}
+––– input –––
+curl -sX POST http://localhost:9308/search -d '{"index":"name","query":{"bool":{"must":[{"match":{"*":"SMITH"}}]}}, "sort":[{"id":"desc"},{"username":"asc"}], "options":{"fuzzy":true}}' | jq -M
+––– output –––
+{
+"took": %{NUMBER},
+"timed_out": false,
+"hits": {
+"total": 1304,
+"total_relation": "eq",
+"hits": [
+{
+"_id": 999737,
+"_score": 1,
+"_source": {
+"username": "KEITH STUMP",
+"s": "a"
+}
+},
+{
+"_id": 999039,
+"_score": 1,
+"_source": {
+"username": "KEITH JAMIESON",
+"s": "a"
+}
+},
+{
+"_id": 996439,
+"_score": 1,
+"_source": {
+"username": "KEITHA CARBAJAL",
+"s": "a"
+}
+},
+{
+"_id": 995770,
+"_score": 1,
+"_source": {
+"username": "KEITH GONZALES",
+"s": "a"
+}
+},
+{
+"_id": 990882,
+"_score": 1,
+"_source": {
+"username": "MINH SANTANA",
+"s": "a"
+}
+},
+{
+"_id": 990643,
+"_score": 1,
+"_source": {
+"username": "KEITH MENDES",
+"s": "a"
+}
+},
+{
+"_id": 989972,
+"_score": 1,
+"_source": {
+"username": "KEITHA WALTERS",
+"s": "a"
+}
+},
+{
+"_id": 989954,
+"_score": 1,
+"_source": {
+"username": "GWENN SMYTH",
+"s": "a"
+}
+},
+{
+"_id": 989444,
+"_score": 1,
+"_source": {
+"username": "KEITH KEATON",
+"s": "a"
+}
+},
+{
+"_id": 988755,
+"_score": 1,
+"_source": {
+"username": "SHERRON SMYTH",
+"s": "a"
+}
+},
+{
+"_id": 988366,
+"_score": 1,
+"_source": {
+"username": "LAVONIA SMYTH",
+"s": "a"
+}
+},
+{
+"_id": 988254,
+"_score": 1,
+"_source": {
+"username": "MAYOLA KEITH",
+"s": "a"
+}
+},
+{
+"_id": 987106,
+"_score": 1,
+"_source": {
+"username": "KEITH FAULK",
+"s": "a"
+}
+},
+{
+"_id": 986580,
+"_score": 1,
+"_source": {
+"username": "DARNELL SMYTH",
+"s": "a"
+}
+},
+{
+"_id": 984012,
+"_score": 1,
+"_source": {
+"username": "KEITH CORONEL",
+"s": "a"
+}
+},
+{
+"_id": 982759,
+"_score": 1,
+"_source": {
+"username": "MORGAN KEITH",
+"s": "a"
+}
+},
+{
+"_id": 982421,
+"_score": 1,
+"_source": {
+"username": "KEITH SHIFFLETT",
+"s": "a"
+}
+},
+{
+"_id": 982223,
+"_score": 1,
+"_source": {
+"username": "TELMA KEITH",
+"s": "a"
+}
+},
+{
+"_id": 982056,
+"_score": 1,
+"_source": {
+"username": "RENITA KEITH",
+"s": "a"
+}
+},
+{
+"_id": 981115,
+"_score": 1,
+"_source": {
+"username": "KATIE SMYTH",
+"s": "a"
+}
+}
+]
+}
+}
+––– input –––
+curl -sX POST http://localhost:9308/search -d '{"index":"name","query":{"bool":{"must":[{"match":{"*":"SMYTH"}}]}}, "sort":[{"id":"desc"},{"username":"asc"}], "options":{"fuzzy":true}}' | jq -M
+––– output –––
+{
+"took": %{NUMBER},
+"timed_out": false,
+"hits": {
+"total": 1567,
+"total_relation": "eq",
+"hits": [
+{
+"_id": 999921,
+"_score": 1,
+"_source": {
+"username": "VICKI SOUTHARD",
+"s": "a"
+}
+},
+{
+"_id": 998829,
+"_score": 1,
+"_source": {
+"username": "EDYTHE VACA",
+"s": "a"
+}
+},
+{
+"_id": 998500,
+"_score": 1,
+"_source": {
+"username": "SETH PHUNG",
+"s": "a"
+}
+},
+{
+"_id": 996507,
+"_score": 1,
+"_source": {
+"username": "SETH LYMAN",
+"s": "a"
+}
+},
+{
+"_id": 995690,
+"_score": 1,
+"_source": {
+"username": "ROBERTO SOUTHARD",
+"s": "a"
+}
+},
+{
+"_id": 995663,
+"_score": 1,
+"_source": {
+"username": "CHUNG SOUTH",
+"s": "a"
+}
+},
+{
+"_id": 995119,
+"_score": 1,
+"_source": {
+"username": "EDYTHE JOHN",
+"s": "a"
+}
+},
+{
+"_id": 993455,
+"_score": 1,
+"_source": {
+"username": "EDYTH ROSADO",
+"s": "a"
+}
+},
+{
+"_id": 993278,
+"_score": 1,
+"_source": {
+"username": "LAKITA SOUTHARD",
+"s": "a"
+}
+},
+{
+"_id": 992097,
+"_score": 1,
+"_source": {
+"username": "EDYTH RAGAN",
+"s": "a"
+}
+},
+{
+"_id": 989954,
+"_score": 1,
+"_source": {
+"username": "GWENN SMYTH",
+"s": "a"
+}
+},
+{
+"_id": 988936,
+"_score": 1,
+"_source": {
+"username": "LARISA SOUTHERLAND",
+"s": "a"
+}
+},
+{
+"_id": 988823,
+"_score": 1,
+"_source": {
+"username": "SETH WHITTAKER",
+"s": "a"
+}
+},
+{
+"_id": 988759,
+"_score": 1,
+"_source": {
+"username": "LIEN SOUTHARD",
+"s": "a"
+}
+},
+{
+"_id": 988755,
+"_score": 1,
+"_source": {
+"username": "SHERRON SMYTH",
+"s": "a"
+}
+},
+{
+"_id": 988366,
+"_score": 1,
+"_source": {
+"username": "LAVONIA SMYTH",
+"s": "a"
+}
+},
+{
+"_id": 987165,
+"_score": 1,
+"_source": {
+"username": "TULA SOUTHARD",
+"s": "a"
+}
+},
+{
+"_id": 987136,
+"_score": 1,
+"_source": {
+"username": "LUANN SOUTHARD",
+"s": "a"
+}
+},
+{
+"_id": 986847,
+"_score": 1,
+"_source": {
+"username": "JORDAN SOUTHERN",
+"s": "a"
+}
+},
+{
+"_id": 986711,
+"_score": 1,
+"_source": {
+"username": "MARLIN SOUTHERN",
+"s": "a"
+}
+}
+]
+}
+}
+––– input –––
+curl -sX POST http://localhost:9308/autocomplete -d '{"table":"name","query":"jo","options":{"layouts":"us,ru"}}' | jq -M
+––– output –––
+[
+{
+"total": 10,
+"error": "",
+"warning": "",
+"columns": [
+{
+"query": {
+"type": "string"
+}
+}
+],
+"data": [
+{
+"query": "jordan"
+},
+{
+"query": "joseph"
+},
+{
+"query": "jose"
+},
+{
+"query": "joe"
+},
+{
+"query": "john"
+},
+{
+"query": "joy"
+},
+{
+"query": "joyce"
+},
+{
+"query": "joey"
+},
+{
+"query": "jon"
+},
+{
+"query": "major"
+}
+]
+}
+]
+––– input –––
+curl -sX POST http://localhost:9308/autocomplete -d '{"table":"name","query":"jo","options":{"append":1}}' | jq -M
+––– output –––
+[
+{
+"total": 10,
+"error": "",
+"warning": "",
+"columns": [
+{
+"query": {
+"type": "string"
+}
+}
+],
+"data": [
+{
+"query": "jordan"
+},
+{
+"query": "joseph"
+},
+{
+"query": "jose"
+},
+{
+"query": "joe"
+},
+{
+"query": "john"
+},
+{
+"query": "joy"
+},
+{
+"query": "joyce"
+},
+{
+"query": "joey"
+},
+{
+"query": "jon"
+},
+{
+"query": "major"
+}
+]
+}
+]
+––– input –––
+curl -sX POST http://localhost:9308/autocomplete -d '{"table":"name","query":"jo","options":{"prepend":0}}' | jq -M
+––– output –––
+[
+{
+"total": 10,
+"error": "",
+"warning": "",
+"columns": [
+{
+"query": {
+"type": "string"
+}
+}
+],
+"data": [
+{
+"query": "jordan"
+},
+{
+"query": "joseph"
+},
+{
+"query": "jose"
+},
+{
+"query": "joe"
+},
+{
+"query": "john"
+},
+{
+"query": "joy"
+},
+{
+"query": "joyce"
+},
+{
+"query": "joey"
+},
+{
+"query": "johnny"
+},
+{
+"query": "jon"
+}
+]
+}
+]
+––– input –––
+curl -sX POST http://localhost:9308/autocomplete -d '{"table":"name","query":"jo","options":{"prepend":1,"append":1}}' | jq -M
+––– output –––
+[
+{
+"total": 10,
+"error": "",
+"warning": "",
+"columns": [
+{
+"query": {
+"type": "string"
+}
+}
+],
+"data": [
+{
+"query": "jordan"
+},
+{
+"query": "joseph"
+},
+{
+"query": "jose"
+},
+{
+"query": "joe"
+},
+{
+"query": "john"
+},
+{
+"query": "joy"
+},
+{
+"query": "joyce"
+},
+{
+"query": "joey"
+},
+{
+"query": "jon"
+},
+{
+"query": "major"
+}
+]
+}
+]
+––– input –––
+curl -sX POST http://localhost:9308/autocomplete -d '{"table":"name","query":"jo","options":{"fuzziness":1,"layouts":"","append":1,"prepend":1}}' | jq -M
+––– output –––
+[
+{
+"total": 10,
+"error": "",
+"warning": "",
+"columns": [
+{
+"query": {
+"type": "string"
+}
+}
+],
+"data": [
+{
+"query": "jordan"
+},
+{
+"query": "joseph"
+},
+{
+"query": "jose"
+},
+{
+"query": "joe"
+},
+{
+"query": "john"
+},
+{
+"query": "joy"
+},
+{
+"query": "joyce"
+},
+{
+"query": "joey"
+},
+{
+"query": "jon"
+},
+{
+"query": "major"
+}
+]
+}
+]
+––– input –––
+curl -sX POST http://localhost:9308/autocomplete -d '{"table":"name","query":"jo","options":{"fuzziness":2,"layouts":"us,ru","append":1,"prepend":1,"expansion_len":2}}' | jq -M
+––– output –––
+[
+{
+"total": 6,
+"error": "",
+"warning": "",
+"columns": [
+{
+"query": {
+"type": "string"
+}
+}
+],
+"data": [
+{
+"query": "jose"
+},
+{
+"query": "joe"
+},
+{
+"query": "john"
+},
+{
+"query": "joy"
+},
+{
+"query": "joey"
+},
+{
+"query": "jon"
+}
+]
+}
+]
+––– input –––
+curl -sX POST http://localhost:9308/autocomplete -d '{"table":"name","query":"gr","options":{"fuzziness":1,"layouts":"ru","append":1,"prepend":1}}' | jq -M
+––– output –––
+[
+{
+"total": 10,
+"error": "",
+"warning": "",
+"columns": [
+{
+"query": {
+"type": "string"
+}
+}
+],
+"data": [
+{
+"query": "gregory"
+},
+{
+"query": "grover"
+},
+{
+"query": "grady"
+},
+{
+"query": "grant"
+},
+{
+"query": "gregg"
+},
+{
+"query": "grace"
+},
+{
+"query": "gracia"
+},
+{
+"query": "graham"
+},
+{
+"query": "grey"
+},
+{
+"query": "grogan"
+}
+]
+}
+]
+––– input –––
+curl -sX POST http://localhost:9308/autocomplete -d '{"table":"name","query":"jo","options":{"fuzziness":1}}' | jq -M
+––– output –––
+[
+{
+"total": 10,
+"error": "",
+"warning": "",
+"columns": [
+{
+"query": {
+"type": "string"
+}
+}
+],
+"data": [
+{
+"query": "jordan"
+},
+{
+"query": "joseph"
+},
+{
+"query": "jose"
+},
+{
+"query": "joe"
+},
+{
+"query": "john"
+},
+{
+"query": "joy"
+},
+{
+"query": "joyce"
+},
+{
+"query": "joey"
+},
+{
+"query": "jon"
+},
+{
+"query": "major"
+}
+]
+}
+]

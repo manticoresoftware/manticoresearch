@@ -917,54 +917,54 @@ public:
 
 	~RtData_c () = default;
 
-	ConstDiskChunkRefPtr_t DiskChunkByID ( int iChunkID ) const
+	ConstDiskChunkRefPtr_t DiskChunkByID ( int iChunkID ) const EXCLUDES ( m_tLock )
 	{
 		ScRL_t rLock ( m_tLock );
 		for ( auto& pChunk : *m_pChunks )
 			if ( pChunk->Cidx().m_iChunk == iChunkID )
 				return pChunk;
-		return ConstDiskChunkRefPtr_t (nullptr);
+		return { nullptr };
 	}
 
-	ConstDiskChunkRefPtr_t DiskChunkByIdx ( int iChunk ) const
+	ConstDiskChunkRefPtr_t DiskChunkByIdx ( int iChunk ) const EXCLUDES ( m_tLock )
 	{
 		ScRL_t rLock ( m_tLock );
 		if ( iChunk < 0 || iChunk >= m_pChunks->GetLength() )
-			return ConstDiskChunkRefPtr_t ( nullptr );
+			return { nullptr };
 		return ( *m_pChunks )[iChunk];
 	}
 
-	ConstDiskChunkVecRefPtr_t DiskChunks () const
+	ConstDiskChunkVecRefPtr_t DiskChunks () const EXCLUDES ( m_tLock )
 	{
 		ScRL_t rLock ( m_tLock );
 		return m_pChunks;
 	}
 
-	ConstRtSegVecRefPtr_t RamSegs () const
+	ConstRtSegVecRefPtr_t RamSegs () const EXCLUDES ( m_tLock )
 	{
 		ScRL_t rLock ( m_tLock );
 		return m_pSegments;
 	}
 
-	ConstRtData RtData () const
+	ConstRtData RtData () const EXCLUDES ( m_tLock )
 	{
 		ScRL_t rLock ( m_tLock );
 		return { m_pChunks, m_pSegments };
 	}
 
-	bool IsEmpty() const
+	bool IsEmpty() const EXCLUDES ( m_tLock )
 	{
 		ScRL_t rLock ( m_tLock );
 		return m_pChunks->IsEmpty() && m_pSegments->IsEmpty();
 	}
 
-	int GetRamSegmentsCount() const
+	int GetRamSegmentsCount() const EXCLUDES ( m_tLock )
 	{
 		ScRL_t rLock ( m_tLock );
 		return m_pSegments->GetLength();
 	}
 
-	int GetDiskChunksCount () const
+	int GetDiskChunksCount () const EXCLUDES ( m_tLock )
 	{
 		ScRL_t rLock ( m_tLock );
 		return m_pChunks->GetLength ();
@@ -1004,7 +1004,7 @@ public:
 		, m_fnOnRamSegsChanged { std::move ( fnOnRamSegsChanged ) }
 	{}
 
-	~RtWriter_c()
+	~RtWriter_c() EXCLUDES ( m_tOwner.m_tLock )
 	{
 		if ( !m_pNewDiskChunks && !m_pNewRamSegs )
 			return;
@@ -1041,22 +1041,6 @@ public:
 		auto pChunks = m_tOwner.DiskChunks();
 		for ( const auto & pChunk : *pChunks )
 			m_pNewDiskChunks->Add ( pChunk );
-	}
-
-	ConstDiskChunkRefPtr_t PopDiskChunk () EXCLUDES ( m_tOwner.m_tLock )
-	{
-		InitDiskChunks ( empty );
-		auto pChunks = m_tOwner.DiskChunks();
-		if ( !pChunks->GetLength() )
-			return ConstDiskChunkRefPtr_t();
-
-		auto pHeadChunk = pChunks->First();
-		for ( int i=1; i<pChunks->GetLength(); i++ )
-		{
-			m_pNewDiskChunks->Add ( pChunks->At ( i ) );
-		}
-
-		return pHeadChunk;
 	}
 
 };
@@ -1556,6 +1540,7 @@ private:
 
 	// internal helpers/hooks
 	inline RtWriter_c			RtWriter() { return { m_tRtChunks, [this] { UpdateUnlockedCount(); } }; }
+	inline void					CopyChunksTo ( RtWriter_c& tWriter ) REQUIRES ( m_tWorkers.SerialChunkAccess() ) { tWriter.InitDiskChunks ( RtWriter_c::copy ); }
 
 	// set of my rt; suitable for any usage
 	inline RtGuard_t			RtGuard() const { return RtGuard_t { RtData() }; }
@@ -4368,6 +4353,8 @@ bool RtIndex_c::SaveDiskChunk ( bool bForced, bool bEmergent ) REQUIRES ( m_tWor
 		break;
 	}
 
+	assert ( Coro::CurrentScheduler() == m_tWorkers.SerialChunkAccess() );
+
 	// here we back into serial fiber. As we're switched, we can't rely on m_iTID and index stats anymore
 	if ( !pNewChunk )
 	{
@@ -4422,7 +4409,7 @@ bool RtIndex_c::SaveDiskChunk ( bool bForced, bool bEmergent ) REQUIRES ( m_tWor
 	// now new disk chunk is loaded, kills and updates applied - we ready to change global index state now.
 	{
 		auto tNewSet = RtWriter();
-		tNewSet.InitDiskChunks ( RtWriter_c::copy );
+		CopyChunksTo ( tNewSet );
 		tNewSet.m_pNewDiskChunks->Add ( DiskChunk_c::make ( std::move ( pNewChunk ) ) );
 		SaveMeta ( iTID, GetChunkIds ( *tNewSet.m_pNewDiskChunks ) );
 
@@ -8766,7 +8753,7 @@ bool RtIndex_c::AttachDiskIndex ( CSphIndex * pIndex, bool bTruncate, bool & bFa
 
 	{	// update disk chunk list
 		auto tNewSet = RtWriter();
-		tNewSet.InitDiskChunks ( RtWriter_c::copy );
+		CopyChunksTo ( tNewSet );
 		tNewSet.m_pNewDiskChunks->Add ( DiskChunk_c::make ( pIndex ) );
 	}
 
@@ -8904,7 +8891,7 @@ bool RtIndex_c::AttachRtIndex ( RtIndex_i * pSrcIndex, bool bTruncate, bool & bF
 
 		// collect all disk chunks from the source RT index in the brand new structure
 		auto tNewSet = RtWriter();
-		tNewSet.InitDiskChunks ( RtWriter_c::copy );
+		CopyChunksTo ( tNewSet );
 		// need to reset m_bFinallyUnlink flag for the disk chunks moved here after all finishes well
 		int iUnlinkIndex = tNewSet.m_pNewDiskChunks->GetLength();
 
@@ -8960,8 +8947,13 @@ ConstDiskChunkRefPtr_t RtIndex_c::PopDiskChunk()
 	ScopedScheduler_c tSerialFiber ( m_tWorkers.SerialChunkAccess() );
 
 	auto tNewSet = RtWriter();
-	tNewSet.InitDiskChunks ( RtWriter_c::empty );
-	return tNewSet.PopDiskChunk();
+	CopyChunksTo ( tNewSet );
+	if ( tNewSet.m_pNewDiskChunks->IsEmpty() )
+		return {};
+
+	auto pHeadChunk = tNewSet.m_pNewDiskChunks->First();
+	tNewSet.m_pNewDiskChunks->Remove(0);
+	return pHeadChunk;
 }
 
 //////////////////////////////////////////////////////////////////////////

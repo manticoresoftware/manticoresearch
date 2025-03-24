@@ -9,14 +9,14 @@ manticore-load --quiet --json --init="CREATE TABLE test (id bigint, usertest tex
 "total_operations": %{NUMBER},
 "operations_per_second": %{NUMBER},
 "qps": {
-"avg": %{NUMBER},
+"avg": #!/[0-9]+(\.[0-9]+)?/!#,
 "p99": %{NUMBER},
 "p95": %{NUMBER},
 "p5": %{NUMBER},
 "p1": %{NUMBER}
 },
 "latency": {
-"avg": %{NUMBER}.%{NUMBER},
+"avg": #!/[0-9]+(\.[0-9]+)?/!#,
 "p50": %{NUMBER},
 "p95": %{NUMBER},
 "p99": %{NUMBER}

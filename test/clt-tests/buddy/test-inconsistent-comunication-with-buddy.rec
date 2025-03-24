@@ -1,4 +1,5 @@
-––– block: ../base/start-searchd –––
+
+––– block: ../base/start-searchd-with-buddy –––
 ––– input –––
 apt-get install jq -y > /dev/null; echo $?
 ––– output –––
@@ -65,7 +66,7 @@ curl -s -X POST "http://localhost:9308/sql?mode=raw" -d "query=SHOW VARIABLES"; 
 {"Variable_name":"character_set_client","Value":"utf8"},
 {"Variable_name":"character_set_connection","Value":"utf8"},
 {"Variable_name":"grouping_in_utc","Value":"%{NUMBER}"},
-{"Variable_name":"timezone","Value":"/etc/localtime"},
+{"Variable_name":"timezone","Value":"UTC"},
 {"Variable_name":"last_insert_id","Value":""},
 {"Variable_name":"pseudo_sharding","Value":"%{NUMBER}"},
 {"Variable_name":"secondary_indexes","Value":"%{NUMBER}"},
@@ -98,7 +99,7 @@ curl -s "http://localhost:9308/sql?mode=raw&query=SHOW%20VARIABLES"; echo
 {"Variable_name":"character_set_client","Value":"utf8"},
 {"Variable_name":"character_set_connection","Value":"utf8"},
 {"Variable_name":"grouping_in_utc","Value":"%{NUMBER}"},
-{"Variable_name":"timezone","Value":"/etc/localtime"},
+{"Variable_name":"timezone","Value":"UTC"},
 {"Variable_name":"last_insert_id","Value":""},
 {"Variable_name":"pseudo_sharding","Value":"%{NUMBER}"},
 {"Variable_name":"secondary_indexes","Value":"%{NUMBER}"},
@@ -131,7 +132,7 @@ curl -s -X POST "http://localhost:9308/sql?raw_response=true" -d "query=SHOW VAR
 {"Variable_name":"character_set_client","Value":"utf8"},
 {"Variable_name":"character_set_connection","Value":"utf8"},
 {"Variable_name":"grouping_in_utc","Value":"%{NUMBER}"},
-{"Variable_name":"timezone","Value":"/etc/localtime"},
+{"Variable_name":"timezone","Value":"UTC"},
 {"Variable_name":"last_insert_id","Value":""},
 {"Variable_name":"pseudo_sharding","Value":"%{NUMBER}"},
 {"Variable_name":"secondary_indexes","Value":"%{NUMBER}"},
@@ -164,7 +165,7 @@ curl -s "http://localhost:9308/sql?raw_response=true&query=SHOW%20VARIABLES"; ec
 {"Variable_name":"character_set_client","Value":"utf8"},
 {"Variable_name":"character_set_connection","Value":"utf8"},
 {"Variable_name":"grouping_in_utc","Value":"%{NUMBER}"},
-{"Variable_name":"timezone","Value":"/etc/localtime"},
+{"Variable_name":"timezone","Value":"UTC"},
 {"Variable_name":"last_insert_id","Value":""},
 {"Variable_name":"pseudo_sharding","Value":"%{NUMBER}"},
 {"Variable_name":"secondary_indexes","Value":"%{NUMBER}"},

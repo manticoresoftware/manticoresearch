@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2017-2024, Manticore Software LTD (https://manticoresearch.com)
+// Copyright (c) 2017-2025, Manticore Software LTD (https://manticoresearch.com)
 // Copyright (c) 2001-2016, Andrew Aksyonoff
 // Copyright (c) 2008-2016, Sphinx Technologies Inc
 // All rights reserved
@@ -50,6 +50,7 @@
 #include "config_reloader.h"
 #include "secondarylib.h"
 #include "knnlib.h"
+#include "knnmisc.h"
 #include "task_dispatcher.h"
 #include "tracer.h"
 #include "netfetch.h"
@@ -170,7 +171,6 @@ static int				g_iBacklog			= SEARCHD_BACKLOG;
 static int				g_iThdQueueMax		= 0;
 static auto&			g_iTFO = sphGetTFO ();
 static int				g_iServerID = 0;
-static bool				g_bServerID = false;
 static bool				g_bJsonConfigLoadedOk = false;
 static auto&			g_iAutoOptimizeCutoffMultiplier = AutoOptimizeCutoffMultiplier();
 static constexpr bool	AUTOOPTIMIZE_NEEDS_VIP = false; // whether non-VIP can issue 'SET GLOBAL auto_optimize = X'
@@ -228,6 +228,7 @@ static bool				g_bHasBuddyPath = false;
 static bool				g_bAutoSchema = true;
 static bool				g_bNoChangeCwd = val_from_env ( "MANTICORE_NO_CHANGE_CWD", false );
 static bool				g_bCwdChanged = false;
+static CSphString		g_sKbnVersion;
 
 // for CLang thread-safety analysis
 ThreadRole MainThread; // functions which called only from main thread
@@ -11054,6 +11055,7 @@ private:
 
 	StringPtrTraits_t 		m_tStrings;
 	StrVec_t				m_dTmpFieldStorage;
+	CSphVector<float>		m_dTmpFloats;
 	CSphVector<int>			m_dColumnarRemap;
 
 	CSphString &			m_sError;
@@ -11176,8 +11178,23 @@ bool AttributeConverter_c::CheckMVA ( const CSphColumnInfo & tCol, const SqlInse
 	if ( tCol.m_eAttrType==SPH_ATTR_FLOAT_VECTOR )
 	{
 		AddMVALength ( tAddVals.GetLength() );
-		for ( const auto & i : tAddVals )
-			AddMVAValue ( sphF2DW ( i.m_fValue ) );
+
+		if ( tCol.IsIndexedKNN() && tCol.m_tKNN.m_eHNSWSimilarity==knn::HNSWSimilarity_e::COSINE && tAddVals.GetLength() )
+		{
+			m_dTmpFloats.Resize ( tAddVals.GetLength() );
+			ARRAY_FOREACH ( i, m_dTmpFloats )
+				m_dTmpFloats[i] = tAddVals[i].m_fValue;
+
+			NormalizeVec(m_dTmpFloats);
+
+			for ( const auto & i : m_dTmpFloats )
+				AddMVAValue ( sphF2DW(i) );
+		}
+		else
+		{
+			for ( const auto & i : tAddVals )
+				AddMVAValue ( sphF2DW ( i.m_fValue ) );
+		}
 
 		return true;
 	}
@@ -13872,8 +13889,9 @@ void sphHandleMysqlUpdate ( StmtErrorReporter_i & tOut, const SqlStmt_t & tStmt,
 		return;
 	} else
 	{
-		int64_t tmRealTime = sphMicroTimer() - tmStart;
-		LogStatementSphinxql ( sQuery, (int)( tmRealTime / 1000 ) );
+		int64_t tmRealTimeMs = ( sphMicroTimer() - tmStart ) / 1000;
+		if ( !g_iQueryLogMinMs || tmRealTimeMs>g_iQueryLogMinMs )
+			LogStatementSphinxql ( sQuery, (int)( tmRealTimeMs ) );
 	}
 
 	tOut.Ok ( iUpdated, iWarns );
@@ -19906,6 +19924,7 @@ void ShowHelp ()
 		"--pidfile\t\tforce using the PID file (useful with --console)\n"
 		"--safetrace\t\tonly use system backtrace() call in crash reports\n"
 		"--coredump\t\tsave core dump file on crash\n"
+		"--mockstack\t\tdump safe stack sizes and exit\n"
 		"\n"
 		"Examples:\n"
 		"searchd --config /usr/local/sphinx/etc/manticore.conf\n"
@@ -20623,7 +20642,6 @@ void ConfigureSearchd ( const CSphConfig & hConf, bool bOptPIDFile, bool bTestMo
 	if ( hSearchd ( "server_id" ) )
 	{
 		g_iServerID = hSearchd.GetInt ( "server_id", g_iServerID );
-		g_bServerID = true;
 		const int iServerMask = 0x7f;
 		if ( g_iServerID>iServerMask )
 		{
@@ -20634,6 +20652,7 @@ void ConfigureSearchd ( const CSphConfig & hConf, bool bOptPIDFile, bool bTestMo
 
 	g_sMySQLVersion = hSearchd.GetStr ( "mysql_version_string", g_sMySQLVersion.cstr() );
 	sphinxexpr::MySQLVersion() = g_sMySQLVersion;
+	g_sKbnVersion = hSearchd.GetStr ( "kibana_version_string" );
 
 	AllowOnlyNot ( hSearchd.GetInt ( "not_terms_only_allowed", 0 )!=0 );
 	ConfigureDaemonLog ( hSearchd.GetStr ( "query_log_commands" ) );
@@ -20662,7 +20681,7 @@ void ConfigureSearchd ( const CSphConfig & hConf, bool bOptPIDFile, bool bTestMo
 
 	ConfigureMerge(hSearchd);
 	SetJoinBatchSize ( hSearchd.GetInt ( "join_batch_size", GetJoinBatchSize() ) );
-	SetRtFlushDiskPeriod ( hSearchd.GetSTimeS ( "diskchunk_flush_write_timeout", GetRtFlushDiskWrite() ), hSearchd.GetSTimeS ( "diskchunk_flush_search_timeout", GetRtFlushDiskSearch() ) );
+	SetRtFlushDiskPeriod ( hSearchd.GetSTimeS ( "diskchunk_flush_write_timeout", GetRtFlushDiskWrite(bTestMode) ), hSearchd.GetSTimeS ( "diskchunk_flush_search_timeout", GetRtFlushDiskSearch() ) );
 }
 
 static void DirMustWritable ( const CSphString & sDataDir )
@@ -21039,7 +21058,8 @@ static void SetUidShort ( bool bTestMode )
 			sphWarning ( "failed to get MAC address, using random number %s", sMAC.cstr()  );
 		}
 		// fold MAC into 1 byte
-		iServerId = Pearson8 ( (const BYTE *)sMAC.cstr(), sMAC.Length() );
+		iServerId = Pearson8 ( (const BYTE *)sMAC.cstr(), sMAC.Length(), iServerId );
+		iServerId = Pearson8 ( (const BYTE *)g_sPidFile.cstr(), g_sPidFile.Length(), iServerId );
 		iServerId &= iServerMask;
 	}
 
@@ -21379,6 +21399,7 @@ int WINAPI ServiceMain ( int argc, char **argv ) EXCLUDES (MainThread)
 	bool			bNewClusterForce = false;
 	bool			bForcePseudoSharding = false;
 	const char*		szCmdConfigFile = nullptr;
+	bool			bMeasureStack = false;
 
 	DWORD			uReplayFlags = 0;
 
@@ -21402,6 +21423,7 @@ int WINAPI ServiceMain ( int argc, char **argv ) EXCLUDES (MainThread)
 		OPT1 ( "--pidfile" )		bOptPIDFile = true;
 		OPT1 ( "--iostats" )		g_bIOStats = true;
 		OPT1 ( "--cpustats" )		g_bCpuStats = true;
+		OPT1 ( "--mockstack" )		{ bMeasureStack = true; g_bOptNoLock = true; g_bOptNoDetach = true; }
 #if _WIN32
 		OPT1 ( "--install" )		{ if ( !g_bService ) { ServiceInstall ( argc, argv ); return 0; } }
 		OPT1 ( "--delete" )			{ if ( !g_bService ) { ServiceDelete (); return 0; } }
@@ -21415,7 +21437,6 @@ int WINAPI ServiceMain ( int argc, char **argv ) EXCLUDES (MainThread)
 		OPT1 ( "--logreplication" )	g_eLogLevel = Max ( g_eLogLevel, SPH_LOG_RPL_DEBUG );
 		OPT1 ( "--safetrace" )		g_bSafeTrace = true;
 		OPT1 ( "--test" )			{ g_bWatchdog = false; bTestMode = true; } // internal option, do NOT document
-		OPT1 ( "--test-thd-pool" )	{ g_bWatchdog = false; bTestMode = true; } // internal option, do NOT document
 		OPT1 ( "--force-pseudo-sharding" ) { bForcePseudoSharding = true; } // internal option, do NOT document
 		OPT1 ( "--strip-path" )		g_bStripPath = true;
 		OPT1 ( "--vtune" )			g_bVtune = true;
@@ -21450,6 +21471,20 @@ int WINAPI ServiceMain ( int argc, char **argv ) EXCLUDES (MainThread)
 	if ( i!=argc )
 		sphFatal ( "malformed or unknown option near '%s'; use '-h' or '--help' to see available options.", argv[i] );
 
+	StringBuilder_c sStack;
+	DetermineNodeItemStackSize ( sStack );
+	DetermineFilterItemStackSize ( sStack );
+	DetermineMatchStackSize ( sStack );
+
+	if ( bMeasureStack )
+	{
+		if ( !g_bService )
+			{
+			sStack << "export NO_STACK_CALCULATION=1\n";
+			fprintf ( stdout, "%s", sStack.cstr() );
+		}
+		return 0;
+	}
 	SetupLemmatizerBase();
 	g_sConfigFile = sphGetConfigFile ( szCmdConfigFile );
 #if _WIN32
@@ -21748,10 +21783,6 @@ int WINAPI ServiceMain ( int argc, char **argv ) EXCLUDES (MainThread)
 	ScheduleMallocTrim();
 
 	CacheCPUInfo();
-
-	DetermineNodeItemStackSize();
-	DetermineFilterItemStackSize();
-	DetermineMatchStackSize();
 
 	// initialize timeouts since hook will use them
 	auto iRtFlushPeriodUs = hSearchd.GetUsTime64S ( "rt_flush_period", 36000000000ll ); // 10h

@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2024, Manticore Software LTD (https://manticoresearch.com)
+// Copyright (c) 2024-2025, Manticore Software LTD (https://manticoresearch.com)
 // All rights reserved
 //
 // This program is free software; you can redistribute it and/or modify
@@ -127,7 +127,6 @@ static void SetTimeZoneLocal ( StrVec_t & dWarnings )
 	}
 #endif
 
-	g_hTimeZoneLocal = cctz::local_time_zone();
 	g_hTimeZone = g_hTimeZoneLocal;
 	CheckForUTC();
 }

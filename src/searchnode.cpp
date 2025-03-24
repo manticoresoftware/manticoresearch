@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2017-2024, Manticore Software LTD (https://manticoresearch.com)
+// Copyright (c) 2017-2025, Manticore Software LTD (https://manticoresearch.com)
 // Copyright (c) 2001-2016, Andrew Aksyonoff
 // Copyright (c) 2008-2016, Sphinx Technologies Inc
 // All rights reserved
@@ -1847,7 +1847,7 @@ ExtNode_i * ExtNode_i::Create ( const XQNode_t * pNode, const ISphQwordSetup & t
 	bool bRowidLimits = !!pBoundaries;
 
 	if ( pNode->GetOp()==SPH_QUERY_SCAN )
-		return CreateHitlessNode ( tSetup.ScanSpawn(), pNode->m_dSpec.m_dFieldMask, tSetup, true, bUseBM25, bRowidLimits );
+		return CreateHitlessNode ( tSetup.ScanSpawn ( pNode->m_iAtomPos ), pNode->m_dSpec.m_dFieldMask, tSetup, true, bUseBM25, bRowidLimits );
 
 	if ( pNode->m_dWords.GetLength() || pNode->m_bVirtuallyPlain )
 	{
@@ -2436,6 +2436,7 @@ void ExtTermHitless_T<USE_BM25,ROWID_LIMITS,STATS>::CollectHits ( const ExtDoc_t
 		}
 
 		for ( DWORD uFieldPos=0; uFieldPos<uMaxFields; uFieldPos++ )
+		{
 			if ( ( pMatched->m_uDocFields & ( 1 << uFieldPos ) ) && this->m_dQueriedFields.Test ( uFieldPos ) )
 			{
 				// emit hit
@@ -2445,6 +2446,7 @@ void ExtTermHitless_T<USE_BM25,ROWID_LIMITS,STATS>::CollectHits ( const ExtDoc_t
 				tHit.m_uQuerypos = (WORD) (this->m_iAtomPos);
 				tHit.m_uWeight = tHit.m_uMatchlen = tHit.m_uSpanlen = 1;
 			}
+		}
 	}
 
 	if constexpr ( STATS )

@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2020-2024, Manticore Software LTD (https://manticoresearch.com)
+// Copyright (c) 2020-2025, Manticore Software LTD (https://manticoresearch.com)
 // All rights reserved
 //
 // This program is free software; you can redistribute it and/or modify
@@ -119,9 +119,9 @@ bool InitKNN ( CSphString & sError )
 	if ( sLibfile.IsEmpty() )
 		return true;
 
-	if ( !IsSSE42Supported() )
+	if ( !IsSSE42Supported() || !IsPOPCNTSupported() )
 	{
-		sError.SetSprintf ( "MCL requires a CPU that supports SSE 4.2" );
+		sError.SetSprintf ( "MCL requires a CPU that supports SSE 4.2 and POPCNT instruction" );
 		return false;
 	}
 

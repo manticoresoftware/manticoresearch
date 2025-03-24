@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2017-2024, Manticore Software LTD (https://manticoresearch.com)
+// Copyright (c) 2017-2025, Manticore Software LTD (https://manticoresearch.com)
 // Copyright (c) 2001-2016, Andrew Aksyonoff
 // Copyright (c) 2008-2016, Sphinx Technologies Inc
 // All rights reserved
@@ -11,6 +11,9 @@
 //
 
 #include "searchdddl.h"
+
+#include "knnmisc.h"
+
 
 class DdlParser_c : public SqlParserTraits_c
 {
@@ -38,6 +41,7 @@ public:
 		int				m_iHNSWM = 16;
 		int				m_iHNSWEFConstruction = 200;
 		knn::HNSWSimilarity_e m_eHNSWSimilarity = knn::HNSWSimilarity_e::L2;
+		knn::Quantization_e m_eQuantization = knn::Quantization_e::NONE;
 		bool			m_bKNNDimsSpecified = false;
 		bool			m_bHNSWSimilaritySpecified = false;
 		CSphString		m_sModelName;
@@ -76,6 +80,7 @@ public:
 	bool	AddItemOptionCachePath ( const SqlNode_t & tOption );
 	bool	AddItemOptionAPIKey ( const SqlNode_t & tOption );
 	bool	AddItemOptionUseGPU ( const SqlNode_t & tOption );
+	bool	AddItemOptionQuantization ( const SqlNode_t & tOption );
 
 	void	AddCreateTableOption ( const SqlNode_t & tName, const SqlNode_t & tValue );
 	bool	SetupAlterTable  ( const SqlNode_t & tIndex, const SqlNode_t & tAttr, const SqlNode_t & tType, bool bModify = false );
@@ -153,6 +158,7 @@ knn::IndexSettings_t DdlParser_c::ItemOptions_t::ToKNN() const
 
 	tKNN.m_iDims			= m_iKNNDims;
 	tKNN.m_eHNSWSimilarity	= m_eHNSWSimilarity;
+	tKNN.m_eQuantization	= m_eQuantization;
 	tKNN.m_iHNSWM			= m_iHNSWM;
 	tKNN.m_iHNSWEFConstruction = m_iHNSWEFConstruction;
 
@@ -461,17 +467,8 @@ bool DdlParser_c::AddItemOptionKNNDims ( const SqlNode_t & tOption )
 bool DdlParser_c::AddItemOptionHNSWSimilarity ( const SqlNode_t & tOption )
 {
 	CSphString sValue = ToStringUnescape(tOption).ToUpper();
-	if ( sValue=="L2" )
-		m_tItemOptions.m_eHNSWSimilarity = knn::HNSWSimilarity_e::L2;
-	else if ( sValue=="IP" )
-		m_tItemOptions.m_eHNSWSimilarity = knn::HNSWSimilarity_e::IP;
-	else if ( sValue=="COSINE" )
-		m_tItemOptions.m_eHNSWSimilarity = knn::HNSWSimilarity_e::COSINE;
-	else
-	{
-		m_sError.SetSprintf ( "Unknown HNSW similarity '%s'", sValue.cstr() );
+	if ( !Str2HNSWSimilarity ( sValue, m_tItemOptions.m_eHNSWSimilarity, &m_sError ) )
 		return false;
-	}
 
 	m_tItemOptions.m_bHNSWSimilaritySpecified = true;
 	return true;
@@ -527,6 +524,12 @@ bool DdlParser_c::AddItemOptionUseGPU ( const SqlNode_t & tOption )
 	CSphString sValue = ToStringUnescape(tOption);
 	m_tItemOptions.m_bUseGPU = !!strtoull ( sValue.cstr(), NULL, 10 );
 	return true;
+}
+
+
+bool DdlParser_c::AddItemOptionQuantization ( const SqlNode_t & tOption )
+{
+	return Str2Quantization ( ToStringUnescape(tOption), m_tItemOptions.m_eQuantization, &m_sError );
 }
 
 

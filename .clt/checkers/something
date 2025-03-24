@@ -1,0 +1,32 @@
+#!/usr/bin/env bash
+
+# Check if two arguments are provided
+if [ $# -ne 2 ]; then
+	echo "Usage: $0 <patterns_file> <target_file>"
+	exit 1
+fi
+
+REC_FILE=$1
+REP_FILE=$2
+
+# Check if files exist
+if [ ! -f "$REC_FILE" ]; then
+	echo "Error: Patterns file '$REC_FILE' does not exist"
+	exit 1
+fi
+
+if [ ! -f "$REP_FILE" ]; then
+	echo "Error: Target file '$REP_FILE' does not exist"
+	exit 1
+fi
+
+# Read the target file content once
+REP_CONTENT=$(cat "$REP_FILE" | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//' -e 's/[[:space:]]\+/ /g')
+if [ -n "$REP_CONTENT" ]; then
+	echo 'Output is not empty'
+	exit 0
+else
+	echo 'Output is empty'
+	exit 1
+fi
+

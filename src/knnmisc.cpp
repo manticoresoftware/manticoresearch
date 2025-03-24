@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2023-2024, Manticore Software LTD (https://manticoresearch.com)
+// Copyright (c) 2023-2025, Manticore Software LTD (https://manticoresearch.com)
 // All rights reserved
 //
 // This program is free software; you can redistribute it and/or modify
@@ -8,6 +8,7 @@
 // did not, you can find it at http://www.gnu.org/
 //
 
+#include <algorithm>
 #include "knnmisc.h"
 #include "knnlib.h"
 #include "exprtraits.h"
@@ -70,7 +71,7 @@ const VecTraits_T<char> EmbeddingsSrc_c::Get ( RowID_t tRowID, int iAttr ) const
 
 ///////////////////////////////////////////////////////////////////////////////
 
-static void NormalizeVec ( VecTraits_T<float> & dData )
+void NormalizeVec ( VecTraits_T<float> & dData )
 {
 	float fNorm = 0.0f;
 	for ( auto i : dData )
@@ -105,7 +106,6 @@ private:
 	std::unique_ptr<columnar::Iterator_i> m_pIterator;
 
 	util::Span_T<const  knn::DocDist_t>	m_dData;
-	mutable CSphVector<float>			m_dTmp;
 	mutable const knn::DocDist_t *		m_pStart = nullptr;
 };
 
@@ -114,8 +114,11 @@ Expr_KNNDist_c::Expr_KNNDist_c ( const CSphVector<float> & dAnchor, const CSphCo
 	: m_dAnchor ( dAnchor )
 	, m_tAttr ( tAttr )
 {
+	knn::IndexSettings_t tDistSettings = tAttr.m_tKNN;
+	tDistSettings.m_eQuantization = knn::Quantization_e::NONE; // we operate on non-quantized data
 	CSphString sError; // fixme! report it
-	m_pDistCalc = CreateKNNDistanceCalc ( tAttr.m_tKNN, sError );
+	m_pDistCalc = CreateKNNDistanceCalc ( tDistSettings, sError );
+
 	if ( tAttr.m_tKNN.m_eHNSWSimilarity==knn::HNSWSimilarity_e::COSINE )
 		NormalizeVec(m_dAnchor);
 }
@@ -134,7 +137,6 @@ float Expr_KNNDist_c::Eval ( const CSphMatch & tMatch ) const
 	else // calculate distance
 	{
 		// this code path is used when no iterator is available, i.e. in ram chunk
-		// so performance is not critical
 		ByteBlob_t tRes;
 		if ( m_tAttr.IsColumnar() )
 			tRes.second = m_pIterator->Get ( tMatch.m_tRowID, tRes.first );
@@ -142,14 +144,6 @@ float Expr_KNNDist_c::Eval ( const CSphMatch & tMatch ) const
 			tRes = tMatch.FetchAttrData ( m_tAttr.m_tLocator, m_pBlobPool );
 
 		VecTraits_T<float> dData ( (float*)tRes.first, tRes.second / sizeof(float) );
-		if ( m_tAttr.m_tKNN.m_eHNSWSimilarity==knn::HNSWSimilarity_e::COSINE )
-		{
-			m_dTmp.Resize ( dData.GetLength() );
-			memcpy ( m_dTmp.Begin(), dData.Begin(), dData.GetLengthBytes() );
-			NormalizeVec(m_dTmp);
-			dData = m_dTmp;
-		}
-
 		if ( dData.GetLength()!=m_tAttr.m_tKNN.m_iDims )
 			return FLT_MAX;
 
@@ -229,17 +223,81 @@ static const char * HNSWSimilarity2Str ( knn::HNSWSimilarity_e eSim )
 }
 
 
-static knn::HNSWSimilarity_e Str2HNSWSimilarity ( const CSphString & sSimilarity )
+static const char * Quantization2Str ( knn::Quantization_e eQuant )
+{
+	switch ( eQuant )
+	{
+	case knn::Quantization_e::BIT1: return "1BIT";
+	case knn::Quantization_e::BIT4: return "4BIT";
+	case knn::Quantization_e::BIT8: return "8BIT";
+	default: return nullptr;
+	}
+}
+
+
+bool Str2HNSWSimilarity ( const CSphString & sSimilarity, knn::HNSWSimilarity_e & eSimilarity, CSphString * pError )
 {
 	CSphString sSim = sSimilarity;
 	sSim.ToUpper();
 
-	if ( sSim=="L2" )		return knn::HNSWSimilarity_e::L2;
-	if ( sSim=="IP" )		return knn::HNSWSimilarity_e::IP;
-	if ( sSim=="COSINE" )	return knn::HNSWSimilarity_e::COSINE;
+	if ( sSim=="L2" )
+	{
+		eSimilarity = knn::HNSWSimilarity_e::L2;
+		return true;
+	}
 
-	assert ( 0 && "Unknown similarity");
-	return knn::HNSWSimilarity_e::L2;
+	if ( sSim=="IP" )
+	{
+		eSimilarity = knn::HNSWSimilarity_e::IP;
+		return true;
+	}
+
+	if ( sSim=="COSINE" )
+	{
+		eSimilarity = knn::HNSWSimilarity_e::COSINE;
+		return true;
+	}
+
+	if ( pError )
+		pError->SetSprintf ( "Unknown knn similarity '%s'", sSimilarity.cstr() );
+
+	return false;
+}
+
+
+bool Str2Quantization ( const CSphString & sQuantization, knn::Quantization_e & eQuantization, CSphString * pError )
+{
+	CSphString sQuant = sQuantization;
+	sQuant.ToUpper();
+
+	if ( sQuant=="NONE" )
+	{
+		eQuantization = knn::Quantization_e::NONE;
+		return true;
+	}
+
+	if ( sQuant=="1BIT" )
+	{
+		eQuantization = knn::Quantization_e::BIT1;
+		return true;
+	}
+
+	if ( sQuant=="4BIT" )
+	{
+		eQuantization = knn::Quantization_e::BIT4;
+		return true;
+	}
+
+	if ( sQuant=="8BIT" )
+	{
+		eQuantization = knn::Quantization_e::BIT8;
+		return true;
+	}
+
+	if ( pError )
+		pError->SetSprintf ( "Unknown quantization '%s'", sQuantization.cstr() );
+
+	return false;
 }
 
 
@@ -271,15 +329,19 @@ void AddKNNSettings ( StringBuilder_c & sRes, const CSphColumnInfo & tAttr )
 
 	if ( tKNNModel.m_bUseGPU!=tDefaultModel.m_bUseGPU )
 		sRes << " use_gpu='" << ( tKNNModel.m_bUseGPU ? 1 : 0 ) << "'";
+
+	if ( tKNN.m_eQuantization!=tDefault.m_eQuantization )
+		sRes << " quantization='" << Quantization2Str ( tKNN.m_eQuantization ) << "'";
 }
 
 
 void ReadKNNJson ( bson::Bson_c tRoot, knn::IndexSettings_t & tIS, knn::ModelSettings_t & tMS, CSphString & sKNNFrom )
 {
 	tIS.m_iDims				= (int) bson::Int ( tRoot.ChildByName ( "knn_dims" ) );
-	tIS.m_eHNSWSimilarity	= Str2HNSWSimilarity ( bson::String ( tRoot.ChildByName ( "hnsw_similarity" ) ) );
+	Str2HNSWSimilarity ( bson::String ( tRoot.ChildByName ( "hnsw_similarity" ) ), tIS.m_eHNSWSimilarity );
 	tIS.m_iHNSWM			= (int) bson::Int ( tRoot.ChildByName ( "hnsw_m" ), tIS.m_iHNSWM );
 	tIS.m_iHNSWEFConstruction = (int) bson::Int ( tRoot.ChildByName ( "hnsw_ef_construction" ), tIS.m_iHNSWEFConstruction );
+	Str2Quantization ( bson::String ( tRoot.ChildByName ( "quantization" ) ), tIS.m_eQuantization );
 
 	tMS.m_sModelName	= bson::String ( tRoot.ChildByName ( "model_name" ) ).cstr();
 	tMS.m_sAPIKey		= bson::String ( tRoot.ChildByName ( "api_key" ) ).cstr();
@@ -300,6 +362,7 @@ void FormatKNNSettings ( JsonEscapedBuilder & tOut, const knn::IndexSettings_t &
 	tOut.NamedString ( "hnsw_similarity", HNSWSimilarity2Str ( tIS.m_eHNSWSimilarity ) );
 	tOut.NamedValNonDefault ( "hnsw_m", tIS.m_iHNSWM, tDefaultIS.m_iHNSWM );
 	tOut.NamedValNonDefault ( "hnsw_ef_construction", tIS.m_iHNSWEFConstruction, tDefaultIS.m_iHNSWEFConstruction );
+	tOut.NamedString ( "quantization", Quantization2Str ( tIS.m_eQuantization ) );
 
 	if ( !tMS.m_sModelName.empty() )
 	{
@@ -326,6 +389,7 @@ CSphString FormatKNNConfigStr ( const CSphVector<NamedKNNSettings_t> & dAttrs )
 		tObj.AddStr ( "hnsw_similarity", HNSWSimilarity2Str ( i.m_eHNSWSimilarity ) );
 		tObj.AddInt ( "hnsw_m", i.m_iHNSWM );
 		tObj.AddInt ( "hnsw_ef_construction", i.m_iHNSWEFConstruction );
+		tObj.AddStr ( "quantization", Quantization2Str ( i.m_eQuantization ) );
 
 		if ( !i.m_sModelName.empty() )
 		{
@@ -380,14 +444,20 @@ bool ParseKNNConfigStr ( const CSphString & sStr, CSphVector<NamedKNNSettings_t>
 		if ( !i.FetchIntItem ( tParsed.m_iHNSWEFConstruction, "hnsw_ef_construction", sError, true ) ) return false;
 		if ( !i.FetchStrItem ( sSimilarity, "hnsw_similarity", sError) ) return false;
 
-		sSimilarity.ToUpper();
-		if ( sSimilarity!="L2" && sSimilarity!="IP" && sSimilarity!="COSINE" )
-		{
-			sError.SetSprintf ( "Unknown knn similarity '%s'", sSimilarity.cstr() );
+		if ( !Str2HNSWSimilarity ( sSimilarity.cstr(), tParsed.m_eHNSWSimilarity, &sError ) )
 			return false;
+
+		JsonObj_c tQuantization = i.GetStrItem ( "quantization", sError, true );
+		if ( !sError.IsEmpty() )
+			return false;
+
+		if ( tQuantization )
+		{
+			CSphString sQuantization = tQuantization.StrVal();
+			if ( !Str2Quantization ( sQuantization.cstr(), tParsed.m_eQuantization, &sError ) )
+				return false;
 		}
-			
-		tParsed.m_eHNSWSimilarity = Str2HNSWSimilarity ( sSimilarity.cstr() );
+
 		if ( !i.FetchStrItem ( tParsed.m_sModelName, "model_name", sError, true ) ) return false;
 
 		if ( !tParsed.m_sModelName.empty() )
@@ -403,7 +473,7 @@ bool ParseKNNConfigStr ( const CSphString & sStr, CSphVector<NamedKNNSettings_t>
 }
 
 
-std::unique_ptr<knn::Builder_i> BuildCreateKNN ( const ISphSchema & tSchema, int64_t iNumElements, CSphVector<PlainOrColumnar_t> & dAttrs, CSphString & sError )
+std::unique_ptr<knn::Builder_i> BuildCreateKNN ( const ISphSchema & tSchema, int64_t iNumElements, CSphVector<std::pair<PlainOrColumnar_t,int>> & dAttrs, CSphString & sError )
 {
 	std::unique_ptr<knn::Builder_i> pBuilder = CreateKNNBuilder ( tSchema, iNumElements, sError );
 	if ( !pBuilder )
@@ -414,7 +484,7 @@ std::unique_ptr<knn::Builder_i> BuildCreateKNN ( const ISphSchema & tSchema, int
 	{
 		const CSphColumnInfo & tAttr = tSchema.GetAttr(i);
 		if ( tAttr.IsIndexedKNN() )
-			dAttrs.Add ( PlainOrColumnar_t ( tAttr, iColumnar ) );
+			dAttrs.Add ( { PlainOrColumnar_t ( tAttr, iColumnar ), i } );
 
 		if ( tAttr.IsColumnar() )
 			iColumnar++;
@@ -424,23 +494,33 @@ std::unique_ptr<knn::Builder_i> BuildCreateKNN ( const ISphSchema & tSchema, int
 }
 
 
-bool BuildStoreKNN ( RowID_t tRowID, const CSphRowitem * pRow, const BYTE * pPool, CSphVector<ScopedTypedIterator_t> & dIterators, const CSphVector<PlainOrColumnar_t> & dAttrs, knn::Builder_i & tBuilder )
+template <typename ACTION>
+static bool BuildProcessKNN ( RowID_t tRowID, const CSphRowitem * pRow, const BYTE * pPool, CSphVector<ScopedTypedIterator_t> & dIterators, const CSphVector<PlainOrColumnar_t> & dAttrs, ACTION && fnAction )
 {
-	int iKNNAttrIndex = 0;
-	for ( auto & i : dAttrs )
+	ARRAY_FOREACH ( i, dAttrs )
 	{
-		assert ( i.m_eType==SPH_ATTR_FLOAT_VECTOR );
+		assert ( dAttrs[i].m_eType==SPH_ATTR_FLOAT_VECTOR );
 		const BYTE * pSrc = nullptr;
-		int iBytes = i.Get ( tRowID, pRow, pPool, dIterators, pSrc );
+		int iBytes = dAttrs[i].Get ( tRowID, pRow, pPool, dIterators, pSrc );
 		int iValues = iBytes / sizeof(float);
 
-		if ( !tBuilder.SetAttr ( iKNNAttrIndex, { (float*)pSrc, (size_t)iValues } ) )
+		if ( !fnAction ( i, { (float*)pSrc, (size_t)iValues } ) )
 			return false;
-
-		iKNNAttrIndex++;
 	}
 
 	return true;
+}
+
+
+void BuildTrainKNN ( RowID_t tRowID, const CSphRowitem * pRow, const BYTE * pPool, CSphVector<ScopedTypedIterator_t> & dIterators, const CSphVector<PlainOrColumnar_t> & dAttrs, knn::Builder_i & tBuilder )
+{
+	BuildProcessKNN ( tRowID, pRow, pPool, dIterators, dAttrs, [&tBuilder]( int iAttr, const util::Span_T<float> & tValues ) { tBuilder.Train ( iAttr, tValues ); return true; } );
+}
+
+
+bool BuildStoreKNN ( RowID_t tRowID, const CSphRowitem * pRow, const BYTE * pPool, CSphVector<ScopedTypedIterator_t> & dIterators, const CSphVector<PlainOrColumnar_t> & dAttrs, knn::Builder_i & tBuilder )
+{
+	return BuildProcessKNN ( tRowID, pRow, pPool, dIterators, dAttrs, [&tBuilder]( int iAttr, const util::Span_T<float> & tValues ) { return tBuilder.SetAttr ( iAttr, tValues ); } );
 }
 
 

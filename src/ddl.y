@@ -73,6 +73,7 @@
 %token	TOK_NOT
 %token	TOK_OPTION
 %token	TOK_PLUGIN
+%token	TOK_QUANTIZATION
 %token	TOK_REBUILD
 %token	TOK_RECONFIGURE
 %token	TOK_RETURNS
@@ -377,6 +378,14 @@ item_option:
 	| TOK_USE_GPU '=' TOK_QUOTED_STRING
 		{
 			if ( !pParser->AddItemOptionUseGPU ( $3 ) )
+			{
+				yyerror ( pParser, pParser->GetLastError() );
+    	    	YYERROR;
+			}
+		}
+	| TOK_QUANTIZATION '=' TOK_QUOTED_STRING
+		{
+			if ( !pParser->AddItemOptionQuantization ( $3 ) )
 			{
 				yyerror ( pParser, pParser->GetLastError() );
     	    	YYERROR;

@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2017-2024, Manticore Software LTD (https://manticoresearch.com)
+// Copyright (c) 2017-2025, Manticore Software LTD (https://manticoresearch.com)
 // Copyright (c) 2001-2016, Andrew Aksyonoff
 // Copyright (c) 2008-2016, Sphinx Technologies Inc
 // All rights reserved
@@ -918,54 +918,54 @@ public:
 
 	~RtData_c () = default;
 
-	ConstDiskChunkRefPtr_t DiskChunkByID ( int iChunkID ) const
+	ConstDiskChunkRefPtr_t DiskChunkByID ( int iChunkID ) const EXCLUDES ( m_tLock )
 	{
 		ScRL_t rLock ( m_tLock );
 		for ( auto& pChunk : *m_pChunks )
 			if ( pChunk->Cidx().m_iChunk == iChunkID )
 				return pChunk;
-		return ConstDiskChunkRefPtr_t (nullptr);
+		return { nullptr };
 	}
 
-	ConstDiskChunkRefPtr_t DiskChunkByIdx ( int iChunk ) const
+	ConstDiskChunkRefPtr_t DiskChunkByIdx ( int iChunk ) const EXCLUDES ( m_tLock )
 	{
 		ScRL_t rLock ( m_tLock );
 		if ( iChunk < 0 || iChunk >= m_pChunks->GetLength() )
-			return ConstDiskChunkRefPtr_t ( nullptr );
+			return { nullptr };
 		return ( *m_pChunks )[iChunk];
 	}
 
-	ConstDiskChunkVecRefPtr_t DiskChunks () const
+	ConstDiskChunkVecRefPtr_t DiskChunks () const EXCLUDES ( m_tLock )
 	{
 		ScRL_t rLock ( m_tLock );
 		return m_pChunks;
 	}
 
-	ConstRtSegVecRefPtr_t RamSegs () const
+	ConstRtSegVecRefPtr_t RamSegs () const EXCLUDES ( m_tLock )
 	{
 		ScRL_t rLock ( m_tLock );
 		return m_pSegments;
 	}
 
-	ConstRtData RtData () const
+	ConstRtData RtData () const EXCLUDES ( m_tLock )
 	{
 		ScRL_t rLock ( m_tLock );
 		return { m_pChunks, m_pSegments };
 	}
 
-	bool IsEmpty() const
+	bool IsEmpty() const EXCLUDES ( m_tLock )
 	{
 		ScRL_t rLock ( m_tLock );
 		return m_pChunks->IsEmpty() && m_pSegments->IsEmpty();
 	}
 
-	int GetRamSegmentsCount() const
+	int GetRamSegmentsCount() const EXCLUDES ( m_tLock )
 	{
 		ScRL_t rLock ( m_tLock );
 		return m_pSegments->GetLength();
 	}
 
-	int GetDiskChunksCount () const
+	int GetDiskChunksCount () const EXCLUDES ( m_tLock )
 	{
 		ScRL_t rLock ( m_tLock );
 		return m_pChunks->GetLength ();
@@ -1005,7 +1005,7 @@ public:
 		, m_fnOnRamSegsChanged { std::move ( fnOnRamSegsChanged ) }
 	{}
 
-	~RtWriter_c()
+	~RtWriter_c() EXCLUDES ( m_tOwner.m_tLock )
 	{
 		if ( !m_pNewDiskChunks && !m_pNewRamSegs )
 			return;
@@ -1042,22 +1042,6 @@ public:
 		auto pChunks = m_tOwner.DiskChunks();
 		for ( const auto & pChunk : *pChunks )
 			m_pNewDiskChunks->Add ( pChunk );
-	}
-
-	ConstDiskChunkRefPtr_t PopDiskChunk () EXCLUDES ( m_tOwner.m_tLock )
-	{
-		InitDiskChunks ( empty );
-		auto pChunks = m_tOwner.DiskChunks();
-		if ( !pChunks->GetLength() )
-			return ConstDiskChunkRefPtr_t();
-
-		auto pHeadChunk = pChunks->First();
-		for ( int i=1; i<pChunks->GetLength(); i++ )
-		{
-			m_pNewDiskChunks->Add ( pChunks->At ( i ) );
-		}
-
-		return pHeadChunk;
 	}
 
 };
@@ -1392,7 +1376,6 @@ public:
 	bool				IsSameSettings ( CSphReconfigureSettings & tSettings, CSphReconfigureSetup & tSetup, StrVec_t & dWarnings, CSphString & sError ) const final;
 	bool				Reconfigure ( CSphReconfigureSetup & tSetup ) final;
 	int64_t				GetLastFlushTimestamp() const final;
-	void				IndexDeleted() final { m_bIndexDeleted = true; }
 	void				ProhibitSave() final;
 	void				EnableSave() final;
 	void				LockFileState ( CSphVector<CSphString> & dFiles ) final;
@@ -1446,8 +1429,6 @@ private:
 	Coro::Waitable_T<int>		m_tNSavesNow { 0 };			// N of merge segment routines running right now
 
 	Coro::Waitable_T<int>		m_tBackgroundRoutines { 0 };
-
-	bool						m_bIndexDeleted = false;
 
 	int64_t						m_iSavedTID = 0;
 	int64_t						m_tmSaved;
@@ -1565,6 +1546,7 @@ private:
 
 	// internal helpers/hooks
 	inline RtWriter_c			RtWriter() { return { m_tRtChunks, [this] { UpdateUnlockedCount(); } }; }
+	inline void					CopyChunksTo ( RtWriter_c& tWriter ) REQUIRES ( m_tWorkers.SerialChunkAccess() ) { tWriter.InitDiskChunks ( RtWriter_c::copy ); }
 
 	// set of my rt; suitable for any usage
 	inline RtGuard_t			RtGuard() const { return RtGuard_t { RtData() }; }
@@ -3621,13 +3603,17 @@ bool RtIndex_c::WriteAttributes ( SaveDiskDataContext_t & tCtx, CSphString & sEr
 	for ( const auto & i : tCtx.m_tRamSegments )
 		tCtx.m_iTotalDocuments += i->m_tAliveRows.load ( std::memory_order_relaxed );
 
+	CSphVector<std::pair<PlainOrColumnar_t,int>> dAllAttrsForKNN;
 	CSphVector<PlainOrColumnar_t> dAttrsForKNN;
 	std::unique_ptr<knn::Builder_i> pKNNBuilder;
 	if ( m_tSchema.HasKNNAttrs() )
 	{
-		pKNNBuilder = BuildCreateKNN ( m_tSchema, tCtx.m_iTotalDocuments, dAttrsForKNN, sError );
+		pKNNBuilder = BuildCreateKNN ( m_tSchema, tCtx.m_iTotalDocuments, dAllAttrsForKNN, sError );
 		if ( !pKNNBuilder )
 			return false;
+
+		for ( const auto & i : dAllAttrsForKNN )
+			dAttrsForKNN.Add ( i.first );
 	}
 
 	CSphFixedVector<DocidRowidPair_t> dRawLookup ( tCtx.m_iTotalDocuments );
@@ -3698,15 +3684,33 @@ bool RtIndex_c::WriteAttributes ( SaveDiskDataContext_t & tCtx, CSphString & sEr
 				pDocstoreBuilder->AddDoc ( tNextRowID, tSeg.m_pDocstore->GetDoc ( tRowID, nullptr, -1, false ) );
 			}
 
-			if ( pKNNBuilder && !BuildStoreKNN ( tRowID, pRow, tSeg.m_dBlobs.Begin(), dColumnarIterators, dAttrsForKNN, *pKNNBuilder ) )
-			{
-				sError = pKNNBuilder->GetError().c_str();
-				return false;
-			}
+			if ( pKNNBuilder )
+				BuildTrainKNN ( tRowID, pRow, tSeg.m_dBlobs.Begin(), dColumnarIterators, dAttrsForKNN, *pKNNBuilder );
 
 			tCtx.m_dRowMaps[i][tRowID] = tNextRowID++;
 		}
 	}
+
+	if ( pKNNBuilder )
+		ARRAY_FOREACH ( i, tCtx.m_tRamSegments )
+		{
+			const auto & tSeg = *tCtx.m_tRamSegments[i];
+
+			SccRL_t rLock ( tSeg.m_tLock );
+			tSeg.m_bAttrsBusy.store ( true, std::memory_order_release );
+
+			auto dColumnarIterators = CreateAllColumnarIterators ( tSeg.m_pColumnar.get(), m_tSchema );
+
+			for ( auto tRowID : RtLiveRows_c(tSeg) )
+			{
+				const CSphRowitem * pRow = tSeg.m_dRows.Begin() + (int64_t)tRowID*iStride;
+				if ( !BuildStoreKNN ( tRowID, pRow, tSeg.m_dBlobs.Begin(), dColumnarIterators, dAttrsForKNN, *pKNNBuilder ) )
+				{
+					sError = pKNNBuilder->GetError().c_str();
+					return false;
+				}
+			}
+		}
 
 	// rows could be killed during index save and tNextRowID could be less than tCtx.m_iTotalDocuments \ initial count
 	assert ( tNextRowID<=(RowID_t)dRawLookup.GetLength() );
@@ -4377,6 +4381,8 @@ bool RtIndex_c::SaveDiskChunk ( bool bForced, bool bEmergent ) REQUIRES ( m_tWor
 		break;
 	}
 
+	assert ( Coro::CurrentScheduler() == m_tWorkers.SerialChunkAccess() );
+
 	// here we back into serial fiber. As we're switched, we can't rely on m_iTID and index stats anymore
 	if ( !pNewChunk )
 	{
@@ -4431,7 +4437,7 @@ bool RtIndex_c::SaveDiskChunk ( bool bForced, bool bEmergent ) REQUIRES ( m_tWor
 	// now new disk chunk is loaded, kills and updates applied - we ready to change global index state now.
 	{
 		auto tNewSet = RtWriter();
-		tNewSet.InitDiskChunks ( RtWriter_c::copy );
+		CopyChunksTo ( tNewSet );
 		tNewSet.m_pNewDiskChunks->Add ( DiskChunk_c::make ( std::move ( pNewChunk ) ) );
 		SaveMeta ( iTID, GetChunkIds ( *tNewSet.m_pNewDiskChunks ) );
 
@@ -6410,8 +6416,8 @@ private:
 class RtScanQword_t final : public QwordScan_c
 {
 public:
-	explicit RtScanQword_t ( int iRowsTotal )
-		: QwordScan_c ( iRowsTotal )
+	explicit RtScanQword_t ( int iRowsTotal, int iAtomPos, int iFieldsCount )
+		: QwordScan_c ( iRowsTotal, iAtomPos, iFieldsCount )
 	{
 	}
 
@@ -6427,7 +6433,6 @@ public:
 		m_iRowsCount = pSegment->m_uRows;
 		m_iDocs = m_iRowsCount;
 		m_bDone = ( m_iRowsCount==0 );
-		m_dQwordFields.SetAll();
 		m_pKilled = &pSegment->m_tDeadRowMap;
 
 		return ( pSegment->m_tAliveRows.load(std::memory_order_relaxed)>0 );
@@ -6451,7 +6456,7 @@ public:
 	ISphQword *	QwordSpawn ( const XQKeyword_t & ) const final;
 	bool		QwordSetup ( ISphQword * pQword ) const final;
 	void				SetSegment ( int iSegment ) { m_iSeg = iSegment; }
-	ISphQword *			ScanSpawn() const final;
+	ISphQword *			ScanSpawn ( int iAtomPos ) const final;
 
 private:
 	const RtGuard_t&	m_tGuard;
@@ -6500,9 +6505,9 @@ bool RtIndex_c::EarlyReject ( CSphQueryContext * pCtx, CSphMatch & tMatch ) cons
 	return false;
 }
 
-ISphQword * RtQwordSetup_t::ScanSpawn () const
+ISphQword * RtQwordSetup_t::ScanSpawn ( int iAtomPos ) const
 {
-	return new RtScanQword_t ( (int)m_pIndex->GetStats().m_iTotalDocuments );
+	return new RtScanQword_t ( (int)m_pIndex->GetStats().m_iTotalDocuments, iAtomPos, m_pIndex->GetMatchSchema().GetFieldsCount() );
 }
 
 
@@ -8858,7 +8863,7 @@ bool RtIndex_c::AttachDiskIndex ( CSphIndex * pIndex, bool bTruncate, bool & bFa
 
 	{	// update disk chunk list
 		auto tNewSet = RtWriter();
-		tNewSet.InitDiskChunks ( RtWriter_c::copy );
+		CopyChunksTo ( tNewSet );
 		tNewSet.m_pNewDiskChunks->Add ( DiskChunk_c::make ( pIndex ) );
 	}
 
@@ -8996,7 +9001,7 @@ bool RtIndex_c::AttachRtIndex ( RtIndex_i * pSrcIndex, bool bTruncate, bool & bF
 
 		// collect all disk chunks from the source RT index in the brand new structure
 		auto tNewSet = RtWriter();
-		tNewSet.InitDiskChunks ( RtWriter_c::copy );
+		CopyChunksTo ( tNewSet );
 		// need to reset m_bFinallyUnlink flag for the disk chunks moved here after all finishes well
 		int iUnlinkIndex = tNewSet.m_pNewDiskChunks->GetLength();
 
@@ -9052,8 +9057,13 @@ ConstDiskChunkRefPtr_t RtIndex_c::PopDiskChunk()
 	ScopedScheduler_c tSerialFiber ( m_tWorkers.SerialChunkAccess() );
 
 	auto tNewSet = RtWriter();
-	tNewSet.InitDiskChunks ( RtWriter_c::empty );
-	return tNewSet.PopDiskChunk();
+	CopyChunksTo ( tNewSet );
+	if ( tNewSet.m_pNewDiskChunks->IsEmpty() )
+		return {};
+
+	auto pHeadChunk = tNewSet.m_pNewDiskChunks->First();
+	tNewSet.m_pNewDiskChunks->Remove(0);
+	return pHeadChunk;
 }
 
 //////////////////////////////////////////////////////////////////////////

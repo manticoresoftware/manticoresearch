@@ -82,7 +82,7 @@ mysql -h0 -P9306 -e "SELECT * FROM test ORDER BY id ASC LIMIT 10;"
 |   10 | We nowhere bad hold! happily.                                                                                           | Unusually hold clever that! sometimes illegally real late suddenly.               |    6 | 70.699997 | 0.800000 |         0 | 1689780079 | 14,94                    | -91152,-66001,-52476,-36462,6015,35599,50917,92421             | {"key":"value"} | 3.000000,6.000000,4.000000,9.000000   |
 +------+-------------------------------------------------------------------------------------------------------------------------+-----------------------------------------------------------------------------------+------+-----------+----------+-----------+------------+--------------------------+----------------------------------------------------------------+-----------------+---------------------------------------+
 ––– input –––
-mysql -h0 -P9306 -e "flush ramchunk test; freeze test; `for n in \`seq 1 100\`; do echo UPDATE test SET category='updated' WHERE id=$n; done`" &
+mysql -h0 -P9306 -e "FLUSH RAMCHUNK test; FREEZE test; `for n in \`seq 1 100\`; do echo UPDATE test SET category='updated' WHERE id=$n; done`" > /dev/null 2>&1 & tail -f /var/log/manticore/searchd.log | grep -i "error" &
 ––– output –––
 ––– input –––
 mysql -h0 -P9306 -e "SELECT * FROM test ORDER BY id ASC LIMIT 5;"

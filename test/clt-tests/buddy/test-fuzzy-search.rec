@@ -665,6 +665,12 @@ mysql -h0 -P9306 -e "CALL AUTOCOMPLETE('gr', 'name', 1 AS fuzziness, 'ru' AS lay
 | grogan  |
 | grover  |
 ––– input –––
+mysql -h0 -P9306 -e "DROP TABLE IF EXISTS tbl1; CREATE TABLE tbl1 (title TEXT) min_infix_len='2';"
+––– output –––
+––– input –––
+mysql -h0 -P9306 -e "SELECT * FROM \`tbl1\` WHERE MATCH('abc') OPTION fuzzy = 1;"
+––– output –––
+––– input –––
 mysql -h0 -P9306 -e "drop table if exists t; create table t(f text) min_infix_len='2'; insert into t values(1, 'something'), (2, 'some thing'); select * from t where match('somethin') option fuzzy=0;"
 ––– output –––
 ––– input –––

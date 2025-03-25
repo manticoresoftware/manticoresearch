@@ -1,0 +1,60 @@
+––– comment –––
+Log cleanup and starting searchd with default config
+––– input –––
+rm -f /var/log/manticore/searchd.log; stdbuf -oL searchd > /dev/null; if timeout 10 grep -qm1 '\[BUDDY\] started' <(tail -n 1000 -f /var/log/manticore/searchd.log); then echo 'Buddy started!'; else echo 'Timeout or failed!'; cat /var/log/manticore/searchd.log; fi
+––– output –––
+Buddy started!
+––– comment –––
+Creating a config with kibana_version_string = "7.10.2"
+––– input –––
+echo -e "searchd {\n  listen = 9306:mysql\n  listen = 9312\n  listen = 9308:http\n  log = /var/log/manticore/searchd.log\n  query_log = /var/log/manticore/query.log\n  pid_file = /var/run/manticore/searchd.pid\n  kibana_version_string = 7.10.2\n}" > /tmp/manticore.conf; echo $?
+––– output –––
+0
+––– comment –––
+Restarting searchd with the new config
+––– input –––
+pkill -9 searchd; stdbuf -oL searchd -c /tmp/manticore.conf > /dev/null; if timeout 10 grep -qm1 '\[BUDDY\] started' <(tail -n 1000 -f /var/log/manticore/searchd.log); then echo 'Buddy started!'; else echo 'Timeout or failed!'; cat /var/log/manticore/searchd.log; fi
+––– output –––
+Buddy started!
+––– comment –––
+Verifying kibana_version_string in SHOW SETTINGS
+––– input –––
+mysql -h0 -P9306 -e "SHOW SETTINGS;" | grep -i "kibana_version_string"
+––– output –––
+| searchd.kibana_version_string | 7.10.2                         |
+––– comment –––
+Updating config with kibana_version_string = "8.5.0"
+––– input –––
+echo -e "searchd {\n  listen = 9306:mysql\n  listen = 9312\n  listen = 9308:http\n  log = /var/log/manticore/searchd.log\n  query_log = /var/log/manticore/query.log\n  pid_file = /var/run/manticore/searchd.pid\n  kibana_version_string = 8.5.0\n}" > /tmp/manticore.conf; echo $?
+––– output –––
+0
+––– comment –––
+Restarting searchd
+––– input –––
+pkill -9 searchd; stdbuf -oL searchd -c /tmp/manticore.conf > /dev/null; if timeout 10 grep -qm1 '\[BUDDY\] started' <(tail -n 1000 -f /var/log/manticore/searchd.log); then echo 'Buddy started!'; else echo 'Timeout or failed!'; cat /var/log/manticore/searchd.log; fi
+––– output –––
+Buddy started!
+––– comment –––
+Checking updated kibana_version_string
+––– input –––
+mysql -h0 -P9306 -e "SHOW SETTINGS;" | grep -i "kibana_version_string"
+––– output –––
+| searchd.kibana_version_string | 8.5.0                          |
+––– comment –––
+Testing with an empty kibana_version_string
+––– input –––
+echo -e "searchd {\n  listen = 9306:mysql\n  listen = 9312\n  listen = 9308:http\n  log = /var/log/manticore/searchd.log\n  query_log = /var/log/manticore/query.log\n  pid_file = /var/run/manticore/searchd.pid\n  kibana_version_string = \n}" > /tmp/manticore.conf; echo $?
+––– output –––
+0
+––– comment –––
+Restarting searchd with an empty value
+––– input –––
+pkill -9 searchd; stdbuf -oL searchd -c /tmp/manticore.conf > /dev/null; if timeout 10 grep -qm1 '\[BUDDY\] started' <(tail -n 1000 -f /var/log/manticore/searchd.log); then echo 'Buddy started!'; else echo 'Timeout or failed!'; cat /var/log/manticore/searchd.log; fi
+––– output –––
+Buddy started!
+––– comment –––
+Verifying the empty kibana_version_string
+––– input –––
+mysql -h0 -P9306 -e "SHOW SETTINGS;" | grep -i "kibana_version_string"
+––– output –––
+| searchd.kibana_version_string |                                |

@@ -10535,6 +10535,10 @@ void RtIndex_c::ProhibitSave()
 	StopOptimize();
 	m_tSaving.SetState ( SaveState_c::DISCARD );
 	std::atomic_thread_fence ( std::memory_order_release );
+	// need also to wait while all disk chunk writers get out of the m_tSaving scope to make sure there will be no new disk chunks after this function
+	// might be called on daemon start from the system mock functions - no need to wait there
+	if ( Threads::IsInsideCoroutine() )
+		m_tNSavesNow.Wait ( [] ( int iVal ) { return iVal == 0; } );
 }
 
 void RtIndex_c::EnableSave()
@@ -10556,6 +10560,9 @@ void RtIndex_c::LockFileState ( CSphVector<CSphString>& dFiles )
 	ScopedScheduler_c tSerialFiber ( m_tWorkers.SerialChunkAccess() );
 	m_tSaving.SetState ( SaveState_c::DISABLED );
 	std::atomic_thread_fence ( std::memory_order_release );
+	// need also to wait while all disk chunk writers get out of the m_tSaving scope to make sure there will be no new disk chunks after this function
+	m_tNSavesNow.Wait ( [] ( int iVal ) { return iVal == 0; } );
+
 	GetIndexFiles ( dFiles, dFiles );
 }
 

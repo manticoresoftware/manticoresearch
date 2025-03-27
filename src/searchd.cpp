@@ -13058,7 +13058,7 @@ static bool CheckCreateTable ( const SqlStmt_t & tStmt, CSphString & sError )
 		// should be routerd into buddy with good error message
 		if ( iShardsPos!=-1 || iRfPos!=-1 )
 		{
-			sError.SetSprintf ( "table '%s': CREATE TABLE failed: 'shard' and 'rf' options require Buddy", tStmt.m_sIndex.cstr(), sError.cstr() );
+			sError.SetSprintf ( "table '%s': CREATE TABLE failed: 'shards' and 'rf' options require Buddy", tStmt.m_sIndex.cstr(), sError.cstr() );
 			return false;
 		}
 	}

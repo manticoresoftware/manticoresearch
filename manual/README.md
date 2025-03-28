@@ -10,13 +10,13 @@
     * [• Manticore Buddy](Installation/Manticore_Buddy.md)
     * [• Migration from Sphinx](Installation/Migration_from_Sphinx.md)
 * [🔰 Quick start guide](Quick_start_guide.md)
-* [2️⃣ Starting the server](Starting_the_server.md)
+* [2️⃣ Starting the server]
     * [• In Linux](Starting_the_server/Linux.md)
     * [• Manually](Starting_the_server/Manually.md)
     * [• In Docker](Starting_the_server/Docker.md)
     * [• In Windows](Starting_the_server/Windows.md)
     * [• In MacOS](Starting_the_server/MacOS.md)
-* [3️⃣ Creating a table](Creating_a_table.md)
+* [3️⃣ Creating a table]
     * [⪢ Data types](Creating_a_table/Data_types.md)
         * [• Row-wise and columnar attribute storages](Creating_a_table/Data_types.md#Row-wise-and-columnar-attribute-storages)
     * [⪢ Creating a local table](Creating_a_table/Local_tables.md)
@@ -124,7 +124,7 @@
     * [• Updating table FT settings in plain mode](Updating_table_schema_and_settings.md#Updating-table-FT-settings-in-plain-mode)
     * [• Rebuilding a secondary index](Updating_table_schema_and_settings.md#Rebuilding-a-secondary-index)
     * [• Changing a distributed table](Updating_table_schema_and_settings.md#Changing-a-distributed-table)
-* [⪢ Functions](Functions.md)
+* [⪢ Functions]
     * [• Mathematical functions](Functions/Mathematical_functions.md)
     * [• Searching and ranking functions](Functions/Searching_and_ranking_functions.md)
     * [• Type casting functions](Functions/Type_casting_functions.md)

@@ -208,6 +208,9 @@ CREATE TABLE test_table
     CALL QSUGGEST ( 'tests passed well in funce', 'dist31', 1 as sentence, 3 as limit);
     CALL QSUGGEST ( 'tests passed well in funce', 'dist32', 1 as sentence, 3 as limit);
     CALL QSUGGEST ( 'tests passed well in funce', 'dist33', 1 as sentence, 3 as limit);
+
+    <!-- suggest min word length 2 -->
+    CALL SUGGEST ( 'ma', 'rt1');
 </sphinxql></queries>
 
 </test>

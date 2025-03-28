@@ -1,0 +1,40 @@
+<test>
+<name>auto disk flush</name>
+
+<requires><force-rt/></requires>
+<skip_indexer/>
+
+<config>
+
+searchd
+{
+	<searchd_settings/>
+    data_dir = <data_path/> 
+    diskchunk_flush_write_timeout = 1
+}
+</config>
+
+<queries>
+<sphinxql>
+CREATE TABLE rt_flush(title text);
+CREATE TABLE rt_no_flush(title text) diskchunk_flush_write_timeout = '-1';
+    
+INSERT INTO rt_flush VALUES (1, 'test1');
+INSERT INTO rt_no_flush VALUES (1, 'test1');
+
+SELECT id from rt_flush;
+SELECT id from rt_no_flush;
+</sphinxql>
+
+<sphinxql d="mysql" sleep="4">SELECT id from rt_flush</sphinxql>
+<sphinxql> 
+show table rt_flush status like 'disk_chunks';
+show table rt_no_flush status like 'disk_chunks';
+
+drop table rt_flush;
+drop table rt_no_flush;
+</sphinxql>
+
+</queries>
+
+</test>

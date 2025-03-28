@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2017-2024, Manticore Software LTD (https://manticoresearch.com)
+// Copyright (c) 2017-2025, Manticore Software LTD (https://manticoresearch.com)
 // All rights reserved
 //
 // This program is free software; you can redistribute it and/or modify
@@ -797,16 +797,37 @@ XQNode_t * QueryParserJson_c::ConstructBoolNode ( const JsonObj_c & tJson, Query
 XQNode_t * QueryParserJson_c::ConstructQLNode ( const JsonObj_c & tJson, QueryTreeBuilder_c & tBuilder ) const
 {
 	ErrorPathGuard_t tGuard = tBuilder.ErrorAddPath ( tJson );
-	if ( !tJson.IsStr() )
+
+	CSphString sQueryString;
+	// query_string could be either {"query_string":{"query":"term"}} or {"query_string":"term"}
+	if ( tJson.IsObj() )
 	{
-		tBuilder.Error ( "\"query_string\" value should be an string" );
-		return nullptr;
+		CSphString sError;
+		JsonObj_c tNestedQuery = tJson.GetStrItem ( "query", sError, false );
+		if ( !tNestedQuery )
+		{
+			tBuilder.Error ( "\"query_string\" value should be an object with the \"query\" string" );
+			return nullptr;
+		}
+		sQueryString = tNestedQuery.StrVal();
+	}
+
+	if ( sQueryString.IsEmpty() )
+	{
+		if ( tJson.IsStr() )
+		{
+			sQueryString = tJson.StrVal();
+		} else
+		{
+			tBuilder.Error ( "\"query_string\" value should be an string" );
+			return nullptr;
+		}
 	}
 
 	XQQuery_t tParsed;
 	tParsed.m_dZones = tBuilder.GetZone(); // should keep the same zone list for whole tree
 	// no need to pass morph fields here as upper level does fixup
-	if ( !sphParseExtendedQuery ( tParsed, tJson.StrVal().cstr(), tBuilder.GetQuery(), tBuilder.GetQLTokenizer(), tBuilder.GetSchema(), tBuilder.GetDict(), tBuilder.GetIndexSettings(), nullptr ) )
+	if ( !sphParseExtendedQuery ( tParsed, sQueryString.cstr(), tBuilder.GetQuery(), tBuilder.GetQLTokenizer(), tBuilder.GetSchema(), tBuilder.GetDict(), tBuilder.GetIndexSettings(), nullptr ) )
 	{
 		tBuilder.Error ( "%s", tParsed.m_sParseError.cstr() );
 		return nullptr;
@@ -1157,9 +1178,11 @@ static bool ParseOptions ( const JsonObj_c & tRoot, ParsedJsonQuery_t & tPJQuery
 		return true;
 
 	if ( tQuery.m_eJoinType!=JoinType_e::NONE )
-	{
 		for ( const auto & i : tOptions )
 		{
+			if ( !i.IsObj() )
+				continue;
+
 			CSphString sTable = i.Name();
 			sTable.ToLower();
 
@@ -1183,9 +1206,6 @@ static bool ParseOptions ( const JsonObj_c & tRoot, ParsedJsonQuery_t & tPJQuery
 			sError.SetSprintf ( "Unknown table '%s' in OPTIONS", sTable.cstr() );
 			return false;
 		}
-
-		return true;
-	}
 
 	return ParseOptions ( tOptions, tQuery, sError );
 }
@@ -1576,9 +1596,9 @@ bool ParseJsonInsertSource ( const JsonObj_c & tSource, SqlStmt_t & tStmt, bool 
 }
 
 
-bool sphParseJsonInsert ( const char * szInsert, SqlStmt_t & tStmt, DocID_t & tDocId, bool bReplace, CSphString & sError )
+bool sphParseJsonInsert ( Str_t sInsert, SqlStmt_t & tStmt, DocID_t & tDocId, bool bReplace, CSphString & sError )
 {
-	JsonObj_c tRoot ( szInsert );
+	JsonObj_c tRoot ( sInsert );
 	return ParseJsonInsert ( tRoot, tStmt, tDocId, bReplace, sError );
 }
 
@@ -2701,10 +2721,11 @@ CSphString sphEncodeResultJson ( const VecTraits_T<const AggrResult_t *> & dRes,
 			ScopedComma_c sQueryComma ( tOut, ",", "{", "}" );
 
 			// note, that originally there is string UID, so we just output number in quotes for docid here
-			if ( bCompatId )
+			// number in quotes in compat mode or just number for _id
+			if ( bCompatId || ( eFormat==ResultSetFormat_e::ES ) )
 			{
-				JsonObjAddAttr ( tOut, pId->m_eAttrType, "_id", tMatch, pId->m_tLocator );
-				tOut.Sprintf ( R"("_score":%d)", tMatch.m_iWeight );
+				DocID_t tDocID = tMatch.GetAttr ( pId->m_tLocator );
+				tOut.Sprintf ( R"("_id":"%llu","_score":%d)", tDocID, tMatch.m_iWeight );
 			}
 			else if ( pId )
 			{
@@ -2833,7 +2854,7 @@ JsonObj_c sphEncodeInsertResultJson ( const char * szIndex, bool bReplace, DocID
 	JsonObj_c tObj;
 
 	tObj.AddStr ( ( eFormat==ResultSetFormat_e::ES ? "_index" : "table" ), szIndex );
-	tObj.AddUint ( "_id", tDocId );
+	tObj.AddUint ( "id", tDocId );
 	tObj.AddBool ( "created", !bReplace );
 	tObj.AddStr ( "result", bReplace ? "updated" : "created" );
 	tObj.AddInt ( "status", bReplace ? 200 : 201 );
@@ -2868,7 +2889,7 @@ JsonObj_c sphEncodeUpdateResultJson ( const char * szIndex, DocID_t tDocId, int 
 		tObj.AddInt ( "updated", iAffected );
 	else
 	{
-		tObj.AddInt ( "_id", tDocId );
+		tObj.AddInt ( "id", tDocId );
 		tObj.AddStr ( "result", iAffected ? "updated" : "noop" );
 	}
 
@@ -2886,7 +2907,7 @@ JsonObj_c sphEncodeDeleteResultJson ( const char * szIndex, DocID_t tDocId, int 
 		tObj.AddInt ( "deleted", iAffected );
 	else
 	{
-		tObj.AddInt ( "_id", tDocId );
+		tObj.AddInt ( "id", tDocId );
 		tObj.AddBool ( "found", !!iAffected );
 		tObj.AddStr ( "result", iAffected ? "deleted" : "not found" );
 	}
@@ -2933,8 +2954,8 @@ bool sphGetResultStats ( const char * szResult, int & iAffected, int & iWarnings
 		return true;
 	}
 
-	// it was probably a query with an "_id"
-	JsonObj_c tId = tJsonRoot.GetIntItem ( "_id", sError );
+	// it was probably a query with an "id"
+	JsonObj_c tId = tJsonRoot.GetIntItem ( "id", sError );
 	if ( tId )
 	{
 		iAffected = 1;

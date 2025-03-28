@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2021-2024, Manticore Software LTD (https://manticoresearch.com)
+// Copyright (c) 2021-2025, Manticore Software LTD (https://manticoresearch.com)
 // All rights reserved
 //
 // This program is free software; you can redistribute it and/or modify
@@ -64,8 +64,8 @@ int64_t sph::LastTimestamp()
 
 /// timer thread context
 static ThreadRole TimerThread;
-static bool g_bTimerCreated = false;
-static bool g_bTimerActive = false;
+static std::atomic<bool> g_bTimerCreated { false };
+static std::atomic<bool> g_bTimerActive { false };
 
 class TinyTimer_c
 {

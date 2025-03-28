@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2017-2024, Manticore Software LTD (https://manticoresearch.com)
+// Copyright (c) 2017-2025, Manticore Software LTD (https://manticoresearch.com)
 // Copyright (c) 2001-2016, Andrew Aksyonoff
 // Copyright (c) 2008-2016, Sphinx Technologies Inc
 // All rights reserved
@@ -108,6 +108,11 @@ class RtIndex_i : public CSphIndexStub
 {
 public:
 	RtIndex_i ( CSphString sIndexName, CSphString sPath ) : CSphIndexStub { std::move ( sIndexName ), std::move ( sPath ) } {}
+	~RtIndex_i()
+	{
+		if ( m_fnOnDestroyed )
+			m_fnOnDestroyed();
+	}
 
 	/// get internal schema (to use for Add calls)
 	virtual const CSphSchema & GetInternalSchema () const { return m_tSchema; }
@@ -137,6 +142,9 @@ public:
 
 	/// forcibly save RAM chunk as a new disk chunk
 	virtual bool ForceDiskChunk () = 0;
+
+	/// forcibly save RAM chunk as a new disk chunk by the conditions (has new data and has recent searches)
+	virtual void ForceDiskChunk ( int iFlushWrite, int iFlushSearch ) {};
 
 	/// attach a disk chunk to current index
 	virtual bool AttachDiskIndex ( CSphIndex * pIndex, bool bTruncate, bool & bFatal, CSphString & sError ) { return true; }
@@ -176,7 +184,11 @@ public:
 	virtual TokenizerRefPtr_c CloneIndexingTokenizer() const = 0;
 
 	// hint an index that it was deleted and should cleanup its files when destructed
-	virtual void IndexDeleted() = 0;
+	void IndexDeleted ( Threads::Handler&& fnOnDestroyed )
+	{
+		m_bIndexDeleted = true;
+		m_fnOnDestroyed = std::move ( fnOnDestroyed );
+	}
 
 	virtual void ProhibitSave() = 0;
 	virtual void EnableSave() = 0;
@@ -191,6 +203,10 @@ public:
 
 protected:
 	bool PrepareAccum ( RtAccum_t* pAccExt, bool bWordDict, CSphString* pError );
+	bool				m_bIndexDeleted = false;
+
+private:
+	Threads::Handler	m_fnOnDestroyed = nullptr;
 };
 
 /// initialize subsystem
@@ -458,5 +474,6 @@ volatile bool &RTChangesAllowed () noexcept;
 // Get global flag of autooptimize
 volatile int & AutoOptimizeCutoffMultiplier() noexcept;
 volatile int AutoOptimizeCutoff() noexcept;
+volatile int AutoOptimizeCutoffKNN() noexcept;
 
 #endif // _sphinxrt_

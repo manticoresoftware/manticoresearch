@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2017-2024, Manticore Software LTD (https://manticoresearch.com)
+// Copyright (c) 2017-2025, Manticore Software LTD (https://manticoresearch.com)
 // All rights reserved
 //
 // This program is free software; you can redistribute it and/or modify
@@ -478,6 +478,16 @@ public:
 	explicit ScopedScheduler_c ( SchedRole pRole ) ACQUIRE ( pRole );
 	explicit ScopedScheduler_c ( RoledSchedulerSharedPtr_t& pRole ) ACQUIRE ( pRole );
 	~ScopedScheduler_c () RELEASE();
+};
+
+class KeeperScheduler_c
+{
+	Scheduler_i* m_pKeepSched;
+
+public:
+	NONCOPYMOVABLE ( KeeperScheduler_c );
+	KeeperScheduler_c();
+	~KeeperScheduler_c() noexcept;
 };
 
 inline void CheckAcquiredSched ( SchedRole R ) ACQUIRE( R ) NO_THREAD_SAFETY_ANALYSIS

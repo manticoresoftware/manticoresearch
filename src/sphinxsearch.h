@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2017-2024, Manticore Software LTD (https://manticoresearch.com)
+// Copyright (c) 2017-2025, Manticore Software LTD (https://manticoresearch.com)
 // Copyright (c) 2001-2016, Andrew Aksyonoff
 // Copyright (c) 2008-2016, Sphinx Technologies Inc
 // All rights reserved
@@ -139,7 +139,7 @@ public:
 	}
 	inline DictRefPtr_c Dict() const { return m_pDict; }
 
-	virtual ISphQword *					ScanSpawn() const = 0;
+	virtual ISphQword *					ScanSpawn ( int iAtomPos ) const = 0;
 };
 
 /// generic ranker interface
@@ -161,19 +161,22 @@ std::unique_ptr<ISphRanker> sphCreateRanker ( const XQQuery_t & tXQ, const CSphQ
 class QwordScan_c : public ISphQword
 {
 public:
-	QwordScan_c ( int iRowsCount );
+	QwordScan_c ( int iRowsCount, int iAtomPos, int iFieldsCount );
 
 	const CSphMatch & GetNextDoc() final;
 
 	void SeekHitlist ( SphOffset_t uOff ) override {}
 	Hitpos_t GetNextHit () override { return EMPTY_HIT; }
+	void Reset () final;
 
 protected:
 	RowID_t m_iRowsCount = INVALID_ROWID;
 	bool m_bDone = false;
 	CSphMatch m_tDoc;
+	int m_iFieldsCount;
 
 	virtual bool IsAliveRow (  RowID_t ) const { return true; }
+	void SetFieldMask();
 };
 
 

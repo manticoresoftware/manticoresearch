@@ -1,4 +1,4 @@
-––– block: ../base/start-searchd –––
+––– block: ../base/start-searchd-with-buddy –––
 ––– input –––
 mysql -h0 -P9306 -e "SHOW BUDDY PLUGINS\G;" | grep "manticoresoftware/buddy-plugin-replace"
 ––– output –––
@@ -48,18 +48,13 @@ values: 523456764345678976,9223372036854775807
 additional_info: {"features":["ProMotion display","A15 Bionic chip","Ceramic Shield front cover"]}
 vector: 0.773448,0.312478,0.137971,0.459821
 ––– input –––
-searchd --stopwait
+stdbuf -oL searchd --stopwait 2>&1 | grep -i 'SIGTERM'
 ––– output –––
-Manticore %{SEMVER} %{COMMITDATE}#!/(\sdev)?\s/!#(columnar %{SEMVER} %{COMMITDATE}) (secondary %{SEMVER} %{COMMITDATE}) (knn %{SEMVER} %{COMMITDATE})
-Copyright (c) 2001-2016, Andrew Aksyonoff
-Copyright (c) 2008-2016, Sphinx Technologies Inc (http://sphinxsearch.com)
-Copyright (c) 2017-%{YEAR}, Manticore Software LTD (https://manticoresearch.com)
-[#!/[0-9]{2}:[0-9]{2}.[0-9]{3}/!#] [#!/[0-9]+/!#] using config file '/etc/manticoresearch/manticore.conf' (%{NUMBER} chars)...
-[#!/[0-9]{2}:[0-9]{2}.[0-9]{3}/!#] [#!/[0-9]+/!#] stop: successfully sent SIGTERM to pid %{NUMBER}
+[#!/[0-9a-zA-Z\:\.\s]+/!#] [#!/[0-9]+/!#] stop: successfully sent SIGTERM to pid %{NUMBER}
 ––– input –––
 sed -i '/data_dir = \/var\/lib\/manticore/a\    buddy_path = manticore-executor -n /usr/share/manticore/modules/manticore-buddy/src/main.php --debugv --skip=manticoresoftware/buddy-plugin-replace' /etc/manticoresearch/manticore.conf
 ––– output –––
-––– block: ../base/searchd-without-table-details –––
+––– block: ../base/start-searchd-with-buddy –––
 ––– input –––
 mysql -h0 -P9306 -e "REPLACE INTO tbl SET price =15000.99 WHERE id = 117; select * from tbl WHERE id = 117;"
 ––– output –––
@@ -96,18 +91,13 @@ mysql -h0 -P9306 -e "SHOW TABLES"
 | tbl           | rt   |
 +---------------+------+
 ––– input –––
-searchd --stopwait
+stdbuf -oL searchd --stopwait 2>&1 | grep -i 'SIGTERM'
 ––– output –––
-Manticore %{SEMVER} %{COMMITDATE}#!/(\sdev)?\s/!#(columnar %{SEMVER} %{COMMITDATE}) (secondary %{SEMVER} %{COMMITDATE}) (knn %{SEMVER} %{COMMITDATE})
-Copyright (c) 2001-2016, Andrew Aksyonoff
-Copyright (c) 2008-2016, Sphinx Technologies Inc (http://sphinxsearch.com)
-Copyright (c) 2017-%{YEAR}, Manticore Software LTD (https://manticoresearch.com)
-[#!/[0-9]{2}:[0-9]{2}.[0-9]{3}/!#] [#!/[0-9]+/!#] using config file '/etc/manticoresearch/manticore.conf' (%{NUMBER} chars)...
-[#!/[0-9]{2}:[0-9]{2}.[0-9]{3}/!#] [#!/[0-9]+/!#] stop: successfully sent SIGTERM to pid %{NUMBER}
+[#!/[0-9a-zA-Z\:\.\s]+/!#] [#!/[0-9]+/!#] stop: successfully sent SIGTERM to pid %{NUMBER}
 ––– input –––
 sed -i '/buddy_path =/c\    buddy_path = manticore-executor -n /usr/share/manticore/modules/manticore-buddy/src/main.php --debugv --skip=manticoresoftware/buddy-plugin-alter-rename-table --skip=manticoresoftware/buddy-plugin-replace' /etc/manticoresearch/manticore.conf
 ––– output –––
-––– block: ../base/searchd-without-table-details –––
+––– block: ../base/start-searchd-with-buddy –––
 ––– input –––
 mysql -h0 -P9306 -e "SHOW BUDDY PLUGINS\G;" | grep "manticoresoftware/buddy-plugin-alter-rename-table"
 ––– output –––
@@ -125,18 +115,13 @@ mysql -h0 -P9306 -e "SHOW TABLES"
 | tbl           | rt   |
 +---------------+------+
 ––– input –––
-searchd --stopwait
+stdbuf -oL searchd --stopwait 2>&1 | grep -i 'SIGTERM'
 ––– output –––
-Manticore %{SEMVER} %{COMMITDATE}#!/(\sdev)?\s/!#(columnar %{SEMVER} %{COMMITDATE}) (secondary %{SEMVER} %{COMMITDATE}) (knn %{SEMVER} %{COMMITDATE})
-Copyright (c) 2001-2016, Andrew Aksyonoff
-Copyright (c) 2008-2016, Sphinx Technologies Inc (http://sphinxsearch.com)
-Copyright (c) 2017-%{YEAR}, Manticore Software LTD (https://manticoresearch.com)
-[#!/[0-9]{2}:[0-9]{2}.[0-9]{3}/!#] [#!/[0-9]+/!#] using config file '/etc/manticoresearch/manticore.conf' (%{NUMBER} chars)...
-[#!/[0-9]{2}:[0-9]{2}.[0-9]{3}/!#] [#!/[0-9]+/!#] stop: successfully sent SIGTERM to pid %{NUMBER}
+[#!/[0-9a-zA-Z\:\.\s]+/!#] [#!/[0-9]+/!#] stop: successfully sent SIGTERM to pid %{NUMBER}
 ––– input –––
 sed -i '/buddy_path =/c\    buddy_path = manticore-executor -n /usr/share/manticore/modules/manticore-buddy/src/main.php --debugv' /etc/manticoresearch/manticore.conf
 ––– output –––
-––– block: ../base/searchd-without-table-details –––
+––– block: ../base/start-searchd-with-buddy –––
 ––– input –––
 mysql -h0 -P9306 -e "SHOW BUDDY PLUGINS\G;" | grep "manticoresoftware/buddy-plugin-alter-rename-table"
 ––– output –––

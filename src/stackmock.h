@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2017-2024, Manticore Software LTD (https://manticoresearch.com)
+// Copyright (c) 2017-2025, Manticore Software LTD (https://manticoresearch.com)
 // Copyright (c) 2001-2016, Andrew Aksyonoff
 // Copyright (c) 2008-2016, Sphinx Technologies Inc
 // All rights reserved
@@ -76,6 +76,6 @@ inline std::pair<int, CSphString> EvalStackForExpr ( const StackSizeParams_t & t
 	return { iStackNeeded, {} };
 }
 
-void DetermineNodeItemStackSize();
-void DetermineFilterItemStackSize();
-void DetermineMatchStackSize();
+void DetermineNodeItemStackSize ( StringBuilder_c& sExport );
+void DetermineFilterItemStackSize ( StringBuilder_c& sExport );
+void DetermineMatchStackSize ( StringBuilder_c& sExport );

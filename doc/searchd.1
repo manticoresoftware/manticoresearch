@@ -5,7 +5,7 @@
 .\"    Source: Manticore Search
 .\"  Language: English
 .\"
-.TH "SEARCHD" "1" "04/01/2024" "Manticore Search" ""
+.TH "SEARCHD" "1" "28/01/2025" "Manticore Search" ""
 .SH "NAME"
 searchd \- Manticore Search Server
 .SH "SYNOPSIS"
@@ -42,21 +42,15 @@ The options available to \fB\fCsearchd\fR in all operating systems are:
   $ searchd \-\-config /etc/manticoresearch/manticore.conf \-\-stopwait
 .fi
 .RE
-.PP
+.TP
 Possible exit codes are as follows:
-.RS
-.IP \(bu 2
-0 on success
-.IP \(bu 2
-1 if connection to running searchd server failed
-.IP \(bu 2
-2 if server reported an error during shutdown
-.IP \(bu 2
-3 if server crashed during shutdown
+    * 0 on success
+    * 1 if connection to running searchd server failed
+    * 2 if server reported an error during shutdown
+    * 3 if server crashed during shutdown
 .RS
 .IP \(bu 2
 \fB\fC\-\-status\fR command is used to query running \fB\fCsearchd\fR instance status using the connection details from the (optionally) provided configuration file. It will try to connect to running instance using the first found UNIX socket or TCP port from the configuration file. On success it will query for a number of status and performance counter values and print them. You can also use \fB\fCSHOW STATUS\fR command to access the very same counters via SQL protocol. Examples:
-.RE
 .RE
 .PP
 .RS
@@ -162,7 +156,30 @@ $ searchd \-\-replay\-flags=accept\-desc\-timestamp
 \fB\fC\-\-new\-cluster\fR bootstraps a replication cluster and makes the server a reference node with \fB\fCcluster restart\fR protection. On Linux you can also run \fB\fCmanticore_new_cluster\fR\&. It will start Manticore in \fB\fC\-\-new\-cluster\fR mode via systemd.
 .IP \(bu 2
 \fB\fC\-\-new\-cluster\-force\fR bootstraps a replication cluster and makes the server a reference node bypassing \fB\fCcluster restart\fR protection. On Linux you can also run \fB\fCmanticore_new_cluster \-\-force\fR\&. It will start Manticore in \fB\fC\-\-new\-cluster\-force\fR mode via systemd.
+.IP \(bu 2
+\fB\fC\-\-mockstack\fR analyzes and reports the necessary stack sizes for recursive expression evaluation, pattern matching operations, and filter processing. This debugging option outputs calculated stack requirements to the console for optimization purposes. The output provides environment variables that can be used to configure stack requirements for different operations.
 .RE
+.IP
+Example:
+```bash
+$ searchd \-\-mockstack
+Manticore 7.4.7 e90b5afbb@25032706 dev (columnar 4.1.2 15bbcc7@25031206) (secondary 4.1.2 15bbcc7@25031206) (knn 4.1.2 15bbcc7@25031206)
+Copyright (c) 2001\-2016, Andrew Aksyonoff
+Copyright (c) 2008\-2016, Sphinx Technologies Inc (\[la]http://sphinxsearch.com\[ra])
+Copyright (c) 2017\-2025, Manticore Software LTD (\[la]https://manticoresearch.com\[ra])
+.IP
+export MANTICORE\fIKNOWN\fPCREATE\fISIZE=200
+export MANTICORE\fPSTART\fIKNOWN\fPCREATE\fISIZE=4504
+export MANTICORE\fPKNOWN\fIEXPR\fPSIZE=16
+export MANTICORE\fISTART\fPKNOWN\fIEXPR\fPSIZE=200
+export MANTICORE\fINONE=32
+export MANTICORE\fPSTART\fINONE=104
+export MANTICORE\fPKNOWN\fIFILTER\fPSIZE=224
+export MANTICORE\fISTART\fPKNOWN\fIFILTER\fPSIZE=11192
+export MANTICORE\fIKNOWN\fPMATCH\fISIZE=320
+export MANTICORE\fPSTART\fIKNOWN\fPMATCH\fISIZE=14552
+export NO\fPSTACK_CALCULATION=1
+```
 .SS Windows options
 .PP
 There are some options for \fB\fCsearchd\fR that are specific to Windows platforms, concerning handling as a service, and are only available in Windows binaries.
@@ -236,7 +253,7 @@ Manticore utilizes the \fB\fCplugin_dir\fR for storing and using Manticore Buddy
 Manticore Software LTD (https://manticoresearch\&.com)
 .SH "COPYRIGHT"
 .PP
-Copyright 2017\-2024 Manticore Software LTD (https://manticoresearch\&.com), 2008\-2016 Sphinx Technologies Inc (http://sphinxsearch\&.com), 2001\-2016 Andrew Aksyonoff
+Copyright 2017\-2025 Manticore Software LTD (https://manticoresearch\&.com), 2008\-2016 Sphinx Technologies Inc (http://sphinxsearch\&.com), 2001\-2016 Andrew Aksyonoff
 .PP
 Permission is granted to copy, distribute and/or modify this document under the terms of the GNU General Public License, Version 3 or any later version published by the Free Software Foundation\&.
 .SH "SEE ALSO"

@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2017-2024, Manticore Software LTD (https://manticoresearch.com)
+// Copyright (c) 2017-2025, Manticore Software LTD (https://manticoresearch.com)
 // Copyright (c) 2001-2016, Andrew Aksyonoff
 // Copyright (c) 2008-2016, Sphinx Technologies Inc
 // All rights reserved
@@ -931,6 +931,8 @@ static KeyDesc_t g_dKeysIndex[] =
 	{ "jieba_hmm",				0, nullptr },
 	{ "jieba_mode",				0, nullptr },
 	{ "jieba_user_dict_path",	0, nullptr },
+	{ "diskchunk_flush_write_timeout",		0, nullptr },
+	{ "diskchunk_flush_search_timeout",		0, nullptr },
 	{ nullptr,					0, nullptr }
 };
 
@@ -1081,6 +1083,9 @@ static KeyDesc_t g_dKeysSearchd[] =
 	{ "merge_si_memlimit",		0, NULL },
 	{ "log_http",				0, NULL },
 	{ "join_batch_size",		0, NULL },
+	{ "diskchunk_flush_write_timeout",		0, nullptr },
+	{ "diskchunk_flush_search_timeout",		0, nullptr },
+	{ "kibana_version_string",		0, NULL },
 	{ NULL,						0, NULL }
 };
 
@@ -3513,6 +3518,7 @@ struct UUID_t
 
 static UUID_t g_tUidShort;
 static UUID_t g_tIndexUid;
+static int g_iUidShortServerId = 0;
 
 int64_t UidShort()
 {
@@ -3526,11 +3532,17 @@ int64_t GetIndexUid()
 
 void UidShortSetup ( int iServer, int iStarted )
 {
+	g_iUidShortServerId = iServer;
 	int64_t iSeed = ( (int64_t)iServer & 0x7f ) << 56;
 	iSeed += ((int64_t)iStarted ) << 24;
 	g_tUidShort.m_iUidBase = iSeed;
 	g_tIndexUid.m_iUidBase = iSeed;
 	sphLogDebug ( "uid-short server_id %d, started %d, seed " INT64_FMT, iServer, iStarted, iSeed );
+}
+
+int GetUidShortServerId ()
+{
+	return g_iUidShortServerId;
 }
 
 // RNG of the integers 0-255
@@ -3553,10 +3565,10 @@ static BYTE g_dPearsonRNG[256] = {
 		43,119,224, 71,122,142, 42,160,104, 48,247,103, 15, 11,138,239  // 16
 };
 
-BYTE Pearson8 ( const BYTE * pBuf, int iLen )
+BYTE Pearson8 ( const BYTE * pBuf, int iLen, BYTE uPrev )
 {
 	const BYTE * pEnd = pBuf + iLen;
-	BYTE iNew = 0;
+	BYTE iNew = uPrev;
 
 	while ( pBuf<pEnd )
 	{

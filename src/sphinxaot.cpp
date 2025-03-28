@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2017-2024, Manticore Software LTD (https://manticoresearch.com)
+// Copyright (c) 2017-2025, Manticore Software LTD (https://manticoresearch.com)
 // Copyright (c) 2011-2016, Andrew Aksyonoff
 // Copyright (c) 2011-2016, Sphinx Technologies Inc
 // All rights reserved
@@ -1470,6 +1470,7 @@ public:
 			pDict->DisableWordforms();
 		}
 		m_bIndexExact = bIndexExact;
+		*(DWORD*)m_sForm = 0; // fix valgrind on test 463: Conditional jump or move depends on uninitialised value
 	}
 
 

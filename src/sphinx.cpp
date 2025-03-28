@@ -1,6 +1,5 @@
 //
-//
-// Copyright (c) 2017-2024, Manticore Software LTD (https://manticoresearch.com)
+// Copyright (c) 2017-2025, Manticore Software LTD (https://manticoresearch.com)
 // Copyright (c) 2001-2016, Andrew Aksyonoff
 // Copyright (c) 2008-2016, Sphinx Technologies Inc
 // All rights reserved
@@ -210,7 +209,7 @@ public:
 	ISphQword *			QwordSpawn ( const XQKeyword_t & tWord ) const final;
 	bool				QwordSetup ( ISphQword * ) const final;
 	bool				Setup ( ISphQword * ) const;
-	ISphQword *			ScanSpawn() const final;
+	ISphQword *			ScanSpawn ( int iAtomPos ) const final;
 
 private:
 	DataReaderFactoryPtr_c		m_pDoclist;
@@ -1346,6 +1345,7 @@ private:
 	bool						AddRemoveColumnarAttr ( bool bAddAttr, const CSphString & sAttrName, ESphAttr eAttrType, const ISphSchema & tOldSchema, const ISphSchema & tNewSchema, CSphString & sError );
 	bool						DeleteFieldFromDict ( int iFieldId, BuildHeader_t & tBuildHeader, CSphString & sError );
 	bool						AddRemoveFromDocstore ( const CSphSchema & tOldSchema, const CSphSchema & tNewSchema, CSphString & sError );
+	bool						AddRemoveFromKNN ( const CSphSchema & tOldSchema, const CSphSchema & tNewSchema, CSphString & sError );
 
 	bool						Build_SetupInplace ( SphOffset_t & iHitsGap, int iHitsMax, int iFdHits ) const; // fixme! build only
 	bool						Build_SetupDocstore ( std::unique_ptr<DocstoreBuilder_i> & pDocstore, CSphBitvec & dStoredFields, CSphBitvec & dStoredAttrs, CSphVector<CSphVector<BYTE>> & dTmpDocstoreFieldStorage, CSphVector<CSphVector<BYTE>> & dTmpDocstoreAttrStorage ); // fixme! build only
@@ -2686,7 +2686,7 @@ struct CmpQueuedLookup_fn
 		if ( m_pStorage[a].m_tDocID==m_pStorage[b].m_tDocID )
 			return m_pStorage[a].m_tRowID < m_pStorage[b].m_tRowID;
 
-		return m_pStorage[a].m_tDocID < m_pStorage[b].m_tDocID;
+		return (uint64_t)m_pStorage[a].m_tDocID < (uint64_t)m_pStorage[b].m_tDocID;
 	}
 };
 
@@ -2748,7 +2748,9 @@ bool CSphIndex_VLN::AddRemoveAttribute ( bool bAddAttr, const AttrAddRemoveCtx_t
 	CSphString sSPAfile = GetTmpFilename ( SPH_EXT_SPA );
 	CSphString sSPBfile = GetTmpFilename ( SPH_EXT_SPB );
 	CSphString sSPHIfile = GetTmpFilename ( SPH_EXT_SPHI );
-	if ( !tSPAWriter.OpenFile ( sSPAfile, sError ) )
+
+	bool bHaveNonColumnar = tNewSchema.HasNonColumnarAttrs();
+	if ( bHaveNonColumnar && !tSPAWriter.OpenFile ( sSPAfile, sError ) )
 		return false;
 
 	bool bHadBlobs = false;
@@ -2807,19 +2809,24 @@ bool CSphIndex_VLN::AddRemoveAttribute ( bool bAddAttr, const AttrAddRemoveCtx_t
 	if ( !AddRemoveFromDocstore ( m_tSchema, tNewSchema, sError ) )
 		return false;
 
-	if ( tSPAWriter.IsError() )
-	{
-		sError.SetSprintf ( "error writing to %s", sSPAfile.cstr() );
+	if ( !AddRemoveFromKNN ( m_tSchema, tNewSchema, sError ) )
 		return false;
-	}
 
-	tSPAWriter.CloseFile();
+	if ( bHaveNonColumnar )
+	{
+		if ( tSPAWriter.IsError() )
+		{
+			sError.SetSprintf ( "error writing to %s", sSPAfile.cstr() );
+			return false;
+		}
+
+		tSPAWriter.CloseFile();
+	}
 
 	bool bHadColumnar = m_tSchema.HasColumnarAttrs();
 	bool bHaveColumnar = tNewSchema.HasColumnarAttrs();
 
 	bool bHadNonColumnar = m_tSchema.HasNonColumnarAttrs();
-	bool bHaveNonColumnar = tNewSchema.HasNonColumnarAttrs();
 
 	m_tAttr.Reset();
 
@@ -6775,6 +6782,12 @@ bool CSphIndex_VLN::DoMerge ( const CSphIndex_VLN * pDstIndex, const CSphIndex_V
 		if ( !tAttrMerger.Prepare ( pSrcIndex, pDstIndex ) )
 			return false;
 
+		if ( !tAttrMerger.AnalyzeAttributes ( *pDstIndex, dDstRows, tTotalDocs.first ) )
+			return false;
+
+		if ( !bCompress && !tAttrMerger.AnalyzeAttributes ( *pSrcIndex, dSrcRows, tTotalDocs.second ) )
+			return false;
+
 		if ( !tAttrMerger.CopyAttributes ( *pDstIndex, dDstRows, tTotalDocs.first ) )
 			return false;
 
@@ -7076,6 +7089,104 @@ bool CSphIndex_VLN::AddRemoveFromDocstore ( const CSphSchema & tOldSchema, const
 
 	m_pDocstore.reset();
 	PreallocDocstore();
+
+	return true;
+}
+
+
+bool CSphIndex_VLN::AddRemoveFromKNN ( const CSphSchema & tOldSchema, const CSphSchema & tNewSchema, CSphString & sError )
+{
+	int iOldNumKNN = 0;
+	for ( int i = 0; i < tOldSchema.GetAttrsCount(); i++ )
+		if ( tOldSchema.GetAttr(i).IsIndexedKNN() )
+			iOldNumKNN++;
+
+	int iNewNumKNN = 0;
+	for ( int i = 0; i < tNewSchema.GetAttrsCount(); i++ )
+		if ( tNewSchema.GetAttr(i).IsIndexedKNN() )
+			iNewNumKNN++;
+
+	if ( iOldNumKNN==iNewNumKNN )
+		return true;
+
+	std::unique_ptr<DocstoreBuilder_i> pDocstoreBuilder;
+	if ( iNewNumKNN )
+	{
+		CSphVector<std::pair<PlainOrColumnar_t,int>> dAllAttrsForKNN;
+		std::unique_ptr<knn::Builder_i> pKNNBuilder = BuildCreateKNN ( tNewSchema, m_iDocinfo, dAllAttrsForKNN, sError );
+		if ( !pKNNBuilder )
+			return false;
+
+		auto dColumnarIterators = CreateAllColumnarIterators ( m_pColumnar.get(), m_tSchema );
+
+		CSphVector<PlainOrColumnar_t> dOldAttrsForKNN;
+		IntVec_t dNewAttrsForKNN;
+		int iMaxDims = 0;
+		ARRAY_FOREACH ( i, dAllAttrsForKNN )
+		{
+			const auto & tKNNAttr = dAllAttrsForKNN[i];
+			const auto & tAttr = tNewSchema.GetAttr ( tKNNAttr.second );
+			if ( tOldSchema.GetAttr ( tAttr.m_sName.cstr() ) )
+				dOldAttrsForKNN.Add ( tKNNAttr.first );
+			else
+			{
+				dNewAttrsForKNN.Add(i);
+				iMaxDims = Max ( iMaxDims, tAttr.m_tKNN.m_iDims );
+			}
+		}
+
+		CSphVector<std::pair<PlainOrColumnar_t,int>> dAttrsForKNN;
+
+		const CSphRowitem * pRow = GetRawAttrs();
+		int iStride = m_tSchema.GetRowSize();
+		if ( !pRow )
+			iStride = 0;
+
+		CSphVector<float> dStubFloatVec;
+		dStubFloatVec.Resize(iMaxDims);
+		dStubFloatVec.ZeroVec();
+
+		auto pBlobs = GetRawBlobAttrs();
+		for ( RowID_t tRowID = 0; tRowID < RowID_t(m_iDocinfo); ++tRowID, pRow += iStride )
+		{
+			BuildTrainKNN ( tRowID, pRow, pBlobs, dColumnarIterators, dOldAttrsForKNN, *pKNNBuilder );
+			for ( auto i : dNewAttrsForKNN )
+			{
+				int iDims = tNewSchema.GetAttr ( dAllAttrsForKNN[i].second ).m_tKNN.m_iDims;
+				pKNNBuilder->Train ( i, { dStubFloatVec.Begin(), size_t(iDims) } );
+			}
+		}
+
+		pRow = GetRawAttrs();
+		for ( RowID_t tRowID = 0; tRowID < RowID_t(m_iDocinfo); ++tRowID, pRow += iStride )
+		{
+			BuildStoreKNN ( tRowID, pRow, pBlobs, dColumnarIterators, dOldAttrsForKNN, *pKNNBuilder );
+			for ( auto i : dNewAttrsForKNN )
+			{
+				int iDims = tNewSchema.GetAttr ( dAllAttrsForKNN[i].second ).m_tKNN.m_iDims;
+				pKNNBuilder->SetAttr ( i, { dStubFloatVec.Begin(), size_t(iDims) } );
+			}
+		}
+
+		BuildBufferSettings_t tSettings; // use default buffer settings
+
+		std::string sErrorSTL;
+		if ( !pKNNBuilder->Save ( GetTmpFilename ( SPH_EXT_SPKNN ).cstr(), tSettings.m_iBufferStorage, sErrorSTL ) )
+		{
+			sError = sErrorSTL.c_str();
+			return false;
+		}
+	}
+
+	if ( !JuggleFile ( SPH_EXT_SPKNN, sError, !!iOldNumKNN, !!iNewNumKNN ) )
+		return false;
+
+	m_pKNN.reset();
+	if ( !PreallocKNN() )
+	{
+		sError = m_sLastError;
+		return false;
+	}
 
 	return true;
 }
@@ -8497,7 +8608,15 @@ bool DiskIndexQwordSetup_c::Setup ( ISphQword * pWord ) const
 	return true;
 }
 
-QwordScan_c::QwordScan_c ( int iRowsCount )
+static DWORD Fields2Mask ( int iFields )
+{
+    if ( iFields>31 )
+        return 0xFFFFFFFF;
+    
+    return ( ( 1U<<iFields ) - 1 );
+}
+
+QwordScan_c::QwordScan_c ( int iRowsCount, int iAtomPos, int iFieldsCount )
 	: m_iRowsCount ( iRowsCount )
 {
 	m_bDone = ( m_iRowsCount==0 );
@@ -8505,8 +8624,23 @@ QwordScan_c::QwordScan_c ( int iRowsCount )
 	m_iDocs = m_iRowsCount;
 	m_sWord = "";
 	m_sDictWord = "";
-	m_bExcluded = true;
-	m_dQwordFields.SetAll();
+	m_iAtomPos = iAtomPos;
+	m_iFieldsCount = iFieldsCount;
+	SetFieldMask();
+}
+
+void QwordScan_c::SetFieldMask ()
+{
+	if ( m_iFieldsCount<32 )
+		m_dQwordFields.Assign32 ( Fields2Mask ( m_iFieldsCount ) );
+	else
+		m_dQwordFields.SetAll();
+}
+
+void QwordScan_c::Reset ()
+{
+	ISphQword::Reset();
+	SetFieldMask();
 }
 
 const CSphMatch & QwordScan_c::GetNextDoc()
@@ -8539,9 +8673,9 @@ const CSphMatch & QwordScan_c::GetNextDoc()
 	return m_tDoc;
 }
 
-ISphQword * DiskIndexQwordSetup_c::ScanSpawn() const
+ISphQword * DiskIndexQwordSetup_c::ScanSpawn ( int iAtomPos ) const
 {
-	return new QwordScan_c ( m_iRowsCount );
+	return new QwordScan_c ( m_iRowsCount, iAtomPos, m_pIndex->GetMatchSchema().GetFieldsCount() );
 }
 
 //////////////////////////////////////////////////////////////////////////////
@@ -11626,7 +11760,7 @@ Bson_t Explain ( ExplainQueryArgs_t & tArgs )
 		return EmptyBson ();
 	}
 
-	sphTransformExtendedQuery ( &tParsed.m_pRoot, *tArgs.m_pSettings, false, nullptr );
+	sphTransformExtendedQuery ( &tParsed.m_pRoot, *tArgs.m_pSettings, false ); // fixme! m.b. explain boolean-simplified?
 
 	bool bWordDict = tArgs.m_pDict->GetSettings().m_bWordDict;
 	int iExpandKeywords = ExpandKeywords ( tArgs.m_iExpandKeywords, QUERY_OPT_DEFAULT, *tArgs.m_pSettings, bWordDict );
@@ -12439,7 +12573,7 @@ bool SuggestResult_t::SetWord ( const char * sWord, const TokenizerRefPtr_c & pT
 	m_iCodepoints = DecodeUtf8 ( (const BYTE *)m_sWord.cstr(), m_dCodepoints );
 	m_bUtf8 = ( m_iCodepoints!=m_iLen );
 
-	bool bValidWord = ( m_iCodepoints>=3 );
+	bool bValidWord = ( m_iCodepoints>=2 );
 	if ( bValidWord )
 	{
 		// lets generate bigrams for short words as trigrams for 5char word could all contain the same wrong symbol

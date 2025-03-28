@@ -1,6 +1,6 @@
 //
 //
-// Copyright (c) 2024, Manticore Software LTD (https://manticoresearch.com)
+// Copyright (c) 2024-2025, Manticore Software LTD (https://manticoresearch.com)
 // All rights reserved
 //
 // This program is free software; you can redistribute it and/or modify
@@ -46,15 +46,60 @@ int	GetJoinBatchSize()
 }
 
 
-static bool GetJoinAttrName ( const CSphString & sAttr, const CSphString & sJoinedIndex, CSphString * pModified = nullptr )
+bool ExprHasLeftTableAttrs ( const CSphString & sAttr, const ISphSchema & tLeftSchema )
+{
+	const char * szAttr = sAttr.cstr();
+	const int MAX_ATTR_NAME_LEN = 512;
+	char dAttrName[MAX_ATTR_NAME_LEN+1];
+	int iPos = 0;
+	while ( *szAttr )
+	{
+		if ( sphIsAlphaOnly(*szAttr) || *szAttr=='.' || *szAttr=='_' )
+		{
+			if ( iPos==MAX_ATTR_NAME_LEN-1 )
+				break;
+
+            dAttrName[iPos++] = *szAttr;
+        }
+		else
+		{
+            if (iPos)
+			{
+                dAttrName[iPos] = '\0';
+				if ( !strchr ( dAttrName, '.' ) && tLeftSchema.GetAttrIndex(dAttrName)!=-1 )
+					return true;
+
+                iPos = 0;
+            }
+        }
+
+        szAttr++;
+    }
+
+    if (iPos)
+	{
+        dAttrName[iPos] = '\0';
+		if ( !strchr ( dAttrName, '.' ) && tLeftSchema.GetAttrIndex(dAttrName)!=-1 )
+			return true;
+    }
+
+	return false;
+}
+
+
+static bool GetJoinAttrName ( const CSphString & sAttr, const CSphString & sJoinedIndex, const ISphSchema & tLeftSchema, CSphString * pModified = nullptr )
 {
 	CSphString sPrefix;
 	sPrefix.SetSprintf ( "%s.", sJoinedIndex.cstr() );
 	int iPrefixLen = sPrefix.Length();
 
+	if ( ExprHasLeftTableAttrs ( sAttr, tLeftSchema ) )
+		return false;
+
 	bool bRightTable = false;
 	CSphString sMod = sAttr;
 	const char * szStart = sMod.cstr();
+
 	while ( true )
 	{
 		const char * szFound = strstr ( sMod.cstr(), sPrefix.cstr() );
@@ -189,7 +234,7 @@ private:
 class MatchCache_c
 {
 public:
-						MatchCache_c ( uint64_t uCacheSize );
+						MatchCache_c ( uint64_t uCacheSize, int iBatchSize );
 						~MatchCache_c();
 
 	void				SetSchema ( const ISphSchema * pSchema );
@@ -197,6 +242,7 @@ public:
 	template <typename MATCHES>
 	bool				Add ( uint64_t uHash, const MATCHES & dMatches );
 	FORCE_INLINE bool	Fetch ( uint64_t uHash, CSphSwapVector<CSphMatch> & dMatches );
+	FORCE_INLINE bool	IsFull() const { return m_uMaxSize && m_uCurSize>=m_uMaxSize; }
 
 private:
 	// a simplified match (incoming matches don't have a static part)
@@ -212,15 +258,18 @@ private:
 
 	uint64_t			m_uMaxSize = 0;
 	uint64_t			m_uCurSize = 0;
+	uint64_t			m_uFetched = 0;
+	int					m_iBatchSize = 0;
 
 	std::unique_ptr<ISphSchema> m_pSchema;
 	uint64_t			CalcMatchMem ( const CSphMatch & tMatch );
 };
 
 
-MatchCache_c::MatchCache_c ( uint64_t uCacheSize )
+MatchCache_c::MatchCache_c ( uint64_t uCacheSize, int iBatchSize )
 	: m_hCache ( INITIAL_HASH_SIZE )
 	, m_uMaxSize ( uCacheSize )
+	, m_iBatchSize ( iBatchSize )
 {}
 
 
@@ -277,20 +326,36 @@ bool MatchCache_c::Add ( uint64_t uHash, const MATCHES & dMatches )
 	if ( !m_pSchema )
 		return false;
 
-	if ( m_uCurSize>=m_uMaxSize )
+	if ( IsFull() )
 		return false;
 
+	// if we're inserting but not fetching anything back, there's high probability that we are dealing with unique JOIN ON conditions
+	// there's no point in caching those
+	int64_t iThresh = Max ( int64_t(8)*m_iBatchSize, 32768 );
+	if ( m_hCache.GetLength() >= iThresh )
+	{
+		float fRatio = float(m_uFetched)/iThresh;
+		if ( fRatio<=0.0001f )
+			return false;
+	}
+
+	uint64_t uEntrySize = 0;
 	StoredMatches_t dStoredMatches;
 	for ( const auto & i : dMatches )
 	{
 		dStoredMatches.Add ( { i.m_pDynamic } );
-		m_uCurSize += CalcMatchMem(i);
+		uEntrySize += CalcMatchMem(i);
 	}
 
-	m_uCurSize += m_hCache.GetEntrySize();
+	uEntrySize += m_hCache.GetEntrySize();
 
-	m_hCache.Add ( uHash, dStoredMatches );
-	return true;
+	if ( m_hCache.Add ( uHash, dStoredMatches ) )
+	{
+		m_uCurSize += uEntrySize;
+		return true;
+	}
+
+	return false;
 }
 
 
@@ -304,6 +369,7 @@ bool MatchCache_c::Fetch ( uint64_t uHash, CSphSwapVector<CSphMatch> & dMatches 
 	for ( int i = 0; i < pMatches->GetLength(); i++ )
 		dMatches[i].m_pDynamic = (*pMatches)[i].m_pDynamic;
 
+	m_uFetched++;
 	return true;
 }
 
@@ -576,10 +642,11 @@ private:
 	CSphVector<ContextCalcItem_t>	m_dCalcPrefilter;
 	CSphVector<ContextCalcItem_t>	m_dCalcPresort;
 	CSphVector<ContextCalcItem_t>	m_dAggregates;
+	IntVec_t						m_dCalcPrefilterPtrAttrs;
+	IntVec_t						m_dCalcPresortPtrAttrs;
 	bool							m_bSorterSchemaHasDataPtrs = false;
 
 	MatchCache_c					m_tCache;
-	bool							m_bCacheOk = true;
 
 	std::unique_ptr<BYTE[]>			m_pNullMask;
 	uint64_t						m_uNullMask = 0;
@@ -594,9 +661,9 @@ private:
 	CSphVector<SphAttr_t>			m_dBatchedFilterValues;
 	CSphVector<CSphString>			m_dBatchedFilterStrings;
 	CSphVector<CSphMatch *>			m_dMatchPtrs;
-	IntVec_t						m_dRightMatchIds;
 	IntVec_t						m_dRightMatchUseCount;
-	CSphVector<uint64_t>			m_dRightMatchFilterHashes;
+	OpenHashTableFastClear_T<uint64_t, IntVec_t> m_hRightMatches;
+
 	IntVec_t						m_dIntFilters;
 	IntVec_t						m_dStrFilters;
 
@@ -606,8 +673,6 @@ private:
 		uint64_t				m_uFilterHash = 0;
 		const BYTE *			m_pBlobPool = nullptr; // each match potentially comes from a different chunk with different pools
 		columnar::Columnar_i *	m_pColumnar = nullptr;
-		int						m_iRightMatchOffset = 0;
-		int						m_iNumRightMatches = 0;
 	};
 
 	CSphFixedVector<BatchedMatches_t> m_dBatchedMatches;
@@ -650,8 +715,11 @@ private:
 	FORCE_INLINE void AddToBatch ( const CSphMatch & tEntry, uint64_t uFilterHash );
 	FORCE_INLINE bool IsBatchFull() const;
 	void		SetupJoinFiltersBatch();
-	FORCE_INLINE bool CheckMatchFiltersBatched ( const BatchedMatches_t & tLeft, const CSphMatch & tRight, uint64_t & uRightHash, const ISphSchema * pRightSchema );
 	void		ClearBatch();
+	uint64_t	CalcRightFilterHash ( const CSphMatch & tEntry );
+	int			DistributeRightMatches();
+	void		CleanupUnusedRightMatches();
+
 	template <typename MATCHES> void CleanupRightMatches ( MATCHES & dMatches );
 	template <typename PUSH> void PushBatch ( PUSH && fnPush );
 	bool		RunJoinedQuery ( int & iTotalCount );
@@ -675,8 +743,9 @@ JoinSorter_c::JoinSorter_c ( const CSphIndex * pIndex, const CSphIndex * pJoined
 	, m_dQueries ( dQueries )
 	, m_dJoinQueryOptions ( dJoinQueryOptions )
 	, m_pSorter ( pSorter )
-	, m_tCache ( GetJoinCacheSize() )
+	, m_tCache ( GetJoinCacheSize(), iBatchSize )
 	, m_iBatchSize ( iBatchSize )
+	, m_hRightMatches ( iBatchSize )
 	, m_dBatchedMatches ( iBatchSize )
 {
 	assert ( pIndex && pJoinedIndex && pSorter );
@@ -688,7 +757,7 @@ JoinSorter_c::JoinSorter_c ( const CSphIndex * pIndex, const CSphIndex * pJoined
 
 	CSphVector<std::pair<int,bool>> dRightFilters = FetchJoinRightTableFilters ( m_tQuery.m_dFilters, tSorterSchema, m_tQuery.m_sJoinIdx.cstr() );
 	bool bDisableByImplicitGrouping = HasImplicitGrouping(m_tQuery) && m_tQuery.m_eJoinType!=JoinType_e::LEFT;
-	m_bFinalCalcOnly = !bJoinedGroupSort && !bHaveAggregates && !dRightFilters.GetLength() && !NeedToMoveMixedJoinFilters ( m_tQuery, tSorterSchema ) && !pSorter->IsPrecalc() && !bDisableByImplicitGrouping;
+	m_bFinalCalcOnly = !pIndex->IsRT() && !bJoinedGroupSort && !bHaveAggregates && !dRightFilters.GetLength() && !NeedToMoveMixedJoinFilters ( m_tQuery, tSorterSchema ) && !pSorter->IsPrecalc() && !bDisableByImplicitGrouping;
 	m_bErrorFlag = !SetupJoinQuery ( m_pSorter->GetSchema()->GetDynamicSize(), m_sErrorMessage );
 	if ( m_bFinalCalcOnly || !m_iBatchSize )
 		m_bCanBatch = false;
@@ -792,7 +861,7 @@ void JoinSorter_c::SetupAggregates()
 	for ( int i = 0; i < m_pSorterSchema->GetAttrsCount(); i++ )
 	{
 		const auto & tAttr = m_pSorterSchema->GetAttr(i);
-		if ( tAttr.m_eAggrFunc!=SPH_AGGR_NONE && tAttr.m_eStage==SPH_EVAL_SORTER && GetJoinAttrName ( tAttr.m_sName, CSphString ( m_pJoinedIndex->GetName() ) ) )
+		if ( tAttr.m_eAggrFunc!=SPH_AGGR_NONE && tAttr.m_eStage==SPH_EVAL_SORTER && GetJoinAttrName ( tAttr.m_sName, CSphString ( m_pJoinedIndex->GetName() ), *m_pSorterSchema ) )
 			m_dAggregates.Add ( { tAttr.m_tLocator, tAttr.m_eAttrType, tAttr.m_pExpr } );
 	}
 }
@@ -869,10 +938,14 @@ void JoinSorter_c::SetupDependentAttrCalc ( const IntVec_t & dJoinedAttrs )
 		{
 		case SPH_EVAL_PREFILTER:
 			m_dCalcPrefilter.Add ( { tAttr.m_tLocator, tAttr.m_eAttrType, tAttr.m_pExpr } );
+			if ( sphIsDataPtrAttr ( tAttr.m_eAttrType ) )
+				m_dCalcPrefilterPtrAttrs.Add ( m_dCalcPrefilter.GetLength()-1 );
 			break;
 
 		case SPH_EVAL_PRESORT:
 			m_dCalcPresort.Add ( { tAttr.m_tLocator, tAttr.m_eAttrType, tAttr.m_pExpr } );
+			if ( sphIsDataPtrAttr ( tAttr.m_eAttrType ) )
+				m_dCalcPresortPtrAttrs.Add ( m_dCalcPresort.GetLength()-1 );
 			break;
 
 		default:
@@ -972,11 +1045,17 @@ bool JoinSorter_c::PushJoinedMatches ( const CSphMatch & tEntry, const MATCHES &
 		}
 
 		if ( !m_tMixedFilter.Eval(m_tMatch) )
+		{
+			FreeDataPtrAttrs ( m_tMatch, m_dCalcPrefilter, m_dCalcPrefilterPtrAttrs );
 			continue;
+		}
 
 		CalcContextItems ( m_tMatch, m_dCalcPresort );
 		CalcContextItems ( m_tMatch, m_dAggregates );
 		bAnythingPushed |= fnPush(m_tMatch);
+
+		FreeDataPtrAttrs ( m_tMatch, m_dCalcPrefilter, m_dCalcPrefilterPtrAttrs );
+		FreeDataPtrAttrs ( m_tMatch, m_dCalcPresort, m_dCalcPresortPtrAttrs );
 
 		// clear repacked json
 		for ( auto & i : m_dJoinRemap )
@@ -1122,6 +1201,16 @@ void JoinSorter_c::SetupJoinFiltersBatch()
 }
 
 
+static int GetIndexWeight ( const CSphQuery & tQuery, const CSphString & sIdxName )
+{
+	for ( const auto & i : tQuery.m_dIndexWeights )
+		if ( i.first==sIdxName )
+			return i.second;
+
+	return 1;
+}
+
+
 bool JoinSorter_c::RunJoinedQuery ( int & iTotalCount )
 {
 	CSphQueryResultMeta tMeta;
@@ -1132,7 +1221,7 @@ bool JoinSorter_c::RunJoinedQuery ( int & iTotalCount )
 	// FIXME!!!! make a SetSchema that does not take ownership of the schema
 	m_pRightSorter->SetSchema ( m_pRightSorterRsetSchema->CloneMe(), true );
 
-	CSphMultiQueryArgs tArgs(1);
+	CSphMultiQueryArgs tArgs ( GetIndexWeight ( m_tJoinQuery, m_tQuery.m_sJoinIdx ) );
 	ISphMatchSorter * pSorter = m_pRightSorter.get();
 	if ( !m_pJoinedIndex->MultiQuery ( tQueryResult, m_tJoinQuery, { &pSorter, 1 }, tArgs ) )
 	{
@@ -1205,7 +1294,6 @@ bool JoinSorter_c::AddToCacheAndPush ( const CSphMatch & tEntry, uint64_t uJoinO
 	{
 		m_tCache.SetSchema ( pSorter->GetSchema() );
 		bInCache = m_tCache.Add ( uJoinOnFilterHash, dMatches );
-		m_bCacheOk &= bInCache;
 	}
 
 	CSphRowitem * pDynamic = m_tMatch.m_pDynamic;
@@ -1229,21 +1317,6 @@ bool JoinSorter_c::AddToCacheAndPush ( const CSphMatch & tEntry, uint64_t uJoinO
 }
 
 
-bool JoinSorter_c::CheckMatchFiltersBatched ( const BatchedMatches_t & tLeft, const CSphMatch & tRight, uint64_t & uRightHash, const ISphSchema * pRightSchema )
-{
-	// use hashes to speed up subsequent checks
-	if ( tLeft.m_uFilterHash==uRightHash )
-		return true;
-
-	for ( const auto & tRemap : m_dFilterRemap )
-		if ( tLeft.m_tMatch.GetAttr ( tRemap.m_tLocator ) != tRight.GetAttr ( tRemap.m_tRightStandaloneLocator ) )
-			return false;
-
-	uRightHash = tLeft.m_uFilterHash;
-	return true;
-}
-
-
 void JoinSorter_c::ClearBatch()
 {
 	if ( m_bSorterSchemaHasDataPtrs )
@@ -1257,41 +1330,64 @@ void JoinSorter_c::ClearBatch()
 	m_dBatchedFilterStrings.Resize(0);
 }
 
-template <typename PUSH>
-void JoinSorter_c::PushBatch ( PUSH && fnPush )
+
+int JoinSorter_c::DistributeRightMatches()
 {
-	m_dRightMatchIds.Resize(0);
 	m_dRightMatchUseCount.Resize ( m_dMatches.GetLength() );
 	m_dRightMatchUseCount.ZeroVec();
-	m_dRightMatchFilterHashes.Resize ( m_dMatches.GetLength() );
-	m_dRightMatchFilterHashes.ZeroVec();
+	m_hRightMatches.Clear();
+
+	ARRAY_FOREACH ( iRightMatch, m_dMatches )
+	{
+		uint64_t uRightHash = CalcRightFilterHash ( m_dMatches[iRightMatch] );
+		IntVec_t * pFound = m_hRightMatches.Find(uRightHash);
+		if ( pFound )
+			pFound->Add(iRightMatch);
+		else
+		{
+			IntVec_t & tFound = m_hRightMatches.Acquire(uRightHash);
+			tFound.Resize(0);
+			tFound.Add(iRightMatch);
+		}
+	}
 
 	int iMaxRightMatches = 0;
-	const ISphSchema * pRightSchema = m_pRightSorter->GetSchema();
 	for ( int iMatch = 0; iMatch < m_iBatched; iMatch++ )
 	{
 		auto & tLeftMatch = m_dBatchedMatches[iMatch];
-		tLeftMatch.m_iRightMatchOffset = m_dRightMatchIds.GetLength();
 
-		ARRAY_FOREACH ( iRightMatch, m_dMatches )
-			if ( CheckMatchFiltersBatched ( tLeftMatch, m_dMatches[iRightMatch], m_dRightMatchFilterHashes[iRightMatch], pRightSchema ) )
-			{
-				m_dRightMatchIds.Add(iRightMatch);
+		IntVec_t * pRightMatchVec = m_hRightMatches.Find(tLeftMatch.m_uFilterHash);
+		if ( pRightMatchVec )
+		{
+			for ( auto iRightMatch : *pRightMatchVec )
 				m_dRightMatchUseCount[iRightMatch]++;
-			}
+		}
 
-		tLeftMatch.m_iNumRightMatches = m_dRightMatchIds.GetLength() - tLeftMatch.m_iRightMatchOffset;
-		iMaxRightMatches = Max ( iMaxRightMatches, tLeftMatch.m_iNumRightMatches );
+		iMaxRightMatches = Max ( iMaxRightMatches, pRightMatchVec ? pRightMatchVec->GetLength() : 0 );
 	}
 
-	// cleanup unused matches
+	return iMaxRightMatches;
+}
+
+
+void JoinSorter_c::CleanupUnusedRightMatches()
+{
+	const ISphSchema * pRightSchema = m_pRightSorter->GetSchema();
 	ARRAY_FOREACH ( i, m_dMatches )
 		if ( !m_dRightMatchUseCount[i] )
 		{
 			pRightSchema->FreeDataPtrs ( m_dMatches[i] );
 			m_dMatches[i].ResetDynamic();
 		}
+}
 
+template <typename PUSH>
+void JoinSorter_c::PushBatch ( PUSH && fnPush )
+{
+	int iMaxRightMatches = DistributeRightMatches();
+	CleanupUnusedRightMatches();
+
+	const ISphSchema * pRightSchema = m_pRightSorter->GetSchema();
 	CSphFixedVector<CSphMatch> dTmpMatchStorage {iMaxRightMatches};
 	for ( int iMatch = 0; iMatch < m_iBatched; iMatch++ )
 	{
@@ -1300,25 +1396,26 @@ void JoinSorter_c::PushBatch ( PUSH && fnPush )
 		int iTmpMatch = 0;
 		m_dMatchPtrs.Resize(0);
 
-		for ( int iRightMatch = 0; iRightMatch < tLeftMatch.m_iNumRightMatches; iRightMatch++ )
-		{
-			int iRightMatchId = m_dRightMatchIds[tLeftMatch.m_iRightMatchOffset + iRightMatch];
-			int & iUseCount = m_dRightMatchUseCount[iRightMatchId];
-			assert ( iUseCount>0 );
-
-			CSphMatch & tRightMatch = m_dMatches[iRightMatchId];
-			if ( iUseCount>1 )
+		IntVec_t * pRightMatchIds = m_hRightMatches.Find ( tLeftMatch.m_uFilterHash );
+		if ( pRightMatchIds )
+			for ( auto iRightMatchId : (*pRightMatchIds) )
 			{
-				// need to clone match to place it into cache
-				CSphMatch & tTmpMatch = dTmpMatchStorage[iTmpMatch++];
-				pRightSchema->CloneMatch ( tTmpMatch, tRightMatch );
-				m_dMatchPtrs.Add ( &tTmpMatch );
-			}
-			else
-				m_dMatchPtrs.Add ( &tRightMatch ); // no need to clone, cache just takes ownership
+				int & iUseCount = m_dRightMatchUseCount[iRightMatchId];
+				assert ( iUseCount>0 );
 
-			iUseCount--;
-		}
+				CSphMatch & tRightMatch = m_dMatches[iRightMatchId];
+				if ( iUseCount>1 )
+				{
+					// need to clone match to place it into cache
+					CSphMatch & tTmpMatch = dTmpMatchStorage[iTmpMatch++];
+					pRightSchema->CloneMatch ( tTmpMatch, tRightMatch );
+					m_dMatchPtrs.Add ( &tTmpMatch );
+				}
+				else
+					m_dMatchPtrs.Add ( &tRightMatch ); // no need to clone, cache just takes ownership
+
+				iUseCount--;
+			}
 
 		MatchPtrVec_c dMatchesToPush(m_dMatchPtrs);
 		AddToCacheAndPush ( tLeftMatch.m_tMatch, tLeftMatch.m_uFilterHash, fnPush, dMatchesToPush, tLeftMatch.m_pBlobPool, tLeftMatch.m_pColumnar, true );
@@ -1362,10 +1459,10 @@ bool JoinSorter_c::Push_T ( const CSphMatch & tEntry, PUSH && fnPush, bool bGrou
 	if ( m_bCanBatch && !bGrouped )
 	{
 		AddToBatch ( tEntry, uJoinOnFilterHash );
-		if ( !IsBatchFull() )
-			return true;
+		if ( IsBatchFull() )
+			RunBatch(fnPush);
 
-		return RunBatch(fnPush);
+		return false; // always return false so that cutoff/implicit cutoff won't work
 	}
 
 	if ( !RunJoinedQueryAndAdjustMaxMatches() )
@@ -1391,7 +1488,7 @@ int64_t	JoinSorter_c::GetTotalCount() const
 
 void JoinSorter_c::ProduceCacheSizeWarning ( CSphString & sWarning )
 {
-	if ( !m_bCacheOk )
+	if ( m_tCache.IsFull() )
 		sWarning.SetSprintf ( "Join cache overflow detected; increase join_cache_size to improve performance" );
 }
 
@@ -1619,6 +1716,27 @@ bool JoinSorter_c::SetupOnFilters ( CSphString & sError )
 }
 
 
+uint64_t JoinSorter_c::CalcRightFilterHash ( const CSphMatch & tEntry )
+{
+	uint64_t uHash = 0;
+	for ( auto & tRemap : m_dFilterRemap )
+	{
+		if ( tRemap.m_bBlob )
+		{
+			ByteBlob_t tBlob = tEntry.FetchAttrData ( tRemap.m_tRightStandaloneLocator, nullptr );
+			uHash = HashWithSeed ( tBlob.first, tBlob.second, uHash );
+		}
+		else
+		{
+			SphAttr_t tValue = tEntry.GetAttr ( tRemap.m_tRightStandaloneLocator );
+			uHash = HashWithSeed ( &tValue, sizeof(tValue), uHash );
+		}
+	}
+
+	return uHash;
+}
+
+
 uint64_t JoinSorter_c::SetupJoinFilters ( const CSphMatch & tEntry )
 {
 	uint64_t uHash = 0;
@@ -1716,7 +1834,7 @@ void JoinSorter_c::AddToJoinSelectList ( const CSphString & sExpr, const CSphStr
 		return;
 
 	CSphString sJoinExpr;
-	if ( !GetJoinAttrName ( sExpr, CSphString ( m_pJoinedIndex->GetName() ), &sJoinExpr ) )
+	if ( !GetJoinAttrName ( sExpr, CSphString ( m_pJoinedIndex->GetName() ), *m_pSorterSchema, &sJoinExpr ) )
 		return;
 
 	const CSphColumnInfo & tSorterAttr = m_pSorterSchema->GetAttr(iSorterAttrId);
@@ -1849,7 +1967,7 @@ void JoinSorter_c::AddExpressionItemsToJoinSelectList()
 		}
 
 		CSphString sJoinedAttr;
-		if ( GetJoinAttrName ( i.m_sAttrName, CSphString ( m_pJoinedIndex->GetName() ), &sJoinedAttr ) )
+		if ( GetJoinAttrName ( i.m_sAttrName, CSphString ( m_pJoinedIndex->GetName() ), *m_pSorterSchema, &sJoinedAttr ) )
 		{
 			const CSphColumnInfo * pAttr = tJoinedSchema.GetAttr ( sJoinedAttr.cstr() );
 			if ( pAttr && pAttr->IsColumnar() )
@@ -1890,7 +2008,7 @@ void JoinSorter_c::AddBatchedFilterItemsToJoinSelectList()
 		sAttr.SetSprintf ( "%s.%s", m_pJoinedIndex->GetName(), i.m_sAttrName.cstr() );
 
 		CSphString sJoinExpr;
-		if ( !GetJoinAttrName ( sAttr, CSphString ( m_pJoinedIndex->GetName() ), &sJoinExpr ) )
+		if ( !GetJoinAttrName ( sAttr, CSphString ( m_pJoinedIndex->GetName() ), *m_pSorterSchema, &sJoinExpr ) )
 			continue;
 
 		CSphString sJoinAlias;

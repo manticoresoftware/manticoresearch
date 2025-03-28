@@ -2,7 +2,7 @@
 
 <test>
 <name>xmlpipe2 indexing vs prefix search</name>
-
+<skip_db/>
 <config>
 indexer
 {

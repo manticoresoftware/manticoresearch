@@ -1,0 +1,65 @@
+––– input –––
+export INSTANCE=1
+––– output –––
+––– block: ../../base/replication/start-searchd-precach –––
+––– input –––
+export INSTANCE=2
+––– output –––
+––– block: ../../base/replication/start-searchd-precach –––
+––– input –––
+export INSTANCE=3
+––– output –––
+––– block: ../../base/replication/start-searchd-precach –––
+––– input –––
+mysql -h0 -P1306 -e "create cluster a 'a' as path"
+––– output –––
+––– input –––
+mysql -h0 -P1306 -e "create table t1; create table t2; create table t3;"
+––– output –––
+––– input –––
+mysql -h0 -P1306 -e "show tables"
+––– output –––
++-------+------+
+| Table | Type |
++-------+------+
+| t1    | rt   |
+| t2    | rt   |
+| t3    | rt   |
++-------+------+
+––– input –––
+mysql -h0 -P2306 -e "join cluster a at '127.0.0.1:1312' 'a' as path" &
+––– output –––
+––– input –––
+mysql -h0 -P1306 -e "alter cluster a add t1" &
+––– output –––
+––– input –––
+mysql -h0 -P3306 -e "join cluster a at '127.0.0.1:1312' 'a' as path" &
+––– output –––
+––– input –––
+mysql -h0 -P1306 -e "alter cluster a add t2" &
+––– output –––
+––– input –––
+mysql -h0 -P1306 -e "alter cluster a add t3" &
+––– output –––
+––– input –––
+wait 1>/dev/null 2>&1; echo $?
+––– output –––
+0
+––– input –––
+for i in 1 2 3; do grep -q 'FATAL:' /var/log/manticore-${i}/searchd.log ; echo "#$i – $?"; done
+––– output –––
+#1 – 1
+#2 – 1
+#3 – 1
+––– input –––
+for i in 1 2 3; do mysql -h0 -P${i}306 -e "show tables\G" | grep 'Table: t'; done | sort -V
+––– output –––
+Table: t1
+Table: t1
+Table: t1
+Table: t2
+Table: t2
+Table: t2
+Table: t3
+Table: t3
+Table: t3

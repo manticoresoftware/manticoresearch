@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2017-2024, Manticore Software LTD (https://manticoresearch.com)
+// Copyright (c) 2017-2025, Manticore Software LTD (https://manticoresearch.com)
 // Copyright (c) 2011-2016, Andrew Aksyonoff
 // Copyright (c) 2011-2016, Sphinx Technologies Inc
 // All rights reserved
@@ -1590,7 +1590,7 @@ JsonObj_c::JsonObj_c ( const char * szJson )
 
 JsonObj_c::JsonObj_c ( Str_t sJson )
 {
-	m_pRoot = cJSON_Parse ( sJson.first );
+	m_pRoot = cJSON_ParseWithLen ( sJson.first, sJson.second );
 }
 
 

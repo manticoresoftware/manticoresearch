@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2024, Manticore Software LTD (https://manticoresearch.com)
+// Copyright (c) 2024-2025, Manticore Software LTD (https://manticoresearch.com)
 // All rights reserved
 //
 // This program is free software; you can redistribute it and/or modify
@@ -258,7 +258,13 @@ ISphMatchSorter * CreateScrollSorter ( ISphMatchSorter * pSorter, const ISphSche
 
 bool ParseScroll ( CSphQuery & tQuery, const CSphString & sVal, CSphString & sError )
 {
-	CSphString sDecoded = DecodeBase64(sVal);
+	CSphString sDecoded;
+	if ( !DecodeBase64 ( sVal, sDecoded ) )
+	{
+		sError.SetSprintf ( "unable to decode BASE64: %s", sVal.cstr() );
+		return false;
+	}
+
 	JsonObj_c tRoot ( sDecoded.cstr() );
 	if ( !tRoot )
 	{

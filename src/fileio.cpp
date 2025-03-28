@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2017-2024, Manticore Software LTD (https://manticoresearch.com)
+// Copyright (c) 2017-2025, Manticore Software LTD (https://manticoresearch.com)
 // Copyright (c) 2001-2016, Andrew Aksyonoff
 // Copyright (c) 2008-2016, Sphinx Technologies Inc
 // All rights reserved
@@ -884,7 +884,7 @@ static std::atomic<int64_t> g_tmNextIOTime { 0 };
 void sphSetThrottling ( int iMaxIOps, int iMaxIOSize )
 {
 	g_iIOpsDelay = iMaxIOps ? 1000000 / iMaxIOps : iMaxIOps;
-	g_iMaxIOSize = Clamp ( 1, g_iLimitIOSize, iMaxIOSize );
+	g_iMaxIOSize = iMaxIOSize ? Clamp ( 1, g_iLimitIOSize, iMaxIOSize ) : g_iLimitIOSize;
 }
 
 

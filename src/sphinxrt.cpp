@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2017-2024, Manticore Software LTD (https://manticoresearch.com)
+// Copyright (c) 2017-2025, Manticore Software LTD (https://manticoresearch.com)
 // Copyright (c) 2001-2016, Andrew Aksyonoff
 // Copyright (c) 2008-2016, Sphinx Technologies Inc
 // All rights reserved
@@ -145,6 +145,11 @@ volatile int AutoOptimizeCutoff() noexcept
 	return iAutoOptimizeCutoff;
 }
 
+volatile int AutoOptimizeCutoffKNN() noexcept
+{
+	static int iAutoOptimizeCutoffKNN = Max ( GetNumPhysicalCPUs() / 2, 1 );
+	return iAutoOptimizeCutoffKNN;
+}
 
 //////////////////////////////////////////////////////////////////////////
 
@@ -912,54 +917,54 @@ public:
 
 	~RtData_c () = default;
 
-	ConstDiskChunkRefPtr_t DiskChunkByID ( int iChunkID ) const
+	ConstDiskChunkRefPtr_t DiskChunkByID ( int iChunkID ) const EXCLUDES ( m_tLock )
 	{
 		ScRL_t rLock ( m_tLock );
 		for ( auto& pChunk : *m_pChunks )
 			if ( pChunk->Cidx().m_iChunk == iChunkID )
 				return pChunk;
-		return ConstDiskChunkRefPtr_t (nullptr);
+		return { nullptr };
 	}
 
-	ConstDiskChunkRefPtr_t DiskChunkByIdx ( int iChunk ) const
+	ConstDiskChunkRefPtr_t DiskChunkByIdx ( int iChunk ) const EXCLUDES ( m_tLock )
 	{
 		ScRL_t rLock ( m_tLock );
 		if ( iChunk < 0 || iChunk >= m_pChunks->GetLength() )
-			return ConstDiskChunkRefPtr_t ( nullptr );
+			return { nullptr };
 		return ( *m_pChunks )[iChunk];
 	}
 
-	ConstDiskChunkVecRefPtr_t DiskChunks () const
+	ConstDiskChunkVecRefPtr_t DiskChunks () const EXCLUDES ( m_tLock )
 	{
 		ScRL_t rLock ( m_tLock );
 		return m_pChunks;
 	}
 
-	ConstRtSegVecRefPtr_t RamSegs () const
+	ConstRtSegVecRefPtr_t RamSegs () const EXCLUDES ( m_tLock )
 	{
 		ScRL_t rLock ( m_tLock );
 		return m_pSegments;
 	}
 
-	ConstRtData RtData () const
+	ConstRtData RtData () const EXCLUDES ( m_tLock )
 	{
 		ScRL_t rLock ( m_tLock );
 		return { m_pChunks, m_pSegments };
 	}
 
-	bool IsEmpty() const
+	bool IsEmpty() const EXCLUDES ( m_tLock )
 	{
 		ScRL_t rLock ( m_tLock );
 		return m_pChunks->IsEmpty() && m_pSegments->IsEmpty();
 	}
 
-	int GetRamSegmentsCount() const
+	int GetRamSegmentsCount() const EXCLUDES ( m_tLock )
 	{
 		ScRL_t rLock ( m_tLock );
 		return m_pSegments->GetLength();
 	}
 
-	int GetDiskChunksCount () const
+	int GetDiskChunksCount () const EXCLUDES ( m_tLock )
 	{
 		ScRL_t rLock ( m_tLock );
 		return m_pChunks->GetLength ();
@@ -999,7 +1004,7 @@ public:
 		, m_fnOnRamSegsChanged { std::move ( fnOnRamSegsChanged ) }
 	{}
 
-	~RtWriter_c()
+	~RtWriter_c() EXCLUDES ( m_tOwner.m_tLock )
 	{
 		if ( !m_pNewDiskChunks && !m_pNewRamSegs )
 			return;
@@ -1036,22 +1041,6 @@ public:
 		auto pChunks = m_tOwner.DiskChunks();
 		for ( const auto & pChunk : *pChunks )
 			m_pNewDiskChunks->Add ( pChunk );
-	}
-
-	ConstDiskChunkRefPtr_t PopDiskChunk () EXCLUDES ( m_tOwner.m_tLock )
-	{
-		InitDiskChunks ( empty );
-		auto pChunks = m_tOwner.DiskChunks();
-		if ( !pChunks->GetLength() )
-			return ConstDiskChunkRefPtr_t();
-
-		auto pHeadChunk = pChunks->First();
-		for ( int i=1; i<pChunks->GetLength(); i++ )
-		{
-			m_pNewDiskChunks->Add ( pChunks->At ( i ) );
-		}
-
-		return pHeadChunk;
 	}
 
 };
@@ -1223,6 +1212,11 @@ public:
 		}
 	}
 
+	bool IsInterrupted() const noexcept
+	{
+		return m_tValue.GetValue().m_bShutdown || sphInterrupted();
+	}
+
 	int GetNumOfLocks() const noexcept
 	{
 		return m_tValue.GetValueRef().m_iDisabledCounter;
@@ -1287,6 +1281,7 @@ public:
 	void				ForceRamFlush ( const char * szReason ) final;
 	bool				IsFlushNeed() const final;
 	bool				ForceDiskChunk() final;
+	void				ForceDiskChunk ( int iFlushWrite, int iFlushSearch ) final;
 	bool				AttachDiskIndex ( CSphIndex * pIndex, bool bTruncate, bool & bFatal, CSphString & sError ) final;
 	bool				AttachRtIndex ( RtIndex_i * pIndex, bool bTruncate, bool & bFatal, CSphString & sError ) final;
 	bool				Truncate ( CSphString & sError, Truncate_e eAction ) final;
@@ -1380,7 +1375,6 @@ public:
 	bool				IsSameSettings ( CSphReconfigureSettings & tSettings, CSphReconfigureSetup & tSetup, StrVec_t & dWarnings, CSphString & sError ) const final;
 	bool				Reconfigure ( CSphReconfigureSetup & tSetup ) final;
 	int64_t				GetLastFlushTimestamp() const final;
-	void				IndexDeleted() final { m_bIndexDeleted = true; }
 	void				ProhibitSave() final;
 	void				EnableSave() final;
 	void				LockFileState ( CSphVector<CSphString> & dFiles ) final;
@@ -1429,16 +1423,17 @@ private:
 	WorkerSchedulers_c			m_tWorkers;
 	Coro::Waitable_T<int>		m_tUnLockedSegments { 0 }; // how many segments are not participating in any locked ops (like merge, save to disk).
 	Coro::Waitable_T<MergeSeg_e> m_eSegMergeQueued { MergeSeg_e::NEWSEG };
-	Coro::Waitable_T<bool>		m_bSegMergeWorking { false };
 	Coro::Waitable_T<CSphVector<int64_t>> m_tSaveTIDS { 0 }; // save operations performing now, and their TIDs
 	int							m_iSaveGeneration = 0;		// SaveDiskChunk() increases generation on finish
 	Coro::Waitable_T<int>		m_tNSavesNow { 0 };			// N of merge segment routines running right now
 
-	bool						m_bIndexDeleted = false;
+	Coro::Waitable_T<int>		m_tBackgroundRoutines { 0 };
 
 	int64_t						m_iSavedTID = 0;
 	int64_t						m_tmSaved;
 	mutable DWORD				m_uDiskAttrStatus = 0;
+	std::atomic<int64_t>		m_tmDataWriten = 0;
+	std::atomic<int64_t>		m_tmDataSearched = 0;
 
 	bool						m_bKeywordDict;
 	int							m_iWordsCheckpoint = RTDICT_CHECKPOINT_V5;
@@ -1462,6 +1457,10 @@ private:
 
 	int							CompareWords ( const RtWord_t * pWord1, const RtWord_t * pWord2 ) const;
 
+	void						StartRoutine();
+	void						StopRoutine();
+	void						WaitAllRoutinesFinished() const noexcept;
+
 	CSphFixedVector<RowID_t>	CopyAttributesFromAliveDocs ( RtSegment_t& tDstSeg, const RtSegment_t & tSrcSeg, RtAttrMergeContext_t & tCtx ) const REQUIRES ( tDstSeg.m_tLock ) REQUIRES (m_tWorkers.SerialChunkAccess());
 	void						MergeKeywords ( RtSegment_t & tSeg, const RtSegment_t & tSeg1, const RtSegment_t & tSeg2, const VecTraits_T<RowID_t> & dRowMap1, const VecTraits_T<RowID_t> & dRowMap2 ) const;
 	RtSegment_t *				MergeTwoSegments ( const RtSegment_t * pA, const RtSegment_t * pB ) const REQUIRES (m_tWorkers.SerialChunkAccess());
@@ -1483,7 +1482,7 @@ private:
 	void						SaveMeta ();
 	bool						SaveDiskHeader ( SaveDiskDataContext_t & tCtx, const ChunkStats_t & tStats, CSphString & sError ) const;
 	bool						SaveDiskData ( const char * szFilename, const ConstRtSegmentSlice_t & tSegs, const ChunkStats_t & tStats, CSphString & sError ) const;
-	bool						SaveDiskChunk ( bool bForced, bool bEmergent=false, bool bBootstrap=false ) REQUIRES ( m_tWorkers.SerialChunkAccess() );
+	bool						SaveDiskChunk ( bool bForced, bool bEmergent=false ) REQUIRES ( m_tWorkers.SerialChunkAccess() );
 	std::unique_ptr<CSphIndex>	PreallocDiskChunk ( const CSphString& sChunk, int iChunk, FilenameBuilder_i * pFilenameBuilder, StrVec_t & dWarnings, CSphString & sError, const char * szName=nullptr ) const;
 	bool						LoadRamChunk ( DWORD uVersion, bool bRebuildInfixes, bool bFixup = true );
 	bool						SaveRamChunk ();
@@ -1518,7 +1517,7 @@ private:
 	bool						MergeSegmentsStep( MergeSeg_e eVal ) REQUIRES ( m_tWorkers.SerialChunkAccess() );
 	void						RunMergeSegmentsWorker();
 	void						StartMergeSegments ( MergeSeg_e eMergeWhat, bool bNotify=true ) REQUIRES ( m_tWorkers.SerialChunkAccess() );
-	void						StopMergeSegmentsWorker() REQUIRES ( m_tWorkers.SerialChunkAccess() );
+	void						StopMergeSegmentsWorker();
 	bool						NeedStoreWordID () const override;
 	int64_t						GetMemLimit() const final { return m_iRtMemLimit; }
 	bool						VerifyKNN ( InsertDocData_c & tDoc, CSphString & sError ) const;
@@ -1541,6 +1540,7 @@ private:
 
 	// internal helpers/hooks
 	inline RtWriter_c			RtWriter() { return { m_tRtChunks, [this] { UpdateUnlockedCount(); } }; }
+	inline void					CopyChunksTo ( RtWriter_c& tWriter ) REQUIRES ( m_tWorkers.SerialChunkAccess() ) { tWriter.InitDiskChunks ( RtWriter_c::copy ); }
 
 	// set of my rt; suitable for any usage
 	inline RtGuard_t			RtGuard() const { return RtGuard_t { RtData() }; }
@@ -1595,21 +1595,39 @@ RtIndex_c::RtIndex_c ( CSphString sIndexName, CSphString sPath, CSphSchema tSche
 	}
 }
 
+class OptimizeGuard_c final
+{
+	RtIndex_c& m_tIndex;
+	const bool m_bPreviousOptimizeState;
+
+public:
+	NONCOPYMOVABLE ( OptimizeGuard_c );
+
+	explicit OptimizeGuard_c (  RtIndex_c& tIndex )
+		: m_tIndex { tIndex }
+		, m_bPreviousOptimizeState { tIndex.StopOptimize() }
+	{}
+
+	~OptimizeGuard_c()
+	{
+		m_tIndex.m_bOptimizeStop.store ( m_bPreviousOptimizeState, std::memory_order_relaxed );
+	}
+};
 
 RtIndex_c::~RtIndex_c ()
 {
-	if ( IsInsideCoroutine())
+	if ( Threads::IsInsideCoroutine())
 	{
 		// From serial worker resuming on Wait() will happen after whole merger coroutine finished.
 		ScopedScheduler_c tSerialFiber { m_tWorkers.SerialChunkAccess() };
 		TRACE_SCHED ( "rt", "~RtIndex_c" );
-		m_tSaving.SetShutdownFlag ();
-		if ( Threads::IsInsideCoroutine() )
-		{
-			Threads::Coro::Reschedule();
-			StopMergeSegmentsWorker();
-		}
-		m_tNSavesNow.Wait ( [] ( int iVal ) { return iVal==0; } );
+
+		m_tSaving.SetShutdownFlag();
+		StopMergeSegmentsWorker();
+		m_tNSavesNow.Wait ( [] ( int iVal ) { return iVal == 0; } );
+		OptimizeGuard_c tStopOptimize ( *this );
+		Threads::Coro::Reschedule();
+		WaitAllRoutinesFinished();
 	}
 
 	int64_t tmSave = sphMicroTimer();
@@ -2951,7 +2969,8 @@ bool RtIndex_c::Commit ( int * pDeleted, RtAccum_t * pAcc, CSphString * pError )
 	pAcc->CleanupPart();
 
 	// sort accum klist, too
-	pAcc->m_dAccumKlist.Uniq ();
+	pAcc->m_dAccumKlist.Sort ( Lesser ( [] ( DocID_t a, DocID_t b ) { return (uint64_t)a < (uint64_t)b; } ) );
+	pAcc->m_dAccumKlist.Uniq (false);
 
 	// now on to the stuff that needs locking and recovery
 	int iKilled = 0;
@@ -2965,6 +2984,8 @@ bool RtIndex_c::Commit ( int * pDeleted, RtAccum_t * pAcc, CSphString * pError )
 
 	if ( pDeleted )
 		*pDeleted = iKilled;
+
+	m_tmDataWriten.store ( sphMicroTimer() );
 
 	// done; cleanup accum
 	pAcc->Cleanup();
@@ -3157,11 +3178,10 @@ void RtIndex_c::StartMergeSegments ( MergeSeg_e eMergeWhat, bool bNotify ) REQUI
 		m_eSegMergeQueued.NotifyOne();
 }
 
-void RtIndex_c::StopMergeSegmentsWorker() REQUIRES ( m_tWorkers.SerialChunkAccess() )
+void RtIndex_c::StopMergeSegmentsWorker()
 {
 	TRACE_SCHED ( "rt", "StopMergeSegmentsWorker" );
 	m_eSegMergeQueued.SetValueAndNotifyOne ( MergeSeg_e::EXIT );
-	m_bSegMergeWorking.Wait ( [] ( bool bVal ) { return !bVal; } );
 }
 
 bool RtIndex_c::MergeSegmentsStep ( MergeSeg_e eVal ) REQUIRES ( m_tWorkers.SerialChunkAccess() )
@@ -3204,8 +3224,10 @@ bool RtIndex_c::MergeSegmentsStep ( MergeSeg_e eVal ) REQUIRES ( m_tWorkers.Seri
 			return true;
 		}
 
+		StartRoutine();
 		Coro::Go ( [this, eMergeAction]() REQUIRES ( m_tWorkers.SerialChunkAccess() ) {
 			SaveDiskChunk ( false, eMergeAction == CheckMerge_e::FLUSH_EM );
+			StopRoutine();
 		}, m_tWorkers.SerialChunkAccess() );
 		return false; // exit into idle
 	}
@@ -3277,11 +3299,11 @@ bool RtIndex_c::MergeSegmentsStep ( MergeSeg_e eVal ) REQUIRES ( m_tWorkers.Seri
 
 void RtIndex_c::RunMergeSegmentsWorker()
 {
+	StartRoutine();
 	Coro::Go ( [this]() REQUIRES ( m_tWorkers.SerialChunkAccess() )
 	{
 		TRACE_SCHED ( "rt", "RunMergeSegmentsWorker-lambda" );
-		m_bSegMergeWorking.SetValueAndNotifyOne ( true );
-		auto tResetSegMergeWorking = AtScopeExit ( [this] { m_bSegMergeWorking.SetValueAndNotifyOne ( false ); } );
+		auto tResetSegMergeWorking = AtScopeExit ( [this] { StopRoutine(); } );
 
 		while (true)
 		{
@@ -3417,6 +3439,41 @@ bool RtIndex_c::ForceDiskChunk()
 	return SaveDiskChunk ( true );
 }
 
+void RtIndex_c::ForceDiskChunk ( int iFlushWrite, int iFlushSearch )
+{
+	if ( iFlushWrite<0 && GetMutableSettings().m_iFlushWrite<0 )
+		return;
+
+	// skip table without either writes or searches
+	if ( !m_tmDataWriten || !m_tmDataSearched )
+		return;
+
+	if ( m_tRtChunks.RamSegs()->IsEmpty() )
+		return;
+
+	int64_t tmFlushWrite = ( GetMutableSettings().IsSet ( MutableName_e::DISKCHUNK_FLUSH_WRITE_TIMEOUT ) ? GetMutableSettings().m_iFlushWrite : iFlushWrite );
+	tmFlushWrite *= 1000000;
+	int64_t tmFlushSearch = ( GetMutableSettings().IsSet ( MutableName_e::DISKCHUNK_FLUSH_SEARCH_TIMEOUT ) ? GetMutableSettings().m_iFlushSearch : iFlushSearch );
+	tmFlushSearch *= 1000000;
+	if ( tmFlushWrite<0 )
+		return;
+
+	int64_t tmNow = sphMicroTimer();
+
+	// recent write disables auto-flush
+	// no need to interrupt write stream with auto-flush
+	if ( ( tmNow-m_tmDataWriten.load() )<tmFlushWrite )
+		return;
+
+	// no recent search disables auto-flush
+	// means post only or archived table
+	if ( ( tmNow-m_tmDataSearched.load() )>tmFlushSearch )
+		return;
+
+	ScopedScheduler_c tSerialFiber ( m_tWorkers.SerialChunkAccess() );
+	SaveDiskChunk ( true );
+}
+
 
 struct SaveDiskDataContext_t : public BuildHeader_t
 {
@@ -3518,13 +3575,17 @@ bool RtIndex_c::WriteAttributes ( SaveDiskDataContext_t & tCtx, CSphString & sEr
 	for ( const auto & i : tCtx.m_tRamSegments )
 		tCtx.m_iTotalDocuments += i->m_tAliveRows.load ( std::memory_order_relaxed );
 
+	CSphVector<std::pair<PlainOrColumnar_t,int>> dAllAttrsForKNN;
 	CSphVector<PlainOrColumnar_t> dAttrsForKNN;
 	std::unique_ptr<knn::Builder_i> pKNNBuilder;
 	if ( m_tSchema.HasKNNAttrs() )
 	{
-		pKNNBuilder = BuildCreateKNN ( m_tSchema, tCtx.m_iTotalDocuments, dAttrsForKNN, sError );
+		pKNNBuilder = BuildCreateKNN ( m_tSchema, tCtx.m_iTotalDocuments, dAllAttrsForKNN, sError );
 		if ( !pKNNBuilder )
 			return false;
+
+		for ( const auto & i : dAllAttrsForKNN )
+			dAttrsForKNN.Add ( i.first );
 	}
 
 	CSphFixedVector<DocidRowidPair_t> dRawLookup ( tCtx.m_iTotalDocuments );
@@ -3595,15 +3656,33 @@ bool RtIndex_c::WriteAttributes ( SaveDiskDataContext_t & tCtx, CSphString & sEr
 				pDocstoreBuilder->AddDoc ( tNextRowID, tSeg.m_pDocstore->GetDoc ( tRowID, nullptr, -1, false ) );
 			}
 
-			if ( pKNNBuilder && !BuildStoreKNN ( tRowID, pRow, tSeg.m_dBlobs.Begin(), dColumnarIterators, dAttrsForKNN, *pKNNBuilder ) )
-			{
-				sError = pKNNBuilder->GetError().c_str();
-				return false;
-			}
+			if ( pKNNBuilder )
+				BuildTrainKNN ( tRowID, pRow, tSeg.m_dBlobs.Begin(), dColumnarIterators, dAttrsForKNN, *pKNNBuilder );
 
 			tCtx.m_dRowMaps[i][tRowID] = tNextRowID++;
 		}
 	}
+
+	if ( pKNNBuilder )
+		ARRAY_FOREACH ( i, tCtx.m_tRamSegments )
+		{
+			const auto & tSeg = *tCtx.m_tRamSegments[i];
+
+			SccRL_t rLock ( tSeg.m_tLock );
+			tSeg.m_bAttrsBusy.store ( true, std::memory_order_release );
+
+			auto dColumnarIterators = CreateAllColumnarIterators ( tSeg.m_pColumnar.get(), m_tSchema );
+
+			for ( auto tRowID : RtLiveRows_c(tSeg) )
+			{
+				const CSphRowitem * pRow = tSeg.m_dRows.Begin() + (int64_t)tRowID*iStride;
+				if ( !BuildStoreKNN ( tRowID, pRow, tSeg.m_dBlobs.Begin(), dColumnarIterators, dAttrsForKNN, *pKNNBuilder ) )
+				{
+					sError = pKNNBuilder->GetError().c_str();
+					return false;
+				}
+			}
+		}
 
 	// rows could be killed during index save and tNextRowID could be less than tCtx.m_iTotalDocuments \ initial count
 	assert ( tNextRowID<=(RowID_t)dRawLookup.GetLength() );
@@ -4168,14 +4247,14 @@ int64_t RtIndex_c::GetMemCount ( PRED&& fnPred ) const
 }
 
 // i.e. create new disk chunk from ram segments
-bool RtIndex_c::SaveDiskChunk ( bool bForced, bool bEmergent, bool bBootstrap ) REQUIRES ( m_tWorkers.SerialChunkAccess() )
+bool RtIndex_c::SaveDiskChunk ( bool bForced, bool bEmergent ) REQUIRES ( m_tWorkers.SerialChunkAccess() )
 {
 	if ( !m_tSaving.WaitEnabledOrShutdown() )
-		return !bBootstrap;
+		return true;
 
 	assert ( Coro::CurrentScheduler() == m_tWorkers.SerialChunkAccess() );
 
-	RTSAVELOG << "SaveDiskChunk (" << ( bForced ? "forced, " : "not forced, " ) << ( bEmergent ? "emergent, " : "not emergent, " ) << ( bBootstrap ? "bootstrap" : "usual" ) << ")";
+	RTSAVELOG << "SaveDiskChunk (" << ( bForced ? "forced, " : "not forced, " ) << ( bEmergent ? "emergent, " : "not emergent " ) << ")";
 
 	m_tNSavesNow.Wait ( [] ( int iVal ) { return iVal < SIMULTANEOUS_SAVE_LIMIT; } );
 
@@ -4221,7 +4300,7 @@ bool RtIndex_c::SaveDiskChunk ( bool bForced, bool bEmergent, bool bBootstrap ) 
 	RTSAVELOG << "SaveDiskChunk process " << dSegments.GetLength() << " segments. Active jobs " << m_tNSavesNow.GetValue() << ", op " << iSaveOp
 		<< " RAM visible+retired/locked/acquired " << iNotMyOpRAM + iMyOpRAM << "+" << m_iRamChunksAllocatedRAM.load ( std::memory_order_relaxed )- iNotMyOpRAM - iMyOpRAM << "/" << iNotMyOpRAM << "/" << iMyOpRAM;
 	if ( dSegments.IsEmpty() )
-		return !bBootstrap;
+		return true;
 
 	auto iTID = m_iTID;
 	m_tSaveTIDS.ModifyValue ( [iTID] ( CSphVector<int64_t>& dSaves ) { dSaves.Add ( iTID ); } );
@@ -4273,6 +4352,8 @@ bool RtIndex_c::SaveDiskChunk ( bool bForced, bool bEmergent, bool bBootstrap ) 
 		tmSave += sphMicroTimer();
 		break;
 	}
+
+	assert ( Coro::CurrentScheduler() == m_tWorkers.SerialChunkAccess() );
 
 	// here we back into serial fiber. As we're switched, we can't rely on m_iTID and index stats anymore
 	if ( !pNewChunk )
@@ -4328,7 +4409,7 @@ bool RtIndex_c::SaveDiskChunk ( bool bForced, bool bEmergent, bool bBootstrap ) 
 	// now new disk chunk is loaded, kills and updates applied - we ready to change global index state now.
 	{
 		auto tNewSet = RtWriter();
-		tNewSet.InitDiskChunks ( RtWriter_c::copy );
+		CopyChunksTo ( tNewSet );
 		tNewSet.m_pNewDiskChunks->Add ( DiskChunk_c::make ( std::move ( pNewChunk ) ) );
 		SaveMeta ( iTID, GetChunkIds ( *tNewSet.m_pNewDiskChunks ) );
 
@@ -4350,10 +4431,6 @@ bool RtIndex_c::SaveDiskChunk ( bool bForced, bool bEmergent, bool bBootstrap ) 
 		iDiskChunks = tNewSet.m_pNewDiskChunks->GetLength();
 	}
 	// from this point all readers will see new state of the index.
-
-	// if saving caused from loading .ram - we're done (DON't need to abandon .ram file!)
-	if ( bBootstrap )
-		return true;
 
 	// abandon .ram file
 	UnlinkRAMChunk ( "SaveDiskChunk" );
@@ -6229,8 +6306,8 @@ private:
 class RtScanQword_t final : public QwordScan_c
 {
 public:
-	explicit RtScanQword_t ( int iRowsTotal )
-		: QwordScan_c ( iRowsTotal )
+	explicit RtScanQword_t ( int iRowsTotal, int iAtomPos, int iFieldsCount )
+		: QwordScan_c ( iRowsTotal, iAtomPos, iFieldsCount )
 	{
 	}
 
@@ -6246,7 +6323,6 @@ public:
 		m_iRowsCount = pSegment->m_uRows;
 		m_iDocs = m_iRowsCount;
 		m_bDone = ( m_iRowsCount==0 );
-		m_dQwordFields.SetAll();
 		m_pKilled = &pSegment->m_tDeadRowMap;
 
 		return ( pSegment->m_tAliveRows.load(std::memory_order_relaxed)>0 );
@@ -6270,7 +6346,7 @@ public:
 	ISphQword *	QwordSpawn ( const XQKeyword_t & ) const final;
 	bool		QwordSetup ( ISphQword * pQword ) const final;
 	void				SetSegment ( int iSegment ) { m_iSeg = iSegment; }
-	ISphQword *			ScanSpawn() const final;
+	ISphQword *			ScanSpawn ( int iAtomPos ) const final;
 
 private:
 	const RtGuard_t&	m_tGuard;
@@ -6319,9 +6395,9 @@ bool RtIndex_c::EarlyReject ( CSphQueryContext * pCtx, CSphMatch & tMatch ) cons
 	return false;
 }
 
-ISphQword * RtQwordSetup_t::ScanSpawn () const
+ISphQword * RtQwordSetup_t::ScanSpawn ( int iAtomPos ) const
 {
-	return new RtScanQword_t ( (int)m_pIndex->GetStats().m_iTotalDocuments );
+	return new RtScanQword_t ( (int)m_pIndex->GetStats().m_iTotalDocuments, iAtomPos, m_pIndex->GetMatchSchema().GetFieldsCount() );
 }
 
 
@@ -7135,6 +7211,10 @@ static int64_t CalcMaxCountDistinct ( const CSphQuery & tQuery, const RtGuard_t 
 
 static bool CalcDiskChunkSplits ( IntVec_t & dThreads, int iJobs, const CSphQuery & tQuery, const CSphMultiQueryArgs & tArgs, const RtGuard_t & tGuard )
 {
+	// less threads than jobs; no need to calculate anything. just use 1 thread per job.
+	if ( tArgs.m_iThreads<=iJobs )
+		return true;
+
 	CSphVector<SplitData_t> dSplitData ( iJobs );
 
 	int iMaxThreadsPerIndex = CalcMaxThreadsPerIndex ( tArgs.m_iThreads, iJobs );
@@ -7725,6 +7805,8 @@ bool RtIndex_c::MultiQuery ( CSphQueryResult & tResult, const CSphQuery & tQuery
 	dSorters.Reserve ( dAllSorters.GetLength() );
 	dAllSorters.Apply ([&dSorters] ( ISphMatchSorter* p ) { if ( p ) dSorters.Add(p); });
 	auto& tMeta = *tResult.m_pMeta;
+
+	AT_SCOPE_EXIT ( [this]() { const_cast<std::atomic<int64_t> &> ( m_tmDataSearched ).store ( sphMicroTimer() ); } );
 
 	// if we have anything to work with
 	if ( dSorters.IsEmpty() )
@@ -8383,25 +8465,6 @@ bool RtIndex_c::SaveAttributes ( CSphString & sError ) const
 	return bAllSaved;
 }
 
-
-class OptimizeGuard_c final
-{
-	RtIndex_c & m_tIndex;
-	const bool m_bPreviousOptimizeState;
-
-public:
-	NONCOPYMOVABLE (OptimizeGuard_c);
-
-	explicit OptimizeGuard_c ( RtIndex_c & tIndex )
-			: m_tIndex { tIndex }, m_bPreviousOptimizeState { tIndex.StopOptimize () }
-	{}
-
-	~OptimizeGuard_c ()
-	{
-		m_tIndex.m_bOptimizeStop.store ( m_bPreviousOptimizeState, std::memory_order_relaxed );
-	}
-};
-
 // fixme! is NOT lru-safe, ensure index locked exclusively!
 // (last is true as it w-locked before 'alter' called, however optimize call need special glance!)
 bool RtIndex_c::AddRemoveColumnarAttr ( RtGuard_t & tGuard, bool bAdd, const CSphString & sAttrName, ESphAttr eAttrType, const CSphSchema & tOldSchema, const CSphSchema & tNewSchema, CSphString & sError )
@@ -8690,7 +8753,7 @@ bool RtIndex_c::AttachDiskIndex ( CSphIndex * pIndex, bool bTruncate, bool & bFa
 
 	{	// update disk chunk list
 		auto tNewSet = RtWriter();
-		tNewSet.InitDiskChunks ( RtWriter_c::copy );
+		CopyChunksTo ( tNewSet );
 		tNewSet.m_pNewDiskChunks->Add ( DiskChunk_c::make ( pIndex ) );
 	}
 
@@ -8828,7 +8891,7 @@ bool RtIndex_c::AttachRtIndex ( RtIndex_i * pSrcIndex, bool bTruncate, bool & bF
 
 		// collect all disk chunks from the source RT index in the brand new structure
 		auto tNewSet = RtWriter();
-		tNewSet.InitDiskChunks ( RtWriter_c::copy );
+		CopyChunksTo ( tNewSet );
 		// need to reset m_bFinallyUnlink flag for the disk chunks moved here after all finishes well
 		int iUnlinkIndex = tNewSet.m_pNewDiskChunks->GetLength();
 
@@ -8884,8 +8947,13 @@ ConstDiskChunkRefPtr_t RtIndex_c::PopDiskChunk()
 	ScopedScheduler_c tSerialFiber ( m_tWorkers.SerialChunkAccess() );
 
 	auto tNewSet = RtWriter();
-	tNewSet.InitDiskChunks ( RtWriter_c::empty );
-	return tNewSet.PopDiskChunk();
+	CopyChunksTo ( tNewSet );
+	if ( tNewSet.m_pNewDiskChunks->IsEmpty() )
+		return {};
+
+	auto pHeadChunk = tNewSet.m_pNewDiskChunks->First();
+	tNewSet.m_pNewDiskChunks->Remove(0);
+	return pHeadChunk;
 }
 
 //////////////////////////////////////////////////////////////////////////
@@ -9202,11 +9270,14 @@ int64_t RtIndex_c::GetCount() const
 
  std::pair<int64_t,int> RtIndex_c::GetPseudoShardingMetric ( const VecTraits_T<const CSphQuery> & dQueries, const VecTraits_T<int64_t> & dMaxCountDistinct, int iThreads, bool & bForceSingleThread ) const
 {
-	 if ( MustRunInSingleThread ( dQueries, false, dMaxCountDistinct, bForceSingleThread ) )
-		 return { 0, 1 };
+	if ( MustRunInSingleThread ( dQueries, false, dMaxCountDistinct, bForceSingleThread ) )
+		return { 0, 1 };
+
+	bool bHaveKNN = dQueries.any_of ( []( auto & tQuery ){ return !tQuery.m_sKNNAttr.IsEmpty(); } );	 
 
 	auto tGuard = RtGuard();
-	int iThreadCap = GetPseudoSharding() ? 0 : tGuard.m_dDiskChunks.GetLength();
+	int iDiskChunks = tGuard.m_dDiskChunks.GetLength();
+	int iThreadCap = GetPseudoSharding() ? ( bHaveKNN ? iDiskChunks : 0 ) : iDiskChunks;
 	return { GetStats().m_iTotalDocuments, iThreadCap };
 }
 
@@ -9458,6 +9529,8 @@ Binlog::CheckTnxResult_t RtIndex_c::ReplayCommit ( CSphReader & tReader, CSphStr
 		// actually replay
 		FakeRL_t _ ( pSeg.operator RtSegment_t*()->m_tLock);
 		int iKilled = 0;
+
+//		dKlist.Sort ( Lesser ( [] ( DocID_t a, DocID_t b ) { return (uint64_t)a < (uint64_t)b; } ) ); // should already be sorted
 		CommitReplayable ( pSeg, dKlist, iAddTotalBytes, iKilled, sError );
 		tRes.m_bApply = true;
 	}
@@ -9881,6 +9954,24 @@ bool RtIndex_c::StopOptimize()
 	return bPrevOptimizeValue;
 }
 
+void RtIndex_c::StartRoutine()
+{
+	m_tBackgroundRoutines.ModifyValue ( [] ( int& i ) { ++i; } );
+}
+
+void RtIndex_c::StopRoutine()
+{
+	if ( Threads::IsInsideCoroutine() )
+		m_tBackgroundRoutines.ModifyValueAndNotifyAll ( [] ( int& i ) { --i; } );
+	else
+		m_tBackgroundRoutines.ModifyValue ( [] ( int& i ) { --i; } );
+}
+
+void RtIndex_c::WaitAllRoutinesFinished() const noexcept
+{
+	if ( Threads::IsInsideCoroutine() )
+		m_tBackgroundRoutines.Wait ( [] ( int iVal ) { return iVal==0; } );
+}
 
 bool RtIndex_c::CheckValidateChunk ( int& iChunk, int iChunks, bool bByOrder ) const
 {
@@ -9936,10 +10027,12 @@ bool RtIndex_c::StartOptimize ( OptimizeTask_t tTask )
 	if ( GetNumOfLocks ()>0 )
 		return false;
 
+	StartRoutine();
 	Threads::StartJob ( [tTask = std::move ( tTask ), this] () {
 		// want to track optimize only at work
 		auto pDesc = PublishSystemInfo ( "OPTIMIZE" );
 		Optimize ( std::move ( tTask ) );
+		StopRoutine();
 	} );
 	return true;
 }
@@ -9965,10 +10058,10 @@ void RtIndex_c::Optimize ( OptimizeTask_t tTask )
 
 	RTDLOG << "Optimize checked with " << tTask;
 
-	if ( m_tOptimizeRuns.GetValue() > 0 )
+	if ( OptimizesRunning() > 0 )
 	{
-		RTDLOG << "Escape optimize as " << m_tOptimizeRuns.GetValue() << " tasks is already running";
-		sphLogDebug ( "Escape optimize as %d tasks is already running", m_tOptimizeRuns.GetValue() );
+		RTDLOG << "Escape optimize as " << OptimizesRunning() << " tasks is already running";
+		sphLogDebug ( "Escape optimize as %d tasks is already running", OptimizesRunning() );
 		return;
 	}
 
@@ -9985,7 +10078,7 @@ void RtIndex_c::Optimize ( OptimizeTask_t tTask )
 	int64_t tmPass = sphMicroTimer() - tmStart;
 	int iDiskChunks = m_tRtChunks.GetDiskChunksCount();
 
-	if ( sphInterrupted() )
+	if ( m_tSaving.IsInterrupted() )
 		LogWarning ( "rt: table %s: optimization terminated chunk(s) %d ( left %d ) in %.3t", GetName(), iChunks, iDiskChunks, tmPass );
 	else if ( iChunks > 0 )
 		LogInfo ( "rt: table %s: optimized %s chunk(s) %d ( left %d ) in %.3t", GetName(), g_bProgressiveMerge ? "progressive" : "regular", iChunks, iDiskChunks, tmPass );
@@ -9993,7 +10086,7 @@ void RtIndex_c::Optimize ( OptimizeTask_t tTask )
 
 bool RtIndex_c::MergeCanRun() const
 {
-	return !sphInterrupted() && !m_bOptimizeStop.load(std::memory_order_relaxed);
+	return !m_tSaving.IsInterrupted() && !m_bOptimizeStop.load(std::memory_order_relaxed);
 }
 
 int RtIndex_c::ClassicOptimize ()
@@ -10007,12 +10100,12 @@ int RtIndex_c::ClassicOptimize ()
 	return iAffected;
 }
 
-static int GetCutOff ( const MutableIndexSettings_c & tSettings )
+static int GetCutOff ( const MutableIndexSettings_c & tSettings, bool bKNN )
 {
 	if ( tSettings.IsSet ( MutableName_e::OPTIMIZE_CUTOFF ) )
 		return tSettings.m_iOptimizeCutoff;
 	else
-		return MutableIndexSettings_c::GetDefaults().m_iOptimizeCutoff;
+		return bKNN ? MutableIndexSettings_c::GetDefaults().m_iOptimizeCutoffKNN : MutableIndexSettings_c::GetDefaults().m_iOptimizeCutoff;
 }
 
 int RtIndex_c::ProgressiveOptimize ( int iCutoff )
@@ -10021,7 +10114,7 @@ int RtIndex_c::ProgressiveOptimize ( int iCutoff )
 
 	int iAffected = 0;
 	if ( !iCutoff )
-		iCutoff = GetCutOff ( m_tMutableSettings );
+		iCutoff = GetCutOff ( m_tMutableSettings, m_tSchema.HasKNNAttrs() );
 
 	bool bWork = true;
 	while ( bWork &= MergeCanRun() )
@@ -10105,7 +10198,7 @@ void RtIndex_c::CheckStartAutoOptimize()
 	if ( !iCutoff )
 		return;
 
-	iCutoff *= GetCutOff ( m_tMutableSettings );
+	iCutoff *= GetCutOff ( m_tMutableSettings, m_tSchema.HasKNNAttrs() );
 
 	if ( m_tRtChunks.GetDiskChunksCount()<=iCutoff )
 		return;
@@ -10442,6 +10535,10 @@ void RtIndex_c::ProhibitSave()
 	StopOptimize();
 	m_tSaving.SetState ( SaveState_c::DISCARD );
 	std::atomic_thread_fence ( std::memory_order_release );
+	// need also to wait while all disk chunk writers get out of the m_tSaving scope to make sure there will be no new disk chunks after this function
+	// might be called on daemon start from the system mock functions - no need to wait there
+	if ( Threads::IsInsideCoroutine() )
+		m_tNSavesNow.Wait ( [] ( int iVal ) { return iVal == 0; } );
 }
 
 void RtIndex_c::EnableSave()
@@ -10463,6 +10560,9 @@ void RtIndex_c::LockFileState ( CSphVector<CSphString>& dFiles )
 	ScopedScheduler_c tSerialFiber ( m_tWorkers.SerialChunkAccess() );
 	m_tSaving.SetState ( SaveState_c::DISABLED );
 	std::atomic_thread_fence ( std::memory_order_release );
+	// need also to wait while all disk chunk writers get out of the m_tSaving scope to make sure there will be no new disk chunks after this function
+	m_tNSavesNow.Wait ( [] ( int iVal ) { return iVal == 0; } );
+
 	GetIndexFiles ( dFiles, dFiles );
 }
 

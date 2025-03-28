@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2017-2024, Manticore Software LTD (https://manticoresearch.com)
+// Copyright (c) 2017-2025, Manticore Software LTD (https://manticoresearch.com)
 // Copyright (c) 2001-2016, Andrew Aksyonoff
 // Copyright (c) 2008-2016, Sphinx Technologies Inc
 // All rights reserved
@@ -337,10 +337,30 @@ static void FixupDegenerates ( XQNode_t * pNode, CSphString & sWarning )
 		FixupDegenerates ( pNode->m_dChildren[i], sWarning );
 }
 
+static int GetMaxAtomPos ( const XQNode_t * pNode )
+{
+	int iMaxAtomPos = -1;
+	if ( !pNode )
+		return iMaxAtomPos;
+
+	for ( const auto & tWord : pNode->m_dWords )
+		iMaxAtomPos = Max ( iMaxAtomPos, tWord.m_iAtomPos );
+
+	for ( const XQNode_t * pItem : pNode->m_dChildren )
+		iMaxAtomPos = GetMaxAtomPos ( pItem );
+
+	return iMaxAtomPos;
+}
+
 static XQNode_t * TransformOnlyNot ( XQNode_t * pNode, CSphVector<XQNode_t *> & dSpawned )
 {
 	XQNode_t * pScan = new XQNode_t ( pNode->m_dSpec );
 	pScan->SetOp ( SPH_QUERY_SCAN );
+	// set the last atom pos for the spawned scan term
+	pScan->m_iAtomPos = GetMaxAtomPos ( pNode );
+	if ( pScan->m_iAtomPos!=-1 )
+		pScan->m_iAtomPos++;
+
 	dSpawned.Add ( pScan );
 
 	XQNode_t * pAnd = new XQNode_t ( pNode->m_dSpec );
@@ -2876,9 +2896,7 @@ private:
 CSphTransformation::CSphTransformation ( XQNode_t ** ppRoot, const ISphKeywordsStat * pKeywords )
 	: m_pKeywords ( pKeywords )
 	, m_ppRoot ( ppRoot )
-{
-	assert ( m_pKeywords!=NULL );
-}
+{}
 
 
 
@@ -2919,6 +2937,9 @@ bool CSphTransformation::CollectInfo ( XQNode_t * pParent, Checker_fn pfnChecker
 void CSphTransformation::SetCosts ( XQNode_t * pNode, const CSphVector<XQNode_t *> & dNodes )
 {
 	assert ( pNode || dNodes.GetLength() );
+
+	if ( !m_pKeywords )
+		return;
 
 	CSphVector<XQNode_t*> dChildren ( dNodes.GetLength() + 1 );
 	dChildren[dNodes.GetLength()] = pNode;

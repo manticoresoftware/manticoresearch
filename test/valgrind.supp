@@ -79,4 +79,55 @@
    ...
    fun:asio_handler_allocate
 }
+
+#cctz
+{
+   cctz::load_time_zone
+   Memcheck:Leak
+   match-leak-kinds: reachable
+   fun:_Znwm
+   ...
+   fun:_ZN4cctz14load_time_zoneERKNSt7__*
+}
+
+{
+   cctz::TimeZoneIf::Load
+   Memcheck:Leak
+   match-leak-kinds: reachable
+   fun:_Znwm
+   ...
+   fun:_ZN4cctz10TimeZoneIf4LoadERKNSt7__*
+}
+
+{
+   cctz::time_zone::Impl::LoadTimeZone
+   Memcheck:Leak
+   match-leak-kinds: reachable
+   fun:_Znwm
+   ...
+   fun:_ZN4cctz9time_zone4Impl12LoadTimeZoneERKNSt7__*
+}
+
+#main
+{
+   ConcatWarnings in ServiceMain
+   Memcheck:Leak
+   match-leak-kinds: reachable
+   fun:_Znam
+   ...
+   fun:ConcatWarnings
+   fun:_Z11ServiceMainiPPc
+}
+
+
+# temporary ScheduleRtFlushDisk (fixme! remove when the leak is fixed)
+{
+   temporary leak in ScheduleRtFlushDisk
+   Memcheck:Leak
+   match-leak-kinds: definite
+   fun:_Znwm
+   ...
+   fun:_Z19ScheduleRtFlushDiskv
+}
+
 #EOF

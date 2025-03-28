@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2017-2024, Manticore Software LTD (https://manticoresearch.com)
+// Copyright (c) 2017-2025, Manticore Software LTD (https://manticoresearch.com)
 // Copyright (c) 2001-2016, Andrew Aksyonoff
 // Copyright (c) 2008-2016, Sphinx Technologies Inc
 // All rights reserved
@@ -413,7 +413,6 @@ public:
 	void			SetGroupbyLimit ( int iLimit );
 	void			SetLimit ( int iOffset, int iLimit );
 
-	float			ToFloat ( const SqlNode_t & tNode ) const;
 	int64_t			DotGetInt ( const SqlNode_t & tNode ) const;
 
 	void 			AddStringSubkey ( const SqlNode_t & tNode ) const;
@@ -530,11 +529,6 @@ static bool CheckInteger ( const CSphString & sOpt, const CSphString & sVal, CSp
 bool SqlParserTraits_c::CheckInteger ( const CSphString & sOpt, const CSphString & sVal ) const
 {
 	return ::CheckInteger ( sOpt, sVal, *m_pParseError );
-}
-
-float SqlParser_c::ToFloat ( const SqlNode_t & tNode ) const
-{
-	return (float) strtod ( m_pBuf+tNode.m_iStart, nullptr );
 }
 
 int64_t SqlParser_c::DotGetInt ( const SqlNode_t & tNode ) const
@@ -2442,7 +2436,7 @@ bool FormatScrollSettings ( const AggrResult_t & tAggrRes, const CSphQuery & tQu
 			switch ( pAttr->m_eAttrType )
 			{
 			case SPH_ATTR_STRINGPTR:
-				tAttrWithOrder.AddStr ( "value", (const char*)tMatch.GetAttr ( pAttr->m_tLocator ) );
+				tAttrWithOrder.AddStr ( "value", B2S ( sphUnpackPtrAttr ( (const BYTE*)tMatch.GetAttr ( pAttr->m_tLocator ) ) ) );
 				tAttrWithOrder.AddStr ( "type", "string" );
 				break;
 

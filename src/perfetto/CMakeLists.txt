@@ -1,5 +1,10 @@
 cmake_minimum_required ( VERSION 3.20 )
 
+if (DISABLE_PERFETTO)
+	message (STATUS "Google perfetto library was explicitly disabled.")
+	return()
+endif()
+
 # Provide valid perfetto library
 if (EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/perfetto.cc" AND NOT CMAKE_SYSTEM_NAME STREQUAL FreeBSD)
 	# Define a static library for Perfetto.

@@ -30,7 +30,6 @@ fluent-bit --version | grep 'Fluent Bit'
 ––– output –––
 Fluent Bit v#!/[0-9]{1}\.[0-9]{1}\.[0-9]{1,2}/!#
 ––– input –––
-––– input –––
 echo -e "2023-05-31 10:42:55 status triggers-awaited ca-certificates-java:all 20190405ubuntu1.1\n2023-05-31 10:42:55 trigproc libc-bin:amd64 2.31-0ubuntu9.9 <none>\n2023-05-31 10:42:55 status half-configured libc-bin:amd64 2.31-0ubuntu9.9\n2023-05-31 10:42:55 status installed libc-bin:amd64 2.31-0ubuntu9.9\n2023-05-31 10:42:55 trigproc systemd:amd64 245.4-4ubuntu3.21 <none>" > /var/log/dpkg.log; echo $?
 ––– output –––
 0
@@ -46,7 +45,7 @@ fluent-bit -c /usr/share/fluentbit/fluentbit/fluentbit.conf > /dev/null 2>&1; ec
 ––– input –––
 sleep 3; curl -s localhost:9308/cli_json -d 'describe dpkg_log' | jq -cM '.[].data | sort_by(.Field)'
 ––– output –––
-[{"Field":"@timestamp","Type":"timestamp","Properties":""},{"Field":"id","Type":"bigint","Properties":""},{"Field":"log","Type":"text","Properties":"indexed stored"}]
+[{"Field":"@timestamp","Type":"timestamp","Properties":""},{"Field":"id","Type":"bigint","Properties":""},{"Field":"log","Type":"string","Properties":"indexed attribute"}]
 ––– input –––
 mysql -P9306 -h0 -N -e "SHOW TABLES\G; SELECT COUNT(*) FROM dpkg_log\G; SELECT log FROM dpkg_log\G;" | grep -v '^*'
 ––– output –––

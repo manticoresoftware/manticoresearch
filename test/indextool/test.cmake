@@ -1,6 +1,9 @@
 # this is cross-platform test script
 cmake_minimum_required ( VERSION 3.13 )
 
+execute_process ( COMMAND ${CMAKE_COMMAND} -E rm -rf datai )
+execute_process ( COMMAND ${CMAKE_COMMAND} -E make_directory datai )
+message (STATUS "Test dir created..." )
 execute_process ( COMMAND ${SEARCHD} -c indextool.conf --test OUTPUT_QUIET )
 message (STATUS "Daemon started...")
 execute_process ( COMMAND ${CMAKE_COMMAND} -E sleep 1 )

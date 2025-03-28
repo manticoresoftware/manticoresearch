@@ -976,3 +976,160 @@ void SeekAndPutOffset ( CSphWriter & tWriter, SphOffset_t tOffset, SphOffset_t t
 	tWriter.PutOffset(tValue);
 	tWriter.SeekTo(tTotalSize);
 }
+
+//////////////////////////////////////////////////////////////////////////
+
+SharedMemory_c::SharedMemory_c ( const CSphString & sPath )
+	: m_sPath ( sPath )
+{
+}
+
+SharedMemory_c::~SharedMemory_c()
+{
+	if ( m_sPath.IsEmpty() )
+		return;
+
+#ifndef _WIN32
+	CSphString sError;
+	if ( !Close ( sError ) )
+		sphFatalLog ( "%s", sError.cstr() );
+#endif
+}
+
+SharedMemory_c::OpenResult_e SharedMemory_c::Open ( CSphString & sError )
+{
+	if ( m_sPath.IsEmpty() )
+	{
+		sError.SetSprintf ( "empty path to shared memory" );
+		return SharedMemory_c::OpenResult_e::NO_FILE;
+	}
+
+	if ( !Close ( sError ) )
+		return SharedMemory_c::OpenResult_e::FAILURE;
+
+	int iFD = -1;
+	int64_t iBytes = 0;
+#ifndef _WIN32
+
+	iFD = ::shm_open ( m_sPath.cstr(), O_RDWR | O_EXCL, 0644 );
+	if ( iFD==-1 )
+	{
+		sError.SetSprintf ( "failed to open shared memory %s: %s" , m_sPath.cstr(), strerror(errno) );
+		return SharedMemory_c::OpenResult_e::NO_FILE;
+	}
+	m_bHasFile = true;
+
+	iBytes = sphGetFileSize ( iFD, &sError );
+	if ( iBytes==-1 )
+		return SharedMemory_c::OpenResult_e::FAILURE;
+
+#endif
+	bool bOk = MapFile ( iFD, iBytes, sError );
+	return ( bOk ? SharedMemory_c::OpenResult_e::OK : SharedMemory_c::OpenResult_e::FAILURE );
+}
+
+bool SharedMemory_c::Create ( int64_t iBytes, CSphString & sError )
+{
+	if ( !Close ( sError ) )
+		return false;
+
+	int iFD = -1;
+#ifndef _WIN32
+
+	iFD = ::shm_open ( m_sPath.cstr(), O_CREAT | O_RDWR | O_EXCL, 0644 );
+	if ( iFD==-1 )
+	{
+		sError.SetSprintf ( "failed to open shared memory %s: %s" , m_sPath.cstr(), strerror(errno) );
+		return false;
+	}
+	m_bHasFile = true;
+
+	if ( ::ftruncate ( iFD, iBytes)==-1 )
+	{
+		sError.SetSprintf ( "failed to set size " INT64_FMT " for shared memory %s: %s" , iBytes, m_sPath.cstr(), strerror(errno) );
+		SafeClose ( iFD );
+		Close ( sError );
+		return false;
+	}
+#endif
+	return MapFile ( iFD, iBytes, sError );
+}
+
+bool SharedMemory_c::Reset ( int64_t iBytes, CSphString & sError )
+{
+	if ( !Close ( sError ) )
+		return false;
+
+	return Create ( iBytes, sError );
+}
+
+bool SharedMemory_c::Close ( CSphString & sError )
+{
+	if ( !IsValid ( sError ) )
+		return false;
+
+#ifndef _WIN32
+	if ( m_pData )
+		::munmap ( m_pData, m_iCount );
+
+	m_pData = nullptr;
+	m_iCount = 0;
+	bool bCloseFile = m_bHasFile;
+	m_bHasFile = false;
+
+	if ( bCloseFile && ::shm_unlink ( m_sPath.cstr() )==-1 )
+	{
+		sError.SetSprintf ( "failed to unlink shared memory %s: %s" , m_sPath.cstr(), strerror(errno) );
+		return false;
+	}
+#endif
+	return true;
+}
+
+bool SharedMemory_c::MapFile ( int iFD, int64_t iBytes, CSphString & sError )
+{
+#ifndef _WIN32
+	BYTE * pData = (BYTE *)::mmap ( nullptr, iBytes, PROT_WRITE | PROT_READ, MAP_SHARED, iFD, 0 );
+	if ( pData==MAP_FAILED )
+	{
+		sError.SetSprintf ( "failed to mmap size " INT64_FMT " for shared memory %s: %s" , iBytes, m_sPath.cstr(), strerror(errno) );
+		SafeClose ( iFD );
+		Close ( sError );
+		return false;
+	}
+
+	SafeClose ( iFD );
+	mmadvise ( pData, iBytes, Advise_e::NOFORK );
+	mmadvise ( pData, iBytes, Advise_e::NODUMP );
+
+	m_pData = pData;
+	m_iCount = iBytes;
+#endif
+	return true;
+}
+
+bool SharedMemory_c::IsValid ( CSphString & sError ) const
+{
+#ifdef _WIN32
+	sError = "shared memory unsupported";
+	return false;
+#else
+	if ( m_sPath.IsEmpty() )
+	{
+		sError = "empty path to shared memory";
+		return false;
+	} else
+	{
+		return true;
+	}
+#endif
+}
+
+bool SharedMemory_c::IsSupported () const
+{
+#ifdef _WIN32
+	return false;
+#else
+	return true;
+#endif
+}

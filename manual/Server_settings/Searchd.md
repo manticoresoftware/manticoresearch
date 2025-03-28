@@ -554,6 +554,22 @@ listen_backlog = 20
 ```
 <!-- end -->
 
+### kibana_version_string
+
+<!-- example conf kibana_version_string -->
+A server version string to return to Kibana or OpenSearch Dashboards. Optional — by default, it's set to an empty value.
+
+Some versions of Kibana and OpenSearch Dashboards expect the server to report a specific version number, and might behave differently depending on it. To workaround such issues, you can use this setting, which makes Manticore report a custom version to Kibana or OpenSearch Dashboards.
+
+<!-- intro -->
+##### Example:
+
+<!-- request Example -->
+
+```ini
+kibana_version_string = 1.2.3
+```
+<!-- end -->
 
 ### listen
 

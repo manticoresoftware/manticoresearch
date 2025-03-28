@@ -1,5 +1,36 @@
 # Changelog
 
+# Version 9.2.14
+Released: March 28th 2025
+
+### Minor changes
+* [Commit ](https://github.com/manticoresoftware/manticoresearch/commit/fe9473dc3f4fcfa0eaae748b538fe853f4ce078b) Implemented `--mockstack` flag to calculate recursive operation stack requirements. The new `--mockstack` mode analyzes and reports the necessary stack sizes for recursive expression evaluation, pttern matching operations, filter processing. Calculated stack requirements are output to console for debugging and optimization purposes.
+* [Issue #3058](https://github.com/manticoresoftware/manticoresearch/pull/3058) Enabled [boolean_simplify](../Searching/Options.md#boolean_simplify) by default.
+* [Issue #3172](https://github.com/manticoresoftware/manticoresearch/issues/3172) Added a new config option: `searchd.kibana_version_string`, which can be useful when using Manticore with specific versions of Kibana or OpenSearch Dashboards that expect a particular Elasticsearch version.
+* [Issue #3211](https://github.com/manticoresoftware/manticoresearch/issues/3211) Fixed [CALL SUGGEST](../Searching/Spell_correction.md#CALL-QSUGGEST,-CALL-SUGGEST) to work with 2-character words.
+* [Issue #490](https://github.com/manticoresoftware/manticoresearch-buddy/issues/490) Improved [fuzzy search](../Searching/Spell_correction.md#Fuzzy-Search): previously, it couldn't sometimes find "defghi" when searching for "def ghi" if another matching document existed.
+* ⚠️ BREAKING [Issue #3165](https://github.com/manticoresoftware/manticoresearch/issues/3165) Changed `_id` to `id` in some HTTP JSON responses for consistency. Make sure to update your app accordingly.
+* ⚠️ BREAKING [Issue #3186](https://github.com/manticoresoftware/manticoresearch/issues/3186) Added a check for `server_id` during cluster joins to ensure each node has a unique ID. This change updates the replication protocol. If you are running a replication cluster, you need to:
+  - First, cleanly stop all your nodes
+  - Then, start the node that was stopped last with `--new-cluster`, using the tool `manticore_new_cluster` in Linux.
+  - Read about [restarting a cluster](Creating_a_cluster/Setting_up_replication/Restarting_a_cluster.md#Restarting-a-cluster) for more details.
+
+### Bugfixes
+* [Commit 6fda](https://github.com/manticoresoftware/manticoresearch/commit/6fdad3923dd6953f4b781943eed5ec5c28b7f808) Fixed a crash caused by losing the scheduler after a wait; now, specific schedulers like `serializer` are properly restored.
+* [Commit c333](https://github.com/manticoresoftware/manticoresearch/commit/c333b277d4a504de5fe298e9ab570a9f9ea31e0a) Fixed a bug where weights from the right joined table couldn't be used in the `ORDER BY` clause.
+* [Issue #2644](https://github.com/manticoresoftware/manticoresearch/issues/2644) gcc 14.2.0: fixed `lower_bound` call error with `const knn::DocDist_t*&`. ❤️ Thank you [@Azq2](https://github.com/Azq2) for the PR.
+* [Issue #3018](https://github.com/manticoresoftware/manticoresearch/issues/3018) Fixed an issue with handling uppercase table names during auto-schema inserts.
+* [Issue #3119](https://github.com/manticoresoftware/manticoresearch/issues/3119) Fixed a crash when decoding invalid base64 input.
+* [Issue #3121](https://github.com/manticoresoftware/manticoresearch/issues/3121) Fixed two related KNN index issues on `ALTER`: float vectors now keep their original dimensions, and KNN indexes are now properly generated.
+* [Issue #3123](https://github.com/manticoresoftware/manticoresearch/issues/3123) Fixed a crash when building a secondary index on an empty JSON column.
+* [Issue #3138](https://github.com/manticoresoftware/manticoresearch/issues/3138) Fixed a crash caused by duplicate entries.
+* [Issue #3151](https://github.com/manticoresoftware/manticoresearch/issues/3151) Fixed: `fuzzy=1` option couldn't be used with `ranker` or `field_weights`.
+* [Issue #3163](https://github.com/manticoresoftware/manticoresearch/issues/3163) Fixed a bug where `SET GLOBAL timezone` had no effect.
+* [Issue #3181](https://github.com/manticoresoftware/manticoresearch/issues/3181) Fixed an issue where text field values could be lost when using IDs larger than 2^63.
+* [Issue #3189](https://github.com/manticoresoftware/manticoresearch/issues/3189) Fixed: `UPDATE` statements now correctly respect the `query_log_min_msec` setting.
+* [Issue #3247](https://github.com/manticoresoftware/manticoresearch/issues/3247) Fixed a race condition when saving real-time disk chunks that could cause `JOIN CLUSTER` to fail.
+
+
 # Version 7.4.6
 Released: February 28th 2025
 

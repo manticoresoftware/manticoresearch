@@ -736,5 +736,16 @@ select * from dist_gr2 facet gid facet tag;;
 <sphinxql>select * from test_gr1 limit 0 facet tag distinct gid limit 10;</sphinxql>
 <query endpoint="sql">select * from test_gr1 limit 0 facet tag distinct gid limit 10;</query>
 
+<!-- query_string as object with the query field -->
+<query endpoint="json/search">
+{
+  "table": "test1",
+  "query":
+  {
+    "query_string": { "query": "3rd" }
+  }
+}
+</query>
+
 </queries>
 </test>

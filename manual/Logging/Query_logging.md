@@ -71,6 +71,17 @@ The features of the Manticore SQL log format compared to the [plain format](../.
 ```
 <!-- end -->
 
+<!-- example sphixql_log3 -->
+It's important to note that Manticore logs not only SELECT queries but also data modification statements such as UPDATE. UPDATE statements are logged in the SQL log format, while INSERT, REPLACE, and DELETE operations are not logged. If you need comprehensive logging of all operations, you may need to implement additional application-level logging.
+
+<!-- intro -->
+`sphinxql` log entries for UPDATE example:
+<!-- request Example -->
+```sql
+/* Sat Mar 15 01:05:28.508 2025 conn 7 (127.0.0.1:63942) real 0.000 */ UPDATE test SET title='Updated Title' WHERE id=1;
+```
+<!-- end -->
+
 ### Plain log format
 
 <!-- example plain_log -->
@@ -128,6 +139,9 @@ Query log example:
 ```
 
 <!-- end -->
+
+Unlike the SQL log format, the plain log format only logs search queries (SELECT statements). Data modification statements such as INSERT, REPLACE, DELETE, and UPDATE are not logged in this format. UPDATE statements are logged in the SQL format but not in the plain format.
+
 
 ## Logging only slow queries
 

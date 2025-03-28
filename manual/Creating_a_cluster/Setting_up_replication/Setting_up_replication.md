@@ -64,8 +64,8 @@ The [Auto ID](../../Data_creation_and_modification/Adding_documents_to_a_table/A
 <!-- request SQL -->
 
 ```sql
-INSERT INTO posts:weekly_index VALUES ( 'iphone case' )
-TRUNCATE RTINDEX click_query:weekly_index
+INSERT INTO posts:weekly_table VALUES ( 'iphone case' )
+TRUNCATE TABLE click_query:weekly_table
 UPDATE INTO posts:rt_tags SET tags=(101, 302, 304) WHERE MATCH ('use') AND id IN (1,101,201)
 DELETE FROM clicks:rt WHERE MATCH ('dumy') AND gid>206
 ```
@@ -76,7 +76,7 @@ DELETE FROM clicks:rt WHERE MATCH ('dumy') AND gid>206
 POST /insert -d '
 {
   "cluster":"posts",
-  "table":"weekly_index",
+  "table":"weekly_table",
   "doc":
   {
     "title" : "iphone case",
@@ -86,7 +86,7 @@ POST /insert -d '
 POST /delete -d '
 {
   "cluster":"posts",
-  "table": "weekly_index",
+  "table": "weekly_table",
   "id":1
 }'
 ```
@@ -94,10 +94,10 @@ POST /delete -d '
 <!-- request PHP -->
 
 ```php
-$index->addDocuments([
+$table->addDocuments([
         1, ['title' => 'iphone case', 'price' => 19.85]
 ]);
-$index->deleteDocument(1);
+$table->deleteDocument(1);
 ```
 
 <!-- intro -->
@@ -106,8 +106,8 @@ $index->deleteDocument(1);
 <!-- request Python -->
 
 ``` python
-indexApi.insert({"cluster":"posts","table":"weekly_index","doc":{"title":"iphone case","price":19.85}})
-indexApi.delete({"cluster":"posts","table":"weekly_index","id":1})
+indexApi.insert({"cluster":"posts","table":"weekly_table","doc":{"title":"iphone case","price":19.85}})
+indexApi.delete({"cluster":"posts","table":"weekly_table","id":1})
 ```
 <!-- intro -->
 ##### Javascript:
@@ -115,8 +115,8 @@ indexApi.delete({"cluster":"posts","table":"weekly_index","id":1})
 <!-- request Javascript -->
 
 ``` javascript
-res = await indexApi.insert({"cluster":"posts","table":"weekly_index","doc":{"title":"iphone case","price":19.85}});
- res = await indexApi.delete({"cluster":"posts","table":"weekly_index","id":1});
+res = await indexApi.insert({"cluster":"posts","table":"weekly_table","doc":{"title":"iphone case","price":19.85}});
+ res = await indexApi.delete({"cluster":"posts","table":"weekly_table","id":1});
 ```
 
 <!-- intro -->
@@ -130,11 +130,11 @@ HashMap<String,Object> doc = new HashMap<String,Object>(){{
     put("title","Crossbody Bag with Tassel");
     put("price",19.85);
 }};
-newdoc.index("weekly_index").cluster("posts").id(1L).setDoc(doc);
+newdoc.table("weekly_table").cluster("posts").id(1L).setDoc(doc);
 sqlresult = indexApi.insert(newdoc);
 
 DeleteDocumentRequest deleteRequest = new DeleteDocumentRequest();
-deleteRequest.index("weekly_index").cluster("posts").setId(1L);
+deleteRequest.table("weekly_table").cluster("posts").setId(1L);
 indexApi.delete(deleteRequest);
 
 ```
@@ -148,10 +148,10 @@ indexApi.delete(deleteRequest);
 Dictionary<string, Object> doc = new Dictionary<string, Object>();
 doc.Add("title", "Crossbody Bag with Tassel");
 doc.Add("price", 19.85);
-InsertDocumentRequest newdoc = new InsertDocumentRequest(index: "weekly_index", cluster:posts, id: 1, doc: doc);
+InsertDocumentRequest newdoc = new InsertDocumentRequest(table: "weekly_table", cluster:posts, id: 1, doc: doc);
 var sqlresult = indexApi.Insert(newdoc);
 
-DeleteDocumentRequest deleteDocumentRequest = new DeleteDocumentRequest(index: "weekly_index", cluster: "posts", id: 1);
+DeleteDocumentRequest deleteDocumentRequest = new DeleteDocumentRequest(table: "weekly_table", cluster: "posts", id: 1);
 indexApi.Delete(deleteDocumentRequest);
 ```
 <!-- end -->
@@ -170,8 +170,8 @@ When using the HTTP endpoint `json/search`, the `cluster` property can be specif
 <!-- request SQL -->
 
 ```sql
-SELECT * FROM weekly_index
-CALL PQ('posts:weekly_index', 'document is here')
+SELECT * FROM weekly_table
+CALL PQ('posts:weekly_table', 'document is here')
 ```
 
 <!-- request JSON -->
@@ -180,12 +180,12 @@ CALL PQ('posts:weekly_index', 'document is here')
 POST /search -d '
 {
   "cluster":"posts",
-  "table":"weekly_index",
+  "table":"weekly_table",
   "query":{"match":{"title":"keyword"}}
 }'
 POST /search -d '
 {
-  "table":"weekly_index",
+  "table":"weekly_table",
   "query":{"match":{"title":"keyword"}}
 }'
 ```
@@ -520,7 +520,7 @@ POST /insert -d '
 <!-- request PHP -->
 
 ```php
-$index->addDocuments([
+$table->addDocuments([
         3, ['title' => 'test me']
 ]);
 
@@ -553,7 +553,7 @@ InsertDocumentRequest newdoc = new InsertDocumentRequest();
 HashMap<String,Object> doc = new HashMap<String,Object>(){{
     put("title","test me");
 }};
-newdoc.index("pq_title").cluster("posts").id(3L).setDoc(doc);
+newdoc.table("pq_title").cluster("posts").id(3L).setDoc(doc);
 sqlresult = indexApi.insert(newdoc);
 ```
 
@@ -565,7 +565,7 @@ sqlresult = indexApi.insert(newdoc);
 ``` clike
 Dictionary<string, Object> doc = new Dictionary<string, Object>();
 doc.Add("title", "test me");
-InsertDocumentRequest newdoc = new InsertDocumentRequest(index: "pq_title", cluster: "posts", id: 3, doc: doc);
+InsertDocumentRequest newdoc = new InsertDocumentRequest(table: "pq_title", cluster: "posts", id: 3, doc: doc);
 var sqlresult = indexApi.Insert(newdoc);
 ```
 <!-- end -->

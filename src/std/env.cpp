@@ -113,6 +113,7 @@ CSphString GetSecondaryFullpath()
 	return sResult;
 }
 
+
 CSphString GetKNNFullpath()
 {
 	CSphString sResult;
@@ -121,6 +122,19 @@ CSphString GetKNNFullpath()
 		sResult = szEnv;
 	else
 		sResult.SetSprintf ( "%s/" LIB_MANTICORE_KNN, GET_MANTICORE_MODULES() );
+
+	return sResult;
+}
+
+
+CSphString GetKNNEmbeddingsFullpath()
+{
+	CSphString sResult;
+	const char* szEnv = getenv ( "LIB_MANTICORE_KNN_EMBEDDINGS" );
+	if ( szEnv )
+		sResult = szEnv;
+	else
+		sResult.SetSprintf ( "%s/" LIB_MANTICORE_KNN_EMBEDDINGS, GET_MANTICORE_MODULES() );
 
 	return sResult;
 }

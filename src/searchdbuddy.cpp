@@ -24,6 +24,8 @@
 
 #include "netfetch.h"
 #include "searchdbuddy.h"
+#include "auth/auth.h"
+#include "auth/auth_proto_http.h"
 
 static std::unique_ptr<boost::process::child> g_pBuddy;
 static CSphString g_sPath;
@@ -57,6 +59,7 @@ static int g_iBuddyVersion = 3;
 static bool g_bBuddyVersion = false;
 extern CSphString g_sStatusVersion;
 static CSphString g_sContainerName;
+static const CSphString g_sBuddyTokenName ( "BUDDY_TOKEN" );
 
 // windows docker needs port XXX:9999 port mapping
 static std::unique_ptr<FreePortList_i> g_pBuddyPortList { nullptr };
@@ -363,12 +366,16 @@ BuddyState_e TryToStart ( const char * sArgs, CSphString & sError )
 	std::unique_ptr<boost::process::child> pBuddy;
 	std::error_code tErrorCode;
 
+	boost::process::environment tEnv = boost::this_process::environment();
+	if ( IsAuthEnabled() )
+		tEnv[g_sBuddyTokenName.cstr()] = GetBuddyToken().scstr();
+
 #if _WIN32
 	BuddyWindow_t tWnd;
-	pBuddy.reset ( new boost::process::child ( sCmd, ( boost::process::std_out & boost::process::std_err ) > *g_pPipe, tWnd, boost::process::limit_handles, boost::process::error ( tErrorCode ) ) );
+	pBuddy.reset ( new boost::process::child ( sCmd, ( boost::process::std_out & boost::process::std_err ) > *g_pPipe, tWnd, boost::process::limit_handles, boost::process::error ( tErrorCode ), tEnv ) );
 #else
 	PreservedStd_t tPreserveStd;
-	pBuddy.reset ( new boost::process::child ( sCmd, ( boost::process::std_out & boost::process::std_err ) > *g_pPipe, boost::process::limit_handles, boost::process::error ( tErrorCode ) , tPreserveStd ) );
+	pBuddy.reset ( new boost::process::child ( sCmd, ( boost::process::std_out & boost::process::std_err ) > *g_pPipe, boost::process::limit_handles, boost::process::error ( tErrorCode ) , tPreserveStd, tEnv ) );
 #endif
 
 	if ( !pBuddy->running ( tErrorCode ) )
@@ -723,9 +730,9 @@ static bool SetSessionMeta ( const JsonObj_c & tBudyyReply )
 // we call it ALWAYS, because even with absolutely correct result, we still might reject it for '/cli' endpoint if buddy is not available or prohibited
 bool ProcessHttpQueryBuddy ( HttpProcessResult_t & tRes, Str_t sSrcQuery, OptionsHash_t & hOptions, CSphVector<BYTE> & dResult, bool bNeedHttpResponse, http_method eRequestType )
 {
-	if ( tRes.m_bOk || !HasBuddy() || tRes.m_eEndpoint==EHTTP_ENDPOINT::INDEX || IsBuddyQuery ( hOptions ) )
+	if ( tRes.m_bOk || !HasBuddy() || tRes.m_eEndpoint==EHTTP_ENDPOINT::INDEX || tRes.m_eEndpoint==EHTTP_ENDPOINT::TOKEN || IsBuddyQuery ( hOptions ) || tRes.m_bSkipBuddy )
 	{
-		if ( tRes.m_eEndpoint==EHTTP_ENDPOINT::CLI )
+		if ( tRes.m_eEndpoint==EHTTP_ENDPOINT::CLI && !tRes.m_bSkipBuddy )
 		{
 			if ( !HasBuddy() )
 				tRes.m_sError.SetSprintf ( "can not process /cli endpoint without buddy" );
@@ -896,6 +903,8 @@ CSphString BuddyGetPath ( const CSphString & sConfigPath, const CSphString & , b
 		sCmd.Appendf ( "-v \"%s\":/var/lib/manticore -e DATA_DIR=/var/lib/manticore", sDataDir.cstr() );
 	sCmd.Appendf ( "-w /buddy" ); // workdir is buddy root dir
 	sCmd.Appendf ( "--name %s", g_sContainerName.cstr() ); // the name of the buddy container is the hash of the config
+	if ( IsAuthEnabled() )
+		sCmd.Appendf ( "-e %s", g_sBuddyTokenName ); // BUDDY_TOKEN for all request into daemon from the env variable
 	sCmd.Appendf ( "%s /buddy/src/main.php", sDefaultBuddyDockerImage ); // docker image and the buddy start command
 
 	return CSphString ( sCmd );

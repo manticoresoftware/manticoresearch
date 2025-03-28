@@ -214,6 +214,8 @@ bool ClusterDesc_t::Parse ( const bson::Bson_c& tBson, const CSphString& sName, 
 	} );
 
 	m_sPath = String ( tBson.ChildByName ( "path" ) );
+	m_sUser = String ( tBson.ChildByName ( "user" ) );
+
 	return true;
 }
 
@@ -248,6 +250,7 @@ void ClusterDesc_t::Save ( JsonEscapedBuilder& tOut ) const
 		for_each ( m_hIndexes, [&tOut] ( const auto& tIndex ) { tOut.String ( tIndex.first ); } );
 	}
 	tOut.NamedStringNonEmpty ( "path", m_sPath );
+	tOut.NamedStringNonEmpty ( "user", m_sUser );
 }
 
 //////////////////////////////////////////////////////////////////////////

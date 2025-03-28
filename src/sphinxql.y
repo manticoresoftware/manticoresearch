@@ -122,6 +122,7 @@
 %token	TOK_OPTION
 %token	TOK_ORDER
 %token	TOK_OPTIMIZE
+%token	TOK_PERMISSIONS
 %token	TOK_PLAN
 %token	TOK_PLUGINS
 %token	TOK_PROFILE
@@ -152,10 +153,12 @@
 %token	TOK_TABLES
 %token	TOK_THREADS
 %token	TOK_TO
+%token	TOK_TOKEN
 %token	TOK_TRANSACTION
 %token	TOK_TRUE
 %token	TOK_UNFREEZE
 %token	TOK_UPDATE
+%token	TOK_USERS
 %token	TOK_VALUES
 %token	TOK_VARIABLES
 %token	TOK_WARNINGS
@@ -277,7 +280,7 @@ reserved_tokens_without_option:
 	| TOK_WARNINGS | TOK_WEIGHT | TOK_WHERE | TOK_WITHIN | TOK_KILL | TOK_QUERY
 	| TOK_INTERVAL | TOK_REGEX
 	| TOK_DATE_ADD | TOK_DATE_SUB | TOK_DAY | TOK_HOUR | TOK_MINUTE | TOK_MONTH | TOK_QUARTER | TOK_SECOND | TOK_WEEK | TOK_YEAR
-	| TOK_LOCKS | TOK_SCROLL
+	| TOK_LOCKS | TOK_SCROLL | TOK_USERS | TOK_PERMISSIONS
 	;
 
 names_transaction_collate:
@@ -1570,6 +1573,23 @@ show_what:
 	| TOK_LOCKS
 		{
 			pParser->m_pStmt->m_eStmt = STMT_SHOW_LOCKS;
+		}
+	| TOK_PERMISSIONS
+		{
+			pParser->m_pStmt->m_eStmt = STMT_SHOW_PERMISSIONS;
+		}
+	| TOK_USERS
+		{
+			pParser->m_pStmt->m_eStmt = STMT_SHOW_USERS;
+		}
+	| TOK_TOKEN
+		{
+			pParser->m_pStmt->m_eStmt = STMT_SHOW_TOKEN;
+		}
+	| TOK_TOKEN TOK_QUOTED_STRING
+		{
+			pParser->m_pStmt->m_dCallStrings.Add() = pParser->ToStringUnescape ( $2 );
+			pParser->m_pStmt->m_eStmt = STMT_SHOW_TOKEN;
 		}
 	;
 

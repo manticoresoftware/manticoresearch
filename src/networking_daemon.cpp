@@ -962,7 +962,8 @@ Proto_e AsyncNetInputBuffer_c::Probe()
 	auto tBlob = Tail ();
 	if ( tBlob.second >=4 )
 	{
-		if ( !memcmp (tBlob.first,"\0\0\0\1",4) )
+		// check for head with SPHINX_CLIENT_VERSION (1 or 2)
+		if ( memcmp ( tBlob.first, "\0\0\0\1", 4 )==0 || memcmp ( tBlob.first, "\0\0\0\2", 4 )==0 )
 		{
 			sBytes << "SphinxAPI, usual byte order";
 			eResult = Proto_e::SPHINX;

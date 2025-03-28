@@ -1,0 +1,13 @@
+––– block: ../base/start-searchd –––
+––– input –––
+curl -s "http://localhost:9308/cli?show%20version" | awk '!/row.*in set/'; echo
+––– output –––
++-----------+----------------------------------+
+| Component | Version                          |
++-----------+----------------------------------+
+| Daemon    | %{VERSION}     |
+| Columnar  | columnar %{VERSION}  |
+| Secondary | secondary %{VERSION} |
+| KNN       | knn %{VERSION}       |
+| Buddy     | buddy %{VERSION}            |
++-----------+----------------------------------+

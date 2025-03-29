@@ -175,7 +175,7 @@ mysql -h0 -P1306 -e "REPLACE INTO c:tbl1 VALUES (1, 'Updated feline runs', 42, 3
 ––– output –––
 0
 ––– input –––
-mysqldump -etc --replace -u cluster -h0 -P1306 --skip-comments manticore c:tbl1 | mysql -h0 -P1306; echo $?
+mysqldump -etc --column-statistics=0 --replace -u cluster -h0 -P1306 --skip-comments manticore c:tbl1 | mysql -h0 -P1306; echo $?
 ––– output –––
 -- Warning: version string returned by server is incorrect.
 0
@@ -218,7 +218,7 @@ mysql -h0 -P3306 -e "INSERT INTO c:tbl3 (id, f, a, b, j, m, s, e, d, v, fv) VALU
 ––– output –––
 0
 ––– input –––
-mysqldump -etc --replace --net-buffer-length=16M -u new_username -h0 -P2306 --skip-comments manticore c:tbl1 c:tbl2 c:tbl3 | mysql -h0 -P3306; echo $?
+mysqldump -etc --column-statistics=0 --replace --net-buffer-length=16M -u new_username -h0 -P2306 --skip-comments manticore c:tbl1 c:tbl2 c:tbl3 | mysql -h0 -P3306; echo $?
 ––– output –––
 -- Warning: version string returned by server is incorrect.
 0
@@ -461,7 +461,7 @@ morphology = lemmatize_ru
 wordforms = /var/log/manticore-2/tbl2/wordforms_chunk0_0.txt
 rt_mem_limit = 536870912
 ––– input –––
-mysqldump -etc --replace -u new_username -h0 -P2306 --skip-comments manticore tbl2 | mysql -P2306 -h0; echo $?
+mysqldump -etc --column-statistics=0 --replace -u new_username -h0 -P2306 --skip-comments manticore tbl2 | mysql -P2306 -h0; echo $?
 ––– output –––
 -- Warning: version string returned by server is incorrect.
 0

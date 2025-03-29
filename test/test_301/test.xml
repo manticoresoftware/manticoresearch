@@ -1,0 +1,82 @@
+<?xml version="1.0" encoding="utf-8"?>
+<test>
+
+<name>GEODIST with huge radian values</name>
+
+<requires>
+	<force-rt/>
+</requires>
+
+<skip_indexer/>
+
+<config>
+searchd
+{
+	<searchd_settings/>
+	data_dir = <data_path/>
+}
+</config>
+
+<queries>
+<sphinxql>
+	drop table if exists geo;
+	create table geo (lat1 float, lon1 float, lat2 float, lon2 float);
+	insert into geo values (1, 55.410572, 37.83372, 55.595615, 37.883945);
+	select * from geo;
+
+	select geodist (lat1, lon1, lat2, lon2) g from geo;
+	select geodist (lat1, lon1, lat2, 37.883945) g from geo;
+	select geodist (lat1, lon1, 55.595615, lon2) g from geo;
+	select geodist (lat1, lon1, 55.595615, 37.883945) g from geo;
+	select geodist (lat1, 37.83372, lat2, lon2) g from geo;
+	select geodist (lat1, 37.83372, lat2, 37.883945) g from geo;
+	select geodist (lat1, 37.83372, 55.595615, lon2) g from geo;
+	select geodist (lat1, 37.83372, 55.595615, 37.883945) g from geo;
+	select geodist (55.410572, lon1, lat2, lon2) g from geo;
+	select geodist (55.410572, lon1, lat2, 37.883945) g from geo;
+	select geodist (55.410572, lon1, 55.595615, lon2) g from geo;
+	select geodist (55.410572, lon1, 55.595615, 37.883945) g from geo;
+	select geodist (55.410572, 37.83372, lat2, lon2) g from geo;
+	select geodist (55.410572, 37.83372, lat2, 37.883945) g from geo;
+	select geodist (55.410572, 37.83372, 55.595615, lon2) g from geo;
+	select geodist (55.410572, 37.83372, 55.595615, 37.883945) g from geo;
+
+	select geodist (lat1, lon1, lat2, lon2) g from geo;
+	select geodist (lat1, lon1, lat2, 3.14) g from geo;
+	select geodist (lat1, lon1, 1.55, lon2) g from geo;
+	select geodist (lat1, lon1, 1.55, 3.14) g from geo;
+	select geodist (lat1, -3.14, lat2, lon2) g from geo;
+	select geodist (lat1, -3.14, lat2, 3.14) g from geo;
+	select geodist (lat1, -3.14, 1.55, lon2) g from geo;
+	select geodist (lat1, -3.14, 1.55, 3.14) g from geo;
+	select geodist (-1.55, lon1, lat2, lon2) g from geo;
+	select geodist (-1.55, lon1, lat2, 3.14) g from geo;
+	select geodist (-1.55, lon1, 1.55, lon2) g from geo;
+	select geodist (-1.55, lon1, 1.55, 3.14) g from geo;
+	select geodist (-1.55, -3.14, lat2, lon2) g from geo;
+	select geodist (-1.55, -3.14, lat2, 3.14) g from geo;
+	select geodist (-1.55, -3.14, 1.55, lon2) g from geo;
+	select geodist (-1.55, -3.14, 1.55, 3.14) g from geo;
+
+	select geodist (lat1, lon1, lat2, lon2, {in=deg}) g from geo;
+	select geodist (lat1, lon1, lat2, 37.883945, {in=deg}) g from geo;
+	select geodist (lat1, lon1, 55.595615, lon2, {in=deg}) g from geo;
+	select geodist (lat1, lon1, 55.595615, 37.883945, {in=deg}) g from geo;
+	select geodist (lat1, 37.83372, lat2, lon2, {in=deg}) g from geo;
+	select geodist (lat1, 37.83372, lat2, 37.883945, {in=deg}) g from geo;
+	select geodist (lat1, 37.83372, 55.595615, lon2, {in=deg}) g from geo;
+	select geodist (lat1, 37.83372, 55.595615, 37.883945, {in=deg}) g from geo;
+	select geodist (55.410572, lon1, lat2, lon2, {in=deg}) g from geo;
+	select geodist (55.410572, lon1, lat2, 37.883945, {in=deg}) g from geo;
+	select geodist (55.410572, lon1, 55.595615, lon2, {in=deg}) g from geo;
+	select geodist (55.410572, lon1, 55.595615, 37.883945, {in=deg}) g from geo;
+	select geodist (55.410572, 37.83372, lat2, lon2, {in=deg}) g from geo;
+	select geodist (55.410572, 37.83372, lat2, 37.883945, {in=deg}) g from geo;
+	select geodist (55.410572, 37.83372, 55.595615, lon2, {in=deg}) g from geo;
+	select geodist (55.410572, 37.83372, 55.595615, 37.883945, {in=deg}) g from geo;
+
+	drop table geo;
+</sphinxql>
+</queries>
+
+</test>

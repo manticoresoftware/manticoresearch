@@ -110,3 +110,15 @@ Table: system.tbl3_s8
 Table: system.tbl3_s9
 Table: system.tbl3_s9
 Table: system.tbl3_s9
+––– input –––
+mysql -h0 -P3306 -e "create table ${CLUSTER_NAME}:tbl4(id bigint) shards=3000 rf=3"; echo $?
+––– output –––
+0
+––– input –––
+for i in 1 2 3; do mysql -h0 -P${i}306 -e "show tables from system\G"; done | grep -c 'system.tbl4_s'
+––– output –––
+9000
+––– input –––
+mysql -h0 -P3306 -e "create table ${CLUSTER_NAME}:tbl5(id bigint) shards=3001 rf=3"?
+––– output –––
+ERROR 1064 (42000) at line 1: Shard count cannot be greater than 3000

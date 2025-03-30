@@ -1,0 +1,33 @@
+––– block: ../base/start-searchd-with-buddy –––
+––– input –––
+mysql -h0 -P9306 -e "DROP TABLE IF EXISTS test; CREATE TABLE test(column1 int, column2 int, column3 text) min_infix_len = '2'; INSERT INTO test(column1, column2, column3) VALUES (123, 3333, 'text here'), (456, 22222, 'text here');"
+––– output –––
+––– input –––
+mysql -h0 -P9306 -e "
+SELECT * FROM test WHERE MATCH('text')
+OPTION fuzzy=1, cutoff=1;"
+––– output –––
+––– input –––
+mysql -h0 -P9306 -e "
+SELECT column1, column2, column3
+FROM test
+WHERE MATCH('text')
+OPTION fuzzy=1
+FACET column1;"
+––– output –––
+––– input –––
+mysql -h0 -P9306 -e "
+SELECT column1, column2, column3
+FROM test
+WHERE MATCH('text')
+OPTION fuzzy=1, cutoff=1
+FACET column2;"
+––– output –––
+––– input –––
+mysql -h0 -P9306 -e "
+SELECT column1, column2, column3
+FROM test
+WHERE MATCH('text')
+OPTION fuzzy=1, cutoff=1
+FACET column2;"
+––– output –––

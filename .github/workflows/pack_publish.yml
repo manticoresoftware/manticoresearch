@@ -196,8 +196,18 @@ jobs:
         || (github.event_name == 'workflow_run' && github.event.workflow_run.conclusion == 'success')
         || (github.event_name == 'push' && startsWith(github.ref, 'refs/heads/manticore-'))
       )
+    outputs:
+      target: ${{ steps.set-target.outputs.target }}
     steps:
       - run: echo "Ready to publish"
+      - id: set-target
+        run: |
+          if [[ "${{ github.ref }}" == refs/heads/manticore-* ]]; then
+            echo "target=release" >> $GITHUB_OUTPUT
+          else
+            echo "target=" >> $GITHUB_OUTPUT
+          fi
+
 
   publish_debian_ubuntu:
     needs: publish
@@ -217,6 +227,7 @@ jobs:
           artifact: build_${{ matrix.DISTR }}_RelWithDebInfo_${{ matrix.arch }}
           type: deb
           delimiter: "-"
+          target: ${{ needs.publish.outputs.target }}
 
   publish_rhel:
     needs: publish
@@ -236,6 +247,7 @@ jobs:
           artifact: build_rhel${{ matrix.DISTR }}_RelWithDebInfo_${{ matrix.arch }}
           type: rpm
           delimiter: "_"
+          target: ${{ needs.publish.outputs.target }}
 
   publish_macos:
     name: Publishing MacOS
@@ -254,6 +266,7 @@ jobs:
           artifact: build_macos_RelWithDebInfo_${{ matrix.arch }}
           type: arc
           delimiter: "-"
+          target: ${{ needs.publish.outputs.target }}
 
   publish_windows:
     name: Publishing Windows packages to repo.manticoresearch.com
@@ -268,10 +281,11 @@ jobs:
           artifact: build_windows_RelWithDebInfo_x64
           type: arc
           delimiter: "-"
+          target: ${{ needs.publish.outputs.target }}
 
   publish_nsis:
     name: Publishing Windows NSIS installer
-    needs: publish_windows
+    needs: [publish_windows, publish]
     runs-on: ubuntu-22.04
     steps:
       - uses: manticoresoftware/publish_to_repo@main
@@ -282,6 +296,7 @@ jobs:
           artifact: win_installer
           type: arc
           delimiter: "-"
+          target: ${{ needs.publish.outputs.target }}
 
   build_docker:
     name: Building and pushing docker
@@ -314,7 +329,7 @@ jobs:
         image: [ "centos:7", "almalinux:8", "almalinux:9", "oraclelinux:9", "amazonlinux:latest" ]
     runs-on: ubuntu-22.04
     steps:
-      - uses: manticoresoftware/clt@0.6.3
+      - uses: manticoresoftware/clt@0.6.5
         with:
           image: ${{ matrix.image }}
           test_prefix: test/clt-tests/installation/rhel-dev-
@@ -329,7 +344,7 @@ jobs:
         image: [ "ubuntu:bionic", "ubuntu:focal", "ubuntu:jammy", "debian:buster", "debian:bullseye", "debian:bookworm" ]
     runs-on: ubuntu-22.04
     steps:
-      - uses: manticoresoftware/clt@0.6.3
+      - uses: manticoresoftware/clt@0.6.5
         with:
           image: ${{ matrix.image }}
           test_prefix: test/clt-tests/installation/deb-dev-

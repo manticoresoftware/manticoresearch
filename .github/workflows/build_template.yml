@@ -27,6 +27,10 @@ on:
         required: false
         type: number
         default: 1
+      version:
+        required: false
+        type: string
+        default: ""
       cmake_command:
         required: false
         type: string
@@ -95,6 +99,11 @@ jobs:
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
           set-safe-directory: true
+
+      - name: Patch version
+        if: inputs.version != ''
+        run: |
+          sed -i "s/x\.x\.x/${{ inputs.version }}/g" src/sphinxversion.h.in
 
       - name: Initialization
         run: | # without adding the safe.directory cmake fails to do git log -1 --date=short --format=%cd

@@ -2,11 +2,8 @@
 ––– input –––
 mysql -h0 -P9306 -e "DROP TABLE IF EXISTS test; CREATE TABLE test(column1 int, column2 int, column3 text) min_infix_len = '2'; INSERT INTO test(column1, column2, column3) VALUES (123, 3333, 'text here'), (456, 22222, 'text here');"
 ––– output –––
-––– input –––
-mysql -h0 -P9306 -e "
-SELECT * FROM test WHERE MATCH('text')
-OPTION fuzzy=1, cutoff=1;"
-––– output –––
+––– comment –––
+1. Fuzzy search ONLY: OPTION fuzzy=1 + FACET
 ––– input –––
 mysql -h0 -P9306 -e "
 SELECT column1, column2, column3
@@ -15,6 +12,14 @@ WHERE MATCH('text')
 OPTION fuzzy=1
 FACET column1;"
 ––– output –––
++---------+---------+-----------+
+| column1 | column2 | column3   |
++---------+---------+-----------+
+|     123 |    3333 | text here |
+|     456 |   22222 | text here |
++---------+---------+-----------+
+––– comment –––
+2. Fuzzy + daemon option: OPTION fuzzy=1, cutoff=1 + FACET
 ––– input –––
 mysql -h0 -P9306 -e "
 SELECT column1, column2, column3
@@ -23,11 +28,125 @@ WHERE MATCH('text')
 OPTION fuzzy=1, cutoff=1
 FACET column2;"
 ––– output –––
++---------+---------+-----------+
+| column1 | column2 | column3   |
++---------+---------+-----------+
+|     123 |    3333 | text here |
++---------+---------+-----------+
+––– comment –––
+3. Fuzzy + multiple Buddy options: OPTION fuzzy=1, layouts='' + FACET
 ––– input –––
 mysql -h0 -P9306 -e "
 SELECT column1, column2, column3
 FROM test
 WHERE MATCH('text')
-OPTION fuzzy=1, cutoff=1
-FACET column2;"
+OPTION fuzzy=1, layouts=''
+FACET column1;"
 ––– output –––
++---------+---------+-----------+
+| column1 | column2 | column3   |
++---------+---------+-----------+
+|     123 |    3333 | text here |
+|     456 |   22222 | text here |
++---------+---------+-----------+
+––– comment –––
+4. Fuzzy + complex FACET expression
+––– input –––
+mysql -h0 -P9306 -e "
+SELECT column1, column2, column3
+FROM test
+WHERE MATCH('text')
+OPTION fuzzy=1
+FACET (IF(NOT INTEGER(column1), column1 > column2, column2 > 4) AND column2 <= 2 AND column2 >= 1) AS crazy_field;"
+––– output –––
++---------+---------+-----------+
+| column1 | column2 | column3   |
++---------+---------+-----------+
+|     123 |    3333 | text here |
+|     456 |   22222 | text here |
++---------+---------+-----------+
+––– comment –––
+5. Fuzzy + Buddy + daemon: OPTION fuzzy=1, cutoff=1, layouts=''
+––– input –––
+mysql -h0 -P9306 -e "
+SELECT column1, column2, column3
+FROM test
+WHERE MATCH('text')
+OPTION fuzzy=1, cutoff=1, layouts=''
+FACET column1;"
+––– output –––
++---------+---------+-----------+
+| column1 | column2 | column3   |
++---------+---------+-----------+
+|     123 |    3333 | text here |
++---------+---------+-----------+
+––– comment –––
+6. Fuzzy + layouts='' + reversed order of options
+––– input –––
+mysql -h0 -P9306 -e "
+SELECT column1, column2, column3
+FROM test
+WHERE MATCH('text')
+OPTION layouts='', fuzzy=1
+FACET column1;"
+––– output –––
++---------+---------+-----------+
+| column1 | column2 | column3   |
++---------+---------+-----------+
+|     123 |    3333 | text here |
+|     456 |   22222 | text here |
++---------+---------+-----------+
+––– comment –––
+7. Fuzzy + FACET with ORDER BY
+––– input –––
+mysql -h0 -P9306 -e "
+SELECT column1, column2, column3
+FROM test
+WHERE MATCH('text')
+OPTION fuzzy=1
+FACET column1 ORDER BY COUNT(*) DESC;"
+––– output –––
++---------+---------+-----------+
+| column1 | column2 | column3   |
++---------+---------+-----------+
+|     123 |    3333 | text here |
+|     456 |   22222 | text here |
++---------+---------+-----------+
+––– comment –––
+8. Fuzzy + FACET with LIMIT
+––– input –––
+mysql -h0 -P9306 -e "
+SELECT column1, column2, column3
+FROM test
+WHERE MATCH('text')
+OPTION fuzzy=1
+FACET column1 LIMIT 1;"
+––– output –––
++---------+---------+-----------+
+| column1 | column2 | column3   |
++---------+---------+-----------+
+|     123 |    3333 | text here |
+|     456 |   22222 | text here |
++---------+---------+-----------+
+––– comment –––
+9. Fuzzy + unknown option (fix_overlap) → expected error
+––– input –––
+mysql -h0 -P9306 -e "
+SELECT column1, column2, column3
+FROM test
+WHERE MATCH('text')
+OPTION fuzzy=1, fix_overlap=1
+FACET column1;"
+––– output –––
+ERROR 1064 (42000) at line 2: unknown option 'fix_overlap'
+––– comment –––
+10. Fuzzy + FACET by unsupported text field → expected error
+––– input –––
+mysql -h0 -P9306 -e "
+SELECT column1, column2, column3
+FROM test
+WHERE MATCH('text')
+OPTION cutoff=1, fuzzy=1
+FACET column3;"
+––– output –––
+ERROR 1064 (42000) at line 2: table test: unable to group by stored field 'column3'

@@ -224,7 +224,7 @@ jobs:
         # TODO: remove the hardcoded paths /builds/ below
         run: |
           mkdir -p /builds/manticoresearch/dev/build/
-          /bin/bash dist/build_dockers/nsis/nsis_src_parser.sh
+          /bin/bash dist/build_dockers/nsis/nsis_src_parser.sh ${{ needs.pack.outputs.target }}
         shell: bash
       - run: mv /builds/manticoresearch/dev/build build
       - name: Upload artifact

@@ -21,6 +21,8 @@ on:
       - 'manual/**'
       - 'cmake/GetGALERA.cmake'
       - 'galera_packaging/**'
+    tags:
+      - 'release*'    
 
 # cancels the previous workflow run when a new one appears in the same branch (e.g. master or a PR's branch)
 concurrency:
@@ -32,6 +34,16 @@ jobs:
   pack:
     name: OK to pack?
     runs-on: ubuntu-22.04
+    permissions:
+      contents: write
+      pull-requests: read
+    outputs:
+      version: ${{ steps.semver-tagger.outputs.version }}
+      version_full: ${{ steps.semver-tagger.outputs.version_full }}
+      version_rpm: ${{ steps.semver-tagger.outputs.version_rpm }}
+      version_deb: ${{ steps.semver-tagger.outputs.version_deb }}
+      target: ${{ steps.semver-tagger.outputs.target }}
+      should_continue: ${{ steps.check-should-continue.outputs.should_continue }}
     if: |
       (
         github.event_name == 'pull_request'
@@ -63,18 +75,45 @@ jobs:
         )
       )
     steps:
-      - run: echo "All set to build packages"
+      - name: Checkout repository
+        uses: actions/checkout@v3
+        with:
+          fetch-depth: 0
+      - name: Update version
+        id: semver-tagger
+        uses: manticoresoftware/semver-tagger-action@main  
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          ignore_patterns: '\.md$|^test/|^manual/|\.clt|\.github|\.patterns|\.yml|\.gitignore'
+      - name: Check if we should continue packing
+        id: check-should-continue
+        run: |
+          # Continue if version was updated or if we have the "pack" label on PR
+          if [[ "${{ steps.semver-tagger.outputs.version_updated }}" == "true" ]]; then
+            echo "Continuing because version was updated"
+            echo "should_continue=true" >> $GITHUB_OUTPUT
+          elif [[ "${{ github.event_name }}" == "pull_request" && "${{ contains(github.event.pull_request.labels.*.name, 'pack') }}" == "true" ]]; then
+            echo "Continuing because PR has 'pack' label"
+            echo "should_continue=true" >> $GITHUB_OUTPUT
+          else
+            echo "Skipping packing because version wasn't updated and there's no 'pack' label"
+            echo "should_continue=false" >> $GITHUB_OUTPUT
+          fi
       - run: |
-          echo '# Packing and publishing all for commit ${{ github.sha }}' >> $GITHUB_STEP_SUMMARY
-          echo '* Commit URL: [${{ github.sha }}](/${{ github.repository }}/commit/${{ github.sha }})' >> $GITHUB_STEP_SUMMARY
-          echo '* Initiated by: [@${{ github.actor }}](https://github.com/${{ github.actor }})' >> $GITHUB_STEP_SUMMARY
-          echo '* Ref: ${{ github.ref_type }} "${{ github.ref_name }}"' >> $GITHUB_STEP_SUMMARY
-          echo '* Attempt: ${{ github.run_attempt }}' >> $GITHUB_STEP_SUMMARY
+          echo "# Packing and publishing all for commit ${{ github.sha }}" >> $GITHUB_STEP_SUMMARY
+          echo "* Commit URL: [${{ github.sha }}](/${{ github.repository }}/commit/${{ github.sha }})" >> $GITHUB_STEP_SUMMARY
+          echo "* Initiated by: [@${{ github.actor }}](https://github.com/${{ github.actor }})" >> $GITHUB_STEP_SUMMARY
+          echo "* Ref: ${{ github.ref_type }} \"${{ github.ref_name }}\"" >> $GITHUB_STEP_SUMMARY
+          echo "* Attempt: ${{ github.run_attempt }}" >> $GITHUB_STEP_SUMMARY
+          echo "* Version updated: ${{ steps.semver-tagger.outputs.version_updated }}" >> $GITHUB_STEP_SUMMARY
+          echo "* Should continue packing: ${{ steps.check-should-continue.outputs.should_continue }}" >> $GITHUB_STEP_SUMMARY
+
 
   pack_debian_ubuntu:
     name: Debian/Ubuntu packages
     uses: ./.github/workflows/build_template.yml
     needs: pack
+    if: needs.pack.outputs.should_continue == 'true'
     strategy:
       fail-fast: false
       matrix:
@@ -91,11 +130,13 @@ jobs:
         cmake --build . --target package
       cache_key: pack_${{ matrix.DISTR }}_${{ matrix.arch }}
       artifact_list: "build/manticore*deb"
+      version: ${{ needs.pack.outputs.version }}
 
   pack_rhel:
     name: RHEL packages
     uses: ./.github/workflows/build_template.yml
     needs: pack
+    if: needs.pack.outputs.should_continue == 'true'
     strategy:
       fail-fast: false
       matrix:
@@ -115,11 +156,13 @@ jobs:
         cmake --build . --target package
       cache_key: pack_${{ matrix.DISTR }}_${{ matrix.arch }}
       artifact_list: "build/manticore*rpm"
+      version: ${{ needs.pack.outputs.version }}
 
   pack_macos:
     name: MacOS packages
     uses: ./.github/workflows/build_template.yml
     needs: pack
+    if: needs.pack.outputs.should_continue == 'true'
     strategy:
       fail-fast: false
       matrix:
@@ -137,11 +180,13 @@ jobs:
         cmake --build . --target package
       cache_key: pack_${{ matrix.DISTR }}_${{ matrix.arch }}
       artifact_list: "build/manticore*tar.gz"
+      version: ${{ needs.pack.outputs.version }}
 
   pack_windows:
     name: Windows x64 package
     uses: ./.github/workflows/build_template.yml
     needs: pack
+    if: needs.pack.outputs.should_continue == 'true'
     with:
       DISTR: windows
       arch: x64
@@ -155,10 +200,12 @@ jobs:
         cmake --build . --target package
       cache_key: pack_windows_x64
       artifact_list: "build/manticore*exe build/manticore*zip"
+      version: ${{ needs.pack.outputs.version }}
 
   build_nsis:
     name: Making Windows NSIS installer
-    needs: pack_windows
+    needs: [pack_windows, pack]
+    if: needs.pack.outputs.should_continue == 'true'
     runs-on: ubuntu-22.04
     container:
       image: manticoresearch/build_nsis:1.0.0
@@ -167,6 +214,9 @@ jobs:
     steps:
       - name: Checkout repository # We have to checkout to access .github/workflows/ in further steps
         uses: actions/checkout@v3
+      - name: Patch version
+        run: |
+          sed -i "s/x\.x\.x/${{ needs.pack.outputs.version }}/g" src/sphinxversion.h.in
       - name: Initialization
         # without adding the safe.directory the script fails to do git show ...
         run: git config --global --add safe.directory /__w/manticoresearch/manticoresearch
@@ -174,7 +224,7 @@ jobs:
         # TODO: remove the hardcoded paths /builds/ below
         run: |
           mkdir -p /builds/manticoresearch/dev/build/
-          /bin/bash dist/build_dockers/nsis/nsis_src_parser.sh
+          /bin/bash dist/build_dockers/nsis/nsis_src_parser.sh ${{ needs.pack.outputs.target }}
         shell: bash
       - run: mv /builds/manticoresearch/dev/build build
       - name: Upload artifact
@@ -200,7 +250,7 @@ jobs:
       - run: echo "Ready to publish"
 
   publish_debian_ubuntu:
-    needs: publish
+    needs: [publish, pack]
     strategy:
       fail-fast: true
       matrix:
@@ -217,9 +267,10 @@ jobs:
           artifact: build_${{ matrix.DISTR }}_RelWithDebInfo_${{ matrix.arch }}
           type: deb
           delimiter: "-"
+          target: ${{ needs.pack.outputs.target }}
 
   publish_rhel:
-    needs: publish
+    needs: [publish, pack]
     strategy:
       fail-fast: true
       matrix:
@@ -236,10 +287,11 @@ jobs:
           artifact: build_rhel${{ matrix.DISTR }}_RelWithDebInfo_${{ matrix.arch }}
           type: rpm
           delimiter: "_"
+          target: ${{ needs.pack.outputs.target }}
 
   publish_macos:
     name: Publishing MacOS
-    needs: publish
+    needs: [publish, pack]
     strategy:
       fail-fast: true
       matrix:
@@ -254,10 +306,11 @@ jobs:
           artifact: build_macos_RelWithDebInfo_${{ matrix.arch }}
           type: arc
           delimiter: "-"
+          target: ${{ needs.pack.outputs.target }}
 
   publish_windows:
     name: Publishing Windows packages to repo.manticoresearch.com
-    needs: publish
+    needs: [publish, pack]
     runs-on: ubuntu-22.04
     steps:
       - uses: manticoresoftware/publish_to_repo@main
@@ -268,10 +321,11 @@ jobs:
           artifact: build_windows_RelWithDebInfo_x64
           type: arc
           delimiter: "-"
+          target: ${{ needs.pack.outputs.target }}
 
   publish_nsis:
     name: Publishing Windows NSIS installer
-    needs: publish_windows
+    needs: [publish_windows, publish, pack]
     runs-on: ubuntu-22.04
     steps:
       - uses: manticoresoftware/publish_to_repo@main
@@ -282,10 +336,11 @@ jobs:
           artifact: win_installer
           type: arc
           delimiter: "-"
+          target: ${{ needs.pack.outputs.target }}
 
   build_docker:
     name: Building and pushing docker
-    needs: publish_debian_ubuntu
+    needs: [publish_debian_ubuntu, pack]
     runs-on: ubuntu-22.04
     env:
       DOCKER_USER: ${{ secrets.DOCKER_USER }}
@@ -295,6 +350,9 @@ jobs:
     steps:
       - name: Checkout repository # We have to checkout to access .github/workflows/ in further steps
         uses: actions/checkout@v3
+      - name: Patch version
+        run: |
+          sed -i "s/x\.x\.x/${{ needs.pack.outputs.version }}/g" src/sphinxversion.h.in
       - name: Calculate short commit hash
         id: sha
         run: echo "sha_short=$(git rev-parse --short HEAD)" >> $GITHUB_OUTPUT

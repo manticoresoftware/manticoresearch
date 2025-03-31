@@ -216,7 +216,7 @@ jobs:
         uses: actions/checkout@v3
       - name: Patch version
         run: |
-          sed -i "s/x\.x\.x/${{ needs.pack.outputs.version }}/g" src/sphinxversion.h.in
+          sed -i "s/0\.0\.0/${{ needs.pack.outputs.version }}/g" src/sphinxversion.h.in
       - name: Initialization
         # without adding the safe.directory the script fails to do git show ...
         run: git config --global --add safe.directory /__w/manticoresearch/manticoresearch
@@ -352,7 +352,7 @@ jobs:
         uses: actions/checkout@v3
       - name: Patch version
         run: |
-          sed -i "s/x\.x\.x/${{ needs.pack.outputs.version }}/g" src/sphinxversion.h.in
+          sed -i "s/0\.0\.0/${{ needs.pack.outputs.version }}/g" src/sphinxversion.h.in
       - name: Calculate short commit hash
         id: sha
         run: echo "sha_short=$(git rev-parse --short HEAD)" >> $GITHUB_OUTPUT

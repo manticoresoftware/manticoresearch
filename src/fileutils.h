@@ -467,4 +467,59 @@ private:
 	CSphString	m_sFilename;
 };
 
+class SharedMemory_c
+{
+public:
+	explicit SharedMemory_c ( const CSphString & sPath );
+	~SharedMemory_c();
+
+	enum class OpenResult_e
+	{
+		OK,
+		FAILURE,
+		NO_FILE
+	};
+
+	/// try to open existed shared memory object
+	OpenResult_e Open ( CSphString & sError );
+
+	/// create new shared memory object
+	bool Create ( int64_t iBytes, CSphString & sError );
+
+	/// set new size of the shared memory object
+	bool Reset ( int64_t iBytes, CSphString & sError );
+
+	/// close and destroy shared memory object
+	bool Close ( CSphString & sError );
+
+	/// get write address
+	BYTE * GetWritePtr() const
+	{
+		return m_pData;
+	}
+
+	/// returns read address - same as write, but const pointer
+	const BYTE * GetReadPtr() const
+	{
+		return GetWritePtr();
+	}
+
+	int64_t GetLength64() const
+	{
+		return m_iCount;
+	}
+
+	bool IsSupported () const;
+
+private:
+	BYTE * m_pData = nullptr;
+	int64_t m_iCount = 0;
+
+	const CSphString m_sPath;
+	bool m_bHasFile = false;
+
+	bool MapFile ( int iFD, int64_t iBytes, CSphString & sError );
+	bool IsValid ( CSphString & sError ) const;
+};
+
 #endif // _fileutils_

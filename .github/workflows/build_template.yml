@@ -108,7 +108,7 @@ jobs:
       - name: Patch version
         if: inputs.version != ''
         run: |
-          sed -i "s/x\.x\.x/${{ inputs.version }}/g" src/sphinxversion.h.in
+          sed -i "s/0\.0\.0/${{ inputs.version }}/g" src/sphinxversion.h.in
           cat src/sphinxversion.h.in
 
       - name: Initialization

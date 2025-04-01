@@ -312,7 +312,7 @@ To change the list of local or remote nodes in a distributed table, follow the s
 ALTER TABLE `distr_table_name` [[local='local_table_name'], [agent='host:port:remote_table'] ... ]
 ```
 
-> NOTE: Renaming a real-time table requires [Manticore Buddy](../Installation/Manticore_Buddy.md). If it doesn't work, make sure Buddy is installed.
+> NOTE: Changing the schema of a distributed table online requires [Manticore Buddy](../Installation/Manticore_Buddy.md). If it doesn't work, make sure Buddy is installed.
 
 <!-- request Example -->
 ```sql

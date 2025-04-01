@@ -64,6 +64,9 @@ public:
 
 	bool operator== ( const char* s ) const { return m_sValue == s; }
 	bool operator!= ( const char* s ) const { return m_sValue != s; }
+
+private:
+	CSphVariant ( const CSphVariant& rhs, bool );
 };
 
 #include "variant_impl.h"

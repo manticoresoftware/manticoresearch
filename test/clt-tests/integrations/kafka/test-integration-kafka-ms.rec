@@ -28,7 +28,7 @@ docker run -it --network=app-network --platform linux/amd64 --name manticore -d 
 ––– output –––
 0
 ––– input –––
-docker exec manticore sed -i '/data_dir = \/var\/lib\/manticore/a\    buddy_path = manticore-executor -n /usr/share/manticore/modules/manticore-buddy/src/main.php --debugv\n' /etc/manticoresearch/manticore.conf
+docker exec manticore sed -i '/data_dir = \/var\/lib\/manticore/a\    buddy_path = manticore-executor -n /usr/share/manticore/modules/manticore-buddy/src/main.php --debugvv\n' /etc/manticoresearch/manticore.conf
 ––– output –––
 ––– input –––
 docker exec manticore stdbuf -oL searchd

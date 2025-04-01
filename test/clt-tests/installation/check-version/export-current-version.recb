@@ -17,7 +17,6 @@ export current_version_knn=$(searchd --version | sed -n 's/.*knn \([^ )]*\).*/\1
 ––– input –––
 export current_version_galera=$(strings /usr/share/manticore/modules/libgalera_manticore.so | grep -oE '[0-9]+\.[0-9]+' | head -n1); echo $current_version_galera
 ––– output –––
-––– output –––
 #!/[0-9]+\.[0-9]+/!#
 ––– input –––
 export current_version_buddy=$(mysql -h0 -P9306 -e "SHOW STATUS LIKE 'version'\G" | awk -F'[ v()]+' '/buddy v/{print $(NF-1)}'); echo $current_version_buddy

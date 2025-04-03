@@ -13011,7 +13011,7 @@ static bool CheckExistingTables ( const SqlStmt_t & tStmt, CSphString & sError )
 	return true;
 }
 
-static bool CheckShardIntOpt ( const char * sName, const SqlStmt_t & tStmt, CSphString & sError )
+static int CheckShardIntOpt ( const char * sName, const SqlStmt_t & tStmt, CSphString & sError )
 {
 	int iPos = tStmt.m_tCreateTable.m_dOpts.GetFirst ( [&]( const auto & tItem ) { return tItem.m_sName==sName; } );
 	if ( iPos==-1 )
@@ -13058,7 +13058,7 @@ static bool CheckCreateTable ( const SqlStmt_t & tStmt, CSphString & sError )
 		// should be routerd into buddy with good error message
 		if ( iShardsPos!=-1 || iRfPos!=-1 )
 		{
-			sError.SetSprintf ( "table '%s': CREATE TABLE failed: 'shards' and 'rf' options require Buddy", tStmt.m_sIndex.cstr(), sError.cstr() );
+			sError.SetSprintf ( "table '%s': CREATE TABLE failed: 'shards' and 'rf' options require Buddy", tStmt.m_sIndex.cstr() );
 			return false;
 		}
 	}

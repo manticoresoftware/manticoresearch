@@ -84,7 +84,7 @@ jobs:
         id: semver-tagger
         uses: manticoresoftware/semver-tagger-action@main  
         with:
-          github_token: ${{ secrets.GITHUB_TOKEN }}
+          github_token: ${{ secrets.WORKFLOW_TOKEN }}
           ignore_patterns: '\.md$|^test/|^manual/|\.clt|\.github|\.patterns|\.yml|\.gitignore'
       - name: Check if we should continue packing
         id: check-should-continue

@@ -1,100 +1,224 @@
-––– block: ../base/start-searchd –––
+––– block: ../base/start-searchd-with-buddy –––
 ––– input –––
-curl -s "http://localhost:9308/cli?show%20version" | awk '!/row.*in set/'; echo
-––– output –––
-+-----------+----------------------------------+
-| Component | Version                          |
-+-----------+----------------------------------+
-| Daemon    | %{VERSION}     |
-| Columnar  | columnar %{VERSION}  |
-| Secondary | secondary %{VERSION} |
-| KNN       | knn %{VERSION}       |
-| Buddy     | buddy %{VERSION}            |
-+-----------+----------------------------------+
-––– input –––
-mysql -h0 -P9306 -e "CREATE TABLE t (id INT, value TEXT, value_attr STRING) min_infix_len = '3' min_prefix_len = '3'; INSERT INTO t VALUES (1, 'example', 'example'), (2, 'test', 'test');"
+mysql -h0 -P9306 -e "CREATE TABLE t (id INT, value TEXT, value_attr STRING, vector FLOAT_VECTOR) min_infix_len = '3' min_prefix_len = '3'; INSERT INTO t VALUES (1, 'example', 'example', '(0.1, 0.2, 0.3)'), (2, 'test', 'test', '(0.4, 0.5, 0.6)');"
 ––– output –––
 ––– input –––
-mysql -h0 -P9306 -e "SHOW CREATE TABLE t;"
+curl -s "http://localhost:9308/cli?show%20version" | awk -F'|' '/\|/ && NF >= 3 && $0 !~ /row.*in set/ { gsub(/^ +| +$/, "", $2); gsub(/^ +| +$/, "", $3); print "Variable_name: " $2 "\nValue: " $3 "\n" }'
 ––– output –––
-+-------+------------------------------------------------------------------------------------------------------------+
-| Table | Create Table                                                                                               |
-+-------+------------------------------------------------------------------------------------------------------------+
-| t     | CREATE TABLE t (
-id bigint,
-value text,
-value_attr string attribute
-) min_prefix_len='3' min_infix_len='3' |
-+-------+------------------------------------------------------------------------------------------------------------+
+Variable_name: Component
+Value: Version
+Variable_name: Daemon
+Value: %{VERSION}
+Variable_name: Columnar
+Value: columnar %{VERSION}
+Variable_name: Secondary
+Value: secondary %{VERSION}
+Variable_name: KNN
+Value: knn %{VERSION}
+Variable_name: Buddy
+Value: buddy %{VERSION}
 ––– input –––
-curl -s "http://localhost:9308/cli?select%20*%20from%20t" | awk '!/row.*in set/'; echo
+curl -s "http://localhost:9308/cli?show%20queries" | awk -F'|' 'BEGIN{ORS=""} /\|/ && NF >= 5 && $0 !~ /row.*in set/ && $0 !~ /^[+]/ { gsub(/^ +| +$/, "", $2); gsub(/^ +| +$/, "", $3); gsub(/^ +| +$/, "", $4); gsub(/^ +| +$/, "", $5); gsub(/^ +| +$/, "", $6); print "id: " $2 "\nquery: " $3 "\ntime: " $4 "\nprotocol: " $5 "\nhost: " $6 "\n\n" }'
 ––– output –––
-+----+---------+------------+
-| id | value   | value_attr |
-+----+---------+------------+
-| 1  | example | example    |
-| 2  | test    | test       |
-+----+---------+------------+
+id: id
+query: query
+time: time
+protocol: protocol
+host: host
+id: %{NUMBER}
+query: select
+time: %{NUMBER}#!/\b(?:us|ms)\b/!# ago
+protocol: http
+host: %{IPADDR}:%{NUMBER}
+id: %{NUMBER}
+query: show queries
+time: %{NUMBER}#!/\b(?:us|ms)\b/!# ago
+protocol: http
+host: %{IPADDR}:%{NUMBER}
+id: %{NUMBER}
+query: show_settings
+time: %{NUMBER}#!/\b(?:us|ms)\b/!#
+protocol: http
+host: %{IPADDR}:%{NUMBER}
 ––– input –––
-curl -s "http://localhost:9308/cli?show%20meta" | awk '!/row.*in set/'; echo
+curl -s "http://localhost:9308/cli?select%20*%20from%20t%20where%20match('exmaple')%20option%20fuzzy=1" | awk '!/row.*in set/'
 ––– output –––
-+----------------+-------+
-| Variable_name  | Value |
-+----------------+-------+
-| total          | 2     |
-| total_found    | 2     |
-| total_relation | eq    |
-| time           | #!/[0-9]{1}.[0-9]{3}+/!# |
-+----------------+-------+
++----+---------+------------+--------+
+| id | value   | value_attr | vector |
++----+---------+------------+--------+
+| 1  | example | example    |        |
++----+---------+------------+--------+
 ––– input –––
-curl -s "http://localhost:9308/cli?select%20*%20from%20t%20where%20match('example')" | awk '!/row.*in set/'; echo
+curl -s "http://localhost:9308/cli?show%20buddy%20plugins" | awk -F'|' 'NF >= 5 && $0 !~ /row.*in set/ && $0 !~ /^[+]/ { gsub(/^ +| +$/, "", $2); gsub(/^ +| +$/, "", $3); gsub(/^ +| +$/, "", $4); gsub(/^ +| +$/, "", $5); gsub(/^ +| +$/, "", $6); print "Package: " $2 "\nPlugin: " $3 "\nVersion: " $4 "\nType: " $5 "\nInfo: " $6 "\n" }'
 ––– output –––
-+----+---------+------------+
-| id | value   | value_attr |
-+----+---------+------------+
-| 1  | example | example    |
-+----+---------+------------+
+Package: Package
+Plugin: Plugin
+Version: Version
+Type: Type
+Info: Info
+Package: manticoresoftware/buddy-plugin-empty-string
+Plugin: empty-string
+Version: %{VERSION}
+Type: core
+Info: Handles empty queries, which can occur when trimming comments or dealing with specific SQL protocol instructions in comments that are not supported
+Package: manticoresoftware/buddy-plugin-backup
+Plugin: backup
+Version: %{VERSION}
+Type: core
+Info: BACKUP sql statement
+Package: manticoresoftware/buddy-plugin-emulate-elastic
+Plugin: emulate-elastic
+Version: %{VERSION}
+Type: core
+Info: Emulates some Elastic queries and generates responses as if they were made by ES
+Package: manticoresoftware/buddy-plugin-fuzzy
+Plugin: fuzzy
+Version: %{VERSION}
+Type: core
+Info: Fuzzy search plugin. It helps to find the best match for a given query.
+Package: manticoresoftware/buddy-plugin-create-table
+Plugin: create-table
+Version: %{VERSION}
+Type: core
+Info: Enables tables copying; handles CREATE TABLE statements with MySQL options not supported by Manticore
+Package: manticoresoftware/buddy-plugin-create-cluster
+Plugin: create-cluster
+Version: %{VERSION}
+Type: core
+Info: Enable CREATE CLUSTER IF NOT EXISTS statements
+Package: manticoresoftware/buddy-plugin-drop
+Plugin: drop
+Version: %{VERSION}
+Type: core
+Info: Handles DROP statements with MySQL options not supported by Manticore
+Package: manticoresoftware/buddy-plugin-insert
+Plugin: insert
+Version: %{VERSION}
+Type: core
+Info: Auto schema support. When an insert operation is performed and the table does not exist, it creates it with data types auto-detection
+Package: manticoresoftware/buddy-plugin-alias
+Plugin: alias
+Version: %{VERSION}
+Type: core
+Info:
+Package: manticoresoftware/buddy-plugin-select
+Plugin: select
+Version: %{VERSION}
+Type: core
+Info: Various SELECTs handlers needed for mysqldump and other software support, mostly aiming to work similarly to MySQL
+Package: manticoresoftware/buddy-plugin-show
+Plugin: show
+Version: %{VERSION}
+Type: core
+Info: Various "show" queries handlers, for example, `show queries`, `show fields`, `show full tables`, etc
+Package: manticoresoftware/buddy-plugin-plugin
+Plugin: plugin
+Version: %{VERSION}
+Type: core
+Info: Core logic for plugin support and helpers. Also handles `create buddy plugin`, `delete buddy plugin`, and `show buddy plugins`
+Package: manticoresoftware/buddy-plugin-test
+Plugin: test
+Version: %{VERSION}
+Type: core
+Info: Test plugin, used exclusively for tests
+Package: manticoresoftware/buddy-plugin-alter-column
+Plugin: alter-column
+Version: %{VERSION}
+Type: core
+Info: Enables adding/dropping table fields(columns)
+Package: manticoresoftware/buddy-plugin-alter-distributed-table
+Plugin: alter-distributed-table
+Version: %{VERSION}
+Type: core
+Info: Enables alter for distributed tables
+Package: manticoresoftware/buddy-plugin-alter-rename-table
+Plugin: alter-rename-table
+Version: %{VERSION}
+Type: core
+Info: Enables alter table rename
+Package: manticoresoftware/buddy-plugin-modify-table
+Plugin: modify-table
+Version: %{VERSION}
+Type: core
+Info: Assists in standardizing options in create and alter table statements to show option=1 for integers.
+Package: manticoresoftware/buddy-plugin-knn
+Plugin: knn
+Version: %{VERSION}
+Type: core
+Info: Enables KNN by document id
+Package: manticoresoftware/buddy-plugin-replace
+Plugin: replace
+Version: %{VERSION}
+Type: core
+Info: Enables partial replaces
+Package: manticoresoftware/buddy-plugin-queue
+Plugin: queue
+Version: %{VERSION}
+Type: core
+Info:
+Package: manticoresoftware/buddy-plugin-sharding
+Plugin: sharding
+Version: %{VERSION}
+Type: core
+Info: Enables sharded tables.
+Package: manticoresoftware/buddy-plugin-update
+Plugin: update
+Version: %{VERSION}
+Type: core
+Info: Handles UPDATE statements sent by MySQL tools making possible for them to update full-text fields
+Package: manticoresoftware/buddy-plugin-autocomplete
+Plugin: autocomplete
+Version: %{VERSION}
+Type: core
+Info: Autocomplete plugin that offers suggestions based on the starting query
+Package: manticoresoftware/buddy-plugin-cli-table
+Plugin: cli-table
+Version: %{VERSION}
+Type: core
+Info: /cli endpoint based on /cli_json - outputs query result as a table
+Package: manticoresoftware/buddy-plugin-distributed-insert
+Plugin: distributed-insert
+Version: %{VERSION}
+Type: core
+Info: The plugin enables data insertion into distributed sharded tables.
 ––– input –––
-curl -s "http://localhost:9308/cli?select%20*%20from%20t%20where%20match('exmaple')%20option%20fuzzy=1"; echo
+curl -s "http://localhost:9308/cli?create%20table%20t_copy%20like%20t" | grep -q 'Query OK' && echo ok
 ––– output –––
+ok
 ––– input –––
-curl -s "http://localhost:9308/cli?select%20*%20from%20nonexistent_table" | awk '!/row.*in set/'; echo
+curl -s "http://localhost:9308/cli?insert%20into%20auto_created%20(id,%20value)%20values%20(10,%20'abc')" | grep -q 'Query OK' && echo ok
 ––– output –––
-ERROR: unknown local table(s) 'nonexistent_table' in search request
+ok
 ––– input –––
-curl -s "http://localhost:9308/cli?select%20*%20from%20t%20order%20by%20id%20desc%20limit%201" | awk '!/row.*in set/'; echo
+curl -s "http://localhost:9308/cli?alter%20table%20t%20add%20column%20extra_field%20int" | grep -q 'Query OK' && echo ok
 ––– output –––
-+----+-------+------------+
-| id | value | value_attr |
-+----+-------+------------+
-| 2  | test  | test       |
-+----+-------+------------+
+ok
 ––– input –––
-curl -s "http://localhost:9308/cli?select%20count(*)%20as%20cnt,value_attr%20from%20t%20group%20by%20value_attr" | awk '!/row.*in set/'; echo
+curl -s "http://localhost:9308/cli?alter%20table%20t%20rename%20to%20t_renamed" | grep -q 'Query OK' && echo ok
 ––– output –––
-+-----+------------+
-| cnt | value_attr |
-+-----+------------+
-| 1   | example    |
-| 1   | test       |
-+-----+------------+
+ok
 ––– input –––
-curl -s "http://localhost:9308/cli?show%20queries" | awk '!/row.*in set/'; echo
+curl -s "http://localhost:9308/cli?replace%20into%20t_renamed%20(id,%20value)%20values%20(1,%20'replaced_value')" | grep -q 'Query OK' && echo ok
 ––– output –––
-+----+---------------+---------+----------+-----------------+
-| id | query         | time    | protocol | host            |
-+----+---------------+---------+----------+-----------------+
-| %{NUMBER}  | select        | %{NUMBER}ms ago | http     | %{IPADDR}:%{NUMBER} |
-| %{NUMBER} | show queries  | %{NUMBER}ms ago | http     | %{IPADDR}:%{NUMBER} |
-| %{NUMBER}  | show_settings | %{NUMBER}us    | http     | %{IPADDR}:%{NUMBER} |
-+----+---------------+---------+----------+-----------------+
+ok
 ––– input –––
-curl -s "http://localhost:9308/cli?describe%20t" | awk '!/row.*in set/'; echo
+curl -s "http://localhost:9308/cli?drop%20table%20if%20exists%20auto_created" | grep -q 'Query OK' && echo ok
 ––– output –––
-+------------+--------+----------------+
-| Field      | Type   | Properties     |
-+------------+--------+----------------+
-| id         | bigint |                |
-| value      | text   | indexed stored |
-| value_attr | string |                |
-+------------+--------+----------------+
+ok
+––– input –––
+curl -s "http://localhost:9308/cli?create%20cluster%20my_cluster%20if%20not%20exists" | grep -q 'Query OK' && echo ok
+––– output –––
+ok
+––– input –––
+curl -s "http://localhost:9308/cli?show%20meta" | awk -F'|' 'NF >= 3 && $0 !~ /row.*in set/ && $0 !~ /^[+]/ { gsub(/^ +| +$/, "", $2); gsub(/^ +| +$/, "", $3); print "Variable_name: " $2 "\nValue: " $3 "\n" }'
+––– output –––
+Variable_name: Variable_name
+Value: Value
+Variable_name: total
+Value: %{NUMBER}
+Variable_name: total_found
+Value: %{NUMBER}
+Variable_name: total_relation
+Value: eq
+Variable_name: time
+Value: #!/[0-9]{1}.[0-9]{3}/!#

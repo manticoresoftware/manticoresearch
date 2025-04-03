@@ -10478,10 +10478,21 @@ bool CreateReconfigure ( const CSphString & sIndexName, bool bIsStarDict, const 
 		}
 	}
 
+	const uint64_t pTokenizer_GetSettingsFNV = pTokenizer->GetSettingsFNV();
+	const uint64_t tDict_GetSettingsFNV = tDict->GetSettingsFNV();
+	const int pTokenizer_GetMaxCodepointLength = pTokenizer->GetMaxCodepointLength();
+	const uint64_t sphGetSettingsFNV_tIndexSettings = sphGetSettingsFNV ( tIndexSettings );
+	const uint64_t sphGetSettingsFNV_tSettings_m_tIndex = sphGetSettingsFNV ( tSettings.m_tIndex );
+	const bool tSettings_m_tMutableSettings_HasSettings = tSettings.m_tMutableSettings.HasSettings();
 	// compare options
-	if ( !bSame || uTokHash!=pTokenizer->GetSettingsFNV() || uDictHash!=tDict->GetSettingsFNV() ||
-		iMaxCodepointLength!=pTokenizer->GetMaxCodepointLength() || sphGetSettingsFNV ( tIndexSettings )!=sphGetSettingsFNV ( tSettings.m_tIndex ) ||
-		!bReFilterSame || !bIcuSame || tSettings.m_tMutableSettings.HasSettings() )
+	if ( !bSame
+		|| uTokHash!=pTokenizer_GetSettingsFNV
+		|| uDictHash!=tDict_GetSettingsFNV
+		|| iMaxCodepointLength!=pTokenizer_GetMaxCodepointLength
+		|| sphGetSettingsFNV_tIndexSettings!=sphGetSettingsFNV_tSettings_m_tIndex
+		|| !bReFilterSame
+		|| !bIcuSame
+		|| tSettings_m_tMutableSettings_HasSettings )
 	{
 		tSetup.m_pTokenizer = pTokenizer.Leak();
 		tSetup.m_pDict = tDict.Leak();
@@ -10645,6 +10656,10 @@ void RtIndex_c::ProhibitSave()
 	StopOptimize();
 	m_tSaving.SetState ( SaveState_c::DISCARD );
 	std::atomic_thread_fence ( std::memory_order_release );
+	// need also to wait while all disk chunk writers get out of the m_tSaving scope to make sure there will be no new disk chunks after this function
+	// might be called on daemon start from the system mock functions - no need to wait there
+	if ( Threads::IsInsideCoroutine() )
+		m_tNSavesNow.Wait ( [] ( int iVal ) { return iVal == 0; } );
 }
 
 void RtIndex_c::EnableSave()
@@ -10666,6 +10681,9 @@ void RtIndex_c::LockFileState ( CSphVector<CSphString>& dFiles )
 	ScopedScheduler_c tSerialFiber ( m_tWorkers.SerialChunkAccess() );
 	m_tSaving.SetState ( SaveState_c::DISABLED );
 	std::atomic_thread_fence ( std::memory_order_release );
+	// need also to wait while all disk chunk writers get out of the m_tSaving scope to make sure there will be no new disk chunks after this function
+	m_tNSavesNow.Wait ( [] ( int iVal ) { return iVal == 0; } );
+
 	GetIndexFiles ( dFiles, dFiles );
 }
 

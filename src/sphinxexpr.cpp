@@ -9033,6 +9033,17 @@ ISphExpr * ExprParser_t::CreateGeodistNode ( int iArgs )
 
 	bool bConst1 = ( IsConst ( &m_dNodes[dArgs[0]] ) && IsConst ( &m_dNodes[dArgs[1]] ) );
 	bool bConst2 = ( IsConst ( &m_dNodes[dArgs[2]] ) && IsConst ( &m_dNodes[dArgs[3]] ) );
+	auto WrongRadians = [this] { m_sCreateError = "GEODIST() expects input coordinates in radians. Use 'in=deg' if providing degrees."; return nullptr; };
+	if ( !bDeg ) {
+		if ( IsConst ( &m_dNodes[dArgs[0]] ) && !CheckLatRad ( FloatVal ( &m_dNodes[dArgs[0]] ) ) )
+			return WrongRadians();
+		if ( IsConst ( &m_dNodes[dArgs[1]] ) && !CheckLonRad ( FloatVal ( &m_dNodes[dArgs[1]] ) ) )
+			return WrongRadians();
+		if ( IsConst ( &m_dNodes[dArgs[2]] ) && !CheckLatRad ( FloatVal ( &m_dNodes[dArgs[2]] ) ) )
+			return WrongRadians();
+		if ( IsConst ( &m_dNodes[dArgs[3]] ) && !CheckLonRad ( FloatVal ( &m_dNodes[dArgs[3]] ) ) )
+			return WrongRadians();
+	}
 
 	if ( bConst1 && bConst2 )
 	{
@@ -9078,7 +9089,7 @@ ISphExpr * ExprParser_t::CreateGeodistNode ( int iArgs )
 	// four expressions
 	VecRefPtrs_t<ISphExpr*> dExpr;
 	MoveToArgList ( CreateTree ( iArgs ), dExpr );
-	assert ( dExpr.GetLength()==4 );
+	assert ( dExpr.GetLength() == 4 || dExpr.GetLength() == 5 );
 	ConvertArgsJson ( dExpr );
 	return new Expr_Geodist_c ( GetGeodistFn ( eMethod, bDeg ), fOut, dExpr[0], dExpr[1], dExpr[2], dExpr[3] );
 }

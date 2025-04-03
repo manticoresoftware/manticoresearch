@@ -2686,7 +2686,7 @@ struct CmpQueuedLookup_fn
 		if ( m_pStorage[a].m_tDocID==m_pStorage[b].m_tDocID )
 			return m_pStorage[a].m_tRowID < m_pStorage[b].m_tRowID;
 
-		return m_pStorage[a].m_tDocID < m_pStorage[b].m_tDocID;
+		return (uint64_t)m_pStorage[a].m_tDocID < (uint64_t)m_pStorage[b].m_tDocID;
 	}
 };
 

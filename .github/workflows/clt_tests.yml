@@ -54,8 +54,10 @@ jobs:
             test_prefix: test/clt-tests/sharding/
           - name: Indexer
             test_prefix: test/clt-tests/indexer/
+          - name: Kibana
+            test_prefix: test/clt-tests/kibana/
     steps:
-      - uses: manticoresoftware/clt@0.6.3
+      - uses: manticoresoftware/clt@0.6.5
         with:
           artifact: ${{ inputs.artifact_name }}
           image: ${{ inputs.docker_image }}

@@ -27,6 +27,14 @@ on:
         required: false
         type: number
         default: 1
+      version:
+        required: false
+        type: string
+        default: ""
+      build_tag:
+        required: false
+        type: string
+        default: ""
       cmake_command:
         required: false
         type: string
@@ -89,12 +97,19 @@ jobs:
         HOMEBREW_PREFIX: ${{ inputs.HOMEBREW_PREFIX }}
         PACK_GALERA: ${{ inputs.PACK_GALERA }}
         COLUMNAR_LOCATOR: ${{ inputs.COLUMNAR_LOCATOR }}
+        BUILD_TAG: ${{ inputs.build_tag }}
     steps:
       - name: Checkout repository
         uses: actions/checkout@v3
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
           set-safe-directory: true
+
+      - name: Patch version
+        if: inputs.version != ''
+        run: |
+          sed -i "s/0\.0\.0/${{ inputs.version }}/g" src/sphinxversion.h.in
+          cat src/sphinxversion.h.in
 
       - name: Initialization
         run: | # without adding the safe.directory cmake fails to do git log -1 --date=short --format=%cd

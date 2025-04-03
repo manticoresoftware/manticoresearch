@@ -797,16 +797,37 @@ XQNode_t * QueryParserJson_c::ConstructBoolNode ( const JsonObj_c & tJson, Query
 XQNode_t * QueryParserJson_c::ConstructQLNode ( const JsonObj_c & tJson, QueryTreeBuilder_c & tBuilder ) const
 {
 	ErrorPathGuard_t tGuard = tBuilder.ErrorAddPath ( tJson );
-	if ( !tJson.IsStr() )
+
+	CSphString sQueryString;
+	// query_string could be either {"query_string":{"query":"term"}} or {"query_string":"term"}
+	if ( tJson.IsObj() )
 	{
-		tBuilder.Error ( "\"query_string\" value should be an string" );
-		return nullptr;
+		CSphString sError;
+		JsonObj_c tNestedQuery = tJson.GetStrItem ( "query", sError, false );
+		if ( !tNestedQuery )
+		{
+			tBuilder.Error ( "\"query_string\" value should be an object with the \"query\" string" );
+			return nullptr;
+		}
+		sQueryString = tNestedQuery.StrVal();
+	}
+
+	if ( sQueryString.IsEmpty() )
+	{
+		if ( tJson.IsStr() )
+		{
+			sQueryString = tJson.StrVal();
+		} else
+		{
+			tBuilder.Error ( "\"query_string\" value should be an string" );
+			return nullptr;
+		}
 	}
 
 	XQQuery_t tParsed;
 	tParsed.m_dZones = tBuilder.GetZone(); // should keep the same zone list for whole tree
 	// no need to pass morph fields here as upper level does fixup
-	if ( !sphParseExtendedQuery ( tParsed, tJson.StrVal().cstr(), tBuilder.GetQuery(), tBuilder.GetQLTokenizer(), tBuilder.GetSchema(), tBuilder.GetDict(), tBuilder.GetIndexSettings(), nullptr ) )
+	if ( !sphParseExtendedQuery ( tParsed, sQueryString.cstr(), tBuilder.GetQuery(), tBuilder.GetQLTokenizer(), tBuilder.GetSchema(), tBuilder.GetDict(), tBuilder.GetIndexSettings(), nullptr ) )
 	{
 		tBuilder.Error ( "%s", tParsed.m_sParseError.cstr() );
 		return nullptr;

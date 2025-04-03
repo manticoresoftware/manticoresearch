@@ -37,6 +37,7 @@ jobs:
     permissions:
       contents: write
       pull-requests: read
+      actions: write
     outputs:
       version: ${{ steps.semver-tagger.outputs.version }}
       version_full: ${{ steps.semver-tagger.outputs.version_full }}

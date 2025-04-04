@@ -22,7 +22,10 @@ on:
       - 'cmake/GetGALERA.cmake'
       - 'galera_packaging/**'
     tags:
-      - 'release*'    
+      - 'release*'
+
+permissions:
+  actions: write
 
 # cancels the previous workflow run when a new one appears in the same branch (e.g. master or a PR's branch)
 concurrency:
@@ -37,7 +40,6 @@ jobs:
     permissions:
       contents: write
       pull-requests: read
-      actions: write
     outputs:
       version: ${{ steps.semver-tagger.outputs.version }}
       version_full: ${{ steps.semver-tagger.outputs.version_full }}
@@ -84,7 +86,7 @@ jobs:
         id: semver-tagger
         uses: manticoresoftware/semver-tagger-action@main  
         with:
-          github_token: ${{ secrets.WORKFLOW_TOKEN }}
+          github_token: ${{ secrets.GITHUB_TOKEN }}
           ignore_patterns: '\.md$|^test/|^manual/|\.clt|\.github|\.patterns|\.yml|\.gitignore'
       - name: Check if we should continue packing
         id: check-should-continue

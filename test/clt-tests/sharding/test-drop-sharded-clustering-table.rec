@@ -12,7 +12,7 @@ export CLUSTER_NAME=c
 ––– block: ../base/replication/create-cluster –––
 ––– block: ../base/replication/join-cluster-on-all-nodes –––
 ––– input –––
-mysql -h0 -P1306 -e "create table ${CLUSTER_NAME}:tbl1(id bigint) shards=3 rf=2;"; echo $?;
+mysql -h0 -P1306 -e "create table ${CLUSTER_NAME}:tbl1(id bigint) shards='3' rf='2';"; echo $?;
 ––– output –––
 0
 ––– input –––
@@ -36,7 +36,7 @@ echo "=== Node 1306 ==="; mysql -h0 -P1306 -e "SHOW TABLES\G" || echo "Node 1306
 === Node 1306 ===
 === Node 2306 ===
 ––– input –––
-mysql -h0 -P1306 -e "create table ${CLUSTER_NAME}:Tbl2(id bigint) shards=3 rf=1;"; echo $?
+mysql -h0 -P1306 -e "create table ${CLUSTER_NAME}:Tbl2(id bigint) shards='3' rf='1';"; echo $?
 ––– output –––
 0
 ––– input –––
@@ -60,7 +60,7 @@ echo "=== Node 1306 ==="; mysql -h0 -P1306 -e "SHOW TABLES\G" || echo "Node 1306
 === Node 1306 ===
 === Node 2306 ===
 ––– input –––
-mysql -h0 -P1306 -e "create table ${CLUSTER_NAME}:tbl_missing_type(id) shards=3 rf=1;"
+mysql -h0 -P1306 -e "create table ${CLUSTER_NAME}:tbl_missing_type(id) shards='3' rf='1';"
 ––– output –––
 ––– input –––
 echo "=== Node 1306 ==="; mysql -h0 -P1306 -e "SHOW TABLES\G" || echo "Node 1306 failed!"; echo "=== Node 2306 ==="; mysql -h0 -P2306 -e "SHOW TABLES\G" || echo "Node 2306 failed!"
@@ -86,7 +86,7 @@ echo "=== Node 1306 ==="; mysql -h0 -P1306 -e "SHOW TABLES\G" || echo "Node 1306
 LONG_TABLE_NAME=$(printf "tbl%065d" 1)
 ––– output –––
 ––– input –––
-mysql -h0 -P1306 -e "create table ${CLUSTER_NAME}:${LONG_TABLE_NAME}(id bigint) shards=3 rf=1;"
+mysql -h0 -P1306 -e "create table ${CLUSTER_NAME}:${LONG_TABLE_NAME}(id bigint) shards='3' rf='1';"
 ––– output –––
 ––– input –––
 echo "=== Node 1306 ==="; mysql -h0 -P1306 -e "SHOW TABLES\G" || echo "Node 1306 failed!"; echo "=== Node 2306 ==="; mysql -h0 -P2306 -e "SHOW TABLES\G" || echo "Node 2306 failed!"

@@ -11,7 +11,7 @@ mysql -h0 -P9306 -e "DROP TABLE IF EXISTS tbl1;"; echo $?;
 ––– output –––
 0
 ––– input –––
-mysql -h0 -P9306 -e "create table tbl1(id bigint) shards=3 rf=1;"; echo $?;
+mysql -h0 -P9306 -e "create table tbl1(id bigint) shards='3' rf='1';"; echo $?;
 ––– output –––
 0
 ––– input –––
@@ -29,7 +29,7 @@ mysql -h0 -P9306 -e "SHOW TABLES\G"; echo $?;
 ––– output –––
 0
 ––– input –––
-mysql -h0 -P9306 -e "create table tbl1(id bigint) shards=3 rf=1;"; echo $?;
+mysql -h0 -P9306 -e "create table tbl1(id bigint) shards='3' rf='1';"; echo $?;
 ––– output –––
 0
 ––– input –––
@@ -71,7 +71,7 @@ ERROR 1064 (42000) at line 1: DROP TABLE failed: unknown table 'tbl1'
 LONG_TABLE_NAME=$(printf "tbl%065d" 1)
 ––– output –––
 ––– input –––
-mysql -h0 -P9306 -e "create table ${LONG_TABLE_NAME}(id bigint) shards=3 rf=1;"
+mysql -h0 -P9306 -e "create table ${LONG_TABLE_NAME}(id bigint) shards='3' rf='1';"
 ––– output –––
 ––– input –––
 mysql -h0 -P9306 -e "SHOW TABLES\G"; echo $?;

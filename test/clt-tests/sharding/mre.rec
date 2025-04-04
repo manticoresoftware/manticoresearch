@@ -12,6 +12,6 @@ export CLUSTER_NAME=c
 ––– block: ../base/replication/create-cluster –––
 ––– block: ../base/replication/join-cluster-on-all-nodes –––
 ––– input –––
-mysql -h0 -P1306 -e "create table ${CLUSTER_NAME}:tbl1(id bigint) shards=3 rf=2 timeout=5;"; echo $?;
+mysql -h0 -P1306 -e "create table ${CLUSTER_NAME}:tbl1(id bigint) shards='3' rf='2' timeout=5;"; echo $?;
 ––– output –––
 0

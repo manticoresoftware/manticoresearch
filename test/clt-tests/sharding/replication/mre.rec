@@ -31,7 +31,7 @@ apt-get install -y jq 1> /dev/null 2>&1 ; echo $?
 ––– output –––
 0
 ––– input –––
-mysql -h0 -P1306 -e "create table c:t(id bigint) shards=5 rf=3 timeout=120" >/dev/null
+mysql -h0 -P1306 -e "create table c:t(id bigint) shards='5' rf='3' timeout=120" >/dev/null
 ––– output –––
 ––– input –––
 grep 'started v' /var/log/manticore-{1,2,3,4,5}/searchd.log | cut -d\' -f3 | cut -d: -f3 | wc -l

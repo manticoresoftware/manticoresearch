@@ -10452,6 +10452,9 @@ bool RtIndex_c::Reconfigure ( CSphReconfigureSetup & tSetup )
 		SaveMeta ();
 	}
 
+	if ( m_sGlobalIDFPath != m_tMutableSettings.m_sGlobalIDFPath )
+		SetGlobalIDFPath ( m_tMutableSettings.m_sGlobalIDFPath );
+
 	return true;
 }
 

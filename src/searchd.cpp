@@ -17039,6 +17039,20 @@ static void HandleMysqlAlterIndexSettings ( RowBuffer_i & tOut, const SqlStmt_t 
 	if ( !bSame && sError.IsEmpty() )
 	{
 		bool bOk = pRtIndex->Reconfigure(tSetup);
+
+		if ( tSetup.m_tMutableSettings.IsSet ( MutableName_e::GLOBAL_IDF ) )
+		{
+			const CSphString sNewIDF = tSetup.m_tMutableSettings.m_sGlobalIDFPath;
+			sph::PrereadGlobalIDF ( sNewIDF, sError );
+			if ( pServed->m_sGlobalIDFPath != sNewIDF )
+			{
+				auto& tConstServed = *pServed;
+				auto& tServed = const_cast<ServedIndex_c&> ( tConstServed );
+				tServed.m_sGlobalIDFPath = sNewIDF;
+				RotateGlobalIdf();
+			}
+		}
+
 		if ( !bOk )
 		{
 			sError.SetSprintf ( "table '%s': alter failed; TABLE UNUSABLE (%s)", tStmt.m_sIndex.cstr(), pRtIndex->GetLastError().cstr() );
@@ -20924,11 +20938,11 @@ ESphAddIndex ConfigureAndPreloadIndex ( const CSphConfigSection & hIndex, const 
 	// no break
 	case ADD_SERVED:
 	{
-		// finally add the index to the hash of enabled.
-		g_pLocalIndexes->Add ( pJustLoadedLocal, szIndexName );
-
 		if ( !pJustLoadedLocal->m_sGlobalIDFPath.IsEmpty() && !sph::PrereadGlobalIDF ( pJustLoadedLocal->m_sGlobalIDFPath, sError ) )
 			dWarnings.Add ( "global IDF unavailable - IGNORING" );
+
+		// finally add the index to the hash of enabled.
+		g_pLocalIndexes->Add ( pJustLoadedLocal, szIndexName );
 	}
 	// no sense to break
 	case ADD_DISTR:

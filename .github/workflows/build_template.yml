@@ -70,9 +70,6 @@ on:
         required: false
         type: string
         default: ""
-
-permissions:
-  actions: write
   
 jobs:
   build:

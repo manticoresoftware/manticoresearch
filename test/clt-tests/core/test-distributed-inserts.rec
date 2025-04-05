@@ -26,7 +26,7 @@ mysql -h0 -P9306 -e "CREATE TABLE test2 (
     knn_type='hnsw'
     knn_dims='4'
     hnsw_similarity='l2'
-) shards=3 rf=1;"; echo $?
+) shards='3' rf='1';"; echo $?
 ––– output –––
 0
 ––– input –––

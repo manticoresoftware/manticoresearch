@@ -1434,6 +1434,7 @@ private:
 	mutable DWORD				m_uDiskAttrStatus = 0;
 	std::atomic<int64_t>		m_tmDataWriten = 0;
 	std::atomic<int64_t>		m_tmDataSearched = 0;
+	std::atomic<int>			m_iActiveReplicationOperations = 0;  // Counter for active replication operations
 
 	bool						m_bKeywordDict;
 	int							m_iWordsCheckpoint = RTDICT_CHECKPOINT_V5;
@@ -4253,6 +4254,15 @@ bool RtIndex_c::SaveDiskChunk ( bool bForced, bool bEmergent ) REQUIRES ( m_tWor
 		return true;
 
 	assert ( Coro::CurrentScheduler() == m_tWorkers.SerialChunkAccess() );
+
+	// Skip saving if replication operations are in progress and this is not a forced save
+	// This prevents data loss in clustered environments where replication operations
+	// might not have fully propagated before disk chunks are saved
+	if ( m_iActiveReplicationOperations.load(std::memory_order_acquire) > 0 && !bForced )
+	{
+		RTSAVELOG << "SaveDiskChunk skipped due to active replication operations";
+		return true;
+	}
 
 	RTSAVELOG << "SaveDiskChunk (" << ( bForced ? "forced, " : "not forced, " ) << ( bEmergent ? "emergent, " : "not emergent " ) << ")";
 

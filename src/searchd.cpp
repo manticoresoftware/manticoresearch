@@ -13011,6 +13011,18 @@ static bool CheckExistingTables ( const SqlStmt_t & tStmt, CSphString & sError )
 	return true;
 }
 
+static int CheckShardIntOpt ( const char * sName, const SqlStmt_t & tStmt, CSphString & sError )
+{
+	int iPos = tStmt.m_tCreateTable.m_dOpts.GetFirst ( [&]( const auto & tItem ) { return tItem.m_sName==sName; } );
+	if ( iPos==-1 )
+		return iPos;
+
+	CSphVariant tVal ( tStmt.m_tCreateTable.m_dOpts[iPos].m_sValue.cstr() );
+	if ( tVal.int64val()<0 )
+		sError.SetSprintf ( "table '%s': CREATE TABLE failed: negative '%s' option is not allowed", tStmt.m_sIndex.cstr(), sName );
+
+	return iPos;
+}
 
 static bool CheckCreateTable ( const SqlStmt_t & tStmt, CSphString & sError )
 {
@@ -13031,6 +13043,25 @@ static bool CheckCreateTable ( const SqlStmt_t & tStmt, CSphString & sError )
 				sError.SetSprintf ( "duplicate attribute name '%s'", i.m_tAttr.m_sName.cstr() );
 				return false;
 			}
+
+	// shard related options
+	const CSphVector<NameValueStr_t> & dOpts = tStmt.m_tCreateTable.m_dOpts;
+	if ( dOpts.GetLength() )
+	{
+		int iShardsPos = CheckShardIntOpt ("shards", tStmt, sError );
+		if ( !sError.IsEmpty() )
+			return false;
+		int iRfPos = CheckShardIntOpt ( "rf", tStmt, sError );
+		if ( !sError.IsEmpty() )
+			return false;
+
+		// should be routerd into buddy with good error message
+		if ( iShardsPos!=-1 || iRfPos!=-1 )
+		{
+			sError.SetSprintf ( "table '%s': CREATE TABLE failed: 'shards' and 'rf' options require Buddy", tStmt.m_sIndex.cstr() );
+			return false;
+		}
+	}
 
 	return true;
 }

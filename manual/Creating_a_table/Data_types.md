@@ -62,9 +62,9 @@ POST /cli -d "CREATE TABLE forum(title text, content text, author_id int, forum_
 <!-- request PHP -->
 
 ```php
-$index = new \Manticoresearch\Index($client);
-$index->setName('forum');
-$index->create([
+$table = new \Manticoresearch\Table($client);
+$table->setName('forum');
+$table->create([
     'title'=>['type'=>'text'],
 	'content'=>['type'=>'text'],
 	'author_id'=>['type'=>'int'],
@@ -237,7 +237,7 @@ Map<String,Object> query = new HashMap<String,Object>();
 query.put("match_all",null);
 query.put("bool",filters);
 SearchRequest searchRequest = new SearchRequest();
-searchRequest.setIndex("forum");
+searchRequest.setTable("forum");
 searchRequest.setQuery(query);
 searchRequest.setSort(new ArrayList<Object>(){{
     add(new HashMap<String,String>(){{ put("post_date","desc");}});
@@ -460,9 +460,9 @@ POST /cli -d "CREATE TABLE products(title text)"
 <!-- request PHP -->
 
 ```php
-$index = new \Manticoresearch\Index($client);
-$index->setName('products');
-$index->create([
+$table = new \Manticoresearch\Table($client);
+$table->setName('products');
+$table->create([
     'title'=>['type'=>'text']
 ]);
 ```
@@ -548,9 +548,9 @@ POST /cli -d "CREATE TABLE products(title text indexed)"
 <!-- request PHP -->
 
 ```php
-$index = new \Manticoresearch\Index($client);
-$index->setName('products');
-$index->create([
+$table = new \Manticoresearch\Table($client);
+$table->setName('products');
+$table->create([
     'title'=>['type'=>'text','options'=>['indexed']]
 ]);
 ```
@@ -642,7 +642,7 @@ POST /search
 <!-- request PHP -->
 
 ```php
-$index->setName('products')->search('@title')->get();
+$table->setName('products')->search('@title')->get();
 
 ```
 
@@ -712,9 +712,9 @@ POST /cli -d "CREATE TABLE products(title text, keys string)"
 <!-- request PHP -->
 
 ```php
-$index = new \Manticoresearch\Index($client);
-$index->setName('products');
-$index->create([
+$table = new \Manticoresearch\Table($client);
+$table->setName('products');
+$table->create([
     'title'=>['type'=>'text'],
 	'keys'=>['type'=>'string']
 ]);
@@ -803,9 +803,9 @@ POST /cli -d "CREATE TABLE products ( title string attribute indexed )"
 <!-- request PHP -->
 
 ```php
-$index = new \Manticoresearch\Index($client);
-$index->setName('products');
-$index->create([
+$table = new \Manticoresearch\Table($client);
+$table->setName('products');
+$table->create([
     'title'=>['type'=>'string','options'=>['indexed','attribute']]
 ]);
 ```
@@ -911,9 +911,9 @@ POST /cli -d "CREATE TABLE products(title text, price int)"
 <!-- request PHP -->
 
 ```php
-$index = new \Manticoresearch\Index($client);
-$index->setName('products');
-$index->create([
+$table = new \Manticoresearch\Table($client);
+$table->setName('products');
+$table->create([
     'title'=>['type'=>'text'],
 	'price'=>['type'=>'int']
 ]);
@@ -999,9 +999,9 @@ POST /cli -d "CREATE TABLE products(title text, flags bit(3), tags bit(2))"
 <!-- request PHP -->
 
 ```php
-$index = new \Manticoresearch\Index($client);
-$index->setName('products');
-$index->create([
+$table = new \Manticoresearch\Table($client);
+$table->setName('products');
+$table->create([
     'title'=>['type'=>'text'],
 	'flags'=>['type'=>'bit(3)'],
 	'tags'=>['type'=>'bit(2)']
@@ -1090,9 +1090,9 @@ POST /cli -d "CREATE TABLE products(title text, price bigint)"
 <!-- request PHP -->
 
 ```php
-$index = new \Manticoresearch\Index($client);
-$index->setName('products');
-$index->create([
+$table = new \Manticoresearch\Table($client);
+$table->setName('products');
+$table->create([
     'title'=>['type'=>'text'],
 	'price'=>['type'=>'bigint']
 ]);
@@ -1180,9 +1180,9 @@ POST /cli -d "CREATE TABLE products(title text, sold bool)"
 <!-- request PHP -->
 
 ```php
-$index = new \Manticoresearch\Index($client);
-$index->setName('products');
-$index->create([
+$table = new \Manticoresearch\Table($client);
+$table->setName('products');
+$table->create([
     'title'=>['type'=>'text'],
 	'sold'=>['type'=>'bool']
 ]);
@@ -1285,9 +1285,9 @@ POST /cli -d "CREATE TABLE products(title text, date timestamp)"
 <!-- request PHP -->
 
 ```php
-$index = new \Manticoresearch\Index($client);
-$index->setName('products');
-$index->create([
+$table = new \Manticoresearch\Table($client);
+$table->setName('products');
+$table->create([
     'title'=>['type'=>'text'],
 	'date'=>['type'=>'timestamp']
 ]);
@@ -1374,9 +1374,9 @@ POST /cli -d "CREATE TABLE products(title text, coeff float)"
 <!-- request PHP -->
 
 ```php
-$index = new \Manticoresearch\Index($client);
-$index->setName('products');
-$index->create([
+$table = new \Manticoresearch\Table($client);
+$table->setName('products');
+$table->create([
     'title'=>['type'=>'text'],
 	'coeff'=>['type'=>'float']
 ]);
@@ -1468,7 +1468,7 @@ POST /search
 <!-- request PHP -->
 
 ```php
-$index->setName('products')->search('')->expression('eps','abs(a-b)')->get();
+$table->setName('products')->search('')->expression('eps','abs(a-b)')->get();
 ```
 <!-- intro -->
 ##### Python:
@@ -1494,7 +1494,7 @@ res = await searchApi.search({"table":"products","query":{"match_all":{}},"expre
 
 ```java
 searchRequest = new SearchRequest();
-searchRequest.setIndex("forum");
+searchRequest.setTable("forum");
 query = new HashMap<String,Object>();
 query.put("match_all",null);
 searchRequest.setQuery(query);
@@ -1550,7 +1550,7 @@ POST /search
 <!-- request PHP -->
 
 ```php
-$index->setName('products')->search('')->expression('inc','in(ceil(attr*100),200,250,350)')->get();
+$table->setName('products')->search('')->expression('inc','in(ceil(attr*100),200,250,350)')->get();
 ```
 <!-- intro -->
 ##### Python:
@@ -1576,7 +1576,7 @@ res = await searchApi.search({"table":"products","query":{"match_all":{}}},"expr
 
 ```java
 searchRequest = new SearchRequest();
-searchRequest.setIndex("forum");
+searchRequest.setTable("forum");
 query = new HashMap<String,Object>();
 query.put("match_all",null);
 searchRequest.setQuery(query);
@@ -1660,9 +1660,9 @@ POST /cli -d "CREATE TABLE products(title text, data json)"
 <!-- request PHP -->
 
 ```php
-$index = new \Manticoresearch\Index($client);
-$index->setName('products');
-$index->create([
+$table = new \Manticoresearch\Table($client);
+$table->setName('products');
+$table->create([
     'title'=>['type'=>'text'],
 	'data'=>['type'=>'json']
 ]);
@@ -1754,7 +1754,7 @@ POST /search
 <!-- request PHP -->
 
 ```php
-$index->setName('products')->search('')->expression('idx','indexof(x>2 for x in data.intarray)')->get();
+$table->setName('products')->search('')->expression('idx','indexof(x>2 for x in data.intarray)')->get();
 ```
 <!-- intro -->
 ##### Python:
@@ -1780,7 +1780,7 @@ res = await searchApi.search({"table":"products","query":{"match_all":{}},"expre
 
 ```java
 searchRequest = new SearchRequest();
-searchRequest.setIndex("forum");
+searchRequest.setTable("forum");
 query = new HashMap<String,Object>();
 query.put("match_all",null);
 searchRequest.setQuery(query);
@@ -1842,7 +1842,7 @@ POST /search
 <!-- request PHP -->
 
 ```php
-$index->setName('products')->search('')->expression('idx',"regex(data.name, 'est')")->filter('c','gt',0)->get();
+$table->setName('products')->search('')->expression('idx',"regex(data.name, 'est')")->filter('c','gt',0)->get();
 ```
 <!-- intro -->
 ##### Python:
@@ -1868,7 +1868,7 @@ res = await searchApi.search({"table":"products","query":{"match_all":{},"range"
 
 ```java
 searchRequest = new SearchRequest();
-searchRequest.setIndex("forum");
+searchRequest.setTable("forum");
 query = new HashMap<String,Object>();
 query.put("match_all",null);
 query.put("range", new HashMap<String,Object>(){{
@@ -1933,7 +1933,7 @@ POST /search
 <!-- request PHP -->
 
 ```php
-$index->setName('products')->search('')->sort('double(data.myfloat)','desc')->get();
+$table->setName('products')->search('')->sort('double(data.myfloat)','desc')->get();
 ```
 <!-- intro -->
 ##### Python:
@@ -1958,7 +1958,7 @@ res = await searchApi.search({"table":"products","query":{"match_all":{}}},"sort
 
 ```java
 searchRequest = new SearchRequest();
-searchRequest.setIndex("forum");
+searchRequest.setTable("forum");
 query = new HashMap<String,Object>();
 query.put("match_all",null);
 searchRequest.setQuery(query);
@@ -2030,9 +2030,9 @@ POST /cli -d "CREATE TABLE products(title text, image_vector float_vector)"
 <!-- request PHP -->
 
 ```php
-$index = new \Manticoresearch\Index($client);
-$index->setName('products');
-$index->create([
+$table = new \Manticoresearch\Table($client);
+$table->setName('products');
+$table->create([
     'title'=>['type'=>'text'],
 	'image_vector'=>['type'=>'float_vector']
 ]);
@@ -2123,9 +2123,9 @@ POST /cli -d "CREATE TABLE products(title text, product_codes multi)"
 <!-- request PHP -->
 
 ```php
-$index = new \Manticoresearch\Index($client);
-$index->setName('products');
-$index->create([
+$table = new \Manticoresearch\Table($client);
+$table->setName('products');
+$table->create([
     'title'=>['type'=>'text'],
 	'product_codes'=>['type'=>'multi']
 ]);
@@ -2220,7 +2220,7 @@ POST /search
 <!-- request PHP -->
 
 ```php
-$index->setName('products')->search('')->filter('any(product_codes)','equals',3)->get();
+$table->setName('products')->search('')->filter('any(product_codes)','equals',3)->get();
 ```
 <!-- intro -->
 ##### Python:
@@ -2245,7 +2245,7 @@ res = await searchApi.search({"table":"products","query":{"match_all":{},"equals
 
 ```java
 searchRequest = new SearchRequest();
-searchRequest.setIndex("forum");
+searchRequest.setTable("forum");
 query = new HashMap<String,Object>();
 query.put("match_all",null);
 query.put("equals",new HashMap<String,Integer>(){{
@@ -2302,7 +2302,7 @@ POST /search
 <!-- request PHP -->
 
 ```php
-$index->setName('products')->search('')->sort('product_codes','asc','min')->get();
+$table->setName('products')->search('')->sort('product_codes','asc','min')->get();
 ```
 <!-- intro -->
 ##### Python:
@@ -2328,7 +2328,7 @@ res = await searchApi.search({"table":"products","query":{"match_all":{},"sort":
 
 ```java
 searchRequest = new SearchRequest();
-searchRequest.setIndex("forum");
+searchRequest.setTable("forum");
 query = new HashMap<String,Object>();
 query.put("match_all",null);
 searchRequest.setQuery(query);
@@ -2473,11 +2473,11 @@ POST /search
 <!-- request PHP -->
 
 ```php
-$index->addDocument([
+$table->addDocument([
     "title"=>"first",
     "product_codes"=>[4,2,1,3]
 ]);
-$index->search('')-get();
+$table->search('')-get();
 ```
 
 <!-- response PHP -->
@@ -2572,12 +2572,12 @@ HashMap<String,Object> doc = new HashMap<String,Object>(){{
     put("title","first");
     put("product_codes",new int[] {4,2,1,3});
 }};
-newdoc.index("products").id(1L).setDoc(doc);
+newdoc.table("products").id(1L).setDoc(doc);
 sqlresult = indexApi.insert(newdoc);
 Map<String,Object> query = new HashMap<String,Object>();
 query.put("match_all",null);
 SearchRequest searchRequest = new SearchRequest();
-searchRequest.setIndex("products");
+searchRequest.setTable("products");
 searchRequest.setQuery(query);
 SearchResponse searchResponse = searchApi.search(searchRequest);
 System.out.println(searchResponse.toString() );
@@ -2607,7 +2607,7 @@ class SearchResponse {
 Dictionary<string, Object> doc = new Dictionary<string, Object>();
 doc.Add("title", "first");
 doc.Add("product_codes", new List<Object> {4,2,1,3});
-InsertDocumentRequest newdoc = new InsertDocumentRequest(index: "products", id: 1, doc: doc);
+InsertDocumentRequest newdoc = new InsertDocumentRequest(table: "products", id: 1, doc: doc);
 var sqlresult = indexApi.Insert(newdoc);
 object query =  new { match_all=null };
 var searchRequest = new SearchRequest("products", query);
@@ -2662,9 +2662,9 @@ POST /cli -d "CREATE TABLE products(title text, values multi64)"
 <!-- request PHP -->
 
 ```php
-$index = new \Manticoresearch\Index($client);
-$index->setName('products');
-$index->create([
+$table = new \Manticoresearch\Table($client);
+$table->setName('products');
+$table->create([
     'title'=>['type'=>'text'],
 	'values'=>['type'=>'multi64']
 ]);

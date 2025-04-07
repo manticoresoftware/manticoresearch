@@ -29,7 +29,7 @@ SHOW TABLES;
 
 ```sql
 +----------+-------------+
-| Index    | Type        |
+| Table    | Type        |
 +----------+-------------+
 | dist     | distributed |
 | plain    | local       |
@@ -68,7 +68,7 @@ utilsApi.sql('SHOW TABLES')
 
 <!-- response Python -->
 ```python
-{u'columns': [{u'Index': {u'type': u'string'}},
+{u'columns': [{u'Table': {u'type': u'string'}},
               {u'Type': {u'type': u'string'}}],
  u'data': [{u'Index': u'dist1', u'Type': u'distributed'},
            {u'Index': u'rt', u'Type': u'rt'},

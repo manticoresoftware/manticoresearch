@@ -33,7 +33,7 @@ table foo {
 #### Via SQL
 
 ```sql
-CREATE TABLE distributed_index type='distributed' local='local_index' agent='127.0.0.1:9312:remote_table'
+CREATE TABLE distributed_table type='distributed' local='local_table' agent='127.0.0.1:9312:remote_table'
 ```
 
 #### Children

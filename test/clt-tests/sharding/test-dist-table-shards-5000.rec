@@ -1,0 +1,22 @@
+––– block: ../base/start-searchd-with-buddy –––
+––– input –––
+locals=()
+for n in $(seq 1 5000); do
+	locals+=("local='system.t$n'")
+	mysql -h0 -P9306 -e "create table system.t$n (id int)"
+done
+local_string=$(IFS=' '; echo "${locals[*]}")
+mysql -h0 -P9306 -e "create table t type='distributed' $local_string"
+––– output –––
+––– input –––
+mysql -h0 -P9306 -e "SHOW TABLES LIKE 't'"
+––– output –––
++-------+-------------+
+| Table | Type        |
++-------+-------------+
+| t     | distributed |
++-------+-------------+
+––– input –––
+mysql -h0 -P9306 -N -e "SHOW CREATE TABLE t OPTION force = 1\G" | grep -o "local='system\.t[0-9]\+'" | wc -l
+––– output –––
+5000

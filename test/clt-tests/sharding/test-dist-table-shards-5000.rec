@@ -1,23 +1,13 @@
 ––– block: ../base/start-searchd-with-buddy –––
 ––– input –––
-cat << 'EOF' > /tmp/create_tables.sh
-#!/usr/bin/env bash
 locals=()
 for n in $(seq 1 5000); do
 	locals+=("local='system.t$n'")
 	mysql -h0 -P9306 -e "create table system.t$n (id int)"
 done
-mysql -h0 -P9306 -e "create table t type='distributed' ${locals[*]}"
-EOF
+local_string=$(IFS=' '; echo "${locals[*]}")
+mysql -h0 -P9306 -e "create table t type='distributed' $local_string"
 ––– output –––
-––– input –––
-chmod +x /tmp/create_tables.sh; echo $?
-––– output –––
-0
-––– input –––
-bash /tmp/create_tables.sh; echo $?
-––– output –––
-0
 ––– input –––
 mysql -h0 -P9306 -e "SHOW TABLES LIKE 't'"
 ––– output –––

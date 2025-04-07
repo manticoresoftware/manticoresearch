@@ -25,4 +25,4 @@ ERROR 1064 (42000) at line 1: Sharded table requires `rf=n`
 ––– input –––
 mysql -h0 -P2306 -e "CREATE TABLE tbl2 shards='5' rf12;"
 ––– output –––
-P03: syntax error, unexpected $end, expecting '=' near 'rf12'
+ERROR 1064 (42000) at line 1: P03: syntax error, unexpected $end, expecting '=' near 'rf12'

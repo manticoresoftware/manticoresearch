@@ -19,7 +19,7 @@ export CLUSTER_NAME=c
 ––– output –––
 ––– block: ../../base/replication/join-cluster-on-all-nodes –––
 ––– input –––
-mysql -h0 -P1306 -e "create table c:t(id bigint) shards=6 rf=2"
+mysql -h0 -P1306 -e "create table c:t(id bigint) shards='6' rf='2'"
 ––– output –––
 ––– input –––
 for i in 1 2 3; do mysql -h0 -P${i}306 -e "show tables from system\G"; done | grep 'Table: system.t' | sort -V

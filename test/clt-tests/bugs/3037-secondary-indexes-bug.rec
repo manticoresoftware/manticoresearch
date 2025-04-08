@@ -1,0 +1,24 @@
+––– block: ../base/start-searchd –––
+––– input –––
+manticore-load --quiet --json --port=9306 --init="CREATE TABLE task (id BIGINT, status UINT, enddatetime TIMESTAMP, isoverdue BOOL)" --load="INSERT INTO task (id, status, enddatetime, isoverdue) VALUES (<increment>, <int/1/8>, <int/1577836800/1672531200>, 0)" --batch-size=1000 --threads=4 --total=10000; echo
+––– output –––
+––– input –––
+mysql -P9306 -h0 -e "SHOW VERSION;"
+––– output –––
+––– input –––
+mysql -P9306 -h0 -e "DESCRIBE task;"
+––– output –––
++-------------+-----------+------------+
+| Field       | Type      | Properties |
++-------------+-----------+------------+
+| id          | bigint    |            |
+| status      | uint      |            |
+| enddatetime | timestamp |            |
+| isoverdue   | bool      |            |
++-------------+-----------+------------+
+––– input –––
+mysql -P9306 -h0 -e "SET GLOBAL secondary_indexes=1; SELECT id, status FROM task WHERE isoverdue = 0 AND status NOT IN (1,4,5,6,7,8) LIMIT 10;"
+––– output –––
+––– input –––
+mysql -P9306 -h0 -e "SET GLOBAL secondary_indexes=0; SELECT id, status FROM task WHERE isoverdue = 0 AND status NOT IN (1,4,5,6,7,8) LIMIT 10;"
+––– output –––

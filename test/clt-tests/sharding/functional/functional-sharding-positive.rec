@@ -25,7 +25,7 @@ Port 3306: Node synced
 Counter: cluster_replication_status
 Value: primary
 ––– input –––
-mysql -h0 -P1306 -e "create table ${CLUSTER_NAME}:tbl1(id bigint) shards=5 rf=2"; echo $?
+mysql -h0 -P1306 -e "create table ${CLUSTER_NAME}:tbl1(id bigint) shards='5' rf='2'"; echo $?
 ––– output –––
 0
 ––– input –––
@@ -42,7 +42,7 @@ Table: system.tbl1_s3
 Table: system.tbl1_s4
 Table: system.tbl1_s4
 ––– input –––
-mysql -h0 -P2306 -e "create table ${CLUSTER_NAME}:tbl2(id bigint) shards=4 rf=1"; echo $?
+mysql -h0 -P2306 -e "create table ${CLUSTER_NAME}:tbl2(id bigint) shards='4' rf='1'"; echo $?
 ––– output –––
 0
 ––– input –––
@@ -53,7 +53,7 @@ Table: system.tbl2_s1
 Table: system.tbl2_s2
 Table: system.tbl2_s3
 ––– input –––
-mysql -h0 -P3306 -e "create table ${CLUSTER_NAME}:tbl3(id bigint) shards=5 rf=2"; echo $?
+mysql -h0 -P3306 -e "create table ${CLUSTER_NAME}:tbl3(id bigint) shards='5' rf='2'"; echo $?
 ––– output –––
 0
 ––– input –––
@@ -74,7 +74,7 @@ mysql -h0 -P3306 -e "DROP TABLE ${CLUSTER_NAME}:tbl3"; echo $?
 ––– output –––
 0
 ––– input –––
-mysql -h0 -P3306 -e "create table ${CLUSTER_NAME}:tbl3(id bigint) shards=10 rf=3"; echo $?
+mysql -h0 -P3306 -e "create table ${CLUSTER_NAME}:tbl3(id bigint) shards='10' rf='3'"; echo $?
 ––– output –––
 0
 ––– input –––
@@ -111,7 +111,7 @@ Table: system.tbl3_s9
 Table: system.tbl3_s9
 Table: system.tbl3_s9
 ––– input –––
-mysql -h0 -P3306 -e "create table ${CLUSTER_NAME}:tbl4(id bigint) shards=3000 rf=3"; echo $?
+mysql -h0 -P3306 -e "create table ${CLUSTER_NAME}:tbl4(id bigint) shards='3000' rf='3'"; echo $?
 ––– output –––
 0
 ––– input –––
@@ -119,6 +119,6 @@ for i in 1 2 3; do mysql -h0 -P${i}306 -e "show tables from system\G"; done | gr
 ––– output –––
 9000
 ––– input –––
-mysql -h0 -P3306 -e "create table ${CLUSTER_NAME}:tbl5(id bigint) shards=3001 rf=3"?
+mysql -h0 -P3306 -e "create table ${CLUSTER_NAME}:tbl5(id bigint) shards='3001' rf='3'"?
 ––– output –––
 ERROR 1064 (42000) at line 1: Shard count cannot be greater than 3000

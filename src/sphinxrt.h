@@ -52,6 +52,7 @@ public:
 	const int64_t *						GetMVA ( int iMVA ) const							{ return m_dMvas.Begin()+iMVA; }
 	void								FixParsedMVAs ( const CSphVector<int64_t> & dParsed, int iCount );
 	static std::pair<int, bool>			ReadMVALength ( const int64_t * & pMVA );
+	void								SwapMVAs ( InsertDocData_c & tSrc )					{ Swap ( m_dMvas, tSrc.m_dMvas ); }
 
 private:
 	static const uint64_t DEFAULT_FLAG = 1ULL << 63;

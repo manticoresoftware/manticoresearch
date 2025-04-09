@@ -9454,7 +9454,7 @@ bool CSphIndex_VLN::LoadSecondaryIndex ( const CSphString & sFile )
 			if ( GetSecondaryIndexDefault()==SIDefault_e::FORCE )
 				m_sLastError.SetSprintf ( "missing secondary index %s", sFile.cstr() );
 			else
-				sphWarning ( "missing %s; secondary index(es) disabled, consider using ALTER REBUILD SECONDARY to recover the secondary index", sFile.cstr() );
+				sphWarning ( "missing %s; secondary index(es) disabled, consider using ALTER TABLE table REBUILD SECONDARY to recover the secondary index", sFile.cstr() );
 		}
 
 		return GetSecondaryIndexDefault()!=SIDefault_e::FORCE;
@@ -9464,7 +9464,7 @@ bool CSphIndex_VLN::LoadSecondaryIndex ( const CSphString & sFile )
 	{
 		if ( GetSecondaryIndexDefault()!=SIDefault_e::FORCE )
 		{
-			sphWarning ( "'%s': secondary index not loaded, %s; secondary index(es) disabled, consider using ALTER REBUILD SECONDARY to recover the secondary index", GetName(), m_sLastError.cstr() );
+			sphWarning ( "'%s': secondary index not loaded, %s; secondary index(es) disabled, consider using ALTER TABLE table REBUILD SECONDARY to recover the secondary index", GetName(), m_sLastError.cstr() );
 			m_sLastError = "";
 		}
 

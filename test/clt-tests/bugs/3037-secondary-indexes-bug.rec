@@ -1,6 +1,6 @@
 ––– block: ../base/start-searchd –––
 ––– input –––
-manticore-load --quiet --json --port=9306 --init="CREATE TABLE task (id BIGINT, status UINT, enddatetime TIMESTAMP, isoverdue BOOL)" --load="INSERT INTO task (id, status, enddatetime, isoverdue) VALUES (<increment>, <int/1/8>, <int/1577836800/1672531200>, 0)" --batch-size=1000 --threads=4 --total=10000; echo
+manticore-load --quiet --json --port=9306 --init="CREATE TABLE task (id BIGINT, status UINT, enddatetime TIMESTAMP, isoverdue BOOL)" --load="INSERT INTO task (id, status, enddatetime, isoverdue) VALUES (<increment>, <int/1/8>, <int/1577836800/1672531200>, 0)" --batch-size=1000 --threads=4 --total=10000 --query="FLUSH RAMCHUNK; OPTIMIZE TABLE task OPTION cutoff=1;" && echo
 ––– output –––
 ––– input –––
 mysql -P9306 -h0 -e "SHOW VERSION;"

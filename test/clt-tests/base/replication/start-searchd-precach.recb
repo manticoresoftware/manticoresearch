@@ -5,6 +5,6 @@ mkdir -p /var/{run,lib,log}/manticore-${INSTANCE}
 stdbuf -oL searchd -c test/clt-tests/base/searchd-with-flexible-ports.conf > /dev/null
 ––– output –––
 ––– input –––
-rm -f /var/log/manticore/searchd.log; stdbuf -oL searchd > /dev/null; if timeout 10 grep -qm1 '\[BUDDY\] started' <(tail -n 1000 -f /var/log/manticore/searchd.log); then echo 'Buddy started!'; else echo 'Timeout or failed!'; cat /var/log/manticore/searchd.log;fi
+if timeout 10 grep -qm1 '\[BUDDY\] started' <(tail -n 1000 -f /var/log/manticore-${INSTANCE}/searchd.log); then echo 'Buddy started!'; else echo 'Timeout or failed!'; cat /var/log/manticore-${INSTANCE}/searchd.log; exit 1; fi
 ––– output –––
 Buddy started!

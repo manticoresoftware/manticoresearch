@@ -1,90 +1,43 @@
-This test checks creation and deletion of tables in MySQL-protocol Manticore Search.
-The test includes commands to handle errors when deleting non-existent tables and to check correctness of creating sharded and RT tables.
-
-––– block: ../base/start-searchd –––
+––– block: ../base/dind/init –––
 ––– input –––
-mysql -h0 -P9306 -e "DROP TABLE tbl1;"
-––– output –––
-ERROR 1064 (42000) at line 1: DROP TABLE failed: unknown table 'tbl1'
-––– input –––
-mysql -h0 -P9306 -e "DROP TABLE IF EXISTS tbl1;"; echo $?;
+docker network create manticore_network > /dev/null; echo $?
 ––– output –––
 0
 ––– input –––
-mysql -h0 -P9306 -e "create table tbl1(id bigint) shards='3' rf='1';"; echo $?;
+docker run -d --name manticore_remote --network manticore_network --platform linux/amd64 manticoresearch/manticore:dev > /dev/null 2>&1; echo $?
 ––– output –––
 0
 ––– input –––
-mysql -h0 -P9306 -e "SHOW TABLES\G"
+if timeout 30 sh -c "docker logs -f manticore_remote 2>&1 | grep -qm1 'accepting connections'"; then echo 'accepting connections'; else echo 'Timeout exceeded'; fi
 ––– output –––
-*************************** 1. row ***************************
-Table: tbl1
-Type: distributed
+accepting connections
 ––– input –––
-mysql -h0 -P9306 -e "DROP TABLE tbl1;"; echo $?;
+docker run -d --name manticore_dist --network manticore_network --platform linux/amd64 manticoresearch/manticore:latest > /dev/null 2>&1; echo $?
 ––– output –––
 0
 ––– input –––
-mysql -h0 -P9306 -e "SHOW TABLES\G"; echo $?;
+if timeout 30 sh -c "docker logs -f manticore_dist 2>&1 | grep -qm1 'accepting connections'"; then echo 'accepting connections'; else echo 'Timeout exceeded'; fi
 ––– output –––
-0
+accepting connections
 ––– input –––
-mysql -h0 -P9306 -e "create table tbl1(id bigint) shards='3' rf='1';"; echo $?;
-––– output –––
-0
-––– input –––
-mysql -h0 -P9306 -e "drop table if exists tbl1;"; echo $?;
-––– output –––
-0
-––– input –––
-mysql -h0 -P9306 -e "SHOW TABLES\G"; echo $?;
-––– output –––
-0
-––– input –––
-mysql -h0 -P9306 -e "create table tbl1(id bigint);"; echo $?;
-––– output –––
-0
-––– input –––
-mysql -h0 -P9306 -e "SHOW TABLES\G"
-––– output –––
-*************************** 1. row ***************************
-Table: tbl1
-Type: rt
-––– input –––
-mysql -h0 -P9306 -e "DROP TABLE tbl1;"; echo $?;
-––– output –––
-0
-––– input –––
-mysql -h0 -P9306 -e "SHOW TABLES\G"; echo $?;
-––– output –––
-0
-––– input –––
-mysql -h0 -P9306 -e "DROP TABLE nonexistent_table;"
-––– output –––
- ERROR 1064 (42000) at line 1: DROP TABLE failed: unknown table 'nonexistent_table'
-––– input –––
-mysql -h0 -P9306 -e "INSERT INTO tbl1 VALUES (1);" & sleep 1; mysql -h0 -P9306 -e "DROP TABLE tbl1;"
-––– output –––
-ERROR 1064 (42000) at line 1: Cannot create table with column names missing
-ERROR 1064 (42000) at line 1: DROP TABLE failed: unknown table 'tbl1'
-––– input –––
-LONG_TABLE_NAME=$(printf "tbl%065d" 1)
+docker exec manticore_remote mysql -e "CREATE TABLE t (id BIGINT, model TEXT, storage_capacity INTEGER, color string, release_year INTEGER, price FLOAT, discounted_price FLOAT, sold BOOL, date_added TIMESTAMP, product_codes MULTI, values MULTI64, additional_info JSON, vector float_vector knn_type='hnsw' knn_dims='4' hnsw_similarity='l2'); INSERT INTO t (id, model, storage_capacity, color, release_year, price, discounted_price, sold, date_added, product_codes, values, additional_info, vector) VALUES (1, 'iPhone 13 Pro', 256, 'silver', 2021, 1099.99, 989.99, 'TRUE', '2021-06-05 10:32:22', (1, 2, 3), (523456764345678976, 98765409877866654098, 1109876543450987650987), '{\"features\": [\"ProMotion display\", \"A15 Bionic chip\", \"Ceramic Shield front cover\"]}', (0.773448, 0.312478, 0.137971, 0.459821)), (2, 'iPhone 13', 128, 'blue', 2021, 799.99, 719.99, 'FALSE', '2021-07-10 15:25:32', (4, 5, 6), (623456764345678976, 98765409877866654099, 1209876543450987650987), '{\"features\": [\"A15 Bionic chip\", \"Ceramic Shield front cover\", \"Dual-camera system\"]}', (-0.028894, 0.868278, 0.211892, 0.024594)), (3, 'Samsung Galaxy S21', 256, 'black', 2021, 999.99, 899.99, 'TRUE', '2021-08-15 12:45:00', (7, 8, 9), (723456764345678976, 98765409877866654100, 1309876543450987650987), '{\"features\": [\"120Hz display\", \"Exynos 2100\", \"Gorilla Glass Victus\"]}', (0.561478, 0.412578, 0.287971, 0.559821));"
 ––– output –––
 ––– input –––
-mysql -h0 -P9306 -e "create table ${LONG_TABLE_NAME}(id bigint) shards='3' rf='1';"
+docker exec manticore_dist mysql -e "CREATE TABLE dist_table type='distributed' agent='manticore_remote:9312:t';"
 ––– output –––
 ––– input –––
-mysql -h0 -P9306 -e "SHOW TABLES\G"; echo $?;
+docker exec manticore_dist mysql -e "DESC dist_table"
 ––– output –––
-*************************** 1. row ***************************
-Table: tbl00000000000000000000000000000000000000000000000000000000000000001
-Type: distributed
-0
++-------------------------+----------+
+| Agent                   | Type     |
++-------------------------+----------+
+| manticore_remote:9312:t | remote_1 |
++-------------------------+----------+
 ––– input –––
-mysql -h0 -P9306 -e "DROP TABLE ${LONG_TABLE_NAME};"; echo $?;
+docker exec manticore_dist mysql -e "select * from dist_table where id=2;"
 ––– output –––
-0
-––– input –––
-mysql -h0 -P9306 -e "SHOW TABLES\G"; echo $?;
-––– output –––
-0
++------+-----------+------------------+-------+--------------+------------+------------------+------+------------+---------------+----------------------------------------+------------------------------------------------------------------------------------+--------------------------------------+
+| id   | model     | storage_capacity | color | release_year | price      | discounted_price | sold | date_added | product_codes | values                                 | additional_info                                                                    | vector                               |
++------+-----------+------------------+-------+--------------+------------+------------------+------+------------+---------------+----------------------------------------+------------------------------------------------------------------------------------+--------------------------------------+
+|    2 | iPhone 13 |              128 | blue  |         2021 | 799.989990 |       719.989990 |    0 |          0 | 4,5,6         | 623456764345678976,9223372036854775807 | {"features":["A15 Bionic chip","Ceramic Shield front cover","Dual-camera system"]} | -0.028894,0.868278,0.211892,0.024594 |
++------+-----------+------------------+-------+--------------+------------+------------------+------+------------+---------------+----------------------------------------+------------------------------------------------------------------------------------+--------------------------------------+

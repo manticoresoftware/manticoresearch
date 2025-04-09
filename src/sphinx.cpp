@@ -1007,7 +1007,7 @@ bool IndexSegment_c::Update_Blobs ( const RowsToUpdate_t& dRows, UpdateContext_t
 					if ( iBlobId!=-1 )
 					{
 
-						pBlobRowBuilder->SetAttr ( iBlobId, &tUpd.m_dBlobs[uOffset], uLength, sError );
+						pBlobRowBuilder->SetAttr ( iBlobId, uLength?&tUpd.m_dBlobs[uOffset]:nullptr, uLength, sError );
 						tCtx.m_tUpd.MarkUpdated ( iUpd );
 						tCtx.m_uUpdateMask |= ATTRS_BLOB_UPDATED;
 					}

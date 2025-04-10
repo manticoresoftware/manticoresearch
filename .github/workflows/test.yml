@@ -437,7 +437,13 @@ jobs:
           name: windows_test_651_and_on
           path: .
       - name: Convert the XML to JUnit format
-        run: for dir in build/xml_*; do xsltproc -o $dir/junit_tests.xml misc/junit/ctest2junit.xsl $dir/Test.xml; done;
+        run: |
+          shopt -s nullglob
+          for dir in build/xml_*; do
+            if [ -d "$dir" ] && [ -f "$dir/Test.xml" ]; then
+              xsltproc -o "$dir/junit_tests.xml" misc/junit/ctest2junit.xsl "$dir/Test.xml"
+            fi
+          done
         shell: bash
       - name: Publish test results
         uses: manticoresoftware/publish-unit-test-result-action@v2

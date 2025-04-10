@@ -62,7 +62,7 @@ mysql -h0 -P1306 -e "DROP TABLE IF EXISTS test2;"; echo $?
 ––– output –––
 0
 ––– input –––
-mysql -h0 -P1306 -e "CREATE TABLE replication:test2 (id BIGINT, model TEXT, storage_capacity INTEGER, color STRING, release_year INTEGER, price FLOAT, discounted_price FLOAT, sold BOOL, date_added TIMESTAMP, product_codes MULTI, values MULTI64, additional_info JSON, vector FLOAT_VECTOR KNN_TYPE='hnsw' KNN_DIMS='4' HNSW_SIMILARITY='l2') shards='3' rf='2';"; echo $?
+mysql -h0 -P1306 -e "CREATE TABLE replication:test2 (id BIGINT, model TEXT, storage_capacity INTEGER, color STRING, release_year INTEGER, price FLOAT, discounted_price FLOAT, sold BOOL, date_added TIMESTAMP, product_codes MULTI, values MULTI64, additional_info JSON, vector FLOAT_VECTOR KNN_TYPE='hnsw' KNN_DIMS='4' HNSW_SIMILARITY='l2') SHARDS='3' RF='2';"; echo $?
 ––– output –––
 0
 ––– input –––

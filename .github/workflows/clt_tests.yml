@@ -56,6 +56,8 @@ jobs:
             test_prefix: test/clt-tests/indexer/
           - name: Kibana
             test_prefix: test/clt-tests/kibana/
+          - name: Bugs
+            test_prefix: test/clt-tests/bugs/
     steps:
       - uses: manticoresoftware/clt@0.6.5
         with:

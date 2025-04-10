@@ -48,7 +48,7 @@ mysql -P9306 -h0 -e "DESCRIBE task;"
 | isoverdue   | bool      |            |
 +-------------+-----------+------------+
 ––– input –––
-mysql -P9306 -h0 -e "SET GLOBAL secondary_indexes=1; SELECT id, status FROM task WHERE isOverdue = 0 AND status NOT IN (1,4,5,6,7,8) ORDER BY id ASC LIMIT 10;"
+mysql -P9306 -h0 -e "SET GLOBAL secondary_indexes=1; select id,status from task where  isOverdue = 0 and status not in (1,4,5,6,7,8) ORDER BY id ASC LIMIT 10 /*+ SecondaryIndex(status) */;"
 ––– output –––
 +------+--------+
 | id   | status |
@@ -65,7 +65,7 @@ mysql -P9306 -h0 -e "SET GLOBAL secondary_indexes=1; SELECT id, status FROM task
 |   38 |      2 |
 +------+--------+
 ––– input –––
-mysql -P9306 -h0 -e "SET GLOBAL secondary_indexes=0; SELECT id, status FROM task WHERE isOverdue = 0 AND status NOT IN (1,4,5,6,7,8) ORDER BY id ASC LIMIT 10;"
+mysql -P9306 -h0 -e "SET GLOBAL secondary_indexes=0; select id,status from task where  isOverdue = 0 and status not in (1,4,5,6,7,8) ORDER BY id ASC LIMIT 10 /*+ SecondaryIndex(status) */;"
 ––– output –––
 +------+--------+
 | id   | status |

@@ -8,9 +8,7 @@ When creating a sharded table, you should be aware of the current limitations yo
 
 3. You can use only one cluster name and cannot make it different for each new clustered table creation. That means if you created a sharded table using the cluster name 'c', you should always use it for future table creations, as other names will not work.
 
-4. If you want to delete a sharded table, you can do it manually. We do not currently support deletion.
-
-5. You are not able to alter the table. The way to change it is to delete the old one and create a new one manually.
+4. You are not able to alter the table. The way to change it is to delete the old one and create a new one manually.
 
 <!-- proofread -->
 

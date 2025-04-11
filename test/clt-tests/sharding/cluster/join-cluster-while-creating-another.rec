@@ -1,4 +1,7 @@
 ––– input –––
+set -b +m
+––– output –––
+––– input –––
 export INSTANCE=1
 ––– output –––
 ––– block: ../../base/replication/start-searchd-precach –––
@@ -11,7 +14,10 @@ export INSTANCE=3
 ––– output –––
 ––– block: ../../base/replication/start-searchd-precach –––
 ––– input –––
-mysql -h0 -P1306 -e "create cluster a 'a' as path"
+mkdir /var/{lib,log}/manticore-{1,2,3}/{a,b}
+––– output –––
+––– input –––
+mysql -h0 -P1306 -e "CREATE CLUSTER a 'a' as path"
 ––– output –––
 ––– input –––
 mysql -h0 -P1306 -e "create cluster b 'b' as path" &

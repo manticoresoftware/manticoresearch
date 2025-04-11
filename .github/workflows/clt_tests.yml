@@ -46,20 +46,25 @@ jobs:
             test_prefix: test/clt-tests/replication/
           - name: Plugins
             test_prefix: test/clt-tests/plugins/
+          - name: Kibana
+            test_prefix: test/clt-tests/kibana/
           - name: Buddy
             test_prefix: test/clt-tests/buddy/
           - name: Update
             test_prefix: test/clt-tests/optimisation-and-update/
-          - name: Sharding and Replication
-            test_prefix: test/clt-tests/sharding/
           - name: Indexer
             test_prefix: test/clt-tests/indexer/
-          - name: Kibana
-            test_prefix: test/clt-tests/kibana/
           - name: Bugs
             test_prefix: test/clt-tests/bugs/
+          - name: Sharding
+            test_prefix: |-
+              test/clt-tests/sharding/cluster/
+              test/clt-tests/sharding/functional/
+              test/clt-tests/sharding/replication/
+              test/clt-tests/sharding/syntax/
+              
     steps:
-      - uses: manticoresoftware/clt@0.6.5
+      - uses: manticoresoftware/clt@0.6.7
         with:
           artifact: ${{ inputs.artifact_name }}
           image: ${{ inputs.docker_image }}

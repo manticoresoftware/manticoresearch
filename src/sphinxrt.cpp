@@ -10368,10 +10368,21 @@ bool CreateReconfigure ( const CSphString & sIndexName, bool bIsStarDict, const 
 		}
 	}
 
+	const uint64_t pTokenizer_GetSettingsFNV = pTokenizer->GetSettingsFNV();
+	const uint64_t tDict_GetSettingsFNV = tDict->GetSettingsFNV();
+	const int pTokenizer_GetMaxCodepointLength = pTokenizer->GetMaxCodepointLength();
+	const uint64_t sphGetSettingsFNV_tIndexSettings = sphGetSettingsFNV ( tIndexSettings );
+	const uint64_t sphGetSettingsFNV_tSettings_m_tIndex = sphGetSettingsFNV ( tSettings.m_tIndex );
+	const bool tSettings_m_tMutableSettings_HasSettings = tSettings.m_tMutableSettings.HasSettings();
 	// compare options
-	if ( !bSame || uTokHash!=pTokenizer->GetSettingsFNV() || uDictHash!=tDict->GetSettingsFNV() ||
-		iMaxCodepointLength!=pTokenizer->GetMaxCodepointLength() || sphGetSettingsFNV ( tIndexSettings )!=sphGetSettingsFNV ( tSettings.m_tIndex ) ||
-		!bReFilterSame || !bIcuSame || tSettings.m_tMutableSettings.HasSettings() )
+	if ( !bSame
+		|| uTokHash!=pTokenizer_GetSettingsFNV
+		|| uDictHash!=tDict_GetSettingsFNV
+		|| iMaxCodepointLength!=pTokenizer_GetMaxCodepointLength
+		|| sphGetSettingsFNV_tIndexSettings!=sphGetSettingsFNV_tSettings_m_tIndex
+		|| !bReFilterSame
+		|| !bIcuSame
+		|| tSettings_m_tMutableSettings_HasSettings )
 	{
 		tSetup.m_pTokenizer = pTokenizer.Leak();
 		tSetup.m_pDict = tDict.Leak();
@@ -10440,6 +10451,9 @@ bool RtIndex_c::Reconfigure ( CSphReconfigureSetup & tSetup )
 		m_iSavedTID = m_iTID = bNewBinlog ? Binlog::LastTidFor ( GetName () ) : -1;
 		SaveMeta ();
 	}
+
+	if ( m_sGlobalIDFPath != m_tMutableSettings.m_sGlobalIDFPath )
+		SetGlobalIDFPath ( m_tMutableSettings.m_sGlobalIDFPath );
 
 	return true;
 }

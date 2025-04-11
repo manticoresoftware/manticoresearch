@@ -3,22 +3,23 @@ export new_version_searchd=$(searchd --version | head -n 1 | cut -d" " -f2); ech
 ––– output –––
 %{VERSION}
 ––– input –––
-export new_version_columnar=$(searchd --version | head -n 1 | cut -d" " -f6); echo $new_version_columnar
+export new_version_columnar=$(searchd --version | sed -n 's/.*columnar \([^ )]*\).*/\1/p'); echo $new_version_columnar
 ––– output –––
 %{VERSION}
 ––– input –––
-export new_version_secondary=$(searchd --version | head -n 1 | cut -d" " -f9); echo $new_version_secondary
+export new_version_secondary=$(searchd --version | sed -n 's/.*secondary \([^ )]*\).*/\1/p'); echo $new_version_secondary
 ––– output –––
 %{VERSION}
 ––– input –––
-export new_version_knn=$(searchd --version | head -n 1 | cut -d" " -f12); echo $new_version_knn
+export new_version_knn=$(searchd --version | sed -n 's/.*knn \([^ )]*\).*/\1/p'); echo $new_version_knn
 ––– output –––
 %{VERSION}
 ––– input –––
-export new_version_galera=$(strings /usr/share/manticore/modules/libgalera_manticore.so|grep -i -E "[0-9]{1}\.[0-9]{2}\([a-z0-9]+\)" | cut -d"(" -f1); echo $current_version_galera
+export new_version_galera=$(strings /usr/share/manticore/modules/libgalera_manticore.so | grep -oE '[0-9]+\.[0-9]+' | head -n1); echo $new_version_galera
 ––– output –––
-#!/[0-9]{1}\.[0-9]{2}/!#
+#!/[0-9]+\.[0-9]+/!#
 ––– input –––
-export new_version_buddy=$(mysql -h0 -P9306 -e "SHOW STATUS LIKE 'version'\G" | grep -oP 'buddy v\K[0-9]+\.[0-9]+\.[0-9]\+[^ )]*'); echo $new_version_buddy
+export new_version_buddy=$(mysql -h0 -P9306 -e "SHOW STATUS LIKE 'version'\G" | grep -oP 'buddy v\K[^ )]+'); echo $new_version_buddy
 ––– output –––
 #!/[0-9]{1,2}\.[0-9]{1,2}\.[0-9]{1,2}\+[0-9]{8}-[0-9a-z]{8}.*/!#
+

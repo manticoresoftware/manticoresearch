@@ -493,6 +493,9 @@ bool SelectIteratorCtx_t::IsEnabled_SI ( const CSphFilterSettings & tFilter ) co
 	// all(mva\string) need to scan whole row
 	if ( tFilter.m_eMvaFunc==SPH_MVAFUNC_ALL )
 		return false;
+	// all\any(string list) need to scan whole row
+	if ( tFilter.m_eType==SPH_FILTER_STRING_LIST && tFilter.m_eMvaFunc!=SPH_MVAFUNC_NONE )
+		return false;
 
 	const CSphColumnInfo * pCol = m_tIndexSchema.GetAttr ( tFilter.m_sAttrName.cstr() );
 

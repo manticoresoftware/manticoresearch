@@ -979,14 +979,24 @@ static void CheckHints ( const CSphVector<SecondaryIndexInfo_t> & dSIInfo, const
 	}
 
 	ARRAY_FOREACH ( i, dFilters )
+	{
 		for ( auto & tHint : tCtx.m_tQuery.m_dIndexHints )
-			if ( tHint.m_sIndex==dFilters[i].m_sAttrName && tHint.m_bForce )
+		{
+			const CSphFilterSettings & tFilter = dFilters[i];
+			if ( tHint.m_sIndex==tFilter.m_sAttrName && tHint.m_bForce )
+			{
 				if ( !dSIInfo[i].m_dCapabilities.any_of ( [&tHint]( auto eSupported ){ return tHint.m_eType==eSupported; } ) )
 				{
 					CSphString sWarning;
-					sWarning.SetSprintf ( "hint error: requested hint type not supported for attribute '%s'", tHint.m_sIndex.cstr() );
-					dWarnings.Add(sWarning);
+					if ( tFilter.m_eType==SPH_FILTER_STRING_LIST && tFilter.m_eMvaFunc!=SPH_MVAFUNC_NONE )
+						sWarning.SetSprintf ( "hint error: requested hint type not supported for %s() filter on attribute '%s'", ( tFilter.m_eMvaFunc==SPH_MVAFUNC_ALL ? "ALL" : "ANY" ), tHint.m_sIndex.cstr() );
+					else
+						sWarning.SetSprintf ( "hint error: requested hint type not supported for attribute '%s'", tHint.m_sIndex.cstr() );
+					dWarnings.Add ( sWarning );
 				}
+			}
+		}
+	}
 }
 
 /////////////////////////////////////////////////////////////////////

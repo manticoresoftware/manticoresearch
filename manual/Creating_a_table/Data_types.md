@@ -80,6 +80,16 @@ $index->create([
 ```python
 utilsApi.sql('CREATE TABLE forum(title text, content text, author_id int, forum_id int, post_date timestamp)')
 ```
+
+<!-- intro -->
+##### Python-asyncio:
+
+<!-- request Python-asyncio -->
+
+```python
+await utilsApi.sql('CREATE TABLE forum(title text, content text, author_id int, forum_id int, post_date timestamp)')
+```
+
 <!-- intro -->
 ##### Javascript:
 
@@ -96,7 +106,6 @@ res = await utilsApi.sql('CREATE TABLE forum(title text, content text, author_id
 
 ```java
 utilsApi.sql("CREATE TABLE forum(title text, content text, author_id int, forum_id int, post_date timestamp)");
-
 ```
 
 <!-- intro -->
@@ -106,7 +115,15 @@ utilsApi.sql("CREATE TABLE forum(title text, content text, author_id int, forum_
 
 ```java
 utilsApi.Sql("CREATE TABLE forum(title text, content text, author_id int, forum_id int, post_date timestamp)");
+```
 
+<!-- intro -->
+##### Rust:
+
+<!-- request Rust -->
+
+```rust
+utils_api.sql("CREATE TABLE forum(title text, content text, author_id int, forum_id int, post_date timestamp)", Some(true)).await;
 ```
 
 <!-- intro -->
@@ -208,6 +225,16 @@ $client->search([
 ```python
 searchApi.search({"table":"forum","query":{"match_all":{},"bool":{"must":[{"equals":{"author_id":123}},{"in":{"forum_id":[1,3,7]}}]}},"sort":[{"post_date":"desc"}]})
 ```
+
+<!-- intro -->
+##### Python-asyncio:
+
+<!-- request Python-asyncio -->
+
+```python
+await searchApi.search({"table":"forum","query":{"match_all":{},"bool":{"must":[{"equals":{"author_id":123}},{"in":{"forum_id":[1,3,7]}}]}},"sort":[{"post_date":"desc"}]})
+```
+
 <!-- intro -->
 ##### Javascript:
 
@@ -261,6 +288,24 @@ boolFilter.Must = new List<Object> {
 searchRequest.AttrFilter = boolFilter;
 searchRequest.Sort = new List<Object> { new SortOrder("post_date", SortOrder.OrderEnum.Desc) };
 var searchResponse = searchApi.Search(searchRequest);
+```
+
+<!-- intro -->
+##### Rust:
+
+<!-- request Rust -->
+
+``` rust
+let query = SearchQuery::new();
+let mut sort = HashMap::new();
+sort.insert("post_date".to_string(), serde_json::json!("desc"));
+let search_request = SearchRequest {
+    table: "forum".to_string(),
+    query: Some(Box::new(query)),
+    sort: serde_json::json!(sort)
+    ..Default::default()
+};
+let search_res = search_api.search(search_req).await;
 ```
 
 <!-- end -->
@@ -475,6 +520,16 @@ $index->create([
 ```python
 utilsApi.sql('CREATE TABLE products(title text)')
 ```
+
+<!-- intro -->
+##### Python-asyncio:
+
+<!-- request Python-asyncio -->
+
+```python
+await utilsApi.sql('CREATE TABLE products(title text)')
+```
+
 <!-- intro -->
 ##### Javascript:
 
@@ -499,6 +554,15 @@ utilsApi.sql("CREATE TABLE products(title text)");
 
 ```clike
 utilsApi.Sql("CREATE TABLE products(title text)");
+```
+
+<!-- intro -->
+##### Rust:
+
+<!-- request Rust -->
+
+```rust
+utils_api.sql("CREATE TABLE products(title text)", Some(true)).await;
 ```
 
 <!-- intro -->
@@ -562,6 +626,16 @@ $index->create([
 ```python
 utilsApi.sql('CREATE TABLE products(title text indexed)')
 ```
+
+<!-- intro -->
+##### Python-asyncio:
+
+<!-- request Python-asyncio -->
+
+```python
+await utilsApi.sql('CREATE TABLE products(title text indexed)')
+```
+
 <!-- intro -->
 ##### Javascript:
 
@@ -587,6 +661,15 @@ utilsApi.sql("CREATE TABLE products(title text indexed)");
 
 ```clike
 utilsApi.Sql("CREATE TABLE products(title text indexed)");
+```
+
+<!-- intro -->
+##### Rust:
+
+<!-- request Rust -->
+
+```rust
+utils_api.sql("CREATE TABLE products(title text indexed)", Some(true)).await;
 ```
 
 <!-- intro -->
@@ -654,6 +737,16 @@ $index->setName('products')->search('@title')->get();
 ```python
 searchApi.search({"table":"products","query":{"match":{"title":"first"}}})
 ```
+
+<!-- intro -->
+##### Python-asyncio:
+
+<!-- request Python-asyncio -->
+
+```python
+await searchApi.search({"table":"products","query":{"match":{"title":"first"}}})
+```
+
 <!-- intro -->
 ##### Javascript:
 
@@ -678,6 +771,15 @@ utilsApi.sql("CREATE TABLE products(title text indexed)");
 
 ```clike
 utilsApi.Sql("CREATE TABLE products(title text indexed)");
+```
+
+<!-- intro -->
+##### Rust:
+
+<!-- request Rust -->
+
+```rust
+utils_api.sql("CREATE TABLE products(title text indexed)", Some(true)).await;
 ```
 
 <!-- end -->
@@ -727,6 +829,16 @@ $index->create([
 ```python
 utilsApi.sql('CREATE TABLE products(title text, keys string)')
 ```
+
+<!-- intro -->
+##### Python-asyncio:
+
+<!-- request Python-asyncio -->
+
+```python
+await utilsApi.sql('CREATE TABLE products(title text, keys string)')
+```
+
 <!-- intro -->
 ##### Javascript:
 
@@ -751,6 +863,15 @@ utilsApi.sql("CREATE TABLE products(title text, keys string)");
 
 ```clike
 utilsApi.Sql("CREATE TABLE products(title text, keys string)");
+```
+
+<!-- intro -->
+##### Rust:
+
+<!-- request Rust -->
+
+```rust
+utils_api.sql("CREATE TABLE products(title text, keys string)", Some(true)).await;
 ```
 
 <!-- intro -->
@@ -817,6 +938,16 @@ $index->create([
 ```python
 utilsApi.sql('CREATE TABLE products ( title string attribute indexed )')
 ```
+
+<!-- intro -->
+##### Python-asyncio:
+
+<!-- request Python-asyncio -->
+
+```python
+await utilsApi.sql('CREATE TABLE products ( title string attribute indexed )')
+```
+
 <!-- intro -->
 ##### Javascript:
 
@@ -842,6 +973,15 @@ utilsApi.sql("CREATE TABLE products ( title string attribute indexed )");
 
 ```clike
 utilsApi.Sql("CREATE TABLE products ( title string attribute indexed )");
+```
+
+<!-- intro -->
+##### Rust:
+
+<!-- request Rust -->
+
+```rust
+utils_api.sql("CREATE TABLE products ( title string attribute indexed )", Some(true)).await;
 ```
 
 <!-- intro -->
@@ -927,6 +1067,16 @@ $index->create([
 ```python
 utilsApi.sql('CREATE TABLE products(title text, price int)')
 ```
+
+<!-- intro -->
+##### Python-asyncio:
+
+<!-- request Python-asyncio -->
+
+```python
+await utilsApi.sql('CREATE TABLE products(title text, price int)')
+```
+
 <!-- intro -->
 ##### Javascript:
 
@@ -951,6 +1101,15 @@ utilsApi.sql("CREATE TABLE products(title text, price int)");
 
 ```clike
 utilsApi.Sql("CREATE TABLE products(title text, price int)");
+```
+
+<!-- intro -->
+##### Rust:
+
+<!-- request Rust -->
+
+``` rust
+utils_api.sql("CREATE TABLE products(title text, price int)", Some(true)).await;
 ```
 
 <!-- intro -->
@@ -1015,6 +1174,16 @@ $index->create([
 ```python
 utilsApi.sql('CREATE TABLE products(title text, flags bit(3), tags bit(2) ')
 ```
+
+<!-- intro -->
+##### Python-asyncio:
+
+<!-- request Python-asyncio -->
+
+```python
+await utilsApi.sql('CREATE TABLE products(title text, flags bit(3), tags bit(2) ')
+```
+
 <!-- intro -->
 ##### Javascript:
 
@@ -1039,6 +1208,15 @@ utilsApi.sql("CREATE TABLE products(title text, flags bit(3), tags bit(2)");
 
 ```clike
 utilsApi.Sql("CREATE TABLE products(title text, flags bit(3), tags bit(2)");
+```
+
+<!-- intro -->
+##### Rust:
+
+<!-- request Rust -->
+
+``` rust
+utils_api.sql("CREATE TABLE products(title text, flags bit(3), tags bit(2)", Some(true)).await;
 ```
 
 <!-- intro -->
@@ -1105,6 +1283,16 @@ $index->create([
 ```python
 utilsApi.sql('CREATE TABLE products(title text, price bigint )')
 ```
+
+<!-- intro -->
+##### Python-asyncio:
+
+<!-- request Python-asyncio -->
+
+```python
+await utilsApi.sql('CREATE TABLE products(title text, price bigint )')
+```
+
 <!-- intro -->
 ##### Javascript:
 
@@ -1130,6 +1318,15 @@ utilsApi.sql("CREATE TABLE products(title text, price bigint )");
 
 ```clike
 utilsApi.Sql("CREATE TABLE products(title text, price bigint )");
+```
+
+<!-- intro -->
+##### Rust:
+
+<!-- request Rust -->
+
+``` rust
+utils_api.sql("CREATE TABLE products(title text, price bigint )", Some(true)).await;
 ```
 
 <!-- intro -->
@@ -1195,6 +1392,16 @@ $index->create([
 ```python
 utilsApi.sql('CREATE TABLE products(title text, sold bool )')
 ```
+
+<!-- intro -->
+##### Python-asyncio:
+
+<!-- request Python-asyncio -->
+
+```python
+await utilsApi.sql('CREATE TABLE products(title text, sold bool )')
+```
+
 <!-- intro -->
 ##### Javascript:
 
@@ -1220,6 +1427,15 @@ utilsApi.sql("CREATE TABLE products(title text, sold bool )");
 
 ```clike
 utilsApi.Sql("CREATE TABLE products(title text, sold bool )");
+```
+
+<!-- intro -->
+##### Rust:
+
+<!-- request Rust -->
+
+``` rust
+utils_api.sql("CREATE TABLE products(title text, sold bool )", Some(true)).await;
 ```
 
 <!-- intro -->
@@ -1300,6 +1516,16 @@ $index->create([
 ```python
 utilsApi.sql('CREATE TABLE products(title text, date timestamp)')
 ```
+
+<!-- intro -->
+##### Python-asyncio:
+
+<!-- request Python-asyncio -->
+
+```python
+await utilsApi.sql('CREATE TABLE products(title text, date timestamp)')
+```
+
 <!-- intro -->
 ##### Javascript:
 
@@ -1325,6 +1551,15 @@ utilsApi.sql("CREATE TABLE products(title text, date timestamp)");
 
 ```clike
 utilsApi.Sql("CREATE TABLE products(title text, date timestamp)");
+```
+
+<!-- intro -->
+##### Rust:
+
+<!-- request Rust -->
+
+``` rust
+utils_api.sql("CREATE TABLE products(title text, date timestamp)", Some(true)).await;
 ```
 
 <!-- intro -->
@@ -1392,6 +1627,15 @@ utilsApi.sql('CREATE TABLE products(title text, coeff float)')
 ```
 
 <!-- intro -->
+##### Python-asyncio:
+
+<!-- request Python-asyncio -->
+
+```python
+await utilsApi.sql('CREATE TABLE products(title text, coeff float)')
+```
+
+<!-- intro -->
 ##### Javascript:
 
 <!-- request javascript -->
@@ -1416,6 +1660,15 @@ utilsApi.sql("CREATE TABLE products(title text, coeff float)");
 
 ```clike
 utilsApi.Sql("CREATE TABLE products(title text, coeff float)");
+```
+
+<!-- intro -->
+##### Rust:
+
+<!-- request Rust -->
+
+``` rust
+utils_api.sql("CREATE TABLE products(title text, coeff float)", Some(true)).await;
 ```
 
 <!-- intro -->
@@ -1480,6 +1733,15 @@ searchApi.search({"table":"products","query":{"match_all":{}},"expressions":{"ep
 ```
 
 <!-- intro -->
+##### Python-asyncio:
+
+<!-- request Python-asyncio -->
+
+```python
+await searchApi.search({"table":"products","query":{"match_all":{}},"expressions":{"eps":"abs(a-b)"}})
+```
+
+<!-- intro -->
 ##### Javascript:
 
 <!-- request javascript -->
@@ -1518,6 +1780,27 @@ searchRequest.Expressions = new List<Object>{
 };
 var searchResponse = searchApi.Search(searchRequest);
 ```
+
+<!-- intro -->
+##### Rust:
+
+<!-- request Rust -->
+
+``` rust
+let query = SearchQuery::new();
+let mut expr = HashMap::new(); 
+expr.insert("ebs".to_string(), serde_json::json!("abs(a-b)"));
+let expressions: [HashMap; 1] = [expr];
+
+let search_request = SearchRequest {
+    table: "forum".to_string(),
+    query: Some(Box::new(query)),
+    expressions: serde_json::json!(expressions),
+    ..Default::default(),
+};
+let search_res = search_api.search(search_req).await;
+```
+
 <!-- end -->
 
 <!-- example for float mul -->
@@ -1560,6 +1843,16 @@ $index->setName('products')->search('')->expression('inc','in(ceil(attr*100),200
 ```python
 searchApi.search({"table":"products","query":{"match_all":{}}},"expressions":{"inc":"in(ceil(attr*100),200,250,350)"}})
 ```
+
+<!-- intro -->
+##### Python-asyncio:
+
+<!-- request Python-asyncio -->
+
+```python
+await searchApi.search({"table":"products","query":{"match_all":{}}},"expressions":{"inc":"in(ceil(attr*100),200,250,350)"}})
+```
+
 <!-- intro -->
 ##### Javascript:
 
@@ -1600,6 +1893,27 @@ searchRequest.Expressions = new List<Object> {
 };
 var searchResponse = searchApi.Search(searchRequest);
 ```
+
+<!-- intro -->
+##### Rust:
+
+<!-- request Rust -->
+
+``` rust
+let query = SearchQuery::new();
+let mut expr = HashMap::new(); 
+expr.insert("ebs".to_string(), serde_json::json!("in(ceil(attr*100),200,250,350)"));
+let expressions: [HashMap; 1] = [expr];
+
+let search_request = SearchRequest {
+    table: "forum".to_string(),
+    query: Some(Box::new(query)),
+    expressions: serde_json::json!(expressions),
+    ..Default::default(),
+};
+let search_res = search_api.search(search_req).await;
+```
+
 <!-- end -->
 
 <!-- example float_accuracy -->
@@ -1676,6 +1990,16 @@ $index->create([
 ```python
 utilsApi.sql('CREATE TABLE products(title text, data json)')
 ```
+
+<!-- intro -->
+##### Python-asyncio:
+
+<!-- request Python-asyncio -->
+
+```python
+await utilsApi.sql('CREATE TABLE products(title text, data json)')
+```
+
 <!-- intro -->
 ##### Javascript:
 
@@ -1690,7 +2014,7 @@ res = await utilsApi.sql('CREATE TABLE products(title text, data json)');
 <!-- request java -->
 
 ```java
-utilsApi.sql'CREATE TABLE products(title text, data json)');
+utilsApi.sql("CREATE TABLE products(title text, data json)");
 ```
 
 <!-- intro -->
@@ -1699,7 +2023,16 @@ utilsApi.sql'CREATE TABLE products(title text, data json)');
 <!-- request C# -->
 
 ```clike
-utilsApi.Sql'CREATE TABLE products(title text, data json)');
+utilsApi.Sql("CREATE TABLE products(title text, data json)");
+```
+
+<!-- intro -->
+##### Rust:
+
+<!-- request Rust -->
+
+```rust
+utils_api.sql("CREATE TABLE products(title text, data json)", Some(true)).await;
 ```
 
 <!-- intro -->
@@ -1764,6 +2097,16 @@ $index->setName('products')->search('')->expression('idx','indexof(x>2 for x in 
 ```python
 searchApi.search({"table":"products","query":{"match_all":{}},"expressions":{"idx":"indexof(x>2 for x in data.intarray)"}})
 ```
+
+<!-- intro -->
+##### Python-asyncio:
+
+<!-- request Python-asyncio -->
+
+```python
+await searchApi.search({"table":"products","query":{"match_all":{}},"expressions":{"idx":"indexof(x>2 for x in data.intarray)"}})
+```
+
 <!-- intro -->
 ##### Javascript:
 
@@ -1804,6 +2147,27 @@ searchRequest.Expressions = new List<Object> {
 };
 var searchResponse = searchApi.Search(searchRequest);
 ```
+
+<!-- intro -->
+##### Rust:
+
+<!-- request Rust -->
+
+``` rust
+let query = SearchQuery::new();
+let mut expr = HashMap::new(); 
+expr.insert("idx".to_string(), serde_json::json!("indexof(x>2 for x in data.intarray)"));
+let expressions: [HashMap; 1] = [expr];
+
+let search_request = SearchRequest {
+    table: "forum".to_string(),
+    query: Some(Box::new(query)),
+    expressions: serde_json::json!(expressions),
+    ..Default::default(),
+};
+let search_res = search_api.search(search_req).await;
+```
+
 
 <!-- end -->
 
@@ -1852,6 +2216,16 @@ $index->setName('products')->search('')->expression('idx',"regex(data.name, 'est
 ```python
 searchApi.search({"table":"products","query":{"match_all":{},"range":{"c":{"gt":0}}}},"expressions":{"c":"regex(data.name, 'est')"}})
 ```
+
+<!-- intro -->
+##### Python-asyncio:
+
+<!-- request Python-asyncio -->
+
+```python
+await searchApi.search({"table":"products","query":{"match_all":{},"range":{"c":{"gt":0}}}},"expressions":{"c":"regex(data.name, 'est')"}})
+```
+
 <!-- intro -->
 ##### Javascript:
 
@@ -1900,6 +2274,28 @@ searchRequest.Expressions = new List<Object> {
 };
 var searchResponse = searchApi.Search(searchRequest);
 ```
+
+<!-- intro -->
+##### Rust:
+
+<!-- request Rust -->
+
+``` rust
+let query = SearchQuery::new();
+let mut expr = HashMap::new(); 
+expr.insert("idx".to_string(), serde_json::json!("indexof(x>2 for x in data.intarray)"));
+let expressions: [HashMap; 1] = [expr];
+
+let search_request = SearchRequest {
+    table: "forum".to_string(),
+    query: Some(Box::new(query)),
+    expressions: serde_json::json!(expressions),
+    ..Default::default(),
+};
+let search_res = search_api.search(search_req).await;
+```
+
+
 <!-- end -->
 
 <!-- example for DOUBLE() -->
@@ -1943,6 +2339,16 @@ $index->setName('products')->search('')->sort('double(data.myfloat)','desc')->ge
 ```python
 searchApi.search({"table":"products","query":{"match_all":{}}},"sort":[{"double(data.myfloat)":{"order":"desc"}}]})
 ```
+
+<!-- intro -->
+##### Python-asyncio:
+
+<!-- request Python-asyncio -->
+
+```python
+await searchApi.search({"table":"products","query":{"match_all":{}}},"sort":[{"double(data.myfloat)":{"order":"desc"}}]})
+```
+
 <!-- intro -->
 ##### Javascript:
 
@@ -1980,6 +2386,24 @@ searchRequest.Sort = new List<Object> {
     new SortOrder("double(data.myfloat)", SortOrder.OrderEnum.Desc)
 };
 var searchResponse = searchApi.Search(searchRequest);
+```
+
+<!-- intro -->
+##### Rust:
+
+<!-- request Rust -->
+
+``` rust
+let query = SearchQuery::new();
+let mut sort = HashMap::new();
+sort.insert("double(data.myfloat)".to_string(), serde_json::json!("desc"));
+let search_request = SearchRequest {
+    table: "forum".to_string(),
+    query: Some(Box::new(query)),
+    sort: serde_json::json!(sort)
+    ..Default::default()
+};
+let search_res = search_api.search(search_req).await;
 ```
 
 <!-- end -->
@@ -2046,6 +2470,16 @@ $index->create([
 ```python
 utilsApi.sql('CREATE TABLE products(title text, image_vector float_vector)')
 ```
+
+<!-- intro -->
+##### Python-asyncio:
+
+<!-- request Python-asyncio -->
+
+```python
+await utilsApi.sql('CREATE TABLE products(title text, image_vector float_vector)')
+```
+
 <!-- intro -->
 ##### Javascript:
 
@@ -2070,6 +2504,15 @@ utilsApi.sql("CREATE TABLE products(title text, image_vector float_vector)");
 
 ```clike
 utilsApi.Sql("CREATE TABLE products(title text, image_vector float_vector)");
+```
+
+<!-- intro -->
+##### Rust:
+
+<!-- request Rust -->
+
+```rust
+utils_api.sql("CREATE TABLE products(title text, image_vector float_vector)", Some(true)).await;
 ```
 
 <!-- intro -->
@@ -2139,6 +2582,16 @@ $index->create([
 ```python
 utilsApi.sql('CREATE TABLE products(title text, product_codes multi)')
 ```
+
+<!-- intro -->
+##### Python-asyncio:
+
+<!-- request Python-asyncio -->
+
+```python
+await utilsApi.sql('CREATE TABLE products(title text, product_codes multi)')
+```
+
 <!-- intro -->
 ##### Javascript:
 
@@ -2163,6 +2616,15 @@ utilsApi.sql("CREATE TABLE products(title text, product_codes multi)");
 
 ```clike
 utilsApi.Sql("CREATE TABLE products(title text, product_codes multi)");
+```
+
+<!-- intro -->
+##### Rust:
+
+<!-- request Rust -->
+
+```rust
+utils_api.sql("CREATE TABLE products(title text, product_codes multi)", Some(true)).await;
 ```
 
 <!-- intro -->
@@ -2230,6 +2692,16 @@ $index->setName('products')->search('')->filter('any(product_codes)','equals',3)
 ```python
 searchApi.search({"table":"products","query":{"match_all":{},"equals":{"any(product_codes)":3}}}})
 ```
+
+<!-- intro -->
+##### Python-asyncio:
+
+<!-- request Python-asyncio -->
+
+```python
+await searchApi.search({"table":"products","query":{"match_all":{},"equals":{"any(product_codes)":3}}}})
+```
+
 <!-- intro -->
 ##### Javascript:
 
@@ -2266,6 +2738,22 @@ var searchRequest = new SearchRequest("forum", query);
 searchRequest.AttrFilter = new EqualsFilter("any(product_codes)", 3);
 var searchResponse = searchApi.Search(searchRequest);
 ```
+
+<!-- intro -->
+##### Rust:
+
+<!-- request Rust -->
+
+``` rust
+let query = SearchQuery::new();
+let search_request = SearchRequest {
+    table: "forum".to_string(),
+    query: Some(Box::new(query)),
+    ..Default::default(),
+};
+let search_res = search_api.search(search_req).await;
+```
+
 <!-- end -->
 
 <!-- example for least/greatest MVA -->
@@ -2312,6 +2800,16 @@ $index->setName('products')->search('')->sort('product_codes','asc','min')->get(
 ```python
 searchApi.search({"table":"products","query":{"match_all":{},"sort":[{"product_codes":{"order":"asc","mode":"min"}}]}})
 ```
+
+<!-- intro -->
+##### Python-asyncio:
+
+<!-- request Python-asyncio -->
+
+```python
+await searchApi.search({"table":"products","query":{"match_all":{},"sort":[{"product_codes":{"order":"asc","mode":"min"}}]}})
+```
+
 <!-- intro -->
 ##### Javascript:
 
@@ -2350,6 +2848,25 @@ searchRequest.Sort = new List<Object> {
     new SortMVA("product_codes", SortOrder.OrderEnum.Asc, SortMVA.ModeEnum.Min)
 };
 searchResponse = searchApi.Search(searchRequest);
+```
+
+<!-- request Rust -->
+
+``` rust
+let query = SearchQuery::new();
+let mut sort_opts = HashMap::new(); 
+sort_opts.insert("order".to_string(), serde_json::json!("asc"));
+sort_opts.insert("mode".to_string(), serde_json::json!("min"));
+sort_expr.insert("product_codes".to_string(), serde_json::json!(sort_opts));
+let sort: [HashMap; 1] = [sort_expr];
+
+let search_req = SearchRequest {
+    table: "forum".to_string(),
+    query: Some(Box::new(query)),
+    sort: serde_json::json!(sort),
+    ..Default::default(),
+};
+let search_res = search_api.search(search_req).await;
 ```
 
 <!-- end -->
@@ -2547,6 +3064,34 @@ searchApi.search({"table":"products","query":{"match_all":{}}})
  'timed_out': False,
  'took': 29}
 ```
+
+<!-- intro -->
+##### Python-asyncio:
+
+<!-- request Python-asyncio -->
+
+```python
+await indexApi.insert({"table":"products","id":1,"doc":{"title":"first","product_codes":[4,2,1,3]}})
+await searchApi.search({"table":"products","query":{"match_all":{}}})
+```
+<!-- response Python-asyncio -->
+
+```python
+{'created': True,
+ 'found': None,
+ 'id': 1,
+ 'table': 'products',
+ 'result': 'created'}
+{'hits': {'hits': [{u'_id': u'1',
+                    u'_score': 1,
+                    u'_source': {u'product_codes': [1, 2, 3, 4],
+                                 u'title': u'first'}}],
+          'total': 1},
+ 'profile': None,
+ 'timed_out': False,
+ 'took': 29}
+```
+
 <!-- intro -->
 ##### Javascript:
 
@@ -2627,7 +3172,43 @@ class SearchResponse {
     }
     profile: null
 }
+```
 
+<!-- intro -->
+##### Rust:
+
+<!-- request Rust -->
+
+``` rust
+let mut doc = HashMap::new();
+doc.insert("title".to_string(), serde_json::json!("first"));
+doc.insert("product_codes".to_string(), serde_json::json!([4,2,1,3]));
+let insert_req = InsertDocumentRequest::new("products".to_string(), serde_json::json!(doc));
+let insert_res = index_api.insert(insert_req).await;
+
+let query = SearchQuery::new();
+let search_req = SearchRequest {
+    table: "forum".to_string(),
+    query: Some(Box::new(query)),
+    ..Default::default(),
+};
+let search_res = search_api.search(search_req).await;
+println!("{:?}", search_res);
+```
+
+<!-- response Rust -->
+
+```rust
+class SearchResponse {
+    took: 0
+    timedOut: false
+    hits: class SearchResponseHits {
+        total: 1
+        hits: [{_id=1, _score=1, _source={product_codes=[1, 2, 3, 4], title=first}}]
+        aggregations: null
+    }
+    profile: null
+}
 ```
 
 <!-- end -->
@@ -2678,6 +3259,16 @@ $index->create([
 ```python
 utilsApi.sql('CREATE TABLE products(title text, values multi64))')
 ```
+
+<!-- intro -->
+##### Python-asyncio:
+
+<!-- request Python-asyncio -->
+
+```python
+await utilsApi.sql('CREATE TABLE products(title text, values multi64))')
+```
+
 <!-- intro -->
 ##### Javascript:
 
@@ -2702,6 +3293,15 @@ utilsApi.sql("CREATE TABLE products(title text, values multi64))");
 
 ```clike
 utilsApi.Sql("CREATE TABLE products(title text, values multi64))");
+```
+
+<!-- intro -->
+##### Rust:
+
+<!-- request Rust -->
+
+```rust
+utils_api.sql("CREATE TABLE products(title text, values multi64))", Some(true)).await;
 ```
 
 <!-- intro -->

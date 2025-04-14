@@ -73,6 +73,21 @@ utilsApi.sql('DROP TABLE products')
 ```python
 {u'error': u'', u'total': 0, u'warning': u''}
 ```
+
+<!-- intro -->
+##### Python-asyncio:
+
+<!-- request Python-asyncio -->
+
+```python
+await utilsApi.sql('DROP TABLE products')
+```
+
+<!-- response Python-asyncio -->
+```python
+{u'error': u'', u'total': 0, u'warning': u''}
+```
+
 <!-- intro -->
 ##### Javascript:
 
@@ -92,7 +107,7 @@ res = await utilsApi.sql('DROP TABLE products');
 <!-- request Java -->
 
 ```java
-sqlresult = utilsApi.sql("DROP TABLE products");
+sqlresult = utilsApi.sql("DROP TABLE products", true);
 ```
 
 <!-- response Java -->
@@ -106,11 +121,25 @@ sqlresult = utilsApi.sql("DROP TABLE products");
 <!-- request C# -->
 
 ```clike
-sqlresult = utilsApi.Sql("DROP TABLE products");
+sqlresult = utilsApi.Sql("DROP TABLE products", true);
 ```
 
 <!-- response C# -->
 ```clike
+{total=0, error="", warning=""}
+```
+
+<!-- intro -->
+##### Rust:
+
+<!-- request Rust -->
+
+```rust
+let sqlresult = utils_api.sql("DROP TABLE products", Some(true)).await;
+```
+
+<!-- response Rust -->
+```rust
 {total=0, error="", warning=""}
 ```
 
@@ -172,6 +201,21 @@ utilsApi.sql('DROP TABLE IF EXISTS products')
 ```python
 {u'error': u'', u'total': 0, u'warning': u''}
 ```
+
+<!-- intro -->
+##### Python-asyncio:
+
+<!-- request Python-asyncio -->
+
+```python
+await utilsApi.sql('DROP TABLE IF EXISTS products')
+```
+
+<!-- response Python-asyncio -->
+```python
+{u'error': u'', u'total': 0, u'warning': u''}
+```
+
 <!-- intro -->
 ##### Javascript:
 
@@ -191,7 +235,7 @@ res = await utilsApi.sql('DROP TABLE IF EXISTS products');
 <!-- request Java -->
 
 ```java
-sqlresult = utilsApi.sql("DROP TABLE IF EXISTS products");
+sqlresult = utilsApi.sql("DROP TABLE IF EXISTS products", true);
 ```
 
 <!-- response Java -->
@@ -205,11 +249,25 @@ sqlresult = utilsApi.sql("DROP TABLE IF EXISTS products");
 <!-- request C# -->
 
 ```clike
-sqlresult = utilsApi.Sql("DROP TABLE IF EXISTS products");
+sqlresult = utilsApi.Sql("DROP TABLE IF EXISTS products", true);
 ```
 
 <!-- response C# -->
 ```clike
+{total=0, error="", warning=""}
+```
+
+<!-- intro -->
+##### Rust:
+
+<!-- request Rust -->
+
+```rust
+let sqlresult = utils_api.sql("DROP TABLE IF EXISTS products", Some(true)).await;
+```
+
+<!-- response Rust -->
+```rust
 {total=0, error="", warning=""}
 ```
 

@@ -1,0 +1,36 @@
+––– block: ../base/start-searchd –––
+––– input –––
+mysql -P9306 -h0 -e "drop table if exists t; create table t(name text) min_infix_len='2' diskchunk_flush_write_timeout = '9999';"
+––– output –––
+––– input –––
+mysql -P9306 -h0 -e "insert into t values(1, 'LIMITED LIABILIYT COMPANY TVK'); insert into t values(2, 'LIPITED LIABILITY COMPANY ABCDEF'); insert into t values(3, 'LIXITED LIABILITY COMPANY XXXXXX');"
+––– output –––
+––– input –––
+mysql -P9306 -h0 -e "call keywords('LI\\?ITED LIQBILITY CO\\?PQNY TVK', 't')"
+––– output –––
++------+-----------+------------+
+| qpos | tokenized | normalized |
++------+-----------+------------+
+| 1    | li?ited   | limited    |
+| 1    | li?ited   | lixited    |
+| 1    | li?ited   | lipited    |
+| 2    | liqbility | liqbility  |
+| 3    | co?pqny   | co?pqny    |
+| 4    | tvk       | tvk        |
++------+-----------+------------+
+––– input –––
+mysql -P9306 -h0 -e "flush ramchunk t"
+––– output –––
+––– input –––
+mysql -P9306 -h0 -e "call keywords('LI\\?ITED LIQBILITY CO\\?PQNY TVK', 't')"
+––– output –––
++------+-----------+------------+
+| qpos | tokenized | normalized |
++------+-----------+------------+
+| 1    | li?ited   | limited    |
+| 1    | li?ited   | lixited    |
+| 1    | li?ited   | lipited    |
+| 2    | liqbility | liqbility  |
+| 3    | co?pqny   | co?pqny    |
+| 4    | tvk       | tvk        |
++------+-----------+------------+

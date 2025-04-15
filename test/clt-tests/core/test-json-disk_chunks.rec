@@ -1,0 +1,19 @@
+––– input –––
+./test/clt-tests/scripts/generate-records-json.sh 1000 4 | mysql -h0 -P9306
+––– output –––
+––– input –––
+mysql -h0 -P9306 -e 'show tables'
+––– output –––
++-------+------+
+| Table | Type |
++-------+------+
+| t     | rt   |
++-------+------+
+––– input –––
+for i in {1..5}; do mysql -h0 -P9306 -e 'SELECT id, ANY(x>100 OR x < 10 FOR x IN j.a) ja, j.b FROM t GROUP BY j.b,j.c LIMIT 1 option threads=4;'; echo "Exit status: $?"; echo; done
+––– output –––
+Exit status: 0
+Exit status: 0
+Exit status: 0
+Exit status: 0
+Exit status: 0

@@ -1515,7 +1515,7 @@ void DiskIndexChecker_c::Impl_c::CheckDocidLookup()
 			iCpDocs = ( iLefover ? iLefover : iDocsPerCheckpoint );
 		}
 
-		for ( int i=0; i<iCpDocs; i++ )
+		for ( int i=0; i<iCpDocs; ++i )
 		{
 			uint64_t tDelta = 0;
 			DocID_t tDocID = 0;
@@ -1557,12 +1557,12 @@ void DiskIndexChecker_c::Impl_c::CheckDocidLookup()
 			tLastDocID = tDocID;
 		}
 
-		iCp++;
+		++iCp;
 	}
 
 	if ( !pId->IsColumnar() )
 	{
-		for ( int i=0; i<m_iNumRows; i++ )
+		for ( int i=0; i<m_iNumRows; ++i )
 		{
 			if ( dRowids.BitGet ( i ) )
 				continue;

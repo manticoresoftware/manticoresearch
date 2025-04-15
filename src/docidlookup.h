@@ -40,7 +40,7 @@ public:
 	bool			Finalize ( CSphString & sError );
 
 private:
-	static const int DOCS_PER_LOOKUP_CHECKPOINT = 64;
+	static constexpr int DOCS_PER_LOOKUP_CHECKPOINT = 64;
 
 	CSphWriter&		m_tWriter;
 	DWORD			m_nDocs;
@@ -82,7 +82,7 @@ public:
 			return tRowID;
 
 		int iDocsInCheckpoint = GetNumDocsInCheckpoint(pFound);
-		for ( int i = 1; i < iDocsInCheckpoint; i++ )
+		for ( int i = 1; i < iDocsInCheckpoint; ++i )
 		{
 			uint64_t tDeltaDocID = UnzipOffsetBE(pCur);
 			tRowID = sphUnalignedRead ( *(const RowID_t*)pCur );
@@ -91,7 +91,7 @@ public:
 			tCurDocID += tDeltaDocID;
 			if ( tCurDocID==tDocID )
 				return tRowID;
-			else if ( (uint64_t)tCurDocID>(uint64_t)tDocID )
+			if ( (uint64_t)tCurDocID>(uint64_t)tDocID )
 				return INVALID_ROWID;
 		}
 
@@ -174,7 +174,7 @@ public:
 			tRowID = sphUnalignedRead ( *(RowID_t*)const_cast<BYTE*>(m_pCur) );
 			m_pCur += sizeof(RowID_t);
 
-			m_iProcessedDocs++;
+			++m_iProcessedDocs;
 			return true;
 		}
 
@@ -186,7 +186,7 @@ public:
 		m_tCurDocID += tDelta;
 		tDocID = m_tCurDocID;
 
-		m_iProcessedDocs++;
+		++m_iProcessedDocs;
 		return true;
 	}
 

@@ -19,16 +19,16 @@
 namespace sphstd {
 
 /// heap sort helper
-template<typename T, typename U, typename V>
-void SiftDown ( T* pData, int iStart, int iEnd, U&& COMP, V&& ACC )
+template<typename T, typename U, typename V, typename INT>
+void SiftDown ( T* pData, INT iStart, INT iEnd, U&& COMP, V&& ACC )
 {
 	while ( true )
 	{
-		int iChild = iStart * 2 + 1;
+		INT iChild = iStart * 2 + 1;
 		if ( iChild > iEnd )
 			return;
 
-		int iChild1 = iChild + 1;
+		INT iChild1 = iChild + 1;
 		if ( iChild1 <= iEnd && COMP.IsLess ( ACC.Key ( ACC.Add ( pData, iChild ) ), ACC.Key ( ACC.Add ( pData, iChild1 ) ) ) )
 			iChild = iChild1;
 
@@ -41,28 +41,28 @@ void SiftDown ( T* pData, int iStart, int iEnd, U&& COMP, V&& ACC )
 
 
 /// heap sort
-template<typename T, typename U, typename V>
-void HeapSort ( T* pData, int iCount, U&& COMP, V&& ACC )
+template<typename T, typename U, typename V, typename INT>
+void HeapSort ( T* pData, INT iCount, U&& COMP, V&& ACC )
 {
 	if ( !pData || iCount <= 1 )
 		return;
 
 	// build a max-heap, so that the largest element is root
-	for ( int iStart = ( iCount - 2 ) >> 1; iStart >= 0; --iStart )
+	for ( INT iStart = ( iCount - 2 ) >> 1; iStart >= 0; --iStart )
 		SiftDown ( pData, iStart, iCount - 1, std::forward<U> ( COMP ), std::forward<V> ( ACC ) );
 
 	// now keep popping root into the end of array
-	for ( int iEnd = iCount - 1; iEnd > 0; )
+	for ( INT iEnd = iCount - 1; iEnd > 0; )
 	{
 		ACC.Swap ( pData, ACC.Add ( pData, iEnd ) );
-		SiftDown ( pData, 0, --iEnd, std::forward<U> ( COMP ), std::forward<V> ( ACC ) );
+		SiftDown ( pData, (INT)0, --iEnd, std::forward<U> ( COMP ), std::forward<V> ( ACC ) );
 	}
 }
 
 
 /// generic sort
-template<typename T, typename U, typename V>
-void Sort ( T* pData, int iCount, U&& COMP, V&& ACC )
+template<typename T, typename U, typename V, typename INT>
+void Sort ( T* pData, INT iCount, U&& COMP, V&& ACC )
 {
 	if ( iCount < 2 )
 		return;
@@ -98,7 +98,7 @@ void Sort ( T* pData, int iCount, U&& COMP, V&& ACC )
 		}
 
 		// for tiny arrays, switch to insertion sort
-		int iLen = ACC.Sub ( b, a );
+		INT iLen = ACC.Sub ( b, a );
 		if ( iLen <= SMALL_THRESH )
 		{
 			for ( i = ACC.Add ( a, 1 ); i <= b; i = ACC.Add ( i, 1 ) )
@@ -159,20 +159,21 @@ void Sort ( T* pData, int iCount, U&& COMP, V&& ACC )
 
 } // namespace sphstd
 
-template<typename T, typename U, typename V>
-void sphSort ( T* pData, int iCount, U&& COMP, V&& ACC ) noexcept
+template<typename T, typename U, typename V, typename INT>
+void sphSort ( T* pData, INT iCount, U&& COMP, V&& ACC ) noexcept
 {
-	sphstd::Sort ( pData, iCount, std::forward<U> ( COMP ), std::forward<V> ( ACC ) );
+	sphstd::Sort ( pData, static_cast<std::make_signed_t<INT>> ( iCount ), std::forward<U> ( COMP ), std::forward<V> ( ACC ) );
 }
 
-template<typename T, typename U>
-void sphSort ( T* pData, int iCount, U&& COMP ) noexcept
+template<typename T, typename U, typename INT>
+void sphSort ( T* pData, INT iCount, U&& COMP ) noexcept
 {
-	sphSort ( pData, iCount, std::forward<U> ( COMP ), SphAccessor_T<T>() );
+	using IINT = std::make_signed_t<INT>;
+	sphSort ( pData, static_cast<IINT> ( iCount ), std::forward<U> ( COMP ), SphAccessor_T<T, IINT>() );
 }
 
-template<typename T>
-void sphSort ( T* pData, int iCount ) noexcept
+template<typename T, typename INT>
+void sphSort ( T* pData, INT iCount ) noexcept
 {
 	sphSort ( pData, iCount, SphLess_T<T>() );
 }

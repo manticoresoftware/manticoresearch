@@ -13,13 +13,13 @@
 #pragma once
 
 /// generic sort
-template<typename T, typename U, typename V>
-void sphSort ( T* pData, int iCount, U&& COMP, V&& ACC ) noexcept;
+template<typename T, typename U, typename V, typename INT>
+void sphSort ( T* pData, INT iCount, U&& COMP, V&& ACC ) noexcept;
 
-template<typename T, typename U>
-void sphSort ( T* pData, int iCount, U&& COMP ) noexcept;
+template<typename T, typename U, typename INT>
+void sphSort ( T* pData, INT iCount, U&& COMP ) noexcept;
 
-template<typename T>
-void sphSort ( T* pData, int iCount ) noexcept;
+template<typename T, typename INT>
+void sphSort ( T* pData, INT iCount ) noexcept;
 
 #include "sort_impl.h"

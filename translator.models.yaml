@@ -1,0 +1,22 @@
+# Translation models configuration
+# Models are sorted by token price in ascending order (input/output)
+models:
+  - name: openai:gpt-4o-mini
+    priority: 1
+    price_notes: $0.15 / $0.6
+  
+  - name: claude:claude-3-5-haiku-20241022
+    priority: 2
+    price_notes: $0.8 / $4
+  
+  - name: openai:o3-mini
+    priority: 3
+    price_notes: $1.1 / $4.4
+  
+  - name: openai:gpt-4o
+    priority: 4
+    price_notes: $2.5 / $10
+  
+  - name: claude:claude-3-5-sonnet-20241022
+    priority: 5
+    price_notes: $3 / $15

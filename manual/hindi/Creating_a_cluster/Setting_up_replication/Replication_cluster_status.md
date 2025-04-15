@@ -1,0 +1,223 @@
+# पुनरुत्पादन क्लस्टर स्थिति 
+
+<!-- example Example -->
+
+आप नोड स्थिति की जांच करके क्लस्टर स्थिति की जानकारी देख सकते हैं। इसे [Node status](../../Node_info_and_management/Node_status.md) कमांड का उपयोग करके किया जा सकता है, जो नोड के बारे में विभिन्न जानकारी दिखाता है, जिसमें क्लस्टर स्थिति वेरिएबल शामिल हैं।
+
+क्लस्टर स्थिति वेरिएबल के लिए आउटपुट प्रारूप इस प्रकार है:  `cluster_name_variable_name` `variable_value`। अधिकांश वेरिएबल को [Galera Documentation Status Variables](https://galeracluster.com/library/documentation/galera-status-variables.html) में वर्णित किया गया है। इन वेरिएबल के अतिरिक्त, Manticore Search भी प्रदर्शित करता है:
+
+* cluster_name - क्लस्टर का नाम, जैसा कि [पुनरुत्पादन सेटअप](../../Creating_a_cluster/Setting_up_replication/Setting_up_replication.md#Replication-cluster) में परिभाषित किया गया है 
+* node_state - नोड की वर्तमान स्थिति: `closed`, `destroyed`, `joining`, `donor`, `synced`
+* indexes_count - उस क्लस्टर द्वारा प्रबंधित तालिकाओं की संख्या
+* indexes - उस क्लस्टर द्वारा प्रबंधित तालिका नामों की सूची
+* nodes_set - `CREATE`, `JOIN` या `ALTER UPDATE` कमांड का उपयोग करके परिभाषित क्लस्टर में नोड्स की सूची
+* nodes_view - क्लस्टर में नोड्स की वास्तविक सूची जिसे वर्तमान नोड देख सकता है।
+
+
+<!-- intro -->
+##### SQL:
+
+<!-- request SQL -->
+
+```sql
+SHOW STATUS
+```
+
+<!-- response SQL-->
+
+```sql
++----------------------------+-------------------------------------------------------------------------------------+
+| Counter                    | Value                                                                               |
++----------------------------+-------------------------------------------------------------------------------------+
+| cluster_name               | post                                                                                |
+| cluster_post_state_uuid    | fba97c45-36df-11e9-a84e-eb09d14b8ea7                                                |
+| cluster_post_conf_id       | 1                                                                                   |
+| cluster_post_status        | primary                                                                             |
+| cluster_post_size          | 5                                                                                   |
+| cluster_post_local_index   | 0                                                                                   |
+| cluster_post_node_state    | synced                                                                              |
+| cluster_post_indexes_count | 2                                                                                   |
+| cluster_post_indexes       | pq1,pq_posts                                                                        |
+| cluster_post_nodes_set     | 10.10.0.1:9312                                                                      |
+| cluster_post_nodes_view    | 10.10.0.1:9312,10.10.0.1:9320:replication,10.10.1.1:9312,10.10.1.1:9320:replication |
+```
+
+<!-- request JSON -->
+
+```json
+POST /cli -d "
+SHOW STATUS
+"
+```
+
+<!-- response JSON-->
+
+```json
+"
+{"columns":[{"Counter":{"type":"string"}},{"Value":{"type":"string"}}],
+"data":[
+{"Counter":"cluster_name", "Value":"post"},
+{"Counter":"cluster_post_state_uuid", "Value":"fba97c45-36df-11e9-a84e-eb09d14b8ea7"},
+{"Counter":"cluster_post_conf_id", "Value":"1"},
+{"Counter":"cluster_post_status", "Value":"primary"},
+{"Counter":"cluster_post_size", "Value":"5"},
+{"Counter":"cluster_post_local_index", "Value":"0"},
+{"Counter":"cluster_post_node_state", "Value":"synced"},
+{"Counter":"cluster_post_indexes_count", "Value":"2"},
+{"Counter":"cluster_post_indexes", "Value":"pq1,pq_posts"},
+{"Counter":"cluster_post_nodes_set", "Value":"10.10.0.1:9312"},
+{"Counter":"cluster_post_nodes_view", "Value":"10.10.0.1:9312,10.10.0.1:9320:replication,10.10.1.1:9312,10.10.1.1:9320:replication"}
+],
+"total":0,
+"error":"",
+"warning":""
+}
+```
+
+<!-- request PHP -->
+
+```php
+$params = [
+    'body' => []
+];
+$response = $client->nodes()->status($params);         
+```
+
+<!-- response PHP -->
+
+```php
+(
+"cluster_name" => "post",
+"cluster_post_state_uuid" => "fba97c45-36df-11e9-a84e-eb09d14b8ea7",
+"cluster_post_conf_id" => 1,
+"cluster_post_status" => "primary",
+"cluster_post_size" => 5,
+"cluster_post_local_index" => 0,
+"cluster_post_node_state" => "synced",
+"cluster_post_indexes_count" => 2,
+"cluster_post_indexes" => "pq1,pq_posts",
+"cluster_post_nodes_set" => "10.10.0.1:9312",
+"cluster_post_nodes_view" => "10.10.0.1:9312,10.10.0.1:9320:replication,10.10.1.1:9312,10.10.1.1:9320:replication"
+)
+```
+<!-- intro -->
+##### Python:
+
+<!-- request Python -->
+
+```python
+utilsApi.sql('SHOW STATUS')
+```
+<!-- response Python -->
+
+```python
+{u'columns': [{u'Key': {u'type': u'string'}},
+              {u'Value': {u'type': u'string'}}],
+ u'data': [
+	{u'Key': u'cluster_name', u'Value': u'post'},
+	{u'Key': u'cluster_post_state_uuid', u'Value': u'fba97c45-36df-11e9-a84e-eb09d14b8ea7'},
+	{u'Key': u'cluster_post_conf_id', u'Value': u'1'},
+	{u'Key': u'cluster_post_status', u'Value': u'primary'},
+	{u'Key': u'cluster_post_size', u'Value': u'5'},
+	{u'Key': u'cluster_post_local_index', u'Value': u'0'},
+	{u'Key': u'cluster_post_node_state', u'Value': u'synced'},
+	{u'Key': u'cluster_post_indexes_count', u'Value': u'2'},
+	{u'Key': u'cluster_post_indexes', u'Value': u'pq1,pq_posts'},
+	{u'Key': u'cluster_post_nodes_set', u'Value': u'10.10.0.1:9312'},
+	{u'Key': u'cluster_post_nodes_view', u'Value': u'10.10.0.1:9312,10.10.0.1:9320:replication,10.10.1.1:9312,10.10.1.1:9320:replication'}],
+ u'error': u'',
+ u'total': 0,
+ u'warning': u''}
+```
+<!-- intro -->
+##### Javascript:
+
+<!-- request javascript -->
+
+```javascript
+res = await utilsApi.sql('SHOW STATUS');
+```
+
+<!-- response Javascript -->
+
+```javascript
+{"columns": [{"Key": {"type": "string"}},
+              {"Value": {"type": "string"}}],
+ "data": [
+	{"Key": "cluster_name", "Value": "पोस्ट"},
+	{"Key": "cluster_post_state_uuid", "Value": "fba97c45-36df-11e9-a84e-eb09d14b8ea7"},
+	{"Key": "cluster_post_conf_id", "Value": "1"},
+	{"Key": "cluster_post_status", "Value": "प्राथमिक"},
+	{"Key": "cluster_post_size", "Value": "5"},
+	{"Key": "cluster_post_local_index", "Value": "0"},
+	{"Key": "cluster_post_node_state", "Value": "सिंक्रनाइज़ेड"},
+	{"Key": "cluster_post_indexes_count", "Value": "2"},
+	{"Key": "cluster_post_indexes", "Value": "pq1,pq_posts"},
+	{"Key": "cluster_post_nodes_set", "Value": "10.10.0.1:9312"},
+	{"Key": "cluster_post_nodes_view", "Value": "10.10.0.1:9312,10.10.0.1:9320:प्रतिलिपि,10.10.1.1:9312,10.10.1.1:9320:प्रतिलिपि"}],
+ "error": "",
+ "total": 0,
+ "warning": ""}
+```
+
+<!-- intro -->
+##### java:
+
+<!-- request Java -->
+
+```java
+utilsApi.sql("SHOW STATUS");
+```
+<!-- response Java -->
+
+```java
+{columns=[{ Key : { type=string }},
+              { Value : { type=string }}],
+  data : [
+	{ Key=cluster_name, Value=पोस्ट},
+	{ Key=cluster_post_state_uuid, Value=fba97c45-36df-11e9-a84e-eb09d14b8ea7},
+	{ Key=cluster_post_conf_id, Value=1},
+	{ Key=cluster_post_status, Value=प्राथमिक},
+	{ Key=cluster_post_size, Value=5},
+	{ Key=cluster_post_local_index, Value=0},
+	{ Key=cluster_post_node_state, Value=सिंक्रनाइज़ेड},
+	{ Key=cluster_post_indexes_count, Value=2},
+	{ Key=cluster_post_indexes, Value=pq1,pq_posts},
+	{ Key=cluster_post_nodes_set, Value=10.10.0.1:9312},
+	{ Key=cluster_post_nodes_view, Value=10.10.0.1:9312,10.10.0.1:9320:प्रतिलिपि,10.10.1.1:9312,10.10.1.1:9320:प्रतिलिपि}],
+  error= ,
+  total=0,
+  warning= }
+```
+
+<!-- intro -->
+##### C#:
+
+<!-- request C# -->
+
+```clike
+utilsApi.sql("SHOW STATUS");
+```
+<!-- response C# -->
+
+```C#
+{columns=[{ Key : { type=String }},
+              { Value : { type=String }}],
+  data : [
+	{ Key=cluster_name, Value=पोस्ट},
+	{ Key=cluster_post_state_uuid, Value=fba97c45-36df-11e9-a84e-eb09d14b8ea7},
+	{ Key=cluster_post_conf_id, Value=1},
+	{ Key=cluster_post_status, Value=प्राथमिक},
+	{ Key=cluster_post_size, Value=5},
+	{ Key=cluster_post_local_index, Value=0},
+	{ Key=cluster_post_node_state, Value=सिंक्रनाइज़ेड},
+	{ Key=cluster_post_indexes_count, Value=2},
+	{ Key=cluster_post_indexes, Value=pq1,pq_posts},
+	{ Key=cluster_post_nodes_set, Value=10.10.0.1:9312},
+	{ Key=cluster_post_nodes_view, Value=10.10.0.1:9312,10.10.0.1:9320:प्रतिलिपि,10.10.1.1:9312,10.10.1.1:9320:प्रतिलिपि}],
+  error="" ,
+  total=0,
+  warning="" }
+```
+<!-- end -->
+<!-- proofread -->

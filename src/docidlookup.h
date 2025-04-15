@@ -15,12 +15,13 @@
 
 class CSphWriter;
 
+#pragma pack( push, 4 )
 struct DocidRowidPair_t
 {
 	DocID_t m_tDocID;
 	RowID_t	m_tRowID;
 };
-
+#pragma pack( pop )
 
 struct DocidLookupCheckpoint_t
 {

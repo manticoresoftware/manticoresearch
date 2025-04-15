@@ -45,7 +45,7 @@ private:
 	CSphWriter&		m_tWriter;
 	DWORD			m_nDocs;
 
-	int				m_iProcessed {0};
+	int64_t			m_iProcessed {0};
 	int				m_iCheckpoint {0};
 	SphOffset_t		m_tCheckpointStart {0};
 	DocID_t			m_tLastDocID {0};

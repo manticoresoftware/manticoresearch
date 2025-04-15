@@ -35,7 +35,7 @@ protected:
 	CSphFixedVector<RowID_t> m_dCollected {MAX_COLLECTED};
 
 	CSphTightVector<RowID_t> m_dRowIDs;
-	int			m_iId = 0;
+	int64_t			m_iId = 0;
 
 	BitVec_T<uint64_t> m_tBitmap;
 	RowID_t		m_tRowID = 0;
@@ -757,9 +757,9 @@ void DocidLookupWriter_c::Start()
 	m_tCheckpointStart = m_tWriter.GetPos();
 	m_tWriter.PutOffset ( 0 );	// reserve space for max docid
 
-	const int nCheckpoints = (m_nDocs+DOCS_PER_LOOKUP_CHECKPOINT-1)/DOCS_PER_LOOKUP_CHECKPOINT;
+	const int64_t nCheckpoints = (m_nDocs+DOCS_PER_LOOKUP_CHECKPOINT-1)/DOCS_PER_LOOKUP_CHECKPOINT;
 	m_dCheckpoints.Reset ( nCheckpoints );
-	for ( int i = 0; i < nCheckpoints; ++i )
+	for ( int64_t i = 0; i < nCheckpoints; ++i )
 	{
 		// reserve space for checkpoints
 		m_tWriter.PutOffset(0);

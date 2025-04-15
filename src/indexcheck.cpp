@@ -1481,10 +1481,10 @@ void DiskIndexChecker_c::Impl_c::CheckDocidLookup()
 
 	CSphFixedVector<CSphRowitem> dRow ( m_tSchema.GetRowSize() );
 	m_tAttrReader.SeekTo ( 0, (int) dRow.GetLengthBytes() );
-	CSphBitvec dRowids ( (int)m_iNumRows );
+	CSphBitvec dRowids ( m_iNumRows );
 
-	int iDocs = tLookup.GetDword();
-	int iDocsPerCheckpoint = tLookup.GetDword();
+	int64_t iDocs = tLookup.GetDword();
+	int64_t iDocsPerCheckpoint = tLookup.GetDword();
 	tLookup.GetOffset(); // max docid
 	int64_t iLookupBase = tLookup.GetPos();
 
@@ -1562,7 +1562,7 @@ void DiskIndexChecker_c::Impl_c::CheckDocidLookup()
 
 	if ( !pId->IsColumnar() )
 	{
-		for ( int i=0; i<m_iNumRows; ++i )
+		for ( int64_t i=0; i<m_iNumRows; ++i )
 		{
 			if ( dRowids.BitGet ( i ) )
 				continue;

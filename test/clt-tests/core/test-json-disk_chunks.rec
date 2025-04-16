@@ -15,7 +15,7 @@ mysql -h0 -P9306 -e 'show tables'
 | t     | rt   |
 +-------+------+
 ––– input –––
-for i in {1..5}; do mysql -h0 -P9306 -e 'SELECT id, ANY(x>100 OR x < 10 FOR x IN j.a) ja, j.b FROM t GROUP BY j.b,j.c LIMIT 1 option threads=4 > /dev/null 2>&1; echo $?; done
+for i in {1..5}; do mysql -h0 -P9306 -e 'SELECT id, ANY(x>100 OR x < 10 FOR x IN j.a) ja, j.b FROM t GROUP BY j.b,j.c LIMIT 1 option threads=4' > /dev/null 2>&1; echo $?; done
 ––– output –––
 0
 0

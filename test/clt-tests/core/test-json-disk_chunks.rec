@@ -1,7 +1,11 @@
 ––– block: ../base/start-searchd –––
 ––– input –––
-./test/clt-tests/scripts/generate-records-json.sh 1000 4 | mysql -h0 -P9306
+chmod +x ./test/clt-tests/scripts/generate-records-json.sh
 ––– output –––
+––– input –––
+./test/clt-tests/scripts/generate-records-json.sh 1000 4 | mysql -h0 -P9306; echo $?;
+––– output –––
+0
 ––– input –––
 mysql -h0 -P9306 -e 'show tables'
 ––– output –––

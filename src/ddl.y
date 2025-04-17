@@ -510,9 +510,9 @@ opt_as:
 	;
 
 insert_val:
-	TOK_CONST_INT			{ $$.m_iType = TOK_CONST_INT; $$.SetValueInt ( $1.GetValueInt() ); }
-	| TOK_CONST_FLOAT		{ $$.m_iType = TOK_CONST_FLOAT; $$.m_fValue = $1.m_fValue; }
-	| TOK_QUOTED_STRING		{ $$.m_iType = TOK_QUOTED_STRING; $$.m_iStart = $1.m_iStart; $$.m_iEnd = $1.m_iEnd; }
+	TOK_CONST_INT			{ $$=$1; $$.m_iType = TOK_CONST_INT; }
+	| TOK_CONST_FLOAT		{ $$.m_fValue = $1.m_fValue; $$.m_iType = TOK_CONST_FLOAT; }
+	| TOK_QUOTED_STRING		{ $$=$1; $$.m_iType = TOK_QUOTED_STRING; }
 	;
 
 create_cluster:

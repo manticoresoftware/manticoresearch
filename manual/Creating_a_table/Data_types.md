@@ -394,13 +394,13 @@ mysql> select * from t where id = -9223372036854775808;
 --- 1 out of 1 results in 0ms ---
 ```
 
-If you use an unsigned value instead, you will get error:
+If you use an unsigned value instead, you will get an error:
 ```sql
 mysql> select * from t where id = 9223372036854775808;
 ERROR 1064 (42000): number 9223372036854775808 is out of range [-9223372036854775808..9223372036854775807]
 ```
 
-Value which are not fit in 64 bits will fire similar error:
+Values that do not fit within 64 bits will trigger a similar error:
 
 ```sql
 mysql> select * from t where id = -9223372036854775809;

@@ -1007,7 +1007,7 @@ bool IndexSegment_c::Update_Blobs ( const RowsToUpdate_t& dRows, UpdateContext_t
 					if ( iBlobId!=-1 )
 					{
 
-						pBlobRowBuilder->SetAttr ( iBlobId, &tUpd.m_dBlobs[uOffset], uLength, sError );
+						pBlobRowBuilder->SetAttr ( iBlobId, uLength?&tUpd.m_dBlobs[uOffset]:nullptr, uLength, sError );
 						tCtx.m_tUpd.MarkUpdated ( iUpd );
 						tCtx.m_uUpdateMask |= ATTRS_BLOB_UPDATED;
 					}
@@ -9454,7 +9454,7 @@ bool CSphIndex_VLN::LoadSecondaryIndex ( const CSphString & sFile )
 			if ( GetSecondaryIndexDefault()==SIDefault_e::FORCE )
 				m_sLastError.SetSprintf ( "missing secondary index %s", sFile.cstr() );
 			else
-				sphWarning ( "missing %s; secondary index(es) disabled, consider using ALTER REBUILD SECONDARY to recover the secondary index", sFile.cstr() );
+				sphWarning ( "missing %s; secondary index(es) disabled, consider using ALTER TABLE table REBUILD SECONDARY to recover the secondary index", sFile.cstr() );
 		}
 
 		return GetSecondaryIndexDefault()!=SIDefault_e::FORCE;
@@ -9464,7 +9464,7 @@ bool CSphIndex_VLN::LoadSecondaryIndex ( const CSphString & sFile )
 	{
 		if ( GetSecondaryIndexDefault()!=SIDefault_e::FORCE )
 		{
-			sphWarning ( "'%s': secondary index not loaded, %s; secondary index(es) disabled, consider using ALTER REBUILD SECONDARY to recover the secondary index", GetName(), m_sLastError.cstr() );
+			sphWarning ( "'%s': secondary index not loaded, %s; secondary index(es) disabled, consider using ALTER TABLE table REBUILD SECONDARY to recover the secondary index", GetName(), m_sLastError.cstr() );
 			m_sLastError = "";
 		}
 

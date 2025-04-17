@@ -17936,7 +17936,7 @@ bool ClientSession_c::Execute ( Str_t sQuery, RowBuffer_i & tOut )
 		return false; // do not profile this call, keep last query profile
 
 	case STMT_JOIN_CLUSTER:
-		if ( ClusterJoin ( pStmt->m_sIndex, pStmt->m_dCallOptNames, pStmt->m_dCallOptValues, pStmt->m_bClusterUpdateNodes ) )
+		if ( ClusterJoin ( pStmt->m_sCluster, pStmt->m_dCallOptNames, pStmt->m_dCallOptValues, pStmt->m_bClusterUpdateNodes ) )
 			tOut.Ok();
 		else
 		{
@@ -17945,7 +17945,7 @@ bool ClientSession_c::Execute ( Str_t sQuery, RowBuffer_i & tOut )
 		}
 		return true;
 	case STMT_CLUSTER_CREATE:
-		if ( ClusterCreate ( pStmt->m_sIndex, pStmt->m_dCallOptNames, pStmt->m_dCallOptValues ) )
+		if ( ClusterCreate ( pStmt->m_sCluster, pStmt->m_dCallOptNames, pStmt->m_dCallOptValues ) )
 			tOut.Ok();
 		else
 		{
@@ -17965,7 +17965,7 @@ bool ClientSession_c::Execute ( Str_t sQuery, RowBuffer_i & tOut )
 	case STMT_CLUSTER_ALTER_ADD:
 	case STMT_CLUSTER_ALTER_DROP:
 		m_tLastMeta = CSphQueryResultMeta();
-		if ( ClusterAlter ( pStmt->m_sCluster, pStmt->m_sIndex, ( eStmt==STMT_CLUSTER_ALTER_ADD ), m_tLastMeta.m_sError ) )
+		if ( ClusterAlter ( pStmt->m_sCluster, pStmt->m_dStringSubkeys, ( eStmt==STMT_CLUSTER_ALTER_ADD ), m_tLastMeta.m_sError ) )
 			tOut.Ok ( 0, m_tLastMeta.m_sWarning.IsEmpty() ? 0 : 1 );
 		else
 			tOut.Error ( m_tLastMeta.m_sError.cstr() );

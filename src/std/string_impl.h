@@ -319,7 +319,7 @@ inline bool CSphString::operator<( const CSphString& b ) const
 inline void CSphString::Unquote()
 {
 	int l = Length();
-	if ( l && m_sValue[0] == '\'' && m_sValue[l - 1] == '\'' )
+	if ( l>1 && m_sValue[0] == '\'' && m_sValue[l - 1] == '\'' )
 	{
 		memmove ( m_sValue, m_sValue + 1, l - 2 );
 		m_sValue[l - 2] = '\0';

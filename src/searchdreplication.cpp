@@ -2009,9 +2009,8 @@ static bool ClusterAddCheckDistLocals ( const StrVec_t & dLocals, const CSphStri
 }
 
 // cluster ALTER statement
-bool ClusterAlter ( const CSphString & sCluster, const CSphString & sIndexes, bool bAdd, CSphString & sError )
+bool ClusterAlter ( const CSphString & sCluster, StrVec_t& dIndexes, bool bAdd, CSphString & sError )
 {
-	StrVec_t dIndexes = SplitIndexes ( sIndexes );
 	dIndexes.Uniq();
 
 	Threads::ScopedCoroMutex_t tClusterLock { g_tClusterOpsLock };

@@ -7,10 +7,7 @@ export INSTANCE=2
 ––– output –––
 ––– block: ../base/replication/start-searchd-precach –––
 ––– input –––
-manticore-load --quiet --json --port=1306 \
---init="CREATE TABLE local_table1 (id BIGINT, username TEXT, status UINT, s STRING) min_infix_len='2' expand_keywords='1'" \
---load="INSERT INTO local_table1 (id, username, status, s) VALUES (<increment>, '<text/10/30>', <int/1/100>, '<text/5/15>')" \
---batch-size=1000 --threads=4 --total=10000
+manticore-load --quiet --json --port=1306 --init="CREATE TABLE local_table1 (id BIGINT, username TEXT, status UINT, s STRING) min_infix_len='2' expand_keywords='1'" --load="INSERT INTO local_table1 (id, username, status, s) VALUES (<increment>, '<text/10/30>', <int/1/100>, '<text/5/15>')" --batch-size=1000 --threads=4 --total=10000
 ––– output –––
 {
 "threads": %{NUMBER},
@@ -33,10 +30,7 @@ manticore-load --quiet --json --port=1306 \
 }
 }
 ––– input –––
-manticore-load --quiet --json --port=2306 \
---init="CREATE TABLE local_table2 (id BIGINT, username TEXT, status UINT, s STRING) min_infix_len='2' expand_keywords='1'" \
---load="INSERT INTO local_table2 (id, username, status, s) VALUES (<increment>, '<text/10/30>', <int/1/100>, '<text/10/12>')" \
---batch-size=1000 --threads=4 --total=10000
+manticore-load --quiet --json --port=2306 --init="CREATE TABLE local_table2 (id BIGINT, username TEXT, status UINT, s STRING) min_infix_len='2' expand_keywords='1'" --load="INSERT INTO local_table2 (id, username, status, s) VALUES (<increment>, '<text/10/30>', <int/1/100>, '<text/10/12>')" --batch-size=1000 --threads=4 --total=10000
 ––– output –––
 {
 "threads": %{NUMBER},

@@ -17936,7 +17936,7 @@ bool ClientSession_c::Execute ( Str_t sQuery, RowBuffer_i & tOut )
 		return false; // do not profile this call, keep last query profile
 
 	case STMT_JOIN_CLUSTER:
-		if ( ClusterJoin ( pStmt->m_sIndex, pStmt->m_dCallOptNames, pStmt->m_dCallOptValues, pStmt->m_bClusterUpdateNodes ) )
+		if ( ClusterJoin ( pStmt->m_sCluster, pStmt->m_dCallOptNames, pStmt->m_dCallOptValues, pStmt->m_bClusterUpdateNodes ) )
 			tOut.Ok();
 		else
 		{
@@ -17945,7 +17945,7 @@ bool ClientSession_c::Execute ( Str_t sQuery, RowBuffer_i & tOut )
 		}
 		return true;
 	case STMT_CLUSTER_CREATE:
-		if ( ClusterCreate ( pStmt->m_sIndex, pStmt->m_dCallOptNames, pStmt->m_dCallOptValues ) )
+		if ( ClusterCreate ( pStmt->m_sCluster, pStmt->m_dCallOptNames, pStmt->m_dCallOptValues ) )
 			tOut.Ok();
 		else
 		{

@@ -520,7 +520,7 @@ create_cluster:
 		{
 			SqlStmt_t & tStmt = *pParser->m_pStmt;
 			tStmt.m_eStmt = STMT_CLUSTER_CREATE;
-			pParser->ToString ( tStmt.m_sIndex, $3 );
+			pParser->ToString ( tStmt.m_sCluster, $3 );
 		}
 	;
 
@@ -529,13 +529,13 @@ join_cluster:
 		{
 			SqlStmt_t & tStmt = *pParser->m_pStmt;
 			tStmt.m_eStmt = STMT_JOIN_CLUSTER;
-			pParser->ToString ( tStmt.m_sIndex, $3 );
+			pParser->ToString ( tStmt.m_sCluster, $3 );
 		}
 	| TOK_JOIN TOK_CLUSTER ident TOK_AT TOK_QUOTED_STRING cluster_opts_list
 		{
 			SqlStmt_t & tStmt = *pParser->m_pStmt;
 			tStmt.m_eStmt = STMT_JOIN_CLUSTER;
-			pParser->ToString ( tStmt.m_sIndex, $3 );
+			pParser->ToString ( tStmt.m_sCluster, $3 );
 			pParser->JoinClusterAt ( $5 );
 		}
 	;

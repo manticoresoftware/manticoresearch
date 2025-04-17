@@ -325,6 +325,19 @@ bool SqlParserTraits_c::SetTableForOptions ( const SqlNode_t & tNode )
 	return true;
 }
 
+bool SqlParserTraits_c::NumIsSaturated ( const SqlNode_t& tNode )
+{
+	const auto uLimit = (uint64_t)LLONG_MAX + (tNode.m_bNegative ? 1ULL : 0ULL);
+	if ( tNode.m_uValue > uLimit )
+	{
+		assert ( m_pParseError );
+		const char* szSign = tNode.m_bNegative?"-":"";
+		m_pParseError->SetSprintf ( "number %s" UINT64_FMT " is out of range [-9223372036854775808..9223372036854775807]", szSign, tNode.m_uValue );
+		return true;
+	}
+	return false;
+}
+
 //////////////////////////////////////////////////////////////////////////
 
 enum class Option_e : BYTE;

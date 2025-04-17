@@ -350,16 +350,16 @@ When working with document IDs, it's important to know that they are stored inte
 
 For example, let's create a table and insert some values around 2^63:
 ```sql
-mysql> create table t(id_text string)
+mysql> create table t(id_text string);
 Query OK, 0 rows affected (0.01 sec)
 
-mysql> insert into t values(9223372036854775807, '2 ^ 63 - 1'),(9223372036854775808, '2 ^ 63')
+mysql> insert into t values(9223372036854775807, '2 ^ 63 - 1'),(9223372036854775808, '2 ^ 63');
 Query OK, 2 rows affected (0.00 sec)
 ```
 
 Some IDs appear as negative numbers in the results because they exceed 2^63-1. However, using `UINT64(id)` can reveal their actual unsigned values:
 ```sql
-mysql> select *, uint64(id) from t
+mysql> select *, uint64(id) from t;
 +----------------------+------------+---------------------+
 | id                   | id_text    | uint64(id)          |
 +----------------------+------------+---------------------+
@@ -372,7 +372,7 @@ mysql> select *, uint64(id) from t
 
 For querying documents with IDs less than 2^63, you can use the unsigned value directly:
 ```sql
-mysql> select * from t where id = 9223372036854775807
+mysql> select * from t where id = 9223372036854775807;
 +---------------------+------------+
 | id                  | id_text    |
 +---------------------+------------+
@@ -384,7 +384,7 @@ mysql> select * from t where id = 9223372036854775807
 
 However, for IDs starting from 2^63, you need to use the signed value:
 ```sql
-mysql> select * from t where id = -9223372036854775808
+mysql> select * from t where id = -9223372036854775808;
 +----------------------+---------+
 | id                   | id_text |
 +----------------------+---------+
@@ -394,16 +394,17 @@ mysql> select * from t where id = -9223372036854775808
 --- 1 out of 1 results in 0ms ---
 ```
 
-If you use an unsigned value instead, you might get incorrect results:
+If you use an unsigned value instead, you will get error:
 ```sql
-mysql> select * from t where id = 9223372036854775808
-+---------------------+------------+
-| id                  | id_text    |
-+---------------------+------------+
-| 9223372036854775807 | 2 ^ 63 - 1 |
-+---------------------+------------+
-1 row in set (0.00 sec)
---- 1 out of 1 results in 0ms ---
+mysql> select * from t where id = 9223372036854775808;
+ERROR 1064 (42000): number 9223372036854775808 is out of range [-9223372036854775808..9223372036854775807]
+```
+
+Value which are not fit in 64 bits will fire similar error:
+
+```sql
+mysql> select * from t where id = -9223372036854775809;
+ERROR 1064 (42000): number -9223372036854775809 is out of range [-9223372036854775808..9223372036854775807]
 ```
 
 ## Character data types
@@ -2786,4 +2787,3 @@ table tbl {
 ```
 
 <!-- end -->
-<!-- proofread -->

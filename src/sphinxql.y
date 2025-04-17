@@ -763,12 +763,16 @@ filter_item:
 			CSphFilterSettings * pFilter = pParser->AddValuesFilter ( $1 );
 			if ( !pFilter )
 				YYERROR;
+			if ( pParser->NumIsSaturated ($3) )
+				YYERROR;
 			pFilter->m_dValues.Add ( $3.GetValueInt() );
 		}
 	| expr_ident TOK_NE bool_or_integer_value
 		{
 			CSphFilterSettings * pFilter = pParser->AddValuesFilter ( $1 );
 			if ( !pFilter )
+				YYERROR;
+			if ( pParser->NumIsSaturated ($3) )
 				YYERROR;
 			pFilter->m_dValues.Add ( $3.GetValueInt() );
 			pFilter->m_bExclude = true;
@@ -946,12 +950,16 @@ filter_item:
 			CSphFilterSettings * pFilter = pParser->AddValuesFilter ( $1 );
 			if ( !pFilter )
 				YYERROR;
+			if ( pParser->NumIsSaturated ($3) )
+				YYERROR;
 			pFilter->m_dValues.Add ( $3.GetValueInt() );
 		}
 	| const_int TOK_NE const_int
 		{
 			CSphFilterSettings * pFilter = pParser->AddValuesFilter ( $1 );
 			if ( !pFilter )
+				YYERROR;
+			if ( pParser->NumIsSaturated ($3) )
 				YYERROR;
 			pFilter->m_dValues.Add ( $3.GetValueInt() );
 			pFilter->m_bExclude = true;
@@ -1613,7 +1621,7 @@ set_string_value:
 bool_or_integer_value:
 	TOK_TRUE			{ $$.SetValueInt(1); }
 	| TOK_FALSE			{ $$.SetValueInt(0); }
-	| const_int			{ $$.SetValueInt ( $1.GetValueInt() ); }
+	| const_int			{ $$ = $1; }
 	;
 
 ident_or_string_or_num_or_nulls:

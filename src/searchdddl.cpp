@@ -78,6 +78,8 @@ public:
 	void	JoinClusterAt ( const SqlNode_t & tAt );
 
 	void	AddInsval ( CSphVector<SqlInsert_t> & dVec, const SqlNode_t & tNode );
+	CSphString	GetTableName ( const SqlNode_t& tName ) const noexcept;
+	CSphString	GetTableName ( const SqlNode_t& tDb, const SqlNode_t& tName ) const noexcept;
 
 private:
 	CSphString		m_sError;
@@ -504,6 +506,20 @@ void DdlParser_c::AddInsval ( CSphVector<SqlInsert_t> & dVec, const SqlNode_t & 
 	if ( tIns.m_iType==TOK_QUOTED_STRING )
 		tIns.m_sVal = ToStringUnescape ( tNode );
 	tIns.m_pVals = CloneMvaVecPtr ( tNode.m_iValues );
+}
+
+CSphString DdlParser_c::GetTableName ( const SqlNode_t& tName ) const noexcept
+{
+	return GetString ( tName ).ToLower();
+}
+
+CSphString DdlParser_c::GetTableName ( const SqlNode_t& tDb, const SqlNode_t& tName ) const noexcept
+{
+	CSphString sName;
+	StringBuilder_c sBuild;
+	sBuild << GetStrt ( tDb ) << '.' << GetTableName ( tName );
+	sBuild.MoveTo ( sName );
+	return sName;
 }
 
 

@@ -8,13 +8,6 @@
 #pragma GCC diagnostic ignored "-Wfree-nonheap-object"
 #pragma GCC diagnostic ignored "-Wunused-but-set-variable"
 #endif
-
-#define TRACK_BOUNDS(_res,_left,_right) \
-	_res = _left; \
-	if ( _res.m_iStart>0 && pParser->m_pBuf[_res.m_iStart-1]=='`' ) \
-		_res.m_iStart--; \
-	_res.m_iEnd = _right.m_iEnd; \
-	_res.m_iType = 0;
 %}
 
 %lex-param		{ DdlParser_c * pParser }
@@ -108,7 +101,7 @@ statement:
 	| import_table
 	;
 
-tablename:
+tableident:
 	TOK_TABLEIDENT
 	| TOK_MODIFY
     | TOK_TYPE
@@ -116,7 +109,7 @@ tablename:
 	;
 
 ident:
-	tablename
+	tableident
 	| TOK_IDENT
     ;
 
@@ -139,12 +132,27 @@ attribute_type:
 	| TOK_FLOAT_VECTOR { $$.SetValueInt ( SPH_ATTR_FLOAT_VECTOR ); }
 	;
 
+
+tablename:
+	tableident
+		{
+			pParser->m_pStmt->m_dStringSubkeys.Add( pParser->GetTableName ( $1 ));
+		}
+	| tableident '.' tableident
+		{
+			auto sDbName = pParser->GetTableName ( $1 );
+			if ( sDbName!="system" )
+			{
+				yyerror ( pParser, SphSprintf ( "unexpected db '%s', only 'system' allowed", sDbName.cstr() ).cstr() );
+				YYERROR;
+			}
+			pParser->m_pStmt->m_dStringSubkeys.Add( pParser->GetTableName ( $1, $3 ));
+		}
+	;
+
 table_or_tables:
 	tablename
 	| table_or_tables ',' tablename
-		{
-			TRACK_BOUNDS ( $$, $1, $3 );
-		}
 	;
 	
 //////////////////////////////////////////////////////////////////////////
@@ -156,7 +164,7 @@ alter_col_type:
 	;
 
 alter_table_name:
-	TOK_ALTER TOK_TABLE tablename		{ pParser->ToString ( pParser->m_pStmt->m_sIndex, $3 );	}
+	TOK_ALTER TOK_TABLE tablename		{ pParser->m_pStmt->m_sIndex = pParser->m_pStmt->m_dStringSubkeys.Last(); }
 	;
 
 alter_cluster_ident:
@@ -198,7 +206,7 @@ alter:
 		{
 			SqlStmt_t & tStmt = *pParser->m_pStmt;
 			tStmt.m_eStmt = STMT_ALTER_RECONFIGURE;
-			pParser->ToString ( tStmt.m_sIndex, $3 );
+			pParser->m_pStmt->m_sIndex = pParser->m_pStmt->m_dStringSubkeys.Last();
 		}
 	| alter_table_name TOK_RECONFIGURE
 		{
@@ -225,13 +233,11 @@ alter:
 		{
 			SqlStmt_t & tStmt = *pParser->m_pStmt;
 			tStmt.m_eStmt = STMT_CLUSTER_ALTER_ADD;
-			pParser->ToString ( tStmt.m_sIndex, $3 );
 		}
 	| alter_cluster_ident TOK_DROP table_or_tables
 		{
 			SqlStmt_t & tStmt = *pParser->m_pStmt;
 			tStmt.m_eStmt = STMT_CLUSTER_ALTER_DROP;
-			pParser->ToString ( tStmt.m_sIndex, $3 );
 		}
 	| alter_cluster_ident TOK_UPDATE tablename
 		{
@@ -396,8 +402,7 @@ create_table:
 		{
 			SqlStmt_t & tStmt = *pParser->m_pStmt;
 			tStmt.m_eStmt = STMT_CREATE_TABLE;
-			pParser->ToString ( tStmt.m_sIndex, $4 );
-			tStmt.m_sIndex.ToLower();
+			tStmt.m_sIndex = tStmt.m_dStringSubkeys.Last();
 		}
 	;
 
@@ -406,10 +411,8 @@ create_table_like:
 		{
 			SqlStmt_t & tStmt = *pParser->m_pStmt;
 			tStmt.m_eStmt = STMT_CREATE_TABLE_LIKE;
-			pParser->ToString ( tStmt.m_sIndex, $4 );
-			pParser->ToString ( tStmt.m_tCreateTable.m_sLike, $6 );
-			tStmt.m_sIndex.ToLower();
-			tStmt.m_tCreateTable.m_sLike.ToLower();
+			tStmt.m_sIndex = tStmt.m_dStringSubkeys.First();
+			tStmt.m_tCreateTable.m_sLike = tStmt.m_dStringSubkeys.Last();
 		}
 	;
 
@@ -418,8 +421,7 @@ drop_table:
 		{
 			SqlStmt_t & tStmt = *pParser->m_pStmt;
 			tStmt.m_eStmt = STMT_DROP_TABLE;
-			pParser->ToString ( tStmt.m_sIndex, $4 );
-			tStmt.m_sIndex.ToLower();
+			tStmt.m_sIndex = tStmt.m_dStringSubkeys.Last();
 		}
 	;
 
@@ -545,7 +547,7 @@ import_table:
 		{
 			SqlStmt_t & tStmt = *pParser->m_pStmt;
 			tStmt.m_eStmt = STMT_IMPORT_TABLE;
-			pParser->ToString ( tStmt.m_sIndex, $3 );
+			tStmt.m_sIndex = tStmt.m_dStringSubkeys.Last();
 			tStmt.m_sStringParam = pParser->ToStringUnescape ( $5 );
 		}
 	;

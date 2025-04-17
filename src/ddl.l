@@ -114,7 +114,6 @@
 
 [a-zA-Z_][a-zA-Z0-9_]*          { YYSTOREBOUNDS; return TOK_TABLEIDENT; }
 `[a-zA-Z0-9_]+`	                { YYSTOREBOUNDS; ++lvalp->m_iStart; --lvalp->m_iEnd; return TOK_TABLEIDENT; } // allow `123xyz` table names
-SYSTEM\.[a-zA-Z_][a-zA-Z0-9_]*	{ YYSTOREBOUNDS; return TOK_TABLEIDENT; }
 
 [@a-zA-Z_][a-zA-Z0-9_]* 		{ YYSTOREBOUNDS; return TOK_IDENT; }
 `[@a-zA-Z0-9_][a-zA-Z0-9_]*`	{ YYSTOREBOUNDS; ++lvalp->m_iStart; --lvalp->m_iEnd; return TOK_IDENT; } // allow `123xyz` column names

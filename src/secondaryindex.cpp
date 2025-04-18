@@ -926,12 +926,12 @@ static void CheckHint ( const IndexHint_t & tHint, const CSphFilterSettings & tF
 				sWarning.SetSprintf ( "hint error: secondary index disabled for '%s' (attribute was updated?)", tHint.m_sIndex.cstr() );
 				dWarnings.Add(sWarning);
 			}
-			else if ( pAttr->m_eAttrType==SPH_ATTR_STRING && tCtx.m_tQuery.m_eCollation!=SPH_COLLATION_DEFAULT )
+			else if ( pAttr && pAttr->m_eAttrType==SPH_ATTR_STRING && tCtx.m_tQuery.m_eCollation!=SPH_COLLATION_DEFAULT )
 			{
 				sWarning.SetSprintf ( "hint error: unsupported collation; secondary index disabled for '%s'", tHint.m_sIndex.cstr() );
 				dWarnings.Add(sWarning);
 			}
-			else if ( pAttr->m_pExpr.Ptr() && !pAttr->IsColumnarExpr() ) 
+			else if ( pAttr &&  pAttr->m_pExpr.Ptr() && !pAttr->IsColumnarExpr() ) 
 			{
 				sWarning.SetSprintf ( "hint error: attribute is an expression; secondary index disabled for '%s'", tHint.m_sIndex.cstr() );
 				dWarnings.Add(sWarning);

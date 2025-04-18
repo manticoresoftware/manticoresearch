@@ -39,6 +39,8 @@
     * [⪢ Creating a distributed table](Creating_a_table/Creating_a_distributed_table/Creating_a_distributed_table.md)
         * [• Creating a local distributed table](Creating_a_table/Creating_a_distributed_table/Creating_a_local_distributed_table.md)
         * [• Remote tables](Creating_a_table/Creating_a_distributed_table/Remote_tables.md)
+    * [⪢ Creating a sharded table](Creating_a_table/Creating_a_sharded_table/Creating_a_sharded_table.md)
+        * [• Table sharding: current limitations](Creating_a_table/Creating_a_sharded_table/Table_sharding_current_limitations.md)
 * [• Listing tables](Listing_tables.md)
 * [• Deleting a table](Deleting_a_table.md)
 * [• Emptying a table](Emptying_a_table.md)

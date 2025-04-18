@@ -286,6 +286,40 @@ res =searchApi.search({"table":"films","limit":0,"aggs":{"release_year":{"terms"
  'took': 0}
 
 ```
+
+<!-- request Python-asyncio -->
+``` python
+res = await searchApi.search({"table":"films","limit":0,"aggs":{"release_year":{"terms":{"field":"release_year","size":100}}}})
+```
+<!-- response Python-asyncio -->
+``` python
+{'aggregations': {u'release_year': {u'buckets': [{u'doc_count': 99,
+                                                  u'key': 2009},
+                                                 {u'doc_count': 102,
+                                                  u'key': 2008},
+                                                 {u'doc_count': 93,
+                                                  u'key': 2007},
+                                                 {u'doc_count': 103,
+                                                  u'key': 2006},
+                                                 {u'doc_count': 93,
+                                                  u'key': 2005},
+                                                 {u'doc_count': 108,
+                                                  u'key': 2004},
+                                                 {u'doc_count': 106,
+                                                  u'key': 2003},
+                                                 {u'doc_count': 108,
+                                                  u'key': 2002},
+                                                 {u'doc_count': 91,
+                                                  u'key': 2001},
+                                                 {u'doc_count': 97,
+                                                  u'key': 2000}]}},
+ 'hits': {'hits': [], 'max_score': None, 'total': 1000},
+ 'profile': None,
+ 'timed_out': False,
+ 'took': 0}
+
+```
+
 <!-- request Javascript -->
 ``` javascript
 res = await searchApi.search({"table":"films","limit":0,"aggs":{"release_year":{"terms":{"field":"release_year","size":100}}}});
@@ -340,6 +374,43 @@ var searchResponse = searchApi.Search(searchRequest);
 ```
 <!-- response C# -->
 ``` clike
+class SearchResponse {
+    took: 0
+    timedOut: false
+    aggregations: {release_year={buckets=[{key=2009, doc_count=99}, {key=2008, doc_count=102}, {key=2007, doc_count=93}, {key=2006, doc_count=103}, {key=2005, doc_count=93}, {key=2004, doc_count=108}, {key=2003, doc_count=106}, {key=2002, doc_count=108}, {key=2001, doc_count=91}, {key=2000, doc_count=97}]}}
+    hits: class SearchResponseHits {
+        maxScore: null
+        total: 1000
+        hits: []
+    }
+    profile: null
+}
+```
+
+<!-- request Rust -->
+``` rust
+let query = SearchQuery::new();
+let aggTerms1 = AggTerms::new {
+    fields: "release_year".to_string(),
+    size: Some(100),
+};
+let agg1 = Aggregation {
+    terms: Some(Box::new(aggTerms1)),
+    ..Default::default(),
+};
+let mut aggs = HashMap::new();
+aggs.insert("release_year".to_string(), agg1); 
+
+let search_req = SearchRequest {
+    table: "films".to_string(),
+    query: Some(Box::new(query)),
+    aggs: serde_json::json!(aggs),
+    ..Default::default(),
+};
+let search_res = search_api.search(search_req).await;
+```
+<!-- response Rust -->
+``` rust
 class SearchResponse {
     took: 0
     timedOut: false
@@ -877,6 +948,28 @@ res =searchApi.search({"table":"shoes","limit":0,"aggs":{"sizes":{"terms":{"fiel
 ``` javascript
 res = await searchApi.search({"table":"shoes","limit":0,"aggs":{"sizes":{"terms":{"field":"sizes","size":100}}}});
 ```
+
+<!-- request Python-asyncio -->
+``` python
+res = await searchApi.search({"table":"shoes","limit":0,"aggs":{"sizes":{"terms":{"field":"sizes","size":100}}}})
+```
+<!-- response Python-asyncio -->
+``` python
+{'aggregations': {u'sizes': {u'buckets': [{u'doc_count': 2, u'key': 43},
+                                          {u'doc_count': 2, u'key': 42},
+                                          {u'doc_count': 2, u'key': 41},
+                                          {u'doc_count': 1, u'key': 40}]}},
+ 'hits': {'hits': [], 'max_score': None, 'total': 3},
+ 'profile': None,
+ 'timed_out': False,
+ 'took': 0}
+```
+
+<!-- request Javascript -->
+``` javascript
+res = await searchApi.search({"table":"shoes","limit":0,"aggs":{"sizes":{"terms":{"field":"sizes","size":100}}}});
+```
+
 <!-- response Javascript -->
 ``` javascript
 {"took":0,"timed_out":false,"aggregations":{"sizes":{"buckets":[{"key":43,"doc_count":2},{"key":42,"doc_count":2},{"key":41,"doc_count":2},{"key":40,"doc_count":1}]}},"hits":{"total":3,"hits":[]}}
@@ -942,6 +1035,43 @@ class SearchResponse {
 }
 
 ```
+
+<!-- request Rust -->
+``` rust
+let query = SearchQuery::new();
+let aggTerms1 = AggTerms::new {
+    fields: "release_year".to_string(),
+    size: Some(100),
+};
+let agg1 = Aggregation {
+    terms: Some(Box::new(aggTerms1)),
+    ..Default::default(),
+};
+let mut aggs = HashMap::new();
+aggs.insert("release_year".to_string(), agg1); 
+
+let search_req = SearchRequest {
+    table: "films".to_string(),
+    query: Some(Box::new(query)),
+    aggs: serde_json::json!(aggs),
+    limit: serde_json::json!(0),
+    ..Default::default(),
+};
+let search_res = search_api.search(search_req).await;
+```
+<!-- response Rust -->
+``` rust
+class SearchResponse {
+    took: 0
+    timedOut: false
+    aggregations: {release_year={buckets=[{key=43, doc_count=2}, {key=42, doc_count=2}, {key=41, doc_count=2}, {key=40, doc_count=1}]}}
+    hits: class SearchResponseHits {
+        maxScore: null
+        total: 3
+        hits: []
+    }
+    profile: null
+}
 
 <!-- request TypeScript -->
 ``` typescript
@@ -1155,6 +1285,23 @@ res =searchApi.search({"table":"products","limit":0,"aggs":{"color":{"terms":{"f
  'timed_out': False,
  'took': 0}
 ```
+
+```
+<!-- request Python-asyncio -->
+``` python
+res = await searchApi.search({"table":"products","limit":0,"aggs":{"color":{"terms":{"field":"meta.color","size":100}}}})
+```
+<!-- response Python-asyncio -->
+``` python
+{'aggregations': {u'color': {u'buckets': [{u'doc_count': 1,
+                                           u'key': u'green'},
+                                          {u'doc_count': 2, u'key': u'red'}]}},
+ 'hits': {'hits': [], 'max_score': None, 'total': 3},
+ 'profile': None,
+ 'timed_out': False,
+ 'took': 0}
+```
+
 <!-- request Javascript -->
 ``` javascript
 res = await searchApi.search({"table":"products","limit":0,"aggs":{"color":{"terms":{"field":"meta.color","size":100}}}});
@@ -1211,6 +1358,45 @@ var searchResponse = searchApi.Search(searchRequest);
 ```
 <!-- response C# -->
 ``` clike
+class SearchResponse {
+    took: 0
+    timedOut: false
+    aggregations: {color={buckets=[{key=green, doc_count=1}, {key=red, doc_count=2}]}}
+    hits: class SearchResponseHits {
+        maxScore: null
+        total: 3
+        hits: []
+    }
+    profile: null
+}
+
+```
+
+<!-- request Rust -->
+``` rust
+let query = SearchQuery::new();
+let aggTerms1 = AggTerms::new {
+    fields: "meta.color".to_string(),
+    size: Some(100),
+};
+let agg1 = Aggregation {
+    terms: Some(Box::new(aggTerms1)),
+    ..Default::default(),
+};
+let mut aggs = HashMap::new();
+aggs.insert("color".to_string(), agg1); 
+
+let search_req = SearchRequest {
+    table: "products".to_string(),
+    query: Some(Box::new(query)),
+    aggs: serde_json::json!(aggs),
+    limit: serde_json::json!(0),
+    ..Default::default(),
+};
+let search_res = search_api.search(search_req).await;
+```
+<!-- response Rust -->
+``` rust
 class SearchResponse {
     took: 0
     timedOut: false

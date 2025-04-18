@@ -218,6 +218,36 @@ indexApi.insert({"table" : "products",  "doc" : {"query" : "@title shoes","filte
  'table': 'products',
  'result': 'created'}
 ```
+
+<!-- intro -->
+Python-asyncio
+<!-- request Python-asyncio -->
+
+```python
+await utilsApi.sql('create table products(title text, color string) type=\'pq\'')
+await indexApi.insert({"table" : "products", "doc" : {"query" : "@title bag" }})
+await indexApi.insert({"table" : "products",  "doc" : {"query" : "@title shoes", "filters": "color='red'" }})
+await indexApi.insert({"table" : "products",  "doc" : {"query" : "@title shoes","filters": "color IN ('blue', 'green')" }})
+```
+<!-- response Python-asyncio -->
+``` python
+{'created': True,
+ 'found': None,
+ 'id': 0,
+ 'table': 'products',
+ 'result': 'created'}
+{'created': True,
+ 'found': None,
+ 'id': 0,
+ 'table': 'products',
+ 'result': 'created'}
+{'created': True,
+ 'found': None,
+ 'id': 0,
+ 'table': 'products',
+ 'result': 'created'}
+```
+
 <!-- intro -->
 javascript
 <!-- request javascript -->
@@ -239,7 +269,7 @@ java
 <!-- request Java -->
 
 ```java
-utilsApi.sql("create table products(title text, color string) type='pq'");
+utilsApi.sql("create table products(title text, color string) type='pq'", true);
 doc = new HashMap<String,Object>(){{
     put("query", "@title bag");
 }};
@@ -295,7 +325,7 @@ C#
 <!-- request C# -->
 
 ```clike
-utilsApi.Sql("create table products(title text, color string) type='pq'");
+utilsApi.Sql("create table products(title text, color string) type='pq'", true);
 
 Dictionary<string, Object> doc = new Dictionary<string, Object>(); 
 doc.Add("query", "@title bag");
@@ -316,6 +346,58 @@ indexApi.Insert(newdoc);
 ```
 <!-- response C# -->
 ``` clike
+{total=0, error="", warning=""}
+
+class SuccessResponse {
+    index: products
+    id: 0
+    created: true
+    result: created
+    found: null
+}
+class SuccessResponse {
+    index: products
+    id: 0
+    created: true
+    result: created
+    found: null
+}
+class SuccessResponse {
+    index: products
+    id: 0
+    created: true
+    result: created
+    found: null
+}
+
+```
+
+<!-- intro -->
+Rust
+<!-- request Rust -->
+
+```rust
+utils_api.sql("create table products(title text, color string) type='pq'", Some(true)).await;
+
+let mut doc1 = HashMap::new();
+doc1.insert("query".to_string(), serde_json::json!("@title bag"));
+let insert_req1 = InsertDocumentRequest::new("products".to_string(), serde_json::json!(doc1));
+index_api.insert(insert_req1).await;
+
+let mut doc2 = HashMap::new();
+doc2.insert("query".to_string(), serde_json::json!("@title shoes"));
+doc2.insert("filters".to_string(), serde_json::json!("color='red'"));
+let insert_req2 = InsertDocumentRequest::new("products".to_string(), serde_json::json!(doc2));
+index_api.insert(insert_req2).await;
+
+let mut doc3 = HashMap::new();
+doc3.insert("query".to_string(), serde_json::json!("@title bag"));
+doc3.insert("filters".to_string(), serde_json::json!("color IN ('blue', 'green')"));
+let insert_req3 = InsertDocumentRequest::new("products".to_string(), serde_json::json!(doc3));
+index_api.insert(insert_req3).await;
+```
+<!-- response Rust -->
+``` rust
 {total=0, error="", warning=""}
 
 class SuccessResponse {
@@ -583,6 +665,28 @@ searchApi.percolate('products',{"query":{"percolate":{"document":{"title":"What 
  'timed_out': False,
  'took': 0}
 ```
+
+<!-- intro -->
+Python-asyncio
+<!-- request Python-asyncio -->
+
+```python
+await searchApi.percolate('products',{"query":{"percolate":{"document":{"title":"What a nice bag"}}}})
+```
+<!-- response Python-asyncio -->
+``` python
+{'hits': {'hits': [{u'_id': u'2811025403043381480',
+                    u'table': u'products',
+                    u'_score': u'1',
+                    u'_source': {u'query': {u'ql': u'@title bag'}},
+                    u'_type': u'doc',
+                    u'fields': {u'_percolator_document_slot': [1]}}],
+          'total': 1},
+ 'profile': None,
+ 'timed_out': False,
+ 'took': 0}
+```
+
 <!-- intro -->
 javascript
 <!-- request javascript -->
@@ -664,6 +768,35 @@ searchApi.Percolate("test_pq",percolateRequest);
 ```
 <!-- response C# -->
 ``` clike
+class SearchResponse {
+    took: 0
+    timedOut: false
+    hits: class SearchResponseHits {
+        total: 1
+        maxScore: 1
+        hits: [{_index=products, _type=doc, _id=2811045522851234109, _score=1, _source={query={ql=@title bag}}, fields={_percolator_document_slot=[1]}}]
+        aggregations: null
+    }
+    profile: null
+}
+
+```
+
+<!-- intro -->
+Rust
+<!-- request Rust -->
+
+```rust
+let mut percolate_doc_fields = HashMap::new();
+percolate_doc_fileds.insert("title".to_string(), "what a nice bag");
+let mut percolate_doc = HashMap::new();
+percolate_doc.insert("document".to_string(), percolate_doc_fields); 
+let percolate_query = PercolateRequestQuery::new(serde_json::json!(percolate_doc));
+let percolate_req = PercolateRequest::new(percolate_query); 
+search_api.percolate("test_pq", percolate_req).await;
+```
+<!-- response Rust -->
+``` rust
 class SearchResponse {
     took: 0
     timedOut: false
@@ -902,6 +1035,28 @@ searchApi.percolate('products',{"query":{"percolate":{"document":{"title":"What 
  'timed_out': False,
  'took': 0}
 ```
+
+<!-- intro -->
+Python-asyncio
+<!-- request Python-asyncio -->
+
+```python
+await searchApi.percolate('products',{"query":{"percolate":{"document":{"title":"What a nice bag"}}}})
+```
+<!-- response Python-asyncio -->
+``` python
+{'hits': {'hits': [{u'_id': u'2811025403043381480',
+                    u'table': u'products',
+                    u'_score': u'1',
+                    u'_source': {u'query': {u'ql': u'@title bag'}},
+                    u'_type': u'doc',
+                    u'fields': {u'_percolator_document_slot': [1]}}],
+          'total': 1},
+ 'profile': None,
+ 'timed_out': False,
+ 'took': 0}
+```
+
 <!-- intro -->
 javascript
 <!-- request javascript -->
@@ -984,6 +1139,36 @@ searchApi.Percolate("test_pq",percolateRequest);
 ```
 <!-- response C# -->
 ``` clike
+class SearchResponse {
+    took: 0
+    timedOut: false
+    hits: class SearchResponseHits {
+        total: 1
+        maxScore: 1
+        hits: [{_index=products, _type=doc, _id=2811045522851234109, _score=1, _source={query={ql=@title bag}}, fields={_percolator_document_slot=[1]}}]
+        aggregations: null
+    }
+    profile: null
+}
+
+```
+
+<!-- intro -->
+Rust
+<!-- request Rust -->
+
+```rust
+let mut percolate_doc_fields = HashMap::new();
+percolate_doc_fileds.insert("title".to_string(), "what a nice bag");
+let mut percolate_doc = HashMap::new();
+percolate_doc.insert("document".to_string(), percolate_doc_fields); 
+let percolate_query = PercolateRequestQuery::new(serde_json::json!(percolate_doc));
+let percolate_req = PercolateRequest::new(percolate_query); 
+search_api.percolate("test_pq", percolate_req).await;
+
+```
+<!-- response Rust -->
+``` rust
 class SearchResponse {
     took: 0
     timedOut: false
@@ -1296,6 +1481,35 @@ searchApi.percolate('products',{"query":{"percolate":{"documents":[{"title":"nic
  'took': 0}
 
 ```
+
+<!-- intro -->
+Python-asyncio
+<!-- request Python-asyncio -->
+
+```python
+await searchApi.percolate('products',{"query":{"percolate":{"documents":[{"title":"nice pair of shoes","color":"blue"},{"title":"beautiful bag"}]}}})
+```
+<!-- response Python-asyncio -->
+``` python
+{'hits': {'hits': [{u'_id': u'2811025403043381494',
+                    u'table': u'products',
+                    u'_score': u'1',
+                    u'_source': {u'query': {u'ql': u'@title bag'}},
+                    u'_type': u'doc',
+                    u'fields': {u'_percolator_document_slot': [2]}},
+                   {u'_id': u'2811025403043381496',
+                    u'table': u'products',
+                    u'_score': u'1',
+                    u'_source': {u'query': {u'ql': u'@title shoes'}},
+                    u'_type': u'doc',
+                    u'fields': {u'_percolator_document_slot': [1]}}],
+          'total': 2},
+ 'profile': None,
+ 'timed_out': False,
+ 'took': 0}
+
+```
+
 <!-- intro -->
 javascript
 <!-- request javascript -->
@@ -1408,6 +1622,39 @@ searchApi.Percolate("products",percolateRequest);
 ```
 <!-- response C# -->
 ``` clike
+class SearchResponse {
+    took: 0
+    timedOut: false
+    hits: class SearchResponseHits {
+        total: 2
+        maxScore: 1
+        hits: [{_index=products, _type=doc, _id=2811045522851234133, _score=1, _source={query={ql=@title bag}}, fields={_percolator_document_slot=[2]}}, {_index=products, _type=doc, _id=2811045522851234135, _score=1, _source={query={ql=@title shoes}}, fields={_percolator_document_slot=[1]}}]
+        aggregations: null
+    }
+    profile: null
+}
+
+```
+
+<!-- intro -->
+Rust
+<!-- request Rust -->
+
+```rust
+let mut percolate_doc_fields1 = HashMap::new();
+percolate_doc_fields1.insert("title".to_string(), "nice pair of shoes");
+percolate_doc_fields1.insert("color".to_string(), "blue");
+let mut percolate_doc_fields2 = HashMap::new();
+percolate_doc_fields2.insert("title".to_string(), "beautiful bag");
+let mut percolate_doc_fields_list: [HashMap; 2] = [percolate_doc_fields1, percolate_doc_fields2];
+let mut percolate_doc = HashMap::new();
+percolate_doc.insert("documents".to_string(), percolate_doc_fields_list); 
+let percolate_query = PercolateRequestQuery::new(serde_json::json!(percolate_doc));
+let percolate_req = PercolateRequest::new(percolate_query); 
+search_api.percolate("products", percolate_req).await;
+```
+<!-- response Rust -->
+``` rust
 class SearchResponse {
     took: 0
     timedOut: false
@@ -1733,6 +1980,35 @@ searchApi.percolate('products',{"query":{"percolate":{"documents":[{"title":"nic
  'took': 0}
 
 ```
+
+<!-- intro -->
+Python-asyncio
+<!-- request Python-asyncio -->
+
+```python
+await searchApi.percolate('products',{"query":{"percolate":{"documents":[{"title":"nice pair of shoes","color":"blue"},{"title":"beautiful bag"}]}}})
+```
+<!-- response Python-asyncio -->
+``` python
+{'hits': {'hits': [{u'_id': u'2811025403043381494',
+                    u'table': u'products',
+                    u'_score': u'1',
+                    u'_source': {u'query': {u'ql': u'@title bag'}},
+                    u'_type': u'doc',
+                    u'fields': {u'_percolator_document_slot': [2]}},
+                   {u'_id': u'2811025403043381496',
+                    u'table': u'products',
+                    u'_score': u'1',
+                    u'_source': {u'query': {u'ql': u'@title shoes'}},
+                    u'_type': u'doc',
+                    u'fields': {u'_percolator_document_slot': [1]}}],
+          'total': 2},
+ 'profile': None,
+ 'timed_out': False,
+ 'took': 0}
+
+```
+
 <!-- intro -->
 javascript
 <!-- request javascript -->
@@ -1843,6 +2119,39 @@ searchApi.Percolate("products",percolateRequest);
 ```
 <!-- response C# -->
 ``` clike
+class SearchResponse {
+    took: 0
+    timedOut: false
+    hits: class SearchResponseHits {
+        total: 2
+        maxScore: 1
+        hits: [{_index=products, _type=doc, _id=2811045522851234133, _score=1, _source={query={ql=@title bag}}, fields={_percolator_document_slot=[2]}}, {_index=products, _type=doc, _id=2811045522851234135, _score=1, _source={query={ql=@title shoes}}, fields={_percolator_document_slot=[1]}}]
+        aggregations: null
+    }
+    profile: null
+}
+
+```
+
+<!-- intro -->
+Rust
+<!-- request Rust -->
+
+```rust
+let mut percolate_doc_fields1 = HashMap::new();
+percolate_doc_fields1.insert("title".to_string(), "nice pair of shoes");
+percolate_doc_fields1.insert("color".to_string(), "blue");
+let mut percolate_doc_fields2 = HashMap::new();
+percolate_doc_fields2.insert("title".to_string(), "beautiful bag");
+let mut percolate_doc_fields_list: [HashMap; 2] = [percolate_doc_fields1, percolate_doc_fields2];
+let mut percolate_doc = HashMap::new();
+percolate_doc.insert("documents".to_string(), percolate_doc_fields_list); 
+let percolate_query = PercolateRequestQuery::new(serde_json::json!(percolate_doc));
+let percolate_req = PercolateRequest::new(percolate_query); 
+search_api.percolate("products", percolate_req).await;
+```
+<!-- response Rust -->
+``` rust
 class SearchResponse {
     took: 0
     timedOut: false
@@ -2195,6 +2504,32 @@ searchApi.search({"table":"pq","query":{"match_all":{}}})
  'timed_out': False,
  'took': 0}
 ```
+
+<!-- intro -->
+Python-asyncio
+<!-- request Python-asyncio -->
+
+```python
+await searchApi.search({"table":"pq","query":{"match_all":{}}})
+```
+<!-- response Python-asyncio -->
+``` python
+{'hits': {'hits': [{u'_id': u'2811025403043381501',
+                    u'_score': 1,
+                    u'_source': {u'filters': u"gid>=10",
+                                 u'query': u'filter test',
+                                 u'tags': u''}},
+                   {u'_id': u'2811025403043381502',
+                    u'_score': 1,
+                    u'_source': {u'filters': u"gid>=10 OR gid<=3",
+                                 u'query': u'angry',
+                                 u'tags': u''}}],
+          'total': 2},
+ 'profile': None,
+ 'timed_out': False,
+ 'took': 0}
+```
+
 <!-- intro -->
 javascript
 <!-- request javascript -->
@@ -2283,6 +2618,36 @@ SearchResponse searchResponse = searchApi.Search(searchRequest);
 ```
 <!-- response C# -->
 ``` clike
+
+class SearchResponse {
+    took: 0
+    timedOut: false
+    hits: class SearchResponseHits {
+        total: 2
+        maxScore: null
+        hits: [{_id=2811045522851233962, _score=1, _source={filters=gid>=10, query=filter test, tags=}}, {_id=2811045522851233951, _score=1, _source={filters=gid>=10 OR gid<=3, query=angry,tags=}}]
+        aggregations: null
+    }
+    profile: null
+}
+
+```
+
+<!-- intro -->
+Rust
+<!-- request Rust -->
+
+```rust
+let query = SearchQuery::new();
+let search_req = SearchRequest {
+    table: "pq".to_string(),
+    query: Some(Box::new(query)),
+    ..Default::default(),
+};
+let search_res = search_api.search(search_req).await;
+```
+<!-- response Rust -->
+``` rust
 
 class SearchResponse {
     took: 0
@@ -2574,6 +2939,34 @@ searchApi.percolate('pq',{"percolate":{"documents":[{"title":"angry test","gid":
  'timed_out': False,
  'took': 0}
 ```
+
+<!-- intro -->
+Python-asyncio
+<!-- request Python-asyncio -->
+
+```python
+await searchApi.percolate('pq',{"percolate":{"documents":[{"title":"angry test","gid":3},{"title":"filter test doc2","gid":13}]}})
+```
+<!-- response Python-asyncio -->
+``` python
+{'hits': {'hits': [{u'_id': u'2811025403043381480',
+                    u'table': u'pq',
+                    u'_score': u'1',
+                    u'_source': {u'query': {u'ql': u'angry'},u'tags':u'',u'filters':u"gid>=10 OR gid<=3"},
+                    u'_type': u'doc',
+                    u'fields': {u'_percolator_document_slot': [1]}},
+                    {u'_id': u'2811025403043381501',
+                    u'table': u'pq',
+                    u'_score': u'1',
+                    u'_source': {u'query': {u'ql': u'filter test'},u'tags':u'',u'filters':u"gid>=10"},
+                    u'_type': u'doc',
+                    u'fields': {u'_percolator_document_slot': [1]}}],
+          'total': 2},
+ 'profile': None,
+ 'timed_out': False,
+ 'took': 0}
+```
+
 <!-- intro -->
 javascript
 <!-- request javascript -->
@@ -2658,6 +3051,40 @@ searchApi.Percolate("pq",percolateRequest);
 ```
 <!-- response C# -->
 ``` clike
+class SearchResponse {
+    took: 10
+    timedOut: false
+    hits: class SearchResponseHits {
+        total: 2
+        maxScore: 1
+        hits: [{_index=pq, _type=doc, _id=2811045522851234165, _score=1, _source={query={ql=@title angry}}, fields={_percolator_document_slot=[1]}}, {_index=pq, _type=doc, _id=2811045522851234166, _score=1, _source={query={ql=@title filter test doc2}}, fields={_percolator_document_slot=[2]}}]
+        aggregations: null
+    }
+    profile: null
+}
+
+```
+
+<!-- intro -->
+Rust
+<!-- request Rust -->
+
+```rust
+let mut percolate_doc_fields1 = HashMap::new();
+percolate_doc_fields1.insert("title".to_string(), "angry test");
+percolate_doc_fields1.insert("gid".to_string(), 3);
+let mut percolate_doc_fields2 = HashMap::new();
+percolate_doc_fields2.insert("title".to_string(), "filter test doc2");
+percolate_doc_fields2.insert("gid".to_string(), 13);
+let mut percolate_doc_fields_list: [HashMap; 2] = [percolate_doc_fields1, percolate_doc_fields2];
+let mut percolate_doc = HashMap::new();
+percolate_doc.insert("documents".to_string(), percolate_doc_fields_list); 
+let percolate_query = PercolateRequestQuery::new(serde_json::json!(percolate_doc));
+let percolate_req = PercolateRequest::new(percolate_query); 
+search_api.percolate("pq", percolate_req).await;
+```
+<!-- response Rust -->
+``` rust
 class SearchResponse {
     took: 10
     timedOut: false

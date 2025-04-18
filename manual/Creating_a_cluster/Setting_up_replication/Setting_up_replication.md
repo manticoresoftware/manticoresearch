@@ -109,6 +109,17 @@ $index->deleteDocument(1);
 indexApi.insert({"cluster":"posts","table":"weekly_index","doc":{"title":"iphone case","price":19.85}})
 indexApi.delete({"cluster":"posts","table":"weekly_index","id":1})
 ```
+
+<!-- intro -->
+##### Python-asyncio:
+
+<!-- request Python-asyncio -->
+
+``` python
+await indexApi.insert({"cluster":"posts","table":"weekly_index","doc":{"title":"iphone case","price":19.85}})
+await indexApi.delete({"cluster":"posts","table":"weekly_index","id":1})
+```
+
 <!-- intro -->
 ##### Javascript:
 
@@ -148,12 +159,38 @@ indexApi.delete(deleteRequest);
 Dictionary<string, Object> doc = new Dictionary<string, Object>();
 doc.Add("title", "Crossbody Bag with Tassel");
 doc.Add("price", 19.85);
-InsertDocumentRequest newdoc = new InsertDocumentRequest(index: "weekly_index", cluster:posts, id: 1, doc: doc);
+InsertDocumentRequest newdoc = new InsertDocumentRequest(table: "weekly_index", cluster:posts, id: 1, doc: doc);
 var sqlresult = indexApi.Insert(newdoc);
 
-DeleteDocumentRequest deleteDocumentRequest = new DeleteDocumentRequest(index: "weekly_index", cluster: "posts", id: 1);
+DeleteDocumentRequest deleteDocumentRequest = new DeleteDocumentRequest(table: "weekly_index", cluster: "posts", id: 1);
 indexApi.Delete(deleteDocumentRequest);
 ```
+
+<!-- intro -->
+##### Rust:
+
+<!-- request Rust -->
+
+``` rust
+let mut doc = HashMap::new();
+doc.insert("title".to_string(), serde_json::json!("Crossbody Bag with Tassel"));
+doc.insert("price".to_string(), serde_json::json!(19.85));
+let insert_req = InsertDocumentRequest {
+    table: serde_json::json!("weekly_index"),
+    doc: serde_json::json!(doc),
+    cluster: serde_json::json!("posts"),
+    id: serde_json::json!(1),
+};
+let insert_res = index_api.insert(insert_req).await;
+
+let delete_req = DeleteDocumentRequest {
+    table: serde_json::json!("weekly_index"),
+    cluster: serde_json::json!("posts"),
+    id: serde_json::json!(1),
+};
+index_api.delete(delete_req).await;
+```
+
 <!-- end -->
 
 ## Read statements
@@ -301,6 +338,16 @@ $response = $client->cluster()->create($params);
 ```python
 utilsApi.sql('CREATE CLUSTER posts')
 ```
+
+<!-- intro -->
+##### Python-asyncio:
+
+<!-- request Python-asyncio -->
+
+```python
+await utilsApi.sql('CREATE CLUSTER posts')
+```
+
 <!-- intro -->
 ##### Javascript:
 
@@ -327,8 +374,17 @@ utilsApi.sql("CREATE CLUSTER posts");
 
 ```clike
 utilsApi.Sql("CREATE CLUSTER posts");
-
 ```
+
+<!-- intro -->
+##### Rust:
+
+<!-- request Rust -->
+
+```rust
+utils_api.sql("CREATE CLUSTER posts", Some(true)).await;
+```
+
 <!-- end -->
 
 <!-- example replication and cluster 3 -->
@@ -387,6 +443,17 @@ $response = $client->cluster()->alter($params);
 utilsApi.sql('ALTER CLUSTER posts ADD pq_title')
 utilsApi.sql('ALTER CLUSTER posts ADD pq_clicks')
 ```
+
+<!-- intro -->
+##### Python-asyncio:
+
+<!-- request Python-asyncio -->
+
+```python
+await utilsApi.sql('ALTER CLUSTER posts ADD pq_title')
+await utilsApi.sql('ALTER CLUSTER posts ADD pq_clicks')
+```
+
 <!-- intro -->
 ##### Javascript:
 
@@ -415,6 +482,16 @@ utilsApi.sql("ALTER CLUSTER posts ADD pq_clicks");
 ```clike
 utilsApi.Sql("ALTER CLUSTER posts ADD pq_title");
 utilsApi.Sql("ALTER CLUSTER posts ADD pq_clicks");
+```
+
+<!-- intro -->
+##### Rust:
+
+<!-- request Rust -->
+
+```rust
+utils_api.sql("ALTER CLUSTER posts ADD pq_title", Some(true)).await;
+utils_api.sql("ALTER CLUSTER posts ADD pq_clicks", Some(true)).await;
 ```
 
 <!-- end -->
@@ -459,6 +536,16 @@ $response = $client->cluster->join($params);
 ```python
 utilsApi.sql('JOIN CLUSTER posts AT \'192.168.1.101:9312\'')
 ```
+
+<!-- intro -->
+##### Python-asyncio:
+
+<!-- request Python-asyncio -->
+
+```python
+await utilsApi.sql('JOIN CLUSTER posts AT \'192.168.1.101:9312\'')
+```
+
 <!-- intro -->
 ##### Javascript:
 
@@ -485,6 +572,16 @@ utilsApi.sql("JOIN CLUSTER posts AT '192.168.1.101:9312'");
 
 ```clike
 utilsApi.Sql("JOIN CLUSTER posts AT '192.168.1.101:9312'");
+
+```
+
+<!-- intro -->
+##### Rust:
+
+<!-- request Rust -->
+
+```rust
+utils_api.sql("JOIN CLUSTER posts AT '192.168.1.101:9312'", Some(true)).await;
 
 ```
 <!-- end -->
@@ -534,6 +631,16 @@ $index->addDocuments([
 indexApi.insert({"cluster":"posts","table":"pq_title","id":3"doc":{"title":"test me"}})
 
 ```
+
+<!-- intro -->
+##### Python-asyncio:
+
+<!-- request Python-asyncio -->
+
+``` python
+await indexApi.insert({"cluster":"posts","table":"pq_title","id":3"doc":{"title":"test me"}})
+```
+
 <!-- intro -->
 ##### Javascript:
 
@@ -567,6 +674,23 @@ Dictionary<string, Object> doc = new Dictionary<string, Object>();
 doc.Add("title", "test me");
 InsertDocumentRequest newdoc = new InsertDocumentRequest(index: "pq_title", cluster: "posts", id: 3, doc: doc);
 var sqlresult = indexApi.Insert(newdoc);
+```
+
+<!-- intro -->
+##### Rust:
+
+<!-- request Rust -->
+
+``` rust
+let mut doc = HashMap::new();
+doc.insert("title".to_string(), serde_json::json!("test me"));
+let insert_req = InsertDocumentRequest {
+    table: serde_json::json!("pq_title"),
+    doc: serde_json::json!(doc),
+    cluster: serde_json::json!("posts"),
+    id: serde_json::json!(3),
+};
+let insert_res = index_api.insert(insert_req).await;
 ```
 <!-- end -->
 

@@ -235,6 +235,35 @@ searchApi.search({"table":"forum","query":{"query_string":"i me"},"_source":{"ex
  'took': 0}
 
 ```
+
+<!-- intro -->
+Python-asyncio
+<!-- request Python-asyncio -->
+
+```python
+await searchApi.search({"table":"forum","query":{"query_string":"i me"},"_source":{"excludes":["*"]},"limit":1,"profile":True})
+```
+<!-- response Python-asyncio -->
+``` python
+{'hits': {'hits': [{u'_id': u'100', u'_score': 2500, u'_source': {}}],
+          'total': 1},
+ 'profile': {u'query': {u'children': [{u'children': [{u'querypos': 1,
+                                                      u'type': u'KEYWORD',
+                                                      u'word': u'i'}],
+                                       u'description': u'AND(KEYWORD(i, querypos=1))',
+                                       u'type': u'AND'},
+                                      {u'children': [{u'querypos': 2,
+                                                      u'type': u'KEYWORD',
+                                                      u'word': u'me'}],
+                                       u'description': u'AND(KEYWORD(me, querypos=2))',
+                                       u'type': u'AND'}],
+                        u'description': u'AND( AND(KEYWORD(i, querypos=1)),  AND(KEYWORD(me, querypos=2)))',
+                        u'type': u'AND'}},
+ 'timed_out': False,
+ 'took': 0}
+
+```
+
 <!-- intro -->
 javascript
 <!-- request javascript -->
@@ -309,6 +338,39 @@ var searchResponse = searchApi.Search(searchRequest);
 ```
 <!-- response C# -->
 ```clike
+class SearchResponse {
+    took: 18
+    timedOut: false
+    hits: class SearchResponseHits {
+        total: 1
+        hits: [{_id=100, _score=2500, _source={}}]
+        aggregations: null
+    }
+    profile: {query={type=AND, description=AND( AND(KEYWORD(i, querypos=1)),  AND(KEYWORD(me, querypos=2))), children=[{type=AND, description=AND(KEYWORD(i, querypos=1)), children=[{type=KEYWORD, word=i, querypos=1}]}, {type=AND, description=AND(KEYWORD(me, querypos=2)), children=[{type=KEYWORD, word=me, querypos=2}]}]}}
+}
+```
+
+<!-- intro -->
+Rust
+<!-- request Rust -->
+
+```rust
+let query = SearchQuery {
+     query_string: Some(serde_json::json!("i me").into()),
+    ..Default::default()
+};
+let search_req = SearchRequest {
+    table: "forum".to_string(),
+    query: Some(Box::new(query)),
+    sort: serde_json::json!(["*"]),
+    limit: serde_json::json!(1),
+    profile: serde_json::json!(true),
+    ..Default::default(),
+};
+let search_res = search_api.search(search_req).await;
+```
+<!-- response Rust -->
+```rust
 class SearchResponse {
     took: 18
     timedOut: false
@@ -849,6 +911,40 @@ searchApi.search({"table":"forum","query":{"query_string":"@title way* @content 
  'took': 0}
 
 ```
+
+<!-- intro -->
+Python-asyncio
+<!-- request Python-asyncio -->
+
+```python
+await searchApi.search({"table":"forum","query":{"query_string":"@title way* @content hey"},"_source":{"excludes":["*"]},"limit":1,"profile":true})
+```
+<!-- response Python-asyncio -->
+``` python
+{'hits': {'hits': [{u'_id': u'2811025403043381551',
+                    u'_score': 2643,
+                    u'_source': {}}],
+          'total': 1},
+ 'profile': {u'query': {u'children': [{u'children': [{u'expanded': True,
+                                                      u'querypos': 1,
+                                                      u'type': u'KEYWORD',
+                                                      u'word': u'way*'}],
+                                       u'description': u'AND(fields=(title), KEYWORD(way*, querypos=1, expanded))',
+                                       u'fields': [u'title'],
+                                       u'type': u'AND'},
+                                      {u'children': [{u'querypos': 2,
+                                                      u'type': u'KEYWORD',
+                                                      u'word': u'hey'}],
+                                       u'description': u'AND(fields=(content), KEYWORD(hey, querypos=2))',
+                                       u'fields': [u'content'],
+                                       u'type': u'AND'}],
+                        u'description': u'AND( AND(fields=(title), KEYWORD(way*, querypos=1, expanded)),  AND(fields=(content), KEYWORD(hey, querypos=2)))',
+                        u'type': u'AND'}},
+ 'timed_out': False,
+ 'took': 0}
+
+```
+
 <!-- intro -->
 javascript
 <!-- request javascript -->
@@ -927,6 +1023,39 @@ var searchResponse = searchApi.Search(searchRequest);
 ```
 <!-- response C# -->
 ```clike
+class SearchResponse {
+    took: 18
+    timedOut: false
+    hits: class SearchResponseHits {
+        total: 1
+        hits: [{_id=2811025403043381551, _score=2643, _source={}}]
+        aggregations: null
+    }
+    profile: {query={type=AND, description=AND( AND(fields=(title), KEYWORD(way*, querypos=1, expanded)),  AND(fields=(content), KEYWORD(hey, querypos=2))), children=[{type=AND, description=AND(fields=(title), KEYWORD(way*, querypos=1, expanded)), fields=[title], children=[{type=KEYWORD, word=way*, querypos=1, expanded=true}]}, {type=AND, description=AND(fields=(content), KEYWORD(hey, querypos=2)), fields=[content], children=[{type=KEYWORD, word=hey, querypos=2}]}]}}
+}
+```
+
+<!-- intro -->
+Rust
+<!-- request Rust -->
+
+```rust
+let query = SearchQuery {
+     query_string: Some(serde_json::json!("@title way* @content hey").into()),
+    ..Default::default()
+};
+let search_req = SearchRequest {
+    table: "forum".to_string(),
+    query: Some(Box::new(query)),
+    sort: serde_json::json!(["*"]),
+    limit: serde_json::json!(1),
+    profile: serde_json::json!(true),
+    ..Default::default(),
+};
+let search_res = search_api.search(search_req).await;
+```
+<!-- response Rust -->
+```rust
 class SearchResponse {
     took: 18
     timedOut: false

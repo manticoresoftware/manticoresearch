@@ -47,6 +47,21 @@ indexApi = manticoresearch.IndexApi(client)
 searchApi = manticoresearch.searchApi(client)
 utilsApi = manticoresearch.UtilsApi(client)
 ```
+
+<!-- intro -->
+##### Python-asyncio
+<!-- request Python-asyncio -->
+```python
+import manticoresearch
+config = manticoresearch.Configuration(
+    host = "http://127.0.0.1:9308"
+)
+async with manticoresearch.ApiClient(config) as client:
+    indexApi = manticoresearch.IndexApi(client)
+    searchApi = manticoresearch.searchApi(client)
+    utilsApi = manticoresearch.UtilsApi(client)
+```
+
 <!-- intro -->
 ##### Javascript
 <!-- request Javascript -->
@@ -91,6 +106,28 @@ string basePath = "http://127.0.0.1:9308";
 IndexApi indexApi = new IndexApi(basePath);
 SearchApi searchApi = new UtilsApi(basePath);
 UtilsApi utilsApi = new UtilsApi(basePath);
+```
+
+<!-- intro -->
+##### Rust
+<!-- request Rust -->
+```rust
+use std::sync::Arc;
+use manticoresearch::{
+    apis::{
+        {configuration::Configuration,IndexApi,IndexApiClient,SearchApi,SearchApiClient,UtilsApi,UtilsApiClient}
+    },
+};
+
+async fn maticore_connect {
+	let configuration = Configuration {
+	    base_path: "http://127.0.0.1:9308".to_owned(),
+	    ..Default::default(),
+	};
+    let api_config = Arc::new(configuration);
+    let utils_api = UtilsApiClient::new(api_config.clone());
+    let index_api = IndexApiClient::new(api_config.clone());
+    let search_api = SearchApiClient::new(api_config.clone());
 ```
 
 <!-- intro -->

@@ -59,6 +59,16 @@ $index->create([
 ```python
 utilsApi.sql('CREATE TABLE products(title text, price float) html_strip = \'1\'')
 ```
+
+<!-- intro -->
+##### Python-asyncio:
+
+<!-- request Python-asyncio -->
+
+```python
+await utilsApi.sql('CREATE TABLE products(title text, price float) html_strip = \'1\'')
+```
+
 <!-- intro -->
 ##### Javascript:
 
@@ -80,6 +90,15 @@ utilsApi.sql("CREATE TABLE products(title text, price float) html_strip = '1'");
 <!-- request C# -->
 ```clike
 utilsApi.Sql("CREATE TABLE products(title text, price float) html_strip = '1'");
+```
+
+<!-- intro -->
+##### Rust:
+
+<!-- request Rust -->
+
+```rust
+utils_api.sql("CREATE TABLE products(title text, price float) html_strip = '1'", Some(true)).await;
 ```
 
 <!-- request CONFIG -->
@@ -145,6 +164,16 @@ $index->create([
 ```python
 utilsApi.sql('CREATE TABLE products(title text, price float) html_index_attrs = \'img=alt,title; a=title;\' html_strip = \'1\'')
 ```
+
+<!-- intro -->
+##### Python-asyncio:
+
+<!-- request Python-asyncio -->
+
+```python
+await utilsApi.sql('CREATE TABLE products(title text, price float) html_index_attrs = \'img=alt,title; a=title;\' html_strip = \'1\'')
+```
+
 <!-- intro -->
 ##### Javascript:
 
@@ -166,6 +195,15 @@ utilsApi.sql("CREATE TABLE products(title text, price float) html_index_attrs = 
 <!-- request C# -->
 ```clike
 utilsApi.Sql("CREATE TABLE products(title text, price float) html_index_attrs = \'img=alt,title; a=title;\' html_strip = '1'");
+```
+
+<!-- intro -->
+##### Rust:
+
+<!-- request Rust -->
+
+```rust
+utils_api.sql("CREATE TABLE products(title text, price float) html_index_attrs = \'img=alt,title; a=title;\' html_strip = '1'", Some(true)).await;
 ```
 
 <!-- request CONFIG -->
@@ -235,6 +273,16 @@ $index->create([
 ```python
 utilsApi.sql('CREATE TABLE products(title text, price float) html_remove_elements = \'style, script\' html_strip = \'1\'')
 ```
+
+<!-- intro -->
+##### Python-asyncio:
+
+<!-- request Python-asyncio -->
+
+```python
+await utilsApi.sql('CREATE TABLE products(title text, price float) html_remove_elements = \'style, script\' html_strip = \'1\'')
+```
+
 <!-- intro -->
 ##### Javascript:
 
@@ -256,6 +304,15 @@ utilsApi.sql("CREATE TABLE products(title text, price float) html_remove_element
 <!-- request C# -->
 ```clike
 utilsApi.Sql("CREATE TABLE products(title text, price float) html_remove_elements = \'style, script\' html_strip = '1'");
+```
+
+<!-- intro -->
+##### Rust:
+
+<!-- request Rust -->
+
+```rust
+utils_api.sql("CREATE TABLE products(title text, price float) html_remove_elements = \'style, script\' html_strip = '1'", Some(true)).await;
 ```
 
 <!-- request CONFIG -->
@@ -338,6 +395,16 @@ $index->create([
 ```python
 utilsApi.sql('CREATE TABLE products(title text, price float) index_sp = \'1\' html_strip = \'1\'')
 ```
+
+<!-- intro -->
+##### Python-asyncio:
+
+<!-- request Python-asyncio -->
+
+```python
+await utilsApi.sql('CREATE TABLE products(title text, price float) index_sp = \'1\' html_strip = \'1\'')
+```
+
 <!-- intro -->
 ##### Javascript:
 
@@ -351,14 +418,23 @@ res = await utilsApi.sql('CREATE TABLE products(title text, price float) index_s
 ##### Java:
 <!-- request Java -->
 ```java
-utilsApi.sql("CREATE TABLE products(title text, price float) index_sp = \'1\' html_strip = '1'");
+utilsApi.sql("CREATE TABLE products(title text, price float) index_sp = \'1\' html_strip = '1'", true);
 ```
 
 <!-- intro -->
 ##### C#:
 <!-- request C# -->
 ```clike
-utilsApi.Sql("CREATE TABLE products(title text, price float) index_sp = \'1\' html_strip = '1'");
+utilsApi.Sql("CREATE TABLE products(title text, price float) index_sp = \'1\' html_strip = '1'", true);
+```
+
+<!-- intro -->
+##### Rust:
+
+<!-- request Rust -->
+
+```rust
+utils_api.sql("CREATE TABLE products(title text, price float) index_sp = \'1\' html_strip = '1'", Some(true)).await;
 ```
 
 <!-- request CONFIG -->
@@ -431,6 +507,16 @@ $index->create([
 ```python
 utilsApi.sql('CREATE TABLE products(title text, price float) index_zones = \'h, th, title\' html_strip = \'1\'')
 ```
+
+<!-- intro -->
+##### Python-asyncio:
+
+<!-- request Python-asyncio -->
+
+```python
+await utilsApi.sql('CREATE TABLE products(title text, price float) index_zones = \'h, th, title\' html_strip = \'1\'')
+```
+
 <!-- intro -->
 ##### Javascript:
 
@@ -444,14 +530,23 @@ res = await utilsApi.sql('CREATE TABLE products(title text, price float) index_z
 ##### Java:
 <!-- request Java -->
 ```java
-utilsApi.sql("CREATE TABLE products(title text, price float) index_zones = 'h, th, title' html_strip = '1'");
+utilsApi.sql("CREATE TABLE products(title text, price float) index_zones = 'h, th, title' html_strip = '1'", true);
 ```
 
 <!-- intro -->
 ##### C#:
 <!-- request C# -->
 ```clike
-utilsApi.Sql("CREATE TABLE products(title text, price float) index_zones = 'h, th, title' html_strip = '1'");
+utilsApi.Sql("CREATE TABLE products(title text, price float) index_zones = 'h, th, title' html_strip = '1'", true);
+```
+
+<!-- intro -->
+##### Rust:
+
+<!-- request Rust -->
+
+```rust
+utils_api.sql("CREATE TABLE products(title text, price float) index_zones = 'h, th, title' html_strip = '1'", Some(true)).await;
 ```
 
 <!-- request CONFIG -->

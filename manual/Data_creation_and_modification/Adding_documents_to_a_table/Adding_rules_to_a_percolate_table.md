@@ -98,6 +98,14 @@ indexApi.insert(newstoredquery)
 ```
 
 <!-- intro -->
+##### Python-asyncio
+<!-- request Python-asyncio -->
+```python
+newstoredquery ={"table" : "test_pq", "id" : 2, "doc" : {"query": {"ql": "@title shoes"},"filters": "price > 5","tags": ["Loius Vuitton"]}}
+await indexApi.insert(newstoredquery)
+```
+
+<!-- intro -->
 ##### Javascript
 <!-- request Javascript -->
 ```javascript
@@ -133,6 +141,23 @@ InsertDocumentRequest newdoc = new InsertDocumentRequest(index: "test_pq", id: 2
 indexApi.Insert(newdoc);
 ```
 
+<!-- intro -->
+##### Rust:
+
+<!-- request Rust -->
+
+``` rust
+let mut pq_doc = HashMap::new();
+pq_doc.insert("q1".to_string(), serde_json::json!("@title shoes"));
+pq_doc.insert("filters".to_string(), serde_json::json!("price>5"));
+pq_doc.insert("tags".to_string(), serde_json::json!(["Louis Vitton"]));
+
+let mut doc = HashMap::new();
+pq_doc.insert("query".to_string(), serde_json::json!(pq_doc));
+
+let insert_req = InsertDocumentRequest::new("test_pq".to_string(), serde_json::json!(doc));
+let insert_res = index_api.insert(insert_req).await;
+```
 <!-- end -->
 
 <!-- example noid -->
@@ -252,6 +277,24 @@ indexApi.insert(store_query)
  'table': 'test_pq',
  'result': 'created'}
 ```
+
+<!-- intro -->
+##### Python-asyncio
+<!-- request Python-asyncio -->
+```python
+indexApi = api = manticoresearch.IndexApi(client)
+newstoredquery ={"table" : "test_pq",   "doc" : {"query": {"ql": "@title shoes"},"filters": "price > 5","tags": ["Loius Vuitton"]}}
+await indexApi.insert(store_query)
+```
+<!-- response Python-asyncio -->
+```python
+{'created': True,
+ 'found': None,
+ 'id': 1657843905795719198,
+ 'table': 'test_pq',
+ 'result': 'created'}
+```
+
 <!-- intro -->
 ##### Javascript
 <!-- request Javascript -->
@@ -294,6 +337,23 @@ InsertDocumentRequest newdoc = new InsertDocumentRequest(index: "test_pq", doc: 
 indexApi.Insert(newdoc);
 ```
 
+<!-- intro -->
+##### Rust:
+
+<!-- request Rust -->
+
+``` rust
+let mut pq_doc = HashMap::new();
+pq_doc.insert("q1".to_string(), serde_json::json!("@title shoes"));
+pq_doc.insert("filters".to_string(), serde_json::json!("price>5"));
+pq_doc.insert("tags".to_string(), serde_json::json!(["Louis Vitton"]));
+
+let mut doc = HashMap::new();
+pq_doc.insert("query".to_string(), serde_json::json!(pq_doc));
+
+let insert_req = InsertDocumentRequest::new("test_pq".to_string(), serde_json::json!(doc));
+let insert_res = index_api.insert(insert_req).await;
+```
 <!-- end -->
 
 <!-- example noschema -->

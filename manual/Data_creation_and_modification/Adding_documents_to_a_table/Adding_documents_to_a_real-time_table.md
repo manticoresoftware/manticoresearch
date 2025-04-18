@@ -187,6 +187,18 @@ indexApi.insert({"table" : "test", "id" : 1, "doc" : {"title" : "Crossbody Bag w
 indexApi.insert({"table" : "test", "id" : 2, "doc" : {"title" : "Crossbody Bag with Tassel"}})
 indexApi.insert({"table" : "test", "id" : 0, "doc" : {{"title" : "Yellow bag"}})
 ```
+
+<!-- intro -->
+##### Python-asyncio:
+
+<!-- request Python-asyncio -->
+
+``` python
+await indexApi.insert({"table" : "test", "id" : 1, "doc" : {"title" : "Crossbody Bag with Tassel", "price" : 19.85}})
+await indexApi.insert({"table" : "test", "id" : 2, "doc" : {"title" : "Crossbody Bag with Tassel"}})
+await indexApi.insert({"table" : "test", "id" : 0, "doc" : {{"title" : "Yellow bag"}})
+```
+
 <!-- intro -->
 ##### Javascript:
 
@@ -250,6 +262,44 @@ doc.Add("title", "Yellow bag");
 newdoc = new InsertDocumentRequest(index: "products", id: 0, doc: doc);
 sqlresult = indexApi.Insert(newdoc);
 
+```
+
+<!-- intro -->
+##### Rust:
+
+<!-- request Rust -->
+
+``` rust
+let mut doc = HashMap::new();
+doc.insert("title".to_string(), serde_json::json!("Crossbody Bag with Tassel"));
+doc.insert("price".to_string(), serde_json::json!(19.85));
+let mut insert_req = InsertDocumentRequest {
+    table: serde_json::json!("products"),
+    doc: serde_json::json!(doc),
+    id: serde_json::json!(1),
+    ..Default::default(),
+};
+let mut insert_res = index_api.insert(insert_req).await;
+
+doc = HashMap::new();
+doc.insert("title".to_string(), serde_json::json!("Crossbody Bag with Tassel"));
+insert_req = InsertDocumentRequest {
+    table: serde_json::json!("products"),
+    doc: serde_json::json!(doc),
+    id: serde_json::json!(2),
+    ..Default::default(),
+};
+insert_res = index_api.insert(insert_req).await;
+
+doc = HashMap::new();
+doc.insert("title".to_string(), serde_json::json!("Tellow bag"));
+insert_req = InsertDocumentRequest {
+    table: serde_json::json!("products"),
+    doc: serde_json::json!(doc),
+    id: serde_json::json!(0),
+    ..Default::default(),
+};
+insert_res = index_api.insert(insert_req).await;
 ```
 
 <!-- end -->
@@ -462,6 +512,16 @@ $index->addDocuments([
 ```python
 indexApi.insert({"table" : "products", "id" : 0, "doc" : {"title" : "Yellow bag"}})
 ```
+
+<!-- intro -->
+##### Python-asyncio:
+
+<!-- request Python-asyncio -->
+
+```python
+await indexApi.insert({"table" : "products", "id" : 0, "doc" : {"title" : "Yellow bag"}})
+```
+
 <!-- intro -->
 
 ##### Javascript:
@@ -497,6 +557,24 @@ doc.Add("title", "Yellow bag");
 InsertDocumentRequest newdoc = new InsertDocumentRequest(index: "products", id: 0, doc: doc);
 var sqlresult = indexApi.Insert(newdoc);
 ```
+
+<!-- intro -->
+##### Rust:
+
+<!-- request Rust -->
+
+``` rust
+let doc = HashMap::new();
+doc.insert("title".to_string(), serde_json::json!("Yellow bag"));
+let insert_req = InsertDocumentRequest {
+    table: serde_json::json!("products"),
+    doc: serde_json::json!(doc),
+    id: serde_json::json!(0),
+    ..Default::default(),
+};
+let insert_res = index_api.insert(insert_req).await;
+```
+
 <!-- end -->
 
 <!-- example call -->
@@ -763,6 +841,19 @@ docs = [ \
 res = indexApi.bulk('\n'.join(map(json.dumps,docs)))
 ```
 
+<!-- intro -->
+##### Python=asyncio:
+
+<!-- request Python-asyncio -->
+
+```python
+docs = [ \
+    {"insert": {"table" : "products", "id" : 1, "doc" : {"title" : "Crossbody Bag with Tassel", "price" : 19.85}}}, \
+    {"insert": {"table" : "products", "id" : 2, "doc" : {"title" : "microfiber sheet set", "price" : 19.99}}}, \
+    {"insert": {"table" : "products", "id" : 3, "doc" : {"title" : "CPet Hair Remover Glove", "price" : 7.99}}}
+]
+res = await indexApi.bulk('\n'.join(map(json.dumps,docs)))
+```
 
 <!-- intro -->
 ##### Javascript:
@@ -799,6 +890,18 @@ string body = "{\"insert\": {\"index\" : \"products\", \"id\" : 1, \"doc\" : {\"
     "{\"insert\": {\"index\" : \"products\", \"id\" : 4, \"doc\" : {\"title\" : \"microfiber sheet set\", \"price\" : 19.99}}}"+"\n"+
     "{\"insert\": {\"index\" : \"products\", \"id\" : 5, \"doc\" : {\"title\" : \"CPet Hair Remover Glove\", \"price\" : 7.99}}}"+"\n";
 BulkResponse bulkresult = indexApi.Bulk(string.Join("\n", docs));
+```
+
+<!-- intro -->
+##### Rust:
+
+<!-- request Rust -->
+``` rust
+let bulk_body = r#"{"insert": "index" : "products", "id" : 1, "doc" : {"title" : "Crossbody Bag with Tassel", "price" : 19.85}}}
+    {"insert": {"index" : "products", "id" : 4, "doc" : {"title" : "microfiber sheet set", "price" : 19.99}}}
+    {"insert": {"index" : "products", "id" : 5, "doc" : {"title" : "CPet Hair Remover Glove", "price" : 7.99}}}         
+"#;
+index_api.bulk(bulk_body).await;
 ```
 
 <!-- end -->
@@ -874,6 +977,15 @@ indexApi.insert({"table" : "products", "id" : 0, "doc" : {"title" : "Yellow bag"
 ```
 
 <!-- intro -->
+##### Python=asyncio:
+
+<!-- request Python-asyncio -->
+
+```python
+await indexApi.insert({"table" : "products", "id" : 0, "doc" : {"title" : "Yellow bag","sizes":[40,41,42,43]}})
+```
+
+<!-- intro -->
 ##### Javascript:
 
 <!-- request Javascript -->
@@ -910,6 +1022,20 @@ doc.Add("sizes", new List<Object> {40,41,42,43});
 InsertDocumentRequest newdoc = new InsertDocumentRequest(index: "products", id: 0, doc: doc);
 var sqlresult = indexApi.Insert(newdoc);
 ```
+
+<!-- intro -->
+##### Rust:
+
+<!-- request Rust -->
+
+``` rust
+let mut doc = HashMap::new();
+doc.insert("title".to_string(), serde_json::json!("Yellow bag"));
+doc.insert("sizes".to_string(), serde_json::json!([40,41,42,43]));
+let insert_req = InsertDocumentRequest::new("products".to_string(), serde_json::json!(doc));
+let insert_res = index_api.insert(insert_req).await;
+```
+
 <!-- end -->
 
 <!-- example JSON_insert -->
@@ -1005,6 +1131,16 @@ $index->addDocument(
 indexApi = api = manticoresearch.IndexApi(client)
 indexApi.insert({"table" : "products", "id" : 0, "doc" : {"title" : "Yellow bag","meta":'{"size": 41, "color": "red"}'}})
 ```
+
+<!-- intro -->
+##### Python-asyncio:
+
+<!-- request Python-asyncio -->
+``` python
+indexApi = api = manticoresearch.IndexApi(client)
+await indexApi.insert({"table" : "products", "id" : 0, "doc" : {"title" : "Yellow bag","meta":'{"size": 41, "color": "red"}'}})
+```
+
 <!-- intro -->
 ##### Javascript:
 
@@ -1046,6 +1182,24 @@ doc.Add("title", "Yellow bag");
 doc.Add("meta", meta);
 InsertDocumentRequest newdoc = new InsertDocumentRequest(index: "products", id: 0, doc: doc);
 var sqlresult = indexApi.Insert(newdoc);
+```
+
+<!-- intro -->
+##### Rust:
+
+<!-- request Rust -->
+
+``` rust
+let mut meta = HashMap::new();
+metadoc.insert("size".to_string(), serde_json::json!(41));
+meta.insert("color".to_string(), serde_json::json!("red"));
+
+let mut doc = HashMap::new();
+doc.insert("title".to_string(), serde_json::json!("Yellow bag"));
+doc.insert("meta".to_string(), serde_json::json!(meta));
+
+let insert_req = InsertDocumentRequest::new("products".to_string(), serde_json::json!(doc));
+let insert_res = index_api.insert(insert_req).await;
 ```
 
 <!-- end -->

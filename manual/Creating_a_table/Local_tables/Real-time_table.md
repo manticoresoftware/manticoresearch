@@ -71,6 +71,13 @@ utilsApi.sql('CREATE TABLE forum(title text, price float)')
 ```
 
 <!-- intro -->
+##### Python-asyncio:
+<!-- request Python-asyncio -->
+```python
+await utilsApi.sql('CREATE TABLE forum(title text, price float)')
+```
+
+<!-- intro -->
 ##### Javascript:
 
 <!-- request Javascript -->
@@ -90,6 +97,15 @@ utilsApi.sql("CREATE TABLE forum(title text, price float)");
 <!-- request C# -->
 ```clike
 utilsApi.Sql("CREATE TABLE forum(title text, price float)");
+```
+
+<!-- intro -->
+##### Rust:
+
+<!-- request Rust -->
+
+```rust
+utils_api.sql("CREATE TABLE forum(title text, price float)", Some(true)).await;
 ```
 
 <!-- intro -->

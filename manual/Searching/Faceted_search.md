@@ -394,6 +394,83 @@ res =searchApi.search({"table":"facetdemo","query":{"match_all":{}},"limit":5,"a
 ```
 
 <!-- intro -->
+##### Python-asyncio:
+
+<!-- request Python-asyncio -->
+```python
+res = await searchApi.search({"table":"facetdemo","query":{"match_all":{}},"limit":5,"aggs":{"group_property":{"terms":{"field":"price",}},"group_brand_id":{"terms":{"field":"brand_id"}}}})
+```
+<!-- response Python-asyncio -->
+```python
+{'aggregations': {u'group_brand_id': {u'buckets': [{u'doc_count': 1019,
+                                                    u'key': 10},
+                                                   {u'doc_count': 954,
+                                                    u'key': 9},
+                                                   {u'doc_count': 1021,
+                                                    u'key': 8},
+                                                   {u'doc_count': 1011,
+                                                    u'key': 7},
+                                                   {u'doc_count': 997,
+                                                    u'key': 6}]},
+                  u'group_property': {u'buckets': [{u'doc_count': 11,
+                                                    u'key': 1000},
+                                                   {u'doc_count': 12,
+                                                    u'key': 999},
+                                                   {u'doc_count': 7,
+                                                    u'key': 998},
+                                                   {u'doc_count': 14,
+                                                    u'key': 997},
+                                                   {u'doc_count': 8,
+                                                    u'key': 996}]}},
+ 'hits': {'hits': [{u'_id': u'1',
+                    u'_score': 1,
+                    u'_source': {u'brand_id': 10,
+                                 u'brand_name': u'Brand Ten',
+                                 u'categories': [10],
+                                 u'price': 197,
+                                 u'property': u'Six',
+                                 u'title': u'Product Eight One'}},
+                   {u'_id': u'2',
+                    u'_score': 1,
+                    u'_source': {u'brand_id': 6,
+                                 u'brand_name': u'Brand Six',
+                                 u'categories': [12, 13, 14],
+                                 u'price': 671,
+                                 u'property': u'Four',
+                                 u'title': u'Product Nine Seven'}},
+                   {u'_id': u'3',
+                    u'_score': 1,
+                    u'_source': {u'brand_id': 3,
+                                 u'brand_name': u'Brand Three',
+                                 u'categories': [13, 14, 15],
+                                 u'price': 92,
+                                 u'property': u'Six',
+                                 u'title': u'Product Five Four'}},
+                   {u'_id': u'4',
+                    u'_score': 1,
+                    u'_source': {u'brand_id': 10,
+                                 u'brand_name': u'Brand Ten',
+                                 u'categories': [11],
+                                 u'price': 713,
+                                 u'property': u'Five',
+                                 u'title': u'Product Eight Nine'}},
+                   {u'_id': u'5',
+                    u'_score': 1,
+                    u'_source': {u'brand_id': 7,
+                                 u'brand_name': u'Brand Seven',
+                                 u'categories': [11, 12, 13],
+                                 u'price': 805,
+                                 u'property': u'Two',
+                                 u'title': u'Product Ten Three'}}],
+          'max_score': None,
+          'total': 10000},
+ 'profile': None,
+ 'timed_out': False,
+ 'took': 4}
+
+```
+
+<!-- intro -->
 ##### Javascript:
 
 <!-- request Javascript -->
@@ -469,6 +546,50 @@ var searchResponse = searchApi.Search(searchRequest);
 ```
 <!-- response C# -->
 ```clike
+class SearchResponse {
+    took: 0
+    timedOut: false
+    aggregations: {group_property={buckets=[{key=1000, doc_count=11}, {key=999, doc_count=12}, {key=998, doc_count=7}, {key=997, doc_count=14}, {key=996, doc_count=8}]}, group_brand_id={buckets=[{key=10, doc_count=1019}, {key=9, doc_count=954}, {key=8, doc_count=1021}, {key=7, doc_count=1011}, {key=6, doc_count=997}]}}
+    hits: class SearchResponseHits {
+        maxScore: null
+        total: 10000
+        hits: [{_id=1, _score=1, _source={price=197, brand_id=10, brand_name=Brand Ten, categories=[10], title=Product Eight One, property=Six}}, {_id=2, _score=1, _source={price=671, brand_id=6, brand_name=Brand Six, categories=[12, 13, 14], title=Product Nine Seven, property=Four}}, {_id=3, _score=1, _source={price=92, brand_id=3, brand_name=Brand Three, categories=[13, 14, 15], title=Product Five Four, property=Six}}, {_id=4, _score=1, _source={price=713, brand_id=10, brand_name=Brand Ten, categories=[11], title=Product Eight Nine, property=Five}}, {_id=5, _score=1, _source={price=805, brand_id=7, brand_name=Brand Seven, categories=[11, 12, 13], title=Product Ten Three, property=Two}}]
+    }
+    profile: null
+}
+```
+
+<!-- intro -->
+##### Rust:
+
+<!-- request Rust -->
+```rust
+let query = SearchQuery::new();
+let aggTerms1 = AggTerms::new("price");
+let agg1 = Aggregation {
+    terms: Some(Box::new(aggTerms1)),
+    ..Default::default(),
+};
+let aggTerms2 = AggTerms::new("brand_id");
+let agg2 = Aggregation {
+    terms: Some(Box::new(aggTerms2)),
+    ..Default::default(),
+};
+let mut aggs = HashMap::new();
+aggs.insert("group_property".to_string(), agg1); 
+aggs.insert("group_brand_id".to_string(), agg2);
+
+let search_req = SearchRequest {
+    table: "facetdemo".to_string(),
+    query: Some(Box::new(query)),
+    aggs: serde_json::json!(aggs),
+    limit: serde_json::json!(5),
+    ..Default::default(),
+};
+let search_res = search_api.search(search_req).await;
+```
+<!-- response Rust -->
+```rust
 class SearchResponse {
     took: 0
     timedOut: false
@@ -1075,6 +1196,79 @@ res =searchApi.search({"table":"facetdemo","query":{"match_all":{}},"expressions
  'took': 0}
 ```
 
+<!-- request Python-asyncio -->
+```python
+res = await searchApi.search({"table":"facetdemo","query":{"match_all":{}},"expressions":{"price_range":"INTERVAL(price,200,400,600,800)"},"aggs":{"group_property":{"terms":{"field":"price_range"}}}})
+```
+<!-- response Python-asyncio -->
+```python
+{'aggregations': {u'group_brand_id': {u'buckets': [{u'doc_count': 1019,
+                                                    u'key': 10},
+                                                   {u'doc_count': 954,
+                                                    u'key': 9},
+                                                   {u'doc_count': 1021,
+                                                    u'key': 8},
+                                                   {u'doc_count': 1011,
+                                                    u'key': 7},
+                                                   {u'doc_count': 997,
+                                                    u'key': 6}]},
+                  u'group_property': {u'buckets': [{u'doc_count': 11,
+                                                    u'key': 1000},
+                                                   {u'doc_count': 12,
+                                                    u'key': 999},
+                                                   {u'doc_count': 7,
+                                                    u'key': 998},
+                                                   {u'doc_count': 14,
+                                                    u'key': 997},
+                                                   {u'doc_count': 8,
+                                                    u'key': 996}]}},
+ 'hits': {'hits': [{u'_id': u'1',
+                    u'_score': 1,
+                    u'_source': {u'brand_id': 10,
+                                 u'brand_name': u'Brand Ten',
+                                 u'categories': [10],
+                                 u'price': 197,
+                                 u'property': u'Six',
+                                 u'title': u'Product Eight One'}},
+                   {u'_id': u'2',
+                    u'_score': 1,
+                    u'_source': {u'brand_id': 6,
+                                 u'brand_name': u'Brand Six',
+                                 u'categories': [12, 13, 14],
+                                 u'price': 671,
+                                 u'property': u'Four',
+                                 u'title': u'Product Nine Seven'}},
+                   {u'_id': u'3',
+                    u'_score': 1,
+                    u'_source': {u'brand_id': 3,
+                                 u'brand_name': u'Brand Three',
+                                 u'categories': [13, 14, 15],
+                                 u'price': 92,
+                                 u'property': u'Six',
+                                 u'title': u'Product Five Four'}},
+                   {u'_id': u'4',
+                    u'_score': 1,
+                    u'_source': {u'brand_id': 10,
+                                 u'brand_name': u'Brand Ten',
+                                 u'categories': [11],
+                                 u'price': 713,
+                                 u'property': u'Five',
+                                 u'title': u'Product Eight Nine'}},
+                   {u'_id': u'5',
+                    u'_score': 1,
+                    u'_source': {u'brand_id': 7,
+                                 u'brand_name': u'Brand Seven',
+                                 u'categories': [11, 12, 13],
+                                 u'price': 805,
+                                 u'property': u'Two',
+                                 u'title': u'Product Ten Three'}}],
+          'max_score': None,
+          'total': 10000},
+ 'profile': None,
+ 'timed_out': False,
+ 'took': 0}
+```
+
 <!-- request Javascript -->
 ```javascript
 res =  await searchApi.search({"table":"facetdemo","query":{"match_all":{}},"expressions":{"price_range":"INTERVAL(price,200,400,600,800)"},"aggs":{"group_property":{"terms":{"field":"price_range"}}}});
@@ -1139,6 +1333,45 @@ var searchResponse = searchApi.Search(searchRequest);
 ```
 <!-- response C# -->
 ```clike
+class SearchResponse {
+    took: 0
+    timedOut: false
+    aggregations: {group_property={buckets=[{key=4, doc_count=2100}, {key=3, doc_count=1973}, {key=2, doc_count=1999}, {key=1, doc_count=2043}, {key=0, doc_count=1885}]}}
+    hits: class SearchResponseHits {
+        maxScore: null
+        total: 10000
+        hits: [{_id=1, _score=1, _source={price=197, brand_id=10, brand_name=Brand Ten, categories=[10], title=Product Eight One, property=Six, price_range=0}}, {_id=2, _score=1, _source={price=671, brand_id=6, brand_name=Brand Six, categories=[12, 13, 14], title=Product Nine Seven, property=Four, price_range=3}}, {_id=3, _score=1, _source={price=92, brand_id=3, brand_name=Brand Three, categories=[13, 14, 15], title=Product Five Four, property=Six, price_range=0}}, {_id=4, _score=1, _source={price=713, brand_id=10, brand_name=Brand Ten, categories=[11], title=Product Eight Nine, property=Five, price_range=3}}, {_id=5, _score=1, _source={price=805, brand_id=7, brand_name=Brand Seven, categories=[11, 12, 13], title=Product Ten Three, property=Two, price_range=4}}]
+    }
+    profile: null
+}
+```
+
+<!-- request Rust -->
+```rust
+let query = SearchQuery::new();
+let aggTerms1 = AggTerms::new("price_range");
+let agg1 = Aggregation {
+    terms: Some(Box::new(aggTerms1)),
+    ..Default::default(),
+};
+let mut aggs = HashMap::new();
+aggs.insert("group_property".to_string(), agg1);
+let mut expr = HashMap::new(); 
+expr.insert("price_range".to_string(), "INTERVAL(price,200,400,600,800");
+let expressions: [HashMap; 1] = [expr];
+
+let search_req = SearchRequest {
+    table: "facetdemo".to_string(),
+    query: Some(Box::new(query)),
+    expressions: serde_json::json!(expressions),
+    aggs: serde_json::json!(aggs),
+    limit: serde_json::json!(5),
+    ..Default::default(),
+};
+let search_res = search_api.search(search_req).await;
+```
+<!-- response Rust -->
+```rust
 class SearchResponse {
     took: 0
     timedOut: false
@@ -2249,6 +2482,68 @@ res =searchApi.search({"table":"facetdemo","query":{"match_all":{}},"limit":5,"a
  'timed_out': False,
  'took': 0}
 ```
+
+<!-- request Python-asyncio -->
+```python
+res = await searchApi.search({"table":"facetdemo","query":{"match_all":{}},"limit":5,"aggs":{"group_property":{"terms":{"field":"price","size":1,}},"group_brand_id":{"terms":{"field":"brand_id","size":3}}}})
+```
+<!-- response Python-asyncio -->
+```python
+{'aggregations': {u'group_brand_id': {u'buckets': [{u'doc_count': 1019,
+                                                    u'key': 10},
+                                                   {u'doc_count': 954,
+                                                    u'key': 9},
+                                                   {u'doc_count': 1021,
+                                                    u'key': 8}]},
+                  u'group_property': {u'buckets': [{u'doc_count': 11,
+                                                    u'key': 1000}]}},
+ 'hits': {'hits': [{u'_id': u'1',
+                    u'_score': 1,
+                    u'_source': {u'brand_id': 10,
+                                 u'brand_name': u'Brand Ten',
+                                 u'categories': [10],
+                                 u'price': 197,
+                                 u'property': u'Six',
+                                 u'title': u'Product Eight One'}},
+                   {u'_id': u'2',
+                    u'_score': 1,
+                    u'_source': {u'brand_id': 6,
+                                 u'brand_name': u'Brand Six',
+                                 u'categories': [12, 13, 14],
+                                 u'price': 671,
+                                 u'property': u'Four',
+                                 u'title': u'Product Nine Seven'}},
+                   {u'_id': u'3',
+                    u'_score': 1,
+                    u'_source': {u'brand_id': 3,
+                                 u'brand_name': u'Brand Three',
+                                 u'categories': [13, 14, 15],
+                                 u'price': 92,
+                                 u'property': u'Six',
+                                 u'title': u'Product Five Four'}},
+                   {u'_id': u'4',
+                    u'_score': 1,
+                    u'_source': {u'brand_id': 10,
+                                 u'brand_name': u'Brand Ten',
+                                 u'categories': [11],
+                                 u'price': 713,
+                                 u'property': u'Five',
+                                 u'title': u'Product Eight Nine'}},
+                   {u'_id': u'5',
+                    u'_score': 1,
+                    u'_source': {u'brand_id': 7,
+                                 u'brand_name': u'Brand Seven',
+                                 u'categories': [11, 12, 13],
+                                 u'price': 805,
+                                 u'property': u'Two',
+                                 u'title': u'Product Ten Three'}}],
+          'max_score': None,
+          'total': 10000},
+ 'profile': None,
+ 'timed_out': False,
+ 'took': 0}
+```
+
 <!-- request Javascript -->
 ```javascript
 res =  await searchApi.search({"table":"facetdemo","query":{"match_all":{}},"limit":5,"aggs":{"group_property":{"terms":{"field":"price","size":1,}},"group_brand_id":{"terms":{"field":"brand_id","size":3}}}});
@@ -2317,6 +2612,53 @@ var searchResponse = searchApi.Search(searchRequest);
 ```
 <!-- response C# -->
 ```clike
+class SearchResponse {
+    took: 0
+    timedOut: false
+    aggregations: {group_property={buckets=[{key=1000, doc_count=11}]}, group_brand_id={buckets=[{key=10, doc_count=1019}, {key=9, doc_count=954}, {key=8, doc_count=1021}]}}
+    hits: class SearchResponseHits {
+        maxScore: null
+        total: 10000
+        hits: [{_id=1, _score=1, _source={price=197, brand_id=10, brand_name=Brand Ten, categories=[10], title=Product Eight One, property=Six}}, {_id=2, _score=1, _source={price=671, brand_id=6, brand_name=Brand Six, categories=[12, 13, 14], title=Product Nine Seven, property=Four}}, {_id=3, _score=1, _source={price=92, brand_id=3, brand_name=Brand Three, categories=[13, 14, 15], title=Product Five Four, property=Six}}, {_id=4, _score=1, _source={price=713, brand_id=10, brand_name=Brand Ten, categories=[11], title=Product Eight Nine, property=Five}}, {_id=5, _score=1, _source={price=805, brand_id=7, brand_name=Brand Seven, categories=[11, 12, 13], title=Product Ten Three, property=Two}}]
+    }
+    profile: null
+}
+```
+
+<!-- request Rust -->
+```rust
+let query = SearchQuery::new();
+let aggTerms1 = AggTerms {
+    field: "price".to_string(),
+    size: Some(1),
+};
+let agg1 = Aggregation {
+    terms: Some(Box::new(aggTerms1)),
+    ..Default::default(),
+};
+let aggTerms1 = AggTerms {
+    field: "brand_id".to_string(),
+    size: Some(3),
+};
+let agg2 = Aggregation {
+    terms: Some(Box::new(aggTerms2)),
+    ..Default::default(),
+};
+let mut aggs = HashMap::new();
+aggs.insert("group_property".to_string(), agg1); 
+aggs.insert("group_brand_id".to_string(), agg2);
+
+let search_req = SearchRequest {
+    table: "facetdemo".to_string(),
+    query: Some(Box::new(query)),
+    aggs: serde_json::json!(aggs),
+    limit: serde_json::json!(5),
+    ..Default::default(),
+};
+let search_res = search_api.search(search_req).await;
+```
+<!-- response Rust -->
+```rust
 class SearchResponse {
     took: 0
     timedOut: false

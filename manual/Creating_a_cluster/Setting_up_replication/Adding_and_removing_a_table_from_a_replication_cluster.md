@@ -51,6 +51,21 @@ utilsApi.sql('ALTER CLUSTER click_query ADD clicks_daily_index')
 ```python
 {u'error': u'', u'total': 0, u'warning': u''}
 ```
+
+<!-- intro -->
+##### Python-asyncio:
+
+<!-- request Python-asyncio -->
+
+```python
+await utilsApi.sql('ALTER CLUSTER click_query ADD clicks_daily_index')
+```
+
+<!-- response Python -->
+```python
+{u'error': u'', u'total': 0, u'warning': u''}
+```
+
 <!-- intro -->
 ##### Javascript:
 
@@ -81,6 +96,15 @@ utilsApi.sql("ALTER CLUSTER click_query ADD clicks_daily_index");
 
 ```clike
 utilsApi.Sql("ALTER CLUSTER click_query ADD clicks_daily_index");
+```
+
+<!-- intro -->
+##### Rust:
+
+<!-- request Rust -->
+
+```rust
+utils_api.sql("ALTER CLUSTER click_query ADD clicks_daily_index", Some(true)).await;
 ```
 
 <!-- end -->
@@ -134,6 +158,21 @@ utilsApi.sql('ALTER CLUSTER posts DROP weekly_index')
 ```python
 {u'error': u'', u'total': 0, u'warning': u''}
 ```
+
+<!-- intro -->
+##### Python-asyncio:
+
+<!-- request Python-asyncio -->
+
+```python
+await utilsApi.sql('ALTER CLUSTER posts DROP weekly_index')
+```
+
+<!-- response Python-asyncio -->
+```python
+{u'error': u'', u'total': 0, u'warning': u''}
+```
+
 <!-- intro -->
 ##### Javascript:
 
@@ -164,6 +203,15 @@ utilsApi.sql("ALTER CLUSTER posts DROP weekly_index");
 
 ```clike
 utilsApi.Sql("ALTER CLUSTER posts DROP weekly_index");
+```
+
+<!-- intro -->
+##### Rust:
+
+<!-- request Rust -->
+
+```rust
+utils_api.sql("ALTER CLUSTER posts DROP weekly_index", Some(true)).await;
 ```
 
 <!-- end -->

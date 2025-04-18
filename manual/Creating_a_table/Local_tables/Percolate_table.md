@@ -90,6 +90,16 @@ Array(
 ```python
 utilsApi.sql('CREATE TABLE products(title text, meta json) type=\'pq\'')
 ```
+
+<!-- intro -->
+##### Python-asyncio:
+
+<!-- request Python-asyncio -->
+
+```python
+await utilsApi.sql('CREATE TABLE products(title text, meta json) type=\'pq\'')
+```
+
 <!-- intro -->
 ##### Javascript:
 
@@ -114,6 +124,15 @@ utilsApi.sql("CREATE TABLE products(title text, meta json) type='pq'");
 
 ```clike
 utilsApi.Sql("CREATE TABLE products(title text, meta json) type='pq'");
+```
+
+<!-- intro -->
+##### Rust:
+
+<!-- request Rust -->
+
+```rust
+utils_api.sql("CREATE TABLE products(title text, meta json) type='pq'", Some(true)).await;
 ```
 
 <!-- intro -->

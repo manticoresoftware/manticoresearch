@@ -46,6 +46,15 @@ utilsApi.sql('CREATE TABLE products(title text, price float) charset_table = \'c
 ```
 
 <!-- intro -->
+##### Python-asyncio:
+
+<!-- request Python-asyncio -->
+
+```python
+await utilsApi.sql('CREATE TABLE products(title text, price float) charset_table = \'cont\' morphology = \'icu_chinese\'')
+```
+
+<!-- intro -->
 ##### Javascript:
 
 <!-- request Javascript -->
@@ -60,7 +69,7 @@ res = await utilsApi.sql('CREATE TABLE products(title text, price float) charset
 <!-- request Java -->
 
 ```java
-utilsApi.sql("CREATE TABLE products(title text, price float) charset_table = 'cont' morphology = 'icu_chinese'");
+utilsApi.sql("CREATE TABLE products(title text, price float) charset_table = 'cont' morphology = 'icu_chinese'", true);
 ```
 
 <!-- intro -->
@@ -69,7 +78,16 @@ utilsApi.sql("CREATE TABLE products(title text, price float) charset_table = 'co
 <!-- request C# -->
 
 ```clike
-utilsApi.Sql("CREATE TABLE products(title text, price float) charset_table = 'cont' morphology = 'icu_chinese'");
+utilsApi.Sql("CREATE TABLE products(title text, price float) charset_table = 'cont' morphology = 'icu_chinese'", true);
+```
+
+<!-- intro -->
+##### Rust:
+
+<!-- request Rust -->
+
+```rust
+utils_api.sql("CREATE TABLE products(title text, price float) charset_table = 'cont' morphology = 'icu_chinese'", Some(true)).await;
 ```
 
 <!-- request CONFIG -->
@@ -130,6 +148,15 @@ utilsApi.sql('CREATE TABLE products(title text, price float) charset_table = \'c
 ```
 
 <!-- intro -->
+##### Python-asyncio:
+
+<!-- request Python-asyncio -->
+
+```python
+await utilsApi.sql('CREATE TABLE products(title text, price float) charset_table = \'cont\' morphology = \'jieba_chinese\'')
+```
+
+<!-- intro -->
 ##### Javascript:
 
 <!-- request Javascript -->
@@ -144,7 +171,7 @@ res = await utilsApi.sql('CREATE TABLE products(title text, price float) charset
 <!-- request Java -->
 
 ```java
-utilsApi.sql("CREATE TABLE products(title text, price float) charset_table = 'cont' morphology = 'jieba_chinese'");
+utilsApi.sql("CREATE TABLE products(title text, price float) charset_table = 'cont' morphology = 'jieba_chinese'", true);
 ```
 
 <!-- intro -->
@@ -153,7 +180,16 @@ utilsApi.sql("CREATE TABLE products(title text, price float) charset_table = 'co
 <!-- request C# -->
 
 ```clike
-utilsApi.Sql("CREATE TABLE products(title text, price float) charset_table = 'cont' morphology = 'jieba_chinese'");
+utilsApi.Sql("CREATE TABLE products(title text, price float) charset_table = 'cont' morphology = 'jieba_chinese'", true);
+```
+
+<!-- intro -->
+##### Rust:
+
+<!-- request Rust -->
+
+```rust
+utils_api.sql("CREATE TABLE products(title text, price float) charset_table = 'cont' morphology = 'jieba_chinese'", Some(true)).await;
 ```
 
 <!-- request CONFIG -->
@@ -222,6 +258,16 @@ $index->create([
 ```python
 utilsApi.sql('CREATE TABLE products(title text, price float) charset_table = \'non_cont\' ngram_len = \'1\' ngram_chars = \'cont\'')
 ```
+
+<!-- intro -->
+##### Python-asyncio:
+
+<!-- request Python-asyncio -->
+
+```python
+await utilsApi.sql('CREATE TABLE products(title text, price float) charset_table = \'non_cont\' ngram_len = \'1\' ngram_chars = \'cont\'')
+```
+
 <!-- intro -->
 ##### Javascript:
 
@@ -236,7 +282,7 @@ res = await utilsApi.sql('CREATE TABLE products(title text, price float) charset
 <!-- request Java -->
 
 ```java
-utilsApi.sql("CREATE TABLE products(title text, price float) charset_table = 'non_cont' ngram_len = '1' ngram_chars = 'cont'");
+utilsApi.sql("CREATE TABLE products(title text, price float) charset_table = 'non_cont' ngram_len = '1' ngram_chars = 'cont'", true);
 ```
 
 <!-- intro -->
@@ -245,7 +291,16 @@ utilsApi.sql("CREATE TABLE products(title text, price float) charset_table = 'no
 <!-- request C# -->
 
 ```clike
-utilsApi.Sql("CREATE TABLE products(title text, price float) charset_table = 'non_cont' ngram_len = '1' ngram_chars = 'cont'");
+utilsApi.Sql("CREATE TABLE products(title text, price float) charset_table = 'non_cont' ngram_len = '1' ngram_chars = 'cont'", true);
+```
+
+<!-- intro -->
+##### Rust:
+
+<!-- request Rust -->
+
+```rust
+utils_api.sql("CREATE TABLE products(title text, price float) charset_table = 'non_cont' ngram_len = '1' ngram_chars = 'cont'", Some(true)).await;
 ```
 
 <!-- request CONFIG -->
@@ -308,6 +363,16 @@ $index->create([
 ```python
 utilsApi.sql('CREATE TABLE products(title text, price float) charset_table = \'chinese\' morphology = \'icu_chinese\' stopwords = \'zh\'')
 ```
+
+<!-- intro -->
+##### Python-asyncio:
+
+<!-- request Python-asyncio -->
+
+```python
+await utilsApi.sql('CREATE TABLE products(title text, price float) charset_table = \'chinese\' morphology = \'icu_chinese\' stopwords = \'zh\'')
+```
+
 <!-- intro -->
 ##### Javascript:
 
@@ -322,7 +387,7 @@ res = await utilsApi.sql('CREATE TABLE products(title text, price float) charset
 <!-- request Java -->
 
 ```java
-utilsApi.sql("CREATE TABLE products(title text, price float) charset_table = 'chinese' morphology = 'icu_chinese' stopwords = 'zh'");
+utilsApi.sql("CREATE TABLE products(title text, price float) charset_table = 'chinese' morphology = 'icu_chinese' stopwords = 'zh'", true);
 ```
 
 <!-- intro -->
@@ -331,7 +396,16 @@ utilsApi.sql("CREATE TABLE products(title text, price float) charset_table = 'ch
 <!-- request C# -->
 
 ```clike
-utilsApi.Sql("CREATE TABLE products(title text, price float) charset_table = 'chinese' morphology = 'icu_chinese' stopwords = 'zh'");
+utilsApi.Sql("CREATE TABLE products(title text, price float) charset_table = 'chinese' morphology = 'icu_chinese' stopwords = 'zh'", true);
+```
+
+<!-- intro -->
+##### Rust:
+
+<!-- request Rust -->
+
+```rust
+utils_api.sql("CREATE TABLE products(title text, price float) charset_table = 'chinese' morphology = 'icu_chinese' stopwords = 'zh'", Some(true)).await;
 ```
 
 <!-- request CONFIG -->

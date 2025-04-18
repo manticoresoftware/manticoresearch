@@ -58,6 +58,16 @@ $index->create([
 ```python
 utilsApi.sql('CREATE TABLE products(title text, price float) stopwords = \'/usr/local/manticore/data/stopwords.txt /usr/local/manticore/data/stopwords-ru.txt /usr/local/manticore/data/stopwords-en.txt\'')
 ```
+
+<!-- intro -->
+##### Python-asyncio:
+
+<!-- request Python-asyncio -->
+
+```python
+await utilsApi.sql('CREATE TABLE products(title text, price float) stopwords = \'/usr/local/manticore/data/stopwords.txt /usr/local/manticore/data/stopwords-ru.txt /usr/local/manticore/data/stopwords-en.txt\'')
+```
+
 <!-- intro -->
 ##### Javascript:
 
@@ -71,14 +81,23 @@ res = await utilsApi.sql('CREATE TABLE products(title text, price float) stopwor
 ##### Java:
 <!-- request Java -->
 ```java
-utilsApi.sql("CREATE TABLE products(title text, price float) stopwords = '/usr/local/manticore/data/stopwords.txt /usr/local/manticore/data/stopwords-ru.txt /usr/local/manticore/data/stopwords-en.txt'");
+utilsApi.sql("CREATE TABLE products(title text, price float) stopwords = '/usr/local/manticore/data/stopwords.txt /usr/local/manticore/data/stopwords-ru.txt /usr/local/manticore/data/stopwords-en.txt'", true);
 ```
 
 <!-- intro -->
 ##### C#:
 <!-- request C# -->
 ```clike
-utilsApi.Sql("CREATE TABLE products(title text, price float) stopwords = '/usr/local/manticore/data/stopwords.txt /usr/local/manticore/data/stopwords-ru.txt /usr/local/manticore/data/stopwords-en.txt'");
+utilsApi.Sql("CREATE TABLE products(title text, price float) stopwords = '/usr/local/manticore/data/stopwords.txt /usr/local/manticore/data/stopwords-ru.txt /usr/local/manticore/data/stopwords-en.txt'", true);
+```
+
+<!-- intro -->
+##### Rust:
+
+<!-- request Rust -->
+
+```rust
+utils_api.sql("CREATE TABLE products(title text, price float) stopwords = '/usr/local/manticore/data/stopwords.txt /usr/local/manticore/data/stopwords-ru.txt /usr/local/manticore/data/stopwords-en.txt'", Some(true)).await;
 ```
 
 <!-- request CONFIG -->
@@ -189,6 +208,16 @@ $index->create([
 ```python
 utilsApi.sql('CREATE TABLE products(title text, price float) stopwords = \'it\'')
 ```
+
+<!-- intro -->
+##### Python-asyncio:
+
+<!-- request Python-asyncio -->
+
+```python
+await utilsApi.sql('CREATE TABLE products(title text, price float) stopwords = \'it\'')
+```
+
 <!-- intro -->
 ##### Javascript:
 
@@ -202,14 +231,23 @@ res = await utilsApi.sql('CREATE TABLE products(title text, price float) stopwor
 ##### Java:
 <!-- request Java -->
 ```java
-utilsApi.sql("CREATE TABLE products(title text, price float) stopwords = 'it'");
+utilsApi.sql("CREATE TABLE products(title text, price float) stopwords = 'it'", true);
 ```
 
 <!-- intro -->
 ##### C#:
 <!-- request C# -->
 ```clike
-utilsApi.Sql("CREATE TABLE products(title text, price float) stopwords = 'it'");
+utilsApi.Sql("CREATE TABLE products(title text, price float) stopwords = 'it'", true);
+```
+
+<!-- intro -->
+##### Rust:
+
+<!-- request Rust -->
+
+```rust
+utils_api.sql("CREATE TABLE products(title text, price float) stopwords = 'it'", Some(true)).await;
 ```
 
 <!-- request CONFIG -->
@@ -266,6 +304,16 @@ $index->create([
 ```python
 utilsApi.sql('CREATE TABLE products(title text, price float) stopwords = \'en, it, ru\'')
 ```
+
+<!-- intro -->
+##### Python-asyncio:
+
+<!-- request Python-asyncio -->
+
+```python
+await utilsApi.sql('CREATE TABLE products(title text, price float) stopwords = \'en, it, ru\'')
+```
+
 <!-- intro -->
 ##### Javascript:
 
@@ -279,14 +327,23 @@ res = await utilsApi.sql('CREATE TABLE products(title text, price float) stopwor
 ##### Java:
 <!-- request Java -->
 ```java
-utilsApi.sql("CREATE TABLE products(title text, price float) stopwords = 'en, it, ru'");
+utilsApi.sql("CREATE TABLE products(title text, price float) stopwords = 'en, it, ru'", true);
 ```
 
 <!-- intro -->
 ##### C#:
 <!-- request C# -->
 ```clike
-utilsApi.sql("CREATE TABLE products(title text, price float) stopwords = 'en, it, ru'");
+utilsApi.sql("CREATE TABLE products(title text, price float) stopwords = 'en, it, ru'", true);
+```
+
+<!-- intro -->
+##### Rust:
+
+<!-- request Rust -->
+
+```rust
+utils_api.sql("CREATE TABLE products(title text, price float) stopwords = 'en, it, ru'", Some(true)).await;
 ```
 
 <!-- request CONFIG -->
@@ -350,6 +407,16 @@ $index->create([
 ```python
 utilsApi.sql('CREATE TABLE products(title text, price float) stopwords = \'en\' stopword_step = \'1\'')
 ```
+
+<!-- intro -->
+##### Python-asyncio:
+
+<!-- request Python-asyncio -->
+
+```python
+await utilsApi.sql('CREATE TABLE products(title text, price float) stopwords = \'en\' stopword_step = \'1\'')
+```
+
 <!-- intro -->
 ##### Javascript:
 
@@ -363,14 +430,23 @@ res = await utilsApi.sql('CREATE TABLE products(title text, price float) stopwor
 ##### Java:
 <!-- request Java -->
 ```java
-utilsApi.sql("CREATE TABLE products(title text, price float) stopwords = \'en\' stopword_step = \'1\'");
+utilsApi.sql("CREATE TABLE products(title text, price float) stopwords = \'en\' stopword_step = \'1\'", true);
 ```
 
 <!-- intro -->
 ##### C#:
 <!-- request C# -->
 ```clike
-utilsApi.sql("CREATE TABLE products(title text, price float) stopwords = \'en\' stopword_step = \'1\'");
+utilsApi.sql("CREATE TABLE products(title text, price float) stopwords = \'en\' stopword_step = \'1\'", true);
+```
+
+<!-- intro -->
+##### Rust:
+
+<!-- request Rust -->
+
+```rust
+utils_api.sql("CREATE TABLE products(title text, price float) stopwords = \'en\' stopword_step = \'1\'", Some(true)).await;
 ```
 
 <!-- request CONFIG -->
@@ -438,6 +514,16 @@ $index->create([
 ```python
 utilsApi.sql('CREATE TABLE products(title text, price float) stopwords = \'en\' stopwords_unstemmed = \'1\'')
 ```
+
+<!-- intro -->
+##### Python-asyncio:
+
+<!-- request Python-asyncio -->
+
+```python
+await utilsApi.sql('CREATE TABLE products(title text, price float) stopwords = \'en\' stopwords_unstemmed = \'1\'')
+```
+
 <!-- intro -->
 ##### Javascript:
 
@@ -451,14 +537,23 @@ res = await utilsApi.sql('CREATE TABLE products(title text, price float) stopwor
 ##### Java:
 <!-- request Java -->
 ```java
-utilsApi.sql("CREATE TABLE products(title text, price float) stopwords = \'en\' stopwords_unstemmed = \'1\'");
+utilsApi.sql("CREATE TABLE products(title text, price float) stopwords = \'en\' stopwords_unstemmed = \'1\'", true);
 ```
 
 <!-- intro -->
 ##### C#:
 <!-- request C# -->
 ```clike
-utilsApi.Sql("CREATE TABLE products(title text, price float) stopwords = \'en\' stopwords_unstemmed = \'1\'");
+utilsApi.Sql("CREATE TABLE products(title text, price float) stopwords = \'en\' stopwords_unstemmed = \'1\'", true);
+```
+
+<!-- intro -->
+##### Rust:
+
+<!-- request Rust -->
+
+```rust
+utils_api.sql("CREATE TABLE products(title text, price float) stopwords = \'en\' stopwords_unstemmed = \'1\'", Some(true)).await;
 ```
 
 <!-- request CONFIG -->

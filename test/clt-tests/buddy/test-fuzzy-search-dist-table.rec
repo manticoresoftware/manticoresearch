@@ -7,51 +7,13 @@ export INSTANCE=2
 ––– output –––
 ––– block: ../base/replication/start-searchd-precach –––
 ––– input –––
-manticore-load --quiet --json --port=1306 --init="CREATE TABLE local_table1 (id BIGINT, username TEXT, status UINT, s STRING) min_infix_len='2' expand_keywords='1'" --load="INSERT INTO local_table1 (id, username, status, s) VALUES (<increment>, '<text/10/30>', <int/1/100>, '<text/5/15>')" --batch-size=1000 --threads=4 --total=10000
+manticore-load --quiet --json --port=1306 --init="CREATE TABLE local_table1 (id BIGINT, username TEXT) min_infix_len='2' expand_keywords='1'" --load="INSERT INTO local_table1 (id, username) VALUES (<increment>, '<text/{./test/clt-tests/scripts/names.txt}/1/1>')" --batch-size=1000 --threads=4 --total=1000 > /dev/null; echo $?
 ––– output –––
-{
-"threads": %{NUMBER},
-"batch_size": %{NUMBER},
-"time": "%{NUMBER}:%{NUMBER}",
-"total_operations": %{NUMBER},
-"operations_per_second": %{NUMBER},
-"qps": {
-"avg": 0,
-"p99": 0,
-"p95": 0,
-"p5": 0,
-"p1": 0
-},
-"latency": {
-"avg": #!/\b\d+(\.\d+)?\b/!#,
-"p50": %{NUMBER}.%{NUMBER},
-"p95": %{NUMBER}.%{NUMBER},
-"p99": %{NUMBER}.%{NUMBER}
-}
-}
+0
 ––– input –––
-manticore-load --quiet --json --port=2306 --init="CREATE TABLE local_table2 (id BIGINT, username TEXT, status UINT, s STRING) min_infix_len='2' expand_keywords='1'" --load="INSERT INTO local_table2 (id, username, status, s) VALUES (<increment>, '<text/10/30>', <int/1/100>, '<text/10/12>')" --batch-size=1000 --threads=4 --total=10000
+manticore-load --quiet --json --port=2306 --init="CREATE TABLE local_table2 (id BIGINT, username TEXT) min_infix_len='2' expand_keywords='1'" --load="INSERT INTO local_table2 (id, username) VALUES (<increment>, '<text/{./test/clt-tests/scripts/surnames.txt}/1/1>')" --batch-size=1000 --threads=4 --total=1000 > /dev/null; echo $?
 ––– output –––
-{
-"threads": %{NUMBER},
-"batch_size": %{NUMBER},
-"time": "%{NUMBER}:%{NUMBER}",
-"total_operations": %{NUMBER},
-"operations_per_second": %{NUMBER},
-"qps": {
-"avg": 0,
-"p99": 0,
-"p95": 0,
-"p5": 0,
-"p1": 0
-},
-"latency": {
-"avg": #!/\b\d+(\.\d+)?\b/!#,
-"p50": %{NUMBER}.%{NUMBER},
-"p95": %{NUMBER}.%{NUMBER},
-"p99": %{NUMBER}.%{NUMBER}
-}
-}
+0
 ––– input –––
 mysql -h0 -P1306 -e "DROP TABLE IF EXISTS dist_table; CREATE TABLE dist_table type='distributed' local='local_table1' agent='127.0.0.1:2312:local_table2';"
 ––– output –––
@@ -69,250 +31,29 @@ mysql -h0 -P1306 -e "SELECT COUNT(*) FROM dist_table;"
 +----------+
 | count(*) |
 +----------+
-|    20000 |
+|     2000 |
 +----------+
 ––– input –––
-mysql -h0 -P1306 -e "SELECT * FROM local_table1 ORDER BY id ASC LIMIT 10;"
-––– output –––
-+------+----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+--------+--------------------------------------------------------------------------------------------------------+
-| id   | username                                                                                                                                                                                     | status | s                                                                                                      |
-+------+----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+--------+--------------------------------------------------------------------------------------------------------+
-|    1 | Incorrectly heavy soft carefully late sit; put draw afraid; gave hardly been vaguely 1000 this at understood gave always east fake, dull internationally sent. At.                           |     87 | Light hot! it dark low today! right near called.                                                       |
-|    2 | Full, foolish! happy? busy taken dead shall make seen privately understood short universally! yearly. Real.                                                                                  |     96 | Economically beautiful legally sick poor incorrectly summer give temporarily took surprisingly gentle. |
-|    3 | Bitter inside set. Try empty calm incorrectly modern obviously soft certainly.                                                                                                               |      1 | Quietly need tell poor spring evening drove young? lost probably came knew felt has hot.               |
-|    4 | Grew fast, informally occasionally hungry understood stale cruel; emotionally beautiful modern the. Thirsty do poor dead; lazy let sick; kept angry politically closed understand regularly. |     26 | Wild fell. Brought with stand south. Certainly.                                                        |
-|    5 | Early 2 become permanently tell heard unluckily right ancient fake meet positively! were spent hard get wrote excited deep suddenly foolish they unsuccessfully spoke might does.            |     16 | Front! stood south! slow spring met made happy certainly.                                              |
-|    6 | Drove grow nowhere paid? grew, hurt hot full monthly cut may calm be sharp cut serious; day! harshly regionally bitter happy quickly stale the felt dark get.                                |      3 | Low dusk instantly front, shallow dull call send should.                                               |
-|    7 | Easily often set hot new it become be quiet cold nightly poor hourly had thin got dry, informally work, 100 50 needed specifically serious do bring.                                         |     45 | Politically grew rich loud tried seen. Nowhere am.                                                     |
-|    8 | Salty dawn quietly? gentle permanently gone? drew kept big specifically.                                                                                                                     |     24 | Sold early 1000 constantly send down spiritually.                                                      |
-|    9 | Spoke nationally! feel educationally! from draw, internationally; made must emotionally far, usually light west educationally. Fake.                                                         |     67 | Understood, wrong maybe! does went usually? humble send are.                                           |
-|   10 | Economically commonly wrote specifically healthy wrong culturally? 4, small rich can sad front artificially? 5, rich lay felt long hungry musically.                                         |     71 | Rise monthly temporarily we nowhere bad hold! happily unusually hold clever that! sometimes illegally. |
-+------+----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+--------+--------------------------------------------------------------------------------------------------------+
-––– input –––
-mysql -h0 -P2306 -e "SELECT * FROM local_table2 ORDER BY id ASC LIMIT 10;"
-––– output –––
-+------+------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+--------+-------------------------------------------------------------------------------------------------+
-| id   | username                                                                                                                                                                                       | status | s                                                                                               |
-+------+------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+--------+-------------------------------------------------------------------------------------------------+
-|    1 | Incorrectly heavy soft carefully late sit; put draw afraid; gave hardly been vaguely 1000 this at understood gave always east fake, dull internationally sent. At.                             |     87 | Light hot! it dark low today! right near called, afraid foolish.                                |
-|    2 | Met grow busy taken dead shall make seen privately understood.                                                                                                                                 |     71 | Think fall yearly. Real morning 2 vaguely poor, poor incorrectly.                               |
-|    3 | Summer give temporarily took surprisingly gentle! hot! set. Try empty calm incorrectly modern obviously soft certainly, quietly need tell poor spring evening drove young? lost probably came. |     22 | Wise give! hot grew fast, informally occasionally hungry understood stale cruel.                |
-|    4 | Commonly bring real heavy 2 thirsty do poor dead; lazy let sick; kept angry.                                                                                                                   |     38 | Of in now. Became? fell. Brought with stand south. Certainly.                                   |
-|    5 | Early 2 become permanently tell heard unluckily right ancient fake meet positively! were spent hard get wrote excited deep suddenly foolish they unsuccessfully spoke might does.              |     16 | Front! stood south! slow spring met made happy certainly, carelessly.                           |
-|    6 | Scientifically lie saw grew, hurt hot full monthly cut may calm be sharp cut serious; day! harshly regionally bitter happy quickly stale the felt.                                             |     83 | Dry? harshly of hold. Front, shallow dull call send should easily.                              |
-|    7 | Often set hot new it become be quiet cold nightly poor hourly had thin got dry, informally work, 100.                                                                                          |     74 | Summer light. Serious do bring below began! rich loud tried.                                    |
-|    8 | Seen. Nowhere am salty dawn quietly? gentle permanently gone? drew kept big specifically weak held she; constantly send down spiritually.                                                      |     15 | Maybe happy feel educationally! from draw, internationally; made must emotionally far, usually. |
-|    9 | Light west educationally. Fake wet salty wrong maybe! does went usually? humble send are.                                                                                                      |     98 | The must medically humble of narrow, generally clean! ask has unfortunately closed.             |
-|   10 | Afraid! spoke scientifically rich lay felt long hungry musically summer normally historically permanently doubtfully.                                                                          |     80 | Bad hold! happily unusually hold clever that! sometimes illegally real late suddenly.           |
-+------+------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+--------+-------------------------------------------------------------------------------------------------+
-––– input –––
-mysql -h0 -P1306 -e "SELECT * FROM dist_table ORDER BY id ASC LIMIT 10;"
-––– output –––
-+------+----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+--------+--------------------------------------------------------------------------------------------------------+
-| id   | username                                                                                                                                                                                     | status | s                                                                                                      |
-+------+----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+--------+--------------------------------------------------------------------------------------------------------+
-|    1 | Incorrectly heavy soft carefully late sit; put draw afraid; gave hardly been vaguely 1000 this at understood gave always east fake, dull internationally sent. At.                           |     87 | Light hot! it dark low today! right near called.                                                       |
-|    2 | Full, foolish! happy? busy taken dead shall make seen privately understood short universally! yearly. Real.                                                                                  |     96 | Economically beautiful legally sick poor incorrectly summer give temporarily took surprisingly gentle. |
-|    3 | Bitter inside set. Try empty calm incorrectly modern obviously soft certainly.                                                                                                               |      1 | Quietly need tell poor spring evening drove young? lost probably came knew felt has hot.               |
-|    4 | Grew fast, informally occasionally hungry understood stale cruel; emotionally beautiful modern the. Thirsty do poor dead; lazy let sick; kept angry politically closed understand regularly. |     26 | Wild fell. Brought with stand south. Certainly.                                                        |
-|    5 | Early 2 become permanently tell heard unluckily right ancient fake meet positively! were spent hard get wrote excited deep suddenly foolish they unsuccessfully spoke might does.            |     16 | Front! stood south! slow spring met made happy certainly.                                              |
-|    6 | Drove grow nowhere paid? grew, hurt hot full monthly cut may calm be sharp cut serious; day! harshly regionally bitter happy quickly stale the felt dark get.                                |      3 | Low dusk instantly front, shallow dull call send should.                                               |
-|    7 | Easily often set hot new it become be quiet cold nightly poor hourly had thin got dry, informally work, 100 50 needed specifically serious do bring.                                         |     45 | Politically grew rich loud tried seen. Nowhere am.                                                     |
-|    8 | Salty dawn quietly? gentle permanently gone? drew kept big specifically.                                                                                                                     |     24 | Sold early 1000 constantly send down spiritually.                                                      |
-|    9 | Spoke nationally! feel educationally! from draw, internationally; made must emotionally far, usually light west educationally. Fake.                                                         |     67 | Understood, wrong maybe! does went usually? humble send are.                                           |
-|   10 | Economically commonly wrote specifically healthy wrong culturally? 4, small rich can sad front artificially? 5, rich lay felt long hungry musically.                                         |     71 | Rise monthly temporarily we nowhere bad hold! happily unusually hold clever that! sometimes illegally. |
-+------+----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+--------+--------------------------------------------------------------------------------------------------------+
-––– input –––
 mysql -h0 -P1306 -e "SELECT id, username FROM dist_table WHERE MATCH('RICH') OPTION fuzzy=1;" | tail -n +2 | sort -k1,1n | head -n 10
 ––– output –––
-+------+------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
-+------+------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
-| 1397 | Formally bitter spend carefully 5 gentle artistically! right? thought. Emotionally open full? of fall tall commonly fortunately; paid; 50 north kind correctly sick paid but rich.             |
-| 1670 | Met begin dead rich sick it right bad infrequently hard possibly later quiet.                                                                                                                  |
-| 2462 | Make pay long never foolish gave right sick! weekly leave stood medically narrow a put taken and happy quiet he shall excited long always! spiritually then. Tomorrow. On cut.                 |
-| 3005 | Heard; simply right sick broke regionally I mentally funny morning; particularly instantly met surely, open, hungry! heavy sometimes real write easily dry.                                    |
-| 3086 | His; publicly, rich permanently instantly north spoke strong back hard. Day heard; simply right sick broke regionally I mentally funny morning; particularly instantly met surely.             |
-| 3901 | Occasionally obviously unhappily unusually later there ran tired spoke; softly! a to? sent west quickly shall? pay salty rich pay sick suddenly got short long 5 wrong keep grew will.         |
-| 4021 | There ran tired spoke; softly! a to? sent west quickly shall? pay salty rich pay sick suddenly got short long 5.                                                                               |
-| 4281 | Definitely. Was indirectly work commonly poor by. Not. Grew lazy do say; true careless narrow I have kept begin; they. Rich later dead dull right see fortunately; foolish carelessly sick.    |
-––– input –––
-mysql -h0 -P1306 -e "SELECT id, username FROM dist_table WHERE MATCH('EBGRNA') OPTION fuzzy=1;" | tail -n +2 | sort -k1,1n | head -n 10
-––– output –––
-––– input –––
-mysql -h0 -P1306 -e "SELECT id, username FROM dist_table WHERE MATCH('ANT') OPTION fuzzy=1;"
-––– output –––
-+------+-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
-| id   | username                                                                                                                                                                                  |
-+------+-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
-| 7924 | Stand wrong privately told certainly, sometimes as! his made; simply as! hurt privately soft emotionally try daily tall! understand stupid? sent; tell formally ran wild have sad.        |
-| 3556 | Rose! run probably sent unfortunately fortunately? lose might? indirectly wet light yesterday fake 5 formally. Locally do, happy ran and told.                                            |
-| 4331 | North! slowly positively? could! sick met ran sent evening 50 taken? cold; for, begin sometimes late be ancient temporarily do today of daily be.                                         |
-| 5501 | Draw nowhere know definitely know begin would find is and ran; lay angry happily there.                                                                                                   |
-| 4206 | Old soon got? socially; ancient; and stood; sent had north taken; instantly grow does wrote rarely.                                                                                       |
-| 8502 | Sent funny ran heavy met west quiet had high? always this seen. Infrequently simply sent dawn cut sent as irregularly! fell; up personally drew? in 2 are, clean strong.                  |
-| 4997 | Meet. South now drew smooth gradually, afraid 100, stand heavy sent, day clean there fortunately understand.                                                                              |
-|  978 | Dark unsuccessfully here asked you fall culturally spoke there and sharp. Her, sent surely. Sent dawn? later call fake doubtfully.                                                        |
-| 9859 | Begin stupid! true salty high correctly, did and true does on buy ask irregularly and buy true autumn, made sent back draw write gentle. Light understand.                                |
-| 1437 | Lay cruel sour? weekly, slow hot winter. Definitely stand ran far wild humble yesterday run clearly it late? lazy cut call directly sick 100 took does shallow. Unluckily.                |
-| 8568 | Sad told irregularly? foolish fake! softly soft artistically? left frequently? draw new! stand ran economically open big speak.                                                           |
-|  795 | Actively wet; stand? stood sent wrong. Happily, surprisingly slowly get! does. Hurt; fresh later; sad? thin feel. Softly held locally today! clever high begin proud serious; try.        |
-| 5957 | Poor; medically understand there sent, informally, I there say with get.                                                                                                                  |
-| 8328 | Worked hardly rich stand; temporarily, sweet you. Understand fake stand thin there and surprisingly brave gone nightly hard! met soft.                                                    |
-| 4021 | There ran tired spoke; softly! a to? sent west quickly shall? pay salty rich pay sick suddenly got short long 5.                                                                          |
-| 1048 | Tall? heavy afraid, not ran often right sent thirsty hot had early. This autumn got gentle monthly were! directly correctly excited vaguely on. Constantly write, heavy drew saw early.   |
-| 8105 | Hard am specifically. Directly fake new. Summer; lazy 10 became ran high mentally often nightly say; calm lead personally; particularly lazy cut yesterday sent poor, bitter! dusk dirty. |
-|  157 | That! taken autumn! should occasionally tomorrow economically heard ran maybe dark sent went slowly simply physically.                                                                    |
-| 8171 | Sent; tell formally ran wild have sad right usually maybe.                                                                                                                                |
-| 3213 | Formally 20 sent ran salty spring regionally could bad, thin, knew healthy stupid tall excited expectedly has tell occasionally find kind! personally stale now asked find fat.           |
-+------+-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
-––– input –––
-mysql -h0 -P1306 -e "SELECT id, username FROM dist_table WHERE MATCH('tony') OPTION fuzzy=1;"
-––– output –––
-+------+-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
-| id   | username                                                                                                                                                                                                          |
-+------+-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
-| 4530 | Felt? read tall draw thin rise grow possibly short proud gone; told were rise told.                                                                                                                               |
-| 8857 | Understood gone successfully gone everywhere write wide. 1000 told took outside loud sour! closed keep morning asked weekly legally been. Hardly careless.                                                        |
-| 2697 | Unusually directly angry fall her wrote angry wrote cut understood; scientifically soft tomorrow thin! today healthy loud, historically grew gentle? would have unluckily, that stand incorrectly? sold you dusk. |
-| 5470 | Hot careless 5! rose make his artificially? luckily maybe break big far! individually; thin drew shallow told knew yesterday soft today asked bitter to. Get gradually hungry.                                    |
-| 6808 | Spiritually ask thin poor back read never built stupid globally negatively told! leave often set clever everywhere today do? would frequently culturally. Publicly outside to fat keep modern.                    |
-| 2442 | Tired lie down! gone might clean angry soft yearly left worked broke ancient afraid today lead to fat will that daily. Medically perhaps everywhere.                                                              |
-| 2505 | Maybe, at sweet carelessly happy clean surprisingly lost; loudly today commonly might know internationally. Was dirty today told afraid being made.                                                               |
-|  488 | Hold work, stale are taken regionally nightly! maybe. Soft cold; came gone by kept below artificially clever wild! told called small individually call 1000 heard built clever went gone informally.              |
-| 1840 | Gone correctly understood near as? 20 heavy run ancient. Thirsty far! 4 by below false actively took! angry rarely.                                                                                               |
-| 6512 | Gone sweet to formally you on held see stale understood false dry low; definitely let tame old went shall possibly; down dull 20 rich.                                                                            |
-| 9776 | Illegally gone heavy historically! educationally sick; rose. May paid closed knew soft bring been. Informally do, frequently quiet nightly inside false! slow found knew hot near calm today commonly! buy.       |
-| 5307 | Generally sick luckily! big far! individually; thin drew shallow told knew yesterday soft today asked bitter to. Get gradually hungry soon lay far loudly got.                                                    |
-| 3087 | Easily dry told empty tomorrow we wise. With below today write permanently south alive weak! night paid we saw; simply then luckily unsuccessfully cut probably.                                                  |
-| 9374 | Salty low called today? excited cruel tell! scientifically need alive on late sat. Write. Took, try weak angry led told? 20 give need empty hot expectedly am.                                                    |
-| 1751 | Short; slow? obviously should right told led regularly new might kept? tomorrow; quiet today, break careful mentally? became has hard regionally met.                                                             |
-| 4880 | Is definitely told understood for. Brought today we spring had educationally quickly up cold spiritually by wide; indirectly.                                                                                     |
-|  729 | Front gone politically historically professionally calm generally rose softly daily? will afraid beautiful! far clever high should.                                                                               |
-| 5740 | Pay night? 20 humble gone by, stood up need later poor quickly need. Calm hear lay? speak medically directly ask.                                                                                                 |
-| 7768 | Spiritually! actively may unsuccessfully sad, tried careful calm lazy happily real shallow need? say lazy. Happily! gone; cold historically buy; for front need far.                                              |
-| 6880 | Break and come wild globally give possibly later cold hot usually; sharp gone! maybe historically.                                                                                                                |
-+------+-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
-––– input –––
-mysql -h0 -P1306 -e "SELECT id, username FROM dist_table WHERE MATCH('SMITH') OPTION fuzzy=1;"
-––– output –––
-+------+------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
-| id   | username                                                                                                                                                                                                                           |
-+------+------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
-| 9400 | Smooth paid light. Particularly left yesterday specifically day should. Dull. Quietly tame led south ancient, smooth? hot hard spent perhaps busy sit actively young artistically a maybe subtly can.                              |
-| 6273 | Early, smooth often begin gradually am kind with fast down worked should. South see be left; successfully; thirsty morning yearly tall build bring loud! never pay thick.                                                          |
-| 7785 | Maybe stupid with educationally weekly smooth light try! paid became understand spring funny took personally! for fresh there south. Then from led he tame.                                                                        |
-| 9677 | Artistically took quietly tame led south ancient, smooth? hot hard spent perhaps busy sit actively young artistically a maybe subtly can do did being.                                                                             |
-| 9161 | South with could. Near sent. Below funny foolish always legally expectedly fortunately nowhere; you take.                                                                                                                          |
-| 9223 | Cold lose been? hard, above; incorrectly later thin clean thought modern. South with might up busy fresh! lie young spoke long.                                                                                                    |
-| 8375 | Physically later wrong frequently south with thirsty! find thin lead locally ancient infrequently night heavy! was inside! physically! fat, careless; north.                                                                       |
-| 8957 | Sometimes? keep? at dark informally now busy! modern. South with might up busy fresh! lie young spoke long surely dirty privately indirectly did? calm met back commonly calm.                                                     |
-| 4756 | Sat 20 daily yesterday. Smooth smooth right held alive have? his, dark lose? call; with meet false; sometimes ancient. Asked softly would far paid fake funny.                                                                     |
-| 4292 | For nationally fall everywhere educationally have; scientifically naturally poor unluckily, keep! formally by; with inside with. Leave informally certainly true professionally smooth calm sweet mentally 50 brought.             |
-| 9904 | Understood worked with? with! say harshly; loud sent smooth built dirty stand evening need.                                                                                                                                        |
-| 1428 | Normally locally cruel with south daily lay happy were gentle 3 sometimes they unfortunately rough there beautiful later may! artistically narrow with.                                                                            |
-| 9617 | Professionally probably open right quiet found naturally see now, successfully infrequently obviously front nationally old understood worked with? with! say harshly; loud sent smooth built dirty stand evening need.             |
-| 8721 | Negatively publicly; false lost commonly paid south ask cold south leave weak read on hourly 1000 dark back built build infrequently negatively young weekly summer probably incorrectly? smooth heavy.                            |
-| 8023 | Found were tall drew quietly bring this needed happy clean dry certainly quickly? ran maybe stupid with educationally weekly smooth light try! paid became understand spring funny took.                                           |
-| 5031 | Spiritually cruel incorrectly! particularly? sad! internationally! sweet rich left legally fat, down internationally thick hard came, hard locally rough with unhappily sour thin! right hourly bring smooth break high musically. |
-| 7049 | Complexly; thick quiet? smooth gentle! thought pay proud. Medically fast. With daily were hold. Rough had. Probably be might positively maybe! think ancient. Dry clearly clean foolish kept. Big? incorrectly.                    |
-| 8332 | Being smooth make monthly shall monthly. Weekly; 1000 run big; then with.                                                                                                                                                          |
-| 6393 | Speak become new gentle held; paid illegally buy; meet break. Rise then subtly cold autumn later? lose hard 2 smooth sent above 2 sold short. Could with weak artificially.                                                        |
-| 5405 | Certainly near rough smooth clever! been weekly, successfully tired good possibly long yesterday west culturally had with take brave specifically, young old complexly.                                                            |
-+------+------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
-––– input –––
-mysql -h0 -P1306 -e "SELECT id, username FROM dist_table WHERE MATCH('RICH') OPTION fuzzy=1;" | tail -n +2 | sort -k1,1n | head -n 10
-––– output –––
-+------+------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
-+------+------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
-| 1397 | Formally bitter spend carefully 5 gentle artistically! right? thought. Emotionally open full? of fall tall commonly fortunately; paid; 50 north kind correctly sick paid but rich.             |
-| 1670 | Met begin dead rich sick it right bad infrequently hard possibly later quiet.                                                                                                                  |
-| 2462 | Make pay long never foolish gave right sick! weekly leave stood medically narrow a put taken and happy quiet he shall excited long always! spiritually then. Tomorrow. On cut.                 |
-| 3005 | Heard; simply right sick broke regionally I mentally funny morning; particularly instantly met surely, open, hungry! heavy sometimes real write easily dry.                                    |
-| 3086 | His; publicly, rich permanently instantly north spoke strong back hard. Day heard; simply right sick broke regionally I mentally funny morning; particularly instantly met surely.             |
-| 3901 | Occasionally obviously unhappily unusually later there ran tired spoke; softly! a to? sent west quickly shall? pay salty rich pay sick suddenly got short long 5 wrong keep grew will.         |
-| 4021 | There ran tired spoke; softly! a to? sent west quickly shall? pay salty rich pay sick suddenly got short long 5.                                                                               |
-| 4281 | Definitely. Was indirectly work commonly poor by. Not. Grew lazy do say; true careless narrow I have kept begin; they. Rich later dead dull right see fortunately; foolish carelessly sick.    |
-––– input –––
-mysql -h0 -P1306 -e "SELECT id, username FROM dist_table WHERE MATCH('jane') AND id BETWEEN 1000 AND 2000 OPTION fuzzy=1;"
-––– output –––
-+------+-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
-| id   | username                                                                                                                                                                                                  |
-+------+-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
-| 1889 | Call stale possibly positively autumn dead? ran personally gone correctly understood near as? 20 heavy run ancient. Thirsty far! 4 by.                                                                    |
-| 1599 | Broke calm rose far shall true! could excited built salty never at a, taken understood fall morning it angry 3 excited ran and.                                                                           |
-| 1279 | Informally, day night mentally they bring artificially gone ran narrow at; thick deep, closed yesterday commonly proud narrow stupid night rose definitely, open I unluckily met hold.                    |
-| 1655 | Down gone culturally! build had lazy ask 2? ancient false dirty was! true; ran lie personally morning clean will, rich tame! he deep wise 20 cut? soft.                                                   |
-| 1562 | Understood fall morning it angry 3 excited ran and cold.                                                                                                                                                  |
-| 1951 | Sometimes and old, yearly west! ran there young happy; hot yearly back.                                                                                                                                   |
-| 1587 | Ran tall it later quickly infrequently, late to? personally and professionally wild young irregularly bad emotionally successfully knew heavy. Full, individually? stand smooth historically! draw.       |
-| 1132 | Her possibly found daily gone? day careful definitely far north specifically grew take is run shall taken long stupid not; complexly salty; probably! paid gone. You.                                     |
-| 1633 | Unsuccessfully gone? professionally vaguely 20 hungry long know gone negatively sick.                                                                                                                     |
-| 1661 | Certainly normally passively sad try tame obviously. Lay south fat, hard clearly slowly unfortunately; you heard publicly do feel stood knew slowly down sat regularly far right culturally; gone gone.   |
-| 1179 | Foolish wrong 100 at stood try luckily politically sharp should healthy to politically high ran irregularly, deep 1. Stupid? slowly! angry. Could not write. Wet? far stand.                              |
-| 1437 | Lay cruel sour? weekly, slow hot winter. Definitely stand ran far wild humble yesterday run clearly it late? lazy cut call directly sick 100 took does shallow. Unluckily.                                |
-| 1619 | Be short publicly now correctly? generally young may understand made carefully! be 3 make autumn ran think 3 temporarily wrong.                                                                           |
-| 1663 | Worked shall angry luckily funny with. Ran? carefully! does, modern tall 5 with hold old am stand night right expectedly, east open kind alive alive happily a positively! beautiful.                     |
-| 1131 | Old, 1 gone legally suddenly physically physically historically, formally happy understand work.                                                                                                          |
-| 1239 | Open stand 3 fat carelessly deep empty west 1 speak? gradually low nationally infrequently was surprisingly sharp closed keep, false happy, educationally carelessly gone; false came.                    |
-| 1408 | Successfully. Alive gone hold light artificially understand have artificially wide, you; below made thin.                                                                                                 |
-| 1448 | Gave tall had has technically light definitely excited there late grow directly I correctly soft north gone commonly down formally everywhere? have know would stand.                                     |
-| 1552 | Soft rough; stand were send artificially were physically, this sharp suddenly carelessly made softly 4 10. Light 10, closed found lead dead cold gone particularly? hard, hear! gentle rise particularly. |
-| 1573 | Naturally technically negatively; soon young gone strong beautiful 100 wrote paid north must hold; wise angry buy usually evening was call nightly; is read. Happy understand.                            |
-+------+-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
++------+-------------+
++------+-------------+
+|  125 | RICHARDSON. |
+|  363 | RICO.       |
+|  417 | BACHMAN.    |
+|   43 | RICHARDSON. |
+|  934 | RICH.       |
+|  948 | ALDRICH.    |
+|  996 | BACH.       |
+| id   | username    |
 ––– input –––
 mysql -h0 -P1306 -e "CALL AUTOCOMPLETE('draw', 'dist_table', 1 AS fuzziness);" | tail -n +4
 ––– output –––
-| draw   |
-| dry    |
-| drew   |
-| grew   |
-| try    |
-| angry  |
-| drive  |
-| drove  |
-| hungry |
-+--------+
-––– input –––
-mysql -h0 -P1306 -e "CALL AUTOCOMPLETE('call', 'dist_table', 1 AS fuzziness);" | tail -n +4
-––– output –––
-| call         |
-| called       |
-| tall         |
-| specifically |
-| calm         |
-| musically    |
-| medically    |
-| historically |
-| technically  |
-| politically  |
-| artistically |
-| economically |
-| small        |
-| shall        |
-| locally      |
-| fall         |
-| mentally     |
-| stale        |
-+--------------+
-––– input –––
-mysql -h0 -P1306 -e "CALL AUTOCOMPLETE('educ', 'dist_table', 1 AS fuzziness);" | tail -n +4
-––– output –––
-| educationally |
-+---------------+
-––– input –––
-mysql -h0 -P1306 -e "CALL AUTOCOMPLETE('dra', 'dist_table', 1 AS fuzziness, '' AS layouts, 1 AS append, 1 AS prepend);" | tail -n +4
-––– output –––
-| draw   |
-| dry    |
-| try    |
-| drew   |
-| angry  |
-| drive  |
-| drove  |
-| hungry |
-+--------+
-––– input –––
-mysql -h0 -P1306 -e "CALL AUTOCOMPLETE('fool', 'dist_table', 1 AS fuzziness);" | tail -n +4
-––– output –––
-| foolish |
-+---------+
+| drew     |
+| drema    |
+| audrea   |
+| brewer   |
+| dreama   |
+| mcgrew   |
+| deandrea |
++----------+

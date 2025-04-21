@@ -101,7 +101,7 @@ constexpr int MAX_TOLERATE_LOAD_SEGMENTS		= MAX_SEGMENTS * ( SIMULTANEOUS_SAVE_L
 #define LOG_LEVEL_RTDIAGV false
 #define LOG_LEVEL_RTDIAGVV false
 #define LOG_LEVEL_DEBUGV false
-#define LOG_COMPONENT_RTSEG __LINE__ << " " << Coro::CurrentScheduler()->Name() << " "
+#define LOG_COMPONENT_RTSEG __LINE__ << " " << (Coro::CurrentScheduler()?Coro::CurrentScheduler()->Name():"") << " "
 
 // used in start/merge RAM segments
 #define RTRLOG LOGINFO ( RTRDIAG, RTSEG )
@@ -1424,7 +1424,7 @@ private:
 	Coro::Waitable_T<int>		m_tUnLockedSegments { 0 }; // how many segments are not participating in any locked ops (like merge, save to disk).
 	Coro::Waitable_T<MergeSeg_e> m_eSegMergeQueued { MergeSeg_e::NEWSEG };
 	Coro::Waitable_T<CSphVector<int64_t>> m_tSaveTIDS { 0 }; // save operations performing now, and their TIDs
-	int							m_iSaveGeneration = 0;		// SaveDiskChunk() increases generation on finish
+	int							m_iSavedGeneration = 0;		// SaveDiskChunk() increases generation on finish
 	Coro::Waitable_T<int>		m_tNSavesNow { 0 };			// N of merge segment routines running right now
 
 	Coro::Waitable_T<int>		m_tBackgroundRoutines { 0 };
@@ -1432,8 +1432,8 @@ private:
 	int64_t						m_iSavedTID = 0;
 	int64_t						m_tmSaved;
 	mutable DWORD				m_uDiskAttrStatus = 0;
-	std::atomic<int64_t>		m_tmDataWriten = 0;
-	std::atomic<int64_t>		m_tmDataSearched = 0;
+	std::atomic<int64_t>		m_tmDataWriten { 0 };
+	mutable std::atomic<int64_t> m_tmDataSearched { 0 };
 
 	bool						m_bKeywordDict;
 	int							m_iWordsCheckpoint = RTDICT_CHECKPOINT_V5;
@@ -3214,11 +3214,11 @@ bool RtIndex_c::MergeSegmentsStep ( MergeSeg_e eVal ) REQUIRES ( m_tWorkers.Seri
 	{
 		// here it might be no race, as we're in serial worker.
 		TRACE_SCHED ( "wait", "MergeSegmentsStep-wait-save" );
-		auto iOldGen = m_iSaveGeneration;
+		auto iOldGen = m_iSavedGeneration;
 		m_tNSavesNow.Wait ( [] ( int iVal ) { return iVal < SIMULTANEOUS_SAVE_LIMIT; } );
 
 		// if a save finished during wait - limits and conditions may be changed, will restart to check whether save is still necessary
-		if ( m_iSaveGeneration != iOldGen )
+		if ( m_iSavedGeneration != iOldGen )
 		{
 			RTLOGV << "Recheck due to just finished SaveDiskChunk";
 			return true;
@@ -4261,7 +4261,7 @@ bool RtIndex_c::SaveDiskChunk ( bool bForced, bool bEmergent ) REQUIRES ( m_tWor
 	// we're in serial worker - no concurrency, no race between wait() and modify()
 	m_tNSavesNow.ModifyValue ( [] ( int& iVal ) { ++iVal; } );
 	auto tFinallySetSaveUnactive = AtScopeExit ( [this] {
-		++m_iSaveGeneration;
+		++m_iSavedGeneration;
 		m_tNSavesNow.ModifyValueAndNotifyAll ( [] ( int& iVal ) { --iVal; } );
 	} );
 
@@ -4320,7 +4320,7 @@ bool RtIndex_c::SaveDiskChunk ( bool bForced, bool bEmergent ) REQUIRES ( m_tWor
 	while ( true )
 	{
 		// as separate subtask we 1-st flush segments to disk, and then load just flushed segment
-		// if forced, continue to work in the same fiber; otherwise split to merge fiber
+		// if forced, continue to work in the same fiber (which is serialworker); otherwise split to merge fiber
 		ScopedScheduler_c tSaveFiber { bForced ? Coro::CurrentScheduler () : m_tWorkers.SaveSegmentsWorker() };
 		TRACE_SCHED_VARID ( "rt", "SaveDiskChunk-routine", iSaveOp );
 
@@ -7806,7 +7806,7 @@ bool RtIndex_c::MultiQuery ( CSphQueryResult & tResult, const CSphQuery & tQuery
 	dAllSorters.Apply ([&dSorters] ( ISphMatchSorter* p ) { if ( p ) dSorters.Add(p); });
 	auto& tMeta = *tResult.m_pMeta;
 
-	AT_SCOPE_EXIT ( [this]() { const_cast<std::atomic<int64_t> &> ( m_tmDataSearched ).store ( sphMicroTimer() ); } );
+	AT_SCOPE_EXIT ( [this]() { m_tmDataSearched.store ( sphMicroTimer(), std::memory_order_relaxed ); } );
 
 	// if we have anything to work with
 	if ( dSorters.IsEmpty() )

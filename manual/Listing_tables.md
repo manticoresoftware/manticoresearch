@@ -77,6 +77,28 @@ utilsApi.sql('SHOW TABLES')
  u'total': 0,
  u'warning': u''}
 ```
+
+<!-- intro -->
+##### Python-asyncio:
+
+<!-- request Python-asyncio -->
+
+```python
+await utilsApi.sql('SHOW TABLES')
+```
+
+<!-- response Python-asyncio -->
+```python
+{u'columns': [{u'Index': {u'type': u'string'}},
+              {u'Type': {u'type': u'string'}}],
+ u'data': [{u'Index': u'dist1', u'Type': u'distributed'},
+           {u'Index': u'rt', u'Type': u'rt'},
+           {u'Index': u'products', u'Type': u'rt'}],
+ u'error': u'',
+ u'total': 0,
+ u'warning': u''}
+```
+
 <!-- intro -->
 ##### Javascript:
 
@@ -97,7 +119,7 @@ res = await utilsApi.sql('SHOW TABLES');
 <!-- request Java -->
 
 ```java
-utilsApi.sql("SHOW TABLES")
+utilsApi.sql("SHOW TABLES", true)
 ```
 
 <!-- response Java -->
@@ -111,11 +133,25 @@ utilsApi.sql("SHOW TABLES")
 <!-- request C# -->
 
 ```clike
-utilsApi.Sql("SHOW TABLES")
+utilsApi.Sql("SHOW TABLES", true)
 ```
 
 <!-- response C# -->
 ```C#
+{columns=[{Index={type=string}}, {Type={type=string}}], data=[{Index=products, Type=rt}], total=0, error="", warning=""}
+```
+
+<!-- intro -->
+##### Rust:
+
+<!-- request Rust -->
+
+```rust
+utils_api.sql("SHOW TABLES", Some(true)).await
+```
+
+<!-- response Rust -->
+```Rust
 {columns=[{Index={type=string}}, {Type={type=string}}], data=[{Index=products, Type=rt}], total=0, error="", warning=""}
 ```
 
@@ -168,7 +204,7 @@ Array
 <!-- request Python -->
 
 ```python
-res = await utilsApi.sql('SHOW TABLES LIKE \'pro%\'');
+utilsApi.sql('SHOW TABLES LIKE \'pro%\'');
 ```
 
 <!-- response Python -->
@@ -180,6 +216,26 @@ res = await utilsApi.sql('SHOW TABLES LIKE \'pro%\'');
  u'total': 0,
  u'warning': u''}
 ```
+
+<!-- intro -->
+##### Python-asyncio:
+
+<!-- request Python-asyncio -->
+
+```python
+await utilsApi.sql('SHOW TABLES LIKE \'pro%\'');
+```
+
+<!-- response Python-asyncio -->
+```python
+{u'columns': [{u'Index': {u'type': u'string'}},
+              {u'Type': {u'type': u'string'}}],
+ u'data': [{u'Index': u'products', u'Type': u'rt'}],
+ u'error': u'',
+ u'total': 0,
+ u'warning': u''}
+```
+
 <!-- intro -->
 ##### Javascript:
 
@@ -201,7 +257,7 @@ utilsApi.sql('SHOW TABLES LIKE \'pro%\'')
 <!-- request Java -->
 
 ```java
-utilsApi.sql("SHOW TABLES LIKE 'pro%'")
+utilsApi.sql("SHOW TABLES LIKE 'pro%'", true)
 ```
 
 <!-- response Java -->
@@ -215,11 +271,25 @@ utilsApi.sql("SHOW TABLES LIKE 'pro%'")
 <!-- request C# -->
 
 ```clike
-utilsApi.Sql("SHOW TABLES LIKE 'pro%'")
+utilsApi.Sql("SHOW TABLES LIKE 'pro%'", true)
 ```
 
 <!-- response C# -->
 ```clike
+{columns=[{Index={type=string}}, {Type={type=string}}], data=[{Index=products, Type=rt}], total=0, error="", warning=""}
+```
+
+<!-- intro -->
+##### Rust:
+
+<!-- request Rust -->
+
+```rust
+utils_api.sql("SHOW TABLES LIKE 'pro%'", Some(true)).await
+```
+
+<!-- response Rust -->
+```rust
 {columns=[{Index={type=string}}, {Type={type=string}}], data=[{Index=products, Type=rt}], total=0, error="", warning=""}
 ```
 

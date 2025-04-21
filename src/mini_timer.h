@@ -19,26 +19,27 @@ namespace sph
 	/// we use useconds for timestamps, however sleep obey mseconds. Interval less than granularity should be considered as 0, timestamps inside granularity should be considered as equal
 	constexpr int64_t TICKS_GRANULARITY = 1000ll;
 
-	inline bool TimeExceeded ( int64_t iTimestampUS, int64_t iPivotUS, int64_t GRANULARITY=TICKS_GRANULARITY )
+	inline bool TimeExceeded ( int64_t iTimestampUS, int64_t iPivotUS, int64_t GRANULARITY=TICKS_GRANULARITY ) noexcept
 	{
 		assert ( iPivotUS > 0 );
 		return ( iTimestampUS - GRANULARITY ) < iPivotUS;
 	}
 
 	/// call sphMicroTime, track value and return it
-	int64_t MicroTimer();
+	int64_t MicroTimer() noexcept;
 
 	/// return last tracked value of MicroTimer (don't call sphMicroTime)
-	int64_t LastTimestamp();
+	int64_t LastTimestamp() noexcept;
 
 	/// returns true if provided timestamp is already reached or not
 	/// it IMPLIES timer is engaged to given limit timestamp.
 	/// non-engaged timer doesn't tick and may infinitely return false.
-	bool TimeExceeded ( int64_t iTimestampUS );
+	bool TimeExceeded ( int64_t iTimestampUS ) noexcept;
 
 	/// should be called on shutdown
 	void ShutdownMiniTimer();
 
+	/// statistic - reveal engaged timers
 	struct ScheduleInfo_t
 	{
 		int64_t m_iTimeoutStamp;
@@ -63,6 +64,8 @@ public:
 		: m_szName ( szName )
 		, m_fnOnTimer { std::move ( fnOnTimer ) }
 	{}
+
+	void SetHandler ( Threads::Handler&& fnOnTimer = nullptr );
 
 	/// on period<=0 does nothing, returns 0. On positive - engage tick after given period; returns timestamp where it should tick.
 	int64_t Engage ( int64_t iTimePeriodMS );

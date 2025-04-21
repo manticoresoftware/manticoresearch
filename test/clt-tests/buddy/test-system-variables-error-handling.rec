@@ -1,0 +1,161 @@
+––– input –––
+mkdir -p /var/lib/manticore && chmod -R 755 /var/lib/manticore
+––– output –––
+––– block: ../base/start-searchd-with-buddy –––
+––– input –––
+mysql -h0 -P9306 -e "SELECT @@session.auto_increment_increment;"
+––– output –––
+––– input –––
+mysql -h0 -P9306 -e "SELECT @@character_set_client;"
+––– output –––
+––– input –––
+mysql -h0 -P9306 -e "SELECT @@max_allowed_packet;"
+––– output –––
+––– input –––
+mysql -h0 -P9306 -e "SELECT @@autocommit;"
+––– output –––
+––– input –––
+mysql -h0 -P9306 -e "SELECT @@tx_isolation_eahhahfefhehfehf;"
+––– output –––
+––– input –––
+mysql -h0 -P9306 -e "SELECT @@nonexistent_variable;"
+––– output –––
+––– input –––
+mysql -h0 -P9306 -e "SELECT @@random_name;"
+––– output –––
+––– input –––
+mysql -h0 -P9306 -e "SELECT @@autocomm;"
+––– output –––
+––– input –––
+mysql -h0 -P9306 -e "SELECT @@character_set;"
+––– output –––
+––– input –––
+mysql -h0 -P9306 -e "SELECT @@version;"
+––– output –––
+––– input –––
+mysql -h0 -P9306 -e "SELECT @@autocommit, @@nonexistent_variable;"
+––– output –––
+––– input –––
+mysql -h0 -P9306 -e "SELECT @@character_set_client, @@tx_isolation_fake, @@max_allowed_packet;"
+––– output –––
+––– input –––
+mysql -h0 -P9306 -e "CREATE TABLE some_index (id BIGINT, value INT); INSERT INTO some_index VALUES (1, 10);"
+––– output –––
+––– input –––
+mysql -h0 -P9306 -e "SELECT @@autocommit AS auto, @@nonexistent_variable AS nonexistent FROM some_index WHERE id=1;"
+––– output –––
+––– input –––
+mysql -h0 -P9306 -e "SELECT * FROM some_index WHERE value > @@nonexistent_variable;"
+––– output –––
+––– input –––
+mysql -h0 -P9306 -e "CREATE TABLE some_index (id BIGINT, value INT); INSERT INTO some_index VALUES (1, 10);"
+––– output –––
+––– input –––
+mysql -h0 -P9306 -e "SELECT @@autocommit AS auto, @@nonexistent_variable AS nonexistent FROM some_index WHERE id=1;"
+––– output –––
+––– input –––
+mysql -h0 -P9306 -e "SELECT * FROM some_index WHERE value > @@nonexistent_variable;"
+––– output –––
+––– input –––
+mysql -h0 -P9306 -e "SELECT @user_variable;"
+––– output –––
+––– input –––
+mysql -h0 -P9306 -e "SET @user_variable = 123; SELECT @user_variable;"
+––– output –––
+––– input –––
+mysql -h0 -P9306 -e "SELECT @@123;"
+––– output –––
+––– input –––
+mysql -h0 -P9306 -e "SELECT @@'quoted_name';"
+––– output –––
+––– input –––
+mysql -h0 -P9306 -e "SELECT @@very_long_variable_name_that_exceeds_normal_length_limits;"
+––– output –––
+––– input –––
+mysql -h0 -P9306 -e "SELECT @@AUTOCOMMIT;"
+––– output –––
+––– input –––
+mysql -h0 -P9306 -e "SELECT @@AutoCommit;"
+––– output –––
+––– input –––
+mysql -h0 -P9306 -e "SELECT @@autocommit;"
+––– output –––
+––– input –––
+stdbuf -oL searchd --stopwait > /dev/null
+––– output –––
+––– input –––
+echo -e "searchd {\nlisten = 9306:mysql\nlisten = 9308:http\nlog = /var/log/manticore/searchd.log\nquery_log = /var/log/manticore/query.log\npid_file = /var/run/manticore/searchd.pid\ndata_dir = /var/lib/manticore\nbuddy_path = \n}" > /tmp/manticore_without_buddy.conf; echo $?
+––– output –––
+0
+––– input –––
+rm -f /var/log/manticore/searchd.log; stdbuf -oL searchd --stopwait > /dev/null; (stdbuf -oL searchd -c /tmp/manticore_without_buddy.conf 2>&1 | tee /var/log/manticore/searchd.log | grep -i precach & disown); sleep 0.5; if timeout 10 grep -qm1 'accepting connections' /var/log/manticore/searchd.log; then echo 'Searchd started!'; else echo 'Timeout or failed!'; cat /var/log/manticore/searchd.log; fi
+––– output –––
+––– input –––
+mysql -h0 -P9306 -e "SELECT @@session.auto_increment_increment;"
+––– output –––
+––– input –––
+mysql -h0 -P9306 -e "SELECT @@character_set_client;"
+––– output –––
+––– input –––
+mysql -h0 -P9306 -e "SELECT @@max_allowed_packet;"
+––– output –––
+––– input –––
+mysql -h0 -P9306 -e "SELECT @@autocommit;"
+––– output –––
+––– input –––
+mysql -h0 -P9306 -e "SELECT @@tx_isolation_eahhahfefhehfehf;"
+––– output –––
+––– input –––
+mysql -h0 -P9306 -e "SELECT @@nonexistent_variable;"
+––– output –––
+––– input –––
+mysql -h0 -P9306 -e "SELECT @@random_name;"
+––– output –––
+––– input –––
+mysql -h0 -P9306 -e "SELECT @@autocomm;"
+––– output –––
+––– input –––
+mysql -h0 -P9306 -e "SELECT @@character_set;"
+––– output –––
+––– input –––
+mysql -h0 -P9306 -e "SELECT @@version;"
+––– output –––
+––– input –––
+mysql -h0 -P9306 -e "SELECT @@autocommit, @@nonexistent_variable;"
+––– output –––
+––– input –––
+mysql -h0 -P9306 -e "SELECT @@character_set_client, @@tx_isolation_fake, @@max_allowed_packet;"
+––– output –––
+––– input –––
+mysql -h0 -P9306 -e "CREATE TABLE some_index (id BIGINT, value INT); INSERT INTO some_index VALUES (1, 10);"
+––– output –––
+––– input –––
+mysql -h0 -P9306 -e "SELECT @@autocommit AS auto, @@nonexistent_variable AS nonexistent FROM some_index WHERE id=1;"
+––– output –––
+––– input –––
+mysql -h0 -P9306 -e "SELECT * FROM some_index WHERE value > @@nonexistent_variable;"
+––– output –––
+––– input –––
+mysql -h0 -P9306 -e "SELECT @user_variable;"
+––– output –––
+––– input –––
+mysql -h0 -P9306 -e "SET @user_variable = 123; SELECT @user_variable;"
+––– output –––
+––– input –––
+mysql -h0 -P9306 -e "SELECT @@123;"
+––– output –––
+––– input –––
+mysql -h0 -P9306 -e "SELECT @@'quoted_name';"
+––– output –––
+––– input –––
+mysql -h0 -P9306 -e "SELECT @@very_long_variable_name_that_exceeds_normal_length_limits;"
+––– output –––
+––– input –––
+mysql -h0 -P9306 -e "SELECT @@AUTOCOMMIT;"
+––– output –––
+––– input –––
+mysql -h0 -P9306 -e "SELECT @@AutoCommit;"
+––– output –––
+––– input –––
+mysql -h0 -P9306 -e "SELECT @@autocommit;"
+––– output –––

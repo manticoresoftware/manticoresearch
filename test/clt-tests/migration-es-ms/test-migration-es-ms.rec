@@ -33,7 +33,15 @@ docker run -d --network=test_network --name elastic -p 127.0.0.1:9200:9200 -e di
 ––– output –––
 0
 ––– input –––
-apk add pnpm > /dev/null 2>&1; echo $?
+apk add npm > /dev/null 2>&1; echo $?
+––– output –––
+0
+––– input –––
+npm config set registry https://registry.npmmirror.com && npm cache clean --force > /dev/null 2>&1; echo $?
+––– output –––
+0
+––– input –––
+timeout 600 npm install elasticdump -g > /dev/null 2>&1; echo $?
 ––– output –––
 0
 ––– input –––
@@ -41,10 +49,6 @@ docker exec manticore bash -c "page=1; while true; do result=\$(curl -s \"https:
 ––– output –––
 6
 latest
-––– input –––
-pnpm install elasticdump -g > /dev/null 2>&1; echo $?
-––– output –––
-0
 ––– input –––
 elasticdump --version
 ––– output –––

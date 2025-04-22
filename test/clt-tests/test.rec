@@ -1,0 +1,28 @@
+––– input –––
+searchd
+––– output –––
+[Tue Apr 22 09:26:42.689 2025] [23] using config file '/etc/manticoresearch/manticore.conf' (273 chars)...
+Manticore 0.0.0 e7f12d695@25041005 (columnar 4.2.1 aeac3b3@25032818) (secondary 4.2.1 aeac3b3@25032818) (knn 4.2.1 aeac3b3@25032818)
+Copyright (c) 2001-2016, Andrew Aksyonoff
+Copyright (c) 2008-2016, Sphinx Technologies Inc (http://sphinxsearch.com)
+Copyright (c) 2017-2025, Manticore Software LTD (https://manticoresearch.com)
+starting daemon version '0.0.0 e7f12d695@25041005 (columnar 4.2.1 aeac3b3@25032818) (secondary 4.2.1 aeac3b3@25032818) (knn 4.2.1 aeac3b3@25032818)' ...
+listening on 127.0.0.1:9312 for sphinx and http(s)
+listening on 127.0.0.1:9306 for mysql
+listening on 127.0.0.1:9308 for sphinx and http(s)
+Manticore 0.0.0 e7f12d695@25041005 (columnar 4.2.1 aeac3b3@25032818) (secondary 4.2.1 aeac3b3@25032818) (knn 4.2.1 aeac3b3@25032818)
+Copyright (c) 2001-2016, Andrew Aksyonoff
+Copyright (c) 2008-2016, Sphinx Technologies Inc (http://sphinxsearch.com)
+Copyright (c) 2017-2025, Manticore Software LTD (https://manticoresearch.com)
+––– input –––
+mysql -h0 -P9306 -e 'create table test'; echo $?
+––– output –––
+0
+––– input –––
+mysql -h0 -P9306 -e 'show tables'
+––– output –––
++-------+------+
+| Table | Type |
++-------+------+
+| test  | rt   |
++-------+------+

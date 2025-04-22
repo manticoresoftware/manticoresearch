@@ -1,14 +1,7 @@
-# Test: Verify that the daemon terminates with a FATAL error if the replication ports are configured incorrectly.
-# Steps:
-# 1. Create a `/replication.conf` configuration file with incorrectly configured replication ports.
-# 2. Run the daemon and check for a FATAL error in the logs.
-# Expected result:
-# - The daemon terminates with a FATAL error.
-# - The logs contain: ‘FATAL: invalid replication ports count 0, must be at least 2’.
-
 ––– input –––
 echo -e 'searchd\n{\n\tlisten = 3103\n\tlisten = 9315:mysql\n\tlisten = 127.0.0.1:3104:replication\n\tdata_dir = data\n\n\tlog = searchd.log\n\tpid_file = searchd.pid\n\tbinlog_path =\n}' > /replication.conf
 ––– output –––
+––– duration: 36ms (4.91%) –––
 ––– input –––
 cat /replication.conf
 ––– output –––
@@ -25,6 +18,7 @@ binlog_path =
 ––– input –––
 mkdir -p data; rm -f searchd.log; stdbuf -oL searchd --stopwait > /dev/null; stdbuf -oL searchd -c /replication.conf > /dev/null
 ––– output –––
+––– duration: 574ms (78.31%) –––
 ––– input –––
 grep 'FATAL: invalid replication ports count 1, should be at least 2' searchd.log |wc -l
 ––– output –––

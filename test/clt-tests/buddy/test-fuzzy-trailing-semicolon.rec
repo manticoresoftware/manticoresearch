@@ -1,4 +1,5 @@
-––– block: ../base/start-searchd –––
+––– block: ../base/start –––
+
 ––– input –––
 mysql -P9306 -h0 -e "drop table if exists t; create table t(f text);"; echo $?
 ––– output –––
@@ -14,6 +15,7 @@ curl -s "0:9308/sql?mode=raw" -d "select * from t where match('ящик') option
 ––– input –––
 mysql -h0 -P9306 -e "DROP TABLE IF EXISTS t; CREATE TABLE t(f TEXT) min_infix_len='2';"
 ––– output –––
+
 ––– input –––
 mysql -h0 -P9306 -e "INSERT INTO t(id, f) VALUES (1, 'ящик'), (2, 'коробка');"; echo $?
 ––– output –––

@@ -8091,7 +8091,6 @@ std::pair<RowidIterator_i *, bool> CSphIndex_VLN::SpawnIterators ( const CSphQue
 	}
 
 	// using g_iPseudoShardingThresh==0 check so that iterators are still spawned in test suite (when g_iPseudoShardingThresh=0)
-	const int64_t SMALL_INDEX_THRESH = 8192;
 	if ( m_iDocinfo < SMALL_INDEX_THRESH && g_iPseudoShardingThresh > 0 )
 	{
 		dModifiedFilters = dFilters;

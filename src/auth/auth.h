@@ -14,6 +14,7 @@
 
 #include "sphinxstd.h"
 #include "sphinxutils.h"
+#include "searchdaemon.h"
 
 void AuthConfigure ( const CSphConfigSection & hSearchd );
 bool IsAuthEnabled();
@@ -23,3 +24,8 @@ void SetSessionAuth ( CSphVector<AgentConn_t *> & dRemotes );
 void SetAuth ( const CSphString & sUser, CSphVector<AgentConn_t *> & dRemotes );
 void SetAuth ( const CSphString & sUser, AgentConn_t * pAgent );
 bool AuthReload ( CSphString & sError );
+
+ServedIndexRefPtr_c MakeDynamicAuthIndex ( const CSphString & sName, StringBuilder_c & sError );
+
+int DeleteAuthDocuments ( const CSphString & sName, const SqlStmt_t & tStmt, CSphString & sError );
+bool InsertAuthDocuments ( const SqlStmt_t & tStmt, CSphString & sError );

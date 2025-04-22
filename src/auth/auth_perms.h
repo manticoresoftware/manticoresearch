@@ -30,12 +30,15 @@ struct UserPerm_t
 	AuthAction_e m_eAction;
 	CSphString m_sTarget;
 	bool m_bAllow = false;
+	CSphString m_sBudget;
 
 	bool m_bTargetWildcard = false;
+	bool m_bTargetWildcardAll = false;
 };
 
 // FIME!!! add offset for each action inside perms vector
 using UserPerms_t = CSphVector<UserPerm_t>;
 
-bool CheckPerms ( const CSphString & sUser, AuthAction_e eAction, const CSphString & sTarget, CSphString & sError );
+bool CheckPerms ( const CSphString & sUser, AuthAction_e eAction, const CSphString & sTarget, bool bAllowEmpty, CSphString & sError );
+AuthAction_e ReadAction ( Str_t sAction );
 const char * GetActionName (  AuthAction_e eAction );

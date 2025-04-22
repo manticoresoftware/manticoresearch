@@ -139,7 +139,7 @@ bool HttpCheckPerms ( const CSphString & sUser, AuthAction_e eAction, const CSph
 		return true;
 	}
 
-	if ( CheckPerms ( sUser, eAction, sTarget, sError ) )
+	if ( CheckPerms ( sUser, eAction, sTarget, false, sError ) )
 		return true;
 
 	eReplyHttpCode = EHTTP_STATUS::_403;

@@ -16,6 +16,8 @@
 #include "std/openhash.h"
 #include "digest_sha1.h"
 #include "digest_sha256.h"
+#include "sphinxjson.h"
+
 #include "auth_perms.h"
 
 struct AuthUserCred_t
@@ -47,8 +49,21 @@ public:
 	AuthUsers_t & operator= ( const AuthUsers_t & ) noexcept = default;
 };
 
-using AuthUsersPtr_t = std::shared_ptr<AuthUsers_t>;
+using AuthUsersPtr_t = std::shared_ptr<const AuthUsers_t>;
+using AuthUsersMutablePtr_t = std::unique_ptr<AuthUsers_t>;
 
 const AuthUsersPtr_t GetAuth();
+AuthUsersMutablePtr_t CopyAuth();
 
-AuthUsersPtr_t ReadAuthFile ( const CSphString & sFile, CSphString & sError );
+AuthUsersMutablePtr_t ReadAuthFile ( const CSphString & sFile, CSphString & sError );
+bool SaveAuthFile ( const AuthUsers_t & tAuth, const CSphString & sFile, CSphString & sError );
+
+const CSphString & GetPrefixAuth();
+const CSphString & GetIndexNameAuthUsers();
+const CSphString & GetIndexNameAuthPerms();
+const CSphString & GetAuthBuddyName();
+
+void AddUser ( const AuthUserCred_t & tEntry, AuthUsersMutablePtr_t & tAuth );
+CSphString ReadHex ( Str_t sRaw, int iHashLen, CSphString & sError );
+CSphString ReadHex ( const char * sName, int iHashLen, const bson::Bson_c & tNode, CSphString & sError );
+void SortUserPerms ( UserPerms_t & dPerms );

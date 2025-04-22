@@ -81,6 +81,7 @@
 #include "detail/indexlink.h"
 #include "detail/expmeter.h"
 #include "auth/auth.h"
+#include "auth/auth_common.h"
 #include "auth/auth_proto_mysql.h"
 
 extern "C"
@@ -5342,7 +5343,7 @@ private:
 		int						m_iDupeId = -1;
 	};
 
-	bool							ParseSysVar();
+	bool							ParseSystem();
 	bool							ParseIdxSubkeys();
 	bool							CheckMultiQuery() const;
 	bool							AcquireInvokedIndexes();
@@ -6780,12 +6781,14 @@ void HandleMysqlDescribe ( RowBuffer_i & tOut, SqlStmt_t * pStmt );
 void HandleSelectIndexStatus ( RowBuffer_i & tOut, const SqlStmt_t * pStmt );
 void HandleSelectFiles ( RowBuffer_i & tOut, const SqlStmt_t * pStmt );
 
-bool SearchHandler_c::ParseSysVar ()
+bool SearchHandler_c::ParseSystem()
 {
-	const auto& sVar = m_dLocal.First().m_sName;
+	const auto & sName = m_dLocal.First().m_sName;
 	const auto & dSubkeys = m_dNQueries.First ().m_dStringSubkeys;
+	bool bSysVar = ( sName=="@@system" );
+	bool bAuthTbl = ( sName.Begins ( GetPrefixAuth().cstr() ) );
 
-	if ( sVar=="@@system" )
+	if ( bSysVar )
 	{
 		if ( !dSubkeys.IsEmpty () )
 		{
@@ -6833,9 +6836,17 @@ bool SearchHandler_c::ParseSysVar ()
 				return true;
 			}
 		}
+	} else if ( bAuthTbl )
+	{
+		cServedIndexRefPtr_c pIndex { MakeDynamicAuthIndex ( sName, m_sError ) };
+		if ( !pIndex )
+			return false;
+
+		m_dAcquired.AddIndex ( sName, std::move ( pIndex ) );
+		return true;
 	}
 
-	m_sError << "no such variable " << sVar;
+	m_sError << "no such " << ( bAuthTbl ? "table " : "variable " ) << sName;
 	dSubkeys.for_each ( [this] ( const auto& s ) { m_sError << s; } );
 	return false;
 }
@@ -7185,10 +7196,11 @@ bool SearchHandler_c::BuildIndexList ( int & iDivideLimits, VecRefPtrsAgentConn_
 	m_dLocal.Reset ();
 	int iOrderTag = 0;
 	bool bSysVar = tQuery.m_sIndexes.Begins ( "@@" );
+	bool bAuthTbl = tQuery.m_sIndexes.Begins ( GetPrefixAuth().cstr() );
 
 	// search through specified local indexes
 	StrVec_t dIdxNames;
-	if ( bSysVar )
+	if ( bSysVar || bAuthTbl )
 		dIdxNames.Add ( tQuery.m_sIndexes );
 	else
 	{
@@ -7270,7 +7282,7 @@ bool SearchHandler_c::BuildIndexList ( int & iDivideLimits, VecRefPtrsAgentConn_
 	else
 		m_dLocal.SwapData ( dLocals );
 
-	return !bSysVar;
+	return !( bSysVar || bAuthTbl );
 }
 
 // generate warning about slow full text expansion for queries there
@@ -7414,7 +7426,7 @@ void SearchHandler_c::RunSubset ( int iStart, int iEnd )
 	} else
 	{
 		// process query to @@*, as @@system.threads, etc.
-		if ( !ParseSysVar () )
+		if ( !ParseSystem () )
 			return;
 		// here we deal
 	}
@@ -11512,6 +11524,23 @@ void sphHandleMysqlInsert ( StmtErrorReporter_i & tOut, const SqlStmt_t & tStmt 
 	auto pServed = GetServed ( tStmt.m_sIndex );
 	if ( !ServedDesc_t::IsMutable ( pServed ) )
 	{
+		if ( tStmt.m_sIndex.Begins ( GetPrefixAuth().cstr() ) )
+		{
+			bool bCommit = ( pSession->m_bAutoCommit && !pSession->m_bInTransaction );
+			if ( !bCommit )
+			{
+				tOut.Error ( "table '%s': %s is not supported on system auth tables when autocommit=0", ( bReplace ? "REPLACE" : "INSERT" ), tStmt.m_sIndex.cstr() );
+				return;
+			}
+
+			CSphString sError;
+			if ( !InsertAuthDocuments ( tStmt, sError ) )
+				tOut.Error ( "%s", sError.cstr () );
+			else
+				tOut.Ok ( tStmt.m_iRowsAffected, CSphString(), 0 ); // FIXME!!!
+			return;
+		}
+
 		bool bDistTable = false;
 		if ( !pServed )
 		{
@@ -12990,6 +13019,11 @@ void HandleMysqlShowTables ( RowBuffer_i & tOut, const SqlStmt_t * pStmt )
 		bool bIsSystem = tIdx.m_sName.SubString ( 0, 7 ).EqN ("system.");
 		return bSystem == bIsSystem;
 	};
+	CSphString sUser;
+	CSphString sPermsError;
+	bool bAuthCheck = IsAuthEnabled();
+	if ( bAuthCheck )
+		sUser = session::GetUser();
 
 	// output the results
 	VectorLike dTable ( pStmt->m_sStringParam, { "Table", "Type" } );
@@ -12997,6 +13031,9 @@ void HandleMysqlShowTables ( RowBuffer_i & tOut, const SqlStmt_t * pStmt )
 	{
 		if ( !fnFilter ( dPair ) )
 			continue;
+		if ( bAuthCheck && !CheckPerms ( sUser, AuthAction_e::READ, dPair.m_sName, false, sPermsError ) )
+			continue;
+
 		if ( bWithClusters && !dPair.m_sCluster.IsEmpty ())
 			dTable.MatchTuplet ( SphSprintf ("%s:%s", dPair.m_sCluster.cstr(), dPair.m_sName.cstr()).cstr(), szIndexType ( dPair.m_eType ) );
 		else
@@ -14636,6 +14673,23 @@ void sphHandleMysqlDelete ( StmtErrorReporter_i & tOut, const SqlStmt_t & tStmt,
 		return;
 	}
 
+	if ( dNames[0].Begins ( GetPrefixAuth().cstr() ) )
+	{
+		if ( !bCommit )
+		{
+			tOut.Error ( "table '%s': DELETE is not supported on system auth tables when autocommit=0", tStmt.m_sIndex.cstr() );
+			return;
+		}
+
+		CSphString sError;
+		int iAffected = DeleteAuthDocuments ( dNames[0], tStmt, sError );
+		if ( !sError.IsEmpty() )
+			tOut.Error ( "%s", sError.cstr () );
+		else
+			tOut.Ok ( iAffected );
+		return;
+	}
+
 	DistrPtrs_t dDistributed;
 	CSphString sMissed;
 	if ( !ExtractDistributedIndexes ( dNames, dDistributed, sMissed ) )
@@ -14645,7 +14699,7 @@ void sphHandleMysqlDelete ( StmtErrorReporter_i & tOut, const SqlStmt_t & tStmt,
 	}
 
 	// delete to agents works only with commit=1
-	if ( !bCommit  )
+	if ( !bCommit )
 	{
 		for ( auto &pDist : dDistributed )
 		{

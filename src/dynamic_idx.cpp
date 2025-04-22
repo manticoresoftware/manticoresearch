@@ -479,22 +479,9 @@ public:
 	void Add ( BYTE ) override {}
 };
 
-class GenericTableIndex_c : public CSphIndexStub
-{
-public:
-	GenericTableIndex_c ()
-		: CSphIndexStub ( "dynamic", nullptr )
-	{}
-
-	bool				MultiQuery ( CSphQueryResult & , const CSphQuery & , const VecTraits_T<ISphMatchSorter *> &, const CSphMultiQueryArgs & ) const final;
-
-private:
-	bool MultiScan ( CSphQueryResult & tResult, const CSphQuery & tQuery, const VecTraits_T<ISphMatchSorter *> & dSorters, const CSphMultiQueryArgs & tArgs ) const;
-
-	virtual void SetSorterStuff ( CSphMatch * pMatch ) const = 0;
-	virtual bool FillNextMatch () const = 0;
-	virtual Str_t GetErrors() const = 0;
-};
+GenericTableIndex_c::GenericTableIndex_c()
+	: CSphIndexStub ( "dynamic", nullptr )
+{}
 
 bool GenericTableIndex_c::MultiQuery ( CSphQueryResult & tResult, const CSphQuery & tQuery,
 		const VecTraits_T<ISphMatchSorter *> & dAllSorters, const CSphMultiQueryArgs &tArgs ) const
@@ -669,7 +656,8 @@ bool GenericTableIndex_c::MultiScan ( CSphQueryResult & tResult, const CSphQuery
 	SwitchProfile ( pProfiler, SPH_QSTATE_FINALIZE );
 
 	// do final expression calculations
-	if ( tCtx.m_dCalcFinal.GetLength () )
+	// even if no final stage calc to finilize doc collector
+	if ( tCtx.m_dCalcFinal.GetLength() || m_bForceFinalize )
 	{
 		DynMatchProcessor_c tFinal ( tArgs.m_iTag, tCtx );
 		dSorters.Apply ( [&] ( ISphMatchSorter * p ) { p->Finalize ( tFinal, false, tArgs.m_bFinalizeSorters ); } );
@@ -780,7 +768,7 @@ Str_t DynamicIndexSchema_c::GetErrors () const
 	return FromStr ( m_tFeeder.GetError() );
 }
 
-static ServedIndexRefPtr_c MakeServed ( CSphIndex* pIndex )
+ServedIndexRefPtr_c MakeServed ( CSphIndex* pIndex )
 {
 	auto pServed = MakeServedIndex();
 	pServed->SetIdx ( std::unique_ptr<CSphIndex> ( pIndex ) );

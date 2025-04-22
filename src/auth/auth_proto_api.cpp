@@ -115,7 +115,7 @@ bool ApiCheckPerms ( const CSphString & sUser, AuthAction_e eAction, const CSphS
 	}
 
 	CSphString sError;
-	if ( CheckPerms ( sUser, eAction, sTarget, sError ) )
+	if ( CheckPerms ( sUser, eAction, sTarget, false, sError ) )
 		return true;
 
 	SendErrorReply ( tOut, "%s", sError.cstr() );

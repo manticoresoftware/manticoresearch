@@ -1637,7 +1637,7 @@ bool ClusterJoin ( const CSphString & sCluster, const StrVec_t & dNames, const C
 
 	CSphString sError;
 	// cluster user (might be not the session user) should be able to perform replication actions
-	if ( IsAuthEnabled() && !CheckPerms ( tDesc->m_sUser, AuthAction_e::REPLICATION, CSphString(), sError ) )
+	if ( IsAuthEnabled() && !CheckPerms ( tDesc->m_sUser, AuthAction_e::REPLICATION, CSphString(), true, sError ) )
 		return false;
 
 	sphLogDebugRpl ( "joining cluster '%s', nodes: %s", sCluster.cstr(), StrVec2Str ( tDesc->m_dClusterNodes ).cstr() );
@@ -1702,7 +1702,7 @@ bool ClusterCreate ( const CSphString & sCluster, const StrVec_t & dNames, const
 
 	CSphString sPermError;
 	// cluster user (might be not the session user) should be able to perform replication actions
-	if ( IsAuthEnabled() && !CheckPerms ( tDesc->m_sUser, AuthAction_e::REPLICATION, CSphString(), sPermError ) )
+	if ( IsAuthEnabled() && !CheckPerms ( tDesc->m_sUser, AuthAction_e::REPLICATION, CSphString(), true, sPermError ) )
 		return TlsMsg::Err ( sPermError );
 
 	// need to clean up Galera system files left from previous cluster

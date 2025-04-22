@@ -914,7 +914,7 @@ CSphString BuddyGetPath ( const CSphString & sConfigPath, const CSphString & , b
 	sCmd.Appendf ( "-w /buddy" ); // workdir is buddy root dir
 	sCmd.Appendf ( "--name %s", g_sContainerName.cstr() ); // the name of the buddy container is the hash of the config
 	if ( IsAuthEnabled() )
-		sCmd.Appendf ( "-e %s", g_sBuddyTokenName ); // BUDDY_TOKEN for all request into daemon from the env variable
+		sCmd.Appendf ( "-e %s", g_sBuddyTokenName.cstr() ); // BUDDY_TOKEN for all request into daemon from the env variable
 	sCmd.Appendf ( "%s /buddy/src/main.php", sDefaultBuddyDockerImage ); // docker image and the buddy start command
 
 	return CSphString ( sCmd );

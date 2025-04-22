@@ -136,7 +136,7 @@ bool SqlCheckPerms ( const CSphString & sUser, const CSphVector<SqlStmt_t> & dSt
 	case STMT_SHOW_INDEX_SETTINGS:
 	case STMT_EXPLAIN:
 	case STMT_SHOW_TABLE_INDEXES:
-		return CheckPerms ( sUser, AuthAction_e::READ, tStmt.m_sIndex, sError );
+		return CheckPerms ( sUser, AuthAction_e::READ, ( tStmt.m_sIndex.IsEmpty() ? tStmt.m_tQuery.m_sIndexes : tStmt.m_sIndex ), false, sError );
 
 	// special read actions without index
 	case STMT_SHOW_WARNINGS:
@@ -146,7 +146,7 @@ bool SqlCheckPerms ( const CSphString & sUser, const CSphVector<SqlStmt_t> & dSt
 	case STMT_SHOW_PROFILE:
 	case STMT_SHOW_PLAN:
 	case STMT_SHOW_SCROLL:
-		return CheckPerms ( sUser, AuthAction_e::READ, tStmt.m_sIndex, sError );
+		return CheckPerms ( sUser, AuthAction_e::READ, tStmt.m_sIndex, true, sError );
 
 	case STMT_INSERT:
 	case STMT_REPLACE:
@@ -161,7 +161,7 @@ bool SqlCheckPerms ( const CSphString & sUser, const CSphVector<SqlStmt_t> & dSt
 	case STMT_ALTER_KLIST_TARGET:
 	case STMT_FREEZE:
 	case STMT_UNFREEZE:
-		return CheckPerms ( sUser, AuthAction_e::WRITE, tStmt.m_sIndex, sError );
+		return CheckPerms ( sUser, AuthAction_e::WRITE, tStmt.m_sIndex, false, sError );
 
 	// special write actions without index
 	case STMT_SET:
@@ -172,7 +172,7 @@ bool SqlCheckPerms ( const CSphString & sUser, const CSphVector<SqlStmt_t> & dSt
 	case STMT_KILL:
 	case STMT_FLUSH_HOSTNAMES:
 	case STMT_FLUSH_LOGS:
-		return CheckPerms ( sUser, AuthAction_e::WRITE, tStmt.m_sIndex, sError );
+		return CheckPerms ( sUser, AuthAction_e::WRITE, tStmt.m_sIndex, true, sError );
 
 	case STMT_SHOW_STATUS:
 	case STMT_CREATE_TABLE:
@@ -206,14 +206,14 @@ bool SqlCheckPerms ( const CSphString & sUser, const CSphVector<SqlStmt_t> & dSt
 	case STMT_SHOW_SETTINGS:
 	case STMT_ALTER_REBUILD_SI:
 	case STMT_SHOW_LOCKS:
-		return CheckPerms ( sUser, AuthAction_e::SCHEMA, tStmt.m_sIndex, sError );
+		return CheckPerms ( sUser, AuthAction_e::SCHEMA, tStmt.m_sIndex, false, sError );
 
 	case STMT_RELOAD_AUTH:
 	case STMT_DEBUG:
 	case STMT_SHOW_USERS:
 	case STMT_SHOW_PERMISSIONS:
 	case STMT_SHOW_TOKEN:
-		 return CheckPerms ( sUser, AuthAction_e::ADMIN, tStmt.m_sIndex, sError );
+		 return CheckPerms ( sUser, AuthAction_e::ADMIN, tStmt.m_sIndex, true, sError );
 
 	default:
 		break;
@@ -246,7 +246,7 @@ void HandleMysqlShowPerms ( RowBuffer_i & tOut )
 				tOut.PutString ( GetActionName ( tPerm.m_eAction ) );
 				tOut.PutString ( tPerm.m_sTarget );
 				tOut.PutString ( tPerm.m_bAllow ? "true" : "false" );
-				tOut.PutString ( "" );
+				tOut.PutString ( tPerm.m_sBudget );
 				if ( !tOut.Commit () )
 					return;
 			}

@@ -21,50 +21,84 @@
 #include "auth_perms.h"
 #include "auth_common.h"
 
-static void FromString ( Str_t sSrc, CSphVector<BYTE> & dBuf )
+static const CSphString g_sBuddyName ( "system.buddy" );
+static CSphString g_sPrefixAuth ( "system.auth_" );
+static CSphString g_sIndexNameAuthUsers ( "system.auth_users" );
+static CSphString g_sIndexNameAuthPerms ( "system.auth_permissions" );
+
+const CSphString & GetPrefixAuth()
+{
+	return g_sPrefixAuth;
+}
+
+const CSphString & GetIndexNameAuthUsers()
+{
+	return g_sIndexNameAuthUsers;
+}
+
+const CSphString & GetIndexNameAuthPerms()
+{
+	return g_sIndexNameAuthPerms;
+}
+
+const CSphString & GetAuthBuddyName()
+{
+	return g_sBuddyName;
+}
+
+static void FromString ( Str_t sSrc, CSphString & sRes )
 {
 	// expects hash in form FIPS-180-1, that is:
 	// 45f44fd2db02b08b4189abf21e90edd712c9616d
 	// i.e. 40 symbols hex hash in small letters, space
 
-	dBuf.Resize ( 0 );
+	ByteBlob_t dBuf ( sRes );
 	for ( int i=0; i<sSrc.second/2; ++i )
 	{
-		BYTE & uCode = dBuf.Add();
+		BYTE & uCode = (BYTE &)dBuf.first[i];
 		uCode = HexChar ( sSrc.first[i * 2] );
 		uCode = BYTE ( ( uCode << 4 ) + HexChar ( sSrc.first[i * 2 + 1] ) );
 	}
 }
 
-static CSphString ReadHex ( const char * sName, int iHashLen, bson::Bson_c & tNode, CSphVector<BYTE> & dBuf, CSphString & sError )
+CSphString ReadHex ( Str_t sRaw, int iHashLen, CSphString & sError )
+{
+	CSphString sRes;
+
+	if ( sRaw.second/2!=iHashLen )
+	{
+		sError.SetSprintf ( "wrong hash size %d, expected %d", sRaw.second/2, iHashLen );
+		return sRes;
+	}
+
+	sRes.Reserve ( sRaw.second/2 );
+	FromString ( sRaw, sRes );
+
+	return sRes;
+}
+
+CSphString ReadHex ( const char * sName, int iHashLen, const bson::Bson_c & tNode, CSphString & sError )
 {
 	CSphString sRes;
 
 	Str_t sRaw = bson::ToStr ( tNode.ChildByName ( sName ) );
-	if ( sRaw.second!=iHashLen*2 )
+	if ( sRaw.second/2!=iHashLen )
 	{
-		sError.SetSprintf ( "wrong decoded hash size %d, expected %d", dBuf.GetLength(), iHashLen );
+		sError.SetSprintf ( "wrong hash size %d, expected %d", sRaw.second/2, iHashLen );
 		return sRes;
 	}
 
-	dBuf.Resize ( 0 );
-	FromString ( sRaw, dBuf );
-	if ( dBuf.GetLength()!=iHashLen )
-	{
-		sError.SetSprintf ( "wrong decoded hash size %d, expected %d", dBuf.GetLength(), iHashLen );
-		return sRes;
-	}
-
-	sRes.SetBinary ( (const char *)dBuf.Begin(), dBuf.GetLength() );
+	sRes.Reserve ( sRaw.second/2 );
+	FromString ( sRaw, sRes );
 	return sRes;
 }
 
-static bool ReadUsers ( const CSphString & sFile, bson::Bson_c & tBson, AuthUsersPtr_t & tAuth, CSphString & sError );
-static bool ReadPerms ( const CSphString & sFile, bson::Bson_c & tBson, AuthUsersPtr_t & tAuth, CSphString & sError );
+static bool ReadUsers ( const CSphString & sFile, bson::Bson_c & tBson, AuthUsersMutablePtr_t & tAuth, CSphString & sError );
+static bool ReadPerms ( const CSphString & sFile, bson::Bson_c & tBson, AuthUsersMutablePtr_t & tAuth, CSphString & sError );
 
-AuthUsersPtr_t ReadAuthFile ( const CSphString & sFile, CSphString & sError )
+AuthUsersMutablePtr_t ReadAuthFile ( const CSphString & sFile, CSphString & sError )
 {
-	AuthUsersPtr_t tAuth { new AuthUsers_t() };
+	AuthUsersMutablePtr_t tAuth { new AuthUsers_t() };
 
 	// ok to skip auth init if the is no filename set
 	if ( sFile.IsEmpty() )
@@ -135,9 +169,15 @@ AuthUsersPtr_t ReadAuthFile ( const CSphString & sFile, CSphString & sError )
 	return tAuth;
 }
 
-bool ReadUsers ( const CSphString & sFile, bson::Bson_c & tBson, AuthUsersPtr_t & tAuth, CSphString & sError )
+void AddUser ( const AuthUserCred_t & tEntry, AuthUsersMutablePtr_t & tAuth )
 {
-	CSphVector<BYTE> dHashBuf { HASH256_SIZE };
+	tAuth->m_hUserToken.Add ( tEntry, tEntry.m_sUser );
+	tAuth->m_hHttpToken2User.Add ( tEntry.m_sUser, tEntry.m_sRawBearerSha256 );
+	tAuth->m_hApiToken2User.Add ( tEntry.m_sUser, tEntry.m_sBearerSha256 );
+}
+
+bool ReadUsers ( const CSphString & sFile, bson::Bson_c & tBson, AuthUsersMutablePtr_t & tAuth, CSphString & sError )
+{
 	sph::StringSet hSalts;
 
 	bson::Bson_c ( tBson.ChildByName ( "users" ) ).ForEach ( [&] ( const bson::NodeHandle_t & tHandle )
@@ -146,14 +186,14 @@ bool ReadUsers ( const CSphString & sFile, bson::Bson_c & tBson, AuthUsersPtr_t 
 
 		AuthUserCred_t tEntry;
 		tEntry.m_sUser = bson::String ( tNode.ChildByName ( "username" ) );
-		tEntry.m_sSalt = ReadHex ( "salt", HASH20_SIZE, tNode, dHashBuf, sError );
+		tEntry.m_sSalt = ReadHex ( "salt", HASH20_SIZE, tNode, sError );
 
 		bson::Bson_c tHashes { tNode.ChildByName ( "hashes" ) };
 
-		ReadHex ( "password_sha1_no_salt", HASH20_SIZE, tHashes, dHashBuf, sError );
-		memcpy ( tEntry.m_tPwdSha1.data(), dHashBuf.Begin(), dHashBuf.GetLength() );
-		tEntry.m_sPwdSha256 = ReadHex ( "password_sha256", HASH256_SIZE, tHashes, dHashBuf, sError );
-		tEntry.m_sBearerSha256 = ReadHex ( "bearer_sha256", HASH256_SIZE, tHashes, dHashBuf, sError );
+		CSphString sSha1 = ReadHex ( "password_sha1_no_salt", HASH20_SIZE, tHashes, sError );
+		memcpy ( tEntry.m_tPwdSha1.data(), sSha1.cstr(), HASH20_SIZE );
+		tEntry.m_sPwdSha256 = ReadHex ( "password_sha256", HASH256_SIZE, tHashes, sError );
+		tEntry.m_sBearerSha256 = ReadHex ( "bearer_sha256", HASH256_SIZE, tHashes, sError );
 		tEntry.m_sRawBearerSha256 = bson::String ( tHashes.ChildByName ( "bearer_sha256" ) );
 
 		if ( !sError.IsEmpty() )
@@ -176,7 +216,7 @@ bool ReadUsers ( const CSphString & sFile, bson::Bson_c & tBson, AuthUsersPtr_t 
 		}
 		if ( hSalts [ tEntry.m_sSalt ] )
 		{
-			sError.SetSprintf ( "can not read users from the '%s', error: multiple salt entries '%s'", sFile.cstr(), tEntry.m_sSalt.cstr() );
+			sError.SetSprintf ( "can not read users from the '%s', error: multiple salt entries '%s'", sFile.cstr(), BinToHex ( (const BYTE *)tEntry.m_sSalt.cstr(), tEntry.m_sSalt.Length() ).cstr() );
 			return;
 		}
 		if ( tAuth->m_hHttpToken2User ( tEntry.m_sRawBearerSha256 ) )
@@ -185,9 +225,7 @@ bool ReadUsers ( const CSphString & sFile, bson::Bson_c & tBson, AuthUsersPtr_t 
 			return;
 		}
 
-		tAuth->m_hUserToken.Add ( tEntry, tEntry.m_sUser );
-		tAuth->m_hHttpToken2User.Add ( tEntry.m_sUser, tEntry.m_sRawBearerSha256 );
-		tAuth->m_hApiToken2User.Add ( tEntry.m_sUser, tEntry.m_sBearerSha256 );
+		AddUser ( tEntry, tAuth );
 		hSalts.Add ( tEntry.m_sSalt );
 	});
 	if ( !sError.IsEmpty() )
@@ -203,7 +241,7 @@ bool ReadUsers ( const CSphString & sFile, bson::Bson_c & tBson, AuthUsersPtr_t 
 	return true;
 }
 
-static AuthAction_e ReadAction ( Str_t sAction )
+AuthAction_e ReadAction ( Str_t sAction )
 {
 	if ( StrEq ( sAction, "read" ) )
 		return AuthAction_e::READ;
@@ -257,7 +295,12 @@ struct CmpPerm_fn
 	}
 };
 
-bool ReadPerms ( const CSphString & sFile, bson::Bson_c & tBson, AuthUsersPtr_t & tAuth, CSphString & sError )
+void SortUserPerms ( UserPerms_t & dPerms )
+{
+	dPerms.Sort( CmpPerm_fn() );
+}
+
+bool ReadPerms ( const CSphString & sFile, bson::Bson_c & tBson, AuthUsersMutablePtr_t & tAuth, CSphString & sError )
 {
 	bson::Bson_c ( tBson.ChildByName ( "permissions" ) ).ForEach ( [&] ( const bson::NodeHandle_t & tHandle )
 	{
@@ -268,8 +311,12 @@ bool ReadPerms ( const CSphString & sFile, bson::Bson_c & tBson, AuthUsersPtr_t 
 		UserPerm_t tPerm;
 		tPerm.m_eAction = ReadAction ( bson::ToStr ( tNode.ChildByName ( "action" ) ) );
 		tPerm.m_sTarget = bson::String ( tNode.ChildByName ( "target" ) );
+		tPerm.m_sTarget.Trim();
 		tPerm.m_bAllow = bson::Bool ( tNode.ChildByName ( "allow" ) );
 		tPerm.m_bTargetWildcard = HasWildcard ( tPerm.m_sTarget.cstr() );
+		tPerm.m_bTargetWildcardAll = ( tPerm.m_sTarget=="*" );
+		if ( tNode.HasAnyOf ( { "budget" } ) )
+			bson::Bson_c ( tNode.ChildByName ( "budget" ) ).BsonToJson ( tPerm.m_sBudget );
 
 		if ( tNode.HasError() )
 		{
@@ -281,6 +328,11 @@ bool ReadPerms ( const CSphString & sFile, bson::Bson_c & tBson, AuthUsersPtr_t 
 			sError.SetSprintf ( "can not read users from the '%s', user: %s, uknown action", sFile.cstr(), sUser.cstr() );
 			return;
 		}
+		if ( tPerm.m_sTarget.IsEmpty() )
+		{
+			sError.SetSprintf ( "can not read users from the '%s', user: %s, empty target", sFile.cstr(), sUser.cstr() );
+			return;
+		}
 		AuthUserCred_t * pUser = tAuth->m_hUserToken ( sUser );
 		if ( !pUser )
 		{
@@ -288,15 +340,94 @@ bool ReadPerms ( const CSphString & sFile, bson::Bson_c & tBson, AuthUsersPtr_t 
 			return;
 		}
 
-		UserPerms_t & tPerms = tAuth->m_hUserPerms.AddUnique ( sUser );
-		tPerms.Add ( tPerm );
+		UserPerms_t & dPerms = tAuth->m_hUserPerms.AddUnique ( sUser );
+		dPerms.Add ( tPerm );
 	});
 
 	if ( !sError.IsEmpty() )
 		return false;
 
-	for ( auto & dPerms : tAuth->m_hUserPerms )
-		dPerms.second.Sort( CmpPerm_fn() );
+	for ( auto & tPerms : tAuth->m_hUserPerms )
+		SortUserPerms ( tPerms.second );
+
+	return true;
+}
+
+static CSphString WriteJson ( const AuthUsers_t & tAuth )
+{
+	JsonEscapedBuilder tWriter;
+	tWriter.StartBlock ( nullptr, "{", "\n}" );
+	{
+		tWriter.StartBlock ( ",\n", "\"users\":[\n", "\n]" );
+		for ( const auto & tItUser : tAuth.m_hUserToken )
+		{
+			const AuthUserCred_t & tUser = tItUser.second;
+			if ( tUser.m_sUser==GetAuthBuddyName() )
+				continue;
+
+			tWriter.StartBlock ( ",\n", "{\n", "\n}" );
+			tWriter.NamedString ( "username", tUser.m_sUser );
+			tWriter.NamedString ( "salt", BinToHex ( (const BYTE *)tUser.m_sSalt.scstr(), tUser.m_sSalt.Length() ) );
+			{
+				tWriter.StartBlock ( ",\n", "\"hashes\":{\n", "\n}" );
+				tWriter.NamedString ( "password_sha1_no_salt", BinToHex ( tUser.m_tPwdSha1.data(), tUser.m_tPwdSha1.size() ) );
+				tWriter.NamedString ( "password_sha256", BinToHex ( (const BYTE *)tUser.m_sPwdSha256.scstr(), tUser.m_sPwdSha256.Length() ) );
+				tWriter.NamedString ( "bearer_sha256", BinToHex ( (const BYTE *)tUser.m_sBearerSha256.scstr(), tUser.m_sBearerSha256.Length() ) );
+				tWriter.FinishBlock ( true );
+			}
+			tWriter.FinishBlock ( true );
+		}
+		tWriter.FinishBlock ( true );
+
+		tWriter.StartBlock ( ",\n", ",\"permissions\":[\n", "\n]" );
+		for ( const auto & dPerms : tAuth.m_hUserPerms )
+		{
+			if ( dPerms.first==GetAuthBuddyName() )
+				continue;
+
+			for ( const auto & tPerm : dPerms.second )
+			{
+				tWriter.StartBlock ( ",\n", "{\n", "\n}" );
+				tWriter.NamedString ( "username", dPerms.first );
+				tWriter.NamedString ( "action", GetActionName ( tPerm.m_eAction ) );
+				tWriter.NamedString ( "target", tPerm.m_sTarget );
+				tWriter.NamedVal ( "allow", tPerm.m_bAllow );
+				if ( !tPerm.m_sBudget.IsEmpty() )
+				{
+					tWriter.Named ( "budget" );
+					tWriter.AppendRawChunk ( FromStr ( tPerm.m_sBudget ) ); 
+				}
+				tWriter.FinishBlock ( true );
+			}
+		}
+		tWriter.FinishBlock ( true );
+	}
+	tWriter.FinishBlock ( true );
+
+	return CSphString ( tWriter );
+}
+
+bool SaveAuthFile ( const AuthUsers_t & tAuth, const CSphString & sFile, CSphString & sError )
+{
+	CSphString sAuth = WriteJson ( tAuth );
+
+	CSphString sNewFile;
+	sNewFile.SetSprintf ( "%s.new", sFile.cstr() );
+
+	CSphWriter tWriter;
+	if ( !tWriter.OpenFile ( sNewFile, sError ) )
+		return false;
+
+	tWriter.PutBytes ( sAuth.cstr(), sAuth.Length() );
+	tWriter.CloseFile();
+	if ( tWriter.IsError() )
+		return false;
+
+	if ( sph::rename ( sNewFile.cstr(), sFile.cstr() ) )
+	{
+		sError.SetSprintf ( "failed to rename (src=%s, dst=%s, errno=%d, error=%s)", sNewFile.cstr(), sFile.cstr(), errno, strerrorm(errno) );
+		return false;
+	}
 
 	return true;
 }

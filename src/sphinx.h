@@ -60,6 +60,8 @@ extern const char * szGDB_SOURCE_DIR;
 #define SPHINX_SEARCHD_PROTO	1
 #define SPHINX_CLIENT_VERSION	2
 
+constexpr int64_t SMALL_INDEX_THRESH = 8192;
+
 /////////////////////////////////////////////////////////////////////////////
 
 extern int64_t g_iIndexerCurrentDocID;

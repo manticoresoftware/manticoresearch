@@ -75,7 +75,7 @@ public:
 	void		Read ( T & tValue )						{ GetBytes ( &tValue, sizeof(tValue) ); }
 	void		Read ( void * pData, size_t tSize )		{ GetBytes ( pData, tSize ); }
 
-	void		GetBytes ( void * pData, int iSize );
+	void		GetBytes ( void * pData, int64_t iSize );
 
 	int			GetByte ();
 	DWORD		GetDword ();

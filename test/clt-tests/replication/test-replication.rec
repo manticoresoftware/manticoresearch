@@ -27,6 +27,15 @@ export CLUSTER_NAME=replication
 ––– output –––
 ––– block: ../base/replication/join-cluster-on-all-nodes –––
 ––– input –––
+for port in 1306 2306 3306; do timeout 30 mysql -h0 -P$port -e "SHOW STATUS LIKE 'cluster_replication_status'\G" > /tmp/status_$port.log && grep -q "Value: primary" /tmp/status_$port.log && echo "Port $port: Node synced"; done && cat /tmp/status_1306.log
+––– output –––
+Port 1306: Node synced
+Port 2306: Node synced
+Port 3306: Node synced
+*************************** 1. row ***************************
+Counter: cluster_replication_status
+Value: primary
+––– input –––
 mysql -h0 -P1306 -e "CREATE TABLE testrt (title text, content text, gid uint);" && mysql -h0 -P1306 -e "INSERT INTO testrt VALUES(6775836565403860993,'List of HP business laptops','Elitebook Probook',1);" && mysql -h0 -P1306 -e "INSERT INTO testrt VALUES(6775836565403860994,'List of Dell business laptops','Latitude Precision Vostro',2);" && mysql -h0 -P1306 -e "ALTER CLUSTER replication ADD testrt;" && mysql -h0 -P1306 -e "SHOW STATUS LIKE 'cluster_replication_indexes';"
 ––– output –––
 +-----------------------------+--------+

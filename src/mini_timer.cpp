@@ -39,25 +39,25 @@ CSphString Stamp()
 
 static std::atomic<int64_t> g_tmLastTimestamp { sphMicroTimer() };
 
-inline static int64_t MicroTimerImpl()
+inline static int64_t MicroTimerImpl() noexcept
 {
 	int64_t tmTimestamp = sphMicroTimer();
 	g_tmLastTimestamp.store ( tmTimestamp, std::memory_order_relaxed );
 	return tmTimestamp;
 }
 
-inline static int64_t LastTimestampImpl()
+inline static int64_t LastTimestampImpl() noexcept
 {
 	return g_tmLastTimestamp.load ( std::memory_order_relaxed );
 }
 
 
-int64_t sph::MicroTimer()
+int64_t sph::MicroTimer() noexcept
 {
 	return MicroTimerImpl();
 }
 
-int64_t sph::LastTimestamp()
+int64_t sph::LastTimestamp() noexcept
 {
 	return LastTimestampImpl();
 }
@@ -265,8 +265,7 @@ void MiniTimer_c::EngageAt ( int64_t iTimeStampUS )
 void MiniTimer_c::EngageAt ( int64_t iTimeStampUS, Threads::Handler&& fnOnTimer )
 {
 	DEBUGT << "MiniTimer_c::EngageAt " << timestamp_t ( iTimeStampUS );
-	assert ( !m_fnOnTimer );
-	m_fnOnTimer = std::move ( fnOnTimer );
+	SetHandler ( std::move ( fnOnTimer ) );
 	g_TinyTimer().EngageAt ( iTimeStampUS, *this );
 }
 
@@ -285,9 +284,14 @@ int64_t MiniTimer_c::Engage ( int64_t iTimePeriodMS, Threads::Handler&& fnOnTime
 	if ( iTimePeriodUS <= 0 )
 		return 0;
 	DEBUGT << "MiniTimer_c::Engage " << timespan_t ( iTimePeriodUS );
+	SetHandler ( std::move ( fnOnTimer ) );
+	return g_TinyTimer().Engage ( iTimePeriodUS, *this );
+}
+
+void MiniTimer_c::SetHandler ( Threads::Handler&& fnOnTimer )
+{
 	assert ( !m_fnOnTimer );
 	m_fnOnTimer = std::move ( fnOnTimer );
-	return g_TinyTimer().Engage ( iTimePeriodUS, *this );
 }
 
 void MiniTimer_c::UnEngage()
@@ -302,7 +306,7 @@ MiniTimer_c::~MiniTimer_c()
 }
 
 /// returns true if provided timestamp is already reached or not
-bool sph::TimeExceeded ( int64_t tmMicroTimestamp )
+bool sph::TimeExceeded ( int64_t tmMicroTimestamp ) noexcept
 {
 	if ( tmMicroTimestamp <= 0 )
 		return false;

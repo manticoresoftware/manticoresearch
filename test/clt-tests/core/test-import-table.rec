@@ -59,7 +59,7 @@ mysql -h0 -P9306 -e "CALL keywords('a 123', 'test3');"
 ––– input –––
 mysql -h0 -P9306 -e "import table test-5 from '/var/lib/manticore/test2/test2'"
 ––– output –––
-ERROR 1064 (42000) at line 1: P03: syntax error, unexpected $undefined, expecting FROM near '-5 from '/var/lib/manticore/test2/test2''
+ERROR 1064 (42000) at line 1: P03: syntax error, unexpected integer, expecting FROM near '-5 from '/var/lib/manticore/test2/test2''
 ––– input –––
 mysql -h0 -P9306 -e "import table test_5 from '/var/lib/manticore/test2/test2'"
 ––– output –––

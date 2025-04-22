@@ -355,7 +355,9 @@ public:
 	CSphString		m_sErrorHeader = "PER:";
 
 	void			PushQuery();
-	CSphString &	ToString ( CSphString & sRes, const SqlNode_t & tNode ) const;
+	CSphString &	ToString ( CSphString & sRes, const SqlNode_t & tNode ) const noexcept;
+	CSphString		GetString ( const SqlNode_t& tNode ) const noexcept;
+	Str_t			GetStrt ( const SqlNode_t& tNode ) const noexcept;
 	CSphString		ToStringUnescape ( const SqlNode_t & tNode ) const;
 	float			ToFloat ( const SqlNode_t & tNode ) const { return (float) strtod ( m_pBuf+tNode.m_iStart, nullptr ); }
 	void			ProcessParsingError ( const char* szMessage );
@@ -374,6 +376,7 @@ public:
 
 	void			SetDefaultTableForOptions();
 	bool			SetTableForOptions ( const SqlNode_t & tNode );
+	bool			NumIsSaturated ( const SqlNode_t& tNode );
 
 protected:
 	CSphVector<SqlStmt_t> &		m_dStmt;

@@ -183,21 +183,29 @@ void SqlParserTraits_c::PushQuery()
 	m_pStmt = &m_dStmt.Last();
 }
 
-
-CSphString & SqlParserTraits_c::ToString ( CSphString & sRes, const SqlNode_t & tNode ) const
+Str_t SqlParserTraits_c::GetStrt ( const SqlNode_t& tNode ) const noexcept
 {
-	if ( tNode.m_iType>=0 )
-		sRes.SetBinary ( m_pBuf + tNode.m_iStart, tNode.m_iEnd - tNode.m_iStart );
-	else switch ( tNode.m_iType )
+	if ( tNode.m_iType >= 0 )
+		return { m_pBuf + tNode.m_iStart, tNode.m_iEnd - tNode.m_iStart };
+	switch ( tNode.m_iType )
 	{
-	case SPHINXQL_TOK_COUNT:	sRes = "@count"; break;
-	case SPHINXQL_TOK_GROUPBY:	sRes = "@groupby"; break;
-	case SPHINXQL_TOK_WEIGHT:	sRes = "@weight"; break;
-	default:					assert ( 0 && "internal error: unknown parser ident code" );
+	case SPHINXQL_TOK_COUNT: return FROMS ( "@count" );
+	case SPHINXQL_TOK_GROUPBY: return FROMS ( "@groupby" );
+	case SPHINXQL_TOK_WEIGHT: return FROMS ( "@weight" );
+	default: assert ( 0 && "internal error: unknown parser ident code" );
 	}
+}
+
+CSphString & SqlParserTraits_c::ToString ( CSphString & sRes, const SqlNode_t & tNode ) const noexcept
+{
+	sRes.SetBinary ( GetStrt ( tNode ) );
 	return sRes;
 }
 
+CSphString SqlParserTraits_c::GetString ( const SqlNode_t& tNode ) const noexcept
+{
+	return GetStrt ( tNode );
+}
 
 CSphString SqlParserTraits_c::ToStringUnescape ( const SqlNode_t & tNode ) const
 {
@@ -241,19 +249,13 @@ void SqlParserTraits_c::DefaultOk ( std::initializer_list<const char*> sList )
 
 void SqlParserTraits_c::SetIndex ( const SqlNode_t& tNode ) const
 {
-	ToString ( m_pStmt->m_sIndex, tNode );
-	// unquote index name
-	if ( ( tNode.m_iEnd - tNode.m_iStart ) > 2 && m_pStmt->m_sIndex.cstr()[0] == '\'' && m_pStmt->m_sIndex.cstr()[tNode.m_iEnd - tNode.m_iStart - 1] == '\'' )
-		m_pStmt->m_sIndex = m_pStmt->m_sIndex.SubString ( 1, m_pStmt->m_sIndex.Length() - 2 );
+	ToString ( m_pStmt->m_sIndex, tNode ).Unquote();
 }
 
 void SqlParserTraits_c::SetIndex ( const CSphString& sIndex ) const
 {
-	auto iLen = sIndex.Length();
-	if ( iLen > 2 && sIndex.cstr()[0] == '\'' && sIndex.cstr()[iLen-1] == '\'' )
-		m_pStmt->m_sIndex = sIndex.SubString ( 1, iLen - 2 );
-	else
-		m_pStmt->m_sIndex = sIndex;
+	m_pStmt->m_sIndex = sIndex;
+	m_pStmt->m_sIndex.Unquote();
 }
 
 
@@ -323,6 +325,19 @@ bool SqlParserTraits_c::SetTableForOptions ( const SqlNode_t & tNode )
 	}
 
 	return true;
+}
+
+bool SqlParserTraits_c::NumIsSaturated ( const SqlNode_t& tNode )
+{
+	const auto uLimit = (uint64_t)LLONG_MAX + (tNode.m_bNegative ? 1ULL : 0ULL);
+	if ( tNode.m_uValue > uLimit )
+	{
+		assert ( m_pParseError );
+		const char* szSign = tNode.m_bNegative?"-":"";
+		m_pParseError->SetSprintf ( "number %s" UINT64_FMT " is out of range [-9223372036854775808..9223372036854775807]", szSign, tNode.m_uValue );
+		return true;
+	}
+	return false;
 }
 
 //////////////////////////////////////////////////////////////////////////

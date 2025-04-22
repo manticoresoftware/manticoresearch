@@ -1,0 +1,52 @@
+––– input –––
+export INSTANCE=1
+––– output –––
+––– block: ../../base/replication/start-searchd-precach –––
+––– input –––
+export INSTANCE=2
+––– output –––
+––– block: ../../base/replication/start-searchd-precach –––
+––– input –––
+export INSTANCE=3
+––– output –––
+––– block: ../../base/replication/start-searchd-precach –––
+––– input –––
+export INSTANCE=4
+––– output –––
+––– block: ../../base/replication/start-searchd-precach –––
+––– input –––
+export INSTANCE=5
+––– output –––
+––– block: ../../base/replication/start-searchd-precach –––
+––– input –––
+export CLUSTER_NAME=c
+––– output –––
+––– block: ../../base/replication/create-cluster –––
+––– input –––
+export CLUSTER_NAME=c
+––– output –––
+––– block: ../../base/replication/join-cluster-on-all-nodes –––
+––– input –––
+apt-get install -y jq 1> /dev/null 2>&1 ; echo $?
+––– output –––
+0
+––– input –––
+mysql -h0 -P1306 -e "create table c:t(id bigint) shards='5' rf='3' timeout='300'" >/dev/null
+––– output –––
+––– input –––
+grep 'started v' /var/log/manticore-{1,2,3,4,5}/searchd.log | cut -d\' -f3 | cut -d: -f3 | wc -l
+––– output –––
+5
+––– input –––
+for i in 1 2 3 4 5; do echo "#{$i}"; mysql -h0 -P${i}306 -e "show create table t option force=1\G" | grep 'Create Table'; done
+––– output –––
+#{1}
+Create Table: CREATE TABLE t type='distributed' local='system.t_s0' local='system.t_s1' local='system.t_s3' agent='127.0.0.1:2312:system.t_s2|127.0.0.1:3312:system.t_s2|127.0.0.1:4312:system.t_s2' agent='127.0.0.1:2312:system.t_s4|127.0.0.1:3312:system.t_s4|127.0.0.1:5312:system.t_s4'
+#{2}
+Create Table: CREATE TABLE t type='distributed' local='system.t_s1' local='system.t_s2' local='system.t_s4' agent='127.0.0.1:1312:system.t_s0|127.0.0.1:3312:system.t_s0|127.0.0.1:5312:system.t_s0' agent='127.0.0.1:1312:system.t_s3|127.0.0.1:4312:system.t_s3|127.0.0.1:5312:system.t_s3'
+#{3}
+Create Table: CREATE TABLE t type='distributed' local='system.t_s0' local='system.t_s2' local='system.t_s4' agent='127.0.0.1:1312:system.t_s1|127.0.0.1:2312:system.t_s1|127.0.0.1:4312:system.t_s1' agent='127.0.0.1:1312:system.t_s3|127.0.0.1:4312:system.t_s3|127.0.0.1:5312:system.t_s3'
+#{4}
+Create Table: CREATE TABLE t type='distributed' local='system.t_s1' local='system.t_s2' local='system.t_s3' agent='127.0.0.1:1312:system.t_s0|127.0.0.1:3312:system.t_s0|127.0.0.1:5312:system.t_s0' agent='127.0.0.1:2312:system.t_s4|127.0.0.1:3312:system.t_s4|127.0.0.1:5312:system.t_s4'
+#{5}
+Create Table: CREATE TABLE t type='distributed' local='system.t_s0' local='system.t_s3' local='system.t_s4' agent='127.0.0.1:1312:system.t_s1|127.0.0.1:2312:system.t_s1|127.0.0.1:4312:system.t_s1' agent='127.0.0.1:2312:system.t_s2|127.0.0.1:3312:system.t_s2|127.0.0.1:4312:system.t_s2'

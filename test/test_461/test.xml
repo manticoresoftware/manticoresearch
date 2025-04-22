@@ -50,6 +50,17 @@ searchd
 
 	drop table test1;
 </sphinxql>
+<sphinxql>
+	create table test1 ( tags string );
+	insert into test1 (id,tags) values
+	(1,'test den' ),
+	(2,'test den' ),
+	(3,'missed' );
+    select * from test1 where tags ANY('test')  /*+ SecondaryIndex(tags) */; show meta;
+	flush ramchunk test1;
+    select * from test1 where tags ANY('test')  /*+ SecondaryIndex(tags) */; show meta;
+    drop table test1;
+</sphinxql>    
 </queries>
 
 </test>

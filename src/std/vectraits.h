@@ -81,14 +81,14 @@ public:
 	int64_t GetLengthBytes64() const;
 
 	/// default sort
-	void Sort ( int iStart = 0, int iEnd = -1 );
+	void Sort ( int64_t iStart = 0, int64_t iEnd = -1 );
 
 	/// default reverse sort
-	void RSort ( int iStart = 0, int iEnd = -1 );
+	void RSort ( int64_t iStart = 0, int64_t iEnd = -1 );
 
 	/// generic sort
 	template<typename F>
-	void Sort ( F&& COMP, int iStart = 0, int iEnd = -1 );
+	void Sort ( F&& COMP, int64_t iStart = 0, int64_t iEnd = -1 );
 
 	/// generic binary search
 	/// assumes that the array is sorted in ascending order
@@ -100,7 +100,7 @@ public:
 	T* BinarySearch ( T tRef ) const;
 
 	template<typename FILTER>
-	FORCE_INLINE int GetFirst ( FILTER&& cond ) const;
+	FORCE_INLINE int64_t GetFirst ( FILTER&& cond ) const;
 
 	/// generic 'ARRAY_ALL'
 	template<typename FILTER>

@@ -16,6 +16,10 @@ apk add yarn > /dev/null 2>&1; echo $?
 ––– output –––
 0
 ––– input –––
+docker exec manticore apt-get install jq -y > /dev/null 2>&1; echo $?
+––– output –––
+0
+––– input –––
 yarn config set registry https://registry.npmmirror.com > /dev/null 2>&1; echo $?
 ––– output –––
 0

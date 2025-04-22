@@ -26,3 +26,7 @@ mysql -h0 -P9306 -e 'show tables'
 +-------+------+
 | test  | rt   |
 +-------+------+
+––– input –––
+echo 1
+––– output –––
+1

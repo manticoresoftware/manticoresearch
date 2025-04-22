@@ -12,10 +12,6 @@ docker run -it --privileged --network=test_network --entrypoint=docker-entrypoin
 ––– output –––
 0
 ––– input –––
-apk add curl > /dev/null 2>&1 && docker exec manticore apt-get install jq -y > /dev/null 2>&1; echo $?
-––– output –––
-0
-––– input –––
 apk add yarn > /dev/null 2>&1; echo $?
 ––– output –––
 0

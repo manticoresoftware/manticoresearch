@@ -1,16 +1,16 @@
 name: Nightly testing of supported versions of mysqldump and elasticdump
 run-name: 🌙 Nightly tests of mysqldump and elasticdump ${{ github.sha }}
-
 on:
   schedule:
     - cron: '00 20 * * *'
   pull_request:
     branches: [ master ]
     paths:
-      - 'test/clt-tests/migration-es-ms/**'       
-      - 'test/clt-tests/mysqldump/versions/**'     
-      - '.github/workflows/nightly_dumps.yml'      
+      - 'test/clt-tests/migration-es-ms/**'       # trigger when changes are made in migration test files
+      - 'test/clt-tests/mysqldump/versions/**'     # trigger when changes are made in mysqldump test files
+      - '.github/workflows/nightly_dumps.yml'      # trigger when changes are made in the workflow config
 
+# cancels the previous workflow run when a new one appears in the same branch (e.g. master or a PR's branch)
 concurrency:
   group: nightly_dumps_${{ github.ref }}
   cancel-in-progress: true
@@ -35,7 +35,7 @@ jobs:
         with:
           image: manticoresearch/dind:v1
           test_prefix: test/clt-tests/mysqldump/versions/
-          run_args: --privileged --memory=4g --cpus=2
+          run_args: --privileged
 
   clt_test_migration_es_ms:
     name: Testing data migration from elastic to manticore
@@ -48,7 +48,7 @@ jobs:
         with:
           image: manticoresearch/dind:v1
           test_prefix: test/clt-tests/migration-es-ms/
-          run_args: --privileged --memory=8g --cpus=4
+          run_args: --privileged
       - name: Upload .rep File
         if: always()  
         uses: actions/upload-artifact@v4

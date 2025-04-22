@@ -147,6 +147,13 @@ utilsApi.sql('CREATE TABLE products(title text, content text stored indexed, nam
 ```
 
 <!-- intro -->
+##### Python-asyncio:
+<!-- request Python-asyncio -->
+```python
+await utilsApi.sql('CREATE TABLE products(title text, content text stored indexed, name text indexed, price float)')
+```
+
+<!-- intro -->
 ##### Javascript:
 
 <!-- request Javascript -->
@@ -166,6 +173,15 @@ utilsApi.sql("CREATE TABLE products(title text, content text stored indexed, nam
 <!-- request C# -->
 ```clike
 utilsApi.Sql("CREATE TABLE products(title text, content text stored indexed, name text indexed, price float)");
+```
+
+<!-- intro -->
+##### Rust:
+
+<!-- request Rust -->
+
+```rust
+utils_api.sql("CREATE TABLE products(title text, content text stored indexed, name text indexed, price float)", Some(true)).await;
 ```
 
 <!-- intro -->
@@ -273,6 +289,13 @@ utilsApi.sql('CREATE TABLE products(title text, j json secondary_index='1')')
 ```
 
 <!-- intro -->
+##### Python-asyncio:
+<!-- request Python-asyncio -->
+```python
+await utilsApi.sql('CREATE TABLE products(title text, j json secondary_index='1')')
+```
+
+<!-- intro -->
 ##### Javascript:
 
 <!-- request Javascript -->
@@ -292,6 +315,15 @@ utilsApi.sql("CREATE TABLE products(title text, j json secondary_index='1')");
 <!-- request C# -->
 ```clike
 utilsApi.Sql("CREATE TABLE products(title text, j json secondary_index='1')");
+```
+
+<!-- intro -->
+##### Rust:
+
+<!-- request Rust -->
+
+```rust
+utils_api.sql("CREATE TABLE products(title text, j json secondary_index='1')", Some(true)).await;
 ```
 
 <!-- intro -->

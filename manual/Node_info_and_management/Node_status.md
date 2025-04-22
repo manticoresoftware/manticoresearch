@@ -510,6 +510,75 @@ utilsApi.sql('SHOW AGENT STATUS')
  u'total': 0,
  u'warning': u''}
 ```
+
+<!-- intro -->
+##### Python-asyncio:
+
+<!-- request Python-asyncio -->
+
+```python
+await utilsApi.sql('SHOW AGENT STATUS')
+```
+<!-- response Python-asyncio -->
+
+```python
+{u'columns': [{u'Key': {u'type': u'string'}},
+              {u'Value': {u'type': u'string'}}],
+ u'data': [
+	{u'Key': u'status_period_seconds', u'Value': u'60'},
+	{u'Key': u'status_stored_periods', u'Value': u'15'},
+	{u'Key': u'ag_0_hostname', u'Value': u'192.168.0.202:6713'},
+	{u'Key': u'ag_0_references', u'Value': u'2'},
+	{u'Key': u'ag_0_lastquery', u'Value': u'0.41'},
+	{u'Key': u'ag_0_lastanswer', u'Value': u'0.19'},
+	{u'Key': u'ag_0_lastperiodmsec', u'Value': u'222'},
+	{u'Key': u'ag_0_errorsarow', u'Value': u'0'},
+	{u'Key': u'ag_0_1periods_query_timeouts', u'Value': u'0'},
+	{u'Key': u'ag_0_1periods_connect_timeouts', u'Value': u'0'},
+	{u'Key': u'ag_0_1periods_connect_failures', u'Value': u'0'},
+	{u'Key': u'ag_0_1periods_network_errors', u'Value': u'0'},
+	{u'Key': u'ag_0_1periods_wrong_replies', u'Value': u'0'},
+	{u'Key': u'ag_0_1periods_unexpected_closings', u'Value': u'0'},
+	{u'Key': u'ag_0_1periods_warnings', u'Value': u'0'},
+	{u'Key': u'ag_0_1periods_succeeded_queries', u'Value': u'27'},
+	{u'Key': u'ag_0_1periods_msecsperquery', u'Value': u'232.31'},
+	{u'Key': u'ag_0_5periods_query_timeouts', u'Value': u'0'},
+	{u'Key': u'ag_0_5periods_connect_timeouts', u'Value': u'0'},
+	{u'Key': u'ag_0_5periods_connect_failures', u'Value': u'0'},
+	{u'Key': u'ag_0_5periods_network_errors', u'Value': u'0'},
+	{u'Key': u'ag_0_5periods_wrong_replies', u'Value': u'0'},
+	{u'Key': u'ag_0_5periods_unexpected_closings', u'Value': u'0'},
+	{u'Key': u'ag_0_5periods_warnings', u'Value': u'0'},
+	{u'Key': u'ag_0_5periods_succeeded_queries', u'Value': u'146'},
+	{u'Key': u'ag_0_5periods_msecsperquery', u'Value': u'231.83'},
+	{u'Key': u'ag_1_hostname 192.168.0.202:6714'},
+	{u'Key': u'ag_1_references', u'Value': u'2'},
+	{u'Key': u'ag_1_lastquery', u'Value': u'0.41'},
+	{u'Key': u'ag_1_lastanswer', u'Value': u'0.19'},
+	{u'Key': u'ag_1_lastperiodmsec', u'Value': u'220'},
+	{u'Key': u'ag_1_errorsarow', u'Value': u'0'},
+	{u'Key': u'ag_1_1periods_query_timeouts', u'Value': u'0'},
+	{u'Key': u'ag_1_1periods_connect_timeouts', u'Value': u'0'},
+	{u'Key': u'ag_1_1periods_connect_failures', u'Value': u'0'},
+	{u'Key': u'ag_1_1periods_network_errors', u'Value': u'0'},
+	{u'Key': u'ag_1_1periods_wrong_replies', u'Value': u'0'},
+	{u'Key': u'ag_1_1periods_unexpected_closings', u'Value': u'0'},
+	{u'Key': u'ag_1_1periods_warnings', u'Value': u'0'},
+	{u'Key': u'ag_1_1periods_succeeded_queries', u'Value': u'27'},
+	{u'Key': u'ag_1_1periods_msecsperquery', u'Value': u'231.24'},
+	{u'Key': u'ag_1_5periods_query_timeouts', u'Value': u'0'},
+	{u'Key': u'ag_1_5periods_connect_timeouts', u'Value': u'0'},
+	{u'Key': u'ag_1_5periods_connect_failures', u'Value': u'0'},
+	{u'Key': u'ag_1_5periods_network_errors', u'Value': u'0'},
+	{u'Key': u'ag_1_5periods_wrong_replies', u'Value': u'0'},
+	{u'Key': u'ag_1_5periods_warnings', u'Value': u'0'},
+	{u'Key': u'ag_1_5periods_succeeded_queries', u'Value': u'146'},
+	{u'Key': u'ag_1_5periods_msecsperquery', u'Value': u'230.85'}],
+ u'error': u'',
+ u'total': 0,
+ u'warning': u''}
+```
+
 <!-- intro -->
 ##### Javascript:
 
@@ -657,6 +726,74 @@ utilsApi.Sql("SHOW AGENT STATUS");
 <!-- response C# -->
 
 ```clike
+{columns=[{ Key : { type=string }},
+              { Value : { type=string }}],
+  data : [
+	{ Key=status_period_seconds ,  Value=60 },
+	{ Key=status_stored_periods ,  Value=15 },
+	{ Key=ag_0_hostname ,  Value=192.168.0.202:6713 },
+	{ Key=ag_0_references ,  Value=2 },
+	{ Key=ag_0_lastquery ,  Value=0.41 },
+	{ Key=ag_0_lastanswer ,  Value=0.19 },
+	{ Key=ag_0_lastperiodmsec ,  Value=222 },
+	{ Key=ag_0_errorsarow ,  Value=0 },
+	{ Key=ag_0_1periods_query_timeouts ,  Value=0 },
+	{ Key=ag_0_1periods_connect_timeouts ,  Value=0 },
+	{ Key=ag_0_1periods_connect_failures ,  Value=0 },
+	{ Key=ag_0_1periods_network_errors ,  Value=0 },
+	{ Key=ag_0_1periods_wrong_replies ,  Value=0 },
+	{ Key=ag_0_1periods_unexpected_closings ,  Value=0 },
+	{ Key=ag_0_1periods_warnings ,  Value=0 },
+	{ Key=ag_0_1periods_succeeded_queries ,  Value=27 },
+	{ Key=ag_0_1periods_msecsperquery ,  Value=232.31 },
+	{ Key=ag_0_5periods_query_timeouts ,  Value=0 },
+	{ Key=ag_0_5periods_connect_timeouts ,  Value=0 },
+	{ Key=ag_0_5periods_connect_failures ,  Value=0 },
+	{ Key=ag_0_5periods_network_errors ,  Value=0 },
+	{ Key=ag_0_5periods_wrong_replies ,  Value=0 },
+	{ Key=ag_0_5periods_unexpected_closings ,  Value=0 },
+	{ Key=ag_0_5periods_warnings ,  Value=0 },
+	{ Key=ag_0_5periods_succeeded_queries ,  Value=146 },
+	{ Key=ag_0_5periods_msecsperquery ,  Value=231.83 },
+	{ Key=ag_1_hostname 192.168.0.202:6714 },
+	{ Key=ag_1_references ,  Value=2 },
+	{ Key=ag_1_lastquery ,  Value=0.41 },
+	{ Key=ag_1_lastanswer ,  Value=0.19 },
+	{ Key=ag_1_lastperiodmsec ,  Value=220 },
+	{ Key=ag_1_errorsarow ,  Value=0 },
+	{ Key=ag_1_1periods_query_timeouts ,  Value=0 },
+	{ Key=ag_1_1periods_connect_timeouts ,  Value=0 },
+	{ Key=ag_1_1periods_connect_failures ,  Value=0 },
+	{ Key=ag_1_1periods_network_errors ,  Value=0 },
+	{ Key=ag_1_1periods_wrong_replies ,  Value=0 },
+	{ Key=ag_1_1periods_unexpected_closings ,  Value=0 },
+	{ Key=ag_1_1periods_warnings ,  Value=0 },
+	{ Key=ag_1_1periods_succeeded_queries ,  Value=27 },
+	{ Key=ag_1_1periods_msecsperquery ,  Value=231.24 },
+	{ Key=ag_1_5periods_query_timeouts ,  Value=0 },
+	{ Key=ag_1_5periods_connect_timeouts ,  Value=0 },
+	{ Key=ag_1_5periods_connect_failures ,  Value=0 },
+	{ Key=ag_1_5periods_network_errors ,  Value=0 },
+	{ Key=ag_1_5periods_wrong_replies ,  Value=0 },
+	{ Key=ag_1_5periods_warnings ,  Value=0 },
+	{ Key=ag_1_5periods_succeeded_queries ,  Value=146 },
+	{ Key=ag_1_5periods_msecsperquery ,  Value=230.85 }],
+  error="" ,
+  total=0,
+  warning="" }
+```
+
+<!-- intro -->
+##### Rust:
+
+<!-- request Rust -->
+
+```clike
+utils_api.sql("SHOW AGENT STATUS", Some(true)).await;
+```
+<!-- response Rust -->
+
+```rust
 {columns=[{ Key : { type=string }},
               { Value : { type=string }}],
   data : [
@@ -950,6 +1087,29 @@ utilsApi.sql('SHOW AGENT STATUS LIKE \'%5period%msec%\'')
  u'total': 0,
  u'warning': u''}
 ```
+
+<!-- intro -->
+##### Python-asyncio:
+
+<!-- request Python-asyncio -->
+
+```python
+await utilsApi.sql('SHOW AGENT STATUS LIKE \'%5period%msec%\'')
+```
+<!-- response Python-asyncio -->
+
+```python
+{u'columns': [{u'Key': {u'type': u'string'}},
+              {u'Value': {u'type': u'string'}}],
+ u'data': [
+	{u'Key': u'ag_0_5periods_msecsperquery', u'Value': u'234.72'},
+	{u'Key': u'ag_1_5periods_msecsperquery', u'Value': u'233.73'},
+	{u'Key': u'ag_2_5periods_msecsperquery', u'Value': u'343.81'}],
+ u'error': u'',
+ u'total': 0,
+ u'warning': u''}
+```
+
 <!-- intro -->
 ##### Javascript:
 
@@ -1006,6 +1166,28 @@ utilsApi.Sql("SHOW AGENT STATUS LIKE \"%5period%msec%\"");
 <!-- response C# -->
 
 ```clike
+{columns: [{Key={type=string}},
+              {Value={type=string}}],
+ data: [
+	{Key=ag_0_5periods_msecsperquery, Value=234.72},
+	{Key=ag_1_5periods_msecsperquery, Value=233.73},
+	{Key=ag_2_5periods_msecsperquery, Value=343.81}],
+ error: "",
+ total: 0,
+ warning: ""}
+```
+
+<!-- intro -->
+##### Rust:
+
+<!-- request Rust -->
+
+```rust
+utils_api.sql("SHOW AGENT STATUS LIKE \"%5period%msec%\"", Some(true)).await;
+```
+<!-- response Rust -->
+
+```rust
 {columns: [{Key={type=string}},
               {Value={type=string}}],
  data: [
@@ -1173,6 +1355,37 @@ utilsApi.sql('SHOW AGENT \'192.168.0.202:6714\' STATUS LIKE \'%15periods%\'')
  u'total': 0,
  u'warning': u''}
 ```
+
+<!-- intro -->
+##### Python-asyncio:
+
+<!-- request Python-asyncio -->
+
+```python
+await utilsApi.sql('SHOW AGENT \'192.168.0.202:6714\' STATUS LIKE \'%15periods%\'')
+```
+<!-- response Python-asyncio -->
+
+```python
+{u'columns': [{u'Key': {u'type': u'string'}},
+              {u'Value': {u'type': u'string'}}],
+ u'data': [
+	{u'Key': u'agent_15periods_query_timeouts', u'Value': u'0'},
+	{u'Key': u'agent_15periods_connect_timeouts', u'Value': u'0'},
+	{u'Key': u'agent_15periods_connect_failures', u'Value': u'0'},
+    {u'Key': u'agent_15periods_network_errors', u'Value': u'0'},
+    {u'Key': u'agent_15periods_connect_failures', u'Value': u'0'},
+    {u'Key': u'agent_15periods_wrong_replies', u'Value': u'0'},
+    {u'Key': u'agent_15periods_unexpected_closings', u'Value': u'0'},
+    {u'Key': u'agent_15periods_warnings', u'Value': u'0'},
+    {u'Key': u'agent_15periods_succeeded_queries', u'Value': u'439'},
+    {u'Key': u'agent_15periods_msecsperquery', u'Value': u'233.73'},
+    ],
+ u'error': u'',
+ u'total': 0,
+ u'warning': u''}
+```
+
 <!-- intro -->
 ##### Javascript:
 
@@ -1244,6 +1457,36 @@ utilsApi.Sql("SHOW AGENT \"192.168.0.202:6714\" STATUS LIKE \"%15periods%\"");
 <!-- response C# -->
 
 ```clike
+{columns=[{Key={type=string}},
+              {Value={type=string}}],
+ data=[
+	{Key=agent_15periods_query_timeouts, Value=0},
+	{Key=agent_15periods_connect_timeouts, Value=0},
+	{Key=agent_15periods_connect_failures, Value=0},
+    {Key=agent_15periods_network_errors, Value=0},
+    {Key=agent_15periods_connect_failures, Value=0},
+    {Key=agent_15periods_wrong_replies, Value=0},
+    {Key=agent_15periods_unexpected_closings, Value=0},
+    {Key=agent_15periods_warnings, Value=0},
+    {Key=agent_15periods_succeeded_queries, Value=439},
+    {Key=agent_15periods_msecsperquery, Value=233.73},
+    ],
+ error="",
+ total=0,
+ warning=""}
+```
+
+<!-- intro -->
+##### Rust:
+
+<!-- request Rust -->
+
+```rust
+utils_api.sql("SHOW AGENT \"192.168.0.202:6714\" STATUS LIKE \"%15periods%\"", Some(true)).await;
+```
+<!-- response Rust -->
+
+```rust
 {columns=[{Key={type=string}},
               {Value={type=string}}],
  data=[
@@ -1436,6 +1679,40 @@ utilsApi.sql('SHOW AGENT \'192.168.0.202:6714\' STATUS LIKE \'%15periods%\'')
  u'total': 0,
  u'warning': u''}
 ```
+
+<!-- intro -->
+##### Python-asyncio:
+
+<!-- request Python-asyncio -->
+
+```python
+await utilsApi.sql('SHOW AGENT \'192.168.0.202:6714\' STATUS LIKE \'%15periods%\'')
+```
+<!-- response Python-asyncio -->
+
+```python
+{u'columns': [{u'Key': {u'type': u'string'}},
+              {u'Value': {u'type': u'string'}}],
+ u'data': [
+	{u'Key': u'dstindex_1_is_ha', u'Value': u'1'},
+	{u'Key': u'dstindex_1mirror1_id', u'Value': u'192.168.0.202:6713:loc'},
+	{u'Key': u'dstindex_1mirror1_probability_weight', u'Value': u'0.372864'},
+    {u'Key': u'dstindex_1mirror1_is_blackhole', u'Value': u'0'},
+    {u'Key': u'dstindex_1mirror1_is_persistent', u'Value': u'0'},
+    {u'Key': u'dstindex_1mirror2_id', u'Value': u'192.168.0.202:6714:loc'},
+    {u'Key': u'dstindex_1mirror2_probability_weight', u'Value': u'0.374635'},
+    {u'Key': u'dstindex_1mirror2_is_blackhole', u'Value': u'0'},
+    {u'Key': u'dstindex_1mirror2_is_persistent', u'Value': u'439'},
+    {u'Key': u'dstindex_1mirror3_id', u'Value': u'dev1.manticoresearch.com:6714:loc'},
+    {u'Key': u'dstindex_1mirror3_probability_weight', u'Value': u' 0.252501'},
+    {u'Key': u'dstindex_1mirror3_is_blackhole', u'Value': u'0'},
+    {u'Key': u'dstindex_1mirror3_is_persistent', u'Value': u'439'}    
+    ],
+ u'error': u'',
+ u'total': 0,
+ u'warning': u''}
+```
+
 <!-- intro -->
 ##### Javascript:
 
@@ -1513,6 +1790,39 @@ utilsApi.Sql("SHOW AGENT \"192.168.0.202:6714\" STATUS LIKE \"%15periods%\"");
 <!-- response C# -->
 
 ```clike
+{columns=[{Key={type=string}},
+              {Value={type=string}}],
+ data=[
+	{Key=dstindex_1_is_ha, Value=1},
+	{Key=dstindex_1mirror1_id, Value=192.168.0.202:6713:loc},
+	{Key=dstindex_1mirror1_probability_weight, Value=0.372864},
+    {Key=dstindex_1mirror1_is_blackhole, Value=0},
+    {Key=dstindex_1mirror1_is_persistent, Value=0},
+    {Key=dstindex_1mirror2_id, Value=192.168.0.202:6714:loc},
+    {Key=dstindex_1mirror2_probability_weight, Value=0.374635},
+    {Key=dstindex_1mirror2_is_blackhole, Value=0},
+    {Key=dstindex_1mirror2_is_persistent, Value=439},
+    {Key=dstindex_1mirror3_id, Value=dev1.manticoresearch.com:6714:loc},
+    {Key=dstindex_1mirror3_probability_weight, Value= 0.252501},
+    {Key=dstindex_1mirror3_is_blackhole, Value=0},
+    {Key=dstindex_1mirror3_is_persistent, Value=439}    
+    ],
+ error="",
+ total=0,
+ warning=""}
+```
+
+<!-- intro -->
+##### Rust:
+
+<!-- request Rust -->
+
+```rust
+utils_api.sql("SHOW AGENT \"192.168.0.202:6714\" STATUS LIKE \"%15periods%\"", Some(true)).await;
+```
+<!-- response Rust -->
+
+```rust
 {columns=[{Key={type=string}},
               {Value={type=string}}],
  data=[

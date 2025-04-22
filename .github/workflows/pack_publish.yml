@@ -1,7 +1,6 @@
 name: 📦 Pack and publish
 run-name: 📦 Pack and publish ${{ github.sha }}
 
-#on: workflow_call
 on:
   workflow_run:
     workflows: [ 🔬 Test ]
@@ -109,11 +108,87 @@ jobs:
           echo "* Version updated: ${{ steps.semver-tagger.outputs.version_updated }}" >> $GITHUB_STEP_SUMMARY
           echo "* Should continue packing: ${{ steps.check-should-continue.outputs.should_continue }}" >> $GITHUB_STEP_SUMMARY
 
+  # New job to check the availability of dependencies listed in deps.txt
+  check_deps:
+    name: Check dependencies availability
+    runs-on: ubuntu-22.04
+    needs: pack
+    if: needs.pack.outputs.should_continue == 'true'
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v3
+      - name: Check dependencies in deps.txt
+        run: |
+          # Check if deps.txt exists
+          if [[ ! -f "deps.txt" ]]; then
+            echo "Error: deps.txt not found!"
+            exit 1
+          fi
+
+          # Define lists of distributions and architectures
+          DEB_DISTR=("bionic" "focal" "jammy" "buster" "bullseye" "bookworm")
+          RHEL_DISTR=("7" "8" "9")
+          MACOS_DISTR=("macos")
+          WINDOWS_DISTR=("windows")
+          ARCH=("x86_64" "aarch64")
+
+          # Function to check the availability of a package
+          check_package() {
+            local package=$1
+            local url=$2
+            echo "Checking $package at $url..."
+            response=$(curl -I -s -o /dev/null -w "%{http_code}" "$url")
+            if [[ "$response" != "200" ]]; then
+              echo "Error: Package $package not found at $url (HTTP status: $response)"
+              exit 1
+            fi
+            echo "Package $package found at $url (HTTP status: $response)"
+          }
+
+          # Read deps.txt line by line
+          while IFS= read -r package || [[ -n "$package" ]]; do
+            # Skip empty lines
+            [[ -z "$package" ]] && continue
+
+            # Check for Debian/Ubuntu
+            for distro in "${DEB_DISTR[@]}"; do
+              for arch in "${ARCH[@]}"; do
+                url="https://repo.manticoresearch.com/repository/manticoresearch_${distro}/pool/${package}_1.0_${arch}.deb"
+                check_package "$package" "$url"
+              done
+            done
+
+            # Check for RHEL
+            for distro in "${RHEL_DISTR[@]}"; do
+              for arch in "${ARCH[@]}"; do
+                url="https://repo.manticoresearch.com/repository/manticoresearch_rhel${distro}/RPMS/${package}-1.0-${arch}.rpm"
+                check_package "$package" "$url"
+              done
+            done
+
+            # Check for macOS
+            for distro in "${MACOS_DISTR[@]}"; do
+              for arch in "${ARCH[@]}"; do
+                url="https://repo.manticoresearch.com/repository/manticoresearch_${distro}/${package}-1.0-${arch}.tar.gz"
+                check_package "$package" "$url"
+              done
+            done
+
+            # Check for Windows
+            for distro in "${WINDOWS_DISTR[@]}"; do
+              for arch in "${ARCH[@]}"; do
+                url="https://repo.manticoresearch.com/repository/manticoresearch_${distro}/${package}-1.0-${arch}.zip"
+                check_package "$package" "$url"
+              done
+            done
+          done < "deps.txt"
+
+          echo "All dependencies from deps.txt are available!"
 
   pack_debian_ubuntu:
     name: Debian/Ubuntu packages
     uses: ./.github/workflows/build_template.yml
-    needs: pack
+    needs: [pack, check_deps]
     if: needs.pack.outputs.should_continue == 'true'
     strategy:
       fail-fast: false
@@ -137,7 +212,7 @@ jobs:
   pack_rhel:
     name: RHEL packages
     uses: ./.github/workflows/build_template.yml
-    needs: pack
+    needs: [pack, check_deps]
     if: needs.pack.outputs.should_continue == 'true'
     strategy:
       fail-fast: false
@@ -164,7 +239,7 @@ jobs:
   pack_macos:
     name: MacOS packages
     uses: ./.github/workflows/build_template.yml
-    needs: pack
+    needs: [pack, check_deps]
     if: needs.pack.outputs.should_continue == 'true'
     strategy:
       fail-fast: false
@@ -189,7 +264,7 @@ jobs:
   pack_windows:
     name: Windows x64 package
     uses: ./.github/workflows/build_template.yml
-    needs: pack
+    needs: [pack, check_deps]
     if: needs.pack.outputs.should_continue == 'true'
     with:
       DISTR: windows
@@ -206,10 +281,10 @@ jobs:
       artifact_list: "build/manticore*exe build/manticore*zip"
       version: ${{ needs.pack.outputs.version }}
       build_tag: ${{ needs.pack.outputs.target == 'dev' && 'dev' || '' }}
-      
+
   build_nsis:
     name: Making Windows NSIS installer
-    needs: [pack_windows, pack]
+    needs: [pack_windows, pack, check_deps]
     if: needs.pack.outputs.should_continue == 'true'
     runs-on: ubuntu-22.04
     container:
@@ -217,16 +292,16 @@ jobs:
     env:
       CI_COMMIT_SHA: ${{ github.sha }}
     steps:
-      - name: Checkout repository # We have to checkout to access .github/workflows/ in further steps
+      - name: Checkout repository
         uses: actions/checkout@v3
       - name: Patch version
         run: |
           sed -i "s/0\.0\.0/${{ needs.pack.outputs.version }}/g" src/sphinxversion.h.in
       - name: Initialization
-        # without adding the safe.directory the script fails to do git show ...
+        # Without adding the safe.directory, the script fails to do git show ...
         run: git config --global --add safe.directory /__w/manticoresearch/manticoresearch
       - name: Make installer
-        # TODO: remove the hardcoded paths /builds/ below
+        # TODO: Remove the hardcoded paths /builds/ below
         run: |
           mkdir -p /builds/manticoresearch/dev/build/
           /bin/bash dist/build_dockers/nsis/nsis_src_parser.sh ${{ needs.pack.outputs.target }}
@@ -238,8 +313,8 @@ jobs:
           name: win_installer
           path: build/manticore-*.exe
 
-  # virtual job to simplify the CI
-  # This job depends on all the package preparation jobs that have to pass before we can start publishing packages
+  # Virtual job to simplify the CI
+  # This job depends on all the package preparation jobs that must pass before we can start publishing packages
   publish:
     name: OK to publish?
     runs-on: ubuntu-22.04
@@ -353,7 +428,7 @@ jobs:
       GHCR_USER: ${{ secrets.GHCR_USER }}
       GHCR_PASSWORD: ${{ secrets.GHCR_PASSWORD }}
     steps:
-      - name: Checkout repository # We have to checkout to access .github/workflows/ in further steps
+      - name: Checkout repository
         uses: actions/checkout@v3
       - name: Patch version
         run: |

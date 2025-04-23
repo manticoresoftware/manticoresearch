@@ -356,7 +356,9 @@ bool CSphSchema::IsReserved ( const char* szToken )
 		"FACET", "FALSE", "FORCE", "FROM", "IGNORE", "IN", "INDEXES", "INNER", "IS", "JOIN", "KNN",
 		"LEFT", "LIMIT", "MOD", "NOT", "NO_COLUMNARSCAN", "NO_DOCIDINDEX", "NO_SECONDARYINDEX", "NULL",
 		"OFFSET", "ON", "OR", "ORDER", "RELOAD", "SECONDARYINDEX", "SELECT", "SYSFILTERS",
-		"TRUE", NULL
+		"TRUE"
+		, "TOKEN"
+		, NULL
 	};
 
 	const char** p = dReserved;

@@ -190,7 +190,7 @@ TEST ( ThreadPool, strandr_with_mutex )
 			ScopedScheduler_c customtp{ pRandr };
 			tMutex.WriteLock();
 			ASSERT_EQ( Coro::CurrentScheduler(), pRandr );
-			Coro::SleepMsec( 10 );
+			Coro::SleepMsec( 100 );
 			ASSERT_EQ( Coro::CurrentScheduler(), pRandr );
 			dRes.Add( NUMS + 1 );
 			dRes.Add( NUMS+2 );

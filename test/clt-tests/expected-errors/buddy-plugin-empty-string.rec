@@ -7,3 +7,7 @@ ERROR 1064 (42000) at line 1: P01: syntax error, unexpected @@sysvar near '@@cha
 mysql -h0 -P9306 -e 'SET character_set_client = utf8mb4;'
 ––– output –––
 ERROR 1064 (42000) at line 1: Unknown session variable 'character_set_client' in SET statement
+
+––– input –––
+whoami
+––– output –––

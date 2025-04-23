@@ -1,4 +1,3 @@
-
 ––– block: ../base/start-searchd-with-buddy –––
 ––– input –––
 apt-get update -y > /dev/null; echo $?
@@ -16,6 +15,7 @@ php -d memory_limit=2G ./test/clt-tests/scripts/load_names_attr.php --batch-size
 ––– input –––
 mysql -h0 -P9306 -e "SELECT * FROM name ORDER BY id ASC LIMIT 1000000 OPTION max_matches=1000000;" > /tmp/name_data.txt
 ––– output –––
+ERROR 1064 (42000) at line 1: unknown local table(s) 'name' in search request
 ––– input –––
 md5sum /tmp/name_data.txt
 ––– output –––
@@ -35,6 +35,7 @@ mysql -h0 -P9306 -e "SELECT COUNT(*) FROM name;"
 ––– input –––
 mysql -h0 -P9306 -e "OPTIMIZE TABLE name OPTION sync=1;"
 ––– output –––
+ERROR 1064 (42000) at line 1: OPTIMIZE TABLE requires an existing RT table
 ––– input –––
 curl -sX POST http://localhost:9308/search -d '{"index":"name","query":{"bool":{"must":[{"match":{"*":"EBGRNA"}}]}},"options":{"fuzzy":true}}' | jq -M
 ––– output –––

@@ -1,0 +1,5 @@
+––– input –––
+echo "This is a test block"
+––– output –––
+This is a test block
+EOF 2>&1

@@ -3561,7 +3561,7 @@ bool RtIndex_c::WriteAttributes ( SaveDiskDataContext_t & tCtx, CSphString & sEr
 	auto sJsonSIdx = tCtx.m_tFilebase.GetFilename ( SPH_EXT_SPJIDX );
 	auto sSKNN	= tCtx.m_tFilebase.GetFilename ( SPH_EXT_SPKNN );
 
-	CSphWriter tWriterSPA;
+	CSphWriterNonThrottled tWriterSPA;
 	if ( !tWriterSPA.OpenFile ( sSPA, sError ) )
 		return false;
 
@@ -3795,7 +3795,7 @@ bool RtIndex_c::WriteAttributes ( SaveDiskDataContext_t & tCtx, CSphString & sEr
 
 bool RtIndex_c::WriteDocs ( SaveDiskDataContext_t & tCtx, CSphWriter & tWriterDict, CSphString & sError ) const
 {
-	CSphWriter tWriterHits, tWriterDocs, tWriterSkips;
+	CSphWriterNonThrottled tWriterHits, tWriterDocs, tWriterSkips;
 
 	if ( !tWriterHits.OpenFile ( tCtx.m_tFilebase.GetFilename ( SPH_EXT_SPP ), sError ) )
 		return false;
@@ -4103,7 +4103,7 @@ bool RtIndex_c::SaveDiskData ( const char * szFilename, const ConstRtSegmentSlic
 	if ( !WriteDeadRowMap ( tCtx, sError ) )
 		return false;
 
-	CSphWriter tWriterDict;
+	CSphWriterNonThrottled tWriterDict;
 	CSphString sSPI = IndexFileBase_c { szFilename }.GetFilename ( SPH_EXT_SPI );
 
 	if ( !tWriterDict.OpenFile ( sSPI.cstr(), sError ) )
@@ -4162,7 +4162,7 @@ bool RtIndex_c::SaveDiskHeader ( SaveDiskDataContext_t & tCtx, const ChunkStats_
 	IndexWriteHeader ( tCtx, tWriteHeader, sJson, m_bKeywordDict, true );
 
 	sName = tCtx.m_tFilebase.GetFilename ( SPH_EXT_SPH );
-	CSphWriter wrHeaderJson;
+	CSphWriterNonThrottled wrHeaderJson;
 	if ( !wrHeaderJson.OpenFile ( sName, sError ) )
 		return false;
 
@@ -4190,7 +4190,7 @@ void RtIndex_c::SaveMeta ( int64_t iTID, VecTraits_T<int> dChunkNames )
 
 	CSphString sError;
 
-	CSphWriter wrMeta;
+	CSphWriterNonThrottled wrMeta;
 	if ( !wrMeta.OpenFile ( sMetaNew, sError ) )
 		sphDie ( "failed to open file for meta serialization: %s", sError.cstr() ); // !COMMIT handle this gracefully
 
@@ -5097,7 +5097,7 @@ bool RtIndex_c::SaveRamChunk ()
 	CSphString sChunk = GetFilename ( "ram" );
 	CSphString sNewChunk = GetFilename ( "ram.new" );
 
-	CSphWriter wrChunk;
+	CSphWriterNonThrottled wrChunk;
 	if ( !wrChunk.OpenFile ( sNewChunk, m_sLastError ) )
 		return false;
 
@@ -5974,7 +5974,7 @@ void RtIndex_c::DumpSegments ( VecTraits_T<const RtSegment_t*> dSegments, const 
 		return;
 
 	CSphString sLastError;
-	CSphWriter wrChunk;
+	CSphWriterNonThrottled wrChunk;
 	if ( !wrChunk.OpenFile ( sFile, sLastError ) )
 	{
 		sphWarning ("Unable to open %s, error %s", sFile.cstr(), sLastError.cstr() );
@@ -6036,7 +6036,7 @@ void RtIndex_c::DumpInsert ( const RtSegment_t* pNewSeg ) const
 	CSphString sFile;
 	sFile.SetSprintf ( "%s.stmt", sBase.cstr() );
 
-	CSphWriter wrContent;
+	CSphWriterNonThrottled wrContent;
 	if ( !wrContent.OpenFile ( sFile, sLastError ) )
 	{
 		sphWarning ( "Unable to open %s, error %s", sFile.cstr(), sLastError.cstr() );

@@ -80,6 +80,7 @@
 #include "searchdbuddy.h"
 #include "detail/indexlink.h"
 #include "detail/expmeter.h"
+
 #include "auth/auth.h"
 #include "auth/auth_common.h"
 #include "auth/auth_proto_mysql.h"

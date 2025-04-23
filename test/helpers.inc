@@ -4296,9 +4296,9 @@ class SphinxConfig
 		fwrite ( $fp, "#\tbinlog_path		=\n" );
 		if ( $windows )
 		{
-			fwrite ( $fp, "\tauth_user_file = C:\\dev\\sphinx\\build\\m_dbg22\\test\\.htpasswd \n" );
+			//fwrite ( $fp, "\tauth_user_file = C:\\dev\\sphinx\\build\\m_dbg22\\test\\.htpasswd \n" );
 		}else {
-			fwrite ( $fp, "\tauth_user_file = /home/stas/build/m_dbg/test/.htpasswd\n" );
+			//fwrite ( $fp, "\tauth_user_file = /home/stas/build/m_dbg/test/.htpasswd\n" );
 		}
 	}
 

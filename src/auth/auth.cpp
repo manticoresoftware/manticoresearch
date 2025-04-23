@@ -475,7 +475,7 @@ static int DeleteUsers ( const VecTraits_T<DocID_t> & dSrcDocs, CSphString & sEr
 	for ( const auto & tItem : tAuth->m_hUserToken )
 	{
 		SphAttr_t tUserHash = Hash ( tItem.second );
-		auto * pDoc = dDocsDelete.BinarySearch ( bind ( &std::pair <DocID_t, CSphString>::first ), tUserHash );
+		auto * pDoc = dDocsDelete.BinarySearch ( ([](const auto & tItem ) { return tItem.first; }), tUserHash );
 		if ( pDoc )
 			pDoc->second = tItem.first;
 	}

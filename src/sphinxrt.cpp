@@ -8937,12 +8937,7 @@ bool RtIndex_c::AttachRtIndex ( RtIndex_i * pSrcIndex, bool bTruncate, bool & bF
 		// prevent optimize to start during the disk chunks stealing
 		OptimizeGuard_c tSrcStopOptimize ( *pSrcRtIndex );
 		OptimizeGuard_c tDstStopOptimize ( *this );
-
-		// collect all disk chunks from the source RT index in the brand new structure
-		auto tNewSet = RtWriter();
-		CopyChunksTo ( tNewSet );
-		// need to reset m_bFinallyUnlink flag for the disk chunks moved here after all finishes well
-		int iUnlinkIndex = tNewSet.m_pNewDiskChunks->GetLength();
+		LazyVector_T<ConstDiskChunkRefPtr_t> dOthers;
 
 		for ( ;; )
 		{
@@ -8957,13 +8952,13 @@ bool RtIndex_c::AttachRtIndex ( RtIndex_i * pSrcIndex, bool bTruncate, bool & bF
 				return false;
 			}
 		
-			// update disk chunk list
-			tNewSet.m_pNewDiskChunks->Add ( tChunk );
+			dOthers.Add ( tChunk );
 		}
 
-		// clean up all destroy flag for all moved disk chunks after loop finished well
-		for ( int i=iUnlinkIndex; i<tNewSet.m_pNewDiskChunks->GetLength(); i++ )
-			tNewSet.m_pNewDiskChunks->At ( i )->m_bFinallyUnlink = false;
+		// update disk chunk list
+		auto tNewSet = RtWriter();
+		CopyChunksTo ( tNewSet );
+		dOthers.for_each ( [&tNewSet] (auto& tChunk) { tChunk->m_bFinallyUnlink = false; tNewSet.m_pNewDiskChunks->Add ( tChunk ); } );
 	}
 
 	AttachSetSettings ( pSrcIndex );

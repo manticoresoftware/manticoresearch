@@ -4452,33 +4452,33 @@ bool RtIndex_c::SaveDiskChunk ( bool bForced, bool bEmergent ) REQUIRES ( m_tWor
 	m_tSaveTIDS.WaitVoid ( [this, iTID] { return m_tSaveTIDS.GetValueRef().First() == iTID; } );
 	END_SCHED( "rt" );
 
-	int iDiskChunks;
+	IntVec_t dChunks;
 	// now new disk chunk is loaded, kills and updates applied - we ready to change global index state now.
 	{
 		auto tNewSet = RtWriter();
 		CopyChunksTo ( tNewSet );
 		tNewSet.m_pNewDiskChunks->Add ( DiskChunk_c::make ( std::move ( pNewChunk ) ) );
-		SaveMeta ( iTID, GetChunkIds ( *tNewSet.m_pNewDiskChunks ) );
-
-		Binlog::NotifyIndexFlush ( iTID, GetName(), Binlog::NoShutdown, Binlog::NoSave );
-		m_iSavedTID = iTID;
-
 		tNewSet.InitRamSegs ( RtWriter_c::empty );
 
 		for ( const auto & pSeg : *m_tRtChunks.RamSegs() )
 			if ( pSeg->m_iLocked!=iSaveOp )
 				tNewSet.m_pNewRamSegs->Add ( pSeg );
 
-		// update field lengths
-		if ( m_tSchema.GetAttrId_FirstFieldLen ()>=0 )
-		{
-			m_dFieldLensRam.SwapData ( dNewFieldLensRam );
-			m_dFieldLensDisk.SwapData ( dNewFieldLensDisk );
-		}
-		iDiskChunks = tNewSet.m_pNewDiskChunks->GetLength();
+		dChunks = GetChunkIds ( *tNewSet.m_pNewDiskChunks );
 	}
+
+	// update field lengths
+	if (m_tSchema.GetAttrId_FirstFieldLen() >= 0) {
+		m_dFieldLensRam.SwapData ( dNewFieldLensRam );
+		m_dFieldLensDisk.SwapData ( dNewFieldLensDisk );
+	}
+
+	SaveMeta ( iTID, dChunks );
+	m_iSavedTID = iTID;
+
 	// from this point all readers will see new state of the index.
 	m_dSavingTickets.RemoveValue ( iSaveOp );
+	Binlog::NotifyIndexFlush ( iTID, GetName(), Binlog::NoShutdown, Binlog::NoSave );
 
 	// abandon .ram file
 	UnlinkRAMChunk ( "SaveDiskChunk" );
@@ -4488,7 +4488,7 @@ bool RtIndex_c::SaveDiskChunk ( bool bForced, bool bEmergent ) REQUIRES ( m_tWor
 
 	StringBuilder_c sInfo;
 	sInfo.Sprintf ( "rt: table %s: diskchunk %d(%d), segments %d %s saved in %.6D (%.6D) sec", GetName (), iChunkID
-					, iDiskChunks, iSegments, bForced ? "forcibly" : "", tmSave, tmSaveWall );
+					, dChunks.GetLength(), iSegments, bForced ? "forcibly" : "", tmSave, tmSaveWall );
 
 	// calculate DoubleBuf percent using current save/insert rate
 	auto iInserted = GetMemCount ( [iSaveOp] ( const auto* pSeg ) { return !pSeg->m_iLocked || pSeg->m_iLocked > iSaveOp; } );

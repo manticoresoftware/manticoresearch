@@ -996,11 +996,84 @@ struct RtGuard_t
 	{}
 };
 
+CSphVector<int> GetChunkIds ( const VecTraits_T<DiskChunkRefPtr_t> & dChunks )
+{
+	CSphVector<int> dIds;
+	dChunks.for_each ( [&dIds] ( const DiskChunkRefPtr_t & pIdx )
+	{
+		if ( !pIdx->m_bFinallyUnlink )
+			dIds.Add ( pIdx->Idx ().m_iChunk );
+	});
+	return dIds;
+}
+
+template<typename VAL>
+CSphString Vec2Str ( const VecTraits_T<VAL>& tVec, const char* szDelim ) noexcept
+{
+	StringBuilder_c tOut ( szDelim );
+	tVec.Apply ( [&tOut] ( const auto& tVal ) { tOut << tVal; } );
+	return CSphString { tOut };
+}
+
 // created with null set of ram segments and disk chunks
 // on d-tr any not-null set will replace chunks and segments from the owner
 // Note, if you want to modify existing set, you NEED to guard some way period between reading old / writing modified
 class RtWriter_c
 {
+	RtSegVecRefPtr_t m_pOldRamSegs;
+	DiskChunkVecRefPtr_t m_pOldDiskChunks;
+
+	void CheckDiskConsistency() const noexcept
+	{
+		if ( !m_pNewDiskChunks )
+			return;
+
+		const auto pOwnerDiskChunks = m_tOwner.DiskChunks();
+		const auto iOldLen = m_pOldDiskChunks->GetLength();
+		const auto iCurLen = pOwnerDiskChunks->GetLength();
+		if ( iOldLen != iCurLen )
+		{
+			sphFatal ("Amount of disk chunks changed from %d to %d during table modification. Table damaged", iOldLen, iCurLen);
+			return;
+		}
+		auto dOldChunks = GetChunkIds ( *m_pOldDiskChunks );
+		auto dCurChunks = GetChunkIds ( *pOwnerDiskChunks );
+
+		ARRAY_CONSTFOREACH( i, dOldChunks )
+		{
+			if ( dOldChunks[i] == dCurChunks[i] )
+				continue;
+
+			sphFatal ("Disk chunks changed from [%s] to [%s] during table modification. Table damaged", Vec2Str( dOldChunks, "," ).cstr(), Vec2Str( dCurChunks, "," ).cstr());
+			return;
+		}
+	}
+
+
+	void CheckRAMConsistency() const noexcept
+	{
+		if ( !m_pNewRamSegs )
+			return;
+
+		const auto pOwnerRamSegs = m_tOwner.RamSegs();
+		const auto iOldLen = m_pOldRamSegs->GetLength();
+		const auto iCurLen = pOwnerRamSegs->GetLength();
+		if ( iOldLen != iCurLen )
+		{
+			sphFatal( "Amount of ram segments changed from %d to %d during table modification. Table damaged", iOldLen, iCurLen );
+			return;
+		}
+
+		ARRAY_CONSTFOREACH( i, (*m_pOldRamSegs) )
+		{
+			if ( (*m_pOldRamSegs)[i] == (*pOwnerRamSegs)[i] )
+				continue;
+
+			sphFatal( "%s", "RAM segments changed during table modification. Table damaged" );
+			return;
+		}
+	}
+
 public:
 	RtData_c&					m_tOwner;
 	DiskChunkVecRefPtr_t		m_pNewDiskChunks;
@@ -1009,12 +1082,23 @@ public:
 
 	RtWriter_c ( RtWriter_c&& rhs ) noexcept = default;
 	RtWriter_c ( RtData_c & tOwner, Handler&& fnOnRamSegsChanged )
-		: m_tOwner ( tOwner )
+		: m_pOldRamSegs{ new RtSegVec_c }
+		, m_pOldDiskChunks{ new DiskChunkVec_c }
+		, m_tOwner( tOwner )
 		, m_fnOnRamSegsChanged { std::move ( fnOnRamSegsChanged ) }
-	{}
+	{
+		for ( const auto & pSeg: *m_tOwner.RamSegs() )
+			m_pOldRamSegs->Add( pSeg );
+		for ( const auto & pChunk: *m_tOwner.DiskChunks() )
+			m_pOldDiskChunks->Add( pChunk );
+	}
+
 
 	~RtWriter_c() EXCLUDES ( m_tOwner.m_tLock )
 	{
+		CheckDiskConsistency();
+		CheckRAMConsistency();
+
 		if ( !m_pNewDiskChunks && !m_pNewRamSegs )
 			return;
 
@@ -1144,17 +1228,6 @@ public:
 		return iRes;
 	}
 };
-
-CSphVector<int> GetChunkIds ( const VecTraits_T<DiskChunkRefPtr_t> & dChunks )
-{
-	CSphVector<int> dIds;
-	dChunks.for_each ( [&dIds] ( const DiskChunkRefPtr_t & pIdx )
-	{
-		if ( !pIdx->m_bFinallyUnlink )
-			dIds.Add ( pIdx->Idx ().m_iChunk );
-	});
-	return dIds;
-}
 
 class SaveState_c
 {

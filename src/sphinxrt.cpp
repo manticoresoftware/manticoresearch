@@ -4367,7 +4367,7 @@ bool RtIndex_c::SaveDiskChunk ( bool bForced, bool bEmergent ) REQUIRES ( m_tWor
 	while ( true )
 	{
 		// as separate subtask we 1-st flush segments to disk, and then load just flushed segment
-		// if forced, continue to work in the same fiber (which is serialworker); otherwise split to merge fiber
+		// if forced, continue to work in the same fiber (which is serialworker); otherwise go to global workpool, wrapped into SaveSegmentsWorker
 		ScopedScheduler_c tSaveFiber { bForced ? Coro::CurrentScheduler () : m_tWorkers.SaveSegmentsWorker() };
 		TRACE_SCHED_VARID ( "rt", "SaveDiskChunk-routine", iSaveOp );
 
@@ -4869,7 +4869,7 @@ bool RtIndex_c::LoadMeta ( FilenameBuilder_i* pFilenameBuilder, bool bStripPath,
 	return false;
 }
 
-
+// called once on index start lifetime
 bool RtIndex_c::PreallocDiskChunks ( FilenameBuilder_i * pFilenameBuilder, StrVec_t & dWarnings ) NO_THREAD_SAFETY_ANALYSIS
 {
 	// load disk chunks, if any
@@ -9426,13 +9426,12 @@ bool RtIndex_c::PublishMergedChunks ( const char* szParentAction, std::function<
 			tChangeset.m_pNewDiskChunks->Add ( pChunk );
 	}
 
-	if ( !bReplaced )
-	{
-		sphWarning ( "rt %s: table %s: unable to locate victim chunk after merge, leave everything unchanged", szParentAction, GetName() );
-		tChangeset.m_pNewDiskChunks = nullptr; // discard changes, i.e. disk chunk set will NOT be modified
-		return false;
-	}
-	return true;
+	if ( bReplaced )
+		return true;
+
+	sphWarning ( "rt %s: table %s: unable to locate victim chunk after merge, leave everything unchanged", szParentAction, GetName() );
+	tChangeset.m_pNewDiskChunks = nullptr; // discard changes, i.e. disk chunk set will NOT be modified
+	return false;
 }
 
 static int64_t NumAliveDocs ( const CSphIndex& dChunk )

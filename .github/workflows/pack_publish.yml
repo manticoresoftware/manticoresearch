@@ -48,13 +48,11 @@ jobs:
         github.event_name == 'pull_request'
         &&
         (
-          contains(
-            github.event.pull_request.labels.*.name, 'pack'
-          )
+          contains(github.event.pull_request.labels.*.name, 'pack')
           ||
-          contains(
-            github.event.pull_request.labels.*.name, 'publish'
-          )
+          contains(github.event.pull_request.labels.*.name, 'publish')
+          ||
+          contains(github.event.pull_request.labels.*.name, 'check-deps')  # Added new label
         )
       )
       ||
@@ -69,9 +67,7 @@ jobs:
       (
         github.event_name == 'push'
         &&
-        startsWith(
-          github.ref, 'refs/heads/manticore-'
-        )
+        startsWith(github.ref, 'refs/heads/manticore-')
       )
     steps:
       - name: Checkout repository
@@ -113,7 +109,33 @@ jobs:
     name: Check deps test
     runs-on: ubuntu-22.04
     needs: pack
-    if: needs.pack.outputs.should_continue == 'true'
+    # Run if PR has 'check-deps', 'pack', or 'publish' label, or if other conditions for pack are met
+    if: |
+      (
+        github.event_name == 'pull_request'
+        &&
+        (
+          contains(github.event.pull_request.labels.*.name, 'check-deps')
+          ||
+          contains(github.event.pull_request.labels.*.name, 'pack')
+          ||
+          contains(github.event.pull_request.labels.*.name, 'publish')
+        )
+      )
+      ||
+      (
+        github.event_name == 'workflow_run'
+        &&
+        github.event.workflow_run.conclusion == 'success'
+        &&
+        github.ref == 'refs/heads/master'
+      )
+      ||
+      (
+        github.event_name == 'push'
+        &&
+        startsWith(github.ref, 'refs/heads/manticore-')
+      )
     steps:
       - name: Checkout repository
         uses: actions/checkout@v3

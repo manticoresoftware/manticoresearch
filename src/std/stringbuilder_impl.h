@@ -222,7 +222,7 @@ inline void StringBuilder_c::Rewind()
 
 
 template<typename INT, int iBase, int iWidth, int iPrec, char cFill>
-inline void StringBuilder_c::NtoA ( INT uVal )
+void StringBuilder_c::NtoA ( INT uVal )
 {
 	InitAddPrefix();
 
@@ -241,7 +241,7 @@ inline void StringBuilder_c::NtoA ( INT uVal )
 }
 
 template<typename INT, int iPrec>
-inline void StringBuilder_c::IFtoA ( FixedFrac_T<INT, iPrec> tVal )
+void StringBuilder_c::IFtoA ( FixedFrac_T<INT, iPrec> tVal )
 {
 	InitAddPrefix();
 
@@ -329,7 +329,7 @@ inline StringBuilder_c& operator<< ( StringBuilder_c& tOut, timestamp_t tVal )
 }
 
 template<typename INT, int iPrec>
-inline StringBuilder_c& operator<< ( StringBuilder_c& tOut, FixedFrac_T<INT, iPrec> tVal )
+StringBuilder_c& operator<< ( StringBuilder_c& tOut, FixedFrac_T<INT, iPrec> tVal )
 {
 	tOut.template IFtoA<INT, iPrec>(tVal);
 	return tOut;
@@ -340,4 +340,12 @@ StringBuilder_c& operator<< ( StringBuilder_c& tOut, FixedNum_T<INT, iBase, iWid
 {
 	tOut.template NtoA<INT, iBase, iWidth, iPrec, cFill> ( tVal.m_tVal );
 	return tOut;
+}
+
+template<typename VAL>
+CSphString Vec2Str( const VecTraits_T<VAL> & tVec, const char * szDelim ) noexcept
+{
+	StringBuilder_c tOut( szDelim );
+	tVec.Apply( [&tOut]( const auto & tVal ) { tOut << tVal; } );
+	return { tOut };
 }

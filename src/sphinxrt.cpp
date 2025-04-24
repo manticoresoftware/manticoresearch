@@ -1007,14 +1007,6 @@ CSphVector<int> GetChunkIds ( const VecTraits_T<DiskChunkRefPtr_t> & dChunks )
 	return dIds;
 }
 
-template<typename VAL>
-CSphString Vec2Str ( const VecTraits_T<VAL>& tVec, const char* szDelim ) noexcept
-{
-	StringBuilder_c tOut ( szDelim );
-	tVec.Apply ( [&tOut] ( const auto& tVal ) { tOut << tVal; } );
-	return CSphString { tOut };
-}
-
 // created with null set of ram segments and disk chunks
 // on d-tr any not-null set will replace chunks and segments from the owner
 // Note, if you want to modify existing set, you NEED to guard some way period between reading old / writing modified
@@ -1042,7 +1034,7 @@ class RtWriter_c
 			if ( dOldChunks[i] == dCurChunks[i] )
 				continue;
 
-			sphDie ("Disk chunks changed from [%s] to [%s] during table modification. Table damaged", Vec2Str( dOldChunks, "," ).cstr(), Vec2Str( dCurChunks, "," ).cstr());
+			sphDie ("Disk chunks changed from [%s] to [%s] during table modification. Table damaged", Vec2Str( dOldChunks ).cstr(), Vec2Str( dCurChunks ).cstr());
 		}
 	}
 

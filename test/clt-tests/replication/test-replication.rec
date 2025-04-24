@@ -274,3 +274,7 @@ id: 6775836565403860994
 title: List of Dell business laptops
 content: Updated Content
 gid: 2
+
+––– input –––
+echo 1
+––– output –––

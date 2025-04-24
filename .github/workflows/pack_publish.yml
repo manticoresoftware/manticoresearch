@@ -1,6 +1,7 @@
 name: 📦 Pack and publish
 run-name: 📦 Pack and publish ${{ github.sha }}
 
+#on: workflow_call
 on:
   workflow_run:
     workflows: [ 🔬 Test ]
@@ -31,7 +32,7 @@ concurrency:
 jobs:
 
   # Pack job to determine if packing should proceed
-  # Runs on every PR, workflow_run, or push event matching the conditions
+  # Added check_deps to run on every PR
   pack:
     name: OK to pack?
     runs-on: ubuntu-22.04
@@ -66,12 +67,13 @@ jobs:
         uses: actions/checkout@v3
         with:
           fetch-depth: 0
-          token: ${{ secrets.WORKFLOW_TOKEN }}
+          token: ${{ secrets.GITHUB_TOKEN }}
       - name: Update version
         id: semver-tagger
         uses: manticoresoftware/semver-tagger-action@main  
         with:
-          github_token: ${{ secrets.WORKFLOW_TOKEN }}
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          conventional_commits_authors: alexey@manticoresearch.com
           ignore_patterns: '\.md$|^test/|^manual/|\.clt|\.github|\.patterns|\.yml|\.gitignore'
       - name: Check if we should continue packing
         id: check-should-continue
@@ -235,7 +237,7 @@ jobs:
     env:
       CI_COMMIT_SHA: ${{ github.sha }}
     steps:
-      - name: Checkout repository
+      - name: Checkout repository # We have to checkout to access .github/workflows/ in further steps
         uses: actions/checkout@v3
       - name: Patch version
         run: |
@@ -371,7 +373,7 @@ jobs:
       GHCR_USER: ${{ secrets.GHCR_USER }}
       GHCR_PASSWORD: ${{ secrets.GHCR_PASSWORD }}
     steps:
-      - name: Checkout repository
+      - name: Checkout repository # We have to checkout to access .github/workflows/ in further steps
         uses: actions/checkout@v3
       - name: Patch version
         run: |

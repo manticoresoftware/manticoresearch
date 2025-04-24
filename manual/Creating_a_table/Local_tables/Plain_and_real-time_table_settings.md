@@ -236,6 +236,10 @@ In contrast, the latter (string attribute):
 * is stored in an uncompressed format
 * can be used for sorting, grouping, filtering, and any other actions you want to take with attributes.
 
+If you are looking to have Manticore store text data for you that you _only_ want stored on disk (eg: json data that is returned with every result), and not in memory or searchable/filterable/groupable, use `stored_only_fields`, or `stored` as your text field property.
+
+When creating your tables using the SQL interface, label your text field as `stored` (and not `indexed` or `indexed stored`). You will not need the `stored_only_fields` option in your `CREATE TABLE` statement; including it may result in a failed query.
+
 #### json_secondary_indexes
 
 ```ini

@@ -108,87 +108,26 @@ jobs:
           echo "* Version updated: ${{ steps.semver-tagger.outputs.version_updated }}" >> $GITHUB_STEP_SUMMARY
           echo "* Should continue packing: ${{ steps.check-should-continue.outputs.should_continue }}" >> $GITHUB_STEP_SUMMARY
 
-  # New job to check the availability of dependencies listed in deps.txt
+  # New job to check dependencies using check_deps_in_repos.sh
   check_deps:
-    name: Check dependencies availability
+    name: Check deps test
     runs-on: ubuntu-22.04
     needs: pack
     if: needs.pack.outputs.should_continue == 'true'
     steps:
       - name: Checkout repository
         uses: actions/checkout@v3
-      - name: Check dependencies in deps.txt
+      - name: Run dependency check script
         run: |
-          # Check if deps.txt exists
-          if [[ ! -f "deps.txt" ]]; then
-            echo "Error: deps.txt not found!"
-            exit 1
-          fi
-
-          # Define lists of distributions and architectures
-          DEB_DISTR=("bionic" "focal" "jammy" "buster" "bullseye" "bookworm")
-          RHEL_DISTR=("7" "8" "9")
-          MACOS_DISTR=("macos")
-          WINDOWS_DISTR=("windows")
-          ARCH=("x86_64" "aarch64")
-
-          # Function to check the availability of a package
-          check_package() {
-            local package=$1
-            local url=$2
-            echo "Checking $package at $url..."
-            response=$(curl -I -s -o /dev/null -w "%{http_code}" "$url")
-            if [[ "$response" != "200" ]]; then
-              echo "Error: Package $package not found at $url (HTTP status: $response)"
-              exit 1
-            fi
-            echo "Package $package found at $url (HTTP status: $response)"
-          }
-
-          # Read deps.txt line by line
-          while IFS= read -r package || [[ -n "$package" ]]; do
-            # Skip empty lines
-            [[ -z "$package" ]] && continue
-
-            # Check for Debian/Ubuntu
-            for distro in "${DEB_DISTR[@]}"; do
-              for arch in "${ARCH[@]}"; do
-                url="https://repo.manticoresearch.com/repository/manticoresearch_${distro}/pool/${package}_1.0_${arch}.deb"
-                check_package "$package" "$url"
-              done
-            done
-
-            # Check for RHEL
-            for distro in "${RHEL_DISTR[@]}"; do
-              for arch in "${ARCH[@]}"; do
-                url="https://repo.manticoresearch.com/repository/manticoresearch_rhel${distro}/RPMS/${package}-1.0-${arch}.rpm"
-                check_package "$package" "$url"
-              done
-            done
-
-            # Check for macOS
-            for distro in "${MACOS_DISTR[@]}"; do
-              for arch in "${ARCH[@]}"; do
-                url="https://repo.manticoresearch.com/repository/manticoresearch_${distro}/${package}-1.0-${arch}.tar.gz"
-                check_package "$package" "$url"
-              done
-            done
-
-            # Check for Windows
-            for distro in "${WINDOWS_DISTR[@]}"; do
-              for arch in "${ARCH[@]}"; do
-                url="https://repo.manticoresearch.com/repository/manticoresearch_${distro}/${package}-1.0-${arch}.zip"
-                check_package "$package" "$url"
-              done
-            done
-          done < "deps.txt"
-
-          echo "All dependencies from deps.txt are available!"
+          # Ensure the script is executable
+          chmod +x dist/check_deps_in_repos.sh
+          # Run the script
+          bash dist/check_deps_in_repos.sh
 
   pack_debian_ubuntu:
     name: Debian/Ubuntu packages
     uses: ./.github/workflows/build_template.yml
-    needs: [pack, check_deps]
+    needs: [pack, check_deps]  # Added dependency on check_deps
     if: needs.pack.outputs.should_continue == 'true'
     strategy:
       fail-fast: false
@@ -212,7 +151,7 @@ jobs:
   pack_rhel:
     name: RHEL packages
     uses: ./.github/workflows/build_template.yml
-    needs: [pack, check_deps]
+    needs: [pack, check_deps]  # Added dependency on check_deps
     if: needs.pack.outputs.should_continue == 'true'
     strategy:
       fail-fast: false
@@ -239,7 +178,7 @@ jobs:
   pack_macos:
     name: MacOS packages
     uses: ./.github/workflows/build_template.yml
-    needs: [pack, check_deps]
+    needs: [pack, check_deps]  # Added dependency on check_deps
     if: needs.pack.outputs.should_continue == 'true'
     strategy:
       fail-fast: false
@@ -264,7 +203,7 @@ jobs:
   pack_windows:
     name: Windows x64 package
     uses: ./.github/workflows/build_template.yml
-    needs: [pack, check_deps]
+    needs: [pack, check_deps]  # Added dependency on check_deps
     if: needs.pack.outputs.should_continue == 'true'
     with:
       DISTR: windows
@@ -284,7 +223,7 @@ jobs:
 
   build_nsis:
     name: Making Windows NSIS installer
-    needs: [pack_windows, pack, check_deps]
+    needs: [pack_windows, pack]
     if: needs.pack.outputs.should_continue == 'true'
     runs-on: ubuntu-22.04
     container:
@@ -464,7 +403,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        image: [ "ubuntu:bionic", "ubuntu:focal", "ubuntu:jammy", "debian:buster", "debian:bullseye", "debian:bookworm" ]
+        image: [ "Ubuntu:bionic", "Ubuntu:focal", "Ubuntu:jammy", "debian:buster", "debian:bullseye", "debian:bookworm" ]
     runs-on: ubuntu-22.04
     steps:
       - uses: manticoresoftware/clt@0.6.7

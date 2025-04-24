@@ -66,3 +66,7 @@ Table: t2
 Table: t3
 Table: t3
 Table: t3
+
+––– input –––
+echo 1
+––– output –––

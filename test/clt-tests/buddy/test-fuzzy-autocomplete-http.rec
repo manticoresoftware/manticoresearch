@@ -1,4 +1,3 @@
-
 ––– block: ../base/start-searchd-with-buddy –––
 ––– input –––
 apt-get update -y > /dev/null; echo $?

@@ -1032,10 +1032,8 @@ class RtWriter_c
 		const auto iOldLen = m_pOldDiskChunks->GetLength();
 		const auto iCurLen = pOwnerDiskChunks->GetLength();
 		if ( iOldLen != iCurLen )
-		{
-			sphFatal ("Amount of disk chunks changed from %d to %d during table modification. Table damaged", iOldLen, iCurLen);
-			return;
-		}
+			sphDie ("Amount of disk chunks changed from %d to %d during table modification. Table damaged", iOldLen, iCurLen);
+
 		auto dOldChunks = GetChunkIds ( *m_pOldDiskChunks );
 		auto dCurChunks = GetChunkIds ( *pOwnerDiskChunks );
 
@@ -1044,8 +1042,7 @@ class RtWriter_c
 			if ( dOldChunks[i] == dCurChunks[i] )
 				continue;
 
-			sphFatal ("Disk chunks changed from [%s] to [%s] during table modification. Table damaged", Vec2Str( dOldChunks, "," ).cstr(), Vec2Str( dCurChunks, "," ).cstr());
-			return;
+			sphDie ("Disk chunks changed from [%s] to [%s] during table modification. Table damaged", Vec2Str( dOldChunks, "," ).cstr(), Vec2Str( dCurChunks, "," ).cstr());
 		}
 	}
 
@@ -1059,18 +1056,15 @@ class RtWriter_c
 		const auto iOldLen = m_pOldRamSegs->GetLength();
 		const auto iCurLen = pOwnerRamSegs->GetLength();
 		if ( iOldLen != iCurLen )
-		{
-			sphFatal( "Amount of ram segments changed from %d to %d during table modification. Table damaged", iOldLen, iCurLen );
-			return;
-		}
+			sphDie ( "Amount of ram segments changed from %d to %d during table modification. Table damaged", iOldLen, iCurLen );
+
 
 		ARRAY_CONSTFOREACH( i, (*m_pOldRamSegs) )
 		{
 			if ( (*m_pOldRamSegs)[i] == (*pOwnerRamSegs)[i] )
 				continue;
 
-			sphFatal( "%s", "RAM segments changed during table modification. Table damaged" );
-			return;
+			sphDie ( "RAM segments changed during table modification. Table damaged" );
 		}
 	}
 

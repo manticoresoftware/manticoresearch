@@ -31,7 +31,6 @@ concurrency:
 jobs:
 
   # Pack job to determine if packing should proceed
-  # Added support for 'check-deps' label to trigger dependency check
   pack:
     name: OK to pack?
     runs-on: ubuntu-22.04
@@ -46,17 +45,7 @@ jobs:
       target: ${{ steps.semver-tagger.outputs.target }}
       should_continue: ${{ steps.check-should-continue.outputs.should_continue }}
     if: |
-      (
-        github.event_name == 'pull_request'
-        &&
-        (
-          contains(github.event.pull_request.labels.*.name, 'pack')
-          ||
-          contains(github.event.pull_request.labels.*.name, 'publish')
-          ||
-          contains(github.event.pull_request.labels.*.name, 'check-deps')
-        )
-      )
+      github.event_name == 'pull_request'  # Run on every PR
       ||
       (
         github.event_name == 'workflow_run'
@@ -111,19 +100,9 @@ jobs:
     name: Check deps test
     runs-on: ubuntu-22.04
     needs: pack
-    # Run if PR has 'check-deps', 'pack', or 'publish' label, or if other conditions for pack are met
+    # Run on every PR, workflow_run, or push event matching the conditions
     if: |
-      (
-        github.event_name == 'pull_request'
-        &&
-        (
-          contains(github.event.pull_request.labels.*.name, 'check-deps')
-          ||
-          contains(github.event.pull_request.labels.*.name, 'pack')
-          ||
-          contains(github.event.pull_request.labels.*.name, 'publish')
-        )
-      )
+      github.event_name == 'pull_request'  # Run on every PR
       ||
       (
         github.event_name == 'workflow_run'

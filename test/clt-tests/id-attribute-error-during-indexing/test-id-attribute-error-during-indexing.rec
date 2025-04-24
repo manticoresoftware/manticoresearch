@@ -71,3 +71,7 @@ docker run --network=t_network --platform linux/x86_64 --name xml -v ./test/clt-
 timeout 20 grep -m1 "can not define auto-defined 'id' attribute" <(docker logs -f xml 2>&1)
 ––– output –––
 ERROR: table 'idx': source 'min': can not define auto-defined 'id' attribute (line=1, pos=207, docid=0).
+
+––– input –––
+ehco 123
+––– output –––

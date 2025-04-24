@@ -30,6 +30,8 @@ concurrency:
 
 jobs:
 
+  # Pack job to determine if packing should proceed
+  # Added support for 'check-deps' label to trigger dependency check
   pack:
     name: OK to pack?
     runs-on: ubuntu-22.04
@@ -52,7 +54,7 @@ jobs:
           ||
           contains(github.event.pull_request.labels.*.name, 'publish')
           ||
-          contains(github.event.pull_request.labels.*.name, 'check-deps')  # Added new label
+          contains(github.event.pull_request.labels.*.name, 'check-deps')
         )
       )
       ||

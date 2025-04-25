@@ -15,6 +15,7 @@
 %pure-parser
 %error-verbose
 
+%token	END 0 "$end"
 %token	TOK_IDENT "identifier"
 %token	TOK_TABLEIDENT "tablename"
 %token	TOK_CONST_FLOAT "float"

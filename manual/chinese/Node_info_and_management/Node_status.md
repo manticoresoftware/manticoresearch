@@ -3,17 +3,17 @@
 ## 状态
 
 <!-- example status -->
-查看您 Manticore 节点的高层信息最简单的方法是在 MySQL 客户端中运行 `status`。它将显示有关各种方面的信息，例如：
+查看您的 Manticore 节点的高层信息的最简单方式是通过在 MySQL 客户端中运行 `status`。它将显示关于各个方面的信息，例如：
 * 当前版本
-* SSL 是否在生效
+* 是否启用了 SSL
 * 当前 TCP 端口/Unix 套接字
-* 正常运行时间
-* [线程](../Server_settings/Searchd.md#threads) 数量
-* [队列中的作业数量](../Server_settings/Searchd.md#jobs_queue_size)
+* 开机时间
+* [线程数](../Server_settings/Searchd.md#threads)
+* [队列中的作业数](../Server_settings/Searchd.md#jobs_queue_size)
 * 连接数（`clients`）
-* 当前正在处理的任务数量
-* 自启动以来执行的查询数量
-* 队列中的作业数量和任务数量，按照线程数量进行归一化
+* 当前正在处理的任务数
+* 自启动以来执行的查询数
+* 队列中的作业数和任务数，按线程数标准化
 
 <!-- request SQL -->
 ```sql
@@ -25,32 +25,32 @@ mysql> status
 --------------
 mysql  Ver 14.14 Distrib 5.7.30, for Linux (x86_64) using  EditLine wrapper
 
-连接 ID:		378
-当前数据库:	Manticore
-当前用户:		Usual
-SSL:			未使用
-当前分页器:		stdout
-使用输出文件:		''
-使用分隔符:	;
-服务器版本:		3.4.3 a48c61d6@200702 coroutines git branch coroutines_work_junk...origin/coroutines_work_junk
-协议版本:	10
-连接:		0 通过 TCP/IP
-服务器字符集:
-Db     字符集:
-客户端字符集:	utf8
-连接. 字符集:	utf8
-TCP 端口:		8306
-正常运行时间:			23 小时 6 秒
+Connection id:		378
+Current database:	Manticore
+Current user:		Usual
+SSL:			Not in use
+Current pager:		stdout
+Using outfile:		''
+Using delimiter:	;
+Server version:		3.4.3 a48c61d6@200702 coroutines git branch coroutines_work_junk...origin/coroutines_work_junk
+Protocol version:	10
+Connection:		0 via TCP/IP
+Server characterset:
+Db     characterset:
+Client characterset:	utf8
+Conn.  characterset:	utf8
+TCP port:		8306
+Uptime:			23 hours 6 sec
 
-线程: 12  队列: 3  客户端: 1  Vip 客户端: 0  任务: 5  查询: 318967  Wall: 7h  CPU: 0us
-队列/Th: 0.2  任务/Th: 0.4
+Threads: 12  Queue: 3  Clients: 1  Vip clients: 0  Tasks: 5  Queries: 318967  Wall: 7h  CPU: 0us
+Queue/Th: 0.2  Tasks/Th: 0.4
 --------------
 ```
 
 
 <!-- end-->
 
-## SHOW STATUS
+## 显示状态
 
 ```sql
 SHOW STATUS [ LIKE pattern ]
@@ -58,7 +58,7 @@ SHOW STATUS [ LIKE pattern ]
 
 <!-- example show status -->
 
-`SHOW STATUS` 是一个 SQL 语句，呈现各种有用的性能计数器。只有当 `searchd` 使用 `--iostats` 和 `--cpustats` 开关启动时（或如果通过 `SET GLOBAL iostats/cpustats=1` 启用时），IO 和 CPU 计数器才会可用。
+`SHOW STATUS` 是一个 SQL 语句，它呈现各种有用的性能计数器。IO 和 CPU 计数器只有在启动 `searchd` 时分别使用了 `--iostats` 和 `--cpustats` 开关时（或者通过 `SET GLOBAL iostats/cpustats=1` 启用时）才可用。
 
 <!-- intro -->
 ##### SQL:
@@ -71,12 +71,12 @@ SHOW STATUS;
 <!-- response SQL -->
 ```sql
 +-------------------------------+------------------------------------------------------------------------------------------------------------------------------------------------+
-| 计数器                        | 值                                                                                                                                           |
+| Counter                       | Value                                                                                                                                          |
 +-------------------------------+------------------------------------------------------------------------------------------------------------------------------------------------+
-| 正常运行时间                  | 182                                                                                                                                            |
-| 连接数                        | 368                                                                                                                                            |
-| 达到最大                      | 0                                                                                                                                              |
-| 版本                          | 6.3.7 b10359434@24100213 dev (columnar 2.3.1 bd59d08@24093015) (secondary 2.3.1 bd59d08@24093015) (knn 2.3.1 bd59d08@24093015) (buddy v2.3.13) |
+| uptime                        | 182                                                                                                                                            |
+| connections                   | 368                                                                                                                                            |
+| maxed_out                     | 0                                                                                                                                              |
+| version                       | 6.3.7 b10359434@24100213 dev (columnar 2.3.1 bd59d08@24093015) (secondary 2.3.1 bd59d08@24093015) (knn 2.3.1 bd59d08@24093015) (buddy v2.3.13) |
 | mysql_version                 | 6.3.7 b10359434@24100213 dev (columnar 2.3.1 bd59d08@24093015) (secondary 2.3.1 bd59d08@24093015) (knn 2.3.1 bd59d08@24093015)                 |
 | command_search                | 4                                                                                                                                              |
 | command_excerpt               | 0                                                                                                                                              |
@@ -127,21 +127,21 @@ SHOW STATUS;
 | load_primary                  | 0.00 0.00 0.00                                                                                                                                 |
 | load_secondary                | 0.00 0.00 0.00                                                                                                                                 |
 | query_wall                    | 0.000                                                                                                                                          |
-| query_cpu                     | 关闭                                                                                                                                            |
+| query_cpu                     | OFF                                                                                                                                            |
 | dist_wall                     | 0.000                                                                                                                                          |
 | dist_local                    | 0.000                                                                                                                                          |
 | dist_wait                     | 0.000                                                                                                                                          |
-| query_reads                   | 关闭                                                                                                                                            |
-| query_readkb                  | 关闭                                                                                                                                            |
-| query_readtime                | 关闭                                                                                                                                            |
+| query_reads                   | OFF                                                                                                                                            |
+| query_readkb                  | OFF                                                                                                                                            |
+| query_readtime                | OFF                                                                                                                                            |
 | avg_query_wall                | 0.000                                                                                                                                          |
-| avg_query_cpu                 | 关闭                                                                                                                                            |
+| avg_query_cpu                 | OFF                                                                                                                                            |
 | avg_dist_wall                 | 0.000                                                                                                                                          |
 | avg_dist_local                | 0.000                                                                                                                                          |
 | avg_dist_wait                 | 0.000                                                                                                                                          |
-| avg_query_reads               | 关闭                                                                                                                                            |
-| avg_query_readkb              | 关闭                                                                                                                                            |
-| avg_query_readtime            | 关闭                                                                                                                                            |
+| avg_query_reads               | OFF                                                                                                                                            |
+| avg_query_readkb              | OFF                                                                                                                                            |
+| avg_query_readtime            | OFF                                                                                                                                            |
 | qcache_max_bytes              | 16777216                                                                                                                                       |
 | qcache_thresh_msec            | 3000                                                                                                                                           |
 | qcache_ttl_sec                | 60                                                                                                                                             |
@@ -155,7 +155,7 @@ SHOW STATUS;
 
 <!-- example show status like -->
 
-An optional `LIKE` clause is supported, allowing you to select only the variables that match a specific pattern. The pattern syntax follows standard SQL wildcards, where `%` represents any number of any characters, and `_` represents a single character.
+一个可选的 `LIKE` 子句被支持，允许您仅选择与特定模式匹配的变量。模式语法遵循标准 SQL 通配符，其中 `%` 代表任意数量的任意字符，`_` 代表单个字符。
 
 <!-- request qcache -->
 
@@ -212,20 +212,20 @@ SHOW STATUS LIKE '%stats_ms%';
 
 <!-- example show status like stats_ms -->
 
-`SHOW STATUS` 命令提供了 Manticore 中各种性能指标的详细报告，包括插入/替换、搜索和更新查询的查询时间统计。这些统计数据是在 1、5 和 15 分钟的滑动窗口内计算的，显示查询时间的平均值、最小值、最大值以及 95% 和 99% 百分位数值。
+`SHOW STATUS` 命令提供关于 Manticore 中各种性能指标的详细报告，包括插入/替换、搜索和更新查询的查询时间统计。这些统计是通过 1、5 和 15 分钟的滑动窗口计算的，显示查询时间的平均值、最小值、最大值和第 95/99 百分位值。
 
-这些指标有助于跟踪特定时间间隔内的性能，使得更容易发现查询响应时间的趋势并找出可能的性能瓶颈。
+这些指标有助于跟踪特定时间间隔内的性能，使得更容易找到查询响应时间中的趋势并发现可能的瓶颈。
 
 以下指标是 `SHOW STATUS` 输出的一部分：
-- `*_avg`：每种查询类型在最近 1、5 和 15 分钟内的平均查询时间。
+- `*_avg`：过去 1、5 和 15 分钟内每种查询类型的平均查询时间。
 - `*_min`：每种查询类型记录的最短查询时间。
 - `*_max`：每种查询类型记录的最长查询时间。
-- `*_pct95`：95% 的查询可以在此时间内完成。
-- `*_pct99`：99% 的查询可以在此时间内完成。
+- `*_pct95`：95% 的查询在该时间内完成。
+- `*_pct99`：99% 的查询在该时间内完成。
 
-这些统计数据分别针对插入/替换（`insert_replace_stats_*`）、搜索（`search_stats_*`）和更新（`update_stats_*`）查询提供，为不同操作的性能提供详细见解。
+这些统计信息分别提供给插入/替换（`insert_replace_stats_*`）、搜索（`search_stats_*`）和更新（`update_stats_*`）查询，提供对不同操作性能的详细见解。
 
-如果在监控间隔内没有执行查询，系统将显示 `N/A`。
+如果在监控间隔内没有执行任何查询，系统将显示 `N/A`。
 
 <!-- request perf_stats -->
 
@@ -262,7 +262,7 @@ SHOW STATUS LIKE '%stats_ms%';
 
 <!-- example show settings -->
 
-`SHOW SETTINGS` 是一个 SQL 语句，用于显示配置文件中的当前设置。设置名称以以下格式表示：`'配置节名称'.'设置名称'`
+`SHOW SETTINGS` 是一个 SQL 语句，它显示当前配置文件中的设置。设置名称的格式为：`'config_section_name'.'setting_name'`
 
 结果还包括两个额外的值：
 - `configuration_file` - 配置文件的路径
@@ -307,7 +307,7 @@ SHOW AGENT ['agent_or_index'] STATUS [ LIKE pattern ]
 
 <!-- example SHOW AGENT STATUS -->
 
-`SHOW AGENT STATUS` 显示 [远程代理](../Creating_a_table/Creating_a_distributed_table/Remote_tables.md#agent) 或分布式表的统计信息。它包括上一个请求的年龄、上一个答案、各种类型的错误和成功次数等值。统计信息针对每个代理，显示最近 1、5 和 15 个间隔（每个间隔由 [ha_period_karma](../Server_settings/Searchd.md#ha_period_karma) 秒组成）的数据。
+`SHOW AGENT STATUS` 显示 [远程代理](../Creating_a_table/Creating_a_distributed_table/Remote_tables.md#agent) 或分布式表的统计信息。它包括诸如最后请求的年龄、最后答复的时间、各种类型的错误和成功的数量等值。每个代理在过去 1、5 和 15 个间隔内的统计信息，每个间隔由 [ha_period_karma](../Server_settings/Searchd.md#ha_period_karma) 秒组成。
 
 <!-- intro -->
 ##### SQL:
@@ -510,6 +510,75 @@ utilsApi.sql('SHOW AGENT STATUS')
  u'total': 0,
  u'warning': u''}
 ```
+
+<!-- intro -->
+##### Python-asyncio:
+
+<!-- request Python-asyncio -->
+
+```python
+await utilsApi.sql('SHOW AGENT STATUS')
+```
+<!-- response Python-asyncio -->
+
+```python
+{u'columns': [{u'Key': {u'type': u'string'}},
+              {u'Value': {u'type': u'string'}}],
+ u'data': [
+	{u'Key': u'status_period_seconds', u'Value': u'60'},
+	{u'Key': u'status_stored_periods', u'Value': u'15'},
+	{u'Key': u'ag_0_hostname', u'Value': u'192.168.0.202:6713'},
+	{u'Key': u'ag_0_references', u'Value': u'2'},
+	{u'Key': u'ag_0_lastquery', u'Value': u'0.41'},
+	{u'Key': u'ag_0_lastanswer', u'Value': u'0.19'},
+	{u'Key': u'ag_0_lastperiodmsec', u'Value': u'222'},
+	{u'Key': u'ag_0_errorsarow', u'Value': u'0'},
+	{u'Key': u'ag_0_1periods_query_timeouts', u'Value': u'0'},
+	{u'Key': u'ag_0_1periods_connect_timeouts', u'Value': u'0'},
+	{u'Key': u'ag_0_1periods_connect_failures', u'Value': u'0'},
+	{u'Key': u'ag_0_1periods_network_errors', u'Value': u'0'},
+	{u'Key': u'ag_0_1periods_wrong_replies', u'Value': u'0'},
+	{u'Key': u'ag_0_1periods_unexpected_closings', u'Value': u'0'},
+	{u'Key': u'ag_0_1periods_warnings', u'Value': u'0'},
+	{u'Key': u'ag_0_1periods_succeeded_queries', u'Value': u'27'},
+	{u'Key': u'ag_0_1periods_msecsperquery', u'Value': u'232.31'},
+	{u'Key': u'ag_0_5periods_query_timeouts', u'Value': u'0'},
+	{u'Key': u'ag_0_5periods_connect_timeouts', u'Value': u'0'},
+	{u'Key': u'ag_0_5periods_connect_failures', u'Value': u'0'},
+	{u'Key': u'ag_0_5periods_network_errors', u'Value': u'0'},
+	{u'Key': u'ag_0_5periods_wrong_replies', u'Value': u'0'},
+	{u'Key': u'ag_0_5periods_unexpected_closings', u'Value': u'0'},
+	{u'Key': u'ag_0_5periods_warnings', u'Value': u'0'},
+	{u'Key': u'ag_0_5periods_succeeded_queries', u'Value': u'146'},
+	{u'Key': u'ag_0_5periods_msecsperquery', u'Value': u'231.83'},
+	{u'Key': u'ag_1_hostname 192.168.0.202:6714'},
+	{u'Key': u'ag_1_references', u'Value': u'2'},
+	{u'Key': u'ag_1_lastquery', u'Value': u'0.41'},
+	{u'Key': u'ag_1_lastanswer', u'Value': u'0.19'},
+	{u'Key': u'ag_1_lastperiodmsec', u'Value': u'220'},
+	{u'Key': u'ag_1_errorsarow', u'Value': u'0'},
+	{u'Key': u'ag_1_1periods_query_timeouts', u'Value': u'0'},
+	{u'Key': u'ag_1_1periods_connect_timeouts', u'Value': u'0'},
+	{u'Key': u'ag_1_1periods_connect_failures', u'Value': u'0'},
+	{u'Key': u'ag_1_1periods_network_errors', u'Value': u'0'},
+	{u'Key': u'ag_1_1periods_wrong_replies', u'Value': u'0'},
+	{u'Key': u'ag_1_1periods_unexpected_closings', u'Value': u'0'},
+	{u'Key': u'ag_1_1periods_warnings', u'Value': u'0'},
+	{u'Key': u'ag_1_1periods_succeeded_queries', u'Value': u'27'},
+	{u'Key': u'ag_1_1periods_msecsperquery', u'Value': u'231.24'},
+	{u'Key': u'ag_1_5periods_query_timeouts', u'Value': u'0'},
+	{u'Key': u'ag_1_5periods_connect_timeouts', u'Value': u'0'},
+	{u'Key': u'ag_1_5periods_connect_failures', u'Value': u'0'},
+	{u'Key': u'ag_1_5periods_network_errors', u'Value': u'0'},
+	{u'Key': u'ag_1_5periods_wrong_replies', u'Value': u'0'},
+	{u'Key': u'ag_1_5periods_warnings', u'Value': u'0'},
+	{u'Key': u'ag_1_5periods_succeeded_queries', u'Value': u'146'},
+	{u'Key': u'ag_1_5periods_msecsperquery', u'Value': u'230.85'}],
+ u'error': u'',
+ u'total': 0,
+ u'warning': u''}
+```
+
 <!-- intro -->
 ##### Javascript:
 
@@ -558,21 +627,21 @@ res = await utilsApi.sql("SHOW AGENT STATUS");
 	{"Key": "ag_1_errorsarow", "Value": "0"},
 	{"Key": "ag_1_1periods_query_timeouts", "Value": "0"},
 	{"Key": "ag_1_1periods_connect_timeouts", "Value": "0"},
-	{u'Key': u'ag_1_1periods_connect_failures', u'Value': u'0'},
-	{u'Key': u'ag_1_1periods_network_errors', u'Value': u'0'},
-	{u'Key': u'ag_1_1periods_wrong_replies', u'Value': u'0'},
-	{u'Key': u'ag_1_1periods_unexpected_closings', u'Value': u'0'},
-	{u'Key': u'ag_1_1periods_warnings', u'Value': u'0'},
-	{u'Key': u'ag_1_1periods_succeeded_queries', u'Value': u'27'},
-	{u'Key': u'ag_1_1periods_msecsperquery', u'Value': u'231.24'},
-	{u'Key': u'ag_1_5periods_query_timeouts', u'Value': u'0'},
-	{u'Key': u'ag_1_5periods_connect_timeouts', u'Value': u'0'},
-	{u'Key': u'ag_1_5periods_connect_failures', u'Value': u'0'},
-	{u'Key': u'ag_1_5periods_network_errors', u'Value': u'0'},
-	{u'Key': u'ag_1_5periods_wrong_replies', u'Value': u'0'},
-	{u'Key': u'ag_1_5periods_warnings', u'Value': u'0'},
-	{u'Key': u'ag_1_5periods_succeeded_queries', u'Value': u'146'},
-	{u'Key': u'ag_1_5periods_msecsperquery', u'Value': u'230.85'}],
+	{"Key": "ag_1_1periods_connect_failures", "Value": "0"},
+	{"Key": "ag_1_1periods_network_errors", "Value": "0"},
+	{"Key": "ag_1_1periods_wrong_replies", "Value": "0"},
+	{"Key": "ag_1_1periods_unexpected_closings", "Value": "0"},
+	{"Key": "ag_1_1periods_warnings", "Value": "0"},
+	{"Key": "ag_1_1periods_succeeded_queries", "Value": "27"},
+	{"Key": "ag_1_1periods_msecsperquery", "Value": "231.24"},
+	{"Key": "ag_1_5periods_query_timeouts", "Value": "0"},
+	{"Key": "ag_1_5periods_connect_timeouts", "Value": "0"},
+	{"Key": "ag_1_5periods_connect_failures", "Value": "0"},
+	{"Key": "ag_1_5periods_network_errors", "Value": "0"},
+	{"Key": "ag_1_5periods_wrong_replies", "Value": "0"},
+	{"Key": "ag_1_5periods_warnings", "Value": "0"},
+	{"Key": "ag_1_5periods_succeeded_queries", "Value": "146"},
+	{"Key": "ag_1_5periods_msecsperquery", "Value": "230.85"}],
  "error": "",
  "total": 0,
  "warning": ""}
@@ -657,6 +726,74 @@ utilsApi.Sql("SHOW AGENT STATUS");
 <!-- response C# -->
 
 ```clike
+{columns=[{ Key : { type=string }},
+              { Value : { type=string }}],
+  data : [
+	{ Key=status_period_seconds ,  Value=60 },
+	{ Key=status_stored_periods ,  Value=15 },
+	{ Key=ag_0_hostname ,  Value=192.168.0.202:6713 },
+	{ Key=ag_0_references ,  Value=2 },
+	{ Key=ag_0_lastquery ,  Value=0.41 },
+	{ Key=ag_0_lastanswer ,  Value=0.19 },
+	{ Key=ag_0_lastperiodmsec ,  Value=222 },
+	{ Key=ag_0_errorsarow ,  Value=0 },
+	{ Key=ag_0_1periods_query_timeouts ,  Value=0 },
+	{ Key=ag_0_1periods_connect_timeouts ,  Value=0 },
+	{ Key=ag_0_1periods_connect_failures ,  Value=0 },
+	{ Key=ag_0_1periods_network_errors ,  Value=0 },
+	{ Key=ag_0_1periods_wrong_replies ,  Value=0 },
+	{ Key=ag_0_1periods_unexpected_closings ,  Value=0 },
+	{ Key=ag_0_1periods_warnings ,  Value=0 },
+	{ Key=ag_0_1periods_succeeded_queries ,  Value=27 },
+	{ Key=ag_0_1periods_msecsperquery ,  Value=232.31 },
+	{ Key=ag_0_5periods_query_timeouts ,  Value=0 },
+	{ Key=ag_0_5periods_connect_timeouts ,  Value=0 },
+	{ Key=ag_0_5periods_connect_failures ,  Value=0 },
+	{ Key=ag_0_5periods_network_errors ,  Value=0 },
+	{ Key=ag_0_5periods_wrong_replies ,  Value=0 },
+	{ Key=ag_0_5periods_unexpected_closings ,  Value=0 },
+	{ Key=ag_0_5periods_warnings ,  Value=0 },
+	{ Key=ag_0_5periods_succeeded_queries ,  Value=146 },
+	{ Key=ag_0_5periods_msecsperquery ,  Value=231.83 },
+	{ Key=ag_1_hostname 192.168.0.202:6714 },
+	{ Key=ag_1_references ,  Value=2 },
+	{ Key=ag_1_lastquery ,  Value=0.41 },
+	{ Key=ag_1_lastanswer ,  Value=0.19 },
+	{ Key=ag_1_lastperiodmsec ,  Value=220 },
+	{ Key=ag_1_errorsarow ,  Value=0 },
+	{ Key=ag_1_1periods_query_timeouts ,  Value=0 },
+	{ Key=ag_1_1periods_connect_timeouts ,  Value=0 },
+	{ Key=ag_1_1periods_connect_failures ,  Value=0 },
+	{ Key=ag_1_1periods_network_errors ,  Value=0 },
+	{ Key=ag_1_1periods_wrong_replies ,  Value=0 },
+	{ Key=ag_1_1periods_unexpected_closings ,  Value=0 },
+	{ Key=ag_1_1periods_warnings ,  Value=0 },
+	{ Key=ag_1_1periods_succeeded_queries ,  Value=27 },
+	{ Key=ag_1_1periods_msecsperquery ,  Value=231.24 },
+	{ Key=ag_1_5periods_query_timeouts ,  Value=0 },
+	{ Key=ag_1_5periods_connect_timeouts ,  Value=0 },
+	{ Key=ag_1_5periods_connect_failures ,  Value=0 },
+	{ Key=ag_1_5periods_network_errors ,  Value=0 },
+	{ Key=ag_1_5periods_wrong_replies ,  Value=0 },
+	{ Key=ag_1_5periods_warnings ,  Value=0 },
+	{ Key=ag_1_5periods_succeeded_queries ,  Value=146 },
+	{ Key=ag_1_5periods_msecsperquery ,  Value=230.85 }],
+  error="" ,
+  total=0,
+  warning="" }
+```
+
+<!-- intro -->
+##### Rust:
+
+<!-- request Rust -->
+
+```clike
+utils_api.sql("SHOW AGENT STATUS", Some(true)).await;
+```
+<!-- response Rust -->
+
+```rust
 {columns=[{ Key : { type=string }},
               { Value : { type=string }}],
   data : [
@@ -885,7 +1022,7 @@ res := apiClient.UtilsAPI.Sql(context.Background()).Body("SHOW AGENT STATUS").Ex
 
 <!-- example SHOW AGENT LIKE -->
 
-An optional `LIKE` clause is supported, with the syntax being the same as in `SHOW STATUS`.
+一个可选的 `LIKE` 子句被支持，语法与 `SHOW STATUS` 中相同。
 
 <!-- intro -->
 ##### SQL:
@@ -950,6 +1087,29 @@ utilsApi.sql('SHOW AGENT STATUS LIKE \'%5period%msec%\'')
  u'total': 0,
  u'warning': u''}
 ```
+
+<!-- intro -->
+##### Python-asyncio:
+
+<!-- request Python-asyncio -->
+
+```python
+await utilsApi.sql('SHOW AGENT STATUS LIKE \'%5period%msec%\'')
+```
+<!-- response Python-asyncio -->
+
+```python
+{u'columns': [{u'Key': {u'type': u'string'}},
+              {u'Value': {u'type': u'string'}}],
+ u'data': [
+	{u'Key': u'ag_0_5periods_msecsperquery', u'Value': u'234.72'},
+	{u'Key': u'ag_1_5periods_msecsperquery', u'Value': u'233.73'},
+	{u'Key': u'ag_2_5periods_msecsperquery', u'Value': u'343.81'}],
+ u'error': u'',
+ u'total': 0,
+ u'warning': u''}
+```
+
 <!-- intro -->
 ##### Javascript:
 
@@ -1006,6 +1166,28 @@ utilsApi.Sql("SHOW AGENT STATUS LIKE \"%5period%msec%\"");
 <!-- response C# -->
 
 ```clike
+{columns: [{Key={type=string}},
+              {Value={type=string}}],
+ data: [
+	{Key=ag_0_5periods_msecsperquery, Value=234.72},
+	{Key=ag_1_5periods_msecsperquery, Value=233.73},
+	{Key=ag_2_5periods_msecsperquery, Value=343.81}],
+ error: "",
+ total: 0,
+ warning: ""}
+```
+
+<!-- intro -->
+##### Rust:
+
+<!-- request Rust -->
+
+```rust
+utils_api.sql("SHOW AGENT STATUS LIKE \"%5period%msec%\"", Some(true)).await;
+```
+<!-- response Rust -->
+
+```rust
 {columns: [{Key={type=string}},
               {Value={type=string}}],
  data: [
@@ -1084,7 +1266,7 @@ apiClient.UtilsAPI.Sql(context.Background()).Body("SHOW AGENT STATUS LIKE \"%5pe
 
 <!-- example show specific agent -->
 
-你可以通过其地址指定特定代理。在这种情况下，只会显示该代理的数据。此外，将使用 `agent_` 前缀而不是 `ag_N_`:
+您可以通过其地址指定特定的代理。在这种情况下，只有该代理的数据会被显示。此外，将使用 `agent_` 前缀而不是 `ag_N_`： 
 
 <!-- intro -->
 ##### SQL:
@@ -1173,6 +1355,37 @@ utilsApi.sql('SHOW AGENT \'192.168.0.202:6714\' STATUS LIKE \'%15periods%\'')
  u'total': 0,
  u'warning': u''}
 ```
+
+<!-- intro -->
+##### Python-asyncio:
+
+<!-- request Python-asyncio -->
+
+```python
+await utilsApi.sql('SHOW AGENT \'192.168.0.202:6714\' STATUS LIKE \'%15periods%\'')
+```
+<!-- response Python-asyncio -->
+
+```python
+{u'columns': [{u'Key': {u'type': u'string'}},
+              {u'Value': {u'type': u'string'}}],
+ u'data': [
+	{u'Key': u'agent_15periods_query_timeouts', u'Value': u'0'},
+	{u'Key': u'agent_15periods_connect_timeouts', u'Value': u'0'},
+	{u'Key': u'agent_15periods_connect_failures', u'Value': u'0'},
+    {u'Key': u'agent_15periods_network_errors', u'Value': u'0'},
+    {u'Key': u'agent_15periods_connect_failures', u'Value': u'0'},
+    {u'Key': u'agent_15periods_wrong_replies', u'Value': u'0'},
+    {u'Key': u'agent_15periods_unexpected_closings', u'Value': u'0'},
+    {u'Key': u'agent_15periods_warnings', u'Value': u'0'},
+    {u'Key': u'agent_15periods_succeeded_queries', u'Value': u'439'},
+    {u'Key': u'agent_15periods_msecsperquery', u'Value': u'233.73'},
+    ],
+ u'error': u'',
+ u'total': 0,
+ u'warning': u''}
+```
+
 <!-- intro -->
 ##### Javascript:
 
@@ -1244,6 +1457,36 @@ utilsApi.Sql("SHOW AGENT \"192.168.0.202:6714\" STATUS LIKE \"%15periods%\"");
 <!-- response C# -->
 
 ```clike
+{columns=[{Key={type=string}},
+              {Value={type=string}}],
+ data=[
+	{Key=agent_15periods_query_timeouts, Value=0},
+	{Key=agent_15periods_connect_timeouts, Value=0},
+	{Key=agent_15periods_connect_failures, Value=0},
+    {Key=agent_15periods_network_errors, Value=0},
+    {Key=agent_15periods_connect_failures, Value=0},
+    {Key=agent_15periods_wrong_replies, Value=0},
+    {Key=agent_15periods_unexpected_closings, Value=0},
+    {Key=agent_15periods_warnings, Value=0},
+    {Key=agent_15periods_succeeded_queries, Value=439},
+    {Key=agent_15periods_msecsperquery, Value=233.73},
+    ],
+ error="",
+ total=0,
+ warning=""}
+```
+
+<!-- intro -->
+##### Rust:
+
+<!-- request Rust -->
+
+```rust
+utils_api.sql("SHOW AGENT \"192.168.0.202:6714\" STATUS LIKE \"%15periods%\"", Some(true)).await;
+```
+<!-- response Rust -->
+
+```rust
 {columns=[{Key={type=string}},
               {Value={type=string}}],
  data=[
@@ -1340,7 +1583,7 @@ apiClient.UtilsAPI.Sql(context.Background()).Body("SHOW AGENT \"192.168.0.202:67
 <!-- end -->
 <!-- example show agent table status -->
 
-最后，您可以使用 `SHOW AGENT table_name STATUS` 语句检查特定分布式表中代理的状态。该语句显示表的HA状态（即，它是否完全使用代理镜像）并提供有关镜像的信息，包括：地址、黑洞和持久化标志，以及在使用[加权概率策略](../Creating_a_cluster/Remote_nodes/Load_balancing.md)时使用的镜像选择概率。
+最后，您可以使用 `SHOW AGENT table_name STATUS` 语句检查特定分布式表中代理的状态。该语句显示表的 HA 状态（即它是否使用代理镜像）并提供关于镜像的信息，包括：地址、黑洞和持久性标志，以及在[加权概率策略](../Creating_a_cluster/Remote_nodes/Load_balancing.md)生效时使用的镜像选择概率。
 
 <!-- intro -->
 ##### SQL:
@@ -1436,6 +1679,40 @@ utilsApi.sql('SHOW AGENT \'192.168.0.202:6714\' STATUS LIKE \'%15periods%\'')
  u'total': 0,
  u'warning': u''}
 ```
+
+<!-- intro -->
+##### Python-asyncio:
+
+<!-- request Python-asyncio -->
+
+```python
+await utilsApi.sql('SHOW AGENT \'192.168.0.202:6714\' STATUS LIKE \'%15periods%\'')
+```
+<!-- response Python-asyncio -->
+
+```python
+{u'columns': [{u'Key': {u'type': u'string'}},
+              {u'Value': {u'type': u'string'}}],
+ u'data': [
+	{u'Key': u'dstindex_1_is_ha', u'Value': u'1'},
+	{u'Key': u'dstindex_1mirror1_id', u'Value': u'192.168.0.202:6713:loc'},
+	{u'Key': u'dstindex_1mirror1_probability_weight', u'Value': u'0.372864'},
+    {u'Key': u'dstindex_1mirror1_is_blackhole', u'Value': u'0'},
+    {u'Key': u'dstindex_1mirror1_is_persistent', u'Value': u'0'},
+    {u'Key': u'dstindex_1mirror2_id', u'Value': u'192.168.0.202:6714:loc'},
+    {u'Key': u'dstindex_1mirror2_probability_weight', u'Value': u'0.374635'},
+    {u'Key': u'dstindex_1mirror2_is_blackhole', u'Value': u'0'},
+    {u'Key': u'dstindex_1mirror2_is_persistent', u'Value': u'439'},
+    {u'Key': u'dstindex_1mirror3_id', u'Value': u'dev1.manticoresearch.com:6714:loc'},
+    {u'Key': u'dstindex_1mirror3_probability_weight', u'Value': u' 0.252501'},
+    {u'Key': u'dstindex_1mirror3_is_blackhole', u'Value': u'0'},
+    {u'Key': u'dstindex_1mirror3_is_persistent', u'Value': u'439'}    
+    ],
+ u'error': u'',
+ u'total': 0,
+ u'warning': u''}
+```
+
 <!-- intro -->
 ##### Javascript:
 
@@ -1513,6 +1790,39 @@ utilsApi.Sql("SHOW AGENT \"192.168.0.202:6714\" STATUS LIKE \"%15periods%\"");
 <!-- response C# -->
 
 ```clike
+{columns=[{Key={type=string}},
+              {Value={type=string}}],
+ data=[
+	{Key=dstindex_1_is_ha, Value=1},
+	{Key=dstindex_1mirror1_id, Value=192.168.0.202:6713:loc},
+	{Key=dstindex_1mirror1_probability_weight, Value=0.372864},
+    {Key=dstindex_1mirror1_is_blackhole, Value=0},
+    {Key=dstindex_1mirror1_is_persistent, Value=0},
+    {Key=dstindex_1mirror2_id, Value=192.168.0.202:6714:loc},
+    {Key=dstindex_1mirror2_probability_weight, Value=0.374635},
+    {Key=dstindex_1mirror2_is_blackhole, Value=0},
+    {Key=dstindex_1mirror2_is_persistent, Value=439},
+    {Key=dstindex_1mirror3_id, Value=dev1.manticoresearch.com:6714:loc},
+    {Key=dstindex_1mirror3_probability_weight, Value= 0.252501},
+    {Key=dstindex_1mirror3_is_blackhole, Value=0},
+    {Key=dstindex_1mirror3_is_persistent, Value=439}    
+    ],
+ error="",
+ total=0,
+ warning=""}
+```
+
+<!-- intro -->
+##### Rust:
+
+<!-- request Rust -->
+
+```rust
+utils_api.sql("SHOW AGENT \"192.168.0.202:6714\" STATUS LIKE \"%15periods%\"", Some(true)).await;
+```
+<!-- response Rust -->
+
+```rust
 {columns=[{Key={type=string}},
               {Value={type=string}}],
  data=[

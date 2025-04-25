@@ -2,6 +2,1147 @@
 
 Результаты запроса могут быть отсортированы по весу ранжирования полного текста, одному или нескольким атрибутам или выражениям.
 
+**Полнотекстовые** запросы возвращают совпадения, отсортированные по умолчанию. Если ничего не указано, они сортируются по релевантности, что эквивалентно `ORDER BY weight() DESC` в формате SQL.
+
+**Неполнотекстовые** запросы по умолчанию не выполняют сортировку.
+
+## Расширенная сортировка
+
+Расширенный режим автоматически включается, когда вы явно задаете правила сортировки, добавляя оператор `ORDER BY` в формате SQL или используя опцию `sort` через HTTP JSON.
+
+### Сортировка через SQL
+
+Общий синтаксис:
+```sql
+SELECT ... ORDER BY
+{attribute_name | expr_alias | weight() | random() } [ASC | DESC],
+...
+{attribute_name | expr_alias | weight() | random() } [ASC | DESC]
+```
+
+<!-- example alias -->
+
+В операторе сортировки вы можете использовать любую комбинацию из 5 столбцов, каждый из которых должен быть завершен `asc` или `desc`. Функции и выражения не допускаются в качестве аргументов для оператора сортировки, за исключением функций `weight()` и `random()` (последняя может использоваться только через SQL в виде `ORDER BY random()`). Однако вы можете использовать любое выражение в списке SELECT и сортировать по его псевдониму.
+
+<!-- request SQL -->
+```sql
+select *, a + b alias from test order by alias desc;
+```
+
+<!-- response SQL -->
+```
++------+------+------+----------+-------+
+| id   | a    | b    | f        | alias |
++------+------+------+----------+-------+
+|    1 |    2 |    3 | document |     5 |
++------+------+------+----------+-------+
+```
+
+<!-- end -->
+
+## Сортировка через JSON
+
+<!-- example sorting 1 -->
+`"sort"` указывает массив, где каждый элемент может быть именем атрибута или `_score`, если вы хотите сортировать по весам совпадений. В этом случае порядок сортировки по умолчанию — по возрастанию для атрибутов и по убыванию для `_score`.
+
+<!-- intro -->
+
+<!-- request JSON -->
+
+```json
+{
+  "table":"test",
+  "query":
+  {
+    "match": { "title": "Test document" }
+  },
+  "sort": [ "_score", "id" ],
+  "_source": "title",
+  "limit": 3
+}
+```
+
+<!-- response JSON -->
+
+``` json
+    {
+
+"took": 0,
+
+"timed_out": false,
+
+"hits": {
+
+  "total": 5,
+
+  "total_relation": "eq",
+
+  "hits": [
+
+    {
+
+      "_id": 5406864699109146628,
+
+      "_score": 2319,
+
+      "_source": {
+
+        "title": "Test document 1"
+
+      }
+
+    },
+
+    {
+
+      "_id": 5406864699109146629,
+
+      "_score": 2319,
+
+      "_source": {
+
+        "title": "Test document 2"
+
+      }
+
+    },
+
+    {
+
+      "_id": 5406864699109146630,
+
+      "_score": 2319,
+
+      "_source": {
+
+        "title": "Test document 3"
+
+      }
+
+    }
+
+  ]
+
+}
+
+}
+```    
+
+<!-- intro -->
+##### PHP:
+
+<!-- request PHP -->
+
+```php
+$search->setIndex("test")->match('Test document')->sort('_score')->sort('id');
+```
+
+<!-- intro -->
+
+##### Python:
+
+<!-- request Python -->
+``` python
+search_request.index = 'test'
+search_request.fulltext_filter = manticoresearch.model.QueryFilter('Test document')
+search_request.sort = ['_score', 'id']
+```
+
+<!-- intro -->
+
+##### Python-asyncio:
+
+<!-- request Python-asyncio -->
+``` python
+search_request.index = 'test'
+search_request.fulltext_filter = manticoresearch.model.QueryFilter('Test document')
+search_request.sort = ['_score', 'id']
+```
+
+<!-- intro -->
+
+##### Javascript:
+
+<!-- request javascript -->
+``` javascript
+searchRequest.index = "test";
+searchRequest.fulltext_filter = new Manticoresearch.QueryFilter('Test document');
+searchRequest.sort = ['_score', 'id'];
+```
+
+<!-- intro -->
+
+##### java:
+
+<!-- request Java -->
+``` java
+searchRequest.setIndex("test");
+QueryFilter queryFilter = new QueryFilter();
+queryFilter.setQueryString("Test document");
+searchRequest.setFulltextFilter(queryFilter);
+List<Object> sort = new ArrayList<Object>( Arrays.asList("_score", "id") );
+searchRequest.setSort(sort);
+
+```
+
+<!-- intro -->
+
+##### C#:
+
+<!-- request C# -->
+``` clike
+var searchRequest = new SearchRequest("test");
+searchRequest.FulltextFilter = new QueryFilter("Test document");
+searchRequest.Sort = new List<Object> {"_score", "id"};
+
+```
+
+<!-- intro -->
+
+##### Rust:
+
+<!-- request Rust -->
+``` rust
+let query = SearchQuery {
+    query_string: Some(serde_json::json!("Test document").into()),
+    ..Default::default(),
+};
+let sort: [String; 2] = ["_score".to_string(), "id".to_string()];
+let search_req = SearchRequest {
+    table: "test".to_string(),
+    query: Some(Box::new(query)),
+    sort: Some(serde_json::json!(sort)),
+    ..Default::default(),
+};
+```
+
+<!-- intro -->
+
+##### Typescript:
+
+<!-- request typescript -->
+``` typescript
+searchRequest = {
+  index: 'test',
+  query: {
+    query_string: {'Test document'},
+  },
+  sort: ['_score', 'id'],
+}
+```
+
+<!-- intro -->
+
+##### Go:
+
+<!-- request go -->
+```go
+searchRequest.SetIndex("test")
+query := map[string]interface{} {"query_string": "Test document"}
+searchRequest.SetQuery(query)
+sort := map[string]interface{} {"_score": "asc", "id": "asc"}
+searchRequest.SetSort(sort)
+```
+
+<!-- end -->
+
+<!-- example sorting 2 -->
+Вы также можете явно указать порядок сортировки:
+
+* `asc`: сортировать по возрастанию
+* `desc`: сортировать по убыванию
+
+
+<!-- intro -->
+
+<!-- request JSON -->
+
+```json
+{
+  "table":"test",
+  "query":
+  {
+    "match": { "title": "Test document" }
+  },
+  "sort":
+  [
+    { "id": "desc" },
+    "_score"
+  ],
+  "_source": "title",
+  "limit": 3
+}
+```
+
+<!-- response JSON -->
+
+``` json
+
+{
+
+"took": 0,
+
+"timed_out": false,
+
+"hits": {
+
+  "total": 5,
+
+  "total_relation": "eq",
+
+  "hits": [
+
+    {
+
+      "_id": 5406864699109146632,
+
+      "_score": 2319,
+
+      "_source": {
+
+        "title": "Тестовый документ 5"
+
+      }
+
+    },
+
+    {
+
+      "_id": 5406864699109146631,
+
+      "_score": 2319,
+
+      "_source": {
+
+        "title": "Тестовый документ 4"
+
+      }
+
+    },
+
+    {
+
+      "_id": 5406864699109146630,
+
+      "_score": 2319,
+
+      "_source": {
+
+        "title": "Тестовый документ 3"
+
+      }
+
+    }
+
+  ]
+
+}
+
+}
+```    
+
+<!-- intro -->
+##### PHP:
+
+<!-- request PHP -->
+
+```php
+$search->setIndex("test")->match('Тестовый документ')->sort('id', 'desc')->sort('_score');
+```
+
+<!-- intro -->
+
+##### Python:
+
+<!-- request Python -->
+``` python
+search_request.index = 'test'
+search_request.fulltext_filter = manticoresearch.model.QueryFilter('Тестовый документ')
+sort_by_id = manticoresearch.model.SortOrder('id', 'desc')
+search_request.sort = [sort_by_id, '_score']
+```
+
+<!-- intro -->
+
+##### Python-asyncio:
+
+<!-- request Python-asyncio -->
+``` python
+search_request.index = 'test'
+search_request.fulltext_filter = manticoresearch.model.QueryFilter('Тестовый документ')
+sort_by_id = manticoresearch.model.SortOrder('id', 'desc')
+search_request.sort = [sort_by_id, '_score']
+```
+
+<!-- intro -->
+
+##### Javascript:
+
+<!-- request javascript -->
+``` javascript
+searchRequest.index = "test";
+searchRequest.fulltext_filter = new Manticoresearch.QueryFilter('Тестовый документ');
+sortById = new Manticoresearch.SortOrder('id', 'desc');
+searchRequest.sort = [sortById, 'id'];
+```
+
+<!-- intro -->
+
+##### java:
+
+<!-- request Java -->
+``` java
+searchRequest.setIndex("test");
+QueryFilter queryFilter = new QueryFilter();
+queryFilter.setQueryString("Тестовый документ");
+searchRequest.setFulltextFilter(queryFilter);
+List<Object> sort = new ArrayList<Object>();
+SortOrder sortById = new SortOrder();
+sortById.setAttr("id");
+sortById.setOrder(SortOrder.OrderEnum.DESC);
+sort.add(sortById);
+sort.add("_score");
+searchRequest.setSort(sort);
+
+```
+
+<!-- intro -->
+
+##### C#:
+
+<!-- request C# -->
+``` clike
+var searchRequest = new SearchRequest("test");
+searchRequest.FulltextFilter = new QueryFilter("Тестовый документ");
+searchRequest.Sort = new List<Object>();
+var sortById = new SortOrder("id", SortOrder.OrderEnum.Desc);
+searchRequest.Sort.Add(sortById);
+searchRequest.Sort.Add("_score");
+```
+
+<!-- intro -->
+
+##### Rust:
+
+<!-- request Rust -->
+``` rust
+let query = SearchQuery {
+    query_string: Some(serde_json::json!("Тестовый документ").into()),
+    ..Default::default(),
+};
+let sort_by_id = HashMap::new();
+sort_by_id.insert("id".to_string(), "desc".to_string()); 
+let mut sort = Vec::new();
+sort.push(sort_by_id);
+sort.push("_score".to_string());
+let search_req = SearchRequest {
+    table: "test".to_string(),
+    query: Some(Box::new(query)),
+    sort: Some(serde_json::json!(sort)),
+    ..Default::default(),
+};
+```
+
+<!-- intro -->
+
+##### Typescript:
+
+<!-- request typescript -->
+``` typescript
+searchRequest = {
+  index: 'test',
+  query: {
+    query_string: {'Тестовый документ'},
+  },
+  sort: [{'id': 'desc'}, '_score'],
+}
+```
+
+<!-- intro -->
+
+##### Go:
+
+<!-- request go -->
+```go
+searchRequest.SetIndex("test")
+query := map[string]interface{} {"query_string": "Тестовый документ"}
+searchRequest.SetQuery(query)
+sortById := map[string]interface{} {"id": "desc"}
+sort := map[string]interface{} {"id": "desc", "_score": "asc"}
+searchRequest.SetSort(sort)
+```
+
+<!-- end -->
+
+<!-- example sorting 3 -->
+Вы также можете использовать другой синтаксис и указать порядок сортировки через свойство `order`:
+
+
+<!-- intro -->
+
+<!-- request JSON -->
+
+```json
+{
+  "table":"test",
+  "query":
+  {
+    "match": { "title": "Тестовый документ" }
+  },
+  "sort":
+  [
+    { "id": { "order":"desc" } }
+  ],
+  "_source": "title",
+  "limit": 3
+}
+```
+
+<!-- response JSON -->
+
+``` json
+
+{
+
+"took": 0,
+
+"timed_out": false,
+
+"hits": {
+
+  "total": 5,
+
+  "total_relation": "eq",
+
+  "hits": [
+
+    {
+
+      "_id": 5406864699109146632,
+
+      "_score": 2319,
+
+      "_source": {
+
+        "title": "Тестовый документ 5"
+
+      }
+
+    },
+
+    {
+
+      "_id": 5406864699109146631,
+
+      "_score": 2319,
+
+      "_source": {
+
+        "title": "Тестовый документ 4"
+
+      }
+
+    },
+
+    {
+
+      "_id": 5406864699109146630,
+
+      "_score": 2319,
+
+      "_source": {
+
+        "title": "Тестовый документ 3"
+
+      }
+
+    }
+
+  ]
+
+}
+
+}
+```    
+
+<!-- intro -->
+##### PHP:
+
+<!-- request PHP -->
+
+```php
+$search->setIndex("test")->match('Тестовый документ')->sort('id', 'desc');
+```
+
+<!-- intro -->
+
+##### Python:
+
+<!-- request Python -->
+``` python
+search_request.index = 'test'
+search_request.fulltext_filter = manticoresearch.model.QueryFilter('Тестовый документ')
+sort_by_id = manticoresearch.model.SortOrder('id', 'desc')
+search_request.sort = [sort_by_id]
+```
+
+<!-- intro -->
+
+##### Python-asyncio:
+
+<!-- request Python-asyncio -->
+``` python
+search_request.index = 'test'
+search_request.fulltext_filter = manticoresearch.model.QueryFilter('Тестовый документ')
+sort_by_id = manticoresearch.model.SortOrder('id', 'desc')
+search_request.sort = [sort_by_id]
+```
+
+<!-- intro -->
+
+##### Javascript:
+
+<!-- request javascript -->
+``` javascript
+searchRequest.index = "test";
+searchRequest.fulltext_filter = new Manticoresearch.QueryFilter('Тестовый документ');
+sortById = new Manticoresearch.SortOrder('id', 'desc');
+searchRequest.sort = [sortById];
+```
+
+<!-- intro -->
+
+##### java:
+
+<!-- request Java -->
+``` java
+searchRequest.setIndex("тест");
+QueryFilter queryFilter = new QueryFilter();
+queryFilter.setQueryString("Тестовый документ");
+searchRequest.setFulltextFilter(queryFilter);
+List<Object> sort = new ArrayList<Object>();
+SortOrder sortById = new SortOrder();
+sortById.setAttr("id");
+sortById.setOrder(SortOrder.OrderEnum.DESC);
+sort.add(sortById);
+searchRequest.setSort(sort);
+
+```
+
+<!-- intro -->
+
+##### C#:
+
+<!-- request C# -->
+``` clike
+var searchRequest = new SearchRequest("тест");
+searchRequest.FulltextFilter = new QueryFilter("Тестовый документ");
+searchRequest.Sort = new List<Object>();
+var sortById = new SortOrder("id", SortOrder.OrderEnum.Desc);
+searchRequest.Sort.Add(sortById);
+```
+
+<!-- intro -->
+
+##### Rust:
+
+<!-- request Rust -->
+``` rust
+let query = SearchQuery {
+    query_string: Some(serde_json::json!("Тестовый документ").into()),
+    ..Default::default(),
+};
+let mut sort_by_id = HashMap::new();
+sort_by_id.insert("id".to_string(), "desc".to_string()); 
+let sort = [HashMap; 1] = [sort_by_id];
+let search_req = SearchRequest {
+    table: "тест".to_string(),
+    query: Some(Box::new(query)),
+    sort: Some(serde_json::json!(sort)),
+    ..Default::default(),
+};
+```
+
+<!-- intro -->
+
+##### Typescript:
+
+<!-- request typescript -->
+``` typescript
+searchRequest = {
+  index: 'тест',
+  query: {
+    query_string: {'Тестовый документ'},
+  },
+  sort: { {'id': {'order':'desc'} },
+}
+```
+
+<!-- intro -->
+
+##### Go:
+
+<!-- request go -->
+```go
+searchRequest.SetIndex("тест")
+query := map[string]interface{} {"query_string": "Тестовый документ"}
+searchRequest.SetQuery(query)
+sort := map[string]interface{} { "id": {"order":"desc"} }
+searchRequest.SetSort(sort)
+```
+
+<!-- end -->
+
+<!-- example sorting 4 -->
+Сортировка по атрибутам MVA также поддерживается в JSON-запросах. Режим сортировки можно установить с помощью свойства `mode`. Поддерживаются следующие режимы:
+
+* `min`: сортировка по минимальному значению
+* `max`: сортировка по максимальному значению
+
+<!-- intro -->
+
+<!-- request JSON -->
+
+```json
+{
+  "table":"тест",
+  "query":
+  {
+    "match": { "title": "Тестовый документ" }
+  },
+  "sort":
+  [
+    { "attr_mva": { "order":"desc", "mode":"max" } }
+  ],
+  "_source": "title",
+  "limit": 3
+}
+```
+
+<!-- response JSON -->
+
+``` json
+
+{
+
+"took": 0,
+
+"timed_out": false,
+
+"hits": {
+
+  "total": 5,
+
+  "total_relation": "eq",
+
+  "hits": [
+
+    {
+
+      "_id": 5406864699109146631,
+
+      "_score": 2319,
+
+      "_source": {
+
+        "title": "Тестовый документ 4"
+
+      }
+
+    },
+
+    {
+
+      "_id": 5406864699109146629,
+
+      "_score": 2319,
+
+      "_source": {
+
+        "title": "Тестовый документ 2"
+
+      }
+
+    },
+
+    {
+
+      "_id": 5406864699109146628,
+
+      "_score": 2319,
+
+      "_source": {
+
+        "title": "Тестовый документ 1"
+
+      }
+
+    }
+
+  ]
+
+}
+
+}
+```    
+
+<!-- intro -->
+##### PHP:
+
+<!-- request PHP -->
+
+```php
+$search->setIndex("тест")->match('Тестовый документ')->sort('id','desc','max');
+```
+
+<!-- intro -->
+
+##### Python:
+
+<!-- request Python -->
+``` python
+search_request.index = 'тест'
+search_request.fulltext_filter = manticoresearch.model.QueryFilter('Тестовый документ')
+sort = manticoresearch.model.SortMVA('attr_mva', 'desc', 'max')
+search_request.sort = [sort]
+```
+
+<!-- intro -->
+
+##### Python-asyncio:
+
+<!-- request Python-asyncio -->
+``` python
+search_request.index = 'тест'
+search_request.fulltext_filter = manticoresearch.model.QueryFilter('Тестовый документ')
+sort = manticoresearch.model.SortMVA('attr_mva', 'desc', 'max')
+search_request.sort = [sort]
+```
+
+<!-- intro -->
+
+##### Javascript:
+
+<!-- request javascript -->
+``` javascript
+searchRequest.index = "тест";
+searchRequest.fulltext_filter = new Manticoresearch.QueryFilter('Тестовый документ');
+sort = new Manticoresearch.SortMVA('attr_mva', 'desc', 'max');
+searchRequest.sort = [sort];
+```
+
+<!-- intro -->
+
+##### java:
+
+<!-- request Java -->
+``` java
+searchRequest.setIndex("тест");
+QueryFilter queryFilter = new QueryFilter();
+queryFilter.setQueryString("Тестовый документ");
+searchRequest.setFulltextFilter(queryFilter);
+SortMVA sort = new SortMVA();
+sort.setAttr("attr_mva");
+sort.setOrder(SortMVA.OrderEnum.DESC);
+sort.setMode(SortMVA.ModeEnum.MAX);
+searchRequest.setSort(sort);
+
+```
+
+<!-- intro -->
+
+##### C#:
+
+<!-- request C# -->
+``` clike
+var searchRequest = new SearchRequest("тест");
+searchRequest.FulltextFilter = new QueryFilter("Тестовый документ");
+var sort = new SortMVA("attr_mva", SortMVA.OrderEnum.Desc, SortMVA.ModeEnum.Max);
+searchRequest.Sort.Add(sort);
+```
+
+<!-- intro -->
+
+##### Rust:
+
+<!-- request Rust -->
+``` rust
+let query = SearchQuery {
+    query_string: Some(serde_json::json!("Тестовый документ").into()),
+    ..Default::default(),
+};
+let mut sort_mva_opts = HashMap::new();
+sort_mva_opts.insert("order".to_string(), "desc".to_string());
+sort_mva_opts.insert("mode".to_string(), "max".to_string());
+let mut sort_mva = HashMap::new();
+sort_mva.insert("attr_mva".to_string(), sort_mva_opts); 
+
+let search_req = SearchRequest {
+    table: "тест".to_string(),
+    query: Some(Box::new(query)),
+    sort: Some(serde_json::json!(sort_mva)),
+    ..Default::default(),
+};
+```
+
+<!-- intro -->
+
+##### Typescript:
+<!-- request typescript -->
+``` typescript
+searchRequest = {
+  index: 'test',
+  query: {
+    query_string: {'Test document'},
+  },
+  sort: { "attr_mva": { "order":"desc", "mode":"max" } },
+}
+```
+
+<!-- intro -->
+
+##### Go:
+
+<!-- request go -->
+```go
+searchRequest.SetIndex("test")
+query := map[string]interface{} {"query_string": "Test document"}
+searchRequest.SetQuery(query)
+sort := map[string]interface{} { "attr_mva": { "order":"desc", "mode":"max" } }
+searchRequest.SetSort(sort)
+```
+
+<!-- end -->
+
+<!-- example sorting 5 -->
+При сортировке по атрибуту вычисление веса (оценки) совпадения отключено по умолчанию (ранжировщик не используется). Вы можете включить вычисление веса, установив свойство `track_scores` в `true`:
+
+<!-- intro -->
+
+<!-- request JSON -->
+
+```json
+{
+  "table":"test",
+  "track_scores": true,
+  "query":
+  {
+    "match": { "title": "Test document" }
+  },
+  "sort":
+  [
+    { "attr_mva": { "order":"desc", "mode":"max" } }
+  ],
+  "_source": "title",
+  "limit": 3
+}
+```
+
+<!-- response JSON -->
+
+``` json
+
+{
+
+"took": 0,
+
+"timed_out": false,
+
+"hits": {
+
+  "total": 5,
+
+  "total_relation": "eq",
+
+  "hits": [
+
+    {
+
+      "_id": 5406864699109146631,
+
+      "_score": 2319,
+
+      "_source": {
+
+        "title": "Test document 4"
+
+      }
+
+    },
+
+    {
+
+      "_id": 5406864699109146629,
+
+      "_score": 2319,
+
+      "_source": {
+
+        "title": "Test document 2"
+
+      }
+
+    },
+
+    {
+
+      "_id": 5406864699109146628,
+
+      "_score": 2319,
+
+      "_source": {
+
+        "title": "Test document 1"
+
+      }
+
+    }
+
+  ]
+
+}
+
+}
+```    
+
+<!-- intro -->
+##### PHP:
+
+<!-- request PHP -->
+
+```php
+$search->setIndex("test")->match('Test document')->sort('id','desc','max')->trackScores(true);
+```
+
+<!-- intro -->
+
+##### Python:
+
+<!-- request Python -->
+``` python
+search_request.index = 'test'
+search_request.track_scores = true
+search_request.fulltext_filter = manticoresearch.model.QueryFilter('Test document')
+sort = manticoresearch.model.SortMVA('attr_mva', 'desc', 'max')
+search_request.sort = [sort]
+```
+
+<!-- intro -->
+
+##### Python-asyncio:
+
+<!-- request Python-asyncio -->
+``` python
+search_request.index = 'test'
+search_request.track_scores = true
+search_request.fulltext_filter = manticoresearch.model.QueryFilter('Test document')
+sort = manticoresearch.model.SortMVA('attr_mva', 'desc', 'max')
+search_request.sort = [sort]
+```
+
+<!-- intro -->
+
+##### Javascript:
+
+<!-- request javascript -->
+``` javascript
+searchRequest.index = "test";
+searchRequest.trackScores = true;
+searchRequest.fulltext_filter = new Manticoresearch.QueryFilter('Test document');
+sort = new Manticoresearch.SortMVA('attr_mva', 'desc', 'max');
+searchRequest.sort = [sort];
+```
+
+<!-- intro -->
+
+##### java:
+
+<!-- request Java -->
+``` java
+searchRequest.setIndex("test");
+searchRequest.setTrackScores(true);
+QueryFilter queryFilter = new QueryFilter();
+queryFilter.setQueryString("Test document");
+searchRequest.setFulltextFilter(queryFilter);
+SortMVA sort = new SortMVA();
+sort.setAttr("attr_mva");
+sort.setOrder(SortMVA.OrderEnum.DESC);
+sort.setMode(SortMVA.ModeEnum.MAX);
+searchRequest.setSort(sort);
+
+```
+
+<!-- intro -->
+
+##### C#:
+
+<!-- request C# -->
+``` clike
+var searchRequest = new SearchRequest("test");
+searchRequest.SetTrackScores(true);
+searchRequest.FulltextFilter = new QueryFilter("Test document");
+var sort = new SortMVA("attr_mva", SortMVA.OrderEnum.Desc, SortMVA.ModeEnum.Max);
+searchRequest.Sort.Add(sort);
+```
+
+<!-- intro -->
+
+##### Rust:
+
+<!-- request Rust -->
+``` rust
+let query = SearchQuery {
+    query_string: Some(serde_json::json!("Test document").into()),
+    ..Default::default(),
+};
+let mut sort_mva_opts = HashMap::new();
+sort_mva_opts.insert("order".to_string(), "desc".to_string());
+sort_mva_opts.insert("mode".to_string(), "max".to_string());
+let mut sort_mva = HashMap::new();
+sort_mva.insert("attr_mva".to_string(), sort_mva_opts); 
+
+let search_req = SearchRequest {
+    table: "test".to_string(),
+    query: Some(Box::new(query)),
+    sort: Some(serde_json::json!(sort_mva)),
+    track_scores: Some(serde_json::json!(true)),
+    ..Default::default(),
+};
+```
+
+<!-- intro -->
+
+##### Typescript:
+
+<!-- request typescript -->
+``` typescript
+searchRequest = {
+  index: 'test',
+  track_scores: true,
+  query: {
+    query_string: {'Test document'},
+  },
+  sort: { "attr_mva": { "order":"desc", "mode":"max" } },
+}
+```
+
+<!-- intro -->
+
+##### Go:
+
+<!-- request go -->
+```go
+searchRequest.SetIndex("test")
+searchRequest.SetTrackScores(true)
+query := map[string]interface{} {"query_string": "Test document"}
+searchRequest.SetQuery(query)
+sort := map[string]interface{} { "attr_mva": { "order":"desc", "mode":"max" } }
+searchRequest.SetSort(sort)
+```
+# Сортировка и ранжирование
+
+Результаты запроса могут быть отсортированы по весу ранжирования полного текста, одному или нескольким атрибутам или выражениям.
+
 **Запросы полного текста** возвращают совпадения, отсортированные по умолчанию. Если ничего не указано, они сортируются по релевантности, что эквивалентно `ORDER BY weight() DESC` в формате SQL.
 
 **Запросы не полного текста** по умолчанию не выполняют сортировку.

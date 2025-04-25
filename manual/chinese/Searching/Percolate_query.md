@@ -1,3 +1,3318 @@
+# 滤查询
+
+滤查询也称为持久查询、前瞻搜索、文档路由、反向搜索和逆向搜索。
+
+传统的搜索方式涉及存储文档并对其执行搜索查询。然而，有些情况下我们想要将查询应用于新接收的文档，以标识匹配项。一些希望实现这一点的场景包括监控系统，这些系统收集数据并通知用户关于特定事件的信息，例如某个指标达到某个阈值或在监控数据中出现特定值。另一个例子是新闻聚合，用户可能只想被通知某些类别或主题，甚至特定的“关键字”。
+
+在这些情况下，传统搜索并不适用，因为它假设所需的搜索是在整个集合上进行的。这一过程随用户数量的增加而成倍增长，导致许多查询同时作用于整个集合，从而可能导致显著的额外负担。本节描述的替代方法涉及存储查询，而是将它们与新接收的文档或文档批次进行测试。
+
+Google Alerts、AlertHN、彭博终端及其他允许用户订阅特定内容的系统利用类似技术。
+
+> * 请参阅[滤](../Creating_a_table/Local_tables/Percolate_table.md)以获取创建PQ表的信息。
+> * 请参阅[将规则添加到滤表](../Data_creation_and_modification/Adding_documents_to_a_table/Adding_rules_to_a_percolate_table.md)以了解如何添加滤规则（也称为PQ规则）。以下是一个快速示例：
+
+
+### 使用CALL PQ执行滤查询
+
+关于滤查询，需要记住的关键点是你的搜索查询已经在表中。你需要提供的是文档**以检查它们是否与存储的规则匹配**。
+
+你可以通过SQL或JSON接口进行滤查询，也可以使用编程语言客户端。SQL方法提供了更多的灵活性，而HTTP方法更简单，并提供了大部分所需的功能。下面的表格可以帮助你理解差异。
+
+| 期望行为                     | SQL                                      | HTTP                                 |
+| ---------------------------- | ---------------------------------------- | ------------------------------------ |
+| 提供单个文档                 | `CALL PQ('tbl', '{doc1}')`               | `query.percolate.document{doc1}`     |
+| 提供单个文档（替代）        | `CALL PQ('tbl', 'doc1', 0 as docs_json)` | -                                   |
+| 提供多个文档                | `CALL PQ('tbl', ('doc1', 'doc2'), 0 as docs_json)` | -                                   |
+| 提供多个文档（替代）        | `CALL PQ('tbl', ('{doc1}', '{doc2}'))`  | -                                   |
+| 提供多个文档（替代）        | `CALL PQ('tbl', '[{doc1}, {doc2}]')`    | -                                   |
+| 返回匹配的文档 IDs          | 0/1 as docs (默认情况下禁用)            | 默认启用                            |
+| 使用文档自身 ID 在结果中显示 | 'id field' as docs_id (默认情况下禁用) | 不可用                               |
+| 考虑输入文档为 JSON         | 1 as docs_json (默认为1)                | 默认启用                            |
+| 考虑输入文档为纯文本       | 0 as docs_json (默认为1)                | 不可用                               |
+| [稀疏分布模式](../Searching/Percolate_query.md#I-want-higher-performance-of-a-percolate-query) | 默认                                 | 默认                                 |
+| [分片分布模式](../Searching/Percolate_query.md#I-want-higher-performance-of-a-percolate-query) | sharded as mode                      | 不可用                               |
+| 返回关于匹配查询的所有信息   | 1 as query (默认为0)                   | 默认启用                            |
+| 跳过无效的 JSON              | 1 as skip_bad_json (默认为0)           | 不可用                               |
+| 在[SHOW META](../Node_info_and_management/SHOW_META.md)中扩展信息 | 1 as verbose (默认为0)               | 不可用                               |
+| 定义如果没有提供 docs_id 字段，则将添加到文档 IDs 的数字（主要与[分布式 PQ 模式](../Creating_a_table/Creating_a_distributed_table/Remote_tables.md#Distributed-percolate-tables-%28DPQ-tables%29)相关） | 1 as shift (默认为0)                   | 不可用                               |
+
+<!-- example create percolate -->
+为了演示这如何工作，这里有几个示例。让我们创建一个包含两个字段的PQ表：
+
+* title (文本)
+* color (字符串)
+
+以及其中的三个规则：
+
+* 仅全文搜索。查询：`@title bag`
+* 全文搜索和过滤。查询：`@title shoes`。过滤条件：`color='red'`
+* 全文搜索和更复杂的过滤。查询：`@title shoes`。过滤条件：`color IN('blue', 'green')`
+
+<!-- intro -->
+#### SQL
+<!-- request SQL -->
+
+```sql
+CREATE TABLE products(title text, color string) type='pq';
+INSERT INTO products(query) values('@title bag');
+INSERT INTO products(query,filters) values('@title shoes', 'color='red'');
+INSERT INTO products(query,filters) values('@title shoes', 'color in ('blue', 'green')');
+select * from products;
+```
+
+<!-- response SQL -->
+
+```sql
++---------------------+--------------+------+---------------------------+
+| id                  | query        | tags | filters                   |
++---------------------+--------------+------+---------------------------+
+| 1657852401006149635 | @title shoes |      | color IN ('blue, 'green') |
+| 1657852401006149636 | @title shoes |      | color='red'               |
+| 1657852401006149637 | @title bag   |      |                           |
++---------------------+--------------+------+---------------------------+
+```
+
+<!-- request JSON -->
+
+```json
+PUT /pq/products/doc/
+{
+  "query": {
+    "match": {
+      "title": "bag"
+    }
+  },
+  "filters": ""
+}
+
+PUT /pq/products/doc/
+{
+  "query": {
+    "match": {
+      "title": "shoes"
+    }
+  },
+  "filters": "color='red'"
+}
+
+PUT /pq/products/doc/
+{
+  "query": {
+    "match": {
+      "title": "shoes"
+    }
+  },
+  "filters": "颜色 IN ('蓝色', '绿色')"
+}
+```
+
+<!-- intro -->
+#### JSON
+<!-- response JSON -->
+
+```json
+{
+  "table": "产品",
+  "type": "doc",
+  "_id": 1657852401006149661,
+  "result": "已创建"
+}
+{
+  "table": "产品",
+  "type": "doc",
+  "_id": 1657852401006149662,
+  "result": "已创建"
+}
+{
+  "table": "产品",
+  "type": "doc",
+  "_id": 1657852401006149663,
+  "result": "已创建"
+}
+```
+
+<!-- intro -->
+#### PHP
+<!-- request PHP -->
+
+```php
+
+$index = [
+    'table' => '产品',
+    'body' => [
+        'columns' => [
+            'title' => ['type' => 'text'],
+            'color' => ['type' => 'string']
+        ],
+        'settings' => [
+            'type' => 'pq'
+        ]
+    ]
+];
+$client->indices()->create($index);
+
+$query = [
+    'table' => '产品',
+    'body' => [ 'query'=>['match'=>['title'=>'包']]]
+];
+$client->pq()->doc($query);
+$query = [
+    'table' => '产品',
+    'body' => [ 'query'=>['match'=>['title'=>'鞋']],'filters'=>"颜色='红色'"]
+];
+$client->pq()->doc($query);
+
+
+$query = [
+    'table' => '产品',
+    'body' => [ 'query'=>['match'=>['title'=>'鞋']],'filters'=>"颜色 IN ('蓝色', '绿色')"]
+];
+$client->pq()->doc($query);
+```
+<!-- response PHP -->
+``` php
+Array(
+  [table] => 产品
+  [type] => doc
+  [_id] => 1657852401006149661
+  [result] => 已创建
+)
+Array(
+  [table] => 产品
+  [type] => doc
+  [_id] => 1657852401006149662
+  [result] => 已创建
+)
+Array(
+  [table] => 产品
+  [type] => doc
+  [_id] => 1657852401006149663
+  [result] => 已创建
+)
+```
+<!-- intro -->
+Python
+<!-- request Python -->
+
+```python
+utilsApi.sql('create table 产品(title text, color string) type='pq'')
+indexApi.insert({"table" : "产品", "doc" : {"query" : "@title bag" }})
+indexApi.insert({"table" : "产品",  "doc" : {"query" : "@title shoes", "filters": "颜色='红色'" }})
+indexApi.insert({"table" : "产品",  "doc" : {"query" : "@title shoes","filters": "颜色 IN ('蓝色', '绿色')" }})
+```
+<!-- response Python -->
+``` python
+{'created': True,
+ 'found': None,
+ 'id': 0,
+ 'table': '产品',
+ 'result': '已创建'}
+{'created': True,
+ 'found': None,
+ 'id': 0,
+ 'table': '产品',
+ 'result': '已创建'}
+{'created': True,
+ 'found': None,
+ 'id': 0,
+ 'table': '产品',
+ 'result': '已创建'}
+```
+
+<!-- intro -->
+Python-asyncio
+<!-- request Python-asyncio -->
+
+```python
+await utilsApi.sql('create table 产品(title text, color string) type='pq'')
+await indexApi.insert({"table" : "产品", "doc" : {"query" : "@title bag" }})
+await indexApi.insert({"table" : "产品",  "doc" : {"query" : "@title shoes", "filters": "颜色='红色'" }})
+await indexApi.insert({"table" : "产品",  "doc" : {"query" : "@title shoes","filters": "颜色 IN ('蓝色', '绿色')" }})
+```
+<!-- response Python-asyncio -->
+``` python
+{'created': True,
+ 'found': None,
+ 'id': 0,
+ 'table': '产品',
+ 'result': '已创建'}
+{'created': True,
+ 'found': None,
+ 'id': 0,
+ 'table': '产品',
+ 'result': '已创建'}
+{'created': True,
+ 'found': None,
+ 'id': 0,
+ 'table': '产品',
+ 'result': '已创建'}
+```
+
+<!-- intro -->
+javascript
+<!-- request javascript -->
+
+```javascript
+res = await utilsApi.sql('create table 产品(title text, color string) type='pq'');
+res = indexApi.insert({"table" : "产品", "doc" : {"query" : "@title bag" }});
+res = indexApi.insert({"table" : "产品",  "doc" : {"query" : "@title shoes", "filters": "颜色='红色'" }});
+res = indexApi.insert({"table" : "产品",  "doc" : {"query" : "@title shoes","filters": "颜色 IN ('蓝色', '绿色')" }});
+```
+<!-- response javascript -->
+``` javascript
+"table":"产品","_id":0,"created":true,"result":"已创建"}
+{"table":"产品","_id":0,"created":true,"result":"已创建"}
+{"table":"产品","_id":0,"created":true,"result":"已创建"}
+```
+<!-- intro -->
+java
+<!-- request Java -->
+
+```java
+utilsApi.sql("create table 产品(title text, color string) type='pq'", true);
+doc = new HashMap<String,Object>(){{
+    put("query", "@title bag");
+}};
+newdoc = new InsertDocumentRequest();
+newdoc.index("产品").setDoc(doc);
+indexApi.insert(newdoc);
+
+doc = new HashMap<String,Object>(){{
+    put("query", "@title shoes");
+    put("filters", "颜色='红色'");
+}};
+newdoc = new InsertDocumentRequest();
+newdoc.index("产品").setDoc(doc);
+indexApi.insert(newdoc);
+
+doc = new HashMap<String,Object>(){{
+    put("query", "@title shoes");
+    put("filters", "颜色 IN ('蓝色', '绿色')");
+}};
+newdoc = new InsertDocumentRequest();
+newdoc.index("产品").setDoc(doc);
+indexApi.insert(newdoc);
+```
+<!-- response Java -->
+``` java
+{total=0, error=, warning=}
+class SuccessResponse {
+    index: 产品
+    id: 0
+    created: true
+    result: 已创建
+    found: null
+}
+class SuccessResponse {
+    index: 产品
+    id: 0
+    created: true
+    result: 已创建
+    found: null
+}
+class SuccessResponse {
+    index: 产品
+    id: 0
+    created: true
+    result: 已创建
+    found: null
+}
+
+```
+
+<!-- intro -->
+C#
+<!-- request C# -->
+
+```clike
+utilsApi.Sql("create table 产品(title text, color string) type='pq'", true);
+
+Dictionary<string, Object> doc = new Dictionary<string, Object>(); 
+doc.Add("query", "@title bag");
+InsertDocumentRequest newdoc = new InsertDocumentRequest(index: "产品", doc: doc);
+indexApi.Insert(newdoc);
+
+doc = new Dictionary<string, Object>(); 
+doc.Add("query", "@title shoes");
+doc.Add("filters", "颜色='红色'");
+newdoc = new InsertDocumentRequest(index: "产品", doc: doc);
+indexApi.Insert(newdoc);
+
+doc = new Dictionary<string, Object>(); 
+doc.Add("query", "@title bag");
+doc.Add("filters", "color IN ('blue', 'green')");
+newdoc = new InsertDocumentRequest(index: "products", doc: doc);
+indexApi.Insert(newdoc);
+```
+<!-- response C# -->
+``` clike
+{total=0, error="", warning=""}
+
+class SuccessResponse {
+    index: products
+    id: 0
+    created: true
+    result: created
+    found: null
+}
+class SuccessResponse {
+    index: products
+    id: 0
+    created: true
+    result: created
+    found: null
+}
+class SuccessResponse {
+    index: products
+    id: 0
+    created: true
+    result: created
+    found: null
+}
+
+```
+
+<!-- intro -->
+Rust
+<!-- request Rust -->
+
+```rust
+utils_api.sql("create table products(title text, color string) type='pq'", Some(true)).await;
+
+let mut doc1 = HashMap::new();
+doc1.insert("query".to_string(), serde_json::json!("@title bag"));
+let insert_req1 = InsertDocumentRequest::new("products".to_string(), serde_json::json!(doc1));
+index_api.insert(insert_req1).await;
+
+let mut doc2 = HashMap::new();
+doc2.insert("query".to_string(), serde_json::json!("@title shoes"));
+doc2.insert("filters".to_string(), serde_json::json!("color='red'"));
+let insert_req2 = InsertDocumentRequest::new("products".to_string(), serde_json::json!(doc2));
+index_api.insert(insert_req2).await;
+
+let mut doc3 = HashMap::new();
+doc3.insert("query".to_string(), serde_json::json!("@title bag"));
+doc3.insert("filters".to_string(), serde_json::json!("color IN ('blue', 'green')"));
+let insert_req3 = InsertDocumentRequest::new("products".to_string(), serde_json::json!(doc3));
+index_api.insert(insert_req3).await;
+```
+<!-- response Rust -->
+``` rust
+{total=0, error="", warning=""}
+
+class SuccessResponse {
+    index: products
+    id: 0
+    created: true
+    result: created
+    found: null
+}
+class SuccessResponse {
+    index: products
+    id: 0
+    created: true
+    result: created
+    found: null
+}
+class SuccessResponse {
+    index: products
+    id: 0
+    created: true
+    result: created
+    found: null
+}
+
+```
+
+<!-- intro -->
+TypeScript
+<!-- request TypeScript -->
+```typescript
+res = await utilsApi.sql("create table test_pq(title text, color string) type='pq'");
+res = indexApi.insert({
+  index: 'test_pq',
+  doc: { query : '@title bag' }
+});
+res = indexApi.insert(
+  index: 'test_pq',
+  doc: { query: '@title shoes', filters: "color='red'" }
+});
+res = indexApi.insert({
+  index: 'test_pq',
+  doc: { query : '@title shoes', filters: "color IN ('blue', 'green')" }
+});
+```
+<!-- response TypeScript -->
+``` typescript
+{
+
+"table":"test_pq",
+
+"_id":1657852401006149661,
+
+"created":true,
+
+"result":"created"
+}
+{
+
+"table":"test_pq",
+
+"_id":1657852401006149662,
+
+"created":true,
+
+"result":"created"
+}
+{
+
+"table":"test_pq",
+
+"_id":1657852401006149663,
+
+"created":true,
+
+"result":"created"
+}
+```
+
+<!-- intro -->
+Go
+<!-- request Go -->
+```go
+apiClient.UtilsAPI.Sql(context.Background()).Body("create table test_pq(title text, color string) type='pq'").Execute()
+
+indexDoc := map[string]interface{} {"query": "@title bag"}
+indexReq := manticoreclient.NewInsertDocumentRequest("test_pq", indexDoc)
+apiClient.IndexAPI.Insert(context.Background()).InsertDocumentRequest(*indexReq).Execute();
+
+indexDoc = map[string]interface{} {"query": "@title shoes", "filters": "color='red'"}
+indexReq = manticoreclient.NewInsertDocumentRequest("test_pq", indexDoc)
+apiClient.IndexAPI.Insert(context.Background()).InsertDocumentRequest(*indexReq).Execute();
+
+indexDoc = map[string]interface{} {"query": "@title shoes", "filters": "color IN ('blue', 'green')"}
+indexReq = manticoreclient.NewInsertDocumentRequest("test_pq", indexDoc)
+apiClient.IndexAPI.Insert(context.Background()).InsertDocumentRequest(*indexReq).Execute();
+```
+<!-- response Go -->
+``` go
+{
+
+"table":"test_pq",
+
+"_id":1657852401006149661,
+
+"created":true,
+
+"result":"created"
+}
+{
+
+"table":"test_pq",
+
+"_id":1657852401006149662,
+
+"created":true,
+
+"result":"created"
+}
+{
+
+"table":"test_pq",
+
+"_id":1657852401006149663,
+
+"created":true,
+
+"result":"created"
+}
+```
+
+<!-- end -->
+
+<!-- example single -->
+##### Just tell me what PQ rules match my single document
+
+The first document doesn't match any rules. It could match the first two, but they require additional filters.
+
+The second document matches one rule. Note that CALL PQ by default expects a document to be a JSON, but if you use `0 as docs_json`, you can pass a plain string instead.
+
+<!-- intro -->
+SQL:
+<!-- request SQL -->
+
+```sql
+CALL PQ('products', 'Beautiful shoes', 0 as docs_json);
+
+CALL PQ('products', 'What a nice bag', 0 as docs_json);
+CALL PQ('products', '{"title": "What a nice bag"}');
+```
+<!-- response SQL -->
+
+```sql
++---------------------+
+| id                  |
++---------------------+
+| 1657852401006149637 |
++---------------------+
+
++---------------------+
+| id                  |
++---------------------+
+| 1657852401006149637 |
++---------------------+
+```
+<!-- intro -->
+JSON:
+<!-- request JSON -->
+
+```json
+POST /pq/products/_search
+{
+  "query": {
+    "percolate": {
+      "document": {
+        "title": "What a nice bag"
+      }
+    }
+  }
+}
+```
+<!-- response JSON -->
+
+```json
+{
+  "took": 0,
+  "timed_out": false,
+  "hits": {
+    "total": 1,
+    "max_score": 1,
+    "hits": [
+      {
+        "table": "products",
+        "_type": "doc",
+        "_id": 1657852401006149644,
+        "_score": "1",
+        "_source": {
+          "query": {
+            "ql": "@title bag"
+          }
+        },
+        "fields": {
+          "_percolator_document_slot": [
+            1
+          ]
+        }
+      }
+    ]
+  }
+}
+```
+<!-- intro -->
+PHP:
+<!-- request PHP -->
+
+```php
+$percolate = [
+    'table' => 'products',
+    'body' => [
+        'query' => [
+            'percolate' => [
+                'document' => [
+                    'title' => '多么好看的包'
+                ]
+            ]
+        ]
+    ]
+];
+$client->pq()->search($percolate);
+
+```
+<!-- response PHP -->
+
+```php
+Array
+(
+    [took] => 0
+    [timed_out] =>
+    [hits] => Array
+        (
+            [total] => 1
+            [max_score] => 1
+            [hits] => Array
+                (
+                    [0] => Array
+                        (
+                            [_index] => products
+                            [_type] => doc
+                            [_id] => 1657852401006149644
+                            [_score] => 1
+                            [_source] => Array
+                                (
+                                    [query] => Array
+                                        (
+                                            [match] => Array
+                                                (
+                                                    [title] => bag
+                                                )
+                                        )
+                                )
+                            [fields] => Array
+                                (
+                                    [_percolator_document_slot] => Array
+                                        (
+                                            [0] => 1
+                                        )
+                                )
+                        )
+                )
+        )
+)
+```
+<!-- intro -->
+Python
+<!-- request Python -->
+
+```python
+searchApi.percolate('products',{"query":{"percolate":{"document":{"title":"多么好看的包"}}}})
+```
+<!-- response Python -->
+``` python
+{'hits': {'hits': [{u'_id': u'2811025403043381480',
+                    u'table': u'products',
+                    u'_score': u'1',
+                    u'_source': {u'query': {u'ql': u'@title bag'}},
+                    u'_type': u'doc',
+                    u'fields': {u'_percolator_document_slot': [1]}}],
+          'total': 1},
+ 'profile': None,
+ 'timed_out': False,
+ 'took': 0}
+```
+
+<!-- intro -->
+Python-asyncio
+<!-- request Python-asyncio -->
+
+```python
+await searchApi.percolate('products',{"query":{"percolate":{"document":{"title":"多么好看的包"}}}})
+```
+<!-- response Python-asyncio -->
+``` python
+{'hits': {'hits': [{u'_id': u'2811025403043381480',
+                    u'table': u'products',
+                    u'_score': u'1',
+                    u'_source': {u'query': {u'ql': u'@title bag'}},
+                    u'_type': u'doc',
+                    u'fields': {u'_percolator_document_slot': [1]}}],
+          'total': 1},
+ 'profile': None,
+ 'timed_out': False,
+ 'took': 0}
+```
+
+<!-- intro -->
+javascript
+<!-- request javascript -->
+
+```javascript
+res = await searchApi.percolate('products',{"query":{"percolate":{"document":{"title":"多么好看的包"}}}});
+```
+<!-- response javascript -->
+``` javascript
+{
+  "took": 0,
+  "timed_out": false,
+  "hits": {
+    "total": 1,
+    "hits": [
+      {
+        "table": "products",
+        "_type": "doc",
+        "_id": 2811045522851233808,
+        "_score": "1",
+        "_source": {
+          "query": {
+            "ql": "@title bag"
+          }
+        },
+        "fields": {
+          "_percolator_document_slot": [
+            1
+          ]
+        }
+      }
+    ]
+  }
+}
+```
+<!-- intro -->
+java
+<!-- request Java -->
+
+```java
+PercolateRequest percolateRequest = new PercolateRequest();
+query = new HashMap<String,Object>(){{
+    put("percolate",new HashMap<String,Object >(){{
+        put("document", new HashMap<String,Object >(){{
+            put("title","多么好看的包");
+        }});
+    }});
+}};
+percolateRequest.query(query);
+searchApi.percolate("test_pq",percolateRequest);
+```
+<!-- response Javs -->
+``` java
+class SearchResponse {
+    took: 0
+    timedOut: false
+    hits: class SearchResponseHits {
+        total: 1
+        maxScore: 1
+        hits: [{_index=products, _type=doc, _id=2811045522851234109, _score=1, _source={query={ql=@title bag}}, fields={_percolator_document_slot=[1]}}]
+        aggregations: null
+    }
+    profile: null
+}
+
+```
+
+<!-- intro -->
+C#
+<!-- request C# -->
+
+```clike
+Dictionary<string, Object> percolateDoc = new Dictionary<string, Object>(); 
+percolateDoc.Add("document", new Dictionary<string, Object> {{ "title", "多么好看的包" }});
+Dictionary<string, Object> query = new Dictionary<string, Object> {{ "percolate", percolateDoc }}; 
+PercolateRequest percolateRequest = new PercolateRequest(query=query);
+searchApi.Percolate("test_pq",percolateRequest);
+
+```
+<!-- response C# -->
+``` clike
+class SearchResponse {
+    took: 0
+    timedOut: false
+    hits: class SearchResponseHits {
+        total: 1
+        maxScore: 1
+        hits: [{_index=products, _type=doc, _id=2811045522851234109, _score=1, _source={query={ql=@title bag}}, fields={_percolator_document_slot=[1]}}]
+        aggregations: null
+    }
+    profile: null
+}
+
+```
+
+<!-- intro -->
+Rust
+<!-- request Rust -->
+
+```rust
+let mut percolate_doc_fields = HashMap::new();
+percolate_doc_fileds.insert("title".to_string(), "多么好看的包");
+let mut percolate_doc = HashMap::new();
+percolate_doc.insert("document".to_string(), percolate_doc_fields); 
+let percolate_query = PercolateRequestQuery::new(serde_json::json!(percolate_doc));
+let percolate_req = PercolateRequest::new(percolate_query); 
+search_api.percolate("test_pq", percolate_req).await;
+```
+<!-- response Rust -->
+``` rust
+class SearchResponse {
+    took: 0
+    timedOut: false
+    hits: class SearchResponseHits {
+        total: 1
+        maxScore: 1
+        hits: [{_index=products, _type=doc, _id=2811045522851234109, _score=1, _source={query={ql=@title bag}}, fields={_percolator_document_slot=[1]}}]
+        aggregations: null
+    }
+    profile: null
+}
+
+```
+
+<!-- intro -->
+TypeScript
+<!-- request TypeScript -->
+
+```typescript
+res = await searchApi.percolate('test_pq', { query: { percolate: { document : { title : 'What a nice bag' } } } } );
+```
+<!-- response TypeScript -->
+``` typescript
+{
+  "took": 0,
+  "timed_out": false,
+  "hits": {
+    "total": 1,
+    "hits": [
+      {
+        "table": "test_pq",
+        "_type": "doc",
+        "_id": 1657852401006149661,
+        "_score": "1",
+        "_source": {
+          "query": {
+            "ql": "@title bag"
+          }
+        },
+        "fields": {
+          "_percolator_document_slot": [
+            1
+          ]
+        }
+      }
+    ]
+  }
+}
+```
+
+<!-- intro -->
+Go
+<!-- request Go -->
+
+```go
+query := map[string]interface{} {"title": "what a nice bag"}
+percolateRequestQuery := manticoreclient.NewPercolateQuery(query)
+percolateRequest := manticoreclient.NewPercolateRequest(percolateRequestQuery)
+res, _, _ := apiClient.SearchAPI.Percolate(context.Background(), "test_pq").PercolateRequest(*percolateRequest).Execute()
+
+```
+<!-- response Go -->
+``` go
+{
+  "took": 0,
+  "timed_out": false,
+  "hits": {
+    "total": 1,
+    "hits": [
+      {
+        "table": "test_pq",
+        "_type": "doc",
+        "_id": 1657852401006149661,
+        "_score": "1",
+        "_source": {
+          "query": {
+            "ql": "@title bag"
+          }
+        },
+        "fields": {
+          "_percolator_document_slot": [
+            1
+          ]
+        }
+      }
+    ]
+  }
+}
+```
+
+<!-- end -->
+
+<!-- example pq_rules -->
+##### 我想知道与我的文档匹配的完整PQ规则
+<!-- intro -->
+SQL:
+<!-- request SQL -->
+
+```sql
+CALL PQ('products', '{"title": "What a nice bag"}', 1 as query);
+```
+<!-- response SQL -->
+
+```sql
++---------------------+------------+------+---------+
+| id                  | query      | tags | filters |
++---------------------+------------+------+---------+
+| 1657852401006149637 | @title bag |      |         |
++---------------------+------------+------+---------+
+```
+<!-- intro -->
+JSON:
+<!-- request JSON -->
+
+```json
+POST /pq/products/_search
+{
+  "query": {
+    "percolate": {
+      "document": {
+        "title": "What a nice bag"
+      }
+    }
+  }
+}
+```
+<!-- response JSON -->
+
+```json
+{
+  "took": 0,
+  "timed_out": false,
+  "hits": {
+    "total": 1,
+    "max_score": 1,
+    "hits": [
+      {
+        "table": "products",
+        "_type": "doc",
+        "_id": 1657852401006149644,
+        "_score": "1",
+        "_source": {
+          "query": {
+            "ql": "@title bag"
+          }
+        },
+        "fields": {
+          "_percolator_document_slot": [
+            1
+          ]
+        }
+      }
+    ]
+  }
+}
+```
+<!-- intro -->
+PHP:
+<!-- request PHP -->
+
+```php
+$percolate = [
+    'table' => 'products',
+    'body' => [
+        'query' => [
+            'percolate' => [
+                'document' => [
+                    'title' => 'What a nice bag'
+                ]
+            ]
+        ]
+    ]
+];
+$client->pq()->search($percolate);
+
+```
+<!-- response PHP -->
+
+```php
+Array
+(
+    [took] => 0
+    [timed_out] =>
+    [hits] => Array
+        (
+            [total] => 1
+            [max_score] => 1
+            [hits] => Array
+                (
+                    [0] => Array
+                        (
+                            [_index] => products
+                            [_type] => doc
+                            [_id] => 1657852401006149644
+                            [_score] => 1
+                            [_source] => Array
+                                (
+                                    [query] => Array
+                                        (
+                                            [match] => Array
+                                                (
+                                                    [title] => bag
+                                                )
+                                        )
+                                )
+                            [fields] => Array
+                                (
+                                    [_percolator_document_slot] => Array
+                                        (
+                                            [0] => 1
+                                        )
+                                )
+                        )
+                )
+        )
+)
+```
+
+<!-- intro -->
+Python
+<!-- request Python -->
+
+```python
+searchApi.percolate('products',{"query":{"percolate":{"document":{"title":"What a nice bag"}}}})
+```
+<!-- response Python -->
+``` python
+{'hits': {'hits': [{u'_id': u'2811025403043381480',
+                    u'table': u'products',
+                    u'_score': u'1',
+                    u'_source': {u'query': {u'ql': u'@title bag'}},
+                    u'_type': u'doc',
+                    u'fields': {u'_percolator_document_slot': [1]}}],
+          'total': 1},
+ 'profile': None,
+ 'timed_out': False,
+ 'took': 0}
+```
+
+<!-- intro -->
+Python-asyncio
+<!-- request Python-asyncio -->
+
+```python
+await searchApi.percolate('products',{"query":{"percolate":{"document":{"title":"什么漂亮的包"}}}})
+```
+<!-- response Python-asyncio -->
+``` python
+{'hits': {'hits': [{u'_id': u'2811025403043381480',
+                    u'table': u'products',
+                    u'_score': u'1',
+                    u'_source': {u'query': {u'ql': u'@title bag'}},
+                    u'_type': u'doc',
+                    u'fields': {u'_percolator_document_slot': [1]}}],
+          'total': 1},
+ 'profile': None,
+ 'timed_out': False,
+ 'took': 0}
+```
+
+<!-- intro -->
+javascript
+<!-- request javascript -->
+
+```javascript
+res = await searchApi.percolate('products',{"query":{"percolate":{"document":{"title":"什么漂亮的包"}}}});
+```
+<!-- response javascript -->
+``` javascript
+{
+  "took": 0,
+  "timed_out": false,
+  "hits": {
+    "total": 1,
+    "hits": [
+      {
+        "table": "products",
+        "_type": "doc",
+        "_id": 2811045522851233808,
+        "_score": "1",
+        "_source": {
+          "query": {
+            "ql": "@title bag"
+          }
+        },
+        "fields": {
+          "_percolator_document_slot": [
+            1
+          ]
+        }
+      }
+    ]
+  }
+}
+```
+
+<!-- intro -->
+java
+<!-- request Java -->
+
+```java
+PercolateRequest percolateRequest = new PercolateRequest();
+query = new HashMap<String,Object>(){{
+    put("percolate",new HashMap<String,Object >(){{
+        put("document", new HashMap<String,Object >(){{
+            put("title","什么漂亮的包");
+        }});
+    }});
+}};
+percolateRequest.query(query);
+searchApi.percolate("test_pq",percolateRequest);
+```
+<!-- response Java -->
+``` java
+class SearchResponse {
+    took: 0
+    timedOut: false
+    hits: class SearchResponseHits {
+        total: 1
+        maxScore: 1
+        hits: [{_index=products, _type=doc, _id=2811045522851234109, _score=1, _source={query={ql=@title bag}}, fields={_percolator_document_slot=[1]}}]
+        aggregations: null
+    }
+    profile: null
+}
+
+```
+
+<!-- intro -->
+C#
+<!-- request C# -->
+
+```clike
+Dictionary<string, Object> percolateDoc = new Dictionary<string, Object>(); 
+percolateDoc.Add("document", new Dictionary<string, Object> {{ "title", "什么漂亮的包" }});
+Dictionary<string, Object> query = new Dictionary<string, Object> {{ "percolate", percolateDoc }}; 
+PercolateRequest percolateRequest = new PercolateRequest(query=query);
+searchApi.Percolate("test_pq",percolateRequest);
+
+```
+<!-- response C# -->
+``` clike
+class SearchResponse {
+    took: 0
+    timedOut: false
+    hits: class SearchResponseHits {
+        total: 1
+        maxScore: 1
+        hits: [{_index=products, _type=doc, _id=2811045522851234109, _score=1, _source={query={ql=@title bag}}, fields={_percolator_document_slot=[1]}}]
+        aggregations: null
+    }
+    profile: null
+}
+
+```
+
+<!-- intro -->
+Rust
+<!-- request Rust -->
+
+```rust
+let mut percolate_doc_fields = HashMap::new();
+percolate_doc_fileds.insert("title".to_string(), "什么漂亮的包");
+let mut percolate_doc = HashMap::new();
+percolate_doc.insert("document".to_string(), percolate_doc_fields); 
+let percolate_query = PercolateRequestQuery::new(serde_json::json!(percolate_doc));
+let percolate_req = PercolateRequest::new(percolate_query); 
+search_api.percolate("test_pq", percolate_req).await;
+
+```
+<!-- response Rust -->
+``` rust
+class SearchResponse {
+    took: 0
+    timedOut: false
+    hits: class SearchResponseHits {
+        total: 1
+        maxScore: 1
+        hits: [{_index=products, _type=doc, _id=2811045522851234109, _score=1, _source={query={ql=@title bag}}, fields={_percolator_document_slot=[1]}}]
+        aggregations: null
+    }
+    profile: null
+}
+
+```
+
+<!-- intro -->
+TypeScript
+<!-- request TypeScript -->
+
+```typescript
+res = await searchApi.percolate('test_pq', { query: { percolate: { document : { title : '什么漂亮的包' } } } } );
+```
+<!-- response TypeScript -->
+``` typescript
+{
+  "took": 0,
+  "timed_out": false,
+  "hits": {
+    "total": 1,
+    "hits": [
+      {
+        "table": "test_pq",
+        "_type": "doc",
+        "_id": 1657852401006149661,
+        "_score": "1",
+        "_source": {
+          "query": {
+            "ql": "@title bag"
+          }
+        },
+        "fields": {
+          "_percolator_document_slot": [
+            1
+          ]
+        }
+      }
+    ]
+  }
+}
+```
+
+<!-- intro -->
+Go
+<!-- request Go -->
+
+```go
+query := map[string]interface{} {"title": "什么漂亮的包"}
+percolateRequestQuery := manticoreclient.NewPercolateQuery(query)
+percolateRequest := manticoreclient.NewPercolateRequest(percolateRequestQuery)
+res, _, _ := apiClient.SearchAPI.Percolate(context.Background(), "test_pq").PercolateRequest(*percolateRequest).Execute()
+
+```
+<!-- response Go -->
+``` go
+{
+  "took": 0,
+  "timed_out": false,
+  "hits": {
+    "total": 1,
+    "hits": [
+      {
+        "table": "test_pq",
+        "_type": "doc",
+        "_id": 1657852401006149661,
+        "_score": "1",
+        "_source": {
+          "query": {
+            "ql": "@title bag"
+          }
+        },
+        "fields": {
+          "_percolator_document_slot": [
+            1
+          ]
+        }
+      }
+    ]
+  }
+}
+```
+
+<!-- end -->
+
+<!-- example multiple -->
+
+##### 多个文档怎么样？
+注意，使用 `CALL PQ` 时，您可以通过不同方式提供多个文档：
+
+* 作为一组普通文档的数组，用圆括号表示 `('doc1', 'doc2')`。这需要 `0 as docs_json`
+* 作为 JSON 数组，用圆括号表示 `('{doc1}', '{doc2}')`
+* 或者作为一个标准的 JSON 数组 `'[{doc1}, {doc2}]'`
+
+<!-- intro -->
+SQL:
+<!-- request SQL -->
+
+```sql
+CALL PQ('products', ('nice pair of shoes', 'beautiful bag'), 1 as query, 0 as docs_json);
+
+CALL PQ('products', ('{"title": "nice pair of shoes", "color": "red"}', '{"title": "beautiful bag"}'), 1 as query);
+
+CALL PQ('products', '[{"title": "nice pair of shoes", "color": "blue"}, {"title": "beautiful bag"}]', 1 as query);
+```
+<!-- response SQL -->
+
+```sql
++---------------------+------------+------+---------+
+| id                  | query      | tags | filters |
++---------------------+------------+------+---------+
+| 1657852401006149637 | @title bag |      |         |
++---------------------+------------+------+---------+
+
++---------------------+--------------+------+-------------+
+| id                  | query        | tags | filters     |
++---------------------+--------------+------+-------------+
+| 1657852401006149636 | @title shoes |      | color='red' |
+| 1657852401006149637 | @title bag   |      |             |
++---------------------+--------------+------+-------------+
+
++---------------------+--------------+------+---------------------------+
+| id                  | query        | tags | filters                   |
++---------------------+--------------+------+---------------------------+
+| 1657852401006149635 | @title shoes |      | color IN ('blue, 'green') |
+| 1657852401006149637 | @title bag   |      |                           |
++---------------------+--------------+------+---------------------------+
+```
+<!-- intro -->
+JSON:
+<!-- request JSON -->
+
+```json
+POST /pq/products/_search
+{
+  "query": {
+    "percolate": {
+      "documents": [
+        {"title": "nice pair of shoes", "color": "blue"},
+        {"title": "beautiful bag"}
+      ]
+    }
+  }
+}
+```
+<!-- response JSON -->
+
+```json
+{
+  "took": 0,
+  "timed_out": false,
+  "hits": {
+    "total": 2,
+    "max_score": 1,
+    "hits": [
+      {
+        "table": "products",
+        "_type": "doc",
+        "_id": 1657852401006149644,
+        "_score": "1",
+        "_source": {
+          "query": {
+            "ql": "@title bag"
+          }
+        },
+        "fields": {
+          "_percolator_document_slot": [
+            2
+          ]
+        }
+      },
+      {
+        "table": "products",
+        "_type": "doc",
+        "_id": 1657852401006149646,
+        "_score": "1",
+        "_source": {
+          "query": {
+            "ql": "@title shoes"
+          }
+        },
+        "fields": {
+          "_percolator_document_slot": [
+            1
+          ]
+        }
+      }
+    ]
+  }
+}
+```
+<!-- intro -->
+PHP:
+<!-- request PHP -->
+
+```php
+$percolate = [
+    'table' => 'products',
+    'body' => [
+        'query' => [
+            'percolate' => [
+                'documents' => [
+                    ['title' => 'nice pair of shoes','color'=>'blue'],
+                    ['title' => 'beautiful bag']
+                ]
+            ]
+        ]
+    ]
+];
+$client->pq()->search($percolate);
+
+```
+<!-- response PHP -->
+
+```php
+Array
+(
+    [took] => 23
+    [timed_out] =>
+    [hits] => Array
+        (
+            [total] => 2
+            [max_score] => 1
+            [hits] => Array
+                (
+                    [0] => Array
+                        (
+                            [_index] => products
+                            [_type] => doc
+                            [_id] => 2810781492890828819
+                            [_score] => 1
+                            [_source] => Array
+                                (
+                                    [query] => Array
+                                        (
+                                            [match] => Array
+                                                (
+                                                    [title] => bag
+                                                )
+                                        )
+                                )
+                            [fields] => Array
+                                (
+                                    [_percolator_document_slot] => Array
+                                        (
+                                            [0] => 2
+                                        )
+                                )
+                        )
+                    [1] => Array
+                        (
+                            [_index] => products
+                            [_type] => doc
+                            [_id] => 2810781492890828821
+                            [_score] => 1
+                            [_source] => Array
+                                (
+                                    [query] => Array
+                                        (
+                                            [match] => Array
+                                                (
+                                                    [title] => shoes
+                                                )
+                                        )
+                                )
+                            [fields] => Array
+                                (
+                                    [_percolator_document_slot] => Array
+                                        (
+                                            [0] => 1
+                                        )
+                                )
+                        )
+                )
+        )
+)
+```
+<!-- intro -->
+Python
+<!-- request Python -->
+
+```python
+searchApi.percolate('products',{"query":{"percolate":{"documents":[{"title":"一双好看的鞋子","color":"蓝色"},{"title":"漂亮的包包"}]}}})
+```
+<!-- response Python -->
+``` python
+{'hits': {'hits': [{u'_id': u'2811025403043381494',
+                    u'table': u'products',
+                    u'_score': u'1',
+                    u'_source': {u'query': {u'ql': u'@title 包包'}},
+                    u'_type': u'doc',
+                    u'fields': {u'_percolator_document_slot': [2]}},
+                   {u'_id': u'2811025403043381496',
+                    u'table': u'products',
+                    u'_score': u'1',
+                    u'_source': {u'query': {u'ql': u'@title 鞋子'}},
+                    u'_type': u'doc',
+                    u'fields': {u'_percolator_document_slot': [1]}}],
+          'total': 2},
+ 'profile': None,
+ 'timed_out': False,
+ 'took': 0}
+
+```
+
+<!-- intro -->
+Python-asyncio
+<!-- request Python-asyncio -->
+
+```python
+await searchApi.percolate('products',{"query":{"percolate":{"documents":[{"title":"一双好看的鞋子","color":"蓝色"},{"title":"漂亮的包包"}]}}})
+```
+<!-- response Python-asyncio -->
+``` python
+{'hits': {'hits': [{u'_id': u'2811025403043381494',
+                    u'table': u'products',
+                    u'_score': u'1',
+                    u'_source': {u'query': {u'ql': u'@title 包包'}},
+                    u'_type': u'doc',
+                    u'fields': {u'_percolator_document_slot': [2]}},
+                   {u'_id': u'2811025403043381496',
+                    u'table': u'products',
+                    u'_score': u'1',
+                    u'_source': {u'query': {u'ql': u'@title 鞋子'}},
+                    u'_type': u'doc',
+                    u'fields': {u'_percolator_document_slot': [1]}}],
+          'total': 2},
+ 'profile': None,
+ 'timed_out': False,
+ 'took': 0}
+
+```
+
+<!-- intro -->
+javascript
+<!-- request javascript -->
+
+```javascript
+res = await searchApi.percolate('products',{"query":{"percolate":{"documents":[{"title":"一双好看的鞋子","color":"蓝色"},{"title":"漂亮的包包"}]}}});
+```
+<!-- response javascript -->
+``` javascript
+{
+  "took": 6,
+  "timed_out": false,
+  "hits": {
+    "total": 2,
+    "hits": [
+      {
+        "table": "products",
+        "_type": "doc",
+        "_id": 2811045522851233808,
+        "_score": "1",
+        "_source": {
+          "query": {
+            "ql": "@title 包包"
+          }
+        },
+        "fields": {
+          "_percolator_document_slot": [
+            2
+          ]
+        }
+      },
+      {
+        "table": "products",
+        "_type": "doc",
+        "_id": 2811045522851233810,
+        "_score": "1",
+        "_source": {
+          "query": {
+            "ql": "@title 鞋子"
+          }
+        },
+        "fields": {
+          "_percolator_document_slot": [
+            1
+          ]
+        }
+      }
+    ]
+  }
+}
+
+```
+
+<!-- intro -->
+java
+<!-- request Java -->
+
+```java
+percolateRequest = new PercolateRequest();
+query = new HashMap<String,Object>(){{
+        put("percolate",new HashMap<String,Object >(){{
+            put("documents", new ArrayList<Object>(){{
+                    add(new HashMap<String,Object >(){{
+                        put("title","一双好看的鞋子");
+                        put("color","蓝色");
+                    }});
+                    add(new HashMap<String,Object >(){{
+                        put("title","漂亮的包包");
+
+                    }});
+
+                     }});
+        }});
+    }};
+percolateRequest.query(query);
+searchApi.percolate("products",percolateRequest);
+
+```
+<!-- response Java -->
+``` java
+class SearchResponse {
+    took: 0
+    timedOut: false
+    hits: class SearchResponseHits {
+        total: 2
+        maxScore: 1
+        hits: [{_index=products, _type=doc, _id=2811045522851234133, _score=1, _source={query={ql=@title 包包}}, fields={_percolator_document_slot=[2]}}, {_index=products, _type=doc, _id=2811045522851234135, _score=1, _source={query={ql=@title 鞋子}}, fields={_percolator_document_slot=[1]}}]
+        aggregations: null
+    }
+    profile: null
+}
+
+```
+
+<!-- intro -->
+C#
+<!-- request C# -->
+
+```clike
+var doc1 = new Dictionary<string, Object>();
+doc1.Add("title","一双好看的鞋子");
+doc1.Add("color","蓝色");
+var doc2 = new Dictionary<string, Object>();
+doc2.Add("title","漂亮的包包");
+var docs = new List<Object> {doc1, doc2};
+Dictionary<string, Object> percolateDoc = new Dictionary<string, Object> {{ "documents", docs }}; 
+Dictionary<string, Object> query = new Dictionary<string, Object> {{ "percolate", percolateDoc }}; 
+PercolateRequest percolateRequest = new PercolateRequest(query=query);
+searchApi.Percolate("products",percolateRequest);
+```
+<!-- response C# -->
+``` clike
+class SearchResponse {
+    took: 0
+    timedOut: false
+    hits: class SearchResponseHits {
+        total: 2
+        maxScore: 1
+        hits: [{_index=products, _type=doc, _id=2811045522851234133, _score=1, _source={query={ql=@title 包包}}, fields={_percolator_document_slot=[2]}}, {_index=products, _type=doc, _id=2811045522851234135, _score=1, _source={query={ql=@title 鞋子}}, fields={_percolator_document_slot=[1]}}]
+        aggregations: null
+    }
+    profile: null
+}
+
+```
+
+<!-- intro -->
+Rust
+<!-- request Rust -->
+
+```rust
+let mut percolate_doc_fields1 = HashMap::new();
+percolate_doc_fields1.insert("title".to_string(), "一双好看的鞋子");
+percolate_doc_fields1.insert("color".to_string(), "蓝色");
+let mut percolate_doc_fields2 = HashMap::new();
+percolate_doc_fields2.insert("title".to_string(), "美丽的包");
+let mut percolate_doc_fields_list: [HashMap; 2] = [percolate_doc_fields1, percolate_doc_fields2];
+let mut percolate_doc = HashMap::new();
+percolate_doc.insert("documents".to_string(), percolate_doc_fields_list); 
+let percolate_query = PercolateRequestQuery::new(serde_json::json!(percolate_doc));
+let percolate_req = PercolateRequest::new(percolate_query); 
+search_api.percolate("products", percolate_req).await;
+```
+<!-- response Rust -->
+``` rust
+class SearchResponse {
+    took: 0
+    timedOut: false
+    hits: class SearchResponseHits {
+        total: 2
+        maxScore: 1
+        hits: [{_index=products, _type=doc, _id=2811045522851234133, _score=1, _source={query={ql=@title bag}}, fields={_percolator_document_slot=[2]}}, {_index=products, _type=doc, _id=2811045522851234135, _score=1, _source={query={ql=@title shoes}}, fields={_percolator_document_slot=[1]}}]
+        aggregations: null
+    }
+    profile: null
+}
+
+```
+
+<!-- intro -->
+TypeScript
+<!-- request TypeScript -->
+
+```typescript
+docs = [ {title : '多么好的包'}, {title : '真不错的鞋子'} ]; 
+res = await searchApi.percolate('test_pq', { query: { percolate: { documents : docs } } } );
+```
+<!-- response TypeScript -->
+``` typescript
+{
+  "took": 0,
+  "timed_out": false,
+  "hits": {
+    "total": 2,
+    "hits": [
+      {
+        "table": "test_pq",
+        "_type": "doc",
+        "_id": 1657852401006149661,
+        "_score": "1",
+        "_source": {
+          "query": {
+            "ql": "@title bag"
+          }
+        },
+        "fields": {
+          "_percolator_document_slot": [
+            1
+          ]
+        }
+      },
+      {
+        "table": "test_pq",
+        "_type": "doc",
+        "_id": 1657852401006149662,
+        "_score": "1",
+        "_source": {
+          "query": {
+            "ql": "@title shoes"
+          }
+        },
+        "fields": {
+          "_percolator_document_slot": [
+            1
+          ]
+        }
+      }
+    ]
+  }
+}
+```
+
+<!-- intro -->
+Go
+<!-- request Go -->
+
+```go
+doc1 := map[string]interface{} {"title": "多么好的包"}
+doc2 := map[string]interface{} {"title": "真不错的鞋子"}
+query := []interface{} {doc1, doc2}
+percolateRequestQuery := manticoreclient.NewPercolateQuery(query)
+percolateRequest := manticoreclient.NewPercolateRequest(percolateRequestQuery)
+res, _, _ := apiClient.SearchAPI.Percolate(context.Background(), "test_pq").PercolateRequest(*percolateRequest).Execute()
+
+```
+<!-- response Go -->
+``` go
+{
+  "took": 0,
+  "timed_out": false,
+  "hits": {
+    "total": 2,
+    "hits": [
+      {
+        "table": "test_pq",
+        "_type": "doc",
+        "_id": 1657852401006149661,
+        "_score": "1",
+        "_source": {
+          "query": {
+            "ql": "@title bag"
+          }
+        },
+        "fields": {
+          "_percolator_document_slot": [
+            1
+          ]
+        }
+      },
+      {
+        "table": "test_pq",
+        "_type": "doc",
+        "_id": 1657852401006149662,
+        "_score": "1",
+        "_source": {
+          "query": {
+            "ql": "@title shoes"
+          }
+        },
+        "fields": {
+          "_percolator_document_slot": [
+            1
+          ]
+        }
+      }
+    ]
+  }
+}
+```
+
+<!-- end -->
+
+<!-- example docs_1 -->
+##### 我想知道哪些文档符合哪些规则
+
+使用选项 `1 as docs` 允许您查看提供的哪些文档符合哪些规则。
+<!-- intro -->
+SQL:
+<!-- request SQL -->
+
+```sql
+CALL PQ('products', '[{"title": "很好的鞋子", "color": "蓝色"}, {"title": "美丽的包"}]', 1 as query, 1 as docs);
+```
+
+<!-- response SQL -->
+
+```sql
++---------------------+-----------+--------------+------+---------------------------+
+| id                  | documents | query        | tags | filters                   |
++---------------------+-----------+--------------+------+---------------------------+
+| 1657852401006149635 | 1         | @title shoes |      | color IN ('blue, 'green') |
+| 1657852401006149637 | 2         | @title bag   |      |                           |
++---------------------+-----------+--------------+------+---------------------------+
+```
+<!-- intro -->
+JSON:
+<!-- request JSON -->
+
+```json
+POST /pq/products/_search
+{
+  "query": {
+    "percolate": {
+      "documents": [
+        {"title": "很好的鞋子", "color": "蓝色"},
+        {"title": "美丽的包"}
+      ]
+    }
+  }
+}
+```
+<!-- response JSON -->
+
+```json
+{
+  "took": 0,
+  "timed_out": false,
+  "hits": {
+    "total": 2,
+    "max_score": 1,
+    "hits": [
+      {
+        "table": "products",
+        "_type": "doc",
+        "_id": 1657852401006149644,
+        "_score": "1",
+        "_source": {
+          "query": {
+            "ql": "@title bag"
+          }
+        },
+        "fields": {
+          "_percolator_document_slot": [
+            2
+          ]
+        }
+      },
+      {
+        "table": "products",
+        "_type": "doc",
+        "_id": 1657852401006149646,
+        "_score": "1",
+        "_source": {
+          "query": {
+            "ql": "@title shoes"
+          }
+        },
+        "fields": {
+          "_percolator_document_slot": [
+            1
+          ]
+        }
+      }
+    ]
+  }
+}
+```
+<!-- intro -->
+PHP:
+<!-- request PHP -->
+
+```php
+$percolate = [
+    'table' => 'products',
+    'body' => [
+        'query' => [
+            'percolate' => [
+                'documents' => [
+                    ['title' => '一双不错的鞋子','color'=>'蓝色'],
+                    ['title' => '美丽的包']
+                ]
+            ]
+        ]
+    ]
+];
+$client->pq()->search($percolate);
+
+```
+<!-- response PHP -->
+
+```php
+Array
+(
+    [took] => 23
+    [timed_out] =>
+    [hits] => Array
+        (
+            [total] => 2
+            [max_score] => 1
+            [hits] => Array
+                (
+                    [0] => Array
+                        (
+                            [_index] => products
+                            [_type] => doc
+                            [_id] => 2810781492890828819
+                            [_score] => 1
+                            [_source] => Array
+                                (
+                                    [query] => Array
+                                        (
+                                            [match] => Array
+                                                (
+                                                    [title] => 包
+                                                )
+                                        )
+                                )
+                            [fields] => Array
+                                (
+                                    [_percolator_document_slot] => Array
+                                        (
+                                            [0] => 2
+                                        )
+                                )
+                        )
+                    [1] => Array
+                        (
+                            [_index] => products
+                            [_type] => doc
+                            [_id] => 2810781492890828821
+                            [_score] => 1
+                            [_source] => Array
+                                (
+                                    [query] => Array
+                                        (
+                                            [match] => Array
+                                                (
+                                                    [title] => 鞋子
+                                                )
+                                        )
+                                )
+                            [fields] => Array
+                                (
+                                    [_percolator_document_slot] => Array
+                                        (
+                                            [0] => 1
+                                        )
+                                )
+                        )
+                )
+        )
+)
+```
+<!-- intro -->
+Python
+<!-- request Python -->
+
+```python
+searchApi.percolate('products',{"query":{"percolate":{"documents":[{"title":"一双不错的鞋子","color":"蓝色"},{"title":"美丽的包"}]}}})
+```
+<!-- response Python -->
+``` python
+{'hits': {'hits': [{u'_id': u'2811025403043381494',
+                    u'table': u'products',
+                    u'_score': u'1',
+                    u'_source': {u'query': {u'ql': u'@title 包'}},
+                    u'_type': u'doc',
+                    u'fields': {u'_percolator_document_slot': [2]}},
+                   {u'_id': u'2811025403043381496',
+                    u'table': u'products',
+                    u'_score': u'1',
+                    u'_source': {u'query': {u'ql': u'@title 鞋子'}},
+                    u'_type': u'doc',
+                    u'fields': {u'_percolator_document_slot': [1]}}],
+          'total': 2},
+ 'profile': None,
+ 'timed_out': False,
+ 'took': 0}
+
+```
+
+<!-- intro -->
+Python-asyncio
+<!-- request Python-asyncio -->
+
+```python
+await searchApi.percolate('products',{"query":{"percolate":{"documents":[{"title":"一双不错的鞋子","color":"蓝色"},{"title":"美丽的包"}]}}})
+```
+<!-- response Python-asyncio -->
+``` python
+{'hits': {'hits': [{u'_id': u'2811025403043381494',
+                    u'table': u'products',
+                    u'_score': u'1',
+                    u'_source': {u'query': {u'ql': u'@title 包'}},
+                    u'_type': u'doc',
+                    u'fields': {u'_percolator_document_slot': [2]}},
+                   {u'_id': u'2811025403043381496',
+                    u'table': u'products',
+                    u'_score': u'1',
+                    u'_source': {u'query': {u'ql': u'@title 鞋子'}},
+                    u'_type': u'doc',
+                    u'fields': {u'_percolator_document_slot': [1]}}],
+          'total': 2},
+ 'profile': None,
+ 'timed_out': False,
+ 'took': 0}
+
+```
+
+<!-- intro -->
+javascript
+<!-- request javascript -->
+
+```javascript
+res = await searchApi.percolate('products',{"query":{"percolate":{"documents":[{"title":"一双不错的鞋子","color":"蓝色"},{"title":"美丽的包"}]}}});
+```
+<!-- response javascript -->
+``` javascript
+{
+  "took": 6,
+  "timed_out": false,
+  "hits": {
+    "total": 2,
+    "hits": [
+      {
+        "table": "products",
+        "_type": "doc",
+        "_id": 2811045522851233808,
+        "_score": "1",
+        "_source": {
+          "query": {
+            "ql": "@title 包"
+          }
+        },
+        "fields": {
+          "_percolator_document_slot": [
+            2
+          ]
+        }
+      },
+      {
+        "table": "products",
+        "_type": "doc",
+        "_id": 2811045522851233810,
+        "_score": "1",
+        "_source": {
+          "query": {
+            "ql": "@title 鞋子"
+          }
+        },
+        "fields": {
+          "_percolator_document_slot": [
+            1
+          ]
+        }
+      }
+    ]
+  }
+}
+```
+<!-- intro -->
+java
+<!-- request Java -->
+
+```java
+percolateRequest = new PercolateRequest();
+query = new HashMap<String,Object>(){{
+        put("percolate",new HashMap<String,Object >(){{
+            put("documents", new ArrayList<Object>(){{
+                    add(new HashMap<String,Object >(){{
+                        put("title","一双不错的鞋子");
+                        put("color","蓝色");
+                    }});
+                    add(new HashMap<String,Object >(){{
+                        put("title","漂亮的包");
+
+                    }});
+
+                     }});
+        }});
+    }};
+percolateRequest.query(query);
+searchApi.percolate("products",percolateRequest);
+
+```
+<!-- response Java -->
+``` java
+class SearchResponse {
+    took: 0
+    timedOut: false
+    hits: class SearchResponseHits {
+        total: 2
+        maxScore: 1
+        hits: [{_index=products, _type=doc, _id=2811045522851234133, _score=1, _source={query={ql=@title bag}}, fields={_percolator_document_slot=[2]}}, {_index=products, _type=doc, _id=2811045522851234135, _score=1, _source={query={ql=@title shoes}}, fields={_percolator_document_slot=[1]}}]
+        aggregations: null
+    }
+    profile: null
+}
+
+```
+
+<!-- intro -->
+C#
+<!-- request C# -->
+
+```clike
+var doc1 = new Dictionary<string, Object>();
+doc1.Add("title","一双不错的鞋子");
+doc1.Add("color","蓝色");
+var doc2 = new Dictionary<string, Object>();
+doc2.Add("title","漂亮的包");
+var docs = new List<Object> {doc1, doc2};
+Dictionary<string, Object> percolateDoc = new Dictionary<string, Object> {{ "documents", docs }}; 
+Dictionary<string, Object> query = new Dictionary<string, Object> {{ "percolate", percolateDoc }}; 
+PercolateRequest percolateRequest = new PercolateRequest(query=query);
+searchApi.Percolate("products",percolateRequest);
+```
+<!-- response C# -->
+``` clike
+class SearchResponse {
+    took: 0
+    timedOut: false
+    hits: class SearchResponseHits {
+        total: 2
+        maxScore: 1
+        hits: [{_index=products, _type=doc, _id=2811045522851234133, _score=1, _source={query={ql=@title bag}}, fields={_percolator_document_slot=[2]}}, {_index=products, _type=doc, _id=2811045522851234135, _score=1, _source={query={ql=@title shoes}}, fields={_percolator_document_slot=[1]}}]
+        aggregations: null
+    }
+    profile: null
+}
+
+```
+
+<!-- intro -->
+Rust
+<!-- request Rust -->
+
+```rust
+let mut percolate_doc_fields1 = HashMap::new();
+percolate_doc_fields1.insert("title".to_string(), "一双不错的鞋子");
+percolate_doc_fields1.insert("color".to_string(), "蓝色");
+let mut percolate_doc_fields2 = HashMap::new();
+percolate_doc_fields2.insert("title".to_string(), "漂亮的包");
+let mut percolate_doc_fields_list: [HashMap; 2] = [percolate_doc_fields1, percolate_doc_fields2];
+let mut percolate_doc = HashMap::new();
+percolate_doc.insert("documents".to_string(), percolate_doc_fields_list); 
+let percolate_query = PercolateRequestQuery::new(serde_json::json!(percolate_doc));
+let percolate_req = PercolateRequest::new(percolate_query); 
+search_api.percolate("products", percolate_req).await;
+```
+<!-- response Rust -->
+``` rust
+class SearchResponse {
+    took: 0
+    timedOut: false
+    hits: class SearchResponseHits {
+        total: 2
+        maxScore: 1
+        hits: [{_index=products, _type=doc, _id=2811045522851234133, _score=1, _source={query={ql=@title bag}}, fields={_percolator_document_slot=[2]}}, {_index=products, _type=doc, _id=2811045522851234135, _score=1, _source={query={ql=@title shoes}}, fields={_percolator_document_slot=[1]}}]
+        aggregations: null
+    }
+    profile: null
+}
+
+```
+
+<!-- intro -->
+TypeScript
+<!-- request TypeScript -->
+
+```typescript
+docs = [ {title : '多么漂亮的包'}, {title : '真的很不错的鞋子'} ]; 
+res = await searchApi.percolate('test_pq', { query: { percolate: { documents : docs } } } );
+```
+<!-- response TypeScript -->
+``` typescript
+{
+  "took": 0,
+  "timed_out": false,
+  "hits": {
+    "total": 2,
+    "hits": [
+      {
+        "table": "test_pq",
+        "_type": "doc",
+        "_id": 1657852401006149661,
+        "_score": "1",
+        "_source": {
+          "query": {
+            "ql": "@title bag"
+          }
+        },
+        "fields": {
+          "_percolator_document_slot": [
+            1
+          ]
+        }
+      },
+      {
+        "table": "test_pq",
+        "_type": "doc",
+        "_id": 1657852401006149662,
+        "_score": "1",
+        "_source": {
+          "query": {
+            "ql": "@title shoes"
+          }
+        },
+        "fields": {
+          "_percolator_document_slot": [
+            1
+          ]
+        }
+      }
+    ]
+  }
+}
+```
+
+<!-- intro -->
+Go
+<!-- request Go -->
+
+```go
+doc1 := map[string]interface{} {"title": "多么漂亮的包"}
+doc2 := map[string]interface{} {"title": "真的很不错的鞋子"}
+query := []interface{} {doc1, doc2}
+percolateRequestQuery := manticoreclient.NewPercolateQuery(query)
+percolateRequest := manticoreclient.NewPercolateRequest(percolateRequestQuery)
+res, _, _ := apiClient.SearchAPI.Percolate(context.Background(), "test_pq").PercolateRequest(*percolateRequest).Execute()
+
+```
+<!-- response Go -->
+``` go
+{
+  "took": 0,
+  "timed_out": false,
+  "hits": {
+    "total": 2,
+    "hits": [
+      {
+        "table": "test_pq",
+        "_type": "doc",
+        "_id": 1657852401006149661,
+        "_score": "1",
+        "_source": {
+          "query": {
+            "ql": "@title bag"
+          }
+        },
+        "fields": {
+          "_percolator_document_slot": [
+            1
+          ]
+        }
+      },
+      {
+        "table": "test_pq",
+        "_type": "doc",
+
+        "_id": 1657852401006149662,
+
+        "_score": "1",
+
+        "_source": {
+
+          "query": {
+
+            "ql": "@title shoes"
+
+          }
+
+        },
+
+        "fields": {
+
+          "_percolator_document_slot": [
+
+            1
+
+          ]
+
+        }
+
+      }
+
+    ]
+
+  }
+
+}
+```
+
+
+<!-- end -->
+
+
+<!-- example docs_id -->
+
+#### 静态 id
+
+默认情况下，匹配的文档 id 对应于您提供的列表中的相对编号。 但是，在某些情况下，每个文档已经有自己的 id。 对于这种情况，可以为 `CALL PQ` 使用选项 `'id field name' as docs_id`。
+
+请注意，如果使用提供的字段名找不到 id，则 PQ 规则将不会在结果中显示。
+
+此选项仅适用于通过 SQL 使用的 `CALL PQ`。
+
+
+<!-- intro -->
+
+##### SQL:
+
+<!-- request SQL -->
+
+```sql
+CALL PQ('products', '[{"id": 123, "title": "nice pair of shoes", "color": "blue"}, {"id": 456, "title": "beautiful bag"}]', 1 as query, 'id' as docs_id, 1 as docs);
+```
+<!-- response SQL -->
+
+```sql
++---------------------+-----------+--------------+------+---------------------------+
+| id                  | documents | query        | tags | filters                   |
++---------------------+-----------+--------------+------+---------------------------+
+| 1657852401006149664 | 456       | @title bag   |      |                           |
+| 1657852401006149666 | 123       | @title shoes |      | color IN ('blue, 'green') |
++---------------------+-----------+--------------+------+---------------------------+
+```
+
+<!-- end -->
+
+
+<!-- example invalid_json -->
+
+##### 我可能有无效的 JSON，请跳过它们
+
+在使用包含单独 JSON 的 CALL PQ 时，您可以使用选项 1 as skip_bad_json 来跳过输入中的任何无效 JSON。 在下面的示例中，由于无效的 JSON，第二个查询失败，但第三个查询通过使用 1 as skip_bad_json 避免了该错误。 请记住，当通过 HTTP 发送 JSON 查询时，此选项不可用，因为整个 JSON 查询在这种情况下必须有效。
+
+
+<!-- intro -->
+
+SQL:
+<!-- request SQL -->
+
+```sql
+CALL PQ('products', ('{"title": "nice pair of shoes", "color": "blue"}', '{"title": "beautiful bag"}'));
+
+CALL PQ('products', ('{"title": "nice pair of shoes", "color": "blue"}', '{"title": "beautiful bag}'));
+
+CALL PQ('products', ('{"title": "nice pair of shoes", "color": "blue"}', '{"title": "beautiful bag}'), 1 as skip_bad_json);
+```
+<!-- response SQL -->
+
+```sql
++---------------------+
+| id                  |
++---------------------+
+| 1657852401006149635 |
+| 1657852401006149637 |
++---------------------+
+
+ERROR 1064 (42000): Bad JSON objects in strings: 2
+
++---------------------+
+| id                  |
++---------------------+
+| 1657852401006149635 |
++---------------------+
+```
+
+
+<!-- end -->
+
+
+##### 我想要更高性能的 percolate 查询
+
+percolate 查询的设计考虑了高吞吐量和大数据量。 为了优化性能以实现较低延迟和更高吞吐量，请考虑以下几点。
+
+percolate 表有两种分布模式以及 percolate 查询如何在其上工作：
+
+* **Sparse (默认).** 理想情况：大量文档、镜像 PQ 表。 当您的文档集很大但存储在 PQ 表中的查询集较小时，稀疏模式非常适用。 在这种模式下，您传递的一批文档将被分配到多个代理之间，因此每个节点仅处理请求中文档的一部分。 Manticore 会拆分您的文档集并将块分发到各个镜像。 一旦代理完成对查询的处理，Manticore 会收集并合并结果，返回一个最终的查询集，就好像它来自单个表一样。 使用 [replication](../References.md#Replication) 来辅助该过程.
+
+* **Sharded.** 理想情况：大量 PQ 规则，规则分布在不同的 PQ 表中。 在这种模式下，整个文档集会广播到分布式 PQ 表的所有表中，而不会先将文档进行拆分。 当推送的文档集相对较小时，但存储的查询数量很大时，这种方式比较适用。 在这种情况下，更适合在每个节点上仅存储部分 PQ 规则，然后合并来自处理相同文档集但针对不同 PQ 规则的节点返回的结果。 该模式必须显式设置，因为它意味着网络负载的增加，并且要求各表具备不同的 PQ，而 [replication](../References.md#Replication) 无法开箱即用地处理这种情况.
+
+假设您定义了表 `pq_d2` 如下：
+
+``` ini
+table pq_d2
+{
+    type = distributed
+    agent = 127.0.0.1:6712:pq
+    agent = 127.0.0.1:6712:ptitle
+}
+```
+
+
+<!-- example distributed pq modes 1 -->
+
+每个 'pq' 和 'ptitle' 都包含:
+
+
+
+<!-- intro -->
+
+##### SQL:
+
+<!-- request SQL -->
+
+```sql
+SELECT * FROM pq;
+```
+
+<!-- response sql -->
+
+```sql
++------+-------------+------+-------------------+
+| id   | query       | tags | filters           |
++------+-------------+------+-------------------+
+|    1 | filter test |      | gid>=10           |
+|    2 | angry       |      | gid>=10 OR gid<=3 |
++------+-------------+------+-------------------+
+2 rows in set (0.01 sec)
+```
+
+
+<!-- request JSON -->
+
+```json
+POST /pq/pq/_search
+```
+
+
+<!-- response JSON -->
+
+```json
+{
+    "took":0,
+    "timed_out":false,
+    "hits":{
+        "total":2,
+        "hits":[
+            {
+                "_id": 1,
+                "_score":1,
+                "_source":{
+                    "query":{ "ql":"filter test" },
+                    "tags":"",
+                    "filters":"gid>=10"
+                }
+            },
+            {
+                "_id": 2,
+                "_score":1,
+                "_source":{
+                    "query":{"ql":"生气"},
+                    "tags":"",
+                    "filters":"gid>=10 OR gid<=3"
+                }
+            }            
+        ]
+    }
+}
+```
+
+<!-- request PHP -->
+
+```php
+$params = [
+    'table' => 'pq',
+    'body' => [
+    ]
+];
+$response = $client->pq()->search($params);
+```
+
+<!-- response PHP -->
+
+```php
+(
+    [took] => 0
+    [timed_out] =>
+    [hits] =>
+        (
+            [total] => 2
+            [hits] =>
+                (
+                    [0] =>
+                        (
+                            [_id] => 1
+                            [_score] => 1
+                            [_source] =>
+                                (
+                                    [query] =>
+                                        (
+                                            [ql] => 过滤测试
+                                        )
+                                    [tags] =>
+                                    [filters] => gid>=10
+                                )
+                        ),
+                    [1] =>
+                        (
+                            [_id] => 1
+                            [_score] => 1
+                            [_source] =>
+                                (
+                                    [query] =>
+                                        (
+                                            [ql] => 生气
+                                        )
+                                    [tags] =>
+                                    [filters] => gid>=10 OR gid<=3
+                                )
+                        )
+                )
+        )
+)
+```
+<!-- intro -->
+Python
+<!-- request Python -->
+
+```python
+searchApi.search({"table":"pq","query":{"match_all":{}}})
+```
+<!-- response Python -->
+``` python
+{'hits': {'hits': [{u'_id': u'2811025403043381501',
+                    u'_score': 1,
+                    u'_source': {u'filters': u"gid>=10",
+                                 u'query': u'过滤测试',
+                                 u'tags': u''}},
+                   {u'_id': u'2811025403043381502',
+                    u'_score': 1,
+                    u'_source': {u'filters': u"gid>=10 OR gid<=3",
+                                 u'query': u'生气',
+                                 u'tags': u''}}],
+          'total': 2},
+ 'profile': None,
+ 'timed_out': False,
+ 'took': 0}
+```
+
+<!-- intro -->
+Python-asyncio
+<!-- request Python-asyncio -->
+
+```python
+await searchApi.search({"table":"pq","query":{"match_all":{}}})
+```
+<!-- response Python-asyncio -->
+``` python
+{'hits': {'hits': [{u'_id': u'2811025403043381501',
+                    u'_score': 1,
+                    u'_source': {u'filters': u"gid>=10",
+                                 u'query': u'过滤测试',
+                                 u'tags': u''}},
+                   {u'_id': u'2811025403043381502',
+                    u'_score': 1,
+                    u'_source': {u'filters': u"gid>=10 OR gid<=3",
+                                 u'query': u'生气',
+                                 u'tags': u''}}],
+          'total': 2},
+ 'profile': None,
+ 'timed_out': False,
+ 'took': 0}
+```
+
+<!-- intro -->
+javascript
+<!-- request javascript -->
+
+```javascript
+res = await searchApi.search({"table":"pq","query":{"match_all":{}}});
+```
+<!-- response javascript -->
+``` javascript
+{'hits': {'hits': [{u'_id': u'2811025403043381501',
+                    u'_score': 1,
+                    u'_source': {u'filters': u"gid>=10",
+                                 u'query': u'过滤测试',
+                                 u'tags': u''}},
+                   {u'_id': u'2811025403043381502',
+                    u'_score': 1,
+                    u'_source': {u'filters': u"gid>=10 OR gid<=3",
+                                 u'query': u'生气',
+                                 u'tags': u''}}],
+          'total': 2},
+ 'profile': None,
+ 'timed_out': False,
+ 'took': 0}
+```
+<!-- intro -->
+javascript
+<!-- request javascript -->
+
+```javascript
+res = await searchApi.search({"table":"pq","query":{"match_all":{}}});
+```
+<!-- response javascript -->
+``` javascript
+{"hits": {"hits": [{"_id": 2811025403043381501,
+                    "_score": 1,
+                    "_source": {"filters": u"gid>=10",
+                                 "query": "过滤测试",
+                                 "tags": ""}},
+                   {"_id": 2811025403043381502,
+                    "_score": 1,
+                    "_source": {"filters": u"gid>=10 OR gid<=3",
+                                 "query": "生气",
+                                 "tags": ""}}],
+          "total": 2},
+  "timed_out": false,
+ "took": 0}
+```
+
+<!-- intro -->
+java
+<!-- request Java -->
+
+```java
+Map<String,Object> query = new HashMap<String,Object>();
+query.put("match_all",null);
+SearchRequest searchRequest = new SearchRequest();
+searchRequest.setIndex("pq");
+searchRequest.setQuery(query);
+SearchResponse searchResponse = searchApi.search(searchRequest);
+```
+<!-- response Java -->
+``` java
+
+class SearchResponse {
+    took: 0
+    timedOut: false
+    hits: class SearchResponseHits {
+        total: 2
+        maxScore: null
+        hits: [{_id=2811045522851233962, _score=1, _source={filters=gid>=10, query=过滤测试, tags=}}, {_id=2811045522851233951, _score=1, _source={filters=gid>=10 OR gid<=3, query=生气,tags=}}]
+        aggregations: null
+    }
+    profile: null
+}
+
+```
+
+<!-- intro -->
+C#
+<!-- request C# -->
+
+```clike
+object query =  new { match_all=null };
+SearchRequest searchRequest = new SearchRequest("pq", query);
+SearchResponse searchResponse = searchApi.Search(searchRequest);
+```
+<!-- response C# -->
+``` clike
+
+class SearchResponse {
+    took: 0
+    timedOut: false
+    hits: class SearchResponseHits {
+        total: 2
+        maxScore: null
+        hits: [{_id=2811045522851233962, _score=1, _source={filters=gid>=10, query=filter test, tags=}}, {_id=2811045522851233951, _score=1, _source={filters=gid>=10 OR gid<=3, query=angry,tags=}}]
+        aggregations: null
+    }
+    profile: null
+}
+
+```
+
+<!-- intro -->
+Rust
+<!-- request Rust -->
+
+```rust
+let query = SearchQuery::new();
+let search_req = SearchRequest {
+    table: "pq".to_string(),
+    query: Some(Box::new(query)),
+    ..Default::default(),
+};
+let search_res = search_api.search(search_req).await;
+```
+<!-- response Rust -->
+``` rust
+
+class SearchResponse {
+    took: 0
+    timedOut: false
+    hits: class SearchResponseHits {
+        total: 2
+        maxScore: null
+        hits: [{_id=2811045522851233962, _score=1, _source={filters=gid>=10, query=filter test, tags=}}, {_id=2811045522851233951, _score=1, _source={filters=gid>=10 OR gid<=3, query=angry,tags=}}]
+        aggregations: null
+    }
+    profile: null
+}
+
+```
+
+<!-- intro -->
+TypeScript
+<!-- request TypeScript -->
+
+```typescript
+res = await searchApi.search({"table":"test_pq","query":{"match_all":{}}});
+```
+<!-- response TypeScript -->
+``` typescript
+{
+
+'hits':
+
+{
+
+'hits': 
+
+[{
+
+'_id': '2811025403043381501',
+            '_score': 1,
+            '_source': 
+            {
+            
+'filters': "gid>=10",
+                'query': 'filter test',
+                'tags': ''
+            }
+        },
+        {
+         
+'_id': 
+         
+'2811025403043381502',
+            '_score': 1,
+            '_source': 
+            {
+            
+'filters': "gid>=10 OR gid<=3",
+                 'query': 'angry',
+                 'tags': ''
+            }
+        }],
+    
+'total': 2
+
+},
+
+'profile': None,
+
+'timed_out': False,
+
+'took': 0
+}
+```
+
+<!-- intro -->
+Go
+<!-- request Go -->
+
+```go
+query := map[string]interface{} {}
+percolateRequestQuery := manticoreclient.NewPercolateRequestQuery(query)
+percolateRequest := manticoreclient.NewPercolateRequest(percolateRequestQuery) 
+res, _, _ := apiClient.SearchAPI.Percolate(context.Background(), "test_pq").PercolateRequest(*percolateRequest).Execute()
+```
+<!-- response Go -->
+``` go
+{
+
+'hits':
+
+{
+
+'hits': 
+
+[{
+
+'_id': '2811025403043381501',
+            '_score': 1,
+            '_source': 
+            {
+            
+'filters': "gid>=10",
+                'query': 'filter test',
+                'tags': ''
+            }
+        },
+        {
+         
+'_id': 
+         
+'2811025403043381502',
+            '_score': 1,
+            '_source': 
+            {
+            
+'filters': "gid>=10 OR gid<=3",
+                 'query': 'angry',
+                 'tags': ''
+            }
+        }],
+    
+'total': 2
+
+},
+
+'profile': None,
+
+'timed_out': False,
+
+'took': 0
+}
+```
+
+<!-- end -->
+
+
+<!-- example call_pq_example -->
+
+And you execute `CALL PQ` on the distributed table with a couple of documents.
+
+
+<!-- intro -->
+##### SQL:
+
+<!-- request SQL -->
+
+```sql
+CALL PQ ('pq_d2', ('{"title":"angry test", "gid":3 }', '{"title":"filter test doc2", "gid":13}'), 1 AS docs);
+```
+
+<!-- response sql -->
+
+```sql
++------+-----------+
+| id   | documents |
++------+-----------+
+|    1 | 2         |
+|    2 | 1         |
++------+-----------+
+```
+
+<!-- request JSON -->
+
+```json
+POST /pq/pq/_search -d '
+"query":
+{
+        "percolate":
+        {
+                "documents" : [
+                    { "title": "angry test", "gid": 3 },
+                    { "title": "filter test doc2", "gid": 13 }
+                ]
+        }
+}
+'
+```
+
+<!-- response JSON -->
+
+```json
+{
+    "took":0,
+    "timed_out":false,
+    "hits":{
+    "total":2,"hits":[
+        {
+            "_id": 2,
+            "_score":1,
+            "_source":{
+                "query":{"title":"angry"},
+                "tags":"",
+                "filters":"gid>=10 OR gid<=3"
+            }
+        }
+        {
+            "_id": 1,
+            "_score":1,
+            "_source":{
+                "query":{"ql":"filter test"},
+                "tags":"",
+                "filters":"gid>=10"
+            }
+        },
+        ]
+    }
+}
+```
+
+<!-- request PHP -->
+
+```php
+$params = [
+    'table' => 'pq',
+    'body' => [
+        'query' => [
+            'percolate' => [
+                'documents' => [
+                    [
+                        'title'=>'angry test',
+                        'gid' => 3
+                    ],
+                    [
+                        'title'=>'filter test doc2',
+                        'gid' => 13
+                    ],
+                ]
+            ]
+        ]
+    ]
+];
+$response = $client->pq()->search($params);
+```
+
+<!-- response PHP -->
+
+```php
+(
+    [took] => 0
+    [timed_out] =>
+    [hits] =>
+        (
+            [total] => 2
+            [hits] =>
+                (
+                    [0] =>
+                        (
+                            [_index] => pq  
+                            [_type] => doc                            
+                            [_id] => 2
+                            [_score] => 1
+                            [_source] =>
+                                (
+                                    [query] =>
+                                        (
+                                            [ql] => 愤怒
+                                        )
+                                    [tags] =>
+                                    [filters] => gid>=10 OR gid<=3
+                                ),
+                           [fields] =>
+                                (
+                                    [_percolator_document_slot] =>
+                                        (
+                                            [0] => 1
+                                        )
+
+                                )
+                        ),
+                    [1] =>
+                        (
+                            [_index] => pq                            
+                            [_id] => 1
+                            [_score] => 1
+                            [_source] =>
+                                (
+                                    [query] =>
+                                        (
+                                            [ql] => 过滤测试
+                                        )
+                                    [tags] =>
+                                    [filters] => gid>=10
+                                )
+                           [fields] =>
+                                (
+                                    [_percolator_document_slot] =>
+                                        (
+                                            [0] => 0
+                                        )
+
+                                )
+                        )
+                )
+        )
+)
+```
+<!-- intro -->
+Python
+<!-- request Python -->
+
+```python
+searchApi.percolate('pq',{"percolate":{"documents":[{"title":"愤怒测试","gid":3},{"title":"过滤测试文档2","gid":13}]}})
+```
+<!-- response Python -->
+``` python
+{'hits': {'hits': [{u'_id': u'2811025403043381480',
+                    u'table': u'pq',
+                    u'_score': u'1',
+                    u'_source': {u'query': {u'ql': u'愤怒'},u'tags':u'',u'filters':u"gid>=10 OR gid<=3"},
+                    u'_type': u'doc',
+                    u'fields': {u'_percolator_document_slot': [1]}},
+                    {u'_id': u'2811025403043381501',
+                    u'table': u'pq',
+                    u'_score': u'1',
+                    u'_source': {u'query': {u'ql': u'过滤测试'},u'tags':u'',u'filters':u"gid>=10"},
+                    u'_type': u'doc',
+                    u'fields': {u'_percolator_document_slot': [1]}}],
+          'total': 2},
+ 'profile': None,
+ 'timed_out': False,
+ 'took': 0}
+```
+
+<!-- intro -->
+Python-asyncio
+<!-- request Python-asyncio -->
+
+```python
+await searchApi.percolate('pq',{"percolate":{"documents":[{"title":"愤怒测试","gid":3},{"title":"过滤测试文档2","gid":13}]}})
+```
+<!-- response Python-asyncio -->
+``` python
+{'hits': {'hits': [{u'_id': u'2811025403043381480',
+                    u'table': u'pq',
+                    u'_score': u'1',
+                    u'_source': {u'query': {u'ql': u'愤怒'},u'tags':u'',u'filters':u"gid>=10 OR gid<=3"},
+                    u'_type': u'doc',
+                    u'fields': {u'_percolator_document_slot': [1]}},
+                    {u'_id': u'2811025403043381501',
+                    u'table': u'pq',
+                    u'_score': u'1',
+                    u'_source': {u'query': {u'ql': u'过滤测试'},u'tags':u'',u'filters':u"gid>=10"},
+                    u'_type': u'doc',
+                    u'fields': {u'_percolator_document_slot': [1]}}],
+          'total': 2},
+ 'profile': None,
+ 'timed_out': False,
+ 'took': 0}
+```
+
+<!-- intro -->
+javascript
+<!-- request javascript -->
+
+```javascript
+res = await searchApi.percolate('pq',{"percolate":{"documents":[{"title":"愤怒测试","gid":3},{"title":"过滤测试文档2","gid":13}]}});
+```
+<!-- response javascript -->
+``` javascript
+{'hits': {'hits': [{u'_id': u'2811025403043381480',
+                    u'table': u'pq',
+                    u'_score': u'1',
+                    u'_source': {u'query': {u'ql': u'愤怒'},u'tags':u'',u'filters':u"gid>=10 OR gid<=3"},
+                    u'_type': u'doc',
+                    u'fields': {u'_percolator_document_slot': [1]}},
+                    {u'_id': u'2811025403043381501',
+                    u'table': u'pq',
+                    u'_score': u'1',
+                    u'_source': {u'query': {u'ql': u'过滤测试'},u'tags':u'',u'filters':u"gid>=10"},
+                    u'_type': u'doc',
+                    u'fields': {u'_percolator_document_slot': [1]}}],
+          'total': 2},
+ 'profile': None,
+ 'timed_out': False,
+ 'took': 0}
+```
+<!-- intro -->
+java
+<!-- request Java -->
+
+```java
+percolateRequest = new PercolateRequest();
+query = new HashMap<String,Object>(){{
+    put("percolate",new HashMap<String,Object >(){{
+        put("documents", new ArrayList<Object>(){{
+            add(new HashMap<String,Object >(){{
+                put("title","愤怒测试");
+                put("gid",3);
+            }});
+            add(new HashMap<String,Object >(){{
+                put("title","过滤测试文档2");
+                put("gid",13);
+            }});
+        }});
+    }});
+}};
+percolateRequest.query(query);
+searchApi.percolate("pq",percolateRequest);
+```
+<!-- response java -->
+``` java
+class SearchResponse {
+    took: 10
+    timedOut: false
+    hits: class SearchResponseHits {
+        total: 2
+        maxScore: 1
+        hits: [{_index=pq, _type=doc, _id=2811045522851234165, _score=1, _source={query={ql=@title angry}}, fields={_percolator_document_slot=[1]}}, {_index=pq, _type=doc, _id=2811045522851234166, _score=1, _source={query={ql=@title filter test doc2}}, fields={_percolator_document_slot=[2]}}]
+        aggregations: null
+    }
+    profile: null
+}
+
+```
+
+<!-- intro -->
+C#
+<!-- request C# -->
+
+```clike
+var doc1 = new Dictionary<string, Object>();
+doc1.Add("title","angry test");
+doc1.Add("gid",3);
+var doc2 = new Dictionary<string, Object>();
+doc2.Add("title","filter test doc2");
+doc2.Add("gid",13);
+var docs = new List<Object> {doc1, doc2};
+Dictionary<string, Object> percolateDoc = new Dictionary<string, Object> {{ "documents", docs }}; 
+Dictionary<string, Object> query = new Dictionary<string, Object> {{ "percolate", percolateDoc }}; 
+PercolateRequest percolateRequest = new PercolateRequest(query=query);
+searchApi.Percolate("pq",percolateRequest);
+```
+<!-- response C# -->
+``` clike
+class SearchResponse {
+    took: 10
+    timedOut: false
+    hits: class SearchResponseHits {
+        total: 2
+        maxScore: 1
+        hits: [{_index=pq, _type=doc, _id=2811045522851234165, _score=1, _source={query={ql=@title angry}}, fields={_percolator_document_slot=[1]}}, {_index=pq, _type=doc, _id=2811045522851234166, _score=1, _source={query={ql=@title filter test doc2}}, fields={_percolator_document_slot=[2]}}]
+        aggregations: null
+    }
+    profile: null
+}
+
+```
+
+<!-- intro -->
+Rust
+<!-- request Rust -->
+
+```rust
+let mut percolate_doc_fields1 = HashMap::new();
+percolate_doc_fields1.insert("title".to_string(), "angry test");
+percolate_doc_fields1.insert("gid".to_string(), 3);
+let mut percolate_doc_fields2 = HashMap::new();
+percolate_doc_fields2.insert("title".to_string(), "filter test doc2");
+percolate_doc_fields2.insert("gid".to_string(), 13);
+let mut percolate_doc_fields_list: [HashMap; 2] = [percolate_doc_fields1, percolate_doc_fields2];
+let mut percolate_doc = HashMap::new();
+percolate_doc.insert("documents".to_string(), percolate_doc_fields_list); 
+let percolate_query = PercolateRequestQuery::new(serde_json::json!(percolate_doc));
+let percolate_req = PercolateRequest::new(percolate_query); 
+search_api.percolate("pq", percolate_req).await;
+```
+<!-- response Rust -->
+``` rust
+class SearchResponse {
+    took: 10
+    timedOut: false
+    hits: class SearchResponseHits {
+        total: 2
+        maxScore: 1
+        hits: [{_index=pq, _type=doc, _id=2811045522851234165, _score=1, _source={query={ql=@title angry}}, fields={_percolator_document_slot=[1]}}, {_index=pq, _type=doc, _id=2811045522851234166, _score=1, _source={query={ql=@title filter test doc2}}, fields={_percolator_document_slot=[2]}}]
+        aggregations: null
+    }
+    profile: null
+}
+
+```
+
+<!-- intro -->
+TypeScript
+<!-- request TypeScript -->
+
+```typescript
+docs = [ {title : 'What a nice bag'}, {title : 'Really nice shoes'} ]; 
+res = await searchApi.percolate('test_pq', { query: { percolate: { documents : docs } } } );
+```
+<!-- response TypeScript -->
+``` typescript
+{
+  "took": 0,
+  "timed_out": false,
+  "hits": {
+    "total": 2,
+    "hits": [
+      {
+        "table": "test_pq",
+        "_type": "doc",
+        "_id": 1657852401006149661,
+        "_score": "1",
+        "_source": {
+          "query": {
+            "ql": "@title bag"
+          }
+        },
+        "fields": {
+          "_percolator_document_slot": [
+            1
+          ]
+        }
+      },
+      {
+        "table": "test_pq",
+        "_type": "doc",
+        "_id": 1657852401006149662,
+        "_score": "1",
+        "_source": {
+          "query": {
+            "ql": "@title shoes"
+          }
+        },
+        "fields": {
+          "_percolator_document_slot": [
+            1
+          ]
+        }
+      }
+    ]
+  }
+}
+```
+
+<!-- intro -->
+Go
+<!-- request Go -->
+
+```go
+doc1 := map[string]interface{} {"title": "What a nice bag"}
+doc2 := map[string]interface{} {"title": "Really nice shoes"}
+query := []interface{} {doc1, doc2}
+percolateRequestQuery := manticoreclient.NewPercolateQuery(query)
+percolateRequest := manticoreclient.NewPercolateRequest(percolateRequestQuery)
+res, _, _ := apiClient.SearchAPI.Percolate(context.Background(), "test_pq").PercolateRequest(*percolateRequest).Execute()
+
+```
+<!-- response Go -->
+``` go
+{
+  "took": 0,
+  "timed_out": false,
+  "hits": {
+    "total": 2,
+    "hits": [
+      {
+        "table": "test_pq",
+        "_type": "doc",
+        "_id": 1657852401006149661,
+        "_score": "1",
+        "_source": {
+          "query": {
+            "ql": "@title bag"
+          }
+        },
+        "fields": {
+          "_percolator_document_slot": [
+            1
+          ]
+        }
+      },
+      {
+        "table": "test_pq",
+        "_type": "doc",
+        "_id": 1657852401006149662,
+        "_score": "1",
+        "_source": {
+          "query": {
+            "ql": "@title shoes"
+          }
+        },
+        "fields": {
+          "_percolator_document_slot": [
+            1
+          ]
+        }
+      }
+    ]
+  }
+}
+```
+
+<!-- end -->
+
+在上一个示例中，我们使用了默认的 **稀疏** 模式。为了演示 **分片** 模式，让我们创建一个由 2 个本地 PQ 表组成的分布式 PQ 表，并将 2 个文档添加到 "products1" ，将 1 个文档添加到 "products2" :
+```sql
+create table products1(title text, color string) type='pq';
+create table products2(title text, color string) type='pq';
+create table products_distributed type='distributed' local='products1' local='products2';
+
+INSERT INTO products1(query) values('@title bag');
+INSERT INTO products1(query,filters) values('@title shoes', 'color='red'');
+INSERT INTO products2(query,filters) values('@title shoes', 'color in ('blue', 'green')');
+```
+
+<!-- example sharded -->
+现在，如果您将 `'sharded' as mode` 添加到 `CALL PQ` 中，它将把文档发送到所有代理的表（在这种情况下，仅为本地表，但它们可以是远程的以利用外部硬件）。此模式在 JSON 接口中不可用。
 # 渗透查询
 
 渗透查询也被称为持久查询、前瞻性搜索、文档路由、反向搜索和逆向搜索。

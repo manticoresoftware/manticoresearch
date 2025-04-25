@@ -1,5 +1,703 @@
 # 设置复制
 
+使用Manticore，写事务（如`INSERT`、`REPLACE`、`DELETE`、`TRUNCATE`、`UPDATE`、`COMMIT`）可以在当前节点完全应用之前复制到其他集群节点。目前，Linux和macOS上支持`percolate`、`rt`和`distributed`表的复制。
+
+Manticore的[原生Windows二进制文件](../../Installation/Windows.md#Installing-Manticore-as-native-Windows-binaries)不支持复制。我们建议[通过WSL安装Manticore](../../Installation/Windows.md#Installing-or-enabling-WSL2)（Windows子系统Linux）。
+
+在[macOS](../../Installation/MacOS.md)上，复制的支持有限，仅建议用于开发目的。
+
+Manticore的复制由[Galera库](https://github.com/codership/galera)提供动力，并拥有多个令人印象深刻的功能：
+
+* 真正的多主：可以随时对任何节点进行读写。
+* [几乎同步的复制](https://galeracluster.com/library/documentation/overview.html)，没有从属延迟，节点崩溃后不会丢失数据。
+* 热备用：在故障转移期间没有停机时间（因为没有故障转移）。
+* 紧密耦合：所有节点保持相同的状态，节点之间不允许有分歧数据。
+* 自动节点配置：无需手动备份数据库并在新节点上恢复。
+* 易于使用和部署。
+* 检测和自动驱逐不可靠的节点。
+* 基于证书的复制。
+
+设置Manticore Search中的复制：
+
+* 配置文件的“searchd”部分必须设置[data_dir](../../Server_settings/Searchd.md#data_dir)选项。普通模式不支持复制。
+* 必须指定一个[listen](../../Server_settings/Searchd.md#listen)指令，包含其他节点可访问的IP地址，或一个可访问的IP地址的[node_address](../../Server_settings/Searchd.md#node_address)。
+* 可选地，您可以在每个集群节点上设置唯一的[server_id](../../Server_settings/Searchd.md#server_id)值。如果未设置值，该节点将尝试使用MAC地址或随机数生成`server_id`。
+
+如果没有设置`replication` [listen](../../Server_settings/Searchd.md#listen)指令，Manticore将在每个创建的集群的默认协议监听端口之后的200个端口范围内使用前两个空闲端口。要手动设置复制端口，必须定义[listen](../../Server_settings/Searchd.md#listen)指令（`replication`类型）的端口范围，并且相同服务器上的不同节点之间的地址/端口范围对不能相交。一般来说，端口范围应至少为每个集群指定两个端口。当您定义具有端口范围的复制监听器（例如，`listen = 192.168.0.1:9320-9328:replication`）时，Manticore不会立即开始监听这些端口。相反，只有在您开始使用复制时，它才会从指定范围中随机选择空闲端口。
+
+## 复制集群
+
+复制集群是一组节点，在这些节点中写事务被复制。复制是在每个表的基础上设置的，这意味着一个表只能属于一个集群。集群可以拥有的表数量没有限制。在属于集群的任何percolate或实时表上的所有事务（如`INSERT`、`REPLACE`、`DELETE`、`TRUNCATE`）都会复制到该集群的所有其他节点。[分布式](../../Creating_a_table/Creating_a_distributed_table/Creating_a_distributed_table.md#Creating-a-distributed-table)表也可以是复制过程的一部分。复制是多主的，因此对任何节点或多个节点同时写入同样有效。
+
+要创建集群，通常可以使用命令[create cluster](../../Creating_a_cluster/Setting_up_replication/Creating_a_replication_cluster.md#Creating-a-replication-cluster)与`CREATE CLUSTER <cluster name>`，要加入集群，可以使用[join cluster](../../Creating_a_cluster/Setting_up_replication/Joining_a_replication_cluster.md#Joining-a-replication-cluster)与`JOIN CLUSTER <cluster name> at 'host:port'`。但是，在一些少见的情况下，您可能希望微调`CREATE/JOIN CLUSTER`的行为。可用的选项有：
+
+### name
+
+该选项指定集群的名称。它在系统中的所有集群中应该是唯一的。
+
+> **注意：** `JOIN`命令的最大可允许主机名长度为**253**个字符。如果您超过此限制，searchd将生成错误。
+
+### path
+
+path选项指定用于[写集缓存复制](https://galeracluster.com/library/documentation/state-transfer.html#state-transfer-gcache)和来自其他节点的传入表的数据目录。此值在系统中的所有集群中应唯一，并应以相对路径指定[data_dir](../../Server_settings/Searchd.md#data_dir)。目录。默认情况下，它设置为[data_dir](../../Server_settings/Searchd.md#data_dir)的值。
+
+### nodes
+
+`nodes`选项是集群中所有节点的地址:端口对的列表，用逗号分隔。该列表应使用节点的API接口获取，并且可以包括当前节点的地址。它用于将节点加入集群并在重启后重新加入。
+
+### options
+
+`options`选项允许您直接将额外选项传递给Galera复制插件，如[Galera文档参数](https://galeracluster.com/library/documentation/galera-parameters.html)中所述。
+
+## 写语句
+
+<!-- example write statements 1 -->
+在使用复制集群时，所有修改集群表内容的写入语句，例如 `INSERT`、`REPLACE`、`DELETE`、`TRUNCATE`、`UPDATE` 必须使用 `cluster_name:table_name` 表达式，而不是表名。这确保了更改会传播到集群中的所有副本。如果未使用正确的表达式，将触发错误。
+
+在 JSON 接口中，所有写入集群表的语句必须同时设置 `cluster` 属性和 `table` 名称。如果未设置 `cluster` 属性，将导致错误。
+
+集群中表的 [Auto ID](../../Data_creation_and_modification/Adding_documents_to_a_table/Adding_documents_to_a_real-time_table.md#Auto-ID) 只要 [server_id](../../Server_settings/Searchd.md#server_id) 配置正确，就应该是有效的。
+
+<!-- intro -->
+##### SQL:
+
+<!-- request SQL -->
+
+```sql
+INSERT INTO posts:weekly_index VALUES ( 'iphone case' )
+TRUNCATE RTINDEX click_query:weekly_index
+UPDATE INTO posts:rt_tags SET tags=(101, 302, 304) WHERE MATCH ('use') AND id IN (1,101,201)
+DELETE FROM clicks:rt WHERE MATCH ('dumy') AND gid>206
+```
+
+<!-- request JSON -->
+
+```json
+POST /insert -d '
+{
+  "cluster":"posts",
+  "table":"weekly_index",
+  "doc":
+  {
+    "title" : "iphone case",
+    "price" : 19.85
+  }
+}'
+POST /delete -d '
+{
+  "cluster":"posts",
+  "table": "weekly_index",
+  "id":1
+}'
+```
+
+<!-- request PHP -->
+
+```php
+$index->addDocuments([
+        1, ['title' => 'iphone case', 'price' => 19.85]
+]);
+$index->deleteDocument(1);
+```
+
+<!-- intro -->
+##### Python:
+
+<!-- request Python -->
+
+``` python
+indexApi.insert({"cluster":"posts","table":"weekly_index","doc":{"title":"iphone case","price":19.85}})
+indexApi.delete({"cluster":"posts","table":"weekly_index","id":1})
+```
+
+<!-- intro -->
+##### Python-asyncio:
+
+<!-- request Python-asyncio -->
+
+``` python
+await indexApi.insert({"cluster":"posts","table":"weekly_index","doc":{"title":"iphone case","price":19.85}})
+await indexApi.delete({"cluster":"posts","table":"weekly_index","id":1})
+```
+
+<!-- intro -->
+##### Javascript:
+
+<!-- request Javascript -->
+
+``` javascript
+res = await indexApi.insert({"cluster":"posts","table":"weekly_index","doc":{"title":"iphone case","price":19.85}});
+ res = await indexApi.delete({"cluster":"posts","table":"weekly_index","id":1});
+```
+
+<!-- intro -->
+##### java:
+
+<!-- request Java -->
+
+``` java
+InsertDocumentRequest newdoc = new InsertDocumentRequest();
+HashMap<String,Object> doc = new HashMap<String,Object>(){{
+    put("title","Crossbody Bag with Tassel");
+    put("price",19.85);
+}};
+newdoc.index("weekly_index").cluster("posts").id(1L).setDoc(doc);
+sqlresult = indexApi.insert(newdoc);
+
+DeleteDocumentRequest deleteRequest = new DeleteDocumentRequest();
+deleteRequest.index("weekly_index").cluster("posts").setId(1L);
+indexApi.delete(deleteRequest);
+
+```
+
+<!-- intro -->
+##### C#:
+
+<!-- request C# -->
+
+``` clike
+Dictionary<string, Object> doc = new Dictionary<string, Object>();
+doc.Add("title", "Crossbody Bag with Tassel");
+doc.Add("price", 19.85);
+InsertDocumentRequest newdoc = new InsertDocumentRequest(table: "weekly_index", cluster:posts, id: 1, doc: doc);
+var sqlresult = indexApi.Insert(newdoc);
+
+DeleteDocumentRequest deleteDocumentRequest = new DeleteDocumentRequest(table: "weekly_index", cluster: "posts", id: 1);
+indexApi.Delete(deleteDocumentRequest);
+```
+
+<!-- intro -->
+##### Rust:
+
+<!-- request Rust -->
+
+``` rust
+let mut doc = HashMap::new();
+doc.insert("title".to_string(), serde_json::json!("Crossbody Bag with Tassel"));
+doc.insert("price".to_string(), serde_json::json!(19.85));
+let insert_req = InsertDocumentRequest {
+    table: serde_json::json!("weekly_index"),
+    doc: serde_json::json!(doc),
+    cluster: serde_json::json!("posts"),
+    id: serde_json::json!(1),
+};
+let insert_res = index_api.insert(insert_req).await;
+
+let delete_req = DeleteDocumentRequest {
+    table: serde_json::json!("weekly_index"),
+    cluster: serde_json::json!("posts"),
+    id: serde_json::json!(1),
+};
+index_api.delete(delete_req).await;
+```
+
+<!-- end -->
+
+## 读取语句
+
+<!-- example write statements 2 -->
+读取语句，例如 `SELECT`、`CALL PQ`、`DESCRIBE` 可以使用不带集群名的常规表名，也可以使用 `cluster_name:table_name` 格式。如果使用后者，`cluster_name` 组件将被忽略。
+
+使用 HTTP 端点 `json/search` 时，`cluster` 属性可以根据需要指定，但也可以省略。
+
+
+<!-- intro -->
+##### SQL:
+
+<!-- request SQL -->
+
+```sql
+SELECT * FROM weekly_index
+CALL PQ('posts:weekly_index', 'document is here')
+```
+
+<!-- request JSON -->
+
+```json
+POST /search -d '
+{
+  "cluster":"posts",
+  "table":"weekly_index",
+  "query":{"match":{"title":"keyword"}}
+}'
+POST /search -d '
+{
+  "table":"weekly_index",
+  "query":{"match":{"title":"keyword"}}
+}'
+```
+
+<!-- end -->
+
+## 集群参数
+
+<!-- example cluster parameters 1 -->
+复制插件选项可以使用 `SET` 语句进行调整。
+
+可用选项的列表可以在 [Galera Documentation Parameters](https://galeracluster.com/library/documentation/galera-parameters.html) 中找到。
+
+
+<!-- intro -->
+##### SQL:
+
+<!-- request SQL -->
+
+```sql
+SET CLUSTER click_query GLOBAL 'pc.bootstrap' = 1
+```
+<!-- request JSON -->
+
+```json
+POST /cli -d "
+SET CLUSTER click_query GLOBAL 'pc.bootstrap' = 1
+"
+```
+<!-- end -->
+
+## 分化节点的集群
+
+<!-- example cluster with diverged nodes  1 -->
+有可能复制节点会彼此偏离，导致所有节点都被标记为 `non-primary`。这可能是由于节点之间的网络分裂、集群崩溃，或在确定 `primary component` 时复制插件出现异常所致。在这种情况下，必须选择一个节点并将其提升为 `primary component`。
+
+为了识别需要被提升的节点，你应该比较所有节点上 `last_committed` 集群状态变量的值。如果所有服务器当前都在运行，则无需重启集群。而是可以简单地使用 `SET` 语句（如示例所示），将 `last_committed` 值最高的节点提升为 `primary component`。
+
+其他节点随后会重新连接到 primary component，并基于该节点重新同步它们的数据.
+
+
+<!-- intro -->
+##### SQL:
+
+<!-- request SQL -->
+
+```sql
+SET CLUSTER posts GLOBAL 'pc.bootstrap' = 1
+```
+<!-- request JSON -->
+
+```json
+POST /cli -d "
+
+SET CLUSTER posts GLOBAL 'pc.bootstrap' = 1
+
+"
+```
+<!-- end -->
+
+## Replication and cluster
+
+<!-- example replication and cluster 1 -->
+要使用复制功能，你需要在配置文件中为 SphinxAPI 协议定义一个 [listen](../../Server_settings/Searchd.md#listen) 端口，并为复制地址和端口范围定义另一个 [listen](../../Server_settings/Searchd.md#listen)。另外，还需要指定 [data_dir](../../Server_settings/Searchd.md#data_dir) 文件夹来接收传入的表。
+
+
+<!-- intro -->
+##### ini:
+
+<!-- request ini -->
+```ini
+searchd {
+
+  listen   = 9312
+
+  listen   = 192.168.1.101:9360-9370:replication
+
+  data_dir = /var/lib/manticore/
+
+  ...
+
+ }
+```
+<!-- end -->
+
+<!-- example replication and cluster 2 -->
+要复制表，你必须在具有需要复制的本地表的服务器上创建一个集群.
+
+<!-- intro -->
+##### SQL:
+
+<!-- request SQL -->
+
+```sql
+CREATE CLUSTER posts
+```
+
+<!-- request JSON -->
+
+```json
+POST /cli -d "
+
+CREATE CLUSTER posts
+
+"
+```
+
+<!-- request PHP -->
+
+```php
+$params = [
+
+    'cluster' => 'posts'
+
+    ]
+];
+$response = $client->cluster()->create($params);
+```
+<!-- intro -->
+##### Python:
+
+<!-- request Python -->
+
+```python
+utilsApi.sql('CREATE CLUSTER posts')
+```
+
+<!-- intro -->
+##### Python-asyncio:
+
+<!-- request Python-asyncio -->
+
+```python
+await utilsApi.sql('CREATE CLUSTER posts')
+```
+
+<!-- intro -->
+##### Javascript:
+
+<!-- request Javascript -->
+
+```javascript
+res = await utilsApi.sql('CREATE CLUSTER posts');
+```
+
+<!-- intro -->
+##### Java:
+
+<!-- request Java -->
+
+```java
+utilsApi.sql("CREATE CLUSTER posts");
+
+```
+
+<!-- intro -->
+##### C#:
+
+<!-- request C# -->
+
+```clike
+utilsApi.Sql("CREATE CLUSTER posts");
+```
+
+<!-- intro -->
+##### Rust:
+
+<!-- request Rust -->
+
+```rust
+utils_api.sql("CREATE CLUSTER posts", Some(true)).await;
+```
+
+<!-- end -->
+
+<!-- example replication and cluster 3 -->
+将这些本地表添加到集群中
+
+
+<!-- intro -->
+##### SQL:
+
+<!-- request SQL -->
+
+```sql
+ALTER CLUSTER posts ADD pq_title
+
+ALTER CLUSTER posts ADD pq_clicks
+```
+
+<!-- request JSON -->
+
+```json
+POST /cli -d "
+
+ALTER CLUSTER posts ADD pq_title
+
+"
+
+POST /cli -d "
+
+ALTER CLUSTER posts ADD pq_clicks
+
+"
+```
+
+<!-- request PHP -->
+
+```php
+$params = [
+  'cluster' => 'posts',
+  'body' => [
+     'operation' => 'add',
+     'table' => 'pq_title'
+
+  ]
+];
+$response = $client->cluster()->alter($params);
+$params = [
+  'cluster' => 'posts',
+  'body' => [
+     'operation' => 'add',
+     'table' => 'pq_clicks'
+
+  ]
+];
+$response = $client->cluster()->alter($params);   
+```
+<!-- intro -->
+##### Python:
+
+<!-- request Python -->
+
+```python
+utilsApi.sql('ALTER CLUSTER posts ADD pq_title')
+utilsApi.sql('ALTER CLUSTER posts ADD pq_clicks')
+```
+
+<!-- intro -->
+##### Python-asyncio:
+
+<!-- request Python-asyncio -->
+
+```python
+await utilsApi.sql('ALTER CLUSTER posts ADD pq_title')
+await utilsApi.sql('ALTER CLUSTER posts ADD pq_clicks')
+```
+
+<!-- intro -->
+##### Javascript:
+
+<!-- request Javascript -->
+
+```javascript
+res = await utilsApi.sql('ALTER CLUSTER posts ADD pq_title');
+res = await utilsApi.sql('ALTER CLUSTER posts ADD pq_clicks');
+```
+
+<!-- intro -->
+##### Java:
+
+<!-- request Java -->
+
+```java
+utilsApi.sql("ALTER CLUSTER posts ADD pq_title");
+utilsApi.sql("ALTER CLUSTER posts ADD pq_clicks");
+```
+
+<!-- intro -->
+##### C#:
+
+<!-- request C# -->
+
+```clike
+utilsApi.Sql("ALTER CLUSTER posts ADD pq_title");
+utilsApi.Sql("ALTER CLUSTER posts ADD pq_clicks");
+```
+
+<!-- intro -->
+##### Rust:
+
+<!-- request Rust -->
+
+```rust
+utils_api.sql("ALTER CLUSTER posts ADD pq_title", Some(true)).await;
+utils_api.sql("ALTER CLUSTER posts ADD pq_clicks", Some(true)).await;
+```
+
+<!-- end -->
+
+<!-- example replication and cluster 4 -->
+所有希望接收集群表副本的其他节点应按照以下方式加入集群:
+
+
+<!-- intro -->
+##### SQL:
+
+<!-- request SQL -->
+
+```sql
+JOIN CLUSTER posts AT '192.168.1.101:9312'
+```
+
+<!-- request JSON -->
+
+```json
+POST /cli -d "
+
+JOIN CLUSTER posts AT '192.168.1.101:9312'
+
+"
+```
+
+<!-- request PHP -->
+
+```php
+$params = [
+  'cluster' => 'posts',
+  'body' => [
+      '192.168.1.101:9312'
+  ]
+];
+$response = $client->cluster->join($params);
+```
+<!-- intro -->
+##### Python:
+
+<!-- request Python -->
+
+```python
+utilsApi.sql('JOIN CLUSTER posts AT '192.168.1.101:9312'')
+```
+
+<!-- intro -->
+##### Python-asyncio:
+
+<!-- request Python-asyncio -->
+
+```python
+await utilsApi.sql('JOIN CLUSTER posts AT '192.168.1.101:9312'')
+```
+
+<!-- intro -->
+##### Javascript:
+
+<!-- request Javascript -->
+
+```javascript
+res = await utilsApi.sql('JOIN CLUSTER posts AT '192.168.1.101:9312'');
+```
+
+<!-- intro -->
+##### Java:
+
+<!-- request Java -->
+
+```java
+utilsApi.sql("JOIN CLUSTER posts AT '192.168.1.101:9312'");
+
+```
+
+<!-- intro -->
+##### C#:
+
+<!-- request C# -->
+
+```clike
+utilsApi.Sql("JOIN CLUSTER posts AT '192.168.1.101:9312'");
+
+```
+
+<!-- intro -->
+##### Rust:
+
+<!-- request Rust -->
+
+```rust
+utils_api.sql("JOIN CLUSTER posts AT '192.168.1.101:9312'", Some(true)).await;
+
+```
+<!-- end -->
+
+<!-- example replication and cluster 5 -->
+运行查询时，使用集群名称 `posts` 作为表名前缀：或使用 HTTP 请求对象的 `cluster` 属性。
+
+
+<!-- intro -->
+##### SQL:
+
+<!-- request SQL -->
+
+```sql
+INSERT INTO posts:pq_title VALUES ( 3, 'test me' )
+```
+
+<!-- request JSON -->
+
+```json
+POST /insert -d '
+{
+  "cluster":"posts",
+  "table":"pq_title",
+  "id": 3
+  "doc":
+  {
+    "title" : "test me"
+  }
+}'
+```
+
+<!-- request PHP -->
+
+```php
+$index->addDocuments([
+        3, ['title' => 'test me']
+]);
+
+```
+<!-- intro -->
+##### Python:
+
+<!-- request Python -->
+
+``` python
+indexApi.insert({"cluster":"posts","table":"pq_title","id":3"doc":{"title":"test me"}})
+
+```
+
+<!-- intro -->
+##### Python-asyncio:
+
+<!-- request Python-asyncio -->
+
+``` python
+await indexApi.insert({"cluster":"posts","table":"pq_title","id":3"doc":{"title":"test me"}})
+```
+
+<!-- intro -->
+##### Javascript:
+
+<!-- request Javascript -->
+
+``` javascript
+res = await indexApi.insert({"cluster":"posts","table":"pq_title","id":3"doc":{"title":"test me"}});
+```
+
+<!-- intro -->
+##### java:
+
+<!-- request Java -->
+
+``` java
+InsertDocumentRequest newdoc = new InsertDocumentRequest();
+HashMap<String,Object> doc = new HashMap<String,Object>(){{
+    put("title","test me");
+}};
+newdoc.index("pq_title").cluster("posts").id(3L).setDoc(doc);
+sqlresult = indexApi.insert(newdoc);
+```
+
+<!-- intro -->
+##### C#:
+
+<!-- request C# -->
+
+``` clike
+Dictionary<string, Object> doc = new Dictionary<string, Object>();
+doc.Add("title", "test me");
+InsertDocumentRequest newdoc = new InsertDocumentRequest(index: "pq_title", cluster: "posts", id: 3, doc: doc);
+var sqlresult = indexApi.Insert(newdoc);
+```
+
+<!-- intro -->
+# 设置复制
+
 使用 Manticore，写事务（例如 `INSERT`、`REPLACE`、`DELETE`、`TRUNCATE`、`UPDATE`、`COMMIT`）可以在当前节点完全应用之前复制到其他集群节点。目前，在 Linux 和 macOS 上，`percolate`、`rt` 和 `distributed` 表支持复制。
 
 Manticore 的原生 Windows 二进制文件不支持复制。我们建议[通过 WSL 安装 Manticore](../../Installation/Windows.md#Installing-or-enabling-WSL2)（Windows 子系统 for Linux）。

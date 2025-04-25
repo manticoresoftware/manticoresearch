@@ -3,15 +3,15 @@
 ## СТАТУС
 
 <!-- example status -->
-Самый простой способ получить информацию о вашем узле Manticore — это выполнить команду `status` в клиенте MySQL. Она отобразит информацию о различных аспектах, таких как:
+Самый простой способ просмотра информации высокого уровня о вашем узле Manticore — это выполнить команду `status` в клиенте MySQL. Это отобразит информацию о различных аспектах, таких как:
 * Текущая версия
-* Используется ли SSL или нет
-* Текущий TCP порт/Unix сокет
+* Включён ли SSL или нет
+* Текущий TCP-порт/Unix-сокет
 * Время работы
 * Количество [потоков](../Server_settings/Searchd.md#threads)
 * Количество [задач в очереди](../Server_settings/Searchd.md#jobs_queue_size)
-* Количество соединений (`clients`)
-* Количество задач, которые в данный момент обрабатываются
+* Количество подключений (`clients`)
+* Количество задач, которые в настоящее время обрабатываются
 * Количество запросов, выполненных с момента старта
 * Количество задач в очереди и количество задач, нормализованных по количеству потоков
 
@@ -28,7 +28,7 @@ mysql  Ver 14.14 Distrib 5.7.30, for Linux (x86_64) using  EditLine wrapper
 Connection id:		378
 Current database:	Manticore
 Current user:		Usual
-SSL:			Не используется
+SSL:			Not in use
 Current pager:		stdout
 Using outfile:		''
 Using delimiter:	;
@@ -58,7 +58,7 @@ SHOW STATUS [ LIKE pattern ]
 
 <!-- example show status -->
 
-`SHOW STATUS` — это SQL-запрос, который представляет различные полезные счетчики производительности. Счетчики IO и CPU будут доступны только в том случае, если `searchd` был запущен с переключателями `--iostats` и `--cpustats` соответственно (или если они были включены с помощью `SET GLOBAL iostats/cpustats=1`).
+`SHOW STATUS` - это SQL-запрос, который представляет различные полезные счётчики производительности. Счётчики ввода-вывода и CPU будут доступны только если `searchd` был запущен с переключателями `--iostats` и `--cpustats`, соответственно (или если они были включены через `SET GLOBAL iostats/cpustats=1`).
 
 <!-- intro -->
 ##### SQL:
@@ -127,21 +127,21 @@ SHOW STATUS;
 | load_primary                  | 0.00 0.00 0.00                                                                                                                                 |
 | load_secondary                | 0.00 0.00 0.00                                                                                                                                 |
 | query_wall                    | 0.000                                                                                                                                          |
-| query_cpu                     | ВЫКЛ                                                                                                                                            |
+| query_cpu                     | OFF                                                                                                                                            |
 | dist_wall                     | 0.000                                                                                                                                          |
 | dist_local                    | 0.000                                                                                                                                          |
 | dist_wait                     | 0.000                                                                                                                                          |
-| query_reads                   | ВЫКЛ                                                                                                                                            |
-| query_readkb                  | ВЫКЛ                                                                                                                                            |
-| query_readtime                | ВЫКЛ                                                                                                                                            |
+| query_reads                   | OFF                                                                                                                                            |
+| query_readkb                  | OFF                                                                                                                                            |
+| query_readtime                | OFF                                                                                                                                            |
 | avg_query_wall                | 0.000                                                                                                                                          |
-| avg_query_cpu                 | ВЫКЛ                                                                                                                                            |
+| avg_query_cpu                 | OFF                                                                                                                                            |
 | avg_dist_wall                 | 0.000                                                                                                                                          |
 | avg_dist_local                | 0.000                                                                                                                                          |
 | avg_dist_wait                 | 0.000                                                                                                                                          |
-| avg_query_reads               | ВЫКЛ                                                                                                                                            |
-| avg_query_readkb              | ВЫКЛ                                                                                                                                            |
-| avg_query_readtime            | ВЫКЛ                                                                                                                                            |
+| avg_query_reads               | OFF                                                                                                                                            |
+| avg_query_readkb              | OFF                                                                                                                                            |
+| avg_query_readtime            | OFF                                                                                                                                            |
 | qcache_max_bytes              | 16777216                                                                                                                                       |
 | qcache_thresh_msec            | 3000                                                                                                                                           |
 | qcache_ttl_sec                | 60                                                                                                                                             |
@@ -155,7 +155,7 @@ SHOW STATUS;
 
 <!-- example show status like -->
 
-Дополнительный оператор `LIKE` поддерживается, позволяя вам выбирать только переменные, которые соответствуют определенному шаблону. Синтаксис шаблона следует стандартным подстановочным символам SQL, где `%` представляет любое количество любых символов, а `_` представляет один символ.
+Поддерживается необязательный оператор `LIKE`, который позволяет вам выбирать только те переменные, которые совпадают с определённым шаблоном. Синтаксис шаблона следует стандартным символам подстановки SQL, где `%` представляет любое количество любых символов, а `_` представляет один символ.
 
 <!-- request qcache -->
 
@@ -199,33 +199,33 @@ SHOW STATUS LIKE '%stats_ms%';
 | search_stats_ms_pct95         | N/A 0.278 0.278   |
 | search_stats_ms_pct99         | N/A 0.278 0.278   |
 | update_stats_ms_avg           | N/A 0.024 0.024   |
-| update_stats_ms_min           | Н/Д 0.007 0.007   |
-| update_stats_ms_max           | Н/Д 0.042 0.042   |
-| update_stats_ms_pct95         | Н/Д 0.042 0.042   |
-| update_stats_ms_pct99         | Н/Д 0.042 0.042   |
+| update_stats_ms_min           | N/A 0.007 0.007   |
+| update_stats_ms_max           | N/A 0.042 0.042   |
+| update_stats_ms_pct95         | N/A 0.042 0.042   |
+| update_stats_ms_pct99         | N/A 0.042 0.042   |
 +-------------------------------+-------------------+
 ```
 
 <!-- end -->
 
-### Статистика времени запроса
+### Статистика времени запросов
 
 <!-- example show status like stats_ms -->
 
-Команда `SHOW STATUS` предоставляет подробный отчет о различных показателях производительности в Manticore, включая статистику времени запроса для вставки/замены, поиска и обновления запросов. Эти статистические данные рассчитываются за скользящие интервалы в 1, 5 и 15 минут, показывая средние, минимальные, максимальные значения, а также 95-й и 99-й процентили для времени запросов.
+Команда `SHOW STATUS` предоставляет подробный отчёт о различных метриках производительности в Manticore, включая статистику времени запросов для вставки/замены, поиска и обновления запросов. Эти статистические данные рассчитываются за скользящие интервалы в 1, 5 и 15 минут, показывая средние, минимальные, максимальные значения и 95-й/99-й процентиль для времени запросов.
 
-Эти метрики помогают отслеживать производительность за конкретные временные интервалы, облегчая обнаружение тенденций во времени отклика запросов и поиск возможных узких мест.
+Эти метрики помогают отслеживать производительность за определённые временные интервалы, облегчая выявление трендов во времени отклика запросов и возможных узких мест.
 
-Следующие метрики являются частью вывода команды `SHOW STATUS`:
+Следующие метрики являются частью вывода `SHOW STATUS`:
 - `*_avg`: Среднее время запроса для каждого типа запроса за последние 1, 5 и 15 минут.
-- `*_min`: Кратчайшее время запроса, зафиксированное для каждого типа запроса.
-- `*_max`: Наиболее длительное время запроса, зафиксированное для каждого типа запроса.
-- `*_pct95`: Время, в течение которого завершены 95% запросов.
-- `*_pct99`: Время, в течение которого завершены 99% запросов.
+- `*_min`: Самое короткое время запроса, зарегистрированное для каждого типа запроса.
+- `*_max`: Самое длительное время запроса, зарегистрированное для каждого типа запроса.
+- `*_pct95`: Время, в течение которого 95% запросов завершаются.
+- `*_pct99`: Время, в течение которого 99% запросов завершаются.
 
-Эти статистические данные предоставляются отдельно для вставки/замены (`insert_replace_stats_*`), поиска (`search_stats_*`) и обновления (`update_stats_*`) запросов, предлагая подробные сведения о производительности различных операций.
+Эти статистические данные предоставляются отдельно для вставки/замены (`insert_replace_stats_*`), поиска (`search_stats_*`) и обновления (`update_stats_*`) запросов, предлагая подробное представление о производительности различных операций.
 
-Если в течение контролируемого интервала не было выполнено запросов, система отобразит `Н/Д`.
+Если во время контролируемого интервала не было выполнено запросов, система отобразит `N/A`.
 
 <!-- request perf_stats -->
 
@@ -238,35 +238,35 @@ SHOW STATUS LIKE '%stats_ms%';
 +-------------------------------+-------------------+
 | Counter                       | Value             |
 +-------------------------------+-------------------+
-| insert_replace_stats_ms_avg   | Н/Д 35.895 35.895 |
-| insert_replace_stats_ms_min   | Н/Д 0.096 0.096   |
-| insert_replace_stats_ms_max   | Н/Д 85.154 85.154 |
-| insert_replace_stats_ms_pct95 | Н/Д 42.625 42.625 |
-| insert_replace_stats_ms_pct99 | Н/Д 42.625 42.625 |
-| search_stats_ms_avg           | Н/Д 0.188 0.188   |
-| search_stats_ms_min           | Н/Д 0.058 0.058   |
-| search_stats_ms_max           | Н/Д 0.278 0.278   |
-| search_stats_ms_pct95         | Н/Д 0.278 0.278   |
-| search_stats_ms_pct99         | Н/Д 0.278 0.278   |
-| update_stats_ms_avg           | Н/Д 0.024 0.024   |
-| update_stats_ms_min           | Н/Д 0.007 0.007   |
-| update_stats_ms_max           | Н/Д 0.042 0.042   |
-| update_stats_ms_pct95         | Н/Д 0.042 0.042   |
-| update_stats_ms_pct99         | Н/Д 0.042 0.042   |
+| insert_replace_stats_ms_avg   | N/A 35.895 35.895 |
+| insert_replace_stats_ms_min   | N/A 0.096 0.096   |
+| insert_replace_stats_ms_max   | N/A 85.154 85.154 |
+| insert_replace_stats_ms_pct95 | N/A 42.625 42.625 |
+| insert_replace_stats_ms_pct99 | N/A 42.625 42.625 |
+| search_stats_ms_avg           | N/A 0.188 0.188   |
+| search_stats_ms_min           | N/A 0.058 0.058   |
+| search_stats_ms_max           | N/A 0.278 0.278   |
+| search_stats_ms_pct95         | N/A 0.278 0.278   |
+| search_stats_ms_pct99         | N/A 0.278 0.278   |
+| update_stats_ms_avg           | N/A 0.024 0.024   |
+| update_stats_ms_min           | N/A 0.007 0.007   |
+| update_stats_ms_max           | N/A 0.042 0.042   |
+| update_stats_ms_pct95         | N/A 0.042 0.042   |
+| update_stats_ms_pct99         | N/A 0.042 0.042   |
 +-------------------------------+-------------------+
 ```
 
 <!-- end -->
 
-## SHOW SETTINGS
+## ПОКАЗАТЬ НАСТРОЙКИ
 
 <!-- example show settings -->
 
-`SHOW SETTINGS` — это SQL-оператор, который отображает текущие настройки из вашего конфигурационного файла. Имена настроек представлены в следующем формате: `'имя_секции_конфигурации'.'имя_настройки'`
+`SHOW SETTINGS` - это SQL-запрос, который отображает текущие настройки из вашего файла конфигурации. Имена настроек представлены в следующем формате: `'config_section_name'.'setting_name'`
 
 Результат также включает два дополнительных значения:
-- `configuration_file` - Путь к конфигурационному файлу
-- `worker_pid` - Идентификатор процесса работающего экземпляра `searchd`
+- `configuration_file` - Путь к файлу конфигурации
+- `worker_pid` - Идентификатор процесса запущенного экземпляра `searchd`
 
 <!-- intro -->
 ##### SQL:
@@ -295,19 +295,19 @@ SHOW SETTINGS;
 | common.plugin_dir        | /usr/local/lib/manticore            |
 | common.lemmatizer_base   | /usr/share/manticore/morph/         |
 +--------------------------+-------------------------------------+
-13 строк в наборе (0.00 сек)
+13 rows in set (0.00 sec)
 ```
 
 <!-- end -->
 
-## SHOW AGENT STATUS
+## ПОКАЗАТЬ СТАТУС АГЕНТА
 ```sql
 SHOW AGENT ['agent_or_index'] STATUS [ LIKE pattern ]
 ```
 
 <!-- example SHOW AGENT STATUS -->
 
-`SHOW AGENT STATUS` отображает статистику [удаленных агентов](../Creating_a_table/Creating_a_distributed_table/Remote_tables.md#agent) или распределенной таблицы. Включает значения, такие как возраст последнего запроса, последний ответ, количество различных типов ошибок и успехов и т. д. Статистика отображается для каждого агента за последние 1, 5 и 15 интервалов, каждый из которых состоит из [ha_period_karma](../Server_settings/Searchd.md#ha_period_karma) секунд.
+`SHOW AGENT STATUS` отображает статистику [удалённых агентов](../Creating_a_table/Creating_a_distributed_table/Remote_tables.md#agent) или распределённой таблицы. Это включает такие значения, как возраст последнего запроса, последний ответ, количество различных типов ошибок и успешных операций и так далее. Статистика отображается для каждого агента за последние 1, 5 и 15 интервалов, каждый из которых состоит из [ha_period_karma](../Server_settings/Searchd.md#ha_period_karma) секунд.
 
 <!-- intro -->
 ##### SQL:
@@ -417,7 +417,7 @@ Array(
 	[ag_0_5periods_warnings] => 0
 	[ag_0_5periods_succeeded_queries] => 146  
 	[ag_0_5periods_msecsperquery] => 231.83
-	[ag_1_hostname] => 192.168.0.202:6714
+	[ag_1_hostname 192.168.0.202:6714
 	[ag_1_references] => 2
 	[ag_1_lastquery] => 0.41
 	[ag_1_lastanswer] => 0.19
@@ -437,7 +437,7 @@ Array(
 	[ag_1_5periods_connect_failures] => 0
 	[ag_1_5periods_network_errors] => 0
 	[ag_1_5periods_wrong_replies] => 0
-	[ag_1_5periods_unexpected_closings] => 0
+	[ag_1_5periods_unexpected_closings
 	[ag_1_5periods_warnings] => 0
 	[ag_1_5periods_succeeded_queries] => 146  
 	[ag_1_5periods_msecsperquery] => 230.85
@@ -510,6 +510,75 @@ utilsApi.sql('SHOW AGENT STATUS')
  u'total': 0,
  u'warning': u''}
 ```
+
+<!-- intro -->
+##### Python-asyncio:
+
+<!-- request Python-asyncio -->
+
+```python
+await utilsApi.sql('SHOW AGENT STATUS')
+```
+<!-- response Python-asyncio -->
+
+```python
+{u'columns': [{u'Key': {u'type': u'string'}},
+              {u'Value': {u'type': u'string'}}],
+ u'data': [
+	{u'Key': u'status_period_seconds', u'Value': u'60'},
+	{u'Key': u'status_stored_periods', u'Value': u'15'},
+	{u'Key': u'ag_0_hostname', u'Value': u'192.168.0.202:6713'},
+	{u'Key': u'ag_0_references', u'Value': u'2'},
+	{u'Key': u'ag_0_lastquery', u'Value': u'0.41'},
+	{u'Key': u'ag_0_lastanswer', u'Value': u'0.19'},
+	{u'Key': u'ag_0_lastperiodmsec', u'Value': u'222'},
+	{u'Key': u'ag_0_errorsarow', u'Value': u'0'},
+	{u'Key': u'ag_0_1periods_query_timeouts', u'Value': u'0'},
+	{u'Key': u'ag_0_1periods_connect_timeouts', u'Value': u'0'},
+	{u'Key': u'ag_0_1periods_connect_failures', u'Value': u'0'},
+	{u'Key': u'ag_0_1periods_network_errors', u'Value': u'0'},
+	{u'Key': u'ag_0_1periods_wrong_replies', u'Value': u'0'},
+	{u'Key': u'ag_0_1periods_unexpected_closings', u'Value': u'0'},
+	{u'Key': u'ag_0_1periods_warnings', u'Value': u'0'},
+	{u'Key': u'ag_0_1periods_succeeded_queries', u'Value': u'27'},
+	{u'Key': u'ag_0_1periods_msecsperquery', u'Value': u'232.31'},
+	{u'Key': u'ag_0_5periods_query_timeouts', u'Value': u'0'},
+	{u'Key': u'ag_0_5periods_connect_timeouts', u'Value': u'0'},
+	{u'Key': u'ag_0_5periods_connect_failures', u'Value': u'0'},
+	{u'Key': u'ag_0_5periods_network_errors', u'Value': u'0'},
+	{u'Key': u'ag_0_5periods_wrong_replies', u'Value': u'0'},
+	{u'Key': u'ag_0_5periods_unexpected_closings', u'Value': u'0'},
+	{u'Key': u'ag_0_5periods_warnings', u'Value': u'0'},
+	{u'Key': u'ag_0_5periods_succeeded_queries', u'Value': u'146'},
+	{u'Key': u'ag_0_5periods_msecsperquery', u'Value': u'231.83'},
+	{u'Key': u'ag_1_hostname 192.168.0.202:6714'},
+	{u'Key': u'ag_1_references', u'Value': u'2'},
+	{u'Key': u'ag_1_lastquery', u'Value': u'0.41'},
+	{u'Key': u'ag_1_lastanswer', u'Value': u'0.19'},
+	{u'Key': u'ag_1_lastperiodmsec', u'Value': u'220'},
+	{u'Key': u'ag_1_errorsarow', u'Value': u'0'},
+	{u'Key': u'ag_1_1periods_query_timeouts', u'Value': u'0'},
+	{u'Key': u'ag_1_1periods_connect_timeouts', u'Value': u'0'},
+	{u'Key': u'ag_1_1periods_connect_failures', u'Value': u'0'},
+	{u'Key': u'ag_1_1periods_network_errors', u'Value': u'0'},
+	{u'Key': u'ag_1_1periods_wrong_replies', u'Value': u'0'},
+	{u'Key': u'ag_1_1periods_unexpected_closings', u'Value': u'0'},
+	{u'Key': u'ag_1_1periods_warnings', u'Value': u'0'},
+	{u'Key': u'ag_1_1periods_succeeded_queries', u'Value': u'27'},
+	{u'Key': u'ag_1_1periods_msecsperquery', u'Value': u'231.24'},
+	{u'Key': u'ag_1_5periods_query_timeouts', u'Value': u'0'},
+	{u'Key': u'ag_1_5periods_connect_timeouts', u'Value': u'0'},
+	{u'Key': u'ag_1_5periods_connect_failures', u'Value': u'0'},
+	{u'Key': u'ag_1_5periods_network_errors', u'Value': u'0'},
+	{u'Key': u'ag_1_5periods_wrong_replies', u'Value': u'0'},
+	{u'Key': u'ag_1_5periods_warnings', u'Value': u'0'},
+	{u'Key': u'ag_1_5periods_succeeded_queries', u'Value': u'146'},
+	{u'Key': u'ag_1_5periods_msecsperquery', u'Value': u'230.85'}],
+ u'error': u'',
+ u'total': 0,
+ u'warning': u''}
+```
+
 <!-- intro -->
 ##### Javascript:
 
@@ -558,21 +627,21 @@ res = await utilsApi.sql("SHOW AGENT STATUS");
 	{"Key": "ag_1_errorsarow", "Value": "0"},
 	{"Key": "ag_1_1periods_query_timeouts", "Value": "0"},
 	{"Key": "ag_1_1periods_connect_timeouts", "Value": "0"},
-	{u'Key': u'ag_1_1periods_connect_failures', u'Value': u'0'},
-	{u'Key': u'ag_1_1periods_network_errors', u'Value': u'0'},
-	{u'Key': u'ag_1_1periods_wrong_replies', u'Value': u'0'},
-	{u'Key': u'ag_1_1periods_unexpected_closings', u'Value': u'0'},
-	{u'Key': u'ag_1_1periods_warnings', u'Value': u'0'},
-	{u'Key': u'ag_1_1periods_succeeded_queries', u'Value': u'27'},
-	{u'Key': u'ag_1_1periods_msecsperquery', u'Value': u'231.24'},
-	{u'Key': u'ag_1_5periods_query_timeouts', u'Value': u'0'},
-	{u'Key': u'ag_1_5periods_connect_timeouts', u'Value': u'0'},
-	{u'Key': u'ag_1_5periods_connect_failures', u'Value': u'0'},
-	{u'Key': u'ag_1_5periods_network_errors', u'Value': u'0'},
-	{u'Key': u'ag_1_5periods_wrong_replies', u'Value': u'0'},
-	{u'Key': u'ag_1_5periods_warnings', u'Value': u'0'},
-	{u'Key': u'ag_1_5periods_succeeded_queries', u'Value': u'146'},
-	{u'Key': u'ag_1_5periods_msecsperquery', u'Value': u'230.85'}],
+	{"Key": "ag_1_1periods_connect_failures", "Value": "0"},
+	{"Key": "ag_1_1periods_network_errors", "Value": "0"},
+	{"Key": "ag_1_1periods_wrong_replies", "Value": "0"},
+	{"Key": "ag_1_1periods_unexpected_closings", "Value": "0"},
+	{"Key": "ag_1_1periods_warnings", "Value": "0"},
+	{"Key": "ag_1_1periods_succeeded_queries", "Value": "27"},
+	{"Key": "ag_1_1periods_msecsperquery", "Value": "231.24"},
+	{"Key": "ag_1_5periods_query_timeouts", "Value": "0"},
+	{"Key": "ag_1_5periods_connect_timeouts", "Value": "0"},
+	{"Key": "ag_1_5periods_connect_failures", "Value": "0"},
+	{"Key": "ag_1_5periods_network_errors", "Value": "0"},
+	{"Key": "ag_1_5periods_wrong_replies", "Value": "0"},
+	{"Key": "ag_1_5periods_warnings", "Value": "0"},
+	{"Key": "ag_1_5periods_succeeded_queries", "Value": "146"},
+	{"Key": "ag_1_5periods_msecsperquery", "Value": "230.85"}],
  "error": "",
  "total": 0,
  "warning": ""}
@@ -589,61 +658,61 @@ utilsApi.sql("SHOW AGENT STATUS");
 <!-- response Java -->
 
 ```java
-{columns=[{ Key : { type=string }}
-              { Value : { тип=строка }}],
-  данные : [
-	{ Ключ=период_статуса_в_секундах ,  Знание=60 },
-	{ Ключ=хранить_периоды_статуса ,  Знание=15 },
-	{ Ключ=аг_0_имя_хоста ,  Знание=192.168.0.202:6713 },
-	{ Ключ=аг_0_ссылки ,  Знание=2 },
-	{ Ключ=аг_0_последний_запрос ,  Знание=0.41 },
-	{ Ключ=аг_0_последний_ответ ,  Знание=0.19 },
-	{ Ключ=аг_0_последний_период_мс ,  Знание=222 },
-	{ Ключ=аг_0_ошибки_в_строке ,  Знание=0 },
-	{ Ключ=аг_0_1периоды_времени_запроса ,  Знание=0 },
-	{ Ключ=аг_0_1периоды_времени_подключения ,  Знание=0 },
-	{ Ключ=аг_0_1периоды_сбой_подключения ,  Знание=0 },
-	{ Ключ=аг_0_1периоды_сеть_ошибки ,  Знание=0 },
-	{ Ключ=аг_0_1периоды_неправильные_ответы ,  Знание=0 },
-	{ Ключ=аг_0_1периоды_неожиданные_закрытия ,  Знание=0 },
-	{ Ключ=аг_0_1периоды_предупреждения ,  Знание=0 },
-	{ Ключ=аг_0_1периоды_успешные_запросы ,  Знание=27 },
-	{ Ключ=аг_0_1периоды_мс_на_запрос ,  Знание=232.31 },
-	{ Ключ=аг_0_5периодов_времени_запроса ,  Знание=0 },
-	{ Ключ=аг_0_5периодов_времени_подключения ,  Знание=0 },
-	{ Ключ=аг_0_5периодов_сбой_подключения ,  Знание=0 },
-	{ Ключ=аг_0_5периодов_сеть_ошибки ,  Знание=0 },
-	{ Ключ=аг_0_5периодов_неправильные_ответы ,  Знание=0 },
-	{ Ключ=аг_0_5периодов_неожиданные_закрытия ,  Знание=0 },
-	{ Ключ=аг_0_5периодов_предупреждения ,  Знание=0 },
-	{ Ключ=аг_0_5периодов_успешные_запросы ,  Знание=146 },
-	{ Ключ=аг_0_5периодов_мс_на_запрос ,  Знание=231.83 },
-	{ Ключ=аг_1_имя_хоста 192.168.0.202:6714 },
-	{ Ключ=аг_1_ссылки ,  Знание=2 },
-	{ Ключ=аг_1_последний_запрос ,  Знание=0.41 },
-	{ Ключ=аг_1_последний_ответ ,  Знание=0.19 },
-	{ Ключ=аг_1_последний_период_мс ,  Знание=220 },
-	{ Ключ=аг_1_ошибки_в_строке ,  Знание=0 },
-	{ Ключ=аг_1_1периоды_времени_запроса ,  Знание=0 },
-	{ Ключ=аг_1_1периоды_времени_подключения ,  Знание=0 },
-	{ Ключ=аг_1_1периоды_сбой_подключения ,  Знание=0 },
-	{ Ключ=аг_1_1периоды_сеть_ошибки ,  Знание=0 },
-	{ Ключ=аг_1_1периоды_неправильные_ответы ,  Знание=0 },
-	{ Ключ=аг_1_1периоды_неожиданные_закрытия ,  Знание=0 },
-	{ Ключ=аг_1_1периоды_предупреждения ,  Знание=0 },
-	{ Ключ=аг_1_1периоды_успешные_запросы ,  Знание=27 },
-	{ Ключ=аг_1_1периоды_мс_на_запрос ,  Знание=231.24 },
-	{ Ключ=аг_1_5периодов_времени_запроса ,  Знание=0 },
-	{ Ключ=аг_1_5периодов_времени_подключения ,  Знание=0 },
-	{ Ключ=аг_1_5периодов_сбой_подключения ,  Знание=0 },
-	{ Ключ=аг_1_5периодов_сеть_ошибки ,  Знание=0 },
-	{ Ключ=аг_1_5периодов_неправильные_ответы ,  Знание=0 },
-	{ Ключ=аг_1_5периодов_предупреждения ,  Знание=0 },
-	{ Ключ=аг_1_5периодов_успешные_запросы ,  Знание=146 },
-	{ Ключ=аг_1_5периодов_мс_на_запрос ,  Знание=230.85 }],
-  ошибка= ,
-  всего=0,
-  предупреждение= }
+{columns=[{ Key : { type=string }},
+              { Value : { type=string }}],
+  data : [
+	{ Key=status_period_seconds ,  Value=60 },
+	{ Key=status_stored_periods ,  Value=15 },
+	{ Key=ag_0_hostname ,  Value=192.168.0.202:6713 },
+	{ Key=ag_0_references ,  Value=2 },
+	{ Key=ag_0_lastquery ,  Value=0.41 },
+	{ Key=ag_0_lastanswer ,  Value=0.19 },
+	{ Key=ag_0_lastperiodmsec ,  Value=222 },
+	{ Key=ag_0_errorsarow ,  Value=0 },
+	{ Key=ag_0_1periods_query_timeouts ,  Value=0 },
+	{ Key=ag_0_1periods_connect_timeouts ,  Value=0 },
+	{ Key=ag_0_1periods_connect_failures ,  Value=0 },
+	{ Key=ag_0_1periods_network_errors ,  Value=0 },
+	{ Key=ag_0_1periods_wrong_replies ,  Value=0 },
+	{ Key=ag_0_1periods_unexpected_closings ,  Value=0 },
+	{ Key=ag_0_1periods_warnings ,  Value=0 },
+	{ Key=ag_0_1periods_succeeded_queries ,  Value=27 },
+	{ Key=ag_0_1periods_msecsperquery ,  Value=232.31 },
+	{ Key=ag_0_5periods_query_timeouts ,  Value=0 },
+	{ Key=ag_0_5periods_connect_timeouts ,  Value=0 },
+	{ Key=ag_0_5periods_connect_failures ,  Value=0 },
+	{ Key=ag_0_5periods_network_errors ,  Value=0 },
+	{ Key=ag_0_5periods_wrong_replies ,  Value=0 },
+	{ Key=ag_0_5periods_unexpected_closings ,  Value=0 },
+	{ Key=ag_0_5periods_warnings ,  Value=0 },
+	{ Key=ag_0_5periods_succeeded_queries ,  Value=146 },
+	{ Key=ag_0_5periods_msecsperquery ,  Value=231.83 },
+	{ Key=ag_1_hostname 192.168.0.202:6714 },
+	{ Key=ag_1_references ,  Value=2 },
+	{ Key=ag_1_lastquery ,  Value=0.41 },
+	{ Key=ag_1_lastanswer ,  Value=0.19 },
+	{ Key=ag_1_lastperiodmsec ,  Value=220 },
+	{ Key=ag_1_errorsarow ,  Value=0 },
+	{ Key=ag_1_1periods_query_timeouts ,  Value=0 },
+	{ Key=ag_1_1periods_connect_timeouts ,  Value=0 },
+	{ Key=ag_1_1periods_connect_failures ,  Value=0 },
+	{ Key=ag_1_1periods_network_errors ,  Value=0 },
+	{ Key=ag_1_1periods_wrong_replies ,  Value=0 },
+	{ Key=ag_1_1periods_unexpected_closings ,  Value=0 },
+	{ Key=ag_1_1periods_warnings ,  Value=0 },
+	{ Key=ag_1_1periods_succeeded_queries ,  Value=27 },
+	{ Key=ag_1_1periods_msecsperquery ,  Value=231.24 },
+	{ Key=ag_1_5periods_query_timeouts ,  Value=0 },
+	{ Key=ag_1_5periods_connect_timeouts ,  Value=0 },
+	{ Key=ag_1_5periods_connect_failures ,  Value=0 },
+	{ Key=ag_1_5periods_network_errors ,  Value=0 },
+	{ Key=ag_1_5periods_wrong_replies ,  Value=0 },
+	{ Key=ag_1_5periods_warnings ,  Value=0 },
+	{ Key=ag_1_5periods_succeeded_queries ,  Value=146 },
+	{ Key=ag_1_5periods_msecsperquery ,  Value=230.85 }],
+  error= ,
+  total=0,
+  warning= }
 ```
 
 <!-- intro -->
@@ -652,66 +721,134 @@ utilsApi.sql("SHOW AGENT STATUS");
 <!-- request C# -->
 
 ```clike
-utilsApi.Sql("ПОКАЗАТЬ СТАТУС АГЕНТА");
+utilsApi.Sql("SHOW AGENT STATUS");
 ```
 <!-- response C# -->
 
 ```clike
-{columns=[{ Ключ : { тип=строка }},
-              { Знание : { тип=строка }}],
-  данные : [
-	{ Ключ=период_статуса_в_секундах ,  Знание=60 },
-	{ Ключ=хранить_периоды_статуса ,  Знание=15 },
-	{ Ключ=аг_0_имя_хоста ,  Знание=192.168.0.202:6713 },
-	{ Ключ=аг_0_ссылки ,  Знание=2 },
-	{ Ключ=аг_0_последний_запрос ,  Знание=0.41 },
-	{ Ключ=аг_0_последний_ответ ,  Знание=0.19 },
-	{ Ключ=аг_0_последний_период_мс ,  Знание=222 },
-	{ Ключ=аг_0_ошибки_в_строке ,  Знание=0 },
-	{ Ключ=аг_0_1периоды_времени_запроса ,  Знание=0 },
-	{ Ключ=аг_0_1периоды_времени_подключения ,  Знание=0 },
-	{ Ключ=аг_0_1периоды_сбой_подключения ,  Знание=0 },
-	{ Ключ=аг_0_1периоды_сеть_ошибки ,  Знание=0 },
-	{ Ключ=аг_0_1периоды_неправильные_ответы ,  Знание=0 },
-	{ Ключ=аг_0_1периоды_неожиданные_закрытия ,  Знание=0 },
-	{ Ключ=аг_0_1периоды_предупреждения ,  Знание=0 },
-	{ Ключ=аг_0_1периоды_успешные_запросы ,  Знание=27 },
-	{ Ключ=аг_0_1периоды_мс_на_запрос ,  Знание=232.31 },
-	{ Ключ=аг_0_5периодов_времени_запроса ,  Знание=0 },
-	{ Ключ=аг_0_5периодов_времени_подключения ,  Знание=0 },
-	{ Ключ=аг_0_5периодов_сбой_подключения ,  Знание=0 },
-	{ Ключ=аг_0_5периодов_сеть_ошибки ,  Знание=0 },
-	{ Ключ=аг_0_5периодов_неправильные_ответы ,  Знание=0 },
-	{ Ключ=аг_0_5периодов_неожиданные_закрытия ,  Знание=0 },
-	{ Ключ=аг_0_5периодов_предупреждения ,  Знание=0 },
-	{ Ключ=аг_0_5периодов_успешные_запросы ,  Знание=146 },
-	{ Ключ=аг_0_5периодов_мс_на_запрос ,  Знание=231.83 },
-	{ Ключ=аг_1_имя_хоста 192.168.0.202:6714 },
-	{ Ключ=аг_1_ссылки ,  Знание=2 },
-	{ Ключ=аг_1_последний_запрос ,  Знание=0.41 },
-	{ Ключ=аг_1_последний_ответ ,  Знание=0.19 },
-	{ Ключ=аг_1_последний_период_мс ,  Знание=220 },
-	{ Ключ=аг_1_ошибки_в_строке ,  Знание=0 },
-	{ Ключ=аг_1_1периоды_времени_запроса ,  Знание=0 },
-	{ Ключ=аг_1_1периоды_времени_подключения ,  Знание=0 },
-	{ Ключ=аг_1_1периоды_сбой_подключения ,  Знание=0 },
-	{ Ключ=аг_1_1периоды_сеть_ошибки ,  Знание=0 },
-	{ Ключ=аг_1_1периоды_неправильные_ответы ,  Знание=0 },
-	{ Ключ=аг_1_1периоды_неожиданные_закрытия ,  Знание=0 },
-	{ Ключ=аг_1_1периоды_предупреждения ,  Знание=0 },
-	{ Ключ=аг_1_1периоды_успешные_запросы ,  Знание=27 },
-	{ Ключ=аг_1_1периоды_мс_на_запрос ,  Знание=231.24 },
-	{ Ключ=аг_1_5периодов_времени_запроса ,  Знание=0 },
-	{ Ключ=аг_1_5периодов_времени_подключения ,  Знание=0 },
-	{ Ключ=аг_1_5периодов_сбой_подключения ,  Знание=0 },
-	{ Ключ=аг_1_5периодов_сеть_ошибки ,  Знание=0 },
-	{ Ключ=аг_1_5периодов_неправильные_ответы ,  Знание=0 },
-	{ Ключ=аг_1_5периодов_предупреждения ,  Знание=0 },
-	{ Ключ=аг_1_5периодов_успешные_запросы ,  Знание=146 },
-	{ Ключ=аг_1_5периодов_мс_на_запрос ,  Знание=230.85 }],
-  ошибка="" ,
-  всего=0,
-  предупреждение="" }
+{columns=[{ Key : { type=string }},
+              { Value : { type=string }}],
+  data : [
+	{ Key=status_period_seconds ,  Value=60 },
+	{ Key=status_stored_periods ,  Value=15 },
+	{ Key=ag_0_hostname ,  Value=192.168.0.202:6713 },
+	{ Key=ag_0_references ,  Value=2 },
+	{ Key=ag_0_lastquery ,  Value=0.41 },
+	{ Key=ag_0_lastanswer ,  Value=0.19 },
+	{ Key=ag_0_lastperiodmsec ,  Value=222 },
+	{ Key=ag_0_errorsarow ,  Value=0 },
+	{ Key=ag_0_1periods_query_timeouts ,  Value=0 },
+	{ Key=ag_0_1periods_connect_timeouts ,  Value=0 },
+	{ Key=ag_0_1periods_connect_failures ,  Value=0 },
+	{ Key=ag_0_1periods_network_errors ,  Value=0 },
+	{ Key=ag_0_1periods_wrong_replies ,  Value=0 },
+	{ Key=ag_0_1periods_unexpected_closings ,  Value=0 },
+	{ Key=ag_0_1periods_warnings ,  Value=0 },
+	{ Key=ag_0_1periods_succeeded_queries ,  Value=27 },
+	{ Key=ag_0_1periods_msecsperquery ,  Value=232.31 },
+	{ Key=ag_0_5periods_query_timeouts ,  Value=0 },
+	{ Key=ag_0_5periods_connect_timeouts ,  Value=0 },
+	{ Key=ag_0_5periods_connect_failures ,  Value=0 },
+	{ Key=ag_0_5periods_network_errors ,  Value=0 },
+	{ Key=ag_0_5periods_wrong_replies ,  Value=0 },
+	{ Key=ag_0_5periods_unexpected_closings ,  Value=0 },
+	{ Key=ag_0_5periods_warnings ,  Value=0 },
+	{ Key=ag_0_5periods_succeeded_queries ,  Value=146 },
+	{ Key=ag_0_5periods_msecsperquery ,  Value=231.83 },
+	{ Key=ag_1_hostname 192.168.0.202:6714 },
+	{ Key=ag_1_references ,  Value=2 },
+	{ Key=ag_1_lastquery ,  Value=0.41 },
+	{ Key=ag_1_lastanswer ,  Value=0.19 },
+	{ Key=ag_1_lastperiodmsec ,  Value=220 },
+	{ Key=ag_1_errorsarow ,  Value=0 },
+	{ Key=ag_1_1periods_query_timeouts ,  Value=0 },
+	{ Key=ag_1_1periods_connect_timeouts ,  Value=0 },
+	{ Key=ag_1_1periods_connect_failures ,  Value=0 },
+	{ Key=ag_1_1periods_network_errors ,  Value=0 },
+	{ Key=ag_1_1periods_wrong_replies ,  Value=0 },
+	{ Key=ag_1_1periods_unexpected_closings ,  Value=0 },
+	{ Key=ag_1_1periods_warnings ,  Value=0 },
+	{ Key=ag_1_1periods_succeeded_queries ,  Value=27 },
+	{ Key=ag_1_1periods_msecsperquery ,  Value=231.24 },
+	{ Key=ag_1_5periods_query_timeouts ,  Value=0 },
+	{ Key=ag_1_5periods_connect_timeouts ,  Value=0 },
+	{ Key=ag_1_5periods_connect_failures ,  Value=0 },
+	{ Key=ag_1_5periods_network_errors ,  Value=0 },
+	{ Key=ag_1_5periods_wrong_replies ,  Value=0 },
+	{ Key=ag_1_5periods_warnings ,  Value=0 },
+	{ Key=ag_1_5periods_succeeded_queries ,  Value=146 },
+	{ Key=ag_1_5periods_msecsperquery ,  Value=230.85 }],
+  error="" ,
+  total=0,
+  warning="" }
+```
+
+<!-- intro -->
+##### Rust:
+
+<!-- request Rust -->
+
+```clike
+utils_api.sql("SHOW AGENT STATUS", Some(true)).await;
+```
+<!-- response Rust -->
+
+```rust
+{columns=[{ Key : { type=string }},
+              { Value : { type=string }}],
+  data : [
+	{ Key=status_period_seconds ,  Value=60 },
+	{ Key=status_stored_periods ,  Value=15 },
+	{ Key=ag_0_hostname ,  Value=192.168.0.202:6713 },
+	{ Key=ag_0_references ,  Value=2 },
+	{ Key=ag_0_lastquery ,  Value=0.41 },
+	{ Key=ag_0_lastanswer ,  Value=0.19 },
+	{ Key=ag_0_lastperiodmsec ,  Value=222 },
+	{ Key=ag_0_errorsarow ,  Value=0 },
+	{ Key=ag_0_1periods_query_timeouts ,  Value=0 },
+	{ Key=ag_0_1periods_connect_timeouts ,  Value=0 },
+	{ Key=ag_0_1periods_connect_failures ,  Value=0 },
+	{ Key=ag_0_1periods_network_errors ,  Value=0 },
+	{ Key=ag_0_1periods_wrong_replies ,  Value=0 },
+	{ Key=ag_0_1periods_unexpected_closings ,  Value=0 },
+	{ Key=ag_0_1periods_warnings ,  Value=0 },
+	{ Key=ag_0_1periods_succeeded_queries ,  Value=27 },
+	{ Key=ag_0_1periods_msecsperquery ,  Value=232.31 },
+	{ Key=ag_0_5periods_query_timeouts ,  Value=0 },
+	{ Key=ag_0_5periods_connect_timeouts ,  Value=0 },
+	{ Key=ag_0_5periods_connect_failures ,  Value=0 },
+	{ Key=ag_0_5periods_network_errors ,  Value=0 },
+	{ Key=ag_0_5periods_wrong_replies ,  Value=0 },
+	{ Key=ag_0_5periods_unexpected_closings ,  Value=0 },
+	{ Key=ag_0_5periods_warnings ,  Value=0 },
+	{ Key=ag_0_5periods_succeeded_queries ,  Value=146 },
+	{ Key=ag_0_5periods_msecsperquery ,  Value=231.83 },
+	{ Key=ag_1_hostname 192.168.0.202:6714 },
+	{ Key=ag_1_references ,  Value=2 },
+	{ Key=ag_1_lastquery ,  Value=0.41 },
+	{ Key=ag_1_lastanswer ,  Value=0.19 },
+	{ Key=ag_1_lastperiodmsec ,  Value=220 },
+	{ Key=ag_1_errorsarow ,  Value=0 },
+	{ Key=ag_1_1periods_query_timeouts ,  Value=0 },
+	{ Key=ag_1_1periods_connect_timeouts ,  Value=0 },
+	{ Key=ag_1_1periods_connect_failures ,  Value=0 },
+	{ Key=ag_1_1periods_network_errors ,  Value=0 },
+	{ Key=ag_1_1periods_wrong_replies ,  Value=0 },
+	{ Key=ag_1_1periods_unexpected_closings ,  Value=0 },
+	{ Key=ag_1_1periods_warnings ,  Value=0 },
+	{ Key=ag_1_1periods_succeeded_queries ,  Value=27 },
+	{ Key=ag_1_1periods_msecsperquery ,  Value=231.24 },
+	{ Key=ag_1_5periods_query_timeouts ,  Value=0 },
+	{ Key=ag_1_5periods_connect_timeouts ,  Value=0 },
+	{ Key=ag_1_5periods_connect_failures ,  Value=0 },
+	{ Key=ag_1_5periods_network_errors ,  Value=0 },
+	{ Key=ag_1_5periods_wrong_replies ,  Value=0 },
+	{ Key=ag_1_5periods_warnings ,  Value=0 },
+	{ Key=ag_1_5periods_succeeded_queries ,  Value=146 },
+	{ Key=ag_1_5periods_msecsperquery ,  Value=230.85 }],
+  error="" ,
+  total=0,
+  warning="" }
 ```
 
 <!-- intro -->
@@ -720,32 +857,32 @@ utilsApi.Sql("ПОКАЗАТЬ СТАТУС АГЕНТА");
 <!-- request TypeScript -->
 
 ```typescript
-res = await utilsApi.sql("ПОКАЗАТЬ СТАТУС АГЕНТА");
+res = await utilsApi.sql("SHOW AGENT STATUS");
 ```
 <!-- response javascript -->
 
 ```typescript
 {
-	"колонки":
+	"columns":
 	[{
-		"Ключ":
+		"Key":
 		{
-			"тип": "строка"
+			"type": "string"
 		}
 	},
     {
-    	"Знание":
+    	"Value":
     	{
-    		"тип": "строка"
+    		"type": "string"
     	}
     }],
- 	"данные":
+ 	"data":
  	[
-		{"Ключ": "период_статуса_в_секундах", "Знание": "60"},
-		{"Ключ": "хранить_периоды_статуса", "Знание": "15"},
-		{"Ключ": "аг_0_имя_хоста", "Знание": "192.168.0.202:6713"},
-		{"Ключ": "аг_0_ссылки", "Знание": "2"},
-		{"Ключ": "аг_0_последний_запрос", "Знание": "0.41"},
+		{"Key": "status_period_seconds", "Value": "60"},
+		{"Key": "status_stored_periods", "Value": "15"},
+		{"Key": "ag_0_hostname", "Value": "192.168.0.202:6713"},
+		{"Key": "ag_0_references", "Value": "2"},
+		{"Key": "ag_0_lastquery", "Value": "0.41"},
 		{"Key": "ag_0_lastanswer", "Value": "0.19"},
 		{"Key": "ag_0_lastperiodmsec", "Value": "222"},
 		{"Key": "ag_0_errorsarow", "Value": "0"},
@@ -798,7 +935,7 @@ res = await utilsApi.sql("ПОКАЗАТЬ СТАТУС АГЕНТА");
 ```
 
 <!-- intro -->
-##### Идти:
+##### Go:
 
 <!-- request Go -->
 
@@ -885,7 +1022,7 @@ res := apiClient.UtilsAPI.Sql(context.Background()).Body("SHOW AGENT STATUS").Ex
 
 <!-- example SHOW AGENT LIKE -->
 
-Необязательный `LIKE` оператор поддерживается, синтаксис такой же, как в `SHOW STATUS`.
+Поддерживается необязательный оператор `LIKE`, синтаксис которого такой же, как и в `SHOW STATUS`.
 
 <!-- intro -->
 ##### SQL:
@@ -950,6 +1087,29 @@ utilsApi.sql('SHOW AGENT STATUS LIKE \'%5period%msec%\'')
  u'total': 0,
  u'warning': u''}
 ```
+
+<!-- intro -->
+##### Python-asyncio:
+
+<!-- request Python-asyncio -->
+
+```python
+await utilsApi.sql('SHOW AGENT STATUS LIKE \'%5period%msec%\'')
+```
+<!-- response Python-asyncio -->
+
+```python
+{u'columns': [{u'Key': {u'type': u'string'}},
+              {u'Value': {u'type': u'string'}}],
+ u'data': [
+	{u'Key': u'ag_0_5periods_msecsperquery', u'Value': u'234.72'},
+	{u'Key': u'ag_1_5periods_msecsperquery', u'Value': u'233.73'},
+	{u'Key': u'ag_2_5periods_msecsperquery', u'Value': u'343.81'}],
+ u'error': u'',
+ u'total': 0,
+ u'warning': u''}
+```
+
 <!-- intro -->
 ##### Javascript:
 
@@ -1006,6 +1166,28 @@ utilsApi.Sql("SHOW AGENT STATUS LIKE \"%5period%msec%\"");
 <!-- response C# -->
 
 ```clike
+{columns: [{Key={type=string}},
+              {Value={type=string}}],
+ data: [
+	{Key=ag_0_5periods_msecsperquery, Value=234.72},
+	{Key=ag_1_5periods_msecsperquery, Value=233.73},
+	{Key=ag_2_5periods_msecsperquery, Value=343.81}],
+ error: "",
+ total: 0,
+ warning: ""}
+```
+
+<!-- intro -->
+##### Rust:
+
+<!-- request Rust -->
+
+```rust
+utils_api.sql("SHOW AGENT STATUS LIKE \"%5period%msec%\"", Some(true)).await;
+```
+<!-- response Rust -->
+
+```rust
 {columns: [{Key={type=string}},
               {Value={type=string}}],
  data: [
@@ -1084,7 +1266,7 @@ apiClient.UtilsAPI.Sql(context.Background()).Body("SHOW AGENT STATUS LIKE \"%5pe
 
 <!-- example show specific agent -->
 
-You can specify a particular agent by its address. In this case, only that agent's data will be displayed. Additionally, the `agent_` prefix will be used instead of `ag_N_`:
+Вы можете указать конкретного агента по адресу. В этом случае будут отображены только данные этого агента. Кроме того, будет использован префикс `agent_` вместо `ag_N_`:
 
 <!-- intro -->
 ##### SQL:
@@ -1150,57 +1332,88 @@ Array(
 <!-- request Python -->
 
 ```python
-utilsApi.sql('ПОКАЗАТЬ АГЕНТА \'192.168.0.202:6714\' СТАТУС ПОХОЖИЙ НА \'%15periods%\'')
+utilsApi.sql('SHOW AGENT \'192.168.0.202:6714\' STATUS LIKE \'%15periods%\'')
 ```
 <!-- response Python -->
 
 ```python
-{u'колонки': [{u'Ключ': {u'тип': u'строка'}},
-              {u'Значение': {u'тип': u'строка'}}],
- u'данные': [
-	{u'Ключ': u'agent_15periods_query_timeouts', u'Значение': u'0'},
-	{u'Ключ': u'agent_15periods_connect_timeouts', u'Значение': u'0'},
-	{u'Ключ': u'agent_15periods_connect_failures', u'Значение': u'0'},
-    {u'Ключ': u'agent_15periods_network_errors', u'Значение': u'0'},
-    {u'Ключ': u'agent_15periods_connect_failures', u'Значение': u'0'},
-    {u'Ключ': u'agent_15periods_wrong_replies', u'Значение': u'0'},
-    {u'Ключ': u'agent_15periods_unexpected_closings', u'Значение': u'0'},
-    {u'Ключ': u'agent_15periods_warnings', u'Значение': u'0'},
-    {u'Ключ': u'agent_15periods_succeeded_queries', u'Значение': u'439'},
-    {u'Ключ': u'agent_15periods_msecsperquery', u'Значение': u'233.73'},
+{u'columns': [{u'Key': {u'type': u'string'}},
+              {u'Value': {u'type': u'string'}}],
+ u'data': [
+	{u'Key': u'agent_15periods_query_timeouts', u'Value': u'0'},
+	{u'Key': u'agent_15periods_connect_timeouts', u'Value': u'0'},
+	{u'Key': u'agent_15periods_connect_failures', u'Value': u'0'},
+    {u'Key': u'agent_15periods_network_errors', u'Value': u'0'},
+    {u'Key': u'agent_15periods_connect_failures', u'Value': u'0'},
+    {u'Key': u'agent_15periods_wrong_replies', u'Value': u'0'},
+    {u'Key': u'agent_15periods_unexpected_closings', u'Value': u'0'},
+    {u'Key': u'agent_15periods_warnings', u'Value': u'0'},
+    {u'Key': u'agent_15periods_succeeded_queries', u'Value': u'439'},
+    {u'Key': u'agent_15periods_msecsperquery', u'Value': u'233.73'},
     ],
- u'ошибка': u'',
- u'итого': 0,
- u'предупреждение': u''}
+ u'error': u'',
+ u'total': 0,
+ u'warning': u''}
 ```
+
+<!-- intro -->
+##### Python-asyncio:
+
+<!-- request Python-asyncio -->
+
+```python
+await utilsApi.sql('SHOW AGENT \'192.168.0.202:6714\' STATUS LIKE \'%15periods%\'')
+```
+<!-- response Python-asyncio -->
+
+```python
+{u'columns': [{u'Key': {u'type': u'string'}},
+              {u'Value': {u'type': u'string'}}],
+ u'data': [
+	{u'Key': u'agent_15periods_query_timeouts', u'Value': u'0'},
+	{u'Key': u'agent_15periods_connect_timeouts', u'Value': u'0'},
+	{u'Key': u'agent_15periods_connect_failures', u'Value': u'0'},
+    {u'Key': u'agent_15periods_network_errors', u'Value': u'0'},
+    {u'Key': u'agent_15periods_connect_failures', u'Value': u'0'},
+    {u'Key': u'agent_15periods_wrong_replies', u'Value': u'0'},
+    {u'Key': u'agent_15periods_unexpected_closings', u'Value': u'0'},
+    {u'Key': u'agent_15periods_warnings', u'Value': u'0'},
+    {u'Key': u'agent_15periods_succeeded_queries', u'Value': u'439'},
+    {u'Key': u'agent_15periods_msecsperquery', u'Value': u'233.73'},
+    ],
+ u'error': u'',
+ u'total': 0,
+ u'warning': u''}
+```
+
 <!-- intro -->
 ##### Javascript:
 
 <!-- request javascript -->
 
 ```javascript
-res = await utilsApi.sql("ПОКАЗАТЬ АГЕНТА \"192.168.0.202:6714\" СТАТУС ПОХОЖИЙ НА \"%15periods%\"");
+res = await utilsApi.sql("SHOW AGENT \"192.168.0.202:6714\" STATUS LIKE \"%15periods%\"");
 ```
 <!-- response javascript -->
 
 ```javascript
-{"колонки": [{"Ключ": {"тип": "строка"}},
-              {"Значение": {"тип": "строка"}}],
- "данные": [
-	{"Ключ": "agent_15periods_query_timeouts", "Значение": "0"},
-	{"Ключ": "agent_15periods_connect_timeouts", "Значение": "0"},
-	{"Ключ": "agent_15periods_connect_failures", "Значение": "0"},
-    {"Ключ": "agent_15periods_network_errors", "Значение": "0"},
-    {"Ключ": "agent_15periods_connect_failures", "Значение": "0"},
-    {"Ключ": "agent_15periods_wrong_replies", "Значение": "0"},
-    {"Ключ": "agent_15periods_unexpected_closings", "Значение": "0"},
-    {"Ключ": "agent_15periods_warnings", "Значение": "0"},
-    {"Ключ": "agent_15periods_succeeded_queries", "Значение": "439"},
-    {"Ключ": "agent_15periods_msecsperquery", "Значение": "233.73"},
+{"columns": [{"Key": {"type": "string"}},
+              {"Value": {"type": "string"}}],
+ "data": [
+	{"Key": "agent_15periods_query_timeouts", "Value": "0"},
+	{"Key": "agent_15periods_connect_timeouts", "Value": "0"},
+	{"Key": "agent_15periods_connect_failures", "Value": "0"},
+    {"Key": "agent_15periods_network_errors", "Value": "0"},
+    {"Key": "agent_15periods_connect_failures", "Value": "0"},
+    {"Key": "agent_15periods_wrong_replies", "Value": "0"},
+    {"Key": "agent_15periods_unexpected_closings", "Value": "0"},
+    {"Key": "agent_15periods_warnings", "Value": "0"},
+    {"Key": "agent_15periods_succeeded_queries", "Value": "439"},
+    {"Key": "agent_15periods_msecsperquery", "Value": "233.73"},
     ],
- "ошибка": "",
- "итого": 0,
- "предупреждение": ""}
+ "error": "",
+ "total": 0,
+ "warning": ""}
 ```
 
 <!-- intro -->
@@ -1209,28 +1422,28 @@ res = await utilsApi.sql("ПОКАЗАТЬ АГЕНТА \"192.168.0.202:6714\" �
 <!-- request Java -->
 
 ```java
-utilsApi.sql("ПОКАЗАТЬ АГЕНТА \"192.168.0.202:6714\" СТАТУС ПОХОЖИЙ НА \"%15periods%\"");
+utilsApi.sql("SHOW AGENT \"192.168.0.202:6714\" STATUS LIKE \"%15periods%\"");
 ```
 <!-- response Java -->
 
 ```java
-{колонки=[{Ключ={тип=строка}},
-              {Значение={тип=строка}}],
- данные=[
-	{Ключ=agent_15periods_query_timeouts, Значение=0},
-	{Ключ=agent_15periods_connect_timeouts, Значение=0},
-	{Ключ=agent_15periods_connect_failures, Значение=0},
-    {Ключ=agent_15periods_network_errors, Значение=0},
-    {Ключ=agent_15periods_connect_failures, Значение=0},
-    {Ключ=agent_15periods_wrong_replies, Значение=0},
-    {Ключ=agent_15periods_unexpected_closings, Значение=0},
-    {Ключ=agent_15periods_warnings, Значение=0},
-    {Ключ=agent_15periods_succeeded_queries, Значение=439},
-    {Ключ=agent_15periods_msecsperquery, Значение=233.73},
+{columns=[{Key={type=string}},
+              {Value={type=string}}],
+ data=[
+	{Key=agent_15periods_query_timeouts, Value=0},
+	{Key=agent_15periods_connect_timeouts, Value=0},
+	{Key=agent_15periods_connect_failures, Value=0},
+    {Key=agent_15periods_network_errors, Value=0},
+    {Key=agent_15periods_connect_failures, Value=0},
+    {Key=agent_15periods_wrong_replies, Value=0},
+    {Key=agent_15periods_unexpected_closings, Value=0},
+    {Key=agent_15periods_warnings, Value=0},
+    {Key=agent_15periods_succeeded_queries, Value=439},
+    {Key=agent_15periods_msecsperquery, Value=233.73},
     ],
- ошибка=,
- итого=0,
- предупреждение=}
+ error=,
+ total=0,
+ warning=}
 ```
 
 <!-- intro -->
@@ -1239,28 +1452,58 @@ utilsApi.sql("ПОКАЗАТЬ АГЕНТА \"192.168.0.202:6714\" СТАТУС 
 <!-- request C# -->
 
 ```clike
-utilsApi.Sql("ПОКАЗАТЬ АГЕНТА \"192.168.0.202:6714\" СТАТУС ПОХОЖИЙ НА \"%15periods%\"");
+utilsApi.Sql("SHOW AGENT \"192.168.0.202:6714\" STATUS LIKE \"%15periods%\"");
 ```
 <!-- response C# -->
 
 ```clike
-{колонки=[{Ключ={тип=строка}},
-              {Значение={тип=строка}}],
- данные=[
-	{Ключ=agent_15periods_query_timeouts, Значение=0},
-	{Ключ=agent_15periods_connect_timeouts, Значение=0},
-	{Ключ=agent_15periods_connect_failures, Значение=0},
-    {Ключ=agent_15periods_network_errors, Значение=0},
-    {Ключ=agent_15periods_connect_failures, Значение=0},
-    {Ключ=agent_15periods_wrong_replies, Значение=0},
-    {Ключ=agent_15periods_unexpected_closings, Значение=0},
-    {Ключ=agent_15periods_warnings, Значение=0},
-    {Ключ=agent_15periods_succeeded_queries, Значение=439},
-    {Ключ=agent_15periods_msecsperquery, Значение=233.73},
+{columns=[{Key={type=string}},
+              {Value={type=string}}],
+ data=[
+	{Key=agent_15periods_query_timeouts, Value=0},
+	{Key=agent_15periods_connect_timeouts, Value=0},
+	{Key=agent_15periods_connect_failures, Value=0},
+    {Key=agent_15periods_network_errors, Value=0},
+    {Key=agent_15periods_connect_failures, Value=0},
+    {Key=agent_15periods_wrong_replies, Value=0},
+    {Key=agent_15periods_unexpected_closings, Value=0},
+    {Key=agent_15periods_warnings, Value=0},
+    {Key=agent_15periods_succeeded_queries, Value=439},
+    {Key=agent_15periods_msecsperquery, Value=233.73},
     ],
- ошибка="",
- итого=0,
- предупреждение=""}
+ error="",
+ total=0,
+ warning=""}
+```
+
+<!-- intro -->
+##### Rust:
+
+<!-- request Rust -->
+
+```rust
+utils_api.sql("SHOW AGENT \"192.168.0.202:6714\" STATUS LIKE \"%15periods%\"", Some(true)).await;
+```
+<!-- response Rust -->
+
+```rust
+{columns=[{Key={type=string}},
+              {Value={type=string}}],
+ data=[
+	{Key=agent_15periods_query_timeouts, Value=0},
+	{Key=agent_15periods_connect_timeouts, Value=0},
+	{Key=agent_15periods_connect_failures, Value=0},
+    {Key=agent_15periods_network_errors, Value=0},
+    {Key=agent_15periods_connect_failures, Value=0},
+    {Key=agent_15periods_wrong_replies, Value=0},
+    {Key=agent_15periods_unexpected_closings, Value=0},
+    {Key=agent_15periods_warnings, Value=0},
+    {Key=agent_15periods_succeeded_queries, Value=439},
+    {Key=agent_15periods_msecsperquery, Value=233.73},
+    ],
+ error="",
+ total=0,
+ warning=""}
 ```
 
 <!-- intro -->
@@ -1269,34 +1512,34 @@ utilsApi.Sql("ПОКАЗАТЬ АГЕНТА \"192.168.0.202:6714\" СТАТУС 
 <!-- request TypeScript -->
 
 ```typescript
-res = await utilsApi.sql("ПОКАЗАТЬ АГЕНТА \"192.168.0.202:6714\" СТАТУС ПОХОЖИЙ НА \"%15periods%\"");
+res = await utilsApi.sql("SHOW AGENT \"192.168.0.202:6714\" STATUS LIKE \"%15periods%\"");
 ```
 <!-- response TypeScript -->
 
 ```typescript
 {
-	"колонки":
+	"columns":
 	[{
-		{"Ключ": {"тип": "строка"}
+		{"Key": {"type": "string"}
 	},
-    	{"Значение": {"тип": "строка"}
+    	{"Value": {"type": "string"}
     }],
-	"данные":
+	"data":
 	[
-		{"Ключ": "agent_15periods_query_timeouts", "Значение": "0"},
-		{"Ключ": "agent_15periods_connect_timeouts", "Значение": "0"},
-		{"Ключ": "agent_15periods_connect_failures", "Значение": "0"},
-	    {"Ключ": "agent_15periods_network_errors", "Значение": "0"},
-	    {"Ключ": "agent_15periods_connect_failures", "Значение": "0"},
-	    {"Ключ": "agent_15periods_wrong_replies", "Значение": "0"},
-	    {"Ключ": "agent_15periods_unexpected_closings", "Значение": "0"},
-	    {"Ключ": "agent_15periods_warnings", "Значение": "0"},
-	    {"Ключ": "agent_15periods_succeeded_queries", "Значение": "439"},
-	    {"Ключ": "agent_15periods_msecsperquery", "Значение": "233.73"},
+		{"Key": "agent_15periods_query_timeouts", "Value": "0"},
+		{"Key": "agent_15periods_connect_timeouts", "Value": "0"},
+		{"Key": "agent_15periods_connect_failures", "Value": "0"},
+	    {"Key": "agent_15periods_network_errors", "Value": "0"},
+	    {"Key": "agent_15periods_connect_failures", "Value": "0"},
+	    {"Key": "agent_15periods_wrong_replies", "Value": "0"},
+	    {"Key": "agent_15periods_unexpected_closings", "Value": "0"},
+	    {"Key": "agent_15periods_warnings", "Value": "0"},
+	    {"Key": "agent_15periods_succeeded_queries", "Value": "439"},
+	    {"Key": "agent_15periods_msecsperquery", "Value": "233.73"},
     ],
-	"ошибка": "",
-	"итого": 0,
-	"предупреждение": ""
+	"error": "",
+	"total": 0,
+	"warning": ""
 }
 ```
 
@@ -1306,29 +1549,29 @@ res = await utilsApi.sql("ПОКАЗАТЬ АГЕНТА \"192.168.0.202:6714\" �
 <!-- request Go -->
 
 ```go
-apiClient.UtilsAPI.Sql(context.Background()).Body("ПОКАЗАТЬ АГЕНТА \"192.168.0.202:6714\" СТАТУС ПОХОЖИЙ НА \"%15periods%\").Execute()
+apiClient.UtilsAPI.Sql(context.Background()).Body("SHOW AGENT \"192.168.0.202:6714\" STATUS LIKE \"%15periods%\").Execute()
 ```
 <!-- response Go -->
 
 ```go
 {
-	"колонки":
+	"columns":
 	[{
-		{"Ключ": {"тип": "строка"}
+		{"Key": {"type": "string"}
 	},
-    	{"Значение": {"тип": "строка"}
+    	{"Value": {"type": "string"}
     }],
-	"данные":
+	"data":
 	[
-		{"Ключ": "agent_15periods_query_timeouts", "Значение": "0"},
-		{"Ключ": "agent_15periods_connect_timeouts", "Значение": "0"},
-		{"Ключ": "agent_15periods_connect_failures", "Значение": "0"},
-	    {"Ключ": "agent_15periods_network_errors", "Значение": "0"},
-	    {"Ключ": "agent_15periods_connect_failures", "Значение": "0"},
-	    {"Ключ": "agent_15periods_wrong_replies", "Значение": "0"},
-	    {"Ключ": "agent_15periods_unexpected_closings", "Значение": "0"},
-	    {"Ключ": "agent_15periods_warnings", "Значение": "0"},
-	    {"Ключ": "agent_15periods_succeeded_queries", "Значение": "439"},
+		{"Key": "agent_15periods_query_timeouts", "Value": "0"},
+		{"Key": "agent_15periods_connect_timeouts", "Value": "0"},
+		{"Key": "agent_15periods_connect_failures", "Value": "0"},
+	    {"Key": "agent_15periods_network_errors", "Value": "0"},
+	    {"Key": "agent_15periods_connect_failures", "Value": "0"},
+	    {"Key": "agent_15periods_wrong_replies", "Value": "0"},
+	    {"Key": "agent_15periods_unexpected_closings", "Value": "0"},
+	    {"Key": "agent_15periods_warnings", "Value": "0"},
+	    {"Key": "agent_15periods_succeeded_queries", "Value": "439"},
 	    {"Key": "agent_15periods_msecsperquery", "Value": "233.73"},
     ],
 	"error": "",
@@ -1340,7 +1583,7 @@ apiClient.UtilsAPI.Sql(context.Background()).Body("ПОКАЗАТЬ АГЕНТА
 <!-- end -->
 <!-- example show agent table status -->
 
-Наконец, вы можете проверить статус агентов в конкретной распределенной таблице, используя оператор `SHOW AGENT table_name STATUS`. Этот оператор отображает статус HA таблицы (т.е. использует ли она зеркала агентов) и предоставляет информацию о зеркалах, включая: адрес, флаги черной дыры и постоянства, а также вероятность выбора зеркала, используемую, когда одна из [взвешенных стратегий вероятности](../Creating_a_cluster/Remote_nodes/Load_balancing.md) находится в действии.
+Наконец, вы можете проверить статус агентов в конкретной распределенной таблице, используя оператор `SHOW AGENT table_name STATUS`. Этот оператор отображает статус HA таблицы (т.е. использует ли она зеркала агентов) и предоставляет информацию о зеркалах, включая: адрес, черную дыру и постоянные флаги, а также вероятность выбора зеркала, используемую, когда одна из [стратегий взвешенной вероятности](../Creating_a_cluster/Remote_nodes/Load_balancing.md) находится в действии.
 
 <!-- intro -->
 ##### SQL:
@@ -1436,6 +1679,40 @@ utilsApi.sql('SHOW AGENT \'192.168.0.202:6714\' STATUS LIKE \'%15periods%\'')
  u'total': 0,
  u'warning': u''}
 ```
+
+<!-- intro -->
+##### Python-asyncio:
+
+<!-- request Python-asyncio -->
+
+```python
+await utilsApi.sql('SHOW AGENT \'192.168.0.202:6714\' STATUS LIKE \'%15periods%\'')
+```
+<!-- response Python-asyncio -->
+
+```python
+{u'columns': [{u'Key': {u'type': u'string'}},
+              {u'Value': {u'type': u'string'}}],
+ u'data': [
+	{u'Key': u'dstindex_1_is_ha', u'Value': u'1'},
+	{u'Key': u'dstindex_1mirror1_id', u'Value': u'192.168.0.202:6713:loc'},
+	{u'Key': u'dstindex_1mirror1_probability_weight', u'Value': u'0.372864'},
+    {u'Key': u'dstindex_1mirror1_is_blackhole', u'Value': u'0'},
+    {u'Key': u'dstindex_1mirror1_is_persistent', u'Value': u'0'},
+    {u'Key': u'dstindex_1mirror2_id', u'Value': u'192.168.0.202:6714:loc'},
+    {u'Key': u'dstindex_1mirror2_probability_weight', u'Value': u'0.374635'},
+    {u'Key': u'dstindex_1mirror2_is_blackhole', u'Value': u'0'},
+    {u'Key': u'dstindex_1mirror2_is_persistent', u'Value': u'439'},
+    {u'Key': u'dstindex_1mirror3_id', u'Value': u'dev1.manticoresearch.com:6714:loc'},
+    {u'Key': u'dstindex_1mirror3_probability_weight', u'Value': u' 0.252501'},
+    {u'Key': u'dstindex_1mirror3_is_blackhole', u'Value': u'0'},
+    {u'Key': u'dstindex_1mirror3_is_persistent', u'Value': u'439'}    
+    ],
+ u'error': u'',
+ u'total': 0,
+ u'warning': u''}
+```
+
 <!-- intro -->
 ##### Javascript:
 
@@ -1513,6 +1790,39 @@ utilsApi.Sql("SHOW AGENT \"192.168.0.202:6714\" STATUS LIKE \"%15periods%\"");
 <!-- response C# -->
 
 ```clike
+{columns=[{Key={type=string}},
+              {Value={type=string}}],
+ data=[
+	{Key=dstindex_1_is_ha, Value=1},
+	{Key=dstindex_1mirror1_id, Value=192.168.0.202:6713:loc},
+	{Key=dstindex_1mirror1_probability_weight, Value=0.372864},
+    {Key=dstindex_1mirror1_is_blackhole, Value=0},
+    {Key=dstindex_1mirror1_is_persistent, Value=0},
+    {Key=dstindex_1mirror2_id, Value=192.168.0.202:6714:loc},
+    {Key=dstindex_1mirror2_probability_weight, Value=0.374635},
+    {Key=dstindex_1mirror2_is_blackhole, Value=0},
+    {Key=dstindex_1mirror2_is_persistent, Value=439},
+    {Key=dstindex_1mirror3_id, Value=dev1.manticoresearch.com:6714:loc},
+    {Key=dstindex_1mirror3_probability_weight, Value= 0.252501},
+    {Key=dstindex_1mirror3_is_blackhole, Value=0},
+    {Key=dstindex_1mirror3_is_persistent, Value=439}    
+    ],
+ error="",
+ total=0,
+ warning=""}
+```
+
+<!-- intro -->
+##### Rust:
+
+<!-- request Rust -->
+
+```rust
+utils_api.sql("SHOW AGENT \"192.168.0.202:6714\" STATUS LIKE \"%15periods%\"", Some(true)).await;
+```
+<!-- response Rust -->
+
+```rust
 {columns=[{Key={type=string}},
               {Value={type=string}}],
  data=[

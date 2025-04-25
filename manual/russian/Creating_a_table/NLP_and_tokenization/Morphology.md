@@ -1,3 +1,795 @@
+# Продвинутая морфология
+
+Морфологические препроцессоры могут применяться к словам во время индексации для нормализации различных форм одного и того же слова и улучшения сегментации. Например, английский стеммер может нормализовать "dogs" и "dog" в "dog", что приводит к идентичным результатам поиска для обоих ключевых слов.
+
+Manticore имеет четыре встроенных морфологических препроцессора:
+
+*   **Лемматизатор**: сводит слово к его корню или лемме. Например, "running" может быть сведено к "run", а "octopi" может быть сведено к "octopus". Обратите внимание, что у некоторых слов может быть несколько соответствующих корневых форм. Например, "dove" может быть как прошедшей формой "dive", так и существительным, означающим птицу, как в "Белая голубка пролетела над гнездом кукушки." В этом случае лемматизатор может генерировать все возможные корневые формы.
+*   **Стеммер**: сводит слово к его стему, удаляя или заменяя определенные известные суффиксы. ПолученныйStem может не быть действительным словом. Например, портативный английский стеммер сводит "running" к "run", "business" к "busi" (не действительное слово) и не сводит "octopi" вовсе.
+*   **Фонетические алгоритмы**: заменяют слова фонетическими кодами, которые одинаковы, даже если слова разные, но фонетически близки.
+*   **Алгоритмы разбиения слов**: разбивают текст на слова. В настоящее время доступны только для китайского языка.
+
+## морфология
+
+```ini
+morphology = morphology1[, morphology2, ...]
+```
+
+<!-- пример морфологии -->
+Директива морфологии определяет список морфологических препроцессоров, применяемых к индексируемым словам. Это необязательный параметр, по умолчанию применяются нулевые препроцессоры.
+
+Manticore поставляется с встроенными морфологическими препроцессорами для:
+
+* Лемматизаторов английского, русского и немецкого языков
+* Стеммеров английского, русского, арабского и чешского языков
+* Фонетических алгоритмов SoundEx и MetaPhone
+* Алгоритма разбиения китайских слов
+* Стеммеров Snowball (libstemmer) для более чем [15 других языков](../../Creating_a_table/NLP_and_tokenization/Supported_languages.md) также доступны.
+
+Лемматизаторы требуют словарные файлы `.pak`, которые можно установить с помощью пакетов `manticore-language-packs` или [скачать с веб-сайта Manticore](https://manticoresearch.com/install/#other-downloads). В последнем случае словари должны быть помещены в каталог, указанный в [lemmatizer_base](../../Server_settings/Common.md#lemmatizer_base).
+
+Кроме того, параметр [lemmatizer_cache](../../Data_creation_and_modification/Adding_data_from_external_storages/Plain_tables_creation.md#lemmatizer_cache) можно использовать для ускорения лемматизации, используя больше ОЗУ для не сжатого кэша словаря.
+
+Сегментацию китайского языка можно выполнить с помощью [ICU](http://site.icu-project.org/) или [Jieba](https://github.com/yanyiwu/cppjieba) (требует пакет `manticore-language-packs`). Оба библиотеки обеспечивают более точную сегментацию, чем n-граммы, но работают немного медленнее. Таблица [charset_table](../../Creating_a_table/NLP_and_tokenization/Low-level_tokenization.md#charset_table) должна включать все китайские символы, что можно сделать, используя наборы символов `cont`, `cjk` или `chinese`. Когда вы устанавливаете `morphology=icu_chinese` или `morphology=jieba_chinese`, документы сначала обрабатываются ICU или Jieba. Затем, токенизатор обрабатывает результат в соответствии с charset_table, и, наконец, к другим морфологическим процессорам из параметра `morphology` применяются другие процессы. Только те части текста, которые содержат китайский язык, передаются ICU/Jieba для сегментации, в то время как другие части могут быть изменены различными средствами, такими как различные морфологии или `charset_table`.
+
+Встроенные стеммеры английского и русского языков быстрее, чем их аналоги libstemmer, но могут давать немного отличающиеся результаты
+
+Реализация Soundex соответствует MySQL. Реализация Metaphone основана на алгоритме Double Metaphone и индексирует основной код.
+
+Чтобы использовать параметр `morphology`, укажите один или несколько из встроенных параметров, включая:
+* none: не выполнять никакой морфологической обработки
+* lemmatize_ru - применить русский лемматизатор и выбрать единственную корневую форму
+* lemmatize_uk - применить украинский лемматизатор и выбрать единственную корневую форму (установите его сначала в [Centos](../../Installation/RHEL_and_Centos.md#Ukrainian-lemmatizer) или [Ubuntu/Debian](../../Installation/Debian_and_Ubuntu.md#Ukrainian-lemmatizer)). Для корректной работы лемматизатора убедитесь, что специфические украинские символы сохранились в вашей `charset_table`, так как по умолчанию они не сохраняются. Для этого переопределите их, вот так: `charset_table='non_cont,U+0406->U+0456,U+0456,U+0407->U+0457,U+0457,U+0490->U+0491,U+0491'`. [Здесь](https://play.manticoresearch.com/ua-lemmatizer/) интерактивный курс о том, как установить и использовать украинский лемматизатор.
+* lemmatize_en - применить английский лемматизатор и выбрать единственную корневую форму
+* lemmatize_de - применить немецкий лемматизатор и выбрать единственную корневую форму
+* lemmatize_ru_all - применить русский лемматизатор и индексировать все возможные корневые формы
+* lemmatize_uk_all - применить украинский лемматизатор и индексировать все возможные корневые формы. Найдите ссылки на установку выше и позаботьтесь о `charset_table`.
+* lemmatize_en_all - применить английский лемматизатор и индексировать все возможные корневые формы
+* lemmatize_de_all - применить немецкий лемматизатор и индексировать все возможные корневые формы
+* stem_en - применить портативный английский стеммер
+* stem_ru - применить портативный русский стеммер
+* stem_enru - применить портативный английский и русский стеммеры
+* stem_cz - применить чешский стеммер
+* stem_ar - применить арабский стеммер
+* soundex - заменить ключевые слова их кодом SOUNDEX
+* metaphone - заменить ключевые слова их кодом METAPHONE
+* icu_chinese - применить сегментацию китайского текста с использованием ICU
+* jieba_chinese - применить сегментацию китайского текста с использованием Jieba (требует пакет `manticore-language-packs`)
+* libstemmer_* . Смотрите [список поддерживаемых языков](../../Creating_a_table/NLP_and_tokenization/Supported_languages.md) для получения подробностей
+Множественные стеммеры могут быть указаны, разделенные запятыми. Они будут применены к входящим словам в порядке их перечисления, и обработка остановится, как только один из стеммеров изменит слово. Кроме того, когда функция [wordforms](../../Creating_a_table/NLP_and_tokenization/Wordforms.md#wordforms) включена, слово сначала будет проверено в словаре словоформ. Если в словаре есть совпадающая запись, стеммеры применены не будут.  [wordforms](../../Creating_a_table/NLP_and_tokenization/Wordforms.md#wordforms) можно использовать для реализации исключений для стемминга.
+
+<!-- request SQL -->
+
+```sql
+CREATE TABLE products(title text, price float) morphology = 'stem_en, libstemmer_sv'
+```
+
+<!-- request JSON -->
+
+```json
+POST /cli -d "CREATE TABLE products(title text, price float)  morphology = 'stem_en, libstemmer_sv'"
+```
+
+<!-- request PHP -->
+
+```php
+$index = new ManticoresearchIndex($client);
+$index->setName('products');
+$index->create([
+            'title'=>['type'=>'text'],
+            'price'=>['type'=>'float']
+        ],[
+            'morphology' => 'stem_en, libstemmer_sv'
+        ]);
+```
+<!-- intro -->
+##### Python:
+
+<!-- request Python -->
+
+```python
+utilsApi.sql('CREATE TABLE products(title text, price float) morphology = 'stem_en, libstemmer_sv'')
+```
+
+<!-- intro -->
+##### Python-asyncio:
+
+<!-- request Python-asyncio -->
+
+```python
+await utilsApi.sql('CREATE TABLE products(title text, price float) morphology = 'stem_en, libstemmer_sv'')
+```
+
+<!-- intro -->
+##### Javascript:
+
+<!-- request javascript -->
+
+```javascript
+res = await utilsApi.sql('CREATE TABLE products(title text, price float) morphology = 'stem_en, libstemmer_sv'');
+```
+
+<!-- intro -->
+##### Java:
+<!-- request Java -->
+```java
+utilsApi.sql("CREATE TABLE products(title text, price float) morphology = 'stem_en, libstemmer_sv'", true);
+```
+
+<!-- intro -->
+##### C#:
+<!-- request C# -->
+```clike
+utilsApi.Sql("CREATE TABLE products(title text, price float) morphology = 'stem_en, libstemmer_sv'", true);
+```
+
+<!-- intro -->
+##### Rust:
+
+<!-- request Rust -->
+
+```rust
+utils_api.sql("CREATE TABLE products(title text, price float) morphology = 'stem_en, libstemmer_sv'", Some(true)).await;
+```
+
+<!-- request CONFIG -->
+
+```ini
+table products {
+  morphology = stem_en, libstemmer_sv
+
+  type = rt
+  path = tbl
+  rt_field = title
+  rt_attr_uint = price
+}
+```
+<!-- end -->
+
+## morphology_skip_fields
+
+<!-- example morphology_skip_fields -->
+
+```ini
+morphology_skip_fields = field1[, field2, ...]
+```
+
+Список полей, которые следует пропустить при предварительной обработке морфологии. Необязательно, по умолчанию пусто (применить препроцессоры ко всем полям).
+
+<!-- request SQL -->
+
+```sql
+CREATE TABLE products(title text, name text, price float) morphology_skip_fields = 'name' morphology = 'stem_en'
+```
+
+<!-- request JSON -->
+
+```json
+POST /cli -d "
+CREATE TABLE products(title text, name text, price float) morphology_skip_fields = 'name' morphology = 'stem_en'"
+```
+
+<!-- request PHP -->
+
+```php
+$index = new ManticoresearchIndex($client);
+$index->setName('products');
+$index->create([
+            'title'=>['type'=>'text'],
+            'price'=>['type'=>'float']
+        ],[
+            'morphology_skip_fields' => 'name',
+            'morphology' => 'stem_en'
+        ]);
+```
+<!-- intro -->
+##### Python:
+
+<!-- request Python -->
+
+```python
+utilsApi.sql('CREATE TABLE products(title text, price float) morphology_skip_fields = 'name' morphology = 'stem_en'')
+```
+
+<!-- intro -->
+##### Python-asyncio:
+
+<!-- request Python-asyncio -->
+
+```python
+await utilsApi.sql('CREATE TABLE products(title text, price float) morphology_skip_fields = 'name' morphology = 'stem_en'')
+```
+
+<!-- intro -->
+##### Javascript:
+
+<!-- request javascript -->
+
+```javascript
+res = await utilsApi.sql('CREATE TABLE products(title text, price float) morphology_skip_fields = 'name' morphology = 'stem_en'');
+```
+
+<!-- intro -->
+##### Java:
+<!-- request Java -->
+```java
+utilsApi.sql("CREATE TABLE products(title text, price float) morphology_skip_fields = 'name' morphology = 'stem_en'", true);
+```
+
+<!-- intro -->
+##### C#:
+<!-- request C# -->
+```clike
+utilsApi.Sql("CREATE TABLE products(title text, price float) morphology_skip_fields = 'name' morphology = 'stem_en'", true);
+```
+
+<!-- intro -->
+##### Rust:
+
+<!-- request Rust -->
+
+```rust
+utils_api.sql("CREATE TABLE products(title text, price float) morphology_skip_fields = 'name' morphology = 'stem_en'", Some(true)).await;
+```
+
+<!-- request CONFIG -->
+
+```ini
+table products {
+  morphology_skip_fields = name
+  morphology = stem_en
+
+  type = rt
+  path = tbl
+  rt_field = title
+  rt_field = name
+  rt_attr_uint = price
+}
+```
+<!-- end -->
+
+## min_stemming_len
+
+<!-- example min_stemming_len -->
+
+```ini
+min_stemming_len = length
+```
+
+Минимальная длина слова, при которой включается стемминг. Необязательный параметр, по умолчанию 1 (стемминг для всех слов).
+Стеммеры не идеальны и иногда могут давать нежелательные результаты. Например, использование ключевого слова "gps" через стеммер Портера для английского языка приводит к "gp", что не соответствует намерению. Функция `min_stemming_len` позволяет вам подавлять стемминг в зависимости от длины исходного слова, т.е. чтобы избежать стемминга слишком коротких слов. Ключевые слова, которые короче заданного порога, не будут стеммированы. Обратите внимание, что ключевые слова, которые точно такой же длины, как указано, **будут** стеммированы. Таким образом, чтобы избежать стемминга ключевых слов из 3 символов, вы должны указать 4 как значение. Для более тонкой настройки обратитесь к функции [wordforms](../../Creating_a_table/NLP_and_tokenization/Wordforms.md#wordforms).
+
+<!-- request SQL -->
+
+```sql
+CREATE TABLE products(title text, price float) min_stemming_len = '4' morphology = 'stem_en'
+```
+
+<!-- request JSON -->
+
+```JSON
+POST /cli -d "
+CREATE TABLE products(title text, price float) min_stemming_len = '4' morphology = 'stem_en'"
+```
+
+<!-- request PHP -->
+
+```php
+$index = new ManticoresearchIndex($client);
+$index->setName('products');
+$index->create([
+            'title'=>['type'=>'text'],
+            'price'=>['type'=>'float']
+        ],[
+             'min_stemming_len' => '4',
+             'morphology' => 'stem_en'
+        ]);
+
+```
+<!-- intro -->
+##### Python:
+
+<!-- request Python -->
+
+```python
+utilsApi.sql('CREATE TABLE products(title text, price float) min_stemming_len = '4' morphology = 'stem_en'')
+```
+
+<!-- intro -->
+##### Python-asyncio:
+
+<!-- request Python-asycnio -->
+
+```python
+await utilsApi.sql('CREATE TABLE products(title text, price float) min_stemming_len = '4' morphology = 'stem_en'')
+```
+
+<!-- intro -->
+##### Javascript:
+
+<!-- request javascript -->
+
+```javascript
+res = await utilsApi.sql('CREATE TABLE products(title text, price float) min_stemming_len = '4' morphology = 'stem_en'');
+```
+
+<!-- intro -->
+##### Java:
+<!-- request Java -->
+```java
+utilsApi.sql("CREATE TABLE products(title text, price float) min_stemming_len = '4' morphology = 'stem_en'", true);
+```
+
+<!-- intro -->
+##### C#:
+<!-- request C# -->
+```clike
+utilsApi.Sql("CREATE TABLE products(title text, price float) min_stemming_len = '4' morphology = 'stem_en'", true);
+```
+
+<!-- intro -->
+##### Rust:
+
+<!-- request Rust -->
+
+```rust
+utils_api.sql("CREATE TABLE products(title text, price float) min_stemming_len = '4' morphology = 'stem_en'", Some(true)).await;
+```
+
+<!-- request CONFIG -->
+
+```ini
+table products {
+  min_stemming_len = 4
+  morphology = stem_en
+
+  type = rt
+  path = tbl
+  rt_field = title
+  rt_attr_uint = price
+}
+```
+<!-- end -->
+
+## index_exact_words
+
+<!-- example index_exact_words -->
+
+```ini
+index_exact_words = {0|1}
+```
+
+Эта опция позволяет индексировать оригинальные ключевые слова вместе с их морфологически изменёнными версиями. Однако оригинальные ключевые слова, которые перенаправлены с помощью [wordforms](../../Creating_a_table/NLP_and_tokenization/Wordforms.md#wordforms) и [exceptions](../../Creating_a_table/NLP_and_tokenization/Exceptions.md), не могут быть проиндексированы. Значение по умолчанию равно 0, что означает, что эта функция отключена по умолчанию.
+
+Это позволяет использовать [оператор точной формы](../../Searching/Full_text_matching/Operators.md#Exact-form-modifier) в языке запросов. Включение этой функции увеличит размер полнотекстового индекса и время индексации, но не повлияет на производительность поиска.
+
+<!-- request SQL -->
+
+```sql
+CREATE TABLE products(title text, price float) index_exact_words = '1' morphology = 'stem_en'
+```
+
+<!-- request JSON -->
+
+```JSON
+POST /cli -d "
+CREATE TABLE products(title text, price float) index_exact_words = '1' morphology = 'stem_en'"
+```
+
+<!-- request PHP -->
+
+```php
+$index = new ManticoresearchIndex($client);
+$index->setName('products');
+$index->create([
+            'title'=>['type'=>'text'],
+            'price'=>['type'=>'float']
+        ],[
+             'index_exact_words' => '1',
+             'morphology' => 'stem_en'
+        ]);
+
+```
+<!-- intro -->
+##### Python:
+
+<!-- request Python -->
+
+```python
+utilsApi.sql('CREATE TABLE products(title text, price float) index_exact_words = '1' morphology = 'stem_en'')
+```
+
+<!-- intro -->
+##### Python-asyncio:
+
+<!-- request Python-asyncio -->
+
+```python
+await utilsApi.sql('CREATE TABLE products(title text, price float) index_exact_words = '1' morphology = 'stem_en'')
+```
+
+<!-- intro -->
+##### Javascript:
+
+<!-- request javascript -->
+
+```javascript
+res = await utilsApi.sql('CREATE TABLE products(title text, price float) index_exact_words = '1' morphology = 'stem_en'');
+```
+
+<!-- intro -->
+##### Java:
+<!-- request Java -->
+```java
+utilsApi.sql("CREATE TABLE products(title text, price float) index_exact_words = '1' morphology = 'stem_en'", true);
+```
+
+<!-- intro -->
+##### C#:
+<!-- request C# -->
+```clike
+utilsApi.Sql("CREATE TABLE products(title text, price float) index_exact_words = '1' morphology = 'stem_en'", true);
+```
+
+<!-- intro -->
+##### Rust:
+
+<!-- request Rust -->
+
+```rust
+utils_api.sql("CREATE TABLE products(title text, price float) index_exact_words = '1' morphology = 'stem_en'", Some(true)).await;
+```
+
+<!-- request CONFIG -->
+
+```ini
+table products {
+  index_exact_words = 1
+  morphology = stem_en
+
+  type = rt
+  path = tbl
+  rt_field = title
+  rt_attr_uint = price
+}
+```
+<!-- end -->
+
+## jieba_hmm
+
+<!-- example jieba_hmm -->
+
+```ini
+jieba_hmm = {0|1}
+```
+
+Включите или отключите HMM в инструменте сегментации Jieba. Необязательно; значение по умолчанию - 1.
+В Jieba опция HMM (Скрытая модель Маркова) относится к алгоритму, используемому для сегментации слов. В частности, она позволяет Jieba выполнять сегментацию китайских слов, распознавая неизвестные слова, особенно те, которые отсутствуют в словаре.
+
+Jieba в основном использует метод на основе словаря для сегментации известных слов, но когда опция HMM включена, она применяет статистическую модель для определения вероятных границ слов для слов или фраз, не входящих в её словарь. Это особенно полезно для сегментации новых или редких слов, имен и сленга.
+
+В резюме, опция `jieba_hmm` помогает улучшить точность сегментации за счёт ухудшения производительности индексации. Она должна использоваться с `morphology = jieba_chinese`, см. [Китайский, японский и корейский (CJK) и тайские языки](Creating_a_table/NLP_and_tokenization/Languages_with_continuous_scripts.md).
+
+<!-- request SQL -->
+
+```sql
+CREATE TABLE products(title text, price float) morphology = 'jieba_chinese' jieba_hmm = '0'
+```
+
+<!-- request JSON -->
+
+```JSON
+POST /cli -d "
+CREATE TABLE products(title text, price float) morphology = 'jieba_chinese' jieba_hmm = '0'"
+```
+
+<!-- request PHP -->
+
+```php
+$index = new ManticoresearchIndex($client);
+$index->setName('products');
+$index->create([
+            'title'=>['type'=>'text'],
+            'price'=>['type'=>'float']
+        ],[
+
+morphology' => 'jieba_chinese',
+
+
+jieba_hmm'='1'
+        ]);
+
+```
+<!-- intro -->
+##### Python:
+
+<!-- request Python -->
+
+```python
+utilsApi.sql('CREATE TABLE products(title text, price float) morphology = 'jieba_chinese' jieba_hmm = '0'')
+```
+
+<!-- intro -->
+##### Python-asyncio:
+
+<!-- request Python-asyncio -->
+
+```python
+await utilsApi.sql('CREATE TABLE products(title text, price float) morphology = 'jieba_chinese' jieba_hmm = '0'')
+```
+
+<!-- intro -->
+##### Javascript:
+
+<!-- request javascript -->
+
+```javascript
+res = await utilsApi.sql('CREATE TABLE products(title text, price float) morphology = 'jieba_chinese' jieba_hmm = '0'');
+```
+
+<!-- intro -->
+##### Java:
+<!-- request Java -->
+```java
+utilsApi.sql("CREATE TABLE products(title text, price float) morphology = 'jieba_chinese' jieba_hmm = '0'", true);
+```
+
+<!-- intro -->
+##### C#:
+<!-- request C# -->
+```clike
+utilsApi.Sql("CREATE TABLE products(title text, price float) morphology = 'jieba_chinese' jieba_hmm = '0'", true);
+```
+
+<!-- intro -->
+##### Rust:
+
+<!-- request Rust -->
+
+```rust
+utils_api.sql("CREATE TABLE products(title text, price float) morphology = 'jieba_chinese' jieba_hmm = '0'", Some(true)).await;
+```
+
+<!-- request CONFIG -->
+
+```ini
+table products {
+  morphology = jieba_chinese
+  jieba_hmm = 0
+
+  type = rt
+  path = tbl
+  rt_field = title
+  rt_attr_uint = price
+}
+```
+<!-- end -->
+
+## jieba_mode
+
+<!-- example jieba_mode -->
+
+```ini
+jieba_mode = {accurate|full|search}
+```
+
+Режим сегментации Jieba. Опционально; по умолчанию используется `accurate`.
+
+В точном режиме Jieba разбивает предложение на самые точные слова с помощью сопоставления со словарём. Этот режим сосредоточен на точности, гарантируя, что сегментация максимально точна.
+
+В полном режиме Jieba пытается разбить предложение на каждую возможную комбинацию слов, стремясь включить все потенциальные слова. Этот режим сосредоточен на максимизации полноты, что означает, что он идентифицирует как можно больше слов, даже если некоторые из них перекрываются или используются реже. Он возвращает все слова, найденные в его словаре.
+
+В поисковом режиме Jieba разбивает текст как на целые слова, так и на меньшие части, комбинируя точную сегментацию с дополнительными деталями, предоставляя перекрывающиеся фрагменты слов. Этот режим балансирует между точностью и полнотой, что делает его полезным для поисковых систем.
+
+`jieba_mode` должен использоваться с `morphology = jieba_chinese`. См. [Китайский, японский, корейский (CJK) и тайские языки](Creating_a_table/NLP_and_tokenization/Languages_with_continuous_scripts.md).
+
+<!-- request SQL -->
+
+```sql
+CREATE TABLE products(title text, price float) morphology = 'jieba_chinese' jieba_mode = 'full'
+```
+
+<!-- request JSON -->
+
+```JSON
+POST /cli -d "
+CREATE TABLE products(title text, price float) morphology = 'jieba_chinese' jieba_mode = 'full'"
+```
+
+<!-- request PHP -->
+
+```php
+$index = new ManticoresearchIndex($client);
+$index->setName('products');
+$index->create([
+            'title'=>['type'=>'text'],
+            'price'=>['type'=>'float']
+        ],[
+
+morphology' => 'jieba_chinese',
+
+
+jieba_mode'='full'
+        ]);
+
+```
+<!-- intro -->
+##### Python:
+
+<!-- request Python -->
+
+```python
+utilsApi.sql('CREATE TABLE products(title text, price float) morphology = 'jieba_chinese' jieba_mode = 'full'')
+```
+
+<!-- intro -->
+##### Python-asyncio:
+
+<!-- request Python-asyncio -->
+
+```python
+await utilsApi.sql('CREATE TABLE products(title text, price float) morphology = 'jieba_chinese' jieba_mode = 'full'')
+```
+
+<!-- intro -->
+##### Javascript:
+
+<!-- request javascript -->
+
+```javascript
+res = await utilsApi.sql('CREATE TABLE products(title text, price float) morphology = 'jieba_chinese' jieba_mode = 'full'');
+```
+
+<!-- intro -->
+##### Java:
+<!-- request Java -->
+```java
+utilsApi.sql("CREATE TABLE products(title text, price float) morphology = 'jieba_chinese' jieba_mode = 'full'", true);
+```
+
+<!-- intro -->
+##### C#:
+<!-- request C# -->
+```clike
+utilsApi.Sql("CREATE TABLE products(title text, price float) morphology = 'jieba_chinese' jieba_mode = 'full'", true);
+```
+
+<!-- intro -->
+##### Rust:
+
+<!-- request Rust -->
+
+```rust
+utils_api.sql("CREATE TABLE products(title text, price float) morphology = 'jieba_chinese' jieba_mode = 'full'", Some(true)).await;
+```
+
+<!-- request CONFIG -->
+
+```ini
+table products {
+  morphology = jieba_chinese
+  jieba_mode = full
+
+  type = rt
+  path = tbl
+  rt_field = title
+  rt_attr_uint = price
+}
+```
+<!-- end -->
+
+## jieba_user_dict_path
+
+<!-- example jieba_user_dict_path -->
+
+```ini
+jieba_user_dict_path = path/to/stopwords/file
+```
+
+Путь к пользовательскому словарю Jieba. Необязательно.
+
+Jieba, библиотека для сегментации китайского текста, использует файлы словарей для помощи в разделении слов. Формат этих файлов словарей следующий: каждая строка содержит слово, разделенное на три части, отделенные пробелами — само слово, частота слова и тег части речи (POS). Частота слова и тег POS являются необязательными и могут быть опущены. Файл словаря должен быть в кодировке UTF-8.
+
+Пример:
+
+```
+创新办 3 i
+云计算 5
+凱特琳 nz
+台中
+```
+
+`jieba_user_dict_path` должен использоваться с `morphology = jieba_chinese`. Для получения дополнительных сведений смотрите [Китайские, японские, корейские (CJK) и тайские языки](Creating_a_table/NLP_and_tokenization/Languages_with_continuous_scripts.md).
+
+<!-- request SQL -->
+
+```sql
+CREATE TABLE products(title text, price float) morphology = 'jieba_chinese' jieba_user_dict_path = '/usr/local/manticore/data/user-dict.txt'
+```
+
+<!-- request JSON -->
+
+```JSON
+POST /cli -d "
+CREATE TABLE products(title text, price float) morphology = 'jieba_chinese' jieba_user_dict_path = '/usr/local/manticore/data/user-dict.txt'"
+```
+
+<!-- request PHP -->
+
+```php
+$index = new ManticoresearchIndex($client);
+$index->setName('products');
+$index->create([
+            'title'=>['type'=>'text'],
+            'price'=>['type'=>'float']
+        ],[
+
+morphology' => 'jieba_chinese',
+             'jieba_user_dict_path' = '/usr/local/manticore/data/user-dict.txt'
+        ]);
+
+```
+<!-- intro -->
+##### Python:
+
+<!-- request Python -->
+
+```python
+utilsApi.sql('CREATE TABLE products(title text, price float) morphology = 'jieba_chinese' jieba_user_dict_path = '/usr/local/manticore/data/user-dict.txt'')
+```
+
+<!-- intro -->
+##### Python-asyncio:
+
+<!-- request Python-asyncio -->
+
+```python
+await utilsApi.sql('CREATE TABLE products(title text, price float) morphology = 'jieba_chinese' jieba_user_dict_path = '/usr/local/manticore/data/user-dict.txt'')
+```
+
+<!-- intro -->
+##### Javascript:
+
+<!-- request javascript -->
+
+```javascript
+res = await utilsApi.sql('CREATE TABLE products(title text, price float) morphology = 'jieba_chinese' jieba_user_dict_path = '/usr/local/manticore/data/user-dict.txt'');
+```
+
+<!-- intro -->
+##### Java:
+<!-- request Java -->
+```java
+utilsApi.sql("CREATE TABLE products(title text, price float) morphology = 'jieba_chinese' jieba_user_dict_path = '/usr/local/manticore/data/user-dict.txt'", true);
+```
+
+<!-- intro -->
+##### C#:
+<!-- request C# -->
+```clike
+utilsApi.Sql("CREATE TABLE products(title text, price float) morphology = 'jieba_chinese' jieba_user_dict_path = '/usr/local/manticore/data/user-dict.txt'", true);
+```
+
+<!-- intro -->
+##### Rust:
+
+<!-- request Rust -->
+
+```rust
+utils_api.sql("CREATE TABLE products(title text, price float) morphology = 'jieba_chinese' jieba_user_dict_path = '/usr/local/manticore/data/user-dict.txt'", Some(true)).await;
+```
+
+<!-- request CONFIG -->
+
+```ini
+table products {
+  morphology = jieba_chinese
+  jieba_user_dict_path = /usr/local/manticore/data/user-dict.txt
+
+  type = rt
+  path = tbl
+  rt_field = title
+  rt_attr_uint = price
 # Расширенная морфология
 
 Морфологические препроцессоры могут применяться к словам во время индексации для нормализации различных форм одного и того же слова и улучшения сегментации. Например, английский стеммер может нормализовать "dogs" и "dog" в "dog", что приводит к одинаковым результатам поиска для обоих ключевых слов.

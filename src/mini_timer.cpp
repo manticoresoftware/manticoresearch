@@ -216,6 +216,9 @@ public:
 
 	void EngageAt ( int64_t iTimeStampUS, MiniTimer_c& tTimer ) EXCLUDES ( TimerThread )
 	{
+		if ( tTimer.m_iTimeoutIdx >= 0 && tTimer.m_iTimeoutTimeUS == iTimeStampUS )
+			return; // no need to re-engage if no changes
+
 		tTimer.m_iTimeoutTimeUS = iTimeStampUS;
 		DEBUGT << "Engage task: " << &tTimer << " after " << timestamp_t ( iTimeStampUS );
 		Enqueue ( tTimer );

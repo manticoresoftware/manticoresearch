@@ -1,3 +1,173 @@
+# Перколационная таблица
+
+<!-- example pq -->
+Перколационная таблица — это специальная таблица, которая хранит запросы, а не документы. Она используется для перспективных поисков или "поиска в обратном направлении."
+
+* Чтобы узнать больше о выполнении поискового запроса против перколационной таблицы, смотрите раздел [Перколационный запрос](../../Searching/Percolate_query.md).
+* Чтобы узнать, как подготовить таблицу для поиска, смотрите раздел [Добавление правил в перколационную таблицу](../../Data_creation_and_modification/Adding_documents_to_a_table/Adding_rules_to_a_percolate_table.md).
+
+Схема перколационной таблицы фиксирована и содержит следующие поля:
+
+| Поле | Описание |
+| - | - |
+| ID| Беззнаковое целое число 64 бита с функцией автоинкремента. Его можно опустить при добавлении правила PQ, как описано в  [добавить правило PQ](../../Data_creation_and_modification/Adding_documents_to_a_table/Adding_rules_to_a_percolate_table.md) |
+| Запрос | [Полнотекстовый запрос](../../Searching/Full_text_matching/Basic_usage.md) правила, который можно рассматривать как значение [условия MATCH](../../Searching/Full_text_matching/Basic_usage.md) или [JSON /search](../../Searching/Full_text_matching/Basic_usage.md#HTTP-JSON). Если в запросе используются [операторы по полям](../../Searching/Full_text_matching/Operators.md), полнотекстовые поля необходимо объявить в конфигурации перколационной таблицы. Если сохраненный запрос предназначен только для фильтрации атрибутов (без полнотекстового запроса), значение запроса может быть пустым или опущенным. Значение этого поля должно соответствовать ожидаемой схеме документа, которая указывается при создании перколационной таблицы. |
+| Фильтры | Необязательно. Фильтры — это необязательное строковое значение, содержащее фильтры атрибутов и/или выражения, определенные так же, как в [условии WHERE](../../Searching/Filters.md#WHERE) или [JSON-фильтрации](../../Searching/Filters.md#HTTP-JSON). Значение этого поля должно соответствовать ожидаемой схеме документа, которая указывается при создании перколационной таблицы. |
+| Теги | Необязательно. Теги представляют собой список строковых меток, разделенных запятыми, которые можно использовать для фильтрации/удаления правил PQ. Теги также могут быть возвращены вместе с соответствующими документами при выполнении [перколационного запроса](../../Searching/Percolate_query.md) |
+
+Обратите внимание, что вам не нужно добавлять вышеуказанные поля при создании перколационной таблицы.
+
+Что вам нужно иметь в виду при создании новой перколационной таблицы, так это указать ожидаемую схему документа, которая будет проверяться по правилам, которые вы добавите позже. Это делается так же, как и для [любой другой локальной таблицы](../../Creating_a_table/Local_tables.md).
+
+
+<!-- intro -->
+##### Создание перколационной таблицы через SQL:
+
+<!-- request SQL -->
+
+```sql
+CREATE TABLE products(title text, meta json) type='pq';
+```
+<!-- response SQL -->
+
+```sql
+Запрос выполнен, 0 строк затронуто (0.00 сек)
+```
+
+<!-- intro -->
+##### Создание перколационной таблицы через JSON по HTTP:
+
+<!-- request JSON -->
+
+```json
+POST /cli -d "CREATE TABLE products(title text, meta json) type='pq'"
+```
+
+<!-- response JSON -->
+
+```json
+{
+"total":0,
+"error":"",
+"warning":""
+}
+```
+
+<!-- intro -->
+##### Создание перколационной таблицы через PHP-клиент:
+
+<!-- request PHP -->
+
+```php
+$index = [
+    'table' => 'products',
+    'body' => [
+        'columns' => [
+            'title' => ['type' => 'text'],
+            'meta' => ['type' => 'json']
+        ],
+        'settings' => [
+            'type' => 'pq'
+        ]
+    ]
+];
+$client->indices()->create($index);
+```
+<!-- response PHP -->
+```php
+Array(
+    [total] => 0
+    [error] =>
+    [warning] =>
+)
+```
+
+<!-- intro -->
+##### Python:
+
+<!-- request Python -->
+
+```python
+utilsApi.sql('CREATE TABLE products(title text, meta json) type='pq'')
+```
+
+<!-- intro -->
+##### Python-asyncio:
+
+<!-- request Python-asyncio -->
+
+```python
+await utilsApi.sql('CREATE TABLE products(title text, meta json) type='pq'')
+```
+
+<!-- intro -->
+##### Javascript:
+
+<!-- request javascript -->
+
+```javascript
+res = await utilsApi.sql('CREATE TABLE products(title text, meta json) type='pq'');
+```
+<!-- intro -->
+##### java:
+
+<!-- request java -->
+
+```java
+utilsApi.sql("CREATE TABLE products(title text, meta json) type='pq'");
+```
+
+<!-- intro -->
+##### C#:
+
+<!-- request C# -->
+
+```clike
+utilsApi.Sql("CREATE TABLE products(title text, meta json) type='pq'");
+```
+
+<!-- intro -->
+##### Rust:
+
+<!-- request Rust -->
+
+```rust
+utils_api.sql("CREATE TABLE products(title text, meta json) type='pq'", Some(true)).await;
+```
+
+<!-- intro -->
+##### TypeScript:
+
+<!-- request typescript -->
+
+```typescript
+res = await utilsApi.sql("CREATE TABLE products(title text, meta json) type='pq'");
+```
+
+<!-- intro -->
+##### Go:
+
+<!-- request go -->
+
+```go
+apiClient.UtilsAPI.Sql(context.Background()).Body("CREATE TABLE products(title text, meta json) type='pq'").Execute()
+```
+
+<!-- intro -->
+##### Создание перколационной таблицы через конфигурацию:
+
+<!-- request CONFIG -->
+
+```ini
+table products {
+  type = percolate
+  path = tbl_pq
+  rt_field = title
+  rt_attr_json = meta
+}
+```
+<!-- end -->
+<!-- proofread -->
 # Перколяционная таблица
 
 <!-- example pq -->

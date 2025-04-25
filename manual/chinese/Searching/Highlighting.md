@@ -1,5 +1,3869 @@
 # 高亮显示
 
+<!-- 示例高亮 -->
+
+高亮显示使您能够从包含匹配关键字的文档中获取高亮文本片段（称为剪辑）。
+
+SQL `HIGHLIGHT()` 函数、通过 HTTP 的 JSON 查询中的 `"highlight"` 属性和 PHP 客户端中的 `highlight()` 函数都利用内置文档存储来检索原始字段内容（默认启用）。
+
+<!-- 简介 -->
+##### SQL:
+
+<!-- 请求 SQL -->
+
+```sql
+SELECT HIGHLIGHT() FROM books WHERE MATCH('try');
+```
+
+<!-- 响应 SQL -->
+
+```sql
++----------------------------------------------------------+
+| highlight()                                              |
++----------------------------------------------------------+
+| Don`t <b>try</b> to compete in childishness, said Bliss. |
++----------------------------------------------------------+
+1 row in set (0.00 sec)
+```
+
+<!-- 简介 -->
+##### JSON:
+
+<!-- 请求 JSON -->
+
+```json
+POST /search
+{
+  "table": "books",
+  "query":  {  "match": { "*" : "try" }  },
+  "highlight": {}
+}
+```
+
+<!-- 响应 JSON -->
+
+```json
+{
+  "took":1,
+  "timed_out":false,
+  "hits":
+  {
+    "total":1,
+    "hits":
+    [
+      {
+        "_id": 4,
+        "_score":1704,
+        "_source":
+        {
+          "title":"Book four",
+          "content":"Don`t try to compete in childishness, said Bliss."
+        },
+        "highlight":
+        {
+          "title": ["Book four"],
+          "content": ["Don`t <b>try</b> to compete in childishness, said Bliss."]
+        }
+      }
+    ]
+  }
+}
+```
+
+<!-- 简介 -->
+##### PHP:
+
+<!-- 请求 PHP -->
+
+```php
+$results = $index->search('try')->highlight()->get();
+foreach($results as $doc)
+{
+    echo 'Document: '.$doc->getId();
+    foreach($doc->getData() as $field=>$value)
+    {
+        echo $field.': '.$value;
+    }
+    foreach($doc->getHighlight() as $field=>$snippets)
+    {
+        echo "Highlight for ".$field.":
+";
+        foreach($snippets as $snippet)
+        {
+            echo "- ".$snippet."
+";
+        }
+    }
+}
+
+```
+
+<!-- 响应 PHP -->
+```php
+Document: 14
+title: Book four
+content: Don`t try to compete in childishness, said Bliss.
+Highlight for title:
+- Book four
+Highlight for content:
+- Don`t <b>try</b> to compete in childishness, said Bliss.
+
+```
+
+<!-- 请求 Python -->
+``` python
+res = searchApi.search({"table":"books","query":{"match":{"*":"try"}},"highlight":{}})
+```
+<!-- 响应 Python -->
+``` python
+{'aggregations': None,
+ 'hits': {'hits': [{u'_id': u'4',
+                    u'_score': 1695,
+                    u'_source': {u'content': u'Don`t try to compete in childishness, said Bliss.',
+                                 u'title': u'Book four'},
+                    u'highlight': {u'content': [u'Don`t <b>try</b> to compete in childishness, said Bliss.'],
+                                   u'title': [u'Book four']}}],
+          'max_score': None,
+          'total': 1},
+ 'profile': None,
+ 'timed_out': False,
+ 'took': 0}
+```
+
+<!-- 请求 Python-asyncio -->
+``` python
+res = await searchApi.search({"table":"books","query":{"match":{"*":"try"}},"highlight":{}})
+```
+<!-- 响应 Python-asyncio -->
+``` python
+{'aggregations': None,
+ 'hits': {'hits': [{u'_id': u'4',
+                    u'_score': 1695,
+                    u'_source': {u'content': u'Don`t try to compete in childishness, said Bliss.',
+                                 u'title': u'Book four'},
+                    u'highlight': {u'content': [u'Don`t <b>try</b> to compete in childishness, said Bliss.'],
+                                   u'title': [u'Book four']}}],
+          'max_score': None,
+          'total': 1},
+ 'profile': None,
+ 'timed_out': False,
+ 'took': 0}
+```
+
+<!-- 请求 Javascript -->
+``` javascript
+res =  await searchApi.search({"table":"books","query":{"match":{"*":"try"}},"highlight":{}});
+```
+<!-- 响应 Javascript -->
+``` javascript
+{"took":0,"timed_out":false,"hits":{"total":1,"hits":[{"_id": 4,"_score":1695,"_source":{"title":"Book four","content":"Don`t try to compete in childishness, said Bliss."},"highlight":{"title":["Book four"],"content":["Don`t <b>try</b> to compete in childishness, said Bliss."]}}]}}
+```
+
+<!-- 简介 -->
+##### Java:
+
+<!-- 请求 Java -->
+
+```java
+searchRequest = new SearchRequest();
+searchRequest.setIndex("books");
+query = new HashMap<String,Object>();
+query.put("match",new HashMap<String,Object>(){{
+    put("*","try|gets|down|said");
+}});        
+searchRequest.setQuery(query);
+highlight = new HashMap<String,Object>(){{
+
+}};
+searchRequest.setHighlight(highlight);
+searchResponse = searchApi.search(searchRequest);
+```
+
+<!-- 响应 Java -->
+```java
+class SearchResponse {
+    took: 0
+    timedOut: false
+    hits: class SearchResponseHits {
+        total: 3
+        maxScore: null
+        hits: [{_id=3, _score=1597, _source={title=Book three, content=Trevize whispered, "It gets infantile pleasure out of display. I`d love to knock it down."}, highlight={title=[Book three], content=[, "It <b>gets</b> infantile pleasure ,  to knock it <b>down</b>."]}}, {_id=4, _score=1563, _source={title=Book four, content=Don`t try to compete in childishness, said Bliss.}, highlight={title=[Book four], content=[Don`t <b>try</b> to compete in childishness, <b>said</b> Bliss.]}}, {_id=5, _score=1514, _source={title=Books two, content=A door opened before them, revealing a small room. Bander said, "Come, half-humans, I want to show you how we live."}, highlight={title=[Books two], content=[ a small room. Bander <b>said</b>, "Come, half-humans, I]}}]
+        aggregations: null
+    }
+    profile: null
+}
+```
+
+<!-- intro -->
+##### C#:
+
+<!-- request C# -->
+
+```clike
+var searchRequest = new SearchRequest("books");
+searchRequest.FulltextFilter = new MatchFilter("*", "try|gets|down|said");
+var highlight = new Highlight();
+searchRequest.Highlight = highlight;
+var searchResponse = searchApi.Search(searchRequest);
+```
+
+<!-- response C# -->
+```clike
+class SearchResponse {
+    took: 0
+    timedOut: false
+    hits: class SearchResponseHits {
+        total: 3
+        maxScore: null
+        hits: [{_id=3, _score=1597, _source={title=Book three, content=Trevize whispered, "It gets infantile pleasure out of display. I`d love to knock it down."}, highlight={title=[Book three], content=[, "It <b>gets</b> infantile pleasure ,  to knock it <b>down</b>."]}}, {_id=4, _score=1563, _source={title=Book four, content=Don`t try to compete in childishness, said Bliss.}, highlight={title=[Book four], content=[Don`t <b>try</b> to compete in childishness, <b>said</b> Bliss.]}}, {_id=5, _score=1514, _source={title=Books two, content=A door opened before them, revealing a small room. Bander said, "Come, half-humans, I want to show you how we live."}, highlight={title=[Books two], content=[ a small room. Bander <b>said</b>, "Come, half-humans, I]}}]
+        aggregations: null
+    }
+    profile: null
+}
+```
+
+<!-- intro -->
+##### Rust:
+
+<!-- request Rust -->
+```rust
+let match_filter = HashMap::new();
+match_filter.insert("*".to_string(), "try|gets|down|said".to_string());
+let query = SearchQuery {
+    match: Some(serde_json::json!(match_filter).into()),
+    ..Default::default(),
+};
+let highlight = Highlight::new();
+
+let search_req = SearchRequest {
+    table: "books".to_string(),
+    query: Some(Box::new(query)),
+    highlight: serde_json::json!(highlight),
+    ..Default::default(),
+};
+```
+
+<!-- response Rust -->
+```rust
+class SearchResponse {
+    took: 0
+    timedOut: false
+    hits: class SearchResponseHits {
+        total: 3
+        maxScore: null
+        hits: [{_id=3, _score=1597, _source={title=Book three, content=Trevize whispered, "It gets infantile pleasure out of display. I`d love to knock it down."}, highlight={title=[Book three], content=[, "It <b>gets</b> infantile pleasure ,  to knock it <b>down</b>."]}}, {_id=4, _score=1563, _source={title=Book four, content=Don`t try to compete in childishness, said Bliss.}, highlight={title=[Book four], content=[Don`t <b>try</b> to compete in childishness, <b>said</b> Bliss.]}}, {_id=5, _score=1514, _source={title=Books two, content=A door opened before them, revealing a small room. Bander said, "Come, half-humans, I want to show you how we live."}, highlight={title=[Books two], content=[ a small room. Bander <b>said</b>, "Come, half-humans, I]}}]
+        aggregations: null
+    }
+    profile: null
+}
+```
+
+<!-- request TypeScript -->
+``` typescript
+res = await searchApi.search({
+  index: 'test',
+  query: {
+    match: {
+      *: 'Text 1'
+    }
+  },
+  highlight: {}
+});
+```
+<!-- response TypeScript -->
+``` typescript
+{
+
+"took":0,
+
+"timed_out":false,
+
+"hits":
+
+{
+
+"total":1,
+
+"hits":
+
+[{
+
+"_id": 1,
+
+"_score":1480,
+
+"_source":
+
+{
+
+"content":"Text 1"
+
+},
+
+"highlight":
+
+{
+
+"content":
+
+[
+
+"<b>Text 1</b>"
+
+]
+
+}
+
+]}
+
+}
+}
+```
+
+<!-- request Go -->
+``` go
+matchClause := map[string]interface{} {"*": "Text 1"};
+query := map[string]interface{} {"match": matchClause};
+searchRequest.SetQuery(query);
+highlight := manticoreclient.NewHighlight()
+searchRequest.SetHighlight(highlight)
+res, _, _ := apiClient.SearchAPI.Search(context.Background()).SearchRequest(*searchRequest).Execute()
+```
+<!-- response Go -->
+``` go
+{
+
+"took":0,
+
+"timed_out":false,
+
+"hits":
+
+{
+
+"total":1,
+
+"hits":
+
+[{
+
+"_id": 1,
+
+"_score":1480,
+
+"_source":
+
+{
+
+"content":"Text 1"
+
+},
+
+"highlight":
+
+{
+
+"content":
+
+[
+
+"<b>Text 1</b>"
+
+]
+
+}
+
+]}
+
+}
+}
+```
+
+<!-- end -->
+
+When using SQL for highlighting search results, you will receive snippets from various fields combined into a single string due to the limitations of the MySQL protocol. You can adjust the concatenation separators with the `field_separator` and `snippet_separator` options, as detailed below.
+
+When executing JSON queries through HTTP or using the PHP client, there are no such constraints, and the result set includes an array of fields containing arrays of snippets (without separators).
+
+Keep in mind that snippet generation options like `limit`, `limit_words`, and `limit_snippets` apply to each field individually by default. You can alter this behavior using the `limits_per_field` option, but it could lead to unwanted results. For example, one field may have matching keywords, but no snippets from that field are included in the result set because they didn't rank as high as snippets from other fields in the highlighting engine.
+
+The highlighting algorithm currently prioritizes better snippets (with closer phrase matches) and then snippets with keywords not yet included in the result. Generally, it aims to highlight the best match for the query and to highlight all query keywords, as allowed by the limits. If no matches are found in the current field, the beginning of the document will be trimmed according to the limits and returned by default. To return an empty string instead, set the `allow_empty` option to 1.
+
+Highlighting is performed during the so-called `post limit` stage, which means that snippet generation is deferred not only until the entire final result set is prepared but also after the LIMIT clause is applied. For instance, with a LIMIT 20,10 clause, the `HIGHLIGHT()` function will be called a maximum of 10 times.
+
+## Highlighting options
+
+<!-- example highlighting options -->
+有几个可选的高亮选项可以用于微调片段生成，这些选项对 SQL、HTTP 和 PHP 客户端都是通用的。
+
+#### before_match
+在关键字匹配前插入的字符串。可以在此字符串中使用 `%SNIPPET_ID%` 宏。此宏的第一次出现被当前片段中的递增片段编号所替代。编号默认从 1 开始，但可以通过 `start_snippet_id` 选项重写。%SNIPPET_ID% 在每个新文档的开头重新开始。默认值是 `<b>`。
+
+#### after_match
+在关键字匹配后插入的字符串。默认值是 `</b>`。
+
+#### limit
+最大片段大小，以符号（代码点）为单位。默认值是 256。此设置默认按字段应用，请参见 `limits_per_field`。
+
+#### limit_words
+限制结果中可以包含的最大单词数。请注意，该限制适用于所有单词，而不仅仅是需要高亮的匹配关键字。例如，如果高亮 `Mary`，并选择片段 `Mary had a little lamb`，它对这个限制贡献 5 个单词，而不仅仅是 1。默认值是 0（没有限制）。此设置默认按字段应用，请参见 `limits_per_field`。
+
+#### limit_snippets
+限制可以包含在结果中的最大片段数。默认值是 0（没有限制）。此设置默认按字段应用，请参见 `limits_per_field`。
+
+#### limits_per_field
+确定 `limit`、`limit_words` 和 `limit_snippets` 是否在待高亮的文档的每个字段中作为独立限制操作，或者作为整个文档的全局限制。将此选项设置为 0 意味着一个文档的所有组合高亮结果必须在指定的限制内。缺点是，如果高亮引擎决定它们更相关，您可能在一个字段中有多个高亮片段而在另一个字段中没有。默认值是 1（使用按字段的限制）。
+#### around
+选择每个匹配关键字块周围的单词数量。默认值是 5。
+
+#### use_boundaries
+确定是否根据表设置中的短语边界字符额外拆分片段，配置使用 [phrase_boundary](../Creating_a_table/NLP_and_tokenization/Low-level_tokenization.md#phrase_boundary) 指令。默认值是 0（不使用边界）。
+
+#### weight_order
+指定是否按照相关性（递减权重）或文档中的出现顺序（递增位置）对提取的片段进行排序。默认值是 0（不使用权重顺序）。
+
+#### force_all_words
+忽略长度限制，直到结果中包含所有关键字。默认值是 0（不强制所有关键字）。
+
+#### start_snippet_id
+设置 `%SNIPPET_ID%` 宏的起始值（在 `before_match`、`after_match` 字符串中检测并扩展）。默认值是 1。
+
+#### html_strip_mode
+定义 HTML 剥离模式设置。默认为 `index`，这意味着将使用表设置。其他值包括 `none` 和 `strip`，它们强制跳过或应用剥离，而不考虑表设置；以及 `retain`，它保留 HTML 标记并保护其不被高亮。`retain` 模式仅在高亮整个文档时可以使用，因此要求不设置片段大小限制。允许的字符串值为 `none`、`strip`、`index` 和 `retain`。
+
+#### allow_empty
+允许在当前字段中无法生成片段时返回空字符串作为高亮结果（没有关键字匹配或没有片段符合限制）。默认情况下，返回原始文本的开头，而不是空字符串。默认值是 0（不允许空结果）。
+
+#### snippet_boundary
+确保片段不跨越句子、段落或区域边界（当与具有相应索引设置的表一起使用时）。允许的值为 `sentence`、`paragraph` 和 `zone`。
+
+#### emit_zones
+在每个片段之前发出一个带有封闭区域名称的 HTML 标签。默认值是 0（不发出区域名称）。
+
+#### force_snippets
+确定是否强制生成片段，即使限制允许高亮整个文本。默认值是 0（不强制生成片段）。
+
+<!-- intro -->
+##### SQL:
+<!-- request SQL -->
+
+```sql
+SELECT HIGHLIGHT({limit=50}) FROM books WHERE MATCH('try|gets|down|said');
+```
+
+<!-- response SQL -->
+```sql
++---------------------------------------------------------------------------+
+| highlight({limit=50})                                                     |
++---------------------------------------------------------------------------+
+|  ... , "It <b>gets</b> infantile pleasure  ...  to knock it <b>down</b>." |
+| Don`t <b>try</b> to compete in childishness, <b>said</b> Bliss.           |
+|  ...  a small room. Bander <b>said</b>, "Come, half-humans, I ...         |
++---------------------------------------------------------------------------+
+3 rows in set (0.00 sec)
+```
+
+<!-- intro -->
+##### JSON:
+
+<!-- request JSON -->
+
+```json
+POST /search
+{
+  "table": "books",
+  "query": {"query_string": "try|gets|down|said"},
+  "highlight": { "limit":50 }
+}
+```
+
+<!-- response JSON -->
+
+```json
+{
+  "took":2,
+  "timed_out":false,
+  "hits":
+  {
+    "total":3,
+    "hits":
+    [
+      {
+        "_id": 3,
+        "_score":1602,
+        "_source":
+        {
+          "title":"Book three",
+          "content":"Trevize whispered, "It gets infantile pleasure out of display. I`d love to knock it down.""
+        },
+        "highlight":
+        {
+          "title":
+          [
+            "Book three"
+          ],
+          "content":
+          [
+            ", "It <b>gets</b> infantile pleasure ",
+            " to knock it <b>down</b>.""
+          ]
+        }
+      },
+      {
+        "_id": 4,
+        "_score":1573,
+        "_source":
+        {
+          "title":"书四",
+          "content":"不要试图在幼稚方面竞争，布利斯说道。"
+        },
+        "highlight":
+        {
+          "title":
+          [
+            "书四"
+          ],
+          "content":
+          [
+            "不要 <b>试图</b> 在幼稚方面竞争，<b>布利斯</b>说道。"
+          ]
+        }
+      },
+      {
+        "_id": 2,
+        "_score":1521,
+        "_source":
+        {
+          "title":"书二",
+          "content":"一扇门在他们面前打开，显露出一个小房间。班德说，"来吧，半人类，我想给你们看看我们是如何生活的。""
+        },
+        "highlight":
+        {
+          "title":
+          [
+            "书二"
+          ],
+          "content":
+          [
+            "一个小房间。班德 <b>说道</b>，"来吧，半人类，我"
+          ]
+        }
+      }
+    ]
+  }
+}
+```
+
+<!-- intro -->
+##### PHP:
+
+<!-- request PHP -->
+
+```php
+$results = $index->search('try|gets|down|said')->highlight([],['limit'=>50])->get();
+foreach($results as $doc)
+{
+    echo '文档: '.$doc->getId();
+    foreach($doc->getData() as $field=>$value)
+    {
+        echo $field.': '.$value;
+    }
+    foreach($doc->getHighlight() as $field=>$snippets)
+    {
+        echo "关于".$field."的高亮:
+";
+        foreach($snippets as $snippet)
+        {
+            echo  $snippet."
+";
+        }
+    }
+}
+```
+
+<!-- response PHP -->
+```php
+文档: 3
+title: 书三
+content: 特雷维兹低声说道，"它从展示中获得幼稚的乐趣。我想把它推倒。"
+关于title的高亮:
+- 书四
+关于content的高亮:
+, "它 <b>获得</b> 幼稚的乐趣
+把它 <b>推倒</b>。"
+
+文档: 4
+title: 书四
+content: 不要试图在幼稚方面竞争，布利斯说道。
+关于title的高亮:
+- 书四
+关于content的高亮:
+不要 <b>试图</b> 在幼稚方面竞争，<b>布利斯</b>说道。
+
+文档: 2
+title: 书二
+content: 一扇门在他们面前打开，显露出一个小房间。班德说，"来吧，半人类，我想给你们看看我们是如何生活的。
+关于title的高亮:
+- 书二
+关于content的高亮:
+ 一个小房间。班德 <b>说道</b>，"来吧，半人类，我
+```
+
+<!-- request Python -->
+``` python
+res = searchApi.search({"table":"books","query":{"match":{"*":"try"}},"highlight":{"limit":50}})
+```
+<!-- response Python -->
+``` python
+{'aggregations': None,
+ 'hits': {'hits': [{u'_id': u'4',
+                    u'_score': 1695,
+                    u'_source': {u'content': u'不要试图在幼稚方面竞争，布利斯说道。',
+                                 u'title': u'书四'},
+                    u'highlight': {u'content': [u'不要 <b>试图</b> 在幼稚方面竞争，布利斯说道。'],
+                                   u'title': [u'书四']}}],
+          'max_score': None,
+          'total': 1},
+ 'profile': None,
+ 'timed_out': False,
+ 'took': 0}
+```
+
+<!-- request Python-asyncio -->
+``` python
+res = await searchApi.search({"table":"books","query":{"match":{"*":"try"}},"highlight":{"limit":50}})
+```
+<!-- response Python-asyncio -->
+``` python
+{'aggregations': None,
+ 'hits': {'hits': [{u'_id': u'4',
+                    u'_score': 1695,
+                    u'_source': {u'content': u'不要试图在幼稚方面竞争，布利斯说道。',
+                                 u'title': u'书四'},
+                    u'highlight': {u'content': [u'不要 <b>试图</b> 在幼稚方面竞争，布利斯说道。'],
+                                   u'title': [u'书四']}}],
+          'max_score': None,
+          'total': 1},
+ 'profile': None,
+ 'timed_out': False,
+ 'took': 0}
+```
+
+<!-- request Javascript -->
+``` javascript
+res =  await searchApi.search({"table":"books","query":{"query_string":"try|gets|down|said"},"highlight":{"limit":50}});
+```
+<!-- response Javascript -->
+``` javascript
+{"took":0,"timed_out":false,"hits":{"total":3,"hits":[{"_id": 3,"_score":1597,"_source":{"title":"书三","content":"特雷维兹低声说道，"它从展示中获得幼稚的乐趣。我想把它推倒。""},"highlight":{"title":["书三"],"content":[", "它 <b>获得</b> 幼稚的乐趣 "," 把它 <b>推倒</b>。""]}},{"_id": 4,"_score":1563,"_source":{"title":"书四","content":"不要试图在幼稚方面竞争，布利斯说道。"},"highlight":{"title":["书四"],"content":["不要 <b>试图</b> 在幼稚方面竞争，<b>布利斯</b>说道。"]}},{"_id": 5,"_score":1514,"_source":{"title":"书二","content":"一扇门在他们面前打开，显露出一个小房间。班德说，"来吧，半人类，我想给你们看看我们是如何生活的。""},"highlight":{"title":["书二"],"content":[" 一个小房间。班德 <b>说道</b>，"来吧，半人类，我"]}}]}}
+```
+
+<!-- intro -->
+##### Java:
+
+<!-- request Java -->
+
+```java
+searchRequest = new SearchRequest();
+searchRequest.setIndex("books");
+query = new HashMap<String,Object>();
+query.put("match",new HashMap<String,Object>(){{
+    put("*","try|gets|down|said");
+}});        
+searchRequest.setQuery(query);
+highlight = new HashMap<String,Object>(){{
+    put("limit",50);
+}};
+searchRequest.setHighlight(highlight);
+searchResponse = searchApi.search(searchRequest);
+```
+
+<!-- response Java -->
+```java
+class SearchResponse {
+    took: 0
+    timedOut: false
+    hits: class SearchResponseHits {
+        total: 3
+        maxScore: null
+        hits: [{_id=3, _score=1597, _source={title=书籍三, content=特雷维兹低声说，“它从展示中获得幼稚的乐趣。我很想把它打倒。”}, highlight={title=[书籍三], content=[, "它 <b>获得</b> 幼稚的乐趣 ,  打倒它 <b>的</b>。"]}}, {_id=4, _score=1563, _source={title=书籍四, content=“不要试图在幼稚中竞争，”布利斯说。}, highlight={title=[书籍四], content=[“不要 <b>试图</b> 在幼稚中竞争，<b>布利斯</b> 说。"]}}, {_id=5, _score=1514, _source={title=书籍二, content=一扇门在他们面前打开，露出了一个小房间。班德说：“来吧，半人类，我想向你们展示我们是如何生活的。”}, highlight={title=[书籍二], content=[ 一个小房间。班德 <b>说</b>，“来吧，半人类，我]}}]
+        aggregations: null
+    }
+    profile: null
+}
+```
+
+<!-- intro -->
+##### C#:
+
+<!-- request C# -->
+
+```clike
+var searchRequest = new SearchRequest("books");
+searchRequest.FulltextFilter = new MatchFilter("*", "try|gets|down|said");
+var highlight = new Highlight();
+highlight.Limit = 50;
+searchRequest.Highlight = highlight;
+var searchResponse = searchApi.Search(searchRequest);
+```
+
+<!-- response C# -->
+```clike
+class SearchResponse {
+    took: 0
+    timedOut: false
+    hits: class SearchResponseHits {
+        total: 3
+        maxScore: null
+        hits: [{_id=3, _score=1597, _source={title=书籍三, content=特雷维兹低声说，“它从展示中获得幼稚的乐趣。我很想把它打倒。”}, highlight={title=[书籍三], content=[, "它 <b>获得</b> 幼稚的乐趣 ,  打倒它 <b>的</b>。"]}}, {_id=4, _score=1563, _source={title=书籍四, content=“不要试图在幼稚中竞争，”布利斯说。}, highlight={title=[书籍四], content=[“不要 <b>试图</b> 在幼稚中竞争，<b>布利斯</b> 说。"]}}, {_id=5, _score=1514, _source={title=书籍二, content=一扇门在他们面前打开，露出了一个小房间。班德说：“来吧，半人类，我想向你们展示我们是如何生活的。”}, highlight={title=[书籍二], content=[ 一个小房间。班德 <b>说</b>，“来吧，半人类，我]}}]
+        aggregations: null
+    }
+    profile: null
+}
+```
+
+<!-- intro -->
+##### Rust:
+
+<!-- request Rust -->
+
+```rust
+let match_filter = HashMap::new();
+match_filter.insert("*".to_string(), "try|gets|down|said".to_string());
+let query = SearchQuery {
+    match: Some(serde_json::json!(match_filter).into()),
+    ..Default::default(),
+};
+let highlight = Highlight {
+    limit: Some(50),
+    ..Default::default(),
+};
+
+let search_req = SearchRequest {
+    table: "books".to_string(),
+    query: Some(Box::new(query)),
+    highlight: serde_json::json!(highlight),
+    ..Default::default(),
+};
+```
+
+<!-- response Rust -->
+```rust
+class SearchResponse {
+    took: 0
+    timedOut: false
+    hits: class SearchResponseHits {
+        total: 3
+        maxScore: null
+        hits: [{_id=3, _score=1597, _source={title=书籍三, content=特雷维兹低声说，“它从展示中获得幼稚的乐趣。我很想把它打倒。”}, highlight={title=[书籍三], content=[, "它 <b>获得</b> 幼稚的乐趣 ,  打倒它 <b>的</b>。"]}}, {_id=4, _score=1563, _source={title=书籍四, content=“不要试图在幼稚中竞争，”布利斯说。}, highlight={title=[书籍四], content=[“不要 <b>试图</b> 在幼稚中竞争，<b>布利斯</b> 说。"]}}, {_id=5, _score=1514, _source={title=书籍二, content=一扇门在他们面前打开，露出了一个小房间。班德说：“来吧，半人类，我想向你们展示我们是如何生活的。”}, highlight={title=[书籍二], content=[ 一个小房间。班德 <b>说</b>，“来吧，半人类，我]}}]
+        aggregations: null
+    }
+    profile: null
+}
+```
+
+<!-- request TypeScript -->
+``` typescript
+res = await searchApi.search({
+  index: 'test',
+  query: { match: { *: '文本 } },
+  highlight: { limit: 2}
+});
+```
+<!-- response TypeScript -->
+``` typescript
+{
+
+"took":0,
+
+"timed_out":false,
+
+"hits":
+
+{
+
+"total":2,
+
+"hits":
+
+[{
+
+"_id": 1,
+
+"_score":1480,
+
+"_source":
+
+{
+
+"content":"文本 1",
+
+"name":"文档 1",
+
+"cat":1
+
+},
+
+"highlight":
+
+{
+
+"content":
+
+[
+
+"<b>文本 1</b>"
+
+]
+
+}
+
+},
+
+{
+
+"_id": 2,
+
+"_score":1480,
+
+"_source":
+
+{
+
+"content":"文本 2",
+
+"name":"文档 2",
+
+"cat":2
+
+},
+
+"highlight":
+
+{
+
+"content":
+
+[
+
+"<b>文本 2</b>"
+
+]
+
+}
+
+}]
+
+}
+}
+```
+
+<!-- request Go -->
+``` go
+matchClause := map[string]interface{} {"*": "文本 1"};
+query := map[string]interface{} {"match": matchClause};
+searchRequest.SetQuery(query);
+highlight := manticoreclient.NewHighlight()
+searchRequest.SetHighlight(highlight)
+res, _, _ := apiClient.SearchAPI.Search(context.Background()).SearchRequest(*searchRequest).Execute()
+```
+<!-- response Go -->
+``` go
+{
+
+"took":0,
+
+"timed_out":false,
+
+"hits":
+
+{
+
+"total":2,
+
+"hits":
+
+[{
+
+"_id": 1,
+
+"_score":1480,
+
+"_source":
+
+{
+
+"content":"文本 1",
+
+"name":"文档 1",
+
+"cat":1
+
+},
+
+"highlight":
+
+{
+
+"content":
+
+[
+
+"<b>文本 1</b>"
+
+]
+
+}
+
+},
+
+{
+
+"_id": 2,
+
+"_score":1480,
+
+"_source":
+
+{
+
+"content":"文本 2",
+
+"name":"文档 2",
+
+"cat":2
+
+},
+
+"highlight":
+
+{
+
+"content":
+
+[
+
+"<b>文本 2</b>"
+
+]
+
+}
+
+}]
+
+}
+}
+```
+
+
+<!-- end -->
+
+
+## Highlighting via SQL
+
+The `HIGHLIGHT()` function can be used to highlight search results. Here's the syntax:
+
+```sql
+HIGHLIGHT([options], [field_list], [query] )
+```
+
+<!-- example highlight() no args -->
+By default, it works with no arguments.
+
+<!-- intro -->
+##### SQL:
+
+<!-- request SQL -->
+
+```sql
+SELECT HIGHLIGHT() FROM books WHERE MATCH('之前');
+```
+
+<!-- response SQL -->
+```sql
++-----------------------------------------------------------+
+| highlight()                                               |
++-----------------------------------------------------------+
+| 一扇门在他们面前打开，透露出一个小房间。                             |
++-----------------------------------------------------------+
+1 row in set (0.00 sec)
+```
+
+<!-- end -->
+
+<!-- example highlight() field syntax -->
+
+`HIGHLIGHT()` 从文档存储中检索所有可用的全文字段并根据提供的查询进行高亮。查询中的字段语法是支持的。字段文本由 `field_separator` 分隔，可以在选项中进行修改。
+
+<!-- intro -->
+##### SQL:
+
+<!-- request SQL -->
+
+```sql
+SELECT HIGHLIGHT() FROM books WHERE MATCH('@title one');
+```
+
+<!-- response SQL -->
+```sql
++-----------------+
+| highlight()     |
++-----------------+
+| 书籍 <b>one</b> |
++-----------------+
+1 row in set (0.00 sec)
+```
+
+<!-- end -->
+
+<!-- example highlight() options -->
+`HIGHLIGHT()` 的可选第一个参数是选项列表。
+
+<!-- intro -->
+##### SQL:
+
+<!-- request SQL -->
+
+```sql
+SELECT HIGHLIGHT({before_match='[match]',after_match='[/match]'}) FROM books WHERE MATCH('@title one');
+```
+
+<!-- response SQL -->
+```sql
++------------------------------------------------------------+
+| highlight({before_match='[match]',after_match='[/match]'}) |
++------------------------------------------------------------+
+| 书籍 [match]one[/match]                                    |
++------------------------------------------------------------+
+1 row in set (0.00 sec)
+```
+
+<!-- end -->
+
+<!-- example highlight() field list -->
+
+可选的第二个参数是一个包含单个字段或以逗号分隔的字段列表的字符串。如果此参数存在，则仅从文档存储中获取指定的字段并进行高亮。将空字符串作为第二个参数表示“获取所有可用字段。”
+
+<!-- intro -->
+##### SQL:
+
+<!-- request SQL -->
+
+```sql
+SELECT HIGHLIGHT({},'title,content') FROM books WHERE MATCH('one|robots');
+```
+
+<!-- response SQL -->
+```sql
++---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
+| highlight({},'title,content')                                                                                                                                                         |
++---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
+| 书籍 <b>one</b> | 他们跟着班德。<b>机器人</b>保持在一个礼貌的距离，但他们的存在是一个持续的威胁。                                   |
+| 班德把所有三个人都引入房间。<b>一个</b> <b>机器人</b>也跟了进来。班德朝其他<b>机器人</b>挥手，将它们驱赶开，并自己进入。门在它身后关上。 |
++---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
+2 rows in set (0.00 sec)
+```
+
+<!-- end -->
+
+<!-- example highlight() string attr -->
+
+或者，您可以使用第二个参数来指定一个字符串属性或字段名称，而不加引号。在这种情况下，提供的字符串将根据提供的查询进行高亮，但字段语法将被忽略。
+
+<!-- intro -->
+##### SQL:
+
+<!-- request SQL -->
+
+```sql
+SELECT HIGHLIGHT({}, title) FROM books WHERE MATCH('one');
+```
+
+<!-- response SQL -->
+```sql
++---------------------+
+| highlight({},title) |
++---------------------+
+| 书籍 <b>one</b>     |
+| 书籍 five           |
++---------------------+
+2 rows in set (0.00 sec)
+```
+
+<!-- end -->
+
+<!-- example highlight() query -->
+
+可选的第三个参数是查询。这用于根据与用于搜索的查询不同的查询高亮搜索结果。
+
+<!-- intro -->
+##### SQL:
+
+<!-- request SQL -->
+
+```sql
+SELECT HIGHLIGHT({},'title', 'five') FROM books WHERE MATCH('one');
+```
+
+<!-- response SQL -->
+```sql
++-------------------------------+
+| highlight({},'title', 'five') |
++-------------------------------+
+| 书籍 one                      |
+| 书籍 <b>five</b>              |
++-------------------------------+
+2 rows in set (0.00 sec)
+```
+
+<!-- end -->
+
+<!-- example HIGHLIGHT TO_STRING -->
+
+尽管 `HIGHLIGHT()` 旨在与存储的全文字段和字符串属性一起使用，但它也可以用来高亮任意文本。请记住，如果查询包含任何字段搜索运算符（例如，`@title hello @body world`），则此情况下将忽略字段部分。
+
+<!-- intro -->
+##### SQL:
+
+<!-- request SQL -->
+
+```sql
+SELECT HIGHLIGHT({},TO_STRING('some text to highlight'), 'highlight') FROM books WHERE MATCH('@title one');
+```
+
+<!-- response SQL -->
+```sql
++----------------------------------------------------------------+
+| highlight({},TO_STRING('some text to highlight'), 'highlight') |
++----------------------------------------------------------------+
+| 一些文本以 <b>高亮</b>                                        |
++----------------------------------------------------------------+
+1 row in set (0.00 sec)
+```
+
+<!-- end -->
+
+生成单个字符串作为结果（而不是数组片段）时，一些选项是相关的。这仅适用于 SQL `HIGHLIGHT()` 函数：
+
+#### snippet_separator
+用于在片段之间插入的字符串。默认值为 ` ... `。
+#### field_separator
+在字段之间插入的字符串。 默认值是 `|`。
+
+
+另一种突出显示文本的方法是使用 [CALL SNIPPETS](../Searching/Highlighting.md#CALL-SNIPPETS) 语句。 这大多重复了 `HIGHLIGHT()` 的功能，但无法使用内置文档存储。 但是，它可以从文件加载源文本。
+
+
+## 通过 HTTP 突出显示
+
+<!-- example highlight in JSON -->
+
+要通过 HTTP 在 JSON 查询中突出显示全文搜索结果，字段内容必须存储在文档存储中（默认启用）。 在示例中，全文字段 `content` 和 `title` 从文档存储中获取，并根据 `query` 子句中指定的查询进行突出显示。
+
+突出显示的片段在 `hits` 数组的 `highlight` 属性中返回。
+
+<!-- intro -->
+##### JSON:
+
+<!-- request JSON -->
+
+```json
+POST /search
+{
+  "table": "books",
+  "query": { "match": { "*": "one|robots" } },
+  "highlight":
+  {
+    "fields": ["content"]
+  }
+}
+```
+
+<!-- response JSON -->
+
+```json
+{
+  "took": 0,
+  "timed_out": false,
+  "hits": {
+    "total": 1,
+    "hits": [
+      {
+        "_id": 1,
+        "_score": 2788,
+        "_source": {
+          "title": "书籍一",
+          "content": "他们跟随班德。 机器人保持在礼貌的距离，但他们的存在始终是一种潜在威胁。 班德把他们三个引入房间。 一台机器人也跟随而来。 班德示意其他机器人离开，自己进入。 门在它身后关闭。 "
+        },
+        "highlight": {
+          "content": [
+            "他们跟随班德。 <b>机器人</b>保持在礼貌的距离，",
+            "三个进入房间。 <b>一台</b> <b>机器人</b>也跟随而来。 班德",
+            "示意其他<b>机器人</b>离开，自己进入。"
+          ]
+        }
+      }
+    ]
+  }
+}
+```
+<!-- intro -->
+##### PHP:
+
+<!-- request PHP -->
+
+```php
+$index->setName('books');
+$results = $index->search('one|robots')->highlight(['content'])->get();
+foreach($results as $doc)
+{
+    echo '文档: '.$doc->getId()."
+";
+    foreach($doc->getData() as $field=>$value)
+    {
+        echo $field.' : '.$value."
+";
+    }
+    foreach($doc->getHighlight() as $field=>$snippets)
+    {
+        echo "对 ".$field." 的突出显示:
+";
+        foreach($snippets as $snippet)
+        {
+            echo "- ".$snippet."
+";
+        }
+    }
+}
+
+```
+
+<!-- response PHP -->
+```php
+文档: 1
+title : 书籍一
+content : 他们跟随班德。 机器人保持在礼貌的距离，但他们的存在始终是一种潜在威胁。 班德把他们三个引入房间。 一台机器人也跟随而来。 班德示意其他机器人离开，自己进入。 门在它身后关闭。
+对 content 的突出显示:
+- 他们跟随班德。 <b>机器人</b>保持在礼貌的距离，
+- 进入房间。 <b>一台</b> <b>机器人</b>也跟随而来。 班德
+- 示意其他 <b>机器人</b>离开，自己进入。 
+```
+<!-- request Python -->
+``` python
+res = searchApi.search({"table":"books","query":{"match":{"*":"one|robots"}},"highlight":{"fields":["content"]}}))
+```
+<!-- response Python -->
+``` python
+{'aggregations': None,
+ 'hits': {'hits': [{u'_id': u'1',
+                    u'_score': 2788,
+                    u'_source': {u'content': u'他们跟随班德。 机器人保持在礼貌的距离，但他们的存在始终是一种潜在威胁。 班德把他们三个引入房间。 一台机器人也跟随而来。 班德示意其他机器人离开，自己进入。 门在它身后关闭。 ',
+                                 u'title': u'书籍一'},
+                    u'highlight': {u'content': [u'他们跟随班德。 <b>机器人</b>保持在礼貌的距离，',
+                                                u' 进入房间。 <b>一台</b> <b>机器人</b>也跟随而来。 班德',
+                                                u' 示意其他 <b>机器人</b>离开，自己进入。 ']}}}],
+          'max_score': None,
+          'total': 1},
+ 'profile': None,
+ 'timed_out': False,
+ 'took': 0}
+```
+
+<!-- request Python-asyncio -->
+``` python
+res = await searchApi.search({"table":"books","query":{"match":{"*":"one|robots"}},"highlight":{"fields":["content"]}}))
+```
+<!-- response Python-asyncio -->
+``` python
+{'aggregations': None,
+ 'hits': {'hits': [{u'_id': u'1',
+                    u'_score': 2788,
+                    u'_source': {u'content': u'他们跟随班德。 机器人保持在礼貌的距离，但他们的存在始终是一种潜在威胁。 班德把他们三个引入房间。 一台机器人也跟随而来。 班德示意其他机器人离开，自己进入。 门在它身后关闭。 ',
+                                 u'title': u'书籍一'},
+                    u'highlight': {u'content': [u'他们跟随班德。 <b>机器人</b>保持在礼貌的距离，',
+                                                u' 进入房间。 <b>一台</b> <b>机器人</b>也跟随而来。 班德',
+                                                u' 示意其他 <b>机器人</b>离开，自己进入。 ']}}}],
+          'max_score': None,
+          'total': 1},
+ 'profile': None,
+ 'timed_out': False,
+ 'took': 0}
+```
+
+<!-- request Javascript -->
+``` javascript
+res =  await searchApi.search({"table":"books","query":{"match":{"*":"one|robots"}},"highlight":{"fields":["content"]}});
+```
+<!-- response Javascript -->
+``` javascript
+{"took":0,"timed_out":false,"hits":{"total":1,"hits":[{"_id": 1,"_score":2788,"_source":{"title":"书籍一","content":"他们跟随班德。机器人保持在礼貌的距离，但它们的存在始终是一种威胁。班德将三人引入房间。一个机器人也跟着进来。班德示意其他机器人远离，并自己走了进去。门在它身后关闭。"},"highlight":{"content":["他们跟随班德。这个<b>机器人</b>保持在礼貌的距离，","三人进入房间。<b>其中一个</b> <b>机器人</b>也跟着进来。班德","示意其他<b>机器人</b>远离并自己走了进去。"]}}]}}
+```
+
+<!-- intro -->
+##### Java:
+
+<!-- request Java -->
+
+```java
+searchRequest = new SearchRequest();
+searchRequest.setIndex("books");
+query = new HashMap<String,Object>();
+query.put("match",new HashMap<String,Object>(){{
+    put("*","one|robots");
+}});        
+searchRequest.setQuery(query);
+highlight = new HashMap<String,Object>(){{
+    put("fields",new String[] {"content"});
+}};
+searchRequest.setHighlight(highlight);
+searchResponse = searchApi.search(searchRequest);
+```
+
+<!-- response Java -->
+```java
+class SearchResponse {
+    took: 0
+    timedOut: false
+    hits: class SearchResponseHits {
+        total: 1
+        maxScore: null
+        hits: [{_id=1, _score=2788, _source={title=书籍一, content=他们跟随班德。机器人保持在礼貌的距离，但它们的存在始终是一种威胁。班德将三人引入房间。一个机器人也跟着进来。班德示意其他机器人远离，并自己走了进去。门在它身后关闭。 }, highlight={title=[书籍 <b>一</b>], content=[他们跟随班德。这个 <b>机器人</b> 保持在礼貌的距离， ,  三人进入房间。<b>其中一个</b> <b>机器人</b> 也跟着进来。班德,  示意其他 <b>机器人</b> 远离并自己走了进去。]}]}
+        aggregations: null
+    }
+    profile: null
+}
+
+```
+
+<!-- intro -->
+##### C#:
+
+<!-- request C# -->
+
+```clike
+var searchRequest = new SearchRequest("books");
+searchRequest.FulltextFilter = new MatchFilter("*", "one|robots");
+var highlight = new Highlight();
+highlight.Fieldnames = new List<string> {"content"};
+searchRequest.Highlight = highlight;
+var searchResponse = searchApi.Search(searchRequest);
+```
+
+<!-- response C# -->
+```clike
+class SearchResponse {
+    took: 0
+    timedOut: false
+    hits: class SearchResponseHits {
+        total: 1
+        maxScore: null
+        hits: [{_id=1, _score=2788, _source={title=书籍一, content=他们跟随班德。机器人保持在礼貌的距离，但它们的存在始终是一种威胁。班德将三人引入房间。一个机器人也跟着进来。班德示意其他机器人远离，并自己走了进去。门在它身后关闭。 }, highlight={title=[书籍 <b>一</b>], content=[他们跟随班德。这个 <b>机器人</b> 保持在礼貌的距离， ,  三人进入房间。<b>其中一个</b> <b>机器人</b> 也跟着进来。班德,  示意其他 <b>机器人</b> 远离并自己走了进去。]}]}
+        aggregations: null
+    }
+    profile: null
+}
+
+```
+
+<!-- intro -->
+##### Rust:
+
+<!-- request Rust -->
+
+```rust
+let match_filter = HashMap::new();
+match_filter.insert("*".to_string(), "one|robots".to_string());
+let query = SearchQuery {
+    match: Some(serde_json::json!(match_filter).into()),
+    ..Default::default(),
+};
+let highlight_fields [String; 1] = ["content".to_string()]; 
+let highlight = Highlight {
+    fields: Some(serde_json::json!(highlight_fields)),
+    ..Default::default(),
+};
+
+let search_req = SearchRequest {
+    table: "books".to_string(),
+    query: Some(Box::new(query)),
+    highlight: serde_json::json!(highlight),
+    ..Default::default(),
+};
+```
+
+<!-- response Rust -->
+```rust
+class SearchResponse {
+    took: 0
+    timedOut: false
+    hits: class SearchResponseHits {
+        total: 1
+        maxScore: null
+        hits: [{_id=1, _score=2788, _source={title=书籍一, content=他们跟随班德。机器人保持在礼貌的距离，但它们的存在始终是一种威胁。班德将三人引入房间。一个机器人也跟着进来。班德示意其他机器人远离，并自己走了进去。门在它身后关闭。 }, highlight={title=[书籍 <b>一</b>], content=[他们跟随班德。这个 <b>机器人</b> 保持在礼貌的距离， ,  三人进入房间。<b>其中一个</b> <b>机器人</b> 也跟着进来。班德,  示意其他 <b>机器人</b> 远离并自己走了进去。]}]}
+        aggregations: null
+    }
+    profile: null
+}
+
+```
+
+<!-- request TypeScript -->
+``` typescript
+res = await searchApi.search({
+  index: 'test',
+  query: {
+    match: {
+      *: 'Text 1|Text 9'
+    }
+  },
+  highlight: {}
+});
+```
+<!-- response TypeScript -->
+``` typescript
+{
+
+"took":0,
+
+"timed_out":false,
+
+"hits":
+
+{
+
+"total":1,
+
+"hits":
+
+[{
+
+"_id": 1,
+
+"_score":1480,
+
+"_source":
+
+{
+
+"content":"文本 1",
+
+"name":"文档 1",
+
+"cat":1
+
+},
+
+"highlight":
+
+{
+
+"content":
+
+[
+
+"<b>文本 1</b>"
+
+]
+
+}
+
+]}
+
+}
+}
+```
+
+<!-- request Go -->
+``` go
+matchClause := map[string]interface{} {"*": "Text 1|Text 9"};
+query := map[string]interface{} {"match": matchClause};
+searchRequest.SetQuery(query);
+highlight := manticoreclient.NewHighlight()
+searchRequest.SetHighlight(highlight)
+res, _, _ := apiClient.SearchAPI.Search(context.Background()).SearchRequest(*searchRequest).Execute()
+```
+<!-- response Go -->
+``` go
+{
+
+"took":0,
+
+"timed_out":false,
+
+"hits":
+
+{
+
+"total":1,
+
+"hits":
+
+[{
+
+"_id": 1,
+
+"_score":1480,
+
+"_source":
+
+{
+
+"content":"文本 1",
+
+"name":"文档 1",
+
+"cat":1
+
+},
+
+"highlight":
+
+{
+
+"content":
+
+[
+
+"<b>文本 1</b>"
+
+]
+
+}
+
+]}
+
+}
+}
+
+```
+
+<!-- end -->
+
+<!-- 示例突出显示 JSON 所有字段  -->
+
+要突出显示所有可能的字段，将一个空对象作为 `highlight` 属性传递。
+
+<!-- intro -->
+##### JSON:
+
+<!-- 请求 JSON -->
+
+```json
+POST /search
+{
+"table": "books",
+"query": { "match": { "*": "one|robots" } },
+"highlight": {}
+}
+```
+
+<!-- 响应 JSON -->
+
+```json
+{
+"took": 0,
+"timed_out": false,
+"hits": {
+  "total": 1,
+  "hits": [
+    {
+      "_id": 1,
+      "_score": 2788,
+      "_source": {
+        "title": "书籍一",
+        "content": "他们跟随班德。机器人保持在礼貌的距离，但它们的存在是一个不断感受到的威胁。班德把三个人都带进了房间。一个机器人也跟了进去。班德示意其他机器人离开，然后自己进入。门在它身后关上。"
+      },
+      "highlight": {
+        "title": [
+          "书籍 <b>一</b>"
+        ],
+        "content": [
+          "他们跟随班德。<b>机器人</b>保持在礼貌的距离，",
+          " 三个人进入房间。<b>一个</b> <b>机器人</b>也跟了进来。班德",
+          " 示意其他<b>机器人</b>离开，然后自己进入。"
+        ]
+      }
+    }
+  ]
+}
+}
+```
+
+<!-- intro -->
+##### PHP:
+
+<!-- 请求 PHP -->
+
+```php
+$index->setName('books');
+$results = $index->search('one|robots')->highlight()->get();
+foreach($results as $doc)
+{
+  echo '文档: '.$doc->getId()."
+";
+  foreach($doc->getData() as $field=>$value)
+  {
+      echo $field.' : '.$value."
+";
+  }
+  foreach($doc->getHighlight() as $field=>$snippets)
+  {
+      echo "对 ".$field." 的突出显示:
+";
+      foreach($snippets as $snippet)
+      {
+          echo "- ".$snippet."
+";
+      }
+  }
+}
+```
+
+<!-- 响应 PHP -->
+
+```php
+文档: 1
+title : 书籍一
+content : 他们跟随班德。机器人保持在礼貌的距离，但它们的存在是一个不断感受到的威胁。班德把三个人都带进了房间。一个机器人也跟了进去。班德示意其他机器人离开，然后自己进入。门在它身后关上。
+对 title 的突出显示:
+- 书籍 <b>一</b>
+对 content 的突出显示:
+- 他们跟随班德。<b>机器人</b>保持在礼貌的距离，
+-  三个人进入房间。<b>一个</b> <b>机器人</b>也跟了进来。班德
+-  示意其他<b>机器人</b>离开，然后自己进入。
+```
+
+<!-- 请求 Python -->
+
+``` python
+res = searchApi.search({"table":"books","query":{"match":{"*":"one|robots"}},"highlight":{}).
+```
+
+<!-- 响应 Python -->
+
+``` python
+{'aggregations': None,
+hits': {'hits': [{u'_id': u'1',
+                  u'_score': 2788,
+                  u'_source': {u'content': u'他们跟随班德。机器人保持在礼貌的距离，但它们的存在是一个不断感受到的威胁。班德把三个人都带进了房间。一个机器人也跟了进去。班德示意其他机器人离开，然后自己进入。门在它身后关上。',
+                               u'title': u'书籍一'},
+                  u'highlight': {u'content': [u'他们跟随班德。<b>机器人</b>保持在礼貌的距离，',
+                                              u' 三个人进入房间。<b>一个</b> <b>机器人</b>也跟了进来。班德',
+                                              u' 示意其他<b>机器人</b>离开，然后自己进入。'],
+                                 u'title': [u'书籍 <b>一</b>']}}],
+        'max_score': None,
+        'total': 1},
+profile': None,
+timed_out': False,
+took': 0}
+```
+
+<!-- 请求 Python-asyncio -->
+
+``` python
+res = await searchApi.search({"table":"books","query":{"match":{"*":"one|robots"}},"highlight":{}}).
+```
+
+<!-- 响应 Python-asyncio -->
+
+``` python
+{'aggregations': None,
+hits': {'hits': [{u'_id': u'1',
+                  u'_score': 2788,
+                  u'_source': {u'content': u'他们跟随班德。机器人保持在礼貌的距离，但它们的存在是一个不断感受到的威胁。班德把三个人都带进了房间。一个机器人也跟了进去。班德示意其他机器人离开，然后自己进入。门在它身后关上。',
+                               u'title': u'书籍一'},
+                  u'highlight': {u'content': [u'他们跟随班德。<b>机器人</b>保持在礼貌的距离，',
+                                              u' 三个人进入房间。<b>一个</b> <b>机器人</b>也跟了进来。班德',
+                                              u' 示意其他<b>机器人</b>离开，然后自己进入。'],
+                                 u'title': [u'书籍 <b>一</b>']}}],
+        'max_score': None,
+        'total': 1},
+profile': None,
+timed_out': False,
+took': 0}
+```
+
+<!-- 请求 Javascript -->
+
+``` javascript
+res =  await searchApi.search({"table":"books","query":{"match":{"*":"one|robots"}},"highlight":{}}).
+```
+
+<!-- 响应 Javascript -->
+
+``` javascript
+{"took":0,"timed_out":false,"hits":{"total":1,"hits":[{"_id": 1,"_score":2788,"_source":{"title":"书籍一","content":"他们跟随班德。机器人保持在一个礼貌的距离，但他们的存在始终是一个潜在的威胁。班德把三个人带进了房间。一个机器人也跟了进来。班德示意其他机器人离开，然后自己也进去了。门在它身后关上了。 "},"highlight":{"title":["书籍 <b>一</b>"],"content":["他们跟随班德。<b>机器人</b>保持在一个礼貌的距离， "," 三个人进入房间。<b>一个</b> <b>机器人</b>也跟随进来。班德","示意其他<b>机器人</b>离开，然后自己也进去了。"]}}]}}
+
+```
+
+<!-- intro -->
+##### Java:
+
+<!-- request Java -->
+
+```java
+searchRequest = new SearchRequest();
+searchRequest.setIndex("books");
+query = new HashMap<String,Object>();
+query.put("match",new HashMap<String,Object>(){{
+    put("*","one|robots");
+}});        
+searchRequest.setQuery(query);
+highlight = new HashMap<String,Object>(){{
+}};
+searchRequest.setHighlight(highlight);
+searchResponse = searchApi.search(searchRequest);
+```
+
+<!-- response Java -->
+```java
+class SearchResponse {
+    took: 0
+    timedOut: false
+    hits: class SearchResponseHits {
+        total: 1
+        maxScore: null
+        hits: [{_id=1, _score=2788, _source={title=书籍一, content=他们跟随班德。机器人保持在一个礼貌的距离，但他们的存在始终是一个潜在的威胁。班德把三个人带进了房间。一个机器人也跟了进来。班德示意其他机器人离开，然后自己也进去了。门在它身后关上了。 }, highlight={title=[书籍 <b>一</b>], content=[他们跟随班德。<b>机器人</b>保持在一个礼貌的距离， ,  三个人进入房间。<b>一个</b> <b>机器人</b>也跟随进来。班德,  示意其他<b>机器人</b>离开，然后自己也进去了。]}}]
+        aggregations: null
+    }
+    profile: null
+}
+```
+
+<!-- intro -->
+##### C#:
+
+<!-- request C# -->
+
+```clike
+var searchRequest = new SearchRequest("books");
+searchRequest.FulltextFilter = new MatchFilter("*", "one|robots");
+var highlight = new Highlight();
+searchRequest.Highlight = highlight;
+var searchResponse = searchApi.Search(searchRequest);
+
+```
+
+<!-- response C# -->
+```clike
+class SearchResponse {
+    took: 0
+    timedOut: false
+    hits: class SearchResponseHits {
+        total: 1
+        maxScore: null
+        hits: [{_id=1, _score=2788, _source={title=书籍一, content=他们跟随班德。机器人保持在一个礼貌的距离，但他们的存在始终是一个潜在的威胁。班德把三个人带进了房间。一个机器人也跟了进来。班德示意其他机器人离开，然后自己也进去了。门在它身后关上了。 }, highlight={title=[书籍 <b>一</b>], content=[他们跟随班德。<b>机器人</b>保持在一个礼貌的距离， ,  三个人进入房间。<b>一个</b> <b>机器人</b>也跟随进来。班德,  示意其他<b>机器人</b>离开，然后自己也进去了。]}}]
+        aggregations: null
+    }
+    profile: null
+}
+```
+
+<!-- intro -->
+##### Rust:
+
+<!-- request Rust -->
+
+```rust
+let match_filter = HashMap::new();
+match_filter.insert("*".to_string(), "one|robots".to_string());
+let query = SearchQuery {
+    match: Some(serde_json::json!(match_filter).into()),
+    ..Default::default(),
+};
+
+let highlight = Highlight::new();
+let search_req = SearchRequest {
+    table: "books".to_string(),
+    query: Some(Box::new(query)),
+    highlight: serde_json::json!(highlight),
+    ..Default::default(),
+};
+```
+
+<!-- response Rust -->
+```rust
+class SearchResponse {
+    took: 0
+    timedOut: false
+    hits: class SearchResponseHits {
+        total: 1
+        maxScore: null
+        hits: [{_id=1, _score=2788, _source={title=书籍一, content=他们跟随班德。机器人保持在一个礼貌的距离，但他们的存在始终是一个潜在的威胁。班德把三个人带进了房间。一个机器人也跟了进来。班德示意其他机器人离开，然后自己也进去了。门在它身后关上了。 }, highlight={title=[书籍 <b>一</b>], content=[他们跟随班德。<b>机器人</b>保持在一个礼貌的距离， ,  三个人进入房间。<b>一个</b> <b>机器人</b>也跟随进来。班德,  示意其他<b>机器人</b>离开，然后自己也进去了。]}}]
+        aggregations: null
+    }
+    profile: null
+}
+```
+
+<!-- request TypeScript -->
+``` typescript
+res = await searchApi.search({
+  index: 'test',
+  query: {
+    match: {
+      *: '文本 1|文档 1'
+    }
+  },
+  highlight: {}
+});
+```
+<!-- response TypeScript -->
+``` typescript
+{
+
+"took":0,
+
+"timed_out":false,
+
+"hits":
+
+{
+
+"total":1,
+
+"hits":
+
+[{
+
+"_id": 1,
+
+"_score":1480,
+
+"_source":
+
+{
+
+"content":"文本 1",
+
+"name":"文档 1",
+
+"cat":1
+
+},
+
+"highlight":
+
+{
+
+"content":
+
+[
+
+"<b>文本 1</b>"
+
+],
+
+"name":
+
+[
+
+"<b>文档 1</b>"
+
+]
+
+}
+
+]}
+
+}
+}
+```
+
+<!-- request Go -->
+``` go
+matchClause := map[string]interface{} {"*": "文本 1|文档 1"};
+query := map[string]interface{} {"match": matchClause};
+searchRequest.SetQuery(query);
+highlight := manticoreclient.NewHighlight()
+searchRequest.SetHighlight(highlight)
+res, _, _ := apiClient.SearchAPI.Search(context.Background()).SearchRequest(*searchRequest).Execute()
+```
+<!-- response Go -->
+``` go
+{
+
+"took":0,
+
+"timed_out":false,
+
+"hits":
+
+{
+
+"total":1,
+
+"hits":
+
+[{
+
+"_id": 1,
+
+"_score":1480,
+
+"_source":
+
+{
+
+"content":"文本 1",
+
+"name":"文档 1",
+
+"cat":1
+
+},
+
+"highlight":
+
+{
+
+"content":
+
+[
+
+"<b>文本 1</b>"
+
+],
+
+"name":
+
+[
+
+"<b>文档 1</b>"
+
+]
+
+}
+
+]}
+}
+}
+```
+
+
+<!-- end -->
+
+除了常见的高亮选项外，多个同义词可以通过 HTTP 的 JSON 查询使用：
+
+#### fields
+`fields` 对象包含属性名称和选项。它也可以是字段名称的数组（没有任何选项）。
+
+请注意，默认情况下，高亮尝试对全文查询后的结果进行高亮。在一般情况下，如果不指定要高亮的字段，高亮是基于您的全文查询。但是，如果您指定了要高亮的字段，则仅当全文查询与所选字段匹配时，才会进行高亮。
+
+#### encoder
+`encoder` 可以设置为 `default` 或 `html`。设置为 `html` 时，它在高亮时保留 HTML 标记。这与 `html_strip_mode=retain` 选项类似。
+
+<!-- example highlight_query -->
+#### highlight_query
+`highlight_query` 选项允许您针对与您的搜索查询不同的查询进行高亮。语法与主 `query` 中相同。
+
+<!-- intro -->
+##### JSON:
+<!-- request JSON -->
+
+```json
+POST /search
+{
+  "table": "books",
+  "query": { "match": { "content": "one|robots" } },
+  "highlight":
+  {
+    "fields": [ "content"],
+    "highlight_query": { "match": { "*":"polite distance" } }
+   }
+}
+```
+<!-- intro -->
+##### PHP:
+
+<!-- request PHP -->
+
+```php
+$index->setName('books');
+$bool = new ManticoresearchQueryBoolQuery();
+$bool->must(new ManticoresearchQueryMatch(['query' => 'one|robots'], 'content'));
+
+$results = $index->search($bool)->highlight(['content'],['highlight_query'=>['match'=>['*'=>'polite distance']]])->get();
+foreach($results as $doc)
+{
+    echo 'Document: '.$doc->getId()."
+";
+    foreach($doc->getData() as $field=>$value)
+    {
+        echo $field.' : '.$value."
+";
+    }
+    foreach($doc->getHighlight() as $field=>$snippets)
+    {
+        echo "Highlight for ".$field.":
+";
+        foreach($snippets as $snippet)
+        {
+            echo "- ".$snippet."
+";
+        }
+    }
+}
+```
+
+<!-- request Python -->
+``` python
+res = searchApi.search({"table":"books","query":{"match":{"content":"one|robots"}},"highlight":{"fields":["content"],"highlight_query":{"match":{"*":"polite distance"}}}})
+```
+<!-- response Python -->
+``` python
+{'aggregations': None,
+ 'hits': {'hits': [{u'_id': u'1',
+                    u'_score': 1788,
+                    u'_source': {u'content': u'They followed Bander. The robots remained at a polite distance, but their presence was a constantly felt threat. Bander ushered all three into the room. One of the robots followed as well. Bander gestured the other robots away and entered itself. The door closed behind it. ',
+                                 u'title': u'Books one'},
+                    u'highlight': {u'content': [u'. The robots remained at a <b>polite distance</b>, but their presence was a']}}],
+          'max_score': None,
+          'total': 1},
+ 'profile': None,
+ 'timed_out': False,
+ 'took': 0}
+```
+
+<!-- request Python-asyncio -->
+``` python
+res = await searchApi.search({"table":"books","query":{"match":{"content":"one|robots"}},"highlight":{"fields":["content"],"highlight_query":{"match":{"*":"polite distance"}}}})
+```
+<!-- response Python-asyncio -->
+``` python
+{'aggregations': None,
+ 'hits': {'hits': [{u'_id': u'1',
+                    u'_score': 1788,
+                    u'_source': {u'content': u'They followed Bander. The robots remained at a polite distance, but their presence was a constantly felt threat. Bander ushered all three into the room. One of the robots followed as well. Bander gestured the other robots away and entered itself. The door closed behind it. ',
+                                 u'title': u'Books one'},
+                    u'highlight': {u'content': [u'. The robots remained at a <b>polite distance</b>, but their presence was a']}}],
+          'max_score': None,
+          'total': 1},
+ 'profile': None,
+ 'timed_out': False,
+ 'took': 0}
+```
+
+<!-- request Javascript -->
+``` javascript
+res =  await searchApi.search({"table":"books","query":{"match":{"content":"one|robots"}},"highlight":{"fields":["content"],"highlight_query":{"match":{"*":"polite distance"}}}});
+```
+<!-- response Javascript -->
+``` javascript
+{"took":0,"timed_out":false,"hits":{"total":1,"hits":[{"_id": 1,"_score":1788,"_source":{"title":"Books one","content":"They followed Bander. The robots remained at a polite distance, but their presence was a constantly felt threat. Bander ushered all three into the room. One of the robots followed as well. Bander gestured the other robots away and entered itself. The door closed behind it. "},"highlight":{"content":[". The robots remained at a <b>polite distance</b>, but their presence was a"]}}]}}
+```
+
+
+<!-- intro -->
+##### Java:
+
+<!-- request Java -->
+
+```java
+searchRequest = new SearchRequest();
+searchRequest.setIndex("books");
+query = new HashMap<String,Object>();
+query.put("match",new HashMap<String,Object>(){{
+    put("*","one|robots");
+}});        
+searchRequest.setQuery(query);
+highlight = new HashMap<String,Object>(){{
+put("fields",new String[] {"content","title"});
+put("highlight_query",
+    new HashMap<String,Object>(){{
+        put("match", new HashMap<String,Object>(){{
+            put("*","polite distance");
+        }});
+    }});
+}};
+searchRequest.setHighlight(highlight);
+searchResponse = searchApi.search(searchRequest);
+```
+
+<!-- intro -->
+##### C#:
+
+<!-- request C# -->
+
+```clike
+var searchRequest = new SearchRequest("books");
+searchRequest.FulltextFilter = new MatchFilter("*", "one|robots");
+var highlight = new Highlight();
+highlight.Fieldnames = new List<string> {"content", "title"};
+Dictionary<string, Object> match = new Dictionary<string, Object>(); 
+match.Add("*", "polite distance");
+Dictionary<string, Object> highlightQuery = new Dictionary<string, Object>(); 
+highlightQuery.Add("match", match);
+highlight.HighlightQuery = highlightQuery;
+searchRequest.Highlight = highlight;
+var searchResponse = searchApi.Search(searchRequest);
+```
+
+<!-- intro -->
+##### Rust:
+
+<!-- request Rust -->
+
+```rust
+let match_filter = HashMap::new();
+match_filter.insert("*".to_string(), "one|robots".to_string());
+let query = SearchQuery {
+    match: Some(serde_json::json!(match_filter).into()),
+    ..Default::default(),
+};
+let mut highlight_match_filter = HashMap::new(); 
+highlight_match_filter.insert("*".to_string(), "polite distance".to_string());
+let highlight_query = QueryFilter {
+    r#match: Some(serde_json::json!(highlight_match_filter)),
+    ..Default::default(),
+};
+let highlight_fields [String; 2] = ["content".to_string(), "title".to_string()]; 
+let highlight = Highlight {
+    fields: Some(serde_json::json!(highlight_fields)),
+    highlight_query: Some(Box::new(highlight_query)),
+    ..Default::default(),
+};
+
+let search_req = SearchRequest {
+    table: "books".to_string(),
+    query: Some(Box::new(query)),
+    highlight: serde_json::json!(highlight),
+    ..Default::default(),
+};
+let search_res = search_api.search(search_req).await;
+```
+
+<!-- request TypeScript -->
+``` typescript
+res = await searchApi.search({
+  index: 'test',
+  query: {
+    match: {
+      *: 'Text 1'
+    }
+  },
+  highlight: {
+    fields: ['content'],
+    highlight_query: {
+      match: {*: 'Text'}
+    }
+  }
+});
+```
+<!-- response TypeScript -->
+``` typescript
+{
+
+"took":0,
+
+"timed_out":false,
+
+"hits":
+
+{
+
+"total":1,
+
+"hits":
+
+[{
+
+"_id": 1,
+
+"_score":1480,
+
+"_source":
+
+{
+
+"content":"Text 1",
+
+"name":"Doc 1",
+
+"cat":1
+
+},
+
+"highlight":
+
+{
+
+"content":
+
+[
+
+"<b>Text</b> 1"
+
+]
+
+}
+
+]}
+
+}
+}
+```
+
+<!-- request Go -->
+``` go
+matchClause := map[string]interface{} {"*": "Text 1"};
+query := map[string]interface{} {"match": matchClause};
+searchRequest.SetQuery(query);
+highlight := manticoreclient.NewHighlight()
+highlightField := manticoreclient.NetHighlightField("content")
+highlightFields := []interface{} { highlightField } 
+highlight.SetFields(highlightFields)
+queryMatchClause := map[string]interface{} {"*": "Text"};
+highlightQuery := map[string]interface{} {"match": queryMatchClause};
+highlight.SetHighlightQuery(highlightQuery)
+searchRequest.SetHighlight(highlight)
+res, _, _ := apiClient.SearchAPI.Search(context.Background()).SearchRequest(*searchRequest).Execute()
+```
+<!-- response Go -->
+``` go
+{
+
+"took":0,
+
+"timed_out":false,
+
+"hits":
+
+{
+
+"total":1,
+
+"hits":
+
+[{
+
+"_id": 1,
+
+"_score":1480,
+
+"_source":
+
+{
+
+"content":"Text 1",
+
+"name":"Doc 1",
+
+"cat":1
+
+},
+
+"highlight":
+
+{
+
+"content":
+
+[
+
+"<b>Text</b> 1"
+
+]
+
+}
+
+]}
+
+}
+}
+```
+
+<!-- end -->
+
+<!-- example pre_tags  -->
+
+#### pre_tags and post_tags
+`pre_tags` and `post_tags` set the opening and closing tags for highlighted text snippets. They function similarly to the `before_match` and `after_match` options. These are optional, with default values of `<b>` and `</b>`.
+
+<!-- intro -->
+##### JSON:
+<!-- request JSON -->
+
+```json
+POST /search
+{
+  "table": "books",
+  "query": { "match": { "*": "one|robots" } },
+  "highlight":
+  {
+    "fields": [ "content", "title" ],
+    "pre_tags": "before_",
+    "post_tags": "_after"
+   }
+}
+```
+<!-- intro -->
+##### PHP:
+
+<!-- request PHP -->
+
+```php
+$index->setName('books');
+$bool = new ManticoresearchQueryBoolQuery();
+$bool->must(new ManticoresearchQueryMatch(['query' => 'one|robots'], '*'));
+
+$results = $index->search($bool)->highlight(['content','title'],['pre_tags'=>'before_','post_tags'=>'_after'])->get();
+foreach($results as $doc)
+{
+    echo 'Document: '.$doc->getId()."
+";
+    foreach($doc->getData() as $field=>$value)
+    {
+        echo $field.' : '.$value."
+";
+    }
+    foreach($doc->getHighlight() as $field=>$snippets)
+    {
+        echo "Highlight for ".$field.":
+";
+        foreach($snippets as $snippet)
+        {
+            echo "- ".$snippet."
+";
+        }
+    }
+}
+```
+<!-- response PHP -->
+```php
+Document: 1
+title : Books one
+content : They followed Bander. The robots remained at a polite distance, but their presence was a constantly felt threat. Bander ushered all three into the room. One of the robots followed as well. Bander gestured the other robots away and entered itself. The door closed behind it.
+Highlight for content:
+- They followed Bander. The before_robots_after remained at a polite distance,
+-  three into the room. before_One_after of the before_robots_after followed as well. Bander
+-  gestured the other before_robots_after away and entered itself. The
+Highlight for title:
+- Books before_one_after
+
+```
+<!-- request Python -->
+``` python
+res = searchApi.search({"table":"books","query":{"match":{"*":"one|robots"}},"highlight":{"fields":["content","title"],"pre_tags":"before_","post_tags":"_after"}})
+```
+<!-- response Python -->
+``` python
+{'aggregations': None,
+ 'hits': {'hits': [{u'_id': u'1',
+                    u'_score': 2788,
+                    u'_source': {u'content': u'They followed Bander. The robots remained at a polite distance, but their presence was a constantly felt threat. Bander ushered all three into the room. One of the robots followed as well. Bander gestured the other robots away and entered itself. The door closed behind it. ',
+                                 u'title': u'Books one'},
+                    u'highlight': {u'content': [u'他们跟随班德。 之前_机器人_之后保持在礼貌的距离，',
+                                                u'三个人走进房间。 之前_一个_之后的之前_机器人_之后也跟随。 班德',
+                                                u'示意其他之前_机器人_之后离开，并且自己进入。 The'],
+                                   u'title': [u'书籍 之前_一个_之后']}}],
+          'max_score': None,
+          'total': 1},
+ 'profile': None,
+ 'timed_out': False,
+ 'took': 0}
+```
+
+<!-- request Python-asyncio -->
+``` python
+res = await searchApi.search({"table":"books","query":{"match":{"*":"one|robots"}},"highlight":{"fields":["content","title"],"pre_tags":"before_","post_tags":"_after"}})
+```
+<!-- response Python-asyncio -->
+``` python
+{'aggregations': None,
+ 'hits': {'hits': [{u'_id': u'1',
+                    u'_score': 2788,
+                    u'_source': {u'content': u'他们跟随班德。机器人保持在礼貌的距离，但他们的存在始终是一个感受到的威胁。班德把所有三个人引入房间。一个机器人也跟随。班德示意其他机器人离开，并自己进入。门在它身后关上。',
+                                 u'title': u'书籍 一个'},
+                    u'highlight': {u'content': [u'他们跟随班德。 之前_机器人_之后保持在礼貌的距离，',
+                                                u'三个人走进房间。 之前_一个_之后的之前_机器人_之后也跟随。 班德',
+                                                u'示意其他之前_机器人_之后离开，并且自己进入。 The'],
+                                   u'title': [u'书籍 之前_一个_之后']}}],
+          'max_score': None,
+          'total': 1},
+ 'profile': None,
+ 'timed_out': False,
+ 'took': 0}
+```
+
+<!-- request Javascript -->
+``` javascript
+res =  await searchApi.search({"table":"books","query":{"match":{"*":"one|robots"}},"highlight":{"fields":["content","title"],"pre_tags":"before_","post_tags":"_after"}});
+```
+<!-- response Javascript -->
+``` javascript
+{"took":0,"timed_out":false,"hits":{"total":1,"hits":[{"_id": 1,"_score":2788,"_source":{"title":"书籍 一个","content":"他们跟随班德。机器人保持在礼貌的距离，但他们的存在始终是一个感受到的威胁。班德把所有三个人引入房间。一个机器人也跟随。班德示意其他机器人离开，并自己进入。门在它身后关上。 "},"highlight":{"content":["他们跟随班德。 之前_机器人_之后保持在礼貌的距离， ","三个人走进房间。 之前_一个_之后的之前_机器人_之后也跟随。 班德","示意其他之前_机器人_之后离开，并且自己进入。 The"],"title":["书籍 之前_一个_之后"]}}]}}
+```
+
+
+<!-- intro -->
+##### Java:
+
+<!-- request Java -->
+
+```java
+searchRequest = new SearchRequest();
+searchRequest.setIndex("books");
+query = new HashMap<String,Object>();
+query.put("match",new HashMap<String,Object>(){{
+    put("*","one|robots");
+}});        
+searchRequest.setQuery(query);
+highlight = new HashMap<String,Object>(){{
+    put("fields",new String[] {"content","title"});
+    put("pre_tags","before_");
+    put("post_tags","_after");
+}};
+searchRequest.setHighlight(highlight);
+searchResponse = searchApi.search(searchRequest);
+```
+
+<!-- intro -->
+##### C#:
+
+<!-- request C# -->
+
+```clike
+var searchRequest = new SearchRequest("books");
+searchRequest.FulltextFilter = new MatchFilter("*", "one|robots");
+var highlight = new Highlight();
+highlight.Fieldnames = new List<string> {"content", "title"};
+highlight.PreTags = "before_";
+highlight.PostTags = "_after";
+searchRequest.Highlight = highlight;
+var searchResponse = searchApi.Search(searchRequest);
+```
+
+<!-- intro -->
+##### Rust:
+
+<!-- request Rust -->
+
+```rust
+let match_filter = HashMap::new();
+match_filter.insert("*".to_string(), "one|robots".to_string());
+let query = SearchQuery {
+    match: Some(serde_json::json!(match_filter).into()),
+    ..Default::default(),
+};
+let highlight_fields [String; 2] = ["content".to_string(), "title".to_string()]; 
+let highlight = Highlight {
+    fields: Some(serde_json::json!(highlight_fields)),
+    pre_tags: Some("before_".to_string()),
+    post_tags: Some("_after".to_string()),
+    ..Default::default(),
+};
+
+let search_req = SearchRequest {
+    table: "books".to_string(),
+    query: Some(Box::new(query)),
+    highlight: serde_json::json!(highlight),
+    ..Default::default(),
+};
+let search_res = search_api.search(search_req).await;
+```
+
+<!-- request TypeScript -->
+``` typescript
+res = await searchApi.search({
+  index: 'test',
+  query: {
+    match: {
+      *: '文本 1'
+    }
+  },
+  highlight: {
+    pre_tags: 'before_',
+    post_tags: '_after'
+  }
+});
+```
+<!-- response TypeScript -->
+``` typescript
+{
+
+"took":0,
+
+"timed_out":false,
+
+"hits":
+
+{
+
+"total":1,
+
+"hits":
+
+[{
+
+"_id": 1,
+
+"_score":1480,
+
+"_source":
+
+{
+
+"content":"文本 1",
+
+"name":"文档 1",
+
+"cat":1
+
+},
+
+"highlight":
+
+{
+
+"content":
+
+[
+
+"before_文本 1_after"
+
+]
+
+}
+
+]}
+
+}
+}
+```
+
+<!-- request Go -->
+``` go
+matchClause := map[string]interface{} {"*": "文本 1"}
+query := map[string]interface{} {"match": matchClause}
+searchRequest.SetQuery(query)
+highlight := manticoreclient.NewHighlight()
+highlight.SetPreTags("before_")
+highlight.SetPostTags("_after")
+searchRequest.SetHighlight(highlight)
+res, _, _ := apiClient.SearchAPI.Search(context.Background()).SearchRequest(*searchRequest).Execute()
+```
+<!-- response Go -->
+``` go
+{
+
+"took":0,
+
+"timed_out":false,
+
+"hits":
+
+{
+
+"total":1,
+
+"hits":
+
+[{
+
+"_id": 1,
+
+"_score":1480,
+
+"_source":
+
+{
+
+"content":"文本 1",
+
+"name":"文档 1",
+
+"cat":1
+
+},
+
+"highlight":
+
+{
+
+"content":
+
+[
+
+"before_文本 1_after"
+
+]
+
+}
+
+]}
+
+}
+}
+```
+
+<!-- end -->
+
+<!-- example no_match_size  -->
+#### no_match_size
+`no_match_size` 与 `allow_empty` 选项类似。如果设置为 0，它的作用相当于 `allow_empty=1`，允许在无法生成片段时返回空字符串作为高亮结果。否则，将返回字段的开头。这是可选的，默认值为 1。
+
+<!-- intro -->
+##### JSON:
+<!-- request JSON -->
+
+```json
+POST /search
+{
+  "table": "books",
+  "query": { "match": { "*": "one|robots" } },
+  "highlight":
+  {
+    "fields": [ "content", "title" ],
+    "no_match_size": 0
+  }
+}
+```
+<!-- intro -->
+##### PHP:
+
+<!-- request PHP -->
+
+```php
+$index->setName('books');
+$bool = new ManticoresearchQueryBoolQuery();
+$bool->must(new ManticoresearchQueryMatch(['query' => 'one|robots'], '*'));
+
+$results = $index->search($bool)->highlight(['content','title'],['no_match_size'=>0])->get();
+foreach($results as $doc)
+{
+    echo 'Document: '.$doc->getId()."
+";
+    foreach($doc->getData() as $field=>$value)
+    {
+        echo $field.' : '.$value."
+";
+    }
+    foreach($doc->getHighlight() as $field=>$snippets)
+    {
+        echo "Highlight for ".$field.":
+";
+        foreach($snippets as $snippet)
+        {
+            echo "- ".$snippet."
+";
+        }
+    }
+}
+```
+<!-- response PHP -->
+```php
+Document: 1
+title : Books one
+content : They followed Bander. The robots remained at a polite distance, but their presence was a constantly felt threat. Bander ushered all three into the room. One of the robots followed as well. Bander gestured the other robots away and entered itself. The door closed behind it.
+Highlight for content:
+- They followed Bander. The <b>robots</b> remained at a polite distance,
+-  three into the room. <b>One</b> of the <b>robots</b> followed as well. Bander
+-  gestured the other <b>robots</b> away and entered itself. The
+Highlight for title:
+- Books <b>one</b>
+```
+<!-- request Python -->
+``` python
+res = searchApi.search({"table":"books","query":{"match":{"*":"one|robots"}},"highlight":{"fields":["content","title"],"no_match_size":0}})
+```
+<!-- response Python -->
+``` python
+{'aggregations': None,
+ 'hits': {'hits': [{u'_id': u'1',
+                    u'_score': 2788,
+                    u'_source': {u'content': u'They followed Bander. The robots remained at a polite distance, but their presence was a constantly felt threat. Bander ushered all three into the room. One of the robots followed as well. Bander gestured the other robots away and entered itself. The door closed behind it. ',
+                                 u'title': u'Books one'},
+                    u'highlight': {u'content': [u'They followed Bander. The <b>robots</b> remained at a polite distance, ',
+                                                u' three into the room. <b>One</b> of the <b>robots</b> followed as well. Bander',
+                                                u' gestured the other <b>robots</b> away and entered itself. The'],
+                                   u'title': [u'Books <b>one</b>']}}],
+          'max_score': None,
+          'total': 1},
+ 'profile': None,
+ 'timed_out': False,
+ 'took': 0}
+```
+
+<!-- request Python-asyncio -->
+``` python
+res = await searchApi.search({"table":"books","query":{"match":{"*":"one|robots"}},"highlight":{"fields":["content","title"],"no_match_size":0}})
+```
+<!-- response Python-asyncio -->
+``` python
+{'aggregations': None,
+ 'hits': {'hits': [{u'_id': u'1',
+                    u'_score': 2788,
+                    u'_source': {u'content': u'They followed Bander. The robots remained at a polite distance, but their presence was a constantly felt threat. Bander ushered all three into the room. One of the robots followed as well. Bander gestured the other robots away and entered itself. The door closed behind it. ',
+                                 u'title': u'Books one'},
+                    u'highlight': {u'content': [u'They followed Bander. The <b>robots</b> remained at a polite distance, ',
+                                                u' three into the room. <b>One</b> of the <b>robots</b> followed as well. Bander',
+                                                u' gestured the other <b>robots</b> away and entered itself. The'],
+                                   u'title': [u'Books <b>one</b>']}}],
+          'max_score': None,
+          'total': 1},
+ 'profile': None,
+ 'timed_out': False,
+ 'took': 0}
+```
+
+<!-- request Javascript -->
+``` javascript
+res =  await searchApi.search({"table":"books","query":{"match":{"*":"one|robots"}},"highlight":{"fields":["content","title"],"no_match_size":0}});
+```
+<!-- response Javascript -->
+``` javascript
+{"took":0,"timed_out":false,"hits":{"total":1,"hits":[{"_id": 1,"_score":2788,"_source":{"title":"Books one","content":"They followed Bander. The robots remained at a polite distance, but their presence was a constantly felt threat. Bander ushered all three into the room. One of the robots followed as well. Bander gestured the other robots away and entered itself. The door closed behind it. "},"highlight":{"content":["They followed Bander. The <b>robots</b> remained at a polite distance, "," three into the room. <b>One</b> of the <b>robots</b> followed as well. Bander"," gestured the other <b>robots</b> away and entered itself. The"],"title":["Books <b>one</b>"]}}]}}
+
+```
+
+<!-- intro -->
+##### Java:
+
+<!-- request Java -->
+
+```java
+searchRequest = new SearchRequest();
+searchRequest.setIndex("books");
+query = new HashMap<String,Object>();
+query.put("match",new HashMap<String,Object>(){{
+    put("*","one|robots");
+}});        
+searchRequest.setQuery(query);
+highlight = new HashMap<String,Object>(){{
+    put("fields",new String[] {"content","title"});
+    put("no_match_size",0);
+}};
+searchRequest.setHighlight(highlight);
+searchResponse = searchApi.search(searchRequest);
+```
+
+<!-- intro -->
+##### C#:
+
+<!-- request C# -->
+
+```clike
+var searchRequest = new SearchRequest("books");
+searchRequest.FulltextFilter = new MatchFilter("*", "one|robots");
+var highlight = new Highlight();
+highlight.Fieldnames = new List<string> {"content", "title"};
+highlight.NoMatchSize = 0;
+searchRequest.Highlight = highlight;
+var searchResponse = searchApi.Search(searchRequest);
+```
+
+<!-- intro -->
+##### Rust:
+
+<!-- request Rust -->
+
+```rust
+let match_filter = HashMap::new();
+match_filter.insert("*".to_string(), "one|robots".to_string());
+let query = SearchQuery {
+    match: Some(serde_json::json!(match_filter).into()),
+    ..Default::default(),
+};
+let highlight_fields [String; 2] = ["content".to_string(), "title".to_string()]; 
+let highlight = Highlight {
+    fields: Some(serde_json::json!(highlight_fields)),
+    no_match_size: Some(NoMatchSize::Variant0),
+    ..Default::default(),
+};
+
+let search_req = SearchRequest {
+    table: "books".to_string(),
+    query: Some(Box::new(query)),
+    highlight: serde_json::json!(highlight),
+    ..Default::default(),
+};
+let search_res = search_api.search(search_req).await;
+```
+
+<!-- request TypeScript -->
+``` typescript
+res = await searchApi.search({
+  index: 'test',
+  query: {
+    match: {
+      *: 'Text 1'
+    }
+  },
+  highlight: {no_match_size: 0}
+});
+```
+<!-- response TypeScript -->
+``` typescript
+{
+
+"took":0,
+
+"timed_out":false,
+
+"hits":
+
+{
+
+"total":1,
+
+"hits":
+
+[{
+
+"_id": 1,
+
+"_score":1480,
+
+"_source":
+
+{
+
+"content":"Text 1",
+
+"name":"Doc 1",
+
+"cat":1
+
+},
+
+"highlight":
+
+{
+
+"content":
+
+[
+
+"<b>Text 1</b>"
+
+]
+
+}
+
+]}
+
+}
+}
+```
+
+<!-- request Go -->
+``` go
+matchClause := map[string]interface{} {"*": "Text 1"};
+query := map[string]interface{} {"match": matchClause};
+searchRequest.SetQuery(query);
+highlight := manticoreclient.NewHighlight()
+highlight.SetNoMatchSize(0)
+searchRequest.SetHighlight(highlight)
+res, _, _ := apiClient.SearchAPI.Search(context.Background()).SearchRequest(*searchRequest).Execute()
+```
+<!-- response Go -->
+``` go
+{
+
+"took":0,
+
+"timed_out":false,
+
+"hits":
+
+{
+
+"total":1,
+
+"hits":
+
+[{
+
+"_id": 1,
+
+"_score":1480,
+
+"_source":
+
+{
+
+"content":"Text 1",
+
+"name":"Doc 1",
+
+"cat":1
+
+},
+
+"highlight":
+
+{
+
+"content":
+
+[
+
+"<b>Text 1</b>"
+
+]
+
+}
+
+]}
+
+}
+}
+```
+
+<!-- end -->
+
+<!-- example order  -->
+#### order
+`order` 设置提取的代码片段的排序顺序。如果设置为 `"score"`，则按相关性对提取的代码片段进行排序。这是可选的，并且与 `weight_order` 选项的工作方式类似。
+
+<!-- intro -->
+##### JSON:
+<!-- request JSON -->
+
+```json
+POST /search
+{
+  "table": "books",
+  "query": { "match": { "*": "one|robots" } },
+  "highlight":
+  {
+    "fields": [ "content", "title" ],
+    "order": "score"
+  }
+}
+```
+
+<!-- request PHP -->
+
+```php
+$index->setName('books');
+$bool = new ManticoresearchQueryBoolQuery();
+$bool->must(new ManticoresearchQueryMatch(['query' => 'one|robots'], '*'));
+
+$results = $index->search($bool)->highlight(['content','title'],['order'=>"score"])->get();
+foreach($results as $doc)
+{
+    echo 'Document: '.$doc->getId()."
+";
+    foreach($doc->getData() as $field=>$value)
+    {
+        echo $field.' : '.$value."
+";
+    }
+    foreach($doc->getHighlight() as $field=>$snippets)
+    {
+        echo "Highlight for ".$field.":
+";
+        foreach($snippets as $snippet)
+        {
+            echo "- ".$snippet."
+";
+        }
+    }
+}
+```
+<!-- response PHP -->
+```php
+Document: 1
+title : Books one
+content : They followed Bander. The robots remained at a polite distance, but their presence was a constantly felt threat. Bander ushered all three into the room. One of the robots followed as well. Bander gestured the other robots away and entered itself. The door closed behind it.
+Highlight for content:
+-  three into the room. <b>One</b> of the <b>robots</b> followed as well. Bander
+-  gestured the other <b>robots</b> away and entered itself. The
+- They followed Bander. The <b>robots</b> remained at a polite distance,
+Highlight for title:
+- Books <b>one</b>
+```
+<!-- request Python -->
+``` python
+res = searchApi.search({"table":"books","query":{"match":{"*":"one|robots"}},"highlight":{"fields":["content","title"],"order":"score"}})
+```
+<!-- response Python -->
+``` python
+{'aggregations': None,
+ 'hits': {'hits': [{u'_id': u'1',
+                    u'_score': 2788,
+                    u'_source': {u'content': u'They followed Bander. The robots remained at a polite distance, but their presence was a constantly felt threat. Bander ushered all three into the room. One of the robots followed as well. Bander gestured the other robots away and entered itself. The door closed behind it. ',
+                                 u'title': u'Books one'},
+                    u'highlight': {u'content': [u' three into the room. <b>One</b> of the <b>robots</b> followed as well. Bander',
+                                                u' gestured the other <b>robots</b> away and entered itself. The',
+                                                u'They followed Bander. The <b>robots</b> remained at a polite distance, '],
+                                   u'title': [u'书籍 <b>一个</b>']}}],
+          'max_score': None,
+          'total': 1},
+ 'profile': None,
+ 'timed_out': False,
+ 'took': 0}
+```
+
+<!-- request Python-asyncio -->
+``` python
+res = await searchApi.search({"table":"books","query":{"match":{"*":"one|robots"}},"highlight":{"fields":["content","title"],"order":"score"}})
+```
+<!-- response Python-asyncio -->
+``` python
+{'aggregations': None,
+ 'hits': {'hits': [{u'_id': u'1',
+                    u'_score': 2788,
+                    u'_source': {u'content': u'他们跟随班德。机器人保持在礼貌的距离，但他们的存在始终是一种感受到的威胁。班德将所有三人引入房间。一台机器人也跟随其后。班德示意其他机器人离开，并自行进入。门在它后面关闭。',
+                                 u'title': u'书籍 一个'},
+                    u'highlight': {u'content': [u' 三人进入房间。 <b>一个</b> <b>机器人</b>也跟随其后。班德',
+                                                u' 示意其他 <b>机器人</b> 离开并自行进入。',
+                                                u'他们跟随班德。<b>机器人</b>保持在礼貌的距离，'],
+                                   u'title': [u'书籍 <b>一个</b>']}}],
+          'max_score': None,
+          'total': 1},
+ 'profile': None,
+ 'timed_out': False,
+ 'took': 0}
+```
+
+<!-- request Javascript -->
+``` javascript
+res =  await searchApi.search({"table":"books","query":{"match":{"*":"one|robots"}},"highlight":{"fields":["content","title"],"order":"score"}});
+```
+<!-- response Javascript -->
+``` javascript
+{"took":0,"timed_out":false,"hits":{"total":1,"hits":[{"_id": 1,"_score":2788,"_source":{"title":"书籍 一个","content":"他们跟随班德。机器人保持在礼貌的距离，但他们的存在始终是一种感受到的威胁。班德将所有三人引入房间。一台机器人也跟随其后。班德示意其他机器人离开，并自行进入。门在它后面关闭。 "},"highlight":{"content":[" 三人进入房间。 <b>一个</b> <b>机器人</b>也跟随其后。班德"," 示意其他 <b>机器人</b> 离开并自行进入。","他们跟随班德。<b>机器人</b>保持在礼貌的距离，"],"title":["书籍 <b>一个</b>"]}}]}}
+
+
+```
+<!-- intro -->
+##### Java:
+
+<!-- request Java -->
+
+```java
+searchRequest = new SearchRequest();
+searchRequest.setIndex("books");
+query = new HashMap<String,Object>();
+query.put("match",new HashMap<String,Object>(){{
+    put("*","one|robots");
+}});        
+searchRequest.setQuery(query);
+highlight = new HashMap<String,Object>(){{
+    put("fields",new String[] {"content","title"});
+    put("order","score");
+}};
+searchRequest.setHighlight(highlight);
+searchResponse = searchApi.search(searchRequest);
+```
+
+<!-- intro -->
+##### C#:
+
+<!-- request C# -->
+
+```clike
+var searchRequest = new SearchRequest("books");
+searchRequest.FulltextFilter = new MatchFilter("*", "one|robots");
+var highlight = new Highlight();
+highlight.Fieldnames = new List<string> {"content", "title"};
+highlight.Order =  "score";
+searchRequest.Highlight = highlight;
+var searchResponse = searchApi.Search(searchRequest);
+```
+
+<!-- intro -->
+##### Rust:
+
+<!-- request Rust -->
+
+```rust
+let match_filter = HashMap::new();
+match_filter.insert("*".to_string(), "one|robots".to_string());
+let query = SearchQuery {
+    match: Some(serde_json::json!(match_filter).into()),
+    ..Default::default(),
+};
+let highlight_fields [String; 2] = ["content".to_string(), "title".to_string()]; 
+let highlight = Highlight {
+    fields: Some(serde_json::json!(highlight_fields)),
+    order: Some(Order::Score),
+    post_tags: Some("_after".to_string()),
+    ..Default::default(),
+};
+
+let search_req = SearchRequest {
+    table: "books".to_string(),
+    query: Some(Box::new(query)),
+    highlight: serde_json::json!(highlight),
+    ..Default::default(),
+};
+let search_res = search_api.search(search_req).await;
+```
+
+<!-- request TypeScript -->
+``` typescript
+res = await searchApi.search({
+  index: 'test',
+  query: {
+    match: {
+      *: '文本 1'
+    }
+  },
+  highlight: { order: 'score' }
+});
+```
+<!-- response TypeScript -->
+``` typescript
+{
+
+"took":0,
+
+"timed_out":false,
+
+"hits":
+
+{
+
+"total":1,
+
+"hits":
+
+[{
+
+"_id": 1,
+
+"_score":1480,
+
+"_source":
+
+{
+
+"content":"文本 1",
+
+"name":"文档 1",
+
+"cat":1
+
+},
+
+"highlight":
+
+{
+
+"content":
+
+[
+
+"<b>文本 1</b>"
+
+]
+
+}
+
+]}
+
+}
+}
+```
+
+<!-- request Go -->
+``` go
+matchClause := map[string]interface{} {"*": "文本 1"};
+query := map[string]interface{} {"match": matchClause};
+searchRequest.SetQuery(query);
+highlight := manticoreclient.NewHighlight()
+highlight.SetOrder("score")
+searchRequest.SetHighlight(highlight)
+res, _, _ := apiClient.SearchAPI.Search(context.Background()).SearchRequest(*searchRequest).Execute()
+```
+<!-- response Go -->
+``` go
+{
+
+"took":0,
+
+"timed_out":false,
+
+"hits":
+
+{
+
+"total":1,
+
+"hits":
+
+[{
+
+"_id": 1,
+
+"_score":1480,
+
+"_source":
+
+{
+
+"content":"文本 1",
+
+"name":"文档 1",
+
+"cat":1
+
+},
+
+"highlight":
+
+{
+
+"content":
+
+[
+
+"<b>文本 1</b>"
+
+]
+
+}
+
+]}
+
+}
+}
+```
+
+
+<!-- end -->
+
+<!-- example fragment_size -->
+#### fragment_size
+`fragment_size` 设置最大片段大小，以符号为单位。它可以是全局或每个字段的。每个字段的选项会覆盖全局选项。这是可选的，默认值为256。它的工作方式类似于 `limit` 选项。
+
+<!-- intro -->
+##### JSON:
+<!-- request JSON -->
+
+```json
+POST /search
+{
+  "table": "books",
+  "query": { "match": { "*": "one|robots" } },
+  "highlight":
+  {
+    "fields": [ "content", "title" ],
+    "fragment_size": 100
+  }
+}
+```
+<!-- request PHP -->
+
+```php
+$index->setName('books');
+$bool = new ManticoresearchQueryBoolQuery();
+$bool->must(new ManticoresearchQueryMatch(['query' => 'one|robots'], '*'));
+
+$results = $index->search($bool)->highlight(['content','title'],['fragment_size'=>100])->get();
+foreach($results as $doc)
+{
+    echo 'Document: '.$doc->getId()."
+";
+    foreach($doc->getData() as $field=>$value)
+    {
+        echo $field.' : '.$value."
+";
+    }
+    foreach($doc->getHighlight() as $field=>$snippets)
+    {
+        echo "Highlight for ".$field.":
+";
+        foreach($snippets as $snippet)
+        {
+            echo "- ".$snippet."
+";
+        }
+    }
+}
+```
+<!-- response PHP -->
+```php
+Document: 1
+title : 书籍 一个
+content : 他们跟随班德。机器人保持在礼貌的距离，但他们的存在始终是一种感受到的威胁。班德把三个全部带入了房间。一个机器人也跟着进来了。班德示意其他机器人离开，并自己进入。门在它身后关上。
+Highlight for content:
+-  房间。 <b>一个</b> 机器人也跟着进来了
+- 班德示意其他 <b>机器人</b> 离开并进入
+Highlight for title:
+- 书籍 <b>一个</b>
+```
+<!-- request Python -->
+``` python
+res = searchApi.search({"table":"books","query":{"match":{"*":"one|robots"}},"highlight":{"fields":["content","title"],"fragment_size":100}})
+```
+<!-- response Python -->
+``` python
+{'aggregations': None,
+ 'hits': {'hits': [{u'_id': u'1',
+                    u'_score': 2788,
+                    u'_source': {u'content': u'他们跟随班德。机器人保持在礼貌的距离，但他们的存在始终是一种感受到的威胁。班德把三个全部带入了房间。一个机器人也跟着进来了。班德示意其他机器人离开，并自己进入。门在它身后关上。 ',
+                                 u'title': u'书籍 一个'},
+                    u'highlight': {u'content': [u' 房间。 <b>一个</b> 机器人也跟着进来了',
+                                                u'班德示意其他 <b>机器人</b> 离开并进入 '],
+                                   u'title': [u'书籍 <b>一个</b>']}}],
+          'max_score': None,
+          'total': 1},
+ 'profile': None,
+ 'timed_out': False,
+ 'took': 0}
+```
+
+<!-- request Python-asyncio -->
+``` python
+res = await searchApi.search({"table":"books","query":{"match":{"*":"one|robots"}},"highlight":{"fields":["content","title"],"fragment_size":100}})
+```
+<!-- response Python-asyncio -->
+``` python
+{'aggregations': None,
+ 'hits': {'hits': [{u'_id': u'1',
+                    u'_score': 2788,
+                    u'_source': {u'content': u'他们跟随班德。机器人保持在礼貌的距离，但他们的存在始终是一种感受到的威胁。班德把三个全部带入了房间。一个机器人也跟着进来了。班德示意其他机器人离开，并自己进入。门在它身后关上。 ',
+                                 u'title': u'书籍 一个'},
+                    u'highlight': {u'content': [u' 房间。 <b>一个</b> 机器人也跟着进来了',
+                                                u'班德示意其他 <b>机器人</b> 离开并进入 '],
+                                   u'title': [u'书籍 <b>一个</b>']}}],
+          'max_score': None,
+          'total': 1},
+ 'profile': None,
+ 'timed_out': False,
+ 'took': 0}
+```
+
+<!-- request Javascript -->
+``` javascript
+res =  await searchApi.search({"table":"books","query":{"match":{"*":"one|robots"}},"highlight":{"fields":["content","title"],"fragment_size":100}});
+```
+<!-- response Javascript -->
+``` javascript
+{"took":0,"timed_out":false,"hits":{"total":1,"hits":[{"_id": 1,"_score":2788,"_source":{"title":"书籍 一个","content":"他们跟随班德。机器人保持在礼貌的距离，但他们的存在始终是一种感受到的威胁。班德把三个全部带入了房间。一个机器人也跟着进来了。班德示意其他机器人离开，并自己进入。门在它身后关上。 "},"highlight":{"content":[" 房间。 <b>一个</b> 机器人也跟着进来了","班德示意其他 <b>机器人</b> 离开并进入 "],"title":["书籍 <b>一个</b>"]}}]}}
+```
+<!-- intro -->
+##### Java:
+
+<!-- request Java -->
+
+```java
+searchRequest = new SearchRequest();
+searchRequest.setIndex("books");
+query = new HashMap<String,Object>();
+query.put("match",new HashMap<String,Object>(){{
+    put("*","one|robots");
+}});        
+searchRequest.setQuery(query);
+highlight = new HashMap<String,Object>(){{
+    put("fields",new String[] {"content","title"});
+    put("fragment_size",100);
+}};
+searchRequest.setHighlight(highlight);
+searchResponse = searchApi.search(searchRequest);
+```
+
+<!-- intro -->
+##### C#:
+
+<!-- request C# -->
+
+```clike
+var searchRequest = new SearchRequest("books");
+searchRequest.FulltextFilter = new MatchFilter("*", "one|robots");
+var highlight = new Highlight();
+highlight.Fieldnames = new List<string> {"content", "title"};
+highlight.FragmentSize = 100;
+searchRequest.Highlight = highlight;
+var searchResponse = searchApi.Search(searchRequest);
+```
+
+<!-- intro -->
+##### Rust:
+
+<!-- request Rust -->
+
+```rust
+let match_filter = HashMap::new();
+match_filter.insert("*".to_string(), "one|robots".to_string());
+let query = SearchQuery {
+    match: Some(serde_json::json!(match_filter).into()),
+    ..Default::default(),
+};
+let highlight_fields [String; 2] = ["content".to_string(), "title".to_string()]; 
+let highlight = Highlight {
+    fields: Some(serde_json::json!(highlight_fields)),
+    fragment_size: Some(serde_json::json!(100)),
+    ..Default::default(),
+};
+
+let search_req = SearchRequest {
+    table: "books".to_string(),
+    query: Some(Box::new(query)),
+    highlight: serde_json::json!(highlight),
+    ..Default::default(),
+};
+let search_res = search_api.search(search_req).await;
+```
+
+<!-- request TypeScript -->
+``` typescript
+res = await searchApi.search({
+  index: 'test',
+  query: {
+    match: {
+      *: 'Text 1'
+    }
+  },
+  highlight: { fragment_size: 4}
+});
+```
+<!-- response TypeScript -->
+``` typescript
+{
+
+"took":0,
+
+"timed_out":false,
+
+"hits":
+
+{
+
+"total":1,
+
+"hits":
+
+[{
+
+"_id": 1,
+
+"_score":1480,
+
+"_source":
+
+{
+
+"content":"Text 1",
+
+"name":"Doc 1",
+
+"cat":1
+
+},
+
+"highlight":
+
+{
+
+"content":
+
+[
+
+"<b>Text</b>"
+
+]
+
+}
+
+]}
+
+}
+}
+```
+
+<!-- request Go -->
+``` go
+matchClause := map[string]interface{} {"*": "Text 1"};
+query := map[string]interface{} {"match": matchClause};
+searchRequest.SetQuery(query);
+highlight := manticoreclient.NewHighlight()
+highlight.SetFragmentSize(4)
+searchRequest.SetHighlight(highlight)
+res, _, _ := apiClient.SearchAPI.Search(context.Background()).SearchRequest(*searchRequest).Execute()
+```
+<!-- response Go -->
+``` go
+{
+
+"took":0,
+
+"timed_out":false,
+
+"hits":
+
+{
+
+"total":1,
+
+"hits":
+
+[{
+
+"_id": 1,
+
+"_score":1480,
+
+"_source":
+
+{
+
+"content":"Text 1",
+
+"name":"Doc 1",
+
+"cat":1
+
+},
+
+"highlight":
+
+{
+
+"content":
+
+[
+
+"<b>Text</b>"
+
+]
+
+}
+
+]}
+
+}
+}
+```
+
+<!-- end -->
+
+<!-- example number_of_fragments -->
+#### number_of_fragments
+`number_of_fragments` limits the maximum number of snippets in the result. Like `fragment_size`, it can be global or per-field. This is optional, with a default value of 0 (no limit). It works similarly to the `limit_snippets` option.
+
+<!-- intro -->
+##### JSON:
+<!-- request JSON -->
+
+```json
+POST /search
+{
+  "table": "books",
+  "query": { "match": { "*": "one|robots"  } },
+  "highlight":
+  {
+    "fields": [ "content", "title" ],
+    "number_of_fragments": 10
+  }
+}
+```
+<!-- request PHP -->
+
+```php
+$index->setName('books');
+$bool = new ManticoresearchQueryBoolQuery();
+$bool->must(new ManticoresearchQueryMatch(['query' => 'one|robots'], '*'));
+
+$results = $index->search($bool)->highlight(['content','title'],['number_of_fragments'=>10])->get();
+foreach($results as $doc)
+{
+    echo 'Document: '.$doc->getId()."
+";
+    foreach($doc->getData() as $field=>$value)
+    {
+        echo $field.' : '.$value."
+";
+    }
+    foreach($doc->getHighlight() as $field=>$snippets)
+    {
+        echo "Highlight for ".$field.":
+";
+        foreach($snippets as $snippet)
+        {
+            echo "- ".$snippet."
+";
+        }
+    }
+}
+```
+<!-- response PHP -->
+```php
+Document: 1
+title : Books one
+content : They followed Bander. The robots remained at a polite distance, but their presence was a constantly felt threat. Bander ushered all three into the room. One of the robots followed as well. Bander gestured the other robots away and entered itself. The door closed behind it.
+Highlight for content:
+- They followed Bander. The <b>robots</b> remained at a polite distance,
+-  three into the room. <b>One</b> of the <b>robots</b> followed as well. Bander
+-  gestured the other <b>robots</b> away and entered itself. The
+Highlight for title:
+- Books <b>one</b>
+
+```
+
+<!-- request Python -->
+``` python
+res =searchApi.search({"table":"books","query":{"match":{"*":"one|robots"}},"highlight":{"fields":["content","title"],"number_of_fragments":10}})
+```
+<!-- response Python -->
+``` python
+{'aggregations': None,
+ 'hits': {'hits': [{u'_id': u'1',
+                    u'_score': 2788,
+                    u'_source': {u'content': u'They followed Bander. The robots remained at a polite distance, but their presence was a constantly felt threat. Bander ushered all three into the room. One of the robots followed as well. Bander gestured the other robots away and entered itself. The door closed behind it. ',
+                                 u'title': u'Books one'},
+                    u'highlight': {u'content': [u'They followed Bander. The <b>robots</b> remained at a polite distance, ',
+                                                u' three into the room. <b>One</b> of the <b>robots</b> followed as well. Bander',
+                                                u' gestured the other <b>robots</b> away and entered itself. The'],
+                                   u'title': [u'Books <b>one</b>']}}],
+          'max_score': None,
+          'total': 1},
+ 'profile': None,
+ 'timed_out': False,
+ 'took': 0}
+```
+
+<!-- request Python-asyncio -->
+``` python
+res = await searchApi.search({"table":"books","query":{"match":{"*":"one|robots"}},"highlight":{"fields":["content","title"],"number_of_fragments":10}})
+```
+<!-- response Python-asyncio -->
+``` python
+{'aggregations': None,
+ 'hits': {'hits': [{u'_id': u'1',
+                    u'_score': 2788,
+                    u'_source': {u'content': u'They followed Bander. The robots remained at a polite distance, but their presence was a constantly felt threat. Bander ushered all three into the room. One of the robots followed as well. Bander gestured the other robots away and entered itself. The door closed behind it. ',
+                                 u'title': u'Books one'},
+                    u'highlight': {u'content': [u'They followed Bander. The <b>robots</b> remained at a polite distance, ',
+                                                u' 三个进入房间。 <b>一个</b> <b>机器人</b> 也跟随其后。 Bander',
+                                                u' 让其他 <b>机器人</b> 离开，然后自己进入。 The'],
+                                   u'title': [u'书籍 <b>一个</b>']}}],
+          'max_score': None,
+          'total': 1},
+ 'profile': None,
+ 'timed_out': False,
+ 'took': 0}
+```
+
+<!-- request Javascript -->
+``` javascript
+res =  await searchApi.search({"table":"books","query":{"match":{"*":"one|robots"}},"highlight":{"fields":["content","title"],"number_of_fragments":10}});
+```
+<!-- response Javascript -->
+``` javascript
+{"took":0,"timed_out":false,"hits":{"total":1,"hits":[{"_id": 1,"_score":2788,"_source":{"title":"书籍 一个","content":"他们跟随 Bander。 机器人保持在一个礼貌的距离，但他们的存在始终如一地感觉到威胁。 Bander 让所有三个进入房间。 一个机器人也跟随其后。 Bander 让其他机器人离开，然后自己进入。 门在它身后关上。 "},"highlight":{"content":["他们跟随 Bander。 <b>机器人</b> 保持在一个礼貌的距离，"," 三个进入房间。 <b>一个</b> <b>机器人</b> 也跟随其后。 Bander"," 让其他 <b>机器人</b> 离开，然后自己进入。 The"],"title":["书籍 <b>一个</b>"]}}]}}
+
+```
+<!-- intro -->
+##### Java:
+
+<!-- request Java -->
+
+```java
+searchRequest = new SearchRequest();
+searchRequest.setIndex("books");
+query = new HashMap<String,Object>();
+query.put("match",new HashMap<String,Object>(){{
+    put("*","one|robots");
+}});        
+searchRequest.setQuery(query);
+highlight = new HashMap<String,Object>(){{
+    put("fields",new String[] {"content","title"});
+    put("number_of_fragments",10);
+}};
+searchRequest.setHighlight(highlight);
+searchResponse = searchApi.search(searchRequest);
+```
+
+<!-- intro -->
+##### C#:
+
+<!-- request C# -->
+
+```clike
+var searchRequest = new SearchRequest("books");
+searchRequest.FulltextFilter = new MatchFilter("*", "one|robots");
+var highlight = new Highlight();
+highlight.Fieldnames = new List<string> {"content", "title"};
+highlight.NumberOfFragments = 10;
+searchRequest.Highlight = highlight;
+var searchResponse = searchApi.Search(searchRequest);
+```
+
+<!-- intro -->
+##### Rust:
+
+<!-- request Rust -->
+
+```rust
+let match_filter = HashMap::new();
+match_filter.insert("*".to_string(), "one|robots".to_string());
+let query = SearchQuery {
+    match: Some(serde_json::json!(match_filter).into()),
+    ..Default::default(),
+};
+let highlight_fields [String; 2] = ["content".to_string(), "title".to_string()]; 
+let highlight = Highlight {
+    fields: Some(serde_json::json!(highlight_fields)),
+    number_of_fragments: Some(serde_json::json!(10)),
+    ..Default::default(),
+};
+
+let search_req = SearchRequest {
+    table: "books".to_string(),
+    query: Some(Box::new(query)),
+    highlight: serde_json::json!(highlight),
+    ..Default::default(),
+};
+let search_res = search_api.search(search_req).await;
+```
+
+<!-- request TypeScript -->
+``` typescript
+res = await searchApi.search({
+  index: 'test',
+  query: {
+    match: {
+      *: '文本 1'
+    }
+  },
+  highlight: { number_of_fragments: 1}
+});
+```
+<!-- response TypeScript -->
+``` typescript
+{
+
+"took":0,
+
+"timed_out":false,
+
+"hits":
+
+{
+
+"total":1,
+
+"hits":
+
+[{
+
+"_id": 1,
+
+"_score":1480,
+
+"_source":
+
+{
+
+"content":"文本 1",
+
+"name":"文档 1",
+
+"cat":1
+
+},
+
+"highlight":
+
+{
+
+"content":
+
+[
+
+"<b>文本 1</b>"
+
+]
+
+}
+
+]}
+
+}
+}
+```
+
+<!-- request Go -->
+``` go
+matchClause := map[string]interface{} {"*": "文本 1"};
+query := map[string]interface{} {"match": matchClause};
+searchRequest.SetQuery(query);
+highlight := manticoreclient.NewHighlight()
+highlight.SetNumberOfFragments(1)
+searchRequest.SetHighlight(highlight)
+res, _, _ := apiClient.SearchAPI.Search(context.Background()).SearchRequest(*searchRequest).Execute()
+```
+<!-- response Go -->
+``` go
+{
+
+"took":0,
+
+"timed_out":false,
+
+"hits":
+
+{
+
+"total":1,
+
+"hits":
+
+[{
+
+"_id": 1,
+
+"_score":1480,
+
+"_source":
+
+{
+
+"content":"文本 1",
+
+"name":"文档 1",
+
+"cat":1
+
+},
+
+"highlight":
+
+{
+
+"content":
+
+[
+
+"<b>文本 1</b>"
+
+]
+
+}
+
+]}
+
+}
+}
+```
+
+<!-- end -->
+
+<!-- example highlight json per-field limits -->
+
+#### limit, limit_words, limit_snippets
+选项如 `limit`、`limit_words` 和 `limit_snippets` 可以设置为全局选项或每个字段的选项。 全局选项用作每个字段的限制，除非每个字段的选项重写它们。 在这个例子中，`title` 字段以默认限制设置进行高亮，而 `content` 字段使用不同的限制。
+
+<!-- intro -->
+##### JSON:
+<!-- request JSON -->
+
+```json
+POST /search
+{
+  "table": "books",
+  "query": { "match": { "*": "one|robots"  } },
+      "highlight":
+      {
+
+# 高亮显示
+
 <!-- example highlighting -->
 
 高亮显示使您能够从包含匹配关键词的文档中获取高亮文本片段（称为代码段）。

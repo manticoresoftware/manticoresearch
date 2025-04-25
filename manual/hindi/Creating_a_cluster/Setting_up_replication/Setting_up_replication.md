@@ -1,3 +1,701 @@
+# पुनरुत्पादन सेट करना
+
+Manticore के साथ, लेखन लेनदेन (जैसे `INSERT`, `REPLACE`, `DELETE`, `TRUNCATE`, `UPDATE`, `COMMIT`) को वर्तमान नोड पर लेनदेन पूरी तरह से लागू होने से पहले अन्य क्लस्टर नोड्स पर पुनरुत्पादित किया जा सकता है। वर्तमान में, `percolate`, `rt` और `distributed` टेबल्स के लिए लिनक्स और मैकोस में पुनरुत्पादन का समर्थन किया गया है।
+
+Manticore के लिए [नेटिव विंडोज बाइनरी](../../Installation/Windows.md#Installing-Manticore-as-native-Windows-binaries) पुनरुत्पादन का समर्थन नहीं करती हैं। हम [WSL के माध्यम से Manticore स्थापित करने](../../Installation/Windows.md#Installing-or-enabling-WSL2) की सिफारिश करते हैं (विंडोज सबसिस्टम फॉर लिनक्स)।
+
+[macOS](../../Installation/MacOS.md) पर, पुनरुत्पादन का सीमित समर्थन है और केवल विकास उद्देश्यों के लिए अनुशंसित है।
+
+Manticore का पुनरुत्पादन [गालेरा पुस्तकालय](https://github.com/codership/galera) द्वारा संचालित है और कई प्रभावशाली विशेषताएँ हैं:
+
+* सच्चा मल्टी-मास्टर: किसी भी नोड पर किसी भी समय पढ़ें और लिखें।
+* [वास्तव में समकालिक पुनरुत्पादन](https://galeracluster.com/library/documentation/overview.html) कोई दास अंतराल नहीं और एक नोड क्रैश के बाद कोई डेटा हानि नहीं।
+* हॉट स्टैंडबाई: फ़ेलओवर के दौरान कोई डाउनटाइम नहीं (क्योंकि कोई फ़ेलओवर नहीं है)।
+* निकटता से जुड़े: सभी नोड्स एक ही स्थिति रखते हैं और नोड्स के बीच कोई विभाजित डेटा की अनुमति नहीं है।
+* स्वचालित नोड प्रोविजनिंग: डेटाबेस का मैन्युअल रूप से बैकअप लेने और नए नोड पर पुनर्स्थापित करने की आवश्यकता नहीं है।
+* उपयोग और तैनाती में आसान।
+* अविश्वसनीय नोड्स का पता लगाना और स्वचालित निष्कासन।
+* प्रमाणीकरण आधारित पुनरुत्पादन।
+
+Manticore सर्च में पुनरुत्पादन सेट करने के लिए:
+
+* विन्यास फ़ाइल के "searchd" सेक्शन में [data_dir](../../Server_settings/Searchd.md#data_dir) विकल्प सेट किया जाना चाहिए। साधारण मोड में पुनरुत्पादन का समर्थन नहीं किया गया है।
+* एक [listen](../../Server_settings/Searchd.md#listen) निर्देश का निर्दिष्ट करना आवश्यक है, जिसमें एक IP पता शामिल है जिसे अन्य नोड्स द्वारा एक्सेस किया जा सकता है, या एक [node_address](../../Server_settings/Searchd.md#node_address) जिसमें एक एक्सेसिबल IP पता हो।
+* वैकल्पिक रूप से, आप प्रत्येक क्लस्टर नोड पर [server_id](../../Server_settings/Searchd.md#server_id) के लिए अद्वितीय मान सेट कर सकते हैं। यदि कोई मान सेट नहीं किया गया है, तो नोड MAC पते या यादृच्छिक संख्या का उपयोग करके `server_id` उत्पन्न करने का प्रयास करेगा।
+
+यदि कोई `replication` [listen](../../Server_settings/Searchd.md#listen) निर्देश सेट नहीं किया गया है, तो Manticore प्रत्येक बनाए गए क्लस्टर के लिए डिफ़ॉल्ट प्रोटोकॉल सुनने वाले पोर्ट के बाद 200 पोर्ट की रेंज में पहले दो मुक्त पोर्ट का उपयोग करेगा। पुनरुत्पादन पोर्ट को मैन्युअल रूप से सेट करने के लिए, [listen](../../Server_settings/Searchd.md#listen) निर्देश (जिसका प्रकार `replication` है) पोर्ट रेंज निर्धारित की जानी चाहिए और पतों/पोर्ट रेंज की जोड़ी विभिन्न नोड्स के बीच समान सर्वर पर नहीं काटनी चाहिए। एक नियम के रूप में, पोर्ट रेंज को प्रति क्लस्टर कम से कम दो पोर्ट निर्दिष्ट करने चाहिए। जब आप एक पोर्ट रेंज के साथ पुनरुत्पादन श्रोता को परिभाषित करते हैं (उदाहरण के लिए, `listen = 192.168.0.1:9320-9328:replication`), तो Manticore तुरंत इन पोर्ट्स पर सुनना शुरू नहीं करता है। इसके बजाय, यह पुनरुत्पादन का उपयोग करना शुरू करने पर केवल निर्दिष्ट रेंज से यादृच्छिक मुक्त पोर्ट लेगा।
+
+## पुनरुत्पादन क्लस्टर
+
+एक पुनरुत्पादन क्लस्टर नोड्स का एक समूह है जिसमें एक लेखन लेनदेन को पुनरुत्पादित किया जाता है। पुनरुत्पादन प्रति-टेबल आधार पर सेट किया जाता है, जिसका अर्थ है कि एक तालिका केवल एक क्लस्टर की हो सकती है। एक क्लस्टर में तालिकाओं की संख्या पर कोई सीमा नहीं है। `INSERT`, `REPLACE`, `DELETE`, `TRUNCATE` जैसी सभी लेनदेन किसी भी पर्कोलट या वास्तविक समय की तालिका पर जो कि एक क्लस्टर से संबंधित होती है, उन सभी अन्य नोड्स को पुनरुत्पादित किया जाता है। [वितरित](../../Creating_a_table/Creating_a_distributed_table/Creating_a_distributed_table.md#Creating-a-distributed-table) तालिकाएँ भी पुनरुत्पादन प्रक्रिया का हिस्सा हो सकती हैं। पुनरुत्पादन मल्टी-मास्टर है, इसलिए किसी भी नोड या कई नोड्स पर लेखन एक साथ करना उतना ही प्रभावशाली होगा।
+
+एक क्लस्टर बनाने के लिए, आप आमतौर पर [create cluster](../../Creating_a_cluster/Setting_up_replication/Creating_a_replication_cluster.md#Creating-a-replication-cluster) कमांड का उपयोग कर सकते हैं `CREATE CLUSTER <cluster name>` के साथ, और एक क्लस्टर में शामिल होने के लिए, आप [join cluster](../../Creating_a_cluster/Setting_up_replication/Joining_a_replication_cluster.md#Joining-a-replication-cluster) का उपयोग कर सकते हैं `JOIN CLUSTER <cluster name> at 'host:port'` के साथ। हालाँकि, कुछ दुर्लभ मामलों में, आप `CREATE/JOIN CLUSTER` के व्यवहार को ठीक से समायोजित करना चाह सकते हैं। उपलब्ध विकल्प हैं:
+
+### नाम
+
+यह विकल्प क्लस्टर का नाम निर्दिष्ट करता है। इसे प्रणाली में सभी क्लस्टरों के बीच अद्वितीय होना चाहिए।
+
+> **नोट:** `JOIN` कमांड के लिए अधिकतम भूतान की लंबाई **253** वर्ण है। यदि आप इस सीमा को पार करते हैं, तो searchd एक त्रुटि उत्पन्न करेगा।
+
+### पथ
+
+पथ विकल्प [write-set cache replication](https://galeracluster.com/library/documentation/state-transfer.html#state-transfer-gcache) और अन्य नोड्स से आने वाली तालिकाओं के लिए डेटा निर्देशिका को निर्दिष्ट करता है। यह मान प्रणाली में सभी क्लस्टरों के बीच अद्वितीय होना चाहिए और इसे [data_dir](../../Server_settings/Searchd.md#data_dir) निर्देशिका के सापेक्ष पथ के रूप में निर्दिष्ट किया जाना चाहिए। डिफ़ॉल्ट रूप से, इसे [data_dir](../../Server_settings/Searchd.md#data_dir) के मान पर सेट किया गया है।
+
+### नोड्स
+
+`nodes` विकल्प क्लस्टर के सभी नोड्स के लिए पता:पोर्ट जोड़े की एक सूची है, जो उन्हें अल्पविराम द्वारा अलग किया गया है। यह सूची नोड के API इंटरफ़ेस का उपयोग करके प्राप्त की जानी चाहिए और इसमें वर्तमान नोड का पता भी शामिल हो सकता है। इसका उपयोग नोड को क्लस्टर में शामिल करने और पुनरारंभ के बाद फिर से शामिल करने के लिए किया जाता है।
+
+### विकल्प
+
+`options` विकल्प आपको गैलेरा पुनरुत्पादन प्लगइन को सीधे अतिरिक्त विकल्पों को पास करने की अनुमति देता है, जैसा कि [गैलेरा प्रलेखन पैरामीटर](https://galeracluster.com/library/documentation/galera-parameters.html) में वर्णित है।
+
+## लिखने के कथन
+
+<!-- example write statements 1 -->
+जब एक प्रतिकृति क्लस्टर के साथ काम कर रहे हों, तब सभी लेखन कथन जैसे `INSERT`, `REPLACE`, `DELETE`, `TRUNCATE`, `UPDATE` जो कि क्लस्टर की तालिका की सामग्री को संशोधित करते हैं, को तालिका नाम के बजाय `cluster_name:table_name` अभिव्यक्ति का उपयोग करना चाहिए। यह सुनिश्चित करता है कि परिवर्तन क्लस्टर में सभी प्रजनकों को प्रेषित किए जाते हैं। यदि सही अभिव्यक्ति का उपयोग नहीं किया गया, तो एक त्रुटि उत्पन्न होगी।
+
+JSON इंटरफेस में, सभी लेखन कथनों के लिए `cluster` संपत्ति को `table` नाम के साथ सेट करना चाहिए जो कि क्लस्टर की तालिका के लिए है। `cluster` संपत्ति सेट न करने पर एक त्रुटि उत्पन्न होगी।
+
+एक क्लस्टर में तालिका के लिए [Auto ID](../../Data_creation_and_modification/Adding_documents_to_a_table/Adding_documents_to_a_real-time_table.md#Auto-ID) सही होना चाहिए जब तक कि [server_id](../../Server_settings/Searchd.md#server_id) सही तरीके से कॉन्फ़िगर किया गया हो।
+
+<!-- intro -->
+##### SQL:
+
+<!-- request SQL -->
+
+```sql
+INSERT INTO posts:weekly_index VALUES ( 'iphone case' )
+TRUNCATE RTINDEX click_query:weekly_index
+UPDATE INTO posts:rt_tags SET tags=(101, 302, 304) WHERE MATCH ('use') AND id IN (1,101,201)
+DELETE FROM clicks:rt WHERE MATCH ('dumy') AND gid>206
+```
+
+<!-- request JSON -->
+
+```json
+POST /insert -d '
+{
+  "cluster":"posts",
+  "table":"weekly_index",
+  "doc":
+  {
+    "title" : "iphone case",
+    "price" : 19.85
+  }
+}'
+POST /delete -d '
+{
+  "cluster":"posts",
+  "table": "weekly_index",
+  "id":1
+}'
+```
+
+<!-- request PHP -->
+
+```php
+$index->addDocuments([
+        1, ['title' => 'iphone case', 'price' => 19.85]
+]);
+$index->deleteDocument(1);
+```
+
+<!-- intro -->
+##### Python:
+
+<!-- request Python -->
+
+``` python
+indexApi.insert({"cluster":"posts","table":"weekly_index","doc":{"title":"iphone case","price":19.85}})
+indexApi.delete({"cluster":"posts","table":"weekly_index","id":1})
+```
+
+<!-- intro -->
+##### Python-asyncio:
+
+<!-- request Python-asyncio -->
+
+``` python
+await indexApi.insert({"cluster":"posts","table":"weekly_index","doc":{"title":"iphone case","price":19.85}})
+await indexApi.delete({"cluster":"posts","table":"weekly_index","id":1})
+```
+
+<!-- intro -->
+##### Javascript:
+
+<!-- request Javascript -->
+
+``` javascript
+res = await indexApi.insert({"cluster":"posts","table":"weekly_index","doc":{"title":"iphone case","price":19.85}});
+ res = await indexApi.delete({"cluster":"posts","table":"weekly_index","id":1});
+```
+
+<!-- intro -->
+##### java:
+
+<!-- request Java -->
+
+``` java
+InsertDocumentRequest newdoc = new InsertDocumentRequest();
+HashMap<String,Object> doc = new HashMap<String,Object>(){{
+    put("title","Crossbody Bag with Tassel");
+    put("price",19.85);
+}};
+newdoc.index("weekly_index").cluster("posts").id(1L).setDoc(doc);
+sqlresult = indexApi.insert(newdoc);
+
+DeleteDocumentRequest deleteRequest = new DeleteDocumentRequest();
+deleteRequest.index("weekly_index").cluster("posts").setId(1L);
+indexApi.delete(deleteRequest);
+
+```
+
+<!-- intro -->
+##### C#:
+
+<!-- request C# -->
+
+``` clike
+Dictionary<string, Object> doc = new Dictionary<string, Object>();
+doc.Add("title", "Crossbody Bag with Tassel");
+doc.Add("price", 19.85);
+InsertDocumentRequest newdoc = new InsertDocumentRequest(table: "weekly_index", cluster:posts, id: 1, doc: doc);
+var sqlresult = indexApi.Insert(newdoc);
+
+DeleteDocumentRequest deleteDocumentRequest = new DeleteDocumentRequest(table: "weekly_index", cluster: "posts", id: 1);
+indexApi.Delete(deleteDocumentRequest);
+```
+
+<!-- intro -->
+##### Rust:
+
+<!-- request Rust -->
+
+``` rust
+let mut doc = HashMap::new();
+doc.insert("title".to_string(), serde_json::json!("Crossbody Bag with Tassel"));
+doc.insert("price".to_string(), serde_json::json!(19.85));
+let insert_req = InsertDocumentRequest {
+    table: serde_json::json!("weekly_index"),
+    doc: serde_json::json!(doc),
+    cluster: serde_json::json!("posts"),
+    id: serde_json::json!(1),
+};
+let insert_res = index_api.insert(insert_req).await;
+
+let delete_req = DeleteDocumentRequest {
+    table: serde_json::json!("weekly_index"),
+    cluster: serde_json::json!("posts"),
+    id: serde_json::json!(1),
+};
+index_api.delete(delete_req).await;
+```
+
+<!-- end -->
+
+## पढ़ने के कथन
+
+<!-- example write statements 2 -->
+पढ़ने के कथन जैसे `SELECT`, `CALL PQ`, `DESCRIBE` नियमित तालिका नामों का उपयोग कर सकते हैं जिन्हें क्लस्टर नाम के साथ नहीं जोड़ा गया है, या वे `cluster_name:table_name` प्रारूप का उपयोग कर सकते हैं। यदि बाद वाला उपयोग किया गया है, तो `cluster_name` घटक की अनदेखी की जाती है।
+
+जब HTTP एंडपॉइंट `json/search` का उपयोग किया जाता है, तो `cluster` संपत्ति को इच्छानुसार निर्दिष्ट किया जा सकता है, लेकिन इसे छोड़ भी दिया जा सकता है।
+
+
+<!-- intro -->
+##### SQL:
+
+<!-- request SQL -->
+
+```sql
+SELECT * FROM weekly_index
+CALL PQ('posts:weekly_index', 'document is here')
+```
+
+<!-- request JSON -->
+
+```json
+POST /search -d '
+{
+  "cluster":"posts",
+  "table":"weekly_index",
+  "query":{"match":{"title":"keyword"}}
+}'
+POST /search -d '
+{
+  "table":"weekly_index",
+  "query":{"match":{"title":"keyword"}}
+}'
+```
+
+<!-- end -->
+
+## क्लस्टर पैरामीटर
+
+<!-- example cluster parameters 1 -->
+प्रतिकृति प्लगइन विकल्पों को `SET` कथन का उपयोग करके समायोजित किया जा सकता है।
+
+उपलब्ध विकल्पों की सूची [Galera Documentation Parameters](https://galeracluster.com/library/documentation/galera-parameters.html) में पाई जा सकती है।
+
+
+<!-- intro -->
+##### SQL:
+
+<!-- request SQL -->
+
+```sql
+SET CLUSTER click_query GLOBAL 'pc.bootstrap' = 1
+```
+<!-- request JSON -->
+
+```json
+POST /cli -d "
+SET CLUSTER click_query GLOBAL 'pc.bootstrap' = 1
+"
+```
+<!-- end -->
+
+## विभाजित नोड्स के साथ क्लस्टर
+
+<!-- example cluster with diverged nodes  1 -->
+यह संभव है कि अनुकरणित नोड एक-दूसरे से भिन्न हो जाएं, जिससे एक स्थिति उत्पन्न हो सकती है जहाँ सभी नोड्स को `non-primary` के रूप में चिह्नित किया गया हो। यह नोड्स के बीच नेटवर्क स्प्लिट, क्लस्टर क्रैश, या यदि अनुकरण प्लगइन `primary component` निर्धारित करते समय एक अपवाद का अनुभव करता है, के परिणामस्वरूप हो सकता है। ऐसे परिदृश्य में, एक नोड का चयन करना और इसे `primary component` की भूमिका में पदोन्नत करना आवश्यक है।
+
+पदोन्नति के लिए आवश्यक नोड की पहचान करने के लिए, आपको सभी नोड्स पर `last_committed` क्लस्टर स्थिति चर के मान की तुलना करनी चाहिए। यदि सभी सर्वर वर्तमान में चल रहे हैं, तो क्लस्टर को पुनरारंभ करने की आवश्यकता नहीं है। इसके बजाय, आप बस सबसे उच्च last_committed मान वाले नोड को `primary component` के रूप में पदोन्नत कर सकते हैं `SET` कथन का उपयोग करके (जैसा कि उदाहरण में प्रदर्शित है)।
+
+अन्य नोड्स फिर प्राथमिक घटक से फिर से कनेक्ट करेंगे और इस नोड के आधार पर अपने डेटा का पुनः समन्वयित करेंगे।
+
+
+<!-- intro -->
+##### SQL:
+
+<!-- request SQL -->
+
+```sql
+SET CLUSTER posts GLOBAL 'pc.bootstrap' = 1
+```
+<!-- request JSON -->
+
+```json
+POST /cli -d "
+SET CLUSTER posts GLOBAL 'pc.bootstrap' = 1
+"
+```
+<!-- end -->
+
+## अनुकरण और क्लस्टर
+
+<!-- example replication and cluster 1 -->
+अनुकरण का उपयोग करने के लिए, आपको कॉन्फ़िगरेशन फ़ाइल में SphinxAPI प्रोटोकॉल के लिए एक [listen](../../Server_settings/Searchd.md#listen) पोर्ट और अनुकरण पते और पोर्ट रेंज के लिए एक [listen](../../Server_settings/Searchd.md#listen) पोर्ट को परिभाषित करना होगा। इसके अलावा, आने वाली तालिकाओं को دریافت करने के लिए [data_dir](../../Server_settings/Searchd.md#data_dir) फ़ोल्डर को निर्दिष्ट करें।
+
+
+<!-- intro -->
+##### ini:
+
+<!-- request ini -->
+```ini
+searchd {
+  listen   = 9312
+  listen   = 192.168.1.101:9360-9370:replication
+  data_dir = /var/lib/manticore/
+  ...
+ }
+```
+<!-- end -->
+
+<!-- example replication and cluster 2 -->
+तालिकाओं को अनुकरण करने के लिए, आपको उस सर्वर पर एक क्लस्टर बनाना होगा जिसमें अनुकरण की जाने वाली स्थानीय तालिकाएँ हों।
+
+<!-- intro -->
+##### SQL:
+
+<!-- request SQL -->
+
+```sql
+CREATE CLUSTER posts
+```
+
+<!-- request JSON -->
+
+```json
+POST /cli -d "
+CREATE CLUSTER posts
+"
+```
+
+<!-- request PHP -->
+
+```php
+$params = [
+    'cluster' => 'posts'
+    ]
+];
+$response = $client->cluster()->create($params);
+```
+<!-- intro -->
+##### Python:
+
+<!-- request Python -->
+
+```python
+utilsApi.sql('CREATE CLUSTER posts')
+```
+
+<!-- intro -->
+##### Python-asyncio:
+
+<!-- request Python-asyncio -->
+
+```python
+await utilsApi.sql('CREATE CLUSTER posts')
+```
+
+<!-- intro -->
+##### Javascript:
+
+<!-- request Javascript -->
+
+```javascript
+res = await utilsApi.sql('CREATE CLUSTER posts');
+```
+
+<!-- intro -->
+##### Java:
+
+<!-- request Java -->
+
+```java
+utilsApi.sql("CREATE CLUSTER posts");
+
+```
+
+<!-- intro -->
+##### C#:
+
+<!-- request C# -->
+
+```clike
+utilsApi.Sql("CREATE CLUSTER posts");
+```
+
+<!-- intro -->
+##### Rust:
+
+<!-- request Rust -->
+
+```rust
+utils_api.sql("CREATE CLUSTER posts", Some(true)).await;
+```
+
+<!-- end -->
+
+<!-- example replication and cluster 3 -->
+इन स्थानीय तालिकाओं को क्लस्टर में जोड़ें
+
+
+<!-- intro -->
+##### SQL:
+
+<!-- request SQL -->
+
+```sql
+ALTER CLUSTER posts ADD pq_title
+ALTER CLUSTER posts ADD pq_clicks
+```
+
+<!-- request JSON -->
+
+```json
+POST /cli -d "
+ALTER CLUSTER posts ADD pq_title
+"
+POST /cli -d "
+ALTER CLUSTER posts ADD pq_clicks
+"
+```
+
+<!-- request PHP -->
+
+```php
+$params = [
+  'cluster' => 'posts',
+  'body' => [
+     'operation' => 'add',
+     'table' => 'pq_title'
+
+  ]
+];
+$response = $client->cluster()->alter($params);
+$params = [
+  'cluster' => 'posts',
+  'body' => [
+     'operation' => 'add',
+     'table' => 'pq_clicks'
+
+  ]
+];
+$response = $client->cluster()->alter($params);   
+```
+<!-- intro -->
+##### Python:
+
+<!-- request Python -->
+
+```python
+utilsApi.sql('ALTER CLUSTER posts ADD pq_title')
+utilsApi.sql('ALTER CLUSTER posts ADD pq_clicks')
+```
+
+<!-- intro -->
+##### Python-asyncio:
+
+<!-- request Python-asyncio -->
+
+```python
+await utilsApi.sql('ALTER CLUSTER posts ADD pq_title')
+await utilsApi.sql('ALTER CLUSTER posts ADD pq_clicks')
+```
+
+<!-- intro -->
+##### Javascript:
+
+<!-- request Javascript -->
+
+```javascript
+res = await utilsApi.sql('ALTER CLUSTER posts ADD pq_title');
+res = await utilsApi.sql('ALTER CLUSTER posts ADD pq_clicks');
+```
+
+<!-- intro -->
+##### Java:
+
+<!-- request Java -->
+
+```java
+utilsApi.sql("ALTER CLUSTER posts ADD pq_title");
+utilsApi.sql("ALTER CLUSTER posts ADD pq_clicks");
+```
+
+<!-- intro -->
+##### C#:
+
+<!-- request C# -->
+
+```clike
+utilsApi.Sql("ALTER CLUSTER posts ADD pq_title");
+utilsApi.Sql("ALTER CLUSTER posts ADD pq_clicks");
+```
+
+<!-- intro -->
+##### Rust:
+
+<!-- request Rust -->
+
+```rust
+utils_api.sql("ALTER CLUSTER posts ADD pq_title", Some(true)).await;
+utils_api.sql("ALTER CLUSTER posts ADD pq_clicks", Some(true)).await;
+```
+
+<!-- end -->
+
+<!-- example replication and cluster 4 -->
+अन्य सभी नोड्स जो क्लस्टर की तालिकाओं की प्रतिलिपि प्राप्त करना चाहते हैं, उन्हें निम्नलिखित के रूप में क्लस्टर में शामिल होना चाहिए:
+
+
+<!-- intro -->
+##### SQL:
+
+<!-- request SQL -->
+
+```sql
+JOIN CLUSTER posts AT '192.168.1.101:9312'
+```
+
+<!-- request JSON -->
+
+```json
+POST /cli -d "
+JOIN CLUSTER posts AT '192.168.1.101:9312'
+"
+```
+
+<!-- request PHP -->
+
+```php
+$params = [
+  'cluster' => 'posts',
+  'body' => [
+      '192.168.1.101:9312'
+  ]
+];
+$response = $client->cluster->join($params);
+```
+<!-- intro -->
+##### Python:
+
+<!-- request Python -->
+
+```python
+utilsApi.sql('JOIN CLUSTER posts AT '192.168.1.101:9312'')
+```
+
+<!-- intro -->
+##### Python-asyncio:
+
+<!-- request Python-asyncio -->
+
+```python
+await utilsApi.sql('JOIN CLUSTER posts AT '192.168.1.101:9312'')
+```
+
+<!-- intro -->
+##### Javascript:
+
+<!-- request Javascript -->
+
+```javascript
+res = await utilsApi.sql('JOIN CLUSTER posts AT '192.168.1.101:9312');
+```
+
+<!-- intro -->
+##### Java:
+
+<!-- request Java -->
+
+```java
+utilsApi.sql("JOIN CLUSTER posts AT '192.168.1.101:9312'");
+
+```
+
+<!-- intro -->
+##### C#:
+
+<!-- request C# -->
+
+```clike
+utilsApi.Sql("JOIN CLUSTER posts AT '192.168.1.101:9312'");
+
+```
+
+<!-- intro -->
+##### Rust:
+
+<!-- request Rust -->
+
+```rust
+utils_api.sql("JOIN CLUSTER posts AT '192.168.1.101:9312'", Some(true)).await;
+
+```
+<!-- end -->
+
+<!-- example replication and cluster 5 -->
+जब क्वेरीज चलाते हैं, तो टेबल के नाम के पहले क्लस्टर का नाम `posts` जोड़ें: या HTTP अनुरोध वस्तु के लिए `cluster` प्रॉपर्टी का उपयोग करें।
+
+
+<!-- intro -->
+##### SQL:
+
+<!-- request SQL -->
+
+```sql
+INSERT INTO posts:pq_title VALUES ( 3, 'test me' )
+```
+
+<!-- request JSON -->
+
+```json
+POST /insert -d '
+{
+  "cluster":"posts",
+  "table":"pq_title",
+  "id": 3
+  "doc":
+  {
+    "title" : "test me"
+  }
+}'
+```
+
+<!-- request PHP -->
+
+```php
+$index->addDocuments([
+        3, ['title' => 'test me']
+]);
+
+```
+<!-- intro -->
+##### Python:
+
+<!-- request Python -->
+
+``` python
+indexApi.insert({"cluster":"posts","table":"pq_title","id":3"doc":{"title":"test me"}})
+
+```
+
+<!-- intro -->
+##### Python-asyncio:
+
+<!-- request Python-asyncio -->
+
+``` python
+await indexApi.insert({"cluster":"posts","table":"pq_title","id":3"doc":{"title":"test me"}})
+```
+
+<!-- intro -->
+##### Javascript:
+
+<!-- request Javascript -->
+
+``` javascript
+res = await indexApi.insert({"cluster":"posts","table":"pq_title","id":3"doc":{"title":"test me"}});
+```
+
+<!-- intro -->
+##### java:
+
+<!-- request Java -->
+
+``` java
+InsertDocumentRequest newdoc = new InsertDocumentRequest();
+HashMap<String,Object> doc = new HashMap<String,Object>(){{
+    put("title","test me");
+}};
+newdoc.index("pq_title").cluster("posts").id(3L).setDoc(doc);
+sqlresult = indexApi.insert(newdoc);
+```
+
+<!-- intro -->
+##### C#:
+
+<!-- request C# -->
+
+``` clike
+Dictionary<string, Object> doc = new Dictionary<string, Object>();
+doc.Add("title", "test me");
+InsertDocumentRequest newdoc = new InsertDocumentRequest(index: "pq_title", cluster: "posts", id: 3, doc: doc);
+var sqlresult = indexApi.Insert(newdoc);
+```
+
+<!-- intro -->
+##### Rust:
+
+<!-- request Rust -->
+
+``` rust
+let mut doc = HashMap::new();
+doc.insert("title".to_string(), serde_json::json!("test me"));
+let insert_req = InsertDocumentRequest {
+    table: serde_json::json!("pq_title"),
+    doc: serde_json::json!(doc),
+    cluster: serde_json::json!("posts"),
+    id: serde_json::json!(3),
+};
+let insert_res = index_api.insert(insert_req).await;
+```
+<!-- end -->
+
+सभी क्वेरीज जो क्लस्टर में टेबल को संशोधित करती हैं, अब क्लस्टर के सभी नोड्स पर दोहराई जाती हैं।
+<!-- proofread -->
 # प्रतिकृति सेट करना
 Manticore के साथ, लेखन लेनदेन (जैसे `INSERT`, `REPLACE`, `DELETE`, `TRUNCATE`, `UPDATE`, `COMMIT`) को अन्य क्लस्टर नोड्स पर प्रतिकृत किया जा सकता है इससे पहले कि लेनदेन को वर्तमान नोड पर पूरी तरह से लागू किया जा सके। वर्तमान में, प्रतिकृति `percolate`, `rt` और `distributed` टेबल के लिए लिनक्स और मैकोज़ में समर्थित है।
 Manticore के लिए [स्थानीय विंडोज बाइनरी](../../Installation/Windows.md#Installing-Manticore-as-native-Windows-binaries) प्रतिकृति का समर्थन नहीं करते हैं। हम [WSL के माध्यम से Manticore स्थापित करने](../../Installation/Windows.md#Installing-or-enabling-WSL2) की सिफारिश करते हैं (विंडोज सबसिस्टम फॉर लिनक्स)।

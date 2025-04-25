@@ -1,5 +1,153 @@
 # Исключения
 
+Исключения (также известные как синонимы) позволяют сопоставлять один или несколько токенов (включая токены с символами, которые обычно исключаются) с одним ключевым словом. Они похожи на [словоформы](../../Creating_a_table/NLP_and_tokenization/Wordforms.md#wordforms) тем, что также выполняют сопоставление, но имеют ряд важных отличий.
+
+Краткое резюме различий от [словоформ](../../Creating_a_table/NLP_and_tokenization/Wordforms.md#wordforms) выглядит следующим образом:
+
+| Исключения | Словоформы |
+| - | - |
+| Чувствительны к регистру | Нечувствительны к регистру |
+| Могут использовать специальные символы, которые не находятся в [charset_table](../../Creating_a_table/NLP_and_tokenization/Low-level_tokenization.md#charset_table) | Полностью подчиняются [charset_table](../../Creating_a_table/NLP_and_tokenization/Low-level_tokenization.md#charset_table) |
+| Плохо работают с огромными словарями | Предназначены для обработки миллионов записей |
+
+## исключения
+
+```ini
+exceptions = path/to/exceptions.txt
+```
+
+<!-- example exceptions -->
+Токенизация файла исключений. Необязательно, по умолчанию пусто.
+В режиме RT разрешены только абсолютные пути.
+
+Ожидаемый формат файла - простой текст, по одной строке на исключение. Формат строки следующий:
+
+```ini
+map-from-tokens => map-to-token
+```
+
+Пример файла:
+
+```ini
+at & t => at&t
+AT&T => AT&T
+Standarten   Fuehrer => standartenfuhrer
+Standarten Fuhrer => standartenfuhrer
+MS Windows => ms windows
+Microsoft Windows => ms windows
+C++ => cplusplus
+c++ => cplusplus
+C plus plus => cplusplus
+=>abc> => abc
+```
+
+Все токены здесь чувствительны к регистру и **не** будут обрабатываться правилами [charset_table](../../Creating_a_table/NLP_and_tokenization/Low-level_tokenization.md#charset_table). Таким образом, с приведенным выше примером файла исключений текст `at&t` будет токенизирован как два ключевых слова `at` и `t` из-за строчных букв. С другой стороны, `AT&T` будет точно соответствовать и создавать одно ключевое слово `AT&T`.
+
+Если вам нужно использовать `>` или `=` как обычные символы, вы можете экранировать их, предшествуя каждому обратной косой чертой (``). Оба символа `>` и `=` должны быть экранированы таким образом.
+
+Обратите внимание, что ключевые слова map-to:
+* всегда интерпретируются как *одиночное* слово
+* чувствительны как к регистру, так и к пробелам
+
+В приведенном примере, запрос `ms windows` *не* совпадет с документом с текстом `MS Windows`. Запрос будет интерпретирован как запрос на два ключевых слова, `ms` и `windows`. Сопоставление для `MS Windows` - это одно ключевое слово `ms windows`, с пробелом посередине. С другой стороны, `standartenfuhrer` вернет документы с содержимым `Standarten Fuhrer` или `Standarten Fuehrer` (первоначально с прописными буквами, как здесь), или любой вариант капитализации самого ключевого слова, например, `staNdarTenfUhreR`. (Однако это не поймает `standarten fuhrer`, поскольку этот текст не соответствует ни одному из указанных исключений из-за чувствительности к регистру и индексируется как два отдельных ключевых слова.)
+
+Пробелы в списке токенов map-from имеют значение, но их количество не имеет. Любое количество пробелов в списке map-form совпадет с любым другим количеством пробелов в индексированном документе или запросе. Например, токен map-from `AT & T` будет соответствовать тексту `AT & T`, независимо от количества пробелов в обеих частях map-from и индексированном тексте. Таким образом, такой текст будет индексироваться как специальное ключевое слово `AT&T`, благодаря самой первой записи из примера.
+
+Исключения также позволяют захватывать специальные символы (которые являются исключениями из общих правил `charset_table`; отсюда и название). Предположим, что вы вообще не хотите рассматривать `+` как допустимый символ, но все же хотите иметь возможность искать некоторые исключения из этого правила, такие как `C++`. Приведенный выше пример сделает именно это, полностью независимо от того, какие символы находятся в таблице, а какие нет.
+
+При использовании [простой таблицы](../../Creating_a_table/Local_tables/Plain_table.md) необходимо поворачивать таблицу, чтобы включить изменения из файла исключений. В случае реальной таблицы изменения будут применяться только к новым документам.
+
+<!-- request SQL -->
+
+```sql
+CREATE TABLE products(title text, price float) exceptions = '/usr/local/manticore/data/exceptions.txt'
+```
+
+<!-- request JSON -->
+
+```json
+POST /cli -d "
+CREATE TABLE products(title text, price float) exceptions = '/usr/local/manticore/data/exceptions.txt'"
+```
+
+<!-- request PHP -->
+
+```php
+$index = new ManticoresearchIndex($client);
+$index->setName('products');
+$index->create([
+            'title'=>['type'=>'text'],
+            'price'=>['type'=>'float']
+        ],[
+            'exceptions' => '/usr/local/manticore/data/exceptions.txt'
+        ]);
+```
+<!-- intro -->
+##### Python:
+
+<!-- request Python -->
+
+```python
+utilsApi.sql('CREATE TABLE products(title text, price float) exceptions = '/usr/local/manticore/data/exceptions.txt'')
+```
+
+<!-- intro -->
+##### Python-asyncio:
+
+<!-- request Python-asyncio -->
+
+```python
+await utilsApi.sql('CREATE TABLE products(title text, price float) exceptions = '/usr/local/manticore/data/exceptions.txt'')
+```
+
+<!-- intro -->
+##### Javascript:
+
+<!-- request javascript -->
+
+```javascript
+res = await utilsApi.sql('CREATE TABLE products(title text, price float) exceptions = '/usr/local/manticore/data/exceptions.txt'');
+```
+
+<!-- intro -->
+##### Java:
+<!-- request Java -->
+```java
+utilsApi.sql("CREATE TABLE products(title text, price float) exceptions = '/usr/local/manticore/data/exceptions.txt'", true);
+```
+
+<!-- intro -->
+##### C#:
+<!-- request C# -->
+```clike
+utilsApi.Sql("CREATE TABLE products(title text, price float) exceptions = '/usr/local/manticore/data/exceptions.txt'", true);
+```
+
+<!-- intro -->
+##### Rust:
+
+<!-- request Rust -->
+
+```rust
+utils_api.sql("CREATE TABLE products(title text, price float) exceptions = '/usr/local/manticore/data/exceptions.txt'", Some(true)).await;
+```
+<!-- request CONFIG -->
+
+```ini
+table products {
+  exceptions = /usr/local/manticore/data/exceptions.txt
+
+  type = rt
+  path = tbl
+  rt_field = title
+  rt_attr_uint = price
+}
+```
+<!-- end -->
+<!-- proofread -->
+
+# Исключения
+
 Исключения (также известные как синонимы) позволяют связывать один или несколько токенов (включая токены с символами, которые обычно исключаются) с одним ключевым словом. Они аналогичны [формам слов](../../Creating_a_table/NLP_and_tokenization/Wordforms.md#wordforms) в том, что также выполняют связывание, но имеют ряд важных различий.
 
 Краткое резюме различий по сравнению с [формами слов](../../Creating_a_table/NLP_and_tokenization/Wordforms.md#wordforms) выглядит следующим образом:

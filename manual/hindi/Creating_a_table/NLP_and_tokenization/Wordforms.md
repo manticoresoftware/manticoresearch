@@ -1,5 +1,200 @@
 # शब्द रूप
 
+शब्द रूपों का उपयोग आने वाले टेक्स्ट को [charset_table](../../Creating_a_table/NLP_and_tokenization/Low-level_tokenization.md#charset_table) नियमों द्वारा टोकनाइज़ करने के बाद किया जाता है। वे मूलतः आपको एक शब्द को दूसरे से बदलने की अनुमति देते हैं। सामान्यतः, इसका उपयोग विभिन्न शब्द रूपों को एक सामान्य रूप में लाने के लिए किया जाता है (जैसे "walks", "walked", "walking" जैसे सभी रूपों को सामान्य रूप "walk" में सामान्यीकृत करना)। इसका उपयोग [stemming](../../Creating_a_table/NLP_and_tokenization/Morphology.md) अपवाद लागू करने के लिए भी किया जा सकता है, क्योंकि रूपों की सूची में पाए जाने वाले शब्दों पर स्टेमिंग लागू नहीं होती।
+
+## शब्दरूप
+
+```ini
+wordforms = path/to/wordforms.txt
+wordforms = path/to/alternateforms.txt
+wordforms = path/to/dict*.txt
+```
+
+<!-- उदाहरण शब्दरूप -->
+शब्द रूपों की शब्दकोश। वैकल्पिक, डिफ़ॉल्ट खाली है।
+
+शब्द रूपों के शब्दकोश का उपयोग आने वाले शब्दों को सामान्यीकृत करने के लिए किया जाता है, चाहे वह इंडेक्सिंग के दौरान हो या खोज के दौरान। इसलिए, जब एक [सादा तालिका](../../Creating_a_table/Local_tables/Plain_table.md) की बात आती है, तो शब्द रूपों फ़ाइल में परिवर्तनों को पकड़ने के लिए तालिका को घुमाना आवश्यक है।
+
+<!-- परिचय -->
+##### SQL:
+
+<!-- अनुरोध SQL -->
+
+```sql
+CREATE TABLE products(title text, price float) wordforms = '/var/lib/manticore/wordforms.txt' wordforms = '/var/lib/manticore/alternateforms.txt /var/lib/manticore/dict*.txt'
+```
+
+<!-- अनुरोध JSON -->
+
+```json
+POST /cli -d "
+CREATE TABLE products(title text, price float) wordforms = '/var/lib/manticore/wordforms.txt' wordforms = '/var/lib/manticore/alternateforms.txt' wordforms = '/var/lib/manticore/dict*.txt'"
+```
+
+<!-- अनुरोध PHP -->
+
+```php
+$index = new ManticoresearchIndex($client);
+$index->setName('products');
+$index->create([
+            'title'=>['type'=>'text'],
+            'price'=>['type'=>'float']
+        ],[
+            'wordforms' => [
+                '/var/lib/manticore/wordforms.txt',
+                '/var/lib/manticore/alternateforms.txt',
+                '/var/lib/manticore/dict*.txt'
+            ]
+        ]);
+```
+<!-- परिचय -->
+##### Python:
+
+<!-- अनुरोध Python -->
+
+```python
+utilsApi.sql('CREATE TABLE products(title text, price float) wordforms = '/var/lib/manticore/wordforms.txt' wordforms = '/var/lib/manticore/alternateforms.txt' wordforms = '/var/lib/manticore/dict*.txt'')
+```
+
+<!-- परिचय -->
+##### Python-asyncio:
+
+<!-- अनुरोध Python-asyncio -->
+
+```python
+await utilsApi.sql('CREATE TABLE products(title text, price float) wordforms = '/var/lib/manticore/wordforms.txt' wordforms = '/var/lib/manticore/alternateforms.txt' wordforms = '/var/lib/manticore/dict*.txt'')
+```
+
+<!-- परिचय -->
+##### Javascript:
+
+<!-- अनुरोध javascript -->
+
+```javascript
+res = await utilsApi.sql('CREATE TABLE products(title text, price float)wordforms = '/var/lib/manticore/wordforms.txt' wordforms = '/var/lib/manticore/alternateforms.txt' wordforms = '/var/lib/manticore/dict*.txt'');
+```
+
+<!-- परिचय -->
+##### Java:
+<!-- अनुरोध Java -->
+```java
+utilsApi.sql("CREATE TABLE products(title text, price float) wordforms = '/var/lib/manticore/wordforms.txt' wordforms = '/var/lib/manticore/alternateforms.txt' wordforms = '/var/lib/manticore/dict*.txt'", true);
+```
+
+<!-- परिचय -->
+##### C#:
+<!-- अनुरोध C# -->
+```clike
+utilsApi.Sql("CREATE TABLE products(title text, price float) wordforms = '/var/lib/manticore/wordforms.txt' wordforms = '/var/lib/manticore/alternateforms.txt' wordforms = '/var/lib/manticore/dict*.txt'", true);
+```
+
+<!-- परिचय -->
+##### Rust:
+
+<!-- अनुरोध Rust -->
+
+```rust
+utils_api.sql("CREATE TABLE products(title text, price float) wordforms = '/var/lib/manticore/wordforms.txt' wordforms = '/var/lib/manticore/alternateforms.txt' wordforms = '/var/lib/manticore/dict*.txt'", Some(true)).await;
+```
+
+<!-- परिचय -->
+##### सादा मोड उदाहरण:
+
+<!-- अनुरोध CONFIG -->
+
+```ini
+table products {
+  wordforms = /var/lib/manticore/wordforms.txt
+  wordforms = /var/lib/manticore/alternateforms.txt
+  wordforms = /var/lib/manticore/dict*.txt
+
+  type = rt
+  path = tbl
+  rt_field = title
+  rt_attr_uint = price
+}
+```
+<!-- अंत -->
+
+Manticore में शब्द रूपों का समर्थन बड़े शब्दकोश को अच्छी तरह से संभालने के लिए डिज़ाइन किया गया है। वे इंडेक्सिंग की गति पर मध्यम रूप से प्रभाव डालते हैं; उदाहरण के लिए, 1 मिलियन प्रविष्टियों वाला एक शब्दकोश पूर्ण-टेक्स्ट इंडेक्सिंग को लगभग 1.5 गुना धीमा कर देता है। खोजने की गति पर कोई प्रभाव नहीं पड़ता। अतिरिक्त RAM प्रभाव लगभग शब्दकोश फ़ाइल के आकार के बराबर होता है, और शब्दकोश तालिकाओं के बीच साझा होते हैं। उदाहरण के लिए, अगर 10 अलग-अलग तालिकाओं के लिए बिल्कुल वही 50 एमबी शब्द रूपों की फ़ाइल निर्दिष्ट की जाती है, तो अतिरिक्त `searchd` RAM उपयोग लगभग 50 एमबी होगा।
+
+<!-- उदाहरण wf_simple -->
+शब्दकोश फ़ाइल को एक साधारण_plain टेक्स्ट प्रारूप में होना चाहिए। प्रत्येक पंक्ति में स्रोत और गंतव्य शब्द रूपों को UTF-8 एनकोडिंग में होना चाहिए, जिन्हें 'से अधिक' के संकेत द्वारा अलग किया जाना चाहिए। फ़ाइल लोड होने पर [charset_table](../../Creating_a_table/NLP_and_tokenization/Low-level_tokenization.md#charset_table) से नियम लागू किए जाएंगे। इसलिए, यदि आप `charset_table` को संशोधित नहीं करते हैं, तो आपके शब्द रूप केस-संवेदनशील नहीं होंगे, आपके अन्य पूर्ण-टेक्स्ट इंडेक्स डेटा के समान। नीचे फ़ाइल की सामग्री का एक नमूना है:
+
+<!-- अनुरोध उदाहरण -->
+```ini
+walks > walk
+walked > walk
+walking > walk
+```
+<!-- अंत -->
+
+एक बंडल किया गया उपयोगिता [Spelldump](../../Miscellaneous_tools.md#spelldump) है जो आपको एक शब्दकोश फ़ाइल बनाने में मदद करता है जिसे Manticore पढ़ सकता है। यह उपयोगिता स्रोत `.dict` और `.aff` शब्दकोश फ़ाइलों को `ispell` या `MySpell` प्रारूप में पढ़ सकती है, जो OpenOffice के साथ शामिल होती हैं।
+
+आप कई स्रोत शब्दों को एकल गंतव्य शब्द पर मैप कर सकते हैं। यह प्रक्रिया टोकनों पर होती है, न कि स्रोत टेक्स्ट पर, इसलिए सफेद स्थान और मार्कअप में भिन्नताओं की अनदेखी की जाती है।
+
+<!-- उदाहरण wf_more_complex -->
+आप `=>` चिन्ह का उपयोग `>` के बजाय कर सकते हैं। टिप्पणियाँ (जो `#` से शुरू होती हैं) भी अनुमति दी गई हैं। अंत में, यदि कोई पंक्ति टिल्ड (`~`) से शुरू होती है, तो रूप-निर्माण के बाद शब्दरूप लागू किया जाएगा, न कि पहले (ध्यान दें कि इस मामले में केवल एकल स्रोत और गंतव्य शब्द ही समर्थन किया जाता है)।
+
+<!-- request Example -->
+```ini
+core 2 duo > c2d
+e6600 > c2d
+core 2duo => c2d # कुछ लोग '2duo' को एक साथ लिखते हैं...
+~run > walk # स्टेम_en रूप-निर्माण सक्षम होने के साथ 'run', 'running', 'runs' (और किसी भी अन्य शब्द जो केवल 'run' से संबंधित हैं) को 'walk' से बदलता है
+```
+<!-- end -->
+
+<!-- example wf_escaping -->
+यदि आपको सामान्य वर्णों के रूप में `>`, `=` या `~` का उपयोग करने की आवश्यकता है, तो आप प्रत्येक से पहले बैकस्लैश (``) लगाकर उन्हें एस्केप कर सकते हैं। इस तरह `>` और `=` दोनों को एस्केप किया जाना चाहिए। यहाँ एक उदाहरण है:
+
+<!-- request Example -->
+```ini
+a> > abc
+>b > bcd
+c=> => cde
+=>d => def
+=>a > f > => foo
+~g => bar
+```
+<!-- end -->
+
+<!-- example wf_multiple_tokens -->
+आप एकाधिक गंतव्य टोकन निर्दिष्ट कर सकते हैं:
+
+<!-- request Example -->
+```ini
+s02e02 > season 2 episode 2
+s3 e3 > season 3 episode 3
+```
+<!-- end -->
+
+<!-- example wf_multiple_files -->
+आप केवल एक नहीं, बल्कि कई फ़ाइलों को निर्दिष्ट कर सकते हैं। मास्क एक पैटर्न के रूप में उपयोग किया जा सकता है, और सभी मिलान करने वाली फ़ाइलों को साधारण आरोही क्रम में संसाधित किया जाएगा:
+
+RT मोड में, केवल पूर्ण पथों की अनुमति है।
+
+यदि बहु-बाइट कोडपृष्ठों का उपयोग किया गया है और फ़ाइल नामों में गैर-लैटिन वर्ण शामिल हैं, तो परिणामी क्रम बिल्कुल वर्णानुक्रम में नहीं हो सकता है। यदि एक ही शब्दरूप परिभाषा एक से अधिक फ़ाइलों में पाई जाती है, तो अंतिम वाला उपयोग किया जाता है और पूर्व की परिभाषाओं को अधिसूचित करता है।
+
+<!-- request SQL -->
+```sql
+create table tbl1 ... wordforms='/tmp/wf*'
+create table tbl2 ... wordforms='/tmp/wf, /tmp/wf2'
+```
+
+<!-- request Config -->
+```ini
+wordforms=/tmp/wf
+wordforms=/tmp/wf2
+wordforms=/tmp/wf_new*
+```
+
+<!-- end -->
+
+
+<!-- proofread -->
+# शब्द रूप
+
 शब्द रूप आने वाले पाठ को [charset_table](../../Creating_a_table/NLP_and_tokenization/Low-level_tokenization.md#charset_table) नियमों द्वारा टोकनाइज करने के बाद लागू होते हैं। वे मूल रूप से आपको एक शब्द को दूसरे शब्द से बदलने की अनुमति देते हैं। सामान्यतः, इसका उपयोग विभिन्न शब्द रूपों को एक सामान्य रूप (जैसे "walks", "walked", "walking" को सामान्य रूप "walk" में सामान्य बनाने) में लाने के लिए किया जाता है। इसका उपयोग [stemming](../../Creating_a_table/NLP_and_tokenization/Morphology.md) अपवाद लागू करने के लिए भी किया जा सकता है, क्योंकि शब्द रूप सूची में पाए गए शब्दों पर स्टेमिंग लागू नहीं होती है।
 
 ## शब्द रूप

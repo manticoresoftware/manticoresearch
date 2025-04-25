@@ -1,4 +1,570 @@
 # Расширенная токенизация HTML
+## Удаление HTML-тегов
+### html_strip
+<!-- example html_strip -->
+```ini
+html_strip = {0|1}
+```
+Эта опция определяет, следует ли удалять HTML-разметку из входящих данных полного текста. Значение по умолчанию — 0, что отключает удаление. Чтобы включить удаление, установите значение 1.
+HTML-теги и сущности считаются разметкой и будут обработаны.
+HTML-теги удаляются, в то время как содержимое между ними (например, все между `<p>` и `</p>`) остается нетронутым. Вы можете выбрать, сохранять и индексировать атрибуты тегов (например, атрибут HREF в теге A или ALT в теге IMG). Некоторые известные встроенные теги, такие как A, B, I, S, U, BASEFONT, BIG, EM, FONT, IMG, LABEL, SMALL, SPAN, STRIKE, STRONG, SUB, SUP и TT, полностью удаляются. Все остальные теги обрабатываются как блочный уровень и заменяются пробелами. Например, текст `te<b>st</b>` будет индексироваться как одно ключевое слово 'test', в то время как `te<p>st</p>` будет индексироваться как два ключевых слова 'te' и 'st'.
+HTML-сущности декодируются и заменяются соответствующими символами UTF-8. Стереотип поддерживает как числовые формы (например, `&#239;`), так и текстовые формы (например, `&oacute;` или `&nbsp;`) сущностей и поддерживает все сущности, указанные стандартом HTML4.
+Стереотип предназначен для работы с правильно сформированной HTML и XHTML, но может давать неожиданные результаты на неправильном вводе (таких как HTML с лишними `<'s` или незакрытыми `>'s`).
+Пожалуйста, обратите внимание, что только сами теги, а также HTML-комментарии, удаляются. Чтобы удалить содержимое тегов, включая встроенные скрипты, смотрите опцию [html_remove_elements](../../Creating_a_table/NLP_and_tokenization/Advanced_HTML_tokenization.md#html_remove_elements). Нет ограничений на имена тегов, что означает, что все, что выглядит как допустимый старт, конец или комментарий тега, будет удалено.
+<!-- intro -->
+##### SQL:
+<!-- request SQL -->
+```sql
+CREATE TABLE products(title text, price float) html_strip = '1'
+```
+<!-- request JSON -->
+```json
+POST /cli -d "
+CREATE TABLE products(title text, price float) html_strip = '1'"
+```
+<!-- request PHP -->
+```php
+$index = new ManticoresearchIndex($client);
+$index->setName('products');
+$index->create([
+            'title'=>['type'=>'text'],
+            'price'=>['type'=>'float']
+        ],[
+            'html_strip' => '1'
+        ]);
+```
+<!-- intro -->
+##### Python:
+<!-- request Python -->
+```python
+utilsApi.sql('CREATE TABLE products(title text, price float) html_strip = '1'')
+```
+<!-- intro -->
+##### Python-asyncio:
+<!-- request Python-asyncio -->
+```python
+await utilsApi.sql('CREATE TABLE products(title text, price float) html_strip = '1'')
+```
+<!-- intro -->
+##### Javascript:
+<!-- request javascript -->
+```javascript
+res = await utilsApi.sql('CREATE TABLE products(title text, price float) html_strip = '1'');
+```
+<!-- intro -->
+##### Java:
+<!-- request Java -->
+```java
+utilsApi.sql("CREATE TABLE products(title text, price float) html_strip = '1'");
+```
+<!-- intro -->
+##### C#:
+<!-- request C# -->
+```clike
+utilsApi.Sql("CREATE TABLE products(title text, price float) html_strip = '1'");
+```
+<!-- intro -->
+##### Rust:
+<!-- request Rust -->
+```rust
+utils_api.sql("CREATE TABLE products(title text, price float) html_strip = '1'", Some(true)).await;
+```
+<!-- request CONFIG -->
+```ini
+table products {
+  html_strip = 1
+  type = rt
+  path = tbl
+  rt_field = title
+  rt_attr_uint = price
+}
+```
+<!-- end -->
+### html_index_attrs
+<!-- example html_index_attrs -->
+```ini
+html_index_attrs = img=alt,title; a=title;
+```
+Опция html_index_attrs позволяет вам указать, какие атрибуты HTML-разметки должны быть индексированы, даже если другая HTML-разметка удаляется. Значение по умолчанию — пустое, что означает, что никакие атрибуты не будут индексироваться.
+Формат опции — это перечисление индексируемых атрибутов по тегам, как показано в приведенном выше примере. Содержимое указанных атрибутов будет сохранено и индексировано, предоставляя способ извлечения дополнительной информации из ваших данных полного текста.
+<!-- intro -->
+##### SQL:
+<!-- request SQL -->
+```sql
+CREATE TABLE products(title text, price float) html_index_attrs = 'img=alt,title; a=title;' html_strip = '1'
+```
+<!-- request JSON -->
+```json
+POST /cli -d "
+CREATE TABLE products(title text, price float) html_index_attrs = 'img=alt,title; a=title;' html_strip = '1'"
+```
+<!-- request PHP -->
+```php
+$index = new ManticoresearchIndex($client);
+$index->setName('products');
+$index->create([
+            'title'=>['type'=>'text'],
+            'price'=>['type'=>'float']
+        ],[
+            'html_index_attrs' => 'img=alt,title; a=title;',
+            'html_strip' => '1'
+        ]);
+```
+<!-- intro -->
+##### Python:
+<!-- request Python -->
+```python
+utilsApi.sql('CREATE TABLE products(title text, price float) html_index_attrs = 'img=alt,title; a=title;' html_strip = '1'')
+```
+<!-- intro -->
+##### Python-asyncio:
+<!-- request Python-asyncio -->
+```python
+await utilsApi.sql('CREATE TABLE products(title text, price float) html_index_attrs = 'img=alt,title; a=title;' html_strip = '1'')
+```
+<!-- intro -->
+##### Javascript:
+<!-- request javascript -->
+```javascript
+res = await utilsApi.sql('CREATE TABLE products(title text, price float) html_index_attrs = 'img=alt,title; a=title;' html_strip = '1'');
+```
+<!-- intro -->
+##### Java:
+<!-- request Java -->
+```java
+utilsApi.sql("CREATE TABLE products(title text, price float) html_index_attrs = 'img=alt,title; a=title;' html_strip = '1'");
+```
+<!-- intro -->
+##### C#:
+<!-- request C# -->
+```clike
+utilsApi.Sql("CREATE TABLE products(title text, price float) html_index_attrs = 'img=alt,title; a=title;' html_strip = '1'");
+```
+<!-- intro -->
+##### Rust:
+<!-- request Rust -->
+```rust
+utils_api.sql("CREATE TABLE products(title text, price float) html_index_attrs = 'img=alt,title; a=title;' html_strip = '1'", Some(true)).await;
+```
+<!-- request CONFIG -->
+```ini
+table products {
+html_index_attrs = img=alt,title; a=title;
+html_strip = 1
+type = rt
+path = tbl
+rt_field = title
+rt_attr_uint = price
+}
+```
+<!-- end -->
+### html_remove_elements
+<!-- example html_remove_elements -->
+```ini
+html_remove_elements = element1[, element2, ...]
+```
+Список HTML-элементов, содержимое которых (вместе с самими элементами) будет удалено. Необязательный параметр, по умолчанию пустая строка (не удалять содержимое каких-либо элементов).
+Этот параметр позволяет удалить содержимое элементов, то есть всё, что находится между открывающим и закрывающим тегами. Это полезно для удаления встроенных скриптов, CSS и т.д. Поддерживается короткая форма тегов для пустых элементов (например, <br/>), и текст после такого тега не будет удален.
+Значение представляет собой список имен элементов (тегов), содержимое которых должно быть удалено, разделенных запятой. Имена тегов нечувствительны к регистру.
+<!-- intro -->
+##### SQL:
+<!-- request SQL -->
+```sql
+CREATE TABLE products(title text, price float) html_remove_elements = 'style, script' html_strip = '1'
+```
+<!-- request JSON -->
+```json
+POST /cli -d "
+CREATE TABLE products(title text, price float) html_remove_elements = 'style, script' html_strip = '1'"
+```
+<!-- request PHP -->
+```php
+$index = new ManticoresearchIndex($client);
+$index->setName('products');
+$index->create([
+          'title'=>['type'=>'text'],
+          'price'=>['type'=>'float']
+      ],[
+          'html_remove_elements' => 'style, script',
+          'html_strip' => '1'
+      ]);
+```
+<!-- intro -->
+##### Python:
+<!-- request Python -->
+```python
+utilsApi.sql('CREATE TABLE products(title text, price float) html_remove_elements = 'style, script' html_strip = '1'')
+```
+<!-- intro -->
+##### Python-asyncio:
+<!-- request Python-asyncio -->
+```python
+await utilsApi.sql('CREATE TABLE products(title text, price float) html_remove_elements = 'style, script' html_strip = '1'')
+```
+<!-- intro -->
+##### Javascript:
+<!-- request javascript -->
+```javascript
+res = await utilsApi.sql('CREATE TABLE products(title text, price float) html_remove_elements = 'style, script' html_strip = '1'');
+```
+<!-- intro -->
+##### Java:
+<!-- request Java -->
+```java
+utilsApi.sql("CREATE TABLE products(title text, price float) html_remove_elements = 'style, script' html_strip = '1'");
+```
+<!-- intro -->
+##### C#:
+<!-- request C# -->
+```clike
+utilsApi.Sql("CREATE TABLE products(title text, price float) html_remove_elements = 'style, script' html_strip = '1'");
+```
+<!-- intro -->
+##### Rust:
+<!-- request Rust -->
+```rust
+utils_api.sql("CREATE TABLE products(title text, price float) html_remove_elements = 'style, script' html_strip = '1'", Some(true)).await;
+```
+<!-- request CONFIG -->
+```ini
+table products {
+html_remove_elements = style, script
+html_strip = 1
+type = rt
+path = tbl
+rt_field = title
+rt_attr_uint = price
+}
+```
+<!-- end -->
+## Извлечение важных частей из HTML
+### index_sp
+<!-- example index_sp -->
+```ini
+index_sp = {0|1}
+```
+Управляет обнаружением и индексацией границ предложений и абзацев. Необязательный параметр, по умолчанию 0 (без обнаружения или индексации).
+Эта директива включает обнаружение и индексацию границ предложений и абзацев, что делает возможным использование операторов [SENTENCE](../../Searching/Full_text_matching/Operators.md#SENTENCE-and-PARAGRAPH-operators) и [PARAGRAPH](../../Searching/Full_text_matching/Operators.md#SENTENCE-and-PARAGRAPH-operators). Обнаружение границ предложений основано на анализе обычного текста и требует только установки `index_sp = 1` для его включения. Обнаружение абзацев, однако, основано на HTML-разметке и происходит во время [процесса удаления HTML](../../Creating_a_table/NLP_and_tokenization/Advanced_HTML_tokenization.md#html_strip). Таким образом, для индексации границ абзацев необходимо установить как директиву index_sp, так и директиву html_strip в значение 1.
+Для определения границ предложений используются следующие правила:
+* Вопросительные знаки (?) и восклицательные знаки (!) всегда указывают на границу предложения.
+* Точки в конце (.) указывают на границу предложения, за исключением следующих случаев:
+  * Когда за точкой следует буква. Это считается частью сокращения (например, "S.T.A.L.K.E.R." или "Goldman Sachs S.p.A.").
+  * Когда за точкой следует запятая. Это считается сокращением, за которым следует запятая (например, "Telecom Italia S.p.A., основанная в 1994 году").
+  * Когда за точкой следует пробел и строчная буква. Это считается сокращением внутри предложения (например, "News Corp. объявила в феврале").
+  * Когда перед точкой стоит пробел и прописная буква, а после точки следует пробел. Это считается инициалом имени (например, "John D. Doe").
+Границы абзацев обнаруживаются на каждом блочном HTML-теге, включая: ADDRESS, BLOCKQUOTE, CAPTION, CENTER, DD, DIV, DL, DT, H1, H2, H3, H4, H5, LI, MENU, OL, P, PRE, TABLE, TBODY, TD, TFOOT, TH, THEAD, TR и UL.
+Как предложения, так и абзацы увеличивают счетчик позиции ключевого слова на 1.
+<!-- intro -->
+##### SQL:
+<!-- request SQL -->
+```sql
+CREATE TABLE products(title text, price float) index_sp = '1' html_strip = '1'
+```
+<!-- request JSON -->
+```json
+POST /cli -d "
+СОЗДАТЬ ТАБЛИЦУ products(title text, price float) index_sp = '1' html_strip = '1'"
+```
+
+<!-- request PHP -->
+
+```php
+$index = new ManticoresearchIndex($client);
+$index->setName('products');
+$index->create([
+            'title'=>['type'=>'text'],
+            'price'=>['type'=>'float']
+        ],[
+            'index_sp' => '1',
+            'html_strip' => '1'
+        ]);
+```
+<!-- intro -->
+##### Python:
+
+<!-- request Python -->
+
+```python
+utilsApi.sql('СОЗДАТЬ ТАБЛИЦУ products(title text, price float) index_sp = '1' html_strip = '1'')
+```
+
+<!-- intro -->
+##### Python-asyncio:
+
+<!-- request Python-asyncio -->
+
+```python
+await utilsApi.sql('СОЗДАТЬ ТАБЛИЦУ products(title text, price float) index_sp = '1' html_strip = '1'')
+```
+
+<!-- intro -->
+##### Javascript:
+
+<!-- request javascript -->
+
+```javascript
+res = await utilsApi.sql('СОЗДАТЬ ТАБЛИЦУ products(title text, price float) index_sp = '1' html_strip = '1'');
+```
+
+<!-- intro -->
+##### Java:
+<!-- request Java -->
+```java
+utilsApi.sql("СОЗДАТЬ ТАБЛИЦУ products(title text, price float) index_sp = '1' html_strip = '1'", true);
+```
+
+<!-- intro -->
+##### C#:
+<!-- request C# -->
+```clike
+utilsApi.Sql("СОЗДАТЬ ТАБЛИЦУ products(title text, price float) index_sp = '1' html_strip = '1'", true);
+```
+
+<!-- intro -->
+##### Rust:
+
+<!-- request Rust -->
+
+```rust
+utils_api.sql("СОЗДАТЬ ТАБЛИЦУ products(title text, price float) index_sp = '1' html_strip = '1'", Some(true)).await;
+```
+
+<!-- request CONFIG -->
+
+```ini
+table products {
+  index_sp = 1
+  html_strip = 1
+  
+  type = rt
+  path = tbl
+  rt_field = title
+  rt_attr_uint = price
+}
+```
+<!-- end -->
+
+
+### index_zones
+
+<!-- example index_zones -->
+
+```ini
+index_zones = h*, th, title
+```
+
+Список зон HTML/XML внутри поля, которые будут индексироваться. По умолчанию это пустая строка (зоны не будут индексироваться).
+
+"Зона" определяется как все, что находится между открывающим и соответствующим закрывающим тегом, и все диапазоны, имеющие одинаковое имя тега, называются "зоной". Например, все, что находится между `<H1>` и `</H1>` в поле документа, принадлежит к зоне H1.
+
+Директива `index_zones` позволяет индексировать зоны, но также необходимо включить HTML [stripper](../../Creating_a_table/NLP_and_tokenization/Advanced_HTML_tokenization.md#html_strip) (установив `html_strip = 1`). Значение `index_zones` должно быть списком названий тегов, разделенных запятыми, и подстановочных знаков (заканчивающихся звездочкой), которые будут индексироваться как зоны.
+
+Зоны могут быть вложенными и перекрываться, при условии, что у каждого открывающего тега есть соответствующий тег. Зоны также могут использоваться для сопоставления с оператором ZONE, как описано в [extended_query_syntax](../../Searching/Full_text_matching/Operators.md#ZONE-limit-operator).
+
+
+<!-- intro -->
+##### SQL:
+
+<!-- request SQL -->
+
+```sql
+СОЗДАТЬ ТАБЛИЦУ products(title text, price float) index_zones = 'h, th, title' html_strip = '1'
+```
+
+<!-- request JSON -->
+
+```json
+POST /cli -d "
+СОЗДАТЬ ТАБЛИЦУ products(title text, price float) index_zones = 'h, th, title' html_strip = '1'"
+```
+
+<!-- request PHP -->
+
+```php
+$index = new ManticoresearchIndex($client);
+$index->setName('products');
+$index->create([
+            'title'=>['type'=>'text'],
+            'price'=>['type'=>'float']
+        ],[
+            'index_zones' => 'h*,th,title',
+            'html_strip' => '1'
+        ]);
+```
+<!-- intro -->
+##### Python:
+
+<!-- request Python -->
+
+```python
+utilsApi.sql('СОЗДАТЬ ТАБЛИЦУ products(title text, price float) index_zones = 'h, th, title' html_strip = '1'')
+```
+
+<!-- intro -->
+##### Python-asyncio:
+
+<!-- request Python-asyncio -->
+
+```python
+await utilsApi.sql('СОЗДАТЬ ТАБЛИЦУ products(title text, price float) index_zones = 'h, th, title' html_strip = '1'')
+```
+
+<!-- intro -->
+##### Javascript:
+
+<!-- request javascript -->
+
+```javascript
+res = await utilsApi.sql('СОЗДАТЬ ТАБЛИЦУ products(title text, price float) index_zones = 'h, th, title' html_strip = '1'');
+```
+
+<!-- intro -->
+##### Java:
+<!-- request Java -->
+```java
+utilsApi.sql("СОЗДАТЬ ТАБЛИЦУ products(title text, price float) index_zones = 'h, th, title' html_strip = '1'", true);
+```
+
+<!-- intro -->
+##### C#:
+<!-- request C# -->
+```clike
+utilsApi.Sql("СОЗДАТЬ ТАБЛИЦУ products(title text, price float) index_zones = 'h, th, title' html_strip = '1'", true);
+```
+
+<!-- intro -->
+##### Rust:
+
+<!-- request Rust -->
+
+```rust
+utils_api.sql("СОЗДАТЬ ТАБЛИЦУ products(title text, price float) index_zones = 'h, th, title' html_strip = '1'", Some(true)).await;
+```
+
+<!-- request CONFIG -->
+
+```ini
+table products {
+  index_zones = h*, th, title
+  html_strip = 1
+  
+  type = rt
+  path = tbl
+  rt_field = title
+  rt_attr_uint = price
+}
+```
+<!-- end -->
+<!-- proofread -->
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+# Расширенная токенизация HTML
 
 ## Удаление HTML-тегов
 

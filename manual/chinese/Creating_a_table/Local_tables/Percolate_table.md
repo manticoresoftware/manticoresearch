@@ -1,5 +1,175 @@
 # 渗透表
 
+
+<!-- example pq -->
+
+渗透表是一种特殊的表，存储查询而非文档。它用于前景搜索或“反向搜索”。
+
+
+* 要了解如何对渗透表执行搜索查询，请参见 [渗透查询](../../Searching/Percolate_query.md) 部分。
+
+* 要了解如何准备一个表以进行搜索，请参见 [向渗透表添加规则](../../Data_creation_and_modification/Adding_documents_to_a_table/Adding_rules_to_a_percolate_table.md) 部分。
+
+
+渗透表的模式是固定的，包含以下字段：
+
+
+| 字段 | 描述 |
+| - | - |
+| ID| 一个具有自动递增功能的无符号 64 位整数。添加 PQ 规则时可以省略，如 [添加 PQ 规则](../../Data_creation_and_modification/Adding_documents_to_a_table/Adding_rules_to_a_percolate_table.md) 中所述 |
+| 查询 | 规则的 [全文查询](../../Searching/Full_text_matching/Basic_usage.md)，可以视为 [MATCH 子句](../../Searching/Full_text_matching/Basic_usage.md) 或 [JSON /search](../../Searching/Full_text_matching/Basic_usage.md#HTTP-JSON) 的值。如果在查询中使用 [每字段操作符](../../Searching/Full_text_matching/Operators.md)，则需在渗透表配置中声明全文字段。如果存储的查询仅用于属性过滤（没有全文查询），则查询值可以为空或省略。该字段的值应与创建渗透表时指定的预期文档模式相对应。 |
+| 过滤器 | 可选。过滤器是一串可选的字符串，包含属性过滤器和/或表达式，定义方式与 [WHERE 子句](../../Searching/Filters.md#WHERE) 或 [JSON 过滤](../../Searching/Filters.md#HTTP-JSON) 相同。该字段的值应与创建渗透表时指定的预期文档模式相对应。 |
+| 标签 | 可选。标签表示由逗号分隔的字符串标签列表，可用于过滤/删除 PQ 规则。标签也可以在执行 [渗透查询](../../Searching/Percolate_query.md) 时与匹配文档一起返回。 |
+
+
+请注意，创建渗透表时无需添加上述字段。
+
+
+创建新的渗透表时需要记住的是指定文档的预期模式，这将与稍后添加的规则进行核对。操作方式与 [任何其他本地表](../../Creating_a_table/Local_tables.md) 一样。
+
+
+
+<!-- intro -->
+
+##### 通过 SQL 创建渗透表：
+
+
+<!-- request SQL -->
+
+
+```sql
+
+CREATE TABLE products(title text, meta json) type='pq';
+
+```
+<!-- response SQL -->
+
+
+```sql
+
+Query OK, 0 rows affected (0.00 sec)
+
+```
+
+
+<!-- intro -->
+
+##### 通过 JSON 通过 HTTP 创建渗透表：
+
+
+<!-- request JSON -->
+
+
+```json
+
+POST /cli -d "CREATE TABLE products(title text, meta json) type='pq'"
+
+```
+
+
+<!-- response JSON -->
+
+
+```json
+
+{
+
+"total":0,
+
+"error":"",
+"warning":""
+}
+
+```
+
+
+<!-- intro -->
+
+##### 通过 PHP 客户端创建渗透表：
+
+
+<!-- request PHP -->
+
+
+```php
+
+$index = [
+
+    'table' => 'products',
+
+    'body' => [
+
+        'columns' => [
+
+            'title' => ['type' => 'text'],
+
+            'meta' => ['type' => 'json']
+
+        ],
+
+        'settings' => [
+
+            'type' => 'pq'
+
+        ]
+
+    ]
+
+];
+
+$client->indices()->create($index);
+
+```
+<!-- response PHP -->
+```php
+
+Array(
+
+    [total] => 0
+
+    [error] =>
+
+    [warning] =>
+
+)
+
+```
+
+
+<!-- intro -->
+
+##### Python:
+
+
+<!-- request Python -->
+
+
+```python
+
+utilsApi.sql('CREATE TABLE products(title text, meta json) type='pq'')
+
+```
+
+
+<!-- intro -->
+
+##### Python-asyncio:
+
+
+<!-- request Python-asyncio -->
+
+
+```python
+
+await utilsApi.sql('CREATE TABLE products(title text, meta json) type='pq'')
+
+```
+
+
+<!-- intro -->
+
+# 渗透表
+
 <!-- example pq -->
 渗透表是存储查询而不是文档的特殊表。用于前瞻性搜索，或称为“逆向搜索”。
 

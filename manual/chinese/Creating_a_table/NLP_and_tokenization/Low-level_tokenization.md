@@ -1,3 +1,2412 @@
+# 低级词法分析  
+
+当文本在Manticore中被索引时，它会被拆分成单词，并进行大小写折叠，以便像“Abc”、“ABC”和“abc”这样的单词被视为同一个单词。
+
+为了正确执行这些操作，Manticore必须知道：
+* 源文本的编码（应始终为UTF-8）
+* 哪些字符被视为字母，哪些不是
+* 哪些字母应该折叠为其他字母
+
+你可以通过 [charset_table](../../Creating_a_table/NLP_and_tokenization/Low-level_tokenization.md#charset_table) 选项在每个表上配置这些设置。charset_table指定一个数组，将字母字符映射到它们的大小写折叠版本（或任何你喜欢的其他字符）。数组中不存在的字符被视为非字母，并将在此表的索引或搜索过程中被视为单词分隔符。
+
+默认字符集为 `non_cont`，它包括了 [大多数语言](../../Creating_a_table/NLP_and_tokenization/Supported_languages.md)。
+
+你还可以定义文本模式替换规则。例如，使用以下规则：
+
+```ini
+regexp_filter = **(d+)" =>  英寸
+regexp_filter = (蓝色|红色) => 颜色
+```
+
+文本 `RED TUBE 5" LONG` 将被索引为 `颜色 TUBE 5 英寸 LONG`，而 `PLANK 2" x 4"` 将被索引为 `PLANK 2 英寸 x 4 英寸`。这些规则按指定顺序应用。规则也适用于查询，因此搜索 `BLUE TUBE` 实际上会搜索 `颜色 TUBE`。
+
+你可以在 [此处了解更多关于 regexp_filter 的信息](../../Creating_a_table/NLP_and_tokenization/Low-level_tokenization.md#regexp_filter)。
+
+## 索引配置选项
+
+### charset_table
+
+```ini
+# 默认
+charset_table = non_cont
+
+# 仅英语和俄语字母
+charset_table = 0..9, A..Z->a..z, _, a..z, U+410..U+42F->U+430..U+44F, U+430..U+44F, U+401->U+451, U+451
+
+# 用别名定义英语字符集
+charset_table = 0..9, english, _
+
+# 你可以通过重新定义字符映射来覆盖字符映射，例如，对于不区分大小写的德语变音字符的搜索，你可以使用：
+charset_table = non_cont, U+00E4, U+00C4->U+00E4, U+00F6, U+00D6->U+00F6, U+00FC, U+00DC->U+00FC, U+00DF, U+1E9E->U+00DF
+```
+
+<!-- example charset_table -->
+`charset_table` 指定一个数组，将字母字符映射到它们的大小写折叠版本（或其他你喜欢的字符）。默认字符集为 `non_cont`，它包括大多数语言的 [非连续](https://en.wikipedia.org/wiki/Scriptio_continua) 字母。
+
+`charset_table` 是Manticore的词法分析过程的核心，它从文档文本或查询文本中提取关键字。它控制哪些字符被视为有效以及它们应该如何转换（例如，是否应该去除大小写）。
+
+默认情况下，每个字符映射到0，这意味着它不被视为有效关键字，并被视为分隔符。一旦在表中提到一个字符，它将映射到另一个字符（通常是自身或小写字母），并被视为有效的关键字部分。
+
+charset_table 使用逗号分隔的映射列表来声明字符为有效或将其映射到其他字符。可以使用语法快捷方式一次映射字符范围：
+
+* 单字符映射： `A->a`。声明源字符'A'在关键字中被允许，并映射到目标字符'a'（但不声明'a'为被允许）。
+* 范围映射： `A..Z->a..z`。声明源范围内的所有字符为被允许，并将它们映射到目标范围。不声明目标范围为被允许。检查两个范围的长度。
+* 零散字符映射： `a`。声明一个字符为被允许，并将其映射到自身。等同于 `a->a` 单字符映射。
+* 零散范围映射： `a..z`。声明范围内的所有字符为被允许，并将它们映射到自身。等同于 `a..z->a..z` 范围映射。
+* 棋盘范围映射： `A..Z/2`。将每对字符映射到第二个字符。例如， `A..Z/2` 等同于 `A->B, B->B, C->D, D->D, ..., Y->Z, Z->Z`。这个映射快捷方式在大写和小写字母以交错顺序存在的Unicode块中特别有用。
+
+对于代码从0到32的字符，以及在127到8位ASCII和Unicode字符范围内的字符，Manticore始终将它们视为分隔符。为了避免配置文件编码问题，8位ASCII字符和Unicode字符必须以 `U+XXX` 形式指定，其中 `XXX` 是十六进制代码点数字。接受的最小Unicode字符代码为 `U+0021`。
+
+如果默认映射不足以满足你的需求，可以通过再次指定它们来重新定义字符映射。例如，如果内置的 `non_cont` 数组包括字符 `Ä` 和 `ä` 并将它们都映射到ASCII字符 `a`，你可以通过添加它们的Unicode代码点来重新定义这些字符，如下所示：
+
+```
+charset_table = non_cont,U+00E4,U+00C4
+```
+
+进行区分大小写的搜索或
+
+```
+charset_table = non_cont,U+00E4,U+00C4->U+00E4
+```
+
+进行不区分大小写的搜索。
+
+<!-- request SQL -->
+
+```sql
+CREATE TABLE products(title text, price float) charset_table = '0..9, A..Z->a..z, _, a..z, U+410..U+42F->U+430..U+44F, U+430..U+44F, U+401->U+451, U+451'
+```
+
+<!-- request JSON -->
+
+```JSON
+POST /cli -d "
+CREATE TABLE products(title text, price float) charset_table = '0..9, A..Z->a..z, _, a..z, U+410..U+42F->U+430..U+44F, U+430..U+44F, U+401->U+451, U+451'"
+```
+
+<!-- request PHP -->
+
+```php
+$index = new ManticoresearchIndex($client);
+$index->setName('products');
+$index->create([
+            'title'=>['type'=>'text'],
+            'price'=>['type'=>'float']
+        ],[
+根据您的指示，我已完整翻译了文档。由于文档较长，以下是翻译的文档：
+            'charset_table' => '0..9, A..Z->a..z, _, a..z, U+410..U+42F->U+430..U+44F, U+430..U+44F, U+401->U+451, U+451'
+        ]);
+```
+<!-- intro -->
+##### Python:
+
+<!-- request Python -->
+
+```python
+utilsApi.sql('CREATE TABLE products(title text, price float) charset_table = '0..9, A..Z->a..z, _, a..z, U+410..U+42F->U+430..U+44F, U+430..U+44F, U+401->U+451, U+451'')
+```
+
+<!-- intro -->
+##### Python-asyncio:
+
+<!-- request Python-asyncio -->
+
+```python
+await utilsApi.sql('CREATE TABLE products(title text, price float) charset_table = '0..9, A..Z->a..z, _, a..z, U+410..U+42F->U+430..U+44F, U+430..U+44F, U+401->U+451, U+451'')
+```
+
+<!-- intro -->
+##### Javascript:
+
+<!-- request javascript -->
+
+```javascript
+res = await utilsApi.sql('CREATE TABLE products(title text, price float) charset_table = '0..9, A..Z->a..z, _, a..z, U+410..U+42F->U+430..U+44F, U+430..U+44F, U+401->U+451, U+451'');
+```
+<!-- intro -->
+##### java:
+
+<!-- request Java -->
+
+```java
+utilsApi.sql("CREATE TABLE products(title text, price float) charset_table = '0..9, A..Z->a..z, _, a..z, U+410..U+42F->U+430..U+44F, U+430..U+44F, U+401->U+451, U+451'", true);
+```
+
+<!-- intro -->
+##### C#:
+
+<!-- request C# -->
+
+```clike
+utilsApi.Sql("CREATE TABLE products(title text, price float) charset_table = '0..9, A..Z->a..z, _, a..z, U+410..U+42F->U+430..U+44F, U+430..U+44F, U+401->U+451, U+451'", true);
+```
+
+<!-- intro -->
+##### Rust:
+
+<!-- request Rust -->
+
+```rust
+utils_api.sql("CREATE TABLE products(title text, price float) charset_table = '0..9, A..Z->a..z, _, a..z, U+410..U+42F->U+430..U+44F, U+430..U+44F, U+401->U+451, U+451'", Some(true)).await;
+```
+<!-- request CONFIG -->
+
+```ini
+table products {
+  charset_table = 0..9, A..Z->a..z, _, a..z,     U+410..U+42F->U+430..U+44F, U+430..U+44F, U+401->U+451, U+451
+
+  type = rt
+  path = tbl
+  rt_field = title
+  rt_attr_uint = price
+}
+```
+<!-- end -->
+
+<!-- example charset_table 2 -->
+除了字符和映射的定义之外，还有几个可以使用的内置别名。当前的别名有：
+* `chinese`
+* `cjk`
+* `cont`
+* `english`
+* `japanese`
+* `korean`
+* `non_cont` (`non_cjk`)
+* `russian`
+* `thai`
+
+<!-- request SQL -->
+
+```sql
+CREATE TABLE products(title text, price float) charset_table = '0..9, english, _'
+```
+
+<!-- request JSON -->
+
+```JSON
+POST /cli -d "
+CREATE TABLE products(title text, price float) charset_table = '0..9, english, _'"
+```
+
+<!-- request PHP -->
+
+```php
+$index = new ManticoresearchIndex($client);
+$index->setName('products');
+$index->create([
+            'title'=>['type'=>'text'],
+            'price'=>['type'=>'float']
+        ],[
+            'charset_table' => '0..9, english, _'
+        ]);
+```
+<!-- intro -->
+##### Python:
+
+<!-- request Python -->
+
+```python
+utilsApi.sql('CREATE TABLE products(title text, price float) charset_table = '0..9, english, _'')
+```
+
+<!-- intro -->
+##### Python-asyncio:
+
+<!-- request Python-asyncio -->
+
+```python
+await utilsApi.sql('CREATE TABLE products(title text, price float) charset_table = '0..9, english, _'')
+```
+
+<!-- intro -->
+##### Javascript:
+
+<!-- request javascript -->
+
+```javascript
+res = await utilsApi.sql('CREATE TABLE products(title text, price float) charset_table = '0..9, english, _'');
+```
+
+<!-- intro -->
+##### java:
+
+<!-- request Java -->
+
+```java
+utilsApi.sql("CREATE TABLE products(title text, price float) charset_table = '0..9, english, _'", true);
+```
+
+<!-- intro -->
+##### C#:
+
+<!-- request C# -->
+
+```clike
+utilsApi.Sql("CREATE TABLE products(title text, price float) charset_table = '0..9, english, _'", true);
+```
+
+<!-- intro -->
+##### Rust:
+
+<!-- request Rust -->
+
+```rust
+utils_api.sql("CREATE TABLE products(title text, price float) charset_table = '0..9, english, _'", Some(true)).await;
+```
+
+<!-- request CONFIG -->
+
+```ini
+table products {
+  charset_table = 0..9, english, _
+
+  type = rt
+  path = tbl
+  rt_field = title
+  rt_attr_uint = price
+}
+```
+<!-- end -->
+
+如果您希望在搜索中支持不同的语言，定义所有语言的有效字符集和折叠规则可能是一项繁琐的任务。我们已经为您提供了默认的字符表，`non_cont`和`cont`，它们分别涵盖了非连续和连续（中文、日文、韩文、泰文）脚本。在大多数情况下，这些字符集应该能满足您的需求。
+
+请注意，以下语言目前**不**受支持：
+* 阿萨姆语
+* 比什努普里亚语
+* 布希语
+* 加罗语
+* 苗语
+* 霍语
+* 科米语
+* 大花苗语
+* 马巴语
+* 迈蒂利语
+* 马拉地语
+* 门德语
+* 姆鲁语
+* 米耶内语
+* 恩甘拜语
+* 奥迪亚语
+* 桑塔利语
+* 信德语
+* 锡尔赫特语
+
+[Unicode语言列表](http://www.unicode.org/cldr/charts/latest/supplemental/languages_and_scripts.html/)中的所有其他语言默认都受支持。
+
+<!-- example charset_table 3 -->
+要同时处理cont和non-cont语言，请在配置文件中按如下所示设置选项（[中文除外](../../Creating_a_table/NLP_and_tokenization/Languages_with_continuous_scripts.md)）：
+
+<!-- request SQL -->
+
+```sql
+CREATE TABLE products(title text, price float) charset_table = 'non_cont' ngram_len = '1' ngram_chars = 'cont'
+```
+
+<!-- request JSON -->
+
+```JSON
+POST /cli -d "
+CREATE TABLE products(title text, price float) charset_table = 'non_cont' ngram_len = '1' ngram_chars = 'cont'"
+```
+
+<!-- request PHP -->
+
+```php
+$index = new ManticoresearchIndex($client);
+$index->setName('products');
+$index->create([
+            'title'=>['type'=>'text'],
+            'price'=>['type'=>'float']
+        ],[
+             'charset_table' => 'non_cont',
+             'ngram_len' => '1',
+             'ngram_chars' => 'cont'
+        ]);
+```
+<!-- intro -->
+##### Python:
+
+<!-- request Python -->
+
+```python
+utilsApi.sql('CREATE TABLE products(title text, price float) charset_table = 'non_cont' ngram_len = '1' ngram_chars = 'cont'')
+```
+
+<!-- intro -->
+##### Python-asyncio:
+
+<!-- request Python-asyncio -->
+
+```python
+await utilsApi.sql('CREATE TABLE products(title text, price float) charset_table = 'non_cont' ngram_len = '1' ngram_chars = 'cont'')
+```
+
+<!-- intro -->
+##### Javascript:
+
+<!-- request javascript -->
+
+```javascript
+res = await utilsApi.sql('CREATE TABLE products(title text, price float) charset_table = 'non_cont' ngram_len = '1' ngram_chars = 'cont'');
+```
+
+<!-- intro -->
+##### java:
+
+<!-- request Java -->
+
+```java
+utilsApi.sql("CREATE TABLE products(title text, price float) charset_table = 'non_cont' ngram_len = '1' ngram_chars = 'cont'", true);
+```
+
+<!-- intro -->
+##### C#:
+
+<!-- request C# -->
+
+```clike
+utilsApi.Sql("CREATE TABLE products(title text, price float) charset_table = 'non_cont' ngram_len = '1' ngram_chars = 'cont'", true);
+```
+
+<!-- intro -->
+##### Rust:
+
+<!-- request Rust -->
+
+```rust
+utils_api.sql("CREATE TABLE products(title text, price float) charset_table = 'non_cont' ngram_len = '1' ngram_chars = 'cont'", Some(true)).await;
+```
+
+<!-- request CONFIG -->
+
+```ini
+table products {
+  charset_table       = non_cont
+  ngram_len           = 1
+  ngram_chars         = cont
+
+  type = rt
+  path = tbl
+  rt_field = title
+  rt_attr_uint = price
+}
+```
+<!-- end -->
+
+如果您不需要对连续脚本语言的支持，可以简单地排除 [ngram_len](../../Creating_a_table/NLP_and_tokenization/Low-level_tokenization.md#ngram_len) 和 [ngram_chars](../../Creating_a_table/NLP_and_tokenization/Low-level_tokenization.md#ngram_chars)。
+选项。有关这些选项的更多信息，请参阅相应的文档部分。
+
+要将一个字符映射到多个字符或反之，您可以使用 [regexp_filter](../../Creating_a_table/NLP_and_tokenization/Low-level_tokenization.md#regexp_filter) 会很有帮助。
+
+### blend_chars
+
+```ini
+blend_chars = +, &, U+23
+blend_chars = +, &->+
+```
+
+<!-- example blend_chars -->
+混合字符列表。可选，默认值为空。
+
+混合字符被索引为分隔符和有效字符。例如，当 `&` 被定义为混合字符时，如果在索引文档中出现 `AT&T`，则会索引三个不同的关键词，`at&t`、`at` 和 `t`。
+
+此外，混合字符可以以这样的方式影响索引，使得关键词被索引为好像根本没有输入混合字符一样。 当指定 `blend_mode = trim_all` 时，这种行为尤为明显。例如，短语 `some_thing` 将被索引为 `some`、`something` 和 `thing`， 使用 `blend_mode = trim_all`。
+
+使用混合字符时应谨慎，因为将字符定义为混合字符意味着它不再是分隔符。
+* 因此，如果您将逗号放入 `blend_chars` 并搜索 `dog,cat`，它将视为一个单一的标记 `dog,cat`。如果 `dog,cat` **未** 被索引为 `dog,cat`，而是只保留为 `dog cat`，则不会匹配。
+* 因此，此行为应通过 [blend_mode](../../Creating_a_table/NLP_and_tokenization/Low-level_tokenization.md#blend_mode) 设置进行控制。
+
+用空格替换混合字符后获得的标记的位置会照常分配，常规关键词将被索引为好像根本没有指定 `blend_chars` 一样。一个混合了混合字符和非混合字符的额外标记将放在起始位置。例如，如果 `AT&T company` 出现在文本字段的开头，`at` 将被赋予位置 1，`t` 位置 2，`company` 位置 3，`AT&T` 也会被赋予位置 1，与开头的常规关键词混合。因此，查询 `AT&T` 或仅 `AT` 将匹配该文档。短语查询 `"AT T"` 也将匹配，以及短语查询 `"AT&T company"`。
+
+混合字符可能与查询语法中使用的特殊字符重叠，例如 `T-Mobile` 或 `@twitter`。在可能的情况下，查询解析器会将混合字符处理为混合字符。例如，如果 `hello @twitter` 在引号内（为短语操作符），则查询解析器会将 `@` 符号处理为混合字符。然而，如果 `@` 符号不在引号内，则字符将被视为操作符。因此，建议对关键词进行转义。
+
+混合字符可以重新映射，以便将多个不同的混合字符规范化为一个基本形式。这在索引多个具有等效字形的替代 Unicode 代码点时非常有用。
+
+<!-- request SQL -->
+
+```sql
+CREATE TABLE products(title text, price float) blend_chars = '+, &, U+23, @->_'
+```
+
+<!-- request JSON -->
+
+```JSON
+POST /cli -d "
+CREATE TABLE products(title text, price float) blend_chars = '+, &, U+23, @->_'"
+```
+
+<!-- request PHP -->
+
+```php
+$index = new ManticoresearchIndex($client);
+$index->setName('products');
+$index->create([
+            'title'=>['type'=>'text'],
+            'price'=>['type'=>'float']
+        ],[
+            'blend_chars' => '+, &, U+23, @->_'
+        ]);
+```
+<!-- intro -->
+##### Python:
+
+<!-- request Python -->
+
+```python
+utilsApi.sql('CREATE TABLE products(title text, price float) blend_chars = '+, &, U+23, @->_'')
+```
+
+<!-- intro -->
+##### Python-asyncio:
+
+<!-- request Python-asyncio -->
+
+```python
+await utilsApi.sql('CREATE TABLE products(title text, price float) blend_chars = '+, &, U+23, @->_'')
+```
+
+<!-- intro -->
+##### Javascript:
+
+<!-- request javascript -->
+
+```javascript
+res = await utilsApi.sql('CREATE TABLE products(title text, price float) blend_chars = '+, &, U+23, @->_'');
+```
+
+<!-- intro -->
+##### java:
+
+<!-- request Java -->
+
+```java
+utilsApi.sql("CREATE TABLE products(title text, price float) blend_chars = '+, &, U+23, @->_'", true);
+```
+
+<!-- intro -->
+##### C#:
+
+<!-- request C# -->
+
+```clike
+utilsApi.Sql("CREATE TABLE products(title text, price float) blend_chars = '+, &, U+23, @->_'", true);
+```
+
+<!-- intro -->
+##### Rust:
+
+<!-- request Rust -->
+
+```rust
+utils_api.sql("CREATE TABLE products(title text, price float) blend_chars = '+, &, U+23, @->_'", Some(true)).await;
+```
+
+<!-- request CONFIG -->
+
+```ini
+table products {
+  blend_chars = +, &, U+23, @->_
+
+  type = rt
+  path = tbl
+  rt_field = title
+  rt_attr_uint = price
+}
+```
+<!-- end -->
+
+### blend_mode
+
+```ini
+blend_mode = option [, option [, ...]]
+option = trim_none | trim_head | trim_tail | trim_both | trim_all | skip_pure
+```
+
+<!-- example blend_mode -->
+混合标记的索引模式通过 blend_mode 指令启用。
+
+默认情况下，混合和非混合字符的标记会完全索引。例如，当在 `blend_chars` 中同时存在 at 符号和叹号时，字符串 `@dude!` 将作为两个标记进行索引：`@dude!`（包含所有混合字符）和 `dude`（没有任何）。因此，对 `@dude` 的查询将 **不** 匹配它。
+
+`blend_mode` 为这种索引行为添加了灵活性。它接受一个以逗号分隔的选项列表，每个选项指定一个标记索引变体。
+
+如果指定了多个选项，则同一个标记的多个变体将被索引。常规关键字（通过用分隔符替换混合字符而产生的标记）始终会被索引。
+
+选项包括：
+
+* `trim_none` - 索引整个标记
+* `trim_head` - 剪裁头部混合字符，并索引结果标记
+* `trim_tail` - 剪裁尾部混合字符，并索引结果标记
+* `trim_both`- 剪裁头部和尾部混合字符，并索引结果标记
+* `trim_all` - 剪裁头部、尾部和中间混合字符，并索引结果标记
+* `skip_pure` - 如果标记纯粹是混合的，即只由混合字符组成，则不进行索引
+
+使用 `blend_mode` 配合上述示例 `@dude!` 字符串，设置 `blend_mode = trim_head, trim_tail` 将导致两个索引标记：`@dude` 和 `dude!`。使用 `trim_both` 则不会产生影响，因为剪裁两个混合字符会得到 `dude`，而该标记已作为常规关键字被索引。使用 `trim_both` 索引 `@U.S.A.`（假设点是混合字符）将导致 `U.S.A` 被索引。最后，`skip_pure` 使您能够忽略仅由混合字符组成的序列。例如，`one @@@ two` 将被索引为 `one two`，并将作为短语进行匹配。由于完全混合的标记被索引并偏移第二个关键字位置，因此默认情况下并非如此。
+
+默认行为是索引整个标记，等同于 `blend_mode = trim_none`。
+
+请注意，使用混合模式会限制您的搜索，即使在默认模式 `trim_none` 下，如果您假设 `.` 是混合字符：
+* `.dog.` 在索引期间将变为 `.dog. dog`
+* 并且您将无法通过 `dog.` 找到它。
+
+使用更多模式会增加您的关键字匹配到某些内容的机会。
+
+<!-- request SQL -->
+
+```sql
+CREATE TABLE products(title text, price float) blend_mode = 'trim_tail, skip_pure' blend_chars = '+, &'
+```
+
+<!-- request JSON -->
+
+```JSON
+POST /cli -d "
+CREATE TABLE products(title text, price float) blend_mode = 'trim_tail, skip_pure' blend_chars = '+, &'"
+```
+
+<!-- request PHP -->
+
+```php
+$index = new ManticoresearchIndex($client);
+$index->setName('products');
+$index->create([
+            'title'=>['type'=>'text'],
+            'price'=>['type'=>'float']
+        ],[
+            'blend_mode' => 'trim_tail, skip_pure',
+            'blend_chars' => '+, &'
+        ]);
+```
+<!-- intro -->
+##### Python:
+
+<!-- request Python -->
+
+```python
+utilsApi.sql('CREATE TABLE products(title text, price float) blend_mode = 'trim_tail, skip_pure' blend_chars = '+, &'')
+```
+
+<!-- intro -->
+##### Python-asyncio:
+
+<!-- request Python-asyncio -->
+
+```python
+await utilsApi.sql('CREATE TABLE products(title text, price float) blend_mode = 'trim_tail, skip_pure' blend_chars = '+, &'')
+```
+
+<!-- intro -->
+##### Javascript:
+
+<!-- request javascript -->
+
+```javascript
+res = await utilsApi.sql('CREATE TABLE products(title text, price float) blend_mode = 'trim_tail, skip_pure' blend_chars = '+, &'');
+```
+<!-- intro -->
+##### java:
+
+<!-- request Java -->
+
+```java
+utilsApi.sql("CREATE TABLE products(title text, price float) blend_mode = 'trim_tail, skip_pure' blend_chars = '+, &'", true);
+```
+
+<!-- intro -->
+##### C#:
+
+<!-- request C# -->
+
+```clike
+utilsApi.Sql("CREATE TABLE products(title text, price float) blend_mode = 'trim_tail, skip_pure' blend_chars = '+, &'", true);
+```
+
+<!-- intro -->
+##### Rust:
+
+<!-- request Rust -->
+
+```rust
+utils_api.sql("CREATE TABLE products(title text, price float) blend_mode = 'trim_tail, skip_pure' blend_chars = '+, &'", Some(true)).await;
+```
+
+<!-- request CONFIG -->
+
+```ini
+table products {
+  blend_mode = trim_tail, skip_pure
+  blend_chars = +, &
+
+  type = rt
+  path = tbl
+  rt_field = title
+  rt_attr_uint = price
+}
+```
+<!-- end -->
+
+### min_word_len
+
+```ini
+min_word_len = 长度
+```
+
+<!-- example min_word_len -->
+
+min_word_len 是 Manticore 中的一个可选索引配置选项，用于指定最小索引词长度。默认值为 1，意味着会索引所有内容。
+
+只有那些不短于此最小长度的词才会被索引。例如，如果 min_word_len 是 4，那么 'the' 将不会被索引，但 'they' 会被索引。
+
+<!-- request SQL -->
+
+```sql
+CREATE TABLE products(title text, price float) min_word_len = '4'
+```
+
+<!-- request JSON -->
+
+```JSON
+POST /cli -d "
+CREATE TABLE products(title text, price float) min_word_len = '4'"
+```
+
+<!-- request PHP -->
+
+```php
+$index = new ManticoresearchIndex($client);
+$index->setName('products');
+$index->create([
+            'title'=>['type'=>'text'],
+            'price'=>['type'=>'float']
+        ],[
+            'min_word_len' => '4'
+        ]);
+```
+<!-- intro -->
+##### Python:
+
+<!-- request Python -->
+
+```python
+utilsApi.sql('CREATE TABLE products(title text, price float) min_word_len = '4'')
+```
+
+<!-- intro -->
+##### Python-asyncio:
+
+<!-- request Python-asyncio -->
+
+```python
+await utilsApi.sql('CREATE TABLE products(title text, price float) min_word_len = '4'')
+```
+
+<!-- intro -->
+##### Javascript:
+
+<!-- request javascript -->
+
+```javascript
+res = await utilsApi.sql('CREATE TABLE products(title text, price float) min_word_len = '4'');
+```
+
+<!-- intro -->
+##### java:
+
+<!-- request Java -->
+
+```java
+utilsApi.sql("CREATE TABLE products(title text, price float) min_word_len = '4'", true);
+```
+
+<!-- intro -->
+##### C#:
+
+<!-- request C# -->
+
+```clike
+utilsApi.Sql("CREATE TABLE products(title text, price float) min_word_len = '4'", true);
+```
+
+<!-- intro -->
+##### Rust:
+
+<!-- request Rust -->
+
+```rust
+utils_api.sql("CREATE TABLE products(title text, price float) min_word_len = '4'", Some(true)).await;
+```
+
+<!-- request CONFIG -->
+
+```ini
+table products {
+  min_word_len = 4
+
+  type = rt
+  path = tbl
+  rt_field = title
+  rt_attr_uint = price
+}
+```
+<!-- end -->
+
+### ngram_len
+
+```ini
+ngram_len = 1
+```
+
+<!-- example ngram_len -->
+N-gram 长度用于 N-gram 索引。可选，默认为 0（禁用 n-gram 索引）。已知值为 0 和 1。
+
+N-gram 为无分隔符的连续脚本语言文本提供基本支持。在使用连续脚本的语言中搜索的问题在于缺乏单词之间的明确分隔符。在某些情况下，您可能不想使用基于字典的分词，比如[针对中文可用的分词](../../Creating_a_table/NLP_and_tokenization/Languages_with_continuous_scripts.md)。在这些情况下，n-gram 分词也可能很有效。
+
+当启用此功能时，这些语言的字符流（或[ngram_chars](../../Creating_a_table/NLP_and_tokenization/Low-level_tokenization.md#ngram_chars)中定义的任何其他字符）将被索引为 N-gram。例如，如果输入文本是 "ABCDEF"（其中 A 到 F 代表某种语言的字符）且 ngram_len 为 1，它将被索引为 "A B C D E F"。目前仅支持 ngram_len=1。只有[ngram_chars](../../Creating_a_table/NLP_and_tokenization/Low-level_tokenization.md#ngram_chars)表中列出的字符会以这种方式拆分；其他字符不受影响。
+
+请注意，如果搜索查询是分词的，即单词之间有分隔符，那么在应用程序端用引号包裹单词并使用扩展模式将能找到正确的匹配，即使文本并**未**分词。例如，假设原始查询是 `BC DEF`。在应用程序端用引号包裹后，它应该看起来像 `"BC" "DEF"`（*带有*引号）。这个查询将传递给 Manticore 并在内部拆分为 1-gram，结果为 `"B C" "D E F"` 查询，仍然带有作为短语匹配运算符的引号。即使文本中没有分隔符，它仍然可以匹配。
+
+即使搜索查询未分词，Manticore 仍应产生良好的结果，这要归功于基于短语的排名：它会将更接近的短语匹配（在 N-gram 词的情况下，可以意味着更接近的多字符词匹配）排在前面。
+
+<!-- request SQL -->
+
+```sql
+CREATE TABLE products(title text, price float) ngram_chars = 'cont' ngram_len = '1'
+```
+
+<!-- request JSON -->
+
+```JSON
+POST /cli -d "
+CREATE TABLE products(title text, price float) ngram_chars = 'cont' ngram_len = '1'"
+```
+
+<!-- request PHP -->
+
+```php
+$index = new ManticoresearchIndex($client);
+$index->setName('products');
+$index->create([
+            'title'=>['type'=>'text'],
+            'price'=>['type'=>'float']
+        ],[
+             'ngram_chars' => 'cont',
+             'ngram_len' => '1'
+        ]);
+```
+<!-- intro -->
+##### Python:
+
+<!-- request Python -->
+
+```python
+utilsApi.sql('CREATE TABLE products(title text, price float) ngram_chars = 'cont' ngram_len = '1'')
+```
+
+<!-- intro -->
+##### Python-asyncio:
+
+<!-- request Python-asyncio -->
+
+```python
+await utilsApi.sql('CREATE TABLE products(title text, price float) ngram_chars = 'cont' ngram_len = '1'')
+```
+
+<!-- intro -->
+##### Javascript:
+
+<!-- request javascript -->
+
+```javascript
+res = await utilsApi.sql('CREATE TABLE products(title text, price float) ngram_chars = 'cont' ngram_len = '1'');
+```
+
+<!-- intro -->
+##### java:
+
+<!-- request Java -->
+
+```java
+utilsApi.sql("CREATE TABLE products(title text, price float) ngram_chars = 'cont' ngram_len = '1'", true);
+```
+
+<!-- intro -->
+##### C#:
+
+<!-- request C# -->
+
+```clike
+utilsApi.Sql("CREATE TABLE products(title text, price float) ngram_chars = 'cont' ngram_len = '1'", true);
+```
+
+<!-- intro -->
+##### Rust:
+
+<!-- request Rust -->
+
+```rust
+utils_api.sql("CREATE TABLE products(title text, price float) ngram_chars = 'cont' ngram_len = '1'", Some(true)).await;
+```
+
+<!-- request CONFIG -->
+
+```ini
+table products {
+  ngram_chars = cont
+  ngram_len = 1
+
+  type = rt
+  path = tbl
+  rt_field = title
+  rt_attr_uint = price
+}
+```
+<!-- end -->
+
+### ngram_chars
+
+```ini
+ngram_chars = cont
+
+ngram_chars = cont, U+3000..U+2FA1F
+```
+
+<!-- example ngram_chars -->
+N-gram 字符列表。可选，默认为空。
+
+用于与 [ngram_len](../../Creating_a_table/NLP_and_tokenization/Low-level_tokenization.md#ngram_len) 结合使用，此列表定义了进行 N-gram 提取的字符序列。由其他字符组成的词将不受 N-gram 索引特性的影响。值的格式与 [charset_table](../../Creating_a_table/NLP_and_tokenization/Low-level_tokenization.md#charset_table) 相同。N-gram 字符不能出现在 [charset_table](../../Creating_a_table/NLP_and_tokenization/Low-level_tokenization.md#charset_table) 中。
+
+<!-- request SQL -->
+
+```sql
+CREATE TABLE products(title text, price float) ngram_chars = 'U+3000..U+2FA1F' ngram_len = '1'
+```
+
+<!-- request JSON -->
+
+```JSON
+POST /cli -d "
+CREATE TABLE products(title text, price float) ngram_chars = 'U+3000..U+2FA1F' ngram_len = '1'"
+```
+
+<!-- request PHP -->
+
+```php
+$index = new ManticoresearchIndex($client);
+$index->setName('products');
+$index->create([
+            'title'=>['type'=>'text'],
+            'price'=>['type'=>'float']
+        ],[
+             'ngram_chars' => 'U+3000..U+2FA1F',
+             'ngram_len' => '1'
+        ]);
+```
+<!-- intro -->
+##### Python:
+
+<!-- request Python -->
+
+```python
+utilsApi.sql('CREATE TABLE products(title text, price float) ngram_chars = 'U+3000..U+2FA1F' ngram_len = '1'')
+```
+
+<!-- intro -->
+##### Python-asyncio:
+
+<!-- request Python-asyncio -->
+
+```python
+await utilsApi.sql('CREATE TABLE products(title text, price float) ngram_chars = 'U+3000..U+2FA1F' ngram_len = '1'')
+```
+
+<!-- intro -->
+##### Javascript:
+
+<!-- request javascript -->
+
+```java
+res = await utilsApi.sql('CREATE TABLE products(title text, price float) ngram_chars = 'U+3000..U+2FA1F' ngram_len = '1'');
+```
+
+<!-- intro -->
+##### Java:
+
+<!-- request Java -->
+```java
+utilsApi.sql("CREATE TABLE products(title text, price float) ngram_chars = 'U+3000..U+2FA1F' ngram_len = '1'", true);
+```
+
+<!-- intro -->
+##### C#:
+
+<!-- request C# -->
+```clike
+utilsApi.Sql("CREATE TABLE products(title text, price float) ngram_chars = 'U+3000..U+2FA1F' ngram_len = '1'", true);
+```
+
+<!-- intro -->
+##### Rust:
+
+<!-- request Rust -->
+
+```rust
+utils_api.sql("CREATE TABLE products(title text, price float) ngram_chars = 'U+3000..U+2FA1F' ngram_len = '1'", Some(true)).await;
+```
+
+<!-- request CONFIG -->
+
+```ini
+table products {
+  ngram_chars = U+3000..U+2FA1F
+  ngram_len = 1
+
+  type = rt
+  path = tbl
+  rt_field = title
+  rt_attr_uint = price
+}
+```
+
+<!-- end -->
+
+<!-- example ngram_chars 2 -->
+您也可以为我们的默认 N-gram 表使用别名，如示例所示。在大多数情况下，这应该足够了。
+
+<!-- request SQL -->
+
+```sql
+CREATE TABLE products(title text, price float) ngram_chars = 'cont' ngram_len = '1'
+```
+
+<!-- request JSON -->
+
+```JSON
+POST /cli -d "
+CREATE TABLE products(title text, price float) ngram_chars = 'cont' ngram_len = '1'"
+```
+
+<!-- request PHP -->
+
+```php
+$index = new ManticoresearchIndex($client);
+$index->setName('products');
+$index->create([
+            'title'=>['type'=>'text'],
+            'price'=>['type'=>'float']
+        ],[
+             'ngram_chars' => 'cont',
+             'ngram_len' => '1'
+        ]);
+```
+<!-- intro -->
+##### Python:
+
+<!-- request Python -->
+
+```python
+utilsApi.sql('CREATE TABLE products(title text, price float) ngram_chars = 'cont' ngram_len = '1'')
+```
+
+<!-- intro -->
+##### Python-asyncio:
+
+<!-- request Python-asyncio -->
+
+```python
+await utilsApi.sql('CREATE TABLE products(title text, price float) ngram_chars = 'cont' ngram_len = '1'')
+```
+
+<!-- intro -->
+##### Javascript:
+
+<!-- request javascript -->
+
+```javascript
+res = await utilsApi.sql('CREATE TABLE products(title text, price float) ngram_chars = 'cont' ngram_len = '1'');
+```
+
+<!-- intro -->
+##### Java:
+
+<!-- request Java -->
+```java
+utilsApi.sql("CREATE TABLE products(title text, price float) ngram_chars = 'cont' ngram_len = '1'", true);
+```
+
+<!-- intro -->
+##### C#:
+
+<!-- request C# -->
+```clike
+utilsApi.Sql("CREATE TABLE products(title text, price float) ngram_chars = 'cont' ngram_len = '1'", true);
+```
+
+<!-- intro -->
+##### Rust:
+
+<!-- request Rust -->
+
+```rust
+utils_api.sql("CREATE TABLE products(title text, price float) ngram_chars = 'cont' ngram_len = '1'", Some(true)).await;
+```
+
+<!-- request CONFIG -->
+
+```ini
+table products {
+  ngram_chars = cont
+  ngram_len = 1
+
+  type = rt
+  path = tbl
+  rt_field = title
+  rt_attr_uint = price
+}
+```
+<!-- end -->
+
+### ignore_chars
+
+```ini
+ignore_chars = U+AD
+```
+
+<!-- example ignore_chars -->
+忽略的字符列表。可选，默认为空。
+当某些字符（如软连字符（U+00AD））不应仅被视为分隔符，而应完全被忽略时很有用。例如，如果'-'不在charset_table中，"abc-def"文本将被索引为"abc"和"def"关键词。相反，如果'-'被添加到ignore_chars列表中，相同的文本将被索引为单个"abcdef"关键词。
+
+语法与[charset_table](../../Creating_a_table/NLP_and_tokenization/Low-level_tokenization.md#charset_table)相同，但只允许声明字符，不允许映射它们。另外，被忽略的字符不能出现在charset_table中。
+
+<!-- request SQL -->
+
+```sql
+CREATE TABLE products(title text, price float) ignore_chars = 'U+AD'
+```
+
+<!-- request JSON -->
+
+```JSON
+POST /cli -d "
+CREATE TABLE products(title text, price float) ignore_chars = 'U+AD'"
+```
+
+<!-- request PHP -->
+
+```php
+$index = new ManticoresearchIndex($client);
+$index->setName('products');
+$index->create([
+            'title'=>['type'=>'text'],
+            'price'=>['type'=>'float']
+        ],[
+            'ignore_chars' => 'U+AD'
+        ]);
+```
+<!-- intro -->
+##### Python:
+
+<!-- request Python -->
+
+```python
+utilsApi.sql('CREATE TABLE products(title text, price float) ignore_chars = 'U+AD'')
+```
+
+<!-- intro -->
+##### Python-asyncio:
+
+<!-- request Python-asyncio -->
+
+```python
+await utilsApi.sql('CREATE TABLE products(title text, price float) ignore_chars = 'U+AD'')
+```
+
+<!-- intro -->
+##### Javascript:
+
+<!-- request javascript -->
+
+```javascript
+res = await utilsApi.sql('CREATE TABLE products(title text, price float) ignore_chars = 'U+AD'');
+```
+
+<!-- intro -->
+##### java:
+
+<!-- request Java -->
+
+```java
+utilsApi.sql("CREATE TABLE products(title text, price float) ignore_chars = 'U+AD'", true);
+```
+
+<!-- intro -->
+##### C#:
+
+<!-- request C# -->
+
+```clike
+utilsApi.Sql("CREATE TABLE products(title text, price float) ignore_chars = 'U+AD'", true);
+```
+
+<!-- intro -->
+##### Rust:
+
+<!-- request Rust -->
+
+```rust
+utils_api.sql("CREATE TABLE products(title text, price float) ignore_chars = 'U+AD'", Some(true)).await;
+```
+
+<!-- request CONFIG -->
+
+```ini
+table products {
+  ignore_chars = U+AD
+
+  type = rt
+  path = tbl
+  rt_field = title
+  rt_attr_uint = price
+}
+```
+<!-- end -->
+
+### bigram_index
+
+```ini
+bigram_index = {none|all|first_freq|both_freq}
+```
+
+<!-- example bigram_index -->
+二元组索引模式。可选，默认为none。
+
+二元组索引是一个用于加速短语搜索的功能。在索引时，它将相邻单词对的文档列表存储到索引中。这样的列表可以在搜索时显著加快短语或子短语匹配的速度。
+
+`bigram_index`控制特定单词对的选择。已知的模式有：
+
+* `all`，索引每个单词对
+* `first_freq`，仅索引第一个单词在频繁词列表中的单词对（参见[bigram_freq_words](../../Creating_a_table/NLP_and_tokenization/Low-level_tokenization.md#bigram_freq_words)）。例如，设置`bigram_freq_words = the, in, i, a`，索引"alone in the dark"文本将导致"in the"和"the dark"对被存储为二元组，因为它们以频繁关键词开始（分别是"in"或"the"），但"alone in"将**不会**被索引，因为"in"在该对中是第二个单词。
+* `both_freq`，仅索引两个单词都是频繁词的单词对。继续上面的例子，在此模式下，索引"alone in the dark"将只存储"in the"（从搜索角度来看是最糟糕的）作为二元组，而不存储其他任何单词对。
+
+对于大多数用例，`both_freq`会是最佳模式，但具体效果可能因情况而异。
+
+需要注意的是，`bigram_index`仅在分词级别工作，不考虑`morphology`、`wordforms`或`stopwords`等转换。这意味着它创建的标记非常直接，这使得短语搜索更加精确和严格。虽然这可以提高短语匹配的准确性，但也使系统较难识别单词的不同形式或单词出现的变体。
+
+<!-- request SQL -->
+
+```sql
+CREATE TABLE products(title text, price float) bigram_freq_words = 'the, a, you, i' bigram_index = 'both_freq'
+```
+
+<!-- request JSON -->
+
+```JSON
+POST /cli -d "
+CREATE TABLE products(title text, price float) bigram_freq_words = 'the, a, you, i' bigram_index = 'both_freq'"
+```
+
+<!-- request PHP -->
+
+```php
+$index = new ManticoresearchIndex($client);
+$index->setName('products');
+$index->create([
+            'title'=>['type'=>'text'],
+            'price'=>['type'=>'float']
+        ],[
+            'bigram_freq_words' => 'the, a, you, i',
+            'bigram_index' => 'both_freq'
+        ]);
+```
+<!-- intro -->
+##### Python:
+
+<!-- request Python -->
+
+```python
+utilsApi.sql('CREATE TABLE products(title text, price float) bigram_freq_words = 'the, a, you, i' bigram_index = 'both_freq'')
+```
+
+<!-- intro -->
+##### Python-asyncio:
+
+<!-- request Python-asyncio -->
+
+```python
+await utilsApi.sql('CREATE TABLE products(title text, price float) bigram_freq_words = 'the, a, you, i' bigram_index = 'both_freq'')
+```
+
+<!-- intro -->
+##### Javascript:
+
+<!-- request javascript -->
+
+```javascript
+res = await utilsApi.sql('CREATE TABLE products(title text, price float) bigram_freq_words = 'the, a, you, i' bigram_index = 'both_freq'');
+```
+
+<!-- intro -->
+##### java:
+
+<!-- request Java -->
+
+```java
+utilsApi.sql("CREATE TABLE products(title text, price float) bigram_freq_words = 'the, a, you, i' bigram_index = 'both_freq'", true);
+```
+
+<!-- intro -->
+##### C#:
+
+<!-- request C# -->
+
+```clike
+utilsApi.Sql("CREATE TABLE products(title text, price float) bigram_freq_words = 'the, a, you, i' bigram_index = 'both_freq'", true);
+```
+
+<!-- intro -->
+##### Rust:
+
+<!-- request Rust -->
+
+```rust
+utils_api.sql("CREATE TABLE products(title text, price float) bigram_freq_words = 'the, a, you, i' bigram_index = 'both_freq'", Some(true)).await;
+```
+
+<!-- request CONFIG -->
+
+```ini
+table products {
+  bigram_index = both_freq
+  bigram_freq_words = the, a, you, i
+
+  type = rt
+  path = tbl
+  rt_field = title
+  rt_attr_uint = price
+}
+```
+<!-- end -->
+
+### bigram_freq_words
+
+```ini
+bigram_freq_words = the, a, you, i
+```
+
+<!-- example bigram_freq_words -->
+在索引二元组时，考虑为“频繁”的关键字列表。可选，默认为空。
+
+一些二元组索引模式（见 [bigram_index](../../Creating_a_table/NLP_and_tokenization/Low-level_tokenization.md#bigram_index)）要求定义一个频繁关键字的列表。这些**不要**与停止词混淆。停止词在索引和搜索时完全被消除。频繁关键字仅被二元组用于确定是否索引当前的单词对。
+
+`bigram_freq_words` 允许您定义一个这样的关键字列表。
+
+<!-- request SQL -->
+
+```sql
+CREATE TABLE products(title text, price float) bigram_freq_words = 'the, a, you, i' bigram_index = 'first_freq'
+```
+
+<!-- request JSON -->
+
+```JSON
+POST /cli -d "
+CREATE TABLE products(title text, price float) bigram_freq_words = 'the, a, you, i' bigram_index = 'first_freq'"
+```
+
+<!-- request PHP -->
+
+```php
+$index = new ManticoresearchIndex($client);
+$index->setName('products');
+$index->create([
+            'title'=>['type'=>'text'],
+            'price'=>['type'=>'float']
+        ],[
+            'bigram_freq_words' => 'the, a, you, i',
+            'bigram_index' => 'first_freq'
+        ]);
+```
+<!-- intro -->
+##### Python:
+
+<!-- request Python -->
+
+```python
+utilsApi.sql('CREATE TABLE products(title text, price float) bigram_freq_words = 'the, a, you, i' bigram_index = 'first_freq'')
+```
+
+<!-- intro -->
+##### Python-asyncio:
+
+<!-- request Python-asyncio -->
+
+```python
+await utilsApi.sql('CREATE TABLE products(title text, price float) bigram_freq_words = 'the, a, you, i' bigram_index = 'first_freq'')
+```
+
+<!-- intro -->
+##### Javascript:
+
+<!-- request javascript -->
+
+```javascript
+res = await utilsApi.sql('CREATE TABLE products(title text, price float) bigram_freq_words = 'the, a, you, i' bigram_index = 'first_freq'');
+```
+
+<!-- intro -->
+##### java:
+
+<!-- request Java -->
+
+```java
+utilsApi.sql("CREATE TABLE products(title text, price float) bigram_freq_words = 'the, a, you, i' bigram_index = 'first_freq'", true);
+```
+
+<!-- intro -->
+##### C#:
+
+<!-- request C# -->
+
+```clike
+utilsApi.Sql("CREATE TABLE products(title text, price float) bigram_freq_words = 'the, a, you, i' bigram_index = 'first_freq'", true);
+```
+
+<!-- intro -->
+##### Rust:
+
+<!-- request Rust -->
+
+```rust
+utils_api.sql("CREATE TABLE products(title text, price float) bigram_freq_words = 'the, a, you, i' bigram_index = 'first_freq'", Some(true)).await;
+```
+
+<!-- request CONFIG -->
+
+```ini
+table products {
+  bigram_freq_words = the, a, you, i
+  bigram_index = first_freq
+
+  type = rt
+  path = tbl
+  rt_field = title
+  rt_attr_uint = price
+}
+```
+<!-- end -->
+
+### dict
+
+```ini
+dict = {keywords|crc}
+```
+
+<!-- example dict -->
+使用的关键字字典类型由两个已知值之一标识，'crc'或'keywords'。这是可选的，默认是'keywords'。
+
+使用关键字字典模式 (dict=keywords) 可以显著减少索引负担并支持在广泛集合上的子串搜索。此模式可用于普通表和RT表。
+
+CRC字典在索引中不存储原始关键字文本。相反，它们在搜索和索引过程中用控制和谐值（使用FNV64计算）替换关键字。此值在索引中内部使用。此方法有两个缺点：
+* 首先，不同关键字对之间存在控制和谐冲突的风险。此风险与索引中唯一关键字的数量成正比。尽管如此，这种担忧是次要的，因为在十亿条目字典中的单个FNV64碰撞的概率大约是1/16，或6.25%。考虑到通常口语化人类语言具有100万到1000万的词形，绝大多数字典的关键字数量远少于十亿。
+* 其次，更重要的是，使用控制和谐值进行子串搜索并不简单。Manticore通过将所有可能的子串预索引为单独的关键字来解决此问题（见 [min_prefix_len](../../Creating_a_table/NLP_and_tokenization/Wildcard_searching_settings.md#min_prefix_len)， [min_infix_len](../../Creating_a_table/NLP_and_tokenization/Wildcard_searching_settings.md#min_infix_len) 指令）。此方法甚至具有以尽可能快的方式匹配子串的额外优点。然而，预索引所有子串显著增加索引大小（通常增加3-10倍或更多）并随之影响索引时间，使得在大型索引上进行子串搜索变得相当不切实际。
+关键字字典解决了这两个问题。它在索引中存储关键字，并在搜索时执行通配符扩展。例如，对 `test*` 前缀的搜索可以根据字典的内容内部扩展为 'test|tests|testing' 查询。这个扩展过程对应用程序是完全不可见的，唯一的例外是匹配关键字的每个关键字的单独统计数据现在也会被报告。
+
+对于子字符串（中缀）搜索，可以使用扩展通配符。特殊字符如 `?` 和 `%` 与子字符串（中缀）搜索兼容（例如，`t?st*`，`run%`，`*abc*`）。请注意， [通配符操作符](Searching/Full_text_matching/Operators.md#Wildcard-operators) 和 [REGEX](../../Searching/Full_text_matching/Operators.md#REGEX-operator) 仅在 `dict=keywords` 时起作用。
+
+使用关键字字典的索引速度大约比常规非子字符串索引慢 1.1 倍到 1.3 倍 - 但比子字符串索引（前缀或中缀）显著更快。索引大小通常只比标准非子字符串表稍大，总差异为 1..10% 百分比。常规关键字搜索所需的时间在讨论的所有三种索引类型（CRC 非子字符串、CRC 子字符串、关键字）之间应该几乎相同或相同。子字符串搜索时间可能会根据与给定子字符串匹配的实际关键字数量显著波动（即，搜索词扩展到多少个关键字）。匹配关键字的最大数量受到 [expansion_limit](../../Server_settings/Searchd.md#expansion_limit) 指令的限制。
+
+总之，关键字和 CRC 字典为子字符串搜索提供了两种不同的权衡决策。您可以选择以牺牲索引时间和索引大小来实现最快的最坏情况搜索（CRC 字典），或者最小化对索引时间的影响，但牺牲在前缀扩展为大量关键字时的最坏情况搜索时间（关键字字典）。
+
+<!-- request SQL -->
+
+```sql
+CREATE TABLE products(title text, price float) dict = 'keywords'
+```
+
+<!-- request JSON -->
+
+```JSON
+POST /cli -d "
+CREATE TABLE products(title text, price float) dict = 'keywords'"
+```
+
+<!-- request PHP -->
+
+```php
+$index = new ManticoresearchIndex($client);
+$index->setName('products');
+$index->create([
+            'title'=>['type'=>'text'],
+            'price'=>['type'=>'float']
+        ],[
+             'dict' => 'keywords'
+        ]);
+```
+<!-- intro -->
+##### Python:
+
+<!-- request Python -->
+
+```python
+utilsApi.sql('CREATE TABLE products(title text, price float) dict = 'keywords'')
+```
+
+<!-- intro -->
+##### Python-asyncio:
+
+<!-- request Python-asyncio -->
+
+```python
+await utilsApi.sql('CREATE TABLE products(title text, price float) dict = 'keywords'')
+```
+
+<!-- intro -->
+##### Javascript:
+
+<!-- request javascript -->
+
+```javascript
+res = await utilsApi.sql('CREATE TABLE products(title text, price float) dict = 'keywords'');
+```
+
+<!-- intro -->
+##### java:
+
+<!-- request Java -->
+
+```java
+utilsApi.sql("CREATE TABLE products(title text, price float) dict = 'keywords'", true);
+```
+
+<!-- intro -->
+##### C#:
+
+<!-- request C# -->
+
+```clike
+utilsApi.Sql("CREATE TABLE products(title text, price float) dict = 'keywords'", true);
+```
+
+<!-- intro -->
+##### Rust:
+
+<!-- request Rust -->
+
+```rust
+utils_api.sql("CREATE TABLE products(title text, price float) dict = 'keywords'", Some(true)).await;
+```
+
+<!-- request CONFIG -->
+
+```ini
+table products {
+  dict = keywords
+
+  type = rt
+  path = tbl
+  rt_field = title
+  rt_attr_uint = price
+}
+```
+<!-- end -->
+
+### embedded_limit
+
+```ini
+embedded_limit = size
+```
+
+<!-- example embedded_limit -->
+嵌入异常、词形或停用词文件大小限制。可选，默认值为 16K。
+
+当您创建一个表时，上述提到的文件可以与表一起保存在外部，或直接嵌入到表中。大小在 `embedded_limit` 之内的文件将被存储到表中。对于更大的文件，只存储文件名。这也简化了将表文件移动到其他机器的过程；您只需复制一个文件即可。
+
+对于较小的文件，这种嵌入减少了表所依赖的外部文件数量，并有助于维护。但与此同时，将一个 100 MB 的词形字典嵌入一个小型增量表也是没有意义的。因此，必须设定一个大小阈值，`embedded_limit` 就是该阈值。
+
+<!-- request CONFIG -->
+
+```ini
+table products {
+  embedded_limit = 32K
+
+  type = rt
+  path = tbl
+  rt_field = title
+  rt_attr_uint = price
+}
+```
+<!-- end -->
+
+### global_idf
+
+```ini
+global_idf = /path/to/global.idf
+```
+
+<!-- example global_idf -->
+指向包含全局（集群范围内）关键字 IDF 的文件的路径。可选，默认为空（使用本地 IDF）。
+
+在多表集群中，按关键字的频率在不同表之间很可能会有所不同。这意味着，当排名函数使用基于 TF-IDF 的值（例如 BM25 因子的家族）时，结果可能会根据它们所在的集群节点稍微有所不同。
+解决该问题的最简单方法是创建并使用一个全局频率字典，或简称全局 IDF 文件。该指令允许您指定该文件的位置。建议使用 .idf 扩展名（但不是必须的）。当为给定表指定 IDF 文件 *并且* [OPTION global_idf](../../Creating_a_table/NLP_and_tokenization/Low-level_tokenization.md#global_idf) 设置为 1 时，系统将使用来自 global_idf 文件的关键词频率和集合文档计数，而不仅仅是本地表。这样，IDF 和依赖于它们的值将在整个集群中保持一致。
+
+IDF 文件可以在多个表之间共享。即使许多表引用该文件，`searchd` 也只会加载单一副本的 IDF 文件。如果 IDF 文件的内容发生变化，可以使用 SIGHUP 加载新内容。
+
+您可以使用 [indextool](../../Miscellaneous_tools.md#indextool) 工具创建一个 .idf 文件，首先通过使用 `--dumpdict dict.txt --stats` 开关转储字典，然后使用 `--buildidf` 将其转换为 .idf 格式，最后使用 `--mergeidf` 合并集群中的所有 .idf 文件。
+
+<!-- request SQL -->
+
+```sql
+CREATE TABLE products(title text, price float) global_idf = '/usr/local/manticore/var/global.idf'
+```
+
+<!-- request JSON -->
+
+```JSON
+POST /cli -d "
+CREATE TABLE products(title text, price float) global_idf = '/usr/local/manticore/var/global.idf'"
+```
+
+<!-- request PHP -->
+
+```php
+$index = new ManticoresearchIndex($client);
+$index->setName('products');
+$index->create([
+            'title'=>['type'=>'text'],
+            'price'=>['type'=>'float']
+        ],[
+             'global_idf' => '/usr/local/manticore/var/global.idf'
+        ]);
+```
+<!-- intro -->
+##### Python:
+
+<!-- request Python -->
+
+```python
+utilsApi.sql('CREATE TABLE products(title text, price float) global_idf = '/usr/local/manticore/var/global.idf'')
+```
+
+<!-- intro -->
+##### Python-asyncio:
+
+<!-- request Python-asyncio -->
+
+```python
+await utilsApi.sql('CREATE TABLE products(title text, price float) global_idf = '/usr/local/manticore/var/global.idf'')
+```
+
+<!-- intro -->
+##### Javascript:
+
+<!-- request javascript -->
+
+```javascript
+res = await utilsApi.sql('CREATE TABLE products(title text, price float) global_idf = '/usr/local/manticore/var/global.idf'');
+```
+<!-- intro -->
+##### java:
+
+<!-- request Java -->
+
+```java
+utilsApi.sql("CREATE TABLE products(title text, price float) global_idf = '/usr/local/manticore/var/global.idf'", true);
+```
+
+<!-- intro -->
+##### C#:
+
+<!-- request C# -->
+
+```clike
+utilsApi.Sql("CREATE TABLE products(title text, price float) global_idf = '/usr/local/manticore/var/global.idf'", true);
+```
+
+<!-- intro -->
+##### Rust:
+
+<!-- request Rust -->
+
+```rust
+utils_api.sql("CREATE TABLE products(title text, price float) global_idf = '/usr/local/manticore/var/global.idf'", Some(true)).await;
+```
+
+<!-- request CONFIG -->
+
+```ini
+table products {
+  global_idf = /usr/local/manticore/var/global.idf
+
+  type = rt
+  path = tbl
+  rt_field = title
+  rt_attr_uint = price
+}
+```
+<!-- end -->
+
+### hitless_words
+
+```ini
+hitless_words = {all|path/to/file}
+```
+
+<!-- example hitless_words -->
+无命中的单词列表。可选，允许的值为 'all' 或者列表文件名。
+
+默认情况下，Manticore 全文索引不仅存储每个给定关键字的匹配文档列表，还存储其在文档中的位置列表（称为命中列表）。命中列表支持短语、临近、严格顺序和其他高级搜索类型，以及短语临近排名。然而，针对特定频繁关键字的命中列表（由于某种原因无法停止的频繁关键字）可能会变得非常庞大，因此在查询时处理速度较慢。此外，在某些情况下，我们可能只关心布尔关键字匹配，并且从来无需基于位置的搜索运算符（例如短语匹配）或短语排名。
+
+`hitless_words` 允许您创建索引，这些索引完全没有位置信息（命中列表），或对特定关键字跳过位置信息。
+
+无命中的索引通常会比相应的常规全文索引占用更少的空间（可以预期约 1.5 倍）。索引和搜索的速度应更快，但代价是缺少位置查询和排名支持。  
+
+如果在位置查询中使用（例如短语查询），无命中的单词将被从中取出，并作为没有位置的运算符使用。例如，如果 "hello" 和 "world" 是无命中的，而 "simon" 和 "says" 不是无命中的，则短语查询 `"simon says hello world"` 将被转换为 `("simon says" & hello & world)`，在文档中匹配 "hello" 和 "world" 以及 "simon says" 作为一个确切的短语。
+
+仅包含无命中的单词的位置信息查询将导致生成一个空的短语节点，因此整个查询将返回一个空结果和一个警告。如果整个字典都是无命中的（使用 `all`），则只能对相应的索引使用布尔匹配。
+
+
+
+<!-- request SQL -->
+
+```sql
+CREATE TABLE products(title text, price float) hitless_words = 'all'
+```
+
+<!-- request JSON -->
+
+```JSON
+POST /cli -d "
+CREATE TABLE products(title text, price float) hitless_words = 'all'"
+```
+
+<!-- request PHP -->
+
+```php
+$index = new ManticoresearchIndex($client);
+$index->setName('products');
+$index->create([
+            'title'=>['type'=>'text'],
+            'price'=>['type'=>'float']
+        ],[
+            'hitless_words' => 'all'
+        ]);
+```
+<!-- intro -->
+##### Python:
+
+<!-- request Python -->
+
+```python
+utilsApi.sql('CREATE TABLE products(title text, price float) hitless_words = 'all'')
+```
+
+<!-- intro -->
+##### Python-asyncio:
+<!-- request Python-asyncio -->
+
+```python
+await utilsApi.sql('CREATE TABLE products(title text, price float) hitless_words = 'all'')
+```
+
+<!-- intro -->
+##### Javascript:
+
+<!-- request javascript -->
+
+```javascript
+res = await utilsApi.sql('CREATE TABLE products(title text, price float) hitless_words = 'all'');
+```
+
+<!-- intro -->
+##### java:
+
+<!-- request Java -->
+
+```java
+utilsApi.sql("CREATE TABLE products(title text, price float) hitless_words = 'all'", true);
+```
+
+<!-- intro -->
+##### C#:
+
+<!-- request C# -->
+
+```clike
+utilsApi.Sql("CREATE TABLE products(title text, price float) hitless_words = 'all'", true);
+```
+
+<!-- intro -->
+##### Rust:
+
+<!-- request Rust -->
+
+```rust
+utils_api.sql("CREATE TABLE products(title text, price float) hitless_words = 'all'", Some(true)).await;
+```
+
+<!-- request CONFIG -->
+
+```ini
+table products {
+  hitless_words = all
+
+  type = rt
+  path = tbl
+  rt_field = title
+  rt_attr_uint = price
+}
+```
+<!-- end -->
+
+### index_field_lengths
+
+```ini
+index_field_lengths = {0|1}
+```
+
+<!-- example index_field_lengths -->
+启用在全文索引中计算和存储字段长度（包括每个文档的字段长度和每个索引的平均字段长度）。可选，默认值为 0（不计算和存储）。
+
+当 `index_field_lengths` 被设置为 1 时，Manticore 将会：
+* 为每个全文字段创建相应的长度属性，属性名称相同但带有 `__len` 后缀
+* 为每个文档计算字段长度（按关键词计数）并存储到相应的属性中
+* 计算每个索引的平均值。长度属性将具有特殊的 TOKENCOUNT 类型，但它们的值实际上是常规的 32 位整数，并且通常可以访问。
+
+[BM25A()](../../Functions/Searching_and_ranking_functions.md#BM25A%28%29) 和 [BM25F()](../../Functions/Searching_and_ranking_functions.md#BM25F%28%29) 函数在表达式排名器中基于这些长度，并且需要启用 `index_field_lengths`。历史上，Manticore 使用了 BM25 的简化版，与完整函数不同，该版本**不**考虑文档长度。同时也支持完整版本的 BM25 以及其针对多个字段的扩展，称为 BM25F。它们分别需要每个文档的长度和每个字段的长度。因此需要额外的指令。
+
+<!-- request SQL -->
+
+```sql
+CREATE TABLE products(title text, price float) index_field_lengths = '1'
+```
+
+<!-- request JSON -->
+
+```JSON
+POST /cli -d "
+CREATE TABLE products(title text, price float) index_field_lengths = '1'"
+```
+
+<!-- request PHP -->
+
+```php
+$index = new ManticoresearchIndex($client);
+$index->setName('products');
+$index->create([
+            'title'=>['type'=>'text'],
+            'price'=>['type'=>'float']
+        ],[
+            'index_field_lengths' => '1'
+        ]);
+```
+<!-- intro -->
+##### Python:
+
+<!-- request Python -->
+
+```python
+utilsApi.sql('CREATE TABLE products(title text, price float) index_field_lengths = '1'')
+```
+
+<!-- intro -->
+##### Python-asyncio:
+
+<!-- request Python-asyncio -->
+
+```python
+await utilsApi.sql('CREATE TABLE products(title text, price float) index_field_lengths = '1'')
+```
+
+<!-- intro -->
+##### Javascript:
+
+<!-- request javascript -->
+
+```javascript
+res = await utilsApi.sql('CREATE TABLE products(title text, price float) index_field_lengths = '1'');
+```
+<!-- intro -->
+##### java:
+
+<!-- request Java -->
+
+```java
+utilsApi.sql("CREATE TABLE products(title text, price float) index_field_lengths = '1'", true);
+```
+
+<!-- intro -->
+##### C#:
+
+<!-- request C# -->
+
+```clike
+utilsApi.Sql("CREATE TABLE products(title text, price float) index_field_lengths = '1'", true);
+```
+
+<!-- intro -->
+##### Rust:
+
+<!-- request Rust -->
+
+```rust
+utils_api.sql("CREATE TABLE products(title text, price float) index_field_lengths = '1'", Some(true)).await;
+```
+
+<!-- request CONFIG -->
+
+```ini
+table products {
+  index_field_lengths = 1
+
+  type = rt
+  path = tbl
+  rt_field = title
+  rt_attr_uint = price
+}
+```
+<!-- end -->
+
+### index_token_filter
+
+```ini
+index_token_filter = my_lib.so:custom_blend:chars=@#&
+```
+
+<!-- example index_token_filter -->
+用于全文索引的索引时标记过滤器。可选，默认为空。
+
+index_token_filter 指令指定了一个用于全文索引的可选索引时标记过滤器。该指令用于创建一个自定义分词器，根据自定义规则生成标记。该过滤器由索引器在将源数据索引到普通表中时创建，或由 RT 表在处理 `INSERT` 或 `REPLACE` 语句时创建。插件使用格式 `library name:plugin name:optional string of settings` 定义。例如，`my_lib.so:custom_blend:chars=@#&`。
+
+<!-- request SQL -->
+
+```sql
+CREATE TABLE products(title text, price float) index_token_filter = 'my_lib.so:custom_blend:chars=@#&'
+```
+
+<!-- request JSON -->
+
+```JSON
+POST /cli -d "
+CREATE TABLE products(title text, price float) index_token_filter = 'my_lib.so:custom_blend:chars=@#&'"
+```
+
+<!-- request PHP -->
+
+```php
+$index = new ManticoresearchIndex($client);
+$index->setName('products');
+$index->create([
+            'title'=>['type'=>'text'],
+            'price'=>['type'=>'float']
+        ],[
+            'index_token_filter' => 'my_lib.so:custom_blend:chars=@#&'
+        ]);
+```
+<!-- intro -->
+##### Python:
+
+<!-- request Python -->
+
+```python
+utilsApi.sql('CREATE TABLE products(title text, price float) index_token_filter = 'my_lib.so:custom_blend:chars=@#&'')
+```
+
+<!-- intro -->
+##### Python-asyncio:
+
+<!-- request Python-asyncio -->
+
+```python
+await utilsApi.sql('CREATE TABLE products(title text, price float) index_token_filter = 'my_lib.so:custom_blend:chars=@#&'')
+```
+
+<!-- intro -->
+
+##### Javascript:
+
+<!-- request javascript -->
+
+```javascript
+res = await utilsApi.sql('CREATE TABLE products(title text, price float) index_token_filter = 'my_lib.so:custom_blend:chars=@#&'');
+```
+
+<!-- intro -->
+
+##### java:
+
+<!-- request Java -->
+
+```java
+utilsApi.sql("CREATE TABLE products(title text, price float) index_token_filter = 'my_lib.so:custom_blend:chars=@#&'", true);
+```
+
+<!-- intro -->
+
+##### C#:
+
+<!-- request C# -->
+
+```clike
+utilsApi.Sql("CREATE TABLE products(title text, price float) index_token_filter = 'my_lib.so:custom_blend:chars=@#&'", true);
+```
+
+<!-- intro -->
+
+##### Rust:
+
+<!-- request Rust -->
+
+```rust
+utils_api.sql("CREATE TABLE products(title text, price float) index_token_filter = 'my_lib.so:custom_blend:chars=@#&'", Some(true)).await;
+```
+
+<!-- request CONFIG -->
+
+```ini
+table products {
+  index_token_filter = my_lib.so:custom_blend:chars=@#&
+
+  type = rt
+  path = tbl
+  rt_field = title
+  rt_attr_uint = price
+}
+```
+
+<!-- end -->
+
+### overshort_step
+
+```ini
+overshort_step = {0|1}
+```
+
+<!-- example overshort_step -->
+Position increment on overshort (less than [min_word_len](../../Creating_a_table/NLP_and_tokenization/Low-level_tokenization.md#min_word_len)) keywords. Optional, allowed values are 0 and 1, default is 1.
+
+<!-- request SQL -->
+
+```sql
+CREATE TABLE products(title text, price float) overshort_step = '1'
+```
+
+<!-- request JSON -->
+
+```JSON
+POST /cli -d "
+CREATE TABLE products(title text, price float) overshort_step = '1'"
+```
+
+<!-- request PHP -->
+
+```php
+$index = new ManticoresearchIndex($client);
+$index->setName('products');
+$index->create([
+            'title'=>['type'=>'text'],
+            'price'=>['type'=>'float']
+        ],[
+            'overshort_step' => '1'
+        ]);
+```
+
+<!-- intro -->
+
+##### Python:
+
+<!-- request Python -->
+
+```python
+utilsApi.sql('CREATE TABLE products(title text, price float) overshort_step = '1'')
+```
+
+<!-- intro -->
+
+##### Python-asyncio:
+
+<!-- request Python-asyncio -->
+
+```python
+utilsApi.sql('CREATE TABLE products(title text, price float) overshort_step = '1'')
+```
+
+<!-- intro -->
+
+##### Javascript:
+
+<!-- request javascript -->
+
+```javascript
+res = await utilsApi.sql('CREATE TABLE products(title text, price float) overshort_step = '1'');
+```
+
+<!-- intro -->
+
+##### java:
+
+<!-- request Java -->
+
+```java
+utilsApi.sql("CREATE TABLE products(title text, price float) overshort_step = '1'", true);
+```
+
+<!-- intro -->
+
+##### C#:
+
+<!-- request C# -->
+
+```clike
+utilsApi.Sql("CREATE TABLE products(title text, price float) overshort_step = '1'", true);
+```
+
+<!-- intro -->
+
+##### Rust:
+
+<!-- request Rust -->
+
+```rust
+utils_api.sql("CREATE TABLE products(title text, price float) overshort_step = '1'", Some(true)).await;
+```
+
+<!-- request CONFIG -->
+
+```ini
+table products {
+  overshort_step = 1
+
+  type = rt
+  path = tbl
+  rt_field = title
+  rt_attr_uint = price
+}
+```
+
+<!-- end -->
+
+### phrase_boundary
+
+```ini
+phrase_boundary = ., ?, !, U+2026 # horizontal ellipsis
+```
+
+<!-- example phrase_boundary -->
+Phrase boundary characters list. Optional, default is empty.
+
+This list controls what characters will be treated as phrase boundaries, in order to adjust word positions and enable phrase-level search emulation through proximity search. The syntax is similar to [charset_table](../../Creating_a_table/NLP_and_tokenization/Low-level_tokenization.md#charset_table), but mappings are not allowed and the boundary characters must not overlap with anything else.
+
+On phrase boundary, additional word position increment (specified by [phrase_boundary_step](../../Creating_a_table/NLP_and_tokenization/Low-level_tokenization.md#phrase_boundary_step)) will be added to current word position. This enables phrase-level searching through proximity queries: words in different phrases will be guaranteed to be more than phrase_boundary_step distance away from each other; so proximity search within that distance will be equivalent to phrase-level search.
+
+Phrase boundary condition will be raised if and only if such character is followed by a separator; this is to avoid abbreviations such as S.T.A.L.K.E.R or URLs being treated as several phrases.
+
+<!-- request SQL -->
+
+```sql
+CREATE TABLE products(title text, price float) phrase_boundary = '., ?, !, U+2026' phrase_boundary_step = '10'
+```
+
+<!-- request JSON -->
+
+```JSON
+POST /cli -d "
+CREATE TABLE products(title text, price float) phrase_boundary = '., ?, !, U+2026' phrase_boundary_step = '10'"
+```
+
+<!-- request PHP -->
+
+```php
+$index = new ManticoresearchIndex($client);
+$index->setName('products');
+$index->create([
+            'title'=>['type'=>'text'],
+            'price'=>['type'=>'float']
+        ],[
+             'phrase_boundary' => '., ?, !, U+2026',
+             'phrase_boundary_step' => '10'
+        ]);
+```
+
+<!-- intro -->
+
+##### Python:
+
+<!-- request Python -->
+
+```python
+utilsApi.sql('CREATE TABLE products(title text, price float) phrase_boundary = '., ?, !, U+2026' phrase_boundary_step = '10'')
+```
+
+<!-- intro -->
+
+##### Pytho-asyncio:
+
+<!-- request Python-asyncio -->
+
+```python
+await utilsApi.sql('CREATE TABLE products(title text, price float) phrase_boundary = '., ?, !, U+2026' phrase_boundary_step = '10'')
+```
+
+<!-- intro -->
+
+##### Javascript:
+<!-- request javascript -->
+
+```javascript
+res = await utilsApi.sql('CREATE TABLE products(title text, price float) phrase_boundary = '., ?, !, U+2026' phrase_boundary_step = '10'');
+```
+<!-- intro -->
+##### java:
+
+<!-- request Java -->
+
+```java
+utilsApi.sql("CREATE TABLE products(title text, price float) phrase_boundary = '., ?, !, U+2026' phrase_boundary_step = '10'", true);
+```
+
+<!-- intro -->
+##### C#:
+
+<!-- request C# -->
+
+```clike
+utilsApi.Sql("CREATE TABLE products(title text, price float) phrase_boundary = '., ?, !, U+2026' phrase_boundary_step = '10'", true);
+```
+
+<!-- intro -->
+##### Rust:
+
+<!-- request Rust -->
+
+```rust
+utils_api.sql("CREATE TABLE products(title text, price float) phrase_boundary = '., ?, !, U+2026' phrase_boundary_step = '10'", Some(true)).await;
+```
+
+<!-- request CONFIG -->
+
+```ini
+table products {
+  phrase_boundary = ., ?, !, U+2026
+  phrase_boundary_step = 10
+
+  type = rt
+  path = tbl
+  rt_field = title
+  rt_attr_uint = price
+}
+```
+<!-- end -->
+
+### phrase_boundary_step
+
+```ini
+phrase_boundary_step = 100
+```
+
+<!-- example phrase_boundary_step -->
+短语边界词位置增量。可选，默认值为 0。
+
+在短语边界处，当前位置将额外增加此数字。
+
+<!-- request SQL -->
+
+```sql
+CREATE TABLE products(title text, price float) phrase_boundary_step = '100' phrase_boundary = '., ?, !, U+2026'
+```
+
+<!-- request JSON -->
+
+```JSON
+POST /cli -d "
+CREATE TABLE products(title text, price float) phrase_boundary_step = '100' phrase_boundary = '., ?, !, U+2026'"
+```
+
+<!-- request PHP -->
+
+```php
+$index = new ManticoresearchIndex($client);
+$index->setName('products');
+$index->create([
+            'title'=>['type'=>'text'],
+            'price'=>['type'=>'float']
+        ],[
+             'phrase_boundary_step' => '100',
+             'phrase_boundary' => '., ?, !, U+2026'
+        ]);
+
+```
+<!-- intro -->
+##### Python:
+
+<!-- request Python -->
+
+```python
+utilsApi.sql('CREATE TABLE products(title text, price float) phrase_boundary_step = '100' phrase_boundary = '., ?, !, U+2026'')
+```
+
+<!-- intro -->
+##### Python-asyncio:
+
+<!-- request Python-asyncio -->
+
+```python
+await utilsApi.sql('CREATE TABLE products(title text, price float) phrase_boundary_step = '100' phrase_boundary = '., ?, !, U+2026'')
+```
+
+<!-- intro -->
+##### Javascript:
+
+<!-- request javascript -->
+
+```javascript
+res = await utilsApi.sql('CREATE TABLE products(title text, price float) phrase_boundary_step = '100' phrase_boundary = '., ?, !, U+2026'');
+```
+<!-- intro -->
+##### java:
+
+<!-- request Java -->
+
+```java
+utilsApi.sql("CREATE TABLE products(title text, price float) phrase_boundary_step = '100' phrase_boundary = '., ?, !, U+2026'", true);
+```
+
+<!-- intro -->
+##### C#:
+
+<!-- request C# -->
+
+```clike
+utilsApi.Sql("CREATE TABLE products(title text, price float) phrase_boundary_step = '100' phrase_boundary = '., ?, !, U+2026'", true);
+```
+
+<!-- intro -->
+##### Rust:
+
+<!-- request Rust -->
+
+```rust
+utils_api.sql("CREATE TABLE products(title text, price float) phrase_boundary_step = '100' phrase_boundary = '., ?, !, U+2026'", Some(true)).await;
+```
+
+<!-- request CONFIG -->
+
+```ini
+table products {
+  phrase_boundary_step = 100
+  phrase_boundary = ., ?, !, U+2026
+
+  type = rt
+  path = tbl
+  rt_field = title
+  rt_attr_uint = price
+}
+```
+<!-- end -->
+
+### regexp_filter
+
+```ini
+# index '13"' as '13inch'
+regexp_filter = (d+)" => inch
+
+# index 'blue' or 'red' as 'color'
+regexp_filter = (blue|red) => color
+```
+
+<!-- example regexp_filter -->
+正则表达式（regexps）用于过滤字段和查询。该指令是可选的、多值的，默认值为空的正则表达式列表。Manticore Search使用的正则表达式引擎是Google的RE2，以其速度和安全性而闻名。有关RE2支持的语法的详细信息，您可以访问 [RE2语法指南](https://github.com/google/re2/wiki/Syntax).
+
+在某些应用程序中，例如产品搜索，可能有许多方式来引用产品、型号或属性。例如，`iPhone 3gs` 和 `iPhone 3 gs`（甚至 `iPhone3 gs`）很可能指的是同一产品。另一个例子可能是不同的方式来表示笔记本电脑屏幕尺寸，如 `13-inch`、`13 inch`、`13"`或`13in`。
+
+正则表达式提供了一种指定规则的机制，以处理此类情况。在第一个例子中，您可能使用一个词形文件来处理一些iPhone型号，但在第二个例子中，最好指定规则来规范化“13-inch”和“13in”为相同的内容。
+
+列在 `regexp_filter` 中的正则表达式按列出的顺序应用，在尽可能早的阶段进行处理，在进行任何其他处理之前（包括[异常](../../Creating_a_table/NLP_and_tokenization/Exceptions.md#exceptions)），甚至在标记化之前。也就是说，正则表达式在索引时应用于原始源字段，在搜索时应用于原始搜索查询文本。
+
+<!-- request SQL -->
+
+```sql
+CREATE TABLE products(title text, price float) regexp_filter = '(blue|red) => color'
+```
+
+<!-- request JSON -->
+
+```JSON
+POST /cli -d "
+CREATE TABLE products(title text, price float) regexp_filter = '(blue|red) => color'"
+```
+
+<!-- request PHP -->
+
+```php
+$index = new ManticoresearchIndex($client);
+$index->setName('products');
+$index->create([
+            'title'=>['type'=>'text'],
+            'price'=>['type'=>'float']
+        ],[
+            'regexp_filter' => '(blue|red) => color'
+        ]);
+
+```
+<!-- intro -->
+##### Python:
+
+<!-- request Python -->
+
+```python
+utilsApi.sql('CREATE TABLE products(title text, price float) regexp_filter = '(blue|red) => color'')
+```
+
+<!-- intro -->
+##### Python-asyncio:
+
+<!-- request Python-asyncio -->
+
+```python
+await utilsApi.sql('CREATE TABLE products(title text, price float) regexp_filter = '(blue|red) => color'')
+```
+
+<!-- intro -->
+##### Javascript:
+
+<!-- request javascript -->
+
+```javascript
+res = await utilsApi.sql('CREATE TABLE products(title text, price float) regexp_filter = '(blue|red) => color'');
+```
+
+<!-- intro -->
+##### java:
+
+<!-- request Java -->
+
+```java
+utilsApi.sql("CREATE TABLE products(title text, price float) regexp_filter = '(blue|red) => color'", true);
+```
+
+<!-- intro -->
+##### C#:
+
+<!-- request C# -->
+
+```clike
+utilsApi.Sql("CREATE TABLE products(title text, price float) regexp_filter = '(blue|red) => color'", true);
+```
+
+<!-- intro -->
+##### Rust:
+
+<!-- request Rust -->
+
+```rust
+utils_api.sql("CREATE TABLE products(title text, price float) regexp_filter = '(blue|red) => color'", Some(true)).await;
+```
+
+<!-- request CONFIG -->
+
+```ini
+table products {
+  # index '13"' as '13inch'
+  regexp_filter = (d+)" => inch
+
 # 低级别标记化  
 
 当文本在 Manticore 中被索引时，它会被拆分成单词，并进行大小写折叠，以便像 "Abc"、"ABC" 和 "abc" 这样的单词被视为同一个单词。

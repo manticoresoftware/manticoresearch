@@ -92,3 +92,5 @@
 **/.DS_Store
 /test/clt-tests/**/*.deb
 /test/clt-tests/*repo.noarch.deb.*
+/src/perfetto/perfetto.cc
+/src/perfetto/perfetto.h

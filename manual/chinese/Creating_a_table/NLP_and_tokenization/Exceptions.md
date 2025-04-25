@@ -1,3 +1,151 @@
+# 例外
+
+例外（也称为同义词）允许将一个或多个令牌（包括通常会被排除的字符的令牌）映射到一个单一的关键词。它们与 [词形](../../Creating_a_table/NLP_and_tokenization/Wordforms.md#wordforms) 类似，因为它们也执行映射，但有一些重要的区别。
+
+与 [词形](../../Creating_a_table/NLP_and_tokenization/Wordforms.md#wordforms) 的区别简要总结如下：
+
+| 例外 | 词形 |
+| - | - |
+| 区分大小写 | 不区分大小写 |
+| 可以使用不在 [字符集表](../../Creating_a_table/NLP_and_tokenization/Low-level_tokenization.md#charset_table) 中的特殊字符 | 完全遵循 [字符集表](../../Creating_a_table/NLP_and_tokenization/Low-level_tokenization.md#charset_table) |
+| 在大型字典中表现不佳 | 设计为处理数百万条记录 |
+
+## exceptions
+
+```ini
+exceptions = path/to/exceptions.txt
+```
+
+<!-- example exceptions -->
+解析例外文件。可选，默认值为空。
+在 RT 模式下，仅允许绝对路径。
+
+期待的文件格式是纯文本，每个例外一行。行格式如下：
+
+```ini
+map-from-tokens => map-to-token
+```
+
+示例文件：
+
+```ini
+at & t => at&t
+AT&T => AT&T
+Standarten   Fuehrer => standartenfuhrer
+Standarten Fuhrer => standartenfuhrer
+MS Windows => ms windows
+Microsoft Windows => ms windows
+C++ => cplusplus
+c++ => cplusplus
+C plus plus => cplusplus
+=>abc> => abc
+```
+
+这里的所有令牌都区分大小写，并且将 **不会** 被 [字符集表](../../Creating_a_table/NLP_and_tokenization/Low-level_tokenization.md#charset_table) 规则处理。因此，使用上面的示例例外文件，`at&t` 文本将被标记为两个关键词 `at` 和 `t`，由于小写字母。另一方面，`AT&T` 将完全匹配，并生成一个单一的 `AT&T` 关键词。
+
+如果您需要将 `>` 或 `=` 视为常规字符，可以通过在每个字符前加反斜杠（``）来转义它们。`>` 和 `=` 都应以这种方式转义。
+
+请注意，映射到的关键词：
+* 始终被解释为一个 *单一* 单词
+* 都区分大小写和空格
+
+在上面的示例中，`ms windows` 查询将 *不* 匹配包含 `MS Windows` 文本的文档。该查询将被解释为针对两个关键词的查询，`ms` 和 `windows`。对 `MS Windows` 的映射是一个单一的关键词 `ms windows`，中间有一个空格。另一方面，`standartenfuhrer` 将检索包含 `Standarten Fuhrer` 或 `Standarten Fuehrer` 内容的文档（确切地以这种方式大写），或关键词本身的任何大小写变体，例如 `staNdarTenfUhreR`。 （但是它不会匹配 `standarten fuhrer`，因为该文本不符合任何列出的例外，因为区分大小写，并作为两个单独的关键词被索引。）
+
+map-from 令牌列表中的空白是重要的，但其数量无关紧要。map-form 列表中的任何数量的空白都将匹配索引文档或查询中的任何其他数量的空白。例如，`AT & T` map-from 令牌将匹配 `AT & T` 文本，不论在 map-from 部分和索引文本中的空格有多少。因此，这样的文本将被索引为特定的 `AT&T` 关键词，感谢示例中的第一个条目。
+
+例外还允许捕获特殊字符（这些字符是一般 `字符集表` 规则的例外，因此称为例外）。假设您通常不想将 `+` 视为有效字符，但仍然希望能够搜索此规则的一些例外，例如 `C++`。上面的示例正好可以做到这一点，与表中包含的字符及其不包含的字符完全独立。
+
+使用 [纯表](../../Creating_a_table/Local_tables/Plain_table.md) 时，必须旋转表以纳入来自例外文件的更改。在实时表的情况下，更改仅适用于新文档。
+
+<!-- request SQL -->
+
+```sql
+CREATE TABLE products(title text, price float) exceptions = '/usr/local/manticore/data/exceptions.txt'
+```
+
+<!-- request JSON -->
+
+```json
+POST /cli -d "
+CREATE TABLE products(title text, price float) exceptions = '/usr/local/manticore/data/exceptions.txt'"
+```
+
+<!-- request PHP -->
+
+```php
+$index = new ManticoresearchIndex($client);
+$index->setName('products');
+$index->create([
+            'title'=>['type'=>'text'],
+            'price'=>['type'=>'float']
+        ],[
+            'exceptions' => '/usr/local/manticore/data/exceptions.txt'
+        ]);
+```
+<!-- intro -->
+##### Python:
+
+<!-- request Python -->
+
+```python
+utilsApi.sql('CREATE TABLE products(title text, price float) exceptions = '/usr/local/manticore/data/exceptions.txt'')
+```
+
+<!-- intro -->
+##### Python-asyncio:
+
+<!-- request Python-asyncio -->
+
+```python
+await utilsApi.sql('CREATE TABLE products(title text, price float) exceptions = '/usr/local/manticore/data/exceptions.txt'')
+```
+
+<!-- intro -->
+##### Javascript:
+
+<!-- request javascript -->
+
+```javascript
+res = await utilsApi.sql('CREATE TABLE products(title text, price float) exceptions = '/usr/local/manticore/data/exceptions.txt'');
+```
+
+<!-- intro -->
+##### Java:
+<!-- request Java -->
+```java
+utilsApi.sql("CREATE TABLE products(title text, price float) exceptions = '/usr/local/manticore/data/exceptions.txt'", true);
+```
+
+<!-- intro -->
+##### C#:
+<!-- request C# -->
+```clike
+utilsApi.Sql("CREATE TABLE products(title text, price float) exceptions = '/usr/local/manticore/data/exceptions.txt'", true);
+```
+
+<!-- intro -->
+##### Rust:
+
+<!-- request Rust -->
+
+```rust
+utils_api.sql("CREATE TABLE products(title text, price float) exceptions = '/usr/local/manticore/data/exceptions.txt'", Some(true)).await;
+```
+<!-- request CONFIG -->
+
+```ini
+table products {
+  exceptions = /usr/local/manticore/data/exceptions.txt
+
+  type = rt
+  path = tbl
+  rt_field = title
+  rt_attr_uint = price
+}
+```
+<!-- end -->
+<!-- proofread -->
+
 # 示例
 
 示例（也称为同义词）允许将一个或多个标记（包括通常会被排除的字符的标记）映射到单个关键字。它们与[词形](../../Creating_a_table/NLP_and_tokenization/Wordforms.md#wordforms)类似，因为它们也执行映射，但有许多重要的差异。

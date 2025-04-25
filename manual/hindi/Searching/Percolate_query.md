@@ -1,3 +1,3318 @@
+# परकोलेट क्वेरी
+
+परकोलेट क्वेरियों को स्थायी क्वेरियों, संभावित खोज, दस्तावेज़ रूटिंग, पीछे से खोज और विपरीत खोज के रूप में भी जाना जाता है।
+
+खोज करने का पारंपरिक तरीका दस्तावेज़ों को स्टोर करना और उनके खिलाफ खोज क्वेरियां निष्पादित करना है। हालाँकि, कुछ मामलों में, हम एक नए आने वाले दस्तावेज़ पर एक क्वेरी लागू करना चाहते हैं ताकि मेल का संकेत मिल सके। ऐसे परिदृश्य जहां यह वांछनीय है, में ऐसे मॉनिटरिंग सिस्टम शामिल हैं जो डेटा इकट्ठा करते हैं और उपयोगकर्ताओं को विशेष घटनाओं के बारे में सूचित करते हैं, जैसे कि किसी मैट्रिक के लिए एक निश्चित सीमा तक पहुंचना या विशेष मान का मॉनिटर की जा रही डेटा में प्रकट होना। एक और उदाहरण समाचार संग्रहण का है, जहाँ उपयोगकर्ता केवल निश्चित श्रेणियों या विषयों के बारे में सूचित होना चाह सकते हैं, या यहां तक कि विशिष्ट "कीवर्ड" के बारे में भी।
+
+इन स्थितियों में, पारंपरिक खोज सबसे अच्छी फिट नहीं होती, क्योंकि यह मानती है कि वांछित खोज पूरे संग्रह पर की जाती है। यह प्रक्रिया उपयोगकर्ताओं की संख्या से गुणा हो जाती है, जिससे पूरे संग्रह पर कई क्वेरियां चलती हैं, जिससे महत्वपूर्ण अतिरिक्त लोड हो सकता है। इस खंड में वर्णित वैकल्पिक दृष्टिकोण में क्वेरियों को स्टोर करना शामिल है और उन्हें एक नए दस्तावेज़ या दस्तावेजों के बैच के खिलाफ परीक्षण करना शामिल है।
+
+गूगल अलर्ट्स, अलर्टHN, ब्लूमबर्ग टर्मिनल और अन्य सिस्टम जो उपयोगकर्ताओं को विशिष्ट सामग्री की सदस्यता लेने की अनुमति देते हैं, समान प्रौद्योगिकी का उपयोग करते हैं।
+
+> * PQ तालिका बनाने के संबंध में जानकारी के लिए [परकोलेट](../Creating_a_table/Local_tables/Percolate_table.md) देखें।
+> * परकोलेट नियम जोड़ने के लिए [परकोलेट तालिका में नियम जोड़ना](../Data_creation_and_modification/Adding_documents_to_a_table/Adding_rules_to_a_percolate_table.md) देखें। यहाँ एक त्वरित उदाहरण है:
+
+
+### CALL PQ के साथ परकोलेट क्वेरी निष्पादित करना
+
+परकोलेट क्वेरियों के बारे में याद रखने वाली महत्वपूर्ण बात यह है कि आपकी खोज क्वेरियां पहले से ही तालिका में हैं। आपको जो प्रदान करने की आवश्यकता है, वे दस्तावेज़ हैं **यह देखने के लिए कि क्या इनमें से कोई भी स्टोर किए गए नियमों से मेल खाता है**।
+
+आप SQL या JSON इंटरफेस के माध्यम से, साथ ही प्रोग्रामिंग भाषा क्लाइंट का उपयोग करके एक परकोलेट क्वेरी निष्पादित कर सकते हैं। SQL दृष्टिकोण अधिक लचीलापन पेश करता है, जबकि HTTP विधि सरल है और जो कुछ भी आपको चाहिए, वह प्रदान करता है। नीचे दी गई तालिका आपको भिन्नताओं को समझने में मदद कर सकती है।
+
+| वांछित व्यवहार              | SQL                                     | HTTP                                 |
+| ----------------------------- | --------------------------------------- | ------------------------------------ |
+| एकल दस्तावेज़ प्रदान करें     | `CALL PQ('tbl', '{doc1}')`              | `query.percolate.document{doc1}`     |
+| एकल दस्तावेज़ प्रदान करें (वैकल्पिक) | `CALL PQ('tbl', 'doc1', 0 as docs_json)` | - |
+| कई दस्तावेज़ प्रदान करें    | `CALL PQ('tbl', ('doc1', 'doc2'), 0 as docs_json)` | - |
+| कई दस्तावेज़ प्रदान करें (वैकल्पिक) | `CALL PQ('tbl', ('{doc1}', '{doc2}'))` | - |
+| कई दस्तावेज़ प्रदान करें (वैकल्पिक) | `CALL PQ('tbl', '[{doc1}, {doc2}]')` | - |
+| मेल खाने वाले दस्तावेज़ आईडी लौटाएँ  | 0/1 as docs (डिफ़ॉल्ट द्वारा अक्षम)       | डिफ़ॉल्ट द्वारा सक्षम                   |
+| परिणाम में दिखाने के लिए दस्तावेज़ की अपनी आईडी का प्रयोग करें | 'id field' as docs_id (डिफ़ॉल्ट द्वारा अक्षम) | उपलब्ध नहीं |
+| इनपुट दस्तावेज़ों को JSON मानें | 1 as docs_json (डिफ़ॉल्ट रूप से 1) | डिफ़ॉल्ट द्वारा सक्षम |
+| इनपुट दस्तावेज़ों को प्लेन टेक्स्ट मानें | 0 as docs_json (डिफ़ॉल्ट रूप से 1) | उपलब्ध नहीं |
+| [स्पार्सेड वितरण मोड](../Searching/Percolate_query.md#I-want-higher-performance-of-a-percolate-query) | डिफ़ॉल्ट | डिफ़ॉल्ट |
+| [शार्डेड वितरण मोड](../Searching/Percolate_query.md#I-want-higher-performance-of-a-percolate-query) | शार्डेड के रूप में मोड | उपलब्ध नहीं |
+| मेल खाने वाली क्वेरी के बारे में सभी जानकारी लौटाएँ | 1 as query (डिफ़ॉल्ट द्वारा 0) | डिफ़ॉल्ट द्वारा सक्षम |
+| अमान्य JSON को छोड़ें | 1 as skip_bad_json (डिफ़ॉल्ट द्वारा 0) | उपलब्ध नहीं |
+| [SHOW META](../Node_info_and_management/SHOW_META.md) में विस्तारित जानकारी | 1 as verbose (डिफ़ॉल्ट द्वारा 0) | उपलब्ध नहीं |
+| उस संख्या को परिभाषित करें जिसे दस्तावेज़ आईडी में जोड़ा जाएगा अगर कोई docs_id फ़ील्ड प्रदान नहीं किया गया (अधिकतर [वितरित PQ मोड](../Creating_a_table/Creating_a_distributed_table/Remote_tables.md#Distributed-percolate-tables-%28DPQ-tables%29) में प्रासंगिक) | 1 as shift (डिफ़ॉल्ट द्वारा 0) | उपलब्ध नहीं |
+
+<!-- उदाहरण परकोलेट बनाएँ -->
+यह दिखाने के लिए कि यह कैसे काम करता है, यहाँ कुछ उदाहरण दिए गए हैं। चलिए दो फ़ील्ड के साथ एक PQ तालिका बनाते हैं:
+
+* शीर्षक (पाठ)
+* रंग (स्ट्रिंग)
+
+और इसमें तीन नियम बनाते हैं:
+
+* केवल पूर्ण टेक्स्ट। क्वेरी: `@title bag`
+* पूर्ण टेक्स्ट और फ़िल्टरिंग। क्वेरी: `@title shoes`। फ़िल्टर: `color='red'`
+* पूर्ण टेक्स्ट और अधिक जटिल फ़िल्टरिंग। क्वेरी: `@title shoes`। फ़िल्टर: `color IN('blue', 'green')`
+
+<!-- परिचय -->
+#### SQL
+<!-- अनुरोध SQL -->
+
+```sql
+CREATE TABLE products(title text, color string) type='pq';
+INSERT INTO products(query) values('@title bag');
+INSERT INTO products(query,filters) values('@title shoes', 'color='red'');
+INSERT INTO products(query,filters) values('@title shoes', 'color in ('blue', 'green')');
+select * from products;
+```
+
+<!-- प्रतिक्रिया SQL -->
+
+```sql
++---------------------+--------------+------+---------------------------+
+| id                  | query        | tags | filters                   |
++---------------------+--------------+------+---------------------------+
+| 1657852401006149635 | @title shoes |      | color IN ('blue, 'green') |
+| 1657852401006149636 | @title shoes |      | color='red'               |
+| 1657852401006149637 | @title bag   |      |                           |
++---------------------+--------------+------+---------------------------+
+```
+
+<!-- अनुरोध JSON -->
+
+```json
+PUT /pq/products/doc/
+{
+  "query": {
+    "match": {
+      "title": "bag"
+    }
+  },
+  "filters": ""
+}
+
+PUT /pq/products/doc/
+{
+  "query": {
+    "match": {
+      "title": "shoes"
+    }
+  },
+  "filters": "color='red'"
+}
+
+PUT /pq/products/doc/
+{
+  "query": {
+    "match": {
+      "title": "shoes"
+    }
+  },
+  "filters": "रंग IN ('नीला', 'हरा')"
+}
+```
+
+<!-- intro -->
+#### JSON
+<!-- response JSON -->
+
+```json
+{
+  "table": "उत्पाद",
+  "type": "doc",
+  "_id": 1657852401006149661,
+  "result": "निर्मित"
+}
+{
+  "table": "उत्पाद",
+  "type": "doc",
+  "_id": 1657852401006149662,
+  "result": "निर्मित"
+}
+{
+  "table": "उत्पाद",
+  "type": "doc",
+  "_id": 1657852401006149663,
+  "result": "निर्मित"
+}
+```
+
+<!-- intro -->
+#### PHP
+<!-- request PHP -->
+
+```php
+
+$index = [
+    'table' => 'उत्पाद',
+    'body' => [
+        'columns' => [
+            'title' => ['type' => 'text'],
+            'color' => ['type' => 'string']
+        ],
+        'settings' => [
+            'type' => 'pq'
+        ]
+    ]
+];
+$client->indices()->create($index);
+
+$query = [
+    'table' => 'उत्पाद',
+    'body' => [ 'query'=>['match'=>['title'=>'बैग']]]
+];
+$client->pq()->doc($query);
+$query = [
+    'table' => 'उत्पाद',
+    'body' => [ 'query'=>['match'=>['title'=>'जूते']],'filters'=>"रंग='लाल'"]
+];
+$client->pq()->doc($query);
+
+
+$query = [
+    'table' => 'उत्पाद',
+    'body' => [ 'query'=>['match'=>['title'=>'जूते']],'filters'=>"रंग IN ('नीला', 'हरा')"]
+];
+$client->pq()->doc($query);
+```
+<!-- response PHP -->
+``` php
+Array(
+  [table] => उत्पाद
+  [type] => doc
+  [_id] => 1657852401006149661
+  [result] => बनायागया
+)
+Array(
+  [table] => उत्पाद
+  [type] => doc
+  [_id] => 1657852401006149662
+  [result] => बनायागया
+)
+Array(
+  [table] => उत्पाद
+  [type] => doc
+  [_id] => 1657852401006149663
+  [result] => बनायागया
+)
+```
+<!-- intro -->
+Python
+<!-- request Python -->
+
+```python
+utilsApi.sql('create table उत्पाद(title text, रंग string) type='pq'')
+indexApi.insert({"table" : "उत्पाद", "doc" : {"query" : "@title बैग" }})
+indexApi.insert({"table" : "उत्पाद",  "doc" : {"query" : "@title जूते", "filters": "रंग='लाल'" }})
+indexApi.insert({"table" : "उत्पाद",  "doc" : {"query" : "@title जूते","filters": "रंग IN ('नीला', 'हरा')" }})
+```
+<!-- response Python -->
+``` python
+{'created': True,
+ 'found': None,
+ 'id': 0,
+ 'table': 'उत्पाद',
+ 'result': 'बनायागया'}
+{'created': True,
+ 'found': None,
+ 'id': 0,
+ 'table': 'उत्पाद',
+ 'result': 'बनायागया'}
+{'created': True,
+ 'found': None,
+ 'id': 0,
+ 'table': 'उत्पाद',
+ 'result': 'बनायागया'}
+```
+
+<!-- intro -->
+Python-asyncio
+<!-- request Python-asyncio -->
+
+```python
+await utilsApi.sql('create table उत्पाद(title text, रंग string) type='pq'')
+await indexApi.insert({"table" : "उत्पाद", "doc" : {"query" : "@title बैग" }})
+await indexApi.insert({"table" : "उत्पाद",  "doc" : {"query" : "@title जूते", "filters": "रंग='लाल'" }})
+await indexApi.insert({"table" : "उत्पाद",  "doc" : {"query" : "@title जूते","filters": "रंग IN ('नीला', 'हरा')" }})
+```
+<!-- response Python-asyncio -->
+``` python
+{'created': True,
+ 'found': None,
+ 'id': 0,
+ 'table': 'उत्पाद',
+ 'result': 'बनायागया'}
+{'created': True,
+ 'found': None,
+ 'id': 0,
+ 'table': 'उत्पाद',
+ 'result': 'बनायागया'}
+{'created': True,
+ 'found': None,
+ 'id': 0,
+ 'table': 'उत्पाद',
+ 'result': 'बनायागया'}
+```
+
+<!-- intro -->
+javascript
+<!-- request javascript -->
+
+```javascript
+res = await utilsApi.sql('create table उत्पाद(title text, रंग string) type='pq'');
+res = indexApi.insert({"table" : "उत्पाद", "doc" : {"query" : "@title बैग" }});
+res = indexApi.insert({"table" : "उत्पाद",  "doc" : {"query" : "@title जूते", "filters": "रंग='लाल'" }});
+res = indexApi.insert({"table" : "उत्पाद",  "doc" : {"query" : "@title जूते","filters": "रंग IN ('नीला', 'हरा')" }});
+```
+<!-- response javascript -->
+``` javascript
+"table":"उत्पाद","_id":0,"created":true,"result":"बनायागया"}
+{"table":"उत्पाद","_id":0,"created":true,"result":"बनायागया"}
+{"table":"उत्पाद","_id":0,"created":true,"result":"बनायागया"}
+```
+<!-- intro -->
+java
+<!-- request Java -->
+
+```java
+utilsApi.sql("create table उत्पाद(title text, रंग string) type='pq'", true);
+doc = new HashMap<String,Object>(){{
+    put("query", "@title बैग");
+}};
+newdoc = new InsertDocumentRequest();
+newdoc.index("उत्पाद").setDoc(doc);
+indexApi.insert(newdoc);
+
+doc = new HashMap<String,Object>(){{
+    put("query", "@title जूते");
+    put("filters", "रंग='लाल'");
+}};
+newdoc = new InsertDocumentRequest();
+newdoc.index("उत्पाद").setDoc(doc);
+indexApi.insert(newdoc);
+
+doc = new HashMap<String,Object>(){{
+    put("query", "@title जूते");
+    put("filters", "रंग IN ('नीला', 'हरा')");
+}};
+newdoc = new InsertDocumentRequest();
+newdoc.index("उत्पाद").setDoc(doc);
+indexApi.insert(newdoc);
+```
+<!-- response Java -->
+``` java
+{total=0, error=, warning=}
+class SuccessResponse {
+    index: उत्पाद
+    id: 0
+    created: true
+    result: बनायागया
+    found: null
+}
+class SuccessResponse {
+    index: उत्पाद
+    id: 0
+    created: true
+    result: बनायागया
+    found: null
+}
+class SuccessResponse {
+    index: उत्पाद
+    id: 0
+    created: true
+    result: बनायागया
+    found: null
+}
+
+```
+
+<!-- intro -->
+C#
+<!-- request C# -->
+
+```clike
+utilsApi.Sql("create table उत्पाद(title text, रंग string) type='pq'", true);
+
+Dictionary<string, Object> doc = new Dictionary<string, Object>(); 
+doc.Add("query", "@title बैग");
+InsertDocumentRequest newdoc = new InsertDocumentRequest(index: "उत्पाद", doc: doc);
+indexApi.Insert(newdoc);
+
+doc = new Dictionary<string, Object>(); 
+doc.Add("query", "@title जूते");
+doc.Add("filters", "रंग='लाल'");
+newdoc = new InsertDocumentRequest(index: "उत्पाद", doc: doc);
+indexApi.Insert(newdoc);
+
+doc = new Dictionary<string, Object>(); 
+doc.Add("query", "@title bag");
+doc.Add("filters", "color IN ('blue', 'green')");
+newdoc = new InsertDocumentRequest(index: "products", doc: doc);
+indexApi.Insert(newdoc);
+```
+<!-- response C# -->
+``` clike
+{total=0, error="", warning=""}
+
+class SuccessResponse {
+    index: products
+    id: 0
+    created: true
+    result: created
+    found: null
+}
+class SuccessResponse {
+    index: products
+    id: 0
+    created: true
+    result: created
+    found: null
+}
+class SuccessResponse {
+    index: products
+    id: 0
+    created: true
+    result: created
+    found: null
+}
+
+```
+
+<!-- intro -->
+Rust
+<!-- request Rust -->
+
+```rust
+utils_api.sql("create table products(title text, color string) type='pq'", Some(true)).await;
+
+let mut doc1 = HashMap::new();
+doc1.insert("query".to_string(), serde_json::json!("@title bag"));
+let insert_req1 = InsertDocumentRequest::new("products".to_string(), serde_json::json!(doc1));
+index_api.insert(insert_req1).await;
+
+let mut doc2 = HashMap::new();
+doc2.insert("query".to_string(), serde_json::json!("@title shoes"));
+doc2.insert("filters".to_string(), serde_json::json!("color='red'"));
+let insert_req2 = InsertDocumentRequest::new("products".to_string(), serde_json::json!(doc2));
+index_api.insert(insert_req2).await;
+
+let mut doc3 = HashMap::new();
+doc3.insert("query".to_string(), serde_json::json!("@title bag"));
+doc3.insert("filters".to_string(), serde_json::json!("color IN ('blue', 'green')"));
+let insert_req3 = InsertDocumentRequest::new("products".to_string(), serde_json::json!(doc3));
+index_api.insert(insert_req3).await;
+```
+<!-- response Rust -->
+``` rust
+{total=0, error="", warning=""}
+
+class SuccessResponse {
+    index: products
+    id: 0
+    created: true
+    result: created
+    found: null
+}
+class SuccessResponse {
+    index: products
+    id: 0
+    created: true
+    result: created
+    found: null
+}
+class SuccessResponse {
+    index: products
+    id: 0
+    created: true
+    result: created
+    found: null
+}
+
+```
+
+<!-- intro -->
+TypeScript
+<!-- request TypeScript -->
+```typescript
+res = await utilsApi.sql("create table test_pq(title text, color string) type='pq'");
+res = indexApi.insert({
+  index: 'test_pq',
+  doc: { query : '@title bag' }
+});
+res = indexApi.insert(
+  index: 'test_pq',
+  doc: { query: '@title shoes', filters: "color='red'" }
+});
+res = indexApi.insert({
+  index: 'test_pq',
+  doc: { query : '@title shoes', filters: "color IN ('blue', 'green')" }
+});
+```
+<!-- response TypeScript -->
+``` typescript
+{
+
+"table":"test_pq",
+
+"_id":1657852401006149661,
+
+"created":true,
+
+"result":"created"
+}
+{
+
+"table":"test_pq",
+
+"_id":1657852401006149662,
+
+"created":true,
+
+"result":"created"
+}
+{
+
+"table":"test_pq",
+
+"_id":1657852401006149663,
+
+"created":true,
+
+"result":"created"
+}
+```
+
+<!-- intro -->
+Go
+<!-- request Go -->
+```go
+apiClient.UtilsAPI.Sql(context.Background()).Body("create table test_pq(title text, color string) type='pq'").Execute()
+
+indexDoc := map[string]interface{} {"query": "@title bag"}
+indexReq := manticoreclient.NewInsertDocumentRequest("test_pq", indexDoc)
+apiClient.IndexAPI.Insert(context.Background()).InsertDocumentRequest(*indexReq).Execute();
+
+indexDoc = map[string]interface{} {"query": "@title shoes", "filters": "color='red'"}
+indexReq = manticoreclient.NewInsertDocumentRequest("test_pq", indexDoc)
+apiClient.IndexAPI.Insert(context.Background()).InsertDocumentRequest(*indexReq).Execute();
+
+indexDoc = map[string]interface{} {"query": "@title shoes", "filters": "color IN ('blue', 'green')"}
+indexReq = manticoreclient.NewInsertDocumentRequest("test_pq", indexDoc)
+apiClient.IndexAPI.Insert(context.Background()).InsertDocumentRequest(*indexReq).Execute();
+```
+<!-- response Go -->
+``` go
+{
+
+"table":"test_pq",
+
+"_id":1657852401006149661,
+
+"created":true,
+
+"result":"created"
+}
+{
+
+"table":"test_pq",
+
+"_id":1657852401006149662,
+
+"created":true,
+
+"result":"created"
+}
+{
+
+"table":"test_pq",
+
+"_id":1657852401006149663,
+
+"created":true,
+
+"result":"created"
+}
+```
+
+<!-- end -->
+
+<!-- example single -->
+##### Just tell me what PQ rules match my single document
+
+The first document doesn't match any rules. It could match the first two, but they require additional filters.
+
+The second document matches one rule. Note that CALL PQ by default expects a document to be a JSON, but if you use `0 as docs_json`, you can pass a plain string instead.
+
+<!-- intro -->
+SQL:
+<!-- request SQL -->
+
+```sql
+CALL PQ('products', 'Beautiful shoes', 0 as docs_json);
+
+CALL PQ('products', 'What a nice bag', 0 as docs_json);
+CALL PQ('products', '{"title": "What a nice bag"}');
+```
+<!-- response SQL -->
+
+```sql
++---------------------+
+| id                  |
++---------------------+
+| 1657852401006149637 |
++---------------------+
+
++---------------------+
+| id                  |
++---------------------+
+| 1657852401006149637 |
++---------------------+
+```
+<!-- intro -->
+JSON:
+<!-- request JSON -->
+
+```json
+POST /pq/products/_search
+{
+  "query": {
+    "percolate": {
+      "document": {
+        "title": "What a nice bag"
+      }
+    }
+  }
+}
+```
+<!-- response JSON -->
+
+```json
+{
+  "took": 0,
+  "timed_out": false,
+  "hits": {
+    "total": 1,
+    "max_score": 1,
+    "hits": [
+      {
+        "table": "products",
+        "_type": "doc",
+        "_id": 1657852401006149644,
+        "_score": "1",
+        "_source": {
+          "query": {
+            "ql": "@title bag"
+          }
+        },
+        "fields": {
+          "_percolator_document_slot": [
+            1
+          ]
+        }
+      }
+    ]
+  }
+}
+```
+<!-- intro -->
+PHP:
+<!-- request PHP -->
+
+```php
+$percolate = [
+    'table' => 'products',
+    'body' => [
+        'query' => [
+            'percolate' => [
+                'document' => [
+                    'title' => 'क्या अच्छा बैग है'
+                ]
+            ]
+        ]
+    ]
+];
+$client->pq()->search($percolate);
+
+```
+<!-- response PHP -->
+
+```php
+Array
+(
+    [took] => 0
+    [timed_out] =>
+    [hits] => Array
+        (
+            [total] => 1
+            [max_score] => 1
+            [hits] => Array
+                (
+                    [0] => Array
+                        (
+                            [_index] => products
+                            [_type] => doc
+                            [_id] => 1657852401006149644
+                            [_score] => 1
+                            [_source] => Array
+                                (
+                                    [query] => Array
+                                        (
+                                            [match] => Array
+                                                (
+                                                    [title] => bag
+                                                )
+                                        )
+                                )
+                            [fields] => Array
+                                (
+                                    [_percolator_document_slot] => Array
+                                        (
+                                            [0] => 1
+                                        )
+                                )
+                        )
+                )
+        )
+)
+```
+<!-- intro -->
+Python
+<!-- request Python -->
+
+```python
+searchApi.percolate('products',{"query":{"percolate":{"document":{"title":"क्या अच्छा बैग है"}}}})
+```
+<!-- response Python -->
+``` python
+{'hits': {'hits': [{u'_id': u'2811025403043381480',
+                    u'table': u'products',
+                    u'_score': u'1',
+                    u'_source': {u'query': {u'ql': u'@title bag'}},
+                    u'_type': u'doc',
+                    u'fields': {u'_percolator_document_slot': [1]}}],
+          'total': 1},
+ 'profile': None,
+ 'timed_out': False,
+ 'took': 0}
+```
+
+<!-- intro -->
+Python-asyncio
+<!-- request Python-asyncio -->
+
+```python
+await searchApi.percolate('products',{"query":{"percolate":{"document":{"title":"क्या अच्छा बैग है"}}}})
+```
+<!-- response Python-asyncio -->
+``` python
+{'hits': {'hits': [{u'_id': u'2811025403043381480',
+                    u'table': u'products',
+                    u'_score': u'1',
+                    u'_source': {u'query': {u'ql': u'@title bag'}},
+                    u'_type': u'doc',
+                    u'fields': {u'_percolator_document_slot': [1]}}],
+          'total': 1},
+ 'profile': None,
+ 'timed_out': False,
+ 'took': 0}
+```
+
+<!-- intro -->
+javascript
+<!-- request javascript -->
+
+```javascript
+res = await searchApi.percolate('products',{"query":{"percolate":{"document":{"title":"क्या अच्छा बैग है"}}}});
+```
+<!-- response javascript -->
+``` javascript
+{
+  "took": 0,
+  "timed_out": false,
+  "hits": {
+    "total": 1,
+    "hits": [
+      {
+        "table": "products",
+        "_type": "doc",
+        "_id": 2811045522851233808,
+        "_score": "1",
+        "_source": {
+          "query": {
+            "ql": "@title bag"
+          }
+        },
+        "fields": {
+          "_percolator_document_slot": [
+            1
+          ]
+        }
+      }
+    ]
+  }
+}
+```
+<!-- intro -->
+java
+<!-- request Java -->
+
+```java
+PercolateRequest percolateRequest = new PercolateRequest();
+query = new HashMap<String,Object>(){{
+    put("percolate",new HashMap<String,Object >(){{
+        put("document", new HashMap<String,Object >(){{
+            put("title","क्या अच्छा बैग है");
+        }});
+    }});
+}};
+percolateRequest.query(query);
+searchApi.percolate("test_pq",percolateRequest);
+```
+<!-- response Javs -->
+``` java
+class SearchResponse {
+    took: 0
+    timedOut: false
+    hits: class SearchResponseHits {
+        total: 1
+        maxScore: 1
+        hits: [{_index=products, _type=doc, _id=2811045522851234109, _score=1, _source={query={ql=@title bag}}, fields={_percolator_document_slot=[1]}}]
+        aggregations: null
+    }
+    profile: null
+}
+
+```
+
+<!-- intro -->
+C#
+<!-- request C# -->
+
+```clike
+Dictionary<string, Object> percolateDoc = new Dictionary<string, Object>(); 
+percolateDoc.Add("document", new Dictionary<string, Object> {{ "title", "क्या अच्छा बैग है" }});
+Dictionary<string, Object> query = new Dictionary<string, Object> {{ "percolate", percolateDoc }}; 
+PercolateRequest percolateRequest = new PercolateRequest(query=query);
+searchApi.Percolate("test_pq",percolateRequest);
+
+```
+<!-- response C# -->
+``` clike
+class SearchResponse {
+    took: 0
+    timedOut: false
+    hits: class SearchResponseHits {
+        total: 1
+        maxScore: 1
+        hits: [{_index=products, _type=doc, _id=2811045522851234109, _score=1, _source={query={ql=@title bag}}, fields={_percolator_document_slot=[1]}}]
+        aggregations: null
+    }
+    profile: null
+}
+
+```
+
+<!-- intro -->
+Rust
+<!-- request Rust -->
+
+```rust
+let mut percolate_doc_fields = HashMap::new();
+percolate_doc_fileds.insert("title".to_string(), "क्या अच्छा बैग है");
+let mut percolate_doc = HashMap::new();
+percolate_doc.insert("document".to_string(), percolate_doc_fields); 
+let percolate_query = PercolateRequestQuery::new(serde_json::json!(percolate_doc));
+let percolate_req = PercolateRequest::new(percolate_query); 
+search_api.percolate("test_pq", percolate_req).await;
+```
+<!-- response Rust -->
+``` rust
+class SearchResponse {
+    took: 0
+    timedOut: false
+    hits: class SearchResponseHits {
+        total: 1
+        maxScore: 1
+        hits: [{_index=products, _type=doc, _id=2811045522851234109, _score=1, _source={query={ql=@title bag}}, fields={_percolator_document_slot=[1]}}]
+        aggregations: null
+    }
+    profile: null
+}
+
+```
+
+<!-- intro -->
+TypeScript
+<!-- request TypeScript -->
+
+```typescript
+res = await searchApi.percolate('test_pq', { query: { percolate: { document : { title : 'What a nice bag' } } } } );
+```
+<!-- response TypeScript -->
+``` typescript
+{
+  "took": 0,
+  "timed_out": false,
+  "hits": {
+    "total": 1,
+    "hits": [
+      {
+        "table": "test_pq",
+        "_type": "doc",
+        "_id": 1657852401006149661,
+        "_score": "1",
+        "_source": {
+          "query": {
+            "ql": "@title bag"
+          }
+        },
+        "fields": {
+          "_percolator_document_slot": [
+            1
+          ]
+        }
+      }
+    ]
+  }
+}
+```
+
+<!-- intro -->
+Go
+<!-- request Go -->
+
+```go
+query := map[string]interface{} {"title": "what a nice bag"}
+percolateRequestQuery := manticoreclient.NewPercolateQuery(query)
+percolateRequest := manticoreclient.NewPercolateRequest(percolateRequestQuery)
+res, _, _ := apiClient.SearchAPI.Percolate(context.Background(), "test_pq").PercolateRequest(*percolateRequest).Execute()
+
+```
+<!-- response Go -->
+``` go
+{
+  "took": 0,
+  "timed_out": false,
+  "hits": {
+    "total": 1,
+    "hits": [
+      {
+        "table": "test_pq",
+        "_type": "doc",
+        "_id": 1657852401006149661,
+        "_score": "1",
+        "_source": {
+          "query": {
+            "ql": "@title bag"
+          }
+        },
+        "fields": {
+          "_percolator_document_slot": [
+            1
+          ]
+        }
+      }
+    ]
+  }
+}
+```
+
+<!-- end -->
+
+<!-- example pq_rules -->
+##### I want to know complete PQ rules matching my document
+<!-- intro -->
+SQL:
+<!-- request SQL -->
+
+```sql
+CALL PQ('products', '{"title": "What a nice bag"}', 1 as query);
+```
+<!-- response SQL -->
+
+```sql
++---------------------+------------+------+---------+
+| id                  | query      | tags | filters |
++---------------------+------------+------+---------+
+| 1657852401006149637 | @title bag |      |         |
++---------------------+------------+------+---------+
+```
+<!-- intro -->
+JSON:
+<!-- request JSON -->
+
+```json
+POST /pq/products/_search
+{
+  "query": {
+    "percolate": {
+      "document": {
+        "title": "What a nice bag"
+      }
+    }
+  }
+}
+```
+<!-- response JSON -->
+
+```json
+{
+  "took": 0,
+  "timed_out": false,
+  "hits": {
+    "total": 1,
+    "max_score": 1,
+    "hits": [
+      {
+        "table": "products",
+        "_type": "doc",
+        "_id": 1657852401006149644,
+        "_score": "1",
+        "_source": {
+          "query": {
+            "ql": "@title bag"
+          }
+        },
+        "fields": {
+          "_percolator_document_slot": [
+            1
+          ]
+        }
+      }
+    ]
+  }
+}
+```
+<!-- intro -->
+PHP:
+<!-- request PHP -->
+
+```php
+$percolate = [
+    'table' => 'products',
+    'body' => [
+        'query' => [
+            'percolate' => [
+                'document' => [
+                    'title' => 'What a nice bag'
+                ]
+            ]
+        ]
+    ]
+];
+$client->pq()->search($percolate);
+
+```
+<!-- response PHP -->
+
+```php
+Array
+(
+    [took] => 0
+    [timed_out] =>
+    [hits] => Array
+        (
+            [total] => 1
+            [max_score] => 1
+            [hits] => Array
+                (
+                    [0] => Array
+                        (
+                            [_index] => products
+                            [_type] => doc
+                            [_id] => 1657852401006149644
+                            [_score] => 1
+                            [_source] => Array
+                                (
+                                    [query] => Array
+                                        (
+                                            [match] => Array
+                                                (
+                                                    [title] => bag
+                                                )
+                                        )
+                                )
+                            [fields] => Array
+                                (
+                                    [_percolator_document_slot] => Array
+                                        (
+                                            [0] => 1
+                                        )
+                                )
+                        )
+                )
+        )
+)
+```
+
+<!-- intro -->
+Python
+<!-- request Python -->
+
+```python
+searchApi.percolate('products',{"query":{"percolate":{"document":{"title":"What a nice bag"}}}})
+```
+<!-- response Python -->
+``` python
+{'hits': {'hits': [{u'_id': u'2811025403043381480',
+                    u'table': u'products',
+                    u'_score': u'1',
+                    u'_source': {u'query': {u'ql': u'@title bag'}},
+                    u'_type': u'doc',
+                    u'fields': {u'_percolator_document_slot': [1]}}],
+          'total': 1},
+ 'profile': None,
+ 'timed_out': False,
+ 'took': 0}
+```
+
+<!-- intro -->
+Python-asyncio
+<!-- request Python-asyncio -->
+
+```python
+await searchApi.percolate('products',{"query":{"percolate":{"document":{"title":"क्या सुंदर बैग है"}}}})
+```
+<!-- response Python-asyncio -->
+``` python
+{'hits': {'hits': [{u'_id': u'2811025403043381480',
+                    u'table': u'products',
+                    u'_score': u'1',
+                    u'_source': {u'query': {u'ql': u'@title बैग'}},
+                    u'_type': u'doc',
+                    u'fields': {u'_percolator_document_slot': [1]}}],
+          'total': 1},
+ 'profile': None,
+ 'timed_out': False,
+ 'took': 0}
+```
+
+<!-- intro -->
+javascript
+<!-- request javascript -->
+
+```javascript
+res = await searchApi.percolate('products',{"query":{"percolate":{"document":{"title":"क्या सुंदर बैग है"}}}});
+```
+<!-- response javascript -->
+``` javascript
+{
+  "took": 0,
+  "timed_out": false,
+  "hits": {
+    "total": 1,
+    "hits": [
+      {
+        "table": "products",
+        "_type": "doc",
+        "_id": 2811045522851233808,
+        "_score": "1",
+        "_source": {
+          "query": {
+            "ql": "@title बैग"
+          }
+        },
+        "fields": {
+          "_percolator_document_slot": [
+            1
+          ]
+        }
+      }
+    ]
+  }
+}
+```
+
+<!-- intro -->
+java
+<!-- request Java -->
+
+```java
+PercolateRequest percolateRequest = new PercolateRequest();
+query = new HashMap<String,Object>(){{
+    put("percolate",new HashMap<String,Object >(){{
+        put("document", new HashMap<String,Object >(){{
+            put("title","क्या सुंदर बैग है");
+        }});
+    }});
+}};
+percolateRequest.query(query);
+searchApi.percolate("test_pq",percolateRequest);
+```
+<!-- response Java -->
+``` java
+class SearchResponse {
+    took: 0
+    timedOut: false
+    hits: class SearchResponseHits {
+        total: 1
+        maxScore: 1
+        hits: [{_index=products, _type=doc, _id=2811045522851234109, _score=1, _source={query={ql=@title बैग}}, fields={_percolator_document_slot=[1]}}]
+        aggregations: null
+    }
+    profile: null
+}
+
+```
+
+<!-- intro -->
+C#
+<!-- request C# -->
+
+```clike
+Dictionary<string, Object> percolateDoc = new Dictionary<string, Object>(); 
+percolateDoc.Add("document", new Dictionary<string, Object> {{ "title", "क्या सुंदर बैग है" }});
+Dictionary<string, Object> query = new Dictionary<string, Object> {{ "percolate", percolateDoc }}; 
+PercolateRequest percolateRequest = new PercolateRequest(query=query);
+searchApi.Percolate("test_pq",percolateRequest);
+
+```
+<!-- response C# -->
+``` clike
+class SearchResponse {
+    took: 0
+    timedOut: false
+    hits: class SearchResponseHits {
+        total: 1
+        maxScore: 1
+        hits: [{_index=products, _type=doc, _id=2811045522851234109, _score=1, _source={query={ql=@title बैग}}, fields={_percolator_document_slot=[1]}}]
+        aggregations: null
+    }
+    profile: null
+}
+
+```
+
+<!-- intro -->
+Rust
+<!-- request Rust -->
+
+```rust
+let mut percolate_doc_fields = HashMap::new();
+percolate_doc_fileds.insert("title".to_string(), "क्या सुंदर बैग है");
+let mut percolate_doc = HashMap::new();
+percolate_doc.insert("document".to_string(), percolate_doc_fields); 
+let percolate_query = PercolateRequestQuery::new(serde_json::json!(percolate_doc));
+let percolate_req = PercolateRequest::new(percolate_query); 
+search_api.percolate("test_pq", percolate_req).await;
+
+```
+<!-- response Rust -->
+``` rust
+class SearchResponse {
+    took: 0
+    timedOut: false
+    hits: class SearchResponseHits {
+        total: 1
+        maxScore: 1
+        hits: [{_index=products, _type=doc, _id=2811045522851234109, _score=1, _source={query={ql=@title बैग}}, fields={_percolator_document_slot=[1]}}]
+        aggregations: null
+    }
+    profile: null
+}
+
+```
+
+<!-- intro -->
+TypeScript
+<!-- request TypeScript -->
+
+```typescript
+res = await searchApi.percolate('test_pq', { query: { percolate: { document : { title : 'क्या सुंदर बैग है' } } } } );
+```
+<!-- response TypeScript -->
+``` typescript
+{
+  "took": 0,
+  "timed_out": false,
+  "hits": {
+    "total": 1,
+    "hits": [
+      {
+        "table": "test_pq",
+        "_type": "doc",
+        "_id": 1657852401006149661,
+        "_score": "1",
+        "_source": {
+          "query": {
+            "ql": "@title बैग"
+          }
+        },
+        "fields": {
+          "_percolator_document_slot": [
+            1
+          ]
+        }
+      }
+    ]
+  }
+}
+```
+
+<!-- intro -->
+Go
+<!-- request Go -->
+
+```go
+query := map[string]interface{} {"title": "क्या सुंदर बैग है"}
+percolateRequestQuery := manticoreclient.NewPercolateQuery(query)
+percolateRequest := manticoreclient.NewPercolateRequest(percolateRequestQuery)
+res, _, _ := apiClient.SearchAPI.Percolate(context.Background(), "test_pq").PercolateRequest(*percolateRequest).Execute()
+
+```
+<!-- response Go -->
+``` go
+{
+  "took": 0,
+  "timed_out": false,
+  "hits": {
+    "total": 1,
+    "hits": [
+      {
+        "table": "test_pq",
+        "_type": "doc",
+        "_id": 1657852401006149661,
+        "_score": "1",
+        "_source": {
+          "query": {
+            "ql": "@title बैग"
+          }
+        },
+        "fields": {
+          "_percolator_document_slot": [
+            1
+          ]
+        }
+      }
+    ]
+  }
+}
+```
+
+<!-- end -->
+
+<!-- example multiple -->
+
+##### कई दस्तावेज़ों के बारे में कैसे?
+ध्यान दें कि `CALL PQ` के साथ, आप विभिन्न तरीकों से कई दस्तावेज़ प्रदान कर सकते हैं:
+
+* गोल ब्रैकेट्स `('doc1', 'doc2')` में सामान्य दस्तावेज़ों के एक ऐरे के रूप में। इसके लिए `0 as docs_json` की आवश्यकता है।
+* गोल ब्रैकेट्स `('{doc1}', '{doc2}')` में JSONs के एक ऐरे के रूप में।
+* या एक मानक JSON ऐरे `'[{doc1}, {doc2}]'` के रूप में।
+
+<!-- intro -->
+SQL:
+<!-- request SQL -->
+
+```sql
+CALL PQ('products', ('nice pair of shoes', 'beautiful bag'), 1 as query, 0 as docs_json);
+
+CALL PQ('products', ('{"title": "nice pair of shoes", "color": "red"}', '{"title": "beautiful bag"}'), 1 as query);
+
+CALL PQ('products', '[{"title": "nice pair of shoes", "color": "blue"}, {"title": "beautiful bag"}]', 1 as query);
+```
+<!-- response SQL -->
+
+```sql
++---------------------+------------+------+---------+
+| id                  | query      | tags | filters |
++---------------------+------------+------+---------+
+| 1657852401006149637 | @title bag |      |         |
++---------------------+------------+------+---------+
+
++---------------------+--------------+------+-------------+
+| id                  | query        | tags | filters     |
++---------------------+--------------+------+-------------+
+| 1657852401006149636 | @title shoes |      | color='red' |
+| 1657852401006149637 | @title bag   |      |             |
++---------------------+--------------+------+-------------+
+
++---------------------+--------------+------+---------------------------+
+| id                  | query        | tags | filters                   |
++---------------------+--------------+------+---------------------------+
+| 1657852401006149635 | @title shoes |      | color IN ('blue, 'green') |
+| 1657852401006149637 | @title bag   |      |                           |
++---------------------+--------------+------+---------------------------+
+```
+<!-- intro -->
+JSON:
+<!-- request JSON -->
+
+```json
+POST /pq/products/_search
+{
+  "query": {
+    "percolate": {
+      "documents": [
+        {"title": "nice pair of shoes", "color": "blue"},
+        {"title": "beautiful bag"}
+      ]
+    }
+  }
+}
+```
+<!-- response JSON -->
+
+```json
+{
+  "took": 0,
+  "timed_out": false,
+  "hits": {
+    "total": 2,
+    "max_score": 1,
+    "hits": [
+      {
+        "table": "products",
+        "_type": "doc",
+        "_id": 1657852401006149644,
+        "_score": "1",
+        "_source": {
+          "query": {
+            "ql": "@title bag"
+          }
+        },
+        "fields": {
+          "_percolator_document_slot": [
+            2
+          ]
+        }
+      },
+      {
+        "table": "products",
+        "_type": "doc",
+        "_id": 1657852401006149646,
+        "_score": "1",
+        "_source": {
+          "query": {
+            "ql": "@title shoes"
+          }
+        },
+        "fields": {
+          "_percolator_document_slot": [
+            1
+          ]
+        }
+      }
+    ]
+  }
+}
+```
+<!-- intro -->
+PHP:
+<!-- request PHP -->
+
+```php
+$percolate = [
+    'table' => 'products',
+    'body' => [
+        'query' => [
+            'percolate' => [
+                'documents' => [
+                    ['title' => 'nice pair of shoes','color'=>'blue'],
+                    ['title' => 'beautiful bag']
+                ]
+            ]
+        ]
+    ]
+];
+$client->pq()->search($percolate);
+
+```
+<!-- response PHP -->
+
+```php
+Array
+(
+    [took] => 23
+    [timed_out] =>
+    [hits] => Array
+        (
+            [total] => 2
+            [max_score] => 1
+            [hits] => Array
+                (
+                    [0] => Array
+                        (
+                            [_index] => products
+                            [_type] => doc
+                            [_id] => 2810781492890828819
+                            [_score] => 1
+                            [_source] => Array
+                                (
+                                    [query] => Array
+                                        (
+                                            [match] => Array
+                                                (
+                                                    [title] => bag
+                                                )
+                                        )
+                                )
+                            [fields] => Array
+                                (
+                                    [_percolator_document_slot] => Array
+                                        (
+                                            [0] => 2
+                                        )
+                                )
+                        )
+                    [1] => Array
+                        (
+                            [_index] => products
+                            [_type] => doc
+                            [_id] => 2810781492890828821
+                            [_score] => 1
+                            [_source] => Array
+                                (
+                                    [query] => Array
+                                        (
+                                            [match] => Array
+                                                (
+                                                    [title] => shoes
+                                                )
+                                        )
+                                )
+                            [fields] => Array
+                                (
+                                    [_percolator_document_slot] => Array
+                                        (
+                                            [0] => 1
+                                        )
+                                )
+                        )
+                )
+        )
+)
+```
+<!-- परिचय -->
+पायथन
+<!-- अनुरोध पायथन -->
+
+```python
+searchApi.percolate('products',{"query":{"percolate":{"documents":[{"title":"nice pair of shoes","color":"blue"},{"title":"beautiful bag"}]}}})
+```
+<!-- प्रतिक्रिया पायथन -->
+``` python
+{'hits': {'hits': [{u'_id': u'2811025403043381494',
+                    u'table': u'products',
+                    u'_score': u'1',
+                    u'_source': {u'query': {u'ql': u'@title bag'}},
+                    u'_type': u'doc',
+                    u'fields': {u'_percolator_document_slot': [2]}},
+                   {u'_id': u'2811025403043381496',
+                    u'table': u'products',
+                    u'_score': u'1',
+                    u'_source': {u'query': {u'ql': u'@title shoes'}},
+                    u'_type': u'doc',
+                    u'fields': {u'_percolator_document_slot': [1]}}],
+          'total': 2},
+ 'profile': None,
+ 'timed_out': False,
+ 'took': 0}
+
+```
+
+<!-- परिचय -->
+पायथन-ऐसिंक्रोनस
+<!-- अनुरोध पायथन-ऐसिंक्रोनस -->
+
+```python
+await searchApi.percolate('products',{"query":{"percolate":{"documents":[{"title":"nice pair of shoes","color":"blue"},{"title":"beautiful bag"}]}}})
+```
+<!-- प्रतिक्रिया पायथन-ऐसिंक्रोनस -->
+``` python
+{'hits': {'hits': [{u'_id': u'2811025403043381494',
+                    u'table': u'products',
+                    u'_score': u'1',
+                    u'_source': {u'query': {u'ql': u'@title bag'}},
+                    u'_type': u'doc',
+                    u'fields': {u'_percolator_document_slot': [2]}},
+                   {u'_id': u'2811025403043381496',
+                    u'table': u'products',
+                    u'_score': u'1',
+                    u'_source': {u'query': {u'ql': u'@title shoes'}},
+                    u'_type': u'doc',
+                    u'fields': {u'_percolator_document_slot': [1]}}],
+          'total': 2},
+ 'profile': None,
+ 'timed_out': False,
+ 'took': 0}
+
+```
+
+<!-- परिचय -->
+जावास्क्रिप्ट
+<!-- अनुरोध जावास्क्रिप्ट -->
+
+```javascript
+res = await searchApi.percolate('products',{"query":{"percolate":{"documents":[{"title":"nice pair of shoes","color":"blue"},{"title":"beautiful bag"}]}}});
+```
+<!-- प्रतिक्रिया जावास्क्रिप्ट -->
+``` javascript
+{
+  "took": 6,
+  "timed_out": false,
+  "hits": {
+    "total": 2,
+    "hits": [
+      {
+        "table": "products",
+        "_type": "doc",
+        "_id": 2811045522851233808,
+        "_score": "1",
+        "_source": {
+          "query": {
+            "ql": "@title bag"
+          }
+        },
+        "fields": {
+          "_percolator_document_slot": [
+            2
+          ]
+        }
+      },
+      {
+        "table": "products",
+        "_type": "doc",
+        "_id": 2811045522851233810,
+        "_score": "1",
+        "_source": {
+          "query": {
+            "ql": "@title shoes"
+          }
+        },
+        "fields": {
+          "_percolator_document_slot": [
+            1
+          ]
+        }
+      }
+    ]
+  }
+}
+
+```
+
+<!-- परिचय -->
+जावा
+<!-- अनुरोध जावा -->
+
+```java
+percolateRequest = new PercolateRequest();
+query = new HashMap<String,Object>(){{
+        put("percolate",new HashMap<String,Object >(){{
+            put("documents", new ArrayList<Object>(){{
+                    add(new HashMap<String,Object >(){{
+                        put("title","nice pair of shoes");
+                        put("color","blue");
+                    }});
+                    add(new HashMap<String,Object >(){{
+                        put("title","beautiful bag");
+
+                    }});
+
+                     }});
+        }});
+    }};
+percolateRequest.query(query);
+searchApi.percolate("products",percolateRequest);
+
+```
+<!-- प्रतिक्रिया जावा -->
+``` java
+class SearchResponse {
+    took: 0
+    timedOut: false
+    hits: class SearchResponseHits {
+        total: 2
+        maxScore: 1
+        hits: [{_index=products, _type=doc, _id=2811045522851234133, _score=1, _source={query={ql=@title bag}}, fields={_percolator_document_slot=[2]}}, {_index=products, _type=doc, _id=2811045522851234135, _score=1, _source={query={ql=@title shoes}}, fields={_percolator_document_slot=[1]}}]
+        aggregations: null
+    }
+    profile: null
+}
+
+```
+
+<!-- परिचय -->
+सी#
+<!-- अनुरोध सी# -->
+
+```clike
+var doc1 = new Dictionary<string, Object>();
+doc1.Add("title","nice pair of shoes");
+doc1.Add("color","blue");
+var doc2 = new Dictionary<string, Object>();
+doc2.Add("title","beautiful bag");
+var docs = new List<Object> {doc1, doc2};
+Dictionary<string, Object> percolateDoc = new Dictionary<string, Object> {{ "documents", docs }}; 
+Dictionary<string, Object> query = new Dictionary<string, Object> {{ "percolate", percolateDoc }}; 
+PercolateRequest percolateRequest = new PercolateRequest(query=query);
+searchApi.Percolate("products",percolateRequest);
+```
+<!-- प्रतिक्रिया सी# -->
+``` clike
+class SearchResponse {
+    took: 0
+    timedOut: false
+    hits: class SearchResponseHits {
+        total: 2
+        maxScore: 1
+        hits: [{_index=products, _type=doc, _id=2811045522851234133, _score=1, _source={query={ql=@title bag}}, fields={_percolator_document_slot=[2]}}, {_index=products, _type=doc, _id=2811045522851234135, _score=1, _source={query={ql=@title shoes}}, fields={_percolator_document_slot=[1]}}]
+        aggregations: null
+    }
+    profile: null
+}
+
+```
+
+<!-- परिचय -->
+रस्ट
+<!-- अनुरोध रस्ट -->
+
+```rust
+let mut percolate_doc_fields1 = HashMap::new();
+percolate_doc_fields1.insert("title".to_string(), "nice pair of shoes");
+percolate_doc_fields1.insert("color".to_string(), "blue");
+let mut percolate_doc_fields2 = HashMap::new();
+percolate_doc_fields2.insert("title".to_string(), "सुंदर बैग");
+let mut percolate_doc_fields_list: [HashMap; 2] = [percolate_doc_fields1, percolate_doc_fields2];
+let mut percolate_doc = HashMap::new();
+percolate_doc.insert("documents".to_string(), percolate_doc_fields_list); 
+let percolate_query = PercolateRequestQuery::new(serde_json::json!(percolate_doc));
+let percolate_req = PercolateRequest::new(percolate_query); 
+search_api.percolate("products", percolate_req).await;
+```
+<!-- response Rust -->
+``` rust
+class SearchResponse {
+    took: 0
+    timedOut: false
+    hits: class SearchResponseHits {
+        total: 2
+        maxScore: 1
+        hits: [{_index=products, _type=doc, _id=2811045522851234133, _score=1, _source={query={ql=@title बैग}}, fields={_percolator_document_slot=[2]}}, {_index=products, _type=doc, _id=2811045522851234135, _score=1, _source={query={ql=@title जूते}}, fields={_percolator_document_slot=[1]}}]
+        aggregations: null
+    }
+    profile: null
+}
+
+```
+
+<!-- intro -->
+TypeScript
+<!-- request TypeScript -->
+
+```typescript
+docs = [ {title : 'क्या एक अच्छा बैग'}, {title : 'सच में अच्छे जूते'} ]; 
+res = await searchApi.percolate('test_pq', { query: { percolate: { documents : docs } } } );
+```
+<!-- response TypeScript -->
+``` typescript
+{
+  "took": 0,
+  "timed_out": false,
+  "hits": {
+    "total": 2,
+    "hits": [
+      {
+        "table": "test_pq",
+        "_type": "doc",
+        "_id": 1657852401006149661,
+        "_score": "1",
+        "_source": {
+          "query": {
+            "ql": "@title बैग"
+          }
+        },
+        "fields": {
+          "_percolator_document_slot": [
+            1
+          ]
+        }
+      },
+      {
+        "table": "test_pq",
+        "_type": "doc",
+        "_id": 1657852401006149662,
+        "_score": "1",
+        "_source": {
+          "query": {
+            "ql": "@title जूते"
+          }
+        },
+        "fields": {
+          "_percolator_document_slot": [
+            1
+          ]
+        }
+      }
+    ]
+  }
+}
+```
+
+<!-- intro -->
+Go
+<!-- request Go -->
+
+```go
+doc1 := map[string]interface{} {"title": "क्या एक अच्छा बैग"}
+doc2 := map[string]interface{} {"title": "सच में अच्छे जूते"}
+query := []interface{} {doc1, doc2}
+percolateRequestQuery := manticoreclient.NewPercolateQuery(query)
+percolateRequest := manticoreclient.NewPercolateRequest(percolateRequestQuery)
+res, _, _ := apiClient.SearchAPI.Percolate(context.Background(), "test_pq").PercolateRequest(*percolateRequest).Execute()
+
+```
+<!-- response Go -->
+``` go
+{
+  "took": 0,
+  "timed_out": false,
+  "hits": {
+    "total": 2,
+    "hits": [
+      {
+        "table": "test_pq",
+        "_type": "doc",
+        "_id": 1657852401006149661,
+        "_score": "1",
+        "_source": {
+          "query": {
+            "ql": "@title बैग"
+          }
+        },
+        "fields": {
+          "_percolator_document_slot": [
+            1
+          ]
+        }
+      },
+      {
+        "table": "test_pq",
+        "_type": "doc",
+        "_id": 1657852401006149662,
+        "_score": "1",
+        "_source": {
+          "query": {
+            "ql": "@title जूते"
+          }
+        },
+        "fields": {
+          "_percolator_document_slot": [
+            1
+          ]
+        }
+      }
+    ]
+  }
+}
+```
+
+<!-- end -->
+
+<!-- example docs_1 -->
+##### मैं जानना चाहता हूँ कि कौन से दस्तावेज़ किस नियम से मेल खाते हैं
+
+Using the option `1 as docs` allows you to see which documents of the provided ones match which rules.
+<!-- intro -->
+SQL:
+<!-- request SQL -->
+
+```sql
+CALL PQ('products', '[{"title": "अच्छी जोड़ी जूते", "color": "नीला"}, {"title": "सुंदर बैग"}]', 1 as query, 1 as docs);
+```
+
+<!-- response SQL -->
+
+```sql
++---------------------+-----------+--------------+------+---------------------------+
+| id                  | documents | query        | tags | filters                   |
++---------------------+-----------+--------------+------+---------------------------+
+| 1657852401006149635 | 1         | @title जूते |      | color IN ('blue, 'green') |
+| 1657852401006149637 | 2         | @title बैग   |      |                           |
++---------------------+-----------+--------------+------+---------------------------+
+```
+<!-- intro -->
+JSON:
+<!-- request JSON -->
+
+```json
+POST /pq/products/_search
+{
+  "query": {
+    "percolate": {
+      "documents": [
+        {"title": "अच्छी जोड़ी जूते", "color": "नीला"},
+        {"title": "सुंदर बैग"}
+      ]
+    }
+  }
+}
+```
+<!-- response JSON -->
+
+```json
+{
+  "took": 0,
+  "timed_out": false,
+  "hits": {
+    "total": 2,
+    "max_score": 1,
+    "hits": [
+      {
+        "table": "products",
+        "_type": "doc",
+        "_id": 1657852401006149644,
+        "_score": "1",
+        "_source": {
+          "query": {
+            "ql": "@title बैग"
+          }
+        },
+        "fields": {
+          "_percolator_document_slot": [
+            2
+          ]
+        }
+      },
+      {
+        "table": "products",
+        "_type": "doc",
+        "_id": 1657852401006149646,
+        "_score": "1",
+        "_source": {
+          "query": {
+            "ql": "@title जूते"
+          }
+        },
+        "fields": {
+          "_percolator_document_slot": [
+            1
+          ]
+        }
+      }
+    ]
+  }
+}
+```
+<!-- intro -->
+PHP:
+<!-- request PHP -->
+
+```php
+$percolate = [
+    'table' => 'products',
+    'body' => [
+        'query' => [
+            'percolate' => [
+                'documents' => [
+                    ['title' => 'अच्छे जूते','color'=>'नीला'],
+                    ['title' => 'सुंदर बैग']
+                ]
+            ]
+        ]
+    ]
+];
+$client->pq()->search($percolate);
+
+```
+<!-- response PHP -->
+
+```php
+Array
+(
+    [took] => 23
+    [timed_out] =>
+    [hits] => Array
+        (
+            [total] => 2
+            [max_score] => 1
+            [hits] => Array
+                (
+                    [0] => Array
+                        (
+                            [_index] => products
+                            [_type] => doc
+                            [_id] => 2810781492890828819
+                            [_score] => 1
+                            [_source] => Array
+                                (
+                                    [query] => Array
+                                        (
+                                            [match] => Array
+                                                (
+                                                    [title] => बैग
+                                                )
+                                        )
+                                )
+                            [fields] => Array
+                                (
+                                    [_percolator_document_slot] => Array
+                                        (
+                                            [0] => 2
+                                        )
+                                )
+                        )
+                    [1] => Array
+                        (
+                            [_index] => products
+                            [_type] => doc
+                            [_id] => 2810781492890828821
+                            [_score] => 1
+                            [_source] => Array
+                                (
+                                    [query] => Array
+                                        (
+                                            [match] => Array
+                                                (
+                                                    [title] => जूते
+                                                )
+                                        )
+                                )
+                            [fields] => Array
+                                (
+                                    [_percolator_document_slot] => Array
+                                        (
+                                            [0] => 1
+                                        )
+                                )
+                        )
+                )
+        )
+)
+```
+<!-- intro -->
+Python
+<!-- request Python -->
+
+```python
+searchApi.percolate('products',{"query":{"percolate":{"documents":[{"title":"अच्छे जूते","color":"नीला"},{"title":"सुंदर बैग"}]}}})
+```
+<!-- response Python -->
+``` python
+{'hits': {'hits': [{u'_id': u'2811025403043381494',
+                    u'table': u'products',
+                    u'_score': u'1',
+                    u'_source': {u'query': {u'ql': u'@title बैग'}},
+                    u'_type': u'doc',
+                    u'fields': {u'_percolator_document_slot': [2]}},
+                   {u'_id': u'2811025403043381496',
+                    u'table': u'products',
+                    u'_score': u'1',
+                    u'_source': {u'query': {u'ql': u'@title जूते'}},
+                    u'_type': u'doc',
+                    u'fields': {u'_percolator_document_slot': [1]}}],
+          'total': 2},
+ 'profile': None,
+ 'timed_out': False,
+ 'took': 0}
+
+```
+
+<!-- intro -->
+Python-asyncio
+<!-- request Python-asyncio -->
+
+```python
+await searchApi.percolate('products',{"query":{"percolate":{"documents":[{"title":"अच्छे जूते","color":"नीला"},{"title":"सुंदर बैग"}]}}})
+```
+<!-- response Python-asyncio -->
+``` python
+{'hits': {'hits': [{u'_id': u'2811025403043381494',
+                    u'table': u'products',
+                    u'_score': u'1',
+                    u'_source': {u'query': {u'ql': u'@title बैग'}},
+                    u'_type': u'doc',
+                    u'fields': {u'_percolator_document_slot': [2]}},
+                   {u'_id': u'2811025403043381496',
+                    u'table': u'products',
+                    u'_score': u'1',
+                    u'_source': {u'query': {u'ql': u'@title जूते'}},
+                    u'_type': u'doc',
+                    u'fields': {u'_percolator_document_slot': [1]}}],
+          'total': 2},
+ 'profile': None,
+ 'timed_out': False,
+ 'took': 0}
+
+```
+
+<!-- intro -->
+javascript
+<!-- request javascript -->
+
+```javascript
+res = await searchApi.percolate('products',{"query":{"percolate":{"documents":[{"title":"अच्छे जूते","color":"नीला"},{"title":"सुंदर बैग"}]}}});
+```
+<!-- response javascript -->
+``` javascript
+{
+  "took": 6,
+  "timed_out": false,
+  "hits": {
+    "total": 2,
+    "hits": [
+      {
+        "table": "products",
+        "_type": "doc",
+        "_id": 2811045522851233808,
+        "_score": "1",
+        "_source": {
+          "query": {
+            "ql": "@title बैग"
+          }
+        },
+        "fields": {
+          "_percolator_document_slot": [
+            2
+          ]
+        }
+      },
+      {
+        "table": "products",
+        "_type": "doc",
+        "_id": 2811045522851233810,
+        "_score": "1",
+        "_source": {
+          "query": {
+            "ql": "@title जूते"
+          }
+        },
+        "fields": {
+          "_percolator_document_slot": [
+            1
+          ]
+        }
+      }
+    ]
+  }
+}
+```
+<!-- intro -->
+java
+<!-- request Java -->
+
+```java
+percolateRequest = new PercolateRequest();
+query = new HashMap<String,Object>(){{
+        put("percolate",new HashMap<String,Object >(){{
+            put("documents", new ArrayList<Object>(){{
+                    add(new HashMap<String,Object >(){{
+                        put("title","अच्छा जोड़े के जूते");
+                        put("color","नीला");
+                    }});
+                    add(new HashMap<String,Object >(){{
+                        put("title","सुंदर बैग");
+
+                    }});
+
+                     }});
+        }});
+    }};
+percolateRequest.query(query);
+searchApi.percolate("products",percolateRequest);
+
+```
+<!-- response Java -->
+``` java
+class SearchResponse {
+    took: 0
+    timedOut: false
+    hits: class SearchResponseHits {
+        total: 2
+        maxScore: 1
+        hits: [{_index=products, _type=doc, _id=2811045522851234133, _score=1, _source={query={ql=@title बैग}}, fields={_percolator_document_slot=[2]}}, {_index=products, _type=doc, _id=2811045522851234135, _score=1, _source={query={ql=@title जूते}}, fields={_percolator_document_slot=[1]}}]
+        aggregations: null
+    }
+    profile: null
+}
+
+```
+
+<!-- intro -->
+C#
+<!-- request C# -->
+
+```clike
+var doc1 = new Dictionary<string, Object>();
+doc1.Add("title","अच्छा जोड़े के जूते");
+doc1.Add("color","नीला");
+var doc2 = new Dictionary<string, Object>();
+doc2.Add("title","सुंदर बैग");
+var docs = new List<Object> {doc1, doc2};
+Dictionary<string, Object> percolateDoc = new Dictionary<string, Object> {{ "documents", docs }}; 
+Dictionary<string, Object> query = new Dictionary<string, Object> {{ "percolate", percolateDoc }}; 
+PercolateRequest percolateRequest = new PercolateRequest(query=query);
+searchApi.Percolate("products",percolateRequest);
+```
+<!-- response C# -->
+``` clike
+class SearchResponse {
+    took: 0
+    timedOut: false
+    hits: class SearchResponseHits {
+        total: 2
+        maxScore: 1
+        hits: [{_index=products, _type=doc, _id=2811045522851234133, _score=1, _source={query={ql=@title बैग}}, fields={_percolator_document_slot=[2]}}, {_index=products, _type=doc, _id=2811045522851234135, _score=1, _source={query={ql=@title जूते}}, fields={_percolator_document_slot=[1]}}]
+        aggregations: null
+    }
+    profile: null
+}
+
+```
+
+<!-- intro -->
+Rust
+<!-- request Rust -->
+
+```rust
+let mut percolate_doc_fields1 = HashMap::new();
+percolate_doc_fields1.insert("title".to_string(), "अच्छा जोड़े के जूते");
+percolate_doc_fields1.insert("color".to_string(), "नीला");
+let mut percolate_doc_fields2 = HashMap::new();
+percolate_doc_fields2.insert("title".to_string(), "सुंदर बैग");
+let mut percolate_doc_fields_list: [HashMap; 2] = [percolate_doc_fields1, percolate_doc_fields2];
+let mut percolate_doc = HashMap::new();
+percolate_doc.insert("documents".to_string(), percolate_doc_fields_list); 
+let percolate_query = PercolateRequestQuery::new(serde_json::json!(percolate_doc));
+let percolate_req = PercolateRequest::new(percolate_query); 
+search_api.percolate("products", percolate_req).await;
+```
+<!-- response Rust -->
+``` rust
+class SearchResponse {
+    took: 0
+    timedOut: false
+    hits: class SearchResponseHits {
+        total: 2
+        maxScore: 1
+        hits: [{_index=products, _type=doc, _id=2811045522851234133, _score=1, _source={query={ql=@title बैग}}, fields={_percolator_document_slot=[2]}}, {_index=products, _type=doc, _id=2811045522851234135, _score=1, _source={query={ql=@title जूते}}, fields={_percolator_document_slot=[1]}}]
+        aggregations: null
+    }
+    profile: null
+}
+
+```
+
+<!-- intro -->
+TypeScript
+<!-- request TypeScript -->
+
+```typescript
+docs = [ {title : 'क्या सुंदर बैग'}, {title : 'वास्तव में सुंदर जूते'} ]; 
+res = await searchApi.percolate('test_pq', { query: { percolate: { documents : docs } } } );
+```
+<!-- response TypeScript -->
+``` typescript
+{
+  "took": 0,
+  "timed_out": false,
+  "hits": {
+    "total": 2,
+    "hits": [
+      {
+        "table": "test_pq",
+        "_type": "doc",
+        "_id": 1657852401006149661,
+        "_score": "1",
+        "_source": {
+          "query": {
+            "ql": "@title बैग"
+          }
+        },
+        "fields": {
+          "_percolator_document_slot": [
+            1
+          ]
+        }
+      },
+      {
+        "table": "test_pq",
+        "_type": "doc",
+        "_id": 1657852401006149662,
+        "_score": "1",
+        "_source": {
+          "query": {
+            "ql": "@title जूते"
+          }
+        },
+        "fields": {
+          "_percolator_document_slot": [
+            1
+          ]
+        }
+      }
+    ]
+  }
+}
+```
+
+<!-- intro -->
+Go
+<!-- request Go -->
+
+```go
+doc1 := map[string]interface{} {"title": "क्या सुंदर बैग"}
+doc2 := map[string]interface{} {"title": "वास्तव में सुंदर जूते"}
+query := []interface{} {doc1, doc2}
+percolateRequestQuery := manticoreclient.NewPercolateQuery(query)
+percolateRequest := manticoreclient.NewPercolateRequest(percolateRequestQuery)
+res, _, _ := apiClient.SearchAPI.Percolate(context.Background(), "test_pq").PercolateRequest(*percolateRequest).Execute()
+
+```
+<!-- response Go -->
+``` go
+{
+  "took": 0,
+  "timed_out": false,
+  "hits": {
+    "total": 2,
+    "hits": [
+      {
+        "table": "test_pq",
+        "_type": "doc",
+        "_id": 1657852401006149661,
+        "_score": "1",
+        "_source": {
+          "query": {
+            "ql": "@title बैग"
+          }
+        },
+        "fields": {
+          "_percolator_document_slot": [
+            1
+          ]
+        }
+      },
+      {
+        "table": "test_pq",
+        "_type": "doc",
+        "_id": 1657852401006149662,
+        "_score": "1",
+        "_source": {
+          "query": {
+            "ql": "@title shoes"
+          }
+        },
+        "fields": {
+          "_percolator_document_slot": [
+            1
+          ]
+        }
+      }
+    ]
+  }
+}
+```
+
+<!-- end -->
+
+<!-- example docs_id -->
+#### स्थिर आइडेंटिफायर
+डिफ़ॉल्ट रूप से, मिलान दस्तावेज़ आइडेंटिफायर आपके द्वारा प्रदान की गई सूची में उनके संबंधी नंबर से मेल खाते हैं। हालाँकि, कुछ मामलों में, प्रत्येक दस्तावेज़ पहले से ही अपना स्वयं का आइडेंटिफायर रखता है। इस मामले के लिए, `CALL PQ` के लिए एक विकल्प `'id field name' as docs_id` है।
+
+ध्यान दें कि यदि आइडेंटिफायर दिए गए फ़ील्ड नाम द्वारा नहीं मिलाया जा सकता है, तो PQ नियम परिणामों में नहीं दिखाए जाएंगे।
+
+यह विकल्प केवल `CALL PQ` के लिए SQL के माध्यम से उपलब्ध है।
+
+<!-- intro -->
+##### SQL:
+
+<!-- request SQL -->
+
+```sql
+CALL PQ('products', '[{"id": 123, "title": "nice pair of shoes", "color": "blue"}, {"id": 456, "title": "beautiful bag"}]', 1 as query, 'id' as docs_id, 1 as docs);
+```
+<!-- response SQL -->
+
+```sql
++---------------------+-----------+--------------+------+---------------------------+
+| id                  | documents | query        | tags | filters                   |
++---------------------+-----------+--------------+------+---------------------------+
+| 1657852401006149664 | 456       | @title bag   |      |                           |
+| 1657852401006149666 | 123       | @title shoes |      | color IN ('blue, 'green') |
++---------------------+-----------+--------------+------+---------------------------+
+```
+<!-- end -->
+
+<!-- example invalid_json -->
+##### मेरे पास दोषपूर्ण JSON हो सकते हैं, कृपया उन्हें छोड़ दें
+
+जब अलग-अलग JSON के साथ CALL PQ का उपयोग करते समय, आप इनपुट में किसी भी दोषपूर्ण JSON को छोड़ने के लिए विकल्प 1 as skip_bad_json का उपयोग कर सकते हैं। नीचे दिए गए उदाहरण में, दूसरा क्वेरी एक दोषपूर्ण JSON के कारण विफल हो जाता है, लेकिन तीसरा क्वेरी 1 as skip_bad_json का उपयोग करके त्रुटि से बचता है। ध्यान रखें कि जब HTTP के माध्यम से JSON क्वेरी भेजते समय यह विकल्प उपलब्ध नहीं है, क्योंकि उस मामले में संपूर्ण JSON क्वेरी मान्य होनी चाहिए।
+
+<!-- intro -->
+SQL:
+<!-- request SQL -->
+
+```sql
+CALL PQ('products', ('{"title": "nice pair of shoes", "color": "blue"}', '{"title": "beautiful bag"}'));
+
+CALL PQ('products', ('{"title": "nice pair of shoes", "color": "blue"}', '{"title": "beautiful bag}'));
+
+CALL PQ('products', ('{"title": "nice pair of shoes", "color": "blue"}', '{"title": "beautiful bag}'), 1 as skip_bad_json);
+```
+<!-- response SQL -->
+
+```sql
++---------------------+
+| id                  |
++---------------------+
+| 1657852401006149635 |
+| 1657852401006149637 |
++---------------------+
+
+ERROR 1064 (42000): Strings में दोषपूर्ण JSON ऑब्जेक्ट: 2
+
++---------------------+
+| id                  |
++---------------------+
+| 1657852401006149635 |
++---------------------+
+```
+
+<!-- end -->
+
+##### मैं एक पर्कोलेट क्वेरी का उच्च प्रदर्शन चाहता हूँ
+पर्कोलेट क्वेरी उच्च थ्रूपुट और बड़े डेटा मात्रा के लिए डिज़ाइन की गई हैं। कम विलंबता और अधिक थ्रूपुट के लिए प्रदर्शन अनुकूलित करने के लिए, निम्नलिखित पर विचार करें।
+
+पर्कोलेट टेबल के लिए वितरण के दो मोड हैं और एक पर्कोलेट क्वेरी इसके खिलाफ कैसे काम कर सकती है:
+
+* **Sparse (डिफ़ॉल्ट)।** आदर्श: कई दस्तावेज़, दर्पण PQ तालिकाएँ। जब आपका दस्तावेज़ सेट बड़ा हो लेकिन PQ तालिका में संग्रहीत क्वेरियों का सेट छोटा हो, तो स्पार्स मोड फायदेमंद होता है। इस मोड में, आप जो दस्तावेज़ भेजते हैं, उन्हें एजेंटों की संख्या के बीच विभाजित किया जाएगा, इसलिए प्रत्येक नोड केवल आपके अनुरोध से दस्तावेज़ों का एक हिस्सा संसाधित करता है। मैन्टिकोर आपके दस्तावेज़ सेट को विभाजित करता है और दर्पणों के बीच टुकड़े वितरित करता है। एक बार जब एजेंट क्वेरियों को संसाधित कर लेते हैं, तो मैन्टिकोर परिणाम एकत्र करता है और मर्ज करता है, अंतिम क्वेरी सेट को वापस करता है जैसे कि यह एक ही तालिका से आया हो। प्रक्रिया में मदद के लिए [प्रतिनिधित्व](../References.md#Replication) का उपयोग करें।
+* **Sharded.** आदर्श: कई PQ नियम, नियम PQ तालिकाओं के बीच विभाजित। इस मोड में, संपूर्ण दस्तावेज़ सेट को वितरित PQ तालिका की सभी तालिकाओं को पहले मौजूद दस्तावेज़ों को विभाजित किए बिना ब्रॉडकास्ट किया जाता है। यह तब फायदेमंद है जब अपेक्षाकृत छोटे दस्तावेज़ों के सेट को आगे बढ़ाना है, लेकिन संग्रहीत क्वेरियों की संख्या बड़ी है। इस मामले में, यह अधिक उपयुक्त है कि प्रत्येक नोड पर केवल PQ नियम का एक हिस्सा संग्रहीत किया जाए और फिर समान दस्तावेज़ों के सेट को विभिन्न PQ नियमों के खिलाफ संसाधित करने वाले नोड्स से प्राप्त परिणामों को मर्ज करें। इस मोड को स्पष्ट रूप से सेट करना होगा, क्योंकि यह नेटवर्क में.payload में वृद्धि का संकेत देता है और विभिन्न PQs के साथ तालिकाओं की अपेक्षा करता है, जिसे [प्रतिनिधित्व](../References.md#Replication) स्वचालित रूप से नहीं कर सकता।
+
+मान लें कि आपके पास तालिका `pq_d2` परिभाषित है:
+
+``` ini
+table pq_d2
+{
+    type = distributed
+    agent = 127.0.0.1:6712:pq
+    agent = 127.0.0.1:6712:ptitle
+}
+```
+
+<!-- example distributed pq modes 1 -->
+'pq' और 'ptitle' में प्रत्येक:
+
+
+<!-- intro -->
+##### SQL:
+
+<!-- request SQL -->
+
+```sql
+SELECT * FROM pq;
+```
+
+<!-- response sql -->
+
+```sql
++------+-------------+------+-------------------+
+| id   | query       | tags | filters           |
++------+-------------+------+-------------------+
+|    1 | filter test |      | gid>=10           |
+|    2 | angry       |      | gid>=10 OR gid<=3 |
++------+-------------+------+-------------------+
+2 rows in set (0.01 sec)
+```
+
+<!-- request JSON -->
+
+```json
+POST /pq/pq/_search
+```
+
+<!-- response JSON -->
+
+```json
+{
+    "took":0,
+    "timed_out":false,
+    "hits":{
+        "total":2,
+        "hits":[
+            {
+                "_id": 1,
+                "_score":1,
+                "_source":{
+                    "query":{ "ql":"filter test" },
+                    "tags":"",
+                    "filters":"gid>=10"
+                }
+            },
+            {
+                "_id": 2,
+                "_score":1,
+                "_source":{
+                    "query":{"ql":"गुस्से में"},
+                    "tags":"",
+                    "filters":"gid>=10 OR gid<=3"
+                }
+            }            
+        ]
+    }
+}
+```
+
+<!-- request PHP -->
+
+```php
+$params = [
+    'table' => 'pq',
+    'body' => [
+    ]
+];
+$response = $client->pq()->search($params);
+```
+
+<!-- response PHP -->
+
+```php
+(
+    [took] => 0
+    [timed_out] =>
+    [hits] =>
+        (
+            [total] => 2
+            [hits] =>
+                (
+                    [0] =>
+                        (
+                            [_id] => 1
+                            [_score] => 1
+                            [_source] =>
+                                (
+                                    [query] =>
+                                        (
+                                            [ql] => फ़िल्टर परीक्षण
+                                        )
+                                    [tags] =>
+                                    [filters] => gid>=10
+                                )
+                        ),
+                    [1] =>
+                        (
+                            [_id] => 1
+                            [_score] => 1
+                            [_source] =>
+                                (
+                                    [query] =>
+                                        (
+                                            [ql] => गुस्से में
+                                        )
+                                    [tags] =>
+                                    [filters] => gid>=10 OR gid<=3
+                                )
+                        )
+                )
+        )
+)
+```
+<!-- intro -->
+Python
+<!-- request Python -->
+
+```python
+searchApi.search({"table":"pq","query":{"match_all":{}}})
+```
+<!-- response Python -->
+``` python
+{'hits': {'hits': [{u'_id': u'2811025403043381501',
+                    u'_score': 1,
+                    u'_source': {u'filters': u"gid>=10",
+                                 u'query': u'फ़िल्टर परीक्षण',
+                                 u'tags': u''}},
+                   {u'_id': u'2811025403043381502',
+                    u'_score': 1,
+                    u'_source': {u'filters': u"gid>=10 OR gid<=3",
+                                 u'query': u'गुस्से में',
+                                 u'tags': u''}}],
+          'total': 2},
+ 'profile': None,
+ 'timed_out': False,
+ 'took': 0}
+```
+
+<!-- intro -->
+Python-asyncio
+<!-- request Python-asyncio -->
+
+```python
+await searchApi.search({"table":"pq","query":{"match_all":{}}})
+```
+<!-- response Python-asyncio -->
+``` python
+{'hits': {'hits': [{u'_id': u'2811025403043381501',
+                    u'_score': 1,
+                    u'_source': {u'filters': u"gid>=10",
+                                 u'query': u'फ़िल्टर परीक्षण',
+                                 u'tags': u''}},
+                   {u'_id': u'2811025403043381502',
+                    u'_score': 1,
+                    u'_source': {u'filters': u"gid>=10 OR gid<=3",
+                                 u'query': u'गुस्से में',
+                                 u'tags': u''}}],
+          'total': 2},
+ 'profile': None,
+ 'timed_out': False,
+ 'took': 0}
+```
+
+<!-- intro -->
+javascript
+<!-- request javascript -->
+
+```javascript
+res = await searchApi.search({"table":"pq","query":{"match_all":{}}});
+```
+<!-- response javascript -->
+``` javascript
+{'hits': {'hits': [{u'_id': u'2811025403043381501',
+                    u'_score': 1,
+                    u'_source': {u'filters': u"gid>=10",
+                                 u'query': u'फ़िल्टर परीक्षण',
+                                 u'tags': u''}},
+                   {u'_id': u'2811025403043381502',
+                    u'_score': 1,
+                    u'_source': {u'filters': u"gid>=10 OR gid<=3",
+                                 u'query': u'गुस्से में',
+                                 u'tags': u''}}],
+          'total': 2},
+ 'profile': None,
+ 'timed_out': False,
+ 'took': 0}
+```
+<!-- intro -->
+javascript
+<!-- request javascript -->
+
+```javascript
+res = await searchApi.search({"table":"pq","query":{"match_all":{}}});
+```
+<!-- response javascript -->
+``` javascript
+{"hits": {"hits": [{"_id": 2811025403043381501,
+                    "_score": 1,
+                    "_source": {"filters": u"gid>=10",
+                                 "query": "फ़िल्टर परीक्षण",
+                                 "tags": ""}},
+                   {"_id": 2811025403043381502,
+                    "_score": 1,
+                    "_source": {"filters": u"gid>=10 OR gid<=3",
+                                 "query": "गुस्से में",
+                                 "tags": ""}}],
+          "total": 2},
+  "timed_out": false,
+ "took": 0}
+```
+
+<!-- intro -->
+java
+<!-- request Java -->
+
+```java
+Map<String,Object> query = new HashMap<String,Object>();
+query.put("match_all",null);
+SearchRequest searchRequest = new SearchRequest();
+searchRequest.setIndex("pq");
+searchRequest.setQuery(query);
+SearchResponse searchResponse = searchApi.search(searchRequest);
+```
+<!-- response Java -->
+``` java
+
+class SearchResponse {
+    took: 0
+    timedOut: false
+    hits: class SearchResponseHits {
+        total: 2
+        maxScore: null
+        hits: [{_id=2811045522851233962, _score=1, _source={filters=gid>=10, query=फ़िल्टर परीक्षण, tags=}}, {_id=2811045522851233951, _score=1, _source={filters=gid>=10 OR gid<=3, query=गुस्से में,tags=}}]
+        aggregations: null
+    }
+    profile: null
+}
+
+```
+
+<!-- intro -->
+C#
+<!-- request C# -->
+
+```clike
+object query =  new { match_all=null };
+SearchRequest खोजRequest = नया SearchRequest("pq", query);
+SearchResponse खोजResponse = searchApi.Search(खोजRequest);
+```
+<!-- response C# -->
+``` clike
+
+class SearchResponse {
+    लिया: 0
+    समयसमाप्त: झूठा
+    हिट्स: class SearchResponseHits {
+        कुल: 2
+        अधिकतमस्कोर: शून्य
+        हिट्स: [{_id=2811045522851233962, _score=1, _source={फिल्टर=gid>=10, query=filter test, tags=}}, {_id=2811045522851233951, _score=1, _source={फिल्टर=gid>=10 OR gid<=3, query=angry,tags=}}]
+        संयोजन: शून्य
+    }
+    प्रोफ़ाइल: शून्य
+}
+
+```
+
+<!-- intro -->
+Rust
+<!-- request Rust -->
+
+```rust
+let query = SearchQuery::new();
+let search_req = SearchRequest {
+    table: "pq".to_string(),
+    query: Some(Box::new(query)),
+    ..Default::default(),
+};
+let search_res = search_api.search(search_req).await;
+```
+<!-- response Rust -->
+``` rust
+
+class SearchResponse {
+    लिया: 0
+    समयसमाप्त: झूठा
+    हिट्स: class SearchResponseHits {
+        कुल: 2
+        अधिकतमस्कोर: शून्य
+        हिट्स: [{_id=2811045522851233962, _score=1, _source={फिल्टर=gid>=10, query=filter test, tags=}}, {_id=2811045522851233951, _score=1, _source={फिल्टर=gid>=10 OR gid<=3, query=angry,tags=}}]
+        संयोजन: शून्य
+    }
+    प्रोफ़ाइल: शून्य
+}
+
+```
+
+<!-- intro -->
+TypeScript
+<!-- request TypeScript -->
+
+```typescript
+res = await searchApi.search({"table":"test_pq","query":{"match_all":{}}});
+```
+<!-- response TypeScript -->
+``` typescript
+{
+
+'hits':
+
+{
+
+'hits': 
+
+[{
+
+'_id': '2811025403043381501',
+            '_score': 1,
+            '_source': 
+            {
+            
+'फिल्टर': "gid>=10",
+                'query': 'filter test',
+                'tags': ''
+            }
+        },
+        {
+         
+'_id': 
+         
+'2811025403043381502',
+            '_score': 1,
+            '_source': 
+            {
+            
+'फिल्टर': "gid>=10 OR gid<=3",
+                 'query': 'angry',
+                 'tags': ''
+            }
+        }],
+    
+'total': 2
+
+},
+
+'प्रोफ़ाइल': कोई नहीं,
+
+'समय समाप्त': झूठा,
+
+'लिया': 0
+}
+```
+
+<!-- intro -->
+Go
+<!-- request Go -->
+
+```go
+query := map[string]interface{} {}
+percolateRequestQuery := manticoreclient.NewPercolateRequestQuery(query)
+percolateRequest := manticoreclient.NewPercolateRequest(percolateRequestQuery) 
+res, _, _ := apiClient.SearchAPI.Percolate(context.Background(), "test_pq").PercolateRequest(*percolateRequest).Execute()
+```
+<!-- response Go -->
+``` go
+{
+
+'hits':
+
+{
+
+'hits': 
+
+[{
+
+'_id': '2811025403043381501',
+            '_score': 1,
+            '_source': 
+            {
+            
+'फिल्टर': "gid>=10",
+                'query': 'filter test',
+                'tags': ''
+            }
+        },
+        {
+         
+'_id': 
+         
+'2811025403043381502',
+            '_score': 1,
+            '_source': 
+            {
+            
+'फिल्टर': "gid>=10 OR gid<=3",
+                 'query': 'angry',
+                 'tags': ''
+            }
+        }],
+    
+'total': 2
+
+},
+
+'प्रोफ़ाइल': कोई नहीं,
+
+'समय समाप्त': झूठा,
+
+'लिया': 0
+}
+```
+
+<!-- end -->
+
+
+<!-- example call_pq_example -->
+
+और आप वितरित तालिका पर `CALL PQ` को कुछ दस्तावेजों के साथ निष्पादित करते हैं।
+
+
+<!-- intro -->
+##### SQL:
+
+<!-- request SQL -->
+
+```sql
+CALL PQ ('pq_d2', ('{"title":"angry test", "gid":3 }', '{"title":"filter test doc2", "gid":13}'), 1 AS docs);
+```
+
+<!-- response sql -->
+
+```sql
++------+-----------+
+| id   | दस्तावेज |
++------+-----------+
+|    1 | 2         |
+|    2 | 1         |
++------+-----------+
+```
+
+<!-- request JSON -->
+
+```json
+POST /pq/pq/_search -d '
+"query":
+{
+        "percolate":
+        {
+                "दस्तावेज़" : [
+                    { "title": "angry test", "gid": 3 },
+                    { "title": "filter test doc2", "gid": 13 }
+                ]
+        }
+}
+'
+```
+
+<!-- response JSON -->
+
+```json
+{
+    "लिया":0,
+    "समय समाप्त":झूठा,
+    "हिट्स":{
+    "कुल":2,"हिट्स":[
+        {
+            "_id": 2,
+            "_score":1,
+            "_source":{
+                "query":{"title":"angry"},
+                "tags":"",
+                "फिल्टर":"gid>=10 OR gid<=3"
+            }
+        }
+        {
+            "_id": 1,
+            "_score":1,
+            "_source":{
+                "query":{"ql":"filter test"},
+                "tags":"",
+                "फिल्टर":"gid>=10"
+            }
+        },
+        ]
+    }
+}
+```
+
+<!-- request PHP -->
+
+```php
+$params = [
+    'table' => 'pq',
+    'body' => [
+        'query' => [
+            'percolate' => [
+                'दस्तावेज़' => [
+                    [
+                        'title'=>'angry test',
+                        'gid' => 3
+                    ],
+                    [
+                        'title'=>'filter test doc2',
+                        'gid' => 13
+                    ],
+                ]
+            ]
+        ]
+    ]
+];
+$response = $client->pq()->search($params);
+```
+
+<!-- response PHP -->
+
+```php
+(
+    [लिया] => 0
+    [समय समाप्त] =>
+    [हिट्स] =>
+        (
+            [कुल] => 2
+            [हिट्स] =>
+                (
+                    [0] =>
+                        (
+                            [_index] => pq  
+                            [_type] => doc                            
+                            [_id] => 2
+                            [_score] => 1
+                            [_source] =>
+                                (
+                                    [query] =>
+                                        (
+                                            [ql] => गुस्सा
+                                        )
+                                    [tags] =>
+                                    [filters] => gid>=10 OR gid<=3
+                                ),
+                           [fields] =>
+                                (
+                                    [_percolator_document_slot] =>
+                                        (
+                                            [0] => 1
+                                        )
+
+                                )
+                        ),
+                    [1] =>
+                        (
+                            [_index] => pq                            
+                            [_id] => 1
+                            [_score] => 1
+                            [_source] =>
+                                (
+                                    [query] =>
+                                        (
+                                            [ql] => फ़िल्टर परीक्षण
+                                        )
+                                    [tags] =>
+                                    [filters] => gid>=10
+                                )
+                           [fields] =>
+                                (
+                                    [_percolator_document_slot] =>
+                                        (
+                                            [0] => 0
+                                        )
+
+                                )
+                        )
+                )
+        )
+)
+```
+<!-- intro -->
+पायथन
+<!-- request Python -->
+
+```python
+searchApi.percolate('pq',{"percolate":{"documents":[{"title":"गुस्सा परीक्षण","gid":3},{"title":"फ़िल्टर परीक्षण doc2","gid":13}]}})
+```
+<!-- response Python -->
+``` python
+{'hits': {'hits': [{u'_id': u'2811025403043381480',
+                    u'table': u'pq',
+                    u'_score': u'1',
+                    u'_source': {u'query': {u'ql': u'गुस्सा'},u'tags':u'',u'filters':u"gid>=10 OR gid<=3"},
+                    u'_type': u'doc',
+                    u'fields': {u'_percolator_document_slot': [1]}},
+                    {u'_id': u'2811025403043381501',
+                    u'table': u'pq',
+                    u'_score': u'1',
+                    u'_source': {u'query': {u'ql': u'फ़िल्टर परीक्षण'},u'tags':u'',u'filters':u"gid>=10"},
+                    u'_type': u'doc',
+                    u'fields': {u'_percolator_document_slot': [1]}}],
+          'total': 2},
+ 'profile': None,
+ 'timed_out': False,
+ 'took': 0}
+```
+
+<!-- intro -->
+पायथन-एन्साइक्लियो
+<!-- request Python-asyncio -->
+
+```python
+await searchApi.percolate('pq',{"percolate":{"documents":[{"title":"गुस्सा परीक्षण","gid":3},{"title":"फ़िल्टर परीक्षण doc2","gid":13}]}})
+```
+<!-- response Python-asyncio -->
+``` python
+{'hits': {'hits': [{u'_id': u'2811025403043381480',
+                    u'table': u'pq',
+                    u'_score': u'1',
+                    u'_source': {u'query': {u'ql': u'गुस्सा'},u'tags':u'',u'filters':u"gid>=10 OR gid<=3"},
+                    u'_type': u'doc',
+                    u'fields': {u'_percolator_document_slot': [1]}},
+                    {u'_id': u'2811025403043381501',
+                    u'table': u'pq',
+                    u'_score': u'1',
+                    u'_source': {u'query': {u'ql': u'फ़िल्टर परीक्षण'},u'tags':u'',u'filters':u"gid>=10"},
+                    u'_type': u'doc',
+                    u'fields': {u'_percolator_document_slot': [1]}}],
+          'total': 2},
+ 'profile': None,
+ 'timed_out': False,
+ 'took': 0}
+```
+
+<!-- intro -->
+जावास्क्रिप्ट
+<!-- request javascript -->
+
+```javascript
+res = await searchApi.percolate('pq',{"percolate":{"documents":[{"title":"गुस्सा परीक्षण","gid":3},{"title":"फ़िल्टर परीक्षण doc2","gid":13}]}});
+```
+<!-- response javascript -->
+``` javascript
+{'hits': {'hits': [{u'_id': u'2811025403043381480',
+                    u'table': u'pq',
+                    u'_score': u'1',
+                    u'_source': {u'query': {u'ql': u'गुस्सा'},u'tags':u'',u'filters':u"gid>=10 OR gid<=3"},
+                    u'_type': u'doc',
+                    u'fields': {u'_percolator_document_slot': [1]}},
+                    {u'_id': u'2811025403043381501',
+                    u'table': u'pq',
+                    u'_score': u'1',
+                    u'_source': {u'query': {u'ql': u'फ़िल्टर परीक्षण'},u'tags':u'',u'filters':u"gid>=10"},
+                    u'_type': u'doc',
+                    u'fields': {u'_percolator_document_slot': [1]}}],
+          'total': 2},
+ 'profile': None,
+ 'timed_out': False,
+ 'took': 0}
+```
+<!-- intro -->
+जावा
+<!-- request Java -->
+
+```java
+percolateRequest = new PercolateRequest();
+query = new HashMap<String,Object>(){{
+    put("percolate",new HashMap<String,Object >(){{
+        put("documents", new ArrayList<Object>(){{
+            add(new HashMap<String,Object >(){{
+                put("title","गुस्सा परीक्षण");
+                put("gid",3);
+            }});
+            add(new HashMap<String,Object >(){{
+                put("title","फ़िल्टर परीक्षण doc2");
+                put("gid",13);
+            }});
+        }});
+    }});
+}};
+percolateRequest.query(query);
+searchApi.percolate("pq",percolateRequest);
+```
+<!-- response java -->
+``` java
+class SearchResponse {
+    took: 10
+    timedOut: false
+    hits: class SearchResponseHits {
+        total: 2
+        maxScore: 1
+        hits: [{_index=pq, _type=doc, _id=2811045522851234165, _score=1, _source={query={ql=@title angry}}, fields={_percolator_document_slot=[1]}}, {_index=pq, _type=doc, _id=2811045522851234166, _score=1, _source={query={ql=@title filter test doc2}}, fields={_percolator_document_slot=[2]}}]
+        aggregations: null
+    }
+    profile: null
+}
+
+```
+
+<!-- intro -->
+C#
+<!-- request C# -->
+
+```clike
+var doc1 = new Dictionary<string, Object>();
+doc1.Add("title","angry test");
+doc1.Add("gid",3);
+var doc2 = new Dictionary<string, Object>();
+doc2.Add("title","filter test doc2");
+doc2.Add("gid",13);
+var docs = new List<Object> {doc1, doc2};
+Dictionary<string, Object> percolateDoc = new Dictionary<string, Object> {{ "documents", docs }}; 
+Dictionary<string, Object> query = new Dictionary<string, Object> {{ "percolate", percolateDoc }}; 
+PercolateRequest percolateRequest = new PercolateRequest(query=query);
+searchApi.Percolate("pq",percolateRequest);
+```
+<!-- response C# -->
+``` clike
+class SearchResponse {
+    took: 10
+    timedOut: false
+    hits: class SearchResponseHits {
+        total: 2
+        maxScore: 1
+        hits: [{_index=pq, _type=doc, _id=2811045522851234165, _score=1, _source={query={ql=@title angry}}, fields={_percolator_document_slot=[1]}}, {_index=pq, _type=doc, _id=2811045522851234166, _score=1, _source={query={ql=@title filter test doc2}}, fields={_percolator_document_slot=[2]}}]
+        aggregations: null
+    }
+    profile: null
+}
+
+```
+
+<!-- intro -->
+Rust
+<!-- request Rust -->
+
+```rust
+let mut percolate_doc_fields1 = HashMap::new();
+percolate_doc_fields1.insert("title".to_string(), "angry test");
+percolate_doc_fields1.insert("gid".to_string(), 3);
+let mut percolate_doc_fields2 = HashMap::new();
+percolate_doc_fields2.insert("title".to_string(), "filter test doc2");
+percolate_doc_fields2.insert("gid".to_string(), 13);
+let mut percolate_doc_fields_list: [HashMap; 2] = [percolate_doc_fields1, percolate_doc_fields2];
+let mut percolate_doc = HashMap::new();
+percolate_doc.insert("documents".to_string(), percolate_doc_fields_list); 
+let percolate_query = PercolateRequestQuery::new(serde_json::json!(percolate_doc));
+let percolate_req = PercolateRequest::new(percolate_query); 
+search_api.percolate("pq", percolate_req).await;
+```
+<!-- response Rust -->
+``` rust
+class SearchResponse {
+    took: 10
+    timedOut: false
+    hits: class SearchResponseHits {
+        total: 2
+        maxScore: 1
+        hits: [{_index=pq, _type=doc, _id=2811045522851234165, _score=1, _source={query={ql=@title angry}}, fields={_percolator_document_slot=[1]}}, {_index=pq, _type=doc, _id=2811045522851234166, _score=1, _source={query={ql=@title filter test doc2}}, fields={_percolator_document_slot=[2]}}]
+        aggregations: null
+    }
+    profile: null
+}
+
+```
+
+<!-- intro -->
+TypeScript
+<!-- request TypeScript -->
+
+```typescript
+docs = [ {title : 'What a nice bag'}, {title : 'Really nice shoes'} ]; 
+res = await searchApi.percolate('test_pq', { query: { percolate: { documents : docs } } } );
+```
+<!-- response TypeScript -->
+``` typescript
+{
+  "took": 0,
+  "timed_out": false,
+  "hits": {
+    "total": 2,
+    "hits": [
+      {
+        "table": "test_pq",
+        "_type": "doc",
+        "_id": 1657852401006149661,
+        "_score": "1",
+        "_source": {
+          "query": {
+            "ql": "@title bag"
+          }
+        },
+        "fields": {
+          "_percolator_document_slot": [
+            1
+          ]
+        }
+      },
+      {
+        "table": "test_pq",
+        "_type": "doc",
+        "_id": 1657852401006149662,
+        "_score": "1",
+        "_source": {
+          "query": {
+            "ql": "@title shoes"
+          }
+        },
+        "fields": {
+          "_percolator_document_slot": [
+            1
+          ]
+        }
+      }
+    ]
+  }
+}
+```
+
+<!-- intro -->
+Go
+<!-- request Go -->
+
+```go
+doc1 := map[string]interface{} {"title": "What a nice bag"}
+doc2 := map[string]interface{} {"title": "Really nice shoes"}
+query := []interface{} {doc1, doc2}
+percolateRequestQuery := manticoreclient.NewPercolateQuery(query)
+percolateRequest := manticoreclient.NewPercolateRequest(percolateRequestQuery)
+res, _, _ := apiClient.SearchAPI.Percolate(context.Background(), "test_pq").PercolateRequest(*percolateRequest).Execute()
+
+```
+<!-- response Go -->
+``` go
+{
+  "took": 0,
+  "timed_out": false,
+  "hits": {
+    "total": 2,
+    "hits": [
+      {
+        "table": "test_pq",
+        "_type": "doc",
+        "_id": 1657852401006149661,
+        "_score": "1",
+        "_source": {
+          "query": {
+            "ql": "@title bag"
+          }
+        },
+        "fields": {
+          "_percolator_document_slot": [
+            1
+          ]
+        }
+      },
+      {
+        "table": "test_pq",
+        "_type": "doc",
+        "_id": 1657852401006149662,
+        "_score": "1",
+        "_source": {
+          "query": {
+            "ql": "@title shoes"
+          }
+        },
+        "fields": {
+          "_percolator_document_slot": [
+            1
+          ]
+        }
+      }
+    ]
+  }
+}
+```
+
+<!-- end -->
+
+पिछले उदाहरण में, हमने डिफ़ॉल्ट **sparse** मोड का उपयोग किया। **sharded** मोड को प्रदर्शित करने के लिए, आइए 2 स्थानीय PQ तालिकाओं से बने एक वितरण PQ तालिका का निर्माण करें और "products1" में 2 दस्तावेज़ और "products2" में 1 दस्तावेज़ जोड़ें:
+```sql
+create table products1(title text, color string) type='pq';
+create table products2(title text, color string) type='pq';
+create table products_distributed type='distributed' local='products1' local='products2';
+
+INSERT INTO products1(query) values('@title bag');
+INSERT INTO products1(query,filters) values('@title shoes', 'color='red'');
+INSERT INTO products2(query,filters) values('@title shoes', 'color in ('blue', 'green')');
+```
+
+<!-- example sharded -->
+अब, यदि आप `CALL PQ` में `'sharded' as mode` जोड़ते हैं, तो यह दस्तावेज़ों को सभी एजेंट की तालिकाओं में भेज देगा (इस मामले में, केवल स्थानीय तालिकाएँ, लेकिन इन्हें बाहरी हार्डवेयर का उपयोग करने के लिए दूरस्थ हो सकता है)। यह मोड JSON इंटरफ़ेस के माध्यम से उपलब्ध नहीं है।
+
+<!-- intro -->
+SQL:
+<!-- request SQL -->
+
+```sql
+CALL PQ('products_distributed', ('{"title": "nice pair of shoes", "color": "blue"}', '{"title": "beautiful bag"}'), 'sharded' as mode, 1 as query);
+```
+<!-- response SQL -->
+
+```sql
++---------------------+--------------+------+---------------------------+
+| id                  | query        | tags | filters                   |
++---------------------+--------------+------+---------------------------+
+| 1657852401006149639 | @title bag   |      |                           |
+| 1657852401006149643 | @title shoes |      | color IN ('blue, 'green') |
++---------------------+--------------+------+---------------------------+
+```
+
+<!-- end -->
+
+ध्यान दें कि एजेंट के कॉन्फ़िगरेशन में आयन कक्षाएं (जब एक `agent` पंक्ति के लिए कई होस्ट असाइन किए जाते हैं, तो `|` द्वारा अलग किया जाता है) का `CALL PQ` क्वेरी मोड से कोई लेना-देना नहीं है। प्रत्येक `agent` हमेशा **एक** नोड का प्रतिनिधित्व करता है, चाहे उस एजेंट के लिए निर्दिष्ट HA दर्पणों की संख्या कितनी भी हो।
+
+<!-- example verbose -->
+##### मैं प्रदर्शन के बारे में और कैसे जान सकता हूँ?
+कुछ मामलों में, आप पर्कोलेट क्वेरी के प्रदर्शन के बारे में अधिक विवरण प्राप्त करना चाहते हैं। इस उद्देश्य के लिए, `1 as verbose` विकल्प है, जो केवल SQL के माध्यम से उपलब्ध है और आपको अधिक प्रदर्शन मैट्रिक्स सहेजने की अनुमति देता है। आप उन्हें `CALL PQ` के बाद चलाने वाले `SHOW META` क्वेरी का उपयोग करके देख सकते हैं। अधिक जानकारी के लिए देखें [SHOW META](../Node_info_and_management/SHOW_META.md)।
+
+<!-- intro -->
+1 as verbose:
+<!-- request 1 as verbose -->
+
+```sql
+CALL PQ('products', ('{"title": "nice pair of shoes", "color": "blue"}', '{"title": "beautiful bag"}'), 1 as verbose); show meta;
+```
+<!-- response 1 as verbose -->
+
+```sql
 # पर्कोलेट क्वेरी
 
 पर्कोलेट क्वेरीज को स्थायी क्वेरीज, संभावित खोज, दस्तावेज़ रूटिंग, उल्टे खोज, और विपरीत खोज के नाम से भी जाना जाता है.

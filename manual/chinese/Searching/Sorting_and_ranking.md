@@ -1,5 +1,1146 @@
 # 排序和排名
 
+查询结果可以通过全文排名权重、一个或多个属性或表达式进行排序。
+
+**全文** 查询默认返回按相关性排序的匹配结果。如果没有指定，结果将按相关性排序，这等同于 SQL 格式中的 `ORDER BY weight() DESC`。
+
+**非全文** 查询默认不执行任何排序。
+
+## 高级排序
+
+当您通过添加 SQL 格式的 `ORDER BY` 子句或通过 HTTP JSON 使用 `sort` 选项显式提供排序规则时，扩展模式会自动启用。
+
+### 通过 SQL 排序
+
+一般语法：
+```sql
+SELECT ... ORDER BY
+{attribute_name | expr_alias | weight() | random() } [ASC | DESC],
+...
+{attribute_name | expr_alias | weight() | random() } [ASC | DESC]
+```
+
+<!-- example alias -->
+
+在排序子句中，您可以使用任意组合的最多 5 列，每列后跟 `asc` 或 `desc`。排序子句的参数不允许使用函数和表达式，除了 `weight()` 和 `random()` 函数（后者只能通过 SQL 以 `ORDER BY random()` 形式使用）。但是，您可以在 SELECT 列表中使用任意表达式并按其别名排序。
+
+<!-- request SQL -->
+```sql
+select *, a + b alias from test order by alias desc;
+```
+
+<!-- response SQL -->
+```
++------+------+------+----------+-------+
+| id   | a    | b    | f        | alias |
++------+------+------+----------+-------+
+|    1 |    2 |    3 | document |     5 |
++------+------+------+----------+-------+
+```
+
+<!-- end -->
+
+## 通过 JSON 排序
+
+<!-- example sorting 1 -->
+`"sort"` 指定一个数组，其中每个元素可以是属性名称或 `_score`，如果您想按匹配权重排序。在这种情况下，属性的排序顺序默认为升序，`_score` 的排序默认为降序。
+
+<!-- intro -->
+
+<!-- request JSON -->
+
+```json
+{
+  "table":"test",
+  "query":
+  {
+    "match": { "title": "Test document" }
+  },
+  "sort": [ "_score", "id" ],
+  "_source": "title",
+  "limit": 3
+}
+```
+
+<!-- response JSON -->
+
+``` json
+    {
+
+"took": 0,
+
+"timed_out": false,
+
+"hits": {
+
+  "total": 5,
+
+  "total_relation": "eq",
+
+  "hits": [
+
+    {
+
+      "_id": 5406864699109146628,
+
+      "_score": 2319,
+
+      "_source": {
+
+        "title": "Test document 1"
+
+      }
+
+    },
+
+    {
+
+      "_id": 5406864699109146629,
+
+      "_score": 2319,
+
+      "_source": {
+
+        "title": "Test document 2"
+
+      }
+
+    },
+
+    {
+
+      "_id": 5406864699109146630,
+
+      "_score": 2319,
+
+      "_source": {
+
+        "title": "Test document 3"
+
+      }
+
+    }
+
+  ]
+
+}
+
+}
+```    
+
+<!-- intro -->
+##### PHP:
+
+<!-- request PHP -->
+
+```php
+$search->setIndex("test")->match('Test document')->sort('_score')->sort('id');
+```
+
+<!-- intro -->
+
+##### Python:
+
+<!-- request Python -->
+``` python
+search_request.index = 'test'
+search_request.fulltext_filter = manticoresearch.model.QueryFilter('Test document')
+search_request.sort = ['_score', 'id']
+```
+
+<!-- intro -->
+
+##### Python-asyncio:
+
+<!-- request Python-asyncio -->
+``` python
+search_request.index = 'test'
+search_request.fulltext_filter = manticoresearch.model.QueryFilter('Test document')
+search_request.sort = ['_score', 'id']
+```
+
+<!-- intro -->
+
+##### Javascript:
+
+<!-- request javascript -->
+``` javascript
+searchRequest.index = "test";
+searchRequest.fulltext_filter = new Manticoresearch.QueryFilter('Test document');
+searchRequest.sort = ['_score', 'id'];
+```
+
+<!-- intro -->
+
+##### java:
+
+<!-- request Java -->
+``` java
+searchRequest.setIndex("test");
+QueryFilter queryFilter = new QueryFilter();
+queryFilter.setQueryString("Test document");
+searchRequest.setFulltextFilter(queryFilter);
+List<Object> sort = new ArrayList<Object>( Arrays.asList("_score", "id") );
+searchRequest.setSort(sort);
+
+```
+
+<!-- intro -->
+
+##### C#:
+
+<!-- request C# -->
+``` clike
+var searchRequest = new SearchRequest("test");
+searchRequest.FulltextFilter = new QueryFilter("Test document");
+searchRequest.Sort = new List<Object> {"_score", "id"};
+
+```
+
+<!-- intro -->
+
+##### Rust:
+
+<!-- request Rust -->
+``` rust
+let query = SearchQuery {
+    query_string: Some(serde_json::json!("Test document").into()),
+    ..Default::default(),
+};
+let sort: [String; 2] = ["_score".to_string(), "id".to_string()];
+let search_req = SearchRequest {
+    table: "test".to_string(),
+    query: Some(Box::new(query)),
+    sort: Some(serde_json::json!(sort)),
+    ..Default::default(),
+};
+```
+
+<!-- intro -->
+
+##### Typescript:
+
+<!-- request typescript -->
+``` typescript
+searchRequest = {
+  index: 'test',
+  query: {
+    query_string: {'Test document'},
+  },
+  sort: ['_score', 'id'],
+}
+```
+
+<!-- intro -->
+
+##### Go:
+
+<!-- request go -->
+```go
+searchRequest.SetIndex("test")
+query := map[string]interface{} {"query_string": "Test document"}
+searchRequest.SetQuery(query)
+sort := map[string]interface{} {"_score": "asc", "id": "asc"}
+searchRequest.SetSort(sort)
+```
+
+<!-- end -->
+
+<!-- example sorting 2 -->
+您还可以显式指定排序顺序：
+
+* `asc`: 以升序排序
+* `desc`: 以降序排序
+
+
+<!-- intro -->
+
+<!-- request JSON -->
+
+```json
+{
+  "table":"test",
+  "query":
+  {
+    "match": { "title": "Test document" }
+  },
+  "sort":
+  [
+    { "id": "desc" },
+    "_score"
+  ],
+  "_source": "title",
+  "limit": 3
+}
+```
+
+<!-- response JSON -->
+
+``` json
+
+{
+
+"took": 0,
+
+"timed_out": false,
+
+"hits": {
+
+  "total": 5,
+
+  "total_relation": "eq",
+
+  "hits": [
+
+    {
+
+      "_id": 5406864699109146632,
+
+      "_score": 2319,
+
+      "_source": {
+
+        "title": "测试文档 5"
+
+      }
+
+    },
+
+    {
+
+      "_id": 5406864699109146631,
+
+      "_score": 2319,
+
+      "_source": {
+
+        "title": "测试文档 4"
+
+      }
+
+    },
+
+    {
+
+      "_id": 5406864699109146630,
+
+      "_score": 2319,
+
+      "_source": {
+
+        "title": "测试文档 3"
+
+      }
+
+    }
+
+  ]
+
+}
+
+}
+```    
+
+<!-- intro -->
+##### PHP:
+
+<!-- request PHP -->
+
+```php
+$search->setIndex("test")->match('测试文档')->sort('id', 'desc')->sort('_score');
+```
+
+<!-- intro -->
+
+##### Python:
+
+<!-- request Python -->
+``` python
+search_request.index = 'test'
+search_request.fulltext_filter = manticoresearch.model.QueryFilter('测试文档')
+sort_by_id = manticoresearch.model.SortOrder('id', 'desc')
+search_request.sort = [sort_by_id, '_score']
+```
+
+<!-- intro -->
+
+##### Python-asyncio:
+
+<!-- request Python-asyncio -->
+``` python
+search_request.index = 'test'
+search_request.fulltext_filter = manticoresearch.model.QueryFilter('测试文档')
+sort_by_id = manticoresearch.model.SortOrder('id', 'desc')
+search_request.sort = [sort_by_id, '_score']
+```
+
+<!-- intro -->
+
+##### Javascript:
+
+<!-- request javascript -->
+``` javascript
+searchRequest.index = "test";
+searchRequest.fulltext_filter = new Manticoresearch.QueryFilter('测试文档');
+sortById = new Manticoresearch.SortOrder('id', 'desc');
+searchRequest.sort = [sortById, 'id'];
+```
+
+<!-- intro -->
+
+##### java:
+
+<!-- request Java -->
+``` java
+searchRequest.setIndex("test");
+QueryFilter queryFilter = new QueryFilter();
+queryFilter.setQueryString("测试文档");
+searchRequest.setFulltextFilter(queryFilter);
+List<Object> sort = new ArrayList<Object>();
+SortOrder sortById = new SortOrder();
+sortById.setAttr("id");
+sortById.setOrder(SortOrder.OrderEnum.DESC);
+sort.add(sortById);
+sort.add("_score");
+searchRequest.setSort(sort);
+
+```
+
+<!-- intro -->
+
+##### C#:
+
+<!-- request C# -->
+``` clike
+var searchRequest = new SearchRequest("test");
+searchRequest.FulltextFilter = new QueryFilter("测试文档");
+searchRequest.Sort = new List<Object>();
+var sortById = new SortOrder("id", SortOrder.OrderEnum.Desc);
+searchRequest.Sort.Add(sortById);
+searchRequest.Sort.Add("_score");
+```
+
+<!-- intro -->
+
+##### Rust:
+
+<!-- request Rust -->
+``` rust
+let query = SearchQuery {
+    query_string: Some(serde_json::json!("测试文档").into()),
+    ..Default::default(),
+};
+let sort_by_id = HashMap::new();
+sort_by_id.insert("id".to_string(), "desc".to_string()); 
+let mut sort = Vec::new();
+sort.push(sort_by_id);
+sort.push("_score".to_string());
+let search_req = SearchRequest {
+    table: "test".to_string(),
+    query: Some(Box::new(query)),
+    sort: Some(serde_json::json!(sort)),
+    ..Default::default(),
+};
+```
+
+<!-- intro -->
+
+##### Typescript:
+
+<!-- request typescript -->
+``` typescript
+searchRequest = {
+  index: 'test',
+  query: {
+    query_string: {'测试文档'},
+  },
+  sort: [{'id': 'desc'}, '_score'],
+}
+```
+
+<!-- intro -->
+
+##### Go:
+
+<!-- request go -->
+```go
+searchRequest.SetIndex("test")
+query := map[string]interface{} {"query_string": "测试文档"}
+searchRequest.SetQuery(query)
+sortById := map[string]interface{} {"id": "desc"}
+sort := map[string]interface{} {"id": "desc", "_score": "asc"}
+searchRequest.SetSort(sort)
+```
+
+<!-- end -->
+
+<!-- example sorting 3 -->
+You can also use another syntax and specify the sort order via the `order` property:
+
+
+<!-- intro -->
+
+<!-- request JSON -->
+
+```json
+{
+  "table":"test",
+  "query":
+  {
+    "match": { "title": "测试文档" }
+  },
+  "sort":
+  [
+    { "id": { "order":"desc" } }
+  ],
+  "_source": "title",
+  "limit": 3
+}
+```
+
+<!-- response JSON -->
+
+``` json
+
+{
+
+"took": 0,
+
+"timed_out": false,
+
+"hits": {
+
+  "total": 5,
+
+  "total_relation": "eq",
+
+  "hits": [
+
+    {
+
+      "_id": 5406864699109146632,
+
+      "_score": 2319,
+
+      "_source": {
+
+        "title": "测试文档 5"
+
+      }
+
+    },
+
+    {
+
+      "_id": 5406864699109146631,
+
+      "_score": 2319,
+
+      "_source": {
+
+        "title": "测试文档 4"
+
+      }
+
+    },
+
+    {
+
+      "_id": 5406864699109146630,
+
+      "_score": 2319,
+
+      "_source": {
+
+        "title": "测试文档 3"
+
+      }
+
+    }
+
+  ]
+
+}
+
+}
+```    
+
+<!-- intro -->
+##### PHP:
+
+<!-- request PHP -->
+
+```php
+$search->setIndex("test")->match('测试文档')->sort('id', 'desc');
+```
+
+<!-- intro -->
+
+##### Python:
+
+<!-- request Python -->
+``` python
+search_request.index = 'test'
+search_request.fulltext_filter = manticoresearch.model.QueryFilter('测试文档')
+sort_by_id = manticoresearch.model.SortOrder('id', 'desc')
+search_request.sort = [sort_by_id]
+```
+
+<!-- intro -->
+
+##### Python-asyncio:
+
+<!-- request Python-asyncio -->
+``` python
+search_request.index = 'test'
+search_request.fulltext_filter = manticoresearch.model.QueryFilter('测试文档')
+sort_by_id = manticoresearch.model.SortOrder('id', 'desc')
+search_request.sort = [sort_by_id]
+```
+
+<!-- intro -->
+
+##### Javascript:
+
+<!-- request javascript -->
+``` javascript
+searchRequest.index = "test";
+searchRequest.fulltext_filter = new Manticoresearch.QueryFilter('测试文档');
+sortById = new Manticoresearch.SortOrder('id', 'desc');
+searchRequest.sort = [sortById];
+```
+
+<!-- intro -->
+
+##### java:
+
+<!-- request Java -->
+``` java
+searchRequest.setIndex("test");
+QueryFilter queryFilter = new QueryFilter();
+queryFilter.setQueryString("测试文档");
+searchRequest.setFulltextFilter(queryFilter);
+List<Object> sort = new ArrayList<Object>();
+SortOrder sortById = new SortOrder();
+sortById.setAttr("id");
+sortById.setOrder(SortOrder.OrderEnum.DESC);
+sort.add(sortById);
+searchRequest.setSort(sort);
+
+```
+
+<!-- intro -->
+
+##### C#:
+
+<!-- request C# -->
+``` clike
+var searchRequest = new SearchRequest("test");
+searchRequest.FulltextFilter = new QueryFilter("测试文档");
+searchRequest.Sort = new List<Object>();
+var sortById = new SortOrder("id", SortOrder.OrderEnum.Desc);
+searchRequest.Sort.Add(sortById);
+```
+
+<!-- intro -->
+
+##### Rust:
+
+<!-- request Rust -->
+``` rust
+let query = SearchQuery {
+    query_string: Some(serde_json::json!("测试文档").into()),
+    ..Default::default(),
+};
+let mut sort_by_id = HashMap::new();
+sort_by_id.insert("id".to_string(), "desc".to_string()); 
+let sort = [HashMap; 1] = [sort_by_id];
+let search_req = SearchRequest {
+    table: "test".to_string(),
+    query: Some(Box::new(query)),
+    sort: Some(serde_json::json!(sort)),
+    ..Default::default(),
+};
+```
+
+<!-- intro -->
+
+##### Typescript:
+
+<!-- request typescript -->
+``` typescript
+searchRequest = {
+  index: 'test',
+  query: {
+    query_string: {'测试文档'},
+  },
+  sort: { {'id': {'order':'desc'} },
+}
+```
+
+<!-- intro -->
+
+##### Go:
+
+<!-- request go -->
+```go
+searchRequest.SetIndex("test")
+query := map[string]interface{} {"query_string": "测试文档"}
+searchRequest.SetQuery(query)
+sort := map[string]interface{} { "id": {"order":"desc"} }
+searchRequest.SetSort(sort)
+```
+
+<!-- end -->
+
+<!-- example sorting 4 -->
+通过 MVA 属性进行排序在 JSON 查询中也受支持。排序模式可以通过 `mode` 属性设置。支持以下模式：
+
+* `min`: 按最小值排序
+* `max`: 按最大值排序
+
+<!-- intro -->
+
+<!-- request JSON -->
+
+```json
+{
+  "table":"test",
+  "query":
+  {
+    "match": { "title": "测试文档" }
+  },
+  "sort":
+  [
+    { "attr_mva": { "order":"desc", "mode":"max" } }
+  ],
+  "_source": "title",
+  "limit": 3
+}
+```
+
+<!-- response JSON -->
+
+``` json
+
+{
+
+"took": 0,
+
+"timed_out": false,
+
+"hits": {
+
+  "total": 5,
+
+  "total_relation": "eq",
+
+  "hits": [
+
+    {
+
+      "_id": 5406864699109146631,
+
+      "_score": 2319,
+
+      "_source": {
+
+        "title": "测试文档 4"
+
+      }
+
+    },
+
+    {
+
+      "_id": 5406864699109146629,
+
+      "_score": 2319,
+
+      "_source": {
+
+        "title": "测试文档 2"
+
+      }
+
+    },
+
+    {
+
+      "_id": 5406864699109146628,
+
+      "_score": 2319,
+
+      "_source": {
+
+        "title": "测试文档 1"
+
+      }
+
+    }
+
+  ]
+
+}
+
+}
+```    
+
+<!-- intro -->
+##### PHP:
+
+<!-- request PHP -->
+
+```php
+$search->setIndex("test")->match('测试文档')->sort('id','desc','max');
+```
+
+<!-- intro -->
+
+##### Python:
+
+<!-- request Python -->
+``` python
+search_request.index = 'test'
+search_request.fulltext_filter = manticoresearch.model.QueryFilter('测试文档')
+sort = manticoresearch.model.SortMVA('attr_mva', 'desc', 'max')
+search_request.sort = [sort]
+```
+
+<!-- intro -->
+
+##### Python-asyncio:
+
+<!-- request Python-asyncio -->
+``` python
+search_request.index = 'test'
+search_request.fulltext_filter = manticoresearch.model.QueryFilter('测试文档')
+sort = manticoresearch.model.SortMVA('attr_mva', 'desc', 'max')
+search_request.sort = [sort]
+```
+
+<!-- intro -->
+
+##### Javascript:
+
+<!-- request javascript -->
+``` javascript
+searchRequest.index = "test";
+searchRequest.fulltext_filter = new Manticoresearch.QueryFilter('测试文档');
+sort = new Manticoresearch.SortMVA('attr_mva', 'desc', 'max');
+searchRequest.sort = [sort];
+```
+
+<!-- intro -->
+
+##### java:
+
+<!-- request Java -->
+``` java
+searchRequest.setIndex("test");
+QueryFilter queryFilter = new QueryFilter();
+queryFilter.setQueryString("测试文档");
+searchRequest.setFulltextFilter(queryFilter);
+SortMVA sort = new SortMVA();
+sort.setAttr("attr_mva");
+sort.setOrder(SortMVA.OrderEnum.DESC);
+sort.setMode(SortMVA.ModeEnum.MAX);
+searchRequest.setSort(sort);
+
+```
+
+<!-- intro -->
+
+##### C#:
+
+<!-- request C# -->
+``` clike
+var searchRequest = new SearchRequest("test");
+searchRequest.FulltextFilter = new QueryFilter("测试文档");
+var sort = new SortMVA("attr_mva", SortMVA.OrderEnum.Desc, SortMVA.ModeEnum.Max);
+searchRequest.Sort.Add(sort);
+```
+
+<!-- intro -->
+
+##### Rust:
+
+<!-- request Rust -->
+``` rust
+let query = SearchQuery {
+    query_string: Some(serde_json::json!("测试文档").into()),
+    ..Default::default(),
+};
+let mut sort_mva_opts = HashMap::new();
+sort_mva_opts.insert("order".to_string(), "desc".to_string());
+sort_mva_opts.insert("mode".to_string(), "max".to_string());
+let mut sort_mva = HashMap::new();
+sort_mva.insert("attr_mva".to_string(), sort_mva_opts); 
+
+let search_req = SearchRequest {
+    table: "test".to_string(),
+    query: Some(Box::new(query)),
+    sort: Some(serde_json::json!(sort_mva)),
+    ..Default::default(),
+};
+```
+
+<!-- intro -->
+
+##### Typescript:
+<!-- request typescript -->
+``` typescript
+searchRequest = {
+  index: 'test',
+  query: {
+    query_string: {'测试文档'},
+  },
+  sort: { "attr_mva": { "order":"desc", "mode":"max" } },
+}
+```
+
+<!-- intro -->
+
+##### Go:
+
+<!-- request go -->
+```go
+searchRequest.SetIndex("test")
+query := map[string]interface{} {"query_string": "测试文档"}
+searchRequest.SetQuery(query)
+sort := map[string]interface{} { "attr_mva": { "order":"desc", "mode":"max" } }
+searchRequest.SetSort(sort)
+```
+
+<!-- end -->
+
+<!-- example sorting 5 -->
+当在一个属性上进行排序时，匹配权重（分数）计算默认情况下是禁用的（不使用排名器）。您可以通过将 `track_scores` 属性设置为 `true` 来启用权重计算：
+
+<!-- intro -->
+
+<!-- request JSON -->
+
+```json
+{
+  "table":"test",
+  "track_scores": true,
+  "query":
+  {
+    "match": { "title": "测试文档" }
+  },
+  "sort":
+  [
+    { "attr_mva": { "order":"desc", "mode":"max" } }
+  ],
+  "_source": "title",
+  "limit": 3
+}
+```
+
+<!-- response JSON -->
+
+``` json
+
+{
+
+"took": 0,
+
+"timed_out": false,
+
+"hits": {
+
+  "total": 5,
+
+  "total_relation": "eq",
+
+  "hits": [
+
+    {
+
+      "_id": 5406864699109146631,
+
+      "_score": 2319,
+
+      "_source": {
+
+        "title": "测试文档 4"
+
+      }
+
+    },
+
+    {
+
+      "_id": 5406864699109146629,
+
+      "_score": 2319,
+
+      "_source": {
+
+        "title": "测试文档 2"
+
+      }
+
+    },
+
+    {
+
+      "_id": 5406864699109146628,
+
+      "_score": 2319,
+
+      "_source": {
+
+        "title": "测试文档 1"
+
+      }
+
+    }
+
+  ]
+
+}
+
+}
+```    
+
+<!-- intro -->
+##### PHP:
+
+<!-- request PHP -->
+
+```php
+$search->setIndex("test")->match('测试文档')->sort('id','desc','max')->trackScores(true);
+```
+
+<!-- intro -->
+
+##### Python:
+
+<!-- request Python -->
+``` python
+search_request.index = 'test'
+search_request.track_scores = true
+search_request.fulltext_filter = manticoresearch.model.QueryFilter('测试文档')
+sort = manticoresearch.model.SortMVA('attr_mva', 'desc', 'max')
+search_request.sort = [sort]
+```
+
+<!-- intro -->
+
+##### Python-asyncio:
+
+<!-- request Python-asyncio -->
+``` python
+search_request.index = 'test'
+search_request.track_scores = true
+search_request.fulltext_filter = manticoresearch.model.QueryFilter('测试文档')
+sort = manticoresearch.model.SortMVA('attr_mva', 'desc', 'max')
+search_request.sort = [sort]
+```
+
+<!-- intro -->
+
+##### Javascript:
+
+<!-- request javascript -->
+``` javascript
+searchRequest.index = "test";
+searchRequest.trackScores = true;
+searchRequest.fulltext_filter = new Manticoresearch.QueryFilter('测试文档');
+sort = new Manticoresearch.SortMVA('attr_mva', 'desc', 'max');
+searchRequest.sort = [sort];
+```
+
+<!-- intro -->
+
+##### java:
+
+<!-- request Java -->
+``` java
+searchRequest.setIndex("test");
+searchRequest.setTrackScores(true);
+QueryFilter queryFilter = new QueryFilter();
+queryFilter.setQueryString("测试文档");
+searchRequest.setFulltextFilter(queryFilter);
+SortMVA sort = new SortMVA();
+sort.setAttr("attr_mva");
+sort.setOrder(SortMVA.OrderEnum.DESC);
+sort.setMode(SortMVA.ModeEnum.MAX);
+searchRequest.setSort(sort);
+
+```
+
+<!-- intro -->
+
+##### C#:
+
+<!-- request C# -->
+``` clike
+var searchRequest = new SearchRequest("test");
+searchRequest.SetTrackScores(true);
+searchRequest.FulltextFilter = new QueryFilter("测试文档");
+var sort = new SortMVA("attr_mva", SortMVA.OrderEnum.Desc, SortMVA.ModeEnum.Max);
+searchRequest.Sort.Add(sort);
+```
+
+<!-- intro -->
+
+##### Rust:
+
+<!-- request Rust -->
+``` rust
+let query = SearchQuery {
+    query_string: Some(serde_json::json!("测试文档").into()),
+    ..Default::default(),
+};
+let mut sort_mva_opts = HashMap::new();
+sort_mva_opts.insert("order".to_string(), "desc".to_string());
+sort_mva_opts.insert("mode".to_string(), "max".to_string());
+let mut sort_mva = HashMap::new();
+sort_mva.insert("attr_mva".to_string(), sort_mva_opts); 
+
+let search_req = SearchRequest {
+    table: "test".to_string(),
+    query: Some(Box::new(query)),
+    sort: Some(serde_json::json!(sort_mva)),
+    track_scores: Some(serde_json::json!(true)),
+    ..Default::default(),
+};
+```
+
+<!-- intro -->
+
+##### Typescript:
+
+<!-- request typescript -->
+``` typescript
+searchRequest = {
+  index: 'test',
+  track_scores: true,
+  query: {
+    query_string: {'测试文档'},
+  },
+  sort: { "attr_mva": { "order":"desc", "mode":"max" } },
+}
+```
+
+<!-- intro -->
+
+##### Go:
+
+<!-- request go -->
+```go
+searchRequest.SetIndex("test")
+searchRequest.SetTrackScores(true)
+query := map[string]interface{} {"query_string": "测试文档"}
+searchRequest.SetQuery(query)
+sort := map[string]interface{} { "attr_mva": { "order":"desc", "mode":"max" } }
+searchRequest.SetSort(sort)
+```
+# 排序和排名
+
 查询结果可以根据全文排名权重、一个或多个属性或表达式进行排序。
 
 **全文** 查询默认返回按匹配程度排序的结果。如果没有指定，它们将按相关性排序，这在SQL格式中等同于 `ORDER BY weight() DESC`。

@@ -1,3 +1,1144 @@
+# वर्गीकरण और रैंकिंग
+
+क्वेरी परिणामों को पूर्ण-शब्द रैंकिंग वजन, एक या अधिक गुण या अभिव्यक्तियों द्वारा वर्गीकृत किया जा सकता है।
+
+**पूर्ण-शब्द** क्वेरी मिलान को डिफ़ॉल्ट रूप से वर्गीकृत करती हैं। यदि कुछ निर्दिष्ट नहीं किया गया है, तो उन्हें प्रासंगिकता के अनुसार वर्गीकृत किया जाता है, जो SQL प्रारूप में `ORDER BY weight() DESC` के बराबर है।
+
+**गैर-पूर्ण-शब्द** क्वेरी डिफ़ॉल्ट रूप से कोई वर्गीकरण नहीं करती हैं।
+
+## उन्नत वर्गीकरण
+
+विस्तारित मोड स्वचालित रूप से सक्षम होता है जब आप स्पष्ट रूप से वर्गीकरण नियम प्रदान करते हैं SQL प्रारूप में `ORDER BY` खंड जोड़कर या HTTP JSON के माध्यम से `sort` विकल्प का उपयोग करके।
+
+### SQL के माध्यम से वर्गीकरण
+
+सामान्य वाक्यविन्यास:
+```sql
+SELECT ... ORDER BY
+{attribute_name | expr_alias | weight() | random() } [ASC | DESC],
+...
+{attribute_name | expr_alias | weight() | random() } [ASC | DESC]
+```
+
+<!-- उदाहरण उपनाम -->
+
+क्रम खंड में, आप 5 कॉलम तक के किसी भी संयोजन का उपयोग कर सकते हैं, प्रत्येक के बाद `asc` या `desc`। क्रम खंड के लिए तर्क के रूप में फ़ंक्शन और अभिव्यक्तियों की अनुमति नहीं है, केवल `weight()` और `random()` फ़ंक्शन (जो केवल SQL के माध्यम से `ORDER BY random()` के रूप में उपयोग किया जा सकता है)। हालाँकि, आप SELECT सूची में किसी भी अभिव्यक्ति का उपयोग कर सकते हैं और उसके उपनाम द्वारा वर्गीकृत कर सकते हैं।
+
+<!-- अनुरोध SQL -->
+```sql
+select *, a + b alias from test order by alias desc;
+```
+
+<!-- प्रतिक्रिया SQL -->
+```
++------+------+------+----------+-------+
+| id   | a    | b    | f        | alias |
++------+------+------+----------+-------+
+|    1 |    2 |    3 | document |     5 |
++------+------+------+----------+-------+
+```
+
+<!-- अंत -->
+
+## JSON के माध्यम से वर्गीकरण
+
+<!-- उदाहरण वर्गीकरण 1 -->
+`"sort"` एक ऐरे को निर्दिष्ट करता है जहाँ प्रत्येक तत्व एक गुण नाम या यदि आप मिलान वजन के द्वारा वर्गीकृत करना चाहते हैं तो `_score` हो सकता है। इस मामले में, गुणों के लिए क्रम सामान्य रूप से चढ़ता है और `_score` के लिए घटता है।
+
+<!-- परिचय -->
+
+<!-- अनुरोध JSON -->
+
+```json
+{
+  "table":"test",
+  "query":
+  {
+    "match": { "title": "Test document" }
+  },
+  "sort": [ "_score", "id" ],
+  "_source": "title",
+  "limit": 3
+}
+```
+
+<!-- प्रतिक्रिया JSON -->
+
+``` json
+    {
+
+"took": 0,
+
+"timed_out": false,
+
+"hits": {
+
+  "total": 5,
+
+  "total_relation": "eq",
+
+  "hits": [
+
+    {
+
+      "_id": 5406864699109146628,
+
+      "_score": 2319,
+
+      "_source": {
+
+        "title": "Test document 1"
+
+      }
+
+    },
+
+    {
+
+      "_id": 5406864699109146629,
+
+      "_score": 2319,
+
+      "_source": {
+
+        "title": "Test document 2"
+
+      }
+
+    },
+
+    {
+
+      "_id": 5406864699109146630,
+
+      "_score": 2319,
+
+      "_source": {
+
+        "title": "Test document 3"
+
+      }
+
+    }
+
+  ]
+
+}
+
+}
+```    
+
+<!-- परिचय -->
+##### PHP:
+
+<!-- अनुरोध PHP -->
+
+```php
+$search->setIndex("test")->match('Test document')->sort('_score')->sort('id');
+```
+
+<!-- परिचय -->
+
+##### Python:
+
+<!-- अनुरोध Python -->
+``` python
+search_request.index = 'test'
+search_request.fulltext_filter = manticoresearch.model.QueryFilter('Test document')
+search_request.sort = ['_score', 'id']
+```
+
+<!-- परिचय -->
+
+##### Python-asyncio:
+
+<!-- अनुरोध Python-asyncio -->
+``` python
+search_request.index = 'test'
+search_request.fulltext_filter = manticoresearch.model.QueryFilter('Test document')
+search_request.sort = ['_score', 'id']
+```
+
+<!-- परिचय -->
+
+##### Javascript:
+
+<!-- अनुरोध javascript -->
+``` javascript
+searchRequest.index = "test";
+searchRequest.fulltext_filter = new Manticoresearch.QueryFilter('Test document');
+searchRequest.sort = ['_score', 'id'];
+```
+
+<!-- परिचय -->
+
+##### java:
+
+<!-- अनुरोध Java -->
+``` java
+searchRequest.setIndex("test");
+QueryFilter queryFilter = new QueryFilter();
+queryFilter.setQueryString("Test document");
+searchRequest.setFulltextFilter(queryFilter);
+List<Object> sort = new ArrayList<Object>( Arrays.asList("_score", "id") );
+searchRequest.setSort(sort);
+
+```
+
+<!-- परिचय -->
+
+##### C#:
+
+<!-- अनुरोध C# -->
+``` clike
+var searchRequest = new SearchRequest("test");
+searchRequest.FulltextFilter = new QueryFilter("Test document");
+searchRequest.Sort = new List<Object> {"_score", "id"};
+
+```
+
+<!-- परिचय -->
+
+##### Rust:
+
+<!-- अनुरोध Rust -->
+``` rust
+let query = SearchQuery {
+    query_string: Some(serde_json::json!("Test document").into()),
+    ..Default::default(),
+};
+let sort: [String; 2] = ["_score".to_string(), "id".to_string()];
+let search_req = SearchRequest {
+    table: "test".to_string(),
+    query: Some(Box::new(query)),
+    sort: Some(serde_json::json!(sort)),
+    ..Default::default(),
+};
+```
+
+<!-- परिचय -->
+
+##### Typescript:
+
+<!-- अनुरोध typescript -->
+``` typescript
+searchRequest = {
+  index: 'test',
+  query: {
+    query_string: {'Test document'},
+  },
+  sort: ['_score', 'id'],
+}
+```
+
+<!-- परिचय -->
+
+##### Go:
+
+<!-- अनुरोध go -->
+```go
+searchRequest.SetIndex("test")
+query := map[string]interface{} {"query_string": "Test document"}
+searchRequest.SetQuery(query)
+sort := map[string]interface{} {"_score": "asc", "id": "asc"}
+searchRequest.SetSort(sort)
+```
+
+<!-- अंत -->
+
+<!-- उदाहरण वर्गीकरण 2 -->
+आप क्रम को स्पष्ट रूप से निर्दिष्ट भी कर सकते हैं:
+
+* `asc`: बढ़ते क्रम में वर्गीकृत करें
+* `desc`: घटते क्रम में वर्गीकृत करें
+
+
+<!-- परिचय -->
+
+<!-- अनुरोध JSON -->
+
+```json
+{
+  "table":"test",
+  "query":
+  {
+    "match": { "title": "Test document" }
+  },
+  "sort":
+  [
+    { "id": "desc" },
+    "_score"
+  ],
+  "_source": "title",
+  "limit": 3
+}
+```
+
+<!-- प्रतिक्रिया JSON -->
+
+``` json
+{
+
+"took": 0,
+
+"timed_out": false,
+
+"hits": {
+
+  "total": 5,
+
+  "total_relation": "eq",
+
+  "hits": [
+
+    {
+
+      "_id": 5406864699109146632,
+
+      "_score": 2319,
+
+      "_source": {
+
+        "title": "परीक्षण दस्तावेज़ 5"
+
+      }
+
+    },
+
+    {
+
+      "_id": 5406864699109146631,
+
+      "_score": 2319,
+
+      "_source": {
+
+        "title": "परीक्षण दस्तावेज़ 4"
+
+      }
+
+    },
+
+    {
+
+      "_id": 5406864699109146630,
+
+      "_score": 2319,
+
+      "_source": {
+
+        "title": "परीक्षण दस्तावेज़ 3"
+
+      }
+
+    }
+
+  ]
+
+}
+
+}
+```    
+
+<!-- intro -->
+##### PHP:
+
+<!-- request PHP -->
+
+```php
+$search->setIndex("test")->match('परीक्षण दस्तावेज़')->sort('id', 'desc')->sort('_score');
+```
+
+<!-- intro -->
+
+##### Python:
+
+<!-- request Python -->
+``` python
+search_request.index = 'test'
+search_request.fulltext_filter = manticoresearch.model.QueryFilter('परीक्षण दस्तावेज़')
+sort_by_id = manticoresearch.model.SortOrder('id', 'desc')
+search_request.sort = [sort_by_id, '_score']
+```
+
+<!-- intro -->
+
+##### Python-asyncio:
+
+<!-- request Python-asyncio -->
+``` python
+search_request.index = 'test'
+search_request.fulltext_filter = manticoresearch.model.QueryFilter('परीक्षण दस्तावेज़')
+sort_by_id = manticoresearch.model.SortOrder('id', 'desc')
+search_request.sort = [sort_by_id, '_score']
+```
+
+<!-- intro -->
+
+##### Javascript:
+
+<!-- request javascript -->
+``` javascript
+searchRequest.index = "test";
+searchRequest.fulltext_filter = new Manticoresearch.QueryFilter('परीक्षण दस्तावेज़');
+sortById = new Manticoresearch.SortOrder('id', 'desc');
+searchRequest.sort = [sortById, 'id'];
+```
+
+<!-- intro -->
+
+##### java:
+
+<!-- request Java -->
+``` java
+searchRequest.setIndex("test");
+QueryFilter queryFilter = new QueryFilter();
+queryFilter.setQueryString("परीक्षण दस्तावेज़");
+searchRequest.setFulltextFilter(queryFilter);
+List<Object> sort = new ArrayList<Object>();
+SortOrder sortById = new SortOrder();
+sortById.setAttr("id");
+sortById.setOrder(SortOrder.OrderEnum.DESC);
+sort.add(sortById);
+sort.add("_score");
+searchRequest.setSort(sort);
+
+```
+
+<!-- intro -->
+
+##### C#:
+
+<!-- request C# -->
+``` clike
+var searchRequest = new SearchRequest("test");
+searchRequest.FulltextFilter = new QueryFilter("परीक्षण दस्तावेज़");
+searchRequest.Sort = new List<Object>();
+var sortById = new SortOrder("id", SortOrder.OrderEnum.Desc);
+searchRequest.Sort.Add(sortById);
+searchRequest.Sort.Add("_score");
+```
+
+<!-- intro -->
+
+##### Rust:
+
+<!-- request Rust -->
+``` rust
+let query = SearchQuery {
+    query_string: Some(serde_json::json!("परीक्षण दस्तावेज़").into()),
+    ..Default::default(),
+};
+let sort_by_id = HashMap::new();
+sort_by_id.insert("id".to_string(), "desc".to_string()); 
+let mut sort = Vec::new();
+sort.push(sort_by_id);
+sort.push("_score".to_string());
+let search_req = SearchRequest {
+    table: "test".to_string(),
+    query: Some(Box::new(query)),
+    sort: Some(serde_json::json!(sort)),
+    ..Default::default(),
+};
+```
+
+<!-- intro -->
+
+##### Typescript:
+
+<!-- request typescript -->
+``` typescript
+searchRequest = {
+  index: 'test',
+  query: {
+    query_string: {'परीक्षण दस्तावेज़'},
+  },
+  sort: [{'id': 'desc'}, '_score'],
+}
+```
+
+<!-- intro -->
+
+##### Go:
+
+<!-- request go -->
+```go
+searchRequest.SetIndex("test")
+query := map[string]interface{} {"query_string": "परीक्षण दस्तावेज़"}
+searchRequest.SetQuery(query)
+sortById := map[string]interface{} {"id": "desc"}
+sort := map[string]interface{} {"id": "desc", "_score": "asc"}
+searchRequest.SetSort(sort)
+```
+
+<!-- end -->
+
+<!-- example sorting 3 -->
+You can also use another syntax and specify the sort order via the `order` property:
+
+
+<!-- intro -->
+
+<!-- request JSON -->
+
+```json
+{
+  "table":"test",
+  "query":
+  {
+    "match": { "title": "परीक्षण दस्तावेज़" }
+  },
+  "sort":
+  [
+    { "id": { "order":"desc" } }
+  ],
+  "_source": "title",
+  "limit": 3
+}
+```
+
+<!-- response JSON -->
+
+``` json
+
+{
+
+"took": 0,
+
+"timed_out": false,
+
+"hits": {
+
+  "total": 5,
+
+  "total_relation": "eq",
+
+  "hits": [
+
+    {
+
+      "_id": 5406864699109146632,
+
+      "_score": 2319,
+
+      "_source": {
+
+        "title": "परीक्षण दस्तावेज़ 5"
+
+      }
+
+    },
+
+    {
+
+      "_id": 5406864699109146631,
+
+      "_score": 2319,
+
+      "_source": {
+
+        "title": "परीक्षण दस्तावेज़ 4"
+
+      }
+
+    },
+
+    {
+
+      "_id": 5406864699109146630,
+
+      "_score": 2319,
+
+      "_source": {
+
+        "title": "परीक्षण दस्तावेज़ 3"
+
+      }
+
+    }
+
+  ]
+
+}
+
+}
+```    
+
+<!-- intro -->
+##### PHP:
+
+<!-- request PHP -->
+
+```php
+$search->setIndex("test")->match('परीक्षण दस्तावेज़')->sort('id', 'desc');
+```
+
+<!-- intro -->
+
+##### Python:
+
+<!-- request Python -->
+``` python
+search_request.index = 'test'
+search_request.fulltext_filter = manticoresearch.model.QueryFilter('परीक्षण दस्तावेज़')
+sort_by_id = manticoresearch.model.SortOrder('id', 'desc')
+search_request.sort = [sort_by_id]
+```
+
+<!-- intro -->
+
+##### Python-asyncio:
+
+<!-- request Python-asyncio -->
+``` python
+search_request.index = 'test'
+search_request.fulltext_filter = manticoresearch.model.QueryFilter('परीक्षण दस्तावेज़')
+sort_by_id = manticoresearch.model.SortOrder('id', 'desc')
+search_request.sort = [sort_by_id]
+```
+
+<!-- intro -->
+
+##### Javascript:
+
+<!-- request javascript -->
+``` javascript
+searchRequest.index = "test";
+searchRequest.fulltext_filter = new Manticoresearch.QueryFilter('Test document');
+sortById = new Manticoresearch.SortOrder('id', 'desc');
+searchRequest.sort = [sortById];
+```
+
+<!-- intro -->
+
+##### java:
+
+<!-- request Java -->
+``` java
+searchRequest.setIndex("test");
+QueryFilter queryFilter = new QueryFilter();
+queryFilter.setQueryString("Test document");
+searchRequest.setFulltextFilter(queryFilter);
+List<Object> sort = new ArrayList<Object>();
+SortOrder sortById = new SortOrder();
+sortById.setAttr("id");
+sortById.setOrder(SortOrder.OrderEnum.DESC);
+sort.add(sortById);
+searchRequest.setSort(sort);
+
+```
+
+<!-- intro -->
+
+##### C#:
+
+<!-- request C# -->
+``` clike
+var searchRequest = new SearchRequest("test");
+searchRequest.FulltextFilter = new QueryFilter("Test document");
+searchRequest.Sort = new List<Object>();
+var sortById = new SortOrder("id", SortOrder.OrderEnum.Desc);
+searchRequest.Sort.Add(sortById);
+```
+
+<!-- intro -->
+
+##### Rust:
+
+<!-- request Rust -->
+``` rust
+let query = SearchQuery {
+    query_string: Some(serde_json::json!("Test document").into()),
+    ..Default::default(),
+};
+let mut sort_by_id = HashMap::new();
+sort_by_id.insert("id".to_string(), "desc".to_string()); 
+let sort = [HashMap; 1] = [sort_by_id];
+let search_req = SearchRequest {
+    table: "test".to_string(),
+    query: Some(Box::new(query)),
+    sort: Some(serde_json::json!(sort)),
+    ..Default::default(),
+};
+```
+
+<!-- intro -->
+
+##### Typescript:
+
+<!-- request typescript -->
+``` typescript
+searchRequest = {
+  index: 'test',
+  query: {
+    query_string: {'Test document'},
+  },
+  sort: { {'id': {'order':'desc'} },
+}
+```
+
+<!-- intro -->
+
+##### Go:
+
+<!-- request go -->
+```go
+searchRequest.SetIndex("test")
+query := map[string]interface{} {"query_string": "Test document"}
+searchRequest.SetQuery(query)
+sort := map[string]interface{} { "id": {"order":"desc"} }
+searchRequest.SetSort(sort)
+```
+
+<!-- end -->
+
+<!-- example sorting 4 -->
+JSON प्रश्नों में MVA गुणों द्वारा क्रमबद्ध करने का समर्थन भी किया जाता है। क्रमबद्धता मोड `mode` संपत्ति के माध्यम से सेट किया जा सकता है। निम्नलिखित मोड समर्थित हैं:
+
+* `min`: न्यूनतम मान द्वारा क्रमबद्ध करें
+* `max`: अधिकतम मान द्वारा क्रमबद्ध करें
+
+<!-- intro -->
+
+<!-- request JSON -->
+
+```json
+{
+  "table":"test",
+  "query":
+  {
+    "match": { "title": "Test document" }
+  },
+  "sort":
+  [
+    { "attr_mva": { "order":"desc", "mode":"max" } }
+  ],
+  "_source": "title",
+  "limit": 3
+}
+```
+
+<!-- response JSON -->
+
+``` json
+
+{
+
+"took": 0,
+
+"timed_out": false,
+
+"hits": {
+
+  "total": 5,
+
+  "total_relation": "eq",
+
+  "hits": [
+
+    {
+
+      "_id": 5406864699109146631,
+
+      "_score": 2319,
+
+      "_source": {
+
+        "title": "Test document 4"
+
+      }
+
+    },
+
+    {
+
+      "_id": 5406864699109146629,
+
+      "_score": 2319,
+
+      "_source": {
+
+        "title": "Test document 2"
+
+      }
+
+    },
+
+    {
+
+      "_id": 5406864699109146628,
+
+      "_score": 2319,
+
+      "_source": {
+
+        "title": "Test document 1"
+
+      }
+
+    }
+
+  ]
+
+}
+
+}
+```    
+
+<!-- intro -->
+##### PHP:
+
+<!-- request PHP -->
+
+```php
+$search->setIndex("test")->match('Test document')->sort('id','desc','max');
+```
+
+<!-- intro -->
+
+##### Python:
+
+<!-- request Python -->
+``` python
+search_request.index = 'test'
+search_request.fulltext_filter = manticoresearch.model.QueryFilter('Test document')
+sort = manticoresearch.model.SortMVA('attr_mva', 'desc', 'max')
+search_request.sort = [sort]
+```
+
+<!-- intro -->
+
+##### Python-asyncio:
+
+<!-- request Python-asyncio -->
+``` python
+search_request.index = 'test'
+search_request.fulltext_filter = manticoresearch.model.QueryFilter('Test document')
+sort = manticoresearch.model.SortMVA('attr_mva', 'desc', 'max')
+search_request.sort = [sort]
+```
+
+<!-- intro -->
+
+##### Javascript:
+
+<!-- request javascript -->
+``` javascript
+searchRequest.index = "test";
+searchRequest.fulltext_filter = new Manticoresearch.QueryFilter('Test document');
+sort = new Manticoresearch.SortMVA('attr_mva', 'desc', 'max');
+searchRequest.sort = [sort];
+```
+
+<!-- intro -->
+
+##### java:
+
+<!-- request Java -->
+``` java
+searchRequest.setIndex("test");
+QueryFilter queryFilter = new QueryFilter();
+queryFilter.setQueryString("Test document");
+searchRequest.setFulltextFilter(queryFilter);
+SortMVA sort = new SortMVA();
+sort.setAttr("attr_mva");
+sort.setOrder(SortMVA.OrderEnum.DESC);
+sort.setMode(SortMVA.ModeEnum.MAX);
+searchRequest.setSort(sort);
+
+```
+
+<!-- intro -->
+
+##### C#:
+
+<!-- request C# -->
+``` clike
+var searchRequest = new SearchRequest("test");
+searchRequest.FulltextFilter = new QueryFilter("Test document");
+var sort = new SortMVA("attr_mva", SortMVA.OrderEnum.Desc, SortMVA.ModeEnum.Max);
+searchRequest.Sort.Add(sort);
+```
+
+<!-- intro -->
+
+##### Rust:
+
+<!-- request Rust -->
+``` rust
+let query = SearchQuery {
+    query_string: Some(serde_json::json!("Test document").into()),
+    ..Default::default(),
+};
+let mut sort_mva_opts = HashMap::new();
+sort_mva_opts.insert("order".to_string(), "desc".to_string());
+sort_mva_opts.insert("mode".to_string(), "max".to_string());
+let mut sort_mva = HashMap::new();
+sort_mva.insert("attr_mva".to_string(), sort_mva_opts); 
+
+let search_req = SearchRequest {
+    table: "test".to_string(),
+    query: Some(Box::new(query)),
+    sort: Some(serde_json::json!(sort_mva)),
+    ..Default::default(),
+};
+```
+
+<!-- intro -->
+
+##### Typescript:
+<!-- request typescript -->
+``` typescript
+searchRequest = {
+  index: 'test',
+  query: {
+    query_string: {'Test document'},
+  },
+  sort: { "attr_mva": { "order":"desc", "mode":"max" } },
+}
+```
+
+<!-- intro -->
+
+##### Go:
+
+<!-- request go -->
+```go
+searchRequest.SetIndex("test")
+query := map[string]interface{} {"query_string": "Test document"}
+searchRequest.SetQuery(query)
+sort := map[string]interface{} { "attr_mva": { "order":"desc", "mode":"max" } }
+searchRequest.SetSort(sort)
+```
+
+<!-- end -->
+
+<!-- example sorting 5 -->
+जब किसी विशेषता पर ترتيب दिया जाता है, तो मेल वजन (स्कोर) की गणना डिफ़ॉल्ट रूप से असक्रिय होती है (कोई रेंकर उपयोग नहीं होता)। आप `track_scores` गुण को `true` पर सेट करके वजन गणना सक्षम कर सकते हैं:
+
+<!-- intro -->
+
+<!-- request JSON -->
+
+```json
+{
+  "table":"test",
+  "track_scores": true,
+  "query":
+  {
+    "match": { "title": "Test document" }
+  },
+  "sort":
+  [
+    { "attr_mva": { "order":"desc", "mode":"max" } }
+  ],
+  "_source": "title",
+  "limit": 3
+}
+```
+
+<!-- response JSON -->
+
+``` json
+
+{
+
+"took": 0,
+
+"timed_out": false,
+
+"hits": {
+
+  "total": 5,
+
+  "total_relation": "eq",
+
+  "hits": [
+
+    {
+
+      "_id": 5406864699109146631,
+
+      "_score": 2319,
+
+      "_source": {
+
+        "title": "Test document 4"
+
+      }
+
+    },
+
+    {
+
+      "_id": 5406864699109146629,
+
+      "_score": 2319,
+
+      "_source": {
+
+        "title": "Test document 2"
+
+      }
+
+    },
+
+    {
+
+      "_id": 5406864699109146628,
+
+      "_score": 2319,
+
+      "_source": {
+
+        "title": "Test document 1"
+
+      }
+
+    }
+
+  ]
+
+}
+
+}
+```    
+
+<!-- intro -->
+##### PHP:
+
+<!-- request PHP -->
+
+```php
+$search->setIndex("test")->match('Test document')->sort('id','desc','max')->trackScores(true);
+```
+
+<!-- intro -->
+
+##### Python:
+
+<!-- request Python -->
+``` python
+search_request.index = 'test'
+search_request.track_scores = true
+search_request.fulltext_filter = manticoresearch.model.QueryFilter('Test document')
+sort = manticoresearch.model.SortMVA('attr_mva', 'desc', 'max')
+search_request.sort = [sort]
+```
+
+<!-- intro -->
+
+##### Python-asyncio:
+
+<!-- request Python-asyncio -->
+``` python
+search_request.index = 'test'
+search_request.track_scores = true
+search_request.fulltext_filter = manticoresearch.model.QueryFilter('Test document')
+sort = manticoresearch.model.SortMVA('attr_mva', 'desc', 'max')
+search_request.sort = [sort]
+```
+
+<!-- intro -->
+
+##### Javascript:
+
+<!-- request javascript -->
+``` javascript
+searchRequest.index = "test";
+searchRequest.trackScores = true;
+searchRequest.fulltext_filter = new Manticoresearch.QueryFilter('Test document');
+sort = new Manticoresearch.SortMVA('attr_mva', 'desc', 'max');
+searchRequest.sort = [sort];
+```
+
+<!-- intro -->
+
+##### java:
+
+<!-- request Java -->
+``` java
+searchRequest.setIndex("test");
+searchRequest.setTrackScores(true);
+QueryFilter queryFilter = new QueryFilter();
+queryFilter.setQueryString("Test document");
+searchRequest.setFulltextFilter(queryFilter);
+SortMVA sort = new SortMVA();
+sort.setAttr("attr_mva");
+sort.setOrder(SortMVA.OrderEnum.DESC);
+sort.setMode(SortMVA.ModeEnum.MAX);
+searchRequest.setSort(sort);
+
+```
+
+<!-- intro -->
+
+##### C#:
+
+<!-- request C# -->
+``` clike
+var searchRequest = new SearchRequest("test");
+searchRequest.SetTrackScores(true);
+searchRequest.FulltextFilter = new QueryFilter("Test document");
+var sort = new SortMVA("attr_mva", SortMVA.OrderEnum.Desc, SortMVA.ModeEnum.Max);
+searchRequest.Sort.Add(sort);
+```
+
+<!-- intro -->
+
+##### Rust:
+
+<!-- request Rust -->
+``` rust
+let query = SearchQuery {
+    query_string: Some(serde_json::json!("Test document").into()),
+    ..Default::default(),
+};
+let mut sort_mva_opts = HashMap::new();
+sort_mva_opts.insert("order".to_string(), "desc".to_string());
+sort_mva_opts.insert("mode".to_string(), "max".to_string());
+let mut sort_mva = HashMap::new();
+sort_mva.insert("attr_mva".to_string(), sort_mva_opts); 
+
+let search_req = SearchRequest {
+    table: "test".to_string(),
+    query: Some(Box::new(query)),
+    sort: Some(serde_json::json!(sort_mva)),
+    track_scores: Some(serde_json::json!(true)),
+    ..Default::default(),
+};
+```
+
+<!-- intro -->
+
+##### Typescript:
+
+<!-- request typescript -->
+``` typescript
+searchRequest = {
+  index: 'test',
+  track_scores: true,
+  query: {
+    query_string: {'Test document'},
+  },
+  sort: { "attr_mva": { "order":"desc", "mode":"max" } },
+}
+```
+
+<!-- intro -->
+
+##### Go:
+
+<!-- request go -->
+```go
+searchRequest.SetIndex("test")
+searchRequest.SetTrackScores(true)
+query := map[string]interface{} {"query_string": "Test document"}
+searchRequest.SetQuery(query)
+sort := map[string]interface{} { "attr_mva": { "order":"desc", "mode":"max" } }
+searchRequest.SetSort(sort)
+```
+
 # क्रमबद्ध करना और रैंकिंग
 
 क्वेरी परिणामों को पूर्ण-पाठ रैंकिंग वजन, एक या एक से अधिक गुणों या अभिव्यक्तियों द्वारा क्रमबद्ध किया जा सकता है।

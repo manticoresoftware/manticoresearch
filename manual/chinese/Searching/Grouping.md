@@ -1,6 +1,1665 @@
 # 分组搜索结果
 
 <!-- example general -->
+分组搜索结果对于获取每组匹配计数或其他汇总通常很有帮助。例如，它用于创建图表，说明每月匹配的博客文章数量，或按网站或作者分组网络搜索结果等。
+
+Manticore 支持按单列或多列以及计算表达式对搜索结果进行分组。结果可以：
+
+* 在组内进行排序
+* 每组返回多于一行
+* 对组进行过滤
+* 对组进行排序
+* 使用 [聚合函数](../Searching/Grouping.md#Aggregation-functions) 进行聚合
+
+<!-- intro -->
+一般语法为：
+
+<!-- request SQL -->
+一般语法
+```sql
+SELECT {* | SELECT_expr [, SELECT_expr ...]}
+...
+GROUP BY {field_name | alias } [, ...]
+[HAVING where_condition]
+[WITHIN GROUP ORDER BY field_name {ASC | DESC} [, ...]]
+...
+
+SELECT_expr: { field_name | function_name(...) }
+where_condition: {aggregation expression alias | COUNT(*)}
+```
+
+<!-- request JSON -->
+JSON 查询格式当前支持基本分组，可以检索聚合值及其 count(*)。
+
+```json
+{
+  "table": "<table_name>",
+  "limit": 0,
+  "aggs": {
+    "<aggr_name>": {
+      "terms": {
+        "field": "<attribute>",
+        "size": <int value>
+      }
+    }
+  }
+}
+```
+
+标准查询输出返回未分组的结果集，可以通过 `limit`（或 `size`）进行隐藏。
+聚合需要设置组的结果集大小的 `size`。
+
+<!-- end -->
+
+<!-- example group1 -->
+### 仅分组
+分组非常简单 - 只需在 `SELECT` 查询的末尾添加 "GROUP BY smth"。该值可以是：
+
+* 表中的任何非全文字段：整数、浮点、字符串、MVA（多值属性）
+* 或者，如果您在 `SELECT` 列表中使用过别名，您也可以对此进行分组
+
+您可以省略 `SELECT` 列表中的任何 [聚合函数](../Searching/Grouping.md#Aggregation-functions)，它仍然可以正常工作：
+
+<!-- intro -->
+##### 示例：
+
+<!-- request SQL -->
+```sql
+SELECT release_year FROM films GROUP BY release_year LIMIT 5;
+```
+<!-- response SQL -->
+```sql
++--------------+
+| release_year |
++--------------+
+|         2004 |
+|         2002 |
+|         2001 |
+|         2005 |
+|         2000 |
++--------------+
+```
+<!-- end -->
+<!-- example group2 -->
+然而在大多数情况下，您会希望为每个组获取一些聚合数据，例如：
+
+* `COUNT(*)` 以简单获取每个组中的元素数量
+* 或者 `AVG(field)` 以计算组内字段的平均值
+
+对于 HTTP JSON 请求，使用一个具有 `limit=0` 的单一 `aggs` 桶在主查询级别的工作方式与使用 `GROUP BY` 和 `COUNT(*)` 的 SQL 查询类似，提供等效的行为和性能。
+
+<!-- intro -->
+##### 示例：
+
+<!-- request SQL1 -->
+```sql
+SELECT release_year, count(*) FROM films GROUP BY release_year LIMIT 5;
+```
+<!-- response SQL1 -->
+```sql
++--------------+----------+
+| release_year | count(*) |
++--------------+----------+
+|         2004 |      108 |
+|         2002 |      108 |
+|         2001 |       91 |
+|         2005 |       93 |
+|         2000 |       97 |
++--------------+----------+
+```
+<!-- request SQL2 -->
+```sql
+SELECT release_year, AVG(rental_rate) FROM films GROUP BY release_year LIMIT 5;
+```
+<!-- response SQL2 -->
+```sql
++--------------+------------------+
+| release_year | avg(rental_rate) |
++--------------+------------------+
+|         2004 |       2.78629661 |
+|         2002 |       3.08259249 |
+|         2001 |       3.09989142 |
+|         2005 |       2.90397978 |
+|         2000 |       3.17556739 |
++--------------+------------------+
+```
+
+<!-- request JSON -->
+``` json
+POST /search -d '
+    {
+     "table" : "films",
+     "limit": 0,
+     "aggs" :
+     {
+        "release_year" :
+         {
+            "terms" :
+             {
+              "field":"release_year",
+              "size":100
+             }
+         }
+     }
+    }
+'
+```
+<!-- response JSON -->
+``` json
+{
+  "took": 2,
+  "timed_out": false,
+  "hits": {
+    "total": 10000,
+    "hits": [
+
+    ]
+  },
+  "release_year": {
+    "group_brand_id": {
+      "buckets": [
+        {
+          "key": 2004,
+          "doc_count": 108
+        },
+        {
+          "key": 2002,
+          "doc_count": 108
+        },
+        {
+          "key": 2000,
+          "doc_count": 97
+        },
+        {
+          "key": 2005,
+          "doc_count": 93
+        },
+        {
+          "key": 2001,
+          "doc_count": 91
+        }
+      ]
+    }
+  }
+}
+```
+<!-- request PHP -->
+``` php
+$index->setName('films');
+$search = $index->search('');
+$search->limit(0);
+$search->facet('release_year','release_year',100);
+$results = $search->get();
+print_r($results->getFacets());
+```
+<!-- response PHP -->
+``` php
+Array
+(
+    [release_year] => Array
+        (
+            [buckets] => Array
+                (
+                    [0] => Array
+                        (
+                            [key] => 2009
+                            [doc_count] => 99
+                        )
+                    [1] => Array
+                        (
+                            [key] => 2008
+                            [doc_count] => 102
+                        )
+                    [2] => Array
+                        (
+                            [key] => 2007
+                            [doc_count] => 93
+                        )
+                    [3] => Array
+                        (
+                            [key] => 2006
+                            [doc_count] => 103
+                        )
+                    [4] => Array
+                        (
+                            [key] => 2005
+                            [doc_count] => 93
+                        )
+                    [5] => Array
+                        (
+                            [key] => 2004
+                            [doc_count] => 108
+                        )
+                    [6] => Array
+                        (
+                            [key] => 2003
+                            [doc_count] => 106
+                        )
+                    [7] => Array
+                        (
+                            [key] => 2002
+                            [doc_count] => 108
+                        )
+                    [8] => Array
+                        (
+                            [key] => 2001
+                            [doc_count] => 91
+                        )
+                    [9] => Array
+                        (
+                            [key] => 2000
+                            [doc_count] => 97
+                        )
+                )
+        )
+)
+```
+<!-- request Python -->
+``` python
+res =searchApi.search({"table":"films","limit":0,"aggs":{"release_year":{"terms":{"field":"release_year","size":100}}}})
+```
+<!-- response Python -->
+``` python
+{'aggregations': {u'release_year': {u'buckets': [{u'doc_count': 99,
+                                                  u'key': 2009},
+                                                 {u'doc_count': 102,
+                                                  u'key': 2008},
+                                                 {u'doc_count': 93,
+                                                  u'key': 2007},
+                                                 {u'doc_count': 103,
+                                                  u'key': 2006},
+                                                 {u'doc_count': 93,
+                                                  u'key': 2005},
+                                                 {u'doc_count': 108,
+                                                  u'key': 2004},
+                                                 {u'doc_count': 106,
+                                                  u'key': 2003},
+                                                 {u'doc_count': 108,
+                                                  u'key': 2002},
+                                                 {u'doc_count': 91,
+                                                  u'key': 2001},
+                                                 {u'doc_count': 97,
+                                                  u'key': 2000}]}},
+ 'hits': {'hits': [], 'max_score': None, 'total': 1000},
+ 'profile': None,
+ 'timed_out': False,
+ 'took': 0}
+
+```
+
+<!-- request Python-asyncio -->
+``` python
+res = await searchApi.search({"table":"films","limit":0,"aggs":{"release_year":{"terms":{"field":"release_year","size":100}}}})
+```
+<!-- response Python-asyncio -->
+``` python
+{'aggregations': {u'release_year': {u'buckets': [{u'doc_count': 99,
+                                                  u'key': 2009},
+                                                 {u'doc_count': 102,
+                                                  u'key': 2008},
+                                                 {u'doc_count': 93,
+                                                  u'key': 2007},
+                                                 {u'doc_count': 103,
+                                                  u'key': 2006},
+                                                 {u'doc_count': 93,
+                                                  u'key': 2005},
+                                                 {u'doc_count': 108,
+                                                  u'key': 2004},
+                                                 {u'doc_count': 106,
+                                                  u'key': 2003},
+                                                 {u'doc_count': 108,
+                                                  u'key': 2002},
+                                                 {u'doc_count': 91,
+                                                  u'key': 2001},
+                                                 {u'doc_count': 97,
+                                                  u'key': 2000}]}},
+ 'hits': {'hits': [], 'max_score': None, 'total': 1000},
+ 'profile': None,
+ 'timed_out': False,
+ 'took': 0}
+
+```
+
+<!-- request Javascript -->
+``` javascript
+res = await searchApi.search({"table":"films","limit":0,"aggs":{"release_year":{"terms":{"field":"release_year","size":100}}}});
+```
+<!-- response Javascript -->
+``` javascript
+{"took":0,"timed_out":false,"aggregations":{"release_year":{"buckets":[{"key":2009,"doc_count":99},{"key":2008,"doc_count":102},{"key":2007,"doc_count":93},{"key":2006,"doc_count":103},{"key":2005,"doc_count":93},{"key":2004,"doc_count":108},{"key":2003,"doc_count":106},{"key":2002,"doc_count":108},{"key":2001,"doc_count":91},{"key":2000,"doc_count":97}]}},"hits":{"total":1000,"hits":[]}}
+```
+<!-- request Java -->
+``` java
+HashMap<String,Object> aggs = new HashMap<String,Object>(){{
+    put("release_year", new HashMap<String,Object>(){{
+        put("terms", new HashMap<String,Object>(){{
+            put("field","release_year");
+            put("size",100);
+        }});
+    }});
+}};
+
+searchRequest = new SearchRequest();
+searchRequest.setIndex("films");        
+searchRequest.setLimit(0);
+query = new HashMap<String,Object>();
+query.put("match_all",null);
+searchRequest.setQuery(query);
+searchRequest.setAggs(aggs);
+searchResponse = searchApi.search(searchRequest);
+```
+<!-- response Java -->
+``` java
+class SearchResponse {
+    took: 0
+    timedOut: false
+    aggregations: {release_year={buckets=[{key=2009, doc_count=99}, {key=2008, doc_count=102}, {key=2007, doc_count=93}, {key=2006, doc_count=103}, {key=2005, doc_count=93}, {key=2004, doc_count=108}, {key=2003, doc_count=106}, {key=2002, doc_count=108}, {key=2001, doc_count=91}, {key=2000, doc_count=97}]}}
+    hits: class SearchResponseHits {
+        maxScore: null
+        total: 1000
+        hits: []
+    }
+    profile: null
+}
+```
+
+<!-- request C# -->
+``` clike
+var agg = new Aggregation("release_year", "release_year");
+agg.Size = 100;
+object query = new { match_all=null };
+var searchRequest = new SearchRequest("films", query);
+searchRequest.Aggs = new List<Aggregation> {agg};
+var searchResponse = searchApi.Search(searchRequest);
+```
+<!-- response C# -->
+``` clike
+class SearchResponse {
+    took: 0
+    timedOut: false
+    aggregations: {release_year={buckets=[{key=2009, doc_count=99}, {key=2008, doc_count=102}, {key=2007, doc_count=93}, {key=2006, doc_count=103}, {key=2005, doc_count=93}, {key=2004, doc_count=108}, {key=2003, doc_count=106}, {key=2002, doc_count=108}, {key=2001, doc_count=91}, {key=2000, doc_count=97}]}}
+    hits: class SearchResponseHits {
+        maxScore: null
+        total: 1000
+        hits: []
+    }
+    profile: null
+}
+```
+
+<!-- request Rust -->
+``` rust
+let query = SearchQuery::new();
+let aggTerms1 = AggTerms::new {
+    fields: "release_year".to_string(),
+    size: Some(100),
+};
+let agg1 = Aggregation {
+    terms: Some(Box::new(aggTerms1)),
+    ..Default::default(),
+};
+let mut aggs = HashMap::new();
+aggs.insert("release_year".to_string(), agg1); 
+
+let search_req = SearchRequest {
+    table: "films".to_string(),
+    query: Some(Box::new(query)),
+    aggs: serde_json::json!(aggs),
+    ..Default::default(),
+};
+let search_res = search_api.search(search_req).await;
+```
+<!-- response Rust -->
+``` rust
+class SearchResponse {
+    took: 0
+    timedOut: false
+    aggregations: {release_year={buckets=[{key=2009, doc_count=99}, {key=2008, doc_count=102}, {key=2007, doc_count=93}, {key=2006, doc_count=103}, {key=2005, doc_count=93}, {key=2004, doc_count=108}, {key=2003, doc_count=106}, {key=2002, doc_count=108}, {key=2001, doc_count=91}, {key=2000, doc_count=97}]}}
+    hits: class SearchResponseHits {
+        maxScore: null
+        total: 1000
+        hits: []
+    }
+    profile: null
+}
+```
+
+<!-- request TypeScript -->
+``` typescript
+res = await searchApi.search({
+  index: 'test',
+  limit: 0,
+  aggs: {
+    cat_id: {
+      terms: { field: "cat", size: 1 }
+    }
+  }
+});
+```
+
+<!-- response TypeScript -->
+``` typescript
+{
+
+"took":0,
+
+"timed_out":false,
+
+"aggregations":
+
+{
+
+"cat_id":
+
+{
+
+"buckets":
+
+[{
+
+"key":1,
+
+"doc_count":1
+
+}]
+
+}
+
+},
+
+"hits":
+
+{
+
+"total":5,
+
+"hits":[]
+
+}
+}
+```
+
+<!-- request Go -->
+``` go
+query := map[string]interface{} {};
+searchRequest.SetQuery(query);
+aggTerms := manticoreclient.NewAggregationTerms()
+aggTerms.SetField("cat")
+aggTerms.SetSize(1)
+aggregation := manticoreclient.NewAggregation()
+aggregation.setTerms(aggTerms)
+searchRequest.SetAggregation(aggregation)
+res, _, _ := apiClient.SearchAPI.Search(context.Background()).SearchRequest(*searchRequest).Execute()
+```
+
+<!-- response Go -->
+``` go
+{
+
+"took":0,
+
+"timed_out":false,
+
+"aggregations":
+
+{
+
+"cat_id":
+
+{
+
+"buckets":
+
+[{
+
+"key":1,
+
+"doc_count":1
+
+}]
+
+}
+
+},
+
+"hits":
+
+{
+
+"total":5,
+
+"hits":[]
+
+}
+}
+```
+
+<!-- end -->
+
+<!-- example sort1 -->
+##### 排序组
+默认情况下，组不会排序，您通常想要做的下一件事是按某种内容排序，比如您分组的字段：
+
+<!-- intro -->
+##### 示例：
+
+<!-- request SQL -->
+```sql
+SELECT release_year, count(*) from films GROUP BY release_year ORDER BY release_year asc limit 5;
+```
+<!-- response SQL -->
+```sql
++--------------+----------+
+| release_year | count(*) |
++--------------+----------+
+|         2000 |       97 |
+|         2001 |       91 |
+|         2002 |      108 |
+|         2003 |      106 |
+|         2004 |      108 |
++--------------+----------+
+```
+<!-- end -->
+<!-- example sort2 -->
+另外，您可以根据聚合进行排序：
+
+* 通过 `count(*)` 首先显示元素最多的组
+* 通过 `avg(rental_rate)` 首先显示评分最高的电影。请注意，在此示例中，它是通过别名完成的：`avg(rental_rate)` 首先映射到 `avg`，然后我们简单地做 `ORDER BY avg`
+
+
+<!-- intro -->
+##### 示例：
+
+<!-- request SQL1 -->
+```sql
+SELECT release_year, count(*) FROM films GROUP BY release_year ORDER BY count(*) desc LIMIT 5;
+```
+<!-- response SQL1 -->
+```sql
++--------------+----------+
+| release_year | count(*) |
++--------------+----------+
+|         2004 |      108 |
+|         2002 |      108 |
+|         2003 |      106 |
+|         2006 |      103 |
+|         2008 |      102 |
++--------------+----------+
+```
+
+<!-- request SQL2 -->
+```sql
+SELECT release_year, AVG(rental_rate) avg FROM films GROUP BY release_year ORDER BY avg desc LIMIT 5;
+```
+<!-- response SQL2 -->
+```sql
++--------------+------------+
+| release_year | avg        |
++--------------+------------+
+|         2006 | 3.26184368 |
+|         2000 | 3.17556739 |
+|         2001 | 3.09989142 |
+|         2002 | 3.08259249 |
+|         2008 | 2.99000049 |
++--------------+------------+
+```
+<!-- end -->
+
+<!-- example group3 -->
+##### 按多个字段分组
+有些情况下，您可能想要不仅仅按单个字段分组，而是同时按多个字段分组，例如电影的类别和年份：
+
+<!-- intro -->
+
+##### 示例：
+
+<!-- request SQL -->
+
+```sql
+
+SELECT category_id, release_year, count(*) FROM films GROUP BY category_id, release_year ORDER BY category_id ASC, release_year ASC;
+
+```
+
+<!-- response SQL -->
+
+```sql
+
++-------------+--------------+----------+
+| category_id | release_year | count(*) |
++-------------+--------------+----------+
+|           1 |         2000 |        5 |
+|           1 |         2001 |        2 |
+|           1 |         2002 |        6 |
+|           1 |         2003 |        6 |
+|           1 |         2004 |        5 |
+|           1 |         2005 |       10 |
+|           1 |         2006 |        4 |
+|           1 |         2007 |        5 |
+|           1 |         2008 |        7 |
+|           1 |         2009 |       14 |
+|           2 |         2000 |       10 |
+|           2 |         2001 |        5 |
+|           2 |         2002 |        6 |
+|           2 |         2003 |        6 |
+|           2 |         2004 |       10 |
+|           2 |         2005 |        4 |
+|           2 |         2006 |        5 |
+|           2 |         2007 |        8 |
+|           2 |         2008 |        8 |
+|           2 |         2009 |        4 |
++-------------+--------------+----------+
+
+```
+
+<!-- request JSON -->
+
+``` json
+
+POST /search -d '
+
+    {
+
+    "size": 0,
+
+    "table": "films",
+
+    "aggs": {
+
+        "cat_release": {
+
+            "composite": {
+
+                "size":5,
+
+                "sources": [
+
+                    { "category": { "terms": { "field": "category_id" } } },
+
+                    { "release year": { "terms": { "field": "release_year" } } }
+
+                ]
+
+            }
+
+        }
+
+    }
+
+    }
+
+'
+
+```
+
+<!-- response JSON -->
+
+``` json
+
+{
+
+  "took": 0,
+
+  "timed_out": false,
+
+  "hits": {
+
+    "total": 1000,
+
+    "total_relation": "eq",
+
+    "hits": []
+
+  },
+
+  "aggregations": {
+
+    "cat_release": {
+
+      "after_key": {
+
+        "category": 1,
+
+        "release year": 2007
+
+      },
+
+      "buckets": [
+
+        {
+
+          "key": {
+
+            "category": 1,
+
+            "release year": 2008
+
+          },
+
+          "doc_count": 7
+
+        },
+
+        {
+
+          "key": {
+
+            "category": 1,
+
+            "release year": 2009
+
+          },
+
+          "doc_count": 14
+
+        },
+
+        {
+
+          "key": {
+
+            "category": 1,
+
+            "release year": 2005
+
+          },
+
+          "doc_count": 10
+
+        },
+
+        {
+
+          "key": {
+
+            "category": 1,
+
+            "release year": 2004
+
+          },
+
+          "doc_count": 5
+
+        },
+
+        {
+
+          "key": {
+
+            "category": 1,
+
+            "release year": 2007
+
+          },
+
+          "doc_count": 5
+
+        }
+
+      ]
+
+    }
+
+  }
+
+}
+
+```
+
+<!-- end -->
+
+<!-- example group4 -->
+
+##### 给我 N 行
+
+有时查看每组不仅仅是单个元素，而是多个元素是很有用的。这可以通过 `GROUP N BY` 的帮助轻松实现。例如，在以下情况下，我们为每年获取两部电影，而不是仅仅一部，这样简单的 `GROUP BY release_year` 将会返回。
+
+<!-- intro -->
+
+##### 示例：
+
+<!-- request SQL -->
+
+```sql
+
+SELECT release_year, title FROM films GROUP 2 BY release_year ORDER BY release_year DESC LIMIT 6;
+
+```
+
+<!-- response SQL -->
+
+```sql
+
++--------------+-----------------------------+
+| release_year | title                       |
++--------------+-----------------------------+
+|         2009 | ALICE FANTASIA              |
+|         2009 | ALIEN CENTER                |
+|         2008 | AMADEUS HOLY                |
+|         2008 | ANACONDA CONFESSIONS        |
+|         2007 | ANGELS LIFE                 |
+|         2007 | ARACHNOPHOBIA ROLLERCOASTER |
++--------------+-----------------------------+
+
+```
+
+<!-- end -->
+
+<!-- example group5 -->
+
+##### 在组内排序
+
+另一个关键的分析需求是对组内的元素进行排序。要实现这一点，请使用 `WITHIN GROUP ORDER BY ... {ASC|DESC}` 子句。例如，获取每年评分最高的电影。请注意，它与简单的 `ORDER BY` 并行工作：
+
+* `WITHIN GROUP ORDER BY` 对**组内**结果进行排序
+
+* 而仅仅 `GROUP BY` 对**组本身**进行排序
+
+这两者完全独立工作。
+
+<!-- intro -->
+
+##### 示例：
+
+<!-- request SQL -->
+
+```sql
+
+SELECT release_year, title, rental_rate FROM films GROUP BY release_year WITHIN GROUP ORDER BY rental_rate DESC ORDER BY release_year DESC LIMIT 5;
+
+```
+
+<!-- response SQL -->
+
+```sql
+
++--------------+------------------+-------------+
+| release_year | title            | rental_rate |
++--------------+------------------+-------------+
+|         2009 | AMERICAN CIRCUS  |    4.990000 |
+|         2008 | ANTHEM LUKE      |    4.990000 |
+|         2007 | ATTACKS HATE     |    4.990000 |
+|         2006 | ALADDIN CALENDAR |    4.990000 |
+|         2005 | AIRPLANE SIERRA  |    4.990000 |
++--------------+------------------+-------------+
+
+```
+
+<!-- end -->
+
+<!-- example group6 -->
+
+##### 过滤组
+
+`HAVING expression` 是一个有用的子句，用于过滤组。虽然 `WHERE` 在分组之前应用，但 `HAVING` 在组上工作。例如，让我们只保留那些年度电影的平均租赁率高于 3 的年份。我们只得到了四年：
+
+<!-- intro -->
+
+##### 示例：
+
+<!-- request SQL -->
+
+```sql
+
+SELECT release_year, avg(rental_rate) avg FROM films GROUP BY release_year HAVING avg > 3;
+
+```
+
+<!-- response SQL -->
+
+```sql
+
++--------------+------------+
+| release_year | avg        |
++--------------+------------+
+|         2002 | 3.08259249 |
+|         2001 | 3.09989142 |
+|         2000 | 3.17556739 |
+|         2006 | 3.26184368 |
++--------------+------------+
+```
+<!-- end -->
+
+请注意 `HAVING` 不会影响 [搜索查询元信息](../Node_info_and_management/SHOW_META.md#SHOW-META)中的 `total_found`。
+
+<!-- example group7 -->
+##### GROUPBY()
+有一个函数 `GROUPBY()`，它返回当前组的键。它在许多情况下都很有用，特别是当您 [按 MVA 分组](../Searching/Grouping.md#Grouping-by-MVA-%28multi-value-attributes%29)或按 [JSON 值分组](../Searching/Grouping.md#Grouping-by-a-JSON-node)时。
+
+它也可以用于 `HAVING`，例如，仅保留 2000 年和 2002 年。
+
+请注意，当您在一次分组多个字段时，不建议使用 `GROUPBY()`。它仍然会工作，但由于在这种情况下组键是字段值的复合体，它可能不会以您预期的方式出现。
+
+<!-- intro -->
+##### 示例：
+
+<!-- request SQL -->
+```sql
+SELECT release_year, count(*) FROM films GROUP BY release_year HAVING GROUPBY() IN (2000, 2002);
+```
+<!-- response SQL -->
+```sql
++--------------+----------+
+| release_year | count(*) |
++--------------+----------+
+|         2002 |      108 |
+|         2000 |       97 |
++--------------+----------+
+```
+<!-- end -->
+<!-- example mva -->
+##### 按 MVA（多值属性）分组
+Manticore 支持按 [MVA](../Creating_a_table/Data_types.md#Multi-value-integer-%28MVA%29) 分组。为了演示它是如何工作的，让我们创建一个具有 MVA "sizes"的表 "shoes"，并插入一些文档：
+```sql
+create table shoes(title text, sizes multi);
+insert into shoes values(0,'nike',(40,41,42)),(0,'adidas',(41,43)),(0,'reebook',(42,43));
+```
+所以我们有：
+```sql
+SELECT * FROM shoes;
++---------------------+----------+---------+
+| id                  | sizes    | title   |
++---------------------+----------+---------+
+| 1657851069130080265 | 40,41,42 | nike    |
+| 1657851069130080266 | 41,43    | adidas  |
+| 1657851069130080267 | 42,43    | reebook |
++---------------------+----------+---------+
+```
+如果我们现在按 "sizes" 分组，它将处理我们所有的多值属性，并返回每个属性的聚合，在这种情况下只是计数：
+
+<!-- intro -->
+##### 示例：
+
+<!-- request SQL -->
+```sql
+SELECT groupby() gb, count(*) FROM shoes GROUP BY sizes ORDER BY gb asc;
+```
+<!-- response SQL -->
+```sql
++------+----------+
+| gb   | count(*) |
++------+----------+
+|   40 |        1 |
+|   41 |        2 |
+|   42 |        2 |
+|   43 |        2 |
++------+----------+
+```
+
+<!-- request JSON -->
+``` json
+POST /search -d '
+    {
+     "table" : "shoes",
+     "limit": 0,
+     "aggs" :
+     {
+        "sizes" :
+         {
+            "terms" :
+             {
+              "field":"sizes",
+              "size":100
+             }
+         }
+     }
+    }
+'
+```
+<!-- response JSON -->
+``` json
+{
+  "took": 0,
+  "timed_out": false,
+  "hits": {
+    "total": 3,
+    "hits": [
+
+    ]
+  },
+  "aggregations": {
+    "sizes": {
+      "buckets": [
+        {
+          "key": 43,
+          "doc_count": 2
+        },
+        {
+          "key": 42,
+          "doc_count": 2
+        },
+        {
+          "key": 41,
+          "doc_count": 2
+        },
+        {
+          "key": 40,
+          "doc_count": 1
+        }
+      ]
+    }
+  }
+}
+```
+<!-- request PHP -->
+``` php
+$index->setName('shoes');
+$search = $index->search('');
+$search->limit(0);
+$search->facet('sizes','sizes',100);
+$results = $search->get();
+print_r($results->getFacets());
+```
+<!-- response PHP -->
+``` php
+Array
+(
+    [sizes] => Array
+        (
+            [buckets] => Array
+                (
+                    [0] => Array
+                        (
+                            [key] => 43
+                            [doc_count] => 2
+                        )
+                    [1] => Array
+                        (
+                            [key] => 42
+                            [doc_count] => 2
+                        )
+                    [2] => Array
+                        (
+                            [key] => 41
+                            [doc_count] => 2
+                        )
+                    [3] => Array
+                        (
+                            [key] => 40
+                            [doc_count] => 1
+                        )
+                )
+        )
+)
+```
+<!-- request Python -->
+``` python
+res =searchApi.search({"table":"shoes","limit":0,"aggs":{"sizes":{"terms":{"field":"sizes","size":100}}}})
+```
+<!-- response Python -->
+``` python
+{'aggregations': {u'sizes': {u'buckets': [{u'doc_count': 2, u'key': 43},
+                                          {u'doc_count': 2, u'key': 42},
+                                          {u'doc_count': 2, u'key': 41},
+                                          {u'doc_count': 1, u'key': 40}]}},
+ 'hits': {'hits': [], 'max_score': None, 'total': 3},
+ 'profile': None,
+ 'timed_out': False,
+ 'took': 0}
+```
+<!-- request Javascript -->
+``` javascript
+res = await searchApi.search({"table":"shoes","limit":0,"aggs":{"sizes":{"terms":{"field":"sizes","size":100}}}});
+```
+
+<!-- request Python-asyncio -->
+``` python
+res = await searchApi.search({"table":"shoes","limit":0,"aggs":{"sizes":{"terms":{"field":"sizes","size":100}}}})
+```
+<!-- response Python-asyncio -->
+``` python
+{'aggregations': {u'sizes': {u'buckets': [{u'doc_count': 2, u'key': 43},
+                                          {u'doc_count': 2, u'key': 42},
+                                          {u'doc_count': 2, u'key': 41},
+                                          {u'doc_count': 1, u'key': 40}]}},
+ 'hits': {'hits': [], 'max_score': None, 'total': 3},
+ 'profile': None,
+ 'timed_out': False,
+ 'took': 0}
+```
+
+<!-- request Javascript -->
+``` javascript
+res = await searchApi.search({"table":"shoes","limit":0,"aggs":{"sizes":{"terms":{"field":"sizes","size":100}}}});
+```
+
+<!-- response Javascript -->
+``` javascript
+{"took":0,"timed_out":false,"aggregations":{"sizes":{"buckets":[{"key":43,"doc_count":2},{"key":42,"doc_count":2},{"key":41,"doc_count":2},{"key":40,"doc_count":1}]}},"hits":{"total":3,"hits":[]}}
+```
+<!-- request Java -->
+``` java
+HashMap<String,Object> aggs = new HashMap<String,Object>(){{
+    put("release_year", new HashMap<String,Object>(){{
+        put("terms", new HashMap<String,Object>(){{
+            put("field","release_year");
+            put("size",100);
+        }});
+    }});
+}};
+
+searchRequest = new SearchRequest();
+searchRequest.setIndex("films");        
+searchRequest.setLimit(0);
+query = new HashMap<String,Object>();
+query.put("match_all",null);
+searchRequest.setQuery(query);
+searchRequest.setAggs(aggs);
+searchResponse = searchApi.search(searchRequest);
+```
+<!-- response Java -->
+``` java
+class SearchResponse {
+    took: 0
+    timedOut: false
+    aggregations: {release_year={buckets=[{key=43, doc_count=2}, {key=42, doc_count=2}, {key=41, doc_count=2}, {key=40, doc_count=1}]}}
+    hits: class SearchResponseHits {
+        maxScore: null
+        total: 3
+        hits: []
+    }
+    profile: null
+}
+
+```
+
+<!-- request C# -->
+``` clike
+var agg = new Aggregation("release_year", "release_year");
+agg.Size = 100;
+object query = new { match_all=null };
+var searchRequest = new SearchRequest("films", query);
+searchRequest.Limit = 0;
+searchRequest.Aggs = new List<Aggregation> {agg};
+var searchResponse = searchApi.Search(searchRequest);
+```
+<!-- response C# -->
+``` clike
+class SearchResponse {
+    took: 0
+    timedOut: false
+    aggregations: {release_year={buckets=[{key=43, doc_count=2}, {key=42, doc_count=2}, {key=41, doc_count=2}, {key=40, doc_count=1}]}}
+    hits: class SearchResponseHits {
+        maxScore: null
+        total: 3
+        hits: []
+    }
+    profile: null
+}
+
+```
+
+<!-- request Rust -->
+``` rust
+let query = SearchQuery::new();
+let aggTerms1 = AggTerms::new {
+    fields: "release_year".to_string(),
+    size: Some(100),
+};
+let agg1 = Aggregation {
+    terms: Some(Box::new(aggTerms1)),
+    ..Default::default(),
+};
+let mut aggs = HashMap::new();
+aggs.insert("release_year".to_string(), agg1); 
+
+let search_req = SearchRequest {
+    table: "films".to_string(),
+    query: Some(Box::new(query)),
+    aggs: serde_json::json!(aggs),
+    limit: serde_json::json!(0),
+    ..Default::default(),
+};
+let search_res = search_api.search(search_req).await;
+```
+<!-- response Rust -->
+``` rust
+class SearchResponse {
+    took: 0
+    timedOut: false
+    aggregations: {release_year={buckets=[{key=43, doc_count=2}, {key=42, doc_count=2}, {key=41, doc_count=2}, {key=40, doc_count=1}]}}
+    hits: class SearchResponseHits {
+        maxScore: null
+        total: 3
+        hits: []
+    }
+    profile: null
+}
+
+<!-- request TypeScript -->
+``` typescript
+res = await searchApi.search({
+  index: 'test',
+  aggs: {
+    mva_agg: {
+      terms: { field: "mva_field", size: 2 }
+    }
+  }
+});
+```
+
+<!-- response TypeScript -->
+``` typescript
+{
+
+"took":0,
+
+"timed_out":false,
+
+"aggregations":
+
+{
+
+"mva_agg":
+
+{
+
+"buckets":
+
+[{
+
+"key":1,
+
+"doc_count":4
+
+},
+
+{
+
+"key":2,
+
+"doc_count":2
+
+}]
+
+}
+
+},
+
+"hits":
+
+{
+
+"total":4,
+
+"hits":[]
+
+}
+}
+```
+
+<!-- request Go -->
+``` go
+query := map[string]interface{} {};
+searchRequest.SetQuery(query);
+aggTerms := manticoreclient.NewAggregationTerms()
+aggTerms.SetField("mva_field")
+aggTerms.SetSize(2)
+aggregation := manticoreclient.NewAggregation()
+aggregation.setTerms(aggTerms)
+searchRequest.SetAggregation(aggregation)
+res, _, _ := apiClient.SearchAPI.Search(context.Background()).SearchRequest(*searchRequest).Execute()
+```
+
+<!-- response Go -->
+``` go
+{
+
+"took":0,
+
+"timed_out":false,
+
+"aggregations":
+
+{
+
+"mva_agg":
+
+{
+
+"buckets":
+
+[{
+
+"key":1,
+
+"doc_count":4
+
+},
+
+{
+
+"key":2,
+
+"doc_count":2
+
+}]
+
+}
+
+},
+
+"hits":
+
+{
+
+"total":5,
+
+"hits":[]
+
+}
+}
+```
+
+<!-- end -->
+
+<!-- example json -->
+##### 按 JSON 节点分组
+如果您有一个类型为 [JSON](../Creating_a_table/Data_types.md#JSON) 的字段，您可以按照其任意节点进行分组。为此，让我们创建一个名为 "products" 的表，其中包含几个文档，每个文档在 "meta" JSON 字段中都有一种颜色：
+```sql
+create table products(title text, meta json);
+insert into products values(0,'nike','{"color":"red"}'),(0,'adidas','{"color":"red"}'),(0,'puma','{"color":"green"}');
+```
+这将给我们：
+```sql
+SELECT * FROM products;
++---------------------+-------------------+--------+
+| id                  | meta              | title  |
++---------------------+-------------------+--------+
+| 1657851069130080268 | {"color":"red"}   | nike   |
+| 1657851069130080269 | {"color":"red"}   | adidas |
+| 1657851069130080270 | {"color":"green"} | puma   |
++---------------------+-------------------+--------+
+```
+要根据颜色对产品进行分组，我们可以简单地使用 `GROUP BY meta.color`，并在 `SELECT` 列表中使用 `GROUPBY()` 来显示相应的组键：
+
+<!-- intro -->
+##### 示例：
+
+<!-- request SQL -->
+```sql
+SELECT groupby() color, count(*) from products GROUP BY meta.color;
+```
+<!-- response SQL -->
+```sql
++-------+----------+
+| 颜色   | 计数(*)  |
++-------+----------+
+| 红色   |        2 |
+| 绿色   |        1 |
++-------+----------+
+```
+<!-- request JSON -->
+``` json
+POST /search -d '
+    {
+     "table" : "products",
+     "limit": 0,
+     "aggs" :
+     {
+        "color" :
+         {
+            "terms" :
+             {
+              "field":"meta.color",
+              "size":100
+             }
+         }
+     }
+    }
+'
+```
+<!-- response JSON -->
+``` json
+{
+  "took": 0,
+  "timed_out": false,
+  "hits": {
+    "total": 3,
+    "hits": [
+
+    ]
+  },
+  "aggregations": {
+    "color": {
+      "buckets": [
+        {
+          "key": "绿色",
+          "doc_count": 1
+        },
+        {
+          "key": "红色",
+          "doc_count": 2
+        }
+      ]
+    }
+  }
+}
+```
+<!-- request PHP -->
+``` php
+$index->setName('products');
+$search = $index->search('');
+$search->limit(0);
+$search->facet('meta.color','color',100);
+$results = $search->get();
+print_r($results->getFacets());
+```
+<!-- response PHP -->
+``` php
+Array
+(
+    [color] => Array
+        (
+            [buckets] => Array
+                (
+                    [0] => Array
+                        (
+                            [key] => 绿色
+                            [doc_count] => 1
+                        )
+                    [1] => Array
+                        (
+                            [key] => 红色
+                            [doc_count] => 2
+                        )
+                )
+        )
+)
+
+```
+<!-- request Python -->
+``` python
+res =searchApi.search({"table":"products","limit":0,"aggs":{"color":{"terms":{"field":"meta.color","size":100}}}})
+```
+<!-- response Python -->
+``` python
+{'aggregations': {u'color': {u'buckets': [{u'doc_count': 1,
+                                           u'key': u'绿色'},
+                                          {u'doc_count': 2, u'key': u'红色'}]}},
+ 'hits': {'hits': [], 'max_score': None, 'total': 3},
+ 'profile': None,
+ 'timed_out': False,
+ 'took': 0}
+```
+
+```
+<!-- request Python-asyncio -->
+``` python
+res = await searchApi.search({"table":"products","limit":0,"aggs":{"color":{"terms":{"field":"meta.color","size":100}}}})
+```
+<!-- response Python-asyncio -->
+``` python
+{'aggregations': {u'color': {u'buckets': [{u'doc_count': 1,
+                                           u'key': u'绿色'},
+                                          {u'doc_count': 2, u'key': u'红色'}]}},
+ 'hits': {'hits': [], 'max_score': None, 'total': 3},
+ 'profile': None,
+ 'timed_out': False,
+ 'took': 0}
+```
+
+<!-- request Javascript -->
+``` javascript
+res = await searchApi.search({"table":"products","limit":0,"aggs":{"color":{"terms":{"field":"meta.color","size":100}}}});
+```
+<!-- response Javascript -->
+``` javascript
+{"took":0,"timed_out":false,"aggregations":{"color":{"buckets":[{"key":"绿色","doc_count":1},{"key":"红色","doc_count":2}]}},"hits":{"total":3,"hits":[]}}
+```
+<!-- request Java -->
+``` java
+HashMap<String,Object> aggs = new HashMap<String,Object>(){{
+    put("color", new HashMap<String,Object>(){{
+        put("terms", new HashMap<String,Object>(){{
+            put("field","meta.color");
+            put("size",100);
+        }});
+    }});
+}};
+
+searchRequest = new SearchRequest();
+searchRequest.setIndex("products");        
+searchRequest.setLimit(0);
+query = new HashMap<String,Object>();
+query.put("match_all",null);
+searchRequest.setQuery(query);
+searchRequest.setAggs(aggs);
+searchResponse = searchApi.search(searchRequest);
+```
+<!-- response Java -->
+``` java
+class SearchResponse {
+    took: 0
+    timedOut: false
+    aggregations: {color={buckets=[{key=绿色, doc_count=1}, {key=红色, doc_count=2}]}}
+    hits: class SearchResponseHits {
+        maxScore: null
+        total: 3
+        hits: []
+    }
+    profile: null
+}
+
+```
+
+<!-- request C# -->
+``` clike
+var agg = new Aggregation("color", "meta.color");
+agg.Size = 100;
+object query = new { match_all=null };
+var searchRequest = new SearchRequest("products", query);
+searchRequest.Limit = 0;
+searchRequest.Aggs = new List<Aggregation> {agg};
+var searchResponse = searchApi.Search(searchRequest);
+```
+<!-- response C# -->
+``` clike
+class SearchResponse {
+    took: 0
+    timedOut: false
+    aggregations: {color={buckets=[{key=绿色, doc_count=1}, {key=红色, doc_count=2}]}}
+    hits: class SearchResponseHits {
+        maxScore: null
+        total: 3
+        hits: []
+    }
+    profile: null
+}
+
+```
+
+<!-- request Rust -->
+``` rust
+let query = SearchQuery::new();
+let aggTerms1 = AggTerms::new {
+    fields: "meta.color".to_string(),
+    size: Some(100),
+};
+let agg1 = Aggregation {
+    terms: Some(Box::new(aggTerms1)),
+    ..Default::default(),
+};
+let mut aggs = HashMap::new();
+aggs.insert("color".to_string(), agg1); 
+
+let search_req = SearchRequest {
+    table: "products".to_string(),
+    query: Some(Box::new(query)),
+    aggs: serde_json::json!(aggs),
+    limit: serde_json::json!(0),
+    ..Default::default(),
+};
+let search_res = search_api.search(search_req).await;
+```
+<!-- response Rust -->
+``` rust
+class SearchResponse {
+    took: 0
+    timedOut: false
+    aggregations: {color={buckets=[{key=绿色, doc_count=1}, {key=红色, doc_count=2}]}}
+    hits: class SearchResponseHits {
+        maxScore: null
+        total: 3
+        hits: []
+    }
+    profile: null
+}
+
+```
+
+<!-- request TypeScript -->
+``` typescript
+res = await searchApi.search({
+  index: 'test',
+  aggs: {
+    json_agg: {
+      terms: { field: "json_field.year", size: 1 }
+    }
+  }
+});
+```
+
+<!-- response TypeScript -->
+``` typescript
+{
+
+"took":0,
+
+"timed_out":false,
+
+"aggregations":
+
+{
+
+"json_agg":
+
+{
+
+"buckets":
+
+[{
+
+"key":2000,
+
+"doc_count":2
+
+},
+
+{
+
+"key":2001,
+
+"doc_count":2
+
+}]
+
+}
+
+},
+# 分组搜索结果
+
+<!-- example general -->
 分组搜索结果通常有助于获取每组的匹配计数或其他聚合。例如，它对于创建图表以说明每月匹配的博客文章数量或按网站或作者分组的论坛帖子等是非常有用的。
 
 Manticore 支持按单列或多列以及计算表达式对搜索结果进行分组。结果可以：

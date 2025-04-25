@@ -222,19 +222,33 @@ table products {
 stored_only_fields = title,content
 ```
 
-List of fields that will be stored in the table, but not indexed. This setting works similarly to [stored_fields](../../Creating_a_table/Local_tables/Plain_and_real-time_table_settings.md#stored_fields) except that when a field is specified in `stored_only_fields` t will only be stored, not indexed, and cannot be searched using full-text queries. It can only be retrieved in search results.
+Use `stored_only_fields` when you want Manticore to store some fields of a plain or real-time table **on disk but not index them**. These fields won't be searchable with full-text queries, but you can still retrieve their values in search results.
 
-The value is a comma-separated list of fields that should be stored only, not indexed. By default, this value is empty. If a real-time table is being defined, the fields listed in `stored_only_fields` must also be declared as [rt_field](../../Creating_a_table/Local_tables/Plain_and_real-time_table_settings.md#rt_field).
+For example, this is useful if you want to store data like JSON documents that should be returned with each result, but don't need to be searched, filtered, or grouped. In that case, storing them only — and not indexing them — saves memory and improves performance.
 
-Note also, that you don't need to list attributes in`stored_only_fields`,since their original values are stored anyway. If to compare `stored_only_fields`  to string attributes the former (stored field):
-* is stored on disk and does not take up memory
-* is stored in a compressed format
-* can only be fetched, it cannot be used for sorting, filtering or grouping
+You can do this in two ways:
+- In [plain mode](../../Creating_a_table/Local_tables.md#Defining-table-schema-in-config-%28Plain-mode%29) in a table config, use the `stored_only_fields` setting.
+- In the SQL interface ([RT mode](../../Creating_a_table/Local_tables.md#Online-schema-management-%28RT-mode%29)), use the [stored](../../Creating_a_table/Data_types.md#Storing-binary-data-in-Manticore) property when defining a text field (instead of `indexed` or `indexed stored`). In SQL, you don't need to include `stored_only_fields` — it's not supported in `CREATE TABLE` statements.
 
-In contrast, the latter (string attribute):
-* is stored on disk and in memory
-* is stored in an uncompressed format
-* can be used for sorting, grouping, filtering, and any other actions you want to take with attributes.
+The value of `stored_only_fields` is a comma-separated list of field names. By default, it's empty. If you're using a real-time table, each field listed in `stored_only_fields` must also be declared as an [rt_field](../../Creating_a_table/Local_tables/Plain_and_real-time_table_settings.md#rt_field).
+
+Note: you don't need to list attributes in `stored_only_fields`, since their original values are stored anyway.
+
+How stored-only fields compare to string attributes:
+
+- **Stored-only field**:
+  - Stored on disk only
+  - Compressed format
+  - Can only be retrieved (not used for filtering, sorting, etc.)
+
+- **String attribute**:
+  - Stored on disk and in memory
+  - Uncompressed format (unless you are using columnar storage)
+  - Can be used for sorting, filtering, grouping, etc.
+
+If you are looking to have Manticore store text data for you that you _only_ want stored on disk (eg: json data that is returned with every result), and not in memory or searchable/filterable/groupable, use `stored_only_fields`, or `stored` as your text field property.
+
+When creating your tables using the SQL interface, label your text field as `stored` (and not `indexed` or `indexed stored`). You will not need the `stored_only_fields` option in your `CREATE TABLE` statement; including it may result in a failed query.
 
 #### json_secondary_indexes
 

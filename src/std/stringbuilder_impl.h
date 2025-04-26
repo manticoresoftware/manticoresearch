@@ -347,5 +347,5 @@ CSphString Vec2Str( const VecTraits_T<VAL> & tVec, const char * szDelim ) noexce
 {
 	StringBuilder_c tOut( szDelim );
 	tVec.Apply( [&tOut]( const auto & tVal ) { tOut << tVal; } );
-	return { tOut };
+	return CSphString { tOut }; // could be just { tOut }, bug it fails on gcc
 }

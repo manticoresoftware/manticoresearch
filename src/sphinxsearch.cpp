@@ -2870,11 +2870,15 @@ private:
 		: m_pState ( rhs.m_pState )
 		, m_fK1 ( rhs.m_fK1 )
 		, m_fB ( rhs.m_fB )
-		, m_dWeights ( rhs.m_dWeights )
-		, m_dAvgDocFieldLens ( rhs.m_dAvgDocFieldLens )
-		, m_dFieldLens ( rhs.m_dFieldLens )
+		, m_dWeights ( rhs.m_dWeights.GetLength() )
+		, m_dAvgDocFieldLens ( rhs.m_dAvgDocFieldLens.GetLength() )
+		, m_dFieldLens ( rhs.m_dFieldLens.GetLength() )
 		, m_iWeightMax ( rhs.m_iWeightMax )
-	{}
+	{
+		m_dWeights.CopyFrom ( rhs.m_dWeights );
+		m_dAvgDocFieldLens.CopyFrom ( rhs.m_dAvgDocFieldLens );
+		m_dFieldLens.CopyFrom ( rhs.m_dFieldLens );
+	}
 };
 
 

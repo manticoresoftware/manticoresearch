@@ -2724,8 +2724,8 @@ struct Expr_FieldFactor_c<CSphBitvec> : public Expr_NoLocator_c
 	}
 
 private:
-	Expr_FieldFactor_c<CSphBitvec> ( const Expr_FieldFactor_c<CSphBitvec>& rhs )
-	        : m_pIndex ( rhs.m_pIndex ), m_tField ( rhs.m_tField ) {}
+	Expr_FieldFactor_c ( const Expr_FieldFactor_c& rhs )
+		: m_pIndex ( rhs.m_pIndex ), m_tField ( rhs.m_tField ) {}
 };
 
 

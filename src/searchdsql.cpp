@@ -192,7 +192,7 @@ Str_t SqlParserTraits_c::GetStrt ( const SqlNode_t& tNode ) const noexcept
 	case SPHINXQL_TOK_COUNT: return FROMS ( "@count" );
 	case SPHINXQL_TOK_GROUPBY: return FROMS ( "@groupby" );
 	case SPHINXQL_TOK_WEIGHT: return FROMS ( "@weight" );
-	default: assert ( 0 && "internal error: unknown parser ident code" );
+	default: assert ( 0 && "internal error: unknown parser ident code" ); return FROMS ( "@unknown" );
 	}
 }
 
@@ -1324,7 +1324,7 @@ bool SqlParser_c::SetMatch ( const YYSTYPE & tValue )
 
 bool SqlParser_c::AddMatch ( const SqlNode_t & tValue, const SqlNode_t & tIndex )
 {
-	// so the index from tIndex is either in m_pQuery->m_sIndexes OR equal to m_pQuery->m_sJoinIdx\
+	// so the index from tIndex is either in m_pQuery->m_sIndexes OR equal to m_pQuery->m_sJoinIdx
 	// check it!
 	StrVec_t dQueryIndexes;
 	ParseIndexList ( m_pQuery->m_sIndexes, dQueryIndexes );

@@ -4048,7 +4048,7 @@ bool RtIndex_c::WriteDocs ( SaveDiskDataContext_t & tCtx, CSphWriter & tWriterDi
 		}
 
 		// read next words
-		for ( int i = 0; i < tSegsWithWord.GetSize(); ++i )
+		for ( DWORD i = 0; i < tSegsWithWord.GetSize(); ++i )
 			if ( tSegsWithWord.BitGet(i) )
 				dWords[i] = dWordReaders[i].UnzipWord();
 	}
@@ -8500,7 +8500,7 @@ int RtIndex_c::CheckThenUpdateAttributes ( AttrUpdateInc_t& tUpd, bool& bCritica
 	if ( m_tRtChunks.IsEmpty() )
 		return 0;
 
-	int iUpdated = tUpd.m_iAffected;
+	int iUpdated = tUpd.m_uAffected;
 	if ( !Update_CheckAttributes ( *tUpd.m_pUpdate, m_tSchema, sError ) )
 		return -1;
 
@@ -8545,7 +8545,7 @@ int RtIndex_c::CheckThenUpdateAttributes ( AttrUpdateInc_t& tUpd, bool& bCritica
 	// bump the counter, binlog the update!
 	CommitUpdateAttributes ( &m_iTID, GetName(), tUpdc );
 
-	iUpdated = tUpd.m_iAffected - iUpdated;
+	iUpdated = tUpd.m_uAffected - iUpdated;
 	if ( !tCtx.HandleJsonWarnings ( iUpdated, sWarning, sError ) )
 		return -1;
 

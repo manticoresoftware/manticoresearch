@@ -174,7 +174,7 @@ static CSphString STime (int64_t iNow=-1)
 inline static const char* CurlPollName ( int iWhat )
 {
 	static const char* WhatStrs[] = { "NONE", "IN", "OUT", "INOUT", "REMOVE" };
-	return iWhat<sizeof(WhatStrs) ? WhatStrs[iWhat] : "UNKNOWN";
+	return iWhat<(int)sizeof(WhatStrs) ? WhatStrs[iWhat] : "UNKNOWN";
 }
 
 // forward def

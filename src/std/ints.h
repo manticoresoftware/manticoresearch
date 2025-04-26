@@ -14,7 +14,7 @@
 
 #include "config.h"
 
-#include <stdio.h>
+#include <cstdio>
 
 // for 64-bit types
 #if __has_include(<cstdint>)

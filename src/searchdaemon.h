@@ -1502,6 +1502,7 @@ struct http_parser;
 enum class Replace_e : bool { NoPlus = false, WithPlus = true };
 void UriPercentReplace ( Str_t& sEntity, Replace_e ePlus = Replace_e::WithPlus );
 void DumpHttp ( int iReqType, const CSphString & sURL, Str_t sBody );
+const char* szStatusVersion() noexcept;
 
 enum MysqlColumnType_e
 {

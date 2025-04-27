@@ -65,6 +65,7 @@
 #include "skip_cache.h"
 #include "jieba.h"
 #include "secondaryindex.h"
+#include "daemon/winservice.h"
 
 // services
 #include "taskping.h"
@@ -122,16 +123,6 @@ extern "C"
 /////////////////////////////////////////////////////////////////////////////
 
 using namespace Threads;
-
-static bool				g_bService		= false;
-#if _WIN32
-static bool				g_bServiceStop	= false;
-static const char *		g_sServiceName	= "searchd";
-static HANDLE			g_hPipe			= INVALID_HANDLE_VALUE;
-#endif
-
-static StrVec_t	g_dArgs;
-
 
 enum LogFormat_e
 {
@@ -327,6 +318,10 @@ static void ReleaseTTYFlag()
 		g_pShared->m_bHaveTTY = true;
 }
 
+const char * szStatusVersion () noexcept
+{
+	return g_sStatusVersion.cstr();
+}
 /////////////////////////////////////////////////////////////////////////////
 // LOGGING
 /////////////////////////////////////////////////////////////////////////////
@@ -334,49 +329,15 @@ static void ReleaseTTYFlag()
 
 /// physically emit log entry
 /// buffer must have 1 extra byte for linefeed
-#if _WIN32
 static void sphLogEntry ( ESphLogLevel eLevel, char * sBuf, char * sTtyBuf )
-#else
-static void sphLogEntry ( ESphLogLevel , char * sBuf, char * sTtyBuf )
-#endif
 {
 #if _WIN32
-	if ( g_bService && g_iLogFile==STDOUT_FILENO )
-	{
-		HANDLE hEventSource;
-		LPCTSTR lpszStrings[2];
-
-		hEventSource = RegisterEventSource ( NULL, g_sServiceName );
-		if ( hEventSource )
-		{
-			lpszStrings[0] = g_sServiceName;
-			lpszStrings[1] = sBuf;
-
-			WORD eType;
-			switch ( eLevel )
-			{
-				case SPH_LOG_FATAL:		eType = EVENTLOG_ERROR_TYPE; break;
-				case SPH_LOG_WARNING:	eType = EVENTLOG_WARNING_TYPE; break;
-				case SPH_LOG_INFO:		eType = EVENTLOG_INFORMATION_TYPE; break;
-				default:				eType = EVENTLOG_INFORMATION_TYPE; break;
-			}
-
-			ReportEvent ( hEventSource,	// event log handle
-				eType,					// event type
-				0,						// event category
-				0,						// event identifier
-				NULL,					// no security identifier
-				2,						// size of lpszStrings array
-				0,						// no binary data
-				lpszStrings,			// array of strings
-				NULL );					// no binary data
-
-			DeregisterEventSource ( hEventSource );
-		}
-
-	} else
+	if ( g_iLogFile==STDOUT_FILENO && WinService() )
+		EventLogEntry ( eLevel, sBuf, sTtyBuf );
+	else
 #endif
 	{
+		(void)eLevel;
 		strcat ( sBuf, "\n" ); // NOLINT
 
 		sphSeek ( g_iLogFile, 0, SEEK_END );
@@ -427,7 +388,7 @@ void sphLog ( ESphLogLevel eLevel, const char * sFmt, va_list ap )
 	}
 #endif
 
-	if ( g_iLogFile<0 && !g_bService )
+	if ( g_iLogFile<0 && !WinService() )
 		return;
 
 	// format the banner
@@ -527,15 +488,12 @@ bool DieOrFatalCb ( bool bDie, const char * sFmt, va_list ap )
 	return false; // don't lot to stdout
 }
 
-#if !_WIN32
 static CSphString GetNamedPipeName ( int iPid )
 {
 	CSphString sRes;
 	sRes.SetSprintf ( "/tmp/searchd_%d", iPid );
 	return sRes;
 }
-#endif
-
 
 void LogChangeMode ( int iFile, int iMode )
 {
@@ -862,7 +820,7 @@ void Shutdown () REQUIRES ( MainThread ) NO_THREAD_SAFETY_ANALYSIS
 	Threads::Done ( g_iLogFile );
 
 #if _WIN32
-	CloseHandle ( g_hPipe );
+	CloseWinPipe();
 #else
 	if ( fdStopwait>=0 )
 	{
@@ -1019,17 +977,16 @@ const char		g_sCrashedIndex[] = "--- local index:";
 const char		g_sEndLine[] = "\n";
 #if _WIN32
 const char		g_sMinidumpBanner[] = "minidump located at: ";
+static char		g_sMinidump[SPH_TIME_PID_MAX_SIZE] = "";
 #endif
+
 #if SPH_ALLOCS_PROFILER
 const char		g_sMemoryStatBanner[] = "\n--- memory statistics ---\n";
 #endif
+
 static BYTE		g_dCrashQueryBuff [4096];
 static char		g_sCrashInfo [SPH_TIME_PID_MAX_SIZE] = "[][]\n";
 static int		g_iCrashInfoLen = 0;
-
-#if _WIN32
-static char		g_sMinidump[SPH_TIME_PID_MAX_SIZE] = "";
-#endif
 
 #if !_WIN32
 void CrashLogger::HandleCrash ( int sig ) NO_THREAD_SAFETY_ANALYSIS
@@ -1167,17 +1124,15 @@ LONG WINAPI CrashLogger::HandleCrash ( EXCEPTION_POINTERS * pExc )
 	sphWrite ( g_iLogFile, g_dCrashQueryBuff, iMiniDumpLen );
 	snprintf ( (char *)g_dCrashQueryBuff, sizeof(g_dCrashQueryBuff), "%s.%p.mdmp",
 		g_sMinidump, tQuery.m_dQuery.first );
-#endif
+	sphBacktrace ( pExc, (char *)g_dCrashQueryBuff );
+#else
 
 	// log trace
-#if !_WIN32
 	sphSafeInfo ( g_iLogFile, "Handling signal %d", sig );
 	// print message to stdout during daemon start
 	if ( g_bLogStdout && g_iLogFile!=STDOUT_FILENO )
 		sphSafeInfo ( STDOUT_FILENO, "Crash!!! Handling signal %d", sig );
 	sphBacktrace ( g_iLogFile, g_bSafeTrace );
-#else
-	sphBacktrace ( pExc, (char *)g_dCrashQueryBuff );
 #endif
 
 	// threads table
@@ -19703,224 +19658,6 @@ void CheckReopenLogs () REQUIRES ( MainThread )
 	g_bGotSigusr1 = 0;
 }
 
-#if !_WIN32
-#define WINAPI
-#else
-
-SERVICE_STATUS			g_ss;
-SERVICE_STATUS_HANDLE	g_ssHandle;
-
-
-void MySetServiceStatus ( DWORD dwCurrentState, DWORD dwWin32ExitCode, DWORD dwWaitHint )
-{
-	static DWORD dwCheckPoint = 1;
-
-	if ( dwCurrentState==SERVICE_START_PENDING )
-		g_ss.dwControlsAccepted = 0;
-	else
-		g_ss.dwControlsAccepted = SERVICE_ACCEPT_STOP | SERVICE_ACCEPT_SHUTDOWN;
-
-	g_ss.dwCurrentState = dwCurrentState;
-	g_ss.dwWin32ExitCode = dwWin32ExitCode;
-	g_ss.dwWaitHint = dwWaitHint;
-
-	if ( dwCurrentState==SERVICE_RUNNING || dwCurrentState==SERVICE_STOPPED )
-		g_ss.dwCheckPoint = 0;
-	else
-		g_ss.dwCheckPoint = dwCheckPoint++;
-
-	SetServiceStatus ( g_ssHandle, &g_ss );
-}
-
-
-void WINAPI ServiceControl ( DWORD dwControlCode )
-{
-	switch ( dwControlCode )
-	{
-		case SERVICE_CONTROL_STOP:
-		case SERVICE_CONTROL_SHUTDOWN:
-			MySetServiceStatus ( SERVICE_STOP_PENDING, NO_ERROR, 0 );
-			g_bServiceStop = true;
-			break;
-
-		default:
-			MySetServiceStatus ( g_ss.dwCurrentState, NO_ERROR, 0 );
-			break;
-	}
-}
-
-
-// warning! static buffer, non-reentrable
-const char * WinErrorInfo ()
-{
-	static char sBuf[1024];
-
-	DWORD uErr = ::GetLastError ();
-	snprintf ( sBuf, sizeof(sBuf), "code=%d, error=", uErr );
-
-	auto iLen = (int) strlen(sBuf);
-	if ( !FormatMessage ( FORMAT_MESSAGE_FROM_SYSTEM, NULL, uErr, 0, sBuf+iLen, sizeof(sBuf)-iLen, NULL ) ) // FIXME? force US-english langid?
-		snprintf ( sBuf+iLen, sizeof(sBuf)-iLen, "(no message)" );
-
-	return sBuf;
-}
-
-
-SC_HANDLE ServiceOpenManager ()
-{
-	SC_HANDLE hSCM = OpenSCManager (
-		NULL,						// local computer
-		NULL,						// ServicesActive database
-		SC_MANAGER_ALL_ACCESS );	// full access rights
-
-	if ( hSCM==NULL )
-		sphFatal ( "OpenSCManager() failed: %s", WinErrorInfo() );
-
-	return hSCM;
-}
-
-
-void AppendArg ( char * sBuf, int iBufLimit, const char * sArg )
-{
-	char * sBufMax = sBuf + iBufLimit - 2; // reserve place for opening space and trailing zero
-	sBuf += strlen(sBuf);
-
-	if ( sBuf>=sBufMax )
-		return;
-
-	auto iArgLen = (int) strlen(sArg);
-	bool bQuote = false;
-	for ( int i=0; i<iArgLen && !bQuote; i++ )
-		if ( sArg[i]==' ' || sArg[i]=='"' )
-			bQuote = true;
-
-	*sBuf++ = ' ';
-	if ( !bQuote )
-	{
-		// just copy
-		int iToCopy = Min ( sBufMax-sBuf, iArgLen );
-		memcpy ( sBuf, sArg, iToCopy );
-		sBuf[iToCopy] = '\0';
-
-	} else
-	{
-		// quote
-		sBufMax -= 2; // reserve place for quotes
-		if ( sBuf>=sBufMax )
-			return;
-
-		*sBuf++ = '"';
-		while ( sBuf<sBufMax && *sArg )
-		{
-			if ( *sArg=='"' )
-			{
-				// quote
-				if ( sBuf<sBufMax-1 )
-				{
-					*sBuf++ = '\\';
-					*sBuf++ = *sArg++;
-				}
-			} else
-			{
-				// copy
-				*sBuf++ = *sArg++;
-			}
-		}
-		*sBuf++ = '"';
-		*sBuf++ = '\0';
-	}
-}
-
-
-void ServiceInstall ( int argc, char ** argv )
-{
-	if ( g_bService )
-		return;
-
-	sphInfo ( "Installing service..." );
-
-	char szBinary[MAX_PATH];
-	if ( !GetModuleFileName ( NULL, szBinary, MAX_PATH ) )
-		sphFatal ( "GetModuleFileName() failed: %s", WinErrorInfo() );
-
-	char szPath[MAX_PATH];
-	szPath[0] = '\0';
-
-	AppendArg ( szPath, sizeof(szPath), szBinary );
-	AppendArg ( szPath, sizeof(szPath), "--ntservice" );
-	for ( int i=1; i<argc; i++ )
-		if ( strcmp ( argv[i], "--install" ) )
-			AppendArg ( szPath, sizeof(szPath), argv[i] );
-
-	SC_HANDLE hSCM = ServiceOpenManager ();
-	SC_HANDLE hService = CreateService (
-		hSCM,							// SCM database
-		g_sServiceName,					// name of service
-		g_sServiceName,					// service name to display
-		SERVICE_ALL_ACCESS,				// desired access
-		SERVICE_WIN32_OWN_PROCESS,		// service type
-		SERVICE_AUTO_START,				// start type
-		SERVICE_ERROR_NORMAL,			// error control type
-		szPath+1,						// path to service's binary
-		NULL,							// no load ordering group
-		NULL,							// no tag identifier
-		NULL,							// no dependencies
-		NULL,							// LocalSystem account
-		NULL );							// no password
-
-	if ( !hService )
-	{
-		CloseServiceHandle ( hSCM );
-		sphFatal ( "CreateService() failed: %s", WinErrorInfo() );
-
-	} else
-	{
-		sphInfo ( "Service '%s' installed successfully.", g_sServiceName );
-	}
-
-	CSphString sDesc;
-	sDesc.SetSprintf ( "%s-%s", g_sServiceName, g_sStatusVersion.cstr() );
-
-	SERVICE_DESCRIPTION tDesc;
-	tDesc.lpDescription = (LPSTR) sDesc.cstr();
-	if ( !ChangeServiceConfig2 ( hService, SERVICE_CONFIG_DESCRIPTION, &tDesc ) )
-		sphWarning ( "failed to set service description" );
-
-	CloseServiceHandle ( hService );
-	CloseServiceHandle ( hSCM );
-}
-
-
-void ServiceDelete ()
-{
-	if ( g_bService )
-		return;
-
-	sphInfo ( "Deleting service..." );
-
-	// open manager
-	SC_HANDLE hSCM = ServiceOpenManager ();
-
-	// open service
-	SC_HANDLE hService = OpenService ( hSCM, g_sServiceName, DELETE );
-	if ( !hService )
-	{
-		CloseServiceHandle ( hSCM );
-		sphFatal ( "OpenService() failed: %s", WinErrorInfo() );
-	}
-
-	// do delete
-	bool bRes = !!DeleteService ( hService );
-	CloseServiceHandle ( hService );
-	CloseServiceHandle ( hSCM );
-
-	if ( !bRes )
-		sphFatal ( "DeleteService() failed: %s", WinErrorInfo() );
-	else
-		sphInfo ( "Service '%s' deleted successfully.", g_sServiceName );
-}
-#endif // _WIN32
-
 
 void ShowHelp ()
 {
@@ -19991,16 +19728,6 @@ void InitSharedBuffer ()
 	g_pShared->m_bDaemonAtShutdown = false;
 	g_pShared->m_bHaveTTY = false;
 }
-
-
-#if _WIN32
-BOOL WINAPI CtrlHandler ( DWORD )
-{
-	if ( !g_bService )
-		sphInterruptNow();
-	return TRUE;
-}
-#endif
 
 
 #if !_WIN32
@@ -20171,18 +19898,16 @@ bool SetWatchDog ( int iDevNull ) REQUIRES ( MainThread )
 		}
 	}
 }
-#else
-const int		WIN32_PIPE_BUFSIZE=32;
 #endif // !_WIN32
 
 /// check for incoming signals, and react on them
 void CheckSignals () REQUIRES ( MainThread )
 {
 #if _WIN32
-	if ( g_bService && g_bServiceStop )
+	if ( WinService() && StopWinService() )
 	{
 		Shutdown ();
-		MySetServiceStatus ( SERVICE_STOPPED, NO_ERROR, 0 );
+		SetWinServiceStopped();
 		exit ( 0 );
 	}
 #endif
@@ -20202,31 +19927,7 @@ void CheckSignals () REQUIRES ( MainThread )
 	}
 
 #if _WIN32
-
-	BYTE dPipeInBuf [ WIN32_PIPE_BUFSIZE ];
-	DWORD nBytesRead = 0;
-	BOOL bSuccess = ReadFile ( g_hPipe, dPipeInBuf, WIN32_PIPE_BUFSIZE, &nBytesRead, NULL );
-	if ( nBytesRead > 0 && bSuccess )
-	{
-		for ( DWORD i=0; i<nBytesRead; i++ )
-		{
-			switch ( dPipeInBuf[i] )
-			{
-			case 0:
-				g_bGotSighup = 1;
-				break;
-
-			case 1:
-				sphInterruptNow();
-				if ( g_bService )
-					g_bServiceStop = true;
-				break;
-			}
-		}
-
-		DisconnectNamedPipe ( g_hPipe );
-		ConnectNamedPipe ( g_hPipe, NULL );
-	}
+	CheckWinSignals();
 #endif
 }
 
@@ -21142,53 +20843,9 @@ int StopOrStopWaitAnother ( CSphVariant * v, bool bWait ) REQUIRES ( MainThread 
 
 	int iWaitTimeout = g_iShutdownTimeoutUs + 100000;
 
+	int iExitCode = 0;
 #if _WIN32
-	bool bTerminatedOk = false;
-
-	char szPipeName[64];
-	snprintf ( szPipeName, sizeof(szPipeName), "\\\\.\\pipe\\searchd_%d", iPid );
-
-	HANDLE hPipe = INVALID_HANDLE_VALUE;
-
-	while ( hPipe==INVALID_HANDLE_VALUE )
-	{
-		hPipe = CreateFile ( szPipeName, GENERIC_WRITE, 0, NULL, OPEN_EXISTING, 0, NULL );
-
-		if ( hPipe==INVALID_HANDLE_VALUE )
-		{
-			if ( GetLastError()!=ERROR_PIPE_BUSY )
-			{
-				fprintf ( stdout, "WARNING: could not open pipe (GetLastError()=%d)\n", GetLastError () );
-				break;
-			}
-
-			if ( !WaitNamedPipe ( szPipeName, iWaitTimeout/1000 ) )
-			{
-				fprintf ( stdout, "WARNING: could not open pipe (GetLastError()=%d)\n", GetLastError () );
-				break;
-			}
-		}
-	}
-
-	if ( hPipe!=INVALID_HANDLE_VALUE )
-	{
-		DWORD uWritten = 0;
-		BYTE uWrite = 1;
-		BOOL bResult = WriteFile ( hPipe, &uWrite, 1, &uWritten, NULL );
-		if ( !bResult )
-			fprintf ( stdout, "WARNING: failed to send SIGHTERM to searchd (pid=%d, GetLastError()=%d)\n", iPid, GetLastError () );
-
-		bTerminatedOk = !!bResult;
-
-		CloseHandle ( hPipe );
-	}
-
-	if ( bTerminatedOk )
-	{
-		sphInfo ( "stop: successfully terminated pid %d", iPid );
-		return 0;
-	} else
-		sphFatal ( "stop: error terminating pid %d", iPid );
+	WinStopOrWaitAnother(iPid, iWaitTimeout);
 #else
 	CSphString sPipeName;
 	int iPipeCreated = -1;
@@ -21211,10 +20868,9 @@ int StopOrStopWaitAnother ( CSphVariant * v, bool bWait ) REQUIRES ( MainThread 
 
 	if ( kill ( iPid, SIGTERM ) )
 		sphFatal ( "stop: kill() on pid %d failed: %s", iPid, strerrorm(errno) );
-	else
-		sphInfo ( "stop: successfully sent SIGTERM to pid %d", iPid );
+	sphInfo ( "stop: successfully sent SIGTERM to pid %d", iPid );
 
-	int iExitCode = ( bWait && ( iPipeCreated==-1 || fdPipe<0 ) ) ? 1 : 0;
+	iExitCode = ( bWait && ( iPipeCreated==-1 || fdPipe<0 ) ) ? 1 : 0;
 	bool bHandshake = true;
 	if ( bWait && fdPipe>=0 )
 		while ( true )
@@ -21247,10 +20903,8 @@ int StopOrStopWaitAnother ( CSphVariant * v, bool bWait ) REQUIRES ( MainThread 
 				sphWarning ( "stopwait read fifo error '%s'", strerrorm(errno) );
 				iExitCode = 3; // stopped demon crashed during stop
 				break;
-			} else
-			{
-				iExitCode = ( uStatus==1 ? 0 : 2 ); // uStatus == 1 - AttributeSave - ok, other values - error
 			}
+			iExitCode = ( uStatus==1 ? 0 : 2 ); // uStatus == 1 - AttributeSave - ok, other values - error
 
 			if ( !bHandshake )
 				break;
@@ -21262,9 +20916,8 @@ int StopOrStopWaitAnother ( CSphVariant * v, bool bWait ) REQUIRES ( MainThread 
 	if ( fdPipe>=0 )
 		::close ( fdPipe );
 
-	return iExitCode;
 #endif
-}
+	return iExitCode;}
 } // static namespace
 
 
@@ -21333,6 +20986,10 @@ static void LogTimeZoneStartup ( const CSphString & sWarning )
 #define LOCALDATADIR "."
 #endif
 
+#if !defined WINAPI
+#define WINAPI
+#endif
+
 int WINAPI ServiceMain ( int argc, char **argv ) EXCLUDES (MainThread)
 {
 	ScopedRole_c thMain (MainThread);
@@ -21344,33 +21001,7 @@ int WINAPI ServiceMain ( int argc, char **argv ) EXCLUDES (MainThread)
 	g_tmStarted = sphMicroTimer();
 
 #if _WIN32
-	CSphVector<char *> dArgs;
-	if ( g_bService )
-	{
-		g_ssHandle = RegisterServiceCtrlHandler ( g_sServiceName, ServiceControl );
-		if ( !g_ssHandle )
-			sphFatal ( "failed to start service: RegisterServiceCtrlHandler() failed: %s", WinErrorInfo() );
-
-		g_ss.dwServiceType = SERVICE_WIN32_OWN_PROCESS;
-		MySetServiceStatus ( SERVICE_START_PENDING, NO_ERROR, 4000 );
-
-		if ( argc<=1 )
-		{
-			dArgs.Resize ( g_dArgs.GetLength() );
-			ARRAY_FOREACH ( i, g_dArgs )
-				dArgs[i] = (char*) g_dArgs[i].cstr();
-
-			argc = g_dArgs.GetLength();
-			argv = &dArgs[0];
-		}
-	}
-
-	char szPipeName[64];
-	snprintf ( szPipeName, sizeof(szPipeName), "\\\\.\\pipe\\searchd_%d", getpid() );
-	g_hPipe = CreateNamedPipe ( szPipeName, PIPE_ACCESS_INBOUND,
-		PIPE_TYPE_BYTE | PIPE_READMODE_BYTE | PIPE_NOWAIT,
-		PIPE_UNLIMITED_INSTANCES, 0, WIN32_PIPE_BUFSIZE, NMPWAIT_NOWAIT, NULL );
-	ConnectNamedPipe ( g_hPipe, NULL );
+	SetupWinService (argc, argv);
 #endif
 
 	tzset();
@@ -21390,7 +21021,7 @@ int WINAPI ServiceMain ( int argc, char **argv ) EXCLUDES (MainThread)
 
 	InitBanner();
 
-	if ( !g_bService )
+	if ( !WinService() )
 		fprintf ( stdout, "%s",  g_sBanner.cstr() );
 
 	if ( bColumnarError )
@@ -21464,8 +21095,8 @@ int WINAPI ServiceMain ( int argc, char **argv ) EXCLUDES (MainThread)
 		OPT1 ( "--cpustats" )		g_bCpuStats = true;
 		OPT1 ( "--mockstack" )		{ bMeasureStack = true; g_bOptNoLock = true; g_bOptNoDetach = true; }
 #if _WIN32
-		OPT1 ( "--install" )		{ if ( !g_bService ) { ServiceInstall ( argc, argv ); return 0; } }
-		OPT1 ( "--delete" )			{ if ( !g_bService ) { ServiceDelete (); return 0; } }
+		OPT1 ( "--install" )		{ if ( !WinService() ) { ServiceInstall ( argc, argv ); return 0; } }
+		OPT1 ( "--delete" )			{ if ( !WinService() ) { ServiceDelete (); return 0; } }
 		OPT1 ( "--ntservice" )		{} // it's valid but handled elsewhere
 #else
 		OPT1 ( "--nodetach" )		g_bOptNoDetach = true;
@@ -21517,8 +21148,8 @@ int WINAPI ServiceMain ( int argc, char **argv ) EXCLUDES (MainThread)
 
 	if ( bMeasureStack )
 	{
-		if ( !g_bService )
-			{
+		if ( !WinService() )
+		{
 			sStack << "export NO_STACK_CALCULATION=1\n";
 			fprintf ( stdout, "%s", sStack.cstr() );
 		}
@@ -21539,7 +21170,7 @@ int WINAPI ServiceMain ( int argc, char **argv ) EXCLUDES (MainThread)
 
 	// i want my windows sessions to log onto stdout
 	// both in Debug and Release builds
-	if ( !g_bService )
+	if ( !WinService() )
 		g_bOptNoDetach = true;
 
 #ifndef NDEBUG
@@ -21936,12 +21567,12 @@ int WINAPI ServiceMain ( int argc, char **argv ) EXCLUDES (MainThread)
 	}
 
 #if _WIN32
-	SetConsoleCtrlHandler ( CtrlHandler, TRUE );
+	WinSetConsoleCtrlHandler();
 #endif
 
 	Threads::CallCoroutine( [bWatched] {
 	StrVec_t dFailed;
-	if ( !g_bOptNoDetach && !bWatched && !g_bService )
+	if ( !g_bOptNoDetach && !bWatched && !WinService() )
 	{
 		// re-lock indexes
 		ServedSnap_t hLocal = g_pLocalIndexes->GetHash();
@@ -21988,8 +21619,7 @@ int WINAPI ServiceMain ( int argc, char **argv ) EXCLUDES (MainThread)
 	/////////////////
 
 #if _WIN32
-	if ( g_bService )
-		MySetServiceStatus ( SERVICE_RUNNING, NO_ERROR, 0 );
+	SetWinServiceRunning();
 #endif
 
 	// replay last binlog
@@ -22116,37 +21746,8 @@ inline int mainimpl ( int argc, char **argv )
 	GeodistInit();
 
 #if _WIN32
-	int iNameIndex = -1;
-	for ( int i=1; i<argc; i++ )
-	{
-		if ( strcmp ( argv[i], "--ntservice" )==0 )
-			g_bService = true;
-
-		if ( strcmp ( argv[i], "--servicename" )==0 && (i+1)<argc )
-		{
-			iNameIndex = i+1;
-			g_sServiceName = argv[iNameIndex];
-		}
-	}
-
-	if ( g_bService )
-	{
-		for ( int i=0; i<argc; i++ )
-			g_dArgs.Add ( argv[i] );
-
-		if ( iNameIndex>=0 )
-			g_sServiceName = g_dArgs[iNameIndex].cstr ();
-
-		SERVICE_TABLE_ENTRY dDispatcherTable[] =
-		{
-			{ (LPSTR) g_sServiceName, (LPSERVICE_MAIN_FUNCTION)ServiceMain },
-			{ NULL, NULL }
-		};
-		if ( !StartServiceCtrlDispatcher ( dDispatcherTable ) )
-			sphFatal ( "StartServiceCtrlDispatcher() failed: %s", WinErrorInfo() );
-
+	if ( ParseArgsAndStartWinService ( argc, argv, (void*)&ServiceMain ) )
 		return 0;
-	} else
 #endif
 
 	return ServiceMain ( argc, argv );

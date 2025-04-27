@@ -10,38 +10,20 @@
 // did not, you can find it at http://www.gnu.org/
 //
 
-#include "sphinxutils.h"
-#include "fileutils.h"
-#include "sphinxexcerpt.h"
-#include "sphinxrt.h"
-#include "sphinxpq.h"
-#include "sphinxint.h"
-#include "sphinxquery.h"
-#include "sphinxsort.h"
-#include "sphinxjson.h"
-#include "sphinxjsonquery.h"
 #include "sphinxplugin.h"
 #include "sphinxqcache.h"
-#include "accumulator.h"
-#include "searchdaemon.h"
 #include "searchdha.h"
 #include "searchdreplication.h"
 #include "replication/api_command_cluster.h"
-#include "threadutils.h"
-#include "searchdtask.h"
 #include "global_idf.h"
-#include "docstore.h"
 #include "searchdssl.h"
 #include "searchdexpr.h"
-#include "indexsettings.h"
 #include "searchdddl.h"
-#include "networking_daemon.h"
 #include "query_status.h"
 #include "debug_cmds.h"
 #include "stackmock.h"
 #include "binlog.h"
 #include "indexfiles.h"
-#include "digest_sha1.h"
 #include "tokenizer/charset_definition_parser.h"
 #include "client_session.h"
 #include "sphinx_alter.h"
@@ -51,11 +33,9 @@
 #include "secondarylib.h"
 #include "knnlib.h"
 #include "knnmisc.h"
-#include "task_dispatcher.h"
 #include "tracer.h"
 #include "netfetch.h"
 #include "queryfilter.h"
-#include "datetime.h"
 #include "exprdatetime.h"
 #include "pseudosharding.h"
 #include "geodist.h"
@@ -64,7 +44,6 @@
 #include "frontendschema.h"
 #include "skip_cache.h"
 #include "jieba.h"
-#include "secondaryindex.h"
 #include "daemon/winservice.h"
 
 // services
@@ -76,40 +55,17 @@
 #include "taskflushattrs.h"
 #include "taskflushmutable.h"
 #include "taskpreread.h"
-#include "coroutine.h"
 #include "dynamic_idx.h"
 #include "searchdbuddy.h"
 #include "detail/indexlink.h"
 #include "detail/expmeter.h"
 
-extern "C"
-{
-#include "sphinxudf.h"
-}
-
 #include <csignal>
 #include <clocale>
-#include <cmath>
-#include <ctime>
 
-#define SEARCHD_BACKLOG			5
-
-// don't shutdown on SIGKILL (debug purposes)
-// 1 - SIGKILL will shut down the whole daemon; 0 - watchdog will reincarnate the daemon
-#define WATCHDOG_SIGKILL		1
-
-/////////////////////////////////////////////////////////////////////////////
-
-#if _WIN32
-	// Win-specific headers and calls
-	#include <io.h>
-
-#else
-	// UNIX-specific headers and calls
+#if !_WIN32
 	#include <sys/wait.h>
-	#include <netdb.h>
 	#include <netinet/in.h>
-	#include <netinet/tcp.h>
 #endif
 
 #if USE_SYSLOG
@@ -122,6 +78,16 @@ extern "C"
 
 /////////////////////////////////////////////////////////////////////////////
 
+#define SEARCHD_BACKLOG			5
+
+// don't shutdown on SIGKILL (debug purposes)
+// 1 - SIGKILL will shut down the whole daemon; 0 - watchdog will reincarnate the daemon
+#define WATCHDOG_SIGKILL		1
+
+#define					LOG_COMPACT_IN	128						// upto this many IN(..) values allowed in query_log
+
+/////////////////////////////////////////////////////////////////////////////
+
 using namespace Threads;
 
 enum LogFormat_e
@@ -129,8 +95,6 @@ enum LogFormat_e
 	LOG_FORMAT_PLAIN,
 	LOG_FORMAT_SPHINXQL
 };
-
-#define					LOG_COMPACT_IN	128						// upto this many IN(..) values allowed in query_log
 
 static int				g_iLogFile			= STDOUT_FILENO;	// log file descriptor
 static auto& 			g_iParentPID		= getParentPID ();  // set by watchdog

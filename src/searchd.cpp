@@ -44,6 +44,7 @@
 #include "frontendschema.h"
 #include "skip_cache.h"
 #include "jieba.h"
+#include "sphinxexcerpt.h"
 #include "daemon/winservice.h"
 #include "daemon/crash_logger.h"
 
@@ -64,11 +65,14 @@
 #include <csignal>
 #include <clocale>
 
+#include <sys/stat.h>
 #if !_WIN32
 	#include <sys/wait.h>
 	#include <netinet/in.h>
 #endif
 
+// USE_SYSLOG, HAVE_GETRLIMIT, HAVE_SETRLIMIT
+#include "config.h"
 #if USE_SYSLOG
 	#include <syslog.h>
 #endif

@@ -20,6 +20,7 @@
 #include "searchdconfig.h"
 #include "memio.h"
 #include "accumulator.h"
+#include "config.h"
 
 /////////////////////////////////////////////////////////////////////////////
 // MACHINE-DEPENDENT STUFF

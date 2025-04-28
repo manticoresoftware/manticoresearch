@@ -16,6 +16,7 @@
 #include "sphinxutils.h"
 #include "sphinxdefs.h"
 #include "grouper.h"
+#include "config.h"
 
 class ISphExpr;
 

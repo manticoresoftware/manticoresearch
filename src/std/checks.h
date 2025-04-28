@@ -20,7 +20,6 @@
 /////////////////////////////////////////////////////////////////////////////
 
 #define VARIABLE_IS_NOT_USED __attribute__((unused))
-#define MAYBE_UNUSED( expr ) do { (void)( expr ); } while ( 0 )
 
 #define STATIC_SIZE_ASSERT(_type,_size)	static_assert ( sizeof(_type)==_size, "sizeof " #_type " must be " #_size " bytes" )
 

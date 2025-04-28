@@ -12,7 +12,6 @@
 #include "sphinxutils.h"
 #include "sphinxexpr.h"
 #include "libutils.h"
-#include "fileutils.h"
 #include "schema/columninfo.h"
 #include "schema/schema.h"
 

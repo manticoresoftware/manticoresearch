@@ -13,6 +13,7 @@
 #include "fileutils.h"
 #include "sphinxint.h"
 #include "std/crc32.h"
+#include <sys/stat.h>
 
 #if _WIN32
 	#define getcwd		_getcwd

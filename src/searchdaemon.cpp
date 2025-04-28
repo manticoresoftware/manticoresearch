@@ -17,8 +17,6 @@
 #include "searchdaemon.h"
 #include "coroutine.h"
 
-#include <optional>
-
 #if _WIN32
 	#define USE_PSI_INTERFACE 1
 
@@ -43,7 +41,7 @@
 #include <netinet/in.h>
 #endif
 
-#include <cmath>
+#include "config.h"
 
 /////////////////////////////////////////////////////////////////////////////
 // MISC GLOBALS

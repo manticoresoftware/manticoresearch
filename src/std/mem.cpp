@@ -13,6 +13,8 @@
 #include "mem.h"
 #include "format.h"
 #include "fatal.h"
+#include "config.h"
+
 #include <cstdlib>
 
 /////////////////////////////////////////////////////////////////////////////

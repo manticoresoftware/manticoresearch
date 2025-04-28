@@ -12,6 +12,9 @@
 
 #include "timers.h"
 
+// for HAVE_CLOCK_GETTIME
+#include "config.h"
+
 #if !_WIN32
 #include <sys/time.h> // for gettimeofday
 #include <time.h>

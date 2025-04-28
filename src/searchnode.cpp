@@ -13,14 +13,11 @@
 #include "searchnode.h"
 #include "sphinxquery.h"
 #include "sphinxint.h"
-#include "sphinxplugin.h"
 #include "sphinxqcache.h"
-#include "attribute.h"
 #include "mini_timer.h"
 #include "coroutine.h"
 #include "secondaryindex.h"
-
-#include <math.h>
+#include "client_task_info.h"
 
 //////////////////////////////////////////////////////////////////////////
 

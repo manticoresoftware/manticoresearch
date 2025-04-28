@@ -16,12 +16,10 @@
 #ifndef _sphinxutils_
 #define _sphinxutils_
 
-#include <csignal>
-
-#include "config.h"
 #include "std/stringhash.h"
 #include "std/stringbuilder.h"
 
+#include <csignal>
 //////////////////////////////////////////////////////////////////////////
 
 /// my own isalpha (let's build our own theme park!)

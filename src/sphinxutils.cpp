@@ -21,19 +21,24 @@
 #include "threadutils.h"
 #include "indexfiles.h"
 #include "datetime.h"
+#include "coroutine.h"
+#include "sphinxexcerpt.h"
 
-#include <codecvt>
+// COMPILER, OS_UNAME, etc
+#include "config.h"
+#include "libutils.h"
+
+#include <sys/stat.h>
 #include <ctype.h>
 #include <fcntl.h>
-#include <errno.h>
 #if __has_include(<execinfo.h>)
 #include <execinfo.h>
 #endif
 
-#include <sstream>
 #include <iomanip>
 
 #if _WIN32
+#include <codecvt>
 #include <io.h> // for ::open on windows
 #include <dbghelp.h>
 #else
@@ -46,9 +51,6 @@
 #define HAVE_SYS_PRCTL_H
 #include <sys/prctl.h>
 #endif
-
-#include "libutils.h"
-#include "coroutine.h"
 
 #if __has_include (<malloc.h>)
 #include <malloc.h>
@@ -67,7 +69,7 @@ CSphString g_sWinInstallPath;
 // STRING FUNCTIONS
 //////////////////////////////////////////////////////////////////////////
 
-inline static char * ltrim ( char * sLine )
+static char * ltrim ( char * sLine )
 {
 	while ( *sLine && sphIsSpace(*sLine) )
 		sLine++;

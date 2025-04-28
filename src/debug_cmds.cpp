@@ -18,11 +18,10 @@
 #include "digest_sha1.h"
 #include "tracer.h"
 #include "netfetch.h"
+#include "config.h"
 
 #include "taskmalloctrim.h"
 #include "tasksavestate.h"
-
-#include <csignal>
 
 /////////////////////////////////////////////////////////////////////////////
 namespace DebugCmd {

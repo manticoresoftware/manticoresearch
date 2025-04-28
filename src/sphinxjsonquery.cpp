@@ -18,8 +18,8 @@
 #include "searchdsql.h"
 #include "searchdha.h"
 #include "knnmisc.h"
-#include "datetime.h"
 #include "sorterscroll.h"
+#include "sphinxexcerpt.h"
 
 #include "json/cJSON.h"
 

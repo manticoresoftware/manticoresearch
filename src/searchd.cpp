@@ -47,6 +47,7 @@
 #include "sphinxexcerpt.h"
 #include "daemon/winservice.h"
 #include "daemon/crash_logger.h"
+#include "daemon/failures_log.h"
 
 // services
 #include "taskping.h"
@@ -474,138 +475,6 @@ void LogChangeMode ( int iFile, int iMode )
 
 /////////////////////////////////////////////////////////////////////////////
 
-static int CmpString ( const CSphString & a, const CSphString & b )
-{
-	if ( !a.cstr() && !b.cstr() )
-		return 0;
-
-	if ( !a.cstr() || !b.cstr() )
-		return a.cstr() ? -1 : 1;
-
-	return strcmp ( a.cstr(), b.cstr() );
-}
-
-struct SearchFailure_t
-{
-	CSphString	m_sParentIndex;
-	CSphString	m_sIndex;	///< searched index name
-	CSphString	m_sError;	///< search error message
-
-	bool operator == ( const SearchFailure_t & r ) const
-	{
-		return m_sIndex==r.m_sIndex && m_sError==r.m_sError && m_sParentIndex==r.m_sParentIndex;
-	}
-
-	bool operator < ( const SearchFailure_t & r ) const
-	{
-		int iRes = CmpString ( m_sError.cstr(), r.m_sError.cstr() );
-		if ( !iRes )
-			iRes = CmpString ( m_sParentIndex.cstr (), r.m_sParentIndex.cstr () );
-		if ( !iRes )
-			iRes = CmpString ( m_sIndex.cstr(), r.m_sIndex.cstr() );
-		return iRes<0;
-	}
-
-	SearchFailure_t & operator = ( const SearchFailure_t & r )
-	{
-		if ( this!=&r )
-		{
-			m_sParentIndex = r.m_sParentIndex;
-			m_sIndex = r.m_sIndex;
-			m_sError = r.m_sError;
-		}
-		return *this;
-	}
-};
-
-
-static void ReportIndexesName ( int iSpanStart, int iSpandEnd, const CSphVector<SearchFailure_t> & dLog, StringBuilder_c & sOut );
-
-class SearchFailuresLog_c
-{
-	CSphVector<SearchFailure_t>		m_dLog;
-
-public:
-	void Submit ( const CSphString& sIndex, const char * sParentIndex , const char * sError )
-	{
-		SearchFailure_t & tEntry = m_dLog.Add ();
-		tEntry.m_sParentIndex = sParentIndex;
-		tEntry.m_sIndex = sIndex;
-		tEntry.m_sError = sError;
-	}
-
-	void SubmitVa ( const char * sIndex, const char * sParentIndex, const char * sTemplate, va_list ap )
-	{
-		StringBuilder_c tError;
-		tError.vAppendf ( sTemplate, ap );
-
-		SearchFailure_t &tEntry = m_dLog.Add ();
-		tEntry.m_sParentIndex = sParentIndex;
-		tEntry.m_sIndex = sIndex;
-		tError.MoveTo ( tEntry.m_sError );
-	}
-
-	inline void Append ( const SearchFailuresLog_c& rhs )
-	{
-		m_dLog.Append ( rhs.m_dLog );
-	}
-
-	void SubmitEx ( const char * sIndex, const char * sParentIndex, const char * sTemplate, ... ) __attribute__ ( ( format ( printf, 4, 5 ) ) )
-	{
-		va_list ap;
-		va_start ( ap, sTemplate );
-		SubmitVa ( sIndex, sParentIndex, sTemplate, ap);
-		va_end ( ap );
-	}
-
-	void SubmitEx ( const CSphString &sIndex, const char * sParentIndex, const char * sTemplate, ... ) __attribute__ ( ( format ( printf, 4, 5 ) ) )
-	{
-		va_list ap;
-		va_start ( ap, sTemplate );
-		SubmitVa ( sIndex.cstr(), sParentIndex, sTemplate, ap );
-		va_end ( ap );
-	}
-
-	bool IsEmpty ()
-	{
-		return m_dLog.GetLength()==0;
-	}
-
-	int GetReportsCount()
-	{
-		return m_dLog.GetLength();
-	}
-
-	void BuildReport ( StringBuilder_c & sReport )
-	{
-		if ( IsEmpty() )
-			return;
-
-		// collapse same messages
-		m_dLog.Uniq ();
-		int iSpanStart = 0;
-		Comma_c sColon( { ";\n", 2 } );
-
-		for ( int i=1; i<=m_dLog.GetLength(); ++i )
-		{
-			// keep scanning while error text is the same
-			if ( i!=m_dLog.GetLength() )
-				if ( m_dLog[i].m_sError==m_dLog[i-1].m_sError )
-					continue;
-
-			if ( m_dLog[iSpanStart].m_sError.IsEmpty() )
-				continue;
-
-			sReport << sColon;
-
-			ReportIndexesName ( iSpanStart, i, m_dLog, sReport );
-			sReport << m_dLog[iSpanStart].m_sError;
-
-			// done
-			iSpanStart = i;
-		}
-	}
-};
 
 #define LOG_COMPONENT_SEARCHD __LINE__ << " "
 
@@ -3144,36 +3013,6 @@ void LogBuddyQuery ( const Str_t sQuery, BuddyQuery_e tType )
 	tBuf << ";\n";
 
 	WriteQuery ( tBuf );
-}
-
-void ReportIndexesName ( int iSpanStart, int iSpandEnd, const CSphVector<SearchFailure_t> & dLog, StringBuilder_c & sOut )
-{
-	int iSpanLen = iSpandEnd - iSpanStart;
-
-	// report distributed index in case all failures are from their locals
-	if ( iSpanLen>1 && !dLog[iSpanStart].m_sParentIndex.IsEmpty ()
-		&& dLog[iSpanStart].m_sParentIndex==dLog[iSpandEnd-1].m_sParentIndex )
-	{
-		auto pDist = GetDistr ( dLog[iSpanStart].m_sParentIndex );
-		if ( pDist && pDist->m_dLocal.GetLength ()==iSpanLen )
-		{
-			sOut << "index " << dLog[iSpanStart].m_sParentIndex << ": ";
-			return;
-		}
-	}
-
-	// report only first indexes up to 4
-	int iEndReport = ( iSpanLen>4 ) ? iSpanStart+3 : iSpandEnd;
-	sOut.StartBlock ( ",", "table " );
-	for ( int j = iSpanStart; j<iEndReport; ++j )
-		sOut << dLog[j].m_sIndex;
-	sOut.FinishBlock ();
-
-	// add total index count
-	if ( iEndReport!=iSpandEnd )
-		sOut.Sprintf ( " and %d more: ", iSpandEnd-iEndReport );
-	else
-		sOut += ": ";
 }
 
 

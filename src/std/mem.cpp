@@ -463,7 +463,7 @@ void debugdeallocate ( void* pPtr )
 // MEMORY STATISTICS
 //////////////////////////////////////////////////////////////////////////////
 
-STATIC_ASSERT ( MEM_TOTAL < 255, TOO_MANY_MEMORY_CATEGORIES );
+static_assert ( MEM_TOTAL < 255, "too many memory categories" );
 
 // stack of memory categories as we move deeper and deeper
 class MemCategoryStack_t // NOLINT

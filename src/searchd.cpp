@@ -258,7 +258,7 @@ static const char * g_dApiCommands[] =
 	"callpq", "clusterpq", "getfield"
 };
 
-STATIC_ASSERT ( sizeof(g_dApiCommands)/sizeof(g_dApiCommands[0])==SEARCHD_COMMAND_TOTAL, SEARCHD_COMMAND_SHOULD_BE_SAME_AS_SEARCHD_COMMAND_TOTAL );
+static_assert ( sizeof(g_dApiCommands)/sizeof(g_dApiCommands[0])==SEARCHD_COMMAND_TOTAL, "number of commands must be same as SEARCHD_COMMAND_TOTAL" );
 
 //////////////////////////////////////////////////////////////////////////
 
@@ -7603,7 +7603,7 @@ static const char * g_dSqlStmts[] =
 };
 
 
-STATIC_ASSERT ( sizeof(g_dSqlStmts)/sizeof(g_dSqlStmts[0])==STMT_TOTAL, STMT_DESC_SHOULD_BE_SAME_AS_STMT_TOTAL );
+static_assert ( sizeof(g_dSqlStmts)/sizeof(g_dSqlStmts[0])==STMT_TOTAL, "number of statements must be same as STMT_TOTAL" );
 
 //////////////////////////////////////////////////////////////////////////
 

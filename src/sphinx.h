@@ -184,7 +184,7 @@ public:
 struct FieldMask_t
 {
 	static const int SIZE = SPH_MAX_FIELDS/32;
-	STATIC_ASSERT ( ( SPH_MAX_FIELDS%32 )==0, ASSUME_MAX_FIELDS_ARE_REPRESENTABLE_BY_DWORD );
+	static_assert ( ( SPH_MAX_FIELDS%32 )==0, "assume SPH_MAX_FIELDS are representable by a dword" );
 	DWORD m_dMask [ SIZE ];
 
 	// no custom cstr and d-tor - to be usable from inside unions

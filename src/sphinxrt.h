@@ -222,7 +222,7 @@ typedef void ProgressCallbackSimple_t ();
 /// Exposed internal stuff (for pq and for testing)
 
 #define SPH_MAX_KEYWORD_LEN (3*SPH_MAX_WORD_LEN+4)
-STATIC_ASSERT ( SPH_MAX_KEYWORD_LEN<255, MAX_KEYWORD_LEN_SHOULD_FITS_BYTE );
+static_assert ( SPH_MAX_KEYWORD_LEN<255, "SPH_MAX_KEYWORD_LEN should fit in byte" );
 
 struct RtDoc_t
 {

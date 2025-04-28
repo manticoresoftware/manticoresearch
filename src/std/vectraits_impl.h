@@ -143,7 +143,7 @@ template<typename T>
 template<typename TT>
 VecTraits_T<T>::operator VecTraits_T<TT>&() const
 {
-	STATIC_ASSERT ( sizeof ( T ) == sizeof ( TT ), SIZE_OF_DERIVED_NOT_SAME_AS_ORIGIN );
+	static_assert ( sizeof ( T ) == sizeof ( TT ), "size of derived not same as origin" );
 	return *(VecTraits_T<TT>*)( const_cast<VecTraits_T<T>*> ( this ) );
 }
 

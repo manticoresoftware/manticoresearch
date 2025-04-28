@@ -105,6 +105,16 @@ $index->create([
 ```python
 utilsApi.sql('CREATE TABLE products(title text, price float) charset_table = \'0..9, A..Z->a..z, _, a..z, U+410..U+42F->U+430..U+44F, U+430..U+44F, U+401->U+451, U+451\'')
 ```
+
+<!-- intro -->
+##### Python-asyncio:
+
+<!-- request Python-asyncio -->
+
+```python
+await utilsApi.sql('CREATE TABLE products(title text, price float) charset_table = \'0..9, A..Z->a..z, _, a..z, U+410..U+42F->U+430..U+44F, U+430..U+44F, U+401->U+451, U+451\'')
+```
+
 <!-- intro -->
 ##### Javascript:
 
@@ -119,7 +129,7 @@ res = await utilsApi.sql('CREATE TABLE products(title text, price float) charset
 <!-- request Java -->
 
 ```java
-utilsApi.sql("CREATE TABLE products(title text, price float) charset_table = '0..9, A..Z->a..z, _, a..z, U+410..U+42F->U+430..U+44F, U+430..U+44F, U+401->U+451, U+451'");
+utilsApi.sql("CREATE TABLE products(title text, price float) charset_table = '0..9, A..Z->a..z, _, a..z, U+410..U+42F->U+430..U+44F, U+430..U+44F, U+401->U+451, U+451'", true);
 ```
 
 <!-- intro -->
@@ -128,7 +138,16 @@ utilsApi.sql("CREATE TABLE products(title text, price float) charset_table = '0.
 <!-- request C# -->
 
 ```clike
-utilsApi.Sql("CREATE TABLE products(title text, price float) charset_table = '0..9, A..Z->a..z, _, a..z, U+410..U+42F->U+430..U+44F, U+430..U+44F, U+401->U+451, U+451'");
+utilsApi.Sql("CREATE TABLE products(title text, price float) charset_table = '0..9, A..Z->a..z, _, a..z, U+410..U+42F->U+430..U+44F, U+430..U+44F, U+401->U+451, U+451'", true);
+```
+
+<!-- intro -->
+##### Rust:
+
+<!-- request Rust -->
+
+```rust
+utils_api.sql("CREATE TABLE products(title text, price float) charset_table = '0..9, A..Z->a..z, _, a..z, U+410..U+42F->U+430..U+44F, U+430..U+44F, U+401->U+451, U+451'", Some(true)).await;
 ```
 
 <!-- request CONFIG -->
@@ -191,6 +210,16 @@ $index->create([
 ```python
 utilsApi.sql('CREATE TABLE products(title text, price float) charset_table = \'0..9, english, _\'')
 ```
+
+<!-- intro -->
+##### Python-asyncio:
+
+<!-- request Python-asyncio -->
+
+```python
+await utilsApi.sql('CREATE TABLE products(title text, price float) charset_table = \'0..9, english, _\'')
+```
+
 <!-- intro -->
 ##### Javascript:
 
@@ -206,7 +235,7 @@ res = await utilsApi.sql('CREATE TABLE products(title text, price float) charset
 <!-- request Java -->
 
 ```java
-utilsApi.sql("CREATE TABLE products(title text, price float) charset_table = '0..9, english, _'");
+utilsApi.sql("CREATE TABLE products(title text, price float) charset_table = '0..9, english, _'", true);
 ```
 
 <!-- intro -->
@@ -215,7 +244,16 @@ utilsApi.sql("CREATE TABLE products(title text, price float) charset_table = '0.
 <!-- request C# -->
 
 ```clike
-utilsApi.Sql("CREATE TABLE products(title text, price float) charset_table = '0..9, english, _'");
+utilsApi.Sql("CREATE TABLE products(title text, price float) charset_table = '0..9, english, _'", true);
+```
+
+<!-- intro -->
+##### Rust:
+
+<!-- request Rust -->
+
+```rust
+utils_api.sql("CREATE TABLE products(title text, price float) charset_table = '0..9, english, _'", Some(true)).await;
 ```
 
 <!-- request CONFIG -->
@@ -296,6 +334,16 @@ $index->create([
 ```python
 utilsApi.sql('CREATE TABLE products(title text, price float) charset_table = \'non_cont\' ngram_len = \'1\' ngram_chars = \'cont\'')
 ```
+
+<!-- intro -->
+##### Python-asyncio:
+
+<!-- request Python-asyncio -->
+
+```python
+await utilsApi.sql('CREATE TABLE products(title text, price float) charset_table = \'non_cont\' ngram_len = \'1\' ngram_chars = \'cont\'')
+```
+
 <!-- intro -->
 ##### Javascript:
 
@@ -311,7 +359,7 @@ res = await utilsApi.sql('CREATE TABLE products(title text, price float) charset
 <!-- request Java -->
 
 ```java
-utilsApi.sql("CREATE TABLE products(title text, price float) charset_table = 'non_cont' ngram_len = '1' ngram_chars = 'cont'");
+utilsApi.sql("CREATE TABLE products(title text, price float) charset_table = 'non_cont' ngram_len = '1' ngram_chars = 'cont'", true);
 ```
 
 <!-- intro -->
@@ -320,7 +368,16 @@ utilsApi.sql("CREATE TABLE products(title text, price float) charset_table = 'no
 <!-- request C# -->
 
 ```clike
-utilsApi.Sql("CREATE TABLE products(title text, price float) charset_table = 'non_cont' ngram_len = '1' ngram_chars = 'cont'");
+utilsApi.Sql("CREATE TABLE products(title text, price float) charset_table = 'non_cont' ngram_len = '1' ngram_chars = 'cont'", true);
+```
+
+<!-- intro -->
+##### Rust:
+
+<!-- request Rust -->
+
+```rust
+utils_api.sql("CREATE TABLE products(title text, price float) charset_table = 'non_cont' ngram_len = '1' ngram_chars = 'cont'", Some(true)).await;
 ```
 
 <!-- request CONFIG -->
@@ -403,6 +460,15 @@ utilsApi.sql('CREATE TABLE products(title text, price float) blend_chars = \'+, 
 ```
 
 <!-- intro -->
+##### Python-asyncio:
+
+<!-- request Python-asyncio -->
+
+```python
+await utilsApi.sql('CREATE TABLE products(title text, price float) blend_chars = \'+, &, U+23, @->_\'')
+```
+
+<!-- intro -->
 ##### Javascript:
 
 <!-- request javascript -->
@@ -417,7 +483,7 @@ res = await utilsApi.sql('CREATE TABLE products(title text, price float) blend_c
 <!-- request Java -->
 
 ```java
-utilsApi.sql("CREATE TABLE products(title text, price float) blend_chars = '+, &, U+23, @->_'");
+utilsApi.sql("CREATE TABLE products(title text, price float) blend_chars = '+, &, U+23, @->_'", true);
 ```
 
 <!-- intro -->
@@ -426,7 +492,16 @@ utilsApi.sql("CREATE TABLE products(title text, price float) blend_chars = '+, &
 <!-- request C# -->
 
 ```clike
-utilsApi.Sql("CREATE TABLE products(title text, price float) blend_chars = '+, &, U+23, @->_'");
+utilsApi.Sql("CREATE TABLE products(title text, price float) blend_chars = '+, &, U+23, @->_'", true);
+```
+
+<!-- intro -->
+##### Rust:
+
+<!-- request Rust -->
+
+```rust
+utils_api.sql("CREATE TABLE products(title text, price float) blend_chars = '+, &, U+23, @->_'", Some(true)).await;
 ```
 
 <!-- request CONFIG -->
@@ -512,6 +587,16 @@ $index->create([
 ```python
 utilsApi.sql('CREATE TABLE products(title text, price float) blend_mode = \'trim_tail, skip_pure\' blend_chars = \'+, &\'')
 ```
+
+<!-- intro -->
+##### Python-asyncio:
+
+<!-- request Python-asyncio -->
+
+```python
+await utilsApi.sql('CREATE TABLE products(title text, price float) blend_mode = \'trim_tail, skip_pure\' blend_chars = \'+, &\'')
+```
+
 <!-- intro -->
 ##### Javascript:
 
@@ -526,7 +611,7 @@ res = await utilsApi.sql('CREATE TABLE products(title text, price float) blend_m
 <!-- request Java -->
 
 ```java
-utilsApi.sql("CREATE TABLE products(title text, price float) blend_mode = 'trim_tail, skip_pure' blend_chars = '+, &'");
+utilsApi.sql("CREATE TABLE products(title text, price float) blend_mode = 'trim_tail, skip_pure' blend_chars = '+, &'", true);
 ```
 
 <!-- intro -->
@@ -535,7 +620,16 @@ utilsApi.sql("CREATE TABLE products(title text, price float) blend_mode = 'trim_
 <!-- request C# -->
 
 ```clike
-utilsApi.Sql("CREATE TABLE products(title text, price float) blend_mode = 'trim_tail, skip_pure' blend_chars = '+, &'");
+utilsApi.Sql("CREATE TABLE products(title text, price float) blend_mode = 'trim_tail, skip_pure' blend_chars = '+, &'", true);
+```
+
+<!-- intro -->
+##### Rust:
+
+<!-- request Rust -->
+
+```rust
+utils_api.sql("CREATE TABLE products(title text, price float) blend_mode = 'trim_tail, skip_pure' blend_chars = '+, &'", Some(true)).await;
 ```
 
 <!-- request CONFIG -->
@@ -598,6 +692,16 @@ $index->create([
 ```python
 utilsApi.sql('CREATE TABLE products(title text, price float) min_word_len = \'4\'')
 ```
+
+<!-- intro -->
+##### Python-asyncio:
+
+<!-- request Python-asyncio -->
+
+```python
+await utilsApi.sql('CREATE TABLE products(title text, price float) min_word_len = \'4\'')
+```
+
 <!-- intro -->
 ##### Javascript:
 
@@ -613,7 +717,7 @@ res = await utilsApi.sql('CREATE TABLE products(title text, price float) min_wor
 <!-- request Java -->
 
 ```java
-utilsApi.sql("CREATE TABLE products(title text, price float) min_word_len = '4'");
+utilsApi.sql("CREATE TABLE products(title text, price float) min_word_len = '4'", true);
 ```
 
 <!-- intro -->
@@ -622,7 +726,16 @@ utilsApi.sql("CREATE TABLE products(title text, price float) min_word_len = '4'"
 <!-- request C# -->
 
 ```clike
-utilsApi.Sql("CREATE TABLE products(title text, price float) min_word_len = '4'");
+utilsApi.Sql("CREATE TABLE products(title text, price float) min_word_len = '4'", true);
+```
+
+<!-- intro -->
+##### Rust:
+
+<!-- request Rust -->
+
+```rust
+utils_api.sql("CREATE TABLE products(title text, price float) min_word_len = '4'", Some(true)).await;
 ```
 
 <!-- request CONFIG -->
@@ -690,6 +803,16 @@ $index->create([
 ```python
 utilsApi.sql('CREATE TABLE products(title text, price float) ngram_chars = \'cont\' ngram_len = \'1\'')
 ```
+
+<!-- intro -->
+##### Python-asyncio:
+
+<!-- request Python-asyncio -->
+
+```python
+await utilsApi.sql('CREATE TABLE products(title text, price float) ngram_chars = \'cont\' ngram_len = \'1\'')
+```
+
 <!-- intro -->
 ##### Javascript:
 
@@ -705,7 +828,7 @@ res = await utilsApi.sql('CREATE TABLE products(title text, price float) ngram_c
 <!-- request Java -->
 
 ```java
-utilsApi.sql("CREATE TABLE products(title text, price float) ngram_chars = 'cont' ngram_len = '1'");
+utilsApi.sql("CREATE TABLE products(title text, price float) ngram_chars = 'cont' ngram_len = '1'", true);
 ```
 
 <!-- intro -->
@@ -714,7 +837,16 @@ utilsApi.sql("CREATE TABLE products(title text, price float) ngram_chars = 'cont
 <!-- request C# -->
 
 ```clike
-utilsApi.Sql("CREATE TABLE products(title text, price float) ngram_chars = 'cont' ngram_len = '1'");
+utilsApi.Sql("CREATE TABLE products(title text, price float) ngram_chars = 'cont' ngram_len = '1'", true);
+```
+
+<!-- intro -->
+##### Rust:
+
+<!-- request Rust -->
+
+```rust
+utils_api.sql("CREATE TABLE products(title text, price float) ngram_chars = 'cont' ngram_len = '1'", Some(true)).await;
 ```
 
 <!-- request CONFIG -->
@@ -779,6 +911,16 @@ $index->create([
 ```python
 utilsApi.sql('CREATE TABLE products(title text, price float) ngram_chars = \'U+3000..U+2FA1F\' ngram_len = \'1\'')
 ```
+
+<!-- intro -->
+##### Python-asyncio:
+
+<!-- request Python-asyncio -->
+
+```python
+await utilsApi.sql('CREATE TABLE products(title text, price float) ngram_chars = \'U+3000..U+2FA1F\' ngram_len = \'1\'')
+```
+
 <!-- intro -->
 ##### Javascript:
 
@@ -793,7 +935,7 @@ res = await utilsApi.sql('CREATE TABLE products(title text, price float) ngram_c
 
 <!-- request Java -->
 ```java
-utilsApi.sql("CREATE TABLE products(title text, price float) ngram_chars = 'U+3000..U+2FA1F' ngram_len = '1'");
+utilsApi.sql("CREATE TABLE products(title text, price float) ngram_chars = 'U+3000..U+2FA1F' ngram_len = '1'", true);
 ```
 
 <!-- intro -->
@@ -801,7 +943,16 @@ utilsApi.sql("CREATE TABLE products(title text, price float) ngram_chars = 'U+30
 
 <!-- request C# -->
 ```clike
-utilsApi.Sql("CREATE TABLE products(title text, price float) ngram_chars = 'U+3000..U+2FA1F' ngram_len = '1'");
+utilsApi.Sql("CREATE TABLE products(title text, price float) ngram_chars = 'U+3000..U+2FA1F' ngram_len = '1'", true);
+```
+
+<!-- intro -->
+##### Rust:
+
+<!-- request Rust -->
+
+```rust
+utils_api.sql("CREATE TABLE products(title text, price float) ngram_chars = 'U+3000..U+2FA1F' ngram_len = '1'", Some(true)).await;
 ```
 
 <!-- request CONFIG -->
@@ -857,6 +1008,16 @@ $index->create([
 ```python
 utilsApi.sql('CREATE TABLE products(title text, price float) ngram_chars = \'cont\' ngram_len = \'1\'')
 ```
+
+<!-- intro -->
+##### Python-asyncio:
+
+<!-- request Python-asyncio -->
+
+```python
+await utilsApi.sql('CREATE TABLE products(title text, price float) ngram_chars = \'cont\' ngram_len = \'1\'')
+```
+
 <!-- intro -->
 ##### Javascript:
 
@@ -871,7 +1032,7 @@ res = await utilsApi.sql('CREATE TABLE products(title text, price float) ngram_c
 
 <!-- request Java -->
 ```java
-utilsApi.sql("CREATE TABLE products(title text, price float) ngram_chars = 'cont' ngram_len = '1'");
+utilsApi.sql("CREATE TABLE products(title text, price float) ngram_chars = 'cont' ngram_len = '1'", true);
 ```
 
 <!-- intro -->
@@ -879,7 +1040,16 @@ utilsApi.sql("CREATE TABLE products(title text, price float) ngram_chars = 'cont
 
 <!-- request C# -->
 ```clike
-utilsApi.Sql("CREATE TABLE products(title text, price float) ngram_chars = 'cont' ngram_len = '1'");
+utilsApi.Sql("CREATE TABLE products(title text, price float) ngram_chars = 'cont' ngram_len = '1'", true);
+```
+
+<!-- intro -->
+##### Rust:
+
+<!-- request Rust -->
+
+```rust
+utils_api.sql("CREATE TABLE products(title text, price float) ngram_chars = 'cont' ngram_len = '1'", Some(true)).await;
 ```
 
 <!-- request CONFIG -->
@@ -943,6 +1113,16 @@ $index->create([
 ```python
 utilsApi.sql('CREATE TABLE products(title text, price float) ignore_chars = \'U+AD\'')
 ```
+
+<!-- intro -->
+##### Python-asyncio:
+
+<!-- request Python-asyncio -->
+
+```python
+await utilsApi.sql('CREATE TABLE products(title text, price float) ignore_chars = \'U+AD\'')
+```
+
 <!-- intro -->
 ##### Javascript:
 
@@ -958,7 +1138,7 @@ res = await utilsApi.sql('CREATE TABLE products(title text, price float) ignore_
 <!-- request Java -->
 
 ```java
-utilsApi.sql("CREATE TABLE products(title text, price float) ignore_chars = 'U+AD'");
+utilsApi.sql("CREATE TABLE products(title text, price float) ignore_chars = 'U+AD'", true);
 ```
 
 <!-- intro -->
@@ -967,7 +1147,16 @@ utilsApi.sql("CREATE TABLE products(title text, price float) ignore_chars = 'U+A
 <!-- request C# -->
 
 ```clike
-utilsApi.Sql("CREATE TABLE products(title text, price float) ignore_chars = 'U+AD'");
+utilsApi.Sql("CREATE TABLE products(title text, price float) ignore_chars = 'U+AD'", true);
+```
+
+<!-- intro -->
+##### Rust:
+
+<!-- request Rust -->
+
+```rust
+utils_api.sql("CREATE TABLE products(title text, price float) ignore_chars = 'U+AD'", Some(true)).await;
 ```
 
 <!-- request CONFIG -->
@@ -1039,6 +1228,16 @@ $index->create([
 ```python
 utilsApi.sql('CREATE TABLE products(title text, price float) bigram_freq_words = \'the, a, you, i\' bigram_index = \'both_freq\'')
 ```
+
+<!-- intro -->
+##### Python-asyncio:
+
+<!-- request Python-asyncio -->
+
+```python
+await utilsApi.sql('CREATE TABLE products(title text, price float) bigram_freq_words = \'the, a, you, i\' bigram_index = \'both_freq\'')
+```
+
 <!-- intro -->
 ##### Javascript:
 
@@ -1054,7 +1253,7 @@ res = await utilsApi.sql('CREATE TABLE products(title text, price float) bigram_
 <!-- request Java -->
 
 ```java
-utilsApi.sql("CREATE TABLE products(title text, price float) bigram_freq_words = 'the, a, you, i' bigram_index = 'both_freq'");
+utilsApi.sql("CREATE TABLE products(title text, price float) bigram_freq_words = 'the, a, you, i' bigram_index = 'both_freq'", true);
 ```
 
 <!-- intro -->
@@ -1063,7 +1262,16 @@ utilsApi.sql("CREATE TABLE products(title text, price float) bigram_freq_words =
 <!-- request C# -->
 
 ```clike
-utilsApi.Sql("CREATE TABLE products(title text, price float) bigram_freq_words = 'the, a, you, i' bigram_index = 'both_freq'");
+utilsApi.Sql("CREATE TABLE products(title text, price float) bigram_freq_words = 'the, a, you, i' bigram_index = 'both_freq'", true);
+```
+
+<!-- intro -->
+##### Rust:
+
+<!-- request Rust -->
+
+```rust
+utils_api.sql("CREATE TABLE products(title text, price float) bigram_freq_words = 'the, a, you, i' bigram_index = 'both_freq'", Some(true)).await;
 ```
 
 <!-- request CONFIG -->
@@ -1128,6 +1336,16 @@ $index->create([
 ```python
 utilsApi.sql('CREATE TABLE products(title text, price float) bigram_freq_words = \'the, a, you, i\' bigram_index = \'first_freq\'')
 ```
+
+<!-- intro -->
+##### Python-asyncio:
+
+<!-- request Python-asyncio -->
+
+```python
+await utilsApi.sql('CREATE TABLE products(title text, price float) bigram_freq_words = \'the, a, you, i\' bigram_index = \'first_freq\'')
+```
+
 <!-- intro -->
 ##### Javascript:
 
@@ -1143,7 +1361,7 @@ res = await utilsApi.sql('CREATE TABLE products(title text, price float) bigram_
 <!-- request Java -->
 
 ```java
-utilsApi.sql("CREATE TABLE products(title text, price float) bigram_freq_words = 'the, a, you, i' bigram_index = 'first_freq'");
+utilsApi.sql("CREATE TABLE products(title text, price float) bigram_freq_words = 'the, a, you, i' bigram_index = 'first_freq'", true);
 ```
 
 <!-- intro -->
@@ -1152,7 +1370,16 @@ utilsApi.sql("CREATE TABLE products(title text, price float) bigram_freq_words =
 <!-- request C# -->
 
 ```clike
-utilsApi.Sql("CREATE TABLE products(title text, price float) bigram_freq_words = 'the, a, you, i' bigram_index = 'first_freq'");
+utilsApi.Sql("CREATE TABLE products(title text, price float) bigram_freq_words = 'the, a, you, i' bigram_index = 'first_freq'", true);
+```
+
+<!-- intro -->
+##### Rust:
+
+<!-- request Rust -->
+
+```rust
+utils_api.sql("CREATE TABLE products(title text, price float) bigram_freq_words = 'the, a, you, i' bigram_index = 'first_freq'", Some(true)).await;
 ```
 
 <!-- request CONFIG -->
@@ -1226,6 +1453,16 @@ $index->create([
 ```python
 utilsApi.sql('CREATE TABLE products(title text, price float) dict = \'keywords\'')
 ```
+
+<!-- intro -->
+##### Python-asyncio:
+
+<!-- request Python-asyncio -->
+
+```python
+await utilsApi.sql('CREATE TABLE products(title text, price float) dict = \'keywords\'')
+```
+
 <!-- intro -->
 ##### Javascript:
 
@@ -1241,7 +1478,7 @@ res = await utilsApi.sql('CREATE TABLE products(title text, price float) dict = 
 <!-- request Java -->
 
 ```java
-utilsApi.sql("CREATE TABLE products(title text, price float) dict = 'keywords'");
+utilsApi.sql("CREATE TABLE products(title text, price float) dict = 'keywords'", true);
 ```
 
 <!-- intro -->
@@ -1250,7 +1487,16 @@ utilsApi.sql("CREATE TABLE products(title text, price float) dict = 'keywords'")
 <!-- request C# -->
 
 ```clike
-utilsApi.Sql("CREATE TABLE products(title text, price float) dict = 'keywords'");
+utilsApi.Sql("CREATE TABLE products(title text, price float) dict = 'keywords'", true);
+```
+
+<!-- intro -->
+##### Rust:
+
+<!-- request Rust -->
+
+```rust
+utils_api.sql("CREATE TABLE products(title text, price float) dict = 'keywords'", Some(true)).await;
 ```
 
 <!-- request CONFIG -->
@@ -1344,6 +1590,16 @@ $index->create([
 ```python
 utilsApi.sql('CREATE TABLE products(title text, price float) global_idf = \'/usr/local/manticore/var/global.idf\'')
 ```
+
+<!-- intro -->
+##### Python-asyncio:
+
+<!-- request Python-asyncio -->
+
+```python
+await utilsApi.sql('CREATE TABLE products(title text, price float) global_idf = \'/usr/local/manticore/var/global.idf\'')
+```
+
 <!-- intro -->
 ##### Javascript:
 
@@ -1358,7 +1614,7 @@ res = await utilsApi.sql('CREATE TABLE products(title text, price float) global_
 <!-- request Java -->
 
 ```java
-utilsApi.sql("CREATE TABLE products(title text, price float) global_idf = '/usr/local/manticore/var/global.idf'");
+utilsApi.sql("CREATE TABLE products(title text, price float) global_idf = '/usr/local/manticore/var/global.idf'", true);
 ```
 
 <!-- intro -->
@@ -1367,7 +1623,16 @@ utilsApi.sql("CREATE TABLE products(title text, price float) global_idf = '/usr/
 <!-- request C# -->
 
 ```clike
-utilsApi.Sql("CREATE TABLE products(title text, price float) global_idf = '/usr/local/manticore/var/global.idf'");
+utilsApi.Sql("CREATE TABLE products(title text, price float) global_idf = '/usr/local/manticore/var/global.idf'", true);
+```
+
+<!-- intro -->
+##### Rust:
+
+<!-- request Rust -->
+
+```rust
+utils_api.sql("CREATE TABLE products(title text, price float) global_idf = '/usr/local/manticore/var/global.idf'", Some(true)).await;
 ```
 
 <!-- request CONFIG -->
@@ -1438,6 +1703,16 @@ $index->create([
 ```python
 utilsApi.sql('CREATE TABLE products(title text, price float) hitless_words = \'all\'')
 ```
+
+<!-- intro -->
+##### Python-asyncio:
+
+<!-- request Python-asyncio -->
+
+```python
+await utilsApi.sql('CREATE TABLE products(title text, price float) hitless_words = \'all\'')
+```
+
 <!-- intro -->
 ##### Javascript:
 
@@ -1453,7 +1728,7 @@ res = await utilsApi.sql('CREATE TABLE products(title text, price float) hitless
 <!-- request Java -->
 
 ```java
-utilsApi.sql("CREATE TABLE products(title text, price float) hitless_words = 'all'");
+utilsApi.sql("CREATE TABLE products(title text, price float) hitless_words = 'all'", true);
 ```
 
 <!-- intro -->
@@ -1462,7 +1737,16 @@ utilsApi.sql("CREATE TABLE products(title text, price float) hitless_words = 'al
 <!-- request C# -->
 
 ```clike
-utilsApi.Sql("CREATE TABLE products(title text, price float) hitless_words = 'all'");
+utilsApi.Sql("CREATE TABLE products(title text, price float) hitless_words = 'all'", true);
+```
+
+<!-- intro -->
+##### Rust:
+
+<!-- request Rust -->
+
+```rust
+utils_api.sql("CREATE TABLE products(title text, price float) hitless_words = 'all'", Some(true)).await;
 ```
 
 <!-- request CONFIG -->
@@ -1528,6 +1812,16 @@ $index->create([
 ```python
 utilsApi.sql('CREATE TABLE products(title text, price float) index_field_lengths = \'1\'')
 ```
+
+<!-- intro -->
+##### Python-asyncio:
+
+<!-- request Python-asyncio -->
+
+```python
+await utilsApi.sql('CREATE TABLE products(title text, price float) index_field_lengths = \'1\'')
+```
+
 <!-- intro -->
 ##### Javascript:
 
@@ -1542,7 +1836,7 @@ res = await utilsApi.sql('CREATE TABLE products(title text, price float) index_f
 <!-- request Java -->
 
 ```java
-utilsApi.sql("CREATE TABLE products(title text, price float) index_field_lengths = '1'");
+utilsApi.sql("CREATE TABLE products(title text, price float) index_field_lengths = '1'", true);
 ```
 
 <!-- intro -->
@@ -1551,7 +1845,16 @@ utilsApi.sql("CREATE TABLE products(title text, price float) index_field_lengths
 <!-- request C# -->
 
 ```clike
-utilsApi.Sql("CREATE TABLE products(title text, price float) index_field_lengths = '1'");
+utilsApi.Sql("CREATE TABLE products(title text, price float) index_field_lengths = '1'", true);
+```
+
+<!-- intro -->
+##### Rust:
+
+<!-- request Rust -->
+
+```rust
+utils_api.sql("CREATE TABLE products(title text, price float) index_field_lengths = '1'", Some(true)).await;
 ```
 
 <!-- request CONFIG -->
@@ -1612,6 +1915,16 @@ $index->create([
 ```python
 utilsApi.sql('CREATE TABLE products(title text, price float) index_token_filter = \'my_lib.so:custom_blend:chars=@#&\'')
 ```
+
+<!-- intro -->
+##### Python-asyncio:
+
+<!-- request Python-asyncio -->
+
+```python
+await utilsApi.sql('CREATE TABLE products(title text, price float) index_token_filter = \'my_lib.so:custom_blend:chars=@#&\'')
+```
+
 <!-- intro -->
 ##### Javascript:
 
@@ -1626,7 +1939,7 @@ res = await utilsApi.sql('CREATE TABLE products(title text, price float) index_t
 <!-- request Java -->
 
 ```java
-utilsApi.sql("CREATE TABLE products(title text, price float) index_token_filter = 'my_lib.so:custom_blend:chars=@#&'");
+utilsApi.sql("CREATE TABLE products(title text, price float) index_token_filter = 'my_lib.so:custom_blend:chars=@#&'", true);
 ```
 
 <!-- intro -->
@@ -1635,7 +1948,16 @@ utilsApi.sql("CREATE TABLE products(title text, price float) index_token_filter 
 <!-- request C# -->
 
 ```clike
-utilsApi.Sql("CREATE TABLE products(title text, price float) index_token_filter = 'my_lib.so:custom_blend:chars=@#&'");
+utilsApi.Sql("CREATE TABLE products(title text, price float) index_token_filter = 'my_lib.so:custom_blend:chars=@#&'", true);
+```
+
+<!-- intro -->
+##### Rust:
+
+<!-- request Rust -->
+
+```rust
+utils_api.sql("CREATE TABLE products(title text, price float) index_token_filter = 'my_lib.so:custom_blend:chars=@#&'", Some(true)).await;
 ```
 
 <!-- request CONFIG -->
@@ -1694,6 +2016,16 @@ $index->create([
 ```python
 utilsApi.sql('CREATE TABLE products(title text, price float) overshort_step = \'1\'')
 ```
+
+<!-- intro -->
+##### Python-asyncio:
+
+<!-- request Python-asyncio -->
+
+```python
+utilsApi.sql('CREATE TABLE products(title text, price float) overshort_step = \'1\'')
+```
+
 <!-- intro -->
 ##### Javascript:
 
@@ -1709,7 +2041,7 @@ res = await utilsApi.sql('CREATE TABLE products(title text, price float) oversho
 <!-- request Java -->
 
 ```java
-utilsApi.sql("CREATE TABLE products(title text, price float) overshort_step = '1'");
+utilsApi.sql("CREATE TABLE products(title text, price float) overshort_step = '1'", true);
 ```
 
 <!-- intro -->
@@ -1718,7 +2050,16 @@ utilsApi.sql("CREATE TABLE products(title text, price float) overshort_step = '1
 <!-- request C# -->
 
 ```clike
-utilsApi.Sql("CREATE TABLE products(title text, price float) overshort_step = '1'");
+utilsApi.Sql("CREATE TABLE products(title text, price float) overshort_step = '1'", true);
+```
+
+<!-- intro -->
+##### Rust:
+
+<!-- request Rust -->
+
+```rust
+utils_api.sql("CREATE TABLE products(title text, price float) overshort_step = '1'", Some(true)).await;
 ```
 
 <!-- request CONFIG -->
@@ -1785,6 +2126,16 @@ $index->create([
 ```python
 utilsApi.sql('CREATE TABLE products(title text, price float) phrase_boundary = \'., ?, !, U+2026\' phrase_boundary_step = \'10\'')
 ```
+
+<!-- intro -->
+##### Pytho-asyncio:
+
+<!-- request Python-asyncio -->
+
+```python
+await utilsApi.sql('CREATE TABLE products(title text, price float) phrase_boundary = \'., ?, !, U+2026\' phrase_boundary_step = \'10\'')
+```
+
 <!-- intro -->
 ##### Javascript:
 
@@ -1799,7 +2150,7 @@ res = await utilsApi.sql('CREATE TABLE products(title text, price float) phrase_
 <!-- request Java -->
 
 ```java
-utilsApi.sql("CREATE TABLE products(title text, price float) phrase_boundary = '., ?, !, U+2026' phrase_boundary_step = '10'");
+utilsApi.sql("CREATE TABLE products(title text, price float) phrase_boundary = '., ?, !, U+2026' phrase_boundary_step = '10'", true);
 ```
 
 <!-- intro -->
@@ -1808,7 +2159,16 @@ utilsApi.sql("CREATE TABLE products(title text, price float) phrase_boundary = '
 <!-- request C# -->
 
 ```clike
-utilsApi.Sql("CREATE TABLE products(title text, price float) phrase_boundary = '., ?, !, U+2026' phrase_boundary_step = '10'");
+utilsApi.Sql("CREATE TABLE products(title text, price float) phrase_boundary = '., ?, !, U+2026' phrase_boundary_step = '10'", true);
+```
+
+<!-- intro -->
+##### Rust:
+
+<!-- request Rust -->
+
+```rust
+utils_api.sql("CREATE TABLE products(title text, price float) phrase_boundary = '., ?, !, U+2026' phrase_boundary_step = '10'", Some(true)).await;
 ```
 
 <!-- request CONFIG -->
@@ -1872,6 +2232,16 @@ $index->create([
 ```python
 utilsApi.sql('CREATE TABLE products(title text, price float) phrase_boundary_step = \'100\' phrase_boundary = \'., ?, !, U+2026\'')
 ```
+
+<!-- intro -->
+##### Python-asyncio:
+
+<!-- request Python-asyncio -->
+
+```python
+await utilsApi.sql('CREATE TABLE products(title text, price float) phrase_boundary_step = \'100\' phrase_boundary = \'., ?, !, U+2026\'')
+```
+
 <!-- intro -->
 ##### Javascript:
 
@@ -1886,7 +2256,7 @@ res = await utilsApi.sql('CREATE TABLE products(title text, price float) phrase_
 <!-- request Java -->
 
 ```java
-utilsApi.sql("CREATE TABLE products(title text, price float) phrase_boundary_step = '100' phrase_boundary = '., ?, !, U+2026'");
+utilsApi.sql("CREATE TABLE products(title text, price float) phrase_boundary_step = '100' phrase_boundary = '., ?, !, U+2026'", true);
 ```
 
 <!-- intro -->
@@ -1895,7 +2265,16 @@ utilsApi.sql("CREATE TABLE products(title text, price float) phrase_boundary_ste
 <!-- request C# -->
 
 ```clike
-utilsApi.Sql("CREATE TABLE products(title text, price float) phrase_boundary_step = '100' phrase_boundary = '., ?, !, U+2026'");
+utilsApi.Sql("CREATE TABLE products(title text, price float) phrase_boundary_step = '100' phrase_boundary = '., ?, !, U+2026'", true);
+```
+
+<!-- intro -->
+##### Rust:
+
+<!-- request Rust -->
+
+```rust
+utils_api.sql("CREATE TABLE products(title text, price float) phrase_boundary_step = '100' phrase_boundary = '., ?, !, U+2026'", Some(true)).await;
 ```
 
 <!-- request CONFIG -->
@@ -1966,6 +2345,16 @@ $index->create([
 ```python
 utilsApi.sql('CREATE TABLE products(title text, price float) regexp_filter = \'(blue|red) => color\'')
 ```
+
+<!-- intro -->
+##### Python-asyncio:
+
+<!-- request Python-asyncio -->
+
+```python
+await utilsApi.sql('CREATE TABLE products(title text, price float) regexp_filter = \'(blue|red) => color\'')
+```
+
 <!-- intro -->
 ##### Javascript:
 
@@ -1981,7 +2370,7 @@ res = await utilsApi.sql('CREATE TABLE products(title text, price float) regexp_
 <!-- request Java -->
 
 ```java
-utilsApi.sql("CREATE TABLE products(title text, price float) regexp_filter = '(blue|red) => color'");
+utilsApi.sql("CREATE TABLE products(title text, price float) regexp_filter = '(blue|red) => color'", true);
 ```
 
 <!-- intro -->
@@ -1990,7 +2379,16 @@ utilsApi.sql("CREATE TABLE products(title text, price float) regexp_filter = '(b
 <!-- request C# -->
 
 ```clike
-utilsApi.Sql("CREATE TABLE products(title text, price float) regexp_filter = '(blue|red) => color'");
+utilsApi.Sql("CREATE TABLE products(title text, price float) regexp_filter = '(blue|red) => color'", true);
+```
+
+<!-- intro -->
+##### Rust:
+
+<!-- request Rust -->
+
+```rust
+utils_api.sql("CREATE TABLE products(title text, price float) regexp_filter = '(blue|red) => color'", Some(true)).await;
 ```
 
 <!-- request CONFIG -->

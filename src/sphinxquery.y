@@ -31,6 +31,7 @@
 	int				iZoneVec;
 };
 
+%token	END 0 "$end"
 %token <pNode>			TOK_KEYWORD
 %token <tInt>			TOK_NEAR
 %token <tInt>			TOK_INT

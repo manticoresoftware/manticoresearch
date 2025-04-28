@@ -59,6 +59,16 @@ searchd
 	select * from system.test;
 	drop table system.test;
 	drop table test;
+	create table system.test;
+	create table system.`test1`;
+	create table `system`.test2;
+	create table `system`.`test3`;
+	create table `bla`.`test3`;
+	show tables;
+	drop table system.test;
+	drop table system.test1;
+	drop table system.test2;
+	drop table system.test3;
 </sphinxql>
 </queries>
 

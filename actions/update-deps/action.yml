@@ -55,9 +55,21 @@ runs:
         version=$( cat deps.txt | grep "$name" | cut -d' ' -f2 )
         date=$( cat deps.txt | grep "$name" | cut -d' ' -f3 )
         commit=$( cat deps.txt | grep "$name" | cut -d' ' -f4 )
+        
+        # Extract the semver part (x.y.z) from the original version
+        if [[ "$version" == *"+"* ]]; then
+          # Handle format like "1.9.1+25021722-22bd3a05-dev"
+          semver_original=$(echo "$version" | cut -d'+' -f1)
+        else
+          # Handle format like "4.1.2" or other formats
+          # Extract digits and dots until we hit something else
+          semver_original=$(echo "$version" | grep -o '^[0-9][0-9.]*')
+        fi
+        
         echo "original_version=$version" >> $GITHUB_OUTPUT
         echo "original_date=$date" >> $GITHUB_OUTPUT
         echo "original_commit=$commit" >> $GITHUB_OUTPUT
+        echo "semver_original=$semver_original" >> $GITHUB_OUTPUT
         cd ..
 
     - name: Determine branch and target
@@ -118,11 +130,33 @@ runs:
         # Update deps
         name=${{ inputs.name }}
         version_string="${{ inputs.version }}"
+        
+        # Extract the semver part (x.y.z) from the new version
+        if [[ "$version_string" == *"+"* ]]; then
+          # Handle format like "1.9.1+25021722-22bd3a05-dev"
+          semver_new=$(echo "$version_string" | cut -d'+' -f1)
+        else
+          # Handle format like "4.1.2" or other formats
+          # Extract digits and dots until we hit something else
+          semver_new=$(echo "$version_string" | grep -o '^[0-9][0-9.]*')
+        fi
+        
+        # Check if semver versions are the same
+        if [ "${{ steps.commit.outputs.semver_original }}" = "$semver_new" ]; then
+          echo "Semver versions are the same ($semver_new), skipping update"
+          echo "version_string=${version_string// /-}" >> $GITHUB_OUTPUT
+          echo "semver_new=$semver_new" >> $GITHUB_OUTPUT
+          echo "skip_update=true" >> $GITHUB_OUTPUT
+          exit 0
+        fi
+        
         echo "version_string=${version_string// /-}" >> $GITHUB_OUTPUT
+        echo "semver_new=$semver_new" >> $GITHUB_OUTPUT
         sed -i '/^'$name'\s/c\'$name' '"$version_string" deps.txt
         cd ..
 
     - name: Prepare commit message
+      if: steps.deps.outputs.skip_update != 'true'
       id: commit-message
       shell: bash
       run: |
@@ -152,18 +186,24 @@ runs:
 
         name=${{ inputs.name }}
         version_string="${{ inputs.version }}"
-        title="🆕 Update ${name} version"
-        commit="Bump ${name} version to: ${version_string}"
+        semver_original="${{ steps.commit.outputs.semver_original }}"
+        semver_new="${{ steps.deps.outputs.semver_new }}"
+        
+        # Updated title to include version change information
+        title="🆕 Update ${name} version from ${semver_original} to ${semver_new}"
+        commit="Bump ${name} version from ${semver_original} to ${semver_new}"
         body_path=$(mktemp)
-        echo "Update [${name}](${repo_url}) version to: ${version_string} which includes:" > "$body_path"
+        echo "Update [${name}](${repo_url}) version from ${semver_original} to ${semver_new} which includes:" > "$body_path"
         echo >> "$body_path"
         echo "$changes" >> "$body_path"
+
         echo "title=$title" >> $GITHUB_OUTPUT
         echo "commit=$commit" >> $GITHUB_OUTPUT
         echo "body-path=$body_path" >> $GITHUB_OUTPUT
         echo "branch=${{ steps.branch.outputs.branch }}" >> $GITHUB_OUTPUT
 
     - name: Create or update Pull Request
+      if: steps.deps.outputs.skip_update != 'true'
       shell: bash
       env:
         GITHUB_TOKEN: ${{ inputs.token }}

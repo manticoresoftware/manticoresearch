@@ -1007,7 +1007,7 @@ bool IndexSegment_c::Update_Blobs ( const RowsToUpdate_t& dRows, UpdateContext_t
 					if ( iBlobId!=-1 )
 					{
 
-						pBlobRowBuilder->SetAttr ( iBlobId, &tUpd.m_dBlobs[uOffset], uLength, sError );
+						pBlobRowBuilder->SetAttr ( iBlobId, uLength?&tUpd.m_dBlobs[uOffset]:nullptr, uLength, sError );
 						tCtx.m_tUpd.MarkUpdated ( iUpd );
 						tCtx.m_uUpdateMask |= ATTRS_BLOB_UPDATED;
 					}
@@ -2248,7 +2248,7 @@ RowsToUpdateData_t CSphIndex_VLN::Update_CollectRowPtrs ( const UpdateContext_t 
 
 	// collect idxes of alive (not-yet-updated) rows
 	CSphVector<int> dSorted;
-	dSorted.Reserve ( dDocids.GetLength() - tCtx.m_tUpd.m_iAffected );
+	dSorted.Reserve ( dDocids.GetLength() - tCtx.m_tUpd.m_uAffected );
 	ARRAY_CONSTFOREACH (i, dDocids)
 		if ( !tCtx.m_tUpd.m_dUpdated.BitGet ( i ) )
 			dSorted.Add ( i );
@@ -2530,7 +2530,7 @@ int CSphIndex_VLN::CheckThenUpdateAttributes ( AttrUpdateInc_t& tUpd, bool& bCri
 		return 0;
 
 	UpdateContext_t tCtx ( tUpd, m_tSchema );
-	int iUpdated = tUpd.m_iAffected;
+	int iUpdated = tUpd.m_uAffected;
 
 	auto dRowsToUpdate = Update_CollectRowPtrs ( tCtx );
 
@@ -2556,7 +2556,7 @@ int CSphIndex_VLN::CheckThenUpdateAttributes ( AttrUpdateInc_t& tUpd, bool& bCri
 		}
 	}
 
-	iUpdated = tUpd.m_iAffected - iUpdated;
+	iUpdated = tUpd.m_uAffected - iUpdated;
 	if ( !tCtx.HandleJsonWarnings ( iUpdated, sWarning, sError ) )
 		return -1;
 
@@ -5343,7 +5343,7 @@ void CSphIndex_VLN::Build_AddToDocstore ( DocstoreBuilder_i * pDocstoreBuilder, 
 
 	// filter out non-hl fields (should already be null)
 	int iField = 0;
-	for ( int i = 0; i < dStoredFields.GetSize(); i++ )
+	for ( DWORD i = 0; i < dStoredFields.GetSize(); ++i )
 	{
 		if ( !dStoredFields.BitGet(i) )
 			tDoc.m_dFields.Remove(iField);
@@ -5386,7 +5386,7 @@ void CSphIndex_VLN::Build_AddToDocstore ( DocstoreBuilder_i * pDocstoreBuilder, 
 
 	VecTraits_T<BYTE> * pAddedAttrs = tDoc.m_dFields.AddN ( dStoredAttrs.BitCount() );
 	int iAttr = 0;
-	for ( int i = 0; i < dStoredAttrs.GetSize(); i++ )
+	for ( DWORD i = 0; i < dStoredAttrs.GetSize(); ++i )
 		if ( dStoredAttrs.BitGet(i) )
 			pAddedAttrs[iAttr++] = GetAttrForDocstore ( tDocID, i, m_tSchema, tMvaContainer, tSource, dTmpDocstoreAttrStorage[i] );
 
@@ -6688,7 +6688,7 @@ std::pair<DWORD,DWORD> CSphIndex_VLN::CreateRowMapsAndCountTotalDocs ( const CSp
 	// (kills directed to that index must be collected to reapply at the finish)
 	BEGIN_CORO ( "sph", "collect dst rowmap");
 	tMonitor.SetEvent ( MergeCb_c::E_COLLECT_START, pDstIndex->m_iChunk );
-	for ( RowID_t i = 0; i < dDstRowMap.GetLength(); ++i, pRow+=iStride )
+	for ( RowID_t i = 0; i < dDstRowMap.GetULength(); ++i, pRow+=iStride )
 	{
 		if ( pDstIndex->m_tDeadRowMap.IsSet(i) )
 			continue;
@@ -8091,7 +8091,6 @@ std::pair<RowidIterator_i *, bool> CSphIndex_VLN::SpawnIterators ( const CSphQue
 	}
 
 	// using g_iPseudoShardingThresh==0 check so that iterators are still spawned in test suite (when g_iPseudoShardingThresh=0)
-	const int64_t SMALL_INDEX_THRESH = 8192;
 	if ( m_iDocinfo < SMALL_INDEX_THRESH && g_iPseudoShardingThresh > 0 )
 	{
 		dModifiedFilters = dFilters;
@@ -9454,7 +9453,7 @@ bool CSphIndex_VLN::LoadSecondaryIndex ( const CSphString & sFile )
 			if ( GetSecondaryIndexDefault()==SIDefault_e::FORCE )
 				m_sLastError.SetSprintf ( "missing secondary index %s", sFile.cstr() );
 			else
-				sphWarning ( "missing %s; secondary index(es) disabled, consider using ALTER REBUILD SECONDARY to recover the secondary index", sFile.cstr() );
+				sphWarning ( "missing %s; secondary index(es) disabled, consider using ALTER TABLE table REBUILD SECONDARY to recover the secondary index", sFile.cstr() );
 		}
 
 		return GetSecondaryIndexDefault()!=SIDefault_e::FORCE;
@@ -9464,7 +9463,7 @@ bool CSphIndex_VLN::LoadSecondaryIndex ( const CSphString & sFile )
 	{
 		if ( GetSecondaryIndexDefault()!=SIDefault_e::FORCE )
 		{
-			sphWarning ( "'%s': secondary index not loaded, %s; secondary index(es) disabled, consider using ALTER REBUILD SECONDARY to recover the secondary index", GetName(), m_sLastError.cstr() );
+			sphWarning ( "'%s': secondary index not loaded, %s; secondary index(es) disabled, consider using ALTER TABLE table REBUILD SECONDARY to recover the secondary index", GetName(), m_sLastError.cstr() );
 			m_sLastError = "";
 		}
 

@@ -54,9 +54,10 @@ constexpr typename std::common_type<T, U, V>::type Clamp ( T tMin, U tMax, V tVa
 	return Max ( tMin, Min ( tMax, tValue ) );
 }
 
-inline constexpr int sphRoundUp ( int iValue, int iLimit )
+template<typename INT>
+constexpr INT sphRoundUp ( INT iValue, std::make_unsigned_t<INT> uLimit )
 {
-	return ( iValue + iLimit - 1 ) & ~( iLimit - 1 );
+	return ( iValue + uLimit - 1 ) & ~( uLimit - 1 );
 }
 
 #define SafeDelete( _x )		do { if ( _x ) { delete ( _x ); ( _x ) = nullptr; } } while ( 0 )

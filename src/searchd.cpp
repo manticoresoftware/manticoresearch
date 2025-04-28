@@ -80,7 +80,6 @@
 #include "searchdbuddy.h"
 #include "detail/indexlink.h"
 #include "detail/expmeter.h"
-#include "taskflushdisk.h"
 
 extern "C"
 {
@@ -13011,6 +13010,18 @@ static bool CheckExistingTables ( const SqlStmt_t & tStmt, CSphString & sError )
 	return true;
 }
 
+static int CheckShardIntOpt ( const char * sName, const SqlStmt_t & tStmt, CSphString & sError )
+{
+	int iPos = tStmt.m_tCreateTable.m_dOpts.GetFirst ( [&]( const auto & tItem ) { return tItem.m_sName==sName; } );
+	if ( iPos==-1 )
+		return iPos;
+
+	CSphVariant tVal ( tStmt.m_tCreateTable.m_dOpts[iPos].m_sValue.cstr() );
+	if ( tVal.int64val()<0 )
+		sError.SetSprintf ( "table '%s': CREATE TABLE failed: negative '%s' option is not allowed", tStmt.m_sIndex.cstr(), sName );
+
+	return iPos;
+}
 
 static bool CheckCreateTable ( const SqlStmt_t & tStmt, CSphString & sError )
 {
@@ -13031,6 +13042,25 @@ static bool CheckCreateTable ( const SqlStmt_t & tStmt, CSphString & sError )
 				sError.SetSprintf ( "duplicate attribute name '%s'", i.m_tAttr.m_sName.cstr() );
 				return false;
 			}
+
+	// shard related options
+	const CSphVector<NameValueStr_t> & dOpts = tStmt.m_tCreateTable.m_dOpts;
+	if ( dOpts.GetLength() )
+	{
+		int iShardsPos = CheckShardIntOpt ("shards", tStmt, sError );
+		if ( !sError.IsEmpty() )
+			return false;
+		int iRfPos = CheckShardIntOpt ( "rf", tStmt, sError );
+		if ( !sError.IsEmpty() )
+			return false;
+
+		// should be routerd into buddy with good error message
+		if ( iShardsPos!=-1 || iRfPos!=-1 )
+		{
+			sError.SetSprintf ( "table '%s': CREATE TABLE failed: 'shards' and 'rf' options require Buddy", tStmt.m_sIndex.cstr() );
+			return false;
+		}
+	}
 
 	return true;
 }
@@ -17008,6 +17038,20 @@ static void HandleMysqlAlterIndexSettings ( RowBuffer_i & tOut, const SqlStmt_t 
 	if ( !bSame && sError.IsEmpty() )
 	{
 		bool bOk = pRtIndex->Reconfigure(tSetup);
+
+		if ( tSetup.m_tMutableSettings.IsSet ( MutableName_e::GLOBAL_IDF ) )
+		{
+			const CSphString sNewIDF = tSetup.m_tMutableSettings.m_sGlobalIDFPath;
+			sph::PrereadGlobalIDF ( sNewIDF, sError );
+			if ( pServed->m_sGlobalIDFPath != sNewIDF )
+			{
+				auto& tConstServed = *pServed;
+				auto& tServed = const_cast<ServedIndex_c&> ( tConstServed );
+				tServed.m_sGlobalIDFPath = sNewIDF;
+				RotateGlobalIdf();
+			}
+		}
+
 		if ( !bOk )
 		{
 			sError.SetSprintf ( "table '%s': alter failed; TABLE UNUSABLE (%s)", tStmt.m_sIndex.cstr(), pRtIndex->GetLastError().cstr() );
@@ -17891,7 +17935,7 @@ bool ClientSession_c::Execute ( Str_t sQuery, RowBuffer_i & tOut )
 		return false; // do not profile this call, keep last query profile
 
 	case STMT_JOIN_CLUSTER:
-		if ( ClusterJoin ( pStmt->m_sIndex, pStmt->m_dCallOptNames, pStmt->m_dCallOptValues, pStmt->m_bClusterUpdateNodes ) )
+		if ( ClusterJoin ( pStmt->m_sCluster, pStmt->m_dCallOptNames, pStmt->m_dCallOptValues, pStmt->m_bClusterUpdateNodes ) )
 			tOut.Ok();
 		else
 		{
@@ -17900,7 +17944,7 @@ bool ClientSession_c::Execute ( Str_t sQuery, RowBuffer_i & tOut )
 		}
 		return true;
 	case STMT_CLUSTER_CREATE:
-		if ( ClusterCreate ( pStmt->m_sIndex, pStmt->m_dCallOptNames, pStmt->m_dCallOptValues ) )
+		if ( ClusterCreate ( pStmt->m_sCluster, pStmt->m_dCallOptNames, pStmt->m_dCallOptValues ) )
 			tOut.Ok();
 		else
 		{
@@ -17920,7 +17964,7 @@ bool ClientSession_c::Execute ( Str_t sQuery, RowBuffer_i & tOut )
 	case STMT_CLUSTER_ALTER_ADD:
 	case STMT_CLUSTER_ALTER_DROP:
 		m_tLastMeta = CSphQueryResultMeta();
-		if ( ClusterAlter ( pStmt->m_sCluster, pStmt->m_sIndex, ( eStmt==STMT_CLUSTER_ALTER_ADD ), m_tLastMeta.m_sError ) )
+		if ( ClusterAlter ( pStmt->m_sCluster, pStmt->m_dStringSubkeys, ( eStmt==STMT_CLUSTER_ALTER_ADD ), m_tLastMeta.m_sError ) )
 			tOut.Ok ( 0, m_tLastMeta.m_sWarning.IsEmpty() ? 0 : 1 );
 		else
 			tOut.Error ( m_tLastMeta.m_sError.cstr() );
@@ -20681,7 +20725,7 @@ void ConfigureSearchd ( const CSphConfig & hConf, bool bOptPIDFile, bool bTestMo
 
 	ConfigureMerge(hSearchd);
 	SetJoinBatchSize ( hSearchd.GetInt ( "join_batch_size", GetJoinBatchSize() ) );
-	SetRtFlushDiskPeriod ( hSearchd.GetSTimeS ( "diskchunk_flush_write_timeout", GetRtFlushDiskWrite(bTestMode) ), hSearchd.GetSTimeS ( "diskchunk_flush_search_timeout", GetRtFlushDiskSearch() ) );
+	SetRtFlushDiskPeriod ( hSearchd.GetSTimeS ( "diskchunk_flush_write_timeout", bTestMode ? -1 : 1 ), hSearchd.GetSTimeS ( "diskchunk_flush_search_timeout", 30 ) );
 }
 
 static void DirMustWritable ( const CSphString & sDataDir )
@@ -20893,11 +20937,11 @@ ESphAddIndex ConfigureAndPreloadIndex ( const CSphConfigSection & hIndex, const 
 	// no break
 	case ADD_SERVED:
 	{
-		// finally add the index to the hash of enabled.
-		g_pLocalIndexes->Add ( pJustLoadedLocal, szIndexName );
-
 		if ( !pJustLoadedLocal->m_sGlobalIDFPath.IsEmpty() && !sph::PrereadGlobalIDF ( pJustLoadedLocal->m_sGlobalIDFPath, sError ) )
 			dWarnings.Add ( "global IDF unavailable - IGNORING" );
+
+		// finally add the index to the hash of enabled.
+		g_pLocalIndexes->Add ( pJustLoadedLocal, szIndexName );
 	}
 	// no sense to break
 	case ADD_DISTR:
@@ -21973,7 +22017,6 @@ int WINAPI ServiceMain ( int argc, char **argv ) EXCLUDES (MainThread)
 	StartRtBinlogFlushing();
 
 	ScheduleFlushAttrs();
-	ScheduleRtFlushDisk();
 	SetupCompatHttp();
 
 	InitSearchdStats();

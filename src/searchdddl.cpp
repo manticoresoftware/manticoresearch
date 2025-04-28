@@ -72,12 +72,14 @@ public:
 	bool	AddItemOptionQuantization ( const SqlNode_t & tOption );
 
 	void	AddCreateTableOption ( const SqlNode_t & tName, const SqlNode_t & tValue );
-	bool	SetupAlterTable  ( const SqlNode_t & tIndex, const SqlNode_t & tAttr, const SqlNode_t & tType, bool bModify = false );
-	bool	SetupAlterTable ( const SqlNode_t & tIndex, const SqlNode_t & tAttr, ESphAttr eAttr, int iFieldFlags, int iBits=-1, bool bModify = false );
+	bool	SetupAlterTable  ( const SqlNode_t & tAttr, const SqlNode_t & tType, bool bModify = false );
+	bool	SetupAlterTable ( const SqlNode_t & tAttr, ESphAttr eAttr, int iFieldFlags, int iBits=-1, bool bModify = false );
 
 	void	JoinClusterAt ( const SqlNode_t & tAt );
 
 	void	AddInsval ( CSphVector<SqlInsert_t> & dVec, const SqlNode_t & tNode );
+	CSphString	GetTableName ( const SqlNode_t& tName ) const noexcept;
+	CSphString	GetTableName ( const SqlNode_t& tDb, const SqlNode_t& tName ) const noexcept;
 
 private:
 	CSphString		m_sError;
@@ -256,12 +258,11 @@ bool DdlParser_c::CheckFieldFlags ( ESphAttr eAttrType, int iFlags, const CSphSt
 }
 
 
-bool DdlParser_c::SetupAlterTable ( const SqlNode_t & tIndex, const SqlNode_t & tAttr, ESphAttr eAttr, int iFieldFlags, int iBits, bool bModify )
+bool DdlParser_c::SetupAlterTable ( const SqlNode_t & tAttr, ESphAttr eAttr, int iFieldFlags, int iBits, bool bModify )
 {
 	assert( m_pStmt );
 
 	m_pStmt->m_eStmt = bModify ? STMT_ALTER_MODIFY : STMT_ALTER_ADD;
-	ToString ( m_pStmt->m_sIndex, tIndex );
 	ToString ( m_pStmt->m_sAlterAttr, tAttr );
 	m_pStmt->m_sIndex.ToLower();
 	m_pStmt->m_sAlterAttr.ToLower();
@@ -279,9 +280,9 @@ bool DdlParser_c::SetupAlterTable ( const SqlNode_t & tIndex, const SqlNode_t & 
 }
 
 
-bool DdlParser_c::SetupAlterTable  ( const SqlNode_t & tIndex, const SqlNode_t & tAttr, const SqlNode_t & tType, bool bModify )
+bool DdlParser_c::SetupAlterTable  ( const SqlNode_t & tAttr, const SqlNode_t & tType, bool bModify )
 {
-	return SetupAlterTable ( tIndex, tAttr, (ESphAttr)tType.GetValueInt(), tType.m_iType, -1, bModify );
+	return SetupAlterTable ( tAttr, (ESphAttr)tType.GetValueInt(), tType.m_iType, -1, bModify );
 }
 
 
@@ -505,6 +506,20 @@ void DdlParser_c::AddInsval ( CSphVector<SqlInsert_t> & dVec, const SqlNode_t & 
 	if ( tIns.m_iType==TOK_QUOTED_STRING )
 		tIns.m_sVal = ToStringUnescape ( tNode );
 	tIns.m_pVals = CloneMvaVecPtr ( tNode.m_iValues );
+}
+
+CSphString DdlParser_c::GetTableName ( const SqlNode_t& tName ) const noexcept
+{
+	return GetString ( tName ).ToLower();
+}
+
+CSphString DdlParser_c::GetTableName ( const SqlNode_t& tDb, const SqlNode_t& tName ) const noexcept
+{
+	CSphString sName;
+	StringBuilder_c sBuild;
+	sBuild << GetStrt ( tDb ) << '.' << GetTableName ( tName );
+	sBuild.MoveTo ( sName );
+	return sName;
 }
 
 

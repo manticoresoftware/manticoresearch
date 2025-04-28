@@ -1,0 +1,40 @@
+––– input –––
+export INSTANCE=1
+––– output –––
+––– block: ../../base/replication/start-searchd-precach –––
+––– input –––
+mysql -h0 -P1306 -e "CREATE TABLE tbl1"; echo $?
+––– output –––
+0
+––– input –––
+mysql -h0 -P1306 -e "create table tbl2 shards='5' rf='1'"; echo $?
+––– output –––
+0
+––– input –––
+mysql -h0 -P1306 -e "create table tbl3(id bigint) shards='3' rf='1'"; echo $?
+––– output –––
+0
+––– input –––
+mysql -h0 -P1306 -e "create table tbl4(id bigint) SHARDS='4' RF='1'"; echo $?
+––– output –––
+0
+––– input –––
+mysql -h0 -P1306 -e "create table tbl5(id bigint) shards = '2' rf = '1'"; echo $?
+––– output –––
+0
+––– input –––
+mysql -h0 -P1306 -e "create table tbl6(id bigint) shards='1' rf='1'"; echo $?
+––– output –––
+0
+––– input –––
+mysql -h0 -P1306 -e "CREATE TaBle tbl8(id bigint) ShaRDS='4' rf='1'"; echo $?
+––– output –––
+0
+––– input –––
+mysql -h0 -P1306 -e "CREATE TABLE tbl9 shards='1000' rf='1'"; echo $?
+––– output –––
+0
+––– input –––
+mysql -h0 -P1306 -e "CREATE TABLE tbl10 SHARDS='3' rf='1'"; echo $?
+––– output –––
+0

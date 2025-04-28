@@ -12,7 +12,23 @@ docker run -it --privileged --network=test_network --entrypoint=docker-entrypoin
 ––– output –––
 0
 ––– input –––
+apk add yarn > /dev/null 2>&1; echo $?
+––– output –––
+0
+––– input –––
 docker exec manticore apt-get install jq -y > /dev/null 2>&1; echo $?
+––– output –––
+0
+––– input –––
+yarn config set registry https://registry.npmmirror.com > /dev/null 2>&1; echo $?
+––– output –––
+0
+––– input –––
+timeout 600 yarn global add elasticdump > /dev/null 2>&1; echo $?
+––– output –––
+0
+––– input –––
+export PATH="$(yarn global bin):$PATH"; echo $?
 ––– output –––
 0
 ––– input –––
@@ -33,20 +49,12 @@ docker run -d --network=test_network --name elastic -p 127.0.0.1:9200:9200 -e di
 ––– output –––
 0
 ––– input –––
-apk add npm > /dev/null 2>&1; echo $?
-––– output –––
-0
-––– input –––
 docker exec manticore bash -c "page=1; while true; do result=\$(curl -s \"https://hub.docker.com/v2/repositories/elasticdump/elasticsearch-dump/tags/?page_size=100&page=\$page\" | jq -r '.results[].name' | grep -E '^v[0-9]{1}.[0-9]{3}.[0-9]+$' | grep -v '^latest$' | awk -F. '{print substr(\$1,2)}'); [ -z \"\$result\" ] && break; echo \"\$result\"; page=\$((page+1)); done | sort -V | uniq && echo 'latest'"
 ––– output –––
 6
 latest
 ––– input –––
-npm install elasticdump -g > /dev/null 2>&1; echo $?
-––– output –––
-0
-––– input –––
-elasticdump --version
+NODE_OPTIONS="--no-warnings" elasticdump --version
 ––– output –––
 6.#!/[0-9]{3}.[0-9]{1,2}/!#
 ––– input –––
@@ -56,7 +64,7 @@ Archive:  ./test/clt-tests/migration-es-ms/index.zip
 inflating: index_mapping.json
 inflating: index_data.json
 ––– input –––
-elasticdump --input=./test/clt-tests/migration-es-ms/index_mapping.json --output=http://localhost:9200/es-index --type=mapping
+NODE_OPTIONS="--no-warnings" timeout 300 elasticdump --input=./test/clt-tests/migration-es-ms/index_mapping.json --output=http://localhost:9200/es-index --type=mapping
 ––– output –––
 #!/[A-Za-z]{3},\s+\d{2}\s+[A-Za-z]{3}\s+\d{4}\s+\d{2}:\d{2}:\d{2}\s+GMT/!# | starting dump
 #!/[A-Za-z]{3},\s+\d{2}\s+[A-Za-z]{3}\s+\d{4}\s+\d{2}:\d{2}:\d{2}\s+GMT/!# | got 1 objects from source file (offset: 0)
@@ -65,7 +73,7 @@ elasticdump --input=./test/clt-tests/migration-es-ms/index_mapping.json --output
 #!/[A-Za-z]{3},\s+\d{2}\s+[A-Za-z]{3}\s+\d{4}\s+\d{2}:\d{2}:\d{2}\s+GMT/!# | Total Writes: 2
 #!/[A-Za-z]{3},\s+\d{2}\s+[A-Za-z]{3}\s+\d{4}\s+\d{2}:\d{2}:\d{2}\s+GMT/!# | dump complete
 ––– input –––
-elasticdump --input=./test/clt-tests/migration-es-ms/index_data.json --output=http://localhost:9200/es-index --type=data
+NODE_OPTIONS="--no-warnings" timeout 300 elasticdump --input=./test/clt-tests/migration-es-ms/index_data.json --output=http://localhost:9200/es-index --type=data
 ––– output –––
 #!/[A-Za-z]{3},\s+\d{2}\s+[A-Za-z]{3}\s+\d{4}\s+\d{2}:\d{2}:\d{2}\s+GMT/!# | starting dump
 #!/[A-Za-z]{3},\s+\d{2}\s+[A-Za-z]{3}\s+\d{4}\s+\d{2}:\d{2}:\d{2}\s+GMT/!# | got 100 objects from source file (offset: 0)
@@ -82,7 +90,7 @@ elasticdump --input=./test/clt-tests/migration-es-ms/index_data.json --output=ht
 #!/[A-Za-z]{3},\s+\d{2}\s+[A-Za-z]{3}\s+\d{4}\s+\d{2}:\d{2}:\d{2}\s+GMT/!# | Total Writes: 464
 #!/[A-Za-z]{3},\s+\d{2}\s+[A-Za-z]{3}\s+\d{4}\s+\d{2}:\d{2}:\d{2}\s+GMT/!# | dump complete
 ––– input –––
-elasticdump --input=http://localhost:9200/es-index --output=http://localhost:9308/ms_index  --type=mapping
+NODE_OPTIONS="--no-warnings" timeout 300 elasticdump --input=http://localhost:9200/es-index --output=http://localhost:9308/ms_index  --type=mapping
 ––– output –––
 #!/[A-Za-z]{3},\s+\d{2}\s+[A-Za-z]{3}\s+\d{4}\s+\d{2}:\d{2}:\d{2}\s+GMT/!# | starting dump
 #!/[A-Za-z]{3},\s+\d{2}\s+[A-Za-z]{3}\s+\d{4}\s+\d{2}:\d{2}:\d{2}\s+GMT/!# | got 1 objects from source elasticsearch (offset: 0)
@@ -91,7 +99,7 @@ elasticdump --input=http://localhost:9200/es-index --output=http://localhost:930
 #!/[A-Za-z]{3},\s+\d{2}\s+[A-Za-z]{3}\s+\d{4}\s+\d{2}:\d{2}:\d{2}\s+GMT/!# | Total Writes: 2
 #!/[A-Za-z]{3},\s+\d{2}\s+[A-Za-z]{3}\s+\d{4}\s+\d{2}:\d{2}:\d{2}\s+GMT/!# | dump complete
 ––– input –––
-elasticdump --input=http://localhost:9200/es-index   --output=http://localhost:9308/ms_index --type=data
+NODE_OPTIONS="--no-warnings" timeout 300 elasticdump --input=http://localhost:9200/es-index   --output=http://localhost:9308/ms_index --type=data
 ––– output –––
 #!/[A-Za-z]{3},\s+\d{2}\s+[A-Za-z]{3}\s+\d{4}\s+\d{2}:\d{2}:\d{2}\s+GMT/!# | starting dump
 #!/[A-Za-z]{3},\s+\d{2}\s+[A-Za-z]{3}\s+\d{4}\s+\d{2}:\d{2}:\d{2}\s+GMT/!# | got 100 objects from source elasticsearch (offset: 0)

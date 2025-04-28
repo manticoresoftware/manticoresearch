@@ -1,0 +1,41 @@
+name: 'Internal Checklist Validator'
+description: 'Validates and enforces completion of internal checklists in issues. Reopens issues and notifies users if required checklist items are not completed.'
+
+runs:
+  using: "composite"
+  steps:
+    - name: 🔁 Reopen issue if checklist is incomplete
+      uses: actions/github-script@v7
+      with:
+        script: |
+          const issueBody = context.payload.issue.body;
+
+          const checklistRegex = /### Internal Checklist:[\s\S]*?<details>([\s\S]*?)<\/details>/;
+          const match = issueBody.match(checklistRegex);
+
+          if (!match) {
+            console.log("Checklist not found. Assuming not required.");
+            return;
+          }
+
+          const checklist = match[1];
+          const unchecked = checklist.match(/-\s\[\s\]/g);
+
+          if (unchecked && unchecked.length > 0) {
+            console.log("Checklist is incomplete. Reopening issue.");
+            await github.rest.issues.update({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.payload.issue.number,
+              state: "open"
+            });
+
+            await github.rest.issues.createComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.payload.issue.number,
+              body: "Thanks for the update! However, the internal checklist is not yet complete. A Manticore team member will close this issue once everything is checked off. 🛠️"
+            });
+          } else {
+            console.log("Checklist is complete. No action needed.");
+          }

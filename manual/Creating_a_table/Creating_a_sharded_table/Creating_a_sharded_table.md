@@ -1,4 +1,4 @@
-# manual Creating a Sharded Table
+# Creating a Sharded Table
 
 Manticore allows for the creation of **sharded tables**, which act like a special distributed table containing multiple tables that represent shards. This feature can be useful if you need to scale data. You can create a local sharded table and a replicated sharded table when multiple clusters are required.
 

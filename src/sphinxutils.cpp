@@ -36,8 +36,6 @@
 #if _WIN32
 #include <io.h> // for ::open on windows
 #include <dbghelp.h>
-#pragma comment(linker, "/defaultlib:dbghelp.lib")
-#pragma message("Automatically linking with dbghelp.lib")
 #else
 #include <sys/wait.h>
 #include <signal.h>
@@ -1658,8 +1656,6 @@ bool CSphConfigParser::Parse ()
 /////////////////////////////////////////////////////////////////////////////
 
 #if _WIN32
-#pragma message( "Automatically linking with AdvAPI32.Lib" )
-#pragma comment( lib, "AdvAPI32.Lib" )
 
 void CheckWinInstall()
 {

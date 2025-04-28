@@ -69,6 +69,8 @@ add_library ( lmanticore STATIC sphinx.cpp sphinxquery.cpp sphinxutils.cpp
 		aggrexpr.cpp joinsorter.cpp queuecreator.cpp exprgeodist.cpp exprremap.cpp exprdocstore.cpp schematransform.cpp
 		sortergroup.cpp sortertraits.cpp sorterprecalc.cpp querycontext.cpp skip_cache.cpp jsonsi.cpp sorterscroll.cpp )
 
+target_link_libraries ( lmanticore PRIVATE $<$<PLATFORM_ID:Windows>:dbghelp.lib AdvAPI32.lib ShLwApi.lib> )
+
 add_library ( lstem STATIC sphinxsoundex.cpp sphinxmetaphone.cpp sphinxstemen.cpp sphinxstemru.cpp sphinxstemru.inl
 		sphinxstemcz.cpp sphinxstemar.cpp )
 target_link_libraries ( lstem PUBLIC lextra )
@@ -261,6 +263,7 @@ add_library ( digest_sha1 digest_sha1.cpp )
 target_link_libraries ( digest_sha1 PRIVATE lextra )
 target_link_libraries ( lsearchd PUBLIC digest_sha1 lextra nlohmann_json::nlohmann_json )
 target_link_libraries ( lsearchd INTERFACE Boost::filesystem )
+target_link_libraries ( lsearchd PRIVATE $<$<PLATFORM_ID:Windows>:iphlpapi.lib WS2_32.lib wsock32.lib> )
 
 function (stackmock processors compiler versions config values)
 	if (NOT CMAKE_SYSTEM_PROCESSOR IN_LIST processors)

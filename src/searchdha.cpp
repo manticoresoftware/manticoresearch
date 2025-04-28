@@ -31,7 +31,6 @@
 	#include <WinSock2.h>
 	#include <MSWSock.h>
 	#include <WS2tcpip.h>
-#pragma comment(lib, "WS2_32.Lib")
 #endif
 
 #if HAVE_GETADDRINFO_A

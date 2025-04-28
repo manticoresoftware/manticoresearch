@@ -21,19 +21,9 @@
 
 #if _WIN32
 	#define USE_PSI_INTERFACE 1
+
 	// for MAC address
-
 	#include <iphlpapi.h>
-	#pragma message("Automatically linking with iphlpapi.lib")
-	#pragma comment(lib, "iphlpapi.lib")
-
-	#pragma comment(linker, "/defaultlib:WS2_32.Lib")
-	#pragma message("Automatically linking with WS2_32.Lib")
-
-	// socket function definitions
-	#pragma comment(linker, "/defaultlib:wsock32.lib")
-	#pragma message("Automatically linking with wsock32.lib")
-
 #else
 	#include <netdb.h>
 	// for MAC address

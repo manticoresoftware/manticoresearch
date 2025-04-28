@@ -16,11 +16,8 @@
 
 #if _WIN32
 	#define getcwd		_getcwd
-
 	#include <shlwapi.h>
 
-	#pragma comment(linker, "/defaultlib:ShLwApi.Lib")
-	#pragma message("Automatically linking with ShLwApi.Lib")
 #else
 	#include <glob.h>
 #endif

@@ -3,7 +3,7 @@
 mysql -h0 -P9306 -e "SHOW THREADS\G;"
 ––– output –––
 *************************** 1. row ***************************
-TID: %{NUMBER}
+                TID: %{NUMBER}
 Name: work_%{NUMBER}
 Proto: mysql
 State: query

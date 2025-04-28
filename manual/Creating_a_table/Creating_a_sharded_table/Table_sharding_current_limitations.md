@@ -1,4 +1,4 @@
-# Manual Table Sharding: Current Limitations
+# Table Sharding: Current Limitations
 
 When creating a sharded table, you should be aware of the current limitations you will face while working with it.
 

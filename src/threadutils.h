@@ -252,17 +252,6 @@ Handler WithCopiedCrashQuery ( Handler fnHandler );
 
 extern ThreadRole MainThread;
 
-
-namespace CrashLogger
-{
-#if !_WIN32
-	void HandleCrash( int );
-#else
-	LONG WINAPI HandleCrash ( EXCEPTION_POINTERS * pExc );
-#endif
-	void SetupTimePID();
-};
-
 // Scheduler to global thread pool
 Threads::Worker_i* GlobalWorkPool ();
 void SetMaxChildrenThreads ( int iThreads );

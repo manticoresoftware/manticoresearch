@@ -16,10 +16,10 @@
 #ifndef _sphinxutils_
 #define _sphinxutils_
 
-#include <ctype.h>
-#include <stdarg.h>
+#include <csignal>
 
-#include "sphinxstd.h"
+#include "std/stringhash.h"
+#include "std/stringbuilder.h"
 
 //////////////////////////////////////////////////////////////////////////
 

@@ -1,6 +1,8 @@
 cmake_minimum_required ( VERSION 3.20 )
 
 add_library ( daemon OBJECT
+	crash_logger.cpp
+	crash_logger.h
 	winservice.cpp
 	winservice.h)
 target_include_directories ( daemon PRIVATE "${MANTICORE_SOURCE_DIR}/src" )

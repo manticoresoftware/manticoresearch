@@ -48,6 +48,10 @@ Here is the meaning of these values:
 * `tid` and `tid_saved`: represent the state of saving the table. `tid` increases with each change (transaction). `tid_saved` shows the max `tid` of the state saved in a RAM chunk in `<table>.ram` file. When the numbers differ, some changes exist only in RAM and are also backed by binlog (if enabled). Performing `FLUSH TABLE` or scheduling periodic flushing saves these changes. After flushing, the binlog is cleared, and `tid_saved` represents the new actual state.
 * `query_time_*`, `exact_query_time_*`: query execution time statistics for the last 1 minute, 5 minutes, 15 minutes, and total since server start; data is encapsulated as a JSON object, including the number of queries and min, max, avg, 95, and 99 percentile values.
 * `found_rows_*`: statistics of rows found by queries; provided for the last 1 minute, 5 minutes, 15 minutes, and total since server start; data is encapsulated as a JSON object, including the number of queries and min, max, avg, 95, and 99 percentile values.
+* `command_*`: counters for the total number of times a specific command has been successfully executed against this table.
+* `search_stats_ms_*`: statistics on the execution time (in milliseconds) for search queries. The * indicates the time window (e.g., 1min, 5min, 15min, total). These stats are calculated over sliding windows of 1, 5, and 15 minutes, showing average, minimum, maximum, and 95th/99th percentile values for query times.
+* `insert_replace_stats_ms_*`: statistics on the execution time (in milliseconds) for insert and replace queries. The * indicates the time window (e.g., 1min, 5min, 15min, total). These stats are calculated over sliding windows of 1, 5, and 15 minutes, showing average, minimum, maximum, and 95th/99th percentile values for query times.
+* `update_stats_ms_*`: statistics on the execution time (in milliseconds) for update queries. The * indicates the time window (e.g., 1min, 5min, 15min, total). These stats are calculated over sliding windows of 1, 5, and 15 minutes, showing average, minimum, maximum, and 95th/99th percentile values for query times.
 
 <!-- intro -->
 ##### SQL:
@@ -60,41 +64,68 @@ mysql> SHOW TABLE statistic STATUS;
 <!-- response SQL -->
 
 ```sql
-+-----------------------------+--------------------------------------------------------------------------+
-| Variable_name               | Value                                                                    |
-+-----------------------------+--------------------------------------------------------------------------+
-| index_type                  | rt                                                                       |
-| indexed_documents           | 146000                                                                   |
-| indexed_bytes               | 149504000                                                                |
-| ram_bytes                   | 87674788                                                                 |
-| disk_bytes                  | 1762811                                                                  |
-| disk_mapped                 | 794147                                                                   |
-| disk_mapped_cached          | 802816                                                                   |
-| disk_mapped_doclists        | 0                                                                        |
-| disk_mapped_cached_doclists | 0                                                                        |
-| disk_mapped_hitlists        | 0                                                                        |
-| disk_mapped_cached_hitlists | 0                                                                        |
-| killed_documents            | 0                                                                        |
-| killed_rate                 | 0.00%                                                                    |
-| ram_chunk                   | 86865484                                                                 |
-| ram_chunk_segments_count    | 24                                                                       |
-| disk_chunks                 | 1                                                                        |
-| mem_limit                   | 134217728                                                                |
-| mem_limit_rate              | 95.00%                                                                   |
-| ram_bytes_retired           | 0                                                                        |
-| optimizing                  | 1                                                                        |
-| locked                      | 0                                                                        |
-| tid                         | 0                                                                        |
-| tid_saved                   | 0                                                                        |
-| query_time_1min             | {"queries":0, "avg":"-", "min":"-", "max":"-", "pct95":"-", "pct99":"-"} |
-| query_time_5min             | {"queries":0, "avg":"-", "min":"-", "max":"-", "pct95":"-", "pct99":"-"} |
-| query_time_15min            | {"queries":0, "avg":"-", "min":"-", "max":"-", "pct95":"-", "pct99":"-"} |
-| query_time_total            | {"queries":0, "avg":"-", "min":"-", "max":"-", "pct95":"-", "pct99":"-"} |
-| found_rows_1min             | {"queries":0, "avg":"-", "min":"-", "max":"-", "pct95":"-", "pct99":"-"} |
-| found_rows_5min             | {"queries":0, "avg":"-", "min":"-", "max":"-", "pct95":"-", "pct99":"-"} |
-| found_rows_15min            | {"queries":0, "avg":"-", "min":"-", "max":"-", "pct95":"-", "pct99":"-"} |
-| found_rows_total            | {"queries":0, "avg":"-", "min":"-", "max":"-", "pct95":"-", "pct99":"-"} |
-+-----------------------------+--------------------------------------------------------------------------+
++-------------------------------+--------------------------------------------------------------------------+
+| Variable_name                 | Value                                                                    |
++-------------------------------+--------------------------------------------------------------------------+
+| index_type                    | rt                                                                       |
+| indexed_documents             | 146000                                                                   |
+| indexed_bytes                 | 149504000                                                                |
+| ram_bytes                     | 87674788                                                                 |
+| disk_bytes                    | 1762811                                                                  |
+| disk_mapped                   | 794147                                                                   |
+| disk_mapped_cached            | 802816                                                                   |
+| disk_mapped_doclists          | 0                                                                        |
+| disk_mapped_cached_doclists   | 0                                                                        |
+| disk_mapped_hitlists          | 0                                                                        |
+| disk_mapped_cached_hitlists   | 0                                                                        |
+| killed_documents              | 0                                                                        |
+| killed_rate                   | 0.00%                                                                    |
+| ram_chunk                     | 86865484                                                                 |
+| ram_chunk_segments_count      | 24                                                                       |
+| disk_chunks                   | 1                                                                        |
+| mem_limit                     | 134217728                                                                |
+| mem_limit_rate                | 95.00%                                                                   |
+| ram_bytes_retired             | 0                                                                        |
+| optimizing                    | 1                                                                        |
+| locked                        | 0                                                                        |
+| tid                           | 0                                                                        |
+| tid_saved                     | 0                                                                        |
+| query_time_1min               | {"queries":0, "avg":"-", "min":"-", "max":"-", "pct95":"-", "pct99":"-"} |
+| query_time_5min               | {"queries":0, "avg":"-", "min":"-", "max":"-", "pct95":"-", "pct99":"-"} |
+| query_time_15min              | {"queries":0, "avg":"-", "min":"-", "max":"-", "pct95":"-", "pct99":"-"} |
+| query_time_total              | {"queries":0, "avg":"-", "min":"-", "max":"-", "pct95":"-", "pct99":"-"} |
+| found_rows_1min               | {"queries":0, "avg":"-", "min":"-", "max":"-", "pct95":"-", "pct99":"-"} |
+| found_rows_5min               | {"queries":0, "avg":"-", "min":"-", "max":"-", "pct95":"-", "pct99":"-"} |
+| found_rows_15min              | {"queries":0, "avg":"-", "min":"-", "max":"-", "pct95":"-", "pct99":"-"} |
+| found_rows_total              | {"queries":0, "avg":"-", "min":"-", "max":"-", "pct95":"-", "pct99":"-"} |
+| command_search                | 2                                                                        |
+| command_excerpt               | 0                                                                        |
+| command_update                | 3                                                                        |
+| command_keywords              | 0                                                                        |
+| command_status                | 2                                                                        |
+| command_delete                | 0                                                                        |
+| command_insert                | 1                                                                        |
+| command_replace               | 0                                                                        |
+| command_commit                | 0                                                                        |
+| command_suggest               | 0                                                                        |
+| command_callpq                | 0                                                                        |
+| command_getfield              | 0                                                                        |
+| insert_replace_stats_ms_avg   | 0.284 0.284 0.284                                                        |
+| insert_replace_stats_ms_min   | 0.284 0.284 0.284                                                        |
+| insert_replace_stats_ms_max   | 0.284 0.284 0.284                                                        |
+| insert_replace_stats_ms_pct95 | 0.284 0.284 0.284                                                        |
+| insert_replace_stats_ms_pct99 | 0.284 0.284 0.284                                                        |
+| search_stats_ms_avg           | 0.000 0.000 0.000                                                        |
+| search_stats_ms_min           | 0.000 0.000 0.000                                                        |
+| search_stats_ms_max           | 0.000 0.000 0.000                                                        |
+| search_stats_ms_pct95         | 0.000 0.000 0.000                                                        |
+| search_stats_ms_pct99         | 0.000 0.000 0.000                                                        |
+| update_stats_ms_avg           | 0.479 0.479 0.479                                                        |
+| update_stats_ms_min           | 0.431 0.431 0.431                                                        |
+| update_stats_ms_max           | 0.530 0.530 0.530                                                        |
+| update_stats_ms_pct95         | 0.530 0.530 0.530                                                        |
+| update_stats_ms_pct99         | 0.530 0.530 0.530                                                        |
++-------------------------------+--------------------------------------------------------------------------+
 29 rows in set (0.00 sec)
 ```
 

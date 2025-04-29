@@ -1,7 +1,7 @@
 # Changelog
 
 # Version 9.2.39
-Released ???
+Released: ... Apr 2025
 
 * [v9.2.39](https://github.com/manticoresoftware/manticoresearch/releases/tag/9.2.39) [ Issue #3236](https://github.com/manticoresoftware/manticoresearch/issues/3236) Fix: prevent table damage by removing complex chunk updates. Using wait functions inside the serial worker broke serial processing, which could damage tables.
 	Reimplemented autoflush. Removed external polling queue to avoid unnecessary table locks. Added "small table" condition: if the number of documents is below the 'small table limit' (8192) and no Secondary Index (SI) is used, flushing is skipped. 

@@ -13,6 +13,7 @@
 #pragma once
 
 #include "std/string.h"
+#include "std/vectraits.h"
 
 enum ESphLogLevel : BYTE;
 
@@ -32,3 +33,10 @@ void SetDaemonLog ( CSphString && sLog, bool bCloseIfOpened = false );
 void SetLogFileMode ( int iMode ) noexcept;
 void DisableLogSyslog () noexcept;
 bool LogSyslogEnabled () noexcept;
+
+// HTTP log
+void SetupHttpLog ( CSphString sHttpLog );
+void ReopenHttpLog ();
+bool HttpLogEnabled () noexcept;
+void logHttpOutput ( VecTraits_T<BYTE> dData, int iReqID );
+void logHttpInput ( VecTraits_T<BYTE> sData, int iReqID, int64_t iTimestamp );

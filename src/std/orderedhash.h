@@ -13,10 +13,7 @@
 #pragma once
 
 #include <utility>
-
-
-#include <cassert>
-#include "generics.h"
+#include <optional>
 
 //////////////////////////////////////////////////////////////////////////
 
@@ -85,8 +82,17 @@ public:
 		return FindByKey ( tKey ) != nullptr;
 	}
 
+	template<typename VAL>
+	std::optional<VAL> Opt ( const KEY& tKey ) const noexcept
+	{
+		std::optional<VAL> tResult;
+		HashEntry_t * pEntry = FindByKey ( tKey );
+		if ( pEntry ) tResult = pEntry->second;
+		return tResult;
+	}
+
 	/// get value pointer by key
-	T* operator() ( const KEY& tKey ) const
+	T * operator() ( const KEY & tKey ) const
 	{
 		HashEntry_t* pEntry = FindByKey ( tKey );
 		return pEntry ? &pEntry->second : nullptr;

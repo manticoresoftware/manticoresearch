@@ -1823,12 +1823,23 @@ void sphLogSupressRemove ( const char * sDelPrefix, ESphLogLevel eLevel )
 		g_dDisabledLevelLogs[eLevel][i] = nullptr;
 }
 
-
-volatile SphLogger_fn& g_pLogger()
+SphLogger_fn& StaticLogger ()
 {
 	static SphLogger_fn pLogger = &StdoutLogger;
 	return pLogger;
 }
+
+SphLogger_fn g_pLogger ()
+{
+	return StaticLogger();
+}
+
+
+void SetLogger (SphLogger_fn fnLogger)
+{
+	StaticLogger() = fnLogger;
+}
+
 
 inline void Log ( ESphLogLevel eLevel, const char * sFmt, va_list ap )
 {

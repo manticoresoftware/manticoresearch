@@ -16,7 +16,6 @@ namespace CrashLogger
 {
 	void SetupTimePID();
 	void SetCoredump ( bool bVal );
-	void SetLogFile ( int iFile );
 	void SetSafeTrace ( bool bVal );
 	bool SetCrashHandler ();
 };

@@ -18,6 +18,7 @@
 #include "digest_sha1.h"
 #include "tracer.h"
 #include "netfetch.h"
+#include "daemon/logger.h"
 #include "config.h"
 
 #include "taskmalloctrim.h"
@@ -90,9 +91,6 @@ inline static CSphString strSHA1 ( const CSphString& sLine )
 {
 	return CalcSHA1 ( sLine.cstr(), sLine.Length() );
 }
-
-// defined in searchd.cpp
-int GetLogFD ();
 
 void HandleMysqlOptimizeManual ( RowBuffer_i & tOut, const DebugCmd::DebugCommand_t & tCmd )
 {
@@ -457,7 +455,7 @@ void HandleMallocStats ( RowBuffer_i & tOut, const CSphString& sParam )
 	tOut.HeadTuplet ( "command", "result" );
 	// check where is stderr...
 	int iOldErr = ::dup ( STDERR_FILENO );
-	::dup2 ( GetLogFD (), STDERR_FILENO );
+	::dup2 ( GetActiveLogFD (), STDERR_FILENO );
 	sphMallocStats ( sParam.cstr() );
 	::close ( STDERR_FILENO );
 	::dup2 ( iOldErr, STDERR_FILENO );

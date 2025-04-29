@@ -48,6 +48,7 @@
 #include "daemon/winservice.h"
 #include "daemon/crash_logger.h"
 #include "daemon/failures_log.h"
+#include "daemon/logger.h"
 
 // services
 #include "taskping.h"
@@ -102,19 +103,11 @@ enum LogFormat_e
 	LOG_FORMAT_SPHINXQL
 };
 
-static int				g_iLogFile			= STDOUT_FILENO;	// log file descriptor
 static auto& 			g_iParentPID		= getParentPID ();  // set by watchdog
-static bool				g_bLogSyslog		= false;
 static bool				g_bQuerySyslog		= false;
-static CSphString		g_sLogFile;								// log file name
-static bool				g_bLogTty			= false;			// cached isatty(g_iLogFile)
-static bool				g_bLogStdout		= true;				// extra copy of startup log messages to stdout; true until around "accepting connections", then MUST be false
 static LogFormat_e		g_eLogFormat		= LOG_FORMAT_SPHINXQL;
 static bool				g_bLogCompactIn		= false;			// whether to cut list in IN() clauses.
 static int				g_iQueryLogMinMs	= 0;				// log 'slow' threshold for query
-static char				g_sLogFilter[SPH_MAX_FILENAME_LEN+1] = "\0";
-static int				g_iLogFilterLen = 0;
-static int				g_iLogFileMode = 0;
 static CSphBitvec		g_tLogStatements;
 
 int						g_iReadTimeoutS		= 5;	// sec
@@ -290,153 +283,6 @@ const char * szStatusVersion () noexcept
 {
 	return g_sStatusVersion.cstr();
 }
-/////////////////////////////////////////////////////////////////////////////
-// LOGGING
-/////////////////////////////////////////////////////////////////////////////
-
-
-/// physically emit log entry
-/// buffer must have 1 extra byte for linefeed
-static void sphLogEntry ( ESphLogLevel eLevel, char * sBuf, char * sTtyBuf )
-{
-#if _WIN32
-	if ( g_iLogFile==STDOUT_FILENO && WinService() )
-		EventLogEntry ( eLevel, sBuf, sTtyBuf );
-	else
-#endif
-	{
-		(void)eLevel;
-		strcat ( sBuf, "\n" ); // NOLINT
-
-		sphSeek ( g_iLogFile, 0, SEEK_END );
-		if ( g_bLogTty )
-		{
-			memmove ( sBuf+20, sBuf+15, 9);
-			sTtyBuf = sBuf + 19;
-			*sTtyBuf = '[';
-			sphWrite ( g_iLogFile, sTtyBuf, strlen(sTtyBuf) );
-		}
-		else
-			sphWrite ( g_iLogFile, sBuf, strlen(sBuf) );
-
-		if ( ForceLogStdout() )
-			sphWrite ( STDOUT_FILENO, sTtyBuf, strlen(sTtyBuf) );
-	}
-}
-
-const int LOG_BUF_SIZE = 1024;
-int GetDaemonLogBufSize ()
-{
-	return LOG_BUF_SIZE;
-}
-
-/// log entry (with log levels, dupe catching, etc)
-/// call with NULL format for dupe flushing
-void sphLog ( ESphLogLevel eLevel, const char * sFmt, va_list ap )
-{
-	// dupe catcher state
-	static const int	FLUSH_THRESH_TIME	= 1000000; // in microseconds
-	static const int	FLUSH_THRESH_COUNT	= 100;
-
-	static ESphLogLevel eLastLevel = SPH_LOG_INFO;
-	static DWORD uLastEntry = 0;
-	static int64_t tmLastStamp = -1000000-FLUSH_THRESH_TIME;
-	static int iLastRepeats = 0;
-
-	// only if we can
-	if ( sFmt && eLevel>g_eLogLevel )
-		return;
-
-#if USE_SYSLOG
-	if ( g_bLogSyslog && sFmt )
-	{
-		const int levels[SPH_LOG_MAX+1] = { LOG_EMERG, LOG_WARNING, LOG_INFO, LOG_DEBUG, LOG_DEBUG, LOG_DEBUG, LOG_DEBUG };
-		vsyslog ( levels[eLevel], sFmt, ap );
-		return;
-	}
-#endif
-
-	if ( g_iLogFile<0 && !WinService() )
-		return;
-
-	// format the banner
-	char sTimeBuf[128];
-	sphFormatCurrentTime ( sTimeBuf, sizeof(sTimeBuf) );
-
-	const char * sBanner = "";
-	if ( sFmt==NULL ) eLevel = eLastLevel;
-	if ( eLevel==SPH_LOG_FATAL ) sBanner = "FATAL: ";
-	if ( eLevel==SPH_LOG_WARNING ) sBanner = "WARNING: ";
-	if ( eLevel>=SPH_LOG_DEBUG ) sBanner = "DEBUG: ";
-	if ( eLevel==SPH_LOG_RPL_DEBUG ) sBanner = "RPL: ";
-
-	char sBuf [ LOG_BUF_SIZE ];
-	snprintf ( sBuf, sizeof(sBuf)-1, "[%s] [%d] ", sTimeBuf, GetOsThreadId() );
-
-	char * sTtyBuf = sBuf + strlen(sBuf);
-	strncpy ( sTtyBuf, sBanner, 32 ); // 32 is arbitrary; just something that is enough and keeps lint happy
-
-	auto iLen = (int) strlen(sBuf);
-
-	// format the message
-	if ( sFmt )
-	{
-		// need more space for tail zero and "\n" that added at sphLogEntry
-		int iSafeGap = 4;
-		int iBufSize = sizeof(sBuf)-iLen-iSafeGap;
-		vsnprintf ( sBuf+iLen, iBufSize, sFmt, ap );
-		sBuf[ sizeof(sBuf)-iSafeGap ] = '\0';
-	}
-
-	if ( sFmt && eLevel>SPH_LOG_INFO && g_iLogFilterLen )
-	{
-		if ( strncmp ( sBuf+iLen, g_sLogFilter, g_iLogFilterLen )!=0 )
-			return;
-	}
-
-	// catch dupes
-	DWORD uEntry = sFmt ? sphCRC32 ( sBuf+iLen ) : 0;
-	int64_t tmNow = sphMicroTimer();
-
-	// accumulate while possible
-	if ( sFmt && eLevel==eLastLevel && uEntry==uLastEntry && iLastRepeats<FLUSH_THRESH_COUNT && tmNow<tmLastStamp+FLUSH_THRESH_TIME )
-	{
-		tmLastStamp = tmNow;
-		iLastRepeats++;
-		return;
-	}
-
-	// flush if needed
-	if ( iLastRepeats!=0 && ( sFmt || tmNow>=tmLastStamp+FLUSH_THRESH_TIME ) )
-	{
-		// flush if we actually have something to flush, and
-		// case 1: got a message we can't accumulate
-		// case 2: got a periodic flush and been otherwise idle for a thresh period
-		char sLast[256];
-		iLen = Min ( iLen, 256 );
-		strncpy ( sLast, sBuf, iLen );
-		if ( iLen < 256 )
-			snprintf ( sLast+iLen, sizeof(sLast)-iLen, "last message repeated %d times", iLastRepeats );
-		sphLogEntry ( eLastLevel, sLast, sLast + ( sTtyBuf-sBuf ) );
-
-		tmLastStamp = tmNow;
-		iLastRepeats = 0;
-		eLastLevel = SPH_LOG_INFO;
-		uLastEntry = 0;
-	}
-
-	// was that a flush-only call?
-	if ( !sFmt )
-		return;
-
-	tmLastStamp = tmNow;
-	iLastRepeats = 0;
-	eLastLevel = eLevel;
-	uLastEntry = uEntry;
-
-	// do the logging
-	sphLogEntry ( eLevel, sBuf, sTtyBuf );
-}
 
 void Shutdown (); // forward
 
@@ -461,16 +307,6 @@ static CSphString GetNamedPipeName ( int iPid )
 	CSphString sRes;
 	sRes.SetSprintf ( "/tmp/searchd_%d", iPid );
 	return sRes;
-}
-
-void LogChangeMode ( int iFile, int iMode )
-{
-	if ( iFile<0 || iMode==0 || iFile==STDOUT_FILENO || iFile==STDERR_FILENO )
-		return;
-
-#if !_WIN32
-	fchmod ( iFile, iMode );
-#endif
 }
 
 /////////////////////////////////////////////////////////////////////////////
@@ -653,7 +489,7 @@ void Shutdown () REQUIRES ( MainThread ) NO_THREAD_SAFETY_ANALYSIS
 	sphInfo ( "shutdown daemon version '%s' ...", g_sStatusVersion.cstr() );
 	sphInfo ( "shutdown complete" );
 
-	Threads::Done ( g_iLogFile );
+	Threads::Done ( GetDaemonLogFD() );
 
 #if _WIN32
 	CloseWinPipe();
@@ -14437,11 +14273,7 @@ static bool HandleSetGlobal ( CSphString& sError, const CSphString& sName, int64
 
 	if ( sName == "log_debug_filter" )
 	{
-		int iLen = sName.Length();
-		iLen = Min ( iLen, SPH_MAX_FILENAME_LEN );
-		memcpy ( g_sLogFilter, sSetValue.cstr(), iLen );
-		g_sLogFilter[iLen] = '\0';
-		g_iLogFilterLen = iLen;
+		SetLogFilter ( sName);
 		return true;
 	}
 
@@ -14913,22 +14745,6 @@ void HandleMysqlFlush ( RowBuffer_i & tOut, const SqlStmt_t & )
 
 	// done
 	tOut.Eof();
-}
-
-bool ForceLogStdout() noexcept
-{
-	return g_bLogStdout && g_iLogFile != STDOUT_FILENO;
-}
-
-int GetLogFD ()
-{
-	return ForceLogStdout() ? STDOUT_FILENO : g_iLogFile;
-}
-
-
-const CSphString & sphGetLogFile () noexcept
-{
-	return g_sLogFile;
 }
 
 // same for select ... from index.files
@@ -17911,7 +17727,7 @@ bool RotateIndexGreedy ( const ServedIndex_c& tServed, const char* szIndex, CSph
 void DumpMemStat ()
 {
 #if SPH_ALLOCS_PROFILER
-	sphMemStatDump ( g_iLogFile );
+	sphMemStatDump ( GetDaemonLogFD() );
 #endif
 }
 
@@ -17924,8 +17740,8 @@ void CheckLeaks () REQUIRES ( MainThread )
 
 	if ( g_dThd.GetLength()==0 && !g_bInRotate && iHeadAllocs!=sphAllocsCount() )
 	{
-		sphSeek ( g_iLogFile, 0, SEEK_END );
-		sphAllocsDump ( g_iLogFile, iHeadCheckpoint );
+		sphSeek ( GetDaemonLogFD(), 0, SEEK_END );
+		sphAllocsDump ( GetDaemonLogFD(), iHeadCheckpoint );
 
 		iHeadAllocs = sphAllocsCount ();
 		iHeadCheckpoint = sphAllocsLastID ();
@@ -19076,24 +18892,10 @@ void CheckReopenLogs () REQUIRES ( MainThread )
 		return;
 
 	// reopen searchd log
-	if ( g_iLogFile>=0 && !g_bLogTty )
-	{
-		int iFD = ::open ( g_sLogFile.cstr(), O_CREAT | O_RDWR | O_APPEND, S_IREAD | S_IWRITE );
-		if ( iFD<0 )
-		{
-			sphWarning ( "failed to reopen log file '%s': %s", g_sLogFile.cstr(), strerrorm(errno) );
-		} else
-		{
-			::close ( g_iLogFile );
-			g_iLogFile = iFD;
-			g_bLogTty = ( isatty ( g_iLogFile )!=0 );
-			LogChangeMode ( g_iLogFile, g_iLogFileMode );
-			sphInfo ( "log reopened" );
-		}
-	}
+	ReopenDaemonLog ();
 
 	// reopen query log
-	if ( !g_bQuerySyslog && g_iQueryLogFile!=g_iLogFile && g_iQueryLogFile>=0 && !isatty ( g_iQueryLogFile ) )
+	if ( !g_bQuerySyslog && g_iQueryLogFile!=GetDaemonLogFD() && g_iQueryLogFile>=0 && !isatty ( g_iQueryLogFile ) )
 	{
 		int iFD = ::open ( g_sQueryLogFile.cstr(), O_CREAT | O_RDWR | O_APPEND, S_IREAD | S_IWRITE );
 		if ( iFD<0 )
@@ -19103,7 +18905,7 @@ void CheckReopenLogs () REQUIRES ( MainThread )
 		{
 			::close ( g_iQueryLogFile );
 			g_iQueryLogFile = iFD;
-			LogChangeMode ( g_iQueryLogFile, g_iLogFileMode );
+			ChangeLogFileMode ( g_iQueryLogFile );
 			sphInfo ( "query log reopened" );
 		}
 	}
@@ -19118,7 +18920,7 @@ void CheckReopenLogs () REQUIRES ( MainThread )
 		{
 			::close ( g_iHttpLogFile );
 			g_iHttpLogFile = iFD;
-			LogChangeMode ( g_iHttpLogFile, g_iLogFileMode );
+			ChangeLogFileMode ( g_iHttpLogFile );
 			sphInfo ( "http log reopened" );
 		}
 	}
@@ -19356,7 +19158,7 @@ bool SetWatchDog ( int iDevNull ) REQUIRES ( MainThread )
 			{
 				g_bGotSigusr2 = 0;
 				sphInfo ( "watchdog: got USR2, performing dump of child's stack" );
-				sphDumpGdb ( g_iLogFile, g_sNameBuf, g_sPid );
+				sphDumpGdb ( GetDaemonLogFD(), g_sNameBuf, g_sPid );
 			}
 		}
 
@@ -19849,7 +19651,7 @@ void ConfigureSearchd ( const CSphConfig & hConf, bool bOptPIDFile, bool bTestMo
 			sphWarning ( "query_log_mode invalid value (value=%o, error=%s); skipped", iMode, strerrorm(iErr) );
 		} else
 		{
-			g_iLogFileMode = iMode;
+			SetLogFileMode ( iMode );
 		}
 	}
 	if ( hSearchd ( "server_id" ) )
@@ -20190,7 +19992,7 @@ static void ConfigureAndPreloadOnStartup ( const CSphConfig & hConf, const StrVe
 }
 
 // if data_dir changes cwd then paths at sections searchd and common should be fixed from realtive into absolute
-static void FixPathAbsolute ( CSphString & sPath )
+void FixPathAbsolute ( CSphString & sPath )
 {
 	if ( !g_bCwdChanged )
 		return;
@@ -20205,47 +20007,10 @@ static void FixPathAbsolute ( CSphString & sPath )
 	sPath = sphNormalizePath ( sFullPath );
 }
 
-void OpenDaemonLog ( const CSphConfigSection & hSearchd, bool bCloseIfOpened=false )
+static void OpenDaemonLog ( const CSphConfigSection & hSearchd, bool bCloseIfOpened=false )
 {
-	CSphString sLog = "searchd.log";
-	if ( hSearchd.Exists ( "log" ) )
-	{
-		if ( hSearchd["log"]=="syslog" )
-		{
-#if !USE_SYSLOG
-			if ( g_iLogFile<0 )
-			{
-				g_iLogFile = STDOUT_FILENO;
-				sphWarning ( "failed to use syslog for logging. You have to reconfigure --with-syslog and rebuild the daemon!" );
-				sphInfo ( "will use default file 'searchd.log' for logging." );
-			}
-#else
-			g_bLogSyslog = true;
-#endif
-		} else
-			sLog = hSearchd["log"].cstr();
-	}
-
-	umask ( 066 );
-	if ( bCloseIfOpened && g_iLogFile!=STDOUT_FILENO )
-	{
-		close ( g_iLogFile );
-		g_iLogFile = STDOUT_FILENO;
-	}
-	if ( !g_bLogSyslog )
-	{
-		FixPathAbsolute ( sLog );
-		g_iLogFile = open ( sLog.cstr(), O_CREAT | O_RDWR | O_APPEND, S_IREAD | S_IWRITE );
-		if ( g_iLogFile<0 )
-		{
-			g_iLogFile = STDOUT_FILENO;
-			sphFatal ( "failed to open log file '%s': %s", sLog.cstr(), strerrorm(errno) );
-		}
-		LogChangeMode ( g_iLogFile, g_iLogFileMode );
-	}
-
-	g_sLogFile = sLog;
-	g_bLogTty = isatty ( g_iLogFile )!=0;
+	auto sLog = hSearchd.Opt<CSphString>("log").value_or("searchd.log");
+	SetDaemonLog ( std::move(sLog), bCloseIfOpened );
 }
 
 static void SetUidShort ( bool bTestMode )
@@ -20437,19 +20202,6 @@ static void CacheCPUInfo()
 	GetNumPhysicalCPUs();
 }
 
-
-static void LogTimeZoneStartup ( const CSphString & sWarning )
-{
-	// avoid writing this to stdout
-	bool bLogStdout = g_bLogStdout;
-	g_bLogStdout = false;
-	if ( !sWarning.IsEmpty() )
-		sphWarning ( "Error initializing time zones: %s", sWarning.cstr() );
-
-	sphInfo ( "Using local time zone '%s'", GetLocalTimeZoneName().cstr() );
-	g_bLogStdout = bLogStdout;
-}
-
 #ifndef LOCALDATADIR
 #define LOCALDATADIR "."
 #endif
@@ -20461,7 +20213,7 @@ static void LogTimeZoneStartup ( const CSphString & sWarning )
 int WINAPI ServiceMain ( int argc, char **argv ) EXCLUDES (MainThread)
 {
 	ScopedRole_c thMain (MainThread);
-	g_bLogTty = isatty ( g_iLogFile )!=0;
+	RefreshIsAtty();
 
 #ifdef USE_VTUNE
 	__itt_pause ();
@@ -20812,7 +20564,7 @@ int WINAPI ServiceMain ( int argc, char **argv ) EXCLUDES (MainThread)
 				if ( g_iQueryLogFile<0 )
 					sphFatal ( "failed to open query log file '%s': %s", sQueryLog.cstr(), strerrorm(errno) );
 
-				LogChangeMode ( g_iQueryLogFile, g_iLogFileMode );
+				ChangeLogFileMode ( g_iQueryLogFile );
 			}
 			g_sQueryLogFile = sQueryLog.cstr();
 		}
@@ -20827,7 +20579,7 @@ int WINAPI ServiceMain ( int argc, char **argv ) EXCLUDES (MainThread)
 				sphWarning ( "failed to open http log file '%s': %s", sHttpLog.cstr (), strerrorm ( errno ) );
 			else
 			{
-				LogChangeMode ( g_iHttpLogFile, g_iLogFileMode );
+				ChangeLogFileMode ( g_iHttpLogFile );
 				g_sHttpLogFile = std::move( sHttpLog );
 			}
 		}
@@ -21068,12 +20820,12 @@ int WINAPI ServiceMain ( int argc, char **argv ) EXCLUDES (MainThread)
 	if ( hSearchd ( "query_log" ) && g_bOptNoLock && g_bOptNoDetach && bOptDebugQlog )
 	{
 		g_bQuerySyslog = false;
-		g_bLogSyslog = false;
-		g_iQueryLogFile = g_iLogFile;
+		DisableLogSyslog();;
+		g_iQueryLogFile = GetDaemonLogFD();
 	}
 
 #if USE_SYSLOG
-	if ( g_bLogSyslog || g_bQuerySyslog )
+	if ( LogSyslogEnabled() || g_bQuerySyslog )
 	{
 		openlog ( "searchd", LOG_PID, LOG_DAEMON );
 	}
@@ -21193,7 +20945,7 @@ int WINAPI ServiceMain ( int argc, char **argv ) EXCLUDES (MainThread)
 
 	// disable startup logging to stdout
 	if ( !g_bOptNoDetach )
-		g_bLogStdout = false;
+		StopLogStdout();
 
 	while (true)
 	{
@@ -21209,7 +20961,7 @@ inline int mainimpl ( int argc, char **argv )
 	Threads::Init();
 	PrepareMainThread ( &cTopOfMainStack );
 	sphSetDieCallback ( DieOrFatalCb );
-	g_pLogger() = sphLog;
+	SetLogger ( &sphLog );
 	sphBacktraceSetBinaryName ( argv[0] );
 	GeodistInit();
 

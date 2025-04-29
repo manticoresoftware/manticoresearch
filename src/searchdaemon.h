@@ -1416,9 +1416,7 @@ bool sphCheckWeCanModify ();
 bool sphCheckWeCanModify ( StmtErrorReporter_i & tOut );
 bool sphCheckWeCanModify ( RowBuffer_i& tOut );
 bool PollOptimizeRunning ( const CSphString & sIndex );
-int GetLogFD ();
-bool ForceLogStdout () noexcept;
-const CSphString & sphGetLogFile() noexcept;
+void FixPathAbsolute ( CSphString & sPath );
 
 void				sphProcessHttpQueryNoResponce ( const CSphString& sEndpoint, const CSphString& sQuery, CSphVector<BYTE> & dResult );
 void				sphHttpErrorReply ( CSphVector<BYTE> & dData, EHTTP_STATUS eCode, const char * szError );
@@ -1458,7 +1456,6 @@ namespace session
 
 void LogSphinxqlError ( const char * sStmt, const Str_t & sError );
 void LogSphinxqlError ( const Str_t & sStmt, const Str_t & sError );
-int GetDaemonLogBufSize ();
 
 enum class BuddyQuery_e { SQL, HTTP };
 void LogBuddyQuery ( const Str_t sQuery, BuddyQuery_e tType );

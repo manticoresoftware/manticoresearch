@@ -11,22 +11,22 @@
 //
 
 #include "crash_logger.h"
-
-#include <searchdaemon.h>
+#include "logger.h"
 
 #include "std/fatal.h"
 #include "std/thread_annotations.h"
 #include "sphinxutils.h"
 #include "fileutils.h"
 #include "sphinxint.h"
+#include "threadutils.h"
+#include "client_task_info.h"
 
 #include <sys/types.h>
 
-#define SPH_TIME_PID_MAX_SIZE 256
+constexpr int SPH_TIME_PID_MAX_SIZE = 256;
 
 static bool g_bCoreDump = false;
 static bool g_bSafeTrace = false;
-static int g_iLogFile = STDOUT_FILENO; // log file descriptor
 static BYTE g_dCrashQueryBuff[4096];
 static char g_sCrashInfo[SPH_TIME_PID_MAX_SIZE] = "[][]\n";
 static int g_iCrashInfoLen = 0;
@@ -48,13 +48,6 @@ void CrashLogger::SetCoredump ( bool bVal )
 {
 	g_bCoreDump = bVal;
 }
-
-
-void CrashLogger::SetLogFile ( int iFile )
-{
-	g_iLogFile = iFile;
-}
-
 
 void CrashLogger::SetSafeTrace ( bool bVal )
 {
@@ -184,7 +177,8 @@ LONG WINAPI HandleCrash ( EXCEPTION_POINTERS * pExc )
 #endif // !_WIN32
 {
 	sphSetDied();
-	if ( g_iLogFile < 0 )
+	auto iLogFile = GetDaemonLogFD();
+	if ( iLogFile < 0 )
 	{
 		if ( g_bCoreDump )
 		{
@@ -196,8 +190,8 @@ LONG WINAPI HandleCrash ( EXCEPTION_POINTERS * pExc )
 	}
 
 	// log [time][pid]
-	sphSeek ( g_iLogFile, 0, SEEK_END );
-	sphWrite ( g_iLogFile, g_sCrashInfo, g_iCrashInfoLen );
+	sphSeek ( iLogFile, 0, SEEK_END );
+	sphWrite ( iLogFile, g_sCrashInfo, g_iCrashInfoLen );
 
 	// log query
 	auto & tQuery = GlobalCrashQueryGetRef();
@@ -237,7 +231,7 @@ LONG WINAPI HandleCrash ( EXCEPTION_POINTERS * pExc )
 	if ( !bValidQuery )
 		dBanner = { g_sCrashedBannerBad, sizeof (g_sCrashedBannerBad) - 1 };
 
-	sphWrite ( g_iLogFile, dBanner );
+	sphWrite ( iLogFile, dBanner );
 
 	// query
 	if ( bValidQuery )
@@ -285,50 +279,50 @@ LONG WINAPI HandleCrash ( EXCEPTION_POINTERS * pExc )
 
 		while ( pfnCopy ( tCopyState ) )
 		{
-			sphWrite ( g_iLogFile, g_dCrashQueryBuff, tCopyState.m_pDst - g_dCrashQueryBuff );
+			sphWrite ( iLogFile, g_dCrashQueryBuff, tCopyState.m_pDst - g_dCrashQueryBuff );
 			tCopyState.m_pDst = g_dCrashQueryBuff; // reset the destination buffer
 		}
 		assert ( tCopyState.m_pSrc==tCopyState.m_pSrcEnd );
 
 		int iLeft = int ( tCopyState.m_pDst - g_dCrashQueryBuff );
 		if ( iLeft > 0 )
-			sphWrite ( g_iLogFile, g_dCrashQueryBuff, iLeft );
+			sphWrite ( iLogFile, g_dCrashQueryBuff, iLeft );
 	}
 
 	// tail
-	sphWrite ( g_iLogFile, g_sCrashedBannerTail, sizeof(g_sCrashedBannerTail) - 1 );
+	sphWrite ( iLogFile, g_sCrashedBannerTail, sizeof(g_sCrashedBannerTail) - 1 );
 
 	// index name
-	sphWrite ( g_iLogFile, g_sCrashedIndex, sizeof (g_sCrashedIndex) - 1 );
+	sphWrite ( iLogFile, g_sCrashedIndex, sizeof (g_sCrashedIndex) - 1 );
 	if ( IsFilled ( tQuery.m_dIndex ) )
-		sphWrite ( g_iLogFile, tQuery.m_dIndex );
-	sphWrite ( g_iLogFile, g_sEndLine, sizeof (g_sEndLine) - 1 );
+		sphWrite ( iLogFile, tQuery.m_dIndex );
+	sphWrite ( iLogFile, g_sEndLine, sizeof (g_sEndLine) - 1 );
 
-	sphSafeInfo ( g_iLogFile, g_sBannerVersion.cstr() );
+	sphSafeInfo ( iLogFile, g_sBannerVersion.cstr() );
 
 #if _WIN32
 	// mini-dump reference
 	int iMiniDumpLen = snprintf ( (char *)g_dCrashQueryBuff, sizeof(g_dCrashQueryBuff),
 		"%s %s.%p.mdmp\n", g_sMinidumpBanner, g_sMinidump, tQuery.m_dQuery.first );
-	sphWrite ( g_iLogFile, g_dCrashQueryBuff, iMiniDumpLen );
+	sphWrite ( iLogFile, g_dCrashQueryBuff, iMiniDumpLen );
 	snprintf ( (char *)g_dCrashQueryBuff, sizeof(g_dCrashQueryBuff), "%s.%p.mdmp",
 		g_sMinidump, tQuery.m_dQuery.first );
 	sphBacktrace ( pExc, (char *)g_dCrashQueryBuff );
 #else
 
 	// log trace
-	sphSafeInfo ( g_iLogFile, "Handling signal %d", sig );
+	sphSafeInfo ( iLogFile, "Handling signal %d", sig );
 	// print message to stdout during daemon start
 	if ( ForceLogStdout() )
 		sphSafeInfo ( STDOUT_FILENO, "Crash!!! Handling signal %d", sig );
-	sphBacktrace ( g_iLogFile, g_bSafeTrace );
+	sphBacktrace ( iLogFile, g_bSafeTrace );
 #endif
 
 	// threads table
-	sphSafeInfo ( g_iLogFile, "--- active threads ---" );
+	sphSafeInfo ( iLogFile, "--- active threads ---" );
 	int iThd = 0;
 	int iAllThd = 0;
-	Threads::IterateActive ( [&iThd,&iAllThd] ( Threads::LowThreadDesc_t * pThread ) {
+	Threads::IterateActive ( [&iThd,&iAllThd,iLogFile] ( Threads::LowThreadDesc_t * pThread ) {
 		if ( pThread )
 		{
 			auto pSrc = (ClientTaskInfo_t *) pThread->m_pTaskInfo.load ( std::memory_order_relaxed );
@@ -336,7 +330,7 @@ LONG WINAPI HandleCrash ( EXCEPTION_POINTERS * pExc )
 			for ( ; pSrc; pSrc = (ClientTaskInfo_t *) pSrc->m_pPrev.load ( std::memory_order_relaxed ) )
 				if ( pSrc->m_eType == ClientTaskInfo_t::Task() )
 				{
-					sphSafeInfo ( g_iLogFile, "thd %d (%s), proto %s, state %s, command %s", iThd,
+					sphSafeInfo ( iLogFile, "thd %d (%s), proto %s, state %s, command %s", iThd,
 					              pThread->m_sThreadName.cstr(),
 					              ProtoName ( pSrc->GetProto() ), TaskStateName ( pSrc->GetTaskState() ),
 					              pSrc->m_szCommand ? pSrc->m_szCommand : "-" );
@@ -346,15 +340,15 @@ LONG WINAPI HandleCrash ( EXCEPTION_POINTERS * pExc )
 		}
 	} );
 
-	sphSafeInfo ( g_iLogFile, "--- Totally %d threads, and %d client-working threads ---", iAllThd, iThd );
+	sphSafeInfo ( iLogFile, "--- Totally %d threads, and %d client-working threads ---", iAllThd, iThd );
 
 	// memory info
 #if SPH_ALLOCS_PROFILER
-	sphWrite ( g_iLogFile, g_sMemoryStatBanner, sizeof ( g_sMemoryStatBanner )-1 );
-	sphMemStatDump ( g_iLogFile );
+	sphWrite ( iLogFile, g_sMemoryStatBanner, sizeof ( g_sMemoryStatBanner )-1 );
+	sphMemStatDump ( iLogFile );
 #endif
 
-	sphSafeInfo ( g_iLogFile, "------- CRASH DUMP END -------" );
+	sphSafeInfo ( iLogFile, "------- CRASH DUMP END -------" );
 
 	if ( g_bCoreDump )
 	{

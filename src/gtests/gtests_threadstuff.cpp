@@ -186,7 +186,7 @@ TEST ( ThreadPool, strandr_with_mutex )
 		RoledSchedulerSharedPtr_t pRandr = MakeAloneScheduler( Coro::CurrentScheduler() );
 
 		// commenting out line below will cause test to fail.
-		Coro::Co( [&] {
+		Coro::Co( [&] () NO_THREAD_SAFETY_ANALYSIS {
 			ScopedScheduler_c customtp{ pRandr };
 			tMutex.WriteLock();
 			ASSERT_EQ( Coro::CurrentScheduler(), pRandr );
@@ -198,7 +198,7 @@ TEST ( ThreadPool, strandr_with_mutex )
 			ASSERT_EQ( Coro::CurrentScheduler(), pRandr );
 		}, dWaiter );
 
-		Coro::Co( [&] {
+		Coro::Co( [&] () NO_THREAD_SAFETY_ANALYSIS {
 			ScopedScheduler_c customtp{ pRandr };
 			Coro::SleepMsec( 10 );
 			ASSERT_EQ( Coro::CurrentScheduler(), pRandr );

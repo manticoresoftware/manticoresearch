@@ -3539,7 +3539,9 @@ int64_t GetIndexUid()
 	return g_tIndexUid.Get();
 }
 
-void UidShortSetup ( int iServer, int iStarted )
+// server - is server id used as iServer & 0x7f
+// started - is a server start time \ Unix timestamp in seconds
+static void UidShortSetup ( int iServer, int iStarted )
 {
 	g_iUidShortServerId = iServer;
 	int64_t iSeed = ( (int64_t)iServer & 0x7f ) << 56;
@@ -3574,7 +3576,7 @@ static BYTE g_dPearsonRNG[256] = {
 		43,119,224, 71,122,142, 42,160,104, 48,247,103, 15, 11,138,239  // 16
 };
 
-BYTE Pearson8 ( const BYTE * pBuf, int iLen, BYTE uPrev )
+static BYTE Pearson8 ( const BYTE * pBuf, int iLen, BYTE uPrev )
 {
 	const BYTE * pEnd = pBuf + iLen;
 	BYTE iNew = uPrev;
@@ -3586,6 +3588,49 @@ BYTE Pearson8 ( const BYTE * pBuf, int iLen, BYTE uPrev )
 	}
 
 	return iNew;
+}
+
+static int g_iServerID = 0;
+void SetServerID ( int iServerID ) noexcept
+{
+	g_iServerID = iServerID;
+}
+
+void SetUidShort ( CSphString sMAC, const CSphString& sPid, bool bTestMode )
+{
+	int iServerId = g_iServerID;
+
+	// need constant seed across all environments for tests
+	if ( bTestMode )
+		return UidShortSetup ( iServerId, 100000 );
+
+	const int iServerMask = 0x7f;
+	uint64_t uStartedSec = 0;
+
+	// server id as high part of counter
+	if ( !iServerId )
+	{
+		sphLogDebug ( "MAC address %s for uuid-short server_id", sMAC.cstr() );
+		if ( sMAC.IsEmpty() )
+		{
+			DWORD uSeed = sphRand();
+			sMAC.SetSprintf ( "%u", uSeed );
+			sphWarning ( "failed to get MAC address, using random number %s", sMAC.cstr()  );
+		}
+		// fold MAC into 1 byte
+		iServerId = Pearson8 ( (const BYTE *)sMAC.cstr(), sMAC.Length(), iServerId );
+		iServerId = Pearson8 ( (const BYTE *)sPid.cstr(), sPid.Length(), iServerId );
+		iServerId &= iServerMask;
+	}
+
+	// start time Unix timestamp as middle part of counter
+	uStartedSec = sphMicroTimer() / 1000000;
+	// base timestamp is 01 May of 2019
+	const uint64_t uBaseSec = 1556668800;
+	if ( uStartedSec>uBaseSec )
+		uStartedSec -= uBaseSec;
+
+	UidShortSetup ( iServerId, (int)uStartedSec );
 }
 
 static const char * g_dDateTimeFormats[] = {

@@ -123,7 +123,6 @@ static int				g_iShutdownTimeoutUs	= 3000000; // default timeout on daemon shutd
 static int				g_iBacklog			= SEARCHD_BACKLOG;
 static int				g_iThdQueueMax		= 0;
 static auto&			g_iTFO = sphGetTFO ();
-static int				g_iServerID = 0;
 static bool				g_bJsonConfigLoadedOk = false;
 static auto&			g_iAutoOptimizeCutoffMultiplier = AutoOptimizeCutoffMultiplier();
 static constexpr bool	AUTOOPTIMIZE_NEEDS_VIP = false; // whether non-VIP can issue 'SET GLOBAL auto_optimize = X'
@@ -19641,13 +19640,14 @@ void ConfigureSearchd ( const CSphConfig & hConf, bool bOptPIDFile, bool bTestMo
 	}
 	if ( hSearchd ( "server_id" ) )
 	{
-		g_iServerID = hSearchd.GetInt ( "server_id", g_iServerID );
+		int iServerID = hSearchd.GetInt ( "server_id", 0 );
 		const int iServerMask = 0x7f;
-		if ( g_iServerID>iServerMask )
+		if ( iServerID>iServerMask )
 		{
-			g_iServerID &= iServerMask;
-			sphWarning ( "server_id out of range 0 - 127, clamped to %d", g_iServerID );
+			iServerID &= iServerMask;
+			sphWarning ( "server_id out of range 0 - 127, clamped to %d", iServerID );
 		}
+		SetServerID ( iServerID );
 	}
 
 	g_sMySQLVersion = hSearchd.GetStr ( "mysql_version_string", g_sMySQLVersion.cstr() );
@@ -19998,43 +19998,6 @@ static void OpenDaemonLog ( const CSphConfigSection & hSearchd, bool bCloseIfOpe
 	SetDaemonLog ( std::move(sLog), bCloseIfOpened );
 }
 
-static void SetUidShort ( bool bTestMode )
-{
-	int iServerId = g_iServerID;
-
-	// need constant seed across all environments for tests
-	if ( bTestMode )
-		return UidShortSetup ( iServerId, 100000 );
-
-	const int iServerMask = 0x7f;
-	uint64_t uStartedSec = 0;
-
-	// server id as high part of counter
-	if ( !iServerId )
-	{
-		CSphString sMAC = GetMacAddress();
-		sphLogDebug ( "MAC address %s for uuid-short server_id", sMAC.cstr() );
-		if ( sMAC.IsEmpty() )
-		{
-			DWORD uSeed = sphRand();
-			sMAC.SetSprintf ( "%u", uSeed );
-			sphWarning ( "failed to get MAC address, using random number %s", sMAC.cstr()  );
-		}
-		// fold MAC into 1 byte
-		iServerId = Pearson8 ( (const BYTE *)sMAC.cstr(), sMAC.Length(), iServerId );
-		iServerId = Pearson8 ( (const BYTE *)g_sPidFile.cstr(), g_sPidFile.Length(), iServerId );
-		iServerId &= iServerMask;
-	}
-
-	// start time Unix timestamp as middle part of counter
-	uStartedSec = sphMicroTimer() / 1000000;
-	// base timestamp is 01 May of 2019
-	const uint64_t uBaseSec = 1556668800;
-	if ( uStartedSec>uBaseSec )
-		uStartedSec -= uBaseSec;
-
-	UidShortSetup ( iServerId, (int)uStartedSec );
-}
 
 namespace { // static
 
@@ -20732,7 +20695,7 @@ int WINAPI ServiceMain ( int argc, char **argv ) EXCLUDES (MainThread)
 		sphLockUn ( g_iPidFD );
 
 	Binlog::Configure ( hSearchd, uReplayFlags );
-	SetUidShort ( bTestMode );
+	SetUidShort ( GetMacAddress(), g_sPidFile, bTestMode );
 	InitDocstore ( g_iDocstoreCache );
 	InitSkipCache ( g_iSkipCache );
 	InitParserOption();

@@ -302,6 +302,8 @@ inline const char * SzTxnName ( Txn_e eTxn )
 	case COMMIT: return "commit";
 	case PQ_ADD_DELETE: return "pq_add_delete";
 	}
+	assert(0);
+	return "unknown";
 }
 
 //////////////////////////////////////////////////////////////////////////
@@ -1449,7 +1451,7 @@ void Binlog_c::LoadMeta ()
 	assert ( m_iBinlogFileDigits>0 );
 
 	// load list of active log files
-	int iMaxExt = 0;
+	DWORD iMaxExt = 0;
 	for ( int i=m_dSavedFiles.GetLength ()-1; i>=0; --i )
 	{
 		auto iExt = rdMeta.UnzipInt (); // everything else is saved in logs themselves

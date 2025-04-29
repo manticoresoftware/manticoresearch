@@ -996,11 +996,70 @@ struct RtGuard_t
 	{}
 };
 
+CSphVector<int> GetChunkIds ( const VecTraits_T<DiskChunkRefPtr_t> & dChunks )
+{
+	CSphVector<int> dIds;
+	dChunks.for_each ( [&dIds] ( const DiskChunkRefPtr_t & pIdx )
+	{
+		if ( !pIdx->m_bFinallyUnlink )
+			dIds.Add ( pIdx->Idx ().m_iChunk );
+	});
+	return dIds;
+}
+
 // created with null set of ram segments and disk chunks
 // on d-tr any not-null set will replace chunks and segments from the owner
 // Note, if you want to modify existing set, you NEED to guard some way period between reading old / writing modified
 class RtWriter_c
 {
+	RtSegVecRefPtr_t m_pOldRamSegs;
+	DiskChunkVecRefPtr_t m_pOldDiskChunks;
+
+	void CheckDiskConsistency() const noexcept
+	{
+		if ( !m_pNewDiskChunks )
+			return;
+
+		const auto pOwnerDiskChunks = m_tOwner.DiskChunks();
+		const auto iOldLen = m_pOldDiskChunks->GetLength();
+		const auto iCurLen = pOwnerDiskChunks->GetLength();
+		if ( iOldLen != iCurLen )
+			sphDie ("Amount of disk chunks changed from %d to %d during table modification. Table damaged", iOldLen, iCurLen);
+
+		auto dOldChunks = GetChunkIds ( *m_pOldDiskChunks );
+		auto dCurChunks = GetChunkIds ( *pOwnerDiskChunks );
+
+		ARRAY_CONSTFOREACH( i, dOldChunks )
+		{
+			if ( dOldChunks[i] == dCurChunks[i] )
+				continue;
+
+			sphDie ("Disk chunks changed from [%s] to [%s] during table modification. Table damaged", Vec2Str( dOldChunks ).cstr(), Vec2Str( dCurChunks ).cstr());
+		}
+	}
+
+
+	void CheckRAMConsistency() const noexcept
+	{
+		if ( !m_pNewRamSegs )
+			return;
+
+		const auto pOwnerRamSegs = m_tOwner.RamSegs();
+		const auto iOldLen = m_pOldRamSegs->GetLength();
+		const auto iCurLen = pOwnerRamSegs->GetLength();
+		if ( iOldLen != iCurLen )
+			sphDie ( "Amount of ram segments changed from %d to %d during table modification. Table damaged", iOldLen, iCurLen );
+
+
+		ARRAY_CONSTFOREACH( i, (*m_pOldRamSegs) )
+		{
+			if ( (*m_pOldRamSegs)[i] == (*pOwnerRamSegs)[i] )
+				continue;
+
+			sphDie ( "RAM segments changed during table modification. Table damaged" );
+		}
+	}
+
 public:
 	RtData_c&					m_tOwner;
 	DiskChunkVecRefPtr_t		m_pNewDiskChunks;
@@ -1009,12 +1068,23 @@ public:
 
 	RtWriter_c ( RtWriter_c&& rhs ) noexcept = default;
 	RtWriter_c ( RtData_c & tOwner, Handler&& fnOnRamSegsChanged )
-		: m_tOwner ( tOwner )
+		: m_pOldRamSegs{ new RtSegVec_c }
+		, m_pOldDiskChunks{ new DiskChunkVec_c }
+		, m_tOwner( tOwner )
 		, m_fnOnRamSegsChanged { std::move ( fnOnRamSegsChanged ) }
-	{}
+	{
+		for ( const auto & pSeg: *m_tOwner.RamSegs() )
+			m_pOldRamSegs->Add( pSeg );
+		for ( const auto & pChunk: *m_tOwner.DiskChunks() )
+			m_pOldDiskChunks->Add( pChunk );
+	}
+
 
 	~RtWriter_c() EXCLUDES ( m_tOwner.m_tLock )
 	{
+		CheckDiskConsistency();
+		CheckRAMConsistency();
+
 		if ( !m_pNewDiskChunks && !m_pNewRamSegs )
 			return;
 
@@ -1144,17 +1214,6 @@ public:
 		return iRes;
 	}
 };
-
-CSphVector<int> GetChunkIds ( const VecTraits_T<DiskChunkRefPtr_t> & dChunks )
-{
-	CSphVector<int> dIds;
-	dChunks.for_each ( [&dIds] ( const DiskChunkRefPtr_t & pIdx )
-	{
-		if ( !pIdx->m_bFinallyUnlink )
-			dIds.Add ( pIdx->Idx ().m_iChunk );
-	});
-	return dIds;
-}
 
 class SaveState_c
 {
@@ -3561,7 +3620,7 @@ bool RtIndex_c::WriteAttributes ( SaveDiskDataContext_t & tCtx, CSphString & sEr
 	auto sJsonSIdx = tCtx.m_tFilebase.GetFilename ( SPH_EXT_SPJIDX );
 	auto sSKNN	= tCtx.m_tFilebase.GetFilename ( SPH_EXT_SPKNN );
 
-	CSphWriter tWriterSPA;
+	CSphWriterNonThrottled tWriterSPA;
 	if ( !tWriterSPA.OpenFile ( sSPA, sError ) )
 		return false;
 
@@ -3795,7 +3854,7 @@ bool RtIndex_c::WriteAttributes ( SaveDiskDataContext_t & tCtx, CSphString & sEr
 
 bool RtIndex_c::WriteDocs ( SaveDiskDataContext_t & tCtx, CSphWriter & tWriterDict, CSphString & sError ) const
 {
-	CSphWriter tWriterHits, tWriterDocs, tWriterSkips;
+	CSphWriterNonThrottled tWriterHits, tWriterDocs, tWriterSkips;
 
 	if ( !tWriterHits.OpenFile ( tCtx.m_tFilebase.GetFilename ( SPH_EXT_SPP ), sError ) )
 		return false;
@@ -3989,7 +4048,7 @@ bool RtIndex_c::WriteDocs ( SaveDiskDataContext_t & tCtx, CSphWriter & tWriterDi
 		}
 
 		// read next words
-		for ( int i = 0; i < tSegsWithWord.GetSize(); ++i )
+		for ( DWORD i = 0; i < tSegsWithWord.GetSize(); ++i )
 			if ( tSegsWithWord.BitGet(i) )
 				dWords[i] = dWordReaders[i].UnzipWord();
 	}
@@ -4103,7 +4162,7 @@ bool RtIndex_c::SaveDiskData ( const char * szFilename, const ConstRtSegmentSlic
 	if ( !WriteDeadRowMap ( tCtx, sError ) )
 		return false;
 
-	CSphWriter tWriterDict;
+	CSphWriterNonThrottled tWriterDict;
 	CSphString sSPI = IndexFileBase_c { szFilename }.GetFilename ( SPH_EXT_SPI );
 
 	if ( !tWriterDict.OpenFile ( sSPI.cstr(), sError ) )
@@ -4162,7 +4221,7 @@ bool RtIndex_c::SaveDiskHeader ( SaveDiskDataContext_t & tCtx, const ChunkStats_
 	IndexWriteHeader ( tCtx, tWriteHeader, sJson, m_bKeywordDict, true );
 
 	sName = tCtx.m_tFilebase.GetFilename ( SPH_EXT_SPH );
-	CSphWriter wrHeaderJson;
+	CSphWriterNonThrottled wrHeaderJson;
 	if ( !wrHeaderJson.OpenFile ( sName, sError ) )
 		return false;
 
@@ -4190,7 +4249,7 @@ void RtIndex_c::SaveMeta ( int64_t iTID, VecTraits_T<int> dChunkNames )
 
 	CSphString sError;
 
-	CSphWriter wrMeta;
+	CSphWriterNonThrottled wrMeta;
 	if ( !wrMeta.OpenFile ( sMetaNew, sError ) )
 		sphDie ( "failed to open file for meta serialization: %s", sError.cstr() ); // !COMMIT handle this gracefully
 
@@ -4367,7 +4426,7 @@ bool RtIndex_c::SaveDiskChunk ( bool bForced, bool bEmergent ) REQUIRES ( m_tWor
 	while ( true )
 	{
 		// as separate subtask we 1-st flush segments to disk, and then load just flushed segment
-		// if forced, continue to work in the same fiber (which is serialworker); otherwise split to merge fiber
+		// if forced, continue to work in the same fiber (which is serialworker); otherwise go to global workpool, wrapped into SaveSegmentsWorker
 		ScopedScheduler_c tSaveFiber { bForced ? Coro::CurrentScheduler () : m_tWorkers.SaveSegmentsWorker() };
 		TRACE_SCHED_VARID ( "rt", "SaveDiskChunk-routine", iSaveOp );
 
@@ -4452,33 +4511,33 @@ bool RtIndex_c::SaveDiskChunk ( bool bForced, bool bEmergent ) REQUIRES ( m_tWor
 	m_tSaveTIDS.WaitVoid ( [this, iTID] { return m_tSaveTIDS.GetValueRef().First() == iTID; } );
 	END_SCHED( "rt" );
 
-	int iDiskChunks;
+	IntVec_t dChunks;
 	// now new disk chunk is loaded, kills and updates applied - we ready to change global index state now.
 	{
 		auto tNewSet = RtWriter();
 		CopyChunksTo ( tNewSet );
 		tNewSet.m_pNewDiskChunks->Add ( DiskChunk_c::make ( std::move ( pNewChunk ) ) );
-		SaveMeta ( iTID, GetChunkIds ( *tNewSet.m_pNewDiskChunks ) );
-
-		Binlog::NotifyIndexFlush ( iTID, GetName(), Binlog::NoShutdown, Binlog::NoSave );
-		m_iSavedTID = iTID;
-
 		tNewSet.InitRamSegs ( RtWriter_c::empty );
 
 		for ( const auto & pSeg : *m_tRtChunks.RamSegs() )
 			if ( pSeg->m_iLocked!=iSaveOp )
 				tNewSet.m_pNewRamSegs->Add ( pSeg );
 
-		// update field lengths
-		if ( m_tSchema.GetAttrId_FirstFieldLen ()>=0 )
-		{
-			m_dFieldLensRam.SwapData ( dNewFieldLensRam );
-			m_dFieldLensDisk.SwapData ( dNewFieldLensDisk );
-		}
-		iDiskChunks = tNewSet.m_pNewDiskChunks->GetLength();
+		dChunks = GetChunkIds ( *tNewSet.m_pNewDiskChunks );
 	}
+
+	// update field lengths
+	if (m_tSchema.GetAttrId_FirstFieldLen() >= 0) {
+		m_dFieldLensRam.SwapData ( dNewFieldLensRam );
+		m_dFieldLensDisk.SwapData ( dNewFieldLensDisk );
+	}
+
+	SaveMeta ( iTID, dChunks );
+	m_iSavedTID = iTID;
+
 	// from this point all readers will see new state of the index.
 	m_dSavingTickets.RemoveValue ( iSaveOp );
+	Binlog::NotifyIndexFlush ( iTID, GetName(), Binlog::NoShutdown, Binlog::NoSave );
 
 	// abandon .ram file
 	UnlinkRAMChunk ( "SaveDiskChunk" );
@@ -4488,7 +4547,7 @@ bool RtIndex_c::SaveDiskChunk ( bool bForced, bool bEmergent ) REQUIRES ( m_tWor
 
 	StringBuilder_c sInfo;
 	sInfo.Sprintf ( "rt: table %s: diskchunk %d(%d), segments %d %s saved in %.6D (%.6D) sec", GetName (), iChunkID
-					, iDiskChunks, iSegments, bForced ? "forcibly" : "", tmSave, tmSaveWall );
+					, dChunks.GetLength(), iSegments, bForced ? "forcibly" : "", tmSave, tmSaveWall );
 
 	// calculate DoubleBuf percent using current save/insert rate
 	auto iInserted = GetMemCount ( [iSaveOp] ( const auto* pSeg ) { return !pSeg->m_iLocked || pSeg->m_iLocked > iSaveOp; } );
@@ -4869,7 +4928,7 @@ bool RtIndex_c::LoadMeta ( FilenameBuilder_i* pFilenameBuilder, bool bStripPath,
 	return false;
 }
 
-
+// called once on index start lifetime
 bool RtIndex_c::PreallocDiskChunks ( FilenameBuilder_i * pFilenameBuilder, StrVec_t & dWarnings ) NO_THREAD_SAFETY_ANALYSIS
 {
 	// load disk chunks, if any
@@ -5097,7 +5156,7 @@ bool RtIndex_c::SaveRamChunk ()
 	CSphString sChunk = GetFilename ( "ram" );
 	CSphString sNewChunk = GetFilename ( "ram.new" );
 
-	CSphWriter wrChunk;
+	CSphWriterNonThrottled wrChunk;
 	if ( !wrChunk.OpenFile ( sNewChunk, m_sLastError ) )
 		return false;
 
@@ -5974,7 +6033,7 @@ void RtIndex_c::DumpSegments ( VecTraits_T<const RtSegment_t*> dSegments, const 
 		return;
 
 	CSphString sLastError;
-	CSphWriter wrChunk;
+	CSphWriterNonThrottled wrChunk;
 	if ( !wrChunk.OpenFile ( sFile, sLastError ) )
 	{
 		sphWarning ("Unable to open %s, error %s", sFile.cstr(), sLastError.cstr() );
@@ -6036,7 +6095,7 @@ void RtIndex_c::DumpInsert ( const RtSegment_t* pNewSeg ) const
 	CSphString sFile;
 	sFile.SetSprintf ( "%s.stmt", sBase.cstr() );
 
-	CSphWriter wrContent;
+	CSphWriterNonThrottled wrContent;
 	if ( !wrContent.OpenFile ( sFile, sLastError ) )
 	{
 		sphWarning ( "Unable to open %s, error %s", sFile.cstr(), sLastError.cstr() );
@@ -8441,7 +8500,7 @@ int RtIndex_c::CheckThenUpdateAttributes ( AttrUpdateInc_t& tUpd, bool& bCritica
 	if ( m_tRtChunks.IsEmpty() )
 		return 0;
 
-	int iUpdated = tUpd.m_iAffected;
+	int iUpdated = tUpd.m_uAffected;
 	if ( !Update_CheckAttributes ( *tUpd.m_pUpdate, m_tSchema, sError ) )
 		return -1;
 
@@ -8486,7 +8545,7 @@ int RtIndex_c::CheckThenUpdateAttributes ( AttrUpdateInc_t& tUpd, bool& bCritica
 	// bump the counter, binlog the update!
 	CommitUpdateAttributes ( &m_iTID, GetName(), tUpdc );
 
-	iUpdated = tUpd.m_iAffected - iUpdated;
+	iUpdated = tUpd.m_uAffected - iUpdated;
 	if ( !tCtx.HandleJsonWarnings ( iUpdated, sWarning, sError ) )
 		return -1;
 
@@ -8937,12 +8996,7 @@ bool RtIndex_c::AttachRtIndex ( RtIndex_i * pSrcIndex, bool bTruncate, bool & bF
 		// prevent optimize to start during the disk chunks stealing
 		OptimizeGuard_c tSrcStopOptimize ( *pSrcRtIndex );
 		OptimizeGuard_c tDstStopOptimize ( *this );
-
-		// collect all disk chunks from the source RT index in the brand new structure
-		auto tNewSet = RtWriter();
-		CopyChunksTo ( tNewSet );
-		// need to reset m_bFinallyUnlink flag for the disk chunks moved here after all finishes well
-		int iUnlinkIndex = tNewSet.m_pNewDiskChunks->GetLength();
+		LazyVector_T<ConstDiskChunkRefPtr_t> dOthers;
 
 		for ( ;; )
 		{
@@ -8957,13 +9011,13 @@ bool RtIndex_c::AttachRtIndex ( RtIndex_i * pSrcIndex, bool bTruncate, bool & bF
 				return false;
 			}
 		
-			// update disk chunk list
-			tNewSet.m_pNewDiskChunks->Add ( tChunk );
+			dOthers.Add ( tChunk );
 		}
 
-		// clean up all destroy flag for all moved disk chunks after loop finished well
-		for ( int i=iUnlinkIndex; i<tNewSet.m_pNewDiskChunks->GetLength(); i++ )
-			tNewSet.m_pNewDiskChunks->At ( i )->m_bFinallyUnlink = false;
+		// update disk chunk list
+		auto tNewSet = RtWriter();
+		CopyChunksTo ( tNewSet );
+		dOthers.for_each ( [&tNewSet] (auto& tChunk) { tChunk->m_bFinallyUnlink = false; tNewSet.m_pNewDiskChunks->Add ( tChunk ); } );
 	}
 
 	AttachSetSettings ( pSrcIndex );
@@ -9431,13 +9485,12 @@ bool RtIndex_c::PublishMergedChunks ( const char* szParentAction, std::function<
 			tChangeset.m_pNewDiskChunks->Add ( pChunk );
 	}
 
-	if ( !bReplaced )
-	{
-		sphWarning ( "rt %s: table %s: unable to locate victim chunk after merge, leave everything unchanged", szParentAction, GetName() );
-		tChangeset.m_pNewDiskChunks = nullptr; // discard changes, i.e. disk chunk set will NOT be modified
-		return false;
-	}
-	return true;
+	if ( bReplaced )
+		return true;
+
+	sphWarning ( "rt %s: table %s: unable to locate victim chunk after merge, leave everything unchanged", szParentAction, GetName() );
+	tChangeset.m_pNewDiskChunks = nullptr; // discard changes, i.e. disk chunk set will NOT be modified
+	return false;
 }
 
 static int64_t NumAliveDocs ( const CSphIndex& dChunk )

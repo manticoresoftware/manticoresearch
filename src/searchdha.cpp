@@ -987,31 +987,9 @@ void InitSearchdStats() NO_THREAD_SAFETY_ANALYSIS
 
 	tStats.m_iPredictedTime = 0;
 	tStats.m_iAgentPredictedTime = 0;
-
-	for ( auto & i : tStats.m_iCommandCount )
-		i = 0;
-
-	for ( auto & i: tStats.m_dDetailedStats )
-		i.m_tStats = MakeStatsContainer ();
 }
 
-
-void StatCountCommandDetails ( SearchdStats_t::EDETAILS eCmd, uint64_t uFoundRows, uint64_t tmStart )
-{
-	auto tmNow = sphMicroTimer ();
-	auto & tDetail = gStats ().m_dDetailedStats[eCmd];
-	ScWL_t wLock ( tDetail.m_tStatsLock );
-	tDetail.m_tStats->Add ( uFoundRows, tmNow-tmStart, tmNow );
-}
-
-static void CalculateCommandStats ( SearchdStats_t::EDETAILS eCmd, QueryStats_t & tRowsFoundStats, QueryStats_t & tQueryTimeStats )
-{
-	auto & tDetail = gStats ().m_dDetailedStats[eCmd];
-	ScRL_t rLock ( tDetail.m_tStatsLock );
-	CalcSimpleStats ( tDetail.m_tStats.get (), tRowsFoundStats, tQueryTimeStats );
-}
-
-void FormatCmdStats ( VectorLike & dStatus, const char * szPrefix, SearchdStats_t::EDETAILS eCmd )
+void FormatCmdStats ( const CommandStats_t & tStats, const char * szPrefix, CommandStats_t::EDETAILS eCmd, VectorLike & dStatus )
 {
 	using namespace QueryStats;
 	static std::array<const char *, TYPE_TOTAL> dStatTypeNames = { "avg", "min", "max", "pct95", "pct99" };
@@ -1027,7 +1005,8 @@ void FormatCmdStats ( VectorLike & dStatus, const char * szPrefix, SearchdStats_
 
 		if ( !bCalculated )
 		{
-			CalculateCommandStats ( eCmd, tRowStats, tTimeStats );
+			tStats.CalcDetailed ( eCmd, tRowStats, tTimeStats );
+
 			iNulls = 0;
 			if ( UINT64_MAX==tTimeStats.m_dStats[INTERVAL_15MIN].m_dData[TYPE_MIN] )
 				iNulls = 3;

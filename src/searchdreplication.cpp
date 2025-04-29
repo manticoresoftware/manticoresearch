@@ -446,7 +446,7 @@ void ReplicationCluster_t::UpdateGroupView ( const Wsrep::ViewInfo_t* pView )
 	for ( int i = 0; i < pView->m_iNMembers; ++i )
 		dNodes.Append ( ParseNodesFromString ( pBoxes[i].m_sIncoming ) );
 
-	sphLogDebugRpl ( "cluster '%s' view nodes changed: %s > %s", m_sName.cstr(), StrVec2Str ( GetViewNodes() ).cstr(), StrVec2Str ( dNodes ).cstr() );
+	sphLogDebugRpl ( "cluster '%s' view nodes changed: %s > %s", m_sName.cstr(), Vec2Str ( GetViewNodes() ).cstr(), Vec2Str ( dNodes ).cstr() );
 	SetViewNodes ( std::move ( dNodes ) );
 }
 
@@ -697,7 +697,7 @@ void ReplicationCluster_t::ShowStatus ( VectorLike& dOut )
 		dOut.Add ( szState() );
 	// nodes of cluster defined and view
 	if ( dOut.MatchAddf ( "cluster_%s_nodes_set", sName ) )
-		dOut.Add ( StrVec2Str ( m_dClusterNodes ).cstr() );
+		dOut.Add ( Vec2Str ( m_dClusterNodes ).cstr() );
 
 	if ( dOut.MatchAddf ( "cluster_%s_nodes_view", sName ) )
 	{
@@ -1168,7 +1168,7 @@ bool SetIndexesClusterTOI ( const ReplicationCommand_t * pCmd )
 
 	StrVec_t dIndexes = SplitIndexes ( tCmd.m_sIndex );
 
-	sphLogDebugRpl ( "SetIndexesClusterTOI '%s' for cluster '%s': indexes '%s' > '%s'", ( tCmd.m_eCommand==ReplCmd_e::CLUSTER_ALTER_ADD ? "add" : "drop" ), pCluster->m_sName.cstr(), tCmd.m_sIndex.cstr(), StrVec2Str ( pCluster->GetIndexes() ).cstr() );
+	sphLogDebugRpl ( "SetIndexesClusterTOI '%s' for cluster '%s': indexes '%s' > '%s'", ( tCmd.m_eCommand==ReplCmd_e::CLUSTER_ALTER_ADD ? "add" : "drop" ), pCluster->m_sName.cstr(), tCmd.m_sIndex.cstr(), Vec2Str ( pCluster->GetIndexes() ).cstr() );
 
 	if ( tCmd.m_bCheckIndex && !CheckClusterIndexes ( dIndexes, pCluster ) )
 		return false;
@@ -1202,7 +1202,7 @@ bool SetIndexesClusterTOI ( const ReplicationCommand_t * pCmd )
 	TLS_MSG_STRING ( sError );
 	bool bSaved = SaveConfigInt ( sError );
 
-	sphLogDebugRpl ( "SetIndexesClusterTOI finished '%s' for cluster '%s': indexes '%s' > '%s', error: %s", ( tCmd.m_eCommand==ReplCmd_e::CLUSTER_ALTER_ADD ? "add" : "drop" ), pCluster->m_sName.cstr(), tCmd.m_sIndex.cstr(), StrVec2Str ( pCluster->GetIndexes() ).cstr(), sError.scstr() );
+	sphLogDebugRpl ( "SetIndexesClusterTOI finished '%s' for cluster '%s': indexes '%s' > '%s', error: %s", ( tCmd.m_eCommand==ReplCmd_e::CLUSTER_ALTER_ADD ? "add" : "drop" ), pCluster->m_sName.cstr(), tCmd.m_sIndex.cstr(), Vec2Str ( pCluster->GetIndexes() ).cstr(), sError.scstr() );
 
 	return bSaved;
 }
@@ -1628,7 +1628,7 @@ bool ClusterJoin ( const CSphString & sCluster, const StrVec_t & dNames, const C
 	if ( !tDesc )
 		return false;
 
-	sphLogDebugRpl ( "joining cluster '%s', nodes: %s", sCluster.cstr(), StrVec2Str ( tDesc->m_dClusterNodes ).cstr() );
+	sphLogDebugRpl ( "joining cluster '%s', nodes: %s", sCluster.cstr(), Vec2Str ( tDesc->m_dClusterNodes ).cstr() );
 
 	// need to clean up Galera system files left from previous cluster
 	CleanClusterFiles ( GetDatadirPath ( tDesc->m_sPath ) );
@@ -1665,7 +1665,7 @@ bool ClusterJoin ( const CSphString & sCluster, const StrVec_t & dNames, const C
 		TlsMsg::Err ( pCluster->m_sError.cstr() );
 	}
 
-	sphWarning ( "'%s' cluster after join error: %s, nodes '%s'", sCluster.cstr(), TlsMsg::szError(), StrVec2Str ( pCluster->m_dClusterNodes ).cstr() );
+	sphWarning ( "'%s' cluster after join error: %s, nodes '%s'", sCluster.cstr(), TlsMsg::szError(), Vec2Str ( pCluster->m_dClusterNodes ).cstr() );
 	// need to wait recv thread to complete in case of error after worker started
 	pCluster->m_bWorkerActive.Wait ( [] ( bool bWorking ) { return !bWorking; } );
 	Threads::SccWL_t wLock ( g_tClustersLock );
@@ -1691,7 +1691,7 @@ bool ClusterCreate ( const CSphString & sCluster, const StrVec_t & dNames, const
 	// need to clean up Galera system files left from previous cluster
 	CleanClusterFiles ( GetDatadirPath ( tDesc->m_sPath ) );
 
-	sphLogDebugRpl ( "creating cluster '%s', nodes: %s", sCluster.cstr(), StrVec2Str ( dNames ).cstr() );
+	sphLogDebugRpl ( "creating cluster '%s', nodes: %s", sCluster.cstr(), Vec2Str ( dNames ).cstr() );
 
 	ReplicationClusterRefPtr_c pCluster { MakeCluster ( tDesc.value(), BOOTSTRAP_E::YES ) };
 	if ( !pCluster )
@@ -1837,7 +1837,7 @@ static bool HasNotReadyNodes ( ReplicationClusterRefPtr_c pCluster )
 static bool ClusterAlterDrop ( const CSphString & sCluster, const VecTraits_T<CSphString> & dIndexes )
 {
 	RtAccum_t tAcc;
-	tAcc.AddCommand ( ReplCmd_e::CLUSTER_ALTER_DROP, StrVec2Str ( dIndexes, "," ), sCluster );
+	tAcc.AddCommand ( ReplCmd_e::CLUSTER_ALTER_DROP, Vec2Str ( dIndexes ), sCluster );
 	return HandleCmdReplicate ( tAcc );
 }
 
@@ -1875,7 +1875,7 @@ static bool SendIndex ( const CSphString & sIndex, ReplicationClusterRefPtr_c pC
 		}
 
 		auto dNodes = pCluster->FilterViewNodesByProto ( Proto_e::SPHINX, false );
-		sphLogDebugRpl ( "alter '%s' SST index '%s' to nodes %d: '%s'", pCluster->m_sName.cstr(), sIndex.cstr(), dNodes.GetLength(), StrVec2Str ( dNodes ).cstr() );
+		sphLogDebugRpl ( "alter '%s' SST index '%s' to nodes %d: '%s'", pCluster->m_sName.cstr(), sIndex.cstr(), dNodes.GetLength(), Vec2Str ( dNodes ).cstr() );
 
 		// ok for just created cluster (wo nodes) to add existed index
 		if ( !dNodes.IsEmpty() )
@@ -1963,13 +1963,13 @@ static bool ClusterAlterAdd ( const CSphString & sCluster, const VecTraits_T<CSp
 	});
 	LoadedIndexesClusterCleanup_t tCleanup ( bAdded, dIndexes, pCluster );
 
-	sphLogDebugRpl ( "alter '%s' adding index '%s'", pCluster->m_sName.cstr(), StrVec2Str ( dIndexes, "," ).cstr() );
+	sphLogDebugRpl ( "alter '%s' adding index '%s'", pCluster->m_sName.cstr(), Vec2Str ( dIndexes ).cstr() );
 	RtAccum_t tAcc;
-	ReplicationCommand_t * pAddCmd = tAcc.AddCommand ( ReplCmd_e::CLUSTER_ALTER_ADD, StrVec2Str ( dIndexes, "," ), sCluster );
+	ReplicationCommand_t * pAddCmd = tAcc.AddCommand ( ReplCmd_e::CLUSTER_ALTER_ADD, Vec2Str ( dIndexes ), sCluster );
 	pAddCmd->m_bCheckIndex = false;
 	
 	bAdded = HandleCmdReplicate ( tAcc );
-	sphLogDebugRpl ( "alter '%s' %s index '%s'", pCluster->m_sName.cstr(), ( bAdded ? "added" : "failed to add" ), StrVec2Str ( dIndexes, "," ).cstr() );
+	sphLogDebugRpl ( "alter '%s' %s index '%s'", pCluster->m_sName.cstr(), ( bAdded ? "added" : "failed to add" ), Vec2Str ( dIndexes ).cstr() );
 	return bAdded;
 }
 

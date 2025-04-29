@@ -28,9 +28,7 @@
 /cmake-build*
 /build
 /buildx64
-/build_temp
 /build_*
-/rlp
 /.vs
 
 # /config/
@@ -42,18 +40,8 @@
 /libstemmer_c/.deps
 
 # /src/
-/src/indexer
-/src/indextool
-/src/search
-/src/searchd
-/src/spelldump
-/src/tests
-/src/wordbreaker
-/src/Makefile
 /src/.deps
 /src/sphinxversion.h
-/src/*.o
-/src/libsphinx.a
 
 # /win/
 /win/*.user
@@ -92,3 +80,5 @@
 **/.DS_Store
 /test/clt-tests/**/*.deb
 /test/clt-tests/*repo.noarch.deb.*
+/src/perfetto/perfetto.cc
+/src/perfetto/perfetto.h

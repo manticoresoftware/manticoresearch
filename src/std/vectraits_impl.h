@@ -174,6 +174,12 @@ int VecTraits_T<T>::GetLength() const
 	return (int)m_iCount;
 }
 
+template<typename T>
+DWORD VecTraits_T<T>::GetULength () const
+{
+	return static_cast<DWORD> (m_iCount);
+}
+
 /// get length in bytes
 template<typename T>
 size_t VecTraits_T<T>::GetLengthBytes() const

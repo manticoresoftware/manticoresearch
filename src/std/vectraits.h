@@ -75,6 +75,7 @@ public:
 	/// query current length, in elements
 	FORCE_INLINE int64_t GetLength64() const;
 	FORCE_INLINE int GetLength() const;
+	FORCE_INLINE DWORD GetULength() const;
 
 	/// get length in bytes
 	size_t GetLengthBytes() const;

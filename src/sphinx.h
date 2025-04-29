@@ -778,7 +778,7 @@ struct AttrUpdateInc_t // for cascade (incremental) update
 {
 	AttrUpdateSharedPtr_t			m_pUpdate;	///< the unchangeable update pool
 	CSphBitvec						m_dUpdated;			///< bitmask of updated rows
-	int								m_iAffected = 0;	///< num of updated rows.
+	DWORD							m_uAffected = 0;	///< num of updated rows.
 
 	explicit AttrUpdateInc_t ( AttrUpdateSharedPtr_t pUpd )
 		: m_pUpdate ( std::move(pUpd) )
@@ -790,14 +790,14 @@ struct AttrUpdateInc_t // for cascade (incremental) update
 		if ( m_dUpdated.BitGet ( iUpd ) )
 			return;
 
-		++m_iAffected;
+		++m_uAffected;
 		m_dUpdated.BitSet ( iUpd );
 	}
 
 	bool AllApplied () const
 	{
-		assert ( m_dUpdated.GetSize() >= m_iAffected );
-		return m_dUpdated.GetSize() == m_iAffected;
+		assert ( m_dUpdated.GetSize() >= m_uAffected );
+		return m_dUpdated.GetSize() == m_uAffected;
 	}
 };
 

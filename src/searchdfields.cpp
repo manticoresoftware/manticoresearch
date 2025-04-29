@@ -170,8 +170,7 @@ bool GetIndexes ( const CSphString & sIndexes, CSphString & sError, StrVec_t & d
 	return true;
 }
 
-bool GetFieldFromLocal ( const CSphString & sIndexName, const FieldRequest_t & tArgs, int64_t iSessionID,
-		DocHash_t & hFetchedDocs, FieldBlob_t & tRes )
+static bool GetFieldFromLocal ( const CSphString & sIndexName, const FieldRequest_t & tArgs, int64_t iSessionID, DocHash_t & hFetchedDocs, FieldBlob_t & tRes )
 {
 	auto pServed = GetServed ( sIndexName );
 	if ( !pServed )
@@ -179,6 +178,8 @@ bool GetFieldFromLocal ( const CSphString & sIndexName, const FieldRequest_t & t
 		tRes.m_sError.SetSprintf ( "no such table %s", sIndexName.cstr() );
 		return false;
 	}
+
+	pServed->m_pStats->IncCmd ( SEARCHD_COMMAND_GETFIELD );
 
 	auto& tRefCrashQuery = GlobalCrashQueryGetRef();
 	tRefCrashQuery.m_dIndex = { sIndexName.cstr(), sIndexName.Length() };
@@ -275,7 +276,7 @@ bool GetFieldFromDist ( VecRefPtrsAgentConn_t & dRemotes, const FieldRequest_t &
 	return true;
 }
 
-bool GetFields ( const FieldRequest_t & tReq, FieldBlob_t & tRes, DocHash_t & hFetchedDocs )
+static bool GetFields ( const FieldRequest_t & tReq, FieldBlob_t & tRes, DocHash_t & hFetchedDocs )
 {
 	if ( tReq.m_dDocs.IsEmpty() )
 		return true;

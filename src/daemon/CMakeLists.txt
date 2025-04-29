@@ -8,6 +8,7 @@ add_library ( daemon OBJECT
 		failures_log.h
 		logger.h
 		http_log.cpp
+		query_log.cpp
 		winservice.cpp
 		winservice.h
 )

@@ -1454,12 +1454,6 @@ namespace session
 	bool GetDeprecatedEOF();
 }
 
-void LogSphinxqlError ( const char * sStmt, const Str_t & sError );
-void LogSphinxqlError ( const Str_t & sStmt, const Str_t & sError );
-
-enum class BuddyQuery_e { SQL, HTTP };
-void LogBuddyQuery ( const Str_t sQuery, BuddyQuery_e tType );
-
 // that is used from sphinxql command over API
 void RunSingleSphinxqlCommand ( Str_t sCommand, GenericOutputBuffer_c & tOut );
 

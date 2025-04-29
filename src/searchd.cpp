@@ -73,12 +73,8 @@
 	#include <netinet/in.h>
 #endif
 
-// USE_SYSLOG, HAVE_GETRLIMIT, HAVE_SETRLIMIT
+// for HAVE_GETRLIMIT, HAVE_SETRLIMIT
 #include "config.h"
-#if USE_SYSLOG
-	#include <syslog.h>
-#endif
-
 #if HAVE_GETRLIMIT & HAVE_SETRLIMIT
 	#include <sys/resource.h>
 #endif
@@ -91,24 +87,12 @@
 // 1 - SIGKILL will shut down the whole daemon; 0 - watchdog will reincarnate the daemon
 #define WATCHDOG_SIGKILL		1
 
-#define					LOG_COMPACT_IN	128						// upto this many IN(..) values allowed in query_log
-
 /////////////////////////////////////////////////////////////////////////////
 
 using namespace Threads;
 
-enum LogFormat_e
-{
-	LOG_FORMAT_PLAIN,
-	LOG_FORMAT_SPHINXQL
-};
-
 static auto& 			g_iParentPID		= getParentPID ();  // set by watchdog
-static bool				g_bQuerySyslog		= false;
-static LogFormat_e		g_eLogFormat		= LOG_FORMAT_SPHINXQL;
-static bool				g_bLogCompactIn		= false;			// whether to cut list in IN() clauses.
-static int				g_iQueryLogMinMs	= 0;				// log 'slow' threshold for query
-static CSphBitvec		g_tLogStatements;
+int						g_iQueryLogMinMs	= 0;				// log 'slow' threshold for query
 
 int						g_iReadTimeoutS		= 5;	// sec
 int						g_iWriteTimeoutS	= 5;	// sec
@@ -130,8 +114,6 @@ static constexpr bool	THREAD_EX_NEEDS_VIP = false; // whether non-VIP can issue 
 
 static CSphVector<Listener_t>	g_dListeners;
 
-static int				g_iQueryLogFile	= -1;
-static CSphString		g_sQueryLogFile;
 CSphString				g_sPidFile;
 static bool				g_bPidIsMine = false;		// if PID is not mine, don't unlink it on fail
 static int				g_iPidFD		= -1;
@@ -872,6 +854,12 @@ void ISphOutputBuffer::SendArray ( ByteBlob_t dData )
 	SendArray ( dData.first, dData.second );
 }
 
+static void LogToConsole(const char* szKind, const char* szMsg) noexcept
+{
+	if ( g_bOptNoDetach && LogFormat()!=LOG_FORMAT::SPHINXQL )
+		sphInfo ( "query %s: %s", szKind, szMsg );
+}
+
 void SendErrorReply ( ISphOutputBuffer & tOut, const char * sTemplate, ... )
 {
 	CSphString sError;
@@ -884,8 +872,7 @@ void SendErrorReply ( ISphOutputBuffer & tOut, const char * sTemplate, ... )
 	tOut.SendString ( sError.cstr() );
 
 	// --console logging
-	if ( g_bOptNoDetach && g_eLogFormat!=LOG_FORMAT_SPHINXQL )
-		sphInfo ( "query error: %s", sError.cstr() );
+	LogToConsole ( "error", sError.cstr() );
 }
 
 void DistributedIndex_t::GetAllHosts ( VectorAgentConn_t &dTarget ) const
@@ -1990,16 +1977,7 @@ bool ParseSearchQuery ( InputBuffer_c & tReq, ISphOutputBuffer & tOut, CSphQuery
 	if ( uMasterVer<15 && !ParseSelectList ( sError, tQuery ) )
 	{
 		// we want to see a parse error in query_log_format=sphinxql mode too
-		if ( g_eLogFormat==LOG_FORMAT_SPHINXQL && g_iQueryLogFile>=0 )
-		{
-			StringBuilder_c tBuf;
-			tBuf << "/* ";
-			sphFormatCurrentTime ( tBuf );
-			tBuf << "*/ " << tQuery.m_sSelect << " # error=" << sError << '\n';
-			sphSeek ( g_iQueryLogFile, 0, SEEK_END );
-			sphWrite ( g_iQueryLogFile, tBuf.cstr(), tBuf.GetLength() );
-		}
-
+		LogQueryToSphinxlLog ( tQuery.m_sSelect, sError );
 		SendErrorReply ( tOut, "select: %s", sError.cstr () );
 		return false;
 	}
@@ -2205,685 +2183,6 @@ bool ParseSearchQuery ( InputBuffer_c & tReq, ISphOutputBuffer & tOut, CSphQuery
 //////////////////////////////////////////////////////////////////////////
 
 using QuotationEscapedBuilder = EscapedStringBuilder_T<BaseQuotation_T<EscapeQuotator_t>>;
-
-
-void LogQueryPlain ( const CSphQuery & tQuery, const CSphQueryResultMeta & tMeta )
-{
-	assert ( g_eLogFormat==LOG_FORMAT_PLAIN );
-	if ( ( !g_bQuerySyslog && g_iQueryLogFile<0 ) || !tMeta.m_sError.IsEmpty() )
-		return;
-
-	QuotationEscapedBuilder tBuf;
-
-	// [time]
-#if USE_SYSLOG
-	if ( !g_bQuerySyslog )
-	{
-#endif
-
-		tBuf << '[';
-		sphFormatCurrentTime ( tBuf );
-		tBuf << ']';
-
-#if USE_SYSLOG
-	} else
-		tBuf += "[query]";
-#endif
-
-	// querytime sec
-	int iQueryTime = Max ( tMeta.m_iQueryTime, 0 );
-	int iRealTime = Max ( tMeta.m_iRealQueryTime, 0 );
-	tBuf.Appendf ( " %d.%03d sec", iRealTime/1000, iRealTime%1000 );
-	tBuf.Appendf ( " %d.%03d sec", iQueryTime/1000, iQueryTime%1000 );
-
-	// optional multi-query multiplier
-	if ( tMeta.m_iMultiplier>1 )
-		tBuf.Appendf ( " x%d", tMeta.m_iMultiplier );
-
-	// [matchmode/numfilters/sortmode matches (offset,limit)
-	static const char * sModes [ SPH_MATCH_TOTAL ] = { "all", "any", "phr", "bool", "ext", "scan", "ext2" };
-	static const char * sSort [ SPH_SORT_TOTAL ] = { "rel", "attr-", "attr+", "tsegs", "ext", "expr" };
-	tBuf.Appendf ( " [%s/%d/%s " INT64_FMT " (%d,%d)",
-		sModes [ tQuery.m_eMode ], tQuery.m_dFilters.GetLength(), sSort [ tQuery.m_eSort ], tMeta.m_iTotalMatches,
-		tQuery.m_iOffset, tQuery.m_iLimit );
-
-	// optional groupby info
-	if ( !tQuery.m_sGroupBy.IsEmpty() )
-		tBuf.Appendf ( " @%s", tQuery.m_sGroupBy.cstr() );
-
-	// ] [indexes]
-	tBuf.Appendf ( "] [%s]", tQuery.m_sIndexes.cstr() );
-
-	// optional performance counters
-	if ( g_bIOStats || g_bCpuStats )
-	{
-		const CSphIOStats & IOStats = tMeta.m_tIOStats;
-
-		tBuf += " [";
-
-		if ( g_bIOStats )
-			tBuf.Appendf ( "ios=%d kb=%d.%d ioms=%d.%d",
-				IOStats.m_iReadOps, (int)( IOStats.m_iReadBytes/1024 ), (int)( IOStats.m_iReadBytes%1024 )*10/1024,
-				(int)( IOStats.m_iReadTime/1000 ), (int)( IOStats.m_iReadTime%1000 )/100 );
-
-		if ( g_bIOStats && g_bCpuStats )
-			tBuf += " ";
-
-		if ( g_bCpuStats )
-			tBuf.Sprintf ( "cpums=%.1D", tMeta.m_iCpuTime/100 );
-
-		tBuf += "]";
-	}
-
-	// optional query comment
-	if ( !tQuery.m_sComment.IsEmpty() )
-		tBuf.Appendf ( " [%s]", tQuery.m_sComment.cstr() );
-
-	// query
-	// (m_sRawQuery is empty when using MySQL handler)
-	const CSphString & sQuery = tQuery.m_sRawQuery.IsEmpty()
-		? tQuery.m_sQuery
-		: tQuery.m_sRawQuery;
-
-	if ( !sQuery.IsEmpty() )
-	{
-		tBuf += " ";
-		tBuf.FixupSpacesAndAppend ( sQuery.cstr() );
-	}
-
-#if USE_SYSLOG
-	if ( !g_bQuerySyslog )
-	{
-#endif
-
-	// line feed
-	tBuf += "\n";
-
-	sphSeek ( g_iQueryLogFile, 0, SEEK_END );
-	sphWrite ( g_iQueryLogFile, tBuf.cstr(), tBuf.GetLength() );
-
-#if USE_SYSLOG
-	} else
-	{
-		syslog ( LOG_INFO, "%s", tBuf.cstr() );
-	}
-#endif
-}
-
-namespace {
-CSphString RemoveBackQuotes ( const char * pSrc )
-{
-	CSphString sResult;
-	if ( !pSrc )
-		return sResult;
-
-	size_t iLen = strlen ( pSrc );
-	if ( !iLen )
-		return sResult;
-
-	auto szResult = new char[iLen+1];
-
-	auto * sMax = pSrc+iLen;
-	auto d = szResult;
-	while ( pSrc<sMax )
-	{
-		auto sQuote = (const char *) memchr ( pSrc, '`', sMax-pSrc );
-		if ( !sQuote )
-			sQuote = sMax;
-		auto iChunk = sQuote-pSrc;
-		memmove ( d, pSrc, iChunk );
-		d += iChunk;
-		pSrc += iChunk+1; // +1 to skip the quote
-	}
-	*d = '\0';
-	if ( !*szResult ) // never return allocated, but empty str. Prefer to return nullptr instead.
-		SafeDeleteArray( szResult );
-	sResult.Adopt ( &szResult );
-	return sResult;
-}
-}
-
-static void FormatOrderBy ( StringBuilder_c * pBuf, const char * sPrefix, ESphSortOrder eSort, const CSphString & sSort )
-{
-	assert ( pBuf );
-	if ( eSort==SPH_SORT_EXTENDED && sSort=="@weight desc" )
-		return;
-
-	const char * sSubst = "@weight";
-	if ( sSort!="@relevance" )
-			sSubst = sSort.cstr();
-
-	auto sUnquoted = RemoveBackQuotes ( sSubst );
-	sSubst = sUnquoted.cstr();
-
-	// for simplicity check that sPrefix is already prefixed/suffixed by spaces.
-	assert ( sPrefix && sPrefix[0]==' ' && sPrefix[strlen ( sPrefix )-1]==' ' );
-	*pBuf << sPrefix;
-	switch ( eSort )
-	{
-	case SPH_SORT_TIME_SEGMENTS:	*pBuf << "TIME_SEGMENT(" << sSubst << ")"; break;
-	case SPH_SORT_EXTENDED:			*pBuf << sSubst; break;
-	case SPH_SORT_EXPR:				*pBuf << "BUILTIN_EXPR()"; break;
-	case SPH_SORT_RELEVANCE:		*pBuf << "weight() desc"; if ( sSubst ) *pBuf << ", " << sSubst; break;
-	default:						pBuf->Appendf ( "mode-%d", (int)eSort ); break;
-	}
-}
-
-static const CSphQuery g_tDefaultQuery {};
-
-static void FormatSphinxql ( const CSphQuery & q, const CSphQuery & tJoinOptions, int iCompactIN, QuotationEscapedBuilder & tBuf );
-static void FormatList ( const CSphVector<CSphNamedInt> & dValues, StringBuilder_c & tBuf )
-{
-	ScopedComma_c tComma ( tBuf, ", " );
-	for ( const auto& dValue : dValues )
-		tBuf << dValue;
-}
-
-static void FormatOption ( const CSphQuery & tQuery, StringBuilder_c & tBuf, const char * szOption )
-{
-	ScopedComma_c tOptionComma ( tBuf, ", ", szOption);
-
-	if ( tQuery.m_iMaxMatches!=DEFAULT_MAX_MATCHES )
-		tBuf.Appendf ( "max_matches=%d", tQuery.m_iMaxMatches );
-
-	if ( !tQuery.m_sComment.IsEmpty() )
-		tBuf.Appendf ( "comment='%s'", tQuery.m_sComment.cstr() ); // FIXME! escape, replace newlines..
-
-	if ( tQuery.m_eRanker!=SPH_RANK_DEFAULT )
-	{
-		const char * sRanker = sphGetRankerName ( tQuery.m_eRanker );
-		if ( !sRanker )
-			sRanker = sphGetRankerName ( SPH_RANK_DEFAULT );
-
-		if ( tQuery.m_sRankerExpr.IsEmpty() )
-			tBuf.Appendf ( "ranker=%s", sRanker );
-		else
-			tBuf.Appendf ( "ranker=%s(\'%s\')", sRanker, tQuery.m_sRankerExpr.scstr() );
-	}
-
-	if ( tQuery.m_iAgentQueryTimeoutMs!=DEFAULT_QUERY_TIMEOUT )
-		tBuf.Appendf ( "agent_query_timeout=%d", tQuery.m_iAgentQueryTimeoutMs );
-
-	if ( tQuery.m_iCutoff!=g_tDefaultQuery.m_iCutoff )
-		tBuf.Appendf ( "cutoff=%d", tQuery.m_iCutoff );
-
-	if ( tQuery.m_dFieldWeights.GetLength() )
-	{
-		tBuf.StartBlock (nullptr,"field_weights=(",")");
-		FormatList ( tQuery.m_dFieldWeights, tBuf );
-		tBuf.FinishBlock ();
-	}
-
-	if ( tQuery.m_bGlobalIDF!=g_tDefaultQuery.m_bGlobalIDF )
-		tBuf << "global_idf=1";
-
-	if ( tQuery.m_bPlainIDF || !tQuery.m_bNormalizedTFIDF )
-	{
-		tBuf.StartBlock(",","idf='","'");
-		tBuf << ( tQuery.m_bPlainIDF ? "plain" : "normalized" )
-		<< ( tQuery.m_bNormalizedTFIDF ? "tfidf_normalized" : "tfidf_unnormalized" );
-		tBuf.FinishBlock ();
-	}
-
-	if ( tQuery.m_bLocalDF.has_value() )
-		tBuf.Appendf ( "local_df=%d", tQuery.m_bLocalDF.value() ? 1 : 0 );
-
-	if ( tQuery.m_dIndexWeights.GetLength() )
-	{
-		tBuf.StartBlock ( nullptr, "index_weights=(", ")" );
-		FormatList ( tQuery.m_dIndexWeights, tBuf );
-		tBuf.FinishBlock ();
-	}
-
-	if ( tQuery.m_uMaxQueryMsec!=g_tDefaultQuery.m_uMaxQueryMsec )
-		tBuf.Appendf ( "max_query_time=%u", tQuery.m_uMaxQueryMsec );
-
-	if ( tQuery.m_iMaxPredictedMsec!=g_tDefaultQuery.m_iMaxPredictedMsec )
-		tBuf.Appendf ( "max_predicted_time=%d", tQuery.m_iMaxPredictedMsec );
-
-	if ( tQuery.m_iRetryCount!=DEFAULT_QUERY_RETRY )
-		tBuf.Appendf ( "retry_count=%d", tQuery.m_iRetryCount );
-
-	if ( tQuery.m_iRetryDelay!=DEFAULT_QUERY_RETRY )
-		tBuf.Appendf ( "retry_delay=%d", tQuery.m_iRetryDelay );
-
-	if ( tQuery.m_iRandSeed!=g_tDefaultQuery.m_iRandSeed )
-		tBuf.Appendf ( "rand_seed=" INT64_FMT, tQuery.m_iRandSeed );
-
-	if ( !tQuery.m_sQueryTokenFilterLib.IsEmpty() )
-	{
-		if ( tQuery.m_sQueryTokenFilterOpts.IsEmpty() )
-			tBuf.Appendf ( "token_filter = '%s:%s'", tQuery.m_sQueryTokenFilterLib.cstr(), tQuery.m_sQueryTokenFilterName.cstr() );
-		else
-			tBuf.Appendf ( "token_filter = '%s:%s:%s'", tQuery.m_sQueryTokenFilterLib.cstr(), tQuery.m_sQueryTokenFilterName.cstr(), tQuery.m_sQueryTokenFilterOpts.cstr() );
-	}
-
-	if ( tQuery.m_bIgnoreNonexistent )
-		tBuf << "ignore_nonexistent_columns=1";
-
-	if ( tQuery.m_bIgnoreNonexistentIndexes )
-		tBuf << "ignore_nonexistent_indexes=1";
-
-	if ( tQuery.m_bStrict )
-		tBuf << "strict=1";
-
-	if ( tQuery.m_eExpandKeywords!=QUERY_OPT_DEFAULT && tQuery.m_eExpandKeywords!=QUERY_OPT_MORPH_NONE )
-		tBuf.Appendf ( "expand_keywords=%d", ( tQuery.m_eExpandKeywords==QUERY_OPT_ENABLED ? 1 : 0 ) );
-	if ( tQuery.m_eExpandKeywords==QUERY_OPT_MORPH_NONE )
-		tBuf.Appendf ( "morphology=none" );
-	if ( tQuery.m_iExpansionLimit!=DEFAULT_QUERY_EXPANSION_LIMIT )
-		tBuf.Appendf ( "expansion_limit=%d", tQuery.m_iExpansionLimit );
-}
-
-
-static CSphString GenerateHintName ( const IndexHint_t & tHint )
-{
-	CSphString sName;
-	switch ( tHint.m_eType )
-	{
-	case SecondaryIndexType_e::FILTER:	sName = "Filter"; break;
-	case SecondaryIndexType_e::LOOKUP:	sName = "DocidIndex"; break;
-	case SecondaryIndexType_e::INDEX:	sName = "SecondaryIndex"; break;
-	case SecondaryIndexType_e::ANALYZER:sName = "ColumnarScan"; break;
-	default:							sName = "None"; break;
-	}
-
-	if ( !tHint.m_bForce )
-		sName.SetSprintf ( "NO_%s", sName.cstr() );
-
-	return sName;
-}
-
-
-static void AppendHint ( const IndexHint_t & tHint, const StrVec_t & dIndexes, StringBuilder_c & tBuf )
-{
-	CSphString sName;
-	sName.SetSprintf ( " %s (", GenerateHintName(tHint).cstr() );
-	ScopedComma_c tComma ( tBuf, ",", sName.cstr(), ")" );
-	for ( const auto & sIndex : dIndexes )
-		tBuf << sIndex;
-}
-
-
-static void FormatIndexHints ( const CSphQuery & tQuery, StringBuilder_c & tBuf )
-{
-	if ( !tQuery.m_dIndexHints.GetLength() )
-		return;
-
-	ScopedComma_c sMatch ( tBuf, nullptr );
-	CSphVector<bool> dUsed { tQuery.m_dIndexHints.GetLength() };
-	dUsed.ZeroVec();
-
-	tBuf << " /*+ ";
-
-	ARRAY_FOREACH ( i, tQuery.m_dIndexHints )
-	{
-		if ( dUsed[i] )
-			continue;
-
-		StrVec_t dIndexes;
-		dIndexes.Add ( tQuery.m_dIndexHints[i].m_sIndex );
-		for ( int j = i+1; j<tQuery.m_dIndexHints.GetLength(); j++)
-			if ( !dUsed[j] && tQuery.m_dIndexHints[i].m_eType==tQuery.m_dIndexHints[j].m_eType && tQuery.m_dIndexHints[i].m_bForce==tQuery.m_dIndexHints[j].m_bForce )
-			{
-				dIndexes.Add ( tQuery.m_dIndexHints[j].m_sIndex );
-				dUsed[j] = true;
-			}
-
-		AppendHint ( tQuery.m_dIndexHints[i], dIndexes, tBuf );
-	}
-
-	tBuf << " */";
-}
-
-
-static void LogQueryJson ( const CSphQuery & q, StringBuilder_c & tBuf )
-{
-	if ( q.m_sRawQuery.IsEmpty() )
-		tBuf << " /*" << "{\"index\":\"" << q.m_sIndexes << "\"}*/ /*" << q.m_sQuery << " */";
-	else
-		tBuf << " /*" << q.m_sRawQuery << " */";
-}
-
-inline static void FormatTimeConnClient ( StringBuilder_c& tBuf )
-{
-	sphFormatCurrentTime ( tBuf );
-	tBuf << " conn " << session::GetConnID() << " (" << session::szClientName() << ")";
-}
-
-static void LogQuerySphinxql ( const CSphQuery & q, const CSphQuery & tJoinOptions, const CSphQueryResultMeta & tMeta, const CSphVector<int64_t> & dAgentTimes )
-{
-	assert ( g_eLogFormat==LOG_FORMAT_SPHINXQL );
-	if ( g_iQueryLogFile<0 )
-		return;
-
-	QuotationEscapedBuilder tBuf;
-	int iCompactIN = ( g_bLogCompactIn ? LOG_COMPACT_IN : 0 );
-
-	// time, conn id, wall, found
-	int iQueryTime = Max ( tMeta.m_iQueryTime, 0 );
-	int iRealTime = Max ( tMeta.m_iRealQueryTime, 0 );
-
-	tBuf  << "/* ";
-	FormatTimeConnClient ( tBuf );
-	tBuf << " real " << FixedFrac ( iRealTime ) << " wall " << FixedFrac ( iQueryTime );
-
-	if ( tMeta.m_iMultiplier>1 )
-		tBuf << " x" << tMeta.m_iMultiplier;
-	tBuf << " found " << tMeta.m_iTotalMatches << " */ ";
-
-	///////////////////////////////////
-	// format request as SELECT query
-	///////////////////////////////////
-
-	if ( q.m_eQueryType==QUERY_JSON )
-		LogQueryJson ( q, tBuf );
-	else
-		FormatSphinxql ( q, tJoinOptions, iCompactIN, tBuf );
-
-	///////////////
-	// query stats
-	///////////////
-
-	// next block ecnlosed in /* .. */, space-separated
-	tBuf.StartBlock ( " ", " /*", " */" );
-	if ( !tMeta.m_sError.IsEmpty() )
-	{
-		// all we have is an error
-		tBuf.Appendf ( "error=%s", tMeta.m_sError.cstr() );
-
-	} else
-	{
-		// performance counters
-		if ( g_bIOStats || g_bCpuStats )
-		{
-			const CSphIOStats & IOStats = tMeta.m_tIOStats;
-
-			if ( g_bIOStats )
-				tBuf.Sprintf ( "ios=%d kb=%d.%d ioms=%.1D",
-				IOStats.m_iReadOps, (int)( IOStats.m_iReadBytes/1024 ), (int)( IOStats.m_iReadBytes%1024 )*10/1024,
-				IOStats.m_iReadTime/100 );
-
-			if ( g_bCpuStats )
-				tBuf.Sprintf ( "cpums=%.1D", tMeta.m_iCpuTime/100 );
-		}
-
-		// per-agent times
-		if ( dAgentTimes.GetLength() )
-		{
-			ScopedComma_c dAgents ( tBuf, ", ", " agents=(",")");
-			for ( auto iTime : dAgentTimes )
-				tBuf.Appendf ( "%d.%03d",
-					(int)( iTime/1000),
-					(int)( iTime%1000) );
-		}
-
-		// merged stats
-		if ( tMeta.m_hWordStats.GetLength() && ( tMeta.m_tExpansionStats.m_iTerms || tMeta.m_tExpansionStats.m_iMerged ) )
-			tBuf.Appendf ( "terms expansion=(merged %d, not merged %d)", tMeta.m_tExpansionStats.m_iMerged, tMeta.m_tExpansionStats.m_iTerms );
-
-		// warning
-		if ( !tMeta.m_sWarning.IsEmpty() )
-			tBuf.Appendf ( "warning=%s", tMeta.m_sWarning.cstr() );
-	}
-	tBuf.FinishBlock (); // close the comment
-
-	// line feed
-	tBuf += "\n";
-
-	sphSeek ( g_iQueryLogFile, 0, SEEK_END );
-	sphWrite ( g_iQueryLogFile, tBuf.cstr(), tBuf.GetLength() );
-}
-
-
-CSphString TypeCastToStr ( ESphAttr eAttr )
-{
-	switch ( eAttr )
-	{
-	case SPH_ATTR_INTEGER:	return "INTEGER";
-	case SPH_ATTR_BIGINT:	return "BIGINT";
-	case SPH_ATTR_STRING:	return "STRING";
-	default:				return "";
-	}
-}
-
-
-void FormatSphinxql ( const CSphQuery & q, const CSphQuery & tJoinOptions, int iCompactIN, QuotationEscapedBuilder & tBuf )
-{
-	if ( q.m_bHasOuter )
-		tBuf << "SELECT * FROM (";
-
-	if ( q.m_sSelect.IsEmpty() )
-		tBuf << "SELECT * FROM " << q.m_sIndexes;
-	else
-		tBuf << "SELECT " << RemoveBackQuotes ( q.m_sSelect.cstr() ) << " FROM " << q.m_sIndexes;
-
-	if ( q.m_eJoinType!=JoinType_e::NONE )
-	{
-		if ( q.m_eJoinType==JoinType_e::LEFT )
-			tBuf << " LEFT JOIN ";
-		else
-			tBuf << " INNER JOIN ";
-
-		tBuf << q.m_sJoinIdx << " ON ";
-
-		ARRAY_FOREACH ( i, q.m_dOnFilters )
-		{
-			const auto & tOn = q.m_dOnFilters[i];
-			CSphString sVar1, sVar2;
-			sVar1.SetSprintf ( "%s.%s", tOn.m_sIdx1.cstr(), tOn.m_sAttr1.cstr() );
-			sVar2.SetSprintf ( "%s.%s", tOn.m_sIdx2.cstr(), tOn.m_sAttr2.cstr() );
-			CSphString sCast1 = TypeCastToStr ( tOn.m_eTypeCast1 );
-			CSphString sCast2 = TypeCastToStr ( tOn.m_eTypeCast2 );
-			if ( !sCast1.IsEmpty() )
-				sVar1.SetSprintf ( "%s(%s)", sCast1.cstr(), sVar1.cstr() );
-
-			if ( !sCast2.IsEmpty() )
-				sVar2.SetSprintf ( "%s(%s)", sCast2.cstr(), sVar2.cstr() );
-
-			tBuf << sVar1 << "=" << sVar2;
-
-			if ( i < q.m_dOnFilters.GetLength()-1 )
-				tBuf << " AND ";
-		}
-	}
-
-	// WHERE clause
-	// (m_sRawQuery is empty when using MySQL handler)
-	const CSphString & sQuery = q.m_sQuery;
-	if ( !sQuery.IsEmpty() || !q.m_sJoinQuery.IsEmpty() || q.m_dFilters.GetLength() )
-	{
-		ScopedComma_c sWHERE ( tBuf, " AND ", " WHERE ");
-
-		if ( !sQuery.IsEmpty() )
-		{
-			ScopedComma_c sMatch (tBuf, nullptr, "MATCH(", ")");
-			tBuf.FixupSpacedAndAppendEscaped ( sQuery.cstr() );
-		}
-
-		if ( !q.m_sJoinQuery.IsEmpty() )
-		{
-			CSphString sEnd;
-			sEnd.SetSprintf ( ",%s)", q.m_sJoinIdx.cstr() );
-			ScopedComma_c sMatch (tBuf, nullptr, "MATCH(", sEnd.cstr() );
-			tBuf.FixupSpacedAndAppendEscaped ( q.m_sJoinQuery.cstr() );
-		}
-
-		FormatFiltersQL ( q.m_dFilters, q.m_dFilterTree, tBuf, iCompactIN );
-	}
-
-	// ORDER BY and/or GROUP BY clause
-	if ( q.m_sGroupBy.IsEmpty() )
-	{
-		if ( !q.m_sSortBy.IsEmpty() ) // case API SPH_MATCH_EXTENDED2 - SPH_SORT_RELEVANCE
-			FormatOrderBy ( &tBuf, " ORDER BY ", q.m_eSort, q.m_sSortBy );
-	} else
-	{
-		tBuf << " GROUP BY " << q.m_sGroupBy;
-		FormatOrderBy ( &tBuf, " WITHIN GROUP ORDER BY ", q.m_eSort, q.m_sSortBy );
-		if ( !q.m_tHaving.m_sAttrName.IsEmpty() )
-		{
-			ScopedComma_c sHawing ( tBuf, nullptr," HAVING ");
-			FormatFilterQL ( q.m_tHaving, tBuf, iCompactIN );
-		}
-		if ( q.m_sGroupSortBy!="@group desc" )
-			FormatOrderBy ( &tBuf, " ORDER BY ", SPH_SORT_EXTENDED, q.m_sGroupSortBy );
-	}
-
-	// LIMIT clause
-	if ( q.m_iOffset!=0 || q.m_iLimit!=20 )
-		tBuf << " LIMIT ";
-	if ( q.m_iOffset )
-		tBuf << q.m_iOffset << ',';
-	if ( q.m_iLimit != 20 )
-		tBuf << q.m_iLimit;
-
-	// OPTION clause
-	FormatOption ( q, tBuf, " OPTION " );
-	if ( q.m_eJoinType!=JoinType_e::NONE )
-	{
-		CSphString sJoinedOption;
-		sJoinedOption.SetSprintf ( " OPTION(%s) ", q.m_sJoinIdx.cstr() );
-		FormatOption ( tJoinOptions, tBuf, sJoinedOption.cstr() );
-	}
-	
-	FormatIndexHints ( q, tBuf );
-
-	// outer order by, limit
-	if ( q.m_bHasOuter )
-	{
-		tBuf << ')';
-		if ( !q.m_sOuterOrderBy.IsEmpty() )
-			tBuf << " ORDER BY " << q.m_sOuterOrderBy;
-		if ( q.m_iOuterOffset>0 )
-			tBuf << " LIMIT " << q.m_iOuterOffset << ", " << q.m_iOuterLimit;
-		else if ( q.m_iOuterLimit>0 )
-			tBuf << " LIMIT " << q.m_iOuterLimit;
-	}
-
-	// finish SQL statement
-	tBuf << ';';
-}
-
-static void LogQuery ( const CSphQuery & q, const CSphQuery & tJoinOptions, const CSphQueryResultMeta & tMeta, const CSphVector<int64_t> & dAgentTimes )
-{
-	if ( g_iQueryLogMinMs>0 && tMeta.m_iQueryTime<g_iQueryLogMinMs )
-		return;
-	// should not log query from buddy in the info but only in debug and more verbose
-	bool bNoLogQuery = ( ( q.m_uDebugFlags & QUERY_DEBUG_NO_LOG )==QUERY_DEBUG_NO_LOG );
-	if ( bNoLogQuery && g_eLogLevel==SPH_LOG_INFO )
-		return;
-
-	switch ( g_eLogFormat )
-	{
-		case LOG_FORMAT_PLAIN:		LogQueryPlain ( q, tMeta ); break;
-		case LOG_FORMAT_SPHINXQL:	LogQuerySphinxql ( q, tJoinOptions, tMeta, dAgentTimes ); break;
-	}
-}
-
-static void WriteQuery ( const StringBuilder_c & tBuf )
-{
-	sphSeek ( g_iQueryLogFile, 0, SEEK_END );
-	sphWrite ( g_iQueryLogFile, tBuf.cstr(), tBuf.GetLength() );
-}
-
-void LogSphinxqlError ( const char * sStmt, const Str_t & sError )
-{
-	if ( g_eLogFormat!=LOG_FORMAT_SPHINXQL || g_iQueryLogFile<0 || !sStmt || IsEmpty(sError) )
-		return;
-
-	StringBuilder_c tBuf;
-	tBuf << "/* ";
-	FormatTimeConnClient ( tBuf );
-	tBuf << " */ " << sStmt << " # error=" << sError << '\n';
-
-	WriteQuery ( tBuf );
-}
-
-void LogSphinxqlError ( const Str_t & sStmt, const Str_t & sError )
-{
-	if ( g_eLogFormat!=LOG_FORMAT_SPHINXQL || g_iQueryLogFile<0 || IsEmpty ( sStmt ) || IsEmpty ( sError ) )
-		return;
-
-	QuotationEscapedBuilder tBuf;
-
-	tBuf << "/* ";
-	FormatTimeConnClient ( tBuf );
-	tBuf << " */ " ;
-	tBuf.AppendEscaped ( sStmt.first, EscBld::eFixupSpace, sStmt.second );
-	tBuf << " # error=" << sError << '\n';
-
-	WriteQuery ( tBuf );
-}
-
-void LogBuddyQuery ( const Str_t sQuery, BuddyQuery_e tType )
-{
-	if ( g_eLogFormat!=LOG_FORMAT_SPHINXQL || g_iQueryLogFile<0 || IsEmpty ( sQuery ) )
-		return;
-
-	const auto & tMeta = session::GetClientSession()->m_tLastMeta;
-
-	QuotationEscapedBuilder tBuf;
-
-	// time, conn id, wall, found
-	int iQueryTime = Max ( tMeta.m_iQueryTime, 0 );
-	int iRealTime = Max ( tMeta.m_iRealQueryTime, 0 );
-
-	tBuf  << "/* ";
-	FormatTimeConnClient ( tBuf );
-	tBuf << " real " << FixedFrac ( iRealTime ) << " wall " << FixedFrac ( iQueryTime );
-
-	if ( tMeta.m_iMultiplier>1 )
-		tBuf << " x" << tMeta.m_iMultiplier;
-	tBuf << " found " << tMeta.m_iTotalMatches << " */ ";
-
-	if ( tType==BuddyQuery_e::HTTP )
-		tBuf << "/* ";
-	tBuf.AppendEscaped ( sQuery.first, EscBld::eFixupSpace, sQuery.second );
-	if ( tType==BuddyQuery_e::HTTP )
-		tBuf << " */";
-
-	tBuf << ";\n";
-
-	WriteQuery ( tBuf );
-}
-
-
-static void LogStatementSphinxql ( Str_t sQuery, int iRealTime )
-{
-	if ( g_iQueryLogFile<0 || g_eLogFormat!=LOG_FORMAT_SPHINXQL || !IsFilled ( sQuery ) )
-		return;
-	if ( session::IsQueryLogDisabled() && g_eLogLevel==SPH_LOG_INFO )
-		return;
-
-	StringBuilder_c tBuf;
-	tBuf << "/* ";
-	FormatTimeConnClient ( tBuf );
-	tBuf << " real " << FixedFrac ( iRealTime ) << " */ "
-
-	// query
-		<< sQuery
-
-	// finish statement and line feed
-		<< ";\n";
-
-	sphSeek ( g_iQueryLogFile, 0, SEEK_END );
-	sphWrite ( g_iQueryLogFile, tBuf.cstr(), tBuf.GetLength() );
-}
-
-
-static int64_t LogFilterStatementSphinxql ( Str_t sQuery, SqlStmt_e eStmt )
-{
-	if ( g_tLogStatements.IsEmpty() )
-		return 0;
-
-	if ( !g_tLogStatements.BitGet ( eStmt ) )
-		return 0;
-
-	int64_t tmStarted = sphMicroTimer();
-	LogStatementSphinxql ( sQuery, 0 );
-	return tmStarted;
-}
 
 //////////////////////////////////////////////////////////////////////////
 
@@ -3173,16 +2472,14 @@ void SendResult ( int iVer, ISphOutputBuffer & tOut, const AggrResult_t& tRes, b
 	{
 		tOut.SendInt ( SEARCHD_ERROR ); // fixme! m.b. use APICommand_t and refactor to common API way
 		tOut.SendString ( tRes.m_sError.cstr() );
-		if ( g_bOptNoDetach && g_eLogFormat!=LOG_FORMAT_SPHINXQL )
-			sphInfo ( "query error: %s", tRes.m_sError.cstr() );
+		LogToConsole ( "error", tRes.m_sError.cstr() );
 		return;
-
-	} else if ( bWarning )
+	}
+	if ( bWarning )
 	{
 		tOut.SendDword ( SEARCHD_WARNING );
 		tOut.SendString ( tRes.m_sWarning.cstr() );
-		if ( g_bOptNoDetach && g_eLogFormat!=LOG_FORMAT_SPHINXQL )
-			sphInfo ( "query warning: %s", tRes.m_sWarning.cstr() );
+		LogToConsole ( "warning", tRes.m_sWarning.cstr() );
 	} else
 		tOut.SendDword ( SEARCHD_OK );
 
@@ -7257,29 +6554,6 @@ std::unique_ptr<ISphTableFunc> CreateRemoveRepeats()
 
 #undef LOC_ERROR1
 #undef LOC_ERROR
-
-//////////////////////////////////////////////////////////////////////////
-// SQL PARSER
-//////////////////////////////////////////////////////////////////////////
-// FIXME? verify or generate these automatically somehow?
-static const char * g_dSqlStmts[] =
-{
-	"parse_error", "dummy", "select", "insert", "replace", "delete", "show_warnings",
-	"show_status", "show_meta", "set", "begin", "commit", "rollback", "call",
-	"desc", "show_tables", "create_table", "create_table_like", "drop_table", "show_create_table", "update", "create_func",
-	"drop_func", "attach_index", "flush_rtindex", "flush_ramchunk", "show_variables", "truncate_rtindex",
-	"select_columns", "show_collation", "show_character_set", "optimize_index", "show_agent_status",
-	"show_index_status", "show_index_status", "show_profile", "alter_add", "alter_drop", "alter_modify", "show_plan",
-	"show_databases", "create_plugin", "drop_plugin", "show_plugins", "show_threads",
-	"facet", "alter_reconfigure", "show_index_settings", "flush_index", "reload_plugins", "reload_index",
-	"flush_hostnames", "flush_logs", "reload_indexes", "sysfilters", "debug", "alter_killlist_target",
-	"alter_index_settings", "join_cluster", "cluster_create", "cluster_delete", "cluster_index_add",
-	"cluster_index_delete", "cluster_update", "explain", "import_table", "freeze_indexes", "unfreeze_indexes",
-	"show_settings", "alter_rebuild_si", "kill", "show_locks", "show_scroll", "show_table_indexes"
-};
-
-
-static_assert ( sizeof(g_dSqlStmts)/sizeof(g_dSqlStmts[0])==STMT_TOTAL, "number of statements must be same as STMT_TOTAL" );
 
 //////////////////////////////////////////////////////////////////////////
 
@@ -12570,8 +11844,7 @@ static Str_t FormatInfo ( const PublicThreadDesc_t & tThd, ThreadInfoFormat_e eF
 
 	if ( tThd.m_sDescription.IsEmpty () && tThd.m_szCommand )
 		return FromSz ( tThd.m_szCommand );
-	else
-		return (Str_t)tThd.m_sDescription;
+	return (Str_t)tThd.m_sDescription;
 }
 
 void HandleMysqlShowThreads ( RowBuffer_i & tOut, const SqlStmt_t * pStmt )
@@ -13174,7 +12447,7 @@ void sphHandleMysqlUpdate ( StmtErrorReporter_i & tOut, const SqlStmt_t & tStmt,
 	{
 		int64_t tmRealTimeMs = ( sphMicroTimer() - tmStart ) / 1000;
 		if ( !g_iQueryLogMinMs || tmRealTimeMs>g_iQueryLogMinMs )
-			LogStatementSphinxql ( sQuery, (int)( tmRealTimeMs ) );
+			LogSphinxqlClause ( sQuery, (int)( tmRealTimeMs ) );
 	}
 
 	tOut.Ok ( iUpdated, iWarns );
@@ -13958,7 +13231,7 @@ void HandleMysqlMultiStmt ( const CSphVector<SqlStmt_t> & dStmt, CSphQueryResult
 
 	CSphQueryResultMeta tPrevMeta = tLastMeta;
 
-	myinfo::SetCommand ( g_dSqlStmts[STMT_SELECT] );
+	myinfo::SetCommand ( SqlStmt2Str(STMT_SELECT) );
 	AT_SCOPE_EXIT ( []() { myinfo::SetCommandDone(); } );
 	for ( int i=0; i<iSelect; i++ )
 		StatCountCommand ( SEARCHD_COMMAND_SEARCH );
@@ -14031,7 +13304,7 @@ void HandleMysqlMultiStmt ( const CSphVector<SqlStmt_t> & dStmt, CSphQueryResult
 	ARRAY_FOREACH ( i, dStmt )
 	{
 		SqlStmt_e eStmt = dStmt[i].m_eStmt;
-		myinfo::SetCommand ( g_dSqlStmts[eStmt] );
+		myinfo::SetCommand ( SqlStmt2Str(eStmt) );
 		AT_SCOPE_EXIT ( []() { myinfo::SetCommandDone(); } );
 
 		const CSphQueryResultMeta & tMeta = bUseFirstMeta ? tHandler.m_dAggrResults[0] : ( iSelect-1>=0 ? tHandler.m_dAggrResults[iSelect-1] : tPrevMeta );
@@ -14202,7 +13475,19 @@ static bool HandleSetLocal ( CSphString& sError, const CSphString& sName, int64_
 	return false;
 }
 
-static bool HandleSetGlobal ( CSphString& sError, const CSphString& sName, int64_t iSetValue, CSphString sSetValue )
+static void SetIOStats ( bool bIOStats = true )
+{
+	g_bIOStats = bIOStats;
+	SetLogStatsFlags ( g_bIOStats, g_bCpuStats );
+}
+
+static void SetCPUStats ( bool bCPUStats = true )
+{
+	g_bCpuStats = bCPUStats;
+	SetLogStatsFlags ( g_bIOStats, g_bCpuStats );
+}
+
+static bool HandleSetGlobal ( CSphString & sError, const CSphString & sName, int64_t iSetValue, CSphString sSetValue )
 {
 	auto& tSess = session::Info();
 	if ( !tSess.GetVip() && !sphCheckWeCanModify ( sError ) )
@@ -14212,9 +13497,9 @@ static bool HandleSetGlobal ( CSphString& sError, const CSphString& sName, int64
 	if ( sName == "query_log_format" )
 	{
 		if ( sSetValue == "plain" )
-			g_eLogFormat = LOG_FORMAT_PLAIN;
+			SetLogFormat ( LOG_FORMAT::_PLAIN );
 		else if ( sSetValue == "sphinxql" )
-			g_eLogFormat = LOG_FORMAT_SPHINXQL;
+			SetLogFormat ( LOG_FORMAT::SPHINXQL );
 		else
 			sError = "Unknown query_log_format value (must be plain or sphinxql)";
 		return true;
@@ -14316,13 +13601,13 @@ static bool HandleSetGlobal ( CSphString& sError, const CSphString& sName, int64
 
 	if ( sName == "cpustats" )
 	{
-		g_bCpuStats = !!iSetValue;
+		SetCPUStats ( !!iSetValue );
 		return true;
 	}
 
 	if ( sName == "iostats" )
 	{
-		g_bIOStats = !!iSetValue;
+		SetIOStats ( !!iSetValue );
 		return true;
 	}
 
@@ -15138,7 +14423,7 @@ void HandleMysqlShowVariables ( RowBuffer_i & dRows, const SqlStmt_t & tStmt )
 		dTable.MatchTupletf ( "auto_optimize", "%d", g_iAutoOptimizeCutoffMultiplier );
 		dTable.MatchTupletf ( "optimize_cutoff", "%d", MutableIndexSettings_c::GetDefaults().m_iOptimizeCutoff );
 		dTable.MatchTuplet ( "collation_connection", sphCollationToName ( session::GetCollation() ) );
-		dTable.MatchTuplet ( "query_log_format", g_eLogFormat==LOG_FORMAT_PLAIN ? "plain" : "sphinxql" );
+		dTable.MatchTuplet ( "query_log_format", LogFormat()==LOG_FORMAT::_PLAIN ? "plain" : "sphinxql" );
 		dTable.MatchTuplet ( "session_read_only", session::GetReadOnly() ? "1" : "0" );
 		dTable.MatchTuplet ( "log_level", LogLevelName ( g_eLogLevel ) );
 		dTable.MatchTupletf ( "max_allowed_packet", "%d", g_iMaxPacketSize );
@@ -16706,30 +15991,6 @@ RtIndex_i * CSphSessionAccum::GetIndex ()
 
 static bool FixupFederatedQuery ( ESphCollation eCollation, CSphVector<SqlStmt_t> & dStmt, CSphString & sError, CSphString & sFederatedQuery );
 
-static const CSphString g_sLogDoneStmt = "/* DONE */";
-static const Str_t g_tLogDoneStmt = FromStr ( g_sLogDoneStmt );
-
-struct LogStmtGuard_t
-{
-	LogStmtGuard_t ( const Str_t & sQuery, SqlStmt_e eStmt, bool bMulti )
-	{
-		m_tmStarted = LogFilterStatementSphinxql ( sQuery, eStmt );
-		m_bLogDone = ( m_tmStarted && eStmt!=STMT_UPDATE && eStmt!=STMT_SELECT && !bMulti ); // update and select will log differently
-	}
-
-	~LogStmtGuard_t ()
-	{
-		if ( m_bLogDone )
-		{
-			int64_t tmDelta = sphMicroTimer() - m_tmStarted;
-			LogStatementSphinxql ( g_tLogDoneStmt, (int)( tmDelta / 1000 ) );
-		}
-	}
-
-	int64_t m_tmStarted = 0;
-	bool m_bLogDone = false;
-};
-
 void ClientSession_c::FreezeLastMeta()
 {
 	m_tLastMeta = CSphQueryResultMeta();
@@ -16782,10 +16043,10 @@ bool ClientSession_c::Execute ( Str_t sQuery, RowBuffer_i & tOut )
 	FixupSystemTableName ( pStmt );
 	assert ( !bParsedOK || pStmt );
 
-	myinfo::SetCommand ( g_dSqlStmts[eStmt] );
+	myinfo::SetCommand ( SqlStmt2Str(eStmt) );
 	AT_SCOPE_EXIT ( []() { myinfo::SetCommandDone(); } );
 
-	LogStmtGuard_t tLogGuard ( sQuery, eStmt, dStmt.GetLength()>1 );
+	LogStmtGuard_c tLogGuard ( sQuery, eStmt, dStmt.GetLength()>1 );
 
 	if ( bParsedOK && m_bFederatedUser )
 	{
@@ -18888,25 +18149,8 @@ void CheckReopenLogs () REQUIRES ( MainThread )
 	if ( !g_bGotSigusr1 )
 		return;
 
-	// reopen searchd log
 	ReopenDaemonLog ();
-
-	// reopen query log
-	if ( !g_bQuerySyslog && g_iQueryLogFile!=GetDaemonLogFD() && g_iQueryLogFile>=0 && !isatty ( g_iQueryLogFile ) )
-	{
-		int iFD = ::open ( g_sQueryLogFile.cstr(), O_CREAT | O_RDWR | O_APPEND, S_IREAD | S_IWRITE );
-		if ( iFD<0 )
-		{
-			sphWarning ( "failed to reopen query log file '%s': %s", g_sQueryLogFile.cstr(), strerrorm(errno) );
-		} else
-		{
-			::close ( g_iQueryLogFile );
-			g_iQueryLogFile = iFD;
-			ChangeLogFileMode ( g_iQueryLogFile );
-			sphInfo ( "query log reopened" );
-		}
-	}
-
+	ReopenQueryLog ();
 	ReopenHttpLog();
 
 	g_bGotSigusr1 = 0;
@@ -19307,71 +18551,6 @@ static void CheckSystemTFO ()
 #endif
 }
 
-static void ConfigureDaemonLog ( const CSphString & sMode )
-{
-	if ( sMode.IsEmpty() )
-		return;
-
-	StrVec_t dOpts = sphSplit ( sMode.cstr(), "," );
-
-	SmallStringHash_T<int> hStmt;
-	for ( int i=0; i<(int)( sizeof(g_dSqlStmts)/sizeof(g_dSqlStmts[0]) ); i++ )
-		hStmt.Add ( i, g_dSqlStmts[i] );
-
-	CSphBitvec tLogStatements ( STMT_TOTAL );
-	StringBuilder_c sWrongModes ( "," );
-
-	for ( const CSphString & sOpt : dOpts )
-	{
-		if ( sOpt=="0" ) // emplicitly disable all statements
-			return;
-
-		if ( sOpt=="1" || sOpt=="*" ) // enable all statements
-		{
-			tLogStatements.Set();
-			g_tLogStatements = tLogStatements;
-			return;
-		}
-
-		// check for whole statement enumerated
-		int * pMode = hStmt ( sOpt );
-		if ( pMode )
-		{
-			tLogStatements.BitSet ( *pMode );
-			continue;
-		}
-
-		bool bHasWild = false;
-		for ( const char * s = sOpt.cstr(); *s && !bHasWild; s++ )
-			bHasWild = sphIsWild ( *s );
-
-		if ( bHasWild )
-		{
-			bool bMatched = false;
-			for ( int i=0; i<(int)( sizeof(g_dSqlStmts)/sizeof(g_dSqlStmts[0]) ); i++ )
-			{
-				if ( sphWildcardMatch ( g_dSqlStmts[i], sOpt.cstr() ) )
-				{
-					tLogStatements.BitSet ( i );
-					bMatched = true;
-					break;
-				}
-			}
-
-			if ( bMatched )
-				continue;
-		}
-
-		sWrongModes += sOpt.cstr();
-	}
-
-	if ( tLogStatements.BitCount() )
-		g_tLogStatements = tLogStatements;
-
-	if ( !sWrongModes.IsEmpty() )
-		sphWarning ( "query_log_statements invalid values: %s", sWrongModes.cstr() );
-}
-
 static void SetOptionSI ( const CSphConfigSection & hSearchd, bool bTestMode )
 {
 	SIDefault_e eState = GetSecondaryIndexDefault();
@@ -19655,7 +18834,7 @@ void ConfigureSearchd ( const CSphConfig & hConf, bool bOptPIDFile, bool bTestMo
 	g_sKbnVersion = hSearchd.GetStr ( "kibana_version_string" );
 
 	AllowOnlyNot ( hSearchd.GetInt ( "not_terms_only_allowed", 0 )!=0 );
-	ConfigureDaemonLog ( hSearchd.GetStr ( "query_log_commands" ) );
+	ConfigureQueryLogCommands ( hSearchd.GetStr ( "query_log_commands" ) );
 
 	g_iAutoOptimizeCutoffMultiplier = hSearchd.GetInt ( "auto_optimize", 1 );
 	MutableIndexSettings_c::GetDefaults().m_iOptimizeCutoff = hSearchd.GetInt ( "optimize_cutoff", AutoOptimizeCutoff() );
@@ -20259,8 +19438,8 @@ int WINAPI ServiceMain ( int argc, char **argv ) EXCLUDES (MainThread)
 		OPT1 ( "--stopwait" )		{ bOptStop = true; bOptStopWait = true; }
 		OPT1 ( "--status" )			bOptStatus = true;
 		OPT1 ( "--pidfile" )		bOptPIDFile = true;
-		OPT1 ( "--iostats" )		g_bIOStats = true;
-		OPT1 ( "--cpustats" )		g_bCpuStats = true;
+		OPT1 ( "--iostats" )		SetIOStats();
+		OPT1 ( "--cpustats" )		SetCPUStats();
 		OPT1 ( "--mockstack" )		{ bMeasureStack = true; g_bOptNoLock = true; g_bOptNoDetach = true; }
 #if _WIN32
 		OPT1 ( "--install" )		{ if ( !WinService() ) { ServiceInstall ( argc, argv ); return 0; } }
@@ -20501,21 +19680,7 @@ int WINAPI ServiceMain ( int argc, char **argv ) EXCLUDES (MainThread)
 
 		// create query log if required
 		if ( hSearchd.Exists ( "query_log" ) )
-		{
-			CSphString sQueryLog = hSearchd["query_log"].cstr();
-			if ( sQueryLog=="syslog" )
-				g_bQuerySyslog = true;
-			else
-			{
-				FixPathAbsolute ( sQueryLog );
-				g_iQueryLogFile = open ( sQueryLog.cstr(), O_CREAT | O_RDWR | O_APPEND, S_IREAD | S_IWRITE );
-				if ( g_iQueryLogFile<0 )
-					sphFatal ( "failed to open query log file '%s': %s", sQueryLog.cstr(), strerrorm(errno) );
-
-				ChangeLogFileMode ( g_iQueryLogFile );
-			}
-			g_sQueryLogFile = sQueryLog.cstr();
-		}
+			SetupQueryLogDrain ( hSearchd["query_log"] );
 
 		// create http log if required
 		if ( hSearchd.Exists ( "log_http" ) )
@@ -20651,27 +19816,27 @@ int WINAPI ServiceMain ( int argc, char **argv ) EXCLUDES (MainThread)
 		g_sSnippetsFilePrefix.SetSprintf ( "%s/", g_sExePath.scstr() );
 	FixPathAbsolute ( g_sSnippetsFilePrefix );
 
+	auto sLogFormat = hSearchd.GetStr ( "query_log_format", "sphinxql" );
+	bool bLogCompactIn = false;
+	LOG_FORMAT eFormat = LOG_FORMAT::SPHINXQL;
+	if ( sLogFormat != "sphinxql" )
 	{
-		auto sLogFormat = hSearchd.GetStr ( "query_log_format", "sphinxql" );
-		if ( sLogFormat=="sphinxql" )
-			g_eLogFormat = LOG_FORMAT_SPHINXQL;
-		else if ( sLogFormat!="plain" )
+		StrVec_t dParams;
+		sphSplit ( dParams, sLogFormat.cstr() );
+		for ( const auto& sParam : dParams )
 		{
-			StrVec_t dParams;
-			sphSplit ( dParams, sLogFormat.cstr() );
-			for ( const auto& sParam : dParams )
-			{
-				if ( sParam=="sphinxql" )
-					g_eLogFormat = LOG_FORMAT_SPHINXQL;
-				else if ( sParam=="plain" )
-					g_eLogFormat = LOG_FORMAT_PLAIN;
-				else if ( sParam=="compact_in" )
-					g_bLogCompactIn = true;
-			}
+			if ( sParam=="sphinxql" )
+				eFormat = LOG_FORMAT::SPHINXQL;
+			else if ( sParam=="plain" )
+				eFormat = LOG_FORMAT::_PLAIN;
+			else if ( sParam=="compact_in" )
+				bLogCompactIn = true;
 		}
 	}
-	if ( g_bLogCompactIn && g_eLogFormat==LOG_FORMAT_PLAIN )
+	if ( bLogCompactIn && eFormat==LOG_FORMAT::_PLAIN )
 		sphWarning ( "compact_in option only supported with query_log_format=sphinxql" );
+	SetLogFormat ( eFormat );
+	SetLogCompact ( bLogCompactIn );
 
 	// prepare to detach
 	if ( !g_bOptNoDetach )
@@ -20755,21 +19920,9 @@ int WINAPI ServiceMain ( int argc, char **argv ) EXCLUDES (MainThread)
 	// if we're running in test console mode, dump queries to tty as well
 	// unless we're explicitly asked not to!
 	if ( hSearchd ( "query_log" ) && g_bOptNoLock && g_bOptNoDetach && bOptDebugQlog )
-	{
-		g_bQuerySyslog = false;
-		DisableLogSyslog();;
-		g_iQueryLogFile = GetDaemonLogFD();
-	}
+		RedirectQueryLogToDaemonLog();
 
-#if USE_SYSLOG
-	if ( LogSyslogEnabled() || g_bQuerySyslog )
-	{
-		openlog ( "searchd", LOG_PID, LOG_DAEMON );
-	}
-#else
-	if ( g_bQuerySyslog )
-		sphFatal ( "Wrong query_log file! You have to reconfigure --with-syslog and rebuild daemon if you want to use syslog there." );
-#endif
+	OpenSyslogIfNecessary();
 
 	/////////////////
 	// serve clients

@@ -1,13 +1,14 @@
 name: 📦 Pack and publish
 run-name: 📦 Pack and publish ${{ github.sha }}
 
+#on: workflow_call
 on:
   workflow_run:
-    workflows: [🔬 Test]
-    types: [completed]
-    branches: [master]
+    workflows: [ 🔬 Test ]
+    types: [ completed ]
+    branches: [ master ]
   pull_request:
-    branches: [master]
+    branches: [ master ]
     types: [opened, synchronize, reopened, labeled, unlabeled]
     paths-ignore:
       - 'manual/**'
@@ -23,12 +24,12 @@ on:
     tags:
       - 'release*'
 
+# cancels the previous workflow run when a new one appears in the same branch (e.g. master or a PR's branch)
 concurrency:
   group: pack_${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
-
   pack:
     name: OK to pack?
     runs-on: ubuntu-22.04
@@ -107,7 +108,6 @@ jobs:
   check_deps:
     name: Check deps test
     runs-on: ubuntu-22.04
-    needs: pack
     if: |
       github.event_name == 'pull_request'
       ||
@@ -353,55 +353,55 @@ jobs:
           target: ${{ needs.pack.outputs.target }}
 
   publish_nsis:
-            name: Publishing Windows NSIS installer
-            needs: [publish_windows, publish, pack]
-            runs-on: ubuntu-22.04
-            steps:
-              - uses: manticoresoftware/publish_to_repo@main
-                with:
-                  ssh_key: ${{ secrets.REPO_SSH_KEY }}
-                  distr:
-                  arch:
-                  artifact: win_installer
-                  type: arc
-                  delimiter: "-"
-                  target: ${{ needs.pack.outputs.target }}
-        
-          build_docker:  
-            name: Building and pushing docker
-            needs: [publish_debian_ubuntu, pack]
-            runs-on: ubuntu-22.04
-            env:
-              DOCKER_USER: ${{ secrets.DOCKER_USER }}
-              DOCKER_PASSWORD: ${{ secrets.DOCKER_PASSWORD }}
-              GHCR_USER: ${{ secrets.GHCR_USER }}
-              GHCR_PASSWORD: ${{ secrets.GHCR_PASSWORD }}
-            steps:
-              - name: Checkout repository
-                uses: actions/checkout@v3
-              - name: Patch version
-                run: |
-                  sed -i "s/0\.0\.0/${{ needs.pack.outputs.version }}/g" src/sphinxversion.h.in
-              - name: Calculate short commit hash
-                id: sha
-                run: echo "sha_short=$(git rev-parse --short HEAD)" >> $GITHUB_OUTPUT
-              - name: Set up QEMU
-                uses: docker/setup-qemu-action@v3
-                with:
-                  image: tonistiigi/binfmt:qemu-v7.0.0-28
-              - name: Build docker
-                run: CI_COMMIT_SHORT_SHA=${{ steps.sha.outputs.sha_short }} /bin/bash dist/dockerhub_deploy.sh
-              - name: Comment pushed Docker images to PR
-                if: github.event_name == 'pull_request'
-                run: |
-                  echo "### 🐳 Test-kit Docker Images:" > docker_comment.md
-                  grep "Pushed test-kit to" "$GITHUB_STEP_SUMMARY" | sed 's/Pushed test-kit to/- `/' | sed 's/$/`/' >> docker_comment.md
-              - name: Post docker images as PR comment
-                if: github.event_name == 'pull_request'
-                uses: marocchino/sticky-pull-request-comment@v2
-                with:
-                  path: docker_comment.md
-                  header: docker-test-kit
+    name: Publishing Windows NSIS installer
+    needs: [publish_windows, publish, pack]
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: manticoresoftware/publish_to_repo@main
+        with:
+          ssh_key: ${{ secrets.REPO_SSH_KEY }}
+          distr:
+          arch:
+          artifact: win_installer
+          type: arc
+          delimiter: "-"
+          target: ${{ needs.pack.outputs.target }}
+
+  build_docker:
+    name: Building and pushing docker
+    needs: [publish_debian_ubuntu, pack]
+    runs-on: ubuntu-22.04
+    env:
+      DOCKER_USER: ${{ secrets.DOCKER_USER }}
+      DOCKER_PASSWORD: ${{ secrets.DOCKER_PASSWORD }}
+      GHCR_USER: ${{ secrets.GHCR_USER }}
+      GHCR_PASSWORD: ${{ secrets.GHCR_PASSWORD }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v3
+      - name: Patch version
+        run: |
+          sed -i "s/0\.0\.0/${{ needs.pack.outputs.version }}/g" src/sphinxversion.h.in
+      - name: Calculate short commit hash
+        id: sha
+        run: echo "sha_short=$(git rev-parse --short HEAD)" >> $GITHUB_OUTPUT
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v3
+        with:
+          image: tonistiigi/binfmt:qemu-v7.0.0-28
+      - name: Build docker
+        run: CI_COMMIT_SHORT_SHA=${{ steps.sha.outputs.sha_short }} /bin/bash dist/dockerhub_deploy.sh
+      - name: Comment pushed Docker images to PR
+        if: github.event_name == 'pull_request'
+        run: |
+          echo "### 🐳 Test-kit Docker Images:" > docker_comment.md
+          grep "Pushed test-kit to" "$GITHUB_STEP_SUMMARY" | sed 's/Pushed test-kit to/- `/' | sed 's/$/`/' >> docker_comment.md
+      - name: Post docker images as PR comment
+        if: github.event_name == 'pull_request'
+        uses: marocchino/sticky-pull-request-comment@v2
+        with:
+          path: docker_comment.md
+          header: docker-test-kit
 
   clt_rhel_dev_installation:
     name: Testing RHEL dev packages installation
@@ -424,7 +424,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        image: [ "ubuntu:bionic", "ubuntu:focal", "ubuntu:jammy", "debian:buster", "debian:bullseye", "debian:bookworm" ]
+        image: [ Ubuntu:bionic, Ubuntu:focal, Ubuntu:jammy, debian:buster, debian:bullseye, debian:bookworm ]
     runs-on: ubuntu-22.04
     steps:
       - uses: manticoresoftware/clt@0.6.7

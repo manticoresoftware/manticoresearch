@@ -106,7 +106,6 @@ jobs:
   check_deps:
     name: Check deps test
     runs-on: ubuntu-22.04
-    # Убрали needs: pack, чтобы check_deps запускался независимо
     if: |
       github.event_name == 'pull_request'
       ||
@@ -368,7 +367,10 @@ jobs:
 
   build_docker:
     name: Building and pushing docker
-    needs: [publish_debian_ubuntu, pack]
+    needs: [pack]
+    if: |
+      github.event_name == 'pull_request' &&
+      needs.pack.outputs.should_continue == 'true'
     runs-on: ubuntu-22.04
     env:
       DOCKER_USER: ${{ secrets.DOCKER_USER }}
@@ -390,13 +392,20 @@ jobs:
           image: tonistiigi/binfmt:qemu-v7.0.0-28
       - name: Build docker
         run: CI_COMMIT_SHORT_SHA=${{ steps.sha.outputs.sha_short }} /bin/bash dist/dockerhub_deploy.sh
+
+  comment_docker_images:
+    name: Comment Docker images to PR
+    needs: [build_docker]
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-22.04
+    steps:
       - name: Comment pushed Docker images to PR
-        if: github.event_name == 'pull_request'
         run: |
-          echo "### 🐳 Test-kit Docker Images:" > docker_comment.md
-          grep "Pushed test-kit to" "$GITHUB_STEP_SUMMARY" | sed 's/Pushed test-kit to/- `/' | sed 's/$/`/' >> docker_comment.md
+          grep "Pushed test-kit to" "$GITHUB_STEP_SUMMARY" | sed 's/Pushed test-kit to //' > docker_comment.md
+          if [ ! -s docker_comment.md ]; then
+            echo "Docker image build skipped (no 'pack' or 'publish' label)." > docker_comment.md
+          fi
       - name: Post docker images as PR comment
-        if: github.event_name == 'pull_request'
         uses: marocchino/sticky-pull-request-comment@v2
         with:
           path: docker_comment.md

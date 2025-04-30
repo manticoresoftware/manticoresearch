@@ -107,11 +107,41 @@ jobs:
           echo "* Version updated: ${{ steps.semver-tagger.outputs.version_updated }}" >> $GITHUB_STEP_SUMMARY
           echo "* Should continue packing: ${{ steps.check-should-continue.outputs.should_continue }}" >> $GITHUB_STEP_SUMMARY
 
+  # New job to check dependencies using check_deps_in_repos.sh
+  # Runs on every PR, workflow_run, or push event matching the conditions
+  check_deps:
+    name: Check deps test
+    runs-on: ubuntu-22.04
+    if: |
+      github.event_name == 'pull_request'
+      ||
+      (
+        github.event_name == 'workflow_run'
+        &&
+        github.event.workflow_run.conclusion == 'success'
+        &&
+        github.ref == 'refs/heads/master'
+      )
+      ||
+      (
+        github.event_name == 'push'
+        &&
+        startsWith(github.ref, 'refs/heads/manticore-')
+      )
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v3
+      - name: Run dependency check script
+        run: |
+          # Ensure the script is executable
+          chmod +x dist/check_deps_in_repos.sh
+          # Run the script
+          bash dist/check_deps_in_repos.sh
 
   pack_debian_ubuntu:
     name: Debian/Ubuntu packages
     uses: ./.github/workflows/build_template.yml
-    needs: pack
+    needs: [pack, check_deps]  # Added dependency on check_deps
     if: needs.pack.outputs.should_continue == 'true'
     strategy:
       fail-fast: false
@@ -135,7 +165,7 @@ jobs:
   pack_rhel:
     name: RHEL packages
     uses: ./.github/workflows/build_template.yml
-    needs: pack
+    needs: [pack, check_deps]  # Added dependency on check_deps
     if: needs.pack.outputs.should_continue == 'true'
     strategy:
       fail-fast: false
@@ -162,7 +192,7 @@ jobs:
   pack_macos:
     name: MacOS packages
     uses: ./.github/workflows/build_template.yml
-    needs: pack
+    needs: [pack, check_deps]  # Added dependency on check_deps
     if: needs.pack.outputs.should_continue == 'true'
     strategy:
       fail-fast: false
@@ -187,7 +217,7 @@ jobs:
   pack_windows:
     name: Windows x64 package
     uses: ./.github/workflows/build_template.yml
-    needs: pack
+    needs: [pack, check_deps]  # Added dependency on check_deps
     if: needs.pack.outputs.should_continue == 'true'
     with:
       DISTR: windows
@@ -204,7 +234,6 @@ jobs:
       artifact_list: "build/manticore*exe build/manticore*zip"
       version: ${{ needs.pack.outputs.version }}
       build_tag: ${{ needs.pack.outputs.target == 'dev' && 'dev' || '' }}
-      
   build_nsis:
     name: Making Windows NSIS installer
     needs: [pack_windows, pack]

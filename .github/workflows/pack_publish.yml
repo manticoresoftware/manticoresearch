@@ -44,23 +44,12 @@ jobs:
       version_deb: ${{ steps.semver-tagger.outputs.version_deb }}
       target: ${{ steps.semver-tagger.outputs.target }}
       should_continue: ${{ steps.check-should-continue.outputs.should_continue }}
-if: |
-      (
-        github.event_name == 'pull_request'
-        &&
-        (
-          contains(
-            github.event.pull_request.labels.*.name, 'pack'
-          )
-          ||
-          contains(
-            github.event.pull_request.labels.*.name, 'publish'
-          )
-        )
-      )
+    if: |
+      github.event_name == 'pull_request'
       ||
       (
-        github.event_name == 'workflow_run'        &&
+        github.event_name == 'workflow_run'
+        &&
         github.event.workflow_run.conclusion == 'success'
         &&
         github.ref == 'refs/heads/master'
@@ -252,10 +241,10 @@ if: |
         run: |
           sed -i "s/0\.0\.0/${{ needs.pack.outputs.version }}/g" src/sphinxversion.h.in
       - name: Initialization
-        # without adding the safe.directory the script fails to do git show ...
+        # Without adding the safe.directory, the script fails to do git show ...
         run: git config --global --add safe.directory /__w/manticoresearch/manticoresearch
       - name: Make installer
-        # TODO: remove the hardcoded paths /builds/ below
+        # TODO: Remove the hardcoded paths /builds/ below
         run: |
           mkdir -p /builds/manticoresearch/dev/build/
           /bin/bash dist/build_dockers/nsis/nsis_src_parser.sh ${{ needs.pack.outputs.target }}
@@ -267,8 +256,8 @@ if: |
           name: win_installer
           path: build/manticore-*.exe
 
-  # virtual job to simplify the CI
-  # This job depends on all the package preparation jobs that have to pass before we can start publishing packages
+  # Virtual job to simplify the CI
+  # This job depends on all the package preparation jobs that must pass before we can start publishing packages
   publish:
     name: OK to publish?
     runs-on: ubuntu-22.04
@@ -435,7 +424,7 @@ if: |
     strategy:
       fail-fast: false
       matrix:
-        image: [ "ubuntu:bionic", "ubuntu:focal", "ubuntu:jammy", "debian:buster", "debian:bullseye", "debian:bookworm" ]
+        image: [ "Ubuntu:bionic", "Ubuntu:focal", "Ubuntu:jammy", "debian:buster", "debian:bullseye", "debian:bookworm" ]
     runs-on: ubuntu-22.04
     steps:
       - uses: manticoresoftware/clt@0.6.7

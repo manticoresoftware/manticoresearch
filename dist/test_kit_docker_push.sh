@@ -75,20 +75,3 @@ docker import ./manticore_test_kit.img "$img_url"
       && echo "Pushed test-kit to $img" >> "$GITHUB_STEP_SUMMARY" \
 	  || echo "❗ Couldn't push the image to $img"
 done || echo "Skipped pushing to repo, because GHCR_USER is not set"
-
-# pusing to ghcr.io
-[ -n "$GHCR_USER" ] && for img in "${images[@]}"; do
-	docker push "$img" \
-	  && echo "✅ Pushed the image to $img" \
-	  && echo "- \`$img\`" >> "$GITHUB_STEP_SUMMARY" \
-	  || echo "❌ Couldn't push the image to $img"
-done || echo "Skipped pushing to repo, because GHCR_USER is not set"
-
-# Add a header for beautiful output
-{
-  echo ""
-  echo "### 🐳 Test-kit Docker Images:"
-  for img in "${images[@]}"; do
-    echo "- \`$img\`"
-  done
-} >> "$GITHUB_STEP_SUMMARY"

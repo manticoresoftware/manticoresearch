@@ -1,27 +1,8 @@
 ––– block: ../base/start-searchd –––
 ––– input –––
-manticore-load --quiet --json --port=9306 --init="CREATE TABLE task (id BIGINT, status UINT, enddatetime TIMESTAMP, isoverdue BOOL)" --load="INSERT INTO task (id, status, enddatetime, isoverdue) VALUES (<increment>, <int/1/8>, <int/1577836800/1672531200>, 0)" --batch-size=1000 --threads=4 --total=10000
+manticore-load --quiet --json --port=9306 --init="CREATE TABLE task (id BIGINT, status UINT, enddatetime TIMESTAMP, isoverdue BOOL)" --load="INSERT INTO task (id, status, enddatetime, isoverdue) VALUES (<increment>, <int/1/8>, <int/1577836800/1672531200>, 0)" --batch-size=1000 --threads=4 --total=10000 > /dev/null; echo $?
 ––– output –––
-{
-"threads": %{NUMBER},
-"batch_size": %{NUMBER},
-"time": "%{NUMBER}:%{NUMBER}",
-"total_operations": %{NUMBER},
-"operations_per_second": %{NUMBER},
-"qps": {
-"avg": 0,
-"p99": 0,
-"p95": 0,
-"p5": 0,
-"p1": 0
-},
-"latency": {
-"avg": %{NUMBER}.%{NUMBER},
-"p50": %{NUMBER}.%{NUMBER},
-"p95": %{NUMBER}.%{NUMBER},
-"p99": %{NUMBER}.%{NUMBER}
-}
-}
+0
 ––– input –––
 mysql -P9306 -h0 -e "FLUSH RAMCHUNK task;"
 ––– output –––

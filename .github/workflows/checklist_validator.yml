@@ -1,0 +1,15 @@
+name: 📝 Checklist Validator
+run-name: 📝 Checklist Validator for issue ${{ github.event.issue.number }}
+
+on:
+  issues:
+    types:
+      - closed
+
+jobs:
+  checklist-validation:
+    name: ✅ Checklist Completion Check
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: manticoresoftware/manticoresearch/actions/checklist-validator@master
+    

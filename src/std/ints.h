@@ -14,7 +14,7 @@
 
 #include "config.h"
 
-#include <stdio.h>
+#include <cstdio>
 
 // for 64-bit types
 #if __has_include(<cstdint>)
@@ -49,14 +49,11 @@
 #define NOMINMAX
 #include <windows.h>
 
-#define strcasecmp strcmpi
-#define strncasecmp _strnicmp
+inline int strcasecmp (char const* sz1, char const* sz2) { return strcmpi(sz1,sz2); }
+inline int strncasecmp (char const* sz1, char const* sz2, size_t n) { return _strnicmp(sz1,sz2,n); }
 #if _MSC_VER < 1900
 	#define snprintf _snprintf
 #endif
-#define strtoll _strtoi64
-#define strtoull _strtoui64
-
 #else
 
 	using DWORD = unsigned int;

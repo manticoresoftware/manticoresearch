@@ -3151,7 +3151,7 @@ void SaveMutableSettings ( const MutableIndexSettings_c & tSettings, const CSphS
 	CSphString sError;
 	CSphString sSettingsFileNew = SphSprintf ( "%s.new", sSettingsFile.cstr() );
 
-	CSphWriter tWriter;
+	CSphWriterNonThrottled tWriter;
 	if ( !tWriter.OpenFile ( sSettingsFileNew, sError ) )
 		sphDie ( "failed to serialize mutable settings: %s", sError.cstr() ); // !COMMIT handle this gracefully
 

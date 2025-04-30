@@ -185,7 +185,7 @@ bool ReplicateIndexToNodes ( const CSphString& sCluster, const CSphString& sInde
 	{
 		FileReserveReply_t & tRes = ClusterFileReserve_c::GetRes ( *dNodes[iNode] );
 		const CSphBitvec & tFilesDstMask = tRes.m_dNodeChunksMask;
-		if ( tSigSrc.m_dBaseNames.GetLength() != tRes.m_dRemotePaths.GetLength() && tSigSrc.m_dHashes.GetLength() != tFilesDstMask.GetSize() )
+		if ( tSigSrc.m_dBaseNames.GetULength() != tRes.m_dRemotePaths.GetULength() && tSigSrc.m_dHashes.GetULength() != tFilesDstMask.GetSize() )
 		{
 			sErr.Sprintf ( "'%s:%d' wrong stored files %d (expected %d), hashes %d (expected %d)",
 					dNodes[iNode]->m_tDesc.m_sAddr.cstr (), dNodes[iNode]->m_tDesc.m_iPort,

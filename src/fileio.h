@@ -201,7 +201,7 @@ public:
 class CSphWriter : public Writer_i
 {
 public:
-	virtual			~CSphWriter ();		///< if error flag is set, or if file is not closed by CloseFile, it will be automatically deleted (unlinked).
+					~CSphWriter () override;		///< if error flag is set, or if file is not closed by CloseFile, it will be automatically deleted (unlinked).
 
 	void			SetBufferSize ( int iBufferSize );	///< tune write cache size; must be called before OpenFile() or SetFile()
 

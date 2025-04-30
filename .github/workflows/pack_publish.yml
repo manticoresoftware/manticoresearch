@@ -29,6 +29,8 @@ concurrency:
 
 jobs:
 
+  # Pack job to determine if packing should proceed
+  # Added check_deps to run on every PR
   pack:
     name: OK to pack?
     runs-on: ubuntu-22.04

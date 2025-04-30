@@ -255,6 +255,7 @@ extern ThreadRole MainThread;
 // Scheduler to global thread pool
 Threads::Worker_i* GlobalWorkPool ();
 void SetMaxChildrenThreads ( int iThreads );
+int MaxChildrenThreads() noexcept;
 void StartGlobalWorkPool ();
 void StopGlobalWorkPool();
 

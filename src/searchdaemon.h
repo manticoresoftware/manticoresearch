@@ -1349,9 +1349,10 @@ void HandleCommandPing ( ISphOutputBuffer & tOut, WORD uVer, InputBuffer_c & tRe
 
 void BuildStatusOneline ( StringBuilder_c& sOut );
 
-namespace session
-{
-	bool IsAutoCommit ( const ClientSession_c* );
+void UpdateLastMeta (VecTraits_T<AggrResult_t> tResults );
+
+namespace session {
+bool IsAutoCommit ( const ClientSession_c* );
 	bool IsInTrans ( const ClientSession_c* );
 
 	bool Execute ( Str_t sQuery, RowBuffer_i& tOut );
@@ -1398,6 +1399,7 @@ bool PercolateParseFilters ( const char * sFilters, ESphCollation eCollation, co
 void PercolateMatchDocuments ( const BlobVec_t &dDocs, const PercolateOptions_t &tOpts, CSphSessionAccum &tAcc, CPqResult &tResult );
 
 void SendErrorReply ( ISphOutputBuffer & tOut, const char * sTemplate, ... );
+void LogToConsole(const char* szKind, const char* szMsg) noexcept;
 void SetLogHttpFilter ( const CSphString & sVal );
 int HttpGetStatusCodes ( EHTTP_STATUS eStatus ) noexcept;
 EHTTP_STATUS HttpGetStatusCodes ( int iStatus ) noexcept;

@@ -56,7 +56,7 @@ mysql> RELOAD TABLES;
 Query OK, 0 rows affected (0.01 sec)
 ```
 
-# Seamless rotate
+## Seamless rotate
 
 The rotate assumes old table version is discarded and new table version is loaded and replaces the existing one. During this swapping, the server needs to also serve incoming queries made on the table that is going to be updated. To avoid stalls of the queries, the server implements a seamless rotate of the table by default, as described below.
 

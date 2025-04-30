@@ -80,7 +80,7 @@ SELECT  ... FROM ...   OPTION max_matches=<value>
 
 <!-- end -->
 
-# Scroll Search Option
+## Scroll Search Option
 
 The scroll search option provides an efficient and reliable way to paginate through large result sets. Unlike traditional offset-based pagination, scroll search offers better performance for deep pagination and provides an easier way to implement pagination.
 

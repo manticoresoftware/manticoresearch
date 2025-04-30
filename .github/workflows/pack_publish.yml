@@ -28,9 +28,6 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-
-  # Pack job to determine if packing should proceed
-  # Added check_deps to run on every PR
   pack:
     name: OK to pack?
     runs-on: ubuntu-22.04
@@ -45,7 +42,15 @@ jobs:
       target: ${{ steps.semver-tagger.outputs.target }}
       should_continue: ${{ steps.check-should-continue.outputs.should_continue }}
     if: |
-      github.event_name == 'pull_request'
+      (
+        github.event_name == 'pull_request'
+        &&
+        (
+          contains(github.event.pull_request.labels.*.name, 'pack')
+          ||
+          contains(github.event.pull_request.labels.*.name, 'publish')
+        )
+      )
       ||
       (
         github.event_name == 'workflow_run'
@@ -101,7 +106,7 @@ jobs:
   check_deps:
     name: Check deps test
     runs-on: ubuntu-22.04
-    needs: pack
+    # Убрали needs: pack, чтобы check_deps запускался независимо
     if: |
       github.event_name == 'pull_request'
       ||
@@ -361,48 +366,42 @@ jobs:
           delimiter: "-"
           target: ${{ needs.pack.outputs.target }}
 
-          build_docker:
-            name: Building and pushing docker
-            needs: [publish_debian_ubuntu, pack]
-            runs-on: ubuntu-22.04
-            env:
-              DOCKER_USER: ${{ secrets.DOCKER_USER }}
-              DOCKER_PASSWORD: ${{ secrets.DOCKER_PASSWORD }}
-              GHCR_USER: ${{ secrets.GHCR_USER }}
-              GHCR_PASSWORD: ${{ secrets.GHCR_PASSWORD }}
-            steps:
-              - name: Checkout repository
-                uses: actions/checkout@v3
-        
-              - name: Patch version
-                run: |
-                  sed -i "s/0\.0\.0/${{ needs.pack.outputs.version }}/g" src/sphinxversion.h.in
-        
-              - name: Calculate short commit hash
-                id: sha
-                run: echo "sha_short=$(git rev-parse --short HEAD)" >> $GITHUB_OUTPUT
-        
-              - name: Set up QEMU
-                uses: docker/setup-qemu-action@v3
-                with:
-                  image: tonistiigi/binfmt:qemu-v7.0.0-28
-        
-              - name: Build docker
-                run: CI_COMMIT_SHORT_SHA=${{ steps.sha.outputs.sha_short }} /bin/bash dist/dockerhub_deploy.sh
-        
-              - name: Comment pushed Docker images to PR
-                if: github.event_name == 'pull_request'
-                run: |
-                  echo "### 🐳 Test-kit Docker Images:" > docker_comment.md
-                  grep "Pushed test-kit to" "$GITHUB_STEP_SUMMARY" | sed 's/Pushed test-kit to/- `/' | sed 's/$/`/' >> docker_comment.md
-        
-              - name: Post docker images as PR comment
-                if: github.event_name == 'pull_request'
-                uses: marocchino/sticky-pull-request-comment@v2
-                with:
-                  path: docker_comment.md
-                  header: docker-test-kit
-                  
+  build_docker:
+    name: Building and pushing docker
+    needs: [publish_debian_ubuntu, pack]
+    runs-on: ubuntu-22.04
+    env:
+      DOCKER_USER: ${{ secrets.DOCKER_USER }}
+      DOCKER_PASSWORD: ${{ secrets.DOCKER_PASSWORD }}
+      GHCR_USER: ${{ secrets.GHCR_USER }}
+      GHCR_PASSWORD: ${{ secrets.GHCR_PASSWORD }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v3
+      - name: Patch version
+        run: |
+          sed -i "s/0\.0\.0/${{ needs.pack.outputs.version }}/g" src/sphinxversion.h.in
+      - name: Calculate short commit hash
+        id: sha
+        run: echo "sha_short=$(git rev-parse --short HEAD)" >> $GITHUB_OUTPUT
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v3
+        with:
+          image: tonistiigi/binfmt:qemu-v7.0.0-28
+      - name: Build docker
+        run: CI_COMMIT_SHORT_SHA=${{ steps.sha.outputs.sha_short }} /bin/bash dist/dockerhub_deploy.sh
+      - name: Comment pushed Docker images to PR
+        if: github.event_name == 'pull_request'
+        run: |
+          echo "### 🐳 Test-kit Docker Images:" > docker_comment.md
+          grep "Pushed test-kit to" "$GITHUB_STEP_SUMMARY" | sed 's/Pushed test-kit to/- `/' | sed 's/$/`/' >> docker_comment.md
+      - name: Post docker images as PR comment
+        if: github.event_name == 'pull_request'
+        uses: marocchino/sticky-pull-request-comment@v2
+        with:
+          path: docker_comment.md
+          header: docker-test-kit
+
   clt_rhel_dev_installation:
     name: Testing RHEL dev packages installation
     needs: publish_rhel

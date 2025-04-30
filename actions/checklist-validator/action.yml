@@ -10,7 +10,7 @@ runs:
         script: |
           const issueBody = context.payload.issue.body;
 
-          const checklistRegex = /### Internal Checklist:[\s\S]*?<details>([\s\S]*?)<\/details>/;
+          const checklistRegex = /### (?:Internal )?Checklist:[\s\S]*?<details>([\s\S]*?)<\/details>/;
           const match = issueBody.match(checklistRegex);
 
           if (!match) {

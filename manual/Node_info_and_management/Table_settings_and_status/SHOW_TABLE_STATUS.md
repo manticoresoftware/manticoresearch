@@ -48,6 +48,10 @@ Here is the meaning of these values:
 * `tid` and `tid_saved`: represent the state of saving the table. `tid` increases with each change (transaction). `tid_saved` shows the max `tid` of the state saved in a RAM chunk in `<table>.ram` file. When the numbers differ, some changes exist only in RAM and are also backed by binlog (if enabled). Performing `FLUSH TABLE` or scheduling periodic flushing saves these changes. After flushing, the binlog is cleared, and `tid_saved` represents the new actual state.
 * `query_time_*`, `exact_query_time_*`: query execution time statistics for the last 1 minute, 5 minutes, 15 minutes, and total since server start; data is encapsulated as a JSON object, including the number of queries and min, max, avg, 95, and 99 percentile values.
 * `found_rows_*`: statistics of rows found by queries; provided for the last 1 minute, 5 minutes, 15 minutes, and total since server start; data is encapsulated as a JSON object, including the number of queries and min, max, avg, 95, and 99 percentile values.
+* `command_*`: counters for the total number of times a specific command has been successfully executed against this table.
+* `search_stats_ms_*`: statistics on the execution time (in milliseconds) for search queries. The * indicates the time window (e.g., 1min, 5min, 15min, total). These stats are calculated over sliding windows of 1, 5, and 15 minutes, showing average, minimum, maximum, and 95th/99th percentile values for query times.
+* `insert_replace_stats_ms_*`: statistics on the execution time (in milliseconds) for insert and replace queries. The * indicates the time window (e.g., 1min, 5min, 15min, total). These stats are calculated over sliding windows of 1, 5, and 15 minutes, showing average, minimum, maximum, and 95th/99th percentile values for query times.
+* `update_stats_ms_*`: statistics on the execution time (in milliseconds) for update queries. The * indicates the time window (e.g., 1min, 5min, 15min, total). These stats are calculated over sliding windows of 1, 5, and 15 minutes, showing average, minimum, maximum, and 95th/99th percentile values for query times.
 
 <!-- intro -->
 ##### SQL:
@@ -60,41 +64,68 @@ mysql> SHOW TABLE statistic STATUS;
 <!-- response SQL -->
 
 ```sql
-+-----------------------------+--------------------------------------------------------------------------+
-| Variable_name               | Value                                                                    |
-+-----------------------------+--------------------------------------------------------------------------+
-| index_type                  | rt                                                                       |
-| indexed_documents           | 146000                                                                   |
-| indexed_bytes               | 149504000                                                                |
-| ram_bytes                   | 87674788                                                                 |
-| disk_bytes                  | 1762811                                                                  |
-| disk_mapped                 | 794147                                                                   |
-| disk_mapped_cached          | 802816                                                                   |
-| disk_mapped_doclists        | 0                                                                        |
-| disk_mapped_cached_doclists | 0                                                                        |
-| disk_mapped_hitlists        | 0                                                                        |
-| disk_mapped_cached_hitlists | 0                                                                        |
-| killed_documents            | 0                                                                        |
-| killed_rate                 | 0.00%                                                                    |
-| ram_chunk                   | 86865484                                                                 |
-| ram_chunk_segments_count    | 24                                                                       |
-| disk_chunks                 | 1                                                                        |
-| mem_limit                   | 134217728                                                                |
-| mem_limit_rate              | 95.00%                                                                   |
-| ram_bytes_retired           | 0                                                                        |
-| optimizing                  | 1                                                                        |
-| locked                      | 0                                                                        |
-| tid                         | 0                                                                        |
-| tid_saved                   | 0                                                                        |
-| query_time_1min             | {"queries":0, "avg":"-", "min":"-", "max":"-", "pct95":"-", "pct99":"-"} |
-| query_time_5min             | {"queries":0, "avg":"-", "min":"-", "max":"-", "pct95":"-", "pct99":"-"} |
-| query_time_15min            | {"queries":0, "avg":"-", "min":"-", "max":"-", "pct95":"-", "pct99":"-"} |
-| query_time_total            | {"queries":0, "avg":"-", "min":"-", "max":"-", "pct95":"-", "pct99":"-"} |
-| found_rows_1min             | {"queries":0, "avg":"-", "min":"-", "max":"-", "pct95":"-", "pct99":"-"} |
-| found_rows_5min             | {"queries":0, "avg":"-", "min":"-", "max":"-", "pct95":"-", "pct99":"-"} |
-| found_rows_15min            | {"queries":0, "avg":"-", "min":"-", "max":"-", "pct95":"-", "pct99":"-"} |
-| found_rows_total            | {"queries":0, "avg":"-", "min":"-", "max":"-", "pct95":"-", "pct99":"-"} |
-+-----------------------------+--------------------------------------------------------------------------+
++-------------------------------+--------------------------------------------------------------------------+
+| Variable_name                 | Value                                                                    |
++-------------------------------+--------------------------------------------------------------------------+
+| index_type                    | rt                                                                       |
+| indexed_documents             | 146000                                                                   |
+| indexed_bytes                 | 149504000                                                                |
+| ram_bytes                     | 87674788                                                                 |
+| disk_bytes                    | 1762811                                                                  |
+| disk_mapped                   | 794147                                                                   |
+| disk_mapped_cached            | 802816                                                                   |
+| disk_mapped_doclists          | 0                                                                        |
+| disk_mapped_cached_doclists   | 0                                                                        |
+| disk_mapped_hitlists          | 0                                                                        |
+| disk_mapped_cached_hitlists   | 0                                                                        |
+| killed_documents              | 0                                                                        |
+| killed_rate                   | 0.00%                                                                    |
+| ram_chunk                     | 86865484                                                                 |
+| ram_chunk_segments_count      | 24                                                                       |
+| disk_chunks                   | 1                                                                        |
+| mem_limit                     | 134217728                                                                |
+| mem_limit_rate                | 95.00%                                                                   |
+| ram_bytes_retired             | 0                                                                        |
+| optimizing                    | 1                                                                        |
+| locked                        | 0                                                                        |
+| tid                           | 0                                                                        |
+| tid_saved                     | 0                                                                        |
+| query_time_1min               | {"queries":0, "avg":"-", "min":"-", "max":"-", "pct95":"-", "pct99":"-"} |
+| query_time_5min               | {"queries":0, "avg":"-", "min":"-", "max":"-", "pct95":"-", "pct99":"-"} |
+| query_time_15min              | {"queries":0, "avg":"-", "min":"-", "max":"-", "pct95":"-", "pct99":"-"} |
+| query_time_total              | {"queries":0, "avg":"-", "min":"-", "max":"-", "pct95":"-", "pct99":"-"} |
+| found_rows_1min               | {"queries":0, "avg":"-", "min":"-", "max":"-", "pct95":"-", "pct99":"-"} |
+| found_rows_5min               | {"queries":0, "avg":"-", "min":"-", "max":"-", "pct95":"-", "pct99":"-"} |
+| found_rows_15min              | {"queries":0, "avg":"-", "min":"-", "max":"-", "pct95":"-", "pct99":"-"} |
+| found_rows_total              | {"queries":0, "avg":"-", "min":"-", "max":"-", "pct95":"-", "pct99":"-"} |
+| command_search                | 2                                                                        |
+| command_excerpt               | 0                                                                        |
+| command_update                | 3                                                                        |
+| command_keywords              | 0                                                                        |
+| command_status                | 2                                                                        |
+| command_delete                | 0                                                                        |
+| command_insert                | 1                                                                        |
+| command_replace               | 0                                                                        |
+| command_commit                | 0                                                                        |
+| command_suggest               | 0                                                                        |
+| command_callpq                | 0                                                                        |
+| command_getfield              | 0                                                                        |
+| insert_replace_stats_ms_avg   | 0.284 0.284 0.284                                                        |
+| insert_replace_stats_ms_min   | 0.284 0.284 0.284                                                        |
+| insert_replace_stats_ms_max   | 0.284 0.284 0.284                                                        |
+| insert_replace_stats_ms_pct95 | 0.284 0.284 0.284                                                        |
+| insert_replace_stats_ms_pct99 | 0.284 0.284 0.284                                                        |
+| search_stats_ms_avg           | 0.000 0.000 0.000                                                        |
+| search_stats_ms_min           | 0.000 0.000 0.000                                                        |
+| search_stats_ms_max           | 0.000 0.000 0.000                                                        |
+| search_stats_ms_pct95         | 0.000 0.000 0.000                                                        |
+| search_stats_ms_pct99         | 0.000 0.000 0.000                                                        |
+| update_stats_ms_avg           | 0.479 0.479 0.479                                                        |
+| update_stats_ms_min           | 0.431 0.431 0.431                                                        |
+| update_stats_ms_max           | 0.530 0.530 0.530                                                        |
+| update_stats_ms_pct95         | 0.530 0.530 0.530                                                        |
+| update_stats_ms_pct99         | 0.530 0.530 0.530                                                        |
++-------------------------------+--------------------------------------------------------------------------+
 29 rows in set (0.00 sec)
 ```
 
@@ -130,7 +161,33 @@ Array(
     [found_rows_5min] => {"queries":1, "avg":3, "min":3, "max":3, "pct95":3, "pct99":3}
     [found_rows_15min] => {"queries":1, "avg":3, "min":3, "max":3, "pct95":3, "pct99":3}
     [found_rows_total] => {"queries":1, "avg":3, "min":3, "max":3, "pct95":3, "pct99":3}
-
+    [command_search] => 2
+    [command_excerpt] => 0
+    [command_update] => 3
+    [command_keywords] => 0
+    [command_status] => 2
+    [command_delete] => 0
+    [command_insert] => 1
+    [command_replace] => 0
+    [command_commit] => 0
+    [command_suggest] => 0
+    [command_callpq] => 0
+    [command_getfield] => 0
+    [insert_replace_stats_ms_avg] => 0.284 0.284 0.284
+    [insert_replace_stats_ms_min] => 0.284 0.284 0.284
+    [insert_replace_stats_ms_max] => 0.284 0.284 0.284
+    [insert_replace_stats_ms_pct95] => 0.284 0.284 0.284
+    [insert_replace_stats_ms_pct99] => 0.284 0.284 0.284
+    [search_stats_ms_avg] => 0.000 0.000 0.000
+    [search_stats_ms_min] => 0.000 0.000 0.000
+    [search_stats_ms_max] => 0.000 0.000 0.000
+    [search_stats_ms_pct95] => 0.000 0.000 0.000
+    [search_stats_ms_pct99] => 0.000 0.000 0.000
+    [update_stats_ms_avg] => 0.479 0.479 0.479
+    [update_stats_ms_min] => 0.431 0.431 0.431
+    [update_stats_ms_max] => 0.530 0.530 0.530
+    [update_stats_ms_pct95] => 0.530 0.530 0.530
+    [update_stats_ms_pct99] => 0.530 0.530 0.530
 )
 ```
 <!-- intro -->
@@ -166,7 +223,34 @@ utilsApi.sql('SHOW TABLE statistic STATUS')
     {u'Key': u'found_rows_1min', u'Value': u'{"queries":1, "avg":3, "min":3, "max":3, "pct95":3, "pct99":3}'}
     {u'Key': u'found_rows_5min', u'Value': u'{"queries":1, "avg":3, "min":3, "max":3, "pct95":3, "pct99":3}'}
     {u'Key': u'found_rows_15min', u'Value': u'{"queries":1, "avg":3, "min":3, "max":3, "pct95":3, "pct99":3}'}
-    {u'Key': u'found_rows_total', u'Value': u'{"queries":1, "avg":3, "min":3, "max":3, "pct95":3, "pct99":3}'}],
+    {u'Key': u'found_rows_total', u'Value': u'{"queries":1, "avg":3, "min":3, "max":3, "pct95":3, "pct99":3}'}
+    {u'Key': u'command_search', u'Value': u'2'}
+    {u'Key': u'command_excerpt', u'Value': u'0'}
+    {u'Key': u'command_update', u'Value': u'3'}
+    {u'Key': u'command_keywords', u'Value': u'0'}
+    {u'Key': u'command_status', u'Value': u'2'}
+    {u'Key': u'command_delete', u'Value': u'0'}
+    {u'Key': u'command_insert', u'Value': u'1'}
+    {u'Key': u'command_replace', u'Value': u'0'}
+    {u'Key': u'command_commit', u'Value': u'0'}
+    {u'Key': u'command_suggest', u'Value': u'0'}
+    {u'Key': u'command_callpq', u'Value': u'0'}
+    {u'Key': u'command_getfield', u'Value': u'0'}
+    {u'Key': u'insert_replace_stats_ms_avg', u'Value': u'0.284 0.284 0.284'}
+    {u'Key': u'insert_replace_stats_ms_min', u'Value': u'0.284 0.284 0.284'}
+    {u'Key': u'insert_replace_stats_ms_max', u'Value': u'0.284 0.284 0.284'}
+    {u'Key': u'insert_replace_stats_ms_pct95', u'Value': u'0.284 0.284 0.284'}
+    {u'Key': u'insert_replace_stats_ms_pct99', u'Value': u'0.284 0.284 0.284'}
+    {u'Key': u'search_stats_ms_avg', u'Value': u'0.000 0.000 0.000'}
+    {u'Key': u'search_stats_ms_min', u'Value': u'0.000 0.000 0.000'}
+    {u'Key': u'search_stats_ms_max', u'Value': u'0.000 0.000 0.000'}
+    {u'Key': u'search_stats_ms_pct95', u'Value': u'0.000 0.000 0.000'}
+    {u'Key': u'search_stats_ms_pct99', u'Value': u'0.000 0.000 0.000'}
+    {u'Key': u'update_stats_ms_avg', u'Value': u'0.479 0.479 0.479'}
+    {u'Key': u'update_stats_ms_min', u'Value': u'0.431 0.431 0.431'}
+    {u'Key': u'update_stats_ms_max', u'Value': u'0.530 0.530 0.530'}
+    {u'Key': u'update_stats_ms_pct95', u'Value': u'0.530 0.530 0.530'}
+    {u'Key': u'update_stats_ms_pct99', u'Value': u'0.530 0.530 0.530'}],
  u'error': u'',
  u'total': 0,
  u'warning': u''}
@@ -205,7 +289,34 @@ await utilsApi.sql('SHOW TABLE statistic STATUS')
     {u'Key': u'found_rows_1min', u'Value': u'{"queries":1, "avg":3, "min":3, "max":3, "pct95":3, "pct99":3}'}
     {u'Key': u'found_rows_5min', u'Value': u'{"queries":1, "avg":3, "min":3, "max":3, "pct95":3, "pct99":3}'}
     {u'Key': u'found_rows_15min', u'Value': u'{"queries":1, "avg":3, "min":3, "max":3, "pct95":3, "pct99":3}'}
-    {u'Key': u'found_rows_total', u'Value': u'{"queries":1, "avg":3, "min":3, "max":3, "pct95":3, "pct99":3}'}],
+    {u'Key': u'found_rows_total', u'Value': u'{"queries":1, "avg":3, "min":3, "max":3, "pct95":3, "pct99":3}'}
+    {u'Key': u'command_search', u'Value': u'2'}
+    {u'Key': u'command_excerpt', u'Value': u'0'}
+    {u'Key': u'command_update', u'Value': u'3'}
+    {u'Key': u'command_keywords', u'Value': u'0'}
+    {u'Key': u'command_status', u'Value': u'2'}
+    {u'Key': u'command_delete', u'Value': u'0'}
+    {u'Key': u'command_insert', u'Value': u'1'}
+    {u'Key': u'command_replace', u'Value': u'0'}
+    {u'Key': u'command_commit', u'Value': u'0'}
+    {u'Key': u'command_suggest', u'Value': u'0'}
+    {u'Key': u'command_callpq', u'Value': u'0'}
+    {u'Key': u'command_getfield', u'Value': u'0'}
+    {u'Key': u'insert_replace_stats_ms_avg', u'Value': u'0.284 0.284 0.284'}
+    {u'Key': u'insert_replace_stats_ms_min', u'Value': u'0.284 0.284 0.284'}
+    {u'Key': u'insert_replace_stats_ms_max', u'Value': u'0.284 0.284 0.284'}
+    {u'Key': u'insert_replace_stats_ms_pct95', u'Value': u'0.284 0.284 0.284'}
+    {u'Key': u'insert_replace_stats_ms_pct99', u'Value': u'0.284 0.284 0.284'}
+    {u'Key': u'search_stats_ms_avg', u'Value': u'0.000 0.000 0.000'}
+    {u'Key': u'search_stats_ms_min', u'Value': u'0.000 0.000 0.000'}
+    {u'Key': u'search_stats_ms_max', u'Value': u'0.000 0.000 0.000'}
+    {u'Key': u'search_stats_ms_pct95', u'Value': u'0.000 0.000 0.000'}
+    {u'Key': u'search_stats_ms_pct99', u'Value': u'0.000 0.000 0.000'}
+    {u'Key': u'update_stats_ms_avg', u'Value': u'0.479 0.479 0.479'}
+    {u'Key': u'update_stats_ms_min', u'Value': u'0.431 0.431 0.431'}
+    {u'Key': u'update_stats_ms_max', u'Value': u'0.530 0.530 0.530'}
+    {u'Key': u'update_stats_ms_pct95', u'Value': u'0.530 0.530 0.530'}
+    {u'Key': u'update_stats_ms_pct99', u'Value': u'0.530 0.530 0.530'}],
  u'error': u'',
  u'total': 0,
  u'warning': u''}
@@ -244,7 +355,35 @@ res = await utilsApi.sql('SHOW TABLE statistic STATUS');
     {"Key": "found_rows_1min", "Value": "{"queries":1, "avg":3, "min":3, "max":3, "pct95":3, "pct99":3}"}
     {"Key": "found_rows_5min", "Value": "{"queries":1, "avg":3, "min":3, "max":3, "pct95":3, "pct99":3}"}
     {"Key": "found_rows_15min", "Value": "{"queries":1, "avg":3, "min":3, "max":3, "pct95":3, "pct99":3}"}
-    {"Key": "found_rows_total", "Value": "{"queries":1, "avg":3, "min":3, "max":3, "pct95":3, "pct99":3}"}],
+    {"Key": "found_rows_total", "Value": "{"queries":1, "avg":3, "min":3, "max":3, "pct95":3, "pct99":3}"}
+    {"Key": "command_search", "Value": "2"}
+    {"Key": "command_excerpt", "Value": "0"}
+    {"Key": "command_update", "Value": "3"}
+    {"Key": "command_keywords", "Value": "0"}
+    {"Key": "command_status", "Value": "2"}
+    {"Key": "command_delete", "Value": "0"}
+    {"Key": "command_insert", "Value": "1"}
+    {"Key": "command_replace", "Value": "0"}
+    {"Key": "command_commit", "Value": "0"}
+    {"Key": "command_suggest", "Value": "0"}
+    {"Key": "command_callpq", "Value": "0"}
+    {"Key": "command_getfield", "Value": "0"}
+    {"Key": "insert_replace_stats_ms_avg", "Value": "0.284 0.284 0.284"}
+    {"Key": "insert_replace_stats_ms_min", "Value": "0.284 0.284 0.284"}
+    {"Key": "insert_replace_stats_ms_max", "Value": "0.284 0.284 0.284"}
+    {"Key": "insert_replace_stats_ms_pct95", "Value": "0.284 0.284 0.284"}
+    {"Key": "insert_replace_stats_ms_pct99", "Value": "0.284 0.284 0.284"}
+    {"Key": "search_stats_ms_avg", "Value": "0.000 0.000 0.000"}
+    {"Key": "search_stats_ms_min", "Value": "0.000 0.000 0.000"}
+    {"Key": "search_stats_ms_max", "Value": "0.000 0.000 0.000"}
+    {"Key": "search_stats_ms_pct95", "Value": "0.000 0.000 0.000"}
+    {"Key": "search_stats_ms_pct99", "Value": "0.000 0.000 0.000"}
+    {"Key": "update_stats_ms_avg", "Value": "0.479 0.479 0.479"}
+    {"Key": "update_stats_ms_min", "Value": "0.431 0.431 0.431"}
+    {"Key": "update_stats_ms_max", "Value": "0.530 0.530 0.530"}
+    {"Key": "update_stats_ms_pct95", "Value": "0.530 0.530 0.530"}
+    {"Key": "update_stats_ms_pct99", "Value": "0.530 0.530 0.530"}
+],
  "error": "",
  "total": 0,
  "warning": ""}
@@ -282,7 +421,35 @@ utilsApi.sql("SHOW TABLE statistic STATUS");
     { Key=found_rows_1min, Value={queries:1, avg:3, min:3, max:3, pct95:3, pct99:3}}
     { Key=found_rows_5min, Value={queries:1, avg:3, min:3, max:3, pct95:3, pct99:3}}
     { Key=found_rows_15min, Value={queries:1, avg:3, min:3, max:3, pct95:3, pct99:3}}
-    { Key=found_rows_total, Value={queries:1, avg:3, min:3, max:3, pct95:3, pct99:3}}],
+    { Key=found_rows_total, Value={queries:1, avg:3, min:3, max:3, pct95:3, pct99:3}}
+    { Key=command_search, Value=2}
+    { Key=command_excerpt, Value=0}
+    { Key=command_update, Value=3}
+    { Key=command_keywords, Value=0}
+    { Key=command_status, Value=2}
+    { Key=command_delete, Value=0}
+    { Key=command_insert, Value=1}
+    { Key=command_replace, Value=0}
+    { Key=command_commit, Value=0}
+    { Key=command_suggest, Value=0}
+    { Key=command_callpq, Value=0}
+    { Key=command_getfield, Value=0}
+    { Key=insert_replace_stats_ms_avg, Value=0.284 0.284 0.284}
+    { Key=insert_replace_stats_ms_min, Value=0.284 0.284 0.284}
+    { Key=insert_replace_stats_ms_max, Value=0.284 0.284 0.284}
+    { Key=insert_replace_stats_ms_pct95, Value=0.284 0.284 0.284}
+    { Key=insert_replace_stats_ms_pct99, Value=0.284 0.284 0.284}
+    { Key=search_stats_ms_avg, Value=0.000 0.000 0.000}
+    { Key=search_stats_ms_min, Value=0.000 0.000 0.000}
+    { Key=search_stats_ms_max, Value=0.000 0.000 0.000}
+    { Key=search_stats_ms_pct95, Value=0.000 0.000 0.000}
+    { Key=search_stats_ms_pct99, Value=0.000 0.000 0.000}
+    { Key=update_stats_ms_avg, Value=0.479 0.479 0.479}
+    { Key=update_stats_ms_min, Value=0.431 0.431 0.431}
+    { Key=update_stats_ms_max, Value=0.530 0.530 0.530}
+    { Key=update_stats_ms_pct95, Value=0.530 0.530 0.530}
+    { Key=update_stats_ms_pct99, Value=0.530 0.530 0.530}
+],
   error= ,
   total=0,
   warning= }
@@ -321,7 +488,35 @@ utilsApi.Sql("SHOW TABLE statistic STATUS");
     { Key=found_rows_1min, Value={queries:1, avg:3, min:3, max:3, pct95:3, pct99:3}}
     { Key=found_rows_5min, Value={queries:1, avg:3, min:3, max:3, pct95:3, pct99:3}}
     { Key=found_rows_15min, Value={queries:1, avg:3, min:3, max:3, pct95:3, pct99:3}}
-    { Key=found_rows_total, Value={queries:1, avg:3, min:3, max:3, pct95:3, pct99:3}}],
+    { Key=found_rows_total, Value={queries:1, avg:3, min:3, max:3, pct95:3, pct99:3}}
+    { Key=command_search, Value=2}
+    { Key=command_excerpt, Value=0}
+    { Key=command_update, Value=3}
+    { Key=command_keywords, Value=0}
+    { Key=command_status, Value=2}
+    { Key=command_delete, Value=0}
+    { Key=command_insert, Value=1}
+    { Key=command_replace, Value=0}
+    { Key=command_commit, Value=0}
+    { Key=command_suggest, Value=0}
+    { Key=command_callpq, Value=0}
+    { Key=command_getfield, Value=0}
+    { Key=insert_replace_stats_ms_avg, Value=0.284 0.284 0.284}
+    { Key=insert_replace_stats_ms_min, Value=0.284 0.284 0.284}
+    { Key=insert_replace_stats_ms_max, Value=0.284 0.284 0.284}
+    { Key=insert_replace_stats_ms_pct95, Value=0.284 0.284 0.284}
+    { Key=insert_replace_stats_ms_pct99, Value=0.284 0.284 0.284}
+    { Key=search_stats_ms_avg, Value=0.000 0.000 0.000}
+    { Key=search_stats_ms_min, Value=0.000 0.000 0.000}
+    { Key=search_stats_ms_max, Value=0.000 0.000 0.000}
+    { Key=search_stats_ms_pct95, Value=0.000 0.000 0.000}
+    { Key=search_stats_ms_pct99, Value=0.000 0.000 0.000}
+    { Key=update_stats_ms_avg, Value=0.479 0.479 0.479}
+    { Key=update_stats_ms_min, Value=0.431 0.431 0.431}
+    { Key=update_stats_ms_max, Value=0.530 0.530 0.530}
+    { Key=update_stats_ms_pct95, Value=0.530 0.530 0.530}
+    { Key=update_stats_ms_pct99, Value=0.530 0.530 0.530}
+],
   error="" ,
   total=0,
   warning="" }
@@ -360,7 +555,35 @@ utils_api.sql("SHOW TABLE statistic STATUS", Some(true)).await;
     { Key=found_rows_1min, Value={queries:1, avg:3, min:3, max:3, pct95:3, pct99:3}}
     { Key=found_rows_5min, Value={queries:1, avg:3, min:3, max:3, pct95:3, pct99:3}}
     { Key=found_rows_15min, Value={queries:1, avg:3, min:3, max:3, pct95:3, pct99:3}}
-    { Key=found_rows_total, Value={queries:1, avg:3, min:3, max:3, pct95:3, pct99:3}}],
+    { Key=found_rows_total, Value={queries:1, avg:3, min:3, max:3, pct95:3, pct99:3}}
+    { Key=command_search, Value=2}
+    { Key=command_excerpt, Value=0}
+    { Key=command_update, Value=3}
+    { Key=command_keywords, Value=0}
+    { Key=command_status, Value=2}
+    { Key=command_delete, Value=0}
+    { Key=command_insert, Value=1}
+    { Key=command_replace, Value=0}
+    { Key=command_commit, Value=0}
+    { Key=command_suggest, Value=0}
+    { Key=command_callpq, Value=0}
+    { Key=command_getfield, Value=0}
+    { Key=insert_replace_stats_ms_avg, Value=0.284 0.284 0.284}
+    { Key=insert_replace_stats_ms_min, Value=0.284 0.284 0.284}
+    { Key=insert_replace_stats_ms_max, Value=0.284 0.284 0.284}
+    { Key=insert_replace_stats_ms_pct95, Value=0.284 0.284 0.284}
+    { Key=insert_replace_stats_ms_pct99, Value=0.284 0.284 0.284}
+    { Key=search_stats_ms_avg, Value=0.000 0.000 0.000}
+    { Key=search_stats_ms_min, Value=0.000 0.000 0.000}
+    { Key=search_stats_ms_max, Value=0.000 0.000 0.000}
+    { Key=search_stats_ms_pct95, Value=0.000 0.000 0.000}
+    { Key=search_stats_ms_pct99, Value=0.000 0.000 0.000}
+    { Key=update_stats_ms_avg, Value=0.479 0.479 0.479}
+    { Key=update_stats_ms_min, Value=0.431 0.431 0.431}
+    { Key=update_stats_ms_max, Value=0.530 0.530 0.530}
+    { Key=update_stats_ms_pct95, Value=0.530 0.530 0.530}
+    { Key=update_stats_ms_pct99, Value=0.530 0.530 0.530}
+],
   error="" ,
   total=0,
   warning="" }
@@ -407,6 +630,33 @@ res = await utilsApi.sql('SHOW TABLE statistic STATUS');
 	    {"Key": "found_rows_5min", "Value": "{"queries":1, "avg":3, "min":3, "max":3, "pct95":3, "pct99":3}"}
 	    {"Key": "found_rows_15min", "Value": "{"queries":1, "avg":3, "min":3, "max":3, "pct95":3, "pct99":3}"}
 	    {"Key": "found_rows_total", "Value": "{"queries":1, "avg":3, "min":3, "max":3, "pct95":3, "pct99":3}"}
+	    {"Key": "command_search", "Value": "2"}
+	    {"Key": "command_excerpt", "Value": "0"}
+	    {"Key": "command_update", "Value": "3"}
+	    {"Key": "command_keywords", "Value": "0"}
+	    {"Key": "command_status", "Value": "2"}
+	    {"Key": "command_delete", "Value": "0"}
+	    {"Key": "command_insert", "Value": "1"}
+	    {"Key": "command_replace", "Value": "0"}
+	    {"Key": "command_commit", "Value": "0"}
+	    {"Key": "command_suggest", "Value": "0"}
+	    {"Key": "command_callpq", "Value": "0"}
+	    {"Key": "command_getfield", "Value": "0"}
+	    {"Key": "insert_replace_stats_ms_avg", "Value": "0.284 0.284 0.284"}
+	    {"Key": "insert_replace_stats_ms_min", "Value": "0.284 0.284 0.284"}
+	    {"Key": "insert_replace_stats_ms_max", "Value": "0.284 0.284 0.284"}
+	    {"Key": "insert_replace_stats_ms_pct95", "Value": "0.284 0.284 0.284"}
+	    {"Key": "insert_replace_stats_ms_pct99", "Value": "0.284 0.284 0.284"}
+	    {"Key": "search_stats_ms_avg", "Value": "0.000 0.000 0.000"}
+	    {"Key": "search_stats_ms_min", "Value": "0.000 0.000 0.000"}
+	    {"Key": "search_stats_ms_max", "Value": "0.000 0.000 0.000"}
+	    {"Key": "search_stats_ms_pct95", "Value": "0.000 0.000 0.000"}
+	    {"Key": "search_stats_ms_pct99", "Value": "0.000 0.000 0.000"}
+	    {"Key": "update_stats_ms_avg", "Value": "0.479 0.479 0.479"}
+	    {"Key": "update_stats_ms_min", "Value": "0.431 0.431 0.431"}
+	    {"Key": "update_stats_ms_max", "Value": "0.530 0.530 0.530"}
+	    {"Key": "update_stats_ms_pct95", "Value": "0.530 0.530 0.530"}
+	    {"Key": "update_stats_ms_pct99", "Value": "0.530 0.530 0.530"}
 	],
 	"error": "",
 	"total": 0,
@@ -455,6 +705,33 @@ apiClient.UtilsAPI.Sql(context.Background()).Body("SHOW TABLE statistic STATUS")
 	    {"Key": "found_rows_5min", "Value": "{"queries":1, "avg":3, "min":3, "max":3, "pct95":3, "pct99":3}"}
 	    {"Key": "found_rows_15min", "Value": "{"queries":1, "avg":3, "min":3, "max":3, "pct95":3, "pct99":3}"}
 	    {"Key": "found_rows_total", "Value": "{"queries":1, "avg":3, "min":3, "max":3, "pct95":3, "pct99":3}"}
+	    {"Key": "command_search", "Value": "2"}
+	    {"Key": "command_excerpt", "Value": "0"}
+	    {"Key": "command_update", "Value": "3"}
+	    {"Key": "command_keywords", "Value": "0"}
+	    {"Key": "command_status", "Value": "2"}
+	    {"Key": "command_delete", "Value": "0"}
+	    {"Key": "command_insert", "Value": "1"}
+	    {"Key": "command_replace", "Value": "0"}
+	    {"Key": "command_commit", "Value": "0"}
+	    {"Key": "command_suggest", "Value": "0"}
+	    {"Key": "command_callpq", "Value": "0"}
+	    {"Key": "command_getfield", "Value": "0"}
+	    {"Key": "insert_replace_stats_ms_avg", "Value": "0.284 0.284 0.284"}
+	    {"Key": "insert_replace_stats_ms_min", "Value": "0.284 0.284 0.284"}
+	    {"Key": "insert_replace_stats_ms_max", "Value": "0.284 0.284 0.284"}
+	    {"Key": "insert_replace_stats_ms_pct95", "Value": "0.284 0.284 0.284"}
+	    {"Key": "insert_replace_stats_ms_pct99", "Value": "0.284 0.284 0.284"}
+	    {"Key": "search_stats_ms_avg", "Value": "0.000 0.000 0.000"}
+	    {"Key": "search_stats_ms_min", "Value": "0.000 0.000 0.000"}
+	    {"Key": "search_stats_ms_max", "Value": "0.000 0.000 0.000"}
+	    {"Key": "search_stats_ms_pct95", "Value": "0.000 0.000 0.000"}
+	    {"Key": "search_stats_ms_pct99", "Value": "0.000 0.000 0.000"}
+	    {"Key": "update_stats_ms_avg", "Value": "0.479 0.479 0.479"}
+	    {"Key": "update_stats_ms_min", "Value": "0.431 0.431 0.431"}
+	    {"Key": "update_stats_ms_max", "Value": "0.530 0.530 0.530"}
+	    {"Key": "update_stats_ms_pct95", "Value": "0.530 0.530 0.530"}
+	    {"Key": "update_stats_ms_pct99", "Value": "0.530 0.530 0.530"}
 	],
 	"error": "",
 	"total": 0,

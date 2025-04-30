@@ -20,6 +20,7 @@
 #include "searchdconfig.h"
 #include "memio.h"
 #include "accumulator.h"
+#include "querystats.h"
 #include "config.h"
 
 /////////////////////////////////////////////////////////////////////////////
@@ -128,35 +129,6 @@ static const int64_t S2US = I64C ( 1000000 );
 /////////////////////////////////////////////////////////////////////////////
 // MISC GLOBALS
 /////////////////////////////////////////////////////////////////////////////
-
-/// known commands
-/// (shared here because at least SEARCHD_COMMAND_TOTAL used outside the core)
-enum SearchdCommand_e : WORD
-{
-	SEARCHD_COMMAND_SEARCH		= 0,
-	SEARCHD_COMMAND_EXCERPT		= 1,
-	SEARCHD_COMMAND_UPDATE		= 2,
-	SEARCHD_COMMAND_KEYWORDS	= 3,
-	SEARCHD_COMMAND_PERSIST		= 4,
-	SEARCHD_COMMAND_STATUS		= 5,
-	SEARCHD_COMMAND_UNUSED_6	= 6,
-	SEARCHD_COMMAND_FLUSHATTRS	= 7,
-	SEARCHD_COMMAND_SPHINXQL	= 8,
-	SEARCHD_COMMAND_PING		= 9,
-	SEARCHD_COMMAND_DELETE		= 10,
-	SEARCHD_COMMAND_UVAR		= 11,
-	SEARCHD_COMMAND_INSERT		= 12,
-	SEARCHD_COMMAND_REPLACE		= 13,
-	SEARCHD_COMMAND_COMMIT		= 14,
-	SEARCHD_COMMAND_SUGGEST		= 15,
-	SEARCHD_COMMAND_JSON		= 16,
-	SEARCHD_COMMAND_CALLPQ 		= 17,
-	SEARCHD_COMMAND_CLUSTER		= 18,
-	SEARCHD_COMMAND_GETFIELD	= 19,
-
-	SEARCHD_COMMAND_TOTAL,
-	SEARCHD_COMMAND_WRONG = SEARCHD_COMMAND_TOTAL,
-};
 
 const char* szCommand ( int );
 
@@ -587,67 +559,6 @@ using MemInputBuffer_c = InputBuffer_c;
 /////////////////////////////////////////////////////////////////////////////
 // SERVED INDEX DESCRIPTORS STUFF
 /////////////////////////////////////////////////////////////////////////////
-namespace QueryStats {
-	enum
-	{
-		INTERVAL_1MIN,
-		INTERVAL_5MIN,
-		INTERVAL_15MIN,
-		INTERVAL_ALLTIME,
-
-		INTERVAL_TOTAL
-	};
-
-
-	enum
-	{
-		TYPE_AVG,
-		TYPE_MIN,
-		TYPE_MAX,
-		TYPE_95,
-		TYPE_99,
-
-		TYPE_TOTAL,
-	};
-}
-
-struct QueryStatElement_t
-{
-	uint64_t	m_dData[QueryStats::TYPE_TOTAL] = { 0, UINT64_MAX, 0, 0, 0, };
-	uint64_t	m_uTotalQueries = 0;
-};
-
-
-struct QueryStats_t
-{
-	QueryStatElement_t	m_dStats[QueryStats::INTERVAL_TOTAL];
-};
-
-
-struct QueryStatRecord_t
-{
-	uint64_t	m_uQueryTimeMin;
-	uint64_t	m_uQueryTimeMax;
-	uint64_t	m_uQueryTimeSum;
-	uint64_t	m_uFoundRowsMin;
-	uint64_t	m_uFoundRowsMax;
-	uint64_t	m_uFoundRowsSum;
-
-	uint64_t	m_uTimestamp;
-	int			m_iCount;
-};
-
-
-class QueryStatContainer_i
-{
-public:
-	virtual								~QueryStatContainer_i() {}
-	virtual void						Add ( uint64_t uFoundRows, uint64_t uQueryTime, uint64_t uTimestamp ) = 0;
-	virtual QueryStatRecord_t			GetRecord ( int iRecord ) const noexcept = 0;
-	virtual int							GetNumRecords() const = 0;
-};
-
-std::unique_ptr<QueryStatContainer_i> MakeStatsContainer();
 
 class ServedStats_c final
 {
@@ -660,6 +571,11 @@ public:
 #ifndef NDEBUG
 	void				CalculateQueryStatsExact ( QueryStats_t & tRowsFoundStats, QueryStats_t & tQueryTimeStats ) const EXCLUDES ( m_tStatsLock );
 #endif
+
+	void				GetIndexQueryStats ( VectorLike & dStatus ) const;
+	void				AddWriteStat ( CommandStats_t::EDETAILS eCmd, bool bReplace, uint64_t uRows, uint64_t tmStart );
+	void				IncCmd ( SearchdCommand_e eCmd );
+
 private:
 	mutable RwLock_t m_tStatsLock;
 	std::unique_ptr<QueryStatContainer_i> m_pQueryStatRecords GUARDED_BY ( m_tStatsLock );
@@ -683,9 +599,9 @@ private:
 
 	void				DoStatCalcStats ( const QueryStatContainer_i * pContainer, QueryStats_t & tRowsFoundStats,
 							QueryStats_t & tQueryTimeStats ) const REQUIRES_SHARED ( m_tStatsLock );
-};
 
-void CalcSimpleStats ( const QueryStatContainer_i * pContainer, QueryStats_t & tRowsFoundStats, QueryStats_t & tQueryTimeStats );
+	CommandStats_t		m_tCommandsStats;
+};
 
 // calculate index mass based on status
 uint64_t CalculateMass ( const CSphIndexStatus & dStats );

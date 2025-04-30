@@ -336,25 +336,7 @@ jobs:
         run: |
           TEST_RESULT=${{ needs.clt.result }} BUILD_COMMIT=${{ steps.sha.outputs.sha_short }} /bin/bash dist/test_kit_docker_push.sh
 
-  comment_docker_images:
-    name: Comment Docker images to PR
-    needs: [test_kit_docker_push]
-    if: github.event_name == 'pull_request' && needs.test_kit_docker_push.result == 'success'
-    runs-on: ubuntu-22.04
-    steps:
-      - name: Comment pushed Docker images to PR
-        run: |
-          grep "Pushed the image to" "$GITHUB_STEP_SUMMARY" | sed 's/Pushed the image to //' > docker_comment.md
-          if [ ! -s docker_comment.md ]; then
-            echo "Docker image build skipped (no changes in source)." > docker_comment.md
-          fi
-      - name: Post docker images as PR comment
-        uses: marocchino/sticky-pull-request-comment@v2
-        with:
-          path: docker_comment.md
-          header: docker-test-kit
-
-build_aarch64:
+  build_aarch64:
     if: (needs.changes.outputs.source == 'true') && (github.event_name == 'pull_request' && github.event.pull_request.base.ref == 'update-buddy-version') != true
     needs: [changes, check_branch]
     name: Linux aarch64 build

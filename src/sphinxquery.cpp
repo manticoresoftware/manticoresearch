@@ -749,7 +749,7 @@ static void TransformMorphOnlyFields ( XQNode_t * pNode, const CSphBitvec & tMor
 	const XQLimitSpec_t & tSpec = pNode->m_dSpec;
 	if ( tSpec.m_bFieldSpec && !tSpec.m_dFieldMask.TestAll ( true ) )
 	{
-		int iField=tMorphDisabledFields.Scan ( 0 );
+		auto iField=tMorphDisabledFields.Scan ( 0 );
 		while ( iField<tMorphDisabledFields.GetSize() )
 		{
 			if ( pNode->m_dSpec.m_dFieldMask.Test ( iField ) )

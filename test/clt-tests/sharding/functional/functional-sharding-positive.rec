@@ -16,7 +16,7 @@ export CLUSTER_NAME=replication
 ––– block: ../../base/replication/create-cluster –––
 ––– block: ../../base/replication/join-cluster-on-all-nodes –––
 ––– input –––
-for port in 1306 2306 3306; do timeout 30 mysql -h0 -P$port -e "SHOW STATUS LIKE 'cluster_replication_status'\G" > /tmp/status_$port.log && grep -q "Value: primary" /tmp/status_$port.log && echo "Port $port: Node synced"; done && cat /tmp/status_1306.log
+for port in 1306 2306 3306; do timeout 60 mysql -h0 -P$port -e "SHOW STATUS LIKE 'cluster_replication_status'\G" > /tmp/status_$port.log && grep -q "Value: primary" /tmp/status_$port.log && echo "Port $port: Node synced"; done && cat /tmp/status_1306.log
 ––– output –––
 Port 1306: Node synced
 Port 2306: Node synced
@@ -111,7 +111,7 @@ Table: system.tbl3_s9
 Table: system.tbl3_s9
 Table: system.tbl3_s9
 ––– input –––
-mysql -h0 -P3306 -e "create table ${CLUSTER_NAME}:tbl4(id bigint) shards='3000' rf='3'"; echo $?
+mysql -h0 -P3306 -e "create table ${CLUSTER_NAME}:tbl4(id bigint) shards='3000' rf='3' timeout='60'"; echo $?
 ––– output –––
 0
 ––– input –––

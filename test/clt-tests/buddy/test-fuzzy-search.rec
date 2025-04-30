@@ -861,6 +861,17 @@ mysql -h0 -P9306 -e "SELECT * FROM t WHERE MATCH('abcdef'); SHOW META;"
 | hits[0]        | 1      |
 +----------------+--------+
 ––– input –––
+mysql -h0 -P9306 -e "insert into t values(3, 'aa defghi xxx');"
+––– output –––
+––– input –––
+mysql -h0 -P9306 -e "select * from t where match('aa def ghi xxx') option fuzzy=1, layouts='';"
+––– output –––
++------+---------------+
+| id   | f             |
++------+---------------+
+|    3 | aa defghi xxx |
++------+---------------+
+––– input –––
 mysql -h0 -P9306 -e "SELECT * FROM t WHERE MATCH('abcef') OPTION fuzzy=1; SHOW META;"
 ––– output –––
 +------+-----------+
@@ -881,6 +892,7 @@ mysql -h0 -P9306 -e "SELECT * FROM t WHERE MATCH('abcef') OPTION fuzzy=1; SHOW M
 grep -A3 "SELECT \* FROM t WHERE MATCH('abcdef')" /var/log/manticore/query.log
 ––– output –––
 /* #!/[A-Za-z]{3}\s+[A-Za-z]{3}\s+[0-9]{1,2}\s+[0-9]{2}:[0-9]{2}:[0-9]{2}\.[0-9]{3}\s+[0-9]{4}/!# conn %{NUMBER} (127.0.0.1:%{NUMBER}) real #!/[0-9]{1}.[0-9]{3}/!# wall #!/[0-9]{1}.[0-9]{3}/!# found 1 */ SELECT * FROM t WHERE MATCH('abcdef');
+/* #!/[A-Za-z]{3}\s+[A-Za-z]{3}\s+[0-9]{1,2}\s+[0-9]{2}:[0-9]{2}:[0-9]{2}\.[0-9]{3}\s+[0-9]{4}/!# conn %{NUMBER} (127.0.0.1:%{NUMBER}) real #!/[0-9]{1}.[0-9]{3}/!# wall #!/[0-9]{1}.[0-9]{3}/!# found 1 */ select * from t where match('aa def ghi xxx') option fuzzy=1, layouts='';
 /* #!/[A-Za-z]{3}\s+[A-Za-z]{3}\s+[0-9]{1,2}\s+[0-9]{2}:[0-9]{2}:[0-9]{2}\.[0-9]{3}\s+[0-9]{4}/!# conn %{NUMBER} (127.0.0.1:%{NUMBER}) real #!/[0-9]{1}.[0-9]{3}/!# wall #!/[0-9]{1}.[0-9]{3}/!# found 2 */ SELECT * FROM t WHERE MATCH('abcef') OPTION fuzzy=1;
 ––– input –––
 mysql -h0 -P9306 -e "SELECT * FROM t WHERE MATCH('nonexistent'); SHOW META;"

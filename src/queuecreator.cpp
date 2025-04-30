@@ -661,6 +661,7 @@ void QueueCreator_c::AssignOrderByToPresortStage ( const int * pAttrs, int iAttr
 	assert ( m_pSorterSchema );
 
 	StrVec_t dCur;
+	sph::StringSet hProcessed;
 
 	// add valid attributes to processing list
 	for ( int i=0; i<iAttrCount; ++i )
@@ -670,10 +671,16 @@ void QueueCreator_c::AssignOrderByToPresortStage ( const int * pAttrs, int iAttr
 	// collect columns which affect current expressions
 	ARRAY_FOREACH ( i, dCur )
 	{
+		if ( hProcessed[dCur[i]] )
+			continue;
+
 		const CSphColumnInfo * pCol = m_pSorterSchema->GetAttr ( dCur[i].cstr() );
 		assert(pCol);
 		if ( pCol->m_eStage>SPH_EVAL_PRESORT && pCol->m_pExpr )
 			pCol->m_pExpr->Command ( SPH_EXPR_GET_DEPENDENT_COLS, &dCur );
+
+		// filter out duplicates to avoid circular dependencies
+		hProcessed.Add ( dCur[i] );
 	}
 
 	// get rid of dupes

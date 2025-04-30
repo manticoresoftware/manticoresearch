@@ -141,12 +141,22 @@ runs:
           semver_new=$(echo "$version_string" | grep -o '^[0-9][0-9.]*')
         fi
         
+        # Check if semver versions are the same
+        if [ "${{ steps.commit.outputs.semver_original }}" = "$semver_new" ]; then
+          echo "Semver versions are the same ($semver_new), skipping update"
+          echo "version_string=${version_string// /-}" >> $GITHUB_OUTPUT
+          echo "semver_new=$semver_new" >> $GITHUB_OUTPUT
+          echo "skip_update=true" >> $GITHUB_OUTPUT
+          exit 0
+        fi
+        
         echo "version_string=${version_string// /-}" >> $GITHUB_OUTPUT
         echo "semver_new=$semver_new" >> $GITHUB_OUTPUT
         sed -i '/^'$name'\s/c\'$name' '"$version_string" deps.txt
         cd ..
 
     - name: Prepare commit message
+      if: steps.deps.outputs.skip_update != 'true'
       id: commit-message
       shell: bash
       run: |
@@ -193,6 +203,7 @@ runs:
         echo "branch=${{ steps.branch.outputs.branch }}" >> $GITHUB_OUTPUT
 
     - name: Create or update Pull Request
+      if: steps.deps.outputs.skip_update != 'true'
       shell: bash
       env:
         GITHUB_TOKEN: ${{ inputs.token }}

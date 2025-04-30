@@ -110,7 +110,7 @@ Manticore Search is versatile and can be applied in various scenarios, including
   - Use percolate tables to filter and process real-time data streams, such as social media feeds or log data, efficiently.
 
 
-# Requirements
+## Requirements
 
 * Architecture: arm64 or x86_64
 * OS: Debian-based (e.g. Debian, Ubuntu, Mint), RHEL-based (e.g. RHEL, CentOS, Alma, Oracle Linux, Amazon Linux), Windows, or MacOS.

@@ -31,13 +31,13 @@ protected:
 	int m_iComplexity;
 
 protected:
-	int CalcUsedStackEdge ( BYTE uFiller )
+	DWORD CalcUsedStackEdge ( BYTE uFiller )
 	{
 		ARRAY_CONSTFOREACH ( i, m_dMockStack )
 			if ( m_dMockStack[i]!=uFiller )
-				return m_dMockStack.GetLength ()-i;
+				return m_dMockStack.GetULength()-i;
 
-		return m_dMockStack.GetLength ();
+		return m_dMockStack.GetULength ();
 	}
 
 	void MockInitMem ( BYTE uFiller )
@@ -45,7 +45,7 @@ protected:
 		::memset ( m_dMockStack.begin (), uFiller, m_dMockStack.GetLengthBytes () );
 	}
 
-	int MeasureStackWithPattern ( BYTE uPattern )
+	DWORD MeasureStackWithPattern ( BYTE uPattern )
 	{
 		MockInitMem ( uPattern );
 		MockParseTest ();
@@ -53,7 +53,7 @@ protected:
 		return sphRoundUp ( iUsedStackEdge, 4 );
 	}
 
-	int MeasureStack ()
+	DWORD MeasureStack ()
 	{
 		auto iStartStackDE = MeasureStackWithPattern ( 0xDE );
 		auto iStartStackAD = MeasureStackWithPattern ( 0xAD );
@@ -73,31 +73,31 @@ public:
 	StackSizeTuplet_t MockMeasureStack ()
 	{
 		constexpr int iMeasures = 20;
-		std::vector<std::pair<int,int>> dMeasures { iMeasures };
+		std::vector<std::pair<int,DWORD>> dMeasures { iMeasures };
 		int i = 0;
 
 		int iDepth = 0;
-		int iStack = 0;
+		DWORD uStack = 0;
 		while ( i<iMeasures )
 		{
 			BuildMockExprWrapper ( iDepth++ );
-			auto iThisStack = MeasureStack ();
-			if ( iThisStack == iStack )
+			auto uThisStack = MeasureStack ();
+			if ( uThisStack == uStack )
 				continue;
 
 			dMeasures[i].first = iDepth-1;
-			dMeasures[i].second = iThisStack;
-			auto iDelta = iThisStack-iStack;
-			iStack = iThisStack;
+			dMeasures[i].second = uThisStack;
+			auto iDelta = uThisStack-uStack;
+			uStack = uThisStack;
 			++i;
-			if ( iStack + iDelta >= m_dMockStack.GetLengthBytes() )
+			if ( uStack + iDelta >= m_dMockStack.GetLengthBytes() )
 				break;
 		}
 
 		auto iValues = i;
-		std::vector<std::pair<int, int>> dDeltas { iMeasures };
+		std::vector<std::pair<int, DWORD>> dDeltas { iMeasures };
 		sphLogDebugv( "========= start measure ==============" );
-		std::pair<int,int> dInitial {0,0};
+		std::pair<int,DWORD> dInitial {0,0};
 		for ( i=0; i<iValues; ++i )
 		{
 			dDeltas[i].first = dMeasures[i].first-dInitial.first;
@@ -108,15 +108,15 @@ public:
 
 		int iStart = dMeasures.front().second;
 
-		iStack = 0;
+		uStack = 0;
 		for ( i=iValues-1; i>0; --i )
 		{
 			if ( dDeltas[i].first !=1 )
 				break;
-			iStack = Max ( iStack, dDeltas[i].second );
+			uStack = Max ( uStack, dDeltas[i].second );
 		}
 
-		int iDelta = sphRoundUp ( iStack, 8 );
+		int iDelta = sphRoundUp ( uStack, 8 );
 		return { iStart, iDelta };
 	}
 

@@ -12,10 +12,8 @@
 
 #include "autoevent.h"
 
-#include "fatal.h"
 #include "timers.h"
 #include "config.h"
-#include <cerrno>
 
 
 #if _WIN32
@@ -127,7 +125,7 @@ void AutoEvent_T<false>::SetEvent()
 }
 
 template<>
-void AutoEvent_T<true>::SetEvent()
+void AutoEvent_T<>::SetEvent()
 {
 	if ( !m_bInitialized )
 		return;
@@ -156,7 +154,7 @@ bool AutoEvent_T<false>::WaitEvent ( int iMsec )
 	}
 
 #ifdef HAVE_PTHREAD_COND_TIMEDWAIT
-	struct timespec ts;
+	timespec ts;
 	clock_gettime ( CLOCK_REALTIME, &ts );
 
 	int ns = ts.tv_nsec + ( iMsec % 1000 ) * 1000000;
@@ -177,7 +175,7 @@ bool AutoEvent_T<false>::WaitEvent ( int iMsec )
 }
 
 template<>
-bool AutoEvent_T<true>::WaitEvent ( int iMsec )
+bool AutoEvent_T<>::WaitEvent ( int iMsec )
 {
 	if ( !m_bInitialized )
 		return false;
@@ -194,7 +192,7 @@ bool AutoEvent_T<true>::WaitEvent ( int iMsec )
 	}
 
 #ifdef HAVE_PTHREAD_COND_TIMEDWAIT
-	struct timespec ts;
+	timespec ts;
 	clock_gettime ( CLOCK_REALTIME, &ts );
 
 	int ns = ts.tv_nsec + ( iMsec % 1000 ) * 1000000;

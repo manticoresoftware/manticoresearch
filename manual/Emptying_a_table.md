@@ -76,6 +76,21 @@ utilsApi.sql('TRUNCATE TABLE products')
 ```python
 {u'error': u'', u'total': 0, u'warning': u''}
 ```
+
+<!-- intro -->
+##### Python-asyncio:
+
+<!-- request Python-asyncio -->
+
+```python
+await utilsApi.sql('TRUNCATE TABLE products')
+```
+
+<!-- response Python-asyncio -->
+```python
+{u'error': u'', u'total': 0, u'warning': u''}
+```
+
 <!-- intro -->
 ##### Javascript:
 
@@ -96,7 +111,7 @@ res = await utilsApi.sql('TRUNCATE TABLE products');
 <!-- request Java -->
 
 ```java
-utilsApi.sql("TRUNCATE TABLE products");
+utilsApi.sql("TRUNCATE TABLE products", true);
 ```
 
 <!-- response Java -->
@@ -110,11 +125,25 @@ utilsApi.sql("TRUNCATE TABLE products");
 <!-- request C# -->
 
 ```clike
-utilsApi.Sql("TRUNCATE TABLE products");
+utilsApi.Sql("TRUNCATE TABLE products", true);
 ```
 
 <!-- response C# -->
 ```clike
+{total=0, error="", warning=""}
+```
+
+<!-- intro -->
+##### Rust:
+
+<!-- request Rust -->
+
+```rust
+utils_api.sql("TRUNCATE TABLE products", Some(true)).await;
+```
+
+<!-- response Rust -->
+```rust
 {total=0, error="", warning=""}
 ```
 
@@ -190,6 +219,21 @@ utilsApi.sql('TRUNCATE TABLE products WITH RECONFIGURE')
 ```python
 {u'error': u'', u'total': 0, u'warning': u''}
 ```
+
+<!-- intro -->
+##### Python-asyncio:
+
+<!-- request Python-asyncio -->
+
+```python
+await utilsApi.sql('TRUNCATE TABLE products WITH RECONFIGURE')
+```
+
+<!-- response Python-asyncio -->
+```python
+{u'error': u'', u'total': 0, u'warning': u''}
+```
+
 <!-- intro -->
 ##### Javascript:
 
@@ -210,7 +254,7 @@ res = await utilsApi.sql('TRUNCATE TABLE products WITH RECONFIGURE');
 <!-- request Java -->
 
 ```java
-utilsApi.sql("TRUNCATE TABLE products WITH RECONFIGURE");
+utilsApi.sql("TRUNCATE TABLE products WITH RECONFIGURE", true);
 ```
 
 <!-- response Java -->
@@ -224,12 +268,27 @@ utilsApi.sql("TRUNCATE TABLE products WITH RECONFIGURE");
 <!-- request C# -->
 
 ```clike
-utilsApi.Sql("TRUNCATE TABLE products WITH RECONFIGURE");
+utilsApi.Sql("TRUNCATE TABLE products WITH RECONFIGURE" ,true);
 ```
 
 <!-- response C# -->
 ```clike
 {total=0, error="", warning=""}
 ```
+
+<!-- intro -->
+##### Rust:
+
+<!-- request Rust -->
+
+```rust
+utils_api.sql("TRUNCATE TABLE products WITH RECONFIGURE", Some(true)).await;
+```
+
+<!-- response C# -->
+```clike
+{total=0, error="", warning=""}
+```
+
 <!-- end -->
 <!-- proofread -->

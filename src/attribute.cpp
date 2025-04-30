@@ -71,7 +71,8 @@ public:
 	bool SetData ( const BYTE * pData, int iDataLen, CSphString & /*sError*/ ) override
 	{
 		m_dData.Resize ( iDataLen );
-		memcpy ( m_dData.Begin(), pData, iDataLen );
+		if (iDataLen)
+			memcpy ( m_dData.Begin(), pData, iDataLen );
 		return true;
 	}
 
@@ -94,6 +95,11 @@ public:
 	{
 		int iValueSize = sizeof ( int64_t );
 		int iNumValues = iDataLen/iValueSize;
+		if (!iNumValues)
+		{
+			m_dData.Resize ( 0 );
+			return true;
+		}
 
 		if ( m_bNeedSorting )
 		{
@@ -107,7 +113,6 @@ public:
 			}
 
 			m_dUnsorted.Uniq();
-			iNumValues = m_dUnsorted.GetLength();
 			m_dData.Resize ( m_dUnsorted.GetLengthBytes() );
 			memcpy ( m_dData.Begin(), m_dUnsorted.Begin(), m_dData.GetLengthBytes() );
 		}

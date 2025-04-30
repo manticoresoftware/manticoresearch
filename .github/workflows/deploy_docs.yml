@@ -67,9 +67,10 @@ jobs:
       - name: Install fresh git
         run: |
           echo 'APT::Key::Assert-Pubkey-Algo ">=rsa1024";' > /etc/apt/apt.conf.d/99weakkey-warning
+          apt-get update --allow-releaseinfo-change
           add-apt-repository -y ppa:git-core/ppa
-          apt -y update
-          apt install -y git
+          apt-get update
+          apt-get install -y git
     
       - name: Checkout
         uses: actions/checkout@v3.5.3

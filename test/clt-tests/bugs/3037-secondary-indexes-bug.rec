@@ -80,3 +80,8 @@ mysql -P9306 -h0 -e "SET GLOBAL secondary_indexes=0; select id,status from task 
 | total_relation | eq                                                                                                                           |
 | time           | %{NUMBER}.%{NUMBER}                                                                                                                        |
 +----------------+------------------------------------------------------------------------------------------------------------------------------+
+
+––– input –––
+echo 1
+––– output –––
+1

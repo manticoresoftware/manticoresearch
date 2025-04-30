@@ -724,7 +724,7 @@ public:
 	void					AddStat ( const ExpansionStats_t & tExpansionStats );
 
 	void					MergeWordStats ( const CSphQueryResultMeta& tOther );// sort wordstat to achieve reproducable result over different runs
-	CSphFixedVector<SmallStringHash_T<CSphQueryResultMeta::WordStat_t>::KeyValue_t *>	MakeSortedWordStat () const;
+	CSphFixedVector<SmallStringHash_T<WordStat_t>::KeyValue_t *>	MakeSortedWordStat () const;
 };
 
 

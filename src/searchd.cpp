@@ -229,13 +229,11 @@ int64_t g_iNextExpMeterTimestamp = sphMicroTimer() + g_iExpMeterPeriod;
 static CSphString							g_sClusterUser { "cluster" }; // user with this name will see cluster:table in show tables
 
 /// command names
-static const char * g_dApiCommands[] =
+static const char * g_dApiCommands[SEARCHD_COMMAND_TOTAL] =
 {
 	"search", "excerpt", "update", "keywords", "persist", "status", "query", "flushattrs", "query", "ping", "delete", "set",  "insert", "replace", "commit", "suggest", "json",
 	"callpq", "clusterpq", "getfield"
 };
-
-static_assert ( sizeof(g_dApiCommands)/sizeof(g_dApiCommands[0])==SEARCHD_COMMAND_TOTAL, "number of commands must be same as SEARCHD_COMMAND_TOTAL" );
 
 //////////////////////////////////////////////////////////////////////////
 
@@ -245,7 +243,10 @@ const char * sAgentStatsNames[eMaxAgentStat+ehMaxStat]=
 		"warnings", "succeeded_queries", "total_query_time",
 		"connect_count", "connect_avg", "connect_max" };
 
-static RwLock_t					g_tLastMetaLock;
+
+// fixme! g_tLastMeta updated *ONLY* from HandleCommandSearch, that is binary API, i.e. no sphinxql, no http
+// m.b. we need to expand it to other protos, or in opposite, deprecate it. 'Just API' looks obsolete.
+static RwLock_t g_tLastMetaLock;
 static CSphQueryResultMeta		g_tLastMeta GUARDED_BY ( g_tLastMetaLock );
 
 /////////////////////////////////////////////////////////////////////////////
@@ -389,7 +390,7 @@ void Shutdown () REQUIRES ( MainThread ) NO_THREAD_SAFETY_ANALYSIS
 			RWIdx_c ( tIt.second )->Unlock();
 	}
 
-	Threads::CallCoroutine ( [] {
+	CallCoroutine ( [] {
 		SHUTINFO << "Abandon local tables list ...";
 		g_pLocalIndexes->ReleaseAndClear();
 
@@ -552,7 +553,7 @@ void SetSignalHandlers ( bool bAllowCtrlC=false ) REQUIRES ( MainThread )
 #endif
 
 #if !_WIN32
-int sphCreateUnixSocket ( const char * sPath ) REQUIRES ( MainThread )
+static int sphCreateUnixSocket ( const char * sPath ) REQUIRES ( MainThread )
 {
 	static struct sockaddr_un uaddr;
 	size_t len = strlen ( sPath );
@@ -586,7 +587,7 @@ int sphCreateUnixSocket ( const char * sPath ) REQUIRES ( MainThread )
 #endif // !_WIN32
 
 
-int sphCreateInetSocket ( const ListenerDesc_t & tDesc ) REQUIRES ( MainThread )
+static int sphCreateInetSocket ( const ListenerDesc_t & tDesc ) REQUIRES ( MainThread )
 {
 	auto uAddr = tDesc.m_uIP;
 	auto iPort = tDesc.m_iPort;
@@ -632,7 +633,7 @@ int sphCreateInetSocket ( const ListenerDesc_t & tDesc ) REQUIRES ( MainThread )
 	return iSock;
 }
 
-ListenerDesc_t MakeAnyListener ( int iPort, Proto_e eProto=Proto_e::SPHINX )
+static ListenerDesc_t MakeAnyListener ( int iPort, Proto_e eProto=Proto_e::SPHINX )
 {
 	ListenerDesc_t tDesc;
 	tDesc.m_eProto = eProto;
@@ -644,7 +645,7 @@ ListenerDesc_t MakeAnyListener ( int iPort, Proto_e eProto=Proto_e::SPHINX )
 	return tDesc;
 }
 
-ListenerDesc_t MakeLocalhostListener ( int iPort, Proto_e eProto )
+static ListenerDesc_t MakeLocalhostListener ( int iPort, Proto_e eProto )
 {
 	ListenerDesc_t tDesc;
 	tDesc.m_eProto = eProto;
@@ -2764,7 +2765,7 @@ bool GetIndexSchemaItems ( const ISphSchema & tSchema, const CSphVector<CSphQuer
 }
 
 
-static bool IsJoinedWeight ( const CSphString & sAttr, const CSphQuery & tQuery )
+bool IsJoinedWeight ( const CSphString & sAttr, const CSphQuery & tQuery )
 {
 	// don't skip this attribute in json queries as it will be used as _score
 	if ( tQuery.m_eQueryType==QUERY_JSON )
@@ -2780,7 +2781,7 @@ static bool IsJoinedWeight ( const CSphString & sAttr, const CSphQuery & tQuery 
 }
 
 
-static bool GetItemsLeftInSchema ( const ISphSchema & tSchema, const CSphQuery & tQuery, const CSphVector<int> & dAttrs, CSphVector<int> & dAttrsInSchema )
+bool GetItemsLeftInSchema ( const ISphSchema & tSchema, const CSphQuery & tQuery, const CSphVector<int> & dAttrs, CSphVector<int> & dAttrsInSchema )
 {	
 	bool bHaveExprs = false;
 
@@ -3617,29 +3618,6 @@ void ComputePostlimit ( AggrResult_t & tRes, const CSphQuery & tQuery, bool bMas
 		ProcessSinglePostlimit ( tRes.m_dResults.First(), dPostlimit, tQuery.m_sQuery.cstr(), iOff, iLimit );
 }
 
-int64_t CalcPredictedTimeMsec ( const CSphQueryResultMeta & tMeta )
-{
-	assert ( tMeta.m_bHasPrediction );
-
-	int64_t iNanoResult = int64_t(g_iPredictorCostSkip)* tMeta.m_tStats.m_iSkips
-		+ g_iPredictorCostDoc * tMeta.m_tStats.m_iFetchedDocs
-		+ g_iPredictorCostHit * tMeta.m_tStats.m_iFetchedHits
-		+ g_iPredictorCostMatch * tMeta.m_iTotalMatches;
-
-	return iNanoResult/1000000;
-}
-
-
-int GetMaxMatches ( int iQueryMaxMatches, const CSphIndex * pIndex )
-{
-	if ( iQueryMaxMatches<=DEFAULT_MAX_MATCHES )
-		return iQueryMaxMatches;
-
-	int64_t iDocs = Min ( (int)INT_MAX, pIndex->GetStats().m_iTotalDocuments ); // clamp to int max
-	return Min ( iQueryMaxMatches, Max ( iDocs, DEFAULT_MAX_MATCHES ) ); // do not want 0 sorter and sorter longer than query.max_matches
-}
-
-
 } // namespace static
 
 
@@ -4227,6 +4205,15 @@ static StrVec_t GetDefaultSchema ( const CSphIndex* pIndex )
 	return dRes;
 }
 
+static int GetMaxMatches ( int iQueryMaxMatches, const CSphIndex * pIndex )
+{
+	if ( iQueryMaxMatches<=DEFAULT_MAX_MATCHES )
+		return iQueryMaxMatches;
+
+	int64_t iDocs = Min ( (int)INT_MAX, pIndex->GetStats().m_iTotalDocuments ); // clamp to int max
+	return Min ( iQueryMaxMatches, Max ( iDocs, DEFAULT_MAX_MATCHES ) ); // do not want 0 sorter and sorter longer than query.max_matches
+}
+
 SphQueueSettings_t SearchHandler_c::MakeQueueSettings ( const CSphIndex * pIndex, const CSphIndex * pJoinedIndex, int iMaxMatches, bool bForceSingleThread, ISphExprHook * pHook ) const
 {
 	auto& tSess = session::Info();
@@ -4314,6 +4301,18 @@ int SearchHandler_c::CreateSorters ( const CSphIndex * pIndex, CSphVector<const 
 		return CreateMultiQueryOrFacetSorters ( pIndex, dJoinedIndexes, dSorters, dErrors, pExtra, tQueueRes, pHook );
 
 	return CreateSingleSorters ( pIndex, dJoinedIndexes, dSorters, dErrors, pExtra, tQueueRes, pHook );
+}
+
+static int64_t CalcPredictedTimeMsec ( const CSphQueryResultMeta & tMeta )
+{
+	assert ( tMeta.m_bHasPrediction );
+
+	int64_t iNanoResult = int64_t(g_iPredictorCostSkip)* tMeta.m_tStats.m_iSkips
+		+ g_iPredictorCostDoc * tMeta.m_tStats.m_iFetchedDocs
+		+ g_iPredictorCostHit * tMeta.m_tStats.m_iFetchedHits
+		+ g_iPredictorCostMatch * tMeta.m_iTotalMatches;
+
+	return iNanoResult/1000000;
 }
 
 struct LocalSearchRef_t
@@ -20042,7 +20041,7 @@ int WINAPI ServiceMain ( int argc, char **argv ) EXCLUDES (MainThread)
 			sphSetSockTFO ( dListener.m_iSock );
 	}
 
-	g_pTickPoolThread = Threads::MakeThreadPool ( g_iNetWorkers, "TickPool" );
+	g_pTickPoolThread = MakeThreadPool ( g_iNetWorkers, "TickPool" );
 	WipeSchedulerOnFork ( g_pTickPoolThread );
 	PrepareClustersOnStartup ( dListenerDescs, bNewClusterForce );
 

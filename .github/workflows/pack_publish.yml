@@ -37,27 +37,30 @@ jobs:
     permissions:
       contents: write
       pull-requests: read
-    outputs:  
+    outputs:
       version: ${{ steps.semver-tagger.outputs.version }}
       version_full: ${{ steps.semver-tagger.outputs.version_full }}
       version_rpm: ${{ steps.semver-tagger.outputs.version_rpm }}
       version_deb: ${{ steps.semver-tagger.outputs.version_deb }}
       target: ${{ steps.semver-tagger.outputs.target }}
       should_continue: ${{ steps.check-should-continue.outputs.should_continue }}
-    if: |  
+if: |
       (
         github.event_name == 'pull_request'
         &&
         (
-          contains(github.event.pull_request.labels.*.name, 'pack')
+          contains(
+            github.event.pull_request.labels.*.name, 'pack'
+          )
           ||
-          contains(github.event.pull_request.labels.*.name, 'publish')
+          contains(
+            github.event.pull_request.labels.*.name, 'publish'
+          )
         )
       )
       ||
       (
-        github.event_name == 'workflow_run'
-        &&
+        github.event_name == 'workflow_run'        &&
         github.event.workflow_run.conclusion == 'success'
         &&
         github.ref == 'refs/heads/master'

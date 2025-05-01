@@ -1,5 +1,38 @@
 # 更新日志
 
+## 版本 9.2.39
+发布时间：... 2025年4月
+
+* [v9.2.39](https://github.com/manticoresoftware/manticoresearch/releases/tag/9.2.39) [问题 #3236](https://github.com/manticoresoftware/manticoresearch/issues/3236) 修复：通过移除复杂的块更新来防止表损坏。在串行工作进程中使用等待函数破坏了串行处理，可能导致表损坏。
+重新实现了自动刷新。移除了外部轮询队列以避免不必要的表锁定。添加了"小表"条件：如果文档数量低于"小表限制"（8192）且未使用二级索引（SI），则跳过刷新。
+
+* [v9.2.38](https://github.com/manticoresoftware/manticoresearch/releases/tag/9.2.38) 修复：对使用字符串列表上的`ALL`/`ANY`的过滤器跳过创建二级索引（SI），不影响JSON属性。
+* [v9.2.37](https://github.com/manticoresoftware/manticoresearch/releases/tag/9.2.37) [问题 #2898](https://github.com/manticoresoftware/manticoresearch/issues/2898) 为系统表添加了反引号支持。
+* [v9.2.36](https://github.com/manticoresoftware/manticoresearch/releases/tag/9.2.36) 修复：在旧代码中为集群操作使用占位符。在解析器中，我们现在明确区分表和集群名称的字段。
+* [v9.2.35](https://github.com/manticoresoftware/manticoresearch/releases/tag/9.2.35) 修复：取消单个`'`引号时的崩溃。
+* [v9.2.34](https://github.com/manticoresoftware/manticoresearch/releases/tag/9.2.34) [问题 #3090](https://github.com/manticoresoftware/manticoresearch/issues/3090) 修复：大文档ID的处理（以前可能无法找到它们）。
+* [v9.2.33](https://github.com/manticoresoftware/manticoresearch/releases/tag/9.2.33) 修复：对位向量大小使用无符号整数。
+* [v9.2.32](https://github.com/manticoresoftware/manticoresearch/releases/tag/9.2.32) 修复：减少合并过程中的峰值内存使用。docid到rowid的查找现在每个文档使用12字节而不是16字节。例如：20亿文档使用24 GB RAM而不是36 GB。
+* [v9.2.31](https://github.com/manticoresoftware/manticoresearch/releases/tag/9.2.31) [问题 #3238](https://github.com/manticoresoftware/manticoresearch/issues/3238) 修复：大型实时表中的`COUNT(*)`值不正确。
+* [v9.2.30](https://github.com/manticoresoftware/manticoresearch/releases/tag/9.2.30) 修复：清零字符串属性时的未定义行为。
+* [v9.2.29](https://github.com/manticoresoftware/manticoresearch/releases/tag/9.2.29) 小修复：改进了警告文本。
+* [v9.2.28](https://github.com/manticoresoftware/manticoresearch/releases/tag/9.2.28) [问题 #3290](https://github.com/manticoresoftware/manticoresearch/issues/3290) 改进：增强了`indextool --buildidf`
+* [v9.2.27](https://github.com/manticoresoftware/manticoresearch/releases/tag/9.2.27) [问题 #3032](https://github.com/manticoresoftware/manticoresearch/issues/3032) 在Kafka集成中，现在可以为特定Kafka分区创建数据源。
+* [v9.2.26](https://github.com/manticoresoftware/manticoresearch/releases/tag/9.2.26) [问题 #3301](https://github.com/manticoresoftware/manticoresearch/issues/3301) 修复：对`id`的`ORDER BY`和`WHERE`可能导致OOM（内存不足）错误。
+* [v9.2.25](https://github.com/manticoresoftware/manticoresearch/releases/tag/9.2.25) [问题 #3171](https://github.com/manticoresoftware/manticoresearch/issues/3171) 修复：在具有多个磁盘块的RT表上使用多个JSON属性的分组器时，由段错误引起的崩溃
+* [v9.2.24](https://github.com/manticoresoftware/manticoresearch/releases/tag/9.2.24) [问题 #3246](https://github.com/manticoresoftware/manticoresearch/issues/3246) 修复：RAM块刷新后`WHERE string ANY(...)`查询失败。
+* [v9.2.23](https://github.com/manticoresoftware/manticoresearch/releases/tag/9.2.23) [PR #518](https://github.com/manticoresoftware/manticoresearch-buddy/pull/518) 自动分片语法的小改进。
+* [v9.2.22](https://github.com/manticoresoftware/manticoresearch/releases/tag/9.2.22) [问题 #2763](https://github.com/manticoresoftware/manticoresearch/issues/2763) 修复：使用`ALTER TABLE`时未加载全局idf文件。
+* [v9.2.21](https://github.com/manticoresoftware/manticoresearch/releases/tag/9.2.21) 修复：全局idf文件可能很大。我们现在更早地释放表以避免占用不必要的资源。
+* [v9.2.20](https://github.com/manticoresoftware/manticoresearch/releases/tag/9.2.20) [PR #3277](https://github.com/manticoresoftware/manticoresearch/pull/3277) 改进：更好地验证分片选项。
+
+* [v9.2.19](https://github.com/manticoresoftware/manticoresearch/releases/tag/9.2.19) [PR #3275](https://github.com/manticoresoftware/manticoresearch/pull/3275) 修复：与Boost 1.88.0的构建兼容性。
+* [v9.2.18](https://github.com/manticoresoftware/manticoresearch/releases/tag/9.2.18) [问题 #3228](https://github.com/manticoresoftware/manticoresearch/issues/3228) 修复：分布式表创建过程中的崩溃（无效指针问题）。
+
+* [v9.2.17](https://github.com/manticoresoftware/manticoresearch/releases/tag/9.2.17) [PR #3272](https://github.com/manticoresoftware/manticoresearch/pull/3272) 修复：多行模糊`FACET`问题。
+* [v9.2.16](https://github.com/manticoresoftware/manticoresearch/releases/tag/9.2.16) [问题 #3063](https://github.com/manticoresoftware/manticoresearch/issues/3063) 修复：使用`GEODIST`函数时距离计算中的错误。
+* [v9.2.15](https://github.com/manticoresoftware/manticoresearch/releases/tag/9.2.15) [问题 #3027](https://github.com/manticoresoftware/manticoresearch/issues/3027) 小改进：支持Elastic的`query_string`过滤器格式。
+
 # 版本 9.2.14
 发布日期：2025年3月28日
 
@@ -702,7 +735,7 @@ Released: January 30th 2025
 
 ### 新特性
 * 改进与 Logstash、Beats 等的集成，包括：
-  - 支持 Logstash 版本 7.6 - 7.15，Filebeat 版本 7.7 - 7.12  
+  - 支持 Logstash 版本 7.6 - 7.15，Filebeat 版本 7.7 - 7.12
   - 自动模式支持。
   - 增加对 Elasticsearch 类格式的批量请求处理。
 * [Buddy commit ce90](https://github.com/manticoresoftware/manticoresearch-buddy/commit/ce907ea) 在 Manticore 启动时记录 Buddy 版本。
@@ -1288,7 +1321,7 @@ user    0m0.004s
 sys     0m0.001s
 ```
 <!-- end -->
-- [custom startup flags for systemd](Starting_the_server/Linux.md#Custom-startup-flags-using-systemd)。现在您不需要手动启动 searchd，如果需要使用特定的启动标志运行 Manticore 
+- [custom startup flags for systemd](Starting_the_server/Linux.md#Custom-startup-flags-using-systemd)。现在您不需要手动启动 searchd，如果需要使用特定的启动标志运行 Manticore
 - 新函数 [LEVENSHTEIN()](Functions/String_functions.md#LEVENSHTEIN%28%29) 计算 Levenshtein 距离
 - 新增 [searchd 启动标志](Starting_the_server/Manually.md#searchd-command-line-options) `--replay-flags=ignore-trx-errors` 和 `--replay-flags=ignore-all-errors`，以便在 binlog 损坏时仍能启动 searchd
 - [Issue #621](https://github.com/manticoresoftware/manticoresearch/issues/621) - 暴露来自 RE2 的错误
@@ -2093,7 +2126,7 @@ Cmake 最低版本现在为 3.13。编译需要 boost 和 libssl
 * 改进 PQ 中匹配多个文档的通配符性能
 * 支持 PQ 中的全扫描查询
 * 支持 PQ 中的 MVA 属性
-* 支持在过热索引的正则表达式和 RLP 
+* 支持在过热索引的正则表达式和 RLP
 
 ### 错误修复
 * [Commit 6885](https://github.com/manticoresoftware/manticoresearch/commit/68856261b41f6950666f9e5122726839fb3c71d0) 修复了查询字符串的丢失

@@ -1,3 +1,311 @@
+# 在 Docker 中启动和使用 Manticore
+
+此映像基于 [当前版本的 Manticore 包](https://manticoresearch.com/install/).
+
+[comment]: # (下面内容应与 https://github.com/manticoresoftware/docker/blob/master/README.md 保持同步)
+
+默认配置包含一个示例实时表，并监听默认端口：
+
+  * `9306` 用于 MySQL 客户端的连接
+  * `9308` 用于通过 HTTP 的连接
+  * `9312` 用于通过二进制协议的连接（例如，如果您运行一个集群）
+
+此映像附带库以便于从 MySQL、PostgreSQL、XML 和 CSV 文件索引数据。
+
+## 如何运行 Manticore Search Docker 映像
+
+### 快速使用
+
+下面是最简单的在容器中启动 Manticore 并通过 mysql 客户端登录的方式：
+
+```bash
+docker run --name manticore --rm -d manticoresearch/manticore && echo "等待 Manticore docker 启动。请考虑映射 data_dir 以便下次更快速地启动" && until docker logs manticore 2>&1 | grep -q "accepting connections"; do sleep 1; echo -n .; done && echo && docker exec -it manticore mysql && docker stop manticore
+```
+
+请注意，在退出 MySQL 客户端后，Manticore 容器将被停止并删除，从而没有保存数据。有关在生产环境中使用 Manticore 的信息，请参见下文。
+
+此映像附带一个可以像这样加载的示例表：
+
+```sql
+mysql> source /sandbox.sql
+```
+
+此外，mysql 客户端的历史记录中有几个示例查询，可以在上面的表上运行，只需在客户端中使用上下箭头键查看和运行它们。
+
+### 生产使用
+
+
+#### 端口和挂载点
+
+为了数据持久性，文件夹 `/var/lib/manticore/` 应挂载到本地存储或其他所需的存储引擎。
+
+实例内部的配置文件位于 `/etc/manticoresearch/manticore.conf`。对于自定义设置，应将此文件挂载到您自己的配置文件中。
+
+端口为 9306/9308/9312，分别用于 SQL/HTTP/二进制，根据您使用 Manticore 的方式进行暴露。例如：
+
+```bash
+docker run --name manticore -v $(pwd)/data:/var/lib/manticore -p 127.0.0.1:9306:9306 -p 127.0.0.1:9308:9308 -d manticoresearch/manticore
+```
+
+或者
+
+```bash
+docker run --name manticore -v $(pwd)/manticore.conf:/etc/manticoresearch/manticore.conf -v $(pwd)/data:/var/lib/manticore/ -p 127.0.0.1:9306:9306 -p 127.0.0.1:9308:9308 -d manticoresearch/manticore
+```
+
+如果您希望端口可以用于外部主机，请确保删除 `127.0.0.1:`。
+
+#### Manticore 列式库和 Manticore Buddy
+
+Manticore Search Docker 映像附带预安装的 [Manticore 列式库](https://github.com/manticoresoftware/columnar) 和 [Manticore Buddy](https://github.com/manticoresoftware/manticoresearch-buddy)
+
+#### Docker-compose
+
+在许多情况下，您可能希望在 Docker Compose YAML 文件中将 Manticore 与其他映像结合使用。以下是 docker-compose.yml 文件中 Manticore Search 的推荐最小配置：
+
+```yaml
+version: '2.2'
+
+services:
+  manticore:
+    container_name: manticore
+    image: manticoresearch/manticore
+    restart: always
+    ports:
+      - 127.0.0.1:9306:9306
+      - 127.0.0.1:9308:9308
+    ulimits:
+      nproc: 65535
+      nofile:
+         soft: 65535
+         hard: 65535
+      memlock:
+        soft: -1
+        hard: -1
+    volumes:
+      - ./data:/var/lib/manticore
+#      - ./manticore.conf:/etc/manticoresearch/manticore.conf # 如果您使用自定义配置，请取消注释
+```
+
+除了使用暴露的端口 9306 和 9308，您还可以通过运行 `docker-compose exec manticore mysql` 登录到实例中。
+
+#### HTTP 协议
+
+HTTP 协议通过端口 9308 暴露。您可以本地映射该端口并使用 curl 连接：
+
+```bash
+docker run --name manticore -p 9308:9308 -d manticoresearch/manticore
+```
+
+<!-- example create -->
+创建一个表：
+
+<!-- request JSON -->
+```json
+POST /cli -d 'CREATE TABLE testrt ( title text, content text, gid integer)'
+```
+<!-- end -->
+<!-- example insert -->
+插入一个文档：
+
+<!-- request JSON -->
+```json
+POST /insert
+-d'{"table":"testrt","id":1,"doc":{"title":"Hello","content":"world","gid":1}}'
+```
+<!-- end -->
+<!-- example search -->
+执行简单搜索：
+
+<!-- request JSON -->
+```json
+POST /search -d '{"table":"testrt","query":{"match":{"*":"hello world"}}}'
+```
+<!-- end -->
+
+### 日志记录
+
+默认情况下，服务器的日志记录设置为发送到 `/dev/stdout`，可以从主机查看：
+
+
+```bash
+docker logs manticore
+```
+
+查询日志可以通过传递变量 `QUERY_LOG_TO_STDOUT=true` 转发到 Docker 日志。
+
+
+#### 带有复制的多节点集群
+
+下面是定义两个节点集群的简单 `docker-compose.yml`：
+
+```yaml
+version: '2.2'
+
+services:
+
+  manticore-1:
+    image: manticoresearch/manticore
+    restart: always
+    ulimits:
+      nproc: 65535
+      nofile:
+         soft: 65535
+         hard: 65535
+      memlock:
+        soft: -1
+        hard: -1
+    networks:
+      - manticore
+  manticore-2:
+    image: manticoresearch/manticore
+    restart: always
+    ulimits:
+      nproc: 65535
+      nofile:
+        soft: 65535
+        hard: 65535
+      memlock:
+        soft: -1
+        hard: -1
+    networks:
+      - manticore
+networks:
+  manticore:
+    driver: bridge
+```
+* 启动它: `docker-compose up`
+* 创建一个集群：
+  ```sql
+  $ docker-compose exec manticore-1 mysql
+
+  mysql> CREATE TABLE testrt ( title text, content text, gid integer);
+
+  mysql> CREATE CLUSTER posts;
+  Query OK, 0 rows affected (0.24 sec)
+
+  mysql> ALTER CLUSTER posts ADD testrt;
+  Query OK, 0 rows affected (0.07 sec)
+
+  MySQL [(none)]> exit
+  Bye
+  ```
+* 加入到第二个实例的集群
+  ```sql
+  $ docker-compose exec manticore-2 mysql
+
+  mysql> JOIN CLUSTER posts AT 'manticore-1:9312';
+  mysql> INSERT INTO posts:testrt(title,content,gid)  VALUES('hello','world',1);
+  Query OK, 1 row affected (0.00 sec)
+
+  MySQL [(none)]> exit
+  Bye
+  ```
+* 如果你现在回到第一个实例，你会看到新的记录：
+  ```sql
+  $ docker-compose exec manticore-1 mysql
+
+  MySQL [(none)]> select * from testrt;
+  +---------------------+------+-------+---------+
+  | id                  | gid  | title | content |
+  +---------------------+------+-------+---------+
+  | 3891565839006040065 |    1 | hello | world   |
+  +---------------------+------+-------+---------+
+  1 row in set (0.00 sec)
+
+  MySQL [(none)]> exit
+  Bye
+  ```
+
+### 内存锁定和限制
+
+建议重写 Manticore 实例的 Docker 默认 ulimit：
+
+```bash
+ --ulimit nofile=65536:65536
+```
+
+为了获得最佳性能，表组件可以被“mlocked”到内存中。当 Manticore 在 Docker 下运行时，该实例需要额外的权限来允许内存锁定。以下选项必须在运行该实例时添加：
+
+```bash
+  --cap-add=IPC_LOCK --ulimit memlock=-1:-1
+```
+
+### 使用 Docker 配置 Manticore Search
+
+如果你想要使用包含表定义的自定义配置运行 Manticore，你需要将配置挂载到实例上：
+
+```bash
+docker run --name manticore -v $(pwd)/manticore.conf:/etc/manticoresearch/manticore.conf -v $(pwd)/data/:/var/lib/manticore -p 127.0.0.1:9306:9306 -d manticoresearch/manticore
+```
+
+请考虑 Manticore search 在容器内是以用户 `manticore` 运行的。执行与表文件相关的操作（如创建或旋转平面表）也应该在 `manticore` 下进行。否则，文件将以 `root` 权限创建，而搜索守护程序将没有权限打开它们。例如，下面是如何旋转所有表：
+
+```bash
+docker exec -it manticore gosu manticore indexer --all --rotate
+```
+
+你还可以使用 Docker 环境变量设置单个 `searchd` 和 `common` 配置设置。
+
+设置必须以其节名称为前缀，例如，如果是 `mysql_version_string`，变量名称必须为 `searchd_mysql_version_string`：
+
+
+```bash
+docker run --name manticore  -p 127.0.0.1:9306:9306  -e searchd_mysql_version_string='5.5.0' -d manticoresearch/manticore
+```
+
+在 `listen` 指令的情况下，新的监听接口使用 Docker 变量 `searchd_listen`，除了默认接口。可以声明多个接口，用分号（“|”）分隔。要仅在网络地址上监听，可以使用 `$ip`（从 `hostname -i` 内部检索的）作为地址别名。
+
+例如 `-e searchd_listen='9316:http|9307:mysql|$ip:5443:mysql_vip'` 将在端口 9307 上添加额外的 SQL 接口，在端口 5443 上添加仅在实例的 IP 上运行的 SQL VIP 监听器，以及在端口 9316 上的 HTTP 监听器，此外还有默认的 9306 和 9308。
+
+```bash
+$ docker run --rm -p 1188:9307  -e searchd_mysql_version_string='5.5.0' -e searchd_listen='9316:http|9307:mysql|$ip:5443:mysql_vip'  manticore
+[Mon Aug 17 07:31:58.719 2020] [1] using config file '/etc/manticoresearch/manticore.conf' (9130 chars)...
+listening on all interfaces for http, port=9316
+listening on all interfaces for mysql, port=9307
+listening on 172.17.0.17:5443 for VIP mysql
+listening on all interfaces for mysql, port=9306
+listening on UNIX socket /var/run/mysqld/mysqld.sock
+listening on 172.17.0.17:9312 for sphinx
+listening on all interfaces for http, port=9308
+prereading 0 indexes
+prereaded 0 indexes in 0.000 sec
+accepting connections
+```
+
+#### 启动标志
+
+要使用自定义启动标志启动 Manticore，请在使用 docker run 时将其作为参数指定。确保不包括 `searchd` 命令并包括 `--nodetach` 标志。以下是一个例子：
+```bash
+docker run --name manticore --rm manticoresearch/manticore:latest --replay-flags=ignore-trx-errors --nodetach
+```
+
+#### 在非 root 用户下运行
+默认情况下，主要的 Manticore 进程 `searchd` 是以用户 `manticore` 在容器内运行，但启动容器时运行的脚本是在你的默认 Docker 用户下运行的，通常是 `root`。如果这不是你所希望的，你可以使用 `docker ... --user manticore` 或在 Docker Compose yaml 中使用 `user: manticore` 来使一切在 `manticore` 下运行。请阅读下面有关可能的卷权限问题以及如何解决它的信息。
+
+#### 在启动时创建平面表
+要构建在自定义配置文件中指定的平面表，可以使用环境变量 `CREATE_PLAIN_TABLES=1`。这将在 Manticore 启动之前执行 `indexer --all`。如果你不使用卷，并且你的表容易重新创建，这将非常有用。
+```bash
+docker run -e CREATE_PLAIN_TABLES=1 --name manticore -v $(pwd)/manticore.conf:/etc/manticoresearch/manticore.conf -p 9306:9306 -p 9308:9308 -d manticoresearch/manticore
+```
+
+### 故障排除
+
+#### 挂载卷的权限问题
+
+如果你在非 root 用户下运行 Manticore Search Docker（使用 `docker ... --user manticore` 或在 Docker Compose yaml 中使用 `user: manticore`），你可能会遇到权限问题，例如：
+```bash
+FATAL: directory /var/lib/manticore write error: failed to open /var/lib/manticore/tmp: Permission denied
+```
+这可能发生因为用于在容器内运行进程的用户可能没有权限修改您已挂载到容器的目录。要修复此问题，您可以 `chown` 或 `chmod` 挂载目录。如果您在用户 `manticore` 下运行容器，则需要执行：
+```bash
+chown -R 999:999 data
+```
+
+因为用户 `manticore` 在容器内的 ID 是 999。
+
+<!-- proofread -->
+
 # 启动和使用 Manticore 在 Docker 中
 
 该镜像基于 [当前版本的 Manticore 包](https://manticoresearch.com/install/).

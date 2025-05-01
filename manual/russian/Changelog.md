@@ -1,5 +1,38 @@
 # Изменения
 
+## Версия 9.2.39
+Выпущен: ... Апр 2025
+
+* [v9.2.39](https://github.com/manticoresoftware/manticoresearch/releases/tag/9.2.39) [ Issue #3236](https://github.com/manticoresoftware/manticoresearch/issues/3236) Исправление: предотвращение повреждения таблиц путем удаления сложных обновлений чанков. Использование функций ожидания внутри последовательного обработчика нарушало последовательную обработку, что могло повредить таблицы.
+Реализован автофлаш заново. Удалена внешняя очередь опроса для избежания ненужных блокировок таблицы. Добавлено условие "маленькой таблицы": если количество документов ниже 'лимита маленькой таблицы' (8192) и не используется Вторичный Индекс (SI), сброс пропускается.
+
+* [v9.2.38](https://github.com/manticoresoftware/manticoresearch/releases/tag/9.2.38)  Исправление: пропуск создания Вторичного Индекса (SI) для фильтров с использованием `ALL`/`ANY` для строковых списков, не затрагивая JSON атрибуты.
+* [v9.2.37](https://github.com/manticoresoftware/manticoresearch/releases/tag/9.2.37) [ Issue #2898](https://github.com/manticoresoftware/manticoresearch/issues/2898) Добавлена поддержка обратных кавычек для системных таблиц.
+* [v9.2.36](https://github.com/manticoresoftware/manticoresearch/releases/tag/9.2.36)  Исправление: использование заполнителя для кластерных операций в устаревшем коде. В парсере теперь чётко разделяются поля для имен таблиц и кластеров.
+* [v9.2.35](https://github.com/manticoresoftware/manticoresearch/releases/tag/9.2.35)  Исправление: сбой при снятии кавычек с одинарной `'`.
+* [v9.2.34](https://github.com/manticoresoftware/manticoresearch/releases/tag/9.2.34) [ Issue #3090](https://github.com/manticoresoftware/manticoresearch/issues/3090) Исправление: обработка больших ID документов (ранее могли не находиться).
+* [v9.2.33](https://github.com/manticoresoftware/manticoresearch/releases/tag/9.2.33)  Исправление: использование беззнаковых целых чисел для размеров битовых векторов.
+* [v9.2.32](https://github.com/manticoresoftware/manticoresearch/releases/tag/9.2.32)  Исправление: снижение пикового использования памяти во время слияния. Поиск docid-to-rowid теперь использует 12 байт на документ вместо 16 байт. Пример: 24 ГБ ОЗУ для 2 миллиардов документов вместо 36 ГБ.
+* [v9.2.31](https://github.com/manticoresoftware/manticoresearch/releases/tag/9.2.31) [ Issue #3238](https://github.com/manticoresoftware/manticoresearch/issues/3238) Исправление: некорректное значение `COUNT(*)` в больших real-time таблицах.
+* [v9.2.30](https://github.com/manticoresoftware/manticoresearch/releases/tag/9.2.30)  Исправление: неопределенное поведение при обнулении строковых атрибутов.
+* [v9.2.29](https://github.com/manticoresoftware/manticoresearch/releases/tag/9.2.29)  Мелкое исправление: улучшен текст предупреждения.
+* [v9.2.28](https://github.com/manticoresoftware/manticoresearch/releases/tag/9.2.28) [ Issue #3290](https://github.com/manticoresoftware/manticoresearch/issues/3290) Улучшение: усовершенствован `indextool --buildidf`
+* [v9.2.27](https://github.com/manticoresoftware/manticoresearch/releases/tag/9.2.27) [ Issue #3032](https://github.com/manticoresoftware/manticoresearch/issues/3032) С интеграцией Kafka теперь можно создать источник для конкретного раздела Kafka.
+* [v9.2.26](https://github.com/manticoresoftware/manticoresearch/releases/tag/9.2.26) [ Issue #3301](https://github.com/manticoresoftware/manticoresearch/issues/3301) Исправление: `ORDER BY` и `WHERE` по `id` могли вызывать ошибки OOM (нехватка памяти).
+* [v9.2.25](https://github.com/manticoresoftware/manticoresearch/releases/tag/9.2.25) [ Issue #3171](https://github.com/manticoresoftware/manticoresearch/issues/3171) Исправление: сбой из-за ошибки сегментации при использовании группировщика с несколькими JSON атрибутами в RT-таблице с несколькими дисковыми чанками
+* [v9.2.24](https://github.com/manticoresoftware/manticoresearch/releases/tag/9.2.24) [ Issue #3246](https://github.com/manticoresoftware/manticoresearch/issues/3246) Исправление: запросы `WHERE string ANY(...)` не работали после сброса RAM-чанка.
+* [v9.2.23](https://github.com/manticoresoftware/manticoresearch/releases/tag/9.2.23) [ PR #518](https://github.com/manticoresoftware/manticoresearch-buddy/pull/518) Незначительные улучшения синтаксиса авто-шардирования.
+* [v9.2.22](https://github.com/manticoresoftware/manticoresearch/releases/tag/9.2.22) [ Issue #2763](https://github.com/manticoresoftware/manticoresearch/issues/2763) Исправление: глобальный idf файл не загружался при использовании `ALTER TABLE`.
+* [v9.2.21](https://github.com/manticoresoftware/manticoresearch/releases/tag/9.2.21)  Исправление: глобальные idf файлы могут быть большими. Теперь мы освобождаем таблицы раньше, чтобы избежать удержания ненужных ресурсов.
+* [v9.2.20](https://github.com/manticoresoftware/manticoresearch/releases/tag/9.2.20) [ PR #3277](https://github.com/manticoresoftware/manticoresearch/pull/3277) Улучшение: лучшая валидация параметров шардинга.
+
+* [v9.2.19](https://github.com/manticoresoftware/manticoresearch/releases/tag/9.2.19) [ PR #3275](https://github.com/manticoresoftware/manticoresearch/pull/3275) Исправление: совместимость сборки с Boost 1.88.0.
+* [v9.2.18](https://github.com/manticoresoftware/manticoresearch/releases/tag/9.2.18) [ Issue #3228](https://github.com/manticoresoftware/manticoresearch/issues/3228) Исправление: сбой при создании распределенной таблицы (проблема с недействительным указателем).
+
+* [v9.2.17](https://github.com/manticoresoftware/manticoresearch/releases/tag/9.2.17) [ PR #3272](https://github.com/manticoresoftware/manticoresearch/pull/3272) Исправление: проблема многострочного нечеткого `FACET`.
+* [v9.2.16](https://github.com/manticoresoftware/manticoresearch/releases/tag/9.2.16) [ Issue #3063](https://github.com/manticoresoftware/manticoresearch/issues/3063) Исправление: ошибка в расчете расстояния при использовании функции `GEODIST`.
+* [v9.2.15](https://github.com/manticoresoftware/manticoresearch/releases/tag/9.2.15) [ Issue #3027](https://github.com/manticoresoftware/manticoresearch/issues/3027) Небольшое улучшение: поддержка формата фильтра `query_string` от Elastic.
+
 # Версия 9.2.14
 Выпущена: 28 марта 2025 года
 
@@ -677,7 +710,7 @@
 
 ### Новые функции
 * Улучшенная интеграция с Logstash, Beats и т.д., включая:
-  - Поддержка версий Logstash 7.6 - 7.15, версий Filebeat 7.7 - 7.12  
+  - Поддержка версий Logstash 7.6 - 7.15, версий Filebeat 7.7 - 7.12
   - Поддержка автосхемы.
   - Добавлена обработка массовых запросов в формате, похожем на Elasticsearch.
 * [Коммит Buddy ce90](https://github.com/manticoresoftware/manticoresearch-buddy/commit/ce907ea) Лог версии Buddy при запуске Manticore.

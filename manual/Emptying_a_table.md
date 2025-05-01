@@ -8,9 +8,17 @@ Here is the syntax for the SQL statement:
 TRUNCATE TABLE table_name [WITH RECONFIGURE]
 ```
 
+For emptying a distributed table, use syntax without the `with reconfigure` option. Simply execute the standard TRUNCATE statement against your distributed table.
+
+```sql
+TRUNCATE TABLE distributed_table
+```
+
 <!-- example truncate -->
 
-When this statement is executed, it clears the RT table completely. It disposes the in-memory data, unlinks all the table data files, and releases the associated binary logs.
+When this statement is executed, it clears the RT or distributed table completely. It disposes the in-memory data, unlinks all the table data files, and releases the associated binary logs.
+
+For a statement that targets a distributed table, Buddy is essential. It sends the `TRUNCATE TABLE` command to each agent within the defined schema.
 
 A table can also be emptied with `DELETE FROM index WHERE id>0`, but it's not recommended as it's slower than `TRUNCATE`.
 
@@ -59,8 +67,8 @@ $response = $client->indices()->truncate($params);
 ```php
 Array(
     [total] => 0
-    [error] => 
-    [warning] => 
+    [error] =>
+    [warning] =>
 )
 ```
 <!-- intro -->
@@ -202,8 +210,8 @@ $response = $client->indices()->truncate($params);
 ```php
 Array(
     [total] => 0
-    [error] => 
-    [warning] => 
+    [error] =>
+    [warning] =>
 )
 ```
 <!-- intro -->

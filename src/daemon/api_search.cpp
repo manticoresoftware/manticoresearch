@@ -1488,35 +1488,16 @@ void HandleCommandSearch ( ISphOutputBuffer & tOut, WORD uVer, InputBuffer_c & t
 		return;
 	}
 
-	SearchHandler_c tHandler ( iQueries, nullptr, QUERY_API, !bAgentMode );
-	for ( auto &dQuery : tHandler.m_dQueries )
+	assert ( iQueries>0 );
+	CSphFixedVector<CSphQuery> dQueries { iQueries };
+	for ( auto & dQuery: dQueries )
 		if ( !ParseSearchQuery ( tReq, tOut, dQuery, uVer, uMasterVer ) )
 			return;
 
-	if ( !tHandler.m_dQueries.IsEmpty() )
-	{
-		QueryType_e eQueryType = tHandler.m_dQueries[0].m_eQueryType;
-
-#ifndef NDEBUG
-		// we assume that all incoming queries have the same type
-		for ( const auto & i: tHandler.m_dQueries )
-			assert ( i.m_eQueryType==eQueryType );
-#endif
-
-		std::unique_ptr<QueryParser_i> pParser;
-		if ( eQueryType==QUERY_JSON )
-			pParser = sphCreateJsonQueryParser();
-		else
-			pParser = sphCreatePlainQueryParser();
-
-		assert ( pParser );
-		tHandler.SetQueryParser ( std::move ( pParser ), eQueryType );
-
-		const CSphQuery & q = tHandler.m_dQueries[0];
-		myinfo::SetTaskInfo ( R"(api-search query="%s" comment="%s" table="%s")", q.m_sQuery.scstr (), q.m_sComment.scstr (), q.m_sIndexes.scstr () );
-	}
-
 	// run queries, send response
+	SearchHandler_c tHandler { std::move (dQueries), !bAgentMode };
+	const CSphQuery & q = tHandler.m_dQueries.First();
+	myinfo::SetTaskInfo ( R"(api-search query="%s" comment="%s" table="%s")", q.m_sQuery.scstr (), q.m_sComment.scstr (), q.m_sIndexes.scstr () );
 	tHandler.RunQueries();
 
 	auto tReply = APIAnswer ( tOut, VER_COMMAND_SEARCH );

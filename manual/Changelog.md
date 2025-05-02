@@ -5,6 +5,8 @@ Released: May 2nd 2025
 
 This release includes multiple bug fixes and stability improvements, better table usage tracking, and enhancements to memory and resource management.
 
+❤️ Special thanks to [@cho-m](https://github.com/cho-m) for fixing build compatibility with Boost 1.88.0 and [@benwills](https://github.com/benwills) for improving documentation around `stored_only_fields`.
+
 * 🪲 [v9.3.2](https://github.com/manticoresoftware/manticoresearch/releases/tag/9.3.2)  Fixed an issue where the "Show Threads" column showed CPU activity as a float instead of a string; also fixed a PyMySQL result set parsing error caused by a wrong data type.
 * 🪲 [v9.3.1](https://github.com/manticoresoftware/manticoresearch/releases/tag/9.3.1) [ Issue #3343](https://github.com/manticoresoftware/manticoresearch/issues/3343) Fixed leftover `tmp.spidx` files when the optimize process was interrupted.
 * 🆕 [v9.3.0](https://github.com/manticoresoftware/manticoresearch/releases/tag/9.3.0) [ PR #3337](https://github.com/manticoresoftware/manticoresearch/pull/3337) Added a per-table command counter and detailed table usage statistics.
@@ -353,7 +355,7 @@ Released: May 23rd 2024
 * [Issue #1424](https://github.com/manticoresoftware/manticoresearch/issues/1424) Added support for the default values (`agent_connect_timeout` and `agent_query_timeout`) for `create distributed table` statement.
 * [Issue #1442](https://github.com/manticoresoftware/manticoresearch/issues/1442) Added [expansion_limit](Searching/Options.md#expansion_limit) search query option that overrides `searchd.expansion_limit`.
 * [Issue #1448](https://github.com/manticoresoftware/manticoresearch/issues/1448) Implemented [ALTER TABLE](Updating_table_schema_and_settings.md#Updating-table-schema-in-RT-mode) for int->bigint conversion.
-* [Issue #146](https://github.com/manticoresoftware/manticoresearch/issues/1456) Meta information in MySQL response.
+* [Issue #1456](https://github.com/manticoresoftware/manticoresearch/issues/1456) Meta information in MySQL response.
 * [Issue #1494](https://github.com/manticoresoftware/manticoresearch/issues/1494) [SHOW VERSION](Node_info_and_management/SHOW_VERSION.md#SHOW-VERSION).
 * [Issue #1582](https://github.com/manticoresoftware/manticoresearch/issues/1582) Support of [deleting documents by id array](Data_creation_and_modification/Deleting_documents.md?client=JSON#Deleting-documents) via JSON.
 * [Issue #1589](https://github.com/manticoresoftware/manticoresearch/issues/1589) Improve error "unsupported value type".

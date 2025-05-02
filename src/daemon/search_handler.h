@@ -75,8 +75,10 @@ class GlobalSorters_c;
 class SearchHandler_c final
 {
 public:
-									SearchHandler_c(SearchHandler_c&&) = default;
-									SearchHandler_c ( int iQueries, std::unique_ptr<QueryParser_i> pParser, QueryType_e eQueryType, bool bMaster );
+									SearchHandler_c (SearchHandler_c&&) = default;
+									SearchHandler_c ( int iQueries, std::unique_ptr<QueryParser_i> pParser, QueryType_e eQueryType, bool bMaster=true ) noexcept;
+									SearchHandler_c ( CSphFixedVector<CSphQuery>, bool bMaster=true ) noexcept;
+
 									~SearchHandler_c();
 
 	void							RunQueries ();					///< run all queries, get all results
@@ -88,17 +90,18 @@ public:
 	void							SetFederatedUser () { m_bFederatedUser = true; }
 
 public:
-	CSphVector<CSphQuery>			m_dQueries;						///< queries which i need to search
-	CSphVector<CSphQuery>			m_dJoinQueryOptions;			///< join query options
-	CSphVector<AggrResult_t>		m_dAggrResults;					///< results which i obtained
-	CSphVector<StatsPerQuery_t>		m_dQueryIndexStats;				///< statistics for current query
-	CSphVector<SearchFailuresLog_c>	m_dFailuresSet;					///< failure logs for each query
-	CSphVector<CSphVector<int64_t>>	m_dAgentTimes;					///< per-agent time stats
+	CSphFixedVector<CSphQuery>				m_dQueries;						///< queries which i need to search
+	CSphFixedVector<CSphQuery>				m_dJoinQueryOptions;			///< join query options
+	CSphFixedVector<AggrResult_t>			m_dAggrResults;					///< results which i obtained
+
+	CSphFixedVector<SearchFailuresLog_c>	m_dFailuresSet;					///< failure logs for each query
+	CSphFixedVector<CSphVector<int64_t>>	m_dAgentTimes;					///< per-agent time stats
 	KeepCollection_c				m_dAcquired;					/// locked indexes
 	CSphFixedVector<std::unique_ptr<ISphTableFunc>>	m_dTables;
 	SqlStmt_t *						m_pStmt = nullptr;				///< original (one) statement to take extra options
 
 private:
+									explicit SearchHandler_c ( int iQueries ) noexcept;
 	void							RunSubset ( int iStart, int iEnd );	///< run queries against index(es) from first query in the subset
 	void							RunLocalSearches();
 	bool							AllowsMulti() const;
@@ -107,6 +110,7 @@ private:
 	bool							m_bMultiQueue = false;	///< whether current subset is subject to multi-queue optimization
 	bool							m_bFacetQueue = false;	///< whether current subset is subject to facet-queue optimization
 	CSphVector<LocalIndex_t>		m_dLocal;				///< local indexes for the current subset
+	CSphVector<StatsPerQuery_t>		m_dQueryIndexStats;		///< statistics for current query
 	StrVec_t 						m_dExtraSchema;		 	///< the extra attrs for agents. One vec per index*threads
 	CSphVector<BYTE> *				m_pCollectedDocs = nullptr;	///< this query is for deleting
 
@@ -123,12 +127,12 @@ private:
 	int64_t							m_iTotalDocs = 0;
 	bool							m_bGotLocalDF = false;
 	bool							m_bMaster;
-	bool							m_bFederatedUser;
+	bool							m_bFederatedUser = false;
 	bool							m_bQueryLog = true;
 
 	void							OnRunFinished ();
 
-	CSphVector<CSphQueryResult>			m_dResults;
+	CSphFixedVector<CSphQueryResult>	m_dResults;
 	VecTraits_T<CSphQuery>				m_dNQueries;		///< working subset of queries
 	VecTraits_T<CSphQuery>				m_dNJoinQueryOptions;///< working subset of join query options
 	VecTraits_T<AggrResult_t>			m_dNAggrResults;	///< working subset of results

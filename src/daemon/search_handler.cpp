@@ -31,7 +31,6 @@ static bool LOG_LEVEL_LOCAL_SEARCH = val_from_env ( "MANTICORE_LOG_LOCAL_SEARCH"
 #define LOG_COMPONENT_LOCSEARCHINFO __LINE__ << " "
 #define LOCSEARCHINFO LOGINFO ( LOCAL_SEARCH, LOCSEARCHINFO )
 
-
 extern int g_iQueryLogMinMs; // log 'slow' threshold for query, defined in searchd.cpp
 
 using namespace Threads;
@@ -1173,30 +1172,58 @@ static bool MinimizeAggrResult ( AggrResult_t & tRes, const CSphQuery & tQuery, 
 }
 
 /////////////////////////////////////////////////////////////////////////////
-
-SearchHandler_c::SearchHandler_c ( int iQueries, std::unique_ptr<QueryParser_i> pQueryParser, QueryType_e eQueryType, bool bMaster )
-	: m_dTables ( iQueries )
-	, m_bMaster ( bMaster )
-	, m_bFederatedUser ( false )
+SearchHandler_c::SearchHandler_c ( int iQueries ) noexcept
+	: m_dQueries { 0 }
+	, m_dJoinQueryOptions { iQueries }
+	, m_dAggrResults { iQueries }
+	, m_dFailuresSet { iQueries }
+	, m_dAgentTimes { iQueries }
+	, m_dTables { iQueries }
+	, m_dResults { iQueries }
 {
-	m_dQueries.Resize ( iQueries );
-	m_dJoinQueryOptions.Resize ( iQueries );
-	m_dAggrResults.Resize ( iQueries );
-	m_dFailuresSet.Resize ( iQueries );
-	m_dAgentTimes.Resize ( iQueries );
-
-	SetQueryParser ( std::move ( pQueryParser ), eQueryType );
-	m_dResults.Resize ( iQueries );
 	for ( int i=0; i<iQueries; ++i )
 		m_dResults[i].m_pMeta = &m_dAggrResults[i];
 
 	// initial slices (when nothing explicitly asked)
-	m_dNQueries = m_dQueries;
 	m_dNJoinQueryOptions = m_dJoinQueryOptions;
 	m_dNAggrResults = m_dAggrResults;
 	m_dNResults = m_dResults;
 	m_dNFailuresSet = m_dFailuresSet;
 }
+
+
+SearchHandler_c::SearchHandler_c ( int iQueries, std::unique_ptr<QueryParser_i> pQueryParser, QueryType_e eQueryType, bool bMaster ) noexcept
+	: SearchHandler_c { iQueries }
+{
+	m_bMaster = bMaster;
+	m_eQueryType = eQueryType;
+	m_pQueryParser = std::move ( pQueryParser );
+	m_dQueries.Reset ( iQueries );
+	m_dNQueries = m_dQueries;
+
+	for ( auto & dQuery: m_dQueries )
+	{
+		dQuery.m_eQueryType = eQueryType;
+		dQuery.m_pQueryParser = m_pQueryParser.get();
+	}
+}
+
+SearchHandler_c::SearchHandler_c ( CSphFixedVector<CSphQuery> dQueries, bool bMaster ) noexcept
+	: SearchHandler_c { dQueries.GetLength() }
+{
+	m_bMaster = bMaster;
+	m_eQueryType = dQueries.First().m_eQueryType;
+	m_pQueryParser = (m_eQueryType == QUERY_JSON) ? sphCreateJsonQueryParser() : sphCreatePlainQueryParser();
+
+	for ( auto & dQuery: dQueries )
+	{
+		assert ( dQuery.m_eQueryType==m_eQueryType ); // we assume that all incoming queries have the same type
+		dQuery.m_pQueryParser = m_pQueryParser.get();
+	}
+	m_dQueries = std::move ( dQueries );
+	m_dNQueries = m_dQueries;
+}
+
 
 //////////////////
 /* Smart gc retire of vec of queries.
@@ -1208,7 +1235,7 @@ SearchHandler_c::SearchHandler_c ( int iQueries, std::unique_ptr<QueryParser_i> 
 */
 class RetireQueriesVec_c
 {
-	CSphVector<CSphQuery>	m_dQueries;	// given queries I'll finally remove
+	CSphFixedVector<CSphQuery> m_dQueries {0}; // given queries I'll finally remove
 	std::atomic<int>		m_iInUse;	// how many of them still reffered
 
 	void OneQueryDeleted()
@@ -1232,7 +1259,7 @@ class RetireQueriesVec_c
 	}
 
 public:
-	void EngageRetiring ( CSphVector<CSphQuery> dQueries, CSphVector<int> dRetired )
+	void EngageRetiring ( CSphFixedVector<CSphQuery> dQueries, CSphVector<int> dRetired )
 	{
 		assert ( !dRetired.IsEmpty () );
 		m_iInUse.store ( dRetired.GetLength (), std::memory_order_release );
@@ -3056,7 +3083,7 @@ DEFINE_RENDER ( QueryInfo_t )
 		dDst.m_pQuery = std::make_unique<CSphQuery> ( *pQuery );
 }
 
-static void FillupFacetError ( int iQueries, const CSphVector<CSphQuery> & dQueries, VecTraits_T<AggrResult_t> & dAggrResults )
+static void FillupFacetError ( int iQueries, const VecTraits_T<CSphQuery> & dQueries, VecTraits_T<AggrResult_t> & dAggrResults )
 {
 	if ( iQueries>1 && !dAggrResults.Begin()->m_iSuccesses && dAggrResults.Begin()->m_sError.IsEmpty() && dQueries.Begin()->m_bFacetHead )
 	{

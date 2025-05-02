@@ -1,7 +1,14 @@
 # Creating a Sharded Table
 
-Manticore allows for the creation of **sharded tables**, which act like a special distributed table containing multiple tables that represent shards. This feature can be useful if you need to scale data. You can create a local sharded table and a replicated sharded table when multiple clusters are required.
+> NOTE: Auto-sharding requires [Manticore Buddy](../../replace Installation/Manticore_Buddy.md). If it doesn't work, make sure Buddy is installed.
 
+Manticore allows for the creation of **sharded tables**, which act like a special distributed table containing multiple tables that represent shards. This feature proves invaluable when scaling your data. You can create both local sharded tables and replicated sharded tables when using multiple nodes to configure optimal data distribution.
+
+Sharded tables offer several key benefits for high-performance applications:
+
+They deliver superior write performance by writing data to multiple tables simultaneously, utilizing system resources more efficiently. This parallel writing capability enables higher indexing throughput compared to a single large table.
+
+Sharded tables support replication out of the box, enhancing high availability. You needn't handle replication manually – simply set the replication factor when creating the sharded table, and the system manages everything. This built-in replication ensures continuous data accessibility even if some nodes fail.
 #### Create a Local Sharded Table
 
 To create a local sharded table, you can create a table as normal but also add two parameters: `shards='x'` and `rf='1'`. `shards` represents the number of local tables that will be created and represent shards. `rf` is the replication factor, and for a single server environment, you need to use 1 here.
@@ -16,7 +23,7 @@ After this query, you will get multiple tables that represent shards and a final
 
 #### Create a Replicated Sharded Table
 
-In case you require to ensure that your data is safe and bypass server outages, you probably already have multiple nodes. You need to set up a replication cluster with the name `c`, add all the nodes you want to be in it by following the original manual instructions, and after that, you can create the table with the given replication factor.
+In case you need to ensure data safety and protection against server outages, you likely already have multiple nodes. Set up a replication cluster with any name you prefer – for simplicity, throughout this documentation we'll assume the cluster you created is named `c`. Add all desired nodes by following the original manual instructions, and then create your table with the specified replication factor.
 
 Let's assume you have created a replication cluster with 3 nodes and want to create a table that will be sharded into 10 and have at least one copy on each node. You should create it by following the next query:
 

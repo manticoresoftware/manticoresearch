@@ -1488,7 +1488,7 @@ void HandleCommandSearch ( ISphOutputBuffer & tOut, WORD uVer, InputBuffer_c & t
 		return;
 	}
 
-	SearchHandler_c tHandler ( iQueries, nullptr, QUERY_API, ( iMasterVer==0 ) );
+	SearchHandler_c tHandler ( iQueries, nullptr, QUERY_API, !bAgentMode );
 	for ( auto &dQuery : tHandler.m_dQueries )
 		if ( !ParseSearchQuery ( tReq, tOut, dQuery, uVer, uMasterVer ) )
 			return;

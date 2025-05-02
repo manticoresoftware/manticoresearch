@@ -129,8 +129,6 @@ static auto &	g_iDistThreads		= getDistThreads();
 
 const int DAEMON_DEFAULT_CONNECT_TIMEOUT	= 1000;
 const int DAEMON_DEFAULT_QUERY_TIMEOUT		= 3000;
-const int DAEMON_MAX_RETRY_COUNT			= 8;
-const int DAEMON_MAX_RETRY_DELAY			= 1000;
 
 int g_iAgentConnectTimeoutMs		= DAEMON_DEFAULT_CONNECT_TIMEOUT;
 int g_iAgentQueryTimeoutMs			= DAEMON_DEFAULT_QUERY_TIMEOUT;	// global (default). May be override by index-scope values, if one specified

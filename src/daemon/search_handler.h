@@ -18,7 +18,6 @@
 #include "searchdaemon.h"
 #include "searchdha.h"
 
-void CheckQuery ( const CSphQuery & tQuery, CSphString & sError, bool bCanLimitless = false );
 
 struct QueryStat_t
 {
@@ -45,7 +44,7 @@ struct DistrServedByAgent_t : StatsPerQuery_t
 /// Get(name) - returns an index from collection.
 /// AddUniqIndex(name) - add local idx to collection, addref is implied by design
 /// AddIndex(name,pidx) - add custom idx, to make it available with Get()
-class KeepCollection_c : public ISphNoncopyable
+class KeepCollection_c
 {
 	SmallStringHash_T<cServedIndexRefPtr_c> m_hIndexes;
 
@@ -73,19 +72,19 @@ struct LocalSearchRef_t;
 class GlobalSorters_c;
 
 
-class SearchHandler_c
+class SearchHandler_c final
 {
 public:
+									SearchHandler_c(SearchHandler_c&&) = default;
 									SearchHandler_c ( int iQueries, std::unique_ptr<QueryParser_i> pParser, QueryType_e eQueryType, bool bMaster );
 									~SearchHandler_c();
 
 	void							RunQueries ();					///< run all queries, get all results
 	void							RunCollect ( const CSphQuery & tQuery, const CSphString & sIndex, CSphString * pErrors, CSphVector<BYTE> * pCollectedDocs );
 	void							SetQuery ( int iQuery, const CSphQuery & tQuery, std::unique_ptr<ISphTableFunc> pTableFunc );
-	void							SetJoinQueryOptions ( int iQuery, const CSphQuery & tJoinQueryOptions ) { m_dJoinQueryOptions[iQuery] = tJoinQueryOptions; }
+	void							SetJoinQueryOptions ( int iQuery, const CSphQuery & tJoinQueryOptions ) const { m_dJoinQueryOptions[iQuery] = tJoinQueryOptions; }
 	void							SetQueryParser ( std::unique_ptr<QueryParser_i> pParser, QueryType_e eQueryType );
 	void							SetProfile ( QueryProfile_c * pProfile );
-	AggrResult_t *					GetResult ( int iResult ) { return m_dAggrResults.Begin() + iResult; }
 	void							SetFederatedUser () { m_bFederatedUser = true; }
 
 public:
@@ -99,7 +98,7 @@ public:
 	CSphFixedVector<std::unique_ptr<ISphTableFunc>>	m_dTables;
 	SqlStmt_t *						m_pStmt = nullptr;				///< original (one) statement to take extra options
 
-protected:
+private:
 	void							RunSubset ( int iStart, int iEnd );	///< run queries against index(es) from first query in the subset
 	void							RunLocalSearches();
 	bool							AllowsMulti() const;
@@ -129,7 +128,6 @@ protected:
 
 	void							OnRunFinished ();
 
-private:
 	CSphVector<CSphQueryResult>			m_dResults;
 	VecTraits_T<CSphQuery>				m_dNQueries;		///< working subset of queries
 	VecTraits_T<CSphQuery>				m_dNJoinQueryOptions;///< working subset of join query options
@@ -148,7 +146,6 @@ private:
 
 	StringBuilder_c						m_sError;
 
-private:
 	struct JoinedServedIndex_t
 	{
 		cServedIndexRefPtr_c	m_pServed;
@@ -181,3 +178,5 @@ private:
 
 	bool							SubmitSuccess ( CSphVector<ISphMatchSorter *> & dSorters, GlobalSorters_c & tGlobalSorters, LocalSearchRef_t & tCtx, int64_t & iCpuTime, int iQuery, int iLocal, const CSphQueryResultMeta & tMqMeta, const CSphQueryResult & tMqRes );
 };
+
+ SearchHandler_c CreateMsearchHandler ( std::unique_ptr<QueryParser_i> pQueryParser, QueryType_e eQueryType, ParsedJsonQuery_t & tParsed );

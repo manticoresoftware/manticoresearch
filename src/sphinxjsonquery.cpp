@@ -2628,11 +2628,10 @@ static void AddJoinedWeight ( JsonEscapedBuilder & tOut, const CSphQuery & tQuer
 }
 
 
-CSphString sphEncodeResultJson ( const VecTraits_T<const AggrResult_t *> & dRes, const JsonQuery_c & tQuery, QueryProfile_c * pProfile, ResultSetFormat_e eFormat )
+CSphString sphEncodeResultJson ( const VecTraits_T<AggrResult_t>& dRes, const JsonQuery_c & tQuery, QueryProfile_c * pProfile, ResultSetFormat_e eFormat )
 {
 	assert ( dRes.GetLength()>=1 );
-	assert ( dRes[0]!=nullptr );
-	const AggrResult_t & tRes = *dRes[0];
+	const AggrResult_t & tRes = dRes[0];
 
 	if ( !tRes.m_iSuccesses )
 		return JsonEncodeResultError ( tRes.m_sError );
@@ -2801,14 +2800,14 @@ CSphString sphEncodeResultJson ( const VecTraits_T<const AggrResult_t *> & dRes,
 			{
 				sDistinctName = tItem.m_sAlias;
 				return true;
-			} else
-				return false;
+			}
+			return false;
 		});
 
 		if ( tQuery.m_bGroupEmulation )
 		{
 			tOut.StartBlock ( ",", R"("aggregations":{)", "}");
-			EncodeAggr ( tQuery.m_dAggs[0], 1, *dRes[0], eFormat, hDatetime, tQuery.m_iNow, sDistinctName, tOut );
+			EncodeAggr ( tQuery.m_dAggs[0], 1, dRes[0], eFormat, hDatetime, tQuery.m_iNow, sDistinctName, tOut );
 			tOut.FinishBlock ( false ); // aggregations obj
 
 		} else
@@ -2817,13 +2816,13 @@ CSphString sphEncodeResultJson ( const VecTraits_T<const AggrResult_t *> & dRes,
 			assert ( dRes.GetLength()==tQuery.m_dAggs.GetLength()+1 );
 			tOut.StartBlock ( ",", R"("aggregations":{)", "}");
 			ARRAY_FOREACH ( i, tQuery.m_dAggs )
-				EncodeAggr ( tQuery.m_dAggs[i], i, *dRes[i+1], eFormat, hDatetime, tQuery.m_iNow, sDistinctName, tOut );
+				EncodeAggr ( tQuery.m_dAggs[i], i, dRes[i+1], eFormat, hDatetime, tQuery.m_iNow, sDistinctName, tOut );
 			tOut.FinishBlock ( false ); // aggregations obj
 		}
 	}
 
 	CSphString sScroll;
-	if ( dRes.GetLength() && FormatScrollSettings ( *dRes.Last(), tQuery, sScroll ) )
+	if ( dRes.GetLength() && FormatScrollSettings ( dRes.Last(), tQuery, sScroll ) )
 		tOut.Sprintf ( R"("scroll":"%s")", sScroll.cstr() );
 
 	if ( eFormat==ResultSetFormat_e::ES )

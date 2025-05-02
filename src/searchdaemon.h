@@ -1207,28 +1207,6 @@ struct AggrResult_t final: CSphQueryResultMeta
 	void			ClampAllMatches();
 };
 
-class SearchHandler_c;
-class PubSearchHandler_c
-{
-public:
-						PubSearchHandler_c ( int iQueries, std::unique_ptr<QueryParser_i> pQueryParser, QueryType_e eQueryType, bool bMaster );
-						~PubSearchHandler_c();
-
-	void				RunQueries ();					///< run all queries, get all results
-	void				SetQuery ( int iQuery, const CSphQuery & tQuery, std::unique_ptr<ISphTableFunc> pTableFunc );
-	void				SetJoinQueryOptions ( int iQuery, const CSphQuery & tJoinQueryOptions );
-	void				SetProfile ( QueryProfile_c * pProfile );
-	void				SetStmt ( SqlStmt_t & tStmt );
-	AggrResult_t *		GetResult ( int iResult );
-
-	void				PushIndex ( const CSphString& sIndex, const cServedIndexRefPtr_c& pDesc );
-	void				RunCollect( const CSphQuery& tQuery, const CSphString& sIndex, CSphString* pErrors, CSphVector<BYTE>* pCollectedDocs );
-
-private:
-	std::unique_ptr<SearchHandler_c>	m_pImpl;
-};
-
-
 class CSphSessionAccum
 {
 	std::optional<RtAccum_t> m_tAcc;
@@ -1341,7 +1319,6 @@ void				SaveCompatHttp ( JsonEscapedBuilder & tOut );
 void				SetupCompatHttp();
 bool				SetLogManagement ( const CSphString & sVal, CSphString & sError );
 bool				IsLogManagementEnabled ();
-std::unique_ptr<PubSearchHandler_c> CreateMsearchHandler ( std::unique_ptr<QueryParser_i> pQueryParser, QueryType_e eQueryType, ParsedJsonQuery_t & tParsed );
 int64_t				GetDocID ( const char * szID );
 
 void ExecuteApiCommand ( SearchdCommand_e eCommand, WORD uCommandVer, int iLength, InputBuffer_c & tBuf, GenericOutputBuffer_c & tOut );

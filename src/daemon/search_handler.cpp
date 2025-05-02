@@ -31,48 +31,10 @@ static bool LOG_LEVEL_LOCAL_SEARCH = val_from_env ( "MANTICORE_LOG_LOCAL_SEARCH"
 #define LOG_COMPONENT_LOCSEARCHINFO __LINE__ << " "
 #define LOCSEARCHINFO LOGINFO ( LOCAL_SEARCH, LOCSEARCHINFO )
 
-constexpr int DAEMON_MAX_RETRY_COUNT = 8;
-constexpr int DAEMON_MAX_RETRY_DELAY = 1000;
 
 extern int g_iQueryLogMinMs; // log 'slow' threshold for query, defined in searchd.cpp
 
 using namespace Threads;
-
-void CheckQuery ( const CSphQuery & tQuery, CSphString & sError, bool bCanLimitless )
-{
-	#define LOC_ERROR( ... ) do { sError.SetSprintf (__VA_ARGS__); return; } while(0)
-
-	sError = nullptr;
-
-	if ( (int)tQuery.m_eMode<0 || tQuery.m_eMode>SPH_MATCH_TOTAL )
-		LOC_ERROR ( "invalid match mode %d", tQuery.m_eMode );
-
-	if ( (int)tQuery.m_eRanker<0 || tQuery.m_eRanker>SPH_RANK_TOTAL )
-		LOC_ERROR ( "invalid ranking mode %d", tQuery.m_eRanker );
-
-	if ( tQuery.m_iMaxMatches<1 )
-		LOC_ERROR ( "max_matches can not be less than one" );
-
-	if ( tQuery.m_iOffset<0 || tQuery.m_iOffset>=tQuery.m_iMaxMatches )
-		LOC_ERROR ( "offset out of bounds (offset=%d, max_matches=%d)", tQuery.m_iOffset, tQuery.m_iMaxMatches );
-
-	if ( tQuery.m_iLimit < ( bCanLimitless ? -1 : 0 ) ) // -1 is magic for 'limitless select'
-		LOC_ERROR ( "limit out of bounds (limit=%d)", tQuery.m_iLimit );
-
-	if ( tQuery.m_iCutoff<-1 )
-		LOC_ERROR ( "cutoff out of bounds (cutoff=%d)", tQuery.m_iCutoff );
-
-	if ( ( tQuery.m_iRetryCount!=-1 ) && ( tQuery.m_iRetryCount>DAEMON_MAX_RETRY_COUNT ) )
-		LOC_ERROR ( "retry count out of bounds (count=%d)", tQuery.m_iRetryCount );
-
-	if ( ( tQuery.m_iRetryDelay!=-1 ) && ( tQuery.m_iRetryDelay>DAEMON_MAX_RETRY_DELAY ) )
-		LOC_ERROR ( "retry delay out of bounds (delay=%d)", tQuery.m_iRetryDelay );
-
-	if ( tQuery.m_iOffset>0 && tQuery.m_bHasOuter )
-		LOC_ERROR ( "inner offset must be 0 when using outer order by (offset=%d)", tQuery.m_iOffset );
-
-	#undef LOC_ERROR
-}
 
 // returns true if incoming schema (src) is compatible with existing (dst); false otherwise
 static bool MinimizeSchema ( CSphSchema & tDst, const ISphSchema & tSrc )
@@ -1211,54 +1173,6 @@ static bool MinimizeAggrResult ( AggrResult_t & tRes, const CSphQuery & tQuery, 
 }
 
 /////////////////////////////////////////////////////////////////////////////
-
-PubSearchHandler_c::PubSearchHandler_c ( int iQueries, std::unique_ptr<QueryParser_i> pQueryParser, QueryType_e eQueryType, bool bMaster )
-	: m_pImpl { std::make_unique<SearchHandler_c> ( iQueries, std::move ( pQueryParser ), eQueryType, bMaster ) }
-{
-	assert ( m_pImpl );
-}
-
-PubSearchHandler_c::~PubSearchHandler_c () = default;
-
-void PubSearchHandler_c::RunQueries ()
-{
-	m_pImpl->RunQueries();
-}
-
-void PubSearchHandler_c::SetQuery ( int iQuery, const CSphQuery & tQuery, std::unique_ptr<ISphTableFunc> pTableFunc )
-{
-	m_pImpl->SetQuery ( iQuery, tQuery, std::move(pTableFunc) );
-}
-
-void PubSearchHandler_c::SetJoinQueryOptions ( int iQuery, const CSphQuery & tJoinQueryOptions )
-{
-	m_pImpl->SetJoinQueryOptions ( iQuery, tJoinQueryOptions );
-}
-
-void PubSearchHandler_c::SetProfile ( QueryProfile_c * pProfile )
-{
-	m_pImpl->SetProfile ( pProfile );
-}
-
-void PubSearchHandler_c::SetStmt ( SqlStmt_t & tStmt )
-{
-	m_pImpl->m_pStmt = &tStmt;
-}
-
-AggrResult_t * PubSearchHandler_c::GetResult ( int iResult )
-{
-	return m_pImpl->GetResult (iResult);
-}
-
-void PubSearchHandler_c::PushIndex ( const CSphString& sIndex, const cServedIndexRefPtr_c& pDesc )
-{
-	m_pImpl->m_dAcquired.AddIndex ( sIndex, pDesc );
-}
-
-void PubSearchHandler_c::RunCollect ( const CSphQuery& tQuery, const CSphString& sIndex, CSphString* pErrors, CSphVector<BYTE>* pCollectedDocs )
-{
-	m_pImpl->RunCollect ( tQuery, sIndex, pErrors, pCollectedDocs );
-}
 
 SearchHandler_c::SearchHandler_c ( int iQueries, std::unique_ptr<QueryParser_i> pQueryParser, QueryType_e eQueryType, bool bMaster )
 	: m_dTables ( iQueries )
@@ -3541,4 +3455,251 @@ void SearchHandler_c::RunSubset ( int iStart, int iEnd )
 	CalcTimeStats ( tmCpu, tmSubset, dDistrServedByAgent );
 	CalcPerIndexStats ( dDistrServedByAgent );
 	CalcGlobalStats ( tmCpu, tmSubset, tmLocal, tIO, dRemotes );
+}
+
+static ESphAggrFunc GetAggr ( Aggr_e eAggrFunc )
+{
+	switch ( eAggrFunc )
+	{
+	case Aggr_e::MIN: return SPH_AGGR_MIN;
+	case Aggr_e::MAX: return SPH_AGGR_MAX;
+	case Aggr_e::SUM: return SPH_AGGR_SUM;
+	case Aggr_e::AVG: return SPH_AGGR_AVG;
+	default: return SPH_AGGR_NONE;
+	}
+}
+
+template<bool HAS_ATTRS>
+void AddCompositeItems ( const CSphString & sCol, CSphVector<CSphQueryItem> & dItems, sph::StringSet * pAttrs )
+{
+	if_const ( HAS_ATTRS )
+	{
+		assert ( pAttrs );
+	}
+
+	StrVec_t dAttrs;
+	sphSplit ( dAttrs, sCol.cstr(), "," );
+	for ( const CSphString & sCol : dAttrs )
+	{
+		if_const ( HAS_ATTRS )
+			if ( (*pAttrs)[sCol] )
+				continue;
+
+		CSphQueryItem & tItem = dItems.Add();
+		tItem.m_sExpr = sCol;
+		tItem.m_sAlias = sCol;
+		if_const ( HAS_ATTRS )
+			(*pAttrs).Add ( sCol );
+	}
+}
+
+SearchHandler_c CreateMsearchHandler ( std::unique_ptr<QueryParser_i> pQueryParser, QueryType_e eQueryType, ParsedJsonQuery_t & tParsed )
+{
+	JsonQuery_c & tQuery = tParsed.m_tQuery;
+	tQuery.m_pQueryParser = pQueryParser.get();
+
+	int iQueries = ( 1 + tQuery.m_dAggs.GetLength() );
+
+	// make single grouper / sorter to match plain query with only group by (wo FACET) if single aggs set and main query limit=0
+	if ( eQueryType==QueryType_e::QUERY_JSON && tQuery.m_dAggs.GetLength()==1 && tQuery.m_iLimit==0 && tQuery.m_dAggs[0].m_eAggrFunc==Aggr_e::NONE )
+	{
+		iQueries = 1;
+		tQuery.m_bGroupEmulation = true;
+		const JsonAggr_t & tAggs = tQuery.m_dAggs[0];
+		tQuery.m_iLimit = tAggs.m_iSize;
+		tQuery.m_sGroupBy = tAggs.m_sCol;
+		if ( tAggs.m_sSort.IsEmpty() )
+			tQuery.m_sGroupSortBy = tQuery.m_sOrderBy;
+		else
+			tQuery.m_sGroupSortBy = tAggs.m_sSort;
+
+		tQuery.m_dRefItems = tQuery.m_dItems;
+		CSphQueryItem & tCountItem = tQuery.m_dItems.Add();
+		tCountItem.m_sExpr = "count(*)";
+		tCountItem.m_sAlias = "count(*)";
+	}
+
+	SearchHandler_c tHandler { iQueries, std::move ( pQueryParser ), eQueryType, true };
+
+	if ( !tQuery.m_dAggs.GetLength() || eQueryType==QUERY_SQL || tQuery.m_bGroupEmulation )
+	{
+		tHandler.SetQuery ( 0, tQuery, nullptr );
+		tHandler.SetJoinQueryOptions ( 0, tParsed.m_tJoinQueryOptions );
+		return tHandler;
+	}
+
+	tQuery.m_dRefItems = tQuery.m_dItems;
+	// FIXME!!! no need to add count for AggrFunc aggregates
+	CSphQueryItem & tCountItem = tQuery.m_dItems.Add();
+	tCountItem.m_sExpr = "count(*)";
+	tCountItem.m_sAlias = "count(*)";
+
+	sph::StringSet hAttrs;
+	for ( const auto & tItem : tQuery.m_dItems )
+		hAttrs.Add ( tItem.m_sAlias );
+
+	ARRAY_FOREACH ( i, tQuery.m_dAggs )
+	{
+		const JsonAggr_t & tBucket = tQuery.m_dAggs[i];
+
+		// add only new items
+		if ( hAttrs[tBucket.m_sCol] )
+			continue;
+
+		if ( tBucket.m_eAggrFunc==Aggr_e::COUNT )
+			continue;
+
+		if ( tBucket.m_eAggrFunc==Aggr_e::COMPOSITE )
+		{
+			AddCompositeItems<true> ( tBucket.m_sCol, tQuery.m_dItems, &hAttrs );
+			continue;
+		}
+
+		CSphQueryItem & tItem = tQuery.m_dItems.Add();
+		if ( tBucket.m_eAggrFunc!=Aggr_e::NONE )
+		{
+			tItem.m_sExpr = DumpAggr ( tBucket.m_sCol.cstr(), tBucket );
+			tItem.m_sAlias = GetAggrName ( i, tBucket.m_sCol );
+			tItem.m_eAggrFunc = GetAggr ( tBucket.m_eAggrFunc );
+		} else
+		{
+			tItem.m_sExpr = tBucket.m_sCol;
+			tItem.m_sAlias = tBucket.m_sCol;
+			hAttrs.Add ( tBucket.m_sCol );
+		}
+	}
+
+	tQuery.m_bFacetHead = true;
+	tHandler.SetQuery ( 0, tQuery, nullptr );
+	tHandler.SetJoinQueryOptions ( 0, tParsed.m_tJoinQueryOptions );
+	int iRefLimit = tQuery.m_iLimit;
+	int iRefOffset = tQuery.m_iOffset;
+
+	ARRAY_FOREACH ( i, tQuery.m_dAggs )
+	{
+		const JsonAggr_t & tBucket = tQuery.m_dAggs[i];
+
+		// common to main query but flags, select list and ref items should uniq
+		tQuery.m_eGroupFunc = SPH_GROUPBY_ATTR;
+
+		// facet flags
+		tQuery.m_bFacetHead = false;
+		tQuery.m_bFacet = true;
+
+		// select list to facet query
+		tQuery.m_sSelect.SetSprintf ( "%s", tBucket.m_sCol.cstr() );
+
+		// ref items to facet query
+		tQuery.m_dRefItems.Resize ( 0 );
+		switch ( tBucket.m_eAggrFunc )
+		{
+			case Aggr_e::SIGNIFICANT:
+			case Aggr_e::HISTOGRAM:
+			case Aggr_e::DATE_HISTOGRAM:
+			case Aggr_e::RANGE:
+			case Aggr_e::DATE_RANGE:
+			{
+				CSphQueryItem & tItem = tQuery.m_dRefItems.Add();
+				tItem.m_sExpr = DumpAggr ( tBucket.m_sCol.cstr(), tBucket );
+				tItem.m_sAlias = GetAggrName ( i, tBucket.m_sCol );
+			}
+			break;
+
+			case Aggr_e::COMPOSITE:
+				AddCompositeItems<false> ( tBucket.m_sCol, tQuery.m_dRefItems, nullptr );
+				break;
+
+			case Aggr_e::COUNT:
+			break;
+
+			case Aggr_e::MIN:
+			case Aggr_e::MAX:
+			case Aggr_e::SUM:
+			case Aggr_e::AVG:
+			{
+				CSphQueryItem & tItem = tQuery.m_dRefItems.Add();
+				tItem.m_sExpr = DumpAggr ( tBucket.m_sCol.cstr(), tBucket );
+				tItem.m_sAlias = GetAggrName ( i, tBucket.m_sCol );
+				tItem.m_eAggrFunc = GetAggr ( tBucket.m_eAggrFunc );
+			}
+			break;
+
+			default:
+			{
+				CSphQueryItem & tItem = tQuery.m_dRefItems.Add();
+				tItem.m_sExpr = tBucket.m_sCol;
+				tItem.m_sAlias = tBucket.m_sCol;
+			}
+			break;
+		}
+
+		// FIXME!!! no need to add count for AggrFunc aggregates
+		CSphQueryItem & tAggCountItem = tQuery.m_dRefItems.Add();
+		tAggCountItem.m_sExpr = "count(*)";
+		tAggCountItem.m_sAlias = "count(*)";
+
+		switch ( tBucket.m_eAggrFunc )
+		{
+			case Aggr_e::SIGNIFICANT:
+			case Aggr_e::HISTOGRAM:
+			case Aggr_e::DATE_HISTOGRAM:
+			case Aggr_e::RANGE:
+			case Aggr_e::DATE_RANGE:
+				tQuery.m_sFacetBy = tQuery.m_sGroupBy = GetAggrName ( i, tBucket.m_sCol );
+			break;
+
+			// GroupBy \ FacetBy should be empty for explicit grouper
+			case Aggr_e::COUNT:
+			case Aggr_e::MIN:
+			case Aggr_e::MAX:
+			case Aggr_e::SUM:
+			case Aggr_e::AVG:
+				break;
+
+			case Aggr_e::COMPOSITE:
+			default:
+				tQuery.m_sGroupBy = tBucket.m_sCol;
+				tQuery.m_sFacetBy = tBucket.m_sCol;
+			break;
+		}
+		tQuery.m_sOrderBy = "@weight desc";
+		if ( tBucket.m_eAggrFunc==Aggr_e::COMPOSITE )
+			tQuery.m_eGroupFunc = SPH_GROUPBY_MULTIPLE;
+
+		if ( tBucket.m_sSort.IsEmpty() )
+		{
+			switch ( tBucket.m_eAggrFunc )
+			{
+			case Aggr_e::SIGNIFICANT:
+			case Aggr_e::HISTOGRAM:
+			case Aggr_e::DATE_HISTOGRAM:
+			case Aggr_e::RANGE:
+			case Aggr_e::DATE_RANGE:
+				tQuery.m_sGroupSortBy = "@groupby asc";
+				break;
+			case Aggr_e::COMPOSITE:
+			default:
+				tQuery.m_sGroupSortBy = tQuery.m_sOrderBy;
+				break;
+			}
+		} else
+		{
+			tQuery.m_sGroupSortBy = tBucket.m_sSort;
+		}
+
+		// aggregate and main query could have different sizes
+		if ( tBucket.m_iSize )
+		{
+			tQuery.m_iLimit = tBucket.m_iSize;
+			tQuery.m_iOffset = 0;
+		} else
+		{
+			tQuery.m_iLimit = iRefLimit;
+			tQuery.m_iOffset = iRefOffset;
+		}
+
+		tHandler.SetQuery ( i+1, tQuery, nullptr );
+	}
+
+	return tHandler;
 }

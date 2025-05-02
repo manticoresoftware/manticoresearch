@@ -19,7 +19,7 @@ Here's an example to create a table that will contain 10 shards, and all data sh
 CREATE TABLE local_sharded shards='10' rf='1'
 ```
 
-After this query, you will get multiple tables that represent shards and a final distributed table with the name `local_sharded` that you can use to insert and read data, and the distribution logic will be handled by the Manticore Search daemon.
+After this query, you'll get a single distributed table with all its shards already set up. All the multiple required shards are hidden and stored in the system database. You can interact with the distributed table normally – all operations will be automatically routed to the appropriate shard.
 
 #### Create a Replicated Sharded Table
 

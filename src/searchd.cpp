@@ -6664,7 +6664,7 @@ void HandleMysqlShowThreads ( RowBuffer_i & tOut, const SqlStmt_t * pStmt )
 //	sphLogDebug ( "^^ Show threads. Current info is %p", GetTaskInfo () );
 
 	CSphSwapVector<PublicThreadDesc_t> dFinal;
-	Threads::IterateActive([&dFinal, iCols] ( Threads::LowThreadDesc_t * pThread ){
+	IterateActive([&dFinal, iCols] ( LowThreadDesc_t * pThread ){
 		if ( pThread )
 			dFinal.Add ( GatherPublicThreadInfo ( pThread, iCols ) );
 	});

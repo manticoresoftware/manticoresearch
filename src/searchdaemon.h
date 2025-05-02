@@ -1200,7 +1200,7 @@ struct AggrResult_t final: CSphQueryResultMeta
 	StrVec_t				m_dIndexNames;
 
 	int				GetLength() const;
-	inline bool		IsEmpty() const { return GetLength()==0; }
+	bool			IsEmpty() const { return GetLength()==0; }
 	bool			AddResultset ( ISphMatchSorter * pQueue, const DocstoreReader_i * pDocstore, int iTag, int iCutoff );
 	void			AddEmptyResultset ( const DocstoreReader_i * pDocstore, int iTag );
 	void			ClampMatches ( int iLimit );

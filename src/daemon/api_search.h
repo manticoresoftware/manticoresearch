@@ -21,13 +21,9 @@ class SearchRequestBuilder_c final : public RequestBuilder_i
 
 public:
 	NONCOPYMOVABLE ( SearchRequestBuilder_c );
-
-
 	SearchRequestBuilder_c ( const VecTraits_T<CSphQuery> & dQueries, int iDivideLimits )
 		: m_dQueries ( dQueries ), m_iDivideLimits ( iDivideLimits )
-	{
-	}
-
+	{}
 
 	void BuildRequest ( const AgentConn_t & tAgent, ISphOutputBuffer & tOut ) const;
 
@@ -42,13 +38,9 @@ class SearchReplyParser_c final : public ReplyParser_i
 
 public:
 	NONCOPYMOVABLE ( SearchReplyParser_c );
-
-
 	explicit SearchReplyParser_c ( int iResults )
 		: m_iResults ( iResults )
-	{
-	}
-
+	{}
 
 	bool ParseReply ( MemInputBuffer_c & tReq, AgentConn_t & tAgent ) const;
 };
@@ -56,8 +48,6 @@ public:
 struct cSearchResult final : iQueryResult
 {
 	CSphVector<AggrResult_t> m_dResults;
-
 	void Reset ();
-
 	bool HasWarnings () const;
 };

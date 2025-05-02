@@ -1260,17 +1260,16 @@ void PubSearchHandler_c::RunCollect ( const CSphQuery& tQuery, const CSphString&
 	m_pImpl->RunCollect ( tQuery, sIndex, pErrors, pCollectedDocs );
 }
 
-
 SearchHandler_c::SearchHandler_c ( int iQueries, std::unique_ptr<QueryParser_i> pQueryParser, QueryType_e eQueryType, bool bMaster )
 	: m_dTables ( iQueries )
+	, m_bMaster ( bMaster )
+	, m_bFederatedUser ( false )
 {
 	m_dQueries.Resize ( iQueries );
 	m_dJoinQueryOptions.Resize ( iQueries );
 	m_dAggrResults.Resize ( iQueries );
 	m_dFailuresSet.Resize ( iQueries );
 	m_dAgentTimes.Resize ( iQueries );
-	m_bMaster = bMaster;
-	m_bFederatedUser = false;
 
 	SetQueryParser ( std::move ( pQueryParser ), eQueryType );
 	m_dResults.Resize ( iQueries );
@@ -2595,12 +2594,14 @@ inline static void FixupSystemTableW ( StrVec_t & dNames, CSphQuery & tQuery ) n
 }
 
 // declared to be used in ParseSysVar
+
 void HandleMysqlShowThreads ( RowBuffer_i & tOut, const SqlStmt_t * pStmt );
 void HandleMysqlShowTables ( RowBuffer_i & tOut, const SqlStmt_t * pStmt );
 void HandleShowSessions ( RowBuffer_i& tOut, const SqlStmt_t* pStmt );
 void HandleMysqlDescribe ( RowBuffer_i & tOut, SqlStmt_t * pStmt );
 void HandleSelectIndexStatus ( RowBuffer_i & tOut, const SqlStmt_t * pStmt );
 void HandleSelectFiles ( RowBuffer_i & tOut, const SqlStmt_t * pStmt );
+/**/
 
 bool SearchHandler_c::ParseSysVar ()
 {
@@ -3183,7 +3184,7 @@ void SearchHandler_c::RunSubset ( int iStart, int iEnd )
 	// we've own scoped context here
 	auto pQueryInfo = new QueryInfo_t;
 	pQueryInfo->m_pHazardQuery.store ( m_dNQueries.begin(), std::memory_order_release );
-	ScopedInfo_T<QueryInfo_t> pTlsQueryInfo ( pQueryInfo );
+	ScopedInfo_T pTlsQueryInfo ( pQueryInfo );
 
 	// all my stats
 	int64_t tmSubset = -sphMicroTimer();

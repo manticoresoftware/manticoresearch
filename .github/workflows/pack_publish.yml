@@ -87,15 +87,18 @@ jobs:
       - name: Check if we should continue packing
         id: check-should-continue
         run: |
-          # Continue if version was updated or if we have the "pack" label on PR
+          # Continue if version was updated, if we have the "pack" label on PR, or if target is "release"
           if [[ "${{ steps.semver-tagger.outputs.version_updated }}" == "true" ]]; then
             echo "Continuing because version was updated"
+            echo "should_continue=true" >> $GITHUB_OUTPUT
+          elif [[ "${{ steps.semver-tagger.outputs.target }}" == "release" ]]; then
+            echo "Continuing because target is release"
             echo "should_continue=true" >> $GITHUB_OUTPUT
           elif [[ "${{ github.event_name }}" == "pull_request" && "${{ contains(github.event.pull_request.labels.*.name, 'pack') }}" == "true" ]]; then
             echo "Continuing because PR has 'pack' label"
             echo "should_continue=true" >> $GITHUB_OUTPUT
           else
-            echo "Skipping packing because version wasn't updated and there's no 'pack' label"
+            echo "Skipping packing because version wasn't updated, target is not release, and there's no 'pack' label"
             echo "should_continue=false" >> $GITHUB_OUTPUT
           fi
       - run: |

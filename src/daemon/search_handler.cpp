@@ -237,7 +237,7 @@ void SearchHandler_c::RunActionQuery ( const CSphQuery & tQuery, const CSphStrin
 	auto & g_tStats = gStats ();
 	g_tStats.m_iQueries.fetch_add ( 1, std::memory_order_relaxed );
 	g_tStats.m_iQueryTime.fetch_add ( tmLocal, std::memory_order_relaxed );
-	g_tStats.m_iQueryCpuTime.fetch_add ( tmLocal, std::memory_order_relaxed );
+	g_tStats.m_iQueryCpuTime.fetch_add ( tmCPU, std::memory_order_relaxed );
 	g_tStats.m_iDiskReads.fetch_add ( tIO.m_iReadOps, std::memory_order_relaxed );
 	g_tStats.m_iDiskReadTime.fetch_add ( tIO.m_iReadTime, std::memory_order_relaxed );
 	g_tStats.m_iDiskReadBytes.fetch_add ( tIO.m_iReadBytes, std::memory_order_relaxed );

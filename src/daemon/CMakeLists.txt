@@ -9,6 +9,10 @@ add_library ( daemon OBJECT
 		failures_log.cpp
 		failures_log.h
 		logger.h
+		match_iterator.cpp
+		match_iterator.h
+		minimize_aggr_result.cpp
+		minimize_aggr_result.h
 		http_log.cpp
 		query_log.cpp
 		search_handler.cpp

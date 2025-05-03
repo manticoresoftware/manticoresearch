@@ -1254,7 +1254,7 @@ class QueryParser_i;
 class RequestBuilder_i;
 class ReplyParser_i;
 
-std::unique_ptr<QueryParser_i> CreateQueryParser ( bool bJson );
+std::unique_ptr<QueryParser_i> CreateQueryParser ( bool bJson ) noexcept;
 std::unique_ptr<RequestBuilder_i> CreateRequestBuilder ( Str_t sQuery, const SqlStmt_t & tStmt );
 std::unique_ptr<ReplyParser_i> CreateReplyParser ( bool bJson, int & iUpdated, int & iWarnings );
 StmtErrorReporter_i * CreateHttpErrorReporter();

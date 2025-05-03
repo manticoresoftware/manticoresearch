@@ -952,12 +952,9 @@ protected:
 	int &	m_iWarnings;
 };
 
-std::unique_ptr<QueryParser_i> CreateQueryParser( bool bJson )
+std::unique_ptr<QueryParser_i> CreateQueryParser ( bool bJson ) noexcept
 {
-	if ( bJson )
-		return sphCreateJsonQueryParser();
-	else
-		return sphCreatePlainQueryParser();
+	return bJson ? sphCreateJsonQueryParser() : sphCreatePlainQueryParser();
 }
 
 std::unique_ptr<RequestBuilder_i> CreateRequestBuilder ( Str_t sQuery, const SqlStmt_t & tStmt )

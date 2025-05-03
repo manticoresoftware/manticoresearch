@@ -75,7 +75,7 @@ SearchHandler_c::SearchHandler_c ( CSphFixedVector<CSphQuery> dQueries, bool bMa
 {
 	m_bMaster = bMaster;
 	m_eQueryType = dQueries.First().m_eQueryType;
-	m_pQueryParser = (m_eQueryType == QUERY_JSON) ? sphCreateJsonQueryParser() : sphCreatePlainQueryParser();
+	m_pQueryParser = CreateQueryParser (m_eQueryType == QUERY_JSON);
 
 	for ( auto & dQuery: dQueries )
 	{

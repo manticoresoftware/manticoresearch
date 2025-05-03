@@ -13285,15 +13285,6 @@ static int	g_iNetWorkers = 1;
 // DAEMON OPTIONS
 /////////////////////////////////////////////////////////////////////////////
 
-static std::unique_ptr<QueryParser_i> PercolateQueryParserFactory ( bool bJson )
-{
-	if ( bJson )
-		return sphCreateJsonQueryParser();
-	else
-		return sphCreatePlainQueryParser();
-}
-
-
 static void ParsePredictedTimeCosts ( const char * p )
 {
 	// yet another mini-parser!
@@ -14600,8 +14591,8 @@ int WINAPI ServiceMain ( int argc, char **argv ) EXCLUDES (MainThread)
 	for ( const auto &dOptIndex : dOptIndexes )
 		sphSplit ( dExactIndexes, dOptIndex.cstr (), "," );
 
-	SetPercolateQueryParserFactory ( PercolateQueryParserFactory );
-	Threads::CallCoroutine ( [&hConf, &dExactIndexes]() REQUIRES_SHARED ( g_tRotateConfigMutex )
+	SetPercolateQueryParserFactory ( CreateQueryParser );
+	CallCoroutine ( [&hConf, &dExactIndexes]() REQUIRES_SHARED ( g_tRotateConfigMutex )
 	{
 		ScopedRole_c thMain ( MainThread );
 		ConfigureAndPreloadOnStartup ( hConf, dExactIndexes );

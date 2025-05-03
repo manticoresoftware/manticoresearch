@@ -44,7 +44,7 @@ struct DistrServedByAgent_t : StatsPerQuery_t
 /// Get(name) - returns an index from collection.
 /// AddUniqIndex(name) - add local idx to collection, addref is implied by design
 /// AddIndex(name,pidx) - add custom idx, to make it available with Get()
-class KeepCollection_c
+class KeepCollection_c final
 {
 	SmallStringHash_T<cServedIndexRefPtr_c> m_hIndexes;
 
@@ -71,7 +71,6 @@ struct LocalIndex_t
 struct LocalSearchRef_t;
 class GlobalSorters_c;
 
-
 class SearchHandler_c final
 {
 public:
@@ -85,7 +84,6 @@ public:
 	void							RunCollect ( const CSphQuery & tQuery, const CSphString & sIndex, CSphString * pErrors, CSphVector<BYTE> * pCollectedDocs );
 	void							SetQuery ( int iQuery, const CSphQuery & tQuery, std::unique_ptr<ISphTableFunc> pTableFunc );
 	void							SetJoinQueryOptions ( int iQuery, const CSphQuery & tJoinQueryOptions ) const { m_dJoinQueryOptions[iQuery] = tJoinQueryOptions; }
-	void							SetQueryParser ( std::unique_ptr<QueryParser_i> pParser, QueryType_e eQueryType );
 	void							SetProfile ( QueryProfile_c * pProfile );
 	void							SetFederatedUser () { m_bFederatedUser = true; }
 
@@ -171,7 +169,7 @@ private:
 	int								CreateMultiQueryOrFacetSorters ( const CSphIndex * pIndex, CSphVector<const CSphIndex*> & dJoinedIndexes, VecTraits_T<ISphMatchSorter*> & dSorters, VecTraits_T<CSphString> & dErrors, StrVec_t * pExtra, SphQueueRes_t & tQueueRes, ISphExprHook * pHook ) const;
 
 	SphQueueSettings_t				MakeQueueSettings ( const CSphIndex * pIndex, const CSphIndex * pJoinedIndex, int iMaxMatches, bool bForceSingleThread, ISphExprHook * pHook ) const;
-	cServedIndexRefPtr_c			CheckIndexSelectable ( const CSphString& sLocal, const char * szParent, VecTraits_T<SearchFailuresLog_c> * pNFailuresSet=nullptr ) const;
+	cServedIndexRefPtr_c			CheckIndexSelectable ( const CSphString& sLocal, VecTraits_T<SearchFailuresLog_c> * pNFailuresSet=nullptr ) const;
 	bool							PopulateJoinedIndexes ( CSphVector<JoinedServedIndex_t> & dJoinedServed, VecTraits_T<SearchFailuresLog_c> & dFailuresSet ) const;
 	CSphVector<const CSphIndex*>	GetRlockedJoinedIndexes ( const CSphVector<JoinedServedIndex_t> & dJoinedServed, std::vector<RIdx_c> & dRLockedJoined ) const;
 	bool							CreateValidSorters ( VecTraits_T<ISphMatchSorter *> & dSrt, SphQueueRes_t * pQueueRes, VecTraits_T<SearchFailuresLog_c> & dFlr, StrVec_t * pExtra, const CSphIndex* pIndex, CSphVector<const CSphIndex*> & dJoinedIndexes, const CSphString & sLocal, const char * szParent, ISphExprHook * pHook );

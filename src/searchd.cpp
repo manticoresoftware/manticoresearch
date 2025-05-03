@@ -6128,7 +6128,7 @@ bool DescribeDistributedSchema ( VectorLike& dOut, const cDistributedIndexRefPtr
 	return true;
 }
 
-void HandleMysqlDescribe ( RowBuffer_i & tOut, SqlStmt_t * pStmt )
+void HandleCmdDescribe ( RowBuffer_i & tOut, SqlStmt_t * pStmt )
 {
 	auto & tStmt = *pStmt;
 	VectorLike dOut ( tStmt.m_sStringParam, 0 );
@@ -6241,7 +6241,7 @@ CSphVector<NamedIndexType_t> GetAllServedIndexes()
 	return dIndexes;
 }
 
-void HandleMysqlShowTables ( RowBuffer_i & tOut, const SqlStmt_t * pStmt )
+void HandleShowTables ( RowBuffer_i & tOut, const SqlStmt_t * pStmt )
 {
 	auto dIndexes = GetAllServedIndexes();
 	bool bWithClusters = ClusterFlavour();
@@ -6621,7 +6621,7 @@ static Str_t FormatInfo ( const PublicThreadDesc_t & tThd, ThreadInfoFormat_e eF
 	return (Str_t)tThd.m_sDescription;
 }
 
-void HandleMysqlShowThreads ( RowBuffer_i & tOut, const SqlStmt_t * pStmt )
+void HandleShowThreads ( RowBuffer_i & tOut, const SqlStmt_t * pStmt )
 {
 	ThreadInfoFormat_e eFmt = THD_FORMAT_NATIVE;
 	bool bAll = false;
@@ -11016,11 +11016,11 @@ bool ClientSession_c::Execute ( Str_t sQuery, RowBuffer_i & tOut )
 		return true;
 
 	case STMT_DESCRIBE:
-		HandleMysqlDescribe ( tOut, pStmt );
+		HandleCmdDescribe ( tOut, pStmt );
 		return true;
 
 	case STMT_SHOW_TABLES:
-		HandleMysqlShowTables ( tOut, pStmt );
+		HandleShowTables ( tOut, pStmt );
 		return true;
 
 	case STMT_CREATE_TABLE:
@@ -11193,7 +11193,7 @@ bool ClientSession_c::Execute ( Str_t sQuery, RowBuffer_i & tOut )
 		return true;
 
 	case STMT_SHOW_THREADS:
-		HandleMysqlShowThreads ( tOut, pStmt );
+		HandleShowThreads ( tOut, pStmt );
 		return true;
 
 	case STMT_ALTER_RECONFIGURE: // ALTER RTINDEX/TABLE <idx> RECONFIGURE

@@ -17,6 +17,7 @@ add_library ( daemon OBJECT
 		query_log.cpp
 		search_handler.cpp
 		search_handler.h
+		system_tables.cpp
 		winservice.cpp
 		winservice.h
 		api_commands.h

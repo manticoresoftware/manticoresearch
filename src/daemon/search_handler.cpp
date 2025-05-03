@@ -15,11 +15,8 @@
 #include "sphinxdefs.h"
 #include "joinsorter.h"
 #include "pseudosharding.h"
-#include "dynamic_idx.h"
 #include "api_search.h"
 #include "logger.h"
-#include "searchdsql.h"
-#include "debug_cmds.h"
 #include "schematransform.h"
 #include "minimize_aggr_result.h"
 
@@ -145,16 +142,6 @@ SearchHandler_c::~SearchHandler_c ()
 	}
 }
 
-void SearchHandler_c::SetQueryParser ( std::unique_ptr<QueryParser_i> pParser, QueryType_e eQueryType )
-{
-	m_pQueryParser = std::move ( pParser );
-	m_eQueryType = eQueryType;
-	for ( auto & dQuery : m_dQueries )
-	{
-		dQuery.m_pQueryParser = m_pQueryParser.get();
-		dQuery.m_eQueryType = eQueryType;
-	}
-}
 
 bool KeepCollection_c::AddUniqIndex ( const CSphString & sName )
 {
@@ -277,11 +264,11 @@ void SearchHandler_c::RunQueries()
 		}
 	}
 	RunSubset ( iStart, m_dQueries.GetLength() );
-	if ( m_bQueryLog )
-	{
-		ARRAY_FOREACH ( i, m_dQueries )
-			LogQuery ( m_dQueries[i], m_dJoinQueryOptions[i], m_dAggrResults[i], m_dAgentTimes[i] );
-	}
+	if ( !m_bQueryLog )
+		return;
+
+	ARRAY_FOREACH ( i, m_dQueries )
+		LogQuery ( m_dQueries[i], m_dJoinQueryOptions[i], m_dAggrResults[i], m_dAgentTimes[i] );
 	// no need to call OnRunFinished() as meta.matches already calculated at search
 }
 
@@ -549,21 +536,19 @@ struct LocalSearchClone_t
 };
 
 
-cServedIndexRefPtr_c SearchHandler_c::CheckIndexSelectable ( const CSphString & sLocal, const char * szParent, VecTraits_T<SearchFailuresLog_c> * pNFailuresSet ) const
+cServedIndexRefPtr_c SearchHandler_c::CheckIndexSelectable ( const CSphString & sLocal, VecTraits_T<SearchFailuresLog_c> * pNFailuresSet ) const
 {
 	const auto& pServed = m_dAcquired.Get ( sLocal );
 	assert ( pServed );
 
-	if ( !ServedDesc_t::IsSelectable ( pServed ) )
-	{
-		if ( pNFailuresSet )
-			for ( auto & dFailureSet : *pNFailuresSet )
-				dFailureSet.SubmitEx ( sLocal, nullptr, "%s", "table is not suitable for select" );
+	if ( ServedDesc_t::IsSelectable ( pServed ) )
+		return pServed;
 
-		return cServedIndexRefPtr_c{};
-	}
+	if ( pNFailuresSet )
+		for ( auto & dFailureSet : *pNFailuresSet )
+			dFailureSet.SubmitEx ( sLocal, nullptr, "%s", "table is not suitable for select" );
 
-	return pServed;
+	return {};
 }
 
 
@@ -614,7 +599,7 @@ bool SearchHandler_c::CreateValidSorters ( VecTraits_T<ISphMatchSorter *> & dSrt
 {
 	auto iQueries = dSrt.GetLength();
 	#if PARANOID
-	for ( const auto* pSorter : dSrt)
+	for ( const auto* pSorter : dSrt )
 		assert ( !pSorter );
 	#endif
 
@@ -641,7 +626,7 @@ void SearchHandler_c::PopulateCountDistinct ( CSphVector<CSphVector<int64_t>> & 
 	ARRAY_FOREACH ( iLocal, m_dLocal )
 	{
 		const LocalIndex_t & tLocal = m_dLocal[iLocal];
-		auto pIndex = CheckIndexSelectable ( tLocal.m_sName, tLocal.m_sParentIndex.cstr(), nullptr );
+		auto pIndex = CheckIndexSelectable ( tLocal.m_sName );
 		if ( !pIndex )
 			continue;
 
@@ -665,16 +650,7 @@ void SearchHandler_c::PopulateCountDistinct ( CSphVector<CSphVector<int64_t>> & 
 
 int SearchHandler_c::CalcMaxThreadsPerIndex ( int iConcurrency ) const
 {
-	int iNumValid = 0;
-	ARRAY_FOREACH ( i, m_dLocal )
-	{
-		auto pIndex = CheckIndexSelectable ( m_dLocal[i].m_sName, m_dLocal[i].m_sParentIndex.cstr(), nullptr );
-		if ( !pIndex )
-			continue;
-
-		iNumValid++;
-	}
-
+	auto iNumValid = m_dLocal.count_of ( [this] (const auto& i) { return CheckIndexSelectable ( i.m_sName ); } );
 	return ::CalcMaxThreadsPerIndex ( iConcurrency, iNumValid );
 }
 
@@ -709,7 +685,7 @@ void SearchHandler_c::CalcThreadsPerIndex ( int iConcurrency )
 	ARRAY_FOREACH ( iLocal, m_dLocal )
 	{
 		const LocalIndex_t & tLocal = m_dLocal[iLocal];
-		auto pIndex = CheckIndexSelectable ( tLocal.m_sName, tLocal.m_sParentIndex.cstr(), nullptr );
+		auto pIndex = CheckIndexSelectable ( tLocal.m_sName );
 		if ( !pIndex )
 			continue;
 
@@ -748,25 +724,24 @@ void SearchHandler_c::CalcThreadsPerIndex ( int iConcurrency )
 }
 
 
-class AssignTag_c : public MatchProcessor_i
+class AssignTag_c final: public MatchProcessor_i
 {
 public:
-	AssignTag_c ( int iTag )
+	explicit AssignTag_c ( int iTag )
 		: m_iTag ( iTag )
 	{}
 
-	void Process ( CSphMatch * pMatch ) final			{ ProcessMatch(pMatch); }
-	bool ProcessInRowIdOrder() const final				{ return false;	}
-	void Process ( VecTraits_T<CSphMatch *> & dMatches ) final { dMatches.for_each ( [this]( CSphMatch * pMatch ){ ProcessMatch(pMatch); } ); }
+	void Process ( CSphMatch * pMatch ) 			{ ProcessMatch(pMatch); }
+	bool ProcessInRowIdOrder() const 				{ return false;	}
+	void Process ( VecTraits_T<CSphMatch *> & dMatches )  { dMatches.for_each ( [this]( CSphMatch * pMatch ){ ProcessMatch(pMatch); } ); }
 
 private:
 	int	m_iTag = 0;
-
-	inline void ProcessMatch ( CSphMatch * pMatch )		{ pMatch->m_iTag = m_iTag; }
+	void ProcessMatch ( CSphMatch * pMatch )		{ pMatch->m_iTag = m_iTag; }
 };
 
 
-class GlobalSorters_c
+class GlobalSorters_c final
 {
 public:
 	GlobalSorters_c ( const VecTraits_T<CSphQuery> & dQueries, const CSphVector<cServedIndexRefPtr_c> & dIndexes )
@@ -811,7 +786,7 @@ public:
 				SafeDelete ( j.m_pSorter );
 	}
 
-	bool StoreSorter ( int iQuery, int iIndex, ISphMatchSorter * & pSorter, const DocstoreReader_i * pDocstore, int iTag )
+	bool StoreSorter ( int iQuery, int iIndex, ISphMatchSorter * & pSorter, const DocstoreReader_i * pDocstore, int iTag ) const
 	{
 		// FACET head is the plain query wo group sorter and can not move all result set into single sorter
 		// could be replaced with !pSorter->IspSorter->IsGroupby()
@@ -990,7 +965,7 @@ void SearchHandler_c::RunLocalSearches()
 
 	CSphVector<cServedIndexRefPtr_c> dLocalIndexes;
 	for ( const auto& i : m_dLocal )
-		dLocalIndexes.Add ( CheckIndexSelectable ( i.m_sName, nullptr ) );
+		dLocalIndexes.Add ( CheckIndexSelectable ( i.m_sName ) );
 
 	GlobalSorters_c tGlobalSorters ( m_dNQueries, dLocalIndexes );
 
@@ -1028,7 +1003,7 @@ void SearchHandler_c::RunLocalSearches()
 //	for ( int iOrder : dOrder )
 //		sphWarning ( "Sorted: %d, Order %d, mass %d", !!bSingle, iOrder, (int) m_dLocal[iOrder].m_iMass );
 
-	std::atomic<int32_t> iTotalSuccesses { 0 };
+	std::atomic iTotalSuccesses { 0 };
 	Coro::ExecuteN ( dCtx.Concurrency ( iNumLocals ), [&]
 	{
 		auto pSource = pDispatcher->MakeSource();
@@ -1047,7 +1022,7 @@ void SearchHandler_c::RunLocalSearches()
 		auto tJobContext = dCtx.CloneNewContext();
 		auto& tCtx = tJobContext.first;
 		LOCSEARCHINFO << "RunLocalSearches cloned context " << tJobContext.second;
-		Threads::Coro::SetThrottlingPeriodMS ( session::GetThrottlingPeriodMS() );
+		Coro::SetThrottlingPeriodMS ( session::GetThrottlingPeriodMS() );
 		while ( true )
 		{
 			if ( !pSource->FetchTask ( iJob ) )
@@ -1078,7 +1053,7 @@ void SearchHandler_c::RunLocalSearches()
 			GlobalCrashQueryGetRef().m_dIndex = FromStr ( sLocal );
 
 			// prepare and check the index
-			cServedIndexRefPtr_c pServed = CheckIndexSelectable ( sLocal, szParent, &dNFailuresSet );
+			cServedIndexRefPtr_c pServed = CheckIndexSelectable ( sLocal, &dNFailuresSet );
 			if ( !pServed )
 				continue;
 
@@ -1165,7 +1140,7 @@ void SearchHandler_c::RunLocalSearches()
 			if ( !pSource->FetchTask ( iJob ) )
 				return; // all is done
 
-			Threads::Coro::ThrottleAndKeepCrashQuery (); // we set CrashQuery anyway at the start of the loop
+			Coro::ThrottleAndKeepCrashQuery (); // we set CrashQuery anyway at the start of the loop
 		}
 	});
 	LOCSEARCHINFO << "RunLocalSearches processed in " << dCtx.NumWorked() << " thread(s)";
@@ -1269,8 +1244,8 @@ void SearchHandler_c::SetupLocalDF ()
 	if ( bOnlyFullScan || bOnlyNoneRanker || !bHasLocalDF )
 		return;
 
-	CSphVector<char> dQuery ( 512 );
-	dQuery.Resize ( 0 );
+	CSphVector<char> dQuery;
+	dQuery.Reserve ( 512 );
 	for ( const CSphQuery & tQuery : m_dNQueries )
 	{
 		if ( tQuery.m_sQuery.IsEmpty() || !tQuery.m_bLocalDF.value_or ( false ) || tQuery.m_eRanker==SPH_RANK_NONE )
@@ -1288,8 +1263,8 @@ void SearchHandler_c::SetupLocalDF ()
 	dQuery.Add ( '\0' );
 
 	// order indexes by settings
-	CSphVector<IndexSettings_t> dLocal ( m_dLocal.GetLength() );
-	dLocal.Resize ( 0 );
+	CSphVector<IndexSettings_t> dLocal;
+	dLocal.Reserve ( m_dLocal.GetLength() );
 	ARRAY_FOREACH ( i, m_dLocal )
 	{
 		dLocal.Add();
@@ -1387,7 +1362,7 @@ static uint64_t GetIndexMass ( const CSphString & sName )
 
 
 // process system.table
-inline static void FixupSystemTableW ( StrVec_t & dNames, CSphQuery & tQuery ) noexcept
+static void FixupSystemTableW ( StrVec_t & dNames, CSphQuery & tQuery ) noexcept
 {
 	if ( dNames.GetLength ()==1 && dNames.First ().EqN ( "system" ) && !tQuery.m_dStringSubkeys.IsEmpty () )
 	{
@@ -1396,112 +1371,6 @@ inline static void FixupSystemTableW ( StrVec_t & dNames, CSphQuery & tQuery ) n
 	}
 }
 
-// declared to be used in ParseSysVar
-
-void HandleMysqlShowThreads ( RowBuffer_i & tOut, const SqlStmt_t * pStmt );
-void HandleMysqlShowTables ( RowBuffer_i & tOut, const SqlStmt_t * pStmt );
-void HandleShowSessions ( RowBuffer_i& tOut, const SqlStmt_t* pStmt );
-void HandleMysqlDescribe ( RowBuffer_i & tOut, SqlStmt_t * pStmt );
-void HandleSelectIndexStatus ( RowBuffer_i & tOut, const SqlStmt_t * pStmt );
-void HandleSelectFiles ( RowBuffer_i & tOut, const SqlStmt_t * pStmt );
-/**/
-
-bool SearchHandler_c::ParseSysVar ()
-{
-	const auto& sVar = m_dLocal.First().m_sName;
-	const auto & dSubkeys = m_dNQueries.First ().m_dStringSubkeys;
-
-	if ( sVar=="@@system" )
-	{
-		if ( !dSubkeys.IsEmpty () )
-		{
-			bool bSchema = ( dSubkeys.Last ()==".@table" );
-			bool bValid = true;
-			TableFeeder_fn fnFeed;
-			if ( dSubkeys[0]==".threads" ) // select .. from @@system.threads
-			{
-				if ( m_pStmt->m_sThreadFormat.IsEmpty() ) // override format to show all columns by default
-					m_pStmt->m_sThreadFormat="all";
-
-				fnFeed = [this] ( RowBuffer_i * pBuf ) { HandleMysqlShowThreads ( *pBuf, m_pStmt ); };
-			}
-			else if ( dSubkeys[0]==".tables" ) // select .. from @@system.tables
-			{
-				fnFeed = [this] ( RowBuffer_i * pBuf ) { HandleMysqlShowTables ( *pBuf, m_pStmt ); };
-			}
-			else if ( dSubkeys[0]==".tasks" ) // select .. from @@system.tasks
-			{
-				fnFeed = [] ( RowBuffer_i * pBuf ) { HandleTasks ( *pBuf ); };
-			}
-			else if ( dSubkeys[0]==".sched" ) // select .. from @@system.sched
-			{
-				fnFeed = [] ( RowBuffer_i * pBuf ) { HandleSched ( *pBuf ); };
-			} else if ( dSubkeys[0] == ".sessions" ) // select .. from @@system.sched
-			{
-				fnFeed = [this] ( RowBuffer_i* pBuf ) { HandleShowSessions ( *pBuf, m_pStmt ); };
-			}
-			else
-				bValid = false;
-
-			if ( bValid )
-			{
-				cServedIndexRefPtr_c pIndex;
-				if ( bSchema )
-				{
-					m_dLocal.First ().m_sName.SetSprintf( "@@system.%s.@table", dSubkeys[0].cstr() );
-					pIndex = MakeDynamicIndexSchema ( std::move ( fnFeed ) );
-
-				} else {
-					m_dLocal.First ().m_sName.SetSprintf ( "@@system.%s", dSubkeys[0].cstr () );
-					pIndex = MakeDynamicIndex ( std::move ( fnFeed ) );
-				}
-				m_dAcquired.AddIndex ( m_dLocal.First ().m_sName, std::move (pIndex) );
-				return true;
-			}
-		}
-	}
-
-	m_sError << "no such variable " << sVar;
-	dSubkeys.for_each ( [this] ( const auto& s ) { m_sError << s; } );
-	return false;
-}
-
-bool SearchHandler_c::ParseIdxSubkeys ()
-{
-	const auto & sVar = m_dLocal.First ().m_sName;
-	const auto & dSubkeys = m_dNQueries.First ().m_dStringSubkeys;
-
-	assert ( !dSubkeys.IsEmpty () );
-
-	bool bSchema = ( dSubkeys.GetLength()>1 && dSubkeys.Last ()==".@table" );
-	TableFeeder_fn fnFeed;
-	if ( dSubkeys[0]==".@table" ) // select .. idx.table
-		fnFeed = [this] ( RowBuffer_i * pBuf ) { HandleMysqlDescribe ( *pBuf, m_pStmt ); };
-	else if ( dSubkeys[0]==".@status" ) // select .. idx.status
-		fnFeed = [this] ( RowBuffer_i * pBuf ) { HandleSelectIndexStatus ( *pBuf, m_pStmt ); };
-	else if ( dSubkeys[0]==".@files" ) // select .. from idx.files
-		fnFeed = [this] ( RowBuffer_i * pBuf ) { HandleSelectFiles ( *pBuf, m_pStmt ); };
-	else
-	{
-		m_sError << "No such table " << sVar;
-		dSubkeys.for_each ([this] (const auto& s) { m_sError << s;});
-		return false;
-	}
-
-	cServedIndexRefPtr_c pIndex;
-	if ( bSchema )
-	{
-		m_dLocal.First ().m_sName.SetSprintf ( "%s%s.@table", sVar.cstr (), dSubkeys[0].cstr () );
-		pIndex = MakeDynamicIndexSchema ( std::move ( fnFeed ) );
-	} else
-	{
-		m_dLocal.First ().m_sName.SetSprintf ( "%s%s", sVar.cstr (), dSubkeys[0].cstr () );
-		pIndex = MakeDynamicIndex ( std::move ( fnFeed ) );
-	}
-
-	m_dAcquired.AddIndex ( m_dLocal.First().m_sName, std::move ( pIndex ) );
-	return true;
-}
 
 ////////////////////////////////////////////////////////////////
 // check for single-query, multi-queue optimization possibility
@@ -1860,9 +1729,8 @@ bool SearchHandler_c::BuildIndexList ( int & iDivideLimits, VecRefPtrsAgentConn_
 				dRemotes.Add ( pConn );
 			}
 
-			ARRAY_CONSTFOREACH ( j, pDist->m_dLocal )
+			for ( const CSphString& sLocalAgent : pDist->m_dLocal )
 			{
-				const CSphString& sLocalAgent = pDist->m_dLocal[j];
 				tDistrStat.m_dLocalNames.Add ( sLocalAgent );
 				auto &dLocal = dLocals.Add ();
 				dLocal.m_sName = sLocalAgent;
@@ -1900,8 +1768,8 @@ bool SearchHandler_c::BuildIndexList ( int & iDivideLimits, VecRefPtrsAgentConn_
 }
 
 // generate warning about slow full text expansion for queries there
-// merged terms is less then expanded terms
-// slower then query_log_min_msec or slower 100ms
+// merged terms is less than expanded terms
+// slower than query_log_min_msec or slower 100ms
 static void CheckExpansion ( CSphQueryResultMeta & tMeta )
 {
 	if ( tMeta.m_hWordStats.IsEmpty() || !tMeta.m_tExpansionStats.m_iTerms )
@@ -1926,12 +1794,12 @@ static void CheckExpansion ( CSphQueryResultMeta & tMeta )
 }
 
 // query info - render query into the view
-struct QueryInfo_t : public TaskInfo_t
+struct QueryInfo_t : TaskInfo_t
 {
 	DECLARE_RENDER( QueryInfo_t );
 
 	// actually it is 'virtually hazard'. Don't care about query* itself, however later in dtr of Searchandler_t
-	// will work with refs to members of it's m_dQueries and retire or whole vec.
+	// will work with refs to members of it's m_dQueries and retire of whole vec.
 	std::atomic<const CSphQuery *> m_pHazardQuery;
 };
 
@@ -2231,7 +2099,6 @@ void SearchHandler_c::RunSubset ( int iStart, int iEnd )
 	/////////////////////
 
 	SwitchProfile ( m_pProfile, SPH_QSTATE_AGGREGATE );
-
 	CSphIOStats tIO;
 
 	for ( int iRes=0; iRes<iQueries; ++iRes )

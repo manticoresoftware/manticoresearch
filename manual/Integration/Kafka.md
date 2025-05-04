@@ -65,15 +65,15 @@ Query OK, 2 rows affected (0.02 sec)
 
 #### Options
 
-| Option | Accepted Values     | Description                                                                                                        |
-|-|---------------------|--------------------------------------------------------------------------------------------------------------------|
-| `type` | `kafka`             | Sets the source type. Currently, only `kafka` is supported                                                         |
-| `broker_list` | `host:port [, ...]` | Specifies Kafka broker URLs                                                                                        |
-| `topic_list` | `string [, ...]`    | Lists Kafka topics to consume from                                                                                 |
-| `consumer_group`| `string`            | Defines the Kafka consumer group, defaulting to `manticore`.                                                       |
-| `num_consumers` | `int`               | Number of consumers to handle messages.                                                                            |
-| `partition_list` | `int [, ...]`       | List of partitions for reading.                                    |
-| `batch` | `int`               | Number of messages to process before moving on. Default is `100`; processes remaining messages on timeout otherwise |
+| Option | Accepted Values | Description                                                                      |
+|-|----------------|----------------------------------------------------------------------------------|
+| `type` | `kafka`        | Sets the source type. Currently, only `kafka` is supported                       |
+| `broker_list` | `host:port [, ...]` | Specifies Kafka broker URLs                                                      |
+| `topic_list` | `string [, ...]` | Lists Kafka topics to consume from                                               |
+| `consumer_group`| `string`       | Defines the Kafka consumer group, defaulting to `manticore`.                     |
+| `num_consumers` | `int`          | Number of consumers to handle messages.                                          |
+| `partition_list` | `int [, ...]`  | List of partitions for reading [more](../Integration/Kafka#Sharding-with-Kafka). |
+| `batch` | `int`          | Number of messages to process before moving on. Default is `100`; processes remaining messages on timeout otherwise |
 
 ### Destination table
 

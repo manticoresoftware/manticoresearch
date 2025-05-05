@@ -14,13 +14,13 @@ cat /replication.conf
 ––– output –––
 searchd
 {
-listen = 3103
-listen = 9315:mysql
-listen = 127.0.0.1:3104:replication
-data_dir = data
-log = searchd.log
-pid_file = searchd.pid
-binlog_path =
+	listen = 3103
+	listen = 9315:mysql
+	listen = 127.0.0.1:3104:replication
+	data_dir = data
+	log = searchd.log
+	pid_file = searchd.pid
+	binlog_path =
 }
 ––– input –––
 mkdir -p data; rm -f searchd.log; stdbuf -oL searchd --stopwait > /dev/null; stdbuf -oL searchd -c /replication.conf > /dev/null

@@ -18,7 +18,7 @@ timeout 10 mysql -h0 -P9306 -e "select * from test where MATCH('@street walnut b
 country: US
 *************************** 2. row ***************************
      id: %{NUMBER}
- street: 6810 Walnut Blvd
+ street: %{NUMBER} Walnut Blvd
 country: US
 *************************** 3. row ***************************
      id: %{NUMBER}

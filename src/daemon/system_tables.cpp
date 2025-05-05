@@ -9,7 +9,7 @@
 // received a copy of the GPL license along with this program; if you
 // did not, you can find it at http://www.gnu.org
 //
-// declared to be used in ParseSysVar
+// declared to be used in ParseSysVarsAndTables
 
 #include "search_handler.h"
 #include "dynamic_idx.h"
@@ -69,44 +69,53 @@ static bool ParseSubkeys ( TableFeeder_fn & fnFeed, const CSphString & sName, Sq
 }
 
 
-bool SearchHandler_c::ParseSysVar ()
+bool SearchHandler_c::ParseSysVarsAndTables ()
 {
 	const char* szVar = m_dLocal.First().m_sName.cstr();
 	const auto & dSubkeys = m_dNQueries.First().m_dStringSubkeys;
-
-	if ( !dSubkeys.IsEmpty() )
-	{
-		const char * szFirst = dSubkeys.First().cstr();
-		const char * szLast = dSubkeys.Last().cstr();
-		bool bSchema = StrEqN ( FROMS ( ".@table" ), szLast );
-		TableFeeder_fn fnFeed;
-		bool bValid = false;
-		if ( StrEqN ( FROMS ("@@system"), szVar ) )
-			bValid = ParseSystem ( fnFeed, szFirst, m_pStmt );
-
-		if ( !bValid && StrEqN ( FROMS ("information_schema"), szVar ) )
-			bValid = ParseInformationSchema ( fnFeed, dSubkeys.First(), m_pStmt );
-
+	const char* szEssence = "variable";
+	bool bValid = false;
+	AT_SCOPE_EXIT ([&,this] {
 		if ( bValid )
-		{
-			cServedIndexRefPtr_c pIndex;
-			if ( bSchema )
-			{
-				m_dLocal.First().m_sName.SetSprintf ( "%s%s%s", szVar, szFirst, szLast );
-				pIndex = MakeDynamicIndexSchema ( std::move ( fnFeed ) );
-			} else
-			{
-				m_dLocal.First().m_sName.SetSprintf ( "%s%s", szVar, szFirst );
-				pIndex = MakeDynamicIndex ( std::move ( fnFeed ) );
-			}
-			m_dAcquired.AddIndex ( m_dLocal.First().m_sName, std::move ( pIndex ) );
-			return true;
-		}
+			return;
+		m_sError << "No such " << szEssence << " " << szVar;
+		dSubkeys.for_each ( [this] ( const auto & s ) { m_sError << s; } );
+	});
+
+	if ( dSubkeys.IsEmpty() )
+		return false;
+
+	const char * szFirst = dSubkeys.First().cstr();
+	const char * szLast = dSubkeys.Last().cstr();
+	bool bSchema = StrEqN ( FROMS ( ".@table" ), szLast );
+	TableFeeder_fn fnFeed;
+	if ( StrEqN ( FROMS ("@@system"), szVar ) )
+		bValid = ParseSystem ( fnFeed, szFirst, m_pStmt );
+
+	if ( !bValid )
+	{
+		if ( !StrEqN ( FROMS ("information_schema"), szVar ) )
+			return false;
+
+		szEssence = "table";
+		bValid = ParseInformationSchema ( fnFeed, dSubkeys.First(), m_pStmt );
 	}
 
-	m_sError << "no such variable " << szVar;
-	dSubkeys.for_each ( [this] ( const auto & s ) { m_sError << s; } );
-	return false;
+	if ( !bValid )
+		return false;
+
+	cServedIndexRefPtr_c pIndex;
+	if ( bSchema )
+	{
+		m_dLocal.First().m_sName.SetSprintf ( "%s%s%s", szVar, szFirst, szLast );
+		pIndex = MakeDynamicIndexSchema ( std::move ( fnFeed ) );
+	} else
+	{
+		m_dLocal.First().m_sName.SetSprintf ( "%s%s", szVar, szFirst );
+		pIndex = MakeDynamicIndex ( std::move ( fnFeed ) );
+	}
+	m_dAcquired.AddIndex ( m_dLocal.First().m_sName, std::move ( pIndex ) );
+	return true;
 }
 
 

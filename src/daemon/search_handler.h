@@ -154,7 +154,7 @@ private:
 		int						m_iDupeId = -1;
 	};
 
-	bool							ParseSysVar();
+	bool							ParseSysVarsAndTables();
 	bool							ParseIdxSubkeys();
 	bool							CheckMultiQuery() const;
 	bool							AcquireInvokedIndexes();

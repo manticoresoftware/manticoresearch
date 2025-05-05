@@ -1908,8 +1908,8 @@ void SearchHandler_c::RunSubset ( int iStart, int iEnd )
 			return;
 	} else
 	{
-		// process query to @@*, as @@system.threads, etc.
-		if ( !ParseSysVar () )
+		// process query to @@*, as @@system.threads, information_schema, etc.
+		if ( !ParseSysVarsAndTables () )
 			return;
 		// here we deal
 	}

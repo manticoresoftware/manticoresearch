@@ -15,6 +15,8 @@
 #include "searchdaemon.h"
 #include "client_session.h"
 
+#include <sys/stat.h>
+
 // for USE_SYSLOG
 #include "config.h"
 #if USE_SYSLOG

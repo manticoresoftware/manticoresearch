@@ -11,9 +11,11 @@
 //
 
 #include "logger.h"
-#include "std/string.h"
-#include "searchdaemon.h"
 #include "fileutils.h"
+#include "searchdaemon.h"
+#include "std/string.h"
+
+#include <sys/stat.h>
 
 static int g_iHttpLogFile = -1;
 static CSphString g_sHttpLogFile;

@@ -65,14 +65,15 @@ Query OK, 2 rows affected (0.02 sec)
 
 #### Options
 
-| Option | Accepted Values | Description |
-|-|-|-|
-| `type` | `kafka` | Sets the source type. Currently, only `kafka` is supported |
-| `broker_list` | `host:port [, ...]` | Specifies Kafka broker URLs |
-| `topic_list` | `string [, ...]` | Lists Kafka topics to consume from |
-| `consumer_group`| `string` | Defines the Kafka consumer group, defaulting to `manticore`. |
-| `num_consumers` | `int` | Number of consumers to handle messages. |
-| `batch` | `int` | Number of messages to process before moving on. Default is `100`; processes remaining messages on timeout otherwise |
+| Option | Accepted Values | Description                                                                                                         |
+|-|----------------|---------------------------------------------------------------------------------------------------------------------|
+| `type` | `kafka`        | Sets the source type. Currently, only `kafka` is supported                                                          |
+| `broker_list` | `host:port [, ...]` | Specifies Kafka broker URLs                                                                                         |
+| `topic_list` | `string [, ...]` | Lists Kafka topics to consume from                                                                                  |
+| `consumer_group`| `string`       | Defines the Kafka consumer group, defaulting to `manticore`.                                                        |
+| `num_consumers` | `int`          | Number of consumers to handle messages.                                                                             |
+| `partition_list` | `int [, ...]`  | List of partitions for reading [more](../Integration/Kafka.md#Sharding-with-Kafka).                                 |
+| `batch` | `int`          | Number of messages to process before moving on. Default is `100`; processes remaining messages on timeout otherwise |
 
 ### Destination table
 
@@ -290,6 +291,47 @@ Query OK (0.02 sec)
 ```
 
 <!-- end -->
+
+### Sharding with Kafka
+
+You can also specify a `partition_list` for each Kafka topic.
+One of the main benefits of this approach is the ability to implement `sharding` for your table via Kafka.
+To achieve this, you should create a separate chain of `source` → `materialized view` → `destination table` for each shard:
+
+**Sources:**
+```sql
+CREATE SOURCE kafka_p1 (id bigint, term text)
+  type='kafka' broker_list='kafka:9092' topic_list='my-data'
+  consumer_group='manticore' num_consumers='1' partition_list='0' batch=50;
+
+CREATE SOURCE kafka_p2 (id bigint, term text)
+  type='kafka' broker_list='kafka:9092' topic_list='my-data'
+  consumer_group='manticore' num_consumers='1' partition_list='1' batch=50;
+```
+
+**Destination Tables:**
+
+```sql
+CREATE TABLE destination_shard_1 (id bigint, name text);
+CREATE TABLE destination_shard_2 (id bigint, name text);
+```
+
+**Materialized Views:**
+
+```sql
+CREATE MATERIALIZED VIEW mv_1 TO destination_shard_1 AS SELECT id, term AS name FROM kafka_p1;
+CREATE MATERIALIZED VIEW mv_2 TO destination_shard_2 AS SELECT id, term AS name FROM kafka_p2;
+```
+
+#### ⚠️ Important Notes:
+
+* In this setup, rebalancing must be managed manually.
+* Kafka does not distribute messages using a round-robin strategy by default.
+* To achieve round-robin-like distribution when sending data, make sure your Kafka producer is configured with:
+  * `parse.key=true`
+  * `key.separator={your_delimiter}`
+
+Otherwise, Kafka will distribute messages based on its own internal rules, which may lead to uneven partitioning.
 
 ### Troubleshooting
 

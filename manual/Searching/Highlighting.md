@@ -3751,7 +3751,7 @@ res, _, _ := apiClient.SearchAPI.Search(context.Background()).SearchRequest(*sea
 ```
 <!-- end -->
 
-# CALL SNIPPETS
+## CALL SNIPPETS
 
 <!-- example CALL SNIPPETS -->
 

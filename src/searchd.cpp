@@ -6662,7 +6662,7 @@ void HandleShowThreads ( RowBuffer_i & tOut, const SqlStmt_t * pStmt )
 	if ( g_bCpuStats )
 	{
 //		tOut.HeadColumn ( "Work time CPU" );
-		tOut.HeadColumn ( "CPU activity", MYSQL_COL_FLOAT);
+		tOut.HeadColumn ( "CPU activity" );
 	}
 	tOut.HeadColumn ( "Jobs done", MYSQL_COL_LONG );
 	tOut.HeadColumn ( "Thread status" );

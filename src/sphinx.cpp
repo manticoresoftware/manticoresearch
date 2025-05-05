@@ -6814,7 +6814,7 @@ bool CSphIndex_VLN::DoMerge ( const CSphIndex_VLN * pDstIndex, const CSphIndex_V
 
 	// merging attributes
 	{
-		AttrMerger_c tAttrMerger { tMonitor, sError, iTotalDocs, g_tMergeSettings };
+		AttrMerger_c tAttrMerger { tMonitor, sError, iTotalDocs, g_tMergeSettings, dDeleteOnInterrupt };
 		if ( !tAttrMerger.Prepare ( pSrcIndex, pDstIndex ) )
 			return false;
 
@@ -6830,7 +6830,7 @@ bool CSphIndex_VLN::DoMerge ( const CSphIndex_VLN * pDstIndex, const CSphIndex_V
 		if ( !bCompress && !tAttrMerger.CopyAttributes ( *pSrcIndex, dSrcRows, tTotalDocs.second ) )
 			return false;
 
-		if ( !tAttrMerger.FinishMergeAttributes ( pDstIndex, tBuildHeader, &dDeleteOnInterrupt ) )
+		if ( !tAttrMerger.FinishMergeAttributes ( pDstIndex, tBuildHeader ) )
 			return false;
 	}
 

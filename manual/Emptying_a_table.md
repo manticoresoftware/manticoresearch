@@ -1,5 +1,7 @@
 # Emptying a table
 
+<!-- example truncate -->
+
 The table can be emptied with a `TRUNCATE TABLE` SQL statement or with a `truncate()` PHP client function.
 
 Here is the syntax for the SQL statement:
@@ -8,9 +10,15 @@ Here is the syntax for the SQL statement:
 TRUNCATE TABLE table_name [WITH RECONFIGURE]
 ```
 
-<!-- example truncate -->
+When this statement is executed, it clears the RT or distributed table completely. It disposes the in-memory data, unlinks all the table data files, and releases the associated binary logs.
 
-When this statement is executed, it clears the RT table completely. It disposes the in-memory data, unlinks all the table data files, and releases the associated binary logs.
+For emptying a distributed table, use syntax without the `with reconfigure` option. Simply execute the standard TRUNCATE statement against your distributed table.
+
+```sql
+TRUNCATE TABLE distributed_table
+```
+
+> NOTE: Emptying a distributed table requires [Manticore Buddy](../Installation/Manticore_Buddy.md). If it doesn't work, make sure Buddy is installed.
 
 A table can also be emptied with `DELETE FROM index WHERE id>0`, but it's not recommended as it's slower than `TRUNCATE`.
 
@@ -59,8 +67,8 @@ $response = $client->indices()->truncate($params);
 ```php
 Array(
     [total] => 0
-    [error] => 
-    [warning] => 
+    [error] =>
+    [warning] =>
 )
 ```
 <!-- intro -->
@@ -155,6 +163,8 @@ One of the possible uses of this command is before [attaching a table](Data_crea
 
 When `RECONFIGURE` option is used new tokenization, morphology, and other text processing settings specified in the config take effect after the table gets cleared. In case the [schema declaration](Creating_a_table/Data_types.md) in config is different from the table schema the new schema from config got applied after table get cleared.
 
+> NOTE: The `RECONFIGURE` option only makes sense in [Plain mode](Read_this_first#Real-time-mode-vs-plain-mode), where it applies the settings from the configuration file. Note that `TRUNCATE` is only supported for RT tables, and the `RECONFIGURE` option can only be used with RT tables when Manticore is running in Plain mode.
+
 With this option clearing and reconfiguring a table becomes one atomic operation.
 
 <!-- intro -->
@@ -202,8 +212,8 @@ $response = $client->indices()->truncate($params);
 ```php
 Array(
     [total] => 0
-    [error] => 
-    [warning] => 
+    [error] =>
+    [warning] =>
 )
 ```
 <!-- intro -->

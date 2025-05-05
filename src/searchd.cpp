@@ -6265,6 +6265,21 @@ void HandleShowTables ( RowBuffer_i & tOut, const SqlStmt_t * pStmt )
 	tOut.DataTable ( dTable );
 }
 
+void HandleShowInformationTables ( RowBuffer_i & tOut, const SqlStmt_t * pStmt )
+{
+	auto dIndexes = GetAllServedIndexes();
+	// output the results
+	VectorLike dTable ( pStmt->m_sStringParam, { "table_schema", "table_name" } );
+	for ( auto& dPair : dIndexes )
+	{
+		if ( !dTable.Match ( dPair.m_sName.cstr() ) )
+			continue;
+
+		dTable.MatchTuplet( dPair.m_sName.cstr (), szIndexType(dPair.m_eType) );
+	}
+	tOut.DataTable ( dTable );
+}
+
 template <typename T, typename GETNAME>
 static bool CheckAttrs ( const VecTraits_T<T> & dAttrs, GETNAME && fnGetName, CSphString & sError )
 {

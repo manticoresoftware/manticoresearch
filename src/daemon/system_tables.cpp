@@ -18,6 +18,7 @@
 
 void HandleShowThreads ( RowBuffer_i & tOut, const SqlStmt_t * pStmt );
 void HandleShowTables ( RowBuffer_i & tOut, const SqlStmt_t * pStmt );
+void HandleShowInformationTables ( RowBuffer_i & tOut, const SqlStmt_t * pStmt );
 void HandleShowSessions ( RowBuffer_i & tOut, const SqlStmt_t * pStmt );
 void HandleCmdDescribe ( RowBuffer_i & tOut, SqlStmt_t * pStmt );
 void HandleSelectIndexStatus ( RowBuffer_i & tOut, const SqlStmt_t * pStmt );
@@ -44,6 +45,14 @@ static bool ParseSystem ( TableFeeder_fn & fnFeed, const CSphString & sName, Sql
 	return true;
 }
 
+static bool ParseInformationSchema ( TableFeeder_fn & fnFeed, const CSphString & sName, SqlStmt_t * pStmt )
+{
+	if ( StrEqN ( FROMS (".tables"), sName.cstr() ) ) // select .. from INFORMATION_SCHEMA.TABLES
+		fnFeed = [pStmt] ( RowBuffer_i * pBuf ) { HandleShowInformationTables ( *pBuf, pStmt ); };
+	else
+		return false;
+	return true;
+}
 
 // select .. idx.@something
 static bool ParseSubkeys ( TableFeeder_fn & fnFeed, const CSphString & sName, SqlStmt_t * pStmt )
@@ -74,6 +83,9 @@ bool SearchHandler_c::ParseSysVar ()
 		bool bValid = false;
 		if ( StrEqN ( FROMS ("@@system"), szVar ) )
 			bValid = ParseSystem ( fnFeed, szFirst, m_pStmt );
+
+		if ( !bValid && StrEqN ( FROMS ("information_schema"), szVar ) )
+			bValid = ParseInformationSchema ( fnFeed, dSubkeys.First(), m_pStmt );
 
 		if ( bValid )
 		{

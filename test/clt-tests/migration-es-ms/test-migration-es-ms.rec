@@ -61,8 +61,8 @@ NODE_OPTIONS="--no-warnings" elasticdump --version
 unzip -o ./test/clt-tests/migration-es-ms/index.zip -d ./test/clt-tests/migration-es-ms/
 ––– output –––
 Archive:  ./test/clt-tests/migration-es-ms/index.zip
-inflating: index_mapping.json
-inflating: index_data.json
+  inflating: index_mapping.json
+  inflating: index_data.json
 ––– input –––
 NODE_OPTIONS="--no-warnings" timeout 300 elasticdump --input=./test/clt-tests/migration-es-ms/index_mapping.json --output=http://localhost:9200/es-index --type=mapping
 ––– output –––

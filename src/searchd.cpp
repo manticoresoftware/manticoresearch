@@ -22057,7 +22057,7 @@ int WINAPI ServiceMain ( int argc, char **argv ) EXCLUDES (MainThread)
 		bNewCluster = false;
 		bNewClusterForce = false;
 	}
-	ReplicationBinlogStart ( g_sConfigFile, hSearchd.GetStr ( "binlog_path", LOCALDATADIR ).IsEmpty() );
+	ReplicationBinlogStart ( g_sConfigFile, !Binlog::IsActive() );
 	
 	StartRtBinlogFlushing();
 

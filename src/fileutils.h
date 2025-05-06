@@ -481,16 +481,16 @@ public:
 	};
 
 	/// try to open existed shared memory object
-	OpenResult_e Open ( CSphString & sError );
+	OpenResult_e Open ();
 
 	/// create new shared memory object
-	bool Create ( int64_t iBytes, CSphString & sError );
+	bool Create ( int64_t iBytes );
 
 	/// set new size of the shared memory object
-	bool Reset ( int64_t iBytes, CSphString & sError );
+	bool Reset ( int64_t iBytes );
 
 	/// close and destroy shared memory object
-	bool Close ( CSphString & sError );
+	bool Close ();
 
 	/// get write address
 	BYTE * GetWritePtr() const
@@ -510,6 +510,10 @@ public:
 	}
 
 	bool IsSupported () const;
+	const CSphString & GetError() const
+	{
+		return m_sError;
+	}
 
 private:
 	BYTE * m_pData = nullptr;
@@ -518,8 +522,10 @@ private:
 	const CSphString m_sPath;
 	bool m_bHasFile = false;
 
-	bool MapFile ( int iFD, int64_t iBytes, CSphString & sError );
-	bool IsValid ( CSphString & sError ) const;
+	CSphString m_sError;
+
+	bool MapFile ( int iFD, int64_t iBytes );
+	bool IsValid ();
 };
 
 #endif // _fileutils_

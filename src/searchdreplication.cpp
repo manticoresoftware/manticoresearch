@@ -33,6 +33,7 @@
 #include "replication/cluster_synced.h"
 #include "replication/replicate_index.h"
 #include "replication/grastate.h"
+#include "replication/cluster_binlog.h"
 
 #if !_WIN32
 // MAC-specific header
@@ -51,8 +52,6 @@ static const bool LOG_LEVEL_RPL_TNX = val_from_env ( "MANTICORE_LOG_RPL_TNX", fa
 #define LOG_COMPONENT_RPL_TNX ""
 #define RPL_TNX LOGMSG ( RPL_DEBUG, RPL_TNX, RPL_TNX )
 
-static bool g_bRplBinlogEnabled = ( val_from_env ( "MANTICORE_REPLICATION_BINLOG", 1 )!=0 );
-
 inline static bool IsSyncedOrDonor ( ClusterState_e eState ) noexcept
 {
 	return ( eState == ClusterState_e::DONOR || eState == ClusterState_e::SYNCED );
@@ -61,7 +60,7 @@ inline static bool IsSyncedOrDonor ( ClusterState_e eState ) noexcept
 enum class BOOTSTRAP_E : bool {NO,YES};
 
 // cluster related data
-struct ReplicationCluster_t final : public ClusterDesc_t, Wsrep::Cluster_i
+struct ReplicationCluster_t final : public Wsrep::Cluster_i, ClusterBinlogData_c
 {
 public:
 	// replicator
@@ -79,7 +78,6 @@ public:
 	bool m_bUserRequest { false }; // indicates, if cluster is joining by user request (i.e. stmt 'join ...')
 
 	// state variables cached from Galera
-	Wsrep::GlobalTid_t		m_tGtid;
 	int64_t					m_iConfID = 0;
 	Wsrep::ViewStatus_e		m_eStatus = Wsrep::ViewStatus_e::DISCONNECTED;
 	int						m_iSize = 0;
@@ -285,26 +283,6 @@ static bool CheckClusterIndex ( const CSphString & sIndex, ReplicationClusterRef
 		return true;
 	});
 }
-
-class ClusterBinlog_i : public ISphNonCopyMovable
-{
-public:
-	virtual ~ClusterBinlog_i() = default;
-
-	virtual void Init ( const CSphString & sConfigFile, bool bDisabled ) = 0;
-	virtual void Close() = 0;
-
-	virtual void OnClusterDelete ( const CSphString & sCluster, const StrVec_t & dIndexes ) = 0;
-	virtual void OnClusterLoad ( ReplicationCluster_t & tCluster ) = 0;
-
-	virtual void OnClusterIndexesAdd ( const ReplicationCluster_t & tCluster, const StrVec_t & dIndexes ) = 0;
-	virtual void OnClusterIndexesDrop ( const ReplicationCluster_t & tCluster, const StrVec_t & dIndexes ) = 0;
-
-	virtual void ClusterTnx ( const CSphString & sCluster, const CSphString & sIndex, int64_t iSeqno, int64_t iTID ) = 0;
-	virtual void OnClusterSynced ( const ReplicationCluster_t & tCluster ) = 0;
-};
-
-static std::unique_ptr<ClusterBinlog_i> g_pBinlog = nullptr;
 
 /////////////////////////////////////////////////////////////////////////////
 /// forward declarations
@@ -548,7 +526,7 @@ void ReplicationCluster_t::SetSynced()
 {
 	SetState ( ClusterState_e::SYNCED );
 	if ( IsPrimary() )
-		g_pBinlog->OnClusterSynced ( *this );
+		RplBinlog()->OnClusterSynced ( *this );
 
 	sphLogDebugRpl ( "synced cluster '%s', gtid %s", m_sName.cstr(), Wsrep::Gtid2Str ( m_tGtid ).cstr() );
 }
@@ -1233,8 +1211,6 @@ bool SetIndexesClusterTOI ( const ReplicationCommand_t * pCmd )
 			}
 		});
 
-		g_pBinlog->OnClusterIndexesAdd ( *pCluster, dIndexes );
-
 	} else
 	{
 		if ( !AssignClusterToIndexes ( dIndexes, "" ) )
@@ -1245,8 +1221,6 @@ bool SetIndexesClusterTOI ( const ReplicationCommand_t * pCmd )
 			for ( const CSphString & sIndex : dIndexes )
 				hIndexes.Delete ( sIndex );
 		});
-
-		g_pBinlog->OnClusterIndexesDrop ( *pCluster, dIndexes );
 	}
 
 	TLS_MSG_STRING ( sError );
@@ -1473,7 +1447,7 @@ static void CoReplicationServiceStart ( bool bBootStrap ) EXCLUDES ( g_tClusters
 		const auto & sName = tCluster.first;
 		auto & pCluster = tCluster.second;
 		
-		g_pBinlog->OnClusterLoad ( *pCluster );
+		RplBinlog()->OnClusterLoad ( *pCluster );
 
 		if ( !PrepareNodesAndInitCluster ( *pCluster, eBootStrap ) )
 		{
@@ -1712,7 +1686,6 @@ bool ClusterJoin ( const CSphString & sCluster, const StrVec_t & dNames, const C
 	if ( bOk )
 	{
 		sphLogDebugRpl ( "'%s' cluster, gtid %s, joined", sCluster.cstr(), Gtid2Str ( pCluster->m_tGtid ).cstr() );
-		g_pBinlog->OnClusterIndexesAdd ( *pCluster, pCluster->GetIndexes() );
 		return true;
 	}
 
@@ -1765,7 +1738,6 @@ bool ClusterCreate ( const CSphString & sCluster, const StrVec_t & dNames, const
 	auto eState = pCluster->WaitReady();
 
 	sphLogDebugRpl ( "created cluster '%s', gtid %s", sCluster.cstr(), Gtid2Str ( pCluster->m_tGtid ).cstr() );
-	g_pBinlog->OnClusterIndexesAdd ( *pCluster, pCluster->GetIndexes() );
 
 	TLS_MSG_STRING ( sError );
 	return SaveConfigInt ( sError ) && ( IsSyncedOrDonor ( eState ) || TlsMsg::Err ( "Wrong state %s", szNodeState( eState ) ) );
@@ -1844,7 +1816,7 @@ bool ClusterDelete ( const CSphString & sCluster ) EXCLUDES ( g_tClustersLock )
 	
 	StrVec_t dClusterIndexes = pCluster->GetIndexes();
 	pCluster->WithRlockedIndexes ( [] ( const auto& hIndexes ) { for_each ( hIndexes, [] ( const auto& tIndex ) { AssignClusterToIndex ( tIndex.first, "" ); } ); } );
-	g_pBinlog->OnClusterDelete ( sCluster, dClusterIndexes );
+	RplBinlog()->OnClusterDelete ( sCluster, dClusterIndexes );
 
 	return true;
 }
@@ -2397,529 +2369,9 @@ bool ClusterUpdateNodes ( const CSphString & sCluster, NODES_E eNodes, StrVec_t 
 	return bOk;
 }
 
-/////////////////////////////////////////////////////////////////////////////
-/// cluster binlog
-
-using ClustersTid_h = SmallStringHash_T<Wsrep::GlobalTid_t>;
-using IndexesTid_h = SmallStringHash_T<int64_t>;
-
-struct BinlogStoreData_t
-{
-	ClustersTid_h m_hClusters;
-	IndexesTid_h m_hIndexes;
-};
-
-using TnxOff_h = SmallStringHash_T<int>;
-
-struct BinlogTnxOff_t
-{
-	TnxOff_h m_hClusters;
-	TnxOff_h m_hIndexes;
-	void Reset ()
-	{
-		m_hClusters.Reset();
-		m_hIndexes.Reset();
-	}
-};
-
-
-class ClusterBinlog_c final : public ClusterBinlog_i
-{
-public:
-	ClusterBinlog_c() = default;
-	~ClusterBinlog_c() final = default;
-
-	void Init ( const CSphString & sConfigFile, bool bDisabled ) final;
-	void Close() final;
-
-	void OnClusterDelete ( const CSphString & sCluster, const StrVec_t & dIndexes ) final;
-	void OnClusterLoad ( ReplicationCluster_t & tCluster ) final;
-
-	void OnClusterIndexesAdd ( const ReplicationCluster_t & tCluster, const StrVec_t & dIndexes ) final;
-	void OnClusterIndexesDrop ( const ReplicationCluster_t & tCluster, const StrVec_t & dIndexes ) final;
-
-	void ClusterTnx ( const CSphString & sCluster, const CSphString & sIndex, int64_t iSeqno, int64_t iTID ) final;
-	void OnClusterSynced ( const ReplicationCluster_t & tCluster ) final;
-
-private:
-	SharedMemory_c * m_pBinlog = nullptr;
-	CSphMutex m_tLock;
-	CSphString m_sFile;
-	CSphString m_sError;
-	bool m_bValid = true;
-
-	bool IsValid() const { return m_bValid; }
-	BYTE * GetWritePtr ( int64_t iSize );
-	int64_t GetLength() const
-	{
-		assert ( IsValid() && m_pBinlog );
-		return m_pBinlog->GetLength64();
-	}
-
-	void LogError() const;
-
-	void SetName ( const CSphString & sConfigFile )
-	{
-		if ( !sConfigFile.Begins ( "/" ) )
-			m_sFile.SetSprintf ( "/%s", sConfigFile.cstr() );
-		else
-			m_sFile = sConfigFile;
-
-		char * sCur = const_cast<char *> ( m_sFile.cstr() );
-		const char * sEnd = sCur + m_sFile.Length();
-		if ( sCur<sEnd && *sCur=='/' )
-			sCur++;
-
-		for ( ; sCur<sEnd; sCur++ )
-		{
-			if ( *sCur=='/' )
-				*sCur = '_';
-		}
-	}
-
-	static constexpr DWORD BINLOG_HEADER_MAGIC_SPBL = 0x4c425053;	/// magic 'SPBL' header that marks binlog file
-	static constexpr DWORD BINLOG_VERSION = 1;
-	
-	static constexpr int MAGIC_INITIAL_LIMIT = 1024;
-	int64_t Relimit ( int64_t iLimit, int64_t iNewLimit )
-	{
-		if ( !iLimit )
-			iLimit = MAGIC_INITIAL_LIMIT;
-		while ( iLimit < iNewLimit )
-		{
-			iLimit = (int)( (float)iLimit * 1.2f );
-			assert ( iLimit > 0 );
-		}
-		return iLimit;
-	}
-
-	BinlogTnxOff_t m_hTnx;
-
-	bool ReadAll ( BinlogStoreData_t & tInfo );
-	bool WriteAll ( const BinlogStoreData_t & tInfo );
-	void Invalidate();
-};
-
-
-void ReplicationBinlogStart ( const CSphString & sConfigFile, bool bDisabled )
-{
-	assert ( !g_pBinlog );
-	g_pBinlog.reset ( new ClusterBinlog_c() );
-	g_pBinlog->Init ( sConfigFile, bDisabled );
-}
-
-void ClusterBinlog_c::Init ( const CSphString & sConfigFile, bool bDisabled )
-{
-	ScopedMutex_t tLock ( m_tLock );
-
-	m_bValid = false;
-	SetName ( sConfigFile );
-
-	if ( !g_bRplBinlogEnabled )
-		return;
-	if ( bDisabled )
-		return;
-
-	std::unique_ptr<SharedMemory_c> pBinlog { new SharedMemory_c ( m_sFile ) };
-	if ( !pBinlog->IsSupported() )
-		return;
-
-	SharedMemory_c::OpenResult_e eRes = pBinlog->Open ( m_sError );
-
-	// no binlog file is not error as daemon could shutdown clean and closes the binlog
-	if ( eRes==SharedMemory_c::OpenResult_e::NO_FILE )
-	{
-		sphLogDebugRpl ( "replication binlog ok, but can not open file: %s", m_sError.cstr() );
-		m_bValid = true;
-		return;
-	}
-
-	if ( eRes!=SharedMemory_c::OpenResult_e::OK )
-	{
-		LogError();
-		return;
-	}
-
-	sphLogDebugRpl ( "replication binlog opened '%s', size %d", m_sFile.cstr(), (int)pBinlog->GetLength64() );
-
-	m_bValid = true;
-	m_pBinlog = pBinlog.release();
-
-	// close existed binlog in case of any error and allow to issue SST
-	BinlogStoreData_t tInfo;
-	if ( !ReadAll ( tInfo ) )
-		return;
-
-	// create Tnx hash
-	if ( tInfo.m_hClusters.GetLength() && !WriteAll ( tInfo ) )
-		return;
-}
-
-void ReplicationBinlogStop()
-{
-	g_pBinlog->Close();
-}
-
-void ClusterBinlog_c::Close()
-{
-	ScopedMutex_t tLock ( m_tLock );
-
-	m_hTnx.Reset();
-	m_bValid = false;
-
-	if ( !m_pBinlog )
-		return;
-
-	sphLogDebugRpl ( "replication binlog closing, size %d", (int)m_pBinlog->GetLength64() );
-
-	if ( !m_pBinlog->Close ( m_sError ) )
-		LogError();
-}
-
-BYTE * ClusterBinlog_c::GetWritePtr ( int64_t iSize )
-{
-	if ( !IsValid() )
-		return nullptr;
-
-	if ( !m_pBinlog )
-	{
-		std::unique_ptr<SharedMemory_c> pBinlog { new SharedMemory_c ( m_sFile ) };
-		if ( !pBinlog->IsSupported() )
-		{
-			m_sError = "shared memory unsupported";
-			m_bValid = false;
-			return nullptr;
-		}
-		if ( !pBinlog->Create ( Relimit ( 0, iSize ), m_sError ) )
-		{
-			m_bValid = false;
-			LogError();
-			return nullptr;
-		}
-		m_pBinlog = pBinlog.release();
-	}
-
-	assert ( IsValid() && m_pBinlog );
-	if ( m_pBinlog->GetLength64()<iSize && !m_pBinlog->Reset ( Relimit ( m_pBinlog->GetLength64(), iSize ), m_sError ) )
-	{
-		m_bValid = false;
-		LogError();
-		return nullptr;
-	}
-
-	return m_pBinlog->GetWritePtr();
-}
-
-void ClusterBinlog_c::LogError() const
-{
-	sphFatalLog ( "replication binlog %s", m_sError.cstr() );
-}
-
-bool ClusterBinlog_c::ReadAll ( BinlogStoreData_t & tInfo )
-{
-	if ( !m_pBinlog || !m_pBinlog->GetLength64() )
-		return true;
-
-	MemoryReader_c tRd ( m_pBinlog->GetReadPtr(), m_pBinlog->GetLength64() );
-
-	// emit header
-	DWORD uHeader = tRd.GetDword();
-	if ( uHeader!=BINLOG_HEADER_MAGIC_SPBL )
-	{
-		m_sError = "missing magic header (corrupted?)";
-		Invalidate();
-		return false;
-	}
-
-	DWORD uVersion = tRd.GetDword();
-	if ( uVersion!=BINLOG_VERSION )
-	{
-		m_sError.SetSprintf ( "is v.%d, binary is v.%d; recovery requires previous binary version", uVersion, BINLOG_VERSION );
-		Invalidate();
-		return false;
-	}
-
-	int iClusters = tRd.UnzipInt();
-	int iIndexes = tRd.UnzipInt();
-
-	CSphVector< std::pair < CSphString, Wsrep::GlobalTid_t > > dClusters ( iClusters );
-	CSphVector< std::pair < CSphString, int64_t > > dIndexes ( iIndexes );
-
-	for ( auto & tCluster : dClusters )
-		tCluster.second.m_iSeqNo = tRd.GetOffset();
-
-	for ( auto & tIndex : dIndexes )
-		tIndex.second = tRd.GetOffset();
-
-	for ( auto & tCluster : dClusters )
-	{
-		tCluster.first = tRd.GetString();
-		tRd.GetBytes ( tCluster.second.m_tUuid.data(), sizeof ( tCluster.second.m_tUuid ) );
-	}
-
-	for ( auto & tIndex : dIndexes )
-		tIndex.first = tRd.GetString();
-
-	for ( auto & tCluster : dClusters )
-	{
-		if ( !tInfo.m_hClusters.Add ( tCluster.second, tCluster.first ) )
-		{
-			m_sError.SetSprintf ( "duplicate cluster found '%s', gtid %s", tCluster.first.cstr(), Gtid2Str ( tCluster.second ).cstr() );
-			Invalidate();
-			return false;
-		}
-	}
-
-	for ( auto & tIndex : dIndexes )
-	{
-		if ( !tInfo.m_hIndexes.Add ( tIndex.second, tIndex.first ) )
-		{
-			m_sError.SetSprintf ( "duplicate index found '%s', TID " INT64_FMT, tIndex.first.cstr(), tIndex.second );
-			Invalidate();
-			return false;
-		}
-	}
-
-	return true;
-}
-
-bool ClusterBinlog_c::WriteAll ( const BinlogStoreData_t & tInfo )
-{
-	if ( !IsValid() )
-		return false;
-
-	m_hTnx.Reset();
-	CSphVector<BYTE> dBuf;
-	MemoryWriter_c tWr ( dBuf );
-
-	int iClusters = tInfo.m_hClusters.GetLength();
-	int iIndexes = tInfo.m_hIndexes.GetLength();
-
-	// emit header
-	tWr.PutDword ( BINLOG_HEADER_MAGIC_SPBL );
-	tWr.PutDword ( BINLOG_VERSION );
-
-	tWr.ZipInt ( iClusters );
-	tWr.ZipInt ( iIndexes );
-	
-	// clusters seqno and indexes tnx first
-	for ( const auto & tCluster : tInfo.m_hClusters )
-	{
-		m_hTnx.m_hClusters.Add ( tWr.GetPos(), tCluster.first );
-		tWr.PutOffset ( tCluster.second.m_iSeqNo );
-	}
-	for ( const auto & tIndex : tInfo.m_hIndexes )
-	{
-		m_hTnx.m_hIndexes.Add ( tWr.GetPos(), tIndex.first );
-		tWr.PutOffset ( tIndex.second );
-	}
-
-	// clusters info
-	for ( const auto & tCluster : tInfo.m_hClusters )
-	{
-		tWr.PutString ( tCluster.first );
-		tWr.PutBytes ( tCluster.second.m_tUuid.data(), sizeof ( tCluster.second.m_tUuid ) );
-	}
-
-	// indexes info
-	for ( const auto & tIndex : tInfo.m_hIndexes )
-		tWr.PutString ( tIndex.first );
-
-	BYTE * pDst = GetWritePtr ( dBuf.GetLength() );
-	if ( !IsValid() )
-	{
-		Invalidate();
-		return false;
-	}
-
-	assert ( IsValid() && pDst && GetLength()>dBuf.GetLength() );
-	memcpy ( pDst, dBuf.Begin(), dBuf.GetLength() );
-
-	sphLogDebugRpl ( "replication binlog flushed, size %d(%d)", (int)dBuf.GetLength(), (int)GetLength() );
-	return true;
-}
-
-void ClusterBinlog_c::Invalidate()
-{
-	LogError();
-	Close();
-	m_bValid = false;
-}
-
-/////////////////////////////////////////////////////////////////////////////
-/// cluster binlog helpers
-
-void ClusterBinlog_c::OnClusterDelete ( const CSphString & sCluster, const StrVec_t & dIndexes )
-{
-	if ( !IsValid() )
-		return;
-
-	ScopedMutex_t tLock ( m_tLock );
-	
-	BinlogStoreData_t tInfo;
-	if ( !ReadAll ( tInfo ) )
-		return;
-	
-	tInfo.m_hClusters.Delete ( sCluster );
-	for ( const auto & sIdx : dIndexes )
-		tInfo.m_hIndexes.Delete ( sIdx );
-
-	WriteAll ( tInfo );
-}
-
-void ClusterBinlog_c::OnClusterIndexesAdd ( const ReplicationCluster_t & tCluster, const StrVec_t & dIndexes )
-{
-	if ( !IsValid() )
-		return;
-
-	ScopedMutex_t tLock ( m_tLock );
-	
-	BinlogStoreData_t tInfo;
-	if ( !ReadAll ( tInfo ) )
-		return;
-
-	tInfo.m_hClusters.AddUnique ( tCluster.m_sName ) = tCluster.m_tGtid;
-
-	for ( const auto & sIndex : dIndexes )
-	{
-		cServedIndexRefPtr_c pServed = GetServed ( sIndex );
-		// distributed index does not have TID
-		if ( pServed && ServedDesc_t::IsMutable ( pServed ) )
-		{
-			int64_t iTID = RIdx_T<RtIndex_i*> ( pServed )->m_iTID;
-			tInfo.m_hIndexes.AddUnique ( sIndex ) = iTID;
-		}
-	}
-
-	WriteAll ( tInfo );
-}
-
-void ClusterBinlog_c::OnClusterIndexesDrop ( const ReplicationCluster_t & tCluster, const StrVec_t & dIndexes )
-{
-	if ( !IsValid() )
-		return;
-
-	ScopedMutex_t tLock ( m_tLock );
-
-	BinlogStoreData_t tInfo;
-	if ( !ReadAll ( tInfo ) )
-		return;
-
-	tInfo.m_hClusters.AddUnique ( tCluster.m_sName ) = tCluster.m_tGtid;
-
-	for ( const auto & sIndex : dIndexes )
-		tInfo.m_hIndexes.Delete ( sIndex );
-
-	WriteAll ( tInfo );
-}
-
-void ClusterBinlog_c::ClusterTnx ( const CSphString & sCluster, const CSphString & sIndex, int64_t iSeqno, int64_t iTID )
-{
-	if ( iTID<0 || iSeqno==Wsrep::WRONG_SEQNO )
-		return;
-	if ( !IsValid() )
-		return;
-
-	ScopedMutex_t tLock ( m_tLock );
-
-	int * pClusterOff = m_hTnx.m_hClusters ( sCluster );
-	int * pIndexOff = m_hTnx.m_hIndexes ( sIndex );
-
-	if ( !pClusterOff || !pIndexOff )
-		return;
-
-	//sphLogDebugRpl ( "replication binlog tnx '%s:%s', seqno %d(%d), tid %d(%d)", sCluster.cstr(), sIndex.cstr(), (int)iSeqno, (*pClusterOff), (int)iTID, (*pIndexOff) ); // !COMMIT
-
-	BYTE * pBlog = m_pBinlog->GetWritePtr();
-	memcpy ( pBlog + *pClusterOff, &iSeqno, sizeof ( iSeqno ) );
-	memcpy ( pBlog + *pIndexOff, &iTID, sizeof ( iTID ) );
-}
-
 void ReplicationCluster_t::OnSeqnoCommited ( const ReplicatedCommand_t & tCmd, int64_t iSeqNo )
 {
 	m_tGtid.m_iSeqNo = iSeqNo;
-	g_pBinlog->ClusterTnx ( m_sName, tCmd.m_sIndex, iSeqNo, tCmd.m_iTID );
+	RplBinlog()->ClusterTnx ( *this );
 }
-
-static bool CheckIndexTidMatched ( const CSphString & sIndex, const IndexesTid_h & hIndexes, int64_t & iBlogTID, int64_t & iIndexTID )
-{
-	const int64_t * pIndexTID = hIndexes ( sIndex );
-
-	if ( !pIndexTID ) 
-		return false;
-
-	iBlogTID = *pIndexTID;
-
-	cServedIndexRefPtr_c pServed = GetServed ( sIndex );
-	// for local index TID should match and for distributed index should exists
-	if ( ServedDesc_t::IsMutable ( pServed ) )
-	{
-		iIndexTID = RIdx_c ( pServed )->m_iTID;
-		return ( iBlogTID==iIndexTID );
-	} else
-	{
-		return GetDistr ( sIndex );
-	}
-}
-
-void ClusterBinlog_c::OnClusterLoad ( ReplicationCluster_t & tCluster )
-{
-	if ( !IsValid() )
-		return;
-
-	ScopedMutex_t tLock ( m_tLock );
-
-	BinlogStoreData_t tInfo;
-	if ( !ReadAll ( tInfo ) )
-		return;
-
-	bool bIndexesMatched = tInfo.m_hClusters.Exists ( tCluster.m_sName );
-	// steel need to add cluster into hash
-	if ( !bIndexesMatched )
-		tInfo.m_hClusters.AddUnique ( tCluster.m_sName ) = tCluster.m_tGtid;
-
-	StrVec_t dIndexes = tCluster.GetIndexes();
-	// need to iterate all indexes and add them into hash
-	for ( const auto & sIndex : dIndexes )
-	{
-		int64_t iBlogTID = -1;
-		int64_t iIndexTID = -1;
-		bool bMatched = CheckIndexTidMatched ( sIndex, tInfo.m_hIndexes, iBlogTID, iIndexTID );
-		bIndexesMatched &= bMatched;
-		if ( !bMatched )
-		{
-			tInfo.m_hIndexes.AddUnique ( sIndex ) = iIndexTID;
-			sphLogDebugRpl ( "replication binlog cluster '%s' index '%s' TID not matched %d(%d)", tCluster.m_sName.cstr(), sIndex.cstr(), (int)iBlogTID, (int)iIndexTID );
-		}
-	}
-
-	if ( bIndexesMatched )
-		tCluster.m_tGtid = tInfo.m_hClusters [ tCluster.m_sName ];
-	else
-		WriteAll ( tInfo );
-
-	sphLogDebugRpl ( "replication binlog loaded cluster '%s', gtid %s, matched %d", tCluster.m_sName.cstr(), Gtid2Str ( tCluster.m_tGtid ).cstr() , (int)bIndexesMatched );
-}
-
-void ClusterBinlog_c::OnClusterSynced ( const ReplicationCluster_t & tCluster )
-{
-	if ( !IsValid() )
-		return;
-
-	ScopedMutex_t tLock ( m_tLock );
-
-	BinlogStoreData_t tInfo;
-	if ( !ReadAll ( tInfo ) )
-		return;
-
-	// should not update then write if gtid matched
-	const auto * pGtid = tInfo.m_hClusters ( tCluster.m_sName );
-	if ( pGtid && *pGtid==tCluster.m_tGtid )
-		return;
-
-	tInfo.m_hClusters.AddUnique ( tCluster.m_sName ) = tCluster.m_tGtid;
-
-	WriteAll ( tInfo );
-}
-
 

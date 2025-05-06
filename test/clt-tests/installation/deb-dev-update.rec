@@ -68,10 +68,10 @@ apt -y install manticore manticore-extra manticore-common manticore-server manti
 WARNING: apt does not have a stable CLI interface. Use with caution in scripts.
 perl: warning: Setting locale failed.
 perl: warning: Please check that your locale settings:
-LANGUAGE = (unset),
-LC_ALL = (unset),
-LANG = "en_US.UTF-8"
-are supported and installed on your system.
+	LANGUAGE = (unset),
+	LC_ALL = (unset),
+	LANG = "en_US.UTF-8"
+    are supported and installed on your system.
 perl: warning: Falling back to the standard locale ("C").
 debconf: delaying package configuration, since apt-utils is not installed
 ––– block: stop-searchd-dev –––

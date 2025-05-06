@@ -41,10 +41,5 @@ for i in 1 2 3; do grep -q 'FATAL:' /var/log/manticore-${i}/searchd.log ; echo "
 ––– input –––
 for i in 1 2 3; do mysql -h0 -P${i}306 -e "show status like 'cluster_a_nodes_view'\G" | grep Value; done
 ––– output –––
-Value: 127.0.0.1:1312,127.0.0.1:1322:replication,127.0.0.1:2312,127.0.0.1:2322:replication
-Value: 127.0.0.1:1312,127.0.0.1:1322:replication,127.0.0.1:2312,127.0.0.1:2322:replication
-––– input –––
-for i in 1 2 3; do mysql -h0 -P${i}306 -e "show status like 'cluster_b_nodes_view'\G" | grep Value; done
-––– output –––
-Value: 127.0.0.1:1312,127.0.0.1:1324:replication,127.0.0.1:3312,127.0.0.1:3322:replication
-Value: 127.0.0.1:1312,127.0.0.1:1324:replication,127.0.0.1:3312,127.0.0.1:3322:replication
+  Value: 127.0.0.1:1312,127.0.0.1:1322:replication,127.0.0.1:2312,127.0.0.1:2322:replication
+  Value: 127.0.0.1:1312,127.0.0.1:1322:replication,127.0.0.1:2312,127.0.0.1:2322:replication

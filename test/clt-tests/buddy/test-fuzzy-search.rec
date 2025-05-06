@@ -1,3 +1,4 @@
+
 ––– block: ../base/start-searchd-with-buddy –––
 ––– input –––
 apt-get update -y > /dev/null; echo $?
@@ -292,6 +293,114 @@ mysql -h0 -P9306 -e "SELECT * FROM name WHERE MATCH('SARA') ORDER BY id ASC, use
 | 6802 | KLARA ROLLER         | a    |
 +------+----------------------+------+
 ––– input –––
+mysql -h0 -P9306 -e "SELECT username FROM name WHERE MATCH('SMITH') OPTION cutoff=0, ranker=expr('sum((4*lcs+2*(min_hit_pos=1)+exact_hit)*user_weight)*1000+bm25'), field_weights=(username=1), fuzzy=1;"
+––– output –––
++----------------+
+| username       |
++----------------+
+| MINH FENNELL   |
+| MINH MAZUR     |
+| MINH VILLEGAS  |
+| MINH TILLER    |
+| MINH VOGT      |
+| MINH SHAW      |
+| MINH STEADMAN  |
+| MINH PEAK      |
+| MINH ROOT      |
+| MINH PATTERSON |
+| MINH BURDETTE  |
+| MINH ABNEY     |
+| MINH DOLAN     |
+| MINH RUDD      |
+| MINH TOLBERT   |
+| MINH CRANDALL  |
+| MINH JAIME     |
+| MINH ISAACSON  |
+| MINH BONILLA   |
+| MINH WAHL      |
++----------------+
+––– input –––
+mysql -h0 -P9306 -e "SELECT username FROM name WHERE MATCH('SMITH') OPTION cutoff=0, field_weights=(username=1), fuzzy=1;"
+––– output –––
++-----------------+
+| username        |
++-----------------+
+| SYDNEY SMYTH    |
+| CHERILYN SMYTH  |
+| SATURNINA SMYTH |
+| LYNN SMYTH      |
+| STEVEN SMYTH    |
+| JASMIN SMYTH    |
+| BERYL SMYTH     |
+| JACK SMYTH      |
+| CAROLEE SMYTH   |
+| CARON SMYTH     |
+| ALFREDO SMYTH   |
+| ALTA SMYTH      |
+| VIKI SMYTH      |
+| CHANA SMYTH     |
+| HYUN SMYTH      |
+| ROGER SMYTH     |
+| LINDSEY SMYTH   |
+| WILFORD SMYTH   |
+| ARLINE SMYTH    |
+| APRYL SMYTH     |
++-----------------+
+––– input –––
+mysql -h0 -P9306 -e "SELECT username FROM name WHERE MATCH('SMITH') OPTION cutoff=0, ranker=expr('sum((4*lcs+2*(min_hit_pos=1)+exact_hit)*user_weight)*1000+bm25'), fuzzy=1;"
+––– output –––
++----------------+
+| username       |
++----------------+
+| MINH FENNELL   |
+| MINH MAZUR     |
+| MINH VILLEGAS  |
+| MINH TILLER    |
+| MINH VOGT      |
+| MINH SHAW      |
+| MINH STEADMAN  |
+| MINH PEAK      |
+| MINH ROOT      |
+| MINH PATTERSON |
+| MINH BURDETTE  |
+| MINH ABNEY     |
+| MINH DOLAN     |
+| MINH RUDD      |
+| MINH TOLBERT   |
+| MINH CRANDALL  |
+| MINH JAIME     |
+| MINH ISAACSON  |
+| MINH BONILLA   |
+| MINH WAHL      |
++----------------+
+––– input –––
+mysql -h0 -P9306 -e "SELECT username FROM name WHERE MATCH('SMITH') OPTION cutoff=0, fuzzy=1;"
+––– output –––
++-----------------+
+| username        |
++-----------------+
+| SYDNEY SMYTH    |
+| CHERILYN SMYTH  |
+| SATURNINA SMYTH |
+| LYNN SMYTH      |
+| STEVEN SMYTH    |
+| JASMIN SMYTH    |
+| BERYL SMYTH     |
+| JACK SMYTH      |
+| CAROLEE SMYTH   |
+| CARON SMYTH     |
+| ALFREDO SMYTH   |
+| ALTA SMYTH      |
+| VIKI SMYTH      |
+| CHANA SMYTH     |
+| HYUN SMYTH      |
+| ROGER SMYTH     |
+| LINDSEY SMYTH   |
+| WILFORD SMYTH   |
+| ARLINE SMYTH    |
+| APRYL SMYTH     |
++-----------------+
+––– input –––
 mysql -h0 -P9306 -e "CALL AUTOCOMPLETE('jo', 'name', 1 AS fuzziness);" | tail -n +4 | sort
 ––– output –––
 +--------+
@@ -472,40 +581,51 @@ mysql -h0 -P9306 -e "CALL AUTOCOMPLETE('al', 'name', 0 AS fuzziness);" | tail -n
 ––– input –––
 mysql -h0 -P9306 -e "CALL AUTOCOMPLETE('mi', 'name', 0 AS append, 1 AS prepend);" | tail -n +4 | sort
 ––– output –––
-+----------+
-| britni   |
-| brittani |
-| cami     |
-| choi     |
-| darci    |
-| jenni    |
-| joi      |
-| kaci     |
-| kami     |
-| kimi     |
-| laci     |
-| leilani  |
-| luci     |
-| mancini  |
-| marci    |
-| mi       |
-| muoi     |
-| nanci    |
-| naomi    |
-| neomi    |
-| nohemi   |
-| penni    |
-| ricci    |
-| roni     |
-| shani    |
-| staci    |
-| stefani  |
-| tami     |
-| tammi    |
-| tiffani  |
-| toi      |
-| tomi     |
-| traci    |
++--------+
+| cami   |
+| darci  |
+| joan   |
+| jody   |
+| joe    |
+| joel   |
+| joey   |
+| john   |
+| johnie |
+| johnny |
+| joi    |
+| jon    |
+| jonas  |
+| jordan |
+| jorge  |
+| jose   |
+| joseph |
+| joshi  |
+| joshua |
+| joy    |
+| joyce  |
+| kaci   |
+| kami   |
+| kimi   |
+| laci   |
+| luci   |
+| marci  |
+| mi     |
+| nanci  |
+| naomi  |
+| neomi  |
+| nohemi |
+| ricci  |
+| staci  |
+| tami   |
+| tammi  |
+| tobias |
+| todd   |
+| toi    |
+| tom    |
+| tomas  |
+| tomi   |
+| toney  |
+| traci  |
 ––– input –––
 mysql -h0 -P9306 -e "CALL AUTOCOMPLETE('ch', 'name', 1 AS fuzziness, 3 AS expansion_len);" | tail -n +4 | sort
 ––– output –––
@@ -544,6 +664,12 @@ mysql -h0 -P9306 -e "CALL AUTOCOMPLETE('gr', 'name', 1 AS fuzziness, 'ru' AS lay
 | grey    |
 | grogan  |
 | grover  |
+––– input –––
+mysql -h0 -P9306 -e "DROP TABLE IF EXISTS tbl1; CREATE TABLE tbl1 (title TEXT) min_infix_len='2';"
+––– output –––
+––– input –––
+mysql -h0 -P9306 -e "SELECT * FROM \`tbl1\` WHERE MATCH('abc') OPTION fuzzy = 1;"
+––– output –––
 ––– input –––
 mysql -h0 -P9306 -e "drop table if exists t; create table t(f text) min_infix_len='2'; insert into t values(1, 'something'), (2, 'some thing'); select * from t where match('somethin') option fuzzy=0;"
 ––– output –––
@@ -735,6 +861,17 @@ mysql -h0 -P9306 -e "SELECT * FROM t WHERE MATCH('abcdef'); SHOW META;"
 | hits[0]        | 1      |
 +----------------+--------+
 ––– input –––
+mysql -h0 -P9306 -e "insert into t values(3, 'aa defghi xxx');"
+––– output –––
+––– input –––
+mysql -h0 -P9306 -e "select * from t where match('aa def ghi xxx') option fuzzy=1, layouts='';"
+––– output –––
++------+---------------+
+| id   | f             |
++------+---------------+
+|    3 | aa defghi xxx |
++------+---------------+
+––– input –––
 mysql -h0 -P9306 -e "SELECT * FROM t WHERE MATCH('abcef') OPTION fuzzy=1; SHOW META;"
 ––– output –––
 +------+-----------+
@@ -755,6 +892,7 @@ mysql -h0 -P9306 -e "SELECT * FROM t WHERE MATCH('abcef') OPTION fuzzy=1; SHOW M
 grep -A3 "SELECT \* FROM t WHERE MATCH('abcdef')" /var/log/manticore/query.log
 ––– output –––
 /* #!/[A-Za-z]{3}\s+[A-Za-z]{3}\s+[0-9]{1,2}\s+[0-9]{2}:[0-9]{2}:[0-9]{2}\.[0-9]{3}\s+[0-9]{4}/!# conn %{NUMBER} (127.0.0.1:%{NUMBER}) real #!/[0-9]{1}.[0-9]{3}/!# wall #!/[0-9]{1}.[0-9]{3}/!# found 1 */ SELECT * FROM t WHERE MATCH('abcdef');
+/* #!/[A-Za-z]{3}\s+[A-Za-z]{3}\s+[0-9]{1,2}\s+[0-9]{2}:[0-9]{2}:[0-9]{2}\.[0-9]{3}\s+[0-9]{4}/!# conn %{NUMBER} (127.0.0.1:%{NUMBER}) real #!/[0-9]{1}.[0-9]{3}/!# wall #!/[0-9]{1}.[0-9]{3}/!# found 1 */ select * from t where match('aa def ghi xxx') option fuzzy=1, layouts='';
 /* #!/[A-Za-z]{3}\s+[A-Za-z]{3}\s+[0-9]{1,2}\s+[0-9]{2}:[0-9]{2}:[0-9]{2}\.[0-9]{3}\s+[0-9]{4}/!# conn %{NUMBER} (127.0.0.1:%{NUMBER}) real #!/[0-9]{1}.[0-9]{3}/!# wall #!/[0-9]{1}.[0-9]{3}/!# found 2 */ SELECT * FROM t WHERE MATCH('abcef') OPTION fuzzy=1;
 ––– input –––
 mysql -h0 -P9306 -e "SELECT * FROM t WHERE MATCH('nonexistent'); SHOW META;"

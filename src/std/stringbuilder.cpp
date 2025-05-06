@@ -343,11 +343,3 @@ const Str_t& StringBuilder_c::LazyComma_c::RawComma ( const std::function<void (
 	fnAddNext();
 	return m_sPrefix;
 }
-
-
-CSphString StrVec2Str ( const VecTraits_T<CSphString>& tVec, const char* szDelim ) noexcept
-{
-	StringBuilder_c tOut ( szDelim );
-	tVec.Apply ( [&tOut] ( const CSphString& sNode ) { tOut << sNode; } );
-	return CSphString { tOut };
-}

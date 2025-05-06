@@ -1,71 +1,107 @@
+––– block: ../base/start-searchd-with-buddy –––
 ––– input –––
-echo -e "searchd {\n    listen = 9315:mysql\n    listen = 9316\n    log = /tmp/searchd.log\n    pid_file = /tmp/searchd.pid\n    data_dir = /tmp/data\n    watchdog = 0\n}" > /tmp/116.conf
+manticore-load --quiet --json --init="CREATE TABLE test (id bigint, usertest text stored indexed, category string, age int, salary float, discount float, is_active bool, last_login timestamp, product_codes multi, large_values multi64, additional_info json, location_vector float_vector)" --load="INSERT INTO test (id, usertest, category, age, salary, discount, is_active, last_login, product_codes, large_values, additional_info, location_vector) VALUES (<increment>, '<text/5/20>', '<text/5/10>', <int/1/100>, <float/1.0/100.0>, <float/0.0/10.0>, <int/0/1>, <int/1609459200/1704067200>, (<array/1/10/1/100>), (<array/1/10/-100000/100000>), '{\"key\":\"value\"}', (<array/4/4/1.0/10.0>))" --batch-size=10000 --threads=4 --total=1000000
+––– output –––
+{
+"threads": %{NUMBER},
+"batch_size": %{NUMBER},
+"time": "%{NUMBER}:%{NUMBER}",
+"total_operations": %{NUMBER},
+"operations_per_second": %{NUMBER},
+"qps": {
+"avg": #!/[0-9]+(\.[0-9]+)?/!#,
+"p99": %{NUMBER},
+"p95": %{NUMBER},
+"p5": %{NUMBER},
+"p1": %{NUMBER}
+},
+"latency": {
+"avg": #!/[0-9]+(\.[0-9]+)?/!#,
+"p50": %{NUMBER},
+"p95": %{NUMBER},
+"p99": %{NUMBER}
+}
+}
+––– input –––
+mysql -h0 -P9306 -e "SELECT * FROM test ORDER BY id ASC LIMIT 100000 OPTION max_matches=100000;" > /tmp/test_data.txt
 ––– output –––
 ––– input –––
-mkdir -p /tmp/data; rm -f /tmp/searchd.log; stdbuf -oL searchd --stopwait > /dev/null; stdbuf -oL searchd -c /tmp/116.conf > /dev/null
+md5sum /tmp/test_data.txt
+––– output –––
+8987cd64fedd82fe4f57587bf7328f43  /tmp/test_data.txt
+––– input –––
+mysql -h0 -P9306 -e "SHOW TABLES"
+––– output –––
++-------+------+
+| Table | Type |
++-------+------+
+| test  | rt   |
++-------+------+
+––– input –––
+mysql -P9306 -h0 -e "SELECT COUNT(*) FROM test;"
+––– output –––
++----------+
+| count(*) |
++----------+
+|  1000000 |
++----------+
+––– input –––
+mysql -P9306 -h0 -e "DESCRIBE test;"
+––– output –––
++-----------------+--------------+----------------+
+| Field           | Type         | Properties     |
++-----------------+--------------+----------------+
+| id              | bigint       |                |
+| usertest        | text         | indexed stored |
+| category        | string       |                |
+| age             | uint         |                |
+| salary          | float        |                |
+| discount        | float        |                |
+| is_active       | bool         |                |
+| last_login      | timestamp    |                |
+| product_codes   | mva          |                |
+| large_values    | mva64        |                |
+| additional_info | json         |                |
+| location_vector | float_vector |                |
++-----------------+--------------+----------------+
+––– input –––
+mysql -h0 -P9306 -e "SELECT * FROM test ORDER BY id ASC LIMIT 10;"
+––– output –––
++------+------------------------------------------------------------------------------------------------------------------------------------------+-----------------------------------------------------------+------+-----------+----------+-----------+------------+------------------------------+------------------------------------------------------+-----------------+----------------------------------------+
+| id   | usertest                                                                                                                                 | category                                                  | age  | salary    | discount | is_active | last_login | product_codes                | large_values                                         | additional_info | location_vector                        |
++------+------------------------------------------------------------------------------------------------------------------------------------------+-----------------------------------------------------------+------+-----------+----------+-----------+------------+------------------------------+------------------------------------------------------+-----------------+----------------------------------------+
+|    1 | Always east fake, dull internationally.                                                                                                  | Humble below; been vaguely 1000 this at understood gave.  |   68 | 92.500000 | 4.300000 |         0 | 1639945392 | 55                           | -94236,-72461,-60893,-8400,86868,88029               | {"key":"value"} | 8.000000,7.000000,5.000000,7.000000    |
+|    2 | To make weak that far find passively light locally think fall yearly.                                                                    | Right near called, afraid foolish! happy.                 |   12 |  2.300000 | 0.800000 |         1 | 1699637668 | 61                           | -15979,1981,21361,23385,72220,88494,97442            | {"key":"value"} | 1.000000,10.000000,1.000000,10.000000  |
+|    3 | Incorrectly modern obviously soft certainly.                                                                                             | Surprisingly gentle! hot! set. Try empty calm.            |   48 |  9.100000 | 6.000000 |         0 | 1627975049 | 1,12,18,21,30,37,40,47,69,80 | -74029,35782                                         | {"key":"value"} | 6.000000,9.000000,6.000000,5.000000    |
+|    4 | Occasionally hungry understood stale cruel; emotionally beautiful modern the. Thirsty do poor dead; lazy let sick.                       | Specifically alive tall simply informally.                |   26 | 29.000000 | 3.100000 |         0 | 1645366189 | 3,10,23,47,49,52,63,88       | -63038,-55685,-55248,-47776,424,79675,81280,89088    | {"key":"value"} | 4.000000,7.000000,1.000000,4.000000    |
+|    5 | Ancient fake meet positively! were.                                                                                                      | 5? 2 become permanently tell heard unluckily right.       |    1 | 17.299999 | 1.400000 |         1 | 1639318374 | 1,5,14,39,73,76,93,99        | -92327,-55702,-54292,-36400,-20075,11742,61145,79052 | {"key":"value"} | 10.000000,10.000000,6.000000,10.000000 |
+|    6 | Spring met made happy certainly, carelessly scientifically lie saw grew, hurt hot full monthly cut.                                      | Does, front! stood south! slow.                           |   96 | 63.500000 | 2.500000 |         1 | 1680043635 | 22,42,57,73,77,78,83,96      | -1532,51121,71461,81729                              | {"key":"value"} | 1.000000,9.000000,5.000000,2.000000    |
+|    7 | Dusk instantly front, shallow dull call send should easily often.                                                                        | Happy quickly stale the felt dark get; low.               |   57 | 28.799999 | 7.300000 |         1 | 1652409436 | 12,16,18,37,42,51,55,80      | -10285,8997                                          | {"key":"value"} | 5.000000,8.000000,9.000000,1.000000    |
+|    8 | Dry, informally work, 100 50 needed specifically.                                                                                        | Cold nightly poor hourly had thin got.                    |   58 | 14.500000 | 4.700000 |         0 | 1702796380 | 53                           | 38271                                                | {"key":"value"} | 10.000000,2.000000,10.000000,4.000000  |
+|    9 | Permanently gone? drew kept big specifically weak held she; constantly send down spiritually? maybe happy feel educationally! from draw. | High, am salty dawn quietly? gentle.                      |   76 | 10.400000 | 3.000000 |         1 | 1638109587 | 59,68                        | -91473,-66740,-7294,2085,58052                       | {"key":"value"} | 5.000000,4.000000,9.000000,2.000000    |
+|   10 | Send are economically commonly wrote specifically healthy wrong culturally? 4, small rich can sad.                                       | Of fake wet salty wrong maybe! does went usually? humble. |  100 |  1.700000 | 8.000000 |         1 | 1632222856 | 6,7,17,48,56,84,89           | 94932                                                | {"key":"value"} | 9.000000,4.000000,3.000000,10.000000   |
++------+------------------------------------------------------------------------------------------------------------------------------------------+-----------------------------------------------------------+------+-----------+----------+-----------+------------+------------------------------+------------------------------------------------------+-----------------+----------------------------------------+
+––– input –––
+mysql -h0 -P9206 -e "
+FLUSH RAMCHUNK test;
+FREEZE test;
+$(for n in $(seq 1 100); do
+    echo "UPDATE test SET category='updated' WHERE id=$n;"
+done)
+" > /dev/null 2>&1 &
+pid=$!
+wait $pid
+grep -i "error" /var/log/manticore/searchd.log
 ––– output –––
 ––– input –––
-if timeout 10 grep -qm1 '\[BUDDY\] started' <(tail -n 1000 -f /tmp/searchd.log); then echo 'Buddy started!'; else echo 'Timeout or failed!'; cat /tmp/searchd.log;fi
+mysql -h0 -P9306 -e "SELECT * FROM test ORDER BY id ASC LIMIT 5;"
 ––– output –––
-Buddy started!
-––– input –––
-mysql -P9315 -h0 -e "drop table if exists t; create table t(s string); insert into t values(1, 'a'); flush ramchunk t"; echo $?
-––– output –––
-0
-––– input –––
-mysql -P9315 -h0 -e "select * from t;"
-––– output –––
-+------+------+
-| id   | s    |
-+------+------+
-|    1 | a    |
-+------+------+
-––– input –––
-(rm -f /tmp/update.sql; for n in `seq 1 10000`; do echo "update t set s='b' where id=1;" >> /tmp/update.sql; done; nohup sh -c "while true; do mysql -P9315 -h0 < /tmp/update.sql | break; done" &>/dev/null &) 2>/dev/null
-––– output –––
-––– input –––
-sleep 30; mysql -P9315 -h0 -e "select * from t;"
-––– output –––
-+------+------+
-| id   | s    |
-+------+------+
-|    1 | b    |
-+------+------+
-––– input –––
-stdbuf -oL mysql -P9315 -h0 -e "freeze t"
-––– output –––
-+------------------------+------------------------+
-| file                   | normalized             |
-+------------------------+------------------------+
-| /tmp/data/t/t.0.spa    | /tmp/data/t/t.0.spa    |
-| /tmp/data/t/t.0.spb    | /tmp/data/t/t.0.spb    |
-| /tmp/data/t/t.0.spd    | /tmp/data/t/t.0.spd    |
-| /tmp/data/t/t.0.spe    | /tmp/data/t/t.0.spe    |
-| /tmp/data/t/t.0.sph    | /tmp/data/t/t.0.sph    |
-| /tmp/data/t/t.0.sphi   | /tmp/data/t/t.0.sphi   |
-| /tmp/data/t/t.0.spi    | /tmp/data/t/t.0.spi    |
-| /tmp/data/t/t.0.spidx  | /tmp/data/t/t.0.spidx  |
-| /tmp/data/t/t.0.spm    | /tmp/data/t/t.0.spm    |
-| /tmp/data/t/t.0.spp    | /tmp/data/t/t.0.spp    |
-| /tmp/data/t/t.0.spt    | /tmp/data/t/t.0.spt    |
-| /tmp/data/t/t.meta     | /tmp/data/t/t.meta     |
-| /tmp/data/t/t.ram      | /tmp/data/t/t.ram      |
-| /tmp/data/t/t.settings | /tmp/data/t/t.settings |
-+------------------------+------------------------+
-––– input –––
-mysql -P9315 -h0 -e "unfreeze t"; echo $?
-––– output –––
-0
-––– input –––
-mysql -P9315 -h0 -e "DESCRIBE t"
-––– output –––
-+-------+--------+------------+
-| Field | Type   | Properties |
-+-------+--------+------------+
-| id    | bigint |            |
-| s     | string |            |
-+-------+--------+------------+
-––– input –––
-mysql -P9315 -h0 -e "UPDATE t SET s='с' WHERE id=1; FLUSH RAMCHUNK t"; echo $?
-––– output –––
-0
++------+--------------------------------------------------------------------------------------------------------------------+----------------------------------------------------------+------+-----------+----------+-----------+------------+------------------------------+------------------------------------------------------+-----------------+----------------------------------------+
+| id   | usertest                                                                                                           | category                                                 | age  | salary    | discount | is_active | last_login | product_codes                | large_values                                         | additional_info | location_vector                        |
++------+--------------------------------------------------------------------------------------------------------------------+----------------------------------------------------------+------+-----------+----------+-----------+------------+------------------------------+------------------------------------------------------+-----------------+----------------------------------------+
+|    1 | Always east fake, dull internationally.                                                                            | Humble below; been vaguely 1000 this at understood gave. |   68 | 92.500000 | 4.300000 |         0 | 1639945392 | 55                           | -94236,-72461,-60893,-8400,86868,88029               | {"key":"value"} | 8.000000,7.000000,5.000000,7.000000    |
+|    2 | To make weak that far find passively light locally think fall yearly.                                              | Right near called, afraid foolish! happy.                |   12 |  2.300000 | 0.800000 |         1 | 1699637668 | 61                           | -15979,1981,21361,23385,72220,88494,97442            | {"key":"value"} | 1.000000,10.000000,1.000000,10.000000  |
+|    3 | Incorrectly modern obviously soft certainly.                                                                       | Surprisingly gentle! hot! set. Try empty calm.           |   48 |  9.100000 | 6.000000 |         0 | 1627975049 | 1,12,18,21,30,37,40,47,69,80 | -74029,35782                                         | {"key":"value"} | 6.000000,9.000000,6.000000,5.000000    |
+|    4 | Occasionally hungry understood stale cruel; emotionally beautiful modern the. Thirsty do poor dead; lazy let sick. | Specifically alive tall simply informally.               |   26 | 29.000000 | 3.100000 |         0 | 1645366189 | 3,10,23,47,49,52,63,88       | -63038,-55685,-55248,-47776,424,79675,81280,89088    | {"key":"value"} | 4.000000,7.000000,1.000000,4.000000    |
+|    5 | Ancient fake meet positively! were.                                                                                | 5? 2 become permanently tell heard unluckily right.      |    1 | 17.299999 | 1.400000 |         1 | 1639318374 | 1,5,14,39,73,76,93,99        | -92327,-55702,-54292,-36400,-20075,11742,61145,79052 | {"key":"value"} | 10.000000,10.000000,6.000000,10.000000 |
++------+--------------------------------------------------------------------------------------------------------------------+----------------------------------------------------------+------+-----------+----------+-----------+------------+------------------------------+------------------------------------------------------+-----------------+----------------------------------------+

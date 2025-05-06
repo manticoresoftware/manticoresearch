@@ -70,6 +70,18 @@ utilsApi.sql('CREATE CLUSTER click_query \'/var/data/click_query/\' as path, \'c
 ```
 
 <!-- intro -->
+##### Python-asyncio:
+
+<!-- request Python-asyncio -->
+
+```python
+await utilsApi.sql('CREATE CLUSTER posts')
+await utilsApi.sql('CREATE CLUSTER click_query \'/var/data/click_query/\' as path')
+await utilsApi.sql('CREATE CLUSTER click_query \'/var/data/click_query/\' as path, \'clicks_mirror1:9312,clicks_mirror2:9312,clicks_mirror3:9312\' as nodes')
+
+```
+
+<!-- intro -->
 ##### Javascript:
 
 <!-- request javascript -->
@@ -101,6 +113,18 @@ utilsApi.Sql("CREATE CLUSTER posts");
 utilsApi.Sql("CREATE CLUSTER click_query '/var/data/click_query/' as path");
 utilsApi.Sql("CREATE CLUSTER click_query '/var/data/click_query/' as path, 'clicks_mirror1:9312,clicks_mirror2:9312,clicks_mirror3:9312' as nodes");
 ```
+
+<!-- intro -->
+##### Rust:
+
+<!-- request Rust -->
+
+```rust
+utils_api.sql("CREATE CLUSTER posts", Some(true)).await;
+utils_api.sql("CREATE CLUSTER click_query '/var/data/click_query/' as path", Some(true)).await;
+utils_api.sql("CREATE CLUSTER click_query '/var/data/click_query/' as path, 'clicks_mirror1:9312,clicks_mirror2:9312,clicks_mirror3:9312' as nodes", Some(true)).await;
+```
+
 <!-- end -->
 
 If the [nodes](../../Creating_a_cluster/Setting_up_replication/Setting_up_replication.md#nodes) option is not specified when creating a cluster, the first node that joins the cluster will be saved as the [nodes](../../Creating_a_cluster/Setting_up_replication/Setting_up_replication.md#nodes) option.

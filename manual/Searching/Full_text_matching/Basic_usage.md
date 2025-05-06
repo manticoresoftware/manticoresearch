@@ -330,6 +330,29 @@ searchApi.search({"table":"hn_small","query":{"query_string":"@comment_text \"fi
 ```
 
 <!-- intro -->
+Python-asyncio
+<!-- request Python-asyncio -->
+
+```python
+await searchApi.search({"table":"hn_small","query":{"query_string":"@comment_text \"find joe fast \"/2"}, "_source": ["story_author","comment_author"], "limit":1})
+```
+<!-- response Python-asyncio -->
+``` python
+{'aggregations': None,
+ 'hits': {'hits': [{'_id': '807160',
+                    '_score': 2566,
+                    '_source': {'comment_author': 'runjake',
+                                'story_author': 'rbanffy'}}],
+          'max_score': None,
+          'total': 1864,
+          'total_relation': 'eq'},
+ 'profile': None,
+ 'timed_out': False,
+ 'took': 2,
+ 'warning': None}
+```
+
+<!-- intro -->
 javascript
 <!-- request javascript -->
 
@@ -401,6 +424,41 @@ SearchResponse searchResponse = searchApi.Search(searchRequest);
 ```
 <!-- response C# -->
 ```clike
+class SearchResponse {
+    took: 1
+    timedOut: false
+    aggregations: null
+    hits: class SearchResponseHits {
+        maxScore: null
+        total: 1864
+        totalRelation: eq
+        hits: [{_id=807160, _score=2566, _source={story_author=rbanffy, comment_author=runjake}}]
+    }
+    profile: null
+    warning: null
+}
+```
+
+<!-- intro -->
+Rust
+<!-- request Rust -->
+
+```rust
+let query = SearchQuery {
+     query_string: Some(serde_json::json!("@comment_text \"find joe fast \"/2").into()),
+    ..Default::default()
+};
+let search_req = SearchRequest {
+    table: "hn_small".to_string(),
+    query: Some(Box::new(query)),
+    source: serde_json::json!(["story_author", "comment_author"]),
+    limit: serde_json::json!(1),
+    ..Default::default(),
+};
+let search_res = search_api.search(search_req).await;
+```
+<!-- response Rust -->
+```rust
 class SearchResponse {
     took: 1
     timedOut: false

@@ -128,6 +128,28 @@ print(utilsApi.sql('SHOW THREADS'))
 ```python
 [{'columns': [{'TID': {'type': 'long'}}, {'Name': {'type': 'string'}}, {'Proto': {'type': 'string'}}, {'State': {'type': 'string'}}, {'Connection from': {'type': 'string'}}, {'ConnID': {'type': 'long long'}}, {'This/prev job time, s': {'type': 'string'}}, {'CPU activity': {'type': 'float'}}, {'Jobs done': {'type': 'long'}}, {'Thread status': {'type': 'string'}}, {'Info': {'type': 'string'}}], 'data': [{'TID': 506958, 'Name': 'work_6', 'Proto': 'http', 'State': 'query', 'Connection from': '127.0.0.1:38600', 'ConnID': 834, 'This/prev job time, s': '206us', 'CPU activity': '91.85%', 'Jobs done': 943, 'Thread status': 'working', 'Info': 'show_threads'}], 'total': 1, 'error': '', 'warning': ''}]
 ```
+
+<!-- intro -->
+##### Python-asyncio:
+
+<!-- request Python-asyncio -->
+
+```python
+import manticoresearch
+config = manticoresearch.Configuration(
+            host = "http://127.0.0.1:9308"
+            )
+client = manticoresearch.ApiClient(config)
+utilsApi = manticoresearch.UtilsApi(client)
+res = await utilsApi.sql('SHOW THREADS')
+print(res)
+```
+<!-- response Python-asyncio -->
+
+```python
+[{'columns': [{'TID': {'type': 'long'}}, {'Name': {'type': 'string'}}, {'Proto': {'type': 'string'}}, {'State': {'type': 'string'}}, {'Connection from': {'type': 'string'}}, {'ConnID': {'type': 'long long'}}, {'This/prev job time, s': {'type': 'string'}}, {'CPU activity': {'type': 'float'}}, {'Jobs done': {'type': 'long'}}, {'Thread status': {'type': 'string'}}, {'Info': {'type': 'string'}}], 'data': [{'TID': 506958, 'Name': 'work_6', 'Proto': 'http', 'State': 'query', 'Connection from': '127.0.0.1:38600', 'ConnID': 834, 'This/prev job time, s': '206us', 'CPU activity': '91.85%', 'Jobs done': 943, 'Thread status': 'working', 'Info': 'show_threads'}], 'total': 1, 'error': '', 'warning': ''}]
+```
+
 <!-- intro -->
 ##### Javascript:
 
@@ -331,6 +353,91 @@ utilsApi.Sql("SHOW THREADS");
 <!-- response C# -->
 
 ```clike
+
+{
+  columns=[
+    {
+      TID={
+        type=string
+      }
+    },
+    {
+      Name={
+        type=string
+      }
+    },
+    {
+      Proto={
+        type=string
+      }
+    },
+    {
+      State={
+        type=string
+      }
+    },
+    {
+      Connection from={
+        type=string
+      }
+    },
+    {
+      ConnID={
+        type=string
+      }
+    },
+    {
+      This/prev job time= {
+        type=string
+      }
+    },
+    {
+      Jobs done={
+        type=string
+      }
+    },
+    {
+      Thread status={
+        type=string
+      }
+    },
+    {
+      Info={
+        type=string
+      }
+    }
+  ],
+  data=[
+    {
+      TID=83,
+      Name=work_1,
+      Proto=http,
+      State=query,
+      Connection from=172.17.0.1:41410,
+      ConnID=6,
+      This/prev job time=689us,
+      Jobs done=159,
+      Thread status=working,
+      Info=show_threads
+    }
+  ],
+  total=0,
+  error="",
+  warning=""
+}
+```
+
+<!-- intro -->
+##### Rust:
+
+<!-- request Rust -->
+
+```rust
+utils_api.sql("SHOW THREADS", Some(true)).await;
+```
+<!-- response Rust -->
+
+```rust
 
 {
   columns=[
@@ -643,6 +750,15 @@ utilsApi.sql('SHOW THREADS OPTION columns=30')
 ```
 
 <!-- intro -->
+##### Python-asyncio:
+
+<!-- request Python-asyncio -->
+
+```python
+await utilsApi.sql('SHOW THREADS OPTION columns=30')
+```
+
+<!-- intro -->
 ##### Javascript:
 
 <!-- request javascript -->
@@ -667,6 +783,15 @@ utilsApi.sql("SHOW THREADS OPTION columns=30");
 
 ```clike
 utilsApi.Sql("SHOW THREADS OPTION columns=30");
+```
+
+<!-- intro -->
+##### Rust:
+
+<!-- request Rust -->
+
+```rust
+utils_api.sql("SHOW THREADS OPTION columns=30", Some(true)).await;
 ```
 
 <!-- intro -->

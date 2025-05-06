@@ -13,7 +13,7 @@
 #pragma once
 
 /// generic accessor
-template<typename T>
+template<typename T, typename INT>
 struct SphAccessor_T
 {
 	using MEDIAN_TYPE = T;
@@ -21,8 +21,8 @@ struct SphAccessor_T
 	MEDIAN_TYPE& Key ( T* a ) const;
 	void CopyKey ( MEDIAN_TYPE* pMed, T* pVal ) const;
 	void Swap ( T* a, T* b ) const;
-	T* Add ( T* p, int i ) const;
-	int Sub ( T* b, T* a ) const;
+	T* Add ( T* p, INT i ) const;
+	INT Sub ( T* b, T* a ) const;
 };
 
 #include "accessor_impl.h"

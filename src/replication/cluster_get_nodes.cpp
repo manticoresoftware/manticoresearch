@@ -66,9 +66,9 @@ StrVec_t QueryNodeListFromRemotes ( const VecTraits_T<CSphString>& dClusterNodes
 	if ( dDesc.IsEmpty() )
 	{
 		if ( TlsMsg::HasErr() )
-			TlsMsg::Err ( "%s invalid node, error: %s", StrVec2Str ( dClusterNodes ).cstr(), TlsMsg::szError() );
+			TlsMsg::Err ( "%s invalid node, error: %s", Vec2Str ( dClusterNodes ).cstr(), TlsMsg::szError() );
 		else
-			TlsMsg::Err ( "%s invalid node", StrVec2Str ( dClusterNodes ).cstr() );
+			TlsMsg::Err ( "%s invalid node", Vec2Str ( dClusterNodes ).cstr() );
 
 		return dNodes;
 	}
@@ -109,9 +109,9 @@ StrVec_t GetNodeListFromRemotes ( const ClusterDesc_t& tDesc )
 {
 	auto dNodes = QueryNodeListFromRemotes ( tDesc.m_dClusterNodes, tDesc.m_sName );
 	if ( dNodes.IsEmpty() )
-		TlsMsg::Err ( "cluster '%s', no nodes available(%s), error: %s", tDesc.m_sName.cstr(), StrVec2Str( tDesc.m_dClusterNodes ).cstr(),  TlsMsg::szError() );
+		TlsMsg::Err ( "cluster '%s', no nodes available(%s), error: %s", tDesc.m_sName.cstr(), Vec2Str( tDesc.m_dClusterNodes ).cstr(),  TlsMsg::szError() );
 	else
-		TlsMsg::Err ( "cluster '%s', invalid nodes '%s'(%s), error: %s", tDesc.m_sName.cstr(), StrVec2Str ( dNodes ).cstr(), StrVec2Str ( tDesc.m_dClusterNodes ).cstr(), TlsMsg::szError() );
+		TlsMsg::Err ( "cluster '%s', invalid nodes '%s'(%s), error: %s", tDesc.m_sName.cstr(), Vec2Str ( dNodes ).cstr(), Vec2Str ( tDesc.m_dClusterNodes ).cstr(), TlsMsg::szError() );
 	return dNodes;
 }
 

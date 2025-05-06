@@ -151,6 +151,25 @@ binlog_flush = 1 # ultimate safety, low speed
 ```
 <!-- end -->
 
+### binlog_common
+
+<!-- example conf binlog_common -->
+This setting controls how binary log files are managed. It is optional, with a default value of 0 (separate file for each table).
+
+You can choose between two ways to manage binary log files:
+
+* Separate file for each table (default, `0`): Each table saves its changes in its own log file. This setup is good if you have many tables that get updated at different times. It allows tables to be updated without waiting for others. Also, if there is a problem with one table's log file, it does not affect the others.
+* Single file for all tables (`1`): All tables use the same binary log file. This method makes it easier to handle files because there are fewer of them. However, this could keep files longer than needed if one table still needs to save its updates. This setting might also slow things down if many tables need to update at the same time because all changes have to wait to be written to one file.
+
+<!-- intro -->
+##### Example:
+
+<!-- request Example -->
+
+```ini
+binlog_common = 1 # use a single binary log file for all tables
+```
+<!-- end -->
 
 ### binlog_max_log_size
 
@@ -433,7 +452,7 @@ expansion_merge_threshold_hits = 512
 
 This setting specifies whether timed grouping in API and SQL will be calculated in the local timezone or in UTC. It is optional, with a default value of 0 (meaning 'local timezone').
 
-By default, all 'group by time' expressions (like group by day, week, month, and year in API, also group by day, month, year, yearmonth, yearmonthday in SQL) are done using local time. For example, if you have documents with attributes timed `13:00 utc` and `15:00 utc`, in the case of grouping, they both will fall into facility groups according to your local timezone setting. If you live in `utc`, it will be one day, but if you live in `utc+10`, then these documents will be matched into different `group by day` facility groups (since 13:00 utc in UTC+10 timezone is 23:00 local time, but 15:00 is 01:00 of the next day). Sometimes such behavior is unacceptable, and it is desirable to make time grouping not dependent on timezone. You can run the server with a defined global TZ environment variable, but it will affect not only grouping but also timestamping in the logs, which may be undesirable as well. Switching 'on' this option (either in config or using [SET global](../Server_settings/Setting_variables_online.md#SET) statement in SQL) will cause all time grouping expressions to be calculated in UTC, leaving the rest of time-depentend functions (i.e. logging of the server) in local TZ.
+By default, all 'group by time' expressions (like group by day, week, month, and year in API, also group by day, month, year, yearmonth, yearmonthday in SQL) are done using local time. For example, if you have documents with attributes timed `13:00 utc` and `15:00 utc`, in the case of grouping, they both will fall into facility groups according to your local timezone setting. If you live in `utc`, it will be one day, but if you live in `utc+10`, then these documents will be matched into different `group by day` facility groups (since 13:00 utc in UTC+10 timezone is 23:00 local time, but 15:00 is 01:00 of the next day). Sometimes such behavior is unacceptable, and it is desirable to make time grouping not dependent on timezone. You can run the server with a defined global TZ environment variable, but it will affect not only grouping but also timestamping in the logs, which may be undesirable as well. Switching 'on' this option (either in config or using [SET global](../Server_settings/Setting_variables_online.md#SET) statement in SQL) will cause all time grouping expressions to be calculated in UTC, leaving the rest of time-depentend functions (i.e. logging of the server) in local TZ.
 
 
 ### timezone
@@ -491,7 +510,7 @@ ha_ping_interval = 3s
 
 ### hostname_lookup
 
-The `hostname_lookup` option defines the strategy for renewing hostnames. By default, the IP addresses of agent host names are cached at server start to avoid excessive access to DNS. However, in some cases, the IP can change dynamically (e.g. cloud hosting) and it may be desirable to not cache the IPs. Setting this option to `request` disables the caching and queries the DNS for each query. The IP addresses can also be manually renewed using the `FLUSH HOSTNAMES` command.
+The `hostname_lookup` option defines the strategy for renewing hostnames. By default, the IP addresses of agent host names are cached at server start to avoid excessive access to DNS. However, in some cases, the IP can change dynamically (e.g. cloud hosting) and it may be desirable to not cache the IPs. Setting this option to `request` disables the caching and queries the DNS for each query. The IP addresses can also be manually renewed using the `FLUSH HOSTNAMES` command.
 
 ### jobs_queue_size
 
@@ -554,6 +573,22 @@ listen_backlog = 20
 ```
 <!-- end -->
 
+### kibana_version_string
+
+<!-- example conf kibana_version_string -->
+A server version string to return to Kibana or OpenSearch Dashboards. Optional — by default, it's set `7.6.0`.
+
+Some versions of Kibana and OpenSearch Dashboards expect the server to report a specific version number, and might behave differently depending on it. To workaround such issues, you can use this setting, which makes Manticore report a custom version to Kibana or OpenSearch Dashboards.
+
+<!-- intro -->
+##### Example:
+
+<!-- request Example -->
+
+```ini
+kibana_version_string = 1.2.3
+```
+<!-- end -->
 
 ### listen
 

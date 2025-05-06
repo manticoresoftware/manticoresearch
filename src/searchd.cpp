@@ -80,7 +80,6 @@
 #include "searchdbuddy.h"
 #include "detail/indexlink.h"
 #include "detail/expmeter.h"
-#include "taskflushdisk.h"
 
 extern "C"
 {
@@ -8658,6 +8657,8 @@ bool MakeSnippets ( CSphString sIndex, CSphVector<ExcerptQuery_t> & dQueries,
 		return false;
 	}
 
+	pServed->m_pStats->IncCmd ( SEARCHD_COMMAND_EXCERPT );
+
 	RIdx_c pLocalIndex { pServed };
 	assert ( pLocalIndex );
 
@@ -9258,20 +9259,20 @@ void HandleCommandUpdate ( ISphOutputBuffer & tOut, int iVer, InputBuffer_c & tR
 
 void BuildStatus ( VectorLike & dStatus )
 {
-	auto & g_tStats = gStats ();
+	const auto & tStats = gStats();
 	const char * OFF = "OFF";
 
-	const int64_t iQueriesDiv = Max ( g_tStats.m_iQueries.load ( std::memory_order_relaxed ), 1 );
-	const int64_t iDistQueriesDiv = Max ( g_tStats.m_iDistQueries.load ( std::memory_order_relaxed ), 1 );
+	const int64_t iQueriesDiv = Max ( tStats.m_iQueries.load ( std::memory_order_relaxed ), 1 );
+	const int64_t iDistQueriesDiv = Max ( tStats.m_iDistQueries.load ( std::memory_order_relaxed ), 1 );
 	const int64_t iDiv1000 = iQueriesDiv * 1000;
 	const int64_t iDDiv1000 = iDistQueriesDiv * 1000;
 
 	dStatus.SetColName ( "Counter" );
 
 	// FIXME? non-transactional!!!
-	dStatus.MatchTupletf ( "uptime", "%u", (DWORD) time ( nullptr )-g_tStats.m_uStarted );
-	dStatus.MatchTupletf ( "connections", "%l", g_tStats.m_iConnections.load ( std::memory_order_relaxed ) );
-	dStatus.MatchTupletf ( "maxed_out", "%l", g_tStats.m_iMaxedOut.load ( std::memory_order_relaxed ) );
+	dStatus.MatchTupletf ( "uptime", "%u", (DWORD) time ( nullptr )-tStats.m_uStarted );
+	dStatus.MatchTupletf ( "connections", "%l", tStats.m_iConnections.load ( std::memory_order_relaxed ) );
+	dStatus.MatchTupletf ( "maxed_out", "%l", tStats.m_iMaxedOut.load ( std::memory_order_relaxed ) );
 	dStatus.MatchTuplet ( "version" , g_sStatusVersion.cstr() );
 	dStatus.MatchTuplet ( "mysql_version", g_sMySQLVersion.cstr() );
 
@@ -9279,20 +9280,20 @@ void BuildStatus ( VectorLike & dStatus )
 	{
 		if ( i==SEARCHD_COMMAND_UNUSED_6 )
 			continue;
-		dStatus.MatchTupletf ( szCommand ( i ), "%l", g_tStats.m_iCommandCount[i].load ( std::memory_order_relaxed ) );
+		dStatus.MatchTupletf ( szCommand ( i ), "%l", tStats.Get ( (SearchdCommand_e)i ) );
 	}
 
-	FormatCmdStats ( dStatus, "insert_replace", SearchdStats_t::eReplace );
-	FormatCmdStats ( dStatus, "search", SearchdStats_t::eSearch );
-	FormatCmdStats ( dStatus, "update", SearchdStats_t::eUpdate );
+	const SearchdStats_t & tGlobalStats = gStats();
+	FormatCmdStats ( tGlobalStats, "insert_replace", SearchdStats_t::eReplace, dStatus );
+	FormatCmdStats ( tGlobalStats, "search", SearchdStats_t::eSearch, dStatus );
+	FormatCmdStats ( tGlobalStats, "update", SearchdStats_t::eUpdate, dStatus);
 
-	auto iConnects = g_tStats.m_iAgentConnectTFO.load ( std::memory_order_relaxed )
-			+g_tStats.m_iAgentConnect.load ( std::memory_order_relaxed );
+	auto iConnects = tStats.m_iAgentConnectTFO.load ( std::memory_order_relaxed ) + tStats.m_iAgentConnect.load ( std::memory_order_relaxed );
 	dStatus.MatchTupletf ( "agent_connect", "%l", iConnects );
-	dStatus.MatchTupletf ( "agent_tfo", "%l", g_tStats.m_iAgentConnectTFO.load ( std::memory_order_relaxed ) );
-	dStatus.MatchTupletf ( "agent_retry", "%l", g_tStats.m_iAgentRetry.load ( std::memory_order_relaxed ) );
-	dStatus.MatchTupletf ( "queries", "%l", g_tStats.m_iQueries.load ( std::memory_order_relaxed ) );
-	dStatus.MatchTupletf ( "dist_queries", "%l", g_tStats.m_iDistQueries.load ( std::memory_order_relaxed ) );
+	dStatus.MatchTupletf ( "agent_tfo", "%l", tStats.m_iAgentConnectTFO.load ( std::memory_order_relaxed ) );
+	dStatus.MatchTupletf ( "agent_retry", "%l", tStats.m_iAgentRetry.load ( std::memory_order_relaxed ) );
+	dStatus.MatchTupletf ( "queries", "%l", tStats.m_iQueries.load ( std::memory_order_relaxed ) );
+	dStatus.MatchTupletf ( "dist_queries", "%l", tStats.m_iDistQueries.load ( std::memory_order_relaxed ) );
 
 	// status of thread pool
 	dStatus.MatchTupletf ( "workers_total", "%d", GlobalWorkPool ()->WorkingThreads () );
@@ -9356,22 +9357,22 @@ void BuildStatus ( VectorLike & dStatus )
 		}
 	}
 
-	dStatus.MatchTupletf ( "query_wall", "%0.3F", g_tStats.m_iQueryTime.load ( std::memory_order_relaxed ) / 1000 );
+	dStatus.MatchTupletf ( "query_wall", "%0.3F", tStats.m_iQueryTime.load ( std::memory_order_relaxed ) / 1000 );
 
 	if ( g_bCpuStats )
-		dStatus.MatchTupletf ( "query_cpu", "%0.3F", g_tStats.m_iQueryCpuTime.load ( std::memory_order_relaxed ) / 1000 );
+		dStatus.MatchTupletf ( "query_cpu", "%0.3F", tStats.m_iQueryCpuTime.load ( std::memory_order_relaxed ) / 1000 );
 	else
 		dStatus.MatchTuplet ( "query_cpu", OFF);
 
-	dStatus.MatchTupletf ( "dist_wall", "%0.3F", g_tStats.m_iDistWallTime.load ( std::memory_order_relaxed ) / 1000 );
-	dStatus.MatchTupletf ( "dist_local", "%0.3F", g_tStats.m_iDistLocalTime.load ( std::memory_order_relaxed ) / 1000 );
-	dStatus.MatchTupletf ( "dist_wait", "%0.3F", g_tStats.m_iDistWaitTime.load ( std::memory_order_relaxed ) / 1000 );
+	dStatus.MatchTupletf ( "dist_wall", "%0.3F", tStats.m_iDistWallTime.load ( std::memory_order_relaxed ) / 1000 );
+	dStatus.MatchTupletf ( "dist_local", "%0.3F", tStats.m_iDistLocalTime.load ( std::memory_order_relaxed ) / 1000 );
+	dStatus.MatchTupletf ( "dist_wait", "%0.3F", tStats.m_iDistWaitTime.load ( std::memory_order_relaxed ) / 1000 );
 
 	if ( g_bIOStats )
 	{
-		dStatus.MatchTupletf ( "query_reads", "%l", g_tStats.m_iDiskReads.load ( std::memory_order_relaxed ) );
-		dStatus.MatchTupletf ( "query_readkb", "%l", g_tStats.m_iDiskReadBytes.load ( std::memory_order_relaxed )/ 1024 );
-		dStatus.MatchTupletf ( "query_readtime", "%l", g_tStats.m_iDiskReadTime.load ( std::memory_order_relaxed ) );
+		dStatus.MatchTupletf ( "query_reads", "%l", tStats.m_iDiskReads.load ( std::memory_order_relaxed ) );
+		dStatus.MatchTupletf ( "query_readkb", "%l", tStats.m_iDiskReadBytes.load ( std::memory_order_relaxed )/ 1024 );
+		dStatus.MatchTupletf ( "query_readtime", "%l", tStats.m_iDiskReadTime.load ( std::memory_order_relaxed ) );
 	} else
 	{
 		dStatus.MatchTuplet ( "query_reads", OFF );
@@ -9379,29 +9380,28 @@ void BuildStatus ( VectorLike & dStatus )
 		dStatus.MatchTuplet ( "query_readtime", OFF );
 	}
 
-	if ( g_tStats.m_iPredictedTime.load ( std::memory_order_relaxed )
-		|| g_tStats.m_iAgentPredictedTime.load ( std::memory_order_relaxed ) )
+	if ( tStats.m_iPredictedTime.load ( std::memory_order_relaxed ) || tStats.m_iAgentPredictedTime.load ( std::memory_order_relaxed ) )
 	{
-		dStatus.MatchTupletf ( "predicted_time", "%l", g_tStats.m_iPredictedTime.load ( std::memory_order_relaxed ) );
-		dStatus.MatchTupletf ( "dist_predicted_time", "%l", g_tStats.m_iAgentPredictedTime.load ( std::memory_order_relaxed ) );
+		dStatus.MatchTupletf ( "predicted_time", "%l", tStats.m_iPredictedTime.load ( std::memory_order_relaxed ) );
+		dStatus.MatchTupletf ( "dist_predicted_time", "%l", tStats.m_iAgentPredictedTime.load ( std::memory_order_relaxed ) );
 	}
 
-	dStatus.MatchTupletf ( "avg_query_wall", "%0.3F", g_tStats.m_iQueryTime.load ( std::memory_order_relaxed ) / iDiv1000 );
+	dStatus.MatchTupletf ( "avg_query_wall", "%0.3F", tStats.m_iQueryTime.load ( std::memory_order_relaxed ) / iDiv1000 );
 
 	if ( g_bCpuStats )
-		dStatus.MatchTupletf ( "avg_query_cpu", "%0.3F", g_tStats.m_iQueryCpuTime.load ( std::memory_order_relaxed ) / iDiv1000 );
+		dStatus.MatchTupletf ( "avg_query_cpu", "%0.3F", tStats.m_iQueryCpuTime.load ( std::memory_order_relaxed ) / iDiv1000 );
 	else
 		dStatus.MatchTuplet ( "avg_query_cpu", OFF );
 
-	dStatus.MatchTupletf ( "avg_dist_wall", "%0.3F", g_tStats.m_iDistWallTime.load ( std::memory_order_relaxed ) / iDDiv1000 );
-	dStatus.MatchTupletf ( "avg_dist_local", "%0.3F", g_tStats.m_iDistLocalTime.load ( std::memory_order_relaxed ) / iDDiv1000 );
-	dStatus.MatchTupletf ( "avg_dist_wait", "%0.3F", g_tStats.m_iDistWaitTime.load ( std::memory_order_relaxed ) / iDDiv1000 );
+	dStatus.MatchTupletf ( "avg_dist_wall", "%0.3F", tStats.m_iDistWallTime.load ( std::memory_order_relaxed ) / iDDiv1000 );
+	dStatus.MatchTupletf ( "avg_dist_local", "%0.3F", tStats.m_iDistLocalTime.load ( std::memory_order_relaxed ) / iDDiv1000 );
+	dStatus.MatchTupletf ( "avg_dist_wait", "%0.3F", tStats.m_iDistWaitTime.load ( std::memory_order_relaxed ) / iDDiv1000 );
 
 	if ( g_bIOStats )
 	{
-		dStatus.MatchTupletf ( "avg_query_reads", "%0.1F", g_tStats.m_iDiskReads.load ( std::memory_order_relaxed ) * 10 / iQueriesDiv );
-		dStatus.MatchTupletf ( "avg_query_readkb", "%0.1F", g_tStats.m_iDiskReadBytes.load ( std::memory_order_relaxed ) * 10 / (iQueriesDiv*1024) );
-		dStatus.MatchTupletf ( "avg_query_readtime", "%0.3F", g_tStats.m_iDiskReadTime.load ( std::memory_order_relaxed ) / iDiv1000 );
+		dStatus.MatchTupletf ( "avg_query_reads", "%0.1F", tStats.m_iDiskReads.load ( std::memory_order_relaxed ) * 10 / iQueriesDiv );
+		dStatus.MatchTupletf ( "avg_query_readkb", "%0.1F", tStats.m_iDiskReadBytes.load ( std::memory_order_relaxed ) * 10 / (iQueriesDiv*1024) );
+		dStatus.MatchTupletf ( "avg_query_readtime", "%0.3F", tStats.m_iDiskReadTime.load ( std::memory_order_relaxed ) / iDiv1000 );
 	} else
 	{
 		dStatus.MatchTuplet ( "avg_query_reads", OFF );
@@ -10401,6 +10401,8 @@ static void PQLocalMatch ( const BlobVec_t & dDocs, const CSphString & sIndex, c
 	if ( pServed->m_eType!=IndexType_e::PERCOLATE )
 		return sMsg.Err ( "table '%s' is not percolate", sIndex.cstr () );
 
+	pServed->m_pStats->IncCmd ( SEARCHD_COMMAND_CALLPQ );
+
 	RIdx_T<PercolateIndex_i*> pIndex { pServed };
 	RtAccum_t * pAccum = tAcc.GetAcc ( pIndex, sError );
 	sMsg.Err ( sError );
@@ -11387,13 +11389,16 @@ static bool CleanupAcc ( bool bMissed, RtAccum_t * pAccum, CSphString & sError )
 	return false;
 }
 
-static bool CheckAccIndex ( CSphSessionAccum & tSession, CSphString & sError )
+static bool CheckAccIndex ( CSphSessionAccum & tSession, CSphString & sError, bool bIncServedCmd )
 {
 	RtAccum_t * pAccum = tSession.GetAcc();
 	assert ( pAccum );
 	auto pServed = GetServed ( pAccum->GetIndexName() );
 	if ( !pServed )
 		return CleanupAcc ( true, pAccum, sError );
+
+	if ( bIncServedCmd )
+		pServed->m_pStats->IncCmd ( SEARCHD_COMMAND_COMMIT );
 
 	if ( pAccum->GetIndexId()!=RIdx_T<RtIndex_i*>( pServed )->GetIndexId() )
 		return CleanupAcc ( false, pAccum, sError );
@@ -11410,7 +11415,7 @@ void sphHandleMysqlBegin ( StmtErrorReporter_i& tOut, Str_t sQuery )
 	MEMORY ( MEM_SQL_BEGIN );
 	if ( tAcc.GetIndex() )
 	{
-		if ( !CheckAccIndex ( tAcc, sError ) )
+		if ( !CheckAccIndex ( tAcc, sError, false ) )
 			return tOut.Error ( "%s", sError.cstr() );
 
 		if ( !HandleCmdReplicate ( *tAcc.GetAcc() ) )
@@ -11440,7 +11445,7 @@ void sphHandleMysqlCommitRollback ( StmtErrorReporter_i& tOut, Str_t sQuery, boo
 		RtAccum_t * pAccum = tAcc.GetAcc();
 		tCrashQuery.m_dIndex = FromStr ( pAccum->GetIndexName() );
 
-		if ( !CheckAccIndex ( tAcc, sError ) )
+		if ( !CheckAccIndex ( tAcc, sError, true ) )
 			return tOut.Error ( "%s", sError.cstr() );
 
 		if ( bCommit )
@@ -11502,7 +11507,8 @@ void sphHandleMysqlInsert ( StmtErrorReporter_i & tOut, const SqlStmt_t & tStmt 
 
 	// index lock after replication takes place
 	CommitAcc ( tStmt, pServed, tOut );
-	StatCountCommandDetails ( SearchdStats_t::eReplace, tStmt.m_iRowsAffected, tmStart );
+	pServed->m_pStats->AddWriteStat ( SearchdStats_t::eReplace, bReplace, tStmt.m_iRowsAffected, tmStart );
+	gStats().AddDetailed ( SearchdStats_t::eReplace, tStmt.m_iRowsAffected, tmStart );
 }
 
 // when index name came as `cluster:name`, it came to the name, and should be splitted to cluster and index name
@@ -11897,8 +11903,10 @@ bool DoGetKeywords ( const CSphString & sIndex, const CSphString & sQuery, const
 	bool bOk = false;
 	// just local plain or template index
 	if ( pLocal )
+	{
+		pLocal->m_pStats->IncCmd ( SEARCHD_COMMAND_KEYWORDS );
 		bOk = RIdx_c(pLocal)->GetKeywords ( dKeywords, sQuery.cstr(), tSettings, &sError );
-	else
+	} else
 	{
 		// FIXME!!! g_iDistThreads thread pool for locals.
 		// locals
@@ -11912,6 +11920,7 @@ bool DoGetKeywords ( const CSphString & sIndex, const CSphString & sQuery, const
 				tFailureLog.Submit ( sLocal.cstr(), sIndex.cstr(), "missed table" );
 				continue;
 			}
+			pServed->m_pStats->IncCmd ( SEARCHD_COMMAND_KEYWORDS );
 
 			dKeywordsLocal.Resize(0);
 			if ( RIdx_c ( pServed )->GetKeywords ( dKeywordsLocal, sQuery.cstr(), tSettings, &sError ) )
@@ -12289,6 +12298,9 @@ static void SuggestSendResult ( const SuggestArgs_t & tArgs, SuggestResultSet_t 
 
 static bool SuggestLocalIndexGet ( const cServedIndexRefPtr_c & pServed, const SuggestArgs_t & tArgs, const char * sWord, SuggestResult_t & tRes, CSphString & sError )
 {
+	assert ( pServed );
+	pServed->m_pStats->IncCmd ( SEARCHD_COMMAND_SUGGEST );
+
 	RIdx_c pIdx { pServed };
 	if ( !pIdx->GetSettings().m_iMinInfixLen || !pIdx->GetDictionary()->GetSettings().m_bWordDict )
 	{
@@ -13012,6 +13024,18 @@ static bool CheckExistingTables ( const SqlStmt_t & tStmt, CSphString & sError )
 	return true;
 }
 
+static int CheckShardIntOpt ( const char * sName, const SqlStmt_t & tStmt, CSphString & sError )
+{
+	int iPos = tStmt.m_tCreateTable.m_dOpts.GetFirst ( [&]( const auto & tItem ) { return tItem.m_sName==sName; } );
+	if ( iPos==-1 )
+		return iPos;
+
+	CSphVariant tVal ( tStmt.m_tCreateTable.m_dOpts[iPos].m_sValue.cstr() );
+	if ( tVal.int64val()<0 )
+		sError.SetSprintf ( "table '%s': CREATE TABLE failed: negative '%s' option is not allowed", tStmt.m_sIndex.cstr(), sName );
+
+	return iPos;
+}
 
 static bool CheckCreateTable ( const SqlStmt_t & tStmt, CSphString & sError )
 {
@@ -13032,6 +13056,25 @@ static bool CheckCreateTable ( const SqlStmt_t & tStmt, CSphString & sError )
 				sError.SetSprintf ( "duplicate attribute name '%s'", i.m_tAttr.m_sName.cstr() );
 				return false;
 			}
+
+	// shard related options
+	const CSphVector<NameValueStr_t> & dOpts = tStmt.m_tCreateTable.m_dOpts;
+	if ( dOpts.GetLength() )
+	{
+		int iShardsPos = CheckShardIntOpt ("shards", tStmt, sError );
+		if ( !sError.IsEmpty() )
+			return false;
+		int iRfPos = CheckShardIntOpt ( "rf", tStmt, sError );
+		if ( !sError.IsEmpty() )
+			return false;
+
+		// should be routerd into buddy with good error message
+		if ( iShardsPos!=-1 || iRfPos!=-1 )
+		{
+			sError.SetSprintf ( "table '%s': CREATE TABLE failed: 'shards' and 'rf' options require Buddy", tStmt.m_sIndex.cstr() );
+			return false;
+		}
+	}
 
 	return true;
 }
@@ -13318,7 +13361,7 @@ void HandleMysqlShowThreads ( RowBuffer_i & tOut, const SqlStmt_t * pStmt )
 	if ( g_bCpuStats )
 	{
 //		tOut.HeadColumn ( "Work time CPU" );
-		tOut.HeadColumn ( "CPU activity", MYSQL_COL_FLOAT);
+		tOut.HeadColumn ( "CPU activity" );
 	}
 	tOut.HeadColumn ( "Jobs done", MYSQL_COL_LONG );
 	tOut.HeadColumn ( "Thread status" );
@@ -13850,7 +13893,13 @@ void sphHandleMysqlUpdate ( StmtErrorReporter_i & tOut, const SqlStmt_t & tStmt,
 		auto pLocked = GetServed ( sReqIndex );
 		if ( pLocked )
 		{
-			DoExtendedUpdate ( tStmt, sReqIndex, nullptr, bBlobUpdate, iSuccesses, iUpdated, dFails, sWarning, pLocked );
+			int64_t tmStartIdx = sphMicroTimer();
+			int iUpdatedIdx = 0;
+
+			DoExtendedUpdate ( tStmt, sReqIndex, nullptr, bBlobUpdate, iSuccesses, iUpdatedIdx, dFails, sWarning, pLocked );
+
+			iUpdated += iUpdatedIdx;
+			pLocked->m_pStats->AddWriteStat ( SearchdStats_t::eUpdate, false, iUpdatedIdx, tmStartIdx );
 
 		} else if ( dDistributed[iIdx] )
 		{
@@ -13860,8 +13909,15 @@ void sphHandleMysqlUpdate ( StmtErrorReporter_i & tOut, const SqlStmt_t & tStmt,
 			ARRAY_FOREACH ( i, dLocal )
 			{
 				const char * sLocal = dLocal[i].cstr();
+				int64_t tmStartIdx = sphMicroTimer();
+				int iUpdatedIdx = 0;
+
 				auto pServed = GetServed ( sLocal );
-				DoExtendedUpdate ( tStmt, sLocal, sReqIndex, bBlobUpdate, iSuccesses, iUpdated, dFails, sWarning, pServed );
+				DoExtendedUpdate ( tStmt, sLocal, sReqIndex, bBlobUpdate, iSuccesses, iUpdatedIdx, dFails, sWarning, pServed );
+
+				iUpdated += iUpdatedIdx;
+				if ( pServed )
+					pServed->m_pStats->AddWriteStat ( SearchdStats_t::eUpdate, false, iUpdatedIdx, tmStartIdx );
 			}
 		}
 
@@ -13883,7 +13939,7 @@ void sphHandleMysqlUpdate ( StmtErrorReporter_i & tOut, const SqlStmt_t & tStmt,
 	StringBuilder_c sReport;
 	dFails.BuildReport ( sReport );
 
-	StatCountCommandDetails ( SearchdStats_t::eUpdate, iUpdated, tmStart );
+	gStats().AddDetailed ( SearchdStats_t::eUpdate, iUpdated, tmStart );
 	if ( !iSuccesses )
 	{
 		tOut.Error ( "%s", sReport.cstr() );
@@ -14455,6 +14511,8 @@ static int LocalIndexDoDeleteDocuments ( const CSphString & sName, const char * 
 	if ( !ServedDesc_t::IsMutable ( pServed ) )
 		return err ( "table not available, or does not support DELETE" );
 
+	pServed->m_pStats->IncCmd ( SEARCHD_COMMAND_DELETE );
+
 	GlobalCrashQueryGetRef().m_dIndex = FromStr ( sName );
 	if ( !ValidateClusterStatement ( sName, *pServed, sCluster, IsHttpStmt ( tStmt ) ) )
 		return err ( TlsMsg::szError() );
@@ -14770,7 +14828,7 @@ void HandleMysqlMultiStmt ( const CSphVector<SqlStmt_t> & dStmt, CSphQueryResult
 				bMoreResultsFollow = false;
 
 			auto uMatches = SendMysqlSelectResult ( dRows, tRes, bMoreResultsFollow, false, nullptr, ( tSess.IsProfile() ? &tProfile : nullptr ) );
-			StatCountCommandDetails ( SearchdStats_t::eSearch, uMatches, tmStart );
+			gStats().AddDetailed ( SearchdStats_t::eSearch, uMatches, tmStart );
 			break;
 		}
 		case STMT_SHOW_WARNINGS:
@@ -16006,19 +16064,29 @@ static void AddFoundRowsStatsToOutput ( VectorLike & dStatus, const char * szPre
 }
 
 
-static void AddIndexQueryStats ( VectorLike & dStatus, const ServedStats_c& tStats )
+void ServedStats_c::GetIndexQueryStats ( VectorLike & dStatus ) const
 {
 	QueryStats_t tQueryTimeStats, tRowsFoundStats;
-	tStats.CalculateQueryStats ( tRowsFoundStats, tQueryTimeStats );
+	CalculateQueryStats ( tRowsFoundStats, tQueryTimeStats );
 	AddQueryTimeStatsToOutput ( dStatus, "query_time", tQueryTimeStats );
 
 #ifndef NDEBUG
 	QueryStats_t tExactQueryTimeStats, tExactRowsFoundStats;
-	tStats.CalculateQueryStatsExact ( tExactQueryTimeStats, tExactRowsFoundStats );
+	CalculateQueryStatsExact ( tExactQueryTimeStats, tExactRowsFoundStats );
 	AddQueryTimeStatsToOutput ( dStatus, "exact_query_time", tQueryTimeStats );
 #endif
 
 	AddFoundRowsStatsToOutput ( dStatus, "found_rows", tRowsFoundStats );
+
+	// command stats
+	SearchdCommand_e dCommands[] = { SEARCHD_COMMAND_SEARCH, SEARCHD_COMMAND_EXCERPT, SEARCHD_COMMAND_UPDATE, SEARCHD_COMMAND_KEYWORDS, SEARCHD_COMMAND_STATUS, SEARCHD_COMMAND_DELETE, SEARCHD_COMMAND_INSERT, SEARCHD_COMMAND_REPLACE, SEARCHD_COMMAND_COMMIT, SEARCHD_COMMAND_SUGGEST, SEARCHD_COMMAND_CALLPQ, SEARCHD_COMMAND_GETFIELD };
+	for ( auto eCmd : dCommands )
+		dStatus.MatchTupletf ( szCommand ( eCmd ), "%l", m_tCommandsStats.Get ( eCmd ) );
+
+	// detailed stats
+	FormatCmdStats ( m_tCommandsStats, "insert_replace", SearchdStats_t::eReplace, dStatus );
+	FormatCmdStats ( m_tCommandsStats, "search", SearchdStats_t::eSearch, dStatus );
+	FormatCmdStats ( m_tCommandsStats, "update", SearchdStats_t::eUpdate, dStatus );
 }
 
 static void AddDiskIndexStatus ( VectorLike & dStatus, const CSphIndex * pIndex, bool bRt, bool bPq )
@@ -16118,7 +16186,7 @@ static void AddPlainIndexStatus ( RowBuffer_i & tOut, const cServedIndexRefPtr_c
 	if ( pServed->m_eType != IndexType_e::TEMPLATE )
 	{
 		AddDiskIndexStatus ( dStatus, pIndex, pServed->m_eType == IndexType_e::RT, pServed->m_eType == IndexType_e::PERCOLATE );
-		AddIndexQueryStats ( dStatus, tStats );
+		tStats.GetIndexQueryStats ( dStatus );
 	}
 	tOut.DataTable ( dStatus );
 }
@@ -16129,7 +16197,7 @@ static void AddDistibutedIndexStatus ( RowBuffer_i & tOut, const cDistributedInd
 	assert ( pIndex );
 	VectorLike dStatus ( sPattern );
 	dStatus.MatchTuplet( "table_type", "distributed" );
-	AddIndexQueryStats ( dStatus, pIndex->m_tStats );
+	pIndex->m_tStats.GetIndexQueryStats ( dStatus );
 	tOut.DataTable ( dStatus );
 }
 
@@ -16144,6 +16212,8 @@ void HandleMysqlShowIndexStatus ( RowBuffer_i& tOut, const SqlStmt_t& tStmt )
 
 	if ( pServed )
 	{
+		pServed->m_pStats->IncCmd ( SEARCHD_COMMAND_STATUS );
+
 		if ( iChunk >= 0 && pServed->m_eType == IndexType_e::RT )
 		{
 			RIdx_T<const RtIndex_i*> ( pServed )->ProcessDiskChunk ( iChunk, [&tOut, &tStmt] ( const CSphIndex* pIndex ) {
@@ -16165,9 +16235,13 @@ void HandleMysqlShowIndexStatus ( RowBuffer_i& tOut, const SqlStmt_t& tStmt )
 	auto pIndex = GetDistr ( tStmt.m_sIndex );
 
 	if ( pIndex )
+	{
+		pIndex->m_tStats.IncCmd ( SEARCHD_COMMAND_STATUS );
 		AddDistibutedIndexStatus ( tOut, pIndex, tStmt.m_sIndex, tStmt.m_sStringParam );
-	else
+	} else
+	{
 		tOut.Error ( "SHOW TABLE STATUS requires an existing table" );
+	}
 }
 
 static bool AddFederatedIndexStatusHeader ( RowBuffer_i& tOut )
@@ -17009,6 +17083,20 @@ static void HandleMysqlAlterIndexSettings ( RowBuffer_i & tOut, const SqlStmt_t 
 	if ( !bSame && sError.IsEmpty() )
 	{
 		bool bOk = pRtIndex->Reconfigure(tSetup);
+
+		if ( tSetup.m_tMutableSettings.IsSet ( MutableName_e::GLOBAL_IDF ) )
+		{
+			const CSphString sNewIDF = tSetup.m_tMutableSettings.m_sGlobalIDFPath;
+			sph::PrereadGlobalIDF ( sNewIDF, sError );
+			if ( pServed->m_sGlobalIDFPath != sNewIDF )
+			{
+				auto& tConstServed = *pServed;
+				auto& tServed = const_cast<ServedIndex_c&> ( tConstServed );
+				tServed.m_sGlobalIDFPath = sNewIDF;
+				RotateGlobalIdf();
+			}
+		}
+
 		if ( !bOk )
 		{
 			sError.SetSprintf ( "table '%s': alter failed; TABLE UNUSABLE (%s)", tStmt.m_sIndex.cstr(), pRtIndex->GetLastError().cstr() );
@@ -17574,7 +17662,7 @@ bool ClientSession_c::Execute ( Str_t sQuery, RowBuffer_i & tOut )
 				m_sError = "";
 				AggrResult_t & tLast = tHandler.m_dAggrResults.Last();
 				auto uMatches = SendMysqlSelectResult ( tOut, tLast, false, m_bFederatedUser, &m_sFederatedQuery, ( tSess.IsProfile() ? &m_tProfile : nullptr ) );
-				StatCountCommandDetails ( SearchdStats_t::eSearch, uMatches, tmStart );
+				gStats().AddDetailed ( SearchdStats_t::eSearch, uMatches, tmStart );
 			}
 
 			// save meta for SHOW META (profile is saved elsewhere)
@@ -17892,7 +17980,7 @@ bool ClientSession_c::Execute ( Str_t sQuery, RowBuffer_i & tOut )
 		return false; // do not profile this call, keep last query profile
 
 	case STMT_JOIN_CLUSTER:
-		if ( ClusterJoin ( pStmt->m_sIndex, pStmt->m_dCallOptNames, pStmt->m_dCallOptValues, pStmt->m_bClusterUpdateNodes ) )
+		if ( ClusterJoin ( pStmt->m_sCluster, pStmt->m_dCallOptNames, pStmt->m_dCallOptValues, pStmt->m_bClusterUpdateNodes ) )
 			tOut.Ok();
 		else
 		{
@@ -17901,7 +17989,7 @@ bool ClientSession_c::Execute ( Str_t sQuery, RowBuffer_i & tOut )
 		}
 		return true;
 	case STMT_CLUSTER_CREATE:
-		if ( ClusterCreate ( pStmt->m_sIndex, pStmt->m_dCallOptNames, pStmt->m_dCallOptValues ) )
+		if ( ClusterCreate ( pStmt->m_sCluster, pStmt->m_dCallOptNames, pStmt->m_dCallOptValues ) )
 			tOut.Ok();
 		else
 		{
@@ -17921,7 +18009,7 @@ bool ClientSession_c::Execute ( Str_t sQuery, RowBuffer_i & tOut )
 	case STMT_CLUSTER_ALTER_ADD:
 	case STMT_CLUSTER_ALTER_DROP:
 		m_tLastMeta = CSphQueryResultMeta();
-		if ( ClusterAlter ( pStmt->m_sCluster, pStmt->m_sIndex, ( eStmt==STMT_CLUSTER_ALTER_ADD ), m_tLastMeta.m_sError ) )
+		if ( ClusterAlter ( pStmt->m_sCluster, pStmt->m_dStringSubkeys, ( eStmt==STMT_CLUSTER_ALTER_ADD ), m_tLastMeta.m_sError ) )
 			tOut.Ok ( 0, m_tLastMeta.m_sWarning.IsEmpty() ? 0 : 1 );
 		else
 			tOut.Error ( m_tLastMeta.m_sError.cstr() );
@@ -18106,8 +18194,7 @@ void HandleCommandJson ( ISphOutputBuffer & tOut, WORD uVer, InputBuffer_c & tRe
 
 void StatCountCommand ( SearchdCommand_e eCmd )
 {
-	if ( eCmd<SEARCHD_COMMAND_TOTAL )
-		gStats ().m_iCommandCount[eCmd].fetch_add ( 1, std::memory_order_relaxed );
+	gStats().Inc ( eCmd );
 }
 
 // fixme! move federated stuff to another parser and remove all kind of 'fixups'
@@ -20682,7 +20769,7 @@ void ConfigureSearchd ( const CSphConfig & hConf, bool bOptPIDFile, bool bTestMo
 
 	ConfigureMerge(hSearchd);
 	SetJoinBatchSize ( hSearchd.GetInt ( "join_batch_size", GetJoinBatchSize() ) );
-	SetRtFlushDiskPeriod ( hSearchd.GetSTimeS ( "diskchunk_flush_write_timeout", GetRtFlushDiskWrite(bTestMode) ), hSearchd.GetSTimeS ( "diskchunk_flush_search_timeout", GetRtFlushDiskSearch() ) );
+	SetRtFlushDiskPeriod ( hSearchd.GetSTimeS ( "diskchunk_flush_write_timeout", bTestMode ? -1 : 1 ), hSearchd.GetSTimeS ( "diskchunk_flush_search_timeout", 30 ) );
 }
 
 static void DirMustWritable ( const CSphString & sDataDir )
@@ -20894,11 +20981,11 @@ ESphAddIndex ConfigureAndPreloadIndex ( const CSphConfigSection & hIndex, const 
 	// no break
 	case ADD_SERVED:
 	{
-		// finally add the index to the hash of enabled.
-		g_pLocalIndexes->Add ( pJustLoadedLocal, szIndexName );
-
 		if ( !pJustLoadedLocal->m_sGlobalIDFPath.IsEmpty() && !sph::PrereadGlobalIDF ( pJustLoadedLocal->m_sGlobalIDFPath, sError ) )
 			dWarnings.Add ( "global IDF unavailable - IGNORING" );
+
+		// finally add the index to the hash of enabled.
+		g_pLocalIndexes->Add ( pJustLoadedLocal, szIndexName );
 	}
 	// no sense to break
 	case ADD_DISTR:
@@ -21975,7 +22062,6 @@ int WINAPI ServiceMain ( int argc, char **argv ) EXCLUDES (MainThread)
 	StartRtBinlogFlushing();
 
 	ScheduleFlushAttrs();
-	ScheduleRtFlushDisk();
 	SetupCompatHttp();
 
 	InitSearchdStats();

@@ -46,6 +46,21 @@ utilsApi.sql('JOIN CLUSTER posts AT \'10.12.1.35:9312\'')
 ```python
 {u'error': u'', u'total': 0, u'warning': u''}
 ```
+
+<!-- intro -->
+##### Python-asyncio:
+
+<!-- request Python-asyncio -->
+
+```python
+await utilsApi.sql('JOIN CLUSTER posts AT \'10.12.1.35:9312\'')
+```
+
+<!-- response Python-asyncio -->
+```python
+{u'error': u'', u'total': 0, u'warning': u''}
+```
+
 <!-- intro -->
 ##### Javascript:
 
@@ -77,6 +92,16 @@ utilsApi.sql("JOIN CLUSTER posts AT '10.12.1.35:9312'");
 ```clike
 utilsApi.Sql("JOIN CLUSTER posts AT '10.12.1.35:9312'");
 ```
+
+<!-- intro -->
+##### Rust:
+
+<!-- request Rust -->
+
+```rust
+utils_api.sql("JOIN CLUSTER posts AT '10.12.1.35:9312'", Some(true)).await;
+```
+
 
 <!-- end -->
 
@@ -142,6 +167,21 @@ utilsApi.sql('JOIN CLUSTER click_query \'clicks_mirror1:9312;clicks_mirror2:9312
 ```python
 {u'error': u'', u'total': 0, u'warning': u''}
 ```
+
+<!-- intro -->
+##### Python-asyncio:
+
+<!-- request Python-asyncio -->
+
+```python
+await utilsApi.sql('JOIN CLUSTER click_query \'clicks_mirror1:9312;clicks_mirror2:9312;clicks_mirror3:9312\' as nodes')
+```
+
+<!-- response Python-asyncio -->
+```python
+{u'error': u'', u'total': 0, u'warning': u''}
+```
+
 <!-- intro -->
 ##### Javascript:
 
@@ -173,6 +213,16 @@ utilsApi.sql("JOIN CLUSTER click_query 'clicks_mirror1:9312;clicks_mirror2:9312;
 ```clike
 utilsApi.Sql("JOIN CLUSTER click_query 'clicks_mirror1:9312;clicks_mirror2:9312;clicks_mirror3:9312' as nodes");
 ```
+
+<!-- intro -->
+##### Rust:
+
+<!-- request Rust -->
+
+```rust
+utils_api.sql("JOIN CLUSTER click_query 'clicks_mirror1:9312;clicks_mirror2:9312;clicks_mirror3:9312' as nodes", Some(true)).await;
+```
+
 <!-- end -->
 
 The `JOIN CLUSTER` command works synchronously and completes as soon as the node receives all data from the other nodes in the cluster and is in sync with them.

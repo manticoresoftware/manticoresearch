@@ -13,6 +13,7 @@
 #include <utility>
 #include <cassert>
 #include <type_traits>
+#include <climits>
 
 #include "thread_annotations.h"
 #include "checks.h"
@@ -173,6 +174,12 @@ int VecTraits_T<T>::GetLength() const
 	return (int)m_iCount;
 }
 
+template<typename T>
+DWORD VecTraits_T<T>::GetULength () const
+{
+	return static_cast<DWORD> (m_iCount);
+}
+
 /// get length in bytes
 template<typename T>
 size_t VecTraits_T<T>::GetLengthBytes() const
@@ -189,14 +196,14 @@ int64_t VecTraits_T<T>::GetLengthBytes64() const
 
 /// default sort
 template<typename T>
-void VecTraits_T<T>::Sort ( int iStart, int iEnd )
+void VecTraits_T<T>::Sort ( int64_t iStart, int64_t iEnd )
 {
 	Sort ( SphLess_T<T>(), iStart, iEnd );
 }
 
 /// default reverse sort
 template<typename T>
-void VecTraits_T<T>::RSort ( int iStart, int iEnd )
+void VecTraits_T<T>::RSort ( int64_t iStart, int64_t iEnd )
 {
 	Sort ( SphGreater_T<T>(), iStart, iEnd );
 }
@@ -204,7 +211,7 @@ void VecTraits_T<T>::RSort ( int iStart, int iEnd )
 /// generic sort
 template<typename T>
 template<typename F>
-void VecTraits_T<T>::Sort ( F&& COMP, int iStart, int iEnd ) NO_THREAD_SAFETY_ANALYSIS
+void VecTraits_T<T>::Sort ( F&& COMP, int64_t iStart, int64_t iEnd ) NO_THREAD_SAFETY_ANALYSIS
 {
 	if ( m_iCount < 2 )
 		return;
@@ -213,8 +220,12 @@ void VecTraits_T<T>::Sort ( F&& COMP, int iStart, int iEnd ) NO_THREAD_SAFETY_AN
 	if ( iEnd < 0 )
 		iEnd += m_iCount;
 	assert ( iStart <= iEnd );
+	const int64_t iCount = iEnd - iStart + 1;
 
-	sphSort ( m_pData + iStart, iEnd - iStart + 1, std::forward<F> ( COMP ) );
+	if ( iCount <= INT_MAX )
+		sphSort ( m_pData + iStart, (int)iCount, std::forward<F> ( COMP ) );
+	else
+		sphSort ( m_pData + iStart, iCount, std::forward<F> ( COMP ) );
 }
 
 /// generic binary search
@@ -236,9 +247,9 @@ T* VecTraits_T<T>::BinarySearch ( T tRef ) const
 
 template<typename T>
 template<typename FILTER>
-int VecTraits_T<T>::GetFirst ( FILTER&& cond ) const NO_THREAD_SAFETY_ANALYSIS
+int64_t VecTraits_T<T>::GetFirst ( FILTER&& cond ) const NO_THREAD_SAFETY_ANALYSIS
 {
-	for ( int i = 0; i < m_iCount; ++i )
+	for ( int64_t i = 0; i < m_iCount; ++i )
 		if ( cond ( m_pData[i] ) )
 			return i;
 	return -1;

@@ -1,13 +1,40 @@
-# SHOW PROFILE
+# Query profile
 
 <!-- example SHOW PROFILE -->
 
-`SHOW PROFILE` is an SQL statement that displays a detailed execution profile of the previous SQL statement executed in the current SQL session. Profiling must be enabled in the current session **before** running the statement to be instrumented, which can be done with a `SET profiling=1` statement. By default, profiling is disabled to avoid potential performance implications, and as a result, the profile will be empty.
+The SQL `SHOW PROFILE` statement and the `"profile": true` JSON interface option both provide a detailed execution profile of the executed query. In the case of SQL, profiling must be enabled in the current session **before** running the statement to be instrumented. This can be accomplished with the `SET profiling=1` statement. By default, profiling is disabled to prevent potential performance implications, resulting in an empty profile if not enabled.
 
-* `Status` column briefly describes the specific state where the time was spent.
+Each profiling result includes the following fields:
+* `Status` column briefly describes the specific state where the time was spent. See below.
 * `Duration` column shows the wall clock time, in seconds.
 * `Switches` column displays the number of times the query engine changed to the given state. These are merely logical engine state switches and **not** any OS level context switches or function calls (although some sections might actually map to function calls), and they do **not** have any direct effect on performance. In a sense, the number of switches is just the number of times the respective instrumentation point was hit.
 * `Percent` column shows the percentage of time spent in this state.
+
+States in the profile are returned in a prerecorded order that roughly maps (but is **not** identical) to the actual query order.
+
+The list of states may (and will) change over time as we refine the states. Here's a brief description of the currently profiled states.
+
+* `unknown`: generic catch-all state. Accounts for not-yet-instrumented code or small miscellaneous tasks that don't really belong in any other state but are too small to warrant their own state.
+* `net_read`: reading the query from the network (i.e., the application).
+* `io`: generic file IO time.
+* `dist_connect`: connecting to remote agents in the distributed table case.
+* `sql_parse`: parsing the SQL syntax.
+* `dict_setup`: dictionary and tokenizer setup.
+* `parse`: parsing the full-text query syntax.
+* `transforms`: full-text query transformations (wildcard and other expansions, simplification, etc.).
+* `init`: initializing the query evaluation.
+* `open`: opening the table files.
+* `read_docs`: IO time spent reading document lists.
+* `read_hits`: IO time spent reading keyword positions.
+* `get_docs`: computing the matching documents.
+* `get_hits`: computing the matching positions.
+* `filter`: filtering the full-text matches.
+* `rank`: computing the relevance rank.
+* `sort`: sorting the matches.
+* `finalize`: finalizing the per-table search result set (last stage expressions, etc.).
+* `dist_wait`: waiting for remote results from agents in the distributed table case.
+* `aggregate`: aggregating multiple result sets.
+* `net_write`: writing the result set to the network.
 
 <!-- intro -->
 ##### SQL:
@@ -61,42 +88,13 @@ Query OK, 0 rows affected (0.00 sec)
 21 rows in set (0.00 sec)
 ```
 
-<!-- end -->
-
-States in the profile are returned in a prerecorded order that roughly maps (but is **not** identical) to the actual query order.
-
-The list of states may (and will) change over time as we refine the states. Here's a brief description of the currently profiled states.
-
-* `unknown`: generic catch-all state. Accounts for not-yet-instrumented code or small miscellaneous tasks that don't really belong in any other state but are too small to warrant their own state.
-* `net_read`: reading the query from the network (i.e., the application).
-* `io`: generic file IO time.
-* `dist_connect`: connecting to remote agents in the distributed table case.
-* `sql_parse`: parsing the SQL syntax.
-* `dict_setup`: dictionary and tokenizer setup.
-* `parse`: parsing the full-text query syntax.
-* `transforms`: full-text query transformations (wildcard and other expansions, simplification, etc.).
-* `init`: initializing the query evaluation.
-* `open`: opening the table files.
-* `read_docs`: IO time spent reading document lists.
-* `read_hits`: IO time spent reading keyword positions.
-* `get_docs`: computing the matching documents.
-* `get_hits`: computing the matching positions.
-* `filter`: filtering the full-text matches.
-* `rank`: computing the relevance rank.
-* `sort`: sorting the matches.
-* `finalize`: finalizing the per-table search result set (last stage expressions, etc.).
-* `dist_wait`: waiting for remote results from agents in the distributed table case.
-* `aggregate`: aggregating multiple result sets.
-* `net_write`: writing the result set to the network.
-
-## Query profiling in HTTP JSON
-
-You can view the final transformed query tree with all normalized keywords by adding a `"profile":true` property:
+<!-- request JSON -->
 
 ```json
+POST /search
 {
-  "index":"test",
-  "profile":true,
+  "table": "test",
+  "profile": true,
   "query":
   {
     "match_phrase": { "_all" : "had grown quite" }
@@ -104,73 +102,92 @@ You can view the final transformed query tree with all normalized keywords by ad
 }
 ```
 
-This feature is somewhat similar to the [SHOW PLAN](../../Node_info_and_management/Profiling/Query_plan.md) statement in SQL. The result appears as a profile property in the result set. For example:
+<!-- response JSON -->
 
 ```json
-"profile":
-{
-  "query":
-  {
-    "type": "PHRASE",
-    "description": "PHRASE( AND(KEYWORD(had, querypos=1)),  AND(KEYWORD(grown, querypos=2)),  AND(KEYWORD(quite, querypos=3)))",
-    "children":
-    [
+ "profile": {
+    "query": [
       {
-        "type": "AND",
-        "description": "AND(KEYWORD(had, querypos=1))",
-        "max_field_pos": 0,
-        "children":
-        [
-          {
-            "type": "KEYWORD",
-            "word": "had",
-            "querypos": 1
-           }
-        ]
+        "status": "unknown",
+        "duration": 0.000141,
+        "switches": 8,
+        "percent": 2.17
       },
       {
-        "type": "AND",
-        "description": "AND(KEYWORD(grown, querypos=2))",
-        "max_field_pos": 0,
-        "children":
-        [
-          {
-            "type": "KEYWORD",
-            "word": "grown",
-            "querypos": 2
-          }
-        ]
+        "status": "local_df",
+        "duration": 0.000870,
+        "switches": 1,
+        "percent": 13.40
       },
       {
-        "type": "AND",
-        "description": "AND(KEYWORD(quite, querypos=3))",
-        "max_field_pos": 0,
-        "children":
-        [
-          {
-            "type": "KEYWORD",
-            "word": "quite",
-            "querypos": 3
-          }
-        ]
+        "status": "local_search",
+        "duration": 0.001038,
+        "switches": 2,
+        "percent": 15.99
+      },
+      {
+        "status": "setup_iter",
+        "duration": 0.000154,
+        "switches": 14,
+        "percent": 2.37
+      },
+      {
+        "status": "dict_setup",
+        "duration": 0.000026,
+        "switches": 3,
+        "percent": 0.40
+      },
+      {
+        "status": "parse",
+        "duration": 0.000205,
+        "switches": 3,
+        "percent": 3.15
+      },
+      {
+        "status": "transforms",
+        "duration": 0.000974,
+        "switches": 4,
+        "percent": 15.01
+      },
+      {
+        "status": "init",
+        "duration": 0.002931,
+        "switches": 20,
+        "percent": 45.16
+      },
+      {
+        "status": "get_docs",
+        "duration": 0.000007,
+        "switches": 7,
+        "percent": 0.10
+      },
+      {
+        "status": "rank",
+        "duration": 0.000002,
+        "switches": 14,
+        "percent": 0.03
+      },
+      {
+        "status": "finalize",
+        "duration": 0.000013,
+        "switches": 7,
+        "percent": 0.20
+      },
+      {
+        "status": "aggregate",
+        "duration": 0.000128,
+        "switches": 1,
+        "percent": 1.97
+      },
+      {
+        "status": "total",
+        "duration": 0.006489,
+        "switches": 84,
+        "percent": 100.00
       }
     ]
   }
-}
 ```
-
-`query` property contains the transformed full-text query tree. Each node contains:
-
-* `type`: node type. Can be AND, OR, PHRASE, KEYWORD, etc.
-* `description`: query subtree for this node shown as a string (in `SHOW PLAN` format)
-* `children`: child nodes, if any
-* `max_field_pos`: maximum position within a field
-* `word`: transformed keyword. Keyword nodes only
-* `querypos`: position of this keyword in a query. Keyword nodes only
-* `excluded`: keyword excluded from query. Keyword nodes only
-* `expanded`: keyword added by prefix expansion. Keyword nodes only
-* `field_start`: keyword must occur at the very start of the field. Keyword nodes only
-* `field_end`: keyword must occur at the very end of the field. Keyword nodes only
-* `boost`: keyword IDF will be multiplied by this. Keyword nodes only
+<!-- end -->
 
 <!-- proofread -->

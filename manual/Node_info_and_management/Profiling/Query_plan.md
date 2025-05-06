@@ -2,13 +2,17 @@
 
 <!-- example SHOW PLAN -->
 
-`SHOW PLAN` is an SQL statement that displays the execution plan of the previous `SELECT` statement. The plan is generated and stored during the actual execution, so profiling must be enabled in the current session **before** running that statement. This can be done with a `SET profiling=1` statement.
+The `SHOW PLAN` SQL statement and the `"plan": N` JSON interface option display the query execution plan. The plan is generated and stored during the actual execution, so in the case of SQL, profiling must be enabled in the current session **before** running that statement. This can be done with a `SET profiling=1` statement.
 
-To view the query execution plan in JSON queries, add `"profile": true` to the query. The result appears as a `profile` property in the result set.
+Two items are returned in SQL mode:
+* `transformed_tree`, which displays the full-text query decomposition.
+* `enabled_indexes`, which provides information about effective secondary indexes.
 
-Note that there are two things returned in the SQL mode:
-* `transformed_tree`, which shows the full-text query decomposition
-* `enabled_indexes`, which shows information about effective secondary indexes
+To view the query execution plan in a JSON query, add `"plan": N` to the query. The result will appear as a `plan` property in the result set. `N` can be one of the following:
+* 1 - Displays only the textual plan of the root node, similar to the one returned in the `SHOW PLAN` SQL query. This is the most compact form.
+* 2 - Displays only the JSON object plan, useful for processing.
+* 3 - Displays a JSON object with a textual description of every node. Note that the description for child nodes is also present and repeats part of the parent's description, which makes the whole representation quite large.
+
 
 <!-- intro -->
 ##### SQL:
@@ -44,11 +48,11 @@ Variable: enabled_indexes
 ```json
 POST /search
 {
-  "index": "hn_small",
+  "table": "hn_small",
   "query": {"query_string": "dog|cat"},
   "_source": { "excludes":["*"] },
   "limit": 0,
-  "profile":true
+  "plan": 3
 }
 ```
 
@@ -62,7 +66,7 @@ POST /search
     "total_relation": "eq",
     "hits": []
   },
-  "profile": {
+  "plan": {
     "query": {
       "type": "OR",
       "description": "OR( AND(KEYWORD(dog, querypos=1)),  AND(KEYWORD(cat, querypos=2)))",
@@ -143,18 +147,18 @@ Query OK, 0 rows affected (0.00 sec)
 ```
 
 <!-- intro -->
-##### JSON:
+##### JSON full format:
 
 <!-- request JSON -->
 
 ```JSON
 POST /search
 {
-  "index": "forum",
+  "table": "forum",
   "query": {"query_string": "@title way* @content hey"},
   "_source": { "excludes":["*"] },
   "limit": 1,
-  "profile": true
+  "plan": 3
 }
 ```
 
@@ -169,13 +173,13 @@ POST /search
     "hits":
     [
        {
-          "_id":"711651",
+          "_id": 711651,
           "_score":2539,
           "_source":{}
        }
     ]
   },
-  "profile":
+  "plan":
   {
     "query":
     {
@@ -299,18 +303,210 @@ POST /search
 }
 ```
 
+<!-- intro -->
+
+##### JSON object format:
+
+<!-- request JSON -->
+
+```JSON
+POST /search
+{
+  "table": "forum",
+  "query": {"query_string": "@title way* @content hey"},
+  "_source": { "excludes":["*"] },
+  "limit": 1,
+  "plan": 2
+}
+```
+
+<!-- response JSON -->
+
+```JSON
+{
+  "took": 33,
+  "timed_out": false,
+  "hits": {
+    "total": 105,
+    "hits": [
+      {
+        "_id": 711651,
+        "_score": 2539,
+        "_source": {}
+      }
+    ]
+  },
+  "plan": {
+    "query": {
+      "type": "AND",
+      "children": [
+        {
+          "type": "OR",
+          "children": [
+            {
+              "type": "OR",
+              "children": [
+                {
+                  "type": "AND",
+                  "fields": [
+                    "title"
+                  ],
+                  "max_field_pos": 0,
+                  "children": [
+                    {
+                      "type": "KEYWORD",
+                      "word": "wayne",
+                      "querypos": 1,
+                      "expanded": true
+                    }
+                  ]
+                },
+                {
+                  "type": "OR",
+                  "children": [
+                    {
+                      "type": "AND",
+                      "fields": [
+                        "title"
+                      ],
+                      "max_field_pos": 0,
+                      "children": [
+                        {
+                          "type": "KEYWORD",
+                          "word": "ways",
+                          "querypos": 1,
+                          "expanded": true
+                        }
+                      ]
+                    },
+                    {
+                      "type": "AND",
+                      "fields": [
+                        "title"
+                      ],
+                      "max_field_pos": 0,
+                      "children": [
+                        {
+                          "type": "KEYWORD",
+                          "word": "wayyy",
+                          "querypos": 1,
+                          "expanded": true
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "type": "AND",
+              "fields": [
+                "title"
+              ],
+              "max_field_pos": 0,
+              "children": [
+                {
+                  "type": "KEYWORD",
+                  "word": "way",
+                  "querypos": 1,
+                  "expanded": true
+                }
+              ]
+            },
+            {
+              "type": "OR",
+              "fields": [
+                "title"
+              ],
+              "max_field_pos": 0,
+              "children": [
+                {
+                  "type": "KEYWORD",
+                  "word": "way*",
+                  "querypos": 1,
+                  "expanded": true
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "type": "AND",
+          "fields": [
+            "content"
+          ],
+          "max_field_pos": 0,
+          "children": [
+            {
+              "type": "KEYWORD",
+              "word": "hey",
+              "querypos": 2
+            }
+          ]
+        }
+      ]
+    }
+  }
+}
+```
+
+<!-- intro -->
+
+##### JSON short format:
+
+<!-- request JSON -->
+
+```JSON
+POST /search
+{
+  "table": "forum",
+  "query": {"query_string": "@title way* @content hey"},
+  "_source": { "excludes":["*"] },
+  "limit": 1,
+  "plan": 1
+}
+```
+
+<!-- response JSON -->
+
+```JSON
+{
+  "took":33,
+  "timed_out":false,
+  "hits":
+  {
+    "total":105,
+    "hits":
+    [
+       {
+          "_id": 711651,
+          "_score":2539,
+          "_source":{}
+       }
+    ]
+  },
+  "plan":
+  {
+    "query":
+    {
+      "description":"AND( OR( OR( AND(fields=(title), KEYWORD(wayne, querypos=1, expanded)),  OR( AND(fields=(title), KEYWORD(ways, querypos=1, expanded)),  AND(fields=(title), KEYWORD(wayyy, querypos=1, expanded)))),  AND(fields=(title), KEYWORD(way, querypos=1, expanded)),  OR(fields=(title), KEYWORD(way*, querypos=1, expanded))),  AND(fields=(content), KEYWORD(hey, querypos=2)))"
+    }
+  }
+}
+```
+
 <!-- end -->
 
-See also [EXPLAIN QUERY](../../Searching/Full_text_matching/Profiling.md#Profiling-without-running-a-query). It displays the execution tree of a full-text query **without actually executing the query**.
+See also [EXPLAIN QUERY](../../Searching/Full_text_matching/Profiling.md#Profiling-without-running-a-query). It displays the execution tree of a full-text query **without actually executing the query**. Note that when using `SHOW PLAN` after a query to a real-time table, the result will be based on a random disk/RAM chunk. Therefore, if you have recently modified the table's tokenization settings, or if the chunks vary significantly in terms of dictionaries, etc., you might not get the result you are expecting. Take this into account and consider using `EXPLAIN QUERY` as well.
 
 ## JSON result set notes
 
 `query` property contains the transformed full-text query tree. Each node contains:
 
 * `type`: node type. Can be `AND`, `OR`, `PHRASE`, `KEYWORD`, etc.
-* `description`: query subtree for this node shown as a string (in `SHOW PLAN` format)
-* `children`: child nodes, if any
-* `max_field_pos`: maximum position within a field
+* `description`: query subtree for this node shown as a string (in `SHOW PLAN` format).
+* `children`: child nodes, if any.
+* `max_field_pos`: maximum position within a field.
 * `word`: transformed keyword. Keyword nodes only.
 * `querypos`: position of this keyword in a query. Keyword nodes only.
 * `excluded`: keyword excluded from query. Keyword nodes only.

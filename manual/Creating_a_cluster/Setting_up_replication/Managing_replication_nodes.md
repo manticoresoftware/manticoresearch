@@ -46,8 +46,23 @@ utilsApi.sql('ALTER CLUSTER posts UPDATE nodes')
 ```python
 {u'error': u'', u'total': 0, u'warning': u''}
 ```
+
 <!-- intro -->
-##### javascript:
+##### Python-asyncio:
+
+<!-- request Python-asyncio -->
+
+```python
+await utilsApi.sql('ALTER CLUSTER posts UPDATE nodes')
+```
+
+<!-- response Python-asyncio -->
+```python
+{u'error': u'', u'total': 0, u'warning': u''}
+```
+
+<!-- intro -->
+##### Javascript:
 
 <!-- request javascript -->
 
@@ -77,6 +92,16 @@ utilsApi.sql("ALTER CLUSTER posts UPDATE nodes");
 ```clike
 utilsApi.Sql("ALTER CLUSTER posts UPDATE nodes");
 ```
+
+<!-- intro -->
+##### Rust:
+
+<!-- request Rust -->
+
+```rust
+utils_api.sql("ALTER CLUSTER posts UPDATE nodes", Some(true)).await;
+```
+
 <!-- end -->
 
 

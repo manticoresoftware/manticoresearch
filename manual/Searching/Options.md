@@ -18,7 +18,7 @@ SELECT ... [OPTION <optionname>=<value> [ , ... ]] [/*+ [NO_][ColumnarScan|Docid
 ```json
 POST /search
 {   
-    "index" : "index_name",
+    "table" : "table_name",
     "options":   
     {
         "optionname": "value",
@@ -54,7 +54,7 @@ JSON:
 ```json
 POST /search
 {   
-    "index" : "test",
+    "table" : "test",
     "query": {
       "match": {
         "title": "hello"
@@ -87,7 +87,7 @@ POST /search
     "total_relation": "eq",
     "hits": [
       {
-        "_id": "1",
+        "_id": 1,
         "_score": 10500,
         "_source": {
           "title": "hello",
@@ -106,34 +106,107 @@ Supported options are:
 ### accurate_aggregation
 Integer. Enables or disables guaranteed aggregate accuracy when running groupby queries in multiple threads. Default is 0.
 
-When running a groupby query, it can be run in parallel on a plain index with several pseudo shards (if `pseudo_sharding` is on). A similar approach works on RT indexes. Each shard/chunk executes the query, but the number of groups is limited by `max_matches`. If the result sets from different shards/chunks have different groups, the group counts and aggregates may be inaccurate. Note that Manticore tries to increase `max_matches` up to [`max_matches_increase_threshold`](../Searching/Options.md#max_matches_increase_threshold) based on the number of unique values of the groupby attribute (retrieved from secondary indexes). If it succeeds, there will be no loss in accuracy.
+When running a groupby query, it can be run in parallel on a plain table with several pseudo shards (if `pseudo_sharding` is on). A similar approach works on RT tables. Each shard/chunk executes the query, but the number of groups is limited by `max_matches`. If the result sets from different shards/chunks have different groups, the group counts and aggregates may be inaccurate. Note that Manticore tries to increase `max_matches` up to [`max_matches_increase_threshold`](../Searching/Options.md#max_matches_increase_threshold) based on the number of unique values of the groupby attribute (retrieved from secondary indexes). If it succeeds, there will be no loss in accuracy.
 
 However, if the number of unique values of the groupby attribute is high, further increasing `max_matches` may not be a good strategy because it can lead to a loss in performance and higher memory usage. Setting `accurate_aggregation` to 1 forces groupby searches to run in a single thread, which fixes the accuracy issue. Note that running in a single thread is only enforced when `max_matches` cannot be set high enough; otherwise, searches with `accurate_aggregation=1` will still run in multiple threads.
 
 Overall, setting `accurate_aggregation` to 1 ensures group count and aggregate accuracy in RT tables and plain tables with `pseudo_sharding=1`. The drawback is that searches will run slower since they will be forced to operate in a single thread.
 
-However, if we have an RT table and a plain table containing the same data, and we run a query with `accurate_aggregation=1`, we might still receive different results. This occurs because the daemon might choose different `max_matches` settings for the RT and plain index due to the [`max_matches_increase_threshold`](../Searching/Options.md#max_matches_increase_threshold) setting.
+However, if we have an RT table and a plain table containing the same data, and we run a query with `accurate_aggregation=1`, we might still receive different results. This occurs because the daemon might choose different `max_matches` settings for the RT and plain table due to the [`max_matches_increase_threshold`](../Searching/Options.md#max_matches_increase_threshold) setting.
 
 ### agent_query_timeout
 Integer. Max time in milliseconds to wait for remote queries to complete, see [this section](../Creating_a_table/Creating_a_distributed_table/Remote_tables.md#agent_query_timeout).
 
 ### boolean_simplify
-`0` or `1` (`0` by default). `boolean_simplify=1` enables [simplifying the query](../Searching/Full_text_matching/Boolean_optimization.md) to speed it up.
+`0` or `1` (`1` by default). `boolean_simplify=1` enables [simplifying the query](../Searching/Full_text_matching/Boolean_optimization.md) to speed it up.
 
 ### comment
 String, user comment that gets copied to a query log file.
 
 ### cutoff
-Integer. Max found matches threshold. The value is selected automatically if not specified.
+Integer. Specifies the maximum number of matches to process. If not set, Manticore will select an appropriate value automatically.
 
-* `N` = 0 disables the threshold
-* `N > 0`: instructs Manticore to stop looking for results as soon as it finds `N` documents.
-* not set: Manticore will decide automatically what the value should be.
+<!-- example cutoff_aggregation -->
 
-In case Manticore cannot calculate the exact matching documents count, you will see `total_relation: gte` in the query [meta information](../Node_info_and_management/SHOW_META.md#SHOW-META), which means that the actual count is **Greater Than or Equal** to the total (`total_found` in `SHOW META` via SQL, `hits.total` in JSON via HTTP). If the total value is precise, you'll get `total_relation: eq`.
+* `N = 0`: Disables the limit on the number of matches.
+* `N > 0`: Instructs Manticore to stop processing results as soon as it finds `N` matching documents.
+* Not set: Manticore decides the threshold automatically.
+
+When Manticore cannot determine the exact count of matching documents, the `total_relation` field in the query [meta information](../Node_info_and_management/SHOW_META.md#SHOW-META) will show `gte`, which stands for **Greater Than or Equal to**. This indicates that the actual count of matches is at least the reported `total_found` (in SQL) or `hits.total` (in JSON). When the count is exact, `total_relation` will display `eq`.
+
+Note: Using `cutoff` in aggregation queries is not recommended because it can produce inaccurate or incomplete results.
+
+<!-- request Example -->
+
+Using `cutoff` in aggregation queries can lead to incorrect or misleading results, as shown in the following example:
+```
+drop table if exists t
+--------------
+
+Query OK, 0 rows affected (0.02 sec)
+
+--------------
+create table t(a int)
+--------------
+
+Query OK, 0 rows affected (0.04 sec)
+
+--------------
+insert into t(a) values(1),(2),(3),(1),(2),(3)
+--------------
+
+Query OK, 6 rows affected (0.00 sec)
+
+--------------
+select avg(a) from t option cutoff=1 facet a
+--------------
+
++----------+
+| avg(a)   |
++----------+
+| 1.000000 |
++----------+
+1 row in set (0.00 sec)
+--- 1 out of 1 results in 0ms ---
+
++------+----------+
+| a    | count(*) |
++------+----------+
+|    1 |        1 |
++------+----------+
+1 row in set (0.00 sec)
+--- 1 out of 1 results in 0ms ---
+```
+
+Compare it with the same query without `cutoff`:
+```
+--------------
+select avg(a) from t facet a
+--------------
+
++----------+
+| avg(a)   |
++----------+
+| 2.000000 |
++----------+
+1 row in set (0.00 sec)
+--- 1 out of 1 results in 0ms ---
+
++------+----------+
+| a    | count(*) |
++------+----------+
+|    1 |        2 |
+|    2 |        2 |
+|    3 |        2 |
++------+----------+
+3 rows in set (0.00 sec)
+--- 3 out of 3 results in 0ms ---
+```
+
+<!-- end -->
 
 ### distinct_precision_threshold
-Integer. Default is `3500`. This option sets the threshold below which counts returned by `count distinct` are guaranteed to be exact within a plain index.
+Integer. Default is `3500`. This option sets the threshold below which counts returned by `count distinct` are guaranteed to be exact within a plain table.
 
 Accepted values range from `500` to `15500`. Values outside this range will be clamped.
 
@@ -173,14 +246,19 @@ Second, `idf=tfidf_normalized` leads to IDF drift across queries. Historically, 
 
 IDF flags can be combined; `plain` and `normalized` are mutually exclusive; `tfidf_unnormalized` and `tfidf_normalized` are also mutually exclusive; and unspecified flags in such mutually exclusive groups default to their original settings. This means `OPTION idf=plain` is the same as specifying `OPTION idf='plain,tfidf_normalized'` in its entirety.
 
+### jieba_mode
+Specifies the Jieba segmentation mode for the query.
+
+When using Jieba Chinese segmentation, it can sometimes help to use different segmentation modes for tokenizing the documents and the query. For a complete list of modes, refer to [jieba_mode](Creating_a_table/NLP_and_tokenization/Morphology.md#jieba_mode).
+
 ### index_weights
 Named integer list. Per-table user weights for ranking.
 
 ### local_df
-`0` or `1`, automatically sum DFs over all local parts of a distributed table, ensuring consistent (and accurate) IDF across a locally sharded table.
+`0` or `1`, automatically sum DFs over all local parts of a distributed table, ensuring consistent (and accurate) IDF across a locally sharded table. Enabled by default for disk chunks of the RT table. Query terms with wildcards are ignored.
 
 ### low_priority
-`0` or `1` (`0` by default). Setting `low_priority=1` executes the query with a lower priority in terms of Linux CPU scheduling. You may also consider using the `threads=1` option instead, or combine it with `low_priority=1`, as it could be more effective in certain scenarios.
+`0` or `1` (`0` by default). Setting `low_priority=1` executes the query with a lower priority, rescheduling its jobs 10 times less frequently than other queries with normal priority.
 
 ### max_matches
 Integer. Per-query max matches value.
@@ -246,7 +324,7 @@ Choose from the following options:
 * `expr`
 * `export`
 
-For more details on each ranker, refer to [Search results ranking](../Searching/Sorting_and_ranking.md).
+For more details on each ranker, refer to [Search results ranking](../Searching/Sorting_and_ranking.md#Available-built-in-rankers).
 
 ### rand_seed
 Allows you to specify a specific integer seed value for an `ORDER BY RAND()` query, for example: `... OPTION rand_seed=1234`. By default, a new and different seed value is autogenerated for every query.
@@ -256,6 +334,10 @@ Integer. Distributed retries count.
 
 ### retry_delay
 Integer. Distributed retry delay, in milliseconds.
+
+### scroll
+
+String. A scroll token for paginating results using the [Scroll pagination approach](../Searching/Pagination.md#Scroll-Search-Option).
 
 ### sort_method
 * `pq` - priority queue, set by default
@@ -271,6 +353,8 @@ Quoted, colon-separated string of `library name:plugin name:optional string of s
 ```sql
 SELECT * FROM index WHERE MATCH ('yes@no') OPTION token_filter='mylib.so:blend:@'
 ```
+### expansion_limit
+Restricts the maximum number of expanded keywords for a single wildcard, with a default value of 0 indicating no limit. For additional details, refer to [expansion_limit](../Server_settings/Searchd.md#expansion_limit).
 
 ## Query optimizer hints
 
@@ -292,6 +376,15 @@ For more information on how the query optimizer works, refer to the [Cost based 
 SELECT * FROM students where age > 21 /*+ SecondaryIndex(age) */
 ```
 
+<!-- end -->
+
+<!-- example comments -->
+When using a MySQL/MariaDB client, make sure to include the `--comments` flag to enable the hints in your queries.
+
+<!-- request mysql -->
+```bash
+mysql -P9306 -h0 --comments
+```
 <!-- end -->
 
 <!-- proofread -->

@@ -43,6 +43,33 @@ Here are the available commands:
 * `--rotate` is only compatible with `--check` and determines whether to check the table waiting for rotation, i.e., with a .new extension. This is useful when you wish to validate your table before actually putting it into use.
 * `--apply-killlists` loads and applies kill-lists for all tables listed in the config file. Changes are saved in .SPM files. Kill-list files (.SPK) are removed. This can be handy if you want to shift the application of tables from server startup to indexing stage.
 
+### Important Consideration for RT Table Checking
+
+`indextool` cannot fully check an RT table that is currently served by the daemon. When attempting to check an active RT table, you may encounter the following warning:
+
+```
+WARNING: failed to load RAM chunks, checking only N disk chunks
+```
+
+To avoid these warning and ensure a proper check of an RT table, consider the following approaches:
+
+- stop the daemon before running `indextool --check`.  
+- ensure that the RT table is not actively served by the daemon.  
+- check a separate copy of the RT table instead of the live one.  
+
+If stopping the daemon is not an option, you can prevent unintended modifications to the RT table by executing the following MySQL statement before running `indextool --check`:
+
+```sql
+SET GLOBAL AUTO_OPTIMIZE=0;
+```
+
+This command prevents the daemon from performing auto-optimization, ensuring that RT table files remain unchanged. After executing this statement, wait until the optimization thread has completely stopped before proceeding with `indextool --check`. This ensures that no disk chunks are unintentionally modified or removed during the check process.
+If auto-optimize was previously enabled, you should manually re-enable it after the check is complete by running:
+
+```sql
+SET GLOBAL AUTO_OPTIMIZE=1;
+```
+
 ## spelldump
 
 The `spelldump` command is designed to retrieve the contents from a dictionary file that employs the `ispell` or `MySpell` format. This can be handy when you need to compile word lists for wordforms, as it generates all possible forms for you.

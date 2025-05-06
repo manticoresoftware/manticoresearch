@@ -33,7 +33,7 @@ JSON query format currently supports a basic grouping that can retrieve aggregat
 
 ```json
 {
-  "index": "<index_name>",
+  "table": "<table_name>",
   "limit": 0,
   "aggs": {
     "<aggr_name>": {
@@ -86,6 +86,7 @@ In most cases, however, you'll want to obtain some aggregated data for each grou
 * `COUNT(*)` to simply get the number of elements in each group
 * or `AVG(field)` to calculate the average value of the field within the group
 
+For HTTP JSON requests, using a single `aggs` bucket with `limit=0` at the main query level works similarly to a SQL query with `GROUP BY` and `COUNT(*)`, providing equivalent behavior and performance.
 
 <!-- intro -->
 ##### Example:
@@ -127,7 +128,7 @@ SELECT release_year, AVG(rental_rate) FROM films GROUP BY release_year LIMIT 5;
 ``` json
 POST /search -d '
     {
-     "index" : "films",
+     "table" : "films",
      "limit": 0,
      "aggs" :
      {
@@ -255,7 +256,7 @@ Array
 ```
 <!-- request Python -->
 ``` python
-res =searchApi.search({"index":"films","limit":0,"aggs":{"release_year":{"terms":{"field":"release_year","size":100}}}})
+res =searchApi.search({"table":"films","limit":0,"aggs":{"release_year":{"terms":{"field":"release_year","size":100}}}})
 ```
 <!-- response Python -->
 ``` python
@@ -285,9 +286,43 @@ res =searchApi.search({"index":"films","limit":0,"aggs":{"release_year":{"terms"
  'took': 0}
 
 ```
+
+<!-- request Python-asyncio -->
+``` python
+res = await searchApi.search({"table":"films","limit":0,"aggs":{"release_year":{"terms":{"field":"release_year","size":100}}}})
+```
+<!-- response Python-asyncio -->
+``` python
+{'aggregations': {u'release_year': {u'buckets': [{u'doc_count': 99,
+                                                  u'key': 2009},
+                                                 {u'doc_count': 102,
+                                                  u'key': 2008},
+                                                 {u'doc_count': 93,
+                                                  u'key': 2007},
+                                                 {u'doc_count': 103,
+                                                  u'key': 2006},
+                                                 {u'doc_count': 93,
+                                                  u'key': 2005},
+                                                 {u'doc_count': 108,
+                                                  u'key': 2004},
+                                                 {u'doc_count': 106,
+                                                  u'key': 2003},
+                                                 {u'doc_count': 108,
+                                                  u'key': 2002},
+                                                 {u'doc_count': 91,
+                                                  u'key': 2001},
+                                                 {u'doc_count': 97,
+                                                  u'key': 2000}]}},
+ 'hits': {'hits': [], 'max_score': None, 'total': 1000},
+ 'profile': None,
+ 'timed_out': False,
+ 'took': 0}
+
+```
+
 <!-- request Javascript -->
 ``` javascript
-res = await searchApi.search({"index":"films","limit":0,"aggs":{"release_year":{"terms":{"field":"release_year","size":100}}}});
+res = await searchApi.search({"table":"films","limit":0,"aggs":{"release_year":{"terms":{"field":"release_year","size":100}}}});
 ```
 <!-- response Javascript -->
 ``` javascript
@@ -351,6 +386,118 @@ class SearchResponse {
     profile: null
 }
 ```
+
+<!-- request Rust -->
+``` rust
+let query = SearchQuery::new();
+let aggTerms1 = AggTerms::new {
+    fields: "release_year".to_string(),
+    size: Some(100),
+};
+let agg1 = Aggregation {
+    terms: Some(Box::new(aggTerms1)),
+    ..Default::default(),
+};
+let mut aggs = HashMap::new();
+aggs.insert("release_year".to_string(), agg1); 
+
+let search_req = SearchRequest {
+    table: "films".to_string(),
+    query: Some(Box::new(query)),
+    aggs: serde_json::json!(aggs),
+    ..Default::default(),
+};
+let search_res = search_api.search(search_req).await;
+```
+<!-- response Rust -->
+``` rust
+class SearchResponse {
+    took: 0
+    timedOut: false
+    aggregations: {release_year={buckets=[{key=2009, doc_count=99}, {key=2008, doc_count=102}, {key=2007, doc_count=93}, {key=2006, doc_count=103}, {key=2005, doc_count=93}, {key=2004, doc_count=108}, {key=2003, doc_count=106}, {key=2002, doc_count=108}, {key=2001, doc_count=91}, {key=2000, doc_count=97}]}}
+    hits: class SearchResponseHits {
+        maxScore: null
+        total: 1000
+        hits: []
+    }
+    profile: null
+}
+```
+
+<!-- request TypeScript -->
+``` typescript
+res = await searchApi.search({
+  index: 'test',
+  limit: 0,
+  aggs: {
+    cat_id: {
+      terms: { field: "cat", size: 1 }
+    }
+  }
+});
+```
+
+<!-- response TypeScript -->
+``` typescript
+{
+	"took":0,
+	"timed_out":false,
+	"aggregations":
+	{
+		"cat_id":
+		{
+			"buckets":
+			[{
+				"key":1,
+				"doc_count":1
+			}]
+		}
+	},
+	"hits":
+	{
+		"total":5,
+		"hits":[]
+	}
+}
+```
+
+<!-- request Go -->
+``` go
+query := map[string]interface{} {};
+searchRequest.SetQuery(query);
+aggTerms := manticoreclient.NewAggregationTerms()
+aggTerms.SetField("cat")
+aggTerms.SetSize(1)
+aggregation := manticoreclient.NewAggregation()
+aggregation.setTerms(aggTerms)
+searchRequest.SetAggregation(aggregation)
+res, _, _ := apiClient.SearchAPI.Search(context.Background()).SearchRequest(*searchRequest).Execute()
+```
+
+<!-- response Go -->
+``` go
+{
+	"took":0,
+	"timed_out":false,
+	"aggregations":
+	{
+		"cat_id":
+		{
+			"buckets":
+			[{
+				"key":1,
+				"doc_count":1
+			}]
+		}
+	},
+	"hits":
+	{
+		"total":5,
+		"hits":[]
+	}
+}
+```
+
 <!-- end -->
 
 <!-- example sort1 -->
@@ -460,6 +607,83 @@ SELECT category_id, release_year, count(*) FROM films GROUP BY category_id, rele
 |           2 |         2009 |        4 |
 +-------------+--------------+----------+
 ```
+<!-- request JSON -->
+``` json
+POST /search -d '
+    {
+    "size": 0,
+    "table": "films",
+    "aggs": {
+        "cat_release": {
+            "composite": {
+                "size":5,
+                "sources": [
+                    { "category": { "terms": { "field": "category_id" } } },
+                    { "release year": { "terms": { "field": "release_year" } } }
+                ]
+            }
+        }
+    }
+    }
+'
+```
+<!-- response JSON -->
+``` json
+{
+  "took": 0,
+  "timed_out": false,
+  "hits": {
+    "total": 1000,
+    "total_relation": "eq",
+    "hits": []
+  },
+  "aggregations": {
+    "cat_release": {
+      "after_key": {
+        "category": 1,
+        "release year": 2007
+      },
+      "buckets": [
+        {
+          "key": {
+            "category": 1,
+            "release year": 2008
+          },
+          "doc_count": 7
+        },
+        {
+          "key": {
+            "category": 1,
+            "release year": 2009
+          },
+          "doc_count": 14
+        },
+        {
+          "key": {
+            "category": 1,
+            "release year": 2005
+          },
+          "doc_count": 10
+        },
+        {
+          "key": {
+            "category": 1,
+            "release year": 2004
+          },
+          "doc_count": 5
+        },
+        {
+          "key": {
+            "category": 1,
+            "release year": 2007
+          },
+          "doc_count": 5
+        }
+      ]
+    }
+  }
+}
+```
 <!-- end -->
 
 <!-- example group4 -->
@@ -543,6 +767,8 @@ SELECT release_year, avg(rental_rate) avg FROM films GROUP BY release_year HAVIN
 ```
 <!-- end -->
 
+Note that `HAVING` does not affect `total_found` in the [search query meta info](../Node_info_and_management/SHOW_META.md#SHOW-META).
+
 <!-- example group7 -->
 ##### GROUPBY()
 There is a function `GROUPBY()` which returns the key of the current group. It's useful in many cases, especially when you [GROUP BY an MVA](../Searching/Grouping.md#Grouping-by-MVA-%28multi-value-attributes%29) or a [JSON value](../Searching/Grouping.md#Grouping-by-a-JSON-node).
@@ -611,7 +837,7 @@ SELECT groupby() gb, count(*) FROM shoes GROUP BY sizes ORDER BY gb asc;
 ``` json
 POST /search -d '
     {
-     "index" : "shoes",
+     "table" : "shoes",
      "limit": 0,
      "aggs" :
      {
@@ -705,7 +931,7 @@ Array
 ```
 <!-- request Python -->
 ``` python
-res =searchApi.search({"index":"shoes","limit":0,"aggs":{"sizes":{"terms":{"field":"sizes","size":100}}}})
+res =searchApi.search({"table":"shoes","limit":0,"aggs":{"sizes":{"terms":{"field":"sizes","size":100}}}})
 ```
 <!-- response Python -->
 ``` python
@@ -720,8 +946,30 @@ res =searchApi.search({"index":"shoes","limit":0,"aggs":{"sizes":{"terms":{"fiel
 ```
 <!-- request Javascript -->
 ``` javascript
-res = await searchApi.search({"index":"shoes","limit":0,"aggs":{"sizes":{"terms":{"field":"sizes","size":100}}}});
+res = await searchApi.search({"table":"shoes","limit":0,"aggs":{"sizes":{"terms":{"field":"sizes","size":100}}}});
 ```
+
+<!-- request Python-asyncio -->
+``` python
+res = await searchApi.search({"table":"shoes","limit":0,"aggs":{"sizes":{"terms":{"field":"sizes","size":100}}}})
+```
+<!-- response Python-asyncio -->
+``` python
+{'aggregations': {u'sizes': {u'buckets': [{u'doc_count': 2, u'key': 43},
+                                          {u'doc_count': 2, u'key': 42},
+                                          {u'doc_count': 2, u'key': 41},
+                                          {u'doc_count': 1, u'key': 40}]}},
+ 'hits': {'hits': [], 'max_score': None, 'total': 3},
+ 'profile': None,
+ 'timed_out': False,
+ 'took': 0}
+```
+
+<!-- request Javascript -->
+``` javascript
+res = await searchApi.search({"table":"shoes","limit":0,"aggs":{"sizes":{"terms":{"field":"sizes","size":100}}}});
+```
+
 <!-- response Javascript -->
 ``` javascript
 {"took":0,"timed_out":false,"aggregations":{"sizes":{"buckets":[{"key":43,"doc_count":2},{"key":42,"doc_count":2},{"key":41,"doc_count":2},{"key":40,"doc_count":1}]}},"hits":{"total":3,"hits":[]}}
@@ -788,6 +1036,124 @@ class SearchResponse {
 
 ```
 
+<!-- request Rust -->
+``` rust
+let query = SearchQuery::new();
+let aggTerms1 = AggTerms::new {
+    fields: "release_year".to_string(),
+    size: Some(100),
+};
+let agg1 = Aggregation {
+    terms: Some(Box::new(aggTerms1)),
+    ..Default::default(),
+};
+let mut aggs = HashMap::new();
+aggs.insert("release_year".to_string(), agg1); 
+
+let search_req = SearchRequest {
+    table: "films".to_string(),
+    query: Some(Box::new(query)),
+    aggs: serde_json::json!(aggs),
+    limit: serde_json::json!(0),
+    ..Default::default(),
+};
+let search_res = search_api.search(search_req).await;
+```
+<!-- response Rust -->
+``` rust
+class SearchResponse {
+    took: 0
+    timedOut: false
+    aggregations: {release_year={buckets=[{key=43, doc_count=2}, {key=42, doc_count=2}, {key=41, doc_count=2}, {key=40, doc_count=1}]}}
+    hits: class SearchResponseHits {
+        maxScore: null
+        total: 3
+        hits: []
+    }
+    profile: null
+}
+
+<!-- request TypeScript -->
+``` typescript
+res = await searchApi.search({
+  index: 'test',
+  aggs: {
+    mva_agg: {
+      terms: { field: "mva_field", size: 2 }
+    }
+  }
+});
+```
+
+<!-- response TypeScript -->
+``` typescript
+{
+	"took":0,
+	"timed_out":false,
+	"aggregations":
+	{
+		"mva_agg":
+		{
+			"buckets":
+			[{
+				"key":1,
+				"doc_count":4
+			},
+			{
+				"key":2,
+				"doc_count":2
+			}]
+		}
+	},
+	"hits":
+	{
+		"total":4,
+		"hits":[]
+	}
+}
+```
+
+<!-- request Go -->
+``` go
+query := map[string]interface{} {};
+searchRequest.SetQuery(query);
+aggTerms := manticoreclient.NewAggregationTerms()
+aggTerms.SetField("mva_field")
+aggTerms.SetSize(2)
+aggregation := manticoreclient.NewAggregation()
+aggregation.setTerms(aggTerms)
+searchRequest.SetAggregation(aggregation)
+res, _, _ := apiClient.SearchAPI.Search(context.Background()).SearchRequest(*searchRequest).Execute()
+```
+
+<!-- response Go -->
+``` go
+{
+	"took":0,
+	"timed_out":false,
+	"aggregations":
+	{
+		"mva_agg":
+		{
+			"buckets":
+			[{
+				"key":1,
+				"doc_count":4
+			},
+			{
+				"key":2,
+				"doc_count":2
+			}]
+		}
+	},
+	"hits":
+	{
+		"total":5,
+		"hits":[]
+	}
+}
+```
+
 <!-- end -->
 
 <!-- example json -->
@@ -830,7 +1196,7 @@ SELECT groupby() color, count(*) from products GROUP BY meta.color;
 ``` json
 POST /search -d '
     {
-     "index" : "products",
+     "table" : "products",
      "limit": 0,
      "aggs" :
      {
@@ -907,7 +1273,7 @@ Array
 ```
 <!-- request Python -->
 ``` python
-res =searchApi.search({"index":"products","limit":0,"aggs":{"color":{"terms":{"field":"meta.color","size":100}}}})
+res =searchApi.search({"table":"products","limit":0,"aggs":{"color":{"terms":{"field":"meta.color","size":100}}}})
 ```
 <!-- response Python -->
 ``` python
@@ -919,9 +1285,26 @@ res =searchApi.search({"index":"products","limit":0,"aggs":{"color":{"terms":{"f
  'timed_out': False,
  'took': 0}
 ```
+
+```
+<!-- request Python-asyncio -->
+``` python
+res = await searchApi.search({"table":"products","limit":0,"aggs":{"color":{"terms":{"field":"meta.color","size":100}}}})
+```
+<!-- response Python-asyncio -->
+``` python
+{'aggregations': {u'color': {u'buckets': [{u'doc_count': 1,
+                                           u'key': u'green'},
+                                          {u'doc_count': 2, u'key': u'red'}]}},
+ 'hits': {'hits': [], 'max_score': None, 'total': 3},
+ 'profile': None,
+ 'timed_out': False,
+ 'took': 0}
+```
+
 <!-- request Javascript -->
 ``` javascript
-res = await searchApi.search({"index":"products","limit":0,"aggs":{"color":{"terms":{"field":"meta.color","size":100}}}});
+res = await searchApi.search({"table":"products","limit":0,"aggs":{"color":{"terms":{"field":"meta.color","size":100}}}});
 ```
 <!-- response Javascript -->
 ``` javascript
@@ -988,6 +1371,127 @@ class SearchResponse {
 }
 
 ```
+
+<!-- request Rust -->
+``` rust
+let query = SearchQuery::new();
+let aggTerms1 = AggTerms::new {
+    fields: "meta.color".to_string(),
+    size: Some(100),
+};
+let agg1 = Aggregation {
+    terms: Some(Box::new(aggTerms1)),
+    ..Default::default(),
+};
+let mut aggs = HashMap::new();
+aggs.insert("color".to_string(), agg1); 
+
+let search_req = SearchRequest {
+    table: "products".to_string(),
+    query: Some(Box::new(query)),
+    aggs: serde_json::json!(aggs),
+    limit: serde_json::json!(0),
+    ..Default::default(),
+};
+let search_res = search_api.search(search_req).await;
+```
+<!-- response Rust -->
+``` rust
+class SearchResponse {
+    took: 0
+    timedOut: false
+    aggregations: {color={buckets=[{key=green, doc_count=1}, {key=red, doc_count=2}]}}
+    hits: class SearchResponseHits {
+        maxScore: null
+        total: 3
+        hits: []
+    }
+    profile: null
+}
+
+```
+
+<!-- request TypeScript -->
+``` typescript
+res = await searchApi.search({
+  index: 'test',
+  aggs: {
+    json_agg: {
+      terms: { field: "json_field.year", size: 1 }
+    }
+  }
+});
+```
+
+<!-- response TypeScript -->
+``` typescript
+{
+	"took":0,
+	"timed_out":false,
+	"aggregations":
+	{
+		"json_agg":
+		{
+			"buckets":
+			[{
+				"key":2000,
+				"doc_count":2
+			},
+			{
+				"key":2001,
+				"doc_count":2
+			}]
+		}
+	},
+	"hits":
+	{
+		"total":4,
+		"hits":[]
+	}
+}
+```
+
+<!-- request Go -->
+``` go
+query := map[string]interface{} {};
+searchRequest.SetQuery(query);
+aggTerms := manticoreclient.NewAggregationTerms()
+aggTerms.SetField("json_field.year")
+aggTerms.SetSize(2)
+aggregation := manticoreclient.NewAggregation()
+aggregation.setTerms(aggTerms)
+searchRequest.SetAggregation(aggregation)
+res, _, _ := apiClient.SearchAPI.Search(context.Background()).SearchRequest(*searchRequest).Execute()
+```
+
+<!-- response Go -->
+``` go
+{
+	"took":0,
+	"timed_out":false,
+	"aggregations":
+	{
+		"json_agg":
+		{
+			"buckets":
+			[{
+				"key":2000,
+				"doc_count":2
+			},
+			{
+				"key":2001,
+				"doc_count":2
+			}]
+		}
+	},
+	"hits":
+	{
+		"total":4,
+		"hits":[]
+	}
+}
+```
+
 <!-- end -->
 
 ## Aggregation functions
@@ -1023,7 +1527,7 @@ There can be at most one `COUNT(DISTINCT)` per query.
 
 Actually, some of them are exact, while others are approximate. More on that below.
 
-Manticore supports two algorithms for computing counts of distinct values. One is a legacy algorithm that uses a lot of memory and is usually slow. It collects `{group; value}` pairs, sorts them, and periodically discards duplicates. The benefit of this approach is that it guarantees exact counts within a plain index. You can enable it by setting the [distinct_precision_threshold](../Searching/Options.md#distinct_precision_threshold) option to `0`.
+Manticore supports two algorithms for computing counts of distinct values. One is a legacy algorithm that uses a lot of memory and is usually slow. It collects `{group; value}` pairs, sorts them, and periodically discards duplicates. The benefit of this approach is that it guarantees exact counts within a plain table. You can enable it by setting the [distinct_precision_threshold](../Searching/Options.md#distinct_precision_threshold) option to `0`.
 
 The other algorithm (enabled by default) loads counts into a hash table and returns its size. If the hash table becomes too large, its contents are moved into a `HyperLogLog`. This is where the counts become approximate since `HyperLogLog` is a probabilistic algorithm. The advantage is that the maximum memory usage per group is fixed and depends on the accuracy of the `HyperLogLog`. The overall memory usage also depends on the [max_matches](../Searching/Options.md#max_matches) setting, which reflects the number of groups.
 
@@ -1105,11 +1609,11 @@ SELECT release_year year, sum(rental_rate) sum, min(rental_rate) min, max(rental
 
 Grouping is done in fixed memory, which depends on the [max_matches](../Searching/Options.md#max_matches) setting. If `max_matches` allows for storage of all found groups, the results will be 100% accurate. However, if the value of `max_matches` is lower, the results will be less accurate.
 
-When parallel processing is involved, it can become more complicated. When `pseudo_sharding` is enabled and/or when using an RT index with several disk chunks, each chunk or pseudo shard gets a result set that is no larger than `max_matches`. This can lead to inaccuracies in aggregates and group counts when the result sets from different threads are merged. To fix this, either a larger `max_matches` value or disabling parallel processing can be used.
+When parallel processing is involved, it can become more complicated. When `pseudo_sharding` is enabled and/or when using an RT table with several disk chunks, each chunk or pseudo shard gets a result set that is no larger than `max_matches`. This can lead to inaccuracies in aggregates and group counts when the result sets from different threads are merged. To fix this, either a larger `max_matches` value or disabling parallel processing can be used.
 
 Manticore will try to increase `max_matches` up to [max_matches_increase_threshold](../Searching/Options.md#max_matches_increase_threshold) if it detects that groupby may return inaccurate results. Detection is based on the number of unique values of the groupby attribute, which is retrieved from secondary indexes (if present).
 
-To ensure accurate aggregates and/or group counts when using RT indexes or `pseudo_sharding`, `accurate_aggregation` can be enabled. This will try to increase `max_matches` up to the threshold, and if the threshold is not high enough, Manticore will disable parallel processing for the query.
+To ensure accurate aggregates and/or group counts when using RT tables or `pseudo_sharding`, `accurate_aggregation` can be enabled. This will try to increase `max_matches` up to the threshold, and if the threshold is not high enough, Manticore will disable parallel processing for the query.
 
 <!-- intro -->
 ##### Example:

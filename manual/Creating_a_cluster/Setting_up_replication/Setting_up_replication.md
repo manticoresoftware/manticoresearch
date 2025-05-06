@@ -1,17 +1,21 @@
 # Setting up replication
 
-With Manticore, write transactions (such as `INSERT`, `REPLACE`, `DELETE`, `TRUNCATE`, `UPDATE`, `COMMIT`) can be replicated to other cluster nodes before the transaction is fully applied on the current node. Currently, replication is supported for `percolate` and `rt` tables in Linux and macOS. However, Manticore Search packages for Windows do not provide replication support.
+With Manticore, write transactions (such as `INSERT`, `REPLACE`, `DELETE`, `TRUNCATE`, `UPDATE`, `COMMIT`) can be replicated to other cluster nodes before the transaction is fully applied on the current node. Currently, replication is supported for `percolate`, `rt` and `distributed` tables in Linux and macOS.
+
+[Native Windows binaries](../../Installation/Windows.md#Installing-Manticore-as-native-Windows-binaries) for Manticore do not support replication. We recommend [installing Manticore via WSL](../../Installation/Windows.md#Installing-or-enabling-WSL2) (Windows Subsystem for Linux).
+
+On [macOS](../../Installation/MacOS.md), replication has limited support and is recommended only for development purposes.
 
 Manticore's replication is powered by the [Galera library](https://github.com/codership/galera) and boasts several impressive features:
 
-* True Multi-Master: Read and write to any node at any time.
-* [virtually synchronous replication](https://galeracluster.com/library/documentation/overview.html) No slave lag and no data loss after a node crash. 
-* Hot Standby: No downtime during failover (since there is no failover).
-* Tightly Coupled: All nodes hold the same state and no diverged data between nodes is allowed. 
-* Automatic Node Provisioning: No need to manually backup the database and restore it on a new node.
-* Easy to Use and Deploy. 
-* Detection and Automatic Eviction of Unreliable Nodes. 
-* Certification-based Replication.
+* True multi-master: read and write to any node at any time.
+* [Virtually synchronous replication](https://galeracluster.com/library/documentation/overview.html) no slave lag and no data loss after a node crash.
+* Hot standby: no downtime during failover (since there is no failover).
+* Tightly coupled: all nodes hold the same state and no diverged data between nodes is allowed.
+* Automatic node provisioning: no need to manually backup the database and restore it on a new node.
+* Easy to use and deploy.
+* Detection and automatic eviction of unreliable nodes.
+* Certification-based replication.
 
 To set up replication in Manticore Search:
 
@@ -19,17 +23,19 @@ To set up replication in Manticore Search:
 * A [listen](../../Server_settings/Searchd.md#listen)  directive must be specified, containing an IP address accessible by other nodes, or a [node_address](../../Server_settings/Searchd.md#node_address) with an accessible IP address.
 * Optionally, you can set unique values for [server_id](../../Server_settings/Searchd.md#server_id) on each cluster node. If no value is set, the node will attempt to use the MAC address or a random number to generate the `server_id`.
 
-If there is no `replication` [listen](../../Server_settings/Searchd.md#listen) directive set, Manticore will use the first two free ports in the range of 200 ports after the default protocol listening port for each created cluster. To set replication ports manually, the [listen](../../Server_settings/Searchd.md#listen) directive (of `replication` type) port range must be defined and the address/port range pairs must not intersect between different nodes on the same server. As a rule of thumb, the port range should specify at least two ports per cluster.
+If there is no `replication` [listen](../../Server_settings/Searchd.md#listen) directive set, Manticore will use the first two free ports in the range of 200 ports after the default protocol listening port for each created cluster. To set replication ports manually, the [listen](../../Server_settings/Searchd.md#listen) directive (of `replication` type) port range must be defined and the address/port range pairs must not intersect between different nodes on the same server. As a rule of thumb, the port range should specify at least two ports per cluster. When you define a replication listener with a port range (e.g., `listen = 192.168.0.1:9320-9328:replication`), Manticore doesn't immediately start listening on these ports. Instead, it will take random free ports from the specified range only when you start using replication.
 
 ## Replication cluster
 
-A replication cluster is a group of nodes in which a write transaction is replicated. Replication is set up on a per-table basis, meaning that one table can only belong to one cluster. There is no limit on the number of tables that a cluster can have. All transactions such as `INSERT`, `REPLACE`, `DELETE`, `TRUNCATE` on any percolate or real-time table that belongs to a cluster are replicated to all the other nodes in that cluster. Replication is multi-master, so writes to any node or multiple nodes simultaneously will work just as well.
+A replication cluster is a group of nodes in which a write transaction is replicated. Replication is set up on a per-table basis, meaning that one table can only belong to one cluster. There is no limit on the number of tables that a cluster can have. All transactions such as `INSERT`, `REPLACE`, `DELETE`, `TRUNCATE` on any percolate or real-time table that belongs to a cluster are replicated to all the other nodes in that cluster. [Distributed](../../Creating_a_table/Creating_a_distributed_table/Creating_a_distributed_table.md#Creating-a-distributed-table) tables can also be part of the replication process. Replication is multi-master, so writes to any node or multiple nodes simultaneously will work just as well.
 
 To create a cluster, you can typically use the command [create cluster](../../Creating_a_cluster/Setting_up_replication/Creating_a_replication_cluster.md#Creating-a-replication-cluster) with `CREATE CLUSTER <cluster name>`, and to join a cluster, you can use [join cluster](../../Creating_a_cluster/Setting_up_replication/Joining_a_replication_cluster.md#Joining-a-replication-cluster) with `JOIN CLUSTER <cluster name> at 'host:port'`. However, in some rare cases, you may want to fine-tune the behavior of `CREATE/JOIN CLUSTER`. The available options are:
 
 ### name
 
 This option specifies the name of the cluster. It should be unique among all the clusters in the system.
+
+> **Note:** The maximum allowable hostname length for the `JOIN` command is **253** characters. If you exceed this limit, searchd will generate an error.
 
 ### path
 
@@ -46,9 +52,9 @@ The `options` option allows you to pass additional options directly to the Galer
 ## Write statements
 
 <!-- example write statements 1 -->
-When working with a replication cluster, all write statements such as  `INSERT`, `REPLACE`, `DELETE`, `TRUNCATE`, `UPDATE` that modify the content of a cluster's table must use the`cluster_name:index_name` expression instead of the table name. This ensures that the changes are propagated to all replicas in the cluster. If the correct expression is not used, an error will be triggered.
+When working with a replication cluster, all write statements such as  `INSERT`, `REPLACE`, `DELETE`, `TRUNCATE`, `UPDATE` that modify the content of a cluster's table must use the`cluster_name:table_name` expression instead of the table name. This ensures that the changes are propagated to all replicas in the cluster. If the correct expression is not used, an error will be triggered.
 
-In the HTTP interface, the `cluster` property must be set along with the `table` name for all write statements to a cluster's table. Failure to set the `cluster` property will result in an error.
+In the JSON interface, the `cluster` property must be set along with the `table` name for all write statements to a cluster's table. Failure to set the `cluster` property will result in an error.
 
 The [Auto ID](../../Data_creation_and_modification/Adding_documents_to_a_table/Adding_documents_to_a_real-time_table.md#Auto-ID) for a table in a cluster should be valid as long as the [server_id](../../Server_settings/Searchd.md#server_id) is correctly configured.
 
@@ -70,7 +76,7 @@ DELETE FROM clicks:rt WHERE MATCH ('dumy') AND gid>206
 POST /insert -d '
 {
   "cluster":"posts",
-  "index":"weekly_index",
+  "table":"weekly_index",
   "doc":
   {
     "title" : "iphone case",
@@ -80,7 +86,7 @@ POST /insert -d '
 POST /delete -d '
 {
   "cluster":"posts",
-  "index": "weekly_index",
+  "table": "weekly_index",
   "id":1
 }'
 ```
@@ -100,17 +106,28 @@ $index->deleteDocument(1);
 <!-- request Python -->
 
 ``` python
-indexApi.insert({"cluster":"posts","index":"weekly_index","doc":{"title":"iphone case","price":19.85}})
-indexApi.delete({"cluster":"posts","index":"weekly_index","id":1})
+indexApi.insert({"cluster":"posts","table":"weekly_index","doc":{"title":"iphone case","price":19.85}})
+indexApi.delete({"cluster":"posts","table":"weekly_index","id":1})
 ```
+
+<!-- intro -->
+##### Python-asyncio:
+
+<!-- request Python-asyncio -->
+
+``` python
+await indexApi.insert({"cluster":"posts","table":"weekly_index","doc":{"title":"iphone case","price":19.85}})
+await indexApi.delete({"cluster":"posts","table":"weekly_index","id":1})
+```
+
 <!-- intro -->
 ##### Javascript:
 
 <!-- request Javascript -->
 
 ``` javascript
-res = await indexApi.insert({"cluster":"posts","index":"weekly_index","doc":{"title":"iphone case","price":19.85}});
- res = await indexApi.delete({"cluster":"posts","index":"weekly_index","id":1});
+res = await indexApi.insert({"cluster":"posts","table":"weekly_index","doc":{"title":"iphone case","price":19.85}});
+ res = await indexApi.delete({"cluster":"posts","table":"weekly_index","id":1});
 ```
 
 <!-- intro -->
@@ -139,21 +156,47 @@ indexApi.delete(deleteRequest);
 <!-- request C# -->
 
 ``` clike
-Dictionary<string, Object> doc = new Dictionary<string, Object>(); 
+Dictionary<string, Object> doc = new Dictionary<string, Object>();
 doc.Add("title", "Crossbody Bag with Tassel");
 doc.Add("price", 19.85);
-InsertDocumentRequest newdoc = new InsertDocumentRequest(index: "weekly_index", cluster:posts, id: 1, doc: doc);
+InsertDocumentRequest newdoc = new InsertDocumentRequest(table: "weekly_index", cluster:posts, id: 1, doc: doc);
 var sqlresult = indexApi.Insert(newdoc);
 
-DeleteDocumentRequest deleteDocumentRequest = new DeleteDocumentRequest(index: "weekly_index", cluster: "posts", id: 1);
+DeleteDocumentRequest deleteDocumentRequest = new DeleteDocumentRequest(table: "weekly_index", cluster: "posts", id: 1);
 indexApi.Delete(deleteDocumentRequest);
 ```
+
+<!-- intro -->
+##### Rust:
+
+<!-- request Rust -->
+
+``` rust
+let mut doc = HashMap::new();
+doc.insert("title".to_string(), serde_json::json!("Crossbody Bag with Tassel"));
+doc.insert("price".to_string(), serde_json::json!(19.85));
+let insert_req = InsertDocumentRequest {
+    table: serde_json::json!("weekly_index"),
+    doc: serde_json::json!(doc),
+    cluster: serde_json::json!("posts"),
+    id: serde_json::json!(1),
+};
+let insert_res = index_api.insert(insert_req).await;
+
+let delete_req = DeleteDocumentRequest {
+    table: serde_json::json!("weekly_index"),
+    cluster: serde_json::json!("posts"),
+    id: serde_json::json!(1),
+};
+index_api.delete(delete_req).await;
+```
+
 <!-- end -->
 
 ## Read statements
 
 <!-- example write statements 2 -->
-Read statements such as `SELECT`, `CALL PQ`, `DESCRIBE` can either use regular table names that are not prepended with a cluster name, or they can use the  `cluster_name:index_name`format. If the latter is used, the `cluster_name` component is ignored.
+Read statements such as `SELECT`, `CALL PQ`, `DESCRIBE` can either use regular table names that are not prepended with a cluster name, or they can use the  `cluster_name:table_name`format. If the latter is used, the `cluster_name` component is ignored.
 
 When using the HTTP endpoint `json/search`, the `cluster` property can be specified if desired, but it can also be omitted.
 
@@ -174,12 +217,12 @@ CALL PQ('posts:weekly_index', 'document is here')
 POST /search -d '
 {
   "cluster":"posts",
-  "index":"weekly_index",
+  "table":"weekly_index",
   "query":{"match":{"title":"keyword"}}
 }'
 POST /search -d '
 {
-  "index":"weekly_index",
+  "table":"weekly_index",
   "query":{"match":{"title":"keyword"}}
 }'
 ```
@@ -295,6 +338,16 @@ $response = $client->cluster()->create($params);
 ```python
 utilsApi.sql('CREATE CLUSTER posts')
 ```
+
+<!-- intro -->
+##### Python-asyncio:
+
+<!-- request Python-asyncio -->
+
+```python
+await utilsApi.sql('CREATE CLUSTER posts')
+```
+
 <!-- intro -->
 ##### Javascript:
 
@@ -321,8 +374,17 @@ utilsApi.sql("CREATE CLUSTER posts");
 
 ```clike
 utilsApi.Sql("CREATE CLUSTER posts");
-
 ```
+
+<!-- intro -->
+##### Rust:
+
+<!-- request Rust -->
+
+```rust
+utils_api.sql("CREATE CLUSTER posts", Some(true)).await;
+```
+
 <!-- end -->
 
 <!-- example replication and cluster 3 -->
@@ -357,7 +419,7 @@ $params = [
   'cluster' => 'posts',
   'body' => [
      'operation' => 'add',
-     'index' => 'pq_title'
+     'table' => 'pq_title'
 
   ]
 ];
@@ -366,7 +428,7 @@ $params = [
   'cluster' => 'posts',
   'body' => [
      'operation' => 'add',
-     'index' => 'pq_clicks'
+     'table' => 'pq_clicks'
 
   ]
 ];
@@ -381,6 +443,17 @@ $response = $client->cluster()->alter($params);
 utilsApi.sql('ALTER CLUSTER posts ADD pq_title')
 utilsApi.sql('ALTER CLUSTER posts ADD pq_clicks')
 ```
+
+<!-- intro -->
+##### Python-asyncio:
+
+<!-- request Python-asyncio -->
+
+```python
+await utilsApi.sql('ALTER CLUSTER posts ADD pq_title')
+await utilsApi.sql('ALTER CLUSTER posts ADD pq_clicks')
+```
+
 <!-- intro -->
 ##### Javascript:
 
@@ -409,6 +482,16 @@ utilsApi.sql("ALTER CLUSTER posts ADD pq_clicks");
 ```clike
 utilsApi.Sql("ALTER CLUSTER posts ADD pq_title");
 utilsApi.Sql("ALTER CLUSTER posts ADD pq_clicks");
+```
+
+<!-- intro -->
+##### Rust:
+
+<!-- request Rust -->
+
+```rust
+utils_api.sql("ALTER CLUSTER posts ADD pq_title", Some(true)).await;
+utils_api.sql("ALTER CLUSTER posts ADD pq_clicks", Some(true)).await;
 ```
 
 <!-- end -->
@@ -453,6 +536,16 @@ $response = $client->cluster->join($params);
 ```python
 utilsApi.sql('JOIN CLUSTER posts AT \'192.168.1.101:9312\'')
 ```
+
+<!-- intro -->
+##### Python-asyncio:
+
+<!-- request Python-asyncio -->
+
+```python
+await utilsApi.sql('JOIN CLUSTER posts AT \'192.168.1.101:9312\'')
+```
+
 <!-- intro -->
 ##### Javascript:
 
@@ -481,6 +574,16 @@ utilsApi.sql("JOIN CLUSTER posts AT '192.168.1.101:9312'");
 utilsApi.Sql("JOIN CLUSTER posts AT '192.168.1.101:9312'");
 
 ```
+
+<!-- intro -->
+##### Rust:
+
+<!-- request Rust -->
+
+```rust
+utils_api.sql("JOIN CLUSTER posts AT '192.168.1.101:9312'", Some(true)).await;
+
+```
 <!-- end -->
 
 <!-- example replication and cluster 5 -->
@@ -502,7 +605,7 @@ INSERT INTO posts:pq_title VALUES ( 3, 'test me' )
 POST /insert -d '
 {
   "cluster":"posts",
-  "index":"pq_title",
+  "table":"pq_title",
   "id": 3
   "doc":
   {
@@ -525,16 +628,26 @@ $index->addDocuments([
 <!-- request Python -->
 
 ``` python
-indexApi.insert({"cluster":"posts","index":"pq_title","id":3"doc":{"title":"test me"}})
+indexApi.insert({"cluster":"posts","table":"pq_title","id":3"doc":{"title":"test me"}})
 
 ```
+
+<!-- intro -->
+##### Python-asyncio:
+
+<!-- request Python-asyncio -->
+
+``` python
+await indexApi.insert({"cluster":"posts","table":"pq_title","id":3"doc":{"title":"test me"}})
+```
+
 <!-- intro -->
 ##### Javascript:
 
 <!-- request Javascript -->
 
 ``` javascript
-res = await indexApi.insert({"cluster":"posts","index":"pq_title","id":3"doc":{"title":"test me"}});
+res = await indexApi.insert({"cluster":"posts","table":"pq_title","id":3"doc":{"title":"test me"}});
 ```
 
 <!-- intro -->
@@ -557,10 +670,27 @@ sqlresult = indexApi.insert(newdoc);
 <!-- request C# -->
 
 ``` clike
-Dictionary<string, Object> doc = new Dictionary<string, Object>(); 
+Dictionary<string, Object> doc = new Dictionary<string, Object>();
 doc.Add("title", "test me");
 InsertDocumentRequest newdoc = new InsertDocumentRequest(index: "pq_title", cluster: "posts", id: 3, doc: doc);
 var sqlresult = indexApi.Insert(newdoc);
+```
+
+<!-- intro -->
+##### Rust:
+
+<!-- request Rust -->
+
+``` rust
+let mut doc = HashMap::new();
+doc.insert("title".to_string(), serde_json::json!("test me"));
+let insert_req = InsertDocumentRequest {
+    table: serde_json::json!("pq_title"),
+    doc: serde_json::json!(doc),
+    cluster: serde_json::json!("posts"),
+    id: serde_json::json!(3),
+};
+let insert_res = index_api.insert(insert_req).await;
 ```
 <!-- end -->
 

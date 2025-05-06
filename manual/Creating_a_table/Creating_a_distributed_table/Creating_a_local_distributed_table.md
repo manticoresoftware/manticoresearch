@@ -36,7 +36,7 @@ $params = [
             ]
         ]
     ],
-    'index' => 'products'
+    'table' => 'products'
 ];
 $index = new \Manticoresearch\Index($client);
 $index->create($params);
@@ -49,8 +49,18 @@ $index->create($params);
 ```python
 utilsApi.sql('CREATE TABLE local_dist type=\'distributed\' local=\'index1\' local=\'index2\'')
 ```
+
 <!-- intro -->
-##### javascript:
+##### Python-asyncio:
+
+<!-- request Python-asyncio -->
+
+```python
+await utilsApi.sql('CREATE TABLE local_dist type=\'distributed\' local=\'index1\' local=\'index2\'')
+```
+
+<!-- intro -->
+##### Javascript:
 
 <!-- request javascript -->
 
@@ -70,6 +80,15 @@ utilsApi.sql("CREATE TABLE local_dist type='distributed' local='index1' local='i
 <!-- request C# -->
 ```clike
 utilsApi.Sql("CREATE TABLE local_dist type='distributed' local='index1' local='index2'");
+```
+
+<!-- intro -->
+##### Rust:
+
+<!-- request Rust -->
+
+```rust
+utils_api.sql("CREATE TABLE local_dist type='distributed' local='index1' local='index2'", Some(true)).await;
 ```
 
 <!-- end -->

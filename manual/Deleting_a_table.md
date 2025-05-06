@@ -45,7 +45,7 @@ POST /cli -d "DROP TABLE products"
 <!-- request PHP -->
 
 ```php
-$params = [ 'index' => 'products' ];
+$params = [ 'table' => 'products' ];
 
 $response = $client->indices()->drop($params);
 ```
@@ -73,8 +73,23 @@ utilsApi.sql('DROP TABLE products')
 ```python
 {u'error': u'', u'total': 0, u'warning': u''}
 ```
+
 <!-- intro -->
-##### javascript:
+##### Python-asyncio:
+
+<!-- request Python-asyncio -->
+
+```python
+await utilsApi.sql('DROP TABLE products')
+```
+
+<!-- response Python-asyncio -->
+```python
+{u'error': u'', u'total': 0, u'warning': u''}
+```
+
+<!-- intro -->
+##### Javascript:
 
 <!-- request javascript -->
 
@@ -92,7 +107,7 @@ res = await utilsApi.sql('DROP TABLE products');
 <!-- request Java -->
 
 ```java
-sqlresult = utilsApi.sql("DROP TABLE products");
+sqlresult = utilsApi.sql("DROP TABLE products", true);
 ```
 
 <!-- response Java -->
@@ -106,11 +121,25 @@ sqlresult = utilsApi.sql("DROP TABLE products");
 <!-- request C# -->
 
 ```clike
-sqlresult = utilsApi.Sql("DROP TABLE products");
+sqlresult = utilsApi.Sql("DROP TABLE products", true);
 ```
 
 <!-- response C# -->
 ```clike
+{total=0, error="", warning=""}
+```
+
+<!-- intro -->
+##### Rust:
+
+<!-- request Rust -->
+
+```rust
+let sqlresult = utils_api.sql("DROP TABLE products", Some(true)).await;
+```
+
+<!-- response Rust -->
+```rust
 {total=0, error="", warning=""}
 ```
 
@@ -119,7 +148,7 @@ sqlresult = utilsApi.Sql("DROP TABLE products");
 Here is the syntax of the `DROP TABLE` statement in SQL:
 
 ```sql
-DROP TABLE [IF EXISTS] index_name
+DROP TABLE [IF EXISTS] table_name
 ```
 
 <!-- example drop-if-exists -->
@@ -153,7 +182,7 @@ POST /cli -d "DROP TABLE IF EXISTS products"
 ```php
 $params =
 [
-  'index' => 'products',
+  'table' => 'products',
   'body' => ['silent' => true]
 ];
 
@@ -172,8 +201,23 @@ utilsApi.sql('DROP TABLE IF EXISTS products')
 ```python
 {u'error': u'', u'total': 0, u'warning': u''}
 ```
+
 <!-- intro -->
-##### javascript:
+##### Python-asyncio:
+
+<!-- request Python-asyncio -->
+
+```python
+await utilsApi.sql('DROP TABLE IF EXISTS products')
+```
+
+<!-- response Python-asyncio -->
+```python
+{u'error': u'', u'total': 0, u'warning': u''}
+```
+
+<!-- intro -->
+##### Javascript:
 
 <!-- request javascript -->
 
@@ -191,7 +235,7 @@ res = await utilsApi.sql('DROP TABLE IF EXISTS products');
 <!-- request Java -->
 
 ```java
-sqlresult = utilsApi.sql("DROP TABLE IF EXISTS products");
+sqlresult = utilsApi.sql("DROP TABLE IF EXISTS products", true);
 ```
 
 <!-- response Java -->
@@ -205,11 +249,25 @@ sqlresult = utilsApi.sql("DROP TABLE IF EXISTS products");
 <!-- request C# -->
 
 ```clike
-sqlresult = utilsApi.Sql("DROP TABLE IF EXISTS products");
+sqlresult = utilsApi.Sql("DROP TABLE IF EXISTS products", true);
 ```
 
 <!-- response C# -->
 ```clike
+{total=0, error="", warning=""}
+```
+
+<!-- intro -->
+##### Rust:
+
+<!-- request Rust -->
+
+```rust
+let sqlresult = utils_api.sql("DROP TABLE IF EXISTS products", Some(true)).await;
+```
+
+<!-- response Rust -->
+```rust
 {total=0, error="", warning=""}
 ```
 

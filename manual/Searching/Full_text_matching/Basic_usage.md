@@ -10,14 +10,26 @@ There must be at most one `MATCH()` in the `SELECT` clause.
 
 Using the [full-text query syntax](../../Searching/Full_text_matching/Operators.md), matching is performed across all indexed text fields of a document, unless the expression requires a match within a field (like phrase search) or is limited by field operators.
 
+When using [JOIN](../../Searching/Joining.md) queries, `MATCH()` can accept an optional second parameter that specifies which table the full-text search should be applied to. By default, the full-text query is applied to the left table in the `JOIN` operation:
+
+```sql
+SELECT * FROM table1 LEFT JOIN table2 ON table1.id = table2.id WHERE MATCH('search query', table2);
+```
+
+This allows you to perform full-text searches on specific tables in a join operation. For more details on using MATCH with JOINs, see the [Joining tables](../../Searching/Joining.md) section.
+
 ## SQL
+
 <!-- example Example_1 -->
 
 ```sql
-SELECT * FROM index WHERE MATCH('cats|birds');
+MATCH('search query' [, table_name])
 ```
+- `'search query'`: The full-text search query string, which can include various [full-text operators](../../Searching/Full_text_matching/Operators.md).
+- `table_name`: (Optional) The name of the table to apply the full-text search to, used in `JOIN` queries to specify a different table than the default left table.
 
-[SELECT](../../Searching/Full_text_matching/Basic_usage.md#SQL) statement uses [MATCH](../../Searching/Full_text_matching/Basic_usage.md) clause for performing full-text searches. It accepts an input string in which all [full-text operators](../../Searching/Full_text_matching/Operators.md) are available.
+
+The [SELECT](../../Searching/Full_text_matching/Basic_usage.md#SQL) statement uses a [MATCH](../../Searching/Full_text_matching/Basic_usage.md) clause, which must come after WHERE, for performing full-text searches. `MATCH()` accepts an input string in which all [full-text operators](../../Searching/Full_text_matching/Operators.md) are available.
 
 
 <!-- intro -->
@@ -38,8 +50,13 @@ SELECT * FROM myindex WHERE MATCH('"find me fast"/2');
 |    2 |   12 | second find me |
 +------+------+----------------+
 2 rows in set (0.00 sec)
+```
 
+<!-- request MATCH with filters -->
+An example of a more complex query using MATCH with WHERE filters.
 
+```sql
+SELECT * FROM myindex WHERE MATCH('cats|birds') AND (`title`='some title' AND `id`=123);
 ```
 
 <!-- end -->
@@ -97,6 +114,21 @@ By default, keywords are combined using the OR operator. However, you can change
 
 "operator" can be set to "or" or "and".
 
+The `boost` modifier can also be applied. It raises the word [IDF](../../Searching/Options.md#idf)_score by the indicated factor in ranking scores that incorporate IDF into their calculations. It does not impact the matching process in any manner.
+```json
+"query":
+{
+  "match":
+  {
+    "field1":
+    {
+      "query": "keyword",
+      "boost": 2.0
+    }
+  }
+}
+```
+
 ### match_phrase
 
 "match_phrase" is a query that matches the entire phrase. It is similar to a phrase operator in SQL. Here's an example:
@@ -118,10 +150,21 @@ By default, keywords are combined using the OR operator. However, you can change
 }
 ```
 
+### match_all
+
+"match_all" accepts an empty object and returns documents from the table without performing any attribute filtering or full-text matching. Alternatively, you can just omit the `query` clause in the request which will have the same effect.
+
+```json
+"query":
+{
+  "match_all": {}
+}
+```
+
 
 ### Combining full-text filtering with other filters
 
-All full-text match clauses can be combined with [must](../../Searching/Filters.md#must), [must_not](../../Searching/Filters.md#must_not), and [should](../../Searching/Filters.md#should) operators of an [HTTP `bool` query](../../Searching/Filters.md#bool-query).
+All full-text match clauses can be combined with [must](../../Searching/Filters.md#must), [must_not](../../Searching/Filters.md#must_not), and [should](../../Searching/Filters.md#should) operators of a [JSON `bool` query](../../Searching/Filters.md#bool-query).
 
 <!-- intro -->
 Examples:
@@ -131,8 +174,8 @@ Examples:
 ```json
 POST /search
 -d
-'{   
-    "index" : "hn_small",
+'{
+    "table" : "hn_small",
     "query":
     {
         "match":
@@ -153,7 +196,7 @@ POST /search
    "hits" : {
       "hits" : [
          {
-            "_id" : "668018",
+            "_id": 668018,
             "_score" : 3579,
             "_source" : {
                "story_author" : "IgorPartola",
@@ -170,8 +213,8 @@ POST /search
 ```json
 POST /search
 -d
-'{   
-    "index" : "hn_small",
+'{
+    "table" : "hn_small",
     "query":
     {
         "match_phrase":
@@ -191,7 +234,7 @@ POST /search
    "hits" : {
       "hits" : [
          {
-            "_id" : "807160",
+            "_id": 807160,
             "_score" : 2599,
             "_source" : {
                "story_author" : "rbanffy",
@@ -209,7 +252,7 @@ POST /search
 ```json
 POST /search
 -d
-'{   "index" : "hn_small",
+'{   "table" : "hn_small",
     "query":
     {
         "query_string": "@comment_text \"find joe fast \"/2"
@@ -226,7 +269,7 @@ POST /search
   "hits" : {
       "hits" : [
          {
-            "_id" : "807160",
+            "_id": 807160,
             "_score" : 2566,
             "_source" : {
                "story_author" : "rbanffy",
@@ -268,9 +311,32 @@ Python
 <!-- request Python -->
 
 ```python
-searchApi.search({"index":"hn_small","query":{"query_string":"@comment_text \"find joe fast \"/2"}, "_source": ["story_author","comment_author"], "limit":1})
+searchApi.search({"table":"hn_small","query":{"query_string":"@comment_text \"find joe fast \"/2"}, "_source": ["story_author","comment_author"], "limit":1})
 ```
 <!-- response Python -->
+``` python
+{'aggregations': None,
+ 'hits': {'hits': [{'_id': '807160',
+                    '_score': 2566,
+                    '_source': {'comment_author': 'runjake',
+                                'story_author': 'rbanffy'}}],
+          'max_score': None,
+          'total': 1864,
+          'total_relation': 'eq'},
+ 'profile': None,
+ 'timed_out': False,
+ 'took': 2,
+ 'warning': None}
+```
+
+<!-- intro -->
+Python-asyncio
+<!-- request Python-asyncio -->
+
+```python
+await searchApi.search({"table":"hn_small","query":{"query_string":"@comment_text \"find joe fast \"/2"}, "_source": ["story_author","comment_author"], "limit":1})
+```
+<!-- response Python-asyncio -->
 ``` python
 {'aggregations': None,
  'hits': {'hits': [{'_id': '807160',
@@ -291,7 +357,7 @@ javascript
 <!-- request javascript -->
 
 ```javascript
-res = await searchApi.search({"index":"hn_small","query":{"query_string":"@comment_text \"find joe fast \"/2"}, "_source": ["story_author","comment_author"], "limit":1});
+res = await searchApi.search({"table":"hn_small","query":{"query_string":"@comment_text \"find joe fast \"/2"}, "_source": ["story_author","comment_author"], "limit":1});
 ```
 <!-- response javascript -->
 ```javascript
@@ -370,6 +436,105 @@ class SearchResponse {
     }
     profile: null
     warning: null
+}
+```
+
+<!-- intro -->
+Rust
+<!-- request Rust -->
+
+```rust
+let query = SearchQuery {
+     query_string: Some(serde_json::json!("@comment_text \"find joe fast \"/2").into()),
+    ..Default::default()
+};
+let search_req = SearchRequest {
+    table: "hn_small".to_string(),
+    query: Some(Box::new(query)),
+    source: serde_json::json!(["story_author", "comment_author"]),
+    limit: serde_json::json!(1),
+    ..Default::default(),
+};
+let search_res = search_api.search(search_req).await;
+```
+<!-- response Rust -->
+```rust
+class SearchResponse {
+    took: 1
+    timedOut: false
+    aggregations: null
+    hits: class SearchResponseHits {
+        maxScore: null
+        total: 1864
+        totalRelation: eq
+        hits: [{_id=807160, _score=2566, _source={story_author=rbanffy, comment_author=runjake}}]
+    }
+    profile: null
+    warning: null
+}
+```
+
+<!-- intro -->
+TypeScript
+<!-- request TypeScript -->
+
+```typescript
+res = await searchApi.search({
+  index: 'test',
+  query: { query_string: "test document 1" },
+  "_source": ["content", "title"],
+  limit: 1
+});
+```
+<!-- response TypeScript -->
+```json
+{
+  took: 1,
+  timed_out: false,
+  hits:
+   exports {
+     total: 5,
+     total_relation: 'eq',
+     hits:
+      [ { _id: '1',
+          _score: 2566,
+          _source: { content: 'This is a test document 1', title: 'Doc 1' }
+        }
+      ]
+   }
+}
+```
+
+<!-- intro -->
+Go
+<!-- request Go -->
+
+```go
+searchRequest := manticoresearch.NewSearchRequest("test")
+query := map[string]interface{} {"query_string": "test document 1"}
+searchReq.SetSource([]string{"content", "title"})
+searchReq.SetLimit(1)
+resp, httpRes, err := search.SearchRequest(*searchRequest).Execute()
+```
+<!-- response Go -->
+```json
+{
+  "hits": {
+    "hits": [
+      {
+        "_id": 1,
+        "_score": 2566,
+        "_source": {
+          "content": "This is a test document 1",
+          "title": "Doc 1"
+        }
+      }
+    ],
+    "total": 5,
+    "total_relation": "eq"
+  },
+  "timed_out": false,
+  "took": 0
 }
 ```
 <!-- end -->

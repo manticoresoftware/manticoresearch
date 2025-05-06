@@ -9,10 +9,9 @@
 
 
 <!-- intro -->
-##### CONFIG:
+##### Creating a template table via a configuration file:
 
 <!-- request CONFIG -->
-##### Creating a template table via a configuration file:
 
 ```ini
 table template {

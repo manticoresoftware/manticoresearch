@@ -71,7 +71,7 @@ PUT /pq/pq_table/doc/2
 <!-- request PHP -->
 ```php
 $newstoredquery = [
-    'index' => 'test_pq',
+    'table' => 'test_pq',
     'body' => [
         'query' => [
                        'match' => [
@@ -93,15 +93,23 @@ $client->pq()->doc($newstoredquery);
 ##### Python
 <!-- request Python -->
 ```python
-newstoredquery ={"index" : "test_pq", "id" : 2, "doc" : {"query": {"ql": "@title shoes"},"filters": "price > 5","tags": ["Loius Vuitton"]}}
+newstoredquery ={"table" : "test_pq", "id" : 2, "doc" : {"query": {"ql": "@title shoes"},"filters": "price > 5","tags": ["Loius Vuitton"]}}
 indexApi.insert(newstoredquery)
+```
+
+<!-- intro -->
+##### Python-asyncio
+<!-- request Python-asyncio -->
+```python
+newstoredquery ={"table" : "test_pq", "id" : 2, "doc" : {"query": {"ql": "@title shoes"},"filters": "price > 5","tags": ["Loius Vuitton"]}}
+await indexApi.insert(newstoredquery)
 ```
 
 <!-- intro -->
 ##### Javascript
 <!-- request Javascript -->
 ```javascript
-newstoredquery ={"index" : "test_pq", "id" : 2, "doc" : {"query": {"ql": "@title shoes"},"filters": "price > 5","tags": ["Loius Vuitton"]}};
+newstoredquery ={"table" : "test_pq", "id" : 2, "doc" : {"query": {"ql": "@title shoes"},"filters": "price > 5","tags": ["Loius Vuitton"]}};
 indexApi.insert(newstoredquery);
 ```
 <!-- intro -->
@@ -133,6 +141,23 @@ InsertDocumentRequest newdoc = new InsertDocumentRequest(index: "test_pq", id: 2
 indexApi.Insert(newdoc);
 ```
 
+<!-- intro -->
+##### Rust:
+
+<!-- request Rust -->
+
+``` rust
+let mut pq_doc = HashMap::new();
+pq_doc.insert("q1".to_string(), serde_json::json!("@title shoes"));
+pq_doc.insert("filters".to_string(), serde_json::json!("price>5"));
+pq_doc.insert("tags".to_string(), serde_json::json!(["Louis Vitton"]));
+
+let mut doc = HashMap::new();
+pq_doc.insert("query".to_string(), serde_json::json!(pq_doc));
+
+let insert_req = InsertDocumentRequest::new("test_pq".to_string(), serde_json::json!(doc));
+let insert_res = index_api.insert(insert_req).await;
+```
 <!-- end -->
 
 <!-- example noid -->
@@ -191,16 +216,16 @@ PUT /pq/pq_table/doc
 
 ```json
 {
-  "index": "pq_table",
+  "table": "pq_table",
   "type": "doc",
-  "_id": "1657843905795719196",
+  "_id": 1657843905795719196,
   "result": "created"
 }
 
 {
-  "index": "pq_table",
+  "table": "pq_table",
   "type": "doc",
-  "_id": "1657843905795719198",
+  "_id": 1657843905795719198,
   "result": "created"
 }
 ```
@@ -209,7 +234,7 @@ PUT /pq/pq_table/doc
 <!-- request PHP -->
 ```php
 $newstoredquery = [
-    'index' => 'pq_table',
+    'table' => 'pq_table',
     'body' => [
         'query' => [
                        'match' => [
@@ -241,7 +266,7 @@ Array(
 <!-- request Python -->
 ```python
 indexApi = api = manticoresearch.IndexApi(client)
-newstoredquery ={"index" : "test_pq",   "doc" : {"query": {"ql": "@title shoes"},"filters": "price > 5","tags": ["Loius Vuitton"]}}
+newstoredquery ={"table" : "test_pq",   "doc" : {"query": {"ql": "@title shoes"},"filters": "price > 5","tags": ["Loius Vuitton"]}}
 indexApi.insert(store_query)
 ```
 <!-- response Python -->
@@ -249,19 +274,37 @@ indexApi.insert(store_query)
 {'created': True,
  'found': None,
  'id': 1657843905795719198,
- 'index': 'test_pq',
+ 'table': 'test_pq',
  'result': 'created'}
 ```
+
+<!-- intro -->
+##### Python-asyncio
+<!-- request Python-asyncio -->
+```python
+indexApi = api = manticoresearch.IndexApi(client)
+newstoredquery ={"table" : "test_pq",   "doc" : {"query": {"ql": "@title shoes"},"filters": "price > 5","tags": ["Loius Vuitton"]}}
+await indexApi.insert(store_query)
+```
+<!-- response Python-asyncio -->
+```python
+{'created': True,
+ 'found': None,
+ 'id': 1657843905795719198,
+ 'table': 'test_pq',
+ 'result': 'created'}
+```
+
 <!-- intro -->
 ##### Javascript
 <!-- request Javascript -->
 ```javascript
-newstoredquery ={"index" : "test_pq",  "doc" : {"query": {"ql": "@title shoes"},"filters": "price > 5","tags": ["Loius Vuitton"]}};
+newstoredquery ={"table" : "test_pq",  "doc" : {"query": {"ql": "@title shoes"},"filters": "price > 5","tags": ["Loius Vuitton"]}};
 res =  await indexApi.insert(store_query);
 ```
 <!-- response Javascript -->
 ```javascript
-{"_index":"test_pq","_id":1657843905795719198,"created":true,"result":"created"}
+{"table":"test_pq","_id":1657843905795719198,"created":true,"result":"created"}
 
 ```
 
@@ -294,6 +337,23 @@ InsertDocumentRequest newdoc = new InsertDocumentRequest(index: "test_pq", doc: 
 indexApi.Insert(newdoc);
 ```
 
+<!-- intro -->
+##### Rust:
+
+<!-- request Rust -->
+
+``` rust
+let mut pq_doc = HashMap::new();
+pq_doc.insert("q1".to_string(), serde_json::json!("@title shoes"));
+pq_doc.insert("filters".to_string(), serde_json::json!("price>5"));
+pq_doc.insert("tags".to_string(), serde_json::json!(["Louis Vitton"]));
+
+let mut doc = HashMap::new();
+pq_doc.insert("query".to_string(), serde_json::json!(pq_doc));
+
+let insert_req = InsertDocumentRequest::new("test_pq".to_string(), serde_json::json!(doc));
+let insert_res = index_api.insert(insert_req).await;
+```
 <!-- end -->
 
 <!-- example noschema -->
@@ -364,7 +424,7 @@ GET /pq/pq/doc/2810823411335430149
     "total": 1,
     "hits": [
       {
-        "_id": "2810823411335430149",
+        "_id": 2810823411335430149,
         "_score": 1,
         "_source": {
           "query": {
@@ -396,7 +456,7 @@ GET /pq/pq/doc/2810823411335430149
     "total": 1,
     "hits": [
       {
-        "_id": "2810823411335430149",
+        "_id": 2810823411335430149,
         "_score": 1,
         "_source": {
           "query": {

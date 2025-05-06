@@ -8,8 +8,8 @@ The manual is arranged to reflect the most likely way you would use Manticore:
 * essential things like adding documents and running searches
 * performance optimization tips, tricks and extending Manticore with the help of plugins and custom functions
 
-##### Do not skip ✔️
-Key sections of the manual are marked with ✔️ sign in the menu for your convenience since their corresponding functionality is most used. If you are new to Manticore **we highly recommend not skiping them**.
+##### Do not skip 1️⃣ 2️⃣ 3️⃣
+Key sections of the manual are marked with 1️⃣, 2️⃣, 3️⃣ etc. in the menu for your convenience since their corresponding functionality is most used. If you are new to Manticore **we highly recommend not skipping them**.
 
 ##### Quick start guide
 If you are looking for a quick understanding of how Manticore works in general [⚡ Quick start guide](Quick_start_guide.md) is a good place to start.
@@ -46,7 +46,7 @@ Manticore Search works in two modes:
 
 You cannot combine the 2 modes and need to decide which one you want to follow by specifying [data_dir](Server_settings/Searchd.md#data_dir) in your configuration file (which is the default behaviour). If you are unsure **our recommendation is to follow the RT mode** as if even you need a plain table you can [build](Data_creation_and_modification/Adding_data_from_external_storages/Plain_tables_creation.md) it with a separate plain table config and [import](Data_creation_and_modification/Adding_data_from_external_storages/Adding_data_to_tables/Importing_table.md) to your main Manticore instance.
 
-Real-time tables can be used in both RT and plain modes. In the RT mode a real-time table is defined with a `CREATE TABLE` command, while in the plain mode it is defined in the configuration file. Plain (offline) tables are supported only in the plain mode. Plain tables cannot be created in the RT mode, but existing plain tables made in the plain mode can be [converted](Data_creation_and_modification/Adding_data_from_external_storages/Adding_data_to_tables/Attaching_a_plain_table_to_RT_table.md) to real-time tables and [imported](Data_creation_and_modification/Adding_data_from_external_storages/Adding_data_to_tables/Importing_table.md) in the RT mode.
+Real-time tables can be used in both RT and plain modes. In the RT mode a real-time table is defined with a `CREATE TABLE` command, while in the plain mode it is defined in the configuration file. Plain (offline) tables are supported only in the plain mode. Plain tables cannot be created in the RT mode, but existing plain tables made in the plain mode can be [converted](Data_creation_and_modification/Adding_data_from_external_storages/Adding_data_to_tables/Attaching_one_table_to_another.md) to real-time tables and [imported](Data_creation_and_modification/Adding_data_from_external_storages/Adding_data_to_tables/Importing_table.md) in the RT mode.
 
 #### SQL vs JSON
 Manticore provides multiple ways and interfaces to manage your schemas and data, but the two main are:

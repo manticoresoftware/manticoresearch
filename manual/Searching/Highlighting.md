@@ -34,7 +34,7 @@ SELECT HIGHLIGHT() FROM books WHERE MATCH('try');
 ```json
 POST /search
 {
-  "index": "books",
+  "table": "books",
   "query":  {  "match": { "*" : "try" }  },
   "highlight": {}
 }
@@ -52,7 +52,7 @@ POST /search
     "hits":
     [
       {
-        "_id":"4",
+        "_id": 4,
         "_score":1704,
         "_source":
         {
@@ -110,7 +110,7 @@ Highlight for content:
 
 <!-- request Python -->
 ``` python
-res = searchApi.search({"index":"books","query":{"match":{"*":"try"}},"highlight":{}})
+res = searchApi.search({"table":"books","query":{"match":{"*":"try"}},"highlight":{}})
 ```
 <!-- response Python -->
 ``` python
@@ -128,13 +128,33 @@ res = searchApi.search({"index":"books","query":{"match":{"*":"try"}},"highlight
  'took': 0}
 ```
 
+<!-- request Python-asyncio -->
+``` python
+res = await searchApi.search({"table":"books","query":{"match":{"*":"try"}},"highlight":{}})
+```
+<!-- response Python-asyncio -->
+``` python
+{'aggregations': None,
+ 'hits': {'hits': [{u'_id': u'4',
+                    u'_score': 1695,
+                    u'_source': {u'content': u'Don`t try to compete in childishness, said Bliss.',
+                                 u'title': u'Book four'},
+                    u'highlight': {u'content': [u'Don`t <b>try</b> to compete in childishness, said Bliss.'],
+                                   u'title': [u'Book four']}}],
+          'max_score': None,
+          'total': 1},
+ 'profile': None,
+ 'timed_out': False,
+ 'took': 0}
+```
+
 <!-- request Javascript -->
 ``` javascript
-res =  await searchApi.search({"index":"books","query":{"match":{"*":"try"}},"highlight":{}});
+res =  await searchApi.search({"table":"books","query":{"match":{"*":"try"}},"highlight":{}});
 ```
 <!-- response Javascript -->
 ``` javascript
-{"took":0,"timed_out":false,"hits":{"total":1,"hits":[{"_id":"4","_score":1695,"_source":{"title":"Book four","content":"Don`t try to compete in childishness, said Bliss."},"highlight":{"title":["Book four"],"content":["Don`t <b>try</b> to compete in childishness, said Bliss."]}}]}}
+{"took":0,"timed_out":false,"hits":{"total":1,"hits":[{"_id": 4,"_score":1695,"_source":{"title":"Book four","content":"Don`t try to compete in childishness, said Bliss."},"highlight":{"title":["Book four"],"content":["Don`t <b>try</b> to compete in childishness, said Bliss."]}}]}}
 ```
 
 <!-- intro -->
@@ -199,6 +219,120 @@ class SearchResponse {
     profile: null
 }
 ```
+
+<!-- intro -->
+##### Rust:
+
+<!-- request Rust -->
+```rust
+let match_filter = HashMap::new();
+match_filter.insert("*".to_string(), "try|gets|down|said".to_string());
+let query = SearchQuery {
+    match: Some(serde_json::json!(match_filter).into()),
+    ..Default::default(),
+};
+let highlight = Highlight::new();
+
+let search_req = SearchRequest {
+    table: "books".to_string(),
+    query: Some(Box::new(query)),
+    highlight: serde_json::json!(highlight),
+    ..Default::default(),
+};
+```
+
+<!-- response Rust -->
+```rust
+class SearchResponse {
+    took: 0
+    timedOut: false
+    hits: class SearchResponseHits {
+        total: 3
+        maxScore: null
+        hits: [{_id=3, _score=1597, _source={title=Book three, content=Trevize whispered, "It gets infantile pleasure out of display. I`d love to knock it down."}, highlight={title=[Book three], content=[, "It <b>gets</b> infantile pleasure ,  to knock it <b>down</b>."]}}, {_id=4, _score=1563, _source={title=Book four, content=Don`t try to compete in childishness, said Bliss.}, highlight={title=[Book four], content=[Don`t <b>try</b> to compete in childishness, <b>said</b> Bliss.]}}, {_id=5, _score=1514, _source={title=Books two, content=A door opened before them, revealing a small room. Bander said, "Come, half-humans, I want to show you how we live."}, highlight={title=[Books two], content=[ a small room. Bander <b>said</b>, "Come, half-humans, I]}}]
+        aggregations: null
+    }
+    profile: null
+}
+```
+
+<!-- request TypeScript -->
+``` typescript
+res = await searchApi.search({
+  index: 'test',
+  query: {
+    match: {
+      *: 'Text 1'
+    }
+  },
+  highlight: {}
+});
+```
+<!-- response TypeScript -->
+``` typescript
+{
+	"took":0,
+	"timed_out":false,
+	"hits":
+	{
+		"total":1,
+		"hits":
+		[{
+			"_id": 1,
+			"_score":1480,
+			"_source":
+			{
+				"content":"Text 1"
+			},
+			"highlight":
+			{
+				"content":
+				[
+					"<b>Text 1</b>"
+				]
+			}
+		]}
+	}
+}
+```
+
+<!-- request Go -->
+``` go
+matchClause := map[string]interface{} {"*": "Text 1"};
+query := map[string]interface{} {"match": matchClause};
+searchRequest.SetQuery(query);
+highlight := manticoreclient.NewHighlight()
+searchRequest.SetHighlight(highlight)
+res, _, _ := apiClient.SearchAPI.Search(context.Background()).SearchRequest(*searchRequest).Execute()
+```
+<!-- response Go -->
+``` go
+{
+	"took":0,
+	"timed_out":false,
+	"hits":
+	{
+		"total":1,
+		"hits":
+		[{
+			"_id": 1,
+			"_score":1480,
+			"_source":
+			{
+				"content":"Text 1"
+			},
+			"highlight":
+			{
+				"content":
+				[
+					"<b>Text 1</b>"
+				]
+			}
+		]}
+	}
+}
+```
+
 <!-- end -->
 
 When using SQL for highlighting search results, you will receive snippets from various fields combined into a single string due to the limitations of the MySQL protocol. You can adjust the concatenation separators with the `field_separator` and `snippet_separator` options, as detailed below.
@@ -292,7 +426,7 @@ SELECT HIGHLIGHT({limit=50}) FROM books WHERE MATCH('try|gets|down|said');
 ```json
 POST /search
 {
-  "index": "books",
+  "table": "books",
   "query": {"query_string": "try|gets|down|said"},
   "highlight": { "limit":50 }
 }
@@ -310,7 +444,7 @@ POST /search
     "hits":
     [
       {
-        "_id":"3",
+        "_id": 3,
         "_score":1602,
         "_source":
         {
@@ -331,7 +465,7 @@ POST /search
         }
       },
       {
-        "_id":"4",
+        "_id": 4,
         "_score":1573,
         "_source":
         {
@@ -351,7 +485,7 @@ POST /search
         }
       },
       {
-        "_id":"2",
+        "_id": 2,
         "_score":1521,
         "_source":
         {
@@ -430,7 +564,7 @@ Highlight for content:
 
 <!-- request Python -->
 ``` python
-res = searchApi.search({"index":"books","query":{"match":{"*":"try"}},"highlight":{"limit":50}})
+res = searchApi.search({"table":"books","query":{"match":{"*":"try"}},"highlight":{"limit":50}})
 ```
 <!-- response Python -->
 ``` python
@@ -448,13 +582,33 @@ res = searchApi.search({"index":"books","query":{"match":{"*":"try"}},"highlight
  'took': 0}
 ```
 
+<!-- request Python-asyncio -->
+``` python
+res = await searchApi.search({"table":"books","query":{"match":{"*":"try"}},"highlight":{"limit":50}})
+```
+<!-- response Python-asyncio -->
+``` python
+{'aggregations': None,
+ 'hits': {'hits': [{u'_id': u'4',
+                    u'_score': 1695,
+                    u'_source': {u'content': u'Don`t try to compete in childishness, said Bliss.',
+                                 u'title': u'Book four'},
+                    u'highlight': {u'content': [u'Don`t <b>try</b> to compete in childishness, said Bliss.'],
+                                   u'title': [u'Book four']}}],
+          'max_score': None,
+          'total': 1},
+ 'profile': None,
+ 'timed_out': False,
+ 'took': 0}
+```
+
 <!-- request Javascript -->
 ``` javascript
-res =  await searchApi.search({"index":"books","query":{"query_string":"try|gets|down|said"},"highlight":{"limit":50}});
+res =  await searchApi.search({"table":"books","query":{"query_string":"try|gets|down|said"},"highlight":{"limit":50}});
 ```
 <!-- response Javascript -->
 ``` javascript
-{"took":0,"timed_out":false,"hits":{"total":3,"hits":[{"_id":"3","_score":1597,"_source":{"title":"Book three","content":"Trevize whispered, \"It gets infantile pleasure out of display. I`d love to knock it down.\""},"highlight":{"title":["Book three"],"content":[", \"It <b>gets</b> infantile pleasure "," to knock it <b>down</b>.\""]}},{"_id":"4","_score":1563,"_source":{"title":"Book four","content":"Don`t try to compete in childishness, said Bliss."},"highlight":{"title":["Book four"],"content":["Don`t <b>try</b> to compete in childishness, <b>said</b> Bliss."]}},{"_id":"5","_score":1514,"_source":{"title":"Books two","content":"A door opened before them, revealing a small room. Bander said, \"Come, half-humans, I want to show you how we live.\""},"highlight":{"title":["Books two"],"content":[" a small room. Bander <b>said</b>, \"Come, half-humans, I"]}}]}}
+{"took":0,"timed_out":false,"hits":{"total":3,"hits":[{"_id": 3,"_score":1597,"_source":{"title":"Book three","content":"Trevize whispered, \"It gets infantile pleasure out of display. I`d love to knock it down.\""},"highlight":{"title":["Book three"],"content":[", \"It <b>gets</b> infantile pleasure "," to knock it <b>down</b>.\""]}},{"_id": 4,"_score":1563,"_source":{"title":"Book four","content":"Don`t try to compete in childishness, said Bliss."},"highlight":{"title":["Book four"],"content":["Don`t <b>try</b> to compete in childishness, <b>said</b> Bliss."]}},{"_id": 5,"_score":1514,"_source":{"title":"Books two","content":"A door opened before them, revealing a small room. Bander said, \"Come, half-humans, I want to show you how we live.\""},"highlight":{"title":["Books two"],"content":[" a small room. Bander <b>said</b>, \"Come, half-humans, I"]}}]}}
 ```
 
 <!-- intro -->
@@ -520,6 +674,158 @@ class SearchResponse {
     profile: null
 }
 ```
+
+<!-- intro -->
+##### Rust:
+
+<!-- request Rust -->
+
+```rust
+let match_filter = HashMap::new();
+match_filter.insert("*".to_string(), "try|gets|down|said".to_string());
+let query = SearchQuery {
+    match: Some(serde_json::json!(match_filter).into()),
+    ..Default::default(),
+};
+let highlight = Highlight {
+    limit: Some(50),
+    ..Default::default(),
+};
+
+let search_req = SearchRequest {
+    table: "books".to_string(),
+    query: Some(Box::new(query)),
+    highlight: serde_json::json!(highlight),
+    ..Default::default(),
+};
+```
+
+<!-- response Rust -->
+```rust
+class SearchResponse {
+    took: 0
+    timedOut: false
+    hits: class SearchResponseHits {
+        total: 3
+        maxScore: null
+        hits: [{_id=3, _score=1597, _source={title=Book three, content=Trevize whispered, "It gets infantile pleasure out of display. I`d love to knock it down."}, highlight={title=[Book three], content=[, "It <b>gets</b> infantile pleasure ,  to knock it <b>down</b>."]}}, {_id=4, _score=1563, _source={title=Book four, content=Don`t try to compete in childishness, said Bliss.}, highlight={title=[Book four], content=[Don`t <b>try</b> to compete in childishness, <b>said</b> Bliss.]}}, {_id=5, _score=1514, _source={title=Books two, content=A door opened before them, revealing a small room. Bander said, "Come, half-humans, I want to show you how we live."}, highlight={title=[Books two], content=[ a small room. Bander <b>said</b>, "Come, half-humans, I]}}]
+        aggregations: null
+    }
+    profile: null
+}
+```
+
+<!-- request TypeScript -->
+``` typescript
+res = await searchApi.search({
+  index: 'test',
+  query: { match: { *: 'Text } },
+  highlight: { limit: 2}
+});
+```
+<!-- response TypeScript -->
+``` typescript
+{
+	"took":0,
+	"timed_out":false,
+	"hits":
+	{
+		"total":2,
+		"hits":
+		[{
+			"_id": 1,
+			"_score":1480,
+			"_source":
+			{
+				"content":"Text 1",
+				"name":"Doc 1",
+				"cat":1
+			},
+			"highlight":
+			{
+				"content":
+				[
+					"<b>Text 1</b>"
+				]
+			}
+		},
+		{
+			"_id": 2,
+			"_score":1480,
+			"_source":
+			{
+				"content":"Text 2",
+				"name":"Doc 2",
+				"cat":2
+			},
+			"highlight":
+			{
+				"content":
+				[
+					"<b>Text 2</b>"
+				]
+			}
+		}]
+	}
+}
+```
+
+<!-- request Go -->
+``` go
+matchClause := map[string]interface{} {"*": "Text 1"};
+query := map[string]interface{} {"match": matchClause};
+searchRequest.SetQuery(query);
+highlight := manticoreclient.NewHighlight()
+searchRequest.SetHighlight(highlight)
+res, _, _ := apiClient.SearchAPI.Search(context.Background()).SearchRequest(*searchRequest).Execute()
+```
+<!-- response Go -->
+``` go
+{
+	"took":0,
+	"timed_out":false,
+	"hits":
+	{
+		"total":2,
+		"hits":
+		[{
+			"_id": 1,
+			"_score":1480,
+			"_source":
+			{
+				"content":"Text 1",
+				"name":"Doc 1",
+				"cat":1
+			},
+			"highlight":
+			{
+				"content":
+				[
+					"<b>Text 1</b>"
+				]
+			}
+		},
+		{
+			"_id": 2,
+			"_score":1480,
+			"_source":
+			{
+				"content":"Text 2",
+				"name":"Doc 2",
+				"cat":2
+			},
+			"highlight":
+			{
+				"content":
+				[
+					"<b>Text 2</b>"
+				]
+			}
+		}]
+	}
+}
+```
+
 
 <!-- end -->
 
@@ -735,7 +1041,7 @@ Highlighted snippets are returned in the `highlight` property of the `hits` arra
 ```json
 POST /search
 {
-  "index": "books",
+  "table": "books",
   "query": { "match": { "*": "one|robots" } },
   "highlight":
   {
@@ -754,7 +1060,7 @@ POST /search
     "total": 1,
     "hits": [
       {
-        "_id": "1",
+        "_id": 1,
         "_score": 2788,
         "_source": {
           "title": "Books one",
@@ -812,7 +1118,7 @@ Highlight for content:
 ```
 <!-- request Python -->
 ``` python
-res = searchApi.search({"index":"books","query":{"match":{"*":"one|robots"}},"highlight":{"fields":["content"]}}))
+res = searchApi.search({"table":"books","query":{"match":{"*":"one|robots"}},"highlight":{"fields":["content"]}}))
 ```
 <!-- response Python -->
 ``` python
@@ -830,13 +1136,35 @@ res = searchApi.search({"index":"books","query":{"match":{"*":"one|robots"}},"hi
  'timed_out': False,
  'took': 0}
 ```
+
+<!-- request Python-asyncio -->
+``` python
+res = await searchApi.search({"table":"books","query":{"match":{"*":"one|robots"}},"highlight":{"fields":["content"]}}))
+```
+<!-- response Python-asyncio -->
+``` python
+{'aggregations': None,
+ 'hits': {'hits': [{u'_id': u'1',
+                    u'_score': 2788,
+                    u'_source': {u'content': u'They followed Bander. The robots remained at a polite distance, but their presence was a constantly felt threat. Bander ushered all three into the room. One of the robots followed as well. Bander gestured the other robots away and entered itself. The door closed behind it. ',
+                                 u'title': u'Books one'},
+                    u'highlight': {u'content': [u'They followed Bander. The <b>robots</b> remained at a polite distance, ',
+                                                u' three into the room. <b>One</b> of the <b>robots</b> followed as well. Bander',
+                                                u' gestured the other <b>robots</b> away and entered itself. The']}}],
+          'max_score': None,
+          'total': 1},
+ 'profile': None,
+ 'timed_out': False,
+ 'took': 0}
+```
+
 <!-- request Javascript -->
 ``` javascript
-res =  await searchApi.search({"index":"books","query":{"match":{"*":"one|robots"}},"highlight":{"fields":["content"]}});
+res =  await searchApi.search({"table":"books","query":{"match":{"*":"one|robots"}},"highlight":{"fields":["content"]}});
 ```
 <!-- response Javascript -->
 ``` javascript
-{"took":0,"timed_out":false,"hits":{"total":1,"hits":[{"_id":"1","_score":2788,"_source":{"title":"Books one","content":"They followed Bander. The robots remained at a polite distance, but their presence was a constantly felt threat. Bander ushered all three into the room. One of the robots followed as well. Bander gestured the other robots away and entered itself. The door closed behind it. "},"highlight":{"content":["They followed Bander. The <b>robots</b> remained at a polite distance, "," three into the room. <b>One</b> of the <b>robots</b> followed as well. Bander"," gestured the other <b>robots</b> away and entered itself. The"]}}]}}
+{"took":0,"timed_out":false,"hits":{"total":1,"hits":[{"_id": 1,"_score":2788,"_source":{"title":"Books one","content":"They followed Bander. The robots remained at a polite distance, but their presence was a constantly felt threat. Bander ushered all three into the room. One of the robots followed as well. Bander gestured the other robots away and entered itself. The door closed behind it. "},"highlight":{"content":["They followed Bander. The <b>robots</b> remained at a polite distance, "," three into the room. <b>One</b> of the <b>robots</b> followed as well. Bander"," gestured the other <b>robots</b> away and entered itself. The"]}}]}}
 ```
 
 <!-- intro -->
@@ -905,6 +1233,129 @@ class SearchResponse {
 
 ```
 
+<!-- intro -->
+##### Rust:
+
+<!-- request Rust -->
+
+```rust
+let match_filter = HashMap::new();
+match_filter.insert("*".to_string(), "one|robots".to_string());
+let query = SearchQuery {
+    match: Some(serde_json::json!(match_filter).into()),
+    ..Default::default(),
+};
+let highlight_fields [String; 1] = ["content".to_string()]; 
+let highlight = Highlight {
+    fields: Some(serde_json::json!(highlight_fields)),
+    ..Default::default(),
+};
+
+let search_req = SearchRequest {
+    table: "books".to_string(),
+    query: Some(Box::new(query)),
+    highlight: serde_json::json!(highlight),
+    ..Default::default(),
+};
+```
+
+<!-- response Rust -->
+```rust
+class SearchResponse {
+    took: 0
+    timedOut: false
+    hits: class SearchResponseHits {
+        total: 1
+        maxScore: null
+        hits: [{_id=1, _score=2788, _source={title=Books one, content=They followed Bander. The robots remained at a polite distance, but their presence was a constantly felt threat. Bander ushered all three into the room. One of the robots followed as well. Bander gestured the other robots away and entered itself. The door closed behind it. }, highlight={title=[Books <b>one</b>], content=[They followed Bander. The <b>robots</b> remained at a polite distance, ,  three into the room. <b>One</b> of the <b>robots</b> followed as well. Bander,  gestured the other <b>robots</b> away and entered itself. The]}}]
+        aggregations: null
+    }
+    profile: null
+}
+
+```
+
+<!-- request TypeScript -->
+``` typescript
+res = await searchApi.search({
+  index: 'test',
+  query: {
+    match: {
+      *: 'Text 1|Text 9'
+    }
+  },
+  highlight: {}
+});
+```
+<!-- response TypeScript -->
+``` typescript
+{
+	"took":0,
+	"timed_out":false,
+	"hits":
+	{
+		"total":1,
+		"hits":
+		[{
+			"_id": 1,
+			"_score":1480,
+			"_source":
+			{
+				"content":"Text 1",
+				"name":"Doc 1",
+				"cat":1
+			},
+			"highlight":
+			{
+				"content":
+				[
+					"<b>Text 1</b>"
+				]
+			}
+		]}
+	}
+}
+```
+
+<!-- request Go -->
+``` go
+matchClause := map[string]interface{} {"*": "Text 1|Text 9"};
+query := map[string]interface{} {"match": matchClause};
+searchRequest.SetQuery(query);
+highlight := manticoreclient.NewHighlight()
+searchRequest.SetHighlight(highlight)
+res, _, _ := apiClient.SearchAPI.Search(context.Background()).SearchRequest(*searchRequest).Execute()
+```
+<!-- response Go -->
+``` go
+{
+	"took":0,
+	"timed_out":false,
+	"hits":
+	{
+		"total":1,
+		"hits":
+		[{
+			"_id": 1,
+			"_score":1480,
+			"_source":
+			{
+				"content":"Text 1",
+				"name":"Doc 1",
+				"cat":1
+			},
+			"highlight":
+			{
+				"content":
+				[
+					"<b>Text 1</b>"
+				]
+			}
+		]}
+	}
+}
+```
+
 <!-- end -->
 
 <!-- example highlight JSON all field  -->
@@ -918,7 +1369,7 @@ To highlight all possible fields, pass an empty object as the `highlight` proper
 ```json
 POST /search
 {
-  "index": "books",
+  "table": "books",
   "query": { "match": { "*": "one|robots" } },
   "highlight": {}
 }
@@ -934,7 +1385,7 @@ POST /search
     "total": 1,
     "hits": [
       {
-        "_id": "1",
+        "_id": 1,
         "_score": 2788,
         "_source": {
           "title": "Books one",
@@ -997,7 +1448,7 @@ Highlight for content:
 ```
 <!-- request Python -->
 ``` python
-res = searchApi.search({"index":"books","query":{"match":{"*":"one|robots"}},"highlight":{}})
+res = searchApi.search({"table":"books","query":{"match":{"*":"one|robots"}},"highlight":{}})
 ```
 <!-- response Python -->
 ``` python
@@ -1016,13 +1467,36 @@ res = searchApi.search({"index":"books","query":{"match":{"*":"one|robots"}},"hi
  'timed_out': False,
  'took': 0}
 ```
+
+<!-- request Python-asyncio -->
+``` python
+res = await searchApi.search({"table":"books","query":{"match":{"*":"one|robots"}},"highlight":{}})
+```
+<!-- response Python-asyncio -->
+``` python
+{'aggregations': None,
+ 'hits': {'hits': [{u'_id': u'1',
+                    u'_score': 2788,
+                    u'_source': {u'content': u'They followed Bander. The robots remained at a polite distance, but their presence was a constantly felt threat. Bander ushered all three into the room. One of the robots followed as well. Bander gestured the other robots away and entered itself. The door closed behind it. ',
+                                 u'title': u'Books one'},
+                    u'highlight': {u'content': [u'They followed Bander. The <b>robots</b> remained at a polite distance, ',
+                                                u' three into the room. <b>One</b> of the <b>robots</b> followed as well. Bander',
+                                                u' gestured the other <b>robots</b> away and entered itself. The'],
+                                   u'title': [u'Books <b>one</b>']}}],
+          'max_score': None,
+          'total': 1},
+ 'profile': None,
+ 'timed_out': False,
+ 'took': 0}
+```
+
 <!-- request Javascript -->
 ``` javascript
-res =  await searchApi.search({"index":"books","query":{"match":{"*":"one|robots"}},"highlight":{}});
+res =  await searchApi.search({"table":"books","query":{"match":{"*":"one|robots"}},"highlight":{}});
 ```
 <!-- response Javascript -->
 ``` javascript
-{"took":0,"timed_out":false,"hits":{"total":1,"hits":[{"_id":"1","_score":2788,"_source":{"title":"Books one","content":"They followed Bander. The robots remained at a polite distance, but their presence was a constantly felt threat. Bander ushered all three into the room. One of the robots followed as well. Bander gestured the other robots away and entered itself. The door closed behind it. "},"highlight":{"title":["Books <b>one</b>"],"content":["They followed Bander. The <b>robots</b> remained at a polite distance, "," three into the room. <b>One</b> of the <b>robots</b> followed as well. Bander"," gestured the other <b>robots</b> away and entered itself. The"]}}]}}
+{"took":0,"timed_out":false,"hits":{"total":1,"hits":[{"_id": 1,"_score":2788,"_source":{"title":"Books one","content":"They followed Bander. The robots remained at a polite distance, but their presence was a constantly felt threat. Bander ushered all three into the room. One of the robots followed as well. Bander gestured the other robots away and entered itself. The door closed behind it. "},"highlight":{"title":["Books <b>one</b>"],"content":["They followed Bander. The <b>robots</b> remained at a polite distance, "," three into the room. <b>One</b> of the <b>robots</b> followed as well. Bander"," gestured the other <b>robots</b> away and entered itself. The"]}}]}}
 
 ```
 
@@ -1089,6 +1563,133 @@ class SearchResponse {
 }
 ```
 
+<!-- intro -->
+##### Rust:
+
+<!-- request Rust -->
+
+```rust
+let match_filter = HashMap::new();
+match_filter.insert("*".to_string(), "one|robots".to_string());
+let query = SearchQuery {
+    match: Some(serde_json::json!(match_filter).into()),
+    ..Default::default(),
+};
+
+let highlight = Highlight::new();
+let search_req = SearchRequest {
+    table: "books".to_string(),
+    query: Some(Box::new(query)),
+    highlight: serde_json::json!(highlight),
+    ..Default::default(),
+};
+```
+
+<!-- response Rust -->
+```rust
+class SearchResponse {
+    took: 0
+    timedOut: false
+    hits: class SearchResponseHits {
+        total: 1
+        maxScore: null
+        hits: [{_id=1, _score=2788, _source={title=Books one, content=They followed Bander. The robots remained at a polite distance, but their presence was a constantly felt threat. Bander ushered all three into the room. One of the robots followed as well. Bander gestured the other robots away and entered itself. The door closed behind it. }, highlight={title=[Books <b>one</b>], content=[They followed Bander. The <b>robots</b> remained at a polite distance, ,  three into the room. <b>One</b> of the <b>robots</b> followed as well. Bander,  gestured the other <b>robots</b> away and entered itself. The]}}]
+        aggregations: null
+    }
+    profile: null
+}
+```
+
+<!-- request TypeScript -->
+``` typescript
+res = await searchApi.search({
+  index: 'test',
+  query: {
+    match: {
+      *: 'Text 1|Doc 1'
+    }
+  },
+  highlight: {}
+});
+```
+<!-- response TypeScript -->
+``` typescript
+{
+	"took":0,
+	"timed_out":false,
+	"hits":
+	{
+		"total":1,
+		"hits":
+		[{
+			"_id": 1,
+			"_score":1480,
+			"_source":
+			{
+				"content":"Text 1",
+				"name":"Doc 1",
+				"cat":1
+			},
+			"highlight":
+			{
+				"content":
+				[
+					"<b>Text 1</b>"
+				],
+				"name":
+				[
+					"<b>Doc 1</b>"
+				]
+			}
+		]}
+	}
+}
+```
+
+<!-- request Go -->
+``` go
+matchClause := map[string]interface{} {"*": "Text 1|Doc 1"};
+query := map[string]interface{} {"match": matchClause};
+searchRequest.SetQuery(query);
+highlight := manticoreclient.NewHighlight()
+searchRequest.SetHighlight(highlight)
+res, _, _ := apiClient.SearchAPI.Search(context.Background()).SearchRequest(*searchRequest).Execute()
+```
+<!-- response Go -->
+``` go
+{
+	"took":0,
+	"timed_out":false,
+	"hits":
+	{
+		"total":1,
+		"hits":
+		[{
+			"_id": 1,
+			"_score":1480,
+			"_source":
+			{
+				"content":"Text 1",
+				"name":"Doc 1",
+				"cat":1
+			},
+			"highlight":
+			{
+				"content":
+				[
+					"<b>Text 1</b>"
+				],
+				"name":
+				[
+					"<b>Doc 1</b>"
+				]
+			}
+		]}
+	}
+}
+```
+
+
 <!-- end -->
 
 In addition to common highlighting options, several synonyms are available for JSON queries via HTTP:
@@ -1112,7 +1713,7 @@ The `highlight_query` option allows you to highlight against a query other than 
 ```json
 POST /search
 {
-  "index": "books",
+  "table": "books",
   "query": { "match": { "content": "one|robots" } },
   "highlight":
   {
@@ -1152,7 +1753,7 @@ foreach($results as $doc)
 
 <!-- request Python -->
 ``` python
-res = searchApi.search({"index":"books","query":{"match":{"content":"one|robots"}},"highlight":{"fields":["content"],"highlight_query":{"match":{"*":"polite distance"}}}})
+res = searchApi.search({"table":"books","query":{"match":{"content":"one|robots"}},"highlight":{"fields":["content"],"highlight_query":{"match":{"*":"polite distance"}}}})
 ```
 <!-- response Python -->
 ``` python
@@ -1169,13 +1770,32 @@ res = searchApi.search({"index":"books","query":{"match":{"content":"one|robots"
  'took': 0}
 ```
 
+<!-- request Python-asyncio -->
+``` python
+res = await searchApi.search({"table":"books","query":{"match":{"content":"one|robots"}},"highlight":{"fields":["content"],"highlight_query":{"match":{"*":"polite distance"}}}})
+```
+<!-- response Python-asyncio -->
+``` python
+{'aggregations': None,
+ 'hits': {'hits': [{u'_id': u'1',
+                    u'_score': 1788,
+                    u'_source': {u'content': u'They followed Bander. The robots remained at a polite distance, but their presence was a constantly felt threat. Bander ushered all three into the room. One of the robots followed as well. Bander gestured the other robots away and entered itself. The door closed behind it. ',
+                                 u'title': u'Books one'},
+                    u'highlight': {u'content': [u'. The robots remained at a <b>polite distance</b>, but their presence was a']}}],
+          'max_score': None,
+          'total': 1},
+ 'profile': None,
+ 'timed_out': False,
+ 'took': 0}
+```
+
 <!-- request Javascript -->
 ``` javascript
-res =  await searchApi.search({"index":"books","query":{"match":{"content":"one|robots"}},"highlight":{"fields":["content"],"highlight_query":{"match":{"*":"polite distance"}}}});
+res =  await searchApi.search({"table":"books","query":{"match":{"content":"one|robots"}},"highlight":{"fields":["content"],"highlight_query":{"match":{"*":"polite distance"}}}});
 ```
 <!-- response Javascript -->
 ``` javascript
-{"took":0,"timed_out":false,"hits":{"total":1,"hits":[{"_id":"1","_score":1788,"_source":{"title":"Books one","content":"They followed Bander. The robots remained at a polite distance, but their presence was a constantly felt threat. Bander ushered all three into the room. One of the robots followed as well. Bander gestured the other robots away and entered itself. The door closed behind it. "},"highlight":{"content":[". The robots remained at a <b>polite distance</b>, but their presence was a"]}}]}}
+{"took":0,"timed_out":false,"hits":{"total":1,"hits":[{"_id": 1,"_score":1788,"_source":{"title":"Books one","content":"They followed Bander. The robots remained at a polite distance, but their presence was a constantly felt threat. Bander ushered all three into the room. One of the robots followed as well. Bander gestured the other robots away and entered itself. The door closed behind it. "},"highlight":{"content":[". The robots remained at a <b>polite distance</b>, but their presence was a"]}}]}}
 ```
 
 
@@ -1223,6 +1843,133 @@ highlight.HighlightQuery = highlightQuery;
 searchRequest.Highlight = highlight;
 var searchResponse = searchApi.Search(searchRequest);
 ```
+
+<!-- intro -->
+##### Rust:
+
+<!-- request Rust -->
+
+```rust
+let match_filter = HashMap::new();
+match_filter.insert("*".to_string(), "one|robots".to_string());
+let query = SearchQuery {
+    match: Some(serde_json::json!(match_filter).into()),
+    ..Default::default(),
+};
+let mut highlight_match_filter = HashMap::new(); 
+highlight_match_filter.insert("*".to_string(), "polite distance".to_string());
+let highlight_query = QueryFilter {
+    r#match: Some(serde_json::json!(highlight_match_filter)),
+    ..Default::default(),
+};
+let highlight_fields [String; 2] = ["content".to_string(), "title".to_string()]; 
+let highlight = Highlight {
+    fields: Some(serde_json::json!(highlight_fields)),
+    highlight_query: Some(Box::new(highlight_query)),
+    ..Default::default(),
+};
+
+let search_req = SearchRequest {
+    table: "books".to_string(),
+    query: Some(Box::new(query)),
+    highlight: serde_json::json!(highlight),
+    ..Default::default(),
+};
+let search_res = search_api.search(search_req).await;
+```
+
+<!-- request TypeScript -->
+``` typescript
+res = await searchApi.search({
+  index: 'test',
+  query: {
+    match: {
+      *: 'Text 1'
+    }
+  },
+  highlight: {
+    fields: ['content'],
+    highlight_query: {
+      match: {*: 'Text'}
+    }
+  }
+});
+```
+<!-- response TypeScript -->
+``` typescript
+{
+	"took":0,
+	"timed_out":false,
+	"hits":
+	{
+		"total":1,
+		"hits":
+		[{
+			"_id": 1,
+			"_score":1480,
+			"_source":
+			{
+				"content":"Text 1",
+				"name":"Doc 1",
+				"cat":1
+			},
+			"highlight":
+			{
+				"content":
+				[
+					"<b>Text</b> 1"
+				]
+			}
+		]}
+	}
+}
+```
+
+<!-- request Go -->
+``` go
+matchClause := map[string]interface{} {"*": "Text 1"};
+query := map[string]interface{} {"match": matchClause};
+searchRequest.SetQuery(query);
+highlight := manticoreclient.NewHighlight()
+highlightField := manticoreclient.NetHighlightField("content")
+highlightFields := []interface{} { highlightField } 
+highlight.SetFields(highlightFields)
+queryMatchClause := map[string]interface{} {"*": "Text"};
+highlightQuery := map[string]interface{} {"match": queryMatchClause};
+highlight.SetHighlightQuery(highlightQuery)
+searchRequest.SetHighlight(highlight)
+res, _, _ := apiClient.SearchAPI.Search(context.Background()).SearchRequest(*searchRequest).Execute()
+```
+<!-- response Go -->
+``` go
+{
+	"took":0,
+	"timed_out":false,
+	"hits":
+	{
+		"total":1,
+		"hits":
+		[{
+			"_id": 1,
+			"_score":1480,
+			"_source":
+			{
+				"content":"Text 1",
+				"name":"Doc 1",
+				"cat":1
+			},
+			"highlight":
+			{
+				"content":
+				[
+					"<b>Text</b> 1"
+				]
+			}
+		]}
+	}
+}
+```
+
 <!-- end -->
 
 <!-- example pre_tags  -->
@@ -1237,7 +1984,7 @@ var searchResponse = searchApi.Search(searchRequest);
 ```json
 POST /search
 {
-  "index": "books",
+  "table": "books",
   "query": { "match": { "*": "one|robots" } },
   "highlight":
   {
@@ -1290,7 +2037,7 @@ Highlight for title:
 ```
 <!-- request Python -->
 ``` python
-res = searchApi.search({"index":"books","query":{"match":{"*":"one|robots"}},"highlight":{"fields":["content","title"],"pre_tags":"before_","post_tags":"_after"}})
+res = searchApi.search({"table":"books","query":{"match":{"*":"one|robots"}},"highlight":{"fields":["content","title"],"pre_tags":"before_","post_tags":"_after"}})
 ```
 <!-- response Python -->
 ``` python
@@ -1310,13 +2057,35 @@ res = searchApi.search({"index":"books","query":{"match":{"*":"one|robots"}},"hi
  'took': 0}
 ```
 
+<!-- request Python-asyncio -->
+``` python
+res = await searchApi.search({"table":"books","query":{"match":{"*":"one|robots"}},"highlight":{"fields":["content","title"],"pre_tags":"before_","post_tags":"_after"}})
+```
+<!-- response Python-asyncio -->
+``` python
+{'aggregations': None,
+ 'hits': {'hits': [{u'_id': u'1',
+                    u'_score': 2788,
+                    u'_source': {u'content': u'They followed Bander. The robots remained at a polite distance, but their presence was a constantly felt threat. Bander ushered all three into the room. One of the robots followed as well. Bander gestured the other robots away and entered itself. The door closed behind it. ',
+                                 u'title': u'Books one'},
+                    u'highlight': {u'content': [u'They followed Bander. The before_robots_after remained at a polite distance, ',
+                                                u' three into the room. before_One_after of the before_robots_after followed as well. Bander',
+                                                u' gestured the other before_robots_after away and entered itself. The'],
+                                   u'title': [u'Books before_one_after']}}],
+          'max_score': None,
+          'total': 1},
+ 'profile': None,
+ 'timed_out': False,
+ 'took': 0}
+```
+
 <!-- request Javascript -->
 ``` javascript
-res =  await searchApi.search({"index":"books","query":{"match":{"*":"one|robots"}},"highlight":{"fields":["content","title"],"pre_tags":"before_","post_tags":"_after"}});
+res =  await searchApi.search({"table":"books","query":{"match":{"*":"one|robots"}},"highlight":{"fields":["content","title"],"pre_tags":"before_","post_tags":"_after"}});
 ```
 <!-- response Javascript -->
 ``` javascript
-{"took":0,"timed_out":false,"hits":{"total":1,"hits":[{"_id":"1","_score":2788,"_source":{"title":"Books one","content":"They followed Bander. The robots remained at a polite distance, but their presence was a constantly felt threat. Bander ushered all three into the room. One of the robots followed as well. Bander gestured the other robots away and entered itself. The door closed behind it. "},"highlight":{"content":["They followed Bander. The before_robots_after remained at a polite distance, "," three into the room. before_One_after of the before_robots_after followed as well. Bander"," gestured the other before_robots_after away and entered itself. The"],"title":["Books before_one_after"]}}]}}
+{"took":0,"timed_out":false,"hits":{"total":1,"hits":[{"_id": 1,"_score":2788,"_source":{"title":"Books one","content":"They followed Bander. The robots remained at a polite distance, but their presence was a constantly felt threat. Bander ushered all three into the room. One of the robots followed as well. Bander gestured the other robots away and entered itself. The door closed behind it. "},"highlight":{"content":["They followed Bander. The before_robots_after remained at a polite distance, "," three into the room. before_One_after of the before_robots_after followed as well. Bander"," gestured the other before_robots_after away and entered itself. The"],"title":["Books before_one_after"]}}]}}
 ```
 
 
@@ -1357,6 +2126,122 @@ highlight.PostTags = "_after";
 searchRequest.Highlight = highlight;
 var searchResponse = searchApi.Search(searchRequest);
 ```
+
+<!-- intro -->
+##### Rust:
+
+<!-- request Rust -->
+
+```rust
+let match_filter = HashMap::new();
+match_filter.insert("*".to_string(), "one|robots".to_string());
+let query = SearchQuery {
+    match: Some(serde_json::json!(match_filter).into()),
+    ..Default::default(),
+};
+let highlight_fields [String; 2] = ["content".to_string(), "title".to_string()]; 
+let highlight = Highlight {
+    fields: Some(serde_json::json!(highlight_fields)),
+    pre_tags: Some("before_".to_string()),
+    post_tags: Some("_after".to_string()),
+    ..Default::default(),
+};
+
+let search_req = SearchRequest {
+    table: "books".to_string(),
+    query: Some(Box::new(query)),
+    highlight: serde_json::json!(highlight),
+    ..Default::default(),
+};
+let search_res = search_api.search(search_req).await;
+```
+
+<!-- request TypeScript -->
+``` typescript
+res = await searchApi.search({
+  index: 'test',
+  query: {
+    match: {
+      *: 'Text 1'
+    }
+  },
+  highlight: {
+    pre_tags: 'before_',
+    post_tags: '_after'
+  }
+});
+```
+<!-- response TypeScript -->
+``` typescript
+{
+	"took":0,
+	"timed_out":false,
+	"hits":
+	{
+		"total":1,
+		"hits":
+		[{
+			"_id": 1,
+			"_score":1480,
+			"_source":
+			{
+				"content":"Text 1",
+				"name":"Doc 1",
+				"cat":1
+			},
+			"highlight":
+			{
+				"content":
+				[
+					"before_Text 1_after"
+				]
+			}
+		]}
+	}
+}
+```
+
+<!-- request Go -->
+``` go
+matchClause := map[string]interface{} {"*": "Text 1"}
+query := map[string]interface{} {"match": matchClause}
+searchRequest.SetQuery(query)
+highlight := manticoreclient.NewHighlight()
+highlight.SetPreTags("before_")
+highlight.SetPostTags("_after")
+searchRequest.SetHighlight(highlight)
+res, _, _ := apiClient.SearchAPI.Search(context.Background()).SearchRequest(*searchRequest).Execute()
+```
+<!-- response Go -->
+``` go
+{
+	"took":0,
+	"timed_out":false,
+	"hits":
+	{
+		"total":1,
+		"hits":
+		[{
+			"_id": 1,
+			"_score":1480,
+			"_source":
+			{
+				"content":"Text 1",
+				"name":"Doc 1",
+				"cat":1
+			},
+			"highlight":
+			{
+				"content":
+				[
+					"before_Text 1_after"
+				]
+			}
+		]}
+	}
+}
+```
+
 <!-- end -->
 
 <!-- example no_match_size  -->
@@ -1370,7 +2255,7 @@ var searchResponse = searchApi.Search(searchRequest);
 ```json
 POST /search
 {
-  "index": "books",
+  "table": "books",
   "query": { "match": { "*": "one|robots" } },
   "highlight":
   {
@@ -1421,7 +2306,7 @@ Highlight for title:
 ```
 <!-- request Python -->
 ``` python
-res = searchApi.search({"index":"books","query":{"match":{"*":"one|robots"}},"highlight":{"fields":["content","title"],"no_match_size":0}})
+res = searchApi.search({"table":"books","query":{"match":{"*":"one|robots"}},"highlight":{"fields":["content","title"],"no_match_size":0}})
 ```
 <!-- response Python -->
 ``` python
@@ -1441,13 +2326,35 @@ res = searchApi.search({"index":"books","query":{"match":{"*":"one|robots"}},"hi
  'took': 0}
 ```
 
+<!-- request Python-asyncio -->
+``` python
+res = await searchApi.search({"table":"books","query":{"match":{"*":"one|robots"}},"highlight":{"fields":["content","title"],"no_match_size":0}})
+```
+<!-- response Python-asyncio -->
+``` python
+{'aggregations': None,
+ 'hits': {'hits': [{u'_id': u'1',
+                    u'_score': 2788,
+                    u'_source': {u'content': u'They followed Bander. The robots remained at a polite distance, but their presence was a constantly felt threat. Bander ushered all three into the room. One of the robots followed as well. Bander gestured the other robots away and entered itself. The door closed behind it. ',
+                                 u'title': u'Books one'},
+                    u'highlight': {u'content': [u'They followed Bander. The <b>robots</b> remained at a polite distance, ',
+                                                u' three into the room. <b>One</b> of the <b>robots</b> followed as well. Bander',
+                                                u' gestured the other <b>robots</b> away and entered itself. The'],
+                                   u'title': [u'Books <b>one</b>']}}],
+          'max_score': None,
+          'total': 1},
+ 'profile': None,
+ 'timed_out': False,
+ 'took': 0}
+```
+
 <!-- request Javascript -->
 ``` javascript
-res =  await searchApi.search({"index":"books","query":{"match":{"*":"one|robots"}},"highlight":{"fields":["content","title"],"no_match_size":0}});
+res =  await searchApi.search({"table":"books","query":{"match":{"*":"one|robots"}},"highlight":{"fields":["content","title"],"no_match_size":0}});
 ```
 <!-- response Javascript -->
 ``` javascript
-{"took":0,"timed_out":false,"hits":{"total":1,"hits":[{"_id":"1","_score":2788,"_source":{"title":"Books one","content":"They followed Bander. The robots remained at a polite distance, but their presence was a constantly felt threat. Bander ushered all three into the room. One of the robots followed as well. Bander gestured the other robots away and entered itself. The door closed behind it. "},"highlight":{"content":["They followed Bander. The <b>robots</b> remained at a polite distance, "," three into the room. <b>One</b> of the <b>robots</b> followed as well. Bander"," gestured the other <b>robots</b> away and entered itself. The"],"title":["Books <b>one</b>"]}}]}}
+{"took":0,"timed_out":false,"hits":{"total":1,"hits":[{"_id": 1,"_score":2788,"_source":{"title":"Books one","content":"They followed Bander. The robots remained at a polite distance, but their presence was a constantly felt threat. Bander ushered all three into the room. One of the robots followed as well. Bander gestured the other robots away and entered itself. The door closed behind it. "},"highlight":{"content":["They followed Bander. The <b>robots</b> remained at a polite distance, "," three into the room. <b>One</b> of the <b>robots</b> followed as well. Bander"," gestured the other <b>robots</b> away and entered itself. The"],"title":["Books <b>one</b>"]}}]}}
 
 ```
 
@@ -1486,6 +2393,117 @@ highlight.NoMatchSize = 0;
 searchRequest.Highlight = highlight;
 var searchResponse = searchApi.Search(searchRequest);
 ```
+
+<!-- intro -->
+##### Rust:
+
+<!-- request Rust -->
+
+```rust
+let match_filter = HashMap::new();
+match_filter.insert("*".to_string(), "one|robots".to_string());
+let query = SearchQuery {
+    match: Some(serde_json::json!(match_filter).into()),
+    ..Default::default(),
+};
+let highlight_fields [String; 2] = ["content".to_string(), "title".to_string()]; 
+let highlight = Highlight {
+    fields: Some(serde_json::json!(highlight_fields)),
+    no_match_size: Some(NoMatchSize::Variant0),
+    ..Default::default(),
+};
+
+let search_req = SearchRequest {
+    table: "books".to_string(),
+    query: Some(Box::new(query)),
+    highlight: serde_json::json!(highlight),
+    ..Default::default(),
+};
+let search_res = search_api.search(search_req).await;
+```
+
+<!-- request TypeScript -->
+``` typescript
+res = await searchApi.search({
+  index: 'test',
+  query: {
+    match: {
+      *: 'Text 1'
+    }
+  },
+  highlight: {no_match_size: 0}
+});
+```
+<!-- response TypeScript -->
+``` typescript
+{
+	"took":0,
+	"timed_out":false,
+	"hits":
+	{
+		"total":1,
+		"hits":
+		[{
+			"_id": 1,
+			"_score":1480,
+			"_source":
+			{
+				"content":"Text 1",
+				"name":"Doc 1",
+				"cat":1
+			},
+			"highlight":
+			{
+				"content":
+				[
+					"<b>Text 1</b>"
+				]
+			}
+		]}
+	}
+}
+```
+
+<!-- request Go -->
+``` go
+matchClause := map[string]interface{} {"*": "Text 1"};
+query := map[string]interface{} {"match": matchClause};
+searchRequest.SetQuery(query);
+highlight := manticoreclient.NewHighlight()
+highlight.SetNoMatchSize(0)
+searchRequest.SetHighlight(highlight)
+res, _, _ := apiClient.SearchAPI.Search(context.Background()).SearchRequest(*searchRequest).Execute()
+```
+<!-- response Go -->
+``` go
+{
+	"took":0,
+	"timed_out":false,
+	"hits":
+	{
+		"total":1,
+		"hits":
+		[{
+			"_id": 1,
+			"_score":1480,
+			"_source":
+			{
+				"content":"Text 1",
+				"name":"Doc 1",
+				"cat":1
+			},
+			"highlight":
+			{
+				"content":
+				[
+					"<b>Text 1</b>"
+				]
+			}
+		]}
+	}
+}
+```
+
 <!-- end -->
 
 <!-- example order  -->
@@ -1499,7 +2517,7 @@ var searchResponse = searchApi.Search(searchRequest);
 ```json
 POST /search
 {
-  "index": "books",
+  "table": "books",
   "query": { "match": { "*": "one|robots" } },
   "highlight":
   {
@@ -1548,7 +2566,7 @@ Highlight for title:
 ```
 <!-- request Python -->
 ``` python
-res = searchApi.search({"index":"books","query":{"match":{"*":"one|robots"}},"highlight":{"fields":["content","title"],"order":"score"}})
+res = searchApi.search({"table":"books","query":{"match":{"*":"one|robots"}},"highlight":{"fields":["content","title"],"order":"score"}})
 ```
 <!-- response Python -->
 ``` python
@@ -1568,13 +2586,35 @@ res = searchApi.search({"index":"books","query":{"match":{"*":"one|robots"}},"hi
  'took': 0}
 ```
 
+<!-- request Python-asyncio -->
+``` python
+res = await searchApi.search({"table":"books","query":{"match":{"*":"one|robots"}},"highlight":{"fields":["content","title"],"order":"score"}})
+```
+<!-- response Python-asyncio -->
+``` python
+{'aggregations': None,
+ 'hits': {'hits': [{u'_id': u'1',
+                    u'_score': 2788,
+                    u'_source': {u'content': u'They followed Bander. The robots remained at a polite distance, but their presence was a constantly felt threat. Bander ushered all three into the room. One of the robots followed as well. Bander gestured the other robots away and entered itself. The door closed behind it. ',
+                                 u'title': u'Books one'},
+                    u'highlight': {u'content': [u' three into the room. <b>One</b> of the <b>robots</b> followed as well. Bander',
+                                                u' gestured the other <b>robots</b> away and entered itself. The',
+                                                u'They followed Bander. The <b>robots</b> remained at a polite distance, '],
+                                   u'title': [u'Books <b>one</b>']}}],
+          'max_score': None,
+          'total': 1},
+ 'profile': None,
+ 'timed_out': False,
+ 'took': 0}
+```
+
 <!-- request Javascript -->
 ``` javascript
-res =  await searchApi.search({"index":"books","query":{"match":{"*":"one|robots"}},"highlight":{"fields":["content","title"],"order":"score"}});
+res =  await searchApi.search({"table":"books","query":{"match":{"*":"one|robots"}},"highlight":{"fields":["content","title"],"order":"score"}});
 ```
 <!-- response Javascript -->
 ``` javascript
-{"took":0,"timed_out":false,"hits":{"total":1,"hits":[{"_id":"1","_score":2788,"_source":{"title":"Books one","content":"They followed Bander. The robots remained at a polite distance, but their presence was a constantly felt threat. Bander ushered all three into the room. One of the robots followed as well. Bander gestured the other robots away and entered itself. The door closed behind it. "},"highlight":{"content":[" three into the room. <b>One</b> of the <b>robots</b> followed as well. Bander"," gestured the other <b>robots</b> away and entered itself. The","They followed Bander. The <b>robots</b> remained at a polite distance, "],"title":["Books <b>one</b>"]}}]}}
+{"took":0,"timed_out":false,"hits":{"total":1,"hits":[{"_id": 1,"_score":2788,"_source":{"title":"Books one","content":"They followed Bander. The robots remained at a polite distance, but their presence was a constantly felt threat. Bander ushered all three into the room. One of the robots followed as well. Bander gestured the other robots away and entered itself. The door closed behind it. "},"highlight":{"content":[" three into the room. <b>One</b> of the <b>robots</b> followed as well. Bander"," gestured the other <b>robots</b> away and entered itself. The","They followed Bander. The <b>robots</b> remained at a polite distance, "],"title":["Books <b>one</b>"]}}]}}
 
 
 ```
@@ -1614,6 +2654,118 @@ searchRequest.Highlight = highlight;
 var searchResponse = searchApi.Search(searchRequest);
 ```
 
+<!-- intro -->
+##### Rust:
+
+<!-- request Rust -->
+
+```rust
+let match_filter = HashMap::new();
+match_filter.insert("*".to_string(), "one|robots".to_string());
+let query = SearchQuery {
+    match: Some(serde_json::json!(match_filter).into()),
+    ..Default::default(),
+};
+let highlight_fields [String; 2] = ["content".to_string(), "title".to_string()]; 
+let highlight = Highlight {
+    fields: Some(serde_json::json!(highlight_fields)),
+    order: Some(Order::Score),
+    post_tags: Some("_after".to_string()),
+    ..Default::default(),
+};
+
+let search_req = SearchRequest {
+    table: "books".to_string(),
+    query: Some(Box::new(query)),
+    highlight: serde_json::json!(highlight),
+    ..Default::default(),
+};
+let search_res = search_api.search(search_req).await;
+```
+
+<!-- request TypeScript -->
+``` typescript
+res = await searchApi.search({
+  index: 'test',
+  query: {
+    match: {
+      *: 'Text 1'
+    }
+  },
+  highlight: { order: 'score' }
+});
+```
+<!-- response TypeScript -->
+``` typescript
+{
+	"took":0,
+	"timed_out":false,
+	"hits":
+	{
+		"total":1,
+		"hits":
+		[{
+			"_id": 1,
+			"_score":1480,
+			"_source":
+			{
+				"content":"Text 1",
+				"name":"Doc 1",
+				"cat":1
+			},
+			"highlight":
+			{
+				"content":
+				[
+					"<b>Text 1</b>"
+				]
+			}
+		]}
+	}
+}
+```
+
+<!-- request Go -->
+``` go
+matchClause := map[string]interface{} {"*": "Text 1"};
+query := map[string]interface{} {"match": matchClause};
+searchRequest.SetQuery(query);
+highlight := manticoreclient.NewHighlight()
+highlight.SetOrder("score")
+searchRequest.SetHighlight(highlight)
+res, _, _ := apiClient.SearchAPI.Search(context.Background()).SearchRequest(*searchRequest).Execute()
+```
+<!-- response Go -->
+``` go
+{
+	"took":0,
+	"timed_out":false,
+	"hits":
+	{
+		"total":1,
+		"hits":
+		[{
+			"_id": 1,
+			"_score":1480,
+			"_source":
+			{
+				"content":"Text 1",
+				"name":"Doc 1",
+				"cat":1
+			},
+			"highlight":
+			{
+				"content":
+				[
+					"<b>Text 1</b>"
+				]
+			}
+		]}
+	}
+}
+```
+
+
 <!-- end -->
 
 <!-- example fragment_size -->
@@ -1627,7 +2779,7 @@ var searchResponse = searchApi.Search(searchRequest);
 ```json
 POST /search
 {
-  "index": "books",
+  "table": "books",
   "query": { "match": { "*": "one|robots" } },
   "highlight":
   {
@@ -1674,7 +2826,7 @@ Highlight for title:
 ```
 <!-- request Python -->
 ``` python
-res = searchApi.search({"index":"books","query":{"match":{"*":"one|robots"}},"highlight":{"fields":["content","title"],"fragment_size":100}})
+res = searchApi.search({"table":"books","query":{"match":{"*":"one|robots"}},"highlight":{"fields":["content","title"],"fragment_size":100}})
 ```
 <!-- response Python -->
 ``` python
@@ -1693,13 +2845,34 @@ res = searchApi.search({"index":"books","query":{"match":{"*":"one|robots"}},"hi
  'took': 0}
 ```
 
+<!-- request Python-asyncio -->
+``` python
+res = await searchApi.search({"table":"books","query":{"match":{"*":"one|robots"}},"highlight":{"fields":["content","title"],"fragment_size":100}})
+```
+<!-- response Python-asyncio -->
+``` python
+{'aggregations': None,
+ 'hits': {'hits': [{u'_id': u'1',
+                    u'_score': 2788,
+                    u'_source': {u'content': u'They followed Bander. The robots remained at a polite distance, but their presence was a constantly felt threat. Bander ushered all three into the room. One of the robots followed as well. Bander gestured the other robots away and entered itself. The door closed behind it. ',
+                                 u'title': u'Books one'},
+                    u'highlight': {u'content': [u' the room. <b>One</b> of the <b>robots</b> followed as well',
+                                                u'Bander gestured the other <b>robots</b> away and entered '],
+                                   u'title': [u'Books <b>one</b>']}}],
+          'max_score': None,
+          'total': 1},
+ 'profile': None,
+ 'timed_out': False,
+ 'took': 0}
+```
+
 <!-- request Javascript -->
 ``` javascript
-res =  await searchApi.search({"index":"books","query":{"match":{"*":"one|robots"}},"highlight":{"fields":["content","title"],"fragment_size":100}});
+res =  await searchApi.search({"table":"books","query":{"match":{"*":"one|robots"}},"highlight":{"fields":["content","title"],"fragment_size":100}});
 ```
 <!-- response Javascript -->
 ``` javascript
-{"took":0,"timed_out":false,"hits":{"total":1,"hits":[{"_id":"1","_score":2788,"_source":{"title":"Books one","content":"They followed Bander. The robots remained at a polite distance, but their presence was a constantly felt threat. Bander ushered all three into the room. One of the robots followed as well. Bander gestured the other robots away and entered itself. The door closed behind it. "},"highlight":{"content":[" the room. <b>One</b> of the <b>robots</b> followed as well","Bander gestured the other <b>robots</b> away and entered "],"title":["Books <b>one</b>"]}}]}}
+{"took":0,"timed_out":false,"hits":{"total":1,"hits":[{"_id": 1,"_score":2788,"_source":{"title":"Books one","content":"They followed Bander. The robots remained at a polite distance, but their presence was a constantly felt threat. Bander ushered all three into the room. One of the robots followed as well. Bander gestured the other robots away and entered itself. The door closed behind it. "},"highlight":{"content":[" the room. <b>One</b> of the <b>robots</b> followed as well","Bander gestured the other <b>robots</b> away and entered "],"title":["Books <b>one</b>"]}}]}}
 ```
 <!-- intro -->
 ##### Java:
@@ -1736,6 +2909,117 @@ highlight.FragmentSize = 100;
 searchRequest.Highlight = highlight;
 var searchResponse = searchApi.Search(searchRequest);
 ```
+
+<!-- intro -->
+##### Rust:
+
+<!-- request Rust -->
+
+```rust
+let match_filter = HashMap::new();
+match_filter.insert("*".to_string(), "one|robots".to_string());
+let query = SearchQuery {
+    match: Some(serde_json::json!(match_filter).into()),
+    ..Default::default(),
+};
+let highlight_fields [String; 2] = ["content".to_string(), "title".to_string()]; 
+let highlight = Highlight {
+    fields: Some(serde_json::json!(highlight_fields)),
+    fragment_size: Some(serde_json::json!(100)),
+    ..Default::default(),
+};
+
+let search_req = SearchRequest {
+    table: "books".to_string(),
+    query: Some(Box::new(query)),
+    highlight: serde_json::json!(highlight),
+    ..Default::default(),
+};
+let search_res = search_api.search(search_req).await;
+```
+
+<!-- request TypeScript -->
+``` typescript
+res = await searchApi.search({
+  index: 'test',
+  query: {
+    match: {
+      *: 'Text 1'
+    }
+  },
+  highlight: { fragment_size: 4}
+});
+```
+<!-- response TypeScript -->
+``` typescript
+{
+	"took":0,
+	"timed_out":false,
+	"hits":
+	{
+		"total":1,
+		"hits":
+		[{
+			"_id": 1,
+			"_score":1480,
+			"_source":
+			{
+				"content":"Text 1",
+				"name":"Doc 1",
+				"cat":1
+			},
+			"highlight":
+			{
+				"content":
+				[
+					"<b>Text</b>"
+				]
+			}
+		]}
+	}
+}
+```
+
+<!-- request Go -->
+``` go
+matchClause := map[string]interface{} {"*": "Text 1"};
+query := map[string]interface{} {"match": matchClause};
+searchRequest.SetQuery(query);
+highlight := manticoreclient.NewHighlight()
+highlight.SetFragmentSize(4)
+searchRequest.SetHighlight(highlight)
+res, _, _ := apiClient.SearchAPI.Search(context.Background()).SearchRequest(*searchRequest).Execute()
+```
+<!-- response Go -->
+``` go
+{
+	"took":0,
+	"timed_out":false,
+	"hits":
+	{
+		"total":1,
+		"hits":
+		[{
+			"_id": 1,
+			"_score":1480,
+			"_source":
+			{
+				"content":"Text 1",
+				"name":"Doc 1",
+				"cat":1
+			},
+			"highlight":
+			{
+				"content":
+				[
+					"<b>Text</b>"
+				]
+			}
+		]}
+	}
+}
+```
+
 <!-- end -->
 
 <!-- example number_of_fragments -->
@@ -1749,7 +3033,7 @@ var searchResponse = searchApi.Search(searchRequest);
 ```json
 POST /search
 {
-  "index": "books",
+  "table": "books",
   "query": { "match": { "*": "one|robots"  } },
   "highlight":
   {
@@ -1799,7 +3083,7 @@ Highlight for title:
 
 <!-- request Python -->
 ``` python
-res =searchApi.search({"index":"books","query":{"match":{"*":"one|robots"}},"highlight":{"fields":["content","title"],"number_of_fragments":10}})
+res =searchApi.search({"table":"books","query":{"match":{"*":"one|robots"}},"highlight":{"fields":["content","title"],"number_of_fragments":10}})
 ```
 <!-- response Python -->
 ``` python
@@ -1819,13 +3103,35 @@ res =searchApi.search({"index":"books","query":{"match":{"*":"one|robots"}},"hig
  'took': 0}
 ```
 
+<!-- request Python-asyncio -->
+``` python
+res = await searchApi.search({"table":"books","query":{"match":{"*":"one|robots"}},"highlight":{"fields":["content","title"],"number_of_fragments":10}})
+```
+<!-- response Python-asyncio -->
+``` python
+{'aggregations': None,
+ 'hits': {'hits': [{u'_id': u'1',
+                    u'_score': 2788,
+                    u'_source': {u'content': u'They followed Bander. The robots remained at a polite distance, but their presence was a constantly felt threat. Bander ushered all three into the room. One of the robots followed as well. Bander gestured the other robots away and entered itself. The door closed behind it. ',
+                                 u'title': u'Books one'},
+                    u'highlight': {u'content': [u'They followed Bander. The <b>robots</b> remained at a polite distance, ',
+                                                u' three into the room. <b>One</b> of the <b>robots</b> followed as well. Bander',
+                                                u' gestured the other <b>robots</b> away and entered itself. The'],
+                                   u'title': [u'Books <b>one</b>']}}],
+          'max_score': None,
+          'total': 1},
+ 'profile': None,
+ 'timed_out': False,
+ 'took': 0}
+```
+
 <!-- request Javascript -->
 ``` javascript
-res =  await searchApi.search({"index":"books","query":{"match":{"*":"one|robots"}},"highlight":{"fields":["content","title"],"number_of_fragments":10}});
+res =  await searchApi.search({"table":"books","query":{"match":{"*":"one|robots"}},"highlight":{"fields":["content","title"],"number_of_fragments":10}});
 ```
 <!-- response Javascript -->
 ``` javascript
-{"took":0,"timed_out":false,"hits":{"total":1,"hits":[{"_id":"1","_score":2788,"_source":{"title":"Books one","content":"They followed Bander. The robots remained at a polite distance, but their presence was a constantly felt threat. Bander ushered all three into the room. One of the robots followed as well. Bander gestured the other robots away and entered itself. The door closed behind it. "},"highlight":{"content":["They followed Bander. The <b>robots</b> remained at a polite distance, "," three into the room. <b>One</b> of the <b>robots</b> followed as well. Bander"," gestured the other <b>robots</b> away and entered itself. The"],"title":["Books <b>one</b>"]}}]}}
+{"took":0,"timed_out":false,"hits":{"total":1,"hits":[{"_id": 1,"_score":2788,"_source":{"title":"Books one","content":"They followed Bander. The robots remained at a polite distance, but their presence was a constantly felt threat. Bander ushered all three into the room. One of the robots followed as well. Bander gestured the other robots away and entered itself. The door closed behind it. "},"highlight":{"content":["They followed Bander. The <b>robots</b> remained at a polite distance, "," three into the room. <b>One</b> of the <b>robots</b> followed as well. Bander"," gestured the other <b>robots</b> away and entered itself. The"],"title":["Books <b>one</b>"]}}]}}
 
 ```
 <!-- intro -->
@@ -1864,6 +3170,116 @@ searchRequest.Highlight = highlight;
 var searchResponse = searchApi.Search(searchRequest);
 ```
 
+<!-- intro -->
+##### Rust:
+
+<!-- request Rust -->
+
+```rust
+let match_filter = HashMap::new();
+match_filter.insert("*".to_string(), "one|robots".to_string());
+let query = SearchQuery {
+    match: Some(serde_json::json!(match_filter).into()),
+    ..Default::default(),
+};
+let highlight_fields [String; 2] = ["content".to_string(), "title".to_string()]; 
+let highlight = Highlight {
+    fields: Some(serde_json::json!(highlight_fields)),
+    number_of_fragments: Some(serde_json::json!(10)),
+    ..Default::default(),
+};
+
+let search_req = SearchRequest {
+    table: "books".to_string(),
+    query: Some(Box::new(query)),
+    highlight: serde_json::json!(highlight),
+    ..Default::default(),
+};
+let search_res = search_api.search(search_req).await;
+```
+
+<!-- request TypeScript -->
+``` typescript
+res = await searchApi.search({
+  index: 'test',
+  query: {
+    match: {
+      *: 'Text 1'
+    }
+  },
+  highlight: { number_of_fragments: 1}
+});
+```
+<!-- response TypeScript -->
+``` typescript
+{
+	"took":0,
+	"timed_out":false,
+	"hits":
+	{
+		"total":1,
+		"hits":
+		[{
+			"_id": 1,
+			"_score":1480,
+			"_source":
+			{
+				"content":"Text 1",
+				"name":"Doc 1",
+				"cat":1
+			},
+			"highlight":
+			{
+				"content":
+				[
+					"<b>Text 1</b>"
+				]
+			}
+		]}
+	}
+}
+```
+
+<!-- request Go -->
+``` go
+matchClause := map[string]interface{} {"*": "Text 1"};
+query := map[string]interface{} {"match": matchClause};
+searchRequest.SetQuery(query);
+highlight := manticoreclient.NewHighlight()
+highlight.SetNumberOfFragments(1)
+searchRequest.SetHighlight(highlight)
+res, _, _ := apiClient.SearchAPI.Search(context.Background()).SearchRequest(*searchRequest).Execute()
+```
+<!-- response Go -->
+``` go
+{
+	"took":0,
+	"timed_out":false,
+	"hits":
+	{
+		"total":1,
+		"hits":
+		[{
+			"_id": 1,
+			"_score":1480,
+			"_source":
+			{
+				"content":"Text 1",
+				"name":"Doc 1",
+				"cat":1
+			},
+			"highlight":
+			{
+				"content":
+				[
+					"<b>Text 1</b>"
+				]
+			}
+		]}
+	}
+}
+```
+
 <!-- end -->
 
 <!-- example highlight json per-field limits -->
@@ -1878,7 +3294,7 @@ Options like `limit`, `limit_words`, and `limit_snippets` can be set as global o
 ```json
 POST /search
 {
-  "index": "books",
+  "table": "books",
   "query": { "match": { "*": "one|robots"  } },
       "highlight":
       {
@@ -1927,7 +3343,7 @@ Highlight for title:
 ```
 <!-- request Python -->
 ``` python
-res =searchApi.search({"index":"books","query":{"match":{"*":"one|robots"}},"highlight":{"fields":{"title":{},"content":{"limit":50}}}})
+res =searchApi.search({"table":"books","query":{"match":{"*":"one|robots"}},"highlight":{"fields":{"title":{},"content":{"limit":50}}}})
 ```
 <!-- response Python -->
 ``` python
@@ -1945,13 +3361,33 @@ res =searchApi.search({"index":"books","query":{"match":{"*":"one|robots"}},"hig
  'took': 0}
 ```
 
+<!-- request Python-asyncio -->
+``` python
+res = await searchApi.search({"table":"books","query":{"match":{"*":"one|robots"}},"highlight":{"fields":{"title":{},"content":{"limit":50}}}})
+```
+<!-- response Python-asyncio -->
+``` python
+{'aggregations': None,
+ 'hits': {'hits': [{u'_id': u'1',
+                    u'_score': 2788,
+                    u'_source': {u'content': u'They followed Bander. The robots remained at a polite distance, but their presence was a constantly felt threat. Bander ushered all three into the room. One of the robots followed as well. Bander gestured the other robots away and entered itself. The door closed behind it. ',
+                                 u'title': u'Books one'},
+                    u'highlight': {u'content': [u' into the room. <b>One</b> of the <b>robots</b> followed as well'],
+                                   u'title': [u'Books <b>one</b>']}}],
+          'max_score': None,
+          'total': 1},
+ 'profile': None,
+ 'timed_out': False,
+ 'took': 0}
+```
+
 <!-- request Javascript -->
 ``` javascript
-res =  await searchApi.search({"index":"books","query":{"match":{"*":"one|robots"}},"highlight":{"fields":{"title":{},"content":{"limit":50}}}});
+res =  await searchApi.search({"table":"books","query":{"match":{"*":"one|robots"}},"highlight":{"fields":{"title":{},"content":{"limit":50}}}});
 ```
 <!-- response Javascript -->
 ``` javascript
-{"took":0,"timed_out":false,"hits":{"total":1,"hits":[{"_id":"1","_score":2788,"_source":{"title":"Books one","content":"They followed Bander. The robots remained at a polite distance, but their presence was a constantly felt threat. Bander ushered all three into the room. One of the robots followed as well. Bander gestured the other robots away and entered itself. The door closed behind it. "},"highlight":{"title":["Books <b>one</b>"],"content":[" into the room. <b>One</b> of the <b>robots</b> followed as well"]}}]}}
+{"took":0,"timed_out":false,"hits":{"total":1,"hits":[{"_id": 1,"_score":2788,"_source":{"title":"Books one","content":"They followed Bander. The robots remained at a polite distance, but their presence was a constantly felt threat. Bander ushered all three into the room. One of the robots followed as well. Bander gestured the other robots away and entered itself. The door closed behind it. "},"highlight":{"title":["Books <b>one</b>"],"content":[" into the room. <b>One</b> of the <b>robots</b> followed as well"]}}]}}
 ```
 <!-- intro -->
 ##### Java:
@@ -1994,6 +3430,124 @@ highlight.Fields = new List<Object> {highlightField};
 searchRequest.Highlight = highlight;
 var searchResponse = searchApi.Search(searchRequest);
 ```
+
+<!-- intro -->
+##### Rust:
+
+<!-- request Rust -->
+
+```rust
+let match_filter = HashMap::new();
+match_filter.insert("*".to_string(), "one|robots".to_string());
+let query = SearchQuery {
+    match: Some(serde_json::json!(match_filter).into()),
+    ..Default::default(),
+};
+let highlight_fields [String; 1] = ["title".to_string()]; 
+let highlight = Highlight {
+    fields: Some(serde_json::json!(highlight_fields)),
+    limit: Some(serde_json::json!(50)),
+    ..Default::default(),
+};
+
+let search_req = SearchRequest {
+    table: "books".to_string(),
+    query: Some(Box::new(query)),
+    highlight: serde_json::json!(highlight),
+    ..Default::default(),
+};
+let search_res = search_api.search(search_req).await;
+```
+
+<!-- request TypeScript -->
+``` typescript
+res = await searchApi.search({
+  index: 'test',
+  query: {
+    match: {
+      *: 'Text 1'
+    }
+  },
+  highlight: {
+    fields: {
+      content: { limit:1 }
+    }
+  }
+});
+```
+<!-- response TypeScript -->
+``` typescript
+{
+	"took":0,
+	"timed_out":false,
+	"hits":
+	{
+		"total":1,
+		"hits":
+		[{
+			"_id": 1,
+			"_score":1480,
+			"_source":
+			{
+				"content":"Text 1",
+				"name":"Doc 1",
+				"cat":1
+			},
+			"highlight":
+			{
+				"content":
+				[
+					"<b>Text</b>"
+				]
+			}
+		]}
+	}
+}
+```
+
+<!-- request Go -->
+``` go
+matchClause := map[string]interface{} {"*": "Text 1"};
+query := map[string]interface{} {"match": matchClause};
+searchRequest.SetQuery(query);
+highlight := manticoreclient.NewHighlight()
+highlightField := manticoreclient.NetHighlightField("content")
+highlightField.SetLimit(1);
+highlightFields := []interface{} { highlightField } 
+highlight.SetFields(highlightFields)
+searchRequest.SetHighlight(highlight)
+res, _, _ := apiClient.SearchAPI.Search(context.Background()).SearchRequest(*searchRequest).Execute()
+```
+<!-- response Go -->
+``` go
+{
+	"took":0,
+	"timed_out":false,
+	"hits":
+	{
+		"total":1,
+		"hits":
+		[{
+			"_id": 1,
+			"_score":1480,
+			"_source":
+			{
+				"content":"Text 1",
+				"name":"Doc 1",
+				"cat":1
+			},
+			"highlight":
+			{
+				"content":
+				[
+					"<b>Text</b>"
+				]
+			}
+		]}
+	}
+}
+```
+
 <!-- end -->
 
 <!-- example highlight json global limits -->
@@ -2008,7 +3562,7 @@ Global limits can also be enforced by specifying `limits_per_field=0`. Setting t
 ```json
 POST /search
 {
-  "index": "books",
+  "table": "books",
   "query": { "match": { "content": "and first" } },
       "highlight":
       {
@@ -2055,7 +3609,7 @@ Highlight for content:
 ```
 <!-- request Python -->
 ``` python
-res =searchApi.search({"index":"books","query":{"match":{"content":"and first"}},"highlight":{"fields":{"content":{"limit":50}},"limits_per_field":False}})
+res =searchApi.search({"table":"books","query":{"match":{"content":"and first"}},"highlight":{"fields":{"content":{"limit":50}},"limits_per_field":False}})
 ```
 <!-- response Python -->
 ``` python
@@ -2073,13 +3627,33 @@ res =searchApi.search({"index":"books","query":{"match":{"content":"and first"}}
 
 ```
 
+<!-- request Python-asyncio -->
+``` python
+res = await searchApi.search({"table":"books","query":{"match":{"content":"and first"}},"highlight":{"fields":{"content":{"limit":50}},"limits_per_field":False}})
+```
+<!-- response Python-asyncio -->
+``` python
+{'aggregations': None,
+ 'hits': {'hits': [{u'_id': u'1',
+                    u'_score': 1597,
+                    u'_source': {u'content': u'They followed Bander. The robots remained at a polite distance, but their presence was a constantly felt threat. Bander ushered all three into the room. One of the robots followed as well. Bander gestured the other robots away and entered itself. The door closed behind it. ',
+                                 u'title': u'Books one'},
+                    u'highlight': {u'content': [u' gestured the other robots away <b>and</b> entered itself. The door closed']}}],
+          'max_score': None,
+          'total': 1},
+ 'profile': None,
+ 'timed_out': False,
+ 'took': 0}
+
+```
+
 <!-- request Javascript -->
 ``` javascript
-res =  await searchApi.search({"index":"books","query":{"match":{"content":"and first"}},"highlight":{"fields":{"content":{"limit":50}},"limits_per_field":false}});
+res =  await searchApi.search({"table":"books","query":{"match":{"content":"and first"}},"highlight":{"fields":{"content":{"limit":50}},"limits_per_field":false}});
 ```
 <!-- response Javascript -->
 ``` javascript
-{"took":0,"timed_out":false,"hits":{"total":1,"hits":[{"_id":"1","_score":1597,"_source":{"title":"Books one","content":"They followed Bander. The robots remained at a polite distance, but their presence was a constantly felt threat. Bander ushered all three into the room. One of the robots followed as well. Bander gestured the other robots away and entered itself. The door closed behind it. "},"highlight":{"content":[" gestured the other robots away <b>and</b> entered itself. The door closed"]}}]}}
+{"took":0,"timed_out":false,"hits":{"total":1,"hits":[{"_id": 1,"_score":1597,"_source":{"title":"Books one","content":"They followed Bander. The robots remained at a polite distance, but their presence was a constantly felt threat. Bander ushered all three into the room. One of the robots followed as well. Bander gestured the other robots away and entered itself. The door closed behind it. "},"highlight":{"content":[" gestured the other robots away <b>and</b> entered itself. The door closed"]}}]}}
 
 ```
 <!-- intro -->
@@ -2124,9 +3698,60 @@ searchRequest.Highlight = highlight;
 var searchResponse = searchApi.Search(searchRequest);
 ```
 
+<!-- intro -->
+##### Rust:
+
+<!-- request Rust -->
+
+```rust
+let match_filter = HashMap::new();
+match_filter.insert("*".to_string(), "one|robots".to_string());
+let query = SearchQuery {
+    match: Some(serde_json::json!(match_filter).into()),
+    ..Default::default(),
+};
+let highlight_fields [String; 1] = ["title".to_string()]; 
+let highlight = Highlight {
+    fields: Some(serde_json::json!(highlight_fields)),
+    limit_per_field: Some(serde_json::json!(false)),
+    ..Default::default(),
+};
+
+let search_req = SearchRequest {
+    table: "books".to_string(),
+    query: Some(Box::new(query)),
+    highlight: serde_json::json!(highlight),
+    ..Default::default(),
+};
+let search_res = search_api.search(search_req).await;
+```
+
+<!-- request TypeScript -->
+``` typescript
+res = await searchApi.search({
+  index: 'test',
+  query: {
+    match: {
+      *: 'Text 1'
+    }
+  },
+  highlight: { limits_per_field: 0 }
+});
+```
+
+<!-- request Go -->
+``` go
+matchClause := map[string]interface{} {"*": "Text 1"};
+query := map[string]interface{} {"match": matchClause};
+searchRequest.SetQuery(query);
+highlight := manticoreclient.NewHighlight()
+highlight.SetLimitsPerField(0)
+searchRequest.SetHighlight(highlight)
+res, _, _ := apiClient.SearchAPI.Search(context.Background()).SearchRequest(*searchRequest).Execute()
+```
 <!-- end -->
 
-# CALL SNIPPETS
+## CALL SNIPPETS
 
 <!-- example CALL SNIPPETS -->
 

@@ -77,8 +77,30 @@ utilsApi.sql('SHOW TABLES')
  u'total': 0,
  u'warning': u''}
 ```
+
 <!-- intro -->
-##### javascript:
+##### Python-asyncio:
+
+<!-- request Python-asyncio -->
+
+```python
+await utilsApi.sql('SHOW TABLES')
+```
+
+<!-- response Python-asyncio -->
+```python
+{u'columns': [{u'Index': {u'type': u'string'}},
+              {u'Type': {u'type': u'string'}}],
+ u'data': [{u'Index': u'dist1', u'Type': u'distributed'},
+           {u'Index': u'rt', u'Type': u'rt'},
+           {u'Index': u'products', u'Type': u'rt'}],
+ u'error': u'',
+ u'total': 0,
+ u'warning': u''}
+```
+
+<!-- intro -->
+##### Javascript:
 
 <!-- request javascript -->
 
@@ -97,7 +119,7 @@ res = await utilsApi.sql('SHOW TABLES');
 <!-- request Java -->
 
 ```java
-utilsApi.sql("SHOW TABLES")
+utilsApi.sql("SHOW TABLES", true)
 ```
 
 <!-- response Java -->
@@ -111,11 +133,25 @@ utilsApi.sql("SHOW TABLES")
 <!-- request C# -->
 
 ```clike
-utilsApi.Sql("SHOW TABLES")
+utilsApi.Sql("SHOW TABLES", true)
 ```
 
 <!-- response C# -->
 ```C#
+{columns=[{Index={type=string}}, {Type={type=string}}], data=[{Index=products, Type=rt}], total=0, error="", warning=""}
+```
+
+<!-- intro -->
+##### Rust:
+
+<!-- request Rust -->
+
+```rust
+utils_api.sql("SHOW TABLES", Some(true)).await
+```
+
+<!-- response Rust -->
+```Rust
 {columns=[{Index={type=string}}, {Type={type=string}}], data=[{Index=products, Type=rt}], total=0, error="", warning=""}
 ```
 
@@ -168,7 +204,7 @@ Array
 <!-- request Python -->
 
 ```python
-res = await utilsApi.sql('SHOW TABLES LIKE \'pro%\'');
+utilsApi.sql('SHOW TABLES LIKE \'pro%\'');
 ```
 
 <!-- response Python -->
@@ -180,8 +216,28 @@ res = await utilsApi.sql('SHOW TABLES LIKE \'pro%\'');
  u'total': 0,
  u'warning': u''}
 ```
+
 <!-- intro -->
-##### javascript:
+##### Python-asyncio:
+
+<!-- request Python-asyncio -->
+
+```python
+await utilsApi.sql('SHOW TABLES LIKE \'pro%\'');
+```
+
+<!-- response Python-asyncio -->
+```python
+{u'columns': [{u'Index': {u'type': u'string'}},
+              {u'Type': {u'type': u'string'}}],
+ u'data': [{u'Index': u'products', u'Type': u'rt'}],
+ u'error': u'',
+ u'total': 0,
+ u'warning': u''}
+```
+
+<!-- intro -->
+##### Javascript:
 
 <!-- request javascript -->
 
@@ -201,7 +257,7 @@ utilsApi.sql('SHOW TABLES LIKE \'pro%\'')
 <!-- request Java -->
 
 ```java
-utilsApi.sql("SHOW TABLES LIKE 'pro%'")
+utilsApi.sql("SHOW TABLES LIKE 'pro%'", true)
 ```
 
 <!-- response Java -->
@@ -215,11 +271,25 @@ utilsApi.sql("SHOW TABLES LIKE 'pro%'")
 <!-- request C# -->
 
 ```clike
-utilsApi.Sql("SHOW TABLES LIKE 'pro%'")
+utilsApi.Sql("SHOW TABLES LIKE 'pro%'", true)
 ```
 
 <!-- response C# -->
 ```clike
+{columns=[{Index={type=string}}, {Type={type=string}}], data=[{Index=products, Type=rt}], total=0, error="", warning=""}
+```
+
+<!-- intro -->
+##### Rust:
+
+<!-- request Rust -->
+
+```rust
+utils_api.sql("SHOW TABLES LIKE 'pro%'", Some(true)).await
+```
+
+<!-- response Rust -->
+```rust
 {columns=[{Index={type=string}}, {Type={type=string}}], data=[{Index=products, Type=rt}], total=0, error="", warning=""}
 ```
 
@@ -229,7 +299,7 @@ utilsApi.Sql("SHOW TABLES LIKE 'pro%'")
 ## DESCRIBE
 
 ```sql
-{DESC | DESCRIBE} table [ LIKE pattern ]
+{DESC | DESCRIBE} table_name [ LIKE pattern ]
 ```
 
 The `DESCRIBE` statement lists the table columns and their associated types. The columns are document ID, full-text fields, and attributes. The order matches the order in which fields and attributes are expected by `INSERT` and `REPLACE` statements. Column types  include `field`, `integer`, `timestamp`, `ordinal`, `bool`, `float`, `bigint`, `string`, and `mva`. ID column will be typed as `bigint`. Example:
@@ -250,14 +320,14 @@ mysql> DESC rt;
 An optional LIKE clause is supported. Refer to
 [SHOW META](Node_info_and_management/SHOW_META.md) for its syntax details.
 
-### SELECT FROM name.table
+### SELECT FROM name.@table
 
 <!-- example name_table -->
-You can also view the table schema by executing the query `select * from <table_name>.table`. The benefit of this method is that you can use the `WHERE` clause for filtering:
+You can also view the table schema by executing the query `select * from <table_name>.@table`. The benefit of this method is that you can use the `WHERE` clause for filtering:
 
 <!-- request SQL -->
 ```sql
-select * from tbl.table where type='text';
+select * from tbl.@table where type='text';
 ```
 
 <!-- response SQL -->
@@ -274,14 +344,14 @@ select * from tbl.table where type='text';
 
 <!-- example name_table2 -->
 
-You can also perform many other actions on `<your_table_name>.table` considering it as a regular Manticore table with columns consisting of integer and string attributes.
+You can also perform many other actions on `<your_table_name>.@table` considering it as a regular Manticore table with columns consisting of integer and string attributes.
 
 <!-- request SQL -->
 
 ```sql
-select field from tbl.table;
-select field, properties from tbl.table where type in ('text', 'uint');
-select * from tbl.table where properties any ('stored');
+select field from tbl.@table;
+select field, properties from tbl.@table where type in ('text', 'uint');
+select * from tbl.@table where properties any ('stored');
 ```
 
 <!-- end -->
@@ -290,7 +360,7 @@ select * from tbl.table where properties any ('stored');
 
 <!-- example show_create -->
 ```sql
-SHOW CREATE TABLE name
+SHOW CREATE TABLE table_name
 ```
 
 Prints the `CREATE TABLE` statement used to create the specified table.
@@ -308,7 +378,7 @@ SHOW CREATE TABLE tbl\G
        Table: tbl
 Create Table: CREATE TABLE tbl (
 f text indexed stored
-) charset_table='non_cjk,cjk' morphology='icu_chinese'
+) charset_table='non_cont,cont' morphology='icu_chinese'
 1 row in set (0.00 sec)
 ```
 <!-- end -->
@@ -356,4 +426,3 @@ mysql> desc pq table like '%title%';
 +-------+------+----------------+
 1 row in set (0.00 sec)
 ```
-<!-- proofread -->

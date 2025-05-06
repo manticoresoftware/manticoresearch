@@ -28,13 +28,11 @@ The options available to `searchd` in all operating systems are:
   ```bash
   $ searchd --config /etc/manticoresearch/manticore.conf --stopwait
   ```
-
-Possible exit codes are as follows:
-
-  * 0 on success
-  * 1 if connection to running searchd server failed
-  * 2 if server reported an error during shutdown
-  * 3 if server crashed during shutdown
+  Possible exit codes are as follows:
+    * 0 on success
+    * 1 if connection to running searchd server failed
+    * 2 if server reported an error during shutdown
+    * 3 if server crashed during shutdown
 
 * `--status` command is used to query running `searchd` instance status using the connection details from the (optionally) provided configuration file. It will try to connect to running instance using the first found UNIX socket or TCP port from the configuration file. On success it will query for a number of status and performance counter values and print them. You can also use [SHOW STATUS](../Node_info_and_management/Node_status.md#SHOW-STATUS) command to access the very same counters via SQL protocol. Examples:
 
@@ -106,6 +104,29 @@ Possible exit codes are as follows:
 * `--new-cluster` bootstraps a replication cluster and makes the server a reference node with [cluster restart](../Creating_a_cluster/Setting_up_replication/Restarting_a_cluster.md) protection. On Linux you can also run `manticore_new_cluster`. It will start Manticore in `--new-cluster` mode via systemd.
 
 * `--new-cluster-force` bootstraps a replication cluster and makes the server a reference node bypassing [cluster restart](../Creating_a_cluster/Setting_up_replication/Restarting_a_cluster.md) protection. On Linux you can also run `manticore_new_cluster --force`. It will start Manticore in `--new-cluster-force` mode via systemd.
+
+* `--mockstack` analyzes and reports the necessary stack sizes for recursive expression evaluation, pattern matching operations, and filter processing. This debugging option outputs calculated stack requirements to the console for optimization purposes. The output provides environment variables that can be used to configure stack requirements for different operations.
+
+  Example:
+  ```bash
+  $ searchd --mockstack
+  Manticore 7.4.7 e90b5afbb@25032706 dev (columnar 4.1.2 15bbcc7@25031206) (secondary 4.1.2 15bbcc7@25031206) (knn 4.1.2 15bbcc7@25031206)
+  Copyright (c) 2001-2016, Andrew Aksyonoff
+  Copyright (c) 2008-2016, Sphinx Technologies Inc (http://sphinxsearch.com)
+  Copyright (c) 2017-2025, Manticore Software LTD (https://manticoresearch.com)
+
+  export MANTICORE_KNOWN_CREATE_SIZE=200
+  export MANTICORE_START_KNOWN_CREATE_SIZE=4504
+  export MANTICORE_KNOWN_EXPR_SIZE=16
+  export MANTICORE_START_KNOWN_EXPR_SIZE=200
+  export MANTICORE_NONE=32
+  export MANTICORE_START_NONE=104
+  export MANTICORE_KNOWN_FILTER_SIZE=224
+  export MANTICORE_START_KNOWN_FILTER_SIZE=11192
+  export MANTICORE_KNOWN_MATCH_SIZE=320
+  export MANTICORE_START_KNOWN_MATCH_SIZE=14552
+  export NO_STACK_CALCULATION=1
+  ```
 
 ### Windows options
 

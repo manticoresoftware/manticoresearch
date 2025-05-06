@@ -2,14 +2,15 @@
 
 <!-- example update -->
 
-UPDATE changes [row-wise](../../Creating_a_table/Data_types.md#Row-wise-and-columnar-attribute-storages) attribute values of existing documents in a specified table with new values. Note that you can't update the contents of a fulltext field or a columnar attribute. If there's such a need, use [REPLACE](../../Data_creation_and_modification/Updating_documents/REPLACE.md).
+The `UPDATE` command changes [row-wise](../../Creating_a_table/Data_types.md#Row-wise-and-columnar-attribute-storages) attribute values of existing documents in a specified table with new values. Note that you can't update the contents of a fulltext field or a columnar attribute. If there's such a need, use [REPLACE](../../Data_creation_and_modification/Updating_documents/REPLACE.md).
 
-Attribute updates are supported for RT, PQ, and plain tables. All attribute types can be updated as long as they are stored in the [traditional row-wise storage](../../Creating_a_table/Data_types.md#Row-wise-and-columnar-attribute-storages).
-
+Attribute updates are supported for RT, PQ, and plain tables. All attribute types can be updated as long as they are stored in the [row-wise storage](../../Creating_a_table/Data_types.md#Row-wise-and-columnar-attribute-storages).
 
 Note that the document ID cannot be updated.
 
-Note that when you update an attribute, its [secondary index](../../Server_settings/Searchd.md#secondary_indexes) gets disabled, so consider [replacing](../../Data_creation_and_modification/Updating_documents/REPLACE.md) the document instead.
+It's important to be aware that updating an attribute disables its [secondary index](../../Server_settings/Searchd.md#secondary_indexes). If maintaining secondary index continuity is critical, consider fully or [partially replacing](../../Data_creation_and_modification/Updating_documents/REPLACE.md?client=REPLACE+SET) the document instead.
+
+Read more about `UPDATE` vs. partial `REPLACE` [here](../../Data_creation_and_modification/Updating_documents/REPLACE_vs_UPDATE.md#UPDATE-vs-partial-REPLACE).
 
 <!-- intro -->
 ##### SQL:
@@ -34,7 +35,7 @@ Query OK, 1 row affected (0.00 sec)
 POST /update
 
 {
-  "index":"products",
+  "table":"products",
   "id":10,
   "doc":
   {
@@ -46,7 +47,7 @@ POST /update
 <!-- response JSON -->
 ```JSON
 {
-  "_index":"products",
+  "table":"products",
   "updated":1
 }
 ```
@@ -77,24 +78,39 @@ Array(
 <!-- request Python -->
 ``` python
 indexApi = api = manticoresearch.IndexApi(client)
-indexApi.update({"index" : "products", "id" : 1, "doc" : {"price":10}})
+indexApi.update({"table" : "products", "id" : 1, "doc" : {"price":10}})
 ```
 
 <!-- response Python -->
 ```python
-{'id': 1, 'index': 'products', 'result': 'updated', 'updated': None}
+{'id': 1, 'table': 'products', 'result': 'updated', 'updated': None}
 ```
+
 <!-- intro -->
-##### javascript:
+##### Python-asyncio:
+
+<!-- request Python-asyncio -->
+``` python
+indexApi = api = manticoresearch.IndexApi(client)
+await indexApi.update({"table" : "products", "id" : 1, "doc" : {"price":10}})
+```
+
+<!-- response Python-asyncio -->
+```python
+{'id': 1, 'table': 'products', 'result': 'updated', 'updated': None}
+```
+
+<!-- intro -->
+##### Javascript:
 
 <!-- request javascript -->
 ``` javascript
-res = await indexApi.update({"index" : "products", "id" : 1, "doc" : {"price":10}});
+res = await indexApi.update({"table" : "products", "id" : 1, "doc" : {"price":10}});
 ```
 
 <!-- response javascript -->
 ```javascript
-{"_index":"products","_id":1,"result":"updated"}
+{"table":"products","_id":1,"result":"updated"}
 ```
 <!-- intro -->
 ##### java:
@@ -124,7 +140,7 @@ class UpdateResponse {
 
 <!-- request C# -->
 ``` clike
-Dictionary<string, Object> doc = new Dictionary<string, Object>(); 
+Dictionary<string, Object> doc = new Dictionary<string, Object>();
 doc.Add("price", 10);
 UpdateDocumentRequest updateRequest = new UpdateDocumentRequest(index: "products", id: 1, doc: doc);
 indexApi.Update(updateRequest);
@@ -137,6 +153,69 @@ class UpdateResponse {
     updated: null
     id: 1
     result: updated
+}
+```
+
+<!-- intro -->
+##### Rust:
+
+<!-- request Rust -->
+``` rust
+let mut doc = HashMap::new();
+doc.insert("price".to_string(), serde_json::json!(10));
+let update_req = UpdateDocumentRequest {
+    table: serde_json::json!("products"),
+    doc: serde_json::json!(doc),
+    id: serde_json::json!(1),
+    ..Default::default(),
+};
+let update_res = index_api.update(update_req).await;
+```
+
+<!-- response Rust -->
+```rust
+class UpdateResponse {
+    index: products
+    updated: null
+    id: 1
+    result: updated
+}
+```
+
+<!-- intro -->
+##### TypeScript:
+
+<!-- request TypeScript -->
+``` typescript
+res = await indexApi.update({ index: "test", id: 1, doc: { cat: 10 } });
+```
+
+<!-- response TypeScript -->
+```typescript
+{
+	"table":"test",
+	"_id":1,
+	"result":"updated"
+}
+```
+
+<!-- intro -->
+##### Go:
+
+<!-- request Go -->
+``` go
+updateDoc = map[string]interface{} {"cat":10}
+updateRequest = openapiclient.NewUpdateDocumentRequest("test", updateDoc)
+updateRequest.SetId(1)
+res, _, _ = apiClient.IndexAPI.Update(context.Background()).UpdateDocumentRequest(*updateRequest).Execute()
+```
+
+<!-- response Go -->
+```go
+{
+	"table":"test",
+	"_id":1,
+	"result":"updated"
 }
 ```
 
@@ -173,7 +252,7 @@ Query OK, 148 rows affected (0.0 sec)
 ```JSON
 POST /update
 {
-  "index":"products",
+  "table":"products",
   "doc":
   {
     "price":100000000000,
@@ -192,7 +271,7 @@ POST /update
 <!-- response JSON -->
 ```JSON
 {
-  "_index":"products",
+  "table":"products",
   "updated":148
 }
 ```
@@ -230,7 +309,7 @@ Array(
 <!-- request Python -->
 ``` python
 indexApi = api = manticoresearch.IndexApi(client)
-indexApi.update({"index" : "products", "id" : 1, "doc" : {
+indexApi.update({"table" : "products", "id" : 1, "doc" : {
     "price": 100000000000,
     "coeff": 3465.23,
     "tags1": [3,6,4],
@@ -239,14 +318,33 @@ indexApi.update({"index" : "products", "id" : 1, "doc" : {
 
 <!-- response Python -->
 ```python
-{'id': 1, 'index': 'products', 'result': 'updated', 'updated': None}
+{'id': 1, 'table': 'products', 'result': 'updated', 'updated': None}
 ```
+
 <!-- intro -->
-##### javascript:
+##### Python-asyncio:
+
+<!-- request Python-asyncio -->
+``` python
+indexApi = api = manticoresearch.IndexApi(client)
+await indexApi.update({"table" : "products", "id" : 1, "doc" : {
+    "price": 100000000000,
+    "coeff": 3465.23,
+    "tags1": [3,6,4],
+    "tags2": []}})
+```
+
+<!-- response Python-asyncio -->
+```python
+{'id': 1, 'table': 'products', 'result': 'updated', 'updated': None}
+```
+
+<!-- intro -->
+##### Javascript:
 
 <!-- request javascript -->
 ``` javascript
-res = await indexApi.update({"index" : "products", "id" : 1, "doc" : {
+res = await indexApi.update({"table" : "products", "id" : 1, "doc" : {
     "price": 100000000000,
     "coeff": 3465.23,
     "tags1": [3,6,4],
@@ -255,7 +353,7 @@ res = await indexApi.update({"index" : "products", "id" : 1, "doc" : {
 
 <!-- response javascript -->
 ```javascript
-{"_index":"products","_id":1,"result":"updated"}
+{"table":"products","_id":1,"result":"updated"}
 ```
 <!-- intro -->
 ##### java:
@@ -288,7 +386,7 @@ class UpdateResponse {
 
 <!-- request C# -->
 ``` clike
-Dictionary<string, Object> doc = new Dictionary<string, Object>(); 
+Dictionary<string, Object> doc = new Dictionary<string, Object>();
 doc.Add("price", 10);
 doc.Add("coeff", 3465.23);
 doc.Add("tags1", new List<int> {3,6,4});
@@ -305,6 +403,72 @@ class UpdateResponse {
     updated: null
     id: 1
     result: updated
+}
+```
+
+<!-- intro -->
+##### Rust:
+
+<!-- request Rust -->
+``` rust
+let mut doc = HashMap::new();
+doc.insert("price".to_string(), serde_json::json!(10));
+doc.insert("coeff".to_string(), serde_json::json!(3465.23));
+doc.insert("tags1".to_string(), serde_json::json!([3,6,4]));
+doc.insert("tags2".to_string(), serde_json::json!([]));
+let update_req = UpdateDocumentRequest {
+    table: serde_json::json!("products"),
+    doc: serde_json::json!(doc),
+    id: serde_json::json!(1),
+    ..Default::default(),
+};
+let update_res = index_api.update(update_req).await;
+```
+
+<!-- response Rust -->
+```rust
+class UpdateResponse {
+    index: products
+    updated: null
+    id: 1
+    result: updated
+}
+```
+
+<!-- intro -->
+##### TypeScript:
+
+<!-- request TypeScript -->
+``` typescript
+res = await indexApi.update({ index: "test", id: 1, doc: { name: "Doc 21", cat: "10" } });
+```
+
+<!-- response TypeScript -->
+```go
+{
+  "table":"test",
+  "_id":1,
+  "result":"updated"
+}
+```
+
+<!-- intro -->
+##### Go:
+
+<!-- request Go -->
+``` go
+updateDoc = map[string]interface{} {"name":"Doc 21", "cat":10}
+updateRequest = manticoreclient.NewUpdateDocumentRequest("test", updateDoc)
+updateRequest.SetId(1)
+res, _, _ = apiClient.IndexAPI.Update(context.Background()).UpdateDocumentRequest(*updateRequest).Execute()
+```
+
+<!-- response Go -->
+```go
+{
+  "table":"test",
+  "_id":1,
+  "result":"updated"
 }
 ```
 
@@ -342,7 +506,7 @@ Query OK, 1 row affected (0.00 sec)
 ```JSON
 POST /insert
 {
-	"index":"products",
+	"table":"products",
 	"id":100,
 	"doc":
 	{
@@ -355,7 +519,7 @@ POST /insert
 
 POST /update
 {
-	"index":"products",
+	"table":"products",
 	"id":100,
 	"doc":
 	{
@@ -367,7 +531,7 @@ POST /update
 <!-- response JSON -->
 ```JSON
 {
-   "_index":"products",
+   "table":"products",
    "_id":100,
    "created":true,
    "result":"created",
@@ -375,7 +539,7 @@ POST /update
 }
 
 {
-  "_index":"products",
+  "table":"products",
   "updated":1
 }
 ```
@@ -416,27 +580,42 @@ Array(
 <!-- request Python -->
 ``` python
 indexApi = api = manticoresearch.IndexApi(client)
-indexApi.update({"index" : "products", "id" : 1, "doc" : {
+indexApi.update({"table" : "products", "id" : 1, "doc" : {
     "meta.tags[0]": 100}})
 ```
 
 <!-- response Python -->
 ```python
-{'id': 1, 'index': 'products', 'result': 'updated', 'updated': None}
+{'id': 1, 'table': 'products', 'result': 'updated', 'updated': None}
 ```
 
 <!-- intro -->
-##### javascript:
+##### Python-asyncio:
+
+<!-- request Python-asyncio -->
+``` python
+indexApi = api = manticoresearch.IndexApi(client)
+await indexApi.update({"table" : "products", "id" : 1, "doc" : {
+    "meta.tags[0]": 100}})
+```
+
+<!-- response Python-asyncio -->
+```python
+{'id': 1, 'table': 'products', 'result': 'updated', 'updated': None}
+```
+
+<!-- intro -->
+##### Javascript:
 
 <!-- request javascript -->
 ``` javascript
-res = await indexApi.update({"index" : "products", "id" : 1, "doc" : {
+res = await indexApi.update({"table" : "products", "id" : 1, "doc" : {
    "meta.tags[0]": 100}});
 ```
 
 <!-- response javascript -->
 ```javascript
-{"_index":"products","_id":1,"result":"updated"}
+{"table":"products","_id":1,"result":"updated"}
 ```
 
 <!-- intro -->
@@ -467,7 +646,7 @@ class UpdateResponse {
 
 <!-- request C# -->
 ``` clike
-Dictionary<string, Object> doc = new Dictionary<string, Object>(); 
+Dictionary<string, Object> doc = new Dictionary<string, Object>();
 doc.Add("meta.tags[0]", 100);
 UpdateDocumentRequest updateRequest = new UpdateDocumentRequest(index: "products", id: 1, doc: doc);
 indexApi.Update(updateRequest);
@@ -481,6 +660,66 @@ class UpdateResponse {
     updated: null
     id: 1
     result: updated
+}
+```
+
+<!-- intro -->
+##### Rust:
+
+<!-- request Rust -->
+``` rust
+let mut doc = HashMap::new();
+doc.insert("meta.tags[0]".to_string(), serde_json::json!(100));
+let update_req = UpdateDocumentRequest {
+    table: serde_json::json!("products"),
+    doc: serde_json::json!(doc),
+    id: serde_json::json!(1),
+    ..Default::default(),
+};
+let update_res = index_api.update(update_req).await;
+```
+
+<!-- response Rust -->
+```rust
+class UpdateResponse {
+    index: products
+    updated: null
+    id: 1
+    result: updated
+}
+```
+
+
+<!-- intro -->
+##### TypeScript:
+
+<!-- request TypeScript -->
+``` typescript
+res = await indexApi.update({"table" : "test", "id" : 1, "doc" : { "meta.tags[0]": 100} });
+```
+
+<!-- response TypeScript -->
+```typescript
+{"table":"test","_id":1,"result":"updated"}
+```
+
+<!-- intro -->
+##### Go:
+
+<!-- request Go -->
+``` go
+updateDoc = map[string]interface{} {"meta.tags[0]":100}
+updateRequest = manticoreclient.NewUpdateDocumentRequest("test", updateDoc)
+updateRequest.SetId(1)
+res, _, _ = apiClient.IndexAPI.Update(context.Background()).UpdateDocumentRequest(*updateRequest).Execute()
+```
+
+<!-- response Go -->
+```go
+{
+	"table":"test",
+	"_id":1,
+	"result":"updated"
 }
 ```
 
@@ -516,7 +755,7 @@ Query OK, 1 row affected (0.00 sec)
 ```JSON
 POST /insert
 {
-	"index":"products",
+	"table":"products",
 	"id":1,
 	"doc":
 	{
@@ -527,7 +766,7 @@ POST /insert
 
 POST /update
 {
-	"index":"products",
+	"table":"products",
 	"id":1,
 	"doc":
 	{
@@ -539,7 +778,7 @@ POST /update
 <!-- response JSON -->
 ```JSON
 {
-  "_index":"products",
+  "table":"products",
   "updated":1
 }
 ```
@@ -583,8 +822,8 @@ Array(
 
 <!-- request Python -->
 ``` python
-indexApi.insert({"index" : "products", "id" : 100, "doc" : {"title" : "title", "meta" : {"tags":[1,2,3]}}})
-indexApi.update({"index" : "products", "id" : 100, "doc" : {"meta" : {"tags":['one','two','three']}}})
+indexApi.insert({"table" : "products", "id" : 100, "doc" : {"title" : "title", "meta" : {"tags":[1,2,3]}}})
+indexApi.update({"table" : "products", "id" : 100, "doc" : {"meta" : {"tags":['one','two','three']}}})
 ```
 
 <!-- response Python -->
@@ -593,23 +832,44 @@ indexApi.update({"index" : "products", "id" : 100, "doc" : {"meta" : {"tags":['o
 {'created': True,
  'found': None,
  'id': 100,
- 'index': 'products',
+ 'table': 'products',
  'result': 'created'}
-{'id': 100, 'index': 'products', 'result': 'updated', 'updated': None}
+{'id': 100, 'table': 'products', 'result': 'updated', 'updated': None}
 ```
+
 <!-- intro -->
-##### javascript:
+##### Python-asyncio:
+
+<!-- request Python-asyncio -->
+``` python
+await indexApi.insert({"table" : "products", "id" : 100, "doc" : {"title" : "title", "meta" : {"tags":[1,2,3]}}})
+await indexApi.update({"table" : "products", "id" : 100, "doc" : {"meta" : {"tags":['one','two','three']}}})
+```
+
+<!-- response Python-asyncio -->
+```python
+
+{'created': True,
+ 'found': None,
+ 'id': 100,
+ 'table': 'products',
+ 'result': 'created'}
+{'id': 100, 'table': 'products', 'result': 'updated', 'updated': None}
+```
+
+<!-- intro -->
+##### Javascript:
 
 <!-- request javascript -->
 ``` javascript
-res = await indexApi.insert({"index" : "products", "id" : 100, "doc" : {"title" : "title", "meta" : {"tags":[1,2,3]}}});
-res = await indexApi.update({"index" : "products", "id" : 100, "doc" : {"meta" : {"tags":['one','two','three']}}});
+res = await indexApi.insert({"table" : "products", "id" : 100, "doc" : {"title" : "title", "meta" : {"tags":[1,2,3]}}});
+res = await indexApi.update({"table" : "products", "id" : 100, "doc" : {"meta" : {"tags":['one','two','three']}}});
 ```
 
 <!-- response javascript -->
 ```javascript
-{"_index":"products","_id":100,"created":true,"result":"created"}
-{"_index":"products","_id":100,"result":"updated"}
+{"table":"products","_id":100,"created":true,"result":"created"}
+{"table":"products","_id":100,"result":"updated"}
 
 ```
 
@@ -666,17 +926,17 @@ class UpdateResponse {
 
 <!-- request C# -->
 ``` clike
-Dictionary<string, Object> meta = new Dictionary<string, Object>(); 
+Dictionary<string, Object> meta = new Dictionary<string, Object>();
 meta.Add("tags", new List<int> {1,2,3});
-Dictionary<string, Object> doc = new Dictionary<string, Object>(); 
+Dictionary<string, Object> doc = new Dictionary<string, Object>();
 doc.Add("title", "title");
 doc.Add("meta", meta);
 InsertDocumentRequest newdoc = new InsertDocumentRequest(index: "products", id: 100, doc: doc);
 indexApi.Insert(newdoc);
 
 meta = new Dictionary<string, Object>();
-meta.Add("tags", new List<string> {"one","two","three"}); 
-doc = new Dictionary<string, Object>(); 
+meta.Add("tags", new List<string> {"one","two","three"});
+doc = new Dictionary<string, Object>();
 doc.Add("meta", meta);
 UpdateDocumentRequest updatedoc = new UpdateDocumentRequest(index: "products", id: 100, doc: doc);
 indexApi.Update(updatedoc);
@@ -700,6 +960,118 @@ class UpdateResponse {
 }
 ```
 
+<!-- intro -->
+##### Rust:
+
+<!-- request Rust -->
+``` rust
+let mut meta = HashMap::new();
+meta.insert("tags".to_string(), serde_json::json!([1,2,3]));
+let mut doc = HashMap::new();
+doc.insert("title".to_string(), serde_json::json!("title"));
+doc.insert("meta".to_string(), serde_json::json!(meta));
+let insert_req = InsertDocumentRequest {
+    table: serde_json::json!("products"),
+    doc: serde_json::json!(doc),
+    id: serde_json::json!(100),
+    ..Default::default(),
+};
+let insert_res = index_api.insert(insert_req).await;
+
+meta = HashMap::new();
+meta.insert("tags".to_string(), serde_json::json!(["one","two","three"]));
+doc = HashMap::new();
+doc.insert("meta".to_string(), serde_json::json!(meta));
+let update_req = UpdateDocumentRequest {
+    table: serde_json::json!("products"),
+    doc: serde_json::json!(doc),
+    id: serde_json::json!(100),
+    ..Default::default(),
+};
+let update_res = index_api.update(update_req).await;
+
+```
+
+<!-- response Rust -->
+```rust
+class SuccessResponse {
+    index: products
+    id: 100
+    created: true
+    result: created
+    found: null
+}
+
+class UpdateResponse {
+    index: products
+    updated: null
+    id: 100
+    result: updated
+}
+```
+
+<!-- intro -->
+##### TypeScript:
+
+<!-- request TypeScript -->
+``` typescript
+res = await indexApi.insert({
+  index: 'test',
+  id: 1,
+  doc: { content: 'Text 1', name: 'Doc 1', meta: { tags:[1,2,3] } }
+})
+res = await indexApi.update({ index: 'test', id: 1, doc: { meta: { tags:['one','two','three'] } } });
+```
+
+<!-- response TypeScript -->
+```typescript
+{
+	"table":"test",
+	"_id":1,
+	"created":true,
+	"result":"created"
+}
+
+{
+	"table":"test",
+	"_id":1,
+	"result":"updated"
+}
+```
+
+<!-- intro -->
+##### TypeScript:
+
+<!-- request Go -->
+``` go
+metaField := map[string]interface{} {"tags": []int{1, 2, 3}}
+insertDoc := map[string]interface{} {"name": "Doc 1", "meta": metaField}}
+insertRequest := manticoreclient.NewInsertDocumentRequest("test", insertDoc)
+insertRequest.SetId(1)
+res, _, _ := apiClient.IndexAPI.Insert(context.Background()).InsertDocumentRequest(*insertRequest).Execute();
+
+metaField = map[string]interface{} {"tags": []string{"one", "two", "three"}}
+updateDoc := map[string]interface{} {"meta": metaField}
+updateRequest := manticoreclient.NewUpdateDocumentRequest("test", updateDoc)
+res, _, _ = apiClient.IndexAPI.Update(context.Background()).UpdateDocumentRequest(*updateRequest).Execute()
+```
+
+<!-- response Go -->
+```go
+{
+	"table":"test",
+	"_id":1,
+	"created":true,
+	"result":"created"
+}
+
+{
+	"table":"test",
+	"_id":1,
+	"result":"updated"
+}
+```
+
 <!-- end -->
 
 <!-- example cluster update -->
@@ -709,7 +1081,7 @@ When using replication, the table name should be prepended with `cluster_name:` 
 ```json
 {
   "cluster":"nodes4",
-  "index":"test",
+  "table":"test",
   "id":1,
   "doc":
   {
@@ -736,7 +1108,7 @@ update weekly:posts set enabled=0 where id=1;
 POST /update
 {
 	"cluster":"weekly",
-	"index":"products",
+	"table":"products",
 	"id":1,
 	"doc":
 	{
@@ -759,15 +1131,23 @@ $index->updateDocument(['enabled'=>0],1);
 
 <!-- request Python -->
 ``` python
-indexApi.update({"cluster":"weekly", "index" : "products", "id" : 1, "doc" : {"enabled" : 0}})
-
+indexApi.update({"cluster":"weekly", "table" : "products", "id" : 1, "doc" : {"enabled" : 0}})
 ```
+
 <!-- intro -->
-##### javascript:
+##### Python-asyncio:
+
+<!-- request Python-asyncio -->
+``` python
+await indexApi.update({"cluster":"weekly", "table" : "products", "id" : 1, "doc" : {"enabled" : 0}})
+```
+
+<!-- intro -->
+##### Javascript:
 
 <!-- request javascript -->
 ``` javascript
-res = wait indexApi.update({"cluster":"weekly", "index" : "products", "id" : 1, "doc" : {"enabled" : 0}});
+res = wait indexApi.update({"cluster":"weekly", "table" : "products", "id" : 1, "doc" : {"enabled" : 0}});
 
 ```
 <!-- intro -->
@@ -784,35 +1164,51 @@ indexApi.update(updatedoc);
 
 ```
 
-<!-- response Java -->
-```java
-class UpdateResponse {
-    index: products
-    updated: null
-    id: 1
-    result: updated
-}
-```
-
 <!-- intro -->
 ##### C#:
 
 <!-- request C# -->
 ``` clike
-Dictionary<string, Object> doc = new Dictionary<string, Object>(); 
+Dictionary<string, Object> doc = new Dictionary<string, Object>();
 doc.Add("enabled", 0);
 UpdateDocumentRequest updatedoc = new UpdateDocumentRequest(index: "products", cluster: "weekly", id: 1, doc: doc);
 indexApi.Update(updatedoc);
 ```
 
-<!-- response C# -->
-```clike
-class UpdateResponse {
-    index: products
-    updated: null
-    id: 1
-    result: updated
-}
+<!-- intro -->
+##### Rust:
+
+<!-- request Rust -->
+``` rust
+let mut doc = HashMap::new();
+doc.insert("enabled".to_string(), serde_json::json!(0));
+let update_req = UpdateDocumentRequest {
+    table: serde_json::json!("products"),
+    cluster: serde_json::json!("weekly"),
+    doc: serde_json::json!(doc),
+    id: serde_json::json!(1),
+};
+let update_res = index_api.update(update_req).await;
+```
+
+<!-- intro -->
+##### TypeScript:
+
+<!-- request TypeScript -->
+``` typescript
+res = wait indexApi.update( {cluster: 'test_cluster', index : 'test', id : 1, doc : {name : 'Doc 11'}} );
+```
+
+<!-- intro -->
+##### Go:
+
+<!-- request Go -->
+``` go
+updateDoc = map[string]interface{} {"name":"Doc 11"}
+updateRequest = manticoreclient.NewUpdateDocumentRequest("test", updateDoc)
+updateRequest.SetCluster("test_cluster")
+updateRequest.SetId(1)
+res, _, _ = apiClient.IndexAPI.Update(context.Background()).UpdateDocumentRequest(*updateRequest).Execute()
 ```
 
 <!-- end -->
@@ -860,7 +1256,7 @@ Query OK, 1 row affected (0.00 sec)
 POST /update
 
 {
-	"index":"products",
+	"table":"products",
 	"_id":1,
 	"doc":
 	{
@@ -872,7 +1268,7 @@ POST /update
 <!-- response JSON -->
 ```JSON
 {
-  "_index":"products",
+  "table":"products",
   "updated":1
 }
 ```
@@ -900,26 +1296,39 @@ Array(
 <!-- request Python -->
 ``` python
 
-indexApi.update({"index" : "products", "id" : 1, "doc" : {"tags1": []}})
+indexApi.update({"table" : "products", "id" : 1, "doc" : {"tags1": []}})
 ```
 
 <!-- response Python -->
 ```python
-{'id': 1, 'index': 'products', 'result': 'updated', 'updated': None}
+{'id': 1, 'table': 'products', 'result': 'updated', 'updated': None}
 ```
 
 <!-- intro -->
-##### javascript:
+##### Python-asyncio:
+
+<!-- request Python-asyncio -->
+``` python
+await indexApi.update({"table" : "products", "id" : 1, "doc" : {"tags1": []}})
+```
+
+<!-- response Python-asyncio -->
+```python
+{'id': 1, 'table': 'products', 'result': 'updated', 'updated': None}
+```
+
+<!-- intro -->
+##### Javascript:
 
 <!-- request javascript -->
 ``` javascript
 
-indexApi.update({"index" : "products", "id" : 1, "doc" : {"tags1": []}})
+indexApi.update({"table" : "products", "id" : 1, "doc" : {"tags1": []}})
 ```
 
 <!-- response javascript -->
 ```javascript
-{"_index":"products","_id":1,"result":"updated"}
+{"table":"products","_id":1,"result":"updated"}
 ```
 <!-- intro -->
 ##### java:
@@ -950,7 +1359,7 @@ class UpdateResponse {
 
 <!-- request C# -->
 ``` clike
-Dictionary<string, Object> doc = new Dictionary<string, Object>(); 
+Dictionary<string, Object> doc = new Dictionary<string, Object>();
 doc.Add("tags1", new List<int> {});
 UpdateDocumentRequest updatedoc = new UpdateDocumentRequest(index: "products", id: 1, doc: doc);
 indexApi.Update(updatedoc);
@@ -965,6 +1374,70 @@ class UpdateResponse {
     result: updated
 }
 ```
+
+<!-- intro -->
+##### Rust:
+
+<!-- request Rust -->
+``` rust
+let mut doc = HashMap::new();
+doc.insert("tags1".to_string(), serde_json::json!([]));
+let update_req = UpdateDocumentRequest {
+    table: serde_json::json!("products"),
+    doc: serde_json::json!(doc),
+    id: serde_json::json!(1),
+    ..Default::default(),
+};
+let update_res = index_api.update(update_req).await;
+```
+
+<!-- response Rust -->
+```rust
+class UpdateResponse {
+    index: products
+    updated: null
+    id: 1
+    result: updated
+}
+```
+
+<!-- intro -->
+##### TypeScript:
+
+<!-- request TypeScript -->
+``` typescript
+res = await indexApi.update({ index: 'test', id: 1, doc: { cat: 10 } });
+```
+
+<!-- response TypeScript -->
+```typescript
+{
+	"table":"test",
+	"_id":1,
+	"result":"updated"
+}
+```
+
+<!-- intro -->
+##### Go:
+
+<!-- request Go -->
+``` go
+updateDoc = map[string]interface{} {"cat":10}
+updateRequest = manticoreclient.NewUpdateDocumentRequest("test", updateDoc)
+updateRequest.SetId(1)
+res, _, _ = apiClient.IndexAPI.Update(context.Background()).UpdateDocumentRequest(*updateRequest).Execute()
+```
+
+<!-- response Go -->
+```go
+{
+	"table":"test",
+	"_id":1,
+	"result":"updated"
+}
+```
+
 <!-- end -->
 
 
@@ -1000,7 +1473,7 @@ The server will respond with a JSON object stating if the operation was successf
 ```JSON
 POST /update
 {
-  "index":"test",
+  "table":"test",
   "id":1,
   "doc":
    {
@@ -1013,7 +1486,7 @@ POST /update
 <!-- response JSON -->
 ``` JSON
 {
-  "_index": "test",
+  "table": "test",
   "_id": 1,
   "result": "updated"
 }
@@ -1034,7 +1507,7 @@ The ID of the document that needs to be updated can be set directly using the `i
 POST /update
 
 {
-  "index":"test",
+  "table":"test",
   "doc":
   {
     "price" : 1000
@@ -1050,7 +1523,7 @@ POST /update
 
 ```json
 {
-  "_index":"products",
+  "table":"products",
   "updated":1
 }
 ```
@@ -1065,7 +1538,7 @@ The query syntax is the same as in the [/search endpoint](../../Searching/Full_t
 FLUSH ATTRIBUTES
 ```
 
-The FLUSH ATTRIBUTES command flushes all in-memory attribute updates in all the active tables to disk. It returns a tag that identifies the result on-disk state, which represents the number of actual disk attribute saves performed since the server startup.
+The FLUSH ATTRIBUTES command ensures that all in-memory attribute updates in all active tables are flushed to disk. It returns a tag that identifies the result on-disk state, which represents the number of actual disk attribute saves performed since the server startup.
 
 ```sql
 mysql> UPDATE testindex SET channel_id=1107025 WHERE id=1;
@@ -1097,8 +1570,8 @@ You can perform multiple update operations in a single call using the `/bulk` en
 ```json
 POST /bulk
 
-{ "update" : { "index" : "products", "id" : 1, "doc": { "price" : 10 } } }
-{ "update" : { "index" : "products", "id" : 2, "doc": { "price" : 20 } } }
+{ "update" : { "table" : "products", "id" : 1, "doc": { "price" : 10 } } }
+{ "update" : { "table" : "products", "id" : 2, "doc": { "price" : 20 } } }
 ```
 
 <!-- response JSON -->
@@ -1110,7 +1583,7 @@ POST /bulk
       {
          "update":
          {
-            "_index":"products",
+            "table":"products",
             "_id":1,
             "result":"updated"
          }
@@ -1118,7 +1591,7 @@ POST /bulk
       {
          "update":
          {
-            "_index":"products",
+            "table":"products",
             "_id":2,
             "result":"updated"
          }
@@ -1151,8 +1624,8 @@ Updates by query and deletes by query are also supported.
 ```json
 POST /bulk
 
-{ "update" : { "index" : "products", "doc": { "coeff" : 1000 }, "query": { "range": { "price": { "gte": 1000 } } } } }
-{ "update" : { "index" : "products", "doc": { "coeff" : 0 }, "query": { "range": { "price": { "lt": 1000 } } } } }
+{ "update" : { "table" : "products", "doc": { "coeff" : 1000 }, "query": { "range": { "price": { "gte": 1000 } } } } }
+{ "update" : { "table" : "products", "doc": { "coeff" : 0 }, "query": { "range": { "price": { "lt": 1000 } } } } }
 ```
 
 <!-- response JSON -->
@@ -1164,14 +1637,14 @@ POST /bulk
     {
       "update":
       {
-        "_index":"products",
-        "updated":0
+        "table":"products",
+        "updated":1
       }
     },
     {
       "update":
       {
-        "_index":"products",
+        "table":"products",
         "updated":3
       }
     }
@@ -1188,7 +1661,7 @@ POST /bulk
 
 $client->bulk([
     ['update'=>[
-            'index' => 'products',
+            'table' => 'products',
              'doc' => [
                 'coeff' => 100
             ],
@@ -1198,7 +1671,7 @@ $client->bulk([
         ]
     ],
     ['update'=>[
-            'index' => 'products',
+            'table' => 'products',
              'doc' => [
                 'coeff' => 0
             ],
@@ -1218,7 +1691,7 @@ Array(
         Array(
             [update] => Array(
                 [_index] => products
-                [updated] => 0
+                [updated] => 1
             )
         )   
         Array(
@@ -1238,32 +1711,52 @@ Array(
 <!-- request Python -->
 ``` python
 docs = [ \
-            { "update" : { "index" : "products", "doc": { "coeff" : 1000 }, "query": { "range": { "price": { "gte": 1000 } } } } }, \
-            { "update" : { "index" : "products", "doc": { "coeff" : 0 }, "query": { "range": { "price": { "lt": 1000 } } } } } ]
+            { "update" : { "table" : "products", "doc": { "coeff" : 1000 }, "query": { "range": { "price": { "gte": 1000 } } } } }, \
+            { "update" : { "table" : "products", "doc": { "coeff" : 0 }, "query": { "range": { "price": { "lt": 1000 } } } } } ]
 indexApi.bulk('\n'.join(map(json.dumps,docs)))
 ```
 
 <!-- response Python -->
 ```python
 {'error': None,
- 'items': [{u'update': {u'_index': u'products', u'updated': 1}},
-           {u'update': {u'_index': u'products', u'updated': 3}}]}
+ 'items': [{u'update': {u'table': u'products', u'updated': 1}},
+           {u'update': {u'table': u'products', u'updated': 3}}]}
 
 ```
+
 <!-- intro -->
-##### javascript:
+##### Python-asyncio:
+
+<!-- request Python-asyncio -->
+``` python
+docs = [ \
+            { "update" : { "table" : "products", "doc": { "coeff" : 1000 }, "query": { "range": { "price": { "gte": 1000 } } } } }, \
+            { "update" : { "table" : "products", "doc": { "coeff" : 0 }, "query": { "range": { "price": { "lt": 1000 } } } } } ]
+await indexApi.bulk('\n'.join(map(json.dumps,docs)))
+```
+
+<!-- response Python-asyncio -->
+```python
+{'error': None,
+ 'items': [{u'update': {u'table': u'products', u'updated': 1}},
+           {u'update': {u'table': u'products', u'updated': 3}}]}
+
+```
+
+<!-- intro -->
+##### Javascript:
 
 <!-- request javascript -->
 ``` javascript
 docs = [
-            { "update" : { "index" : "products", "doc": { "coeff" : 1000 }, "query": { "range": { "price": { "gte": 1000 } } } } },
-            { "update" : { "index" : "products", "doc": { "coeff" : 0 }, "query": { "range": { "price": { "lt": 1000 } } } } } ];
+            { "update" : { "table" : "products", "doc": { "coeff" : 1000 }, "query": { "range": { "price": { "gte": 1000 } } } } },
+            { "update" : { "table" : "products", "doc": { "coeff" : 0 }, "query": { "range": { "price": { "lt": 1000 } } } } } ];
 res =  await indexApi.bulk(docs.map(e=>JSON.stringify(e)).join('\n'));
 ```
 
 <!-- response javascript -->
 ```javascript
-{"items":[{"update":{"_index":"products","updated":1}},{"update":{"_index":"products","updated":5}}],"errors":false}
+{"items":[{"update":{"table":"products","updated":1}},{"update":{"table":"products","updated":3}}],"errors":false}
 
 ```
 
@@ -1280,7 +1773,7 @@ indexApi.bulk(body);
 <!-- response Java -->
 ```java
 class BulkResponse {
-    items: [{replace={_index=products, _id=1, created=false, result=updated, status=200}}, {replace={_index=products, _id=2, created=false, result=updated, status=200}}]
+    items: [{update={_index=products, _id=1, created=false, result=updated, status=200}}, {update={_index=products, _id=2, created=false, result=updated, status=200}}]
     error: null
     additionalProperties: {errors=false}
 }
@@ -1299,11 +1792,113 @@ indexApi.Bulk(body);
 <!-- response C# -->
 ```clike
 class BulkResponse {
-    items: [{replace={_index=products, _id=1, created=false, result=updated, status=200}}, {replace={_index=products, _id=2, created=false, result=updated, status=200}}]
+    items: [{update={_index=products, _id=1, created=false, result=updated, status=200}}, {update={_index=products, _id=2, created=false, result=updated, status=200}}]
     error: null
     additionalProperties: {errors=false}
 }
 ```
+
+<!-- intro -->
+##### Rust:
+
+<!-- request Rust -->
+``` rust
+string  body = r#"{ "update" : { "index" : "products", "doc": { "coeff" : 1000 }, "query": { "range": { "price": { "gte": 1000 } } } }}
+    { "update" : { "index" : "products", "doc": { "coeff" : 0 }, "query": { "range": { "price": { "lt": 1000 } } } } }
+"#;
+index_api.bulk(body).await;
+```
+
+<!-- response Rust -->
+```rust
+class BulkResponse {
+    items: [{update={_index=products, _id=1, created=false, result=updated, status=200}}, {update={_index=products, _id=2, created=false, result=updated, status=200}}]
+    error: null
+    additionalProperties: {errors=false}
+}
+```
+
+<!-- request TypeScript -->
+
+``` typescript
+updateDocs = [
+  {
+    update: {
+      index: 'test',
+      id: 1,
+      doc: { content: 'Text 11', cat: 1, name: 'Doc 11' },
+    },
+  },
+  {
+    update: {
+      index: 'test',
+      id: 2,
+      doc: { content: 'Text 22', cat: 9, name: 'Doc 22' },
+    },
+  },
+];
+
+res = await indexApi.bulk(
+  updateDocs.map((e) => JSON.stringify(e)).join("\n")
+);
+```
+
+<!-- response TypeScript -->
+```typescript
+{
+  "items":
+  [
+    {
+      "update":
+      {
+        "table":"test",
+        "updated":1
+      }
+    },
+    {
+      "update":
+      {
+        "table":"test",
+        "updated":1
+      }
+    }
+  ],
+  "errors":false
+}
+```
+
+<!-- request Go -->
+
+``` go
+body := "{\"update\": {\"index\": \"test\", \"id\": 1, \"doc\": {\"content\": \"Text 11\", \"name\": \"Doc 11\", \"cat\": 1 }}}" + "\n" +
+	"{\"update\": {\"index\": \"test\", \"id\": 2, \"doc\": {\"content\": \"Text 22\", \"name\": \"Doc 22\", \"cat\": 9 }}}" +"\n";
+res, _, _ := apiClient.IndexAPI.Bulk(context.Background()).Body(body).Execute()
+```
+
+<!-- response Go -->
+```go
+{
+  "items":
+  [
+    {
+      "update":
+      {
+        "table":"test",
+        "updated":1
+      }
+    },
+    {
+      "update":
+      {
+        "table":"test",
+        "updated":1
+      }
+    }
+  ],
+  "errors":false
+}
+```
+
 
 <!-- end -->
 
@@ -1356,7 +1951,7 @@ $params = [
             'price'=>['type'=>'float']
         ]
     ],
-    'index' => 'products'
+    'table' => 'products'
 ];
 $index = new \Manticoresearch\Index($client);
 $index->create($params);
@@ -1369,12 +1964,22 @@ $index->create($params);
 ```python
 utilsApi.sql('create table products(title text, price float) attr_update_reserve = \'1M\'')
 ```
+
 <!-- intro -->
-##### javascript:
+##### Python-asyncio:
+
+<!-- request Python-asyncio -->
+
+```python
+await utilsApi.sql('create table products(title text, price float) attr_update_reserve = \'1M\'')
+```
+
+<!-- intro -->
+##### Javascript:
 
 <!-- request javascript -->
 
-```java
+```javascript
 res = await utilsApi.sql('create table products(title text, price float) attr_update_reserve = \'1M\'');
 ```
 
@@ -1382,15 +1987,41 @@ res = await utilsApi.sql('create table products(title text, price float) attr_up
 ##### Java:
 <!-- request Java -->
 ```java
-utilsApi.sql("create table products(title text, price float) attr_update_reserve = '1M'");
+utilsApi.sql("create table products(title text, price float) attr_update_reserve = '1M'", true);
 ```
 
 <!-- intro -->
 ##### C#:
 <!-- request C# -->
 ```clike
-utilsApi.Sql("create table products(title text, price float) attr_update_reserve = '1M'");
+utilsApi.Sql("create table products(title text, price float) attr_update_reserve = '1M'", true);
 ```
+
+<!-- intro -->
+##### Rust:
+<!-- request Rust -->
+```rust
+utils_api.sql("create table products(title text, price float) attr_update_reserve = '1M'", Some(true)).await;
+```
+
+<!-- intro -->
+##### TypeScript:
+
+<!-- request TypeScript -->
+
+```typescript
+utilsApi.sql("create table test(content text, name string, cat int) attr_update_reserve = '1M'");
+```
+
+<!-- intro -->
+##### Go:
+
+<!-- request Go -->
+
+```go
+apiClient.UtilsAPI.Sql(context.Background()).Body("create table test(content text, name string, cat int) attr_update_reserve = '1M'").Execute()
+```
+
 <!-- request CONFIG -->
 
 ```ini

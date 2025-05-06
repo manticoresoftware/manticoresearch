@@ -42,8 +42,23 @@ utilsApi.sql('DELETE CLUSTER click_query')
 ```python
 {u'error': u'', u'total': 0, u'warning': u''}
 ```
+
 <!-- intro -->
-##### javascript:
+##### Python-asyncio:
+
+<!-- request Python-asyncio -->
+
+```python
+await utilsApi.sql('DELETE CLUSTER click_query')
+```
+
+<!-- response Python-asyncio -->
+```python
+{u'error': u'', u'total': 0, u'warning': u''}
+```
+
+<!-- intro -->
+##### Javascript:
 
 <!-- request javascript -->
 
@@ -73,5 +88,15 @@ utilsApi.sql("DELETE CLUSTER click_query");
 ```clike
 utilsApi.Sql("DELETE CLUSTER click_query");
 ```
+
+<!-- intro -->
+##### Rust:
+
+<!-- request Rust -->
+
+```rust
+utils_api.Sql("DELETE CLUSTER click_query", Some(true)).await;
+```
+
 <!-- end -->
 <!-- proofread -->

@@ -22,8 +22,6 @@ The expression parser automatically switches to integer mode if no operations re
 
 The comparison operators return 1.0 when the condition is true and 0.0 otherwise. For example, `(a=b)+3` evaluates to 4 when attribute `a` is equal to attribute `b`, and to 3 when `a` is not. Unlike MySQL, the equality comparisons (i.e., `=` and `<>` operators) include a small equality threshold (1e-6 by default). If the difference between the compared values is within the threshold, they are considered equal.
 
-For string attributes, only the equality operator is supported, and using other operators will result in a syntax error.
-
 The `BETWEEN` and `IN` operators, in the case of multi-value attributes, return true if at least one value matches the condition (similar to [ANY()](../Functions/Arrays_and_conditions_functions.md#ANY%28%29)). The `IN` operator does not support JSON attributes. The `IS (NOT) NULL` operator is supported only for JSON attributes.
 
 ## Boolean operators
@@ -53,6 +51,8 @@ These operators perform bitwise AND and OR respectively. The operands must be of
 * [CONTAINS()](../Functions/Arrays_and_conditions_functions.md#CONTAINS%28%29)
 * [COS()](../Functions/Mathematical_functions.md#COS%28%29)
 * [CRC32()](../Functions/Mathematical_functions.md#CRC32%28%29)
+* [DATE_HISTOGRAM()](../Functions/Date_and_time_functions.md#DATE_HISTOGRAM%28%29)
+* [DATE_RANGE()](../Functions/Date_and_time_functions.md#DATE_RANGE%28%29)
 * [DAY()](../Functions/Date_and_time_functions.md#DAY%28%29)
 * [DOUBLE()](../Functions/Type_casting_functions.md#DOUBLE%28%29)
 * [EXP()](../Functions/Mathematical_functions.md#EXP%28%29)
@@ -62,6 +62,7 @@ These operators perform bitwise AND and OR respectively. The operands must be of
 * [GEOPOLY2D()](../Functions/Geo_spatial_functions.md#GEOPOLY2D%28%29)
 * [GREATEST()](../Functions/Mathematical_functions.md#GREATEST%28%29)
 * [HOUR()](../Functions/Date_and_time_functions.md#HOUR%28%29)
+* [HISTOGRAM()](../Functions/Arrays_and_conditions_functions.md#HISTOGRAM%28%29)
 * [IDIV()](../Functions/Mathematical_functions.md#IDIV%28%29)
 * [IF()](../Functions/Arrays_and_conditions_functions.md#IF%28%29)
 * [IN()](../Functions/Arrays_and_conditions_functions.md#IN%28%29)
@@ -85,6 +86,7 @@ These operators perform bitwise AND and OR respectively. The operands must be of
 * [POLY2D()](../Functions/Geo_spatial_functions.md#POLY2D%28%29)
 * [POW()](../Functions/Mathematical_functions.md#POW%28%29)
 * [RAND()](../Functions/Mathematical_functions.md#RAND%28%29)
+* [RANGE()](../Functions/Arrays_and_conditions_functions.md#RANGE%28%29)
 * [REGEX()](../Functions/String_functions.md#REGEX%28%29)
 * [REMAP()](../Functions/Arrays_and_conditions_functions.md#REMAP%28%29)
 * [SECOND()](../Functions/Date_and_time_functions.md#SECOND%28%29)
@@ -108,7 +110,7 @@ In the HTTP JSON interface, expressions are supported via `script_fields` and `e
 <!-- example script_fields -->
 ```json
 {
-	"index": "test",
+	"table": "test",
 	"query": {
 		"match_all": {}
 	}, "script_fields": {
@@ -139,7 +141,7 @@ The expression name can be utilized in filtering or sorting.
 <!-- request script_fields -->
 ```json
 {
-	"index":"movies_rt",
+	"table":"movies_rt",
 	"script_fields":{
 		"cond1":{
 			"script":{
@@ -204,7 +206,7 @@ By default, expression values are included in the `_source` array of the result 
 <!-- request expressions -->
 ```json
 {
-  "index": "test",
+  "table": "test",
   "query": { "match_all": {} },
   "expressions":
   {

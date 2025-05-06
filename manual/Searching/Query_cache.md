@@ -14,7 +14,7 @@ mysql> SET GLOBAL qcache_max_bytes=128000000;
 
 These changes are applied immediately, and cached result sets that no longer satisfy the constraints are immediately discarded. When reducing the cache size on the fly, MRU (most recently used) result sets win.
 
-Query cache operates as follows. When enabled, every full-text search result is completely stored in memory. This occurs after full-text matching, filtering, and ranking, so essentially we store `total_found` docid,weight} pairs. Compressed matches can consume anywhere from 2 bytes to 12 bytes per match on average, mostly depending on the deltas between subsequent docids. Once the query is complete, we check the wall time and size thresholds, and either save the compressed result set for reuse or discard it.
+Query cache operates as follows. When enabled, every full-text search result is completely stored in memory. This occurs after full-text matching, filtering, and ranking, so essentially we store `total_found` {docid,weight} pairs. Compressed matches can consume anywhere from 2 bytes to 12 bytes per match on average, mostly depending on the deltas between subsequent docids. Once the query is complete, we check the wall time and size thresholds, and either save the compressed result set for reuse or discard it.
 
 Note that the query cache's impact on RAM is not limited by`qcache_max_bytes`! If you run, for example, 10 concurrent queries, each matching up to 1M matches (after filters), then the peak temporary RAM usage will be in the range of 40 MB to 240 MB, even if the queries are fast enough and don't get cached.
 

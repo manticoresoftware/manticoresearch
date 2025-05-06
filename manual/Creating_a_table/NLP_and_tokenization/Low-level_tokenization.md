@@ -9,7 +9,7 @@ To perform these operations correctly, Manticore must know:
 
 You can configure these settings on a per-table basis using the  [charset_table](../../Creating_a_table/NLP_and_tokenization/Low-level_tokenization.md#charset_table) option. charset_table specifies an array that maps letter characters to their case-folded versions (or any other characters that you prefer). Characters that are not present in the array are considered to be non-letters and will be treated as word separators during indexing or searching in this table.
 
-The default character set is `non_cjk`, which includes [most languages](../../Creating_a_table/NLP_and_tokenization/Supported_languages.md).
+The default character set is `non_cont`, which includes [most languages](../../Creating_a_table/NLP_and_tokenization/Supported_languages.md).
 
 You can also define text pattern replacement rules. For example, with the following rules:
 
@@ -28,7 +28,7 @@ You can learn more about [regexp_filter here](../../Creating_a_table/NLP_and_tok
 
 ```ini
 # default
-charset_table = non_cjk
+charset_table = non_cont
 
 # only English and Russian letters
 charset_table = 0..9, A..Z->a..z, _, a..z, \
@@ -38,11 +38,11 @@ U+410..U+42F->U+430..U+44F, U+430..U+44F, U+401->U+451, U+451
 charset_table = 0..9, english, _
 
 # you can override character mappings by redefining them, e.g. for case insensitive search with German umlauts you can use:
-charset_table = non_cjk, U+00E4, U+00C4->U+00E4, U+00F6, U+00D6->U+00F6, U+00FC, U+00DC->U+00FC, U+00DF, U+1E9E->U+00DF
+charset_table = non_cont, U+00E4, U+00C4->U+00E4, U+00F6, U+00D6->U+00F6, U+00FC, U+00DC->U+00FC, U+00DF, U+1E9E->U+00DF
 ```
 
 <!-- example charset_table -->
-`charset_table` specifies an array that maps letter characters to their case folded versions (or any other characters if you like). The default character set is `non_cjk` which includes most non-CJK languages.
+`charset_table` specifies an array that maps letter characters to their case-folded versions (or any other characters if you prefer). The default character set is `non_cont`, which includes most languages with [non-continuous](https://en.wikipedia.org/wiki/Scriptio_continua) scripts.
 
 `charset_table` is a workhorse of Manticore's tokenization process, which extracts keywords from document text or query text. It controls what characters are accepted as valid and how they should be transformed (e.g. whether case should be removed or not).
 
@@ -58,16 +58,16 @@ charset_table uses a comma-separated list of mappings to declare characters as v
 
 For characters with codes from 0 to 32, and those in the range of 127 to 8-bit ASCII and Unicode characters, Manticore always treats them as separators. To avoid configuration file encoding issues, 8-bit ASCII characters and Unicode characters must be specified in `U+XXX` form, where `XXX` is a hexadecimal code point number. The minimal accepted Unicode character code is `U+0021`.
 
-If the default mappings are insufficient for your needs, you can redefine the character mappings by specifying them again with another mapping. For example, if the built-in `non_cjk` array includes characters `Ä` and `ä` and maps them both to the ASCII character `a`, you can redefine those characters by adding the Unicode code points for them, like this:
+If the default mappings are insufficient for your needs, you can redefine the character mappings by specifying them again with another mapping. For example, if the built-in `non_cont` array includes characters `Ä` and `ä` and maps them both to the ASCII character `a`, you can redefine those characters by adding the Unicode code points for them, like this:
 
 ```
-charset_table = non_cjk,U+00E4,U+00C4
+charset_table = non_cont,U+00E4,U+00C4
 ```
 
 for case sensitive search or
 
 ```
-charset_table = non_cjk,U+00E4,U+00C4->U+00E4
+charset_table = non_cont,U+00E4,U+00C4->U+00E4
 ```
 
 for case insensitive search.
@@ -105,8 +105,18 @@ $index->create([
 ```python
 utilsApi.sql('CREATE TABLE products(title text, price float) charset_table = \'0..9, A..Z->a..z, _, a..z, U+410..U+42F->U+430..U+44F, U+430..U+44F, U+401->U+451, U+451\'')
 ```
+
 <!-- intro -->
-##### javascript:
+##### Python-asyncio:
+
+<!-- request Python-asyncio -->
+
+```python
+await utilsApi.sql('CREATE TABLE products(title text, price float) charset_table = \'0..9, A..Z->a..z, _, a..z, U+410..U+42F->U+430..U+44F, U+430..U+44F, U+401->U+451, U+451\'')
+```
+
+<!-- intro -->
+##### Javascript:
 
 <!-- request javascript -->
 
@@ -119,7 +129,7 @@ res = await utilsApi.sql('CREATE TABLE products(title text, price float) charset
 <!-- request Java -->
 
 ```java
-utilsApi.sql("CREATE TABLE products(title text, price float) charset_table = '0..9, A..Z->a..z, _, a..z, U+410..U+42F->U+430..U+44F, U+430..U+44F, U+401->U+451, U+451'");
+utilsApi.sql("CREATE TABLE products(title text, price float) charset_table = '0..9, A..Z->a..z, _, a..z, U+410..U+42F->U+430..U+44F, U+430..U+44F, U+401->U+451, U+451'", true);
 ```
 
 <!-- intro -->
@@ -128,7 +138,16 @@ utilsApi.sql("CREATE TABLE products(title text, price float) charset_table = '0.
 <!-- request C# -->
 
 ```clike
-utilsApi.Sql("CREATE TABLE products(title text, price float) charset_table = '0..9, A..Z->a..z, _, a..z, U+410..U+42F->U+430..U+44F, U+430..U+44F, U+401->U+451, U+451'");
+utilsApi.Sql("CREATE TABLE products(title text, price float) charset_table = '0..9, A..Z->a..z, _, a..z, U+410..U+42F->U+430..U+44F, U+430..U+44F, U+401->U+451, U+451'", true);
+```
+
+<!-- intro -->
+##### Rust:
+
+<!-- request Rust -->
+
+```rust
+utils_api.sql("CREATE TABLE products(title text, price float) charset_table = '0..9, A..Z->a..z, _, a..z, U+410..U+42F->U+430..U+44F, U+430..U+44F, U+401->U+451, U+451'", Some(true)).await;
 ```
 
 <!-- request CONFIG -->
@@ -148,10 +167,15 @@ table products {
 
 <!-- example charset_table 2 -->
 Besides definitions of characters and mappings, there are several built-in aliases that can be used. Current aliases are:
-* `english`
-* `russian`
-* `non_cjk`
+* `chinese`
 * `cjk`
+* `cont`
+* `english`
+* `japanese`
+* `korean`
+* `non_cont` (`non_cjk`)
+* `russian`
+* `thai`
 
 <!-- request SQL -->
 
@@ -186,8 +210,18 @@ $index->create([
 ```python
 utilsApi.sql('CREATE TABLE products(title text, price float) charset_table = \'0..9, english, _\'')
 ```
+
 <!-- intro -->
-##### javascript:
+##### Python-asyncio:
+
+<!-- request Python-asyncio -->
+
+```python
+await utilsApi.sql('CREATE TABLE products(title text, price float) charset_table = \'0..9, english, _\'')
+```
+
+<!-- intro -->
+##### Javascript:
 
 <!-- request javascript -->
 
@@ -201,7 +235,7 @@ res = await utilsApi.sql('CREATE TABLE products(title text, price float) charset
 <!-- request Java -->
 
 ```java
-utilsApi.sql("CREATE TABLE products(title text, price float) charset_table = '0..9, english, _'");
+utilsApi.sql("CREATE TABLE products(title text, price float) charset_table = '0..9, english, _'", true);
 ```
 
 <!-- intro -->
@@ -210,7 +244,16 @@ utilsApi.sql("CREATE TABLE products(title text, price float) charset_table = '0.
 <!-- request C# -->
 
 ```clike
-utilsApi.Sql("CREATE TABLE products(title text, price float) charset_table = '0..9, english, _'");
+utilsApi.Sql("CREATE TABLE products(title text, price float) charset_table = '0..9, english, _'", true);
+```
+
+<!-- intro -->
+##### Rust:
+
+<!-- request Rust -->
+
+```rust
+utils_api.sql("CREATE TABLE products(title text, price float) charset_table = '0..9, english, _'", Some(true)).await;
 ```
 
 <!-- request CONFIG -->
@@ -227,7 +270,7 @@ table products {
 ```
 <!-- end -->
 
-If you want to support different languages in your search, it can be a laborious task to define sets of valid characters and folding rules for all of them. We have simplified this for you by providing default charset tables, `non_cjk` and `cjk`, that cover non-CJK and CJK (Chinese, Japanese, Korean) languages respectively. In most cases, these charsets should be sufficient for your needs.
+If you want to support different languages in your search, it can be a laborious task to define sets of valid characters and folding rules for all of them. We have simplified this for you by providing default charset tables, `non_cont` and `cont`, that cover languages with non-continuous and continuous (Chinese, Japanese, Korean, Thai) scripts, respectively. In most cases, these charsets should be sufficient for your needs.
 
 Please note that the following languages are currently **not** supported:
 * Assamese
@@ -254,19 +297,19 @@ All other languages listed in the [Unicode languages
 list](http://www.unicode.org/cldr/charts/latest/supplemental/languages_and_scripts.html/) are supported by default.
 
 <!-- example charset_table 3 -->
-To work with both cjk and non-cjk languages, set the options in your configuration file as shown below (with an [exception](../../Creating_a_table/NLP_and_tokenization/CJK.md) for Chinese):
+To work with both cont and non-cont languages, set the options in your configuration file as shown below (with an [exception](../../Creating_a_table/NLP_and_tokenization/Languages_with_continuous_scripts.md) for Chinese):
 
 <!-- request SQL -->
 
 ```sql
-CREATE TABLE products(title text, price float) charset_table = 'non_cjk' ngram_len = '1' ngram_chars = 'cjk'
+CREATE TABLE products(title text, price float) charset_table = 'non_cont' ngram_len = '1' ngram_chars = 'cont'
 ```
 
 <!-- request JSON -->
 
 ```JSON
 POST /cli -d "
-CREATE TABLE products(title text, price float) charset_table = 'non_cjk' ngram_len = '1' ngram_chars = 'cjk'"
+CREATE TABLE products(title text, price float) charset_table = 'non_cont' ngram_len = '1' ngram_chars = 'cont'"
 ```
 
 <!-- request PHP -->
@@ -278,9 +321,9 @@ $index->create([
             'title'=>['type'=>'text'],
             'price'=>['type'=>'float']
         ],[
-             'charset_table' => 'non_cjk',
+             'charset_table' => 'non_cont',
              'ngram_len' => '1',
-             'ngram_chars' => 'cjk'
+             'ngram_chars' => 'cont'
         ]);
 ```
 <!-- intro -->
@@ -289,15 +332,25 @@ $index->create([
 <!-- request Python -->
 
 ```python
-utilsApi.sql('CREATE TABLE products(title text, price float) charset_table = \'non_cjk\' ngram_len = \'1\' ngram_chars = \'cjk\'')
+utilsApi.sql('CREATE TABLE products(title text, price float) charset_table = \'non_cont\' ngram_len = \'1\' ngram_chars = \'cont\'')
 ```
+
 <!-- intro -->
-##### javascript:
+##### Python-asyncio:
+
+<!-- request Python-asyncio -->
+
+```python
+await utilsApi.sql('CREATE TABLE products(title text, price float) charset_table = \'non_cont\' ngram_len = \'1\' ngram_chars = \'cont\'')
+```
+
+<!-- intro -->
+##### Javascript:
 
 <!-- request javascript -->
 
 ```javascript
-res = await utilsApi.sql('CREATE TABLE products(title text, price float) charset_table = \'non_cjk\' ngram_len = \'1\' ngram_chars = \'cjk\'');
+res = await utilsApi.sql('CREATE TABLE products(title text, price float) charset_table = \'non_cont\' ngram_len = \'1\' ngram_chars = \'cont\'');
 ```
 
 <!-- intro -->
@@ -306,7 +359,7 @@ res = await utilsApi.sql('CREATE TABLE products(title text, price float) charset
 <!-- request Java -->
 
 ```java
-utilsApi.sql("CREATE TABLE products(title text, price float) charset_table = 'non_cjk' ngram_len = '1' ngram_chars = 'cjk'");
+utilsApi.sql("CREATE TABLE products(title text, price float) charset_table = 'non_cont' ngram_len = '1' ngram_chars = 'cont'", true);
 ```
 
 <!-- intro -->
@@ -315,16 +368,25 @@ utilsApi.sql("CREATE TABLE products(title text, price float) charset_table = 'no
 <!-- request C# -->
 
 ```clike
-utilsApi.Sql("CREATE TABLE products(title text, price float) charset_table = 'non_cjk' ngram_len = '1' ngram_chars = 'cjk'");
+utilsApi.Sql("CREATE TABLE products(title text, price float) charset_table = 'non_cont' ngram_len = '1' ngram_chars = 'cont'", true);
+```
+
+<!-- intro -->
+##### Rust:
+
+<!-- request Rust -->
+
+```rust
+utils_api.sql("CREATE TABLE products(title text, price float) charset_table = 'non_cont' ngram_len = '1' ngram_chars = 'cont'", Some(true)).await;
 ```
 
 <!-- request CONFIG -->
 
 ```ini
 table products {
-  charset_table       = non_cjk
+  charset_table       = non_cont
   ngram_len           = 1
-  ngram_chars         = cjk
+  ngram_chars         = cont
 
   type = rt
   path = tbl
@@ -334,7 +396,7 @@ table products {
 ```
 <!-- end -->
 
-If you do not require support for cjk-languages, you can simply exclude the [ngram_len](../../Creating_a_table/NLP_and_tokenization/Low-level_tokenization.md#ngram_len) and [ngram_chars](../../Creating_a_table/NLP_and_tokenization/Low-level_tokenization.md#ngram_chars)
+If you do not require support for continuous-script languages, you can simply exclude the [ngram_len](../../Creating_a_table/NLP_and_tokenization/Low-level_tokenization.md#ngram_len) and [ngram_chars](../../Creating_a_table/NLP_and_tokenization/Low-level_tokenization.md#ngram_chars).
 options. For more information on these options, refer to the corresponding documentation sections.
 
 To map one character to multiple characters or vice versa, you can use [regexp_filter](../../Creating_a_table/NLP_and_tokenization/Low-level_tokenization.md#regexp_filter) can be helpful.
@@ -350,6 +412,8 @@ blend_chars = +, &->+
 Blended characters list. Optional, default is empty.
 
 Blended characters are indexed as both separators and valid characters. For example, when `&` is defined as a blended character and `AT&T` appears in an indexed document, three different keywords will be indexed, `at&t`, `at` and `t`.
+
+Additionally, blended characters can influence indexing in such a way that keywords are indexed as if the blended characters were not typed at all. This behavior is particularly evident when `blend_mode = trim_all` is specified. For example, the phrase `some_thing` will be indexed as `some`, `something`, and `thing` with `blend_mode = trim_all`.
 
 Care should be taken when using blended characters as defining a character as blended means that it is no longer a separator.
 * Therefore, if you put a comma to the `blend_chars` and search for `dog,cat`, it will treat that as a single token `dog,cat`. If `dog,cat` was **not** indexed as `dog,cat`, but left as `dog cat` only, then it will not match.
@@ -396,7 +460,16 @@ utilsApi.sql('CREATE TABLE products(title text, price float) blend_chars = \'+, 
 ```
 
 <!-- intro -->
-##### javascript:
+##### Python-asyncio:
+
+<!-- request Python-asyncio -->
+
+```python
+await utilsApi.sql('CREATE TABLE products(title text, price float) blend_chars = \'+, &, U+23, @->_\'')
+```
+
+<!-- intro -->
+##### Javascript:
 
 <!-- request javascript -->
 
@@ -410,7 +483,7 @@ res = await utilsApi.sql('CREATE TABLE products(title text, price float) blend_c
 <!-- request Java -->
 
 ```java
-utilsApi.sql("CREATE TABLE products(title text, price float) blend_chars = '+, &, U+23, @->_'");
+utilsApi.sql("CREATE TABLE products(title text, price float) blend_chars = '+, &, U+23, @->_'", true);
 ```
 
 <!-- intro -->
@@ -419,7 +492,16 @@ utilsApi.sql("CREATE TABLE products(title text, price float) blend_chars = '+, &
 <!-- request C# -->
 
 ```clike
-utilsApi.Sql("CREATE TABLE products(title text, price float) blend_chars = '+, &, U+23, @->_'");
+utilsApi.Sql("CREATE TABLE products(title text, price float) blend_chars = '+, &, U+23, @->_'", true);
+```
+
+<!-- intro -->
+##### Rust:
+
+<!-- request Rust -->
+
+```rust
+utils_api.sql("CREATE TABLE products(title text, price float) blend_chars = '+, &, U+23, @->_'", Some(true)).await;
 ```
 
 <!-- request CONFIG -->
@@ -466,7 +548,7 @@ Using `blend_mode` with the example `@dude!` string above, the setting `blend_mo
 Default behavior is to index the entire token, equivalent to `blend_mode = trim_none`.
 
 Be aware that using blend modes limits your search, even with the default mode `trim_none` if you assume `.` is a blended character:
-* `.dog.` will become `dog. dog` during indexing
+* `.dog.` will become `.dog. dog` during indexing
 * and you won't be able to find it by `dog.`.
 
 Using more modes increases the chance your keyword will match something.
@@ -505,8 +587,18 @@ $index->create([
 ```python
 utilsApi.sql('CREATE TABLE products(title text, price float) blend_mode = \'trim_tail, skip_pure\' blend_chars = \'+, &\'')
 ```
+
 <!-- intro -->
-##### javascript:
+##### Python-asyncio:
+
+<!-- request Python-asyncio -->
+
+```python
+await utilsApi.sql('CREATE TABLE products(title text, price float) blend_mode = \'trim_tail, skip_pure\' blend_chars = \'+, &\'')
+```
+
+<!-- intro -->
+##### Javascript:
 
 <!-- request javascript -->
 
@@ -519,7 +611,7 @@ res = await utilsApi.sql('CREATE TABLE products(title text, price float) blend_m
 <!-- request Java -->
 
 ```java
-utilsApi.sql("CREATE TABLE products(title text, price float) blend_mode = 'trim_tail, skip_pure' blend_chars = '+, &'");
+utilsApi.sql("CREATE TABLE products(title text, price float) blend_mode = 'trim_tail, skip_pure' blend_chars = '+, &'", true);
 ```
 
 <!-- intro -->
@@ -528,7 +620,16 @@ utilsApi.sql("CREATE TABLE products(title text, price float) blend_mode = 'trim_
 <!-- request C# -->
 
 ```clike
-utilsApi.Sql("CREATE TABLE products(title text, price float) blend_mode = 'trim_tail, skip_pure' blend_chars = '+, &'");
+utilsApi.Sql("CREATE TABLE products(title text, price float) blend_mode = 'trim_tail, skip_pure' blend_chars = '+, &'", true);
+```
+
+<!-- intro -->
+##### Rust:
+
+<!-- request Rust -->
+
+```rust
+utils_api.sql("CREATE TABLE products(title text, price float) blend_mode = 'trim_tail, skip_pure' blend_chars = '+, &'", Some(true)).await;
 ```
 
 <!-- request CONFIG -->
@@ -591,8 +692,18 @@ $index->create([
 ```python
 utilsApi.sql('CREATE TABLE products(title text, price float) min_word_len = \'4\'')
 ```
+
 <!-- intro -->
-##### javascript:
+##### Python-asyncio:
+
+<!-- request Python-asyncio -->
+
+```python
+await utilsApi.sql('CREATE TABLE products(title text, price float) min_word_len = \'4\'')
+```
+
+<!-- intro -->
+##### Javascript:
 
 <!-- request javascript -->
 
@@ -606,7 +717,7 @@ res = await utilsApi.sql('CREATE TABLE products(title text, price float) min_wor
 <!-- request Java -->
 
 ```java
-utilsApi.sql("CREATE TABLE products(title text, price float) min_word_len = '4'");
+utilsApi.sql("CREATE TABLE products(title text, price float) min_word_len = '4'", true);
 ```
 
 <!-- intro -->
@@ -615,7 +726,16 @@ utilsApi.sql("CREATE TABLE products(title text, price float) min_word_len = '4'"
 <!-- request C# -->
 
 ```clike
-utilsApi.Sql("CREATE TABLE products(title text, price float) min_word_len = '4'");
+utilsApi.Sql("CREATE TABLE products(title text, price float) min_word_len = '4'", true);
+```
+
+<!-- intro -->
+##### Rust:
+
+<!-- request Rust -->
+
+```rust
+utils_api.sql("CREATE TABLE products(title text, price float) min_word_len = '4'", Some(true)).await;
 ```
 
 <!-- request CONFIG -->
@@ -641,25 +761,25 @@ ngram_len = 1
 <!-- example ngram_len -->
 N-gram lengths for N-gram indexing. Optional, default is 0 (disable n-gram indexing). Known values are 0 and 1.
 
-N-grams provide basic CJK (Chinese, Japanese, Korean) support for unsegmented texts. The issue with CJK searching is that there may be no clear separators between the words. In some cases, you may not want to use dictionary-based segmentation [the one available for Chinese](../../Creating_a_table/NLP_and_tokenization/CJK.md). In those cases, n-gram segmentation might work well too.
+N-grams provide basic support for continuous-script languages in unsegmented texts. The issue with searching in languages using continuous scripts is the absence of clear separators between words. In some cases, you may not want to use dictionary-based segmentation, such as [the one available for Chinese](../../Creating_a_table/NLP_and_tokenization/Languages_with_continuous_scripts.md). In those instances, n-gram segmentation might also work well.
 
-When this feature is enabled, streams of CJK (or any other characters defined in [ngram_chars](../../Creating_a_table/NLP_and_tokenization/Low-level_tokenization.md#ngram_chars)) are indexed as N-grams. For example, if the incoming text is "ABCDEF" (where A to F represent some CJK characters) and ngram_len is 1, it will be indexed as if it were "A B C D E F". Only ngram_len=1 is currently supported. Only those characters that are listed in [ngram_chars](../../Creating_a_table/NLP_and_tokenization/Low-level_tokenization.md#ngram_chars) table will be split this way; others will not be affected.
+When this feature is enabled, streams of such languages (or any other characters defined in [ngram_chars](../../Creating_a_table/NLP_and_tokenization/Low-level_tokenization.md#ngram_chars)) are indexed as N-grams. For example, if the incoming text is "ABCDEF" (where A to F represent some language characters) and ngram_len is 1, it will be indexed as if it were "A B C D E F". Only ngram_len=1 is currently supported. Only those characters that are listed in [ngram_chars](../../Creating_a_table/NLP_and_tokenization/Low-level_tokenization.md#ngram_chars) table will be split this way; others will not be affected.
 
 Note that if the search query is segmented, i.e. there are separators between individual words, then wrapping the words in quotes and using extended mode will result in proper matches being found even if the text was **not** segmented. For instance, assume that the original query is `BC DEF`. After wrapping in quotes on the application side, it should look like `"BC" "DEF"` (*with* quotes). This query will be passed to Manticore and internally split into 1-grams too, resulting in `"B C" "D E F"` query, still with quotes that are the phrase matching operator. And it will match the text even though there were no separators in the text.
 
-Even if the search query is not segmented, Manticore should still produce good results, thanks to phrase-based ranking: it will pull closer phrase matches (which in the case of N-gram CJK words can mean closer multi-character word matches) to the top.
+Even if the search query is not segmented, Manticore should still produce good results, thanks to phrase-based ranking: it will pull closer phrase matches (which in the case of N-gram words can mean closer multi-character word matches) to the top.
 
 <!-- request SQL -->
 
 ```sql
-CREATE TABLE products(title text, price float) ngram_chars = 'cjk' ngram_len = '1'
+CREATE TABLE products(title text, price float) ngram_chars = 'cont' ngram_len = '1'
 ```
 
 <!-- request JSON -->
 
 ```JSON
 POST /cli -d "
-CREATE TABLE products(title text, price float) ngram_chars = 'cjk' ngram_len = '1'"
+CREATE TABLE products(title text, price float) ngram_chars = 'cont' ngram_len = '1'"
 ```
 
 <!-- request PHP -->
@@ -671,7 +791,7 @@ $index->create([
             'title'=>['type'=>'text'],
             'price'=>['type'=>'float']
         ],[
-             'ngram_chars' => 'cjk',
+             'ngram_chars' => 'cont',
              'ngram_len' => '1'
         ]);
 ```
@@ -681,15 +801,25 @@ $index->create([
 <!-- request Python -->
 
 ```python
-utilsApi.sql('CREATE TABLE products(title text, price float) ngram_chars = \'cjk\' ngram_len = \'1\'')
+utilsApi.sql('CREATE TABLE products(title text, price float) ngram_chars = \'cont\' ngram_len = \'1\'')
 ```
+
 <!-- intro -->
-##### javascript:
+##### Python-asyncio:
+
+<!-- request Python-asyncio -->
+
+```python
+await utilsApi.sql('CREATE TABLE products(title text, price float) ngram_chars = \'cont\' ngram_len = \'1\'')
+```
+
+<!-- intro -->
+##### Javascript:
 
 <!-- request javascript -->
 
 ```javascript
-res = await utilsApi.sql('CREATE TABLE products(title text, price float) ngram_chars = \'cjk\' ngram_len = \'1\'');
+res = await utilsApi.sql('CREATE TABLE products(title text, price float) ngram_chars = \'cont\' ngram_len = \'1\'');
 ```
 
 <!-- intro -->
@@ -698,7 +828,7 @@ res = await utilsApi.sql('CREATE TABLE products(title text, price float) ngram_c
 <!-- request Java -->
 
 ```java
-utilsApi.sql("CREATE TABLE products(title text, price float) ngram_chars = 'cjk' ngram_len = '1'");
+utilsApi.sql("CREATE TABLE products(title text, price float) ngram_chars = 'cont' ngram_len = '1'", true);
 ```
 
 <!-- intro -->
@@ -707,14 +837,23 @@ utilsApi.sql("CREATE TABLE products(title text, price float) ngram_chars = 'cjk'
 <!-- request C# -->
 
 ```clike
-utilsApi.Sql("CREATE TABLE products(title text, price float) ngram_chars = 'cjk' ngram_len = '1'");
+utilsApi.Sql("CREATE TABLE products(title text, price float) ngram_chars = 'cont' ngram_len = '1'", true);
+```
+
+<!-- intro -->
+##### Rust:
+
+<!-- request Rust -->
+
+```rust
+utils_api.sql("CREATE TABLE products(title text, price float) ngram_chars = 'cont' ngram_len = '1'", Some(true)).await;
 ```
 
 <!-- request CONFIG -->
 
 ```ini
 table products {
-  ngram_chars = cjk
+  ngram_chars = cont
   ngram_len = 1
 
   type = rt
@@ -728,9 +867,9 @@ table products {
 ### ngram_chars
 
 ```ini
-ngram_chars = cjk
+ngram_chars = cont
 
-ngram_chars = cjk, U+3000..U+2FA1F
+ngram_chars = cont, U+3000..U+2FA1F
 ```
 
 <!-- example ngram_chars -->
@@ -772,8 +911,18 @@ $index->create([
 ```python
 utilsApi.sql('CREATE TABLE products(title text, price float) ngram_chars = \'U+3000..U+2FA1F\' ngram_len = \'1\'')
 ```
+
 <!-- intro -->
-##### javascript:
+##### Python-asyncio:
+
+<!-- request Python-asyncio -->
+
+```python
+await utilsApi.sql('CREATE TABLE products(title text, price float) ngram_chars = \'U+3000..U+2FA1F\' ngram_len = \'1\'')
+```
+
+<!-- intro -->
+##### Javascript:
 
 <!-- request javascript -->
 
@@ -786,7 +935,7 @@ res = await utilsApi.sql('CREATE TABLE products(title text, price float) ngram_c
 
 <!-- request Java -->
 ```java
-utilsApi.sql("CREATE TABLE products(title text, price float) ngram_chars = 'U+3000..U+2FA1F' ngram_len = '1'");
+utilsApi.sql("CREATE TABLE products(title text, price float) ngram_chars = 'U+3000..U+2FA1F' ngram_len = '1'", true);
 ```
 
 <!-- intro -->
@@ -794,7 +943,16 @@ utilsApi.sql("CREATE TABLE products(title text, price float) ngram_chars = 'U+30
 
 <!-- request C# -->
 ```clike
-utilsApi.Sql("CREATE TABLE products(title text, price float) ngram_chars = 'U+3000..U+2FA1F' ngram_len = '1'");
+utilsApi.Sql("CREATE TABLE products(title text, price float) ngram_chars = 'U+3000..U+2FA1F' ngram_len = '1'", true);
+```
+
+<!-- intro -->
+##### Rust:
+
+<!-- request Rust -->
+
+```rust
+utils_api.sql("CREATE TABLE products(title text, price float) ngram_chars = 'U+3000..U+2FA1F' ngram_len = '1'", Some(true)).await;
 ```
 
 <!-- request CONFIG -->
@@ -819,14 +977,14 @@ Also you can use an alias for our default N-gram table as in the example. It sho
 <!-- request SQL -->
 
 ```sql
-CREATE TABLE products(title text, price float) ngram_chars = 'cjk' ngram_len = '1'
+CREATE TABLE products(title text, price float) ngram_chars = 'cont' ngram_len = '1'
 ```
 
 <!-- request JSON -->
 
 ```JSON
 POST /cli -d "
-CREATE TABLE products(title text, price float) ngram_chars = 'cjk' ngram_len = '1'"
+CREATE TABLE products(title text, price float) ngram_chars = 'cont' ngram_len = '1'"
 ```
 
 <!-- request PHP -->
@@ -838,7 +996,7 @@ $index->create([
             'title'=>['type'=>'text'],
             'price'=>['type'=>'float']
         ],[
-             'ngram_chars' => 'cjk',
+             'ngram_chars' => 'cont',
              'ngram_len' => '1'
         ]);
 ```
@@ -848,15 +1006,25 @@ $index->create([
 <!-- request Python -->
 
 ```python
-utilsApi.sql('CREATE TABLE products(title text, price float) ngram_chars = \'cjk\' ngram_len = \'1\'')
+utilsApi.sql('CREATE TABLE products(title text, price float) ngram_chars = \'cont\' ngram_len = \'1\'')
 ```
+
 <!-- intro -->
-##### javascript:
+##### Python-asyncio:
+
+<!-- request Python-asyncio -->
+
+```python
+await utilsApi.sql('CREATE TABLE products(title text, price float) ngram_chars = \'cont\' ngram_len = \'1\'')
+```
+
+<!-- intro -->
+##### Javascript:
 
 <!-- request javascript -->
 
 ```javascript
-res = await utilsApi.sql('CREATE TABLE products(title text, price float) ngram_chars = \'cjk\' ngram_len = \'1\'');
+res = await utilsApi.sql('CREATE TABLE products(title text, price float) ngram_chars = \'cont\' ngram_len = \'1\'');
 ```
 
 <!-- intro -->
@@ -864,7 +1032,7 @@ res = await utilsApi.sql('CREATE TABLE products(title text, price float) ngram_c
 
 <!-- request Java -->
 ```java
-utilsApi.sql("CREATE TABLE products(title text, price float) ngram_chars = 'cjk' ngram_len = '1'");
+utilsApi.sql("CREATE TABLE products(title text, price float) ngram_chars = 'cont' ngram_len = '1'", true);
 ```
 
 <!-- intro -->
@@ -872,14 +1040,23 @@ utilsApi.sql("CREATE TABLE products(title text, price float) ngram_chars = 'cjk'
 
 <!-- request C# -->
 ```clike
-utilsApi.Sql("CREATE TABLE products(title text, price float) ngram_chars = 'cjk' ngram_len = '1'");
+utilsApi.Sql("CREATE TABLE products(title text, price float) ngram_chars = 'cont' ngram_len = '1'", true);
+```
+
+<!-- intro -->
+##### Rust:
+
+<!-- request Rust -->
+
+```rust
+utils_api.sql("CREATE TABLE products(title text, price float) ngram_chars = 'cont' ngram_len = '1'", Some(true)).await;
 ```
 
 <!-- request CONFIG -->
 
 ```ini
 table products {
-  ngram_chars = cjk
+  ngram_chars = cont
   ngram_len = 1
 
   type = rt
@@ -936,8 +1113,18 @@ $index->create([
 ```python
 utilsApi.sql('CREATE TABLE products(title text, price float) ignore_chars = \'U+AD\'')
 ```
+
 <!-- intro -->
-##### javascript:
+##### Python-asyncio:
+
+<!-- request Python-asyncio -->
+
+```python
+await utilsApi.sql('CREATE TABLE products(title text, price float) ignore_chars = \'U+AD\'')
+```
+
+<!-- intro -->
+##### Javascript:
 
 <!-- request javascript -->
 
@@ -951,7 +1138,7 @@ res = await utilsApi.sql('CREATE TABLE products(title text, price float) ignore_
 <!-- request Java -->
 
 ```java
-utilsApi.sql("CREATE TABLE products(title text, price float) ignore_chars = 'U+AD'");
+utilsApi.sql("CREATE TABLE products(title text, price float) ignore_chars = 'U+AD'", true);
 ```
 
 <!-- intro -->
@@ -960,7 +1147,16 @@ utilsApi.sql("CREATE TABLE products(title text, price float) ignore_chars = 'U+A
 <!-- request C# -->
 
 ```clike
-utilsApi.Sql("CREATE TABLE products(title text, price float) ignore_chars = 'U+AD'");
+utilsApi.Sql("CREATE TABLE products(title text, price float) ignore_chars = 'U+AD'", true);
+```
+
+<!-- intro -->
+##### Rust:
+
+<!-- request Rust -->
+
+```rust
+utils_api.sql("CREATE TABLE products(title text, price float) ignore_chars = 'U+AD'", Some(true)).await;
 ```
 
 <!-- request CONFIG -->
@@ -996,6 +1192,8 @@ Bigram indexing is a feature to accelerate phrase searches. When indexing, it st
 
 For most use cases, `both_freq` would be the best mode, but your mileage may vary.
 
+It's important to note that `bigram_index` works only at the tokenization level and doesn't account for transformations like `morphology`, `wordforms` or `stopwords`. This means the tokens it creates are very straightforward, which makes searching phrases more exact and strict. While this can improve the accuracy of phrase matching, it also makes the system less able to recognize different forms of words or variations in how words appear.
+
 <!-- request SQL -->
 
 ```sql
@@ -1030,8 +1228,18 @@ $index->create([
 ```python
 utilsApi.sql('CREATE TABLE products(title text, price float) bigram_freq_words = \'the, a, you, i\' bigram_index = \'both_freq\'')
 ```
+
 <!-- intro -->
-##### javascript:
+##### Python-asyncio:
+
+<!-- request Python-asyncio -->
+
+```python
+await utilsApi.sql('CREATE TABLE products(title text, price float) bigram_freq_words = \'the, a, you, i\' bigram_index = \'both_freq\'')
+```
+
+<!-- intro -->
+##### Javascript:
 
 <!-- request javascript -->
 
@@ -1045,7 +1253,7 @@ res = await utilsApi.sql('CREATE TABLE products(title text, price float) bigram_
 <!-- request Java -->
 
 ```java
-utilsApi.sql("CREATE TABLE products(title text, price float) bigram_freq_words = 'the, a, you, i' bigram_index = 'both_freq'");
+utilsApi.sql("CREATE TABLE products(title text, price float) bigram_freq_words = 'the, a, you, i' bigram_index = 'both_freq'", true);
 ```
 
 <!-- intro -->
@@ -1054,7 +1262,16 @@ utilsApi.sql("CREATE TABLE products(title text, price float) bigram_freq_words =
 <!-- request C# -->
 
 ```clike
-utilsApi.Sql("CREATE TABLE products(title text, price float) bigram_freq_words = 'the, a, you, i' bigram_index = 'both_freq'");
+utilsApi.Sql("CREATE TABLE products(title text, price float) bigram_freq_words = 'the, a, you, i' bigram_index = 'both_freq'", true);
+```
+
+<!-- intro -->
+##### Rust:
+
+<!-- request Rust -->
+
+```rust
+utils_api.sql("CREATE TABLE products(title text, price float) bigram_freq_words = 'the, a, you, i' bigram_index = 'both_freq'", Some(true)).await;
 ```
 
 <!-- request CONFIG -->
@@ -1119,8 +1336,18 @@ $index->create([
 ```python
 utilsApi.sql('CREATE TABLE products(title text, price float) bigram_freq_words = \'the, a, you, i\' bigram_index = \'first_freq\'')
 ```
+
 <!-- intro -->
-##### javascript:
+##### Python-asyncio:
+
+<!-- request Python-asyncio -->
+
+```python
+await utilsApi.sql('CREATE TABLE products(title text, price float) bigram_freq_words = \'the, a, you, i\' bigram_index = \'first_freq\'')
+```
+
+<!-- intro -->
+##### Javascript:
 
 <!-- request javascript -->
 
@@ -1134,7 +1361,7 @@ res = await utilsApi.sql('CREATE TABLE products(title text, price float) bigram_
 <!-- request Java -->
 
 ```java
-utilsApi.sql("CREATE TABLE products(title text, price float) bigram_freq_words = 'the, a, you, i' bigram_index = 'first_freq'");
+utilsApi.sql("CREATE TABLE products(title text, price float) bigram_freq_words = 'the, a, you, i' bigram_index = 'first_freq'", true);
 ```
 
 <!-- intro -->
@@ -1143,7 +1370,16 @@ utilsApi.sql("CREATE TABLE products(title text, price float) bigram_freq_words =
 <!-- request C# -->
 
 ```clike
-utilsApi.Sql("CREATE TABLE products(title text, price float) bigram_freq_words = 'the, a, you, i' bigram_index = 'first_freq'");
+utilsApi.Sql("CREATE TABLE products(title text, price float) bigram_freq_words = 'the, a, you, i' bigram_index = 'first_freq'", true);
+```
+
+<!-- intro -->
+##### Rust:
+
+<!-- request Rust -->
+
+```rust
+utils_api.sql("CREATE TABLE products(title text, price float) bigram_freq_words = 'the, a, you, i' bigram_index = 'first_freq'", Some(true)).await;
 ```
 
 <!-- request CONFIG -->
@@ -1178,7 +1414,7 @@ CRC dictionaries do not store the original keyword text in the index. Instead, t
 
 The keywords dictionary resolves both of these issues. It stores keywords in the index and performs search-time wildcard expansion. For instance, a search for a `test*` prefix could internally expand to a 'test|tests|testing' query based on the dictionary's contents. This expansion process is entirely invisible to the application, with the exception that the separate per-keyword statistics for all the matched keywords are now also reported.
 
-For substring (infix) searches, extended wildcards can be used. Special characters such as '?' and '%' are compatible with substring (infix) search (e.g., `t?st*`, `run%`, `*abc*`). Note that these wildcards only function with dict=keywords, and not elsewhere.
+For substring (infix) searches, extended wildcards can be used. Special characters such as `?` and `%` are compatible with substring (infix) search (e.g., `t?st*`, `run%`, `*abc*`). Note that the [wildcards operators](Searching/Full_text_matching/Operators.md#Wildcard-operators) and the [REGEX](../../Searching/Full_text_matching/Operators.md#REGEX-operator) only function with `dict=keywords`.
 
 Indexing with a keywords dictionary is approximately 1.1x to 1.3x slower than regular, non-substring indexing - yet significantly faster than substring indexing (either prefix or infix). The index size should only be slightly larger than that of the standard non-substring table, with a total difference of 1..10% percent. The time it takes for regular keyword searching should be nearly the same or identical across all three index types discussed (CRC non-substring, CRC substring, keywords). Substring searching time can significantly fluctuate based on how many actual keywords match the given substring (i.e., how many keywords the search term expands into). The maximum number of matched keywords is limited by the [expansion_limit](../../Server_settings/Searchd.md#expansion_limit) directive.
 
@@ -1217,8 +1453,18 @@ $index->create([
 ```python
 utilsApi.sql('CREATE TABLE products(title text, price float) dict = \'keywords\'')
 ```
+
 <!-- intro -->
-##### javascript:
+##### Python-asyncio:
+
+<!-- request Python-asyncio -->
+
+```python
+await utilsApi.sql('CREATE TABLE products(title text, price float) dict = \'keywords\'')
+```
+
+<!-- intro -->
+##### Javascript:
 
 <!-- request javascript -->
 
@@ -1232,7 +1478,7 @@ res = await utilsApi.sql('CREATE TABLE products(title text, price float) dict = 
 <!-- request Java -->
 
 ```java
-utilsApi.sql("CREATE TABLE products(title text, price float) dict = 'keywords'");
+utilsApi.sql("CREATE TABLE products(title text, price float) dict = 'keywords'", true);
 ```
 
 <!-- intro -->
@@ -1241,7 +1487,16 @@ utilsApi.sql("CREATE TABLE products(title text, price float) dict = 'keywords'")
 <!-- request C# -->
 
 ```clike
-utilsApi.Sql("CREATE TABLE products(title text, price float) dict = 'keywords'");
+utilsApi.Sql("CREATE TABLE products(title text, price float) dict = 'keywords'", true);
+```
+
+<!-- intro -->
+##### Rust:
+
+<!-- request Rust -->
+
+```rust
+utils_api.sql("CREATE TABLE products(title text, price float) dict = 'keywords'", Some(true)).await;
 ```
 
 <!-- request CONFIG -->
@@ -1335,8 +1590,18 @@ $index->create([
 ```python
 utilsApi.sql('CREATE TABLE products(title text, price float) global_idf = \'/usr/local/manticore/var/global.idf\'')
 ```
+
 <!-- intro -->
-##### javascript:
+##### Python-asyncio:
+
+<!-- request Python-asyncio -->
+
+```python
+await utilsApi.sql('CREATE TABLE products(title text, price float) global_idf = \'/usr/local/manticore/var/global.idf\'')
+```
+
+<!-- intro -->
+##### Javascript:
 
 <!-- request javascript -->
 
@@ -1349,7 +1614,7 @@ res = await utilsApi.sql('CREATE TABLE products(title text, price float) global_
 <!-- request Java -->
 
 ```java
-utilsApi.sql("CREATE TABLE products(title text, price float) global_idf = '/usr/local/manticore/var/global.idf'");
+utilsApi.sql("CREATE TABLE products(title text, price float) global_idf = '/usr/local/manticore/var/global.idf'", true);
 ```
 
 <!-- intro -->
@@ -1358,7 +1623,16 @@ utilsApi.sql("CREATE TABLE products(title text, price float) global_idf = '/usr/
 <!-- request C# -->
 
 ```clike
-utilsApi.Sql("CREATE TABLE products(title text, price float) global_idf = '/usr/local/manticore/var/global.idf'");
+utilsApi.Sql("CREATE TABLE products(title text, price float) global_idf = '/usr/local/manticore/var/global.idf'", true);
+```
+
+<!-- intro -->
+##### Rust:
+
+<!-- request Rust -->
+
+```rust
+utils_api.sql("CREATE TABLE products(title text, price float) global_idf = '/usr/local/manticore/var/global.idf'", Some(true)).await;
 ```
 
 <!-- request CONFIG -->
@@ -1429,8 +1703,18 @@ $index->create([
 ```python
 utilsApi.sql('CREATE TABLE products(title text, price float) hitless_words = \'all\'')
 ```
+
 <!-- intro -->
-##### javascript:
+##### Python-asyncio:
+
+<!-- request Python-asyncio -->
+
+```python
+await utilsApi.sql('CREATE TABLE products(title text, price float) hitless_words = \'all\'')
+```
+
+<!-- intro -->
+##### Javascript:
 
 <!-- request javascript -->
 
@@ -1444,7 +1728,7 @@ res = await utilsApi.sql('CREATE TABLE products(title text, price float) hitless
 <!-- request Java -->
 
 ```java
-utilsApi.sql("CREATE TABLE products(title text, price float) hitless_words = 'all'");
+utilsApi.sql("CREATE TABLE products(title text, price float) hitless_words = 'all'", true);
 ```
 
 <!-- intro -->
@@ -1453,7 +1737,16 @@ utilsApi.sql("CREATE TABLE products(title text, price float) hitless_words = 'al
 <!-- request C# -->
 
 ```clike
-utilsApi.Sql("CREATE TABLE products(title text, price float) hitless_words = 'all'");
+utilsApi.Sql("CREATE TABLE products(title text, price float) hitless_words = 'all'", true);
+```
+
+<!-- intro -->
+##### Rust:
+
+<!-- request Rust -->
+
+```rust
+utils_api.sql("CREATE TABLE products(title text, price float) hitless_words = 'all'", Some(true)).await;
 ```
 
 <!-- request CONFIG -->
@@ -1519,8 +1812,18 @@ $index->create([
 ```python
 utilsApi.sql('CREATE TABLE products(title text, price float) index_field_lengths = \'1\'')
 ```
+
 <!-- intro -->
-##### javascript:
+##### Python-asyncio:
+
+<!-- request Python-asyncio -->
+
+```python
+await utilsApi.sql('CREATE TABLE products(title text, price float) index_field_lengths = \'1\'')
+```
+
+<!-- intro -->
+##### Javascript:
 
 <!-- request javascript -->
 
@@ -1533,7 +1836,7 @@ res = await utilsApi.sql('CREATE TABLE products(title text, price float) index_f
 <!-- request Java -->
 
 ```java
-utilsApi.sql("CREATE TABLE products(title text, price float) index_field_lengths = '1'");
+utilsApi.sql("CREATE TABLE products(title text, price float) index_field_lengths = '1'", true);
 ```
 
 <!-- intro -->
@@ -1542,7 +1845,16 @@ utilsApi.sql("CREATE TABLE products(title text, price float) index_field_lengths
 <!-- request C# -->
 
 ```clike
-utilsApi.Sql("CREATE TABLE products(title text, price float) index_field_lengths = '1'");
+utilsApi.Sql("CREATE TABLE products(title text, price float) index_field_lengths = '1'", true);
+```
+
+<!-- intro -->
+##### Rust:
+
+<!-- request Rust -->
+
+```rust
+utils_api.sql("CREATE TABLE products(title text, price float) index_field_lengths = '1'", Some(true)).await;
 ```
 
 <!-- request CONFIG -->
@@ -1603,8 +1915,18 @@ $index->create([
 ```python
 utilsApi.sql('CREATE TABLE products(title text, price float) index_token_filter = \'my_lib.so:custom_blend:chars=@#&\'')
 ```
+
 <!-- intro -->
-##### javascript:
+##### Python-asyncio:
+
+<!-- request Python-asyncio -->
+
+```python
+await utilsApi.sql('CREATE TABLE products(title text, price float) index_token_filter = \'my_lib.so:custom_blend:chars=@#&\'')
+```
+
+<!-- intro -->
+##### Javascript:
 
 <!-- request javascript -->
 
@@ -1617,7 +1939,7 @@ res = await utilsApi.sql('CREATE TABLE products(title text, price float) index_t
 <!-- request Java -->
 
 ```java
-utilsApi.sql("CREATE TABLE products(title text, price float) index_token_filter = 'my_lib.so:custom_blend:chars=@#&'");
+utilsApi.sql("CREATE TABLE products(title text, price float) index_token_filter = 'my_lib.so:custom_blend:chars=@#&'", true);
 ```
 
 <!-- intro -->
@@ -1626,7 +1948,16 @@ utilsApi.sql("CREATE TABLE products(title text, price float) index_token_filter 
 <!-- request C# -->
 
 ```clike
-utilsApi.Sql("CREATE TABLE products(title text, price float) index_token_filter = 'my_lib.so:custom_blend:chars=@#&'");
+utilsApi.Sql("CREATE TABLE products(title text, price float) index_token_filter = 'my_lib.so:custom_blend:chars=@#&'", true);
+```
+
+<!-- intro -->
+##### Rust:
+
+<!-- request Rust -->
+
+```rust
+utils_api.sql("CREATE TABLE products(title text, price float) index_token_filter = 'my_lib.so:custom_blend:chars=@#&'", Some(true)).await;
 ```
 
 <!-- request CONFIG -->
@@ -1685,8 +2016,18 @@ $index->create([
 ```python
 utilsApi.sql('CREATE TABLE products(title text, price float) overshort_step = \'1\'')
 ```
+
 <!-- intro -->
-##### javascript:
+##### Python-asyncio:
+
+<!-- request Python-asyncio -->
+
+```python
+utilsApi.sql('CREATE TABLE products(title text, price float) overshort_step = \'1\'')
+```
+
+<!-- intro -->
+##### Javascript:
 
 <!-- request javascript -->
 
@@ -1700,7 +2041,7 @@ res = await utilsApi.sql('CREATE TABLE products(title text, price float) oversho
 <!-- request Java -->
 
 ```java
-utilsApi.sql("CREATE TABLE products(title text, price float) overshort_step = '1'");
+utilsApi.sql("CREATE TABLE products(title text, price float) overshort_step = '1'", true);
 ```
 
 <!-- intro -->
@@ -1709,7 +2050,16 @@ utilsApi.sql("CREATE TABLE products(title text, price float) overshort_step = '1
 <!-- request C# -->
 
 ```clike
-utilsApi.Sql("CREATE TABLE products(title text, price float) overshort_step = '1'");
+utilsApi.Sql("CREATE TABLE products(title text, price float) overshort_step = '1'", true);
+```
+
+<!-- intro -->
+##### Rust:
+
+<!-- request Rust -->
+
+```rust
+utils_api.sql("CREATE TABLE products(title text, price float) overshort_step = '1'", Some(true)).await;
 ```
 
 <!-- request CONFIG -->
@@ -1776,8 +2126,18 @@ $index->create([
 ```python
 utilsApi.sql('CREATE TABLE products(title text, price float) phrase_boundary = \'., ?, !, U+2026\' phrase_boundary_step = \'10\'')
 ```
+
 <!-- intro -->
-##### javascript:
+##### Pytho-asyncio:
+
+<!-- request Python-asyncio -->
+
+```python
+await utilsApi.sql('CREATE TABLE products(title text, price float) phrase_boundary = \'., ?, !, U+2026\' phrase_boundary_step = \'10\'')
+```
+
+<!-- intro -->
+##### Javascript:
 
 <!-- request javascript -->
 
@@ -1790,7 +2150,7 @@ res = await utilsApi.sql('CREATE TABLE products(title text, price float) phrase_
 <!-- request Java -->
 
 ```java
-utilsApi.sql("CREATE TABLE products(title text, price float) phrase_boundary = '., ?, !, U+2026' phrase_boundary_step = '10'");
+utilsApi.sql("CREATE TABLE products(title text, price float) phrase_boundary = '., ?, !, U+2026' phrase_boundary_step = '10'", true);
 ```
 
 <!-- intro -->
@@ -1799,7 +2159,16 @@ utilsApi.sql("CREATE TABLE products(title text, price float) phrase_boundary = '
 <!-- request C# -->
 
 ```clike
-utilsApi.Sql("CREATE TABLE products(title text, price float) phrase_boundary = '., ?, !, U+2026' phrase_boundary_step = '10'");
+utilsApi.Sql("CREATE TABLE products(title text, price float) phrase_boundary = '., ?, !, U+2026' phrase_boundary_step = '10'", true);
+```
+
+<!-- intro -->
+##### Rust:
+
+<!-- request Rust -->
+
+```rust
+utils_api.sql("CREATE TABLE products(title text, price float) phrase_boundary = '., ?, !, U+2026' phrase_boundary_step = '10'", Some(true)).await;
 ```
 
 <!-- request CONFIG -->
@@ -1863,8 +2232,18 @@ $index->create([
 ```python
 utilsApi.sql('CREATE TABLE products(title text, price float) phrase_boundary_step = \'100\' phrase_boundary = \'., ?, !, U+2026\'')
 ```
+
 <!-- intro -->
-##### javascript:
+##### Python-asyncio:
+
+<!-- request Python-asyncio -->
+
+```python
+await utilsApi.sql('CREATE TABLE products(title text, price float) phrase_boundary_step = \'100\' phrase_boundary = \'., ?, !, U+2026\'')
+```
+
+<!-- intro -->
+##### Javascript:
 
 <!-- request javascript -->
 
@@ -1877,7 +2256,7 @@ res = await utilsApi.sql('CREATE TABLE products(title text, price float) phrase_
 <!-- request Java -->
 
 ```java
-utilsApi.sql("CREATE TABLE products(title text, price float) phrase_boundary_step = '100' phrase_boundary = '., ?, !, U+2026'");
+utilsApi.sql("CREATE TABLE products(title text, price float) phrase_boundary_step = '100' phrase_boundary = '., ?, !, U+2026'", true);
 ```
 
 <!-- intro -->
@@ -1886,7 +2265,16 @@ utilsApi.sql("CREATE TABLE products(title text, price float) phrase_boundary_ste
 <!-- request C# -->
 
 ```clike
-utilsApi.Sql("CREATE TABLE products(title text, price float) phrase_boundary_step = '100' phrase_boundary = '., ?, !, U+2026'");
+utilsApi.Sql("CREATE TABLE products(title text, price float) phrase_boundary_step = '100' phrase_boundary = '., ?, !, U+2026'", true);
+```
+
+<!-- intro -->
+##### Rust:
+
+<!-- request Rust -->
+
+```rust
+utils_api.sql("CREATE TABLE products(title text, price float) phrase_boundary_step = '100' phrase_boundary = '., ?, !, U+2026'", Some(true)).await;
 ```
 
 <!-- request CONFIG -->
@@ -1915,13 +2303,13 @@ regexp_filter = (blue|red) => color
 ```
 
 <!-- example regexp_filter -->
-Regular expressions (regexps) used to filter the fields and queries. This directive is optional, multi-valued, and its default is an empty list of regexps.
+Regular expressions (regexps) used to filter the fields and queries. This directive is optional, multi-valued, and its default is an empty list of regular expressions. The regular expressions engine used by Manticore Search is Google's RE2, which is known for its speed and safety. For detailed information on the syntax supported by RE2, you can visit the [RE2 syntax guide](https://github.com/google/re2/wiki/Syntax).
 
 In certain applications such as product search, there can be many ways to refer to a product, model, or property. For example, `iPhone 3gs` and `iPhone 3 gs` (or even `iPhone3 gs`) are very likely to refer to the same product. Another example could be different ways to express a laptop screen size, such as `13-inch`, `13 inch`, `13"`, or `13in`.
 
 Regexps provide a mechanism to specify rules tailored to handle such cases. In the first example, you could possibly use a wordforms file to handle a handful of iPhone models, but in the second example, it's better to specify rules that would normalize "13-inch" and "13in" to something identical.
 
-Regular expressions listed in `regexp_filter` are applied in the order they are listed, at the earliest stage possible, before any other processing, even before tokenization. That is, regexps are applied to the raw source fields when indexing, and to the raw search query text when searching.
+Regular expressions listed in `regexp_filter` are applied in the order they are listed, at the earliest stage possible, before any other processing (including [exceptions](../../Creating_a_table/NLP_and_tokenization/Exceptions.md#exceptions)), even before tokenization. That is, regexps are applied to the raw source fields when indexing, and to the raw search query text when searching.
 
 <!-- request SQL -->
 
@@ -1957,8 +2345,18 @@ $index->create([
 ```python
 utilsApi.sql('CREATE TABLE products(title text, price float) regexp_filter = \'(blue|red) => color\'')
 ```
+
 <!-- intro -->
-##### javascript:
+##### Python-asyncio:
+
+<!-- request Python-asyncio -->
+
+```python
+await utilsApi.sql('CREATE TABLE products(title text, price float) regexp_filter = \'(blue|red) => color\'')
+```
+
+<!-- intro -->
+##### Javascript:
 
 <!-- request javascript -->
 
@@ -1972,7 +2370,7 @@ res = await utilsApi.sql('CREATE TABLE products(title text, price float) regexp_
 <!-- request Java -->
 
 ```java
-utilsApi.sql("CREATE TABLE products(title text, price float) regexp_filter = '(blue|red) => color'");
+utilsApi.sql("CREATE TABLE products(title text, price float) regexp_filter = '(blue|red) => color'", true);
 ```
 
 <!-- intro -->
@@ -1981,7 +2379,16 @@ utilsApi.sql("CREATE TABLE products(title text, price float) regexp_filter = '(b
 <!-- request C# -->
 
 ```clike
-utilsApi.Sql("CREATE TABLE products(title text, price float) regexp_filter = '(blue|red) => color'");
+utilsApi.Sql("CREATE TABLE products(title text, price float) regexp_filter = '(blue|red) => color'", true);
+```
+
+<!-- intro -->
+##### Rust:
+
+<!-- request Rust -->
+
+```rust
+utils_api.sql("CREATE TABLE products(title text, price float) regexp_filter = '(blue|red) => color'", Some(true)).await;
 ```
 
 <!-- request CONFIG -->

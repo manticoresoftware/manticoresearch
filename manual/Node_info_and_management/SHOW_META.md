@@ -7,6 +7,21 @@ SHOW META [ LIKE pattern ]
 <!-- example show meta -->
 `SHOW META` is an SQL statement that displays additional meta-information about the processed query, including the query time, keyword statistics, and information about the secondary indexes used. The syntax is:
 
+The included items are:
+* `total`: The number of matches that were actually retrieved and sent to the client. This value is typically limited by the [LIMIT/size](Searching/Pagination.md#Pagination-of-search-results) search option.
+* `total_found`:
+  - The estimated total number of matches for the query in the index. If you need the exact number of matches, use `SELECT COUNT(*)` instead of relying on this value.
+  - For queries with `GROUP BY`, `total_found` represents the number of groups instead of individual matches.
+  - For [GROUP N BY](../Searching/Grouping.md#Give-me-N-rows) queries, `total_found` still represents the number of groups, regardless of the value of `N`.
+* `total_relation`: Indicates whether the `total_found` value is exact or an estimate.
+  - If Manticore cannot determine the precise `total_found` value, this field will display `total_relation: gte`, meaning the actual number of matches is **Greater Than or Equal** to the reported `total_found`.
+  - If the `total_found` value is exact, `total_relation: eq` will be displayed.
+* `time`: The duration (in seconds) it took to process the search query.
+* `keyword[N]`: The n-th keyword used in the search query. Note that the keyword can be presented as a wildcard, e.g., `abc*`.
+* `docs[N]`: The total number of documents (or records) containing the n-th keyword from the search query. If the keyword is presented as a wildcard, this value represents the sum of documents for all expanded sub-keywords, potentially exceeding the actual number of matched documents.
+* `hits[N]`: The total number of occurrences (or hits) of the n-th keyword across all documents.
+* `index`: Information about the utilized index (e.g., secondary index).
+
 <!-- intro -->
 ##### SQL:
 <!-- request SQL -->
@@ -303,7 +318,7 @@ SHOW META LIKE 'multiplier';
 
 When the [cost-based query optimizer](../Searching/Cost_based_optimizer.md) chooses to use `DocidIndex`, `ColumnarScan`, or `SecondaryIndex` instead of a plain filter, this is reflected in the `SHOW META` command.
 
-The `index` variable displays the names and types of secondary indexes used during query execution. The percentage indicates how many disk chunks (in the case of an RT index) or pseudo shards (in the case of a plain index) utilized the secondary index.
+The `index` variable displays the names and types of secondary indexes used during query execution. The percentage indicates how many disk chunks (in the case of an RT table) or pseudo shards (in the case of a plain table) utilized the secondary index.
 
 <!-- intro -->
 ##### SQL:
@@ -339,11 +354,11 @@ SHOW META;
 
 `SHOW META` following a `CALL PQ` statement includes:
 
-* `Total` - Total time spent on matching the document(s)
-* `Queries matched` - Number of stored queries that match the document(s)
-* `Document matches` - Number of documents that matched the queries stored in the table
-* `Total queries stored` - Total number of queries stored in the table
-* `Term only queries` - Number of queries in the table that have terms; the remaining queries use extended query syntax.
+* `total` - Total time spent on matching the document(s)
+* `queries_matched` - Number of stored queries that match the document(s)
+* `document_matches` - Number of documents that matched the queries stored in the table
+* `total_queries_stored` - Total number of queries stored in the table
+* `term_only_queries` - Number of queries in the table that have terms; the remaining queries use extended query syntax.
 
 <!-- intro -->
 ##### SQL:
@@ -364,15 +379,15 @@ CALL PQ ('pq', ('{"title":"angry", "gid":3 }')); SHOW META;
 1 row in set (0.00 sec)
 
 +-----------------------+-----------+
-| Name                  | Value     |
+| Variable name         | Value     |
 +-----------------------+-----------+
-| Total                 | 0.000 sec |
-| Queries matched       | 1         |
-| Queries failed        | 0         |
-| Document matched      | 1         |
-| Total queries stored  | 2         |
-| Term only queries     | 2         |
-| Fast rejected queries | 1         |
+| total                 | 0.000 sec |
+| queries_matched       | 1         |
+| queries_failed        | 0         |
+| document_matched      | 1         |
+| total_queries_stored  | 2         |
+| term_only_queries     | 2         |
+| fast_rejected_queries | 1         |
 +-----------------------+-----------+
 7 rows in set (0.00 sec)
 ```
@@ -411,21 +426,22 @@ CALL PQ ('pq', ('{"title":"angry", "gid":3 }'), 1 as verbose); SHOW META;
 1 row in set (0.00 sec)
 
 +-------------------------+-----------+
-| Name                    | Value     |
+| Variable name           | Value     |
 +-------------------------+-----------+
-| Total                   | 0.000 sec |
-| Setup                   | 0.000 sec |
-| Queries matched         | 1         |
-| Queries failed          | 0         |
-| Document matched        | 1         |
-| Total queries stored    | 2         |
-| Term only queries       | 2         |
-| Fast rejected queries   | 1         |
-| Time per query          | 69        |
-| Time of matched queries | 69        |
+| total                   | 0.000 sec |
+| setup                   | 0.000 sec |
+| queries_matched         | 1         |
+| queries_failed          | 0         |
+| document_matched        | 1         |
+| total_queries_stored    | 2         |
+| term_only_queries       | 2         |
+| fast_rejected_queries   | 1         |
+| time_per_query          | 69        |
+| time_of_matched_queries | 69        |
 +-------------------------+-----------+
 10 rows in set (0.00 sec)
 ```
 
 <!-- end -->
+
 <!-- proofread -->

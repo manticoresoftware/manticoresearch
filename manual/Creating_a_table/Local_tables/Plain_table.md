@@ -1,28 +1,19 @@
-<!-- example plain -->
 # Plain table
 
-**Plain table** is a basic element for non-[percolate](../../Creating_a_table/Local_tables/Percolate_table.md) searching. It can be defined only in a configuration file using the [Plain mode](../../Creating_a_table/Local_tables.md#Defining-table-schema-in-config-%28Plain mode%29), and is not supported in the [RT mode](../../Creating_a_table/Local_tables.md#Online-schema-management-%28RT-mode%29). It is typically used in conjunction with a [source](../../Creating_a_table/Local_tables/Plain_and_real-time_table_settings.md#source) to process data [from the external storage](../../Data_creation_and_modification/Adding_data_from_external_storages/Plain_tables_creation.md) and can later be [attached](../../Data_creation_and_modification/Adding_data_from_external_storages/Adding_data_to_tables/Attaching_a_plain_table_to_RT_table.md) to a **real-time table**.
+**Plain table** is a basic element for non-[percolate](../../Creating_a_table/Local_tables/Percolate_table.md) searching. It can be defined only in a configuration file using the [Plain mode](../../Creating_a_table/Local_tables.md#Defining-table-schema-in-config-%28Plain mode%29), and is not supported in the [RT mode](../../Creating_a_table/Local_tables.md#Online-schema-management-%28RT-mode%29). It is typically used in conjunction with a [source](../../Creating_a_table/Local_tables/Plain_and_real-time_table_settings.md#source) to process data [from the external storage](../../Data_creation_and_modification/Adding_data_from_external_storages/Plain_tables_creation.md) and can later be [attached](../../Data_creation_and_modification/Adding_data_from_external_storages/Adding_data_to_tables/Attaching_one_table_to_another.md) to a **real-time table**.
 
-### 👍 What you can do with a plain table:
-  * Build it from external storage using a [source](../../Creating_a_table/Local_tables/Plain_and_real-time_table_settings.md#source) and [indexer](../../Data_creation_and_modification/Adding_data_from_external_storages/Plain_tables_creation.md#Indexer-tool)
-  * Perform an in-place update of [integer, float, string and MVA attribute](../../Creating_a_table/Data_types.md)
-  * [update](../../Quick_start_guide.md#Update) it's killlist_target
+#### Creating a plain table
 
-### ⛔ What you cannot do with a plain table:
-  * Insert additional data into the table once it has been built
-  * Delete data from the table
-  * Create, delete, or alter the table online
-  * Use [UUID](../../Data_creation_and_modification/Adding_documents_to_a_table/Adding_documents_to_a_real-time_table.md#Auto-ID) for automatic ID generation (data from external storage must include a unique identifier)
+To create a plain table, you'll need to define it in a configuration file. It's not supported by the  `CREATE TABLE` command.
 
-Numeric attributes, including [MVAs](../../Creating_a_table/Data_types.md#Multi-value-integer-%28MVA%29), are the only elements that can be updated in a plain table. All other data in the table is immutable. If updates or new records are required, the table must be rebuilt. During the rebuilding process, the existing table remains available to serve requests, and a process called  [rotation](../../Data_creation_and_modification/Adding_data_from_external_storages/Rotating_a_table.md) is performed when the new version is ready, bringing it online and discarding the old version.
+<!-- example plain -->
+
+Here's an example of a plain table configuration and a source for fetching data from a MySQL database:
 
 <!-- intro -->
 #### How to create a plain table
 
 <!-- request Plain table example -->
-To create a plain table, you'll need to define it in a configuration file. It's not supported by the  `CREATE TABLE` command.
-
-Here's an example of a plain table configuration and a source for fetching data from a MySQL database:
 
 ```ini
 source source {
@@ -44,10 +35,23 @@ table tbl {
 ```
 <!-- end -->
 
+### 👍 What you can do with a plain table:
+  * Build it from an external storage using a [source](../../Creating_a_table/Local_tables/Plain_and_real-time_table_settings.md#source) and [indexer](../../Data_creation_and_modification/Adding_data_from_external_storages/Plain_tables_creation.md#Indexer-tool)
+  * Perform an in-place update of [integer, float, string and MVA attribute](../../Creating_a_table/Data_types.md)
+  * [Update](../../Data_creation_and_modification/Adding_data_from_external_storages/Adding_data_to_tables/Killlist_in_plain_tables.md#killlist_target) it's `killlist_target`
+
+### ⛔ What you cannot do with a plain table:
+  * Insert additional data into the table once it has been built
+  * Delete data from the table
+  * Create, delete, or alter the table schema online
+  * Use [UUID](../../Data_creation_and_modification/Adding_documents_to_a_table/Adding_documents_to_a_real-time_table.md#Auto-ID) for automatic ID generation (data from external storage must include a unique identifier)
+
+Numeric attributes, including [MVAs](../../Creating_a_table/Data_types.md#Multi-value-integer-%28MVA%29), are the only elements that can be updated in a plain table. All other data in the table is immutable. If updates or new records are required, the table must be rebuilt. During the rebuilding process, the existing table remains available to serve requests, and a process called  [rotation](../../Data_creation_and_modification/Adding_data_from_external_storages/Rotating_a_table.md) is performed when the new version is ready, bringing it online and discarding the old version.
+
 #### Plain table building performance
 The speed at which a plain table is indexed depends on several factors, including:
 * Data source retrieval speed
-* [tokenization settings](../../Creating_a_table/NLP_and_tokenization/Data_tokenization.md)
+* [Tokenization settings](../../Creating_a_table/NLP_and_tokenization/Data_tokenization.md)
 * The hardware specifications (such as CPU, RAM, and disk performance)
 
 #### Plain table building scenarios
@@ -56,7 +60,7 @@ For small data sets, the simplest option is to have a single plain table that is
 * The data in the table is not as fresh as the data in the source
 * The time it takes to build the table increases as the data set grows
 
-##### Main+delta scenario 
+##### Main+delta scenario
 For larger data sets, a plain table can be used instead of a [Real-Time](../../Creating_a_table/Local_tables/Real-time_table.md). The main+delta scenario involves:
 * Creating a smaller table for incremental indexing
 * Combining the two tables using a [distributed table](../../Creating_a_table/Creating_a_distributed_table/Creating_a_local_distributed_table.md)
@@ -84,6 +88,7 @@ The following table outlines the various file extensions used in a plain table a
 |`.sphi` | stores histograms of attribute values |
 |`.spi` | stores word lists (word IDs and pointers to `.spd` file) |
 |`.spidx` | stores secondary indexes data |
+|`.spjidx` | stores data of secondary indexes generated for JSON attributes |
 |`.spk` | stores kill-lists |
 |`.spl` | lock file |
 |`.spm` | stores a bitmap of killed documents |

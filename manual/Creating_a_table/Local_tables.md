@@ -2,7 +2,7 @@
 
 In Manticore Search, there are two ways to manage tables:
 ## Online schema management (RT mode)
-Real-time mode requires no table definition in the configuration file. However, the [data_dir](../Server_settings/Searchd.md#data_dir) directive in the `searchd` section is mandatory. Index files are stored inside the `data_dir`.
+Real-time mode requires no table definition in the configuration file. However, the [data_dir](../Server_settings/Searchd.md#data_dir) directive in the `searchd` section is mandatory. Table files are stored inside the `data_dir`.
 
 Replication is only available in this mode.
 

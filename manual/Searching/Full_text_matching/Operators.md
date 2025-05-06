@@ -6,19 +6,23 @@ The query string can include specific operators that define the conditions for h
 
 #### AND operator
 
-An implicit `AND` operator is always present, so "hello world" implies that both "hello" and "world" must be found in the matching document.
+An implicit logical AND operator is always present, so "hello world" implies that both "hello" and "world" must be found in the matching document.
 
 ```sql
 hello  world
 ```
 
+Note: There is no explicit `AND` operator.
+
 #### OR operator
 
-The `OR` operator has a higher precedence than AND, so `looking for cat | dog | mouse` means `looking for (cat | dog | mouse)` rather than `(looking for cat) | dog | mouse`.
+The logical OR operator `|` has a higher precedence than AND, so `looking for cat | dog | mouse` means `looking for (cat | dog | mouse)` rather than `(looking for cat) | dog | mouse`.
 
 ```sql
 hello | world
 ```
+
+Note: There is no operator `OR`. Please use `|` instead.
 
 ### MAYBE operator
 
@@ -91,7 +95,7 @@ All-field search operator:
 
 The phrase operator mandates that the words be adjacent to each other.
 
-The phrase search operator can incorporate a `match any term` modifier. Within the phrase operator, terms are positionally significant. When the 'match any term' modifier is employed, the positions of the subsequent terms in that phrase query will be shifted. As a result, the 'match any' modifier does not affect search performance.
+The phrase search operator can include a `match any term` modifier. Within the phrase operator, terms are positionally significant. When the 'match any term' modifier is employed, the positions of the subsequent terms in that phrase query will be shifted. As a result, the 'match any' modifier does not affect search performance.
 
 ```sql
 "exact * phrase * * for terms"
@@ -132,7 +136,7 @@ raining =cats and =dogs
 ="exact phrase"
 ```
 
-The exact form keyword modifier matches a document only if the keyword appears in the exact form specified. By default, a document is considered a match if the stemmed/lemmatized keyword matches. For instance, the query "runs" will match both a document containing "runs" and one containing "running", because both forms stem to just "run". However, the `=runs` query will only match the first document. The exact form operator requires the [index_exact_words](../../Creating_a_table/NLP_and_tokenization/Morphology.md#index_exact_words) option to be enabled.
+The exact form keyword modifier matches a document only if the keyword appears in the exact form specified. By default, a document is considered a match if the stemmed/lemmatized keyword matches. For instance, the query "runs" will match both a document containing "runs" and one containing "running", because both forms stem to just "run". However, the `=runs` query will only match the first document. The exact form modifier requires the [index_exact_words](../../Creating_a_table/NLP_and_tokenization/Morphology.md#index_exact_words) option to be enabled.
 
 Another use case is to prevent [expanding](../../Creating_a_table/NLP_and_tokenization/Wildcard_searching_settings.md#expand_keywords) a keyword to its `*keyword*` form. For example, with `index_exact_words=1` + `expand_keywords=1/star`, `bcd` will find a document containing `abcde`, but `=bcd` will not.
 
@@ -155,8 +159,25 @@ In addition, the following inline wildcard operators are supported:
 * `?` can match any single character: `t?st` will match `test`, but not `teast`
 * `%` can match zero or one character: `tes%` will match `tes` or `test`, but not `testing`
 
-The inline operators require `dict=keywords` and infixing enabled.
+The inline operators require `dict=keywords` (enabled by default) and prefixing/infixing enabled.
 
+### REGEX operator
+
+```sql
+REGEX(/t.?e/)
+```
+
+Requires the [min_infix_len](../../Creating_a_table/NLP_and_tokenization/Wildcard_searching_settings.md#min_infix_len) or [min_prefix_len](../../Creating_a_table/NLP_and_tokenization/Wildcard_searching_settings.md#min_prefix_len) and [dict](../../Creating_a_table/NLP_and_tokenization/Low-level_tokenization.md#dict)=keywords options to be set (which is a default).
+
+Similarly to the [wildcard operators](../../Searching/Full_text_matching/Operators.md#Wildcard-operators), the REGEX operator attempts to find all tokens matching the provided pattern, and each expansion is recorded as a matched hit. Note, this can have a significant impact on query search time, as the entire dictionary is scanned, and every term in the dictionary undergoes matching with the REGEX pattern.
+
+The patterns should adhere to the [RE2 syntax](https://github.com/google/re2/wiki/Syntax). The REGEX expression delimiter is the first symbol after the open bracket. In other words, all text between the open bracket followed by the delimiter and the delimiter and the closed bracket is considered as a RE2 expression.
+Please note that the terms stored in the dictionary undergo `charset_table` transformation, meaning that for example, REGEX may not be able to match uppercase characters if all characters are lowercased according to the `charset_table` (which happens by default). To successfully match a term using a REGEX expression, the pattern must correspond to the entire token. To achieve partial matching, place `.*` at the beginning and/or end of your pattern.
+
+```sql
+REGEX(/.{3}t/)
+REGEX(/t.*\d*/)
+```
 
 ### Field-start and field-end modifier
 
@@ -172,7 +193,7 @@ Field-start and field-end keyword modifiers ensure that a keyword only matches i
 boosted^1.234 boostedfieldend$^1.234
 ```
 
-The boost modifier raises the word IDF score by the indicated factor in ranking scores that incorporate IDF into their calculations. It does not impact the matching process in any manner.
+The boost modifier raises the word [IDF](../../Searching/Options.md#idf)_score by the indicated factor in ranking scores that incorporate IDF into their calculations. It does not impact the matching process in any manner.
 
 ### NEAR operator
 
@@ -224,7 +245,7 @@ The `ZONE limit` operator closely resembles the field limit operator but limits 
 <th>Table 2. World-wide brand awareness.</th>
 ```
 
-The `ZONE` operator influences the query until the next field or `ZONE` limit operator, or until the closing parenthesis. It functions exclusively with tables built with zone support (refer to [index_zones](../../Creating_a_table/NLP_and_tokenization/Advanced_HTML_tokenization.md#index_zones)) and will be disregarded otherwise.
+The `ZONE` operator affects the query until the next field or `ZONE` limit operator, or until the closing parenthesis. It functions exclusively with tables built with zone support (refer to [index_zones](../../Creating_a_table/NLP_and_tokenization/Advanced_HTML_tokenization.md#index_zones)) and will be disregarded otherwise.
 
 ### ZONESPAN limit operator
 

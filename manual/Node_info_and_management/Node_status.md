@@ -70,62 +70,85 @@ SHOW STATUS;
 
 <!-- response SQL -->
 ```sql
-+-----------------------+---------------------------+
-| Counter               | Value                     |
-+-----------------------+---------------------------+
-| uptime                | 1385                      |
-| connections           | 11                        |
-| maxed_out             | 0                         |
-| version               | 3.4.3 ab7cbe5d@200511 dev |
-| mysql_version         | 3.4.3 ab7cbe5d@200511 dev |
-| command_search        | 2                         |
-| command_excerpt       | 0                         |
-| command_update        | 0                         |
-| command_delete        | 0                         |
-| command_keywords      | 0                         |
-| command_persist       | 0                         |
-| command_status        | 1                         |
-| command_flushattrs    | 0                         |
-| command_set           | 1                         |
-| command_insert        | 0                         |
-| command_replace       | 0                         |
-| command_commit        | 0                         |
-| command_suggest       | 0                         |
-| command_json          | 0                         |
-| command_callpq        | 0                         |
-| agent_connect         | 0                         |
-| agent_retry           | 0                         |
-| queries               | 12                        |
-| dist_queries          | 0                         |
-| workers_total         | 30                        |
-| workers_active        | 1                         |
-| workers_clients       | 0                         |
-| workers_clients_vip   | 1                         |
-| work_queue_length     | 1                         |
-| query_wall            | 10.805                    |
-| query_cpu             | OFF                       |
-| dist_wall             | 0.000                     |
-| dist_local            | 0.000                     |
-| dist_wait             | 0.000                     |
-| query_reads           | OFF                       |
-| query_readkb          | OFF                       |
-| query_readtime        | OFF                       |
-| avg_query_wall        | 0.900                     |
-| avg_query_cpu         | OFF                       |
-| avg_dist_wall         | 0.000                     |
-| avg_dist_local        | 0.000                     |
-| avg_dist_wait         | 0.000                     |
-| avg_query_reads       | OFF                       |
-| avg_query_readkb      | OFF                       |
-| avg_query_readtime    | OFF                       |
-| qcache_max_bytes      | 0                         |
-| qcache_thresh_msec    | 3000                      |
-| qcache_ttl_sec        | 60                        |
-| qcache_cached_queries | 0                         |
-| qcache_used_bytes     | 0                         |
-| qcache_hits           | 0                         |
-+-----------------------+---------------------------+
-49 rows in set (0.00 sec)
++-------------------------------+------------------------------------------------------------------------------------------------------------------------------------------------+
+| Counter                       | Value                                                                                                                                          |
++-------------------------------+------------------------------------------------------------------------------------------------------------------------------------------------+
+| uptime                        | 182                                                                                                                                            |
+| connections                   | 368                                                                                                                                            |
+| maxed_out                     | 0                                                                                                                                              |
+| version                       | 6.3.7 b10359434@24100213 dev (columnar 2.3.1 bd59d08@24093015) (secondary 2.3.1 bd59d08@24093015) (knn 2.3.1 bd59d08@24093015) (buddy v2.3.13) |
+| mysql_version                 | 6.3.7 b10359434@24100213 dev (columnar 2.3.1 bd59d08@24093015) (secondary 2.3.1 bd59d08@24093015) (knn 2.3.1 bd59d08@24093015)                 |
+| command_search                | 4                                                                                                                                              |
+| command_excerpt               | 0                                                                                                                                              |
+| command_update                | 2                                                                                                                                              |
+| command_keywords              | 0                                                                                                                                              |
+| command_persist               | 0                                                                                                                                              |
+| command_status                | 8                                                                                                                                              |
+| command_flushattrs            | 0                                                                                                                                              |
+| command_sphinxql              | 0                                                                                                                                              |
+| command_ping                  | 0                                                                                                                                              |
+| command_delete                | 3                                                                                                                                              |
+| command_set                   | 0                                                                                                                                              |
+| command_insert                | 3                                                                                                                                              |
+| command_replace               | 3                                                                                                                                              |
+| command_commit                | 0                                                                                                                                              |
+| command_suggest               | 0                                                                                                                                              |
+| command_json                  | 0                                                                                                                                              |
+| command_callpq                | 0                                                                                                                                              |
+| command_cluster               | 0                                                                                                                                              |
+| command_getfield              | 0                                                                                                                                              |
+| insert_replace_stats_ms_avg   | 42.625 35.895 35.895                                                                                                                           |
+| insert_replace_stats_ms_min   | 0.096 0.096 0.096                                                                                                                              |
+| insert_replace_stats_ms_max   | 85.154 85.154 85.154                                                                                                                           |
+| insert_replace_stats_ms_pct95 | 42.625 42.625 42.625                                                                                                                           |
+| insert_replace_stats_ms_pct99 | 42.625 42.625 42.625                                                                                                                           |
+| search_stats_ms_avg           | 0.209 0.188 0.188                                                                                                                              |
+| search_stats_ms_min           | 0.205 0.058 0.058                                                                                                                              |
+| search_stats_ms_max           | 0.214 0.278 0.278                                                                                                                              |
+| search_stats_ms_pct95         | 0.214 0.278 0.278                                                                                                                              |
+| search_stats_ms_pct99         | 0.214 0.278 0.278                                                                                                                              |
+| update_stats_ms_avg           | 0.024 0.024 0.024                                                                                                                              |
+| update_stats_ms_min           | 0.007 0.007 0.007                                                                                                                              |
+| update_stats_ms_max           | 0.042 0.042 0.042                                                                                                                              |
+| update_stats_ms_pct95         | 0.042 0.042 0.042                                                                                                                              |
+| update_stats_ms_pct99         | 0.042 0.042 0.042                                                                                                                              |
+| agent_connect                 | 0                                                                                                                                              |
+| agent_tfo                     | 0                                                                                                                                              |
+| agent_retry                   | 0                                                                                                                                              |
+| queries                       | 6                                                                                                                                              |
+| dist_queries                  | 0                                                                                                                                              |
+| workers_total                 | 32                                                                                                                                             |
+| workers_active                | 3                                                                                                                                              |
+| workers_clients               | 1                                                                                                                                              |
+| workers_clients_vip           | 0                                                                                                                                              |
+| workers_clients_buddy         | 1                                                                                                                                              |
+| work_queue_length             | 6                                                                                                                                              |
+| load                          | 0.03 0.03 0.03                                                                                                                                 |
+| load_primary                  | 0.00 0.00 0.00                                                                                                                                 |
+| load_secondary                | 0.00 0.00 0.00                                                                                                                                 |
+| query_wall                    | 0.000                                                                                                                                          |
+| query_cpu                     | OFF                                                                                                                                            |
+| dist_wall                     | 0.000                                                                                                                                          |
+| dist_local                    | 0.000                                                                                                                                          |
+| dist_wait                     | 0.000                                                                                                                                          |
+| query_reads                   | OFF                                                                                                                                            |
+| query_readkb                  | OFF                                                                                                                                            |
+| query_readtime                | OFF                                                                                                                                            |
+| avg_query_wall                | 0.000                                                                                                                                          |
+| avg_query_cpu                 | OFF                                                                                                                                            |
+| avg_dist_wall                 | 0.000                                                                                                                                          |
+| avg_dist_local                | 0.000                                                                                                                                          |
+| avg_dist_wait                 | 0.000                                                                                                                                          |
+| avg_query_reads               | OFF                                                                                                                                            |
+| avg_query_readkb              | OFF                                                                                                                                            |
+| avg_query_readtime            | OFF                                                                                                                                            |
+| qcache_max_bytes              | 16777216                                                                                                                                       |
+| qcache_thresh_msec            | 3000                                                                                                                                           |
+| qcache_ttl_sec                | 60                                                                                                                                             |
+| qcache_cached_queries         | 0                                                                                                                                              |
+| qcache_used_bytes             | 0                                                                                                                                              |
+| qcache_hits                   | 0                                                                                                                                              |
++-------------------------------+------------------------------------------------------------------------------------------------------------------------------------------------+
 ```
 
 <!-- end -->
@@ -134,15 +157,13 @@ SHOW STATUS;
 
 An optional `LIKE` clause is supported, allowing you to select only the variables that match a specific pattern. The pattern syntax follows standard SQL wildcards, where `%` represents any number of any characters, and `_` represents a single character.
 
-<!-- intro -->
-##### SQL:
-<!-- request SQL -->
+<!-- request qcache -->
 
 ```sql
 SHOW STATUS LIKE 'qcache%';
 ```
 
-<!-- response SQL -->
+<!-- response qcache -->
 ```sql
 +-----------------------+-------+
 | Counter               | Value |
@@ -154,7 +175,85 @@ SHOW STATUS LIKE 'qcache%';
 | qcache_used_bytes     | 0     |
 | qcache_hits           | 0     |
 +-----------------------+-------+
-6 rows in set (0.00 sec)
+```
+
+<!-- request perf_stats -->
+
+```sql
+SHOW STATUS LIKE '%stats_ms%';
+```
+
+<!-- response perf_stats -->
+```sql
++-------------------------------+-------------------+
+| Counter                       | Value             |
++-------------------------------+-------------------+
+| insert_replace_stats_ms_avg   | N/A 35.895 35.895 |
+| insert_replace_stats_ms_min   | N/A 0.096 0.096   |
+| insert_replace_stats_ms_max   | N/A 85.154 85.154 |
+| insert_replace_stats_ms_pct95 | N/A 42.625 42.625 |
+| insert_replace_stats_ms_pct99 | N/A 42.625 42.625 |
+| search_stats_ms_avg           | N/A 0.188 0.188   |
+| search_stats_ms_min           | N/A 0.058 0.058   |
+| search_stats_ms_max           | N/A 0.278 0.278   |
+| search_stats_ms_pct95         | N/A 0.278 0.278   |
+| search_stats_ms_pct99         | N/A 0.278 0.278   |
+| update_stats_ms_avg           | N/A 0.024 0.024   |
+| update_stats_ms_min           | N/A 0.007 0.007   |
+| update_stats_ms_max           | N/A 0.042 0.042   |
+| update_stats_ms_pct95         | N/A 0.042 0.042   |
+| update_stats_ms_pct99         | N/A 0.042 0.042   |
++-------------------------------+-------------------+
+```
+
+<!-- end -->
+
+### Query Time Statistics
+
+<!-- example show status like stats_ms -->
+
+The `SHOW STATUS` command gives a detailed report on various performance metrics in Manticore, including query time statistics for insert/replace, search, and update queries. These stats are calculated over sliding windows of 1, 5, and 15 minutes, showing average, minimum, maximum, and 95th/99th percentile values for query times.
+
+These metrics help track performance over specific time intervals, making it easier to spot trends in query response times and find possible bottlenecks.
+
+The following metrics are part of the `SHOW STATUS` output:
+- `*_avg`: The average query time for each type of query over the last 1, 5, and 15 minutes.
+- `*_min`: The shortest query time recorded for each query type.
+- `*_max`: The longest query time recorded for each query type.
+- `*_pct95`: The time under which 95% of queries are completed.
+- `*_pct99`: The time under which 99% of queries are completed.
+
+These statistics are provided separately for insert/replace (`insert_replace_stats_*`), search (`search_stats_*`), and update (`update_stats_*`) queries, offering detailed insights into the performance of different operations.
+
+If no queries are executed during the monitored interval, the system will display `N/A`.
+
+<!-- request perf_stats -->
+
+```sql
+SHOW STATUS LIKE '%stats_ms%';
+```
+
+<!-- response perf_stats -->
+```sql
++-------------------------------+-------------------+
+| Counter                       | Value             |
++-------------------------------+-------------------+
+| insert_replace_stats_ms_avg   | N/A 35.895 35.895 |
+| insert_replace_stats_ms_min   | N/A 0.096 0.096   |
+| insert_replace_stats_ms_max   | N/A 85.154 85.154 |
+| insert_replace_stats_ms_pct95 | N/A 42.625 42.625 |
+| insert_replace_stats_ms_pct99 | N/A 42.625 42.625 |
+| search_stats_ms_avg           | N/A 0.188 0.188   |
+| search_stats_ms_min           | N/A 0.058 0.058   |
+| search_stats_ms_max           | N/A 0.278 0.278   |
+| search_stats_ms_pct95         | N/A 0.278 0.278   |
+| search_stats_ms_pct99         | N/A 0.278 0.278   |
+| update_stats_ms_avg           | N/A 0.024 0.024   |
+| update_stats_ms_min           | N/A 0.007 0.007   |
+| update_stats_ms_max           | N/A 0.042 0.042   |
+| update_stats_ms_pct95         | N/A 0.042 0.042   |
+| update_stats_ms_pct99         | N/A 0.042 0.042   |
++-------------------------------+-------------------+
 ```
 
 <!-- end -->
@@ -411,8 +510,77 @@ utilsApi.sql('SHOW AGENT STATUS')
  u'total': 0,
  u'warning': u''}
 ```
+
 <!-- intro -->
-##### javascript:
+##### Python-asyncio:
+
+<!-- request Python-asyncio -->
+
+```python
+await utilsApi.sql('SHOW AGENT STATUS')
+```
+<!-- response Python-asyncio -->
+
+```python
+{u'columns': [{u'Key': {u'type': u'string'}},
+              {u'Value': {u'type': u'string'}}],
+ u'data': [
+	{u'Key': u'status_period_seconds', u'Value': u'60'},
+	{u'Key': u'status_stored_periods', u'Value': u'15'},
+	{u'Key': u'ag_0_hostname', u'Value': u'192.168.0.202:6713'},
+	{u'Key': u'ag_0_references', u'Value': u'2'},
+	{u'Key': u'ag_0_lastquery', u'Value': u'0.41'},
+	{u'Key': u'ag_0_lastanswer', u'Value': u'0.19'},
+	{u'Key': u'ag_0_lastperiodmsec', u'Value': u'222'},
+	{u'Key': u'ag_0_errorsarow', u'Value': u'0'},
+	{u'Key': u'ag_0_1periods_query_timeouts', u'Value': u'0'},
+	{u'Key': u'ag_0_1periods_connect_timeouts', u'Value': u'0'},
+	{u'Key': u'ag_0_1periods_connect_failures', u'Value': u'0'},
+	{u'Key': u'ag_0_1periods_network_errors', u'Value': u'0'},
+	{u'Key': u'ag_0_1periods_wrong_replies', u'Value': u'0'},
+	{u'Key': u'ag_0_1periods_unexpected_closings', u'Value': u'0'},
+	{u'Key': u'ag_0_1periods_warnings', u'Value': u'0'},
+	{u'Key': u'ag_0_1periods_succeeded_queries', u'Value': u'27'},
+	{u'Key': u'ag_0_1periods_msecsperquery', u'Value': u'232.31'},
+	{u'Key': u'ag_0_5periods_query_timeouts', u'Value': u'0'},
+	{u'Key': u'ag_0_5periods_connect_timeouts', u'Value': u'0'},
+	{u'Key': u'ag_0_5periods_connect_failures', u'Value': u'0'},
+	{u'Key': u'ag_0_5periods_network_errors', u'Value': u'0'},
+	{u'Key': u'ag_0_5periods_wrong_replies', u'Value': u'0'},
+	{u'Key': u'ag_0_5periods_unexpected_closings', u'Value': u'0'},
+	{u'Key': u'ag_0_5periods_warnings', u'Value': u'0'},
+	{u'Key': u'ag_0_5periods_succeeded_queries', u'Value': u'146'},
+	{u'Key': u'ag_0_5periods_msecsperquery', u'Value': u'231.83'},
+	{u'Key': u'ag_1_hostname 192.168.0.202:6714'},
+	{u'Key': u'ag_1_references', u'Value': u'2'},
+	{u'Key': u'ag_1_lastquery', u'Value': u'0.41'},
+	{u'Key': u'ag_1_lastanswer', u'Value': u'0.19'},
+	{u'Key': u'ag_1_lastperiodmsec', u'Value': u'220'},
+	{u'Key': u'ag_1_errorsarow', u'Value': u'0'},
+	{u'Key': u'ag_1_1periods_query_timeouts', u'Value': u'0'},
+	{u'Key': u'ag_1_1periods_connect_timeouts', u'Value': u'0'},
+	{u'Key': u'ag_1_1periods_connect_failures', u'Value': u'0'},
+	{u'Key': u'ag_1_1periods_network_errors', u'Value': u'0'},
+	{u'Key': u'ag_1_1periods_wrong_replies', u'Value': u'0'},
+	{u'Key': u'ag_1_1periods_unexpected_closings', u'Value': u'0'},
+	{u'Key': u'ag_1_1periods_warnings', u'Value': u'0'},
+	{u'Key': u'ag_1_1periods_succeeded_queries', u'Value': u'27'},
+	{u'Key': u'ag_1_1periods_msecsperquery', u'Value': u'231.24'},
+	{u'Key': u'ag_1_5periods_query_timeouts', u'Value': u'0'},
+	{u'Key': u'ag_1_5periods_connect_timeouts', u'Value': u'0'},
+	{u'Key': u'ag_1_5periods_connect_failures', u'Value': u'0'},
+	{u'Key': u'ag_1_5periods_network_errors', u'Value': u'0'},
+	{u'Key': u'ag_1_5periods_wrong_replies', u'Value': u'0'},
+	{u'Key': u'ag_1_5periods_warnings', u'Value': u'0'},
+	{u'Key': u'ag_1_5periods_succeeded_queries', u'Value': u'146'},
+	{u'Key': u'ag_1_5periods_msecsperquery', u'Value': u'230.85'}],
+ u'error': u'',
+ u'total': 0,
+ u'warning': u''}
+```
+
+<!-- intro -->
+##### Javascript:
 
 <!-- request javascript -->
 
@@ -614,6 +782,241 @@ utilsApi.Sql("SHOW AGENT STATUS");
   total=0,
   warning="" }
 ```
+
+<!-- intro -->
+##### Rust:
+
+<!-- request Rust -->
+
+```clike
+utils_api.sql("SHOW AGENT STATUS", Some(true)).await;
+```
+<!-- response Rust -->
+
+```rust
+{columns=[{ Key : { type=string }},
+              { Value : { type=string }}],
+  data : [
+	{ Key=status_period_seconds ,  Value=60 },
+	{ Key=status_stored_periods ,  Value=15 },
+	{ Key=ag_0_hostname ,  Value=192.168.0.202:6713 },
+	{ Key=ag_0_references ,  Value=2 },
+	{ Key=ag_0_lastquery ,  Value=0.41 },
+	{ Key=ag_0_lastanswer ,  Value=0.19 },
+	{ Key=ag_0_lastperiodmsec ,  Value=222 },
+	{ Key=ag_0_errorsarow ,  Value=0 },
+	{ Key=ag_0_1periods_query_timeouts ,  Value=0 },
+	{ Key=ag_0_1periods_connect_timeouts ,  Value=0 },
+	{ Key=ag_0_1periods_connect_failures ,  Value=0 },
+	{ Key=ag_0_1periods_network_errors ,  Value=0 },
+	{ Key=ag_0_1periods_wrong_replies ,  Value=0 },
+	{ Key=ag_0_1periods_unexpected_closings ,  Value=0 },
+	{ Key=ag_0_1periods_warnings ,  Value=0 },
+	{ Key=ag_0_1periods_succeeded_queries ,  Value=27 },
+	{ Key=ag_0_1periods_msecsperquery ,  Value=232.31 },
+	{ Key=ag_0_5periods_query_timeouts ,  Value=0 },
+	{ Key=ag_0_5periods_connect_timeouts ,  Value=0 },
+	{ Key=ag_0_5periods_connect_failures ,  Value=0 },
+	{ Key=ag_0_5periods_network_errors ,  Value=0 },
+	{ Key=ag_0_5periods_wrong_replies ,  Value=0 },
+	{ Key=ag_0_5periods_unexpected_closings ,  Value=0 },
+	{ Key=ag_0_5periods_warnings ,  Value=0 },
+	{ Key=ag_0_5periods_succeeded_queries ,  Value=146 },
+	{ Key=ag_0_5periods_msecsperquery ,  Value=231.83 },
+	{ Key=ag_1_hostname 192.168.0.202:6714 },
+	{ Key=ag_1_references ,  Value=2 },
+	{ Key=ag_1_lastquery ,  Value=0.41 },
+	{ Key=ag_1_lastanswer ,  Value=0.19 },
+	{ Key=ag_1_lastperiodmsec ,  Value=220 },
+	{ Key=ag_1_errorsarow ,  Value=0 },
+	{ Key=ag_1_1periods_query_timeouts ,  Value=0 },
+	{ Key=ag_1_1periods_connect_timeouts ,  Value=0 },
+	{ Key=ag_1_1periods_connect_failures ,  Value=0 },
+	{ Key=ag_1_1periods_network_errors ,  Value=0 },
+	{ Key=ag_1_1periods_wrong_replies ,  Value=0 },
+	{ Key=ag_1_1periods_unexpected_closings ,  Value=0 },
+	{ Key=ag_1_1periods_warnings ,  Value=0 },
+	{ Key=ag_1_1periods_succeeded_queries ,  Value=27 },
+	{ Key=ag_1_1periods_msecsperquery ,  Value=231.24 },
+	{ Key=ag_1_5periods_query_timeouts ,  Value=0 },
+	{ Key=ag_1_5periods_connect_timeouts ,  Value=0 },
+	{ Key=ag_1_5periods_connect_failures ,  Value=0 },
+	{ Key=ag_1_5periods_network_errors ,  Value=0 },
+	{ Key=ag_1_5periods_wrong_replies ,  Value=0 },
+	{ Key=ag_1_5periods_warnings ,  Value=0 },
+	{ Key=ag_1_5periods_succeeded_queries ,  Value=146 },
+	{ Key=ag_1_5periods_msecsperquery ,  Value=230.85 }],
+  error="" ,
+  total=0,
+  warning="" }
+```
+
+<!-- intro -->
+##### TypeScript:
+
+<!-- request TypeScript -->
+
+```typescript
+res = await utilsApi.sql("SHOW AGENT STATUS");
+```
+<!-- response javascript -->
+
+```typescript
+{
+	"columns":
+	[{
+		"Key":
+		{
+			"type": "string"
+		}
+	},
+    {
+    	"Value":
+    	{
+    		"type": "string"
+    	}
+    }],
+ 	"data":
+ 	[
+		{"Key": "status_period_seconds", "Value": "60"},
+		{"Key": "status_stored_periods", "Value": "15"},
+		{"Key": "ag_0_hostname", "Value": "192.168.0.202:6713"},
+		{"Key": "ag_0_references", "Value": "2"},
+		{"Key": "ag_0_lastquery", "Value": "0.41"},
+		{"Key": "ag_0_lastanswer", "Value": "0.19"},
+		{"Key": "ag_0_lastperiodmsec", "Value": "222"},
+		{"Key": "ag_0_errorsarow", "Value": "0"},
+		{"Key": "ag_0_1periods_query_timeouts", "Value": "0"},
+		{"Key": "ag_0_1periods_connect_timeouts", "Value": "0"},
+		{"Key": "ag_0_1periods_connect_failures", "Value": "0"},
+		{"Key": "ag_0_1periods_network_errors", "Value": "0"},
+		{"Key": "ag_0_1periods_wrong_replies", "Value": "0"},
+		{"Key": "ag_0_1periods_unexpected_closings", "Value": "0"},
+		{"Key": "ag_0_1periods_warnings", "Value": "0"},
+		{"Key": "ag_0_1periods_succeeded_queries", "Value": "27"},
+		{"Key": "ag_0_1periods_msecsperquery", "Value": "232.31"},
+		{"Key": "ag_0_5periods_query_timeouts", "Value": "0"},
+		{"Key": "ag_0_5periods_connect_timeouts", "Value": "0"},
+		{"Key": "ag_0_5periods_connect_failures", "Value": "0"},
+		{"Key": "ag_0_5periods_network_errors", "Value": "0"},
+		{"Key": "ag_0_5periods_wrong_replies", "Value": "0"},
+		{"Key": "ag_0_5periods_unexpected_closings", "Value": "0"},
+		{"Key": "ag_0_5periods_warnings", "Value": "0"},
+		{"Key": "ag_0_5periods_succeeded_queries", "Value": "146"},
+		{"Key": "ag_0_5periods_msecsperquery", "Value": "231.83"},
+		{"Key": "ag_1_hostname 192.168.0.202:6714"},
+		{"Key": "ag_1_references", "Value": "2"},
+		{"Key": "ag_1_lastquery", "Value": "0.41"},
+		{"Key": "ag_1_lastanswer", "Value": "0.19"},
+		{"Key": "ag_1_lastperiodmsec", "Value": "220"},
+		{"Key": "ag_1_errorsarow", "Value": "0"},
+		{"Key": "ag_1_1periods_query_timeouts", "Value": "0"},
+		{"Key": "ag_1_1periods_connect_timeouts", "Value": "0"},
+		{"Key": "ag_1_1periods_connect_failures", "Value": "0"},
+		{"Key": "ag_1_1periods_network_errors", "Value": "0"},
+		{"Key": "ag_1_1periods_wrong_replies", "Value": "0"},
+		{"Key": "ag_1_1periods_unexpected_closings", "Value": "0"},
+		{"Key": "ag_1_1periods_warnings", "Value": "0"},
+		{"Key": "ag_1_1periods_succeeded_queries", "Value": "27"},
+		{"Key": "ag_1_1periods_msecsperquery", "Value": "231.24"},
+		{"Key": "ag_1_5periods_query_timeouts", "Value": "0"},
+		{"Key": "ag_1_5periods_connect_timeouts", "Value": "0"},
+		{"Key": "ag_1_5periods_connect_failures", "Value": "0"},
+		{"Key": "ag_1_5periods_network_errors", "Value": "0"},
+		{"Key": "ag_1_5periods_wrong_replies", "Value": "0"},
+		{"Key": "ag_1_5periods_warnings", "Value": "0"},
+		{"Key": "ag_1_5periods_succeeded_queries", "Value": "146"},
+		{"Key": "ag_1_5periods_msecsperquery", "Value": "230.85"}
+	],
+ 	"error": "",
+ 	"total": 0,
+ 	"warning": ""
+ }
+```
+
+<!-- intro -->
+##### Go:
+
+<!-- request Go -->
+
+```go
+res := apiClient.UtilsAPI.Sql(context.Background()).Body("SHOW AGENT STATUS").Execute()
+```
+<!-- response Go -->
+
+```go
+{
+	"columns":
+	[{
+		"Key":
+		{
+			"type": "string"
+		}
+	},
+    {
+    	"Value":
+    	{
+    		"type": "string"
+    	}
+    }],
+ 	"data":
+ 	[
+		{"Key": "status_period_seconds", "Value": "60"},
+		{"Key": "status_stored_periods", "Value": "15"},
+		{"Key": "ag_0_hostname", "Value": "192.168.0.202:6713"},
+		{"Key": "ag_0_references", "Value": "2"},
+		{"Key": "ag_0_lastquery", "Value": "0.41"},
+		{"Key": "ag_0_lastanswer", "Value": "0.19"},
+		{"Key": "ag_0_lastperiodmsec", "Value": "222"},
+		{"Key": "ag_0_errorsarow", "Value": "0"},
+		{"Key": "ag_0_1periods_query_timeouts", "Value": "0"},
+		{"Key": "ag_0_1periods_connect_timeouts", "Value": "0"},
+		{"Key": "ag_0_1periods_connect_failures", "Value": "0"},
+		{"Key": "ag_0_1periods_network_errors", "Value": "0"},
+		{"Key": "ag_0_1periods_wrong_replies", "Value": "0"},
+		{"Key": "ag_0_1periods_unexpected_closings", "Value": "0"},
+		{"Key": "ag_0_1periods_warnings", "Value": "0"},
+		{"Key": "ag_0_1periods_succeeded_queries", "Value": "27"},
+		{"Key": "ag_0_1periods_msecsperquery", "Value": "232.31"},
+		{"Key": "ag_0_5periods_query_timeouts", "Value": "0"},
+		{"Key": "ag_0_5periods_connect_timeouts", "Value": "0"},
+		{"Key": "ag_0_5periods_connect_failures", "Value": "0"},
+		{"Key": "ag_0_5periods_network_errors", "Value": "0"},
+		{"Key": "ag_0_5periods_wrong_replies", "Value": "0"},
+		{"Key": "ag_0_5periods_unexpected_closings", "Value": "0"},
+		{"Key": "ag_0_5periods_warnings", "Value": "0"},
+		{"Key": "ag_0_5periods_succeeded_queries", "Value": "146"},
+		{"Key": "ag_0_5periods_msecsperquery", "Value": "231.83"},
+		{"Key": "ag_1_hostname 192.168.0.202:6714"},
+		{"Key": "ag_1_references", "Value": "2"},
+		{"Key": "ag_1_lastquery", "Value": "0.41"},
+		{"Key": "ag_1_lastanswer", "Value": "0.19"},
+		{"Key": "ag_1_lastperiodmsec", "Value": "220"},
+		{"Key": "ag_1_errorsarow", "Value": "0"},
+		{"Key": "ag_1_1periods_query_timeouts", "Value": "0"},
+		{"Key": "ag_1_1periods_connect_timeouts", "Value": "0"},
+		{"Key": "ag_1_1periods_connect_failures", "Value": "0"},
+		{"Key": "ag_1_1periods_network_errors", "Value": "0"},
+		{"Key": "ag_1_1periods_wrong_replies", "Value": "0"},
+		{"Key": "ag_1_1periods_unexpected_closings", "Value": "0"},
+		{"Key": "ag_1_1periods_warnings", "Value": "0"},
+		{"Key": "ag_1_1periods_succeeded_queries", "Value": "27"},
+		{"Key": "ag_1_1periods_msecsperquery", "Value": "231.24"},
+		{"Key": "ag_1_5periods_query_timeouts", "Value": "0"},
+		{"Key": "ag_1_5periods_connect_timeouts", "Value": "0"},
+		{"Key": "ag_1_5periods_connect_failures", "Value": "0"},
+		{"Key": "ag_1_5periods_network_errors", "Value": "0"},
+		{"Key": "ag_1_5periods_wrong_replies", "Value": "0"},
+		{"Key": "ag_1_5periods_warnings", "Value": "0"},
+		{"Key": "ag_1_5periods_succeeded_queries", "Value": "146"},
+		{"Key": "ag_1_5periods_msecsperquery", "Value": "230.85"}
+	],
+ 	"error": "",
+ 	"total": 0,
+ 	"warning": ""
+ }
+```
+
 <!-- end -->
 
 
@@ -684,8 +1087,31 @@ utilsApi.sql('SHOW AGENT STATUS LIKE \'%5period%msec%\'')
  u'total': 0,
  u'warning': u''}
 ```
+
 <!-- intro -->
-##### javascript:
+##### Python-asyncio:
+
+<!-- request Python-asyncio -->
+
+```python
+await utilsApi.sql('SHOW AGENT STATUS LIKE \'%5period%msec%\'')
+```
+<!-- response Python-asyncio -->
+
+```python
+{u'columns': [{u'Key': {u'type': u'string'}},
+              {u'Value': {u'type': u'string'}}],
+ u'data': [
+	{u'Key': u'ag_0_5periods_msecsperquery', u'Value': u'234.72'},
+	{u'Key': u'ag_1_5periods_msecsperquery', u'Value': u'233.73'},
+	{u'Key': u'ag_2_5periods_msecsperquery', u'Value': u'343.81'}],
+ u'error': u'',
+ u'total': 0,
+ u'warning': u''}
+```
+
+<!-- intro -->
+##### Javascript:
 
 <!-- request javascript -->
 
@@ -750,6 +1176,91 @@ utilsApi.Sql("SHOW AGENT STATUS LIKE \"%5period%msec%\"");
  total: 0,
  warning: ""}
 ```
+
+<!-- intro -->
+##### Rust:
+
+<!-- request Rust -->
+
+```rust
+utils_api.sql("SHOW AGENT STATUS LIKE \"%5period%msec%\"", Some(true)).await;
+```
+<!-- response Rust -->
+
+```rust
+{columns: [{Key={type=string}},
+              {Value={type=string}}],
+ data: [
+	{Key=ag_0_5periods_msecsperquery, Value=234.72},
+	{Key=ag_1_5periods_msecsperquery, Value=233.73},
+	{Key=ag_2_5periods_msecsperquery, Value=343.81}],
+ error: "",
+ total: 0,
+ warning: ""}
+```
+
+<!-- intro -->
+##### TypeScript:
+
+<!-- request TypeScript -->
+
+```typescript
+res = await utilsApi.sql("SHOW AGENT STATUS LIKE \"%5period%msec%\"");
+```
+<!-- response TypeScript -->
+
+```typescript
+{
+	"columns":
+	[{
+		"Key": {"type": "string"}
+	},
+    {
+    	"Value": {"type": "string"}
+    }],
+	"data":
+	[
+		{"Key": "ag_0_5periods_msecsperquery", "Value": "234.72"},
+		{"Key": "ag_1_5periods_msecsperquery", "Value": "233.73"},
+		{"Key": "ag_2_5periods_msecsperquery", "Value": "343.81"}
+	],
+ 	"error": "",
+ 	"total": 0,
+ 	"warning": ""
+}
+```
+
+<!-- intro -->
+##### Go:
+
+<!-- request Go -->
+
+```go
+apiClient.UtilsAPI.Sql(context.Background()).Body("SHOW AGENT STATUS LIKE \"%5period%msec%\"").Execute()
+```
+<!-- response Go -->
+
+```go
+{
+	"columns":
+	[{
+		"Key": {"type": "string"}
+	},
+    {
+    	"Value": {"type": "string"}
+    }],
+	"data":
+	[
+		{"Key": "ag_0_5periods_msecsperquery", "Value": "234.72"},
+		{"Key": "ag_1_5periods_msecsperquery", "Value": "233.73"},
+		{"Key": "ag_2_5periods_msecsperquery", "Value": "343.81"}
+	],
+ 	"error": "",
+ 	"total": 0,
+ 	"warning": ""
+}
+```
+
 <!-- end -->
 
 
@@ -844,8 +1355,39 @@ utilsApi.sql('SHOW AGENT \'192.168.0.202:6714\' STATUS LIKE \'%15periods%\'')
  u'total': 0,
  u'warning': u''}
 ```
+
 <!-- intro -->
-##### javascript:
+##### Python-asyncio:
+
+<!-- request Python-asyncio -->
+
+```python
+await utilsApi.sql('SHOW AGENT \'192.168.0.202:6714\' STATUS LIKE \'%15periods%\'')
+```
+<!-- response Python-asyncio -->
+
+```python
+{u'columns': [{u'Key': {u'type': u'string'}},
+              {u'Value': {u'type': u'string'}}],
+ u'data': [
+	{u'Key': u'agent_15periods_query_timeouts', u'Value': u'0'},
+	{u'Key': u'agent_15periods_connect_timeouts', u'Value': u'0'},
+	{u'Key': u'agent_15periods_connect_failures', u'Value': u'0'},
+    {u'Key': u'agent_15periods_network_errors', u'Value': u'0'},
+    {u'Key': u'agent_15periods_connect_failures', u'Value': u'0'},
+    {u'Key': u'agent_15periods_wrong_replies', u'Value': u'0'},
+    {u'Key': u'agent_15periods_unexpected_closings', u'Value': u'0'},
+    {u'Key': u'agent_15periods_warnings', u'Value': u'0'},
+    {u'Key': u'agent_15periods_succeeded_queries', u'Value': u'439'},
+    {u'Key': u'agent_15periods_msecsperquery', u'Value': u'233.73'},
+    ],
+ u'error': u'',
+ u'total': 0,
+ u'warning': u''}
+```
+
+<!-- intro -->
+##### Javascript:
 
 <!-- request javascript -->
 
@@ -933,10 +1475,115 @@ utilsApi.Sql("SHOW AGENT \"192.168.0.202:6714\" STATUS LIKE \"%15periods%\"");
  total=0,
  warning=""}
 ```
+
+<!-- intro -->
+##### Rust:
+
+<!-- request Rust -->
+
+```rust
+utils_api.sql("SHOW AGENT \"192.168.0.202:6714\" STATUS LIKE \"%15periods%\"", Some(true)).await;
+```
+<!-- response Rust -->
+
+```rust
+{columns=[{Key={type=string}},
+              {Value={type=string}}],
+ data=[
+	{Key=agent_15periods_query_timeouts, Value=0},
+	{Key=agent_15periods_connect_timeouts, Value=0},
+	{Key=agent_15periods_connect_failures, Value=0},
+    {Key=agent_15periods_network_errors, Value=0},
+    {Key=agent_15periods_connect_failures, Value=0},
+    {Key=agent_15periods_wrong_replies, Value=0},
+    {Key=agent_15periods_unexpected_closings, Value=0},
+    {Key=agent_15periods_warnings, Value=0},
+    {Key=agent_15periods_succeeded_queries, Value=439},
+    {Key=agent_15periods_msecsperquery, Value=233.73},
+    ],
+ error="",
+ total=0,
+ warning=""}
+```
+
+<!-- intro -->
+##### TypeScript:
+
+<!-- request TypeScript -->
+
+```typescript
+res = await utilsApi.sql("SHOW AGENT \"192.168.0.202:6714\" STATUS LIKE \"%15periods%\"");
+```
+<!-- response TypeScript -->
+
+```typescript
+{
+	"columns":
+	[{
+		{"Key": {"type": "string"}
+	},
+    	{"Value": {"type": "string"}
+    }],
+	"data":
+	[
+		{"Key": "agent_15periods_query_timeouts", "Value": "0"},
+		{"Key": "agent_15periods_connect_timeouts", "Value": "0"},
+		{"Key": "agent_15periods_connect_failures", "Value": "0"},
+	    {"Key": "agent_15periods_network_errors", "Value": "0"},
+	    {"Key": "agent_15periods_connect_failures", "Value": "0"},
+	    {"Key": "agent_15periods_wrong_replies", "Value": "0"},
+	    {"Key": "agent_15periods_unexpected_closings", "Value": "0"},
+	    {"Key": "agent_15periods_warnings", "Value": "0"},
+	    {"Key": "agent_15periods_succeeded_queries", "Value": "439"},
+	    {"Key": "agent_15periods_msecsperquery", "Value": "233.73"},
+    ],
+	"error": "",
+	"total": 0,
+	"warning": ""
+}
+```
+
+<!-- intro -->
+##### Go:
+
+<!-- request Go -->
+
+```go
+apiClient.UtilsAPI.Sql(context.Background()).Body("SHOW AGENT \"192.168.0.202:6714\" STATUS LIKE \"%15periods%\").Execute()
+```
+<!-- response Go -->
+
+```go
+{
+	"columns":
+	[{
+		{"Key": {"type": "string"}
+	},
+    	{"Value": {"type": "string"}
+    }],
+	"data":
+	[
+		{"Key": "agent_15periods_query_timeouts", "Value": "0"},
+		{"Key": "agent_15periods_connect_timeouts", "Value": "0"},
+		{"Key": "agent_15periods_connect_failures", "Value": "0"},
+	    {"Key": "agent_15periods_network_errors", "Value": "0"},
+	    {"Key": "agent_15periods_connect_failures", "Value": "0"},
+	    {"Key": "agent_15periods_wrong_replies", "Value": "0"},
+	    {"Key": "agent_15periods_unexpected_closings", "Value": "0"},
+	    {"Key": "agent_15periods_warnings", "Value": "0"},
+	    {"Key": "agent_15periods_succeeded_queries", "Value": "439"},
+	    {"Key": "agent_15periods_msecsperquery", "Value": "233.73"},
+    ],
+	"error": "",
+	"total": 0,
+	"warning": ""
+}
+```
+
 <!-- end -->
 <!-- example show agent table status -->
 
-Finally, you can check the status of the agents in a specific distributed table using the `SHOW AGENT index_name STATUS` statement. This statement displays the table's HA status (i.e., whether or not it uses agent mirrors at all) and provides information on the mirrors, including: address, blackhole and persistent flags, and the mirror selection probability used when one of the [weighted probability strategies](../Creating_a_cluster/Remote_nodes/Load_balancing.md) is in effect.
+Finally, you can check the status of the agents in a specific distributed table using the `SHOW AGENT table_name STATUS` statement. This statement displays the table's HA status (i.e., whether or not it uses agent mirrors at all) and provides information on the mirrors, including: address, blackhole and persistent flags, and the mirror selection probability used when one of the [weighted probability strategies](../Creating_a_cluster/Remote_nodes/Load_balancing.md) is in effect.
 
 <!-- intro -->
 ##### SQL:
@@ -1032,8 +1679,42 @@ utilsApi.sql('SHOW AGENT \'192.168.0.202:6714\' STATUS LIKE \'%15periods%\'')
  u'total': 0,
  u'warning': u''}
 ```
+
 <!-- intro -->
-##### javascript:
+##### Python-asyncio:
+
+<!-- request Python-asyncio -->
+
+```python
+await utilsApi.sql('SHOW AGENT \'192.168.0.202:6714\' STATUS LIKE \'%15periods%\'')
+```
+<!-- response Python-asyncio -->
+
+```python
+{u'columns': [{u'Key': {u'type': u'string'}},
+              {u'Value': {u'type': u'string'}}],
+ u'data': [
+	{u'Key': u'dstindex_1_is_ha', u'Value': u'1'},
+	{u'Key': u'dstindex_1mirror1_id', u'Value': u'192.168.0.202:6713:loc'},
+	{u'Key': u'dstindex_1mirror1_probability_weight', u'Value': u'0.372864'},
+    {u'Key': u'dstindex_1mirror1_is_blackhole', u'Value': u'0'},
+    {u'Key': u'dstindex_1mirror1_is_persistent', u'Value': u'0'},
+    {u'Key': u'dstindex_1mirror2_id', u'Value': u'192.168.0.202:6714:loc'},
+    {u'Key': u'dstindex_1mirror2_probability_weight', u'Value': u'0.374635'},
+    {u'Key': u'dstindex_1mirror2_is_blackhole', u'Value': u'0'},
+    {u'Key': u'dstindex_1mirror2_is_persistent', u'Value': u'439'},
+    {u'Key': u'dstindex_1mirror3_id', u'Value': u'dev1.manticoresearch.com:6714:loc'},
+    {u'Key': u'dstindex_1mirror3_probability_weight', u'Value': u' 0.252501'},
+    {u'Key': u'dstindex_1mirror3_is_blackhole', u'Value': u'0'},
+    {u'Key': u'dstindex_1mirror3_is_persistent', u'Value': u'439'}    
+    ],
+ u'error': u'',
+ u'total': 0,
+ u'warning': u''}
+```
+
+<!-- intro -->
+##### Javascript:
 
 <!-- request javascript -->
 
@@ -1130,6 +1811,118 @@ utilsApi.Sql("SHOW AGENT \"192.168.0.202:6714\" STATUS LIKE \"%15periods%\"");
  total=0,
  warning=""}
 ```
+
+<!-- intro -->
+##### Rust:
+
+<!-- request Rust -->
+
+```rust
+utils_api.sql("SHOW AGENT \"192.168.0.202:6714\" STATUS LIKE \"%15periods%\"", Some(true)).await;
+```
+<!-- response Rust -->
+
+```rust
+{columns=[{Key={type=string}},
+              {Value={type=string}}],
+ data=[
+	{Key=dstindex_1_is_ha, Value=1},
+	{Key=dstindex_1mirror1_id, Value=192.168.0.202:6713:loc},
+	{Key=dstindex_1mirror1_probability_weight, Value=0.372864},
+    {Key=dstindex_1mirror1_is_blackhole, Value=0},
+    {Key=dstindex_1mirror1_is_persistent, Value=0},
+    {Key=dstindex_1mirror2_id, Value=192.168.0.202:6714:loc},
+    {Key=dstindex_1mirror2_probability_weight, Value=0.374635},
+    {Key=dstindex_1mirror2_is_blackhole, Value=0},
+    {Key=dstindex_1mirror2_is_persistent, Value=439},
+    {Key=dstindex_1mirror3_id, Value=dev1.manticoresearch.com:6714:loc},
+    {Key=dstindex_1mirror3_probability_weight, Value= 0.252501},
+    {Key=dstindex_1mirror3_is_blackhole, Value=0},
+    {Key=dstindex_1mirror3_is_persistent, Value=439}    
+    ],
+ error="",
+ total=0,
+ warning=""}
+```
+
+<!-- intro -->
+##### TypeScript:
+
+<!-- request TypeScript -->
+
+```typescript
+res = await utilsApi.sql("SHOW AGENT \"192.168.0.202:6714\" STATUS LIKE \"%15periods%\"");
+```
+<!-- response TypeScript -->
+
+```typescript
+{
+	"columns":
+	[{
+		"Key": {"type": "string"}},
+        {"Value": {"type": "string"}
+	}],
+	"data":
+	[
+		{"Key": "dstindex_1_is_ha", "Value": "1"},
+		{"Key": "dstindex_1mirror1_id", "Value": "192.168.0.202:6713:loc"},
+		{"Key": "dstindex_1mirror1_probability_weight", "Value": "0.372864"},
+	    {"Key": "dstindex_1mirror1_is_blackhole", "Value": "0"},
+	    {"Key": "dstindex_1mirror1_is_persistent", "Value": "0"},
+	    {"Key": "dstindex_1mirror2_id", "Value": "192.168.0.202:6714:loc"},
+	    {"Key": "dstindex_1mirror2_probability_weight", "Value": "0.374635"},
+	    {"Key": "dstindex_1mirror2_is_blackhole", "Value": "0"},
+	    {"Key": "dstindex_1mirror2_is_persistent", "Value": "439"},
+	    {"Key": "dstindex_1mirror3_id", "Value": "dev1.manticoresearch.com:6714:loc"},
+	    {"Key": "dstindex_1mirror3_probability_weight", "Value": " 0.252501"},
+	    {"Key": "dstindex_1mirror3_is_blackhole", "Value": "0"},
+	    {"Key": "dstindex_1mirror3_is_persistent", "Value": "439"}    
+    ],
+	"error": "",
+	"total": 0,
+	"warning": ""
+}
+```
+
+<!-- intro -->
+##### Go:
+
+<!-- request Go -->
+
+```go
+apiClient.UtilsAPI.Sql(context.Background()).Body("SHOW AGENT \"192.168.0.202:6714\" STATUS LIKE \"%15periods%\"").Execute()
+```
+<!-- response Go -->
+
+```go
+{
+	"columns":
+	[{
+		"Key": {"type": "string"}},
+        {"Value": {"type": "string"}
+	}],
+	"data":
+	[
+		{"Key": "dstindex_1_is_ha", "Value": "1"},
+		{"Key": "dstindex_1mirror1_id", "Value": "192.168.0.202:6713:loc"},
+		{"Key": "dstindex_1mirror1_probability_weight", "Value": "0.372864"},
+	    {"Key": "dstindex_1mirror1_is_blackhole", "Value": "0"},
+	    {"Key": "dstindex_1mirror1_is_persistent", "Value": "0"},
+	    {"Key": "dstindex_1mirror2_id", "Value": "192.168.0.202:6714:loc"},
+	    {"Key": "dstindex_1mirror2_probability_weight", "Value": "0.374635"},
+	    {"Key": "dstindex_1mirror2_is_blackhole", "Value": "0"},
+	    {"Key": "dstindex_1mirror2_is_persistent", "Value": "439"},
+	    {"Key": "dstindex_1mirror3_id", "Value": "dev1.manticoresearch.com:6714:loc"},
+	    {"Key": "dstindex_1mirror3_probability_weight", "Value": " 0.252501"},
+	    {"Key": "dstindex_1mirror3_is_blackhole", "Value": "0"},
+	    {"Key": "dstindex_1mirror3_is_persistent", "Value": "439"}    
+    ],
+	"error": "",
+	"total": 0,
+	"warning": ""
+}
+```
+
 <!-- end -->
 
 <!-- proofread -->

@@ -16,7 +16,7 @@ GEODIST(51.50, -0.12, 29.98, 31.13, {in=deg, out=mi})
 The known options and their values are:
 
 * `in = {deg | degrees | rad | radians}`, specifies the input units;
-* `out = {m | meters | km | kilometers | ft | feet | mi | miles}`, specifies the output units;
+* `out = {m | meters | km | kilometers | ft | feet | mi | miles | yd | yards | in | inch | cm | centimeters | mm | millimeters | NM | nmi | nauticalmiles}`, specifies the output units;
 * `method = {adaptive | haversine}`, specifies the geodistance calculation method.
 
 The default method is "adaptive". It is a well-optimized implementation that is both more precise *and* much faster at all times than "haversine".

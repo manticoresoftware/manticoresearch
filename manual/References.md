@@ -2,20 +2,33 @@
 
 ### SQL commands
 ##### Schema management
-* [CREATE TABLE](Creating_a_table/Local_tables/Plain_and_real-time_table_settings.md#General-syntax-of-CREATE-TABLE) - Creates new table
-* [CREATE TABLE LIKE](Creating_a_table/Local_tables/Plain_and_real-time_table_settings.md#General-syntax-of-CREATE-TABLE) - Creates table using another one as a template
+* [CREATE TABLE](Creating_a_table/Local_tables/Real-time_table.md#CREATE-TABLE-command:) - Creates new table
+* [CREATE TABLE LIKE](Creating_a_table/Local_tables/Real-time_table.md#CREATE-TABLE-LIKE:) - Creates table using another one as a template
+* [CREATE TABLE LIKE ... WITH DATA](Creating_a_table/Local_tables/Real-time_table.md#CREATE-TABLE-LIKE:) - Copies a table
+* [CREATE SOURCE](Integration/Kafka.md#Source) - Create Kafka consumer source
+* [CREATE MATERIALIZED VIEW](Integration/Kafka.md#Materialized-view) - Data transformation from Kafka messages
+* [CREATE MV](Integration/Kafka.md#Materialized-view) - The same as previous
 * [DESCRIBE](Listing_tables.md#DESCRIBE) - Prints out table's field list and their types
 * [ALTER TABLE](Updating_table_schema_and_settings.md) - Changes table schema / settings
-* [ALTER TABLE REBUILD SECONDARY](Updating_table_schema_and_settings.md#Rebuild-secondary-index) - Updates/recovers secondary indexes
+* [ALTER TABLE REBUILD SECONDARY](Updating_table_schema_and_settings.md#Rebuilding-a-secondary-index) - Updates/recovers secondary indexes
+* [ALTER TABLE type='distributed'](Updating_table_schema_and_settings.md#Changing-a-distributed-table) - Updates/recovers secondary indexes
+* [ALTER TABLE RENAME](Updating_table_schema_and_settings.md#Renaming-a-real-time-table)
+* [ALTER MATERIALIZED VIEW {name} suspended=1](Integration/Kafka.md#Altering-materialized-views) - Suspend or resume consuming from the Kafka source
 * [DROP TABLE IF EXISTS](Deleting_a_table.md#Deleting-a-table) - Deletes a table (if it exists)
 * [SHOW TABLES](Listing_tables.md#DESCRIBE) - Shows tables list
+* [SHOW SOURCES](Integration/Kafka.md#Listing) - Shows list of Kafka sources
+* [SHOW MATERIALIZED VIEWS](Integration/Kafka.md#Listing) - Shows list of materialized views
+* [SHOW MVS](Integration/Kafka.md#Listing) - Alias of previous command
 * [SHOW CREATE TABLE](Listing_tables.md#DESCRIBE) - Shows SQL command how to create the table
+* [SHOW TABLE INDEXES](Node_info_and_management/Table_settings_and_status/SHOW_TABLE_INDEXES.md) - Displays information about the available secondary indexes for the table
 * [SHOW TABLE STATUS](Node_info_and_management/Table_settings_and_status/SHOW_TABLE_STATUS.md) - Shows information about current table status
 * [SHOW TABLE SETTINGS](Node_info_and_management/Table_settings_and_status/SHOW_TABLE_SETTINGS.md) - Shows table settings
+* [SHOW LOCKS](Securing_and_compacting_a_table/Freezing_a_table.md#SHOW-LOCKS) - Shows information about frozen tables
 
 ##### Data management
 * [INSERT](Data_creation_and_modification/Adding_documents_to_a_table/Adding_documents_to_a_real-time_table.md) - Adds new documents
 * [REPLACE](Data_creation_and_modification/Updating_documents/REPLACE.md) - Replaces existing documents with new ones
+* [REPLACE .. SET](Data_creation_and_modification/Updating_documents/REPLACE.md?client=REPLACE+SET) - Replaces one or multiple fields in a table
 * [UPDATE](Data_creation_and_modification/Updating_documents/UPDATE.md) - Does in-place update in documents
 * [DELETE](Data_creation_and_modification/Deleting_documents.md) - Deletes documents
 * [TRUNCATE TABLE](Emptying_a_table.md) - Deletes all documents from table
@@ -32,6 +45,7 @@
   * [OPTION](Searching/Options.md#OPTION) - Query Options
   * [FACET](Searching/Faceted_search.md) - Faceted search
   * [SUB-SELECTS](Searching/Sub-selects.md) - About using SELECT sub-queries
+  * [JOIN](Searching/Joining.md) - Joining tables in SELECT
 * [EXPLAIN QUERY](Searching/Full_text_matching/Profiling.md#Profiling-without-running-a-query) - Shows query execution plan without running the query itself
 * [SHOW META](Node_info_and_management/SHOW_META.md) - Shows extended information about executed query
 * [SHOW PROFILE](Node_info_and_management/Profiling/Query_profile.md) - Shows profiling information about executed query
@@ -49,7 +63,7 @@
 * [OPTIMIZE TABLE](Securing_and_compacting_a_table/Compacting_a_table.md#OPTIMIZE-TABLE) - Enqueues real-time table for optimization
 
 ##### Importing to a real-time table
-* [ATTACH TABLE](Data_creation_and_modification/Adding_data_from_external_storages/Adding_data_to_tables/Attaching_a_plain_table_to_RT_table.md) - Moves data from a plain table to a real-time table
+* [ATTACH TABLE](Data_creation_and_modification/Adding_data_from_external_storages/Adding_data_to_tables/Attaching_one_table_to_another.md) - Moves data from a plain table to a real-time table
 * [IMPORT TABLE](Data_creation_and_modification/Adding_data_from_external_storages/Adding_data_to_tables/Importing_table.md) - Imports previously created RT or PQ table into a server running in the RT mode
 
 ##### Replication
@@ -72,18 +86,24 @@
 * [CALL SNIPPETS](Searching/Highlighting.md) - Builds a highlighted results snippet from provided data and query
 * [CALL PQ](Searching/Percolate_query.md) - Runs a percolate query
 * [CALL KEYWORDS](Searching/Autocomplete.md#CALL-KEYWORDS) - Used to check how keywords are tokenized. Also allows to retrieve tokenized forms of provided keywords
+* [CALL AUTOCOMPLETE](Searching/Autocomplete.md#CALL-AUTOCOMPLETE) - Autocompletes your search query
 
 ##### Plugins
 * [CREATE FUNCTION](Extensions/UDFs_and_Plugins/UDF/Creating_a_function.md) - Installs a user-defined function (UDF)
 * [DROP FUNCTION](Extensions/UDFs_and_Plugins/UDF/Deleting_a_function.md) - Drops a user-defined function (UDF)
 * [CREATE PLUGIN](Extensions/UDFs_and_Plugins/Plugins/Creating_a_plugin.md) - Installs a plugin
-* [DROP PLUGIN](Extensions/UDFs_and_Plugins/Plugins/Deleting_a_plugin.md) - Drops a plugin
+* [CREATE BUDDY PLUGIN](Extensions/UDFs_and_Plugins/Plugins/Creating_a_plugin.md#CREATE-BUDDY-PLUGIN) - Installs a Buddy plugin
+* [DROP PLUGIN](Extensions/UDFs_and_Plugins/Plugins/Deleting_a_plugin.md#DELETE-PLUGIN) - Drops a plugin
+* [DROP BUDDY PLUGIN](Extensions/UDFs_and_Plugins/Plugins/Deleting_a_plugin.md#DELETE-BUDDY-PLUGIN) - Drops a Buddy plugin
 * [RELOAD PLUGINS](Extensions/UDFs_and_Plugins/Plugins/Reloading_plugins.md) - Reloads all plugins from a given library
+* [ENABLE BUDDY PLUGIN](Extensions/UDFs_and_Plugins/Plugins/Enabling_and_disabling_buddy_plugins.md#ENABLE-BUDDY-PLUGIN) - Reactivates a previously disabled Buddy plugin
+* [DISABLE BUDDY PLUGIN](Extensions/UDFs_and_Plugins/Plugins/Enabling_and_disabling_buddy_plugins.md#DISABLE-BUDDY-PLUGIN) - Deactivates an active Buddy plugin
 
 ##### Server status
 * [SHOW STATUS](Node_info_and_management/Node_status.md#SHOW-STATUS) - Displays a number of useful performance counters
 * [SHOW THREADS](Node_info_and_management/SHOW_THREADS.md) - Lists all currently active client threads
 * [SHOW VARIABLES](Node_info_and_management/SHOW_VARIABLES.md) - Lists server-wide variables and their values
+* [SHOW VERSION](Node_info_and_management/SHOW_VERSION.md#SHOW-VERSION) - Provides detailed version information of various components of the instance.
 
 ### HTTP endpoints
 * [/sql](Connecting_to_the_server/HTTP.md#SQL-over-HTTP) - Execute an SQL statement over HTTP JSON
@@ -96,9 +116,12 @@
 * [/delete](Data_creation_and_modification/Deleting_documents.md) - Removes a document from a table
 * [/bulk](Data_creation_and_modification/Updating_documents/UPDATE.md#Bulk-updates) - Executes multiple insert, update, or delete operations in a single call. Learn more about bulk inserts [here](Data_creation_and_modification/Adding_documents_to_a_table/Adding_documents_to_a_real-time_table.md).
 * [/search](Searching/Full_text_matching/Basic_usage.md#HTTP-JSON) - Performs a search
+* [/search -> knn](Searching/KNN.md) - Performs a KNN vector search
 * [/pq/tbl_name/search](Searching/Percolate_query.md) - Performs a reverse search in a percolate table
+* [/tbl_name/_mapping](Creating_a_table/Local_tables/Real-time_table.md#_mapping-API:) - Creates a table schema in the Elasticsearch style
 
 ### Common things
+* [field name syntax](Creating_a_table/Data_types.md#Field-name-syntax)
 * [data types](Creating_a_table/Data_types.md)
 * [engine](Creating_a_table/Data_types.md)
 * [plain mode](Read_this_first.md#Real-time-mode-vs-plain-mode)
@@ -109,61 +132,66 @@
 * [access_blob_attrs](Server_settings/Searchd.md#access_blob_attrs)
 * [access_doclists](Server_settings/Searchd.md#access_doclists)
 * [access_hitlists](Server_settings/Searchd.md#access_hitlists)
+* [access_dict](Server_settings/Searchd.md#access_dict)
 * [attr_update_reserve](Data_creation_and_modification/Updating_documents/UPDATE.md#attr_update_reserve)
 * [bigram_freq_words](Creating_a_table/NLP_and_tokenization/Low-level_tokenization.md#bigram_freq_words)
-* [bigram_index](Creating_a_table/NLP_and_tokenization/Low-level_tokenization.md#bigram_freq_words)
-* [blend_chars](Creating_a_table/NLP_and_tokenization/Low-level_tokenization.md#bigram_freq_words)
-* [blend_mode](Creating_a_table/NLP_and_tokenization/Low-level_tokenization.md#bigram_freq_words)
-* [charset_table](Creating_a_table/NLP_and_tokenization/Low-level_tokenization.md#bigram_freq_words)
-* [dict](Creating_a_table/NLP_and_tokenization/Low-level_tokenization.md#bigram_freq_words)
+* [bigram_index](Creating_a_table/NLP_and_tokenization/Low-level_tokenization.md#bigram_index)
+* [blend_chars](Creating_a_table/NLP_and_tokenization/Low-level_tokenization.md#blend_chars)
+* [blend_mode](Creating_a_table/NLP_and_tokenization/Low-level_tokenization.md#blend_mode)
+* [charset_table](Creating_a_table/NLP_and_tokenization/Low-level_tokenization.md#charset_table)
+* [dict](Creating_a_table/NLP_and_tokenization/Low-level_tokenization.md#dict)
 * [docstore_block_size](Creating_a_table/Local_tables/Plain_and_real-time_table_settings.md#General-syntax-of-CREATE-TABLE)
 * [docstore_compression](Creating_a_table/Local_tables/Plain_and_real-time_table_settings.md#General-syntax-of-CREATE-TABLE)
 * [docstore_compression_level](Creating_a_table/Local_tables/Plain_and_real-time_table_settings.md#General-syntax-of-CREATE-TABLE)
-* [embedded_limit](Creating_a_table/NLP_and_tokenization/Low-level_tokenization.md#bigram_freq_words)
-* [exceptions](Creating_a_table/NLP_and_tokenization/Low-level_tokenization.md#bigram_freq_words)
+* [embedded_limit](Creating_a_table/NLP_and_tokenization/Low-level_tokenization.md#embedded_limit)
+* [exceptions](Creating_a_table/NLP_and_tokenization/Exceptions.md#exceptions)
 * [expand_keywords](Searching/Options.md#expand_keywords)
 * [global_idf](Searching/Options.md#global_idf)
-* [hitless_words](Creating_a_table/NLP_and_tokenization/Low-level_tokenization.md#bigram_freq_words)
-* [html_index_attrs](Creating_a_table/NLP_and_tokenization/Low-level_tokenization.md#bigram_freq_words)
-* [html_remove_elements](Creating_a_table/NLP_and_tokenization/Low-level_tokenization.md#bigram_freq_words)
-* [html_strip](Creating_a_table/NLP_and_tokenization/Low-level_tokenization.md#bigram_freq_words)
-* [ignore_chars](Creating_a_table/NLP_and_tokenization/Low-level_tokenization.md#bigram_freq_words)
-* [index_exact_words](Creating_a_table/NLP_and_tokenization/Low-level_tokenization.md#bigram_freq_words)
-* [index_field_lengths](Creating_a_table/NLP_and_tokenization/Low-level_tokenization.md#bigram_freq_words)
-* [index_sp](Creating_a_table/NLP_and_tokenization/Low-level_tokenization.md#bigram_freq_words)
-* [index_token_filter](Creating_a_table/NLP_and_tokenization/Low-level_tokenization.md#bigram_freq_words)
-* [index_zones](Creating_a_table/NLP_and_tokenization/Low-level_tokenization.md#bigram_freq_words)
-* [infix_fields](Creating_a_table/NLP_and_tokenization/Low-level_tokenization.md#bigram_freq_words)
+* [hitless_words](Creating_a_table/NLP_and_tokenization/Low-level_tokenization.md#hitless_words)
+* [html_index_attrs](Creating_a_table/NLP_and_tokenization/Advanced_HTML_tokenization.md#html_index_attrs)
+* [html_remove_elements](Creating_a_table/NLP_and_tokenization/Advanced_HTML_tokenization.md#html_remove_elements)
+* [html_strip](Creating_a_table/NLP_and_tokenization/Advanced_HTML_tokenization.md#html_strip)
+* [ignore_chars](Creating_a_table/NLP_and_tokenization/Low-level_tokenization.md#ignore_chars)
+* [index_exact_words](Creating_a_table/NLP_and_tokenization/Morphology.md#index_exact_words)
+* [index_field_lengths](Creating_a_table/NLP_and_tokenization/Low-level_tokenization.md#index_field_lengths)
+* [index_sp](Creating_a_table/NLP_and_tokenization/Advanced_HTML_tokenization.md#index_sp)
+* [index_token_filter](Creating_a_table/NLP_and_tokenization/Low-level_tokenization.md#index_token_filter)
+* [index_zones](Creating_a_table/NLP_and_tokenization/Advanced_HTML_tokenization.md#index_zones)
+* [infix_fields](Creating_a_table/NLP_and_tokenization/Wildcard_searching_settings.md#infix_fields)
 * [inplace_enable](Creating_a_table/Local_tables/Plain_and_real-time_table_settings.md#General-syntax-of-CREATE-TABLE)
 * [inplace_hit_gap](Creating_a_table/Local_tables/Plain_and_real-time_table_settings.md#General-syntax-of-CREATE-TABLE)
 * [inplace_reloc_factor](Creating_a_table/Local_tables/Plain_and_real-time_table_settings.md#General-syntax-of-CREATE-TABLE)
 * [inplace_write_factor](Creating_a_table/Local_tables/Plain_and_real-time_table_settings.md#General-syntax-of-CREATE-TABLE)
+* [jieba_hmm](Creating_a_table/NLP_and_tokenization/Morphology.md#jieba_hmm)
+* [jieba_mode](Creating_a_table/NLP_and_tokenization/Morphology.md#jieba_mode)
+* [jieba_user_dict_path](Creating_a_table/NLP_and_tokenization/Morphology.md#jieba_user_dict_path)
 * [killlist_target](Creating_a_table/Local_tables/Plain_and_real-time_table_settings.md#General-syntax-of-CREATE-TABLE)
-* [max_substring_len](Creating_a_table/NLP_and_tokenization/Low-level_tokenization.md#bigram_freq_words)
-* [min_infix_len](Creating_a_table/NLP_and_tokenization/Low-level_tokenization.md#bigram_freq_words)
-* [min_prefix_len](Creating_a_table/NLP_and_tokenization/Low-level_tokenization.md#bigram_freq_words)
-* [min_stemming_len](Creating_a_table/NLP_and_tokenization/Low-level_tokenization.md#bigram_freq_words)
-* [min_word_len](Creating_a_table/NLP_and_tokenization/Low-level_tokenization.md#bigram_freq_words)
+* [max_substring_len](Creating_a_table/NLP_and_tokenization/Wildcard_searching_settings.md#max_substring_len)
+* [min_infix_len](Creating_a_table/NLP_and_tokenization/Wildcard_searching_settings.md#min_infix_len)
+* [min_prefix_len](Creating_a_table/NLP_and_tokenization/Wildcard_searching_settings.md#min_prefix_len)
+* [min_stemming_len](Creating_a_table/NLP_and_tokenization/Morphology.md#min_stemming_len)
+* [min_word_len](Creating_a_table/NLP_and_tokenization/Low-level_tokenization.md#min_word_len)
 * [morphology](Searching/Options.md#morphology)
-* [morphology_skip_fields](Creating_a_table/NLP_and_tokenization/Low-level_tokenization.md#bigram_freq_words)
-* [ngram_chars](Creating_a_table/NLP_and_tokenization/Low-level_tokenization.md#bigram_freq_words)
-* [ngram_len](Creating_a_table/NLP_and_tokenization/Low-level_tokenization.md#bigram_freq_words)
-* [overshort_step](Creating_a_table/NLP_and_tokenization/Low-level_tokenization.md#bigram_freq_words)
+* [morphology_skip_fields](Creating_a_table/NLP_and_tokenization/Morphology.md#morphology_skip_fields)
+* [ngram_chars](Creating_a_table/NLP_and_tokenization/Low-level_tokenization.md#ngram_chars)
+* [ngram_len](Creating_a_table/NLP_and_tokenization/Low-level_tokenization.md#ngram_len)
+* [overshort_step](Creating_a_table/NLP_and_tokenization/Low-level_tokenization.md#overshort_step)
 * [path](Creating_a_table/Local_tables/Plain_and_real-time_table_settings.md#General-syntax-of-CREATE-TABLE)
-* [phrase_boundary](Creating_a_table/NLP_and_tokenization/Low-level_tokenization.md#bigram_freq_words)
-* [phrase_boundary_step](Creating_a_table/NLP_and_tokenization/Low-level_tokenization.md#bigram_freq_words)
-* [prefix_fields](Creating_a_table/NLP_and_tokenization/Low-level_tokenization.md#bigram_freq_words)
+* [phrase_boundary](Creating_a_table/NLP_and_tokenization/Low-level_tokenization.md#phrase_boundary)
+* [phrase_boundary_step](Creating_a_table/NLP_and_tokenization/Low-level_tokenization.md#phrase_boundary_step)
+* [prefix_fields](Creating_a_table/NLP_and_tokenization/Wildcard_searching_settings.md#prefix_fields)
 * [preopen](Creating_a_table/Local_tables/Plain_and_real-time_table_settings.md#General-syntax-of-CREATE-TABLE)
 * [read_buffer_docs](Creating_a_table/Local_tables/Plain_and_real-time_table_settings.md#General-syntax-of-CREATE-TABLE)
 * [read_buffer_hits](Creating_a_table/Local_tables/Plain_and_real-time_table_settings.md#General-syntax-of-CREATE-TABLE)
-* [regexp_filter](Creating_a_table/NLP_and_tokenization/Low-level_tokenization.md#bigram_freq_words)
-* [stopwords](Creating_a_table/NLP_and_tokenization/Low-level_tokenization.md#bigram_freq_words)
-* [stopword_step](Creating_a_table/NLP_and_tokenization/Low-level_tokenization.md#bigram_freq_words)
-* [stopwords_unstemmed](Creating_a_table/NLP_and_tokenization/Low-level_tokenization.md#bigram_freq_words)
+* [regexp_filter](Creating_a_table/NLP_and_tokenization/Low-level_tokenization.md#regexp_filter)
+* [stopwords](Creating_a_table/NLP_and_tokenization/Ignoring_stop-words.md#stopwords)
+* [stopword_step](Creating_a_table/NLP_and_tokenization/Ignoring_stop-words.md#stopword_step)
+* [stopwords_unstemmed](Creating_a_table/NLP_and_tokenization/Ignoring_stop-words.md#stopwords_unstemmed)
 * [type](Creating_a_table/Local_tables/Plain_and_real-time_table_settings.md#General-syntax-of-CREATE-TABLE)
-* [wordforms](Creating_a_table/NLP_and_tokenization/Low-level_tokenization.md#bigram_freq_words)
+* [wordforms](Creating_a_table/NLP_and_tokenization/Wordforms.md#wordforms)
 
 ##### Plain table settings
+* [json_secondary_indexes](Creating_a_table/Local_tables/Plain_and_real-time_table_settings.md#json_secondary_indexes)
 * [source](Creating_a_table/Local_tables/Plain_and_real-time_table_settings.md#General-syntax-of-CREATE-TABLE)
 * [stored_fields](Creating_a_table/Local_tables/Plain_and_real-time_table_settings.md#General-syntax-of-CREATE-TABLE)
 * [stored_only_fields](Creating_a_table/Local_tables/Plain_and_real-time_table_settings.md#General-syntax-of-CREATE-TABLE)
@@ -184,6 +212,7 @@
 * [rt_attr_bigint](Creating_a_table/Local_tables/Plain_and_real-time_table_settings.md#General-syntax-of-CREATE-TABLE)
 * [rt_attr_bool](Creating_a_table/Local_tables/Plain_and_real-time_table_settings.md#General-syntax-of-CREATE-TABLE)
 * [rt_attr_float](Creating_a_table/Local_tables/Plain_and_real-time_table_settings.md#General-syntax-of-CREATE-TABLE)
+* [rt_attr_float_vector](Creating_a_table/Local_tables/Plain_and_real-time_table_settings.md#General-syntax-of-CREATE-TABLE)
 * [rt_attr_json](Creating_a_table/Local_tables/Plain_and_real-time_table_settings.md#General-syntax-of-CREATE-TABLE)
 * [rt_attr_multi_64](Creating_a_table/Local_tables/Plain_and_real-time_table_settings.md#General-syntax-of-CREATE-TABLE)
 * [rt_attr_multi](Creating_a_table/Local_tables/Plain_and_real-time_table_settings.md#General-syntax-of-CREATE-TABLE)
@@ -192,6 +221,9 @@
 * [rt_attr_uint](Creating_a_table/Local_tables/Plain_and_real-time_table_settings.md#General-syntax-of-CREATE-TABLE)
 * [rt_field](Creating_a_table/Local_tables/Plain_and_real-time_table_settings.md#General-syntax-of-CREATE-TABLE)
 * [rt_mem_limit](Creating_a_table/Local_tables/Plain_and_real-time_table_settings.md#General-syntax-of-CREATE-TABLE)
+* [diskchunk_flush_write_timeout](Creating_a_table/Local_tables/Plain_and_real-time_table_settings.md#General-syntax-of-CREATE-TABLE)
+* [diskchunk_flush_search_timeout](Creating_a_table/Local_tables/Plain_and_real-time_table_settings.md#General-syntax-of-CREATE-TABLE)
+
 
 ## Full-text search operators
 * [OR](Searching/Full_text_matching/Operators.md#OR-operator)
@@ -206,18 +238,20 @@
 * ["word1 word2 ... "](Searching/Full_text_matching/Operators.md#Phrase-search-operator) - phrase search operator
 * ["word1 word2 ... "~N](Searching/Full_text_matching/Operators.md#Proximity-search-operator) - proximity search operator
 * ["word1 word2 ... "/N](Searching/Full_text_matching/Operators.md#Quorum-matching-operator) - quorum matching operator
-* [word1 <<< word2 <<< word3](Searching/Full_text_matching/Operators.md#Strict-order-operator) - strict order operator
+* [word1 << word2 << word3](Searching/Full_text_matching/Operators.md#Strict-order-operator) - strict order operator
 * [=word1](Searching/Full_text_matching/Operators.md#Exact-form-modifier) - exact form modifier
 * [^word1](Searching/Full_text_matching/Operators.md#Field-start-and-field-end-modifier) - field-start modifier
 * [word2$](Searching/Full_text_matching/Operators.md#Field-start-and-field-end-modifier) - field-end modifier
 * [word^N](Searching/Full_text_matching/Operators.md#IDF-boost-modifier) - keyword IDF boost modifier
 * [word1 NEAR/N word2](Searching/Full_text_matching/Operators.md#NEAR-operator) - NEAR, generalized proximity operator
 * [word1 NOTNEAR/N word2](Searching/Full_text_matching/Operators.md#NOTNEAR-operator) - NOTNEAR, negative assertion operator
-* [word1 SENTENCE word2 SENTENCE "word3 word4"](Searching/Full_text_matching/Operators.md#SENTENCE-and-PARAGRAPH-operators) - SENTENCE operator
 * [word1 PARAGRAPH word2 PARAGRAPH "word3 word4"](Searching/Full_text_matching/Operators.md#SENTENCE-and-PARAGRAPH-operators) - PARAGRAPH operator
+* [word1 SENTENCE word2 SENTENCE "word3 word4"](Searching/Full_text_matching/Operators.md#SENTENCE-and-PARAGRAPH-operators) - SENTENCE operator
 * [ZONE:(h3,h4)](Searching/Full_text_matching/Operators.md#ZONE-limit-operator) - ZONE limit operator
 * [ZONESPAN:(h2)](Searching/Full_text_matching/Operators.md#ZONESPAN-limit-operator) - ZONESPAN limit operator
 * [@@relaxed](Searching/Full_text_matching/Operators.md#Field-search-operator) - suppresses errors about missing fields
+* [t?st](Searching/Full_text_matching/Operators.md#Wildcard-operators) - wildcard operators
+* [REGEX(/pattern/)](Searching/Full_text_matching/Operators.md#REGEX-operator) - REGEX operator
 
 ## Functions
 ##### Mathematical
@@ -280,6 +314,7 @@
 ##### Date and time
 * [NOW()](Functions/Date_and_time_functions.md#NOW%28%29) - Returns current timestamp as an INTEGER
 * [CURTIME()](Functions/Date_and_time_functions.md#CURTIME%28%29) - Returns current time in local timezone
+* [CURDATE()](Functions/Date_and_time_functions.md#CURDATE%28%29) - Returns current date in local timezone
 * [UTC_TIME()](Functions/Date_and_time_functions.md#UTC_TIME%28%29) - Returns current time in UTC timezone
 * [UTC_TIMESTAMP()](Functions/Date_and_time_functions.md#UTC_TIMESTAMP%28%29) - Returns current date/time in UTC timezone
 * [SECOND()](Functions/Date_and_time_functions.md#SECOND%28%29) - Returns integer second from the timestamp argument
@@ -287,10 +322,19 @@
 * [HOUR()](Functions/Date_and_time_functions.md#HOUR%28%29) - Returns integer hour from the timestamp argument
 * [DAY()](Functions/Date_and_time_functions.md#DAY%28%29) - Returns integer day from the timestamp argument
 * [MONTH()](Functions/Date_and_time_functions.md#MONTH%28%29) - Returns integer month from the timestamp argument
+* [QUARTER()](Functions/Date_and_time_functions.md#QUARTER%28%29) - Returns the integer quarter of the year from a timestamp argument
 * [YEAR()](Functions/Date_and_time_functions.md#YEAR%28%29) - Returns integer year from the timestamp argument
+* [DAYNAME()](Functions/Date_and_time_functions.md#DAYNAME%28%29) - Returns the weekday name for a given timestamp argument
+* [MONTHNAME()](Functions/Date_and_time_functions.md#MONTHNAME%28%29) - Returns the name of the month for a given timestamp argument
+* [DAYOFWEEK()](Functions/Date_and_time_functions.md#DAYOFWEEK%28%29) - Returns the integer weekday index for a given timestamp argument
+* [DAYOFYEAR()](Functions/Date_and_time_functions.md#DAYOFYEAR%28%29) - Returns the integer day of the year for a given timestamp argument
+* [YEARWEEK()](Functions/Date_and_time_functions.md#YEARWEEK%28%29) - Returns the integer year and the day code of the first day of current week for a given timestamp argument
 * [YEARMONTH()](Functions/Date_and_time_functions.md#YEARMONTH%28%29) - Returns integer year and month code from the timestamp argument
 * [YEARMONTHDAY()](Functions/Date_and_time_functions.md#YEARMONTHDAY%28%29) - Returns integer year, month and day code from the timestamp argument
 * [TIMEDIFF()](Functions/Date_and_time_functions.md#TIMEDIFF%28%29) - Returns difference between the timstamps
+* [DATEDIFF()](Functions/Date_and_time_functions.md#DATEDIFF%28%29) - Returns the number of days between two given timestamps
+* [DATE()](Functions/Date_and_time_functions.md#DATE%28%29) - Formats the date part from a timestamp argument
+* [TIME()](Functions/Date_and_time_functions.md#TIME%28%29) - Formats the time part from a timestamp argument
 * [DATE_FORMAT()](Functions/Date_and_time_functions.md#DATE_FORMAT%28%29) - Returns a formatted string based on the provided date and format arguments
 
 
@@ -304,9 +348,12 @@
 * [REGEX()](Functions/String_functions.md#REGEX%28%29) - Returns 1 if regular expression matched to string of attribute and 0 otherwise
 * [SNIPPET()](Functions/String_functions.md#SNIPPET%28%29) - Highlights search results
 * [SUBSTRING_INDEX()](Functions/String_functions.md#SUBSTRING_INDEX%28%29) - Returns a substring of the string before the specified number of delimiter occurs
-*
+
 ##### Other
+* [CONNECTION_ID()](Functions/Other_functions.md#CONNECTION_ID%28%29) - Returns the current connection ID
+* [KNN_DIST()](Functions/Other_functions.md#KNN_DIST%28%29) - Returns KNN vector search distance
 * [LAST_INSERT_ID()](Functions/Other_functions.md#LAST_INSERT_ID%28%29) - Returns ids of documents inserted or replaced by last statement in the current session
+* [UUID_SHORT()](Functions/Other_functions.md#UUID_SHORT%28%29) - Returns a "short" universal identifier following the same algorithm as for auto-id generation.
 
 ## Common settings in configuration file
 To be put to section `common {}` in configuration file:
@@ -380,6 +427,7 @@ To be put in the `searchd {}` section of the configuration file:
   * [access_doclists](Server_settings/Searchd.md#access_doclists) - Defines how table's doclists file is accessed
   * [access_hitlists](Server_settings/Searchd.md#access_hitlists) - Defines how table's hitlists file is accessed
   * [access_plain_attrs](Server_settings/Searchd.md#access_plain_attrs) - Defines how search server accesses table's plain attributes
+  * [access_dict](Server_settings/Searchd.md#access_dict) - Defines how table's dictionary file is accessed
   * [agent_connect_timeout](Creating_a_table/Creating_a_distributed_table/Remote_tables.md#agent_connect_timeout) - Remote agent connection timeout
   * [agent_query_timeout](Searching/Options.md#agent_query_timeout) - Remote agent query timeout
   * [agent_retry_count](Creating_a_table/Creating_a_distributed_table/Remote_tables.md#agent_connect_timeout) - Specifies the number of times Manticore tries to connect and query remote agents
@@ -387,18 +435,26 @@ To be put in the `searchd {}` section of the configuration file:
   * [attr_flush_period](Data_creation_and_modification/Updating_documents/UPDATE.md#attr_flush_period) - Sets the time period between flushing updated attributes to disk
   * [binlog_flush](Server_settings/Searchd.md#binlog_flush) - Binary log transaction flush/sync mode
   * [binlog_max_log_size](Server_settings/Searchd.md#binlog_max_log_size) - Maximum binary log file size
+  * [binlog_common](Logging/Binary_logging.md#Binary-logging-strategies) - Common binary log file for all tables
+  * [binlog_filename_digits](Logging/Binary_logging.md#Log-files) - Number of digits in a binlog file name
+  * [binlog_flush](Logging/Binary_logging.md#Binary-flushing-strategies) - Binlog flushing strategy
   * [binlog_path](Server_settings/Searchd.md#binlog_path) - Binary log files path
   * [client_timeout](Creating_a_table/Creating_a_distributed_table/Remote_tables.md#agent) - Maximum time to wait between requests when using persistent connections
   * [collation_libc_locale](Server_settings/Searchd.md#collation_libc_locale) - Server libc locale
   * [collation_server](Server_settings/Searchd.md#collation_server) - Default server collation
   * [data_dir](Server_settings/Searchd.md#data_dir) - Path to data directory where Manticore stores everything ([RT mode](Creating_a_table/Local_tables.md#Online-schema-management-%28RT-mode%29))
+  * [diskchunk_flush_write_timeout](Server_settings/Searchd.md#diskchunk_flush_write_timeout) - Timeout for auto-flushing a RAM chunk if there are no writes to it
+  * [diskchunk_flush_search_timeout](Server_settings/Searchd.md#diskchunk_flush_search_timeout) - Timeout for preventing auto-flushing a RAM chunk if there are no searches in the table
   * [docstore_cache_size](Server_settings/Searchd.md#docstore_cache_size) - Maximum size of document blocks from document storage held in memory
-  * [expansion_limit](Creating_a_table/NLP_and_tokenization/Low-level_tokenization.md#bigram_freq_words) - Maximum number of expanded keywords for a single wildcard
+  * [expansion_limit](Creating_a_table/NLP_and_tokenization/Wildcard_searching_settings.md#expansion_limit) - Maximum number of expanded keywords for a single wildcard
   * [grouping_in_utc](Server_settings/Searchd.md#grouping_in_utc) - Enables using UTC timezone for grouping time fields
   * [ha_period_karma](Server_settings/Searchd.md#ha_period_karma) - Agent mirror statistics window size
   * [ha_ping_interval](Creating_a_cluster/Remote_nodes/Load_balancing.md#ha_ping_interval) - Interval between agent mirror pings
   * [hostname_lookup](Creating_a_table/Creating_a_distributed_table/Remote_tables.md#agent) - Hostnames renew strategy
   * [jobs_queue_size](Server_settings/Searchd.md#jobs_queue_size) - Defines the maximum number of "jobs" allowed in the queue simultaneously
+  * [join_batch_size](Searching/Joining.md#Join-batching) - Defines batch size for table joins to balance performance and memory usage
+  * [join_cache_size](Searching/Joining.md#Join-caching) - Defines cache size for reusing JOIN query results
+  * [kibana_version_string](Server_settings/Searchd.md#kibana_version_string) – The server version string that's sent in response to Kibana requests
   * [listen](Server_settings/Searchd.md#listen) - Specifies IP address and port or Unix-domain socket path for searchd to listen on
   * [listen_backlog](Server_settings/Searchd.md#listen_backlog) - TCP listen backlog
   * [listen_tfo](Creating_a_table/Creating_a_distributed_table/Remote_tables.md#agent) - Enables TCP_FASTOPEN flag for all listeners
@@ -447,6 +503,7 @@ To be put in the `searchd {}` section of the configuration file:
   * [ssl_key](Server_settings/Searchd.md#ssl_key) - Path to SSL certificate key of the server
   * [subtree_docs_cache](Server_settings/Searchd.md#subtree_docs_cache) - Maximum common subtree document cache size
   * [subtree_hits_cache](Server_settings/Searchd.md#subtree_hits_cache) - Maximum common subtree hit cache size, per-query
+  * [timezone](Server_settings/Searchd.md#timezone) - Timezone used by date/time-related functions
   * [thread_stack](Server_settings/Searchd.md#thread_stack) - Maximum stack size for a job
   * [unlink_old](Server_settings/Searchd.md#unlink_old) - Whether to unlink .old table copies on successful rotation
   * [watchdog](Server_settings/Searchd.md#watchdog) - Whether to enable or disable Manticore server watchdog
@@ -547,7 +604,7 @@ spelldump [options] <dictionary> <affix> [result] [locale-name]
 A comprehensive alphabetical list of keywords currently reserved in Manticore SQL syntax (thus, they cannot be used as identifiers).
 
 ```
-AND, AS, BY, COLUMNARSCAN, DISTINCT, DIV, DOCIDINDEX, EXPLAIN, FACET, FALSE, FORCE, FROM, IGNORE, IN, INDEXES, IS, LIMIT, MOD, NOT, NO_COLUMNARSCAN, NO_DOCIDINDEX, NO_SECONDARYINDEX, NULL, OFFSET, OR, ORDER, REGEX, RELOAD, SECONDARYINDEX, SELECT, SYSFILTERS, TRUE
+AND, AS, BY, COLUMNARSCAN, DISTINCT, DIV, DOCIDINDEX, EXPLAIN, FACET, FALSE, FORCE, FROM, IGNORE, IN, INDEXES, INNER, IS, JOIN, KNN, LEFT, LIMIT, MOD, NOT, NO_COLUMNARSCAN, NO_DOCIDINDEX, NO_SECONDARYINDEX, NULL, OFFSET, ON, OR, ORDER, RELOAD, SECONDARYINDEX, SELECT, SYSFILTERS, TRUE
 ```
 
 ## Documentation for old Manticore versions
@@ -580,12 +637,21 @@ AND, AS, BY, COLUMNARSCAN, DISTINCT, DIV, DOCIDINDEX, EXPLAIN, FACET, FALSE, FOR
 * [3.5.0](https://manual.manticoresearch.com/manticore-3-5-0/)
 * [3.5.2](https://manual.manticoresearch.com/manticore-3-5-2/)
 * [3.5.4](https://manual.manticoresearch.com/manticore-3-5-4/)
-* [3.6.0](https://manual.manticoresearch.com/manticore-3-6-0/)
 * [4.0.2](https://manual.manticoresearch.com/manticore-4-0-2/)
 * [4.2.0](https://manual.manticoresearch.com/manticore-4-2-0/)
-* [5.0.0](https://manual.manticoresearch.com/manticore-5-0-0/)
-* [5.0.2](https://manual.manticoresearch.com/manticore-5-0-2/)
-* [6.0.0](https://manual.manticoresearch.com/manticore-6-0-0/)
-* [6.0.2](https://manual.manticoresearch.com/manticore-6-0-2/)
-* [6.0.4](https://manual.manticoresearch.com/manticore-6-0-4/)
+* [5.0.2](https://manual.manticoresearch.com/manticore-5-0-2/). [Installation page](https://manticoresearch.com/install-5.0.0/)
+* [6.0.0](https://manual.manticoresearch.com/manticore-6-0-0/). [Installation page](https://manticoresearch.com/install-6.0.0/)
+* [6.0.2](https://manual.manticoresearch.com/manticore-6-0-2/). [Installation page](https://manticoresearch.com/install-6.0.2/)
+* [6.0.4](https://manual.manticoresearch.com/manticore-6-0-4/). [Installation page](https://manticoresearch.com/install-6.0.4/)
+* [6.2.0](https://manual.manticoresearch.com/manticore-6-2-0/). [Installation page](https://manticoresearch.com/install-6.2.0/)
+* [6.2.12](https://manual.manticoresearch.com/manticore-6-2-12/). [Installation page](https://manticoresearch.com/install-6.2.12/)
+* [6.3.0](https://manual.manticoresearch.com/manticore-6-3-0/). [Installation page](https://manticoresearch.com/install-6.3.0/)
+* [6.3.2](https://manual.manticoresearch.com/manticore-6-3-2/). [Installation page](https://manticoresearch.com/install-6.3.2/)
+* [6.3.4](https://manual.manticoresearch.com/manticore-6-3-4/). [Installation page](https://manticoresearch.com/install-6.3.4/)
+* [6.3.6](https://manual.manticoresearch.com/manticore-6-3-6/). [Installation page](https://manticoresearch.com/install-6.3.6/)
+* [6.3.8](https://manual.manticoresearch.com/manticore-6-3-8/). [Installation page](https://manticoresearch.com/install-6.3.8/)
+* [7.0.0](https://manual.manticoresearch.com/manticore-7-0-0/). [Installation page](https://manticoresearch.com/install-7.0.0/)
+* [7.4.6](https://manual.manticoresearch.com/manticore-7-4-6/). [Installation page](https://manticoresearch.com/install-7.4.6/)
+* [9.2.14](https://manual.manticoresearch.com/manticore-9-2-14/). [Installation page](https://manticoresearch.com/install-9.2.14/)
+* [9.3.2](https://manual.manticoresearch.com/manticore-9-3-2/). [Installation page](https://manticoresearch.com/install-9.3.2/)
 <!-- proofread -->

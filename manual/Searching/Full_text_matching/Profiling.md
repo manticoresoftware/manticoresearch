@@ -43,7 +43,7 @@ When using the HTTP JSON protocol we can just enable `"profile":true` to get in 
 
 ```json
 {
-  "index":"test",
+  "table":"test",
   "profile":true,
   "query":
   {
@@ -97,7 +97,7 @@ Variable: transformed_tree
 ```JSON
 POST /search
 {
-  "index": "forum",
+  "table": "forum",
   "query": {"query_string": "i me"},
   "_source": { "excludes":["*"] },
   "limit": 1,
@@ -116,7 +116,7 @@ POST /search
     "hits":
     [
        {
-          "_id":"406443",
+          "_id": 406443,
           "_score":3493,
           "_source":{}
        }
@@ -213,7 +213,7 @@ Python
 <!-- request Python -->
 
 ```python
-searchApi.search({"index":"forum","query":{"query_string":"i me"},"_source":{"excludes":["*"]},"limit":1,"profile":True})
+searchApi.search({"table":"forum","query":{"query_string":"i me"},"_source":{"excludes":["*"]},"limit":1,"profile":True})
 ```
 <!-- response Python -->
 ``` python
@@ -235,16 +235,45 @@ searchApi.search({"index":"forum","query":{"query_string":"i me"},"_source":{"ex
  'took': 0}
 
 ```
+
+<!-- intro -->
+Python-asyncio
+<!-- request Python-asyncio -->
+
+```python
+await searchApi.search({"table":"forum","query":{"query_string":"i me"},"_source":{"excludes":["*"]},"limit":1,"profile":True})
+```
+<!-- response Python-asyncio -->
+``` python
+{'hits': {'hits': [{u'_id': u'100', u'_score': 2500, u'_source': {}}],
+          'total': 1},
+ 'profile': {u'query': {u'children': [{u'children': [{u'querypos': 1,
+                                                      u'type': u'KEYWORD',
+                                                      u'word': u'i'}],
+                                       u'description': u'AND(KEYWORD(i, querypos=1))',
+                                       u'type': u'AND'},
+                                      {u'children': [{u'querypos': 2,
+                                                      u'type': u'KEYWORD',
+                                                      u'word': u'me'}],
+                                       u'description': u'AND(KEYWORD(me, querypos=2))',
+                                       u'type': u'AND'}],
+                        u'description': u'AND( AND(KEYWORD(i, querypos=1)),  AND(KEYWORD(me, querypos=2)))',
+                        u'type': u'AND'}},
+ 'timed_out': False,
+ 'took': 0}
+
+```
+
 <!-- intro -->
 javascript
 <!-- request javascript -->
 
 ```javascript
-res = await searchApi.search({"index":"forum","query":{"query_string":"i me"},"_source":{"excludes":["*"]},"limit":1,"profile":true});
+res = await searchApi.search({"table":"forum","query":{"query_string":"i me"},"_source":{"excludes":["*"]},"limit":1,"profile":true});
 ```
 <!-- response javascript -->
 ``` javascript
-{"hits": {"hits": [{"_id": "100", "_score": 2500, "_source": {}}],
+{"hits": {"hits": [{"_id": 100, "_score": 2500, "_source": {}}],
           "total": 1},
  "profile": {"query": {"children": [{"children": [{"querypos": 1,
                                                       "type": "KEYWORD",
@@ -321,6 +350,158 @@ class SearchResponse {
 }
 ```
 
+<!-- intro -->
+Rust
+<!-- request Rust -->
+
+```rust
+let query = SearchQuery {
+     query_string: Some(serde_json::json!("i me").into()),
+    ..Default::default()
+};
+let search_req = SearchRequest {
+    table: "forum".to_string(),
+    query: Some(Box::new(query)),
+    sort: serde_json::json!(["*"]),
+    limit: serde_json::json!(1),
+    profile: serde_json::json!(true),
+    ..Default::default(),
+};
+let search_res = search_api.search(search_req).await;
+```
+<!-- response Rust -->
+```rust
+class SearchResponse {
+    took: 18
+    timedOut: false
+    hits: class SearchResponseHits {
+        total: 1
+        hits: [{_id=100, _score=2500, _source={}}]
+        aggregations: null
+    }
+    profile: {query={type=AND, description=AND( AND(KEYWORD(i, querypos=1)),  AND(KEYWORD(me, querypos=2))), children=[{type=AND, description=AND(KEYWORD(i, querypos=1)), children=[{type=KEYWORD, word=i, querypos=1}]}, {type=AND, description=AND(KEYWORD(me, querypos=2)), children=[{type=KEYWORD, word=me, querypos=2}]}]}}
+}
+```
+
+<!-- intro -->
+TypeScript
+<!-- request TypeScript -->
+
+```typescript
+res = await searchApi.search({
+  index: 'test',
+  query: { query_string: 'Text' }, 
+  _source: { excludes: ['*'] },
+  limit: 1,
+  profile: true
+});
+```
+<!-- response TypeScript -->
+``` typescript
+{
+	"hits": 
+	{
+		"hits": 
+		[{
+			"_id": 1,
+			"_score": 1480,
+			"_source": {}
+		}],
+        "total": 1
+	},
+	"profile":
+	{
+		"query": {
+			"children": 
+			[{
+				"children": 
+				[{
+					"querypos": 1,
+                    "type": "KEYWORD",
+                    "word": "i"
+                }],
+				"description": "AND(KEYWORD(i, querypos=1))",
+				"type": "AND"
+			},
+            {
+            	"children": 
+            	[{
+            		"querypos": 2,
+                    "type": "KEYWORD",
+                    "word": "me"
+                }],
+                "description": "AND(KEYWORD(me, querypos=2))",
+				"type": "AND"
+			}],
+            "description": "AND( AND(KEYWORD(i, querypos=1)),  AND(KEYWORD(me, querypos=2)))",
+            "type": "AND"
+		}
+	},
+	"timed_out": False,
+	"took": 0
+}
+```
+
+<!-- intro -->
+Go
+<!-- request Go -->
+
+```go
+searchRequest := manticoresearch.NewSearchRequest("test")
+query := map[string]interface{} {"query_string": "Text"}
+source := map[string]interface{} { "excludes": []string {"*"} }
+searchRequest.SetQuery(query)
+searchRequest.SetSource(source)
+searchReq.SetLimit(1)
+searchReq.SetProfile(true)
+res, _, _ := apiClient.SearchAPI.Search(context.Background()).SearchRequest(*searchRequest).Execute()
+```
+<!-- response Go -->
+``` Go
+{
+	"hits": 
+	{
+		"hits": 
+		[{
+			"_id": 1,
+			"_score": 1480,
+			"_source": {}
+		}],
+        "total": 1
+	},
+	"profile":
+	{
+		"query": {
+			"children": 
+			[{
+				"children": 
+				[{
+					"querypos": 1,
+                    "type": "KEYWORD",
+                    "word": "i"
+                }],
+				"description": "AND(KEYWORD(i, querypos=1))",
+				"type": "AND"
+			},
+            {
+            	"children": 
+            	[{
+            		"querypos": 2,
+                    "type": "KEYWORD",
+                    "word": "me"
+                }],
+                "description": "AND(KEYWORD(me, querypos=2))",
+				"type": "AND"
+			}],
+            "description": "AND( AND(KEYWORD(i, querypos=1)),  AND(KEYWORD(me, querypos=2)))",
+            "type": "AND"
+		}
+	},
+	"timed_out": False,
+	"took": 0
+}
+```
+
 <!-- end -->
 
 
@@ -377,7 +558,7 @@ Query OK, 0 rows affected (0.00 sec)
 ```JSON
 POST /search
 {
-  "index": "forum",
+  "table": "forum",
   "query": {"query_string": "@title way* @content hey"},
   "_source": { "excludes":["*"] },
   "limit": 1,
@@ -396,7 +577,7 @@ POST /search
     "hits":
     [
        {
-          "_id":"711651",
+          "_id": 711651,
           "_score":2539,
           "_source":{}
        }
@@ -703,7 +884,7 @@ Python
 <!-- request Python -->
 
 ```python
-searchApi.search({"index":"forum","query":{"query_string":"@title way* @content hey"},"_source":{"excludes":["*"]},"limit":1,"profile":true})
+searchApi.search({"table":"forum","query":{"query_string":"@title way* @content hey"},"_source":{"excludes":["*"]},"limit":1,"profile":true})
 ```
 <!-- response Python -->
 ``` python
@@ -730,16 +911,50 @@ searchApi.search({"index":"forum","query":{"query_string":"@title way* @content 
  'took': 0}
 
 ```
+
+<!-- intro -->
+Python-asyncio
+<!-- request Python-asyncio -->
+
+```python
+await searchApi.search({"table":"forum","query":{"query_string":"@title way* @content hey"},"_source":{"excludes":["*"]},"limit":1,"profile":true})
+```
+<!-- response Python-asyncio -->
+``` python
+{'hits': {'hits': [{u'_id': u'2811025403043381551',
+                    u'_score': 2643,
+                    u'_source': {}}],
+          'total': 1},
+ 'profile': {u'query': {u'children': [{u'children': [{u'expanded': True,
+                                                      u'querypos': 1,
+                                                      u'type': u'KEYWORD',
+                                                      u'word': u'way*'}],
+                                       u'description': u'AND(fields=(title), KEYWORD(way*, querypos=1, expanded))',
+                                       u'fields': [u'title'],
+                                       u'type': u'AND'},
+                                      {u'children': [{u'querypos': 2,
+                                                      u'type': u'KEYWORD',
+                                                      u'word': u'hey'}],
+                                       u'description': u'AND(fields=(content), KEYWORD(hey, querypos=2))',
+                                       u'fields': [u'content'],
+                                       u'type': u'AND'}],
+                        u'description': u'AND( AND(fields=(title), KEYWORD(way*, querypos=1, expanded)),  AND(fields=(content), KEYWORD(hey, querypos=2)))',
+                        u'type': u'AND'}},
+ 'timed_out': False,
+ 'took': 0}
+
+```
+
 <!-- intro -->
 javascript
 <!-- request javascript -->
 
 ```javascript
-res = await searchApi.search({"index":"forum","query":{"query_string":"@title way* @content hey"},"_source":{"excludes":["*"]},"limit":1,"profile":true});
+res = await searchApi.search({"table":"forum","query":{"query_string":"@title way* @content hey"},"_source":{"excludes":["*"]},"limit":1,"profile":true});
 ```
 <!-- response javascript -->
 ``` javascript
-{"hits": {"hits": [{"_id": "2811025403043381551",
+{"hits": {"hits": [{"_id": 2811025403043381551,
                     "_score": 2643,
                     "_source": {}}],
           "total": 1},
@@ -819,6 +1034,143 @@ class SearchResponse {
     profile: {query={type=AND, description=AND( AND(fields=(title), KEYWORD(way*, querypos=1, expanded)),  AND(fields=(content), KEYWORD(hey, querypos=2))), children=[{type=AND, description=AND(fields=(title), KEYWORD(way*, querypos=1, expanded)), fields=[title], children=[{type=KEYWORD, word=way*, querypos=1, expanded=true}]}, {type=AND, description=AND(fields=(content), KEYWORD(hey, querypos=2)), fields=[content], children=[{type=KEYWORD, word=hey, querypos=2}]}]}}
 }
 ```
+
+<!-- intro -->
+Rust
+<!-- request Rust -->
+
+```rust
+let query = SearchQuery {
+     query_string: Some(serde_json::json!("@title way* @content hey").into()),
+    ..Default::default()
+};
+let search_req = SearchRequest {
+    table: "forum".to_string(),
+    query: Some(Box::new(query)),
+    sort: serde_json::json!(["*"]),
+    limit: serde_json::json!(1),
+    profile: serde_json::json!(true),
+    ..Default::default(),
+};
+let search_res = search_api.search(search_req).await;
+```
+<!-- response Rust -->
+```rust
+class SearchResponse {
+    took: 18
+    timedOut: false
+    hits: class SearchResponseHits {
+        total: 1
+        hits: [{_id=2811025403043381551, _score=2643, _source={}}]
+        aggregations: null
+    }
+    profile: {query={type=AND, description=AND( AND(fields=(title), KEYWORD(way*, querypos=1, expanded)),  AND(fields=(content), KEYWORD(hey, querypos=2))), children=[{type=AND, description=AND(fields=(title), KEYWORD(way*, querypos=1, expanded)), fields=[title], children=[{type=KEYWORD, word=way*, querypos=1, expanded=true}]}, {type=AND, description=AND(fields=(content), KEYWORD(hey, querypos=2)), fields=[content], children=[{type=KEYWORD, word=hey, querypos=2}]}]}}
+}
+```
+
+<!-- intro -->
+TypeScript
+<!-- request TypeScript -->
+
+```typescript
+res = await searchApi.search({
+  index: 'test',
+  query: { query_string: '@content 1'},
+  _source: { excludes: ["*"] },
+  limit:1,
+  profile":true
+});
+```
+<!-- response TypeScript -->
+``` typescript
+{
+	"hits": 
+	{
+		"hits": 
+		[{
+			"_id": 1,
+            "_score": 1480,
+            "_source": {}
+        }],
+        "total": 1
+    },
+ 	"profile": 
+ 	{
+ 		"query": 
+ 		{
+ 			"children": 
+ 			[{
+ 				"children": 
+ 				[{
+ 					"expanded": True,
+                    "querypos": 1,
+                    "type": "KEYWORD",
+                    "word": "1*"
+                }],
+                "description": "AND(fields=(content), KEYWORD(1*, querypos=1, expanded))",
+                "fields": ["content"],
+                "type": "AND"
+            }],
+            "description": "AND(fields=(content), KEYWORD(1*, querypos=1))",
+            "type": "AND"
+        }},
+	"timed_out": False,
+	"took": 0
+}
+```
+
+<!-- intro -->
+Go
+<!-- request Go -->
+
+```go
+searchRequest := manticoresearch.NewSearchRequest("test")
+query := map[string]interface{} {"query_string": "1*"}
+source := map[string]interface{} { "excludes": []string {"*"} }
+searchRequest.SetQuery(query)
+searchRequest.SetSource(source)
+searchReq.SetLimit(1)
+searchReq.SetProfile(true)
+res, _, _ := apiClient.SearchAPI.Search(context.Background()).SearchRequest(*searchRequest).Execute()
+```
+<!-- response Go -->
+``` go
+{
+	"hits": 
+	{
+		"hits": 
+		[{
+			"_id": 1,
+            "_score": 1480,
+            "_source": {}
+        }],
+        "total": 1
+    },
+ 	"profile": 
+ 	{
+ 		"query": 
+ 		{
+ 			"children": 
+ 			[{
+ 				"children": 
+ 				[{
+ 					"expanded": True,
+                    "querypos": 1,
+                    "type": "KEYWORD",
+                    "word": "1*"
+                }],
+                "description": "AND(fields=(content), KEYWORD(1*, querypos=1, expanded))",
+                "fields": ["content"],
+                "type": "AND"
+            }],
+            "description": "AND(fields=(content), KEYWORD(1*, querypos=1))",
+            "type": "AND"
+        }},
+	"timed_out": False,
+	"took": 0
+}
+```
+
 <!-- end -->
 
 

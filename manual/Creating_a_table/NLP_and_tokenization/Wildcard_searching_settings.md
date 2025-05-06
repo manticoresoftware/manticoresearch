@@ -64,8 +64,18 @@ $index->create([
 ```python
 utilsApi.sql('CREATE TABLE products(title text, price float) min_prefix_len = \'3\'')
 ```
+
 <!-- intro -->
-##### javascript:
+##### Python-asyncio:
+
+<!-- request Python-asyncio -->
+
+```python
+await utilsApi.sql('CREATE TABLE products(title text, price float) min_prefix_len = \'3\'')
+```
+
+<!-- intro -->
+##### Javascript:
 
 <!-- request javascript -->
 
@@ -77,14 +87,23 @@ res = await utilsApi.sql('CREATE TABLE products(title text, price float) min_pre
 ##### Java:
 <!-- request Java -->
 ```java
-utilsApi.sql("CREATE TABLE products(title text, price float) min_prefix_len = '3'");
+utilsApi.sql("CREATE TABLE products(title text, price float) min_prefix_len = '3'", true);
 ```
 
 <!-- intro -->
 ##### C#:
 <!-- request C# -->
 ```clike
-utilsApi.Sql("CREATE TABLE products(title text, price float) min_prefix_len = '3'");
+utilsApi.Sql("CREATE TABLE products(title text, price float) min_prefix_len = '3'", true);
+```
+
+<!-- intro -->
+##### Rust:
+
+<!-- request Rust -->
+
+```rust
+utils_api.sql("CREATE TABLE products(title text, price float) min_prefix_len = '3'", Some(true)).await;
 ```
 
 <!-- request CONFIG -->
@@ -167,8 +186,18 @@ $index->create([
 ```python
 utilsApi.sql('CREATE TABLE products(title text, price float) min_infix_len = \'3\'')
 ```
+
 <!-- intro -->
-##### javascript:
+##### Python-asyncio:
+
+<!-- request Python-asyncio -->
+
+```python
+await utilsApi.sql('CREATE TABLE products(title text, price float) min_infix_len = \'3\'')
+```
+
+<!-- intro -->
+##### Javascript:
 
 <!-- request javascript -->
 
@@ -180,14 +209,23 @@ res = await utilsApi.sql('CREATE TABLE products(title text, price float) min_inf
 ##### Java:
 <!-- request Java -->
 ```java
-utilsApi.sql("CREATE TABLE products(title text, price float) min_infix_len = '3'");
+utilsApi.sql("CREATE TABLE products(title text, price float) min_infix_len = '3'", true);
 ```
 
 <!-- intro -->
 ##### C#:
 <!-- request C# -->
 ```clike
-utilsApi.Sql("CREATE TABLE products(title text, price float) min_infix_len = '3'");
+utilsApi.Sql("CREATE TABLE products(title text, price float) min_infix_len = '3'", true);
+```
+
+<!-- intro -->
+##### Rust:
+
+<!-- request Rust -->
+
+```rust
+utils_api.sql("CREATE TABLE products(title text, price float) min_infix_len = '3'", Some(true)).await;
 ```
 
 <!-- request CONFIG -->
@@ -345,8 +383,18 @@ $index->create([
 ```python
 utilsApi.sql('CREATE TABLE products(title text, price float) expand_keywords = \'1\'')
 ```
+
 <!-- intro -->
-##### javascript:
+##### Python-asyncio:
+
+<!-- request Python-asyncio -->
+
+```python
+await utilsApi.sql('CREATE TABLE products(title text, price float) expand_keywords = \'1\'')
+```
+
+<!-- intro -->
+##### Javascript:
 
 <!-- request javascript -->
 
@@ -358,14 +406,23 @@ res = await utilsApi.sql('CREATE TABLE products(title text, price float) expand_
 ##### Java:
 <!-- request Java -->
 ```java
-utilsApi.sql("CREATE TABLE products(title text, price float) expand_keywords = '1'");
+utilsApi.sql("CREATE TABLE products(title text, price float) expand_keywords = '1'", true);
 ```
 
 <!-- intro -->
 ##### C#:
 <!-- request C# -->
 ```clike
-utilsApi.Sql("CREATE TABLE products(title text, price float) expand_keywords = '1'");
+utilsApi.Sql("CREATE TABLE products(title text, price float) expand_keywords = '1'", true);
+```
+
+<!-- intro -->
+##### Rust:
+
+<!-- request Rust -->
+
+```rust
+utils_api.sql("CREATE TABLE products(title text, price float) expand_keywords = '1'", Some(true)).await;
 ```
 
 <!-- request CONFIG -->

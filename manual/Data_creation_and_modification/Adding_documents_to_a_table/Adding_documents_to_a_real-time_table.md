@@ -48,7 +48,7 @@ Query OK, 1 rows affected (0.00 sec)
 ```json
 POST /insert
 {
-  "index":"products",
+  "table":"products",
   "id":1,
   "doc":
   {
@@ -59,7 +59,7 @@ POST /insert
 
 POST /insert
 {
-  "index":"products",
+  "table":"products",
   "id":2,
   "doc":
   {
@@ -69,7 +69,7 @@ POST /insert
 
 POST /insert
 {
-  "index":"products",
+  "table":"products",
   "id":0,
   "doc":
   {
@@ -83,22 +83,22 @@ POST /insert
 
 ```json
 {
-  "_index": "products",
+  "table": "products",
   "_id": 1,
   "created": true,
   "result": "created",
   "status": 201
 }
 {
-  "_index": "products",
+  "table": "products",
   "_id": 2,
   "created": true,
   "result": "created",
   "status": 201
 }
 {
-  "_index": "products",
-  "_id": 0,
+  "table": "products",
+  "_id": 1657860156022587406,
   "created": true,
   "result": "created",
   "status": 201
@@ -110,6 +110,8 @@ POST /insert
 ##### Elasticsearch:
 
 <!-- request Elasticsearch -->
+
+> NOTE: `_create` requires [Manticore Buddy](../Installation/Manticore_Buddy.md). If it doesn't work, make sure Buddy is installed.
 
 ```json
 POST /products/_create/3
@@ -130,7 +132,7 @@ POST /products/_create/
 ```json
 {
 "_id":3,
-"_index":"products",
+"table":"products",
 "_primary_term":1,
 "_seq_no":0,
 "_shards":{
@@ -144,7 +146,7 @@ POST /products/_create/
 }
 {
 "_id":2235747273424240642,
-"_index":"products",
+"table":"products",
 "_primary_term":1,
 "_seq_no":0,
 "_shards":{
@@ -181,19 +183,31 @@ $index->addDocuments([
 <!-- request Python -->
 
 ``` python
-indexApi.insert({"index" : "test", "id" : 1, "doc" : {"title" : "Crossbody Bag with Tassel", "price" : 19.85}})
-indexApi.insert({"index" : "test", "id" : 2, "doc" : {"title" : "Crossbody Bag with Tassel"}})
-indexApi.insert({"index" : "test", "id" : 0, "doc" : {{"title" : "Yellow bag"}})
+indexApi.insert({"table" : "test", "id" : 1, "doc" : {"title" : "Crossbody Bag with Tassel", "price" : 19.85}})
+indexApi.insert({"table" : "test", "id" : 2, "doc" : {"title" : "Crossbody Bag with Tassel"}})
+indexApi.insert({"table" : "test", "id" : 0, "doc" : {{"title" : "Yellow bag"}})
 ```
+
+<!-- intro -->
+##### Python-asyncio:
+
+<!-- request Python-asyncio -->
+
+``` python
+await indexApi.insert({"table" : "test", "id" : 1, "doc" : {"title" : "Crossbody Bag with Tassel", "price" : 19.85}})
+await indexApi.insert({"table" : "test", "id" : 2, "doc" : {"title" : "Crossbody Bag with Tassel"}})
+await indexApi.insert({"table" : "test", "id" : 0, "doc" : {{"title" : "Yellow bag"}})
+```
+
 <!-- intro -->
 ##### Javascript:
 
 <!-- request Javascript -->
 
 ``` javascript
-res = await indexApi.insert({"index" : "test", "id" : 1, "doc" : {"title" : "Crossbody Bag with Tassel", "price" : 19.85}});
-res = await indexApi.insert({"index" : "test", "id" : 2, "doc" : {"title" : "Crossbody Bag with Tassel"}});
-res = await indexApi.insert({"index" : "test", "id" : 0, "doc" : {{"title" : "Yellow bag"}});
+res = await indexApi.insert({"table" : "test", "id" : 1, "doc" : {"title" : "Crossbody Bag with Tassel", "price" : 19.85}});
+res = await indexApi.insert({"table" : "test", "id" : 2, "doc" : {"title" : "Crossbody Bag with Tassel"}});
+res = await indexApi.insert({"table" : "test", "id" : 0, "doc" : {{"title" : "Yellow bag"}});
 ```
 
 <!-- intro -->
@@ -232,27 +246,67 @@ sqlresult = indexApi.insert(newdoc);
 <!-- request C# -->
 
 ``` clike
-Dictionary<string, Object> doc = new Dictionary<string, Object>(); 
+Dictionary<string, Object> doc = new Dictionary<string, Object>();
 doc.Add("title", "Crossbody Bag with Tassel");
 doc.Add("price", 19.85);
 InsertDocumentRequest newdoc = new InsertDocumentRequest(index: "products", id: 1, doc: doc);
 var sqlresult = indexApi.Insert(newdoc);
 
-doc = new Dictionary<string, Object>(); 
+doc = new Dictionary<string, Object>();
 doc.Add("title", "Crossbody Bag with Tassel");
 newdoc = new InsertDocumentRequest(index: "products", id: 2, doc: doc);
 sqlresult = indexApi.Insert(newdoc);
 
-doc = new Dictionary<string, Object>(); 
+doc = new Dictionary<string, Object>();
 doc.Add("title", "Yellow bag");
 newdoc = new InsertDocumentRequest(index: "products", id: 0, doc: doc);
 sqlresult = indexApi.Insert(newdoc);
 
 ```
 
+<!-- intro -->
+##### Rust:
+
+<!-- request Rust -->
+
+``` rust
+let mut doc = HashMap::new();
+doc.insert("title".to_string(), serde_json::json!("Crossbody Bag with Tassel"));
+doc.insert("price".to_string(), serde_json::json!(19.85));
+let mut insert_req = InsertDocumentRequest {
+    table: serde_json::json!("products"),
+    doc: serde_json::json!(doc),
+    id: serde_json::json!(1),
+    ..Default::default(),
+};
+let mut insert_res = index_api.insert(insert_req).await;
+
+doc = HashMap::new();
+doc.insert("title".to_string(), serde_json::json!("Crossbody Bag with Tassel"));
+insert_req = InsertDocumentRequest {
+    table: serde_json::json!("products"),
+    doc: serde_json::json!(doc),
+    id: serde_json::json!(2),
+    ..Default::default(),
+};
+insert_res = index_api.insert(insert_req).await;
+
+doc = HashMap::new();
+doc.insert("title".to_string(), serde_json::json!("Tellow bag"));
+insert_req = InsertDocumentRequest {
+    table: serde_json::json!("products"),
+    doc: serde_json::json!(doc),
+    id: serde_json::json!(0),
+    ..Default::default(),
+};
+insert_res = index_api.insert(insert_req).await;
+```
+
 <!-- end -->
 
 ## Auto schema
+
+> NOTE: Auto schema requires [Manticore Buddy](../Installation/Manticore_Buddy.md). If it doesn't work, make sure Buddy is installed.
 
 Manticore features an automatic table creation mechanism, which activates when a specified table in the insert query doesn't yet exist. This mechanism is enabled by default. To disable it, set `auto_schema = 0` in the [Searchd](../../Server_settings/Searchd.md#auto_schema) section of your Manticore config file.
 
@@ -262,8 +316,17 @@ By default, all text values in the `VALUES` clause are considered to be of the `
 
 If you attempt to INSERT multiple rows with different, incompatible value types for the same field, auto table creation will be canceled, and an error message will be returned. However, if the different value types are compatible, the resulting field type will be the one that accommodates all the values. Some automatic data type conversions that may occur include:
 * mva -> mva64
-* uint -> bigint -> float
+* uint -> bigint -> float (this may cause some precision loss)
 * string -> text
+
+Also, the following formats of dates will be recognized and converted to timestamps while all other date formats will be treated as strings:
+- `%Y-%m-%dT%H:%M:%E*S%Z`
+- `%Y-%m-%d'T'%H:%M:%S%Z`
+- `%Y-%m-%dT%H:%M:%E*S`
+- `%Y-%m-%dT%H:%M:%s`
+- `%Y-%m-%dT%H:%M`
+- `%Y-%m-%dT%H`
+
 
 Keep in mind that the `/bulk` HTTP endpoint does not support automatic table creation (auto schema). Only the `/_bulk` (Elasticsearch-like) HTTP endpoint and the SQL interface support this feature.
 
@@ -327,7 +390,7 @@ select * from t
 ```json
 POST /insert  -d
 {
- "index":"t",
+ "table":"t",
  "id": 2,
  "doc":
  {
@@ -346,7 +409,7 @@ POST /insert  -d
 <!-- response JSON -->
 
 ```json
-{"_index":"t","_id":2,"created":true,"result":"created","status":201}
+{"table":"t","_id":2,"created":true,"result":"created","status":201}
 ```
 
 <!-- end -->
@@ -394,7 +457,7 @@ select * from products;
 ```json
 POST /insert
 {
-  "index":"products",
+  "table":"products",
   "id":0,
   "doc":
   {
@@ -404,7 +467,7 @@ POST /insert
 
 GET /search
 {
-  "index":"products",
+  "table":"products",
   "query":{
     "query_string":""
   }
@@ -420,7 +483,7 @@ GET /search
     "total": 1,
     "hits": [
       {
-        "_id": "1657860156022587406",
+        "_id": 1657860156022587406,
         "_score": 1,
         "_source": {
           "price": 0,
@@ -447,8 +510,18 @@ $index->addDocuments([
 <!-- request Python -->
 
 ```python
-indexApi.insert({"index" : "products", "id" : 0, "doc" : {"title" : "Yellow bag"}})
+indexApi.insert({"table" : "products", "id" : 0, "doc" : {"title" : "Yellow bag"}})
 ```
+
+<!-- intro -->
+##### Python-asyncio:
+
+<!-- request Python-asyncio -->
+
+```python
+await indexApi.insert({"table" : "products", "id" : 0, "doc" : {"title" : "Yellow bag"}})
+```
+
 <!-- intro -->
 
 ##### Javascript:
@@ -456,7 +529,7 @@ indexApi.insert({"index" : "products", "id" : 0, "doc" : {"title" : "Yellow bag"
 <!-- request Javascript -->
 
 ```javascript
-res = await indexApi.insert({"index" : "products", "id" : 0, "doc" : {"title" : "Yellow bag"}});
+res = await indexApi.insert({"table" : "products", "id" : 0, "doc" : {"title" : "Yellow bag"}});
 ```
 
 <!-- intro -->
@@ -479,10 +552,56 @@ sqlresult = indexApi.insert(newdoc);
 <!-- request C# -->
 
 ``` clike
-Dictionary<string, Object> doc = new Dictionary<string, Object>(); 
+Dictionary<string, Object> doc = new Dictionary<string, Object>();
 doc.Add("title", "Yellow bag");
 InsertDocumentRequest newdoc = new InsertDocumentRequest(index: "products", id: 0, doc: doc);
 var sqlresult = indexApi.Insert(newdoc);
+```
+
+<!-- intro -->
+##### Rust:
+
+<!-- request Rust -->
+
+``` rust
+let doc = HashMap::new();
+doc.insert("title".to_string(), serde_json::json!("Yellow bag"));
+let insert_req = InsertDocumentRequest {
+    table: serde_json::json!("products"),
+    doc: serde_json::json!(doc),
+    id: serde_json::json!(0),
+    ..Default::default(),
+};
+let insert_res = index_api.insert(insert_req).await;
+```
+
+<!-- end -->
+
+<!-- example call -->
+### UUID_SHORT multi-ID generation
+
+```sql
+CALL UUID_SHORT(N)
+```
+
+The `CALL UUID_SHORT(N)` statement allows for generating N unique 64-bit IDs in a single call without inserting any documents. It is particularly useful when you need to pre-generate IDs in Manticore for use in other systems or storage solutions. For example, you can generate auto-IDs in Manticore and then use them in another database, application, or workflow, ensuring consistent and unique identifiers across different environments.
+
+<!-- intro -->
+##### Example:
+<!-- request Example -->
+
+```sql
+CALL UUID_SHORT(3)
+```
+<!-- response SQL -->
+```
++---------------------+
+| uuid_short()        |
++---------------------+
+| 1227930988733973183 |
+| 1227930988733973184 |
+| 1227930988733973185 |
++---------------------+
 ```
 <!-- end -->
 
@@ -494,7 +613,20 @@ You can insert not just a single document into a real-time table, but as many as
 * You might want to increase the [max_packet_size](../../Server_settings/Searchd.md#max_packet_size) value to allow for larger batches
 * Normally, each batch insert operation is considered a single [transaction](../../Data_creation_and_modification/Transactions.md) with atomicity guarantee, so you will either have all the new documents in the table at once or, in case of failure, none of them will be added. See more details about an empty line or switching to another table in the "JSON" example.
 
-Note that the `/bulk` HTTP endpoint does not support automatic creation of tables (auto schema). Only the `/_bulk` (Elasticsearch-like) HTTP endpoint and the SQL interface support this feature.
+Note that the `/bulk` HTTP endpoint does not support automatic creation of tables (auto schema). Only the `/_bulk` (Elasticsearch-like) HTTP endpoint and the SQL interface support this feature. The `/_bulk` (Elasticsearch-like) HTTP endpoint allows the table name to include the cluster name in the format `cluster_name:table_name`.
+
+`/_bulk` endpoint accepts document IDs in the same format as Elasticsearch, and you can also include the `id` within the document itself:
+```json
+{ "index": { "table" : "products", "_id" : "1" } }
+{ "title" : "Crossbody Bag with Tassel", "price": 19.85 }
+```
+
+or
+
+```json
+{ "index": { "table" : "products" } }
+{ "title" : "Crossbody Bag with Tassel", "price": 19.85, "id": "1" }
+```
 
 #### Chunked transfer in /bulk
 The `/bulk` (Manticore mode) endpoint supports [Chunked transfer encoding](https://en.wikipedia.org/wiki/Chunked_transfer_encoding). You can use it to transmit large batches. It:
@@ -509,7 +641,7 @@ The `/bulk` (Manticore mode) endpoint supports [Chunked transfer encoding](https
 For bulk insert, simply provide more documents in brackets after `VALUES()`. The syntax is:
 
 ```sql
-INSERT INTO <table name>[(column1, column2, ...)] VALUES ()[,(value1,[value2, ...])]
+INSERT INTO <table name>[(column1, column2, ...)] VALUES(value1[, value2 , ...]), (...)
 ```
 
 The optional column name list allows you to explicitly specify values for some of the columns present in the table. All other columns will be filled with their default values (0 for scalar types, empty string for string types).
@@ -545,18 +677,18 @@ In the response for a `/bulk` request, you can find the following fields:
 ```json
 POST /bulk
 -H "Content-Type: application/x-ndjson" -d '
-{"insert": {"index":"products", "id":1, "doc":  {"title":"Crossbody Bag with Tassel","price" : 19.85}}}
-{"insert":{"index":"products", "id":2, "doc":  {"title":"microfiber sheet set","price" : 19.99}}}
+{"insert": {"table":"products", "id":1, "doc":  {"title":"Crossbody Bag with Tassel","price" : 19.85}}}
+{"insert":{"table":"products", "id":2, "doc":  {"title":"microfiber sheet set","price" : 19.99}}}
 '
 
 POST /bulk
 -H "Content-Type: application/x-ndjson" -d '
-{"insert":{"index":"test1","id":21,"doc":{"int_col":1,"price":1.1,"title":"bulk doc one"}}}
-{"insert":{"index":"test1","id":22,"doc":{"int_col":2,"price":2.2,"title":"bulk doc two"}}}
+{"insert":{"table":"test1","id":21,"doc":{"int_col":1,"price":1.1,"title":"bulk doc one"}}}
+{"insert":{"table":"test1","id":22,"doc":{"int_col":2,"price":2.2,"title":"bulk doc two"}}}
 
-{"insert":{"index":"test1","id":23,"doc":{"int_col":3,"price":3.3,"title":"bulk doc three"}}}
-{"insert":{"index":"test2","id":24,"doc":{"int_col":4,"price":4.4,"title":"bulk doc four"}}}
-{"insert":{"index":"test2","id":25,"doc":{"int_col":5,"price":5.5,"title":"bulk doc five"}}}
+{"insert":{"table":"test1","id":23,"doc":{"int_col":3,"price":3.3,"title":"bulk doc three"}}}
+{"insert":{"table":"test2","id":24,"doc":{"int_col":4,"price":4.4,"title":"bulk doc four"}}}
+{"insert":{"table":"test2","id":25,"doc":{"int_col":5,"price":5.5,"title":"bulk doc five"}}}
 '
 ```
 
@@ -566,7 +698,7 @@ POST /bulk
   "items": [
     {
       "bulk": {
-        "_index": "products",
+        "table": "products",
         "_id": 2,
         "created": 2,
         "deleted": 0,
@@ -586,7 +718,7 @@ POST /bulk
   "items": [
     {
       "bulk": {
-        "_index": "test1",
+        "table": "test1",
         "_id": 22,
         "created": 2,
         "deleted": 0,
@@ -597,7 +729,7 @@ POST /bulk
     },
     {
       "bulk": {
-        "_index": "test1",
+        "table": "test1",
         "_id": 23,
         "created": 1,
         "deleted": 0,
@@ -608,7 +740,7 @@ POST /bulk
     },
     {
       "bulk": {
-        "_index": "test2",
+        "table": "test2",
         "_id": 25,
         "created": 2,
         "deleted": 0,
@@ -626,12 +758,15 @@ POST /bulk
 ```
 
 <!-- request Elasticsearch -->
+
+> NOTE: `_bulk` requires [Manticore Buddy](../Installation/Manticore_Buddy.md) if the table doesn't exist yet. If it doesn't work, make sure Buddy is installed.
+
 ```json
 POST /_bulk
 -H "Content-Type: application/x-ndjson" -d '
-{ "index" : { "_index" : "products" } }
+{ "index" : { "table" : "products" } }
 { "title" : "Yellow Bag", "price": 12 }
-{ "create" : { "_index" : "products" } }
+{ "create" : { "table" : "products" } }
 { "title" : "Red Bag", "price": 12.5, "id": 3 }
 '
 ```
@@ -640,10 +775,10 @@ POST /_bulk
 {
   "items": [
     {
-      "index": {
-        "_index": "products",
+      "table": {
+        "table": "products",
         "_type": "doc",
-        "_id": "0",
+        "_id": 1657860156022587406,
         "_version": 1,
         "result": "created",
         "_shards": {
@@ -658,9 +793,9 @@ POST /_bulk
     },
     {
       "create": {
-        "_index": "products",
+        "table": "products",
         "_type": "doc",
-        "_id": "3",
+        "_id": 3,
         "_version": 1,
         "result": "created",
         "_shards": {
@@ -699,13 +834,26 @@ $index->addDocuments([
 
 ```python
 docs = [ \
-    {"insert": {"index" : "products", "id" : 1, "doc" : {"title" : "Crossbody Bag with Tassel", "price" : 19.85}}}, \
-    {"insert": {"index" : "products", "id" : 2, "doc" : {"title" : "microfiber sheet set", "price" : 19.99}}}, \
-    {"insert": {"index" : "products", "id" : 3, "doc" : {"title" : "CPet Hair Remover Glove", "price" : 7.99}}}
+    {"insert": {"table" : "products", "id" : 1, "doc" : {"title" : "Crossbody Bag with Tassel", "price" : 19.85}}}, \
+    {"insert": {"table" : "products", "id" : 2, "doc" : {"title" : "microfiber sheet set", "price" : 19.99}}}, \
+    {"insert": {"table" : "products", "id" : 3, "doc" : {"title" : "CPet Hair Remover Glove", "price" : 7.99}}}
 ]
 res = indexApi.bulk('\n'.join(map(json.dumps,docs)))
 ```
 
+<!-- intro -->
+##### Python=asyncio:
+
+<!-- request Python-asyncio -->
+
+```python
+docs = [ \
+    {"insert": {"table" : "products", "id" : 1, "doc" : {"title" : "Crossbody Bag with Tassel", "price" : 19.85}}}, \
+    {"insert": {"table" : "products", "id" : 2, "doc" : {"title" : "microfiber sheet set", "price" : 19.99}}}, \
+    {"insert": {"table" : "products", "id" : 3, "doc" : {"title" : "CPet Hair Remover Glove", "price" : 7.99}}}
+]
+res = await indexApi.bulk('\n'.join(map(json.dumps,docs)))
+```
 
 <!-- intro -->
 ##### Javascript:
@@ -714,9 +862,9 @@ res = indexApi.bulk('\n'.join(map(json.dumps,docs)))
 
 ```javascript
 let docs = [
-    {"insert": {"index" : "products", "id" : 3, "doc" : {"title" : "Crossbody Bag with Tassel", "price" : 19.85}}},
-    {"insert": {"index" : "products", "id" : 4, "doc" : {"title" : "microfiber sheet set", "price" : 19.99}}},
-    {"insert": {"index" : "products", "id" : 5, "doc" : {"title" : "CPet Hair Remover Glove", "price" : 7.99}}}
+    {"insert": {"table" : "products", "id" : 3, "doc" : {"title" : "Crossbody Bag with Tassel", "price" : 19.85}}},
+    {"insert": {"table" : "products", "id" : 4, "doc" : {"title" : "microfiber sheet set", "price" : 19.99}}},
+    {"insert": {"table" : "products", "id" : 5, "doc" : {"title" : "CPet Hair Remover Glove", "price" : 7.99}}}
 ];
 res =  await indexApi.bulk(docs.map(e=>JSON.stringify(e)).join('\n'));
 ```
@@ -728,7 +876,7 @@ res =  await indexApi.bulk(docs.map(e=>JSON.stringify(e)).join('\n'));
 ``` java
 String body = "{\"insert\": {\"index\" : \"products\", \"id\" : 1, \"doc\" : {\"title\" : \"Crossbody Bag with Tassel\", \"price\" : 19.85}}}"+"\n"+
     "{\"insert\": {\"index\" : \"products\", \"id\" : 4, \"doc\" : {\"title\" : \"microfiber sheet set\", \"price\" : 19.99}}}"+"\n"+
-    "{\"insert\": {\"index\" : \"products\", \"id\" : 5, \"doc\" : {\"title\" : \"CPet Hair Remover Glove\", \"price\" : 7.99}}}"+"\n";         
+    "{\"insert\": {\"index\" : \"products\", \"id\" : 5, \"doc\" : {\"title\" : \"CPet Hair Remover Glove\", \"price\" : 7.99}}}"+"\n";
 BulkResponse bulkresult = indexApi.bulk(body);
 ```
 
@@ -740,8 +888,20 @@ BulkResponse bulkresult = indexApi.bulk(body);
 ``` clike
 string body = "{\"insert\": {\"index\" : \"products\", \"id\" : 1, \"doc\" : {\"title\" : \"Crossbody Bag with Tassel\", \"price\" : 19.85}}}"+"\n"+
     "{\"insert\": {\"index\" : \"products\", \"id\" : 4, \"doc\" : {\"title\" : \"microfiber sheet set\", \"price\" : 19.99}}}"+"\n"+
-    "{\"insert\": {\"index\" : \"products\", \"id\" : 5, \"doc\" : {\"title\" : \"CPet Hair Remover Glove\", \"price\" : 7.99}}}"+"\n";                                 
+    "{\"insert\": {\"index\" : \"products\", \"id\" : 5, \"doc\" : {\"title\" : \"CPet Hair Remover Glove\", \"price\" : 7.99}}}"+"\n";
 BulkResponse bulkresult = indexApi.Bulk(string.Join("\n", docs));
+```
+
+<!-- intro -->
+##### Rust:
+
+<!-- request Rust -->
+``` rust
+let bulk_body = r#"{"insert": "index" : "products", "id" : 1, "doc" : {"title" : "Crossbody Bag with Tassel", "price" : 19.85}}}
+    {"insert": {"index" : "products", "id" : 4, "doc" : {"title" : "microfiber sheet set", "price" : 19.99}}}
+    {"insert": {"index" : "products", "id" : 5, "doc" : {"title" : "CPet Hair Remover Glove", "price" : 7.99}}}         
+"#;
+index_api.bulk(bulk_body).await;
 ```
 
 <!-- end -->
@@ -764,7 +924,7 @@ INSERT INTO products(title, sizes) VALUES('shoes', (40,41,42,43));
 
 POST /insert
 {
-  "index":"products",
+  "table":"products",
   "id":1,
   "doc":
   {
@@ -773,6 +933,29 @@ POST /insert
   }
 }
 ```
+
+<!-- intro -->
+##### Elasticsearch:
+<!-- request Elasticsearch -->
+
+```json
+POST /products/_create/1
+{
+  "title": "shoes",
+  "sizes" : [40, 41, 42, 43]
+}
+```
+
+Or, alternatively
+```json
+POST /products/_doc/
+{
+  "title": "shoes",
+  "sizes" : [40, 41, 42, 43]
+}
+```
+
+
 <!-- intro -->
 ##### PHP
 <!-- request PHP -->
@@ -790,7 +973,16 @@ $index->addDocument(
 <!-- request Python -->
 
 ```python
-indexApi.insert({"index" : "products", "id" : 0, "doc" : {"title" : "Yellow bag","sizes":[40,41,42,43]}})
+indexApi.insert({"table" : "products", "id" : 0, "doc" : {"title" : "Yellow bag","sizes":[40,41,42,43]}})
+```
+
+<!-- intro -->
+##### Python=asyncio:
+
+<!-- request Python-asyncio -->
+
+```python
+await indexApi.insert({"table" : "products", "id" : 0, "doc" : {"title" : "Yellow bag","sizes":[40,41,42,43]}})
 ```
 
 <!-- intro -->
@@ -799,7 +991,7 @@ indexApi.insert({"index" : "products", "id" : 0, "doc" : {"title" : "Yellow bag"
 <!-- request Javascript -->
 
 ```javascript
-res = await indexApi.insert({"index" : "products", "id" : 0, "doc" : {"title" : "Yellow bag","sizes":[40,41,42,43]}});
+res = await indexApi.insert({"table" : "products", "id" : 0, "doc" : {"title" : "Yellow bag","sizes":[40,41,42,43]}});
 ```
 
 
@@ -824,17 +1016,31 @@ sqlresult = indexApi.insert(newdoc);
 <!-- request C# -->
 
 ``` clike
-Dictionary<string, Object> doc = new Dictionary<string, Object>(); 
+Dictionary<string, Object> doc = new Dictionary<string, Object>();
 doc.Add("title", "Yellow bag");
 doc.Add("sizes", new List<Object> {40,41,42,43});
 InsertDocumentRequest newdoc = new InsertDocumentRequest(index: "products", id: 0, doc: doc);
 var sqlresult = indexApi.Insert(newdoc);
 ```
+
+<!-- intro -->
+##### Rust:
+
+<!-- request Rust -->
+
+``` rust
+let mut doc = HashMap::new();
+doc.insert("title".to_string(), serde_json::json!("Yellow bag"));
+doc.insert("sizes".to_string(), serde_json::json!([40,41,42,43]));
+let insert_req = InsertDocumentRequest::new("products".to_string(), serde_json::json!(doc));
+let insert_res = index_api.insert(insert_req).await;
+```
+
 <!-- end -->
 
 <!-- example JSON_insert -->
 ## Inserting JSON
-JSON value can be inserted as an [escaped](../../Searching/Full_text_matching/Escaping.md) string (via SQL, HTTP, PHP) or as a JSON object (via HTTP).
+JSON value can be inserted as an [escaped](../../Searching/Full_text_matching/Escaping.md) string (via SQL or JSON) or as a JSON object (via the JSON interface).
 
 <!-- intro -->
 ### Examples
@@ -851,7 +1057,7 @@ JSON value can be inserted as a JSON object
 ```json
 POST /insert
 {
-  "index":"products",
+  "table":"products",
   "id":1,
   "doc":
   {
@@ -868,7 +1074,7 @@ JSON value can be also inserted as a string containing escaped JSON:
 ```json
 POST /insert
 {
-  "index":"products",
+  "table":"products",
   "id":1,
   "doc":
   {
@@ -877,6 +1083,35 @@ POST /insert
   }
 }
 ```
+
+<!-- intro -->
+##### Elasticsearch:
+<!-- request Elasticsearch -->
+
+```json
+POST /products/_create/1
+{
+  "title": "shoes",
+  "meta" : {
+    "size": 41,
+    "color": "red"
+  }
+}
+```
+
+Or, alternatively
+```json
+POST /products/_doc/
+{
+  "title": "shoes",
+  "meta" : {
+    "size": 41,
+    "color": "red"
+  }
+}
+```
+
+
 <!-- intro -->
 ##### PHP
 Consider JSON just as string:
@@ -894,15 +1129,25 @@ $index->addDocument(
 <!-- request Python -->
 ``` python
 indexApi = api = manticoresearch.IndexApi(client)
-indexApi.insert({"index" : "products", "id" : 0, "doc" : {"title" : "Yellow bag","meta":'{"size": 41, "color": "red"}'}})
+indexApi.insert({"table" : "products", "id" : 0, "doc" : {"title" : "Yellow bag","meta":'{"size": 41, "color": "red"}'}})
 ```
+
+<!-- intro -->
+##### Python-asyncio:
+
+<!-- request Python-asyncio -->
+``` python
+indexApi = api = manticoresearch.IndexApi(client)
+await indexApi.insert({"table" : "products", "id" : 0, "doc" : {"title" : "Yellow bag","meta":'{"size": 41, "color": "red"}'}})
+```
+
 <!-- intro -->
 ##### Javascript:
 
 <!-- request Javascript -->
 ```javascript
 
-res = await indexApi.insert({"index" : "products", "id" : 0, "doc" : {"title" : "Yellow bag","meta":'{"size": 41, "color": "red"}'}});
+res = await indexApi.insert({"table" : "products", "id" : 0, "doc" : {"title" : "Yellow bag","meta":'{"size": 41, "color": "red"}'}});
 ```
 <!-- intro -->
 ##### java:
@@ -929,14 +1174,32 @@ sqlresult = indexApi.insert(newdoc);
 <!-- request C# -->
 
 ``` clike
-Dictionary<string, Object> meta = new Dictionary<string, Object>(); 
+Dictionary<string, Object> meta = new Dictionary<string, Object>();
 meta.Add("size", 41);
 meta.Add("color", "red");
-Dictionary<string, Object> doc = new Dictionary<string, Object>(); 
+Dictionary<string, Object> doc = new Dictionary<string, Object>();
 doc.Add("title", "Yellow bag");
 doc.Add("meta", meta);
 InsertDocumentRequest newdoc = new InsertDocumentRequest(index: "products", id: 0, doc: doc);
 var sqlresult = indexApi.Insert(newdoc);
+```
+
+<!-- intro -->
+##### Rust:
+
+<!-- request Rust -->
+
+``` rust
+let mut meta = HashMap::new();
+metadoc.insert("size".to_string(), serde_json::json!(41));
+meta.insert("color".to_string(), serde_json::json!("red"));
+
+let mut doc = HashMap::new();
+doc.insert("title".to_string(), serde_json::json!("Yellow bag"));
+doc.insert("meta".to_string(), serde_json::json!(meta));
+
+let insert_req = InsertDocumentRequest::new("products".to_string(), serde_json::json!(doc));
+let insert_res = index_api.insert(insert_req).await;
 ```
 
 <!-- end -->

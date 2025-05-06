@@ -16,14 +16,13 @@ The default configuration file for Manticore is located at either `/usr/local/et
 
 If you plan to use [indexer](../Creating_a_table/Local_tables/Plain_table.md) to fetch data from sources such as MySQL, PostgreSQL, or another database using ODBC, you may need additional libraries, such as `mysql@5.7`, `libpq`, and `unixodbc`, respectively.
 
-###### Development packages
+#### Development packages
 If you prefer "Nightly" (development) versions do:
 ```bash
-brew tap manticoresoftware/tap
-brew install manticoresoftware/tap/manticoresearch-dev manticoresoftware/tap/manticore-extra-dev
+brew tap manticoresoftware/tap-dev
+brew install manticoresoftware/tap-dev/manticoresearch-dev manticoresoftware/tap-dev/manticore-extra-dev manticoresoftware/tap-dev/manticore-language-packs
 brew services start manticoresearch-dev
 ```
-
 
 <!--
 ## From tarball with binaries
@@ -43,10 +42,10 @@ wget https://repo.manticoresearch.com/repository/manticoresearch_macos/release/m
 
 tar -xf manticore-columnar-lib-1.15.4-220522-2fef34e-osx10.14.4-x86_64.tar.gz
 
-# Start Manticore
+## Start Manticore
 FULL_SHARE_DIR=./share/manticore ./bin/searchd -c ./etc/manticoresearch/manticore.conf
 
-# Run indexer
+## Run indexer
 FULL_SHARE_DIR=./share/manticore ./bin/indexer -c ./etc/manticoresearch/manticore.conf
 ```
 

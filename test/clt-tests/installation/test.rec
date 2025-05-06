@@ -1,0 +1,46 @@
+––– input –––
+yum install -y -q https://repo.manticoresearch.com/manticore-repo.noarch.rpm
+––– output –––
+Failed to set locale, defaulting to C.UTF-8
+Installed:
+  manticore-repo-0.2.0-1.noarch
+––– input –––
+yum -y --enablerepo manticore-dev install manticore-buddy
+––– output –––
+Failed to set locale, defaulting to C.UTF-8
+Manticore Repository                            1.2 MB/s | 236 kB     00:00    
+Manticore Repository                             21 MB/s | 3.6 MB     00:00    
+Dependencies resolved.
+================================================================================
+ Package          Arch    Version                          Repository      Size
+================================================================================
+Installing:
+ manticore-buddy  noarch  3.27.3+25050214.c52f3477.dev-1   manticore-dev  2.1 M
+Transaction Summary
+================================================================================
+Install  1 Package
+Total download size: 2.1 M
+Installed size: 9.7 M
+Downloading Packages:
+manticore-buddy-3.27.3+25050214.c52f3477.dev-1.  25 MB/s | 2.1 MB     00:00    
+--------------------------------------------------------------------------------
+Total                                            25 MB/s | 2.1 MB     00:00     
+retrieving repo key for manticore-dev unencrypted from http://repo.manticoresearch.com/GPG-KEY-SHA256-manticore
+Manticore Repository                            1.3 MB/s | 2.4 kB     00:00    
+Importing GPG key 0x79F5BFA6:
+ Userid     : "ManticoreSearch <support@manticoresearch.com>"
+ Fingerprint: 1E51 71BE 1E52 2F8C 900D 0FF4 B48F F4F2 79F5 BFA6
+ From       : http://repo.manticoresearch.com/GPG-KEY-SHA256-manticore
+Key imported successfully
+Running transaction check
+Transaction check succeeded.
+Running transaction test
+Transaction test succeeded.
+Running transaction
+  Preparing        :                                                        1/1 
+  Installing       : manticore-buddy-3.27.3+25050214.c52f3477.dev-1.noarc   1/1 
+  Running scriptlet: manticore-buddy-3.27.3+25050214.c52f3477.dev-1.noarc   1/1 
+  Verifying        : manticore-buddy-3.27.3+25050214.c52f3477.dev-1.noarc   1/1 
+Installed:
+  manticore-buddy-3.27.3+25050214.c52f3477.dev-1.noarch                         
+Complete!

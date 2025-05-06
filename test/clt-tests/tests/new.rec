@@ -1,0 +1,10 @@
+––– input –––
+echo 123
+––– output –––
+#!/[0-9]+/!#
+––– comment –––
+some comment
+––– input –––
+whoami
+––– output –––
+root

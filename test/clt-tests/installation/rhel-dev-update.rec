@@ -25,3 +25,4 @@ yum remove -y 'manticore*' > /dev/null 2>&1; echo $?
 ––– input –––
 rpm -qa | grep manticore
 ––– output –––
+bash: line 69: rpm: command not found

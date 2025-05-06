@@ -92,9 +92,12 @@ bool SearchHandler_c::ParseSysVarsAndTables ()
 	if ( StrEqN ( FROMS ("@@system"), szVar ) )
 		bValid = ParseSystem ( fnFeed, szFirst, m_pStmt );
 
+	// fixme! Disabled because of conflict with Buddy.
+	// bSysVar = bSysVar || StrEqN ( FROMS ("information_schema"), tQuery.m_sIndexes.cstr() );
+	// ^ uncomment this line in searchd_handler.cpp to enable.
 	if ( !bValid )
 	{
-		if ( !StrEqN ( FROMS ("information_schema"), szVar ) )
+		if ( !StrEqN ( FROMS ( "information_schema" ), szVar ) )
 			return false;
 
 		szEssence = "table";

@@ -1679,8 +1679,8 @@ bool SearchHandler_c::BuildIndexList ( int & iDivideLimits, VecRefPtrsAgentConn_
 
 	m_dLocal.Reset ();
 	int iOrderTag = 0;
-	bool bSysVar = tQuery.m_sIndexes.Begins ( "@@" )
-				|| StrEqN ( FROMS ("information_schema"), tQuery.m_sIndexes.cstr() );
+	bool bSysVar = tQuery.m_sIndexes.Begins ( "@@" );
+//		bSysVar = bSysVar || StrEqN ( FROMS ("information_schema"), tQuery.m_sIndexes.cstr() );
 
 	// search through specified local indexes
 	StrVec_t dIdxNames;

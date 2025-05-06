@@ -184,7 +184,7 @@ public:
 struct FieldMask_t
 {
 	static const int SIZE = SPH_MAX_FIELDS/32;
-	STATIC_ASSERT ( ( SPH_MAX_FIELDS%32 )==0, ASSUME_MAX_FIELDS_ARE_REPRESENTABLE_BY_DWORD );
+	static_assert ( ( SPH_MAX_FIELDS%32 )==0, "assume SPH_MAX_FIELDS are representable by a dword" );
 	DWORD m_dMask [ SIZE ];
 
 	// no custom cstr and d-tor - to be usable from inside unions
@@ -484,16 +484,18 @@ enum class JoinType_e
 	LEFT
 };
 
-const int DEFAULT_MAX_MATCHES = 1000;
-const int DEFAULT_QUERY_TIMEOUT = 0;
-const int DEFAULT_QUERY_RETRY = -1;
-const int DEFAULT_QUERY_EXPANSION_LIMIT = -1;
+constexpr int DEFAULT_MAX_MATCHES = 1000;
+constexpr int DEFAULT_QUERY_TIMEOUT = 0;
+constexpr int DEFAULT_QUERY_RETRY = -1;
+constexpr int DEFAULT_QUERY_EXPANSION_LIMIT = -1;
+constexpr int DAEMON_MAX_RETRY_COUNT = 8;
+constexpr int DAEMON_MAX_RETRY_DELAY = 1000;
 
 struct ScrollAttr_t
 {
-	CSphString	m_sSortAttr;
-	bool		m_bDesc = true;
-	ESphAttr	m_eType = SPH_ATTR_INTEGER;
+	CSphString m_sSortAttr;
+	bool m_bDesc = true;
+	ESphAttr m_eType = SPH_ATTR_INTEGER;
 	SphAttr_t	m_tValue = 0;
 	float		m_fValue = 0.0f;
 	CSphString	m_sValue;
@@ -642,8 +644,10 @@ struct CSphQuery
 	Dispatcher::Template_t	m_tPseudoShardingDispatcher;
 };
 
+void CheckQuery ( const CSphQuery & tQuery, CSphString & sError, bool bCanLimitless = false );
+
 /// parse select list string into items
-bool ParseSelectList ( CSphString &sError, CSphQuery &pResult );
+bool ParseSelectList ( CSphString & sError, CSphQuery &pResult );
 
 void SetQueryDefaultsExt2 ( CSphQuery & tQuery );
 
@@ -724,7 +728,7 @@ public:
 	void					AddStat ( const ExpansionStats_t & tExpansionStats );
 
 	void					MergeWordStats ( const CSphQueryResultMeta& tOther );// sort wordstat to achieve reproducable result over different runs
-	CSphFixedVector<SmallStringHash_T<CSphQueryResultMeta::WordStat_t>::KeyValue_t *>	MakeSortedWordStat () const;
+	CSphFixedVector<SmallStringHash_T<WordStat_t>::KeyValue_t *>	MakeSortedWordStat () const;
 };
 
 

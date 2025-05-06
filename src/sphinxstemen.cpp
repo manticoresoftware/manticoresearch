@@ -9,7 +9,8 @@
 // did not, you can find it at http://www.gnu.org/
 //
 
-#include "sphinxdefs.h" // for UNALIGNED_RAM_ACCESS
+// for UNALIGNED_RAM_ACCESS
+#include "config.h"
 
 #if defined(_MSC_VER) && !defined(__cplusplus)
 #define inline

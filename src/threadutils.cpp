@@ -1147,7 +1147,12 @@ void SetMaxChildrenThreads ( int iThreads )
 	g_iMaxChildrenThreads = Max ( 1, iThreads );
 }
 
-Threads::Worker_i * GlobalWorkPool ()
+int MaxChildrenThreads() noexcept
+{
+	return g_iMaxChildrenThreads;
+}
+
+Worker_i * GlobalWorkPool ()
 {
 	WorkerSharedPtr_t& pPool = GlobalPoolSingletone ();
 	assert ( pPool && "invoke StartGlobalWorkPool first");

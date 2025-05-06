@@ -24,6 +24,7 @@ if (CMAKE_CXX_COMPILER_ID STREQUAL "Clang" AND CMAKE_CXX_COMPILER_FRONTEND_VARIA
 else ()
 	target_compile_options ( sphinxclient PRIVATE -g3 -Wall -O0 )
 endif ()
+target_link_libraries ( sphinxclient PRIVATE $<$<PLATFORM_ID:Windows>:wsock32.lib> )
 
 if (NOT BUILD_TESTING OR DISABLE_GTESTS OR WIN32 OR TEST_SPECIAL_EXTERNAL )
 	return()

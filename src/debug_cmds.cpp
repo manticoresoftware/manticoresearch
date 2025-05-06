@@ -308,7 +308,7 @@ void HandleShutdownCrash ( RowBuffer_i & tOut, const CSphString & sPasswd, Debug
 		sphInterruptNow ();
 	} else // crash
 	{
-		BYTE * pSegv = (BYTE *) ( 0 );
+		volatile BYTE * pSegv = nullptr;
 		*pSegv = 'a';
 	}
 }

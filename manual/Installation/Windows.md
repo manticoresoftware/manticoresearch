@@ -10,7 +10,7 @@ Follow the [official Microsoft guide](https://docs.microsoft.com/en-us/windows/w
 
 ### Installing Manticore
 
-To install Manticore on Windows via WSL2, refer to the [Debian and Ubuntu Installation](../../Installation/Debian_and_Ubuntu.md) section.
+To install Manticore on Windows via WSL2, refer to the [Debian and Ubuntu Installation](../Installation/Debian_and_Ubuntu.md) section.
 
 > NOTE: Installing Manticore via WSL2 is the recommended method as it offers better compatibility compared to using native Windows packages.
 

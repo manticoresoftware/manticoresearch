@@ -18,10 +18,7 @@
 #include "cluster_binlog.h"
 
 static bool g_bRplBinlogEnabled = ( val_from_env ( "MANTICORE_REPLICATION_BINLOG", 1 )!=0 );
-
 static bool LOG_LEVEL_RPLOG = val_from_env ( "MANTICORE_RPL_BINLOG", false ); // verbose logging for cluster binlog, ruled by this env variable
-#define LOG_COMPONENT_RPLOG __LINE__ << " "
-#define RPLOGINFO LOGINFO (RPLOG,RPLOG)
 
 struct ClusterTid_t
 {
@@ -89,19 +86,19 @@ ClusterBinlog_i * RplBinlog()
 	return g_pBinlog.get();
 }
 
-void ReplicationBinlogStart ( const CSphString & sConfigFile, bool bDisabled )
+void ReplicationBinlogStart ( const CSphString & sDataDir, bool bDisabled )
 {
 	g_pBinlog.reset ( new ClusterBinlog_c() );
-	g_pBinlog->Init ( sConfigFile, bDisabled );
+	g_pBinlog->Init ( sDataDir, bDisabled );
 }
 
-static CSphString GetFileName ( const CSphString & sConfigFile )
+static CSphString GetFileName ( const CSphString & sDataDir )
 {
 	CSphString sFile;
-	if ( !sConfigFile.Begins ( "/" ) )
-		sFile.SetSprintf ( "/%s", sConfigFile.cstr() );
+	if ( !sDataDir.Begins ( "/" ) )
+		sFile.SetSprintf ( "/%s", sDataDir.cstr() );
 	else
-		sFile = sConfigFile;
+		sFile = sDataDir;
 
 	char * sCur = const_cast<char *> ( sFile.cstr() );
 	const char * sEnd = sCur + sFile.Length();
@@ -117,12 +114,12 @@ static CSphString GetFileName ( const CSphString & sConfigFile )
 	return sFile;
 }
 
-void ClusterBinlog_c::Init ( const CSphString & sConfigFile, bool bDisabled )
+void ClusterBinlog_c::Init ( const CSphString & sDataDir, bool bDisabled )
 {
 	ScopedMutex_t tLock ( m_tLock );
 
 	m_bValid = false;
-	m_sFile = GetFileName ( sConfigFile );
+	m_sFile = GetFileName ( sDataDir );
 
 	if ( !g_bRplBinlogEnabled )
 		return;
@@ -132,6 +129,9 @@ void ClusterBinlog_c::Init ( const CSphString & sConfigFile, bool bDisabled )
 	std::unique_ptr<SharedMemory_c> pBinlog { new SharedMemory_c ( m_sFile ) };
 	if ( !pBinlog->IsSupported() )
 		return;
+
+	if ( !m_sFile.IsEmpty() && LOG_LEVEL_RPLOG )
+		sphLogDebugRpl ( "replication binlog file '%s'", m_sFile.cstr() );
 
 	SharedMemory_c::OpenResult_e eRes = pBinlog->Open();
 
@@ -354,7 +354,8 @@ void ClusterBinlog_c::ClusterTnx ( const ClusterBinlogData_c & tCluster )
 	if ( pCluster )
 		WriteSeqno ( *pCluster );
 
-	RPLOGINFO << "replication binlog tnx '" << tCluster.m_sName << "', seqno " << tCluster.m_tGtid.m_iSeqNo << ", at " << ( pCluster ? pCluster->m_iOffSeqno : -1 );
+	if ( LOG_LEVEL_RPLOG )
+		sphLogDebugRpl ( "replication binlog tnx '%s', seqno " INT64_FMT ", at %d", tCluster.m_sName.cstr(), tCluster.m_tGtid.m_iSeqNo, ( pCluster ? pCluster->m_iOffSeqno : -1 ) );
 }
 
 void ClusterBinlog_c::OnClusterLoad ( ClusterBinlogData_c & tCluster )
@@ -387,18 +388,21 @@ void ClusterBinlog_c::OnClusterSynced ( const ClusterBinlogData_c & tCluster )
 		// do nothing if the gtid matched
 		if ( bUuidMatched && bSeqnoMatched )
 		{
-			RPLOGINFO << "replication binlog synced '" << tCluster.m_sName << "', seqno " << pItem->m_tGtid.m_iSeqNo << ", at " << pItem->m_iOffSeqno << ", gtid matched";
+			if ( LOG_LEVEL_RPLOG )
+				sphLogDebugRpl ( "replication binlog synced '%s', seqno " INT64_FMT ", at %d, gtid matched", tCluster.m_sName.cstr(), pItem->m_tGtid.m_iSeqNo, pItem->m_iOffSeqno );
 			return;
 		} else if ( bUuidMatched )
 		{
 			pItem->m_tGtid.m_iSeqNo = tCluster.m_tGtid.m_iSeqNo;
 			WriteSeqno ( *pItem );
-			RPLOGINFO << "replication binlog synced '" << tCluster.m_sName << "', seqno " << tCluster.m_tGtid.m_iSeqNo << ", uuid matched";
+			if ( LOG_LEVEL_RPLOG )
+				sphLogDebugRpl ( "replication binlog synced '%s', seqno " INT64_FMT ", at %d, uuid matched", tCluster.m_sName.cstr(), pItem->m_tGtid.m_iSeqNo );
 			return;
 		}
 	}
 
 	m_hClusters.AddUnique ( tCluster.m_sName ).m_tGtid = tCluster.m_tGtid;
 	Write();
-	RPLOGINFO << "replication binlog synced '" << tCluster.m_sName << "', seqno " << tCluster.m_tGtid.m_iSeqNo << ", entry added";
+	if ( LOG_LEVEL_RPLOG )
+		sphLogDebugRpl ( "replication binlog synced '%s', seqno " INT64_FMT ", at %d, entry added", tCluster.m_sName.cstr(), pItem->m_tGtid.m_iSeqNo );
 }

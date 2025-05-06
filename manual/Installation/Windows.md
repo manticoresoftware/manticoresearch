@@ -16,7 +16,7 @@ To install Manticore on Windows via WSL2, refer to the [Debian and Ubuntu Instal
 
 ## Installing Manticore as native Windows binaries
 
-Alternatively, you can install Manticore as native Windows binaries, which require Docker for [Manticore Buddy](../../Installation/Manticore_Buddy.md#Manticore-Buddy), by following these steps:
+Alternatively, you can install Manticore as native Windows binaries, which require Docker for [Manticore Buddy](../Installation/Manticore_Buddy.md#Manticore-Buddy), by following these steps:
 
 1. Install Docker Desktop and start it.
 2. Download the Manticore Search Installer (find a link on the [installation page](http://manticoresearch.com/install/)) and run it. Follow the installation instructions.

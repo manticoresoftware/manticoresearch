@@ -354,7 +354,10 @@ void ClusterBinlog_c::ClusterTnx ( const ClusterBinlogData_c & tCluster )
 
 	auto * pCluster = m_hClusters ( tCluster.m_sName );
 	if ( pCluster )
+	{
+		pCluster->m_tGtid.m_iSeqNo = tCluster.m_tGtid.m_iSeqNo;
 		WriteSeqno ( *pCluster );
+	}
 
 	if ( LOG_LEVEL_RPLOG )
 		sphLogDebugRpl ( "replication binlog tnx '%s', seqno " INT64_FMT ", at %d", tCluster.m_sName.cstr(), tCluster.m_tGtid.m_iSeqNo, ( pCluster ? pCluster->m_iOffSeqno : -1 ) );

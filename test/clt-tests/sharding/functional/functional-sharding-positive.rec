@@ -23,7 +23,7 @@ Port 2306: Node synced
 Port 3306: Node synced
 *************************** 1. row ***************************
 Counter: cluster_replication_status
-Value: primary
+  Value: primary
 ––– input –––
 mysql -h0 -P1306 -e "create table ${CLUSTER_NAME}:tbl1(id bigint) shards='5' rf='2'"; echo $?
 ––– output –––

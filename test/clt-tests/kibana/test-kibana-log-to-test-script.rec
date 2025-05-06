@@ -166,20 +166,20 @@ curl -s -X POST -H 'Authorization: Basic ZWxhc3RpYzpwYXNz' -H 'content-type: app
 curl -s -X POST -H 'Authorization: Basic ZWxhc3RpYzpwYXNz' -H 'content-type: application/json' -H 'Content-Length: 374' -H 'Connection: keep-alive' -d '{"seq_no_primary_term":true,"_source":{"excludes":["output.content"]},"query":{"bool":{"filter":{"bool":{"minimum_should_match":1,"should":[{"term":{"status":"pending"}},{"bool":{"must":[{"term":{"status":"processing"}},{"range":{"process_expiration":{"lte":"2025-04-16T12:07:03.101Z"}}}]}}]}}}},"sort":[{"priority":{"order":"asc"}},{"created_at":{"order":"asc"}}],"size":1}' 'localhost:9308/.reporting-*/_search'
 ––– output –––
 {
-"took": 0,
-"timed_out": false,
-"_shards": {
-"total": 0,
-"successful": 0,
-"skipped": 0,
-"failed": 0
-},
-"hits": {
-"total": {
-"value": 0,
-"relation": "eq"
-},
-"max_score": 0,
-"hits": []
-}
+  "took": 0,
+  "timed_out": false,
+  "_shards": {
+    "total": 0,
+    "successful": 0,
+    "skipped": 0,
+    "failed": 0
+  },
+  "hits": {
+    "total": {
+      "value": 0,
+      "relation": "eq"
+    },
+    "max_score": 0,
+    "hits": []
+  }
 }

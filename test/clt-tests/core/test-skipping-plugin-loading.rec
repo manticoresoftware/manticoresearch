@@ -34,19 +34,19 @@ mysql -h0 -P9306 -e "SHOW TABLES;"
 mysql -h0 -P9306 -e "REPLACE INTO tbl SET model ='iPhone 15 PRO' WHERE id = 101; SELECT * FROM tbl WHERE id = 101\G"
 ––– output –––
 *************************** 1. row ***************************
-id: 101
-model: iPhone 15 PRO
+              id: 101
+           model: iPhone 15 PRO
 storage_capacity: 256
-color: silver
-release_year: 2021
-price: 1099.989990
+           color: silver
+    release_year: 2021
+           price: 1099.989990
 discounted_price: 989.989990
-sold: 1
-date_added: 2224442480
-product_codes: 1,2,3
-values: 523456764345678976,9223372036854775807
-additional_info: {"features":["ProMotion display","A15 Bionic chip","Ceramic Shield front cover"]}
-vector: 0.773448,0.312478,0.137971,0.459821
+            sold: 1
+      date_added: 2224442480
+   product_codes: 1,2,3
+          values: 523456764345678976,9223372036854775807
+ additional_info: {"features":["ProMotion display","A15 Bionic chip","Ceramic Shield front cover"]}
+          vector: 0.773448,0.312478,0.137971,0.459821
 ––– input –––
 stdbuf -oL searchd --stopwait 2>&1 | grep -i 'SIGTERM'
 ––– output –––

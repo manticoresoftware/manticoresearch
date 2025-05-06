@@ -46,9 +46,32 @@ const char * dlerror()
 
 #endif // _WIN32
 
-std::optional<CSphString> TryPath ( const CSphString& sFullpath, int iVersion )
+ScopedHandle_c::~ScopedHandle_c ()
 {
-	// first try versioned variant. So, that non-versioned libs from 'ancient age' doesn't suppress new one one
+	if ( m_pHandle )
+		dlclose ( m_pHandle );
+}
+
+void * DlSym ( void * pHandle, const char * szFunc, const CSphString & sLib, CSphString & sError )
+{
+#if HAVE_DLOPEN
+	auto * pSym = dlsym ( pHandle, szFunc );
+	if ( !pSym )
+	{
+		sError.SetSprintf ( "symbol '%s' not found in '%s'", szFunc, sLib.cstr() );
+		dlclose ( pHandle );
+	}
+
+	return pSym;
+#else
+	return nullptr;
+#endif
+}
+
+
+std::optional<CSphString> TryPath ( const CSphString & sFullpath, int iVersion )
+{
+	// first try versioned variant. So, that non-versioned libs from 'ancient age' doesn't suppress new one
 	auto sVersionedFullPath = SphSprintf ( "%s.%i", sFullpath.cstr(), iVersion );
 	if ( sphFileExists ( sVersionedFullPath.cstr() ) )
 		return sVersionedFullPath;

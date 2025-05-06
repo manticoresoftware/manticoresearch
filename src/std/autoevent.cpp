@@ -13,6 +13,7 @@
 #include "autoevent.h"
 
 #include "timers.h"
+// for HAVE_PTHREAD_COND_TIMEDWAIT
 #include "config.h"
 
 

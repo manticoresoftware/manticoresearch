@@ -16,6 +16,7 @@
 // simplest way to test searchd internals - include the source, supress main() function there.
 #define SUPRESS_SEARCHD_MAIN 1
 #include "searchd.cpp"
+#include "daemon/api_commands.h"
 
 #if POLLING_EPOLL
 // different aspects of epoll internals

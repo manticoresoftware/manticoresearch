@@ -16,8 +16,6 @@
 #include "sphinxstd.h"
 #include "sphinxfilter.h"
 #include "sphinxquery.h"
-#include "sphinxexcerpt.h"
-#include "sphinxudf.h"
 #include "sphinxjsonquery.h"
 #include "sphinxutils.h"
 #include "fileio.h"

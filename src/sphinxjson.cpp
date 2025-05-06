@@ -19,6 +19,8 @@
 #include <io.h> // for isatty() in sphinxjson.c
 #endif
 
+// for UNALIGNED_RAM_ACCESS
+#include "config.h"
 
 //////////////////////////////////////////////////////////////////////////
 // helpers

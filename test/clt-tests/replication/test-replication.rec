@@ -34,7 +34,7 @@ Port 2306: Node synced
 Port 3306: Node synced
 *************************** 1. row ***************************
 Counter: cluster_replication_status
-Value: primary
+  Value: primary
 ––– input –––
 mysql -h0 -P1306 -e "CREATE TABLE testrt (title text, content text, gid uint);" && mysql -h0 -P1306 -e "INSERT INTO testrt VALUES(6775836565403860993,'List of HP business laptops','Elitebook Probook',1);" && mysql -h0 -P1306 -e "INSERT INTO testrt VALUES(6775836565403860994,'List of Dell business laptops','Latitude Precision Vostro',2);" && mysql -h0 -P1306 -e "ALTER CLUSTER replication ADD testrt;" && mysql -h0 -P1306 -e "SHOW STATUS LIKE 'cluster_replication_indexes';"
 ––– output –––
@@ -47,19 +47,21 @@ mysql -h0 -P1306 -e "CREATE TABLE testrt (title text, content text, gid uint);" 
 mysql -h0 -P1306 -e "SELECT * FROM testrt ORDER BY id ASC\G"
 ––– output –––
 *************************** 1. row ***************************
-id: 6775836565403860993
-title: List of HP business laptops
+     id: 6775836565403860993
+  title: List of HP business laptops
 content: Elitebook Probook
-gid: 1
+    gid: 1
 *************************** 2. row ***************************
-id: 6775836565403860994
-title: List of Dell business laptops
+     id: 6775836565403860994
+  title: List of Dell business laptops
 content: Latitude Precision Vostro
-gid: 2
+    gid: 2
 ––– input –––
 export INSTANCE=5
 ––– output –––
-––– block: ../base/replication/stop-searchd –––
+––– input –––
+stdbuf -oL searchd --stopwait -c test/clt-tests/base/searchd-with-flexible-ports.conf > /dev/null
+––– output –––
 ––– input –––
 mysql -h0 -P1306 -e "INSERT INTO replication:testrt VALUES(6775836565403860995,'List of HP business laptops','Macbook',3);"; echo $?
 ––– output –––
@@ -72,24 +74,26 @@ export INSTANCE=5
 sleep 5; mysql -h0 -P5306 -e "SELECT * FROM testrt ORDER BY id ASC\G"
 ––– output –––
 *************************** 1. row ***************************
-id: 6775836565403860993
-title: List of HP business laptops
+     id: 6775836565403860993
+  title: List of HP business laptops
 content: Elitebook Probook
-gid: 1
+    gid: 1
 *************************** 2. row ***************************
-id: 6775836565403860994
-title: List of Dell business laptops
+     id: 6775836565403860994
+  title: List of Dell business laptops
 content: Latitude Precision Vostro
-gid: 2
+    gid: 2
 *************************** 3. row ***************************
-id: 6775836565403860995
-title: List of HP business laptops
+     id: 6775836565403860995
+  title: List of HP business laptops
 content: Macbook
-gid: 3
+    gid: 3
 ––– input –––
 export INSTANCE=2
 ––– output –––
-––– block: ../base/replication/stop-searchd –––
+––– input –––
+stdbuf -oL searchd --stopwait -c test/clt-tests/base/searchd-with-flexible-ports.conf > /dev/null
+––– output –––
 ––– input –––
 mysql -h0 -P3306 -e "INSERT INTO replication:testrt VALUES(6775836565403860996,'NEW','TABLE',4);"; echo $?
 ––– output –––
@@ -99,98 +103,100 @@ mysql -h0 -P3306 -e "INSERT INTO replication:testrt VALUES(6775836565403860996,'
 sleep 5;mysql -h0 -P2306 -e "SELECT * FROM testrt ORDER BY id ASC\G"
 ––– output –––
 *************************** 1. row ***************************
-id: 6775836565403860993
-title: List of HP business laptops
+     id: 6775836565403860993
+  title: List of HP business laptops
 content: Elitebook Probook
-gid: 1
+    gid: 1
 *************************** 2. row ***************************
-id: 6775836565403860994
-title: List of Dell business laptops
+     id: 6775836565403860994
+  title: List of Dell business laptops
 content: Latitude Precision Vostro
-gid: 2
+    gid: 2
 *************************** 3. row ***************************
-id: 6775836565403860995
-title: List of HP business laptops
+     id: 6775836565403860995
+  title: List of HP business laptops
 content: Macbook
-gid: 3
+    gid: 3
 *************************** 4. row ***************************
-id: 6775836565403860996
-title: NEW
+     id: 6775836565403860996
+  title: NEW
 content: TABLE
-gid: 4
+    gid: 4
 ––– input –––
 mysql -h0 -P3306 -e "SELECT * FROM testrt ORDER BY id ASC\G"
 ––– output –––
 *************************** 1. row ***************************
-id: 6775836565403860993
-title: List of HP business laptops
+     id: 6775836565403860993
+  title: List of HP business laptops
 content: Elitebook Probook
-gid: 1
+    gid: 1
 *************************** 2. row ***************************
-id: 6775836565403860994
-title: List of Dell business laptops
+     id: 6775836565403860994
+  title: List of Dell business laptops
 content: Latitude Precision Vostro
-gid: 2
+    gid: 2
 *************************** 3. row ***************************
-id: 6775836565403860995
-title: List of HP business laptops
+     id: 6775836565403860995
+  title: List of HP business laptops
 content: Macbook
-gid: 3
+    gid: 3
 *************************** 4. row ***************************
-id: 6775836565403860996
-title: NEW
+     id: 6775836565403860996
+  title: NEW
 content: TABLE
-gid: 4
+    gid: 4
 ––– input –––
 mysql -h0 -P4306 -e "SELECT * FROM testrt ORDER BY id ASC\G"
 ––– output –––
 *************************** 1. row ***************************
-id: 6775836565403860993
-title: List of HP business laptops
+     id: 6775836565403860993
+  title: List of HP business laptops
 content: Elitebook Probook
-gid: 1
+    gid: 1
 *************************** 2. row ***************************
-id: 6775836565403860994
-title: List of Dell business laptops
+     id: 6775836565403860994
+  title: List of Dell business laptops
 content: Latitude Precision Vostro
-gid: 2
+    gid: 2
 *************************** 3. row ***************************
-id: 6775836565403860995
-title: List of HP business laptops
+     id: 6775836565403860995
+  title: List of HP business laptops
 content: Macbook
-gid: 3
+    gid: 3
 *************************** 4. row ***************************
-id: 6775836565403860996
-title: NEW
+     id: 6775836565403860996
+  title: NEW
 content: TABLE
-gid: 4
+    gid: 4
 ––– input –––
 mysql -h0 -P5306 -e "SELECT * FROM testrt ORDER BY id ASC\G"
 ––– output –––
 *************************** 1. row ***************************
-id: 6775836565403860993
-title: List of HP business laptops
+     id: 6775836565403860993
+  title: List of HP business laptops
 content: Elitebook Probook
-gid: 1
+    gid: 1
 *************************** 2. row ***************************
-id: 6775836565403860994
-title: List of Dell business laptops
+     id: 6775836565403860994
+  title: List of Dell business laptops
 content: Latitude Precision Vostro
-gid: 2
+    gid: 2
 *************************** 3. row ***************************
-id: 6775836565403860995
-title: List of HP business laptops
+     id: 6775836565403860995
+  title: List of HP business laptops
 content: Macbook
-gid: 3
+    gid: 3
 *************************** 4. row ***************************
-id: 6775836565403860996
-title: NEW
+     id: 6775836565403860996
+  title: NEW
 content: TABLE
-gid: 4
+    gid: 4
 ––– input –––
 export INSTANCE=4
 ––– output –––
-––– block: ../base/replication/stop-searchd –––
+––– input –––
+stdbuf -oL searchd --stopwait -c test/clt-tests/base/searchd-with-flexible-ports.conf > /dev/null
+––– output –––
 ––– input –––
 sleep 5;mysql -h0 -P2306 -e "DELETE FROM replication:testrt WHERE id = 6775836565403860994"; echo $?
 ––– output –––
@@ -238,39 +244,39 @@ mysql -h0 -P1306 -e "REPLACE INTO replication:testrt SET content='Updated Conten
 mysql -h0 -P1306 -e "SELECT * FROM replication:testrt WHERE id=6775836565403860994\G"
 ––– output –––
 *************************** 1. row ***************************
-id: 6775836565403860994
-title: List of Dell business laptops
+     id: 6775836565403860994
+  title: List of Dell business laptops
 content: Updated Content
-gid: 2
+    gid: 2
 ––– input –––
 mysql -h0 -P2306 -e "SELECT * FROM replication:testrt WHERE id=6775836565403860994\G"
 ––– output –––
 *************************** 1. row ***************************
-id: 6775836565403860994
-title: List of Dell business laptops
+     id: 6775836565403860994
+  title: List of Dell business laptops
 content: Updated Content
-gid: 2
+    gid: 2
 ––– input –––
 mysql -h0 -P3306 -e "SELECT * FROM replication:testrt WHERE id=6775836565403860994\G"
 ––– output –––
 *************************** 1. row ***************************
-id: 6775836565403860994
-title: List of Dell business laptops
+     id: 6775836565403860994
+  title: List of Dell business laptops
 content: Updated Content
-gid: 2
+    gid: 2
 ––– input –––
 mysql -h0 -P4306 -e "SELECT * FROM replication:testrt WHERE id=6775836565403860994\G"
 ––– output –––
 *************************** 1. row ***************************
-id: 6775836565403860994
-title: List of Dell business laptops
+     id: 6775836565403860994
+  title: List of Dell business laptops
 content: Updated Content
-gid: 2
+    gid: 2
 ––– input –––
 mysql -h0 -P5306 -e "SELECT * FROM replication:testrt WHERE id=6775836565403860994\G"
 ––– output –––
 *************************** 1. row ***************************
-id: 6775836565403860994
-title: List of Dell business laptops
+     id: 6775836565403860994
+  title: List of Dell business laptops
 content: Updated Content
-gid: 2
+    gid: 2

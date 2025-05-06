@@ -12,6 +12,7 @@
 
 #include "fileio.h"
 #include "sphinxint.h"
+#include <sys/stat.h>
 
 #define SPH_READ_NOPROGRESS_CHUNK (32768*1024)
 

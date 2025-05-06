@@ -17,8 +17,6 @@
 #include "std/strerrorm.h"
 #include <fcntl.h>
 
-#include <sys/stat.h>
-
 #if !_WIN32
  #include <sys/mman.h>
 #endif

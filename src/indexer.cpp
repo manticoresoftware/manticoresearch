@@ -26,8 +26,8 @@
 #include "tokenizer/tokenizer.h"
 #include "secondarylib.h"
 #include "knnlib.h"
+#include "config.h"
 
-#include <sys/stat.h>
 #include <sys/types.h>
 #include <ctype.h>
 #include <errno.h>

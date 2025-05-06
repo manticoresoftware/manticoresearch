@@ -29,7 +29,7 @@ mysql -h0 -P1306 -e "SHOW TABLE tbl1 SETTINGS\G;"
 ––– output –––
 *************************** 1. row ***************************
 Variable_name: settings
-Value: engine = columnar
+        Value: engine = columnar
 exceptions = /var/log/manticore-1/tbl1/exceptions_chunk0_0.txt
 morphology = stem_en
 stopwords = /var/log/manticore-1/tbl1/stopwords_chunk0_0.txt
@@ -49,7 +49,7 @@ mysql -h0 -P${INSTANCE}306 -e "show status like 'cluster_${CLUSTER_NAME}_status'
 ––– output –––
 *************************** 1. row ***************************
 Counter: cluster_#!/[a-z]+/!#_status
-Value: primary
+  Value: primary
 ––– input –––
 echo '=> faster' > /tmp/wordforms.txt
 ––– output –––
@@ -62,7 +62,7 @@ mysql -h0 -P2306 -e "SHOW TABLE tbl2 SETTINGS\G;"
 ––– output –––
 *************************** 1. row ***************************
 Variable_name: settings
-Value: engine = rowwise
+        Value: engine = rowwise
 morphology = stem_ru
 wordforms = /var/log/manticore-2/tbl2/wordforms_chunk0_0.txt
 rt_mem_limit = 536870912
@@ -86,7 +86,7 @@ mysql -h0 -P3306 -e "SHOW TABLE tbl3 SETTINGS\G;"
 ––– output –––
 *************************** 1. row ***************************
 Variable_name: settings
-Value: engine = rowwise
+        Value: engine = rowwise
 rt_mem_limit = 536870912
 ––– input –––
 mysql -h0 -P3306 -e "INSERT INTO tbl3 (id, f, a, b, j, m, s, e, d, v, fv) VALUES (1, 'Plain example', 42, 3.14, '{\"key\":\"value\"}', (1,2,3), 'plain_string', 1, '2024-12-16 12:00:00', (123456789012345678, 987654321098765432), (0.1, 0.2, 0.3, 0.4));"; echo $?
@@ -317,7 +317,7 @@ mysql -h0 -P1306 -e "SHOW TABLE tbl1 SETTINGS\G;"
 ––– output –––
 *************************** 1. row ***************************
 Variable_name: settings
-Value: engine = columnar
+        Value: engine = columnar
 exceptions = /var/log/manticore-1/tbl1/exceptions_chunk0_1.txt
 morphology = stem_en
 stopwords = /var/log/manticore-1/tbl1/stopwords_chunk0_1.txt
@@ -356,7 +356,7 @@ mysql -h0 -P2306 -e "SHOW TABLE c:tbl1 SETTINGS\G;"
 ––– output –––
 *************************** 1. row ***************************
 Variable_name: settings
-Value: engine = columnar
+        Value: engine = columnar
 exceptions = /var/log/manticore-2/tbl1/exceptions_chunk0_1.txt
 morphology = stem_en
 stopwords = /var/log/manticore-2/tbl1/stopwords_chunk0_1.txt
@@ -456,7 +456,7 @@ mysql -h0 -P2306 -e "SHOW TABLE tbl2 SETTINGS\G;"
 ––– output –––
 *************************** 1. row ***************************
 Variable_name: settings
-Value: engine = rowwise
+        Value: engine = rowwise
 morphology = lemmatize_ru
 wordforms = /var/log/manticore-2/tbl2/wordforms_chunk0_0.txt
 rt_mem_limit = 536870912

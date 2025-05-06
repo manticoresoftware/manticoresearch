@@ -12,8 +12,6 @@
 
 #pragma once
 
-#include "config.h"
-
 #include <cstdio>
 
 // for 64-bit types

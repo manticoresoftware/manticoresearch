@@ -11,7 +11,7 @@
 #include "compressed_mysql_layer.h"
 
 // for UNALIGNED_RAM_ACCESS
-#include "sphinxdefs.h"
+#include "config.h"
 
 
 DWORD MysqlCompressedSocket_c::ReadLSBSmallDword ( InputBuffer_c& tIn )

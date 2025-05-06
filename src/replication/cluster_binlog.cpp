@@ -264,6 +264,8 @@ bool ClusterBinlog_c::Read()
 
 		tCluster.m_iOffSeqno = tRd.GetPos();
 		tCluster.m_tGtid.m_iSeqNo = tRd.GetOffset();
+
+		sphLogDebugRpl ( "replication binlog loaded cluster '%s', gtid %s, at %d", sName.cstr(), Wsrep::Gtid2Str ( tCluster.m_tGtid ).cstr(), tCluster.m_iOffSeqno );
 	}
 
 	m_hClusters = std::move ( hClusters );
@@ -369,7 +371,7 @@ void ClusterBinlog_c::OnClusterLoad ( ClusterBinlogData_c & tCluster )
 	if ( pCluster )
 		tCluster.m_tGtid = pCluster->m_tGtid;
 
-	sphLogDebugRpl ( "replication binlog %s cluster '%s', gtid %s", ( pCluster ? "loaded" : "missed" ), tCluster.m_sName.cstr(), Wsrep::Gtid2Str ( tCluster.m_tGtid ).cstr() );
+	sphLogDebugRpl ( "replication binlog on_%s cluster '%s', gtid %s", ( pCluster ? "loaded" : "missed" ), tCluster.m_sName.cstr(), Wsrep::Gtid2Str ( tCluster.m_tGtid ).cstr() );
 }
 
 void ClusterBinlog_c::OnClusterSynced ( const ClusterBinlogData_c & tCluster )
@@ -396,7 +398,7 @@ void ClusterBinlog_c::OnClusterSynced ( const ClusterBinlogData_c & tCluster )
 			pItem->m_tGtid.m_iSeqNo = tCluster.m_tGtid.m_iSeqNo;
 			WriteSeqno ( *pItem );
 			if ( LOG_LEVEL_RPLOG )
-				sphLogDebugRpl ( "replication binlog synced '%s', seqno " INT64_FMT ", at %d, uuid matched", tCluster.m_sName.cstr(), pItem->m_tGtid.m_iSeqNo );
+				sphLogDebugRpl ( "replication binlog synced '%s', seqno " INT64_FMT ", uuid matched", tCluster.m_sName.cstr(), pItem->m_tGtid.m_iSeqNo );
 			return;
 		}
 	}
@@ -404,5 +406,5 @@ void ClusterBinlog_c::OnClusterSynced ( const ClusterBinlogData_c & tCluster )
 	m_hClusters.AddUnique ( tCluster.m_sName ).m_tGtid = tCluster.m_tGtid;
 	Write();
 	if ( LOG_LEVEL_RPLOG )
-		sphLogDebugRpl ( "replication binlog synced '%s', seqno " INT64_FMT ", at %d, entry added", tCluster.m_sName.cstr(), tCluster.m_tGtid.m_iSeqNo );
+		sphLogDebugRpl ( "replication binlog synced '%s', seqno " INT64_FMT ", entry added", tCluster.m_sName.cstr(), tCluster.m_tGtid.m_iSeqNo );
 }

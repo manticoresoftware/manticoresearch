@@ -10837,6 +10837,11 @@ bool ClientSession_c::Execute ( Str_t sQuery, RowBuffer_i & tOut )
 	tCrashQuery.m_eType = QUERY_SQL;
 	tCrashQuery.m_dQuery = { (const BYTE*) sQuery.first, sQuery.second };
 
+	// fixme! That is dirty hack, should be handled another way
+	constexpr Str_t mysqldump_8_0_39_30_hack {FROMS("SELECT COUNT(*) FROM INFORMATION_SCHEMA.TABLES WHERE table_schema = 'performance_schema' AND table_name = 'session_variables'")};
+	if ( StrEq ( mysqldump_8_0_39_30_hack, sQuery) )
+		return tOut.DataTableOneline ( "count(*)" );
+
 	// parse SQL query
 	if ( tSess.IsProfile() )
 		m_tProfile.Switch ( SPH_QSTATE_SQL_PARSE );

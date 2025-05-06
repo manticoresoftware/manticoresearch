@@ -1651,6 +1651,17 @@ public:
 		Eof();
 	}
 
+	bool DataTableOneline ( const char* szTitle, int iValue=0 )
+	{
+		HeadBegin();
+		HeadColumn (szTitle, MYSQL_COL_LONG);
+		HeadEnd();
+		PutNumAsString ( iValue );
+		Commit();
+		Eof();
+		return true;
+	}
+
 	virtual const CSphString & GetError() const { return m_sError; }
 	virtual bool IsError() const { return m_bError; }
 

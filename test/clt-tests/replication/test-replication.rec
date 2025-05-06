@@ -69,16 +69,7 @@ mysql -h0 -P1306 -e "INSERT INTO replication:testrt VALUES(6775836565403860995,'
 ––– input –––
 export INSTANCE=5
 ––– output –––
-––– input –––
-mkdir -p /var/{run,lib,log}/manticore-${INSTANCE}
-––– output –––
-––– input –––
-stdbuf -oL searchd -c test/clt-tests/base/searchd-with-flexible-ports.conf > /dev/null
-––– output –––
-––– input –––
-if timeout 10 grep -qm1 '\[BUDDY\] started' <(tail -n 1000 -f /var/log/manticore-${INSTANCE}/searchd.log); then echo 'Buddy started!'; else echo 'Timeout or failed!'; cat /var/log/manticore-${INSTANCE}/searchd.log; exit 1; fi
-––– output –––
-Buddy started!
+––– block: ../base/replication/start-searchd-precach –––
 ––– input –––
 sleep 5; mysql -h0 -P5306 -e "SELECT * FROM testrt ORDER BY id ASC\G"
 ––– output –––
@@ -107,16 +98,7 @@ stdbuf -oL searchd --stopwait -c test/clt-tests/base/searchd-with-flexible-ports
 mysql -h0 -P3306 -e "INSERT INTO replication:testrt VALUES(6775836565403860996,'NEW','TABLE',4);"; echo $?
 ––– output –––
 0
-––– input –––
-mkdir -p /var/{run,lib,log}/manticore-${INSTANCE}
-––– output –––
-––– input –––
-stdbuf -oL searchd -c test/clt-tests/base/searchd-with-flexible-ports.conf > /dev/null
-––– output –––
-––– input –––
-if timeout 10 grep -qm1 '\[BUDDY\] started' <(tail -n 1000 -f /var/log/manticore-${INSTANCE}/searchd.log); then echo 'Buddy started!'; else echo 'Timeout or failed!'; cat /var/log/manticore-${INSTANCE}/searchd.log; exit 1; fi
-––– output –––
-Buddy started!
+––– block: ../base/replication/start-searchd-precach –––
 ––– input –––
 sleep 5;mysql -h0 -P2306 -e "SELECT * FROM testrt ORDER BY id ASC\G"
 ––– output –––
@@ -225,16 +207,7 @@ mysql -h0 -P2306 -e "SELECT * FROM testrt ORDER BY id ASC" > /tmp/output_2306.tx
 ––– input –––
 export INSTANCE=4
 ––– output –––
-––– input –––
-mkdir -p /var/{run,lib,log}/manticore-${INSTANCE}
-––– output –––
-––– input –––
-stdbuf -oL searchd -c test/clt-tests/base/searchd-with-flexible-ports.conf > /dev/null
-––– output –––
-––– input –––
-if timeout 10 grep -qm1 '\[BUDDY\] started' <(tail -n 1000 -f /var/log/manticore-${INSTANCE}/searchd.log); then echo 'Buddy started!'; else echo 'Timeout or failed!'; cat /var/log/manticore-${INSTANCE}/searchd.log; exit 1; fi
-––– output –––
-Buddy started!
+––– block: ../base/replication/start-searchd-precach –––
 ––– input –––
 sleep 5;mysql -h0 -P1306 -e "SELECT * FROM testrt ORDER BY id ASC" > /tmp/output_1306.txt;
 ––– output –––

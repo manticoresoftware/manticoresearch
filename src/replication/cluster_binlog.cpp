@@ -404,5 +404,5 @@ void ClusterBinlog_c::OnClusterSynced ( const ClusterBinlogData_c & tCluster )
 	m_hClusters.AddUnique ( tCluster.m_sName ).m_tGtid = tCluster.m_tGtid;
 	Write();
 	if ( LOG_LEVEL_RPLOG )
-		sphLogDebugRpl ( "replication binlog synced '%s', seqno " INT64_FMT ", at %d, entry added", tCluster.m_sName.cstr(), pItem->m_tGtid.m_iSeqNo );
+		sphLogDebugRpl ( "replication binlog synced '%s', seqno " INT64_FMT ", at %d, entry added", tCluster.m_sName.cstr(), tCluster.m_tGtid.m_iSeqNo );
 }

@@ -2,7 +2,7 @@
 ––– input –––
 mysql -h0 -P9306 -e "show variables like 'timezone'\G" | grep Value
 ––– output –––
-Value: #!/[0-9a-zA-Z]\w+/!#
+        Value: #!/[0-9a-zA-Z]\w+/!#
 ––– input –––
 mysql -h0 -P9306 -e "select curtime()\G" | awk 'NR>1 {print $2}' > /tmp/utc.txt
 ––– output –––
@@ -24,7 +24,7 @@ mysql -h0 -P9306 -e "set global timezone='UTC';"
 ––– input –––
 mysql -h0 -P9306 -e "show variables like 'timezone'\G" | grep Value
 ––– output –––
-Value: UTC
+        Value: UTC
 ––– input –––
 mysql -h0 -P9306 -e "select now(), curtime(), curdate(), utc_time(), utc_timestamp();"
 ––– output –––
@@ -46,7 +46,7 @@ cat /tmp/bkk.txt
 ––– input –––
 mysql -h0 -P9306 -e "show variables like 'timezone'\G" | grep Value
 ––– output –––
-Value: Asia/Bangkok
+        Value: Asia/Bangkok
 ––– input –––
 mysql -h0 -P9306 -e "select now(), curtime(), curdate(), utc_time(), utc_timestamp();"
 ––– output –––

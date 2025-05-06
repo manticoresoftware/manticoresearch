@@ -21,23 +21,26 @@
 #include "threadutils.h"
 #include "indexfiles.h"
 #include "datetime.h"
+#include "coroutine.h"
+#include "sphinxexcerpt.h"
 
-#include <codecvt>
+// COMPILER, OS_UNAME, etc
+#include "config.h"
+#include "libutils.h"
+
+#include <sys/stat.h>
 #include <ctype.h>
 #include <fcntl.h>
-#include <errno.h>
 #if __has_include(<execinfo.h>)
 #include <execinfo.h>
 #endif
 
-#include <sstream>
 #include <iomanip>
 
 #if _WIN32
+#include <codecvt>
 #include <io.h> // for ::open on windows
 #include <dbghelp.h>
-#pragma comment(linker, "/defaultlib:dbghelp.lib")
-#pragma message("Automatically linking with dbghelp.lib")
 #else
 #include <sys/wait.h>
 #include <signal.h>
@@ -48,9 +51,6 @@
 #define HAVE_SYS_PRCTL_H
 #include <sys/prctl.h>
 #endif
-
-#include "libutils.h"
-#include "coroutine.h"
 
 #if __has_include (<malloc.h>)
 #include <malloc.h>
@@ -69,7 +69,7 @@ CSphString g_sWinInstallPath;
 // STRING FUNCTIONS
 //////////////////////////////////////////////////////////////////////////
 
-inline static char * ltrim ( char * sLine )
+static char * ltrim ( char * sLine )
 {
 	while ( *sLine && sphIsSpace(*sLine) )
 		sLine++;
@@ -1658,8 +1658,6 @@ bool CSphConfigParser::Parse ()
 /////////////////////////////////////////////////////////////////////////////
 
 #if _WIN32
-#pragma message( "Automatically linking with AdvAPI32.Lib" )
-#pragma comment( lib, "AdvAPI32.Lib" )
 
 void CheckWinInstall()
 {
@@ -1825,12 +1823,23 @@ void sphLogSupressRemove ( const char * sDelPrefix, ESphLogLevel eLevel )
 		g_dDisabledLevelLogs[eLevel][i] = nullptr;
 }
 
-
-volatile SphLogger_fn& g_pLogger()
+SphLogger_fn& StaticLogger ()
 {
 	static SphLogger_fn pLogger = &StdoutLogger;
 	return pLogger;
 }
+
+SphLogger_fn g_pLogger ()
+{
+	return StaticLogger();
+}
+
+
+void SetLogger (SphLogger_fn fnLogger)
+{
+	StaticLogger() = fnLogger;
+}
+
 
 inline void Log ( ESphLogLevel eLevel, const char * sFmt, va_list ap )
 {
@@ -3530,7 +3539,9 @@ int64_t GetIndexUid()
 	return g_tIndexUid.Get();
 }
 
-void UidShortSetup ( int iServer, int iStarted )
+// server - is server id used as iServer & 0x7f
+// started - is a server start time \ Unix timestamp in seconds
+static void UidShortSetup ( int iServer, int iStarted )
 {
 	g_iUidShortServerId = iServer;
 	int64_t iSeed = ( (int64_t)iServer & 0x7f ) << 56;
@@ -3565,7 +3576,7 @@ static BYTE g_dPearsonRNG[256] = {
 		43,119,224, 71,122,142, 42,160,104, 48,247,103, 15, 11,138,239  // 16
 };
 
-BYTE Pearson8 ( const BYTE * pBuf, int iLen, BYTE uPrev )
+static BYTE Pearson8 ( const BYTE * pBuf, int iLen, BYTE uPrev )
 {
 	const BYTE * pEnd = pBuf + iLen;
 	BYTE iNew = uPrev;
@@ -3577,6 +3588,49 @@ BYTE Pearson8 ( const BYTE * pBuf, int iLen, BYTE uPrev )
 	}
 
 	return iNew;
+}
+
+static int g_iServerID = 0;
+void SetServerID ( int iServerID ) noexcept
+{
+	g_iServerID = iServerID;
+}
+
+void SetUidShort ( CSphString sMAC, const CSphString& sPid, bool bTestMode )
+{
+	int iServerId = g_iServerID;
+
+	// need constant seed across all environments for tests
+	if ( bTestMode )
+		return UidShortSetup ( iServerId, 100000 );
+
+	const int iServerMask = 0x7f;
+	uint64_t uStartedSec = 0;
+
+	// server id as high part of counter
+	if ( !iServerId )
+	{
+		sphLogDebug ( "MAC address %s for uuid-short server_id", sMAC.cstr() );
+		if ( sMAC.IsEmpty() )
+		{
+			DWORD uSeed = sphRand();
+			sMAC.SetSprintf ( "%u", uSeed );
+			sphWarning ( "failed to get MAC address, using random number %s", sMAC.cstr()  );
+		}
+		// fold MAC into 1 byte
+		iServerId = Pearson8 ( (const BYTE *)sMAC.cstr(), sMAC.Length(), iServerId );
+		iServerId = Pearson8 ( (const BYTE *)sPid.cstr(), sPid.Length(), iServerId );
+		iServerId &= iServerMask;
+	}
+
+	// start time Unix timestamp as middle part of counter
+	uStartedSec = sphMicroTimer() / 1000000;
+	// base timestamp is 01 May of 2019
+	const uint64_t uBaseSec = 1556668800;
+	if ( uStartedSec>uBaseSec )
+		uStartedSec -= uBaseSec;
+
+	UidShortSetup ( iServerId, (int)uStartedSec );
 }
 
 static const char * g_dDateTimeFormats[] = {

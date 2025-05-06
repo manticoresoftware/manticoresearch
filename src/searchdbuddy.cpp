@@ -34,6 +34,7 @@
 
 #include "netfetch.h"
 #include "searchdbuddy.h"
+#include "daemon/logger.h"
 
 static std::unique_ptr<boost::process::child> g_pBuddy;
 static CSphString g_sPath;

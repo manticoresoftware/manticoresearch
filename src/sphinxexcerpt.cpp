@@ -10,7 +10,7 @@
 //
 
 #include "sphinxexcerpt.h"
-#include "sphinxutils.h"
+#include "searchdaemon.h"
 #include "sphinxsearch.h"
 #include "sphinxquery.h"
 #include "fileutils.h"
@@ -1392,10 +1392,9 @@ void SnippetBuilder_c::Impl_c::Setup ( const CSphIndex * pIndex, const SnippetQu
 		bool bWordDict = m_pDict->GetSettings().m_bWordDict;
 		// caveat: here we clone from Tokenizer, not from QueryTokenizer, as last was cloned as non-json, and so, includes different extra symbols.
 		m_pState->m_pTokenizerJson = sphCloneAndSetupQueryTokenizer ( pIndex->GetTokenizer(), pIndex->IsStarDict ( bWordDict ), tIndexSettings.m_bIndexExactWords, true );
-		m_pState->m_pQueryParser = sphCreateJsonQueryParser();
 	}
-	else
-		m_pState->m_pQueryParser = sphCreatePlainQueryParser();
+
+	m_pState->m_pQueryParser = CreateQueryParser ( tSettings.m_bJsonQuery );
 
 	if ( pIndex->GetFieldFilter() )
 		m_pFieldFilter = pIndex->GetFieldFilter()->Clone();

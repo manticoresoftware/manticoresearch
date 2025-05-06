@@ -1865,6 +1865,42 @@ void SetQueryDefaultsExt2 ( CSphQuery & tQuery )
 	tQuery.m_iRetryDelay = DEFAULT_QUERY_RETRY;
 }
 
+void CheckQuery ( const CSphQuery & tQuery, CSphString & sError, bool bCanLimitless )
+{
+	#define LOC_ERROR( ... ) do { sError.SetSprintf (__VA_ARGS__); return; } while(0)
+
+	sError = nullptr;
+
+	if ( (int)tQuery.m_eMode<0 || tQuery.m_eMode>SPH_MATCH_TOTAL )
+		LOC_ERROR ( "invalid match mode %d", tQuery.m_eMode );
+
+	if ( (int)tQuery.m_eRanker<0 || tQuery.m_eRanker>SPH_RANK_TOTAL )
+		LOC_ERROR ( "invalid ranking mode %d", tQuery.m_eRanker );
+
+	if ( tQuery.m_iMaxMatches<1 )
+		LOC_ERROR ( "max_matches can not be less than one" );
+
+	if ( tQuery.m_iOffset<0 || tQuery.m_iOffset>=tQuery.m_iMaxMatches )
+		LOC_ERROR ( "offset out of bounds (offset=%d, max_matches=%d)", tQuery.m_iOffset, tQuery.m_iMaxMatches );
+
+	if ( tQuery.m_iLimit < ( bCanLimitless ? -1 : 0 ) ) // -1 is magic for 'limitless select'
+		LOC_ERROR ( "limit out of bounds (limit=%d)", tQuery.m_iLimit );
+
+	if ( tQuery.m_iCutoff<-1 )
+		LOC_ERROR ( "cutoff out of bounds (cutoff=%d)", tQuery.m_iCutoff );
+
+	if ( ( tQuery.m_iRetryCount!=-1 ) && ( tQuery.m_iRetryCount>DAEMON_MAX_RETRY_COUNT ) )
+		LOC_ERROR ( "retry count out of bounds (count=%d)", tQuery.m_iRetryCount );
+
+	if ( ( tQuery.m_iRetryDelay!=-1 ) && ( tQuery.m_iRetryDelay>DAEMON_MAX_RETRY_DELAY ) )
+		LOC_ERROR ( "retry delay out of bounds (delay=%d)", tQuery.m_iRetryDelay );
+
+	if ( tQuery.m_iOffset>0 && tQuery.m_bHasOuter )
+		LOC_ERROR ( "inner offset must be 0 when using outer order by (offset=%d)", tQuery.m_iOffset );
+
+	#undef LOC_ERROR
+}
+
 /////////////////////////////////////////////////////////////////////////////
 // QUERY STATS
 /////////////////////////////////////////////////////////////////////////////

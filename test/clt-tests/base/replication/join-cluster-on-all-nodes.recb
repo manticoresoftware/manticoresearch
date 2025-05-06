@@ -6,4 +6,4 @@ mysql -h0 -P${INSTANCE}306 -e "show status like 'cluster_${CLUSTER_NAME}_status'
 ––– output –––
 *************************** 1. row ***************************
 Counter: cluster_#!/[a-z]+/!#_status
-Value: primary
+  Value: primary

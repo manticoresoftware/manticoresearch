@@ -217,8 +217,6 @@ struct AgentOptions_t
 	int m_iRetryCountMultiplier;
 };
 
-
-extern const char * sAgentStatsNames[(int)eMaxAgentStat + (int)ehMaxStat];
 using HostMetricsSnapshot_t = uint64_t[(int)eMaxAgentStat + (int)ehMaxStat];
 
 /// per-host dashboard

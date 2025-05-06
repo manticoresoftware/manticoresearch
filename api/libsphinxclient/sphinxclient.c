@@ -42,9 +42,6 @@
 	#include <io.h>
 	#include <winsock2.h>
 
-	#pragma comment(linker, "/defaultlib:wsock32.lib")
-	#pragma message("Automatically linking with wsock32.lib")
-
 	#ifndef EWOULDBLOCK
 		#define EWOULDBLOCK			WSAEWOULDBLOCK
 	#endif

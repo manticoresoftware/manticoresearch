@@ -30,7 +30,6 @@ static Coro::RWLock_c g_tCfgIndexesLock;
 static CSphVector<ClusterDesc_t> g_dCfgClusters;
 static CSphVector<IndexDesc_t> g_dCfgIndexes GUARDED_BY ( g_tCfgIndexesLock );
 
-static CSphString	g_sLogFile;
 static CSphString	g_sDataDir;
 static CSphString	g_sConfigPath;
 static bool			g_bConfigless = false;
@@ -699,7 +698,6 @@ static const char * g_sJsonConfName = "manticore.json";
 bool LoadConfigInt ( const CSphConfig & hConf, const CSphString & sConfigFile, CSphString & sError ) REQUIRES (MainThread)
 {
 	const CSphConfigSection & hSearchd = hConf["searchd"]["searchd"];
-	g_sLogFile = hSearchd.GetStr ( "log", "" );
 
 	g_bConfigless = hSearchd.Exists("data_dir");
 	if ( !g_bConfigless )

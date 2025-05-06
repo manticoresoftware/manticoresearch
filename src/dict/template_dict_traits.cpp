@@ -26,6 +26,8 @@
 #include "sphinxjson.h"
 #include "tokenizer/tok_internals.h"
 
+#include <sys/stat.h>
+
 CSphString g_sLemmatizerBase;
 
 /// morphology

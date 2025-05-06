@@ -65,7 +65,7 @@ enum ESphQueryState
 
 	SPH_QSTATE_TOTAL
 };
-STATIC_ASSERT ( SPH_QSTATE_UNKNOWN==0, BAD_QUERY_STATE_ENUM_BASE );
+static_assert ( SPH_QSTATE_UNKNOWN==0, "bad query state enum base" );
 
 struct XQNode_t;
 

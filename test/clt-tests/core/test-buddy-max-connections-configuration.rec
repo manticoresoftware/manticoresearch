@@ -18,23 +18,23 @@ Buddy started!
 mysql -P9306 -h0 -e "CREATE TABLE IF NOT EXISTS t (id INT); INSERT INTO t (id) VALUES(0); SHOW QUERIES\G;"
 ––– output –––
 *************************** 1. row ***************************
-id: %{NUMBER}
-query: SHOW QUERIES
-time: %{NUMBER}us
+      id: %{NUMBER}
+   query: SHOW QUERIES
+    time: %{NUMBER}us
 protocol: mysql
-host: %{IPADDR}:%{NUMBER}
+    host: %{IPADDR}:%{NUMBER}
 *************************** 2. row ***************************
-id: %{NUMBER}
-query: select
-time: %{NUMBER}#!/\b(?:us|ms)\b/!# ago
+      id: %{NUMBER}
+   query: select
+    time: %{NUMBER}#!/\b(?:us|ms)\b/!# ago
 protocol: http
-host: %{IPADDR}:%{NUMBER}
+    host: %{IPADDR}:%{NUMBER}
 *************************** 3. row ***************************
-id: %{NUMBER}
-query: show_settings
-time: %{NUMBER}us
+      id: %{NUMBER}
+   query: show_settings
+    time: %{NUMBER}us
 protocol: http
-host: %{IPADDR}:%{NUMBER}
+    host: %{IPADDR}:%{NUMBER}
 ––– input –––
 stdbuf -oL searchd --stopwait
 ––– output –––
@@ -66,20 +66,20 @@ Buddy started!
 for n in 1 2; do mysql -P9306 -h0 -e "CREATE TABLE IF NOT EXISTS b${n} (id INT);" ; done; sleep 1; for n in 1 2; do mysql -P9306 -h0 -e "INSERT INTO b${n} (id) VALUES(0)" & pids="$pids $!"; done; for pid in $pids; do wait $pid; done; mysql -P9306 -h0 -e "show queries\G;"
 ––– output –––
 *************************** 1. row ***************************
-id: %{NUMBER}
-query: show queries
-time: %{NUMBER}us
+      id: %{NUMBER}
+   query: show queries
+    time: %{NUMBER}us
 protocol: mysql
-host: %{IPADDR}:%{NUMBER}
+    host: %{IPADDR}:%{NUMBER}
 *************************** 2. row ***************************
-id: %{NUMBER}
-query: select
-time: %{NUMBER}#!/\b(?:us|ms)\b/!# ago
+      id: %{NUMBER}
+   query: select
+    time: %{NUMBER}#!/\b(?:us|ms)\b/!# ago
 protocol: http
-host: %{IPADDR}:%{NUMBER}
+    host: %{IPADDR}:%{NUMBER}
 *************************** 3. row ***************************
-id: %{NUMBER}
-query: show_settings
-time: %{NUMBER}us
+      id: %{NUMBER}
+   query: show_settings
+    time: %{NUMBER}us
 protocol: http
-host: %{IPADDR}:%{NUMBER}
+    host: %{IPADDR}:%{NUMBER}

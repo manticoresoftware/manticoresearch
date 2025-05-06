@@ -46,6 +46,20 @@ inline bool StrEqN ( Str_t l, const char* r )
 	return strncasecmp ( l.first, r, l.second ) == 0;
 }
 
+inline bool StrEq ( Str_t l, Str_t r )
+{
+	if ( l.second != r.second )
+		return false;
+	return strncmp ( l.first, r.first, l.second ) == 0;
+}
+
+inline bool StrEqN ( Str_t l, Str_t r )
+{
+	if ( l.second != r.second )
+		return false;
+	return strncasecmp ( l.first, r.first, l.second ) == 0;
+}
+
 inline Str_t FromStr ( const CSphString& sString ) noexcept
 {
 	return { sString.cstr(), (int)sString.Length() };

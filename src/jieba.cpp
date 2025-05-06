@@ -14,7 +14,7 @@
 
 #include "jieba.h"
 
-STATIC_ASSERT ( WITH_JIEBA, SHOULD_NOT_BUILD_WIHTOUT_WITH_JIEBA_DEFINITION );
+static_assert ( WITH_JIEBA, "should not build without WITH_JIEBA definition" );
 
 #include "cjkpreprocessor.h"
 

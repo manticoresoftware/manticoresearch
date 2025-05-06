@@ -12,9 +12,9 @@ The default configuration includes a sample Real-Time table and listens on the d
 
 The image comes with libraries for easy indexing data from MySQL, PostgreSQL, XML and CSV files.
 
-# How to run Manticore Search Docker image
+## How to run Manticore Search Docker image
 
-## Quick usage
+### Quick usage
 
 The below is the simplest way to start Manticore in a container and log in to it via the mysql client:
 
@@ -32,10 +32,10 @@ mysql> source /sandbox.sql
 
 Also, the mysql client has several sample queries in its history that you can run on the above table, just use Up/Down keys in the client to see and run them.
 
-## Production use
+### Production use
 
 
-### Ports and mounting points
+#### Ports and mounting points
 
 For data persistence the folder `/var/lib/manticore/` should be mounted to local storage or other desired storage engine.
 
@@ -55,11 +55,11 @@ docker run --name manticore -v $(pwd)/manticore.conf:/etc/manticoresearch/mantic
 
 Make sure to remove `127.0.0.1:` if you want the ports to be available for external hosts.
 
-### Manticore Columnar Library and Manticore Buddy
+#### Manticore Columnar Library and Manticore Buddy
 
 The Manticore Search Docker image comes with pre-installed [Manticore Columnar Library](https://github.com/manticoresoftware/columnar) and [Manticore Buddy](https://github.com/manticoresoftware/manticoresearch-buddy)
 
-### Docker-compose
+#### Docker-compose
 
 In many cases, you may want to use Manticore in conjunction with other images specified in a Docker Compose YAML file. Below is the minimal recommended configuration for Manticore Search in a docker-compose.yml file:
 
@@ -89,7 +89,7 @@ services:
 
 Besides using the exposed ports 9306 and 9308, you can log into the instance by running `docker-compose exec manticore mysql`.
 
-### HTTP protocol
+#### HTTP protocol
 
 HTTP protocol is exposed on port 9308. You can map the port locally and connect using curl.:
 
@@ -135,7 +135,7 @@ docker logs manticore
 The query log can be diverted to Docker log by passing the variable `QUERY_LOG_TO_STDOUT=true`.
 
 
-### Multi-node cluster with replication
+#### Multi-node cluster with replication
 
 Here is a simple `docker-compose.yml` for defining a two node cluster:
 
@@ -217,7 +217,7 @@ networks:
   Bye
   ```
 
-## Memory locking and limits
+### Memory locking and limits
 
 It's recommended to overwrite the default ulimits of docker for the Manticore instance:
 
@@ -231,7 +231,7 @@ For best performance, table components can be "mlocked" into memory. When Mantic
   --cap-add=IPC_LOCK --ulimit memlock=-1:-1
 ```
 
-## Configuring Manticore Search with Docker
+### Configuring Manticore Search with Docker
 
 If you want to run Manticore with a custom configuration that includes table definitions, you will need to mount the configuration to the instance:
 
@@ -273,25 +273,25 @@ prereaded 0 indexes in 0.000 sec
 accepting connections
 ```
 
-### Startup flags
+#### Startup flags
 
 To start Manticore with custom startup flags, specify them as arguments when using docker run. Ensure you do not include the `searchd` command and include the `--nodetach` flag. Here's an example:
 ```bash
 docker run --name manticore --rm manticoresearch/manticore:latest --replay-flags=ignore-trx-errors --nodetach
 ```
 
-### Running under non-root
+#### Running under non-root
 By default, the main Manticore process `searchd` is running under user `manticore` inside the container, but the script which runs on starting the container is run under your default docker user which in most cases is `root`. If that's not what you want you can use `docker ... --user manticore` or `user: manticore` in docker compose yaml to make everything run under `manticore`. Read below about possible volume permissions issue you can get and how to solve it.
 
-### Creating plain tables on startup
+#### Creating plain tables on startup
 To build plain tables specified in your custom configuration file, you can use the `CREATE_PLAIN_TABLES=1` environment variable. It will execute `indexer --all` before Manticore starts. This is useful if you don't use volumes, and your tables are easy to recreate.
 ```bash
 docker run -e CREATE_PLAIN_TABLES=1 --name manticore -v $(pwd)/manticore.conf:/etc/manticoresearch/manticore.conf -p 9306:9306 -p 9308:9308 -d manticoresearch/manticore
 ```
 
-## Troubleshooting
+### Troubleshooting
 
-### Permissions issue with a mounted volume
+#### Permissions issue with a mounted volume
 
 In case you are running Manticore Search docker under non-root (using `docker ... --user manticore` or `user: manticore` in docker compose yaml), you can face a permissions issue, for example:
 ```bash

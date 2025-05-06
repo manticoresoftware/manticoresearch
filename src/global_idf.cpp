@@ -13,6 +13,7 @@
 #include "sphinxint.h"
 #include "fileutils.h"
 
+#include <sys/stat.h>
 #include <math.h>
 
 

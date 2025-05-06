@@ -19,6 +19,7 @@
 #include "searchdaemon.h"
 #include "binlog.h"
 #include "accumulator.h"
+#include "sphinxudf.h"
 
 #include <gmock/gmock.h>
 

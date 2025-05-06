@@ -244,7 +244,7 @@ int CSphBin::ReadHit ( AggregateHit_t* pOut )
 	{
 		// SPH_MAX_WORD_LEN is now 42 only to keep ReadVLB() below
 		// technically, we can just use different functions on different paths, if ever needed
-		STATIC_ASSERT ( SPH_MAX_WORD_LEN * 3 <= 127, KEYWORD_TOO_LONG );
+		static_assert ( SPH_MAX_WORD_LEN * 3 <= 127, "keyword too long" );
 		SphWordID_t uDelta = ReadVLB();
 
 		if ( uDelta )

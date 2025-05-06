@@ -33,6 +33,7 @@ download_package() {
 		
 		if wget -q --spider "$file_url" 2>/dev/null; then
 			echo "Package found at $file_url"
+			mkdir -p "../build"
 			wget -q -O "../build/${file_name}" "$file_url"
 			
 			# For executor, we need to download the dev version and also extra package

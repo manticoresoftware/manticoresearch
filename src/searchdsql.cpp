@@ -23,8 +23,10 @@
 #include "sorterscroll.h"
 #include "std/base64.h"
 
-extern int g_iAgentQueryTimeoutMs;	// global (default). May be override by index-scope values, if one specified
+// uncomment to see everything came to parser.
+//#define DUMP_INCOMING_QUERIES
 
+extern int g_iAgentQueryTimeoutMs; // global (default). May be override by index-scope values, if one specified
 
 void SqlNode_t::SetValueInt ( int64_t iValue ) noexcept
 {
@@ -452,7 +454,7 @@ private:
 };
 
 using YYSTYPE = SqlNode_t;
-STATIC_ASSERT ( IS_TRIVIALLY_COPYABLE ( SqlNode_t ), YYSTYPE_MUST_BE_TRIVIAL_FOR_RESIZABLE_PARSER_STACK );
+static_assert ( IS_TRIVIALLY_COPYABLE ( SqlNode_t ), "YYSTYPE must be trivial for resizable parser stack" );
 # define YYSTYPE_IS_TRIVIAL 1
 # define YYSTYPE_IS_DECLARED 1
 
@@ -1801,21 +1803,13 @@ void SqlParser_c::SetLimit ( int iOffset, int iLimit )
 	m_pQuery->m_iLimit = iLimit;
 }
 
-#ifndef NDEBUG
-CSphVector<CSphNamedInt> & SqlParser_c::GetNamedVec ( int iIndex )
-#else
-CSphVector<CSphNamedInt> & SqlParser_c::GetNamedVec ( int )
-#endif
+CSphVector<CSphNamedInt> & SqlParser_c::GetNamedVec ( [[maybe_unused]] int iIndex )
 {
 	assert ( m_bNamedVecBusy && iIndex==0 );
 	return m_dNamedVec;
 }
 
-#ifndef NDEBUG
-void SqlParser_c::FreeNamedVec ( int iIndex )
-#else
-void SqlParser_c::FreeNamedVec ( int )
-#endif
+void SqlParser_c::FreeNamedVec ( [[maybe_unused]] int iIndex )
 {
 	assert ( m_bNamedVecBusy && iIndex==0 );
 	m_bNamedVecBusy = false;
@@ -2112,8 +2106,9 @@ bool sphParseSqlQuery ( Str_t sQuery, CSphVector<SqlStmt_t> & dStmt, CSphString 
 		return false;
 	}
 
-	// uncomment to see everything came to parser.
-//	sphWarning ( "Query: %s", sQuery.first );
+#ifdef DUMP_INCOMING_QUERIES
+	sphWarning ( "Query: %s", sQuery.first );
+#endif
 
 	int iRes = yyparse ( &tParser );
 

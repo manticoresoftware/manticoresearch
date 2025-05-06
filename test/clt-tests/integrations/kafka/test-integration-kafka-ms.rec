@@ -83,7 +83,7 @@ broker_list='kafka:9092'
 topic_list='my-data'
 consumer_group='manticore'
 num_consumers='1'
-batch=50 |
+ batch=50 |
 +--------+---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
 ––– input –––
 docker exec manticore mysql -h0 -P9306 -e "SHOW MVS;"
@@ -592,7 +592,7 @@ docker exec manticore mysql -h0 -P9306 -e "CREATE MATERIALIZED VIEW view_drop_so
 ––– input –––
 docker exec manticore mysql -h0 -P9306 -e "SHOW MV view_drop_source\G;" | grep suspended
 ––– output –––
-suspended: 0
+   suspended: 0
 ––– input –––
 docker exec manticore mysql -h0 -P9306 -e "DROP SOURCE kafka_drop_source;"; echo $?
 ––– output –––
@@ -600,7 +600,7 @@ docker exec manticore mysql -h0 -P9306 -e "DROP SOURCE kafka_drop_source;"; echo
 ––– input –––
 docker exec manticore mysql -h0 -P9306 -e "SHOW MV view_drop_source\G;" | grep suspended
 ––– output –––
-suspended: 1
+   suspended: 1
 ––– input –––
 docker exec manticore mysql -h0 -P9306 -e "CREATE SOURCE kafka_drop_source (id bigint, term text) type='kafka' broker_list='kafka:9092' topic_list='my-data' consumer_group='manticore_drop_source' num_consumers='1' batch=50;"; echo $?
 ––– output –––
@@ -608,7 +608,7 @@ docker exec manticore mysql -h0 -P9306 -e "CREATE SOURCE kafka_drop_source (id b
 ––– input –––
 docker exec manticore mysql -h0 -P9306 -e "SHOW MV view_drop_source\G;" | grep suspended
 ––– output –––
-suspended: 1
+   suspended: 1
 ––– input –––
 docker exec manticore mysql -h0 -P9306 -e "ALTER MATERIALIZED VIEW view_drop_source suspended=0"; echo $?
 ––– output –––

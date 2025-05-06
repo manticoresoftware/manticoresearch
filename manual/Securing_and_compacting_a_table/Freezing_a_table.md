@@ -69,7 +69,7 @@ Manually `FLUSH`ing a RAM chunk of a frozen table will report 'success', but no 
 
 If you shut down the daemon with a frozen table, it will act as if it experienced a dirty shutdown (e.g., `kill -9`): newly inserted data will **not** be saved in the RAM-chunk on disk, and upon restart, it will be restored from a binary log (if any) or lost (if binary logging is disabled).
 
-# Unfreezing a table
+## Unfreezing a table
 
 <!-- example unfreeze -->
 
@@ -86,7 +86,7 @@ UNFREEZE tbl;
 
 <!-- end -->
 
-# Inspecting the lock state of a table
+## Inspecting the lock state of a table
 
 <!-- example show_table_status -->
 
@@ -113,7 +113,7 @@ SHOW TABLE `foo` STATUS LIKE 'locked';
 
 <!-- end -->
 
-# SHOW LOCKS
+## SHOW LOCKS
 
 <!-- example show_locks -->
 

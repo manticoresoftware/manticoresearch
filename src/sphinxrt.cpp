@@ -166,7 +166,7 @@ void SetRtFlushDiskPeriod ( int iFlushWrite, int iFlushSearch )
 // store int variable in as much bytes as actually needed to represent it
 
 #define SPH_MAX_KEYWORD_LEN (3*SPH_MAX_WORD_LEN+4)
-STATIC_ASSERT ( SPH_MAX_KEYWORD_LEN<255, MAX_KEYWORD_LEN_SHOULD_FITS_BYTE );
+static_assert ( SPH_MAX_KEYWORD_LEN<255, "SPH_MAX_KEYWORD_LEN should fit in a byte" );
 
 
 // Variable Length Byte (VLB) skipping (BE/LE agnostic)
@@ -3401,8 +3401,7 @@ int CommitID() {
 bool RtIndex_c::CommitReplayable ( RtSegment_t * pNewSeg, const VecTraits_T<DocID_t> & dAccKlist, int64_t iAddTotalBytes, int & iTotalKilled, CSphString & sError ) REQUIRES_SHARED ( pNewSeg->m_tLock )
 {
 	// store statistics, because pNewSeg just might get merged
-	const int iId = CommitID();
-	MAYBE_UNUSED ( iId );
+	[[maybe_unused]] const int iId = CommitID();
 	TRACE_VARID ( "rt", "CommitReplayable", iId );
 	int iNewDocs = pNewSeg ? (int)pNewSeg->m_uRows : 0;
 
@@ -5078,7 +5077,7 @@ static bool CheckVectorLength ( int iLen, int64_t iMinLen, const char * sAt, CSp
 template < typename T >
 static void SaveVector ( CSphWriter & tWriter, const VecTraits_T < T > & tVector )
 {
-	STATIC_ASSERT ( IS_TRIVIALLY_COPYABLE(T), NON_TRIVIAL_VECTORS_ARE_UNSERIALIZABLE );
+	static_assert ( IS_TRIVIALLY_COPYABLE(T), "non trivial vectors are unserializable" );
 	tWriter.PutDword ( tVector.GetLength() );
 	if ( tVector.GetLength() )
 		tWriter.PutBytes ( tVector.Begin(), tVector.GetLengthBytes() );
@@ -5089,7 +5088,7 @@ template < typename T, typename P >
 static bool LoadVector ( CSphReader & tReader, CSphVector < T, P > & tVector,
 	int64_t iMinLen, const char * sAt, CSphString & sError )
 {
-	STATIC_ASSERT ( IS_TRIVIALLY_COPYABLE(T), NON_TRIVIAL_VECTORS_ARE_UNSERIALIZABLE );
+	static_assert ( IS_TRIVIALLY_COPYABLE(T), "non trivial vectors are unserializable" );
 	int iSize = tReader.GetDword();
 	if ( !CheckVectorLength<P> ( iSize, iMinLen, sAt, sError ) )
 		return false;

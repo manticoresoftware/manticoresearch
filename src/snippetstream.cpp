@@ -217,7 +217,7 @@ private:
 
 		TYPE_TOTAL
 	};
-	STATIC_ASSERT ( TYPE_TOTAL<=15, OUT_OF_TYPECODES );
+	static_assert ( TYPE_TOTAL<=15, "out of typecodes" );
 
 	CSphTightVector<BYTE>		m_dTokenStream;
 	int							m_iReadPtr = 0;

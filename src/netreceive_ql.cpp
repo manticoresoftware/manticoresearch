@@ -15,6 +15,7 @@
 #include "searchdssl.h"
 #include "compressed_zlib_mysql.h"
 #include "compressed_zstd_mysql.h"
+#include "daemon/logger.h"
 #include "searchdbuddy.h"
 
 extern int g_iClientQlTimeoutS;    // sec

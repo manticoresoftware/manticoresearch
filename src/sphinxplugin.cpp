@@ -13,6 +13,8 @@
 #include "sphinxint.h"
 #include "sphinxutils.h"
 #include "sphinxplugin.h"
+
+// for HAVE_DLOPEN
 #include "libutils.h"
 
 //////////////////////////////////////////////////////////////////////////

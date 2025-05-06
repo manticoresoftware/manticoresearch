@@ -231,7 +231,7 @@ public:
 
 
 
-STATIC_ASSERT ( ( 8*8*sizeof(DWORD) )>=SPH_MAX_FIELDS, PAYLOAD_MASK_OVERFLOW );
+static_assert ( ( 8*8*sizeof(DWORD) )>=SPH_MAX_FIELDS, "payload mask overflow" );
 
 static const bool WITH_BM25 = true;
 

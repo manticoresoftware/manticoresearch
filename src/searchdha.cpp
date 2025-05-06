@@ -16,7 +16,6 @@
 #include "searchdha.h"
 #include "searchdtask.h"
 #include "coroutine.h"
-#include "mini_timer.h"
 #include "pollable_event.h"
 #include "netpoll.h"
 
@@ -31,9 +30,9 @@
 	#include <WinSock2.h>
 	#include <MSWSock.h>
 	#include <WS2tcpip.h>
-#pragma comment(lib, "WS2_32.Lib")
 #endif
 
+#include "config.h"
 #if HAVE_GETADDRINFO_A
 	#include <signal.h>
 #endif

@@ -18,7 +18,7 @@ Port 1306: Node synced
 Port 2306: Node synced
 *************************** 1. row ***************************
 Counter: cluster_c_status
-Value: primary
+  Value: primary
 ––– input –––
 sleep 5; mysql -h0 -P1306 -e "create table c:testrt(id bigint, title text, content text, gid uint) shards='2' rf='1';"; echo $?
 ––– output –––

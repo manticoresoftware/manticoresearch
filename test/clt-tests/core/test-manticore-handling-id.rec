@@ -25,28 +25,28 @@ mysql -P9306 -h0 -e "show tables; select * from test;"
 curl -s localhost:9308/test/_search -d '{}' |jq .
 ––– output –––
 {
-"took": %{NUMBER},
-"timed_out": false,
-"_shards": {
-"total": 1,
-"successful": 1,
-"skipped": 0,
-"failed": 0
-},
-"hits": {
-"total": 1,
-"total_relation": "eq",
-"max_score": null,
-"hits": [
-{
-"_id": "1",
-"_score": 1,
-"_index": "test",
-"_type": "doc",
-"_version": 1,
-"_source": {}
-}
-]
-},
-"status": 200
+  "took": 0,
+  "timed_out": false,
+  "_shards": {
+    "total": 1,
+    "successful": 1,
+    "skipped": 0,
+    "failed": 0
+  },
+  "hits": {
+    "total": 1,
+    "total_relation": "eq",
+    "max_score": null,
+    "hits": [
+      {
+        "_id": "1",
+        "_score": 1,
+        "_index": "test",
+        "_type": "doc",
+        "_version": 1,
+        "_source": {}
+      }
+    ]
+  },
+  "status": 200
 }

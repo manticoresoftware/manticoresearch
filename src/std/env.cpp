@@ -13,6 +13,7 @@
 #include "env.h"
 
 #include "sphinxutils.h"
+#include "config.h"
 
 #ifdef _WIN32
 #include "fileutils.h"

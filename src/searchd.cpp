@@ -407,6 +407,7 @@ void Shutdown () REQUIRES ( MainThread ) NO_THREAD_SAFETY_ANALYSIS
 
 	SHUTINFO << "Finish binlog serving ...";
 	Binlog::Deinit();
+	ReplicationBinlogStop();
 
 	SHUTINFO << "Shutdown docstore ...";
 	ShutdownDocstore();
@@ -14768,6 +14769,7 @@ int WINAPI ServiceMain ( int argc, char **argv ) EXCLUDES (MainThread)
 		bNewCluster = false;
 		bNewClusterForce = false;
 	}
+	ReplicationBinlogStart ( GetDataDirInt(), !Binlog::IsActive() );
 	
 	StartRtBinlogFlushing();
 

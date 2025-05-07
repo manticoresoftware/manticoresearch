@@ -129,6 +129,9 @@ if (WIN32)
 		target_compile_options ( lmanticore PRIVATE /bigobj )
 	endif ()
 endif ()
+if (NOT WIN32)
+	add_lib_for ( shm_open rt lmanticore )
+endif ()
 
 # Boost is required dependency now
 set ( Boost_USE_MULTITHREADED ON )

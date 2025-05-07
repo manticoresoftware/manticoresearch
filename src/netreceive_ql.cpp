@@ -801,8 +801,8 @@ class HandshakeResponse41
 {
 	CSphString m_sLoginUserName;
 	CSphString m_sAuthResponse;
-	CSphString m_sDatabase;
-	CSphString m_sClientPluginName;
+	std::optional<CSphString> m_sDatabase;
+	std::optional<CSphString> m_sClientPluginName;
 	SmallStringHash_T<CSphString> m_hAttributes;
 	DWORD m_uCapabilities;
 	DWORD m_uMaxPacketSize;
@@ -841,13 +841,13 @@ public:
 		// db name
 		if ( m_uCapabilities & CLIENT::CONNECT_WITH_DB )
 		{
-			m_sDatabase = MysqlReadSzStr ( tIn );
-			sphLogDebugv ( "DB: %s", m_sDatabase.cstr() );
+			m_sDatabase.emplace ( MysqlReadSzStr ( tIn ) );
+			sphLogDebugv ( "DB: %s", m_sDatabase->cstr() );
 		}
 
 		// db name
 		if ( m_uCapabilities & CLIENT::PLUGIN_AUTH )
-			m_sClientPluginName = MysqlReadSzStr ( tIn );
+			m_sClientPluginName.emplace ( MysqlReadSzStr ( tIn ) );
 
 		// attributes
 		if ( m_uCapabilities & CLIENT::CONNECT_ATTRS )
@@ -874,7 +874,7 @@ public:
 		return m_sLoginUserName;
 	}
 
-	[[nodiscard]] const CSphString& GetDB() const noexcept
+	[[nodiscard]] const std::optional<CSphString>& GetDB() const noexcept
 	{
 		return m_sDatabase;
 	}
@@ -905,6 +905,16 @@ public:
 	}
 };
 
+bool ValidateDBName (Str_t tSrcQueryReference)
+{
+	return StrEqN ( tSrcQueryReference, szManticore );
+}
+
+bool ValidateDBName ( const std::optional<CSphString>& tSrcQueryReference )
+{
+	return ValidateDBName ( FromStr ( tSrcQueryReference.value_or ( szManticore ) ) );
+}
+
 
 bool LoopClientMySQL ( BYTE & uPacketID, int iPacketLen, QueryProfile_c * pProfile, AsyncNetBuffer_c * pBuf )
 {
@@ -926,11 +936,31 @@ bool LoopClientMySQL ( BYTE & uPacketID, int iPacketLen, QueryProfile_c * pProfi
 	bool bKeepProfile = true;
 	switch ( uMysqlCmd )
 	{
+		// client wants a pong
 		case MYSQL_COM_PING:
-		case MYSQL_COM_INIT_DB:
-			// client wants a pong
 			SendMysqlOkPacket ( tOut, uPacketID, session::IsAutoCommit(), session::IsInTrans() );
 			break;
+
+		// handle 'use DB'
+		case MYSQL_COM_INIT_DB:
+		{
+			Str_t tSrcQueryReference ( nullptr, iPacketLen - 1 );
+			tIn.GetBytesZerocopy ( ( const BYTE ** )( &tSrcQueryReference.first ), tSrcQueryReference.second );
+			CSphString sInitDB { tSrcQueryReference };
+			sphLogDebugv ( "LoopClientMySQL command %d, COM_INIT_DB '%s'", uMysqlCmd, sInitDB.cstr() );
+			if ( !ValidateDBName ( tSrcQueryReference ) )
+			{
+				StringBuilder_c sError;
+				sError << "no such database " << tSrcQueryReference;
+				LogSphinxqlError ( "", Str_t ( sError ) );
+				SendMysqlErrorPacket ( tOut, uPacketID, Str_t(sError), EMYSQL_ERR::NO_DB_ERROR );
+				break;
+			}
+			// commented, because it is 'Manticore' by default; no need to write another one
+			// session::SetCurrentDbName ( { tSrcQueryReference } );
+			SendMysqlOkPacket ( tOut, uPacketID, session::IsAutoCommit(), session::IsInTrans() );
+			break;
+		}
 
 		case MYSQL_COM_SET_OPTION:
 			// bMulti = ( tIn.GetWord()==MYSQL_OPTION_MULTI_STATEMENTS_ON ); // that's how we could double check and validate multi query
@@ -1203,6 +1233,17 @@ void SqlServe ( std::unique_ptr<AsyncNetBuffer_c> pBuf )
 			if ( tResponse.GetUsername() == "FEDERATED" )
 				session::SetFederatedUser();
 			session::SetUser ( tResponse.GetUsername() );
+
+			if ( !ValidateDBName ( tResponse.GetDB() ) )
+			{
+				StringBuilder_c sError;
+				sError << "no such database " << tResponse.GetDB().value_or ( "<empty>" );
+				LogSphinxqlError ( "", Str_t ( sError ) );
+				SendMysqlErrorPacket ( *pOut, uPacketID, Str_t(sError), EMYSQL_ERR::NO_DB_ERROR );
+				pOut->Flush();
+				break;
+			}
+
 			SendMysqlOkPacket ( *pOut, uPacketID, session::IsAutoCommit(), session::IsInTrans ());
 			tSess.SetPersistent ( pOut->Flush () );
 			bAuthed = true;

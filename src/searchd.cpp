@@ -11404,6 +11404,16 @@ void session::SetUser ( const CSphString & sUser )
 	GetClientSession()->m_sUser = sUser;
 }
 
+void session::SetCurrentDbName ( CSphString sDb )
+{
+	GetClientSession()->m_sCurrentDbName = std::move(sDb);
+}
+
+const char* session::GetCurrentDbName ()
+{
+	return GetClientSession() ? GetClientSession()->m_sCurrentDbName.cstr() : nullptr;
+}
+
 void session::SetAutoCommit ( bool bAutoCommit )
 {
 	GetClientSession()->m_bAutoCommit = bAutoCommit;

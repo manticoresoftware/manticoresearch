@@ -111,7 +111,7 @@ POST /insert
 
 <!-- request Elasticsearch -->
 
-> NOTE: `_create` requires [Manticore Buddy](../Installation/Manticore_Buddy.md). If it doesn't work, make sure Buddy is installed.
+> NOTE: `_create` requires [Manticore Buddy](Installation/Manticore_Buddy.md). If it doesn't work, make sure Buddy is installed.
 
 ```json
 POST /products/_create/3
@@ -306,7 +306,7 @@ insert_res = index_api.insert(insert_req).await;
 
 ## Auto schema
 
-> NOTE: Auto schema requires [Manticore Buddy](../Installation/Manticore_Buddy.md). If it doesn't work, make sure Buddy is installed.
+> NOTE: Auto schema requires [Manticore Buddy](Installation/Manticore_Buddy.md). If it doesn't work, make sure Buddy is installed.
 
 Manticore features an automatic table creation mechanism, which activates when a specified table in the insert query doesn't yet exist. This mechanism is enabled by default. To disable it, set `auto_schema = 0` in the [Searchd](../../Server_settings/Searchd.md#auto_schema) section of your Manticore config file.
 
@@ -632,7 +632,7 @@ or
 The `/bulk` (Manticore mode) endpoint supports [Chunked transfer encoding](https://en.wikipedia.org/wiki/Chunked_transfer_encoding). You can use it to transmit large batches. It:
 * reduces peak RAM usage, lowering the risk of OOM
 * decreases response time
-* allows you to bypass [max_packet_size](../Server_settings/Searchd.md#max_packet_size) and transfer batches much larger than the maximum allowed value of `max_packet_size` (128MB), for example, 1GB at a time.
+* allows you to bypass [max_packet_size](../../Server_settings/Searchd.md#max_packet_size) and transfer batches much larger than the maximum allowed value of `max_packet_size` (128MB), for example, 1GB at a time.
 
 <!-- intro -->
 ### Bulk insert examples
@@ -759,7 +759,7 @@ POST /bulk
 
 <!-- request Elasticsearch -->
 
-> NOTE: `_bulk` requires [Manticore Buddy](../Installation/Manticore_Buddy.md) if the table doesn't exist yet. If it doesn't work, make sure Buddy is installed.
+> NOTE: `_bulk` requires [Manticore Buddy](Installation/Manticore_Buddy.md) if the table doesn't exist yet. If it doesn't work, make sure Buddy is installed.
 
 ```json
 POST /_bulk

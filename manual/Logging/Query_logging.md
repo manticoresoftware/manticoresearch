@@ -42,7 +42,7 @@ query_log_format = sphinxql # default
 <!-- end -->
 
 <!-- example sphixql_log2 -->
-The features of the Manticore SQL log format compared to the [plain format](../../Logging/Query_logging.md#Plain-log-format) include:
+The features of the Manticore SQL log format compared to the [plain format](../Logging/Query_logging.md#Plain-log-format) include:
 * Full statement data is logged where possible.
 * Errors and warnings are logged.
 * The query log can be replayed.

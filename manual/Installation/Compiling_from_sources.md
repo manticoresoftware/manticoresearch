@@ -108,7 +108,7 @@ To disable it, use `-DFOO=0`. If not explicitly noted, enabling a feature that i
 
 #### Configuration flags and options
 
-- **USE_SYSLOG** - allows the use of`syslog` in [query logging](Logging/Query_logging.md).
+- **USE_SYSLOG** - allows the use of`syslog` in [query logging](../Logging/Query_logging.md).
 - **WITH_GALERA** -Enables support for replication on the search daemon. Support will be configured for the build, and the sources for the Galera library will be downloaded, built, and included in the distribution/installation. Usually, it is safe to build with Galera, but not distribute the library itself (so no Galera module, no replication). However, sometimes you may need to explicitly disable it, such as if you want to build a static binary that by design cannot load any libraries, so that even the presence of a call to the 'dlopen' function inside the daemon will cause a link error.
 - **WITH_RE2** - Builds with the use of the RE2 regular expression library. This is necessary for functions like [REGEX()](../Functions/String_functions.md#REGEX%28%29), and the [regexp_filter](../Creating_a_table/NLP_and_tokenization/Low-level_tokenization.md#regexp_filter)
   feature.

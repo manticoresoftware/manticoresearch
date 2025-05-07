@@ -159,7 +159,7 @@ The payload query must return exactly 3 columns:
 
 Document IDs can be duplicate, but they must be in ascending order. Payloads **must** be unsigned integers within the 24-bit range, i.e., from 0 to 16777215.
 
-The only ranker that accounts for payloads is `proximity_bm25` (the default [ranker](../../Searching/Sorting_and_ranking.md#Available-built-in-rankers)). On tables with payload fields, it will automatically switch to a variant that matches keywords in those fields, computes a sum of matched payloads multiplied by field weights, and adds that sum to the final rank.
+The only ranker that accounts for payloads is `proximity_bm25` (the default [ranker](../../../Searching/Sorting_and_ranking.md#Available-built-in-rankers)). On tables with payload fields, it will automatically switch to a variant that matches keywords in those fields, computes a sum of matched payloads multiplied by field weights, and adds that sum to the final rank.
 
 Please note that the payload field is ignored for full-text queries containing complex operators. It only works for simple bag-of-words queries.
 

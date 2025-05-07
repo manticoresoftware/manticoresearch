@@ -84,7 +84,7 @@ The table below lists all supported languages and indicates how to enable:
 | Tamil | specify charset_table manually | - | morphology=libstemmer_ta | |
 | Thai | charset_table=thai | th | - | |
 | Turkish | charset_table=non_cont | tr | morphology=libstemmer_tr | |
-| Ukrainian | charset_table=non_cont,U+0406->U+0456,U+0456,U+0407->U+0457,U+0457,U+0490->U+0491,U+0491   | - | morphology=lemmatize_uk_all | Requires [installation](../../../Installation/Debian_and_Ubuntu.md#Ukrainian-lemmatizer) of UK lemmatizer |
+| Ukrainian | charset_table=non_cont,U+0406->U+0456,U+0456,U+0407->U+0457,U+0457,U+0490->U+0491,U+0491   | - | morphology=lemmatize_uk_all | Requires [installation](../../Installation/Debian_and_Ubuntu.md#Ukrainian-lemmatizer) of UK lemmatizer |
 | Yoruba | charset_table=non_cont | yo | - | |
 | Zulu | charset_table=non_cont | zu | - |  |
 <!-- proofread -->

@@ -1,6 +1,6 @@
 # Deleting documents
 
-Deleting documents is only supported in [RT mode](../../Read_this_first.md#Real-time-mode-vs-plain-mode) for the following table types:
+Deleting documents is only supported in [RT mode](../Read_this_first.md#Real-time-mode-vs-plain-mode) for the following table types:
 * [Real-time](../Creating_a_table/Local_tables/Real-time_table.md) tables
 * [Percolate](../Creating_a_table/Local_tables/Percolate_table.md) tables
 * Distributed tables that only contain RT tables as local or remote agents.

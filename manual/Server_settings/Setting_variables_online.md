@@ -105,8 +105,8 @@ Known global server variables are:
 * `CPUSTATS= {1|0}` Turns on/off [CPU time tracking](../Starting_the_server/Manually.md#searchd-command-line-options).
 * `DISTINCT_PRECISION_THRESHOLD`: Sets the default value for the option [distinct_precision_threshold](../Searching/Options.md#distinct_precision_threshold) of future queries.
 * `ES_COMPAT = {on/off/dashboards}` When set to `on` (default), Elasticsearch-like write requests are supported; `off` disables the support; `dashboards` enables the support and also allows requests from Kibana (this functionality is experimental).
-* `EXPANSION_MERGE_THRESHOLD_DOCS`: Changes the value of the config's [expansion_merge_threshold_docs](Server_settings/Searchd.md#expansion_merge_threshold_docs) setting on-the-fly.
-* `EXPANSION_MERGE_THRESHOLD_HITS`: Changes the value of the config's [expansion_merge_threshold_hits](Server_settings/Searchd.md#expansion_merge_threshold_hits) setting on-the-fly.
+* `EXPANSION_MERGE_THRESHOLD_DOCS`: Changes the value of the config's [expansion_merge_threshold_docs](../Server_settings/Searchd.md#expansion_merge_threshold_docs) setting on-the-fly.
+* `EXPANSION_MERGE_THRESHOLD_HITS`: Changes the value of the config's [expansion_merge_threshold_hits](../Server_settings/Searchd.md#expansion_merge_threshold_hits) setting on-the-fly.
 * `GROUPING_IN_UTC = {0 | 1}` When set to 1, causes timed grouping functions (day(), month(), year(), yearmonth(), yearmonthday()) to be calculated in UTC. Read the doc for [grouping_in_utc](../Server_settings/Searchd.md) config params for more details.
 * `IOSTATS = {0 | 1}` Enables or disables I/O operations (except for attributes) reporting in the query log.
 * `LOG_DEBUG_FILTER = <string value>` Filters out redundant log messages. If the value is set, then all logs with level > INFO (i.e., `DEBUG`, `DEBUGV`, etc.) will be compared with the string and output only in the case they start with the given value.

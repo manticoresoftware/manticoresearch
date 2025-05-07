@@ -25,7 +25,7 @@ CREATE SOURCE <source name> [(column type, ...)] [source_options]
 
 All schema keys are case-insensitive, meaning `Products`, `products`, and `PrOdUcTs` are treated the same. They are all converted to lowercase.
 
-If your field names don't match the [field name syntax](../../Creating_a_table/Data_types.md#Field-name-syntax) allowed in Manticore Search (for example, if they contain special characters or start with numbers), you must define a schema mapping. For instance, `$keyName` or `123field` are valid keys in JSON but not valid field names in Manticore Search. If you try to use invalid field names without proper mapping, Manticore will return an error and the source creation will fail.
+If your field names don't match the [field name syntax](../Creating_a_table/Data_types.md#Field-name-syntax) allowed in Manticore Search (for example, if they contain special characters or start with numbers), you must define a schema mapping. For instance, `$keyName` or `123field` are valid keys in JSON but not valid field names in Manticore Search. If you try to use invalid field names without proper mapping, Manticore will return an error and the source creation will fail.
 
 To handle such cases, use the following schema syntax to map invalid field names to valid ones:
 

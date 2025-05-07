@@ -334,7 +334,7 @@ data_dir = /var/lib/manticore
 The timeout for preventing auto-flushing a RAM chunk if there are no searches in the table. Optional, default is 30 seconds.
 
 The time to check for searches before determining whether to auto-flush.
-Auto-flushing will occur only if there has been at least one search in the table within the last `diskchunk_flush_search_timeout` seconds. Works in conjunction with [diskchunk_flush_write_timeout](../../Server_settings/Searchd.md#diskchunk_flush_write_timeout). The corresponding [per-table setting](../Creating_a_table/Local_tables/Plain_and_real-time_table_settings.md#diskchunk_flush_search_timeout) has a higher priority and will override this instance-wide default, providing more fine-grained control.
+Auto-flushing will occur only if there has been at least one search in the table within the last `diskchunk_flush_search_timeout` seconds. Works in conjunction with [diskchunk_flush_write_timeout](../Server_settings/Searchd.md#diskchunk_flush_write_timeout). The corresponding [per-table setting](../Creating_a_table/Local_tables/Plain_and_real-time_table_settings.md#diskchunk_flush_search_timeout) has a higher priority and will override this instance-wide default, providing more fine-grained control.
 
 <!-- intro -->
 ##### Example:
@@ -351,7 +351,7 @@ diskchunk_flush_search_timeout = 120s
 <!-- example conf diskchunk_flush_write_timeout -->
 The time in seconds to wait without a write before auto-flushing the RAM chunk to disk. Optional, default is 1 second.
 
-If no write occurs in the RAM chunk within `diskchunk_flush_write_timeout` seconds, the chunk will be flushed to disk. Works in conjunction with [diskchunk_flush_search_timeout](../../Server_settings/Searchd.md#diskchunk_flush_search_timeout). To disable auto-flush, set `diskchunk_flush_write_timeout = -1` explicitly in your configuration. The corresponding [per-table setting](../Creating_a_table/Local_tables/Plain_and_real-time_table_settings.md#diskchunk_flush_write_timeout) has a higher priority and will override this instance-wide default, providing more fine-grained control.
+If no write occurs in the RAM chunk within `diskchunk_flush_write_timeout` seconds, the chunk will be flushed to disk. Works in conjunction with [diskchunk_flush_search_timeout](../Server_settings/Searchd.md#diskchunk_flush_search_timeout). To disable auto-flush, set `diskchunk_flush_write_timeout = -1` explicitly in your configuration. The corresponding [per-table setting](../Creating_a_table/Local_tables/Plain_and_real-time_table_settings.md#diskchunk_flush_write_timeout) has a higher priority and will override this instance-wide default, providing more fine-grained control.
 
 <!-- intro -->
 ##### Example:
@@ -1085,7 +1085,7 @@ pseudo_sharding = 0
 
 ### replication_connect_timeout
 
-The `replication_connect_timeout` directive defines the timeout for connecting to a remote node. By default, the value is assumed to be in milliseconds, but it can have [another suffix](../../Server_settings/Special_suffixes.md). The default value is 1000 (1 second).
+The `replication_connect_timeout` directive defines the timeout for connecting to a remote node. By default, the value is assumed to be in milliseconds, but it can have [another suffix](../Server_settings/Special_suffixes.md). The default value is 1000 (1 second).
 
 When connecting to a remote node, Manticore will wait for this amount of time at most to complete the connection successfully. If the timeout is reached but the connection has not been established, and `retries` are enabled, a retry will be initiated.
 

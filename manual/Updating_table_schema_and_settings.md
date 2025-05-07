@@ -227,7 +227,7 @@ You can change the name of a real-time table in RT mode.
 ALTER TABLE table_name RENAME new_table_name;
 ```
 
-> NOTE: Renaming a real-time table requires [Manticore Buddy](../Installation/Manticore_Buddy.md). If it doesn't work, make sure Buddy is installed.
+> NOTE: Renaming a real-time table requires [Manticore Buddy](Installation/Manticore_Buddy.md). If it doesn't work, make sure Buddy is installed.
 
 <!-- request Example -->
 ```sql
@@ -306,13 +306,13 @@ Query OK, 0 rows affected (0.00 sec)
 
 <!-- example local_dist -->
 
-To change the list of local or remote nodes in a distributed table, follow the same syntax you used to [create the table](../Creating_a_table/Creating_a_distributed_table/Creating_a_local_distributed_table.md#Creating-a-local-distributed-table). Just replace `CREATE` with `ALTER` in the command and remove `type='distributed'`:
+To change the list of local or remote nodes in a distributed table, follow the same syntax you used to [create the table](Creating_a_table/Creating_a_distributed_table/Creating_a_local_distributed_table.md#Creating-a-local-distributed-table). Just replace `CREATE` with `ALTER` in the command and remove `type='distributed'`:
 
 ```sql
 ALTER TABLE `distr_table_name` [[local='local_table_name'], [agent='host:port:remote_table'] ... ]
 ```
 
-> NOTE: Changing the schema of a distributed table online requires [Manticore Buddy](../Installation/Manticore_Buddy.md). If it doesn't work, make sure Buddy is installed.
+> NOTE: Changing the schema of a distributed table online requires [Manticore Buddy](Installation/Manticore_Buddy.md). If it doesn't work, make sure Buddy is installed.
 
 <!-- request Example -->
 ```sql

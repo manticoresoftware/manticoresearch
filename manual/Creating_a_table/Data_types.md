@@ -391,7 +391,7 @@ When working with document IDs, it's important to know that they are stored inte
 
 * IDs greater than 2^63-1 will appear as negative numbers.
 * When filtering by such large IDs, you must use their signed representation.
-* Use the [UINT64()](Functions/Type_casting_functions.md#UINT64%28%29) function to view the actual unsigned value.
+* Use the [UINT64()](../Functions/Type_casting_functions.md#UINT64%28%29) function to view the actual unsigned value.
 
 For example, let's create a table and insert some values around 2^63:
 ```sql

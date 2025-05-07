@@ -264,7 +264,7 @@ Manticore config
 
 <!-- example mysqldump_backup -->
 
-> NOTE: some versions of `mysqldump` / `mariadb-dump` require [Manticore Buddy](../../Installation/Manticore_Buddy.md). If the dump isn't working, make sure Buddy is installed.
+> NOTE: some versions of `mysqldump` / `mariadb-dump` require [Manticore Buddy](../Installation/Manticore_Buddy.md). If the dump isn't working, make sure Buddy is installed.
 
 To create a backup of your Manticore Search database, you can use the `mysqldump` command. We will use the default port and host in the examples.
 

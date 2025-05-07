@@ -24,7 +24,7 @@ Alternatively, you can install Manticore as native Windows binaries, which requi
 4. Select the components you want to install. We recommend installing all of them.
 5. Manticore comes with a preconfigured `manticore.conf` file in [RT mode](../Read_this_first.md#Real-time-mode-vs-plain-mode). No additional configuration is required.
 
-> NOTE: The native Windows binaries do not support [replication](../../Creating_a_cluster/Setting_up_replication/Setting_up_replication.md#Setting-up-replication).
+> NOTE: The native Windows binaries do not support [replication](../Creating_a_cluster/Setting_up_replication/Setting_up_replication.md#Setting-up-replication).
 
 ### Installing as a Windows service
 

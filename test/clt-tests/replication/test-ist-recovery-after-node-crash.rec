@@ -9,6 +9,7 @@ apt-get install -y iproute2 procps > /dev/null; echo $?
 ––– input –––
 sed -i '/^searchd {/,/^}/ s/^\([[:space:]]*\)}$/\1watchdog = 0\n\1}/' test/clt-tests/base/searchd-with-flexible-ports.conf; echo $?
 ––– output –––
+0
 ––– input –––
 export INSTANCE=1
 ––– output –––

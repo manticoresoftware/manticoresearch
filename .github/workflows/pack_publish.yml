@@ -107,7 +107,7 @@ jobs:
           echo "* Version updated: ${{ steps.semver-tagger.outputs.version_updated }}" >> $GITHUB_STEP_SUMMARY
           echo "* Should continue packing: ${{ steps.check-should-continue.outputs.should_continue }}" >> $GITHUB_STEP_SUMMARY
 
-  # New job to check dependencies using check_deps_in_repos.sh
+  # Job to check dependencies using check_deps_in_repos.sh
   # Runs on every PR, workflow_run, or push event matching the conditions
   check_deps:
     name: Check deps test
@@ -133,15 +133,12 @@ jobs:
         uses: actions/checkout@v3
       - name: Run dependency check script
         run: |
-          # Ensure the script is executable
-          chmod +x dist/check_deps_in_repos.sh
-          # Run the script
           bash dist/check_deps_in_repos.sh
 
   pack_debian_ubuntu:
     name: Debian/Ubuntu packages
     uses: ./.github/workflows/build_template.yml
-    needs: [pack, check_deps]  # Added dependency on check_deps
+    needs: [pack, check_deps]
     if: needs.pack.outputs.should_continue == 'true'
     strategy:
       fail-fast: false
@@ -165,7 +162,7 @@ jobs:
   pack_rhel:
     name: RHEL packages
     uses: ./.github/workflows/build_template.yml
-    needs: [pack, check_deps]  # Added dependency on check_deps
+    needs: [pack, check_deps]
     if: needs.pack.outputs.should_continue == 'true'
     strategy:
       fail-fast: false
@@ -192,7 +189,7 @@ jobs:
   pack_macos:
     name: MacOS packages
     uses: ./.github/workflows/build_template.yml
-    needs: [pack, check_deps]  # Added dependency on check_deps
+    needs: [pack, check_deps]
     if: needs.pack.outputs.should_continue == 'true'
     strategy:
       fail-fast: false
@@ -217,7 +214,7 @@ jobs:
   pack_windows:
     name: Windows x64 package
     uses: ./.github/workflows/build_template.yml
-    needs: [pack, check_deps]  # Added dependency on check_deps
+    needs: [pack, check_deps]
     if: needs.pack.outputs.should_continue == 'true'
     with:
       DISTR: windows

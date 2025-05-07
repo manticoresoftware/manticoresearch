@@ -141,9 +141,7 @@ static int g_iReplRetryCount		= 3;
 static int g_iReplRetryDelayMs		= DAEMON_MAX_RETRY_DELAY/2;
 
 bool					g_bHostnameLookup = false;
-CSphString				g_sMySQLVersion = szMANTICORE_VERSION;
-CSphString				g_sDbName = "Manticore";
-
+CSphString				g_sMySQLVersion { szMANTICORE_VERSION };
 CSphString				g_sBannerVersion { szMANTICORE_NAME };
 CSphString				g_sBanner;
 CSphString				g_sStatusVersion = szMANTICORE_VERSION;
@@ -6574,9 +6572,11 @@ void HandleMysqlShowCreateTable ( RowBuffer_i & tOut, const SqlStmt_t & tStmt )
 void HandleMysqlShowDatabases ( RowBuffer_i & tOut, SqlStmt_t & )
 {
 	tOut.HeadBegin ();
-	tOut.HeadColumn ( "Databases" );
+	tOut.HeadColumn ( "Database" );
 	tOut.HeadEnd();
-	tOut.PutString ( g_sDbName );
+	tOut.PutString ( "information_schema" );
+	tOut.Commit ();
+	tOut.PutString ( "Manticore" );
 	tOut.Commit ();
 	tOut.Eof();
 }

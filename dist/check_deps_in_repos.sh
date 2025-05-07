@@ -53,11 +53,19 @@ should_skip() {
 }
 
 # Download HTML files into TEMP_DIR
+pids=()
 for pair in "${urls[@]}"; do
   name="${pair%% *}"
   url="${pair#* }"
-  echo "Downloading $name..."
-  wget -q -O "$TEMP_DIR/$name" "$url" || { echo "Error: Failed to download $name"; exit 1; }
+  echo "Starting download for $name..."
+  wget -q -O "$TEMP_DIR/$name" "$url" &
+  pids+=($!)
+done
+
+# Wait for all download processes to complete
+echo "Waiting for all downloads to complete..."
+for pid in "${pids[@]}"; do
+  wait $pid || { echo "Error: One of the downloads failed"; exit 1; }
 done
 echo "All HTML pages were successfully downloaded to $TEMP_DIR."
 
@@ -82,8 +90,6 @@ while IFS=" " read -r package version_string date hash suffix || [ -n "$package"
     mcl) real_name="manticore-columnar-lib" ;;
     tzdata) real_name="manticore-tzdata" ;;
     executor) real_name="manticore-executor" ;;
-    read) real_name="manticore-read" ;;
-    grok) real_name="manticore-grok" ;;
     *) real_name="$package" ;;
   esac
 

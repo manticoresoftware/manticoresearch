@@ -599,7 +599,7 @@ void UriPercentReplace ( Str_t & sEntity, Replace_e ePlus )
 
 	const char* pSrc = sEntity.first;
 	auto* pDst = const_cast<char*> ( pSrc );
-	char cPlus = ((bool)ePlus) ? ' ' : '+';
+	char cPlus = ( ePlus==Replace_e::NoPlus ? ' ' : '+' );
 	auto* pEnd = pSrc + sEntity.second;
 	while ( pSrc < pEnd )
 	{

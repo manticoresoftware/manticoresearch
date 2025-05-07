@@ -45,7 +45,7 @@ POST /autocomplete
 ```
 
 #### Options
-- `layouts`: A comma-separated string of keyboard layout codes to validate and check for spell correction. Available options: us, ru, ua, se, pt, no, it, gr, uk, fr, es, dk, de, ch, br, bg, be (more details [here](../../Searching/Spell_correction.md#Options)). Default: all enabled
+- `layouts`: A comma-separated string of keyboard layout codes to validate and check for spell correction. Available options: us, ru, ua, se, pt, no, it, gr, uk, fr, es, dk, de, ch, br, bg, be (more details [here](../Searching/Spell_correction.md#Options)). Default: all enabled
 - `fuzziness`: `0`, `1`, or `2` (default: `2`). Maximum Levenshtein distance for finding typos. Set to `0` to disable fuzzy matching
 - `prepend`: Boolean (0/1 in SQL). If true(1), adds an asterisk before the last word for prefix expansion (e.g., `*word`)
 - `append`: Boolean (0/1 in SQL). If true(1), adds an asterisk after the last word for suffix expansion (e.g., `word*`)
@@ -182,7 +182,7 @@ The `CALL KEYWORDS` statement divides text into keywords. It returns the tokeniz
 | 0/1 as fold_blended | Fold blended words, default is 0 |
 | N as expansion_limit | Override [expansion_limit](../Creating_a_table/NLP_and_tokenization/Wildcard_searching_settings.md#expansion_limit) defined in the server configuration, default is 0 (use value from the configuration) |
 | docs/hits as sort_mode | Sorts output results by either 'docs' or 'hits'. No sorting is applied by default. |
-| jieba_mode | Jieba segmentation mode for the query. See [jieba_mode](Creating_a_table/NLP_and_tokenization/Morphology.md#jieba_mode) for more details |
+| jieba_mode | Jieba segmentation mode for the query. See [jieba_mode](../Creating_a_table/NLP_and_tokenization/Morphology.md#jieba_mode) for more details |
 
 The examples show how it works if assuming the user is trying to get an autocomplete for "my cat ...". So on the application side all you need to do is to suggest the user the endings from the column "normalized" for each new word. It often makes sense to sort by hits or docs using `'hits' as sort_mode` or `'docs' as sort_mode`.
 

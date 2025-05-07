@@ -266,7 +266,7 @@ add_library ( digest_sha1 digest_sha1.cpp )
 target_link_libraries ( digest_sha1 PRIVATE lextra )
 target_link_libraries ( lsearchd PUBLIC digest_sha1 lextra nlohmann_json::nlohmann_json )
 target_link_libraries ( lsearchd INTERFACE Boost::filesystem )
-target_link_libraries ( lsearchd PRIVATE $<$<PLATFORM_ID:Windows>:iphlpapi.lib WS2_32.lib wsock32.lib> )
+target_link_libraries ( lsearchd PRIVATE $<$<PLATFORM_ID:Windows>:iphlpapi WS2_32 wsock32> )
 
 function (stackmock processors compiler versions config values)
 	if (NOT CMAKE_SYSTEM_PROCESSOR IN_LIST processors)

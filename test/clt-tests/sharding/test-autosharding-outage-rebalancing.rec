@@ -1,3 +1,5 @@
+––– comment –––
+Start of all 5 nodes
 ––– input –––
 export INSTANCE=1
 ––– output –––
@@ -18,114 +20,252 @@ export INSTANCE=4
 export INSTANCE=5
 ––– output –––
 ––– block: ../base/replication/start-searchd-precach –––
+––– comment –––
+Creating a cluster and adding nodes
 ––– input –––
 export CLUSTER_NAME=c
 ––– output –––
 ––– block: ../base/replication/create-cluster –––
-––– input –––
-export CLUSTER_NAME=c
-––– output –––
 ––– block: ../base/replication/join-cluster-on-all-nodes –––
+––– comment –––
+Creating a table with 3 shards and rf=2
 ––– input –––
-for port in 1306 2306 3306 4306 5306; do timeout 30 mysql -h0 -P$port -e "SHOW STATUS LIKE 'cluster_c_status'\G" > /tmp/status_$port.log && grep -q "Value: primary" /tmp/status_$port.log && echo "Port $port: Node synced"; done && cat /tmp/status_1306.log
+sleep 5; mysql -h0 -P1306 -e "create table c:testrt(id bigint, title text, content text, gid uint) shards='3' rf='2' timeout='60';"
 ––– output –––
-Port 1306: Node synced
-Port 2306: Node synced
-Port 3306: Node synced
-Port 4306: Node synced
-Port 5306: Node synced
-*************************** 1. row ***************************
-Counter: cluster_c_status
-Value: primary
+––– comment –––
+Checking that shards are correct on all nodes
 ––– input –––
-sleep 5; mysql -h0 -P1306 -e "create table c:testrt(id bigint, title text, content text, gid uint) shards='3' rf='2' timeout='60';"; echo $?
+for port in 1306 2306 3306 4306 5306; do mysql -h0 -P$port -e "show tables from system\G" | grep Table; done
 ––– output –––
-0
+Table: system.sharding_queue
+Table: system.sharding_state
+Table: system.sharding_table
+Table: system.testrt_s0
+Table: system.sharding_queue
+Table: system.sharding_state
+Table: system.sharding_table
+Table: system.testrt_s1
+Table: system.sharding_queue
+Table: system.sharding_state
+Table: system.sharding_table
+Table: system.testrt_s0
+Table: system.sharding_queue
+Table: system.sharding_state
+Table: system.sharding_table
+Table: system.testrt_s1
+Table: system.testrt_s2
+Table: system.sharding_queue
+Table: system.sharding_state
+Table: system.sharding_table
+Table: system.testrt_s2
+––– comment –––
+Filling the table with data
 ––– input –––
-mysql -h0 -P1306 -e "SHOW STATUS LIKE 'cluster_c_indexes';"
+for i in {1..100}; do mysql -h0 -P1306 -e "insert into testrt (id,title,content,gid) values ($i,'title $i','content $i',$i)"; done
 ––– output –––
-+-------------------+-------------------------------------------------------------------+
-| Counter           | Value                                                             |
-+-------------------+-------------------------------------------------------------------+
-| cluster_c_indexes | system.sharding_state,system.sharding_table,system.sharding_queue |
-+-------------------+-------------------------------------------------------------------+
-––– input –––
-for i in 1 2 3 4 5; do mysql -h0 -P${i}306 -e "show tables from system\G"; done | grep 'Table: system.t' | sort -V
-––– output –––
-––– input –––
-mysql -h0 -P1306 -e "SELECT * FROM system.sharding_table\G"
-––– output –––
-––– input –––
-for i in `seq 5 100`; do mysql -h0 -P1306 -e "INSERT INTO testrt (id, title, content, gid) values ($i, 'Title $i', 'Content $i', $i);"; done; echo "Inserted 100 records"
-––– output –––
-Inserted 100 records
-––– input –––
-mysql -h0 -P1306 -e "SELECT * FROM testrt WHERE id IN (1, 2, 3, 4) ORDER BY id ASC;"
-––– output –––
-––– input –––
-mysql -h0 -P1306 -N -e "SHOW CREATE TABLE testrt OPTION force = 1\G"
-––– output –––
-––– input –––
-export INSTANCE=5;
-––– output –––
-––– block: ../base/replication/stop-searchd –––
-––– input –––
-ps aux | grep searchd | grep manticore-5
-––– output –––
-––– input –––
-if ! ss -ltn | grep -q ':5306'; then echo "Node 5 is correctly stopped"; fi
-––– output –––
-Node 5 is correctly stopped
-––– input –––
-sleep 10; for i in 1 2 3 4; do mysql -h0 -P${i}306 -e "show tables from system\G"; done | grep 'Table: system.t' | sort -V
-––– output –––
-––– input –––
-mysql -h0 -P1306 -e "SELECT * FROM system.sharding_table\G"
-––– output –––
-––– input –––
-mysql -h0 -P1306 -N -e "SHOW CREATE TABLE testrt OPTION force = 1\G"
-––– output –––
-––– input –––
-mysql -h0 -P1306 -e "SELECT * FROM testrt WHERE id IN (1, 2, 3, 4) ORDER BY id ASC;"
-––– output –––
-––– input –––
-mysql -h0 -P1306 -e "SELECT * FROM testrt;" 2>&1 | grep "lost"
-––– output –––
-––– input –––
-cat /var/log/manticore-1/searchd.log | grep -i "rebuild|rebalance" || echo "No rebalancing detected"
-––– output –––
-No rebalancing detected
+––– comment –––
+Остановка 5-й ноды
 ––– input –––
 export INSTANCE=5
 ––– output –––
+––– block: ../base/replication/stop-searchd –––
+––– input –––
+sleep 5
+––– output –––
+––– comment –––
+Checking shards after the fall of the 5th node - no rebalancing
+––– input –––
+mysql -h0 -P1306 -e "select * from system.sharding_table\G"
+––– output –––
+*************************** 1. row ***************************
+     id: %{NUMBER}
+cluster: c
+   node: 127.0.0.1:3312
+  table: testrt
+ shards: 0,2
+*************************** 2. row ***************************
+     id: %{NUMBER}
+cluster: c
+   node: 127.0.0.1:4312
+  table: testrt
+ shards: 1,2
+*************************** 3. row ***************************
+     id: %{NUMBER}
+cluster: c
+   node: 127.0.0.1:1312
+  table: testrt
+ shards: 0
+*************************** 4. row ***************************
+     id: %{NUMBER}
+cluster: c
+   node: 127.0.0.1:2312
+  table: testrt
+ shards: 1
+––– comment –––
+Restarting the 5th node
+––– block: ../base/replication/start-searchd-precach –––
+––– comment –––
+Adding the 6th node to the cluster
+––– input –––
+export INSTANCE=6
+––– output –––
 ––– block: ../base/replication/start-searchd-precach –––
 ––– input –––
-sleep 70; for port in 1306 2306 3306 4306 5306; do timeout 30 mysql -h0 -P$port -e "SHOW STATUS LIKE 'cluster_c_status'\G" > /tmp/status_$port.log && grep -q "Value: primary" /tmp/status_$port.log && echo "Port $port: Node synced"; done && cat /tmp/status_1306.log
+mysql -h0 -P6306 -e "join cluster c at '127.0.0.1:1312';"
 ––– output –––
-Port 1306: Node synced
-Port 2306: Node synced
-Port 3306: Node synced
-Port 4306: Node synced
-Port 5306: Node synced
+––– comment –––
+Checking the final state of the shards after adding the 6th node
+––– input –––
+timeout 70 bash -c 'until mysql -h0 -P1306 -e "select * from system.sharding_table\G" | grep -q "node: 127.0.0.1:5312"; do sleep 1; done'; mysql -h0 -P1306 -e "select * from system.sharding_table\G"
+––– output –––
 *************************** 1. row ***************************
-Counter: cluster_c_status
-Value: primary
+     id: %{NUMBER}
+cluster: c
+   node: 127.0.0.1:4312
+  table: testrt
+ shards: 1,2
+*************************** 2. row ***************************
+     id: %{NUMBER}
+cluster: c
+   node: 127.0.0.1:1312
+  table: testrt
+ shards: 0
+*************************** 3. row ***************************
+     id: %{NUMBER}
+cluster: c
+   node: 127.0.0.1:2312
+  table: testrt
+ shards: 1
+*************************** 4. row ***************************
+     id: %{NUMBER}
+cluster: c
+   node: 127.0.0.1:5312
+  table: testrt
+ shards:
+*************************** 5. row ***************************
+     id: %{NUMBER}
+cluster: c
+   node: 127.0.0.1:3312
+  table: testrt
+ shards: 0,2
+––– comment –––
+Start of three nodes for the case of 3 nodes and rf=3
 ––– input –––
-grep -i rebalance /var/log/manticore-*/searchd.log
+export INSTANCE=7
+––– output –––
+––– block: ../base/replication/start-searchd-precach –––
+––– input –––
+export INSTANCE=8
+––– output –––
+––– block: ../base/replication/start-searchd-precach –––
+––– input –––
+export INSTANCE=9
+––– output –––
+––– block: ../base/replication/start-searchd-precach –––
+––– comment –––
+Creation of a new cluster
+––– input –––
+export CLUSTER_NAME=b
 ––– output –––
 ––– input –––
-for i in 1 2 3 4 5; do mysql -h0 -P${i}306 -e "show tables from system\G"; done | grep 'Table: system.t' | sort -V
+mysql -h0 -P7306 -e "create cluster ${CLUSTER_NAME}"
 ––– output –––
 ––– input –––
-mysql -h0 -P1306 -e "SELECT * FROM system.sharding_table\G"
+mysql -h0 -P7306 -e "show status like 'cluster_${CLUSTER_NAME}_status'\G"
+––– output –––
+*************************** 1. row ***************************
+Counter: cluster_#!/[a-z]+/!#_status
+  Value: primary
+––– input –––
+mysql -h0 -P8306 -e "join cluster ${CLUSTER_NAME} at '127.0.0.1:7312'"
 ––– output –––
 ––– input –––
-mysql -h0 -P1306 -N -e "SHOW CREATE TABLE testrt OPTION force = 1\G"
+mysql -h0 -P9306 -e "join cluster ${CLUSTER_NAME} at '127.0.0.1:7312'"
 ––– output –––
 ––– input –––
-for i in 1 2 3 4 5; do
-  echo "=== LOGS FROM INSTANCE $i ==="
-  cat /var/log/manticore-$i/searchd.log
-  echo
-done
+mysql -h0 -P7306 -e "show status like 'cluster_${CLUSTER_NAME}_status'\G"
 ––– output –––
+*************************** 1. row ***************************
+Counter: cluster_#!/[a-z]+/!#_status
+  Value: primary
+––– comment –––
+Creating a table with rf=3
+––– input –––
+sleep 5; mysql -h0 -P7306 -e "create table b:testrt3(id bigint, title text, content text, gid uint) shards='3' rf='3' timeout='60';"
+––– output –––
+––– comment –––
+Checking the availability of system.* tables
+––– input –––
+for port in 7306 8306 9306; do mysql -h0 -P$port -e "show tables from system"; done
+––– output –––
++-----------------------+------+
+| Table                 | Type |
++-----------------------+------+
+| system.sharding_queue | rt   |
+| system.sharding_state | rt   |
+| system.sharding_table | rt   |
+| system.testrt3_s0     | rt   |
+| system.testrt3_s1     | rt   |
+| system.testrt3_s2     | rt   |
++-----------------------+------+
++-----------------------+------+
+| Table                 | Type |
++-----------------------+------+
+| system.sharding_queue | rt   |
+| system.sharding_state | rt   |
+| system.sharding_table | rt   |
+| system.testrt3_s0     | rt   |
+| system.testrt3_s1     | rt   |
+| system.testrt3_s2     | rt   |
++-----------------------+------+
++-----------------------+------+
+| Table                 | Type |
++-----------------------+------+
+| system.sharding_queue | rt   |
+| system.sharding_state | rt   |
+| system.sharding_table | rt   |
+| system.testrt3_s0     | rt   |
+| system.testrt3_s1     | rt   |
+| system.testrt3_s2     | rt   |
++-----------------------+------+
+––– comment –––
+Turning off two nodes
+––– input –––
+export INSTANCE=8
+––– output –––
+––– block: ../base/replication/stop-searchd –––
+––– input –––
+export INSTANCE=9
+––– output –––
+––– block: ../base/replication/stop-searchd –––
+––– comment –––
+Shard condition check - no rebalancing
+––– input –––
+mysql -h0 -P7306 -e "select * from system.sharding_table\G;"
+––– output –––
+*************************** 1. row ***************************
+     id: %{NUMBER}
+cluster: b
+   node: 127.0.0.1:8312
+  table: testrt3
+ shards: 0,1,2
+*************************** 2. row ***************************
+     id: %{NUMBER}
+cluster: b
+   node: 127.0.0.1:9312
+  table: testrt3
+ shards: 0,1,2
+*************************** 3. row ***************************
+     id: %{NUMBER}
+cluster: b
+   node: 127.0.0.1:7312
+  table: testrt3
+ shards: 0,1,2
+––– comment –––
+Final check of shard allocation
+––– input –––
+sleep 5; mysql -h0 -P7306 -e "show tables from system\G" | grep 'Table: system.t' | sort -V
+––– output –––
+Table: system.testrt3_s0
+Table: system.testrt3_s1
+Table: system.testrt3_s2

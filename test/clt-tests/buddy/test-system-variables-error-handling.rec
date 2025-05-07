@@ -42,11 +42,11 @@ mysql -h0 -P9306 -e "SELECT @@max_allowed_packet;"
 ––– input –––
 mysql -h0 -P9306 -e "SELECT @@version_comment;"
 ––– output –––
-+-----------------------------+
-| @@version_comment           |
-+-----------------------------+
-| git branch HEAD (no branch) |
-+-----------------------------+
++-----------------------------------+
+| @@version_comment                 |
++-----------------------------------+
+| git branch master...origin/master |
++-----------------------------------+
 ––– input –––
 mysql -h0 -P9306 -e "SELECT @@lower_case_table_names;"
 ––– output –––

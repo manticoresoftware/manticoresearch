@@ -66,7 +66,7 @@ While Manticore is not fully ACID-compliant, it supports isolated transactions f
 Data can be distributed across servers and data centers with any Manticore Search node acting as both a load balancer and a data node. Manticore implements virtually synchronous multi-master [replication](https://play.manticoresearch.com/replication/) using the [Galera library](https://galeracluster.com/), ensuring data consistency across all nodes, preventing data loss, and providing exceptional replication performance.
 
 #### Built-in backup capabilities
-Manticore is equipped with an external tool [manticore-backup](Securing_and_compacting_a_table/Backup_and_restore.md), and the [BACKUP](Securing_and_compacting_a_table/Backup_and_restore.md#BACKUP-SQL-command-reference) SQL command to simplify the process of backing up and restoring your data. Alternatively, you can use [mysqldump](https://dev.mysql.com/doc/refman/8.0/en/mysqldump.html) to [make logical backups](../Securing_and_compacting_a_table/Backup_and_restore.md#Backup-and-restore-with-mysqldump).
+Manticore is equipped with an external tool [manticore-backup](Securing_and_compacting_a_table/Backup_and_restore.md), and the [BACKUP](Securing_and_compacting_a_table/Backup_and_restore.md#BACKUP-SQL-command-reference) SQL command to simplify the process of backing up and restoring your data. Alternatively, you can use [mysqldump](https://dev.mysql.com/doc/refman/8.0/en/mysqldump.html) to [make logical backups](Securing_and_compacting_a_table/Backup_and_restore.md#Backup-and-restore-with-mysqldump).
 
 #### Out-of-the-box data sync
 The `indexer` tool and comprehensive configuration syntax of Manticore make it easy to sync data from sources like MySQL, PostgreSQL, ODBC-compatible databases, XML, and CSV.
@@ -111,6 +111,8 @@ Manticore Search is versatile and can be applied in various scenarios, including
 
 
 ## Requirements
+
+<video src="https://www.youtube.com/watch?v=WUNP7e-h48s" width="320" height="240" controls></video>
 
 * Architecture: arm64 or x86_64
 * OS: Debian-based (e.g. Debian, Ubuntu, Mint), RHEL-based (e.g. RHEL, CentOS, Alma, Oracle Linux, Amazon Linux), Windows, or MacOS.

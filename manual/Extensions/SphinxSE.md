@@ -362,7 +362,7 @@ mysql> SHOW ENGINE SPHINX STATUS;
 ## Building snippets via MySQL
 
 
-SphinxSE also features a UDF function that allows you to create snippets using MySQL. This functionality is similar to [HIGHLIGHT()](../../Searching/Highlighting.md#Highlighting), but can be accessed through MySQL+SphinxSE.
+SphinxSE also features a UDF function that allows you to create snippets using MySQL. This functionality is similar to [HIGHLIGHT()](../Searching/Highlighting.md#Highlighting), but can be accessed through MySQL+SphinxSE.
 
 The binary providing the UDF is called `sphinx.so` and should be automatically built and installed in the appropriate location along with SphinxSE. If it doesn't install automatically for some reason, locate `sphinx.so` in the build directory and copy it to your MySQL instance's plugins directory. Once done, register the UDF with the following statement:
 

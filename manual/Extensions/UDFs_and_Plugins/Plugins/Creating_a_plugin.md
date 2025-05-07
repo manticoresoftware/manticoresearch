@@ -30,7 +30,7 @@ To create a Buddy plugin, run the following SQL command:
 CREATE PLUGIN <username/package name on https://packagist.org/> TYPE 'buddy' VERSION <package version>
 ```
 
-> NOTE: `CREATE BUDDY PLUGIN` requires [Manticore Buddy](../Installation/Manticore_Buddy.md). If it doesn't work, make sure Buddy is installed.
+> NOTE: `CREATE BUDDY PLUGIN` requires [Manticore Buddy](../../../Installation/Manticore_Buddy.md). If it doesn't work, make sure Buddy is installed.
 
 You can also use an alias command specifically created for Buddy plugins, which is easier to remember:
 
@@ -38,7 +38,7 @@ You can also use an alias command specifically created for Buddy plugins, which 
 CREATE BUDDY PLUGIN <username/package name on https://packagist.org/> VERSION <package version>
 ```
 
-This command will install the `show-hostname` plugin to the [plugin_dir](../../Server_settings/Common.md#plugin_dir) and enable it without the need to restart the server.
+This command will install the `show-hostname` plugin to the [plugin_dir](../../../Server_settings/Common.md#plugin_dir) and enable it without the need to restart the server.
 
 <!-- intro -->
 ### Examples

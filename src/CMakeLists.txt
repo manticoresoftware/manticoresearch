@@ -69,7 +69,7 @@ add_library ( lmanticore STATIC sphinx.cpp sphinxquery.cpp sphinxutils.cpp
 		aggrexpr.cpp joinsorter.cpp queuecreator.cpp exprgeodist.cpp exprremap.cpp exprdocstore.cpp schematransform.cpp
 		sortergroup.cpp sortertraits.cpp sorterprecalc.cpp querycontext.cpp skip_cache.cpp jsonsi.cpp sorterscroll.cpp )
 
-target_link_libraries ( lmanticore PRIVATE $<$<PLATFORM_ID:Windows>:dbghelp.lib AdvAPI32.lib ShLwApi.lib> )
+target_link_libraries ( lmanticore PRIVATE $<$<PLATFORM_ID:Windows>:dbghelp AdvAPI32 ShLwApi> )
 
 add_library ( lstem STATIC sphinxsoundex.cpp sphinxmetaphone.cpp sphinxstemen.cpp sphinxstemru.cpp sphinxstemru.inl
 		sphinxstemcz.cpp sphinxstemar.cpp )

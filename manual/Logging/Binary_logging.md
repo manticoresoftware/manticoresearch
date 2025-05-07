@@ -144,6 +144,7 @@ searchd {
 
 ### Cluster binlog support
 
+<!-- Example binlog_cluster -->
 In a cluster setup using Galera, node recovery behavior is crucial. Normally, Galera handles node desynchronization via IST (incremental state transfer) if the node was shut down cleanly and its last sequence number (seqno) was properly saved. However, in case of a crash where seqno isn't preserved, Galera will trigger an SST (state snapshot transfer), which is resource-intensive and can significantly slow down the cluster due to high I/O activity.
 
 To address this, cluster binlog support has been introduced. This feature extends the existing binary logging functionality to help reduce the need for SST by allowing a recovering node to replay missing transactions from local binlogs and rejoin the cluster with a valid seqno.
@@ -151,7 +152,6 @@ To address this, cluster binlog support has been introduced. This feature extend
 Cluster binlog is enabled by default for any cluster operations. However, it can be disabled by setting the environment variable:
 
 <!-- request binlog_cluster -->
-
 ```bash
 MANTICORE_REPLICATION_BINLOG=0
 ```

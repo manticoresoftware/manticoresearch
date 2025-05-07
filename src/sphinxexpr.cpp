@@ -8432,8 +8432,10 @@ public:
 		break;
 
 		case SPH_EXPR_GET_DEPENDENT_COLS:
-			static_cast<StrVec_t*> ( pArg )->Add ( m_sAttrLat );
-			static_cast<StrVec_t*> ( pArg )->Add ( m_sAttrLon );
+			if ( !m_sAttrLat.IsEmpty() )
+				static_cast<StrVec_t*> ( pArg )->Add ( m_sAttrLat );
+			if ( !m_sAttrLon.IsEmpty() )
+				static_cast<StrVec_t*> ( pArg )->Add ( m_sAttrLon );
 			break;
 
 		default:

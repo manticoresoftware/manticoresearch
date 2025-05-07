@@ -112,8 +112,6 @@ Manticore Search is versatile and can be applied in various scenarios, including
 
 ## Requirements
 
-<video src="https://www.youtube.com/watch?v=WUNP7e-h48s" width="320" height="240" controls></video>
-
 * Architecture: arm64 or x86_64
 * OS: Debian-based (e.g. Debian, Ubuntu, Mint), RHEL-based (e.g. RHEL, CentOS, Alma, Oracle Linux, Amazon Linux), Windows, or MacOS.
 * [Manticore Columnar Library](https://github.com/manticoresoftware/columnar), which provides [columnar storage](Creating_a_table/Data_types.md#Row-wise-and-columnar-attribute-storages) and [secondary indexes](Introduction.md#Automatic-secondary-indexes), requires a CPU with SSE >= 4.2.

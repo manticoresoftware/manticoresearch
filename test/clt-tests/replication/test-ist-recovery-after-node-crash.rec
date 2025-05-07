@@ -59,7 +59,7 @@ mysql -h0 -P1306 -e "show status like 'cluster_${CLUSTER_NAME}_status'\G"
 ––– output –––
 *************************** 1. row ***************************
 Counter: cluster_#!/[a-z]+/!#_status
-Value: primary
+  Value: primary
 ––– input –––
 export CLUSTER_NAME=test
 ––– output –––
@@ -74,7 +74,7 @@ Port 2306: Node synced
 Port 3306: Node synced
 *************************** 1. row ***************************
 Counter: cluster_test_status
-Value: primary
+  Value: primary
 ––– input –––
 mysql -h0 -P1306 -e "CREATE TABLE tbl1 (id, attr1 INT) min_infix_len = '3' min_prefix_len = '3';"; echo $?
 ––– output –––
@@ -131,25 +131,25 @@ Port 2306: Node synced
 Port 3306: Node synced
 *************************** 1. row ***************************
 Counter: cluster_test_status
-Value: primary
+  Value: primary
 ––– input –––
 mysql -h0 -P1306 -e "SHOW STATUS LIKE 'cluster_test_indexes'\G"
 ––– output –––
 *************************** 1. row ***************************
 Counter: cluster_test_indexes
-Value: tbl1
+  Value: tbl1
 ––– input –––
 mysql -h0 -P2306 -e "SHOW STATUS LIKE 'cluster_test_indexes'\G"
 ––– output –––
 *************************** 1. row ***************************
 Counter: cluster_test_indexes
-Value: tbl1
+  Value: tbl1
 ––– input –––
 mysql -h0 -P3306 -e "SHOW STATUS LIKE 'cluster_test_indexes'\G"
 ––– output –––
 *************************** 1. row ***************************
 Counter: cluster_test_indexes
-Value: tbl1
+  Value: tbl1
 ––– input –––
 mysql -h0 -P2306 -e "REPLACE INTO test:tbl1 (id, attr1) VALUES (12, 200);"
 ––– output –––
@@ -189,7 +189,7 @@ Port 2306: Node synced
 Port 3306: Node synced
 *************************** 1. row ***************************
 Counter: cluster_test_status
-Value: primary
+  Value: primary
 ––– input –––
 mysql -h0 -P1306 -e "UPDATE test:tbl1 SET attr1=1 WHERE id=11;"; echo $?
 ––– output –––
@@ -227,7 +227,7 @@ Port 2306: Node synced
 Port 3306: Node synced
 *************************** 1. row ***************************
 Counter: cluster_test_status
-Value: primary
+  Value: primary
 ––– input –––
 mysql -h0 -P2306 -e "UPDATE test:tbl1 SET attr1=1 WHERE id=11;"; echo $?
 ––– output –––
@@ -268,4 +268,4 @@ Port 2306: Node synced
 Port 3306: Node synced
 *************************** 1. row ***************************
 Counter: cluster_test_status
-Value: primary
+  Value: primary

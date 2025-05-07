@@ -27,7 +27,7 @@ namespace { // c++ way of 'static'
 
 /// proto details are here: https://dev.mysql.com/doc/dev/mysql-server/latest/page_protocol_basic_packets.html
 
-inline bool OmitEof() noexcept
+bool OmitEof() noexcept
 {
 	return bSendOkInsteadofEOF && session::GetDeprecatedEOF();
 }
@@ -35,7 +35,7 @@ inline bool OmitEof() noexcept
 /////////////////////////////////////////////////////////////////////////////
 /// how many bytes this int will occupy in proto mysql
 template<typename INT>
-inline int SqlSizeOf ( INT _iLen ) noexcept
+int SqlSizeOf ( INT _iLen ) noexcept
 {
 	auto iLen = (uint64_t)_iLen;
 	if ( iLen < 251 )
@@ -409,7 +409,8 @@ class SqlRowBuffer_c final : public RowBuffer_i
 		m_tOut.SendBytes ( sStr, iLen );
 	}
 
-	bool SomethingWasSent() final {
+	bool SomethingWasSent() override
+	{
 		auto iPrevSent = std::exchange ( m_iTotalSent, m_tOut.GetTotalSent() + m_tOut.GetSentCount() + m_tBuf.GetLength() );
 		return iPrevSent != m_iTotalSent;
 	}
@@ -478,7 +479,6 @@ class SqlRowBuffer_c final : public RowBuffer_i
 	}
 
 public:
-
 	SqlRowBuffer_c ( BYTE * pPacketID, GenericOutputBuffer_c * pOut )
 		: m_uPacketID ( *pPacketID )
 		, m_tOut ( *pOut )
@@ -623,7 +623,7 @@ public:
 	}
 
 	// Header of the table with defined num of columns
-	inline void HeadBegin ( ) override
+	void HeadBegin () override
 	{
 		m_dHead.Reset();
 	}
@@ -869,44 +869,44 @@ public:
 			m_uCompressionLevel = tIn.GetByte();
 	}
 
-	[[nodiscard]] inline const CSphString& GetUsername() const noexcept
+	[[nodiscard]] const CSphString& GetUsername() const noexcept
 	{
 		return m_sLoginUserName;
 	}
 
-	[[nodiscard]] inline const CSphString& GetDB() const noexcept
+	[[nodiscard]] const CSphString& GetDB() const noexcept
 	{
 		return m_sDatabase;
 	}
 
-	[[nodiscard]] inline bool WantSSL() const noexcept
+	[[nodiscard]] bool WantSSL() const noexcept
 	{
 		return ( m_uCapabilities & CLIENT::SSL ) != 0;
 	}
 
-	[[nodiscard]] inline bool WantZlib() const noexcept
+	[[nodiscard]] bool WantZlib() const noexcept
 	{
 		return ( m_uCapabilities & CLIENT::COMPRESS ) != 0;
 	}
 
-	[[nodiscard]] inline bool WantZstd() const noexcept
+	[[nodiscard]] bool WantZstd() const noexcept
 	{
 		return ( m_uCapabilities & CLIENT::ZSTD_COMPRESSION_ALGORITHM ) != 0;
 	}
 
-	[[nodiscard]] inline int WantZstdLev() const noexcept
+	[[nodiscard]] int WantZstdLev() const noexcept
 	{
 		return m_uCompressionLevel;
 	}
 
-	[[nodiscard]] inline bool DeprecateEOF() const noexcept
+	[[nodiscard]] bool DeprecateEOF() const noexcept
 	{
 		return ( m_uCapabilities & CLIENT::DEPRECATE_EOF ) != 0;
 	}
 };
 
 
-static bool LoopClientMySQL ( BYTE & uPacketID, int iPacketLen, QueryProfile_c * pProfile, AsyncNetBuffer_c * pBuf )
+bool LoopClientMySQL ( BYTE & uPacketID, int iPacketLen, QueryProfile_c * pProfile, AsyncNetBuffer_c * pBuf )
 {
 	auto& tSess = session::Info();
 	assert ( pBuf );
@@ -976,8 +976,8 @@ static bool LoopClientMySQL ( BYTE & uPacketID, int iPacketLen, QueryProfile_c *
 					ProcessSqlQueryBuddy ( tSrcQueryReference, FromStr ( tRows.GetError() ), tStoredPos, uPacketID, tOut );
 				}
 			}
+			break;
 		}
-		break;
 
 		default:
 			// default case, unknown command

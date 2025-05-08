@@ -41,9 +41,7 @@ jobs:
         id: changed-files
         run: |
           git config --global --add safe.directory /__w/manticoresearch/manticoresearch
-          changed_files=$(git diff-tree --no-commit-id --name-only -r HEAD^1 HEAD)
-          echo $changed_files
-          echo "changed_files=$changed_files" >> $GITHUB_OUTPUT
+          echo "changed_files=$(git diff-tree --no-commit-id --name-only -r HEAD^1 HEAD)" >> $GITHUB_OUTPUT
       - name: Get changed doc filepathes
         id: doc-filepathes
         run: |

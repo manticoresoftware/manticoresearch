@@ -32,11 +32,13 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v3
         with:
-          fetch-depth: 2
+          fetch-depth: 0
       - name: Get changed files
         id: changed-files
         run: |
-          echo "changed_files=$(git diff --name-only HEAD^1 HEAD | xargs)" >> $GITHUB_OUTPUT
+          firstCommit='${{ github.event.base_ref }}'
+          lastCommit='${{ github.event.head_ref }}'
+          echo "changed_files=$(git diff --name-only --diff-filter=d "${firstCommit}~1" "${lastCommit}" | xargs)" >> $GITHUB_OUTPUT
       - name: Get changed doc filepathes
         id: doc-filepathes
         run: |

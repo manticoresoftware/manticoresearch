@@ -13,6 +13,14 @@ on:
 jobs:
   docs_check:
     runs-on: ubuntu-22.04
+    container:
+      image: manticoresearch/docs_autodeploy:latest
+      env:
+        CACHEB: "../cache"
+        DOCKER_HOST: tcp://docker:2375/
+        DOCKER_DRIVER: overlay2
+        COMMIT_DIR: manual
+        DOCS_ERRORS_DIR: build/docs/
     steps:
       - name: Checkout
         uses: actions/checkout@v3
@@ -22,9 +30,24 @@ jobs:
         id: changed-files
         run: |
           echo "changed_files=$(git diff --name-only -r HEAD^1 HEAD | xargs)" >> $GITHUB_OUTPUT
-      - name: List changed files
+      - name: Get changed doc filepathes
+        id: doc-filepathes
         run: |
+          filepathes=""
           for file in ${{ steps.changed-files.outputs.changed_files }}; do
-            echo "$file"
+            case "$file" in 
+              "$COMMIT_DIR/"*)  
+                 filepathes="$file $filepathes"
+              ;;
+             esac  
           done
+          echo "filepathes=$filepathes" >> $GITHUB_OUTPUT
+      - name: Check docs
+        run: |
+          docs_errors=$(php "/Deploy/check_docs_validity.php"  ${{ steps.doc-filepathes.outputs.filepathes }} "$COMMIT_DIR/" "$DOCS_ERRORS_DIR")
+          echo $docs_errors
+          if [ "$docs_errors" != "" ]; then
+            exit 1
+          fi
+          echo "Doc check passed successfully"
           

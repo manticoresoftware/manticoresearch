@@ -42,6 +42,7 @@ jobs:
       - name: Get changed files
         id: changed-files
         run: |
+          git config --global --add safe.directory /__w/manticoresearch/manticoresearch
           echo $CI_COMMIT_SHA
           echo $PREV_COMMIT_SHA
           git diff-tree --no-commit-id --name-only -r HEAD^1 HEAD

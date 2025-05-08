@@ -47,10 +47,8 @@ jobs:
         run: |
           filepathes=""
           for file in ${{ steps.changed-files.outputs.changed_files }}; do
-            echo "$file"
             case "$file" in 
               "$COMMIT_DIR/"*) 
-                 echo "added" 
                  filepathes="$file $filepathes"
               ;;
              esac  
@@ -59,7 +57,8 @@ jobs:
       - name: Check docs
         id: check
         run: |
-          docs_errors=$(php "/Deploy/check_docs_validity.php"  ${{ steps.doc-filepathes.outputs.filepathes }} "$COMMIT_DIR/" "$DOCS_ERRORS_DIR")
+          docs_errors=$(php "/Deploy/check_docs_validity.php"  ${{ steps.doc-filepathes.outputs.filepathes }} "$COMMIT_DIR/" "$DOCS_ERRORS_DIR" | xargs)
+          echo $docs_errors
           echo "errors=$docs_errors" >> $GITHUB_OUTPUT
       - name: Upload artifact
         uses: manticoresoftware/upload_artifact_with_retries@v4

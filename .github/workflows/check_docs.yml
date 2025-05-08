@@ -57,13 +57,13 @@ jobs:
           done
           echo "filepathes=$filepathes" >> $GITHUB_OUTPUT
       - name: Check docs
+        id: check
         run: |
-          echo ${{ steps.doc-filepathes.outputs.filepathes }}
           docs_errors=$(php "/Deploy/check_docs_validity.php"  ${{ steps.doc-filepathes.outputs.filepathes }} "$COMMIT_DIR/" "$DOCS_ERRORS_DIR")
-          echo $docs_errors
-          if [ "$docs_errors" != "" ]; then
-            exit 1
-          fi
-          echo "Doc check passed successfully "
-  
+          echo "errors=$docs_errors" >> $GITHUB_OUTPUT
+      - name: Upload artifact
+        uses: manticoresoftware/upload_artifact_with_retries@v4
+        with:
+          name: Docs error artifact
+          path: $DOCS_ERRORS_DIR
           

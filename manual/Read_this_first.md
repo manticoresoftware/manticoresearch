@@ -1,6 +1,6 @@
 # Read this first
 
-Test1
+Test
 
 ## About this manual
 

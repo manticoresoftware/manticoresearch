@@ -38,13 +38,12 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v3
         with:
-          fetch-depth: 0
+          fetch-depth: 2
       - name: Get changed files
         id: changed-files
         run: |
           echo $CI_COMMIT_SHA
           echo $PREV_COMMIT_SHA
-          git diff --name-only ${{github.event.before}} ${{github.sha}}
-          git diff --name-only "$PREV_COMMIT_SHA" "$CI_COMMIT_SHA"
+          git diff-tree --no-commit-id --name-only -r HEAD^1 HEAD
           echo "Doc check passed successfully "
           

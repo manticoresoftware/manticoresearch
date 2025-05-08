@@ -26,6 +26,8 @@ jobs:
         DOCS_ERRORS_DIR: build/docs/
 
         CI_COMMIT_SHA: ${{ github.sha }}
+        FIRST_COMMIT: ${{ github.event.base_ref }}
+        LAST_COMMIT: ${{ github.event.head_ref }}
     steps:
       - name: Install fresh git
         run: |
@@ -41,11 +43,10 @@ jobs:
       - name: Get changed files
         id: changed-files
         run: |
-          firstCommit='${{ github.event.base_ref }}~1'
-          lastCommit='${{ github.event.head_ref }}'
+          firstCommit="$FIRST_COMMIT~1"
           echo $firstCommit
-          echo $lastCommit
-          changed_files=$(git diff --name-only --diff-filter=d "${firstCommit}" "${lastCommit}")
+          echo $LAST_COMMIT
+          changed_files=$(git diff --name-only --diff-filter=d "$firstCommit" "$LAST_COMMIT")
           echo $changed_files
           echo "changed_files=$changed_files" >> $GITHUB_OUTPUT
       - name: Get changed doc filepathes

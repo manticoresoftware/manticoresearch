@@ -60,5 +60,5 @@ jobs:
           if [ "$docs_errors" != "" ]; then
             exit 1
           fi
-          echo "Doc check passed successfully"
+          echo "Doc check passed successfully "
           

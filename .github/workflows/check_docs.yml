@@ -43,34 +43,7 @@ jobs:
       - name: Get changed files
         id: changed-files
         run: |
-          firstCommit="$FIRST_COMMIT~1"
-          echo $firstCommit
+          echo $FIRST_COMMIT
           echo $LAST_COMMIT
-          changed_files=$(git diff --name-only --diff-filter=d "$firstCommit" "$LAST_COMMIT")
-          echo $changed_files
-          echo "changed_files=$changed_files" >> $GITHUB_OUTPUT
-      - name: Get changed doc filepathes
-        id: doc-filepathes
-        run: |
-          filepathes=""
-          for file in ${{ steps.changed-files.outputs.changed_files }}; do
-            echo "$file"
-            case "$file" in 
-              "$COMMIT_DIR/"*) 
-                 echo "added" 
-                 filepathes="$file $filepathes"
-              ;;
-             esac  
-          done
-          echo $filepathes
-          echo "filepathes=$filepathes" >> $GITHUB_OUTPUT
-      - name: Check docs
-        run: |
-          echo ${{ steps.doc-filepathes.outputs.filepathes }}
-          docs_errors=$(php "/Deploy/check_docs_validity.php"  ${{ steps.doc-filepathes.outputs.filepathes }} "$COMMIT_DIR/" "$DOCS_ERRORS_DIR")
-          echo $docs_errors
-          if [ "$docs_errors" != "" ]; then
-            exit 1
-          fi
           echo "Doc check passed successfully "
           

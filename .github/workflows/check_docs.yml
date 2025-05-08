@@ -29,7 +29,7 @@ jobs:
       - name: Get changed files
         id: changed-files
         run: |
-          echo "changed_files=$(git diff --name-only -r HEAD^1 HEAD | xargs)" >> $GITHUB_OUTPUT
+          echo "changed_files=$(git diff --name-only --raw HEAD^1 HEAD | xargs)" >> $GITHUB_OUTPUT
       - name: Get changed doc filepathes
         id: doc-filepathes
         run: |

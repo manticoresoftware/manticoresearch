@@ -45,6 +45,6 @@ jobs:
           echo $CI_COMMIT_SHA
           echo $PREV_COMMIT_SHA
           git diff --name-only ${{github.event.before}} ${{github.sha}}
-          git diff --name-only $PREV_COMMIT_SHA $CI_COMMIT_SHA
+          git diff --name-only "$PREV_COMMIT_SHA" "$CI_COMMIT_SHA"
           echo "Doc check passed successfully "
           

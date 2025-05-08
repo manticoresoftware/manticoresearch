@@ -26,8 +26,6 @@ jobs:
         DOCS_ERRORS_DIR: build/docs/
 
         CI_COMMIT_SHA: ${{ github.sha }}
-        FIRST_COMMIT: ${{ github.event.base_ref }}
-        LAST_COMMIT: ${{ github.event.head_ref }}
     steps:
       - name: Install fresh git
         run: |
@@ -39,11 +37,11 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v3
         with:
-          fetch-depth: 0
+          fetch-depth: 2
       - name: Get changed files
         id: changed-files
         run: |
-          echo $FIRST_COMMIT
-          echo $LAST_COMMIT
+          echo $CI_COMMIT_SHA
+          git diff --name-only HEAD^1 HEAD
           echo "Doc check passed successfully "
           

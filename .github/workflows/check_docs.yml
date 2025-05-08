@@ -57,4 +57,11 @@ jobs:
         with:
           name: Docs error artifact
           path: $DOCS_ERRORS_DIR
+      - name: Display result
+        run: |
+          if [ "${{ steps.check.outputs.errors }}" != "" ]; then
+            exit 1
+          fi
+          echo "Doc check passed successfully "
+
           

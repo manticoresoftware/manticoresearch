@@ -21,6 +21,8 @@ jobs:
         DOCKER_DRIVER: overlay2
         COMMIT_DIR: manual
         DOCS_ERRORS_DIR: build/docs/
+
+        CI_COMMIT_SHA: ${{ github.sha }}
     steps:
       - name: Install fresh git
         run: |
@@ -38,7 +40,11 @@ jobs:
         run: |
           firstCommit='${{ github.event.base_ref }}'
           lastCommit='${{ github.event.head_ref }}'
-          echo "changed_files=$(git diff --name-only --diff-filter=d "${firstCommit}~1" "${lastCommit}" | xargs)" >> $GITHUB_OUTPUT
+          echo $firstCommit
+          echo $lastCommit
+          changed_files=$(git diff --name-only --diff-filter=d "${firstCommit}~1" "${lastCommit}")
+          echo $changed_files
+          echo "changed_files=$changed_files" >> $GITHUB_OUTPUT
       - name: Get changed doc filepathes
         id: doc-filepathes
         run: |

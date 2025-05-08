@@ -13,6 +13,9 @@ on:
 jobs:
   docs_check:
     runs-on: ubuntu-22.04
+    defaults:
+      run:
+        shell: bash
     container:
       image: manticoresearch/docs_autodeploy:latest
       env:
@@ -38,11 +41,11 @@ jobs:
       - name: Get changed files
         id: changed-files
         run: |
-          firstCommit='${{ github.event.base_ref }}'
+          firstCommit='${{ github.event.base_ref }}~1'
           lastCommit='${{ github.event.head_ref }}'
           echo $firstCommit
           echo $lastCommit
-          changed_files=$(git diff --name-only --diff-filter=d "${firstCommit}~1" "${lastCommit}")
+          changed_files=$(git diff --name-only --diff-filter=d "${firstCommit}" "${lastCommit}")
           echo $changed_files
           echo "changed_files=$changed_files" >> $GITHUB_OUTPUT
       - name: Get changed doc filepathes

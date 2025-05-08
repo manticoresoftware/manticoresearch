@@ -55,5 +55,7 @@ jobs:
               ;;
              esac  
           done
+          echo $filepathes
+          echo "filepathes=$filepathes" >> $GITHUB_OUTPUT
           echo "Doc check passed successfully "
           

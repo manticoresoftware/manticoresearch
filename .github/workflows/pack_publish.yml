@@ -113,24 +113,10 @@ jobs:
   # Job to check dependencies using check_deps_in_repos.sh
   # Runs on every PR, workflow_run, or push event matching the conditions
   check_deps:
+    needs: pack
+    if: needs.pack.outputs.should_continue == 'true'
     name: Check deps test
     runs-on: ubuntu-22.04
-    if: |
-      github.event_name == 'pull_request'
-      ||
-      (
-        github.event_name == 'workflow_run'
-        &&
-        github.event.workflow_run.conclusion == 'success'
-        &&
-        github.ref == 'refs/heads/master'
-      )
-      ||
-      (
-        github.event_name == 'push'
-        &&
-        startsWith(github.ref, 'refs/heads/manticore-')
-      )
     steps:
       - name: Checkout repository
         uses: actions/checkout@v3
@@ -141,8 +127,7 @@ jobs:
   pack_debian_ubuntu:
     name: Debian/Ubuntu packages
     uses: ./.github/workflows/build_template.yml
-    needs: [pack, check_deps]
-    if: needs.pack.outputs.should_continue == 'true'
+    needs: check_deps
     strategy:
       fail-fast: false
       matrix:
@@ -165,8 +150,7 @@ jobs:
   pack_rhel:
     name: RHEL packages
     uses: ./.github/workflows/build_template.yml
-    needs: [pack, check_deps]
-    if: needs.pack.outputs.should_continue == 'true'
+    needs: check_deps
     strategy:
       fail-fast: false
       matrix:
@@ -192,8 +176,7 @@ jobs:
   pack_macos:
     name: MacOS packages
     uses: ./.github/workflows/build_template.yml
-    needs: [pack, check_deps]
-    if: needs.pack.outputs.should_continue == 'true'
+    needs: check_deps
     strategy:
       fail-fast: false
       matrix:
@@ -217,8 +200,7 @@ jobs:
   pack_windows:
     name: Windows x64 package
     uses: ./.github/workflows/build_template.yml
-    needs: [pack, check_deps]
-    if: needs.pack.outputs.should_continue == 'true'
+    needs: check_deps
     with:
       DISTR: windows
       arch: x64

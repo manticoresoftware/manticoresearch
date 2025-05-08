@@ -35,15 +35,19 @@ jobs:
         run: |
           filepathes=""
           for file in ${{ steps.changed-files.outputs.changed_files }}; do
+            echo "$file"
             case "$file" in 
-              "$COMMIT_DIR/"*)  
+              "$COMMIT_DIR/"*) 
+                 echo "added" 
                  filepathes="$file $filepathes"
               ;;
              esac  
           done
+          echo $filepathes
           echo "filepathes=$filepathes" >> $GITHUB_OUTPUT
       - name: Check docs
         run: |
+          echo ${{ steps.doc-filepathes.outputs.filepathes }}
           docs_errors=$(php "/Deploy/check_docs_validity.php"  ${{ steps.doc-filepathes.outputs.filepathes }} "$COMMIT_DIR/" "$DOCS_ERRORS_DIR")
           echo $docs_errors
           if [ "$docs_errors" != "" ]; then

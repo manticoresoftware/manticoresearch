@@ -380,7 +380,7 @@ void SendMysqlEofPacket ( ISphOutputBuffer & tOut, BYTE uPacketID, int iWarns, b
 //////////////////////////////////////////////////////////////////////////
 // Mysql row buffer and command handler
 
-class SqlRowBuffer_c final : public RowBuffer_i, private LazyVector_T<BYTE>
+class SqlRowBuffer_c final : public RowBuffer_i
 {
 	BYTE & m_uPacketID;
 	GenericOutputBuffer_c & m_tOut;
@@ -388,6 +388,7 @@ class SqlRowBuffer_c final : public RowBuffer_i, private LazyVector_T<BYTE>
 	size_t m_iTotalSent = 0;
 	bool m_bWasFlushed = false;
 	CSphVector<std::pair<CSphString, MysqlColumnType_e>> m_dHead;
+	LazyVector_T<BYTE> m_tBuf {0};
 
 	// how many bytes this string will occupy in proto mysql
 	static int SqlStrlen ( const char * sStr )
@@ -409,7 +410,7 @@ class SqlRowBuffer_c final : public RowBuffer_i, private LazyVector_T<BYTE>
 	}
 
 	bool SomethingWasSent() final {
-		auto iPrevSent = std::exchange ( m_iTotalSent, m_tOut.GetTotalSent() + m_tOut.GetSentCount() + GetLength() );
+		auto iPrevSent = std::exchange ( m_iTotalSent, m_tOut.GetTotalSent() + m_tOut.GetSentCount() + m_tBuf.GetLength() );
 		return iPrevSent != m_iTotalSent;
 	}
 
@@ -462,6 +463,20 @@ class SqlRowBuffer_c final : public RowBuffer_i, private LazyVector_T<BYTE>
 		return m_pSession != nullptr && session::IsInTrans ( m_pSession );
 	}
 
+	template<typename NUM>
+	void PutNumAsStringT ( NUM iVal )
+	{
+		m_tBuf.ReserveGap ( SPH_MAX_NUMERIC_STR );
+		auto pSize = (char*) m_tBuf.End();
+#if __has_include ( <charconv> )
+		int iLen = std::to_chars ( pSize + 1, pSize + SPH_MAX_NUMERIC_STR, iVal ).ptr - (pSize + 1);
+#else
+		int iLen = sph::NtoA ( pSize + 1, iVal );
+#endif
+		*pSize = BYTE ( iLen );
+		m_tBuf.AddN ( iLen + 1 );
+	}
+
 public:
 
 	SqlRowBuffer_c ( BYTE * pPacketID, GenericOutputBuffer_c * pOut )
@@ -472,77 +487,44 @@ public:
 
 	void PutFloatAsString ( float fVal, const char * sFormat ) override
 	{
-		ReserveGap ( SPH_MAX_NUMERIC_STR );
-		auto pSize = End();
+		m_tBuf.ReserveGap ( SPH_MAX_NUMERIC_STR );
+		auto pSize = m_tBuf.End();
 		int iLen = sFormat
 			? snprintf (( char* ) pSize + 1, SPH_MAX_NUMERIC_STR - 1, sFormat, fVal )
 			: sph::PrintVarFloat (( char* ) pSize + 1, SPH_MAX_NUMERIC_STR - 1, fVal );
 		*pSize = BYTE ( iLen );
-		AddN ( iLen + 1 );
+		m_tBuf.AddN ( iLen + 1 );
 	}
 
 	void PutDoubleAsString ( double fVal, const char * szFormat ) override
 	{
-		ReserveGap ( SPH_MAX_NUMERIC_STR );
-		auto pSize = End();
+		m_tBuf.ReserveGap ( SPH_MAX_NUMERIC_STR );
+		auto pSize = m_tBuf.End();
 		int iLen = szFormat
 			? snprintf (( char* ) pSize + 1, SPH_MAX_NUMERIC_STR - 1, szFormat, fVal )
 			: sph::PrintVarDouble (( char* ) pSize + 1, SPH_MAX_NUMERIC_STR - 1, fVal );
 		*pSize = BYTE ( iLen );
-		AddN ( iLen + 1 );
+		m_tBuf.AddN ( iLen + 1 );
 	}
 
 	void PutNumAsString ( int64_t iVal ) override
 	{
-		ReserveGap ( SPH_MAX_NUMERIC_STR );
-		auto pSize = End();
-#if __has_include( <charconv>)
-		int iLen = std::to_chars ( (char*)pSize + 1, (char*)pSize + SPH_MAX_NUMERIC_STR, iVal ).ptr - (char*)( pSize + 1 );
-#else
-	int iLen = sph::NtoA ( ( char * ) pSize + 1, iVal );
-#endif
-		*pSize = BYTE ( iLen );
-		AddN ( iLen + 1 );
+		PutNumAsStringT ( iVal );
 	}
 
 	void PutNumAsString ( uint64_t uVal ) override
 	{
-		ReserveGap ( SPH_MAX_NUMERIC_STR );
-		auto pSize = End();
-#if __has_include( <charconv>)
-		int iLen = std::to_chars ( (char*)pSize + 1, (char*)pSize + SPH_MAX_NUMERIC_STR, uVal ).ptr - (char*)( pSize + 1 );
-#else
-		int iLen = sph::NtoA ( (char*)pSize + 1, uVal );
-#endif
-		*pSize = BYTE ( iLen );
-		AddN ( iLen + 1 );
+		PutNumAsStringT ( uVal );
 	}
 
 	void PutNumAsString ( int iVal ) override
 	{
-		ReserveGap ( SPH_MAX_NUMERIC_STR );
-		auto pSize = End();
-#if __has_include( <charconv>)
-		int iLen = std::to_chars ( (char*)pSize + 1, (char*)pSize + SPH_MAX_NUMERIC_STR, iVal ).ptr - (char*)( pSize + 1 );
-#else
-		int iLen = sph::NtoA ( ( char * ) pSize + 1, iVal );
-#endif
-
-		*pSize = BYTE ( iLen );
-		AddN ( iLen + 1 );
+		PutNumAsStringT ( iVal );
 	}
 
 	void PutNumAsString ( DWORD uVal ) override
 	{
-		ReserveGap ( SPH_MAX_NUMERIC_STR );
-		auto pSize = End();
-#if __has_include( <charconv>)
-		int iLen = std::to_chars ( (char*)pSize + 1, (char*)pSize + SPH_MAX_NUMERIC_STR, uVal ).ptr - (char*)( pSize + 1 );
-#else
-		int iLen = sph::NtoA ( ( char * ) pSize + 1, uVal );
-#endif
-		*pSize = BYTE ( iLen );
-		AddN ( iLen + 1 );
+		PutNumAsStringT ( uVal );
 	}
 
 	// pack raw array (i.e. packed length, then blob) into proto mysql
@@ -557,11 +539,11 @@ public:
 			return;
 		}
 
-		auto pSpace = AddN ( dBlob.second + 9 ); // 9 is taken from MysqlPack() implementation (max possible offset)
+		auto pSpace = m_tBuf.AddN ( dBlob.second + 9 ); // 9 is taken from MysqlPack() implementation (max possible offset)
 		auto iNumLen = MysqlPackInt ( pSpace, dBlob.second );
 		if ( dBlob.second )
 			memcpy ( pSpace+iNumLen, dBlob.first, dBlob.second );
-		Resize ( Idx ( pSpace ) + iNumLen + dBlob.second );
+		m_tBuf.Resize ( m_tBuf.Idx ( pSpace ) + iNumLen + dBlob.second );
 	}
 
 	// pack string (or "")
@@ -574,11 +556,11 @@ public:
 	{
 		iUsec = Max ( iUsec, 0 );
 
-		ReserveGap ( SPH_MAX_NUMERIC_STR+1 );
-		auto pSize = (char*) End();
+		m_tBuf.ReserveGap ( SPH_MAX_NUMERIC_STR+1 );
+		auto pSize = (char*) m_tBuf.End();
 		int iLen = sph::IFtoA ( pSize + 1, iUsec, 6 );
 		*pSize = BYTE ( iLen );
-		AddN ( iLen + 1 );
+		m_tBuf.AddN ( iLen + 1 );
 	}
 
 	void PutNULL () override
@@ -594,8 +576,8 @@ public:
 		if ( m_bError )
 			return false;
 
-		int iLeft = GetLength();
-		const BYTE * pBuf = Begin();
+		int iLeft = m_tBuf.GetLength();
+		const BYTE * pBuf = m_tBuf.Begin();
 		while ( iLeft )
 		{
 			int iSize = Min ( iLeft, MAX_PACKET_LEN );
@@ -615,7 +597,7 @@ public:
 				m_bWasFlushed = true;
 			}
 		}
-		Resize(0);
+		m_tBuf.Resize(0);
 		return true;
 	}
 
@@ -657,7 +639,6 @@ public:
 
 		if ( !OmitEof() )
 			Eof ( bMoreResults, iWarns );
-		Resize(0);
 		m_dHead.Reset();
 		return true;
 	}
@@ -670,7 +651,7 @@ public:
 
 	void Add ( BYTE uVal ) override
 	{
-		LazyVector_T<BYTE>::Add ( uVal );
+		m_tBuf.Add ( uVal );
 	}
 
 	[[nodiscard]] bool WasFlushed() const noexcept { return m_bWasFlushed; }
@@ -687,8 +668,8 @@ public:
 		assert ( !m_bWasFlushed && "Can't rewind already flushed stream!");
 
 		// reset to initial state (as after ctr)
-		RowBuffer_i::Reset();
-		LazyVector_T<BYTE>::Reset();
+		Reset();
+		m_tBuf.Reset();
 
 		m_pSession = session::GetClientSession();
 		m_iTotalSent = 0;

@@ -1,7 +1,5 @@
 # Read this first
 
-Test
-
 ## About this manual
 
 The manual is arranged to reflect the most likely way you would use Manticore:

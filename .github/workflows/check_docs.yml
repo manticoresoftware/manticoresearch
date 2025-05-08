@@ -1,0 +1,30 @@
+name: 📖 Check docs
+run-name: 📖 Check docs ${{ github.sha }}
+
+on:
+  pull_request:
+    paths:
+      - 'manual/**'
+    branches:
+      - master
+      - maintenance-release
+      - manticore-*
+
+jobs:
+  docs_check:
+    runs-on: ubuntu-22.04
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v3
+        with:
+          fetch-depth: 2
+      - name: Get changed files
+        id: changed-files
+        run: |
+          echo "changed_files=$(git diff --name-only -r HEAD^1 HEAD | xargs)" >> $GITHUB_OUTPUT
+      - name: List changed files
+        run: |
+          for file in ${{ steps.changed-files.outputs.changed_files }}; do
+            echo "$file"
+          done
+          

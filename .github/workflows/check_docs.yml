@@ -7,7 +7,6 @@ on:
       - 'manual/**'
     branches:
       - master
-      - maintenance-release
       - manticore-*
 
 jobs:
@@ -26,13 +25,6 @@ jobs:
         DOCS_ERRORS_DIR: build/docs/
 
     steps:
-      - name: Install fresh git
-        run: |
-          echo 'APT::Key::Assert-Pubkey-Algo ">=rsa1024";' > /etc/apt/apt.conf.d/99weakkey-warning
-          apt-get update --allow-releaseinfo-change
-          add-apt-repository -y ppa:git-core/ppa
-          apt-get update
-          apt-get install -y git
       - name: Checkout
         uses: actions/checkout@v3
         with:
@@ -57,7 +49,7 @@ jobs:
       - name: Check docs
         id: check
         run: |
-          docs_errors=$(php "/Deploy/check_docs_validity.php"  ${{ steps.doc-filepathes.outputs.filepathes }} "$COMMIT_DIR/" "$DOCS_ERRORS_DIR" | xargs)
+          docs_errors=$(php "/Deploy/check_docs_validity.php"  "${{ steps.doc-filepathes.outputs.filepathes }}" "$COMMIT_DIR/" "$DOCS_ERRORS_DIR" | xargs)
           echo $docs_errors
           echo "errors=$docs_errors" >> $GITHUB_OUTPUT
       - name: Upload artifact

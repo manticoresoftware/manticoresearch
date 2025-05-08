@@ -44,5 +44,18 @@ jobs:
           changed_files=$(git diff-tree --no-commit-id --name-only -r HEAD^1 HEAD)
           echo $changed_files
           echo "changed_files=$changed_files" >> $GITHUB_OUTPUT
+      - name: Get changed doc filepathes
+        id: doc-filepathes
+        run: |
+          filepathes=""
+          for file in ${{ steps.changed-files.outputs.changed_files }}; do
+            echo "$file"
+            case "$file" in 
+              "$COMMIT_DIR/"*) 
+                 echo "added" 
+                 filepathes="$file $filepathes"
+              ;;
+             esac  
+          done
           echo "Doc check passed successfully "
           

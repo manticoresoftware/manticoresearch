@@ -25,8 +25,6 @@ jobs:
         COMMIT_DIR: manual
         DOCS_ERRORS_DIR: build/docs/
 
-        CI_COMMIT_SHA: ${{ github.sha }}
-        PREV_COMMIT_SHA: ${{ github.event.before }}
     steps:
       - name: Install fresh git
         run: |
@@ -43,8 +41,8 @@ jobs:
         id: changed-files
         run: |
           git config --global --add safe.directory /__w/manticoresearch/manticoresearch
-          echo $CI_COMMIT_SHA
-          echo $PREV_COMMIT_SHA
-          git diff-tree --no-commit-id --name-only -r HEAD^1 HEAD
+          changed_files=$(git diff-tree --no-commit-id --name-only -r HEAD^1 HEAD)
+          echo $changed_files
+          echo "changed_files=$changed_files" >> $GITHUB_OUTPUT
           echo "Doc check passed successfully "
           

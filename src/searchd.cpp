@@ -8008,7 +8008,7 @@ bool IsDot ( const SqlStmt_t & tStmt )
 {
 	if ( tStmt.m_sThreadFormat=="dot" )
 		return true;
-	else if ( tStmt.m_sThreadFormat=="plain" )
+	if ( tStmt.m_sThreadFormat=="plain" )
 		return false;
 	return session::IsDot();
 }
@@ -8016,14 +8016,14 @@ bool IsDot ( const SqlStmt_t & tStmt )
 Profile_e ParseProfileFormat ( const SqlStmt_t & tStmt )
 {
 	if ( tStmt.m_sSetValue=="dot" )
-		return Profile_e::DOT;
-	else if ( tStmt.m_sSetValue=="expr" )
-		return Profile_e::DOTEXPR;
-	else if ( tStmt.m_sSetValue=="exprurl" )
-		return Profile_e::DOTEXPRURL;
-	else if ( tStmt.m_iSetValue!=0 )
-		return Profile_e::PLAIN;
-	return Profile_e::NONE;
+		return DOT;
+	if ( tStmt.m_sSetValue=="expr" )
+		return DOTEXPR;
+	if ( tStmt.m_sSetValue=="exprurl" )
+		return DOTEXPRURL;
+	if ( tStmt.m_iSetValue!=0 )
+		return PLAIN;
+	return NONE;
 }
 
 void HandleMysqlMultiStmt ( const CSphVector<SqlStmt_t> & dStmt, CSphQueryResultMeta & tLastMeta, RowBuffer_i & dRows,

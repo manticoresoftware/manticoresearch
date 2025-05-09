@@ -5483,7 +5483,7 @@ static CSphString Dots2String ( CSphVector<NamedDot>& dDots )
 	return sResult;
 }
 
-alignas ( 128 ) static const BYTE g_UrlEncodeTable[] = { // 0 if need escape, 1 if not
+alignas ( 128 ) static constexpr BYTE g_UrlEncodeTable[] = { // 0 if need escape, 1 if not
 	0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
 	0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
 	0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 0, // -.

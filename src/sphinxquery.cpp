@@ -13,7 +13,7 @@
 #include "sphinxquery.h"
 #include "sphinxutils.h"
 #include "sphinxplugin.h"
-#include <stdarg.h>
+#include <cstdarg>
 
 #include "tokenizer/tokenizer.h"
 #include "dict/dict_base.h"
@@ -901,7 +901,7 @@ XQNode_t::XQNode_t ( const XQLimitSpec_t & dSpec )
 : m_dSpec ( dSpec )
 {
 #if XQ_DUMP_NODE_ADDR
-	printf ( "node new 0x%08x\n", this );
+	printf ( "node new %p\n", this );
 #endif
 }
 
@@ -909,7 +909,7 @@ XQNode_t::XQNode_t ( const XQLimitSpec_t & dSpec )
 XQNode_t::~XQNode_t ()
 {
 #if XQ_DUMP_NODE_ADDR
-	printf ( "node deleted %d 0x%08x\n", m_eOp, this );
+	printf ( "node deleted %d %p\n", m_eOp, this );
 #endif
 	ARRAY_FOREACH ( i, m_dChildren )
 		SafeDelete ( m_dChildren[i] );
@@ -1997,55 +1997,51 @@ static void xqIndent ( int iIndent )
 		printf ( "|-" );
 }
 
+void xqDumpNode ( const XQNode_t * pNode )
+{
+	const bool bHasWords = !pNode->m_dWords.IsEmpty();
+	if ( bHasWords && pNode->GetOp() == SPH_QUERY_AND )
+		printf ( "MATCH(%d,%d):", pNode->m_dSpec.m_dFieldMask.GetMask32(), pNode->m_iOpArg );
+	else
+		printf ( "%s", XQOperatorNameSz ( pNode->GetOp()));
+
+	for ( XQKeyword_t & tWord : pNode->m_dWords )
+	{
+		const char * sLocTag = "";
+		if ( tWord.m_bFieldStart ) sLocTag = ", start";
+		if ( tWord.m_bFieldEnd ) sLocTag = ", end";
+
+		printf ( " %s (qpos %d%s)", tWord.m_sWord.cstr(), tWord.m_iAtomPos, sLocTag );
+	}
+}
+
 void xqDump ( const XQNode_t * pNode, int iIndent )
 {
 #if XQ_DUMP_NODE_ADDR
-	printf ( "0x%08x ", pNode );
+	printf ( "%p ", pNode );
 #endif
-	if ( pNode->m_dChildren.GetLength() )
+	xqIndent ( iIndent );
+	xqDumpNode ( pNode );
+	if ( pNode->m_dChildren.IsEmpty() )
 	{
-		xqIndent ( iIndent );
-		switch ( pNode->GetOp() )
-		{
-			case SPH_QUERY_AND: printf ( "AND:" ); break;
-			case SPH_QUERY_OR: printf ( "OR:" ); break;
-			case SPH_QUERY_MAYBE: printf ( "MAYBE:" ); break;
-			case SPH_QUERY_NOT: printf ( "NOT:" ); break;
-			case SPH_QUERY_ANDNOT: printf ( "ANDNOT:" ); break;
-			case SPH_QUERY_BEFORE: printf ( "BEFORE:" ); break;
-			case SPH_QUERY_PHRASE: printf ( "PHRASE:" ); break;
-			case SPH_QUERY_PROXIMITY: printf ( "PROXIMITY:" ); break;
-			case SPH_QUERY_QUORUM: printf ( "QUORUM:" ); break;
-			case SPH_QUERY_NEAR: printf ( "NEAR:" ); break;
-			case SPH_QUERY_SENTENCE: printf ( "SENTENCE:" ); break;
-			case SPH_QUERY_PARAGRAPH: printf ( "PARAGRAPH:" ); break;
-			default: printf ( "unknown-op-%d:", pNode->GetOp() ); break;
-		}
-		printf ( " (%d)\n", pNode->m_dChildren.GetLength() );
-		ARRAY_FOREACH ( i, pNode->m_dChildren )
-		{
-			assert ( pNode->m_dChildren[i]->m_pParent==pNode );
-			xqDump ( pNode->m_dChildren[i], iIndent+1 );
-		}
-	} else
-	{
-		xqIndent ( iIndent );
-		if ( pNode->GetOp()==SPH_QUERY_SCAN )
-			printf ( "SCAN:" );
-		else
-			printf ( "MATCH(%d,%d):", pNode->m_dSpec.m_dFieldMask.GetMask32(), pNode->m_iOpArg );
-
-		ARRAY_FOREACH ( i, pNode->m_dWords )
-		{
-			const XQKeyword_t & tWord = pNode->m_dWords[i];
-
-			const char * sLocTag = "";
-			if ( tWord.m_bFieldStart ) sLocTag = ", start";
-			if ( tWord.m_bFieldEnd ) sLocTag = ", end";
-
-			printf ( " %s (qpos %d%s)", tWord.m_sWord.cstr(), tWord.m_iAtomPos, sLocTag );
-		}
 		printf ( "\n" );
+		return;
+	}
+
+	if ( ( pNode->m_dChildren.GetLength()==1 )
+		&& ( pNode->GetOp()==SPH_QUERY_AND)
+		&& ( !pNode->m_dChildren.First()->m_dWords.IsEmpty()))
+	{
+		xqDumpNode ( pNode->m_dChildren.First() );
+		printf ( "\n" );
+		return;
+	}
+
+	printf ( " (%d)\n", pNode->m_dChildren.GetLength() );
+	for ( const auto* tChild : pNode->m_dChildren )
+	{
+		assert ( tChild->m_pParent==pNode );
+		xqDump ( tChild, iIndent + 1 );
 	}
 }
 #endif
@@ -2082,16 +2078,14 @@ CSphString sphReconstructNode ( const XQNode_t * pNode, const CSphSchema * pSche
 		if ( !pNode->m_dSpec.m_dFieldMask.TestAll(true) )
 		{
 			CSphString sFields ( "" );
-			for ( int i=0; i<SPH_MAX_FIELDS; i++ )
+			if ( pSchema )
 			{
-				if ( !pNode->m_dSpec.m_dFieldMask.Test(i) )
-					continue;
-
-				if ( pSchema )
-					sFields.SetSprintf ( "%s,%s", sFields.cstr(), pSchema->GetFieldName(i) );
-				else
-					sFields.SetSprintf ( "%s,%u", sFields.cstr(), pNode->m_dSpec.m_dFieldMask.GetMask32() );
+				for ( int i=0; i<pSchema->GetFieldsCount(); ++i )
+					if ( pNode->m_dSpec.m_dFieldMask.Test(i) )
+						sFields.SetSprintf ( "%s,%s", sFields.cstr(), pSchema->GetFieldName(i) );
 			}
+			else if (!pNode->m_dSpec.m_dFieldMask.TestAll(false))
+				sFields.SetSprintf ( "%s,%u", sFields.cstr(), pNode->m_dSpec.m_dFieldMask.GetMask32() );
 
 			sRes.Sprintf ( "( @%s: %s )", sFields.cstr()+1, sTrim.cstr() );
 		} else
@@ -2811,13 +2805,13 @@ private:
 	int			GetWeakestIndex ( const CSphVector<XQNode_t *> & dNodes );
 
 	template < typename Group, typename SubGroup >
-	inline void TreeCollectInfo ( XQNode_t * pParent, Checker_fn pfnChecker );
+	void TreeCollectInfo ( XQNode_t * pParent, Checker_fn pfnChecker );
 
 	template < typename Group, typename SubGroup >
-	inline bool CollectInfo ( XQNode_t * pParent, Checker_fn pfnChecker );
+	bool CollectInfo ( XQNode_t * pParent, Checker_fn pfnChecker );
 
 	template < typename Excluder, typename Parenter >
-	inline bool	CollectRelatedNodes ( const CSphVector<XQNode_t *> & dSimilarNodes );
+	bool	CollectRelatedNodes ( const CSphVector<XQNode_t *> & dSimilarNodes );
 
 	// ((A !N) | (B !N)) -> ((A|B) !N)
 	static bool CheckCommonNot ( const XQNode_t * pNode );
@@ -2879,34 +2873,27 @@ private:
 		static inline const XQNode_t * From ( const XQNode_t * ) { return NULL; } // NOLINT
 	};
 
-	struct CurrentNode
+
+	template<BYTE INHERITANCE>
+	struct Grand
 	{
-		static inline uint64_t By ( XQNode_t * p ) { return p->GetFuzzyHash(); }
-		static inline const XQNode_t * From ( const XQNode_t * p ) { return p; }
+		static uint64_t By ( const XQNode_t * p ) noexcept { return From ( p )->GetFuzzyHash(); }
+		static constexpr const XQNode_t * From ( const XQNode_t * p ) noexcept
+		{
+            if constexpr ( INHERITANCE )
+            {
+                assert (p);
+                return Grand<INHERITANCE-1>::From(p)->m_pParent;
+            }
+            return p;
+		}
 	};
 
-	struct ParentNode
-	{
-		static inline uint64_t By ( XQNode_t * p ) { return p->m_pParent->GetFuzzyHash(); }
-		static inline const XQNode_t * From ( const XQNode_t * p ) { return p->m_pParent; }
-	};
-
-	struct GrandNode
-	{
-		static inline uint64_t By ( XQNode_t * p ) { return p->m_pParent->m_pParent->GetFuzzyHash(); }
-		static inline const XQNode_t * From ( const XQNode_t * p ) { return p->m_pParent->m_pParent; }
-	};
-
-	struct Grand2Node {
-		static inline uint64_t By ( XQNode_t * p ) { return p->m_pParent->m_pParent->m_pParent->GetFuzzyHash(); }
-		static inline const XQNode_t * From ( const XQNode_t * p ) { return p->m_pParent->m_pParent->m_pParent; }
-	};
-
-	struct Grand3Node
-	{
-		static inline uint64_t By ( XQNode_t * p ) { return p->m_pParent->m_pParent->m_pParent->m_pParent->GetFuzzyHash(); }
-		static inline const XQNode_t * From ( const XQNode_t * p ) { return p->m_pParent->m_pParent->m_pParent->m_pParent; }
-	};
+	using CurrentNode = Grand<0>;
+	using ParentNode = Grand<1>;
+	using GrandNode = Grand<2>;
+	using Grand2Node = Grand<3>;
+	using Grand3Node = Grand<4>;
 };
 
 
@@ -2922,21 +2909,21 @@ const uint64_t CSphTransformation::CONST_GROUP_FACTOR = 0;
 template < typename Group, typename SubGroup >
 void CSphTransformation::TreeCollectInfo ( XQNode_t * pParent, Checker_fn pfnChecker )
 {
-	if ( pParent )
+	if ( !pParent )
+		return;
+
+	if ( pfnChecker ( pParent ) )
 	{
-		if ( pfnChecker ( pParent ) )
-		{
-			// "Similar nodes" are nodes which are suited to a template (like 'COMMON NOT', 'COMMON COMPOND NOT', ...)
-			uint64_t uGroup = (uint64_t)Group::From ( pParent );
-			uint64_t uSubGroup = SubGroup::By ( pParent );
+		// "Similar nodes" are nodes which are suited to a template (like 'COMMON NOT', 'COMMON COMPOND NOT', ...)
+		uint64_t uGroup = (uint64_t)Group::From ( pParent );
+		uint64_t uSubGroup = SubGroup::By ( pParent );
 
-			HashSimilar_t & hGroup = m_hSimilar.AddUnique ( uGroup );
-			hGroup.AddUnique ( uSubGroup ).Add ( pParent );
-		}
-
-		ARRAY_FOREACH ( iChild, pParent->m_dChildren )
-			TreeCollectInfo<Group, SubGroup> ( pParent->m_dChildren[iChild], pfnChecker );
+		HashSimilar_t & hGroup = m_hSimilar.AddUnique ( uGroup );
+		hGroup.AddUnique ( uSubGroup ).Add ( pParent );
 	}
+
+	for ( const auto& dChild : pParent->m_dChildren )
+		TreeCollectInfo<Group, SubGroup> ( dChild, pfnChecker );
 }
 
 
@@ -2972,23 +2959,23 @@ void CSphTransformation::SetCosts ( XQNode_t * pNode, const CSphVector<XQNode_t 
 	ARRAY_FOREACH ( i, dChildren )
 	{
 		XQNode_t * pChild = dChildren[i];
-		ARRAY_FOREACH ( j, pChild->m_dChildren )
+		for ( XQNode_t* pGrandChild : pChild->m_dChildren )
 		{
-			dChildren.Add ( pChild->m_dChildren[j] );
+			dChildren.Add ( pGrandChild );
 			dChildren.Last()->m_iUser = 0;
 			assert ( dChildren.Last()->m_pParent==pChild );
 		}
-		ARRAY_FOREACH ( j, pChild->m_dWords )
+		for ( const auto& dWord : pChild->m_dWords )
 		{
-			const CSphString & sWord = pChild->m_dWords[j].m_sWord;
+			const CSphString & sWord = dWord.m_sWord;
 			int * pCost = hCosts ( sWord );
-			if ( !pCost )
-			{
-				Verify ( hCosts.Add ( 0, sWord ) );
-				dKeywords.Add();
-				dKeywords.Last().m_sTokenized = sWord;
-				dKeywords.Last().m_iDocs = 0;
-			}
+			if ( pCost )
+				continue;
+
+			Verify ( hCosts.Add ( 0, sWord ) );
+			dKeywords.Add();
+			dKeywords.Last().m_sTokenized = sWord;
+			dKeywords.Last().m_iDocs = 0;
 		}
 	}
 
@@ -2996,21 +2983,15 @@ void CSphTransformation::SetCosts ( XQNode_t * pNode, const CSphVector<XQNode_t 
 	if ( dKeywords.GetLength() )
 	{
 		m_pKeywords->FillKeywords ( dKeywords );
-		ARRAY_FOREACH ( i, dKeywords )
-		{
-			const CSphKeywordInfo & tKeyword = dKeywords[i];
-			hCosts[tKeyword.m_sTokenized] = tKeyword.m_iDocs;
-		}
+		for_each ( dKeywords, [&hCosts] (const auto& tKeyword) { hCosts[tKeyword.m_sTokenized] = tKeyword.m_iDocs; } );
 	}
 
 	// propagate cost bottom-up (from children to parents)
-	for ( int i=dChildren.GetLength()-1; i>=0; i-- )
+	for ( int i=dChildren.GetLength()-1; i>=0; --i )
 	{
 		XQNode_t * pChild = dChildren[i];
 		int iCost = 0;
-		ARRAY_FOREACH ( j, pChild->m_dWords )
-			iCost += hCosts [ pChild->m_dWords[j].m_sWord ];
-
+		for_each ( pChild->m_dWords, [&iCost,&hCosts] (const auto& dWord) { iCost += hCosts[dWord.m_sWord]; } );
 		pChild->m_iUser += iCost;
 		if ( pChild->m_pParent )
 			pChild->m_pParent->m_iUser += pChild->m_iUser;
@@ -3022,19 +3003,20 @@ template < typename Excluder, typename Parenter >
 bool CSphTransformation::CollectRelatedNodes ( const CSphVector<XQNode_t *> & dSimilarNodes )
 {
 	m_dRelatedNodes.Resize ( 0 );
-	ARRAY_FOREACH ( i, dSimilarNodes )
+	for ( XQNode_t * pSimilar : dSimilarNodes )
 	{
 		// Eval node that should be excluded
-		const XQNode_t * pExclude = Excluder::From ( dSimilarNodes[i] );
+		const XQNode_t * pExclude = Excluder::From ( pSimilar );
 
 		// Eval node that points to related nodes
-		const XQNode_t * pParent = Parenter::From ( dSimilarNodes[i] );
+		const XQNode_t * pParent = Parenter::From ( pSimilar );
 
 		assert ( &pParent->m_dChildren!=&m_dRelatedNodes );
-		ARRAY_FOREACH ( j, pParent->m_dChildren )
+		for ( XQNode_t * pChild : pParent->m_dChildren )
 		{
-			if ( pParent->m_dChildren[j]!=pExclude )
-				m_dRelatedNodes.Add ( pParent->m_dChildren[j] );
+			if ( pChild==pExclude )
+				continue;
+			m_dRelatedNodes.Add ( pChild );
 		}
 	}
 	return ( m_dRelatedNodes.GetLength()>1 );
@@ -3228,7 +3210,7 @@ bool CSphTransformation::TransformCommonCompoundNot ()
 			if ( dSimilarNodes.GetLength()<2 )
 				continue;
 
-			if ( CollectRelatedNodes < GrandNode, Grand2Node > ( dSimilarNodes ) )
+			if ( CollectRelatedNodes < GrandNode, Grand2Node> ( dSimilarNodes ) )
 			{
 				// Load cost of the first node from the group
 				// of the common nodes. The cost of nodes from
@@ -3307,11 +3289,10 @@ bool CSphTransformation::MakeTransformCommonCompoundNot ( CSphVector<XQNode_t *>
 
 bool CSphTransformation::CheckCommonSubTerm ( const XQNode_t * pNode )
 {
-	if ( !pNode || ( pNode->GetOp()==SPH_QUERY_PHRASE && pNode->m_dChildren.GetLength() )
-		|| !pNode->m_pParent || !pNode->m_pParent->m_pParent || !pNode->m_pParent->m_pParent->m_pParent ||
-			pNode->m_pParent->GetOp()!=SPH_QUERY_OR || pNode->m_pParent->m_pParent->GetOp()!=SPH_QUERY_AND ||
-			pNode->m_pParent->m_pParent->m_pParent->GetOp()!=SPH_QUERY_OR )
-	{
+	return pNode && ( pNode->GetOp()!=SPH_QUERY_PHRASE || pNode->m_dChildren.IsEmpty() )
+		&& pNode->m_pParent && pNode->m_pParent->m_pParent && pNode->m_pParent->m_pParent->m_pParent
+		&& pNode->m_pParent->GetOp()==SPH_QUERY_OR && pNode->m_pParent->m_pParent->GetOp()==SPH_QUERY_AND
+		&& pNode->m_pParent->m_pParent->m_pParent->GetOp()==SPH_QUERY_OR;
 //
 // NOLINT		//  NOT:
 // NOLINT		//        ________OR (gGOr)
@@ -3322,9 +3303,6 @@ bool CSphTransformation::CheckCommonSubTerm ( const XQNode_t * pNode )
 // NOLINT		//        	            /   |
 // NOLINT		//                   pNode  ...
 //
-		return false;
-	}
-	return true;
 }
 
 
@@ -3350,7 +3328,7 @@ bool CSphTransformation::TransformCommonSubTerm ()
 			if ( bSame )
 				continue;
 
-			if ( CollectRelatedNodes < ParentNode, GrandNode > ( dX ) )
+			if ( CollectRelatedNodes < ParentNode, GrandNode> ( dX ) )
 			{
 				// Load cost of the first node from the group
 				// of the common nodes. The cost of nodes from
@@ -4138,7 +4116,7 @@ bool CSphTransformation::TransformCommonOrNot ()
 			if ( dSimilarNodes.GetLength()<2 )
 				continue;
 
-			if ( CollectRelatedNodes < GrandNode, Grand2Node > ( dSimilarNodes ) && MakeTransformCommonOrNot ( dSimilarNodes ) )
+			if ( CollectRelatedNodes < GrandNode, Grand2Node> ( dSimilarNodes ) && MakeTransformCommonOrNot ( dSimilarNodes ) )
 			{
 				bRecollect = true;
 				// Don't make transformation for other nodes from the same OR-node,
@@ -4459,7 +4437,7 @@ void CSphTransformation::Dump ( const XQNode_t * pNode, const char * sHeader )
 	if ( !pNode )
 		return;
 
-	printf ( "%s", sHeader );
+	printf ( "%s\n", sHeader );
 	printf ( "%s\n", sphReconstructNode ( pNode, NULL ).cstr() );
 #if XQ_DUMP_TRANSFORMED_TREE
 	xqDump ( pNode, 0 );

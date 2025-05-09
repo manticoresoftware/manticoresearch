@@ -63,6 +63,14 @@ enum XQOperator_e
 	SPH_QUERY_TOTAL
 };
 
+constexpr const char* XQOperatorNameSz (XQOperator_e eOperator)
+{
+	constexpr std::array <const char*, SPH_QUERY_TOTAL> dNames { "AND", "OR", "MAYBE", "NOT", "ANDNOT", "BEFORE", "PHRASE",
+	"PROXIMITY", "QUORUM", "NEAR", "NOTNEAR", "SENTENCE", "PARAGRAPH", "NULL", "SCAN" };
+	return dNames[eOperator];
+}
+
+
 // the limit of field or zone or zonespan
 struct XQLimitSpec_t
 {
@@ -78,7 +86,7 @@ public:
 		m_dFieldMask.SetAll ();
 	}
 
-	inline void Reset ()
+	void Reset ()
 	{
 		m_bFieldSpec = false;
 		m_iFieldMaxPos = 0;
@@ -125,7 +133,6 @@ public:
 	}
 
 
-public:
 	void SetZoneSpec ( const CSphVector<int> & dZones, bool bZoneSpan );
 	void SetFieldSpec ( const FieldMask_t& uMask, int iMaxPos );
 };
@@ -142,7 +149,6 @@ private:
 	int						m_iOrder = 0;
 	int						m_iCounter = 0;
 
-private:
 	mutable uint64_t		m_iMagicHash = 0;
 	mutable uint64_t		m_iFuzzyHash = 0;
 
@@ -158,7 +164,7 @@ public:
 	bool					m_bNotWeighted = false;	///< this our expanded but empty word's node
 	bool					m_bPercentOp = false;
 
-public:
+
 	/// ctor
 	explicit XQNode_t ( const XQLimitSpec_t & dSpec );
 
@@ -184,7 +190,6 @@ public:
 	/// unconditionally clear field mask
 	void ClearFieldMask ();
 
-public:
 	/// get my operator
 	XQOperator_e GetOp () const
 	{
@@ -269,7 +274,7 @@ public:
 
 
 /// extended query
-struct XQQuery_t : public ISphNoncopyable
+struct XQQuery_t : ISphNoncopyable
 {
 	CSphString				m_sParseError;
 	CSphString				m_sParseWarning;

@@ -4713,27 +4713,8 @@ CSphHitMarker * CSphHitMarker::Create ( const XQNode_t * pRoot, const ISphQwordS
 
 CSphString sphXQNodeToStr ( const XQNode_t * pNode )
 {
-	static const char * szNodeNames[] =
-	{
-		"AND",
-		"OR",
-		"MAYBE",
-		"NOT",
-		"ANDNOT",
-		"BEFORE",
-		"PHRASE",
-		"PROXIMITY",
-		"QUORUM",
-		"NEAR",
-		"NOTNEAR",
-		"SENTENCE",
-		"PARAGRAPH"
-	};
+	if ( pNode->GetOp()>=SPH_QUERY_AND && pNode->GetOp()<SPH_QUERY_TOTAL )
+		return XQOperatorNameSz(pNode->GetOp());
 
-	if ( pNode->GetOp()>=SPH_QUERY_AND && pNode->GetOp()<=SPH_QUERY_PARAGRAPH )
-		return szNodeNames [ pNode->GetOp()-SPH_QUERY_AND ];
-
-	CSphString sTmp;
-	sTmp.SetSprintf ( "OPERATOR-%d", pNode->GetOp() );
-	return sTmp; 
+	return SphSprintf ( "OPERATOR-%d", pNode->GetOp() );
 }

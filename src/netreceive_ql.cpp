@@ -277,7 +277,7 @@ enum
 	MYSQL_COM_SET_OPTION	= 27
 };
 
-static void SendMysqlErrorPacket ( ISphOutputBuffer & tOut, BYTE uPacketID, Str_t sError, EMYSQL_ERR eErr )
+void SendMysqlErrorPacket ( ISphOutputBuffer & tOut, BYTE uPacketID, Str_t sError, EMYSQL_ERR eErr )
 {
 	if ( IsEmpty ( sError ) )
 		sError = FROMS("(null)");
@@ -322,7 +322,7 @@ static void SendMysqlErrorPacket ( ISphOutputBuffer & tOut, BYTE uPacketID, Str_
 	tOut.SendBytes ( sError );
 }
 
-inline WORD MysqlStatus ( bool bMoreResults, bool bAutoCommit, bool bIsInTrans )
+WORD MysqlStatus ( bool bMoreResults, bool bAutoCommit, bool bIsInTrans )
 {
 	WORD uStatus = 0;
 	if ( bMoreResults )
@@ -407,7 +407,7 @@ class SqlRowBuffer_c final : public RowBuffer_i
 
 	void SendSqlString ( const char * sStr )
 	{
-		auto iLen = (int) strlen ( sStr );
+		auto iLen = sStr? (int) strlen ( sStr ) : 0;
 		SendSqlInt ( iLen );
 		m_tOut.SendBytes ( sStr, iLen );
 	}
@@ -418,11 +418,13 @@ class SqlRowBuffer_c final : public RowBuffer_i
 		return iPrevSent != m_iTotalSent;
 	}
 
-	void SendSqlFieldPacket ( const char * szDB, const char * sCol, MysqlColumnType_e eType, WORD uFlags=0 )
+	void SendSqlFieldPacket ( const char * szDB, const char * sCol, MysqlColumnType_e eType )
 	{
 		const char * sTable = m_sTable.scstr();
+		WORD uFlags = 0;
 
 		int iColLen = 0;
+		WORD uCollation = 0x3f00; // binary
 		switch ( eType )
 		{
 		case MYSQL_COL_LONG: iColLen = 11;
@@ -433,7 +435,9 @@ class SqlRowBuffer_c final : public RowBuffer_i
 		case MYSQL_COL_UINT64:
 		case MYSQL_COL_LONGLONG: iColLen = 20;
 			break;
-		case MYSQL_COL_STRING: iColLen = 255;
+		case MYSQL_COL_STRING:
+			iColLen = 255;
+			uCollation = 0x2100; // utf8
 			break;
 		}
 
@@ -446,12 +450,10 @@ class SqlRowBuffer_c final : public RowBuffer_i
 		SendSqlString ( sCol ); // org_name
 
 		m_tOut.SendByte ( 12 ); // filler, must be 12 (following pseudo-string length)
-		m_tOut.SendByte ( 0x21 ); // charset_nr, 0x21 is utf8
-		m_tOut.SendByte ( 0 ); // charset_nr
+		m_tOut.SendWord ( uCollation ); // charset_nr, 0x21 is utf8
 		m_tOut.SendLSBDword ( iColLen ); // length
 		m_tOut.SendByte ( BYTE ( eType ) ); // type (0=decimal)
-		m_tOut.SendByte ( uFlags & 255 );
-		m_tOut.SendByte ( uFlags >> 8 );
+		m_tOut.SendWord ( uFlags );
 		m_tOut.SendByte ( 0 ); // decimals
 		m_tOut.SendWord ( 0 ); // filler
 	}
@@ -624,7 +626,7 @@ public:
 			m_uPacketID++;
 	}
 
-	void SendColumnDefinitions ( bool bMoreResults = false, int iWarns = 0 )
+	void SendColumnDefinitions ()
 	{
 		const char* szDB = session::GetCurrentDbName();
 		if (!szDB)
@@ -633,9 +635,6 @@ public:
 			SendSqlFieldPacket ( szDB, dCol.first.cstr(), dCol.second );
 
 		m_dHead.Reset();
-
-		if ( !OmitEof() )
-			Eof ( bMoreResults, iWarns );
 	}
 
 	// Header of the table with defined num of columns
@@ -656,7 +655,11 @@ public:
 			SQLPacketHeader_c dHead { m_tOut, m_uPacketID++ };
 			SendSqlInt ( m_dHead.GetLength() );
 		}
-		SendColumnDefinitions ( bMoreResults, iWarns );
+
+		SendColumnDefinitions ();
+		if ( !OmitEof() )
+			Eof ( bMoreResults, iWarns );
+
 		return true;
 	}
 
@@ -923,7 +926,7 @@ public:
 };
 
 
-void SendTableSchema ( SqlRowBuffer_c & tSqlOut, const CSphString& sName )
+void SendTableSchema ( SqlRowBuffer_c & tSqlOut, CSphString sName )
 {
 	auto pServed = GetServed ( sName );
 	if ( !pServed )
@@ -955,9 +958,6 @@ void SendTableSchema ( SqlRowBuffer_c & tSqlOut, const CSphString& sName )
 	{
 		const auto & tAttr = tSchema.GetAttr ( i );
 		if ( sphIsInternalAttr ( tAttr ) )
-			continue;
-
-		if ( tAttr.m_eAttrType == SPH_ATTR_TOKENCOUNT )
 			continue;
 
 		if ( tSchema.GetField ( tAttr.m_sName.cstr() ) )
@@ -1075,12 +1075,11 @@ bool LoopClientMySQL ( BYTE & uPacketID, int iPacketLen, QueryProfile_c * pProfi
 		case MYSQL_COM_FIELD_LIST:
 		{
 			auto sTable = MysqlReadSzStr ( tIn );
-			Str_t tWildchar ( nullptr, iPacketLen-2-sTable.Length() );
-			tIn.GetBytesZerocopy ( ( const BYTE ** )( &tWildchar.first ), tWildchar.second );
 			sphLogDebugv ( "LoopClientMySQL command %d, '%s'", uMysqlCmd, sTable.cstr() );
 			SqlRowBuffer_c tRows ( &uPacketID, &tOut );
 			tSess.m_pSqlRowBuffer = &tRows;
 			SendTableSchema ( tRows, sTable );
+			SendMysqlEofPacket ( tOut, uPacketID, 0, false, session::IsAutoCommit (), session::IsInTrans() );
 			break;
 		}
 

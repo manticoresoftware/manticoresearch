@@ -107,7 +107,7 @@ public:
 	// RT index stub
 	bool MultiQuery ( CSphQueryResult &, const CSphQuery &, const VecTraits_T<ISphMatchSorter *> &, const CSphMultiQueryArgs & ) const override;
 	bool DeleteDocument ( const VecTraits_T<DocID_t> &, CSphString & , RtAccum_t * pAccExt ) override { RollBack ( pAccExt ); return true; }
-	void ForceRamFlush ( const char* szReason ) EXCLUDES ( m_tLock ) final;
+	void ForceRamFlush ( const char* szReason ) final EXCLUDES ( m_tLock );
 	bool IsFlushNeed() const override;
 	bool ForceDiskChunk () override;
 	bool IsSameSettings ( CSphReconfigureSettings & tSettings, CSphReconfigureSetup & tSetup, StrVec_t & dWarnings, CSphString & sError ) const override;

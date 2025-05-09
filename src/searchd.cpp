@@ -14642,21 +14642,24 @@ int WINAPI ServiceMain ( int argc, char **argv ) EXCLUDES (MainThread)
 		g_sSnippetsFilePrefix.SetSprintf ( "%s/", g_sExePath.scstr() );
 	FixPathAbsolute ( g_sSnippetsFilePrefix );
 
-	auto sLogFormat = hSearchd.GetStr ( "query_log_format", "sphinxql" );
 	bool bLogCompactIn = false;
 	LOG_FORMAT eFormat = LOG_FORMAT::SPHINXQL;
-	if ( sLogFormat != "sphinxql" )
-	{
-		StrVec_t dParams;
-		sphSplit ( dParams, sLogFormat.cstr() );
-		for ( const auto& sParam : dParams )
+
+	{ // scope for sLogFormat to avoid valgrind's complains
+		auto sLogFormat = hSearchd.GetStr ( "query_log_format", "sphinxql" );
+		if ( sLogFormat != "sphinxql" )
 		{
-			if ( sParam=="sphinxql" )
-				eFormat = LOG_FORMAT::SPHINXQL;
-			else if ( sParam=="plain" )
-				eFormat = LOG_FORMAT::_PLAIN;
-			else if ( sParam=="compact_in" )
-				bLogCompactIn = true;
+			StrVec_t dParams;
+			sphSplit ( dParams, sLogFormat.cstr() );
+			for ( const auto& sParam : dParams )
+			{
+				if ( sParam=="sphinxql" )
+					eFormat = LOG_FORMAT::SPHINXQL;
+				else if ( sParam=="plain" )
+					eFormat = LOG_FORMAT::_PLAIN;
+				else if ( sParam=="compact_in" )
+					bLogCompactIn = true;
+			}
 		}
 	}
 	if ( bLogCompactIn && eFormat==LOG_FORMAT::_PLAIN )

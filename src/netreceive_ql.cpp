@@ -418,7 +418,7 @@ class SqlRowBuffer_c final : public RowBuffer_i
 		return iPrevSent != m_iTotalSent;
 	}
 
-	void SendSqlFieldPacket ( const char * szDB, const char * sCol, MysqlColumnType_e eType )
+	void SendSqlFieldPacket ( const char * szDB, const char * sCol, MysqlColumnType_e eType, bool bFromFieldList )
 	{
 		const char * sTable = m_sTable.scstr();
 		WORD uFlags = 0;
@@ -456,6 +456,8 @@ class SqlRowBuffer_c final : public RowBuffer_i
 		m_tOut.SendWord ( uFlags );
 		m_tOut.SendByte ( 0 ); // decimals
 		m_tOut.SendWord ( 0 ); // filler
+		if ( bFromFieldList )
+			m_tOut.SendByte ( 0xFB );
 	}
 
 	bool IsAutoCommit() const
@@ -626,13 +628,13 @@ public:
 			m_uPacketID++;
 	}
 
-	void SendColumnDefinitions ()
+	void SendColumnDefinitions (bool bFromFieldList = false)
 	{
 		const char* szDB = session::GetCurrentDbName();
 		if (!szDB)
 			szDB = szManticore;
 		for ( const auto & dCol: m_dHead )
-			SendSqlFieldPacket ( szDB, dCol.first.cstr(), dCol.second );
+			SendSqlFieldPacket ( szDB, dCol.first.cstr(), dCol.second, bFromFieldList );
 
 		m_dHead.Reset();
 	}
@@ -966,7 +968,7 @@ void SendTableSchema ( SqlRowBuffer_c & tSqlOut, CSphString sName )
 		tSqlOut.HeadColumn ( tAttr.m_sName.cstr(), ESphAttr2MysqlColumn ( tAttr.m_eAttrType ) );
 	}
 
-	tSqlOut.SendColumnDefinitions ();
+	tSqlOut.SendColumnDefinitions (true); // true means - from field list
 }
 
 bool ValidateDBName (Str_t tSrcQueryReference)

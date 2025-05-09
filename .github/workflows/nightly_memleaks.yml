@@ -5,6 +5,8 @@ on:
   schedule:
     - cron: '00 20 * * *'
   push:
+    branches:
+      - '**'
     paths:
       - '.github/workflows/nightly_memleaks.yml'    
       

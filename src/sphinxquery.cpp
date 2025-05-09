@@ -13,6 +13,7 @@
 #include "sphinxquery.h"
 #include "sphinxutils.h"
 #include "sphinxplugin.h"
+#include "sphinxsearch.h"
 #include <cstdarg>
 
 #include "tokenizer/tokenizer.h"
@@ -2142,6 +2143,42 @@ CSphString sphReconstructNode ( const XQNode_t * pNode, const CSphSchema * pSche
 	return CSphString{sRes};
 }
 
+alignas ( 128 ) static constexpr BYTE g_UrlEncodeTable[] = { // 0 if need escape, 1 if not
+	0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+	0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+	0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 0, // -.
+	1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, // 0123456789
+	0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, // ABCDEFGHIJKLMNO
+	1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 1, // PQRSTUVWXYZ_
+	0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, // abcdefghijklmno
+	1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0, 1, 0, // pqrstuvwxyz~
+};
+
+static CSphString UrlEncode ( const CSphString& sSource )
+{
+	StringBuilder_c sRes;
+	for ( const auto* pC = sSource.cstr (); *pC; ++pC )
+	{
+		auto c = (BYTE)*pC;
+		if ( ( c & 0x80 ) || !g_UrlEncodeTable[c] )
+			sRes.Sprintf("%%%02x",c);
+		else
+			sRes.RawC((char)c);
+	}
+
+	CSphString sResult;
+	sRes.MoveTo (sResult);
+	return sResult;
+}
+
+void DotDump (const XQNode_t * pNode)
+{
+	auto dPlan = sphExplainQuery ( pNode );
+	StringBuilder_c sRes;
+	sph::RenderBsonPlan ( sRes, bson::MakeHandle ( dPlan ), true );
+	printf ( "\nhttps://dreampuf.github.io/GraphvizOnline/#%s\n", UrlEncode ( CSphString{sRes} ).cstr() );
+}
+
 
 bool sphParseExtendedQuery ( XQQuery_t & tParsed, const char * sQuery, const CSphQuery * pQuery, const TokenizerRefPtr_c& pTokenizer, const CSphSchema * pSchema, const DictRefPtr_c& pDict, const CSphIndexSettings & tSettings, const CSphBitvec * pMorphFields )
 {
@@ -2159,6 +2196,7 @@ bool sphParseExtendedQuery ( XQQuery_t & tParsed, const char * sQuery, const CSp
 		printf ( "\n--- query ---\n" );
 		printf ( "%s\n", sQuery );
 		xqDump ( tParsed.m_pRoot, 0 );
+		DotDump ( tParsed.m_pRoot );
 		printf ( "\n--- query reconstructed ---\n" );
 		printf ( "%s\n", sphReconstructNode ( tParsed.m_pRoot, NULL ).cstr(), NULL );
 		printf ( "---\n" );
@@ -4441,6 +4479,8 @@ void CSphTransformation::Dump ( const XQNode_t * pNode, const char * sHeader )
 	printf ( "%s\n", sphReconstructNode ( pNode, NULL ).cstr() );
 #if XQ_DUMP_TRANSFORMED_TREE
 	xqDump ( pNode, 0 );
+	DotDump ( pNode );
+	fflush ( stdout );
 #endif
 }
 #else

@@ -127,7 +127,7 @@ jobs:
   pack_debian_ubuntu:
     name: Debian/Ubuntu packages
     uses: ./.github/workflows/build_template.yml
-    needs: check_deps
+    needs: [pack, check_deps]
     strategy:
       fail-fast: false
       matrix:
@@ -150,7 +150,7 @@ jobs:
   pack_rhel:
     name: RHEL packages
     uses: ./.github/workflows/build_template.yml
-    needs: check_deps
+    needs: [pack, check_deps]
     strategy:
       fail-fast: false
       matrix:
@@ -176,7 +176,7 @@ jobs:
   pack_macos:
     name: MacOS packages
     uses: ./.github/workflows/build_template.yml
-    needs: check_deps
+    needs: [pack, check_deps]
     strategy:
       fail-fast: false
       matrix:
@@ -200,7 +200,7 @@ jobs:
   pack_windows:
     name: Windows x64 package
     uses: ./.github/workflows/build_template.yml
-    needs: check_deps
+    needs: [pack, check_deps]
     with:
       DISTR: windows
       arch: x64

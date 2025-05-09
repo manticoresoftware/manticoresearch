@@ -503,7 +503,7 @@ void XQNodeGetExtraBson ( bson::Assoc_c & tNode, const XQNode_t * pNode )
 	}
 }
 
-void AddAccessSpecsBson ( bson::Assoc_c & tNode, const XQNode_t * pNode, const CSphSchema & tSchema, const StrVec_t & dZones )
+void AddAccessSpecsBson ( bson::Assoc_c & tNode, const XQNode_t * pNode, const CSphSchema * pSchema, const StrVec_t * pZones )
 {
 	assert ( pNode );
 	// dump spec for keyword nodes
@@ -515,15 +515,23 @@ void AddAccessSpecsBson ( bson::Assoc_c & tNode, const XQNode_t * pNode, const C
 	if ( s.m_bFieldSpec && !s.m_dFieldMask.TestAll ( true ) )
 	{
 		StrVec_t dFields;
-		for ( int i = 0; i<tSchema.GetFieldsCount (); ++i )
-			if ( s.m_dFieldMask.Test ( i ) )
-				dFields.Add ( tSchema.GetFieldName ( i ) );
-		tNode.AddStringVec( SZ_FIELDS, dFields );
+		if ( pSchema )
+		{
+			for ( int i = 0; i<pSchema->GetFieldsCount (); ++i )
+				if ( s.m_dFieldMask.Test ( i ) )
+					dFields.Add ( pSchema->GetFieldName ( i ) );
+		} else
+		{
+			if ( !s.m_dFieldMask.TestAll ( false ) )
+				dFields.Add ( SphSprintf ( "%u",s.m_dFieldMask.GetMask32() ) );
+		}
+
+		tNode.AddStringVec ( SZ_FIELDS, dFields );
 	}
 	if ( s.m_iFieldMaxPos )
 		tNode.AddInt ( SZ_MAX_FIELD_POS, s.m_iFieldMaxPos );
-	if ( s.m_dZones.GetLength () )
-		tNode.AddStringVec ( s.m_bZoneSpan ? SZ_ZONESPANS : SZ_ZONES, dZones );
+	if ( pZones && !s.m_dZones.IsEmpty () )
+		tNode.AddStringVec ( s.m_bZoneSpan ? SZ_ZONESPANS : SZ_ZONES, *pZones );
 }
 
 void CreateKeywordBson ( bson::Assoc_c& tWord, const XQKeyword_t & tKeyword )
@@ -547,12 +555,12 @@ void CreateKeywordBson ( bson::Assoc_c& tWord, const XQKeyword_t & tKeyword )
 		tWord.AddDouble ( SZ_BOOST, tKeyword.m_fBoost );
 }
 
-void BuildPlanBson ( bson::Assoc_c& tPlan, const XQNode_t * pNode, const CSphSchema & tSchema, const StrVec_t & dZones )
+void BuildPlanBson ( bson::Assoc_c& tPlan, const XQNode_t * pNode, const CSphSchema * pSchema, const StrVec_t * pZones )
 {
 	using namespace bson;
 	tPlan.AddString ( SZ_TYPE, sphXQNodeToStr ( pNode ).cstr() );
 	XQNodeGetExtraBson ( tPlan, pNode );
-	AddAccessSpecsBson ( tPlan, pNode, tSchema, dZones );
+	AddAccessSpecsBson ( tPlan, pNode, pSchema, pZones );
 
 	if ( pNode->m_dChildren.GetLength () && pNode->m_dWords.GetLength () )
 		tPlan.AddBool ( SZ_VIRTUALLY_PLAIN, true );
@@ -571,7 +579,7 @@ void BuildPlanBson ( bson::Assoc_c& tPlan, const XQNode_t * pNode, const CSphSch
 		for ( const auto & i : pNode->m_dChildren )
 		{
 			Obj_c tChild ( dChildren.StartObj () );
-			BuildPlanBson ( tChild, i, tSchema, dZones );
+			BuildPlanBson ( tChild, i, pSchema, pZones );
 		}
 	}
 }
@@ -601,12 +609,12 @@ CSphString sph::RenderBsonPlanBrief ( const bson::NodeHandle_t& dBson )
 }
 
 
-Bson_t sphExplainQuery ( const XQNode_t * pNode, const CSphSchema & tSchema, const StrVec_t & dZones )
+Bson_t sphExplainQuery ( const XQNode_t * pNode, const CSphSchema * pSchema, const StrVec_t * pZones )
 {
 	CSphVector<BYTE> dPlan;
 	{
 		bson::Root_c tPlan ( dPlan );
-		::BuildPlanBson ( tPlan, pNode, tSchema, dZones );
+		::BuildPlanBson ( tPlan, pNode, pSchema, pZones );
 	}
 	return dPlan;
 }
@@ -618,7 +626,7 @@ void QueryProfile_c::BuildResult ( XQNode_t * pRoot, const CSphSchema & tSchema,
 		return;
 	m_dPlan.Reset();
 	bson::Root_c tPlan ( m_dPlan );
-	::BuildPlanBson ( tPlan, pRoot, tSchema, dZones );
+	::BuildPlanBson ( tPlan, pRoot, &tSchema, &dZones );
 }
 
 ExtRanker_c::ExtRanker_c ( const XQQuery_t & tXQ, const ISphQwordSetup & tSetup, const RankerSettings_t & tSettings, bool bUseBM25 )

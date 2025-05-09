@@ -11828,7 +11828,7 @@ Bson_t Explain ( ExplainQueryArgs_t & tArgs )
 		tParsed.m_pRoot = sphExpandXQNode ( tParsed.m_pRoot, tExpCtx );
 	}
 
-	return sphExplainQuery ( tParsed.m_pRoot, *pSchema, tParsed.m_dZones );
+	return sphExplainQuery ( tParsed.m_pRoot, pSchema, &tParsed.m_dZones );
 }
 
 Bson_t CSphIndex_VLN::ExplainQuery ( const CSphString & sQuery ) const

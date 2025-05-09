@@ -17,13 +17,13 @@ on:
   push:
     branches:
       - manticore-*
-      - master
     paths-ignore:
       - 'manual/**'
       - 'cmake/GetGALERA.cmake'
       - 'galera_packaging/**'
     tags:
       - 'release*'
+      - 'pack'
 
 # cancels the previous workflow run when a new one appears in the same branch (e.g. master or a PR's branch)
 concurrency:
@@ -104,8 +104,11 @@ jobs:
           elif [[ "${{ github.event_name }}" == "pull_request" && "${{ contains(github.event.pull_request.labels.*.name, 'pack') }}" == "true" ]]; then
             echo "Continuing because PR has 'pack' label"
             echo "should_continue=true" >> $GITHUB_OUTPUT
+          elif [[ "${{ contains(github.ref, 'refs/tags/pack') }}" == "true" ]]; then
+            echo "Continuing because commit has 'pack' tag"
+            echo "should_continue=true" >> $GITHUB_OUTPUT
           else
-            echo "Skipping packing because version wasn't updated, target is not release, and there's no 'pack' label"
+            echo "Skipping packing because version wasn't updated, target is not release, and there's no 'pack' label or tag"
             echo "should_continue=false" >> $GITHUB_OUTPUT
           fi
       - run: |
@@ -116,6 +119,25 @@ jobs:
           echo "* Attempt: ${{ github.run_attempt }}" >> $GITHUB_STEP_SUMMARY
           echo "* Version updated: ${{ steps.semver-tagger.outputs.version_updated }}" >> $GITHUB_STEP_SUMMARY
           echo "* Should continue packing: ${{ steps.check-should-continue.outputs.should_continue }}" >> $GITHUB_STEP_SUMMARY
+
+#  debug_info:
+#    name: Debug GitHub Event Info
+#    runs-on: ubuntu-22.04
+#    steps:
+#      - name: Print GitHub Event Info
+#        run: |
+#          echo "GitHub Event Name: ${{ github.event_name }}"
+#          echo "GitHub Ref: ${{ github.ref }}"
+#          echo "GitHub Ref Type: ${{ github.ref_type }}"
+#          echo "GitHub Ref Name: ${{ github.ref_name }}"
+#          echo "GitHub Actor: ${{ github.actor }}"
+#          echo "GitHub Repository: ${{ github.repository }}"
+#          echo "GitHub SHA: ${{ github.sha }}"
+#          echo "GitHub Run Number: ${{ github.run_number }}"
+#          echo "GitHub Run Attempt: ${{ github.run_attempt }}"
+#          echo "GitHub Workflow: ${{ github.workflow }}"
+#          echo "GitHub Event JSON:"
+#          echo '${{ toJSON(github.event) }}'
 
   # Job to check dependencies using check_deps_in_repos.sh
   # Runs on every PR, workflow_run, or push event matching the conditions

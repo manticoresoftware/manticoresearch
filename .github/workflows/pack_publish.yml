@@ -23,7 +23,7 @@ on:
       - 'galera_packaging/**'
     tags:
       - 'release*'
-      - 'pack'
+      - 'pack_publish'
 
 # cancels the previous workflow run when a new one appears in the same branch (e.g. master or a PR's branch)
 concurrency:
@@ -74,7 +74,7 @@ jobs:
           )
           ||
           contains(
-            github.ref, 'refs/tags/pack'
+            github.ref, 'refs/tags/pack_publish'
           )
         )
       )
@@ -104,8 +104,8 @@ jobs:
           elif [[ "${{ github.event_name }}" == "pull_request" && "${{ contains(github.event.pull_request.labels.*.name, 'pack') }}" == "true" ]]; then
             echo "Continuing because PR has 'pack' label"
             echo "should_continue=true" >> $GITHUB_OUTPUT
-          elif [[ "${{ contains(github.ref, 'refs/tags/pack') }}" == "true" ]]; then
-            echo "Continuing because commit has 'pack' tag"
+          elif [[ "${{ contains(github.ref, 'refs/tags/pack_publish') }}" == "true" ]]; then
+            echo "Continuing because commit has 'pack_publish' tag"
             echo "should_continue=true" >> $GITHUB_OUTPUT
           else
             echo "Skipping packing because version wasn't updated, target is not release, and there's no 'pack' label or tag"
@@ -288,7 +288,7 @@ jobs:
         (github.event_name == 'pull_request' && (contains(github.event.pull_request.labels.*.name, 'publish')))
         || (github.event_name == 'workflow_run' && github.event.workflow_run.conclusion == 'success')
         || (github.event_name == 'push' && startsWith(github.ref, 'refs/heads/manticore-'))
-        || (github.event_name == 'push' && contains(github.ref, 'refs/tags/publish'))
+        || (github.event_name == 'push' && contains(github.ref, 'refs/tags/pack_publish'))
       )
     steps:
       - run: echo "Ready to publish"

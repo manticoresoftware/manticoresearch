@@ -148,7 +148,7 @@ global $sd_address, $sd_sphinxql_port;
 $sockStr = "$sd_address:$sd_sphinxql_port";
 if ($sd_address == "localhost")
 	$sockStr = "127.0.0.1:$sd_sphinxql_port";
-$sock = @mysql_connect ($sockStr,'','',	true );
+$sock = @mysql_test_connect ($sockStr);
 if ( $sock === false )
 {
 	$results[] = "error: can't connect to searchd: " . @mysql_errno ( $sock ) . " : " . @mysql_error ( $sock );
@@ -164,7 +164,7 @@ $results = array_merge ( $results, $query ( "SET GLOBAL @filter1 = ( 101 )", $so
 
 for ( $i = 102; $i < 104; $i++)
 {
-	$sock = @mysql_connect ($sockStr,'','',	true );
+	$sock = @mysql_test_connect ($sockStr );
 	if ( $sock === false )
 	{
 		$results[] = "error: can't connect to searchd: " . @mysql_errno ( $sock ) . " : " . @mysql_error ( $sock );
@@ -193,7 +193,7 @@ for ( $i = 102; $i < 104; $i++)
 	}
 }
 
-$sock = @mysql_connect ($sockStr,'','',	true );
+$sock = @mysql_test_connect ($sockStr );
 if ( $sock === false )
 {
 	$results[] = "error: can't connect to searchd: " . @mysql_errno ( $sock ) . " : " . @mysql_error ( $sock );

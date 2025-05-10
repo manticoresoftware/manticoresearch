@@ -24,6 +24,7 @@
 %token	TOK_QUOTED_STRING "string"
 
 %token	TOK_CREATE
+%token	TOK_COLUMNS
 %token	TOK_DATABASE
 %token	TOK_FIELDS
 %token	TOK_FLUSH
@@ -78,7 +79,7 @@ statement:
 ident:
 	TOK_FIELDS | TOK_FLUSH | TOK_FROM | TOK_LOCK | TOK_READ | TOK_RELOAD | TOK_SAVEPOINT
 	| TOK_SET | TOK_SHOW | TOK_TABLE | TOK_TABLES | TOK_UNLOCK | TOK_USE | TOK_WITH | TOK_IDENT
-	| TOK_TRIGGERS | TOK_LIKE | TOK_CREATE | TOK_DATABASE
+	| TOK_TRIGGERS | TOK_LIKE | TOK_CREATE | TOK_DATABASE | TOK_COLUMNS
 	; // no TOK_SESSION, no TOK_GLOBAL
 
 //////////////////////////////////////////////////////////////////////////
@@ -228,9 +229,12 @@ savepoint_sp:
 	;
 
 //////////////////////////////////////////////////////////////////////////
+fields_or_columns:
+	TOK_FIELDS | TOK_COLUMNS
+	;
 
 show_fields:
-	TOK_SHOW TOK_FIELDS TOK_FROM table_ident like_filter
+	TOK_SHOW fields_or_columns TOK_FROM table_ident like_filter
 		{
 			pParser->SetIndex ($4);
 			pParser->m_pStmt->m_eStmt = STMT_DESCRIBE;

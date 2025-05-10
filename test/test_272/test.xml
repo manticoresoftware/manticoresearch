@@ -127,6 +127,9 @@ show fields from `check`;
 SELECT /*!40001 SQL_NO_CACHE */ * FROM `check`;
 SELECT * FROM `check`;
 
+show columns from check;
+show columns from indexrt like '%id';
+
 /*M!999999\- enable the sandbox mode */
 /*!40101 SET @OLD_CHARACTER_SET_CLIENT=@@CHARACTER_SET_CLIENT */;
 

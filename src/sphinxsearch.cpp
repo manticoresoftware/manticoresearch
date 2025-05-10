@@ -423,19 +423,19 @@ bool RenderKeywordNodeDot ( StringBuilder_c & tRes, const bson::Bson_c& tBson )
 	ScopedComma_c ExplainComma ( tRes, " | ", "[shape=record label=\"", "\"]\n" );
 	tRes << String ( tWord );
 	ScopedComma_c ParamComma ( tRes, " | ", "{ ", " }" );
-	tRes.Sprintf ( "querypos=%d", Int ( tBson.ChildByName ( SZ_QUERYPOS ) ) );
+	tRes.Sprintf ( "qp=%d", Int ( tBson.ChildByName ( SZ_QUERYPOS ) ) );
 	if ( Bool ( tBson.ChildByName ( SZ_EXCLUDED ) ) )
-		tRes += "excluded";
+		tRes += "excl";
 	if ( Bool ( tBson.ChildByName ( SZ_EXPANDED ) ) )
-		tRes += "expanded";
+		tRes += "exp";
 	if ( Bool ( tBson.ChildByName ( SZ_FIELD_START ) ) )
-		tRes += "field_start";
+		tRes += "_start";
 	if ( Bool ( tBson.ChildByName ( SZ_FIELD_END ) ) )
-		tRes += "field_end";
+		tRes += "_end";
 	if ( Bool ( tBson.ChildByName ( SZ_MORPHED ) ) )
-		tRes += "morphed";
+		tRes += "mrph";
 	if ( Bool ( tBson.ChildByName ( SZ_REGEX ) ) )
-		tRes += "regex";
+		tRes += "rgx";
 	auto tBoost = tBson.ChildByName ( SZ_BOOST );
 	if ( !IsNullNode ( tBoost ) )
 	{
@@ -459,7 +459,7 @@ void RenderDotBsonNodePlan ( bson::NodeHandle_t dBson, StringBuilder_c & tRes, i
 		return;
 
 	{
-		ScopedComma_c ExplainComma ( tRes, " | ", R"([shape=record,style=filled,bgcolor="lightgrey" label=")", "\"]\n" );
+		ScopedComma_c ExplainComma ( tRes, " | ", R"([shape=record,style=filled label=")", "\"]\n" );
 		tRes << String ( tBson.ChildByName ( SZ_TYPE ) );
 		ScopedComma_c ParamComma ( tRes, " \\n| ", "{ ", " }" );
 
@@ -486,7 +486,7 @@ void RenderDotBsonNodePlan ( bson::NodeHandle_t dBson, StringBuilder_c & tRes, i
 void RenderDotBsonPlan ( bson::NodeHandle_t dBson, StringBuilder_c & tRes )
 {
 	int iId=0;
-	tRes << "digraph \"transformed_tree\"\n{\n";
+	tRes << "digraph \"transformed_tree\" {\n";
 	RenderDotBsonNodePlan ( dBson, tRes, iId );
 	tRes << "}";
 }

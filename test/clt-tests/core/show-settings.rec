@@ -20,6 +20,7 @@ mysql -h0 -P1306 -e "SHOW SETTINGS;"
 | searchd.query_log_format   | sphinxql                                                   |
 | searchd.query_log_commands | 1                                                          |
 | searchd.server_id          | 1                                                          |
+| searchd.watchdog           | 0                                                          |
 | searchd.binlog_path        | /var/log/manticore-1/binlog                                |
 | common.plugin_dir          | /usr/local/lib/manticore                                   |
 | common.lemmatizer_base     | /usr/share/manticore/                                      |

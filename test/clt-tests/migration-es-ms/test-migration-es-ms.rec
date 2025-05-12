@@ -38,7 +38,7 @@ docker exec manticore bash -c 'page=1; all_versions=""; while true; do json=$(cu
 ––– input –––
 docker exec manticore cat /tmp/latest_version
 ––– output –––
-8.#!/[0-9]{1,2}.[0-9]{1,2}/!#
+9.#!/[0-9]{1,2}.[0-9]{1,2}/!#
 ––– input –––
 latest=$(docker exec manticore cat /tmp/latest_version) && echo "Latest version: $latest" && docker pull docker.elastic.co/elasticsearch/elasticsearch:$latest > /dev/null 2>&1 && echo $?
 ––– output –––

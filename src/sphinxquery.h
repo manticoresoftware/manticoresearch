@@ -42,7 +42,7 @@ struct XQKeyword_t
 
 
 /// extended query operator
-enum XQOperator_e
+enum XQOperator_e : BYTE
 {
 	SPH_QUERY_AND,
 	SPH_QUERY_OR,
@@ -145,7 +145,7 @@ struct XQNode_t : public ISphNoncopyable
 	XQNode_t *				m_pParent = nullptr;		///< my parent node (NULL for root ones)
 
 private:
-	XQOperator_e			m_eOp { SPH_QUERY_AND };	///< operation over childen
+	XQOperator_e			m_eOp { SPH_QUERY_AND };	///< operation over children
 	int						m_iOrder = 0;
 	int						m_iCounter = 0;
 
@@ -174,8 +174,8 @@ public:
 	/// check if i'm empty
 	bool IsEmpty () const
 	{
-		assert ( m_dWords.GetLength()==0 || m_dChildren.GetLength()==0 );
-		return m_dWords.GetLength()==0 && m_dChildren.GetLength()==0;
+		assert ( m_dWords.IsEmpty() || m_dChildren.IsEmpty() );
+		return m_dWords.IsEmpty() && m_dChildren.IsEmpty();
 	}
 
 	/// setup field limits
@@ -191,7 +191,7 @@ public:
 	void ClearFieldMask ();
 
 	/// get my operator
-	XQOperator_e GetOp () const
+	XQOperator_e GetOp () const noexcept
 	{
 		return m_eOp;
 	}
@@ -216,22 +216,22 @@ public:
 	}
 
 	/// hash me
-	uint64_t GetHash () const;
+	uint64_t GetHash () const noexcept;
 
 	/// fuzzy hash ( a hash value is equal for proximity and phrase nodes
 	/// with similar keywords )
-	uint64_t GetFuzzyHash () const;
+	uint64_t GetFuzzyHash () const noexcept;
 
 	/// setup new operator and args
-	void SetOp ( XQOperator_e eOp, XQNode_t * pArg1, XQNode_t * pArg2=NULL );
+	void SetOp ( XQOperator_e eOp, XQNode_t * pArg1, XQNode_t * pArg2=nullptr );
 
 	/// setup new operator and args
 	void SetOp ( XQOperator_e eOp, CSphVector<XQNode_t*> & dArgs )
 	{
 		m_eOp = eOp;
 		m_dChildren.SwapData(dArgs);
-		ARRAY_FOREACH ( i, m_dChildren )
-			m_dChildren[i]->m_pParent = this;
+		for ( auto* pChild : m_dChildren )
+			pChild->m_pParent = this;
 	}
 
 	/// setup new operator (careful parser/transform use only)
@@ -243,13 +243,10 @@ public:
 	/// fixup atom positions in case of proximity queries and blended chars
 	/// we need to handle tokens with blended characters as simple tokens in this case
 	/// and we need to remove possible gaps in atom positions
-	int FixupAtomPos();
+	int FixupAtomPos() const noexcept;
 
 	/// return node like current
-	inline XQNode_t * Clone ();
-
-	/// force resetting magic hash value ( that changed after transformation )
-	inline bool ResetHash ();
+	inline XQNode_t * Clone () const noexcept;
 
 #ifndef NDEBUG
 	/// consistency check
@@ -378,7 +375,7 @@ private:
 	void			FixupNulls ( XQNode_t * pNode );
 	void			DeleteNodesWOFields ( XQNode_t * pNode );
 	void			FixupDestForms();
-	bool			CheckQuorumProximity ( XQNode_t * pNode );
+	bool			CheckQuorumProximity ( const XQNode_t * pNode );
 };
 
 //////////////////////////////////////////////////////////////////////////////

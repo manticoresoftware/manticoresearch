@@ -297,7 +297,7 @@ void XQParseHelper_c::Cleanup()
 }
 
 
-bool XQParseHelper_c::CheckQuorumProximity ( XQNode_t * pNode )
+bool XQParseHelper_c::CheckQuorumProximity ( const XQNode_t * pNode )
 {
 	if ( !pNode )
 		return true;
@@ -308,8 +308,7 @@ bool XQParseHelper_c::CheckQuorumProximity ( XQNode_t * pNode )
 	{
 		if ( pNode->m_bPercentOp )
 			return Error ( "quorum threshold out of bounds 0.0 and 1.0f (%f)", 1.0f / 100.0f * pNode->m_iOpArg );
-		else
-			return Error ( "quorum threshold too low (%d)", pNode->m_iOpArg );
+		return Error ( "quorum threshold too low (%d)", pNode->m_iOpArg );
 	}
 
 	if ( pNode->GetOp()==SPH_QUERY_PROXIMITY && pNode->m_iOpArg<1 )
@@ -425,7 +424,7 @@ XQNode_t * XQParseHelper_c::FixupTree ( XQNode_t * pRoot, const XQLimitSpec_t & 
 XQNode_t * XQParseHelper_c::SweepNulls ( XQNode_t * pNode, bool bOnlyNotAllowed )
 {
 	if ( !pNode )
-		return NULL;
+		return nullptr;
 
 	// sweep plain node
 	if ( pNode->m_dWords.GetLength() )
@@ -607,7 +606,7 @@ bool XQParseHelper_c::FixupNots ( XQNode_t * pNode, bool bOnlyNotAllowed, XQNode
 	pAnd->SetOp ( SPH_QUERY_AND, pNode->m_dChildren );
 	m_dSpawned.Add ( pAnd );
 
-	XQNode_t * pNot = NULL;
+	XQNode_t * pNot = nullptr;
 	if ( dNots.GetLength()==1 )
 	{
 		pNot = dNots[0];
@@ -661,11 +660,10 @@ void XQParseHelper_c::DeleteNodesWOFields ( XQNode_t * pNode )
 			// this should be a leaf node
 			SafeDelete ( pNode->m_dChildren[i] );
 			pNode->m_dChildren.RemoveFast ( i );
-
 		} else
 		{
 			DeleteNodesWOFields ( pNode->m_dChildren[i] );
-			i++;
+			++i;
 		}
 	}
 }
@@ -678,9 +676,8 @@ void XQParseHelper_c::FixupDestForms ()
 
 	CSphVector<XQNode_t *> dForms;
 
-	ARRAY_FOREACH ( iNode, m_dMultiforms )
+	for ( const MultiformNode_t & tDesc : m_dMultiforms )
 	{
-		const MultiformNode_t & tDesc = m_dMultiforms[iNode];
 		XQNode_t * pMultiParent = tDesc.m_pNode;
 		assert ( pMultiParent->m_dWords.GetLength()==1 && pMultiParent->m_dChildren.GetLength()==0 );
 
@@ -700,14 +697,15 @@ void XQParseHelper_c::FixupDestForms ()
 		m_dSpawned.Add ( pMultiHead );
 		dForms.Add ( pMultiHead );
 
-		for ( int iForm=0; iForm<tDesc.m_iDestCount; iForm++ )
+		for ( int iForm=0; iForm<tDesc.m_iDestCount; ++iForm )
 		{
-			tKeyword.m_iAtomPos++;
-			tKeyword.m_sWord = m_dDestForms [ tDesc.m_iDestStart + iForm ];
-
+			++tKeyword.m_iAtomPos;
+			const auto& sWord =  m_dDestForms [ tDesc.m_iDestStart + iForm ];
 			// propagate exact word flag to all destination forms
 			if ( bExact )
-				tKeyword.m_sWord.SetSprintf ( "=%s", tKeyword.m_sWord.cstr() );
+				tKeyword.m_sWord.SetSprintf ( "=%s", sWord.cstr() );
+			else
+				tKeyword.m_sWord = sWord;
 
 			XQNode_t * pMulti = new XQNode_t ( pMultiParent->m_dSpec );
 			pMulti->m_dWords.Add ( tKeyword );
@@ -762,10 +760,9 @@ static void TransformMorphOnlyFields ( XQNode_t * pNode, const CSphBitvec & tMor
 					});
 			}
 
-			if ( ( iField+1 )<tMorphDisabledFields.GetSize() )
-				iField=tMorphDisabledFields.Scan ( iField+1 );
-			else
+			if ( ( iField+1 )>=tMorphDisabledFields.GetSize() )
 				break;
+			iField=tMorphDisabledFields.Scan ( iField+1 );
 		}
 	}
 }
@@ -917,7 +914,7 @@ XQNode_t::~XQNode_t ()
 }
 
 
-void XQNode_t::SetFieldSpec ( const FieldMask_t& uMask, int iMaxPos )
+void XQNode_t::SetFieldSpec ( const FieldMask_t & uMask, int iMaxPos )
 {
 	// set it, if we do not yet have one
 	if ( !m_dSpec.m_bFieldSpec )
@@ -969,7 +966,7 @@ void XQNode_t::ClearFieldMask ()
 }
 
 
-uint64_t XQNode_t::GetHash () const
+uint64_t XQNode_t::GetHash () const noexcept
 {
 	if ( m_iMagicHash )
 		return m_iMagicHash;
@@ -989,7 +986,7 @@ uint64_t XQNode_t::GetHash () const
 }
 
 
-uint64_t XQNode_t::GetFuzzyHash () const
+uint64_t XQNode_t::GetFuzzyHash () const noexcept
 {
 	if ( m_iFuzzyHash )
 		return m_iFuzzyHash;
@@ -1026,7 +1023,7 @@ void XQNode_t::SetOp ( XQOperator_e eOp, XQNode_t * pArg1, XQNode_t * pArg2 )
 }
 
 
-int XQNode_t::FixupAtomPos()
+int XQNode_t::FixupAtomPos() const noexcept
 {
 	assert ( m_eOp==SPH_QUERY_PROXIMITY && m_dWords.GetLength()>0 );
 
@@ -1044,7 +1041,7 @@ int XQNode_t::FixupAtomPos()
 }
 
 
-XQNode_t * XQNode_t::Clone ()
+XQNode_t * XQNode_t::Clone () const noexcept
 {
 	XQNode_t * pRet = new XQNode_t ( m_dSpec );
 	pRet->SetOp ( m_eOp );
@@ -1067,15 +1064,6 @@ XQNode_t * XQNode_t::Clone ()
 	}
 
 	return pRet;
-}
-
-
-bool XQNode_t::ResetHash ()
-{
-	bool bAlreadyReset = ( m_iMagicHash==0 && m_iFuzzyHash==0 );
-	m_iMagicHash = 0;
-	m_iFuzzyHash = 0;
-	return bAlreadyReset;
 }
 
 
@@ -2852,58 +2840,58 @@ private:
 	bool	CollectRelatedNodes ( const CSphVector<XQNode_t *> & dSimilarNodes );
 
 	// ((A !N) | (B !N)) -> ((A|B) !N)
-	static bool CheckCommonNot ( const XQNode_t * pNode );
-	bool		TransformCommonNot ();
+	static bool CheckCommonNot ( const XQNode_t * pNode ) noexcept;
+	bool		TransformCommonNot () noexcept;
 	bool		MakeTransformCommonNot ( CSphVector<XQNode_t *> & dSimilarNodes );
 
 	// ((A !(N AA)) | (B !(N BB))) -> (((A|B) !N) | (A !AA) | (B !BB)) [ if cost(N) > cost(A) + cost(B) ]
-	static bool	CheckCommonCompoundNot ( const XQNode_t * pNode );
-	bool		TransformCommonCompoundNot ();
+	static bool	CheckCommonCompoundNot ( const XQNode_t * pNode ) noexcept;
+	bool		TransformCommonCompoundNot () noexcept;
 	bool		MakeTransformCommonCompoundNot ( CSphVector<XQNode_t *> & dSimilarNodes );
 
 	// ((A (X | AA)) | (B (X | BB))) -> (((A|B) X) | (A AA) | (B BB)) [ if cost(X) > cost(A) + cost(B) ]
-	static bool	CheckCommonSubTerm ( const XQNode_t * pNode );
-	bool		TransformCommonSubTerm ();
+	static bool	CheckCommonSubTerm ( const XQNode_t * pNode ) noexcept;
+	bool		TransformCommonSubTerm () noexcept;
 	void		MakeTransformCommonSubTerm ( CSphVector<XQNode_t *> & dX );
 
 	// (A | "A B"~N) -> A ; ("A B" | "A B C") -> "A B" ; ("A B"~N | "A B C"~N) -> ("A B"~N)
-	static bool CheckCommonKeywords ( const XQNode_t * pNode );
-	bool		TransformCommonKeywords ();
+	static bool CheckCommonKeywords ( const XQNode_t * pNode ) noexcept;
+	bool		TransformCommonKeywords () const noexcept;
 
 	// ("X A B" | "Y A B") -> (("X|Y") "A B")
 	// ("A B X" | "A B Y") -> (("X|Y") "A B")
-	static bool CheckCommonPhrase ( const XQNode_t * pNode );
-	bool 		TransformCommonPhrase ();
-	void		MakeTransformCommonPhrase ( CSphVector<XQNode_t *> & dCommonNodes, int iCommonLen, bool bHeadIsCommon );
+	static bool CheckCommonPhrase ( const XQNode_t * pNode ) noexcept;
+	bool 		TransformCommonPhrase () noexcept;
+	static void		MakeTransformCommonPhrase ( CSphVector<XQNode_t *> & dCommonNodes, int iCommonLen, bool bHeadIsCommon );
 
 	// ((A !X) | (A !Y) | (A !Z)) -> (A !(X Y Z))
-	static bool CheckCommonAndNotFactor ( const XQNode_t * pNode );
-	bool		TransformCommonAndNotFactor ();
+	static bool CheckCommonAndNotFactor ( const XQNode_t * pNode ) noexcept;
+	bool		TransformCommonAndNotFactor () noexcept;
 	bool		MakeTransformCommonAndNotFactor ( CSphVector<XQNode_t *> & dSimilarNodes );
 
 	// ((A !(N | N1)) | (B !(N | N2))) -> (( (A !N1) | (B !N2) ) !N)
-	static bool CheckCommonOrNot ( const XQNode_t * pNode );
-	bool 		TransformCommonOrNot ();
+	static bool CheckCommonOrNot ( const XQNode_t * pNode ) noexcept;
+	bool 		TransformCommonOrNot () noexcept;
 	bool		MakeTransformCommonOrNot ( CSphVector<XQNode_t *> & dSimilarNodes );
 
 	// The main goal of transformations below is tree clarification and
 	// further applying of standard transformations above.
 
 	// "hung" operand ( AND(OR) node with only 1 child ) appears after an internal transformation
-	static bool CheckHungOperand ( const XQNode_t * pNode );
-	bool		TransformHungOperand ();
+	static bool CheckHungOperand ( const XQNode_t * pNode ) noexcept;
+	bool		TransformHungOperand () const noexcept;
 
 	// ((A | B) | C) -> ( A | B | C )
 	// ((A B) C) -> ( A B C )
-	static bool CheckExcessBrackets ( const XQNode_t * pNode );
-	bool 		TransformExcessBrackets ();
+	static bool CheckExcessBrackets ( const XQNode_t * pNode ) noexcept;
+	bool 		TransformExcessBrackets () const noexcept;
 
 	// ((A !N1) !N2) -> (A !(N1 | N2))
-	static bool CheckExcessAndNot ( const XQNode_t * pNode );
-	bool		TransformExcessAndNot ();
+	static bool CheckExcessAndNot ( const XQNode_t * pNode ) noexcept;
+	bool		TransformExcessAndNot () const noexcept;
 
 private:
-	static const uint64_t CONST_GROUP_FACTOR;
+	static constexpr uint64_t CONST_GROUP_FACTOR = 0;
 
 	struct NullNode
 	{
@@ -2941,9 +2929,6 @@ CSphTransformation::CSphTransformation ( XQNode_t ** ppRoot, const ISphKeywordsS
 {}
 
 
-
-const uint64_t CSphTransformation::CONST_GROUP_FACTOR = 0;
-
 template < typename Group, typename SubGroup >
 void CSphTransformation::TreeCollectInfo ( XQNode_t * pParent, Checker_fn pfnChecker )
 {
@@ -2953,8 +2938,8 @@ void CSphTransformation::TreeCollectInfo ( XQNode_t * pParent, Checker_fn pfnChe
 	if ( pfnChecker ( pParent ) )
 	{
 		// "Similar nodes" are nodes which are suited to a template (like 'COMMON NOT', 'COMMON COMPOND NOT', ...)
-		uint64_t uGroup = (uint64_t)Group::From ( pParent );
-		uint64_t uSubGroup = SubGroup::By ( pParent );
+		const uint64_t uGroup = (uint64_t)Group::From ( pParent );
+		const uint64_t uSubGroup = SubGroup::By ( pParent );
 
 		HashSimilar_t & hGroup = m_hSimilar.AddUnique ( uGroup );
 		hGroup.AddUnique ( uSubGroup ).Add ( pParent );
@@ -2993,8 +2978,8 @@ void CSphTransformation::SetCosts ( XQNode_t * pNode, const CSphVector<XQNode_t 
 
 	// collect unknown keywords from all children
 	CSphVector<CSphKeywordInfo> dKeywords;
-	SmallStringHash_T<int>	hCosts;
-	ARRAY_FOREACH ( i, dChildren )
+	SmallStringHash_T<int> hCosts;
+	ARRAY_FOREACH ( i, dChildren ) // don't use 'ranged for' here, as dChildren modified during the loop
 	{
 		XQNode_t * pChild = dChildren[i];
 		for ( XQNode_t* pGrandChild : pChild->m_dChildren )
@@ -3057,11 +3042,11 @@ bool CSphTransformation::CollectRelatedNodes ( const CSphVector<XQNode_t *> & dS
 			m_dRelatedNodes.Add ( pChild );
 		}
 	}
-	return ( m_dRelatedNodes.GetLength()>1 );
+	return m_dRelatedNodes.GetLength()>1;
 }
 
 
-bool CSphTransformation::CheckCommonNot ( const XQNode_t * pNode )
+bool CSphTransformation::CheckCommonNot ( const XQNode_t * pNode ) noexcept
 {
 	if ( !pNode || !pNode->m_pParent || !pNode->m_pParent->m_pParent || !pNode->m_pParent->m_pParent->m_pParent ||
 			pNode->m_pParent->GetOp()!=SPH_QUERY_NOT || pNode->m_pParent->m_pParent->GetOp()!=SPH_QUERY_ANDNOT ||
@@ -3083,7 +3068,7 @@ bool CSphTransformation::CheckCommonNot ( const XQNode_t * pNode )
 }
 
 
-bool CSphTransformation::TransformCommonNot ()
+bool CSphTransformation::TransformCommonNot () noexcept
 {
 	bool bRecollect = false;
 	for ( auto& tSimSimilar : m_hSimilar )
@@ -3121,7 +3106,7 @@ int CSphTransformation::GetWeakestIndex ( const CSphVector<XQNode_t *> & dNodes 
 	int iWeakestIndex = 0;
 	int iProximity = -1;
 
-	ARRAY_FOREACH ( i, dNodes )
+	ARRAY_CONSTFOREACH ( i, dNodes )
 	{
 		XQNode_t * pNode = dNodes[i];
 		if ( pNode->GetOp()==SPH_QUERY_PROXIMITY && pNode->m_iOpArg>iProximity )
@@ -3181,37 +3166,38 @@ bool CSphTransformation::MakeTransformCommonNot ( CSphVector<XQNode_t *> & dSimi
 	pWeakestAndNot->m_dChildren[0] = pHubAnd;
 
 	// in case common OR had only 2 children
-	if ( !bKeepOr )
+	if ( bKeepOr )
+		return true;
+
+	// replace old OR with AND_NOT at parent
+	if ( !pGrandCommonOr )
 	{
-		// replace old OR with AND_NOT at parent
-		if ( !pGrandCommonOr )
+		pWeakestAndNot->m_pParent = nullptr;
+		*m_ppRoot = pWeakestAndNot;
+	} else
+	{
+		pWeakestAndNot->m_pParent = pGrandCommonOr;
+		CSphVector<XQNode_t *> & dChildren = pGrandCommonOr->m_dChildren;
+		for ( XQNode_t *& pChild : dChildren )
 		{
-			pWeakestAndNot->m_pParent = NULL;
-			*m_ppRoot = pWeakestAndNot;
-		} else
-		{
-			pWeakestAndNot->m_pParent = pGrandCommonOr;
-			CSphVector<XQNode_t *> & dChildren = pGrandCommonOr->m_dChildren;
-			ARRAY_FOREACH ( i, dChildren )
+			if ( pChild==pCommonOr )
 			{
-				if ( dChildren[i]==pCommonOr )
-				{
-					dChildren[i] = pWeakestAndNot;
-					break;
-				}
+				pChild = pWeakestAndNot;
+				break;
 			}
 		}
-		// remove new parent ( AND OR ) from OR children
-		Verify ( pCommonOr->m_dChildren.RemoveValue ( pWeakestAndNot ) );
-		// free OR and all children
-		SafeDelete ( pCommonOr );
 	}
 
+	// remove new parent ( AND OR ) from OR children
+	Verify ( pCommonOr->m_dChildren.RemoveValue ( pWeakestAndNot ) );
+
+	// free OR and all children
+	SafeDelete ( pCommonOr );
 	return true;
 }
 
 
-bool CSphTransformation::CheckCommonCompoundNot ( const XQNode_t * pNode )
+bool CSphTransformation::CheckCommonCompoundNot ( const XQNode_t * pNode ) noexcept
 {
 	if ( !pNode || !pNode->m_pParent || !pNode->m_pParent->m_pParent || !pNode->m_pParent->m_pParent->m_pParent ||
 			!pNode->m_pParent->m_pParent->m_pParent->m_pParent || pNode->m_pParent->GetOp()!=SPH_QUERY_AND ||
@@ -3236,7 +3222,7 @@ bool CSphTransformation::CheckCommonCompoundNot ( const XQNode_t * pNode )
 }
 
 
-bool CSphTransformation::TransformCommonCompoundNot ()
+bool CSphTransformation::TransformCommonCompoundNot () noexcept
 {
 	bool bRecollect = false;
 	for ( auto& tSimSimilar : m_hSimilar )
@@ -3325,7 +3311,7 @@ bool CSphTransformation::MakeTransformCommonCompoundNot ( CSphVector<XQNode_t *>
 }
 
 
-bool CSphTransformation::CheckCommonSubTerm ( const XQNode_t * pNode )
+bool CSphTransformation::CheckCommonSubTerm ( const XQNode_t * pNode ) noexcept
 {
 	return pNode && ( pNode->GetOp()!=SPH_QUERY_PHRASE || pNode->m_dChildren.IsEmpty() )
 		&& pNode->m_pParent && pNode->m_pParent->m_pParent && pNode->m_pParent->m_pParent->m_pParent
@@ -3344,7 +3330,7 @@ bool CSphTransformation::CheckCommonSubTerm ( const XQNode_t * pNode )
 }
 
 
-bool CSphTransformation::TransformCommonSubTerm ()
+bool CSphTransformation::TransformCommonSubTerm () noexcept
 {
 	bool bRecollect = false;
 	for ( auto& tSimSimilar : m_hSimilar )
@@ -3357,37 +3343,37 @@ bool CSphTransformation::TransformCommonSubTerm ()
 				continue;
 
 			// skip common sub-terms from same tree
-			bool bSame = false;
-			for ( int i=0; i<dX.GetLength()-1 && !bSame; i++ )
-			{
-				for ( int j=i+1; j<dX.GetLength() && !bSame; j++ )
-					bSame = ( dX[i]->m_pParent==dX[j]->m_pParent );
-			}
+			const bool bSame = [&dX] {
+				for ( int i = 0; i < dX.GetLength() - 1; ++i )
+					for ( int j = i + 1; j < dX.GetLength(); ++j )
+						if ( dX[i]->m_pParent == dX[j]->m_pParent )
+							return true;
+				return false;
+			}();
 			if ( bSame )
 				continue;
 
-			if ( CollectRelatedNodes < ParentNode, GrandNode> ( dX ) )
-			{
-				// Load cost of the first node from the group
-				// of the common nodes. The cost of nodes from
-				// TransformableNodes are the same.
-				SetCosts ( dX[0], m_dRelatedNodes );
-				int iCostCommonSubTermNode = dX[0]->m_iUser;
-				int iCostRelatedNodes = 0;
-				ARRAY_FOREACH ( i, m_dRelatedNodes )
-					iCostRelatedNodes += m_dRelatedNodes[i]->m_iUser;
+			if ( !CollectRelatedNodes < ParentNode, GrandNode> ( dX ) )
+				continue;
 
-				// Check that optimization will be useful.
-				if ( iCostCommonSubTermNode > iCostRelatedNodes )
-				{
-					MakeTransformCommonSubTerm ( dX );
-					bRecollect = true;
-					// Don't make transformation for other nodes from the same OR-node,
-					// because query tree was changed and further transformations
-					// might be invalid.
-					break;
-				}
-			}
+			// Load cost of the first node from the group
+			// of the common nodes. The cost of nodes from
+			// TransformableNodes are the same.
+			SetCosts ( dX[0], m_dRelatedNodes );
+			int iCostCommonSubTermNode = dX[0]->m_iUser;
+			int iCostRelatedNodes = 0;
+			for_each ( m_dRelatedNodes, [&iCostRelatedNodes] (XQNode_t* pNode) { iCostRelatedNodes += pNode->m_iUser; });
+
+			// Check that optimization will be useful.
+			if ( iCostCommonSubTermNode <= iCostRelatedNodes )
+				continue;
+
+			MakeTransformCommonSubTerm ( dX );
+			bRecollect = true;
+			// Don't make transformation for other nodes from the same OR-node,
+			// because query tree was changed and further transformations
+			// might be invalid.
+			break;
 		}
 	}
 
@@ -3403,11 +3389,8 @@ static bool SubtreeRemoveEmpty ( XQNode_t * pNode )
 
 	// climb up
 	XQNode_t * pParent = pNode->m_pParent;
-	while ( pParent && pParent->m_dChildren.GetLength()<=1 && !pParent->m_dWords.GetLength() )
-	{
-		pNode = pParent;
-		pParent = pParent->m_pParent;
-	}
+	while ( pParent && pParent->m_dChildren.GetLength()<=1 && pParent->m_dWords.IsEmpty() )
+		pNode = std::exchange ( pParent, pParent->m_pParent );
 
 	if ( pParent )
 		pParent->m_dChildren.RemoveValue ( pNode );
@@ -3418,34 +3401,33 @@ static bool SubtreeRemoveEmpty ( XQNode_t * pNode )
 }
 
 
-// eliminate composite ( AND \ OR ) nodes with only one children
+// eliminate composite ( AND / OR ) nodes with only one children
 static void CompositeFixup ( XQNode_t * pNode, XQNode_t ** ppRoot )
 {
-	assert ( pNode && !pNode->m_dWords.GetLength() );
-	if ( pNode->m_dChildren.GetLength()!=1 || !( pNode->GetOp()==SPH_QUERY_OR || pNode->GetOp()==SPH_QUERY_AND ) )
+	assert ( pNode && pNode->m_dWords.IsEmpty() );
+	if ( pNode->m_dChildren.GetLength()!=1 || ( pNode->GetOp()!=SPH_QUERY_OR && pNode->GetOp()!=SPH_QUERY_AND ) )
 		return;
 
-	XQNode_t * pChild = pNode->m_dChildren[0];
-	pChild->m_pParent = NULL;
+	XQNode_t * pChild = pNode->m_dChildren.First();
+	pChild->m_pParent = nullptr;
 	pNode->m_dChildren.Resize ( 0 );
 
 	// climb up
 	XQNode_t * pParent = pNode->m_pParent;
-	while ( pParent && pParent->m_dChildren.GetLength()==1 && !pParent->m_dWords.GetLength() &&
+	while ( pParent && pParent->m_dChildren.GetLength()==1 && pParent->m_dWords.IsEmpty() &&
 		( pParent->GetOp()==SPH_QUERY_OR || pParent->GetOp()==SPH_QUERY_AND ) )
 	{
-		pNode = pParent;
-		pParent = pParent->m_pParent;
+		pNode = std::exchange (pParent, pParent->m_pParent);
 	}
 
 	if ( pParent )
 	{
-		ARRAY_FOREACH ( i, pParent->m_dChildren )
+		for ( auto& dChild : pParent->m_dChildren )
 		{
-			if ( pParent->m_dChildren[i]!=pNode )
+			if ( dChild!=pNode )
 				continue;
 
-			pParent->m_dChildren[i] = pChild;
+			dChild = pChild;
 			pChild->m_pParent = pParent;
 			break;
 		}
@@ -3476,7 +3458,7 @@ void CSphTransformation::MakeTransformCommonSubTerm ( CSphVector<XQNode_t *> & d
 	int iWeakestIndex = GetWeakestIndex ( dX );
 	XQNode_t * pX = dX[iWeakestIndex];
 
-	// common parents of X and AA \ BB need to be excluded
+	// common parents of X and AA / BB need to be excluded
 	CSphVector<XQNode_t *> dExcluded ( dX.GetLength() );
 
 	// Factor out and delete/unlink similar nodes ( except weakest )
@@ -3492,21 +3474,20 @@ void CSphTransformation::MakeTransformCommonSubTerm ( CSphVector<XQNode_t *> & d
 	}
 
 	CSphVector<XQNode_t *> dRelatedParents;
-	for ( int i=0; i<m_dRelatedNodes.GetLength(); i++ )
+	for ( XQNode_t * pRelated : m_dRelatedNodes )
 	{
-		XQNode_t * pParent = m_dRelatedNodes[i]->m_pParent;
+		XQNode_t * pParent = pRelated->m_pParent;
 		if ( !dRelatedParents.Contains ( pParent ) )
 			dRelatedParents.Add ( pParent );
 	}
 
-	ARRAY_FOREACH ( i, dRelatedParents )
-		dRelatedParents[i] = dRelatedParents[i]->Clone();
+	for ( XQNode_t *& pRelated : dRelatedParents )
+		pRelated = pRelated->Clone();
 
 	// push excluded children back
-	ARRAY_FOREACH ( i, dExcluded )
+	for ( XQNode_t * pExcluded: dExcluded )
 	{
-		XQNode_t * pChild = dExcluded[i];
-		pChild->m_pParent->m_dChildren.Add ( pChild );
+		pExcluded->m_pParent->m_dChildren.Add ( pExcluded );
 	}
 
 	XQNode_t * pNewOr = new XQNode_t ( XQLimitSpec_t() );
@@ -3520,14 +3501,12 @@ void CSphTransformation::MakeTransformCommonSubTerm ( CSphVector<XQNode_t *> & d
 	pCommonOr->m_dChildren.Add ( pNewAnd );
 	pNewAnd->m_pParent = pCommonOr;
 
-	ARRAY_FOREACH ( i, dExcluded )
-	{
-		CleanupSubtree ( dExcluded[i], m_ppRoot );
-	}
+	for ( auto* pExcluded : dExcluded )
+		CleanupSubtree ( pExcluded, m_ppRoot );
 }
 
 
-bool CSphTransformation::CheckCommonKeywords ( const XQNode_t * pNode )
+bool CSphTransformation::CheckCommonKeywords ( const XQNode_t * pNode ) noexcept
 {
 	if ( !pNode || !pNode->m_pParent || pNode->m_pParent->GetOp()!=SPH_QUERY_OR || !pNode->m_dWords.GetLength() )
 	{
@@ -3543,8 +3522,7 @@ bool CSphTransformation::CheckCommonKeywords ( const XQNode_t * pNode )
 }
 
 
-typedef CSphOrderedHash<CSphVector<XQNode_t *>, uint64_t, IdentityHash_fn, 128> BigramHash_t;
-
+using BigramHash_t = CSphOrderedHash<CSphVector<XQNode_t *>, uint64_t, IdentityHash_fn, 128>;
 
 static int sphBigramAddNode ( XQNode_t * pNode, int64_t uHash, BigramHash_t & hBirgam )
 {
@@ -3555,11 +3533,10 @@ static int sphBigramAddNode ( XQNode_t * pNode, int64_t uHash, BigramHash_t & hB
 		dNode[0] = pNode;
 		hBirgam.Add ( dNode, uHash );
 		return 1;
-	} else
-	{
-		(*ppNodes).Add ( pNode );
-		return (*ppNodes).GetLength();
 	}
+
+	(*ppNodes).Add ( pNode );
+	return (*ppNodes).GetLength();
 }
 
 static const BYTE g_sPhraseDelimiter[] = { 1 };
@@ -3568,13 +3545,20 @@ static uint64_t sphHashPhrase ( const XQNode_t * pNode )
 {
 	assert ( pNode );
 	uint64_t uHash = SPH_FNV64_SEED;
-	ARRAY_FOREACH ( i, pNode->m_dWords )
+
+	auto iWords = pNode->m_dWords.GetLength();
+	if ( !iWords )
+		return uHash;
+
+	uHash = sphFNV64cont ( pNode->m_dWords.First().m_sWord.cstr(), uHash );
+	if ( iWords==1 )
+		return uHash;
+
+	for ( int i=1; i<iWords; ++i )
 	{
-		if ( i )
-			uHash = sphFNV64 ( g_sPhraseDelimiter, sizeof(g_sPhraseDelimiter), uHash );
+		uHash = sphFNV64 ( g_sPhraseDelimiter, sizeof(g_sPhraseDelimiter), uHash );
 		uHash = sphFNV64cont ( pNode->m_dWords[i].m_sWord.cstr(), uHash );
 	}
-
 	return uHash;
 }
 
@@ -3588,14 +3572,14 @@ static void sphHashSubphrases ( XQNode_t * pNode, BigramHash_t & hBirgam )
 
 	const CSphVector<XQKeyword_t> & dWords = pNode->m_dWords;
 	int iLen = dWords.GetLength();
-	for ( int i=0; i<iLen; i++ )
+	for ( int i=0; i<iLen; ++i )
 	{
 		uint64_t uSubPhrase = sphFNV64cont ( dWords[i].m_sWord.cstr(), SPH_FNV64_SEED );
 		sphBigramAddNode ( pNode, uSubPhrase, hBirgam );
 
 		// skip whole phrase
 		int iSubLen = ( i==0 ? iLen-1 : iLen );
-		for ( int j=i+1; j<iSubLen; j++ )
+		for ( int j=i+1; j<iSubLen; ++j )
 		{
 			uSubPhrase = sphFNV64 ( g_sPhraseDelimiter, sizeof(g_sPhraseDelimiter), uSubPhrase );
 			uSubPhrase = sphFNV64cont ( dWords[j].m_sWord.cstr(), uSubPhrase );
@@ -3604,8 +3588,8 @@ static void sphHashSubphrases ( XQNode_t * pNode, BigramHash_t & hBirgam )
 	}
 
 	// loop all children
-	ARRAY_FOREACH ( i, pNode->m_dChildren )
-		sphHashSubphrases ( pNode->m_dChildren[i], hBirgam );
+	for ( XQNode_t * pChild : pNode->m_dChildren )
+		sphHashSubphrases ( pChild, hBirgam );
 }
 
 
@@ -3644,10 +3628,10 @@ static bool sphIsNodeStrongest ( const XQNode_t * pNode, const CSphVector<XQNode
 		if ( ( eNode==SPH_QUERY_PHRASE || eNode==SPH_QUERY_AND ) && ( eSimilar==SPH_QUERY_PROXIMITY && ( iWords>1 || pNode->m_dChildren.GetLength() ) ) )
 			return false;
 
-		bool bSimilar = ( ( eNode==SPH_QUERY_PHRASE && eSimilar==SPH_QUERY_PHRASE ) ||
-			( ( eNode==SPH_QUERY_PHRASE || eNode==SPH_QUERY_AND ) && ( eSimilar==SPH_QUERY_PHRASE || eSimilar==SPH_QUERY_PROXIMITY ) ) ||
-			( eNode==SPH_QUERY_PROXIMITY && ( eSimilar==SPH_QUERY_AND || eSimilar==SPH_QUERY_PHRASE ) ) ||
-			( eNode==SPH_QUERY_PROXIMITY && eSimilar==SPH_QUERY_PROXIMITY && pNode->m_iOpArg>=dSimilar[i]->m_iOpArg ) );
+		bool bSimilar = ( eNode==SPH_QUERY_PHRASE && eSimilar==SPH_QUERY_PHRASE )
+			|| ( ( eNode==SPH_QUERY_PHRASE || eNode==SPH_QUERY_AND ) && ( eSimilar==SPH_QUERY_PHRASE || eSimilar==SPH_QUERY_PROXIMITY ) )
+			|| ( eNode==SPH_QUERY_PROXIMITY && ( eSimilar==SPH_QUERY_AND || eSimilar==SPH_QUERY_PHRASE ) )
+			|| ( eNode==SPH_QUERY_PROXIMITY && eSimilar==SPH_QUERY_PROXIMITY && pNode->m_iOpArg>=dSimilar[i]->m_iOpArg );
 
 		if ( !bSimilar )
 			return false;
@@ -3657,7 +3641,7 @@ static bool sphIsNodeStrongest ( const XQNode_t * pNode, const CSphVector<XQNode
 }
 
 
-bool CSphTransformation::TransformCommonKeywords ()
+bool CSphTransformation::TransformCommonKeywords () const noexcept
 {
 	CSphVector <XQNode_t *> dPendingDel;
 	for ( auto& tSimSimilar : m_hSimilar )
@@ -3670,18 +3654,17 @@ bool CSphTransformation::TransformCommonKeywords ()
 			if ( dPhrases.GetLength()<2 )
 				continue;
 
-			ARRAY_FOREACH ( i, dPhrases )
-				sphHashSubphrases ( dPhrases[i], hBigrams );
+			for ( XQNode_t * pNode : dPhrases )
+				sphHashSubphrases ( pNode, hBigrams );
 
-			ARRAY_FOREACH ( i, dPhrases )
+			for ( XQNode_t * pNode : dPhrases )
 			{
-				XQNode_t * pNode = dPhrases[i];
 				uint64_t uPhraseHash = sphHashPhrase ( pNode );
 				CSphVector<XQNode_t *> * ppCommon = hBigrams ( uPhraseHash );
 				if ( ppCommon && sphIsNodeStrongest ( pNode, *ppCommon ) )
 				{
-					ARRAY_FOREACH ( j, (*ppCommon) )
-						dPendingDel.Add ( (*ppCommon)[j] );
+					for ( auto pCommon : *ppCommon )
+						dPendingDel.Add ( pCommon );
 				}
 			}
 		}
@@ -3690,17 +3673,16 @@ bool CSphTransformation::TransformCommonKeywords ()
 	bool bTransformed = ( dPendingDel.GetLength()>0 );
 	dPendingDel.Sort();
 	// Delete stronger terms
-	XQNode_t * pLast = NULL;
-	ARRAY_FOREACH ( i, dPendingDel )
+	XQNode_t * pLast = nullptr;
+	for ( XQNode_t * pPending : dPendingDel ) // by value, as later that pointer will be compared
 	{
 		// skip dupes
-		if ( pLast==dPendingDel[i] )
+		if ( pLast == pPending )
 			continue;
 
-		pLast = dPendingDel[i];
+		pLast = pPending;
 		Verify ( pLast->m_pParent->m_dChildren.RemoveValue ( pLast ) );
-		// delete here (not SafeDelete) as later that pointer will be compared
-		delete ( dPendingDel[i] );
+		delete ( pPending );
 	}
 
 	return bTransformed;
@@ -3708,7 +3690,7 @@ bool CSphTransformation::TransformCommonKeywords ()
 
 // minimum words per phrase that might be optimized by CommonSuffix optimization
 
-bool CSphTransformation::CheckCommonPhrase ( const XQNode_t * pNode )
+bool CSphTransformation::CheckCommonPhrase ( const XQNode_t * pNode ) noexcept
 {
 	if ( !pNode || !pNode->m_pParent || pNode->m_pParent->GetOp()!=SPH_QUERY_OR || pNode->GetOp()!=SPH_QUERY_PHRASE || pNode->m_dWords.GetLength()<2 )
 	{
@@ -3775,7 +3757,7 @@ struct XQNodeAtomPos_fn
 };
 
 
-bool CSphTransformation::TransformCommonPhrase ()
+bool CSphTransformation::TransformCommonPhrase () noexcept
 {
 	bool bRecollect = false;
 	for ( auto& tSimSimilar : m_hSimilar )
@@ -3842,9 +3824,8 @@ bool CSphTransformation::TransformCommonPhrase ()
 
 			// for each set of phrases with common words at the head or tail
 			// each word that is same at all phrases makes common length longer
-			ARRAY_FOREACH ( i, dCommon )
+			for ( CommonInfo_t & tCommon : dCommon )
 			{
-				CommonInfo_t & tCommon = dCommon[i];
 				bool bHead = tCommon.m_bHead;
 				const CSphVector<XQNode_t *> & dPhrases = *tCommon.m_pPhrases;
 				// start from third word ( two words at each phrase already matched at bigram hashing )
@@ -3884,14 +3865,12 @@ bool CSphTransformation::TransformCommonPhrase ()
 			{
 				CSphVector<Node2Common_t> dDups ( dCommon.GetLength()*2 );
 				dDups.Resize ( 0 );
-				ARRAY_FOREACH ( i, dCommon )
+				for ( CommonInfo_t & tCommon : dCommon )
 				{
-					CommonInfo_t & tCommon = dCommon[i];
-					CSphVector<XQNode_t *> & dPhrases = *tCommon.m_pPhrases;
-					ARRAY_FOREACH ( j, dPhrases )
+					for ( XQNode_t * pPhrase : *tCommon.m_pPhrases )
 					{
 						Node2Common_t & tDup = dDups.Add();
-						tDup.m_pNode = dPhrases[j];
+						tDup.m_pNode = pPhrase;
 						tDup.m_pCommon = &tCommon;
 					}
 				}
@@ -3910,9 +3889,8 @@ bool CSphTransformation::TransformCommonPhrase ()
 				}
 			}
 
-			ARRAY_FOREACH ( i, dCommon )
+			for ( const CommonInfo_t & tElem : dCommon )
 			{
-				const CommonInfo_t & tElem = dCommon[i];
 				if ( !tElem.m_bHasBetter )
 				{
 					tElem.m_pPhrases->Sort ( XQNodeAtomPos_fn() );
@@ -3936,18 +3914,18 @@ void CSphTransformation::MakeTransformCommonPhrase ( CSphVector<XQNode_t *> & dC
 	if ( bHeadIsCommon )
 	{
 		// fill up common suffix
-		XQNode_t * pPhrase = dCommonNodes[0];
+		const XQNode_t * pPhrase = dCommonNodes[0];
 		pCommonPhrase->m_iAtomPos = pPhrase->m_dWords[0].m_iAtomPos;
 		for ( int i=0; i<iCommonLen; i++ )
 			pCommonPhrase->m_dWords.Add ( pPhrase->m_dWords[i] );
 	} else
 	{
-		XQNode_t * pPhrase = dCommonNodes[0];
+		const XQNode_t * pPhrase = dCommonNodes[0];
 		// set the farthest atom position
 		int iAtomPos = pPhrase->m_dWords [ pPhrase->m_dWords.GetLength() - iCommonLen ].m_iAtomPos;
 		for ( int i=1; i<dCommonNodes.GetLength(); i++ )
 		{
-			XQNode_t * pCur = dCommonNodes[i];
+			const XQNode_t * pCur = dCommonNodes[i];
 			int iCurAtomPos = pCur->m_dWords[pCur->m_dWords.GetLength() - iCommonLen].m_iAtomPos;
 			if ( iAtomPos < iCurAtomPos )
 			{
@@ -3964,10 +3942,8 @@ void CSphTransformation::MakeTransformCommonPhrase ( CSphVector<XQNode_t *> & dC
 	XQNode_t * pNewOr = new XQNode_t ( XQLimitSpec_t() );
 	pNewOr->SetOp ( SPH_QUERY_OR );
 
-	ARRAY_FOREACH ( i, dCommonNodes )
+	for ( XQNode_t * pPhrase : dCommonNodes )
 	{
-		XQNode_t * pPhrase = dCommonNodes[i];
-
 		// remove phrase from parent and eliminate in case of common phrase duplication
 		Verify ( pGrandOr->m_dChildren.RemoveValue ( pPhrase ) );
 		if ( pPhrase->m_dWords.GetLength()==iCommonLen )
@@ -4026,7 +4002,7 @@ void CSphTransformation::MakeTransformCommonPhrase ( CSphVector<XQNode_t *> & dC
 }
 
 
-bool CSphTransformation::CheckCommonAndNotFactor ( const XQNode_t * pNode )
+bool CSphTransformation::CheckCommonAndNotFactor ( const XQNode_t * pNode ) noexcept
 {
 	if ( !pNode || !pNode->m_pParent || !pNode->m_pParent->m_pParent || !pNode->m_pParent->m_pParent->m_pParent ||
 			pNode->m_pParent->GetOp()!=SPH_QUERY_AND || pNode->m_pParent->m_pParent->GetOp()!=SPH_QUERY_ANDNOT ||
@@ -4050,7 +4026,7 @@ bool CSphTransformation::CheckCommonAndNotFactor ( const XQNode_t * pNode )
 }
 
 
-bool CSphTransformation::TransformCommonAndNotFactor ()
+bool CSphTransformation::TransformCommonAndNotFactor () noexcept
 {
 	bool bRecollect = false;
 	for ( auto& tSimSimilar : m_hSimilar )
@@ -4105,10 +4081,10 @@ bool CSphTransformation::MakeTransformCommonAndNotFactor ( CSphVector<XQNode_t *
 		assert ( &pAndNew->m_dChildren!=&pNot->m_dChildren );
 		pAndNew->m_dChildren.Add ( pNot->m_dChildren[0] );
 		pAndNew->m_dChildren.Last()->m_pParent = pAndNew;
-		pNot->m_dChildren[0] = NULL;
+		pNot->m_dChildren[0] = nullptr;
 
 		Verify ( pCommonOr->m_dChildren.RemoveValue ( pAndNot ) );
-		dSimilarNodes[i] = NULL;
+		dSimilarNodes[i] = nullptr;
 		SafeDelete ( pAndNot );
 	}
 
@@ -4116,7 +4092,7 @@ bool CSphTransformation::MakeTransformCommonAndNotFactor ( CSphVector<XQNode_t *
 }
 
 
-bool CSphTransformation::CheckCommonOrNot ( const XQNode_t * pNode )
+bool CSphTransformation::CheckCommonOrNot ( const XQNode_t * pNode ) noexcept
 {
 	if ( !pNode || !pNode->m_pParent || !pNode->m_pParent->m_pParent || !pNode->m_pParent->m_pParent->m_pParent ||
 			!pNode->m_pParent->m_pParent->m_pParent->m_pParent || pNode->m_pParent->GetOp()!=SPH_QUERY_OR ||
@@ -4142,7 +4118,7 @@ bool CSphTransformation::CheckCommonOrNot ( const XQNode_t * pNode )
 }
 
 
-bool CSphTransformation::TransformCommonOrNot ()
+bool CSphTransformation::TransformCommonOrNot () noexcept
 {
 	bool bRecollect = false;
 	for ( auto& tSimSimilar : m_hSimilar )
@@ -4171,7 +4147,7 @@ bool CSphTransformation::TransformCommonOrNot ()
 
 bool CSphTransformation::MakeTransformCommonOrNot ( CSphVector<XQNode_t *> & dSimilarNodes )
 {
-	// Pick weakest node from the equal
+	// Pick the weakest node from the equal
 	// PROXIMITY and PHRASE nodes with same keywords have an equal magic hash
 	// so they are considered as equal nodes.
 	int iWeakestIndex = GetWeakestIndex ( dSimilarNodes );
@@ -4199,12 +4175,16 @@ bool CSphTransformation::MakeTransformCommonOrNot ( CSphVector<XQNode_t *> & dSi
 		*m_ppRoot = pNewAndNot;
 	} else
 	{
-		pNewAndNot->m_pParent = pCommonOr->m_pParent;
-		assert ( pCommonOr->m_pParent->m_dChildren.Contains ( pCommonOr ) );
-		ARRAY_FOREACH ( i, pCommonOr->m_pParent->m_dChildren )
+		XQNode_t * pParent = pCommonOr->m_pParent;
+		assert ( pParent->m_dChildren.Contains ( pCommonOr ) );
+		for ( XQNode_t *& pChild : pParent->m_dChildren )
 		{
-			if ( pCommonOr->m_pParent->m_dChildren[i]==pCommonOr )
-				pCommonOr->m_pParent->m_dChildren[i] = pNewAndNot;
+			if ( pChild!=pCommonOr )
+				continue;
+
+			pChild = pNewAndNot;
+			pNewAndNot->m_pParent = pParent;
+			break;
 		}
 	}
 	pNewAnd->SetOp ( SPH_QUERY_AND, pCommonOr );
@@ -4215,7 +4195,7 @@ bool CSphTransformation::MakeTransformCommonOrNot ( CSphVector<XQNode_t *> & dSi
 }
 
 
-bool CSphTransformation::CheckHungOperand ( const XQNode_t * pNode )
+bool CSphTransformation::CheckHungOperand ( const XQNode_t * pNode ) noexcept
 {
 	if ( !pNode || !pNode->m_pParent ||
 			( pNode->m_pParent->GetOp()!=SPH_QUERY_OR && pNode->m_pParent->GetOp()!=SPH_QUERY_AND ) ||
@@ -4235,37 +4215,36 @@ bool CSphTransformation::CheckHungOperand ( const XQNode_t * pNode )
 }
 
 
-bool CSphTransformation::TransformHungOperand ()
+bool CSphTransformation::TransformHungOperand () const noexcept
 {
 	if ( !m_hSimilar.GetLength() || !m_hSimilar.Exists ( CONST_GROUP_FACTOR ) || !m_hSimilar[CONST_GROUP_FACTOR].Exists ( CONST_GROUP_FACTOR ) )
 		return false;
 
 	CSphVector<XQNode_t *> & dSimilarNodes = m_hSimilar[CONST_GROUP_FACTOR][CONST_GROUP_FACTOR];
-	ARRAY_FOREACH ( i, dSimilarNodes )
+	for ( XQNode_t * pHungNode: dSimilarNodes )
 	{
-		XQNode_t * pHungNode = dSimilarNodes[i];
 		XQNode_t * pParent = pHungNode->m_pParent;
 		XQNode_t * pGrand = pParent->m_pParent;
 
 		if ( !pGrand )
 		{
 			*m_ppRoot = pHungNode;
-			pHungNode->m_pParent = NULL;
+			pHungNode->m_pParent = nullptr;
 		} else
 		{
 			assert ( pGrand->m_dChildren.Contains ( pParent ) );
-			ARRAY_FOREACH ( j, pGrand->m_dChildren )
+			for ( XQNode_t *& pChild : pGrand->m_dChildren )
 			{
-				if ( pGrand->m_dChildren[j]!=pParent )
+				if ( pChild!=pParent )
 					continue;
 
-				pGrand->m_dChildren[j] = pHungNode;
+				pChild = pHungNode;
 				pHungNode->m_pParent = pGrand;
 				break;
 			}
 		}
 
-		pParent->m_dChildren[0] = NULL;
+		pParent->m_dChildren[0] = nullptr;
 		SafeDelete ( pParent );
 	}
 
@@ -4273,7 +4252,7 @@ bool CSphTransformation::TransformHungOperand ()
 }
 
 
-bool CSphTransformation::CheckExcessBrackets ( const XQNode_t * pNode )
+bool CSphTransformation::CheckExcessBrackets ( const XQNode_t * pNode ) noexcept
 {
 	if ( !pNode || !pNode->m_pParent || !pNode->m_pParent->m_pParent ||
 			!( ( pNode->m_pParent->GetOp()==SPH_QUERY_AND && !pNode->m_pParent->m_dWords.GetLength() &&
@@ -4336,11 +4315,11 @@ static XQNode_t * sphMoveSiblingsUp ( XQNode_t * pNode )
 
 struct XQNodeHash_fn
 {
-	static inline uint64_t Hash ( XQNode_t * pNode )	{ return (uint64_t)pNode; }
+	static uint64_t Hash ( XQNode_t * pNode ) { return (uint64_t)pNode; }
 };
 
 
-bool CSphTransformation::TransformExcessBrackets ()
+bool CSphTransformation::TransformExcessBrackets () const noexcept
 {
 	bool bRecollect = false;
 	CSphOrderedHash<int, XQNode_t *, XQNodeHash_fn, 64> hDeleted;
@@ -4366,7 +4345,7 @@ bool CSphTransformation::TransformExcessBrackets ()
 }
 
 
-bool CSphTransformation::CheckExcessAndNot ( const XQNode_t * pNode )
+bool CSphTransformation::CheckExcessAndNot ( const XQNode_t * pNode ) noexcept
 {
 	if ( !pNode || !ParentNode::From ( pNode ) || !GrandNode::From ( pNode ) || !Grand2Node::From ( pNode ) || pNode->GetOp()!=SPH_QUERY_AND ||
 			( pNode->m_dChildren.GetLength()==1 && pNode->m_dChildren[0]->GetOp()==SPH_QUERY_ANDNOT ) ||
@@ -4393,7 +4372,7 @@ bool CSphTransformation::CheckExcessAndNot ( const XQNode_t * pNode )
 }
 
 
-bool CSphTransformation::TransformExcessAndNot ()
+bool CSphTransformation::TransformExcessAndNot () const noexcept
 {
 	bool bRecollect = false;
 	CSphOrderedHash<int, XQNode_t *, XQNodeHash_fn, 64> hDeleted;
@@ -4428,14 +4407,14 @@ bool CSphTransformation::TransformExcessAndNot ()
 
 				assert ( pGrandAnd->m_dChildren.Contains ( pParentAndNot ) );
 				int iChild = GetNodeChildIndex ( pGrandAnd, pParentAndNot );
-				if ( iChild >=0 )
+				if ( iChild>=0 )
 					pGrandAnd->m_dChildren[iChild] = pAnd;
 				pAnd->m_pParent = pGrandAnd;
 
 				// Delete excess nodes
 				hDeleted.Add ( 1, pParentAndNot );
 				pNot->m_dChildren.Resize ( 0 );
-				pParentAndNot->m_dChildren[0] = NULL;
+				pParentAndNot->m_dChildren[0] = nullptr;
 				SafeDelete ( pParentAndNot );
 				bRecollect = true;
 			}

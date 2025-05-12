@@ -4204,7 +4204,7 @@ bool CSphTransformation::MakeTransformCommonOrNot ( CSphVector<XQNode_t *> & dSi
 		ARRAY_FOREACH ( i, pCommonOr->m_pParent->m_dChildren )
 		{
 			if ( pCommonOr->m_pParent->m_dChildren[i]==pCommonOr )
-				pCommonOr->m_pParent->m_pParent->m_dChildren[i] = pNewAndNot;
+				pCommonOr->m_pParent->m_dChildren[i] = pNewAndNot;
 		}
 	}
 	pNewAnd->SetOp ( SPH_QUERY_AND, pCommonOr );

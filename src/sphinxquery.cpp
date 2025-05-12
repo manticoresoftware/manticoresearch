@@ -2895,8 +2895,9 @@ private:
 
 	struct NullNode
 	{
-		static inline uint64_t By ( XQNode_t * ) { return CONST_GROUP_FACTOR; } // NOLINT
-		static inline const XQNode_t * From ( const XQNode_t * ) { return NULL; } // NOLINT
+		static uint64_t By ( XQNode_t * ) noexcept { return CONST_GROUP_FACTOR; }
+		static const XQNode_t * From ( const XQNode_t * ) noexcept { return nullptr; }
+		static XQNode_t * From ( XQNode_t * p ) noexcept { return nullptr; }
 	};
 
 
@@ -2904,7 +2905,9 @@ private:
 	struct Grand
 	{
 		static uint64_t By ( const XQNode_t * p ) noexcept { return From ( p )->GetFuzzyHash(); }
-		static constexpr const XQNode_t * From ( const XQNode_t * p ) noexcept
+		static constexpr const XQNode_t * From ( const XQNode_t * p ) noexcept { return From ( const_cast<XQNode_t *> (p) ); }
+
+		static constexpr XQNode_t * From ( XQNode_t * p ) noexcept
 		{
             if constexpr ( INHERITANCE )
             {
@@ -2912,6 +2915,15 @@ private:
                 return Grand<INHERITANCE-1>::From(p)->m_pParent;
             }
             return p;
+		}
+
+
+		static constexpr bool Valid ( const XQNode_t * p ) noexcept
+		{
+			if constexpr ( !INHERITANCE )
+				return p;
+            else
+			    return Grand<INHERITANCE-1>::Valid(p) && From(p);
 		}
 	};
 
@@ -3048,10 +3060,11 @@ bool CSphTransformation::CollectRelatedNodes ( const CSphVector<XQNode_t *> & dS
 
 bool CSphTransformation::CheckCommonNot ( const XQNode_t * pNode ) noexcept
 {
-	if ( !pNode || !pNode->m_pParent || !pNode->m_pParent->m_pParent || !pNode->m_pParent->m_pParent->m_pParent ||
-			pNode->m_pParent->GetOp()!=SPH_QUERY_NOT || pNode->m_pParent->m_pParent->GetOp()!=SPH_QUERY_ANDNOT ||
-			pNode->m_pParent->m_pParent->m_pParent->GetOp()!=SPH_QUERY_OR )
-	{
+	return Grand2Node::Valid(pNode)
+		&& ParentNode::From(pNode)->GetOp()==SPH_QUERY_NOT
+		&& GrandNode::From(pNode)->GetOp()==SPH_QUERY_ANDNOT
+		&& Grand2Node::From(pNode)->GetOp()==SPH_QUERY_OR;
+
 //
 // NOLINT		//  NOT:
 // NOLINT		//		 _______ OR (gGOr) ___________
@@ -3062,9 +3075,6 @@ bool CSphTransformation::CheckCommonNot ( const XQNode_t * pNode ) noexcept
 // NOLINT		//         	               |
 // NOLINT		//         	             pNode
 //
-		return false;
-	}
-	return true;
 }
 
 
@@ -3199,11 +3209,11 @@ bool CSphTransformation::MakeTransformCommonNot ( CSphVector<XQNode_t *> & dSimi
 
 bool CSphTransformation::CheckCommonCompoundNot ( const XQNode_t * pNode ) noexcept
 {
-	if ( !pNode || !pNode->m_pParent || !pNode->m_pParent->m_pParent || !pNode->m_pParent->m_pParent->m_pParent ||
-			!pNode->m_pParent->m_pParent->m_pParent->m_pParent || pNode->m_pParent->GetOp()!=SPH_QUERY_AND ||
-			pNode->m_pParent->m_pParent->GetOp()!=SPH_QUERY_NOT || pNode->m_pParent->m_pParent->m_pParent->GetOp()!=SPH_QUERY_ANDNOT ||
-			pNode->m_pParent->m_pParent->m_pParent->m_pParent->GetOp()!=SPH_QUERY_OR )
-	{
+	return  Grand3Node::Valid(pNode)
+			&& ParentNode::From(pNode)->GetOp()==SPH_QUERY_AND
+			&& GrandNode::From(pNode)->GetOp()==SPH_QUERY_NOT
+			&& Grand2Node::From(pNode)->GetOp()==SPH_QUERY_ANDNOT
+			&& Grand3Node::From(pNode)->GetOp()==SPH_QUERY_OR;
 //
 // NOLINT		//  NOT:
 // NOLINT		//		 __ OR (Grand3 = CommonOr) __
@@ -3216,9 +3226,6 @@ bool CSphTransformation::CheckCommonCompoundNot ( const XQNode_t * pNode ) noexc
 // NOLINT		//                 /    |
 // NOLINT		//               pNode  ...
 //
-		return false;
-	}
-	return true;
 }
 
 
@@ -3272,7 +3279,7 @@ bool CSphTransformation::MakeTransformCommonCompoundNot ( CSphVector<XQNode_t *>
 	XQNode_t * pWeakestSimilar = dSimilarNodes [ iWeakestIndex ];
 
 	// Common OR node (that is Grand3Node::From)
-	XQNode_t * pCommonOr = pWeakestSimilar->m_pParent->m_pParent->m_pParent->m_pParent;
+	XQNode_t * pCommonOr = Grand3Node::From ( pWeakestSimilar );
 
 	// Factor out and delete/unlink similar nodes ( except weakest )
 	ARRAY_FOREACH ( i, dSimilarNodes )
@@ -3313,10 +3320,11 @@ bool CSphTransformation::MakeTransformCommonCompoundNot ( CSphVector<XQNode_t *>
 
 bool CSphTransformation::CheckCommonSubTerm ( const XQNode_t * pNode ) noexcept
 {
-	return pNode && ( pNode->GetOp()!=SPH_QUERY_PHRASE || pNode->m_dChildren.IsEmpty() )
-		&& pNode->m_pParent && pNode->m_pParent->m_pParent && pNode->m_pParent->m_pParent->m_pParent
-		&& pNode->m_pParent->GetOp()==SPH_QUERY_OR && pNode->m_pParent->m_pParent->GetOp()==SPH_QUERY_AND
-		&& pNode->m_pParent->m_pParent->m_pParent->GetOp()==SPH_QUERY_OR;
+	return Grand2Node::Valid(pNode)
+		&& (pNode->GetOp() != SPH_QUERY_PHRASE || pNode->m_dChildren.IsEmpty())
+		&& ParentNode::From(pNode)->GetOp()==SPH_QUERY_OR
+		&& GrandNode::From(pNode)->GetOp()==SPH_QUERY_AND
+		&& Grand2Node::From(pNode)->GetOp()==SPH_QUERY_OR;
 //
 // NOLINT		//  NOT:
 // NOLINT		//        ________OR (gGOr)
@@ -3495,7 +3503,7 @@ void CSphTransformation::MakeTransformCommonSubTerm ( CSphVector<XQNode_t *> & d
 
 	// Create yet another AND node
 	// with related nodes and one common dSimilar node
-	XQNode_t * pCommonOr = pX->m_pParent->m_pParent->m_pParent;
+	XQNode_t * pCommonOr = Grand2Node::From(pX);
 	XQNode_t * pNewAnd = new XQNode_t ( XQLimitSpec_t() );
 	pNewAnd->SetOp ( SPH_QUERY_AND, pNewOr, pX );
 	pCommonOr->m_dChildren.Add ( pNewAnd );
@@ -3508,17 +3516,15 @@ void CSphTransformation::MakeTransformCommonSubTerm ( CSphVector<XQNode_t *> & d
 
 bool CSphTransformation::CheckCommonKeywords ( const XQNode_t * pNode ) noexcept
 {
-	if ( !pNode || !pNode->m_pParent || pNode->m_pParent->GetOp()!=SPH_QUERY_OR || !pNode->m_dWords.GetLength() )
-	{
+	return ParentNode::Valid ( pNode )
+	&& ParentNode::From(pNode)->GetOp()==SPH_QUERY_OR
+	&& !pNode->m_dWords.IsEmpty();
 //
 // NOLINT		//	NOT:
 // NOLINT		// 		 ______________________ OR (parentOr) _______
 // NOLINT		//		/                            |               |
 // NOLINT		//	  pNode (PHRASE|AND|PROXIMITY)  ...	            ...
 //
-		return false;
-	}
-	return true;
 }
 
 
@@ -3692,7 +3698,11 @@ bool CSphTransformation::TransformCommonKeywords () const noexcept
 
 bool CSphTransformation::CheckCommonPhrase ( const XQNode_t * pNode ) noexcept
 {
-	if ( !pNode || !pNode->m_pParent || pNode->m_pParent->GetOp()!=SPH_QUERY_OR || pNode->GetOp()!=SPH_QUERY_PHRASE || pNode->m_dWords.GetLength()<2 )
+	if ( !pNode
+		|| !pNode->m_pParent
+		|| pNode->m_pParent->GetOp()!=SPH_QUERY_OR
+		|| pNode->GetOp()!=SPH_QUERY_PHRASE
+		|| pNode->m_dWords.GetLength()<2 )
 	{
 		//
 		// NOLINT		//  NOT:
@@ -4004,12 +4014,13 @@ void CSphTransformation::MakeTransformCommonPhrase ( CSphVector<XQNode_t *> & dC
 
 bool CSphTransformation::CheckCommonAndNotFactor ( const XQNode_t * pNode ) noexcept
 {
-	if ( !pNode || !pNode->m_pParent || !pNode->m_pParent->m_pParent || !pNode->m_pParent->m_pParent->m_pParent ||
-			pNode->m_pParent->GetOp()!=SPH_QUERY_AND || pNode->m_pParent->m_pParent->GetOp()!=SPH_QUERY_ANDNOT ||
-			pNode->m_pParent->m_pParent->m_pParent->GetOp()!=SPH_QUERY_OR ||
-			// FIXME!!! check performance with OR node at 2nd grand instead of regular not NOT
-			pNode->m_pParent->m_pParent->m_dChildren.GetLength()<2 || pNode->m_pParent->m_pParent->m_dChildren[1]->GetOp()!=SPH_QUERY_NOT )
-	{
+	return Grand2Node::Valid(pNode)
+		&& ParentNode::From(pNode)->GetOp()==SPH_QUERY_AND
+		&& GrandNode::From(pNode)->GetOp()==SPH_QUERY_ANDNOT
+		&& Grand2Node::From(pNode)->GetOp()==SPH_QUERY_OR
+		// FIXME!!! check performance with OR node at 2nd grand instead of regular not NOT
+		&& GrandNode::From(pNode)->m_dChildren.GetLength()>=2
+		&& GrandNode::From(pNode)->m_dChildren[1]->GetOp()==SPH_QUERY_NOT;
 //
 // NOLINT		//  NOT:
 // NOLINT		//		 _______ OR (gGOr) ________________
@@ -4020,9 +4031,6 @@ bool CSphTransformation::CheckCommonAndNotFactor ( const XQNode_t * pNode ) noex
 // NOLINT		//                |       |
 // NOLINT		//              pNode  relatedNode
 //
-		return false;
-	}
-	return true;
 }
 
 
@@ -4053,7 +4061,7 @@ bool CSphTransformation::MakeTransformCommonAndNotFactor ( CSphVector<XQNode_t *
 	// so they are considered as equal nodes.
 	int iWeakestIndex = GetWeakestIndex ( dSimilarNodes );
 
-	XQNode_t * pFirstAndNot = dSimilarNodes [iWeakestIndex]->m_pParent->m_pParent;
+	XQNode_t * pFirstAndNot = GrandNode::From ( dSimilarNodes [iWeakestIndex] );
 	XQNode_t * pCommonOr = pFirstAndNot->m_pParent;
 
 	assert ( pFirstAndNot->m_dChildren.GetLength()==2 );
@@ -4074,7 +4082,7 @@ bool CSphTransformation::MakeTransformCommonAndNotFactor ( CSphVector<XQNode_t *
 		if ( i==iWeakestIndex )
 			continue;
 
-		XQNode_t * pAndNot = dSimilarNodes[i]->m_pParent->m_pParent;
+		XQNode_t * pAndNot = GrandNode::From ( dSimilarNodes[i] );
 		assert ( pAndNot->m_dChildren.GetLength()==2 );
 		XQNode_t * pNot = pAndNot->m_dChildren[1];
 		assert ( pNot->m_dChildren.GetLength()==1 );
@@ -4094,12 +4102,11 @@ bool CSphTransformation::MakeTransformCommonAndNotFactor ( CSphVector<XQNode_t *
 
 bool CSphTransformation::CheckCommonOrNot ( const XQNode_t * pNode ) noexcept
 {
-	if ( !pNode || !pNode->m_pParent || !pNode->m_pParent->m_pParent || !pNode->m_pParent->m_pParent->m_pParent ||
-			!pNode->m_pParent->m_pParent->m_pParent->m_pParent || pNode->m_pParent->GetOp()!=SPH_QUERY_OR ||
-			pNode->m_pParent->m_pParent->GetOp()!=SPH_QUERY_NOT ||
-			pNode->m_pParent->m_pParent->m_pParent->GetOp()!=SPH_QUERY_ANDNOT ||
-			pNode->m_pParent->m_pParent->m_pParent->m_pParent->GetOp()!=SPH_QUERY_OR )
-	{
+	return Grand3Node::Valid(pNode)
+		&& ParentNode::From(pNode)->GetOp()==SPH_QUERY_OR
+		&& GrandNode::From(pNode)->GetOp()==SPH_QUERY_NOT
+		&& Grand2Node::From(pNode)->GetOp()==SPH_QUERY_ANDNOT
+		&& Grand3Node::From(pNode)->GetOp()==SPH_QUERY_OR;
 //
 // NOLINT		//  NOT:
 // NOLINT		//		 __ OR (Grand3 = CommonOr) __
@@ -4112,9 +4119,6 @@ bool CSphTransformation::CheckCommonOrNot ( const XQNode_t * pNode ) noexcept
 // NOLINT		//                 /    |
 // NOLINT		//               pNode  ...
 //
-		return false;
-	}
-	return true;
 }
 
 
@@ -4155,7 +4159,7 @@ bool CSphTransformation::MakeTransformCommonOrNot ( CSphVector<XQNode_t *> & dSi
 	XQNode_t * pWeakestSimilar = dSimilarNodes [ iWeakestIndex ];
 
 	// Common OR node (that is Grand3Node::From)
-	XQNode_t * pCommonOr = pWeakestSimilar->m_pParent->m_pParent->m_pParent->m_pParent;
+	XQNode_t * pCommonOr = Grand3Node::From (pWeakestSimilar);
 
 	// Delete/unlink similar nodes ( except weakest )
 	ARRAY_FOREACH ( i, dSimilarNodes )
@@ -4197,21 +4201,18 @@ bool CSphTransformation::MakeTransformCommonOrNot ( CSphVector<XQNode_t *> & dSi
 
 bool CSphTransformation::CheckHungOperand ( const XQNode_t * pNode ) noexcept
 {
-	if ( !pNode || !pNode->m_pParent ||
-			( pNode->m_pParent->GetOp()!=SPH_QUERY_OR && pNode->m_pParent->GetOp()!=SPH_QUERY_AND ) ||
-			( pNode->m_pParent->m_pParent && pNode->m_pParent->GetOp()==SPH_QUERY_AND &&
-				pNode->m_pParent->m_pParent->GetOp()==SPH_QUERY_ANDNOT ) ||
-				pNode->m_pParent->m_dChildren.GetLength()>1 || pNode->m_dWords.GetLength() )
-	{
+	return ParentNode::Valid(pNode)
+		&& ( ParentNode::From(pNode)->GetOp()==SPH_QUERY_OR || ParentNode::From(pNode)->GetOp()==SPH_QUERY_AND )
+		&& !( GrandNode::Valid(pNode) && ParentNode::From(pNode)->GetOp()==SPH_QUERY_AND && GrandNode::From(pNode)->GetOp()==SPH_QUERY_ANDNOT )
+		&& ParentNode::From(pNode)->m_dChildren.GetLength()<=1
+		&& pNode->m_dWords.IsEmpty();
+
 //
 // NOLINT		//  NOT:
 // NOLINT		//	OR|AND (parent)
 // NOLINT		//		  |
 // NOLINT		//	    pNode\?
 //
-		return false;
-	}
-	return true;
 }
 
 
@@ -4254,11 +4255,12 @@ bool CSphTransformation::TransformHungOperand () const noexcept
 
 bool CSphTransformation::CheckExcessBrackets ( const XQNode_t * pNode ) noexcept
 {
-	if ( !pNode || !pNode->m_pParent || !pNode->m_pParent->m_pParent ||
-			!( ( pNode->m_pParent->GetOp()==SPH_QUERY_AND && !pNode->m_pParent->m_dWords.GetLength() &&
-					pNode->m_pParent->m_pParent->GetOp()==SPH_QUERY_AND ) ||
-					( pNode->m_pParent->GetOp()==SPH_QUERY_OR && pNode->m_pParent->m_pParent->GetOp()==SPH_QUERY_OR ) ) )
-	{
+	return GrandNode::Valid(pNode)
+		&& ( ( ParentNode::From(pNode)->GetOp()==SPH_QUERY_AND
+				&& ParentNode::From(pNode)->m_dWords.IsEmpty()
+				&& GrandNode::From(pNode)->GetOp()==SPH_QUERY_AND )
+			|| ( ParentNode::From(pNode)->GetOp()==SPH_QUERY_OR
+				&& GrandNode::From(pNode)->GetOp()==SPH_QUERY_OR ) );
 //
 // NOLINT		//  NOT:
 // NOLINT		//	         OR|AND (grand)
@@ -4267,9 +4269,6 @@ bool CSphTransformation::CheckExcessBrackets ( const XQNode_t * pNode ) noexcept
 // NOLINT		//		  |
 // NOLINT		//	    pNode
 //
-		return false;
-	}
-	return true;
 }
 
 static XQNode_t * sphMoveSiblingsUp ( XQNode_t * pNode )
@@ -4347,13 +4346,15 @@ bool CSphTransformation::TransformExcessBrackets () const noexcept
 
 bool CSphTransformation::CheckExcessAndNot ( const XQNode_t * pNode ) noexcept
 {
-	if ( !pNode || !ParentNode::From ( pNode ) || !GrandNode::From ( pNode ) || !Grand2Node::From ( pNode ) || pNode->GetOp()!=SPH_QUERY_AND ||
-			( pNode->m_dChildren.GetLength()==1 && pNode->m_dChildren[0]->GetOp()==SPH_QUERY_ANDNOT ) ||
-			ParentNode::From ( pNode )->GetOp()!=SPH_QUERY_ANDNOT || GrandNode::From ( pNode )->GetOp()!=SPH_QUERY_AND ||
-			Grand2Node::From ( pNode )->GetOp()!=SPH_QUERY_ANDNOT ||
-			// FIXME!!! check performance with OR node at 2nd grand instead of regular not NOT
-			Grand2Node::From ( pNode )->m_dChildren.GetLength()<2 || Grand2Node::From ( pNode )->m_dChildren[1]->GetOp()!=SPH_QUERY_NOT )
-	{
+	return Grand2Node::Valid(pNode)
+		&& pNode->GetOp()==SPH_QUERY_AND
+		&& !( pNode->m_dChildren.GetLength()==1 && pNode->m_dChildren[0]->GetOp()==SPH_QUERY_ANDNOT )
+		&& ParentNode::From(pNode)->GetOp()==SPH_QUERY_ANDNOT
+		&& GrandNode::From(pNode)->GetOp()==SPH_QUERY_AND
+		&& Grand2Node::From(pNode)->GetOp()==SPH_QUERY_ANDNOT
+	// FIXME!!! check performance with OR node at 2nd grand instead of regular not NOT
+		&& Grand2Node::From(pNode)->m_dChildren.GetLength()>1
+		&& Grand2Node::From(pNode)->m_dChildren[1]->GetOp()==SPH_QUERY_NOT;
 //
 // NOLINT		//  NOT:
 // NOLINT		//	                      AND NOT
@@ -4366,9 +4367,6 @@ bool CSphTransformation::CheckExcessAndNot ( const XQNode_t * pNode ) noexcept
 // NOLINT		//            |          |
 // NOLINT		//           ..         ...
 //
-		return false;
-	}
-	return true;
 }
 
 

@@ -2,7 +2,7 @@
 
 When working with sharded tables, be aware of the following limitations:
 
-1. Don't create local tables on one server and clustered tables on another in the same cluster.
+1. Don't create local sharded tables on one server and clustered sharded tables on another in the same cluster.
 
 2. You must use the same cluster name for all sharded tables. For example, if you created a sharded table using the cluster name 'c', you must use the same name for all subsequent sharded table creations. Using different cluster names will not work.
 

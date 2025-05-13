@@ -1,10 +1,13 @@
-––– input –––
-mkdir -p /var/lib/manticore && chmod -R 755 /var/lib/manticore
-––– output –––
+––– comment –––
+Setup: Clean logs and create test index
 ––– input –––
 rm -f /var/log/manticore/searchd.log; stdbuf -oL searchd > /dev/null; if timeout 10 grep -qm1 '\[BUDDY\] started' <(tail -n 1000 -f /var/log/manticore/searchd.log); then echo 'Buddy started!'; else echo 'Timeout or failed!'; cat /var/log/manticore/searchd.log;fi
 ––– output –––
 Buddy started!
+––– input –––
+mysql -h0 -P9306 -e "CREATE TABLE IF NOT EXISTS tbl (id bigint, value int); INSERT INTO tbl VALUES (1, 100), (2, 200);"; echo $?
+––– output –––
+0
 ––– comment –––
 1.1 Checking existing system variables
 ––– input –––
@@ -42,11 +45,11 @@ mysql -h0 -P9306 -e "SELECT @@max_allowed_packet;"
 ––– input –––
 mysql -h0 -P9306 -e "SELECT @@version_comment;"
 ––– output –––
-+-----------------------------+
-| @@version_comment           |
-+-----------------------------+
-| git branch HEAD (no branch) |
-+-----------------------------+
++-----------------------------------+
+| @@version_comment                 |
++-----------------------------------+
+| git branch master...origin/master |
++-----------------------------------+
 ––– input –––
 mysql -h0 -P9306 -e "SELECT @@lower_case_table_names;"
 ––– output –––
@@ -76,55 +79,61 @@ mysql -h0 -P9306 -e "SELECT @@autocommit;"
 ––– input –––
 mysql -h0 -P9306 -e "SELECT @@tx_isolation_eahhahfefhehfehf;"
 ––– output –––
-+---------------------------------+
-| @@tx_isolation_eahhahfefhehfehf |
-+---------------------------------+
-|                               0 |
-+---------------------------------+
+ERROR 1064 (42000) at line 1: unknown sysvar @@tx_isolation_eahhahfefhehfehf
 ––– input –––
 mysql -h0 -P9306 -e "SELECT @@nonexistent_variable;"
 ––– output –––
-+------------------------+
-| @@nonexistent_variable |
-+------------------------+
-|                      0 |
-+------------------------+
+ERROR 1064 (42000) at line 1: unknown sysvar @@nonexistent_variable
 ––– input –––
 mysql -h0 -P9306 -e "SELECT @@random_name;"
 ––– output –––
-+---------------+
-| @@random_name |
-+---------------+
-|             0 |
-+---------------+
+ERROR 1064 (42000) at line 1: unknown sysvar @@random_name
 ––– comment –––
 1.3 Checking partial matches of variables
 ––– input –––
 mysql -h0 -P9306 -e "SELECT @@autocomm;"
 ––– output –––
-+------------+
-| @@autocomm |
-+------------+
-|          0 |
-+------------+
+ERROR 1064 (42000) at line 1: unknown sysvar @@autocomm
 ––– input –––
 mysql -h0 -P9306 -e "SELECT @@character_set;"
 ––– output –––
-+-----------------+
-| @@character_set |
-+-----------------+
-|               0 |
-+-----------------+
+ERROR 1064 (42000) at line 1: unknown sysvar @@character_set
 ––– input –––
 mysql -h0 -P9306 -e "SELECT @@version;"
 ––– output –––
-+-----------+
-| @@version |
-+-----------+
-|         0 |
-+-----------+
+ERROR 1064 (42000) at line 1: unknown sysvar @@version
 ––– comment –––
-4.1 Checking user variables @var
+2.1 Test in Multi-Select Queries
+––– input –––
+mysql -h0 -P9306 -e "SELECT @@autocommit, @@nonexistent_variable;"
+––– output –––
+ERROR 1064 (42000) at line 1: unknown sysvar @@nonexistent_variable
+––– input –––
+mysql -h0 -P9306 -e "SELECT @@character_set_client, @@tx_isolation_fake, @@max_allowed_packet;"
+––– output –––
+ERROR 1064 (42000) at line 1: unknown sysvar @@tx_isolation_fake
+––– comment –––
+2.2 Test in Complex Queries
+––– input –––
+mysql -h0 -P9306 -e "SELECT @@autocommit AS auto, @@nonexistent_variable AS nonexistent FROM tbl WHERE id=1;"
+––– output –––
+ERROR 1064 (42000): unknown sysvar @@nonexistent_variable
+––– input –––
+mysql -h0 -P9306 -e "SELECT * FROM tbl WHERE value > @@nonexistent_variable;"
+––– output –––
+ERROR 1064 (42000): unknown sysvar @@nonexistent_variable
+––– comment –––
+3.1 Test with mysqldump/mariadb-dump
+––– input –––
+mysqldump -h0 -P9306 --no-data --skip-opt --no-tablespaces tbl > /tmp/dump.sql
+––– output –––
+––– input –––
+test -s /tmp/dump.sql && echo "Dump created successfully" || (echo "Dump is empty or failed!" && cat /tmp/dump.sql)
+––– output –––
+Dump created successfully
+––– comment –––
+––– comment –––
+4.1 Checking user variables @var (with Buddy)
 ––– input –––
 mysql -h0 -P9306 -e "SELECT @user_variable;"
 ––– output –––
@@ -133,6 +142,10 @@ ERROR 1064 (42000) at line 1: P09: syntax error, unexpected TOK_USERVAR near ''
 mysql -h0 -P9306 -e "SET @user_variable = 123; SELECT @user_variable;"
 ––– output –––
 ERROR 1064 (42000) at line 1: sphinxql: only 0 and 1 could be used as boolean values near '123'
+––– input –––
+mysql -h0 -P9306 -e "SELECT @nonexistent_user_var;"
+––– output –––
+ERROR 1064 (42000) at line 1: P09: syntax error, unexpected TOK_USERVAR near ''
 ––– comment –––
 5.1 Checking for strange variable names
 ––– input –––
@@ -146,11 +159,7 @@ ERROR 1064 (42000) at line 1: P01: syntax error, unexpected string, expecting $e
 ––– input –––
 mysql -h0 -P9306 -e "SELECT @@very_long_variable_name_that_exceeds_normal_length_limits;"
 ––– output –––
-+-------------------------------------------------------------+
-| @@very_long_variable_name_that_exceeds_normal_length_limits |
-+-------------------------------------------------------------+
-|                                                           0 |
-+-------------------------------------------------------------+
+ERROR 1064 (42000) at line 1: unknown sysvar @@very_long_variable_name_that_exceeds_normal_length_limits
 ––– comment –––
 5.2 Checking case-sensitivity of system variables
 ––– input –––
@@ -190,74 +199,6 @@ echo -e "searchd {\nlisten = 9306:mysql\nlisten = 9308:http\nlog = /var/log/mant
 rm -f /var/log/manticore/searchd.log; stdbuf -oL searchd -c /tmp/manticore_without_buddy.conf > /dev/null; if timeout 10 grep -qm1 'accepting connections' /var/log/manticore/searchd.log; then echo 'Searchd started!'; else echo 'Timeout or failed!'; cat /var/log/manticore/searchd.log; fi
 ––– output –––
 Searchd started!
-––– comment –––
-1.1 Checking existing system variables (without Buddy)
-––– input –––
-mysql -h0 -P9306 -e "SELECT @@session.auto_increment_increment;"
-––– output –––
-+------------------------------------+
-| @@session.auto_increment_increment |
-+------------------------------------+
-|                                  1 |
-+------------------------------------+
-––– input –––
-mysql -h0 -P9306 -e "SELECT @@character_set_client;"
-––– output –––
-+------------------------+
-| @@character_set_client |
-+------------------------+
-| utf8                   |
-+------------------------+
-––– input –––
-mysql -h0 -P9306 -e "SELECT @@character_set_connection;"
-––– output –––
-+----------------------------+
-| @@character_set_connection |
-+----------------------------+
-| utf8                       |
-+----------------------------+
-––– input –––
-mysql -h0 -P9306 -e "SELECT @@max_allowed_packet;"
-––– output –––
-+----------------------+
-| @@max_allowed_packet |
-+----------------------+
-|            134217728 |
-+----------------------+
-––– input –––
-mysql -h0 -P9306 -e "SELECT @@version_comment;"
-––– output –––
-+-----------------------------+
-| @@version_comment           |
-+-----------------------------+
-| git branch HEAD (no branch) |
-+-----------------------------+
-––– input –––
-mysql -h0 -P9306 -e "SELECT @@lower_case_table_names;"
-––– output –––
-+--------------------------+
-| @@lower_case_table_names |
-+--------------------------+
-|                        1 |
-+--------------------------+
-––– input –––
-mysql -h0 -P9306 -e "SELECT @@session.last_insert_id;"
-––– output –––
-+--------------------------+
-| @@session.last_insert_id |
-+--------------------------+
-|                          |
-+--------------------------+
-––– input –––
-mysql -h0 -P9306 -e "SELECT @@autocommit;"
-––– output –––
-+--------------+
-| @@autocommit |
-+--------------+
-|            1 |
-+--------------+
-––– comment –––
-1.2 Checking for non-existent system variables (without Buddy)
 ––– input –––
 mysql -h0 -P9306 -e "SELECT @@tx_isolation_eahhahfefhehfehf;"
 ––– output –––
@@ -309,6 +250,47 @@ mysql -h0 -P9306 -e "SELECT @@version;"
 | <empty>   |
 +-----------+
 ––– comment –––
+2.1 Test in Multi-Select Queries (without Buddy)
+––– input –––
+mysql -h0 -P9306 -e "SELECT @@autocommit, @@nonexistent_variable;"
+––– output –––
++--------------+------------------------+
+| @@autocommit | @@nonexistent_variable |
++--------------+------------------------+
+|            1 | <empty>                |
++--------------+------------------------+
+––– input –––
+mysql -h0 -P9306 -e "SELECT @@character_set_client, @@tx_isolation_fake, @@max_allowed_packet;"
+––– output –––
++------------------------+---------------------+----------------------+
+| @@character_set_client | @@tx_isolation_fake | @@max_allowed_packet |
++------------------------+---------------------+----------------------+
+| utf8                   | <empty>             |            134217728 |
++------------------------+---------------------+----------------------+
+––– comment –––
+2.2 Test in Complex Queries (without Buddy)
+––– input –––
+mysql -h0 -P9306 -e "SELECT @@autocommit AS auto, @@nonexistent_variable AS nonexistent FROM tbl WHERE id=1;"
+––– output –––
++------------------------+
+| @@nonexistent_variable |
++------------------------+
+| <empty>                |
++------------------------+
+––– input –––
+mysql -h0 -P9306 -e "SELECT * FROM tbl WHERE value > @@nonexistent_variable;"
+––– output –––
++------------------------+
+| @@nonexistent_variable |
++------------------------+
+| <empty>                |
++------------------------+
+––– comment –––
+3.1 Test with mysqldump/mariadb-dump (without Buddy)
+––– input –––
+mysqldump -h 127.0.0.1 -P9306 --no-data --skip-comments --skip-opt --no-tablespaces tbl > /tmp/dump.sql
+––– output –––
+––– comment –––
 4.1 Checking user variables @var (without Buddy)
 ––– input –––
 mysql -h0 -P9306 -e "SELECT @user_variable;"
@@ -318,16 +300,28 @@ ERROR 1064 (42000) at line 1: P09: syntax error, unexpected TOK_USERVAR near ''
 mysql -h0 -P9306 -e "SET @user_variable = 123; SELECT @user_variable;"
 ––– output –––
 ERROR 1064 (42000) at line 1: sphinxql: only 0 and 1 could be used as boolean values near '123'
+––– input –––
+mysql -h0 -P9306 -e "SELECT @nonexistent_user_var;"
+––– output –––
+ERROR 1064 (42000) at line 1: P09: syntax error, unexpected TOK_USERVAR near ''
 ––– comment –––
 5.1 Checking for strange variable names (without Buddy)
 ––– input –––
 mysql -h0 -P9306 -e "SELECT @@123;"
 ––– output –––
-ERROR 1064 (42000) at line 1: P09: syntax error, unexpected $end near ''
++---------+
+| @@123   |
++---------+
+| <empty> |
++---------+
 ––– input –––
 mysql -h0 -P9306 -e "SELECT @@'quoted_name';"
 ––– output –––
-ERROR 1064 (42000) at line 1: P01: syntax error, unexpected string, expecting $end near ''quoted_name''
++-----------------+
+| @@'quoted_name' |
++-----------------+
+| <empty>         |
++-----------------+
 ––– input –––
 mysql -h0 -P9306 -e "SELECT @@very_long_variable_name_that_exceeds_normal_length_limits;"
 ––– output –––

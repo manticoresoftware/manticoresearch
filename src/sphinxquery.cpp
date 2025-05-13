@@ -2060,6 +2060,7 @@ CSphString sphReconstructNode ( const XQNode_t * pNode, const CSphSchema * pSche
 		case SPH_QUERY_PROXIMITY:	sRes << '"' << sTrim << "\"~" <<  pNode->m_iOpArg; break;
 		case SPH_QUERY_QUORUM:		sRes << '"' << sTrim << "\"/" <<  pNode->m_iOpArg; break;
 		case SPH_QUERY_NEAR:		sRes << '"' << sTrim << "\"NEAR/" <<  pNode->m_iOpArg; break;
+		case SPH_QUERY_NOTNEAR:		sRes << '"' << sTrim << "\"NOTNEAR/" <<  pNode->m_iOpArg; break;
 		default:					assert ( 0 && "unexpected op in ReconstructNode()" ); break;
 		}
 
@@ -2096,18 +2097,15 @@ CSphString sphReconstructNode ( const XQNode_t * pNode, const CSphSchema * pSche
 				sRes << sFoo;
 			} else
 			{
-				const char * sOp = "(unknown-op)";
+				const char * sOp = XQOperatorNameSz ( pNode->GetOp() );
+				// fixup some ops to shortened versions suitable for reconstruction
 				switch ( pNode->GetOp() )
 				{
 				case SPH_QUERY_AND:		sOp = " "; break;
 				case SPH_QUERY_OR:		sOp = "|"; break;
-				case SPH_QUERY_MAYBE:	sOp = "MAYBE"; break;
-				case SPH_QUERY_NOT:		sOp = "NOT"; break;
 				case SPH_QUERY_ANDNOT:	sOp = "AND NOT"; break;
-				case SPH_QUERY_BEFORE:	sOp = "BEFORE"; break;
-				case SPH_QUERY_NEAR:	sOp = "NEAR"; break;
 				case SPH_QUERY_PHRASE:	sOp = ""; break;
-				default:				assert ( 0 && "unexpected op in ReconstructNode()" ); break;
+				default: break;
 				}
 				CSphString sTrim { sRes };
 				sRes.Clear();

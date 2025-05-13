@@ -288,10 +288,10 @@ void XQParseHelper_c::Cleanup()
 {
 	m_dSpawned.Uniq(); // FIXME! should eliminate this by testing
 
-	ARRAY_FOREACH ( i, m_dSpawned )
+	for ( auto& pSpawned : m_dSpawned )
 	{
-		m_dSpawned[i]->m_dChildren.Reset ();
-		SafeDelete ( m_dSpawned[i] );
+		pSpawned->m_dChildren.Reset ();
+		SafeDelete ( pSpawned );
 	}
 	m_dSpawned.Reset ();
 }
@@ -435,9 +435,8 @@ XQNode_t * XQParseHelper_c::SweepNulls ( XQNode_t * pNode, bool bOnlyNotAllowed 
 
 		if ( pNode->m_dWords.GetLength()==0 )
 		{
-			m_dSpawned.RemoveValue ( pNode ); // OPTIMIZE!
-			SafeDelete ( pNode );
-			return NULL;
+			DeleteSpawned ( pNode );
+			return nullptr;
 		}
 
 		return pNode;
@@ -457,9 +456,8 @@ XQNode_t * XQParseHelper_c::SweepNulls ( XQNode_t * pNode, bool bOnlyNotAllowed 
 
 	if ( pNode->m_dChildren.GetLength()==0 )
 	{
-		m_dSpawned.RemoveValue ( pNode ); // OPTIMIZE!
-		SafeDelete ( pNode );
-		return NULL;
+		DeleteSpawned ( pNode ); // OPTIMIZE!
+		return nullptr;
 	}
 
 	// remove redundancies if needed
@@ -474,15 +472,13 @@ XQNode_t * XQParseHelper_c::SweepNulls ( XQNode_t * pNode, bool bOnlyNotAllowed 
 			pRet->SetOp ( SPH_QUERY_NULL );
 			ARRAY_FOREACH ( i, pRet->m_dChildren )
 			{
-				m_dSpawned.RemoveValue ( pRet->m_dChildren[i] );
-				SafeDelete ( pRet->m_dChildren[i] );
+				DeleteSpawned ( pRet->m_dChildren[i] );
 			}
 			pRet->m_dChildren.Reset();
 		}
 		pRet->m_iOpArg = pNode->m_iOpArg;
 
-		m_dSpawned.RemoveValue ( pNode ); // OPTIMIZE!
-		SafeDelete ( pNode );
+		DeleteSpawned ( pNode ); // OPTIMIZE!
 		return SweepNulls ( pRet, bOnlyNotAllowed );
 	}
 
@@ -508,10 +504,7 @@ void XQParseHelper_c::FixupNulls ( XQNode_t * pNode )
 			if ( pChild->GetOp()!=SPH_QUERY_NULL )
 				dNotNulls.Add ( pChild );
 			else
-			{
-				m_dSpawned.RemoveValue ( pChild );
-				SafeDelete ( pChild );
-			}
+				DeleteSpawned ( pChild );
 		}
 		pNode->m_dChildren.SwapData ( dNotNulls );
 		dNotNulls.Reset();
@@ -523,10 +516,7 @@ void XQParseHelper_c::FixupNulls ( XQNode_t * pNode )
 		{
 			pNode->SetOp ( SPH_QUERY_NULL );
 			for ( auto &pChild : pNode->m_dChildren )
-			{
-				m_dSpawned.RemoveValue ( pChild );
-				SafeDelete ( pChild );
-			}
+				DeleteSpawned ( pChild );
 			pNode->m_dChildren.Reset ();
 		}
 	}
@@ -602,9 +592,8 @@ bool XQParseHelper_c::FixupNots ( XQNode_t * pNode, bool bOnlyNotAllowed, XQNode
 		}
 	}
 
-	XQNode_t * pAnd = new XQNode_t ( pNode->m_dSpec );
+	XQNode_t * pAnd = SpawnNode ( pNode->m_dSpec );
 	pAnd->SetOp ( SPH_QUERY_AND, pNode->m_dChildren );
-	m_dSpawned.Add ( pAnd );
 
 	XQNode_t * pNot = nullptr;
 	if ( dNots.GetLength()==1 )
@@ -612,9 +601,8 @@ bool XQParseHelper_c::FixupNots ( XQNode_t * pNode, bool bOnlyNotAllowed, XQNode
 		pNot = dNots[0];
 	} else
 	{
-		pNot = new XQNode_t ( pNode->m_dSpec );
+		pNot = SpawnNode ( pNode->m_dSpec );
 		pNot->SetOp ( SPH_QUERY_OR, dNots );
-		m_dSpawned.Add ( pNot );
 	}
 
 	pNode->SetOp ( SPH_QUERY_ANDNOT, pAnd, pNot );
@@ -692,9 +680,8 @@ void XQParseHelper_c::FixupDestForms ()
 		tKeyword.m_bFieldStart = false;
 		tKeyword.m_bFieldEnd = false;
 
-		XQNode_t * pMultiHead = new XQNode_t ( pMultiParent->m_dSpec );
+		XQNode_t * pMultiHead = SpawnNode ( pMultiParent->m_dSpec );
 		pMultiHead->m_dWords.Add ( tKeyword );
-		m_dSpawned.Add ( pMultiHead );
 		dForms.Add ( pMultiHead );
 
 		for ( int iForm=0; iForm<tDesc.m_iDestCount; ++iForm )
@@ -707,9 +694,8 @@ void XQParseHelper_c::FixupDestForms ()
 			else
 				tKeyword.m_sWord = sWord;
 
-			XQNode_t * pMulti = new XQNode_t ( pMultiParent->m_dSpec );
+			XQNode_t * pMulti = SpawnNode ( pMultiParent->m_dSpec );
 			pMulti->m_dWords.Add ( tKeyword );
-			m_dSpawned.Add ( pMulti );
 			dForms.Add ( pMulti );
 		}
 
@@ -732,6 +718,19 @@ const StrVec_t & XQParseHelper_c::GetZone() const
 {
 	assert ( m_pParsed );
 	return m_pParsed->m_dZones;
+}
+
+XQNode_t * XQParseHelper_c::SpawnNode ( const XQLimitSpec_t & dSpec ) noexcept
+{
+	XQNode_t * pNode = new XQNode_t ( dSpec );
+	m_dSpawned.Add ( pNode );
+	return pNode;
+}
+
+void XQParseHelper_c::DeleteSpawned ( XQNode_t * pNode ) noexcept
+{
+	m_dSpawned.RemoveValue ( pNode ); // OPTIMIZE!
+	SafeDelete ( pNode );
 }
 
 static void TransformMorphOnlyFields ( XQNode_t * pNode, const CSphBitvec & tMorphDisabledFields )
@@ -1741,9 +1740,8 @@ XQNode_t * XQParser_t::AddKeyword ( const char * sKeyword, int iSkippedPosBefore
 	XQKeyword_t tAW ( sKeyword, m_iAtomPos );
 	tAW.m_iSkippedBefore = iSkippedPosBeforeToken;
 	HandleModifiers ( tAW );
-	XQNode_t * pNode = new XQNode_t ( *m_dStateSpec.Last() );
+	XQNode_t * pNode = SpawnNode ( *m_dStateSpec.Last() );
 	pNode->m_dWords.Add ( tAW );
-	m_dSpawned.Add ( pNode );
 	return pNode;
 }
 
@@ -1757,8 +1755,7 @@ XQNode_t * XQParser_t::AddKeyword ( XQNode_t * pLeft, XQNode_t * pRight )
 	assert ( pRight->m_dWords.GetLength()==1 );
 
 	pLeft->m_dWords.Add ( pRight->m_dWords[0] );
-	m_dSpawned.RemoveValue ( pRight );
-	SafeDelete ( pRight );
+	DeleteSpawned ( pRight );
 	return pLeft;
 }
 
@@ -1777,9 +1774,8 @@ XQNode_t * XQParser_t::AddOp ( XQOperator_e eOp, XQNode_t * pLeft, XQNode_t * pR
 
 	if ( eOp==SPH_QUERY_NOT )
 	{
-		XQNode_t * pNode = new XQNode_t ( *m_dStateSpec.Last() );
+		XQNode_t * pNode = SpawnNode ( *m_dStateSpec.Last() );
 		pNode->SetOp ( SPH_QUERY_NOT, pLeft );
-		m_dSpawned.Add ( pNode );
 		return pNode;
 	}
 
@@ -1806,10 +1802,9 @@ XQNode_t * XQParser_t::AddOp ( XQOperator_e eOp, XQNode_t * pLeft, XQNode_t * pR
 
 		// however, it's right (!) spec which is chosen for the resulting node,
 		// eg. '@title hello' + 'world @body program'
-		XQNode_t * pNode = new XQNode_t ( tSpec );
+		XQNode_t * pNode = SpawnNode ( tSpec );
 		pNode->SetOp ( eOp, pLeft, pRight );
 		pNode->m_iOpArg = iOpArg;
-		m_dSpawned.Add ( pNode );
 		pResult = pNode;
 	}
 	return pResult;

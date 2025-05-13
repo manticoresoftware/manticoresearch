@@ -336,6 +336,8 @@ public:
 	virtual void	Cleanup();
 	void			SetZone ( const StrVec_t & dZones );
 	const StrVec_t & GetZone() const;
+	XQNode_t *		SpawnNode ( const XQLimitSpec_t & dSpec ) noexcept;
+	void			DeleteSpawned ( XQNode_t * pNode ) noexcept;
 
 protected:
 	struct MultiformNode_t

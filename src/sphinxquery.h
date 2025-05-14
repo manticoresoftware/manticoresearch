@@ -179,6 +179,12 @@ public:
 		Rehash();
 	}
 
+	void ResetWords() noexcept
+	{
+		m_dWords.Reset();
+		Rehash();
+	}
+
 	void AddDirtyWord (XQKeyword_t dWord); // add word without invalidating hashes. OK for fresh (new-born) nodes.
 
 	/// ctor

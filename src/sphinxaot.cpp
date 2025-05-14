@@ -2154,7 +2154,7 @@ void TransformAotFilterKeyword ( XQNode_t * pNode, LemmatizerTrait_i * pLemmatiz
 			pNode->m_dChildren.Last()->m_pParent = pNode;
 			pNode->m_dChildren.Last()->AddDirtyWord ( tLemma );
 		}
-		pNode->WithWords ( [] ( auto & dWords ) { dWords.Reset();});
+		pNode->ResetWords();
 		if ( pExact )
 			pNode->m_dChildren.Add ( pExact );
 	}
@@ -2192,7 +2192,7 @@ void TransformAotFilter ( XQNode_t * pNode, LemmatizerTrait_i * pLemmatizer, con
 			TransformAotFilterKeyword ( pNew, pLemmatizer, tWord, pWordforms, tSettings );
 		}
 
-		pNode->WithWords ([](auto& dWords){dWords.Reset();});
+		pNode->ResetWords();
 		pNode->m_bVirtuallyPlain = true;
 		return;
 	}

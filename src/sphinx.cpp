@@ -10102,7 +10102,7 @@ void sphQueryExpandKeywords ( XQNode_t ** ppNode, const CSphIndexSettings & tSet
 			pNode->m_dChildren.Last()->m_iAtomPos = dNode.m_iAtomPos;
 			pNode->m_dChildren.Last()->m_pParent = pNode;
 		}
-		pNode->WithWords ([](auto& dWords){dWords.Reset();});
+		pNode->ResetWords();
 		pNode->m_bVirtuallyPlain = true;
 		return;
 	}
@@ -10149,7 +10149,7 @@ static void TransformQuorum ( XQNode_t ** ppNode )
 		dArgs.Add ( pAnd );
 	}
 
-	pNode->WithWords ([](auto& dWords){dWords.Reset();});
+	pNode->ResetWords();
 	pNode->SetOp ( SPH_QUERY_OR, dArgs );
 }
 
@@ -10163,7 +10163,7 @@ struct BinaryNode_t
 static void BuildExpandedTree ( const XQKeyword_t & tRootWord, const ISphWordlist::Args_t & dWordSrc, XQNode_t * pRoot )
 {
 	assert ( dWordSrc.m_dExpanded.GetLength() );
-	pRoot->WithWords ([](auto& dWords){dWords.Reset();});
+	pRoot->ResetWords();
 
 	// build a binary tree from all the other expansions
 	CSphVector<BinaryNode_t> dNodes;
@@ -10255,7 +10255,7 @@ XQNode_t * sphExpandXQNode ( XQNode_t * pNode, ExpansionContext_t & tCtx )
 			// but here we create nodes manually and have to push down limits too
 			pWord->CopySpecs ( pNode );
 		}
-		pNode->WithWords ([](auto& dWords){dWords.Reset();});
+		pNode->ResetWords();
 		pNode->m_bVirtuallyPlain = true;
 		return pNode;
 	}

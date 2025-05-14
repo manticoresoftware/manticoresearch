@@ -7149,7 +7149,9 @@ bool CSphIndex_VLN::AddRemoveFromKNN ( const CSphSchema & tOldSchema, const CSph
 	if ( iNewNumKNN )
 	{
 		CSphVector<std::pair<PlainOrColumnar_t,int>> dAllAttrsForKNN;
-		std::unique_ptr<knn::Builder_i> pKNNBuilder = BuildCreateKNN ( tNewSchema, m_iDocinfo, dAllAttrsForKNN, sError );
+		CSphString sTmpFilename = GetTmpFilename(SPH_EXT_SPKNN);
+		sTmpFilename.SetSprintf ( "%s.4bit", sTmpFilename.cstr() );
+		std::unique_ptr<knn::Builder_i> pKNNBuilder = BuildCreateKNN ( tNewSchema, m_iDocinfo, dAllAttrsForKNN, sTmpFilename, sError );
 		if ( !pKNNBuilder )
 			return false;
 

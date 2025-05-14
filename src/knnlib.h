@@ -17,7 +17,7 @@
 class ISphSchema;
 
 std::unique_ptr<knn::KNN_i>			CreateKNN ( CSphString & sError );
-std::unique_ptr<knn::Builder_i>		CreateKNNBuilder ( const ISphSchema & tSchema, int64_t iNumElements, CSphString & sError );
+std::unique_ptr<knn::Builder_i>		CreateKNNBuilder ( const ISphSchema & tSchema, int64_t iNumElements, const CSphString & sTmpFilename, CSphString & sError );
 std::unique_ptr<knn::Distance_i>	CreateKNNDistanceCalc ( const knn::IndexSettings_t & tSettings );
 
 bool			InitKNN ( CSphString & sError );

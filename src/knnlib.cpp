@@ -15,7 +15,7 @@
 #include "schema/schema.h"
 
 using Create_fn =				knn::KNN_i * (*) ();
-using CreateBuilder_fn =		knn::Builder_i * (*) ( const knn::Schema_t & tSchema, int64_t iNumElements );
+using CreateBuilder_fn =		knn::Builder_i * (*) ( const knn::Schema_t & tSchema, int64_t iNumElements, const std::string & sTmpFilename );
 using CreateDistanceCalc_fn =	knn::Distance_i * (*) ( const knn::IndexSettings_t & tSettings );
 using VersionStr_fn =			const char * (*)();
 using GetVersion_fn	=			int (*)();
@@ -41,7 +41,7 @@ std::unique_ptr<knn::KNN_i>	CreateKNN ( CSphString & sError )
 }
 
 
-std::unique_ptr<knn::Builder_i>	CreateKNNBuilder ( const ISphSchema & tSchema, int64_t iNumElements, CSphString & sError )
+std::unique_ptr<knn::Builder_i>	CreateKNNBuilder ( const ISphSchema & tSchema, int64_t iNumElements, const CSphString & sTmpFilename, CSphString & sError )
 {
 	if ( !IsKNNLibLoaded() )
 	{
@@ -71,7 +71,7 @@ std::unique_ptr<knn::Builder_i>	CreateKNNBuilder ( const ISphSchema & tSchema, i
 		return nullptr;
 
 	assert ( g_fnCreateKNNBuilder );
-	std::unique_ptr<knn::Builder_i> pBuilder { g_fnCreateKNNBuilder ( tKNNSchema, iNumElements ) };
+	std::unique_ptr<knn::Builder_i> pBuilder { g_fnCreateKNNBuilder ( tKNNSchema, iNumElements, sTmpFilename.cstr() ) };
 	if ( !pBuilder )
 		sError = "error creating knn index builder";
 

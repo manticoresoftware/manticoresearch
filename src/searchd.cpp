@@ -8327,7 +8327,12 @@ static bool HandleSetGlobal ( CSphString & sError, const CSphString & sName, int
 			if ( !HttpSetLogVerbosity ( sSetValue ) )
 				sError = "Unknown log_level value (http_on, http_off, http_bad_req_on, http_bad_req_off)";
 		} else
+		{
 			sError = "Unknown log_level value (must be one of info, debug, debugv, debugvv, replication)";
+		}
+		if ( sError.IsEmpty() )
+			BuddySetLogLevel ( g_eLogLevel );
+
 		return true;
 	}
 

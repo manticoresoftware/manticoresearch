@@ -641,7 +641,7 @@ static void CheckQuerySoftSpace ( const XQNode_t * pNode, const int * pQPos, int
 	ARRAY_FOREACH ( i, dChildren )
 	{
 		const XQNode_t * pChild = dChildren[i];
-		for ( auto * pChildren : pChild->m_dChildren )
+		for ( auto * pChildren : pChild->dChildren() )
 			dChildren.Add ( pChildren );
 
 		for ( auto & dWord : pChild->dWords() )

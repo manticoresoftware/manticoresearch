@@ -166,7 +166,7 @@ void ISphQueryFilter::GetKeywords ( CSphVector<CSphKeywordInfo> & dKeywords, Exp
 			}
 
 			// push all child nodes at node to process list
-			for ( const XQNode_t* pGrand : pChild->m_dChildren )
+			for ( const XQNode_t* pGrand : pChild->dChildren() )
 				dChildren.Add ( pGrand );
 		}
 

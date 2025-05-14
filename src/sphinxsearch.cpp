@@ -562,10 +562,10 @@ void BuildPlanBson ( bson::Assoc_c& tPlan, const XQNode_t * pNode, const CSphSch
 	XQNodeGetExtraBson ( tPlan, pNode );
 	AddAccessSpecsBson ( tPlan, pNode, pSchema, pZones );
 
-	if ( pNode->m_dChildren.GetLength () && pNode->dWords().GetLength () )
+	if ( pNode->dChildren().GetLength () && pNode->dWords().GetLength () )
 		tPlan.AddBool ( SZ_VIRTUALLY_PLAIN, true );
 
-	if ( pNode->m_dChildren.IsEmpty () )
+	if ( pNode->dChildren().IsEmpty () )
 	{
 		MixedVector_c dChildren ( tPlan.StartMixedVec( SZ_CHILDREN ), pNode->dWords().GetLength() );
 		for ( const XQKeyword_t & i : pNode->dWords() )
@@ -575,8 +575,8 @@ void BuildPlanBson ( bson::Assoc_c& tPlan, const XQNode_t * pNode, const CSphSch
 		}
 	} else
 	{
-		MixedVector_c dChildren ( tPlan.StartMixedVec ( SZ_CHILDREN ), pNode->m_dChildren.GetLength () );
-		for ( const auto & i : pNode->m_dChildren )
+		MixedVector_c dChildren ( tPlan.StartMixedVec ( SZ_CHILDREN ), pNode->dChildren().GetLength () );
+		for ( const auto & i : pNode->dChildren() )
 		{
 			Obj_c tChild ( dChildren.StartObj () );
 			BuildPlanBson ( tChild, i, pSchema, pZones );
@@ -4423,8 +4423,8 @@ struct ExtQwordOrderbyQueryPos_t
 
 static bool HasQwordDupes ( XQNode_t * pNode, SmallStringHash_T<int> & hQwords )
 {
-	ARRAY_FOREACH ( i, pNode->m_dChildren )
-		if ( HasQwordDupes ( pNode->m_dChildren[i], hQwords ) )
+	ARRAY_FOREACH ( i, pNode->dChildren() )
+		if ( HasQwordDupes ( pNode->dChildren()[i], hQwords ) )
 			return true;
 	for ( const auto& dWord : pNode->dWords() )
 		if ( !hQwords.Add ( 1, dWord.m_sWord ) )

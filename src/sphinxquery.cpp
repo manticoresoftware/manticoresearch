@@ -290,7 +290,7 @@ void XQParseHelper_c::Cleanup()
 
 	for ( auto& pSpawned : m_dSpawned )
 	{
-		pSpawned->m_dChildren.Reset ();
+		pSpawned->ResetChildren();
 		SafeDelete ( pSpawned );
 	}
 	m_dSpawned.Reset ();
@@ -314,7 +314,7 @@ bool XQParseHelper_c::CheckQuorumProximity ( const XQNode_t * pNode )
 	if ( pNode->GetOp()==SPH_QUERY_PROXIMITY && pNode->m_iOpArg<1 )
 		return Error ( "proximity threshold too low (%d)", pNode->m_iOpArg );
 
-	return pNode->m_dChildren.all_of ( [&] ( XQNode_t * pChild ) { return CheckQuorumProximity(pChild); } );
+	return pNode->dChildren().all_of ( [&] ( XQNode_t * pChild ) { return CheckQuorumProximity(pChild); } );
 }
 
 
@@ -333,8 +333,9 @@ static void FixupDegenerates ( XQNode_t * pNode, CSphString & sWarning )
 		return;
 	}
 
-	ARRAY_FOREACH ( i, pNode->m_dChildren )
-		FixupDegenerates ( pNode->m_dChildren[i], sWarning );
+	pNode->WithChildren([&sWarning](auto& dChildren) {
+		dChildren.for_each ( [&sWarning] (auto& dChild) {FixupDegenerates ( dChild, sWarning );});
+	});
 }
 
 static int GetMaxAtomPos ( const XQNode_t * pNode )
@@ -346,7 +347,7 @@ static int GetMaxAtomPos ( const XQNode_t * pNode )
 	for ( const auto & tWord : pNode->dWords() )
 		iMaxAtomPos = Max ( iMaxAtomPos, tWord.m_iAtomPos );
 
-	for ( const XQNode_t * pItem : pNode->m_dChildren )
+	for ( const XQNode_t * pItem : pNode->dChildren() )
 		iMaxAtomPos = GetMaxAtomPos ( pItem );
 
 	return iMaxAtomPos;
@@ -445,38 +446,38 @@ XQNode_t * XQParseHelper_c::SweepNulls ( XQNode_t * pNode, bool bOnlyNotAllowed 
 	}
 
 	// sweep op node
-	ARRAY_FOREACH ( i, pNode->m_dChildren )
+	pNode->WithChildren ( [this,bOnlyNotAllowed,pNode] ( CSphVector<XQNode_t*>& dChildren ) {
+	ARRAY_FOREACH ( i, dChildren )
 	{
-		pNode->m_dChildren[i] = SweepNulls ( pNode->m_dChildren[i], bOnlyNotAllowed );
-		if ( pNode->m_dChildren[i]==NULL )
+		dChildren[i] = SweepNulls ( dChildren[i], bOnlyNotAllowed );
+		if ( !dChildren[i] )
 		{
-			pNode->m_dChildren.Remove ( i-- );
+			dChildren.Remove ( i-- );
 			// use non-null iOpArg as a flag indicating that the sweeping happened.
 			++pNode->m_iOpArg;
 		}
-	}
+	}});
 
-	if ( pNode->m_dChildren.GetLength()==0 )
+	if ( pNode->dChildren().IsEmpty() )
 	{
 		DeleteSpawned ( pNode ); // OPTIMIZE!
 		return nullptr;
 	}
 
 	// remove redundancies if needed
-	if ( pNode->GetOp()!=SPH_QUERY_NOT && pNode->m_dChildren.GetLength()==1 )
+	if ( pNode->GetOp() != SPH_QUERY_NOT && pNode->dChildren().GetLength() == 1 )
 	{
-		XQNode_t * pRet = pNode->m_dChildren[0];
-		pNode->m_dChildren.Reset ();
+		auto * pRet = pNode->dChildren()[0];
+		pNode->ResetChildren();
 		pRet->m_pParent = pNode->m_pParent;
 		// expressions like 'la !word' (having min_word_len>len(la)) became a 'null' node.
 		if ( pNode->m_iOpArg && pRet->GetOp()==SPH_QUERY_NOT && !bOnlyNotAllowed )
 		{
 			pRet->SetOp ( SPH_QUERY_NULL );
-			ARRAY_FOREACH ( i, pRet->m_dChildren )
-			{
-				DeleteSpawned ( pRet->m_dChildren[i] );
-			}
-			pRet->m_dChildren.Reset();
+			pRet->WithChildren ( [this] ( auto& dChildren ) {
+				dChildren.for_each ( [this] (auto& pChild) { DeleteSpawned ( pChild );} );
+				dChildren.Reset();
+			});
 		}
 		pRet->m_iOpArg = pNode->m_iOpArg;
 
@@ -493,35 +494,36 @@ void XQParseHelper_c::FixupNulls ( XQNode_t * pNode )
 	if ( !pNode )
 		return;
 
-	ARRAY_FOREACH ( i, pNode->m_dChildren )
-		FixupNulls ( pNode->m_dChildren[i] );
+	pNode->WithChildren([this,pNode](auto& dChildren) {
+
+	dChildren.for_each ( [this](auto& dChild) { FixupNulls ( dChild );} );
 
 	// smth OR null == smth.
 	if ( pNode->GetOp()==SPH_QUERY_OR )
 	{
+
 		CSphVector<XQNode_t*> dNotNulls;
-		ARRAY_FOREACH ( i, pNode->m_dChildren )
+		for ( XQNode_t* pChild : dChildren )
 		{
-			XQNode_t* pChild = pNode->m_dChildren[i];
 			if ( pChild->GetOp()!=SPH_QUERY_NULL )
 				dNotNulls.Add ( pChild );
 			else
 				DeleteSpawned ( pChild );
 		}
-		pNode->m_dChildren.SwapData ( dNotNulls );
+		dChildren.SwapData ( dNotNulls );
 		dNotNulls.Reset();
 		// smth AND null = null.
 	} else if ( pNode->GetOp()==SPH_QUERY_AND )
 	{
-		if ( pNode->m_dChildren.any_of (
+		if ( dChildren.any_of (
 			[] ( XQNode_t * pChild ) { return pChild->GetOp ()==SPH_QUERY_NULL; } ) )
 		{
 			pNode->SetOp ( SPH_QUERY_NULL );
-			for ( auto &pChild : pNode->m_dChildren )
+			for ( auto &pChild : dChildren )
 				DeleteSpawned ( pChild );
-			pNode->m_dChildren.Reset ();
+			dChildren.Reset ();
 		}
-	}
+	}} );
 }
 
 bool XQParseHelper_c::FixupNots ( XQNode_t * pNode, bool bOnlyNotAllowed, XQNode_t ** ppRoot )
@@ -535,25 +537,35 @@ bool XQParseHelper_c::FixupNots ( XQNode_t * pNode, bool bOnlyNotAllowed, XQNode
 		return true;
 
 	// process 'em children
-	for ( auto& dNode : pNode->m_dChildren )
-		if ( !FixupNots ( dNode, bOnlyNotAllowed, ppRoot ) )
-			return false;
-
-	// extract NOT subnodes
-	CSphVector<XQNode_t*> dNots;
-	ARRAY_FOREACH ( i, pNode->m_dChildren )
-		if ( pNode->m_dChildren[i]->GetOp()==SPH_QUERY_NOT )
+	CSphVector<XQNode_t *> dNots;
+	bool bSuccess = true;
+	pNode->WithChildren ( [bOnlyNotAllowed,ppRoot,this,&bSuccess,&dNots](auto& dChildren) {
+		for ( auto & dNode: dChildren )
 		{
-			dNots.Add ( pNode->m_dChildren[i] );
-			pNode->m_dChildren.RemoveFast ( i-- );
+			if ( FixupNots ( dNode, bOnlyNotAllowed, ppRoot ) )
+				continue;
+
+			bSuccess = false;
+			return;
 		}
+
+		// extract NOT subnodes
+		ARRAY_FOREACH ( i, dChildren )
+			if ( dChildren[i]->GetOp() == SPH_QUERY_NOT )
+			{
+				dNots.Add ( dChildren[i] );
+				dChildren.RemoveFast ( i-- );
+			}
+	} );
+	if ( !bSuccess )
+		return false;
 
 	// no NOTs? we're square
 	if ( !dNots.GetLength() )
 		return true;
 
 	// nothing but NOTs? we can't compute that
-	if ( !pNode->m_dChildren.GetLength() && !bOnlyNotAllowed )
+	if ( pNode->dChildren().IsEmpty() && !bOnlyNotAllowed )
 		return Error ( "query is non-computable (node consists of NOT operators only)" );
 
 	// NOT within OR or MAYBE? we can't compute that
@@ -569,11 +581,11 @@ bool XQParseHelper_c::FixupNots ( XQNode_t * pNode, bool bOnlyNotAllowed, XQNode
 		return Error ( "query is non-computable (NOT cannot be used as before operand)" );
 
 	// must be some NOTs within AND at this point, convert this node to ANDNOT
-	assert ( ( ( pNode->GetOp()==SPH_QUERY_AND && pNode->m_dChildren.GetLength() )
-		|| ( pNode->GetOp()==SPH_QUERY_AND && !pNode->m_dChildren.GetLength() && bOnlyNotAllowed ) )
+	assert ( ( ( pNode->GetOp()==SPH_QUERY_AND && pNode->dChildren().GetLength() )
+		|| ( pNode->GetOp()==SPH_QUERY_AND && pNode->dChildren().IsEmpty() && bOnlyNotAllowed ) )
 		&& dNots.GetLength() );
 
-	if ( pNode->GetOp()==SPH_QUERY_AND && !pNode->m_dChildren.GetLength() )
+	if ( pNode->GetOp()==SPH_QUERY_AND && pNode->dChildren().IsEmpty() )
 	{
 		if ( !bOnlyNotAllowed )
 			return Error ( "query is non-computable (node consists of NOT operators only)" );
@@ -583,19 +595,20 @@ bool XQParseHelper_c::FixupNots ( XQNode_t * pNode, bool bOnlyNotAllowed, XQNode
 			pNode->SetOp ( SPH_QUERY_OR, dNots );
 			*ppRoot = TransformOnlyNot ( pNode, m_dSpawned );
 			return true;
-		} else if ( pNode->m_pParent && pNode->m_pParent->GetOp()==SPH_QUERY_AND && pNode->m_pParent->m_dChildren.GetLength()==2 )
+		}
+
+		if ( pNode->m_pParent && pNode->m_pParent->GetOp()==SPH_QUERY_AND && pNode->m_pParent->dChildren().GetLength()==2 )
 		{
 			pNode->m_pParent->SetOp ( SPH_QUERY_ANDNOT );
 			pNode->SetOp ( SPH_QUERY_OR, dNots );
 			return true;
-		} else
-		{
-			return Error ( "query is non-computable (node consists of NOT operators only)" );
 		}
+
+		return Error ( "query is non-computable (node consists of NOT operators only)" );
 	}
 
 	XQNode_t * pAnd = SpawnNode ( pNode->m_dSpec );
-	pAnd->SetOp ( SPH_QUERY_AND, pNode->m_dChildren );
+	pNode->WithChildren ( [pAnd](auto& dChildren) { pAnd->SetOp ( SPH_QUERY_AND, dChildren ); } );
 
 	XQNode_t * pNot = nullptr;
 	if ( dNots.GetLength()==1 )
@@ -611,51 +624,32 @@ bool XQParseHelper_c::FixupNots ( XQNode_t * pNode, bool bOnlyNotAllowed, XQNode
 	return true;
 }
 
-
-static void CollectChildren ( XQNode_t * pNode, CSphVector<XQNode_t *> & dChildren )
-{
-	if ( pNode->m_dChildren.IsEmpty() )
-		return;
-
-	dChildren.Add ( pNode );
-	for ( const XQNode_t *pChild : dChildren )
-		for ( const auto& dChild : pChild->m_dChildren )
-			dChildren.Add ( dChild );
-}
-
-
 void XQParseHelper_c::DeleteNodesWOFields ( XQNode_t * pNode )
 {
 	if ( !pNode )
 		return;
 
-	for ( int i = 0; i < pNode->m_dChildren.GetLength (); )
+	pNode->WithChildren([this](auto& dChildren) {
+	for ( int i = 0; i < dChildren.GetLength (); ) // no ++i
 	{
-		if ( pNode->m_dChildren[i]->m_dSpec.m_dFieldMask.TestAll ( false ) )
+		XQNode_t * pChild = dChildren[i];
+		if ( pChild->m_dSpec.m_dFieldMask.TestAll ( false ) )
 		{
-			XQNode_t * pChild = pNode->m_dChildren[i];
-			CSphVector<XQNode_t *> dChildren;
-			CollectChildren ( pChild, dChildren );
+			const auto& dGrandChildren = pChild->dChildren();
 #ifndef NDEBUG
-			bool bAllEmpty = dChildren.all_of ( [] ( XQNode_t * pChildNode ) { return pChildNode->m_dSpec.m_dFieldMask.TestAll ( false ); } );
-			assert ( pChild->m_dChildren.GetLength()==0 || ( dChildren.GetLength() && bAllEmpty ) );
+			bool bAllEmpty = dGrandChildren.all_of ( [] ( XQNode_t * pChildNode ) { return pChildNode->m_dSpec.m_dFieldMask.TestAll ( false ); } );
+			assert ( dGrandChildren.IsEmpty() || ( bAllEmpty && pChild->m_dSpec.m_dFieldMask.TestAll ( false )) );
 #endif
-			if ( dChildren.GetLength() )
-			{
-				ARRAY_FOREACH ( iChild, dChildren )
-					m_dSpawned.RemoveValue ( dChildren[iChild] );
-			} else
-				m_dSpawned.RemoveValue ( pChild );
-
-			// this should be a leaf node
-			SafeDelete ( pNode->m_dChildren[i] );
-			pNode->m_dChildren.RemoveFast ( i );
+			for ( auto& pGrand : dGrandChildren )
+				m_dSpawned.RemoveValue ( pGrand );
+			DeleteSpawned ( pChild );
+			dChildren.RemoveFast ( i );
 		} else
 		{
-			DeleteNodesWOFields ( pNode->m_dChildren[i] );
+			DeleteNodesWOFields ( dChildren[i] );
 			++i;
 		}
-	}
+	} });
 }
 
 
@@ -669,7 +663,7 @@ void XQParseHelper_c::FixupDestForms ()
 	for ( const MultiformNode_t & tDesc : m_dMultiforms )
 	{
 		XQNode_t * pMultiParent = tDesc.m_pNode;
-		assert ( pMultiParent->dWords().GetLength()==1 && pMultiParent->m_dChildren.GetLength()==0 );
+		assert ( pMultiParent->dWords().GetLength()==1 && pMultiParent->dChildren().GetLength()==0 );
 
 		XQKeyword_t tKeyword;
 		pMultiParent->WithWords ( [&tKeyword] ( auto& dWords ) {
@@ -742,9 +736,10 @@ static void TransformMorphOnlyFields ( XQNode_t * pNode, const CSphBitvec & tMor
 	if ( !pNode )
 		return;
 
-	ARRAY_FOREACH ( i, pNode->m_dChildren )
-		TransformMorphOnlyFields ( pNode->m_dChildren[i], tMorphDisabledFields );
-
+	pNode->WithChildren([&tMorphDisabledFields] ( auto & dChildren ) {
+		for ( auto& pChild : dChildren )
+			TransformMorphOnlyFields ( pChild, tMorphDisabledFields );
+	});
 	if ( pNode->m_dSpec.IsEmpty () || pNode->dWords().IsEmpty () )
 		return;
 
@@ -989,8 +984,8 @@ uint64_t XQNode_t::GetHash () const noexcept
 
 	for ( const auto& dWord : dWords() )
 		m_iMagicHash = 100 + ( m_iMagicHash ^ sphFNV64 ( dWord.m_sWord.cstr() ) ); // +100 to make it non-transitive
-	ARRAY_FOREACH ( j, m_dChildren )
-		m_iMagicHash = 100 + ( m_iMagicHash ^ m_dChildren[j]->GetHash() ); // +100 to make it non-transitive
+	for ( const auto* pChild : m_dChildren )
+		m_iMagicHash = 100 + ( m_iMagicHash ^ pChild->GetHash() ); // +100 to make it non-transitive
 	m_iMagicHash += 1000000; // to immerse difference between parents and children
 	m_iMagicHash ^= sphFNV64 ( dZeroOp );
 
@@ -1009,8 +1004,8 @@ uint64_t XQNode_t::GetFuzzyHash () const noexcept
 
 	for ( const auto& dWord : dWords() )
 		m_iFuzzyHash = 100 + ( m_iFuzzyHash ^ sphFNV64 ( dWord.m_sWord.cstr() ) ); // +100 to make it non-transitive
-	ARRAY_FOREACH ( j, m_dChildren )
-		m_iFuzzyHash = 100 + ( m_iFuzzyHash ^ m_dChildren[j]->GetFuzzyHash () ); // +100 to make it non-transitive
+	for ( const auto* pChild : m_dChildren )
+		m_iFuzzyHash = 100 + ( m_iFuzzyHash ^ pChild->GetFuzzyHash () ); // +100 to make it non-transitive
 	m_iFuzzyHash += 1000000; // to immerse difference between parents and children
 	m_iFuzzyHash ^= sphFNV64 ( dZeroOp );
 
@@ -1065,15 +1060,12 @@ XQNode_t * XQNode_t::Clone () const noexcept
 	pRet->m_bNotWeighted = m_bNotWeighted;
 	pRet->m_bPercentOp = m_bPercentOp;
 
-	if ( m_dChildren.GetLength()==0 )
+	if ( m_dChildren.IsEmpty() )
 		return pRet;
 
 	pRet->m_dChildren.Reserve ( m_dChildren.GetLength() );
-	for ( int i = 0; i < m_dChildren.GetLength(); ++i )
-	{
-		pRet->m_dChildren.Add ( m_dChildren[i]->Clone() );
-		pRet->m_dChildren.Last()->m_pParent = pRet;
-	}
+	for ( const auto* pChild : m_dChildren )
+		pRet->AddNewChild ( pChild->Clone() );
 
 	return pRet;
 }
@@ -1083,8 +1075,8 @@ XQNode_t * XQNode_t::Clone () const noexcept
 static int GetNodeChildIndex ( const XQNode_t * pParent, const XQNode_t * pNode )
 {
 	assert ( pParent && pNode );
-	ARRAY_FOREACH ( i, pParent->m_dChildren )
-		if ( pParent->m_dChildren[i]==pNode )
+	ARRAY_FOREACH ( i, pParent->dChildren() )
+		if ( pParent->dChild(i)==pNode )
 			return i;
 
 	return -1;
@@ -1805,10 +1797,9 @@ XQNode_t * XQParser_t::AddOp ( XQOperator_e eOp, XQNode_t * pLeft, XQNode_t * pR
 
 	// build a new node
 	XQNode_t * pResult = NULL;
-	if ( pLeft->m_dChildren.GetLength() && pLeft->GetOp()==eOp && pLeft->m_iOpArg==iOpArg )
+	if ( !pLeft->dChildren().IsEmpty() && pLeft->GetOp()==eOp && pLeft->m_iOpArg==iOpArg )
 	{
-		pLeft->m_dChildren.Add ( pRight );
-		pRight->m_pParent = pLeft;
+		pLeft->AddNewChild ( pRight );
 		pResult = pLeft;
 	} else
 	{
@@ -2027,23 +2018,23 @@ void xqDump ( const XQNode_t * pNode, int iIndent )
 #endif
 	xqIndent ( iIndent );
 	xqDumpNode ( pNode );
-	if ( pNode->m_dChildren.IsEmpty() )
+	if ( pNode->dChildren().IsEmpty() )
 	{
 		printf ( "\n" );
 		return;
 	}
 
-	if ( ( pNode->m_dChildren.GetLength()==1 )
+	if ( ( pNode->dChildren().GetLength()==1 )
 		&& ( pNode->GetOp()==SPH_QUERY_AND)
-		&& ( !pNode->m_dChildren.First()->dWords().IsEmpty()))
+		&& ( !pNode->dChild(0)->dWords().IsEmpty()))
 	{
-		xqDumpNode ( pNode->m_dChildren.First() );
+		xqDumpNode ( pNode->dChild(0) );
 		printf ( "\n" );
 		return;
 	}
 
-	printf ( " (%d)\n", pNode->m_dChildren.GetLength() );
-	for ( const auto* tChild : pNode->m_dChildren )
+	printf ( " (%d)\n", pNode->dChildren().GetLength() );
+	for ( const auto* tChild : pNode->dChildren() )
 	{
 		assert ( tChild->m_pParent==pNode );
 		xqDump ( tChild, iIndent + 1 );
@@ -2104,11 +2095,11 @@ CSphString sphReconstructNode ( const XQNode_t * pNode, const CSphSchema * pSche
 
 	} else
 	{
-		ARRAY_FOREACH ( i, pNode->m_dChildren )
+		ARRAY_FOREACH ( i, pNode->dChildren() )
 		{
 			if ( !i )
 			{
-				auto sFoo = sphReconstructNode ( pNode->m_dChildren[i], pSchema );
+				auto sFoo = sphReconstructNode ( pNode->dChild(i), pSchema );
 				sRes.Clear();
 				sRes << sFoo;
 			} else
@@ -2127,13 +2118,13 @@ CSphString sphReconstructNode ( const XQNode_t * pNode, const CSphSchema * pSche
 				sRes.Clear();
 
 				if ( pNode->GetOp()==SPH_QUERY_PHRASE )
-					sRes.Sprintf ( "\"%s %s\"", sTrim.cstr(), sphReconstructNode ( pNode->m_dChildren[i], pSchema ).cstr() );
+					sRes.Sprintf ( "\"%s %s\"", sTrim.cstr(), sphReconstructNode ( pNode->dChild(i), pSchema ).cstr() );
 				else
-					sRes.Sprintf ( "%s %s %s", sTrim.cstr(), sOp, sphReconstructNode ( pNode->m_dChildren[i], pSchema ).cstr() );
+					sRes.Sprintf ( "%s %s %s", sTrim.cstr(), sOp, sphReconstructNode ( pNode->dChild(i), pSchema ).cstr() );
 			}
 		}
 
-		if ( pNode->m_dChildren.GetLength()>1 )
+		if ( pNode->dChildren().GetLength()>1 )
 		{
 			CSphString sFoo;
 			sRes.MoveTo ( sFoo );
@@ -2207,7 +2198,7 @@ bool sphParseExtendedQuery ( XQQuery_t & tParsed, const char * sQuery, const CSp
 
 	// moved here from ranker creation
 	// as at that point term expansion could produce many terms from expanded term and this condition got failed
-	tParsed.m_bSingleWord = ( tParsed.m_pRoot && tParsed.m_pRoot->m_dChildren.GetLength()==0 && tParsed.m_pRoot->dWords().GetLength()==1 );
+	tParsed.m_bSingleWord = ( tParsed.m_pRoot && tParsed.m_pRoot->dChildren().IsEmpty() && tParsed.m_pRoot->dWords().GetLength()==1 );
 	tParsed.m_bEmpty = qp.m_bEmpty;
 
 	return bRes;
@@ -2373,14 +2364,14 @@ private:
 
 	// recursively scans the whole tree and builds the maps
 	// where a list of parents associated with every "leaf" nodes (i.e. with children)
-	bool BuildAssociations ( XQNode_t * pTree )
+	bool BuildAssociations ( const XQNode_t * pTree )
 	{
 		if ( IsAppropriate ( pTree ) )
 		{
-			ARRAY_FOREACH ( i, pTree->m_dChildren )
-			if ( ( !BuildAssociations ( pTree->m_dChildren[i] ) )
+			ARRAY_FOREACH ( i, pTree->dChildren() )
+			if ( ( !BuildAssociations ( pTree->dChild(i) ) )
 				|| ( ( m_eOp==pTree->GetOp() )
-				&& ( m_hNodes.Associate ( pTree, pTree->m_dChildren[i]->GetHash() )>=MAX_MULTINODES ) ) )
+				&& ( m_hNodes.Associate ( pTree, pTree->dChild(i)->GetHash() )>=MAX_MULTINODES ) ) )
 			{
 				return false;
 			}
@@ -2415,7 +2406,7 @@ private:
 			// calculate the bitmask
 			int iOrder;
 			uint64_t dMask = 0;
-			for ( const XQNode_t* pChild : pTree->m_dChildren )
+			for ( const XQNode_t* pChild : pTree->dChildren() )
 			{
 				iOrder = GetBitOrder ( pChild->GetHash() );
 				if ( iOrder>=0 )
@@ -2428,7 +2419,7 @@ private:
 		}
 
 		// recursively process all the children
-		for ( const XQNode_t* pChild : pTree->m_dChildren )
+		for ( const XQNode_t* pChild : pTree->dChildren() )
 			BuildBitmasks ( pChild );
 	}
 
@@ -2508,14 +2499,15 @@ private:
 
 		if ( m_eOp==pTree->GetOp() )
 		{
+			pTree->WithChildren ( [this,pTree] ( auto & dChildren ) {
 			// pBranch is for common subset of children, pOtherChildren is for the rest.
-			CSphOrderedHash < XQNode_t*, int, IdentityHash_fn, 64 > hBranches;
-			XQNode_t * pOtherChildren = nullptr;
+			CSphOrderedHash < CSphVector<XQNode_t *>, int, IdentityHash_fn, 64 > hBranches;
+			CSphVector<XQNode_t*> dOtherChildren;
 			int iBit;
 			int iOptimizations = 0;
-			ARRAY_FOREACH ( i, pTree->m_dChildren )
+			ARRAY_FOREACH ( i, dChildren )
 			{
-				iBit = GetBitOrder ( pTree->m_dChildren[i]->GetHash() );
+				iBit = GetBitOrder ( dChildren[i]->GetHash() );
 
 				// works only with children which are actually common with somebody else
 				if ( iBit>=0 )
@@ -2525,74 +2517,52 @@ private:
 					ARRAY_FOREACH ( j, m_dSubQueries )
 						if ( ( 1ull << iBit ) & m_dSubQueries[j] )
 						{
-							XQNode_t * pNode;
-							if ( !hBranches.Exists(j) )
-							{
-								pNode = new XQNode_t ( pTree->m_dSpec );
-								pNode->SetOp ( m_eOp, pTree->m_dChildren[i] );
-								hBranches.Add ( pNode, j );
-							} else
-							{
-								pNode = hBranches[j];
-								pNode->m_dChildren.Add ( pTree->m_dChildren[i] );
+							auto& dNode = hBranches.AddUnique (j);
+							dNode.Add ( dChildren[i] );
 
-								// Count essential subtrees (with at least 2 children)
-								if ( pNode->m_dChildren.GetLength()==2 )
-									++iOptimizations;
-							}
+							// Count essential subtrees (with at least 2 children)
+							if ( dNode.GetLength()==2 )
+								++iOptimizations;
+
 							break;
 						}
 					// another nodes add to the set of "other" children
 				} else
 				{
-					if ( !pOtherChildren )
-					{
-						pOtherChildren = new XQNode_t ( pTree->m_dSpec );
-						pOtherChildren->SetOp ( m_eOp, pTree->m_dChildren[i] );
-					} else
-						pOtherChildren->m_dChildren.Add ( pTree->m_dChildren[i] );
+					dOtherChildren.Add ( dChildren[i] );
 				}
 			}
 
 			// we don't reorganize explicit simple case - as no "others" and only one common.
 			// Also reject optimization if there is nothing to optimize.
-			if ( ( iOptimizations==0 )
-				| ( !pOtherChildren && ( hBranches.GetLength()==1 ) ) )
-			{
-				if ( pOtherChildren )
-					pOtherChildren->m_dChildren.Reset();
-				for (  auto& tBranch : hBranches )
-				{
-					assert ( tBranch.second );
-					tBranch.second->m_dChildren.Reset();
-					SafeDelete ( tBranch.second );
-				}
-			} else
+			if ( iOptimizations && !( dOtherChildren.IsEmpty() && hBranches.GetLength()==1 ) )
 			{
 				// reorganize the tree: replace the common subset to explicit node with
-				// only common members inside. This will give the the possibility
+				// only common members inside. This will give the possibility
 				// to cache the node.
-				pTree->m_dChildren.Reset();
-				if ( pOtherChildren )
-					pTree->m_dChildren.SwapData ( pOtherChildren->m_dChildren );
+				dChildren.Reset();
+				dChildren.SwapData ( dOtherChildren );
 
 				for ( auto& tBranch : hBranches )
 				{
-					if ( tBranch.second->m_dChildren.GetLength()==1 )
+					if ( tBranch.second.GetLength()==1 )
+						dChildren.Add ( tBranch.second[0] );
+					else
 					{
-						pTree->m_dChildren.Add ( tBranch.second->m_dChildren[0] );
-						tBranch.second->m_dChildren.Reset();
-						SafeDelete ( tBranch.second );
-					} else
-						pTree->m_dChildren.Add ( tBranch.second );
+						auto pNode = new XQNode_t ( pTree->m_dSpec );
+						pNode->SetOp ( m_eOp, tBranch.second );
+						dChildren.Add ( pNode );
+						pNode->m_pParent = pTree;
+					}
 				}
 			}
-			SafeDelete ( pOtherChildren );
+			} );
 		}
 
 		// recursively process all the children
-		for ( XQNode_t* pChild : pTree->m_dChildren )
-			Reorganize ( pChild );
+		pTree->WithChildren ( [this](auto& dChildren) {
+			dChildren.for_each ( [this]( XQNode_t* pChild ) { Reorganize ( pChild ); });
+		});
 	}
 
 public:
@@ -2682,7 +2652,7 @@ static void FlagCommonSubtrees ( const XQNode_t * pTree, CSubtreeHash & hSubTree
 		// we just add all the children but do NOT mark them as common
 		// so that only the subtree root is marked.
 		// also we unmark all the cases which were eaten by bigger trees
-		for ( const XQNode_t * pChild : pTree->m_dChildren )
+		for ( const XQNode_t * pChild : pTree->dChildren() )
 			if ( !hSubTrees.Exists ( pChild->GetHash() ) )
 				FlagCommonSubtrees ( pChild, hSubTrees, tCmp, false, bMark );
 			else
@@ -2694,13 +2664,13 @@ static void FlagCommonSubtrees ( const XQNode_t * pTree, CSubtreeHash & hSubTree
 		else
 			hSubTrees[iHash].Unmark();
 
-		for ( const XQNode_t* pChild : pTree->m_dChildren )
+		for ( const XQNode_t* pChild : pTree->dChildren() )
 			FlagCommonSubtrees ( pChild, hSubTrees, tCmp, bFlag, bMark );
 	}
 }
 
 
-static void SignCommonSubtrees ( XQNode_t * pTree, const CSubtreeHash & hSubTrees )
+static void SignCommonSubtrees ( const XQNode_t * pTree, const CSubtreeHash & hSubTrees )
 {
 	if ( !pTree )
 		return;
@@ -2710,7 +2680,7 @@ static void SignCommonSubtrees ( XQNode_t * pTree, const CSubtreeHash & hSubTree
 	if ( pCommon && pCommon->m_bMarked )
 		pTree->TagAsCommon ( pCommon->m_iOrder, pCommon->m_iCounter );
 
-	for ( XQNode_t* pChild : pTree->m_dChildren )
+	for ( XQNode_t* pChild : pTree->dChildren() )
 		SignCommonSubtrees ( pChild, hSubTrees );
 }
 
@@ -2810,7 +2780,7 @@ bool XqTreeComparator_t::CheckCollectTerms ( const XQNode_t * pNode1, const XQNo
 	if ( !pNode1 || !pNode2
 			|| pNode1->GetHash ()!=pNode2->GetHash () || pNode1->GetOp ()!=pNode2->GetOp ()
 			|| pNode1->dWords().GetLength ()!=pNode2->dWords().GetLength ()
-			|| pNode1->m_dChildren.GetLength ()!=pNode2->m_dChildren.GetLength () )
+			|| pNode1->dChildren().GetLength ()!=pNode2->dChildren().GetLength () )
 		return false;
 
 	// for plain nodes compare keywords
@@ -2821,9 +2791,9 @@ bool XqTreeComparator_t::CheckCollectTerms ( const XQNode_t * pNode1, const XQNo
 		m_dTerms2.Add ( pNode2->dWords().Begin () + i );
 
 	// for non-plain nodes compare children
-	ARRAY_FOREACH ( i, pNode1->m_dChildren )
+	ARRAY_FOREACH ( i, pNode1->dChildren() )
 	{
-		if ( !CheckCollectTerms ( pNode1->m_dChildren[i], pNode2->m_dChildren[i] ) )
+		if ( !CheckCollectTerms ( pNode1->dChild(i), pNode2->dChild(i) ) )
 			return false;
 	}
 
@@ -2980,7 +2950,7 @@ void CSphTransformation::TreeCollectInfo ( XQNode_t * pParent, Checker_fn pfnChe
 		hGroup.AddUnique ( uSubGroup ).Add ( pParent );
 	}
 
-	for ( const auto& dChild : pParent->m_dChildren )
+	for ( const auto& dChild : pParent->dChildren() )
 		TreeCollectInfo<Group, SubGroup> ( dChild, pfnChecker );
 }
 
@@ -3017,7 +2987,7 @@ void CSphTransformation::SetCosts ( XQNode_t * pNode, const CSphVector<XQNode_t 
 	ARRAY_FOREACH ( i, dChildren ) // don't use 'ranged for' here, as dChildren modified during the loop
 	{
 		XQNode_t * pChild = dChildren[i];
-		for ( XQNode_t* pGrandChild : pChild->m_dChildren )
+		for ( XQNode_t* pGrandChild : pChild->dChildren() )
 		{
 			dChildren.Add ( pGrandChild );
 			dChildren.Last()->m_iUser = 0;
@@ -3069,8 +3039,8 @@ bool CSphTransformation::CollectRelatedNodes ( const CSphVector<XQNode_t *> & dS
 		// Eval node that points to related nodes
 		const XQNode_t * pParent = Parenter::From ( pSimilar );
 
-		assert ( &pParent->m_dChildren!=&m_dRelatedNodes );
-		for ( XQNode_t * pChild : pParent->m_dChildren )
+		assert ( &pParent->dChildren()!=&m_dRelatedNodes );
+		for ( XQNode_t * pChild : pParent->dChildren() )
 		{
 			if ( pChild==pExclude )
 				continue;
@@ -3161,12 +3131,12 @@ bool CSphTransformation::MakeTransformCommonNot ( CSphVector<XQNode_t *> & dSimi
 
 	// the weakest node is new parent of transformed expression
 	XQNode_t * pWeakestAndNot = m_dRelatedNodes[iWeakestIndex]->m_pParent;
-	assert ( pWeakestAndNot->m_dChildren[0]==m_dRelatedNodes[iWeakestIndex] );
+	assert ( pWeakestAndNot->dChild(0)==m_dRelatedNodes[iWeakestIndex] );
 	XQNode_t * pCommonOr = pWeakestAndNot->m_pParent;
-	assert ( pCommonOr->GetOp()==SPH_QUERY_OR && pCommonOr->m_dChildren.Contains ( pWeakestAndNot ) );
+	assert ( pCommonOr->GetOp()==SPH_QUERY_OR && pCommonOr->dChildren().Contains ( pWeakestAndNot ) );
 	XQNode_t * pGrandCommonOr = pCommonOr->m_pParent;
 
-	bool bKeepOr = ( pCommonOr->m_dChildren.GetLength()>2 );
+	bool bKeepOr = ( pCommonOr->dChildren().GetLength()>2 );
 
 	// reset ownership of related nodes
 	ARRAY_FOREACH ( i, m_dRelatedNodes )
@@ -3177,11 +3147,10 @@ bool CSphTransformation::MakeTransformCommonNot ( CSphVector<XQNode_t *> & dSimi
 
 		if ( i!=iWeakestIndex )
 		{
-			Verify ( pAndNot->m_dChildren.RemoveValue ( pAnd ) );
-
+			Verify ( pAndNot->RemoveChild ( pAnd ) );
 			if ( bKeepOr )
 			{
-				pCommonOr->m_dChildren.RemoveValue ( pAndNot );
+				pCommonOr->RemoveChild ( pAndNot );
 				SafeDelete ( pAndNot );
 			}
 		}
@@ -3196,7 +3165,8 @@ bool CSphTransformation::MakeTransformCommonNot ( CSphVector<XQNode_t *> & dSimi
 	pHubAnd->SetOp ( SPH_QUERY_AND, pHubOr );
 	// replace old AND at new parent ( AND NOT ) 0 already at OR children
 	pHubAnd->m_pParent = pWeakestAndNot;
-	pWeakestAndNot->m_dChildren[0] = pHubAnd;
+	pWeakestAndNot->dChildren()[0] = pHubAnd;
+	pWeakestAndNot->Rehash();
 
 	// in case common OR had only 2 children
 	if ( bKeepOr )
@@ -3210,19 +3180,20 @@ bool CSphTransformation::MakeTransformCommonNot ( CSphVector<XQNode_t *> & dSimi
 	} else
 	{
 		pWeakestAndNot->m_pParent = pGrandCommonOr;
-		CSphVector<XQNode_t *> & dChildren = pGrandCommonOr->m_dChildren;
-		for ( XQNode_t *& pChild : dChildren )
-		{
-			if ( pChild==pCommonOr )
+		pGrandCommonOr->WithChildren([pCommonOr,pWeakestAndNot](auto& dChildren) {
+			for ( XQNode_t *& pChild : dChildren )
 			{
-				pChild = pWeakestAndNot;
-				break;
+				if ( pChild==pCommonOr )
+				{
+					pChild = pWeakestAndNot;
+					break;
+				}
 			}
-		}
+		});
 	}
 
 	// remove new parent ( AND OR ) from OR children
-	Verify ( pCommonOr->m_dChildren.RemoveValue ( pWeakestAndNot ) );
+	Verify ( pCommonOr->RemoveChild ( pWeakestAndNot ) );
 
 	// free OR and all children
 	SafeDelete ( pCommonOr );
@@ -3308,8 +3279,7 @@ bool CSphTransformation::MakeTransformCommonCompoundNot ( CSphVector<XQNode_t *>
 	ARRAY_FOREACH ( i, dSimilarNodes )
 	{
 		XQNode_t * pParent = dSimilarNodes[i]->m_pParent;
-		Verify ( pParent->m_dChildren.RemoveValue ( dSimilarNodes[i] ) );
-
+		Verify ( pParent->RemoveChild ( dSimilarNodes[i] ) );
 		if ( i!=iWeakestIndex )
 			SafeDelete ( dSimilarNodes[i] );
 	}
@@ -3319,24 +3289,23 @@ bool CSphTransformation::MakeTransformCommonCompoundNot ( CSphVector<XQNode_t *>
 	XQNode_t * pNewNot = new XQNode_t ( XQLimitSpec_t() );
 	pNewNot->SetOp ( SPH_QUERY_NOT, pWeakestSimilar );
 
-	XQNode_t * pNewOr = new XQNode_t ( XQLimitSpec_t() );
-	pNewOr->SetOp ( SPH_QUERY_OR );
-	pNewOr->m_dChildren.Resize ( m_dRelatedNodes.GetLength() );
+	CSphVector<XQNode_t *> dNewOrChildren {m_dRelatedNodes.GetLength()};
 	ARRAY_FOREACH ( i, m_dRelatedNodes )
 	{
 		// ANDNOT operation implies AND and NOT nodes.
 		// The related nodes point to AND node that has one child node.
-		assert ( m_dRelatedNodes[i]->m_dChildren.GetLength()==1 );
-		pNewOr->m_dChildren[i] = m_dRelatedNodes[i]->m_dChildren[0]->Clone();
-		pNewOr->m_dChildren[i]->m_pParent = pNewOr;
+		assert ( m_dRelatedNodes[i]->dChildren().GetLength()==1 );
+		dNewOrChildren[i] = m_dRelatedNodes[i]->dChild(0)->Clone();
 	}
+
+	XQNode_t * pNewOr = new XQNode_t ( XQLimitSpec_t() );
+	pNewOr->SetOp ( SPH_QUERY_OR, dNewOrChildren );
 
 	XQNode_t * pNewAnd = new XQNode_t ( XQLimitSpec_t() );
 	pNewAnd->SetOp ( SPH_QUERY_AND, pNewOr );
 	XQNode_t * pNewAndNot = new XQNode_t ( XQLimitSpec_t() );
 	pNewAndNot->SetOp ( SPH_QUERY_ANDNOT, pNewAnd, pNewNot );
-	pCommonOr->m_dChildren.Add ( pNewAndNot );
-	pNewAndNot->m_pParent = pCommonOr;
+	pCommonOr->AddNewChild ( pNewAndNot );
 	return true;
 }
 
@@ -3344,7 +3313,7 @@ bool CSphTransformation::MakeTransformCommonCompoundNot ( CSphVector<XQNode_t *>
 bool CSphTransformation::CheckCommonSubTerm ( const XQNode_t * pNode ) noexcept
 {
 	return Grand2Node::Valid(pNode)
-		&& (pNode->GetOp() != SPH_QUERY_PHRASE || pNode->m_dChildren.IsEmpty())
+		&& (pNode->GetOp() != SPH_QUERY_PHRASE || pNode->dChildren().IsEmpty())
 		&& ParentNode::From(pNode)->GetOp()==SPH_QUERY_OR
 		&& GrandNode::From(pNode)->GetOp()==SPH_QUERY_AND
 		&& Grand2Node::From(pNode)->GetOp()==SPH_QUERY_OR;
@@ -3420,11 +3389,11 @@ static bool SubtreeRemoveEmpty ( XQNode_t * pNode )
 
 	// climb up
 	XQNode_t * pParent = pNode->m_pParent;
-	while ( pParent && pParent->m_dChildren.GetLength()<=1 && pParent->dWords().IsEmpty() )
+	while ( pParent && pParent->dChildren().GetLength()<=1 && pParent->dWords().IsEmpty() )
 		pNode = std::exchange ( pParent, pParent->m_pParent );
 
 	if ( pParent )
-		pParent->m_dChildren.RemoveValue ( pNode );
+		pParent->RemoveChild ( pNode );
 
 	// free subtree
 	SafeDelete ( pNode );
@@ -3436,16 +3405,16 @@ static bool SubtreeRemoveEmpty ( XQNode_t * pNode )
 static void CompositeFixup ( XQNode_t * pNode, XQNode_t ** ppRoot )
 {
 	assert ( pNode && pNode->dWords().IsEmpty() );
-	if ( pNode->m_dChildren.GetLength()!=1 || ( pNode->GetOp()!=SPH_QUERY_OR && pNode->GetOp()!=SPH_QUERY_AND ) )
+	if ( pNode->dChildren().GetLength()!=1 || ( pNode->GetOp()!=SPH_QUERY_OR && pNode->GetOp()!=SPH_QUERY_AND ) )
 		return;
 
-	XQNode_t * pChild = pNode->m_dChildren.First();
+	XQNode_t * pChild = pNode->dChildren()[0];
 	pChild->m_pParent = nullptr;
-	pNode->m_dChildren.Resize ( 0 );
+	pNode->WithChildren ( [] ( auto & dChildren ) { dChildren.Resize ( 0 ); } );
 
 	// climb up
 	XQNode_t * pParent = pNode->m_pParent;
-	while ( pParent && pParent->m_dChildren.GetLength()==1 && pParent->dWords().IsEmpty() &&
+	while ( pParent && pParent->dChildren().GetLength()==1 && pParent->dWords().IsEmpty() &&
 		( pParent->GetOp()==SPH_QUERY_OR || pParent->GetOp()==SPH_QUERY_AND ) )
 	{
 		pNode = std::exchange (pParent, pParent->m_pParent);
@@ -3453,7 +3422,7 @@ static void CompositeFixup ( XQNode_t * pNode, XQNode_t ** ppRoot )
 
 	if ( pParent )
 	{
-		for ( auto& dChild : pParent->m_dChildren )
+		for ( auto& dChild : pParent->dChildren() )
 		{
 			if ( dChild!=pNode )
 				continue;
@@ -3496,16 +3465,16 @@ void CSphTransformation::MakeTransformCommonSubTerm ( CSphVector<XQNode_t *> & d
 	ARRAY_FOREACH ( i, dX )
 	{
 		XQNode_t * pParent = dX[i]->m_pParent;
-		Verify ( pParent->m_dChildren.RemoveValue ( dX[i] ) );
+		Verify ( pParent->RemoveChild ( dX[i] ) );
 		if ( i!=iWeakestIndex )
 			SafeDelete ( dX[i] );
 
 		dExcluded[i] = pParent;
-		pParent->m_pParent->m_dChildren.RemoveValue ( pParent );
+		pParent->m_pParent->RemoveChild ( pParent );
 	}
 
 	CSphVector<XQNode_t *> dRelatedParents;
-	for ( XQNode_t * pRelated : m_dRelatedNodes )
+	for ( XQNode_t * pRelated: m_dRelatedNodes )
 	{
 		XQNode_t * pParent = pRelated->m_pParent;
 		if ( !dRelatedParents.Contains ( pParent ) )
@@ -3518,7 +3487,8 @@ void CSphTransformation::MakeTransformCommonSubTerm ( CSphVector<XQNode_t *> & d
 	// push excluded children back
 	for ( XQNode_t * pExcluded: dExcluded )
 	{
-		pExcluded->m_pParent->m_dChildren.Add ( pExcluded );
+		// pExcluded->m_pParent->m_dChildren.Add ( pExcluded );
+		pExcluded->m_pParent->WithChildren ( [pVal=pExcluded] ( auto & dChildren ) { dChildren.Add ( pVal ); } );
 	}
 
 	XQNode_t * pNewOr = new XQNode_t ( XQLimitSpec_t() );
@@ -3529,8 +3499,7 @@ void CSphTransformation::MakeTransformCommonSubTerm ( CSphVector<XQNode_t *> & d
 	XQNode_t * pCommonOr = Grand2Node::From(pX);
 	XQNode_t * pNewAnd = new XQNode_t ( XQLimitSpec_t() );
 	pNewAnd->SetOp ( SPH_QUERY_AND, pNewOr, pX );
-	pCommonOr->m_dChildren.Add ( pNewAnd );
-	pNewAnd->m_pParent = pCommonOr;
+	pCommonOr->AddNewChild ( pNewAnd );
 
 	for ( auto* pExcluded : dExcluded )
 		CleanupSubtree ( pExcluded, m_ppRoot );
@@ -3617,7 +3586,7 @@ static void sphHashSubphrases ( XQNode_t * pNode, BigramHash_t & hBirgam )
 	}
 
 	// loop all children
-	for ( XQNode_t * pChild : pNode->m_dChildren )
+	for ( XQNode_t * pChild : pNode->dChildren() )
 		sphHashSubphrases ( pChild, hBirgam );
 }
 
@@ -3654,7 +3623,7 @@ static bool sphIsNodeStrongest ( const XQNode_t * pNode, const CSphVector<XQNode
 
 		if ( eNode==SPH_QUERY_PROXIMITY && eSimilar==SPH_QUERY_PROXIMITY && iWords>iSimilarWords )
 			return false;
-		if ( ( eNode==SPH_QUERY_PHRASE || eNode==SPH_QUERY_AND ) && ( eSimilar==SPH_QUERY_PROXIMITY && ( iWords>1 || pNode->m_dChildren.GetLength() ) ) )
+		if ( ( eNode==SPH_QUERY_PHRASE || eNode==SPH_QUERY_AND ) && ( eSimilar==SPH_QUERY_PROXIMITY && ( iWords>1 || pNode->dChildren().GetLength() ) ) )
 			return false;
 
 		bool bSimilar = ( eNode==SPH_QUERY_PHRASE && eSimilar==SPH_QUERY_PHRASE )
@@ -3710,12 +3679,13 @@ bool CSphTransformation::TransformCommonKeywords () const noexcept
 			continue;
 
 		pLast = pPending;
-		Verify ( pLast->m_pParent->m_dChildren.RemoveValue ( pLast ) );
+		Verify ( pLast->m_pParent->RemoveChild ( pLast ) );
 		delete ( pPending );
 	}
 
 	return bTransformed;
 }
+
 
 // minimum words per phrase that might be optimized by CommonSuffix optimization
 
@@ -3982,7 +3952,7 @@ void CSphTransformation::MakeTransformCommonPhrase ( CSphVector<XQNode_t *> & dC
 	for ( XQNode_t * pPhrase : dCommonNodes )
 	{
 		// remove phrase from parent and eliminate in case of common phrase duplication
-		Verify ( pGrandOr->m_dChildren.RemoveValue ( pPhrase ) );
+		Verify ( pGrandOr->RemoveChild ( pPhrase ) );
 		if ( pPhrase->dWords().GetLength()==iCommonLen )
 		{
 			SafeDelete ( pPhrase );
@@ -3990,8 +3960,7 @@ void CSphTransformation::MakeTransformCommonPhrase ( CSphVector<XQNode_t *> & dC
 		}
 
 		// move phrase to new OR
-		pNewOr->m_dChildren.Add ( pPhrase );
-		pPhrase->m_pParent = pNewOr;
+		pNewOr->AddNewChild ( pPhrase );
 
 		// shift down words and enumerate words atom positions
 		pPhrase->WithWords ( [pCommonPhrase,bHeadIsCommon,iCommonLen] ( auto& dPhraseWords )
@@ -4019,10 +3988,10 @@ void CSphTransformation::MakeTransformCommonPhrase ( CSphVector<XQNode_t *> & dC
 			pPhrase->SetOp ( SPH_QUERY_AND );
 	}
 
-	if ( pNewOr->m_dChildren.GetLength() )
+	if ( pNewOr->dChildren().GetLength() )
 	{
 		// parent phrase need valid atom position of children
-		pNewOr->m_iAtomPos = pNewOr->m_dChildren[0]->dWord(0).m_iAtomPos;
+		pNewOr->m_iAtomPos = pNewOr->dChild(0)->dWord(0).m_iAtomPos;
 
 		XQNode_t * pNewPhrase = new XQNode_t ( XQLimitSpec_t() );
 		if ( bHeadIsCommon )
@@ -4030,13 +3999,11 @@ void CSphTransformation::MakeTransformCommonPhrase ( CSphVector<XQNode_t *> & dC
 		else
 			pNewPhrase->SetOp ( SPH_QUERY_PHRASE, pNewOr, pCommonPhrase );
 
-		pGrandOr->m_dChildren.Add ( pNewPhrase );
-		pNewPhrase->m_pParent = pGrandOr;
+		pGrandOr->AddNewChild ( pNewPhrase );
 	} else
 	{
 		// common phrases with same words elimination
-		pGrandOr->m_dChildren.Add ( pCommonPhrase );
-		pCommonPhrase->m_pParent = pGrandOr;
+		pGrandOr->AddNewChild ( pCommonPhrase );
 		SafeDelete ( pNewOr );
 	}
 }
@@ -4049,8 +4016,8 @@ bool CSphTransformation::CheckCommonAndNotFactor ( const XQNode_t * pNode ) noex
 		&& GrandNode::From(pNode)->GetOp()==SPH_QUERY_ANDNOT
 		&& Grand2Node::From(pNode)->GetOp()==SPH_QUERY_OR
 		// FIXME!!! check performance with OR node at 2nd grand instead of regular not NOT
-		&& GrandNode::From(pNode)->m_dChildren.GetLength()>=2
-		&& GrandNode::From(pNode)->m_dChildren[1]->GetOp()==SPH_QUERY_NOT;
+		&& GrandNode::From(pNode)->dChildren().GetLength()>=2
+		&& GrandNode::From(pNode)->dChild(1)->GetOp()==SPH_QUERY_NOT;
 //
 // NOLINT		//  NOT:
 // NOLINT		//		 _______ OR (gGOr) ________________
@@ -4094,38 +4061,37 @@ bool CSphTransformation::MakeTransformCommonAndNotFactor ( CSphVector<XQNode_t *
 	XQNode_t * pFirstAndNot = GrandNode::From ( dSimilarNodes [iWeakestIndex] );
 	XQNode_t * pCommonOr = pFirstAndNot->m_pParent;
 
-	assert ( pFirstAndNot->m_dChildren.GetLength()==2 );
-	XQNode_t * pFirstNot = pFirstAndNot->m_dChildren[1];
-	assert ( pFirstNot->m_dChildren.GetLength()==1 );
+	assert ( pFirstAndNot->dChildren().GetLength()==2 );
+	XQNode_t * pFirstNot = pFirstAndNot->dChildren()[1];
+	assert ( pFirstNot->dChildren().GetLength()==1 );
 
+	CSphVector<XQNode_t *> dAndNewChildren;
+	dAndNewChildren.Reserve ( dSimilarNodes.GetLength() );
+	dAndNewChildren.Add (pFirstNot->dChildren()[0]);
 	XQNode_t * pAndNew = new XQNode_t ( XQLimitSpec_t() );
-	pAndNew->SetOp ( SPH_QUERY_AND );
-	pAndNew->m_dChildren.Reserve ( dSimilarNodes.GetLength() );
-	pAndNew->m_dChildren.Add ( pFirstNot->m_dChildren[0] );
-	pAndNew->m_dChildren.Last()->m_pParent = pAndNew;
-	pFirstNot->m_dChildren[0] = pAndNew;
+	pFirstNot->dChildren()[0] = pAndNew;
 	pAndNew->m_pParent = pFirstNot;
 
-	for ( int i=0; i<dSimilarNodes.GetLength(); ++i )
+
+	for ( int i = 0; i < dSimilarNodes.GetLength(); ++i )
 	{
 		assert ( CheckCommonAndNotFactor ( dSimilarNodes[i] ) );
 		if ( i==iWeakestIndex )
 			continue;
 
 		XQNode_t * pAndNot = GrandNode::From ( dSimilarNodes[i] );
-		assert ( pAndNot->m_dChildren.GetLength()==2 );
-		XQNode_t * pNot = pAndNot->m_dChildren[1];
-		assert ( pNot->m_dChildren.GetLength()==1 );
-		assert ( &pAndNew->m_dChildren!=&pNot->m_dChildren );
-		pAndNew->m_dChildren.Add ( pNot->m_dChildren[0] );
-		pAndNew->m_dChildren.Last()->m_pParent = pAndNew;
-		pNot->m_dChildren[0] = nullptr;
+		assert ( pAndNot->dChildren().GetLength()==2 );
+		XQNode_t * pNot = pAndNot->dChildren()[1];
+		assert ( pNot->dChildren().GetLength()==1 );
+		assert ( &pAndNew->dChildren()!=&pNot->dChildren() );
+		dAndNewChildren.Add ( pNot->dChildren()[0] );
+		pNot->dChildren()[0] = nullptr;
 
-		Verify ( pCommonOr->m_dChildren.RemoveValue ( pAndNot ) );
+		Verify ( pCommonOr->RemoveChild ( pAndNot ) );
 		dSimilarNodes[i] = nullptr;
 		SafeDelete ( pAndNot );
 	}
-
+	pAndNew->SetOp ( SPH_QUERY_AND, dAndNewChildren );
 	return true;
 }
 
@@ -4195,7 +4161,7 @@ bool CSphTransformation::MakeTransformCommonOrNot ( CSphVector<XQNode_t *> & dSi
 	ARRAY_FOREACH ( i, dSimilarNodes )
 	{
 		XQNode_t * pParent = dSimilarNodes[i]->m_pParent;
-		Verify ( pParent->m_dChildren.RemoveValue ( dSimilarNodes[i] ) );
+		Verify ( pParent->RemoveChild ( dSimilarNodes[i] ) );
 
 		if ( i!=iWeakestIndex )
 			SafeDelete ( dSimilarNodes[i] );
@@ -4210,14 +4176,15 @@ bool CSphTransformation::MakeTransformCommonOrNot ( CSphVector<XQNode_t *> & dSi
 	} else
 	{
 		XQNode_t * pParent = pCommonOr->m_pParent;
-		assert ( pParent->m_dChildren.Contains ( pCommonOr ) );
-		for ( XQNode_t *& pChild : pParent->m_dChildren )
+		assert ( pParent->dChildren().Contains ( pCommonOr ) );
+		for ( XQNode_t *& pChild : pParent->dChildren() )
 		{
 			if ( pChild!=pCommonOr )
 				continue;
 
 			pChild = pNewAndNot;
 			pNewAndNot->m_pParent = pParent;
+			pChild->Rehash();
 			break;
 		}
 	}
@@ -4234,7 +4201,7 @@ bool CSphTransformation::CheckHungOperand ( const XQNode_t * pNode ) noexcept
 	return ParentNode::Valid(pNode)
 		&& ( ParentNode::From(pNode)->GetOp()==SPH_QUERY_OR || ParentNode::From(pNode)->GetOp()==SPH_QUERY_AND )
 		&& !( GrandNode::Valid(pNode) && ParentNode::From(pNode)->GetOp()==SPH_QUERY_AND && GrandNode::From(pNode)->GetOp()==SPH_QUERY_ANDNOT )
-		&& ParentNode::From(pNode)->m_dChildren.GetLength()<=1
+		&& ParentNode::From(pNode)->dChildren().GetLength()<=1
 		&& pNode->dWords().IsEmpty();
 
 //
@@ -4263,19 +4230,20 @@ bool CSphTransformation::TransformHungOperand () const noexcept
 			pHungNode->m_pParent = nullptr;
 		} else
 		{
-			assert ( pGrand->m_dChildren.Contains ( pParent ) );
-			for ( XQNode_t *& pChild : pGrand->m_dChildren )
+			assert ( pGrand->dChildren().Contains ( pParent ) );
+			for ( XQNode_t *& pChild : pGrand->dChildren() )
 			{
 				if ( pChild!=pParent )
 					continue;
 
 				pChild = pHungNode;
 				pHungNode->m_pParent = pGrand;
+				pHungNode->Rehash();
 				break;
 			}
 		}
 
-		pParent->m_dChildren[0] = nullptr;
+		pParent->dChildren()[0] = nullptr;
 		SafeDelete ( pParent );
 	}
 
@@ -4308,11 +4276,11 @@ static XQNode_t * sphMoveSiblingsUp ( XQNode_t * pNode )
 	XQNode_t * pGrand = pParent->m_pParent;
 	assert ( pGrand );
 
-	assert ( pGrand->m_dChildren.Contains ( pParent ) );
+	assert ( pGrand->dChildren().Contains ( pParent ) );
 	int iParent = GetNodeChildIndex ( pGrand, pParent );
 
-	int iParentChildren = pParent->m_dChildren.GetLength();
-	int iGrandChildren = pGrand->m_dChildren.GetLength();
+	int iParentChildren = pParent->dChildren().GetLength();
+	int iGrandChildren = pGrand->dChildren().GetLength();
 	int iTotalChildren = iParentChildren+iGrandChildren-1;
 
 	// parent.children + grand.parent.children - parent itself
@@ -4320,24 +4288,24 @@ static XQNode_t * sphMoveSiblingsUp ( XQNode_t * pNode )
 
 	// grand head prior parent
 	for ( int i=0; i<iParent; i++ )
-		dChildren[i] = pGrand->m_dChildren[i];
+		dChildren[i] = pGrand->dChildren()[i];
 
 	// grand tail after parent
 	for ( int i=0; i<iGrandChildren-iParent-1; i++ )
-		dChildren[i+iParent+iParentChildren] = pGrand->m_dChildren[i+iParent+1];
+		dChildren[i+iParent+iParentChildren] = pGrand->dChildren()[i+iParent+1];
 
 	// all parent children
 	for ( int i=0; i<iParentChildren; i++ )
 	{
-		XQNode_t * pChild = pParent->m_dChildren[i];
+		XQNode_t * pChild = pParent->dChildren()[i];
 		pChild->m_pParent = pGrand;
 		dChildren[i+iParent] = pChild;
 	}
 
-	pGrand->m_dChildren.SwapData ( dChildren );
+	pGrand->WithChildren ( [&dChildren](auto& dMyChildren) { dMyChildren.SwapData ( dChildren );} );
 	// all children at grand now
-	pParent->m_dChildren.Resize(0);
-	delete ( pParent );
+	pParent->WithChildren ( [] ( auto & dChildren ) { dChildren.Resize ( 0 ); } );
+	delete (pParent);
 	return nullptr;
 }
 
@@ -4378,13 +4346,13 @@ bool CSphTransformation::CheckExcessAndNot ( const XQNode_t * pNode ) noexcept
 {
 	return Grand2Node::Valid(pNode)
 		&& pNode->GetOp()==SPH_QUERY_AND
-		&& !( pNode->m_dChildren.GetLength()==1 && pNode->m_dChildren[0]->GetOp()==SPH_QUERY_ANDNOT )
+		&& !( pNode->dChildren().GetLength()==1 && pNode->dChild(0)->GetOp()==SPH_QUERY_ANDNOT )
 		&& ParentNode::From(pNode)->GetOp()==SPH_QUERY_ANDNOT
 		&& GrandNode::From(pNode)->GetOp()==SPH_QUERY_AND
 		&& Grand2Node::From(pNode)->GetOp()==SPH_QUERY_ANDNOT
 	// FIXME!!! check performance with OR node at 2nd grand instead of regular not NOT
-		&& Grand2Node::From(pNode)->m_dChildren.GetLength()>1
-		&& Grand2Node::From(pNode)->m_dChildren[1]->GetOp()==SPH_QUERY_NOT;
+		&& Grand2Node::From(pNode)->dChildren().GetLength()>1
+		&& Grand2Node::From(pNode)->dChild(1)->GetOp()==SPH_QUERY_NOT;
 //
 // NOLINT		//  NOT:
 // NOLINT		//	                      AND NOT
@@ -4417,32 +4385,34 @@ bool CSphTransformation::TransformExcessAndNot () const noexcept
 				if ( hDeleted.Exists ( pParentAndNot ) || !CheckExcessAndNot ( pAnd ) )
 					continue;
 
-				assert ( pParentAndNot->m_dChildren.GetLength()==2 );
-				XQNode_t * pNot = pParentAndNot->m_dChildren[1];
+				assert ( pParentAndNot->dChildren().GetLength()==2 );
+				XQNode_t * pNot = pParentAndNot->dChildren()[1];
 				XQNode_t * pGrandAnd = pParentAndNot->m_pParent;
 				XQNode_t * pGrand2AndNot = pGrandAnd->m_pParent;
-				assert ( pGrand2AndNot->m_dChildren.GetLength()==2 );
-				XQNode_t * pGrand2Not = pGrand2AndNot->m_dChildren[1];
+				assert ( pGrand2AndNot->dChildren().GetLength()==2 );
+				XQNode_t * pGrand2Not = pGrand2AndNot->dChildren()[1];
 
-				assert ( pGrand2Not->m_dChildren.GetLength()==1 );
+				assert ( pGrand2Not->dChildren().GetLength()==1 );
 				auto * pNewOr = new XQNode_t ( XQLimitSpec_t() );
 
-				pNewOr->SetOp ( SPH_QUERY_OR, pNot->m_dChildren );
-				pNewOr->m_dChildren.Add ( pGrand2Not->m_dChildren[0] );
-				pNewOr->m_dChildren.Last()->m_pParent = pNewOr;
-				pGrand2Not->m_dChildren[0] = pNewOr;
+				pNot->WithChildren([pNewOr](auto& dChildren) {
+					pNewOr->SetOp ( SPH_QUERY_OR, dChildren );
+					dChildren.Resize(0);
+				});
+
+				pNewOr->AddNewChild ( pGrand2Not->dChildren()[0] );
+				pGrand2Not->dChildren()[0] = pNewOr;
 				pNewOr->m_pParent = pGrand2Not;
 
-				assert ( pGrandAnd->m_dChildren.Contains ( pParentAndNot ) );
+				assert ( pGrandAnd->dChildren().Contains ( pParentAndNot ) );
 				int iChild = GetNodeChildIndex ( pGrandAnd, pParentAndNot );
 				if ( iChild>=0 )
-					pGrandAnd->m_dChildren[iChild] = pAnd;
+					pGrandAnd->dChildren()[iChild] = pAnd;
 				pAnd->m_pParent = pGrandAnd;
 
 				// Delete excess nodes
 				hDeleted.Add ( 1, pParentAndNot );
-				pNot->m_dChildren.Resize ( 0 );
-				pParentAndNot->m_dChildren[0] = nullptr;
+				pParentAndNot->dChildren()[0] = nullptr;
 				SafeDelete ( pParentAndNot );
 				bRecollect = true;
 			}

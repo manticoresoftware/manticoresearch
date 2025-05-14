@@ -263,7 +263,7 @@ void SnippetsDocIndex_c::ParseQuery ( const DictRefPtr_c& pDict, DWORD eExtQuery
 			if ( !pChild )
 				continue;
 
-			for ( const auto & dChild : pChild->m_dChildren )
+			for ( const auto & dChild : pChild->dChildren() )
 				dChildren.Add ( dChild );
 
 			for ( const auto& dWord : pChild->dWords() )
@@ -355,8 +355,8 @@ int SnippetsDocIndex_c::ExtractWords ( XQNode_t * pNode, const DictRefPtr_c& pDi
 		}
 	}
 
-	ARRAY_FOREACH ( i, pNode->m_dChildren )
-		iQpos = ExtractWords ( pNode->m_dChildren[i], pDict, iQpos );
+	ARRAY_FOREACH ( i, pNode->dChildren() )
+		iQpos = ExtractWords ( pNode->dChildren()[i], pDict, iQpos );
 
 	return iQpos;
 }

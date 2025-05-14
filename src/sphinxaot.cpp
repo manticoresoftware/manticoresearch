@@ -2067,7 +2067,7 @@ namespace {
 void TransformAotFilterKeyword ( XQNode_t * pNode, LemmatizerTrait_i * pLemmatizer, const XQKeyword_t & tKeyword, const CSphWordforms * pWordforms, const CSphIndexSettings & tSettings )
 {
 	assert ( pNode->dWords().GetLength()<=1 );
-	assert ( pNode->m_dChildren.GetLength()==0 );
+	assert ( pNode->dChildren().IsEmpty() );
 
 	XQNode_t * pExact = nullptr;
 	if ( pWordforms )
@@ -2125,7 +2125,6 @@ void TransformAotFilterKeyword ( XQNode_t * pNode, LemmatizerTrait_i * pLemmatiz
 			pExact->AddDirtyWord ( tKeyword );
 
 		pExact->WithWord(0,[&tKeyword](auto& dWord) {dWord.m_sWord.SetSprintf ( "=%s", tKeyword.m_sWord.cstr() ); });
-		pExact->m_pParent = pNode;
 	}
 
 	if ( !pExact && dLemmas.GetLength()<=1 )
@@ -2150,13 +2149,12 @@ void TransformAotFilterKeyword ( XQNode_t * pNode, LemmatizerTrait_i * pLemmatiz
 			tLemma.m_bFieldStart = tKeyword.m_bFieldStart;
 			tLemma.m_bFieldEnd = tKeyword.m_bFieldEnd;
 			tLemma.m_bMorphed = true;
-			pNode->m_dChildren.Add ( new XQNode_t ( pNode->m_dSpec ) );
-			pNode->m_dChildren.Last()->m_pParent = pNode;
-			pNode->m_dChildren.Last()->AddDirtyWord ( tLemma );
+			pNode->AddNewChild ( new XQNode_t ( pNode->m_dSpec ) );
+			pNode->dChildren().Last()->AddDirtyWord ( tLemma );
 		}
 		pNode->ResetWords();
 		if ( pExact )
-			pNode->m_dChildren.Add ( pExact );
+			pNode->AddNewChild ( pExact );
 	}
 }
 }// namespace
@@ -2171,9 +2169,9 @@ void TransformAotFilter ( XQNode_t * pNode, LemmatizerTrait_i * pLemmatizer, con
 	if ( !pNode )
 		return;
 	// case one, regular operator (and empty nodes)
-	for ( XQNode_t* pChild : pNode->m_dChildren )
+	for ( XQNode_t* pChild : pNode->dChildren() )
 		TransformAotFilter ( pChild, pLemmatizer, pWordforms, tSettings );
-	if ( pNode->m_dChildren.GetLength() || pNode->dWords().IsEmpty() )
+	if ( pNode->dChildren().GetLength() || pNode->dWords().IsEmpty() )
 		return;
 
 	// case two, operator on a bag of words
@@ -2186,9 +2184,8 @@ void TransformAotFilter ( XQNode_t * pNode, LemmatizerTrait_i * pLemmatizer, con
 		for ( const XQKeyword_t& tWord : pNode->dWords() )
 		{
 			auto * pNew = new XQNode_t ( pNode->m_dSpec );
-			pNew->m_pParent = pNode;
 			pNew->m_iAtomPos = tWord.m_iAtomPos;
-			pNode->m_dChildren.Add ( pNew );
+			pNode->AddNewChild ( pNew );
 			TransformAotFilterKeyword ( pNew, pLemmatizer, tWord, pWordforms, tSettings );
 		}
 

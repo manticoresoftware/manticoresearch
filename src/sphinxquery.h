@@ -146,15 +146,16 @@ struct XQNode_t : public ISphNoncopyable
 
 private:
 	XQOperator_e			m_eOp { SPH_QUERY_AND };	///< operation over children
-	int						m_iOrder = 0;
-	int						m_iCounter = 0;
+	mutable int				m_iOrder = 0;
+	mutable int				m_iCounter = 0;
 
 	mutable uint64_t		m_iMagicHash = 0;
 	mutable uint64_t		m_iFuzzyHash = 0;
 
 	CSphVector<XQKeyword_t>		m_dWords;		///< query words (plain node). Private to keep hashes valid
-public:
 	CSphVector<XQNode_t*>	m_dChildren;		///< non-plain node children
+
+public:
 	XQLimitSpec_t			m_dSpec;			///< specification by field, zone(s), etc.
 
 	int						m_iOpArg = 0;		///< operator argument (proximity distance, quorum count)
@@ -186,6 +187,42 @@ public:
 	}
 
 	void AddDirtyWord (XQKeyword_t dWord); // add word without invalidating hashes. OK for fresh (new-born) nodes.
+
+	const CSphVector<XQNode_t*>& dChildren() const noexcept { return m_dChildren; };
+	const XQNode_t* dChild(int64_t i) const noexcept { return m_dChildren[i]; };
+
+	// manipulate with children, caring hash
+	void WithChild ( int64_t iChild, std::function<void (XQNode_t*)> fnAction ) noexcept
+	{
+		fnAction(m_dChildren[iChild]);
+		Rehash();
+	}
+
+	void WithChildren (std::function<void (CSphVector<XQNode_t*>&)> fnAction ) noexcept
+	{
+		fnAction(m_dChildren);
+		Rehash();
+	}
+
+	void ResetChildren (bool bWithRehash=false) noexcept
+	{
+		m_dChildren.Reset();
+		if ( bWithRehash )
+			Rehash();
+	}
+
+	void AddNewChild ( XQNode_t* pNode ) noexcept
+	{
+		pNode->m_pParent = this;
+		m_dChildren.Add ( pNode);
+		Rehash();
+	}
+
+	bool RemoveChild ( XQNode_t* pNode ) noexcept
+	{
+		Rehash();
+		return m_dChildren.RemoveValue ( pNode );
+	}
 
 	/// ctor
 	explicit XQNode_t ( const XQLimitSpec_t & dSpec );
@@ -231,7 +268,7 @@ public:
 	}
 
 	/// setup common nodes for caching
-	void TagAsCommon ( int iOrder, int iCounter )
+	void TagAsCommon ( int iOrder, int iCounter ) const noexcept
 	{
 		m_iCounter = iCounter;
 		m_iOrder = iOrder;

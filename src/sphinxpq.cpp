@@ -344,11 +344,11 @@ static void DoQueryGetRejects ( const XQNode_t * pNode, const DictRefPtr_c& pDic
 
 	// composite nodes children recursion
 	// for AND-NOT node NOT children should be skipped
-	int iCount = pNode->m_dChildren.GetLength();
+	int iCount = pNode->dChildren().GetLength();
 	if ( pNode->GetOp()==SPH_QUERY_ANDNOT && iCount>1 )
 		iCount = 1;
 	for ( int i=0; i<iCount; i++ )
-		DoQueryGetRejects ( pNode->m_dChildren[i], pDict, dRejectTerms, dRejectBloom, dSuffixes, bOnlyTerms, bUtf8 );
+		DoQueryGetRejects ( pNode->dChildren()[i], pDict, dRejectTerms, dRejectBloom, dSuffixes, bOnlyTerms, bUtf8 );
 }
 
 static void QueryGetRejects ( const XQNode_t * pNode, const DictRefPtr_c& pDict, CSphFixedVector<uint64_t> & dRejectTerms, CSphFixedVector<uint64_t> & dRejectBloom, CSphVector<CSphString> & dSuffixes, bool & bOnlyTerms, bool bUtf8 )
@@ -399,7 +399,7 @@ static void DoQueryGetTerms ( const XQNode_t * pNode, const DictRefPtr_c& pDict,
 		dKeywords.Append ( sTmp, iLen );
 	}
 
-	for ( const XQNode_t * pChild : pNode->m_dChildren )
+	for ( const XQNode_t * pChild : pNode->dChildren() )
 		DoQueryGetTerms ( pChild, pDict, hDict, dKeywords );
 }
 
@@ -1667,10 +1667,10 @@ class XQTreeCompressor_t
 		if ( pNode->dWords().GetLength() && pNode->dWords().GetLength()!=pNode->dWords().GetLimit() )
 			m_dWords.Add ( pNode );
 
-		if ( pNode->m_dChildren.GetLength() && pNode->m_dChildren.GetLength()!=pNode->m_dChildren.GetLimit() )
+		if ( pNode->dChildren().GetLength() && pNode->dChildren().GetLength()!=pNode->dChildren().GetLimit() )
 			m_dChildren.Add ( pNode );
 
-		for ( auto & tChild : pNode->m_dChildren )
+		for ( auto & tChild : pNode->dChildren() )
 			WalkNodes ( tChild );
 	}
 
@@ -1693,17 +1693,19 @@ class XQTreeCompressor_t
 			});
 		}
 
+
 		for ( int i=0; i<m_dChildren.GetLength(); i++ )
 		{
-			auto & dSrcChild = m_dChildren[i]->m_dChildren;
+			m_dChildren[i]->WithChildren([&dChildren2Free,i](auto& dSrcChild) {
 			int iLen = dSrcChild.GetLength();
 			
 			CSphFixedVector<XQNode_t *> dDstChildren ( iLen );
 			dDstChildren.CopyFrom ( dSrcChild );
-			dSrcChild.Resize ( 0 ); // XQNode_t poionter moved into new fixed-vector
+			dSrcChild.Resize ( 0 ); // XQNode_t pointer moved into new fixed-vector
 
 			dChildren2Free[i].SwapData ( dSrcChild ); // remove all collected vectors m_pData on exit
 			dSrcChild.AdoptData ( dDstChildren.LeakData(), iLen, iLen );
+			});
 		}
 	}
 
@@ -1767,8 +1769,8 @@ static void FixExpandedNode ( XQNode_t * pNode )
 		}
 	}
 
-	ARRAY_FOREACH ( i, pNode->m_dChildren )
-		FixExpandedNode ( pNode->m_dChildren[i] );
+	ARRAY_FOREACH ( i, pNode->dChildren() )
+		FixExpandedNode ( pNode->dChildren()[i] );
 }
 
 static XQNode_t * FixExpanded ( XQNode_t * pNode, int iMinPrefix, int iMinInfix, bool bExactForm )

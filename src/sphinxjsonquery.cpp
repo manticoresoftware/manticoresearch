@@ -202,9 +202,8 @@ XQNode_t * QueryTreeBuilder_c::AddChildKeyword ( XQNode_t * pParent, const char 
 	tKeyword.m_iSkippedBefore = iSkippedPosBeforeToken;
 	tKeyword.m_fBoost = fBoost;
 	auto * pNode = new XQNode_t ( tLimitSpec );
-	pNode->m_pParent = pParent;
 	pNode->AddDirtyWord ( tKeyword );
-	pParent->m_dChildren.Add ( pNode );
+	pParent->AddNewChild ( pNode );
 	m_dSpawned.Add ( pNode );
 
 	return pNode;
@@ -305,7 +304,7 @@ bool QueryParserJson_c::IsFullscan ( const CSphQuery & tQuery ) const
 
 bool QueryParserJson_c::IsFullscan ( const XQQuery_t & tQuery ) const
 {
-	return !( tQuery.m_pRoot && ( tQuery.m_pRoot->m_dChildren.GetLength () || tQuery.m_pRoot->dWords().GetLength () ) );
+	return !( tQuery.m_pRoot && ( tQuery.m_pRoot->dChildren().GetLength () || tQuery.m_pRoot->dWords().GetLength () ) );
 }
 
 static bool IsFullText ( const CSphString & sName );
@@ -405,7 +404,7 @@ bool QueryParserJson_c::ParseQuery ( XQQuery_t & tParsed, const char * szQuery, 
 		return false;
 	}
 
-	tParsed.m_bSingleWord = ( pRoot && pRoot->m_dChildren.IsEmpty() && pRoot->dWords().GetLength() == 1 );
+	tParsed.m_bSingleWord = ( pRoot && pRoot->dChildren().IsEmpty() && pRoot->dWords().GetLength() == 1 );
 	tParsed.m_pRoot = pRoot;
 	return true;
 }
@@ -683,10 +682,7 @@ XQNode_t * QueryParserJson_c::ConstructBoolNode ( const JsonObj_c & tJson, Query
 			pAndNode->SetOp ( SPH_QUERY_AND );
 
 			for ( auto & i : dMust )
-			{
-				pAndNode->m_dChildren.Add(i);
-				i->m_pParent = pAndNode;
-			}
+				pAndNode->AddNewChild ( i);
 
 			pMustNode = pAndNode;
 		}
@@ -702,10 +698,7 @@ XQNode_t * QueryParserJson_c::ConstructBoolNode ( const JsonObj_c & tJson, Query
 			pOrNode->SetOp ( SPH_QUERY_OR );
 
 			for ( auto & i : dShould )
-			{
-				pOrNode->m_dChildren.Add(i);
-				i->m_pParent = pOrNode;
-			}
+				pOrNode->AddNewChild (i);
 
 			pShouldNode = pOrNode;
 		}
@@ -719,21 +712,16 @@ XQNode_t * QueryParserJson_c::ConstructBoolNode ( const JsonObj_c & tJson, Query
 
 		if ( dMustNot.GetLength()==1 )
 		{
-			pNotNode->m_dChildren.Add ( dMustNot[0] );
-			dMustNot[0]->m_pParent = pNotNode;
+			pNotNode->AddNewChild ( dMustNot[0] );
 		} else
 		{
 			XQNode_t * pOrNode = tBuilder.CreateNode ( tLimitSpec );
 			pOrNode->SetOp ( SPH_QUERY_OR );
 
 			for ( auto & i : dMustNot )
-			{
-				pOrNode->m_dChildren.Add ( i );
-				i->m_pParent = pOrNode;
-			}
+				pOrNode->AddNewChild ( i );
 
-			pNotNode->m_dChildren.Add ( pOrNode );
-			pOrNode->m_pParent = pNotNode;
+			pNotNode->AddNewChild (  pOrNode );
 		}
 
 		pMustNotNode = pNotNode;
@@ -768,10 +756,8 @@ XQNode_t * QueryParserJson_c::ConstructBoolNode ( const JsonObj_c & tJson, Query
 		{
 			XQNode_t * pAndNode = tBuilder.CreateNode(tLimitSpec);
 			pAndNode->SetOp(SPH_QUERY_AND);
-			pAndNode->m_dChildren.Add ( pMustNode );
-			pAndNode->m_dChildren.Add ( pMustNotNode );
-			pMustNode->m_pParent = pAndNode;
-			pMustNotNode->m_pParent = pAndNode;
+			pAndNode->AddNewChild ( pMustNode );
+			pAndNode->AddNewChild ( pMustNotNode );
 
 			pResultNode = pAndNode;
 		}
@@ -781,10 +767,8 @@ XQNode_t * QueryParserJson_c::ConstructBoolNode ( const JsonObj_c & tJson, Query
 		{
 			XQNode_t * pMaybeNode = tBuilder.CreateNode ( tLimitSpec );
 			pMaybeNode->SetOp ( SPH_QUERY_MAYBE );
-			pMaybeNode->m_dChildren.Add ( pResultNode );
-			pMaybeNode->m_dChildren.Add ( pShouldNode );
-			pShouldNode->m_pParent = pMaybeNode;
-			pResultNode->m_pParent = pMaybeNode;
+			pMaybeNode->AddNewChild ( pResultNode );
+			pMaybeNode->AddNewChild ( pShouldNode );
 
 			pResultNode = pMaybeNode;
 		}

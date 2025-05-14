@@ -24,14 +24,14 @@ struct XQKeyword_t
 	CSphString			m_sWord;
 	int					m_iAtomPos = -1;
 	int					m_iSkippedBefore = 0;	///< positions skipped before this token (because of blended chars)
-	bool				m_bFieldStart = false;	///< must occur at very start
-	bool				m_bFieldEnd = false;	///< must occur at very end
+	mutable bool		m_bFieldStart = false;	///< must occur at very start
+	mutable bool		m_bFieldEnd = false;	///< must occur at very end
 	float				m_fBoost = 1.0f;		///< keyword IDF will be multiplied by this
-	bool				m_bExpanded = false;	///< added by prefix expansion
-	bool				m_bExcluded = false;	///< excluded by query (rval to operator NOT)
-	bool				m_bMorphed = false;		///< morphology processing (wordforms, stemming etc) already done
-	void *				m_pPayload = nullptr;
-	bool				m_bRegex = false;
+	mutable bool		m_bExpanded = false;	///< added by prefix expansion
+	mutable bool		m_bExcluded = false;	///< excluded by query (rval to operator NOT)
+	mutable bool		m_bMorphed = false;		///< morphology processing (wordforms, stemming etc) already done
+	mutable void *		m_pPayload = nullptr;
+	mutable bool		m_bRegex = false;
 
 	XQKeyword_t() = default;
 	XQKeyword_t ( const char * sWord, int iPos )
@@ -152,11 +152,11 @@ private:
 	mutable uint64_t		m_iMagicHash = 0;
 	mutable uint64_t		m_iFuzzyHash = 0;
 
+	CSphVector<XQKeyword_t>		m_dWords;		///< query words (plain node). Private to keep hashes valid
 public:
 	CSphVector<XQNode_t*>	m_dChildren;		///< non-plain node children
 	XQLimitSpec_t			m_dSpec;			///< specification by field, zone(s), etc.
 
-	CSphVector<XQKeyword_t>	m_dWords;			///< query words (plain node)
 	int						m_iOpArg = 0;		///< operator argument (proximity distance, quorum count)
 	int						m_iAtomPos = -1;	///< atom position override (currently only used within expanded nodes)
 	int						m_iUser = 0;
@@ -164,6 +164,22 @@ public:
 	bool					m_bNotWeighted = false;	///< this our expanded but empty word's node
 	bool					m_bPercentOp = false;
 
+	const CSphVector<XQKeyword_t>& dWords() const noexcept { return m_dWords; };
+	const XQKeyword_t& dWord(int64_t i) const noexcept { return m_dWords[i]; };
+
+	void WithWord ( int64_t iWord, std::function<void (XQKeyword_t&)> fnAction ) noexcept
+	{
+		fnAction(m_dWords[iWord]);
+		Rehash();
+	}
+
+	void WithWords ( std::function<void (CSphVector<XQKeyword_t>&)> fnAction ) noexcept
+	{
+		fnAction(m_dWords);
+		Rehash();
+	}
+
+	void AddDirtyWord (XQKeyword_t dWord); // add word without invalidating hashes. OK for fresh (new-born) nodes.
 
 	/// ctor
 	explicit XQNode_t ( const XQLimitSpec_t & dSpec );
@@ -222,13 +238,23 @@ public:
 	/// with similar keywords )
 	uint64_t GetFuzzyHash () const noexcept;
 
+	void Rehash () const noexcept
+	{
+		if ( !m_iFuzzyHash && !m_iMagicHash )
+			return;
+
+		m_iMagicHash = m_iFuzzyHash = 0;
+		if ( m_pParent )
+			m_pParent->Rehash();
+	}
+
 	/// setup new operator and args
 	void SetOp ( XQOperator_e eOp, XQNode_t * pArg1, XQNode_t * pArg2=nullptr );
 
 	/// setup new operator and args
 	void SetOp ( XQOperator_e eOp, CSphVector<XQNode_t*> & dArgs )
 	{
-		m_eOp = eOp;
+		SetOp (eOp);
 		m_dChildren.SwapData(dArgs);
 		for ( auto* pChild : m_dChildren )
 			pChild->m_pParent = this;
@@ -238,6 +264,7 @@ public:
 	void SetOp ( XQOperator_e eOp )
 	{
 		m_eOp = eOp;
+		Rehash();
 	}
 
 	/// fixup atom positions in case of proximity queries and blended chars
@@ -404,6 +431,8 @@ void	sphOptimizeBoolean ( XQNode_t ** pXQ, const ISphKeywordsStat * pKeywords );
 int		sphMarkCommonSubtrees ( int iXQ, const XQQuery_t * pXQ );
 
 XQQuery_t * CloneXQQuery ( const XQQuery_t & tQuery );
+
+XQNode_t * CloneKeyword ( const XQNode_t * pNode );
 
 /// whatever to allow alone operator NOT at query
 void	AllowOnlyNot ( bool bAllowed );

@@ -2060,21 +2060,13 @@ BYTE * TokenizerUk_c::GetToken()
 
 
 namespace {
-XQNode_t* CloneKeyword ( const XQNode_t* pNode )
-{
-	assert ( pNode );
-
-	auto* pRes = new XQNode_t ( pNode->m_dSpec );
-	pRes->m_dWords = pNode->m_dWords;
-	return pRes;
-}
 
 /// create a node from a set of lemmas
 /// WARNING, tKeyword might or might not be pointing to pNode->m_dWords[0]
 /// Called from the daemon side (searchd) in time of query
 void TransformAotFilterKeyword ( XQNode_t * pNode, LemmatizerTrait_i * pLemmatizer, const XQKeyword_t & tKeyword, const CSphWordforms * pWordforms, const CSphIndexSettings & tSettings )
 {
-	assert ( pNode->m_dWords.GetLength()<=1 );
+	assert ( pNode->dWords().GetLength()<=1 );
 	assert ( pNode->m_dChildren.GetLength()==0 );
 
 	XQNode_t * pExact = nullptr;
@@ -2087,10 +2079,12 @@ void TransformAotFilterKeyword ( XQNode_t * pNode, LemmatizerTrait_i * pLemmatiz
 		strncpy ( sBuf, tKeyword.m_sWord.cstr(), sizeof(sBuf)-1 );
 		if ( pWordforms->ToNormalForm ( (BYTE*)sBuf, true, false ) )
 		{
-			if ( !pNode->m_dWords.GetLength() )
-				pNode->m_dWords.Add ( tKeyword );
-			pNode->m_dWords[0].m_sWord = sBuf;
-			pNode->m_dWords[0].m_bMorphed = true;
+			if ( pNode->dWords().IsEmpty() )
+				pNode->AddDirtyWord ( tKeyword );
+			pNode->WithWord ( 0,[&sBuf] (auto& dWord) {
+				dWord.m_sWord = sBuf;
+				dWord.m_bMorphed = true;
+			});
 			return;
 		}
 	}
@@ -2127,39 +2121,40 @@ void TransformAotFilterKeyword ( XQNode_t * pNode, LemmatizerTrait_i * pLemmatiz
 	if ( dLemmas.GetLength() && tSettings.m_bIndexExactWords )
 	{
 		pExact = CloneKeyword ( pNode );
-		if ( !pExact->m_dWords.GetLength() )
-			pExact->m_dWords.Add ( tKeyword );
+		if ( pExact->dWords().IsEmpty() )
+			pExact->AddDirtyWord ( tKeyword );
 
-		pExact->m_dWords[0].m_sWord.SetSprintf ( "=%s", tKeyword.m_sWord.cstr() );
+		pExact->WithWord(0,[&tKeyword](auto& dWord) {dWord.m_sWord.SetSprintf ( "=%s", tKeyword.m_sWord.cstr() ); });
 		pExact->m_pParent = pNode;
 	}
 
 	if ( !pExact && dLemmas.GetLength()<=1 )
 	{
 		// zero or one lemmas, update node in-place
-		if ( !pNode->m_dWords.GetLength() )
-			pNode->m_dWords.Add ( tKeyword );
+		if ( pNode->dWords().IsEmpty() )
+			pNode->AddDirtyWord ( tKeyword );
 		if ( dLemmas.GetLength() )
-		{
-			pNode->m_dWords[0].m_sWord = dLemmas[0];
-			pNode->m_dWords[0].m_bMorphed = true;
-		}
+			pNode->WithWord ( 0, [&dLemmas] ( auto & dWord ) {
+				dWord.m_sWord = dLemmas[0];
+				dWord.m_bMorphed = true;
+			} );
 	} else
 	{
 		// multiple lemmas, create an OR node
 		pNode->SetOp ( SPH_QUERY_OR );
 		ARRAY_FOREACH ( i, dLemmas )
 		{
-			pNode->m_dChildren.Add ( new XQNode_t ( pNode->m_dSpec ) );
-			pNode->m_dChildren.Last()->m_pParent = pNode;
-			XQKeyword_t & tLemma = pNode->m_dChildren.Last()->m_dWords.Add();
+			XQKeyword_t tLemma;
 			tLemma.m_sWord = dLemmas[i];
 			tLemma.m_iAtomPos = tKeyword.m_iAtomPos;
 			tLemma.m_bFieldStart = tKeyword.m_bFieldStart;
 			tLemma.m_bFieldEnd = tKeyword.m_bFieldEnd;
 			tLemma.m_bMorphed = true;
+			pNode->m_dChildren.Add ( new XQNode_t ( pNode->m_dSpec ) );
+			pNode->m_dChildren.Last()->m_pParent = pNode;
+			pNode->m_dChildren.Last()->AddDirtyWord ( tLemma );
 		}
-		pNode->m_dWords.Reset();
+		pNode->WithWords ( [] ( auto & dWords ) { dWords.Reset();});
 		if ( pExact )
 			pNode->m_dChildren.Add ( pExact );
 	}
@@ -2178,17 +2173,17 @@ void TransformAotFilter ( XQNode_t * pNode, LemmatizerTrait_i * pLemmatizer, con
 	// case one, regular operator (and empty nodes)
 	for ( XQNode_t* pChild : pNode->m_dChildren )
 		TransformAotFilter ( pChild, pLemmatizer, pWordforms, tSettings );
-	if ( pNode->m_dChildren.GetLength() || pNode->m_dWords.GetLength()==0 )
+	if ( pNode->m_dChildren.GetLength() || pNode->dWords().IsEmpty() )
 		return;
 
 	// case two, operator on a bag of words
 	// FIXME? check phrase vs expand_keywords vs lemmatize_ru_all?
-	if ( pNode->m_dWords.GetLength()
+	if ( pNode->dWords().GetLength()
 		&& ( pNode->GetOp()==SPH_QUERY_PHRASE || pNode->GetOp()==SPH_QUERY_PROXIMITY || pNode->GetOp()==SPH_QUERY_QUORUM ) )
 	{
-		assert ( pNode->m_dWords.GetLength() );
+		assert ( pNode->dWords().GetLength() );
 
-		for ( XQKeyword_t& tWord : pNode->m_dWords )
+		for ( const XQKeyword_t& tWord : pNode->dWords() )
 		{
 			auto * pNew = new XQNode_t ( pNode->m_dSpec );
 			pNew->m_pParent = pNode;
@@ -2197,14 +2192,14 @@ void TransformAotFilter ( XQNode_t * pNode, LemmatizerTrait_i * pLemmatizer, con
 			TransformAotFilterKeyword ( pNew, pLemmatizer, tWord, pWordforms, tSettings );
 		}
 
-		pNode->m_dWords.Reset();
+		pNode->WithWords ([](auto& dWords){dWords.Reset();});
 		pNode->m_bVirtuallyPlain = true;
 		return;
 	}
 
 	// case three, plain old single keyword
-	assert ( pNode->m_dWords.GetLength()==1 );
-	TransformAotFilterKeyword ( pNode, pLemmatizer, pNode->m_dWords[0], pWordforms, tSettings );
+	assert ( pNode->dWords().GetLength()==1 );
+	TransformAotFilterKeyword ( pNode, pLemmatizer, pNode->dWord(0), pWordforms, tSettings );
 }
 
 void TransformAotFilter ( XQNode_t * pNode, const CSphWordforms * pWordforms, const CSphIndexSettings & tSettings )

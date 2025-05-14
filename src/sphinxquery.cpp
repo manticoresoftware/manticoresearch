@@ -323,11 +323,11 @@ static void FixupDegenerates ( XQNode_t * pNode, CSphString & sWarning )
 	if ( !pNode )
 		return;
 
-	if ( pNode->m_dWords.GetLength()==1 &&
+	if ( pNode->dWords().GetLength()==1 &&
 		( pNode->GetOp()==SPH_QUERY_PHRASE || pNode->GetOp()==SPH_QUERY_PROXIMITY || pNode->GetOp()==SPH_QUERY_QUORUM ) )
 	{
 		if ( pNode->GetOp()==SPH_QUERY_QUORUM && !pNode->m_bPercentOp && pNode->m_iOpArg>1 )
-			sWarning.SetSprintf ( "quorum threshold too high (words=%d, thresh=%d); replacing quorum operator with AND operator", pNode->m_dWords.GetLength(), pNode->m_iOpArg );
+			sWarning.SetSprintf ( "quorum threshold too high (words=%d, thresh=%d); replacing quorum operator with AND operator", pNode->dWords().GetLength(), pNode->m_iOpArg );
 
 		pNode->SetOp ( SPH_QUERY_AND );
 		return;
@@ -343,7 +343,7 @@ static int GetMaxAtomPos ( const XQNode_t * pNode )
 	if ( !pNode )
 		return iMaxAtomPos;
 
-	for ( const auto & tWord : pNode->m_dWords )
+	for ( const auto & tWord : pNode->dWords() )
 		iMaxAtomPos = Max ( iMaxAtomPos, tWord.m_iAtomPos );
 
 	for ( const XQNode_t * pItem : pNode->m_dChildren )
@@ -427,13 +427,15 @@ XQNode_t * XQParseHelper_c::SweepNulls ( XQNode_t * pNode, bool bOnlyNotAllowed 
 		return nullptr;
 
 	// sweep plain node
-	if ( pNode->m_dWords.GetLength() )
+	if ( !pNode->dWords().IsEmpty() )
 	{
-		ARRAY_FOREACH ( i, pNode->m_dWords )
-			if ( pNode->m_dWords[i].m_sWord.cstr()==NULL )
-				pNode->m_dWords.Remove ( i-- );
+		pNode->WithWords ( [] (auto& dWords) {
+		ARRAY_FOREACH ( i, dWords )
+			if ( !dWords[i].m_sWord.cstr() )
+				dWords.Remove ( i-- );
+		});
 
-		if ( pNode->m_dWords.GetLength()==0 )
+		if ( pNode->dWords().IsEmpty() )
 		{
 			DeleteSpawned ( pNode );
 			return nullptr;
@@ -525,7 +527,7 @@ void XQParseHelper_c::FixupNulls ( XQNode_t * pNode )
 bool XQParseHelper_c::FixupNots ( XQNode_t * pNode, bool bOnlyNotAllowed, XQNode_t ** ppRoot )
 {
 	// no processing for plain nodes
-	if ( !pNode || !pNode->m_dWords.IsEmpty() )
+	if ( !pNode || !pNode->dWords().IsEmpty() )
 		return true;
 
 	// query was already transformed
@@ -667,11 +669,13 @@ void XQParseHelper_c::FixupDestForms ()
 	for ( const MultiformNode_t & tDesc : m_dMultiforms )
 	{
 		XQNode_t * pMultiParent = tDesc.m_pNode;
-		assert ( pMultiParent->m_dWords.GetLength()==1 && pMultiParent->m_dChildren.GetLength()==0 );
+		assert ( pMultiParent->dWords().GetLength()==1 && pMultiParent->m_dChildren.GetLength()==0 );
 
 		XQKeyword_t tKeyword;
-		Swap ( pMultiParent->m_dWords[0], tKeyword );
-		pMultiParent->m_dWords.Reset();
+		pMultiParent->WithWords ( [&tKeyword] ( auto& dWords ) {
+			Swap ( dWords[0], tKeyword );
+			dWords.Reset();
+		});
 
 		// FIXME: what about whildcard?
 		bool bExact = ( tKeyword.m_sWord.Length()>1 && tKeyword.m_sWord.cstr()[0]=='=' );
@@ -681,7 +685,7 @@ void XQParseHelper_c::FixupDestForms ()
 		tKeyword.m_bFieldEnd = false;
 
 		XQNode_t * pMultiHead = SpawnNode ( pMultiParent->m_dSpec );
-		pMultiHead->m_dWords.Add ( tKeyword );
+		pMultiHead->AddDirtyWord ( tKeyword );
 		dForms.Add ( pMultiHead );
 
 		for ( int iForm=0; iForm<tDesc.m_iDestCount; ++iForm )
@@ -695,13 +699,13 @@ void XQParseHelper_c::FixupDestForms ()
 				tKeyword.m_sWord = sWord;
 
 			XQNode_t * pMulti = SpawnNode ( pMultiParent->m_dSpec );
-			pMulti->m_dWords.Add ( tKeyword );
+			pMulti->AddDirtyWord ( tKeyword );
 			dForms.Add ( pMulti );
 		}
 
 		// fix-up field start\end modifier
-		dForms[0]->m_dWords[0].m_bFieldStart = bFieldStart;
-		dForms.Last()->m_dWords[0].m_bFieldEnd = bFieldEnd;
+		dForms[0]->dWord(0).m_bFieldStart = bFieldStart;
+		dForms.Last()->dWord(0).m_bFieldEnd = bFieldEnd;
 
 		pMultiParent->SetOp ( SPH_QUERY_AND, dForms );
 		dForms.Resize ( 0 );
@@ -741,7 +745,7 @@ static void TransformMorphOnlyFields ( XQNode_t * pNode, const CSphBitvec & tMor
 	ARRAY_FOREACH ( i, pNode->m_dChildren )
 		TransformMorphOnlyFields ( pNode->m_dChildren[i], tMorphDisabledFields );
 
-	if ( pNode->m_dSpec.IsEmpty () || pNode->m_dWords.IsEmpty () )
+	if ( pNode->m_dSpec.IsEmpty () || pNode->dWords().IsEmpty () )
 		return;
 
 	const XQLimitSpec_t & tSpec = pNode->m_dSpec;
@@ -752,11 +756,13 @@ static void TransformMorphOnlyFields ( XQNode_t * pNode, const CSphBitvec & tMor
 		{
 			if ( pNode->m_dSpec.m_dFieldMask.Test ( iField ) )
 			{
-				pNode->m_dWords.for_each ( [] ( XQKeyword_t & tKw )
+				pNode->WithWords ( [] ( auto& dWords ) {
+					dWords.for_each ( [] ( XQKeyword_t & tKw )
 					{
 						if ( !tKw.m_sWord.IsEmpty() && !tKw.m_sWord.Begins( "=" ) && !tKw.m_sWord.Begins("*") && !tKw.m_sWord.Ends("*") )
 							tKw.m_sWord.SetSprintf ( "=%s", tKw.m_sWord.cstr() );
 					});
+				});
 			}
 
 			if ( ( iField+1 )>=tMorphDisabledFields.GetSize() )
@@ -860,7 +866,7 @@ public:
 	CSphVector < CSphVector<int> >	m_dZoneVecs;
 	CSphVector<XQLimitSpec_t *>		m_dStateSpec;
 	CSphVector<XQLimitSpec_t *>		m_dSpecPool;
-	CSphVector<int>					m_dPhraseStar;
+	IntVec_t						m_dPhraseStar;
 
 protected:
 	bool			HandleFieldBlockStart ( const char * & pPtr ) override;
@@ -910,6 +916,13 @@ XQNode_t::~XQNode_t ()
 #endif
 	ARRAY_FOREACH ( i, m_dChildren )
 		SafeDelete ( m_dChildren[i] );
+}
+
+// manipulate with words, caring hash
+void XQNode_t::AddDirtyWord ( XQKeyword_t dWord )
+{
+	assert (!m_iFuzzyHash && !m_iMagicHash);
+	m_dWords.Add ( std::move ( dWord ) );
 }
 
 
@@ -974,8 +987,8 @@ uint64_t XQNode_t::GetHash () const noexcept
 	dZeroOp[0] = m_eOp;
 	dZeroOp[1] = (XQOperator_e) 0;
 
-	ARRAY_FOREACH ( i, m_dWords )
-		m_iMagicHash = 100 + ( m_iMagicHash ^ sphFNV64 ( m_dWords[i].m_sWord.cstr() ) ); // +100 to make it non-transitive
+	for ( const auto& dWord : dWords() )
+		m_iMagicHash = 100 + ( m_iMagicHash ^ sphFNV64 ( dWord.m_sWord.cstr() ) ); // +100 to make it non-transitive
 	ARRAY_FOREACH ( j, m_dChildren )
 		m_iMagicHash = 100 + ( m_iMagicHash ^ m_dChildren[j]->GetHash() ); // +100 to make it non-transitive
 	m_iMagicHash += 1000000; // to immerse difference between parents and children
@@ -994,8 +1007,8 @@ uint64_t XQNode_t::GetFuzzyHash () const noexcept
 	dZeroOp[0] = ( m_eOp==SPH_QUERY_PHRASE ? SPH_QUERY_PROXIMITY : m_eOp );
 	dZeroOp[1] = (XQOperator_e) 0;
 
-	ARRAY_FOREACH ( i, m_dWords )
-		m_iFuzzyHash = 100 + ( m_iFuzzyHash ^ sphFNV64 ( m_dWords[i].m_sWord.cstr() ) ); // +100 to make it non-transitive
+	for ( const auto& dWord : dWords() )
+		m_iFuzzyHash = 100 + ( m_iFuzzyHash ^ sphFNV64 ( dWord.m_sWord.cstr() ) ); // +100 to make it non-transitive
 	ARRAY_FOREACH ( j, m_dChildren )
 		m_iFuzzyHash = 100 + ( m_iFuzzyHash ^ m_dChildren[j]->GetFuzzyHash () ); // +100 to make it non-transitive
 	m_iFuzzyHash += 1000000; // to immerse difference between parents and children
@@ -1007,7 +1020,7 @@ uint64_t XQNode_t::GetFuzzyHash () const noexcept
 
 void XQNode_t::SetOp ( XQOperator_e eOp, XQNode_t * pArg1, XQNode_t * pArg2 )
 {
-	m_eOp = eOp;
+	SetOp ( eOp );
 	m_dChildren.Reset();
 	if ( pArg1 )
 	{
@@ -1024,7 +1037,7 @@ void XQNode_t::SetOp ( XQOperator_e eOp, XQNode_t * pArg1, XQNode_t * pArg2 )
 
 int XQNode_t::FixupAtomPos() const noexcept
 {
-	assert ( m_eOp==SPH_QUERY_PROXIMITY && m_dWords.GetLength()>0 );
+	assert ( m_eOp==SPH_QUERY_PROXIMITY && !dWords().IsEmpty() );
 
 	ARRAY_FOREACH ( i, m_dWords )
 	{
@@ -1213,8 +1226,11 @@ XQNode_t * XQParser_t::ParseRegex ( const char * sStart )
 		{
 			// spawn token node
 			XQNode_t * pNode = AddKeyword ( nullptr, 0 );
-			pNode->m_dWords[0].m_sWord.SetBinary ( sToken, sNextDel-sToken );
-			pNode->m_dWords[0].m_bRegex = true;
+			pNode->WithWords ( [sToken,sNextDel] ( auto& dWords) { // fresh!
+				dWords.First().m_sWord.SetBinary ( sToken, sNextDel-sToken );
+				dWords.First().m_bRegex = true;
+			});
+
 			// skip the whole expression
 			m_pTokenizer->SetBufferPtr ( sNextDel+2 );
 			return pNode;
@@ -1741,7 +1757,7 @@ XQNode_t * XQParser_t::AddKeyword ( const char * sKeyword, int iSkippedPosBefore
 	tAW.m_iSkippedBefore = iSkippedPosBeforeToken;
 	HandleModifiers ( tAW );
 	XQNode_t * pNode = SpawnNode ( *m_dStateSpec.Last() );
-	pNode->m_dWords.Add ( tAW );
+	pNode->AddDirtyWord ( std::move(tAW) );
 	return pNode;
 }
 
@@ -1751,10 +1767,11 @@ XQNode_t * XQParser_t::AddKeyword ( XQNode_t * pLeft, XQNode_t * pRight )
 	if ( !pLeft || !pRight )
 		return pLeft ? pLeft : pRight;
 
-	assert ( pLeft->m_dWords.GetLength()>0 );
-	assert ( pRight->m_dWords.GetLength()==1 );
+	assert ( pLeft->dWords().GetLength()>0 );
+	assert ( pRight->dWords().GetLength()==1 );
 
-	pLeft->m_dWords.Add ( pRight->m_dWords[0] );
+	pLeft->AddDirtyWord ( pRight->dWord(0) );
+	pLeft->Rehash();
 	DeleteSpawned ( pRight );
 	return pLeft;
 }
@@ -1816,14 +1833,15 @@ void XQParser_t::SetPhrase ( XQNode_t * pNode, bool bSetExact )
 	if ( !pNode )
 		return;
 
-	assert ( pNode->m_dWords.GetLength() );
+	assert ( !pNode->dWords().IsEmpty() );
 	if ( bSetExact )
 	{
-		ARRAY_FOREACH ( iWord, pNode->m_dWords )
-		{
-			if ( !pNode->m_dWords[iWord].m_sWord.IsEmpty() )
-				pNode->m_dWords[iWord].m_sWord.SetSprintf ( "=%s", pNode->m_dWords[iWord].m_sWord.cstr() );
-		}
+		pNode->WithWords ( [] ( auto& dWords ) {
+			dWords.for_each ([] ( XQKeyword_t& dWord ) {
+				if ( !dWord.m_sWord.IsEmpty() )
+					dWord.m_sWord.SetSprintf ( "=%s", dWord.m_sWord.cstr() );
+			});
+		});
 	}
 	pNode->SetOp ( SPH_QUERY_PHRASE );
 
@@ -1833,8 +1851,10 @@ void XQParser_t::SetPhrase ( XQNode_t * pNode, bool bSetExact )
 
 void XQParser_t::PhraseShiftQpos ( XQNode_t * pNode )
 {
-	if ( !m_dPhraseStar.GetLength() )
+	if ( m_dPhraseStar.IsEmpty() )
 		return;
+
+	pNode->WithWords ( [this] ( auto& dWords ) {
 
 	const int * pLast = m_dPhraseStar.Begin();
 	const int * pEnd = m_dPhraseStar.Begin() + m_dPhraseStar.GetLength();
@@ -1842,9 +1862,9 @@ void XQParser_t::PhraseShiftQpos ( XQNode_t * pNode )
 	int iQposShift = 0;
 	int iLastStarPos = *pLast;
 
-	ARRAY_FOREACH ( iWord, pNode->m_dWords )
+	ARRAY_FOREACH ( iWord, dWords )
 	{
-		XQKeyword_t & tWord = pNode->m_dWords[iWord];
+		XQKeyword_t & tWord = dWords[iWord];
 
 		// fold stars in phrase till current term position
 		while ( pLast<pEnd && *(pLast)<=tWord.m_iAtomPos )
@@ -1860,7 +1880,7 @@ void XQParser_t::PhraseShiftQpos ( XQNode_t * pNode )
 		// however not stopwords that is also term with empty word
 		if ( tWord.m_sWord=="*" || ( tWord.m_sWord.IsEmpty() && tWord.m_iAtomPos==iLastStarPos ) )
 		{
-			pNode->m_dWords.Remove ( iWord-- );
+			dWords.Remove ( iWord-- );
 			iQposShift--;
 			continue;
 		}
@@ -1868,6 +1888,7 @@ void XQParser_t::PhraseShiftQpos ( XQNode_t * pNode )
 		if ( iQposShiftStart<=tWord.m_iAtomPos )
 			tWord.m_iAtomPos += iQposShift;
 	}
+	});
 }
 
 
@@ -1983,13 +2004,13 @@ static void xqIndent ( int iIndent )
 
 void xqDumpNode ( const XQNode_t * pNode )
 {
-	const bool bHasWords = !pNode->m_dWords.IsEmpty();
+	const bool bHasWords = !pNode->dWords().IsEmpty();
 	if ( bHasWords && pNode->GetOp() == SPH_QUERY_AND )
 		printf ( "MATCH(%d,%d):", pNode->m_dSpec.m_dFieldMask.GetMask32(), pNode->m_iOpArg );
 	else
 		printf ( "%s", XQOperatorNameSz ( pNode->GetOp()));
 
-	for ( XQKeyword_t & tWord : pNode->m_dWords )
+	for ( const XQKeyword_t & tWord : pNode->dWords() )
 	{
 		const char * sLocTag = "";
 		if ( tWord.m_bFieldStart ) sLocTag = ", start";
@@ -2014,7 +2035,7 @@ void xqDump ( const XQNode_t * pNode, int iIndent )
 
 	if ( ( pNode->m_dChildren.GetLength()==1 )
 		&& ( pNode->GetOp()==SPH_QUERY_AND)
-		&& ( !pNode->m_dChildren.First()->m_dWords.IsEmpty()))
+		&& ( !pNode->m_dChildren.First()->dWords().IsEmpty()))
 	{
 		xqDumpNode ( pNode->m_dChildren.First() );
 		printf ( "\n" );
@@ -2038,10 +2059,10 @@ CSphString sphReconstructNode ( const XQNode_t * pNode, const CSphSchema * pSche
 	if ( !pNode )
 		return CSphString{sRes};
 
-	if ( pNode->m_dWords.GetLength() )
+	if ( pNode->dWords().GetLength() )
 	{
 		// say just words to me
-		const CSphVector<XQKeyword_t> & dWords = pNode->m_dWords;
+		const CSphVector<XQKeyword_t> & dWords = pNode->dWords();
 		for ( const auto& i: dWords )
 			sRes << i.m_sWord.cstr();
 		CSphString sTrim { sRes };
@@ -2186,7 +2207,7 @@ bool sphParseExtendedQuery ( XQQuery_t & tParsed, const char * sQuery, const CSp
 
 	// moved here from ranker creation
 	// as at that point term expansion could produce many terms from expanded term and this condition got failed
-	tParsed.m_bSingleWord = ( tParsed.m_pRoot && tParsed.m_pRoot->m_dChildren.GetLength()==0 && tParsed.m_pRoot->m_dWords.GetLength()==1 );
+	tParsed.m_bSingleWord = ( tParsed.m_pRoot && tParsed.m_pRoot->m_dChildren.GetLength()==0 && tParsed.m_pRoot->dWords().GetLength()==1 );
 	tParsed.m_bEmpty = qp.m_bEmpty;
 
 	return bRes;
@@ -2203,7 +2224,7 @@ static bool IsAppropriate ( const XQNode_t * pTree )
 	if ( !pTree ) return false;
 
 	// skip nodes that actually are leaves (eg. "AND smth" node instead of merely "smth")
-	return !( pTree->m_dWords.GetLength()==1 && pTree->GetOp()!=SPH_QUERY_NOT );
+	return !( pTree->dWords().GetLength()==1 && pTree->GetOp()!=SPH_QUERY_NOT );
 }
 
 typedef CSphOrderedHash < DWORD, uint64_t, IdentityHash_fn, 128 > CDwordHash;
@@ -2735,6 +2756,15 @@ XQQuery_t * CloneXQQuery ( const XQQuery_t & tQuery )
 	return pQuery;
 }
 
+XQNode_t * CloneKeyword ( const XQNode_t * pNode )
+{
+	assert ( pNode );
+
+	XQNode_t * pRes = new XQNode_t ( pNode->m_dSpec );
+	pRes->WithWords ( [pNode] (auto& dWords) { dWords = pNode->dWords(); } );
+	return pRes;
+}
+
 
 bool XqTreeComparator_t::IsEqual ( const XQNode_t * pNode1, const XQNode_t * pNode2 )
 {
@@ -2779,16 +2809,16 @@ bool XqTreeComparator_t::CheckCollectTerms ( const XQNode_t * pNode1, const XQNo
 	// early out
 	if ( !pNode1 || !pNode2
 			|| pNode1->GetHash ()!=pNode2->GetHash () || pNode1->GetOp ()!=pNode2->GetOp ()
-			|| pNode1->m_dWords.GetLength ()!=pNode2->m_dWords.GetLength ()
+			|| pNode1->dWords().GetLength ()!=pNode2->dWords().GetLength ()
 			|| pNode1->m_dChildren.GetLength ()!=pNode2->m_dChildren.GetLength () )
 		return false;
 
 	// for plain nodes compare keywords
-	ARRAY_FOREACH ( i, pNode1->m_dWords )
-		m_dTerms1.Add ( pNode1->m_dWords.Begin() + i );
+	ARRAY_FOREACH ( i, pNode1->dWords() )
+		m_dTerms1.Add ( pNode1->dWords().Begin() + i );
 
-	ARRAY_FOREACH ( i, pNode2->m_dWords )
-		m_dTerms2.Add ( pNode2->m_dWords.Begin () + i );
+	ARRAY_FOREACH ( i, pNode2->dWords() )
+		m_dTerms2.Add ( pNode2->dWords().Begin () + i );
 
 	// for non-plain nodes compare children
 	ARRAY_FOREACH ( i, pNode1->m_dChildren )
@@ -2993,7 +3023,7 @@ void CSphTransformation::SetCosts ( XQNode_t * pNode, const CSphVector<XQNode_t 
 			dChildren.Last()->m_iUser = 0;
 			assert ( dChildren.Last()->m_pParent==pChild );
 		}
-		for ( const auto& dWord : pChild->m_dWords )
+		for ( const auto& dWord : pChild->dWords() )
 		{
 			const CSphString & sWord = dWord.m_sWord;
 			int * pCost = hCosts ( sWord );
@@ -3019,7 +3049,7 @@ void CSphTransformation::SetCosts ( XQNode_t * pNode, const CSphVector<XQNode_t 
 	{
 		XQNode_t * pChild = dChildren[i];
 		int iCost = 0;
-		for_each ( pChild->m_dWords, [&iCost,&hCosts] (const auto& dWord) { iCost += hCosts[dWord.m_sWord]; } );
+		for_each ( pChild->dWords(), [&iCost,&hCosts] (const auto& dWord) { iCost += hCosts[dWord.m_sWord]; } );
 		pChild->m_iUser += iCost;
 		if ( pChild->m_pParent )
 			pChild->m_pParent->m_iUser += pChild->m_iUser;
@@ -3390,7 +3420,7 @@ static bool SubtreeRemoveEmpty ( XQNode_t * pNode )
 
 	// climb up
 	XQNode_t * pParent = pNode->m_pParent;
-	while ( pParent && pParent->m_dChildren.GetLength()<=1 && pParent->m_dWords.IsEmpty() )
+	while ( pParent && pParent->m_dChildren.GetLength()<=1 && pParent->dWords().IsEmpty() )
 		pNode = std::exchange ( pParent, pParent->m_pParent );
 
 	if ( pParent )
@@ -3405,7 +3435,7 @@ static bool SubtreeRemoveEmpty ( XQNode_t * pNode )
 // eliminate composite ( AND / OR ) nodes with only one children
 static void CompositeFixup ( XQNode_t * pNode, XQNode_t ** ppRoot )
 {
-	assert ( pNode && pNode->m_dWords.IsEmpty() );
+	assert ( pNode && pNode->dWords().IsEmpty() );
 	if ( pNode->m_dChildren.GetLength()!=1 || ( pNode->GetOp()!=SPH_QUERY_OR && pNode->GetOp()!=SPH_QUERY_AND ) )
 		return;
 
@@ -3415,7 +3445,7 @@ static void CompositeFixup ( XQNode_t * pNode, XQNode_t ** ppRoot )
 
 	// climb up
 	XQNode_t * pParent = pNode->m_pParent;
-	while ( pParent && pParent->m_dChildren.GetLength()==1 && pParent->m_dWords.IsEmpty() &&
+	while ( pParent && pParent->m_dChildren.GetLength()==1 && pParent->dWords().IsEmpty() &&
 		( pParent->GetOp()==SPH_QUERY_OR || pParent->GetOp()==SPH_QUERY_AND ) )
 	{
 		pNode = std::exchange (pParent, pParent->m_pParent);
@@ -3511,7 +3541,7 @@ bool CSphTransformation::CheckCommonKeywords ( const XQNode_t * pNode ) noexcept
 {
 	return ParentNode::Valid ( pNode )
 	&& ParentNode::From(pNode)->GetOp()==SPH_QUERY_OR
-	&& !pNode->m_dWords.IsEmpty();
+	&& !pNode->dWords().IsEmpty();
 //
 // NOLINT		//	NOT:
 // NOLINT		// 		 ______________________ OR (parentOr) _______
@@ -3545,18 +3575,18 @@ static uint64_t sphHashPhrase ( const XQNode_t * pNode )
 	assert ( pNode );
 	uint64_t uHash = SPH_FNV64_SEED;
 
-	auto iWords = pNode->m_dWords.GetLength();
+	auto iWords = pNode->dWords().GetLength();
 	if ( !iWords )
 		return uHash;
 
-	uHash = sphFNV64cont ( pNode->m_dWords.First().m_sWord.cstr(), uHash );
+	uHash = sphFNV64cont ( pNode->dWord(0).m_sWord.cstr(), uHash );
 	if ( iWords==1 )
 		return uHash;
 
 	for ( int i=1; i<iWords; ++i )
 	{
 		uHash = sphFNV64 ( g_sPhraseDelimiter, sizeof(g_sPhraseDelimiter), uHash );
-		uHash = sphFNV64cont ( pNode->m_dWords[i].m_sWord.cstr(), uHash );
+		uHash = sphFNV64cont ( pNode->dWord(i).m_sWord.cstr(), uHash );
 	}
 	return uHash;
 }
@@ -3566,10 +3596,10 @@ static void sphHashSubphrases ( XQNode_t * pNode, BigramHash_t & hBirgam )
 {
 	assert ( pNode );
 	// skip whole phrase
-	if ( pNode->m_dWords.GetLength()<=1 )
+	if ( pNode->dWords().GetLength()<=1 )
 		return;
 
-	const CSphVector<XQKeyword_t> & dWords = pNode->m_dWords;
+	const CSphVector<XQKeyword_t> & dWords = pNode->dWords();
 	int iLen = dWords.GetLength();
 	for ( int i=0; i<iLen; ++i )
 	{
@@ -3615,12 +3645,12 @@ static bool sphIsNodeStrongest ( const XQNode_t * pNode, const CSphVector<XQNode
 
 	assert ( pNode );
 	XQOperator_e eNode = pNode->GetOp();
-	int iWords = pNode->m_dWords.GetLength();
+	int iWords = pNode->dWords().GetLength();
 
 	ARRAY_FOREACH ( i, dSimilar )
 	{
 		XQOperator_e eSimilar = dSimilar[i]->GetOp();
-		int iSimilarWords = dSimilar[i]->m_dWords.GetLength();
+		int iSimilarWords = dSimilar[i]->dWords().GetLength();
 
 		if ( eNode==SPH_QUERY_PROXIMITY && eSimilar==SPH_QUERY_PROXIMITY && iWords>iSimilarWords )
 			return false;
@@ -3695,7 +3725,7 @@ bool CSphTransformation::CheckCommonPhrase ( const XQNode_t * pNode ) noexcept
 		|| !pNode->m_pParent
 		|| pNode->m_pParent->GetOp()!=SPH_QUERY_OR
 		|| pNode->GetOp()!=SPH_QUERY_PHRASE
-		|| pNode->m_dWords.GetLength()<2 )
+		|| pNode->dWords().GetLength()<2 )
 	{
 		//
 		// NOLINT		//  NOT:
@@ -3707,12 +3737,12 @@ bool CSphTransformation::CheckCommonPhrase ( const XQNode_t * pNode ) noexcept
 	}
 
 	// single word phrase not allowed
-	assert ( pNode->m_dWords.GetLength()>=2 );
+	assert ( pNode->dWords().GetLength()>=2 );
 
 	// phrase there words not one after another not allowed
-	for ( int i=1; i<pNode->m_dWords.GetLength(); i++ )
+	for ( int i=1; i<pNode->dWords().GetLength(); i++ )
 	{
-		if ( pNode->m_dWords[i].m_iAtomPos-pNode->m_dWords[i-1].m_iAtomPos!=1 )
+		if ( pNode->dWord(i).m_iAtomPos-pNode->dWord(i-1).m_iAtomPos!=1 )
 			return false;
 	}
 
@@ -3778,7 +3808,7 @@ bool CSphTransformation::TransformCommonPhrase () noexcept
 			// 1st check only 2 words at head tail at phrases
 			ARRAY_FOREACH ( iPhrase, dNodes )
 			{
-				const CSphVector<XQKeyword_t> & dWords = dNodes[iPhrase]->m_dWords;
+				const CSphVector<XQKeyword_t> & dWords = dNodes[iPhrase]->dWords();
 				assert ( dWords.GetLength()>=2 );
 				dNodes[iPhrase]->m_iAtomPos = dWords.Begin()->m_iAtomPos;
 
@@ -3835,22 +3865,22 @@ bool CSphTransformation::TransformCommonPhrase () noexcept
 				for ( int iCount=3; ; iCount++ )
 				{
 					// is shortest phrase words over
-					if ( iCount>=dPhrases[0]->m_dWords.GetLength() )
+					if ( iCount>=dPhrases.First()->dWords().GetLength() )
 						break;
 
-					int iWordRef = ( bHead ? iCount-1 : dPhrases[0]->m_dWords.GetLength() - iCount );
-					uint64_t uHash = sphFNV64 ( dPhrases[0]->m_dWords[iWordRef].m_sWord.cstr() );
+					int iWordRef = ( bHead ? iCount-1 : dPhrases.First()->dWords().GetLength() - iCount );
+					uint64_t uHash = sphFNV64 ( dPhrases.First()->dWord(iWordRef).m_sWord.cstr() );
 
 					bool bPhrasesMatch = false;
 					bool bSomePhraseOver = false;
 					for ( int iPhrase=1; iPhrase<dPhrases.GetLength(); iPhrase++ )
 					{
-						bSomePhraseOver = ( iCount>=dPhrases[iPhrase]->m_dWords.GetLength() );
+						bSomePhraseOver = ( iCount>=dPhrases[iPhrase]->dWords().GetLength() );
 						if ( bSomePhraseOver )
 							break;
 
-						int iWord = ( bHead ? iCount-1 : dPhrases[iPhrase]->m_dWords.GetLength() - iCount );
-						bPhrasesMatch = ( uHash==sphFNV64 ( dPhrases[iPhrase]->m_dWords[iWord].m_sWord.cstr() ) );
+						int iWord = ( bHead ? iCount-1 : dPhrases[iPhrase]->dWords().GetLength() - iCount );
+						bPhrasesMatch = ( uHash==sphFNV64 ( dPhrases[iPhrase]->dWord(iWord).m_sWord.cstr() ) );
 						if ( !bPhrasesMatch )
 							break;
 					}
@@ -3918,18 +3948,20 @@ void CSphTransformation::MakeTransformCommonPhrase ( CSphVector<XQNode_t *> & dC
 	{
 		// fill up common suffix
 		const XQNode_t * pPhrase = dCommonNodes[0];
-		pCommonPhrase->m_iAtomPos = pPhrase->m_dWords[0].m_iAtomPos;
-		for ( int i=0; i<iCommonLen; i++ )
-			pCommonPhrase->m_dWords.Add ( pPhrase->m_dWords[i] );
+		pCommonPhrase->m_iAtomPos = pPhrase->dWord(0).m_iAtomPos;
+		pCommonPhrase->WithWords ( [pPhrase,iCommonLen] ( auto& dWords ) {
+		for ( int i=0; i<iCommonLen; ++i )
+			dWords.Add ( pPhrase->dWord(i) );
+		});
 	} else
 	{
 		const XQNode_t * pPhrase = dCommonNodes[0];
 		// set the farthest atom position
-		int iAtomPos = pPhrase->m_dWords [ pPhrase->m_dWords.GetLength() - iCommonLen ].m_iAtomPos;
+		int iAtomPos = pPhrase->dWord ( pPhrase->dWords().GetLength() - iCommonLen ).m_iAtomPos;
 		for ( int i=1; i<dCommonNodes.GetLength(); i++ )
 		{
 			const XQNode_t * pCur = dCommonNodes[i];
-			int iCurAtomPos = pCur->m_dWords[pCur->m_dWords.GetLength() - iCommonLen].m_iAtomPos;
+			int iCurAtomPos = pCur->dWord(pCur->dWords().GetLength() - iCommonLen).m_iAtomPos;
 			if ( iAtomPos < iCurAtomPos )
 			{
 				pPhrase = pCur;
@@ -3938,8 +3970,10 @@ void CSphTransformation::MakeTransformCommonPhrase ( CSphVector<XQNode_t *> & dC
 		}
 		pCommonPhrase->m_iAtomPos = iAtomPos;
 
-		for ( int i=pPhrase->m_dWords.GetLength() - iCommonLen; i<pPhrase->m_dWords.GetLength(); i++ )
-			pCommonPhrase->m_dWords.Add ( pPhrase->m_dWords[i] );
+		pCommonPhrase->WithWords ( [pPhrase,iCommonLen] ( auto& dWords ) {
+			for ( int i=pPhrase->dWords().GetLength() - iCommonLen; i<pPhrase->dWords().GetLength(); ++i )
+				dWords.Add ( pPhrase->dWord(i) );
+		});
 	}
 
 	XQNode_t * pNewOr = new XQNode_t ( XQLimitSpec_t() );
@@ -3949,7 +3983,7 @@ void CSphTransformation::MakeTransformCommonPhrase ( CSphVector<XQNode_t *> & dC
 	{
 		// remove phrase from parent and eliminate in case of common phrase duplication
 		Verify ( pGrandOr->m_dChildren.RemoveValue ( pPhrase ) );
-		if ( pPhrase->m_dWords.GetLength()==iCommonLen )
+		if ( pPhrase->dWords().GetLength()==iCommonLen )
 		{
 			SafeDelete ( pPhrase );
 			continue;
@@ -3960,32 +3994,35 @@ void CSphTransformation::MakeTransformCommonPhrase ( CSphVector<XQNode_t *> & dC
 		pPhrase->m_pParent = pNewOr;
 
 		// shift down words and enumerate words atom positions
-		if ( bHeadIsCommon )
+		pPhrase->WithWords ( [pCommonPhrase,bHeadIsCommon,iCommonLen] ( auto& dPhraseWords )
 		{
-			int iEndCommonAtom = pCommonPhrase->m_dWords.Last().m_iAtomPos+1;
-			for ( int j=iCommonLen; j<pPhrase->m_dWords.GetLength(); j++ )
+			if ( bHeadIsCommon )
 			{
-				int iTo = j-iCommonLen;
-				pPhrase->m_dWords[iTo] = pPhrase->m_dWords[j];
-				pPhrase->m_dWords[iTo].m_iAtomPos = iEndCommonAtom + iTo;
+				int iEndCommonAtom = pCommonPhrase->dWords().Last().m_iAtomPos+1;
+				for ( int j=iCommonLen; j<dPhraseWords.GetLength(); ++j )
+				{
+					int iTo = j-iCommonLen;
+					dPhraseWords[iTo] = dPhraseWords[j];
+					dPhraseWords[iTo].m_iAtomPos = iEndCommonAtom + iTo;
+				}
 			}
-		}
-		pPhrase->m_dWords.Resize ( pPhrase->m_dWords.GetLength() - iCommonLen );
-		if ( !bHeadIsCommon )
-		{
-			int iStartAtom = pCommonPhrase->m_dWords[0].m_iAtomPos - pPhrase->m_dWords.GetLength();
-			ARRAY_FOREACH ( j, pPhrase->m_dWords )
-				pPhrase->m_dWords[j].m_iAtomPos = iStartAtom + j;
-		}
+			dPhraseWords.Resize ( dPhraseWords.GetLength() - iCommonLen );
+			if ( !bHeadIsCommon )
+			{
+				int iStartAtom = pCommonPhrase->dWord(0).m_iAtomPos - dPhraseWords.GetLength();
+				ARRAY_FOREACH ( j, dPhraseWords )
+					dPhraseWords[j].m_iAtomPos = iStartAtom + j;
+			}
+		});
 
-		if ( pPhrase->m_dWords.GetLength()==1 )
+		if ( pPhrase->dWords().GetLength()==1 )
 			pPhrase->SetOp ( SPH_QUERY_AND );
 	}
 
 	if ( pNewOr->m_dChildren.GetLength() )
 	{
 		// parent phrase need valid atom position of children
-		pNewOr->m_iAtomPos = pNewOr->m_dChildren[0]->m_dWords[0].m_iAtomPos;
+		pNewOr->m_iAtomPos = pNewOr->m_dChildren[0]->dWord(0).m_iAtomPos;
 
 		XQNode_t * pNewPhrase = new XQNode_t ( XQLimitSpec_t() );
 		if ( bHeadIsCommon )
@@ -4198,7 +4235,7 @@ bool CSphTransformation::CheckHungOperand ( const XQNode_t * pNode ) noexcept
 		&& ( ParentNode::From(pNode)->GetOp()==SPH_QUERY_OR || ParentNode::From(pNode)->GetOp()==SPH_QUERY_AND )
 		&& !( GrandNode::Valid(pNode) && ParentNode::From(pNode)->GetOp()==SPH_QUERY_AND && GrandNode::From(pNode)->GetOp()==SPH_QUERY_ANDNOT )
 		&& ParentNode::From(pNode)->m_dChildren.GetLength()<=1
-		&& pNode->m_dWords.IsEmpty();
+		&& pNode->dWords().IsEmpty();
 
 //
 // NOLINT		//  NOT:
@@ -4250,7 +4287,7 @@ bool CSphTransformation::CheckExcessBrackets ( const XQNode_t * pNode ) noexcept
 {
 	return GrandNode::Valid(pNode)
 		&& ( ( ParentNode::From(pNode)->GetOp()==SPH_QUERY_AND
-				&& ParentNode::From(pNode)->m_dWords.IsEmpty()
+				&& ParentNode::From(pNode)->dWords().IsEmpty()
 				&& GrandNode::From(pNode)->GetOp()==SPH_QUERY_AND )
 			|| ( ParentNode::From(pNode)->GetOp()==SPH_QUERY_OR
 				&& GrandNode::From(pNode)->GetOp()==SPH_QUERY_OR ) );

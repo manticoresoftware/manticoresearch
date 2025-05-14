@@ -508,7 +508,7 @@ void AddAccessSpecsBson ( bson::Assoc_c & tNode, const XQNode_t * pNode, const C
 	assert ( pNode );
 	// dump spec for keyword nodes
 	// FIXME? double check that spec does *not* affect non keyword nodes
-	if ( pNode->m_dSpec.IsEmpty () || pNode->m_dWords.IsEmpty () )
+	if ( pNode->m_dSpec.IsEmpty () || pNode->dWords().IsEmpty () )
 		return;
 
 	const XQLimitSpec_t & s = pNode->m_dSpec;
@@ -562,13 +562,13 @@ void BuildPlanBson ( bson::Assoc_c& tPlan, const XQNode_t * pNode, const CSphSch
 	XQNodeGetExtraBson ( tPlan, pNode );
 	AddAccessSpecsBson ( tPlan, pNode, pSchema, pZones );
 
-	if ( pNode->m_dChildren.GetLength () && pNode->m_dWords.GetLength () )
+	if ( pNode->m_dChildren.GetLength () && pNode->dWords().GetLength () )
 		tPlan.AddBool ( SZ_VIRTUALLY_PLAIN, true );
 
 	if ( pNode->m_dChildren.IsEmpty () )
 	{
-		MixedVector_c dChildren ( tPlan.StartMixedVec( SZ_CHILDREN ), pNode->m_dWords.GetLength() );
-		for ( const auto & i : pNode->m_dWords )
+		MixedVector_c dChildren ( tPlan.StartMixedVec( SZ_CHILDREN ), pNode->dWords().GetLength() );
+		for ( const XQKeyword_t & i : pNode->dWords() )
 		{
 			Obj_c tWord ( dChildren.StartObj () );
 			CreateKeywordBson ( tWord, i );
@@ -4426,8 +4426,8 @@ static bool HasQwordDupes ( XQNode_t * pNode, SmallStringHash_T<int> & hQwords )
 	ARRAY_FOREACH ( i, pNode->m_dChildren )
 		if ( HasQwordDupes ( pNode->m_dChildren[i], hQwords ) )
 			return true;
-	ARRAY_FOREACH ( i, pNode->m_dWords )
-		if ( !hQwords.Add ( 1, pNode->m_dWords[i].m_sWord ) )
+	for ( const auto& dWord : pNode->dWords() )
+		if ( !hQwords.Add ( 1, dWord.m_sWord ) )
 			return true;
 	return false;
 }

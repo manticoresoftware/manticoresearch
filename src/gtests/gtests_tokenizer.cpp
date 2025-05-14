@@ -644,7 +644,7 @@ static void CheckQuerySoftSpace ( const XQNode_t * pNode, const int * pQPos, int
 		for ( auto * pChildren : pChild->m_dChildren )
 			dChildren.Add ( pChildren );
 
-		for ( auto & dWord : pChild->m_dWords )
+		for ( auto & dWord : pChild->dWords() )
 			dTerms.Add ( &dWord );
 	}
 

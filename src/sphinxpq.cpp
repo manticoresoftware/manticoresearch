@@ -279,9 +279,8 @@ static void DoQueryGetRejects ( const XQNode_t * pNode, const DictRefPtr_c& pDic
 		return;
 
 	BYTE sTmp[3 * SPH_MAX_WORD_LEN + 16];
-	ARRAY_FOREACH ( i, pNode->m_dWords )
+	for ( const XQKeyword_t & tWord : pNode->dWords() )
 	{
-		const XQKeyword_t & tWord = pNode->m_dWords[i];
 		int iLen = tWord.m_sWord.Length();
 		assert ( iLen < (int)sizeof( sTmp ) );
 
@@ -367,9 +366,8 @@ static void DoQueryGetTerms ( const XQNode_t * pNode, const DictRefPtr_c& pDict,
 		return;
 
 	BYTE sTmp[3 * SPH_MAX_WORD_LEN + 16];
-	ARRAY_FOREACH ( i, pNode->m_dWords )
+	for ( const XQKeyword_t & tWord : pNode->dWords() )
 	{
-		const XQKeyword_t & tWord = pNode->m_dWords[i];
 		uint64_t uHash = sphFNV64 ( tWord.m_sWord.cstr() );
 		if ( hDict.m_hTerms.Find ( uHash ) )
 			continue;
@@ -1666,7 +1664,7 @@ class XQTreeCompressor_t
 		if ( !pNode )
 			return;
 
-		if ( pNode->m_dWords.GetLength() && pNode->m_dWords.GetLength()!=pNode->m_dWords.GetLimit() )
+		if ( pNode->dWords().GetLength() && pNode->dWords().GetLength()!=pNode->dWords().GetLimit() )
 			m_dWords.Add ( pNode );
 
 		if ( pNode->m_dChildren.GetLength() && pNode->m_dChildren.GetLength()!=pNode->m_dChildren.GetLimit() )
@@ -1682,16 +1680,17 @@ class XQTreeCompressor_t
 		CSphFixedVector< CSphVector<XQKeyword_t> > dWords2Free ( m_dWords.GetLength() );
 		CSphFixedVector< CSphVector<XQNode_t *> > dChildren2Free ( m_dChildren.GetLength() );
 
-		for ( int i=0; i<m_dWords.GetLength(); i++ )
+		for ( int i=0; i<m_dWords.GetLength(); ++i )
 		{
-			auto & dSrcWords = m_dWords[i]->m_dWords;
-			int iLen = dSrcWords.GetLength();
-			
-			CSphFixedVector<XQKeyword_t> dDstWords ( iLen );
-			dDstWords.CopyFrom ( dSrcWords );
+			m_dWords[i]->WithWords ( [i,&dWords2Free] (auto & dSrcWords) {
 
-			dWords2Free[i].SwapData ( dSrcWords ); // remove all collected vectors m_pData on exit
-			dSrcWords.AdoptData ( dDstWords.LeakData(), iLen, iLen );
+				int iLen = dSrcWords.GetLength();
+				CSphFixedVector<XQKeyword_t> dDstWords ( iLen );
+				dDstWords.CopyFrom ( dSrcWords );
+
+				dWords2Free[i].SwapData ( dSrcWords ); // remove all collected vectors m_pData on exit
+				dSrcWords.AdoptData ( dDstWords.LeakData(), iLen, iLen );
+			});
 		}
 
 		for ( int i=0; i<m_dChildren.GetLength(); i++ )
@@ -1757,9 +1756,8 @@ void SetPercolateQueryParserFactory ( CreateQueryParser_fn * pCall )
 static void FixExpandedNode ( XQNode_t * pNode )
 {
 	assert ( pNode );
-	ARRAY_FOREACH ( i, pNode->m_dWords )
+	for ( const XQKeyword_t & tKw : pNode->dWords() )
 	{
-		XQKeyword_t & tKw = pNode->m_dWords[i];
 		if ( sphHasExpandableWildcards ( tKw.m_sWord.cstr() ) )
 		{
 			tKw.m_bExpanded = true;

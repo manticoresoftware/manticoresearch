@@ -203,7 +203,7 @@ XQNode_t * QueryTreeBuilder_c::AddChildKeyword ( XQNode_t * pParent, const char 
 	tKeyword.m_fBoost = fBoost;
 	auto * pNode = new XQNode_t ( tLimitSpec );
 	pNode->m_pParent = pParent;
-	pNode->m_dWords.Add ( tKeyword );
+	pNode->AddDirtyWord ( tKeyword );
 	pParent->m_dChildren.Add ( pNode );
 	m_dSpawned.Add ( pNode );
 
@@ -305,7 +305,7 @@ bool QueryParserJson_c::IsFullscan ( const CSphQuery & tQuery ) const
 
 bool QueryParserJson_c::IsFullscan ( const XQQuery_t & tQuery ) const
 {
-	return !( tQuery.m_pRoot && ( tQuery.m_pRoot->m_dChildren.GetLength () || tQuery.m_pRoot->m_dWords.GetLength () ) );
+	return !( tQuery.m_pRoot && ( tQuery.m_pRoot->m_dChildren.GetLength () || tQuery.m_pRoot->dWords().GetLength () ) );
 }
 
 static bool IsFullText ( const CSphString & sName );
@@ -405,7 +405,7 @@ bool QueryParserJson_c::ParseQuery ( XQQuery_t & tParsed, const char * szQuery, 
 		return false;
 	}
 
-	tParsed.m_bSingleWord = ( pRoot && pRoot->m_dChildren.IsEmpty() && pRoot->m_dWords.GetLength() == 1 );
+	tParsed.m_bSingleWord = ( pRoot && pRoot->m_dChildren.IsEmpty() && pRoot->dWords().GetLength() == 1 );
 	tParsed.m_pRoot = pRoot;
 	return true;
 }

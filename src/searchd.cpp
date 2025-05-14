@@ -6604,7 +6604,7 @@ void HandleMysqlShowPlugins ( RowBuffer_i & tOut, SqlStmt_t & )
 		tOut.PutNumAsString ( p.m_iUsers );
 		tOut.PutString ( p.m_sExtra );
 		if ( !tOut.Commit() )
-		return;
+			return;
 	}
 	tOut.Eof();
 }

@@ -985,9 +985,11 @@ bool InputBuffer_c::IsDataSizeValid ( int iSize )
 	if ( !IsLessMaxPacket ( iSize ) )
 	{
 		return false;
-	} else if ( m_pCur + iSize>m_pBuf + m_iLen )
+	}
+
+	if ( m_pCur + iSize>m_pBuf + m_iLen )
 	{
-		SetError( "read overflows buffer by %d byte, data size %d", (int)( ( m_pCur + iSize ) - ( m_pBuf + m_iLen ) ), iSize );
+		SetError( "read overflows buffer by %d byte, data size %d", (int)( m_pCur + iSize - ( m_pBuf + m_iLen ) ), iSize );
 		return false;
 	}
 

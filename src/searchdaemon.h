@@ -1329,7 +1329,7 @@ void BuildStatusOneline ( StringBuilder_c& sOut );
 void UpdateLastMeta (VecTraits_T<AggrResult_t> tResults );
 
 namespace session {
-bool IsAutoCommit ( const ClientSession_c* );
+	bool IsAutoCommit ( const ClientSession_c* );
 	bool IsInTrans ( const ClientSession_c* );
 
 	bool Execute ( Str_t sQuery, RowBuffer_i& tOut );
@@ -1482,9 +1482,9 @@ public:
 
 	// wrappers for popular packets
 	virtual void Eof ( bool bMoreResults, int iWarns, const char* szMeta ) = 0;
-	inline void Eof ( bool bMoreResults , int iWarns ) { return Eof ( bMoreResults, iWarns, nullptr); }
-	inline void Eof ( bool bMoreResults ) { return Eof ( bMoreResults, 0 ); }
-	inline void Eof () { return Eof ( false ); }
+	void Eof ( bool bMoreResults , int iWarns ) { return Eof ( bMoreResults, iWarns, nullptr); }
+	void Eof ( bool bMoreResults ) { return Eof ( bMoreResults, 0 ); }
+	void Eof () { return Eof ( false ); }
 
 	virtual void Error ( const char * sError, EMYSQL_ERR iErr = EMYSQL_ERR::PARSE_ERROR ) = 0;
 

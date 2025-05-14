@@ -660,14 +660,14 @@ void HttpRequestParser_c::ParseList ( Str_t sData, OptionsHash_t & hOptions )
 		case '=':
 			{
 				sName = { sLast, int ( sCur - sLast ) };
-				UriPercentReplace ( sName );
+				UriPercentReplace ( sName, Replace_e::NoPlus );
 				sLast = sCur + 1;
 				break;
 			}
 		case '&':
 			{
 				Str_t sVal { sLast, int ( sCur - sLast ) };
-				UriPercentReplace ( sVal );
+				UriPercentReplace ( sVal, Replace_e::NoPlus );
 				ToLower ( sName );
 				hOptions.Add ( sVal, sName );
 				sLast = sCur + 1;
@@ -683,7 +683,7 @@ void HttpRequestParser_c::ParseList ( Str_t sData, OptionsHash_t & hOptions )
 		return;
 
 	Str_t sVal { sLast, int ( sCur - sLast ) };
-	UriPercentReplace ( sVal );
+	UriPercentReplace ( sVal, Replace_e::NoPlus );
 	ToLower ( sName );
 	hOptions.Add ( sVal, sName );
 }

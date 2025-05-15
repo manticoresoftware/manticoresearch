@@ -7,11 +7,10 @@
 // This program is free software; you can redistribute it and/or modify
 // it under the terms of the GNU General Public License. You should have
 // received a copy of the GPL license along with this program; if you
-// did not, you can find it at http://www.gnu.org/
+// did not, you can find it at http://www.gnu.org
 //
 
-#ifndef _sphinxquery_
-#define _sphinxquery_
+#pragma once
 
 #include "sphinxstd.h"
 #include "sphinx.h"
@@ -485,4 +484,3 @@ CSphString sphReconstructNode ( const XQNode_t * pNode, const CSphSchema * pSche
 
 int GetExpansionLimit ( int iQueryLimit, int iIndexLimit  );
 
-#endif // _sphinxquery_

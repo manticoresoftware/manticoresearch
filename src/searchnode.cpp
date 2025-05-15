@@ -11,7 +11,7 @@
 //
 
 #include "searchnode.h"
-#include "sphinxquery.h"
+#include "sphinxquery/sphinxquery.h"
 #include "sphinxint.h"
 #include "sphinxqcache.h"
 #include "mini_timer.h"

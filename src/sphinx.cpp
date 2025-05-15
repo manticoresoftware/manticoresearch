@@ -12,7 +12,7 @@
 
 #include "sphinx.h"
 #include "sphinxstem.h"
-#include "sphinxquery.h"
+#include "sphinxquery/sphinxquery.h"
 #include "sphinxutils.h"
 #include "sphinxsort.h"
 #include "fileutils.h"

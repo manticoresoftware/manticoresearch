@@ -13,7 +13,7 @@
 #ifndef _sphinxsearch_
 #define _sphinxsearch_
 
-#include "sphinxquery.h"
+#include "sphinxquery/sphinxquery.h"
 #include "sphinxint.h"
 
 //////////////////////////////////////////////////////////////////////////

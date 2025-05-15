@@ -8,7 +8,7 @@
 // did not, you can find it at http://www.gnu.org/
 //
 
-#include "sphinxquery.h"
+#include "sphinxquery/sphinxquery.h"
 #include "sphinxsearch.h"
 #include "sphinxplugin.h"
 #include "sphinxutils.h"

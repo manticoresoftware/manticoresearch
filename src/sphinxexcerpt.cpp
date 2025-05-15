@@ -12,7 +12,7 @@
 #include "sphinxexcerpt.h"
 #include "searchdaemon.h"
 #include "sphinxsearch.h"
-#include "sphinxquery.h"
+#include "sphinxquery/sphinxquery.h"
 #include "fileutils.h"
 #include "sphinxstem.h"
 #include "coroutine.h"

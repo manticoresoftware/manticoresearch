@@ -424,7 +424,7 @@ class SqlRowBuffer_c final : public RowBuffer_i
 		WORD uFlags = 0;
 
 		int iColLen = 0;
-		WORD uCollation = 0x3f00; // binary
+		WORD uCollation = 0x2100; // utf8. Better to have 0x3f00, i.e. 'binary', but it breaks mysqldump
 		switch ( eType )
 		{
 		case MYSQL_COL_LONG: iColLen = 11;

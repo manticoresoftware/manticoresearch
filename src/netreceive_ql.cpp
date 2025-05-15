@@ -22,6 +22,7 @@ extern int g_iClientQlTimeoutS;    // sec
 extern volatile bool g_bMaintenance;
 extern CSphString g_sMySQLVersion;
 constexpr bool bSendOkInsteadofEOF = true; // _if_ client support - send OK packet instead of EOF (in mysql proto).
+constexpr const char* szManticore = "Manticore";
 
 namespace { // c++ way of 'static'
 
@@ -270,12 +271,13 @@ enum
 	MYSQL_COM_QUIT		= 1,
 	MYSQL_COM_INIT_DB	= 2,
 	MYSQL_COM_QUERY		= 3,
+	MYSQL_COM_FIELD_LIST = 4,
 	MYSQL_COM_STATISTICS = 9,
 	MYSQL_COM_PING		= 14,
 	MYSQL_COM_SET_OPTION	= 27
 };
 
-static void SendMysqlErrorPacket ( ISphOutputBuffer & tOut, BYTE uPacketID, Str_t sError, EMYSQL_ERR eErr )
+void SendMysqlErrorPacket ( ISphOutputBuffer & tOut, BYTE uPacketID, Str_t sError, EMYSQL_ERR eErr )
 {
 	if ( IsEmpty ( sError ) )
 		sError = FROMS("(null)");
@@ -320,7 +322,7 @@ static void SendMysqlErrorPacket ( ISphOutputBuffer & tOut, BYTE uPacketID, Str_
 	tOut.SendBytes ( sError );
 }
 
-inline WORD MysqlStatus ( bool bMoreResults, bool bAutoCommit, bool bIsInTrans )
+WORD MysqlStatus ( bool bMoreResults, bool bAutoCommit, bool bIsInTrans )
 {
 	WORD uStatus = 0;
 	if ( bMoreResults )
@@ -389,6 +391,7 @@ class SqlRowBuffer_c final : public RowBuffer_i
 	bool m_bWasFlushed = false;
 	CSphVector<std::pair<CSphString, MysqlColumnType_e>> m_dHead;
 	LazyVector_T<BYTE> m_tBuf {0};
+	CSphString m_sTable;
 
 	// how many bytes this string will occupy in proto mysql
 	static int SqlStrlen ( const char * sStr )
@@ -404,7 +407,7 @@ class SqlRowBuffer_c final : public RowBuffer_i
 
 	void SendSqlString ( const char * sStr )
 	{
-		auto iLen = (int) strlen ( sStr );
+		auto iLen = sStr? (int) strlen ( sStr ) : 0;
 		SendSqlInt ( iLen );
 		m_tOut.SendBytes ( sStr, iLen );
 	}
@@ -415,12 +418,13 @@ class SqlRowBuffer_c final : public RowBuffer_i
 		return iPrevSent != m_iTotalSent;
 	}
 
-	void SendSqlFieldPacket ( const char * sCol, MysqlColumnType_e eType, WORD uFlags=0 )
+	void SendSqlFieldPacket ( const char * szDB, const char * sCol, MysqlColumnType_e eType, bool bFromFieldList )
 	{
-		const char * sDB = "";
-		const char * sTable = "";
+		const char * sTable = m_sTable.scstr();
+		WORD uFlags = 0;
 
 		int iColLen = 0;
+		WORD uCollation = 0x2100; // utf8. Better to have 0x3f00, i.e. 'binary', but it breaks mysqldump
 		switch ( eType )
 		{
 		case MYSQL_COL_LONG: iColLen = 11;
@@ -431,27 +435,29 @@ class SqlRowBuffer_c final : public RowBuffer_i
 		case MYSQL_COL_UINT64:
 		case MYSQL_COL_LONGLONG: iColLen = 20;
 			break;
-		case MYSQL_COL_STRING: iColLen = 255;
+		case MYSQL_COL_STRING:
+			iColLen = 255;
+			uCollation = 0x2100; // utf8
 			break;
 		}
 
 		SQLPacketHeader_c dBlob { m_tOut, m_uPacketID++ };
 		SendSqlString ( "def" ); // catalog
-		SendSqlString ( sDB ); // db
+		SendSqlString ( szDB ); // db
 		SendSqlString ( sTable ); // table
 		SendSqlString ( sTable ); // org_table
 		SendSqlString ( sCol ); // name
 		SendSqlString ( sCol ); // org_name
 
 		m_tOut.SendByte ( 12 ); // filler, must be 12 (following pseudo-string length)
-		m_tOut.SendByte ( 0x21 ); // charset_nr, 0x21 is utf8
-		m_tOut.SendByte ( 0 ); // charset_nr
+		m_tOut.SendWord ( uCollation ); // charset_nr, 0x21 is utf8
 		m_tOut.SendLSBDword ( iColLen ); // length
 		m_tOut.SendByte ( BYTE ( eType ) ); // type (0=decimal)
-		m_tOut.SendByte ( uFlags & 255 );
-		m_tOut.SendByte ( uFlags >> 8 );
+		m_tOut.SendWord ( uFlags );
 		m_tOut.SendByte ( 0 ); // decimals
 		m_tOut.SendWord ( 0 ); // filler
+		if ( bFromFieldList )
+			m_tOut.SendByte ( 0xFB );
 	}
 
 	bool IsAutoCommit() const
@@ -622,10 +628,27 @@ public:
 			m_uPacketID++;
 	}
 
+	void SendColumnDefinitions (bool bFromFieldList = false)
+	{
+		const char* szDB = session::GetCurrentDbName();
+		if (!szDB)
+			szDB = szManticore;
+		for ( const auto & dCol: m_dHead )
+			SendSqlFieldPacket ( szDB, dCol.first.cstr(), dCol.second, bFromFieldList );
+
+		m_dHead.Reset();
+	}
+
 	// Header of the table with defined num of columns
 	void HeadBegin () override
 	{
 		m_dHead.Reset();
+	}
+
+	void HeadBegin ( CSphString sTable )
+	{
+		m_sTable = std::move ( sTable );
+		HeadBegin();
 	}
 
 	bool HeadEnd ( bool bMoreResults, int iWarns ) override
@@ -634,12 +657,11 @@ public:
 			SQLPacketHeader_c dHead { m_tOut, m_uPacketID++ };
 			SendSqlInt ( m_dHead.GetLength() );
 		}
-		for ( const auto& dCol : m_dHead )
-			SendSqlFieldPacket ( dCol.first.cstr(), dCol.second );
 
+		SendColumnDefinitions ();
 		if ( !OmitEof() )
 			Eof ( bMoreResults, iWarns );
-		m_dHead.Reset();
+
 		return true;
 	}
 
@@ -801,8 +823,8 @@ class HandshakeResponse41
 {
 	CSphString m_sLoginUserName;
 	CSphString m_sAuthResponse;
-	CSphString m_sDatabase;
-	CSphString m_sClientPluginName;
+	std::optional<CSphString> m_sDatabase;
+	std::optional<CSphString> m_sClientPluginName;
 	SmallStringHash_T<CSphString> m_hAttributes;
 	DWORD m_uCapabilities;
 	DWORD m_uMaxPacketSize;
@@ -841,13 +863,13 @@ public:
 		// db name
 		if ( m_uCapabilities & CLIENT::CONNECT_WITH_DB )
 		{
-			m_sDatabase = MysqlReadSzStr ( tIn );
-			sphLogDebugv ( "DB: %s", m_sDatabase.cstr() );
+			m_sDatabase.emplace ( MysqlReadSzStr ( tIn ) );
+			sphLogDebugv ( "DB: %s", m_sDatabase->cstr() );
 		}
 
 		// db name
 		if ( m_uCapabilities & CLIENT::PLUGIN_AUTH )
-			m_sClientPluginName = MysqlReadSzStr ( tIn );
+			m_sClientPluginName.emplace ( MysqlReadSzStr ( tIn ) );
 
 		// attributes
 		if ( m_uCapabilities & CLIENT::CONNECT_ATTRS )
@@ -874,7 +896,7 @@ public:
 		return m_sLoginUserName;
 	}
 
-	[[nodiscard]] const CSphString& GetDB() const noexcept
+	[[nodiscard]] const std::optional<CSphString>& GetDB() const noexcept
 	{
 		return m_sDatabase;
 	}
@@ -906,6 +928,60 @@ public:
 };
 
 
+void SendTableSchema ( SqlRowBuffer_c & tSqlOut, CSphString sName )
+{
+	auto pServed = GetServed ( sName );
+	if ( !pServed )
+	{
+		tSqlOut.Eof();
+		return;
+	}
+
+	tSqlOut.HeadBegin(std::move(sName));
+
+	// data
+	const CSphSchema * pSchema = &RIdx_c ( pServed )->GetMatchSchema();
+	const CSphSchema & tSchema = *pSchema;
+	assert ( tSchema.GetAttr ( 0 ).m_sName == sphGetDocidName() );
+	const auto & tId = tSchema.GetAttr ( 0 );
+
+	tSqlOut.HeadColumn ( tId.m_sName.cstr(), ESphAttr2MysqlColumn ( tId.m_eAttrType ) );
+	for ( int i = 0; i < tSchema.GetFieldsCount(); ++i )
+	{
+		const auto & tField = tSchema.GetField ( i );
+		const CSphColumnInfo * pAttr = tSchema.GetAttr ( tField.m_sName.cstr() );
+		if (pAttr)
+			tSqlOut.HeadColumn ( pAttr->m_sName.cstr(), ESphAttr2MysqlColumn ( pAttr->m_eAttrType ) );
+		else
+			tSqlOut.HeadColumn ( tField.m_sName.cstr(), MYSQL_COL_STRING );
+	}
+
+	for ( int i = 1; i < tSchema.GetAttrsCount(); ++i ) // from 1, as 0 is docID and already emerged
+	{
+		const auto & tAttr = tSchema.GetAttr ( i );
+		if ( sphIsInternalAttr ( tAttr ) )
+			continue;
+
+		if ( tSchema.GetField ( tAttr.m_sName.cstr() ) )
+			continue; // already described it as a field property
+
+		tSqlOut.HeadColumn ( tAttr.m_sName.cstr(), ESphAttr2MysqlColumn ( tAttr.m_eAttrType ) );
+	}
+
+	tSqlOut.SendColumnDefinitions (true); // true means - from field list
+}
+
+bool ValidateDBName (Str_t tSrcQueryReference)
+{
+	return StrEqN ( tSrcQueryReference, szManticore );
+}
+
+bool ValidateDBName ( const std::optional<CSphString>& tSrcQueryReference )
+{
+	return ValidateDBName ( FromStr ( tSrcQueryReference.value_or ( szManticore ) ) );
+}
+
+
 bool LoopClientMySQL ( BYTE & uPacketID, int iPacketLen, QueryProfile_c * pProfile, AsyncNetBuffer_c * pBuf )
 {
 	auto& tSess = session::Info();
@@ -926,11 +1002,31 @@ bool LoopClientMySQL ( BYTE & uPacketID, int iPacketLen, QueryProfile_c * pProfi
 	bool bKeepProfile = true;
 	switch ( uMysqlCmd )
 	{
+		// client wants a pong
 		case MYSQL_COM_PING:
-		case MYSQL_COM_INIT_DB:
-			// client wants a pong
 			SendMysqlOkPacket ( tOut, uPacketID, session::IsAutoCommit(), session::IsInTrans() );
 			break;
+
+		// handle 'use DB'
+		case MYSQL_COM_INIT_DB:
+		{
+			Str_t tSrcQueryReference ( nullptr, iPacketLen - 1 );
+			tIn.GetBytesZerocopy ( ( const BYTE ** )( &tSrcQueryReference.first ), tSrcQueryReference.second );
+			CSphString sInitDB { tSrcQueryReference };
+			sphLogDebugv ( "LoopClientMySQL command %d, COM_INIT_DB '%s'", uMysqlCmd, sInitDB.cstr() );
+			if ( !ValidateDBName ( tSrcQueryReference ) )
+			{
+				StringBuilder_c sError;
+				sError << "no such database " << tSrcQueryReference;
+				LogSphinxqlError ( "", Str_t ( sError ) );
+				SendMysqlErrorPacket ( tOut, uPacketID, Str_t(sError), EMYSQL_ERR::NO_DB_ERROR );
+				break;
+			}
+			// commented, because it is 'Manticore' by default; no need to write another one
+			// session::SetCurrentDbName ( { tSrcQueryReference } );
+			SendMysqlOkPacket ( tOut, uPacketID, session::IsAutoCommit(), session::IsInTrans() );
+			break;
+		}
 
 		case MYSQL_COM_SET_OPTION:
 			// bMulti = ( tIn.GetWord()==MYSQL_OPTION_MULTI_STATEMENTS_ON ); // that's how we could double check and validate multi query
@@ -976,6 +1072,16 @@ bool LoopClientMySQL ( BYTE & uPacketID, int iPacketLen, QueryProfile_c * pProfi
 					ProcessSqlQueryBuddy ( tSrcQueryReference, FromStr ( tRows.GetError() ), tStoredPos, uPacketID, tOut );
 				}
 			}
+			break;
+		}
+		case MYSQL_COM_FIELD_LIST:
+		{
+			auto sTable = MysqlReadSzStr ( tIn );
+			sphLogDebugv ( "LoopClientMySQL command %d, '%s'", uMysqlCmd, sTable.cstr() );
+			SqlRowBuffer_c tRows ( &uPacketID, &tOut );
+			tSess.m_pSqlRowBuffer = &tRows;
+			SendTableSchema ( tRows, sTable );
+			SendMysqlEofPacket ( tOut, uPacketID, 0, false, session::IsAutoCommit (), session::IsInTrans() );
 			break;
 		}
 
@@ -1203,6 +1309,17 @@ void SqlServe ( std::unique_ptr<AsyncNetBuffer_c> pBuf )
 			if ( tResponse.GetUsername() == "FEDERATED" )
 				session::SetFederatedUser();
 			session::SetUser ( tResponse.GetUsername() );
+
+			if ( !ValidateDBName ( tResponse.GetDB() ) )
+			{
+				StringBuilder_c sError;
+				sError << "no such database " << tResponse.GetDB().value_or ( "<empty>" );
+				LogSphinxqlError ( "", Str_t ( sError ) );
+				SendMysqlErrorPacket ( *pOut, uPacketID, Str_t(sError), EMYSQL_ERR::NO_DB_ERROR );
+				pOut->Flush();
+				break;
+			}
+
 			SendMysqlOkPacket ( *pOut, uPacketID, session::IsAutoCommit(), session::IsInTrans ());
 			tSess.SetPersistent ( pOut->Flush () );
 			bAuthed = true;

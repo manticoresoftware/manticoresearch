@@ -1221,6 +1221,7 @@ public:
 // from mysqld_error.h
 enum class EMYSQL_ERR : WORD
 {
+	NO_DB_ERROR					= 1046,
 	UNKNOWN_COM_ERROR			= 1047,
 	SERVER_SHUTDOWN				= 1053,
 	PARSE_ERROR					= 1064,
@@ -1335,6 +1336,8 @@ namespace session {
 	bool Execute ( Str_t sQuery, RowBuffer_i& tOut );
 	void SetFederatedUser();
 	void SetUser ( const CSphString & sUser );
+	void SetCurrentDbName ( CSphString sDb );
+	const char* GetCurrentDbName ();
 	void SetAutoCommit ( bool bAutoCommit );
 	void SetInTrans ( bool bInTrans );
 	bool IsAutoCommit();

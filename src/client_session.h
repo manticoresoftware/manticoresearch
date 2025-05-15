@@ -19,6 +19,8 @@
 #include "searchdsql.h"
 #include "sphinxpq.h"
 
+constexpr const char* szManticore = "Manticore";
+
 class ClientSession_c
 {
 public:
@@ -30,6 +32,7 @@ public:
 	bool m_bFederatedUser = false;
 	CSphString m_sFederatedQuery;
 	CSphString m_sUser;
+	CSphString m_sCurrentDbName { szManticore };
 
 public:
 	bool m_bAutoCommit = true;

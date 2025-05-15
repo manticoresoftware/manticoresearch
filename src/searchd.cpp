@@ -141,9 +141,7 @@ static int g_iReplRetryCount		= 3;
 static int g_iReplRetryDelayMs		= DAEMON_MAX_RETRY_DELAY/2;
 
 bool					g_bHostnameLookup = false;
-CSphString				g_sMySQLVersion = szMANTICORE_VERSION;
-CSphString				g_sDbName = "Manticore";
-
+CSphString				g_sMySQLVersion { szMANTICORE_VERSION };
 CSphString				g_sBannerVersion { szMANTICORE_NAME };
 CSphString				g_sBanner;
 CSphString				g_sStatusVersion = szMANTICORE_VERSION;
@@ -6574,9 +6572,11 @@ void HandleMysqlShowCreateTable ( RowBuffer_i & tOut, const SqlStmt_t & tStmt )
 void HandleMysqlShowDatabases ( RowBuffer_i & tOut, SqlStmt_t & )
 {
 	tOut.HeadBegin ();
-	tOut.HeadColumn ( "Databases" );
+	tOut.HeadColumn ( "Database" );
 	tOut.HeadEnd();
-	tOut.PutString ( g_sDbName );
+	tOut.PutString ( "information_schema" );
+	tOut.Commit ();
+	tOut.PutString ( "Manticore" );
 	tOut.Commit ();
 	tOut.Eof();
 }
@@ -11404,6 +11404,16 @@ void session::SetUser ( const CSphString & sUser )
 	GetClientSession()->m_sUser = sUser;
 }
 
+void session::SetCurrentDbName ( CSphString sDb )
+{
+	GetClientSession()->m_sCurrentDbName = std::move(sDb);
+}
+
+const char* session::GetCurrentDbName ()
+{
+	return GetClientSession() ? GetClientSession()->m_sCurrentDbName.cstr() : nullptr;
+}
+
 void session::SetAutoCommit ( bool bAutoCommit )
 {
 	GetClientSession()->m_bAutoCommit = bAutoCommit;
@@ -14632,21 +14642,24 @@ int WINAPI ServiceMain ( int argc, char **argv ) EXCLUDES (MainThread)
 		g_sSnippetsFilePrefix.SetSprintf ( "%s/", g_sExePath.scstr() );
 	FixPathAbsolute ( g_sSnippetsFilePrefix );
 
-	auto sLogFormat = hSearchd.GetStr ( "query_log_format", "sphinxql" );
 	bool bLogCompactIn = false;
 	LOG_FORMAT eFormat = LOG_FORMAT::SPHINXQL;
-	if ( sLogFormat != "sphinxql" )
-	{
-		StrVec_t dParams;
-		sphSplit ( dParams, sLogFormat.cstr() );
-		for ( const auto& sParam : dParams )
+
+	{ // scope for sLogFormat to avoid valgrind's complains
+		auto sLogFormat = hSearchd.GetStr ( "query_log_format", "sphinxql" );
+		if ( sLogFormat != "sphinxql" )
 		{
-			if ( sParam=="sphinxql" )
-				eFormat = LOG_FORMAT::SPHINXQL;
-			else if ( sParam=="plain" )
-				eFormat = LOG_FORMAT::_PLAIN;
-			else if ( sParam=="compact_in" )
-				bLogCompactIn = true;
+			StrVec_t dParams;
+			sphSplit ( dParams, sLogFormat.cstr() );
+			for ( const auto& sParam : dParams )
+			{
+				if ( sParam=="sphinxql" )
+					eFormat = LOG_FORMAT::SPHINXQL;
+				else if ( sParam=="plain" )
+					eFormat = LOG_FORMAT::_PLAIN;
+				else if ( sParam=="compact_in" )
+					bLogCompactIn = true;
+			}
 		}
 	}
 	if ( bLogCompactIn && eFormat==LOG_FORMAT::_PLAIN )

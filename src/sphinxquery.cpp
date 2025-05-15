@@ -2806,7 +2806,7 @@ class CSphTransformation : public ISphNoncopyable
 public:
 	CSphTransformation ( XQNode_t ** ppRoot, const ISphKeywordsStat * pKeywords );
 	void Transform ();
-	inline void Dump ( const XQNode_t * pNode, const char * sHeader = "" );
+	inline void Dump ( const XQNode_t * pNode, const char * sHeader = "", bool bWithDot=true );
 
 private:
 
@@ -4428,26 +4428,26 @@ void CSphTransformation::Dump ()
 #if XQ_DUMP_TRANSFORMED_TREE
 	for (const auto& tSimilar : m_hSimilar)
 	{
-		printf ( "\nnode: hash 0x" UINT64_FMT "\n", tSimilar.first );
+		printf ( "\n%p\n", (void*)tSimilar.first );
 		for (const auto& tNode : tSimilar.second )
 		{
-			const CSphVector<XQNode_t *> & dNodes = tNode.second; //m_hSimilar.IterateGet().IterateGet();
-			printf ( "\tgrand: hash 0x" UINT64_FMT ", children %d\n", tNode.first, dNodes.GetLength() );
+			const CSphVector<XQNode_t *> & dleaves = tNode.second; //m_hSimilar.IterateGet().IterateGet();
+			printf ( "\t%p\n", (void*)tNode.first );
 
-			printf ( "\tparents:\n" );
-			for ( const auto& tLeaf : dNodes )
+			for ( const XQNode_t * pLeaf : dleaves )
 			{
-				uint64_t uParentHash = tLeaf->GetHash();
-				printf ( "\t\thash 0x" UINT64_FMT "\n", uParentHash );
+				const uint64_t uParentHash = pLeaf->GetHash();
+				printf ( "\t\t%p, leaf %p\n", (void*)uParentHash, pLeaf );
 			}
 		}
 	}
+	fflush ( stdout );
 #endif
 }
 
 
 #if XQDEBUG
-void CSphTransformation::Dump ( const XQNode_t * pNode, const char * sHeader )
+void CSphTransformation::Dump ( const XQNode_t * pNode, const char * sHeader, bool bWithDot )
 {
 	if ( !pNode )
 		return;
@@ -4456,13 +4456,15 @@ void CSphTransformation::Dump ( const XQNode_t * pNode, const char * sHeader )
 	printf ( "%s\n", sphReconstructNode ( pNode, NULL ).cstr() );
 #if XQ_DUMP_TRANSFORMED_TREE
 	xqDump ( pNode, 0 );
-	DotDump ( pNode );
+	if( bWithDot )
+		DotDump ( pNode );
 	fflush ( stdout );
 #endif
 }
 #else
-void CSphTransformation::Dump ( const XQNode_t * , const char * )
-{}
+void CSphTransformation::Dump (const XQNode_t *, const char *, bool)
+{
+}
 #endif
 
 
@@ -4471,15 +4473,13 @@ void CSphTransformation::Transform ()
 	if ( CollectInfo <ParentNode, NullNode> ( *m_ppRoot, &CheckCommonKeywords ) )
 	{
 		bool bDump = TransformCommonKeywords ();
-		if ( bDump )
-			Dump ( *m_ppRoot, "\nAfter  transformation of 'COMMON KEYWORDS'\n" );
+		Dump ( bDump ? *m_ppRoot : nullptr, "\nAfter  transformation of 'COMMON KEYWORDS'" );
 	}
 
 	if ( CollectInfo <ParentNode, NullNode> ( *m_ppRoot, &CheckCommonPhrase ) )
 	{
 		bool bDump = TransformCommonPhrase ();
-		if ( bDump )
-			Dump ( *m_ppRoot, "\nAfter  transformation of 'COMMON PHRASES'\n" );
+		Dump ( bDump ? *m_ppRoot : nullptr, "\nAfter  transformation of 'COMMON PHRASES'" );
 	}
 
 	bool bRecollect = false;
@@ -4491,56 +4491,56 @@ void CSphTransformation::Transform ()
 		{
 			bool bDump = TransformCommonNot ();
 			bRecollect |= bDump;
-			Dump ( bDump ? *m_ppRoot : NULL, "\nAfter  transformation of 'COMMON NOT'\n" );
+			Dump ( bDump ? *m_ppRoot : nullptr, "\nAfter  transformation of 'COMMON NOT'" );
 		}
 
 		if ( CollectInfo <Grand3Node, CurrentNode> ( *m_ppRoot, &CheckCommonCompoundNot ) )
 		{
 			bool bDump = TransformCommonCompoundNot ();
 			bRecollect |= bDump;
-			Dump ( bDump ? *m_ppRoot : NULL, "\nAfter  transformation of 'COMMON COMPOUND NOT'\n" );
+			Dump ( bDump ? *m_ppRoot : nullptr, "\nAfter  transformation of 'COMMON COMPOUND NOT'" );
 		}
 
 		if ( CollectInfo <Grand2Node, CurrentNode> ( *m_ppRoot, &CheckCommonSubTerm ) )
 		{
 			bool bDump = TransformCommonSubTerm ();
 			bRecollect |= bDump;
-			Dump ( bDump ? *m_ppRoot : NULL, "\nAfter  transformation of 'COMMON SUBTERM'\n" );
+			Dump ( bDump ? *m_ppRoot : nullptr, "\nAfter  transformation of 'COMMON SUBTERM'" );
 		}
 
 		if ( CollectInfo <Grand2Node, CurrentNode> ( *m_ppRoot, &CheckCommonAndNotFactor ) )
 		{
 			bool bDump = TransformCommonAndNotFactor ();
 			bRecollect |= bDump;
-			Dump ( bDump ? *m_ppRoot : NULL, "\nAfter  transformation of 'COMMON ANDNOT FACTOR'\n" );
+			Dump ( bDump ? *m_ppRoot : nullptr, "\nAfter  transformation of 'COMMON ANDNOT FACTOR'" );
 		}
 
 		if ( CollectInfo <Grand3Node, CurrentNode> ( *m_ppRoot, &CheckCommonOrNot ) )
 		{
 			bool bDump = TransformCommonOrNot ();
 			bRecollect |= bDump;
-			Dump ( bDump ? *m_ppRoot : NULL, "\nAfter  transformation of 'COMMON OR NOT'\n" );
+			Dump ( bDump ? *m_ppRoot : nullptr, "\nAfter  transformation of 'COMMON OR NOT'" );
 		}
 
 		if ( CollectInfo <NullNode, NullNode> ( *m_ppRoot, &CheckHungOperand ) )
 		{
 			bool bDump = TransformHungOperand ();
 			bRecollect |= bDump;
-			Dump ( bDump ? *m_ppRoot : NULL, "\nAfter  transformation of 'HUNG OPERAND'\n" );
+			Dump ( bDump ? *m_ppRoot : nullptr, "\nAfter  transformation of 'HUNG OPERAND'" );
 		}
 
 		if ( CollectInfo <NullNode, NullNode> ( *m_ppRoot, &CheckExcessBrackets ) )
 		{
 			bool bDump = TransformExcessBrackets ();
 			bRecollect |= bDump;
-			Dump ( bDump ? *m_ppRoot : NULL, "\nAfter  transformation of 'EXCESS BRACKETS'\n" );
+			Dump ( bDump ? *m_ppRoot : nullptr, "\nAfter  transformation of 'EXCESS BRACKETS'" );
 		}
 
 		if ( CollectInfo <ParentNode, CurrentNode> ( *m_ppRoot, &CheckExcessAndNot ) )
 		{
 			bool bDump = TransformExcessAndNot ();
 			bRecollect |= bDump;
-			Dump ( bDump ? *m_ppRoot : NULL, "\nAfter  transformation of 'EXCESS AND NOT'\n" );
+			Dump ( bDump ? *m_ppRoot : nullptr, "\nAfter  transformation of 'EXCESS AND NOT'" );
 		}
 	} while ( bRecollect );
 
@@ -4560,7 +4560,7 @@ void sphOptimizeBoolean ( XQNode_t ** ppRoot, const ISphKeywordsStat * pKeywords
 #if XQDEBUG
 	tmDelta = sphMicroTimer() - tmDelta;
 	if ( tmDelta>10 )
-		printf ( "optimized boolean in %d.%03d msec", (int)(tmDelta/1000), (int)(tmDelta%1000) );
+		printf ( "optimized boolean in %d.%03d msec\n", (int)(tmDelta/1000), (int)(tmDelta%1000) );
 #endif
 }
 

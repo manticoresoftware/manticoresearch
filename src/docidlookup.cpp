@@ -671,6 +671,8 @@ static RowidIterator_i * CreateLookupIterator ( const CSphFilterSettings & tFilt
 	if ( tFilter.m_sAttrName!=sphGetDocidName() )
 		return nullptr;
 
+	assert ( !tFilter.m_bExclude || tFilter.m_eType!=SPH_FILTER_VALUES );
+
 	bool bBitmap = NeedBitmapStorage ( iRsetEstimate, uTotalDocs );
 
 	switch ( tFilter.m_eType )

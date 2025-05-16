@@ -649,6 +649,8 @@ static bool HaveLookup ( const CSphFilterSettings & tFilter, const CSphVector<In
 {
 	if ( tFilter.m_sAttrName!=sphGetDocidName() )
 		return false;
+	if ( tFilter.m_eType==SPH_FILTER_VALUES && tFilter.m_bExclude )
+		return false;
 
 	return CheckIndexHint ( tFilter, dHints, SecondaryIndexType_e::LOOKUP, bForce );
 }

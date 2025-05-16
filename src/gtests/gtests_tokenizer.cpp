@@ -15,6 +15,7 @@
 #include "sphinxint.h"
 #include "tokenizer/tokenizer.h"
 #include "tokenizer/tok_internals.h"
+#include "sphinxquery/xqparser.h"
 
 // Miscelaneous tests of tokenizer
 

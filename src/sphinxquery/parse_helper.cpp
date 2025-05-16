@@ -10,7 +10,7 @@
 // did not, you can find it at http://www.gnu.org
 //
 
-#include "sphinxquery.h"
+#include "parse_helper.h"
 #include "sphinxplugin.h"
 
 #include "tokenizer/tokenizer.h"

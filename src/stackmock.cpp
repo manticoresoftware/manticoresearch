@@ -17,6 +17,7 @@
 #include "searchdsql.h"
 #include "attribute.h"
 #include "querycontext.h"
+#include "sphinxquery/xqparser.h"
 
 // hard-coded definitions to avoid probing (that is - to avoid confusing memcheck programs)
 // run searchd with --logdebug --console once, read values, then write them here and uncomment these lines

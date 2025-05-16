@@ -42,6 +42,7 @@
 #include "skip_cache.h"
 #include "jieba.h"
 #include "sphinxexcerpt.h"
+#include "sphinxquery/xqparser.h"
 #include "daemon/winservice.h"
 #include "daemon/crash_logger.h"
 #include "daemon/logger.h"

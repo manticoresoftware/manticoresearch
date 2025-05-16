@@ -8,7 +8,8 @@
 // did not, you can find it at http://www.gnu.org/
 //
 
-#include "sphinxquery/sphinxquery.h"
+#include "sphinxquery/xqparser.h"
+#include "sphinxquery/parse_helper.h"
 #include "sphinxsearch.h"
 #include "sphinxplugin.h"
 #include "sphinxutils.h"
@@ -20,8 +21,6 @@
 #include "knnmisc.h"
 #include "sorterscroll.h"
 #include "sphinxexcerpt.h"
-
-#include "json/cJSON.h"
 
 static const char * g_szAll = "_all";
 static const char * g_szHighlight = "_@highlight_";

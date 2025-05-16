@@ -23,6 +23,7 @@
 #include "tokenizer/tokenizer.h"
 #include "task_dispatcher.h"
 #include "stackmock.h"
+#include "sphinxquery/xqparser.h"
 
 #include <atomic>
 

@@ -13,6 +13,7 @@
 #include "sphinx.h"
 #include "sphinxstem.h"
 #include "sphinxquery/sphinxquery.h"
+#include "sphinxquery/xqparser.h"
 #include "sphinxutils.h"
 #include "sphinxsort.h"
 #include "fileutils.h"
@@ -22,7 +23,6 @@
 #include "sphinxsearch.h"
 #include "searchnode.h"
 #include "sphinxjson.h"
-#include "sphinxplugin.h"
 #include "sphinxqcache.h"
 #include "icu.h"
 #include "jieba.h"
@@ -67,7 +67,6 @@
 #include <stdlib.h>
 #include <stdarg.h>
 #include <sys/stat.h>
-#include <time.h>
 #include <math.h>
 #include <algorithm>
 
@@ -110,7 +109,6 @@ void gmtime_r ( const time_t * clock, struct tm * res )
 #include <boost/preprocessor/repetition/repeat.hpp>
 
 #include "attrindex_builder.h"
-#include "stripper/html_stripper.h"
 #include "queryfilter.h"
 #include "indexing_sources/source_document.h"
 #include "indexing_sources/source_stats.h"

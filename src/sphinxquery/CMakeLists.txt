@@ -4,6 +4,7 @@ add_library ( sphinxquery OBJECT
 		sphinxquery.cpp
 		sphinxquery.h
 		parse_helper.cpp
+		parse_helper.h
 		xqparser.cpp
 		xqparser.h
 		xqnode.cpp

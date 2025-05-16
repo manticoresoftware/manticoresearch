@@ -3413,6 +3413,9 @@ static bool ParseSort ( const JsonObj_c & tSort, JsonQuery_c & tQuery, bool & bG
 				tSortField.m_sName = tItem.StrVal();
 				// order defaults to desc when sorting on the _score, and defaults to asc when sorting on anything else
 				tSortField.m_bAsc = ( tSortField.m_sName!="_score" );
+				// _random name should be on pair with _score \ _geo_distance 
+				if ( tSortField.m_sName=="_random" )
+					tSortField.m_sName = "@random";
 				continue;
 			}
 

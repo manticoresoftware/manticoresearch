@@ -315,7 +315,7 @@ public:
 	int FixupAtomPos() const noexcept;
 
 	/// return node like current
-	inline XQNode_t * Clone () const noexcept;
+	XQNode_t * Clone () const;
 
 #ifndef NDEBUG
 	/// consistency check
@@ -403,8 +403,8 @@ public:
 	
 	bool			IsError() { return m_bError; }
 	virtual void	Cleanup();
-	void			SetZone ( const StrVec_t & dZones );
-	const StrVec_t & GetZone() const;
+	void			SetZone ( const StrVec_t & dZones ) const noexcept;
+	const StrVec_t & GetZone() const noexcept;
 	XQNode_t *		SpawnNode ( const XQLimitSpec_t & dSpec ) noexcept;
 	void			DeleteSpawned ( XQNode_t * pNode ) noexcept;
 
@@ -451,9 +451,6 @@ private:
 
 //////////////////////////////////////////////////////////////////////////////
 
-/// setup tokenizer for query parsing (ie. add all specials and whatnot)
-TokenizerRefPtr_c sphCloneAndSetupQueryTokenizer ( const TokenizerRefPtr_c& pTokenizer, bool bWildcards, bool bExact, bool bJson );
-
 // a wrapper for sphParseExtendedQuery
 std::unique_ptr<QueryParser_i> sphCreatePlainQueryParser();
 
@@ -471,16 +468,14 @@ void	sphOptimizeBoolean ( XQNode_t ** pXQ, const ISphKeywordsStat * pKeywords );
 
 /// analyze vector of trees and tag common parts of them (to cache them later)
 int		sphMarkCommonSubtrees ( int iXQ, const XQQuery_t * pXQ );
-
 XQQuery_t * CloneXQQuery ( const XQQuery_t & tQuery );
-
 XQNode_t * CloneKeyword ( const XQNode_t * pNode );
 
 /// whatever to allow alone operator NOT at query
 void	AllowOnlyNot ( bool bAllowed );
 bool	IsAllowOnlyNot();
-
-CSphString sphReconstructNode ( const XQNode_t * pNode, const CSphSchema * pSchema );
-
-int GetExpansionLimit ( int iQueryLimit, int iIndexLimit  );
-
+CSphString sphReconstructNode ( const XQNode_t * pNode, const CSphSchema * pSchema = nullptr );
+inline int GetExpansionLimit ( int iQueryLimit, int iIndexLimit  )
+{
+	return ( iQueryLimit!=DEFAULT_QUERY_EXPANSION_LIMIT ? iQueryLimit : iIndexLimit );
+}

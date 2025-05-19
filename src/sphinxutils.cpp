@@ -2509,6 +2509,7 @@ static int sphVSprintf ( char * pOutput, const char * sFmt, va_list ap )
 }
 
 static char g_sSafeInfoBuf [ 1024 ];
+static bool g_bEnableStdOutTee = false;
 
 void sphSafeInfo ( int iFD, const char * sFmt, ... )
 {
@@ -2520,6 +2521,8 @@ void sphSafeInfo ( int iFD, const char * sFmt, ... )
 	int iLen = sphVSprintf ( g_sSafeInfoBuf, sFmt, ap ); // FIXME! make this vsnprintf
 	va_end ( ap );
 	sphWrite ( iFD, g_sSafeInfoBuf, size_t (iLen) );
+	if ( g_bEnableStdOutTee )
+		sphWrite ( STDOUT_FILENO, g_sSafeInfoBuf, size_t ( iLen ) );
 }
 
 
@@ -2532,6 +2535,17 @@ static int sphSafeInfo ( char * pBuf, const char * sFmt, ... )
 	return iLen;
 }
 
+void sphSafeInfoStdOut ( bool bEnableTee )
+{
+	g_bEnableStdOutTee = bEnableTee;
+}
+
+void sphSafeInfoWrite ( int iFD, const void * pBuf, int iLen )
+{
+	sphWrite ( iFD, pBuf, iLen );
+	if ( g_bEnableStdOutTee )
+		sphWrite ( STDOUT_FILENO, pBuf, size_t ( iLen ) );
+}
 
 volatile int& getParentPID ()
 {
@@ -2932,6 +2946,7 @@ void sphBacktrace ( int iFD, bool bSafe )
 			"Look into the chapter 'Reporting bugs' in the manual\n"
 			"(https://manual.manticoresearch.com/Reporting_bugs)" );
 
+	sphSafeInfoStdOut ( false );
 	if ( DumpGdb ( iFD ) )
 		return;
 
@@ -2978,15 +2993,15 @@ void sphBacktrace ( int iFD, bool bSafe )
 			while ( *s )
 				s++;
 			size_t iLen = s-g_pArgv[i];
-			sphWrite ( iFD, g_pArgv[i], iLen );
-			sphWrite ( iFD, " ", 1 );
+			sphSafeInfoWrite ( iFD, g_pArgv[i], iLen );
+			sphSafeInfoWrite ( iFD, " ", 1 );
 			int iWas = iColumn % 80;
 			iColumn += iLen;
 			int iNow = iColumn % 80;
 			if ( iNow<iWas )
-				sphWrite ( iFD, "\n", 1 );
+				sphSafeInfoWrite ( iFD, "\n", 1 );
 		}
-		sphWrite ( iFD, g_sSourceTail, sizeof(g_sSourceTail)-1 );
+		sphSafeInfoWrite ( iFD, g_sSourceTail, sizeof(g_sSourceTail)-1 );
 		exit ( 1 );
 
 	} else

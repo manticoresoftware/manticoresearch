@@ -10,34 +10,117 @@ apt-get update > /dev/null 2>&1 && apt-get install -y gnupg openjdk-11-jre-headl
 ––– output –––
 0
 ––– input –––
+curl -s "https://hub.docker.com/v2/repositories/library/logstash/tags/?page_size=100" | jq -r ".results[].name" | grep "^[0-9][0-9]*\.[0-9][0-9]*\.[0-9][0-9]*$" | sed "s/\.[0-9]*$//" | awk "!/rc|beta|alpha/" | sort -V | uniq
+––– output –––
+7.17
+8.0
+8.1
+8.2
+8.3
+8.4
+8.5
+8.6
+8.7
+8.8
+8.9
+8.10
+8.11
+8.12
+8.13
+8.14
+8.15
+8.16
+8.17
+8.18
+9.0
+––– input –––
+set +H; mkdir -p /tmp/logstash_cache; for version in $(curl -s "https://hub.docker.com/v2/repositories/library/logstash/tags/?page_size=100" | jq -r ".results[].name" | grep "^[0-9]\\+\\.[0-9]\\+\\.[0-9]\\+$" | sed "s/\\.[0-9]*$//" | awk '!/rc|beta|alpha/' | sort -V | uniq); do archive="/tmp/logstash_cache/logstash-${version}.0-linux-x86_64.tar.gz"; echo ">>> Checking Logstash $version ..."; while true; do if [ -f "$archive" ]; then if gzip -t "$archive" >/dev/null 2>&1 && tar -tzf "$archive" | grep -q "bin/logstash"; then echo "✓ Archive for $version is OK"; break; else echo "✗ Archive for $version is corrupted or incomplete, removing..."; rm -f "$archive"; fi; fi; echo ">>> Downloading Logstash $version ..."; wget -q "https://artifacts.elastic.co/downloads/logstash/logstash-${version}.0-linux-x86_64.tar.gz" -O "$archive" || { echo "✗ Failed to download Logstash $version" >&2; sleep 2; }; done; donedone
+––– output –––
+>>> Checking Logstash 7.17 ...
+>>> Downloading Logstash 7.17 ...
+✓ Archive for 7.17 is OK
+>>> Checking Logstash 8.0 ...
+>>> Downloading Logstash 8.0 ...
+✓ Archive for 8.0 is OK
+>>> Checking Logstash 8.1 ...
+>>> Downloading Logstash 8.1 ...
+✓ Archive for 8.1 is OK
+>>> Checking Logstash 8.2 ...
+>>> Downloading Logstash 8.2 ...
+✓ Archive for 8.2 is OK
+>>> Checking Logstash 8.3 ...
+>>> Downloading Logstash 8.3 ...
+✓ Archive for 8.3 is OK
+>>> Checking Logstash 8.4 ...
+>>> Downloading Logstash 8.4 ...
+✓ Archive for 8.4 is OK
+>>> Checking Logstash 8.5 ...
+>>> Downloading Logstash 8.5 ...
+✓ Archive for 8.5 is OK
+>>> Checking Logstash 8.6 ...
+>>> Downloading Logstash 8.6 ...
+✓ Archive for 8.6 is OK
+>>> Checking Logstash 8.7 ...
+>>> Downloading Logstash 8.7 ...
+✓ Archive for 8.7 is OK
+>>> Checking Logstash 8.8 ...
+>>> Downloading Logstash 8.8 ...
+✓ Archive for 8.8 is OK
+>>> Checking Logstash 8.9 ...
+>>> Downloading Logstash 8.9 ...
+✓ Archive for 8.9 is OK
+>>> Checking Logstash 8.10 ...
+>>> Downloading Logstash 8.10 ...
+✓ Archive for 8.10 is OK
+>>> Checking Logstash 8.11 ...
+>>> Downloading Logstash 8.11 ...
+✓ Archive for 8.11 is OK
+>>> Checking Logstash 8.12 ...
+>>> Downloading Logstash 8.12 ...
+✓ Archive for 8.12 is OK
+>>> Checking Logstash 8.13 ...
+>>> Downloading Logstash 8.13 ...
+✓ Archive for 8.13 is OK
+>>> Checking Logstash 8.14 ...
+>>> Downloading Logstash 8.14 ...
+✓ Archive for 8.14 is OK
+>>> Checking Logstash 8.15 ...
+>>> Downloading Logstash 8.15 ...
+✓ Archive for 8.15 is OK
+>>> Checking Logstash 8.16 ...
+>>> Downloading Logstash 8.16 ...
+✓ Archive for 8.16 is OK
+>>> Checking Logstash 8.17 ...
+>>> Downloading Logstash 8.17 ...
+✓ Archive for 8.17 is OK
+>>> Checking Logstash 8.18 ...
+>>> Downloading Logstash 8.18 ...
+✓ Archive for 8.18 is OK
+>>> Checking Logstash 9.0 ...
+>>> Downloading Logstash 9.0 ...
+✓ Archive for 9.0 is OK
+––– input –––
 cat << 'EOF' > /tmp/logstash-single-test.sh
 #!/bin/bash
 set -euo pipefail
-
-# Disable debug output
 set +x
 
-# Check version argument
 if [ $# -ne 1 ]; then
     echo "✗ Usage: $0 <logstash_version>" >&2
     echo "✗ Example: $0 8.14" >&2
     exit 1
 fi
 version="$1"
-
 echo ">>> Testing Logstash version: $version"
 
-# Check Manticore Search availability before operations
 if ! curl -s localhost:9308/cli_json -d 'show status' > /dev/null; then
     echo "✗ Error: Manticore Search unavailable before starting test" >&2
     exit 1
 fi
 
-# Check system resources
 free -m > /tmp/resource_check.log 2>&1
 nproc >> /tmp/resource_check.log 2>&1
 
-# Attempt to drop table with retries
 for attempt in {1..3}; do
     mysql -h0 -P9306 -e "DROP TABLE IF EXISTS dpkg_log" > /dev/null 2>/tmp/mysql_error.log && break
     echo "✗ Warning: Attempt $attempt to drop table dpkg_log failed" >&2
@@ -49,21 +132,25 @@ for attempt in {1..3}; do
     sleep 2
 done
 
-# Create table
-mysql -h0 -P9306 -e "CREATE TABLE dpkg_log (id bigint, message string attribute indexed, host string attribute indexed, path string attribute indexed, \`@version\` string attribute indexed, \`@timestamp\` timestamp)" > /dev/null 2>/tmp/mysql_error.log || { echo "✗ Error: Failed to create table dpkg_log" >&2; cat /tmp/mysql_error.log >&2; exit 1; }
+mysql -h0 -P9306 -e "CREATE TABLE dpkg_log (id bigint, message string attribute indexed, host string attribute indexed, path string attribute indexed, \`@version\` string attribute indexed, \`@timestamp\` timestamp)" > /dev/null 2>/tmp/mysql_error.log || {
+    echo "✗ Error: Failed to create table dpkg_log" >&2
+    cat /tmp/mysql_error.log >&2
+    exit 1
+}
 
-mkdir -p /usr/share/logstash && cd /usr/share/logstash > /dev/null
+mkdir -p /usr/share/logstash && cd /usr/share/logstash
 
-# Use cached archive
-if [ -f "/tmp/logstash_cache/logstash-${version}.0-linux-x86_64.tar.gz" ]; then
-    cp "/tmp/logstash_cache/logstash-${version}.0-linux-x86_64.tar.gz" . > /dev/null 2>&1
-else
-    wget -q "https://artifacts.elastic.co/downloads/logstash/logstash-${version}.0-linux-x86_64.tar.gz" -O "logstash-${version}.0-linux-x86_64.tar.gz" || { echo "✗ Error: Failed to download Logstash $version" >&2; exit 1; }
-fi
-tar -xzf "logstash-${version}.0-linux-x86_64.tar.gz" > /dev/null 2>&1
-ln -sf "/usr/share/logstash/logstash-${version}.0/bin/logstash" /usr/bin/logstash > /dev/null 2>&1
+cp "/tmp/logstash_cache/logstash-${version}.0-linux-x86_64.tar.gz" . || {
+    echo "✗ Error: Logstash archive not found" >&2
+    exit 1
+}
+tar -xzf "logstash-${version}.0-linux-x86_64.tar.gz"
+ln -sf "/usr/share/logstash/logstash-${version}.0/bin/logstash" /usr/bin/logstash
 
-# Create Logstash configuration
+major=$(echo "$version" | cut -d. -f1)
+minor=$(echo "$version" | cut -d. -f2)
+
+if { [ "$major" -eq 8 ] && [ "$minor" -gt 18 ]; } || [ "$major" -ge 9 ]; then
 cat << 'CONF' > /usr/share/logstash/logstash.conf
 input {
   file {
@@ -100,35 +187,68 @@ output {
   stdout { codec => rubydebug }
 }
 CONF
+else
+cat << 'CONF' > /usr/share/logstash/logstash.conf
+input {
+  file {
+    path => ["/var/log/dpkg.log"]
+    start_position => "beginning"
+    sincedb_path => "/dev/null"
+    mode => "read"
+    exit_after_read => true
+    file_completed_action => "delete"
+  }
+}
+filter {
+  mutate {
+    replace => {
+      "@version" => "1"
+      "host" => "logstash"
+      "path" => "/var/log/dpkg.log"
+    }
+    remove_field => ["event", "log"]
+  }
+  ruby {
+    code => "event.set('id', (Time.now.to_f * 1000000).to_i)"
+  }
+}
+output {
+  elasticsearch {
+    hosts => ["http://localhost:9308"]
+    index => "dpkg_log"
+    ilm_enabled => false
+    manage_template => false
+    action => "index"
+  }
+  stdout { codec => rubydebug }
+}
+CONF
+fi
 
-# Create test log
 echo -e "2023-05-31 10:42:55 trigproc systemd:amd64 245.4-4ubuntu3.21 <none>\n2023-05-31 10:42:55 trigproc libc-bin:amd64 2.31-0ubuntu9.9 <none>\n2023-05-31 10:42:55 status triggers-awaited ca-certificates-java:all 20190405ubuntu1.1\n2023-05-31 10:42:55 status installed libc-bin:amd64 2.31-0ubuntu9.9\n2023-05-31 10:42:55 status half-configured libc-bin:amd64 2.31-0ubuntu9.9" > /var/log/dpkg.log
 
-# Check number of lines in log
 log_lines=$(wc -l < /var/log/dpkg.log)
-if [ "$log_lines" -eq 5 ]; then
-    echo "✓ Log file has 5 lines"
-else
+if [ "$log_lines" -ne 5 ]; then
     echo "✗ Error: Expected 5 lines, got $log_lines" >&2
     exit 1
 fi
+echo "✓ Log file has 5 lines"
 
-# Check Manticore Search availability
-curl -s localhost:9308/cli_json -d 'show status' > /dev/null || { echo "✗ Error: Manticore Search unavailable" >&2; exit 1; }
+curl -s localhost:9308/cli_json -d 'show status' > /dev/null || {
+    echo "✗ Error: Manticore Search unavailable" >&2
+    exit 1
+}
 echo "✓ Manticore Search available"
 
-# Create logstash user
 if ! id logstash >/dev/null 2>&1; then
-    useradd -m -s /bin/bash logstash > /dev/null 2>&1
+    useradd -m -s /bin/bash logstash
 fi
-chown -R logstash:logstash /usr/share/logstash /var/log/dpkg.log > /dev/null 2>&1
+chown -R logstash:logstash /usr/share/logstash /var/log/dpkg.log
 
-# Create log directory
-mkdir -p /var/log > /dev/null 2>&1
-touch /var/log/logstash.log > /dev/null 2>&1
-chown logstash:logstash /var/log/logstash.log > /dev/null 2>&1
+mkdir -p /var/log
+touch /var/log/logstash.log
+chown logstash:logstash /var/log/logstash.log
 
-# Run Logstash
 timeout 600 su - logstash -c "logstash -f /usr/share/logstash/logstash.conf --log.level debug --pipeline.batch.size 5 --pipeline.ecs_compatibility v1 > /var/log/logstash.log 2>&1 && sleep 15" || {
     echo "✗ Error: Logstash $version failed to run" >&2
     cat /var/log/logstash.log >&2
@@ -136,7 +256,6 @@ timeout 600 su - logstash -c "logstash -f /usr/share/logstash/logstash.conf --lo
 }
 echo "✓ Logstash $version started and processed logs"
 
-# Check table structure
 response=$(curl -s -w "\n%{http_code}" localhost:9308/cli_json -d 'describe dpkg_log')
 http_code=$(echo "$response" | tail -n1)
 response_body=$(echo "$response" | sed '$d')
@@ -156,28 +275,22 @@ else
     exit 1
 fi
 
-# Check row count
 row_count=$(mysql -h0 -P9306 -N -B -e "SELECT COUNT(*) FROM dpkg_log" | grep -o '[0-9]\+')
 if [[ "$row_count" =~ ^[0-9]+$ ]] && [ "$row_count" -eq 5 ]; then
     echo "✓ Row count check for $version: $row_count rows"
 else
     echo "✗ Error: Expected 5 rows, got $row_count" >&2
-    echo "Table contents for debugging:" >&2
     mysql -h0 -P9306 -e "SELECT * FROM dpkg_log\G" >&2
     cat /var/log/logstash.log >&2
     exit 1
 fi
 
-# Record result
 echo "$version: Success" >> /tmp/logstash_results.txt
-
-# Save log for debugging
 cp /var/log/logstash.log "/tmp/logstash-$version.log"
 
-# Cleanup
-rm -rf /usr/share/logstash/* /var/log/dpkg.log /usr/share/logstash/logstash.conf /var/log/logstash.log /tmp/mysql_error.log > /dev/null 2>&1
-mysql -h0 -P9306 -e "DROP TABLE IF EXISTS dpkg_log" > /dev/null 2>&1
-cd /usr/local/src > /dev/null 2>&1
+rm -rf /usr/share/logstash/* /var/log/dpkg.log /usr/share/logstash/logstash.conf /var/log/logstash.log /tmp/mysql_error.log
+mysql -h0 -P9306 -e "DROP TABLE IF EXISTS dpkg_log"
+cd /usr/local/src
 
 echo "✓ Logstash version $version tested successfully"
 EOF
@@ -376,3 +489,26 @@ bash /tmp/logstash-single-test.sh 8.17
 ✓ Structure check for 8.17: passed
 ✓ Row count check for 8.17: 5 rows
 ✓ Logstash version 8.17 tested successfully
+––– input –––
+bash /tmp/logstash-single-test.sh 8.18
+––– output –––
+>>> Testing Logstash version: 8.18
+✓ Log file has 5 lines
+✓ Manticore Search available
+✓ Logstash 8.18 started and processed logs
+✓ Structure check for 8.18: passed
+✓ Row count check for 8.18: 5 rows
+✓ Logstash version 8.18 tested successfully
+––– input –––
+bash /tmp/logstash-single-test.sh 9.0
+––– output –––
+>>> Testing Logstash version: 9.0
+✓ Log file has 5 lines
+✓ Manticore Search available
+✓ Logstash 9.0 started and processed logs
+✓ Structure check for 9.0: passed
+✓ Row count check for 9.0: 5 rows
+✓ Logstash version 9.0 tested successfully
+––– input –––
+rm -f /tmp/logstash_cache/logstash-*.tar.gz
+––– output –––

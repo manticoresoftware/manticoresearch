@@ -41,8 +41,8 @@ bool SubtreeRemoveEmpty ( XQNode_t * pNode )
 // eliminate composite ( AND / OR ) nodes with only one child
 void CompositeFixup ( XQNode_t * pNode, XQNode_t ** ppRoot )
 {
-	assert ( pNode && pNode->dWords().IsEmpty() );
-	if ( pNode->dChildren().GetLength()!=1 || ( pNode->GetOp()!=SPH_QUERY_OR && pNode->GetOp()!=SPH_QUERY_AND ) )
+	assert ( pNode );
+	if ( !pNode->dWords().IsEmpty() || pNode->dChildren().GetLength()!=1 || ( pNode->GetOp()!=SPH_QUERY_OR && pNode->GetOp()!=SPH_QUERY_AND ) )
 		return;
 
 	XQNode_t * pChild = pNode->dChildren()[0];
@@ -179,7 +179,10 @@ void CSphTransformation::MakeTransformCommonSubTerm ( const CSphVector<XQNode_t 
 	}
 
 	for ( XQNode_t *& pRelated : dRelatedParents )
+	{
 		pRelated = pRelated->Clone();
+		CompositeFixup ( pRelated, &pRelated );
+	}
 
 	// push excluded children back
 	dExcluded.for_each ([](XQNode_t * pExcl) { pExcl->m_pParent->WithChildren ( [pExcl] ( auto & dChildren ) { dChildren.Add ( pExcl ); } ); });

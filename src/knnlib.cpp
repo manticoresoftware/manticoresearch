@@ -203,3 +203,10 @@ bool IsKNNLibLoaded()
 {
 	return !!g_pKNNLib;
 }
+
+
+bool IsKNNEmbeddingsLibLoaded()
+{
+	return !!g_pEmbeddingsLib;
+}
+

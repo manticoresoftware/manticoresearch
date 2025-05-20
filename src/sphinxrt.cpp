@@ -2079,9 +2079,6 @@ bool RtIndex_c::AddDocument ( InsertDocData_c & tDoc, bool bReplace, const CSphS
 	if ( m_tSettings.m_bHtmlStrip && !tSrc.SetStripHTML ( m_tSettings.m_sHtmlIndexAttrs.cstr(), m_tSettings.m_sHtmlRemoveElements.cstr(), m_tSettings.m_bIndexSP, m_tSettings.m_sZones.cstr(), sError ) )
 		return false;
 
-	if ( !LoadEmbeddingModels(sError) )
-		return false;
-
 	tSrc.Setup ( m_tSettings, nullptr );
 	tSrc.SetTokenizer ( std::move ( tTokenizer ) );
 	tSrc.SetDict ( pAcc->m_pDict );
@@ -5040,6 +5037,9 @@ bool RtIndex_c::Prealloc ( bool bStripPath, FilenameBuilder_i * pFilenameBuilder
 	// field lengths
 	ARRAY_FOREACH ( i, m_dFieldLens )
 		m_dFieldLens[i] = m_dFieldLensDisk[i] + m_dFieldLensRam[i];
+
+	if ( !LoadEmbeddingModels(m_sLastError) )
+		return false;
 
 	// set up values for on timer save
 	m_iSavedTID = m_iTID;

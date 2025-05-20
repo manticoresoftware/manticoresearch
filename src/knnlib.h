@@ -27,3 +27,4 @@ void			ShutdownKNN();
 const char *	GetKNNVersionStr();
 const char *	GetKNNEmbeddingsVersionStr();
 bool			IsKNNLibLoaded();
+bool			IsKNNEmbeddingsLibLoaded();

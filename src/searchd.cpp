@@ -13023,6 +13023,14 @@ static bool CheckCreateTable ( const SqlStmt_t & tStmt, CSphString & sError )
 	if ( !CheckAttrs ( tStmt.m_tCreateTable.m_dFields, []( const CSphColumnInfo & tAttr ) { return tAttr.m_sName; }, sError ) )
 		return false;
 
+	for ( auto & i : tStmt.m_tCreateTable.m_dAttrs )
+		if ( i.m_bKNN && !i.m_tKNNModel.m_sModelName.empty() && !IsKNNEmbeddingsLibLoaded() )
+		{
+			sError.SetSprintf ( "model_name specified for '%s', but embeddings library is not loded", i.m_tAttr.m_sName.cstr() );
+			return false;
+		}
+
+
 	// cross-checks attrs and fields
 	for ( const auto & i : tStmt.m_tCreateTable.m_dAttrs )
 		for ( const auto & j : tStmt.m_tCreateTable.m_dFields )

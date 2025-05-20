@@ -2501,20 +2501,32 @@ ISphMatchSorter * QueueCreator_c::CreateQueue ()
 	return pTop;
 }
 
-static void ResetRemaps ( CSphMatchComparatorState & tState )
+static void ResetRemaps ( CSphMatchComparatorState & tState, const CSphRsetSchema & tOldSchema  )
 {
 	for ( int i = 0; i<CSphMatchComparatorState::MAX_ATTRS; i++ )
 	{
-		if ( tState.m_dRemapped.BitGet ( i ) && tState.m_eKeypart[i]==SPH_KEYPART_STRINGPTR )
-			tState.m_dRemapped.BitClear ( i );
+		if ( tState.m_dRemapped.BitGet ( i ) )
+		{
+			bool bStrAttr = ( tState.m_eKeypart[i]==SPH_KEYPART_STRINGPTR );
+			bool bJsonAttr = false;
+			if ( !bStrAttr )
+			{
+				const CSphColumnInfo & tCol = tOldSchema.GetAttr ( tState.m_dAttrs[i] );
+				bool bTmp = false;
+				bJsonAttr = ( tCol.m_eAttrType==SPH_ATTR_JSON || tCol.m_eAttrType==SPH_ATTR_JSON_FIELD || ( tCol.m_pExpr && tCol.m_pExpr->IsJson ( bTmp ) ) );
+			}
+
+			if ( bStrAttr || bJsonAttr )
+				tState.m_dRemapped.BitClear ( i );
+		}
 	}
 }
 
 bool QueueCreator_c::SetSchemaGroupQueue ( const CSphRsetSchema & tNewSchema )
 {
 	// need to reissue remap but with existed attributes
-	ResetRemaps ( m_tStateMatch );
-	ResetRemaps ( m_tStateGroup );
+	ResetRemaps ( m_tStateMatch, *m_pSorterSchema );
+	ResetRemaps ( m_tStateGroup, *m_pSorterSchema );
 
 	*m_pSorterSchema = tNewSchema;
 

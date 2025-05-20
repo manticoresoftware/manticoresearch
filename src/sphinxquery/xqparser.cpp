@@ -125,6 +125,7 @@ public:
 	bool					m_bWasKeyword = false;
 
 	bool					m_bEmpty = false;
+	bool					m_bWasFullText = false;
 	bool					m_bQuoted = false;
 	int						m_iOvershortStep = 0;
 
@@ -1017,6 +1018,7 @@ bool XQParser_t::Parse ( XQQuery_t & tParsed, const char * sQuery, const CSphQue
 	if ( pQuery )
 		bNotOnlyAllowed |= pQuery->m_bNotOnlyAllowed;
 
+	m_bWasFullText = ( m_pRoot && ( m_pRoot->dChildren().GetLength () || m_pRoot->dWords().GetLength () ) );
 	XQNode_t * pNewRoot = FixupTree ( m_pRoot, *m_dStateSpec.Last(), pMorphFields, bNotOnlyAllowed );
 	if ( !pNewRoot )
 	{
@@ -1069,6 +1071,7 @@ bool sphParseExtendedQuery ( XQQuery_t & tParsed, const char * sQuery, const CSp
 	// as at that point term expansion could produce many terms from expanded term and this condition got failed
 	tParsed.m_bSingleWord = ( tParsed.m_pRoot && tParsed.m_pRoot->dChildren().IsEmpty() && tParsed.m_pRoot->dWords().GetLength()==1 );
 	tParsed.m_bEmpty = qp.m_bEmpty;
+	tParsed.m_bWasFullText = ( qp.m_bWasFullText || !qp.m_bEmpty );
 
 	return bRes;
 }

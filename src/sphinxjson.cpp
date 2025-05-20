@@ -1727,7 +1727,7 @@ bool JsonObj_c::IsDbl() const
 bool JsonObj_c::IsNum() const
 {
 	assert ( m_pRoot );
-	return !!cJSON_IsNumeric ( m_pRoot );
+	return !! ( cJSON_IsNumeric ( m_pRoot ) ||  cJSON_IsUInteger(m_pRoot) );
 }
 
 

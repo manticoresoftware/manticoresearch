@@ -269,7 +269,6 @@ class QueryParserJson_c : public QueryParser_i
 {
 public:
 	bool	IsFullscan ( const CSphQuery & tQuery ) const final;
-	bool	IsFullscan ( const XQQuery_t & tQuery ) const final;
 	bool	ParseQuery ( XQQuery_t & tParsed, const char * sQuery, const CSphQuery * pQuery, TokenizerRefPtr_c pQueryTokenizer, TokenizerRefPtr_c pQueryTokenizerJson, const CSphSchema * pSchema, const DictRefPtr_c& pDict, const CSphIndexSettings & tSettings, const CSphBitvec * pMorphFields ) const final;
 	QueryParser_i * Clone() const final { return new QueryParserJson_c; }
 
@@ -300,11 +299,6 @@ bool QueryParserJson_c::IsFullscan ( const CSphQuery & tQuery ) const
 	return true;
 }
 
-
-bool QueryParserJson_c::IsFullscan ( const XQQuery_t & tQuery ) const
-{
-	return !( tQuery.m_pRoot && ( tQuery.m_pRoot->dChildren().GetLength () || tQuery.m_pRoot->dWords().GetLength () ) );
-}
 
 static bool IsFullText ( const CSphString & sName );
 static bool IsBoolNode ( const CSphString & sName );
@@ -394,6 +388,8 @@ bool QueryParserJson_c::ParseQuery ( XQQuery_t & tParsed, const char * szQuery, 
 
 		return false;
 	}
+
+	tParsed.m_bWasFullText = ( pRoot && ( pRoot->dChildren().GetLength () || pRoot->dWords().GetLength () ) );
 
 	XQLimitSpec_t tLimitSpec;
 	pRoot = tBuilder.FixupTree ( pRoot, tLimitSpec, pMorphFields, IsAllowOnlyNot() );
@@ -3401,6 +3397,9 @@ static bool ParseSort ( const JsonObj_c & tSort, JsonQuery_c & tQuery, bool & bG
 				tSortField.m_sName = tItem.StrVal();
 				// order defaults to desc when sorting on the _score, and defaults to asc when sorting on anything else
 				tSortField.m_bAsc = ( tSortField.m_sName!="_score" );
+				// _random name should be on pair with _score \ _geo_distance
+				if ( tSortField.m_sName=="_random" )
+					tSortField.m_sName = "@random";
 				continue;
 			}
 

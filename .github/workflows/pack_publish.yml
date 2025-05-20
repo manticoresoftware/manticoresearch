@@ -23,6 +23,7 @@ on:
       - 'galera_packaging/**'
     tags:
       - 'release*'
+      - 'pack_publish'
 
 # cancels the previous workflow run when a new one appears in the same branch (e.g. master or a PR's branch)
 concurrency:
@@ -67,8 +68,14 @@ jobs:
       (
         github.event_name == 'push'
         &&
-        startsWith(
-          github.ref, 'refs/heads/manticore-'
+        (
+          startsWith(
+            github.ref, 'refs/heads/manticore-'
+          )
+          ||
+          contains(
+            github.ref, 'refs/tags/pack_publish'
+          )
         )
       )
     steps:
@@ -97,8 +104,11 @@ jobs:
           elif [[ "${{ github.event_name }}" == "pull_request" && "${{ contains(github.event.pull_request.labels.*.name, 'pack') }}" == "true" ]]; then
             echo "Continuing because PR has 'pack' label"
             echo "should_continue=true" >> $GITHUB_OUTPUT
+          elif [[ "${{ contains(github.ref, 'refs/tags/pack_publish') }}" == "true" ]]; then
+            echo "Continuing because commit has 'pack_publish' tag"
+            echo "should_continue=true" >> $GITHUB_OUTPUT
           else
-            echo "Skipping packing because version wasn't updated, target is not release, and there's no 'pack' label"
+            echo "Skipping packing because version wasn't updated, target is not release, and there's no 'pack' label or tag"
             echo "should_continue=false" >> $GITHUB_OUTPUT
           fi
       - run: |
@@ -110,27 +120,32 @@ jobs:
           echo "* Version updated: ${{ steps.semver-tagger.outputs.version_updated }}" >> $GITHUB_STEP_SUMMARY
           echo "* Should continue packing: ${{ steps.check-should-continue.outputs.should_continue }}" >> $GITHUB_STEP_SUMMARY
 
+#  debug_info:
+#    name: Debug GitHub Event Info
+#    runs-on: ubuntu-22.04
+#    steps:
+#      - name: Print GitHub Event Info
+#        run: |
+#          echo "GitHub Event Name: ${{ github.event_name }}"
+#          echo "GitHub Ref: ${{ github.ref }}"
+#          echo "GitHub Ref Type: ${{ github.ref_type }}"
+#          echo "GitHub Ref Name: ${{ github.ref_name }}"
+#          echo "GitHub Actor: ${{ github.actor }}"
+#          echo "GitHub Repository: ${{ github.repository }}"
+#          echo "GitHub SHA: ${{ github.sha }}"
+#          echo "GitHub Run Number: ${{ github.run_number }}"
+#          echo "GitHub Run Attempt: ${{ github.run_attempt }}"
+#          echo "GitHub Workflow: ${{ github.workflow }}"
+#          echo "GitHub Event JSON:"
+#          echo '${{ toJSON(github.event) }}'
+
   # Job to check dependencies using check_deps_in_repos.sh
   # Runs on every PR, workflow_run, or push event matching the conditions
   check_deps:
+    needs: pack
+    if: needs.pack.outputs.should_continue == 'true'
     name: Check deps test
     runs-on: ubuntu-22.04
-    if: |
-      github.event_name == 'pull_request'
-      ||
-      (
-        github.event_name == 'workflow_run'
-        &&
-        github.event.workflow_run.conclusion == 'success'
-        &&
-        github.ref == 'refs/heads/master'
-      )
-      ||
-      (
-        github.event_name == 'push'
-        &&
-        startsWith(github.ref, 'refs/heads/manticore-')
-      )
     steps:
       - name: Checkout repository
         uses: actions/checkout@v3
@@ -142,7 +157,6 @@ jobs:
     name: Debian/Ubuntu packages
     uses: ./.github/workflows/build_template.yml
     needs: [pack, check_deps]
-    if: needs.pack.outputs.should_continue == 'true'
     strategy:
       fail-fast: false
       matrix:
@@ -166,7 +180,6 @@ jobs:
     name: RHEL packages
     uses: ./.github/workflows/build_template.yml
     needs: [pack, check_deps]
-    if: needs.pack.outputs.should_continue == 'true'
     strategy:
       fail-fast: false
       matrix:
@@ -193,7 +206,6 @@ jobs:
     name: MacOS packages
     uses: ./.github/workflows/build_template.yml
     needs: [pack, check_deps]
-    if: needs.pack.outputs.should_continue == 'true'
     strategy:
       fail-fast: false
       matrix:
@@ -218,7 +230,6 @@ jobs:
     name: Windows x64 package
     uses: ./.github/workflows/build_template.yml
     needs: [pack, check_deps]
-    if: needs.pack.outputs.should_continue == 'true'
     with:
       DISTR: windows
       arch: x64
@@ -277,6 +288,7 @@ jobs:
         (github.event_name == 'pull_request' && (contains(github.event.pull_request.labels.*.name, 'publish')))
         || (github.event_name == 'workflow_run' && github.event.workflow_run.conclusion == 'success')
         || (github.event_name == 'push' && startsWith(github.ref, 'refs/heads/manticore-'))
+        || (github.event_name == 'push' && contains(github.ref, 'refs/tags/pack_publish'))
       )
     steps:
       - run: echo "Ready to publish"

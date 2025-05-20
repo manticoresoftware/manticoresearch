@@ -111,7 +111,7 @@ POST /insert
 
 <!-- request Elasticsearch -->
 
-> NOTE: `_create` requires [Manticore Buddy](../Installation/Manticore_Buddy.md). If it doesn't work, make sure Buddy is installed.
+> NOTE: `_create` requires [Manticore Buddy](Installation/Manticore_Buddy.md). If it doesn't work, make sure Buddy is installed.
 
 ```json
 POST /products/_create/3
@@ -187,6 +187,18 @@ indexApi.insert({"table" : "test", "id" : 1, "doc" : {"title" : "Crossbody Bag w
 indexApi.insert({"table" : "test", "id" : 2, "doc" : {"title" : "Crossbody Bag with Tassel"}})
 indexApi.insert({"table" : "test", "id" : 0, "doc" : {{"title" : "Yellow bag"}})
 ```
+
+<!-- intro -->
+##### Python-asyncio:
+
+<!-- request Python-asyncio -->
+
+``` python
+await indexApi.insert({"table" : "test", "id" : 1, "doc" : {"title" : "Crossbody Bag with Tassel", "price" : 19.85}})
+await indexApi.insert({"table" : "test", "id" : 2, "doc" : {"title" : "Crossbody Bag with Tassel"}})
+await indexApi.insert({"table" : "test", "id" : 0, "doc" : {{"title" : "Yellow bag"}})
+```
+
 <!-- intro -->
 ##### Javascript:
 
@@ -252,11 +264,49 @@ sqlresult = indexApi.Insert(newdoc);
 
 ```
 
+<!-- intro -->
+##### Rust:
+
+<!-- request Rust -->
+
+``` rust
+let mut doc = HashMap::new();
+doc.insert("title".to_string(), serde_json::json!("Crossbody Bag with Tassel"));
+doc.insert("price".to_string(), serde_json::json!(19.85));
+let mut insert_req = InsertDocumentRequest {
+    table: serde_json::json!("products"),
+    doc: serde_json::json!(doc),
+    id: serde_json::json!(1),
+    ..Default::default(),
+};
+let mut insert_res = index_api.insert(insert_req).await;
+
+doc = HashMap::new();
+doc.insert("title".to_string(), serde_json::json!("Crossbody Bag with Tassel"));
+insert_req = InsertDocumentRequest {
+    table: serde_json::json!("products"),
+    doc: serde_json::json!(doc),
+    id: serde_json::json!(2),
+    ..Default::default(),
+};
+insert_res = index_api.insert(insert_req).await;
+
+doc = HashMap::new();
+doc.insert("title".to_string(), serde_json::json!("Tellow bag"));
+insert_req = InsertDocumentRequest {
+    table: serde_json::json!("products"),
+    doc: serde_json::json!(doc),
+    id: serde_json::json!(0),
+    ..Default::default(),
+};
+insert_res = index_api.insert(insert_req).await;
+```
+
 <!-- end -->
 
 ## Auto schema
 
-> NOTE: Auto schema requires [Manticore Buddy](../Installation/Manticore_Buddy.md). If it doesn't work, make sure Buddy is installed.
+> NOTE: Auto schema requires [Manticore Buddy](Installation/Manticore_Buddy.md). If it doesn't work, make sure Buddy is installed.
 
 Manticore features an automatic table creation mechanism, which activates when a specified table in the insert query doesn't yet exist. This mechanism is enabled by default. To disable it, set `auto_schema = 0` in the [Searchd](../../Server_settings/Searchd.md#auto_schema) section of your Manticore config file.
 
@@ -464,6 +514,16 @@ $index->addDocuments([
 ```python
 indexApi.insert({"table" : "products", "id" : 0, "doc" : {"title" : "Yellow bag"}})
 ```
+
+<!-- intro -->
+##### Python-asyncio:
+
+<!-- request Python-asyncio -->
+
+```python
+await indexApi.insert({"table" : "products", "id" : 0, "doc" : {"title" : "Yellow bag"}})
+```
+
 <!-- intro -->
 
 ##### Javascript:
@@ -499,6 +559,24 @@ doc.Add("title", "Yellow bag");
 InsertDocumentRequest newdoc = new InsertDocumentRequest(index: "products", id: 0, doc: doc);
 var sqlresult = indexApi.Insert(newdoc);
 ```
+
+<!-- intro -->
+##### Rust:
+
+<!-- request Rust -->
+
+``` rust
+let doc = HashMap::new();
+doc.insert("title".to_string(), serde_json::json!("Yellow bag"));
+let insert_req = InsertDocumentRequest {
+    table: serde_json::json!("products"),
+    doc: serde_json::json!(doc),
+    id: serde_json::json!(0),
+    ..Default::default(),
+};
+let insert_res = index_api.insert(insert_req).await;
+```
+
 <!-- end -->
 
 <!-- example call -->
@@ -556,7 +634,7 @@ or
 The `/bulk` (Manticore mode) endpoint supports [Chunked transfer encoding](https://en.wikipedia.org/wiki/Chunked_transfer_encoding). You can use it to transmit large batches. It:
 * reduces peak RAM usage, lowering the risk of OOM
 * decreases response time
-* allows you to bypass [max_packet_size](../Server_settings/Searchd.md#max_packet_size) and transfer batches much larger than the maximum allowed value of `max_packet_size` (128MB), for example, 1GB at a time.
+* allows you to bypass [max_packet_size](../../Server_settings/Searchd.md#max_packet_size) and transfer batches much larger than the maximum allowed value of `max_packet_size` (128MB), for example, 1GB at a time.
 
 <!-- intro -->
 ### Bulk insert examples
@@ -683,7 +761,7 @@ POST /bulk
 
 <!-- request Elasticsearch -->
 
-> NOTE: `_bulk` requires [Manticore Buddy](../Installation/Manticore_Buddy.md) if the table doesn't exist yet. If it doesn't work, make sure Buddy is installed.
+> NOTE: `_bulk` requires [Manticore Buddy](Installation/Manticore_Buddy.md) if the table doesn't exist yet. If it doesn't work, make sure Buddy is installed.
 
 ```json
 POST /_bulk
@@ -765,6 +843,19 @@ docs = [ \
 res = indexApi.bulk('\n'.join(map(json.dumps,docs)))
 ```
 
+<!-- intro -->
+##### Python=asyncio:
+
+<!-- request Python-asyncio -->
+
+```python
+docs = [ \
+    {"insert": {"table" : "products", "id" : 1, "doc" : {"title" : "Crossbody Bag with Tassel", "price" : 19.85}}}, \
+    {"insert": {"table" : "products", "id" : 2, "doc" : {"title" : "microfiber sheet set", "price" : 19.99}}}, \
+    {"insert": {"table" : "products", "id" : 3, "doc" : {"title" : "CPet Hair Remover Glove", "price" : 7.99}}}
+]
+res = await indexApi.bulk('\n'.join(map(json.dumps,docs)))
+```
 
 <!-- intro -->
 ##### Javascript:
@@ -801,6 +892,18 @@ string body = "{\"insert\": {\"index\" : \"products\", \"id\" : 1, \"doc\" : {\"
     "{\"insert\": {\"index\" : \"products\", \"id\" : 4, \"doc\" : {\"title\" : \"microfiber sheet set\", \"price\" : 19.99}}}"+"\n"+
     "{\"insert\": {\"index\" : \"products\", \"id\" : 5, \"doc\" : {\"title\" : \"CPet Hair Remover Glove\", \"price\" : 7.99}}}"+"\n";
 BulkResponse bulkresult = indexApi.Bulk(string.Join("\n", docs));
+```
+
+<!-- intro -->
+##### Rust:
+
+<!-- request Rust -->
+``` rust
+let bulk_body = r#"{"insert": "index" : "products", "id" : 1, "doc" : {"title" : "Crossbody Bag with Tassel", "price" : 19.85}}}
+    {"insert": {"index" : "products", "id" : 4, "doc" : {"title" : "microfiber sheet set", "price" : 19.99}}}
+    {"insert": {"index" : "products", "id" : 5, "doc" : {"title" : "CPet Hair Remover Glove", "price" : 7.99}}}         
+"#;
+index_api.bulk(bulk_body).await;
 ```
 
 <!-- end -->
@@ -876,6 +979,15 @@ indexApi.insert({"table" : "products", "id" : 0, "doc" : {"title" : "Yellow bag"
 ```
 
 <!-- intro -->
+##### Python=asyncio:
+
+<!-- request Python-asyncio -->
+
+```python
+await indexApi.insert({"table" : "products", "id" : 0, "doc" : {"title" : "Yellow bag","sizes":[40,41,42,43]}})
+```
+
+<!-- intro -->
 ##### Javascript:
 
 <!-- request Javascript -->
@@ -912,6 +1024,20 @@ doc.Add("sizes", new List<Object> {40,41,42,43});
 InsertDocumentRequest newdoc = new InsertDocumentRequest(index: "products", id: 0, doc: doc);
 var sqlresult = indexApi.Insert(newdoc);
 ```
+
+<!-- intro -->
+##### Rust:
+
+<!-- request Rust -->
+
+``` rust
+let mut doc = HashMap::new();
+doc.insert("title".to_string(), serde_json::json!("Yellow bag"));
+doc.insert("sizes".to_string(), serde_json::json!([40,41,42,43]));
+let insert_req = InsertDocumentRequest::new("products".to_string(), serde_json::json!(doc));
+let insert_res = index_api.insert(insert_req).await;
+```
+
 <!-- end -->
 
 <!-- example JSON_insert -->
@@ -1007,6 +1133,16 @@ $index->addDocument(
 indexApi = api = manticoresearch.IndexApi(client)
 indexApi.insert({"table" : "products", "id" : 0, "doc" : {"title" : "Yellow bag","meta":'{"size": 41, "color": "red"}'}})
 ```
+
+<!-- intro -->
+##### Python-asyncio:
+
+<!-- request Python-asyncio -->
+``` python
+indexApi = api = manticoresearch.IndexApi(client)
+await indexApi.insert({"table" : "products", "id" : 0, "doc" : {"title" : "Yellow bag","meta":'{"size": 41, "color": "red"}'}})
+```
+
 <!-- intro -->
 ##### Javascript:
 
@@ -1048,6 +1184,24 @@ doc.Add("title", "Yellow bag");
 doc.Add("meta", meta);
 InsertDocumentRequest newdoc = new InsertDocumentRequest(index: "products", id: 0, doc: doc);
 var sqlresult = indexApi.Insert(newdoc);
+```
+
+<!-- intro -->
+##### Rust:
+
+<!-- request Rust -->
+
+``` rust
+let mut meta = HashMap::new();
+metadoc.insert("size".to_string(), serde_json::json!(41));
+meta.insert("color".to_string(), serde_json::json!("red"));
+
+let mut doc = HashMap::new();
+doc.insert("title".to_string(), serde_json::json!("Yellow bag"));
+doc.insert("meta".to_string(), serde_json::json!(meta));
+
+let insert_req = InsertDocumentRequest::new("products".to_string(), serde_json::json!(doc));
+let insert_res = index_api.insert(insert_req).await;
 ```
 
 <!-- end -->

@@ -26,6 +26,8 @@
 #include "sphinxjson.h"
 #include "tokenizer/tok_internals.h"
 
+#include <sys/stat.h>
+
 CSphString g_sLemmatizerBase;
 
 /// morphology
@@ -52,7 +54,7 @@ enum class EMORPH : int {
 
 void ConcatReportStrings ( const CSphTightVector<CSphString> & dStrings, CSphString & sReport )
 {
-	sReport = StrVec2Str ( dStrings, " " );
+	sReport = Vec2Str ( dStrings, " " );
 }
 
 

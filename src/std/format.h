@@ -12,7 +12,6 @@
 
 #pragma once
 
-#include "config.h"
 #include <limits.h>
 #include <cstring>
 

@@ -24,9 +24,9 @@
 class XQParser_t;
 #include "bissphinxquery.h"
 
-// #define XQDEBUG 1
-// #define XQ_DUMP_TRANSFORMED_TREE 1
-// #define XQ_DUMP_NODE_ADDR 1
+#define XQDEBUG 0
+#define XQ_DUMP_TRANSFORMED_TREE 0
+#define XQ_DUMP_NODE_ADDR 0
 
 static bool g_bOnlyNotAllowed = false;
 
@@ -749,7 +749,7 @@ static void TransformMorphOnlyFields ( XQNode_t * pNode, const CSphBitvec & tMor
 	const XQLimitSpec_t & tSpec = pNode->m_dSpec;
 	if ( tSpec.m_bFieldSpec && !tSpec.m_dFieldMask.TestAll ( true ) )
 	{
-		int iField=tMorphDisabledFields.Scan ( 0 );
+		auto iField=tMorphDisabledFields.Scan ( 0 );
 		while ( iField<tMorphDisabledFields.GetSize() )
 		{
 			if ( pNode->m_dSpec.m_dFieldMask.Test ( iField ) )
@@ -851,6 +851,7 @@ public:
 	bool					m_bWasKeyword = false;
 
 	bool					m_bEmpty = false;
+	bool					m_bWasFullText = false;
 	bool					m_bQuoted = false;
 	int						m_iOvershortStep = 0;
 
@@ -900,7 +901,7 @@ void XQLimitSpec_t::SetFieldSpec ( const FieldMask_t& uMask, int iMaxPos )
 XQNode_t::XQNode_t ( const XQLimitSpec_t & dSpec )
 : m_dSpec ( dSpec )
 {
-#ifdef XQ_DUMP_NODE_ADDR
+#if XQ_DUMP_NODE_ADDR
 	printf ( "node new 0x%08x\n", this );
 #endif
 }
@@ -908,7 +909,7 @@ XQNode_t::XQNode_t ( const XQLimitSpec_t & dSpec )
 /// dtor
 XQNode_t::~XQNode_t ()
 {
-#ifdef XQ_DUMP_NODE_ADDR
+#if XQ_DUMP_NODE_ADDR
 	printf ( "node deleted %d 0x%08x\n", m_eOp, this );
 #endif
 	ARRAY_FOREACH ( i, m_dChildren )
@@ -1960,6 +1961,7 @@ bool XQParser_t::Parse ( XQQuery_t & tParsed, const char * sQuery, const CSphQue
 	if ( pQuery )
 		bNotOnlyAllowed |= pQuery->m_bNotOnlyAllowed;
 
+	m_bWasFullText = ( m_pRoot && ( m_pRoot->m_dChildren.GetLength () || m_pRoot->m_dWords.GetLength () ) );
 	XQNode_t * pNewRoot = FixupTree ( m_pRoot, *m_dStateSpec.Last(), pMorphFields, bNotOnlyAllowed );
 	if ( !pNewRoot )
 	{
@@ -1989,7 +1991,7 @@ bool XQParser_t::HandleFieldBlockStart ( const char * & pPtr )
 //////////////////////////////////////////////////////////////////////////
 
 
-#ifdef XQDEBUG
+#if XQDEBUG
 static void xqIndent ( int iIndent )
 {
 	iIndent *= 2;
@@ -1999,7 +2001,7 @@ static void xqIndent ( int iIndent )
 
 void xqDump ( const XQNode_t * pNode, int iIndent )
 {
-#ifdef XQ_DUMP_NODE_ADDR
+#if XQ_DUMP_NODE_ADDR
 	printf ( "0x%08x ", pNode );
 #endif
 	if ( pNode->m_dChildren.GetLength() )
@@ -2053,29 +2055,32 @@ void xqDump ( const XQNode_t * pNode, int iIndent )
 
 CSphString sphReconstructNode ( const XQNode_t * pNode, const CSphSchema * pSchema )
 {
-	CSphString sRes ( "" );
+	StringBuilder_c sRes ( " " );
 
 	if ( !pNode )
-		return sRes;
+		return CSphString{sRes};
 
 	if ( pNode->m_dWords.GetLength() )
 	{
 		// say just words to me
 		const CSphVector<XQKeyword_t> & dWords = pNode->m_dWords;
-		ARRAY_FOREACH ( i, dWords )
-			sRes.SetSprintf ( "%s %s", sRes.cstr(), dWords[i].m_sWord.cstr() );
-		sRes.Trim ();
+		for ( const auto& i: dWords )
+			sRes << i.m_sWord.cstr();
+		CSphString sTrim { sRes };
+		sTrim.Trim();
+		sRes.Clear ();
 
 		switch ( pNode->GetOp() )
 		{
-		case SPH_QUERY_AND:			break;
-		case SPH_QUERY_PHRASE:		sRes.SetSprintf ( "\"%s\"", sRes.cstr() ); break;
-		case SPH_QUERY_PROXIMITY:	sRes.SetSprintf ( "\"%s\"~%d", sRes.cstr(), pNode->m_iOpArg ); break;
-		case SPH_QUERY_QUORUM:		sRes.SetSprintf ( "\"%s\"/%d", sRes.cstr(), pNode->m_iOpArg ); break;
-		case SPH_QUERY_NEAR:		sRes.SetSprintf ( "\"%s\"NEAR/%d", sRes.cstr(), pNode->m_iOpArg ); break;
+		case SPH_QUERY_AND:			sRes << sTrim; break;
+		case SPH_QUERY_PHRASE:		sRes << '"' << sTrim << '"'; break;
+		case SPH_QUERY_PROXIMITY:	sRes << '"' << sTrim << "\"~" <<  pNode->m_iOpArg; break;
+		case SPH_QUERY_QUORUM:		sRes << '"' << sTrim << "\"/" <<  pNode->m_iOpArg; break;
+		case SPH_QUERY_NEAR:		sRes << '"' << sTrim << "\"NEAR/" <<  pNode->m_iOpArg; break;
 		default:					assert ( 0 && "unexpected op in ReconstructNode()" ); break;
 		}
 
+		sRes.MoveTo ( sTrim );
 		if ( !pNode->m_dSpec.m_dFieldMask.TestAll(true) )
 		{
 			CSphString sFields ( "" );
@@ -2090,11 +2095,13 @@ CSphString sphReconstructNode ( const XQNode_t * pNode, const CSphSchema * pSche
 					sFields.SetSprintf ( "%s,%u", sFields.cstr(), pNode->m_dSpec.m_dFieldMask.GetMask32() );
 			}
 
-			sRes.SetSprintf ( "( @%s: %s )", sFields.cstr()+1, sRes.cstr() );
+			sRes.Sprintf ( "( @%s: %s )", sFields.cstr()+1, sTrim.cstr() );
 		} else
 		{
 			if ( pNode->GetOp()==SPH_QUERY_AND && dWords.GetLength()>1 )
-				sRes.SetSprintf ( "( %s )", sRes.cstr() ); // wrap bag of words
+				sRes.Sprintf ( "( %s )", sTrim.cstr() ); // wrap bag of words
+			else
+				sRes << sTrim;
 		}
 
 	} else
@@ -2103,7 +2110,9 @@ CSphString sphReconstructNode ( const XQNode_t * pNode, const CSphSchema * pSche
 		{
 			if ( !i )
 			{
-				sRes = sphReconstructNode ( pNode->m_dChildren[i], pSchema );
+				auto sFoo = sphReconstructNode ( pNode->m_dChildren[i], pSchema );
+				sRes.Clear();
+				sRes << sFoo;
 			} else
 			{
 				const char * sOp = "(unknown-op)";
@@ -2119,18 +2128,26 @@ CSphString sphReconstructNode ( const XQNode_t * pNode, const CSphSchema * pSche
 				case SPH_QUERY_PHRASE:	sOp = ""; break;
 				default:				assert ( 0 && "unexpected op in ReconstructNode()" ); break;
 				}
+				CSphString sTrim { sRes };
+				sRes.Clear();
+
 				if ( pNode->GetOp()==SPH_QUERY_PHRASE )
-					sRes.SetSprintf ( "\"%s %s\"", sRes.cstr(), sphReconstructNode ( pNode->m_dChildren[i], pSchema ).cstr() );
+					sRes.Sprintf ( "\"%s %s\"", sTrim.cstr(), sphReconstructNode ( pNode->m_dChildren[i], pSchema ).cstr() );
 				else
-					sRes.SetSprintf ( "%s %s %s", sRes.cstr(), sOp, sphReconstructNode ( pNode->m_dChildren[i], pSchema ).cstr() );
+					sRes.Sprintf ( "%s %s %s", sTrim.cstr(), sOp, sphReconstructNode ( pNode->m_dChildren[i], pSchema ).cstr() );
 			}
 		}
 
 		if ( pNode->m_dChildren.GetLength()>1 )
-			sRes.SetSprintf ( "( %s )", sRes.cstr() );
+		{
+			CSphString sFoo;
+			sRes.MoveTo ( sFoo );
+			sRes.Clear();
+			sRes.Sprintf ( "( %s )", sFoo.cstr() );
+		}
 	}
 
-	return sRes;
+	return CSphString{sRes};
 }
 
 
@@ -2144,12 +2161,14 @@ bool sphParseExtendedQuery ( XQQuery_t & tParsed, const char * sQuery, const CSp
 		tParsed.m_pRoot->Check ( true );
 #endif
 
-#ifdef XQDEBUG
+#if XQDEBUG
 	if ( bRes )
 	{
 		printf ( "\n--- query ---\n" );
 		printf ( "%s\n", sQuery );
 		xqDump ( tParsed.m_pRoot, 0 );
+		printf ( "\n--- query reconstructed ---\n" );
+		printf ( "%s\n", sphReconstructNode ( tParsed.m_pRoot, NULL ).cstr(), NULL );
 		printf ( "---\n" );
 	}
 #endif
@@ -2158,6 +2177,7 @@ bool sphParseExtendedQuery ( XQQuery_t & tParsed, const char * sQuery, const CSp
 	// as at that point term expansion could produce many terms from expanded term and this condition got failed
 	tParsed.m_bSingleWord = ( tParsed.m_pRoot && tParsed.m_pRoot->m_dChildren.GetLength()==0 && tParsed.m_pRoot->m_dWords.GetLength()==1 );
 	tParsed.m_bEmpty = qp.m_bEmpty;
+	tParsed.m_bWasFullText = ( qp.m_bWasFullText || !qp.m_bEmpty );
 
 	return bRes;
 }
@@ -4415,21 +4435,19 @@ bool CSphTransformation::TransformExcessAndNot ()
 
 void CSphTransformation::Dump ()
 {
-#ifdef XQ_DUMP_TRANSFORMED_TREE
-	m_hSimilar.IterateStart();
-	while ( m_hSimilar.IterateNext() )
+#if XQ_DUMP_TRANSFORMED_TREE
+	for (const auto& tSimilar : m_hSimilar)
 	{
-		printf ( "\nnode: hash 0x" UINT64_FMT "\n", m_hSimilar.IterateGetKey() );
-		m_hSimilar.IterateGet().IterateStart();
-		while ( m_hSimilar.IterateGet().IterateNext() )
+		printf ( "\nnode: hash 0x" UINT64_FMT "\n", tSimilar.first );
+		for (const auto& tNode : tSimilar.second )
 		{
-			CSphVector<XQNode_t *> & dNodes = m_hSimilar.IterateGet().IterateGet();
-			printf ( "\tgrand: hash 0x" UINT64_FMT ", children %d\n", m_hSimilar.IterateGet().IterateGetKey(), dNodes.GetLength() );
+			const CSphVector<XQNode_t *> & dNodes = tNode.second; //m_hSimilar.IterateGet().IterateGet();
+			printf ( "\tgrand: hash 0x" UINT64_FMT ", children %d\n", tNode.first, dNodes.GetLength() );
 
 			printf ( "\tparents:\n" );
-			ARRAY_FOREACH ( i, dNodes )
+			for ( const auto& tLeaf : dNodes )
 			{
-				uint64_t uParentHash = dNodes[i]->GetHash();
+				uint64_t uParentHash = tLeaf->GetHash();
 				printf ( "\t\thash 0x" UINT64_FMT "\n", uParentHash );
 			}
 		}
@@ -4438,17 +4456,17 @@ void CSphTransformation::Dump ()
 }
 
 
-#ifdef XQDEBUG
+#if XQDEBUG
 void CSphTransformation::Dump ( const XQNode_t * pNode, const char * sHeader )
 {
-	printf ( sHeader );
-	if ( pNode )
-	{
-		printf ( "%s\n", sphReconstructNode ( pNode, NULL ).cstr(), NULL );
-#ifdef XQ_DUMP_TRANSFORMED_TREE
-		xqDump ( pNode, 0 );
+	if ( !pNode )
+		return;
+
+	printf ( "%s", sHeader );
+	printf ( "%s\n", sphReconstructNode ( pNode, NULL ).cstr() );
+#if XQ_DUMP_TRANSFORMED_TREE
+	xqDump ( pNode, 0 );
 #endif
-	}
 }
 #else
 void CSphTransformation::Dump ( const XQNode_t * , const char * )
@@ -4540,14 +4558,14 @@ void CSphTransformation::Transform ()
 
 void sphOptimizeBoolean ( XQNode_t ** ppRoot, const ISphKeywordsStat * pKeywords )
 {
-#ifdef XQDEBUG
+#if XQDEBUG
 	int64_t tmDelta = sphMicroTimer();
 #endif
 
 	CSphTransformation qInfo ( ppRoot, pKeywords );
 	qInfo.Transform ();
 
-#ifdef XQDEBUG
+#if XQDEBUG
 	tmDelta = sphMicroTimer() - tmDelta;
 	if ( tmDelta>10 )
 		printf ( "optimized boolean in %d.%03d msec", (int)(tmDelta/1000), (int)(tmDelta%1000) );
@@ -4586,7 +4604,6 @@ TokenizerRefPtr_c sphCloneAndSetupQueryTokenizer ( const TokenizerRefPtr_c& pTok
 class QueryParserPlain_c : public QueryParser_i
 {
 public:
-	bool IsFullscan ( const XQQuery_t & tQuery ) const override { return false; }
 	bool ParseQuery ( XQQuery_t & tParsed, const char * sQuery, const CSphQuery * pQuery, TokenizerRefPtr_c pQueryTokenizer, TokenizerRefPtr_c pQueryTokenizerJson, const CSphSchema * pSchema, const DictRefPtr_c& pDict, const CSphIndexSettings & tSettings, const CSphBitvec * pMorphFields ) const override;
 	QueryParser_i * Clone() const final { return new QueryParserPlain_c; }
 };

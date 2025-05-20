@@ -21,6 +21,7 @@
 	BlobLocator_t sValue;
 }
 
+%token	END 0 "$end"
 %token <sValue>	TOK_QUOTED_STRING
 %token <fValue> TOK_CONST_FLOAT
 %token <iValue> TOK_CONST_INT

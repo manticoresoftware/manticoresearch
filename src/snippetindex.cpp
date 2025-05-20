@@ -12,7 +12,7 @@
 
 #include "snippetindex.h"
 #include "sphinxint.h"
-
+#include "sphinxexcerpt.h"
 
 struct KeywordCmp_t
 {

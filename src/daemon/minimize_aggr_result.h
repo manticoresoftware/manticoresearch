@@ -7,17 +7,12 @@
 // This program is free software; you can redistribute it and/or modify
 // it under the terms of the GNU General Public License. You should have
 // received a copy of the GPL license along with this program; if you
-// did not, you can find it at http://www.gnu.org/
+// did not, you can find it at http://www.gnu.org
 //
-/// @file taskflushdisk.h
-/// Task to flush RAM chunks to disk
 
 #pragma once
 
-#include "sphinxstd.h"
+#include "searchdaemon.h"
 
-void SetRtFlushDiskPeriod ( int iFlushWrite, int iFlushSearch );
-int GetRtFlushDiskWrite(bool bTestMode);
-int GetRtFlushDiskSearch();
+bool MinimizeAggrResult ( AggrResult_t & tRes, const CSphQuery & tQuery, bool bHaveLocals, const sph::StringSet & hExtraColumns, QueryProfile_c * pProfiler, const CSphFilterSettings * pAggrFilter, bool bForceRefItems, bool bMaster );
 
-void ScheduleRtFlushDisk();

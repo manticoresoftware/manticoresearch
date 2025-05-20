@@ -626,7 +626,7 @@ When performing table joins, Manticore Search processes the results in batches t
 
 - **Configuring Batch Size**:
   - The size of the batch can be adjusted using the `join_batch_size` search option.
-  - It is also [configurable](../../Server_settings/Searchd.md#join_batch_size) in the `searchd` section of the configuration file.
+  - It is also [configurable](../Server_settings/Searchd.md#join_batch_size) in the `searchd` section of the configuration file.
   - The default batch size is `1000`, but you can increase or decrease it depending on your use case.
   - Setting `join_batch_size=0` disables batching entirely, which may be useful for debugging or specific scenarios.
 
@@ -645,7 +645,7 @@ To further optimize join operations, Manticore Search employs a caching mechanis
   - This avoids redundant queries and speeds up subsequent join operations.
 
 - **Configuring Cache Size**:
-  - The size of the join cache can be configured using the [join_cache_size](../../Server_settings/Searchd.md#join_cache_size) option in the `searchd` section of the configuration file.
+  - The size of the join cache can be configured using the [join_cache_size](../Server_settings/Searchd.md#join_cache_size) option in the `searchd` section of the configuration file.
   - The default cache size is `20MB`, but you can adjust it based on your workload and available memory.
   - Setting `join_cache_size=0` disables caching entirely.
 

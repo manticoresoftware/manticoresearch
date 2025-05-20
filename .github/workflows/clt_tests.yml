@@ -68,7 +68,7 @@ jobs:
               test/clt-tests/sharding/syntax/
               
     steps:
-      - uses: manticoresoftware/clt@0.6.7
+      - uses: manticoresoftware/clt@0.6.9
         with:
           artifact: ${{ inputs.artifact_name }}
           image: ${{ inputs.docker_image }}

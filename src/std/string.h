@@ -20,7 +20,8 @@ bool StrEq ( const char* l, const char* r );
 bool StrEqN ( const char* l, const char* r );
 bool StrEq ( Str_t l, const char* r );
 bool StrEqN ( Str_t l, const char* r );
-
+bool StrEq ( Str_t l, Str_t r );
+bool StrEqN ( Str_t l, Str_t r );
 
 /// immutable C string proxy
 struct CSphString

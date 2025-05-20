@@ -10,8 +10,6 @@
 
 #pragma once
 
-#include "config.h"
-
 #if __has_include( <valgrind/valgrind.h>)
 #define BOOST_USE_VALGRIND 1
 #include <valgrind/valgrind.h>
@@ -20,8 +18,8 @@
 #endif
 
 #include <boost/context/stack_context.hpp>
-#include "std/vector.h"
 #include "std/ints.h"
+#include "std/vectraits.h"
 
 namespace Threads
 {

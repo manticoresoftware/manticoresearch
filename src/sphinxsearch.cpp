@@ -231,7 +231,7 @@ public:
 
 
 
-STATIC_ASSERT ( ( 8*8*sizeof(DWORD) )>=SPH_MAX_FIELDS, PAYLOAD_MASK_OVERFLOW );
+static_assert ( ( 8*8*sizeof(DWORD) )>=SPH_MAX_FIELDS, "payload mask overflow" );
 
 static const bool WITH_BM25 = true;
 
@@ -2724,8 +2724,8 @@ struct Expr_FieldFactor_c<CSphBitvec> : public Expr_NoLocator_c
 	}
 
 private:
-	Expr_FieldFactor_c<CSphBitvec> ( const Expr_FieldFactor_c<CSphBitvec>& rhs )
-	        : m_pIndex ( rhs.m_pIndex ), m_tField ( rhs.m_tField ) {}
+	Expr_FieldFactor_c ( const Expr_FieldFactor_c& rhs )
+		: m_pIndex ( rhs.m_pIndex ), m_tField ( rhs.m_tField ) {}
 };
 
 
@@ -2870,11 +2870,15 @@ private:
 		: m_pState ( rhs.m_pState )
 		, m_fK1 ( rhs.m_fK1 )
 		, m_fB ( rhs.m_fB )
-		, m_dWeights ( rhs.m_dWeights )
-		, m_dAvgDocFieldLens ( rhs.m_dAvgDocFieldLens )
-		, m_dFieldLens ( rhs.m_dFieldLens )
+		, m_dWeights ( rhs.m_dWeights.GetLength() )
+		, m_dAvgDocFieldLens ( rhs.m_dAvgDocFieldLens.GetLength() )
+		, m_dFieldLens ( rhs.m_dFieldLens.GetLength() )
 		, m_iWeightMax ( rhs.m_iWeightMax )
-	{}
+	{
+		m_dWeights.CopyFrom ( rhs.m_dWeights );
+		m_dAvgDocFieldLens.CopyFrom ( rhs.m_dAvgDocFieldLens );
+		m_dFieldLens.CopyFrom ( rhs.m_dFieldLens );
+	}
 };
 
 

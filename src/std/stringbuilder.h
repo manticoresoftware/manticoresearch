@@ -230,11 +230,12 @@ inline char* Tail ( StringBuilder_c& tBuilder )
 	return tBuilder.end();
 }
 
-CSphString StrVec2Str ( const VecTraits_T<CSphString>& tVec, const char* szDelim = "," ) noexcept;
+template<typename VAL>
+CSphString Vec2Str( const VecTraits_T<VAL> & tVec, const char * szDelim = "," ) noexcept;
 
 inline CSphString ConcatWarnings ( const VecTraits_T<CSphString>& tVec ) noexcept
 {
-	return StrVec2Str ( tVec, "; " );
+	return Vec2Str( tVec, "; " );
 }
 
 #include "stringbuilder_impl.h"

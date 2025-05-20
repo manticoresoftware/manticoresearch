@@ -5,19 +5,19 @@ mkdir -p /var/{run,lib,log}/manticore; echo -e "common {\n\tplugin_dir = /usr/lo
 cat /tmp/manticore.conf
 ––– output –––
 common {
-plugin_dir = /usr/local/lib/manticore
-lemmatizer_base = /usr/share/manticore/morph/
+	plugin_dir = /usr/local/lib/manticore
+	lemmatizer_base = /usr/share/manticore/morph/
 }
 searchd {
-listen = 127.0.0.1:9306:mysql41
-listen = 127.0.0.1:9312
-listen = 127.0.0.1:9308:http
-log = /var/log/manticore/searchd.log
-query_log = /var/log/manticore/query.log
-pid_file = /var/log/manticore/searchd.pid
-data_dir = /var/log/manticore
-query_log_format = sphinxql
-query_log_min_msec = 500
+	listen = 127.0.0.1:9306:mysql41
+	listen = 127.0.0.1:9312
+	listen = 127.0.0.1:9308:http
+	log = /var/log/manticore/searchd.log
+	query_log = /var/log/manticore/query.log
+	pid_file = /var/log/manticore/searchd.pid
+	data_dir = /var/log/manticore
+	query_log_format = sphinxql
+	query_log_min_msec = 500
 }
 ––– input –––
 stdbuf -oL searchd -c /tmp/manticore.conf > /dev/null

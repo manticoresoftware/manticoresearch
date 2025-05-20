@@ -91,6 +91,16 @@ $index->create([
 ```python
 utilsApi.sql('CREATE TABLE products(title text, price float) morphology = \'stem_en, libstemmer_sv\'')
 ```
+
+<!-- intro -->
+##### Python-asyncio:
+
+<!-- request Python-asyncio -->
+
+```python
+await utilsApi.sql('CREATE TABLE products(title text, price float) morphology = \'stem_en, libstemmer_sv\'')
+```
+
 <!-- intro -->
 ##### Javascript:
 
@@ -104,14 +114,23 @@ res = await utilsApi.sql('CREATE TABLE products(title text, price float) morphol
 ##### Java:
 <!-- request Java -->
 ```java
-utilsApi.sql("CREATE TABLE products(title text, price float) morphology = 'stem_en, libstemmer_sv'");
+utilsApi.sql("CREATE TABLE products(title text, price float) morphology = 'stem_en, libstemmer_sv'", true);
 ```
 
 <!-- intro -->
 ##### C#:
 <!-- request C# -->
 ```clike
-utilsApi.Sql("CREATE TABLE products(title text, price float) morphology = 'stem_en, libstemmer_sv'");
+utilsApi.Sql("CREATE TABLE products(title text, price float) morphology = 'stem_en, libstemmer_sv'", true);
+```
+
+<!-- intro -->
+##### Rust:
+
+<!-- request Rust -->
+
+```rust
+utils_api.sql("CREATE TABLE products(title text, price float) morphology = 'stem_en, libstemmer_sv'", Some(true)).await;
 ```
 
 <!-- request CONFIG -->
@@ -172,6 +191,16 @@ $index->create([
 ```python
 utilsApi.sql('CREATE TABLE products(title text, price float) morphology_skip_fields = \'name\' morphology = \'stem_en\'')
 ```
+
+<!-- intro -->
+##### Python-asyncio:
+
+<!-- request Python-asyncio -->
+
+```python
+await utilsApi.sql('CREATE TABLE products(title text, price float) morphology_skip_fields = \'name\' morphology = \'stem_en\'')
+```
+
 <!-- intro -->
 ##### Javascript:
 
@@ -185,14 +214,23 @@ res = await utilsApi.sql('CREATE TABLE products(title text, price float) morphol
 ##### Java:
 <!-- request Java -->
 ```java
-utilsApi.sql("CREATE TABLE products(title text, price float) morphology_skip_fields = 'name' morphology = 'stem_en'");
+utilsApi.sql("CREATE TABLE products(title text, price float) morphology_skip_fields = 'name' morphology = 'stem_en'", true);
 ```
 
 <!-- intro -->
 ##### C#:
 <!-- request C# -->
 ```clike
-utilsApi.Sql("CREATE TABLE products(title text, price float) morphology_skip_fields = 'name' morphology = 'stem_en'");
+utilsApi.Sql("CREATE TABLE products(title text, price float) morphology_skip_fields = 'name' morphology = 'stem_en'", true);
+```
+
+<!-- intro -->
+##### Rust:
+
+<!-- request Rust -->
+
+```rust
+utils_api.sql("CREATE TABLE products(title text, price float) morphology_skip_fields = 'name' morphology = 'stem_en'", Some(true)).await;
 ```
 
 <!-- request CONFIG -->
@@ -258,6 +296,16 @@ $index->create([
 ```python
 utilsApi.sql('CREATE TABLE products(title text, price float) min_stemming_len = \'4\' morphology = \'stem_en\'')
 ```
+
+<!-- intro -->
+##### Python-asyncio:
+
+<!-- request Python-asycnio -->
+
+```python
+await utilsApi.sql('CREATE TABLE products(title text, price float) min_stemming_len = \'4\' morphology = \'stem_en\'')
+```
+
 <!-- intro -->
 ##### Javascript:
 
@@ -271,14 +319,23 @@ res = await utilsApi.sql('CREATE TABLE products(title text, price float) min_ste
 ##### Java:
 <!-- request Java -->
 ```java
-utilsApi.sql("CREATE TABLE products(title text, price float) min_stemming_len = '4' morphology = 'stem_en'");
+utilsApi.sql("CREATE TABLE products(title text, price float) min_stemming_len = '4' morphology = 'stem_en'", true);
 ```
 
 <!-- intro -->
 ##### C#:
 <!-- request C# -->
 ```clike
-utilsApi.Sql("CREATE TABLE products(title text, price float) min_stemming_len = '4' morphology = 'stem_en'");
+utilsApi.Sql("CREATE TABLE products(title text, price float) min_stemming_len = '4' morphology = 'stem_en'", true);
+```
+
+<!-- intro -->
+##### Rust:
+
+<!-- request Rust -->
+
+```rust
+utils_api.sql("CREATE TABLE products(title text, price float) min_stemming_len = '4' morphology = 'stem_en'", Some(true)).await;
 ```
 
 <!-- request CONFIG -->
@@ -343,6 +400,16 @@ $index->create([
 ```python
 utilsApi.sql('CREATE TABLE products(title text, price float) index_exact_words = \'1\' morphology = \'stem_en\'')
 ```
+
+<!-- intro -->
+##### Python-asyncio:
+
+<!-- request Python-asyncio -->
+
+```python
+await utilsApi.sql('CREATE TABLE products(title text, price float) index_exact_words = \'1\' morphology = \'stem_en\'')
+```
+
 <!-- intro -->
 ##### Javascript:
 
@@ -356,14 +423,23 @@ res = await utilsApi.sql('CREATE TABLE products(title text, price float) index_e
 ##### Java:
 <!-- request Java -->
 ```java
-utilsApi.sql("CREATE TABLE products(title text, price float) index_exact_words = '1' morphology = 'stem_en'");
+utilsApi.sql("CREATE TABLE products(title text, price float) index_exact_words = '1' morphology = 'stem_en'", true);
 ```
 
 <!-- intro -->
 ##### C#:
 <!-- request C# -->
 ```clike
-utilsApi.Sql("CREATE TABLE products(title text, price float) index_exact_words = '1' morphology = 'stem_en'");
+utilsApi.Sql("CREATE TABLE products(title text, price float) index_exact_words = '1' morphology = 'stem_en'", true);
+```
+
+<!-- intro -->
+##### Rust:
+
+<!-- request Rust -->
+
+```rust
+utils_api.sql("CREATE TABLE products(title text, price float) index_exact_words = '1' morphology = 'stem_en'", Some(true)).await;
 ```
 
 <!-- request CONFIG -->
@@ -395,7 +471,7 @@ In Jieba, the HMM (Hidden Markov Model) option refers to an algorithm used for w
 
 Jieba primarily uses a dictionary-based method for segmenting known words, but when the HMM option is enabled, it applies a statistical model to identify probable word boundaries for words or phrases that are not in its dictionary. This is particularly useful for segmenting new or rare words, names, and slang.
 
-In summary, the `jieba_hmm` option helps improve segmentation accuracy at the expense of indexing performance. It must be used with `morphology = jieba_chinese`, see [Chinese, Japanese and Korean (CJK) and Thai languages](Creating_a_table/NLP_and_tokenization/Languages_with_continuous_scripts.md).
+In summary, the `jieba_hmm` option helps improve segmentation accuracy at the expense of indexing performance. It must be used with `morphology = jieba_chinese`, see [Chinese, Japanese and Korean (CJK) and Thai languages](../../Creating_a_table/NLP_and_tokenization/Languages_with_continuous_scripts.md).
 
 <!-- request SQL -->
 
@@ -432,6 +508,16 @@ $index->create([
 ```python
 utilsApi.sql('CREATE TABLE products(title text, price float) morphology = \'jieba_chinese\' jieba_hmm = \'0\'')
 ```
+
+<!-- intro -->
+##### Python-asyncio:
+
+<!-- request Python-asyncio -->
+
+```python
+await utilsApi.sql('CREATE TABLE products(title text, price float) morphology = \'jieba_chinese\' jieba_hmm = \'0\'')
+```
+
 <!-- intro -->
 ##### Javascript:
 
@@ -445,14 +531,23 @@ res = await utilsApi.sql('CREATE TABLE products(title text, price float) morphol
 ##### Java:
 <!-- request Java -->
 ```java
-utilsApi.sql("CREATE TABLE products(title text, price float) morphology = 'jieba_chinese' jieba_hmm = '0'");
+utilsApi.sql("CREATE TABLE products(title text, price float) morphology = 'jieba_chinese' jieba_hmm = '0'", true);
 ```
 
 <!-- intro -->
 ##### C#:
 <!-- request C# -->
 ```clike
-utilsApi.Sql("CREATE TABLE products(title text, price float) morphology = 'jieba_chinese' jieba_hmm = '0'");
+utilsApi.Sql("CREATE TABLE products(title text, price float) morphology = 'jieba_chinese' jieba_hmm = '0'", true);
+```
+
+<!-- intro -->
+##### Rust:
+
+<!-- request Rust -->
+
+```rust
+utils_api.sql("CREATE TABLE products(title text, price float) morphology = 'jieba_chinese' jieba_hmm = '0'", Some(true)).await;
 ```
 
 <!-- request CONFIG -->
@@ -486,7 +581,7 @@ In full mode, Jieba tries to split the sentence into every possible word combina
 
 In search mode, Jieba breaks the text into both whole words and smaller parts, combining precise segmentation with extra detail by providing overlapping word fragments. This mode balances precision and recall, making it useful for search engines.
 
-`jieba_mode` should be used with `morphology = jieba_chinese`. See [Chinese, Japanese, Korean (CJK) and Thai languages](Creating_a_table/NLP_and_tokenization/Languages_with_continuous_scripts.md).
+`jieba_mode` should be used with `morphology = jieba_chinese`. See [Chinese, Japanese, Korean (CJK) and Thai languages](../../Creating_a_table/NLP_and_tokenization/Languages_with_continuous_scripts.md).
 
 <!-- request SQL -->
 
@@ -523,6 +618,16 @@ $index->create([
 ```python
 utilsApi.sql('CREATE TABLE products(title text, price float) morphology = \'jieba_chinese\' jieba_mode = \'full\'')
 ```
+
+<!-- intro -->
+##### Python-asyncio:
+
+<!-- request Python-asyncio -->
+
+```python
+await utilsApi.sql('CREATE TABLE products(title text, price float) morphology = \'jieba_chinese\' jieba_mode = \'full\'')
+```
+
 <!-- intro -->
 ##### Javascript:
 
@@ -536,14 +641,23 @@ res = await utilsApi.sql('CREATE TABLE products(title text, price float) morphol
 ##### Java:
 <!-- request Java -->
 ```java
-utilsApi.sql("CREATE TABLE products(title text, price float) morphology = 'jieba_chinese' jieba_mode = 'full'");
+utilsApi.sql("CREATE TABLE products(title text, price float) morphology = 'jieba_chinese' jieba_mode = 'full'", true);
 ```
 
 <!-- intro -->
 ##### C#:
 <!-- request C# -->
 ```clike
-utilsApi.Sql("CREATE TABLE products(title text, price float) morphology = 'jieba_chinese' jieba_mode = 'full'");
+utilsApi.Sql("CREATE TABLE products(title text, price float) morphology = 'jieba_chinese' jieba_mode = 'full'", true);
+```
+
+<!-- intro -->
+##### Rust:
+
+<!-- request Rust -->
+
+```rust
+utils_api.sql("CREATE TABLE products(title text, price float) morphology = 'jieba_chinese' jieba_mode = 'full'", Some(true)).await;
 ```
 
 <!-- request CONFIG -->
@@ -582,7 +696,7 @@ Example:
 台中
 ```
 
-`jieba_user_dict_path` should be used with `morphology = jieba_chinese`. For more details, see [Chinese, Japanese, Korean (CJK), and Thai languages](Creating_a_table/NLP_and_tokenization/Languages_with_continuous_scripts.md).
+`jieba_user_dict_path` should be used with `morphology = jieba_chinese`. For more details, see [Chinese, Japanese, Korean (CJK), and Thai languages](../../Creating_a_table/NLP_and_tokenization/Languages_with_continuous_scripts.md).
 
 <!-- request SQL -->
 
@@ -619,6 +733,16 @@ $index->create([
 ```python
 utilsApi.sql('CREATE TABLE products(title text, price float) morphology = \'jieba_chinese\' jieba_user_dict_path = \'/usr/local/manticore/data/user-dict.txt\'')
 ```
+
+<!-- intro -->
+##### Python-asyncio:
+
+<!-- request Python-asyncio -->
+
+```python
+await utilsApi.sql('CREATE TABLE products(title text, price float) morphology = \'jieba_chinese\' jieba_user_dict_path = \'/usr/local/manticore/data/user-dict.txt\'')
+```
+
 <!-- intro -->
 ##### Javascript:
 
@@ -632,14 +756,23 @@ res = await utilsApi.sql('CREATE TABLE products(title text, price float) morphol
 ##### Java:
 <!-- request Java -->
 ```java
-utilsApi.sql("CREATE TABLE products(title text, price float) morphology = 'jieba_chinese' jieba_user_dict_path = '/usr/local/manticore/data/user-dict.txt'");
+utilsApi.sql("CREATE TABLE products(title text, price float) morphology = 'jieba_chinese' jieba_user_dict_path = '/usr/local/manticore/data/user-dict.txt'", true);
 ```
 
 <!-- intro -->
 ##### C#:
 <!-- request C# -->
 ```clike
-utilsApi.Sql("CREATE TABLE products(title text, price float) morphology = 'jieba_chinese' jieba_user_dict_path = '/usr/local/manticore/data/user-dict.txt'");
+utilsApi.Sql("CREATE TABLE products(title text, price float) morphology = 'jieba_chinese' jieba_user_dict_path = '/usr/local/manticore/data/user-dict.txt'", true);
+```
+
+<!-- intro -->
+##### Rust:
+
+<!-- request Rust -->
+
+```rust
+utils_api.sql("CREATE TABLE products(title text, price float) morphology = 'jieba_chinese' jieba_user_dict_path = '/usr/local/manticore/data/user-dict.txt'", Some(true)).await;
 ```
 
 <!-- request CONFIG -->

@@ -29,7 +29,9 @@ target_link_libraries ( gmanticoretest
 		lmanticore
 		lsearchd
 		searchd_ssl
-		source_svpipe )
+		source_svpipe
+		daemon
+)
 
 if (WITH_EXPAT)
 	target_link_libraries ( gmanticoretest source_xmlpipe2 )

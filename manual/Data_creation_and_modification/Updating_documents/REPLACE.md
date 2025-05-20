@@ -25,7 +25,7 @@ REPLACE INTO table
 ```
 Note, you can filter only by id in this mode.
 
-> NOTE: Partial replace requires [Manticore Buddy](../Installation/Manticore_Buddy.md). If it doesn't work, make sure Buddy is installed.
+> NOTE: Partial replace requires [Manticore Buddy](Installation/Manticore_Buddy.md). If it doesn't work, make sure Buddy is installed.
 
 Read more about `UPDATE` vs. partial `REPLACE` [here](../../Data_creation_and_modification/Updating_documents/REPLACE_vs_UPDATE.md#UPDATE-vs-partial-REPLACE).
 
@@ -57,7 +57,7 @@ See the examples for more details.
     "<fieldN>": <valueN>
   }
   ```
-  > NOTE: Elasticsearch-like replace requires [Manticore Buddy](../Installation/Manticore_Buddy.md). If it doesn't work, make sure Buddy is installed.
+  > NOTE: Elasticsearch-like replace requires [Manticore Buddy](Installation/Manticore_Buddy.md). If it doesn't work, make sure Buddy is installed.
 * Partial replace:
   ```
   POST /<{table | cluster:table}>/_update/<id>
@@ -69,7 +69,7 @@ See the examples for more details.
   ```
   The `<table name>` can either be just the table name or in the format `cluster:table`. This allows for updates across a specific cluster if needed.
 
-  > NOTE: Partial replace requires [Manticore Buddy](../Installation/Manticore_Buddy.md). If it doesn't work, make sure Buddy is installed.
+  > NOTE: Partial replace requires [Manticore Buddy](Installation/Manticore_Buddy.md). If it doesn't work, make sure Buddy is installed.
 
 See the examples for more details.
 
@@ -139,7 +139,7 @@ POST /replace
 
 <!-- request Elasticsearch-like -->
 
-> NOTE: Elasticsearch-like replace requires [Manticore Buddy](../Installation/Manticore_Buddy.md). If it doesn't work, make sure Buddy is installed.
+> NOTE: Elasticsearch-like replace requires [Manticore Buddy](Installation/Manticore_Buddy.md). If it doesn't work, make sure Buddy is installed.
 
 ```json
 PUT /products/_doc/2
@@ -193,7 +193,7 @@ POST /products/_doc/3
 
 <!-- request Elasticsearch-like partial -->
 
-> NOTE: Partial replace requires [Manticore Buddy](../Installation/Manticore_Buddy.md). If it doesn't work, make sure Buddy is installed.
+> NOTE: Partial replace requires [Manticore Buddy](Installation/Manticore_Buddy.md). If it doesn't work, make sure Buddy is installed.
 
 ```json
 POST /products/_update/55
@@ -275,6 +275,25 @@ indexApi.replace({"table" : "products", "id" : 1, "doc" : {"title" : "document o
  'table': 'products',
  'result': 'updated'}
 ```
+
+<!-- intro -->
+
+##### Python-asyncio:
+
+<!-- request Python-asyncio -->
+``` python
+await indexApi.replace({"table" : "products", "id" : 1, "doc" : {"title" : "document one","price":10}})
+```
+
+<!-- response Python-asyncio -->
+```python
+{'created': False,
+ 'found': None,
+ 'id': 1,
+ 'table': 'products',
+ 'result': 'updated'}
+```
+
 <!-- intro -->
 
 ##### Javascript:
@@ -331,6 +350,31 @@ var sqlresult = indexApi.replace(docRequest);
 
 <!-- response C# -->
 ```clike
+class SuccessResponse {
+    index: products
+    id: 1
+    created: false
+    result: updated
+    found: null
+}
+
+```
+
+<!-- intro -->
+
+##### Rust:
+
+<!-- request Rust -->
+``` rust
+let mut doc = HashMap::new();
+doc.insert("title".to_string(), serde_json::json!("document one"));
+doc.insert("price".to_string(), serde_json::json!(10));
+let insert_req = InsertDocumentRequest::new("products".to_string(), serde_json::json!(doc));
+let insert_res = index_api.replace(insert_req).await;
+```
+
+<!-- response Rust -->
+```rust
 class SuccessResponse {
     index: products
     id: 1
@@ -523,6 +567,33 @@ api_resp = indexApi.bulk('\n'.join(map(json.dumps,docs)))
                          u'status': 200}}]}
 
 ```
+
+<!-- request Python-asyncio -->
+
+``` python
+indexApi = manticoresearch.IndexApi(client)
+docs = [ \
+    {"replace": {"table" : "products", "id" : 1, "doc" : {"title" : "document one"}}}, \
+    {"replace": {"table" : "products", "id" : 2, "doc" : {"title" : "document two"}}} ]
+api_resp = await indexApi.bulk('\n'.join(map(json.dumps,docs)))
+```
+
+<!-- response Python-asyncio -->
+```python
+{'error': None,
+ 'items': [{u'replace': {u'_id': 1,
+                         u'table': u'products',
+                         u'created': False,
+                         u'result': u'updated',
+                         u'status': 200}},
+           {u'replace': {u'_id': 2,
+                         u'table': u'products',
+                         u'created': False,
+                         u'result': u'updated',
+                         u'status': 200}}]}
+
+```
+
 <!-- request javascript -->
 
 ``` javascript
@@ -565,6 +636,24 @@ indexApi.Bulk(body);
 
 <!-- response C# -->
 ```clike
+class BulkResponse {
+    items: [{replace={_index=products, _id=1, created=false, result=updated, status=200}}, {replace={_index=products, _id=2, created=false, result=updated, status=200}}]
+    error: null
+    additionalProperties: {errors=false}
+}
+```
+
+<!-- request Rust -->
+
+``` rust
+string body = r#"{"replace": {"index" : "products", "id" : 1, "doc" : {"title" : "document one"}}}
+    {"replace": {"index" : "products", "id" : 2, "doc" : {"title" : "document two"}}}
+"#;
+index_api.bulk(body).await;
+```
+
+<!-- response Rust -->
+```rust
 class BulkResponse {
     items: [{replace={_index=products, _id=1, created=false, result=updated, status=200}}, {replace={_index=products, _id=2, created=false, result=updated, status=200}}]
     error: null

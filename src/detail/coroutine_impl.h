@@ -233,15 +233,6 @@ inline ScopedScheduler_c::~ScopedScheduler_c()
 		AcquireSched ( m_pRoleRef );
 }
 
-inline KeeperScheduler_c::KeeperScheduler_c()
-	: m_pKeepSched { Coro::CurrentScheduler() }
-{}
-
-inline KeeperScheduler_c::~KeeperScheduler_c()
-{
-	if ( m_pKeepSched && m_pKeepSched!=Coro::CurrentScheduler() )
-		AcquireSched ( m_pKeepSched );
-}
 
 namespace Coro
 {
@@ -458,7 +449,6 @@ inline void Waitable_T<T>::NotifyAll()
 template<typename T>
 void Waitable_T<T>::Wait () const
 {
-	KeeperScheduler_c foo;
 	ScopedMutex_t lk ( m_tMutex );
 	m_tCondVar.Wait ( lk );
 }
@@ -466,7 +456,6 @@ void Waitable_T<T>::Wait () const
 template<typename T>
 bool Waitable_T<T>::WaitUntil(int64_t iTime) const
 {
-	KeeperScheduler_c foo;
 	ScopedMutex_t lk ( m_tMutex );
 	return m_tCondVar.WaitUntil ( lk, iTime );
 }
@@ -474,7 +463,6 @@ bool Waitable_T<T>::WaitUntil(int64_t iTime) const
 template<typename T>
 bool Waitable_T<T>::WaitForMs(int64_t iPeriodMS) const
 {
-	KeeperScheduler_c foo;
 	ScopedMutex_t lk ( m_tMutex );
 	return m_tCondVar.WaitForMs ( lk, iPeriodMS );
 }
@@ -483,7 +471,6 @@ template<typename T>
 template<typename PRED>
 T Waitable_T<T>::Wait ( PRED&& fnPred ) const
 {
-	KeeperScheduler_c foo;
 	ScopedMutex_t lk ( m_tMutex );
 	m_tCondVar.Wait ( lk, [this, fnPred = std::forward<PRED> ( fnPred )]() { return fnPred ( m_tValue ); } );
 	return m_tValue;
@@ -493,7 +480,6 @@ template<typename T>
 template<typename PRED>
 T Waitable_T<T>::WaitUntil ( PRED&& fnPred, int64_t iTime ) const
 {
-	KeeperScheduler_c foo;
 	ScopedMutex_t lk ( m_tMutex );
 	m_tCondVar.WaitUntil ( lk, [this, fnPred = std::forward<PRED> ( fnPred )]() { return fnPred ( m_tValue ); }, iTime );
 	return m_tValue;
@@ -503,7 +489,6 @@ template<typename T>
 template<typename PRED>
 T Waitable_T<T>::WaitForMs ( PRED&& fnPred, int64_t iPeriodMs ) const
 {
-	KeeperScheduler_c foo;
 	ScopedMutex_t lk ( m_tMutex );
 	m_tCondVar.WaitForMs ( lk, [this, fnPred = std::forward<PRED> ( fnPred )]() { return fnPred ( m_tValue ); }, iPeriodMs );
 	return m_tValue;
@@ -513,7 +498,6 @@ template<typename T>
 template<typename PRED>
 void Waitable_T<T>::WaitVoid ( PRED&& fnPred ) const
 {
-	KeeperScheduler_c foo;
 	ScopedMutex_t lk ( m_tMutex );
 	m_tCondVar.Wait ( lk, std::forward<PRED> ( fnPred ) );
 }
@@ -522,7 +506,6 @@ template<typename T>
 template<typename PRED>
 bool Waitable_T<T>::WaitVoidUntil ( PRED&& fnPred, int64_t iTime ) const
 {
-	KeeperScheduler_c foo;
 	ScopedMutex_t lk ( m_tMutex );
 	return m_tCondVar.WaitUntil ( lk, std::forward<PRED> ( fnPred ), iTime );
 }
@@ -531,7 +514,6 @@ template<typename T>
 template<typename PRED>
 bool Waitable_T<T>::WaitVoidForMs ( PRED&& fnPred, int64_t iPeriodMs ) const
 {
-	KeeperScheduler_c foo;
 	ScopedMutex_t lk ( m_tMutex );
 	return m_tCondVar.WaitForMs ( lk, std::forward<PRED> ( fnPred ), iPeriodMs );
 }

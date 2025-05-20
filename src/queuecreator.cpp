@@ -661,6 +661,7 @@ void QueueCreator_c::AssignOrderByToPresortStage ( const int * pAttrs, int iAttr
 	assert ( m_pSorterSchema );
 
 	StrVec_t dCur;
+	sph::StringSet hProcessed;
 
 	// add valid attributes to processing list
 	for ( int i=0; i<iAttrCount; ++i )
@@ -670,10 +671,16 @@ void QueueCreator_c::AssignOrderByToPresortStage ( const int * pAttrs, int iAttr
 	// collect columns which affect current expressions
 	ARRAY_FOREACH ( i, dCur )
 	{
+		if ( hProcessed[dCur[i]] )
+			continue;
+
 		const CSphColumnInfo * pCol = m_pSorterSchema->GetAttr ( dCur[i].cstr() );
 		assert(pCol);
 		if ( pCol->m_eStage>SPH_EVAL_PRESORT && pCol->m_pExpr )
 			pCol->m_pExpr->Command ( SPH_EXPR_GET_DEPENDENT_COLS, &dCur );
+
+		// filter out duplicates to avoid circular dependencies
+		hProcessed.Add ( dCur[i] );
 	}
 
 	// get rid of dupes
@@ -2494,20 +2501,32 @@ ISphMatchSorter * QueueCreator_c::CreateQueue ()
 	return pTop;
 }
 
-static void ResetRemaps ( CSphMatchComparatorState & tState )
+static void ResetRemaps ( CSphMatchComparatorState & tState, const CSphRsetSchema & tOldSchema  )
 {
 	for ( int i = 0; i<CSphMatchComparatorState::MAX_ATTRS; i++ )
 	{
-		if ( tState.m_dRemapped.BitGet ( i ) && tState.m_eKeypart[i]==SPH_KEYPART_STRINGPTR )
-			tState.m_dRemapped.BitClear ( i );
+		if ( tState.m_dRemapped.BitGet ( i ) )
+		{
+			bool bStrAttr = ( tState.m_eKeypart[i]==SPH_KEYPART_STRINGPTR );
+			bool bJsonAttr = false;
+			if ( !bStrAttr )
+			{
+				const CSphColumnInfo & tCol = tOldSchema.GetAttr ( tState.m_dAttrs[i] );
+				bool bTmp = false;
+				bJsonAttr = ( tCol.m_eAttrType==SPH_ATTR_JSON || tCol.m_eAttrType==SPH_ATTR_JSON_FIELD || ( tCol.m_pExpr && tCol.m_pExpr->IsJson ( bTmp ) ) );
+			}
+
+			if ( bStrAttr || bJsonAttr )
+				tState.m_dRemapped.BitClear ( i );
+		}
 	}
 }
 
 bool QueueCreator_c::SetSchemaGroupQueue ( const CSphRsetSchema & tNewSchema )
 {
 	// need to reissue remap but with existed attributes
-	ResetRemaps ( m_tStateMatch );
-	ResetRemaps ( m_tStateGroup );
+	ResetRemaps ( m_tStateMatch, *m_pSorterSchema );
+	ResetRemaps ( m_tStateGroup, *m_pSorterSchema );
 
 	*m_pSorterSchema = tNewSchema;
 

@@ -11,11 +11,9 @@
 
 #include "sphinxutils.h"
 #include "libutils.h"
-#include "fileutils.h"
-#include "schema/columninfo.h"
-#include "schema/schema.h"
-#include "columnarmisc.h"
 #include "secondarylib.h"
+#include "std/env.h"
+#include "std/sys.h"
 
 namespace sec {
 using CheckStorage_fn =			void (*) ( const std::string & sFilename, uint32_t uNumRows, std::function<void (const char*)> & fnError, std::function<void (const char*)> & fnProgress );

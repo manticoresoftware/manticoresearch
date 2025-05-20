@@ -64,12 +64,12 @@ echo -e '{"index":{"_index":"test1","_id":4}}\n{"id":4,"model":"iPhone 14","stor
 curl -s -H 'Content-type: application/x-ndjson' --data-binary @bulk.json http://localhost:9308/_bulk | jq '.items[] | {index: .index.result, id: .index._id}'
 ––– output –––
 {
-"index": "created",
-"id": "4"
+  "index": "created",
+  "id": "4"
 }
 {
-"index": "created",
-"id": "5"
+  "index": "created",
+  "id": "5"
 }
 ––– input –––
 mysql -P9306 -h0 -e "select * from test1;"

@@ -105,6 +105,7 @@ bool CSphTransformation::CheckCommonSubTerm ( const XQNode_t * pNode ) noexcept
 		&& Grand2Node::From(pNode)->GetOp()==SPH_QUERY_OR;
 }
 
+//int iTurns = 0;
 
 bool CSphTransformation::TransformCommonSubTerm () noexcept
 {
@@ -140,6 +141,9 @@ bool CSphTransformation::TransformCommonSubTerm () noexcept
 				continue;
 
 			MakeTransformCommonSubTerm ( dX );
+//			StringBuilder_c sHead;
+//			sHead << "\nTransformCommonSubTerm #" << ++iTurns << " ((A (X | AA)) | (B (X | BB))) -> (((A|B) X) | (A AA) | (B BB)) [ if cost(X) > cost(A) + cost(B) ]";
+//			Dump ( *m_ppRoot, sHead.cstr() );
 			// Don't make transformation for other nodes from the same OR-node,
 			// because query tree was changed and further transformations
 			// might be invalid.
@@ -158,6 +162,8 @@ void CSphTransformation::MakeTransformCommonSubTerm ( const CSphVector<XQNode_t 
 	int iWeakestIndex = GetWeakestIndex ( dX );
 	XQNode_t * pX = dX[iWeakestIndex];
 
+//	Dump (pX, "weakest");
+
 	// common parents of X and AA / BB need to be excluded
 	const CSphVector<XQNode_t *> dExcluded ( dX.GetLength() );
 
@@ -165,10 +171,12 @@ void CSphTransformation::MakeTransformCommonSubTerm ( const CSphVector<XQNode_t 
 	ARRAY_FOREACH ( i, dX )
 	{
 		XQNode_t * pExcl = dX[i]->m_pParent;
+//		Dump(pExcl, "dX[i]->m_pParent" );
 		Verify ( pExcl->RemoveChild ( dX[i] ) );
 		if ( i!=iWeakestIndex )
 			SafeDelete ( dX[i] );
 
+//		Dump(pExcl, "dExcluded[i]" );
 		dExcluded[i] = pExcl;
 		pExcl->m_pParent->RemoveChild ( pExcl );
 	}
@@ -183,6 +191,7 @@ void CSphTransformation::MakeTransformCommonSubTerm ( const CSphVector<XQNode_t 
 
 	for ( XQNode_t *& pRelated : dRelatedParents )
 	{
+//		Dump ( pRelated, "Cloning pRelated" );
 		pRelated = pRelated->Clone();
 		CompositeFixup ( pRelated, &pRelated );
 	}
@@ -200,5 +209,7 @@ void CSphTransformation::MakeTransformCommonSubTerm ( const CSphVector<XQNode_t 
 	pNewAnd->SetOp ( SPH_QUERY_AND, pNewOr, pX );
 	pCommonOr->AddNewChild ( pNewAnd );
 
+//	Dump ( *m_ppRoot, "root before cleanup" );
 	dExcluded.for_each ( [this] ( XQNode_t * pExcl ) { CleanupSubtree ( pExcl, m_ppRoot ); } );
+//	Dump ( *m_ppRoot, "root after cleanup" );
 }

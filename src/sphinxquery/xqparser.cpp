@@ -1058,7 +1058,7 @@ bool sphParseExtendedQuery ( XQQuery_t & tParsed, const char * sQuery, const CSp
 		printf ( "\n--- query ---\n" );
 		printf ( "%s\n", sQuery );
 		xqDump ( tParsed.m_pRoot, 0 );
-		DotDump ( tParsed.m_pRoot );
+//		DotDump ( tParsed.m_pRoot );
 		printf ( "\n--- query reconstructed ---\n" );
 		printf ( "%s\n", sphReconstructNode ( tParsed.m_pRoot ).cstr());
 		printf ( "---\n" );

@@ -78,6 +78,8 @@ void xqDumpNode ( const XQNode_t * pNode )
 	else
 		printf ( "%s", XQOperatorNameSz ( pNode->GetOp()));
 
+	printf ( " %p ", (void*)pNode->m_iFuzzyHash );
+
 	for ( const XQKeyword_t & tWord : pNode->dWords() )
 	{
 		const char * sLocTag = "";

@@ -14,6 +14,7 @@
 
 #include "sphinxstd.h"
 #include "sphinx.h"
+#include "xqdebug.h"
 
 //////////////////////////////////////////////////////////////////////////////
 
@@ -148,11 +149,14 @@ private:
 	mutable int				m_iOrder = 0;
 	mutable int				m_iCounter = 0;
 
-	mutable uint64_t		m_iMagicHash = 0;
-	mutable uint64_t		m_iFuzzyHash = 0;
-
 	CSphVector<XQKeyword_t>		m_dWords;		///< query words (plain node). Private to keep hashes valid
 	CSphVector<XQNode_t*>	m_dChildren;		///< non-plain node children
+
+	mutable uint64_t		m_iMagicHash = 0;
+#if XQDEBUG
+public: // debug dump prints the hash
+#endif
+	mutable uint64_t		m_iFuzzyHash = 0;
 
 public:
 	XQLimitSpec_t			m_dSpec;			///< specification by field, zone(s), etc.

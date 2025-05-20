@@ -176,7 +176,7 @@ void CSphTransformation::Transform ()
 		// ((A (AA | X)) | (B (BB | X))) -> ((A AA) | (B BB) | ((A|B) X)) [ if cost(X) > cost(A) + cost(B) ]
 		if ( CollectInfo <Grand2Node, CurrentNode> ( *m_ppRoot, &CheckCommonSubTerm ) )
 		{
-			DumpSimilar();
+			// DumpSimilar();
 			const bool bDump = TransformCommonSubTerm ();
 			bRecollect |= bDump;
 			Dump ( bDump ? *m_ppRoot : nullptr, "\nAfter  transformation of 'COMMON SUBTERM'" );

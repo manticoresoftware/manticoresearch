@@ -166,6 +166,7 @@ bool CSphTransformation::CollectRelatedNodes ( const CSphVector<XQNode_t *> & dS
 			if ( pChild==pExclude )
 				continue;
 			m_dRelatedNodes.Add ( pChild );
+//			Dump ( pParent, "RelatedNodes", false );
 		}
 	}
 	return m_dRelatedNodes.GetLength()>1;

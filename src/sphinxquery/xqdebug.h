@@ -16,10 +16,11 @@
 #define XQ_DUMP_TRANSFORMED_TREE 0
 #define XQ_DUMP_NODE_ADDR 0
 
+struct XQNode_t;
+void Dump ( const XQNode_t * pNode, const char * sHeader = "", bool bWithDot = true );
 
 #if XQ_DUMP_TRANSFORMED_TREE
 void xqDump ( const XQNode_t * pNode, int iIndent = 0 );
 void DotDump ( const XQNode_t * pNode );
 #endif
 
-void Dump ( const XQNode_t * pNode, const char * sHeader = "", bool bWithDot = true );

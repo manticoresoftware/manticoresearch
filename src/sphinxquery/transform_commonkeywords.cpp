@@ -198,7 +198,7 @@ bool CSphTransformation::TransformCommonKeywords () const noexcept
 	for ( auto& [_, hSimGroup] : m_hSimilar )
 	{
 		BigramHash_t hBigrams;
-		for ( auto& [_, dPhrases] : hSimGroup )
+		for ( auto& [_, dPhrases] : hSimGroup.tHash )
 		{
 			// Nodes with the same iFuzzyHash
 			if ( dPhrases.GetLength()<2 )
@@ -267,10 +267,13 @@ bool CSphTransformation::CheckCommonPhrase ( const XQNode_t * pNode ) noexcept
 
 bool CSphTransformation::TransformCommonPhrase () const noexcept
 {
-	bool bRecollect = false;
+	int iActiveDeep = 0;
 	for ( auto& [_, hSimGroup] : m_hSimilar )
-		for ( auto& [_, dNodes] : hSimGroup )
+		for ( auto& [_, dNodes] : hSimGroup.tHash )
 		{
+			if ( iActiveDeep && iActiveDeep < hSimGroup.iDeep )
+				continue;
+
 			// Nodes with the same iFuzzyHash
 			if ( dNodes.GetLength()<2 )
 				continue;
@@ -402,11 +405,11 @@ bool CSphTransformation::TransformCommonPhrase () const noexcept
 
 				tElem.m_pPhrases->Sort ( XQNodeAtomPos_fn() );
 				MakeTransformCommonPhrase ( *tElem.m_pPhrases, tElem.m_iCommonLen, tElem.m_bHead );
-				bRecollect = true;
+				iActiveDeep = hSimGroup.iDeep;
 			}
 		}
 
-	return bRecollect;
+	return iActiveDeep;
 }
 
 

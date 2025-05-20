@@ -22,33 +22,34 @@ CSphTransformation::CSphTransformation ( XQNode_t ** ppRoot, const ISphKeywordsS
 
 
 template < typename Group, typename SubGroup >
-void CSphTransformation::TreeCollectInfo ( XQNode_t * pParent, const Checker_fn pfnChecker )
+void CSphTransformation::TreeCollectInfo ( XQNode_t * pNode, const Checker_fn pfnChecker, int iDeep )
 {
-	if ( !pParent )
+	if ( !pNode )
 		return;
 
-	if ( pfnChecker ( pParent ) )
+	if ( pfnChecker ( pNode ) )
 	{
 		// "Similar nodes" are nodes which are suited to a template (like 'COMMON NOT', 'COMMON COMPOUND NOT', ...)
-		const uint64_t uGroup = (const uint64_t) Group::From ( pParent );
-		const uint64_t uSubGroup = SubGroup::By ( pParent );
+		const uint64_t uGroup = (const uintptr_t) Group::From ( pNode );
+		const uint64_t uSubGroup = SubGroup::By ( pNode );
 
-		HashSimilar_t & hGroup = m_hSimilar.AddUnique ( uGroup );
-		hGroup.AddUnique ( uSubGroup ).Add ( pParent );
+		auto & hGroup = m_hSimilar.AddUnique ( uGroup );
+		hGroup.iDeep = iDeep;
+		hGroup.tHash.AddUnique ( uSubGroup ).Add ( pNode );
 	}
 
-	for ( const auto& dChild : pParent->dChildren() )
-		TreeCollectInfo<Group, SubGroup> ( dChild, pfnChecker );
+	for ( const auto& dChild : pNode->dChildren() )
+		TreeCollectInfo<Group, SubGroup> ( dChild, pfnChecker, iDeep + 1 );
 }
 
 
 template < typename Group, typename SubGroup >
-bool CSphTransformation::CollectInfo ( XQNode_t * pParent, Checker_fn pfnChecker )
+bool CSphTransformation::CollectInfo ( XQNode_t * pNode, Checker_fn pfnChecker )
 {
 	( *m_ppRoot )->Check ( true );
 	m_hSimilar.Reset();
 
-	TreeCollectInfo<Group, SubGroup> ( pParent, pfnChecker );
+	TreeCollectInfo<Group, SubGroup> ( pNode, pfnChecker, 1 );
 	return ( m_hSimilar.GetLength()>0 );
 }
 
@@ -119,8 +120,8 @@ void CSphTransformation::DumpSimilar () const noexcept
 	for ( const auto& [hKey1, hSimGroup] : m_hSimilar )
 	{
 		printf ( "\n%p\n", (void *) hKey1 );
-		for (const auto& [hKey2, dleaves] : hSimGroup) {
-			printf ( "\t%p\n", (void*)hKey2 );
+		for (const auto& [hKey2, dleaves] : hSimGroup.tHash) {
+			printf ( "\t%p %d\n", (void*)hKey2, hSimGroup.iDeep );
 			for ( const XQNode_t * pLeaf : dleaves )
 			{
 				const uint64_t uParentHash = pLeaf->GetHash();

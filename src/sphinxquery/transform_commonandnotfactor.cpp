@@ -32,25 +32,28 @@ bool CSphTransformation::CheckCommonAndNotFactor ( const XQNode_t * pNode ) noex
 			&& GrandNode::From ( pNode )->GetOp() == SPH_QUERY_ANDNOT
 			&& Grand2Node::From ( pNode )->GetOp() == SPH_QUERY_OR
 			// FIXME!!! check performance with OR node at 2nd grand instead of regular not NOT
-		&& GrandNode::From(pNode)->dChildren().GetLength()>=2
-		&& GrandNode::From(pNode)->dChild(1)->GetOp()==SPH_QUERY_NOT;
+			&& GrandNode::From(pNode)->dChildren().GetLength()>=2
+			&& GrandNode::From(pNode)->dChild(1)->GetOp()==SPH_QUERY_NOT;
 }
 
 
 bool CSphTransformation::TransformCommonAndNotFactor () const noexcept
 {
-	bool bRecollect = false;
+	int iActiveDeep = 0;
 	for ( auto& [_, hSimGroup] : m_hSimilar )
-		for ( auto& [_, dSimilarNodes] : hSimGroup )
+		for ( auto& [_, dSimilarNodes] : hSimGroup.tHash )
 		{
+			if ( iActiveDeep && iActiveDeep < hSimGroup.iDeep )
+				continue;
+
 			// Nodes with the same iFuzzyHash
 			if ( dSimilarNodes.GetLength()<2 )
 				continue;
 
 			MakeTransformCommonAndNotFactor ( dSimilarNodes );
-			bRecollect = true;
+			iActiveDeep = hSimGroup.iDeep;
 		}
-	return bRecollect;
+	return iActiveDeep;
 }
 
 // Pick the weakest node from the equal

@@ -33,10 +33,12 @@ bool CSphTransformation::CheckHungOperand ( const XQNode_t * pNode ) noexcept
 
 bool CSphTransformation::TransformHungOperand () const noexcept
 {
-	if ( !m_hSimilar.GetLength() || !m_hSimilar.Exists ( CONST_GROUP_FACTOR ) || !m_hSimilar[CONST_GROUP_FACTOR].Exists ( CONST_GROUP_FACTOR ) )
+	if ( !m_hSimilar.GetLength()
+		|| !m_hSimilar.Exists ( CONST_GROUP_FACTOR )
+		|| !m_hSimilar[CONST_GROUP_FACTOR].tHash.Exists ( CONST_GROUP_FACTOR ) )
 		return false;
 
-	const CSphVector<XQNode_t *> & dSimilarNodes = m_hSimilar[CONST_GROUP_FACTOR][CONST_GROUP_FACTOR];
+	const CSphVector<XQNode_t *> & dSimilarNodes = m_hSimilar[CONST_GROUP_FACTOR].tHash[CONST_GROUP_FACTOR];
 	for ( XQNode_t * pHungNode: dSimilarNodes )
 	{
 		XQNode_t * pParent = pHungNode->m_pParent;

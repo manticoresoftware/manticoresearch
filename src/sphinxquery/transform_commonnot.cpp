@@ -36,26 +36,28 @@ bool CSphTransformation::CheckCommonNot ( const XQNode_t * pNode ) noexcept
 
 bool CSphTransformation::TransformCommonNot () noexcept
 {
-	bool bRecollect = false;
-	for ( auto& [_, hSimGroup] : m_hSimilar )
-		for ( auto& [_, dSimilarNodes] : hSimGroup )
+	int iActiveDeep = 0;
+	for ( auto & [_, hSimGroup] : m_hSimilar )
+		for ( auto& [_, dSimilarNodes] : hSimGroup.tHash )
 		{
+			if ( iActiveDeep && iActiveDeep<hSimGroup.iDeep )
+				continue;
 			// Nodes with the same iFuzzyHash
 			if ( dSimilarNodes.GetLength() < 2 )
 				continue;
 
-			if ( CollectRelatedNodes<ParentNode, GrandNode> ( dSimilarNodes ) )
-			{
-				MakeTransformCommonNot ( dSimilarNodes );
-				bRecollect = true;
-				// Don't make transformation for other nodes from the same OR-node,
-				// because query tree was changed and further transformations
-				// might be invalid.
-				break;
-			}
+			if ( !CollectRelatedNodes<ParentNode, GrandNode> ( dSimilarNodes ) )
+				continue;
+
+			MakeTransformCommonNot ( dSimilarNodes );
+			iActiveDeep = hSimGroup.iDeep;
+			// Don't make transformation for other nodes from the same OR-node,
+			// because query tree was changed and further transformations
+			// might be invalid.
+			break;
 		}
 
-	return bRecollect;
+	return iActiveDeep;
 }
 
 // Returns index of weakest node from the equal.

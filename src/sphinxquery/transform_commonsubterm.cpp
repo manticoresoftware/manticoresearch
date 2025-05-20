@@ -108,10 +108,13 @@ bool CSphTransformation::CheckCommonSubTerm ( const XQNode_t * pNode ) noexcept
 
 bool CSphTransformation::TransformCommonSubTerm () noexcept
 {
-	bool bRecollect = false;
-	for ( auto& [_, hSimGroup] : m_hSimilar )
-		for ( auto& [_, dX] : hSimGroup )
+	int iActiveDeep = 0;
+	for ( auto & [_, hSimGroup]: m_hSimilar )
+		for ( auto & [_, dX] : hSimGroup.tHash )
 		{
+			if ( iActiveDeep && iActiveDeep < hSimGroup.iDeep )
+				continue;
+
 			// Nodes with the same iFuzzyHash
 			if ( dX.GetLength()<2 )
 				continue;
@@ -137,14 +140,14 @@ bool CSphTransformation::TransformCommonSubTerm () noexcept
 				continue;
 
 			MakeTransformCommonSubTerm ( dX );
-			bRecollect = true;
 			// Don't make transformation for other nodes from the same OR-node,
 			// because query tree was changed and further transformations
 			// might be invalid.
+			iActiveDeep = hSimGroup.iDeep;
 			break;
 		}
 
-	return bRecollect;
+	return iActiveDeep;
 }
 
 // Pick the weakest node from the equal

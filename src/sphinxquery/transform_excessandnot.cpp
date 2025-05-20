@@ -108,10 +108,14 @@ bool CSphTransformation::CheckExcessAndNot ( const XQNode_t * pNode ) noexcept
 
 bool CSphTransformation::TransformExcessAndNot () const
 {
-	bool bRecollect = false;
+	int iActiveDeep = 0;
 	CSphOrderedHash<int, XQNode_t *, XQNodeHash_fn, 64> hDeleted;
 	for ( auto& [_, hSimGroup] : m_hSimilar )
-		for ( auto& [_, dNodes] : hSimGroup )
+		for ( auto& [_, dNodes] : hSimGroup.tHash )
+		{
+			if ( iActiveDeep && iActiveDeep < hSimGroup.iDeep )
+				continue;
+
 			for ( XQNode_t* pAnd : dNodes ) // Nodes with the same iFuzzyHash
 			{
 				XQNode_t * pParentAndNot = pAnd->m_pParent;
@@ -148,10 +152,11 @@ bool CSphTransformation::TransformExcessAndNot () const
 				hDeleted.Add ( 1, pParentAndNot );
 				pParentAndNot->dChildren()[0] = nullptr;
 				SafeDelete ( pParentAndNot );
-				bRecollect = true;
+				iActiveDeep = hSimGroup.iDeep;
 			}
+		}
 
-	return bRecollect;
+	return iActiveDeep;
 }
 
 //  NOT:
@@ -172,10 +177,13 @@ bool CSphTransformation::CheckExcessBrackets ( const XQNode_t * pNode ) noexcept
 
 bool CSphTransformation::TransformExcessBrackets () const noexcept
 {
-	bool bRecollect = false;
+	int iActiveDeep = 0;
 	CSphOrderedHash<int, XQNode_t *, XQNodeHash_fn, 64> hDeleted;
 	for ( auto& [_, hSimGroup] : m_hSimilar )
-		for ( auto& [_, dNodes] : hSimGroup )
+		for ( auto& [_, dNodes] : hSimGroup.tHash )
+		{
+			if ( iActiveDeep && iActiveDeep < hSimGroup.iDeep )
+				continue;
 			for ( XQNode_t* pNode : dNodes ) // Nodes with the same iFuzzyHash
 			{
 				// node environment might be changed due prior nodes transformations
@@ -184,8 +192,9 @@ bool CSphTransformation::TransformExcessBrackets () const noexcept
 
 				XQNode_t * pDel = sphMoveSiblingsUp ( pNode );
 				hDeleted.Add ( 1, pDel );
-				bRecollect = true;
+				iActiveDeep = hSimGroup.iDeep;
 			}
+		}
 
-	return bRecollect;
+	return iActiveDeep;
 }

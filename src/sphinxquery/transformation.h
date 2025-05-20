@@ -26,8 +26,9 @@ public:
 	void Transform ();
 
 private:
-	using HashSimilar_t = CSphOrderedHash<CSphVector<XQNode_t *>, uint64_t, IdentityHash_fn, 32>;
-	CSphOrderedHash<HashSimilar_t, uint64_t, IdentityHash_fn, 256> m_hSimilar;
+	using HashSimilar_t = CSphOrderedHash<CSphVector<XQNode_t *>, uintptr_t, IdentityHash_fn, 32>;
+	struct DeepHashSimilar_t {HashSimilar_t tHash; int iDeep;};
+	CSphOrderedHash<DeepHashSimilar_t, uint64_t, IdentityHash_fn, 256> m_hSimilar;
 	CSphVector<XQNode_t *> m_dRelatedNodes;
 	const ISphKeywordsStat * m_pKeywords;
 	XQNode_t ** m_ppRoot;
@@ -42,10 +43,10 @@ private:
 	static int GetWeakestIndex ( const CSphVector<XQNode_t *> & dNodes );
 
 	template<typename Group, typename SubGroup>
-	void TreeCollectInfo ( XQNode_t * pParent, Checker_fn pfnChecker );
+	void TreeCollectInfo ( XQNode_t * pNode, Checker_fn pfnChecker, int iDeep );
 
 	template<typename Group, typename SubGroup>
-	bool CollectInfo ( XQNode_t * pParent, Checker_fn pfnChecker );
+	bool CollectInfo ( XQNode_t * pNode, Checker_fn pfnChecker );
 
 	template<typename Excluder, typename Parenter>
 	bool CollectRelatedNodes ( const CSphVector<XQNode_t *> & dSimilarNodes );

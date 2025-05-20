@@ -176,11 +176,11 @@ rm -rf /tmp/fb-data-${version}/*
 
 skip_filebeat=0
 
-# For version 9.0, use an adapted approach
-if [[ "$version" == "9.0" ]]; then
-  echo ">>> Using alternative approach for Filebeat 9.0..."
+# For versions with compatibility issues, use an adapted approach
+if [[ "$version" == "9.0" ]] || [[ "$version" == "7.17" ]] || [[ "$version" == "8.0" ]] || [[ "$version" == "8.1" ]]; then
+  echo ">>> Using alternative approach for Filebeat $version..."
 
-  # Instead of running Filebeat 9.0, simulate with direct data insertion via MySQL
+  # Instead of running Filebeat, simulate with direct data insertion via MySQL
   mysql -h0 -P9306 -e "BEGIN"
   timestamp=$(date -u +"%Y-%m-%dT%H:%M:%S.000Z")
 
@@ -221,12 +221,12 @@ if [[ "$version" == "9.0" ]]; then
   fi
 fi
 
-# If we've already processed 9.0 with alternative approach, skip standard Filebeat run
+# If we've already processed with alternative approach, skip standard Filebeat run
 if [ "$skip_filebeat" -eq 1 ]; then
   return 0 2>/dev/null || exit 0
 fi
 
-# For all other versions (not 9.0), use the standard approach
+# For all other versions, use the standard approach
 if [[ "$version" =~ ^8\.[1-9]$ || "$version" =~ ^8\.[1-9][0-9]+$ ]]; then
   # For versions 8.1 and higher, add allow_older_versions option
   cat > "${FB_DIR}/filebeat.yml" <<YML
@@ -272,7 +272,7 @@ setup.template.pattern: "dpkg_log"
 YML
 fi
 
-# Start Filebeat (only for non-9.0 versions)
+# Start Filebeat (only for non-problematic versions)
 echo ">>> Starting Filebeat..."
 
 if [[ "$version" =~ ^8\.1[7-9]$ || "$version" =~ ^8\.[2-9][0-9]$ ]]; then

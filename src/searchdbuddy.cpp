@@ -805,7 +805,7 @@ bool ProcessHttpQueryBuddy ( HttpProcessResult_t & tRes, Str_t sSrcQuery, Option
 	} else
 	{
 		CSphVector<BYTE> dBson;
-		bson::JsonObjToBson ( tReplyParsed.m_tMessage, dBson, true, false );
+		bson::JsonObjToBson ( tReplyParsed.m_tMessage, dBson, false, false );
 		bson::Bson_c ( dBson ).BsonToJson ( sDumpBuf, false );
 		sDump = FromStr ( sDumpBuf );
 	}

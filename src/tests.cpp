@@ -12,7 +12,7 @@
 
 #include "sphinxexpr.h"
 #include "sphinxutils.h"
-#include "sphinxquery.h"
+#include "sphinxquery/sphinxquery.h"
 #include "sphinxrt.h"
 #include "sphinxint.h"
 #include "threadutils.h"

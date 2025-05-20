@@ -6000,6 +6000,8 @@ public:
 	void Progress ( const char* szFmt, ... ) override {};
 	void Done() override {};
 	int64_t GetNumFails() const override;
+	void CheckDocidDup ( DocID_t tDocid, DWORD uRowid ) override {};
+	void FinishDiskChunk ( int64_t iNumRows ) override {};
 
 	inline const char* cstr() const { return m_sMsg.cstr(); }
 };

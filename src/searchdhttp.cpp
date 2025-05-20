@@ -27,6 +27,7 @@
 #include "compressed_http.h"
 #include "daemon/logger.h"
 #include "daemon/search_handler.h"
+#include "sphinxquery/xqparser.h"
 
 static bool g_bLogBadHttpReq = val_from_env ( "MANTICORE_LOG_HTTP_BAD_REQ", false ); // log content of bad http requests, ruled by this env variable
 static int g_iLogHttpData = val_from_env ( "MANTICORE_LOG_HTTP_DATA", 0 ); // verbose logging of http data, ruled by this env variable

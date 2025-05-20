@@ -12,7 +12,7 @@
 #include "sphinxexcerpt.h"
 #include "searchdaemon.h"
 #include "sphinxsearch.h"
-#include "sphinxquery.h"
+#include "sphinxquery/sphinxquery.h"
 #include "fileutils.h"
 #include "sphinxstem.h"
 #include "coroutine.h"
@@ -1317,8 +1317,8 @@ static DWORD CollectQuerySPZ ( const XQNode_t * pNode )
 	else if ( pNode->GetOp ()==SPH_QUERY_PARAGRAPH )
 		eSPZ |= SPH_SPZ_PARAGRAPH;
 
-	ARRAY_FOREACH ( i, pNode->m_dChildren )
-		eSPZ |= CollectQuerySPZ ( pNode->m_dChildren[i] );
+	ARRAY_FOREACH ( i, pNode->dChildren() )
+		eSPZ |= CollectQuerySPZ ( pNode->dChildren()[i] );
 
 	return eSPZ;
 }

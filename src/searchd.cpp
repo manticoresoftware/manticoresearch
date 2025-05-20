@@ -42,6 +42,7 @@
 #include "skip_cache.h"
 #include "jieba.h"
 #include "sphinxexcerpt.h"
+#include "sphinxquery/xqparser.h"
 #include "daemon/winservice.h"
 #include "daemon/crash_logger.h"
 #include "daemon/logger.h"
@@ -141,9 +142,7 @@ static int g_iReplRetryCount		= 3;
 static int g_iReplRetryDelayMs		= DAEMON_MAX_RETRY_DELAY/2;
 
 bool					g_bHostnameLookup = false;
-CSphString				g_sMySQLVersion = szMANTICORE_VERSION;
-CSphString				g_sDbName = "Manticore";
-
+CSphString				g_sMySQLVersion { szMANTICORE_VERSION };
 CSphString				g_sBannerVersion { szMANTICORE_NAME };
 CSphString				g_sBanner;
 CSphString				g_sStatusVersion = szMANTICORE_VERSION;
@@ -6574,9 +6573,11 @@ void HandleMysqlShowCreateTable ( RowBuffer_i & tOut, const SqlStmt_t & tStmt )
 void HandleMysqlShowDatabases ( RowBuffer_i & tOut, SqlStmt_t & )
 {
 	tOut.HeadBegin ();
-	tOut.HeadColumn ( "Databases" );
+	tOut.HeadColumn ( "Database" );
 	tOut.HeadEnd();
-	tOut.PutString ( g_sDbName );
+	tOut.PutString ( "information_schema" );
+	tOut.Commit ();
+	tOut.PutString ( "Manticore" );
 	tOut.Commit ();
 	tOut.Eof();
 }
@@ -8008,7 +8009,7 @@ bool IsDot ( const SqlStmt_t & tStmt )
 {
 	if ( tStmt.m_sThreadFormat=="dot" )
 		return true;
-	else if ( tStmt.m_sThreadFormat=="plain" )
+	if ( tStmt.m_sThreadFormat=="plain" )
 		return false;
 	return session::IsDot();
 }
@@ -8016,14 +8017,14 @@ bool IsDot ( const SqlStmt_t & tStmt )
 Profile_e ParseProfileFormat ( const SqlStmt_t & tStmt )
 {
 	if ( tStmt.m_sSetValue=="dot" )
-		return Profile_e::DOT;
-	else if ( tStmt.m_sSetValue=="expr" )
-		return Profile_e::DOTEXPR;
-	else if ( tStmt.m_sSetValue=="exprurl" )
-		return Profile_e::DOTEXPRURL;
-	else if ( tStmt.m_iSetValue!=0 )
-		return Profile_e::PLAIN;
-	return Profile_e::NONE;
+		return DOT;
+	if ( tStmt.m_sSetValue=="expr" )
+		return DOTEXPR;
+	if ( tStmt.m_sSetValue=="exprurl" )
+		return DOTEXPRURL;
+	if ( tStmt.m_iSetValue!=0 )
+		return PLAIN;
+	return NONE;
 }
 
 void HandleMysqlMultiStmt ( const CSphVector<SqlStmt_t> & dStmt, CSphQueryResultMeta & tLastMeta, RowBuffer_i & dRows,
@@ -11404,6 +11405,16 @@ void session::SetUser ( const CSphString & sUser )
 	GetClientSession()->m_sUser = sUser;
 }
 
+void session::SetCurrentDbName ( CSphString sDb )
+{
+	GetClientSession()->m_sCurrentDbName = std::move(sDb);
+}
+
+const char* session::GetCurrentDbName ()
+{
+	return GetClientSession() ? GetClientSession()->m_sCurrentDbName.cstr() : nullptr;
+}
+
 void session::SetAutoCommit ( bool bAutoCommit )
 {
 	GetClientSession()->m_bAutoCommit = bAutoCommit;
@@ -14632,21 +14643,24 @@ int WINAPI ServiceMain ( int argc, char **argv ) EXCLUDES (MainThread)
 		g_sSnippetsFilePrefix.SetSprintf ( "%s/", g_sExePath.scstr() );
 	FixPathAbsolute ( g_sSnippetsFilePrefix );
 
-	auto sLogFormat = hSearchd.GetStr ( "query_log_format", "sphinxql" );
 	bool bLogCompactIn = false;
 	LOG_FORMAT eFormat = LOG_FORMAT::SPHINXQL;
-	if ( sLogFormat != "sphinxql" )
-	{
-		StrVec_t dParams;
-		sphSplit ( dParams, sLogFormat.cstr() );
-		for ( const auto& sParam : dParams )
+
+	{ // scope for sLogFormat to avoid valgrind's complains
+		auto sLogFormat = hSearchd.GetStr ( "query_log_format", "sphinxql" );
+		if ( sLogFormat != "sphinxql" )
 		{
-			if ( sParam=="sphinxql" )
-				eFormat = LOG_FORMAT::SPHINXQL;
-			else if ( sParam=="plain" )
-				eFormat = LOG_FORMAT::_PLAIN;
-			else if ( sParam=="compact_in" )
-				bLogCompactIn = true;
+			StrVec_t dParams;
+			sphSplit ( dParams, sLogFormat.cstr() );
+			for ( const auto& sParam : dParams )
+			{
+				if ( sParam=="sphinxql" )
+					eFormat = LOG_FORMAT::SPHINXQL;
+				else if ( sParam=="plain" )
+					eFormat = LOG_FORMAT::_PLAIN;
+				else if ( sParam=="compact_in" )
+					bLogCompactIn = true;
+			}
 		}
 	}
 	if ( bLogCompactIn && eFormat==LOG_FORMAT::_PLAIN )

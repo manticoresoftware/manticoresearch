@@ -17,6 +17,7 @@
 #include "sphinxsort.h"
 #include "searchdaemon.h"
 #include "indexing_sources/source_mysql.h"
+#include "sphinxquery/xqparser.h"
 
 #if HAVE_RTESTCONFIG_H
 #include "rtestconfig.h"

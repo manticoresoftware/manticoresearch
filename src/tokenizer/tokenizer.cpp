@@ -326,3 +326,29 @@ TokenizerRefPtr_c Tokenizer::Create ( const CSphTokenizerSettings & tSettings, c
 	return pResult;
 }
 
+TokenizerRefPtr_c sphCloneAndSetupQueryTokenizer ( const TokenizerRefPtr_c& pTokenizer, bool bWildcards, bool bExact, bool bJson )
+{
+	assert ( pTokenizer );
+	if ( bWildcards )
+	{
+		if ( bExact )
+		{
+			if ( bJson )
+				return pTokenizer->Clone ( SPH_CLONE_QUERY_WILD_EXACT_JSON);
+			return pTokenizer->Clone ( SPH_CLONE_QUERY_WILD_EXACT );
+		}
+		if ( bJson )
+			return pTokenizer->Clone ( SPH_CLONE_QUERY_WILD_JSON );
+		return pTokenizer->Clone ( SPH_CLONE_QUERY_WILD );
+	}
+
+	if ( bExact )
+	{
+		if ( bJson )
+			return pTokenizer->Clone ( SPH_CLONE_QUERY_EXACT_JSON );
+		return pTokenizer->Clone ( SPH_CLONE_QUERY_EXACT );
+	}
+	if ( bJson )
+		return pTokenizer->Clone ( SPH_CLONE_QUERY );
+	return pTokenizer->Clone ( SPH_CLONE_QUERY_ );
+}

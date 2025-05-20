@@ -11,7 +11,7 @@
 //
 
 #include "searchnode.h"
-#include "sphinxquery.h"
+#include "sphinxquery/sphinxquery.h"
 #include "sphinxint.h"
 #include "sphinxqcache.h"
 #include "mini_timer.h"
@@ -1031,13 +1031,13 @@ static ExtNode_i * CreateMultiNode ( const XQNode_t * pQueryNode, const ISphQwor
 	// virtually plain (expanded) node
 	///////////////////////////////////
 	assert ( pQueryNode );
-	if ( pQueryNode->m_dChildren.GetLength() )
+	if ( pQueryNode->dChildren().GetLength() )
 	{
 		CSphVector<ExtNode_i *> dNodes;
 		CSphVector<ExtNode_i *> dTerms;
-		ARRAY_FOREACH ( i, pQueryNode->m_dChildren )
+		ARRAY_FOREACH ( i, pQueryNode->dChildren() )
 		{
-			ExtNode_i * pTerm = ExtNode_i::Create ( pQueryNode->m_dChildren[i], tSetup, bUseBM25, pBoundaries );
+			ExtNode_i * pTerm = ExtNode_i::Create ( pQueryNode->dChildren()[i], tSetup, bUseBM25, pBoundaries );
 			assert ( !pTerm || pTerm->GetAtomPos()>=0 );
 			if ( pTerm )
 			{
@@ -1056,7 +1056,7 @@ static ExtNode_i * CreateMultiNode ( const XQNode_t * pQueryNode, const ISphQwor
 			ARRAY_FOREACH ( i, dTerms )
 				SafeDelete ( dTerms[i] );
 			if ( tSetup.m_pWarning )
-				tSetup.m_pWarning->SetSprintf ( "can't create phrase node, hitlists unavailable (hitlists=%d, nodes=%d)", iAtoms, pQueryNode->m_dChildren.GetLength() );
+				tSetup.m_pWarning->SetSprintf ( "can't create phrase node, hitlists unavailable (hitlists=%d, nodes=%d)", iAtoms, pQueryNode->dChildren().GetLength() );
 			return NULL;
 		}
 
@@ -1087,7 +1087,7 @@ static ExtNode_i * CreateMultiNode ( const XQNode_t * pQueryNode, const ISphQwor
 	CSphVector<ISphQword *> dQwords;	// don't have hits
 
 	// partition phrase words
-	const CSphVector<XQKeyword_t> & dWords = pQueryNode->m_dWords;
+	const CSphVector<XQKeyword_t> & dWords = pQueryNode->dWords();
 	ARRAY_FOREACH ( i, dWords )
 	{
 		ISphQword * pWord = CreateQueryWord ( dWords[i], tSetup );
@@ -1113,7 +1113,7 @@ static ExtNode_i * CreateMultiNode ( const XQNode_t * pQueryNode, const ISphQwor
 	} else
 	{
 		// at least two words have hitlists, creating phrase node
-		assert ( pQueryNode->m_dWords.GetLength() );
+		assert ( pQueryNode->dWords().GetLength() );
 		assert ( pQueryNode->GetOp()==SPH_QUERY_PHRASE || pQueryNode->GetOp()==SPH_QUERY_PROXIMITY || pQueryNode->GetOp()==SPH_QUERY_QUORUM );
 
 		// create nodes
@@ -1145,7 +1145,7 @@ static ExtNode_i * CreateMultiNode ( const XQNode_t * pQueryNode, const ISphQwor
 
 static ExtNode_i * CreateOrderNode ( const XQNode_t * pNode, const ISphQwordSetup & tSetup, bool bUseBM25, const RowIdBoundaries_t * pBoundaries )
 {
-	if ( pNode->m_dChildren.GetLength()<2 )
+	if ( pNode->dChildren().GetLength()<2 )
 	{
 		if ( tSetup.m_pWarning )
 			tSetup.m_pWarning->SetSprintf ( "order node requires at least two children" );
@@ -1153,9 +1153,9 @@ static ExtNode_i * CreateOrderNode ( const XQNode_t * pNode, const ISphQwordSetu
 	}
 
 	CSphVector<ExtNode_i *> dChildren;
-	ARRAY_FOREACH ( i, pNode->m_dChildren )
+	ARRAY_FOREACH ( i, pNode->dChildren() )
 	{
-		ExtNode_i * pChild = ExtNode_i::Create ( pNode->m_dChildren[i], tSetup, bUseBM25, pBoundaries );
+		ExtNode_i * pChild = ExtNode_i::Create ( pNode->dChildren()[i], tSetup, bUseBM25, pBoundaries );
 		if ( !pChild || pChild->GotHitless() )
 		{
 			if ( tSetup.m_pWarning )
@@ -1507,11 +1507,11 @@ ExtPayloadBase_T<ROWID_LIMITS>::ExtPayloadBase_T ( const XQNode_t * pNode, const
 {
 	// sanity checks
 	// this node must be only created for a huge OR of tiny expansions
-	assert ( pNode->m_dWords.GetLength()==1 );
-	assert ( pNode->m_dWords.Begin()->m_pPayload );
+	assert ( pNode->dWords().GetLength()==1 );
+	assert ( pNode->dWord(0).m_pPayload );
 	assert ( pNode->m_dSpec.m_dZones.GetLength()==0 && !pNode->m_dSpec.m_bZoneSpan );
 
-	(XQKeyword_t &)m_tWord = *pNode->m_dWords.Begin();
+	(XQKeyword_t &)m_tWord = pNode->dWord(0);
 	m_dFieldMask = pNode->m_dSpec.m_dFieldMask;
 	m_iAtomPos = m_tWord.m_iAtomPos;
 
@@ -1846,21 +1846,20 @@ ExtNode_i * ExtNode_i::Create ( const XQNode_t * pNode, const ISphQwordSetup & t
 	if ( pNode->GetOp()==SPH_QUERY_SCAN )
 		return CreateHitlessNode ( tSetup.ScanSpawn ( pNode->m_iAtomPos ), pNode->m_dSpec.m_dFieldMask, tSetup, true, bUseBM25, bRowidLimits );
 
-	if ( pNode->m_dWords.GetLength() || pNode->m_bVirtuallyPlain )
+	if ( pNode->dWords().GetLength() || pNode->m_bVirtuallyPlain )
 	{
 		const int iWords = pNode->m_bVirtuallyPlain
-			? pNode->m_dChildren.GetLength()
-			: pNode->m_dWords.GetLength();
+			? pNode->dChildren().GetLength()
+			: pNode->dWords().GetLength();
 
 		if ( iWords==1 )
 		{
-			if ( pNode->m_dWords.Begin()->m_bExpanded && pNode->m_dWords.Begin()->m_pPayload )
+			if ( pNode->dWord(0).m_bExpanded && pNode->dWord(0).m_pPayload )
 				return CreatePayloadNode ( pNode, tSetup, bUseBM25, pBoundaries );
 
 			if ( pNode->m_bVirtuallyPlain )
-				return Create ( pNode->m_dChildren[0], tSetup, bUseBM25, pBoundaries );
-			else
-				return Create ( pNode->m_dWords[0], pNode, tSetup, bUseBM25, bRowidLimits );
+				return Create ( pNode->dChildren()[0], tSetup, bUseBM25, pBoundaries );
+			return Create ( pNode->dWord(0), pNode, tSetup, bUseBM25, bRowidLimits );
 		}
 
 		switch ( pNode->GetOp() )
@@ -1876,8 +1875,8 @@ ExtNode_i * ExtNode_i::Create ( const XQNode_t * pNode, const ISphQwordSetup & t
 
 			case SPH_QUERY_QUORUM:
 			{
-				assert ( pNode->m_dWords.GetLength()==0 || pNode->m_dChildren.GetLength()==0 );
-				int iQuorumCount = pNode->m_dWords.GetLength()+pNode->m_dChildren.GetLength();
+				assert ( pNode->dWords().IsEmpty() || pNode->dChildren().IsEmpty() );
+				int iQuorumCount = pNode->dWords().GetLength()+pNode->dChildren().GetLength();
 				int iThr = ExtQuorum_c::GetThreshold ( *pNode, iQuorumCount );
 				bool bOrOperator = false;
 				if ( iThr>=iQuorumCount )
@@ -1904,10 +1903,10 @@ ExtNode_i * ExtNode_i::Create ( const XQNode_t * pNode, const ISphQwordSetup & t
 				CSphVector<ExtNode_i*> dTerms;
 				dTerms.Reserve ( iQuorumCount );
 
-				for ( const XQKeyword_t& tWord: pNode->m_dWords )
+				for ( const XQKeyword_t& tWord: pNode->dWords() )
 					dTerms.Add ( Create ( tWord, pNode, tSetup, bUseBM25, bRowidLimits ) );
 
-				for ( const XQNode_t* tNode: pNode->m_dChildren )
+				for ( const XQNode_t* tNode: pNode->dChildren() )
 					dTerms.Add ( Create ( tNode, tSetup, bUseBM25, pBoundaries ) );
 
 				// make not simple, but optimized AND node.
@@ -1933,7 +1932,7 @@ ExtNode_i * ExtNode_i::Create ( const XQNode_t * pNode, const ISphQwordSetup & t
 
 	} else
 	{
-		int iChildren = pNode->m_dChildren.GetLength ();
+		int iChildren = pNode->dChildren().GetLength ();
 		assert ( iChildren>0 );
 
 		// special case, operator BEFORE
@@ -1941,31 +1940,31 @@ ExtNode_i * ExtNode_i::Create ( const XQNode_t * pNode, const ISphQwordSetup & t
 		{
 			// before operator can not handle ZONESPAN
 			if ( tSetup.m_pWarning
-				&& pNode->m_dChildren.any_of ( [] ( XQNode_t * pChild ) { return pChild->m_dSpec.m_bZoneSpan; } ) )
+				&& pNode->dChildren().any_of ( [] ( XQNode_t * pChild ) { return pChild->m_dSpec.m_bZoneSpan; } ) )
 				tSetup.m_pWarning->SetSprintf ( "BEFORE operator is incompatible with ZONESPAN, ZONESPAN ignored" );
 			return CreateOrderNode ( pNode, tSetup, bUseBM25, pBoundaries );
 		}
 
 		// special case, AND over terms (internally reordered for speed)
 		bool bAndTerms = ( pNode->GetOp()==SPH_QUERY_AND );
-		for ( int i=0; i<iChildren && bAndTerms; i++ )
+		for ( int i=0; i<iChildren && bAndTerms; ++i )
 		{
-			const XQNode_t * pChildren = pNode->m_dChildren[i];
-			bAndTerms = ( pChildren->m_dWords.GetLength()==1 );
+			const XQNode_t * pChildren = pNode->dChildren()[i];
+			bAndTerms = ( pChildren->dWords().GetLength()==1 );
 		}
 
 		bool bZonespan = bAndTerms;
 		for ( int i=0; i<iChildren && bZonespan; i++ )
-			bZonespan &= pNode->m_dChildren[i]->m_dSpec.m_bZoneSpan;
+			bZonespan &= pNode->dChildren()[i]->m_dSpec.m_bZoneSpan;
 
 		if ( bAndTerms )
 		{
 			// check if we can create multi-and node
-			bool bMultiAnd = !bZonespan && pNode->m_dChildren.GetLength()>1;
+			bool bMultiAnd = !bZonespan && pNode->dChildren().GetLength()>1;
 			for ( int i=0; i<iChildren && bMultiAnd; i++ )
 			{
-				const XQNode_t * pChild = pNode->m_dChildren[i];
-				const XQKeyword_t & tWord = pChild->m_dWords[0];
+				const XQNode_t * pChild = pNode->dChildren()[i];
+				const XQKeyword_t & tWord = pChild->dWord(0);
 				if ( tWord.m_bFieldStart || tWord.m_bFieldEnd || tWord.m_pPayload || pChild->m_dSpec.m_iFieldMaxPos || pChild->m_dSpec.m_dZones.GetLength() )
 				{
 					bMultiAnd = false;
@@ -1983,7 +1982,7 @@ ExtNode_i * ExtNode_i::Create ( const XQNode_t * pNode, const ISphQwordSetup & t
 				CSphVector<ExtNode_i*> dTerms;
 				for ( int i=0; i<iChildren; i++ )
 				{
-					const XQNode_t * pChild = pNode->m_dChildren[i];
+					const XQNode_t * pChild = pNode->dChildren()[i];
 					ExtNode_i * pTerm = ExtNode_i::Create ( pChild, tSetup, bUseBM25, pBoundaries );
 					if ( pTerm )
 						dTerms.Add ( pTerm );
@@ -1996,7 +1995,7 @@ ExtNode_i * ExtNode_i::Create ( const XQNode_t * pNode, const ISphQwordSetup & t
 				ExtNode_i * pCur = dTerms[0];
 				for ( int i=1; i<dTerms.GetLength(); i++ )
 					if ( bZonespan )
-						pCur = new ExtAndZonespan_c ( pCur, dTerms[i], tSetup, pNode->m_dChildren[0] );
+						pCur = new ExtAndZonespan_c ( pCur, dTerms[i], tSetup, pNode->dChildren()[0] );
 					else
 						pCur = new ExtAnd_c ( pCur, dTerms[i] );
 
@@ -2007,8 +2006,8 @@ ExtNode_i * ExtNode_i::Create ( const XQNode_t * pNode, const ISphQwordSetup & t
 
 				return pCur;
 			}
-			else
-				return CreateMultiAndNode ( pNode->m_dChildren, tSetup, bUseBM25, bRowidLimits );
+
+			return CreateMultiAndNode ( pNode->dChildren(), tSetup, bUseBM25, bRowidLimits );
 		}
 
 		// Multinear and phrase could be also non-plain, so here is the second entry for it.
@@ -2021,7 +2020,7 @@ ExtNode_i * ExtNode_i::Create ( const XQNode_t * pNode, const ISphQwordSetup & t
 		ExtNode_i * pCur = NULL;
 		for ( int i=0; i<iChildren; i++ )
 		{
-			ExtNode_i * pNext = ExtNode_i::Create ( pNode->m_dChildren[i], tSetup, bUseBM25, pBoundaries );
+			ExtNode_i * pNext = Create ( pNode->dChildren()[i], tSetup, bUseBM25, pBoundaries );
 			if ( !pNext ) continue;
 			if ( !pCur )
 			{
@@ -3079,7 +3078,7 @@ ExtMultiAnd_T<USE_BM25,TEST_FIELDS,ROWID_LIMITS>::ExtMultiAnd_T ( const VecTrait
 		NodeInfo_t & tNode = m_dNodes[i];
 		const XQNode_t & tXQNode = *dXQNodes[i];
 
-		tNode.m_pQword = CreateQueryWord ( tXQNode.m_dWords[0], tSetup );
+		tNode.m_pQword = CreateQueryWord ( tXQNode.dWord(0), tSetup );
 		assert ( tNode.m_pQword );
 		tNode.m_iAtomPos = tNode.m_pQword->m_iAtomPos;
 		tNode.m_uNodepos = (WORD)i;

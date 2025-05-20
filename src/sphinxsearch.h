@@ -13,7 +13,7 @@
 #ifndef _sphinxsearch_
 #define _sphinxsearch_
 
-#include "sphinxquery.h"
+#include "sphinxquery/sphinxquery.h"
 #include "sphinxint.h"
 
 //////////////////////////////////////////////////////////////////////////
@@ -210,7 +210,7 @@ public:
 //////////////////////////////////////////////////////////////////////////
 
 CSphString sphXQNodeToStr ( const XQNode_t * pNode );
-Bson_t sphExplainQuery ( const XQNode_t * pNode, const CSphSchema & tSchema, const StrVec_t & dZones );
+Bson_t sphExplainQuery ( const XQNode_t * pNode, const CSphSchema * pSchema = nullptr, const StrVec_t * pZones = nullptr );
 
 namespace sph
 {

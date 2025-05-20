@@ -13,7 +13,7 @@
 
 #include "std/hash.h"
 #include "std/openhash.h"
-#include "sphinxquery.h"
+#include "sphinxquery/sphinxquery.h"
 #include "sphinxsort.h"
 #include "sphinxjson.h"
 #include "querycontext.h"

@@ -3562,7 +3562,7 @@ void RtIndex_c::ConditionalDiskChunk ( )
 		int iFinalChunks = ( m_tRtChunks.DiskChunks()->GetLength() - 1 );
 		if ( iFinalChunks>=iCutoff )
 		{
-			RTSAVELOG << "not flush because optimize runining; engage to be run after " << tmFlushWriteUs;
+			RTSAVELOG << "not flush because optimize running; engage to be run after " << tmFlushWriteUs;
 			m_dSavingTimer.EngageAt ( tmNow + tmFlushWriteUs );
 			return;
 		}

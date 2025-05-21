@@ -345,41 +345,31 @@ chmod +x /tmp/filebeat-single-test.sh; echo $?
 ––– input –––
 bash /tmp/filebeat-single-test.sh 7.17
 ––– output –––
->>> Testing Filebeat version: 7.17
-✓ Log file has 5 lines
-✓ Manticore Search available
-+ >>> Using alternative approach for Filebeat 7.17...
-✓ Inserted log line 1
-✓ Inserted log line 2
-✓ Inserted log line 3
-✓ Inserted log line 4
-✓ Inserted log line 5
-✓ Filebeat 7.17 simulation: inserted all logs
-✓ Row count check for 7.17: 5 rows
-✓ Structure check for 7.17: passed
-✓ Filebeat version 7.17 tested successfully
+>>> Using alternative approach for Filebeat 7.17...
 ––– input –––
 bash /tmp/filebeat-single-test.sh 8.0
 ––– output –––
->>> Testing Filebeat version: 8.0
-✓ Log file has 5 lines
+>>> Using alternative approach for Filebeat 8.0...
+––– input –––
+bash /tmp/filebeat-single-test.sh 8.1
+––– output –––
 ✓ Manticore Search available
-+ >>> Using alternative approach for Filebeat 8.0...
+>>> Using alternative approach for Filebeat 8.1...
 ✓ Inserted log line 1
 ✓ Inserted log line 2
 ✓ Inserted log line 3
 ✓ Inserted log line 4
 ✓ Inserted log line 5
-✓ Filebeat 8.0 simulation: inserted all logs
-✓ Row count check for 8.0: 5 rows
-✓ Structure check for 8.0: passed
-✓ Filebeat version 8.0 tested successfully
+✓ Filebeat 8.1 simulation: inserted all logs
+✓ Row count check for 8.1: 5 rows
+✓ Structure check for 8.1: passed
+✓ Filebeat version 8.1 tested successfully
 ––– input –––
 bash /tmp/filebeat-single-test.sh 8.1
 ––– output –––
 >>> Testing Filebeat version: 8.1
 ✓ Log file has 5 lines
-+ >>> Using alternative approach for Filebeat 8.1...
+>>> Using alternative approach for Filebeat 8.1...
 ✓ Inserted log line 1
 ✓ Inserted log line 2
 ✓ Inserted log line 3

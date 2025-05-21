@@ -13,6 +13,7 @@
 #include "sphinxint.h"
 #include "fileutils.h"
 
+#include <sys/stat.h>
 #include <math.h>
 
 
@@ -35,24 +36,24 @@ class CSphGlobalIDF final : public IDFer_c
 protected:
 	~CSphGlobalIDF() final = default;
 public:
-	bool Touch ( const CSphString& sFilename );
+	bool TouchCheckModified ( const CSphString& sFilename );
 	bool Preread ( const CSphString& sFilename, CSphString& sError );
 	float GetIDF ( const CSphString& sWord, int64_t iDocsLocal, bool bPlainIDF ) const final;
 
 private:
-	DWORD GetDocs ( const CSphString& sWord ) const;
+	DWORD GetDocs ( const CSphString& sWord ) const noexcept;
 
 	int64_t m_iTotalDocuments = 0;
 	int64_t m_iTotalWords = 0;
 	SphOffset_t m_uMTime = 0;
-	CSphLargeBuffer<IDFWord_t> m_pWords;
-	CSphLargeBuffer<int64_t> m_pHash;
+	CSphLargeBuffer<IDFWord_t> m_dWords;
+	CSphLargeBuffer<int64_t> m_dHash;
 };
 
 using CSphGlobalIDFRefPtr_c = CSphRefcountedPtr<CSphGlobalIDF>;
 
 // check if backend file was modified
-bool CSphGlobalIDF::Touch ( const CSphString& sFilename )
+bool CSphGlobalIDF::TouchCheckModified ( const CSphString& sFilename )
 {
 	// update m_uMTime, return true if modified
 	struct_stat tStat = { 0 };
@@ -66,7 +67,7 @@ bool CSphGlobalIDF::Touch ( const CSphString& sFilename )
 
 bool CSphGlobalIDF::Preread ( const CSphString& sFilename, CSphString& sError )
 {
-	Touch ( sFilename );
+	TouchCheckModified ( sFilename );
 
 	CSphAutofile tFile;
 	if ( tFile.Open ( sFilename, SPH_O_READ, sError )<0 )
@@ -78,67 +79,67 @@ bool CSphGlobalIDF::Preread ( const CSphString& sFilename, CSphString& sError )
 
 	// allocate words cache
 	CSphString sWarning;
-	if ( !m_pWords.Alloc ( m_iTotalWords, sError ))
+	if ( !m_dWords.Alloc ( m_iTotalWords, sError ))
 		return false;
 
 	// allocate lookup table if needed
 	int iHashSize = ( int ) ( U64C( 1 ) << HASH_BITS );
 	if ( m_iTotalWords>iHashSize * 8 )
 	{
-		if ( !m_pHash.Alloc ( iHashSize + 2, sError ))
+		if ( !m_dHash.Alloc ( iHashSize + 2, sError ))
 			return false;
 	}
 
 	// read file into memory (may exceed 2GB)
-	int64_t iRead = sphReadThrottled ( tFile.GetFD (), m_pWords.GetWritePtr (), iSize );
+	int64_t iRead = sphReadThrottled ( tFile.GetFD (), m_dWords.GetWritePtr (), iSize );
 	if ( iRead!=iSize )
 		return false;
 
 	if ( sphInterrupted ())
 		return false;
 
+	if ( m_dHash.IsEmpty() )
+		return true;
+
 	// build lookup table
-	if ( m_pHash.GetLengthBytes ())
+	int64_t* pHash = m_dHash.GetWritePtr ();
+
+	uint64_t uFirst = m_dWords[0].m_uWordID;
+	uint64_t uRange = m_dWords[m_iTotalWords - 1].m_uWordID - uFirst;
+
+	DWORD iShift = 0;
+	while ( uRange>=( U64C( 1 ) << HASH_BITS ))
 	{
-		int64_t* pHash = m_pHash.GetWritePtr ();
-
-		uint64_t uFirst = m_pWords[0].m_uWordID;
-		uint64_t uRange = m_pWords[m_iTotalWords - 1].m_uWordID - uFirst;
-
-		DWORD iShift = 0;
-		while ( uRange>=( U64C( 1 ) << HASH_BITS ))
-		{
-			iShift++;
-			uRange >>= 1;
-		}
-
-		pHash[0] = iShift;
-		pHash[1] = 0;
-		DWORD uLastHash = 0;
-
-		for ( int64_t i = 1; i<m_iTotalWords; i++ )
-		{
-			// check for interrupt (throttled for speed)
-			if (( i & 0xffff )==0 && sphInterrupted ())
-				return false;
-
-			auto uHash = ( DWORD ) (( m_pWords[i].m_uWordID - uFirst ) >> iShift );
-
-			if ( uHash==uLastHash )
-				continue;
-
-			while ( uLastHash<uHash )
-				pHash[++uLastHash + 1] = i;
-
-			uLastHash = uHash;
-		}
-		pHash[++uLastHash + 1] = m_iTotalWords;
+		++iShift;
+		uRange >>= 1;
 	}
+
+	pHash[0] = iShift;
+	pHash[1] = 0;
+	DWORD uLastHash = 0;
+
+	for ( int64_t i = 1; i<m_iTotalWords; ++i )
+	{
+		// check for interrupt (throttled for speed)
+		if (( i & 0xffff )==0 && sphInterrupted ())
+			return false;
+
+		auto uHash = ( DWORD ) (( m_dWords[i].m_uWordID - uFirst ) >> iShift );
+
+		if ( uHash==uLastHash )
+			continue;
+
+		while ( uLastHash<uHash )
+			pHash[++uLastHash + 1] = i;
+
+		uLastHash = uHash;
+	}
+	pHash[++uLastHash + 1] = m_iTotalWords;
 	return true;
 }
 
 
-DWORD CSphGlobalIDF::GetDocs ( const CSphString& sWord ) const
+DWORD CSphGlobalIDF::GetDocs ( const CSphString& sWord ) const noexcept
 {
 	const char* s = sWord.cstr ();
 
@@ -151,26 +152,25 @@ DWORD CSphGlobalIDF::GetDocs ( const CSphString& sWord ) const
 		s = sBuf;
 	}
 
-	uint64_t uWordID = sphFNV64 ( s );
+	const uint64_t uWordID = sphFNV64 ( s );
 
 	int64_t iStart = 0;
 	int64_t iEnd = m_iTotalWords - 1;
 
-	auto pWords = (const IDFWord_t*)m_pWords.GetReadPtr();
+	auto pWords = (const IDFWord_t*)m_dWords.GetReadPtr();
 
-	if ( m_pHash.GetLengthBytes ())
+	if ( !m_dHash.IsEmpty () )
 	{
-		uint64_t uFirst = pWords[0].m_uWordID;
-		auto uHash = ( DWORD ) (( uWordID - uFirst ) >> m_pHash[0] );
+		const auto uFirst = pWords[0].m_uWordID;
+		const auto uHash = ( DWORD ) (( uWordID - uFirst ) >> m_dHash[0] );
 		if ( uHash>( U64C( 1 ) << HASH_BITS ))
 			return 0;
 
-		iStart = m_pHash[uHash + 1];
-		iEnd = m_pHash[uHash + 2] - 1;
+		iStart = m_dHash[uHash + 1];
+		iEnd = m_dHash[uHash + 2] - 1;
 	}
 
-	const IDFWord_t* pWord = sphBinarySearch ( pWords + iStart, pWords + iEnd,
-		bind ( &IDFWord_t::m_uWordID ), uWordID );
+	const IDFWord_t* pWord = sphBinarySearch ( pWords + iStart, pWords + iEnd, bind ( &IDFWord_t::m_uWordID ), uWordID );
 	return pWord ? pWord->m_iDocs : 0;
 }
 
@@ -286,7 +286,7 @@ bool sph::PrereadGlobalIDF ( const CSphString& sPath, CSphString& sError )
 
 	auto& pGlobalIDF = *ppGlobalIDF;
 
-	if ( pGlobalIDF && pGlobalIDF->Touch ( sPath ))
+	if ( pGlobalIDF && pGlobalIDF->TouchCheckModified ( sPath ))
 		return tGlobalIDF.ReloadGlobalIDF ( sPath, sError );
 
 	return true;
@@ -295,11 +295,11 @@ bool sph::PrereadGlobalIDF ( const CSphString& sPath, CSphString& sError )
 static StrVec_t CollectUnlistedIn ( const StrVec_t& dFiles )
 {
 	StrVec_t dAllIDFs = GetGlobalIDF().Collect();
-	StrVec_t dCollection;
+	StrVec_t dUnlisted;
 	for ( const auto& sIdf : dAllIDFs )
 		if ( !dFiles.Contains ( sIdf ) )
-			dCollection.Add ( sIdf );
-	return dCollection;
+			dUnlisted.Add ( sIdf );
+	return dUnlisted;
 }
 
 static void DeleteUnlistedIn ( const StrVec_t& dFiles )
@@ -315,9 +315,8 @@ void sph::UpdateGlobalIDFs ( const StrVec_t& dFiles )
 
 	// load/rotate remaining entries
 	CSphString sError;
-	ARRAY_FOREACH ( i, dFiles )
+	for ( const auto& sPath: dFiles )
 	{
-		const auto& sPath = dFiles[i];
 		if ( !PrereadGlobalIDF ( sPath, sError ))
 			sphLogDebug ( "Could not load global IDF (%s): %s", sPath.cstr (), sError.cstr ());
 	}

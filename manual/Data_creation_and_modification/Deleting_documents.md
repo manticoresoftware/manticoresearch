@@ -1,6 +1,6 @@
 # Deleting documents
 
-Deleting documents is only supported in [RT mode](../../Read_this_first.md#Real-time-mode-vs-plain-mode) for the following table types:
+Deleting documents is only supported in [RT mode](../Read_this_first.md#Real-time-mode-vs-plain-mode) for the following table types:
 * [Real-time](../Creating_a_table/Local_tables/Real-time_table.md) tables
 * [Percolate](../Creating_a_table/Local_tables/Percolate_table.md) tables
 * Distributed tables that only contain RT tables as local or remote agents.
@@ -113,6 +113,21 @@ indexApi.delete({"table" : "test", "query": { "match": { "*": "test document" }}
 ```python
 {'deleted': 5, 'id': None, 'table': 'test', 'result': None}
 ```
+
+<!-- intro -->
+
+##### Python-asyncio:
+
+<!-- request Python-asyncio -->
+``` python
+indexApi.delete({"table" : "test", "query": { "match": { "*": "test document" }}})
+```
+
+<!-- response Python-asyncio -->
+```python
+{'deleted': 5, 'id': None, 'table': 'test', 'result': None}
+```
+
 <!-- intro -->
 
 ##### Javascript:
@@ -170,6 +185,33 @@ indexApi.Delete(deleteRequest);
 
 <!-- response C# -->
 ```clike
+class DeleteResponse {
+    index: test
+    deleted: 5
+    id: null
+    result: null
+}
+```
+
+<!-- intro -->
+
+##### Rust:
+
+<!-- request Rust -->
+``` rust
+let match_expr = HashMap::new();
+match_expr.insert("*".to_string(), serde_json::json!("test document"));
+let query = SearchQuery {
+     match: Some(serde_json::json!(match_expr).into()),
+    ..Default::default()
+};
+
+let delete_req = DeleteDocumentRequest::new("test".to_string());
+index_api.delete(delete_req).await;
+```
+
+<!-- response Rust -->
+```rust
 class DeleteResponse {
     index: test
     deleted: 5
@@ -282,6 +324,21 @@ indexApi.delete({"table" : "test", "id" : 1})
 ```python
 {'deleted': None, 'id': 1, 'table': 'test', 'result': 'deleted'}
 ```
+
+<!-- intro -->
+
+##### Python-asyncio:
+
+<!-- request Python-asyncio -->
+``` python
+indexApi.delete({"table" : "test", "id" : 1})
+```
+
+<!-- response Python-asyncio -->
+```python
+{'deleted': None, 'id': 1, 'table': 'test', 'result': 'deleted'}
+```
+
 <!-- intro -->
 
 ##### Javascript:
@@ -330,6 +387,31 @@ indexApi.Delete(deleteRequest);
 
 <!-- response C# -->
 ```java
+class DeleteResponse {
+    index: test
+    _id: 1
+    result: deleted
+}
+```
+
+<!-- intro -->
+
+##### Rust:
+
+<!-- request Rust -->
+``` rust
+let delete_req = DeleteDocumentRequest {
+    table: "test".to_string(),
+    id: serde_json::json!(1),
+    ..Default::default(),
+};
+
+index_api.delete(delete_req).await;
+
+```
+
+<!-- response Rust -->
+```rust
 class DeleteResponse {
     index: test
     _id: 1
@@ -524,6 +606,21 @@ indexApi.delete({"cluster":"cluster","table" : "test", "id" : 1})
 ```python
 {'deleted': None, 'id': 1, 'table': 'test', 'result': 'deleted'}
 ```
+
+<!-- intro -->
+
+##### Python-asyncio:
+
+<!-- request Python-asyncio -->
+``` python
+indexApi.delete({"cluster":"cluster","table" : "test", "id" : 1})
+```
+
+<!-- response Python-asyncio -->
+```python
+{'deleted': None, 'id': 1, 'table': 'test', 'result': 'deleted'}
+```
+
 <!-- intro -->
 
 ##### Javascript:
@@ -572,6 +669,32 @@ indexApi.Delete(deleteRequest);
 
 <!-- response C# -->
 ```clike
+class DeleteResponse {
+    index: test
+    _id: 1
+    result: deleted
+}
+```
+
+<!-- intro -->
+
+##### Rust:
+
+<!-- request Rust -->
+``` rust
+let delete_req = DeleteDocumentRequest {
+    table: "test".to_string(),
+    cluster: "cluster".to_string(),
+    id: serde_json::json!(1),
+    ..Default::default(),
+};
+
+index_api.delete(delete_req).await;
+
+```
+
+<!-- response Rust -->
+```rust
 class DeleteResponse {
     index: test
     _id: 1
@@ -728,6 +851,27 @@ indexApi.bulk('\n'.join(map(json.dumps,docs)))
 }
 
 ```
+
+<!-- intro -->
+##### Python-asyncio:
+
+<!-- request Python-asyncio -->
+``` python
+docs = [ \
+            { "delete" : { "table" : "test", "id": 1 } }, \
+            { "delete" : { "table" : "test", "query": { "equals": { "int_data": 20 } } } } ]
+indexApi.bulk('\n'.join(map(json.dumps,docs)))
+```
+
+<!-- response Python-asyncio -->
+```python
+{
+    'error': None,
+    'items': [{u'delete': {u'table': test', u'deleted': 2}}]
+}
+
+```
+
 <!-- intro -->
 ##### Javascript:
 
@@ -782,6 +926,27 @@ class BulkResponse {
     additionalProperties: {errors=false}
 }
 ```
+
+<!-- intro -->
+##### Rust:
+
+<!-- request Rust -->
+``` rust
+let bulk_body = r#"{ "delete" : { "table" : "test", "id": 1 } }
+    { "delete" : { "table" : "test", "query": { "equals": { "int_data": 20 } } } }"         
+"#;
+index_api.bulk(bulk_body).await;
+```
+
+<!-- response Rust -->
+```rust
+class BulkResponse {
+    items: [{replace={_index=test, _id=0, created=false, deleted=2, result=created, status=200}}]
+    error: null
+    additionalProperties: {errors=false}
+}
+```
+
 
 <!-- intro -->
 ##### TypeScript:

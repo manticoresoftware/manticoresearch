@@ -26,7 +26,7 @@ mysql -h0 -P9306 -e "CREATE TABLE test2 (
     knn_type='hnsw'
     knn_dims='4'
     hnsw_similarity='l2'
-) shards=3 rf=1;"; echo $?
+) shards='3' rf='1';"; echo $?
 ––– output –––
 0
 ––– input –––
@@ -233,12 +233,12 @@ bulk_insert=$(mktemp); echo -e '{ "index": { "_index": "test2", "_id": 4 } }\n{ 
 curl -s -H 'Content-type: application/x-ndjson' --data-binary @"$bulk_insert" http://localhost:9308/_bulk | jq '.items[] | {index: .index.result, id: .index._id}'
 ––– output –––
 {
-"index": "created",
-"id": 4
+  "index": "created",
+  "id": 4
 }
 {
-"index": "created",
-"id": 5
+  "index": "created",
+  "id": 5
 }
 ––– input –––
 mysql -h0 -P9306 -e "SELECT * FROM test2 order by id asc;"
@@ -259,12 +259,12 @@ bulk_insert=$(mktemp); echo -e '{"index":{"_index":"test2","_id":6}}\n{"id":6,"m
 curl -s -H 'Content-type: application/x-ndjson' --data-binary @"$bulk_insert" http://localhost:9308/_bulk | jq '.items[] | {index: .index.result, id: .index._id}'
 ––– output –––
 {
-"index": "created",
-"id": 6
+  "index": "created",
+  "id": 6
 }
 {
-"index": "created",
-"id": 7
+  "index": "created",
+  "id": 7
 }
 ––– input –––
 mysql -h0 -P9306 -e "SELECT * FROM test2 order by id asc;"
@@ -287,12 +287,12 @@ bulk_update=$(mktemp); echo -e '{"update":{"_index":"test2","_id":6}}\n{"doc":{"
 curl -s -H 'Content-type: application/x-ndjson' --data-binary @"$bulk_update" http://localhost:9308/_bulk | jq '.items[] | {update: .update.result, id: .update._id}'
 ––– output –––
 {
-"update": "updated",
-"id": "6"
+  "update": "updated",
+  "id": "6"
 }
 {
-"update": "updated",
-"id": "7"
+  "update": "updated",
+  "id": "7"
 }
 ––– input –––
 mysql -h0 -P9306 -e "SELECT * FROM test2 order by id asc;"
@@ -315,12 +315,12 @@ bulk_delete=$(mktemp); echo -e '{"delete":{"_index":"test2","_id":2}}\n{"delete"
 curl -s -H 'Content-type: application/x-ndjson' --data-binary @"$bulk_delete" http://localhost:9308/_bulk | jq '.items[] | {delete: .delete.result, id: .delete._id}'
 ––– output –––
 {
-"delete": "deleted",
-"id": "2"
+  "delete": "deleted",
+  "id": "2"
 }
 {
-"delete": "deleted",
-"id": "3"
+  "delete": "deleted",
+  "id": "3"
 }
 ––– input –––
 mysql -h0 -P9306 -e "SELECT * FROM test2 order by id asc;"
@@ -378,10 +378,10 @@ curl -s -X POST http://localhost:9308/insert -d '{
 }' | jq -e '.error' && echo "Duplicate ID test passed!" || echo "Duplicate ID test failed!"
 ––– output –––
 {
-"type": "action_request_validation_exception",
-"reason": "duplicate id '4'",
-"table": "system.test2_s2",
-"index": "test2"
+  "type": "action_request_validation_exception",
+  "reason": "duplicate id '4'",
+  "table": "system.test2_s2",
+  "index": "test2"
 }
 Duplicate ID test passed!
 ––– input –––

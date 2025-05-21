@@ -66,7 +66,7 @@ typedef int64_t			SphAttr_t;
 const int				ROWITEM_BITS	= 8*sizeof(CSphRowitem);
 const int				ROWITEM_SHIFT	= 5;
 
-STATIC_ASSERT ( ( 1 << ROWITEM_SHIFT )==ROWITEM_BITS, INVALID_ROWITEM_SHIFT );
+static_assert ( ( 1 << ROWITEM_SHIFT )==ROWITEM_BITS, "invalid ROWITEM_SHIFT" );
 
 #ifndef USE_LITTLE_ENDIAN
 #error Please define endianness

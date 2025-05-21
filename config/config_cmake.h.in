@@ -32,7 +32,7 @@
 /* Define to 1 if you have the `clock_gettime' function. */
 #cmakedefine HAVE_CLOCK_GETTIME ${HAVE_CLOCK_GETTIME}
 
-/* Define to 1 if you have the `dlopen' function. */
+/* Define to 1 if you have the `dlopen' function. Use header libutil.h to have all variants available */
 #cmakedefine01 HAVE_DLOPEN
 
 /* Define if  you have async 'getaddrinfo_a' */

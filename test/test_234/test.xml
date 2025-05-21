@@ -36,6 +36,22 @@ index test
 	min_prefix_len	= 3
 }
 
+source test1
+{
+	type			= mysql
+	<sql_settings/>
+	sql_query_pre = SET NAMES utf8
+	sql_query		= select * from test_table1
+	sql_attr_uint	= gid
+}
+
+index test1
+{
+	source			= test1
+	path			= <data_path/>/test1
+    charset_table	= A..Z->a..z, _, a..z
+}
+
 </config>
 
 <db_create>
@@ -73,6 +89,21 @@ another time, the age of wonders"],
 Two"}')
 </db_insert>
 
+<db_create>
+CREATE TABLE `test_table1` (
+  `id` int(11) NOT NULL AUTO_INCREMENT,
+  `gid` int(11) NOT NULL,
+  `title` varchar(255) NOT NULL,
+  PRIMARY KEY (`id`)
+) CHARACTER SET utf8;
+</db_create>
+<db_drop>DROP TABLE IF EXISTS `test_table1`;</db_drop>
+<db_insert>
+INSERT INTO `test_table1` VALUES
+(1,1,'test 9'),
+(2,1,'test')
+</db_insert>
+
 <queries>
 <sphinxql>set global threads_ex='8'</sphinxql>
 <query endpoint="sql" method="get">query=select+*+from+test+limit+2</query>
@@ -102,7 +133,7 @@ Related issue https://gitlab.com/manticoresearch/dev/-/issues/3508
 <query endpoint="cli_json" method="post">select * from test where match ('%2F')</query>
 
 <!-- cli with 'get' method -->
-<query endpoint="cli_json" method="get">select%20id,1+2%20as%20a,%20packedfactors()%20from%20test%20where%20match(%27tes*%27)%20option%20ranker=expr(%271%27)</query>
+<query endpoint="cli_json" method="get">select%20id,1%2B2%20as%20a,%20packedfactors()%20from%20test%20where%20match(%27tes*%27)%20option%20ranker=expr(%271%27)</query>
 
 <!-- any statement via mode=raw -->
 <query endpoint="sql" method="post">mode=raw&amp;query=desc test</query>
@@ -127,6 +158,15 @@ Related issue https://gitlab.com/manticoresearch/dev/-/issues/3508
 <query endpoint="sql" method="post">select concat('"', 'a')</query>
 <query endpoint="sql?mode=raw" method="post">select concat('"', 'a')</query>
 <query endpoint="sql?raw_response=true" method="post">select concat('"', 'a')</query>
+
+<!-- regression different result for HTTP and SQL search for full text that was folded into empty -->
+<query endpoint="json/search">{"table": "test1", "query": {"match": {"*": "9"}}}</query>
+<query endpoint="json/search">{"table": "test1", "query": {"match": {"*": "test 9"}}}</query>
+
+<sphinxql>
+select * from test1 where match ('9');
+select * from test1 where match ('test 9');
+</sphinxql>
 
 </queries>
 

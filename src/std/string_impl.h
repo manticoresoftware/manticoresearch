@@ -46,6 +46,20 @@ inline bool StrEqN ( Str_t l, const char* r )
 	return strncasecmp ( l.first, r, l.second ) == 0;
 }
 
+inline bool StrEq ( Str_t l, Str_t r )
+{
+	if ( l.second != r.second )
+		return false;
+	return strncmp ( l.first, r.first, l.second ) == 0;
+}
+
+inline bool StrEqN ( Str_t l, Str_t r )
+{
+	if ( l.second != r.second )
+		return false;
+	return strncasecmp ( l.first, r.first, l.second ) == 0;
+}
+
 inline Str_t FromStr ( const CSphString& sString ) noexcept
 {
 	return { sString.cstr(), (int)sString.Length() };
@@ -319,7 +333,7 @@ inline bool CSphString::operator<( const CSphString& b ) const
 inline void CSphString::Unquote()
 {
 	int l = Length();
-	if ( l && m_sValue[0] == '\'' && m_sValue[l - 1] == '\'' )
+	if ( l>1 && m_sValue[0] == '\'' && m_sValue[l - 1] == '\'' )
 	{
 		memmove ( m_sValue, m_sValue + 1, l - 2 );
 		m_sValue[l - 2] = '\0';

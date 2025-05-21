@@ -40,7 +40,7 @@ mysql -h0 -P1306 -e "SHOW STATUS LIKE 'cluster_${CLUSTER_NAME}_status'\G"
 ––– output –––
 *************************** 1. row ***************************
 Counter: cluster_replication_status
-Value: primary
+  Value: primary
 ––– input –––
 for n in `seq 2 $INSTANCE`; do mysql -h0 -P${n}306 -e "JOIN CLUSTER ${CLUSTER_NAME} AT '127.0.0.1:1312'"; done;
 ––– output –––
@@ -49,7 +49,7 @@ mysql -h0 -P${INSTANCE}306 -e "SHOW STATUS LIKE 'cluster_${CLUSTER_NAME}_status'
 ––– output –––
 *************************** 1. row ***************************
 Counter: cluster_replication_status
-Value: primary
+  Value: primary
 ––– input –––
 for port in 1306 2306; do echo "Checking status for port $port:"; timeout 10 bash -c "while ! mysql -h0 -P$port -e \"SHOW STATUS LIKE 'cluster_replication_node_state'\G\" | grep -q 'Value: synced'; do sleep 1; done" && echo "Port $port: Node is synced." || echo "Port $port: Node is not synced (Value: closed or other)."; done
 ––– output –––
@@ -62,7 +62,7 @@ mysql -h0 -P1306 -e "DROP TABLE IF EXISTS test2;"; echo $?
 ––– output –––
 0
 ––– input –––
-mysql -h0 -P1306 -e "CREATE TABLE replication:test2 (id BIGINT, model TEXT, storage_capacity INTEGER, color STRING, release_year INTEGER, price FLOAT, discounted_price FLOAT, sold BOOL, date_added TIMESTAMP, product_codes MULTI, values MULTI64, additional_info JSON, vector FLOAT_VECTOR KNN_TYPE='hnsw' KNN_DIMS='4' HNSW_SIMILARITY='l2') SHARDS=3 RF=2;"; echo $?
+mysql -h0 -P1306 -e "CREATE TABLE replication:test2 (id BIGINT, model TEXT, storage_capacity INTEGER, color STRING, release_year INTEGER, price FLOAT, discounted_price FLOAT, sold BOOL, date_added TIMESTAMP, product_codes MULTI, values MULTI64, additional_info JSON, vector FLOAT_VECTOR KNN_TYPE='hnsw' KNN_DIMS='4' HNSW_SIMILARITY='l2') SHARDS='3' RF='2';"; echo $?
 ––– output –––
 0
 ––– input –––
@@ -70,49 +70,49 @@ mysql -h0 -P1306 -e "SHOW STATUS LIKE 'cluster_replication_node_state'\G"
 ––– output –––
 *************************** 1. row ***************************
 Counter: cluster_replication_node_state
-Value: synced
+  Value: synced
 ––– input –––
 mysql -h0 -P1306 -e "SHOW TABLES FROM SYSTEM\G"
 ––– output –––
 *************************** 1. row ***************************
 Table: system.sharding_queue
-Type: rt
+ Type: rt
 *************************** 2. row ***************************
 Table: system.sharding_state
-Type: rt
+ Type: rt
 *************************** 3. row ***************************
 Table: system.sharding_table
-Type: rt
+ Type: rt
 *************************** 4. row ***************************
 Table: system.test2_s0
-Type: rt
+ Type: rt
 *************************** 5. row ***************************
 Table: system.test2_s1
-Type: rt
+ Type: rt
 *************************** 6. row ***************************
 Table: system.test2_s2
-Type: rt
+ Type: rt
 ––– input –––
 mysql -h0 -P2306 -e "SHOW TABLES FROM SYSTEM\G"
 ––– output –––
 *************************** 1. row ***************************
 Table: system.sharding_queue
-Type: rt
+ Type: rt
 *************************** 2. row ***************************
 Table: system.sharding_state
-Type: rt
+ Type: rt
 *************************** 3. row ***************************
 Table: system.sharding_table
-Type: rt
+ Type: rt
 *************************** 4. row ***************************
 Table: system.test2_s0
-Type: rt
+ Type: rt
 *************************** 5. row ***************************
 Table: system.test2_s1
-Type: rt
+ Type: rt
 *************************** 6. row ***************************
 Table: system.test2_s2
-Type: rt
+ Type: rt
 ––– input –––
 mysql -P1306 -h0 -e "SHOW TABLES;"
 ––– output –––

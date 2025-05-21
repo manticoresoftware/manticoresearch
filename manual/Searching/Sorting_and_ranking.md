@@ -43,7 +43,7 @@ select *, a + b alias from test order by alias desc;
 ## Sorting via JSON
 
 <!-- example sorting 1 -->
-`"sort"` specifies an array where each element can be an attribute name or `_score` if you want to sort by match weights. In that case, the sort order defaults to ascending for attributes and descending for `_score`.
+`"sort"` specifies an array where each element can be an attribute name or `_score` if you want to sort by match weights or `_random` if you want radnom match order. In that case, the sort order defaults to ascending for attributes and descending for `_score`.
 
 <!-- intro -->
 
@@ -120,6 +120,17 @@ search_request.sort = ['_score', 'id']
 
 <!-- intro -->
 
+##### Python-asyncio:
+
+<!-- request Python-asyncio -->
+``` python
+search_request.index = 'test'
+search_request.fulltext_filter = manticoresearch.model.QueryFilter('Test document')
+search_request.sort = ['_score', 'id']
+```
+
+<!-- intro -->
+
 ##### Javascript:
 
 <!-- request javascript -->
@@ -154,6 +165,25 @@ var searchRequest = new SearchRequest("test");
 searchRequest.FulltextFilter = new QueryFilter("Test document");
 searchRequest.Sort = new List<Object> {"_score", "id"};
 
+```
+
+<!-- intro -->
+
+##### Rust:
+
+<!-- request Rust -->
+``` rust
+let query = SearchQuery {
+    query_string: Some(serde_json::json!("Test document").into()),
+    ..Default::default(),
+};
+let sort: [String; 2] = ["_score".to_string(), "id".to_string()];
+let search_req = SearchRequest {
+    table: "test".to_string(),
+    query: Some(Box::new(query)),
+    sort: Some(serde_json::json!(sort)),
+    ..Default::default(),
+};
 ```
 
 <!-- intro -->
@@ -273,6 +303,18 @@ search_request.sort = [sort_by_id, '_score']
 
 <!-- intro -->
 
+##### Python-asyncio:
+
+<!-- request Python-asyncio -->
+``` python
+search_request.index = 'test'
+search_request.fulltext_filter = manticoresearch.model.QueryFilter('Test document')
+sort_by_id = manticoresearch.model.SortOrder('id', 'desc')
+search_request.sort = [sort_by_id, '_score']
+```
+
+<!-- intro -->
+
 ##### Javascript:
 
 <!-- request javascript -->
@@ -315,7 +357,29 @@ searchRequest.Sort = new List<Object>();
 var sortById = new SortOrder("id", SortOrder.OrderEnum.Desc);
 searchRequest.Sort.Add(sortById);
 searchRequest.Sort.Add("_score");
+```
 
+<!-- intro -->
+
+##### Rust:
+
+<!-- request Rust -->
+``` rust
+let query = SearchQuery {
+    query_string: Some(serde_json::json!("Test document").into()),
+    ..Default::default(),
+};
+let sort_by_id = HashMap::new();
+sort_by_id.insert("id".to_string(), "desc".to_string()); 
+let mut sort = Vec::new();
+sort.push(sort_by_id);
+sort.push("_score".to_string());
+let search_req = SearchRequest {
+    table: "test".to_string(),
+    query: Some(Box::new(query)),
+    sort: Some(serde_json::json!(sort)),
+    ..Default::default(),
+};
 ```
 
 <!-- intro -->
@@ -432,6 +496,18 @@ search_request.sort = [sort_by_id]
 
 <!-- intro -->
 
+##### Python-asyncio:
+
+<!-- request Python-asyncio -->
+``` python
+search_request.index = 'test'
+search_request.fulltext_filter = manticoresearch.model.QueryFilter('Test document')
+sort_by_id = manticoresearch.model.SortOrder('id', 'desc')
+search_request.sort = [sort_by_id]
+```
+
+<!-- intro -->
+
 ##### Javascript:
 
 <!-- request javascript -->
@@ -472,7 +548,27 @@ searchRequest.FulltextFilter = new QueryFilter("Test document");
 searchRequest.Sort = new List<Object>();
 var sortById = new SortOrder("id", SortOrder.OrderEnum.Desc);
 searchRequest.Sort.Add(sortById);
+```
 
+<!-- intro -->
+
+##### Rust:
+
+<!-- request Rust -->
+``` rust
+let query = SearchQuery {
+    query_string: Some(serde_json::json!("Test document").into()),
+    ..Default::default(),
+};
+let mut sort_by_id = HashMap::new();
+sort_by_id.insert("id".to_string(), "desc".to_string()); 
+let sort = [HashMap; 1] = [sort_by_id];
+let search_req = SearchRequest {
+    table: "test".to_string(),
+    query: Some(Box::new(query)),
+    sort: Some(serde_json::json!(sort)),
+    ..Default::default(),
+};
 ```
 
 <!-- intro -->
@@ -590,6 +686,18 @@ search_request.sort = [sort]
 
 <!-- intro -->
 
+##### Python-asyncio:
+
+<!-- request Python-asyncio -->
+``` python
+search_request.index = 'test'
+search_request.fulltext_filter = manticoresearch.model.QueryFilter('Test document')
+sort = manticoresearch.model.SortMVA('attr_mva', 'desc', 'max')
+search_request.sort = [sort]
+```
+
+<!-- intro -->
+
 ##### Javascript:
 
 <!-- request javascript -->
@@ -628,6 +736,30 @@ var searchRequest = new SearchRequest("test");
 searchRequest.FulltextFilter = new QueryFilter("Test document");
 var sort = new SortMVA("attr_mva", SortMVA.OrderEnum.Desc, SortMVA.ModeEnum.Max);
 searchRequest.Sort.Add(sort);
+```
+
+<!-- intro -->
+
+##### Rust:
+
+<!-- request Rust -->
+``` rust
+let query = SearchQuery {
+    query_string: Some(serde_json::json!("Test document").into()),
+    ..Default::default(),
+};
+let mut sort_mva_opts = HashMap::new();
+sort_mva_opts.insert("order".to_string(), "desc".to_string());
+sort_mva_opts.insert("mode".to_string(), "max".to_string());
+let mut sort_mva = HashMap::new();
+sort_mva.insert("attr_mva".to_string(), sort_mva_opts); 
+
+let search_req = SearchRequest {
+    table: "test".to_string(),
+    query: Some(Box::new(query)),
+    sort: Some(serde_json::json!(sort_mva)),
+    ..Default::default(),
+};
 ```
 
 <!-- intro -->
@@ -744,6 +876,19 @@ search_request.sort = [sort]
 
 <!-- intro -->
 
+##### Python-asyncio:
+
+<!-- request Python-asyncio -->
+``` python
+search_request.index = 'test'
+search_request.track_scores = true
+search_request.fulltext_filter = manticoresearch.model.QueryFilter('Test document')
+sort = manticoresearch.model.SortMVA('attr_mva', 'desc', 'max')
+search_request.sort = [sort]
+```
+
+<!-- intro -->
+
 ##### Javascript:
 
 <!-- request javascript -->
@@ -785,6 +930,31 @@ searchRequest.SetTrackScores(true);
 searchRequest.FulltextFilter = new QueryFilter("Test document");
 var sort = new SortMVA("attr_mva", SortMVA.OrderEnum.Desc, SortMVA.ModeEnum.Max);
 searchRequest.Sort.Add(sort);
+```
+
+<!-- intro -->
+
+##### Rust:
+
+<!-- request Rust -->
+``` rust
+let query = SearchQuery {
+    query_string: Some(serde_json::json!("Test document").into()),
+    ..Default::default(),
+};
+let mut sort_mva_opts = HashMap::new();
+sort_mva_opts.insert("order".to_string(), "desc".to_string());
+sort_mva_opts.insert("mode".to_string(), "max".to_string());
+let mut sort_mva = HashMap::new();
+sort_mva.insert("attr_mva".to_string(), sort_mva_opts); 
+
+let search_req = SearchRequest {
+    table: "test".to_string(),
+    query: Some(Box::new(query)),
+    sort: Some(serde_json::json!(sort_mva)),
+    track_scores: Some(serde_json::json!(true)),
+    ..Default::default(),
+};
 ```
 
 <!-- intro -->

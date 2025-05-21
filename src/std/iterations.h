@@ -24,6 +24,9 @@ inline bool none_of ( const CONTAINER& dData, FILTER cond );
 template<typename CONTAINER, typename FILTER>
 inline int64_t count_of ( const CONTAINER& dData, FILTER cond );
 
+template<typename INT = int64_t, typename CONTAINER, typename SIZER>
+inline INT sum_of ( const CONTAINER & dData, SIZER amount );
+
 template<typename CONTAINER, typename ACTION>
 void for_each ( CONTAINER&& dData, ACTION fnAction );
 

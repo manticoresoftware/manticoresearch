@@ -155,8 +155,8 @@ set ( USE_SYSLOG ${HAVE_SYSLOG_H} CACHE BOOL "compile with possibility to use sy
 bannervar ( USE_SYSLOG )
 
 # options for clang/gcc c and c++
-target_compile_options ( lextra INTERFACE $<${ONLYGNUCLANGC_CXX}:-D_FILE_OFFSET_BITS=64 -Wall -fno-strict-aliasing> )
-target_compile_options ( lextra INTERFACE $<${CLANGWIN}:-fno-strict-aliasing -Wno-format -Wno-uninitialized-const-reference -Wno-unneeded-internal-declaration
+target_compile_options ( lextra INTERFACE $<${ONLYGNUCLANGC_CXX}:-D_FILE_OFFSET_BITS=64 -Wall -Wstrict-aliasing> )
+target_compile_options ( lextra INTERFACE $<${CLANGWIN}:-Wstrict-aliasing -Wno-format -Wno-uninitialized-const-reference -Wno-unneeded-internal-declaration
 		-Wno-deprecated-declarations -Wno-implicit-const-int-float-conversion -Wno-missing-braces -Wno-unused-function> )
 
 # disable rtti
@@ -243,6 +243,9 @@ target_link_libraries ( lextra INTERFACE cctz::cctz )
 
 include ( GetxxHash )
 target_link_libraries ( lextra INTERFACE xxHash::xxhash )
+
+include ( GetRBitmap )
+target_link_libraries ( lextra INTERFACE roaring::roaring )
 
 with_get ( jieba "Jieba" "Chinese text segmentation tool" )
 

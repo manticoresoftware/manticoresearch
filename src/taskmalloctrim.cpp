@@ -12,6 +12,7 @@
 
 #include "taskmalloctrim.h"
 
+#include "config.h"
 #if HAVE_MALLOC_TRIM
 
 #include <malloc.h>

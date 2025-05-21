@@ -14,10 +14,10 @@
 #include "searchdssl.h"
 #include "searchdhttp.h"
 #include "tracer.h"
+#include "daemon/logger.h"
 
 extern int g_iClientTimeoutS; // from searchd.cpp
 extern volatile bool g_bMaintenance;
-extern int g_iHttpLogFile; // from searchd.cpp
 
 int GetGlobalReqID () noexcept
 {
@@ -25,47 +25,6 @@ int GetGlobalReqID () noexcept
 	return iReqID.fetch_add ( 1, std::memory_order_relaxed );
 }
 
-static void logRec ( const StringBuilder_c& sData )
-{
-	sphSeek ( g_iHttpLogFile, 0, SEEK_END );
-	sphWrite ( g_iHttpLogFile, sData.cstr (), sData.GetLength () );
-}
-
-static void logOutput ( VecTraits_T<BYTE> dData, int iReqID )
-{
-	StringBuilder_c tBuf;
-	tBuf << "[";
-	sphFormatCurrentTime ( tBuf );
-	tBuf << "] [Request-ID: " << iReqID << "] - Outgoing HTTP Response:\n";
-	auto iLine = tBuf.GetLength();
-	for ( auto i = 1; i<iLine; ++i ) tBuf << ">";
-	tBuf << "\n";
-	if ( dData.IsEmpty () )
-		tBuf << "<empty response>";
-	else
-		tBuf << Str_t { dData };
-	tBuf << "\n\n";
-	logRec ( tBuf );
-}
-
-
-static void logInput ( VecTraits_T<BYTE> sData, int iReqID, int64_t iTimestamp )
-{
-	StringBuilder_c tBuf;
-	tBuf << "[";
-	sphFormatTime ( iTimestamp, tBuf );
-	tBuf << "] [Request-ID: " << iReqID << "] - Incoming HTTP Request:\n";
-	auto iLine = tBuf.GetLength ();
-	for ( auto i = 1; i<iLine; ++i )
-		tBuf << "<";
-	tBuf << "\n";
-	if ( sData.IsEmpty () )
-		tBuf << "<empty request>";
-	else
-		tBuf.AppendRawChunk ( sData );
-	tBuf << "\n\n";
-	logRec ( tBuf );
-}
 
 class LoggingAsyncNetBuffer_c final : public AsyncNetBuffer_c
 {
@@ -144,9 +103,9 @@ public:
 
 	bool SendBuffer ( const VecTraits_T<BYTE> & dData ) final
 	{
-		logInput ( m_dInput, m_iReqID, std::exchange ( m_iIncomingTimestamp, 0 ) );
+		logHttpInput ( m_dInput, m_iReqID, std::exchange ( m_iIncomingTimestamp, 0 ) );
 		m_dInput.Reset();
-		logOutput ( dData, m_iReqID );
+		logHttpOutput ( dData, m_iReqID );
 		m_tOut.SendBytes ( dData );
 		return m_tOut.Flush();
 	}
@@ -208,7 +167,7 @@ void HttpServe ( std::unique_ptr<AsyncNetBuffer_c> pBuf )
 	if ( bHeNeedSSL )
 		tSess.SetSsl ( MakeSecureLayer ( pBuf ) );
 
-	bool bHttpLogging = g_iHttpLogFile>=0;
+	bool bHttpLogging = HttpLogEnabled();
 	if ( bHttpLogging )
 		MakeLoggingLayer ( pBuf );
 

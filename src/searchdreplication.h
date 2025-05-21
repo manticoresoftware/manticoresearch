@@ -58,7 +58,7 @@ bool GloballyDeleteCluster ( const CSphString & sCluster, CSphString & sError );
 StrVec_t ClusterGetAllNodes ( const CSphString& sCluster );
 
 // cluster ALTER statement
-bool ClusterAlter ( const CSphString & sCluster, const CSphString & sIndex, bool bAdd, CSphString & sError );
+bool ClusterAlter ( const CSphString & sCluster, StrVec_t& dIndexes, bool bAdd, CSphString & sError );
 
 // cluster ALTER statement that updates nodes option from view nodes at all nodes at cluster
 bool ClusterAlterUpdate ( const CSphString & sCluster, const CSphString & sUpdate, CSphString & sError );
@@ -79,5 +79,8 @@ bool SetIndexesClusterTOI ( const ReplicationCommand_t * pCmd );
 
 CSphString WaitClusterReady ( const CSphString& sCluster, int64_t iTimeoutS );
 std::pair<int,CSphString> WaitClusterCommit ( const CSphString& sCluster, int iTxn, int64_t iTimeoutS );
+
+void ReplicationBinlogStart ( const CSphString & sDataDir, bool bDisabled );
+void ReplicationBinlogStop();
 
 #endif // _searchdreplication_

@@ -48,7 +48,7 @@ class AttrMerger_c::Impl_c
 	CSphVector<PlainOrColumnar_t>	m_dSiAttrs;
 	std::unique_ptr<SI::Builder_i>	m_pSIdxBuilder;
 
-	CSphVector<ESphExt> 					m_dCreatedFiles;
+	StrVec_t &								m_dCreatedFiles;
 
 private:
 	template <bool WITH_BLOB, bool WITH_STRIDE, bool WITH_DOCSTORE, bool WITH_SI, bool WITH_KNN, bool PURE_COLUMNAR>
@@ -58,29 +58,25 @@ private:
 
 	CSphString GetTmpFilename ( const CSphIndex* pIdx, ESphExt eExt )
 	{
-		m_dCreatedFiles.Add ( eExt );
 		assert ( pIdx );
-		return  pIdx->GetTmpFilename ( eExt );
+		CSphString sTmp = pIdx->GetTmpFilename ( eExt );
+		m_dCreatedFiles.Add ( sTmp );
+		return sTmp;
 	}
 
 public:
-	Impl_c ( MergeCb_c & tMonitor, CSphString & sError, int64_t iTotalDocs, const BuildBufferSettings_t & tSettings )
+	Impl_c ( MergeCb_c & tMonitor, CSphString & sError, int64_t iTotalDocs, const BuildBufferSettings_t & tSettings, StrVec_t & dCreatedFiles )
 		: m_tMonitor ( tMonitor )
 		, m_sError ( sError )
 		, m_iTotalDocs ( iTotalDocs )
 		, m_tBufferSettings ( tSettings )
+		, m_dCreatedFiles ( dCreatedFiles )
 	{}
 
 	bool Prepare ( const CSphIndex * pSrcIndex, const CSphIndex * pDstIndex );
 	bool AnalyzeAttributes ( const CSphIndex & tIndex, const VecTraits_T<RowID_t>& dRowMap, DWORD uAlive );
 	bool CopyAttributes ( const CSphIndex & tIndex, const VecTraits_T<RowID_t>& dRowMap, DWORD uAlive );
-	bool FinishMergeAttributes ( const CSphIndex * pDstIndex, BuildHeader_t& tBuildHeader, StrVec_t* pCreatedFiles );
-
-	void AddCreatedFiles ( const CSphIndex * pDstIndex, StrVec_t * pCreatedFiles )
-	{
-		if ( pCreatedFiles )
-			m_dCreatedFiles.for_each ( [pCreatedFiles, pDstIndex] ( auto eExt ) { pCreatedFiles->Add ( pDstIndex->GetTmpFilename ( eExt ) ); } );
-	}
+	bool FinishMergeAttributes ( const CSphIndex * pDstIndex, BuildHeader_t & tBuildHeader );
 };
 
 bool AttrMerger_c::Impl_c::Prepare ( const CSphIndex * pSrcIndex, const CSphIndex * pDstIndex )
@@ -318,7 +314,7 @@ bool AttrMerger_c::Impl_c::CopyAttributes ( const CSphIndex & tIndex, const VecT
 }
 
 
-bool AttrMerger_c::Impl_c::FinishMergeAttributes ( const CSphIndex * pDstIndex, BuildHeader_t& tBuildHeader, StrVec_t* pCreatedFiles )
+bool AttrMerger_c::Impl_c::FinishMergeAttributes ( const CSphIndex * pDstIndex, BuildHeader_t & tBuildHeader )
 {
 	m_tMinMax.FinishCollect();
 	assert ( m_tResultRowID==m_iTotalDocs );
@@ -387,8 +383,8 @@ bool AttrMerger_c::Impl_c::FinishMergeAttributes ( const CSphIndex * pDstIndex, 
 }
 
 
-AttrMerger_c::AttrMerger_c ( MergeCb_c& tMonitor, CSphString& sError, int64_t iTotalDocs, const BuildBufferSettings_t & tSettings )
-	: m_pImpl { std::make_unique<Impl_c> ( tMonitor, sError, iTotalDocs, tSettings ) }
+AttrMerger_c::AttrMerger_c ( MergeCb_c& tMonitor, CSphString& sError, int64_t iTotalDocs, const BuildBufferSettings_t & tSettings, StrVec_t & dCreatedFiles )
+	: m_pImpl { std::make_unique<Impl_c> ( tMonitor, sError, iTotalDocs, tSettings, dCreatedFiles ) }
 {}
 
 AttrMerger_c::~AttrMerger_c() = default;
@@ -411,11 +407,10 @@ bool AttrMerger_c::CopyAttributes ( const CSphIndex& tIndex, const VecTraits_T<R
 	return m_pImpl->CopyAttributes ( tIndex, dRowMap, uAlive );
 }
 
-bool AttrMerger_c::FinishMergeAttributes ( const CSphIndex* pDstIndex, BuildHeader_t& tBuildHeader, StrVec_t* pCreatedFiles )
+bool AttrMerger_c::FinishMergeAttributes ( const CSphIndex * pDstIndex, BuildHeader_t & tBuildHeader )
 {
 	TRACE_CORO ( "sph", "AttrMerger_c::FinishMergeAttributes" );
-	bool bOk = m_pImpl->FinishMergeAttributes ( pDstIndex, tBuildHeader, pCreatedFiles );
-	m_pImpl->AddCreatedFiles ( pDstIndex, pCreatedFiles );
+	bool bOk = m_pImpl->FinishMergeAttributes ( pDstIndex, tBuildHeader );
 	return bOk;
 }
 

@@ -28,6 +28,8 @@
 #include "knnmisc.h"
 #include <time.h>
 #include <math.h>
+
+#include "client_session.h"
 #include "uni_algo/case.h"
 #include "datetime.h"
 #include "exprdatetime.h"
@@ -5481,7 +5483,7 @@ static CSphString Dots2String ( CSphVector<NamedDot>& dDots )
 	return sResult;
 }
 
-alignas ( 128 ) static const BYTE g_UrlEncodeTable[] = { // 0 if need escape, 1 if not
+alignas ( 128 ) static constexpr BYTE g_UrlEncodeTable[] = { // 0 if need escape, 1 if not
 	0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
 	0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
 	0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 0, // -.
@@ -7076,7 +7078,7 @@ ISphExpr * ExprParser_t::CreateFuncExpr ( int iNode, VecRefPtrs_t<ISphExpr*> & d
 	case FUNC_LEVENSHTEIN: return CreateLevenshteinNode ( dArgs[0], dArgs[1], ( dArgs.GetLength()>2 ? dArgs[2] : nullptr ) );
 
 	case FUNC_DATE_FORMAT: return CreateExprDateFormat ( dArgs[0], dArgs[1] );
-	case FUNC_DATABASE: return new Expr_GetStrConst_c ( FROMS ( "Manticore" ), false ) ;
+	case FUNC_DATABASE: return new Expr_GetStrConst_c ( FromStr ( session::GetClientSession()->m_sCurrentDbName ), false ) ;
 	case FUNC_VERSION: return new Expr_GetStrConst_c ( FromStr ( sphinxexpr::MySQLVersion() ), false );
 	
 	case FUNC_RANGE:
@@ -8432,8 +8434,10 @@ public:
 		break;
 
 		case SPH_EXPR_GET_DEPENDENT_COLS:
-			static_cast<StrVec_t*> ( pArg )->Add ( m_sAttrLat );
-			static_cast<StrVec_t*> ( pArg )->Add ( m_sAttrLon );
+			if ( !m_sAttrLat.IsEmpty() )
+				static_cast<StrVec_t*> ( pArg )->Add ( m_sAttrLat );
+			if ( !m_sAttrLon.IsEmpty() )
+				static_cast<StrVec_t*> ( pArg )->Add ( m_sAttrLon );
 			break;
 
 		default:

@@ -71,7 +71,7 @@ class tstlogger
 protected:
 	void setup ()
 	{
-		g_pLogger() = TestLogger;
+		SetLogger ( &TestLogger );
 		sLogBuff[0] = '\0';
 	}
 
@@ -84,7 +84,7 @@ public:
 	{
 		m_eMaxLevel = SPH_LOG_DEBUG;
 		m_bOutToStderr = true;
-		g_pLogger () = TestLogger;
+		SetLogger ( &TestLogger );
 	}
 };
 

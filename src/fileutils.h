@@ -17,8 +17,6 @@
 #include "std/strerrorm.h"
 #include <fcntl.h>
 
-#include <sys/stat.h>
-
 #if !_WIN32
  #include <sys/mman.h>
 #endif
@@ -465,6 +463,67 @@ private:
 
 	bool		m_bWrite {false};
 	CSphString	m_sFilename;
+};
+
+class SharedMemory_c
+{
+public:
+	explicit SharedMemory_c ( const CSphString & sPath );
+	~SharedMemory_c();
+
+	enum class OpenResult_e
+	{
+		OK,
+		FAILURE,
+		NO_FILE
+	};
+
+	/// try to open existed shared memory object
+	OpenResult_e Open ();
+
+	/// create new shared memory object
+	bool Create ( int64_t iBytes );
+
+	/// set new size of the shared memory object
+	bool Reset ( int64_t iBytes );
+
+	/// close and destroy shared memory object
+	bool Close ();
+
+	/// get write address
+	BYTE * GetWritePtr() const
+	{
+		return m_pData;
+	}
+
+	/// returns read address - same as write, but const pointer
+	const BYTE * GetReadPtr() const
+	{
+		return GetWritePtr();
+	}
+
+	int64_t GetLength64() const
+	{
+		return m_iCount;
+	}
+
+	bool IsSupported () const;
+	const CSphString & GetError() const
+	{
+		return m_sError;
+	}
+
+private:
+	BYTE * m_pData = nullptr;
+	int64_t m_iCount = 0;
+
+	const CSphString m_sPath;
+	bool m_bHasFile = false;
+
+	CSphString m_sError;
+
+	bool MapFile ( int iFD, int64_t iBytes );
+	bool IsValid ();
 };
 
 #endif // _fileutils_

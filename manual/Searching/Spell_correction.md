@@ -24,7 +24,7 @@ There are a few ways spell correction can be done, but it's important to note th
 
 Manticore provides the fuzzy search option and the commands `CALL QSUGGEST` and `CALL SUGGEST` that can be used for automatic spell correction purposes.
 
-# Fuzzy Search
+## Fuzzy Search
 
 The Fuzzy Search feature allows for more flexible matching by accounting for slight variations or misspellings in the search query. It works similarly to a normal `SELECT` SQL statement or a `/search` JSON request but provides additional parameters to control the fuzzy matching behavior.
 
@@ -121,7 +121,7 @@ POST /search
 }
 ```
 
-Note: If you use the [query_string](../../Searching/Full_text_matching/Basic_usage.md#query_string), be aware that it does not support full-text operators except the [phrase search operator](../Searching/Full_text_matching/Operators.md#Phrase-search-operator). The query string should consist solely of the words you wish to match.
+Note: If you use the [query_string](../Searching/Full_text_matching/Basic_usage.md#query_string), be aware that it does not support full-text operators except the [phrase search operator](../Searching/Full_text_matching/Operators.md#Phrase-search-operator). The query string should consist solely of the words you wish to match.
 
 ### Options
 

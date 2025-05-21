@@ -22,7 +22,8 @@ on:
       - 'cmake/GetGALERA.cmake'
       - 'galera_packaging/**'
     tags:
-      - 'release*'    
+      - 'release*'
+      - 'pack_publish'
 
 # cancels the previous workflow run when a new one appears in the same branch (e.g. master or a PR's branch)
 concurrency:
@@ -66,9 +67,6 @@ jobs:
   pack:
     name: OK to pack?
     runs-on: ubuntu-22.04
-    permissions:
-      contents: write
-      pull-requests: read
     outputs:
       version: ${{ steps.semver-tagger.outputs.version }}
       version_full: ${{ steps.semver-tagger.outputs.version_full }}
@@ -102,8 +100,14 @@ jobs:
       (
         github.event_name == 'push'
         &&
-        startsWith(
-          github.ref, 'refs/heads/manticore-'
+        (
+          startsWith(
+            github.ref, 'refs/heads/manticore-'
+          )
+          ||
+          contains(
+            github.ref, 'refs/tags/pack_publish'
+          )
         )
       )
     steps:
@@ -111,24 +115,32 @@ jobs:
         uses: actions/checkout@v3
         with:
           fetch-depth: 0
+          token: ${{ secrets.GITHUB_TOKEN }}
       - name: Update version
         id: semver-tagger
         uses: manticoresoftware/semver-tagger-action@main  
         with:
           github_token: ${{ secrets.GITHUB_TOKEN }}
+          conventional_commits_authors: alexey@manticoresearch.com
           ignore_patterns: '\.md$|^test/|^manual/|\.clt|\.github|\.patterns|\.yml|\.gitignore'
       - name: Check if we should continue packing
         id: check-should-continue
         run: |
-          # Continue if version was updated or if we have the "pack" label on PR
+          # Continue if version was updated, if we have the "pack" label on PR, or if target is "release"
           if [[ "${{ steps.semver-tagger.outputs.version_updated }}" == "true" ]]; then
             echo "Continuing because version was updated"
+            echo "should_continue=true" >> $GITHUB_OUTPUT
+          elif [[ "${{ steps.semver-tagger.outputs.target }}" == "release" ]]; then
+            echo "Continuing because target is release"
             echo "should_continue=true" >> $GITHUB_OUTPUT
           elif [[ "${{ github.event_name }}" == "pull_request" && "${{ contains(github.event.pull_request.labels.*.name, 'pack') }}" == "true" ]]; then
             echo "Continuing because PR has 'pack' label"
             echo "should_continue=true" >> $GITHUB_OUTPUT
+          elif [[ "${{ contains(github.ref, 'refs/tags/pack_publish') }}" == "true" ]]; then
+            echo "Continuing because commit has 'pack_publish' tag"
+            echo "should_continue=true" >> $GITHUB_OUTPUT
           else
-            echo "Skipping packing because version wasn't updated and there's no 'pack' label"
+            echo "Skipping packing because version wasn't updated, target is not release, and there's no 'pack' label or tag"
             echo "should_continue=false" >> $GITHUB_OUTPUT
           fi
       - run: |
@@ -140,11 +152,43 @@ jobs:
           echo "* Version updated: ${{ steps.semver-tagger.outputs.version_updated }}" >> $GITHUB_STEP_SUMMARY
           echo "* Should continue packing: ${{ steps.check-should-continue.outputs.should_continue }}" >> $GITHUB_STEP_SUMMARY
 
+#  debug_info:
+#    name: Debug GitHub Event Info
+#    runs-on: ubuntu-22.04
+#    steps:
+#      - name: Print GitHub Event Info
+#        run: |
+#          echo "GitHub Event Name: ${{ github.event_name }}"
+#          echo "GitHub Ref: ${{ github.ref }}"
+#          echo "GitHub Ref Type: ${{ github.ref_type }}"
+#          echo "GitHub Ref Name: ${{ github.ref_name }}"
+#          echo "GitHub Actor: ${{ github.actor }}"
+#          echo "GitHub Repository: ${{ github.repository }}"
+#          echo "GitHub SHA: ${{ github.sha }}"
+#          echo "GitHub Run Number: ${{ github.run_number }}"
+#          echo "GitHub Run Attempt: ${{ github.run_attempt }}"
+#          echo "GitHub Workflow: ${{ github.workflow }}"
+#          echo "GitHub Event JSON:"
+#          echo '${{ toJSON(github.event) }}'
+
+  # Job to check dependencies using check_deps_in_repos.sh
+  # Runs on every PR, workflow_run, or push event matching the conditions
+  check_deps:
+    needs: pack
+    if: needs.pack.outputs.should_continue == 'true'
+    name: Check deps test
+    runs-on: ubuntu-22.04
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v3
+      - name: Run dependency check script
+        run: |
+          bash dist/check_deps_in_repos.sh
 
   pack_debian_ubuntu:
     name: Debian/Ubuntu packages
     uses: ./.github/workflows/build_template.yml
-    needs: [pack, check_branch]
+    needs: [pack, check_branch, check_deps]
     if: needs.pack.outputs.should_continue == 'true'
     strategy:
       fail-fast: false
@@ -169,7 +213,7 @@ jobs:
   pack_rhel:
     name: RHEL packages
     uses: ./.github/workflows/build_template.yml
-    needs: [pack, check_branch]
+    needs: [pack, check_branch, check_deps]
     if: needs.pack.outputs.should_continue == 'true'
     strategy:
       fail-fast: false
@@ -197,7 +241,7 @@ jobs:
   pack_macos:
     name: MacOS packages
     uses: ./.github/workflows/build_template.yml
-    needs: [pack, check_branch]
+    needs: [pack, check_branch, check_deps]
     if: needs.pack.outputs.should_continue == 'true'
     strategy:
       fail-fast: false
@@ -223,7 +267,7 @@ jobs:
   pack_windows:
     name: Windows x64 package
     uses: ./.github/workflows/build_template.yml
-    needs: [pack, check_branch]
+    needs: [pack, check_branch, check_deps]
     if: needs.pack.outputs.should_continue == 'true'
     with:
       COLUMNAR_LOCATOR: ${{ needs.check_branch.outputs.columnar_locator }}
@@ -241,7 +285,6 @@ jobs:
       artifact_list: "build/manticore*exe build/manticore*zip"
       version: ${{ needs.pack.outputs.version }}
       build_tag: ${{ needs.pack.outputs.target == 'dev' && 'dev' || '' }}
-      
   build_nsis:
     name: Making Windows NSIS installer
     needs: [pack_windows, pack]
@@ -285,6 +328,7 @@ jobs:
         (github.event_name == 'pull_request' && (contains(github.event.pull_request.labels.*.name, 'publish')))
         || (github.event_name == 'workflow_run' && github.event.workflow_run.conclusion == 'success')
         || (github.event_name == 'push' && startsWith(github.ref, 'refs/heads/manticore-'))
+        || (github.event_name == 'push' && contains(github.ref, 'refs/tags/pack_publish'))
       )
     steps:
       - run: echo "Ready to publish"
@@ -412,7 +456,7 @@ jobs:
         image: [ "centos:7", "almalinux:8", "almalinux:9", "oraclelinux:9", "amazonlinux:latest" ]
     runs-on: ubuntu-22.04
     steps:
-      - uses: manticoresoftware/clt@0.6.5
+      - uses: manticoresoftware/clt@0.6.9
         with:
           image: ${{ matrix.image }}
           test_prefix: test/clt-tests/installation/rhel-dev-
@@ -427,7 +471,7 @@ jobs:
         image: [ "ubuntu:bionic", "ubuntu:focal", "ubuntu:jammy", "debian:buster", "debian:bullseye", "debian:bookworm" ]
     runs-on: ubuntu-22.04
     steps:
-      - uses: manticoresoftware/clt@0.6.5
+      - uses: manticoresoftware/clt@0.6.9
         with:
           image: ${{ matrix.image }}
           test_prefix: test/clt-tests/installation/deb-dev-

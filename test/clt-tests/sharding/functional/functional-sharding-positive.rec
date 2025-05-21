@@ -1,0 +1,124 @@
+––– input –––
+export INSTANCE=1
+––– output –––
+––– block: ../../base/replication/start-searchd-precach –––
+––– input –––
+export INSTANCE=2
+––– output –––
+––– block: ../../base/replication/start-searchd-precach –––
+––– input –––
+export INSTANCE=3
+––– output –––
+––– block: ../../base/replication/start-searchd-precach –––
+––– input –––
+export CLUSTER_NAME=replication
+––– output –––
+––– block: ../../base/replication/create-cluster –––
+––– block: ../../base/replication/join-cluster-on-all-nodes –––
+––– input –––
+for port in 1306 2306 3306; do timeout 60 mysql -h0 -P$port -e "SHOW STATUS LIKE 'cluster_replication_status'\G" > /tmp/status_$port.log && grep -q "Value: primary" /tmp/status_$port.log && echo "Port $port: Node synced"; done && cat /tmp/status_1306.log
+––– output –––
+Port 1306: Node synced
+Port 2306: Node synced
+Port 3306: Node synced
+*************************** 1. row ***************************
+Counter: cluster_replication_status
+  Value: primary
+––– input –––
+mysql -h0 -P1306 -e "create table ${CLUSTER_NAME}:tbl1(id bigint) shards='5' rf='2'"; echo $?
+––– output –––
+0
+––– input –––
+for i in 1 2 3; do mysql -h0 -P${i}306 -e "show tables from system\G"; done | grep 'system.tbl1_s' | sort -V
+––– output –––
+Table: system.tbl1_s0
+Table: system.tbl1_s0
+Table: system.tbl1_s1
+Table: system.tbl1_s1
+Table: system.tbl1_s2
+Table: system.tbl1_s2
+Table: system.tbl1_s3
+Table: system.tbl1_s3
+Table: system.tbl1_s4
+Table: system.tbl1_s4
+––– input –––
+mysql -h0 -P2306 -e "create table ${CLUSTER_NAME}:tbl2(id bigint) shards='4' rf='1'"; echo $?
+––– output –––
+0
+––– input –––
+for i in 1 2 3; do mysql -h0 -P${i}306 -e "show tables from system\G"; done | grep 'system.tbl2_s' | sort -V
+––– output –––
+Table: system.tbl2_s0
+Table: system.tbl2_s1
+Table: system.tbl2_s2
+Table: system.tbl2_s3
+––– input –––
+mysql -h0 -P3306 -e "create table ${CLUSTER_NAME}:tbl3(id bigint) shards='5' rf='2'"; echo $?
+––– output –––
+0
+––– input –––
+for i in 1 2 3; do mysql -h0 -P${i}306 -e "show tables from system\G"; done | grep 'system.tbl3_s' | sort -V
+––– output –––
+Table: system.tbl3_s0
+Table: system.tbl3_s0
+Table: system.tbl3_s1
+Table: system.tbl3_s1
+Table: system.tbl3_s2
+Table: system.tbl3_s2
+Table: system.tbl3_s3
+Table: system.tbl3_s3
+Table: system.tbl3_s4
+Table: system.tbl3_s4
+––– input –––
+mysql -h0 -P3306 -e "DROP TABLE ${CLUSTER_NAME}:tbl3"; echo $?
+––– output –––
+0
+––– input –––
+mysql -h0 -P3306 -e "create table ${CLUSTER_NAME}:tbl3(id bigint) shards='10' rf='3'"; echo $?
+––– output –––
+0
+––– input –––
+for i in 1 2 3; do mysql -h0 -P${i}306 -e "show tables from system\G"; done | grep 'system.tbl3_s' | sort -V
+––– output –––
+Table: system.tbl3_s0
+Table: system.tbl3_s0
+Table: system.tbl3_s0
+Table: system.tbl3_s1
+Table: system.tbl3_s1
+Table: system.tbl3_s1
+Table: system.tbl3_s2
+Table: system.tbl3_s2
+Table: system.tbl3_s2
+Table: system.tbl3_s3
+Table: system.tbl3_s3
+Table: system.tbl3_s3
+Table: system.tbl3_s4
+Table: system.tbl3_s4
+Table: system.tbl3_s4
+Table: system.tbl3_s5
+Table: system.tbl3_s5
+Table: system.tbl3_s5
+Table: system.tbl3_s6
+Table: system.tbl3_s6
+Table: system.tbl3_s6
+Table: system.tbl3_s7
+Table: system.tbl3_s7
+Table: system.tbl3_s7
+Table: system.tbl3_s8
+Table: system.tbl3_s8
+Table: system.tbl3_s8
+Table: system.tbl3_s9
+Table: system.tbl3_s9
+Table: system.tbl3_s9
+––– input –––
+mysql -h0 -P3306 -e "create table ${CLUSTER_NAME}:tbl4(id bigint) shards='3000' rf='3' timeout='60'"; echo $?
+––– output –––
+0
+––– input –––
+for i in 1 2 3; do mysql -h0 -P${i}306 -e "show tables from system\G"; done | grep -c 'system.tbl4_s'
+––– output –––
+9000
+––– input –––
+mysql -h0 -P3306 -e "create table ${CLUSTER_NAME}:tbl5(id bigint) shards='3001' rf='3'"?
+––– output –––
+ERROR 1064 (42000) at line 1: Shard count cannot be greater than 3000

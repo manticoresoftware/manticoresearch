@@ -14,6 +14,7 @@
 
 #include "searchdaemon.h"
 
+#include "config.h"
 #if HAVE_EVENTFD
 #include <sys/eventfd.h>
 #endif

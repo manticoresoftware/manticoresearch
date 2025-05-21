@@ -14,7 +14,7 @@
 #define _snippetfunctor_
 
 #include "sphinxstd.h"
-#include "sphinxquery.h"
+#include "sphinxexcerpt.h"
 #include "sphinxsearch.h"
 #include "sphinxdefs.h"
 

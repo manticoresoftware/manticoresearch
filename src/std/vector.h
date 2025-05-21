@@ -30,11 +30,8 @@ namespace sph
 template<typename T, class POLICY = DefaultCopy_T<T>, class LIMIT = DefaultRelimit, class STORE = DefaultStorage_T<T>>
 class Vector_T: public VecTraits_T<T>, protected STORE, LIMIT
 {
-	template<typename S = STORE>
-	std::enable_if_t< S::is_sized> Deallocate ( typename STORE::TYPE* pData, int64_t );
+	void Deallocate ( typename STORE::TYPE * pData, int64_t iLimit );
 
-	template<typename S = STORE>
-	std::enable_if_t<!S::is_sized> Deallocate ( typename STORE::TYPE* pData, int64_t );
 protected:
 	using BASE = VecTraits_T<T>;
 	using BASE::m_pData;
@@ -71,14 +68,10 @@ public:
 	T& Add();
 
 	/// add entry
-	template<typename S = STORE>
-	FORCE_INLINE typename std::enable_if<S::is_constructed>::type Add ( T tValue );
-
-	template<typename S = STORE>
-	FORCE_INLINE typename std::enable_if<!S::is_constructed>::type Add ( T tValue );
+	FORCE_INLINE void Add ( T tValue );
 
 	template<typename S = STORE, class... Args>
-	typename std::enable_if<!S::is_constructed>::type Emplace_back ( Args&&... args );
+	std::enable_if_t<!S::is_constructed> Emplace_back ( Args&&... args );
 
 	/// add N more entries, and return a pointer to that buffer
 	T* AddN ( int iCount );
@@ -119,15 +112,11 @@ public:
 	typename std::enable_if<!S::is_constructed>::type Reserve_static ( int64_t iNewLimit );
 
 	/// ensure we have space for iGap more items (reserve more if necessary)
-	inline void ReserveGap ( int iGap );
+	void ReserveGap ( int iGap );
 
 	/// resize
-	template<typename S = STORE>
-	inline typename std::enable_if<S::is_constructed>::type Resize ( int64_t iNewLength );
-
 	/// for non-constructed imply destroy when shrinking, of construct when widening
-	template<typename S = STORE>
-	typename std::enable_if<!S::is_constructed>::type Resize ( int64_t iNewLength );
+	void Resize ( int64_t iNewLength );
 
 	// doesn't need default c-tr
 	void Shrink ( int64_t iNewLength );
@@ -143,11 +132,11 @@ public:
 	void ZeroTail();
 
 	/// query current reserved size, in elements
-	inline int GetLimit() const;
+	int GetLimit() const;
 
 	/// query currently allocated RAM, in bytes
 	/// (could be > GetLengthBytes() since uses limit, not size)
-	inline int64_t AllocatedBytes() const;
+	int64_t AllocatedBytes() const;
 
 	/// filter unique
 	void Uniq ( bool bSort=true );
@@ -168,26 +157,21 @@ public:
 
 	/// append another vec to the end
 	/// will use memmove (POD case), or one-by-one copying.
-	template<typename S = STORE>
-	typename std::enable_if<S::is_constructed>::type Append ( const VecTraits_T<T>& rhs );
-
-	/// append another vec to the end for non-constructed
-	/// will construct in-place with copy c-tr
-	template<typename S = STORE>
-	typename std::enable_if<!S::is_constructed>::type Append ( const VecTraits_T<T>& rhs );
+	/// or construct in-place with copy c-tr
+	void Append ( const VecTraits_T<T> & rhs );
 
 	/// swap
 	template<typename L = LIMIT, typename S = STORE>
-	typename std::enable_if<!S::is_owned>::type SwapData ( Vector_T<T, POLICY, L, STORE>& rhs ) noexcept;
+	std::enable_if_t<!S::is_owned> SwapData ( Vector_T<T, POLICY, L, STORE>& rhs ) noexcept;
 
 	/// leak
 	template<typename S = STORE>
-	typename std::enable_if<!S::is_owned, T*>::type LeakData();
+	std::enable_if_t<!S::is_owned, T*> LeakData();
 
 	/// adopt external buffer
 	/// note that caller must himself then nullify origin pData to avoid double-deletion
 	template<typename S = STORE>
-	typename std::enable_if<!S::is_owned>::type AdoptData ( T* pData, int64_t iLen, int64_t iLimit );
+	std::enable_if_t<!S::is_owned> AdoptData ( T* pData, int64_t iLen, int64_t iLimit );
 
 	/// insert into a middle (will fail to compile for swap vector)
 	template<typename TT=T>
@@ -196,17 +180,9 @@ public:
 protected:
 	int64_t m_iLimit = 0; ///< entries allocated
 
-	template<typename S = STORE>
-	typename std::enable_if<S::is_constructed>::type destroy_at ( int64_t, int64_t ) {}
+	void destroy_at ( int64_t iIndex, int64_t iCount );
 
-	template<typename S = STORE>
-	typename std::enable_if<!S::is_constructed>::type destroy_at ( int64_t iIndex, int64_t iCount );
-
-	template<typename S = STORE>
-	typename std::enable_if<S::is_constructed>::type construct_at ( int64_t, int64_t ) {}
-
-	template<typename S = STORE>
-	typename std::enable_if<!S::is_constructed>::type construct_at ( int64_t iIndex, int64_t iCount );
+	void construct_at ( int64_t iIndex, int64_t iCount );
 };
 
 } // namespace sph

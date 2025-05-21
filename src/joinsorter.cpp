@@ -13,7 +13,7 @@
 
 #include "std/hash.h"
 #include "std/openhash.h"
-#include "sphinxquery.h"
+#include "sphinxquery/sphinxquery.h"
 #include "sphinxsort.h"
 #include "sphinxjson.h"
 #include "querycontext.h"
@@ -454,7 +454,7 @@ void StoredFetch_c::Process ( CSphMatch * pMatch )
 	SphAttr_t tDocId = pMatch->GetAttr ( m_pId->m_tLocator );
 
 	// compare against a preset null mask that the join sorter uses
-	bool bNull = m_pNullMaskAttr && pMatch->GetAttr ( m_pNullMaskAttr->m_tLocator )==m_uNullMask;
+	bool bNull = m_pNullMaskAttr && pMatch->GetAttr ( m_pNullMaskAttr->m_tLocator )==(SphAttr_t)m_uNullMask;
 
 	DocstoreDoc_t tDoc;
 	if ( !bNull && m_tRightIndex.GetDoc ( tDoc, tDocId, &m_dFieldToFetch, m_iSessionUID, true ) )
@@ -1296,9 +1296,17 @@ bool JoinSorter_c::AddToCacheAndPush ( const CSphMatch & tEntry, uint64_t uJoinO
 		bInCache = m_tCache.Add ( uJoinOnFilterHash, dMatches );
 	}
 
-	CSphRowitem * pDynamic = m_tMatch.m_pDynamic;
-	memcpy ( &m_tMatch, &tEntry, sizeof(m_tMatch) );
-	m_tMatch.m_pDynamic = pDynamic;
+	if constexpr ( !offsetof ( CSphMatch, m_pDynamic ) )
+	{
+		auto * pShiftedm_tMatch = reinterpret_cast<BYTE *> (&m_tMatch) + sizeof (CSphMatch::m_pDynamic);
+		const auto * pShiftedtEntry = reinterpret_cast<const BYTE *> (&tEntry) + sizeof (CSphMatch::m_pDynamic);
+		memcpy ( pShiftedm_tMatch, pShiftedtEntry, sizeof ( CSphMatch ) - sizeof (CSphMatch::m_pDynamic) );
+	} else
+	{
+		CSphRowitem * pDynamic = m_tMatch.m_pDynamic;
+		memcpy ( &m_tMatch, &tEntry, sizeof ( CSphMatch ) ); // warn about UB since CSphMatch is not trivially copyable
+		m_tMatch.m_pDynamic = pDynamic;
+	}
 
 	bool bAnythingPushed = PushJoinedMatches ( tEntry, dMatches, fnPush, pBlobPool, pColumnar );
 

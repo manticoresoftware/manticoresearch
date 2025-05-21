@@ -35,7 +35,7 @@ protected:
 	CSphFixedVector<RowID_t> m_dCollected {MAX_COLLECTED};
 
 	CSphTightVector<RowID_t> m_dRowIDs;
-	int			m_iId = 0;
+	int64_t			m_iId = 0;
 
 	BitVec_T<uint64_t> m_tBitmap;
 	RowID_t		m_tRowID = 0;
@@ -72,7 +72,7 @@ bool CachedIterator_T<true>::HintRowID ( RowID_t tRowID )
 		if ( m_tBitmap.BitGet(m_tRowID) )
 			return true;
 
-		m_tRowID++;
+		++m_tRowID;
 	}
 	
 	return false;
@@ -81,19 +81,19 @@ bool CachedIterator_T<true>::HintRowID ( RowID_t tRowID )
 template <>
 bool CachedIterator_T<false>::HintRowID ( RowID_t tRowID )
 {
-	RowID_t * pRowID = m_dRowIDs.Begin() + m_iId;
-	RowID_t * pRowIdMax = m_dRowIDs.End();
+	const RowID_t * pRowID = m_dRowIDs.Begin() + m_iId;
+	const RowID_t * pRowIdMax = m_dRowIDs.End();
 
 	if ( m_dRowIDs.IsEmpty() || pRowID>=pRowIdMax )
 		return false;
 
-	const int64_t LINEAR_THRESH = 256;
+	constexpr int64_t LINEAR_THRESH = 256;
 	if ( tRowID - *pRowID < LINEAR_THRESH )
 	{
 		const RowID_t * pRowIdStart = m_dRowIDs.Begin();
 
 		while ( pRowID<pRowIdMax && *pRowID<tRowID )
-			pRowID++;
+			++pRowID;
 
 		m_iId = pRowID-pRowIdStart;
 		return pRowID<pRowIdMax;
@@ -161,7 +161,7 @@ bool CachedIterator_T<true>::ReturnRowIdChunk ( RowIdBlock_t & dRowIdBlock )
 		if ( m_tBitmap.BitGet(m_tRowID) )
 			*pRowID++ = m_tRowID;
 
-		m_tRowID++;
+		++m_tRowID;
 	}
 
 	return ReturnIteratorResult ( pRowID, pRowIdStart, dRowIdBlock );
@@ -266,7 +266,7 @@ bool RowidIterator_LookupValues_T<ROWID_LIMITS,BITMAP>::Fill()
 			bHaveLookupDocs = m_tLookupReader.Read ( tLookupDocID, tLookupRowID );
 		}
 
-		m_iProcessed++;
+		++m_iProcessed;
 	}
 
 	return BASE::Finalize();
@@ -330,7 +330,7 @@ public:
 		if ( uValue >= MIN_NEG )
 			return { false, true };
 
-		if_const ( EQ )
+		if constexpr ( EQ )
 			return { uValue >= m_uValue, false };
 
 		return {  uValue > m_uValue, false };
@@ -345,7 +345,7 @@ class LtPos_T : public DocIdCheck_c
 public:
 	std::pair<bool,bool> Check ( uint64_t uValue ) override
 	{
-		if_const ( EQ )
+		if constexpr ( EQ )
 		{
 			if ( uValue <= m_uValue ) return { true, false };
 		}
@@ -386,7 +386,7 @@ public:
 			return { false, false };
 		}
 
-		if_const ( EQ )
+		if constexpr ( EQ )
 			return { uValue >= m_uValue, false };
 
 		return { uValue > m_uValue, false };
@@ -410,7 +410,7 @@ public:
 		if ( uValue < MIN_NEG )
 			return { false, false };
 
-		if_const ( EQ )
+		if constexpr ( EQ )
 		{
 			if ( uValue <= m_uValue ) return { true, false };
 		}
@@ -481,7 +481,7 @@ bool RowidIterator_LookupRange_T<ROWID_LIMITS,BITMAP>::Fill()
 	RowID_t tLookupRowID = INVALID_ROWID;
 	while ( m_pReader->Read ( tLookupDocID, tLookupRowID ) )
 	{
-		m_iProcessed++;
+		++m_iProcessed;
 
 		if ( m_pCheck1 )
 		{
@@ -503,7 +503,7 @@ bool RowidIterator_LookupRange_T<ROWID_LIMITS,BITMAP>::Fill()
 				continue;
 		}
 
-		if ( ROWID_LIMITS )
+		if constexpr ( ROWID_LIMITS )
 		{
 			if ( tLookupRowID >= m_tBoundaries.m_tMinRowID && tLookupRowID <= m_tBoundaries.m_tMaxRowID )
 				BASE::Add(tLookupRowID);
@@ -543,13 +543,13 @@ protected:
 	bool	Fill() override;
 
 private:
-	void	Add ( RowID_t tLookupRowID );
+	void	CheckAdd ( RowID_t tLookupRowID );
 };
 
 template <bool ROWID_LIMITS, bool BITMAP>
-void RowidIterator_LookupRangeExclude_T<ROWID_LIMITS,BITMAP>::Add ( RowID_t tLookupRowID )
+void RowidIterator_LookupRangeExclude_T<ROWID_LIMITS,BITMAP>::CheckAdd ( RowID_t tLookupRowID )
 {
-	if ( ROWID_LIMITS )
+	if constexpr ( ROWID_LIMITS )
 	{
 		if ( tLookupRowID>=BASE::m_tBoundaries.m_tMinRowID && tLookupRowID<=BASE::m_tBoundaries.m_tMaxRowID )
 			BASE::Add(tLookupRowID);
@@ -570,7 +570,7 @@ bool RowidIterator_LookupRangeExclude_T<ROWID_LIMITS,BITMAP>::Fill()
 
 	while ( pRowID<pRowIdMax && ( BASE::m_pCheck1 || BASE::m_pCheck2 ) && BASE::m_pReader->Read ( tLookupDocID, tLookupRowID ) )
 	{
-		BASE::m_iProcessed++;
+		++BASE::m_iProcessed;
 
 		if ( BASE::m_pCheck1 )
 		{
@@ -580,7 +580,7 @@ bool RowidIterator_LookupRangeExclude_T<ROWID_LIMITS,BITMAP>::Fill()
 
 			if ( bAccept )
 			{
-				Add ( tLookupRowID );
+				CheckAdd ( tLookupRowID );
 				continue;
 			}
 		}
@@ -592,10 +592,7 @@ bool RowidIterator_LookupRangeExclude_T<ROWID_LIMITS,BITMAP>::Fill()
 				BASE::m_pCheck2.reset();
 
 			if ( bAccept )
-			{
-				Add ( tLookupRowID );
-				continue;
-			}
+				CheckAdd ( tLookupRowID );
 		}
 	}
 
@@ -639,17 +636,14 @@ static DocIdCheck_i * CreateCheckLt ( int64_t iMaxValue, bool bHasEqualMax, std:
 	}
 }
 
-#define DECL_CREATEVALUES( _, n, params ) case n: return new RowidIterator_LookupValues_T<!!( n & 2 ), !!( n & 1 )> params;
+#define DECL_LOOKUP_RANGE( _, n, params ) case n: return new params<!!( n & 2 ), !!( n & 1 )> ( pReader, pCheck1, pCheck2, iRsetEstimate, uTotalDocs, pBoundaries );
 
 static RowidIterator_i * CreateRowidLookupRange ( std::shared_ptr<LookupReaderIterator_c> & pReader, DocIdCheck_i * pCheck1, DocIdCheck_i * pCheck2, int64_t iRsetEstimate, DWORD uTotalDocs, const RowIdBoundaries_t * pBoundaries, bool bBitmap )
 {
 	int iIndex = ( pBoundaries ? 1 : 0 )*2 + ( bBitmap ? 1 : 0 );
 	switch ( iIndex )
 	{
-	case 0: return new RowidIterator_LookupRange_T<false, false> ( pReader, pCheck1, pCheck2, iRsetEstimate, uTotalDocs, pBoundaries );
-	case 1: return new RowidIterator_LookupRange_T<false, true>  ( pReader, pCheck1, pCheck2, iRsetEstimate, uTotalDocs, pBoundaries );
-	case 2: return new RowidIterator_LookupRange_T<true, false>  ( pReader, pCheck1, pCheck2, iRsetEstimate, uTotalDocs, pBoundaries );
-	case 3: return new RowidIterator_LookupRange_T<true, true>   ( pReader, pCheck1, pCheck2, iRsetEstimate, uTotalDocs, pBoundaries );
+	BOOST_PP_REPEAT ( 4, DECL_LOOKUP_RANGE, RowidIterator_LookupRange_T )
 	default:
 		assert ( 0 && "Internal error" );
 		return nullptr;
@@ -662,21 +656,22 @@ static RowidIterator_i * CreateRowidLookupRangeExclude ( std::shared_ptr<LookupR
 	int iIndex = ( pBoundaries ? 1 : 0 )*2 + ( bBitmap ? 1 : 0 );
 	switch ( iIndex )
 	{
-	case 0: return new RowidIterator_LookupRangeExclude_T<false, false> ( pReader, pCheck1, pCheck2, iRsetEstimate, uTotalDocs, pBoundaries );
-	case 1: return new RowidIterator_LookupRangeExclude_T<false, true>  ( pReader, pCheck1, pCheck2, iRsetEstimate, uTotalDocs, pBoundaries );
-	case 2: return new RowidIterator_LookupRangeExclude_T<true, false>  ( pReader, pCheck1, pCheck2, iRsetEstimate, uTotalDocs, pBoundaries );
-	case 3: return new RowidIterator_LookupRangeExclude_T<true, true>   ( pReader, pCheck1, pCheck2, iRsetEstimate, uTotalDocs, pBoundaries );
+	BOOST_PP_REPEAT ( 4, DECL_LOOKUP_RANGE, RowidIterator_LookupRangeExclude_T )
 	default:
 		assert ( 0 && "Internal error" );
 		return nullptr;
 	}
 }
+#undef DECL_LOOKUP_RANGE
 
+#define DECL_CREATEVALUES( _, n, params ) case n: return new RowidIterator_LookupValues_T<!!( n & 2 ), !!( n & 1 )> params;
 
 static RowidIterator_i * CreateLookupIterator ( const CSphFilterSettings & tFilter, int64_t iRsetEstimate, DWORD uTotalDocs, const BYTE * pDocidLookup, const RowIdBoundaries_t * pBoundaries )
 {
 	if ( tFilter.m_sAttrName!=sphGetDocidName() )
 		return nullptr;
+
+	assert ( !tFilter.m_bExclude || tFilter.m_eType!=SPH_FILTER_VALUES );
 
 	bool bBitmap = NeedBitmapStorage ( iRsetEstimate, uTotalDocs );
 
@@ -723,9 +718,6 @@ static RowidIterator_i * CreateLookupIterator ( const CSphFilterSettings & tFilt
 }
 
 #undef DECL_CREATEVALUES
-#undef DECL_CREATERANGEEX
-#undef DECL_CREATERANGE
-
 
 RowIteratorsWithEstimates_t CreateLookupIterator ( CSphVector<SecondaryIndexInfo_t> & dSIInfo, const CSphVector<CSphFilterSettings> & dFilters, const BYTE * pDocidLookup, uint32_t uTotalDocs )
 {
@@ -767,9 +759,9 @@ void DocidLookupWriter_c::Start()
 	m_tCheckpointStart = m_tWriter.GetPos();
 	m_tWriter.PutOffset ( 0 );	// reserve space for max docid
 
-	int nCheckpoints = (m_nDocs+DOCS_PER_LOOKUP_CHECKPOINT-1)/DOCS_PER_LOOKUP_CHECKPOINT;
+	const int64_t nCheckpoints = (m_nDocs+DOCS_PER_LOOKUP_CHECKPOINT-1)/DOCS_PER_LOOKUP_CHECKPOINT;
 	m_dCheckpoints.Reset ( nCheckpoints );
-	for ( int i = 0; i < nCheckpoints; ++i )
+	for ( int64_t i = 0; i < nCheckpoints; ++i )
 	{
 		// reserve space for checkpoints
 		m_tWriter.PutOffset(0);

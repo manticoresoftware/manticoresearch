@@ -42,10 +42,10 @@ wget https://repo.manticoresearch.com/repository/manticoresearch_macos/release/m
 
 tar -xf manticore-columnar-lib-1.15.4-220522-2fef34e-osx10.14.4-x86_64.tar.gz
 
-# Start Manticore
+## Start Manticore
 FULL_SHARE_DIR=./share/manticore ./bin/searchd -c ./etc/manticoresearch/manticore.conf
 
-# Run indexer
+## Run indexer
 FULL_SHARE_DIR=./share/manticore ./bin/indexer -c ./etc/manticoresearch/manticore.conf
 ```
 

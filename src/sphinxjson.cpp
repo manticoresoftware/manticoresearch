@@ -19,6 +19,8 @@
 #include <io.h> // for isatty() in sphinxjson.c
 #endif
 
+// for UNALIGNED_RAM_ACCESS
+#include "config.h"
 
 //////////////////////////////////////////////////////////////////////////
 // helpers
@@ -1725,7 +1727,7 @@ bool JsonObj_c::IsDbl() const
 bool JsonObj_c::IsNum() const
 {
 	assert ( m_pRoot );
-	return !!cJSON_IsNumeric ( m_pRoot );
+	return !! ( cJSON_IsNumeric ( m_pRoot ) ||  cJSON_IsUInteger(m_pRoot) );
 }
 
 

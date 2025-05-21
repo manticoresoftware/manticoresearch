@@ -129,23 +129,23 @@ struct Scheduler_i
 {
 	virtual ~Scheduler_i() = default;
 
-	virtual void ScheduleOp ( Threads::details::SchedulerOperation_t* pOp, bool bVip ) = 0;
-	virtual void ScheduleContinuationOp ( Threads::details::SchedulerOperation_t* pOp ) // if task already started
+	virtual void ScheduleOp ( Threads::details::SchedulerOperation_t* pOp, bool bVip ) noexcept = 0;
+	virtual void ScheduleContinuationOp ( Threads::details::SchedulerOperation_t* pOp ) noexcept // if task already started
 	{
 		ScheduleOp ( pOp, false );
 	}
 	// RAII keeper of scheduler (when it exists, scheduler will not finish). That is necessary, say, if the only work is
 	// paused and moved somewhere (for example, as cb in epoll polling). Without keeper scheduler then finish and it will
 	// be impossible to resume it later.
-	virtual Keeper_t KeepWorking() = 0;
+	virtual Keeper_t KeepWorking() noexcept = 0;
 
 	// number of parallel contextes might be necessary when working via this scheduler
 	// alone and strand obviously has 1 worker; threadpool has many.
-	virtual int WorkingThreads() const
+	virtual int WorkingThreads() const noexcept
 	{
 		return 1;
 	};
-	virtual const char* Name() const
+	virtual const char* Name() const noexcept
 	{
 		return "unnamed_sched";
 	}
@@ -159,7 +159,7 @@ struct Scheduler_i
 
 struct SchedulerWithBackend_i: public Scheduler_i
 {
-	virtual bool SetBackend ( Scheduler_i* pBackend ) = 0;
+	virtual bool SetBackend ( Scheduler_i* pBackend ) noexcept = 0;
 };
 
 struct NTasks_t { // snapshot length of Op queue
@@ -252,20 +252,10 @@ Handler WithCopiedCrashQuery ( Handler fnHandler );
 
 extern ThreadRole MainThread;
 
-
-namespace CrashLogger
-{
-#if !_WIN32
-	void HandleCrash( int );
-#else
-	LONG WINAPI HandleCrash ( EXCEPTION_POINTERS * pExc );
-#endif
-	void SetupTimePID();
-};
-
 // Scheduler to global thread pool
 Threads::Worker_i* GlobalWorkPool ();
 void SetMaxChildrenThreads ( int iThreads );
+int MaxChildrenThreads() noexcept;
 void StartGlobalWorkPool ();
 void StopGlobalWorkPool();
 

@@ -12,7 +12,8 @@
 
 #include "sphinx.h"
 #include "sphinxstem.h"
-#include "sphinxquery.h"
+#include "sphinxquery/sphinxquery.h"
+#include "sphinxquery/xqparser.h"
 #include "sphinxutils.h"
 #include "sphinxsort.h"
 #include "fileutils.h"
@@ -22,7 +23,6 @@
 #include "sphinxsearch.h"
 #include "searchnode.h"
 #include "sphinxjson.h"
-#include "sphinxplugin.h"
 #include "sphinxqcache.h"
 #include "icu.h"
 #include "jieba.h"
@@ -67,7 +67,6 @@
 #include <stdlib.h>
 #include <stdarg.h>
 #include <sys/stat.h>
-#include <time.h>
 #include <math.h>
 #include <algorithm>
 
@@ -110,7 +109,6 @@ void gmtime_r ( const time_t * clock, struct tm * res )
 #include <boost/preprocessor/repetition/repeat.hpp>
 
 #include "attrindex_builder.h"
-#include "stripper/html_stripper.h"
 #include "queryfilter.h"
 #include "indexing_sources/source_document.h"
 #include "indexing_sources/source_stats.h"
@@ -1007,7 +1005,7 @@ bool IndexSegment_c::Update_Blobs ( const RowsToUpdate_t& dRows, UpdateContext_t
 					if ( iBlobId!=-1 )
 					{
 
-						pBlobRowBuilder->SetAttr ( iBlobId, &tUpd.m_dBlobs[uOffset], uLength, sError );
+						pBlobRowBuilder->SetAttr ( iBlobId, uLength?&tUpd.m_dBlobs[uOffset]:nullptr, uLength, sError );
 						tCtx.m_tUpd.MarkUpdated ( iUpd );
 						tCtx.m_uUpdateMask |= ATTRS_BLOB_UPDATED;
 					}
@@ -1865,6 +1863,42 @@ void SetQueryDefaultsExt2 ( CSphQuery & tQuery )
 	tQuery.m_iRetryDelay = DEFAULT_QUERY_RETRY;
 }
 
+void CheckQuery ( const CSphQuery & tQuery, CSphString & sError, bool bCanLimitless )
+{
+	#define LOC_ERROR( ... ) do { sError.SetSprintf (__VA_ARGS__); return; } while(0)
+
+	sError = nullptr;
+
+	if ( (int)tQuery.m_eMode<0 || tQuery.m_eMode>SPH_MATCH_TOTAL )
+		LOC_ERROR ( "invalid match mode %d", tQuery.m_eMode );
+
+	if ( (int)tQuery.m_eRanker<0 || tQuery.m_eRanker>SPH_RANK_TOTAL )
+		LOC_ERROR ( "invalid ranking mode %d", tQuery.m_eRanker );
+
+	if ( tQuery.m_iMaxMatches<1 )
+		LOC_ERROR ( "max_matches can not be less than one" );
+
+	if ( tQuery.m_iOffset<0 || tQuery.m_iOffset>=tQuery.m_iMaxMatches )
+		LOC_ERROR ( "offset out of bounds (offset=%d, max_matches=%d)", tQuery.m_iOffset, tQuery.m_iMaxMatches );
+
+	if ( tQuery.m_iLimit < ( bCanLimitless ? -1 : 0 ) ) // -1 is magic for 'limitless select'
+		LOC_ERROR ( "limit out of bounds (limit=%d)", tQuery.m_iLimit );
+
+	if ( tQuery.m_iCutoff<-1 )
+		LOC_ERROR ( "cutoff out of bounds (cutoff=%d)", tQuery.m_iCutoff );
+
+	if ( ( tQuery.m_iRetryCount!=-1 ) && ( tQuery.m_iRetryCount>DAEMON_MAX_RETRY_COUNT ) )
+		LOC_ERROR ( "retry count out of bounds (count=%d)", tQuery.m_iRetryCount );
+
+	if ( ( tQuery.m_iRetryDelay!=-1 ) && ( tQuery.m_iRetryDelay>DAEMON_MAX_RETRY_DELAY ) )
+		LOC_ERROR ( "retry delay out of bounds (delay=%d)", tQuery.m_iRetryDelay );
+
+	if ( tQuery.m_iOffset>0 && tQuery.m_bHasOuter )
+		LOC_ERROR ( "inner offset must be 0 when using outer order by (offset=%d)", tQuery.m_iOffset );
+
+	#undef LOC_ERROR
+}
+
 /////////////////////////////////////////////////////////////////////////////
 // QUERY STATS
 /////////////////////////////////////////////////////////////////////////////
@@ -2248,7 +2282,7 @@ RowsToUpdateData_t CSphIndex_VLN::Update_CollectRowPtrs ( const UpdateContext_t 
 
 	// collect idxes of alive (not-yet-updated) rows
 	CSphVector<int> dSorted;
-	dSorted.Reserve ( dDocids.GetLength() - tCtx.m_tUpd.m_iAffected );
+	dSorted.Reserve ( dDocids.GetLength() - tCtx.m_tUpd.m_uAffected );
 	ARRAY_CONSTFOREACH (i, dDocids)
 		if ( !tCtx.m_tUpd.m_dUpdated.BitGet ( i ) )
 			dSorted.Add ( i );
@@ -2530,7 +2564,7 @@ int CSphIndex_VLN::CheckThenUpdateAttributes ( AttrUpdateInc_t& tUpd, bool& bCri
 		return 0;
 
 	UpdateContext_t tCtx ( tUpd, m_tSchema );
-	int iUpdated = tUpd.m_iAffected;
+	int iUpdated = tUpd.m_uAffected;
 
 	auto dRowsToUpdate = Update_CollectRowPtrs ( tCtx );
 
@@ -2556,7 +2590,7 @@ int CSphIndex_VLN::CheckThenUpdateAttributes ( AttrUpdateInc_t& tUpd, bool& bCri
 		}
 	}
 
-	iUpdated = tUpd.m_iAffected - iUpdated;
+	iUpdated = tUpd.m_uAffected - iUpdated;
 	if ( !tCtx.HandleJsonWarnings ( iUpdated, sWarning, sError ) )
 		return -1;
 
@@ -5346,7 +5380,7 @@ void CSphIndex_VLN::Build_AddToDocstore ( DocstoreBuilder_i * pDocstoreBuilder, 
 
 	// filter out non-hl fields (should already be null)
 	int iField = 0;
-	for ( int i = 0; i < dStoredFields.GetSize(); i++ )
+	for ( DWORD i = 0; i < dStoredFields.GetSize(); ++i )
 	{
 		if ( !dStoredFields.BitGet(i) )
 			tDoc.m_dFields.Remove(iField);
@@ -5389,7 +5423,7 @@ void CSphIndex_VLN::Build_AddToDocstore ( DocstoreBuilder_i * pDocstoreBuilder, 
 
 	VecTraits_T<BYTE> * pAddedAttrs = tDoc.m_dFields.AddN ( dStoredAttrs.BitCount() );
 	int iAttr = 0;
-	for ( int i = 0; i < dStoredAttrs.GetSize(); i++ )
+	for ( DWORD i = 0; i < dStoredAttrs.GetSize(); ++i )
 		if ( dStoredAttrs.BitGet(i) )
 			pAddedAttrs[iAttr++] = GetAttrForDocstore ( tDocID, i, m_tSchema, tMvaContainer, tSource, dTmpDocstoreAttrStorage[i] );
 
@@ -6691,7 +6725,7 @@ std::pair<DWORD,DWORD> CSphIndex_VLN::CreateRowMapsAndCountTotalDocs ( const CSp
 	// (kills directed to that index must be collected to reapply at the finish)
 	BEGIN_CORO ( "sph", "collect dst rowmap");
 	tMonitor.SetEvent ( MergeCb_c::E_COLLECT_START, pDstIndex->m_iChunk );
-	for ( RowID_t i = 0; i < dDstRowMap.GetLength(); ++i, pRow+=iStride )
+	for ( RowID_t i = 0; i < dDstRowMap.GetULength(); ++i, pRow+=iStride )
 	{
 		if ( pDstIndex->m_tDeadRowMap.IsSet(i) )
 			continue;
@@ -6781,7 +6815,7 @@ bool CSphIndex_VLN::DoMerge ( const CSphIndex_VLN * pDstIndex, const CSphIndex_V
 
 	// merging attributes
 	{
-		AttrMerger_c tAttrMerger { tMonitor, sError, iTotalDocs, g_tMergeSettings };
+		AttrMerger_c tAttrMerger { tMonitor, sError, iTotalDocs, g_tMergeSettings, dDeleteOnInterrupt };
 		if ( !tAttrMerger.Prepare ( pSrcIndex, pDstIndex ) )
 			return false;
 
@@ -6797,7 +6831,7 @@ bool CSphIndex_VLN::DoMerge ( const CSphIndex_VLN * pDstIndex, const CSphIndex_V
 		if ( !bCompress && !tAttrMerger.CopyAttributes ( *pSrcIndex, dSrcRows, tTotalDocs.second ) )
 			return false;
 
-		if ( !tAttrMerger.FinishMergeAttributes ( pDstIndex, tBuildHeader, &dDeleteOnInterrupt ) )
+		if ( !tAttrMerger.FinishMergeAttributes ( pDstIndex, tBuildHeader ) )
 			return false;
 	}
 
@@ -8094,7 +8128,6 @@ std::pair<RowidIterator_i *, bool> CSphIndex_VLN::SpawnIterators ( const CSphQue
 	}
 
 	// using g_iPseudoShardingThresh==0 check so that iterators are still spawned in test suite (when g_iPseudoShardingThresh=0)
-	const int64_t SMALL_INDEX_THRESH = 8192;
 	if ( m_iDocinfo < SMALL_INDEX_THRESH && g_iPseudoShardingThresh > 0 )
 	{
 		dModifiedFilters = dFilters;
@@ -9457,7 +9490,7 @@ bool CSphIndex_VLN::LoadSecondaryIndex ( const CSphString & sFile )
 			if ( GetSecondaryIndexDefault()==SIDefault_e::FORCE )
 				m_sLastError.SetSprintf ( "missing secondary index %s", sFile.cstr() );
 			else
-				sphWarning ( "missing %s; secondary index(es) disabled, consider using ALTER REBUILD SECONDARY to recover the secondary index", sFile.cstr() );
+				sphWarning ( "missing %s; secondary index(es) disabled, consider using ALTER TABLE table REBUILD SECONDARY to recover the secondary index", sFile.cstr() );
 		}
 
 		return GetSecondaryIndexDefault()!=SIDefault_e::FORCE;
@@ -9467,7 +9500,7 @@ bool CSphIndex_VLN::LoadSecondaryIndex ( const CSphString & sFile )
 	{
 		if ( GetSecondaryIndexDefault()!=SIDefault_e::FORCE )
 		{
-			sphWarning ( "'%s': secondary index not loaded, %s; secondary index(es) disabled, consider using ALTER REBUILD SECONDARY to recover the secondary index", GetName(), m_sLastError.cstr() );
+			sphWarning ( "'%s': secondary index not loaded, %s; secondary index(es) disabled, consider using ALTER TABLE table REBUILD SECONDARY to recover the secondary index", GetName(), m_sLastError.cstr() );
 			m_sLastError = "";
 		}
 
@@ -9831,7 +9864,7 @@ bool CSphIndex_VLN::FillKeywords ( CSphVector <CSphKeywordInfo> & dKeywords ) co
 
 static int sphQueryHeightCalc ( const XQNode_t * pNode )
 {
-	if ( pNode->m_dChildren.IsEmpty() )
+	if ( pNode->dChildren().IsEmpty() )
 	{
 		// exception, pre-cached OR of tiny (rare) keywords is just one node
 		if ( pNode->GetOp()==SPH_QUERY_OR )
@@ -9839,16 +9872,16 @@ static int sphQueryHeightCalc ( const XQNode_t * pNode )
 #ifndef NDEBUG
 			// sanity checks
 			// this node must be only created for a huge OR of tiny expansions
-			assert ( pNode->m_dWords.GetLength() );
-			ARRAY_FOREACH ( i, pNode->m_dWords )
+			assert ( !pNode->dWords().IsEmpty() );
+			ARRAY_FOREACH ( i, pNode->dWords() )
 			{
-				assert ( pNode->m_dWords[i].m_iAtomPos==pNode->m_dWords[0].m_iAtomPos );
-				assert ( pNode->m_dWords[i].m_bExpanded );
+				assert ( pNode->dWord(i).m_iAtomPos==pNode->dWord(0).m_iAtomPos );
+				assert ( pNode->dWord(i).m_bExpanded );
 			}
 #endif
 			return 1;
 		}
-		return pNode->m_dWords.GetLength();
+		return !pNode->dWords().IsEmpty();
 	}
 
 	if ( pNode->GetOp()==SPH_QUERY_BEFORE )
@@ -9856,10 +9889,10 @@ static int sphQueryHeightCalc ( const XQNode_t * pNode )
 
 	int iMaxChild = 0;
 	int iHeight = 0;
-	ARRAY_FOREACH ( i, pNode->m_dChildren )
+	ARRAY_FOREACH ( i, pNode->dChildren() )
 	{
-		int iBottom = sphQueryHeightCalc ( pNode->m_dChildren[i] );
-		int iTop = pNode->m_dChildren.GetLength()-i-1;
+		int iBottom = sphQueryHeightCalc ( pNode->dChild(i) );
+		int iTop = pNode->dChildren().GetLength()-i-1;
 		if ( iBottom+iTop>=iMaxChild+iHeight )
 		{
 			iMaxChild = iBottom;
@@ -9946,24 +9979,16 @@ int ConsiderStack ( const struct XQNode_t * pRoot, CSphString & sError )
 }
 
 
-static XQNode_t * CloneKeyword ( const XQNode_t * pNode )
-{
-	assert ( pNode );
-
-	XQNode_t * pRes = new XQNode_t ( pNode->m_dSpec );
-	pRes->m_dWords = pNode->m_dWords;
-	return pRes;
-}
-
-
 static XQNode_t * ExpandKeyword ( XQNode_t * pNode, const CSphIndexSettings & tSettings, int iExpandKeywords, bool bWordDict )
 {
 	assert ( pNode );
 
 	if ( tSettings.m_bIndexExactWords && ( iExpandKeywords & KWE_MORPH_NONE )==KWE_MORPH_NONE )
 	{
-		if ( !pNode->m_dWords[0].m_sWord.Begins( "=" ) )
-			pNode->m_dWords[0].m_sWord.SetSprintf ( "=%s", pNode->m_dWords[0].m_sWord.cstr() );
+		pNode->WithWord(0,[](auto& dWord) {
+			if ( !dWord.m_sWord.Begins( "=" ) )
+				dWord.m_sWord.SetSprintf ( "=%s", dWord.m_sWord.cstr() );
+		});
 		return pNode;
 	}
 
@@ -9972,9 +9997,9 @@ static XQNode_t * ExpandKeyword ( XQNode_t * pNode, const CSphIndexSettings & tS
 	bool bExpandPrefix = false;
 	if ( ( iExpandKeywords & KWE_STAR )==KWE_STAR )
 	{
-		assert ( pNode->m_dChildren.GetLength()==0 );
-		assert ( pNode->m_dWords.GetLength()==1 );
-		int iLen = sphUTF8Len ( pNode->m_dWords[0].m_sWord.cstr() );
+		assert ( pNode->dChildren().IsEmpty() );
+		assert ( pNode->dWords().GetLength()==1 );
+		int iLen = sphUTF8Len ( pNode->dWord(0).m_sWord.cstr() );
 
 		int iMinInfix = tSettings.m_iMinInfixLen;
 		int iMinPrefix = tSettings.RawMinPrefixLen();
@@ -9993,36 +10018,35 @@ static XQNode_t * ExpandKeyword ( XQNode_t * pNode, const CSphIndexSettings & tS
 
 	if ( bExpandInfix )
 	{
-		assert ( pNode->m_dChildren.GetLength()==0 );
-		assert ( pNode->m_dWords.GetLength()==1 );
+		assert ( pNode->dChildren().IsEmpty() );
+		assert ( pNode->dWords().GetLength()==1 );
 		XQNode_t * pInfix = CloneKeyword ( pNode );
-		pInfix->m_dWords[0].m_sWord.SetSprintf ( "*%s*", pNode->m_dWords[0].m_sWord.cstr() );
-		pInfix->m_pParent = pExpand;
-		pExpand->m_dChildren.Add ( pInfix );
+		pInfix->WithWord ( 0,[pNode](auto& dWord) { dWord.m_sWord.SetSprintf ( "*%s*", pNode->dWord(0).m_sWord.cstr() ); } );;
+		pExpand->AddNewChild ( pInfix );
 	} else if ( bExpandPrefix )
 	{
-		assert ( pNode->m_dChildren.GetLength()==0 );
-		assert ( pNode->m_dWords.GetLength()==1 );
+		assert ( pNode->dChildren().IsEmpty() );
+		assert ( pNode->dWords().GetLength()==1 );
 		XQNode_t * pPrefix = CloneKeyword ( pNode );
-		pPrefix->m_dWords[0].m_sWord.SetSprintf ( "%s*", pNode->m_dWords[0].m_sWord.cstr() );
-		pPrefix->m_pParent = pExpand;
-		pExpand->m_dChildren.Add ( pPrefix );
+		pPrefix->WithWord ( 0,[pNode](auto& dWord) { dWord.m_sWord.SetSprintf ( "%s*", pNode->dWord(0).m_sWord.cstr() ); } );;
+		pExpand->AddNewChild ( pPrefix );
 	}
 
 	if ( bExpandExact )
 	{
-		assert ( pNode->m_dChildren.GetLength()==0 );
-		assert ( pNode->m_dWords.GetLength()==1 );
+		assert ( pNode->dChildren().IsEmpty() );
+		assert ( pNode->dWords().GetLength()==1 );
 		XQNode_t * pExact = CloneKeyword ( pNode );
-		if ( pNode->m_dWords[0].m_sWord.Begins( "=" ) )
-		{
-			pExact->m_dWords[0].m_sWord = pNode->m_dWords[0].m_sWord;
-		} else
-		{
-			pExact->m_dWords[0].m_sWord.SetSprintf ( "=%s", pNode->m_dWords[0].m_sWord.cstr() );
-		}
-		pExact->m_pParent = pExpand;
-		pExpand->m_dChildren.Add ( pExact );
+		pExact->WithWord ( 0,[pNode](auto& dWord) {
+			if ( pNode->dWord(0).m_sWord.Begins( "=" ) )
+			{
+				dWord.m_sWord = pNode->dWord(0).m_sWord;
+			} else
+			{
+				dWord.m_sWord.SetSprintf ( "=%s", pNode->dWord(0).m_sWord.cstr() );
+			}
+		});
+		pExpand->AddNewChild ( pExact );
 	}
 
 	return pExpand;
@@ -10043,12 +10067,12 @@ void sphQueryExpandKeywords ( XQNode_t ** ppNode, const CSphIndexSettings & tSet
 	assert ( iExpandKeywords!=KWE_DISABLED );
 
 	// process children for composite nodes
-	if ( pNode->m_dChildren.GetLength() )
+	if ( pNode->dChildren().GetLength() )
 	{
-		ARRAY_FOREACH ( i, pNode->m_dChildren )
+		ARRAY_FOREACH ( i, pNode->dChildren() )
 		{
-			sphQueryExpandKeywords ( &pNode->m_dChildren[i], tSettings, iExpandKeywords, bWordDict );
-			pNode->m_dChildren[i]->m_pParent = pNode;
+			sphQueryExpandKeywords ( &pNode->dChildren()[i], tSettings, iExpandKeywords, bWordDict );
+			pNode->dChildren()[i]->m_pParent = pNode;
 		}
 		return;
 	}
@@ -10056,39 +10080,38 @@ void sphQueryExpandKeywords ( XQNode_t ** ppNode, const CSphIndexSettings & tSet
 	// if that's a phrase/proximity node, create a very special, magic phrase/proximity node
 	if ( pNode->GetOp()==SPH_QUERY_PHRASE || pNode->GetOp()==SPH_QUERY_PROXIMITY || pNode->GetOp()==SPH_QUERY_QUORUM )
 	{
-		assert ( pNode->m_dWords.GetLength()>1 );
+		assert ( pNode->dWords().GetLength()>1 );
 
 		// should skip expansion if all terms have modifiers
-		if ( pNode->m_dWords.all_of ( [] ( const XQKeyword_t & tWord ) { return SkipExpand ( tWord.m_sWord ); } ) )
+		if ( pNode->dWords().all_of ( [] ( const XQKeyword_t & tWord ) { return SkipExpand ( tWord.m_sWord ); } ) )
 			return;
 
-		ARRAY_FOREACH ( i, pNode->m_dWords )
+		for ( const XQKeyword_t& dNode : pNode->dWords() )
 		{
 			auto * pWord = new XQNode_t ( pNode->m_dSpec );
-			pWord->m_dWords.Add ( pNode->m_dWords[i] );
+			pWord->AddDirtyWord ( dNode );
 
 			// should not expand if word already has any modifiers
-			if ( SkipExpand ( pWord->m_dWords[0].m_sWord ) )
-				pNode->m_dChildren.Add ( pWord );
+			if ( SkipExpand ( pWord->dWord(0).m_sWord ) )
+				pNode->AddNewChild ( pWord );
 			else
-				pNode->m_dChildren.Add ( ExpandKeyword ( pWord, tSettings, iExpandKeywords, bWordDict ) );
+				pNode->AddNewChild ( ExpandKeyword ( pWord, tSettings, iExpandKeywords, bWordDict ) );
 
-			pNode->m_dChildren.Last()->m_iAtomPos = pNode->m_dWords[i].m_iAtomPos;
-			pNode->m_dChildren.Last()->m_pParent = pNode;
+			pNode->dChildren().Last()->m_iAtomPos = dNode.m_iAtomPos;
 		}
-		pNode->m_dWords.Reset();
+		pNode->ResetWords();
 		pNode->m_bVirtuallyPlain = true;
 		return;
 	}
 
 	// skip empty plain nodes
-	if ( pNode->m_dWords.GetLength()<=0 )
+	if ( pNode->dWords().IsEmpty() )
 		return;
 
 	// process keywords for plain nodes
-	assert ( pNode->m_dWords.GetLength()==1 );
+	assert ( pNode->dWords().GetLength()==1 );
 
-	if ( SkipExpand ( pNode->m_dWords[0].m_sWord ) )
+	if ( SkipExpand ( pNode->dWord(0).m_sWord ) )
 		return;
 
 	// do the expansion
@@ -10104,8 +10127,8 @@ static void TransformQuorum ( XQNode_t ** ppNode )
 	// recurse non-quorum nodes
 	if ( pNode->GetOp()!=SPH_QUERY_QUORUM )
 	{
-		ARRAY_FOREACH ( i, pNode->m_dChildren )
-			TransformQuorum ( &pNode->m_dChildren[i] );
+		ARRAY_FOREACH ( i, pNode->dChildren() )
+			TransformQuorum ( &pNode->dChildren()[i] );
 		return;
 	}
 
@@ -10114,16 +10137,16 @@ static void TransformQuorum ( XQNode_t ** ppNode )
 		return;
 
 	// transform quorums with a threshold of 1 only
-	assert ( pNode->GetOp()==SPH_QUERY_QUORUM && pNode->m_dChildren.GetLength()==0 );
+	assert ( pNode->GetOp()==SPH_QUERY_QUORUM && pNode->dChildren().GetLength()==0 );
 	CSphVector<XQNode_t*> dArgs;
-	ARRAY_FOREACH ( i, pNode->m_dWords )
+	for ( const auto& dWord : pNode->dWords() )
 	{
 		XQNode_t * pAnd = new XQNode_t ( pNode->m_dSpec );
-		pAnd->m_dWords.Add ( pNode->m_dWords[i] );
+		pAnd->AddDirtyWord ( dWord );
 		dArgs.Add ( pAnd );
 	}
 
-	pNode->m_dWords.Reset();
+	pNode->ResetWords();
 	pNode->SetOp ( SPH_QUERY_OR, dArgs );
 }
 
@@ -10137,7 +10160,7 @@ struct BinaryNode_t
 static void BuildExpandedTree ( const XQKeyword_t & tRootWord, const ISphWordlist::Args_t & dWordSrc, XQNode_t * pRoot )
 {
 	assert ( dWordSrc.m_dExpanded.GetLength() );
-	pRoot->m_dWords.Reset();
+	pRoot->ResetWords();
 
 	// build a binary tree from all the other expansions
 	CSphVector<BinaryNode_t> dNodes;
@@ -10166,23 +10189,24 @@ static void BuildExpandedTree ( const XQKeyword_t & tRootWord, const ISphWordlis
 		dNodes.Last().m_iLo = iMid+1;
 		dNodes.Last().m_iHi = tNode.m_iHi;
 
-		if ( pCur->m_dWords.GetLength() )
+		if ( !pCur->dWords().IsEmpty() )
 		{
-			assert ( pCur->m_dWords.GetLength()==1 );
+			assert ( pCur->dWords().GetLength()==1 );
+			assert ( pRoot->dWords().GetLength()==0 );
 			XQNode_t * pTerm = CloneKeyword ( pRoot );
-			Swap ( pTerm->m_dWords, pCur->m_dWords );
-			pCur->m_dChildren.Add ( pTerm );
-			pTerm->m_pParent = pCur;
+			pCur->WithWords ( [pTerm] (auto& dWords) { pTerm->AddDirtyWord(dWords[0]); dWords.Reset(); });
+			pCur->AddNewChild ( pTerm );
 		}
 
 		XQNode_t * pChild = CloneKeyword ( pRoot );
-		pChild->m_dWords.Add ( tRootWord );
-		pChild->m_dWords.Last().m_sWord = dWordSrc.GetWordExpanded ( iMid );
-		pChild->m_dWords.Last().m_bExpanded = true;
+		pChild->WithWords ( [&tRootWord,&dWordSrc,iMid] ( auto & dWords) {
+			dWords.Add ( tRootWord );
+			dWords.Last().m_sWord = dWordSrc.GetWordExpanded ( iMid );
+			dWords.Last().m_bExpanded = true;
+		} );
 		pChild->m_bNotWeighted = pRoot->m_bNotWeighted;
 
-		pChild->m_pParent = pCur;
-		pCur->m_dChildren.Add ( pChild );
+		pCur->AddNewChild ( pChild );
 		pCur->SetOp ( SPH_QUERY_OR );
 
 		pCur = pChild;
@@ -10198,12 +10222,12 @@ XQNode_t * sphExpandXQNode ( XQNode_t * pNode, ExpansionContext_t & tCtx )
 	assert ( pNode );
 
 	// process children for composite nodes
-	if ( pNode->m_dChildren.GetLength() )
+	if ( pNode->dChildren().GetLength() )
 	{
-		ARRAY_FOREACH ( i, pNode->m_dChildren )
+		ARRAY_FOREACH ( i, pNode->dChildren() )
 		{
-			pNode->m_dChildren[i] = sphExpandXQNode ( pNode->m_dChildren[i], tCtx );
-			pNode->m_dChildren[i]->m_pParent = pNode;
+			pNode->dChildren()[i] = sphExpandXQNode ( pNode->dChildren()[i], tCtx );
+			pNode->dChildren()[i]->m_pParent = pNode;
 		}
 		return pNode;
 	}
@@ -10211,14 +10235,13 @@ XQNode_t * sphExpandXQNode ( XQNode_t * pNode, ExpansionContext_t & tCtx )
 	// if that's a phrase/proximity node, create a very special, magic phrase/proximity node
 	if ( pNode->GetOp()==SPH_QUERY_PHRASE || pNode->GetOp()==SPH_QUERY_PROXIMITY || pNode->GetOp()==SPH_QUERY_QUORUM )
 	{
-		assert ( pNode->m_dWords.GetLength()>1 );
-		ARRAY_FOREACH ( i, pNode->m_dWords )
+		assert ( pNode->dWords().GetLength()>1 );
+		for ( const auto& dNodeWord : pNode->dWords() )
 		{
 			XQNode_t * pWord = new XQNode_t ( pNode->m_dSpec );
-			pWord->m_dWords.Add ( pNode->m_dWords[i] );
-			pNode->m_dChildren.Add ( sphExpandXQNode ( pWord, tCtx ) );
-			pNode->m_dChildren.Last()->m_iAtomPos = pNode->m_dWords[i].m_iAtomPos;
-			pNode->m_dChildren.Last()->m_pParent = pNode;
+			pWord->AddDirtyWord ( dNodeWord );
+			pNode->AddNewChild ( sphExpandXQNode ( pWord, tCtx ) );
+			pNode->dChildren().Last()->m_iAtomPos = dNodeWord.m_iAtomPos;
 
 			// tricky part
 			// current node may have field/zone limits attached
@@ -10226,18 +10249,18 @@ XQNode_t * sphExpandXQNode ( XQNode_t * pNode, ExpansionContext_t & tCtx )
 			// but here we create nodes manually and have to push down limits too
 			pWord->CopySpecs ( pNode );
 		}
-		pNode->m_dWords.Reset();
+		pNode->ResetWords();
 		pNode->m_bVirtuallyPlain = true;
 		return pNode;
 	}
 
 	// skip empty plain nodes
-	if ( pNode->m_dWords.GetLength()<=0 )
+	if ( pNode->dWords().IsEmpty() )
 		return pNode;
 
 	// process keywords for plain nodes
-	assert ( pNode->m_dChildren.GetLength()==0 );
-	assert ( pNode->m_dWords.GetLength()==1 );
+	assert ( pNode->dChildren().IsEmpty() );
+	assert ( pNode->dWords().GetLength()==1 );
 
 	// might be a pass to only fixup of the tree
 	if ( tCtx.m_bOnlyTreeFix )
@@ -10246,8 +10269,8 @@ XQNode_t * sphExpandXQNode ( XQNode_t * pNode, ExpansionContext_t & tCtx )
 	assert ( tCtx.m_pResult );
 
 	// check the wildcards
-	const char * sFull = pNode->m_dWords[0].m_sWord.cstr();
-	const bool bRegex = ( pNode->m_dWords[0].m_bRegex );
+	const char * sFull = pNode->dWord(0).m_sWord.cstr();
+	const bool bRegex = ( pNode->dWord(0).m_bRegex );
 
 	// no wildcards, or just wildcards? do not expand
 	if ( !( bRegex || sphHasExpandableWildcards ( sFull ) ) )
@@ -10278,13 +10301,13 @@ XQNode_t * ExpandXQNode ( const ExpansionContext_t & tCtx, ISphWordlist::Args_t 
 	// mark source word as expanded to prevent warning on terms mismatch in statistics
 	if ( !tArgs.m_dExpanded.GetLength() && !tArgs.m_pPayload )
 	{
-		tCtx.m_pResult->AddStat ( pNode->m_dWords.Begin()->m_sWord, 0, 0 );
-		pNode->m_dWords.Begin()->m_bExpanded = true;
+		tCtx.m_pResult->AddStat ( pNode->dWord(0).m_sWord, 0, 0 );
+		pNode->dWord(0).m_bExpanded = true;
 		return pNode;
 	}
 
 	// copy the original word (iirc it might get overwritten),
-	const XQKeyword_t tRootWord = pNode->m_dWords[0];
+	const XQKeyword_t tRootWord = pNode->dWord(0);
 	tCtx.m_pResult->AddStat ( tRootWord.m_sWord, tArgs.m_iTotalDocs, tArgs.m_iTotalHits );
 
 	// and build a binary tree of all the expansions
@@ -10298,16 +10321,16 @@ XQNode_t * ExpandXQNode ( const ExpansionContext_t & tCtx, ISphWordlist::Args_t 
 		ISphSubstringPayload * pPayload = tArgs.m_pPayload.release();
 		tCtx.m_pPayloads->Add( pPayload );
 
-		if ( pNode->m_dWords.GetLength() )
+		if ( pNode->dWords().GetLength() )
 		{
 			// all expanded fit to single payload
-			pNode->m_dWords.Begin()->m_bExpanded = true;
-			pNode->m_dWords.Begin()->m_pPayload = pPayload;
+			pNode->dWord(0).m_bExpanded = true;
+			pNode->dWord(0).m_pPayload = pPayload;
 		} else
 		{
 			// payload added to expanded binary tree
 			assert ( pNode->GetOp()==SPH_QUERY_OR );
-			assert ( pNode->m_dChildren.GetLength() );
+			assert ( pNode->dChildren().GetLength() );
 
 			XQNode_t * pSubstringNode = new XQNode_t ( pNode->m_dSpec );
 			pSubstringNode->SetOp ( SPH_QUERY_OR );
@@ -10315,10 +10338,9 @@ XQNode_t * ExpandXQNode ( const ExpansionContext_t & tCtx, ISphWordlist::Args_t 
 			XQKeyword_t tSubstringWord = tRootWord;
 			tSubstringWord.m_bExpanded = true;
 			tSubstringWord.m_pPayload = pPayload;
-			pSubstringNode->m_dWords.Add ( tSubstringWord );
+			pSubstringNode->AddDirtyWord ( tSubstringWord );
 
-			pNode->m_dChildren.Add ( pSubstringNode );
-			pSubstringNode->m_pParent = pNode;
+			pNode->AddNewChild ( pSubstringNode );
 		}
 	}
 
@@ -10502,7 +10524,7 @@ static void TransformNear ( XQNode_t ** ppNode )
 	XQNode_t *& pNode = *ppNode;
 	if ( pNode->GetOp()==SPH_QUERY_NEAR )
 	{
-		assert ( pNode->m_dWords.GetLength()==0 );
+		assert ( pNode->dWords().IsEmpty() );
 		CSphVector<XQNode_t*> dArgs;
 		int iStartFrom;
 
@@ -10511,25 +10533,27 @@ static void TransformNear ( XQNode_t ** ppNode )
 		{
 			dArgs.Reset();
 			iStartFrom = 0;
-			ARRAY_FOREACH ( i, pNode->m_dChildren )
+			ARRAY_FOREACH ( i, pNode->dChildren() )
 			{
-				XQNode_t * pChild = pNode->m_dChildren[i]; ///< shortcut
-				if ( pChild->GetOp()==SPH_QUERY_AND && pChild->m_dChildren.GetLength()>0 )
+				XQNode_t * pChild = pNode->dChildren()[i]; ///< shortcut
+				if ( pChild->GetOp()==SPH_QUERY_AND && pChild->dChildren().GetLength()>0 )
 				{
-					ARRAY_FOREACH ( j, pChild->m_dChildren )
-					{
-						if ( j==0 && iStartFrom==0 )
+					pChild->WithChildren ( [pNode,i,&dArgs,&iStartFrom](auto& dChildren) {
+						ARRAY_FOREACH ( j, dChildren )
 						{
-							// we will remove the node anyway, so just replace it with 1-st child instead
-							pNode->m_dChildren[i] = pChild->m_dChildren[j];
-							pNode->m_dChildren[i]->m_pParent = pNode;
-							iStartFrom = i+1;
-						} else
-						{
-							dArgs.Add ( pChild->m_dChildren[j] );
+							if ( j==0 && iStartFrom==0 )
+							{
+								// we will remove the node anyway, so just replace it with 1-st child instead
+								pNode->dChildren()[i] = dChildren[j];
+								pNode->dChildren()[i]->m_pParent = pNode;
+								iStartFrom = i+1;
+							} else
+							{
+								dArgs.Add ( dChildren[j] );
+							}
 						}
-					}
-					pChild->m_dChildren.Reset();
+						dChildren.Reset();
+					});
 					SafeDelete ( pChild );
 				} else if ( iStartFrom!=0 )
 				{
@@ -10539,18 +10563,20 @@ static void TransformNear ( XQNode_t ** ppNode )
 
 			if ( iStartFrom!=0 )
 			{
-				pNode->m_dChildren.Resize ( iStartFrom + dArgs.GetLength() );
-				ARRAY_FOREACH ( i, dArgs )
-				{
-					pNode->m_dChildren [ i + iStartFrom ] = dArgs[i];
-					pNode->m_dChildren [ i + iStartFrom ]->m_pParent = pNode;
-				}
+				pNode->WithChildren ( [&dArgs,iStartFrom,pNode](auto& dChildren) {
+					dChildren.Resize ( iStartFrom + dArgs.GetLength() );
+					ARRAY_FOREACH ( i, dArgs )
+					{
+						dChildren [ i + iStartFrom ] = dArgs[i];
+						dChildren [ i + iStartFrom ]->m_pParent = pNode;
+					}
+				} );
 			}
 		} while ( iStartFrom!=0 );
 	}
 
-	ARRAY_FOREACH ( i, pNode->m_dChildren )
-		TransformNear ( &pNode->m_dChildren[i] );
+	ARRAY_FOREACH ( i, pNode->dChildren() )
+		TransformNear ( &pNode->dChildren()[i] );
 }
 
 
@@ -10559,23 +10585,23 @@ static void TagExcluded ( XQNode_t * pNode, bool bNot )
 {
 	if ( pNode->GetOp()==SPH_QUERY_ANDNOT )
 	{
-		assert ( pNode->m_dChildren.GetLength()==2 );
-		assert ( pNode->m_dWords.GetLength()==0 );
-		TagExcluded ( pNode->m_dChildren[0], bNot );
-		TagExcluded ( pNode->m_dChildren[1], !bNot );
+		assert ( pNode->dChildren().GetLength()==2 );
+		assert ( pNode->dWords().IsEmpty() );
+		TagExcluded ( pNode->dChildren()[0], bNot );
+		TagExcluded ( pNode->dChildren()[1], !bNot );
 
-	} else if ( pNode->m_dChildren.GetLength() )
+	} else if ( pNode->dChildren().GetLength() )
 	{
 		// FIXME? check if this works okay with "virtually plain" stuff?
-		ARRAY_FOREACH ( i, pNode->m_dChildren )
-			TagExcluded ( pNode->m_dChildren[i], bNot );
+		ARRAY_FOREACH ( i, pNode->dChildren() )
+			TagExcluded ( pNode->dChildren()[i], bNot );
 	} else
 	{
 		// tricky bit
 		// no assert on length here and that is intended
 		// we have fully empty nodes (0 children, 0 words) sometimes!
-		ARRAY_FOREACH ( i, pNode->m_dWords )
-			pNode->m_dWords[i].m_bExcluded = bNot;
+		for ( const auto& dWord : pNode->dWords() )
+			dWord.m_bExcluded = bNot;
 	}
 }
 
@@ -10588,15 +10614,15 @@ static void TransformBigrams ( XQNode_t * pNode, const CSphIndexSettings & tSett
 
 	if ( pNode->GetOp()!=SPH_QUERY_PHRASE )
 	{
-		ARRAY_FOREACH ( i, pNode->m_dChildren )
-			TransformBigrams ( pNode->m_dChildren[i], tSettings );
+		ARRAY_FOREACH ( i, pNode->dChildren() )
+			TransformBigrams ( pNode->dChildren()[i], tSettings );
 		return;
 	}
 
 	CSphBitvec bmRemove;
-	bmRemove.Init ( pNode->m_dWords.GetLength() );
+	bmRemove.Init ( pNode->dWords().GetLength() );
 
-	for ( int i=0; i<pNode->m_dWords.GetLength()-1; i++ )
+	for ( int i=0; i<pNode->dWords().GetLength()-1; ++i )
 	{
 		// check whether this pair was indexed
 		bool bBigram = false;
@@ -10608,12 +10634,12 @@ static void TransformBigrams ( XQNode_t * pNode, const CSphIndexSettings & tSett
 				bBigram = true;
 				break;
 			case SPH_BIGRAM_FIRSTFREQ:
-				bBigram = tSettings.m_dBigramWords.BinarySearch ( pNode->m_dWords[i].m_sWord )!=NULL;
+				bBigram = tSettings.m_dBigramWords.BinarySearch ( pNode->dWord(i).m_sWord )!=nullptr;
 				break;
 			case SPH_BIGRAM_BOTHFREQ:
 				bBigram =
-					( tSettings.m_dBigramWords.BinarySearch ( pNode->m_dWords[i].m_sWord )!=NULL ) &&
-					( tSettings.m_dBigramWords.BinarySearch ( pNode->m_dWords[i+1].m_sWord )!=NULL );
+					tSettings.m_dBigramWords.BinarySearch ( pNode->dWord(i).m_sWord )!=nullptr
+					&& tSettings.m_dBigramWords.BinarySearch ( pNode->dWord(i+1).m_sWord )!=nullptr;
 				break;
 		}
 		if ( !bBigram )
@@ -10621,10 +10647,10 @@ static void TransformBigrams ( XQNode_t * pNode, const CSphIndexSettings & tSett
 
 		// replace the pair with a bigram keyword
 		// FIXME!!! set phrase weight for this "word" here
-		pNode->m_dWords[i].m_sWord.SetSprintf ( "%s%c%s",
-			pNode->m_dWords[i].m_sWord.cstr(),
-			MAGIC_WORD_BIGRAM,
-			pNode->m_dWords[i+1].m_sWord.cstr() );
+		pNode->WithWords ( [i] (auto& dWords) {
+			dWords[i].m_sWord.SetSprintf ( "%s%c%s", dWords[i].m_sWord.cstr(), MAGIC_WORD_BIGRAM, dWords[i+1].m_sWord.cstr() );
+		});
+
 
 		// only mark for removal now, we will sweep later
 		// so that [a b c] would convert to ["a b" "b c"], not just ["a b" c]
@@ -10633,14 +10659,16 @@ static void TransformBigrams ( XQNode_t * pNode, const CSphIndexSettings & tSett
 	}
 
 	// remove marked words
-	int iOut = 0;
-	ARRAY_FOREACH ( i, pNode->m_dWords )
-		if ( !bmRemove.BitGet(i) )
-			pNode->m_dWords[iOut++] = pNode->m_dWords[i];
-	pNode->m_dWords.Resize ( iOut );
+	pNode->WithWords ( [&bmRemove] (auto& dWords) {
+		int iOut = 0;
+		ARRAY_FOREACH ( i, dWords )
+			if ( !bmRemove.BitGet(i) )
+				dWords[iOut++] = dWords[i];
+		dWords.Resize ( iOut );
+	});
 
-	// fixup nodes that are not real phrases any more
-	if ( pNode->m_dWords.GetLength()==1 )
+	// fixup nodes that are not real phrases anymore
+	if ( pNode->dWords().GetLength()==1 )
 		pNode->SetOp ( SPH_QUERY_AND );
 }
 
@@ -11796,7 +11824,7 @@ Bson_t Explain ( ExplainQueryArgs_t & tArgs )
 		tParsed.m_pRoot = sphExpandXQNode ( tParsed.m_pRoot, tExpCtx );
 	}
 
-	return sphExplainQuery ( tParsed.m_pRoot, *pSchema, tParsed.m_dZones );
+	return sphExplainQuery ( tParsed.m_pRoot, pSchema, &tParsed.m_dZones );
 }
 
 Bson_t CSphIndex_VLN::ExplainQuery ( const CSphString & sQuery ) const

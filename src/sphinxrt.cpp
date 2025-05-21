@@ -97,7 +97,6 @@ constexpr int MAX_TOLERATE_LOAD_SEGMENTS		= MAX_SEGMENTS * ( SIMULTANEOUS_SAVE_L
 
 #define LOG_LEVEL_RTRDIAG false
 #define LOG_LEVEL_RTDDIAG false
-#define LOG_LEVEL_RTSAVEDIAG false
 #define LOG_LEVEL_RTDIAGV false
 #define LOG_LEVEL_RTDIAGVV false
 #define LOG_LEVEL_DEBUGV false
@@ -110,9 +109,9 @@ constexpr int MAX_TOLERATE_LOAD_SEGMENTS		= MAX_SEGMENTS * ( SIMULTANEOUS_SAVE_L
 #define RTDLOG LOGINFO ( RTDDIAG, RTSEG )
 
 // ops for save RAM segments as disk chunk
+static bool LOG_LEVEL_RTSAVEDIAG = val_from_env ( "MANTICORE_LOG_RTSAVEDIAG", false );
 #define RTSAVELOG LOGINFO ( RTSAVEDIAG, RTSEG )
 #define RTLOGV LOGINFO ( RTDIAGV, RTSEG )
-#define RTLOGVV LOGINFO ( RTDIAGVV, RTSEG )
 
 static bool LOG_LEVEL_RTSPLIT_QUERY = val_from_env ( "MANTICORE_LOG_RTSPLIT_QUERY", false ); // verbose logging split query events, ruled by this env variable
 #define LOG_COMPONENT_RTQUERYINFO __LINE__ << " "
@@ -3496,6 +3495,8 @@ bool RtIndex_c::DeleteDocument ( const VecTraits_T<DocID_t> & dDocs, CSphString 
 // LOAD/SAVE
 //////////////////////////////////////////////////////////////////////////
 
+static int GetCutOff ( const MutableIndexSettings_c & tSettings, bool bKNN );
+
 struct Checkpoint_t
 {
 	uint64_t m_uWord;
@@ -3552,6 +3553,19 @@ void RtIndex_c::ConditionalDiskChunk ( )
 		RTSAVELOG << "not flush because WriteSearch not exceeded; engage to be run after " << tmNextFlushByWriteUs - tmNow;
 		m_dSavingTimer.EngageAt ( tmNextFlushByWriteUs );
 		return;
+	}
+
+	// no need to auto-flush during optimize
+	if ( OptimizesRunning() )
+	{
+		int iCutoff = GetCutOff ( m_tMutableSettings, m_tSchema.HasKNNAttrs() );
+		int iFinalChunks = ( m_tRtChunks.DiskChunks()->GetLength() - 1 );
+		if ( iFinalChunks>=iCutoff )
+		{
+			RTSAVELOG << "not flush because optimize runining; engage to be run after " << tmFlushWriteUs;
+			m_dSavingTimer.EngageAt ( tmNow + tmFlushWriteUs );
+			return;
+		}
 	}
 
 	Coro::Go ( [this]() REQUIRES ( m_tWorkers.SerialChunkAccess() )
@@ -10203,7 +10217,7 @@ int RtIndex_c::ClassicOptimize ()
 	return iAffected;
 }
 
-static int GetCutOff ( const MutableIndexSettings_c & tSettings, bool bKNN )
+int GetCutOff ( const MutableIndexSettings_c & tSettings, bool bKNN )
 {
 	if ( tSettings.IsSet ( MutableName_e::OPTIMIZE_CUTOFF ) )
 		return tSettings.m_iOptimizeCutoff;

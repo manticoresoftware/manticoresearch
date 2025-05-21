@@ -10,7 +10,7 @@ apt-get update > /dev/null 2>&1 && apt-get install -y curl jq > /dev/null 2>&1; 
 ––– output –––
 0
 ––– input –––
-echo '[]' > /tmp/filebeat_tags.json; page=1; while curl -s --fail "https://hub.docker.com/v2/repositories/elastic/filebeat/tags/?page_size=1000&page=$page" | tee /tmp/page.json | jq -e '.next' > /dev/null; do jq -r '.results[].name' /tmp/page.json >> /tmp/filebeat_tags.json; page=$((page+1)); done; jq -r '.results[].name' /tmp/page.json >> /tmp/filebeat_tags.json; cat /tmp/filebeat_tags.json | grep -E '^([7-9]|[1-9][0-9]+).[0-9]+.[0-9]+$' | grep -E '^(7.(1[7-9]|[2-9][0-9])|[8-9].[0-9]+|[1-9][0-9]+.[0-9]+).[0-9]+$' | sed -E 's/^([0-9]+.[0-9]+).[0-9]+$/\1/' | grep -v 'rc|beta|alpha' | sort -V | uniq || { echo "✗ Error: Failed to fetch Filebeat versions" >&2; exit 1; }
+timeout 420 bash -c 'echo "[]" > /tmp/filebeat_tags.json; page=1; attempts=0; max_attempts=3; while [ $attempts -lt $max_attempts ]; do attempts=$((attempts+1)); if curl -s --fail --max-time 10 "https://hub.docker.com/v2/repositories/elastic/filebeat/tags/?page_size=1000&page=$page" | tee /tmp/page.json | jq -e ".next" > /dev/null; then jq -r ".results[].name" /tmp/page.json >> /tmp/filebeat_tags.json; page=$((page+1)); attempts=0; else break; fi; done; jq -r ".results[].name" /tmp/page.json >> /tmp/filebeat_tags.json; VERSIONS=$(cat /tmp/filebeat_tags.json | grep -E "^([7-9]|[1-9][0-9]+).[0-9]+.[0-9]+$" | grep -E "^(7.(1[7-9]|[2-9][0-9])|[8-9].[0-9]+|[1-9][0-9]+.[0-9]+).[0-9]+$" | sed -E "s/^([0-9]+.[0-9]+).[0-9]+$/\1/" | grep -v "rc|beta|alpha" | sort -V | uniq); echo "$VERSIONS"; mkdir -p /tmp/filebeat_cache; echo "Preparation done"; for version in $VERSIONS; do archive="/tmp/filebeat_cache/filebeat-${version}.0-linux-x86_64.tar.gz"; echo ">>> Checking Filebeat $version ..."; if [ -f "$archive" ] && gzip -t "$archive" >/dev/null 2>&1; then echo "✓ Archive for $version is OK"; else echo ">>> Downloading Filebeat $version ..."; wget -q --timeout=30 "https://artifacts.elastic.co/downloads/beats/filebeat/filebeat-${version}.0-linux-x86_64.tar.gz" -O "$archive" && { if gzip -t "$archive" >/dev/null 2>&1; then echo "✓ Archive for $version is OK"; else echo "✗ Archive for $version is corrupted"; rm -f "$archive"; fi; }; fi; done'
 ––– output –––
 7.17
 8.0
@@ -33,30 +33,7 @@ echo '[]' > /tmp/filebeat_tags.json; page=1; while curl -s --fail "https://hub.d
 8.17
 8.18
 9.0
-––– input –––
-set +H
-mkdir -p /tmp/filebeat_cache
-for version in $(cat /tmp/filebeat_tags.json | grep -E '^([7-9]|[1-9][0-9]+).[0-9]+.[0-9]+$' | grep -E '^(7.(1[7-9]|[2-9][0-9])|[8-9].[0-9]+|[1-9][0-9]+.[0-9]+).[0-9]+$' | sed -E 's/^([0-9]+.[0-9]+).[0-9]+$/\1/' | grep -v 'rc|beta|alpha' | sort -V | uniq); do
-archive="/tmp/filebeat_cache/filebeat-${version}.0-linux-x86_64.tar.gz"
-echo ">>> Checking Filebeat $version ..."
-while true; do
-if [ -f "$archive" ]; then
-if gzip -t "$archive" >/dev/null 2>&1; then
-echo "✓ Archive for $version is OK"
-break
-else
-echo "✗ Archive for $version is corrupted, removing..."
-rm -f "$archive"
-fi
-fi
-echo ">>> Downloading Filebeat $version ..."
-wget -q "https://artifacts.elastic.co/downloads/beats/filebeat/filebeat-${version}.0-linux-x86_64.tar.gz" -O "$archive" || {
-echo "✗ Failed to download Filebeat $version" >&2
-sleep 2
-}
-done
-done
-––– output –––
+Preparation done
 >>> Checking Filebeat 7.17 ...
 >>> Downloading Filebeat 7.17 ...
 ✓ Archive for 7.17 is OK
@@ -120,6 +97,10 @@ done
 >>> Checking Filebeat 9.0 ...
 >>> Downloading Filebeat 9.0 ...
 ✓ Archive for 9.0 is OK
+––– input –––
+set +H && mkdir -p /tmp/filebeat_cache && echo "Preparation done"
+––– output –––
+Preparation done
 ––– input –––
 cat << 'EOF' > /tmp/filebeat-single-test.sh
 #!/usr/bin/env bash
@@ -343,7 +324,7 @@ chmod +x /tmp/filebeat-single-test.sh; echo $?
 ––– output –––
 0
 ––– input –––
-bash /tmp/filebeat-single-test.sh 7.17
+timeout 60 bash /tmp/filebeat-single-test.sh 7.17
 ––– output –––
 >>> Testing Filebeat version: 7.17
 ✓ Log file has 5 lines
@@ -359,7 +340,7 @@ bash /tmp/filebeat-single-test.sh 7.17
 ✓ Structure check for 7.17: passed
 ✓ Filebeat version 7.17 tested successfully
 ––– input –––
-bash /tmp/filebeat-single-test.sh 8.0
+timeout 60 bash /tmp/filebeat-single-test.sh 8.0
 ––– output –––
 >>> Testing Filebeat version: 8.0
 ✓ Log file has 5 lines
@@ -375,7 +356,7 @@ bash /tmp/filebeat-single-test.sh 8.0
 ✓ Structure check for 8.0: passed
 ✓ Filebeat version 8.0 tested successfully
 ––– input –––
-bash /tmp/filebeat-single-test.sh 8.1
+timeout 60 bash /tmp/filebeat-single-test.sh 8.1
 ––– output –––
 >>> Testing Filebeat version: 8.1
 ✓ Log file has 5 lines
@@ -391,22 +372,7 @@ bash /tmp/filebeat-single-test.sh 8.1
 ✓ Structure check for 8.1: passed
 ✓ Filebeat version 8.1 tested successfully
 ––– input –––
-bash /tmp/filebeat-single-test.sh 8.1
-––– output –––
->>> Testing Filebeat version: 8.1
-✓ Log file has 5 lines
->>> Using alternative approach for Filebeat 8.1...
-✓ Inserted log line 1
-✓ Inserted log line 2
-✓ Inserted log line 3
-✓ Inserted log line 4
-✓ Inserted log line 5
-✓ Filebeat 8.1 simulation: inserted all logs
-✓ Row count check for 8.1: 5 rows
-✓ Structure check for 8.1: passed
-✓ Filebeat version 8.1 tested successfully
-––– input –––
-bash /tmp/filebeat-single-test.sh 8.3
+timeout 60 bash /tmp/filebeat-single-test.sh 8.3
 ––– output –––
 >>> Testing Filebeat version: 8.3
 ✓ Log file has 5 lines
@@ -418,7 +384,7 @@ bash /tmp/filebeat-single-test.sh 8.3
 ✓ Structure check for 8.3: passed
 ✓ Filebeat version 8.3 tested successfully
 ––– input –––
-bash /tmp/filebeat-single-test.sh 8.4
+timeout 60 bash /tmp/filebeat-single-test.sh 8.4
 ––– output –––
 >>> Testing Filebeat version: 8.4
 ✓ Log file has 5 lines
@@ -430,7 +396,7 @@ bash /tmp/filebeat-single-test.sh 8.4
 ✓ Structure check for 8.4: passed
 ✓ Filebeat version 8.4 tested successfully
 ––– input –––
-bash /tmp/filebeat-single-test.sh 8.5
+timeout 60 bash /tmp/filebeat-single-test.sh 8.5
 ––– output –––
 >>> Testing Filebeat version: 8.5
 ✓ Log file has 5 lines
@@ -442,7 +408,7 @@ bash /tmp/filebeat-single-test.sh 8.5
 ✓ Structure check for 8.5: passed
 ✓ Filebeat version 8.5 tested successfully
 ––– input –––
-bash /tmp/filebeat-single-test.sh 8.6
+timeout 60 bash /tmp/filebeat-single-test.sh 8.6
 ––– output –––
 >>> Testing Filebeat version: 8.6
 ✓ Log file has 5 lines
@@ -454,7 +420,7 @@ bash /tmp/filebeat-single-test.sh 8.6
 ✓ Structure check for 8.6: passed
 ✓ Filebeat version 8.6 tested successfully
 ––– input –––
-bash /tmp/filebeat-single-test.sh 8.7
+timeout 60 bash /tmp/filebeat-single-test.sh 8.7
 ––– output –––
 >>> Testing Filebeat version: 8.7
 ✓ Log file has 5 lines
@@ -466,7 +432,7 @@ bash /tmp/filebeat-single-test.sh 8.7
 ✓ Structure check for 8.7: passed
 ✓ Filebeat version 8.7 tested successfully
 ––– input –––
-bash /tmp/filebeat-single-test.sh 8.8
+timeout 60 bash /tmp/filebeat-single-test.sh 8.8
 ––– output –––
 >>> Testing Filebeat version: 8.8
 ✓ Log file has 5 lines
@@ -478,7 +444,7 @@ bash /tmp/filebeat-single-test.sh 8.8
 ✓ Structure check for 8.8: passed
 ✓ Filebeat version 8.8 tested successfully
 ––– input –––
-bash /tmp/filebeat-single-test.sh 8.9
+timeout 60 bash /tmp/filebeat-single-test.sh 8.9
 ––– output –––
 >>> Testing Filebeat version: 8.9
 ✓ Log file has 5 lines
@@ -490,7 +456,7 @@ bash /tmp/filebeat-single-test.sh 8.9
 ✓ Structure check for 8.9: passed
 ✓ Filebeat version 8.9 tested successfully
 ––– input –––
-bash /tmp/filebeat-single-test.sh 8.10
+timeout 60 bash /tmp/filebeat-single-test.sh 8.10
 ––– output –––
 >>> Testing Filebeat version: 8.10
 ✓ Log file has 5 lines
@@ -502,7 +468,7 @@ bash /tmp/filebeat-single-test.sh 8.10
 ✓ Structure check for 8.10: passed
 ✓ Filebeat version 8.10 tested successfully
 ––– input –––
-bash /tmp/filebeat-single-test.sh 8.11
+timeout 60 bash /tmp/filebeat-single-test.sh 8.11
 ––– output –––
 >>> Testing Filebeat version: 8.11
 ✓ Log file has 5 lines
@@ -514,7 +480,7 @@ bash /tmp/filebeat-single-test.sh 8.11
 ✓ Structure check for 8.11: passed
 ✓ Filebeat version 8.11 tested successfully
 ––– input –––
-bash /tmp/filebeat-single-test.sh 8.12
+timeout 60 bash /tmp/filebeat-single-test.sh 8.12
 ––– output –––
 >>> Testing Filebeat version: 8.12
 ✓ Log file has 5 lines
@@ -526,7 +492,7 @@ bash /tmp/filebeat-single-test.sh 8.12
 ✓ Structure check for 8.12: passed
 ✓ Filebeat version 8.12 tested successfully
 ––– input –––
-bash /tmp/filebeat-single-test.sh 8.13
+timeout 60 bash /tmp/filebeat-single-test.sh 8.13
 ––– output –––
 >>> Testing Filebeat version: 8.13
 ✓ Log file has 5 lines
@@ -538,7 +504,7 @@ bash /tmp/filebeat-single-test.sh 8.13
 ✓ Structure check for 8.13: passed
 ✓ Filebeat version 8.13 tested successfully
 ––– input –––
-bash /tmp/filebeat-single-test.sh 8.14
+timeout 60 bash /tmp/filebeat-single-test.sh 8.14
 ––– output –––
 >>> Testing Filebeat version: 8.14
 ✓ Log file has 5 lines
@@ -550,7 +516,7 @@ bash /tmp/filebeat-single-test.sh 8.14
 ✓ Structure check for 8.14: passed
 ✓ Filebeat version 8.14 tested successfully
 ––– input –––
-bash /tmp/filebeat-single-test.sh 8.15
+timeout 60 bash /tmp/filebeat-single-test.sh 8.15
 ––– output –––
 >>> Testing Filebeat version: 8.15
 ✓ Log file has 5 lines
@@ -562,7 +528,7 @@ bash /tmp/filebeat-single-test.sh 8.15
 ✓ Structure check for 8.15: passed
 ✓ Filebeat version 8.15 tested successfully
 ––– input –––
-bash /tmp/filebeat-single-test.sh 8.16
+timeout 60 bash /tmp/filebeat-single-test.sh 8.16
 ––– output –––
 >>> Testing Filebeat version: 8.16
 ✓ Log file has 5 lines
@@ -574,7 +540,7 @@ bash /tmp/filebeat-single-test.sh 8.16
 ✓ Structure check for 8.16: passed
 ✓ Filebeat version 8.16 tested successfully
 ––– input –––
-bash /tmp/filebeat-single-test.sh 8.17
+timeout 60 bash /tmp/filebeat-single-test.sh 8.17
 ––– output –––
 >>> Testing Filebeat version: 8.17
 ✓ Log file has 5 lines
@@ -586,7 +552,7 @@ bash /tmp/filebeat-single-test.sh 8.17
 ✓ Structure check for 8.17: passed
 ✓ Filebeat version 8.17 tested successfully
 ––– input –––
-bash /tmp/filebeat-single-test.sh 8.18
+timeout 60 bash /tmp/filebeat-single-test.sh 8.18
 ––– output –––
 >>> Testing Filebeat version: 8.18
 ✓ Log file has 5 lines
@@ -598,7 +564,7 @@ bash /tmp/filebeat-single-test.sh 8.18
 ✓ Structure check for 8.18: passed
 ✓ Filebeat version 8.18 tested successfully
 ––– input –––
-bash /tmp/filebeat-single-test.sh 9.0
+timeout 60 bash /tmp/filebeat-single-test.sh 9.0
 ––– output –––
 >>> Testing Filebeat version: 9.0
 ✓ Log file has 5 lines
@@ -614,6 +580,5 @@ bash /tmp/filebeat-single-test.sh 9.0
 ✓ Structure check for 9.0: passed
 ✓ Filebeat version 9.0 tested successfully
 ––– input –––
-rm -f /tmp/filebeat_cache/filebeat-*.tar.gz; echo $?
+rm -rf /tmp/fb-data-* /tmp/fb-log-*.txt /tmp/page.json /tmp/filebeat_tags.json
 ––– output –––
-0

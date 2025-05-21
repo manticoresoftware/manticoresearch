@@ -401,6 +401,87 @@ mysql -h0 -P9306 -e "SELECT username FROM name WHERE MATCH('SMITH') OPTION cutof
 | APRYL SMYTH     |
 +-----------------+
 ––– input –––
+mysql -h0 -P9306 -e "SELECT * FROM name WHERE MATCH('@username RICH') OPTION fuzzy=0;"
+––– output –––
++--------+-----------------+------+
+| id     | username        | s    |
++--------+-----------------+------+
+| 909617 | RICH RICH       | a    |
+| 811497 | LYNNE RICH      | a    |
+| 812956 | ANGELIKA RICH   | a    |
+| 814280 | FELICE RICH     | a    |
+| 817690 | RICH HOFFMANN   | a    |
+| 819795 | RICH PACKARD    | a    |
+| 821869 | RICH GANDY      | a    |
+| 824099 | RICH CHAPMAN    | a    |
+| 826649 | RICH NOBLE      | a    |
+| 828364 | KITTIE RICH     | a    |
+| 836546 | DEJA RICH       | a    |
+| 838012 | RICH CANDELARIA | a    |
+| 838874 | RICH MOHAMMED   | a    |
+| 841222 | RICH CHASTAIN   | a    |
+| 844143 | AMBER RICH      | a    |
+| 844655 | VIOLA RICH      | a    |
+| 852899 | RICH CHUN       | a    |
+| 853125 | CANDRA RICH     | a    |
+| 857050 | RICH RANDAZZO   | a    |
+| 862012 | MIGUEL RICH     | a    |
++--------+-----------------+------+
+––– input –––
+mysql -h0 -P9306 -e "SELECT * FROM name WHERE MATCH('@username RICH') OPTION fuzzy=1;"
+––– output –––
++--------+----------------+------+
+| id     | username       | s    |
++--------+----------------+------+
+| 976710 | RICH RICE      | a    |
+| 855506 | RICHIE RICE    | a    |
+| 909617 | RICH RICH      | a    |
+| 802084 | OTELIA RICO    | a    |
+| 802416 | HERLINDA RICO  | a    |
+| 804097 | RETA RICO      | a    |
+| 804245 | RICO MULLIS    | a    |
+| 811013 | COLLIN RICO    | a    |
+| 819322 | SID RICO       | a    |
+| 821118 | KORTNEY RICO   | a    |
+| 822064 | LINETTE RICO   | a    |
+| 822956 | FRANCOISE RICO | a    |
+| 825638 | RICO BOSTIC    | a    |
+| 830634 | RICO SYED      | a    |
+| 841133 | MARYANNA RICO  | a    |
+| 841925 | PHILLIS RICO   | a    |
+| 845438 | GREG RICO      | a    |
+| 846041 | RICO STEINER   | a    |
+| 847859 | LAUREN RICO    | a    |
+| 849571 | CARA RICO      | a    |
++--------+----------------+------+
+––– input –––
+mysql -h0 -P9306 -e "SELECT * FROM name WHERE MATCH('@username RISH') OPTION fuzzy=1;"
+––– output –––
++--------+---------------+------+
+| id     | username      | s    |
++--------+---------------+------+
+| 761096 | RICH FISH     | a    |
+| 134175 | RICHIE FISHER | a    |
+| 909617 | RICH RICH     | a    |
+| 806568 | MAREN FISH    | a    |
+| 809850 | JACINTO FISH  | a    |
+| 817837 | AUDRY FISH    | a    |
+| 822059 | GRANT FISH    | a    |
+| 826641 | CAROLINE FISH | a    |
+| 829532 | LAURENCE FISH | a    |
+| 830099 | MEGAN FISH    | a    |
+| 832981 | WESTON FISH   | a    |
+| 842049 | KELLY FISH    | a    |
+| 848696 | INGER FISH    | a    |
+| 849977 | CORRINE FISH  | a    |
+| 855254 | KEVA FISH     | a    |
+| 860627 | MATTHEW FISH  | a    |
+| 862856 | CATHIE FISH   | a    |
+| 870760 | LYNN FISH     | a    |
+| 873766 | SHERELL FISH  | a    |
+| 881347 | THERON FISH   | a    |
++--------+---------------+------+
+––– input –––
 mysql -h0 -P9306 -e "CALL AUTOCOMPLETE('jo', 'name', 1 AS fuzziness);" | tail -n +4 | sort
 ––– output –––
 +--------+

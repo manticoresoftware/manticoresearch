@@ -6,7 +6,7 @@ set ( ROARINGBITMAP_SRC_MD5 "9ad3047cd74e5a3562c30f7c8a606373" )
 
 include ( update_bundle )
 
-# try to find quietly (will work most time
+# try to find quietly (will work most of the times)
 find_package ( roaring QUIET CONFIG )
 return_if_target_found ( roaring::roaring "found ready (no need to build)" )
 

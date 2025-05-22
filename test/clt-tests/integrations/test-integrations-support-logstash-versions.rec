@@ -43,7 +43,7 @@ for i in {1..3}; do wget -q --timeout=60 --tries=1 "https://artifacts.elastic.co
 ––– output –––
 ✓ Logstash 7.17.0 downloaded successfully
 ––– input –––
-for i in {1..3}; do wget -q --timeout=60 --tries=1 "https://artifacts.elastic.co/downloads/logstash/logstash-8.0.0-linux-x86_64.tar.gz" -O logstash-
+for i in {1..3}; do wget -q --timeout=60 --tries=1 "https://artifacts.elastic.co/downloads/logstash/logstash-8.0.0-linux-x86_64.tar.gz" -O logstash-8.0.0.tar.gz && gzip -t logstash-8.0.0.tar.gz 2>/dev/null && tar -tzf logstash-8.0.0.tar.gz | grep -q "bin/logstash" && { echo "✓ Logstash 8.0.0 downloaded successfully"; break; } || { [ $i -eq 3 ] && echo "✗ Failed to download Logstash 8.0.0 after 3 attempts" >&2 || rm -f logstash-8.0.0.tar.gz >/dev/null 2>&1; sleep 2; }; done
 ––– output –––
 ✓ Logstash 8.0.0 downloaded successfully
 ––– input –––

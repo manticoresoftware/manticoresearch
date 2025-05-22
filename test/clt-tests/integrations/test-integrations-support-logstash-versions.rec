@@ -140,11 +140,11 @@ LOGSTASH_LOG="$LOG_DIR/logstash.log"
 TEMP_DATA_DIR="/tmp/logstash_test_${VERSION}"
 TEST_LOG="/var/log/dpkg.log"
 
-# Тихая очистка всех процессов Logstash
+# Очистка перед запуском
 killall -9 java logstash ruby 2>/dev/null || true
-sleep 1
+sleep 2
 
-# Тихая очистка временных файлов
+# Очистка временных директорий
 rm -rf "$TEMP_DATA_DIR" 2>/dev/null || true
 mkdir -p "$TEMP_DATA_DIR"
 chmod 777 "$TEMP_DATA_DIR"
@@ -184,24 +184,47 @@ mysql -h0 -P9306 -e "CREATE TABLE dpkg_log (id bigint, message string attribute 
     exit 1
 }
 
-# Создание symbolic для запуска нужной версии
-cd /usr/share/logstash
-ln -sf "/usr/share/logstash/logstash-${VERSION}.0/bin/logstash" /usr/bin/logstash > /dev/null 2>&1 || {
-    echo "✗ Error: Failed to create symlink for Logstash $VERSION" >&2
+# Создание директории и символической ссылки для запуска нужной версии
+# Убедимся, что директории существуют
+if [ ! -d "/usr/share/logstash" ]; then
+    mkdir -p /usr/share/logstash
+fi
+
+# Проверяем, что версия Logstash существует и распакована
+if [ ! -d "/usr/share/logstash/logstash-${VERSION}.0" ]; then
+    # Ищем архив и распаковываем его
+    if [ -f "logstash-${VERSION}.0.tar.gz" ]; then
+        tar -xzf "logstash-${VERSION}.0.tar.gz" -C /usr/share/logstash/ > /dev/null 2>&1
+    elif [ -f "/tmp/logstash-${VERSION}.0.tar.gz" ]; then
+        tar -xzf "/tmp/logstash-${VERSION}.0.tar.gz" -C /usr/share/logstash/ > /dev/null 2>&1
+    else
+        echo "✗ Error: Logstash $VERSION archive not found" >&2
+        exit 1
+    fi
+fi
+
+# Создание символической ссылки
+if [ -f "/usr/share/logstash/logstash-${VERSION}.0/bin/logstash" ]; then
+    ln -sf "/usr/share/logstash/logstash-${VERSION}.0/bin/logstash" /usr/bin/logstash > /dev/null 2>&1
+else
+    echo "✗ Error: Logstash $VERSION binary not found" >&2
     exit 1
-}
+fi
 
 # Определение версионных параметров
 version_major=$(echo "$VERSION" | cut -d. -f1)
 version_minor=$(echo "$VERSION" | cut -d. -f2)
 
+# ECS совместимость доступна с версии 7.5+
 ecs_args=""
 if [ "$version_major" -gt 7 ] || ([ "$version_major" -eq 7 ] && [ "$version_minor" -ge 5 ]); then
     ecs_args="--pipeline.ecs_compatibility v1"
 fi
 
-# Настройки ILM для версии 8+
+# Настройки для elasticsearch output в зависимости от версии
 ilm_settings=""
+
+# Настройки для версии 8.0+
 if [ "$version_major" -ge 8 ]; then
     ilm_settings="ilm_enabled => false
     manage_template => false"
@@ -242,25 +265,29 @@ output {
 }
 CONF
 
+# Параметры для запуска Logstash
+batch_size=10
+
 # Дополнительные опции JVM
 export LS_JAVA_OPTS="-Xms256m -Xmx512m"
 
-# Запуск Logstash - выполняем без ожидания, просто с блокировкой на заданное время
-(
-  timeout 60 logstash --path.data="$TEMP_DATA_DIR" -f "$CONFIG_FILE" --pipeline.batch.size 10 $ecs_args > /dev/null 2>&1
-  echo "Logstash process completed" > /dev/null  # Тихое завершение
-) &
+# Определение времени ожидания в зависимости от версии
+wait_time=60
 
-# Ожидаем фиксированное время и проверяем результаты без промежуточных сообщений
-sleep 60 > /dev/null 2>&1
+# Запуск Logstash
+timeout $wait_time logstash --path.data="$TEMP_DATA_DIR" \
+  -f "$CONFIG_FILE" \
+  --log.level=error \
+  --pipeline.batch.size $batch_size \
+  $ecs_args \
+  > /dev/null 2>&1 || true
 
-# Принудительно завершаем все процессы Logstash
-killall -9 java logstash ruby 2>/dev/null || true
-sleep 2 > /dev/null 2>&1
+# Дополнительное ожидание для завершения индексации
+sleep 10
 
 echo "✓ Logstash $VERSION started and processed logs"
 
-# Проверка количества записей (только один раз, без цикла)
+# Проверка количества записей
 row_count=$(mysql -h0 -P9306 -N -B -e "SELECT COUNT(*) FROM dpkg_log" | grep -o '[0-9]\+' || echo "0")
 if [ "$row_count" -eq 5 ]; then
     echo "✓ Row count check for $VERSION: $row_count rows"
@@ -290,8 +317,8 @@ fi
 
 echo "✓ Logstash version $VERSION tested successfully"
 
-# Тихая очистка временных файлов
-rm -f "$CONFIG_FILE" > /dev/null 2>&1
+# Очистка временных файлов
+rm -f "$CONFIG_FILE" "$TEST_LOG" > /dev/null 2>&1
 EOF
 ––– output –––
 ––– input –––
@@ -479,5 +506,5 @@ bash /tmp/logstash-single-test.sh 8.18
 ✓ Structure check for 8.18: passed
 ✓ Logstash version 8.18 tested successfully
 ––– input –––
-rm -f /tmp/logstash_cache/logstash-*.tar.gz
+rm -f logstash-*.tar.gz
 ––– output –––

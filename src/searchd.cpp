@@ -15598,6 +15598,18 @@ void HandleMysqlOptimize ( RowBuffer_i & tOut, const SqlStmt_t & tStmt )
 		tOut.Ok ();
 }
 
+static CSphString GetLastInsertId ( const ClientSession_c * pSession )
+{
+    StringBuilder_c sBuf ( "," );
+
+	if ( pSession->m_dLastIds.IsEmpty() )
+		sBuf << 0;
+	else
+		pSession->m_dLastIds.Apply ( [&sBuf] ( int64_t iID ) { sBuf << iID; } );
+
+    return CSphString ( sBuf );
+}
+
 class ExtraLastInsertID_c final: public ISphExtra
 {
 	bool ExtraDataImpl ( ExtraData_e eCmd, void** pData ) final
@@ -15607,9 +15619,7 @@ class ExtraLastInsertID_c final: public ISphExtra
 
 		auto* sVal = (CSphString*)pData;
 		assert ( sVal );
-		StringBuilder_c tBuf ( "," );
-		session::Info().GetClientSession()->m_dLastIds.for_each ( [&tBuf] ( auto& iId ) { tBuf << iId; } );
-		tBuf.MoveTo ( *sVal );
+		*sVal = GetLastInsertId ( session::Info().GetClientSession() );
 		return true;
 	}
 };
@@ -15635,11 +15645,7 @@ void HandleMysqlSelectColumns ( RowBuffer_i & tOut, const SqlStmt_t & tStmt, Cli
 		{ MYSQL_COL_LONG,	"@@max_allowed_packet", [] { StringBuilder_c s; s << g_iMaxPacketSize; return CSphString(s); }},
 		{ MYSQL_COL_STRING,	"@@version_comment", [] { return szGIT_BRANCH_ID;}},
 		{ MYSQL_COL_LONG,	"@@lower_case_table_names", [] { return "1"; }},
-		{ MYSQL_COL_STRING,	"@@session.last_insert_id", [pSession] {
-			StringBuilder_c s ( "," );
-			pSession->m_dLastIds.Apply ( [&s] ( int64_t iID ) { s << iID; } );
-			return CSphString ( s );
-		}},
+		{ MYSQL_COL_STRING,	"@@session.last_insert_id", [pSession] { return GetLastInsertId ( pSession ); } },
 		{ MYSQL_COL_LONG, "@@autocommit", [pSession] { return pSession->m_bAutoCommit ? "1" : "0"; } },
 	};
 
@@ -15869,12 +15875,7 @@ void HandleMysqlShowVariables ( RowBuffer_i & dRows, const SqlStmt_t & tStmt )
 		dTable.MatchTuplet ( "character_set_connection", "utf8" );
 		dTable.MatchTuplet ( "grouping_in_utc", GetGroupingInUTC() ? "1" : "0" );
 		dTable.MatchTuplet ( "timezone", GetTimeZoneName().cstr() );
-		dTable.MatchTupletFn ( "last_insert_id" , [&pVars]
-		{
-			StringBuilder_c tBuf ( "," );
-			pVars->m_dLastIds.Apply ( [&tBuf] ( int64_t iID ) { tBuf << iID; } );
-			return tBuf;
-		});
+		dTable.MatchTupletFn ( "last_insert_id" , [&pVars]  { return GetLastInsertId ( pVars ); } );
 	}
 	dTable.MatchTuplet ( "pseudo_sharding", GetPseudoSharding() ? "1" : "0" );
 

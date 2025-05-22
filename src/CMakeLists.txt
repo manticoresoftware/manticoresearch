@@ -57,7 +57,7 @@ add_library ( lmanticore STATIC sphinx.cpp sphinxutils.cpp
 		sphinxjson.cpp sphinxaot.cpp sphinxplugin.cpp sphinxudf.c sphinxqcache.cpp 
 		attribute.cpp secondaryindex.cpp killlist.cpp searchnode.cpp json/cJSON.c sphinxpq.cpp
 		global_idf.cpp docstore.cpp lz4/lz4.c lz4/lz4hc.c snippetfunctor.cpp snippetindex.cpp
-		snippetstream.cpp snippetpassage.cpp threadutils.cpp sphinxversion.cpp indexcheck.cpp datareader.cpp
+		snippetstream.cpp snippetpassage.cpp threadutils.cpp sphinxversion.cpp datareader.cpp
 		indexformat.cpp indexsettings.cpp fileutils.cpp threads_detached.cpp hazard_pointer.cpp
 		task_info.cpp mini_timer.cpp fileio.cpp memio.cpp queryprofile.cpp columnarfilter.cpp columnargrouper.cpp
 		columnarlib.cpp collation.cpp histogram.cpp
@@ -72,6 +72,11 @@ add_library ( lmanticore STATIC sphinx.cpp sphinxutils.cpp
 if (WIN32)
 target_link_libraries ( lmanticore PRIVATE dbghelp AdvAPI32 ShLwApi )
 endif()
+
+include ( GetRBitmap )
+add_library ( indexcheck OBJECT indexcheck.cpp indexcheck.h )
+target_link_libraries ( indexcheck PRIVATE lextra roaring::roaring )
+target_link_libraries ( lmanticore PUBLIC indexcheck )
 
 add_library ( lstem STATIC sphinxsoundex.cpp sphinxmetaphone.cpp sphinxstemen.cpp sphinxstemru.cpp sphinxstemru.inl
 		sphinxstemcz.cpp sphinxstemar.cpp )

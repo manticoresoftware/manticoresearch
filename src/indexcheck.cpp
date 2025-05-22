@@ -190,7 +190,7 @@ private:
 };
 
 
-void DebugCheckHelper_c::DebugCheck_Attributes ( DebugCheckReader_i & tAttrs, DebugCheckReader_i & tBlobs, int64_t nRows, int64_t iMinMaxBytes, const CSphSchema & tSchema, DebugCheckError_i & tReporter ) const
+void DebugCheck_Attributes ( DebugCheckReader_i & tAttrs, DebugCheckReader_i & tBlobs, int64_t nRows, int64_t iMinMaxBytes, const CSphSchema & tSchema, DebugCheckError_i & tReporter )
 {
 	// empty?
 	if ( !tAttrs.GetLengthBytes() )
@@ -295,7 +295,7 @@ void DebugCheckHelper_c::DebugCheck_Attributes ( DebugCheckReader_i & tAttrs, De
 }
 
 
-void DebugCheckHelper_c::DebugCheck_DeadRowMap ( int64_t iSizeBytes, int64_t nRows, DebugCheckError_i & tReporter ) const
+void DebugCheck_DeadRowMap ( int64_t iSizeBytes, int64_t nRows, DebugCheckError_i & tReporter )
 {
 	tReporter.Msg ( "checking dead row map..." );
 
@@ -361,7 +361,7 @@ static JsonEscapedBuilder& operator<< ( JsonEscapedBuilder& dOut, const Wordid_t
 
 using cbWordidFn = std::function<void ( RowID_t, Wordid_t, int iField, int iPos, bool bIsEnd )>;
 
-class DiskIndexChecker_c::Impl_c : public DebugCheckHelper_c
+class DiskIndexChecker_c::Impl_c
 {
 public:
 			Impl_c ( CSphIndex & tIndex, DebugCheckError_i & tReporter );
@@ -1779,4 +1779,28 @@ bool DebugCheckSchema ( const ISphSchema & tSchema, CSphString & sError )
 void DebugCheckSchema ( const ISphSchema & tSchema, DebugCheckError_i & tReporter )
 {
 	DebugCheckSchema_T ( tSchema, tReporter );
+}
+
+
+bool SchemaConfigureCheckAttribute ( const CSphSchema & tSchema, const CSphColumnInfo & tCol, CSphString & sError )
+{
+	if ( tCol.m_sName.IsEmpty() )
+	{
+		sError.SetSprintf ( "column number %d has no name", tCol.m_iIndex );
+		return false;
+	}
+
+	if ( tSchema.GetAttr ( tCol.m_sName.cstr() ) )
+	{
+		sError.SetSprintf ( "can not add multiple attributes with same name '%s'", tCol.m_sName.cstr () );
+		return false;
+	}
+
+	if ( CSphSchema::IsReserved ( tCol.m_sName.cstr() ) )
+	{
+		sError.SetSprintf ( "%s is not a valid attribute name", tCol.m_sName.cstr() );
+		return false;
+	}
+
+	return true;
 }

@@ -244,9 +244,6 @@ target_link_libraries ( lextra INTERFACE cctz::cctz )
 include ( GetxxHash )
 target_link_libraries ( lextra INTERFACE xxHash::xxhash )
 
-include ( GetRBitmap )
-target_link_libraries ( lextra INTERFACE roaring::roaring )
-
 with_get ( jieba "Jieba" "Chinese text segmentation tool" )
 
 # Support for OpenSSL

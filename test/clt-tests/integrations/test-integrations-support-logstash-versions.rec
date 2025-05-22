@@ -326,7 +326,7 @@ chmod +x /tmp/logstash-single-test.sh; echo $?
 ––– output –––
 0
 ––– input –––
-bash /tmp/logstash-single-test.sh 7.17
+timeout 300 bash /tmp/logstash-single-test.sh 7.17
 ––– output –––
 >>> Testing Logstash version: 7.17
 ✓ Log file has 5 lines
@@ -336,7 +336,7 @@ bash /tmp/logstash-single-test.sh 7.17
 ✓ Structure check for 7.17: passed
 ✓ Logstash version 7.17 tested successfully
 ––– input –––
-bash /tmp/logstash-single-test.sh 8.0
+timeout 300 bash /tmp/logstash-single-test.sh 8.0
 ––– output –––
 >>> Testing Logstash version: 8.0
 ✓ Log file has 5 lines
@@ -346,7 +346,7 @@ bash /tmp/logstash-single-test.sh 8.0
 ✓ Structure check for 8.0: passed
 ✓ Logstash version 8.0 tested successfully
 ––– input –––
-bash /tmp/logstash-single-test.sh 8.1
+timeout 300 bash /tmp/logstash-single-test.sh 8.1
 ––– output –––
 >>> Testing Logstash version: 8.1
 ✓ Log file has 5 lines
@@ -356,7 +356,7 @@ bash /tmp/logstash-single-test.sh 8.1
 ✓ Structure check for 8.1: passed
 ✓ Logstash version 8.1 tested successfully
 ––– input –––
-bash /tmp/logstash-single-test.sh 8.2
+timeout 300 bash /tmp/logstash-single-test.sh 8.2
 ––– output –––
 >>> Testing Logstash version: 8.2
 ✓ Log file has 5 lines
@@ -366,7 +366,7 @@ bash /tmp/logstash-single-test.sh 8.2
 ✓ Structure check for 8.2: passed
 ✓ Logstash version 8.2 tested successfully
 ––– input –––
-bash /tmp/logstash-single-test.sh 8.3
+timeout 300 bash /tmp/logstash-single-test.sh 8.3
 ––– output –––
 >>> Testing Logstash version: 8.3
 ✓ Log file has 5 lines
@@ -376,7 +376,7 @@ bash /tmp/logstash-single-test.sh 8.3
 ✓ Structure check for 8.3: passed
 ✓ Logstash version 8.3 tested successfully
 ––– input –––
-bash /tmp/logstash-single-test.sh 8.4
+timeout 300 bash /tmp/logstash-single-test.sh 8.4
 ––– output –––
 >>> Testing Logstash version: 8.4
 ✓ Log file has 5 lines
@@ -386,7 +386,7 @@ bash /tmp/logstash-single-test.sh 8.4
 ✓ Structure check for 8.4: passed
 ✓ Logstash version 8.4 tested successfully
 ––– input –––
-bash /tmp/logstash-single-test.sh 8.5
+timeout 300 bash /tmp/logstash-single-test.sh 8.5
 ––– output –––
 >>> Testing Logstash version: 8.5
 ✓ Log file has 5 lines
@@ -396,7 +396,7 @@ bash /tmp/logstash-single-test.sh 8.5
 ✓ Structure check for 8.5: passed
 ✓ Logstash version 8.5 tested successfully
 ––– input –––
-bash /tmp/logstash-single-test.sh 8.6
+timeout 300 bash /tmp/logstash-single-test.sh 8.6
 ––– output –––
 >>> Testing Logstash version: 8.6
 ✓ Log file has 5 lines
@@ -406,7 +406,7 @@ bash /tmp/logstash-single-test.sh 8.6
 ✓ Structure check for 8.6: passed
 ✓ Logstash version 8.6 tested successfully
 ––– input –––
-bash /tmp/logstash-single-test.sh 8.7
+timeout 300 bash /tmp/logstash-single-test.sh 8.7
 ––– output –––
 >>> Testing Logstash version: 8.7
 ✓ Log file has 5 lines
@@ -416,7 +416,7 @@ bash /tmp/logstash-single-test.sh 8.7
 ✓ Structure check for 8.7: passed
 ✓ Logstash version 8.7 tested successfully
 ––– input –––
-bash /tmp/logstash-single-test.sh 8.8
+timeout 300 bash /tmp/logstash-single-test.sh 8.8
 ––– output –––
 >>> Testing Logstash version: 8.8
 ✓ Log file has 5 lines
@@ -426,7 +426,7 @@ bash /tmp/logstash-single-test.sh 8.8
 ✓ Structure check for 8.8: passed
 ✓ Logstash version 8.8 tested successfully
 ––– input –––
-bash /tmp/logstash-single-test.sh 8.9
+timeout 300 bash /tmp/logstash-single-test.sh 8.9
 ––– output –––
 >>> Testing Logstash version: 8.9
 ✓ Log file has 5 lines
@@ -436,7 +436,7 @@ bash /tmp/logstash-single-test.sh 8.9
 ✓ Structure check for 8.9: passed
 ✓ Logstash version 8.9 tested successfully
 ––– input –––
-bash /tmp/logstash-single-test.sh 8.10
+timeout 300 bash /tmp/logstash-single-test.sh 8.10
 ––– output –––
 >>> Testing Logstash version: 8.10
 ✓ Log file has 5 lines
@@ -446,7 +446,7 @@ bash /tmp/logstash-single-test.sh 8.10
 ✓ Structure check for 8.10: passed
 ✓ Logstash version 8.10 tested successfully
 ––– input –––
-bash /tmp/logstash-single-test.sh 8.11
+timeout 300 bash /tmp/logstash-single-test.sh 8.11
 ––– output –––
 >>> Testing Logstash version: 8.11
 ✓ Log file has 5 lines
@@ -456,7 +456,7 @@ bash /tmp/logstash-single-test.sh 8.11
 ✓ Structure check for 8.11: passed
 ✓ Logstash version 8.11 tested successfully
 ––– input –––
-bash /tmp/logstash-single-test.sh 8.12
+timeout 300 bash /tmp/logstash-single-test.sh 8.12
 ––– output –––
 >>> Testing Logstash version: 8.12
 ✓ Log file has 5 lines
@@ -466,7 +466,7 @@ bash /tmp/logstash-single-test.sh 8.12
 ✓ Structure check for 8.12: passed
 ✓ Logstash version 8.12 tested successfully
 ––– input –––
-bash /tmp/logstash-single-test.sh 8.13
+timeout 300 bash /tmp/logstash-single-test.sh 8.13
 ––– output –––
 >>> Testing Logstash version: 8.13
 ✓ Log file has 5 lines
@@ -476,7 +476,7 @@ bash /tmp/logstash-single-test.sh 8.13
 ✓ Structure check for 8.13: passed
 ✓ Logstash version 8.13 tested successfully
 ––– input –––
-bash /tmp/logstash-single-test.sh 8.14
+timeout 300 bash /tmp/logstash-single-test.sh 8.14
 ––– output –––
 >>> Testing Logstash version: 8.14
 ✓ Log file has 5 lines
@@ -486,7 +486,7 @@ bash /tmp/logstash-single-test.sh 8.14
 ✓ Structure check for 8.14: passed
 ✓ Logstash version 8.14 tested successfully
 ––– input –––
-bash /tmp/logstash-single-test.sh 8.15
+timeout 300 bash /tmp/logstash-single-test.sh 8.15
 ––– output –––
 >>> Testing Logstash version: 8.15
 ✓ Log file has 5 lines
@@ -496,7 +496,7 @@ bash /tmp/logstash-single-test.sh 8.15
 ✓ Structure check for 8.15: passed
 ✓ Logstash version 8.15 tested successfully
 ––– input –––
-bash /tmp/logstash-single-test.sh 8.18
+timeout 300 bash /tmp/logstash-single-test.sh 8.18
 ––– output –––
 >>> Testing Logstash version: 8.18
 ✓ Log file has 5 lines

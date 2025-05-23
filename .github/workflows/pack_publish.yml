@@ -31,7 +31,39 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-
+  check_branch:
+    name: Check branch existence
+    runs-on: ubuntu-22.04
+    outputs:
+      columnar_locator: ${{ steps.set_locator.outputs.columnar_locator }}
+    steps:
+      - name: Check if branch exists in manticoresoftware/manticoresearch
+        id: check_branch
+        if: github.ref_name != 'master'
+        run: |
+          # Extract the actual branch name for pull requests
+          if [[ "${{ github.event_name }}" == "pull_request" ]]; then
+            BRANCH_NAME="${{ github.event.pull_request.head.ref }}"
+          else
+            BRANCH_NAME="${{ github.ref_name }}"
+          fi
+          
+          HTTP_STATUS=$(curl -s -o /dev/null -w "%{http_code}" https://api.github.com/repos/manticoresoftware/columnar/branches/$BRANCH_NAME)
+          if [ "$HTTP_STATUS" -eq "200" ]; then
+            echo "branch_exists=true" >> $GITHUB_OUTPUT
+            echo "branch_name=$BRANCH_NAME" >> $GITHUB_OUTPUT
+          else
+            echo "branch_exists=false" >> $GITHUB_OUTPUT
+            echo "branch_name=$BRANCH_NAME" >> $GITHUB_OUTPUT
+          fi
+      - name: Set Columnar Locator
+        id: set_locator
+        run: |
+          if [[ "${{ github.ref_name }}" != "master" && "${{ steps.check_branch.outputs.branch_exists }}" == "true" ]]; then
+            echo "columnar_locator=GIT_REPOSITORY https://github.com/manticoresoftware/columnar.git GIT_TAG ${{ steps.check_branch.outputs.branch_name }}" >> $GITHUB_OUTPUT
+          else
+            echo "columnar_locator=" >> $GITHUB_OUTPUT
+          fi
   pack:
     name: OK to pack?
     runs-on: ubuntu-22.04
@@ -156,13 +188,15 @@ jobs:
   pack_debian_ubuntu:
     name: Debian/Ubuntu packages
     uses: ./.github/workflows/build_template.yml
-    needs: [pack, check_deps]
+    needs: [pack, check_branch, check_deps]
+    if: needs.pack.outputs.should_continue == 'true'
     strategy:
       fail-fast: false
       matrix:
         DISTR: [bionic, focal, jammy, buster, bullseye, bookworm]
         arch: [x86_64, aarch64]
     with:
+      COLUMNAR_LOCATOR: ${{ needs.check_branch.outputs.columnar_locator }}
       DISTR: ${{ matrix.DISTR }}
       arch: ${{ matrix.arch }}
       cmake_command: |
@@ -179,13 +213,15 @@ jobs:
   pack_rhel:
     name: RHEL packages
     uses: ./.github/workflows/build_template.yml
-    needs: [pack, check_deps]
+    needs: [pack, check_branch, check_deps]
+    if: needs.pack.outputs.should_continue == 'true'
     strategy:
       fail-fast: false
       matrix:
         DISTR: [rhel7, rhel8, rhel9]
         arch: [x86_64, aarch64]
     with:
+      COLUMNAR_LOCATOR: ${{ needs.check_branch.outputs.columnar_locator }}
       DISTR: ${{ matrix.DISTR }}
       arch: ${{ matrix.arch }}
       boost_url_key: boost_rhel_feb17
@@ -205,13 +241,15 @@ jobs:
   pack_macos:
     name: MacOS packages
     uses: ./.github/workflows/build_template.yml
-    needs: [pack, check_deps]
+    needs: [pack, check_branch, check_deps]
+    if: needs.pack.outputs.should_continue == 'true'
     strategy:
       fail-fast: false
       matrix:
         DISTR: [macos]
         arch: [x86_64, arm64]
     with:
+      COLUMNAR_LOCATOR: ${{ needs.check_branch.outputs.columnar_locator }}
       DISTR: ${{ matrix.DISTR }}
       arch: ${{ matrix.arch }}
       HOMEBREW_PREFIX: /opt/homebrew
@@ -229,8 +267,10 @@ jobs:
   pack_windows:
     name: Windows x64 package
     uses: ./.github/workflows/build_template.yml
-    needs: [pack, check_deps]
+    needs: [pack, check_branch, check_deps]
+    if: needs.pack.outputs.should_continue == 'true'
     with:
+      COLUMNAR_LOCATOR: ${{ needs.check_branch.outputs.columnar_locator }}
       DISTR: windows
       arch: x64
       sysroot_url_key: roots_mysql83_jan17

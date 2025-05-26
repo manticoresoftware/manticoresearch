@@ -812,8 +812,11 @@ bool ProcessHttpQueryBuddy ( HttpProcessResult_t & tRes, Str_t sSrcQuery, Option
 
 	} else
 	{
+		// kubana related endpoints should be converted
+		bool bConvert = ( bHttpEndpoint && hOptions["endpoint"].Begins ( "_" ) );
+
 		CSphVector<BYTE> dBson;
-		bson::JsonObjToBson ( tReplyParsed.m_tMessage, dBson, true, false );
+		bson::JsonObjToBson ( tReplyParsed.m_tMessage, dBson, bConvert, false );
 		bson::Bson_c ( dBson ).BsonToJson ( sDumpBuf, false );
 		sDump = FromStr ( sDumpBuf );
 	}

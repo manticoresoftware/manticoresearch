@@ -118,6 +118,9 @@ public:
 	template<typename FILTER>
 	FORCE_INLINE int64_t count_of ( FILTER&& cond ) const noexcept;
 
+	template<typename INT=int64_t, typename FILTER>
+	FORCE_INLINE INT sum_of ( FILTER&& cond ) const noexcept;
+
 	/// Apply an action to every member
 	/// Apply ( [] (T& item) {...} );
 	template<typename ACTION>

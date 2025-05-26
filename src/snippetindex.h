@@ -13,7 +13,7 @@
 #ifndef _snippetindex_
 #define _snippetindex_
 
-#include "sphinxquery.h"
+#include "sphinxquery/sphinxquery.h"
 
 //////////////////////////////////////////////////////////////////////////
 /// mini-index for a single document

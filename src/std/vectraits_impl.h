@@ -289,6 +289,13 @@ int64_t VecTraits_T<T>::count_of ( FILTER&& cond ) const noexcept
 	return ::count_of ( *this, std::forward<FILTER> ( cond ) );
 }
 
+template<typename T>
+template<typename INT, typename FILTER>
+INT VecTraits_T<T>::sum_of ( FILTER&& cond ) const noexcept
+{
+	return ::sum_of<INT> ( *this, std::forward<FILTER> ( cond ) );
+}
+
 /// Apply an action to every member
 /// Apply ( [] (T& item) {...} );
 template<typename T>

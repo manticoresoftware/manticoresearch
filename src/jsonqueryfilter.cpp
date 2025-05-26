@@ -282,7 +282,7 @@ static void AddToSelectList ( CSphQuery & tQuery, const CSphVector<CSphQueryItem
 
 static ESphAttr Json2AttrType ( const JsonObj_c & tJson )
 {
-	if ( tJson.IsInt() )	return SPH_ATTR_BIGINT;
+	if ( tJson.IsInt() || tJson.IsUint() )	return SPH_ATTR_BIGINT;
 	if ( tJson.IsDbl() )	return SPH_ATTR_FLOAT;
 	if ( tJson.IsBool() )	return SPH_ATTR_BOOL;
 	if ( tJson.IsStr() )	return SPH_ATTR_STRING;
@@ -833,7 +833,7 @@ std::unique_ptr<FilterTreeNode_t> FilterTreeConstructor_c::ConstructEqualsFilter
 	sphColumnToLowercase ( const_cast<char *>( tFilter.m_sAttrName.cstr() ) );
 	SetMvaFilterFunc ( tFilter );
 
-	if ( tColumn.IsInt() )
+	if ( tColumn.IsInt() || tColumn.IsUint() )
 	{
 		tFilter.m_eType = SPH_FILTER_VALUES;
 		tFilter.m_dValues.Add ( tColumn.IntVal() );
@@ -1000,13 +1000,13 @@ std::unique_ptr<FilterTreeNode_t> FilterTreeConstructor_c::ConstructRangeFilter 
 		}
 	} else
 	{
-		if ( bLess && tLess.IsInt() )
+		if ( bLess && ( tLess.IsInt() || tLess.IsUint() ) )
 			iLessVal = tLess.IntVal();
-		if ( bGreater && tGreater.IsInt() )
+		if ( bGreater && ( tGreater.IsInt() || tGreater.IsUint() ) )
 			iGreaterVal = tGreater.IntVal();
 	}
 
-	bool bIntFilter = ( ( !bLess || tLess.IsInt() || tLess.IsStr() ) && ( !bGreater || tGreater.IsInt() || tGreater.IsStr() ) );
+	bool bIntFilter = ( ( !bLess || tLess.IsInt() || tLess.IsUint() || tLess.IsStr() ) && ( !bGreater || tGreater.IsInt() || tGreater.IsUint() || tGreater.IsStr() ) );
 
 	if ( bLess )
 	{

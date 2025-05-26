@@ -43,14 +43,6 @@ mysql -h0 -P9306 -e "SELECT @@max_allowed_packet;"
 |            134217728 |
 +----------------------+
 ––– input –––
-mysql -h0 -P9306 -e "SELECT @@version_comment;"
-––– output –––
-+-----------------------------------+
-| @@version_comment                 |
-+-----------------------------------+
-| git branch master...origin/master |
-+-----------------------------------+
-––– input –––
 mysql -h0 -P9306 -e "SELECT @@lower_case_table_names;"
 ––– output –––
 +--------------------------+
@@ -64,7 +56,7 @@ mysql -h0 -P9306 -e "SELECT @@session.last_insert_id;"
 +--------------------------+
 | @@session.last_insert_id |
 +--------------------------+
-|                          |
+| 0                        |
 +--------------------------+
 ––– input –––
 mysql -h0 -P9306 -e "SELECT @@autocommit;"
@@ -151,11 +143,11 @@ ERROR 1064 (42000) at line 1: P09: syntax error, unexpected TOK_USERVAR near ''
 ––– input –––
 mysql -h0 -P9306 -e "SELECT @@123;"
 ––– output –––
-ERROR 1064 (42000) at line 1: Failed to parse query
+ERROR 1064 (42000) at line 1: unknown sysvar @@123
 ––– input –––
-mysql -h0 -P9306 -e "SELECT @@'quoted_name';"
+mysql -h0 -P9306 -e 'SELECT @@`quoted_name`;'
 ––– output –––
-ERROR 1064 (42000) at line 1: P01: syntax error, unexpected string, expecting $end near ''quoted_name''
+ERROR 1064 (42000) at line 1: unknown sysvar @@`quoted_name`
 ––– input –––
 mysql -h0 -P9306 -e "SELECT @@very_long_variable_name_that_exceeds_normal_length_limits;"
 ––– output –––
@@ -315,10 +307,10 @@ mysql -h0 -P9306 -e "SELECT @@123;"
 | <empty> |
 +---------+
 ––– input –––
-mysql -h0 -P9306 -e "SELECT @@'quoted_name';"
+mysql -h0 -P9306 -e 'SELECT @@`quoted_name`;'
 ––– output –––
 +-----------------+
-| @@'quoted_name' |
+| @@`quoted_name` |
 +-----------------+
 | <empty>         |
 +-----------------+
@@ -356,3 +348,6 @@ mysql -h0 -P9306 -e "SELECT @@autocommit;"
 +--------------+
 |            1 |
 +--------------+
+––– input –––
+searchd --version
+––– output –––

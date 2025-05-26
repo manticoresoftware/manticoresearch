@@ -23,7 +23,7 @@ for version in "${versions[@]}"; do
     sleep 1
 
     # Executing mysqldump
-    docker exec db-test $dump_command -hmanticore -P9306 manticore t > dump.sql
+    docker exec db-test $dump_command -hmanticore -P9306 manticore t > dump.sql 2> >(grep -E -v "Warning: column statistics|Warning: version string returned by server is incorrect." >&2)
 	docker exec manticore mysql -h0 -P9306 -e "DROP TABLE t;"
 
     # Next, we use $dump_command for mysqldump and mysql

@@ -72,6 +72,21 @@ index pq_expr
 	rt_field 		= title
 	rt_attr_json	= j
 }
+
+source src_coord1
+{
+	type			= mysql
+	<sql_settings/>
+	sql_query		= select * from coord1_table
+	sql_attr_json	= coordinates
+}
+
+index coord1
+{
+	source			= src_coord1
+	path			= <data_path/>/coord1
+}
+
 </config>
 
 <db_create>
@@ -98,6 +113,19 @@ INSERT INTO j_arrays ( id, gid, j ) VALUES
 	( 234, 1, '{"a":[2,3,4,5], "t":["t2", "t3", "t4"]}' ),
 	( 345, 2, '{"a":[3,4,5,1], "t":["t3", "t4", "t5"]}' ),
 	( 456, 2, '{"a":["4","5","6","2"], "t":["t4", "t5", "t6"]}' )
+</db_insert>
+
+<db_create>
+CREATE TABLE `coord1_table` (
+  `id` int(11) NOT NULL AUTO_INCREMENT,
+  `coordinates` varchar(8192) NOT NULL,
+  PRIMARY KEY (`id`)
+);
+</db_create>
+<db_drop>DROP TABLE IF EXISTS `coord1_table`;</db_drop>
+<db_insert>
+INSERT INTO `coord1_table` VALUES
+(1, '[{"latitude":47.425413,"longitude":9.612921,"ort":"9442"},{"latitude":47.425413,"longitude":9.612921,"ort":"9442"}]')
 </db_insert>
 
 <queries><sphinxql>
@@ -143,6 +171,9 @@ CALL PQ ('pq_expr', ('{"j":{"poly":"1,2,3,4,5,6.0"}}', '{"j":{"poly":"1,-2,1,2,-
 
 <!-- regression crash at IN to JSON attribute -->
 select * from test where j IN (5,100);
+
+<!-- regression crash at filter for geodist with JSON attribute and attribute hide -->
+SELECT id, coordinates, ANY(GEODIST(47.425413, 9.612921, x.latitude, x.longitude, {in=deg, out=km}) &lt; 5 FOR x IN coordinates) as coordinates_multi FROM coord1 WHERE coordinates_multi = 1;
 
 </sphinxql></queries>
 </test>

@@ -42,6 +42,7 @@
 #include "skip_cache.h"
 #include "jieba.h"
 #include "sphinxexcerpt.h"
+#include "sphinxquery/xqparser.h"
 #include "daemon/winservice.h"
 #include "daemon/crash_logger.h"
 #include "daemon/logger.h"
@@ -141,9 +142,7 @@ static int g_iReplRetryCount		= 3;
 static int g_iReplRetryDelayMs		= DAEMON_MAX_RETRY_DELAY/2;
 
 bool					g_bHostnameLookup = false;
-CSphString				g_sMySQLVersion = szMANTICORE_VERSION;
-CSphString				g_sDbName = "Manticore";
-
+CSphString				g_sMySQLVersion { szMANTICORE_VERSION };
 CSphString				g_sBannerVersion { szMANTICORE_NAME };
 CSphString				g_sBanner;
 CSphString				g_sStatusVersion = szMANTICORE_VERSION;
@@ -407,6 +406,7 @@ void Shutdown () REQUIRES ( MainThread ) NO_THREAD_SAFETY_ANALYSIS
 
 	SHUTINFO << "Finish binlog serving ...";
 	Binlog::Deinit();
+	ReplicationBinlogStop();
 
 	SHUTINFO << "Shutdown docstore ...";
 	ShutdownDocstore();
@@ -5962,7 +5962,7 @@ static CSphString DescribeAttributeProperties ( const CSphColumnInfo & tAttr )
 	if ( tAttr.IsIndexedSI() )
 		sProps << "indexed";
 
-	if ( tAttr.m_uAttrFlags & CSphColumnInfo::ATTR_STORED )
+	if ( tAttr.IsStored() )
 		sProps << "fast_fetch";
 
 	if ( tAttr.IsColumnar() && tAttr.m_eAttrType==SPH_ATTR_STRING && !(tAttr.m_uAttrFlags & CSphColumnInfo::ATTR_COLUMNAR_HASHES) )
@@ -6350,6 +6350,14 @@ static bool CheckCreateTable ( const SqlStmt_t & tStmt, CSphString & sError )
 	if ( !CheckAttrs ( tStmt.m_tCreateTable.m_dFields, []( const CSphColumnInfo & tAttr ) { return tAttr.m_sName; }, sError ) )
 		return false;
 
+	for ( auto & i : tStmt.m_tCreateTable.m_dAttrs )
+		if ( i.m_bKNN && !i.m_tKNNModel.m_sModelName.empty() && !IsKNNEmbeddingsLibLoaded() )
+		{
+			sError.SetSprintf ( "model_name specified for '%s', but embeddings library is not loded", i.m_tAttr.m_sName.cstr() );
+			return false;
+		}
+
+
 	// cross-checks attrs and fields
 	for ( const auto & i : tStmt.m_tCreateTable.m_dAttrs )
 		for ( const auto & j : tStmt.m_tCreateTable.m_dFields )
@@ -6573,9 +6581,11 @@ void HandleMysqlShowCreateTable ( RowBuffer_i & tOut, const SqlStmt_t & tStmt )
 void HandleMysqlShowDatabases ( RowBuffer_i & tOut, SqlStmt_t & )
 {
 	tOut.HeadBegin ();
-	tOut.HeadColumn ( "Databases" );
+	tOut.HeadColumn ( "Database" );
 	tOut.HeadEnd();
-	tOut.PutString ( g_sDbName );
+	tOut.PutString ( "information_schema" );
+	tOut.Commit ();
+	tOut.PutString ( "Manticore" );
 	tOut.Commit ();
 	tOut.Eof();
 }
@@ -6603,7 +6613,7 @@ void HandleMysqlShowPlugins ( RowBuffer_i & tOut, SqlStmt_t & )
 		tOut.PutNumAsString ( p.m_iUsers );
 		tOut.PutString ( p.m_sExtra );
 		if ( !tOut.Commit() )
-		return;
+			return;
 	}
 	tOut.Eof();
 }
@@ -8007,7 +8017,7 @@ bool IsDot ( const SqlStmt_t & tStmt )
 {
 	if ( tStmt.m_sThreadFormat=="dot" )
 		return true;
-	else if ( tStmt.m_sThreadFormat=="plain" )
+	if ( tStmt.m_sThreadFormat=="plain" )
 		return false;
 	return session::IsDot();
 }
@@ -8015,14 +8025,14 @@ bool IsDot ( const SqlStmt_t & tStmt )
 Profile_e ParseProfileFormat ( const SqlStmt_t & tStmt )
 {
 	if ( tStmt.m_sSetValue=="dot" )
-		return Profile_e::DOT;
-	else if ( tStmt.m_sSetValue=="expr" )
-		return Profile_e::DOTEXPR;
-	else if ( tStmt.m_sSetValue=="exprurl" )
-		return Profile_e::DOTEXPRURL;
-	else if ( tStmt.m_iSetValue!=0 )
-		return Profile_e::PLAIN;
-	return Profile_e::NONE;
+		return DOT;
+	if ( tStmt.m_sSetValue=="expr" )
+		return DOTEXPR;
+	if ( tStmt.m_sSetValue=="exprurl" )
+		return DOTEXPRURL;
+	if ( tStmt.m_iSetValue!=0 )
+		return PLAIN;
+	return NONE;
 }
 
 void HandleMysqlMultiStmt ( const CSphVector<SqlStmt_t> & dStmt, CSphQueryResultMeta & tLastMeta, RowBuffer_i & dRows,
@@ -11403,6 +11413,16 @@ void session::SetUser ( const CSphString & sUser )
 	GetClientSession()->m_sUser = sUser;
 }
 
+void session::SetCurrentDbName ( CSphString sDb )
+{
+	GetClientSession()->m_sCurrentDbName = std::move(sDb);
+}
+
+const char* session::GetCurrentDbName ()
+{
+	return GetClientSession() ? GetClientSession()->m_sCurrentDbName.cstr() : nullptr;
+}
+
 void session::SetAutoCommit ( bool bAutoCommit )
 {
 	GetClientSession()->m_bAutoCommit = bAutoCommit;
@@ -14113,10 +14133,15 @@ static void InitBanner()
 	if ( szKNNVer )
 		sKNN.SetSprintf ( " (knn %s)", szKNNVer );
 
-	g_sBannerVersion.SetSprintf ( "%s%s%s%s", szMANTICORE_NAME, sColumnar.cstr(), sSi.cstr(), sKNN.cstr() );
+	const char * szKNNEmbVer = GetKNNEmbeddingsVersionStr();
+	CSphString sKNNEmb = "";
+	if ( szKNNEmbVer )
+		sKNNEmb.SetSprintf ( " (embeddings %s)", szKNNEmbVer );
+
+	g_sBannerVersion.SetSprintf ( "%s%s%s%s%s", szMANTICORE_NAME, sColumnar.cstr(), sSi.cstr(), sKNN.cstr(), sKNNEmb.cstr() );
 	g_sBanner.SetSprintf ( "%s%s", g_sBannerVersion.cstr(), szMANTICORE_BANNER_TEXT );
-	g_sMySQLVersion.SetSprintf ( "%s%s%s%s", szMANTICORE_VERSION, sColumnar.cstr(), sSi.cstr(), sKNN.cstr() );
-	g_sStatusVersion.SetSprintf ( "%s%s%s%s", szMANTICORE_VERSION, sColumnar.cstr(), sSi.cstr(), sKNN.cstr() );
+	g_sMySQLVersion.SetSprintf ( "%s%s%s%s%s", szMANTICORE_VERSION, sColumnar.cstr(), sSi.cstr(), sKNN.cstr(), sKNNEmb.cstr() );
+	g_sStatusVersion.SetSprintf ( "%s%s%s%s%s", szMANTICORE_VERSION, sColumnar.cstr(), sSi.cstr(), sKNN.cstr(), sKNNEmb.cstr() );
 }
 
 
@@ -14631,21 +14656,24 @@ int WINAPI ServiceMain ( int argc, char **argv ) EXCLUDES (MainThread)
 		g_sSnippetsFilePrefix.SetSprintf ( "%s/", g_sExePath.scstr() );
 	FixPathAbsolute ( g_sSnippetsFilePrefix );
 
-	auto sLogFormat = hSearchd.GetStr ( "query_log_format", "sphinxql" );
 	bool bLogCompactIn = false;
 	LOG_FORMAT eFormat = LOG_FORMAT::SPHINXQL;
-	if ( sLogFormat != "sphinxql" )
-	{
-		StrVec_t dParams;
-		sphSplit ( dParams, sLogFormat.cstr() );
-		for ( const auto& sParam : dParams )
+
+	{ // scope for sLogFormat to avoid valgrind's complains
+		auto sLogFormat = hSearchd.GetStr ( "query_log_format", "sphinxql" );
+		if ( sLogFormat != "sphinxql" )
 		{
-			if ( sParam=="sphinxql" )
-				eFormat = LOG_FORMAT::SPHINXQL;
-			else if ( sParam=="plain" )
-				eFormat = LOG_FORMAT::_PLAIN;
-			else if ( sParam=="compact_in" )
-				bLogCompactIn = true;
+			StrVec_t dParams;
+			sphSplit ( dParams, sLogFormat.cstr() );
+			for ( const auto& sParam : dParams )
+			{
+				if ( sParam=="sphinxql" )
+					eFormat = LOG_FORMAT::SPHINXQL;
+				else if ( sParam=="plain" )
+					eFormat = LOG_FORMAT::_PLAIN;
+				else if ( sParam=="compact_in" )
+					bLogCompactIn = true;
+			}
 		}
 	}
 	if ( bLogCompactIn && eFormat==LOG_FORMAT::_PLAIN )
@@ -14768,6 +14796,7 @@ int WINAPI ServiceMain ( int argc, char **argv ) EXCLUDES (MainThread)
 		bNewCluster = false;
 		bNewClusterForce = false;
 	}
+	ReplicationBinlogStart ( GetDataDirInt(), !Binlog::IsActive() );
 	
 	StartRtBinlogFlushing();
 

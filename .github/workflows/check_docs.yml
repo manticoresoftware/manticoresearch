@@ -1,0 +1,67 @@
+name: 📖 Check docs
+run-name: 📖 Check docs ${{ github.sha }}
+
+on:
+  pull_request:
+    paths:
+      - 'manual/**'
+    branches:
+      - master
+      - manticore-*
+
+jobs:
+  docs_check:
+    runs-on: ubuntu-22.04
+    defaults:
+      run:
+        shell: bash
+    container:
+      image: manticoresearch/docs_autodeploy:latest
+      env:
+        CACHEB: "../cache"
+        DOCKER_HOST: tcp://docker:2375/
+        DOCKER_DRIVER: overlay2
+        COMMIT_DIR: manual
+        DOCS_ERRORS_DIR: build/docs/
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v3
+        with:
+          fetch-depth: 2
+      - name: Get changed files
+        id: changed-files
+        run: |
+          git config --global --add safe.directory /__w/manticoresearch/manticoresearch
+          echo "changed_files=$(git diff-tree --no-commit-id --name-only -r HEAD^1 HEAD | xargs)" >> $GITHUB_OUTPUT
+      - name: Get changed doc filepathes
+        id: doc-filepathes
+        run: |
+          filepathes=""
+          for file in ${{ steps.changed-files.outputs.changed_files }}; do
+            case "$file" in 
+              "$COMMIT_DIR/"*) 
+                 filepathes="$file $filepathes"
+              ;;
+             esac  
+          done
+          echo "filepathes=$filepathes" >> $GITHUB_OUTPUT
+      - name: Check docs
+        id: check
+        run: |
+          docs_errors=$(php "/Deploy/check_docs_validity.php"  "${{ steps.doc-filepathes.outputs.filepathes }}" "$COMMIT_DIR/" "$DOCS_ERRORS_DIR" | xargs)
+          echo $docs_errors
+          echo "errors=$docs_errors" >> $GITHUB_OUTPUT
+      - name: Upload artifact
+        uses: manticoresoftware/upload_artifact_with_retries@v4
+        with:
+          name: Docs error artifact
+          path: $DOCS_ERRORS_DIR
+      - name: Display result
+        run: |
+          if [ "${{ steps.check.outputs.errors }}" != "" ]; then
+            exit 1
+          fi
+          echo "Doc check passed successfully "
+
+          

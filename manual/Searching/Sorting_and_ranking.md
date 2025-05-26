@@ -43,7 +43,7 @@ select *, a + b alias from test order by alias desc;
 ## Sorting via JSON
 
 <!-- example sorting 1 -->
-`"sort"` specifies an array where each element can be an attribute name or `_score` if you want to sort by match weights. In that case, the sort order defaults to ascending for attributes and descending for `_score`.
+`"sort"` specifies an array where each element can be an attribute name or `_score` if you want to sort by match weights or `_random` if you want radnom match order. In that case, the sort order defaults to ascending for attributes and descending for `_score`.
 
 <!-- intro -->
 

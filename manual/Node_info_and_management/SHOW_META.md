@@ -8,7 +8,7 @@ SHOW META [ LIKE pattern ]
 `SHOW META` is an SQL statement that displays additional meta-information about the processed query, including the query time, keyword statistics, and information about the secondary indexes used. The syntax is:
 
 The included items are:
-* `total`: The number of matches that were actually retrieved and sent to the client. This value is typically limited by the [LIMIT/size](Searching/Pagination.md#Pagination-of-search-results) search option.
+* `total`: The number of matches that were actually retrieved and sent to the client. This value is typically limited by the [LIMIT/size](../Searching/Pagination.md#Pagination-of-search-results) search option.
 * `total_found`:
   - The estimated total number of matches for the query in the index. If you need the exact number of matches, use `SELECT COUNT(*)` instead of relying on this value.
   - For queries with `GROUP BY`, `total_found` represents the number of groups instead of individual matches.

@@ -342,6 +342,14 @@ select id from facetdemo limit 0 facet brand_id order by count(*);;
 <!-- facet with error at the FACET part -->
 select id from facetdemo limit 0 facet brand_id order by count(missed);;
 
+<!-- facet with sort on json.field -->
+select * from multi1 order by bigint(j.b) asc facet id limit 0;;
+select * from multi1 order by j.b asc facet id limit 0;;
+select * from multi1 order by j.b asc;;
+select * from multi1 order by bigint(j.b) asc;;
+select *, bigint(j.b) as c from multi1 order by c asc facet id limit 0;;
+select *, j.b as c from multi1 order by c asc facet id limit 0;;
+
 </sphinxql></queries>
 
 </test>

@@ -33,6 +33,7 @@
 #include "replication/cluster_synced.h"
 #include "replication/replicate_index.h"
 #include "replication/grastate.h"
+#include "replication/cluster_binlog.h"
 
 #if !_WIN32
 // MAC-specific header
@@ -59,7 +60,7 @@ inline static bool IsSyncedOrDonor ( ClusterState_e eState ) noexcept
 enum class BOOTSTRAP_E : bool {NO,YES};
 
 // cluster related data
-struct ReplicationCluster_t final : public ClusterDesc_t, Wsrep::Cluster_i
+struct ReplicationCluster_t final : public Wsrep::Cluster_i, ClusterBinlogData_c
 {
 public:
 	// replicator
@@ -77,7 +78,6 @@ public:
 	bool m_bUserRequest { false }; // indicates, if cluster is joining by user request (i.e. stmt 'join ...')
 
 	// state variables cached from Galera
-	Wsrep::UUID_t			m_dUUID {};
 	int64_t					m_iConfID = 0;
 	Wsrep::ViewStatus_e		m_eStatus = Wsrep::ViewStatus_e::DISCONNECTED;
 	int						m_iSize = 0;
@@ -170,6 +170,8 @@ public:
 	void OnRecvStarted() final;
 
 	void OnRecvFinished ( bool bSuccess ) final;
+
+	void OnSeqnoCommited ( const ReplicatedCommand_t & tCmd, int64_t iSeqNo ) final;
 
 	bool IsPrimary() const noexcept { return ( m_eStatus == Wsrep::ViewStatus_e::PRIMARY ); }
 
@@ -409,7 +411,7 @@ bool ReplicationCluster_t::Init()
 	if ( g_eLogLevel >= SPH_LOG_RPL_DEBUG )
 		sOptions += g_sDebugOptions;
 
-	m_pProvider = Wsrep::MakeProvider ( this, m_sNodeName, sListenAddr.cstr(), sIncoming.cstr(), sFullClusterPath.cstr(), sOptions.cstr() );
+	m_pProvider = Wsrep::MakeProvider ( this, m_sNodeName, sListenAddr.cstr(), sIncoming.cstr(), sFullClusterPath.cstr(), sOptions.cstr(), m_tGtid );
 	return bool ( m_pProvider );
 }
 
@@ -424,7 +426,7 @@ bool ReplicationCluster_t::Connect ( BOOTSTRAP_E eBootStrap )
 	if ( g_eLogLevel >= SPH_LOG_RPL_DEBUG ) {
 		StringBuilder_c sIndexes ( "," );
 		WithRlockedIndexes ( [&sIndexes] ( const auto& hIndexes ) { for_each ( hIndexes, [&] ( const auto& tIndex ) { sIndexes << tIndex.first; } ); } );
-		sphLogDebugRpl ( "cluster '%s', indexes '%s', nodes '%s'", m_sName.cstr(), sIndexes.cstr(), sNodes.cstr() );
+		sphLogDebugRpl ( "cluster '%s', gtid %s, indexes '%s', nodes '%s'", m_sName.cstr(), Gtid2Str ( m_tGtid ).cstr(), sIndexes.cstr(), sNodes.cstr() );
 	}
 
 	// Connect to cluster
@@ -435,7 +437,7 @@ void ReplicationCluster_t::StartListen()
 {
 	CSphRefcountedPtr<Wsrep::Receiver_i> pReceiver { MakeReceiverCtx ( m_sName, m_pProvider, [this]() { HeartBeat(); } ) };
 	m_pProvider->StartListen ( pReceiver.Ptr() );
-	sphLogDebugRpl ( "replicator is created for cluster '%s'", m_sName.cstr() );
+	sphLogDebugRpl ( "replicator is created for cluster '%s', gtid %s", m_sName.cstr(), Gtid2Str ( m_tGtid ).cstr() );
 }
 
 // update cluster state nodes from Galera callback on cluster view changes
@@ -446,7 +448,7 @@ void ReplicationCluster_t::UpdateGroupView ( const Wsrep::ViewInfo_t* pView )
 	for ( int i = 0; i < pView->m_iNMembers; ++i )
 		dNodes.Append ( ParseNodesFromString ( pBoxes[i].m_sIncoming ) );
 
-	sphLogDebugRpl ( "cluster '%s' view nodes changed: %s > %s", m_sName.cstr(), Vec2Str ( GetViewNodes() ).cstr(), Vec2Str ( dNodes ).cstr() );
+	sphLogDebugRpl ( "cluster '%s', gtid %s, view nodes changed: %s > %s", m_sName.cstr(), Gtid2Str ( m_tGtid ).cstr(), Vec2Str ( GetViewNodes() ).cstr(), Vec2Str ( dNodes ).cstr() );
 	SetViewNodes ( std::move ( dNodes ) );
 }
 
@@ -498,7 +500,7 @@ std::pair<int, CSphString> WaitClusterCommit ( const CSphString& sCluster, int i
 // It is guaranteed that no other callbacks are called concurrently with it.
 void ReplicationCluster_t::ChangeView ( const Wsrep::ViewInfo_t* pView, const char* pState, uint64_t uStateLen, void** ppSstReq, uint64_t* pSstReqLen )
 {
-	m_dUUID = pView->m_tStateId.m_tUuid;
+	m_tGtid = pView->m_tStateId;
 	m_iConfID = pView->m_ViewSeqNo;
 	m_iSize = pView->m_iNMembers;
 	m_iIdx = pView->m_iIdx;
@@ -513,7 +515,7 @@ void ReplicationCluster_t::ChangeView ( const Wsrep::ViewInfo_t* pView, const ch
 		return;
 
 	auto sAddr = FromSz ( szIncomingProto() );
-	sphLogDebugRpl ( "join %s to %s", sAddr.first, m_sName.cstr() );
+	sphLogDebugRpl ( "join %s to '%s', gtid %s", sAddr.first, m_sName.cstr(), Wsrep::Gtid2Str ( m_tGtid ).cstr() );
 	*ppSstReq = memcpy ( malloc ( sAddr.second ), sAddr.first, sAddr.second ); // mem will be freed by Galera
 	*pSstReqLen = sAddr.second;
 	SetState ( ClusterState_e::JOINING );
@@ -523,12 +525,15 @@ void ReplicationCluster_t::ChangeView ( const Wsrep::ViewInfo_t* pView, const ch
 void ReplicationCluster_t::SetSynced()
 {
 	SetState ( ClusterState_e::SYNCED );
-	sphLogDebugRpl ( "synced cluster %s", m_sName.cstr() );
+	if ( IsPrimary() )
+		RplBinlog()->OnClusterSynced ( *this );
+
+	sphLogDebugRpl ( "synced cluster '%s', gtid %s", m_sName.cstr(), Wsrep::Gtid2Str ( m_tGtid ).cstr() );
 }
 
 bool ReplicationCluster_t::DonateSST ( CSphString sJoiner, const Wsrep::GlobalTid_t* pStateID, bool bBypass )
 {
-	auto tGtid = *pStateID;
+	Wsrep::GlobalTid_t tGtid = *pStateID;
 	sphLogDebugRpl ( "donate %s to %s, gtid %s, bypass %d", m_sName.cstr(), sJoiner.cstr(), Wsrep::Gtid2Str ( tGtid ).cstr(), (int)bBypass );
 
 	SetState ( ClusterState_e::DONOR );
@@ -542,7 +547,7 @@ bool ReplicationCluster_t::DonateSST ( CSphString sJoiner, const Wsrep::GlobalTi
 
 	m_pProvider->SstSent ( tGtid, bOk );
 
-	sphLogDebugRpl ( "donate cluster %s to %s, gtid %s, bypass %d, done %d", m_sName.cstr(), sJoiner.cstr(), Wsrep::Gtid2Str ( *pStateID ).cstr(), (int)bBypass, (int)bOk );
+	sphLogDebugRpl ( "donate cluster %s to %s, gtid %s, bypass %d, done %d", m_sName.cstr(), sJoiner.cstr(), Wsrep::Gtid2Str ( tGtid ).cstr(), (int)bBypass, (int)bOk );
 	return bOk;
 }
 
@@ -576,9 +581,9 @@ void ReplicationCluster_t::DisconnectAndDeleteProvider()
 		return;
 
 	AbortSST ();
-	sphLogDebugRpl ( "disconnecting from cluster %s", m_sName.cstr() );
+	sphLogDebugRpl ( "disconnecting from cluster %s, gtid %s", m_sName.cstr(), Wsrep::Gtid2Str ( m_tGtid ).cstr() );
 	m_pProvider->Disconnect();
-	sphLogDebugRpl ( "disconnected from cluster %s", m_sName.cstr() );
+	sphLogDebugRpl ( "disconnected from cluster %s, gtid %s", m_sName.cstr(), Wsrep::Gtid2Str ( m_tGtid ).cstr() );
 }
 
 ReplicationCluster_t::~ReplicationCluster_t()
@@ -684,7 +689,9 @@ void ReplicationCluster_t::ShowStatus ( VectorLike& dOut )
 	if ( dOut.MatchAdd ( "cluster_name" ) )
 		dOut.Add ( m_sName );
 	if ( dOut.MatchAddf ( "cluster_%s_state_uuid", sName ) )
-		dOut.Add ( Wsrep::Uuid2Str ( m_dUUID ) );
+		dOut.Add ( Wsrep::Uuid2Str ( m_tGtid.m_tUuid ) );
+	if ( dOut.MatchAddf ( "cluster_%s_state_seqno", sName ) )
+		dOut.Add().SetSprintf ( INT64_FMT, m_tGtid.m_iSeqNo );
 	if ( dOut.MatchAddf ( "cluster_%s_conf_id", sName ) )
 		dOut.Add().SetSprintf ( INT64_FMT, m_iConfID );
 	if ( dOut.MatchAddf ( "cluster_%s_status", sName ) )
@@ -970,8 +977,15 @@ bool HandleCmdReplicated ( RtAccum_t & tAcc )
 		sphWarning ( "%s, table '%s', command %d", sError.cstr(), tCmd.m_sIndex.cstr(), (int)tCmd.m_eCommand );
 		return false;
 	}
+	
+	// tAcc.m_dCmd and tCmd are invalidated after commit
+	tAcc.m_tCmdReplicated = tCmd;
 
-	return pIndex->Commit ( nullptr, &tAcc );
+	bool bOk = pIndex->Commit ( nullptr, &tAcc );
+
+	tAcc.m_tCmdReplicated.m_iTID = pIndex->m_iTID;
+
+	return bOk;
 }
 
 // single point there all commands passed these might be replicated to cluster
@@ -1119,9 +1133,19 @@ static bool HandleRealCmdReplicate ( RtAccum_t & tAcc, CommitMonitor_c && tMonit
 	Threads::ScopedCoroMutex_t tClusterLock { pCluster->m_tReplicationMutex };
 	END_CONN ( "conn" );
 
+	tAcc.CleanReplicated();
+	bool bReplicated = false;
 	if ( bTOI )
-		return ReplicateTOI ( dBufKeys, dBufQueries, *pWriteSet, std::move ( tMonitor ) );
-	return Replicate ( dBufKeys, dBufQueries, *pWriteSet, std::move ( tMonitor ), bUpdate, tAcc.IsReplace () );
+	{
+		bReplicated = ReplicateTOI ( dBufKeys, dBufQueries, *pWriteSet, std::move ( tMonitor ) );
+	} else
+	{
+		bReplicated = Replicate ( dBufKeys, dBufQueries, *pWriteSet, std::move ( tMonitor ), bUpdate, tAcc.IsReplace () );
+	}
+	if ( bReplicated )
+		pCluster->OnSeqnoCommited ( tAcc.m_tCmdReplicated, pWriteSet->LastSeqno() );
+
+	return bReplicated;
 }
 
 
@@ -1328,7 +1352,7 @@ static ReplicationCluster_t* MakeClusterOffline ( ClusterDesc_t tDesc )
 	return pCluster.Leak();
 }
 
-static bool PrepareNodesAndInitCluster ( ReplicationCluster_t& tCluster, BOOTSTRAP_E eBootStrap )
+static bool PrepareNodesAndInitCluster ( ReplicationCluster_t & tCluster, BOOTSTRAP_E eBootStrap )
 {
 	sphLogDebugRpl ( "PrepareNodesAndInitCluster '%s', bootstrap %d, nodes: %d", tCluster.m_sName.cstr(), (int)eBootStrap, tCluster.m_dClusterNodes.GetLength() );
 
@@ -1408,34 +1432,39 @@ static void CoReplicationServiceStart ( bool bBootStrap ) EXCLUDES ( g_tClusters
 	const auto eBootStrap = (BOOTSTRAP_E)bBootStrap;
 	assert ( Threads::IsInsideCoroutine() );
 	StrVec_t dFailedClustersToRemove;
-	auto fnRemoveFailedCluster = [&dFailedClustersToRemove] ( std::pair<CSphString, CSphRefcountedPtr<ReplicationCluster_t>>& hCluster ) {
+	auto fnRemoveFailedCluster = [&dFailedClustersToRemove] ( std::pair<CSphString, CSphRefcountedPtr<ReplicationCluster_t>>& tCluster ) {
 		sphWarning ( "%s", TlsMsg::szError() );
-		dFailedClustersToRemove.Add ( hCluster.first );
-		auto& pCluster = hCluster.second;
+		dFailedClustersToRemove.Add ( tCluster.first );
+		auto & pCluster = tCluster.second;
 		pCluster->WithRlockedIndexes ( [] ( const auto& hIndexes ) { for_each ( hIndexes, [] ( const auto& tIndex ) { AssignClusterToIndex ( tIndex.first, "" ); } ); } );
 	};
 
 	Threads::SccWL_t tLock ( g_tClustersLock );
-	for ( auto& hCluster : g_hClusters )
+
+	for ( auto & tCluster : g_hClusters )
 	{
 		TlsMsg::ResetErr();
-		auto& sName = hCluster.first;
-		auto& pCluster = hCluster.second;
+		const auto & sName = tCluster.first;
+		auto & pCluster = tCluster.second;
+		
+		RplBinlog()->OnClusterLoad ( *pCluster );
+
 		if ( !PrepareNodesAndInitCluster ( *pCluster, eBootStrap ) )
 		{
-			fnRemoveFailedCluster ( hCluster );
+			fnRemoveFailedCluster ( tCluster );
 			continue;
 		}
 
 		// check indexes valid
 		if ( !pCluster->Connect ( eBootStrap ) )
 		{
-			fnRemoveFailedCluster ( hCluster );
+			fnRemoveFailedCluster ( tCluster );
 			continue;
 		}
 
 		pCluster->StartListen();
-		sphLogDebugRpl ( "'%s' cluster started with %d tables", sName.cstr(), pCluster->WithRlockedIndexes ( [] ( const auto& hIndexes ) { return hIndexes.GetLength(); } ) );
+
+		sphLogDebugRpl ( "'%s' cluster, gtid %s starting", sName.cstr(), Gtid2Str ( pCluster->m_tGtid ).cstr() );
 	}
 	if ( !g_hClusters.IsEmpty() && dFailedClustersToRemove.GetLength()==g_hClusters.GetLength() )
 		sphWarning ( "no clusters to start" );
@@ -1655,7 +1684,10 @@ bool ClusterJoin ( const CSphString & sCluster, const StrVec_t & dNames, const C
 		bOk &= DoClusterAlterUpdate ( sCluster, "nodes", NODES_E::BOTH );
 
 	if ( bOk )
+	{
+		sphLogDebugRpl ( "'%s' cluster, gtid %s, joined", sCluster.cstr(), Gtid2Str ( pCluster->m_tGtid ).cstr() );
 		return true;
+	}
 
 	if ( sphInterrupted() )
 		return TlsMsg::Err ( "%s", "daemon shutdown" );
@@ -1704,6 +1736,9 @@ bool ClusterCreate ( const CSphString & sCluster, const StrVec_t & dNames, const
 		return TlsMsg::Err ( "Failed to start and add %s", TlsMsg::szError() );
 
 	auto eState = pCluster->WaitReady();
+
+	sphLogDebugRpl ( "created cluster '%s', gtid %s", sCluster.cstr(), Gtid2Str ( pCluster->m_tGtid ).cstr() );
+
 	TLS_MSG_STRING ( sError );
 	return SaveConfigInt ( sError ) && ( IsSyncedOrDonor ( eState ) || TlsMsg::Err ( "Wrong state %s", szNodeState( eState ) ) );
 }
@@ -1778,7 +1813,11 @@ bool ClusterDelete ( const CSphString & sCluster ) EXCLUDES ( g_tClustersLock )
 	sphLogDebugRpl ( "remote delete cluster %s", sCluster.cstr() );
 	// remove cluster from cache without delete of cluster itself
 	pCluster->DisconnectAndDeleteProvider();
+	
+	StrVec_t dClusterIndexes = pCluster->GetIndexes();
 	pCluster->WithRlockedIndexes ( [] ( const auto& hIndexes ) { for_each ( hIndexes, [] ( const auto& tIndex ) { AssignClusterToIndex ( tIndex.first, "" ); } ); } );
+	RplBinlog()->OnClusterDelete ( sCluster, dClusterIndexes );
+
 	return true;
 }
 
@@ -2172,7 +2211,7 @@ bool SendClusterIndexes ( const ReplicationCluster_t * pCluster, const CSphStrin
 // callback at remote node for CLUSTER_SYNCED to pick up received indexes then call Galera sst_received
 bool ClusterSynced ( const ClusterSyncedRequest_t & tCmd ) EXCLUDES ( g_tClustersLock )
 {
-	sphLogDebugRpl ( "join sync %s, UID %s, sent %s, tables %d, %s", tCmd.m_sCluster.cstr(), Wsrep::Gtid2Str ( tCmd.m_tGtid ).cstr(), ( tCmd.m_bSendFilesSuccess ? "ok" : "failed" ), tCmd.m_dIndexes.GetLength(), tCmd.m_sMsg.scstr() );
+	sphLogDebugRpl ( "join sync '%s', gtid %s, sent %s, tables %d, %s", tCmd.m_sCluster.cstr(), Wsrep::Gtid2Str ( tCmd.m_tGtid ).cstr(), ( tCmd.m_bSendFilesSuccess ? "ok" : "failed" ), tCmd.m_dIndexes.GetLength(), tCmd.m_sMsg.scstr() );
 
 	if ( !tCmd.m_bSendFilesSuccess )
 	{
@@ -2329,3 +2368,10 @@ bool ClusterUpdateNodes ( const CSphString & sCluster, NODES_E eNodes, StrVec_t 
 
 	return bOk;
 }
+
+void ReplicationCluster_t::OnSeqnoCommited ( const ReplicatedCommand_t & tCmd, int64_t iSeqNo )
+{
+	m_tGtid.m_iSeqNo = iSeqNo;
+	RplBinlog()->ClusterTnx ( *this );
+}
+

@@ -400,6 +400,8 @@ struct CreateTableAttr_t
 	bool					m_bIndexed = false;
 	bool					m_bKNN = false;
 	knn::IndexSettings_t	m_tKNN;
+	knn::ModelSettings_t	m_tKNNModel;
+	CSphString				m_sKNNFrom;
 };
 
 struct NameValueStr_t

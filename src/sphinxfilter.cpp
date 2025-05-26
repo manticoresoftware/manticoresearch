@@ -1701,6 +1701,9 @@ static void TryToAddGeodistFilters ( const CreateFilterContext_t & tCtx, const C
 
 	assert ( tSettingsPair.first );
 	const GeoDistSettings_t & tSettings = *tSettingsPair.first;
+	// could be JSON field or expression these should be handled different
+	if ( tSettings.m_sAttrLat.IsEmpty() || tSettings.m_sAttrLon.IsEmpty() )
+		return;
 
 	const CSphColumnInfo * pLat = tCtx.m_pMatchSchema->GetAttr ( tSettings.m_sAttrLat.cstr() );
 	const CSphColumnInfo * pLon = tCtx.m_pMatchSchema->GetAttr ( tSettings.m_sAttrLon.cstr() );

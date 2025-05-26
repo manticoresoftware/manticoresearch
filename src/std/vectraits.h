@@ -35,51 +35,51 @@ public:
 	template<typename TT, typename INT>
 	VecTraits_T ( const std::pair<const TT*, INT>& dData );
 
-	FORCE_INLINE VecTraits_T Slice ( int64_t iBegin = 0, int64_t iCount = -1 ) const;
+	FORCE_INLINE VecTraits_T Slice ( int64_t iBegin = 0, int64_t iCount = -1 ) const noexcept;
 
 	/// accessor by forward index
-	FORCE_INLINE T & operator[] ( int64_t iIndex ) const;
-	T& At ( int64_t iIndex ) const;
+	FORCE_INLINE T & operator[] ( int64_t iIndex ) const noexcept;
+	T& At ( int64_t iIndex ) const noexcept;
 
 	/// get first entry ptr
-	FORCE_INLINE T * Begin() const;
+	FORCE_INLINE T * Begin() const noexcept;
 
 	/// pointer to the item after the last
-	FORCE_INLINE T * End() const;
+	FORCE_INLINE T * End() const noexcept;
 
 	/// make happy C++11 ranged for loops
 	FORCE_INLINE T * begin() const noexcept;
 	FORCE_INLINE T * end() const noexcept;
 
 	/// get first entry
-	T& First() const;
+	T& First() const noexcept;
 
 	/// get last entry
-	T& Last() const;
+	T& Last() const noexcept;
 
 	/// return idx of the item pointed by pBuf, or -1
-	FORCE_INLINE int Idx ( const T* pBuf ) const;
+	FORCE_INLINE int Idx ( const T* pBuf ) const noexcept;
 
 	/// make possible to pass VecTraits_T<T*> into funcs which need VecTraits_T<const T*>
-	operator VecTraits_T<const typename std::remove_pointer<T>::type*>&() const;
+	operator VecTraits_T<const typename std::remove_pointer<T>::type*>&() const noexcept;
 
 	template<typename TT>
-	operator VecTraits_T<TT>&() const;
+	operator VecTraits_T<TT>&() const noexcept;
 
 	template<typename TT, typename INT>
-	operator std::pair<TT*, INT>() const;
+	operator std::pair<TT*, INT>() const noexcept;
 
 	/// check if i'm empty
-	FORCE_INLINE bool IsEmpty() const;
+	FORCE_INLINE bool IsEmpty() const noexcept;
 
 	/// query current length, in elements
-	FORCE_INLINE int64_t GetLength64() const;
-	FORCE_INLINE int GetLength() const;
-	FORCE_INLINE DWORD GetULength() const;
+	FORCE_INLINE int64_t GetLength64() const noexcept;
+	FORCE_INLINE int GetLength() const noexcept;
+	FORCE_INLINE DWORD GetULength() const noexcept;
 
 	/// get length in bytes
-	size_t GetLengthBytes() const;
-	int64_t GetLengthBytes64() const;
+	size_t GetLengthBytes() const noexcept;
+	int64_t GetLengthBytes64() const noexcept;
 
 	/// default sort
 	void Sort ( int64_t iStart = 0, int64_t iEnd = -1 );
@@ -94,40 +94,43 @@ public:
 	/// generic binary search
 	/// assumes that the array is sorted in ascending order
 	template<typename U, typename PRED>
-	T* BinarySearch ( const PRED& tPred, U tRef ) const;
+	T* BinarySearch ( const PRED& tPred, U tRef ) const noexcept;
 
 	/// generic binary search
 	/// assumes that the array is sorted in ascending order
-	T* BinarySearch ( T tRef ) const;
+	T* BinarySearch ( T tRef ) const noexcept;
 
 	template<typename FILTER>
-	FORCE_INLINE int64_t GetFirst ( FILTER&& cond ) const;
+	FORCE_INLINE int64_t GetFirst ( FILTER&& cond ) const noexcept;
 
 	/// generic 'ARRAY_ALL'
 	template<typename FILTER>
-	FORCE_INLINE bool all_of ( FILTER&& cond ) const;
+	FORCE_INLINE bool all_of ( FILTER&& cond ) const noexcept;
 
 	/// generic linear search - 'ARRAY_ANY' replace
 	/// see 'Contains()' below for examlpe of usage.
 	template<typename FILTER>
-	FORCE_INLINE bool any_of ( FILTER&& cond ) const;
+	FORCE_INLINE bool any_of ( FILTER&& cond ) const noexcept;
 
 	template<typename FILTER>
-	FORCE_INLINE bool none_of ( FILTER&& cond ) const;
+	FORCE_INLINE bool none_of ( FILTER&& cond ) const noexcept;
 
 	template<typename FILTER>
-	FORCE_INLINE int64_t count_of ( FILTER&& cond ) const;
+	FORCE_INLINE int64_t count_of ( FILTER&& cond ) const noexcept;
+
+	template<typename INT=int64_t, typename FILTER>
+	FORCE_INLINE INT sum_of ( FILTER&& cond ) const noexcept;
 
 	/// Apply an action to every member
 	/// Apply ( [] (T& item) {...} );
 	template<typename ACTION>
-	FORCE_INLINE void Apply ( ACTION&& Verb ) const;
+	FORCE_INLINE void Apply ( ACTION&& Verb ) const noexcept;
 
 	template<typename ACTION>
-	FORCE_INLINE void for_each ( ACTION&& tAction ) const;
+	FORCE_INLINE void for_each ( ACTION&& tAction ) const noexcept;
 
 	/// generic linear search
-	bool Contains ( T tRef ) const;
+	bool Contains ( T tRef ) const noexcept;
 
 	/// generic linear search
 	template<typename FUNCTOR, typename U>

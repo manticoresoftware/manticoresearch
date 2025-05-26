@@ -47,7 +47,7 @@ UDF function names in SQL are case-insensitive. However, the respective C functi
 Unfortunately, there is no (easy) way for us to check for these mistakes when loading the function, and they could crash the server and/or result in unexpected results. Last but not least, all the C functions you implement need to be thread-safe.
 
 The first argument, a pointer to `SPH_UDF_INIT` structure, is essentially a pointer to our function state. It is optional. In the example just above, the function is stateless, as it simply returns 123 every time it gets called. So, we do not have to define an initialization function, and we can simply ignore that argument.
-This argument serves one more purpose. Since a single query can be executed on multiple threads (see [pseudo-sharding](../Server_settings/Searchd.md#pseudo_sharding)), the daemon tries to determine whether a UDF is stateful or stateless by checking this argument. If the argument is initialized, parallel execution will be disabled. So, if your UDF is stateful but you don't use this argument, it will be called from multiple threads, and your code needs to be aware of that.
+This argument serves one more purpose. Since a single query can be executed on multiple threads (see [pseudo-sharding](../../Server_settings/Searchd.md#pseudo_sharding)), the daemon tries to determine whether a UDF is stateful or stateless by checking this argument. If the argument is initialized, parallel execution will be disabled. So, if your UDF is stateful but you don't use this argument, it will be called from multiple threads, and your code needs to be aware of that.
 
 The second argument, a pointer to `SPH_UDF_ARGS`, is the most important one. All the actual call arguments are passed to your UDF via this structure; it contains the call argument count, names, types, etc. So, whether your function gets called like `SELECT id, testfunc(1)` or like `SELECT id, testfunc('abc', 1000*id+gid, WEIGHT())` or any other way, it will receive the very same `SPH_UDF_ARGS` structure in all of these cases. However, the data passed in the `args` structure will be different. In the first example, `args->arg_count` will be set to 1, in the second example it will be set to 3, and the `args->arg_types` array will contain different type data, and so on.
 
@@ -81,7 +81,7 @@ Note how `testfunc_init()` also receives the call arguments structure. By the ti
 
 UDFs can receive arguments of pretty much any valid internal Manticore type. Refer to the `sphinx_udf_argtype` enumeration in `sphinxudf.h` for a full list. Most of the types map straightforwardly to the respective C types.
 
-The most notable type is the `SPH_UDF_TYPE_FACTORS` argument type. You get that type by calling your UDF with a [PACKEDFACTOR()](../../searching-and-ranking-functions#PACKEDFACTORS()) argument. Its data is a binary blob in a certain internal format, and to extract individual ranking signals from that blob, you need to use either of the two `sphinx_factors_XXX()` or `sphinx_get_YYY_factor()` families of functions.
+The most notable type is the `SPH_UDF_TYPE_FACTORS` argument type. You get that type by calling your UDF with a [PACKEDFACTOR()](../../Functions/Searching_and_ranking_functions#PACKEDFACTORS()) argument. Its data is a binary blob in a certain internal format, and to extract individual ranking signals from that blob, you need to use either of the two `sphinx_factors_XXX()` or `sphinx_get_YYY_factor()` families of functions.
 
 ### sphinx_factors_XXX() functions
 

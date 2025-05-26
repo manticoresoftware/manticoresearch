@@ -83,6 +83,8 @@ SELECT  ... FROM ...   OPTION max_matches=<value>
 ## Scroll Search Option
 
 The scroll search option provides an efficient and reliable way to paginate through large result sets. Unlike traditional offset-based pagination, scroll search offers better performance for deep pagination and provides an easier way to implement pagination.
+While it utilizes the same `max_matches` window as offset-based pagination, scroll search **can return more documents than the `max_matches` value** by retrieving results over multiple requests using a scroll token. 
+When using scroll pagination, there's no need to use `offset` and `limit` together — it's redundant and generally considered overengineering. Instead, just specify a `limit` along with the `scroll` token to fetch each subsequent page.
 
 #### Scrolling via SQL
 
@@ -119,6 +121,8 @@ SELECT weight(), id FROM test WHERE match('hello') ORDER BY weight() desc, id as
 **Retrieving the Scroll Token**
 
 After executing the initial query, retrieve the scroll token by executing the `SHOW SCROLL` command.
+You must call `SHOW SCROLL` after **every** query in the scroll sequence to obtain the updated scroll token for the next page. 
+Each query generates a new token that reflects the latest scroll position.
 
 ```sql
 SHOW SCROLL;
@@ -155,6 +159,7 @@ SHOW SCROLL;
 **Paginated Query Using scroll**
 
  To retrieve the next page of results, include the scroll token in the subsequent query as an option. When the `scroll` option is provided, specifying the sort criteria is optional.
+Remember to call `SHOW SCROLL` again after this query to obtain the new token needed for the following page.
 
 ```sql
 SELECT ... [ORDER BY [... ,] id {ASC|DESC}] OPTION scroll='<base64 encoded scroll token>'[, ...];

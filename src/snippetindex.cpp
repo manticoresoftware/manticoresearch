@@ -263,10 +263,10 @@ void SnippetsDocIndex_c::ParseQuery ( const DictRefPtr_c& pDict, DWORD eExtQuery
 			if ( !pChild )
 				continue;
 
-			for ( const auto & dChild : pChild->m_dChildren )
+			for ( const auto & dChild : pChild->dChildren() )
 				dChildren.Add ( dChild );
 
-			for ( const auto& dWord : pChild->m_dWords )
+			for ( const auto& dWord : pChild->dWords() )
 			{
 				if ( HasWildcards ( dWord.m_sWord.cstr() ) )
 					continue;
@@ -334,9 +334,9 @@ int SnippetsDocIndex_c::ExtractWords ( XQNode_t * pNode, const DictRefPtr_c& pDi
 	if ( !pNode )
 		return iQpos;
 
-	ARRAY_FOREACH ( i, pNode->m_dWords )
+	ARRAY_FOREACH ( i, pNode->dWords() )
 	{
-		const XQKeyword_t & tWord = pNode->m_dWords[i];
+		const XQKeyword_t & tWord = pNode->dWord(i);
 
 		int iLenCP = sphUTF8Len ( tWord.m_sWord.cstr() );
 		if ( HasWildcards ( tWord.m_sWord.cstr() ) )
@@ -355,8 +355,8 @@ int SnippetsDocIndex_c::ExtractWords ( XQNode_t * pNode, const DictRefPtr_c& pDi
 		}
 	}
 
-	ARRAY_FOREACH ( i, pNode->m_dChildren )
-		iQpos = ExtractWords ( pNode->m_dChildren[i], pDict, iQpos );
+	ARRAY_FOREACH ( i, pNode->dChildren() )
+		iQpos = ExtractWords ( pNode->dChildren()[i], pDict, iQpos );
 
 	return iQpos;
 }

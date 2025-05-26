@@ -1221,6 +1221,7 @@ public:
 // from mysqld_error.h
 enum class EMYSQL_ERR : WORD
 {
+	NO_DB_ERROR					= 1046,
 	UNKNOWN_COM_ERROR			= 1047,
 	SERVER_SHUTDOWN				= 1053,
 	PARSE_ERROR					= 1064,
@@ -1329,12 +1330,14 @@ void BuildStatusOneline ( StringBuilder_c& sOut );
 void UpdateLastMeta (VecTraits_T<AggrResult_t> tResults );
 
 namespace session {
-bool IsAutoCommit ( const ClientSession_c* );
+	bool IsAutoCommit ( const ClientSession_c* );
 	bool IsInTrans ( const ClientSession_c* );
 
 	bool Execute ( Str_t sQuery, RowBuffer_i& tOut );
 	void SetFederatedUser();
 	void SetUser ( const CSphString & sUser );
+	void SetCurrentDbName ( CSphString sDb );
+	const char* GetCurrentDbName ();
 	void SetAutoCommit ( bool bAutoCommit );
 	void SetInTrans ( bool bInTrans );
 	bool IsAutoCommit();
@@ -1482,9 +1485,9 @@ public:
 
 	// wrappers for popular packets
 	virtual void Eof ( bool bMoreResults, int iWarns, const char* szMeta ) = 0;
-	inline void Eof ( bool bMoreResults , int iWarns ) { return Eof ( bMoreResults, iWarns, nullptr); }
-	inline void Eof ( bool bMoreResults ) { return Eof ( bMoreResults, 0 ); }
-	inline void Eof () { return Eof ( false ); }
+	void Eof ( bool bMoreResults , int iWarns ) { return Eof ( bMoreResults, iWarns, nullptr); }
+	void Eof ( bool bMoreResults ) { return Eof ( bMoreResults, 0 ); }
+	void Eof () { return Eof ( false ); }
 
 	virtual void Error ( const char * sError, EMYSQL_ERR iErr = EMYSQL_ERR::PARSE_ERROR ) = 0;
 

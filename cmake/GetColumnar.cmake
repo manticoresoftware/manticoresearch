@@ -40,6 +40,7 @@ endif()
 set ( LIB_MANTICORE_COLUMNAR "lib_manticore_columnar.${EXTENSION}" )
 set ( LIB_MANTICORE_SECONDARY "lib_manticore_secondary.${EXTENSION}" )
 set ( LIB_MANTICORE_KNN "lib_manticore_knn.${EXTENSION}" )
+set ( LIB_MANTICORE_KNN_EMBEDDINGS "libmanticore_knn_embeddings.${EXTENSION}" )
 
 macro ( backup_paths )
 	set ( _CMAKE_FIND_ROOT_PATH "${CMAKE_FIND_ROOT_PATH}" )

@@ -1137,7 +1137,7 @@ public:
 class CSphHitBuilder;
 
 /// this is my actual VLN-compressed phrase index implementation
-class CSphIndex_VLN : public CSphIndex, public IndexAlterHelper_c, public DebugCheckHelper_c
+class CSphIndex_VLN : public CSphIndex, public IndexAlterHelper_c
 {
 	friend class DiskIndexQwordSetup_c;
 	friend class CSphMerger;
@@ -3932,7 +3932,7 @@ static void ReadSchemaColumnJson ( bson::Bson_c tNode, CSphColumnInfo & tCol )
 
 	NodeHandle_t tKNN = tNode.ChildByName ("knn");
 	if ( tKNN!=nullnode )
-		tCol.m_tKNN = ReadKNNJson(tKNN);
+		ReadKNNJson ( tKNN, tCol.m_tKNN, tCol.m_tKNNModel, tCol.m_sKNNFrom );
 }
 
 
@@ -4027,7 +4027,10 @@ void DumpAttrToJson ( JsonEscapedBuilder& tOut, const CSphColumnInfo& tCol )
 	tOut.NamedVal ( "locator", tCol.m_tLocator );
 
 	if ( tCol.IsIndexedKNN() )
-		tOut.NamedVal ( "knn", tCol.m_tKNN );
+	{
+		tOut.Named ( "knn" );
+		FormatKNNSettings ( tOut, tCol.m_tKNN, tCol.m_tKNNModel, tCol.m_sKNNFrom );
+	}
 }
 } // namespace
 
@@ -11614,18 +11617,18 @@ size_t strnlen ( const char * s, size_t iMaxLen )
 
 int CSphIndex_VLN::DebugCheck ( DebugCheckError_i & tReporter, FilenameBuilder_i * pFilenameBuilder )
 {
-	auto pIndexChecker = std::make_unique<DiskIndexChecker_c> ( *this, tReporter );
+	DiskIndexChecker_c tIndexChecker { *this, tReporter };
 
-	pIndexChecker->Setup ( m_iDocinfo, m_iDocinfoIndex, m_iMinMaxIndex, m_bCheckIdDups );
+	tIndexChecker.Setup ( m_iDocinfo, m_iDocinfoIndex, m_iMinMaxIndex, m_bCheckIdDups );
 
 	// check if index is ready
 	if ( !m_bPassedAlloc )
 		tReporter.Fail ( "table not preread" );
 
-	if ( !pIndexChecker->OpenFiles() )
+	if ( !tIndexChecker.OpenFiles() )
 		return 1;
 
-	if ( !LoadHitlessWords ( m_tSettings.m_sHitlessFiles, m_pTokenizer, m_pDict, pIndexChecker->GetHitlessWords(), m_sLastError ) )
+	if ( !LoadHitlessWords ( m_tSettings.m_sHitlessFiles, m_pTokenizer, m_pDict, tIndexChecker.GetHitlessWords(), m_sLastError ) )
 		tReporter.Fail ( "unable to load hitless words: %s", m_sLastError.cstr() );
 
 	CSphSavedFile tStat;
@@ -11676,8 +11679,7 @@ int CSphIndex_VLN::DebugCheck ( DebugCheckError_i & tReporter, FilenameBuilder_i
 		}
 	}
 
-	pIndexChecker->Check();
-
+	tIndexChecker.Check();
 	tReporter.Done();
 
 	return (int)Min ( tReporter.GetNumFails(), 255 ); // this is the exitcode; so cap it
@@ -12252,30 +12254,6 @@ bool ParseMorphFields ( const CSphString & sMorphology, const CSphString & sMorp
 		sError.SetSprintf ( "morphology_skip_fields contains out of schema fields: %s", sMissed.cstr() );
 
 	return ( !sMissed.GetLength() );
-}
-
-
-bool SchemaConfigureCheckAttribute ( const CSphSchema & tSchema, const CSphColumnInfo & tCol, CSphString & sError )
-{
-	if ( tCol.m_sName.IsEmpty() )
-	{
-		sError.SetSprintf ( "column number %d has no name", tCol.m_iIndex );
-		return false;
-	}
-
-	if ( tSchema.GetAttr ( tCol.m_sName.cstr() ) )
-	{
-		sError.SetSprintf ( "can not add multiple attributes with same name '%s'", tCol.m_sName.cstr () );
-		return false;
-	}
-
-	if ( CSphSchema::IsReserved ( tCol.m_sName.cstr() ) )
-	{
-		sError.SetSprintf ( "%s is not a valid attribute name", tCol.m_sName.cstr() );
-		return false;
-	}
-
-	return true;
 }
 
 /////////////////////////////////////////////////////////////////////////////

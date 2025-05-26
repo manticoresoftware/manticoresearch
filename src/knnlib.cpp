@@ -17,13 +17,17 @@
 using Create_fn =				knn::KNN_i * (*) ();
 using CreateBuilder_fn =		knn::Builder_i * (*) ( const knn::Schema_t & tSchema, int64_t iNumElements, const std::string & sTmpFilename );
 using CreateDistanceCalc_fn =	knn::Distance_i * (*) ( const knn::IndexSettings_t & tSettings );
+using LoadEmbeddingsLib_fn =	knn::EmbeddingsLib_i * (*) ( const std::string & sLibPath, std::string & sError );
 using VersionStr_fn =			const char * (*)();
 using GetVersion_fn	=			int (*)();
 
 static void *					g_pKNNLib = nullptr;
+std::unique_ptr<knn::EmbeddingsLib_i> g_pEmbeddingsLib;
+
 static Create_fn 				g_fnCreate = nullptr;
 static CreateBuilder_fn 		g_fnCreateKNNBuilder = nullptr;
 static CreateDistanceCalc_fn	g_fnCreateDistanceCalc = nullptr;
+static LoadEmbeddingsLib_fn		g_fnLoadEmbeddingsLib = nullptr;
 static VersionStr_fn			g_fnVersionStr = nullptr;
 
 /////////////////////////////////////////////////////////////////////
@@ -79,9 +83,30 @@ std::unique_ptr<knn::Builder_i>	CreateKNNBuilder ( const ISphSchema & tSchema, i
 }
 
 
-std::unique_ptr<knn::Distance_i> CreateKNNDistanceCalc ( const knn::IndexSettings_t & tSettings )
+std::unique_ptr<knn::Distance_i> CreateKNNDistanceCalc ( const knn::IndexSettings_t & tSettings, CSphString & sError )
 {
+	if ( !IsKNNLibLoaded() )
+	{
+		sError = "knn library not loaded";
+		return nullptr;
+	}
+
 	return std::unique_ptr<knn::Distance_i> ( g_fnCreateDistanceCalc(tSettings) );
+}
+
+
+std::unique_ptr<knn::TextToEmbeddings_i> CreateTextToEmbeddings ( const knn::ModelSettings_t & tSettings, CSphString & sError )
+{
+	if ( !g_pEmbeddingsLib )
+	{
+		sError = "embeddings library not loaded";
+		return nullptr;
+	}
+
+	std::string sErrorSTL;
+	auto pRes = std::unique_ptr<knn::TextToEmbeddings_i> ( g_pEmbeddingsLib->CreateTextToEmbeddings ( tSettings, sErrorSTL ) );
+	sError = sErrorSTL.c_str();
+	return pRes;
 }
 
 
@@ -124,7 +149,17 @@ bool InitKNN ( CSphString & sError )
 	if ( !LoadFunc ( g_fnCreate, tHandle.Get(), "CreateKNN", sLibfile, sError ) )						return false;
 	if ( !LoadFunc ( g_fnCreateKNNBuilder, tHandle.Get(), "CreateKNNBuilder", sLibfile, sError ) )		return false;
 	if ( !LoadFunc ( g_fnCreateDistanceCalc, tHandle.Get(), "CreateDistanceCalc", sLibfile, sError ) )	return false;
+	if ( !LoadFunc ( g_fnLoadEmbeddingsLib, tHandle.Get(), "LoadEmbeddingsLib", sLibfile, sError ) )	return false;
 	if ( !LoadFunc ( g_fnVersionStr, tHandle.Get(), "GetKNNLibVersionStr", sLibfile, sError ) )			return false;
+
+	std::string sEmbeddingsLibFile = TryDifferentPaths ( LIB_MANTICORE_KNN_EMBEDDINGS, GetKNNEmbeddingsFullpath(), 0 ).cstr();
+	if ( !sEmbeddingsLibFile.empty() )
+	{
+		std::string sErrorSTL;
+		g_pEmbeddingsLib = std::unique_ptr<knn::EmbeddingsLib_i> ( g_fnLoadEmbeddingsLib ( sEmbeddingsLibFile, sErrorSTL ) );
+		if ( !g_pEmbeddingsLib )
+			return false;
+	}
 
 	g_pKNNLib = tHandle.Leak();
 
@@ -134,7 +169,10 @@ bool InitKNN ( CSphString & sError )
 void ShutdownKNN()
 {
 	if ( g_pKNNLib )
+	{
+		g_pEmbeddingsLib.reset();
 		dlclose(g_pKNNLib);
+	}
 }
 
 #else
@@ -152,7 +190,23 @@ const char * GetKNNVersionStr()
 }
 
 
+const char * GetKNNEmbeddingsVersionStr()
+{
+	if ( !g_pEmbeddingsLib )
+		return nullptr;
+
+	return g_pEmbeddingsLib->GetVersionStr().c_str();
+}
+
+
 bool IsKNNLibLoaded()
 {
 	return !!g_pKNNLib;
 }
+
+
+bool IsKNNEmbeddingsLibLoaded()
+{
+	return !!g_pEmbeddingsLib;
+}
+

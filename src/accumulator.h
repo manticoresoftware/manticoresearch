@@ -17,6 +17,7 @@
 
 #include "sphinxint.h"
 #include "docstore.h"
+#include "knnmisc.h"
 
 struct StoredQueryDesc_t
 {
@@ -98,8 +99,15 @@ struct ReplicatedCommand_t
 
 std::unique_ptr<ReplicationCommand_t> MakeReplicationCommand ( ReplCmd_e eCommand, CSphString sIndex, CSphString sCluster = CSphString() );
 
+struct AttrWithModel_t
+{
+	knn::TextToEmbeddings_i *	m_pModel = nullptr;
+	CSphVector<std::pair<int,bool>> m_dFrom;
+};
+
 class RtIndex_i;
 class ColumnarBuilderRT_i;
+class TableEmbeddings_c;
 
 /// indexing accumulator
 class RtAccum_t
@@ -122,6 +130,8 @@ public:
 public:
 	void			SetupDict ( const RtIndex_i * pIndex, const DictRefPtr_c& pDict, bool bKeywordDict );
 	void			Sort();
+	bool			FetchEmbeddings ( TableEmbeddings_c * pEmbeddings, const CSphVector<AttrWithModel_t> & dAttrsWithModels, CSphString & sError );
+	void			FetchEmbeddingsSrc ( InsertDocData_c & tDoc, const CSphVector<AttrWithModel_t> & dAttrsWithModels );
 
 	void			CleanupPart();
 	void			Cleanup();
@@ -162,6 +172,7 @@ private:
 	std::unique_ptr<BlobRowBuilder_i>	m_pBlobWriter;
 	std::unique_ptr<DocstoreRT_i>		m_pDocstore;
 	std::unique_ptr<ColumnarBuilderRT_i> m_pColumnarBuilder;
+	std::unique_ptr<EmbeddingsSrc_c>	m_pEmbeddingsSrc;
 	RowID_t								m_tNextRowID = 0;
 	CSphFixedVector<BYTE>				m_dPackedKeywords { 0 };
 	uint64_t							m_uSchemaHash = 0;
@@ -174,6 +185,9 @@ private:
 
 	void			ResetDict();
 	void			SetupDocstore();
+
+	bool			RebuildStoragesForEmbeddings ( RowID_t tRowID, CSphRowitem * pRow, const CSphVector<AttrWithModel_t> & dAttrsWithModels, std::unique_ptr<BlobRowBuilder_i> & pNewBlobBuilder, std::unique_ptr<ColumnarBuilderRT_i> & pNewColumnarBuilder, std::unique_ptr<DocstoreRT_i> & pNewDocstoreBuilder, CSphVector<ScopedTypedIterator_t> & dAllIterators, const IntVec_t & dDocstoreRemap, const CSphColumnInfo * pBlobLoc, std::vector<std::vector<std::vector<float>>> & dAllEmbeddings, CSphVector<int64_t> & dTmp, CSphString & sError );
+	bool			GenerateEmbeddings ( int iAttr, int iAttrWithModel, const CSphVector<AttrWithModel_t> & dAttrsWithModels, std::vector<std::vector<std::vector<float>>> & dAllEmbeddings, CSphString & sError );
 
 	// defined in sphinxrt.cpp
 	friend RtSegment_t* CreateSegment ( RtAccum_t*, int, ESphHitless, const VecTraits_T<SphWordID_t>&, CSphString& );

@@ -2054,7 +2054,7 @@ bool RtIndex_c::VerifyKNN ( InsertDocData_c & tDoc, CSphString & sError ) const
 		if ( tAttr.m_eAttrType!=SPH_ATTR_FLOAT_VECTOR || !tAttr.IsIndexedKNN() )
 			continue;
 
-		if ( m_dAttrsWithModels[i].m_pModel )
+		if ( m_dAttrsWithModels.GetLength() && m_dAttrsWithModels[i].m_pModel )
 		{
 			if ( iNumValues!=0 )
 			{

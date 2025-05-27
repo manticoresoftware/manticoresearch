@@ -519,6 +519,10 @@ curl -s -X POST "http://localhost:9308/sql?mode=raw" -d "query=SHOW VERSION" | j
         "Version": "knn %{VERSION}"
       },
       {
+        "Component": "Daemon",
+        "Version": "embeddings #!/([0-9]+\.[0-9]+\.[0-9]+)/!#"
+      },
+      {
         "Component": "Buddy",
         "Version": "buddy %{VERSION}"
       }
@@ -561,6 +565,10 @@ curl -s "http://localhost:9308/sql?mode=raw&query=SHOW%20VERSION" | jq '.[0].dat
       {
         "Component": "KNN",
         "Version": "knn %{VERSION}"
+      },
+      {
+        "Component": "Daemon",
+        "Version": "embeddings #!/([0-9]+\.[0-9]+\.[0-9]+)/!#"
       },
       {
         "Component": "Buddy",
@@ -607,6 +615,10 @@ curl -s -X POST "http://localhost:9308/sql?raw_response=true" -d "query=SHOW VER
         "Version": "knn %{VERSION}"
       },
       {
+        "Component": "Daemon",
+        "Version": "embeddings #!/([0-9]+\.[0-9]+\.[0-9]+)/!#"
+      },
+      {
         "Component": "Buddy",
         "Version": "buddy %{VERSION}"
       }
@@ -649,6 +661,10 @@ curl -s "http://localhost:9308/sql?raw_response=true&query=SHOW%20VERSION" | jq 
       {
         "Component": "KNN",
         "Version": "knn %{VERSION}"
+      },
+      {
+        "Component": "Daemon",
+        "Version": "embeddings #!/([0-9]+\.[0-9]+\.[0-9]+)/!#"
       },
       {
         "Component": "Buddy",

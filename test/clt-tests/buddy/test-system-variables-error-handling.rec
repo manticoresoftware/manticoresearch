@@ -117,13 +117,31 @@ ERROR 1064 (42000): unknown sysvar @@nonexistent_variable
 ––– comment –––
 3.1 Test with mysqldump/mariadb-dump
 ––– input –––
-mysqldump -h0 -P9306 --no-data --skip-opt --no-tablespaces tbl > /tmp/dump.sql
+mysqldump -h0 -P9306 manticore tbl --no-data --skip-comments --skip-opt --no-tablespaces > /tmp/dump.sql 2> >(grep -E -v "Warning: column statistics|Warning: version string returned by server is incorrect." >&2)
 ––– output –––
 ––– input –––
 test -s /tmp/dump.sql && echo "Dump created successfully" || (echo "Dump is empty or failed!" && cat /tmp/dump.sql)
 ––– output –––
 Dump created successfully
-––– comment –––
+––– input –––
+mysql -h0 -P9306 -e "DROP TABLE tbl;"; echo $?
+––– output –––
+0
+––– input –––
+mysql -h0 -P9306 manticore < /tmp/dump.sql; echo $?
+––– output –––
+0
+––– input –––
+mysql -h0 -P9306 -e "SHOW CREATE TABLE tbl;"
+––– output –––
++-------+-----------------------------------------------+
+| Table | Create Table                                  |
++-------+-----------------------------------------------+
+| tbl   | CREATE TABLE tbl (
+id bigint,
+value integer
+) |
++-------+-----------------------------------------------+
 ––– comment –––
 4.1 Checking user variables @var (with Buddy)
 ––– input –––
@@ -280,8 +298,31 @@ mysql -h0 -P9306 -e "SELECT * FROM tbl WHERE value > @@nonexistent_variable;"
 ––– comment –––
 3.1 Test with mysqldump/mariadb-dump (without Buddy)
 ––– input –––
-mysqldump -h 127.0.0.1 -P9306 --no-data --skip-comments --skip-opt --no-tablespaces tbl > /tmp/dump.sql
+mysqldump -h0 -P9306 manticore tbl --no-data --skip-comments --skip-opt --no-tablespaces > /tmp/dump.sql 2> >(grep -E -v "Warning: column statistics|Warning: version string returned by server is incorrect." >&2)
 ––– output –––
+––– input –––
+test -s /tmp/dump.sql && echo "Dump created successfully" || (echo "Dump is empty or failed!" && cat /tmp/dump.sql)
+––– output –––
+Dump created successfully
+––– input –––
+mysql -h0 -P9306 -e "DROP TABLE tbl;"; echo $?
+––– output –––
+0
+––– input –––
+mysql -h0 -P9306 manticore < /tmp/dump.sql; echo $?
+––– output –––
+0
+––– input –––
+mysql -h0 -P9306 -e "SHOW CREATE TABLE tbl;"
+––– output –––
++-------+-----------------------------------------------+
+| Table | Create Table                                  |
++-------+-----------------------------------------------+
+| tbl   | CREATE TABLE tbl (
+id bigint,
+value integer
+) |
++-------+-----------------------------------------------+
 ––– comment –––
 4.1 Checking user variables @var (without Buddy)
 ––– input –––
@@ -348,6 +389,3 @@ mysql -h0 -P9306 -e "SELECT @@autocommit;"
 +--------------+
 |            1 |
 +--------------+
-––– input –––
-searchd --version
-––– output –––

@@ -18,8 +18,8 @@ curl -s "http://localhost:9308/cli?show%20version" | awk '!/row.*in set/'; echo
 ––– input –––
 curl -s "http://localhost:9308/cli_json" -d "show version"; echo
 ––– output –––
-[{"total":%{NUMBER},"error":"","warning":"","columns":[{"Component":{"type":"string"}},{"Version":{"type":"string"}}],"data":[{"Component":"Daemon","Version":"%{VERSION}"},{"Component":"Columnar","Version":"columnar %{VERSION}"},{"Component":"Secondary","Version":"secondary %{VERSION}"},{"Component":"KNN","Version":"knn %{VERSION}"},{"Component":"Daemon","Version":"embeddings #!/([0-9]+\.[0-9]+\.[0-9]+)/!#"},{"Component":"Buddy","Version":"buddy %{VERSION}"}]}]
+[{"total":%{NUMBER},"error":"","warning":"","columns":[{"Component":{"type":"string"}},{"Version":{"type":"string"}}],"data":[{"Component":"Daemon","Version":"%{VERSION}"},{"Component":"Columnar","Version":"columnar %{VERSION}"},{"Component":"Secondary","Version":"secondary %{VERSION}"},{"Component":"KNN","Version":"knn %{VERSION}"},{"Component":"Embeddings","Version":"embeddings #!/([0-9]+\.[0-9]+\.[0-9]+)/!#"},{"Component":"Buddy","Version":"buddy %{VERSION}"}]}]
 ––– input –––
 curl -s "http://localhost:9308/sql?mode=raw" -d "show version"; echo
 ––– output –––
-[{"total":%{NUMBER},"error":"","warning":"","columns":[{"Component":{"type":"string"}},{"Version":{"type":"string"}}],"data":[{"Component":"Daemon","Version":"%{VERSION}"},{"Component":"Columnar","Version":"columnar %{VERSION}"},{"Component":"Secondary","Version":"secondary %{VERSION}"},{"Component":"KNN","Version":"knn %{VERSION}"},{"Component":"Daemon","Version":"embeddings #!/([0-9]+\.[0-9]+\.[0-9]+)/!#"},{"Component":"Buddy","Version":"buddy %{VERSION}"}]}]
+[{"total":%{NUMBER},"error":"","warning":"","columns":[{"Component":{"type":"string"}},{"Version":{"type":"string"}}],"data":[{"Component":"Daemon","Version":"%{VERSION}"},{"Component":"Columnar","Version":"columnar %{VERSION}"},{"Component":"Secondary","Version":"secondary %{VERSION}"},{"Component":"KNN","Version":"knn %{VERSION}"},{"Component":"Embeddings","Version":"embeddings #!/([0-9]+\.[0-9]+\.[0-9]+)/!#"},{"Component":"Buddy","Version":"buddy %{VERSION}"}]}]

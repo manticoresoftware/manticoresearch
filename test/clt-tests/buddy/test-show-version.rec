@@ -12,7 +12,7 @@ Component: Columnar
 Component: Secondary
   Version: secondary %{VERSION}
 *************************** 4. row ***************************
-Component: KNN
+Component: Knn
   Version: knn %{VERSION}
 *************************** 5. row ***************************
 Component: Buddy

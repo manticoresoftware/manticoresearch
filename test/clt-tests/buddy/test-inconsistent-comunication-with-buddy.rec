@@ -515,7 +515,7 @@ curl -s -X POST "http://localhost:9308/sql?mode=raw" -d "query=SHOW VERSION" | j
         "Version": "secondary %{VERSION}"
       },
       {
-        "Component": "KNN",
+        "Component": "Knn",
         "Version": "knn %{VERSION}"
       },
       {
@@ -559,7 +559,7 @@ curl -s "http://localhost:9308/sql?mode=raw&query=SHOW%20VERSION" | jq '.[0].dat
         "Version": "secondary %{VERSION}"
       },
       {
-        "Component": "KNN",
+        "Component": "Knn",
         "Version": "knn %{VERSION}"
       },
       {
@@ -603,7 +603,7 @@ curl -s -X POST "http://localhost:9308/sql?raw_response=true" -d "query=SHOW VER
         "Version": "secondary %{VERSION}"
       },
       {
-        "Component": "KNN",
+        "Component": "Knn",
         "Version": "knn %{VERSION}"
       },
       {
@@ -647,7 +647,7 @@ curl -s "http://localhost:9308/sql?raw_response=true&query=SHOW%20VERSION" | jq 
         "Version": "secondary %{VERSION}"
       },
       {
-        "Component": "KNN",
+        "Component": "Knn",
         "Version": "knn %{VERSION}"
       },
       {

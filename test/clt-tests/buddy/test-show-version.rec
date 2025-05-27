@@ -12,10 +12,10 @@ Component: Columnar
 Component: Secondary
   Version: secondary %{VERSION}
 *************************** 4. row ***************************
-Component: #!/(knn|KNN)/!#
+Component: Knn
   Version: knn %{VERSION}
 *************************** 5. row ***************************
-Component: #!/(Daemon|embeddings)/!#
+Component: Embeddings
   Version: embeddings #!/([0-9]+\.[0-9]+\.[0-9]+)/!#
 *************************** 6. row ***************************
 Component: Buddy

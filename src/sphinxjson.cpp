@@ -1727,7 +1727,7 @@ bool JsonObj_c::IsDbl() const
 bool JsonObj_c::IsNum() const
 {
 	assert ( m_pRoot );
-	return !!cJSON_IsNumeric ( m_pRoot );
+	return !! ( cJSON_IsNumeric ( m_pRoot ) ||  cJSON_IsUInteger(m_pRoot) );
 }
 
 
@@ -1966,6 +1966,15 @@ bool JsonObj_c::FetchStrItem ( CSphString & sValue, const char * szName, CSphStr
 		return false;
 
 	return true;
+}
+
+
+bool JsonObj_c::FetchStrItem ( std::string & sValue, const char * szName, CSphString & sError, bool bIgnoreMissing ) const
+{
+	CSphString sTmp;
+	bool bRes = FetchStrItem ( sTmp, szName, sError, bIgnoreMissing );
+	sValue = sTmp.scstr();
+	return bRes;
 }
 
 

@@ -554,6 +554,11 @@ In addition to `rt_mem_limit`, the flushing behavior of RAM chunks is also influ
 
 These timeouts work in conjunction.  A RAM chunk will be flushed if *either* timeout is reached.  This ensures that even if there are no writes, the data will eventually be persisted to disk, and conversely, even if there are constant writes but no searches, the data will also be persisted.  These settings provide more granular control over how frequently RAM chunks are flushed, balancing the need for data durability with performance considerations.  Per-table directives for these settings have higher priority and will override the instance-wide defaults.
 
+In addition to the `diskchunk_flush_write_timeout` and `diskchunk_flush_search_timeout` settings, flushing a RAM chunk may be skipped under the following conditions:
+
+* ongoing optimization: If an optimization process is currently running, and the number of existing disk chunks has reached or exceeded a configured internal `cutoff` threshold, flushing is deferred to avoid interfering with the optimization.
+* too few documents in RAM segments: If the number of documents across RAM segments is below a minimum threshold (8192), flushing is skipped to avoid creating very small disk chunks. This helps minimize unnecessary disk writes and chunk fragmentation.
+
 ### Plain table settings:
 
 #### source

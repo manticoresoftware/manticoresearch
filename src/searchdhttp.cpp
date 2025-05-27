@@ -27,6 +27,7 @@
 #include "compressed_http.h"
 #include "daemon/logger.h"
 #include "daemon/search_handler.h"
+#include "sphinxquery/xqparser.h"
 
 static bool g_bLogBadHttpReq = val_from_env ( "MANTICORE_LOG_HTTP_BAD_REQ", false ); // log content of bad http requests, ruled by this env variable
 static int g_iLogHttpData = val_from_env ( "MANTICORE_LOG_HTTP_DATA", 0 ); // verbose logging of http data, ruled by this env variable
@@ -599,7 +600,7 @@ void UriPercentReplace ( Str_t & sEntity, Replace_e ePlus )
 
 	const char* pSrc = sEntity.first;
 	auto* pDst = const_cast<char*> ( pSrc );
-	char cPlus = ((bool)ePlus) ? ' ' : '+';
+	char cPlus = ( ePlus==Replace_e::NoPlus ? ' ' : '+' );
 	auto* pEnd = pSrc + sEntity.second;
 	while ( pSrc < pEnd )
 	{
@@ -660,14 +661,14 @@ void HttpRequestParser_c::ParseList ( Str_t sData, OptionsHash_t & hOptions )
 		case '=':
 			{
 				sName = { sLast, int ( sCur - sLast ) };
-				UriPercentReplace ( sName );
+				UriPercentReplace ( sName, Replace_e::NoPlus );
 				sLast = sCur + 1;
 				break;
 			}
 		case '&':
 			{
 				Str_t sVal { sLast, int ( sCur - sLast ) };
-				UriPercentReplace ( sVal );
+				UriPercentReplace ( sVal, Replace_e::NoPlus );
 				ToLower ( sName );
 				hOptions.Add ( sVal, sName );
 				sLast = sCur + 1;
@@ -683,7 +684,7 @@ void HttpRequestParser_c::ParseList ( Str_t sData, OptionsHash_t & hOptions )
 		return;
 
 	Str_t sVal { sLast, int ( sCur - sLast ) };
-	UriPercentReplace ( sVal );
+	UriPercentReplace ( sVal, Replace_e::NoPlus );
 	ToLower ( sName );
 	hOptions.Add ( sVal, sName );
 }

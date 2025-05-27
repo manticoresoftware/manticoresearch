@@ -282,6 +282,22 @@ if ( !function_exists("mysql_query") ) {
 	$mysql_simulated = false;
  }
 
+function mysql_test_connect($host)
+{
+	mysqli_report(MYSQLI_REPORT_OFF);
+	global $gl_conn;
+	$conndetails = explode(":",$host);
+	if ( count($conndetails)==1 )
+		$gl_conn = new mysqli($host,'','');
+	else
+	{
+		$gl_conn = new mysqli($host, '', '', '', (int)$port);
+	}
+	if ($gl_conn->connect_error)
+		return false;
+	return $gl_conn;
+}
+
 // will use mysql_query from php, or our redefined
 function legacy_mysql_wr ($q, $conn)
 {

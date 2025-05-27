@@ -8,7 +8,8 @@
 // did not, you can find it at http://www.gnu.org/
 //
 
-#include "sphinxquery.h"
+#include "sphinxquery/xqparser.h"
+#include "sphinxquery/parse_helper.h"
 #include "sphinxsearch.h"
 #include "sphinxplugin.h"
 #include "sphinxutils.h"
@@ -20,8 +21,6 @@
 #include "knnmisc.h"
 #include "sorterscroll.h"
 #include "sphinxexcerpt.h"
-
-#include "json/cJSON.h"
 
 static const char * g_szAll = "_all";
 static const char * g_szHighlight = "_@highlight_";
@@ -202,9 +201,8 @@ XQNode_t * QueryTreeBuilder_c::AddChildKeyword ( XQNode_t * pParent, const char 
 	tKeyword.m_iSkippedBefore = iSkippedPosBeforeToken;
 	tKeyword.m_fBoost = fBoost;
 	auto * pNode = new XQNode_t ( tLimitSpec );
-	pNode->m_pParent = pParent;
-	pNode->m_dWords.Add ( tKeyword );
-	pParent->m_dChildren.Add ( pNode );
+	pNode->AddDirtyWord ( tKeyword );
+	pParent->AddNewChild ( pNode );
 	m_dSpawned.Add ( pNode );
 
 	return pNode;
@@ -271,7 +269,6 @@ class QueryParserJson_c : public QueryParser_i
 {
 public:
 	bool	IsFullscan ( const CSphQuery & tQuery ) const final;
-	bool	IsFullscan ( const XQQuery_t & tQuery ) const final;
 	bool	ParseQuery ( XQQuery_t & tParsed, const char * sQuery, const CSphQuery * pQuery, TokenizerRefPtr_c pQueryTokenizer, TokenizerRefPtr_c pQueryTokenizerJson, const CSphSchema * pSchema, const DictRefPtr_c& pDict, const CSphIndexSettings & tSettings, const CSphBitvec * pMorphFields ) const final;
 	QueryParser_i * Clone() const final { return new QueryParserJson_c; }
 
@@ -302,11 +299,6 @@ bool QueryParserJson_c::IsFullscan ( const CSphQuery & tQuery ) const
 	return true;
 }
 
-
-bool QueryParserJson_c::IsFullscan ( const XQQuery_t & tQuery ) const
-{
-	return !( tQuery.m_pRoot && ( tQuery.m_pRoot->m_dChildren.GetLength () || tQuery.m_pRoot->m_dWords.GetLength () ) );
-}
 
 static bool IsFullText ( const CSphString & sName );
 static bool IsBoolNode ( const CSphString & sName );
@@ -397,6 +389,8 @@ bool QueryParserJson_c::ParseQuery ( XQQuery_t & tParsed, const char * szQuery, 
 		return false;
 	}
 
+	tParsed.m_bWasFullText = ( pRoot && ( pRoot->dChildren().GetLength () || pRoot->dWords().GetLength () ) );
+
 	XQLimitSpec_t tLimitSpec;
 	pRoot = tBuilder.FixupTree ( pRoot, tLimitSpec, pMorphFields, IsAllowOnlyNot() );
 	if ( tBuilder.IsError() )
@@ -405,7 +399,7 @@ bool QueryParserJson_c::ParseQuery ( XQQuery_t & tParsed, const char * szQuery, 
 		return false;
 	}
 
-	tParsed.m_bSingleWord = ( pRoot && pRoot->m_dChildren.IsEmpty() && pRoot->m_dWords.GetLength() == 1 );
+	tParsed.m_bSingleWord = ( pRoot && pRoot->dChildren().IsEmpty() && pRoot->dWords().GetLength() == 1 );
 	tParsed.m_pRoot = pRoot;
 	return true;
 }
@@ -683,10 +677,7 @@ XQNode_t * QueryParserJson_c::ConstructBoolNode ( const JsonObj_c & tJson, Query
 			pAndNode->SetOp ( SPH_QUERY_AND );
 
 			for ( auto & i : dMust )
-			{
-				pAndNode->m_dChildren.Add(i);
-				i->m_pParent = pAndNode;
-			}
+				pAndNode->AddNewChild ( i);
 
 			pMustNode = pAndNode;
 		}
@@ -702,10 +693,7 @@ XQNode_t * QueryParserJson_c::ConstructBoolNode ( const JsonObj_c & tJson, Query
 			pOrNode->SetOp ( SPH_QUERY_OR );
 
 			for ( auto & i : dShould )
-			{
-				pOrNode->m_dChildren.Add(i);
-				i->m_pParent = pOrNode;
-			}
+				pOrNode->AddNewChild (i);
 
 			pShouldNode = pOrNode;
 		}
@@ -719,21 +707,16 @@ XQNode_t * QueryParserJson_c::ConstructBoolNode ( const JsonObj_c & tJson, Query
 
 		if ( dMustNot.GetLength()==1 )
 		{
-			pNotNode->m_dChildren.Add ( dMustNot[0] );
-			dMustNot[0]->m_pParent = pNotNode;
+			pNotNode->AddNewChild ( dMustNot[0] );
 		} else
 		{
 			XQNode_t * pOrNode = tBuilder.CreateNode ( tLimitSpec );
 			pOrNode->SetOp ( SPH_QUERY_OR );
 
 			for ( auto & i : dMustNot )
-			{
-				pOrNode->m_dChildren.Add ( i );
-				i->m_pParent = pOrNode;
-			}
+				pOrNode->AddNewChild ( i );
 
-			pNotNode->m_dChildren.Add ( pOrNode );
-			pOrNode->m_pParent = pNotNode;
+			pNotNode->AddNewChild (  pOrNode );
 		}
 
 		pMustNotNode = pNotNode;
@@ -768,10 +751,8 @@ XQNode_t * QueryParserJson_c::ConstructBoolNode ( const JsonObj_c & tJson, Query
 		{
 			XQNode_t * pAndNode = tBuilder.CreateNode(tLimitSpec);
 			pAndNode->SetOp(SPH_QUERY_AND);
-			pAndNode->m_dChildren.Add ( pMustNode );
-			pAndNode->m_dChildren.Add ( pMustNotNode );
-			pMustNode->m_pParent = pAndNode;
-			pMustNotNode->m_pParent = pAndNode;
+			pAndNode->AddNewChild ( pMustNode );
+			pAndNode->AddNewChild ( pMustNotNode );
 
 			pResultNode = pAndNode;
 		}
@@ -781,10 +762,8 @@ XQNode_t * QueryParserJson_c::ConstructBoolNode ( const JsonObj_c & tJson, Query
 		{
 			XQNode_t * pMaybeNode = tBuilder.CreateNode ( tLimitSpec );
 			pMaybeNode->SetOp ( SPH_QUERY_MAYBE );
-			pMaybeNode->m_dChildren.Add ( pResultNode );
-			pMaybeNode->m_dChildren.Add ( pShouldNode );
-			pShouldNode->m_pParent = pMaybeNode;
-			pResultNode->m_pParent = pMaybeNode;
+			pMaybeNode->AddNewChild ( pResultNode );
+			pMaybeNode->AddNewChild ( pShouldNode );
 
 			pResultNode = pMaybeNode;
 		}
@@ -3418,6 +3397,9 @@ static bool ParseSort ( const JsonObj_c & tSort, JsonQuery_c & tQuery, bool & bG
 				tSortField.m_sName = tItem.StrVal();
 				// order defaults to desc when sorting on the _score, and defaults to asc when sorting on anything else
 				tSortField.m_bAsc = ( tSortField.m_sName!="_score" );
+				// _random name should be on pair with _score \ _geo_distance
+				if ( tSortField.m_sName=="_random" )
+					tSortField.m_sName = "@random";
 				continue;
 			}
 

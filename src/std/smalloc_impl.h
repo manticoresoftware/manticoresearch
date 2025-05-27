@@ -12,7 +12,7 @@
 
 
 template<typename T>
-inline T* sph::CustomStorage_T<T>::Allocate ( int64_t iLimit )
+T* sph::CustomStorage_T<T>::Allocate ( int64_t iLimit )
 {
 	return sphAllocateSmall ( int ( iLimit * sizeof ( T ) ) );
 }
@@ -20,7 +20,7 @@ inline T* sph::CustomStorage_T<T>::Allocate ( int64_t iLimit )
 #if WITH_SMALLALLOC
 
 template<typename T>
-inline void sph::CustomStorage_T<T>::Deallocate ( T* pData, int64_t iLimit )
+void sph::CustomStorage_T<T>::Deallocate ( T* pData, int64_t iLimit )
 {
 	sphDeallocateSmall ( (BYTE*)pData, int ( iLimit * sizeof ( T ) ) );
 }
@@ -28,7 +28,7 @@ inline void sph::CustomStorage_T<T>::Deallocate ( T* pData, int64_t iLimit )
 #else
 
 template<typename T>
-FORCE_INLINE void sph::CustomStorage_T<T>::Deallocate ( T * pData )
+void sph::CustomStorage_T<T>::Deallocate ( T * pData )
 {
 	sphDeallocateSmall ( (BYTE*)pData );
 }

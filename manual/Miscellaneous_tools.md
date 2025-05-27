@@ -37,7 +37,7 @@ Here are the available commands:
 * `--mergeidf NODE1.idf [NODE2.idf ...] --out GLOBAL.idf` combines multiple .idf files into a single one. The extra parameter `--skip-uniq` will ignore unique words (df=1).
 * `--morph TABLENAME` applies morphology to the given stdin and directs the result to stdout.
 * `--check TABLENAME` evaluates the table data files for consistency errors that could be caused by bugs in `indexer` or hardware faults. `--check` is also functional on RT tables, RAM, and disk chunks. Additional options:
-    - `--check-id-dups` assesses for duplicate ids
+    - `--check-id-dups` checks for duplicate document IDs in the plain table and all disk chunks of an RT table
     - `--check-disk-chunk CHUNK_NAME` checks only a specific disk chunk of an RT table. The argument is the numeric extension of the RT table's disk chunk to be checked.
 * `--strip-path` removes the path names from all file names referred to from the table (stopwords, wordforms, exceptions, etc). This is helpful when verifying tables built on a different machine with possibly varying path layouts.
 * `--rotate` is only compatible with `--check` and determines whether to check the table waiting for rotation, i.e., with a .new extension. This is useful when you wish to validate your table before actually putting it into use.

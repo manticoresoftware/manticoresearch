@@ -13,7 +13,6 @@
 #ifndef _sphinxexcerpt_
 #define _sphinxexcerpt_
 
-#include "sphinxquery.h"
 #include "sphinx.h"
 
 enum ESphSpz : DWORD

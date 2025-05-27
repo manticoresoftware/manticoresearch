@@ -40,7 +40,7 @@ SHOW PLUGINS;
 SHOW BUDDY PLUGINS
 ```
 
-> NOTE: `SHOW BUDDY PLUGINS` requires [Manticore Buddy](../Installation/Manticore_Buddy.md). If it doesn't work, make sure Buddy is installed.
+> NOTE: `SHOW BUDDY PLUGINS` requires [Manticore Buddy](../../Installation/Manticore_Buddy.md). If it doesn't work, make sure Buddy is installed.
 
 This will display all available plugins, including core and local ones.
 To remove a plugin, make sure to use the name listed in the Package column.

@@ -11,14 +11,14 @@ curl -s "http://localhost:9308/cli?show%20version" | awk '!/row.*in set/'; echo
 | Daemon    | %{VERSION} #!/\s*/!#|
 | Columnar  | columnar %{VERSION} #!/\s*/!#|
 | Secondary | secondary %{VERSION} #!/\s*/!#|
-| KNN       | knn %{VERSION} #!/\s*/!#|
+| Knn       | knn %{VERSION} #!/\s*/!#|
 | Buddy     | buddy %{VERSION} #!/\s*/!#|
 +-----------+----------------------------------+
 ––– input –––
 curl -s "http://localhost:9308/cli_json" -d "show version"; echo
 ––– output –––
-[{"total":%{NUMBER},"error":"","warning":"","columns":[{"Component":{"type":"string"}},{"Version":{"type":"string"}}],"data":[{"Component":"Daemon","Version":"%{VERSION}"},{"Component":"Columnar","Version":"columnar %{VERSION}"},{"Component":"Secondary","Version":"secondary %{VERSION}"},{"Component":"KNN","Version":"knn %{VERSION}"},{"Component":"Buddy","Version":"buddy %{VERSION}"}]}]
+[{"total":%{NUMBER},"error":"","warning":"","columns":[{"Component":{"type":"string"}},{"Version":{"type":"string"}}],"data":[{"Component":"Daemon","Version":"%{VERSION}"},{"Component":"Columnar","Version":"columnar %{VERSION}"},{"Component":"Secondary","Version":"secondary %{VERSION}"},{"Component":"Knn","Version":"knn %{VERSION}"},{"Component":"Buddy","Version":"buddy %{VERSION}"}]}]
 ––– input –––
 curl -s "http://localhost:9308/sql?mode=raw" -d "show version"; echo
 ––– output –––
-[{"total":%{NUMBER},"error":"","warning":"","columns":[{"Component":{"type":"string"}},{"Version":{"type":"string"}}],"data":[{"Component":"Daemon","Version":"%{VERSION}"},{"Component":"Columnar","Version":"columnar %{VERSION}"},{"Component":"Secondary","Version":"secondary %{VERSION}"},{"Component":"KNN","Version":"knn %{VERSION}"},{"Component":"Buddy","Version":"buddy %{VERSION}"}]}]
+[{"total":%{NUMBER},"error":"","warning":"","columns":[{"Component":{"type":"string"}},{"Version":{"type":"string"}}],"data":[{"Component":"Daemon","Version":"%{VERSION}"},{"Component":"Columnar","Version":"columnar %{VERSION}"},{"Component":"Secondary","Version":"secondary %{VERSION}"},{"Component":"Knn","Version":"knn %{VERSION}"},{"Component":"Buddy","Version":"buddy %{VERSION}"}]}]

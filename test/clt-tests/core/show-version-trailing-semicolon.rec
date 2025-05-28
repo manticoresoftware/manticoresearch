@@ -11,7 +11,7 @@ curl -s "http://localhost:9308/cli?show%20version" | awk '!/row.*in set/'; echo
 | Daemon     | %{VERSION} #!/\s*/!#|
 | Columnar   | columnar %{VERSION} #!/\s*/!#|
 | Secondary  | secondary %{VERSION} #!/\s*/!#|
-| KNN        | knn %{VERSION} #!/\s*/!#|
+| Knn        | knn %{VERSION} #!/\s*/!#|
 | Embeddings | embeddings #!/([0-9]+\.[0-9]+\.[0-9]+)\s*/!#|
 | Buddy      | buddy %{VERSION} #!/\s*/!#|
 +------------+----------------------------------+

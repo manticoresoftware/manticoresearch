@@ -15,5 +15,8 @@ Component: Secondary
 Component: Knn
   Version: knn %{VERSION}
 *************************** 5. row ***************************
+Component: Embeddings
+  Version: embeddings #!/([0-9]+\.[0-9]+\.[0-9]+)/!#
+*************************** 6. row ***************************
 Component: Buddy
   Version: buddy %{VERSION}

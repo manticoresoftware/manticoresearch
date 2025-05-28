@@ -401,6 +401,16 @@ mysql -h0 -P9306 -e "SELECT username FROM name WHERE MATCH('SMITH') OPTION cutof
 | APRYL SMYTH     |
 +-----------------+
 ––– input –––
+mysql -h0 -P9306 -e "SELECT * FROM name WHERE MATCH('SMITH') ORDER BY id ASC OPTION fuzzy=0;" > /tmp/result_fuzzy0.txt
+––– output –––
+––– input –––
+mysql -h0 -P9306 -e "SELECT * FROM name WHERE MATCH('SMITH') ORDER BY id ASC;" > /tmp/result_no_fuzzy.txt
+––– output –––
+––– input –––
+diff /tmp/result_fuzzy0.txt /tmp/result_no_fuzzy.txt; echo $?
+––– output –––
+0
+––– input –––
 mysql -h0 -P9306 -e "CALL AUTOCOMPLETE('jo', 'name', 1 AS fuzziness);" | tail -n +4 | sort
 ––– output –––
 +--------+

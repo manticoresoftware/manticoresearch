@@ -2193,13 +2193,16 @@ void SearchHandler_c::RunSubset ( int iStart, int iEnd )
 		AggrResult_t & tRes = m_dNAggrResults[i];
 		auto& pTableFunc = m_dTables[iStart+i];
 
+		if ( !pTableFunc )
+			continue;
+
+		if ( !tRes.m_iSuccesses )
+			continue;
+
 		// FIXME! log such queries properly?
-		if ( pTableFunc )
-		{
-			SwitchProfile ( m_pProfile, SPH_QSTATE_TABLE_FUNC );
-			if ( !pTableFunc->Process ( &tRes, tRes.m_sError ) )
-				tRes.m_iSuccesses = 0;
-		}
+		SwitchProfile ( m_pProfile, SPH_QSTATE_TABLE_FUNC );
+		if ( !pTableFunc->Process ( &tRes, tRes.m_sError ) )
+			tRes.m_iSuccesses = 0;
 	}
 
 	/////////

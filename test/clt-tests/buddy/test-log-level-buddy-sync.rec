@@ -1,0 +1,82 @@
+––– block: ../base/start-searchd-with-buddy –––
+––– input –––
+apt-get install jq -y > /dev/null; echo $?
+––– output –––
+debconf: delaying package configuration, since apt-utils is not installed
+0
+––– input –––
+BUDDY_PORT=$(grep "started.*at http://127.0.0.1:" /var/log/manticore/searchd.log | tail -1 | sed 's/.*http:\/\/127.0.0.1:\([0-9]*\).*/\1/'); echo "Buddy API port: $BUDDY_PORT"
+––– output –––
+Buddy API port: 34183
+––– input –––
+sleep 2; curl -s -X GET localhost:$BUDDY_PORT/config; echo
+––– output –––
+{"log_level":"info"}
+––– input –––
+curl -s -X GET localhost:$BUDDY_PORT/config | jq -r '.log_level'
+––– output –––
+info
+––– input –––
+mysql -h0 -P9306 -e "SET GLOBAL log_level=debug;"
+––– output –––
+––– input –––
+sleep 1; curl -s -X GET localhost:$BUDDY_PORT/config | jq -r '.log_level'
+––– output –––
+debug
+––– input –––
+mysql -h0 -P9306 -e "SET GLOBAL log_level=debugv;"
+––– output –––
+––– input –––
+sleep 1; curl -s -X GET localhost:$BUDDY_PORT/config | jq -r '.log_level'
+––– output –––
+debugv
+––– input –––
+mysql -h0 -P9306 -e "SET GLOBAL log_level=debugvv;"
+––– output –––
+––– input –––
+sleep 1; curl -s -X GET localhost:$BUDDY_PORT/config | jq -r '.log_level'
+––– output –––
+debugvv
+––– input –––
+mysql -h0 -P9306 -e "SET GLOBAL log_level=info;"
+––– output –––
+––– input –––
+sleep 1; curl -s -X GET localhost:$BUDDY_PORT/config | jq -r '.log_level'
+––– output –––
+info
+––– input –––
+curl -s -X POST -d '{"log_level":"debug"}' localhost:$BUDDY_PORT/config; echo
+––– output –––
+{"log_level":"debug"}
+––– input –––
+mysql -h0 -P9306 -e "SHOW VARIABLES LIKE 'log_level';"
+––– output –––
++---------------+-------+
+| Variable_name | Value |
++---------------+-------+
+| log_level     | debug |
++---------------+-------+
+––– input –––
+curl -s -X POST -d '{"log_level":"debugvv"}' localhost:$BUDDY_PORT/config; echo
+––– output –––
+{"log_level":"debugvv"}
+––– input –––
+mysql -h0 -P9306 -e "SHOW VARIABLES LIKE 'log_level';"
+––– output –––
++---------------+---------+
+| Variable_name | Value   |
++---------------+---------+
+| log_level     | debugvv |
++---------------+---------+
+––– input –––
+curl -s -X POST -d '{"log_level":"info"}' localhost:$BUDDY_PORT/config; echo
+––– output –––
+{"log_level":"info"}
+––– input –––
+mysql -h0 -P9306 -e "SHOW VARIABLES LIKE 'log_level';"
+––– output –––
++---------------+-------+
+| Variable_name | Value |
++---------------+-------+
+| log_level     | info  |
++---------------+-------+

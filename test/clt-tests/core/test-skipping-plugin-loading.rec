@@ -52,7 +52,7 @@ stdbuf -oL searchd --stopwait 2>&1 | grep -i 'SIGTERM'
 ––– output –––
 [#!/[0-9a-zA-Z\:\.\s]+/!#] [#!/[0-9]+/!#] stop: successfully sent SIGTERM to pid %{NUMBER}
 ––– input –––
-sed -i '/data_dir = \/var\/lib\/manticore/a\    buddy_path = manticore-executor -n /usr/share/manticore/modules/manticore-buddy/src/main.php --debugv --skip=manticoresoftware/buddy-plugin-replace' /etc/manticoresearch/manticore.conf
+sed -i '/data_dir = \/var\/lib\/manticore/a\    buddy_path = manticore-executor -n /usr/share/manticore/modules/manticore-buddy/src/main.php --log-level=debugv --skip=manticoresoftware/buddy-plugin-replace' /etc/manticoresearch/manticore.conf
 ––– output –––
 ––– block: ../base/start-searchd-with-buddy –––
 ––– input –––
@@ -95,7 +95,7 @@ stdbuf -oL searchd --stopwait 2>&1 | grep -i 'SIGTERM'
 ––– output –––
 [#!/[0-9a-zA-Z\:\.\s]+/!#] [#!/[0-9]+/!#] stop: successfully sent SIGTERM to pid %{NUMBER}
 ––– input –––
-sed -i '/buddy_path =/c\    buddy_path = manticore-executor -n /usr/share/manticore/modules/manticore-buddy/src/main.php --debugv --skip=manticoresoftware/buddy-plugin-alter-rename-table --skip=manticoresoftware/buddy-plugin-replace' /etc/manticoresearch/manticore.conf
+sed -i '/buddy_path =/c\    buddy_path = manticore-executor -n /usr/share/manticore/modules/manticore-buddy/src/main.php --log-level=debugv --skip=manticoresoftware/buddy-plugin-alter-rename-table --skip=manticoresoftware/buddy-plugin-replace' /etc/manticoresearch/manticore.conf
 ––– output –––
 ––– block: ../base/start-searchd-with-buddy –––
 ––– input –––
@@ -119,7 +119,7 @@ stdbuf -oL searchd --stopwait 2>&1 | grep -i 'SIGTERM'
 ––– output –––
 [#!/[0-9a-zA-Z\:\.\s]+/!#] [#!/[0-9]+/!#] stop: successfully sent SIGTERM to pid %{NUMBER}
 ––– input –––
-sed -i '/buddy_path =/c\    buddy_path = manticore-executor -n /usr/share/manticore/modules/manticore-buddy/src/main.php --debugv' /etc/manticoresearch/manticore.conf
+sed -i '/buddy_path =/c\    buddy_path = manticore-executor -n /usr/share/manticore/modules/manticore-buddy/src/main.php --log-level=debugv' /etc/manticoresearch/manticore.conf
 ––– output –––
 ––– block: ../base/start-searchd-with-buddy –––
 ––– input –––

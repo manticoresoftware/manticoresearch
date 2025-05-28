@@ -1,7 +1,4 @@
 ––– block: ../base/start-searchd –––
-––– comment –––
-# Test for bug #3199 - URL encoding with + symbols
-# Create test tables
 ––– input –––
 mysql -h0 -P9306 -e "CREATE TABLE articles(title text, content text); INSERT INTO articles VALUES(1,'test','content');"
 ––– output –––
@@ -17,16 +14,10 @@ mysql -h0 -P9306 -e "SHOW TABLES"
 | articles | rt   |
 | products | rt   |
 +----------+------+
-––– comment –––
-# Test ALTER TABLE RENAME with + encoding - demonstrates bug #3199
-# Expected: should work like with %20 encoding
-# Actual: returns syntax error
 ––– input –––
 curl -s "http://localhost:9308/sql?query=ALTER+TABLE+products+RENAME+products_new"
 ––– output –––
 {"error":"P03: syntax error, unexpected tablename, expecting '=' near 'products_new'"}
-––– comment –––
-# Verify table was not renamed due to bug
 ––– input –––
 mysql -h0 -P9306 -e "SHOW TABLES"
 ––– output –––
@@ -36,55 +27,37 @@ mysql -h0 -P9306 -e "SHOW TABLES"
 | articles | rt   |
 | products | rt   |
 +----------+------+
-––– comment –––
-# Test SHOW VERSION with + encoding - this works correctly
 ––– input –––
 curl -s "http://localhost:9308/sql?query=SHOW+VERSION" | grep -o '"Component":"Daemon"'
 ––– output –––
 "Component":"Daemon"
-––– comment –––
-# Test SELECT with + encoding - this works correctly
 ––– input –––
 curl -s "http://localhost:9308/sql?query=SELECT+*+FROM+articles+LIMIT+1" | grep -o '"_id":1'
 ––– output –––
 "_id":1
-––– comment –––
-# Test SELECT with WHERE clause and + encoding - works correctly
 ––– input –––
 curl -s "http://localhost:9308/sql?query=SELECT+title,+content+FROM+articles+WHERE+MATCH('test')+LIMIT+10" | grep -o '"title":"test"'
 ––– output –––
 "title":"test"
-––– comment –––
-# Test error handling - verify it shows correct error, not "Source table + not exists"
 ––– input –––
 curl -s "http://localhost:9308/sql?query=ALTER+TABLE+nonexistent+RENAME+new_name"
 ––– output –––
 {"error":"Source table nonexistent not exists"}
-––– comment –––
-# Test mixed encoding - %20 and + in same query
 ––– input –––
 curl -s "http://localhost:9308/sql?query=SELECT%20title+FROM+articles+WHERE%20MATCH('test')" | grep -o '"title":"test"'
 ––– output –––
 "title":"test"
-––– comment –––
-# Add test data with spaces
 ––– input –––
 mysql -h0 -P9306 -e "INSERT INTO articles(title,content) VALUES('test with spaces','content with special chars');"
 ––– output –––
-––– comment –––
-# Test complex SELECT query with many + symbols
 ––– input –––
 curl -s "http://localhost:9308/sql?query=SELECT+id,+title,+content+FROM+articles+ORDER+BY+id+DESC+LIMIT+10" | grep -o '"total":2'
 ––– output –––
 "total":2
-––– comment –––
-# Test ALTER TABLE with %20 encoding - this works correctly
 ––– input –––
 curl -s "http://localhost:9308/sql?query=ALTER%20TABLE%20articles%20RENAME%20articles2"
 ––– output –––
 [{"total":0,"error":"","warning":""}]
-––– comment –––
-# Verify %20 encoding worked
 ––– input –––
 mysql -h0 -P9306 -e "SHOW TABLES"
 ––– output –––
@@ -94,20 +67,14 @@ mysql -h0 -P9306 -e "SHOW TABLES"
 | articles2 | rt   |
 | products  | rt   |
 +-----------+------+
-––– comment –––
-# Test SELECT on renamed table with + encoding
 ––– input –––
 curl -s "http://localhost:9308/sql?query=SELECT+COUNT(*)+AS+cnt+FROM+articles2" | grep -o '"cnt":2'
 ––– output –––
 "cnt":2
-––– comment –––
-# Clean up - rename table back using %20 encoding since + doesn't work for ALTER
 ––– input –––
 curl -s "http://localhost:9308/sql?query=ALTER%20TABLE%20articles2%20RENAME%20articles"
 ––– output –––
 [{"total":0,"error":"","warning":""}]
-––– comment –––
-# Final verification
 ––– input –––
 mysql -h0 -P9306 -e "SHOW TABLES"
 ––– output –––

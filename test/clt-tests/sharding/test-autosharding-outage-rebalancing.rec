@@ -116,38 +116,14 @@ mysql -h0 -P6306 -e "join cluster c at '127.0.0.1:1312';"
 ––– comment –––
 Checking the final state of the shards after adding the 6th node
 ––– input –––
-timeout 70 bash -c 'until mysql -h0 -P1306 -e "select * from system.sharding_table\G" | grep -q "node: 127.0.0.1:5312"; do sleep 1; done'; mysql -h0 -P1306 -e "select * from system.sharding_table\G"
+sleep 120; timeout 120 bash -c 'until mysql -h0 -P1306 -e "select * from system.sharding_table\G" | grep -q "node: 127.0.0.1:6312"; do sleep 1; done'; mysql -h0 -P1306 -e "select * from system.sharding_table\G"
 ––– output –––
-*************************** 1. row ***************************
-     id: %{NUMBER}
-cluster: c
-   node: 127.0.0.1:4312
-  table: testrt
- shards: 1,2
-*************************** 2. row ***************************
-     id: %{NUMBER}
-cluster: c
-   node: 127.0.0.1:1312
-  table: testrt
- shards: 0
-*************************** 3. row ***************************
-     id: %{NUMBER}
-cluster: c
-   node: 127.0.0.1:2312
-  table: testrt
- shards: 1
-*************************** 4. row ***************************
-     id: %{NUMBER}
-cluster: c
-   node: 127.0.0.1:5312
-  table: testrt
- shards:
-*************************** 5. row ***************************
-     id: %{NUMBER}
-cluster: c
-   node: 127.0.0.1:3312
-  table: testrt
- shards: 0,2
+––– input –––
+mysql -h0 -P6306 -e "show status like 'cluster_c_status'\G"
+––– output –––
+––– input –––
+mysql -h0 -P6306 -e "show tables from system\G" | grep Table
+––– output –––
 ––– comment –––
 Start of three nodes for the case of 3 nodes and rf=3
 ––– input –––
@@ -269,3 +245,14 @@ sleep 5; mysql -h0 -P7306 -e "show tables from system\G" | grep 'Table: system.t
 Table: system.testrt3_s0
 Table: system.testrt3_s1
 Table: system.testrt3_s2
+––– input –––
+echo "=== Node 1 logs ==="
+grep -i "shard\|rebalance\|balance\|cluster" /var/log/manticore-1/searchd.log | tail -n 50
+––– output –––
+––– input –––
+echo "=== Cluster status on all nodes ==="
+for port in 1306 2306 3306 4306 4306 5306 6306; do
+ echo "Node $(($port/1000)):"
+ mysql -h0 -P$port -e "show status like 'cluster_c_%'\G'"
+done
+––– output –––

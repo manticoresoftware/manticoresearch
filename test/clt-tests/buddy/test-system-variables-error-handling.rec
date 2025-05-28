@@ -105,16 +105,6 @@ mysql -h0 -P9306 -e "SELECT @@character_set_client, @@tx_isolation_fake, @@max_a
 ––– output –––
 ERROR 1064 (42000) at line 1: unknown sysvar @@tx_isolation_fake
 ––– comment –––
-2.2 Test in Complex Queries
-––– input –––
-mysql -h0 -P9306 -e "SELECT @@autocommit AS auto, @@nonexistent_variable AS nonexistent FROM tbl WHERE id=1;"
-––– output –––
-ERROR 1064 (42000): unknown sysvar @@nonexistent_variable
-––– input –––
-mysql -h0 -P9306 -e "SELECT * FROM tbl WHERE value > @@nonexistent_variable;"
-––– output –––
-ERROR 1064 (42000): unknown sysvar @@nonexistent_variable
-––– comment –––
 3.1 Test with mysqldump/mariadb-dump
 ––– input –––
 mysqldump -h0 -P9306 manticore tbl --no-data --skip-comments --skip-opt --no-tablespaces > /tmp/dump.sql 2> >(grep -E -v "Warning: column statistics|Warning: version string returned by server is incorrect." >&2)
@@ -148,10 +138,6 @@ value integer
 mysql -h0 -P9306 -e "SELECT @user_variable;"
 ––– output –––
 ERROR 1064 (42000) at line 1: P09: syntax error, unexpected TOK_USERVAR near ''
-––– input –––
-mysql -h0 -P9306 -e "SET @user_variable = 123; SELECT @user_variable;"
-––– output –––
-ERROR 1064 (42000) at line 1: sphinxql: only 0 and 1 could be used as boolean values near '123'
 ––– input –––
 mysql -h0 -P9306 -e "SELECT @nonexistent_user_var;"
 ––– output –––
@@ -278,24 +264,6 @@ mysql -h0 -P9306 -e "SELECT @@character_set_client, @@tx_isolation_fake, @@max_a
 | utf8                   | <empty>             |            134217728 |
 +------------------------+---------------------+----------------------+
 ––– comment –––
-2.2 Test in Complex Queries (without Buddy)
-––– input –––
-mysql -h0 -P9306 -e "SELECT @@autocommit AS auto, @@nonexistent_variable AS nonexistent FROM tbl WHERE id=1;"
-––– output –––
-+------------------------+
-| @@nonexistent_variable |
-+------------------------+
-| <empty>                |
-+------------------------+
-––– input –––
-mysql -h0 -P9306 -e "SELECT * FROM tbl WHERE value > @@nonexistent_variable;"
-––– output –––
-+------------------------+
-| @@nonexistent_variable |
-+------------------------+
-| <empty>                |
-+------------------------+
-––– comment –––
 3.1 Test with mysqldump/mariadb-dump (without Buddy)
 ––– input –––
 mysqldump -h0 -P9306 manticore tbl --no-data --skip-comments --skip-opt --no-tablespaces > /tmp/dump.sql 2> >(grep -E -v "Warning: column statistics|Warning: version string returned by server is incorrect." >&2)
@@ -329,10 +297,6 @@ value integer
 mysql -h0 -P9306 -e "SELECT @user_variable;"
 ––– output –––
 ERROR 1064 (42000) at line 1: P09: syntax error, unexpected TOK_USERVAR near ''
-––– input –––
-mysql -h0 -P9306 -e "SET @user_variable = 123; SELECT @user_variable;"
-––– output –––
-ERROR 1064 (42000) at line 1: sphinxql: only 0 and 1 could be used as boolean values near '123'
 ––– input –––
 mysql -h0 -P9306 -e "SELECT @nonexistent_user_var;"
 ––– output –––

@@ -83,6 +83,12 @@ bool CSphColumnInfo::IsIndexedSI() const
 }
 
 
+bool CSphColumnInfo::IsStored() const
+{
+	return m_uAttrFlags & CSphColumnInfo::ATTR_STORED;
+}
+
+
 CSphString sphDumpAttr ( const CSphColumnInfo & tAttr )
 {
 	CSphString sRes;

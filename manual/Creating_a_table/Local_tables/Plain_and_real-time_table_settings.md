@@ -556,8 +556,8 @@ These timeouts work in conjunction.  A RAM chunk will be flushed if *either* tim
 
 In addition to the `diskchunk_flush_write_timeout` and `diskchunk_flush_search_timeout` settings, flushing a RAM chunk may be skipped under the following conditions:
 
-* ongoing optimization: If an optimization process is currently running, and the number of existing disk chunks has reached or exceeded a configured internal `cutoff`, flushing is deferred to avoid interfering with the optimization.
-* too few documents in RAM segments: If the number of documents across RAM segments is below a small threshold (8192), flushing is skipped to avoid creating very small disk chunks. This helps minimize unnecessary disk writes and chunk fragmentation.
+* ongoing optimization: If an optimization process is currently running, and the number of existing disk chunks has reached or exceeded a configured internal `cutoff` threshold, flushing is deferred to avoid interfering with the optimization.
+* too few documents in RAM segments: If the number of documents across RAM segments is below a minimum threshold (8192), flushing is skipped to avoid creating very small disk chunks. This helps minimize unnecessary disk writes and chunk fragmentation.
 
 ### Plain table settings:
 

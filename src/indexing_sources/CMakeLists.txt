@@ -19,7 +19,7 @@ target_link_libraries ( indexer_sources INTERFACE sourcedoc )
 
 # tsv/csv pipe
 add_library ( source_svpipe source_svpipe.cpp source_svpipe.h )
-target_link_libraries ( source_svpipe PUBLIC lextra )
+target_link_libraries ( source_svpipe PUBLIC lextra indexcheck )
 target_link_libraries ( indexer_sources INTERFACE source_svpipe )
 
 # generic sql
@@ -74,7 +74,7 @@ endif ()
 #xmlpipe (with or without iconv)
 if (WITH_EXPAT)
 	add_library ( source_xmlpipe2 source_xmlpipe2.cpp source_xmlpipe2.h )
-	target_link_libraries ( source_xmlpipe2 PRIVATE lextra )
+	target_link_libraries ( source_xmlpipe2 PRIVATE lextra indexcheck )
 	if (DL_EXPAT)
 		target_link_libraries ( source_xmlpipe2 PRIVATE EXPAT::EXPAT_ld )
 	else ()

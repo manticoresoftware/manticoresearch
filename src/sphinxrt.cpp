@@ -41,6 +41,7 @@
 #include "tracer.h"
 #include "pseudosharding.h"
 #include "knnmisc.h"
+#include "knnlib.h"
 #include "jsonsi.h"
 #include "std/sys.h"
 #include "dict/infix/infix_builder.h"
@@ -1333,7 +1334,7 @@ enum class MergeSeg_e : BYTE
 	EXIT 	= 4,	// shutdown and exit
 };
 
-class RtIndex_c final : public RtIndex_i, public ISphNoncopyable, public ISphWordlist, public ISphWordlistSuggest, public IndexAlterHelper_c, public DebugCheckHelper_c
+class RtIndex_c final : public RtIndex_i, public ISphNoncopyable, public ISphWordlist, public ISphWordlistSuggest, public IndexAlterHelper_c
 {
 public:
 						RtIndex_c ( CSphString sIndexName, CSphString sPath, CSphSchema tSchema, int64_t iRamSize, bool bKeywordDict );
@@ -1521,6 +1522,9 @@ private:
 	mutable int					m_iTrackFailedRamActions;
 	int							m_iAlterGeneration = 0;		// increased every time index altered
 
+	std::unique_ptr<TableEmbeddings_c> m_pEmbeddings;
+	CSphVector<AttrWithModel_t> m_dAttrsWithModels;
+
 	bool						BindAccum ( RtAccum_t * pAccExt, CSphString* pError = nullptr ) final;
 
 	int							CompareWords ( const RtWord_t * pWord1, const RtWord_t * pWord2 ) const;
@@ -1590,6 +1594,8 @@ private:
 	void						StopMergeSegmentsWorker();
 	bool						NeedStoreWordID () const override;
 	int64_t						GetMemLimit() const final { return m_iRtMemLimit; }
+
+	bool						LoadEmbeddingModels ( CSphString & sError );
 	bool						VerifyKNN ( InsertDocData_c & tDoc, CSphString & sError ) const;
 
 	template<typename PRED>
@@ -2048,7 +2054,15 @@ bool RtIndex_c::VerifyKNN ( InsertDocData_c & tDoc, CSphString & sError ) const
 		if ( tAttr.m_eAttrType!=SPH_ATTR_FLOAT_VECTOR || !tAttr.IsIndexedKNN() )
 			continue;
 
-		if ( !bDefault && iNumValues!=tAttr.m_tKNN.m_iDims )
+		if ( m_dAttrsWithModels.GetLength() && m_dAttrsWithModels[i].m_pModel )
+		{
+			if ( iNumValues!=0 )
+			{
+				sError.SetSprintf ( "attribute '%s' has model_name=%s specified, but vector contents with %d values is provided", tAttr.m_sName.cstr(), tAttr.m_tKNNModel.m_sModelName.c_str(), iNumValues );
+				return false;
+			}
+		}
+		else if ( !bDefault && iNumValues!=tAttr.m_tKNN.m_iDims )
 		{
 			sError.SetSprintf ( "KNN error: data has %d values, index '%s' needs %d values", iNumValues, tAttr.m_sName.cstr(), tAttr.m_tKNN.m_iDims );
 			return false;
@@ -2155,6 +2169,9 @@ bool RtIndex_c::AddDocument ( InsertDocData_c & tDoc, bool bReplace, const CSphS
 
 	ISphHits * pHits = tSrc.IterateHits ( sError );
 	pAcc->GrabLastWarning ( sWarning );
+
+	if ( m_pEmbeddings )
+		pAcc->FetchEmbeddingsSrc ( tDoc, m_dAttrsWithModels );
 
 	if ( !VerifyKNN ( tDoc, sError ) )
 		return false;
@@ -3022,6 +3039,15 @@ bool RtIndex_c::Commit ( int * pDeleted, RtAccum_t * pAcc, CSphString * pError )
 	pAcc->Sort();
 	CleanupHitDuplicates ( pAcc->m_dAccum );
 
+	CSphString sError;
+	if ( !pAcc->FetchEmbeddings ( m_pEmbeddings.get(), m_dAttrsWithModels, sError ) )
+	{
+		if ( pError )
+			*pError = sError;
+
+		return false;
+	}
+
 	CSphString sCreateError;
 	RtSegmentRefPtf_t pNewSeg { CreateSegment ( pAcc, m_iWordsCheckpoint, m_tSettings.m_eHitless, m_dHitlessWords, sCreateError ) };
 	if ( !pNewSeg && !sCreateError.IsEmpty() )
@@ -3046,7 +3072,6 @@ bool RtIndex_c::Commit ( int * pDeleted, RtAccum_t * pAcc, CSphString * pError )
 
 	// now on to the stuff that needs locking and recovery
 	int iKilled = 0;
-	CSphString sError;
 	if ( !CommitReplayable ( pNewSeg, pAcc->m_dAccumKlist, pAcc->m_iAccumBytes, iKilled, sError ) )
 	{
 		if ( pError )
@@ -4979,6 +5004,83 @@ bool RtIndex_c::PreallocDiskChunks ( FilenameBuilder_i * pFilenameBuilder, StrVe
 }
 
 
+static bool ParseKNNFrom ( AttrWithModel_t & tAttrWithModel, const CSphString & sFrom, const ISphSchema & tSchema, CSphString & sError )
+{
+	StrVec_t dFrom;
+	sphSplit ( dFrom, sFrom.cstr(), " \t," );
+
+	for ( const auto & i : dFrom )
+	{
+		int iAttrId = tSchema.GetAttrIndex ( i.cstr() );
+		int iFieldId = tSchema.GetFieldIndex ( i.cstr() );
+
+		if ( iFieldId==-1 && iAttrId==-1 )
+		{
+			sError.SetSprintf ( "embedding source '%s' not found", i.cstr() );
+			return false;
+		}
+
+		if ( iAttrId!=-1 && tSchema.GetAttr(iAttrId).m_eAttrType!=SPH_ATTR_STRING )
+		{
+			sError.SetSprintf ( "embedding source attribute '%s' is not a string", i.cstr() );
+			return false;
+		}
+
+		tAttrWithModel.m_dFrom.Add ( { iFieldId==-1 ? iAttrId : iFieldId, iFieldId!=-1 } );
+	}
+
+	return true;
+}
+
+
+bool RtIndex_c::LoadEmbeddingModels ( CSphString & sError )
+{
+	if ( m_pEmbeddings )
+		return true;
+
+	bool bHaveModels = false;
+	for ( int i = 0 ; i < m_tSchema.GetAttrsCount(); i++ )
+		bHaveModels |= !m_tSchema.GetAttr(i).m_tKNNModel.m_sModelName.empty();
+
+	if ( !bHaveModels )
+		return true;
+
+	m_dAttrsWithModels.Resize ( m_tSchema.GetAttrsCount() );
+
+	m_pEmbeddings = std::make_unique<TableEmbeddings_c>();
+	for ( int i = 0; i < m_tSchema.GetAttrsCount(); i++ )
+	{
+		const auto & tAttr = m_tSchema.GetAttr(i);
+		m_dAttrsWithModels[i].m_pModel = nullptr;
+
+		if ( tAttr.m_tKNNModel.m_sModelName.empty() )
+			continue;
+
+		if ( !ParseKNNFrom ( m_dAttrsWithModels[i], tAttr.m_sKNNFrom, m_tSchema, sError ) )
+		{
+			m_pEmbeddings.reset();
+			return false;
+		}
+
+		if ( !m_pEmbeddings->Load ( tAttr.m_sName, tAttr.m_tKNNModel, sError ) )
+		{
+			m_pEmbeddings.reset();
+			return false;
+		}
+
+		auto pModel = m_pEmbeddings->GetModel ( tAttr.m_sName );
+		assert(pModel);
+
+		m_dAttrsWithModels[i].m_pModel = pModel;
+
+		// fixme! modifying the schema
+		const_cast<CSphColumnInfo&>(tAttr).m_tKNN.m_iDims = pModel->GetDims();
+	}
+
+	return true;
+}
+
+
 bool RtIndex_c::Prealloc ( bool bStripPath, FilenameBuilder_i * pFilenameBuilder, StrVec_t & dWarnings )
 {
 	MEMORY ( MEM_INDEX_RT );
@@ -5013,7 +5115,6 @@ bool RtIndex_c::Prealloc ( bool bStripPath, FilenameBuilder_i * pFilenameBuilder
 	if ( !LoadMeta ( pFilenameBuilder, bStripPath, uVersion, bRebuildInfixes, dWarnings ) )
 		return false;
 
-
 	CSphString sMutableFile = GetFilename ( SPH_EXT_SETTINGS );
 	m_tMutableSettings.m_iMemLimit = m_iRtMemLimit; // to avoid overriding value from meta by default value, if no settings provided
 	if ( !m_tMutableSettings.Load ( sMutableFile.cstr(), GetName() ) )
@@ -5027,6 +5128,12 @@ bool RtIndex_c::Prealloc ( bool bStripPath, FilenameBuilder_i * pFilenameBuilder
 	if ( m_tSchema.HasColumnarAttrs() && !IsColumnarLibLoaded() )
 	{
 		m_sLastError.SetSprintf ( "failed to load table with columnar attributes without columnar library" );
+		return false;
+	}
+
+	if ( m_tSchema.HasKNNAttrs() && !IsKNNLibLoaded() )
+	{
+		m_sLastError.SetSprintf ( "failed to load table with knn attributes without knn library" );
 		return false;
 	}
 
@@ -5050,6 +5157,9 @@ bool RtIndex_c::Prealloc ( bool bStripPath, FilenameBuilder_i * pFilenameBuilder
 	// field lengths
 	ARRAY_FOREACH ( i, m_dFieldLens )
 		m_dFieldLens[i] = m_dFieldLensDisk[i] + m_dFieldLensRam[i];
+
+	if ( !LoadEmbeddingModels(m_sLastError) )
+		return false;
 
 	// set up values for on timer save
 	m_iSavedTID = m_iTID;

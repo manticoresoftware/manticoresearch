@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2017-2024, Manticore Software LTD (https://manticoresearch.com)
+// Copyright (c) 2017-2025, Manticore Software LTD (https://manticoresearch.com)
 // Copyright (c) 2001-2016, Andrew Aksyonoff
 // Copyright (c) 2008-2016, Sphinx Technologies Inc
 // All rights reserved
@@ -23,8 +23,10 @@
 #include "sorterscroll.h"
 #include "std/base64.h"
 
-extern int g_iAgentQueryTimeoutMs;	// global (default). May be override by index-scope values, if one specified
+// uncomment to see everything came to parser.
+//#define DUMP_INCOMING_QUERIES
 
+extern int g_iAgentQueryTimeoutMs; // global (default). May be override by index-scope values, if one specified
 
 void SqlNode_t::SetValueInt ( int64_t iValue ) noexcept
 {
@@ -183,21 +185,29 @@ void SqlParserTraits_c::PushQuery()
 	m_pStmt = &m_dStmt.Last();
 }
 
-
-CSphString & SqlParserTraits_c::ToString ( CSphString & sRes, const SqlNode_t & tNode ) const
+Str_t SqlParserTraits_c::GetStrt ( const SqlNode_t& tNode ) const noexcept
 {
-	if ( tNode.m_iType>=0 )
-		sRes.SetBinary ( m_pBuf + tNode.m_iStart, tNode.m_iEnd - tNode.m_iStart );
-	else switch ( tNode.m_iType )
+	if ( tNode.m_iType >= 0 )
+		return { m_pBuf + tNode.m_iStart, tNode.m_iEnd - tNode.m_iStart };
+	switch ( tNode.m_iType )
 	{
-	case SPHINXQL_TOK_COUNT:	sRes = "@count"; break;
-	case SPHINXQL_TOK_GROUPBY:	sRes = "@groupby"; break;
-	case SPHINXQL_TOK_WEIGHT:	sRes = "@weight"; break;
-	default:					assert ( 0 && "internal error: unknown parser ident code" );
+	case SPHINXQL_TOK_COUNT: return FROMS ( "@count" );
+	case SPHINXQL_TOK_GROUPBY: return FROMS ( "@groupby" );
+	case SPHINXQL_TOK_WEIGHT: return FROMS ( "@weight" );
+	default: assert ( 0 && "internal error: unknown parser ident code" ); return FROMS ( "@unknown" );
 	}
+}
+
+CSphString & SqlParserTraits_c::ToString ( CSphString & sRes, const SqlNode_t & tNode ) const noexcept
+{
+	sRes.SetBinary ( GetStrt ( tNode ) );
 	return sRes;
 }
 
+CSphString SqlParserTraits_c::GetString ( const SqlNode_t& tNode ) const noexcept
+{
+	return GetStrt ( tNode );
+}
 
 CSphString SqlParserTraits_c::ToStringUnescape ( const SqlNode_t & tNode ) const
 {
@@ -241,19 +251,13 @@ void SqlParserTraits_c::DefaultOk ( std::initializer_list<const char*> sList )
 
 void SqlParserTraits_c::SetIndex ( const SqlNode_t& tNode ) const
 {
-	ToString ( m_pStmt->m_sIndex, tNode );
-	// unquote index name
-	if ( ( tNode.m_iEnd - tNode.m_iStart ) > 2 && m_pStmt->m_sIndex.cstr()[0] == '\'' && m_pStmt->m_sIndex.cstr()[tNode.m_iEnd - tNode.m_iStart - 1] == '\'' )
-		m_pStmt->m_sIndex = m_pStmt->m_sIndex.SubString ( 1, m_pStmt->m_sIndex.Length() - 2 );
+	ToString ( m_pStmt->m_sIndex, tNode ).Unquote();
 }
 
 void SqlParserTraits_c::SetIndex ( const CSphString& sIndex ) const
 {
-	auto iLen = sIndex.Length();
-	if ( iLen > 2 && sIndex.cstr()[0] == '\'' && sIndex.cstr()[iLen-1] == '\'' )
-		m_pStmt->m_sIndex = sIndex.SubString ( 1, iLen - 2 );
-	else
-		m_pStmt->m_sIndex = sIndex;
+	m_pStmt->m_sIndex = sIndex;
+	m_pStmt->m_sIndex.Unquote();
 }
 
 
@@ -323,6 +327,19 @@ bool SqlParserTraits_c::SetTableForOptions ( const SqlNode_t & tNode )
 	}
 
 	return true;
+}
+
+bool SqlParserTraits_c::NumIsSaturated ( const SqlNode_t& tNode )
+{
+	const auto uLimit = (uint64_t)LLONG_MAX + (tNode.m_bNegative ? 1ULL : 0ULL);
+	if ( tNode.m_uValue > uLimit )
+	{
+		assert ( m_pParseError );
+		const char* szSign = tNode.m_bNegative?"-":"";
+		m_pParseError->SetSprintf ( "number %s" UINT64_FMT " is out of range [-9223372036854775808..9223372036854775807]", szSign, tNode.m_uValue );
+		return true;
+	}
+	return false;
 }
 
 //////////////////////////////////////////////////////////////////////////
@@ -413,7 +430,6 @@ public:
 	void			SetGroupbyLimit ( int iLimit );
 	void			SetLimit ( int iOffset, int iLimit );
 
-	float			ToFloat ( const SqlNode_t & tNode ) const;
 	int64_t			DotGetInt ( const SqlNode_t & tNode ) const;
 
 	void 			AddStringSubkey ( const SqlNode_t & tNode ) const;
@@ -438,7 +454,7 @@ private:
 };
 
 using YYSTYPE = SqlNode_t;
-STATIC_ASSERT ( IS_TRIVIALLY_COPYABLE ( SqlNode_t ), YYSTYPE_MUST_BE_TRIVIAL_FOR_RESIZABLE_PARSER_STACK );
+static_assert ( IS_TRIVIALLY_COPYABLE ( SqlNode_t ), "YYSTYPE must be trivial for resizable parser stack" );
 # define YYSTYPE_IS_TRIVIAL 1
 # define YYSTYPE_IS_DECLARED 1
 
@@ -530,11 +546,6 @@ static bool CheckInteger ( const CSphString & sOpt, const CSphString & sVal, CSp
 bool SqlParserTraits_c::CheckInteger ( const CSphString & sOpt, const CSphString & sVal ) const
 {
 	return ::CheckInteger ( sOpt, sVal, *m_pParseError );
-}
-
-float SqlParser_c::ToFloat ( const SqlNode_t & tNode ) const
-{
-	return (float) strtod ( m_pBuf+tNode.m_iStart, nullptr );
 }
 
 int64_t SqlParser_c::DotGetInt ( const SqlNode_t & tNode ) const
@@ -1315,7 +1326,7 @@ bool SqlParser_c::SetMatch ( const YYSTYPE & tValue )
 
 bool SqlParser_c::AddMatch ( const SqlNode_t & tValue, const SqlNode_t & tIndex )
 {
-	// so the index from tIndex is either in m_pQuery->m_sIndexes OR equal to m_pQuery->m_sJoinIdx\
+	// so the index from tIndex is either in m_pQuery->m_sIndexes OR equal to m_pQuery->m_sJoinIdx
 	// check it!
 	StrVec_t dQueryIndexes;
 	ParseIndexList ( m_pQuery->m_sIndexes, dQueryIndexes );
@@ -1792,21 +1803,13 @@ void SqlParser_c::SetLimit ( int iOffset, int iLimit )
 	m_pQuery->m_iLimit = iLimit;
 }
 
-#ifndef NDEBUG
-CSphVector<CSphNamedInt> & SqlParser_c::GetNamedVec ( int iIndex )
-#else
-CSphVector<CSphNamedInt> & SqlParser_c::GetNamedVec ( int )
-#endif
+CSphVector<CSphNamedInt> & SqlParser_c::GetNamedVec ( [[maybe_unused]] int iIndex )
 {
 	assert ( m_bNamedVecBusy && iIndex==0 );
 	return m_dNamedVec;
 }
 
-#ifndef NDEBUG
-void SqlParser_c::FreeNamedVec ( int iIndex )
-#else
-void SqlParser_c::FreeNamedVec ( int )
-#endif
+void SqlParser_c::FreeNamedVec ( [[maybe_unused]] int iIndex )
 {
 	assert ( m_bNamedVecBusy && iIndex==0 );
 	m_bNamedVecBusy = false;
@@ -2103,8 +2106,9 @@ bool sphParseSqlQuery ( Str_t sQuery, CSphVector<SqlStmt_t> & dStmt, CSphString 
 		return false;
 	}
 
-	// uncomment to see everything came to parser.
-//	sphWarning ( "Query: %s", sQuery.first );
+#ifdef DUMP_INCOMING_QUERIES
+	sphWarning ( "Query: %s", sQuery.first );
+#endif
 
 	int iRes = yyparse ( &tParser );
 

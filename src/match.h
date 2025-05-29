@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2017-2024, Manticore Software LTD (https://manticoresearch.com)
+// Copyright (c) 2017-2025, Manticore Software LTD (https://manticoresearch.com)
 // Copyright (c) 2001-2016, Andrew Aksyonoff
 // Copyright (c) 2008-2016, Sphinx Technologies Inc
 // All rights reserved
@@ -14,6 +14,7 @@
 
 #include "schema/locator.h"
 
+#pragma pack(push,4)
 /// search query match (document info plus weight/tag)
 class CSphMatch : public ISphNoncopyable
 {
@@ -23,17 +24,18 @@ class CSphMatch : public ISphNoncopyable
 	friend class CSphRsetSchema;
 
 public:
-	RowID_t					m_tRowID {INVALID_ROWID};	///< document ID
-	const CSphRowitem *		m_pStatic {nullptr};		///< static part (stored in and owned by the index)
+	// m_pDynamic intentionally placed first, to allow copying subset of match without it
 	CSphRowitem *			m_pDynamic {nullptr};		///< dynamic part (computed per query; owned by the match)
+	const CSphRowitem *		m_pStatic {nullptr};		///< static part (stored in and owned by the index)
+	RowID_t					m_tRowID {INVALID_ROWID};	///< document ID
 	int						m_iWeight {0};				///< my computed weight
 	int						m_iTag {0};					///< my index tag
 
 public:
 	CSphMatch () = default;
 	CSphMatch ( RowID_t tRowID, const CSphRowitem* pStatic )
-		: m_tRowID { tRowID }
-		, m_pStatic { pStatic }
+		: m_pStatic { pStatic }
+		, m_tRowID { tRowID }
 	{}
 
 	/// dtor. frees everything
@@ -71,6 +73,8 @@ public:
 	/// fetches blobs from both data ptr attrs and pooled blob attrs
 	ByteBlob_t FetchAttrData ( const CSphAttrLocator & tLoc, const BYTE * pPool ) const;
 };
+
+#pragma pack(pop)
 
 /// specialized swapper
 void Swap ( CSphMatch & a, CSphMatch & b );

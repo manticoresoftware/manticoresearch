@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2017-2024, Manticore Software LTD (https://manticoresearch.com)
+// Copyright (c) 2017-2025, Manticore Software LTD (https://manticoresearch.com)
 // Copyright (c) 2001-2016, Andrew Aksyonoff
 // Copyright (c) 2008-2016, Sphinx Technologies Inc
 // All rights reserved
@@ -44,6 +44,16 @@ FORCE_INLINE int64_t count_of ( const CONTAINER& dData, FILTER cond ) NO_THREAD_
 	for ( const auto& dItem : dData )
 		if ( cond ( dItem ) )
 			++iRes;
+
+	return iRes;
+}
+
+template<typename INT, typename CONTAINER, typename SIZER>
+FORCE_INLINE INT sum_of ( const CONTAINER& dData, SIZER amount ) NO_THREAD_SAFETY_ANALYSIS
+{
+	INT iRes = 0;
+	for ( const auto& dItem : dData )
+		iRes += amount (dItem);
 
 	return iRes;
 }

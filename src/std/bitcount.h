@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2017-2024, Manticore Software LTD (https://manticoresearch.com)
+// Copyright (c) 2017-2025, Manticore Software LTD (https://manticoresearch.com)
 // Copyright (c) 2001-2016, Andrew Aksyonoff
 // Copyright (c) 2008-2016, Sphinx Technologies Inc
 // All rights reserved
@@ -14,10 +14,10 @@
 
 #include "ints.h"
 
-int sphBitCount ( DWORD n );
+int sphBitCount ( DWORD n ) noexcept;
 
-int sphBitCount ( uint64_t n );
+int sphBitCount ( uint64_t n ) noexcept;
 
-int sphBitCount ( BYTE n );
+int sphBitCount ( BYTE n ) noexcept;
 
 #include "bitcount_impl.h"

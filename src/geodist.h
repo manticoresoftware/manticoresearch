@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2017-2024, Manticore Software LTD (https://manticoresearch.com)
+// Copyright (c) 2017-2025, Manticore Software LTD (https://manticoresearch.com)
 // Copyright (c) 2001-2016, Andrew Aksyonoff
 // Copyright (c) 2008-2016, Sphinx Technologies Inc
 // All rights reserved
@@ -54,5 +54,17 @@ void		GeoTesselate ( CSphVector<float> & dIn );
 
 /// get geodist conversion coeff
 bool		GeoDistanceUnit ( const char * szUnit, float & fCoeff );
+
+inline bool CheckLatRad ( float fLat )
+{
+	constexpr float fPI2 = 3.14159265358979323846 * .5;
+	return fLat >= -fPI2 && fLat <= fPI2;
+}
+
+inline bool CheckLonRad ( float fLon )
+{
+	constexpr float fPI = 3.14159265358979323846;
+	return fLon >= -fPI && fLon <= fPI;
+}
 
 #endif // _geodist_

@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2017-2024, Manticore Software LTD (https://manticoresearch.com)
+// Copyright (c) 2017-2025, Manticore Software LTD (https://manticoresearch.com)
 // Copyright (c) 2001-2016, Andrew Aksyonoff
 // Copyright (c) 2008-2016, Sphinx Technologies Inc
 // All rights reserved
@@ -12,8 +12,9 @@
 
 #pragma once
 
-#include "sphinxstd.h"
-
+// HAVE_DLOPEN
+#include "config.h"
+#if HAVE_DLOPEN
 #if _WIN32
 	#define RTLD_LAZY		0
 	#define RTLD_NOW		0
@@ -24,16 +25,13 @@
 	void *			dlopen ( const char * libname, int );
 	int				dlclose ( void * lib );
 	const char *	dlerror();
-#else // !_WIN32
-#include "config.h"
-#if HAVE_DLOPEN
+#else
 #	include <dlfcn.h>
-#endif // HAVE_DLOPEN
+#endif
+#include "std/string.h"
+#include <utility>
 #endif // _WIN32
 
-#if HAVE_DLOPEN
-
-#include <utility>
 
 class ScopedHandle_c final
 {
@@ -42,42 +40,26 @@ public:
 		: m_pHandle ( pHandle )
 	{}
 
-	~ScopedHandle_c()
-	{
-		if ( m_pHandle )
-			dlclose ( m_pHandle );
-	}
+	~ScopedHandle_c();
 
-	void * Leak()
+	void * Leak() noexcept
 	{
 		return std::exchange ( m_pHandle, nullptr );
 	}
 
-	void * Get() { return m_pHandle; }
+	void * Get() const noexcept { return m_pHandle; }
 
 private:
 	void * m_pHandle = nullptr;
 };
 
-template <typename T>
-bool LoadFunc ( T & pFunc, void * pHandle, const char * szFunc, const CSphString & sLib, CSphString & sError )
-{
-	pFunc = (T) dlsym ( pHandle, szFunc );
-	if ( !pFunc )
-	{
-		sError.SetSprintf ( "symbol '%s' not found in '%s'", szFunc, sLib.cstr() );
-		dlclose ( pHandle );
-		return false;
-	}
+void * DlSym ( void * pHandle, const char * szFunc, const CSphString & sLib, CSphString & sError );
 
-	return true;
-}
-#else
-template <typename T>
+template<typename T>
 bool LoadFunc ( T & pFunc, void * pHandle, const char * szFunc, const CSphString & sLib, CSphString & sError )
 {
-	return false;
+	pFunc = (T) DlSym ( pHandle, szFunc, sLib, sError  );
+	return !!pFunc;
 }
-#endif // HAVE_DLOPEN
 
 CSphString TryDifferentPaths ( const CSphString & sLibfile, const CSphString & sFullpath, int iVersion );

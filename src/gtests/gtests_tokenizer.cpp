@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2017-2024, Manticore Software LTD (https://manticoresearch.com)
+// Copyright (c) 2017-2025, Manticore Software LTD (https://manticoresearch.com)
 // Copyright (c) 2001-2016, Andrew Aksyonoff
 // Copyright (c) 2008-2016, Sphinx Technologies Inc
 // All rights reserved
@@ -15,6 +15,7 @@
 #include "sphinxint.h"
 #include "tokenizer/tokenizer.h"
 #include "tokenizer/tok_internals.h"
+#include "sphinxquery/xqparser.h"
 
 // Miscelaneous tests of tokenizer
 
@@ -641,10 +642,10 @@ static void CheckQuerySoftSpace ( const XQNode_t * pNode, const int * pQPos, int
 	ARRAY_FOREACH ( i, dChildren )
 	{
 		const XQNode_t * pChild = dChildren[i];
-		for ( auto * pChildren : pChild->m_dChildren )
+		for ( auto * pChildren : pChild->dChildren() )
 			dChildren.Add ( pChildren );
 
-		for ( auto & dWord : pChild->m_dWords )
+		for ( auto & dWord : pChild->dWords() )
 			dTerms.Add ( &dWord );
 	}
 
@@ -834,7 +835,8 @@ TEST_F ( QueryParser, query_transforms )
 	{
 		{ { "nnn", 10 }, { "aaa", 1 }, { "bbb", 1 }, { 0, 0 } },
 		{ { "nnn", 10 }, { "aaa", 100 }, { "bbb", 200 }, { 0, 0 } },
-		{ { "nnn", 10 }, { "aaa", 1 }, { "bbb", 2 }, { "qqq", 500 }, { "www", 100 }, { 0, 0 } }
+		{ { "nnn", 10 }, { "aaa", 1 }, { "bbb", 2 }, { "qqq", 500 }, { "www", 100 }, { 0, 0 } },
+		{ {"aaa",0}, {"bbb",0}, {"ccc",0}, {"ddd",0}, {"eee",0}, {"fff",0}, {"ggg",35}, {"hhh",63}, {"iii",2445}, {0,0} }, // obfuscated from #3356
 	};
 
 	const QueryTest_t dTest[] =
@@ -931,6 +933,12 @@ TEST_F ( QueryParser, query_transforms )
 			"( ( aaa   ( ccc | nnn ) ) | ( bbb   ( nnn | ddd ) ) )",
 			"( ( aaa   ( ccc | nnn ) ) | ( bbb   ( nnn | ddd ) ) )",
 			( const CKeywordHits * ) &dPseudoHits[1]
+		},
+		{	// obfuscated test case based on #3356. M.b. need XQDEBUG 1
+			"(aaa (( ccc (hhh | iii)) | (ddd (fff | iii)) | (eee (ggg | iii)))) | (bbb ((ccc (hhh | iii)) | (ddd (fff | iii)) | (eee (ggg | iii))))",
+			"( ( aaa   ( ( ccc   ( hhh | iii ) ) | ( ddd   ( fff | iii ) ) | ( eee   ( ggg | iii ) ) ) ) | ( bbb   ( ( ccc   ( hhh | iii ) ) | ( ddd   ( fff | iii ) ) | ( eee   ( ggg | iii ) ) ) ) )",
+			"( ( aaa   eee   iii ) | ( bbb   eee   iii ) | ( ( aaa | bbb )   ccc   hhh ) | ( ( aaa | bbb )   ddd   fff ) | ( ( ( aaa   eee ) | ( bbb   eee ) )   ggg ) | ( ( ( ( aaa | bbb )   ccc ) | ( ( aaa | bbb )   ddd ) )   iii ) )",
+			(const CKeywordHits *) &dPseudoHits[3]
 		},
 
 		// COMMON SUBTERM WITH MIXED PHRASES/PROXIMITY terms

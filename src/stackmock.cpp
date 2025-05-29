@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2017-2024, Manticore Software LTD (https://manticoresearch.com)
+// Copyright (c) 2017-2025, Manticore Software LTD (https://manticoresearch.com)
 // Copyright (c) 2001-2016, Andrew Aksyonoff
 // Copyright (c) 2008-2016, Sphinx Technologies Inc
 // All rights reserved
@@ -17,6 +17,7 @@
 #include "searchdsql.h"
 #include "attribute.h"
 #include "querycontext.h"
+#include "sphinxquery/xqparser.h"
 
 // hard-coded definitions to avoid probing (that is - to avoid confusing memcheck programs)
 // run searchd with --logdebug --console once, read values, then write them here and uncomment these lines
@@ -31,13 +32,13 @@ protected:
 	int m_iComplexity;
 
 protected:
-	int CalcUsedStackEdge ( BYTE uFiller )
+	DWORD CalcUsedStackEdge ( BYTE uFiller )
 	{
 		ARRAY_CONSTFOREACH ( i, m_dMockStack )
 			if ( m_dMockStack[i]!=uFiller )
-				return m_dMockStack.GetLength ()-i;
+				return m_dMockStack.GetULength()-i;
 
-		return m_dMockStack.GetLength ();
+		return m_dMockStack.GetULength ();
 	}
 
 	void MockInitMem ( BYTE uFiller )
@@ -45,7 +46,7 @@ protected:
 		::memset ( m_dMockStack.begin (), uFiller, m_dMockStack.GetLengthBytes () );
 	}
 
-	int MeasureStackWithPattern ( BYTE uPattern )
+	DWORD MeasureStackWithPattern ( BYTE uPattern )
 	{
 		MockInitMem ( uPattern );
 		MockParseTest ();
@@ -53,7 +54,7 @@ protected:
 		return sphRoundUp ( iUsedStackEdge, 4 );
 	}
 
-	int MeasureStack ()
+	DWORD MeasureStack ()
 	{
 		auto iStartStackDE = MeasureStackWithPattern ( 0xDE );
 		auto iStartStackAD = MeasureStackWithPattern ( 0xAD );
@@ -73,31 +74,31 @@ public:
 	StackSizeTuplet_t MockMeasureStack ()
 	{
 		constexpr int iMeasures = 20;
-		std::vector<std::pair<int,int>> dMeasures { iMeasures };
+		std::vector<std::pair<int,DWORD>> dMeasures { iMeasures };
 		int i = 0;
 
 		int iDepth = 0;
-		int iStack = 0;
+		DWORD uStack = 0;
 		while ( i<iMeasures )
 		{
 			BuildMockExprWrapper ( iDepth++ );
-			auto iThisStack = MeasureStack ();
-			if ( iThisStack == iStack )
+			auto uThisStack = MeasureStack ();
+			if ( uThisStack == uStack )
 				continue;
 
 			dMeasures[i].first = iDepth-1;
-			dMeasures[i].second = iThisStack;
-			auto iDelta = iThisStack-iStack;
-			iStack = iThisStack;
+			dMeasures[i].second = uThisStack;
+			auto iDelta = uThisStack-uStack;
+			uStack = uThisStack;
 			++i;
-			if ( iStack + iDelta >= m_dMockStack.GetLengthBytes() )
+			if ( uStack + iDelta >= m_dMockStack.GetLengthBytes() )
 				break;
 		}
 
 		auto iValues = i;
-		std::vector<std::pair<int, int>> dDeltas { iMeasures };
+		std::vector<std::pair<int, DWORD>> dDeltas { iMeasures };
 		sphLogDebugv( "========= start measure ==============" );
-		std::pair<int,int> dInitial {0,0};
+		std::pair<int,DWORD> dInitial {0,0};
 		for ( i=0; i<iValues; ++i )
 		{
 			dDeltas[i].first = dMeasures[i].first-dInitial.first;
@@ -108,15 +109,15 @@ public:
 
 		int iStart = dMeasures.front().second;
 
-		iStack = 0;
+		uStack = 0;
 		for ( i=iValues-1; i>0; --i )
 		{
 			if ( dDeltas[i].first !=1 )
 				break;
-			iStack = Max ( iStack, dDeltas[i].second );
+			uStack = Max ( uStack, dDeltas[i].second );
 		}
 
-		int iDelta = sphRoundUp ( iStack, 8 );
+		int iDelta = sphRoundUp ( uStack, 8 );
 		return { iStart, iDelta };
 	}
 
@@ -549,7 +550,7 @@ ATTRIBUTE_NO_SANITIZE_ADDRESS StackSizeTuplet_t FullTextStackSize_c::MockMeasure
 
 
 template<typename MOCK, int FRAMEVAL=0, int INITVAL=0>
-ATTRIBUTE_NO_SANITIZE_ADDRESS void DetermineStackSize ()
+ATTRIBUTE_NO_SANITIZE_ADDRESS void DetermineStackSize (StringBuilder_c& sExport)
 {
 	int iFrameSize = FRAMEVAL;
 	int iInitSize = INITVAL;
@@ -573,8 +574,10 @@ ATTRIBUTE_NO_SANITIZE_ADDRESS void DetermineStackSize ()
 #endif
 		}
 		iFrameSize = tNewSize.m_iEval;
-		if ( bMocked )
+		if ( bMocked ) {
 			sphLogDebug ( "Frame %s is %d (mocked, as no env MANTICORE_%s=%d found)", szReport, iFrameSize, szEnv, iFrameSize );
+			sExport.Sprint ( "export MANTICORE_", szEnv, "=", iFrameSize, "\n" );
+		}
 		else
 			sphLogDebug ( "Frame %s %d (from env MANTICORE_%s)", szReport, iFrameSize, szEnv );
 	} else
@@ -598,8 +601,10 @@ ATTRIBUTE_NO_SANITIZE_ADDRESS void DetermineStackSize ()
 #endif
 		}
 		iInitSize = tNewSize.m_iCreate;
-		if ( bMocked )
+		if ( bMocked ) {
 			sphLogDebug ( "Starting %s is %d (mocked, as no env MANTICORE_START_%s=%d found)", szReport, iInitSize, szEnv, iInitSize );
+			sExport.Sprint ( "export MANTICORE_START_", szEnv, "=", iInitSize, "\n");
+		}
 		else
 			sphLogDebug ( "Starting %s %d (from env MANTICORE_START_%s)", szReport, iInitSize, szEnv );
 	} else
@@ -611,7 +616,7 @@ ATTRIBUTE_NO_SANITIZE_ADDRESS void DetermineStackSize ()
 }
 
 
-void DetermineNodeItemStackSize()
+void DetermineNodeItemStackSize( StringBuilder_c& sExport )
 {
 	// some values for x86_64: clang 12.0.1 relwithdebinfo = 768, debug = 4208. gcc 9.3 relwithdebinfo = 16, debug = 256
 #ifdef KNOWN_CREATE_SIZE
@@ -619,7 +624,7 @@ void DetermineNodeItemStackSize()
 #else
 	DetermineStackSize<CreateExprStackSize_c>
 #endif
-		();
+		(sExport);
 
 	// some values for x86_64: clang 12.0.1 relwithdebinfo = 32, debug = 48. gcc 9.3 relwithdebinfo = 48, debug = 48
 #ifdef KNOWN_EXPR_SIZE
@@ -627,11 +632,11 @@ void DetermineNodeItemStackSize()
 #else
 	DetermineStackSize<EvalExprStackSize_c>
 #endif
-		();
-	DetermineStackSize<DeleteExprStackSize_c>();
+		(sExport);
+	DetermineStackSize<DeleteExprStackSize_c>(sExport);
 }
 
-void DetermineFilterItemStackSize ()
+void DetermineFilterItemStackSize ( StringBuilder_c& sExport )
 {
 	// some values for x86_64: clang 12.0.1 relwithdebinfo = 208, debug = 400. gcc 9.3 relwithdebinfo = 240, debug = 272
 #ifdef KNOWN_FILTER_SIZE
@@ -639,10 +644,10 @@ void DetermineFilterItemStackSize ()
 #else
 	DetermineStackSize<FilterCreationMeasureStack_c>
 #endif
-		();
+		(sExport);
 }
 
-void DetermineMatchStackSize()
+void DetermineMatchStackSize(StringBuilder_c& sExport)
 {
 #ifdef KNOWN_MATCH_SIZE
 #ifdef START_KNOWN_MATCH_SIZE
@@ -653,6 +658,6 @@ void DetermineMatchStackSize()
 #else
 	DetermineStackSize<FullTextStackSize_c, 0>
 #endif
-		();
+		(sExport);
 }
 

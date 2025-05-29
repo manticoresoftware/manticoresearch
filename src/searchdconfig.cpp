@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2017-2024, Manticore Software LTD (https://manticoresearch.com)
+// Copyright (c) 2017-2025, Manticore Software LTD (https://manticoresearch.com)
 // All rights reserved
 //
 // This program is free software; you can redistribute it and/or modify
@@ -30,7 +30,6 @@ static Coro::RWLock_c g_tCfgIndexesLock;
 static CSphVector<ClusterDesc_t> g_dCfgClusters;
 static CSphVector<IndexDesc_t> g_dCfgIndexes GUARDED_BY ( g_tCfgIndexesLock );
 
-static CSphString	g_sLogFile;
 static CSphString	g_sDataDir;
 static CSphString	g_sConfigPath;
 static bool			g_bConfigless = false;
@@ -95,13 +94,13 @@ void ModifyDaemonPaths ( CSphConfigSection & hSearchd, FixPathAbsolute_fn && fnP
 		hSearchd.AddEntry ( szBinlogKey, sBinlogDir.cstr() );
 	}
 
-	if ( fnPathFix && hSearchd.Exists ( szBinlogKey ) )
-	{
-		CSphString sBinlogPath ( hSearchd.GetStr( szBinlogKey ) );
-		fnPathFix ( sBinlogPath );
-		hSearchd.Delete ( szBinlogKey );
-		hSearchd.AddEntry ( szBinlogKey, sBinlogPath.cstr() );
-	}
+	if ( !fnPathFix )
+		return;
+
+	CSphString sBinlogPath ( hSearchd.GetStr( szBinlogKey ) );
+	fnPathFix ( sBinlogPath );
+	hSearchd.Delete ( szBinlogKey );
+	hSearchd.AddEntry ( szBinlogKey, sBinlogPath.cstr() );
 }
 
 
@@ -699,7 +698,6 @@ static const char * g_sJsonConfName = "manticore.json";
 bool LoadConfigInt ( const CSphConfig & hConf, const CSphString & sConfigFile, CSphString & sError ) REQUIRES (MainThread)
 {
 	const CSphConfigSection & hSearchd = hConf["searchd"]["searchd"];
-	g_sLogFile = hSearchd.GetStr ( "log", "" );
 
 	g_bConfigless = hSearchd.Exists("data_dir");
 	if ( !g_bConfigless )
@@ -1327,13 +1325,13 @@ static void DeleteExtraIndexFiles ( CSphIndex * pIndex, const StrVec_t * pExtFil
 }
 
 
-static void DeleteRtIndex ( CSphIndex * pIdx, const StrVec_t * pExtFiles )
+static void DeleteRtIndex ( CSphIndex * pIdx, const StrVec_t * pExtFiles, Handler fnOnDestroy )
 {
 	assert ( IsConfigless() );
 	if ( !pIdx->IsRT() && !pIdx->IsPQ() )
 		return;
 	auto pRt = static_cast<RtIndex_i*> ( pIdx );
-	pRt->IndexDeleted();
+	pRt->IndexDeleted ( std::move ( fnOnDestroy ) );
 	DeleteExtraIndexFiles ( pRt, pExtFiles );
 }
 
@@ -1352,7 +1350,7 @@ static void RemoveAndDeleteRtIndex ( const CSphString& sIndex )
 		return;
 
 	WIdx_c pIdx { pServed };
-	DeleteRtIndex ( pIdx, nullptr );
+	DeleteRtIndex ( pIdx, nullptr, nullptr );
 	g_pLocalIndexes->Delete ( sIndex );
 }
 
@@ -1408,7 +1406,7 @@ bool CreateNewIndexConfigless ( const CSphString & sIndex, const CreateTableSett
 			FixupIndexTID ( UnlockedHazardIdxFromServed ( *pDesc ), Binlog::LastTidFor ( sIndex ) );
 			if ( !PreallocNewIndex ( *pDesc, &hCfg, sIndex.cstr(), dWarnings, sError ) )
 			{
-				DeleteRtIndex ( UnlockedHazardIdxFromServed ( *pDesc ), nullptr );
+				DeleteRtIndex ( UnlockedHazardIdxFromServed ( *pDesc ), nullptr, nullptr );
 				return false;
 			}
 		}
@@ -1562,7 +1560,7 @@ static bool ReportEmptyDir ( const CSphString & sIndexName, CSphString * pMsg )
 	return false;
 }
 
-static bool DropLocalIndex ( const CSphString & sIndex, CSphString & sError, CSphString * pWarning )
+static bool DropLocalIndexWithCb ( const CSphString & sIndex, CSphString & sError, CSphString * pWarning, Handler fnOnDestroy=nullptr )
 {
 	assert ( IsConfigless() );
 	auto pServed = GetServed(sIndex);
@@ -1601,11 +1599,23 @@ static bool DropLocalIndex ( const CSphString & sIndex, CSphString & sError, CSp
 		if ( !pRt->Truncate(sError, RtIndex_i::DROP ) )
 			return false;
 
-		DeleteRtIndex ( pRt, &dExtFiles );
+		DeleteRtIndex ( pRt, &dExtFiles, std::move ( fnOnDestroy ) );
 		RemoveConfigIndex ( sIndex );
 	}
 
 	ReportEmptyDir ( sIndex, pWarning );
+	return true;
+}
+
+static bool DropLocalIndex ( const CSphString& sIndex, CSphString& sError, CSphString* pWarning )
+{
+	if ( !IsInsideCoroutine() )
+		return DropLocalIndexWithCb ( sIndex, sError, pWarning );
+
+	Coro::Waitable_T<bool> bDestroyed { false };
+	if ( !DropLocalIndexWithCb ( sIndex, sError, pWarning, [&bDestroyed] { bDestroyed.SetValueAndNotifyOne ( true ); } ) )
+		return false;
+	bDestroyed.Wait ( [] ( bool bVal ) { return bVal; } );
 	return true;
 }
 

@@ -118,7 +118,7 @@ However, if we have an RT table and a plain table containing the same data, and 
 Integer. Max time in milliseconds to wait for remote queries to complete, see [this section](../Creating_a_table/Creating_a_distributed_table/Remote_tables.md#agent_query_timeout).
 
 ### boolean_simplify
-`0` or `1` (`0` by default). `boolean_simplify=1` enables [simplifying the query](../Searching/Full_text_matching/Boolean_optimization.md) to speed it up.
+`0` or `1` (`1` by default). `boolean_simplify=1` enables [simplifying the query](../Searching/Full_text_matching/Boolean_optimization.md) to speed it up.
 
 ### comment
 String, user comment that gets copied to a query log file.
@@ -249,7 +249,7 @@ IDF flags can be combined; `plain` and `normalized` are mutually exclusive; `tfi
 ### jieba_mode
 Specifies the Jieba segmentation mode for the query.
 
-When using Jieba Chinese segmentation, it can sometimes help to use different segmentation modes for tokenizing the documents and the query. For a complete list of modes, refer to [jieba_mode](Creating_a_table/NLP_and_tokenization/Morphology.md#jieba_mode).
+When using Jieba Chinese segmentation, it can sometimes help to use different segmentation modes for tokenizing the documents and the query. For a complete list of modes, refer to [jieba_mode](../Creating_a_table/NLP_and_tokenization/Morphology.md#jieba_mode).
 
 ### index_weights
 Named integer list. Per-table user weights for ranking.

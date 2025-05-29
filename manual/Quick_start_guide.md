@@ -65,7 +65,7 @@ brew services start manticoresearch
 <!-- request Docker -->
 ```bash
 docker pull manticoresearch/manticore
-docker run -e EXTRA=1 --name manticore -p9306:9306 -p9308:9308 -p9312:9312 -d manticoresearch/manticore
+docker run --name manticore -p9306:9306 -p9308:9308 -p9312:9312 -d manticoresearch/manticore
 ```
 For persisting your data directory, read [how to use Manticore docker in production](Starting_the_server/Docker.md#Production-use)
 <!-- end -->
@@ -79,7 +79,7 @@ By default Manticore is waiting for your connections on:
   * port 9308 for HTTP/HTTPS connections
   * port 9312 for connections from other Manticore nodes and clients based on Manticore binary API
 
-More details about HTTPS support can be found in our learning course [here](https://play.manticoresearch.com/https/).   
+More details about HTTPS support can be found in our learning course [here](https://play.manticoresearch.com/https/).
 
 <!-- intro -->
 ##### Connect via MySQL:
@@ -124,6 +124,22 @@ client = manticoresearch.ApiClient(config)
 indexApi = manticoresearch.IndexApi(client)
 searchApi = manticoresearch.SearchApi(client)
 utilsApi = manticoresearch.UtilsApi(client)
+```
+
+<!-- intro -->
+##### Connect via [Python asyncio client](https://github.com/manticoresoftware/manticoresearch-php-asyncio):
+
+<!-- request Python-asyncio -->
+```python
+// https://github.com/manticoresoftware/manticoresearch-python-asyncio
+import manticoresearch
+config = manticoresearch.Configuration(
+    host = "http://127.0.0.1:9308"
+)
+async with manticoresearch.ApiClient(config) as client:
+    indexApi = manticoresearch.IndexApi(client)
+    searchApi = manticoresearch.searchApi(client)
+    utilsApi = manticoresearch.UtilsApi(client)
 ```
 
 <!-- intro -->
@@ -180,6 +196,30 @@ var utilsApi = new UtilsApi(httpClient, config, httpClientHandler);
 ```
 
 <!-- intro -->
+##### Connect via [Rust client](https://github.com/manticoresoftware/manticoresearch-rust):
+
+<!-- request Rust -->
+```rust
+// https://github.com/manticoresoftware/manticoresearch-rust
+use std::sync::Arc;
+use manticoresearch::{
+    apis::{
+        {configuration::Configuration,IndexApi,IndexApiClient,SearchApi,SearchApiClient,UtilsApi,UtilsApiClient}
+    },
+};
+
+async fn maticore_connect {
+	let configuration = Configuration {
+	    base_path: "http://127.0.0.1:9308".to_owned(),
+	    ..Default::default(),
+	};
+    let api_config = Arc::new(configuration);
+    let utils_api = UtilsApiClient::new(api_config.clone());
+    let index_api = IndexApiClient::new(api_config.clone());
+    let search_api = SearchApiClient::new(api_config.clone());
+```
+
+<!-- intro -->
 ##### Connect via [TypeScript client](https://github.com/manticoresoftware/manticoresearch-typescript):
 
 <!-- request Typescript -->
@@ -228,7 +268,7 @@ Note that it is possible to omit creating a table with an explicit create statem
 More information about different ways to create a table can be found in our learning courses:
 * [Creating a RealTime table](https://play.manticoresearch.com/rtmode/)
 * [Creating a table from the MySQL source](https://play.manticoresearch.com/mysql/)
-* [Creating a table from the CSV source](https://play.manticoresearch.com/csv/) 
+* [Creating a table from the CSV source](https://play.manticoresearch.com/csv/)
 * [Creating a table using the auto schema mechanism](https://play.manticoresearch.com/autoschema/)
 * [Creating a table with Logstash/Beats](https://play.manticoresearch.com/logstash/)
 * [Creating a table with Fluentbit](https://play.manticoresearch.com/vectordev/)
@@ -286,6 +326,16 @@ $index->create([
 ```python
 utilsApi.sql('create table products(title text, price float) morphology=\'stem_en\'')
 ```
+
+<!-- intro -->
+##### Python-asyncio:
+
+<!-- request Python-asyncio -->
+
+```python
+await utilsApi.sql('create table products(title text, price float) morphology=\'stem_en\'')
+```
+
 <!-- intro -->
 ##### Javascript:
 
@@ -301,8 +351,7 @@ res = await utilsApi.sql('create table products(title text, price float) morphol
 <!-- request Java -->
 
 ```java
-utilsApi.sql("create table products(title text, price float) morphology='stem_en'");
-
+utilsApi.sql("create table products(title text, price float) morphology='stem_en'", true);
 ```
 
 <!-- intro -->
@@ -311,8 +360,16 @@ utilsApi.sql("create table products(title text, price float) morphology='stem_en
 <!-- request C# -->
 
 ```clike
-utilsApi.Sql("create table products(title text, price float) morphology='stem_en'");
+utilsApi.Sql("create table products(title text, price float) morphology='stem_en'", true);
+```
 
+<!-- intro -->
+##### Rust:
+
+<!-- request Rust -->
+
+```rust
+utils_api.sql("create table products(title text, price float) morphology='stem_en'", Some(true)).await;
 ```
 
 <!-- intro -->
@@ -440,6 +497,18 @@ indexApi.insert({"table" : "products", "doc" : {"title" : "Crossbody Bag with Ta
 indexApi.insert({"table" : "products", "doc" : {"title" : "microfiber sheet set", "price" : 19.99}})
 indexApi.insert({"table" : "products", "doc" : {"title" : "Pet Hair Remover Glove", "price" : 7.99}})
 ```
+
+<!-- intro -->
+##### Python-asyncio:
+
+<!-- request Python-asyncio -->
+
+``` python
+await indexApi.insert({"table" : "products", "doc" : {"title" : "Crossbody Bag with Tassel", "price" : 19.85}})
+await indexApi.insert({"table" : "products", "doc" : {"title" : "microfiber sheet set", "price" : 19.99}})
+await indexApi.insert({"table" : "products", "doc" : {"title" : "Pet Hair Remover Glove", "price" : 7.99}})
+```
+
 <!-- intro -->
 ##### Javascript:
 
@@ -508,6 +577,31 @@ sqlresult = indexApi.Insert(insertDocumentRequest);
 ```
 
 <!-- intro -->
+##### Rust:
+
+<!-- request Rust -->
+
+``` rust
+let mut doc1 = HashMap::new();
+doc1.insert("title".to_string(), serde_json::json!("Crossbody Bag with Tassel"));
+doc1.insert("price".to_string(), serde_json::json!(19.85));
+let insert_req1 = InsertDocumentRequest::new("products".to_string(), serde_json::json!(doc1));
+let insert_res1 = index_api.insert(insert_req1).await;
+
+let mut doc2 = HashMap::new();
+doc2.insert("title".to_string(), serde_json::json!("microfiber sheet set"));
+doc2.insert("price".to_string(), serde_json::json!(19.99));
+let insert_req2 = InsertDocumentRequest::new("products".to_string(), serde_json::json!(doc2));
+let insert_res2 = index_api.insert(insert_req2).await;
+
+let mut doc3 = HashMap::new();
+doc3.insert("title".to_string(), serde_json::json!("Pet Hair Remover Glove"));
+doc3.insert("price".to_string(), serde_json::json!(7.99));
+let insert_req3 = InsertDocumentRequest::new("products".to_string(), serde_json::json!(doc3));
+let insert_res3 = index_api.insert(insert_req3).await;
+```
+
+<!-- intro -->
 ##### TypeScript:
 
 <!-- request TypeScript -->
@@ -546,7 +640,7 @@ indexReq = manticoreclient.NewInsertDocumentRequest("products", indexDoc)
 indexReq.SetId(2)
 apiClient.IndexAPI.Insert(context.Background()).InsertDocumentRequest(*indexReq).Execute()
 
-indexDoc = map[string]interface{} {"content": "Text 3", "name": "Doc 3", "cat": 7 }    	
+indexDoc = map[string]interface{} {"content": "Text 3", "name": "Doc 3", "cat": 7 }
 indexReq = manticoreclient.NewInsertDocumentRequest("products", indexDoc)
 indexReq.SetId(3)
 apiClient.IndexAPI.Insert(context.Background()).InsertDocumentRequest(*indexReq).Execute()
@@ -555,7 +649,7 @@ apiClient.IndexAPI.Insert(context.Background()).InsertDocumentRequest(*indexReq)
 <!-- end -->
 
 More details on the subject can be found here:
-* [Adding data to a plain table](https://play.manticoresearch.com/mysql/) 
+* [Adding data to a plain table](https://play.manticoresearch.com/mysql/)
 * [Adding data to a RealTime table](https://play.manticoresearch.com/rtintro/)
 
 
@@ -686,6 +780,25 @@ searchApi.search({"table":"products","query":{"query_string":"@title remove hair
 ```
 
 <!-- intro -->
+Python-asyncio
+<!-- request Python-asyncio -->
+
+```python
+await searchApi.search({"table":"products","query":{"query_string":"@title remove hair"},"highlight":{"fields":["title"]}})
+```
+<!-- response Python-asyncio -->
+``` python
+{'hits': {'hits': [{u'_id': u'1513686608316989452',
+                    u'_score': 1680,
+                    u'_source': {u'title': u'Pet Hair Remover Glove', u'price':7.99},
+                    u'highlight':{u'title':[u'Pet <b>Hair Remover</b> Glove']}}}],
+          'total': 1},
+ 'profile': None,
+ 'timed_out': False,
+ 'took': 0}
+```
+
+<!-- intro -->
 javascript
 <!-- request javascript -->
 
@@ -767,6 +880,42 @@ class SearchResponse {
 ```
 
 <!-- intro -->
+Rust
+<!-- request Rust -->
+
+```rust
+let query = SearchQuery {
+    query_string: Some(serde_json::json!("@title remove hair").into()),
+    ..Default::default()
+};
+let highlight = Highlight {
+    fields: Some(serde_json::json!(["title"]).into()),
+    ..Default::default()
+};
+let search_req = SearchRequest {
+    table: "products".to_string(),
+    query: Some(Box::new(query)),
+    highlight: Some(Box::new(highlight)),
+    ..Default::default(),
+};
+let search_res = search_api.search(search_req).await;
+```
+<!-- response Rust -->
+```rust
+class SearchResponse {
+    took: 103
+    timedOut: false
+    hits: class SearchResponseHits {
+        total: 1
+        maxScore: null
+        hits: [{_id=1513686608316989452, _score=1, _source={price=7.99, title=Pet Hair Remover Glove}, highlight={title=[Pet <b>Hair Remover</b> Glove]}}]
+        aggregations: null
+    }
+    profile: null
+}
+```
+
+<!-- intro -->
 TypeScript
 <!-- request TypeScript -->
 
@@ -780,9 +929,9 @@ res = await searchApi.search({
 <!-- response typescript -->
 ```typescript
 {
-    "hits": 
+    "hits":
     {
-        "hits": 
+        "hits":
         [{
             "_id": 1,
             "_score": 1400,
@@ -817,9 +966,9 @@ res, _, _ := apiClient.SearchAPI.Search(context.Background()).SearchRequest(*sea
 <!-- response Go -->
 ```go
 {
-    "hits": 
+    "hits":
     {
-        "hits": 
+        "hits":
         [{
             "_id": 1,
             "_score": 1400,
@@ -913,6 +1062,16 @@ $response = $client->update($doc);
 indexApi = api = manticoresearch.IndexApi(client)
 indexApi.update({"table" : "products", "id" : 1513686608316989452, "doc" : {"price":18.5}})
 ```
+
+<!-- intro -->
+##### Python-asyncio:
+
+<!-- request Python-asyncio -->
+``` python
+indexApi = api = manticoresearch.IndexApi(client)
+await indexApi.update({"table" : "products", "id" : 1513686608316989452, "doc" : {"price":18.5}})
+```
+
 <!-- intro -->
 ##### Javascript:
 
@@ -943,6 +1102,22 @@ Dictionary<string, Object> doc = new Dictionary<string, Object>();
 doc.Add("price", 18.5);
 UpdateDocumentRequest updateDocumentRequest = new UpdateDocumentRequest(index: "products", id: 1513686608316989452L, doc: doc);
 indexApi.Update(updateDocumentRequest);
+```
+
+<!-- intro -->
+##### Rust:
+
+<!-- request Rust -->
+``` rust
+let mut doc = HashMap::new();
+doc.insert("price".to_string(), serde_json::json!(18.5));
+let update_req = UpdateDocumentRequest {
+    table: serde_json::json!("products"),
+    doc: serde_json::json!(doc),
+    id: serde_json::json!(1513686608316989452),
+    ..Default::default(),
+};
+let update_res = index_api.update(update_req).await;
 ```
 
 <!-- intro -->
@@ -1046,6 +1221,15 @@ indexApi.delete({"table" : "products", "query": {"range":{"price":{"lte":10}}}})
 
 <!-- intro -->
 
+##### Python-asyncio:
+
+<!-- request Python-asyncio -->
+``` python
+await indexApi.delete({"table" : "products", "query": {"range":{"price":{"lte":10}}}})
+```
+
+<!-- intro -->
+
 ##### Javascript:
 
 <!-- request javascript -->
@@ -1081,8 +1265,26 @@ Dictionary<string, Object> price = new Dictionary<string, Object>();
 price.Add("lte", 10);
 Dictionary<string, Object> range = new Dictionary<string, Object>();
 range.Add("price", price);
-DeleteDocumentRequest deleteDocumentRequest = new DeleteDocumentRequest(index: "products", range: range);
+DeleteDocumentRequest deleteDocumentRequest = new DeleteDocumentRequest(index: "products", query: range);
 indexApi.Delete(deleteDocumentRequest);
+```
+
+<!-- intro -->
+
+##### Rust:
+
+<!-- request Rust -->
+``` rust
+let mut price_range= HashMap::new();
+price_range.insert("lte".to_string(), serde_json::json!(10));
+let mut range= HashMap::new();
+range.insert("price".to_string(), serde_json::json!(price_range));
+let delete_req = DeleteDocumentRequest {
+    table: "products".to_string(),
+    query: serde_json::json!(range),
+    ..Default::default(),
+};
+index_api.delete(delete_req).await;
 ```
 
 <!-- intro -->

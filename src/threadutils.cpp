@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2017-2024, Manticore Software LTD (https://manticoresearch.com)
+// Copyright (c) 2017-2025, Manticore Software LTD (https://manticoresearch.com)
 // Copyright (c) 2001-2016, Andrew Aksyonoff
 // Copyright (c) 2008-2016, Sphinx Technologies Inc
 // All rights reserved
@@ -582,7 +582,7 @@ public:
 		LOGINFO ( TPLIFE, TP ) << "Strand_c created";
 	}
 
-	void ScheduleOp ( Threads::details::SchedulerOperation_t* pOp, bool bVip ) final
+	void ScheduleOp ( Threads::details::SchedulerOperation_t* pOp, bool bVip ) noexcept
 	{
 		LOG ( ST, ST ) << "Post";
 		bool bFirst = Enqueue ( pOp );
@@ -595,20 +595,20 @@ public:
 		LOG ( ST, ST ) << "Post finished";
 	}
 
-	void ScheduleContinuationOp ( Threads::details::SchedulerOperation_t* pOp ) final
+	void ScheduleContinuationOp ( Threads::details::SchedulerOperation_t* pOp ) noexcept
 	{
 		LOG ( ST, ST ) << "ScheduleContinuation";
 		PostContinuationImpl ( pOp );
 		LOG ( ST, ST ) << "Post finished";
 	}
 
-	Keeper_t KeepWorking () final
+	Keeper_t KeepWorking () noexcept
 	{
 		assert ( m_pWorker );
 		return m_pWorker->KeepWorking();
 	}
 
-	bool SetBackend ( Scheduler_i* pBackend ) final
+	bool SetBackend ( Scheduler_i* pBackend ) noexcept
 	{
 		assert ( m_pWorker );
 		ScopedMutex_t tLock ( m_pWorker->m_dMutex );
@@ -628,7 +628,7 @@ public:
 		return true;
 	}
 
-	const char * Name () const final { return m_szName; }
+	const char * Name () const noexcept { return m_szName; }
 };
 
 Strand_c::Invoker_c::Invoker_c ( StrandWorkerPtr_t pRand )
@@ -780,7 +780,7 @@ public:
 		LOGINFO ( TPLIFE, TP ) << "thread pool created with threads: " << iThreadCount;
 	}
 
-	~ThreadPool_c () final
+	~ThreadPool_c ()
 	{
 		LOGINFO ( TPLIFE, TP ) << "thread pool destroying";
 		StopAll();
@@ -793,12 +793,12 @@ public:
 		m_dThreads.Reset ( 0 );
 	}
 
-	void ScheduleOp ( Threads::details::SchedulerOperation_t* pOp, bool bVip ) final
+	void ScheduleOp ( Threads::details::SchedulerOperation_t* pOp, bool bVip ) noexcept
 	{
 		Post ( pOp, bVip );
 	}
 
-	void ScheduleContinuationOp ( Threads::details::SchedulerOperation_t* pOp ) final
+	void ScheduleContinuationOp ( Threads::details::SchedulerOperation_t* pOp ) noexcept
 	{
 		PostContinuation ( pOp );
 	}
@@ -821,41 +821,41 @@ public:
 					LOGINFO ( SERVICE_KEEP_MT, MT ) << "KeepWorking finished " << (intptr_t)kwid; } };
 	}
 #else
-	Keeper_t KeepWorking() final
+	Keeper_t KeepWorking() noexcept
 	{
 		m_tService.work_started();
 		return { nullptr, [this] ( void* ) { m_tService.work_finished(); } };
 	}
 #endif
 
-	int WorkingThreads () const final NO_THREAD_SAFETY_ANALYSIS
+	int WorkingThreads () const noexcept NO_THREAD_SAFETY_ANALYSIS
 	{
 		return m_dThreads.GetLength ();
 	}
 
-	int Works () const final
+	int Works () const noexcept
 	{
 		return (int)m_tService.works ();
 	}
 
-	NTasks_t Tasks() const noexcept final
+	NTasks_t Tasks() const noexcept
 	{
 		return m_tService.tasks();
 	}
 
-	int CurTasks() const noexcept final NO_THREAD_SAFETY_ANALYSIS
+	int CurTasks() const noexcept NO_THREAD_SAFETY_ANALYSIS
 	{
 		return (int)m_dThreads.count_of ( [] ( auto& i ) { return i.m_bBusy.load ( std::memory_order_relaxed ); } );
 	}
 
-	void IterateChildren ( ThreadFN& fnHandler ) noexcept final
+	void IterateChildren ( ThreadFN& fnHandler ) noexcept
 	{
 		ScRL_t _ ( m_dChildGuard );
 		for ( const auto& tThd : m_dThreads )
 			fnHandler ( tThd.m_pChild );
 	}
 
-	void StopAll () final NO_THREAD_SAFETY_ANALYSIS
+	void StopAll () NO_THREAD_SAFETY_ANALYSIS
 	{
 		ScopedMutex_t dLock { m_dMutex };
 		m_bStop = true;
@@ -918,7 +918,7 @@ public:
 		LOG ( DEBUG, TP ) << "alone worker created " << szName;
 	}
 
-	~AloneThread_c () final
+	~AloneThread_c ()
 	{
 		LOG ( DEBUG, TP ) << "stopping thread";
 		--m_iRunningAlones;
@@ -926,7 +926,7 @@ public:
 		LOGINFO ( TPLIFE, TP ) << "AloneThread_c destroyed";
 	}
 
-	void ScheduleOp ( Service_t::operation* pOp , bool bVip ) final
+	void ScheduleOp ( Service_t::operation* pOp , bool bVip ) noexcept
 	{
 		Post ( pOp, bVip );
 	}
@@ -939,7 +939,7 @@ public:
 		return uWorker.fetch_add ( 1, std::memory_order_relaxed );
 	}
 
-	Keeper_t KeepWorking() final
+	Keeper_t KeepWorking() noexcept
 	{
 		m_tService.work_started();
 		auto kwid = KeepWorkingID();
@@ -949,33 +949,33 @@ public:
 					LOGINFO ( SERVICE_KEEP_ALONE, MT ) << "KeepWorking alone inished " << this << " " << (intptr_t)kwid; } };
 	}
 #else
-	Keeper_t KeepWorking() final
+	Keeper_t KeepWorking() noexcept
 	{
 		m_tService.work_started();
 		return { nullptr, [this] ( void* ) { m_tService.work_finished(); } };
 	}
 #endif
 
-	void StopAll () final {}
+	void StopAll () {}
 
 	static int GetRunners () { return m_iRunningAlones; }
 
-	int Works () const final
+	int Works () const
 	{
 		return GetRunners ();
 	}
 
-	NTasks_t Tasks() const noexcept final
+	NTasks_t Tasks() const noexcept
 	{
 		return m_tService.tasks();
 	}
 
-	int CurTasks() const noexcept final
+	int CurTasks() const noexcept
 	{
 		return !!m_bBusy.load(std::memory_order_relaxed);
 	}
 
-	const char* Name() const override
+	const char* Name() const noexcept
 	{
 		return m_sName.cstr();
 	}
@@ -994,27 +994,27 @@ public:
 		, m_szName { szName }
 	{}
 
-	void ScheduleOp ( details::SchedulerOperation_t* pOp, bool bVip ) final
+	void ScheduleOp ( details::SchedulerOperation_t* pOp, bool bVip ) noexcept
 	{
 		m_pScheduler->ScheduleOp ( pOp, bVip );
 	}
 
-	void ScheduleContinuationOp ( details::SchedulerOperation_t* pOp ) final
+	void ScheduleContinuationOp ( details::SchedulerOperation_t* pOp ) noexcept
 	{
 		m_pScheduler->ScheduleContinuationOp ( pOp );
 	}
 
-	Keeper_t KeepWorking() final
+	Keeper_t KeepWorking() noexcept
 	{
 		return m_pScheduler->KeepWorking();
 	};
 
-	int WorkingThreads() const final
+	int WorkingThreads() const noexcept
 	{
 		return m_pScheduler->WorkingThreads();
 	};
 
-	const char* Name() const final
+	const char* Name() const noexcept
 	{
 		return m_szName ? m_szName : m_pScheduler->Name();
 	}
@@ -1147,7 +1147,12 @@ void SetMaxChildrenThreads ( int iThreads )
 	g_iMaxChildrenThreads = Max ( 1, iThreads );
 }
 
-Threads::Worker_i * GlobalWorkPool ()
+int MaxChildrenThreads() noexcept
+{
+	return g_iMaxChildrenThreads;
+}
+
+Worker_i * GlobalWorkPool ()
 {
 	WorkerSharedPtr_t& pPool = GlobalPoolSingletone ();
 	assert ( pPool && "invoke StartGlobalWorkPool first");

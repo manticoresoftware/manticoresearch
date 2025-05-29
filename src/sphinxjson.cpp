@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2017-2024, Manticore Software LTD (https://manticoresearch.com)
+// Copyright (c) 2017-2025, Manticore Software LTD (https://manticoresearch.com)
 // Copyright (c) 2011-2016, Andrew Aksyonoff
 // Copyright (c) 2011-2016, Sphinx Technologies Inc
 // All rights reserved
@@ -19,6 +19,8 @@
 #include <io.h> // for isatty() in sphinxjson.c
 #endif
 
+// for UNALIGNED_RAM_ACCESS
+#include "config.h"
 
 //////////////////////////////////////////////////////////////////////////
 // helpers
@@ -1725,7 +1727,7 @@ bool JsonObj_c::IsDbl() const
 bool JsonObj_c::IsNum() const
 {
 	assert ( m_pRoot );
-	return !!cJSON_IsNumeric ( m_pRoot );
+	return !! ( cJSON_IsNumeric ( m_pRoot ) ||  cJSON_IsUInteger(m_pRoot) );
 }
 
 
@@ -1964,6 +1966,15 @@ bool JsonObj_c::FetchStrItem ( CSphString & sValue, const char * szName, CSphStr
 		return false;
 
 	return true;
+}
+
+
+bool JsonObj_c::FetchStrItem ( std::string & sValue, const char * szName, CSphString & sError, bool bIgnoreMissing ) const
+{
+	CSphString sTmp;
+	bool bRes = FetchStrItem ( sTmp, szName, sError, bIgnoreMissing );
+	sValue = sTmp.scstr();
+	return bRes;
 }
 
 

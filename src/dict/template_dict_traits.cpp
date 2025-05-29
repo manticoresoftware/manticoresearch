@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2017-2024, Manticore Software LTD (https://manticoresearch.com)
+// Copyright (c) 2017-2025, Manticore Software LTD (https://manticoresearch.com)
 // Copyright (c) 2001-2016, Andrew Aksyonoff
 // Copyright (c) 2008-2016, Sphinx Technologies Inc
 // All rights reserved
@@ -25,6 +25,8 @@
 #include "sphinxint.h"
 #include "sphinxjson.h"
 #include "tokenizer/tok_internals.h"
+
+#include <sys/stat.h>
 
 CSphString g_sLemmatizerBase;
 
@@ -52,7 +54,7 @@ enum class EMORPH : int {
 
 void ConcatReportStrings ( const CSphTightVector<CSphString> & dStrings, CSphString & sReport )
 {
-	sReport = StrVec2Str ( dStrings, " " );
+	sReport = Vec2Str ( dStrings, " " );
 }
 
 

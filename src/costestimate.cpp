@@ -1,6 +1,6 @@
 //
 //
-// Copyright (c) 2018-2024, Manticore Software LTD (https://manticoresearch.com)
+// Copyright (c) 2018-2025, Manticore Software LTD (https://manticoresearch.com)
 // All rights reserved
 //
 // This program is free software; you can redistribute it and/or modify
@@ -498,6 +498,10 @@ bool SelectIteratorCtx_t::IsEnabled_SI ( const CSphFilterSettings & tFilter ) co
 
 	// FIXME!!! warn in case force index used but index was skipped
 	if ( pCol && ( pCol->m_eAttrType==SPH_ATTR_STRING && m_tQuery.m_eCollation!=SPH_COLLATION_DEFAULT ) )
+		return false;
+
+	// all\any(string list) need to scan whole row
+	if ( pCol && pCol->m_eAttrType==SPH_ATTR_STRING && tFilter.m_eType==SPH_FILTER_STRING_LIST && tFilter.m_eMvaFunc!=SPH_MVAFUNC_NONE )
 		return false;
 
 	return m_tSI.IsEnabled ( tFilter.m_sAttrName );

@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2017-2024, Manticore Software LTD (https://manticoresearch.com)
+// Copyright (c) 2017-2025, Manticore Software LTD (https://manticoresearch.com)
 // Copyright (c) 2001-2016, Andrew Aksyonoff
 // Copyright (c) 2008-2016, Sphinx Technologies Inc
 // All rights reserved
@@ -44,6 +44,20 @@ inline bool StrEqN ( Str_t l, const char* r )
 	if ( IsEmpty ( l ) || !r )
 		return ( ( !r && IsEmpty ( l ) ) || ( IsEmpty ( l ) && !*r ) );
 	return strncasecmp ( l.first, r, l.second ) == 0;
+}
+
+inline bool StrEq ( Str_t l, Str_t r )
+{
+	if ( l.second != r.second )
+		return false;
+	return strncmp ( l.first, r.first, l.second ) == 0;
+}
+
+inline bool StrEqN ( Str_t l, Str_t r )
+{
+	if ( l.second != r.second )
+		return false;
+	return strncasecmp ( l.first, r.first, l.second ) == 0;
 }
 
 inline Str_t FromStr ( const CSphString& sString ) noexcept
@@ -319,7 +333,7 @@ inline bool CSphString::operator<( const CSphString& b ) const
 inline void CSphString::Unquote()
 {
 	int l = Length();
-	if ( l && m_sValue[0] == '\'' && m_sValue[l - 1] == '\'' )
+	if ( l>1 && m_sValue[0] == '\'' && m_sValue[l - 1] == '\'' )
 	{
 		memmove ( m_sValue, m_sValue + 1, l - 2 );
 		m_sValue[l - 2] = '\0';

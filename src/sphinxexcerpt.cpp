@@ -10,9 +10,9 @@
 //
 
 #include "sphinxexcerpt.h"
-#include "sphinxutils.h"
+#include "searchdaemon.h"
 #include "sphinxsearch.h"
-#include "sphinxquery.h"
+#include "sphinxquery/sphinxquery.h"
 #include "fileutils.h"
 #include "sphinxstem.h"
 #include "coroutine.h"
@@ -300,10 +300,10 @@ public:
 		return true;
 	}
 
-	ISphQword * ScanSpawn() const override
+	ISphQword * ScanSpawn ( int iAtomPos ) const override
 	{
 		int iDocs = ( m_tIndex.GetDocHits().GetLength() ? 1 : 0 );
-		return new QwordScan_c ( iDocs );
+		return new QwordScan_c ( iDocs, iAtomPos, SPH_MAX_FIELDS );
 	}
 
 private:
@@ -1317,8 +1317,8 @@ static DWORD CollectQuerySPZ ( const XQNode_t * pNode )
 	else if ( pNode->GetOp ()==SPH_QUERY_PARAGRAPH )
 		eSPZ |= SPH_SPZ_PARAGRAPH;
 
-	ARRAY_FOREACH ( i, pNode->m_dChildren )
-		eSPZ |= CollectQuerySPZ ( pNode->m_dChildren[i] );
+	ARRAY_FOREACH ( i, pNode->dChildren() )
+		eSPZ |= CollectQuerySPZ ( pNode->dChildren()[i] );
 
 	return eSPZ;
 }
@@ -1392,10 +1392,9 @@ void SnippetBuilder_c::Impl_c::Setup ( const CSphIndex * pIndex, const SnippetQu
 		bool bWordDict = m_pDict->GetSettings().m_bWordDict;
 		// caveat: here we clone from Tokenizer, not from QueryTokenizer, as last was cloned as non-json, and so, includes different extra symbols.
 		m_pState->m_pTokenizerJson = sphCloneAndSetupQueryTokenizer ( pIndex->GetTokenizer(), pIndex->IsStarDict ( bWordDict ), tIndexSettings.m_bIndexExactWords, true );
-		m_pState->m_pQueryParser = sphCreateJsonQueryParser();
 	}
-	else
-		m_pState->m_pQueryParser = sphCreatePlainQueryParser();
+
+	m_pState->m_pQueryParser = CreateQueryParser ( tSettings.m_bJsonQuery );
 
 	if ( pIndex->GetFieldFilter() )
 		m_pFieldFilter = pIndex->GetFieldFilter()->Clone();

@@ -66,7 +66,7 @@ While Manticore is not fully ACID-compliant, it supports isolated transactions f
 Data can be distributed across servers and data centers with any Manticore Search node acting as both a load balancer and a data node. Manticore implements virtually synchronous multi-master [replication](https://play.manticoresearch.com/replication/) using the [Galera library](https://galeracluster.com/), ensuring data consistency across all nodes, preventing data loss, and providing exceptional replication performance.
 
 #### Built-in backup capabilities
-Manticore is equipped with an external tool [manticore-backup](Securing_and_compacting_a_table/Backup_and_restore.md), and the [BACKUP](Securing_and_compacting_a_table/Backup_and_restore.md#BACKUP-SQL-command-reference) SQL command to simplify the process of backing up and restoring your data. Alternatively, you can use [mysqldump](https://dev.mysql.com/doc/refman/8.0/en/mysqldump.html) to [make logical backups](../Securing_and_compacting_a_table/Backup_and_restore.md#Backup-and-restore-with-mysqldump).
+Manticore is equipped with an external tool [manticore-backup](Securing_and_compacting_a_table/Backup_and_restore.md), and the [BACKUP](Securing_and_compacting_a_table/Backup_and_restore.md#BACKUP-SQL-command-reference) SQL command to simplify the process of backing up and restoring your data. Alternatively, you can use [mysqldump](https://dev.mysql.com/doc/refman/8.0/en/mysqldump.html) to [make logical backups](Securing_and_compacting_a_table/Backup_and_restore.md#Backup-and-restore-with-mysqldump).
 
 #### Out-of-the-box data sync
 The `indexer` tool and comprehensive configuration syntax of Manticore make it easy to sync data from sources like MySQL, PostgreSQL, ODBC-compatible databases, XML, and CSV.
@@ -74,7 +74,9 @@ The `indexer` tool and comprehensive configuration syntax of Manticore make it e
 #### Integration options
 You can integrate Manticore Search with a MySQL/MariaDB server using the [FEDERATED engine](Extensions/FEDERATED.md) or via [ProxySQL](https://manticoresearch.com/blog/using-proxysql-to-route-inserts-in-a-distributed-realtime-index/).
 
-You can use [Apache Superset](https://manticoresearch.com/blog/manticoresearch-apache-superset-integration/) and [Grafana](https://manticoresearch.com/blog/manticoresearch-grafana-integration/) to visualize data stored in Manticore. Various MySQL tools can be used to develop Manticore queries interactively, such as [HeidiSQL](https://www.heidisql.com/) and [DBForge](https://www.devart.com/dbforge/).
+You can use [Apache Superset](https://manticoresearch.com/blog/manticoresearch-apache-superset-integration/), Kibana and [Grafana](https://manticoresearch.com/blog/manticoresearch-grafana-integration/) to visualize data stored in Manticore. Various MySQL tools can be used to develop Manticore queries interactively, such as [HeidiSQL](https://www.heidisql.com/) and [DBForge](https://www.devart.com/dbforge/).
+
+You can use Manticore Search with [Kibana](Integration/Kibana.md).
 
 #### Stream filtering made easy
 Manticore offers a special table type, the "[percolate](Creating_a_table/Local_tables/Percolate_table.md)" table, which allows you to search queries instead of data, making it an efficient tool for filtering full-text data streams. Simply store your queries in the table, process your data stream by sending each batch of documents to Manticore Search, and receive only the results that match your stored queries.
@@ -90,7 +92,7 @@ Manticore Search is versatile and can be applied in various scenarios, including
   - Ingest data into Manticore Search using [Beats/Logstash](https://manticoresearch.com/blog/integration-of-manticore-with-logstash-filebeat/), [Vector.dev](https://manticoresearch.com/blog/integration-of-manticore-with-vectordev/), [Fluentbit](https://manticoresearch.com/blog/integration-of-manticore-with-fluentbit/).
   - Analyze large datasets efficiently using Manticore's columnar storage and OLAP capabilities.
   - Perform complex queries on terabytes of data with minimal latency.
-  - Visualize data using [Grafana](https://manticoresearch.com/blog/manticoresearch-grafana-integration/), or [Apache Superset](https://manticoresearch.com/blog/manticoresearch-apache-superset-integration/).
+  - Visualize data using Kibana, [Grafana](https://manticoresearch.com/blog/manticoresearch-grafana-integration/), or [Apache Superset](https://manticoresearch.com/blog/manticoresearch-apache-superset-integration/).
 
 - **Faceted Search**:
   - Enable users to filter search results by categories, such as price, brand, or date, for a more refined search experience.
@@ -108,7 +110,7 @@ Manticore Search is versatile and can be applied in various scenarios, including
   - Use percolate tables to filter and process real-time data streams, such as social media feeds or log data, efficiently.
 
 
-# Requirements
+## Requirements
 
 * Architecture: arm64 or x86_64
 * OS: Debian-based (e.g. Debian, Ubuntu, Mint), RHEL-based (e.g. RHEL, CentOS, Alma, Oracle Linux, Amazon Linux), Windows, or MacOS.

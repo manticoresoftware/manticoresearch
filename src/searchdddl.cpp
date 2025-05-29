@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2017-2024, Manticore Software LTD (https://manticoresearch.com)
+// Copyright (c) 2017-2025, Manticore Software LTD (https://manticoresearch.com)
 // Copyright (c) 2001-2016, Andrew Aksyonoff
 // Copyright (c) 2008-2016, Sphinx Technologies Inc
 // All rights reserved
@@ -11,6 +11,9 @@
 //
 
 #include "searchdddl.h"
+
+#include "knnmisc.h"
+
 
 class DdlParser_c : public SqlParserTraits_c
 {
@@ -38,12 +41,19 @@ public:
 		int				m_iHNSWM = 16;
 		int				m_iHNSWEFConstruction = 200;
 		knn::HNSWSimilarity_e m_eHNSWSimilarity = knn::HNSWSimilarity_e::L2;
+		knn::Quantization_e m_eQuantization = knn::Quantization_e::NONE;
 		bool			m_bKNNDimsSpecified = false;
 		bool			m_bHNSWSimilaritySpecified = false;
+		CSphString		m_sModelName;
+		CSphString		m_sAPIKey;
+		CSphString		m_sCachePath;
+		CSphString		m_sFrom;
+		bool			m_bUseGPU = false;
 
 		void			Reset()	{ *this = ItemOptions_t(); }
 		DWORD			ToFlags() const;
 		knn::IndexSettings_t ToKNN() const;
+		knn::ModelSettings_t ToKNNModel() const;
 		void			CopyOptionsTo ( CreateTableAttr_t & tAttr ) const;
 	};
 
@@ -65,14 +75,22 @@ public:
 	bool	AddItemOptionHNSWSimilarity ( const SqlNode_t & tOption );
 	bool	AddItemOptionHNSWM ( const SqlNode_t & tOption );
 	bool	AddItemOptionHNSWEfConstruction ( const SqlNode_t & tOption );
+	bool	AddItemOptionModelName ( const SqlNode_t & tOption );
+	bool	AddItemOptionFrom ( const SqlNode_t & tOption );
+	bool	AddItemOptionCachePath ( const SqlNode_t & tOption );
+	bool	AddItemOptionAPIKey ( const SqlNode_t & tOption );
+	bool	AddItemOptionUseGPU ( const SqlNode_t & tOption );
+	bool	AddItemOptionQuantization ( const SqlNode_t & tOption );
 
 	void	AddCreateTableOption ( const SqlNode_t & tName, const SqlNode_t & tValue );
-	bool	SetupAlterTable  ( const SqlNode_t & tIndex, const SqlNode_t & tAttr, const SqlNode_t & tType, bool bModify = false );
-	bool	SetupAlterTable ( const SqlNode_t & tIndex, const SqlNode_t & tAttr, ESphAttr eAttr, int iFieldFlags, int iBits=-1, bool bModify = false );
+	bool	SetupAlterTable  ( const SqlNode_t & tAttr, const SqlNode_t & tType, bool bModify = false );
+	bool	SetupAlterTable ( const SqlNode_t & tAttr, ESphAttr eAttr, int iFieldFlags, int iBits=-1, bool bModify = false );
 
 	void	JoinClusterAt ( const SqlNode_t & tAt );
 
 	void	AddInsval ( CSphVector<SqlInsert_t> & dVec, const SqlNode_t & tNode );
+	CSphString	GetTableName ( const SqlNode_t& tName ) const noexcept;
+	CSphString	GetTableName ( const SqlNode_t& tDb, const SqlNode_t& tName ) const noexcept;
 
 private:
 	CSphString		m_sError;
@@ -84,7 +102,7 @@ private:
 };
 
 using YYSTYPE = SqlNode_t;
-STATIC_ASSERT ( IS_TRIVIALLY_COPYABLE ( SqlNode_t ), YYSTYPE_MUST_BE_TRIVIAL_FOR_RESIZABLE_PARSER_STACK );
+static_assert ( IS_TRIVIALLY_COPYABLE ( SqlNode_t ), "YYSTYPE must be trivial for resizable parser stack" );
 # define YYSTYPE_IS_TRIVIAL 1
 # define YYSTYPE_IS_DECLARED 1
 
@@ -142,10 +160,24 @@ knn::IndexSettings_t DdlParser_c::ItemOptions_t::ToKNN() const
 
 	tKNN.m_iDims			= m_iKNNDims;
 	tKNN.m_eHNSWSimilarity	= m_eHNSWSimilarity;
+	tKNN.m_eQuantization	= m_eQuantization;
 	tKNN.m_iHNSWM			= m_iHNSWM;
 	tKNN.m_iHNSWEFConstruction = m_iHNSWEFConstruction;
 
 	return tKNN;
+}
+
+
+knn::ModelSettings_t DdlParser_c::ItemOptions_t::ToKNNModel() const
+{
+	knn::ModelSettings_t tModel;
+
+	tModel.m_sModelName	= m_sModelName.scstr();
+	tModel.m_sAPIKey	= m_sAPIKey.scstr();
+	tModel.m_sCachePath = m_sCachePath.scstr();
+	tModel.m_bUseGPU	= m_bUseGPU;
+
+	return tModel;
 }
 
 
@@ -224,10 +256,19 @@ bool DdlParser_c::CheckFieldFlags ( ESphAttr eAttrType, int iFlags, const CSphSt
 	}
 	else if ( eAttrType==SPH_ATTR_FLOAT_VECTOR )
 	{
-		if ( !tOpts.m_sKNNType.IsEmpty() && ( !tOpts.m_bKNNDimsSpecified || !tOpts.m_bHNSWSimilaritySpecified ) )
+		if ( !tOpts.m_sKNNType.IsEmpty() )
 		{
-			sError = "knn_dims and hnsw_similarity are required if knn_type='hnsw'";
-			return false;
+			if ( ( !tOpts.m_bKNNDimsSpecified || !tOpts.m_bHNSWSimilaritySpecified ) && tOpts.m_sModelName.IsEmpty() )
+			{
+				sError = "knn_dims and hnsw_similarity are required if knn_type='hnsw'";
+				return false;
+			}
+
+			if ( tOpts.m_bKNNDimsSpecified && !tOpts.m_sModelName.IsEmpty() )
+			{
+				sError = "knn_dims can't be used together with model_name";
+				return false;
+			}
 		}
 	}
 	else
@@ -250,12 +291,11 @@ bool DdlParser_c::CheckFieldFlags ( ESphAttr eAttrType, int iFlags, const CSphSt
 }
 
 
-bool DdlParser_c::SetupAlterTable ( const SqlNode_t & tIndex, const SqlNode_t & tAttr, ESphAttr eAttr, int iFieldFlags, int iBits, bool bModify )
+bool DdlParser_c::SetupAlterTable ( const SqlNode_t & tAttr, ESphAttr eAttr, int iFieldFlags, int iBits, bool bModify )
 {
 	assert( m_pStmt );
 
 	m_pStmt->m_eStmt = bModify ? STMT_ALTER_MODIFY : STMT_ALTER_ADD;
-	ToString ( m_pStmt->m_sIndex, tIndex );
 	ToString ( m_pStmt->m_sAlterAttr, tAttr );
 	m_pStmt->m_sIndex.ToLower();
 	m_pStmt->m_sAlterAttr.ToLower();
@@ -273,9 +313,9 @@ bool DdlParser_c::SetupAlterTable ( const SqlNode_t & tIndex, const SqlNode_t & 
 }
 
 
-bool DdlParser_c::SetupAlterTable  ( const SqlNode_t & tIndex, const SqlNode_t & tAttr, const SqlNode_t & tType, bool bModify )
+bool DdlParser_c::SetupAlterTable  ( const SqlNode_t & tAttr, const SqlNode_t & tType, bool bModify )
 {
-	return SetupAlterTable ( tIndex, tAttr, (ESphAttr)tType.GetValueInt(), tType.m_iType, -1, bModify );
+	return SetupAlterTable ( tAttr, (ESphAttr)tType.GetValueInt(), tType.m_iType, -1, bModify );
 }
 
 
@@ -299,11 +339,13 @@ bool DdlParser_c::AddCreateTableCol ( const SqlNode_t & tName, const SqlNode_t &
 	if ( eAttrType!=SPH_ATTR_STRING )
 	{
 		CreateTableAttr_t & tAttr = m_pStmt->m_tCreateTable.m_dAttrs.Add();
-		tAttr.m_tAttr.m_sName			= sName;
-		tAttr.m_tAttr.m_eAttrType		= eAttrType;
+		tAttr.m_tAttr.m_sName		= sName;
+		tAttr.m_tAttr.m_eAttrType	= eAttrType;
 		tOpts.CopyOptionsTo(tAttr);
-		tAttr.m_bKNN					= !tOpts.m_sKNNType.IsEmpty();
-		tAttr.m_tKNN					= tOpts.ToKNN();
+		tAttr.m_bKNN				= !tOpts.m_sKNNType.IsEmpty();
+		tAttr.m_tKNN				= tOpts.ToKNN();
+		tAttr.m_tKNNModel			= tOpts.ToKNNModel();
+		tAttr.m_sKNNFrom			= tOpts.m_sFrom;
 
 		return true;
 	}
@@ -426,17 +468,8 @@ bool DdlParser_c::AddItemOptionKNNDims ( const SqlNode_t & tOption )
 bool DdlParser_c::AddItemOptionHNSWSimilarity ( const SqlNode_t & tOption )
 {
 	CSphString sValue = ToStringUnescape(tOption).ToUpper();
-	if ( sValue=="L2" )
-		m_tItemOptions.m_eHNSWSimilarity = knn::HNSWSimilarity_e::L2;
-	else if ( sValue=="IP" )
-		m_tItemOptions.m_eHNSWSimilarity = knn::HNSWSimilarity_e::IP;
-	else if ( sValue=="COSINE" )
-		m_tItemOptions.m_eHNSWSimilarity = knn::HNSWSimilarity_e::COSINE;
-	else
-	{
-		m_sError.SetSprintf ( "Unknown HNSW similarity '%s'", sValue.cstr() );
+	if ( !Str2HNSWSimilarity ( sValue, m_tItemOptions.m_eHNSWSimilarity, &m_sError ) )
 		return false;
-	}
 
 	m_tItemOptions.m_bHNSWSimilaritySpecified = true;
 	return true;
@@ -456,6 +489,48 @@ bool DdlParser_c::AddItemOptionHNSWEfConstruction ( const SqlNode_t & tOption )
 	CSphString sValue = ToStringUnescape(tOption);
 	m_tItemOptions.m_iHNSWEFConstruction = strtoull ( sValue.cstr(), NULL, 10 );
 	return true;
+}
+
+
+bool DdlParser_c::AddItemOptionModelName ( const SqlNode_t & tOption )
+{
+	m_tItemOptions.m_sModelName = ToStringUnescape(tOption);
+	return true;
+}
+
+
+bool DdlParser_c::AddItemOptionFrom ( const SqlNode_t & tOption )
+{
+	m_tItemOptions.m_sFrom= ToStringUnescape(tOption);
+	return true;
+}
+
+
+bool DdlParser_c::AddItemOptionAPIKey ( const SqlNode_t & tOption )
+{
+	m_tItemOptions.m_sAPIKey = ToStringUnescape(tOption);
+	return true;
+}
+
+
+bool DdlParser_c::AddItemOptionCachePath ( const SqlNode_t & tOption )
+{
+	m_tItemOptions.m_sCachePath = ToStringUnescape(tOption);
+	return true;
+}
+
+
+bool DdlParser_c::AddItemOptionUseGPU ( const SqlNode_t & tOption )
+{
+	CSphString sValue = ToStringUnescape(tOption);
+	m_tItemOptions.m_bUseGPU = !!strtoull ( sValue.cstr(), NULL, 10 );
+	return true;
+}
+
+
+bool DdlParser_c::AddItemOptionQuantization ( const SqlNode_t & tOption )
+{
+	return Str2Quantization ( ToStringUnescape(tOption), m_tItemOptions.m_eQuantization, &m_sError );
 }
 
 
@@ -502,6 +577,20 @@ void DdlParser_c::AddInsval ( CSphVector<SqlInsert_t> & dVec, const SqlNode_t & 
 	if ( tIns.m_iType==TOK_QUOTED_STRING )
 		tIns.m_sVal = ToStringUnescape ( tNode );
 	tIns.m_pVals = CloneMvaVecPtr ( tNode.m_iValues );
+}
+
+CSphString DdlParser_c::GetTableName ( const SqlNode_t& tName ) const noexcept
+{
+	return GetString ( tName ).ToLower();
+}
+
+CSphString DdlParser_c::GetTableName ( const SqlNode_t& tDb, const SqlNode_t& tName ) const noexcept
+{
+	CSphString sName;
+	StringBuilder_c sBuild;
+	sBuild << GetStrt ( tDb ) << '.' << GetTableName ( tName );
+	sBuild.MoveTo ( sName );
+	return sName;
 }
 
 

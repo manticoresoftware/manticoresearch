@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2017-2024, Manticore Software LTD (https://manticoresearch.com)
+// Copyright (c) 2017-2025, Manticore Software LTD (https://manticoresearch.com)
 // Copyright (c) 2001-2016, Andrew Aksyonoff
 // Copyright (c) 2008-2016, Sphinx Technologies Inc
 // All rights reserved
@@ -28,6 +28,8 @@
 #include "knnmisc.h"
 #include <time.h>
 #include <math.h>
+
+#include "client_session.h"
 #include "uni_algo/case.h"
 #include "datetime.h"
 #include "exprdatetime.h"
@@ -5481,7 +5483,7 @@ static CSphString Dots2String ( CSphVector<NamedDot>& dDots )
 	return sResult;
 }
 
-alignas ( 128 ) static const BYTE g_UrlEncodeTable[] = { // 0 if need escape, 1 if not
+alignas ( 128 ) static constexpr BYTE g_UrlEncodeTable[] = { // 0 if need escape, 1 if not
 	0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
 	0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
 	0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 0, // -.
@@ -5973,7 +5975,7 @@ ISphExpr * ExprParser_t::CreateExistNode ( const ExprNode_t & tNode )
 		}
 
 		bool bColumnar = tCol.IsColumnar();
-		bool bStored = tCol.m_uAttrFlags & CSphColumnInfo::ATTR_STORED;
+		bool bStored = tCol.IsStored();
 		const CSphAttrLocator & tLoc = tCol.m_tLocator;
 		if ( tNode.m_eRetType==SPH_ATTR_FLOAT )
 		{
@@ -6635,28 +6637,28 @@ ISphExpr * ExprParser_t::CreateFieldNode ( int iField )
 ISphExpr * ExprParser_t::CreateColumnarIntNode ( int iAttr, ESphAttr eAttrType )
 {
 	const CSphColumnInfo & tAttr = m_pSchema->GetAttr(iAttr);
-	return CreateExpr_GetColumnarInt ( tAttr.m_sName, tAttr.m_uAttrFlags & CSphColumnInfo::ATTR_STORED );
+	return CreateExpr_GetColumnarInt ( tAttr.m_sName, tAttr.IsStored() );
 }
 
 
 ISphExpr * ExprParser_t::CreateColumnarFloatNode ( int iAttr )
 {
 	const CSphColumnInfo & tAttr = m_pSchema->GetAttr(iAttr);
-	return CreateExpr_GetColumnarFloat ( tAttr.m_sName, tAttr.m_uAttrFlags & CSphColumnInfo::ATTR_STORED );
+	return CreateExpr_GetColumnarFloat ( tAttr.m_sName, tAttr.IsStored() );
 }
 
 
 ISphExpr * ExprParser_t::CreateColumnarStringNode ( int iAttr )
 {
 	const CSphColumnInfo & tAttr = m_pSchema->GetAttr(iAttr);
-	return CreateExpr_GetColumnarString ( tAttr.m_sName, tAttr.m_uAttrFlags & CSphColumnInfo::ATTR_STORED );
+	return CreateExpr_GetColumnarString ( tAttr.m_sName, tAttr.IsStored() );
 }
 
 
 ISphExpr * ExprParser_t::CreateColumnarMvaNode ( int iAttr )
 {
 	const CSphColumnInfo & tAttr = m_pSchema->GetAttr(iAttr);
-	return CreateExpr_GetColumnarMva ( tAttr.m_sName, tAttr.m_uAttrFlags & CSphColumnInfo::ATTR_STORED );
+	return CreateExpr_GetColumnarMva ( tAttr.m_sName, tAttr.IsStored() );
 }
 
 //////////////////////////////////////////////////////////////////////////
@@ -7076,7 +7078,7 @@ ISphExpr * ExprParser_t::CreateFuncExpr ( int iNode, VecRefPtrs_t<ISphExpr*> & d
 	case FUNC_LEVENSHTEIN: return CreateLevenshteinNode ( dArgs[0], dArgs[1], ( dArgs.GetLength()>2 ? dArgs[2] : nullptr ) );
 
 	case FUNC_DATE_FORMAT: return CreateExprDateFormat ( dArgs[0], dArgs[1] );
-	case FUNC_DATABASE: return new Expr_GetStrConst_c ( FROMS ( "Manticore" ), false ) ;
+	case FUNC_DATABASE: return new Expr_GetStrConst_c ( FromStr ( session::GetClientSession()->m_sCurrentDbName ), false ) ;
 	case FUNC_VERSION: return new Expr_GetStrConst_c ( FromStr ( sphinxexpr::MySQLVersion() ), false );
 	
 	case FUNC_RANGE:
@@ -8432,8 +8434,10 @@ public:
 		break;
 
 		case SPH_EXPR_GET_DEPENDENT_COLS:
-			static_cast<StrVec_t*> ( pArg )->Add ( m_sAttrLat );
-			static_cast<StrVec_t*> ( pArg )->Add ( m_sAttrLon );
+			if ( !m_sAttrLat.IsEmpty() )
+				static_cast<StrVec_t*> ( pArg )->Add ( m_sAttrLat );
+			if ( !m_sAttrLon.IsEmpty() )
+				static_cast<StrVec_t*> ( pArg )->Add ( m_sAttrLon );
 			break;
 
 		default:
@@ -9033,6 +9037,17 @@ ISphExpr * ExprParser_t::CreateGeodistNode ( int iArgs )
 
 	bool bConst1 = ( IsConst ( &m_dNodes[dArgs[0]] ) && IsConst ( &m_dNodes[dArgs[1]] ) );
 	bool bConst2 = ( IsConst ( &m_dNodes[dArgs[2]] ) && IsConst ( &m_dNodes[dArgs[3]] ) );
+	auto WrongRadians = [this] { m_sCreateError = "GEODIST() expects input coordinates in radians. Use 'in=deg' if providing degrees."; return nullptr; };
+	if ( !bDeg ) {
+		if ( IsConst ( &m_dNodes[dArgs[0]] ) && !CheckLatRad ( FloatVal ( &m_dNodes[dArgs[0]] ) ) )
+			return WrongRadians();
+		if ( IsConst ( &m_dNodes[dArgs[1]] ) && !CheckLonRad ( FloatVal ( &m_dNodes[dArgs[1]] ) ) )
+			return WrongRadians();
+		if ( IsConst ( &m_dNodes[dArgs[2]] ) && !CheckLatRad ( FloatVal ( &m_dNodes[dArgs[2]] ) ) )
+			return WrongRadians();
+		if ( IsConst ( &m_dNodes[dArgs[3]] ) && !CheckLonRad ( FloatVal ( &m_dNodes[dArgs[3]] ) ) )
+			return WrongRadians();
+	}
 
 	if ( bConst1 && bConst2 )
 	{
@@ -9078,7 +9093,7 @@ ISphExpr * ExprParser_t::CreateGeodistNode ( int iArgs )
 	// four expressions
 	VecRefPtrs_t<ISphExpr*> dExpr;
 	MoveToArgList ( CreateTree ( iArgs ), dExpr );
-	assert ( dExpr.GetLength()==4 );
+	assert ( dExpr.GetLength() == 4 || dExpr.GetLength() == 5 );
 	ConvertArgsJson ( dExpr );
 	return new Expr_Geodist_c ( GetGeodistFn ( eMethod, bDeg ), fOut, dExpr[0], dExpr[1], dExpr[2], dExpr[3] );
 }

@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2017-2024, Manticore Software LTD (https://manticoresearch.com)
+// Copyright (c) 2017-2025, Manticore Software LTD (https://manticoresearch.com)
 // Copyright (c) 2001-2016, Andrew Aksyonoff
 // Copyright (c) 2008-2016, Sphinx Technologies Inc
 // All rights reserved
@@ -65,7 +65,7 @@ enum ESphQueryState
 
 	SPH_QSTATE_TOTAL
 };
-STATIC_ASSERT ( SPH_QSTATE_UNKNOWN==0, BAD_QUERY_STATE_ENUM_BASE );
+static_assert ( SPH_QSTATE_UNKNOWN==0, "bad query state enum base" );
 
 struct XQNode_t;
 

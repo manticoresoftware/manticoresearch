@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2017-2024, Manticore Software LTD (https://manticoresearch.com)
+// Copyright (c) 2017-2025, Manticore Software LTD (https://manticoresearch.com)
 // Copyright (c) 2001-2016, Andrew Aksyonoff
 // Copyright (c) 2008-2016, Sphinx Technologies Inc
 // All rights reserved
@@ -20,6 +20,8 @@
 #include "searchdconfig.h"
 #include "memio.h"
 #include "accumulator.h"
+#include "querystats.h"
+#include "config.h"
 
 /////////////////////////////////////////////////////////////////////////////
 // MACHINE-DEPENDENT STUFF
@@ -128,35 +130,6 @@ static const int64_t S2US = I64C ( 1000000 );
 // MISC GLOBALS
 /////////////////////////////////////////////////////////////////////////////
 
-/// known commands
-/// (shared here because at least SEARCHD_COMMAND_TOTAL used outside the core)
-enum SearchdCommand_e : WORD
-{
-	SEARCHD_COMMAND_SEARCH		= 0,
-	SEARCHD_COMMAND_EXCERPT		= 1,
-	SEARCHD_COMMAND_UPDATE		= 2,
-	SEARCHD_COMMAND_KEYWORDS	= 3,
-	SEARCHD_COMMAND_PERSIST		= 4,
-	SEARCHD_COMMAND_STATUS		= 5,
-	SEARCHD_COMMAND_UNUSED_6	= 6,
-	SEARCHD_COMMAND_FLUSHATTRS	= 7,
-	SEARCHD_COMMAND_SPHINXQL	= 8,
-	SEARCHD_COMMAND_PING		= 9,
-	SEARCHD_COMMAND_DELETE		= 10,
-	SEARCHD_COMMAND_UVAR		= 11,
-	SEARCHD_COMMAND_INSERT		= 12,
-	SEARCHD_COMMAND_REPLACE		= 13,
-	SEARCHD_COMMAND_COMMIT		= 14,
-	SEARCHD_COMMAND_SUGGEST		= 15,
-	SEARCHD_COMMAND_JSON		= 16,
-	SEARCHD_COMMAND_CALLPQ 		= 17,
-	SEARCHD_COMMAND_CLUSTER		= 18,
-	SEARCHD_COMMAND_GETFIELD	= 19,
-
-	SEARCHD_COMMAND_TOTAL,
-	SEARCHD_COMMAND_WRONG = SEARCHD_COMMAND_TOTAL,
-};
-
 const char* szCommand ( int );
 
 /// master-agent API SEARCH command protocol extensions version
@@ -177,11 +150,11 @@ enum SearchdCommandV_e : WORD
 	VER_COMMAND_STATUS		= 0x101,
 	VER_COMMAND_FLUSHATTRS	= 0x100,
 	VER_COMMAND_SPHINXQL	= 0x100,
-	VER_COMMAND_JSON		= 0x100,
+	VER_COMMAND_JSON		= 0x101,
 	VER_COMMAND_PING		= 0x100,
 	VER_COMMAND_UVAR		= 0x100,
 	VER_COMMAND_CALLPQ		= 0x100,
-	VER_COMMAND_CLUSTER		= 0x109,
+	VER_COMMAND_CLUSTER		= 0x10A,
 	VER_COMMAND_GETFIELD	= 0x100,
 	VER_COMMAND_SUGGEST		= 0x101,
 
@@ -586,67 +559,6 @@ using MemInputBuffer_c = InputBuffer_c;
 /////////////////////////////////////////////////////////////////////////////
 // SERVED INDEX DESCRIPTORS STUFF
 /////////////////////////////////////////////////////////////////////////////
-namespace QueryStats {
-	enum
-	{
-		INTERVAL_1MIN,
-		INTERVAL_5MIN,
-		INTERVAL_15MIN,
-		INTERVAL_ALLTIME,
-
-		INTERVAL_TOTAL
-	};
-
-
-	enum
-	{
-		TYPE_AVG,
-		TYPE_MIN,
-		TYPE_MAX,
-		TYPE_95,
-		TYPE_99,
-
-		TYPE_TOTAL,
-	};
-}
-
-struct QueryStatElement_t
-{
-	uint64_t	m_dData[QueryStats::TYPE_TOTAL] = { 0, UINT64_MAX, 0, 0, 0, };
-	uint64_t	m_uTotalQueries = 0;
-};
-
-
-struct QueryStats_t
-{
-	QueryStatElement_t	m_dStats[QueryStats::INTERVAL_TOTAL];
-};
-
-
-struct QueryStatRecord_t
-{
-	uint64_t	m_uQueryTimeMin;
-	uint64_t	m_uQueryTimeMax;
-	uint64_t	m_uQueryTimeSum;
-	uint64_t	m_uFoundRowsMin;
-	uint64_t	m_uFoundRowsMax;
-	uint64_t	m_uFoundRowsSum;
-
-	uint64_t	m_uTimestamp;
-	int			m_iCount;
-};
-
-
-class QueryStatContainer_i
-{
-public:
-	virtual								~QueryStatContainer_i() {}
-	virtual void						Add ( uint64_t uFoundRows, uint64_t uQueryTime, uint64_t uTimestamp ) = 0;
-	virtual QueryStatRecord_t			GetRecord ( int iRecord ) const noexcept = 0;
-	virtual int							GetNumRecords() const = 0;
-};
-
-std::unique_ptr<QueryStatContainer_i> MakeStatsContainer();
 
 class ServedStats_c final
 {
@@ -659,6 +571,11 @@ public:
 #ifndef NDEBUG
 	void				CalculateQueryStatsExact ( QueryStats_t & tRowsFoundStats, QueryStats_t & tQueryTimeStats ) const EXCLUDES ( m_tStatsLock );
 #endif
+
+	void				GetIndexQueryStats ( VectorLike & dStatus ) const;
+	void				AddWriteStat ( CommandStats_t::EDETAILS eCmd, bool bReplace, uint64_t uRows, uint64_t tmStart );
+	void				IncCmd ( SearchdCommand_e eCmd );
+
 private:
 	mutable RwLock_t m_tStatsLock;
 	std::unique_ptr<QueryStatContainer_i> m_pQueryStatRecords GUARDED_BY ( m_tStatsLock );
@@ -682,9 +599,9 @@ private:
 
 	void				DoStatCalcStats ( const QueryStatContainer_i * pContainer, QueryStats_t & tRowsFoundStats,
 							QueryStats_t & tQueryTimeStats ) const REQUIRES_SHARED ( m_tStatsLock );
-};
 
-void CalcSimpleStats ( const QueryStatContainer_i * pContainer, QueryStats_t & tRowsFoundStats, QueryStats_t & tQueryTimeStats );
+	CommandStats_t		m_tCommandsStats;
+};
 
 // calculate index mass based on status
 uint64_t CalculateMass ( const CSphIndexStatus & dStats );
@@ -925,7 +842,7 @@ class ReadOnlyHash_T
 {
 public:
 	using Hash_t = cRefCountedHashOfRefcnt_T<T>;
-	using cRefPtrHash_t = cRefCountedRefPtr_T<cRefCountedHashOfRefcnt_T<T>>;
+	using cRefPtrHash_t = cRefCountedRefPtr_T<Hash_t>;
 	using cRefCountedRefPtr_t = cRefCountedRefPtr_T<T>;
 	using RefCountedRefPtr_t = RefCountedRefPtr_T<T>;
 	using Snapshot_t = std::pair<cRefPtrHash_t, int64_t>;
@@ -1283,34 +1200,12 @@ struct AggrResult_t final: CSphQueryResultMeta
 	StrVec_t				m_dIndexNames;
 
 	int				GetLength() const;
-	inline bool		IsEmpty() const { return GetLength()==0; }
+	bool			IsEmpty() const { return GetLength()==0; }
 	bool			AddResultset ( ISphMatchSorter * pQueue, const DocstoreReader_i * pDocstore, int iTag, int iCutoff );
 	void			AddEmptyResultset ( const DocstoreReader_i * pDocstore, int iTag );
 	void			ClampMatches ( int iLimit );
 	void			ClampAllMatches();
 };
-
-class SearchHandler_c;
-class PubSearchHandler_c
-{
-public:
-						PubSearchHandler_c ( int iQueries, std::unique_ptr<QueryParser_i> pQueryParser, QueryType_e eQueryType, bool bMaster );
-						~PubSearchHandler_c();
-
-	void				RunQueries ();					///< run all queries, get all results
-	void				SetQuery ( int iQuery, const CSphQuery & tQuery, std::unique_ptr<ISphTableFunc> pTableFunc );
-	void				SetJoinQueryOptions ( int iQuery, const CSphQuery & tJoinQueryOptions );
-	void				SetProfile ( QueryProfile_c * pProfile );
-	void				SetStmt ( SqlStmt_t & tStmt );
-	AggrResult_t *		GetResult ( int iResult );
-
-	void				PushIndex ( const CSphString& sIndex, const cServedIndexRefPtr_c& pDesc );
-	void				RunCollect( const CSphQuery& tQuery, const CSphString& sIndex, CSphString* pErrors, CSphVector<BYTE>* pCollectedDocs );
-
-private:
-	std::unique_ptr<SearchHandler_c>	m_pImpl;
-};
-
 
 class CSphSessionAccum
 {
@@ -1326,6 +1221,7 @@ public:
 // from mysqld_error.h
 enum class EMYSQL_ERR : WORD
 {
+	NO_DB_ERROR					= 1046,
 	UNKNOWN_COM_ERROR			= 1047,
 	SERVER_SHUTDOWN				= 1053,
 	PARSE_ERROR					= 1064,
@@ -1359,7 +1255,7 @@ class QueryParser_i;
 class RequestBuilder_i;
 class ReplyParser_i;
 
-std::unique_ptr<QueryParser_i> CreateQueryParser ( bool bJson );
+std::unique_ptr<QueryParser_i> CreateQueryParser ( bool bJson ) noexcept;
 std::unique_ptr<RequestBuilder_i> CreateRequestBuilder ( Str_t sQuery, const SqlStmt_t & tStmt );
 std::unique_ptr<ReplyParser_i> CreateReplyParser ( bool bJson, int & iUpdated, int & iWarnings );
 StmtErrorReporter_i * CreateHttpErrorReporter();
@@ -1415,8 +1311,7 @@ bool sphCheckWeCanModify ();
 bool sphCheckWeCanModify ( StmtErrorReporter_i & tOut );
 bool sphCheckWeCanModify ( RowBuffer_i& tOut );
 bool PollOptimizeRunning ( const CSphString & sIndex );
-int GetLogFD ();
-const CSphString& sphGetLogFile() noexcept;
+void FixPathAbsolute ( CSphString & sPath );
 
 void				sphProcessHttpQueryNoResponce ( const CSphString& sEndpoint, const CSphString& sQuery, CSphVector<BYTE> & dResult );
 void				sphHttpErrorReply ( CSphVector<BYTE> & dData, EHTTP_STATUS eCode, const char * szError );
@@ -1425,7 +1320,6 @@ void				SaveCompatHttp ( JsonEscapedBuilder & tOut );
 void				SetupCompatHttp();
 bool				SetLogManagement ( const CSphString & sVal, CSphString & sError );
 bool				IsLogManagementEnabled ();
-std::unique_ptr<PubSearchHandler_c> CreateMsearchHandler ( std::unique_ptr<QueryParser_i> pQueryParser, QueryType_e eQueryType, ParsedJsonQuery_t & tParsed );
 int64_t				GetDocID ( const char * szID );
 
 void ExecuteApiCommand ( SearchdCommand_e eCommand, WORD uCommandVer, int iLength, InputBuffer_c & tBuf, GenericOutputBuffer_c & tOut );
@@ -1433,14 +1327,17 @@ void HandleCommandPing ( ISphOutputBuffer & tOut, WORD uVer, InputBuffer_c & tRe
 
 void BuildStatusOneline ( StringBuilder_c& sOut );
 
-namespace session
-{
+void UpdateLastMeta (VecTraits_T<AggrResult_t> tResults );
+
+namespace session {
 	bool IsAutoCommit ( const ClientSession_c* );
 	bool IsInTrans ( const ClientSession_c* );
 
 	bool Execute ( Str_t sQuery, RowBuffer_i& tOut );
 	void SetFederatedUser();
 	void SetUser ( const CSphString & sUser );
+	void SetCurrentDbName ( CSphString sDb );
+	const char* GetCurrentDbName ();
 	void SetAutoCommit ( bool bAutoCommit );
 	void SetInTrans ( bool bInTrans );
 	bool IsAutoCommit();
@@ -1453,13 +1350,6 @@ namespace session
 	void SetDeprecatedEOF ( bool bDeprecatedEOF );
 	bool GetDeprecatedEOF();
 }
-
-void LogSphinxqlError ( const char * sStmt, const Str_t & sError );
-void LogSphinxqlError ( const Str_t & sStmt, const Str_t & sError );
-int GetDaemonLogBufSize ();
-
-enum class BuddyQuery_e { SQL, HTTP };
-void LogBuddyQuery ( const Str_t sQuery, BuddyQuery_e tType );
 
 // that is used from sphinxql command over API
 void RunSingleSphinxqlCommand ( Str_t sCommand, GenericOutputBuffer_c & tOut );
@@ -1489,6 +1379,7 @@ bool PercolateParseFilters ( const char * sFilters, ESphCollation eCollation, co
 void PercolateMatchDocuments ( const BlobVec_t &dDocs, const PercolateOptions_t &tOpts, CSphSessionAccum &tAcc, CPqResult &tResult );
 
 void SendErrorReply ( ISphOutputBuffer & tOut, const char * sTemplate, ... );
+void LogToConsole(const char* szKind, const char* szMsg) noexcept;
 void SetLogHttpFilter ( const CSphString & sVal );
 int HttpGetStatusCodes ( EHTTP_STATUS eStatus ) noexcept;
 EHTTP_STATUS HttpGetStatusCodes ( int iStatus ) noexcept;
@@ -1502,6 +1393,7 @@ struct http_parser;
 enum class Replace_e : bool { NoPlus = false, WithPlus = true };
 void UriPercentReplace ( Str_t& sEntity, Replace_e ePlus = Replace_e::WithPlus );
 void DumpHttp ( int iReqType, const CSphString & sURL, Str_t sBody );
+const char* szStatusVersion() noexcept;
 
 enum MysqlColumnType_e
 {
@@ -1593,9 +1485,9 @@ public:
 
 	// wrappers for popular packets
 	virtual void Eof ( bool bMoreResults, int iWarns, const char* szMeta ) = 0;
-	inline void Eof ( bool bMoreResults , int iWarns ) { return Eof ( bMoreResults, iWarns, nullptr); }
-	inline void Eof ( bool bMoreResults ) { return Eof ( bMoreResults, 0 ); }
-	inline void Eof () { return Eof ( false ); }
+	void Eof ( bool bMoreResults , int iWarns ) { return Eof ( bMoreResults, iWarns, nullptr); }
+	void Eof ( bool bMoreResults ) { return Eof ( bMoreResults, 0 ); }
+	void Eof () { return Eof ( false ); }
 
 	virtual void Error ( const char * sError, EMYSQL_ERR iErr = EMYSQL_ERR::PARSE_ERROR ) = 0;
 
@@ -1760,6 +1652,17 @@ public:
 			if ( !DataRow ( dData.Slice ( i, iStride ) ) )
 				break;
 		Eof();
+	}
+
+	bool DataTableOneline ( const char* szTitle, int iValue=0 )
+	{
+		HeadBegin();
+		HeadColumn (szTitle, MYSQL_COL_LONG);
+		HeadEnd();
+		PutNumAsString ( iValue );
+		Commit();
+		Eof();
+		return true;
 	}
 
 	virtual const CSphString & GetError() const { return m_sError; }

@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2021-2024, Manticore Software LTD (https://manticoresearch.com)
+// Copyright (c) 2021-2025, Manticore Software LTD (https://manticoresearch.com)
 // Copyright (c) 2001-2016, Andrew Aksyonoff
 // Copyright (c) 2008-2016, Sphinx Technologies Inc
 // All rights reserved
@@ -64,7 +64,7 @@ void SqlSecondParser_c::SetStatement ( const SqlNode_t & tName, SqlSet_e eSet, i
 }
 
 using YYSTYPE = SqlNode_t;
-STATIC_ASSERT ( IS_TRIVIALLY_COPYABLE ( SqlNode_t ), YYSTYPE_MUST_BE_TRIVIAL_FOR_RESIZABLE_PARSER_STACK );
+static_assert ( IS_TRIVIALLY_COPYABLE ( SqlNode_t ), "YYSTYPE must be trivial for resizable parser stack" );
 # define YYSTYPE_IS_TRIVIAL 1
 # define YYSTYPE_IS_DECLARED 1
 

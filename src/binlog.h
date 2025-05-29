@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2021-2024, Manticore Software LTD (https://manticoresearch.com)
+// Copyright (c) 2021-2025, Manticore Software LTD (https://manticoresearch.com)
 // Copyright (c) 2001-2016, Andrew Aksyonoff
 // Copyright (c) 2008-2016, Sphinx Technologies Inc
 // All rights reserved
@@ -40,7 +40,7 @@ namespace Binlog {
 	template < typename T >
 	static void SaveVector ( Writer_i & tWriter, const VecTraits_T<T> &tVector )
 	{
-		STATIC_ASSERT ( IS_TRIVIALLY_COPYABLE (T), NON_TRIVIAL_VECTORS_ARE_UNSERIALIZABLE );
+		static_assert ( IS_TRIVIALLY_COPYABLE (T), "non-trivial vectors are unserializable" );
 		tWriter.ZipOffset ( tVector.GetLength() );
 		if ( tVector.GetLength() )
 			tWriter.PutBytes ( tVector.Begin(), tVector.GetLengthBytes() );
@@ -49,7 +49,7 @@ namespace Binlog {
 	template < typename T, typename P >
 	static bool LoadVector ( CSphReader & tReader, CSphVector <T,P> & tVector )
 	{
-		STATIC_ASSERT ( IS_TRIVIALLY_COPYABLE(T), NON_TRIVIAL_VECTORS_ARE_UNSERIALIZABLE );
+		static_assert ( IS_TRIVIALLY_COPYABLE(T), "non-trivial vectors are unserializable" );
 		tVector.Resize ( (int) tReader.UnzipOffset() ); // FIXME? sanitize?
 		if ( tVector.GetLength() )
 			tReader.GetBytes ( tVector.Begin(), (int) tVector.GetLengthBytes() );

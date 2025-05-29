@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2017-2024, Manticore Software LTD (https://manticoresearch.com)
+// Copyright (c) 2017-2025, Manticore Software LTD (https://manticoresearch.com)
 // Copyright (c) 2001-2016, Andrew Aksyonoff
 // Copyright (c) 2008-2016, Sphinx Technologies Inc
 // All rights reserved
@@ -53,6 +53,7 @@ public:
 	const char* cstr() const { return m_sValue.cstr(); }
 
 	const CSphString& strval() const { return m_sValue; }
+	operator CSphString () const { return m_sValue; }
 	int intval() const { return m_iValue; }
 	int64_t int64val() const { return m_i64Value; }
 	float floatval() const { return m_fValue; }
@@ -64,6 +65,9 @@ public:
 
 	bool operator== ( const char* s ) const { return m_sValue == s; }
 	bool operator!= ( const char* s ) const { return m_sValue != s; }
+
+private:
+	CSphVariant ( const CSphVariant& rhs, bool );
 };
 
 #include "variant_impl.h"

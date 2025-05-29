@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2017-2024, Manticore Software LTD (https://manticoresearch.com)
+// Copyright (c) 2017-2025, Manticore Software LTD (https://manticoresearch.com)
 // Copyright (c) 2001-2016, Andrew Aksyonoff
 // Copyright (c) 2008-2016, Sphinx Technologies Inc
 // All rights reserved
@@ -71,7 +71,7 @@ class tstlogger
 protected:
 	void setup ()
 	{
-		g_pLogger() = TestLogger;
+		SetLogger ( &TestLogger );
 		sLogBuff[0] = '\0';
 	}
 
@@ -84,7 +84,7 @@ public:
 	{
 		m_eMaxLevel = SPH_LOG_DEBUG;
 		m_bOutToStderr = true;
-		g_pLogger () = TestLogger;
+		SetLogger ( &TestLogger );
 	}
 };
 

@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2020-2024, Manticore Software LTD (https://manticoresearch.com)
+// Copyright (c) 2020-2025, Manticore Software LTD (https://manticoresearch.com)
 // All rights reserved
 //
 // This program is free software; you can redistribute it and/or modify
@@ -12,7 +12,6 @@
 #include "sphinxutils.h"
 #include "sphinxexpr.h"
 #include "libutils.h"
-#include "fileutils.h"
 #include "schema/columninfo.h"
 #include "schema/schema.h"
 

@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2021-2024, Manticore Software LTD (https://manticoresearch.com)
+// Copyright (c) 2021-2025, Manticore Software LTD (https://manticoresearch.com)
 // Copyright (c) 2001-2016, Andrew Aksyonoff
 // Copyright (c) 2008-2016, Sphinx Technologies Inc
 // All rights reserved
@@ -19,6 +19,8 @@
 #include "searchdsql.h"
 #include "sphinxpq.h"
 
+constexpr const char* szManticore = "Manticore";
+
 class ClientSession_c
 {
 public:
@@ -30,6 +32,7 @@ public:
 	bool m_bFederatedUser = false;
 	CSphString m_sFederatedQuery;
 	CSphString m_sUser;
+	CSphString m_sCurrentDbName { szManticore };
 
 public:
 	bool m_bAutoCommit = true;

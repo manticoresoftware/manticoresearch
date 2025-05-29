@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2017-2024, Manticore Software LTD (https://manticoresearch.com)
+// Copyright (c) 2017-2025, Manticore Software LTD (https://manticoresearch.com)
 // Copyright (c) 2001-2016, Andrew Aksyonoff
 // Copyright (c) 2008-2016, Sphinx Technologies Inc
 // All rights reserved
@@ -30,12 +30,14 @@ void RotateGlobalIdf ()
 		Threads::Coro::ScopedMutex_t tLock { tSerializer };
 
 		CSphVector<CSphString> dFiles;
-		ServedSnap_t hLocals = g_pLocalIndexes->GetHash();
-		for ( auto& tIt : *hLocals )
-		{
-			auto pIndex = tIt.second;
-			if ( pIndex && !pIndex->m_sGlobalIDFPath.IsEmpty() )
-				dFiles.Add ( pIndex->m_sGlobalIDFPath );
+		{ // scope for GetHash() below
+			ServedSnap_t hLocals = g_pLocalIndexes->GetHash();
+			for ( auto& tIt : *hLocals )
+			{
+				auto pIndex = tIt.second;
+				if ( pIndex && !pIndex->m_sGlobalIDFPath.IsEmpty() )
+					dFiles.Add ( pIndex->m_sGlobalIDFPath );
+			}
 		}
 
 		auto pDesc = PublishSystemInfo ( "ROTATE global IDF" );

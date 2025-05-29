@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2017-2024, Manticore Software LTD (https://manticoresearch.com)
+// Copyright (c) 2017-2025, Manticore Software LTD (https://manticoresearch.com)
 // Copyright (c) 2001-2016, Andrew Aksyonoff
 // Copyright (c) 2008-2016, Sphinx Technologies Inc
 // All rights reserved
@@ -1029,8 +1029,8 @@ Commands are:
 
 --fold <TABLE> [FILE]		fold FILE or stdin using TABLE charset_table
 --htmlstrip <TABLE>		filter stdin using table HTML stripper settings
---buildidf <TABLE1.dict> [TABLE2.dict ...] [--skip-uniq] --out <GLOBAL.idf>
-				join --stats dictionary dumps into global.idf file
+--buildidf <DICTFILE1.txt> [DICTFILE2.txt ...] [--skip-uniq] --out <GLOBAL.idf>
+				join --dumpdict dictionary dumps into global.idf file
 --mergeidf <NODE1.idf> [NODE2.idf ...] [--skip-uniq] --out <GLOBAL.idf>
 				merge several .idf files into one file
 --apply-killlists		apply table killlists
@@ -1275,6 +1275,7 @@ int main ( int argc, char ** argv )
 	int iCheckChunk = -1;
 	DocID_t iExtractDocid = -1;
 
+	const char* szErrorMsgTmpl = "ERROR: malformed or unknown option near '%s'.\n";
 	int i;
 	for ( i=1; i<argc; i++ )
 	{
@@ -1288,6 +1289,41 @@ int main ( int argc, char ** argv )
 		OPT ( "-h", "--help" )		{ ShowVersion(); ShowHelp(); exit(0); }
 		OPT1 ( "--apply-killlists" ){ SetCmd ( IndextoolCmd_e::APPLYKLISTS ); continue; }
 		OPT1 ( "--check-id-dups" )	{ bCheckIdDups = true; continue; }
+		if ( !strcmp ( argv[i], "--buildidf" ) || !strcmp ( argv[i], "--mergeidf" ) )
+		{
+			if ( !strcmp ( argv[i], "--buildidf" ) )
+			{
+				szErrorMsgTmpl = "USAGE: %s <DICTFILE1.txt> [DICTFILE2.txt ...] [--skip-uniq] --out <NODEGLOBAL.idf>\n";
+				SetCmd ( IndextoolCmd_e::BUILDIDF );
+			} else {
+				szErrorMsgTmpl = "USAGE: %s <NODE1.idf> [NODE2.idf ...] [--skip-uniq] --out <GLOBAL.idf>\n";
+				SetCmd ( IndextoolCmd_e::MERGEIDF );
+			}
+			if ( ( i + 1 ) >= argc )
+				break;
+			while ( ++i < argc )
+			{
+				if ( !strcmp ( argv[i], "--out" ) )
+				{
+					if ( ( i + 1 ) >= argc )
+						break; // too few args
+					sOut = argv[++i];
+
+				} else if ( !strcmp ( argv[i], "--skip-uniq" ) )
+				{
+					bSkipUnique = true;
+
+				} else if ( argv[i][0] == '-' )
+				{
+					break; // unknown switch
+
+				} else
+				{
+					dFiles.Add ( argv[i] ); // handle everything else as a file name
+				}
+			}
+			break;
+		}
 
 		// handle options/commands with 1+ args
 		if ( (i+1)>=argc )			break;
@@ -1342,32 +1378,6 @@ int main ( int argc, char ** argv )
 
 			sKeyword = argv[++i];
 
-		} else if ( !strcmp ( argv[i], "--buildidf" ) || !strcmp ( argv[i], "--mergeidf" ) )
-		{
-			SetCmd ( !strcmp ( argv[i], "--buildidf" ) ? IndextoolCmd_e::BUILDIDF : IndextoolCmd_e::MERGEIDF );
-			while ( ++i<argc )
-			{
-				if ( !strcmp ( argv[i], "--out" ) )
-				{
-					if ( (i+1)>=argc )
-						break; // too few args
-					sOut = argv[++i];
-
-				} else if ( !strcmp ( argv[i], "--skip-uniq" ) )
-				{
-					bSkipUnique = true;
-
-				} else if ( argv[i][0]=='-' )
-				{
-					break; // unknown switch
-
-				} else
-				{
-					dFiles.Add ( argv[i] ); // handle everything else as a file name
-				}
-			}
-			break;
-
 		} else
 		{
 			// unknown option
@@ -1380,7 +1390,7 @@ int main ( int argc, char ** argv )
 
 	if ( i!=argc )
 	{
-		fprintf ( stdout, "ERROR: malformed or unknown option near '%s'.\n", argv[i] );
+		fprintf ( stdout, szErrorMsgTmpl, argv[i] );
 		return 1;
 	}
 
@@ -1393,6 +1403,21 @@ int main ( int argc, char ** argv )
 
 	sphCollationInit ();
 	SetupLemmatizerBase();
+
+
+// buildidf/mergeidf doesn't need config file at all
+	switch ( g_eCommand ) {
+	case IndextoolCmd_e::BUILDIDF:
+		if ( !BuildIDF ( sOut, dFiles, sError, bSkipUnique ) )
+			sphDie ( "ERROR: %s\n", sError.cstr() );
+		return 0;
+
+	case IndextoolCmd_e::MERGEIDF:
+		if ( !MergeIDF ( sOut, dFiles, sError, bSkipUnique ) )
+			sphDie ( "ERROR: %s\n", sError.cstr() );
+		return 0;
+	default: break;
+	};
 
 	auto hConf = sphLoadConfigWithoutIndexes ( sOptConfig, bTraceToStdout );
 
@@ -1640,16 +1665,6 @@ int main ( int argc, char ** argv )
 
 		case IndextoolCmd_e::MORPH:
 			ApplyMorphology ( pIndex.get() );
-			break;
-
-		case IndextoolCmd_e::BUILDIDF:
-			if ( !BuildIDF ( sOut, dFiles, sError, bSkipUnique ) )
-				sphDie ( "ERROR: %s\n", sError.cstr() );
-			break;
-
-		case IndextoolCmd_e::MERGEIDF:
-			if ( !MergeIDF ( sOut, dFiles, sError, bSkipUnique ) )
-				sphDie ( "ERROR: %s\n", sError.cstr() );
 			break;
 
 		case IndextoolCmd_e::FOLD:

@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2017-2024, Manticore Software LTD (https://manticoresearch.com)
+// Copyright (c) 2017-2025, Manticore Software LTD (https://manticoresearch.com)
 // Copyright (c) 2001-2016, Andrew Aksyonoff
 // Copyright (c) 2008-2016, Sphinx Technologies Inc
 // All rights reserved
@@ -20,7 +20,8 @@ bool StrEq ( const char* l, const char* r );
 bool StrEqN ( const char* l, const char* r );
 bool StrEq ( Str_t l, const char* r );
 bool StrEqN ( Str_t l, const char* r );
-
+bool StrEq ( Str_t l, Str_t r );
+bool StrEqN ( Str_t l, Str_t r );
 
 /// immutable C string proxy
 struct CSphString

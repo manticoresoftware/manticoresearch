@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2017-2024, Manticore Software LTD (https://manticoresearch.com)
+// Copyright (c) 2017-2025, Manticore Software LTD (https://manticoresearch.com)
 // Copyright (c) 2001-2016, Andrew Aksyonoff
 // Copyright (c) 2008-2016, Sphinx Technologies Inc
 // All rights reserved
@@ -244,7 +244,7 @@ int CSphBin::ReadHit ( AggregateHit_t* pOut )
 	{
 		// SPH_MAX_WORD_LEN is now 42 only to keep ReadVLB() below
 		// technically, we can just use different functions on different paths, if ever needed
-		STATIC_ASSERT ( SPH_MAX_WORD_LEN * 3 <= 127, KEYWORD_TOO_LONG );
+		static_assert ( SPH_MAX_WORD_LEN * 3 <= 127, "keyword too long" );
 		SphWordID_t uDelta = ReadVLB();
 
 		if ( uDelta )

@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2017-2024, Manticore Software LTD (https://manticoresearch.com)
+// Copyright (c) 2017-2025, Manticore Software LTD (https://manticoresearch.com)
 // Copyright (c) 2001-2016, Andrew Aksyonoff
 // Copyright (c) 2008-2016, Sphinx Technologies Inc
 // All rights reserved
@@ -13,7 +13,7 @@
 #ifndef _snippetindex_
 #define _snippetindex_
 
-#include "sphinxquery.h"
+#include "sphinxquery/sphinxquery.h"
 
 //////////////////////////////////////////////////////////////////////////
 /// mini-index for a single document

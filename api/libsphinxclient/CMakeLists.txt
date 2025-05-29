@@ -24,6 +24,7 @@ if (CMAKE_CXX_COMPILER_ID STREQUAL "Clang" AND CMAKE_CXX_COMPILER_FRONTEND_VARIA
 else ()
 	target_compile_options ( sphinxclient PRIVATE -g3 -Wall -O0 )
 endif ()
+target_link_libraries ( sphinxclient PRIVATE $<$<PLATFORM_ID:Windows>:wsock32> )
 
 if (NOT BUILD_TESTING OR DISABLE_GTESTS OR WIN32 OR TEST_SPECIAL_EXTERNAL )
 	return()
@@ -39,16 +40,12 @@ configure_file ( ${CMAKE_CURRENT_SOURCE_DIR}/smoke_test.conf ${CMAKE_CURRENT_BIN
 # since cmake 3.18 names need fixup
 include(fixup_test_name)
 
-fixup_test_name ( test "Prepare API test" )
-add_test ( NAME ${test} COMMAND indexer -c smoke_test.conf --all
-		WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR} )
-SET_TESTS_PROPERTIES ( ${test} PROPERTIES LABELS API FIXTURES_SETUP APIINDEX  )
-
 fixup_test_name ( test "Perform API smoke test" )
 add_test ( NAME ${test} COMMAND ${CMAKE_COMMAND}
 		-D SEARCHD=$<TARGET_FILE:searchd>
+		-D INDEXER=$<TARGET_FILE:indexer>
 		-D CLI=$<TARGET_FILE:testcli>
 		-D SRCDIR=${CMAKE_CURRENT_SOURCE_DIR}
 		-P ${CMAKE_CURRENT_SOURCE_DIR}/smoke.cmake
 		WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR} )
-SET_TESTS_PROPERTIES ( ${test} PROPERTIES LABELS API FIXTURES_REQUIRED APIINDEX )
+SET_TESTS_PROPERTIES ( ${test} PROPERTIES LABELS API )

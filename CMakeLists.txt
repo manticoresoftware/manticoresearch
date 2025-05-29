@@ -41,7 +41,11 @@ if (WIN32 AND WIN_BUNDLE)
 	set ( CMAKE_FIND_PACKAGE_PREFER_CONFIG TRUE )
 endif ()
 
-set ( BUILD_TAG "" CACHE STRING "The tag which will be added to build" )
+if (NOT DEFINED BUILD_TAG AND DEFINED ENV{BUILD_TAG})
+	set ( BUILD_TAG $ENV{BUILD_TAG} CACHE STRING "The tag which will be added to build" )
+elseif (NOT DEFINED BUILD_TAG)
+	set ( BUILD_TAG "" CACHE STRING "The tag which will be added to build" )
+endif()
 set ( PACKAGE_NAME "manticore" )
 set ( COMPANY_NAME "Manticore Software LTD" )
 set ( CPACK_PACKAGE_NAME "${PACKAGE_NAME}" )
@@ -151,8 +155,8 @@ set ( USE_SYSLOG ${HAVE_SYSLOG_H} CACHE BOOL "compile with possibility to use sy
 bannervar ( USE_SYSLOG )
 
 # options for clang/gcc c and c++
-target_compile_options ( lextra INTERFACE $<${ONLYGNUCLANGC_CXX}:-D_FILE_OFFSET_BITS=64 -Wall -fno-strict-aliasing> )
-target_compile_options ( lextra INTERFACE $<${CLANGWIN}:-fno-strict-aliasing -Wno-format -Wno-uninitialized-const-reference -Wno-unneeded-internal-declaration
+target_compile_options ( lextra INTERFACE $<${ONLYGNUCLANGC_CXX}:-D_FILE_OFFSET_BITS=64 -Wall -Wstrict-aliasing> )
+target_compile_options ( lextra INTERFACE $<${CLANGWIN}:-Wstrict-aliasing -Wno-format -Wno-uninitialized-const-reference -Wno-unneeded-internal-declaration
 		-Wno-deprecated-declarations -Wno-implicit-const-int-float-conversion -Wno-missing-braces -Wno-unused-function> )
 
 # disable rtti

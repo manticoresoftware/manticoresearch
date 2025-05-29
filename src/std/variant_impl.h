@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2017-2024, Manticore Software LTD (https://manticoresearch.com)
+// Copyright (c) 2017-2025, Manticore Software LTD (https://manticoresearch.com)
 // Copyright (c) 2001-2016, Andrew Aksyonoff
 // Copyright (c) 2008-2016, Sphinx Technologies Inc
 // All rights reserved
@@ -25,10 +25,30 @@ inline CSphVariant::CSphVariant ( const char* sString, int iTag )
 }
 
 /// copy ctor
-inline CSphVariant::CSphVariant ( const CSphVariant& rhs )
+inline CSphVariant::CSphVariant ( const CSphVariant& rhs ) : CSphVariant ( rhs, false )
 {
-	if ( rhs.m_pNext )
-		m_pNext = new CSphVariant ( *rhs.m_pNext );
+	if ( &rhs == this )
+		return;
+
+// recursive copy; mem-greedy
+//	if ( rhs.m_pNext )
+//		m_pNext = new CSphVariant ( *rhs.m_pNext );
+
+	// non-recursive copy
+	const auto* pNextRhs = rhs.m_pNext;
+	auto* pCurrent = this;
+
+	while ( pNextRhs ) {
+		pCurrent->m_pNext = new CSphVariant ( *pNextRhs, false );
+		pCurrent = pCurrent->m_pNext;
+		pNextRhs = pNextRhs->m_pNext;
+	}
+}
+
+inline CSphVariant::CSphVariant ( const CSphVariant& rhs, bool )
+{
+	if ( &rhs == this )
+		return;
 
 	m_sValue = rhs.m_sValue;
 	m_iValue = rhs.m_iValue;
@@ -50,7 +70,17 @@ inline CSphVariant::CSphVariant ( CSphVariant&& rhs ) noexcept
 /// WARNING: automatically frees linked items!
 inline CSphVariant::~CSphVariant()
 {
-	SafeDelete ( m_pNext );
+	// SafeDelete ( m_pNext ); /// < trivial, but recursive; deletion of ~5k elems requires ~128Kb of stack
+
+	if ( !m_pNext )
+		return;
+
+	CSphVector<CSphVariant*> dChildren;
+	for ( CSphVariant* pVal = m_pNext; pVal; pVal = std::exchange ( pVal->m_pNext, nullptr ) )
+		dChildren.Add ( pVal );
+
+	for ( int i= dChildren.GetLength() -1; i >= 0; --i )
+		delete dChildren[i];
 }
 
 /// default copy operator

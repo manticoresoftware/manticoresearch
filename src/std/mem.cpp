@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2017-2024, Manticore Software LTD (https://manticoresearch.com)
+// Copyright (c) 2017-2025, Manticore Software LTD (https://manticoresearch.com)
 // Copyright (c) 2001-2016, Andrew Aksyonoff
 // Copyright (c) 2008-2016, Sphinx Technologies Inc
 // All rights reserved
@@ -13,6 +13,8 @@
 #include "mem.h"
 #include "format.h"
 #include "fatal.h"
+#include "config.h"
+
 #include <cstdlib>
 
 /////////////////////////////////////////////////////////////////////////////
@@ -463,7 +465,7 @@ void debugdeallocate ( void* pPtr )
 // MEMORY STATISTICS
 //////////////////////////////////////////////////////////////////////////////
 
-STATIC_ASSERT ( MEM_TOTAL < 255, TOO_MANY_MEMORY_CATEGORIES );
+static_assert ( MEM_TOTAL < 255, "too many memory categories" );
 
 // stack of memory categories as we move deeper and deeper
 class MemCategoryStack_t // NOLINT

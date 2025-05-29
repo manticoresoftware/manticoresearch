@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2017-2024, Manticore Software LTD (https://manticoresearch.com)
+// Copyright (c) 2017-2025, Manticore Software LTD (https://manticoresearch.com)
 // Copyright (c) 2001-2016, Andrew Aksyonoff
 // Copyright (c) 2008-2016, Sphinx Technologies Inc
 // All rights reserved
@@ -251,13 +251,17 @@ private:
 
 template <class PRED, bool HAVE_COLUMNAR>
 CSphGrouperMulti<PRED,HAVE_COLUMNAR>::CSphGrouperMulti ( const CSphVector<CSphColumnInfo> & dAttrs, VecRefPtrs_t<ISphExpr *> dJsonKeys, ESphCollation eCollation )
-	: m_dAttrs ( dAttrs )
-	, m_dJsonKeys ( std::move(dJsonKeys) )
+	: m_dJsonKeys ( std::move(dJsonKeys) )
 	, m_eCollation ( eCollation )
 {
 	assert ( dAttrs.GetLength()>1 );
 	assert ( dAttrs.GetLength()==m_dJsonKeys.GetLength() );
 	
+	// should clone original attr expression
+	m_dAttrs = dAttrs;
+	for ( auto & tAttr : m_dAttrs )
+		tAttr.m_pExpr = SafeClone ( tAttr.m_pExpr );
+
 	if constexpr ( HAVE_COLUMNAR )
 		SpawnColumnarGroupers();
 }

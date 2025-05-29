@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2017-2024, Manticore Software LTD (https://manticoresearch.com)
+// Copyright (c) 2017-2025, Manticore Software LTD (https://manticoresearch.com)
 // Copyright (c) 2001-2016, Andrew Aksyonoff
 // Copyright (c) 2008-2016, Sphinx Technologies Inc
 // All rights reserved
@@ -23,52 +23,6 @@
 static CSphString g_sSslCert;
 static CSphString g_sSslKey;
 static CSphString g_sSslCa;
-
-#if not defined OPENSSL_API_COMPAT or OPENSSL_API_COMPAT >= 0x10100000L
-
-// need by OpenSSL
-struct CRYPTO_dynlock_value
-{
-	CSphMutex m_tLock;
-};
-
-static CSphFixedVector<CSphMutex> g_dSslLocks { 0 };
-
-static void fnSslLock ( int iMode, int iLock, const char*, int )
-{
-	if ( iMode & CRYPTO_LOCK )
-		g_dSslLocks[iLock].Lock();
-	else
-		g_dSslLocks[iLock].Unlock();
-}
-
-static CRYPTO_dynlock_value* fnSslLockDynCreate ( const char*, int )
-{
-	auto* pLock = new CRYPTO_dynlock_value;
-	return pLock;
-}
-
-static void fnSslLockDyn ( int iMode, CRYPTO_dynlock_value* pLock, const char*, int )
-{
-	assert ( pLock );
-	if ( iMode & CRYPTO_LOCK )
-		pLock->m_tLock.Lock();
-	else
-		pLock->m_tLock.Unlock();
-}
-
-static void fnSslLockDynDestroy ( CRYPTO_dynlock_value* pLock, const char*, int )
-{
-	SafeDelete ( pLock );
-}
-
-inline static void ResetSslLocks ( int iLocks )
-{
-	g_dSslLocks.Reset ( iLocks );
-}
-#else
-inline static void ResetSslLocks ( int iLocks ) {}
-#endif
 
 static BIO_METHOD * BIO_s_coroAsync ( bool bDestroy = false );
 
@@ -158,17 +112,9 @@ static void SslFreeCtx ( SSL_CTX * pCtx )
 	SSL_CTX_free ( pCtx );
 	pCtx = nullptr;
 
-	CRYPTO_set_locking_callback ( nullptr );
-	CRYPTO_set_dynlock_create_callback ( nullptr );
-	CRYPTO_set_dynlock_lock_callback ( nullptr );
-	CRYPTO_set_dynlock_destroy_callback ( nullptr );
-
 	EVP_cleanup();
 	CRYPTO_cleanup_all_ex_data();
-	ERR_remove_state ( 0 );
 	ERR_free_strings();
-
-	ResetSslLocks ( 0 );
 }
 
 using SmartSSL_CTX_t = SharedPtrCustom_t<SSL_CTX>;
@@ -179,27 +125,10 @@ static SmartSSL_CTX_t GetSslCtx ()
 	static SmartSSL_CTX_t pSslCtx;
 	if ( !pSslCtx )
 	{
-		int iLocks = CRYPTO_num_locks();
-		ResetSslLocks ( iLocks );
-
-		CRYPTO_set_locking_callback ( &fnSslLock );
-		CRYPTO_set_dynlock_create_callback ( &fnSslLockDynCreate );
-		CRYPTO_set_dynlock_lock_callback ( &fnSslLockDyn );
-		CRYPTO_set_dynlock_destroy_callback ( &fnSslLockDynDestroy );
-
 		SSL_load_error_strings();
 		SSL_library_init();
 
-		const SSL_METHOD * pMode = nullptr;
-		#if HAVE_TLS_SERVER_METHOD
-		pMode = TLS_server_method ();
-		#elif HAVE_TLSV1_2_METHOD
-		pMode = TLSv1_2_server_method();
-		#elif HAVE_TLSV1_1_SERVER_METHOD
-		pMode = TLSv1_1_server_method();
-		#else
-		pMode = SSLv23_server_method();
-		#endif
+		const SSL_METHOD * pMode = TLS_server_method();
 		pSslCtx = SmartSSL_CTX_t ( SSL_CTX_new ( pMode ), [] ( SSL_CTX * pCtx )
 		{
 			sphLogDebugv ( BACKN "~~ Releasing ssl context." NORM );
@@ -208,7 +137,7 @@ static SmartSSL_CTX_t GetSslCtx ()
 		});
 		SSL_CTX_set_verify ( pSslCtx, SSL_VERIFY_NONE, nullptr );
 
-		// shedule callback for final shutdown.
+		// schedule callback for final shutdown.
 		searchd::AddShutdownCb ( [pRefCtx = pSslCtx] {
 			sphLogDebugv ( BACKN "~~ Shutdowncb called." NORM );
 			pSslCtx = nullptr;

@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2017-2024, Manticore Software LTD (https://manticoresearch.com)
+// Copyright (c) 2017-2025, Manticore Software LTD (https://manticoresearch.com)
 // Copyright (c) 2001-2016, Andrew Aksyonoff
 // Copyright (c) 2008-2016, Sphinx Technologies Inc
 // All rights reserved
@@ -217,7 +217,7 @@ private:
 
 		TYPE_TOTAL
 	};
-	STATIC_ASSERT ( TYPE_TOTAL<=15, OUT_OF_TYPECODES );
+	static_assert ( TYPE_TOTAL<=15, "out of typecodes" );
 
 	CSphTightVector<BYTE>		m_dTokenStream;
 	int							m_iReadPtr = 0;

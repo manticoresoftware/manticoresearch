@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2017-2024, Manticore Software LTD (https://manticoresearch.com)
+// Copyright (c) 2017-2025, Manticore Software LTD (https://manticoresearch.com)
 // Copyright (c) 2001-2016, Andrew Aksyonoff
 // Copyright (c) 2008-2016, Sphinx Technologies Inc
 // All rights reserved
@@ -22,9 +22,10 @@
 class CSphWriter;
 class CSphReader;
 
-struct NamedKNNSettings_t : public knn::IndexSettings_t
+struct NamedKNNSettings_t : public knn::IndexSettings_t, public knn::ModelSettings_t
 {
-	CSphString		m_sName;
+	CSphString	m_sName;
+	CSphString	m_sFrom;
 };
 
 /// source column info
@@ -72,7 +73,9 @@ struct CSphColumnInfo
 	DWORD			m_uAttrFlags = ATTR_NONE;			///< attribute storage spec
 	AttrEngine_e	m_eEngine = AttrEngine_e::DEFAULT;	///< used together with per-table engine specs to determine attribute storage
 
-	knn::IndexSettings_t m_tKNN;								///< knn index settings
+	knn::IndexSettings_t m_tKNN;						///< knn index settings
+	knn::ModelSettings_t m_tKNNModel;					///< knn model settings
+	CSphString		m_sKNNFrom;							///< fields/attrs used by the model
 
 	WORD			m_uNext = 0xFFFF;					///< next in linked list for hash in CSphSchema
 
@@ -92,6 +95,7 @@ struct CSphColumnInfo
 	bool IsIndexedKNN() const;
 	bool IsJoined() const;
 	bool IsIndexedSI() const;
+	bool IsStored() const;
 };
 
 

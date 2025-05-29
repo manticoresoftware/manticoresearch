@@ -29,7 +29,9 @@ target_link_libraries ( gmanticoretest
 		lmanticore
 		lsearchd
 		searchd_ssl
-		source_svpipe )
+		source_svpipe
+		daemon
+)
 
 if (WITH_EXPAT)
 	target_link_libraries ( gmanticoretest source_xmlpipe2 )
@@ -40,7 +42,7 @@ target_compile_options ( gmanticoretest PRIVATE $<$<OR:$<COMPILE_LANG_AND_ID:CXX
 set ( CMAKE_GTEST_DISCOVER_TESTS_DISCOVERY_MODE PRE_TEST )
 
 include ( GoogleTest )
-GTEST_DISCOVER_TESTS ( gmanticoretest PROPERTIES LABELS GOOGLE )
+GTEST_DISCOVER_TESTS ( gmanticoretest PROPERTIES LABELS GOOGLE ENVIRONMENT "GTEST_DICT=${CMAKE_CURRENT_SOURCE_DIR}")
 message ( STATUS "Discovered and added individual google-tests" )
 
 if (WIN32)

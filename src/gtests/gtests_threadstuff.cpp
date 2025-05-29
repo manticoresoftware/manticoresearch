@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2019-2024, Manticore Software LTD (https://manticoresearch.com)
+// Copyright (c) 2019-2025, Manticore Software LTD (https://manticoresearch.com)
 // All rights reserved
 //
 // This program is free software; you can redistribute it and/or modify
@@ -83,7 +83,7 @@ void Sleeper(int iMsec, const char* szName)
 }
 
 // this test will NOT pass in single-thread (see gtests_globalstate.cpp, if iThreads<2).
-// that is because it uses ture sphSleepMsec, which effectively pauses single thread.
+// that is because it uses true sphSleepMsec, which effectively pauses single thread.
 TEST ( ThreadPool, WaitForN )
 {
 	using namespace Threads;
@@ -169,6 +169,57 @@ TEST ( ThreadPool, strandr2 )
 		ASSERT_EQ ( i, dRes[i] );
 	}
 	ASSERT_EQ ( dRes.GetLength (), NUMS );
+}
+// check if interrupted strandr is 1) kept on wait, and 2) lose seriality
+TEST ( ThreadPool, strandr_with_mutex )
+{
+	using namespace Threads;
+	g_eLogLevel = SPH_LOG_VERBOSE_DEBUG;
+
+	static constexpr int NUMS = 10;
+	CSphVector<int> dRes;
+	dRes.Reserve( NUMS );
+
+	CallCoroutine( [&] {
+		auto dWaiter = DefferedRestarter();
+		Coro::RWLock_c tMutex;
+		RoledSchedulerSharedPtr_t pRandr = MakeAloneScheduler( Coro::CurrentScheduler() );
+
+		// commenting out line below will cause test to fail.
+		Coro::Co( [&] () NO_THREAD_SAFETY_ANALYSIS {
+			ScopedScheduler_c customtp{ pRandr };
+			tMutex.WriteLock();
+			ASSERT_EQ( Coro::CurrentScheduler(), pRandr );
+			Coro::SleepMsec( 100 );
+			ASSERT_EQ( Coro::CurrentScheduler(), pRandr );
+			dRes.Add( NUMS + 1 );
+			dRes.Add( NUMS+2 );
+			tMutex.Unlock();
+			ASSERT_EQ( Coro::CurrentScheduler(), pRandr );
+		}, dWaiter );
+
+		Coro::Co( [&] () NO_THREAD_SAFETY_ANALYSIS {
+			ScopedScheduler_c customtp{ pRandr };
+			Coro::SleepMsec( 10 );
+			ASSERT_EQ( Coro::CurrentScheduler(), pRandr );
+			for ( int i = 0; i < NUMS / 2; ++i )
+				dRes.Add( i );
+			tMutex.ReadLock();
+			ASSERT_EQ( Coro::CurrentScheduler(), pRandr );
+			for ( int i = NUMS / 2; i < NUMS; ++i )
+				dRes.Add( i );
+			tMutex.Unlock();
+			ASSERT_EQ( Coro::CurrentScheduler(), pRandr );
+		}, dWaiter );
+		WaitForDeffered( std::move( dWaiter ) );
+	} );
+
+	std::array<int,NUMS+2> dRef = { 0, 1, 2, 3, 4, 11, 12, 5, 6, 7, 8, 9 };
+	ARRAY_CONSTFOREACH( i, dRes )
+	{
+		ASSERT_EQ( dRef[i], dRes[i] );
+	}
+	ASSERT_EQ( dRes.GetLength (), NUMS+2 );
 }
 
 // checks that strandr is re-enterable. I.e. that Coro::Reschedule is NOT cause stack overflow.

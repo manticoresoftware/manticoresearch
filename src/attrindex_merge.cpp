@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2017-2024, Manticore Software LTD (https://manticoresearch.com)
+// Copyright (c) 2017-2025, Manticore Software LTD (https://manticoresearch.com)
 // Copyright (c) 2001-2016, Andrew Aksyonoff
 // Copyright (c) 2008-2016, Sphinx Technologies Inc
 // All rights reserved
@@ -48,35 +48,35 @@ class AttrMerger_c::Impl_c
 	CSphVector<PlainOrColumnar_t>	m_dSiAttrs;
 	std::unique_ptr<SI::Builder_i>	m_pSIdxBuilder;
 
-	CSphVector<ESphExt> 					m_dCreatedFiles;
+	StrVec_t &								m_dCreatedFiles;
 
 private:
-	template<bool WITH_BLOB, bool WITH_STRIDE, bool WITH_DOCSTORE, bool WITH_SI, bool WITH_KNN, bool PURE_COLUMNAR>
-	bool CopyMixedAttributes_T ( const CSphIndex & tIndex, const VecTraits_T<RowID_t>& dRowMap );
+	template <bool WITH_BLOB, bool WITH_STRIDE, bool WITH_DOCSTORE, bool WITH_SI, bool WITH_KNN, bool PURE_COLUMNAR>
+	bool CopyMixedAttributes_T ( const CSphIndex & tIndex, const VecTraits_T<RowID_t> & dRowMap );
+
+	bool AnalyzeMixedAttributes ( const CSphIndex & tIndex, const VecTraits_T<RowID_t> & dRowMap );
+
 	CSphString GetTmpFilename ( const CSphIndex* pIdx, ESphExt eExt )
 	{
-		m_dCreatedFiles.Add ( eExt );
 		assert ( pIdx );
-		return  pIdx->GetTmpFilename ( eExt );
+		CSphString sTmp = pIdx->GetTmpFilename ( eExt );
+		m_dCreatedFiles.Add ( sTmp );
+		return sTmp;
 	}
 
 public:
-	Impl_c ( MergeCb_c & tMonitor, CSphString & sError, int64_t iTotalDocs, const BuildBufferSettings_t & tSettings )
+	Impl_c ( MergeCb_c & tMonitor, CSphString & sError, int64_t iTotalDocs, const BuildBufferSettings_t & tSettings, StrVec_t & dCreatedFiles )
 		: m_tMonitor ( tMonitor )
 		, m_sError ( sError )
 		, m_iTotalDocs ( iTotalDocs )
 		, m_tBufferSettings ( tSettings )
+		, m_dCreatedFiles ( dCreatedFiles )
 	{}
 
 	bool Prepare ( const CSphIndex * pSrcIndex, const CSphIndex * pDstIndex );
+	bool AnalyzeAttributes ( const CSphIndex & tIndex, const VecTraits_T<RowID_t>& dRowMap, DWORD uAlive );
 	bool CopyAttributes ( const CSphIndex & tIndex, const VecTraits_T<RowID_t>& dRowMap, DWORD uAlive );
-	bool FinishMergeAttributes ( const CSphIndex * pDstIndex, BuildHeader_t& tBuildHeader, StrVec_t* pCreatedFiles );
-
-	void AddCreatedFiles ( const CSphIndex * pDstIndex, StrVec_t * pCreatedFiles )
-	{
-		if ( pCreatedFiles )
-			m_dCreatedFiles.for_each ( [pCreatedFiles, pDstIndex] ( auto eExt ) { pCreatedFiles->Add ( pDstIndex->GetTmpFilename ( eExt ) ); } );
-	}
+	bool FinishMergeAttributes ( const CSphIndex * pDstIndex, BuildHeader_t & tBuildHeader );
 };
 
 bool AttrMerger_c::Impl_c::Prepare ( const CSphIndex * pSrcIndex, const CSphIndex * pDstIndex )
@@ -117,9 +117,13 @@ bool AttrMerger_c::Impl_c::Prepare ( const CSphIndex * pSrcIndex, const CSphInde
 
 	if ( tDstSchema.HasKNNAttrs() )
 	{
-		m_pKNNBuilder = BuildCreateKNN ( tDstSchema, m_iTotalDocs, m_dAttrsForKNN, m_sError );
+		CSphVector<std::pair<PlainOrColumnar_t,int>> dAllKNNAttrs;
+		m_pKNNBuilder = BuildCreateKNN ( tDstSchema, m_iTotalDocs, dAllKNNAttrs, m_sError );
 		if ( !m_pKNNBuilder )
 			return false;
+
+		for ( const auto & i : dAllKNNAttrs )
+			m_dAttrsForKNN.Add ( i.first );
 	}
 
 	if ( tDstSchema.HasJsonSIAttrs() )
@@ -227,16 +231,56 @@ bool AttrMerger_c::Impl_c::CopyMixedAttributes_T ( const CSphIndex & tIndex, con
 
 		if constexpr ( WITH_KNN )
 			if ( !BuildStoreKNN ( tRowID, pRow, tIndex.GetRawBlobAttrs(), dColumnarIterators, m_dAttrsForKNN, *m_pKNNBuilder ) )
-		{
-			m_sError = m_pKNNBuilder->GetError().c_str();
-			return false;
-		}
+			{
+				m_sError = m_pKNNBuilder->GetError().c_str();
+				return false;
+			}
 
 		m_dDocidLookup[m_tResultRowID] = { tDocID, m_tResultRowID };
 		++m_tResultRowID;
 	}
 
 	return true;
+}
+
+
+bool AttrMerger_c::Impl_c::AnalyzeMixedAttributes ( const CSphIndex & tIndex, const VecTraits_T<RowID_t> & dRowMap )
+{
+	if ( !m_pKNNBuilder )
+		return true;
+
+	auto dColumnarIterators = CreateAllColumnarIterators ( tIndex.GetColumnar(), tIndex.GetMatchSchema() );
+
+	const CSphRowitem * pRow = tIndex.GetRawAttrs ();
+	int iStride = tIndex.GetMatchSchema().GetRowSize();
+	int iChunk = tIndex.m_iChunk;
+	if ( !tIndex.GetRawAttrs() )
+		iStride = 0;
+
+	m_tMonitor.SetEvent ( MergeCb_c::E_MERGEATTRS_START, iChunk );
+	AT_SCOPE_EXIT ( [this, iChunk] { m_tMonitor.SetEvent ( MergeCb_c::E_MERGEATTRS_FINISHED, iChunk ); } );
+	for ( RowID_t tRowID = 0, tRows = (RowID_t)dRowMap.GetLength64(); tRowID < tRows; ++tRowID, pRow += iStride )
+	{
+		if ( dRowMap[tRowID]==INVALID_ROWID )
+			continue;
+
+		m_tMonitor.SetEvent ( MergeCb_c::E_MERGEATTRS_PULSE, iChunk );
+		if ( m_tMonitor.NeedStop() )
+			return false;
+
+		BuildTrainKNN ( tRowID, pRow, tIndex.GetRawBlobAttrs(), dColumnarIterators, m_dAttrsForKNN, *m_pKNNBuilder );
+	}
+
+	return true;
+}
+
+
+bool AttrMerger_c::Impl_c::AnalyzeAttributes ( const CSphIndex & tIndex, const VecTraits_T<RowID_t> & dRowMap, DWORD uAlive )
+{
+	if ( !uAlive )
+		return true;
+
+	return AnalyzeMixedAttributes ( tIndex, dRowMap );
 }
 
 
@@ -270,7 +314,7 @@ bool AttrMerger_c::Impl_c::CopyAttributes ( const CSphIndex & tIndex, const VecT
 }
 
 
-bool AttrMerger_c::Impl_c::FinishMergeAttributes ( const CSphIndex * pDstIndex, BuildHeader_t& tBuildHeader, StrVec_t* pCreatedFiles )
+bool AttrMerger_c::Impl_c::FinishMergeAttributes ( const CSphIndex * pDstIndex, BuildHeader_t & tBuildHeader )
 {
 	m_tMinMax.FinishCollect();
 	assert ( m_tResultRowID==m_iTotalDocs );
@@ -339,8 +383,8 @@ bool AttrMerger_c::Impl_c::FinishMergeAttributes ( const CSphIndex * pDstIndex, 
 }
 
 
-AttrMerger_c::AttrMerger_c ( MergeCb_c& tMonitor, CSphString& sError, int64_t iTotalDocs, const BuildBufferSettings_t & tSettings )
-	: m_pImpl { std::make_unique<Impl_c> ( tMonitor, sError, iTotalDocs, tSettings ) }
+AttrMerger_c::AttrMerger_c ( MergeCb_c& tMonitor, CSphString& sError, int64_t iTotalDocs, const BuildBufferSettings_t & tSettings, StrVec_t & dCreatedFiles )
+	: m_pImpl { std::make_unique<Impl_c> ( tMonitor, sError, iTotalDocs, tSettings, dCreatedFiles ) }
 {}
 
 AttrMerger_c::~AttrMerger_c() = default;
@@ -351,17 +395,22 @@ bool AttrMerger_c::Prepare ( const CSphIndex* pSrcIndex, const CSphIndex* pDstIn
 	return m_pImpl->Prepare ( pSrcIndex, pDstIndex );
 }
 
+bool AttrMerger_c::AnalyzeAttributes ( const CSphIndex& tIndex, const VecTraits_T<RowID_t>& dRowMap, DWORD uAlive )
+{
+	TRACE_CORO ( "sph", "AttrMerger_c::AnalyzeAttributes" );
+	return m_pImpl->AnalyzeAttributes ( tIndex, dRowMap, uAlive );
+}
+
 bool AttrMerger_c::CopyAttributes ( const CSphIndex& tIndex, const VecTraits_T<RowID_t>& dRowMap, DWORD uAlive )
 {
 	TRACE_CORO ( "sph", "AttrMerger_c::CopyAttributes" );
 	return m_pImpl->CopyAttributes ( tIndex, dRowMap, uAlive );
 }
 
-bool AttrMerger_c::FinishMergeAttributes ( const CSphIndex* pDstIndex, BuildHeader_t& tBuildHeader, StrVec_t* pCreatedFiles )
+bool AttrMerger_c::FinishMergeAttributes ( const CSphIndex * pDstIndex, BuildHeader_t & tBuildHeader )
 {
 	TRACE_CORO ( "sph", "AttrMerger_c::FinishMergeAttributes" );
-	bool bOk = m_pImpl->FinishMergeAttributes ( pDstIndex, tBuildHeader, pCreatedFiles );
-	m_pImpl->AddCreatedFiles ( pDstIndex, pCreatedFiles );
+	bool bOk = m_pImpl->FinishMergeAttributes ( pDstIndex, tBuildHeader );
 	return bOk;
 }
 

@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2017-2024, Manticore Software LTD (https://manticoresearch.com)
+// Copyright (c) 2017-2025, Manticore Software LTD (https://manticoresearch.com)
 // Copyright (c) 2001-2016, Andrew Aksyonoff
 // Copyright (c) 2008-2016, Sphinx Technologies Inc
 // All rights reserved
@@ -10,6 +10,8 @@
 // did not, you can find it at http://www.gnu.org
 //
 
+#pragma once
+
 #include <cassert>
 #include "checks.h"
 #include "uniq.h"
@@ -18,29 +20,13 @@ namespace sph
 {
 
 template<typename T, class POLICY, class LIMIT, class STORE>
-template<typename S>
-inline std::enable_if_t<S::is_sized> Vector_T<T, POLICY, LIMIT, STORE>::Vector_T::Deallocate ( typename STORE::TYPE* pData, int64_t iLimit )
-{
-	STORE::Deallocate ( pData, iLimit );
-}
-
-template<typename T, class POLICY, class LIMIT, class STORE>
-template<typename S>
-inline std::enable_if_t<!S::is_sized> Vector_T<T, POLICY, LIMIT, STORE>::Vector_T::Deallocate ( typename STORE::TYPE* pData, int64_t )
-{
-	STORE::Deallocate ( pData );
-}
-
-/* variant below needs C++17
-template<class STORE>
-inline void Deallocate ( typename STORE::TYPE* pData, int64_t iLimit )
+void Vector_T<T,POLICY,LIMIT,STORE>::Deallocate ( typename STORE::TYPE* pData, int64_t iLimit )
 {
 	if constexpr ( STORE::is_sized )
 		STORE::Deallocate ( pData, iLimit );
 	else
 		STORE::Deallocate ( pData );
 }
- */
 
 /// ctor with initial size
 template<typename T, class POLICY, class LIMIT, class STORE>
@@ -89,28 +75,20 @@ T& Vector_T<T, POLICY, LIMIT, STORE>::Add()
 
 /// add entry
 template<typename T, class POLICY, class LIMIT, class STORE>
-template<typename S>
-typename std::enable_if_t<S::is_constructed> Vector_T<T, POLICY, LIMIT, STORE>::Add ( T tValue )
+void Vector_T<T, POLICY, LIMIT, STORE>::Add ( T tValue )
 {
 	assert ( ( &tValue < m_pData || &tValue >= ( m_pData + m_iCount ) ) && "inserting own value (like last()) by ref!" );
 	if ( m_iCount >= m_iLimit )
 		Reserve ( 1 + m_iCount );
-	m_pData[m_iCount++] = std::move ( tValue );
-}
-
-template<typename T, class POLICY, class LIMIT, class STORE>
-template<typename S>
-typename std::enable_if_t<!S::is_constructed> Vector_T<T, POLICY, LIMIT, STORE>::Add ( T tValue )
-{
-	assert ( ( &tValue < m_pData || &tValue >= ( m_pData + m_iCount ) ) && "inserting own value (like last()) by ref!" );
-	if ( m_iCount >= m_iLimit )
-		Reserve ( 1 + m_iCount );
-	new ( m_pData + m_iCount++ ) T ( std::move ( tValue ) );
+	if constexpr ( STORE::is_constructed )
+		m_pData[m_iCount++] = std::move ( tValue );
+	else
+		new ( m_pData + m_iCount++ ) T ( std::move ( tValue ) );
 }
 
 template<typename T, class POLICY, class LIMIT, class STORE>
 template<typename S, class... Args>
-typename std::enable_if_t<!S::is_constructed> Vector_T<T, POLICY, LIMIT, STORE>::Emplace_back ( Args&&... args )
+std::enable_if_t<!S::is_constructed> Vector_T<T, POLICY, LIMIT, STORE>::Emplace_back ( Args&&... args )
 {
 	assert ( m_iCount <= m_iLimit );
 	new ( m_pData + m_iCount++ ) T ( std::forward<Args> ( args )... );
@@ -292,37 +270,37 @@ typename std::enable_if<!S::is_constructed>::type Vector_T<T, POLICY, LIMIT, STO
 
 /// ensure we have space for iGap more items (reserve more if necessary)
 template<typename T, class POLICY, class LIMIT, class STORE>
-inline void Vector_T<T, POLICY, LIMIT, STORE>::ReserveGap ( int iGap )
+void Vector_T<T, POLICY, LIMIT, STORE>::ReserveGap ( int iGap )
 {
 	Reserve ( m_iCount + iGap );
 }
 
 /// resize
 template<typename T, class POLICY, class LIMIT, class STORE>
-template<typename S>
-typename std::enable_if<S::is_constructed>::type Vector_T<T, POLICY, LIMIT, STORE>::Resize ( int64_t iNewLength )
+void Vector_T<T, POLICY, LIMIT, STORE>::Resize ( int64_t iNewLength )
 {
 	assert ( iNewLength >= 0 );
-	if ( iNewLength > m_iCount )
-		Reserve ( iNewLength );
-	m_iCount = iNewLength;
-}
+	if ( iNewLength == m_iCount )
+		return;
 
-/// for non-constructed imply destroy when shrinking, of construct when widening
-template<typename T, class POLICY, class LIMIT, class STORE>
-template<typename S>
-typename std::enable_if<!S::is_constructed>::type Vector_T<T, POLICY, LIMIT, STORE>::Resize ( int64_t iNewLength )
-{
-	assert ( iNewLength >= 0 );
-	if ( iNewLength < m_iCount )
-		destroy_at ( iNewLength, m_iCount - iNewLength );
-	else
+	if constexpr ( STORE::is_constructed)
 	{
-		Reserve ( iNewLength );
-		construct_at ( m_iCount, iNewLength - m_iCount );
+		if ( iNewLength > m_iCount )
+			Reserve ( iNewLength );
+	} else
+	{
+		if ( iNewLength < m_iCount )
+			destroy_at ( iNewLength, m_iCount - iNewLength );
+		else
+		{
+			Reserve ( iNewLength );
+			construct_at ( m_iCount, iNewLength - m_iCount );
+		}
 	}
 	m_iCount = iNewLength;
 }
+
+
 
 // doesn't need default c-tr
 template<typename T, class POLICY, class LIMIT, class STORE>
@@ -453,38 +431,33 @@ void Vector_T<T, POLICY, LIMIT, STORE>::Append ( const void* pData, int iN )
 /// append another vec to the end
 /// will use memmove (POD case), or one-by-one copying.
 template<typename T, class POLICY, class LIMIT, class STORE>
-template<typename S>
-typename std::enable_if<S::is_constructed>::type Vector_T<T, POLICY, LIMIT, STORE>::Append ( const VecTraits_T<T>& rhs )
+void Vector_T<T, POLICY, LIMIT, STORE>::Append ( const VecTraits_T<T>& rhs )
 {
 	if ( rhs.IsEmpty() )
 		return;
 
-	auto* pDst = AddN ( rhs.GetLength() );
-	POLICY::Copy ( pDst, rhs.begin(), rhs.GetLength() );
+	if constexpr ( STORE::is_constructed )
+	{
+		auto* pDst = AddN ( rhs.GetLength() );
+		POLICY::Copy ( pDst, rhs.begin(), rhs.GetLength() );
+	} else
+	{
+		/// will construct in-place with copy c-tr
+		auto iRhsLen = rhs.GetLength64();
+		if ( m_iCount + iRhsLen > m_iLimit )
+			Reserve ( m_iCount + iRhsLen );
+		for ( int i = 0; i < iRhsLen; ++i )
+			new ( m_pData + m_iCount + i ) T ( rhs[i] );
+
+		m_iCount += iRhsLen;
+	}
 }
 
-/// append another vec to the end for non-constructed
-/// will construct in-place with copy c-tr
-template<typename T, class POLICY, class LIMIT, class STORE>
-template<typename S>
-typename std::enable_if<!S::is_constructed>::type Vector_T<T, POLICY, LIMIT, STORE>::Append ( const VecTraits_T<T>& rhs )
-{
-	if ( rhs.IsEmpty() )
-		return;
-
-	auto iRhsLen = rhs.GetLength64();
-	if ( m_iCount + iRhsLen > m_iLimit )
-		Reserve ( m_iCount + iRhsLen );
-	for ( int i = 0; i < iRhsLen; ++i )
-		new ( m_pData + m_iCount + i ) T ( rhs[i] );
-
-	m_iCount += iRhsLen;
-}
 
 /// swap
 template<typename T, class POLICY, class LIMIT, class STORE>
 template<typename L, typename S>
-typename std::enable_if<!S::is_owned>::type Vector_T<T, POLICY, LIMIT, STORE>::SwapData ( Vector_T<T, POLICY, L, STORE>& rhs ) noexcept
+std::enable_if_t<!S::is_owned> Vector_T<T, POLICY, LIMIT, STORE>::SwapData ( Vector_T<T, POLICY, L, STORE>& rhs ) noexcept
 {
 	Swap ( m_iCount, rhs.m_iCount );
 	Swap ( m_iLimit, rhs.m_iLimit );
@@ -494,7 +467,7 @@ typename std::enable_if<!S::is_owned>::type Vector_T<T, POLICY, LIMIT, STORE>::S
 /// leak
 template<typename T, class POLICY, class LIMIT, class STORE>
 template<typename S>
-typename std::enable_if<!S::is_owned, T*>::type Vector_T<T, POLICY, LIMIT, STORE>::LeakData()
+std::enable_if_t<!S::is_owned, T*> Vector_T<T, POLICY, LIMIT, STORE>::LeakData()
 {
 	T* pData = m_pData;
 	m_pData = nullptr;
@@ -506,7 +479,7 @@ typename std::enable_if<!S::is_owned, T*>::type Vector_T<T, POLICY, LIMIT, STORE
 /// note that caller must himself then nullify origin pData to avoid double-deletion
 template<typename T, class POLICY, class LIMIT, class STORE>
 template<typename S>
-typename std::enable_if<!S::is_owned>::type Vector_T<T, POLICY, LIMIT, STORE>::AdoptData ( T* pData, int64_t iLen, int64_t iLimit )
+std::enable_if_t<!S::is_owned> Vector_T<T, POLICY, LIMIT, STORE>::AdoptData ( T* pData, int64_t iLen, int64_t iLimit )
 {
 	assert ( iLen >= 0 );
 	assert ( iLimit >= 0 );
@@ -537,17 +510,21 @@ void Vector_T<T, POLICY, LIMIT, STORE>::Insert ( int64_t iIndex, TT&& tValue )
 
 
 template<typename T, class POLICY, class LIMIT, class STORE>
-template<typename S>
-typename std::enable_if<!S::is_constructed>::type Vector_T<T, POLICY, LIMIT, STORE>::destroy_at ( int64_t iIndex, int64_t iCount )
+void Vector_T<T, POLICY, LIMIT, STORE>::destroy_at ( int64_t iIndex, int64_t iCount )
 {
+	if constexpr ( STORE::is_constructed )
+		return;
+
 	for ( int64_t i = 0; i < iCount; ++i )
 		m_pData[iIndex + i].~T();
 }
 
 template<typename T, class POLICY, class LIMIT, class STORE>
-template<typename S>
-typename std::enable_if<!S::is_constructed>::type Vector_T<T, POLICY, LIMIT, STORE>::construct_at ( int64_t iIndex, int64_t iCount )
+void Vector_T<T, POLICY, LIMIT, STORE>::construct_at ( int64_t iIndex, int64_t iCount )
 {
+	if constexpr ( STORE::is_constructed )
+		return;
+
 	assert ( m_pData );
 	for ( int64_t i = 0; i < iCount; ++i )
 		new ( m_pData + iIndex + i ) T();

@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2021-2024, Manticore Software LTD (https://manticoresearch.com)
+// Copyright (c) 2021-2025, Manticore Software LTD (https://manticoresearch.com)
 // All rights reserved
 //
 // This program is free software; you can redistribute it and/or modify
@@ -637,7 +637,7 @@ void RemoveColumnarDuplicates ( std::unique_ptr<ColumnarBuilderRT_i> & pBuilder,
 		CSphVector<ScopedTypedIterator_t> dIterators = CreateAllColumnarIterators ( pColumnar.get(), tSchema );
 
 		CSphVector<int64_t> dTmpMVA;
-		for ( RowID_t tSrcRowID = 0; tSrcRowID < dRowMap.GetLength(); tSrcRowID++ )
+		for ( RowID_t tSrcRowID = 0; tSrcRowID < dRowMap.GetULength(); tSrcRowID++ )
 		{
 			if ( dRowMap[tSrcRowID]==INVALID_ROWID )
 				continue;

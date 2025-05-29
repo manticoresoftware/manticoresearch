@@ -1,0 +1,22 @@
+––– block: ../base/start-searchd-with-buddy –––
+––– input –––
+mysql -h0 -P9306 -e "show version\G;"
+––– output –––
+*************************** 1. row ***************************
+Component: Daemon
+  Version: %{VERSION}
+*************************** 2. row ***************************
+Component: Columnar
+  Version: columnar %{VERSION}
+*************************** 3. row ***************************
+Component: Secondary
+  Version: secondary %{VERSION}
+*************************** 4. row ***************************
+Component: Knn
+  Version: knn %{VERSION}
+*************************** 5. row ***************************
+Component: Embeddings
+  Version: embeddings #!/([0-9]+\.[0-9]+\.[0-9]+)/!#
+*************************** 6. row ***************************
+Component: Buddy
+  Version: buddy %{VERSION}

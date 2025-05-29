@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2017-2024, Manticore Software LTD (https://manticoresearch.com)
+// Copyright (c) 2017-2025, Manticore Software LTD (https://manticoresearch.com)
 // Copyright (c) 2001-2016, Andrew Aksyonoff
 // Copyright (c) 2008-2016, Sphinx Technologies Inc
 // All rights reserved
@@ -59,6 +59,8 @@ extern const char * szGDB_SOURCE_DIR;
 
 #define SPHINX_SEARCHD_PROTO	1
 #define SPHINX_CLIENT_VERSION	1
+
+constexpr int64_t SMALL_INDEX_THRESH = 8192;
 
 /////////////////////////////////////////////////////////////////////////////
 
@@ -182,7 +184,7 @@ public:
 struct FieldMask_t
 {
 	static const int SIZE = SPH_MAX_FIELDS/32;
-	STATIC_ASSERT ( ( SPH_MAX_FIELDS%32 )==0, ASSUME_MAX_FIELDS_ARE_REPRESENTABLE_BY_DWORD );
+	static_assert ( ( SPH_MAX_FIELDS%32 )==0, "assume SPH_MAX_FIELDS are representable by a dword" );
 	DWORD m_dMask [ SIZE ];
 
 	// no custom cstr and d-tor - to be usable from inside unions
@@ -482,16 +484,18 @@ enum class JoinType_e
 	LEFT
 };
 
-const int DEFAULT_MAX_MATCHES = 1000;
-const int DEFAULT_QUERY_TIMEOUT = 0;
-const int DEFAULT_QUERY_RETRY = -1;
-const int DEFAULT_QUERY_EXPANSION_LIMIT = -1;
+constexpr int DEFAULT_MAX_MATCHES = 1000;
+constexpr int DEFAULT_QUERY_TIMEOUT = 0;
+constexpr int DEFAULT_QUERY_RETRY = -1;
+constexpr int DEFAULT_QUERY_EXPANSION_LIMIT = -1;
+constexpr int DAEMON_MAX_RETRY_COUNT = 8;
+constexpr int DAEMON_MAX_RETRY_DELAY = 1000;
 
 struct ScrollAttr_t
 {
-	CSphString	m_sSortAttr;
-	bool		m_bDesc = true;
-	ESphAttr	m_eType = SPH_ATTR_INTEGER;
+	CSphString m_sSortAttr;
+	bool m_bDesc = true;
+	ESphAttr m_eType = SPH_ATTR_INTEGER;
 	SphAttr_t	m_tValue = 0;
 	float		m_fValue = 0.0f;
 	CSphString	m_sValue;
@@ -536,7 +540,7 @@ struct CSphQuery
 
 	bool			m_bSortKbuffer = false;		///< whether to use PQ or K-buffer sorting algorithm
 	bool			m_bZSlist = false;			///< whether the ranker has to fetch the zonespanlist with this query
-	bool			m_bSimplify = false;		///< whether to apply boolean simplification
+	bool			m_bSimplify = true;			///< whether to apply boolean simplification
 	bool			m_bPlainIDF = false;		///< whether to use PlainIDF=log(N/n) or NormalizedIDF=log((N-n+1)/n)
 	bool			m_bGlobalIDF = false;		///< whether to use local indexes or a global idf file
 	bool			m_bNormalizedTFIDF = true;	///< whether to scale IDFs by query word count, so that TF*IDF is normalized
@@ -640,8 +644,10 @@ struct CSphQuery
 	Dispatcher::Template_t	m_tPseudoShardingDispatcher;
 };
 
+void CheckQuery ( const CSphQuery & tQuery, CSphString & sError, bool bCanLimitless = false );
+
 /// parse select list string into items
-bool ParseSelectList ( CSphString &sError, CSphQuery &pResult );
+bool ParseSelectList ( CSphString & sError, CSphQuery &pResult );
 
 void SetQueryDefaultsExt2 ( CSphQuery & tQuery );
 
@@ -722,7 +728,7 @@ public:
 	void					AddStat ( const ExpansionStats_t & tExpansionStats );
 
 	void					MergeWordStats ( const CSphQueryResultMeta& tOther );// sort wordstat to achieve reproducable result over different runs
-	CSphFixedVector<SmallStringHash_T<CSphQueryResultMeta::WordStat_t>::KeyValue_t *>	MakeSortedWordStat () const;
+	CSphFixedVector<SmallStringHash_T<WordStat_t>::KeyValue_t *>	MakeSortedWordStat () const;
 };
 
 
@@ -776,7 +782,7 @@ struct AttrUpdateInc_t // for cascade (incremental) update
 {
 	AttrUpdateSharedPtr_t			m_pUpdate;	///< the unchangeable update pool
 	CSphBitvec						m_dUpdated;			///< bitmask of updated rows
-	int								m_iAffected = 0;	///< num of updated rows.
+	DWORD							m_uAffected = 0;	///< num of updated rows.
 
 	explicit AttrUpdateInc_t ( AttrUpdateSharedPtr_t pUpd )
 		: m_pUpdate ( std::move(pUpd) )
@@ -788,14 +794,14 @@ struct AttrUpdateInc_t // for cascade (incremental) update
 		if ( m_dUpdated.BitGet ( iUpd ) )
 			return;
 
-		++m_iAffected;
+		++m_uAffected;
 		m_dUpdated.BitSet ( iUpd );
 	}
 
 	bool AllApplied () const
 	{
-		assert ( m_dUpdated.GetSize() >= m_iAffected );
-		return m_dUpdated.GetSize() == m_iAffected;
+		assert ( m_dUpdated.GetSize() >= m_uAffected );
+		return m_dUpdated.GetSize() == m_uAffected;
 	}
 };
 

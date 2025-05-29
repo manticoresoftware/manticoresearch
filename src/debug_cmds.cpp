@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2017-2024, Manticore Software LTD (https://manticoresearch.com)
+// Copyright (c) 2017-2025, Manticore Software LTD (https://manticoresearch.com)
 // Copyright (c) 2001-2016, Andrew Aksyonoff
 // Copyright (c) 2008-2016, Sphinx Technologies Inc
 // All rights reserved
@@ -18,11 +18,11 @@
 #include "digest_sha1.h"
 #include "tracer.h"
 #include "netfetch.h"
+#include "daemon/logger.h"
+#include "config.h"
 
 #include "taskmalloctrim.h"
 #include "tasksavestate.h"
-
-#include <csignal>
 
 /////////////////////////////////////////////////////////////////////////////
 namespace DebugCmd {
@@ -91,9 +91,6 @@ inline static CSphString strSHA1 ( const CSphString& sLine )
 {
 	return CalcSHA1 ( sLine.cstr(), sLine.Length() );
 }
-
-// defined in searchd.cpp
-int GetLogFD ();
 
 void HandleMysqlOptimizeManual ( RowBuffer_i & tOut, const DebugCmd::DebugCommand_t & tCmd )
 {
@@ -311,7 +308,7 @@ void HandleShutdownCrash ( RowBuffer_i & tOut, const CSphString & sPasswd, Debug
 		sphInterruptNow ();
 	} else // crash
 	{
-		BYTE * pSegv = (BYTE *) ( 0 );
+		volatile BYTE * pSegv = nullptr;
 		*pSegv = 'a';
 	}
 }
@@ -458,7 +455,7 @@ void HandleMallocStats ( RowBuffer_i & tOut, const CSphString& sParam )
 	tOut.HeadTuplet ( "command", "result" );
 	// check where is stderr...
 	int iOldErr = ::dup ( STDERR_FILENO );
-	::dup2 ( GetLogFD (), STDERR_FILENO );
+	::dup2 ( GetActiveLogFD (), STDERR_FILENO );
 	sphMallocStats ( sParam.cstr() );
 	::close ( STDERR_FILENO );
 	::dup2 ( iOldErr, STDERR_FILENO );

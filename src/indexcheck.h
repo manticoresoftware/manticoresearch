@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2017-2024, Manticore Software LTD (https://manticoresearch.com)
+// Copyright (c) 2017-2025, Manticore Software LTD (https://manticoresearch.com)
 // Copyright (c) 2001-2016, Andrew Aksyonoff
 // Copyright (c) 2008-2016, Sphinx Technologies Inc
 // All rights reserved
@@ -38,18 +38,11 @@ public:
 	virtual void Done() = 0;
 	virtual int64_t GetNumFails() const = 0;
 	virtual const DocID_t* GetExtractDocs () const {return nullptr;};
+	virtual void CheckDocidDup ( DocID_t tDocid, DWORD uRowid ) = 0;
+	virtual void FinishDiskChunk ( int64_t iNumRows ) = 0;
 };
 
 DebugCheckError_i* MakeDebugCheckError ( FILE* fp, DocID_t* pExtract );
-
-// common code for debug checks in RT and disk indexes
-class DebugCheckHelper_c
-{
-protected:
-	void	DebugCheck_Attributes ( DebugCheckReader_i & tAttrs, DebugCheckReader_i & tBlobs, int64_t nRows, int64_t iMinMaxBytes, const CSphSchema & tSchema, DebugCheckError_i & tReporter ) const;
-	void	DebugCheck_DeadRowMap (  int64_t iSizeBytes, int64_t nRows, DebugCheckError_i & tReporter ) const;
-};
-
 
 // disk index checker
 class DiskIndexChecker_c
@@ -67,6 +60,9 @@ public:
 	void	Check();
 };
 
+// common code for debug checks in RT and disk indexes
+void DebugCheck_Attributes ( DebugCheckReader_i & tAttrs, DebugCheckReader_i & tBlobs, int64_t nRows, int64_t iMinMaxBytes, const CSphSchema & tSchema, DebugCheckError_i & tReporter );
+void DebugCheck_DeadRowMap (  int64_t iSizeBytes, int64_t nRows, DebugCheckError_i & tReporter );
 void DebugCheckSchema ( const ISphSchema & tSchema, DebugCheckError_i & tReporter );
 bool DebugCheckSchema ( const ISphSchema & tSchema, CSphString & sError );
 bool SchemaConfigureCheckAttribute ( const CSphSchema & tSchema, const CSphColumnInfo & tCol, CSphString & sError );

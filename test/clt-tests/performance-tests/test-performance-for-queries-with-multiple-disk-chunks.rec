@@ -41,7 +41,7 @@ mysql -h0 -P9306 -e "OPTIMIZE TABLE name OPTION cutoff=1, sync=1;"
 ––– input –––
 mysql -h0 -P9306 -e "show table name status" | grep "disk_chunks"
 ––– output –––
-| disk_chunks                 | 1                                                                                                      |
+| disk_chunks                   | 1                                                                                                      |
 ––– input –––
 export start=$(date +%s%N)
 ––– output –––

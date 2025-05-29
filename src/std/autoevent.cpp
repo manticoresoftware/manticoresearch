@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2017-2024, Manticore Software LTD (https://manticoresearch.com)
+// Copyright (c) 2017-2025, Manticore Software LTD (https://manticoresearch.com)
 // Copyright (c) 2001-2016, Andrew Aksyonoff
 // Copyright (c) 2008-2016, Sphinx Technologies Inc
 // All rights reserved
@@ -12,10 +12,9 @@
 
 #include "autoevent.h"
 
-#include "fatal.h"
 #include "timers.h"
+// for HAVE_PTHREAD_COND_TIMEDWAIT
 #include "config.h"
-#include <cerrno>
 
 
 #if _WIN32
@@ -127,7 +126,7 @@ void AutoEvent_T<false>::SetEvent()
 }
 
 template<>
-void AutoEvent_T<true>::SetEvent()
+void AutoEvent_T<>::SetEvent()
 {
 	if ( !m_bInitialized )
 		return;
@@ -156,7 +155,7 @@ bool AutoEvent_T<false>::WaitEvent ( int iMsec )
 	}
 
 #ifdef HAVE_PTHREAD_COND_TIMEDWAIT
-	struct timespec ts;
+	timespec ts;
 	clock_gettime ( CLOCK_REALTIME, &ts );
 
 	int ns = ts.tv_nsec + ( iMsec % 1000 ) * 1000000;
@@ -177,7 +176,7 @@ bool AutoEvent_T<false>::WaitEvent ( int iMsec )
 }
 
 template<>
-bool AutoEvent_T<true>::WaitEvent ( int iMsec )
+bool AutoEvent_T<>::WaitEvent ( int iMsec )
 {
 	if ( !m_bInitialized )
 		return false;
@@ -194,7 +193,7 @@ bool AutoEvent_T<true>::WaitEvent ( int iMsec )
 	}
 
 #ifdef HAVE_PTHREAD_COND_TIMEDWAIT
-	struct timespec ts;
+	timespec ts;
 	clock_gettime ( CLOCK_REALTIME, &ts );
 
 	int ns = ts.tv_nsec + ( iMsec % 1000 ) * 1000000;

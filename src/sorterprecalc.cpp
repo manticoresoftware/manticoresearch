@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2017-2024, Manticore Software LTD (https://manticoresearch.com)
+// Copyright (c) 2017-2025, Manticore Software LTD (https://manticoresearch.com)
 // Copyright (c) 2001-2016, Andrew Aksyonoff
 // Copyright (c) 2008-2016, Sphinx Technologies Inc
 // All rights reserved
@@ -52,7 +52,7 @@ int FastBaseSorter_c::Flatten ( CSphMatch * pTo )
 class FastCountDistinctSorter_c final : public FastBaseSorter_c
 {
 public:
-			FastCountDistinctSorter_c ( int iCountDistinct, const CSphString & sAttr, const CSphGroupSorterSettings & tSettings );
+			FastCountDistinctSorter_c ( int64_t iCountDistinct, const CSphString & sAttr, const CSphGroupSorterSettings & tSettings );
 
 	bool	Push ( const CSphMatch & tEntry ) final							{ return PushEx(tEntry); }
 	void	Push ( const VecTraits_T<const CSphMatch> & dMatches ) final	{ assert ( 0 && "Not supported in grouping"); }
@@ -60,14 +60,14 @@ public:
 	void	AddDesc ( CSphVector<IteratorDesc_t> & dDesc ) const final		{ dDesc.Add ( { m_sAttr, GetPrecalcSorterName() } ); }
 
 private:
-	int			m_iCountDistinct = 0;
+	int64_t			m_iCountDistinct = 0;
 	CSphString	m_sAttr;
 
 	bool	PushEx ( const CSphMatch & tEntry );
 };
 
 
-FastCountDistinctSorter_c::FastCountDistinctSorter_c ( int iCountDistinct, const CSphString & sAttr, const CSphGroupSorterSettings & tSettings )
+FastCountDistinctSorter_c::FastCountDistinctSorter_c ( int64_t iCountDistinct, const CSphString & sAttr, const CSphGroupSorterSettings & tSettings )
 	: FastBaseSorter_c ( tSettings )
 	, m_iCountDistinct ( iCountDistinct )
 	, m_sAttr ( sAttr )
@@ -85,7 +85,7 @@ FORCE_INLINE bool FastCountDistinctSorter_c::PushEx ( const CSphMatch & tEntry )
 	m_tData.SetAttr ( m_tLocDistinct, m_iCountDistinct );
 
 	m_bDataInitialized = true;
-	m_iTotal++;
+	++m_iTotal;
 	return true;
 }
 
@@ -94,7 +94,7 @@ FORCE_INLINE bool FastCountDistinctSorter_c::PushEx ( const CSphMatch & tEntry )
 class FastCountFilterSorter_c final : public FastBaseSorter_c
 {
 public:
-			FastCountFilterSorter_c ( int iCount, const CSphString & sAttr, const CSphGroupSorterSettings & tSettings );
+			FastCountFilterSorter_c ( int64_t iCount, const CSphString & sAttr, const CSphGroupSorterSettings & tSettings );
 
 	bool	Push ( const CSphMatch & tEntry ) final							{ return PushEx(tEntry); }
 	void	Push ( const VecTraits_T<const CSphMatch> & dMatches ) final	{ assert ( 0 && "Not supported in grouping"); }
@@ -102,14 +102,14 @@ public:
 	void	AddDesc ( CSphVector<IteratorDesc_t> & dDesc ) const final		{ dDesc.Add ( { m_sAttr, GetPrecalcSorterName() } ); }
 
 private:
-	int			m_iCount = 0;
+	int64_t		m_iCount;
 	CSphString	m_sAttr;
 
 	bool	PushEx ( const CSphMatch & tEntry );
 };
 
 
-FastCountFilterSorter_c::FastCountFilterSorter_c ( int iCount, const CSphString & sAttr, const CSphGroupSorterSettings & tSettings )
+FastCountFilterSorter_c::FastCountFilterSorter_c ( int64_t iCount, const CSphString & sAttr, const CSphGroupSorterSettings & tSettings )
 	: FastBaseSorter_c ( tSettings )
 	, m_iCount ( iCount )
 	, m_sAttr ( sAttr )
@@ -123,7 +123,6 @@ FORCE_INLINE bool FastCountFilterSorter_c::PushEx ( const CSphMatch & tEntry )
 
 	m_pSchema->CloneMatch ( m_tData, tEntry );
 	m_tData.SetAttr ( m_tLocGroupby, 1 ); // fake group number
-	m_tData.SetAttr ( m_tLocCount, 1 );
 	m_tData.SetAttr ( m_tLocCount, m_iCount );
 
 	m_bDataInitialized = true;

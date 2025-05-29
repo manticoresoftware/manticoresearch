@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2017-2024, Manticore Software LTD (https://manticoresearch.com)
+// Copyright (c) 2017-2025, Manticore Software LTD (https://manticoresearch.com)
 // Copyright (c) 2001-2016, Andrew Aksyonoff
 // Copyright (c) 2008-2016, Sphinx Technologies Inc
 // All rights reserved
@@ -12,7 +12,7 @@
 
 
 template<typename T>
-inline T* sph::CustomStorage_T<T>::Allocate ( int64_t iLimit )
+T* sph::CustomStorage_T<T>::Allocate ( int64_t iLimit )
 {
 	return sphAllocateSmall ( int ( iLimit * sizeof ( T ) ) );
 }
@@ -20,7 +20,7 @@ inline T* sph::CustomStorage_T<T>::Allocate ( int64_t iLimit )
 #if WITH_SMALLALLOC
 
 template<typename T>
-inline void sph::CustomStorage_T<T>::Deallocate ( T* pData, int64_t iLimit )
+void sph::CustomStorage_T<T>::Deallocate ( T* pData, int64_t iLimit )
 {
 	sphDeallocateSmall ( (BYTE*)pData, int ( iLimit * sizeof ( T ) ) );
 }
@@ -28,7 +28,7 @@ inline void sph::CustomStorage_T<T>::Deallocate ( T* pData, int64_t iLimit )
 #else
 
 template<typename T>
-FORCE_INLINE void sph::CustomStorage_T<T>::Deallocate ( T * pData )
+void sph::CustomStorage_T<T>::Deallocate ( T * pData )
 {
 	sphDeallocateSmall ( (BYTE*)pData );
 }

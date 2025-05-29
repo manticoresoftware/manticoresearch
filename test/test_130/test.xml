@@ -2,7 +2,7 @@
 
 <test>
 <name>snippets vs load_files</name>
-
+<skip_db/>
 <config>
 searchd
 {
@@ -24,8 +24,6 @@ index test
 
 }
 </config>
-
-<db_insert>select 1;</db_insert>
 
 <custom_test><![CDATA[
 

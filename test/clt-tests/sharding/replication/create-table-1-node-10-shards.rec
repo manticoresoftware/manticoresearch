@@ -1,0 +1,41 @@
+––– input –––
+export INSTANCE=1
+––– output –––
+––– block: ../../base/replication/start-searchd-precach –––
+––– input –––
+mysql -h0 -P1306 -e "create table t(id bigint) shards='10' rf='1'"
+––– output –––
+––– input –––
+mysql -h0 -P1306 -e "show tables from system" | grep 'Table: system.a' | sort
+––– output –––
+––– input –––
+mysql -h0 -P1306 -e "DESC t\G"
+––– output –––
+*************************** 1. row ***************************
+     Field: id
+      Type: bigint
+Properties:
+––– input –––
+mysql -h0 -P1306 -e "create table a(id bigint) shards='4' rf='1'"
+––– output –––
+––– input –––
+mysql -h0 -P1306 -e "show tables from system\G" | grep 'Table: system.a' | sort
+––– output –––
+Table: system.a_s0
+Table: system.a_s1
+Table: system.a_s2
+Table: system.a_s3
+––– input –––
+mysql -h0 -P1306 -e "DESCRIBE a\G"
+––– output –––
+*************************** 1. row ***************************
+     Field: id
+      Type: bigint
+Properties:
+––– input –––
+mysql -h0 -P1306 -e "DESC a\G"
+––– output –––
+*************************** 1. row ***************************
+     Field: id
+      Type: bigint
+Properties:

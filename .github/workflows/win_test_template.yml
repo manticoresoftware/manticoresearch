@@ -14,6 +14,10 @@ on:
       artifact_name:
         required: true
         type: string
+      COLUMNAR_LOCATOR:
+        required: false
+        type: string
+        default: ""
 
 jobs:
   test_windows:
@@ -30,6 +34,7 @@ jobs:
       # The following is useful to test a specific test, just uncomment it, no need to disable CTEST_START/END
       # CTEST_REGEX: test_234
       NO_BUILD: 1
+      COLUMNAR_LOCATOR: ${{ inputs.COLUMNAR_LOCATOR }}
     steps:
       - name: Checkout repository # We have to checkout to access .github/workflows/ in further steps
         uses: actions/checkout@v3
@@ -39,7 +44,7 @@ jobs:
           name: build_windows_Debug_x64
           path: .
       - name: Check out Windows bundle cache
-        uses: actions/cache@v3.3.1
+        uses: actions/cache@v4
         with:
           path: |
             bundle
@@ -49,7 +54,7 @@ jobs:
       - name: Remove ZSTD # since it wasn't used to save the cache and if we don't remove it here the cache won't be found. TODO: install zstd in our images, so we don't have to do these hacks
         run: rm C:\tools\zstd\zstd.exe
       - name: Check out cache
-        uses: actions/cache@v3.3.1
+        uses: actions/cache@v4
         with:
           path: cache
           enableCrossOsArchive: true
@@ -72,7 +77,7 @@ jobs:
         id: test
         # --timeout may be not working https://gitlab.kitware.com/cmake/cmake/-/issues/23979
         # Add -VV to ctest to display extra debug info
-        run: ctest -V -S misc/ctest/gltest.cmake --no-compress-output --timeout 600
+        run: ctest -VV -S misc/ctest/gltest.cmake --no-compress-output --timeout 600
         continue-on-error: true
       - name: Remember status
         if: always()

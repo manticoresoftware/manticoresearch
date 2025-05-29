@@ -1,0 +1,59 @@
+––– input –––
+export INSTANCE=1
+––– output –––
+––– block: ../base/replication/start-searchd-precach –––
+––– input –––
+export INSTANCE=2
+––– output –––
+––– block: ../base/replication/start-searchd-precach –––
+––– input –––
+manticore-load --quiet --json --port=1306 --init="CREATE TABLE local_table1 (id BIGINT, username TEXT) min_infix_len='2' expand_keywords='1'" --load="INSERT INTO local_table1 (id, username) VALUES (<increment>, '<text/{./test/clt-tests/scripts/names.txt}/1/1>')" --batch-size=1000 --threads=4 --total=1000 > /dev/null; echo $?
+––– output –––
+0
+––– input –––
+manticore-load --quiet --json --port=2306 --init="CREATE TABLE local_table2 (id BIGINT, username TEXT) min_infix_len='2' expand_keywords='1'" --load="INSERT INTO local_table2 (id, username) VALUES (<increment>, '<text/{./test/clt-tests/scripts/surnames.txt}/1/1>')" --batch-size=1000 --threads=4 --total=1000 > /dev/null; echo $?
+––– output –––
+0
+––– input –––
+mysql -h0 -P1306 -e "DROP TABLE IF EXISTS dist_table; CREATE TABLE dist_table type='distributed' local='local_table1' agent='127.0.0.1:2312:local_table2';"
+––– output –––
+––– input –––
+mysql -h0 -P1306 -e "SHOW CREATE TABLE dist_table;"
+––– output –––
++------------+-----------------------------------------------------------------------------------------------------+
+| Table      | Create Table                                                                                        |
++------------+-----------------------------------------------------------------------------------------------------+
+| dist_table | CREATE TABLE dist_table type='distributed' local='local_table1' agent='127.0.0.1:2312:local_table2' |
++------------+-----------------------------------------------------------------------------------------------------+
+––– input –––
+mysql -h0 -P1306 -e "SELECT COUNT(*) FROM dist_table;"
+––– output –––
++----------+
+| count(*) |
++----------+
+|     2000 |
++----------+
+––– input –––
+mysql -h0 -P1306 -e "SELECT id, username FROM dist_table WHERE MATCH('RICH') OPTION fuzzy=1;" | tail -n +2 | sort -k1,1n | head -n 10
+––– output –––
++------+-------------+
++------+-------------+
+|  125 | RICHARDSON. |
+|  363 | RICO.       |
+|  417 | BACHMAN.    |
+|   43 | RICHARDSON. |
+|  934 | RICH.       |
+|  948 | ALDRICH.    |
+|  996 | BACH.       |
+| id   | username    |
+––– input –––
+mysql -h0 -P1306 -e "CALL AUTOCOMPLETE('draw', 'dist_table', 1 AS fuzziness);" | tail -n +4
+––– output –––
+| drew     |
+| drema    |
+| audrea   |
+| brewer   |
+| dreama   |
+| mcgrew   |
+| deandrea |
++----------+

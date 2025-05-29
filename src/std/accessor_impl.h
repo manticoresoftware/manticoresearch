@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2017-2024, Manticore Software LTD (https://manticoresearch.com)
+// Copyright (c) 2017-2025, Manticore Software LTD (https://manticoresearch.com)
 // Copyright (c) 2001-2016, Andrew Aksyonoff
 // Copyright (c) 2008-2016, Sphinx Technologies Inc
 // All rights reserved
@@ -12,32 +12,32 @@
 
 #include "generics.h"
 
-template<typename T>
-typename SphAccessor_T<T>::MEDIAN_TYPE& SphAccessor_T<T>::Key (T* a) const
+template<typename T, typename INT>
+typename SphAccessor_T<T,INT>::MEDIAN_TYPE& SphAccessor_T<T,INT>::Key (T* a) const
 {
 	return *a;
 }
 
-template<typename T>
-void SphAccessor_T<T>::CopyKey ( SphAccessor_T<T>::MEDIAN_TYPE* pMed, T* pVal ) const
+template<typename T, typename INT>
+void SphAccessor_T<T,INT>::CopyKey ( SphAccessor_T<T,INT>::MEDIAN_TYPE* pMed, T* pVal ) const
 {
 	*pMed = Key ( pVal );
 }
 
-template<typename T>
-void SphAccessor_T<T>::Swap ( T* a, T* b ) const
+template<typename T, typename INT>
+void SphAccessor_T<T,INT>::Swap ( T* a, T* b ) const
 {
 	::Swap ( *a, *b );
 }
 
-template<typename T>
-T* SphAccessor_T<T>::Add ( T* p, int i ) const
+template<typename T, typename INT>
+T* SphAccessor_T<T, INT>::Add ( T* p, INT i ) const
 {
 	return p + i;
 }
 
-template<typename T>
-int SphAccessor_T<T>::Sub ( T* b, T* a ) const
+template<typename T, typename INT>
+INT SphAccessor_T<T,INT>::Sub ( T* b, T* a ) const
 {
-	return (int)( b - a );
+	return (INT)( b - a );
 }

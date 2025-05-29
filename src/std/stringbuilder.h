@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2017-2024, Manticore Software LTD (https://manticoresearch.com)
+// Copyright (c) 2017-2025, Manticore Software LTD (https://manticoresearch.com)
 // Copyright (c) 2001-2016, Andrew Aksyonoff
 // Copyright (c) 2008-2016, Sphinx Technologies Inc
 // All rights reserved
@@ -230,11 +230,12 @@ inline char* Tail ( StringBuilder_c& tBuilder )
 	return tBuilder.end();
 }
 
-CSphString StrVec2Str ( const VecTraits_T<CSphString>& tVec, const char* szDelim = "," ) noexcept;
+template<typename VAL>
+CSphString Vec2Str( const VecTraits_T<VAL> & tVec, const char * szDelim = "," ) noexcept;
 
 inline CSphString ConcatWarnings ( const VecTraits_T<CSphString>& tVec ) noexcept
 {
-	return StrVec2Str ( tVec, "; " );
+	return Vec2Str( tVec, "; " );
 }
 
 #include "stringbuilder_impl.h"

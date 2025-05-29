@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2017-2024, Manticore Software LTD (https://manticoresearch.com)
+// Copyright (c) 2017-2025, Manticore Software LTD (https://manticoresearch.com)
 // Copyright (c) 2001-2016, Andrew Aksyonoff
 // Copyright (c) 2008-2016, Sphinx Technologies Inc
 // All rights reserved
@@ -13,10 +13,7 @@
 #pragma once
 
 #include <utility>
-
-
-#include <cassert>
-#include "generics.h"
+#include <optional>
 
 //////////////////////////////////////////////////////////////////////////
 
@@ -85,8 +82,17 @@ public:
 		return FindByKey ( tKey ) != nullptr;
 	}
 
+	template<typename VAL>
+	std::optional<VAL> Opt ( const KEY& tKey ) const noexcept
+	{
+		std::optional<VAL> tResult;
+		HashEntry_t * pEntry = FindByKey ( tKey );
+		if ( pEntry ) tResult = pEntry->second;
+		return tResult;
+	}
+
 	/// get value pointer by key
-	T* operator() ( const KEY& tKey ) const
+	T * operator() ( const KEY & tKey ) const
 	{
 		HashEntry_t* pEntry = FindByKey ( tKey );
 		return pEntry ? &pEntry->second : nullptr;

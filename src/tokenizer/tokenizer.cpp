@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2017-2024, Manticore Software LTD (https://manticoresearch.com)
+// Copyright (c) 2017-2025, Manticore Software LTD (https://manticoresearch.com)
 // Copyright (c) 2001-2016, Andrew Aksyonoff
 // Copyright (c) 2008-2016, Sphinx Technologies Inc
 // All rights reserved
@@ -326,3 +326,29 @@ TokenizerRefPtr_c Tokenizer::Create ( const CSphTokenizerSettings & tSettings, c
 	return pResult;
 }
 
+TokenizerRefPtr_c sphCloneAndSetupQueryTokenizer ( const TokenizerRefPtr_c& pTokenizer, bool bWildcards, bool bExact, bool bJson )
+{
+	assert ( pTokenizer );
+	if ( bWildcards )
+	{
+		if ( bExact )
+		{
+			if ( bJson )
+				return pTokenizer->Clone ( SPH_CLONE_QUERY_WILD_EXACT_JSON);
+			return pTokenizer->Clone ( SPH_CLONE_QUERY_WILD_EXACT );
+		}
+		if ( bJson )
+			return pTokenizer->Clone ( SPH_CLONE_QUERY_WILD_JSON );
+		return pTokenizer->Clone ( SPH_CLONE_QUERY_WILD );
+	}
+
+	if ( bExact )
+	{
+		if ( bJson )
+			return pTokenizer->Clone ( SPH_CLONE_QUERY_EXACT_JSON );
+		return pTokenizer->Clone ( SPH_CLONE_QUERY_EXACT );
+	}
+	if ( bJson )
+		return pTokenizer->Clone ( SPH_CLONE_QUERY );
+	return pTokenizer->Clone ( SPH_CLONE_QUERY_ );
+}

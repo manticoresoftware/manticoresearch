@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2017-2024, Manticore Software LTD (https://manticoresearch.com)
+// Copyright (c) 2017-2025, Manticore Software LTD (https://manticoresearch.com)
 // Copyright (c) 2001-2016, Andrew Aksyonoff
 // Copyright (c) 2008-2016, Sphinx Technologies Inc
 // All rights reserved
@@ -13,6 +13,7 @@
 #include "env.h"
 
 #include "sphinxutils.h"
+#include "config.h"
 
 #ifdef _WIN32
 #include "fileutils.h"
@@ -113,6 +114,7 @@ CSphString GetSecondaryFullpath()
 	return sResult;
 }
 
+
 CSphString GetKNNFullpath()
 {
 	CSphString sResult;
@@ -121,6 +123,19 @@ CSphString GetKNNFullpath()
 		sResult = szEnv;
 	else
 		sResult.SetSprintf ( "%s/" LIB_MANTICORE_KNN, GET_MANTICORE_MODULES() );
+
+	return sResult;
+}
+
+
+CSphString GetKNNEmbeddingsFullpath()
+{
+	CSphString sResult;
+	const char* szEnv = getenv ( "LIB_MANTICORE_KNN_EMBEDDINGS" );
+	if ( szEnv )
+		sResult = szEnv;
+	else
+		sResult.SetSprintf ( "%s/" LIB_MANTICORE_KNN_EMBEDDINGS, GET_MANTICORE_MODULES() );
 
 	return sResult;
 }

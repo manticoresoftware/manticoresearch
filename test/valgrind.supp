@@ -99,6 +99,15 @@
    fun:_ZN4cctz10TimeZoneIf4LoadERKNSt7__*
 }
 
+{
+   cctz::time_zone::Impl::LoadTimeZone
+   Memcheck:Leak
+   match-leak-kinds: reachable
+   fun:_Znwm
+   ...
+   fun:_ZN4cctz9time_zone4Impl12LoadTimeZoneERKNSt7__*
+}
+
 #main
 {
    ConcatWarnings in ServiceMain
@@ -109,4 +118,6 @@
    fun:ConcatWarnings
    fun:_Z11ServiceMainiPPc
 }
+
+
 #EOF

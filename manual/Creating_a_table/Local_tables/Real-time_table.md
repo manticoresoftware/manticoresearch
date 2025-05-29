@@ -71,6 +71,13 @@ utilsApi.sql('CREATE TABLE forum(title text, price float)')
 ```
 
 <!-- intro -->
+##### Python-asyncio:
+<!-- request Python-asyncio -->
+```python
+await utilsApi.sql('CREATE TABLE forum(title text, price float)')
+```
+
+<!-- intro -->
 ##### Javascript:
 
 <!-- request Javascript -->
@@ -90,6 +97,15 @@ utilsApi.sql("CREATE TABLE forum(title text, price float)");
 <!-- request C# -->
 ```clike
 utilsApi.Sql("CREATE TABLE forum(title text, price float)");
+```
+
+<!-- intro -->
+##### Rust:
+
+<!-- request Rust -->
+
+```rust
+utils_api.sql("CREATE TABLE forum(title text, price float)", Some(true)).await;
 ```
 
 <!-- intro -->
@@ -126,7 +142,7 @@ table products {
 
 #### _mapping API:
 
-> NOTE: The `_mapping` API requires [Manticore Buddy](../Installation/Manticore_Buddy.md). If it doesn't work, make sure Buddy is installed.
+> NOTE: The `_mapping` API requires [Manticore Buddy](Installation/Manticore_Buddy.md). If it doesn't work, make sure Buddy is installed.
 
 <!-- example rt-mapping -->
 
@@ -233,7 +249,7 @@ You can create a copy of a real-time table, with or without its data. Please not
 CREATE TABLE [IF NOT EXISTS] table_name LIKE old_table_name [WITH DATA]
 ```
 
-> NOTE: Copying a table requires [Manticore Buddy](../Installation/Manticore_Buddy.md). If it doesn't work, make sure Buddy is installed.
+> NOTE: Copying a table requires [Manticore Buddy](Installation/Manticore_Buddy.md). If it doesn't work, make sure Buddy is installed.
 
 <!-- intro -->
 ##### Example:

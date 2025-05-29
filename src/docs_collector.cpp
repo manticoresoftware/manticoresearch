@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2008-2024, Manticore Software LTD (https://manticoresearch.com)
+// Copyright (c) 2008-2025, Manticore Software LTD (https://manticoresearch.com)
 // Copyright (c) 2001-2016, Andrew Aksyonoff
 // Copyright (c) 2008-2016, Sphinx Technologies Inc
 // All rights reserved
@@ -13,6 +13,7 @@
 #include "docs_collector.h"
 #include "searchdaemon.h"
 #include "indexfiles.h"
+#include "daemon/search_handler.h"
 
 class DocsCollector_c::Impl_c
 {
@@ -44,8 +45,8 @@ class DocsCollector_c::Impl_c
 
 	void ProcessFull ( const CSphQuery& tQuery, bool bJson, const CSphString& sIndex, const cServedIndexRefPtr_c& pDesc, CSphString* pError )
 	{
-		PubSearchHandler_c tHandler ( 1, CreateQueryParser ( bJson ), tQuery.m_eQueryType, false );
-		tHandler.PushIndex ( sIndex, pDesc );
+		SearchHandler_c tHandler ( 1, CreateQueryParser ( bJson ), tQuery.m_eQueryType, false );
+		tHandler.m_dAcquired.AddIndex ( sIndex, pDesc );
 		tHandler.RunCollect ( tQuery, sIndex, pError, &m_dCompressedDocids );
 
 		if ( m_dCompressedDocids.IsEmpty() )

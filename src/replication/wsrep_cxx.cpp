@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2019-2024, Manticore Software LTD (https://manticoresearch.com)
+// Copyright (c) 2019-2025, Manticore Software LTD (https://manticoresearch.com)
 // Copyright (c) 2001-2016, Andrew Aksyonoff
 // Copyright (c) 2008-2016, Sphinx Technologies Inc
 // All rights reserved
@@ -254,17 +254,17 @@ WsrepLoader_t TryWsrep()
 	return tRes;
 }
 
-Wsrep::Provider_i* Wsrep::MakeProvider ( Wsrep::Cluster_i* pCluster, CSphString sName, const char* szListenAddr, const char* szIncoming, const char* szPath, const char* szOptions )
+Wsrep::Provider_i* Wsrep::MakeProvider ( Wsrep::Cluster_i* pCluster, CSphString sName, const char* szListenAddr, const char* szIncoming, const char* szPath, const char* szOptions, Wsrep::GlobalTid_t & tGtid )
 {
 	auto tLoader = TryWsrep();
 	if ( !tLoader.m_pLibrary )
 		return nullptr;
 
 	if ( tLoader.m_iIfaceVer == 25 )
-		return MakeProviderV25 ( std::move ( tLoader ), pCluster, std::move ( sName ), szListenAddr, szIncoming, szPath, szOptions );
+		return MakeProviderV25 ( std::move ( tLoader ), pCluster, std::move ( sName ), szListenAddr, szIncoming, szPath, szOptions, tGtid );
 
 	if ( tLoader.m_iIfaceVer == 31 )
-		return MakeProviderV31 ( std::move ( tLoader ), pCluster, std::move ( sName ), szListenAddr, szIncoming, szPath, szOptions );
+		return MakeProviderV31 ( std::move ( tLoader ), pCluster, std::move ( sName ), szListenAddr, szIncoming, szPath, szOptions, tGtid );
 
 	TlsMsg::Err ( "Wrong galera interface version. Got %d", tLoader.m_iIfaceVer );
 	return nullptr;

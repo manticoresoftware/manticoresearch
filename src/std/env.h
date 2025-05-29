@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2017-2024, Manticore Software LTD (https://manticoresearch.com)
+// Copyright (c) 2017-2025, Manticore Software LTD (https://manticoresearch.com)
 // Copyright (c) 2001-2016, Andrew Aksyonoff
 // Copyright (c) 2008-2016, Sphinx Technologies Inc
 // All rights reserved
@@ -34,6 +34,7 @@ CSphString GET_GALERA_FULLPATH();
 CSphString GetColumnarFullpath();
 CSphString GetSecondaryFullpath();
 CSphString GetKNNFullpath();
+CSphString GetKNNEmbeddingsFullpath();
 
 // return value of asked ENV, or default.
 // note, default determines the type which to return

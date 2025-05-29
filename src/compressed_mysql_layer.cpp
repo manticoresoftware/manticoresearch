@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2021-2024, Manticore Software LTD (https://manticoresearch.com)
+// Copyright (c) 2021-2025, Manticore Software LTD (https://manticoresearch.com)
 // All rights reserved
 //
 // This program is free software; you can redistribute it and/or modify
@@ -11,7 +11,7 @@
 #include "compressed_mysql_layer.h"
 
 // for UNALIGNED_RAM_ACCESS
-#include "sphinxdefs.h"
+#include "config.h"
 
 
 DWORD MysqlCompressedSocket_c::ReadLSBSmallDword ( InputBuffer_c& tIn )

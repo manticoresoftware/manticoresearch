@@ -12,7 +12,8 @@ if [[ "$FAILED_TO_LOGIN" == 'true' ]]; then
 fi
 
 if [ ! -n "$BUILD_TAGS" ]; then
-  BUILD_TAGS="dev dev-$( cat src/sphinxversion.h.in | grep VERNUMBERS | cut -d" " -f3 | cut -d'"' -f2 )-$CI_COMMIT_SHORT_SHA"
+  VERSION=$( cat src/sphinxversion.h.in | grep VERNUMBERS | cut -d" " -f3 | cut -d'"' -f2 )
+  BUILD_TAGS="dev dev-${VERSION} dev-${VERSION}-$CI_COMMIT_SHORT_SHA"
 fi
 
 IFS=' ' read -r -a SPLITTED_BUILD_TAGS <<<"$BUILD_TAGS"
@@ -29,17 +30,26 @@ if [[ ! $(docker ps | grep manticore_build) ]]; then
 #    docker run --rm --privileged multiarch/qemu-user-static --reset -p yes
 fi
 
+BUILD_ARGS=""
 for BUILD_TAG in "${SPLITTED_BUILD_TAGS[@]}"; do
-    for ((i = 0; i < 3; i++)); do
-      echo "Started building manticoresearch/manticore:$BUILD_TAG"
+  BUILD_ARGS="$BUILD_ARGS --tag manticoresearch/manticore:$BUILD_TAG"
+done
 
-      docker buildx build --progress=plain --build-arg DEV=1 --push --platform linux/arm64,linux/amd64 --tag manticoresearch/manticore:$BUILD_TAG . && break
+for ((i = 0; i < 3; i++)); do
+  echo "Started building manticoresearch/manticore"
 
-      if [ $i==2 ]; then
-        echo "Docker build failed"
-        BUILD_FAILED=true
-      fi
-    done
+  docker buildx build \
+    --progress=plain \
+    --build-arg DEV=1 \
+    --push \
+    --platform linux/arm64,linux/amd64 \
+    $BUILD_ARGS \
+    . && break
+
+  if [ $i == 2 ]; then
+    echo "Docker build failed"
+    BUILD_FAILED=true
+  fi
 done
 
 echo "Done"

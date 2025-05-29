@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2017-2024, Manticore Software LTD (https://manticoresearch.com)
+// Copyright (c) 2017-2025, Manticore Software LTD (https://manticoresearch.com)
 // Copyright (c) 2001-2016, Andrew Aksyonoff
 // Copyright (c) 2008-2016, Sphinx Technologies Inc
 // All rights reserved
@@ -75,7 +75,7 @@ public:
 	void		Read ( T & tValue )						{ GetBytes ( &tValue, sizeof(tValue) ); }
 	void		Read ( void * pData, size_t tSize )		{ GetBytes ( pData, tSize ); }
 
-	void		GetBytes ( void * pData, int iSize );
+	void		GetBytes ( void * pData, int64_t iSize );
 
 	int			GetByte ();
 	DWORD		GetDword ();
@@ -201,7 +201,7 @@ public:
 class CSphWriter : public Writer_i
 {
 public:
-	virtual			~CSphWriter ();		///< if error flag is set, or if file is not closed by CloseFile, it will be automatically deleted (unlinked).
+					~CSphWriter () override;		///< if error flag is set, or if file is not closed by CloseFile, it will be automatically deleted (unlinked).
 
 	void			SetBufferSize ( int iBufferSize );	///< tune write cache size; must be called before OpenFile() or SetFile()
 

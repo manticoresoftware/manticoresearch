@@ -1,4 +1,5 @@
-––– block: ../base/start-searchd –––
+
+––– block: ../base/start-searchd-with-buddy –––
 ––– input –––
 apt-get install jq -y > /dev/null; echo $?
 ––– output –––
@@ -241,34 +242,434 @@ curl -s "http://localhost:9308/sql?raw_response=true&query=SHOW%20META"; echo
 "warning":""
 }]
 ––– input –––
-curl -s -X POST "http://localhost:9308/sql?mode=raw" -d "query=SHOW QUERIES"; echo
+curl -s -X POST "http://localhost:9308/sql?mode=raw" -d "query=SHOW QUERIES" | jq '.[0].data |= sort_by(.id)'; echo
 ––– output –––
-[{"total":%{NUMBER},"error":"","warning":"","columns":[{"id":{"type":"long long"}},{"query":{"type":"string"}},{"time":{"type":"string"}},{"protocol":{"type":"string"}},{"host":{"type":"string"}}],"data":[{"id":%{NUMBER},"query":"SHOW QUERIES","time":"%{NUMBER}#!/(s|ms|us)/!# ago","protocol":"http","host":"127.0.0.1:%{NUMBER}"},{"id":%{NUMBER},"query":"select","time":"%{NUMBER}#!/(s|ms|us)/!# ago","protocol":"http","host":"127.0.0.1:%{NUMBER}"},{"id":%{NUMBER},"query":"show_settings","time":"%{NUMBER}#!/(s|ms|us)/!#","protocol":"http","host":"127.0.0.1:%{NUMBER}"}]}]
+[
+  {
+    "total": %{NUMBER},
+    "error": "",
+    "warning": "",
+    "columns": [
+      {
+        "id": {
+          "type": "long long"
+        }
+      },
+      {
+        "query": {
+          "type": "string"
+        }
+      },
+      {
+        "time": {
+          "type": "string"
+        }
+      },
+      {
+        "protocol": {
+          "type": "string"
+        }
+      },
+      {
+        "host": {
+          "type": "string"
+        }
+      }
+    ],
+    "data": [
+      {
+        "id": %{NUMBER},
+        "query": "#!/[a-zA-Z\s\_]+/!#",
+        "time": "%{NUMBER}#!/(s|ms|us)/!#",
+        "protocol": "http",
+        "host": "127.0.0.1:%{NUMBER}"
+      },
+      {
+        "id": %{NUMBER},
+        "query": "#!/[a-zA-Z\s\_]+/!#",
+        "time": "%{NUMBER}#!/(s|ms|us)/!# ago",
+        "protocol": "http",
+        "host": "127.0.0.1:%{NUMBER}"
+      },
+      {
+        "id": %{NUMBER},
+        "query": "#!/[a-zA-Z\s\_]+/!#",
+        "time": "%{NUMBER}#!/(s|ms|us)/!# ago",
+        "protocol": "http",
+        "host": "127.0.0.1:%{NUMBER}"
+      }
+    ]
+  }
+]
 ––– input –––
-curl -s "http://localhost:9308/sql?mode=raw&query=SHOW%20QUERIES"; echo
+curl -s "http://localhost:9308/sql?mode=raw&query=SHOW%20QUERIES" | jq '.[0].data |= sort_by(.id)'; echo
 ––– output –––
-[{"total":%{NUMBER},"error":"","warning":"","columns":[{"id":{"type":"long long"}},{"query":{"type":"string"}},{"time":{"type":"string"}},{"protocol":{"type":"string"}},{"host":{"type":"string"}}],"data":[{"id":%{NUMBER},"query":"select","time":"%{NUMBER}#!/(s|ms|us)/!# ago","protocol":"http","host":"127.0.0.1:%{NUMBER}"},{"id":%{NUMBER},"query":"SHOW QUERIES","time":"%{NUMBER}#!/(s|ms|us)/!# ago","protocol":"http","host":"127.0.0.1:%{NUMBER}"},{"id":%{NUMBER},"query":"show_settings","time":"%{NUMBER}#!/(s|ms|us)/!#","protocol":"http","host":"127.0.0.1:%{NUMBER}"}]}]
+[
+  {
+    "total": %{NUMBER},
+    "error": "",
+    "warning": "",
+    "columns": [
+      {
+        "id": {
+          "type": "long long"
+        }
+      },
+      {
+        "query": {
+          "type": "string"
+        }
+      },
+      {
+        "time": {
+          "type": "string"
+        }
+      },
+      {
+        "protocol": {
+          "type": "string"
+        }
+      },
+      {
+        "host": {
+          "type": "string"
+        }
+      }
+    ],
+    "data": [
+      {
+        "id": %{NUMBER},
+        "query": "#!/[a-zA-Z\s\_]+/!#",
+        "time": "%{NUMBER}#!/(s|ms|us)/!#",
+        "protocol": "http",
+        "host": "127.0.0.1:%{NUMBER}"
+      },
+      {
+        "id": %{NUMBER},
+        "query": "#!/[a-zA-Z\s\_]+/!#",
+        "time": "%{NUMBER}#!/(s|ms|us)/!# ago",
+        "protocol": "http",
+        "host": "127.0.0.1:%{NUMBER}"
+      },
+      {
+        "id": %{NUMBER},
+        "query": "#!/[a-zA-Z\s\_]+/!#",
+        "time": "%{NUMBER}#!/(s|ms|us)/!# ago",
+        "protocol": "http",
+        "host": "127.0.0.1:%{NUMBER}"
+      }
+    ]
+  }
+]
 ––– input –––
-curl -s -X POST "http://localhost:9308/sql?raw_response=true" -d "query=SHOW QUERIES"; echo
+curl -s -X POST "http://localhost:9308/sql?raw_response=true" -d "query=SHOW QUERIES" | jq '.[0].data |= sort_by(.id)'; echo
 ––– output –––
-[{"total":%{NUMBER},"error":"","warning":"","columns":[{"id":{"type":"long long"}},{"query":{"type":"string"}},{"time":{"type":"string"}},{"protocol":{"type":"string"}},{"host":{"type":"string"}}],"data":[{"id":%{NUMBER},"query":"select","time":"%{NUMBER}#!/(s|ms|us)/!# ago","protocol":"http","host":"127.0.0.1:%{NUMBER}"},{"id":%{NUMBER},"query":"SHOW QUERIES","time":"%{NUMBER}#!/(s|ms|us)/!# ago","protocol":"http","host":"127.0.0.1:%{NUMBER}"},{"id":%{NUMBER},"query":"show_settings","time":"%{NUMBER}#!/(s|ms|us)/!#","protocol":"http","host":"127.0.0.1:%{NUMBER}"}]}]
+[
+  {
+    "total": %{NUMBER},
+    "error": "",
+    "warning": "",
+    "columns": [
+      {
+        "id": {
+          "type": "long long"
+        }
+      },
+      {
+        "query": {
+          "type": "string"
+        }
+      },
+      {
+        "time": {
+          "type": "string"
+        }
+      },
+      {
+        "protocol": {
+          "type": "string"
+        }
+      },
+      {
+        "host": {
+          "type": "string"
+        }
+      }
+    ],
+    "data": [
+      {
+        "id": %{NUMBER},
+        "query": "#!/[a-zA-Z\s\_]+/!#",
+        "time": "%{NUMBER}#!/(s|ms|us)/!#",
+        "protocol": "http",
+        "host": "127.0.0.1:%{NUMBER}"
+      },
+      {
+        "id": %{NUMBER},
+        "query": "#!/[a-zA-Z\s\_]+/!#",
+        "time": "%{NUMBER}#!/(s|ms|us)/!# ago",
+        "protocol": "http",
+        "host": "127.0.0.1:%{NUMBER}"
+      },
+      {
+        "id": %{NUMBER},
+        "query": "#!/[a-zA-Z\s\_]+/!#",
+        "time": "%{NUMBER}#!/(s|ms|us)/!# ago",
+        "protocol": "http",
+        "host": "127.0.0.1:%{NUMBER}"
+      }
+    ]
+  }
+]
 ––– input –––
-curl -s "http://localhost:9308/sql?raw_response=true&query=SHOW%20QUERIES"; echo
+curl -s "http://localhost:9308/sql?raw_response=true&query=SHOW%20QUERIES" | jq '.[0].data |= sort_by(.id)'; echo
 ––– output –––
-[{"total":%{NUMBER},"error":"","warning":"","columns":[{"id":{"type":"long long"}},{"query":{"type":"string"}},{"time":{"type":"string"}},{"protocol":{"type":"string"}},{"host":{"type":"string"}}],"data":[{"id":%{NUMBER},"query":"select","time":"%{NUMBER}#!/(s|ms|us)/!# ago","protocol":"http","host":"127.0.0.1:%{NUMBER}"},{"id":%{NUMBER},"query":"SHOW QUERIES","time":"%{NUMBER}#!/(s|ms|us)/!# ago","protocol":"http","host":"127.0.0.1:%{NUMBER}"},{"id":%{NUMBER},"query":"show_settings","time":"%{NUMBER}#!/(s|ms|us)/!#","protocol":"http","host":"127.0.0.1:%{NUMBER}"}]}]
+[
+  {
+    "total": %{NUMBER},
+    "error": "",
+    "warning": "",
+    "columns": [
+      {
+        "id": {
+          "type": "long long"
+        }
+      },
+      {
+        "query": {
+          "type": "string"
+        }
+      },
+      {
+        "time": {
+          "type": "string"
+        }
+      },
+      {
+        "protocol": {
+          "type": "string"
+        }
+      },
+      {
+        "host": {
+          "type": "string"
+        }
+      }
+    ],
+    "data": [
+      {
+        "id": %{NUMBER},
+        "query": "#!/[a-zA-Z\s\_]+/!#",
+        "time": "%{NUMBER}#!/(s|ms|us)/!#",
+        "protocol": "http",
+        "host": "127.0.0.1:%{NUMBER}"
+      },
+      {
+        "id": %{NUMBER},
+        "query": "#!/[a-zA-Z\s\_]+/!#",
+        "time": "%{NUMBER}#!/(s|ms|us)/!# ago",
+        "protocol": "http",
+        "host": "127.0.0.1:%{NUMBER}"
+      },
+      {
+        "id": %{NUMBER},
+        "query": "#!/[a-zA-Z\s\_]+/!#",
+        "time": "%{NUMBER}#!/(s|ms|us)/!# ago",
+        "protocol": "http",
+        "host": "127.0.0.1:%{NUMBER}"
+      }
+    ]
+  }
+]
 ––– input –––
-curl -s -X POST "http://localhost:9308/sql?mode=raw" -d "query=SHOW VERSION"; echo
+curl -s -X POST "http://localhost:9308/sql?mode=raw" -d "query=SHOW VERSION" | jq '.[0].data |= sort_by(.id)'; echo
 ––– output –––
-[{"total":%{NUMBER},"error":"","warning":"","columns":[{"Component":{"type":"string"}},{"Version":{"type":"string"}}],"data":[{"Component":"Daemon","Version":"%{VERSION}"},{"Component":"Columnar","Version":"columnar %{VERSION}"},{"Component":"Secondary","Version":"secondary %{VERSION}"},{"Component":"KNN","Version":"knn %{VERSION}"},{"Component":"Buddy","Version":"buddy %{VERSION}"}]}]
+[
+  {
+    "total": %{NUMBER},
+    "error": "",
+    "warning": "",
+    "columns": [
+      {
+        "Component": {
+          "type": "string"
+        }
+      },
+      {
+        "Version": {
+          "type": "string"
+        }
+      }
+    ],
+    "data": [
+      {
+        "Component": "Daemon",
+        "Version": "%{VERSION}"
+      },
+      {
+        "Component": "Columnar",
+        "Version": "columnar %{VERSION}"
+      },
+      {
+        "Component": "Secondary",
+        "Version": "secondary %{VERSION}"
+      },
+      {
+        "Component": "Knn",
+        "Version": "knn %{VERSION}"
+      },
+      {
+        "Component": "Embeddings",
+        "Version": "embeddings #!/([0-9]+\.[0-9]+\.[0-9]+)/!#"
+      },
+      {
+        "Component": "Buddy",
+        "Version": "buddy %{VERSION}"
+      }
+    ]
+  }
+]
 ––– input –––
-curl -s "http://localhost:9308/sql?mode=raw&query=SHOW%20VERSION"; echo
+curl -s "http://localhost:9308/sql?mode=raw&query=SHOW%20VERSION" | jq '.[0].data |= sort_by(.id)'; echo
 ––– output –––
-[{"total":%{NUMBER},"error":"","warning":"","columns":[{"Component":{"type":"string"}},{"Version":{"type":"string"}}],"data":[{"Component":"Daemon","Version":"%{VERSION}"},{"Component":"Columnar","Version":"columnar %{VERSION}"},{"Component":"Secondary","Version":"secondary %{VERSION}"},{"Component":"KNN","Version":"knn %{VERSION}"},{"Component":"Buddy","Version":"buddy %{VERSION}"}]}]
+[
+  {
+    "total": %{NUMBER},
+    "error": "",
+    "warning": "",
+    "columns": [
+      {
+        "Component": {
+          "type": "string"
+        }
+      },
+      {
+        "Version": {
+          "type": "string"
+        }
+      }
+    ],
+    "data": [
+      {
+        "Component": "Daemon",
+        "Version": "%{VERSION}"
+      },
+      {
+        "Component": "Columnar",
+        "Version": "columnar %{VERSION}"
+      },
+      {
+        "Component": "Secondary",
+        "Version": "secondary %{VERSION}"
+      },
+      {
+        "Component": "Knn",
+        "Version": "knn %{VERSION}"
+      },
+      {
+        "Component": "Embeddings",
+        "Version": "embeddings #!/([0-9]+\.[0-9]+\.[0-9]+)/!#"
+      },
+      {
+        "Component": "Buddy",
+        "Version": "buddy %{VERSION}"
+      }
+    ]
+  }
+]
 ––– input –––
-curl -s -X POST "http://localhost:9308/sql?raw_response=true" -d "query=SHOW VERSION"; echo
+curl -s -X POST "http://localhost:9308/sql?raw_response=true" -d "query=SHOW VERSION" | jq '.[0].data |= sort_by(.id)'; echo
 ––– output –––
-[{"total":%{NUMBER},"error":"","warning":"","columns":[{"Component":{"type":"string"}},{"Version":{"type":"string"}}],"data":[{"Component":"Daemon","Version":"%{VERSION}"},{"Component":"Columnar","Version":"columnar %{VERSION}"},{"Component":"Secondary","Version":"secondary %{VERSION}"},{"Component":"KNN","Version":"knn %{VERSION}"},{"Component":"Buddy","Version":"buddy %{VERSION}"}]}]
+[
+  {
+    "total": %{NUMBER},
+    "error": "",
+    "warning": "",
+    "columns": [
+      {
+        "Component": {
+          "type": "string"
+        }
+      },
+      {
+        "Version": {
+          "type": "string"
+        }
+      }
+    ],
+    "data": [
+      {
+        "Component": "Daemon",
+        "Version": "%{VERSION}"
+      },
+      {
+        "Component": "Columnar",
+        "Version": "columnar %{VERSION}"
+      },
+      {
+        "Component": "Secondary",
+        "Version": "secondary %{VERSION}"
+      },
+      {
+        "Component": "Knn",
+        "Version": "knn %{VERSION}"
+      },
+      {
+        "Component": "Embeddings",
+        "Version": "embeddings #!/([0-9]+\.[0-9]+\.[0-9]+)/!#"
+      },
+      {
+        "Component": "Buddy",
+        "Version": "buddy %{VERSION}"
+      }
+    ]
+  }
+]
 ––– input –––
-curl -s "http://localhost:9308/sql?raw_response=true&query=SHOW%20VERSION"; echo
+curl -s "http://localhost:9308/sql?raw_response=true&query=SHOW%20VERSION" | jq '.[0].data |= sort_by(.id)'; echo
 ––– output –––
-[{"total":%{NUMBER},"error":"","warning":"","columns":[{"Component":{"type":"string"}},{"Version":{"type":"string"}}],"data":[{"Component":"Daemon","Version":"%{VERSION}"},{"Component":"Columnar","Version":"columnar %{VERSION}"},{"Component":"Secondary","Version":"secondary %{VERSION}"},{"Component":"KNN","Version":"knn %{VERSION}"},{"Component":"Buddy","Version":"buddy %{VERSION}"}]}]
+[
+  {
+    "total": %{NUMBER},
+    "error": "",
+    "warning": "",
+    "columns": [
+      {
+        "Component": {
+          "type": "string"
+        }
+      },
+      {
+        "Version": {
+          "type": "string"
+        }
+      }
+    ],
+    "data": [
+      {
+        "Component": "Daemon",
+        "Version": "%{VERSION}"
+      },
+      {
+        "Component": "Columnar",
+        "Version": "columnar %{VERSION}"
+      },
+      {
+        "Component": "Secondary",
+        "Version": "secondary %{VERSION}"
+      },
+      {
+        "Component": "Knn",
+        "Version": "knn %{VERSION}"
+      },
+      {
+        "Component": "Embeddings",
+        "Version": "embeddings #!/([0-9]+\.[0-9]+\.[0-9]+)/!#"
+      },
+      {
+        "Component": "Buddy",
+        "Version": "buddy %{VERSION}"
+      }
+    ]
+  }
+]

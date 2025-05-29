@@ -1,0 +1,70 @@
+<?xml version="1.0" encoding="utf-8"?>
+<test>
+
+<name>knn vs alter</name>
+
+<requires>
+	<knn/>
+	<columnar/>
+	<force-rt/>
+</requires>
+
+<skip_indexer/>
+
+<config>
+searchd
+{
+	<searchd_Settings/>
+	data_dir = <data_path path="data0"/>
+}
+</config>
+
+<queries>
+<sphinxql>
+	<!-- regression for knn not loaded after daemon restart -->
+	create table t(f text);
+	insert into t values(1, 'abc');
+	flush ramchunk t;
+	alter table t add column v float_vector knn_type='hnsw' knn_dims='4' hnsw_similarity='l2';
+	select * from t;
+
+	<!-- daemon restart -->
+	<sphinxql system="restart-daemon-no-warnings"/>
+
+	select * from t;
+	drop table t;
+
+	<!-- regression for knn not loaded after daemon restart (columnar) -->
+	create table t(f text) engine='columnar';
+	insert into t values(1, 'abc');
+	flush ramchunk t;
+	alter table t add column v float_vector knn_type='hnsw' knn_dims='4' hnsw_similarity='l2';
+	select * from t;
+
+	<!-- daemon restart -->
+	<sphinxql system="restart-daemon-no-warnings"/>
+
+	select * from t;
+	drop table t;
+
+	<!-- regression for flush ramchunk failure -->
+	create table t(f text);
+	insert into t values(1, 'abc');
+	alter table t add column v float_vector knn_type='hnsw' knn_dims='4' hnsw_similarity='l2';
+	flush ramchunk t;
+	drop table t;
+	create table t;
+	drop table t;
+
+	<!-- regression for flush ramchunk failure (columnar) -->
+	create table t(f text);
+	insert into t values(1, 'abc');
+	alter table t add column v float_vector knn_type='hnsw' knn_dims='4' hnsw_similarity='l2';
+	flush ramchunk t;
+	drop table t;
+	create table t;
+	drop table t;
+</sphinxql>
+</queries>
+
+</test>

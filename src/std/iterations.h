@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2017-2024, Manticore Software LTD (https://manticoresearch.com)
+// Copyright (c) 2017-2025, Manticore Software LTD (https://manticoresearch.com)
 // Copyright (c) 2001-2016, Andrew Aksyonoff
 // Copyright (c) 2008-2016, Sphinx Technologies Inc
 // All rights reserved
@@ -23,6 +23,9 @@ inline bool none_of ( const CONTAINER& dData, FILTER cond );
 
 template<typename CONTAINER, typename FILTER>
 inline int64_t count_of ( const CONTAINER& dData, FILTER cond );
+
+template<typename INT = int64_t, typename CONTAINER, typename SIZER>
+inline INT sum_of ( const CONTAINER & dData, SIZER amount );
 
 template<typename CONTAINER, typename ACTION>
 void for_each ( CONTAINER&& dData, ACTION fnAction );

@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2017-2024, Manticore Software LTD (https://manticoresearch.com)
+// Copyright (c) 2017-2025, Manticore Software LTD (https://manticoresearch.com)
 // Copyright (c) 2001-2016, Andrew Aksyonoff
 // Copyright (c) 2008-2016, Sphinx Technologies Inc
 // All rights reserved
@@ -14,7 +14,7 @@
 
 #include "jieba.h"
 
-STATIC_ASSERT ( WITH_JIEBA, SHOULD_NOT_BUILD_WIHTOUT_WITH_JIEBA_DEFINITION );
+static_assert ( WITH_JIEBA, "should not build without WITH_JIEBA definition" );
 
 #include "cjkpreprocessor.h"
 

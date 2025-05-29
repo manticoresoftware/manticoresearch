@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2021-2024, Manticore Software LTD (https://manticoresearch.com)
+// Copyright (c) 2021-2025, Manticore Software LTD (https://manticoresearch.com)
 // Copyright (c) 2001-2016, Andrew Aksyonoff
 // Copyright (c) 2008-2016, Sphinx Technologies Inc
 // All rights reserved
@@ -302,6 +302,8 @@ inline const char * SzTxnName ( Txn_e eTxn )
 	case COMMIT: return "commit";
 	case PQ_ADD_DELETE: return "pq_add_delete";
 	}
+	assert(0);
+	return "unknown";
 }
 
 //////////////////////////////////////////////////////////////////////////
@@ -1449,7 +1451,7 @@ void Binlog_c::LoadMeta ()
 	assert ( m_iBinlogFileDigits>0 );
 
 	// load list of active log files
-	int iMaxExt = 0;
+	DWORD iMaxExt = 0;
 	for ( int i=m_dSavedFiles.GetLength ()-1; i>=0; --i )
 	{
 		auto iExt = rdMeta.UnzipInt (); // everything else is saved in logs themselves

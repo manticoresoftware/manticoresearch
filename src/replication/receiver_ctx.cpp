@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2019-2024, Manticore Software LTD (https://manticoresearch.com)
+// Copyright (c) 2019-2025, Manticore Software LTD (https://manticoresearch.com)
 // Copyright (c) 2001-2016, Andrew Aksyonoff
 // Copyright (c) 2008-2016, Sphinx Technologies Inc
 // All rights reserved
@@ -223,6 +223,7 @@ bool ReceiverCtx_c::Commit ( const void* pHndTrx, uint32_t uFlags, const Wsrep::
 
 	bool bOk = true;
 	bool bIsolated = ( m_tAcc.m_dCmd[0]->m_bIsolated );
+	m_tAcc.CleanReplicated();
 
 	if ( bIsolated || !m_pProvider->GetApplier() ) {
 		bOk = HandleCmdReplicated ( m_tAcc );
@@ -232,8 +233,11 @@ bool ReceiverCtx_c::Commit ( const void* pHndTrx, uint32_t uFlags, const Wsrep::
 		bOk = HandleCmdReplicated ( m_tAcc );
 		m_pProvider->GetApplier()->ApplierInterimPostCommit ( pHndTrx );
 	}
-	if ( TlsMsg::HasErr ())
-		sphWarning ( "%s", TlsMsg::szError ());
+	if ( TlsMsg::HasErr () )
+		sphWarning ( "%s", TlsMsg::szError () );
+
+	if ( bOk )
+		m_pProvider->GetCluster()->OnSeqnoCommited ( m_tAcc.m_tCmdReplicated, pMeta->m_tGtid.m_iSeqNo );
 
 	sphLogDebugRpl ( "seq " INT64_FMT ", committed %d, isolated %d", (int64_t) pMeta->m_tGtid.m_iSeqNo, (int) bOk, (int) bIsolated );
 	return bOk;

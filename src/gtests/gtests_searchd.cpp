@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2017-2024, Manticore Software LTD (https://manticoresearch.com)
+// Copyright (c) 2017-2025, Manticore Software LTD (https://manticoresearch.com)
 // Copyright (c) 2001-2016, Andrew Aksyonoff
 // Copyright (c) 2008-2016, Sphinx Technologies Inc
 // All rights reserved
@@ -16,6 +16,7 @@
 // simplest way to test searchd internals - include the source, supress main() function there.
 #define SUPRESS_SEARCHD_MAIN 1
 #include "searchd.cpp"
+#include "daemon/api_commands.h"
 
 #if POLLING_EPOLL
 // different aspects of epoll internals

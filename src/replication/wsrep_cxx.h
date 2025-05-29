@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2019-2024, Manticore Software LTD (https://manticoresearch.com)
+// Copyright (c) 2019-2025, Manticore Software LTD (https://manticoresearch.com)
 // All rights reserved
 //
 // This program is free software; you can redistribute it and/or modify
@@ -20,6 +20,8 @@
 #include <functional>
 #include <memory>
 #include <array>
+
+struct ReplicatedCommand_t;
 
 namespace Wsrep {
 
@@ -113,6 +115,8 @@ public:
 
 	// cb invoked when recv is to be finished
 	virtual void OnRecvFinished ( bool bSuccess ) = 0;
+
+	virtual void OnSeqnoCommited ( const ReplicatedCommand_t & tCmd, int64_t iSeqNo ) = 0;
 };
 
 using ClusterRefPtr_c = CSphRefcountedPtr<Cluster_i>;
@@ -156,9 +160,10 @@ public:
 	virtual void StartListen ( Wsrep::Receiver_i * pReceiver ) = 0;
 	virtual std::unique_ptr<Writeset_i> MakeWriteSet() = 0;
 	virtual Applier_i* GetApplier() = 0;
+	virtual Cluster_i * GetCluster() = 0;
 };
 
-Provider_i * MakeProvider ( Cluster_i * pCluster, CSphString sName, const char * szListenAddr, const char * szIncoming, const char * szPath, const char * szOptions );
+Provider_i * MakeProvider ( Cluster_i * pCluster, CSphString sName, const char * szListenAddr, const char * szIncoming, const char * szPath, const char * szOptions, GlobalTid_t & tGtid );
 
 // these guys tested in gtests_wsrep.cpp
 CSphString Uuid2Str ( const UUID_t& tUuid );

@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2017-2024, Manticore Software LTD (https://manticoresearch.com)
+// Copyright (c) 2017-2025, Manticore Software LTD (https://manticoresearch.com)
 // Copyright (c) 2001-2016, Andrew Aksyonoff
 // Copyright (c) 2008-2016, Sphinx Technologies Inc
 // All rights reserved
@@ -16,11 +16,10 @@
 #ifndef _sphinxutils_
 #define _sphinxutils_
 
-#include <ctype.h>
-#include <stdarg.h>
+#include "std/stringhash.h"
+#include "std/stringbuilder.h"
 
-#include "sphinxstd.h"
-
+#include <csignal>
 //////////////////////////////////////////////////////////////////////////
 
 /// my own isalpha (let's build our own theme park!)
@@ -74,7 +73,7 @@ inline bool sphIsModifier ( int iSymbol )
 
 /// all wildcards
 template < typename T >
-inline bool sphIsWild ( T c )
+bool sphIsWild ( T c )
 {
 	return c=='*' || c=='?' || c=='%';
 }
@@ -348,8 +347,9 @@ enum ESphLogLevel : BYTE
 
 extern ESphLogLevel g_eLogLevel;		// current log level, can be changed on the fly
 
-typedef void ( *SphLogger_fn )( ESphLogLevel, const char *, va_list );
-volatile SphLogger_fn& g_pLogger();
+using SphLogger_fn = void ( * )( ESphLogLevel, const char *, va_list );
+void SetLogger (SphLogger_fn fnLogger);
+SphLogger_fn g_pLogger();
 
 void sphLogVa ( const char * sFmt, va_list ap, ESphLogLevel eLevel = SPH_LOG_WARNING );
 void sphWarning_impl ( const char * sFmt, ... ) __attribute__((format(printf,1,2))); //NOLINT
@@ -449,7 +449,7 @@ void sphConfigureCommon ( const CSphConfig & hConf, FixPathAbsolute_fn && fnPath
 /// my own is chinese
 FORCE_INLINE bool sphIsChineseCode ( int iCode )
 {
-	return ( ( iCode>=0x2E80 && iCode<=0x2EF3 ) ||	// CJK radicals
+	return ( iCode>=0x2E80 && iCode<=0x2EF3 ) ||	// CJK radicals
 		( iCode>=0x2F00 && iCode<=0x2FD5 ) ||	// Kangxi radicals
 		( iCode>=0x3000 && iCode<=0x303F ) ||	// CJK Symbols and Punctuation
 		( iCode>=0x3105 && iCode<=0x312D ) ||	// Bopomofo
@@ -458,7 +458,7 @@ FORCE_INLINE bool sphIsChineseCode ( int iCode )
 		( iCode>=0x4E00 && iCode<=0x9FFF ) ||	// Ideograph
 		( iCode>=0xF900 && iCode<=0xFAD9 ) ||	// compatibility ideographs
 		( iCode>=0xFF00 && iCode<=0xFFEF ) ||	// Halfwidth and fullwidth forms
-		( iCode>=0x20000 && iCode<=0x2FA1D ) );	// CJK Ideograph Extensions B/C/D, and compatibility ideographs
+		( iCode>=0x20000 && iCode<=0x2FA1D ) ;	// CJK Ideograph Extensions B/C/D, and compatibility ideographs
 }
 
 /// detect chinese chars in a buffer
@@ -576,11 +576,9 @@ bool HasMvaUpdated ( const CSphString & sIndexPath );
 int64_t	UidShort();
 int64_t GetIndexUid();
 
-// server - is server id used as iServer & 0x7f
-// started - is a server start time \ Unix timestamp in seconds
-void		UidShortSetup ( int iServer, int iStarted );
-
-BYTE Pearson8 ( const BYTE * pBuf, int iLen );
+int			GetUidShortServerId ();
+void		SetUidShort ( CSphString sMAC, const CSphString& sPid, bool bTestMode );
+void		SetServerID ( int iServerID ) noexcept;
 
 #if _WIN32
 void		CheckWinInstall();

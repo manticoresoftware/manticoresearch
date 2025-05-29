@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2020-2024, Manticore Software LTD (https://manticoresearch.com)
+// Copyright (c) 2020-2025, Manticore Software LTD (https://manticoresearch.com)
 // All rights reserved
 //
 // This program is free software; you can redistribute it and/or modify
@@ -11,11 +11,9 @@
 
 #include "sphinxutils.h"
 #include "libutils.h"
-#include "fileutils.h"
-#include "schema/columninfo.h"
-#include "schema/schema.h"
-#include "columnarmisc.h"
 #include "secondarylib.h"
+#include "std/env.h"
+#include "std/sys.h"
 
 namespace sec {
 using CheckStorage_fn =			void (*) ( const std::string & sFilename, uint32_t uNumRows, std::function<void (const char*)> & fnError, std::function<void (const char*)> & fnProgress );

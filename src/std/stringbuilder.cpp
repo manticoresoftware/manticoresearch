@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2017-2024, Manticore Software LTD (https://manticoresearch.com)
+// Copyright (c) 2017-2025, Manticore Software LTD (https://manticoresearch.com)
 // Copyright (c) 2001-2016, Andrew Aksyonoff
 // Copyright (c) 2008-2016, Sphinx Technologies Inc
 // All rights reserved
@@ -342,12 +342,4 @@ const Str_t& StringBuilder_c::LazyComma_c::RawComma ( const std::function<void (
 	m_bStarted = true;
 	fnAddNext();
 	return m_sPrefix;
-}
-
-
-CSphString StrVec2Str ( const VecTraits_T<CSphString>& tVec, const char* szDelim ) noexcept
-{
-	StringBuilder_c tOut ( szDelim );
-	tVec.Apply ( [&tOut] ( const CSphString& sNode ) { tOut << sNode; } );
-	return CSphString { tOut };
 }

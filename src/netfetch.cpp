@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2022-2024, Manticore Software LTD (https://manticoresearch.com)
+// Copyright (c) 2022-2025, Manticore Software LTD (https://manticoresearch.com)
 // All rights reserved
 //
 // This program is free software; you can redistribute it and/or modify
@@ -174,7 +174,7 @@ static CSphString STime (int64_t iNow=-1)
 inline static const char* CurlPollName ( int iWhat )
 {
 	static const char* WhatStrs[] = { "NONE", "IN", "OUT", "INOUT", "REMOVE" };
-	return iWhat<sizeof(WhatStrs) ? WhatStrs[iWhat] : "UNKNOWN";
+	return iWhat<(int)sizeof(WhatStrs) ? WhatStrs[iWhat] : "UNKNOWN";
 }
 
 // forward def

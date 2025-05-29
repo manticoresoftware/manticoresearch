@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2021-2024, Manticore Software LTD (https://manticoresearch.com)
+// Copyright (c) 2021-2025, Manticore Software LTD (https://manticoresearch.com)
 // All rights reserved
 //
 // This program is free software; you can redistribute it and/or modify
@@ -10,8 +10,6 @@
 
 #pragma once
 
-#include "config.h"
-
 #if __has_include( <valgrind/valgrind.h>)
 #define BOOST_USE_VALGRIND 1
 #include <valgrind/valgrind.h>
@@ -20,8 +18,8 @@
 #endif
 
 #include <boost/context/stack_context.hpp>
-#include "std/vector.h"
 #include "std/ints.h"
+#include "std/vectraits.h"
 
 namespace Threads
 {

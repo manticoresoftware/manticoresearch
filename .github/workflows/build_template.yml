@@ -27,6 +27,14 @@ on:
         required: false
         type: number
         default: 1
+      version:
+        required: false
+        type: string
+        default: ""
+      build_tag:
+        required: false
+        type: string
+        default: ""
       cmake_command:
         required: false
         type: string
@@ -46,7 +54,7 @@ on:
       artifact_list:
         required: false
         type: string
-        default: "build/xml build/CMakeFiles/CMake*.log build/api/libsphinxclient/testcli build/src/indexer build/src/indextool build/src/searchd build/src/tests build/src/gtests/gmanticoretest build/config/*.c build/config/*.h build/**/*.gcno"
+        default: "build/xml build/CMakeFiles/CMake*.log build/api/libsphinxclient/testcli build/src/indexer build/src/indextool build/src/searchd build/src/tests build/src/gtests/gmanticoretest build/config/*.c build/config/*.h build/**/*.cxx build/**/*.gcno"
       artifact_name:
         required: false
         type: string
@@ -58,7 +66,11 @@ on:
         required: false
         type: number
         default: 0
-
+      COLUMNAR_LOCATOR:
+        required: false
+        type: string
+        default: ""
+  
 jobs:
   build:
     runs-on: ubuntu-22.04
@@ -84,12 +96,20 @@ jobs:
         SYSROOT_URL: https://repo.manticoresearch.com/repository/sysroots
         HOMEBREW_PREFIX: ${{ inputs.HOMEBREW_PREFIX }}
         PACK_GALERA: ${{ inputs.PACK_GALERA }}
+        COLUMNAR_LOCATOR: ${{ inputs.COLUMNAR_LOCATOR }}
+        BUILD_TAG: ${{ inputs.build_tag }}
     steps:
       - name: Checkout repository
         uses: actions/checkout@v3
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
           set-safe-directory: true
+
+      - name: Patch version
+        if: inputs.version != ''
+        run: |
+          sed -i "s/0\.0\.0/${{ inputs.version }}/g" src/sphinxversion.h.in
+          cat src/sphinxversion.h.in
 
       - name: Initialization
         run: | # without adding the safe.directory cmake fails to do git log -1 --date=short --format=%cd
@@ -104,7 +124,7 @@ jobs:
           echo "value=${USER_INPUT:-"build_${{ inputs.DISTR }}_${{ inputs.CTEST_CONFIGURATION_TYPE }}_${{ inputs.arch }}"}" >> "$GITHUB_OUTPUT"
 
       - name: Check out cache before building
-        uses: actions/cache@v3.3.1
+        uses: actions/cache@v4
         with:
           path: cache
           enableCrossOsArchive: true

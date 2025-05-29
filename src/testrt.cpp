@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2017-2024, Manticore Software LTD (https://manticoresearch.com)
+// Copyright (c) 2017-2025, Manticore Software LTD (https://manticoresearch.com)
 // Copyright (c) 2001-2016, Andrew Aksyonoff
 // Copyright (c) 2008-2016, Sphinx Technologies Inc
 // All rights reserved
@@ -17,6 +17,7 @@
 #include "sphinxsort.h"
 #include "searchdaemon.h"
 #include "indexing_sources/source_mysql.h"
+#include "sphinxquery/xqparser.h"
 
 #if HAVE_RTESTCONFIG_H
 #include "rtestconfig.h"

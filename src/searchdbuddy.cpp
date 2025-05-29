@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2017-2024, Manticore Software LTD (https://manticoresearch.com)
+// Copyright (c) 2017-2025, Manticore Software LTD (https://manticoresearch.com)
 // Copyright (c) 2001-2016, Andrew Aksyonoff
 // Copyright (c) 2008-2016, Sphinx Technologies Inc
 // All rights reserved
@@ -16,7 +16,17 @@
 
 #include <boost/asio/io_context.hpp>
 #include <boost/asio/read_until.hpp>
+#include <boost/version.hpp>
+#if BOOST_VERSION >= 108800
+#define BOOST_PROCESS_VERSION 1
+#include <boost/process/v1/async.hpp>
+#include <boost/process/v1/child.hpp>
+#include <boost/process/v1/error.hpp>
+#include <boost/process/v1/handles.hpp>
+#include <boost/process/v1/io.hpp>
+#else
 #include <boost/process.hpp>
+#endif
 #if _WIN32
 #include <boost/winapi/process.hpp>
 #endif
@@ -24,6 +34,7 @@
 
 #include "netfetch.h"
 #include "searchdbuddy.h"
+#include "daemon/logger.h"
 
 static std::unique_ptr<boost::process::child> g_pBuddy;
 static CSphString g_sPath;
@@ -703,7 +714,7 @@ static bool SetSessionMeta ( const JsonObj_c & tBudyyReply )
 	// if no meta.total this is not a search query - do not log it into query.log
 	if ( !ConvertValue ( "total", tSrcMeta, tLastMeta.m_iMatches ) )
 		return false;
-		
+
 	// total_found => m_iTotalMatches
 	ConvertValue ( "total_found", tSrcMeta, tLastMeta.m_iTotalMatches );
 
@@ -793,8 +804,11 @@ bool ProcessHttpQueryBuddy ( HttpProcessResult_t & tRes, Str_t sSrcQuery, Option
 
 	} else
 	{
+		// kubana related endpoints should be converted
+		bool bConvert = ( bHttpEndpoint && hOptions["endpoint"].Begins ( "_" ) );
+
 		CSphVector<BYTE> dBson;
-		bson::JsonObjToBson ( tReplyParsed.m_tMessage, dBson, true, false );
+		bson::JsonObjToBson ( tReplyParsed.m_tMessage, dBson, bConvert, false );
 		bson::Bson_c ( dBson ).BsonToJson ( sDumpBuf, false );
 		sDump = FromStr ( sDumpBuf );
 	}
@@ -803,7 +817,7 @@ bool ProcessHttpQueryBuddy ( HttpProcessResult_t & tRes, Str_t sSrcQuery, Option
 
 	dResult.Resize ( 0 );
 	ReplyBuf ( FromStr ( sDump ), eHttpStatus, bNeedHttpResponse, dResult );
-	
+
 	if ( SetSessionMeta ( tReplyParsed.m_tRoot ) )
 		LogBuddyQuery ( sSrcQuery, BuddyQuery_e::HTTP );
 

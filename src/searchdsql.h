@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2017-2024, Manticore Software LTD (https://manticoresearch.com)
+// Copyright (c) 2017-2025, Manticore Software LTD (https://manticoresearch.com)
 // Copyright (c) 2001-2016, Andrew Aksyonoff
 // Copyright (c) 2008-2016, Sphinx Technologies Inc
 // All rights reserved
@@ -84,7 +84,7 @@ enum
 };
 
 
-enum SqlStmt_e
+enum SqlStmt_e : BYTE
 {
 	STMT_PARSE_ERROR = 0,
 	STMT_DUMMY,
@@ -165,6 +165,26 @@ enum SqlStmt_e
 
 	STMT_TOTAL
 };
+
+constexpr const char* SqlStmt2Str(SqlStmt_e eStmt)
+{
+	constexpr const char* dNames[STMT_TOTAL]
+	{
+	"parse_error", "dummy", "select", "insert", "replace", "delete", "show_warnings",
+	"show_status", "show_meta", "set", "begin", "commit", "rollback", "call",
+	"desc", "show_tables", "create_table", "create_table_like", "drop_table", "show_create_table", "update", "create_func",
+	"drop_func", "attach_index", "flush_rtindex", "flush_ramchunk", "show_variables", "truncate_rtindex",
+	"select_columns", "show_collation", "show_character_set", "optimize_index", "show_agent_status",
+	"show_index_status", "show_index_status", "show_profile", "alter_add", "alter_drop", "alter_modify", "show_plan",
+	"show_databases", "create_plugin", "drop_plugin", "show_plugins", "show_threads",
+	"facet", "alter_reconfigure", "show_index_settings", "flush_index", "reload_plugins", "reload_index",
+	"flush_hostnames", "flush_logs", "reload_indexes", "sysfilters", "debug", "alter_killlist_target",
+	"alter_index_settings", "join_cluster", "cluster_create", "cluster_delete", "cluster_index_add",
+	"cluster_index_delete", "cluster_update", "explain", "import_table", "freeze_indexes", "unfreeze_indexes",
+	"show_settings", "alter_rebuild_si", "kill", "show_locks", "show_scroll", "show_table_indexes"
+	};
+	return dNames[eStmt];
+}
 
 
 enum SqlSet_e
@@ -351,7 +371,9 @@ public:
 	CSphString		m_sErrorHeader = "PER:";
 
 	void			PushQuery();
-	CSphString &	ToString ( CSphString & sRes, const SqlNode_t & tNode ) const;
+	CSphString &	ToString ( CSphString & sRes, const SqlNode_t & tNode ) const noexcept;
+	CSphString		GetString ( const SqlNode_t& tNode ) const noexcept;
+	Str_t			GetStrt ( const SqlNode_t& tNode ) const noexcept;
 	CSphString		ToStringUnescape ( const SqlNode_t & tNode ) const;
 	float			ToFloat ( const SqlNode_t & tNode ) const { return (float) strtod ( m_pBuf+tNode.m_iStart, nullptr ); }
 	void			ProcessParsingError ( const char* szMessage );
@@ -370,6 +392,7 @@ public:
 
 	void			SetDefaultTableForOptions();
 	bool			SetTableForOptions ( const SqlNode_t & tNode );
+	bool			NumIsSaturated ( const SqlNode_t& tNode );
 
 protected:
 	CSphVector<SqlStmt_t> &		m_dStmt;

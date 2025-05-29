@@ -1,7 +1,7 @@
 //
 // Copyright (c) 2001-2016, Andrew Aksyonoff
 // Copyright (c) 2008-2016, Sphinx Technologies Inc
-// Copyright (c) 2017-2024, Manticore Software LTD (https://manticoresearch.com)
+// Copyright (c) 2017-2025, Manticore Software LTD (https://manticoresearch.com)
 // All rights reserved
 //
 // This program is free software; you can redistribute it and/or modify
@@ -41,9 +41,6 @@
 	// Win-specific headers, calls, libraries
 	#include <io.h>
 	#include <winsock2.h>
-
-	#pragma comment(linker, "/defaultlib:wsock32.lib")
-	#pragma message("Automatically linking with wsock32.lib")
 
 	#ifndef EWOULDBLOCK
 		#define EWOULDBLOCK			WSAEWOULDBLOCK

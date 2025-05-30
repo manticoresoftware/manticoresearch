@@ -119,7 +119,30 @@ mysql -h0 -P9306 -e "SELECT * FROM name WHERE MATCH('ANT') ORDER BY id ASC, user
 ––– input –––
 mysql -h0 -P9306 -e "SELECT * FROM name WHERE MATCH('tony') ORDER BY id ASC, username ASC OPTION fuzzy=1;"
 ––– output –––
-
++-------+------------------+------+
+| id    | username         | s    |
++-------+------------------+------+
+|   688 | SHERIE STORY     | a    |
+|  1422 | TOBY CARO        | a    |
+|  1627 | RUPERT STORY     | a    |
+|  2154 | TONY GREY        | a    |
+|  3759 | TOBY GILCHRIST   | a    |
+|  5687 | TONY EASTERLING  | a    |
+|  5835 | TOBY ROBERSON    | a    |
+|  6281 | TOBY ARAIZA      | a    |
+|  7311 | ANTONY STOVALL   | a    |
+|  7475 | TOBY REINHART    | a    |
+|  8828 | TONYA CALLAHAN   | a    |
+|  9251 | TOBY LANGFORD    | a    |
+|  9293 | ZENA STORY       | a    |
+|  9619 | TONY WHITTINGTON | a    |
+| 10167 | LANA STORY       | a    |
+| 10341 | ANTONY KAYE      | a    |
+| 12573 | LATONYA CRABTREE | a    |
+| 12876 | TOBY MONTENEGRO  | a    |
+| 13391 | ANTONY CARRILLO  | a    |
+| 13672 | LEZLIE STORY     | a    |
++-------+------------------+------+
 ––– input –––
 mysql -h0 -P9306 -e "SELECT * FROM name WHERE MATCH('SMITH') ORDER BY id DESC, username ASC OPTION fuzzy=1;"
 ––– output –––
@@ -150,7 +173,30 @@ mysql -h0 -P9306 -e "SELECT * FROM name WHERE MATCH('SMITH') ORDER BY id DESC, u
 ––– input –––
 mysql -h0 -P9306 -e "SELECT * FROM name WHERE MATCH('SMYTH') ORDER BY id DESC, username ASC OPTION fuzzy=1;"
 ––– output –––
-
++--------+----------------+------+
+| id     | username       | s    |
++--------+----------------+------+
+| 998829 | EDYTHE VACA    | a    |
+| 998500 | SETH PHUNG     | a    |
+| 996507 | SETH LYMAN     | a    |
+| 995119 | EDYTHE JOHN    | a    |
+| 993455 | EDYTH ROSADO   | a    |
+| 992097 | EDYTH RAGAN    | a    |
+| 989954 | GWENN SMYTH    | a    |
+| 988823 | SETH WHITTAKER | a    |
+| 988755 | SHERRON SMYTH  | a    |
+| 988366 | LAVONIA SMYTH  | a    |
+| 986580 | DARNELL SMYTH  | a    |
+| 986231 | EDYTH BLODGETT | a    |
+| 985595 | SETH BACON     | a    |
+| 982423 | SETH CHATMAN   | a    |
+| 981115 | KATIE SMYTH    | a    |
+| 979541 | EDYTHE CLAYTON | a    |
+| 979093 | SETH BURROUGHS | a    |
+| 978812 | EDYTH GULLEY   | a    |
+| 975994 | SETH PARHAM    | a    |
+| 975841 | ALEIDA SMYTH   | a    |
++--------+----------------+------+
 ––– input –––
 mysql -h0 -P9306 -e "SELECT * FROM name WHERE MATCH('SMITH') ORDER BY id DESC, username ASC OPTION fuzzy=\"1\";"
 ––– output –––

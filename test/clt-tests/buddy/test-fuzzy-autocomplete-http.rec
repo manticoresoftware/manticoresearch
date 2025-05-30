@@ -383,7 +383,176 @@ curl -sX POST http://localhost:9308/search -d '{"index":"name","query":{"bool":{
 ––– input –––
 curl -sX POST http://localhost:9308/search -d '{"index":"name","query":{"bool":{"must":[{"match":{"*":"tony"}}]}},"options":{"fuzzy":true}}' | jq -M
 ––– output –––
-
+{
+  "took": 0,
+  "timed_out": false,
+  "hits": {
+    "total": 1813,
+    "total_relation": "eq",
+    "hits": [
+      {
+        "_id": 800363,
+        "_score": 1547,
+        "_source": {
+          "username": "TOBY BEAULIEU",
+          "s": "a"
+        }
+      },
+      {
+        "_id": 807095,
+        "_score": 1547,
+        "_source": {
+          "username": "TOBY HOFER",
+          "s": "a"
+        }
+      },
+      {
+        "_id": 807096,
+        "_score": 1547,
+        "_source": {
+          "username": "TOBY DEMPSEY",
+          "s": "a"
+        }
+      },
+      {
+        "_id": 808820,
+        "_score": 1547,
+        "_source": {
+          "username": "TOBY RAYMOND",
+          "s": "a"
+        }
+      },
+      {
+        "_id": 808863,
+        "_score": 1547,
+        "_source": {
+          "username": "TOBY BATEMAN",
+          "s": "a"
+        }
+      },
+      {
+        "_id": 813761,
+        "_score": 1547,
+        "_source": {
+          "username": "TOBY VANWINKLE",
+          "s": "a"
+        }
+      },
+      {
+        "_id": 818229,
+        "_score": 1547,
+        "_source": {
+          "username": "TOBY BROCK",
+          "s": "a"
+        }
+      },
+      {
+        "_id": 825472,
+        "_score": 1547,
+        "_source": {
+          "username": "TOBY LINDQUIST",
+          "s": "a"
+        }
+      },
+      {
+        "_id": 826251,
+        "_score": 1547,
+        "_source": {
+          "username": "TOBY KAUFFMAN",
+          "s": "a"
+        }
+      },
+      {
+        "_id": 827886,
+        "_score": 1547,
+        "_source": {
+          "username": "TOBY PITMAN",
+          "s": "a"
+        }
+      },
+      {
+        "_id": 832558,
+        "_score": 1547,
+        "_source": {
+          "username": "TOBY KELLEY",
+          "s": "a"
+        }
+      },
+      {
+        "_id": 833689,
+        "_score": 1547,
+        "_source": {
+          "username": "TOBY HANDY",
+          "s": "a"
+        }
+      },
+      {
+        "_id": 834136,
+        "_score": 1547,
+        "_source": {
+          "username": "TOBY HOPPE",
+          "s": "a"
+        }
+      },
+      {
+        "_id": 836413,
+        "_score": 1547,
+        "_source": {
+          "username": "TOBY STOVALL",
+          "s": "a"
+        }
+      },
+      {
+        "_id": 839075,
+        "_score": 1547,
+        "_source": {
+          "username": "TOBY JEROME",
+          "s": "a"
+        }
+      },
+      {
+        "_id": 839512,
+        "_score": 1547,
+        "_source": {
+          "username": "TOBY LEONARD",
+          "s": "a"
+        }
+      },
+      {
+        "_id": 841923,
+        "_score": 1547,
+        "_source": {
+          "username": "TOBY PARNELL",
+          "s": "a"
+        }
+      },
+      {
+        "_id": 842450,
+        "_score": 1547,
+        "_source": {
+          "username": "TOBY LOWE",
+          "s": "a"
+        }
+      },
+      {
+        "_id": 843217,
+        "_score": 1547,
+        "_source": {
+          "username": "TOBY ROBISON",
+          "s": "a"
+        }
+      },
+      {
+        "_id": 846291,
+        "_score": 1547,
+        "_source": {
+          "username": "TOBY BITTNER",
+          "s": "a"
+        }
+      }
+    ]
+  }
+}
 ––– input –––
 curl -sX POST http://localhost:9308/search -d '{"index":"name","query":{"bool":{"must":[{"match":{"*":"SMITH"}}]}}, "sort":[{"id":"desc"},{"username":"asc"}], "options":{"fuzzy":true}}' | jq -M
 ––– output –––
@@ -560,7 +729,176 @@ curl -sX POST http://localhost:9308/search -d '{"index":"name","query":{"bool":{
 ––– input –––
 curl -sX POST http://localhost:9308/search -d '{"index":"name","query":{"bool":{"must":[{"match":{"*":"SMYTH"}}]}}, "sort":[{"id":"desc"},{"username":"asc"}], "options":{"fuzzy":true}}' | jq -M
 ––– output –––
-
+{
+  "took": 0,
+  "timed_out": false,
+  "hits": {
+    "total": 773,
+    "total_relation": "eq",
+    "hits": [
+      {
+        "_id": 998829,
+        "_score": 1,
+        "_source": {
+          "username": "EDYTHE VACA",
+          "s": "a"
+        }
+      },
+      {
+        "_id": 998500,
+        "_score": 1,
+        "_source": {
+          "username": "SETH PHUNG",
+          "s": "a"
+        }
+      },
+      {
+        "_id": 996507,
+        "_score": 1,
+        "_source": {
+          "username": "SETH LYMAN",
+          "s": "a"
+        }
+      },
+      {
+        "_id": 995119,
+        "_score": 1,
+        "_source": {
+          "username": "EDYTHE JOHN",
+          "s": "a"
+        }
+      },
+      {
+        "_id": 993455,
+        "_score": 1,
+        "_source": {
+          "username": "EDYTH ROSADO",
+          "s": "a"
+        }
+      },
+      {
+        "_id": 992097,
+        "_score": 1,
+        "_source": {
+          "username": "EDYTH RAGAN",
+          "s": "a"
+        }
+      },
+      {
+        "_id": 989954,
+        "_score": 1,
+        "_source": {
+          "username": "GWENN SMYTH",
+          "s": "a"
+        }
+      },
+      {
+        "_id": 988823,
+        "_score": 1,
+        "_source": {
+          "username": "SETH WHITTAKER",
+          "s": "a"
+        }
+      },
+      {
+        "_id": 988755,
+        "_score": 1,
+        "_source": {
+          "username": "SHERRON SMYTH",
+          "s": "a"
+        }
+      },
+      {
+        "_id": 988366,
+        "_score": 1,
+        "_source": {
+          "username": "LAVONIA SMYTH",
+          "s": "a"
+        }
+      },
+      {
+        "_id": 986580,
+        "_score": 1,
+        "_source": {
+          "username": "DARNELL SMYTH",
+          "s": "a"
+        }
+      },
+      {
+        "_id": 986231,
+        "_score": 1,
+        "_source": {
+          "username": "EDYTH BLODGETT",
+          "s": "a"
+        }
+      },
+      {
+        "_id": 985595,
+        "_score": 1,
+        "_source": {
+          "username": "SETH BACON",
+          "s": "a"
+        }
+      },
+      {
+        "_id": 982423,
+        "_score": 1,
+        "_source": {
+          "username": "SETH CHATMAN",
+          "s": "a"
+        }
+      },
+      {
+        "_id": 981115,
+        "_score": 1,
+        "_source": {
+          "username": "KATIE SMYTH",
+          "s": "a"
+        }
+      },
+      {
+        "_id": 979541,
+        "_score": 1,
+        "_source": {
+          "username": "EDYTHE CLAYTON",
+          "s": "a"
+        }
+      },
+      {
+        "_id": 979093,
+        "_score": 1,
+        "_source": {
+          "username": "SETH BURROUGHS",
+          "s": "a"
+        }
+      },
+      {
+        "_id": 978812,
+        "_score": 1,
+        "_source": {
+          "username": "EDYTH GULLEY",
+          "s": "a"
+        }
+      },
+      {
+        "_id": 975994,
+        "_score": 1,
+        "_source": {
+          "username": "SETH PARHAM",
+          "s": "a"
+        }
+      },
+      {
+        "_id": 975841,
+        "_score": 1,
+        "_source": {
+          "username": "ALEIDA SMYTH",
+          "s": "a"
+        }
+      }
+    ]
+  }
+}
 ––– input –––
 curl -sX POST http://localhost:9308/autocomplete -d '{"table":"name","query":"jo","options":{"layouts":"us,ru"}}' | jq -M
 ––– output –––

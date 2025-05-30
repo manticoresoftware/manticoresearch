@@ -119,30 +119,7 @@ mysql -h0 -P9306 -e "SELECT * FROM name WHERE MATCH('ANT') ORDER BY id ASC, user
 ––– input –––
 mysql -h0 -P9306 -e "SELECT * FROM name WHERE MATCH('tony') ORDER BY id ASC, username ASC OPTION fuzzy=1;"
 ––– output –––
-+-------+------------------+------+
-| id    | username         | s    |
-+-------+------------------+------+
-|   688 | SHERIE STORY     | a    |
-|  1422 | TOBY CARO        | a    |
-|  1627 | RUPERT STORY     | a    |
-|  1721 | JOE TONG         | a    |
-|  2154 | TONY GREY        | a    |
-|  3759 | TOBY GILCHRIST   | a    |
-|  5292 | TONA VALENTIN    | a    |
-|  5687 | TONY EASTERLING  | a    |
-|  5835 | TOBY ROBERSON    | a    |
-|  6281 | TOBY ARAIZA      | a    |
-|  6962 | TONA DAVIDSON    | a    |
-|  7311 | ANTONY STOVALL   | a    |
-|  7475 | TOBY REINHART    | a    |
-|  8174 | TONA CARRILLO    | a    |
-|  8700 | TONA FLETCHER    | a    |
-|  8828 | TONYA CALLAHAN   | a    |
-|  9251 | TOBY LANGFORD    | a    |
-|  9293 | ZENA STORY       | a    |
-|  9619 | TONY WHITTINGTON | a    |
-| 10167 | LANA STORY       | a    |
-+-------+------------------+------+
+
 ––– input –––
 mysql -h0 -P9306 -e "SELECT * FROM name WHERE MATCH('SMITH') ORDER BY id DESC, username ASC OPTION fuzzy=1;"
 ––– output –––
@@ -173,30 +150,7 @@ mysql -h0 -P9306 -e "SELECT * FROM name WHERE MATCH('SMITH') ORDER BY id DESC, u
 ––– input –––
 mysql -h0 -P9306 -e "SELECT * FROM name WHERE MATCH('SMYTH') ORDER BY id DESC, username ASC OPTION fuzzy=1;"
 ––– output –––
-+--------+--------------------+------+
-| id     | username           | s    |
-+--------+--------------------+------+
-| 999921 | VICKI SOUTHARD     | a    |
-| 998829 | EDYTHE VACA        | a    |
-| 998500 | SETH PHUNG         | a    |
-| 996507 | SETH LYMAN         | a    |
-| 995690 | ROBERTO SOUTHARD   | a    |
-| 995663 | CHUNG SOUTH        | a    |
-| 995119 | EDYTHE JOHN        | a    |
-| 993455 | EDYTH ROSADO       | a    |
-| 993278 | LAKITA SOUTHARD    | a    |
-| 992097 | EDYTH RAGAN        | a    |
-| 989954 | GWENN SMYTH        | a    |
-| 988936 | LARISA SOUTHERLAND | a    |
-| 988823 | SETH WHITTAKER     | a    |
-| 988759 | LIEN SOUTHARD      | a    |
-| 988755 | SHERRON SMYTH      | a    |
-| 988366 | LAVONIA SMYTH      | a    |
-| 987165 | TULA SOUTHARD      | a    |
-| 987136 | LUANN SOUTHARD     | a    |
-| 986847 | JORDAN SOUTHERN    | a    |
-| 986711 | MARLIN SOUTHERN    | a    |
-+--------+--------------------+------+
+
 ––– input –––
 mysql -h0 -P9306 -e "SELECT * FROM name WHERE MATCH('SMITH') ORDER BY id DESC, username ASC OPTION fuzzy=\"1\";"
 ––– output –––

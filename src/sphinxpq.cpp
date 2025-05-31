@@ -190,9 +190,8 @@ private:
 //////////////////////////////////////////////////////////////////////////
 // percolate functions
 
-#define PERCOLATE_BLOOM_WILD_COUNT 32
-#define PERCOLATE_BLOOM_SIZE PERCOLATE_BLOOM_WILD_COUNT * 2
-#define PERCOLATE_WORDS_PER_CP 128
+static constexpr DWORD PERCOLATE_BLOOM_SIZE = PERCOLATE_BLOOM_WILD_COUNT * BLOOM_HASHES_COUNT;
+static constexpr DWORD PERCOLATE_WORDS_PER_CP = 128;
 
 /// percolate query index factory
 std::unique_ptr<PercolateIndex_i> CreateIndexPercolate ( CSphString sIndexName, CSphString sPath, CSphSchema tSchema )

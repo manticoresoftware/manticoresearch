@@ -1334,6 +1334,8 @@ enum class MergeSeg_e : BYTE
 	EXIT 	= 4,	// shutdown and exit
 };
 
+using AlterOp_fn = std::function < bool( CSphIndex & , CSphString & ) >;
+
 class RtIndex_c final : public RtIndex_i, public ISphNoncopyable, public ISphWordlist, public ISphWordlistSuggest, public IndexAlterHelper_c
 {
 public:
@@ -1640,6 +1642,8 @@ private:
 	void						RaiseAlterGeneration();
 	int							GetAlterGeneration() const override;
 	bool						AlterSI ( CSphString & sError ) override;
+	bool						AlterKNN ( CSphString & sError ) override;
+	bool						AlterRebuild ( AlterOp_fn && operation, CSphString & sError, const char * sTrace );
 
 	bool						CanAttach ( const CSphIndex * pIndex, CSphString & sError ) const;
 	bool						AttachDiskChunkMove ( CSphIndex * pIndex, bool & bFatal, CSphString & sError ) REQUIRES ( m_tWorkers.SerialChunkAccess() );
@@ -11166,21 +11170,31 @@ void RtIndex_c::RecalculateRateLimit ( int64_t iSaved, int64_t iInserted, bool b
 	TRACE_COUNTER ( "mem", perfetto::CounterTrack ( "Ratio", "%" ), m_fSaveRateLimit );
 }
 
-bool RtIndex_c::AlterSI ( CSphString & sError )
+bool RtIndex_c::AlterRebuild ( AlterOp_fn && fnOp, CSphString & sError, const char * sTrace )
 {
 	// strength single-fiber access (don't rely upon to upstream w-lock)
 	ScopedScheduler_c tSerialFiber ( m_tWorkers.SerialChunkAccess() );
-	TRACE_SCHED ( "rt", "alter-si" );
+	TRACE_SCHED ( "rt", sTrace );
 
 	auto pChunks = m_tRtChunks.DiskChunks();
 	for ( auto & tChunk : *pChunks )
 	{
-		if ( !tChunk->CastIdx().AlterSI ( sError ) )
+		if ( !fnOp ( tChunk->CastIdx(), sError ) )
 			return false;
 	}
 
 	RaiseAlterGeneration();
 	return true;
+}
+
+bool RtIndex_c::AlterSI ( CSphString & sError )
+{
+	return AlterRebuild ( []( CSphIndex & tIndex, CSphString & sError ) { return tIndex.AlterSI ( sError ); }, sError, "alter-si" );
+}
+
+bool RtIndex_c::AlterKNN ( CSphString & sError )
+{
+	return AlterRebuild ( []( CSphIndex & tIndex, CSphString & sError ) { return tIndex.AlterKNN ( sError ); }, sError, "alter-knn" );
 }
 
 void RtIndex_c::SetGlobalIDFPath ( const CSphString & sPath )

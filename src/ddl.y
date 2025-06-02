@@ -57,6 +57,7 @@
 %token	TOK_JOIN
 %token	TOK_JSON
 %token	TOK_KILLLIST_TARGET
+%token	TOK_KNN
 %token	TOK_KNN_DIMS
 %token	TOK_KNN_TYPE
 %token	TOK_LIKE
@@ -250,6 +251,11 @@ alter:
 			tStmt.m_eStmt = STMT_CLUSTER_ALTER_UPDATE;
 			pParser->ToString ( tStmt.m_sSetName, $3 );
 		}
+	| alter_table_name TOK_REBUILD TOK_KNN
+   		{
+   			SqlStmt_t & tStmt = *pParser->m_pStmt;
+   			tStmt.m_eStmt = STMT_ALTER_REBUILD_KNN;
+   		}
 	;
 
 //////////////////////////////////////////////////////////////////////////

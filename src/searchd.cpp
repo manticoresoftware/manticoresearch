@@ -10028,6 +10028,7 @@ enum class Alter_e
 	DropColumn,
 	ModifyColumn,
 	RebuildSI,
+	RebuildKNN
 };
 
 static void HandleMysqlAlter ( RowBuffer_i & tOut, const SqlStmt_t & tStmt, Alter_e eAction )
@@ -10090,6 +10091,10 @@ static void HandleMysqlAlter ( RowBuffer_i & tOut, const SqlStmt_t & tStmt, Alte
 		else if ( eAction==Alter_e::RebuildSI )
 		{
 			WIdx_c ( pServed )->AlterSI ( sAddError );
+
+		} else if ( eAction==Alter_e::RebuildKNN )
+		{
+			WIdx_c ( pServed )->AlterKNN ( sAddError );
 		}
 
 		if ( !sAddError.IsEmpty() )
@@ -11216,6 +11221,10 @@ bool ClientSession_c::Execute ( Str_t sQuery, RowBuffer_i & tOut )
 
 	case STMT_ALTER_REBUILD_SI:
 		HandleMysqlAlter ( tOut, *pStmt, Alter_e::RebuildSI );
+		return true;
+
+	case STMT_ALTER_REBUILD_KNN:
+		HandleMysqlAlter ( tOut, *pStmt, Alter_e::RebuildKNN );
 		return true;
 
 	case STMT_SHOW_PLAN:

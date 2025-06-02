@@ -1334,6 +1334,8 @@ enum class MergeSeg_e : BYTE
 	EXIT 	= 4,	// shutdown and exit
 };
 
+using AlterOp_fn = std::function < bool( CSphIndex & , CSphString & ) >;
+
 class RtIndex_c final : public RtIndex_i, public ISphNoncopyable, public ISphWordlist, public ISphWordlistSuggest, public IndexAlterHelper_c
 {
 public:
@@ -1640,6 +1642,8 @@ private:
 	void						RaiseAlterGeneration();
 	int							GetAlterGeneration() const override;
 	bool						AlterSI ( CSphString & sError ) override;
+	bool						AlterKNN ( CSphString & sError ) override;
+	bool						AlterRebuild ( AlterOp_fn && operation, CSphString & sError, const char * sTrace );
 
 	bool						CanAttach ( const CSphIndex * pIndex, CSphString & sError ) const;
 	bool						AttachDiskChunkMove ( CSphIndex * pIndex, bool & bFatal, CSphString & sError ) REQUIRES ( m_tWorkers.SerialChunkAccess() );
@@ -2584,49 +2588,83 @@ private:
 	RowID_t NextAliveRow ( RowID_t tRowID ) const { return SkipDeadRows ( tRowID+1 ); }
 };
 
-template <typename BLOOM_TRAITS>
-inline bool BuildBloom_T ( const BYTE * sWord, int iLen, int iInfixCodepointCount, bool bUtf8, int iKeyValCount, BLOOM_TRAITS & tBloom )
+template <typename BLOOM_TRAITS, BYTE INFIX_CODEPOINT_COUNT, BYTE KEY_VAL_COUNT, bool UTF8>
+bool BuildBloom_T ( const BYTE * sWord, int iLen, BLOOM_TRAITS & tBloom )
 {
-	if ( iLen<iInfixCodepointCount )
+	if ( iLen<INFIX_CODEPOINT_COUNT )
 		return false;
-	// byte offset for each codepoints
-	std::array<BYTE, SPH_MAX_WORD_LEN+1> dOffsets { 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19,
-		20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40, 41, 42 };
-	assert ( iLen<=SPH_MAX_WORD_LEN || ( bUtf8 && iLen<=SPH_MAX_WORD_LEN*3 ) );
-	int iCodes = iLen;
-	if ( bUtf8 )
+
+	constexpr int uKEYMASK = KEY_VAL_COUNT * 64 - 1; // KEY_VAL_COUNT is 8 or 32
+	if constexpr ( UTF8 )
 	{
+		assert ( iLen<=SPH_MAX_WORD_LEN*3 );
+		// byte offset for each codepoints
+		std::array<BYTE, SPH_MAX_WORD_LEN+1> dOffsets { 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19,
+			20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40, 41, 42 };
+
 		// build an offsets table into the bytestring
-		iCodes = 0;
 		const BYTE * s = sWord;
 		const BYTE * sEnd = sWord + iLen;
-		while ( s<sEnd )
+		int iCodes = 0;
+		while ( s<sEnd && iCodes<SPH_MAX_WORD_LEN )
 		{
-			int iCodepoints = sphUtf8CharBytes ( *s );
-			assert ( iCodepoints>=1 && iCodepoints<=4 );
-			dOffsets[iCodes+1] = dOffsets[iCodes] + (BYTE)iCodepoints;
-			s += iCodepoints;
-			iCodes++;
+			const BYTE uCodepoints = sphUtf8CharBytes ( *s );
+			assert ( uCodepoints>=1 && uCodepoints<=4 );
+			dOffsets[iCodes+1] = dOffsets[iCodes] + uCodepoints;
+			s += uCodepoints;
+			++iCodes;
+		}
+
+		if ( iCodes<INFIX_CODEPOINT_COUNT )
+			return false;
+
+		for ( int i=0; i<=iCodes-INFIX_CODEPOINT_COUNT && tBloom.IterateNext(); ++i )
+		{
+			const int iFrom = dOffsets[i];
+			const int iTo = dOffsets[i+INFIX_CODEPOINT_COUNT];
+			uint64_t uHash64 = sphFNV64 ( sWord+iFrom, iTo-iFrom );
+			uHash64 = ( uHash64>>32 ) ^ ( uHash64 & 0xFFFFFFFF );
+			const int iByte = static_cast<int> (uHash64 & uKEYMASK);
+			const int iPos = iByte >> 6;
+			const uint64_t uVal = U64C(1) << ( iByte & 63 );
+			tBloom.Set ( iPos, uVal );
+		}
+	} else // if constexpr ( !UTF8 )
+	{
+		assert ( iLen<=SPH_MAX_WORD_LEN );
+		for ( int i=0; i<=iLen-INFIX_CODEPOINT_COUNT && tBloom.IterateNext(); ++i )
+		{
+			const int iFrom = i;
+			const int iTo = i+INFIX_CODEPOINT_COUNT;
+			uint64_t uHash64 = sphFNV64 ( sWord+iFrom, iTo-iFrom );
+			uHash64 = ( uHash64>>32 ) ^ ( uHash64 & 0xFFFFFFFF );
+			const int iByte = static_cast<int> (uHash64 & uKEYMASK);
+			const int iPos = iByte >> 6;
+			const uint64_t uVal = U64C(1) << ( iByte & 63 );
+			tBloom.Set ( iPos, uVal );
 		}
 	}
-	if ( iCodes<iInfixCodepointCount )
-		return false;
-
-	int iKeyBytes = iKeyValCount * 64;
-	for ( int i=0; i<=iCodes-iInfixCodepointCount && tBloom.IterateNext(); i++ )
-	{
-		int iFrom = dOffsets[i];
-		int iTo = dOffsets[i+iInfixCodepointCount];
-		uint64_t uHash64 = sphFNV64 ( sWord+iFrom, iTo-iFrom );
-
-		uHash64 = ( uHash64>>32 ) ^ ( (DWORD)uHash64 );
-		int iByte = (int)( uHash64 % iKeyBytes );
-		int iPos = iByte/64;
-		uint64_t uVal = U64C(1) << ( iByte % 64 );
-
-		tBloom.Set ( iPos, uVal );
-	}
 	return true;
+}
+
+template <typename TRAITS>
+bool BuildBloom_T ( const BYTE * sWord, int iLen, int iInfixCodepointCount, bool bUtf8, int iKeyValCount, TRAITS &tBloom )
+{
+	assert ( (iInfixCodepointCount == BLOOM_NGRAM_0) || (iInfixCodepointCount == BLOOM_NGRAM_1) );
+	assert ( (iKeyValCount == BLOOM_PER_ENTRY_VALS_COUNT) || (iKeyValCount == PERCOLATE_BLOOM_WILD_COUNT) );
+	switch ( 4*(iInfixCodepointCount == BLOOM_NGRAM_1) + 2*(iKeyValCount == PERCOLATE_BLOOM_WILD_COUNT) + !!bUtf8 )
+	{
+	case 0: return BuildBloom_T<TRAITS, BLOOM_NGRAM_0, BLOOM_PER_ENTRY_VALS_COUNT, false> (sWord, iLen, tBloom);
+	case 1: return BuildBloom_T<TRAITS, BLOOM_NGRAM_0, BLOOM_PER_ENTRY_VALS_COUNT, true>  (sWord, iLen, tBloom);
+	case 2: return BuildBloom_T<TRAITS, BLOOM_NGRAM_0, PERCOLATE_BLOOM_WILD_COUNT, false> (sWord, iLen, tBloom);
+	case 3: return BuildBloom_T<TRAITS, BLOOM_NGRAM_0, PERCOLATE_BLOOM_WILD_COUNT, true>  (sWord, iLen, tBloom);
+	case 4: return BuildBloom_T<TRAITS, BLOOM_NGRAM_1, BLOOM_PER_ENTRY_VALS_COUNT, false> (sWord, iLen, tBloom);
+	case 5: return BuildBloom_T<TRAITS, BLOOM_NGRAM_1, BLOOM_PER_ENTRY_VALS_COUNT, true>  (sWord, iLen, tBloom);
+	case 6: return BuildBloom_T<TRAITS, BLOOM_NGRAM_1, PERCOLATE_BLOOM_WILD_COUNT, false> (sWord, iLen, tBloom);
+	case 7: return BuildBloom_T<TRAITS, BLOOM_NGRAM_1, PERCOLATE_BLOOM_WILD_COUNT, true>  (sWord, iLen, tBloom);
+	}
+	assert(0);
+	return false;
 }
 
 // explicit instantiations
@@ -4339,8 +4377,8 @@ void RtIndex_c::WriteMeta ( int64_t iTID, const VecTraits_T<int>& dChunkNames, C
 
 	// meta v.7
 	sNewMeta.NamedValNonDefault ( "max_codepoint_length", m_iMaxCodepointLength );
-	sNewMeta.NamedValNonDefault ( "bloom_per_entry_vals_count", BLOOM_PER_ENTRY_VALS_COUNT, 8 );
-	sNewMeta.NamedValNonDefault ( "bloom_hashes_count",  BLOOM_HASHES_COUNT, 2 );
+	sNewMeta.NamedValNonDefault ( "bloom_per_entry_vals_count", (int)BLOOM_PER_ENTRY_VALS_COUNT, 8 );
+	sNewMeta.NamedValNonDefault ( "bloom_hashes_count",  (int)BLOOM_HASHES_COUNT, 2 );
 
 	// meta v.11
 	CSphFieldFilterSettings tFieldFilterSettings;
@@ -11132,21 +11170,31 @@ void RtIndex_c::RecalculateRateLimit ( int64_t iSaved, int64_t iInserted, bool b
 	TRACE_COUNTER ( "mem", perfetto::CounterTrack ( "Ratio", "%" ), m_fSaveRateLimit );
 }
 
-bool RtIndex_c::AlterSI ( CSphString & sError )
+bool RtIndex_c::AlterRebuild ( AlterOp_fn && fnOp, CSphString & sError, const char * sTrace )
 {
 	// strength single-fiber access (don't rely upon to upstream w-lock)
 	ScopedScheduler_c tSerialFiber ( m_tWorkers.SerialChunkAccess() );
-	TRACE_SCHED ( "rt", "alter-si" );
+	TRACE_SCHED ( "rt", sTrace );
 
 	auto pChunks = m_tRtChunks.DiskChunks();
 	for ( auto & tChunk : *pChunks )
 	{
-		if ( !tChunk->CastIdx().AlterSI ( sError ) )
+		if ( !fnOp ( tChunk->CastIdx(), sError ) )
 			return false;
 	}
 
 	RaiseAlterGeneration();
 	return true;
+}
+
+bool RtIndex_c::AlterSI ( CSphString & sError )
+{
+	return AlterRebuild ( []( CSphIndex & tIndex, CSphString & sError ) { return tIndex.AlterSI ( sError ); }, sError, "alter-si" );
+}
+
+bool RtIndex_c::AlterKNN ( CSphString & sError )
+{
+	return AlterRebuild ( []( CSphIndex & tIndex, CSphString & sError ) { return tIndex.AlterKNN ( sError ); }, sError, "alter-knn" );
 }
 
 void RtIndex_c::SetGlobalIDFPath ( const CSphString & sPath )

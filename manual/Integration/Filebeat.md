@@ -4,55 +4,110 @@
 
 [Filebeat](https://www.elastic.co/beats/filebeat) is a lightweight shipper for forwarding and centralizing log data. Once installed as an agent, it monitors the log files or locations you specify, collects log events, and forwards them for indexing, usually to Elasticsearch or Logstash.
 
-Now, Manticore also supports the use of Filebeat as processing pipelines. This allows the collected and transformed data to be sent to Manticore just like to Elasticsearch. Currently, all the versions >= 7.10  are supported.
+Now, Manticore also supports the use of Filebeat as processing pipelines. This allows the collected and transformed data to be sent to Manticore just like to Elasticsearch. Currently, All versions to 9.0 are fully supported.
 
 ## Filebeat configuration
 
-Below is a Filebeat config to work with our example dpkg log:
+Configuration varies slightly depending on which version of Filebeat you're using.
 
-```
-filebeat.inputs:
-- type: filestream
-  id: example
-  paths:
-	- /var/log/dpkg.log
-
-output.elasticsearch:
-  hosts: ["http://localhost:9308"]
-  index:  "dpkg_log"
-  allow_older_versions: true
-
-setup.ilm:
-  enabled: false
-
-setup.template:
-  name: "dpkg_log"
-  pattern: "dpkg_log"
-```
-
-### Configuration for Filebeat versions >= 8.11
+### Configuration for Filebeat 7.17 - 8.0
 
 Note that Filebeat versions higher than 8.10 have the output compression feature enabled by default. That is why the `compression_level: 0` option must be added to the configuration file to provide compatibility with Manticore:
 
 ```
 filebeat.inputs:
-- type: filestream
-  id: example
+- type: log
+  enabled: true
   paths:
-	- /var/log/dpkg.log
+    - /var/log/dpkg.log
+  close_eof: true
+  scan_frequency: 1s
 
 output.elasticsearch:
   hosts: ["http://localhost:9308"]
-  index:  "dpkg_log"
-  allow_older_versions: true
+  index: "dpkg_log"
   compression_level: 0
 
-setup.ilm:
-  enabled: false
+setup.ilm.enabled: false
+setup.template.enabled: false
+setup.template.name: "dpkg_log"
+setup.template.pattern: "dpkg_log"
+```
 
-setup.template:
-  name: "dpkg_log"
-  pattern: "dpkg_log"
+### Configuration for Filebeat 8.1 - 8.10
+
+For versions 8.1 through 8.10, you need to add the allow_older_versions option:
+
+```
+filebeat.inputs:
+- type: log
+  enabled: true
+  paths:
+    - /var/log/dpkg.log
+  close_eof: true
+  scan_frequency: 1s
+
+output.elasticsearch:
+  hosts: ["http://localhost:9308"]
+  index: "dpkg_log"
+  compression_level: 0
+  allow_older_versions: true
+
+setup.ilm.enabled: false
+setup.template.enabled: false
+setup.template.name: "dpkg_log"
+setup.template.pattern: "dpkg_log"
+```
+
+### Configuration for Filebeat 8.11 - 8.18
+
+From version 8.11, output compression is enabled by default, so you must explicitly set `compression_level: 0` for compatibility with Manticore:
+
+```
+filebeat.inputs:
+- type: log
+  enabled: true
+  paths:
+    - /var/log/dpkg.log
+  close_eof: true
+  scan_frequency: 1s
+
+output.elasticsearch:
+  hosts: ["http://localhost:9308"]
+  index: "dpkg_log"
+  compression_level: 0
+  allow_older_versions: true
+
+setup.ilm.enabled: false
+setup.template.enabled: false
+setup.template.name: "dpkg_log"
+setup.template.pattern: "dpkg_log"
+```
+
+### Configuration for Filebeat 9.0
+
+Filebeat 9.0 introduces a major architecture change, replacing the log input type with filestream. Here's the required configuration:
+
+```
+filebeat.inputs:
+- type: filestream
+  id: dpkg-log-input
+  enabled: true
+  paths:
+    - /var/log/dpkg.log
+  prospector.scanner.check_interval: 1s
+  close.on_eof: true
+
+output.elasticsearch:
+  hosts: ["http://localhost:9308"]
+  index: "dpkg_log"
+  compression_level: 0
+  allow_older_versions: true
+
+setup.ilm.enabled: false
+setup.template.enabled: false
+setup.template.name: "dpkg_log"
+setup.template.pattern: "dpkg_log"
 ```
 
 ## Filebeat results

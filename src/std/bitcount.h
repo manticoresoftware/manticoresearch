@@ -14,10 +14,10 @@
 
 #include "ints.h"
 
-int sphBitCount ( DWORD n );
+int sphBitCount ( DWORD n ) noexcept;
 
-int sphBitCount ( uint64_t n );
+int sphBitCount ( uint64_t n ) noexcept;
 
-int sphBitCount ( BYTE n );
+int sphBitCount ( BYTE n ) noexcept;
 
 #include "bitcount_impl.h"

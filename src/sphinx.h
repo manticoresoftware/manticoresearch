@@ -1322,6 +1322,7 @@ public:
 	virtual const DWORD *			GetRawAttrs() const { return nullptr; }
 	virtual const BYTE *			GetRawBlobAttrs() const { return nullptr; }
 	virtual bool					AlterSI ( CSphString & sError ) { return true; }
+	virtual bool					AlterKNN ( CSphString & sError ) { return true; }
 	const CSphBitvec &				GetMorphFields () const { return m_tMorphFields; }
 
 public:

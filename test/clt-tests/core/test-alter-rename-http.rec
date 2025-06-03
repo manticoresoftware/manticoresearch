@@ -1,6 +1,6 @@
-––– block: ../base/start-searchd –––
+––– block: ../base/start-searchd-with-buddy –––
 ––– input –––
-mysql -h0 -P9306 -e "CREATE TABLE articles(title text, content text); INSERT INTO articles VALUES(1,'test','content');"
+sleep 3; mysql -h0 -P9306 -e "CREATE TABLE articles(title text, content text); INSERT INTO articles VALUES(1,'test','content');"
 ––– output –––
 ––– input –––
 mysql -h0 -P9306 -e "CREATE TABLE products(name text, price float); INSERT INTO products VALUES(1,'laptop',999.99);"
@@ -15,18 +15,17 @@ mysql -h0 -P9306 -e "SHOW TABLES"
 | products | rt   |
 +----------+------+
 ––– input –––
-curl -s "http://localhost:9308/sql?query=ALTER+TABLE+products+RENAME+products_new"
+mysql -h0 -P9306 -e "ALTER TABLE products RENAME products_new"
 ––– output –––
-{"error":"P03: syntax error, unexpected tablename, expecting '=' near 'products_new'"}
 ––– input –––
 mysql -h0 -P9306 -e "SHOW TABLES"
 ––– output –––
-+----------+------+
-| Table    | Type |
-+----------+------+
-| articles | rt   |
-| products | rt   |
-+----------+------+
++--------------+------+
+| Table        | Type |
++--------------+------+
+| articles     | rt   |
+| products_new | rt   |
++--------------+------+
 ––– input –––
 curl -s "http://localhost:9308/sql?query=SHOW+VERSION" | grep -o '"Component":"Daemon"'
 ––– output –––
@@ -61,12 +60,12 @@ curl -s "http://localhost:9308/sql?query=ALTER%20TABLE%20articles%20RENAME%20art
 ––– input –––
 mysql -h0 -P9306 -e "SHOW TABLES"
 ––– output –––
-+-----------+------+
-| Table     | Type |
-+-----------+------+
-| articles2 | rt   |
-| products  | rt   |
-+-----------+------+
++--------------+------+
+| Table        | Type |
++--------------+------+
+| articles2    | rt   |
+| products_new | rt   |
++--------------+------+
 ––– input –––
 curl -s "http://localhost:9308/sql?query=SELECT+COUNT(*)+AS+cnt+FROM+articles2" | grep -o '"cnt":2'
 ––– output –––
@@ -78,9 +77,9 @@ curl -s "http://localhost:9308/sql?query=ALTER%20TABLE%20articles2%20RENAME%20ar
 ––– input –––
 mysql -h0 -P9306 -e "SHOW TABLES"
 ––– output –––
-+----------+------+
-| Table    | Type |
-+----------+------+
-| articles | rt   |
-| products | rt   |
-+----------+------+
++--------------+------+
+| Table        | Type |
++--------------+------+
+| articles     | rt   |
+| products_new | rt   |
++--------------+------+

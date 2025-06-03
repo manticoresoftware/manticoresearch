@@ -901,7 +901,7 @@ network_timeout = 10s
 ### node_address
 
 <!-- example conf node_address -->
-This setting allows you to specify the network address of the node. By default, it is set to the replication [listen](../Server_settings/Searchd.md#listen) ddress. This is correct in most cases; however, there are situations where you have to specify it manually:
+This setting allows you to specify the network address of the node. By default, it is set to the replication [listen](../Server_settings/Searchd.md#listen) address. This is correct in most cases; however, there are situations where you have to specify it manually:
 
 * Node behind a firewall
 * Network address translation enabled (NAT)

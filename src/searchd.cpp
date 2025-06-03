@@ -8981,6 +8981,18 @@ void HandleMysqlOptimize ( RowBuffer_i & tOut, const SqlStmt_t & tStmt )
 		tOut.Ok ();
 }
 
+static CSphString GetLastInsertId ( const ClientSession_c * pSession )
+{
+    StringBuilder_c sBuf ( "," );
+
+	if ( pSession->m_dLastIds.IsEmpty() )
+		sBuf << 0;
+	else
+		pSession->m_dLastIds.Apply ( [&sBuf] ( int64_t iID ) { sBuf << iID; } );
+
+    return CSphString ( sBuf );
+}
+
 class ExtraLastInsertID_c final: public ISphExtra
 {
 	bool ExtraDataImpl ( ExtraData_e eCmd, void** pData ) final
@@ -8990,9 +9002,7 @@ class ExtraLastInsertID_c final: public ISphExtra
 
 		auto* sVal = (CSphString*)pData;
 		assert ( sVal );
-		StringBuilder_c tBuf ( "," );
-		session::Info().GetClientSession()->m_dLastIds.for_each ( [&tBuf] ( auto& iId ) { tBuf << iId; } );
-		tBuf.MoveTo ( *sVal );
+		*sVal = GetLastInsertId ( session::Info().GetClientSession() );
 		return true;
 	}
 };
@@ -9009,27 +9019,20 @@ void HandleMysqlSelectColumns ( RowBuffer_i & tOut, const SqlStmt_t & tStmt, Cli
 		std::function<CSphString ( void )> m_fnValue;
 	};
 
-	const bool bHasBuddy = HasBuddy();
-	const SysVar_t tDefaultStr { MYSQL_COL_STRING, nullptr, [] { return "<empty>"; } };
-	const SysVar_t tDefaultNum { MYSQL_COL_LONG, nullptr, [] { return "0"; } };
-
 	const SysVar_t dSysvars[] =
-	{	bHasBuddy ? tDefaultNum : tDefaultStr, // stub
+	{
+		{ MYSQL_COL_STRING,	nullptr, [] { return "<empty>"; } }, // stub
 		{ MYSQL_COL_LONG,	"@@session.auto_increment_increment",	[] {return "1";}},
 		{ MYSQL_COL_STRING,	"@@character_set_client", [] {return "utf8";}},
 		{ MYSQL_COL_STRING,	"@@character_set_connection", [] {return "utf8";}},
 		{ MYSQL_COL_LONG,	"@@max_allowed_packet", [] { StringBuilder_c s; s << g_iMaxPacketSize; return CSphString(s); }},
 		{ MYSQL_COL_STRING,	"@@version_comment", [] { return szGIT_BRANCH_ID;}},
 		{ MYSQL_COL_LONG,	"@@lower_case_table_names", [] { return "1"; }},
-		{ MYSQL_COL_STRING,	"@@session.last_insert_id", [pSession] {
-			StringBuilder_c s ( "," );
-			pSession->m_dLastIds.Apply ( [&s] ( int64_t iID ) { s << iID; } );
-			return CSphString ( s );
-		}},
+		{ MYSQL_COL_STRING,	"@@session.last_insert_id", [pSession] { return GetLastInsertId ( pSession ); } },
 		{ MYSQL_COL_LONG, "@@autocommit", [pSession] { return pSession->m_bAutoCommit ? "1" : "0"; } },
 	};
 
-	auto VarIdxByName = [&dSysvars] ( const CSphString& sName ) noexcept -> int
+	auto fnVarIdxByName = [&dSysvars] ( const CSphString& sName ) noexcept -> int
 	{
 		constexpr auto iSysvars = sizeof ( dSysvars ) / sizeof ( dSysvars[0] );
 		for ( int i = 1; i<(int)iSysvars; ++i )
@@ -9051,17 +9054,17 @@ void HandleMysqlSelectColumns ( RowBuffer_i & tOut, const SqlStmt_t & tStmt, Cli
 
 	CSphVector<PreparedItem_t> dColumns;
 
+	const bool bHasBuddy = HasBuddy();
 	bool bHaveValidExpressions = false; // whether we have at least one expression among @@sysvars
 	bool bHaveInvalidExpressions = false; // whether at least one expression is erroneous
 
-	for ( const auto& dItem : dItems )
+	for ( const auto & tItem : dItems )
 	{
-		bool bIsExpr = !dItem.m_sExpr.Begins ( "@@" );
 		CSphString sError;
-		auto iVar = VarIdxByName ( dItem.m_sExpr );
+		auto iVar = fnVarIdxByName ( tItem.m_sExpr );
 		if ( !iVar )
 		{
-			CSphString sVar = dItem.m_sExpr;
+			CSphString sVar = tItem.m_sExpr;
 			CSphSchema tSchema;
 			ESphAttr eAttrType;
 			ExprParseArgs_t tExprArgs;
@@ -9069,18 +9072,28 @@ void HandleMysqlSelectColumns ( RowBuffer_i & tOut, const SqlStmt_t & tStmt, Cli
 			ISphExprRefPtr_c pExpr { sphExprParse ( sVar.cstr(), tSchema, nullptr, sError, tExprArgs ) };
 			if ( pExpr )
 			{
-				dColumns.Add ( { eAttrType, ESphAttr2MysqlColumn ( eAttrType ), pExpr, -1, dItem.m_sAlias.cstr() } );
+				dColumns.Add ( { eAttrType, ESphAttr2MysqlColumn ( eAttrType ), pExpr, -1, tItem.m_sAlias.cstr() } );
 				bHaveValidExpressions = true;
 				continue;
 			}
-			bHaveInvalidExpressions |= bIsExpr;
+
+			// failure:
+			// - if a buddy exists and any unknown sysvar is requested
+			// - if no buddy exists and a non-sysvar is requested or the expression parser failed
+			bool bSysVar = tItem.m_sExpr.Begins ( "@@" );
+			if ( bSysVar && bHasBuddy )
+			{
+				sError.SetSprintf ( "unknown sysvar %s", tItem.m_sExpr.cstr() );
+				bHaveInvalidExpressions = true;
+			} else if ( !bSysVar )
+				bHaveInvalidExpressions = true;
 		}
-		dColumns.Add ( { SPH_ATTR_NONE, dSysvars[iVar].m_eType, nullptr, iVar, dItem.m_sAlias.cstr(), sError } );
+		dColumns.Add ( { SPH_ATTR_NONE, dSysvars[iVar].m_eType, nullptr, iVar, tItem.m_sAlias.cstr(), sError } );
 	}
 
 	assert ( dColumns.GetLength() == dItems.GetLength() );
 
-	// fail when we have error(s) in expression(s).
+	// fail when we have error in expression or any unknown sysvar - buddy should handle that
 	if ( bHaveInvalidExpressions )
 	{
 		StringBuilder_c sError ("; ");
@@ -9245,12 +9258,7 @@ void HandleMysqlShowVariables ( RowBuffer_i & dRows, const SqlStmt_t & tStmt )
 		dTable.MatchTuplet ( "character_set_connection", "utf8" );
 		dTable.MatchTuplet ( "grouping_in_utc", GetGroupingInUTC() ? "1" : "0" );
 		dTable.MatchTuplet ( "timezone", GetTimeZoneName().cstr() );
-		dTable.MatchTupletFn ( "last_insert_id" , [&pVars]
-		{
-			StringBuilder_c tBuf ( "," );
-			pVars->m_dLastIds.Apply ( [&tBuf] ( int64_t iID ) { tBuf << iID; } );
-			return tBuf;
-		});
+		dTable.MatchTupletFn ( "last_insert_id" , [&pVars]  { return GetLastInsertId ( pVars ); } );
 	}
 	dTable.MatchTuplet ( "pseudo_sharding", GetPseudoSharding() ? "1" : "0" );
 
@@ -10020,6 +10028,7 @@ enum class Alter_e
 	DropColumn,
 	ModifyColumn,
 	RebuildSI,
+	RebuildKNN
 };
 
 static void HandleMysqlAlter ( RowBuffer_i & tOut, const SqlStmt_t & tStmt, Alter_e eAction )
@@ -10082,6 +10091,10 @@ static void HandleMysqlAlter ( RowBuffer_i & tOut, const SqlStmt_t & tStmt, Alte
 		else if ( eAction==Alter_e::RebuildSI )
 		{
 			WIdx_c ( pServed )->AlterSI ( sAddError );
+
+		} else if ( eAction==Alter_e::RebuildKNN )
+		{
+			WIdx_c ( pServed )->AlterKNN ( sAddError );
 		}
 
 		if ( !sAddError.IsEmpty() )
@@ -11208,6 +11221,10 @@ bool ClientSession_c::Execute ( Str_t sQuery, RowBuffer_i & tOut )
 
 	case STMT_ALTER_REBUILD_SI:
 		HandleMysqlAlter ( tOut, *pStmt, Alter_e::RebuildSI );
+		return true;
+
+	case STMT_ALTER_REBUILD_KNN:
+		HandleMysqlAlter ( tOut, *pStmt, Alter_e::RebuildKNN );
 		return true;
 
 	case STMT_SHOW_PLAN:

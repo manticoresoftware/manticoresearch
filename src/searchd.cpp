@@ -6516,6 +6516,240 @@ static void HandleMysqlCreateTableLike ( RowBuffer_i & tOut, const SqlStmt_t & t
 	HandleMysqlCreateTable ( tOut, tNewCreateTable, sWarning );
 }
 
+// Structure to hold prepared statement information
+struct PreparedStmt_t
+{
+	CSphString m_sName;           // Statement name
+	CSphString m_sQuery;          // Original SQL query with placeholders
+	CSphVector<CSphString> m_dParamNames;  // Parameter names (?param or positional)
+	SqlStmt_t m_tParsedStmt;      // Parsed statement structure (when possible)
+	bool m_bParsed = false;       // Whether we successfully parsed the statement
+	int64_t m_iCreateTime;        // Creation timestamp
+};
+
+// Global storage for prepared statements (you might want this per-connection)
+static CSphOrderedHash<PreparedStmt_t, CSphString> g_hPreparedStmts;
+static CSphMutex g_tPreparedStmtsMutex;
+
+void HandleMysqlPrepare ( RowBuffer_i & tOut, const SqlStmt_t & tStmt )
+{
+	if ( !sphCheckWeCanModify ( tOut ) )
+		return;
+
+	CSphString sError;
+	
+	if ( tStmt.m_sIndex.IsEmpty() )
+	{
+		sError = "PREPARE statement requires a statement name";
+		tOut.Error ( sError.cstr() );
+		return;
+	}
+
+	if ( tStmt.m_sStringParam.IsEmpty() )
+	{
+		sError = "PREPARE statement requires a SQL query";
+		tOut.Error ( sError.cstr() );
+		return;
+	}
+
+	CSphScopedLock<CSphMutex> tLock ( g_tPreparedStmtsMutex );
+	
+	if ( g_hPreparedStmts.Exists ( tStmt.m_sIndex ) )
+	{
+		sError.SetSprintf ( "Prepared statement '%s' already exists", tStmt.m_sIndex.cstr() );
+		tOut.Error ( sError.cstr() );
+		return;
+	}
+
+	PreparedStmt_t tPrepStmt;
+	tPrepStmt.m_sName = tStmt.m_sIndex;
+	tPrepStmt.m_sQuery = tStmt.m_sStringParam;
+	tPrepStmt.m_iCreateTime = sphMicroTimer();
+
+	CSphString sQuery = tStmt.m_sStringParam;
+	const char * pQuery = sQuery.cstr();
+	int iLen = sQuery.Length();
+	
+	for ( int i = 0; i < iLen; i++ )
+	{
+		if ( pQuery[i] == '?' )
+		{
+			CSphString sParamName;
+			
+			// Check if it's a named parameter (?name) or positional (?)
+			if ( i + 1 < iLen && ( sphIsAlpha(pQuery[i+1]) || pQuery[i+1] == '_' ) )
+			{
+				int iStart = i + 1;
+				int iEnd = iStart;
+				while ( iEnd < iLen && ( sphIsAlpha(pQuery[iEnd]) || sphIsDigit(pQuery[iEnd]) || pQuery[iEnd] == '_' ) )
+					iEnd++;
+				
+				sParamName.SetBinary ( pQuery + iStart, iEnd - iStart );
+			}
+			else
+			{
+				sParamName.SetSprintf ( "param_%d", tPrepStmt.m_dParamNames.GetLength() + 1 );
+			}
+			
+			tPrepStmt.m_dParamNames.Add ( sParamName );
+		}
+	}
+
+	if ( tPrepStmt.m_dParamNames.GetLength() == 0 )
+	{
+		SqlStmt_t tTestStmt;
+		CSphString sParseError;
+		if ( ParseSqlQuery ( tStmt.m_sStringParam, tTestStmt, sParseError ) )
+		{
+			tPrepStmt.m_tParsedStmt = tTestStmt;
+			tPrepStmt.m_bParsed = true;
+		}
+	}
+
+	g_hPreparedStmts.Add ( tPrepStmt, tStmt.m_sIndex );
+
+	sphLogDebug ( "prepared statement '%s' with %d parameters", 
+		tStmt.m_sIndex.cstr(), tPrepStmt.m_dParamNames.GetLength() );
+
+	tOut.Ok ( 0, 0 );
+}
+
+void HandleMysqlExecute ( RowBuffer_i & tOut, const SqlStmt_t & tStmt )
+{
+	if ( !sphCheckWeCanModify ( tOut ) )
+		return;
+
+	CSphString sError;
+	
+	if ( tStmt.m_sIndex.IsEmpty() )
+	{
+		sError = "EXECUTE requires a prepared statement name";
+		tOut.Error ( sError.cstr() );
+		return;
+	}
+
+	CSphScopedLock<CSphMutex> tLock ( g_tPreparedStmtsMutex );
+	
+	PreparedStmt_t * pPrepStmt = g_hPreparedStmts ( tStmt.m_sIndex );
+	if ( !pPrepStmt )
+	{
+		sError.SetSprintf ( "Unknown prepared statement '%s'", tStmt.m_sIndex.cstr() );
+		tOut.Error ( sError.cstr() );
+		return;
+	}
+
+	if ( tStmt.m_dInsertValues.GetLength() != pPrepStmt->m_dParamNames.GetLength() )
+	{
+		sError.SetSprintf ( "Prepared statement '%s' expects %d parameters, got %d", 
+			tStmt.m_sIndex.cstr(), 
+			pPrepStmt->m_dParamNames.GetLength(),
+			tStmt.m_dInsertValues.GetLength() );
+		tOut.Error ( sError.cstr() );
+		return;
+	}
+
+	CSphString sExecuteQuery = pPrepStmt->m_sQuery;
+	
+	for ( int i = 0; i < pPrepStmt->m_dParamNames.GetLength(); i++ )
+	{
+		CSphString sParamPlaceholder;
+		sParamPlaceholder.SetSprintf ( "?%s", pPrepStmt->m_dParamNames[i].cstr() );
+		
+		// For positional parameters, also try just "?"
+		if ( pPrepStmt->m_dParamNames[i].Begins("param_") )
+			sParamPlaceholder = "?";
+
+		CSphString sParamValue;
+		if ( i < tStmt.m_dInsertValues.GetLength() )
+		{
+			// Format the parameter value appropriately
+			const SqlInsert_t & tVal = tStmt.m_dInsertValues[i];
+			if ( tVal.m_iType == SqlInsert_t::QUOTED_STRING )
+				sParamValue.SetSprintf ( "'%s'", tVal.m_sVal.cstr() );
+			else if ( tVal.m_iType == SqlInsert_t::CONST_INT )
+				sParamValue.SetSprintf ( INT64_FMT, tVal.m_iVal );
+			else if ( tVal.m_iType == SqlInsert_t::CONST_FLOAT )
+				sParamValue.SetSprintf ( "%f", tVal.m_fVal );
+			else
+				sParamValue = tVal.m_sVal;
+		}
+
+		sExecuteQuery = sExecuteQuery.SubstituteFirst ( sParamPlaceholder.cstr(), sParamValue.cstr() );
+	}
+
+	sphLogDebug ( "executing prepared statement '%s': %s", 
+		tStmt.m_sIndex.cstr(), sExecuteQuery.cstr() );
+
+	SqlStmt_t tExecStmt;
+	CSphString sParseError;
+	
+	if ( !ParseSqlQuery ( sExecuteQuery, tExecStmt, sParseError ) )
+	{
+		sError.SetSprintf ( "Error parsing prepared statement: %s", sParseError.cstr() );
+		tOut.Error ( sError.cstr() );
+		return;
+	}
+
+	ExecuteSqlStatement ( tOut, tExecStmt );
+}
+
+void HandleMysqlDeallocate ( RowBuffer_i & tOut, const SqlStmt_t & tStmt )
+{
+	CSphString sError;
+	
+	if ( tStmt.m_sIndex.IsEmpty() )
+	{
+		sError = "DEALLOCATE requires a prepared statement name";
+		tOut.Error ( sError.cstr() );
+		return;
+	}
+
+	CSphScopedLock<CSphMutex> tLock ( g_tPreparedStmtsMutex );
+	
+	if ( !g_hPreparedStmts.Exists ( tStmt.m_sIndex ) )
+	{
+		sError.SetSprintf ( "Unknown prepared statement '%s'", tStmt.m_sIndex.cstr() );
+		tOut.Error ( sError.cstr() );
+		return;
+	}
+
+	g_hPreparedStmts.Delete ( tStmt.m_sIndex );
+
+	sphLogDebug ( "deallocated prepared statement '%s'", tStmt.m_sIndex.cstr() );
+
+	tOut.Ok ( 0, 0 );
+}
+
+void HandleMysqlShowPreparedStatements ( RowBuffer_i & tOut )
+{
+	CSphScopedLock<CSphMutex> tLock ( g_tPreparedStmtsMutex );
+	
+	// Result set header
+	tOut.HeadTuplet ( "Statement_Name", "SQL_Text", "Parameters", "Created" );
+
+	// Iterate through prepared statements
+	for ( g_hPreparedStmts.IterateStart(); g_hPreparedStmts.IterateNext(); )
+	{
+		const PreparedStmt_t & tStmt = g_hPreparedStmts.IterateGet();
+		
+		CSphString sParams;
+		for ( int i = 0; i < tStmt.m_dParamNames.GetLength(); i++ )
+		{
+			if ( i > 0 )
+				sParams.SetSprintf ( "%s, %s", sParams.cstr(), tStmt.m_dParamNames[i].cstr() );
+			else
+				sParams = tStmt.m_dParamNames[i];
+		}
+		
+		CSphString sCreated;
+		sCreated.SetSprintf ( INT64_FMT, tStmt.m_iCreateTime );
+		
+		tOut.DataTuplet ( tStmt.m_sName.cstr(), tStmt.m_sQuery.cstr(), 
+			sParams.cstr(), sCreated.cstr() );
+	}
+	
+	tOut.Eof();
+}
 
 static void HandleMysqlDropTable ( RowBuffer_i & tOut, const SqlStmt_t & tStmt, CSphString & sWarning )
 {

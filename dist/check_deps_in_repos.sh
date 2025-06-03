@@ -24,8 +24,6 @@ declare -a urls=(
   "focal-arm.html https://repo.manticoresearch.com/repository/manticoresearch_focal_dev/dists/focal/main/binary-arm64/"
   "jammy-amd.html https://repo.manticoresearch.com/repository/manticoresearch_jammy_dev/dists/jammy/main/binary-amd64/"
   "jammy-arm.html https://repo.manticoresearch.com/repository/manticoresearch_jammy_dev/dists/jammy/main/binary-arm64/"
-  "centos-7-x86_64.html https://repo.manticoresearch.com/repository/manticoresearch/dev/centos/7/x86_64/"
-  "centos-7-aarch64.html https://repo.manticoresearch.com/repository/manticoresearch/dev/centos/7/aarch64/"
   "centos-8-x86_64.html https://repo.manticoresearch.com/repository/manticoresearch/dev/centos/8/x86_64/"
   "centos-8-aarch64.html https://repo.manticoresearch.com/repository/manticoresearch/dev/centos/8/aarch64/"
   "centos-9-x86_64.html https://repo.manticoresearch.com/repository/manticoresearch/dev/centos/9/x86_64/"

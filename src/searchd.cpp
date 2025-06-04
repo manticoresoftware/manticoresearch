@@ -10851,7 +10851,7 @@ struct PreparedStmt_t
 static CSphOrderedHash<PreparedStmt_t, CSphString, CSphStrHashFunc, 256> g_hPreparedStmts;
 static CSphMutex g_tPreparedStmtsMutex;
 
-void HandleMysqlPrepare ( RowBuffer_i & tOut, const SqlStmt_t & tStmt, ClientSession_c & tSess )
+void HandleMysqlPrepare ( RowBuffer_i & tOut, const SqlStmt_t & tStmt )
 {
 	if ( !sphCheckWeCanModify ( tOut ) )
 		return;
@@ -10924,7 +10924,7 @@ void HandleMysqlPrepare ( RowBuffer_i & tOut, const SqlStmt_t & tStmt, ClientSes
 	tOut.Ok ( 0, 0 );
 }
 
-void HandleMysqlExecute ( RowBuffer_i & tOut, const SqlStmt_t & tStmt, ClientSession_c & tSess )
+void HandleMysqlExecute ( RowBuffer_i & tOut, const SqlStmt_t & tStmt )
 {
 	if ( !sphCheckWeCanModify ( tOut ) )
 		return;
@@ -10954,20 +10954,45 @@ void HandleMysqlExecute ( RowBuffer_i & tOut, const SqlStmt_t & tStmt, ClientSes
 		return;
 	}
 
-	// Replace parameters in reverse order to avoid offset issues
-	for ( int i = pPrepStmt->m_dParamNames.GetLength() - 1; i >= 0; i-- )
+	// Replace parameters - for MySQL compatibility, we replace ? placeholders in order
+	// with the values provided in the USING clause
+	for ( int i = 0; i < tStmt.m_dInsertValues.GetLength() && i < pPrepStmt->m_dParamNames.GetLength(); i++ )
 	{
-		CSphString sParamPlaceholder;
-		sParamPlaceholder.SetSprintf ( "?%s", pPrepStmt->m_dParamNames[i].cstr() );
-		
 		// Format the parameter value
 		CSphString sParamValue;
 		const SqlInsert_t & tVal = tStmt.m_dInsertValues[i];
-		if ( tVal.m_iType == SqlInsert_t::QUOTED_STRING )
+		
+		// Handle user variable lookup - the parser stores the variable name in m_sVal
+		if ( tVal.m_iType == SqlInsert_t::QUOTED_STRING && tVal.m_sVal.Begins("@") )
+		{
+			// This is a user variable - look up its value
+			CSphString sVarName = tVal.m_sVal;
+			bool bFound = false;
+			
+			IterateUservars ( [&sVarName, &sParamValue, &bFound] ( const NamedRefVectorPair_t & dVar )
+			{
+				if ( sVarName == dVar.first )
+				{
+					// Found the variable - get its first value
+					if ( dVar.second.m_pVal && dVar.second.m_pVal->GetLength() > 0 )
+					{
+						uint64_t uVal = (*dVar.second.m_pVal)[0];
+						sParamValue.SetSprintf ( UINT64_FMT, uVal );
+						bFound = true;
+					}
+				}
+			});
+			
+			if ( !bFound )
+			{
+				// Variable not found, use NULL
+				sParamValue = "NULL";
+			}
+		}
+		else if ( tVal.m_iType == SqlInsert_t::QUOTED_STRING )
 			sParamValue.SetSprintf ( "'%s'", tVal.m_sVal.cstr() );
 		else if ( tVal.m_iType == SqlInsert_t::CONST_INT )
 		{
-			// Convert based on whether it's negative
 			if ( tVal.IsNegativeInt() )
 				sParamValue.SetSprintf ( "-" INT64_FMT, (int64_t)tVal.GetValueInt() );
 			else
@@ -10978,14 +11003,14 @@ void HandleMysqlExecute ( RowBuffer_i & tOut, const SqlStmt_t & tStmt, ClientSes
 		else
 			sParamValue = tVal.m_sVal;
 
-		// Simple string replacement - find and replace first occurrence
-		const char * pFound = strstr ( sExecuteQuery.cstr(), sParamPlaceholder.cstr() );
+		// Find and replace the first occurrence of ?
+		const char * pFound = strchr ( sExecuteQuery.cstr(), '?' );
 		if ( pFound )
 		{
 			CSphString sNewQuery;
 			int iPos = pFound - sExecuteQuery.cstr();
 			sNewQuery.SetSprintf ( "%.*s%s%s", iPos, sExecuteQuery.cstr(), sParamValue.cstr(), 
-				sExecuteQuery.cstr() + iPos + sParamPlaceholder.Length() );
+				sExecuteQuery.cstr() + iPos + 1 ); // +1 to skip the ?
 			sExecuteQuery = sNewQuery;
 		}
 	}
@@ -11006,16 +11031,25 @@ void HandleMysqlExecute ( RowBuffer_i & tOut, const SqlStmt_t & tStmt, ClientSes
 	// Handle multiple statements separately using the existing multi-statement handler
 	if ( dExecStmts.GetLength() > 0 )
 	{
+		auto* pSession = session::GetClientSession();
+		if ( !pSession )
+		{
+			tOut.Error ( "No active session" );
+			return;
+		}
+
 		if ( dExecStmts.GetLength() > 1 )
 		{
 			// Multiple statements - use the multi-statement handler
 			// This properly handles different statement types and multi-result sets
-			HandleMysqlMultiStmt ( dExecStmts, tSess.m_tLastMeta, tOut, "" );
+			CSphQueryResultMeta tMeta;
+			CSphString sError;
+			HandleMysqlMultiStmt ( dExecStmts, tMeta, tOut, sError );
 		}
 		else
 		{
 			// Single statement - execute directly
-			tSess.Execute ( FromStr ( sExecuteQuery ), tOut );
+			pSession->Execute ( FromStr ( sExecuteQuery ), tOut );
 		}
 	}
 }
@@ -11611,6 +11645,18 @@ bool ClientSession_c::Execute ( Str_t sQuery, RowBuffer_i & tOut )
 
 	case STMT_SHOW_TABLE_INDEXES:
 		HandleMysqlShowTableIndexes ( tOut, *pStmt );
+		return true;
+
+	case STMT_PREPARE:
+		HandleMysqlPrepare ( tOut, *pStmt );
+		return true;
+
+	case STMT_EXECUTE:
+		HandleMysqlExecute ( tOut, *pStmt );
+		return true;
+
+	case STMT_DEALLOCATE:
+		HandleMysqlClosePrepare ( tOut, *pStmt );
 		return true;
 
 

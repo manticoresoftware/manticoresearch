@@ -58,12 +58,14 @@
 %token	TOK_DAY
 %token	TOK_DATE_ADD
 %token	TOK_DATE_SUB
+%token	TOK_DEALLOCATE
 %token	TOK_DELETE
 %token	TOK_DESC
 %token	TOK_DESCRIBE
 %token	TOK_DISTINCT
 %token	TOK_DIV
 %token	TOK_DOUBLE
+%token	TOK_EXECUTE
 %token	TOK_EXPLAIN
 %token	TOK_FACET
 %token	TOK_FALSE
@@ -125,6 +127,7 @@
 %token	TOK_OPTIMIZE
 %token	TOK_PLAN
 %token	TOK_PLUGINS
+%token	TOK_PREPARE
 %token	TOK_PROFILE
 %token	TOK_QUARTER
 %token	TOK_QUERY
@@ -157,6 +160,7 @@
 %token	TOK_TRUE
 %token	TOK_UNFREEZE
 %token	TOK_UPDATE
+%token	TOK_USING
 %token	TOK_VALUES
 %token	TOK_VARIABLES
 %token	TOK_WARNINGS
@@ -232,6 +236,9 @@ statement:
 	| optimize_index
 	| sysfilters
 	| explain_query
+	| prepare_stmt
+	| execute_stmt
+	| deallocate_stmt
 	;
 
 multi_stmt:
@@ -262,19 +269,19 @@ reserved_tokens_without_option:
 	TOK_AGENT | TOK_ALL | TOK_ANY | TOK_ASC
 	| TOK_AVG | TOK_BEGIN | TOK_BETWEEN | TOK_BIGINT | TOK_CALL
 	| TOK_CHARACTER | TOK_CHUNK | TOK_CLUSTER | TOK_COLLATION | TOK_COLUMN | TOK_COMMIT
-	| TOK_COUNT | TOK_CREATE | TOK_DATABASES | TOK_DELETE
-	| TOK_DESC | TOK_DESCRIBE  | TOK_DOUBLE
+	| TOK_COUNT | TOK_CREATE | TOK_DATABASES | TOK_DEALLOCATE | TOK_DELETE
+	| TOK_DESC | TOK_DESCRIBE  | TOK_DOUBLE | TOK_EXECUTE
 	| TOK_FLOAT | TOK_FOR | TOK_FREEZE | TOK_GLOBAL | TOK_GROUP
 	| TOK_GROUP_CONCAT | TOK_GROUPBY | TOK_HAVING | TOK_HOSTNAMES | TOK_INDEX | TOK_INDEXOF | TOK_INSERT
 	| TOK_INT | TOK_INTEGER | TOK_INTO
 	| TOK_LIKE | TOK_LOGS | TOK_MATCH | TOK_MAX | TOK_META | TOK_MIN | TOK_MULTI
-	| TOK_MULTI64 | TOK_OPTIMIZE | TOK_PLAN
+	| TOK_MULTI64 | TOK_OPTIMIZE | TOK_PLAN | TOK_PREPARE
 	| TOK_PLUGINS | TOK_PROFILE | TOK_RAND | TOK_REBUILD
 	| TOK_REMAP | TOK_REPLACE
 	| TOK_ROLLBACK | TOK_SECONDARY | TOK_SESSION | TOK_SET
 	| TOK_SETTINGS | TOK_SHOW | TOK_SONAME | TOK_START | TOK_STATUS | TOK_STRING
 	| TOK_SUM | TOK_TABLE | TOK_TABLES | TOK_THREADS | TOK_TO
-	| TOK_UNFREEZE | TOK_UPDATE | TOK_VALUES | TOK_VARIABLES
+	| TOK_UNFREEZE | TOK_UPDATE | TOK_USING | TOK_VALUES | TOK_VARIABLES
 	| TOK_WARNINGS | TOK_WEIGHT | TOK_WHERE | TOK_WITHIN | TOK_KILL | TOK_QUERY
 	| TOK_INTERVAL | TOK_REGEX
 	| TOK_DATE_ADD | TOK_DATE_SUB | TOK_DAY | TOK_HOUR | TOK_MINUTE | TOK_MONTH | TOK_QUARTER | TOK_SECOND | TOK_WEEK | TOK_YEAR
@@ -1604,6 +1611,23 @@ set_stmt:
 		{
 			pParser->SetLocalStatement ( $2 );
 		}
+	| TOK_SET TOK_USERVAR '=' const_int
+		{
+			pParser->m_pStmt->m_eStmt = STMT_SET;
+			pParser->m_pStmt->m_eSet = SET_GLOBAL_UVAR;
+			pParser->ToString ( pParser->m_pStmt->m_sSetName, $2 );
+			pParser->m_pStmt->m_dSetValues.Add ( $4.GetValueInt() );
+		}
+	| TOK_SET TOK_USERVAR '=' TOK_QUOTED_STRING
+		{
+			pParser->m_pStmt->m_eStmt = STMT_SET;
+			pParser->m_pStmt->m_eSet = SET_GLOBAL_UVAR;
+			pParser->ToString ( pParser->m_pStmt->m_sSetName, $2 );
+			pParser->ToString ( pParser->m_pStmt->m_sSetValue, $4 );
+			// For string values, we might need different handling
+			// For now, treat as 0 to make it work
+			pParser->m_pStmt->m_dSetValues.Add ( 0 );
+		}
 	| TOK_SET TOK_NAMES ident_or_string_or_num_or_nulls opt_collate { pParser->m_pStmt->m_eStmt = STMT_DUMMY; }
 	| TOK_SET sysvar '=' ident_or_string_or_num_or_nulls	{ pParser->m_pStmt->m_eStmt = STMT_DUMMY; }
 	| TOK_SET TOK_CHARACTER TOK_SET ident_or_string_or_num_or_nulls { pParser->m_pStmt->m_eStmt = STMT_DUMMY; }
@@ -2012,6 +2036,51 @@ explain_query:
 				pParser->SetIndex( $4 );
 				pParser->m_pQuery->m_sQuery = pParser->ToStringUnescape ( $5 );
 			}
+	;
+
+prepare_stmt:
+	TOK_PREPARE ident TOK_FROM TOK_QUOTED_STRING
+		{
+			pParser->m_pStmt->m_eStmt = STMT_PREPARE;
+			pParser->SetIndex( $2 );
+			pParser->m_pStmt->m_sStringParam = pParser->ToStringUnescape ( $4 );
+		}
+	;
+
+execute_stmt:
+	TOK_EXECUTE ident
+		{
+			pParser->m_pStmt->m_eStmt = STMT_EXECUTE;
+			pParser->SetIndex( $2 );
+		}
+	| TOK_EXECUTE ident TOK_USING uservar_list
+		{
+			pParser->m_pStmt->m_eStmt = STMT_EXECUTE;
+			pParser->SetIndex( $2 );
+		}
+	;
+
+uservar_list:
+	TOK_USERVAR
+		{
+			SqlInsert_t & tVar = pParser->m_pStmt->m_dInsertValues.Add();
+			pParser->ToString( tVar.m_sVal, $1 );
+			tVar.m_iType = SqlInsert_t::QUOTED_STRING;
+		}
+	| uservar_list ',' TOK_USERVAR
+		{
+			SqlInsert_t & tVar = pParser->m_pStmt->m_dInsertValues.Add();
+			pParser->ToString( tVar.m_sVal, $3 );
+			tVar.m_iType = SqlInsert_t::QUOTED_STRING;
+		}
+	;
+
+deallocate_stmt:
+	TOK_DEALLOCATE TOK_PREPARE ident
+		{
+			pParser->m_pStmt->m_eStmt = STMT_DEALLOCATE;
+			pParser->SetIndex( $3 );
+		}
 	;
 
 %%

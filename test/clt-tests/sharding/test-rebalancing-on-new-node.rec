@@ -1,0 +1,34 @@
+––– input –––
+export INSTANCE=1
+––– output –––
+––– block: ../base/replication/start-searchd-precach –––
+––– input –––
+export INSTANCE=2
+––– output –––
+––– block: ../base/replication/start-searchd-precach –––
+––– input –––
+export CLUSTER_NAME=c
+––– output –––
+––– block: ../base/replication/create-cluster –––
+––– block: ../base/replication/join-cluster-on-all-nodes –––
+––– input –––
+mysql -h0 -P1306 -e "create table c:test shards='6' rf='1'"
+––– output –––
+––– input –––
+mysql -h0 -P1306 -e "show create table test option force=1\G" | grep 'Create Table'
+––– output –––
+Create Table: CREATE TABLE test type='distributed' local='system.test_s0' local='system.test_s2' local='system.test_s4' agent='127.0.0.1:2312:system.test_s1' agent='127.0.0.1:2312:system.test_s3' agent='127.0.0.1:2312:system.test_s5'
+––– input –––
+export INSTANCE=3
+––– output –––
+––– block: ../base/replication/start-searchd-precach –––
+––– input –––
+mysql -h0 -P3306 -e "join cluster c at '127.0.0.1:1312';"
+––– output –––
+––– input –––
+sleep 30
+––– output –––
+––– input –––
+mysql -h0 -P1306 -e "show create table test option force=1\G" | grep 'Create Table'
+––– output –––
+Create Table: CREATE TABLE test type='distributed' local='system.test_s0' local='system.test_s1' local='system.test_s3' local='system.test_s5' agent='127.0.0.1:2312:system.test_s2|127.0.0.1:3312:system.test_s2' agent='127.0.0.1:2312:system.test_s4|127.0.0.1:3312:system.test_s4'

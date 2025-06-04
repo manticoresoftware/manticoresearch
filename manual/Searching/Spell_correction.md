@@ -1,4 +1,4 @@
-# Spell correction
+t s# Spell correction
 
 Spell correction, also known as:
 
@@ -172,7 +172,7 @@ Note: If you use the [query_string](../Searching/Full_text_matching/Basic_usage.
 - `fuzzy`: Turn fuzzy search on or off.
 - `distance`: Set the Levenshtein distance for matching. The default is `2`.
 - `preserve`: `0` or `1` (default: `0`). When set to `1`, preserves the original form of words even when not found during fuzzy matching. When set to `0`, words not found with fuzzy matching are ignored when building matching for fuzziness. Particularly useful for short words.
-- `layouts`: Keyboard layouts to check for typing errors. All layouts are used by default. Use an empty string `''` (SQL) or array `[]` (JSON) to turn this off. Supported layouts include:
+- `layouts`: Keyboard layouts to check for typing errors. All layouts are used by default. Use an empty string `''` (SQL) or array `[]` (JSON) to turn this off. At least two layouts must be specified due to the combination logic. Supported layouts include:
   - `be` - Belgian AZERTY layout
   - `bg` - Standard Bulgarian layout
   - `br` - Brazilian QWERTY layout

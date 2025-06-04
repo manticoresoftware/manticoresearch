@@ -1973,7 +1973,7 @@ bool JsonObj_c::FetchStrItem ( std::string & sValue, const char * szName, CSphSt
 {
 	CSphString sTmp;
 	bool bRes = FetchStrItem ( sTmp, szName, sError, bIgnoreMissing );
-	sValue = sTmp.cstr();
+	sValue = sTmp.scstr();
 	return bRes;
 }
 

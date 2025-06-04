@@ -228,6 +228,7 @@ static const char * Quantization2Str ( knn::Quantization_e eQuant )
 	switch ( eQuant )
 	{
 	case knn::Quantization_e::BIT1: return "1BIT";
+	case knn::Quantization_e::BIT1SIMPLE: return "1BITSIMPLE";
 	case knn::Quantization_e::BIT4: return "4BIT";
 	case knn::Quantization_e::BIT8: return "8BIT";
 	default: return nullptr;
@@ -279,6 +280,12 @@ bool Str2Quantization ( const CSphString & sQuantization, knn::Quantization_e & 
 	if ( sQuant=="1BIT" )
 	{
 		eQuantization = knn::Quantization_e::BIT1;
+		return true;
+	}
+
+	if ( sQuant=="1BITSIMPLE" )
+	{
+		eQuantization = knn::Quantization_e::BIT1SIMPLE;
 		return true;
 	}
 
@@ -495,7 +502,7 @@ std::unique_ptr<knn::Builder_i> BuildCreateKNN ( const ISphSchema & tSchema, int
 
 
 template <typename ACTION>
-static bool BuildProcessKNN ( RowID_t tRowID, const CSphRowitem * pRow, const BYTE * pPool, CSphVector<ScopedTypedIterator_t> & dIterators, const CSphVector<PlainOrColumnar_t> & dAttrs, ACTION && fnAction )
+static bool BuildProcessKNN ( RowID_t tRowID, const CSphRowitem * pRow, const BYTE * pPool, CSphVector<ScopedTypedIterator_t> & dIterators, const VecTraits_T<PlainOrColumnar_t> & dAttrs, ACTION && fnAction )
 {
 	ARRAY_FOREACH ( i, dAttrs )
 	{
@@ -512,13 +519,13 @@ static bool BuildProcessKNN ( RowID_t tRowID, const CSphRowitem * pRow, const BY
 }
 
 
-void BuildTrainKNN ( RowID_t tRowID, const CSphRowitem * pRow, const BYTE * pPool, CSphVector<ScopedTypedIterator_t> & dIterators, const CSphVector<PlainOrColumnar_t> & dAttrs, knn::Builder_i & tBuilder )
+void BuildTrainKNN ( RowID_t tRowID, const CSphRowitem * pRow, const BYTE * pPool, CSphVector<ScopedTypedIterator_t> & dIterators, const VecTraits_T<PlainOrColumnar_t> & dAttrs, knn::Builder_i & tBuilder )
 {
 	BuildProcessKNN ( tRowID, pRow, pPool, dIterators, dAttrs, [&tBuilder]( int iAttr, const util::Span_T<float> & tValues ) { tBuilder.Train ( iAttr, tValues ); return true; } );
 }
 
 
-bool BuildStoreKNN ( RowID_t tRowID, const CSphRowitem * pRow, const BYTE * pPool, CSphVector<ScopedTypedIterator_t> & dIterators, const CSphVector<PlainOrColumnar_t> & dAttrs, knn::Builder_i & tBuilder )
+bool BuildStoreKNN ( RowID_t tRowID, const CSphRowitem * pRow, const BYTE * pPool, CSphVector<ScopedTypedIterator_t> & dIterators, const VecTraits_T<PlainOrColumnar_t> & dAttrs, knn::Builder_i & tBuilder )
 {
 	return BuildProcessKNN ( tRowID, pRow, pPool, dIterators, dAttrs, [&tBuilder]( int iAttr, const util::Span_T<float> & tValues ) { return tBuilder.SetAttr ( iAttr, tValues ); } );
 }

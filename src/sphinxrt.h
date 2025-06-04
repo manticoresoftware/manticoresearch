@@ -406,11 +406,11 @@ protected:
 	CSphVector<int>				m_dFieldLengths;
 };
 
-
-#define BLOOM_PER_ENTRY_VALS_COUNT 8
-#define BLOOM_HASHES_COUNT 2
-#define BLOOM_NGRAM_0 2
-#define BLOOM_NGRAM_1 4
+static constexpr DWORD PERCOLATE_BLOOM_WILD_COUNT = 32;
+static constexpr DWORD BLOOM_PER_ENTRY_VALS_COUNT = 8;
+static constexpr DWORD BLOOM_HASHES_COUNT = 2;
+static constexpr DWORD BLOOM_NGRAM_0 = 2;
+static constexpr DWORD BLOOM_NGRAM_1 = 4;
 
 struct BloomGenTraits_t
 {
@@ -425,7 +425,7 @@ struct BloomGenTraits_t
 		m_pBuf[iPos] |= uVal;
 	}
 
-	bool IterateNext () const
+	bool IterateNext () const noexcept
 	{ return true; }
 };
 
@@ -443,7 +443,7 @@ struct BloomCheckTraits_t
 		m_bSame = ( ( m_pBuf[iPos] & uVal )==uVal );
 	}
 
-	bool IterateNext () const
+	bool IterateNext () const noexcept
 	{ return m_bSame; }
 };
 

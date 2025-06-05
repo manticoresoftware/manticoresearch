@@ -12,7 +12,7 @@ export CLUSTER_NAME=c
 ––– block: ../base/replication/create-cluster –––
 ––– block: ../base/replication/join-cluster-on-all-nodes –––
 ––– input –––
-mysql -h0 -P1306 -e "create table c:test shards='6' rf='1'"
+mysql -h0 -P1306 -e "create table c:test(id bigint) shards='6' rf='2'"
 ––– output –––
 ––– input –––
 mysql -h0 -P1306 -e "show create table test option force=1\G" | grep 'Create Table'

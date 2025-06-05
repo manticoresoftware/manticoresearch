@@ -842,6 +842,19 @@ const char * GetExtension ( const CSphString & sFullPath )
 }
 
 
+CSphString GetPathNoExtension ( const CSphString & sFullPath )
+{
+    if ( sFullPath.IsEmpty() )
+		return "";
+
+    const char * pDot = strchr ( sFullPath.cstr(), '.' );
+    if ( !pDot || pDot==sFullPath.cstr() )
+        return sFullPath.cstr();
+
+    return sFullPath.SubString ( 0, pDot-sFullPath.cstr() );
+}
+
+
 CSphString RealPath ( const CSphString& sPath )
 {
 #if _WIN32

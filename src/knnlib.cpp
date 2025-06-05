@@ -115,7 +115,13 @@ bool InitKNN ( CSphString & sError )
 {
 	assert ( !g_pKNNLib );
 
-	CSphString sLibfile = TryDifferentPaths ( LIB_MANTICORE_KNN, GetKNNFullpath(), knn::LIB_VERSION );
+	CSphString sLibfile;
+	if ( IsAVX2Supported() )
+		sLibfile = TryDifferentPaths ( LIB_MANTICORE_KNN, GetKNNFullpath(), knn::LIB_VERSION, "_avx2" );
+
+	if ( sLibfile.IsEmpty() )
+		sLibfile = TryDifferentPaths ( LIB_MANTICORE_KNN, GetKNNFullpath(), knn::LIB_VERSION );
+
 	if ( sLibfile.IsEmpty() )
 		return true;
 

@@ -384,7 +384,7 @@ curl -sX POST http://localhost:9308/search -d '{"index":"name","query":{"bool":{
 curl -sX POST http://localhost:9308/search -d '{"index":"name","query":{"bool":{"must":[{"match":{"*":"tony"}}]}},"options":{"fuzzy":true}}' | jq -M
 ––– output –––
 {
-  "took": 0,
+  "took": %{NUMBER},
   "timed_out": false,
   "hits": {
     "total": 1813,
@@ -730,7 +730,7 @@ curl -sX POST http://localhost:9308/search -d '{"index":"name","query":{"bool":{
 curl -sX POST http://localhost:9308/search -d '{"index":"name","query":{"bool":{"must":[{"match":{"*":"SMYTH"}}]}}, "sort":[{"id":"desc"},{"username":"asc"}], "options":{"fuzzy":true}}' | jq -M
 ––– output –––
 {
-  "took": 0,
+  "took": %{NUMBER},
   "timed_out": false,
   "hits": {
     "total": 773,

@@ -127,7 +127,7 @@ Note: If you use the [query_string](../Searching/Full_text_matching/Basic_usage.
 
 - `fuzzy`: Turn fuzzy search on or off.
 - `distance`: Set the Levenshtein distance for matching. The default is `2`.
-- `layouts`: Keyboard layouts to check for typing errors. All layouts are used by default. Use an empty string `''` (SQL) or array `[]` (JSON) to turn this off. Supported layouts include:
+- `layouts`: Keyboard layouts to check for typing errors. All layouts are used by default. Use an empty string `''` (SQL) or array `[]` (JSON) to turn this off. At least two layouts must be specified due to the combination logic. Supported layouts include:
   - `be` - Belgian AZERTY layout
   - `bg` - Standard Bulgarian layout
   - `br` - Brazilian QWERTY layout

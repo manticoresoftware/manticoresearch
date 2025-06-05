@@ -512,13 +512,13 @@ rt_mem_limit = 512M
 
 Memory limit for a RAM chunk of the table. Optional, default is 128M.
 
-RT tables store some data in memory, known as the "RAM chunk," and also maintain a number of on-disk tables, referred to as "disk chunks." This directive allows you to control the size of the RAM chunk. When there is too much data to keep in memory, RT tables will flush it to disk, activate a newly created disk chunk, and reset the RAM chunk.
+RT tables store some data in memory, known as the "RAM chunk", and also maintain a number of on-disk tables, referred to as "disk chunks." This directive allows you to control the size of the RAM chunk. When there is too much data to keep in memory, RT tables will flush it to disk, activate a newly created disk chunk, and reset the RAM chunk.
 
 Please note that the limit is strict, and RT tables will never allocate more memory than what is specified in the rt_mem_limit. Additionally, memory is not preallocated, so specifying a 512MB limit and only inserting 3MB of data will result in allocating only 3MB, not 512MB.
 
 The `rt_mem_limit` is never exceeded, but the actual RAM chunk size can be significantly lower than the limit. RT tables adapt to the data insertion pace and adjust the actual limit dynamically to minimize memory usage and maximize data write speed. This is how it works:
 * By default, the RAM chunk size is 50% of the  `rt_mem_limit`, referred to as the  "`rt_mem_limit`".
-* As soon as the RAM chunk accumulates data equivalent to `rt_mem_limit * rate` data (50% of `rt_mem_limit`  by default), Manticore starts saving the RAM chunk as a new disk chunk.
+* As soon as the RAM chunk accumulates data equivalent to `rt_mem_limit * rate` data (50% of `rt_mem_limit` by default), Manticore starts saving the RAM chunk as a new disk chunk.
 * While a new disk chunk is being saved, Manticore assesses the number of new/updated documents.
 * After saving a new disk chunk, the `rt_mem_limit` rate is updated.
 * The rate is reset to 50% each time you restart the searchd.
@@ -527,7 +527,7 @@ For instance, if 90MB of data is saved to a disk chunk and an additional 10MB of
 
 ##### How to change rt_mem_limit and optimize_cutoff
 
-In real-time mode, you can adjust the size limit of RAM chunks and the maximum number of disk chunks using the `ALTER TABLE` statement. To set `rt_mem_limit` to 1 gigabyte for the table "t," run the following query: `ALTER TABLE t rt_mem_limit='1G'`. To change the maximum number of disk chunks, run the query: `ALTER TABLE t optimize_cutoff='5'`.
+In real-time mode, you can adjust the size limit of RAM chunks and the maximum number of disk chunks using the `ALTER TABLE` statement. To set `rt_mem_limit` to 1 gigabyte for the table "t", run the following query: `ALTER TABLE t rt_mem_limit='1G'`. To change the maximum number of disk chunks, run the query: `ALTER TABLE t optimize_cutoff='5'`.
 
 In the plain mode, you can change the values of `rt_mem_limit` and `optimize_cutoff` by updating the table configuration or running the command `ALTER TABLE <table_name> RECONFIGURE`
 
@@ -547,17 +547,23 @@ In the plain mode, you can change the values of `rt_mem_limit` and `optimize_cut
 * The RAM chunk may be slightly slower than a disk chunk.
 * Although the RAM chunk itself doesn't take up more memory than `rt_mem_limit` Manticore may take up more memory in some cases, such as when you start a transaction to insert data and don't commit it for a while. In this case, the data you have already transmitted within the transaction will remain in memory.
 
-In addition to `rt_mem_limit`, the flushing behavior of RAM chunks is also influenced by the following settings: [diskchunk_flush_write_timeout](../../Server_settings/Searchd.md#diskchunk_flush_write_timeout) and [diskchunk_flush_search_timeout](../../Server_settings/Searchd.md#diskchunk_flush_search_timeout).
+##### RAM chunk flushing conditions
 
-* `diskchunk_flush_write_timeout`: This option defines the timeout for auto-flushing a RAM chunk if there are no writes to it.  If no write occurs within this time, the chunk will be flushed to disk.  Setting it to `-1` disables auto-flushing based on write activity. The default value is 1 second.
-* `diskchunk_flush_search_timeout`: This option sets the timeout for preventing auto-flushing a RAM chunk if there are no searches in the table. Auto-flushing will only occur if there has been at least one search within this time. The default value is 30 seconds.
+In addition to `rt_mem_limit`, the flushing behavior of RAM chunks is also influenced by the following options and conditions:
+
+* Frozen state. If table is [frozen](../../Securing_and_compacting_a_table/Freezing_a_table.md), flushing is deferred. That is permanent rule; nothing can override it. If `rt_mem_limit` condition reached in frozen state, all further inserts will be delayed until the table unfrozen.
+
+* [diskchunk_flush_write_timeout](../../Server_settings/Searchd.md#diskchunk_flush_write_timeout): This option defines the timeout (in seconds) for auto-flushing a RAM chunk if there are no writes to it.  If no write occurs within this time, the chunk will be flushed to disk. Setting it to `-1` disables auto-flushing based on write activity. Default value is 1 second.
+
+* [diskchunk_flush_search_timeout](../../Server_settings/Searchd.md#diskchunk_flush_search_timeout): This option sets the timeout (in seconds) for preventing auto-flushing a RAM chunk if there are no searches in the table. Auto-flushing will only occur if there has been at least one search within this time. The default value is 30 seconds.
+
+* ongoing optimization: If an optimization process is currently running, and the number of existing disk chunks has
+  reached or exceeded a configured internal `cutoff` threshold, timeout-initiated flush (caused by `diskchunk_flush_write_timeout` or `diskchunk_flush_search_timeout`) will be skipped.
+
+* too few documents in RAM segments: If the number of documents across RAM segments is below a minimum threshold (8192),
+  timeout-initiated flush (caused by `diskchunk_flush_write_timeout` or `diskchunk_flush_search_timeout`) will be skipped to avoid creating very small disk chunks. This helps minimize unnecessary disk writes and chunk fragmentation.
 
 These timeouts work in conjunction.  A RAM chunk will be flushed if *either* timeout is reached.  This ensures that even if there are no writes, the data will eventually be persisted to disk, and conversely, even if there are constant writes but no searches, the data will also be persisted.  These settings provide more granular control over how frequently RAM chunks are flushed, balancing the need for data durability with performance considerations.  Per-table directives for these settings have higher priority and will override the instance-wide defaults.
-
-In addition to the `diskchunk_flush_write_timeout` and `diskchunk_flush_search_timeout` settings, flushing a RAM chunk may be skipped under the following conditions:
-
-* ongoing optimization: If an optimization process is currently running, and the number of existing disk chunks has reached or exceeded a configured internal `cutoff` threshold, flushing is deferred to avoid interfering with the optimization.
-* too few documents in RAM segments: If the number of documents across RAM segments is below a minimum threshold (8192), flushing is skipped to avoid creating very small disk chunks. This helps minimize unnecessary disk writes and chunk fragmentation.
 
 ### Plain table settings:
 

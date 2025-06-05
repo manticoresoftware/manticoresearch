@@ -397,7 +397,7 @@ Array(
 	[ag_0_references] => 2
 	[ag_0_lastquery] => 0.41
 	[ag_0_lastanswer] => 0.19
-	[ag_0_lastperiodmsec] => 222  
+	[ag_0_lastperiodmsec] => 222
 	[ag_0_errorsarow] => 0
 	[ag_0_1periods_query_timeouts] => 0
 	[ag_0_1periods_connect_timeouts] => 0
@@ -415,13 +415,13 @@ Array(
 	[ag_0_5periods_wrong_replies] => 0
 	[ag_0_5periods_unexpected_closings] => 0
 	[ag_0_5periods_warnings] => 0
-	[ag_0_5periods_succeeded_queries] => 146  
+	[ag_0_5periods_succeeded_queries] => 146
 	[ag_0_5periods_msecsperquery] => 231.83
 	[ag_1_hostname 192.168.0.202:6714
 	[ag_1_references] => 2
 	[ag_1_lastquery] => 0.41
 	[ag_1_lastanswer] => 0.19
-	[ag_1_lastperiodmsec] => 220  
+	[ag_1_lastperiodmsec] => 220
 	[ag_1_errorsarow] => 0
 	[ag_1_1periods_query_timeouts] => 0
 	[ag_1_1periods_connect_timeouts] => 0
@@ -439,7 +439,7 @@ Array(
 	[ag_1_5periods_wrong_replies] => 0
 	[ag_1_5periods_unexpected_closings
 	[ag_1_5periods_warnings] => 0
-	[ag_1_5periods_succeeded_queries] => 146  
+	[ag_1_5periods_succeeded_queries] => 146
 	[ag_1_5periods_msecsperquery] => 230.85
 )
 ```
@@ -1673,7 +1673,7 @@ utilsApi.sql('SHOW AGENT \'192.168.0.202:6714\' STATUS LIKE \'%15periods%\'')
     {u'Key': u'dstindex_1mirror3_id', u'Value': u'dev1.manticoresearch.com:6714:loc'},
     {u'Key': u'dstindex_1mirror3_probability_weight', u'Value': u' 0.252501'},
     {u'Key': u'dstindex_1mirror3_is_blackhole', u'Value': u'0'},
-    {u'Key': u'dstindex_1mirror3_is_persistent', u'Value': u'439'}    
+    {u'Key': u'dstindex_1mirror3_is_persistent', u'Value': u'439'}
     ],
  u'error': u'',
  u'total': 0,
@@ -1706,7 +1706,7 @@ await utilsApi.sql('SHOW AGENT \'192.168.0.202:6714\' STATUS LIKE \'%15periods%\
     {u'Key': u'dstindex_1mirror3_id', u'Value': u'dev1.manticoresearch.com:6714:loc'},
     {u'Key': u'dstindex_1mirror3_probability_weight', u'Value': u' 0.252501'},
     {u'Key': u'dstindex_1mirror3_is_blackhole', u'Value': u'0'},
-    {u'Key': u'dstindex_1mirror3_is_persistent', u'Value': u'439'}    
+    {u'Key': u'dstindex_1mirror3_is_persistent', u'Value': u'439'}
     ],
  u'error': u'',
  u'total': 0,
@@ -1739,7 +1739,7 @@ res = await utilsApi.sql("SHOW AGENT \"192.168.0.202:6714\" STATUS LIKE \"%15per
     {"Key": "dstindex_1mirror3_id", "Value": "dev1.manticoresearch.com:6714:loc"},
     {"Key": "dstindex_1mirror3_probability_weight", "Value": " 0.252501"},
     {"Key": "dstindex_1mirror3_is_blackhole", "Value": "0"},
-    {"Key": "dstindex_1mirror3_is_persistent", "Value": "439"}    
+    {"Key": "dstindex_1mirror3_is_persistent", "Value": "439"}
     ],
  "error": "",
  "total": 0,
@@ -1772,7 +1772,7 @@ utilsApi.sql("SHOW AGENT \"192.168.0.202:6714\" STATUS LIKE \"%15periods%\"");
     {Key=dstindex_1mirror3_id, Value=dev1.manticoresearch.com:6714:loc},
     {Key=dstindex_1mirror3_probability_weight, Value= 0.252501},
     {Key=dstindex_1mirror3_is_blackhole, Value=0},
-    {Key=dstindex_1mirror3_is_persistent, Value=439}    
+    {Key=dstindex_1mirror3_is_persistent, Value=439}
     ],
  error=,
  total=0,
@@ -1805,7 +1805,7 @@ utilsApi.Sql("SHOW AGENT \"192.168.0.202:6714\" STATUS LIKE \"%15periods%\"");
     {Key=dstindex_1mirror3_id, Value=dev1.manticoresearch.com:6714:loc},
     {Key=dstindex_1mirror3_probability_weight, Value= 0.252501},
     {Key=dstindex_1mirror3_is_blackhole, Value=0},
-    {Key=dstindex_1mirror3_is_persistent, Value=439}    
+    {Key=dstindex_1mirror3_is_persistent, Value=439}
     ],
  error="",
  total=0,
@@ -1838,7 +1838,7 @@ utils_api.sql("SHOW AGENT \"192.168.0.202:6714\" STATUS LIKE \"%15periods%\"", S
     {Key=dstindex_1mirror3_id, Value=dev1.manticoresearch.com:6714:loc},
     {Key=dstindex_1mirror3_probability_weight, Value= 0.252501},
     {Key=dstindex_1mirror3_is_blackhole, Value=0},
-    {Key=dstindex_1mirror3_is_persistent, Value=439}    
+    {Key=dstindex_1mirror3_is_persistent, Value=439}
     ],
  error="",
  total=0,
@@ -1876,7 +1876,7 @@ res = await utilsApi.sql("SHOW AGENT \"192.168.0.202:6714\" STATUS LIKE \"%15per
 	    {"Key": "dstindex_1mirror3_id", "Value": "dev1.manticoresearch.com:6714:loc"},
 	    {"Key": "dstindex_1mirror3_probability_weight", "Value": " 0.252501"},
 	    {"Key": "dstindex_1mirror3_is_blackhole", "Value": "0"},
-	    {"Key": "dstindex_1mirror3_is_persistent", "Value": "439"}    
+	    {"Key": "dstindex_1mirror3_is_persistent", "Value": "439"}
     ],
 	"error": "",
 	"total": 0,
@@ -1915,12 +1915,55 @@ apiClient.UtilsAPI.Sql(context.Background()).Body("SHOW AGENT \"192.168.0.202:67
 	    {"Key": "dstindex_1mirror3_id", "Value": "dev1.manticoresearch.com:6714:loc"},
 	    {"Key": "dstindex_1mirror3_probability_weight", "Value": " 0.252501"},
 	    {"Key": "dstindex_1mirror3_is_blackhole", "Value": "0"},
-	    {"Key": "dstindex_1mirror3_is_persistent", "Value": "439"}    
+	    {"Key": "dstindex_1mirror3_is_persistent", "Value": "439"}
     ],
 	"error": "",
 	"total": 0,
 	"warning": ""
 }
+```
+
+<!-- end -->
+
+## Prometheus Exporter
+
+<!-- example prometheus exporter -->
+
+Manticore Search has a built-in Prometheus exporter.
+To request metrics, make sure the HTTP port is exposed and simply call the /metrics endpoint.
+
+**Note:** The exporter requires **Buddy** to be enabled.
+
+<!-- intro -->
+##### HTTP:
+
+<!-- request http -->
+
+```go
+curl -s 0:9308/metrics
+```
+<!-- response http -->
+
+```http
+# HELP manticore_uptime_seconds Time in seconds since start
+# TYPE manticore_uptime_seconds counter
+manticore_uptime_seconds 25
+# HELP manticore_connections_count Connections count since start
+# TYPE manticore_connections_count gauge
+manticore_connections_count 55
+# HELP manticore_maxed_out_error_count Count of maxed_out errors since start
+# TYPE manticore_maxed_out_error_count counter
+manticore_maxed_out_error_count 0
+# HELP manticore_version Manticore Search version
+# TYPE manticore_version gauge
+manticore_version {version="0.0.0 c88e811b2@25060409 (columnar 5.0.1 59c7092@25060304) (secondary 5.0.1 59c7092@25060304) (knn 5.0.1 59c7092@25060304) (embeddings 1.0.0) (buddy v3.28.6-7-g14ee10)"} 1
+# HELP manticore_mysql_version Manticore Search version
+# TYPE manticore_mysql_version gauge
+manticore_mysql_version {version="0.0.0 c88e811b2@25060409 (columnar 5.0.1 59c7092@25060304) (secondary 5.0.1 59c7092@25060304) (knn 5.0.1 59c7092@25060304) (embeddings 1.0.0)"} 1
+# HELP manticore_command_search_count Count of search queries since start
+# TYPE manticore_command_search_count counter
+manticore_command_search_count 1
+......
 ```
 
 <!-- end -->

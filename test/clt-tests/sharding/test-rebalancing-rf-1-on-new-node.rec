@@ -31,4 +31,4 @@ sleep 30
 ––– input –––
 mysql -h0 -P1306 -e "show create table test option force=1\G" | grep 'Create Table'
 ––– output –––
-Create Table: CREATE TABLE test type='distributed' local='system.test_s0' local='system.test_s2' local='system.test_s4' agent='127.0.0.1:2312:system.test_s3' agent='127.0.0.1:2312:system.test_s5' agent='127.0.0.1:3312:system.test_s1'
+Create Table: CREATE TABLE test type='distributed' local='system.test_s2' local='system.test_s4' agent='127.0.0.1:2312:system.test_s3' agent='127.0.0.1:2312:system.test_s5' agent='127.0.0.1:3312:system.test_s0' agent='127.0.0.1:3312:system.test_s1'

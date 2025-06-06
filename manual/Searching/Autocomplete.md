@@ -47,6 +47,7 @@ POST /autocomplete
 #### Options
 - `layouts`: A comma-separated string of keyboard layout codes to validate and check for spell correction. Available options: us, ru, ua, se, pt, no, it, gr, uk, fr, es, dk, de, ch, br, bg, be (more details [here](../Searching/Spell_correction.md#Options)). Default: all enabled
 - `fuzziness`: `0`, `1`, or `2` (default: `2`). Maximum Levenshtein distance for finding typos. Set to `0` to disable fuzzy matching
+- `preserve`: `0` or `1` (default: `0`). When set to `1`, preserves the original form of words even when not found during fuzzy matching. When set to `0`, words not found with fuzzy matching are ignored when building matching for fuzziness. Particularly useful for short words
 - `prepend`: Boolean (0/1 in SQL). If true(1), adds an asterisk before the last word for prefix expansion (e.g., `*word`)
 - `append`: Boolean (0/1 in SQL). If true(1), adds an asterisk after the last word for suffix expansion (e.g., `word*`)
 - `expansion_len`: Number of characters to expand in the last word. Default: `10`
@@ -128,6 +129,57 @@ POST /autocomplete
       },
       {
         "query": "help"
+      }
+    ]
+  }
+]
+```
+
+<!-- request SQL with preserve option -->
+
+```sql
+mysql> CALL AUTOCOMPLETE('hello wrld', 'comment', 1 as preserve);
++------------+
+| query      |
++------------+
+| hello wrld |
+| hello world|
++------------+
+```
+
+<!-- request JSON with preserve option -->
+
+```json
+POST /autocomplete
+{
+	"table":"comment",
+	"query":"hello wrld",
+	"options": {
+		"preserve": 1
+	}
+}
+```
+
+<!-- response JSON with preserve option -->
+```json
+[
+  {
+    "total": 2,
+    "error": "",
+    "warning": "",
+    "columns": [
+      {
+        "query": {
+          "type": "string"
+        }
+      }
+    ],
+    "data": [
+      {
+        "query": "hello wrld"
+      },
+      {
+        "query": "hello world"
       }
     ]
   }

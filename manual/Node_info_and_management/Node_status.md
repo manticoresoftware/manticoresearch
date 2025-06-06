@@ -1930,9 +1930,9 @@ apiClient.UtilsAPI.Sql(context.Background()).Body("SHOW AGENT \"192.168.0.202:67
 <!-- example prometheus exporter -->
 
 Manticore Search has a built-in Prometheus exporter.
-To request metrics, make sure the HTTP port is exposed and simply call the /metrics endpoint.
+To request metrics, make sure the HTTP port is exposed and simply call the `/metrics` endpoint.
 
-**Note:** The exporter requires **Buddy** to be enabled.
+> NOTE: The exporter requires [Manticore Buddy](Installation/Manticore_Buddy.md). If it doesn't work, make sure Buddy is installed.
 
 <!-- intro -->
 ##### HTTP:

@@ -838,6 +838,16 @@ filter_item:
 			if ( !pParser->AddUservarFilter ( $1, $4, true ) )
 				YYERROR;
 		}
+	| expr_ident TOK_IN TOK_USERVAR
+		{
+			if ( !pParser->AddUservarFilter ( $1, $3, false ) )
+				YYERROR;
+		}
+	| expr_ident TOK_NOT TOK_IN TOK_USERVAR
+		{
+			if ( !pParser->AddUservarFilter ( $1, $4, true ) )
+				YYERROR;
+		}
 	| expr_ident TOK_BETWEEN const_int TOK_AND const_int
 		{
 			if ( !pParser->AddIntRangeFilter ( $1, $3.GetValueInt(), $5.GetValueInt(), false ) )

@@ -43,6 +43,7 @@ SELECT
   ...
   OPTION fuzzy={0|1}
   [, distance=N]
+  [, preserve={0|1}]
   [, layouts='{be,bg,br,ch,de,dk,es,fr,uk,gr,it,no,pt,ru,se,ua,us}']
 }
 ```
@@ -102,6 +103,48 @@ POST /search
 2 rows in set (0.00 sec)
 ```
 
+<!-- request SQL with preserve option -->
+
+```sql
+SELECT * FROM mytable WHERE MATCH('hello wrld') OPTION fuzzy=1, preserve=1;
+```
+
+<!-- request JSON with preserve option -->
+
+```json
+POST /search
+{
+  "table": "test",
+  "query": {
+    "bool": {
+      "must": [
+        {
+          "match": {
+            "*": "hello wrld"
+          }
+        }
+      ]
+    }
+  },
+  "options": {
+    "fuzzy": true,
+    "preserve": 1
+  }
+}
+```
+
+<!-- response SQL with preserve option -->
+
+```sql
++------+-------------+
+| id   | content     |
++------+-------------+
+|    1 | hello wrld  |
+|    2 | hello world |
++------+-------------+
+2 rows in set (0.00 sec)
+```
+
 <!-- end -->
 
 ### JSON
@@ -117,6 +160,7 @@ POST /search
     "fuzzy": {true|false}
     [,"layouts": ["be","bg","br","ch","de","dk","es","fr","uk","gr","it","no","pt","ru","se","ua","us"]]
     [,"distance": N]
+    [,\"preserve\": {0|1}]
   }
 }
 ```
@@ -127,6 +171,7 @@ Note: If you use the [query_string](../Searching/Full_text_matching/Basic_usage.
 
 - `fuzzy`: Turn fuzzy search on or off.
 - `distance`: Set the Levenshtein distance for matching. The default is `2`.
+- `preserve`: `0` or `1` (default: `0`). When set to `1`, preserves the original form of words even when not found during fuzzy matching. When set to `0`, words not found with fuzzy matching are ignored when building matching for fuzziness. Particularly useful for short words.
 - `layouts`: Keyboard layouts to check for typing errors. All layouts are used by default. Use an empty string `''` (SQL) or array `[]` (JSON) to turn this off. Supported layouts include:
   - `be` - Belgian AZERTY layout
   - `bg` - Standard Bulgarian layout

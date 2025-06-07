@@ -302,6 +302,28 @@ Query OK, 0 rows affected (0.00 sec)
 
 <!-- end -->
 
+
+## Rebuilding a KNN index
+
+<!-- example ALTER REBUILD KNN -->
+```sql
+ALTER TABLE table REBUILD KNN
+```
+
+The command reprocesses all vector data in the table and rebuilds the KNN index from scratch.
+
+<!-- request Example -->
+```sql
+ALTER TABLE rt REBUILD KNN;
+```
+
+<!-- response Example -->
+```sql
+Query OK, 0 rows affected (0.00 sec)
+```
+
+<!-- end -->
+
 ## Changing a distributed table
 
 <!-- example local_dist -->

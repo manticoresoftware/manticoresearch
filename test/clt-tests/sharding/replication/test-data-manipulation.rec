@@ -51,11 +51,11 @@ mysql -h0 -P1306 -e "INSERT INTO testrt (id, title, content, gid) values (4, 'Ti
 ––– input –––
 mysql -h0 -P1306 -e "SELECT * FROM testrt WHERE id IN (1, 2, 3, 4) ORDER BY id ASC;"
 ––– output –––
-+------+-------+---------+------+
-| id   | title | content | gid  |
-+------+-------+---------+------+
-|    1 | 1     | Title 1 |    0 |
-|    2 | 2     | Title 2 |    0 |
-|    3 | 3     | Title 3 |    0 |
-|    4 | 4     | Title 4 |    0 |
-+------+-------+---------+------+
++------+---------+-----------+------+
+| id   | title   | content   | gid  |
++------+---------+-----------+------+
+|    1 | Title 1 | Content 1 |    1 |
+|    2 | Title 2 | Content 2 |    2 |
+|    3 | Title 3 | Content 3 |    3 |
+|    4 | Title 4 | Content 4 |    4 |
++------+---------+-----------+------+

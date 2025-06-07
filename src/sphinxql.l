@@ -244,7 +244,6 @@ FLOAT_CONSTANT      {INT}\.{INT}?{EXP}?|{INT}?\.{INT}{EXP}|{INT}{EXP}
 "@id"				{ YYSTOREBOUNDS; return TOK_ATIDENT; }
 "@weight"			{ YYSTOREBOUNDS; return TOK_ATIDENT; }
 "@count"			{ YYSTOREBOUNDS; return TOK_ATIDENT; }
-@{ID}				{ YYSTOREBOUNDS; return TOK_USERVAR; }
 {ID}				{ YYSTOREBOUNDS; return TOK_IDENT; }
 {ALNUM}+    		{ YYSTOREBOUNDS; return TOK_BAD_NUMERIC; }
 @@{ID_SYS}			{ YYSTOREBOUNDS; return TOK_SYSVAR; }

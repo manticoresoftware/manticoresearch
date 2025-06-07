@@ -24,7 +24,6 @@
 %token	TOK_CONST_MVA 262	// not a real token, only placeholder
 %token	TOK_QUOTED_STRING 263 "string"
 %token	TOK_NULL 473 "null"
-%token	TOK_USERVAR "@uservar"
 %token	TOK_SYSVAR "@@sysvar"
 %token	TOK_CONST_STRINGS 269	// not a real token, only placeholder
 %token	TOK_BAD_NUMERIC
@@ -838,16 +837,6 @@ filter_item:
 			if ( !pParser->AddUservarFilter ( $1, $4, true ) )
 				YYERROR;
 		}
-	| expr_ident TOK_IN TOK_USERVAR
-		{
-			if ( !pParser->AddUservarFilter ( $1, $3, false ) )
-				YYERROR;
-		}
-	| expr_ident TOK_NOT TOK_IN TOK_USERVAR
-		{
-			if ( !pParser->AddUservarFilter ( $1, $4, true ) )
-				YYERROR;
-		}
 	| expr_ident TOK_BETWEEN const_int TOK_AND const_int
 		{
 			if ( !pParser->AddIntRangeFilter ( $1, $3.GetValueInt(), $5.GetValueInt(), false ) )
@@ -1621,23 +1610,6 @@ set_stmt:
 		{
 			pParser->SetLocalStatement ( $2 );
 		}
-	| TOK_SET TOK_USERVAR '=' const_int
-		{
-			pParser->m_pStmt->m_eStmt = STMT_SET;
-			pParser->m_pStmt->m_eSet = SET_GLOBAL_UVAR;
-			pParser->ToString ( pParser->m_pStmt->m_sSetName, $2 );
-			pParser->m_pStmt->m_dSetValues.Add ( $4.GetValueInt() );
-		}
-	| TOK_SET TOK_USERVAR '=' TOK_QUOTED_STRING
-		{
-			pParser->m_pStmt->m_eStmt = STMT_SET;
-			pParser->m_pStmt->m_eSet = SET_GLOBAL_UVAR;
-			pParser->ToString ( pParser->m_pStmt->m_sSetName, $2 );
-			pParser->ToString ( pParser->m_pStmt->m_sSetValue, $4 );
-			// For string values, we might need different handling
-			// For now, treat as 0 to make it work
-			pParser->m_pStmt->m_dSetValues.Add ( 0 );
-		}
 	| TOK_SET TOK_NAMES ident_or_string_or_num_or_nulls opt_collate { pParser->m_pStmt->m_eStmt = STMT_DUMMY; }
 	| TOK_SET sysvar '=' ident_or_string_or_num_or_nulls	{ pParser->m_pStmt->m_eStmt = STMT_DUMMY; }
 	| TOK_SET TOK_CHARACTER TOK_SET ident_or_string_or_num_or_nulls { pParser->m_pStmt->m_eStmt = STMT_DUMMY; }
@@ -2071,13 +2043,13 @@ execute_stmt:
 	;
 
 uservar_list:
-	TOK_USERVAR
+	ident
 		{
 			SqlInsert_t & tVar = pParser->m_pStmt->m_dInsertValues.Add();
 			pParser->ToString( tVar.m_sVal, $1 );
 			tVar.m_iType = SqlInsert_t::QUOTED_STRING;
 		}
-	| uservar_list ',' TOK_USERVAR
+	| uservar_list ',' ident
 		{
 			SqlInsert_t & tVar = pParser->m_pStmt->m_dInsertValues.Add();
 			pParser->ToString( tVar.m_sVal, $3 );

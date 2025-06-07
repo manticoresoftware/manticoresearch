@@ -1131,7 +1131,6 @@ bool ParseBinaryParameters ( InputBuffer_c& tIn, const BinaryPreparedStmt_t& tSt
 		for ( int i = 0; i < tStmt.m_iParamCount; i++ )
 		{
 			BYTE uType = tIn.GetByte();
-			BYTE uFlags = tIn.GetByte(); // Read flags but don't use them for now
 			dParamTypes[i] = uType;
 		}
 	}
@@ -1243,8 +1242,6 @@ void HandleComStmtExecute ( ISphOutputBuffer& tOut, BYTE& uPacketID, InputBuffer
 	}
 
 	DWORD uStmtID = tIn.GetLSBDword();
-	BYTE uFlags = tIn.GetByte();
-	DWORD uIterationCount = tIn.GetLSBDword();
 
 	CSphScopedLock<CSphMutex> tLock ( g_tBinaryPreparedStmtsMutex );
 

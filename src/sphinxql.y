@@ -647,6 +647,7 @@ distinct_ident:
 select_expr:
 	expr								{ pParser->AddItem ( &$1 ); }
 	| sysvar							{ pParser->AddItem ( &$1 ); }
+	| sysvar_ext						{ pParser->AddItem ( &$1 ); }
 	| TOK_AVG '(' expr ')'				{ pParser->AddItem ( &$3, SPH_AGGR_AVG, &$1, &$4 ); }
 	| TOK_MAX '(' expr ')'				{ pParser->AddItem ( &$3, SPH_AGGR_MAX, &$1, &$4 ); }
 	| TOK_MIN '(' expr ')'				{ pParser->AddItem ( &$3, SPH_AGGR_MIN, &$1, &$4 ); }
@@ -1396,6 +1397,8 @@ time_unit:
 expr:
 	identcol
 	| TOK_ATIDENT				{ if ( !pParser->SetOldSyntax() ) YYERROR; }
+	| sysvar
+	| sysvar_ext
 	| TOK_CONST_INT
 	| TOK_CONST_FLOAT
 	| TOK_DOT_NUMBER
@@ -1609,6 +1612,51 @@ set_stmt:
 	| TOK_SET ident_for_set_stmt '=' TOK_NULL
 		{
 			pParser->SetLocalStatement ( $2 );
+		}
+	| TOK_SET ident '=' const_int
+		{
+			CSphString sIdent;
+			pParser->ToString( sIdent, $2 );
+			if ( sIdent.cstr()[0] == '@' )
+			{
+				pParser->m_pStmt->m_eStmt = STMT_SET;
+				pParser->m_pStmt->m_eSet = SET_SESSION_UVAR;
+				pParser->ToString ( pParser->m_pStmt->m_sSetName, $2 );
+				pParser->m_pStmt->m_dSetValues.Add ( $4.GetValueInt() );
+			} else {
+				pParser->SetLocalStatement ( $2 );
+				pParser->m_pStmt->m_iSetValue = $4.GetValueInt();
+			}
+		}
+	| TOK_SET ident '=' TOK_QUOTED_STRING
+		{
+			CSphString sIdent;
+			pParser->ToString( sIdent, $2 );
+			if ( sIdent.cstr()[0] == '@' )
+			{
+				pParser->m_pStmt->m_eStmt = STMT_SET;
+				pParser->m_pStmt->m_eSet = SET_SESSION_UVAR;
+				pParser->ToString ( pParser->m_pStmt->m_sSetName, $2 );
+				pParser->m_pStmt->m_sSetValue = pParser->ToStringUnescape ( $4 );
+			} else {
+				pParser->SetLocalStatement ( $2 );
+				pParser->ToString ( pParser->m_pStmt->m_sSetValue, $4 );
+			}
+		}
+	| TOK_SET ident '=' const_float
+		{
+			CSphString sIdent;
+			pParser->ToString( sIdent, $2 );
+			if ( sIdent.cstr()[0] == '@' )
+			{
+				pParser->m_pStmt->m_eStmt = STMT_SET;
+				pParser->m_pStmt->m_eSet = SET_SESSION_UVAR;
+				pParser->ToString ( pParser->m_pStmt->m_sSetName, $2 );
+				pParser->m_pStmt->m_sSetValue.SetSprintf ( "%g", $4.m_fValue );
+			} else {
+				pParser->SetLocalStatement ( $2 );
+				pParser->m_pStmt->m_sSetValue.SetSprintf ( "%g", $4.m_fValue );
+			}
 		}
 	| TOK_SET TOK_NAMES ident_or_string_or_num_or_nulls opt_collate { pParser->m_pStmt->m_eStmt = STMT_DUMMY; }
 	| TOK_SET sysvar '=' ident_or_string_or_num_or_nulls	{ pParser->m_pStmt->m_eStmt = STMT_DUMMY; }

@@ -8633,6 +8633,7 @@ void HandleMysqlSet ( RowBuffer_i & tOut, SqlStmt_t & tStmt, CSphSessionAccum & 
 		break;
 	}
 
+
 	case SET_GLOBAL_SVAR: // SET GLOBAL foo = iValue|'string'
 
 		if ( !HandleSetGlobal ( sError, tStmt.m_sSetName, tStmt.m_iSetValue, tStmt.m_sSetValue ) )

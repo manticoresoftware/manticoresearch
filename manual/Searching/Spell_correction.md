@@ -1,4 +1,4 @@
-t s# Spell correction
+# Spell correction
 
 Spell correction, also known as:
 

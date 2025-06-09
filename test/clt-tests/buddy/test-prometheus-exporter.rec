@@ -1,0 +1,39 @@
+--- comment ---
+# Prometheus Exporter Metrics Validation for Buddy
+
+This test verifies that the Prometheus exporter for Buddy correctly exposes metrics.
+Specifically, it ensures that accessing the /metrics endpoint (on port 0:9308) returns all mandatory metrics derived from the SHOW STATUS command.
+While the exporter may include additional custom metrics, all metrics based on SHOW STATUS fields must be present and accurate.
+
+––– input –––
+export SEARCHD_FLAGS="--iostats --cpustats"
+––– output –––
+––– block: ../base/start-searchd-with-buddy –––
+––– input –––
+curl -s 0:9308/metrics > /tmp/exporter_unfiltered_output.txt
+––– output –––
+––– input –––
+cat /tmp/exporter_unfiltered_output.txt | grep -e "^manticore" | cut -d" " -f1 | sed 's/^manticore_//' | sed 's/qcache_thresh_microseconds/qcache_thresh_msec/' | sort > /tmp/exporter_output.txt
+––– output –––
+––– input –––
+searchd --iostats --cpustats --status | cut -d":" -f1 | tail -n +10 | sort > /tmp/searchd_output.txt
+––– output –––
+––– input –––
+ls -1 /tmp
+––– output –––
+exporter_output.txt
+exporter_unfiltered_output.txt
+searchd_output.txt
+––– input –––
+cat /tmp/exporter_unfiltered_output.txt | grep "Warning"
+––– output –––
+––– input –––
+while read -r line; do   grep -q "^$line" /tmp/exporter_output.txt || echo "$line"; done < /tmp/searchd_output.txt
+––– output –––
+––– input –––
+echo "new-option" >> /tmp/searchd_output.txt
+––– output –––
+––– input –––
+while read -r line; do   grep -q "^$line" /tmp/exporter_output.txt || echo "$line"; done < /tmp/searchd_output.txt
+––– output –––
+new-option

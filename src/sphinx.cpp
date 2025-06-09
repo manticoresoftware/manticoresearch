@@ -1377,6 +1377,7 @@ private:
 	const DWORD *				GetRawAttrs() const override { return m_tAttr.GetReadPtr(); }
 	const BYTE *				GetRawBlobAttrs() const override { return m_tBlobAttrs.GetReadPtr(); }
 	bool						AlterSI ( CSphString & sError ) override;
+	bool						AlterKNN ( CSphString & sError ) override;
 };
 
 
@@ -7146,7 +7147,6 @@ bool CSphIndex_VLN::AddRemoveFromKNN ( const CSphSchema & tOldSchema, const CSph
 	if ( iOldNumKNN==iNewNumKNN )
 		return true;
 
-	std::unique_ptr<DocstoreBuilder_i> pDocstoreBuilder;
 	if ( iNewNumKNN )
 	{
 		CSphVector<std::pair<PlainOrColumnar_t,int>> dAllAttrsForKNN;
@@ -7171,8 +7171,6 @@ bool CSphIndex_VLN::AddRemoveFromKNN ( const CSphSchema & tOldSchema, const CSph
 				iMaxDims = Max ( iMaxDims, tAttr.m_tKNN.m_iDims );
 			}
 		}
-
-		CSphVector<std::pair<PlainOrColumnar_t,int>> dAttrsForKNN;
 
 		const CSphRowitem * pRow = GetRawAttrs();
 		int iStride = m_tSchema.GetRowSize();
@@ -9462,13 +9460,34 @@ bool CSphIndex_VLN::PreallocKNN()
 		return false;
 
 	std::string sErrorSTL;
-	if ( !m_pKNN->Load ( GetFilename ( SPH_EXT_SPKNN ).cstr(), sErrorSTL ) )
+	if ( m_pKNN->Load ( GetFilename ( SPH_EXT_SPKNN ).cstr(), sErrorSTL ) )
+		return true;
+
+	m_pKNN.reset();
+
+	// need to rebuild knn from the source data if it just version mismatch
+	bool bVrongVer = ( sErrorSTL.rfind ( "Unable to load KNN index:", 0 )==0 );
+	if ( bVrongVer )
+	{
+		sphWarning ( "Rebuilding knn due to error: %s", sErrorSTL.c_str() );
+		CSphString sRebuildError;
+		if ( !AlterKNN ( sRebuildError ) )
+		{
+			m_pKNN.reset();
+			sErrorSTL.append ( "; rebuild knn error: " );
+			sErrorSTL.append ( sRebuildError.cstr() );
+		}
+		sphInfo ( "rebuilded knn" );
+	}
+
+	if ( !m_pKNN )
 	{
 		m_sLastError = sErrorSTL.c_str();
 		return false;
+	} else
+	{
+		return true;
 	}
-
-	return !!m_pKNN;
 }
 
 
@@ -11894,6 +11913,68 @@ bool CSphIndex_VLN::AlterSI ( CSphString & sError )
 			::unlink ( sFileOld.cstr() );
 	}
 
+	return true;
+}
+
+
+bool CSphIndex_VLN::AlterKNN ( CSphString & sError )
+{
+	if ( m_uVersion<65 || !m_tSchema.HasKNNAttrs() )
+		return true;
+
+	if ( !IsKNNLibLoaded() )
+	{
+		sError.SetSprintf ( "failed to load table with knn attributes without knn library" );
+		return false;
+	}
+
+	bool bHasKnnFile = sphFileExists ( GetFilename ( SPH_EXT_SPKNN ).cstr() );
+
+	CSphVector< std::pair < PlainOrColumnar_t, int > > dAllAttrsForKNN;
+	std::unique_ptr<knn::Builder_i> pKNNBuilder = BuildCreateKNN ( m_tSchema, m_iDocinfo, dAllAttrsForKNN, sError );
+	if ( !pKNNBuilder )
+		return false;
+
+	auto dColumnarIterators = CreateAllColumnarIterators ( m_pColumnar.get(), m_tSchema );
+	CSphFixedVector<PlainOrColumnar_t> dAttrs ( dAllAttrsForKNN.GetLength() );
+	ARRAY_FOREACH ( i, dAllAttrsForKNN )
+		dAttrs[i] = dAllAttrsForKNN[i].first;
+
+	int iStride = m_tSchema.GetRowSize();
+	RowID_t tRows = RowID_t ( m_iDocinfo );
+
+	const CSphRowitem * pCur = GetRawAttrs();
+	for ( RowID_t tRowID=0; tRowID<tRows; ++tRowID )
+	{
+		BuildTrainKNN ( tRowID, pCur, GetRawBlobAttrs(), dColumnarIterators, dAttrs, *pKNNBuilder );
+		pCur += iStride;
+	}
+
+	pCur = GetRawAttrs();
+	for ( RowID_t tRowID=0; tRowID<tRows; ++tRowID )
+	{
+		BuildStoreKNN ( tRowID, pCur, GetRawBlobAttrs(), dColumnarIterators, dAttrs, *pKNNBuilder );
+		pCur += iStride;
+	}
+
+	BuildBufferSettings_t tSettings; // Use default buffer settings
+	std::string sStdErr;
+	if ( !pKNNBuilder->Save ( GetTmpFilename ( SPH_EXT_SPKNN ).cstr(), tSettings.m_iBufferStorage, sStdErr ) )
+	{
+		sError = sStdErr.c_str();
+		return false;
+	}
+
+	if ( !JuggleFile ( SPH_EXT_SPKNN, sError, bHasKnnFile, true ) )
+		return false;
+
+	m_pKNN.reset();
+
+	if ( !PreallocKNN() )
+	{
+		sError = m_sLastError;
+		return false;
+	}
 	return true;
 }
 

@@ -183,7 +183,7 @@ jobs:
         uses: actions/checkout@v3
       - name: Run dependency check script
         run: |
-          bash dist/check_deps_in_repos.sh
+          bash dist/check_deps_in_repos.sh --target ${{ needs.pack.outputs.target }}
 
   pack_debian_ubuntu:
     name: Debian/Ubuntu packages
@@ -453,7 +453,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        image: [ "centos:7", "almalinux:8", "almalinux:9", "oraclelinux:9", "amazonlinux:latest" ]
+        image: [ "almalinux:8", "almalinux:9", "oraclelinux:9", "amazonlinux:latest" ]
     runs-on: ubuntu-22.04
     steps:
       - uses: manticoresoftware/clt@0.6.9

@@ -70,5 +70,6 @@ private:
 	int InitMorph ( const char* szMorph, int iLength, CSphString& sError );
 	int AddMorph ( int iMorph ); ///< helper that always returns ST_OK
 	bool StemById ( BYTE* pWord, int iStemmer ) const;
-	void AddWordform ( CSphWordforms* pContainer, char* sBuffer, int iLen, const TokenizerRefPtr_c& pTokenizer, const char* szFile, const CSphVector<int>& dBlended, int iFileId );
+	void AddWordform ( CSphWordforms* pContainer, char* sBuffer, int iLen, const TokenizerRefPtr_c& pTokenizer, const char* szFile, const CSphVector<int>& dBlended, int iFileId, StrVec_t & dDst2Norm );
+	static void AddDst2Norm ( CSphWordforms* pContainer, StrVec_t & dDst2Norm );
 };

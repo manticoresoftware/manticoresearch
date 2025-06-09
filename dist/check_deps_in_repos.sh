@@ -1,6 +1,24 @@
 #!/bin/bash
 set -e
 
+# Parse command line arguments
+REPO_TYPE="dev"  # Default value
+while [[ $# -gt 0 ]]; do
+  case $1 in
+    --target)
+      if [[ "$2" == "release" ]]; then
+        REPO_TYPE="release_candidate"
+      fi
+      shift 2
+      ;;
+    *)
+      echo "Unknown option: $1"
+      echo "Usage: $0 [--target release]"
+      exit 1
+      ;;
+  esac
+done
+
 SCRIPT_DIR="$(dirname "$0")"
 REPO_ROOT="$(realpath "$SCRIPT_DIR/..")"
 TEMP_DIR=$(mktemp -d)
@@ -9,29 +27,28 @@ echo "Current directory: $(pwd)"
 echo "Script location: $SCRIPT_DIR"
 echo "Expected repository root: $REPO_ROOT"
 echo "Temporary directory: $TEMP_DIR"
+echo "Using repository type: $REPO_TYPE"
 
 # List of HTML pages to download
 declare -a urls=(
-  "bionic-amd.html https://repo.manticoresearch.com/repository/manticoresearch_bionic_dev/dists/bionic/main/binary-amd64/"
-  "bionic-arm.html https://repo.manticoresearch.com/repository/manticoresearch_bionic_dev/dists/bionic/main/binary-arm64/"
-  "bookworm-amd.html https://repo.manticoresearch.com/repository/manticoresearch_bookworm_dev/dists/bookworm/main/binary-amd64/"
-  "bookworm-arm.html https://repo.manticoresearch.com/repository/manticoresearch_bookworm_dev/dists/bookworm/main/binary-arm64/"
-  "bullseye-amd.html https://repo.manticoresearch.com/repository/manticoresearch_bullseye_dev/dists/bullseye/main/binary-amd64/"
-  "bullseye-arm.html https://repo.manticoresearch.com/repository/manticoresearch_bullseye_dev/dists/bullseye/main/binary-arm64/"
-  "buster-amd.html https://repo.manticoresearch.com/repository/manticoresearch_buster_dev/dists/buster/main/binary-amd64/"
-  "buster-arm.html https://repo.manticoresearch.com/repository/manticoresearch_buster_dev/dists/buster/main/binary-arm64/"
-  "focal-amd.html https://repo.manticoresearch.com/repository/manticoresearch_focal_dev/dists/focal/main/binary-amd64/"
-  "focal-arm.html https://repo.manticoresearch.com/repository/manticoresearch_focal_dev/dists/focal/main/binary-arm64/"
-  "jammy-amd.html https://repo.manticoresearch.com/repository/manticoresearch_jammy_dev/dists/jammy/main/binary-amd64/"
-  "jammy-arm.html https://repo.manticoresearch.com/repository/manticoresearch_jammy_dev/dists/jammy/main/binary-arm64/"
-  "centos-7-x86_64.html https://repo.manticoresearch.com/repository/manticoresearch/dev/centos/7/x86_64/"
-  "centos-7-aarch64.html https://repo.manticoresearch.com/repository/manticoresearch/dev/centos/7/aarch64/"
-  "centos-8-x86_64.html https://repo.manticoresearch.com/repository/manticoresearch/dev/centos/8/x86_64/"
-  "centos-8-aarch64.html https://repo.manticoresearch.com/repository/manticoresearch/dev/centos/8/aarch64/"
-  "centos-9-x86_64.html https://repo.manticoresearch.com/repository/manticoresearch/dev/centos/9/x86_64/"
-  "centos-9-aarch64.html https://repo.manticoresearch.com/repository/manticoresearch/dev/centos/9/aarch64/"
-  "macos.html https://repo.manticoresearch.com/repository/manticoresearch_macos/dev/"
-  "windows-x64.html https://repo.manticoresearch.com/repository/manticoresearch_windows/dev/x64/"
+  "bionic-amd.html https://repo.manticoresearch.com/repository/manticoresearch_bionic_${REPO_TYPE}/dists/bionic/main/binary-amd64/"
+  "bionic-arm.html https://repo.manticoresearch.com/repository/manticoresearch_bionic_${REPO_TYPE}/dists/bionic/main/binary-arm64/"
+  "bookworm-amd.html https://repo.manticoresearch.com/repository/manticoresearch_bookworm_${REPO_TYPE}/dists/bookworm/main/binary-amd64/"
+  "bookworm-arm.html https://repo.manticoresearch.com/repository/manticoresearch_bookworm_${REPO_TYPE}/dists/bookworm/main/binary-arm64/"
+  "bullseye-amd.html https://repo.manticoresearch.com/repository/manticoresearch_bullseye_${REPO_TYPE}/dists/bullseye/main/binary-amd64/"
+  "bullseye-arm.html https://repo.manticoresearch.com/repository/manticoresearch_bullseye_${REPO_TYPE}/dists/bullseye/main/binary-arm64/"
+  "buster-amd.html https://repo.manticoresearch.com/repository/manticoresearch_buster_${REPO_TYPE}/dists/buster/main/binary-amd64/"
+  "buster-arm.html https://repo.manticoresearch.com/repository/manticoresearch_buster_${REPO_TYPE}/dists/buster/main/binary-arm64/"
+  "focal-amd.html https://repo.manticoresearch.com/repository/manticoresearch_focal_${REPO_TYPE}/dists/focal/main/binary-amd64/"
+  "focal-arm.html https://repo.manticoresearch.com/repository/manticoresearch_focal_${REPO_TYPE}/dists/focal/main/binary-arm64/"
+  "jammy-amd.html https://repo.manticoresearch.com/repository/manticoresearch_jammy_${REPO_TYPE}/dists/jammy/main/binary-amd64/"
+  "jammy-arm.html https://repo.manticoresearch.com/repository/manticoresearch_jammy_${REPO_TYPE}/dists/jammy/main/binary-arm64/"
+  "centos-8-x86_64.html https://repo.manticoresearch.com/repository/manticoresearch/${REPO_TYPE}/centos/8/x86_64/"
+  "centos-8-aarch64.html https://repo.manticoresearch.com/repository/manticoresearch/${REPO_TYPE}/centos/8/aarch64/"
+  "centos-9-x86_64.html https://repo.manticoresearch.com/repository/manticoresearch/${REPO_TYPE}/centos/9/x86_64/"
+  "centos-9-aarch64.html https://repo.manticoresearch.com/repository/manticoresearch/${REPO_TYPE}/centos/9/aarch64/"
+  "macos.html https://repo.manticoresearch.com/repository/manticoresearch_macos/${REPO_TYPE}/"
+  "windows-x64.html https://repo.manticoresearch.com/repository/manticoresearch_windows/${REPO_TYPE}/x64/"
 )
 
 # List of exceptions: allowed missing packages in specific repositories

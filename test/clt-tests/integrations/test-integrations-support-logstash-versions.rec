@@ -136,7 +136,9 @@ VERSION="$1"
 LOG_DIR="/var/log"
 LOGSTASH_LOG="$LOG_DIR/logstash.log"
 TEMP_DATA_DIR="/tmp/logstash_test_${VERSION}"
-TEST_LOG="/var/log/dpkg{$VERSION}.log"
+# Remove dots from versions to make correct filenames
+LOG_NAME=$(echo $VERSION | sed -E 's/(.+)[\.](.+)/\1\2/g')
+TEST_LOG="/var/log/dpkg{$LOG_NAME}.log"
 # Cleanup before start
 killall -9 java logstash ruby 2>/dev/null || true
 sleep 2

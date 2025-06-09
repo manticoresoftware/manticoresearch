@@ -45,9 +45,9 @@ POST /autocomplete
 ```
 
 #### Options
-- `layouts`: A comma-separated string of keyboard layout codes to validate and check for spell correction. Available options: us, ru, ua, se, pt, no, it, gr, uk, fr, es, dk, de, ch, br, bg, be (more details [here](../Searching/Spell_correction.md#Options)). At least two layouts must be specified due to the combination logic. Default: all enabled
+- `layouts`: A comma-separated string of keyboard layout codes for detecting typing errors caused by keyboard layout mismatches (e.g., typing "ghbdtn" instead of "привет" when using wrong layout). Manticore compares character positions across different layouts to suggest corrections. Requires at least 2 layouts to effectively detect mismatches. Available options: us, ru, ua, se, pt, no, it, gr, uk, fr, es, dk, de, ch, br, bg, be (more details [here](../Searching/Spell_correction.md#Options)). Default: all enabled
 - `fuzziness`: `0`, `1`, or `2` (default: `2`). Maximum Levenshtein distance for finding typos. Set to `0` to disable fuzzy matching
-- `preserve`: `0` or `1` (default: `0`). When set to `1`, preserves the original form of words even when not found during fuzzy matching. When set to `0`, words not found with fuzzy matching are ignored when building matching for fuzziness. Particularly useful for short words
+- `preserve`: `0` or `1` (default: `0`). When set to `1`, keeps words that don't have fuzzy matches in the search results (e.g., "hello wrld" returns both "hello wrld" and "hello world"). When set to `0`, only returns words with successful fuzzy matches (e.g., "hello wrld" returns only "hello world"). Particularly useful for preserving short words or proper nouns that may not exist in Manticore Search
 - `prepend`: Boolean (0/1 in SQL). If true(1), adds an asterisk before the last word for prefix expansion (e.g., `*word`)
 - `append`: Boolean (0/1 in SQL). If true(1), adds an asterisk after the last word for suffix expansion (e.g., `word*`)
 - `expansion_len`: Number of characters to expand in the last word. Default: `10`

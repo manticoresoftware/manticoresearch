@@ -646,7 +646,7 @@ insert into join2 values (1, 'name1');
 insert into join2 values (2, 'name2');
 insert into join2 values (3, 'name1 name2');
 
-select groupby() from join1 left join join2 on join1.string_id = join2.id where match('name1 | name2',join2) group by mva order by join2.id asc;
+select id, join2.id, groupby() from join1 left join join2 on join1.string_id = join2.id where match('name1 | name2',join2) group by mva order by id asc, groupby() asc;
 
 drop table join1;
 drop table join2;

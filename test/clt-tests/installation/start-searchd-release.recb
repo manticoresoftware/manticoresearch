@@ -4,7 +4,7 @@ mkdir -p /var/run/manticore
 ––– input –––
 stdbuf -oL searchd
 ––– output –––
-Manticore %{VERSION} (columnar %{VERSION}) (secondary %{VERSION}) (knn %{VERSION})
+Manticore %{VERSION} (columnar %{VERSION}) (secondary %{VERSION}) (knn %{VERSION}) (embeddings #!/([0-9]+\.[0-9]+\.[0-9]+)/!#)
 Copyright (c) 2001-2016, Andrew Aksyonoff
 Copyright (c) 2008-2016, Sphinx Technologies Inc (http://sphinxsearch.com)
 Copyright (c) 2017-%{YEAR}, Manticore Software LTD (https://manticoresearch.com)
@@ -16,13 +16,13 @@ listening on %{IPADDR}:9308 for sphinx and http(s)
 ––– input –––
 rm /var/log/manticore/searchd.log; stdbuf -oL searchd --stopwait; stdbuf -oL searchd; if timeout 10 grep -qm1 '\[BUDDY\] started' <(tail -n 1000 -f /var/log/manticore/searchd.log); then echo 'Buddy started!'; else echo 'Timeout or failed!'; fi
 ––– output –––
-Manticore %{VERSION} (columnar %{VERSION}) (secondary %{VERSION}) (knn %{VERSION})
+Manticore %{VERSION} (columnar %{VERSION}) (secondary %{VERSION}) (knn %{VERSION}) (embeddings #!/([0-9]+\.[0-9]+\.[0-9]+)/!#)
 Copyright (c) 2001-2016, Andrew Aksyonoff
 Copyright (c) 2008-2016, Sphinx Technologies Inc (http://sphinxsearch.com)
 Copyright (c) 2017-%{YEAR}, Manticore Software LTD (https://manticoresearch.com)
 [#!/[0-9a-zA-Z\:\.\s]+/!#] [#!/[0-9]+/!#] using config file '/etc/manticoresearch/manticore.conf' (%{NUMBER} chars)...
 [#!/[0-9a-zA-Z\:\.\s]+/!#] [#!/[0-9]+/!#] stop: successfully sent SIGTERM to pid %{NUMBER}
-Manticore %{VERSION} (columnar %{VERSION}) (secondary %{VERSION}) (knn %{VERSION})
+Manticore %{VERSION} (columnar %{VERSION}) (secondary %{VERSION}) (knn %{VERSION}) (embeddings #!/([0-9]+\.[0-9]+\.[0-9]+)/!#)
 Copyright (c) 2001-2016, Andrew Aksyonoff
 Copyright (c) 2008-2016, Sphinx Technologies Inc (http://sphinxsearch.com)
 Copyright (c) 2017-%{YEAR}, Manticore Software LTD (https://manticoresearch.com)

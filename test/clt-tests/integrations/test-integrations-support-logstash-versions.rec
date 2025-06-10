@@ -247,9 +247,6 @@ filter {
     }
     remove_field => ["event", "log"]
   }
-  ruby {
-    code => "event.set('id', (Time.now.to_f * 1000000 - 600000).to_i)"
-  }
 }
 output {
   elasticsearch {

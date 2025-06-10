@@ -549,17 +549,7 @@ mysql -h0 -P9306 -e "CALL AUTOCOMPLETE('jo', 'name', 1 AS append, 1 AS prepend);
 ––– input –––
 mysql -h0 -P9306 -e "CALL AUTOCOMPLETE('jo', 'name', 'us' AS layouts);" | tail -n +4 | sort
 ––– output –––
-+--------+
-| joe    |
-| joey   |
-| john   |
-| jon    |
-| jordan |
-| jose   |
-| joseph |
-| joy    |
-| joyce  |
-| major  |
+ERROR 1064 (42000) at line 1: At least two languages are required in layouts
 ––– input –––
 mysql -h0 -P9306 -e "CALL AUTOCOMPLETE('jo', 'name', 'ru' AS layouts);" | tail -n +4 | sort
 ––– output –––
@@ -660,6 +650,7 @@ mysql -h0 -P9306 -e "CALL AUTOCOMPLETE('зф', 'name', 'us,ru' AS layouts);" | t
 ––– input –––
 mysql -h0 -P9306 -e "CALL AUTOCOMPLETE('зф', 'name', 'us' AS layouts);" | tail -n +4 | sort
 ––– output –––
+ERROR 1064 (42000) at line 1: At least two languages are required in layouts
 ––– input –––
 mysql -h0 -P9306 -e "CALL AUTOCOMPLETE('gr', 'name', 1 AS fuzziness, 'ru' AS layouts, 1 AS append, 1 AS prepend);" | tail -n +4 | sort
 ––– output –––

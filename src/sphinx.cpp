@@ -9469,6 +9469,7 @@ bool CSphIndex_VLN::PreallocKNN()
 	bool bVrongVer = ( sErrorSTL.rfind ( "Unable to load KNN index:", 0 )==0 );
 	if ( bVrongVer )
 	{
+		sphWarning ( "Rebuilding knn due to error: %s", sErrorSTL.c_str() );
 		CSphString sRebuildError;
 		if ( !AlterKNN ( sRebuildError ) )
 		{
@@ -9476,6 +9477,7 @@ bool CSphIndex_VLN::PreallocKNN()
 			sErrorSTL.append ( "; rebuild knn error: " );
 			sErrorSTL.append ( sRebuildError.cstr() );
 		}
+		sphInfo ( "rebuilded knn" );
 	}
 
 	if ( !m_pKNN )

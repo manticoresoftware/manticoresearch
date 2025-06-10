@@ -313,7 +313,6 @@ jobs:
     if: always() && needs.changes.outputs.source == 'true'
     needs:
       - changes
-      - clt
     name: Push Test Kit docker image to repo
     runs-on: ubuntu-22.04
     env:

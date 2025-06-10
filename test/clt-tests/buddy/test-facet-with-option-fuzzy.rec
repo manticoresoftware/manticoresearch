@@ -18,6 +18,12 @@ FACET column1;"
 |     123 |    3333 | text here |
 |     456 |   22222 | text here |
 +---------+---------+-----------+
++---------+----------+
+| column1 | count(*) |
++---------+----------+
+|     123 |        1 |
+|     456 |        1 |
++---------+----------+
 ––– comment –––
 2. Fuzzy + daemon option: OPTION fuzzy=1, cutoff=1 + FACET
 ––– input –––
@@ -33,6 +39,11 @@ FACET column2;"
 +---------+---------+-----------+
 |     123 |    3333 | text here |
 +---------+---------+-----------+
++---------+----------+
+| column2 | count(*) |
++---------+----------+
+|    3333 |        1 |
++---------+----------+
 ––– comment –––
 3. Fuzzy + multiple Buddy options: OPTION fuzzy=1, layouts='' + FACET
 ––– input –––
@@ -49,6 +60,12 @@ FACET column1;"
 |     123 |    3333 | text here |
 |     456 |   22222 | text here |
 +---------+---------+-----------+
++---------+----------+
+| column1 | count(*) |
++---------+----------+
+|     123 |        1 |
+|     456 |        1 |
++---------+----------+
 ––– comment –––
 4. Fuzzy + complex FACET expression
 ––– input –––
@@ -65,6 +82,11 @@ FACET (IF(NOT INTEGER(column1), column1 > column2, column2 > 4) AND column2 <= 2
 |     123 |    3333 | text here |
 |     456 |   22222 | text here |
 +---------+---------+-----------+
++-------------+----------+
+| crazy_field | count(*) |
++-------------+----------+
+|           0 |        2 |
++-------------+----------+
 ––– comment –––
 5. Fuzzy + Buddy + daemon: OPTION fuzzy=1, cutoff=1, layouts=''
 ––– input –––
@@ -80,6 +102,11 @@ FACET column1;"
 +---------+---------+-----------+
 |     123 |    3333 | text here |
 +---------+---------+-----------+
++---------+----------+
+| column1 | count(*) |
++---------+----------+
+|     123 |        1 |
++---------+----------+
 ––– comment –––
 6. Fuzzy + layouts='' + reversed order of options
 ––– input –––
@@ -96,6 +123,12 @@ FACET column1;"
 |     123 |    3333 | text here |
 |     456 |   22222 | text here |
 +---------+---------+-----------+
++---------+----------+
+| column1 | count(*) |
++---------+----------+
+|     123 |        1 |
+|     456 |        1 |
++---------+----------+
 ––– comment –––
 7. Fuzzy + FACET with ORDER BY
 ––– input –––
@@ -112,6 +145,12 @@ FACET column1 ORDER BY COUNT(*) DESC;"
 |     123 |    3333 | text here |
 |     456 |   22222 | text here |
 +---------+---------+-----------+
++---------+----------+
+| column1 | count(*) |
++---------+----------+
+|     123 |        1 |
+|     456 |        1 |
++---------+----------+
 ––– comment –––
 8. Fuzzy + FACET with LIMIT
 ––– input –––
@@ -128,6 +167,11 @@ FACET column1 LIMIT 1;"
 |     123 |    3333 | text here |
 |     456 |   22222 | text here |
 +---------+---------+-----------+
++---------+----------+
+| column1 | count(*) |
++---------+----------+
+|     123 |        1 |
++---------+----------+
 ––– comment –––
 9. Fuzzy + unknown option (fix_overlap) → expected error
 ––– input –––

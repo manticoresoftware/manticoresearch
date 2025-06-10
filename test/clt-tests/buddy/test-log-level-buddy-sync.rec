@@ -7,7 +7,7 @@ debconf: delaying package configuration, since apt-utils is not installed
 ––– input –––
 BUDDY_PORT=$(grep "started.*at http://127.0.0.1:" /var/log/manticore/searchd.log | tail -1 | sed 's/.*http:\/\/127.0.0.1:\([0-9]*\).*/\1/'); echo "Buddy API port: $BUDDY_PORT"
 ––– output –––
-Buddy API port: 34183
+Buddy API port: %{NUMBER}
 ––– input –––
 sleep 2; curl -s -X GET localhost:$BUDDY_PORT/config; echo
 ––– output –––

@@ -15,7 +15,7 @@ curl -s "https://hub.docker.com/v2/repositories/library/logstash/tags/?page_size
 | grep "^[0-9][0-9]*\.[0-9][0-9]*\.[0-9][0-9]*$" \
 | sed "s/\.[0-9]*$//" \
 | awk '!/rc|beta|alpha/' \
-| sort -V | uniq
+| sort -t. -k1,1n -k2,2n | uniq
 ––– output –––
 8.1
 8.2

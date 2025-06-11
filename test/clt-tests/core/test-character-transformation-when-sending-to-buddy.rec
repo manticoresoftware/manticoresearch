@@ -1,5 +1,8 @@
 ––– input –––
-sed -i '/data_dir = \/var\/lib\/manticore/a buddy_path = manticore-executor -n /usr/share/manticore/modules/manticore-buddy/src/main.php --log-level=debugv' /etc/manticoresearch/manticore.conf
+sed -i '/data_dir = \/var\/lib\/manticore/a buddy_path = manticore-executor -n /usr/share/manticore/modules/manticore-buddy/src/main.php' /etc/manticoresearch/manticore.conf
+––– output –––
+––– input –––
+export SEARCHD_ARGS="--logdebugv"
 ––– output –––
 ––– block: ../base/start-searchd –––
 ––– input –––

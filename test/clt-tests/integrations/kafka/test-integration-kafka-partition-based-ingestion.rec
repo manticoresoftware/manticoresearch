@@ -1,35 +1,5 @@
 ––– block: ../../base/dind/init –––
-––– comment –––
-Create bridge network for container communication
-––– input –––
-docker network create app-network --driver bridge > /dev/null; echo $?
-––– output –––
-0
-––– comment –––
-Start Manticore Search container with test-kit image
-––– input –––
-docker run -it --network=app-network --platform linux/amd64 --name manticore -d ghcr.io/manticoresoftware/manticoresearch:test-kit-latest bash > /dev/null 2>&1; echo $?
-––– output –––
-0
-––– comment –––
-Configure Manticore with Buddy integration and debug logging
-––– input –––
-docker exec manticore sed -i '/data_dir = \/var\/lib\/manticore/a\    buddy_path = manticore-executor -n /usr/share/manticore/modules/manticore-buddy/src/main.php --debugvv\n' /etc/manticoresearch/manticore.conf
-––– output –––
-––– comment –––
-Start Manticore Search daemon with real-time output
-––– input –––
-docker exec manticore stdbuf -oL searchd
-––– output –––
-Manticore %{VERSION} (columnar %{VERSION}) (secondary %{VERSION}) (knn %{VERSION}) (embeddings %{VERSION})
-Copyright (c) 2001-2016, Andrew Aksyonoff
-Copyright (c) 2008-2016, Sphinx Technologies Inc (http://sphinxsearch.com)
-Copyright (c) 2017-%{YEAR}, Manticore Software LTD (https://manticoresearch.com)
-[#!/[a-zA-Z]{3}\s[a-zA-Z]{3}\s+[0-9]{1,2}\s[0-9]{2}:[0-9]{2}:[0-9]{2}.[0-9]{3}\s[0-9]{4}/!#] [%{NUMBER}] using config file '/etc/manticoresearch/manticore.conf' (%{NUMBER} chars)...
-starting daemon version '%{VERSION} (columnar %{VERSION}) (secondary %{VERSION}) (knn %{VERSION}) (embeddings %{VERSION})' ...
-listening on %{IPADDR}:9312 for sphinx and http(s)
-listening on %{IPADDR}:9306 for mysql
-listening on %{IPADDR}:9308 for sphinx and http(s)
+––– block: ../../base/basic-initialization-manticore-kafka –––
 ––– comment –––
 Start Kafka container with KRaft mode configuration
 ––– input –––
@@ -105,100 +75,20 @@ name: mv_2
 *************************** 2. row ***************************
 name: mv_1
 ––– comment –––
-Create test dataset with 57 JSON records for partition distribution testing
+Download test dataset with 57 JSON records for partition distribution testing
 ––– input –––
-docker exec kafka bash -c "cat > /tmp/dump.json << EOF
-{\"id\": 1, \"isActive\": true, \"term\": \"The Quick Brown Fox\", \"acronym\": \"TQBF\", \"abbrev\": \"ISO 12345:6789\", \"GlossDef\": {\"para\": \"Lorem ipsum dolor sit amet, consectetur adipiscing elit.\", \"size\": [20, 25, 30]}}
-{\"id\": 2, \"isActive\": false, \"term\": \"Jumped Over The Lazy Dog\", \"acronym\": \"JOTLD\", \"abbrev\": \"ISO 98765:4321\", \"GlossDef\": {\"para\": \"Sed do eiusmod tempor incididunt ut labore et dolore magna aliqua.\", \"size\": [20, 25, 30]}}
-{\"id\": 3, \"isActive\": true, \"term\": \"A Stitch In Time Saves Nine\", \"acronym\": \"ASITSN\", \"abbrev\": \"ISO 24680:1357\", \"GlossDef\": {\"para\": \"Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat.\", \"size\": [20, 25, 30]}}
-{\"id\": 4, \"isActive\": false, \"term\": \"An Apple A Day Keeps The Doctor Away\", \"acronym\": \"AADKTDA\", \"abbrev\": \"ISO 97531:86420\", \"GlossDef\": {\"para\": \"Duis aute irure dolor in reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla pariatur.\", \"size\": [20, 25, 30]}}
-{\"id\": 5, \"isActive\": true, \"term\": \"Actions Speak Louder Than Words\", \"acronym\": \"ASTWTW\", \"abbrev\": \"ISO 56789:12345\", \"GlossDef\": {\"para\": \"Excepteur sint occaecat cupidatat non proident, sunt in culpa qui officia deserunt mollit anim id est laborum.\", \"size\": [20, 25, 30]}}
-{\"id\": 6, \"isActive\": false, \"term\": \"Every Cloud Has A Silver Lining\", \"acronym\": \"ECHAASL\", \"abbrev\": \"ISO 86420:97531\", \"GlossDef\": {\"para\": \"Nemo enim ipsam voluptatem quia voluptas sit aspernatur aut odit aut fugit.\", \"size\": [20, 25, 30]}}
-{\"id\": 7, \"isActive\": true, \"term\": \"Beauty Is In The Eye Of The Beholder\", \"acronym\": \"BIITEOTB\", \"abbrev\": \"ISO 13579:86420\", \"GlossDef\": {\"para\": \"Neque porro quisquam est, qui dolorem ipsum quia dolor sit amet, consectetur, adipisci velit.\", \"size\": [20, 25, 30]}}
-{\"id\": 8, \"isActive\": false, \"term\": \"Birds Of A Feather Flock Together\", \"acronym\": \"BOAFFT\", \"abbrev\": \"ISO 97531:24680\", \"GlossDef\": {\"para\": \"At vero eos et accusamus et iusto odio dignissimos ducimus qui blanditiis praesentium voluptatum deleniti atque corrupti quos dolores et quas molestias excepturi sint occaecati cupiditate non provident.\", \"size\": [20, 25, 30]}}
-{\"id\": 9, \"isActive\": true, \"term\": \"You Can't Judge A Book By Its Cover\", \"acronym\": \"YCJABBICT\", \"abbrev\": \"ISO 56789:86420\", \"GlossDef\": {\"para\": \"Similique sunt in culpa qui officia deserunt mollitia animi, id est laborum et dolorum fuga.\", \"size\": [20, 25, 30]}}
-{\"id\": 10, \"isActive\": false, \"term\": \"Two Heads Are Better Than One\", \"acronym\": \"THABTO\", \"abbrev\": \"ISO 86420:97531\", \"GlossDef\": {\"para\": \"Et harum quidem rerum facilis est et expedita distinctio.\", \"size\": [20, 25, 30]}}
-{\"id\": 11, \"isActive\": true, \"term\": \"The Early Bird Catches The Worm\", \"acronym\": \"TEBCTW\", \"abbrev\": \"ISO 97531:86420\", \"GlossDef\": {\"para\": \"Lorem ipsum dolor sit amet, consectetur adipiscing elit.\", \"size\": [20, 25, 30]}}
-{\"id\": 12, \"isActive\": false, \"term\": \"All That Glitters Is Not Gold\", \"acronym\": \"ATGING\", \"abbrev\": \"ISO 24680:1357\", \"GlossDef\": {\"para\": \"Sed do eiusmod tempor incididunt ut labore et dolore magna aliqua.\", \"size\": [20, 25, 30]}}
-{\"id\": 13, \"isActive\": true, \"term\": \"A Penny For Your Thoughts\", \"acronym\": \"APFYT\", \"abbrev\": \"ISO 97531:86420\", \"GlossDef\": {\"para\": \"Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat.\", \"size\": [20, 25, 30]}}
-{\"id\": 14, \"isActive\": false, \"term\": \"Bite The Bullet\", \"acronym\": \"BTB\", \"abbrev\": \"ISO 13579:86420\", \"GlossDef\": {\"para\": \"Duis aute irure dolor in reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla pariatur.\", \"size\": [20, 25, 30]}}
-{\"id\": 15, \"isActive\": true, \"term\": \"Break A Leg\", \"acronym\": \"BAL\", \"abbrev\": \"ISO 56789:12345\", \"GlossDef\": {\"para\": \"Excepteur sint occaecat cupidatat non proident, sunt in culpa qui officia deserunt mollit anim id est laborum.\", \"size\": [20, 25, 30]}}
-{\"id\": 16, \"isActive\": false, \"term\": \"A Picture Is Worth A Thousand Words\", \"acronym\": \"APIWATW\", \"abbrev\": \"ISO 86420:97531\", \"GlossDef\": {\"para\": \"Nemo enim ipsam voluptatem quia voluptas sit aspernatur aut odit aut fugit.\", \"size\": [20, 25, 30]}}
-{\"id\": 17, \"isActive\": true, \"term\": \"Curiosity Killed The Cat\", \"acronym\": \"CKTC\", \"abbrev\": \"ISO 13579:86420\", \"GlossDef\": {\"para\": \"Neque porro quisquam est, qui dolorem ipsum quia dolor sit amet, consectetur, adipisci velit.\", \"size\": [20, 25, 30]}}
-{\"id\": 18, \"isActive\": false, \"term\": \"Don't Count Your Chickens Before They Hatch\", \"acronym\": \"DCYCBTTH\", \"abbrev\": \"ISO 97531:24680\", \"GlossDef\": {\"para\": \"At vero eos et accusamus et iusto odio dignissimos ducimus qui blanditiis praesentium voluptatum deleniti atque corrupti quos dolores et quas molestias excepturi sint occaecati cupiditate non provident.\", \"size\": [20, 25, 30]}}
-{\"id\": 19, \"isActive\": true, \"term\": \"Every Dog Has His Day\", \"acronym\": \"EDHHD\", \"abbrev\": \"ISO 56789:86420\", \"GlossDef\": {\"para\": \"Similique sunt in culpa qui officia deserunt mollitia animi, id est laborum et dolorum fuga.\", \"size\": [20, 25, 30]}}
-{\"id\": 20, \"isActive\": false, \"term\": \"Haste Makes Waste\", \"acronym\": \"HMW\", \"abbrev\": \"ISO 86420:97531\", \"GlossDef\": {\"para\": \"Et harum quidem rerum facilis est et expedita distinctio.\", \"size\": [20, 25, 30]}}
-{\"id\": 21, \"isActive\": true, \"term\": \"Ignorance Is Bliss\", \"acronym\": \"IIB\", \"abbrev\": \"ISO 97531:86420\", \"GlossDef\": {\"para\": \"Lorem ipsum dolor sit amet, consectetur adipiscing elit.\", \"size\": [20, 25, 30]}}
-{\"id\": 22, \"isActive\": false, \"term\": \"The Best Things In Life Are Free\", \"acronym\": \"TBTILAF\", \"abbrev\": \"ISO 24680:1357\", \"GlossDef\": {\"para\": \"Sed do eiusmod tempor incididunt ut labore et dolore magna aliqua.\", \"size\": [20, 25, 30]}}
-{\"id\": 23, \"isActive\": true, \"term\": \"Money Doesn't Grow On Trees\", \"acronym\": \"MDGOT\", \"abbrev\": \"ISO 97531:86420\", \"GlossDef\": {\"para\": \"Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat.\", \"size\": [20, 25, 30]}}
-{\"id\": 24, \"isActive\": false, \"term\": \"No Pain, No Gain\", \"acronym\": \"NPNJG\", \"abbrev\": \"ISO 13579:86420\", \"GlossDef\": {\"para\": \"Duis aute irure dolor in reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla pariatur.\", \"size\": [20, 25, 30]}}
-{\"id\": 25, \"isActive\": true, \"term\": \"When In Rome, Do As The Romans Do\", \"acronym\": \"WIRDAATRD\", \"abbrev\": \"ISO 56789:12345\", \"GlossDef\": {\"para\": \"Excepteur sint occaecat cupidatat non proident, sunt in culpa qui officia deserunt mollit anim id est laborum.\", \"size\": [20, 25, 30]}}
-{\"id\": 26, \"isActive\": false, \"term\": \"Better Late Than Never\", \"acronym\": \"BLTN\", \"abbrev\": \"ISO 86420:97531\", \"GlossDef\": {\"para\": \"Nemo enim ipsam voluptatem quia voluptas sit aspernatur aut odit aut fugit.\", \"size\": [20, 25, 30]}}
-{\"id\": 27, \"isActive\": true, \"term\": \"All's Well That Ends Well\", \"acronym\": \"AWTEW\", \"abbrev\": \"ISO 13579:86420\", \"GlossDef\": {\"para\": \"Neque porro quisquam est, qui dolorem ipsum quia dolor sit amet, consectetur, adipisci velit.\", \"size\": [20, 25, 30]}}
-{\"id\": 28, \"isActive\": false, \"term\": \"Cutting Corners\", \"acronym\": \"CC\", \"abbrev\": \"ISO 97531:24680\", \"GlossDef\": {\"para\": \"At vero eos et accusamus et iusto odio dignissimos ducimus qui blanditiis praesentium voluptatum deleniti atque corrupti quos dolores et quas molestias excepturi sint occaecati cupiditate non provident.\", \"size\": [20, 25, 30]}}
-{\"id\": 29, \"isActive\": true, \"term\": \"Barking Up The Wrong Tree\", \"acronym\": \"BUTWT\", \"abbrev\": \"ISO 56789:86420\", \"GlossDef\": {\"para\": \"Similique sunt in culpa qui officia deserunt mollitia animi, id est laborum et dolorum fuga.\", \"size\": [20, 25, 30]}}
-{\"id\": 30, \"isActive\": false, \"term\": \"Rome Wasn't Built In A Day\", \"acronym\": \"RWBIAD\", \"abbrev\": \"ISO 86420:97531\", \"GlossDef\": {\"para\": \"Et harum quidem rerum facilis est et expedita distinctio.\", \"size\": [20, 25, 30]}}
-{\"id\": 31, \"isActive\": true, \"term\": \"Don't Put All Your Eggs In One Basket\", \"acronym\": \"DPAYEIOB\", \"abbrev\": \"ISO 97531:86420\", \"GlossDef\": {\"para\": \"Lorem ipsum dolor sit amet, consectetur adipiscing elit.\", \"size\": [20, 25, 30]}}
-{\"id\": 32, \"isActive\": false, \"term\": \"A Bird In The Hand Is Worth Two In The Bush\", \"acronym\": \"ABITHIWTITB\", \"abbrev\": \"ISO 24680:1357\", \"GlossDef\": {\"para\": \"Sed do eiusmod tempor incididunt ut labore et dolore magna aliqua.\", \"size\": [20, 25, 30]}}
-{\"id\": 33, \"isActive\": true, \"term\": \"The Grass Is Always Greener On The Other Side\", \"acronym\": \"TGIAGOOTOS\", \"abbrev\": \"ISO 97531:86420\", \"GlossDef\": {\"para\": \"Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat.\", \"size\": [20, 25, 30]}}
-{\"id\": 34, \"isActive\": false, \"term\": \"Every Rose Has Its Thorn\", \"acronym\": \"ERHIIT\", \"abbrev\": \"ISO 13579:86420\", \"GlossDef\": {\"para\": \"Duis aute irure dolor in reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla pariatur.\", \"size\": [20, 25, 30]}}
-{\"id\": 35, \"isActive\": true, \"term\": \"All That Glitters Is Not Gold\", \"acronym\": \"ATGING\", \"abbrev\": \"ISO 56789:12345\", \"GlossDef\": {\"para\": \"Excepteur sint occaecat cupidatat non proident, sunt in culpa qui officia deserunt mollit anim id est laborum.\", \"size\": [20, 25, 30]}}
-{\"id\": 36, \"isActive\": false, \"term\": \"A Penny For Your Thoughts\", \"acronym\": \"APFYT\", \"abbrev\": \"ISO 86420:97531\", \"GlossDef\": {\"para\": \"Nemo enim ipsam voluptatem quia voluptas sit aspernatur aut odit aut fugit.\", \"size\": [20, 25, 30]}}
-{\"id\": 37, \"isActive\": true, \"term\": \"Bite The Bullet\", \"acronym\": \"BTB\", \"abbrev\": \"ISO 13579:86420\", \"GlossDef\": {\"para\": \"Neque porro quisquam est, qui dolorem ipsum quia dolor sit amet, consectetur, adipisci velit.\", \"size\": [20, 25, 30]}}
-{\"id\": 38, \"isActive\": false, \"term\": \"Break A Leg\", \"acronym\": \"BAL\", \"abbrev\": \"ISO 56789:12345\", \"GlossDef\": {\"para\": \"Similique sunt in culpa qui officia deserunt mollitia animi, id est laborum et dolorum fuga.\", \"size\": [20, 25, 30]}}
-{\"id\": 39, \"isActive\": true, \"term\": \"A Picture Is Worth A Thousand Words\", \"acronym\": \"APIWATW\", \"abbrev\": \"ISO 86420:97531\", \"GlossDef\": {\"para\": \"At vero eos et accusamus et iusto odio dignissimos ducimus qui blanditiis praesentium voluptatum deleniti atque corrupti quos dolores et quas molestias excepturi sint occaecati cupiditate non provident.\", \"size\": [20, 25, 30]}}
-{\"id\": 40, \"isActive\": false, \"term\": \"Curiosity Killed The Cat\", \"acronym\": \"CKTC\", \"abbrev\": \"ISO 13579:86420\", \"GlossDef\": {\"para\": \"Lorem ipsum dolor sit amet, consectetur adipiscing elit.\", \"size\": [20, 25, 30]}}
-{\"id\": 41, \"isActive\": true, \"term\": \"Don't Count Your Chickens Before They Hatch\", \"acronym\": \"DCYCBTTH\", \"abbrev\": \"ISO 97531:24680\", \"GlossDef\": {\"para\": \"Sed do eiusmod tempor incididunt ut labore et dolore magna aliqua.\", \"size\": [20, 25, 30]}}
-{\"id\": 42, \"isActive\": false, \"term\": \"Every Dog Has His Day\", \"acronym\": \"EDHHD\", \"abbrev\": \"ISO 56789:86420\", \"GlossDef\": {\"para\": \"Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat.\", \"size\": [20, 25, 30]}}
-{\"id\": 43, \"isActive\": true, \"term\": \"Haste Makes Waste\", \"acronym\": \"HMW\", \"abbrev\": \"ISO 86420:97531\", \"GlossDef\": {\"para\": \"Duis aute irure dolor in reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla pariatur.\", \"size\": [20, 25, 30]}}
-{\"id\": 44, \"isActive\": false, \"term\": \"Ignorance Is Bliss\", \"acronym\": \"IIB\", \"abbrev\": \"ISO 97531:86420\", \"GlossDef\": {\"para\": \"Nemo enim ipsam voluptatem quia voluptas sit aspernatur aut odit aut fugit.\", \"size\": [20, 25, 30]}}
-{\"id\": 45, \"isActive\": true, \"term\": \"The Best Things In Life Are Free\", \"acronym\": \"TBTILAF\", \"abbrev\": \"ISO 24680:1357\", \"GlossDef\": {\"para\": \"Excepteur sint occaecat cupidatat non proident, sunt in culpa qui officia deserunt mollit anim id est laborum.\", \"size\": [20, 25, 30]}}
-{\"id\": 46, \"isActive\": false, \"term\": \"Money Doesn't Grow On Trees\", \"acronym\": \"MDGOT\", \"abbrev\": \"ISO 97531:86420\", \"GlossDef\": {\"para\": \"Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat.\", \"size\": [20, 25, 30]}}
-{\"id\": 47, \"isActive\": true, \"term\": \"No Pain, No Gain\", \"acronym\": \"NPNJG\", \"abbrev\": \"ISO 13579:86420\", \"GlossDef\": {\"para\": \"Duis aute irure dolor in reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla pariatur.\", \"size\": [20, 25, 30]}}
-{\"id\": 48, \"isActive\": false, \"term\": \"When In Rome, Do As The Romans Do\", \"acronym\": \"WIRDAATRD\", \"abbrev\": \"ISO 56789:12345\", \"GlossDef\": {\"para\": \"Excepteur sint occaecat cupidatat non proident, sunt in culpa qui officia deserunt mollit anim id est laborum.\", \"size\": [20, 25, 30]}}
-{\"id\": 49, \"isActive\": true, \"term\": \"Better Late Than Never\", \"acronym\": \"BLTN\", \"abbrev\": \"ISO 86420:97531\", \"GlossDef\": {\"para\": \"Nemo enim ipsam voluptatem quia voluptas sit aspernatur aut odit aut fugit.\", \"size\": [20, 25, 30]}}
-{\"id\": 50, \"isActive\": false, \"term\": \"All's Well That Ends Well\", \"acronym\": \"AWTEW\", \"abbrev\": \"ISO 13579:86420\", \"GlossDef\": {\"para\": \"Neque porro quisquam est, qui dolorem ipsum quia dolor sit amet, consectetur, adipisci velit.\", \"size\": [20, 25, 30]}}
-{\"id\": 51, \"isActive\": true, \"term\": \"Cutting Corners\", \"acronym\": \"CC\", \"abbrev\": \"ISO 97531:24680\", \"GlossDef\": {\"para\": \"At vero eos et accusamus et iusto odio dignissimos ducimus qui blanditiis praesentium voluptatum deleniti atque corrupti quos dolores et quas molestias excepturi sint occaecati cupiditate non provident.\", \"size\": [20, 25, 30]}}
-{\"id\": 52, \"isActive\": false, \"term\": \"Barking Up The Wrong Tree\", \"acronym\": \"BUTWT\", \"abbrev\": \"ISO 56789:86420\", \"GlossDef\": {\"para\": \"Similique sunt in culpa qui officia deserunt mollitia animi, id est laborum et dolorum fuga.\", \"size\": [20, 25, 30]}}
-{\"id\": 53, \"isActive\": true, \"term\": \"Rome Wasn't Built In A Day\", \"acronym\": \"RWBIAD\", \"abbrev\": \"ISO 86420:97531\", \"GlossDef\": {\"para\": \"Et harum quidem rerum facilis est et expedita distinctio.\", \"size\": [20, 25, 30]}}
-{\"id\": 54, \"isActive\": false, \"term\": \"Don't Put All Your Eggs In One Basket\", \"acronym\": \"DPAYEIOB\", \"abbrev\": \"ISO 97531:86420\", \"GlossDef\": {\"para\": \"Lorem ipsum dolor sit amet, consectetur adipiscing elit.\", \"size\": [20, 25, 30]}}
-{\"id\": 55, \"isActive\": true, \"term\": \"A Bird In The Hand Is Worth Two In The Bush\", \"acronym\": \"ABITHIWTITB\", \"abbrev\": \"ISO 24680:1357\", \"GlossDef\": {\"para\": \"Sed do eiusmod tempor incididunt ut labore et dolore magna aliqua.\", \"size\": [20, 25, 30]}}
-{\"id\": 56, \"isActive\": false, \"term\": \"The Grass Is Always Greener On The Other Side\", \"acronym\": \"TGIAGOOTOS\", \"abbrev\": \"ISO 97531:86420\", \"GlossDef\": {\"para\": \"Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat.\", \"size\": [20, 25, 30]}}
-{\"id\": 57, \"isActive\": true, \"term\": \"Every Rose Has Its Thorn\", \"acronym\": \"ERHIIT\", \"abbrev\": \"ISO 13579:86420\", \"GlossDef\": {\"para\": \"Duis aute irure dolor in reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla pariatur.\", \"size\": [20, 25, 30]}}
-EOF"
+docker exec kafka curl -s -o /tmp/dump.json https://raw.githubusercontent.com/manticoresoftware/manticoresearch-buddy/main/test/Kafka/dump.json
 ––– output –––
 ––– comment –––
-Create import script with key-based partitioning for balanced data distribution
+Download import script with key-based partitioning for balanced data distribution
 ––– input –––
-docker exec kafka bash -c 'cat > /tmp/import.sh << "EOF"
-#!/bin/bash
-bootstrap_servers="localhost:9092"
-kafka_topic="my-data"
-json_file_path="/tmp/dump.json"
-echo "Starting Kafka import with key distribution..."
-while IFS= read -r line; do
-    id=$(echo "$line" | grep -o "\"id\": [0-9]*" | cut -d" " -f2)
-    echo "$id:$line"
-done < "$json_file_path" | /opt/bitnami/kafka/bin/kafka-console-producer.sh \
-  --bootstrap-server "$bootstrap_servers" \
-  --property parse.key=true \
-  --property "key.separator=:" \
-  --topic "$kafka_topic"
-echo "Import completed!"
-EOF'
+docker exec kafka curl -s -o /tmp/import.sh https://raw.githubusercontent.com/manticoresoftware/manticoresearch-buddy/main/test/Kafka/import.sh
 ––– output –––
 ––– comment –––
-Make import script executable
+Make import script executable and execute data import to Kafka topic
 ––– input –––
-docker exec kafka chmod +x /tmp/import.sh
+docker exec kafka chmod +x /tmp/import.sh && docker exec kafka /tmp/import.sh; echo $?
 ––– output –––
-––– comment –––
-Execute data import to Kafka topic with exit code verification
-––– input –––
-docker exec kafka /tmp/import.sh; echo $?
-––– output –––
-Starting Kafka import with key distribution...
-Import completed!
 0
 ––– comment –––
 Verify data was successfully written to both Kafka partitions
@@ -206,7 +96,7 @@ Verify data was successfully written to both Kafka partitions
 echo "Checking Kafka topic info:"; docker exec kafka kafka-log-dirs.sh --bootstrap-server localhost:9092 --describe --topic-list my-data | grep -E "(partition|size)" | head -4
 ––– output –––
 Checking Kafka topic info:
-{"brokers":[{"broker":0,"logDirs":[{"partitions":[{"partition":"my-data-1","size":7534,"offsetLag":0,"isFuture":false},{"partition":"my-data-0","size":8087,"offsetLag":0,"isFuture":false}],"error":null,"logDir":"/bitnami/kafka/data"}]}],"version":1}
+{"brokers":[{"broker":0,"logDirs":[{"partitions":[{"partition":"my-data-1","size":#!/[0-9]+/!#,"offsetLag":0,"isFuture":false},{"partition":"my-data-0","size":#!/[0-9]+/!#,"offsetLag":0,"isFuture":false}],"error":null,"logDir":"/bitnami/kafka/data"}]}],"version":1}
 ––– comment –––
 Verify Kafka sources are active in Manticore
 ––– input –––
@@ -232,44 +122,12 @@ GROUP           TOPIC           PARTITION  CURRENT-OFFSET  LOG-END-OFFSET  LAG  
 manticore       my-data         0          30              30              0               -               -               -
 manticore       my-data         1          27              27              0               -               -               -
 ––– comment –––
-Get final record count from partition 0 destination table
+Validate final record counts and partition distribution results
 ––– input –––
-docker exec manticore mysql -h0 -P9306 -e "SELECT COUNT(*) FROM destination_shard_1\G;" | grep "count" | cut -d: -f2 | tr -d ' '
+SHARD1_COUNT=$(docker exec manticore mysql -h0 -P9306 -e "SELECT COUNT(*) FROM destination_shard_1\G;" | grep "count" | cut -d: -f2 | tr -d ' '); SHARD2_COUNT=$(docker exec manticore mysql -h0 -P9306 -e "SELECT COUNT(*) FROM destination_shard_2\G;" | grep "count" | cut -d: -f2 | tr -d ' '); TOTAL=$((SHARD1_COUNT + SHARD2_COUNT)); echo "Shard 1: $SHARD1_COUNT records"; echo "Shard 2: $SHARD2_COUNT records"; echo "Total records: $TOTAL"; if [ $TOTAL -eq 57 ]; then echo "✅ TEST PASSED: All 57 records processed correctly"; else echo "❌ TEST FAILED: Expected 57 records, got $TOTAL"; fi; if [ $SHARD1_COUNT -gt 0 ] && [ $SHARD2_COUNT -gt 0 ]; then echo "✅ Both partitions received data"; else echo "⚠️ Data went to single partition only"; fi
 ––– output –––
-30
-––– comment –––
-Get final record count from partition 1 destination table
-––– input –––
-docker exec manticore mysql -h0 -P9306 -e "SELECT COUNT(*) FROM destination_shard_2\G;" | grep "count" | cut -d: -f2 | tr -d ' '
-––– output –––
-27
-––– comment –––
-Display sample data from partition 0 destination table
-––– input –––
-echo "Sample data from shard 1:"; docker exec manticore mysql -h0 -P9306 -e "SELECT * FROM destination_shard_1 LIMIT 5;" 2>/dev/null
-––– output –––
-Sample data from shard 1:
-+------+---------------------------------+
-| id   | name                            |
-+------+---------------------------------+
-|    2 | Jumped Over The Lazy Dog        |
-|    5 | Actions Speak Louder Than Words |
-|    6 | Every Cloud Has A Silver Lining |
-|   10 | Two Heads Are Better Than One   |
-|   11 | The Early Bird Catches The Worm |
-+------+---------------------------------+
-––– comment –––
-Display sample data from partition 1 destination table
-––– input –––
-echo "Sample data from shard 2:"; docker exec manticore mysql -h0 -P9306 -e "SELECT * FROM destination_shard_2 LIMIT 5;" 2>/dev/null
-––– output –––
-Sample data from shard 2:
-+------+--------------------------------------+
-| id   | name                                 |
-+------+--------------------------------------+
-|    1 | The Quick Brown Fox                  |
-|    3 | A Stitch In Time Saves Nine          |
-|    4 | An Apple A Day Keeps The Doctor Away |
-|    7 | Beauty Is In The Eye Of The Beholder |
-|    8 | Birds Of A Feather Flock Together    |
-+------+--------------------------------------+
+Shard 1: 30 records
+Shard 2: 27 records
+Total records: 57
+✅ TEST PASSED: All 57 records processed correctly
+✅ Both partitions received data

@@ -288,10 +288,10 @@ function mysql_test_connect($host)
 	global $gl_conn;
 	$conndetails = explode(":",$host);
 	if ( count($conndetails)==1 )
-		$gl_conn = new mysqli($host,'','');
+		$gl_conn = new mysqli($host,'','', 'Manticore');
 	else
 	{
-		$gl_conn = new mysqli($host, '', '', '', (int)$port);
+		$gl_conn = new mysqli($host, '', '', 'Manticore', (int)$port);
 	}
 	if ($gl_conn->connect_error)
 		return false;

@@ -550,8 +550,8 @@ public:
 	void		SetState ( const CSphMatchComparatorState & tState ) override		{ m_pSorter->SetState(tState); }
 	const		CSphMatchComparatorState & GetState() const override				{ return m_pSorter->GetState(); }
 	void		SetGroupState ( const CSphMatchComparatorState & tState ) override	{ m_pSorter->SetGroupState(tState); }
-	void		SetBlobPool ( const BYTE * pBlobPool ) override;
-	void		SetColumnar ( columnar::Columnar_i * pColumnar ) override;
+	void		SetBlobPool ( const BYTE * pBlobPool ) override						{ SetBlobPoolImpl(pBlobPool); }
+	void		SetColumnar ( columnar::Columnar_i * pColumnar ) override			{ SetColumnarImpl(pColumnar); }
 	void		SetSchema ( ISphSchema * pSchema, bool bRemapCmp ) override;
 	const ISphSchema *	GetSchema() const override									{ return m_pSorter->GetSchema(); }
 	bool		Push ( const CSphMatch & tEntry ) override							{ return Push_T ( tEntry, [this]( const CSphMatch & tMatch ){ return m_pSorter->Push(tMatch); }, false ); }
@@ -712,6 +712,9 @@ private:
 	void		ProduceCacheSizeWarning ( CSphString & sWarning );
 	void		PopulateStoredFields();
 
+	FORCE_INLINE void SetBlobPoolImpl ( const BYTE * pBlobPool );
+	FORCE_INLINE void SetColumnarImpl ( columnar::Columnar_i * pColumnar );
+
 	FORCE_INLINE void AddToBatch ( const CSphMatch & tEntry, uint64_t uFilterHash );
 	FORCE_INLINE bool IsBatchFull() const;
 	void		SetupJoinFiltersBatch();
@@ -764,16 +767,22 @@ JoinSorter_c::JoinSorter_c ( const CSphIndex * pIndex, const CSphIndex * pJoined
 }
 
 
-void JoinSorter_c::SetBlobPool ( const BYTE * pBlobPool )
+void JoinSorter_c::SetBlobPoolImpl ( const BYTE * pBlobPool )
 {
+	if ( m_pBlobPool==pBlobPool )
+		return;
+
 	m_pBlobPool = pBlobPool;
 	m_pSorter->SetBlobPool(pBlobPool);
 	m_tMixedFilter.SetBlobPool(pBlobPool);
 }
 
 
-void JoinSorter_c::SetColumnar ( columnar::Columnar_i * pColumnar )
+void JoinSorter_c::SetColumnarImpl ( columnar::Columnar_i * pColumnar )
 {
+	if ( m_pColumnar==pColumnar )
+		return;
+
 	m_pColumnar = pColumnar;
 	m_pSorter->SetColumnar(pColumnar);
 	m_tMixedFilter.SetColumnar(pColumnar);
@@ -1025,6 +1034,12 @@ bool JoinSorter_c::PushJoinedMatches ( const CSphMatch & tEntry, const MATCHES &
 	SetExprBlobPool ( m_dCalcPresort, pBlobPool );
 	SetExprBlobPool ( m_dAggregates, pBlobPool );
 
+	if ( m_bCanBatch )
+	{
+		SetBlobPoolImpl(pBlobPool);
+		SetColumnarImpl(pColumnar);
+	}
+
 	bool bAnythingPushed = false;
 	for ( auto & tMatchFromRset : dMatches )
 	{
@@ -1038,11 +1053,6 @@ bool JoinSorter_c::PushJoinedMatches ( const CSphMatch & tEntry, const MATCHES &
 		}
 
 		CalcContextItems ( m_tMatch, m_dCalcPrefilter );
-		if ( m_bCanBatch )
-		{
-			m_tMixedFilter.SetBlobPool(pBlobPool);
-			m_tMixedFilter.SetColumnar(pColumnar);
-		}
 
 		if ( !m_tMixedFilter.Eval(m_tMatch) )
 		{

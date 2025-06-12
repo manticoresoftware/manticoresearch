@@ -94,6 +94,9 @@ docker exec kafka chmod +x ./import.sh; docker exec kafka ./import.sh; echo $?
 ––– output –––
 0
 ––– input –––
+timeout 60 bash -c 'docker exec manticore bash -c "tail -f /var/log/manticore/searchd.log" | grep -m2 "REPLACE"
+––– output –––
+––– input –––
 timeout 60 bash -c 'docker exec manticore bash -c "tail -f /var/log/manticore/searchd.log" | grep -m2 "REPLACE%20INTO%20destination_kafka" > /dev/null && echo "Data processing completed."' || echo "Data processing failed."
 ––– output –––
 Data processing completed.

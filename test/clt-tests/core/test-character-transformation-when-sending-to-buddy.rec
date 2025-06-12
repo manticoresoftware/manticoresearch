@@ -4,7 +4,7 @@ sed -i '/data_dir = \/var\/lib\/manticore/a buddy_path = manticore-executor -n /
 ––– input –––
 export SEARCHD_ARGS="--logdebugv"
 ––– output –––
-––– block: ../base/start-searchd –––
+––– block: ../base/start-searchd-with-buddy –––
 ––– input –––
 mysql -h0 -P9306 -e "CREATE TABLE test (id BIGINT, a TEXT, b TEXT);"
 ––– output –––

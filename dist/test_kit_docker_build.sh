@@ -174,6 +174,7 @@ docker exec manticore-test-kit bash -c \
 docker exec manticore-test-kit bash -c \
 	"curl -sSL https://getcomposer.org/download/2.7.0/composer.phar > /usr/bin/composer; chmod +x /usr/bin/composer"
 
+echo "Installing custom buddy from git repo with commit $buddy_commit"
 # Install custom buddy from git repo
 #
 buddy_path=/usr/share/manticore/modules/manticore-buddy

@@ -1,5 +1,8 @@
 ––– input –––
-sed -i '/data_dir = \/var\/lib\/manticore/a buddy_path = manticore-executor -n /usr/share/manticore/modules/manticore-buddy/src/main.php --debug' /etc/manticoresearch/manticore.conf
+sed -i '/data_dir = \/var\/lib\/manticore/a buddy_path = manticore-executor -n /usr/share/manticore/modules/manticore-buddy/src/main.php' /etc/manticoresearch/manticore.conf
+––– output –––
+––– input –––
+export SEARCHD_ARGS="--logdebugv"
 ––– output –––
 ––– block: ../base/start-searchd –––
 ––– input –––
@@ -29,7 +32,7 @@ mysql -h0 -P9306 -e "select a, b from test where match('hello world') option key
 ––– output –––
 ERROR 1064 (42000) at line 1: unknown option 'key1'
 ––– input –––
-sleep 0.02; cat /var/log/manticore/searchd.log | grep 'request data' | sed 's/.*request data/request data/'
+sleep 0.2; cat /var/log/manticore/searchd.log | grep 'request data' | sed 's/.*request data/request data/'
 ––– output –––
 request data: {"type":"unknown sql request","error":{"message":"unknown option 'key1'","body":null},"version":3,"user":"root","message":{"path_query":"","body":"select a, b from test where match('hello world') option key1 = 1, key2 = 2","http_method":""}}
 request data: {"type":"unknown sql request","error":{"message":"unknown option 'key1'","body":null},"version":3,"user":"root","message":{"path_query":"","body":"select b, a from test where match('hello world') option key1 = 1, key2 = 2","http_method":""}}

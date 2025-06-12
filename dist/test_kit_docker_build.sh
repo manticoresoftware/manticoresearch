@@ -86,12 +86,12 @@ do
 		break
 	fi
 
-    if [[ "$line" =~ ^([^[:space:]]+)[[:space:]]+([^[:space:]]+)\+([0-9]+)-([a-f0-9]+)-?([a-zA-Z0-9]+)?$ ]]; then
-        # Format: <package> <version>+<date>-<commit>-<optional_suffix>
+    if [[ "$line" =~ ^([^[:space:]]+)[[:space:]]+([^[:space:]]+)\+([0-9]+)-([a-f0-9]+)(-?[a-zA-Z0-9]+)?$ ]]; then
+        # Format: <package> <version>+<date>-<commit>[-<optional_suffix>]
         package="${BASH_REMATCH[1]}"
         version_string="${BASH_REMATCH[2]}+${BASH_REMATCH[3]}-${BASH_REMATCH[4]}"
         if [ -n "${BASH_REMATCH[5]}" ]; then
-            version_string="${version_string}-${BASH_REMATCH[5]}"
+            version_string="${version_string}${BASH_REMATCH[5]}"
         fi
         suffix="${BASH_REMATCH[5]}" # Optional suffix without leading "-"
     elif [[ "$line" =~ ^([^[:space:]]+)[[:space:]]+([^[:space:]]+)[[:space:]]+([^[:space:]]+)[[:space:]]+([^[:space:]]+)$ ]]; then

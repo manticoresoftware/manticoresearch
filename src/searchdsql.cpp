@@ -376,7 +376,7 @@ public:
 	bool			AddSchemaItem ( SqlNode_t * pNode );
 	bool			SetMatch ( const SqlNode_t & tValue );
 	bool			AddMatch ( const SqlNode_t & tValue, const SqlNode_t & tIndex );
-	bool			SetKNN ( const SqlNode_t & tAttr, const SqlNode_t & tK, const SqlNode_t & tValues, const SqlNode_t * pEf );
+	bool			SetKNN ( const SqlNode_t & tAttr, const SqlNode_t & tK, const SqlNode_t & tValues, const CSphVector<CSphNamedInt> * pOpts );
 	void			AddConst ( int iList, const SqlNode_t& tValue );
 	void			SetLocalStatement ( const SqlNode_t & tName );
 	bool			AddFloatRangeFilter ( const SqlNode_t & tAttr, float fMin, float fMax, bool bHasEqual, bool bExclude=false );
@@ -1372,18 +1372,54 @@ bool SqlParser_c::AddMatch ( const SqlNode_t & tValue, const SqlNode_t & tIndex 
 	return true;
 }
 
-bool SqlParser_c::SetKNN ( const SqlNode_t & tAttr, const SqlNode_t & tK, const SqlNode_t & tValues, const SqlNode_t * pEf )
+
+static bool ParseKNNOption ( const CSphNamedInt & tOpt, KnnSearchSettings_t & tKNN )
 {
-	ToString ( m_pQuery->m_sKNNAttr, tAttr );
-	m_pQuery->m_iKNNK = tK.GetValueInt();
-	if ( pEf )
-		m_pQuery->m_iKnnEf = pEf->GetValueInt();
+	CSphString sName = tOpt.first;
+	sName.ToLower();
+	if ( sName=="ef" )
+	{
+		tKNN.m_iEf = tOpt.second;
+		return true;
+	}
+	else if ( sName=="oversampling" )
+	{
+		// fixme!
+		tKNN.m_fOversampling = tOpt.second / 100.0f;
+		return true;
+	}
+	else if ( sName=="rescore" )
+	{
+		tKNN.m_bRescore = !!tOpt.second;
+		return true;
+	}
+
+	return false;
+}
+
+
+bool SqlParser_c::SetKNN ( const SqlNode_t & tAttr, const SqlNode_t & tK, const SqlNode_t & tValues, const CSphVector<CSphNamedInt> * pOpts )
+{
+	auto & tKNN = m_pQuery->m_tKnnSettings;
+
+	ToString ( tKNN.m_sAttr, tAttr );
+	tKNN.m_iK = tK.GetValueInt();
+	if ( pOpts )
+		for ( auto & i : *pOpts )
+			if ( !ParseKNNOption ( i, tKNN ) )
+			{
+				CSphString sError;
+				sError.SetSprintf ( "Unable to parse KNN option '%s'", i.first.cstr() );
+				yyerror ( this, sError.cstr() );
+				return false;
+			}
+
 	if ( tValues.m_iValues>=0 )
 	{
 		const auto & dValues = GetMvaVec ( tValues.m_iValues );
-		m_pQuery->m_dKNNVec.Reserve ( dValues.GetLength() );
+		tKNN.m_dVec.Reserve ( dValues.GetLength() );
 		for ( const auto & i : dValues )
-			m_pQuery->m_dKNNVec.Add( i.m_fValue );
+			tKNN.m_dVec.Add( i.m_fValue );
 	}
 	
 	return true;
@@ -1998,8 +2034,7 @@ static bool SetupFacets ( CSphVector<SqlStmt_t> & dStmt )
 			tStmt.m_tQuery.m_sSelect	= tStmt.m_tQuery.m_sFacetBy;
 			tStmt.m_tQuery.m_sQuery		= tHeadQuery.m_sQuery;
 			tStmt.m_tQuery.m_iMaxMatches = tHeadQuery.m_iMaxMatches;
-			tStmt.m_tQuery.m_sKNNAttr	= tHeadQuery.m_sKNNAttr;
-			tStmt.m_tQuery.m_dKNNVec	= tHeadQuery.m_dKNNVec;
+			tStmt.m_tQuery.m_tKnnSettings= tHeadQuery.m_tKnnSettings;
 			tStmt.m_tQuery.m_sJoinIdx	= tHeadQuery.m_sJoinIdx;
 			tStmt.m_tQuery.m_eJoinType	= tHeadQuery.m_eJoinType;
 			tStmt.m_tQuery.m_dOnFilters = tHeadQuery.m_dOnFilters;

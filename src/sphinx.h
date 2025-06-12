@@ -508,6 +508,17 @@ struct ScrollSettings_t
 	CSphVector<ScrollAttr_t>	m_dAttrs;
 };
 
+
+struct KnnSearchSettings_t
+{
+	CSphString		m_sAttr;				///< which attr to use for KNN search (enables KNN if not empty)
+	int				m_iK = 0;				///< KNN K
+	int				m_iEf = 0;				///< KNN ef
+	bool			m_bRescore = false;		///< KNN rescoring
+	float			m_fOversampling = 1.0f;	///< KNN oversampling
+	CSphVector<float> m_dVec;				///< KNN anchor vector
+};
+
 /// search query. Pure struct, no member functions
 struct CSphQuery
 {
@@ -529,10 +540,7 @@ struct CSphQuery
 	int				m_iMaxMatches = DEFAULT_MAX_MATCHES;	///< max matches to retrieve, default is 1000. more matches use more memory and CPU time to hold and sort them
 	bool			m_bExplicitMaxMatches = false; ///< did we specify the max_matches explicitly?
 
-	CSphString		m_sKNNAttr;					///< which attr to use for KNN search (enables KNN if not empty)
-	int				m_iKNNK = 0;				///< KNN K
-	int				m_iKnnEf = 0;				///< KNN ef
-	CSphVector<float> m_dKNNVec;				///< KNN anchor vector
+	KnnSearchSettings_t m_tKnnSettings;
 
 	JiebaMode_e		m_eJiebaMode = JiebaMode_e::NONE;	///< separate optional jieba mode for searches
 

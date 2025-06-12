@@ -9541,7 +9541,7 @@ int64_t RtIndex_c::GetCount() const
 	if ( MustRunInSingleThread ( dQueries, false, dMaxCountDistinct, bForceSingleThread ) )
 		return { 0, 1 };
 
-	bool bHaveKNN = dQueries.any_of ( []( auto & tQuery ){ return !tQuery.m_sKNNAttr.IsEmpty(); } );	 
+	bool bHaveKNN = dQueries.any_of ( []( auto & tQuery ){ return !tQuery.m_tKnnSettings.m_sAttr.IsEmpty(); } );	 
 
 	auto tGuard = RtGuard();
 	int iDiskChunks = tGuard.m_dDiskChunks.GetLength();

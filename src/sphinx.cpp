@@ -2105,7 +2105,7 @@ static bool DetectPrecalcSorters ( const CSphQuery & tQuery, const ISphSchema & 
 	if ( !tQuery.m_sQuery.IsEmpty() )
 		return false;
 
-	if ( !tQuery.m_sKNNAttr.IsEmpty() )
+	if ( !tQuery.m_tKnnSettings.m_sAttr.IsEmpty() )
 		return false;
 
 	bool bDistinct = !tQuery.m_sGroupDistinct.IsEmpty();
@@ -3260,7 +3260,7 @@ std::pair<int64_t,int> CSphIndex_VLN::GetPseudoShardingMetric ( const VecTraits_
 		if ( bFulltext )
 			iThreadCap = iThreadCap ? Min ( iThreadCap, iNumProc ) : iNumProc;
 
-		if ( !tQuery.m_sKNNAttr.IsEmpty() )
+		if ( !tQuery.m_tKnnSettings.m_sAttr.IsEmpty() )
 			iThreadCap = 1;
 
 		if ( !CheckQueryFilters ( tQuery, m_tSchema ) )
@@ -8075,7 +8075,7 @@ static void RemoveOptionalFilters ( const CSphVector<CSphFilterSettings> & dFilt
 bool CSphIndex_VLN::ChooseIterators ( CSphVector<SecondaryIndexInfo_t> & dSIInfo, const CSphQuery & tQuery, const CSphVector<CSphFilterSettings> & dFilters, CSphQueryContext & tCtx, CreateFilterContext_t & tFlx, const ISphSchema & tMaxSorterSchema, CSphQueryResultMeta & tMeta, int iCutoff, int iThreads, CSphVector<CSphFilterSettings> & dModifiedFilters, ISphRanker * pRanker ) const
 {
 	StrVec_t dWarnings;
-	bool bKNN = !tQuery.m_sKNNAttr.IsEmpty();
+	bool bKNN = !tQuery.m_tKnnSettings.m_sAttr.IsEmpty();
 	float fBestCost = FLT_MAX;
 
 	if ( bKNN )
@@ -8083,7 +8083,7 @@ bool CSphIndex_VLN::ChooseIterators ( CSphVector<SecondaryIndexInfo_t> & dSIInfo
 		SelectIteratorCtx_t tSelectIteratorCtx ( tQuery, dFilters, m_tSchema, tMaxSorterSchema, m_pHistograms, m_pColumnar.get(), m_tSI, iCutoff, m_iDocinfo, 1 );
 		tSelectIteratorCtx.m_bFromIterator = true;
 
-		int iRequestedKNNDocs = Min ( tQuery.m_iKNNK, m_iDocinfo );
+		int iRequestedKNNDocs = Min ( int64_t(tQuery.m_tKnnSettings.m_iK * tQuery.m_tKnnSettings.m_fOversampling), m_iDocinfo );
 		tSelectIteratorCtx.m_fDocsLeft = float(iRequestedKNNDocs)/m_iDocinfo;
 		dSIInfo = SelectIterators ( tSelectIteratorCtx, fBestCost, dWarnings );
 	}
@@ -8121,7 +8121,7 @@ std::pair<RowidIterator_i *, bool> CSphIndex_VLN::SpawnIterators ( const CSphQue
 {
 	if ( !dFilters.GetLength() )
 	{
-		if ( !tQuery.m_sKNNAttr.IsEmpty() )
+		if ( !tQuery.m_tKnnSettings.m_sAttr.IsEmpty() )
 			return CreateKNNIterator ( m_pKNN.get(), tQuery, m_tSchema, tMaxSorterSchema, tMeta.m_sError );
 
 		return { nullptr, false };

@@ -39,8 +39,12 @@ private:
 	CSphVector<CSphVector<CSphVector<char>>> m_dStored;
 };
 
+bool							IsKnnDist ( const CSphString & sExpr );
 const char *					GetKnnDistAttrName();
+const char *					GetKnnDistRescoreAttrName();
+
 ISphExpr *						CreateExpr_KNNDist ( const CSphVector<float> & dAnchor, const CSphColumnInfo & tAttr );
+ISphExpr *						CreateExpr_KNNDistRescore ( const CSphVector<float> & dAnchor, const CSphColumnInfo & tAttr );
 void							NormalizeVec ( VecTraits_T<float> & dData );
 
 void							AddKNNSettings ( StringBuilder_c & sRes, const CSphColumnInfo & tAttr );
@@ -57,3 +61,5 @@ void							BuildTrainKNN ( RowID_t tRowID, const CSphRowitem * pRow, const BYTE 
 bool							BuildStoreKNN ( RowID_t tRowID, const CSphRowitem * pRow, const BYTE * pPool, CSphVector<ScopedTypedIterator_t> & dIterators, const VecTraits_T<PlainOrColumnar_t> & dAttrs, knn::Builder_i & tBuilder );
 std::pair<RowidIterator_i *, bool> CreateKNNIterator ( knn::KNN_i * pKNN, const CSphQuery & tQuery, const ISphSchema & tIndexSchema, const ISphSchema & tSorterSchema, CSphString & sError );
 RowIteratorsWithEstimates_t		CreateKNNIterators ( knn::KNN_i * pKNN, const CSphQuery & tQuery, const ISphSchema & tIndexSchema, const ISphSchema & tSorterSchema, bool & bError, CSphString & sError );
+
+ISphMatchSorter *				CreateKNNRescoreSorter ( ISphMatchSorter * pSorter, const KnnSearchSettings_t & tSettings );

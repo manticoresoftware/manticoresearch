@@ -1201,9 +1201,12 @@ static bool ParseKNNQuery ( const JsonObj_c & tJson, CSphQuery & tQuery, CSphStr
 		return false;
 	}
 
-	if ( !tJson.FetchStrItem ( tQuery.m_sKNNAttr, "field", sError ) )	return false;
-	if ( !tJson.FetchIntItem ( tQuery.m_iKNNK, "k", sError ) )			return false;
-	if ( !tJson.FetchIntItem ( tQuery.m_iKnnEf, "ef", sError, true ) )		return false;
+	auto & tKNN = tQuery.m_tKnnSettings;
+	if ( !tJson.FetchStrItem ( tKNN.m_sAttr, "field", sError ) )	return false;
+	if ( !tJson.FetchIntItem ( tKNN.m_iK, "k", sError ) )			return false;
+	if ( !tJson.FetchIntItem ( tKNN.m_iEf, "ef", sError, true ) )	return false;
+	if ( !tJson.FetchBoolItem ( tKNN.m_bRescore, "rescore", sError, true ) )			return false;
+	if ( !tJson.FetchFltItem ( tKNN.m_fOversampling, "oversampling", sError, true ) )	return false;
 
 	JsonObj_c tQueryVec = tJson.GetArrayItem ( "query_vector", sError );
 	if ( !tQueryVec )
@@ -1217,7 +1220,7 @@ static bool ParseKNNQuery ( const JsonObj_c & tJson, CSphQuery & tQuery, CSphStr
 			return false;
 		}
 
-		tQuery.m_dKNNVec.Add ( tArrayItem.FltVal() );
+		tKNN.m_dVec.Add ( tArrayItem.FltVal() );
 	}
 
 	return true;

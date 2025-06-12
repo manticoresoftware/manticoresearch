@@ -742,9 +742,9 @@ knn_item:
 			if ( !pParser->SetKNN ( $3, $5, $8, nullptr ) )
 				YYERROR;
 		}
-	| TOK_KNN '(' ident ',' const_int ',' '(' const_list ')' ',' const_int ')'
+	| TOK_KNN '(' ident ',' const_int ',' '(' const_list ')' ',' '{' named_const_list '}' ')'
 		{
-			if ( !pParser->SetKNN ( $3, $5, $8, &$11 ) )
+			if ( !pParser->SetKNN ( $3, $5, $8, &( pParser->GetNamedVec ( $4.GetValueInt() ) ) ) )
 				YYERROR;
 		}
 	;

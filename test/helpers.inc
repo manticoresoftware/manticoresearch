@@ -288,10 +288,10 @@ function mysql_test_connect($host)
 	global $gl_conn;
 	$conndetails = explode(":",$host);
 	if ( count($conndetails)==1 )
-		$gl_conn = new mysqli($host,'','');
+		$gl_conn = new mysqli($host,'','', 'Manticore');
 	else
 	{
-		$gl_conn = new mysqli($host, '', '', '', (int)$port);
+		$gl_conn = new mysqli($host, '', '', 'Manticore', (int)$port);
 	}
 	if ($gl_conn->connect_error)
 		return false;
@@ -1087,7 +1087,7 @@ function ConnectSpecificQL($agent, $vip=false)
 	if ($address == "localhost")
 		$address = "127.0.0.1";
 	mysqli_report(MYSQLI_REPORT_OFF);
-	return @mysqli_connect ( $address, '', '', '', $port );
+	return @mysqli_connect ( $address, '', '', 'Manticore', $port );
 }
 
 function ConnectQL()
@@ -4162,7 +4162,7 @@ class SphinxConfig
 				$connect_string = "$address:$port";
 				if ( $cn !== false )
 					$cn->close();
-				$cn = new mysqli( $address, "", "", "", $port );
+				$cn = new mysqli( $address, "", "", "Manticore", $port );
 			}
 			if ( $cn === false )
 				return false;

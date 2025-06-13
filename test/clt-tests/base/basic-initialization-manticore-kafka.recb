@@ -13,7 +13,7 @@ docker run -it --network=app-network --platform linux/amd64 --name manticore -d 
 ––– comment –––
 Configure Manticore with Buddy integration and debug logging
 ––– input –––
-docker exec manticore sed -i '/data_dir = \/var\/lib\/manticore/a\    buddy_path = manticore-executor -n /usr/share/manticore/modules/manticore-buddy/src/main.php --debugvv\n' /etc/manticoresearch/manticore.conf
+docker exec manticore sed -i '/data_dir = \/var\/lib\/manticore/a\    buddy_path = manticore-executor -n /usr/share/manticore/modules/manticore-buddy/src/main.php --logdebugv\n' /etc/manticoresearch/manticore.conf
 ––– output –––
 ––– comment –––
 Start Manticore Search daemon with real-time output

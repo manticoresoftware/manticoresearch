@@ -7,3 +7,4 @@ When using comments, be cautious when incorporating the `#` character in charact
 If you need to use the `#` character within your configuration file, such as within database credentials in source declarations, you can escape it using a backslash `\`. This allows you to include the `#` character in your settings without it being interpreted as the start of a comment.
 
 <!-- proofread -->
+

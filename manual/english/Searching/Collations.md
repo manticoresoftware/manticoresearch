@@ -54,3 +54,4 @@ Collation can be overridden via SQL on a per-session basis using the `SET collat
 Collations affect all string attribute comparisons, including those within `ORDER BY` and `GROUP BY`, so differently ordered or grouped results can be returned depending on the collation chosen. Note that collations don't affect full-text searching; for that, use the [charset_table](../Creating_a_table/NLP_and_tokenization/Low-level_tokenization.md#charset_table).
 
 <!-- proofread -->
+

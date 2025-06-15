@@ -295,3 +295,4 @@ The following table outlines the different file extensions and their respective 
 
  For more information on the structure of disk chunks, refer to the [plain table files structure](../../Creating_a_table/Local_tables/Plain_table.md#Plain-table-files-structure).
 <!-- proofread -->
+

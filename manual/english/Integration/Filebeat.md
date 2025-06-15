@@ -142,3 +142,4 @@ host: {"name":"logstash-db848f65f-lnlf9"}
 agent: {"ephemeral_id":"587c2ebc-e7e2-4e27-b772-19c611115996","id":"2e3d985b-3610-4b8b-aa3b-2e45804edd2c","name":"logstash-db848f65f-lnlf9","type":"filebeat","version":"7.10.0","hostname":"logstash-db848f65f-lnlf9"}
 log: {"offset":80,"file":{"path":"/var/log/dpkg.log"}}
 ```
+

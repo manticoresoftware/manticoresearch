@@ -96,7 +96,7 @@ select *, a + b alias from test order by alias desc;
 	    ]
 	  }
 	}
-```    
+```
 
 <!-- intro -->
 ##### PHP:
@@ -278,7 +278,7 @@ You can also specify the sort order explicitly:
 	    ]
 	  }
 	}
-```    
+```
 
 <!-- intro -->
 ##### PHP:
@@ -370,7 +370,7 @@ let query = SearchQuery {
     ..Default::default(),
 };
 let sort_by_id = HashMap::new();
-sort_by_id.insert("id".to_string(), "desc".to_string()); 
+sort_by_id.insert("id".to_string(), "desc".to_string());
 let mut sort = Vec::new();
 sort.push(sort_by_id);
 sort.push("_score".to_string());
@@ -471,7 +471,7 @@ You can also use another syntax and specify the sort order via the `order` prope
 	    ]
 	  }
 	}
-```    
+```
 
 <!-- intro -->
 ##### PHP:
@@ -561,7 +561,7 @@ let query = SearchQuery {
     ..Default::default(),
 };
 let mut sort_by_id = HashMap::new();
-sort_by_id.insert("id".to_string(), "desc".to_string()); 
+sort_by_id.insert("id".to_string(), "desc".to_string());
 let sort = [HashMap; 1] = [sort_by_id];
 let search_req = SearchRequest {
     table: "test".to_string(),
@@ -661,7 +661,7 @@ Sorting by MVA attributes is also supported in JSON queries. Sorting mode can be
 	    ]
 	  }
 	}
-```    
+```
 
 <!-- intro -->
 ##### PHP:
@@ -752,7 +752,7 @@ let mut sort_mva_opts = HashMap::new();
 sort_mva_opts.insert("order".to_string(), "desc".to_string());
 sort_mva_opts.insert("mode".to_string(), "max".to_string());
 let mut sort_mva = HashMap::new();
-sort_mva.insert("attr_mva".to_string(), sort_mva_opts); 
+sort_mva.insert("attr_mva".to_string(), sort_mva_opts);
 
 let search_req = SearchRequest {
     table: "test".to_string(),
@@ -850,7 +850,7 @@ When sorting on an attribute, match weight (score) calculation is disabled by de
 	    ]
 	  }
 	}
-```    
+```
 
 <!-- intro -->
 ##### PHP:
@@ -946,7 +946,7 @@ let mut sort_mva_opts = HashMap::new();
 sort_mva_opts.insert("order".to_string(), "desc".to_string());
 sort_mva_opts.insert("mode".to_string(), "max".to_string());
 let mut sort_mva = HashMap::new();
-sort_mva.insert("attr_mva".to_string(), sort_mva_opts); 
+sort_mva.insert("attr_mva".to_string(), sort_mva_opts);
 
 let search_req = SearchRequest {
     table: "test".to_string(),
@@ -1136,6 +1136,7 @@ Plain IDF varies in `[0, log(N)]` range, and keywords are never penalized; while
 
 Second, `idf=tfidf_normalized` causes IDF drift over queries. Historically, we additionally divided IDF by query keyword count, so that the entire `sum(tf*idf)` over all keywords would still fit into `[0,1]` range. However, that means that queries `word1` and `word1 | nonmatchingword2` would assign different weights to the exactly same result set, because the IDFs for both `word1` and `nonmatchingword2` would be divided by 2. `OPTION idf='tfidf_unnormalized'` fixes that. Note that BM25, BM25A, BM25F() ranking factors will be scale accordingly  once you disable this normalization.
 
-IDF flags can be mixed; `plain` and `normalized` are mutually exclusive;`tfidf_unnormalized` and `tfidf_normalized` are mutually exclusive; and unspecified flags in such a mutually exclusive group take their defaults. That means that `OPTION idf=plain` is equivalent to a complete `OPTION idf='plain,tfidf_normalized'` specification.    
+IDF flags can be mixed; `plain` and `normalized` are mutually exclusive;`tfidf_unnormalized` and `tfidf_normalized` are mutually exclusive; and unspecified flags in such a mutually exclusive group take their defaults. That means that `OPTION idf=plain` is equivalent to a complete `OPTION idf='plain,tfidf_normalized'` specification.
 
 <!-- proofread -->
+

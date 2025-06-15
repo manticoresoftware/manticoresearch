@@ -899,7 +899,7 @@ BulkResponse bulkresult = indexApi.Bulk(string.Join("\n", docs));
 ``` rust
 let bulk_body = r#"{"insert": "index" : "products", "id" : 1, "doc" : {"title" : "Crossbody Bag with Tassel", "price" : 19.85}}}
     {"insert": {"index" : "products", "id" : 4, "doc" : {"title" : "microfiber sheet set", "price" : 19.99}}}
-    {"insert": {"index" : "products", "id" : 5, "doc" : {"title" : "CPet Hair Remover Glove", "price" : 7.99}}}         
+    {"insert": {"index" : "products", "id" : 5, "doc" : {"title" : "CPet Hair Remover Glove", "price" : 7.99}}}
 "#;
 index_api.bulk(bulk_body).await;
 ```
@@ -1205,3 +1205,4 @@ let insert_res = index_api.insert(insert_req).await;
 <!-- end -->
 
 <!-- proofread -->
+

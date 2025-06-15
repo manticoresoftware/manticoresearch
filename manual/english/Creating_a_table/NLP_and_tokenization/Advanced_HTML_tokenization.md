@@ -12,7 +12,7 @@ html_strip = {0|1}
 
 This option determines whether HTML markup should be stripped from the incoming full-text data. The default value is 0, which disables stripping. To enable stripping, set the value to 1.
 
-HTML tags and entities are considered as markup and will be processed. 
+HTML tags and entities are considered as markup and will be processed.
 
 HTML tags are removed, while the contents between them (e.g. everything between `<p>` and `</p>`) are left intact. You can choose to keep and index tag attributes (e.g. HREF attribute in an A tag or ALT in an IMG tag). Some well-known inline tags, such as A, B, I, S, U, BASEFONT, BIG, EM, FONT, IMG, LABEL, SMALL, SPAN, STRIKE, STRONG, SUB, SUP, and TT, are completely removed. All other tags are treated as block level and are replaced with whitespace. For example, the text `te<b>st</b>` will be indexed as a single keyword 'test', while `te<p>st</p>` will be indexed as two keywords 'te' and 'st'.
 
@@ -106,7 +106,7 @@ utils_api.sql("CREATE TABLE products(title text, price float) html_strip = '1'",
 ```ini
 table products {
   html_strip = 1
-  
+
   type = rt
   path = tbl
   rt_field = title
@@ -123,7 +123,7 @@ table products {
 html_index_attrs = img=alt,title; a=title;
 ```
 
-The html_index_attrs option allows you to specify which HTML markup attributes should be indexed even though other HTML markup is stripped. The default value is empty, meaning no attributes will be indexed. 
+The html_index_attrs option allows you to specify which HTML markup attributes should be indexed even though other HTML markup is stripped. The default value is empty, meaning no attributes will be indexed.
 The format of the option is a per-tag enumeration of indexable attributes, as demonstrated in the example above. The contents of the specified attributes will be retained and indexed, providing a way to extract additional information from your full-text data.
 
 
@@ -212,7 +212,7 @@ utils_api.sql("CREATE TABLE products(title text, price float) html_index_attrs =
 table products {
   html_index_attrs = img=alt,title; a=title;
   html_strip = 1
-  
+
   type = rt
   path = tbl
   rt_field = title
@@ -321,7 +321,7 @@ utils_api.sql("CREATE TABLE products(title text, price float) html_remove_elemen
 table products {
   html_remove_elements = style, script
   html_strip = 1
-  
+
   type = rt
   path = tbl
   rt_field = title
@@ -346,13 +346,13 @@ This directive enables the detection and indexing of sentence and paragraph boun
 
 The following rules are used to determine sentence boundaries:
 
-* Question marks (?) and exclamation marks (!) always indicate a sentence boundary. 
+* Question marks (?) and exclamation marks (!) always indicate a sentence boundary.
 * Trailing dots (.) indicate a sentence boundary, except in the following cases:
     * When followed by a letter. This is considered part of an abbreviation (e.g. "S.T.A.L.K.E.R." or "Goldman Sachs S.p.A.").
     * When followed by a comma. This is considered an abbreviation followed by a comma (e.g. "Telecom Italia S.p.A., founded in 1994").
     * When followed by a space and a lowercase letter. This is considered an abbreviation within a sentence (e.g. "News Corp. announced in February").
     * When preceded by a space and an uppercase letter, and followed by a space. This is considered a middle initial (e.g. "John D. Doe").
-        
+
 Paragraph boundaries are detected at every block-level HTML tag, including: ADDRESS, BLOCKQUOTE, CAPTION, CENTER, DD, DIV, DL, DT, H1, H2, H3, H4, H5, LI, MENU, OL, P, PRE, TABLE, TBODY, TD, TFOOT, TH, THEAD, TR, and UL.
 
 Both sentences and paragraphs increment the keyword position counter by 1.
@@ -443,7 +443,7 @@ utils_api.sql("CREATE TABLE products(title text, price float) index_sp = \'1\' h
 table products {
   index_sp = 1
   html_strip = 1
-  
+
   type = rt
   path = tbl
   rt_field = title
@@ -555,7 +555,7 @@ utils_api.sql("CREATE TABLE products(title text, price float) index_zones = 'h, 
 table products {
   index_zones = h*, th, title
   html_strip = 1
-  
+
   type = rt
   path = tbl
   rt_field = title
@@ -564,3 +564,4 @@ table products {
 ```
 <!-- end -->
 <!-- proofread -->
+

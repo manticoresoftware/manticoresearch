@@ -601,14 +601,14 @@ res = await utilsApi.sql('SHOW TABLE statistic STATUS');
 
 ```typescript
 {
-	"columns": 
+	"columns":
 	[{
 		"Key": {"type": "string"}
 	},
     {
     	"Value": {"type": "string"}
     }],
-	"data": 
+	"data":
 	[
 		{"Key": "table_type", "Value": "rt"}
 	    {"Key": "indexed_documents", "Value": "3"}
@@ -676,14 +676,14 @@ apiClient.UtilsAPI.Sql(context.Background()).Body("SHOW TABLE statistic STATUS")
 
 ```go
 {
-	"columns": 
+	"columns":
 	[{
 		"Key": {"type": "string"}
 	},
     {
     	"Value": {"type": "string"}
     }],
-	"data": 
+	"data":
 	[
 		{"Key": "table_type", "Value": "rt"}
 	    {"Key": "indexed_documents", "Value": "3"}
@@ -740,3 +740,4 @@ apiClient.UtilsAPI.Sql(context.Background()).Body("SHOW TABLE statistic STATUS")
 ```
 
 <!-- end -->
+

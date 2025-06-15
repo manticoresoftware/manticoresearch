@@ -8,7 +8,7 @@ The database server host to connect to. Note that the MySQL client library choos
 
 ## sql_port
 
-The server IP port to connect to. 
+The server IP port to connect to.
 For `mysql` the default is 3306 and for `pgsql`, it is 5432.
 
 ## sql_db
@@ -105,3 +105,4 @@ odbc_dsn = Driver={Oracle ODBC Driver};Dbq=myDBName;Uid=myUsername;Pwd=myPasswor
 
 Please note that the format depends on the specific ODBC driver used.
 <!-- proofread -->
+

@@ -131,11 +131,11 @@ indexApi.insert(newdoc);
 ##### C#
 <!-- request C# -->
 ```clike
-Dictionary<string, Object> query = new Dictionary<string, Object>(); 
+Dictionary<string, Object> query = new Dictionary<string, Object>();
 query.Add("q1", "@title shoes");
 query.Add("filters", "price>5");
 query.Add("tags", new List<string> {"Loius Vuitton"});
-Dictionary<string, Object> newstoredquery = new Dictionary<string, Object>(); 
+Dictionary<string, Object> newstoredquery = new Dictionary<string, Object>();
 newstoredquery.Add("query", query);
 InsertDocumentRequest newdoc = new InsertDocumentRequest(index: "test_pq", id: 2, doc: doc);
 indexApi.Insert(newdoc);
@@ -327,11 +327,11 @@ indexApi.insert(newdoc);
 ##### C#
 <!-- request C# -->
 ```clike
-Dictionary<string, Object> query = new Dictionary<string, Object>(); 
+Dictionary<string, Object> query = new Dictionary<string, Object>();
 query.Add("q1", "@title shoes");
 query.Add("filters", "price>5");
 query.Add("tags", new List<string> {"Loius Vuitton"});
-Dictionary<string, Object> newstoredquery = new Dictionary<string, Object>(); 
+Dictionary<string, Object> newstoredquery = new Dictionary<string, Object>();
 newstoredquery.Add("query", query);
 InsertDocumentRequest newdoc = new InsertDocumentRequest(index: "test_pq", doc: doc);
 indexApi.Insert(newdoc);
@@ -475,3 +475,4 @@ GET /pq/pq/doc/2810823411335430149
 
 <!-- end -->
 <!-- proofread -->
+

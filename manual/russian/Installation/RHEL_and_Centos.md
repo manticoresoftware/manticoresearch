@@ -1,15 +1,14 @@
 # Установка пакетов Manticore на RedHat и CentOS
 
-### Поддерживаемые версии:
+### Поддерживаемые релизы:
 
-* CentOS 7, RHEL 7, Oracle Linux 7
 * CentOS 8, RHEL 8, Oracle Linux 8, CentOS Stream 8
 * Amazon Linux 2
 * CentOS 9, RHEL 9, AlmaLinux 9
 
-### YUM репозиторий
+### Репозиторий YUM
 
-Самый простой способ установить Manticore на RedHat/CentOS — воспользоваться нашим YUM репозиторием:
+Самый простой метод установки Manticore на RedHat/CentOS — использовать наш репозиторий YUM:
 
 Установите репозиторий:
 ```bash
@@ -21,7 +20,7 @@ sudo yum install https://repo.manticoresearch.com/manticore-repo.noarch.rpm
 sudo yum install manticore manticore-extra
 ```
 
-Если вы обновляетесь до Manticore 6 с более ранней версии, рекомендуется сначала удалить старые пакеты, чтобы избежать конфликтов, вызванных обновленной структурой пакетов:
+Если вы обновляетесь до Manticore 6 с более старой версии, рекомендуется сначала удалить старые пакеты, чтобы избежать конфликтов из-за обновлённой структуры пакетов:
 
 ```bash
 sudo yum remove manticore*
@@ -29,48 +28,48 @@ sudo yum remove manticore*
 
 Это не удалит ваши данные и файл конфигурации.
 
-###### Пакеты разработки
-Если вы предпочитаете "Nightly" (разработческие) версии, выполните:
+###### Пакеты для разработки
+Если вы предпочитаете версии "Nightly" (разработки), выполните:
 
 ```bash
 sudo yum -y install https://repo.manticoresearch.com/manticore-repo.noarch.rpm && \
 sudo yum -y --enablerepo manticore-dev install manticore manticore-extra manticore-common manticore-server manticore-server-core manticore-tools manticore-executor manticore-buddy manticore-backup manticore-columnar-lib manticore-server-core-debuginfo manticore-tools-debuginfo manticore-columnar-lib-debuginfo  manticore-icudata manticore-galera manticore-galera-debuginfo manticore-language-packs manticore-load
 ```
 
-### Ст standalone RPM пакеты
-Чтобы скачать standalone RPM файлы из репозитория Manticore, следуйте инструкциям, доступным на https://manticoresearch.com/install/.
+### Отдельные RPM-пакеты
+Чтобы скачать отдельные RPM-файлы из репозитория Manticore, следуйте инструкциям на https://manticoresearch.com/install/.
 
 ### Дополнительные пакеты, которые могут понадобиться
-#### Для индексатора
-Если вы планируете использовать [индексатор](../Data_creation_and_modification/Adding_data_from_external_storages/Plain_tables_creation.md#Indexer-tool) для создания таблиц из внешних источников, вам нужно убедиться, что вы установили соответствующие клиентские библиотеки, чтобы сделать доступными источники индексирования, которые вам нужны. Строка ниже установит все из них сразу; не стесняйтесь использовать ее, как есть, или сократите, чтобы установить только необходимые библиотеки (для только mysql источников — достаточно `mysql-libs`, а unixODBC не требуется).
+#### Для indexer
+Если вы планируете использовать [indexer](../Data_creation_and_modification/Adding_data_from_external_storages/Plain_tables_creation.md#Indexer-tool) для создания таблиц из внешних источников, необходимо убедиться, что установлены соответствующие клиентские библиотеки для поддержки нужных источников индексации. Следующая строка установит все их сразу; вы можете использовать её как есть или сократить, установив только нужные библиотеки (для mysql-источников достаточно `mysql-libs`, а unixODBC не обязателен).
 
 ```bash
 sudo yum install mysql-libs postgresql-libs expat unixODBC
 ```
 
-В CentOS Stream 8 вам может понадобиться выполнить:
+В CentOS Stream 8 может понадобиться выполнить:
 
 ```
 dnf install mariadb-connector-c
 ```
 
-если вы получите ошибку `sql_connect: MySQL source wasn't initialized. Wrong name in dlopen?`, пытаясь создать простую таблицу из MySQL.
+если при попытке собрать plain table из MySQL возникнет ошибка `sql_connect: MySQL source wasn't initialized. Wrong name in dlopen?`.
 
 #### Украинский лемматизатор
-Лемматизатор требует Python 3.9+. **Убедитесь, что он установлен и настроен с `--enable-shared`.**
+Лемматизатор требует Python 3.9+. **Убедитесь, что он установлен и настроен с опцией `--enable-shared`.**
 
-Вот как установить Python 3.9 и украинский лемматизатор в CentOS 7/8:
+Как установить Python 3.9 и украинский лемматизатор в Centos 8:
 
 ```bash
-# установить Manticore Search и УК лемматизатор из YUM репозитория
+# install Manticore Search and UK lemmatizer from YUM repository
 yum -y install https://repo.manticoresearch.com/manticore-repo.noarch.rpm
 yum -y install manticore manticore-lemmatizer-uk
 
-# установить пакеты, необходимые для сборки Python
+# install packages needed for building Python
 yum groupinstall "Development Tools" -y
 yum install openssl-devel libffi-devel bzip2-devel wget -y
 
-# скачать, собрать и установить Python 3.9
+# download, build and install Python 3.9
 cd ~
 wget https://www.python.org/ftp/python/3.9.2/Python-3.9.2.tgz
 tar xvf Python-3.9.2.tgz
@@ -78,11 +77,12 @@ cd Python-3.9*/
 ./configure --enable-optimizations --enable-shared
 make -j8 altinstall
 
-# обновить кэш компоновщика
+# update linker cache
 ldconfig
 
-# установить pymorphy2 и УК словарь
+# install pymorphy2 and UK dictionary
 pip3.9 install pymorphy2[fast]
 pip3.9 install pymorphy2-dicts-uk
 ```
 <!-- proofread -->
+

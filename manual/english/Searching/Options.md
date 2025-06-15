@@ -17,9 +17,9 @@ SELECT ... [OPTION <optionname>=<value> [ , ... ]] [/*+ [NO_][ColumnarScan|Docid
 **HTTP**:
 ```json
 POST /search
-{   
+{
     "table" : "table_name",
-    "options":   
+    "options":
     {
         "optionname": "value",
         "optionname2": <value2>
@@ -53,17 +53,17 @@ JSON:
 
 ```json
 POST /search
-{   
+{
     "table" : "test",
     "query": {
       "match": {
         "title": "hello"
       },
       "match": {
-        "body": "world"     
+        "body": "world"
       }
     },
-    "options":   
+    "options":
     {
         "ranker": "bm25",
         "max_matches": 3000,
@@ -388,3 +388,4 @@ mysql -P9306 -h0 --comments
 <!-- end -->
 
 <!-- proofread -->
+

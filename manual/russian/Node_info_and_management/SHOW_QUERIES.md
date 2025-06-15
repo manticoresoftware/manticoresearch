@@ -1,26 +1,27 @@
-# ПОКАЗАТЬ ЗАПРОСЫ
+# SHOW QUERIES
 
-<!-- пример ПОКАЗАТЬ ЗАПРОСЫ -->
+<!-- example SHOW QUERIES -->
 ```sql
 SHOW QUERIES
 ```
 
-> ЗАМЕТКА: `SHOW QUERIES` требует [Manticore Buddy](../Installation/Manticore_Buddy.md). Если это не работает, убедитесь, что Buddy установлен.
+> ПРИМЕЧАНИЕ: `SHOW QUERIES` требует [Manticore Buddy](../Installation/Manticore_Buddy.md). Если не работает, убедитесь, что Buddy установлен.
 
-`SHOW QUERIES` возвращает информацию обо всех в настоящее время выполняемых запросах. Вывод представляет собой таблицу со следующей структурой:
+`SHOW QUERIES` возвращает информацию обо всех текущих выполняемых запросах. Вывод представляет собой таблицу со следующей структурой:
 
-- `id`: Идентификатор запроса, который можно использовать в [KILL](../Node_info_and_management/KILL.md) для завершения запроса
-- `query`: Запрос или его часть
-- `time`: Время выполнения команды или сколько времени назад был выполнен запрос (в этом случае значение будет включать `ago`)
-- `protocol`: [Протокол соединения](../Server_settings/Searchd.md#listen), возможные значения: `sphinx`, `mysql`, `http`, `ssl`, `compressed`, `replication` или комбинация (например, `http,ssl` или `compressed,mysql`)
+- `id`: ID запроса, который можно использовать в [KILL](../Node_info_and_management/KILL.md) для завершения запроса
+- `query`: Текст запроса или его часть
+- `time`: Время выполнения команды или как давно был выполнен запрос (в этом случае значение будет содержать `ago`)
+- `protocol`: [Протокол соединения](../Server_settings/Searchd.md#listen), возможные значения `sphinx`, `mysql`, `http`, `ssl`, `compressed`, `replication` или их комбинация (например, `http,ssl` или `compressed,mysql`)
 - `host`: `ip:port` клиента
 
-<!-- запрос SQL -->
+
+<!-- request SQL -->
 ```sql
 mysql> SHOW QUERIES;
 ```
 
-<!-- ответ SQL -->
+<!-- response SQL -->
 ```
 +------+--------------+---------+----------+-----------------+
 | id   | query        | time    | protocol | host            |
@@ -28,12 +29,12 @@ mysql> SHOW QUERIES;
 |  111 | select       | 5ms ago | http     | 127.0.0.1:58986 |
 |   96 | SHOW QUERIES | 255us   | mysql    | 127.0.0.1:33616 |
 +------+--------------+---------+----------+-----------------+
-2 строки в наборе (0.61 сек)
+2 rows in set (0.61 sec)
 ```
 
-<!-- конец -->
+<!-- end -->
 
-Обратитесь к [ПОКАЗАТЬ ТРЕДЫ](../Node_info_and_management/SHOW_THREADS.md), если вы хотите получить представление с точки зрения самих потоков.
+Обратитесь к [SHOW THREADS](../Node_info_and_management/SHOW_THREADS.md), если хотите получить информацию с точки зрения самих потоков.
 
-<!-- корректура -->
+<!-- proofread -->
 

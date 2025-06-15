@@ -116,3 +116,4 @@ The calling sequence of the other functions is fixed, though. Namely,
 * `testfunc_deinit()` is called once when the query processing (in a given table shard) ends.
 
 <!-- proofread -->
+

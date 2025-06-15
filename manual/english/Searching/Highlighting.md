@@ -168,7 +168,7 @@ searchRequest.setIndex("books");
 query = new HashMap<String,Object>();
 query.put("match",new HashMap<String,Object>(){{
     put("*","try|gets|down|said");
-}});        
+}});
 searchRequest.setQuery(query);
 highlight = new HashMap<String,Object>(){{
 
@@ -622,7 +622,7 @@ searchRequest.setIndex("books");
 query = new HashMap<String,Object>();
 query.put("match",new HashMap<String,Object>(){{
     put("*","try|gets|down|said");
-}});        
+}});
 searchRequest.setQuery(query);
 highlight = new HashMap<String,Object>(){{
     put("limit",50);
@@ -1178,7 +1178,7 @@ searchRequest.setIndex("books");
 query = new HashMap<String,Object>();
 query.put("match",new HashMap<String,Object>(){{
     put("*","one|robots");
-}});        
+}});
 searchRequest.setQuery(query);
 highlight = new HashMap<String,Object>(){{
     put("fields",new String[] {"content"});
@@ -1245,7 +1245,7 @@ let query = SearchQuery {
     match: Some(serde_json::json!(match_filter).into()),
     ..Default::default(),
 };
-let highlight_fields [String; 1] = ["content".to_string()]; 
+let highlight_fields [String; 1] = ["content".to_string()];
 let highlight = Highlight {
     fields: Some(serde_json::json!(highlight_fields)),
     ..Default::default(),
@@ -1511,7 +1511,7 @@ searchRequest.setIndex("books");
 query = new HashMap<String,Object>();
 query.put("match",new HashMap<String,Object>(){{
     put("*","one|robots");
-}});        
+}});
 searchRequest.setQuery(query);
 highlight = new HashMap<String,Object>(){{
 }};
@@ -1810,7 +1810,7 @@ searchRequest.setIndex("books");
 query = new HashMap<String,Object>();
 query.put("match",new HashMap<String,Object>(){{
     put("*","one|robots");
-}});        
+}});
 searchRequest.setQuery(query);
 highlight = new HashMap<String,Object>(){{
 put("fields",new String[] {"content","title"});
@@ -1835,9 +1835,9 @@ var searchRequest = new SearchRequest("books");
 searchRequest.FulltextFilter = new MatchFilter("*", "one|robots");
 var highlight = new Highlight();
 highlight.Fieldnames = new List<string> {"content", "title"};
-Dictionary<string, Object> match = new Dictionary<string, Object>(); 
+Dictionary<string, Object> match = new Dictionary<string, Object>();
 match.Add("*", "polite distance");
-Dictionary<string, Object> highlightQuery = new Dictionary<string, Object>(); 
+Dictionary<string, Object> highlightQuery = new Dictionary<string, Object>();
 highlightQuery.Add("match", match);
 highlight.HighlightQuery = highlightQuery;
 searchRequest.Highlight = highlight;
@@ -1856,13 +1856,13 @@ let query = SearchQuery {
     match: Some(serde_json::json!(match_filter).into()),
     ..Default::default(),
 };
-let mut highlight_match_filter = HashMap::new(); 
+let mut highlight_match_filter = HashMap::new();
 highlight_match_filter.insert("*".to_string(), "polite distance".to_string());
 let highlight_query = QueryFilter {
     r#match: Some(serde_json::json!(highlight_match_filter)),
     ..Default::default(),
 };
-let highlight_fields [String; 2] = ["content".to_string(), "title".to_string()]; 
+let highlight_fields [String; 2] = ["content".to_string(), "title".to_string()];
 let highlight = Highlight {
     fields: Some(serde_json::json!(highlight_fields)),
     highlight_query: Some(Box::new(highlight_query)),
@@ -1932,7 +1932,7 @@ query := map[string]interface{} {"match": matchClause};
 searchRequest.SetQuery(query);
 highlight := manticoreclient.NewHighlight()
 highlightField := manticoreclient.NetHighlightField("content")
-highlightFields := []interface{} { highlightField } 
+highlightFields := []interface{} { highlightField }
 highlight.SetFields(highlightFields)
 queryMatchClause := map[string]interface{} {"*": "Text"};
 highlightQuery := map[string]interface{} {"match": queryMatchClause};
@@ -2100,7 +2100,7 @@ searchRequest.setIndex("books");
 query = new HashMap<String,Object>();
 query.put("match",new HashMap<String,Object>(){{
     put("*","one|robots");
-}});        
+}});
 searchRequest.setQuery(query);
 highlight = new HashMap<String,Object>(){{
     put("fields",new String[] {"content","title"});
@@ -2139,7 +2139,7 @@ let query = SearchQuery {
     match: Some(serde_json::json!(match_filter).into()),
     ..Default::default(),
 };
-let highlight_fields [String; 2] = ["content".to_string(), "title".to_string()]; 
+let highlight_fields [String; 2] = ["content".to_string(), "title".to_string()];
 let highlight = Highlight {
     fields: Some(serde_json::json!(highlight_fields)),
     pre_tags: Some("before_".to_string()),
@@ -2369,7 +2369,7 @@ searchRequest.setIndex("books");
 query = new HashMap<String,Object>();
 query.put("match",new HashMap<String,Object>(){{
     put("*","one|robots");
-}});        
+}});
 searchRequest.setQuery(query);
 highlight = new HashMap<String,Object>(){{
     put("fields",new String[] {"content","title"});
@@ -2406,7 +2406,7 @@ let query = SearchQuery {
     match: Some(serde_json::json!(match_filter).into()),
     ..Default::default(),
 };
-let highlight_fields [String; 2] = ["content".to_string(), "title".to_string()]; 
+let highlight_fields [String; 2] = ["content".to_string(), "title".to_string()];
 let highlight = Highlight {
     fields: Some(serde_json::json!(highlight_fields)),
     no_match_size: Some(NoMatchSize::Variant0),
@@ -2629,7 +2629,7 @@ searchRequest.setIndex("books");
 query = new HashMap<String,Object>();
 query.put("match",new HashMap<String,Object>(){{
     put("*","one|robots");
-}});        
+}});
 searchRequest.setQuery(query);
 highlight = new HashMap<String,Object>(){{
     put("fields",new String[] {"content","title"});
@@ -2666,7 +2666,7 @@ let query = SearchQuery {
     match: Some(serde_json::json!(match_filter).into()),
     ..Default::default(),
 };
-let highlight_fields [String; 2] = ["content".to_string(), "title".to_string()]; 
+let highlight_fields [String; 2] = ["content".to_string(), "title".to_string()];
 let highlight = Highlight {
     fields: Some(serde_json::json!(highlight_fields)),
     order: Some(Order::Score),
@@ -2885,7 +2885,7 @@ searchRequest.setIndex("books");
 query = new HashMap<String,Object>();
 query.put("match",new HashMap<String,Object>(){{
     put("*","one|robots");
-}});        
+}});
 searchRequest.setQuery(query);
 highlight = new HashMap<String,Object>(){{
     put("fields",new String[] {"content","title"});
@@ -2922,7 +2922,7 @@ let query = SearchQuery {
     match: Some(serde_json::json!(match_filter).into()),
     ..Default::default(),
 };
-let highlight_fields [String; 2] = ["content".to_string(), "title".to_string()]; 
+let highlight_fields [String; 2] = ["content".to_string(), "title".to_string()];
 let highlight = Highlight {
     fields: Some(serde_json::json!(highlight_fields)),
     fragment_size: Some(serde_json::json!(100)),
@@ -3145,7 +3145,7 @@ searchRequest.setIndex("books");
 query = new HashMap<String,Object>();
 query.put("match",new HashMap<String,Object>(){{
     put("*","one|robots");
-}});        
+}});
 searchRequest.setQuery(query);
 highlight = new HashMap<String,Object>(){{
     put("fields",new String[] {"content","title"});
@@ -3182,7 +3182,7 @@ let query = SearchQuery {
     match: Some(serde_json::json!(match_filter).into()),
     ..Default::default(),
 };
-let highlight_fields [String; 2] = ["content".to_string(), "title".to_string()]; 
+let highlight_fields [String; 2] = ["content".to_string(), "title".to_string()];
 let highlight = Highlight {
     fields: Some(serde_json::json!(highlight_fields)),
     number_of_fragments: Some(serde_json::json!(10)),
@@ -3400,7 +3400,7 @@ searchRequest.setIndex("books");
 query = new HashMap<String,Object>();
 query.put("match",new HashMap<String,Object>(){{
     put("*","one|robots");
-}});        
+}});
 searchRequest.setQuery(query);
 highlight = new HashMap<String,Object>(){{
     put("fields",new HashMap<String,Object>(){{
@@ -3443,7 +3443,7 @@ let query = SearchQuery {
     match: Some(serde_json::json!(match_filter).into()),
     ..Default::default(),
 };
-let highlight_fields [String; 1] = ["title".to_string()]; 
+let highlight_fields [String; 1] = ["title".to_string()];
 let highlight = Highlight {
     fields: Some(serde_json::json!(highlight_fields)),
     limit: Some(serde_json::json!(50)),
@@ -3513,7 +3513,7 @@ searchRequest.SetQuery(query);
 highlight := manticoreclient.NewHighlight()
 highlightField := manticoreclient.NetHighlightField("content")
 highlightField.SetLimit(1);
-highlightFields := []interface{} { highlightField } 
+highlightFields := []interface{} { highlightField }
 highlight.SetFields(highlightFields)
 searchRequest.SetHighlight(highlight)
 res, _, _ := apiClient.SearchAPI.Search(context.Background()).SearchRequest(*searchRequest).Execute()
@@ -3667,7 +3667,7 @@ searchRequest.setIndex("books");
 query = new HashMap<String,Object>();
 query.put("match",new HashMap<String,Object>(){{
     put("*","one|robots");
-}});        
+}});
 searchRequest.setQuery(query);
 highlight = new HashMap<String,Object>(){{
     put("limits_per_field",0);
@@ -3710,7 +3710,7 @@ let query = SearchQuery {
     match: Some(serde_json::json!(match_filter).into()),
     ..Default::default(),
 };
-let highlight_fields [String; 1] = ["title".to_string()]; 
+let highlight_fields [String; 1] = ["title".to_string()];
 let highlight = Highlight {
     fields: Some(serde_json::json!(highlight_fields)),
     limit_per_field: Some(serde_json::json!(false)),
@@ -3826,3 +3826,4 @@ CALL SNIPPETS(('data/doc1.txt','data/doc2.txt'), 'forum', 'is text', 1 AS load_f
 
 <!-- end -->
 <!-- proofread -->
+

@@ -54,7 +54,7 @@ Returns the smaller of two arguments.
 ## POW()
 Returns the first argument raised to the power of the second argument.
 ### RAND()
-Returns a random float between 0 and 1. It can optionally accept a `seed`, which can be a constant integer or an integer attribute's name. 
+Returns a random float between 0 and 1. It can optionally accept a `seed`, which can be a constant integer or an integer attribute's name.
 
 If you use a `seed`, keep in mind that it resets `rand()`'s starting point separately for each plain table, RT disk, RAM chunk, or pseudo shard. Therefore, queries to a distributed table in any form can return multiple identical random values.
 
@@ -65,3 +65,4 @@ Returns the sine of the argument.
 Returns the square root of the argument.
 
 <!-- proofread -->
+

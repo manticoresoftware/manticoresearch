@@ -305,3 +305,4 @@ There are two approaches to scheduling indexer runs. The first way is the classi
    systemctl start manticore-indexer@idx1.timer
    ```
 5. Repeat steps 2-4 for any additional timers.
+

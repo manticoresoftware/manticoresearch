@@ -118,3 +118,4 @@ Manticore Search is versatile and can be applied in various scenarios, including
 * No specific disk space or RAM requirements are needed. An empty Manticore Search instance only uses around 40MB of RSS RAM.
 
 <!-- proofread -->
+

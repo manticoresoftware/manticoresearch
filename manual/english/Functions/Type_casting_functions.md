@@ -33,3 +33,4 @@ The `UINT64()` function promotes its argument to a 64-bit unsigned integer type.
 
 The `SINT()` function forcefully reinterprets its 32-bit unsigned integer argument as signed and extends it to a 64-bit type (since the 32-bit type is unsigned). For instance, 1-2 ordinarily evaluates to 4294967295, but `SINT(1-2)` evaluates to -1.
 <!-- proofread -->
+

@@ -390,7 +390,7 @@ TypeScript
 ```typescript
 res = await searchApi.search({
   index: 'test',
-  query: { query_string: 'Text' }, 
+  query: { query_string: 'Text' },
   _source: { excludes: ['*'] },
   limit: 1,
   profile: true
@@ -399,9 +399,9 @@ res = await searchApi.search({
 <!-- response TypeScript -->
 ``` typescript
 {
-	"hits": 
+	"hits":
 	{
-		"hits": 
+		"hits":
 		[{
 			"_id": 1,
 			"_score": 1480,
@@ -412,9 +412,9 @@ res = await searchApi.search({
 	"profile":
 	{
 		"query": {
-			"children": 
+			"children":
 			[{
-				"children": 
+				"children":
 				[{
 					"querypos": 1,
                     "type": "KEYWORD",
@@ -424,7 +424,7 @@ res = await searchApi.search({
 				"type": "AND"
 			},
             {
-            	"children": 
+            	"children":
             	[{
             		"querypos": 2,
                     "type": "KEYWORD",
@@ -459,9 +459,9 @@ res, _, _ := apiClient.SearchAPI.Search(context.Background()).SearchRequest(*sea
 <!-- response Go -->
 ``` Go
 {
-	"hits": 
+	"hits":
 	{
-		"hits": 
+		"hits":
 		[{
 			"_id": 1,
 			"_score": 1480,
@@ -472,9 +472,9 @@ res, _, _ := apiClient.SearchAPI.Search(context.Background()).SearchRequest(*sea
 	"profile":
 	{
 		"query": {
-			"children": 
+			"children":
 			[{
-				"children": 
+				"children":
 				[{
 					"querypos": 1,
                     "type": "KEYWORD",
@@ -484,7 +484,7 @@ res, _, _ := apiClient.SearchAPI.Search(context.Background()).SearchRequest(*sea
 				"type": "AND"
 			},
             {
-            	"children": 
+            	"children":
             	[{
             		"querypos": 2,
                     "type": "KEYWORD",
@@ -1084,9 +1084,9 @@ res = await searchApi.search({
 <!-- response TypeScript -->
 ``` typescript
 {
-	"hits": 
+	"hits":
 	{
-		"hits": 
+		"hits":
 		[{
 			"_id": 1,
             "_score": 1480,
@@ -1094,13 +1094,13 @@ res = await searchApi.search({
         }],
         "total": 1
     },
- 	"profile": 
+ 	"profile":
  	{
- 		"query": 
+ 		"query":
  		{
- 			"children": 
+ 			"children":
  			[{
- 				"children": 
+ 				"children":
  				[{
  					"expanded": True,
                     "querypos": 1,
@@ -1136,9 +1136,9 @@ res, _, _ := apiClient.SearchAPI.Search(context.Background()).SearchRequest(*sea
 <!-- response Go -->
 ``` go
 {
-	"hits": 
+	"hits":
 	{
-		"hits": 
+		"hits":
 		[{
 			"_id": 1,
             "_score": 1480,
@@ -1146,13 +1146,13 @@ res, _, _ := apiClient.SearchAPI.Search(context.Background()).SearchRequest(*sea
         }],
         "total": 1
     },
- 	"profile": 
+ 	"profile":
  	{
- 		"query": 
+ 		"query":
  		{
- 			"children": 
+ 			"children":
  			[{
- 				"children": 
+ 				"children":
  				[{
  					"expanded": True,
                     "querypos": 1,
@@ -1273,3 +1273,4 @@ packedfactors(): bm25=569, bm25a=0.617197, field_mask=2, doc_word_count=2,
 ```
 <!-- end -->
 <!-- proofread -->
+

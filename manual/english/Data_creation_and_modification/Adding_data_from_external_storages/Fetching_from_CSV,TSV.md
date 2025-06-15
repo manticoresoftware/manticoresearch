@@ -1,4 +1,4 @@
-# Fetching from TSV,CSV 
+# Fetching from TSV,CSV
 
 TSV/CSV is the simplest way to pass data to the Manticore indexer. This method was created due to the limitations of xmlpipe2. In xmlpipe2, the indexer must map each attribute and field tag in the XML file to a corresponding schema element. This mapping requires time, and it increases with the number of fields and attributes in the schema. TSV/CSV has no such issue, as each field and attribute corresponds to a particular column in the TSV/CSV file. In some cases, TSV/CSV could work slightly faster than xmlpipe2.
 
@@ -14,20 +14,20 @@ The difference between tsvpipe and csvpipe is delimiter and quoting rules. tsvpi
 ## Declaration of TSV stream
 `tsvpipe_command` directive is mandatory and contains the shell command invoked to produce the TSV stream that gets indexed. The command can read a TSV file, but it can also be a program that generates on-the-fly the tab delimited content.
 
-##  TSV indexed columns 
+##  TSV indexed columns
 
 The following directives can be used to declare the types of the indexed columns:
 
-* `tsvpipe_field` -  declares a `text` field. 
+* `tsvpipe_field` -  declares a `text` field.
 * `tsvpipe_field_string` - declares a text field/string attribute. The column will be both indexed as a text field but also stored as a string attribute.
-* `tsvpipe_attr_uint` - declares an integer attribute. 
+* `tsvpipe_attr_uint` - declares an integer attribute.
 * `tsvpipe_attr_timestamp` - declares a timestamp attribute.
 * `tsvpipe_attr_bool` -  declares a boolean attribute.
 * `tsvpipe_attr_float` - declares a float attribute.
 * `tsvpipe_attr_bigint` - declares a big integer attribute.
 * `tsvpipe_attr_multi` - declares a multi-value attribute with integers.
 * `tsvpipe_attr_multi_64` - declares a multi-value attribute with 64-bit integers.
-* `tsvpipe_attr_string` - declares a string attribute. 
+* `tsvpipe_attr_string` - declares a string attribute.
 * `tsvpipe_attr_json` - declares a JSON attribute.
 
 
@@ -56,9 +56,9 @@ source tsv_test
 
 The following directives can be used to declare the types of the indexed columns:
 
-* `csvpipe_field` -  declares a `text` field. 
+* `csvpipe_field` -  declares a `text` field.
 * `csvpipe_field_string` - declares a text field/string attribute. The column will be both indexed as a text field but also stored as a string attribute.
-* `csvpipe_attr_uint` - declares an integer attribute. 
+* `csvpipe_attr_uint` - declares an integer attribute.
 * `csvpipe_attr_timestamp` - declares a timestamp attribute.
 * `csvpipe_attr_bool` -  declares a boolean attribute.
 * `csvpipe_attr_float` - declares a float attribute.
@@ -86,3 +86,4 @@ source csv_test
 3,"Frank Zappa","35,23,16,92,33,24"
 ```
 <!-- proofread -->
+

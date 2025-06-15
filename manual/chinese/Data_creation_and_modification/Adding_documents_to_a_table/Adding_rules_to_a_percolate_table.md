@@ -1,18 +1,18 @@
-# 向渗透表添加规则
+# 向 percolate 表添加规则
 
 <!-- example -->
-在[渗透表](../../Creating_a_table/Local_tables/Percolate_table.md)中，存储了渗透查询规则，并且必须遵循四个字段的确切模式：
+在 [percolate 表](../../Creating_a_table/Local_tables/Percolate_table.md) 中，percolate 查询规则被存储，且必须遵循四个字段的精确模式：
 
 | 字段 | 类型 | 描述 |
 | - | - | - |
-| id | bigint | PQ规则标识符（如果省略，将自动分配） |
-| query | string | 兼容于[渗透表](../../Creating_a_table/Local_tables/Percolate_table.md)的全文查询（可以为空） |
-| filters | string | 兼容于[渗透表](../../Creating_a_table/Local_tables/Percolate_table.md)的额外非全文字段过滤器（可以为空） |
-| tags   | string | 一个包含一个或多个以逗号分隔的标签的字符串，可用于选择性地显示/删除已保存的查询 |
+| id | bigint | PQ 规则标识符（如果省略，将自动分配） |
+| query | string | 全文查询（可以为空），与 [percolate 表](../../Creating_a_table/Local_tables/Percolate_table.md) 兼容 |
+| filters | string | 非全文字段的附加过滤器（可以为空），与 [percolate 表](../../Creating_a_table/Local_tables/Percolate_table.md) 兼容 |
+| tags   | string | 包含一个或多个逗号分隔标签的字符串，可用于选择性显示/删除已保存查询 |
 
-其他字段名称不被支持，并将触发错误。
+不支持任何其他字段名，否则会触发错误。
 
-**警告：** 通过SQL插入/替换JSON格式的PQ规则将不起作用。换句话说，JSON特定的运算符（`match`等）将被视为规则文本的一部分，应该与文档匹配。如果您更喜欢JSON语法，请使用HTTP端点而不是`INSERT`/`REPLACE`。
+**警告：** 通过 SQL 插入/替换 JSON 格式的 PQ 规则将无法生效。换言之，JSON 特定的操作符（如 `match` 等）只会被视为应与文档匹配的规则文本部分。如果您偏好 JSON 语法，请使用 HTTP 端点，而非 `INSERT`/`REPLACE`。
 
 <!-- intro -->
 ##### SQL
@@ -36,8 +36,8 @@ SELECT * FROM pq;
 <!-- intro -->
 ##### JSON
 <!-- request JSON -->
-有两种方法可以将渗透查询添加到渗透表中：
-* 兼容于JSON /search格式的查询，详述于[json/search](../../Searching/Full_text_matching/Basic_usage.md#HTTP-JSON)
+向 percolate 表添加 percolate 查询有两种方式：
+* 兼容 /search 的 JSON 格式，详见 [json/search](../../Searching/Full_text_matching/Basic_usage.md#HTTP-JSON)
 ```json
 PUT /pq/pq_table/doc/1
 {
@@ -55,7 +55,7 @@ PUT /pq/pq_table/doc/1
 }
 ```
 
-* 详述于[搜索查询语法](../../Searching/Filters.md#Queries-in-SQL-format)的SQL格式查询
+* SQL 格式查询，详见 [search query syntax](../../Searching/Filters.md#Queries-in-SQL-format)
 ```json
 PUT /pq/pq_table/doc/2
 {
@@ -131,11 +131,11 @@ indexApi.insert(newdoc);
 ##### C#
 <!-- request C# -->
 ```clike
-Dictionary<string, Object> query = new Dictionary<string, Object>(); 
+Dictionary<string, Object> query = new Dictionary<string, Object>();
 query.Add("q1", "@title shoes");
 query.Add("filters", "price>5");
 query.Add("tags", new List<string> {"Loius Vuitton"});
-Dictionary<string, Object> newstoredquery = new Dictionary<string, Object>(); 
+Dictionary<string, Object> newstoredquery = new Dictionary<string, Object>();
 newstoredquery.Add("query", query);
 InsertDocumentRequest newdoc = new InsertDocumentRequest(index: "test_pq", id: 2, doc: doc);
 indexApi.Insert(newdoc);
@@ -161,9 +161,9 @@ let insert_res = index_api.insert(insert_req).await;
 <!-- end -->
 
 <!-- example noid -->
-## 自动ID供应
+## 自动 ID 分配
 
-如果您不指定ID，它将被自动分配。您可以在此处阅读有关自动ID的更多信息[这里](../../Data_creation_and_modification/Adding_documents_to_a_table/Adding_documents_to_a_real-time_table.md#Auto-ID)。
+如果未指定 ID，则会自动分配。您可以在此处了解有关自动 ID 的更多信息 [here](../../Data_creation_and_modification/Adding_documents_to_a_table/Adding_documents_to_a_real-time_table.md#Auto-ID)。
 
 <!-- intro -->
 ##### SQL:
@@ -327,11 +327,11 @@ indexApi.insert(newdoc);
 ##### C#
 <!-- request C# -->
 ```clike
-Dictionary<string, Object> query = new Dictionary<string, Object>(); 
+Dictionary<string, Object> query = new Dictionary<string, Object>();
 query.Add("q1", "@title shoes");
 query.Add("filters", "price>5");
 query.Add("tags", new List<string> {"Loius Vuitton"});
-Dictionary<string, Object> newstoredquery = new Dictionary<string, Object>(); 
+Dictionary<string, Object> newstoredquery = new Dictionary<string, Object>();
 newstoredquery.Add("query", query);
 InsertDocumentRequest newdoc = new InsertDocumentRequest(index: "test_pq", doc: doc);
 indexApi.Insert(newdoc);
@@ -357,12 +357,12 @@ let insert_res = index_api.insert(insert_req).await;
 <!-- end -->
 
 <!-- example noschema -->
-## No schema in SQL
-In case of omitted schema in SQL `INSERT` command, the following parameters are expected:
-1. ID. You can use `0` as the ID to trigger auto-ID generation.
-2. Query - Full-text query.
-3. Tags - PQ rule tags string.
-4. Filters - Additional filters by attributes.
+## SQL 中无模式
+当 SQL `INSERT` 命令中省略模式时，期望以下参数：
+1. ID。您可以使用 `0` 作为 ID 以触发自动 ID 生成。
+2. Query - 全文查询。
+3. Tags - PQ 规则标签字符串。
+4. Filters - 属性附加过滤器。
 
 <!-- request SQL -->
 
@@ -384,9 +384,9 @@ SELECT * FROM pq;
 <!-- end -->
 
 <!-- example replace -->
-## Replacing rules in a PQ table
+## 替换 PQ 表中的规则
 
-To replace an existing PQ rule with a new one in SQL, just use a regular [REPLACE](../../Data_creation_and_modification/Updating_documents/REPLACE.md) command. There's a special syntax `?refresh=1` to replace a PQ rule **defined in JSON mode** via the HTTP JSON interface.
+要在 SQL 中用新规则替换现有的 PQ 规则，只需使用常规的 [REPLACE](../../Data_creation_and_modification/Updating_documents/REPLACE.md) 命令。通过 HTTP JSON 接口替换 **以 JSON 模式定义的** PQ 规则时，有一个特殊语法 `?refresh=1`。
 
 
 <!-- intro -->
@@ -475,3 +475,4 @@ GET /pq/pq/doc/2810823411335430149
 
 <!-- end -->
 <!-- proofread -->
+

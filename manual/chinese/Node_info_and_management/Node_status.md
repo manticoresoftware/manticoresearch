@@ -1,19 +1,19 @@
 # 节点状态
 
-## 状态
+## STATUS
 
 <!-- example status -->
-查看您的 Manticore 节点的高层信息的最简单方式是通过在 MySQL 客户端中运行 `status`。它将显示关于各个方面的信息，例如：
+查看 Manticore 节点高层信息的最简单方法是在 MySQL 客户端中运行 `status`。它会显示各个方面的信息，例如：
 * 当前版本
-* 是否启用了 SSL
+* 是否启用 SSL
 * 当前 TCP 端口/Unix 套接字
-* 开机时间
-* [线程数](../Server_settings/Searchd.md#threads)
-* [队列中的作业数](../Server_settings/Searchd.md#jobs_queue_size)
+* 运行时间
+* [线程](../Server_settings/Searchd.md#threads) 数量
+* [队列中的作业](../Server_settings/Searchd.md#jobs_queue_size) 数量
 * 连接数（`clients`）
 * 当前正在处理的任务数
-* 自启动以来执行的查询数
-* 队列中的作业数和任务数，按线程数标准化
+* 启动以来执行的查询数
+* 队列中的作业数和任务数，按线程数归一化
 
 <!-- request SQL -->
 ```sql
@@ -50,7 +50,7 @@ Queue/Th: 0.2  Tasks/Th: 0.4
 
 <!-- end-->
 
-## 显示状态
+## SHOW STATUS
 
 ```sql
 SHOW STATUS [ LIKE pattern ]
@@ -58,7 +58,7 @@ SHOW STATUS [ LIKE pattern ]
 
 <!-- example show status -->
 
-`SHOW STATUS` 是一个 SQL 语句，它呈现各种有用的性能计数器。IO 和 CPU 计数器只有在启动 `searchd` 时分别使用了 `--iostats` 和 `--cpustats` 开关时（或者通过 `SET GLOBAL iostats/cpustats=1` 启用时）才可用。
+`SHOW STATUS` 是一条 SQL 语句，展示各种有用的性能计数器。IO 和 CPU 计数器只有在 `searchd` 启动时使用 `--iostats` 和 `--cpustats` 开关（或通过 `SET GLOBAL iostats/cpustats=1` 启用）时才可用。
 
 <!-- intro -->
 ##### SQL:
@@ -155,7 +155,7 @@ SHOW STATUS;
 
 <!-- example show status like -->
 
-一个可选的 `LIKE` 子句被支持，允许您仅选择与特定模式匹配的变量。模式语法遵循标准 SQL 通配符，其中 `%` 代表任意数量的任意字符，`_` 代表单个字符。
+支持可选的 `LIKE` 子句，允许你只选择匹配特定模式的变量。模式语法遵循标准 SQL 通配符，其中 `%` 表示任意数量的任意字符，`_` 表示单个字符。
 
 <!-- request qcache -->
 
@@ -212,20 +212,20 @@ SHOW STATUS LIKE '%stats_ms%';
 
 <!-- example show status like stats_ms -->
 
-`SHOW STATUS` 命令提供关于 Manticore 中各种性能指标的详细报告，包括插入/替换、搜索和更新查询的查询时间统计。这些统计是通过 1、5 和 15 分钟的滑动窗口计算的，显示查询时间的平均值、最小值、最大值和第 95/99 百分位值。
+`SHOW STATUS` 命令提供 Manticore 各项性能指标的详细报告，包括插入/替换、搜索和更新查询的查询时间统计。这些统计基于 1、5 和 15 分钟的滑动窗口，显示查询时间的平均值、最小值、最大值以及 95%/99% 百分位值。
 
-这些指标有助于跟踪特定时间间隔内的性能，使得更容易找到查询响应时间中的趋势并发现可能的瓶颈。
+这些指标帮助跟踪特定时间间隔内的性能，便于发现查询响应时间趋势和潜在瓶颈。
 
 以下指标是 `SHOW STATUS` 输出的一部分：
-- `*_avg`：过去 1、5 和 15 分钟内每种查询类型的平均查询时间。
+- `*_avg`：每种查询类型在最近 1、5 和 15 分钟内的平均查询时间。
 - `*_min`：每种查询类型记录的最短查询时间。
 - `*_max`：每种查询类型记录的最长查询时间。
-- `*_pct95`：95% 的查询在该时间内完成。
-- `*_pct99`：99% 的查询在该时间内完成。
+- `*_pct95`：95% 查询完成所需的时间。
+- `*_pct99`：99% 查询完成所需的时间。
 
-这些统计信息分别提供给插入/替换（`insert_replace_stats_*`）、搜索（`search_stats_*`）和更新（`update_stats_*`）查询，提供对不同操作性能的详细见解。
+这些统计分别针对插入/替换 (`insert_replace_stats_*`)、搜索 (`search_stats_*`) 和更新 (`update_stats_*`) 查询提供，详细洞察不同操作的性能。
 
-如果在监控间隔内没有执行任何查询，系统将显示 `N/A`。
+如果监控期间无查询执行，系统将显示 `N/A`。
 
 <!-- request perf_stats -->
 
@@ -258,14 +258,14 @@ SHOW STATUS LIKE '%stats_ms%';
 
 <!-- end -->
 
-## 显示设置
+## SHOW SETTINGS
 
 <!-- example show settings -->
 
-`SHOW SETTINGS` 是一个 SQL 语句，它显示当前配置文件中的设置。设置名称的格式为：`'config_section_name'.'setting_name'`
+`SHOW SETTINGS` 是一条 SQL 语句，用于显示配置文件中的当前设置。设置名称格式为：`'config_section_name'.'setting_name'`
 
-结果还包括两个额外的值：
-- `configuration_file` - 配置文件的路径
+结果还包括两个额外值：
+- `configuration_file` - 配置文件路径
 - `worker_pid` - 正在运行的 `searchd` 实例的进程 ID
 
 <!-- intro -->
@@ -300,14 +300,14 @@ SHOW SETTINGS;
 
 <!-- end -->
 
-## 显示代理状态
+## SHOW AGENT STATUS
 ```sql
 SHOW AGENT ['agent_or_index'] STATUS [ LIKE pattern ]
 ```
 
 <!-- example SHOW AGENT STATUS -->
 
-`SHOW AGENT STATUS` 显示 [远程代理](../Creating_a_table/Creating_a_distributed_table/Remote_tables.md#agent) 或分布式表的统计信息。它包括诸如最后请求的年龄、最后答复的时间、各种类型的错误和成功的数量等值。每个代理在过去 1、5 和 15 个间隔内的统计信息，每个间隔由 [ha_period_karma](../Server_settings/Searchd.md#ha_period_karma) 秒组成。
+`SHOW AGENT STATUS` 显示[远程代理](../Creating_a_table/Creating_a_distributed_table/Remote_tables.md#agent)或分布式表的统计信息。它包括最后请求时间、最后响应时间、各种错误与成功次数等值。对于每个代理，列出了最近 1、5 和 15 个时间段的统计，每个时间段由 [ha_period_karma](../Server_settings/Searchd.md#ha_period_karma) 秒组成。
 
 <!-- intro -->
 ##### SQL:
@@ -397,7 +397,7 @@ Array(
 	[ag_0_references] => 2
 	[ag_0_lastquery] => 0.41
 	[ag_0_lastanswer] => 0.19
-	[ag_0_lastperiodmsec] => 222  
+	[ag_0_lastperiodmsec] => 222
 	[ag_0_errorsarow] => 0
 	[ag_0_1periods_query_timeouts] => 0
 	[ag_0_1periods_connect_timeouts] => 0
@@ -415,13 +415,13 @@ Array(
 	[ag_0_5periods_wrong_replies] => 0
 	[ag_0_5periods_unexpected_closings] => 0
 	[ag_0_5periods_warnings] => 0
-	[ag_0_5periods_succeeded_queries] => 146  
+	[ag_0_5periods_succeeded_queries] => 146
 	[ag_0_5periods_msecsperquery] => 231.83
 	[ag_1_hostname 192.168.0.202:6714
 	[ag_1_references] => 2
 	[ag_1_lastquery] => 0.41
 	[ag_1_lastanswer] => 0.19
-	[ag_1_lastperiodmsec] => 220  
+	[ag_1_lastperiodmsec] => 220
 	[ag_1_errorsarow] => 0
 	[ag_1_1periods_query_timeouts] => 0
 	[ag_1_1periods_connect_timeouts] => 0
@@ -439,7 +439,7 @@ Array(
 	[ag_1_5periods_wrong_replies] => 0
 	[ag_1_5periods_unexpected_closings
 	[ag_1_5periods_warnings] => 0
-	[ag_1_5periods_succeeded_queries] => 146  
+	[ag_1_5periods_succeeded_queries] => 146
 	[ag_1_5periods_msecsperquery] => 230.85
 )
 ```
@@ -1022,7 +1022,7 @@ res := apiClient.UtilsAPI.Sql(context.Background()).Body("SHOW AGENT STATUS").Ex
 
 <!-- example SHOW AGENT LIKE -->
 
-一个可选的 `LIKE` 子句被支持，语法与 `SHOW STATUS` 中相同。
+支持可选的 `LIKE` 子句，语法同 `SHOW STATUS`。
 
 <!-- intro -->
 ##### SQL:
@@ -1266,7 +1266,7 @@ apiClient.UtilsAPI.Sql(context.Background()).Body("SHOW AGENT STATUS LIKE \"%5pe
 
 <!-- example show specific agent -->
 
-您可以通过其地址指定特定的代理。在这种情况下，只有该代理的数据会被显示。此外，将使用 `agent_` 前缀而不是 `ag_N_`： 
+您可以通过其地址指定特定的代理。在这种情况下，只会显示该代理的数据。此外，将使用 `agent_` 前缀代替 `ag_N_`：
 
 <!-- intro -->
 ##### SQL:
@@ -1583,7 +1583,7 @@ apiClient.UtilsAPI.Sql(context.Background()).Body("SHOW AGENT \"192.168.0.202:67
 <!-- end -->
 <!-- example show agent table status -->
 
-最后，您可以使用 `SHOW AGENT table_name STATUS` 语句检查特定分布式表中代理的状态。该语句显示表的 HA 状态（即它是否使用代理镜像）并提供关于镜像的信息，包括：地址、黑洞和持久性标志，以及在[加权概率策略](../Creating_a_cluster/Remote_nodes/Load_balancing.md)生效时使用的镜像选择概率。
+最后，您可以使用 `SHOW AGENT table_name STATUS` 语句检查特定分布式表中代理的状态。该语句显示表的高可用性 (HA) 状态（即是否使用代理镜像）并提供有关镜像的信息，包括：地址、blackhole 和持久标志，以及当采用[加权概率策略](../Creating_a_cluster/Remote_nodes/Load_balancing.md)之一时使用的镜像选择概率。
 
 <!-- intro -->
 ##### SQL:
@@ -1673,7 +1673,7 @@ utilsApi.sql('SHOW AGENT \'192.168.0.202:6714\' STATUS LIKE \'%15periods%\'')
     {u'Key': u'dstindex_1mirror3_id', u'Value': u'dev1.manticoresearch.com:6714:loc'},
     {u'Key': u'dstindex_1mirror3_probability_weight', u'Value': u' 0.252501'},
     {u'Key': u'dstindex_1mirror3_is_blackhole', u'Value': u'0'},
-    {u'Key': u'dstindex_1mirror3_is_persistent', u'Value': u'439'}    
+    {u'Key': u'dstindex_1mirror3_is_persistent', u'Value': u'439'}
     ],
  u'error': u'',
  u'total': 0,
@@ -1706,7 +1706,7 @@ await utilsApi.sql('SHOW AGENT \'192.168.0.202:6714\' STATUS LIKE \'%15periods%\
     {u'Key': u'dstindex_1mirror3_id', u'Value': u'dev1.manticoresearch.com:6714:loc'},
     {u'Key': u'dstindex_1mirror3_probability_weight', u'Value': u' 0.252501'},
     {u'Key': u'dstindex_1mirror3_is_blackhole', u'Value': u'0'},
-    {u'Key': u'dstindex_1mirror3_is_persistent', u'Value': u'439'}    
+    {u'Key': u'dstindex_1mirror3_is_persistent', u'Value': u'439'}
     ],
  u'error': u'',
  u'total': 0,
@@ -1739,7 +1739,7 @@ res = await utilsApi.sql("SHOW AGENT \"192.168.0.202:6714\" STATUS LIKE \"%15per
     {"Key": "dstindex_1mirror3_id", "Value": "dev1.manticoresearch.com:6714:loc"},
     {"Key": "dstindex_1mirror3_probability_weight", "Value": " 0.252501"},
     {"Key": "dstindex_1mirror3_is_blackhole", "Value": "0"},
-    {"Key": "dstindex_1mirror3_is_persistent", "Value": "439"}    
+    {"Key": "dstindex_1mirror3_is_persistent", "Value": "439"}
     ],
  "error": "",
  "total": 0,
@@ -1772,7 +1772,7 @@ utilsApi.sql("SHOW AGENT \"192.168.0.202:6714\" STATUS LIKE \"%15periods%\"");
     {Key=dstindex_1mirror3_id, Value=dev1.manticoresearch.com:6714:loc},
     {Key=dstindex_1mirror3_probability_weight, Value= 0.252501},
     {Key=dstindex_1mirror3_is_blackhole, Value=0},
-    {Key=dstindex_1mirror3_is_persistent, Value=439}    
+    {Key=dstindex_1mirror3_is_persistent, Value=439}
     ],
  error=,
  total=0,
@@ -1805,7 +1805,7 @@ utilsApi.Sql("SHOW AGENT \"192.168.0.202:6714\" STATUS LIKE \"%15periods%\"");
     {Key=dstindex_1mirror3_id, Value=dev1.manticoresearch.com:6714:loc},
     {Key=dstindex_1mirror3_probability_weight, Value= 0.252501},
     {Key=dstindex_1mirror3_is_blackhole, Value=0},
-    {Key=dstindex_1mirror3_is_persistent, Value=439}    
+    {Key=dstindex_1mirror3_is_persistent, Value=439}
     ],
  error="",
  total=0,
@@ -1838,7 +1838,7 @@ utils_api.sql("SHOW AGENT \"192.168.0.202:6714\" STATUS LIKE \"%15periods%\"", S
     {Key=dstindex_1mirror3_id, Value=dev1.manticoresearch.com:6714:loc},
     {Key=dstindex_1mirror3_probability_weight, Value= 0.252501},
     {Key=dstindex_1mirror3_is_blackhole, Value=0},
-    {Key=dstindex_1mirror3_is_persistent, Value=439}    
+    {Key=dstindex_1mirror3_is_persistent, Value=439}
     ],
  error="",
  total=0,
@@ -1876,7 +1876,7 @@ res = await utilsApi.sql("SHOW AGENT \"192.168.0.202:6714\" STATUS LIKE \"%15per
 	    {"Key": "dstindex_1mirror3_id", "Value": "dev1.manticoresearch.com:6714:loc"},
 	    {"Key": "dstindex_1mirror3_probability_weight", "Value": " 0.252501"},
 	    {"Key": "dstindex_1mirror3_is_blackhole", "Value": "0"},
-	    {"Key": "dstindex_1mirror3_is_persistent", "Value": "439"}    
+	    {"Key": "dstindex_1mirror3_is_persistent", "Value": "439"}
     ],
 	"error": "",
 	"total": 0,
@@ -1915,7 +1915,7 @@ apiClient.UtilsAPI.Sql(context.Background()).Body("SHOW AGENT \"192.168.0.202:67
 	    {"Key": "dstindex_1mirror3_id", "Value": "dev1.manticoresearch.com:6714:loc"},
 	    {"Key": "dstindex_1mirror3_probability_weight", "Value": " 0.252501"},
 	    {"Key": "dstindex_1mirror3_is_blackhole", "Value": "0"},
-	    {"Key": "dstindex_1mirror3_is_persistent", "Value": "439"}    
+	    {"Key": "dstindex_1mirror3_is_persistent", "Value": "439"}
     ],
 	"error": "",
 	"total": 0,
@@ -1925,4 +1925,48 @@ apiClient.UtilsAPI.Sql(context.Background()).Body("SHOW AGENT \"192.168.0.202:67
 
 <!-- end -->
 
+## Prometheus Exporter
+
+<!-- example prometheus exporter -->
+
+Manticore Search 内置了 Prometheus 导出器。
+要请求指标，请确保 HTTP 端口已暴露，然后调用 /metrics 端点。
+
+**注意：**导出器需要启用 **Buddy**。
+
+<!-- intro -->
+##### HTTP:
+
+<!-- request http -->
+
+```go
+curl -s 0:9308/metrics
+```
+<!-- response http -->
+
+```http
+# HELP manticore_uptime_seconds Time in seconds since start
+# TYPE manticore_uptime_seconds counter
+manticore_uptime_seconds 25
+# HELP manticore_connections_count Connections count since start
+# TYPE manticore_connections_count gauge
+manticore_connections_count 55
+# HELP manticore_maxed_out_error_count Count of maxed_out errors since start
+# TYPE manticore_maxed_out_error_count counter
+manticore_maxed_out_error_count 0
+# HELP manticore_version Manticore Search version
+# TYPE manticore_version gauge
+manticore_version {version="0.0.0 c88e811b2@25060409 (columnar 5.0.1 59c7092@25060304) (secondary 5.0.1 59c7092@25060304) (knn 5.0.1 59c7092@25060304) (embeddings 1.0.0) (buddy v3.28.6-7-g14ee10)"} 1
+# HELP manticore_mysql_version Manticore Search version
+# TYPE manticore_mysql_version gauge
+manticore_mysql_version {version="0.0.0 c88e811b2@25060409 (columnar 5.0.1 59c7092@25060304) (secondary 5.0.1 59c7092@25060304) (knn 5.0.1 59c7092@25060304) (embeddings 1.0.0)"} 1
+# HELP manticore_command_search_count Count of search queries since start
+# TYPE manticore_command_search_count counter
+manticore_command_search_count 1
+......
+```
+
+<!-- end -->
+
 <!-- proofread -->
+

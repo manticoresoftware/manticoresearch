@@ -181,3 +181,4 @@ Manticore utilizes the [plugin_dir](../Server_settings/Common.md#plugin_dir) for
 
 * `MANTICORE_TRACK_DAEMON_SHUTDOWN=1` enables detailed logging while searchd is shutting down. It's useful in case of some shutdown problems, such as when Manticore takes too long to shut down or freezes during the shutdown process.
 <!-- proofread -->
+

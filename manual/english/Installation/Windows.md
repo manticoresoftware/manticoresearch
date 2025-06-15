@@ -47,3 +47,4 @@ mysql -P9306 -h127.0.0.1
 Note that in most examples in this manual, we use `-h0` to connect to the local host, but in Windows, you must use `localhost` or `127.0.0.1` explicitly.
 
 <!-- proofread -->
+

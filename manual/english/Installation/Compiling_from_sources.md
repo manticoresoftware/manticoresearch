@@ -132,7 +132,7 @@ Compiling Manticore without using the building Docker is **not recommended**, bu
 
 #### From git
 
-Manticore source code is [hosted on GitHub](https://github.com/manticoresoftware/manticoresearch).   
+Manticore source code is [hosted on GitHub](https://github.com/manticoresoftware/manticoresearch).
 To obtain the source code, clone the repository and then check out the desired branch or tag. The branch `master` represents the main development branch. Upon release, a versioned tag is created, such as `3.6.0` and a new branch for the current release is started, in this case `manticore-3.6.0`. The head of the versioned branch after all changes is used as source to build all binary releases. For example, to take sources of version 3.6.0 you can run:
 
 ```bash
@@ -379,3 +379,4 @@ Configured with these definitions: -DDISTR_BUILD=rhel8 -DUSE_SYSLOG=1 -DWITH_GAL
 -DFULL_SHARE_DIR=/usr/share/manticore
 ```
 <!-- proofread -->
+

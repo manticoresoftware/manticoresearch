@@ -1,26 +1,26 @@
-# 显示元数据
+# SHOW META
 
 ```sql
 SHOW META [ LIKE pattern ]
 ```
 
 <!-- example show meta -->
-`SHOW META` 是一个SQL语句，用于显示关于处理的查询的额外元信息，包括查询时间、关键字统计和所使用的二级索引的信息。语法如下：
+`SHOW META` 是一个 SQL 语句，用于显示有关处理查询的额外元信息，包括查询时间、关键字统计信息以及所使用的二级索引的信息。其语法为：
 
-包括的项目有：
-* `total`: 实际检索并发送到客户端的匹配数量。此值通常受限于 [LIMIT/size](Searching/Pagination.md#Pagination-of-search-results) 搜索选项。
-* `total_found`:
-  - 索引中查询的匹配的估计总数。如果您需要确切的匹配数量，请使用 `SELECT COUNT(*)` 而不是依赖此值。
-  - 对于使用 `GROUP BY` 的查询，`total_found` 表示组的数量，而不是单个匹配的数量。
-  - 对于 [GROUP N BY](../Searching/Grouping.md#Give-me-N-rows) 查询，`total_found` 仍然表示组的数量，而不管 `N` 的值。
-* `total_relation`: 指示 `total_found` 值是准确还是估计。
-  - 如果 Manticore 无法确定精确的 `total_found` 值，则此字段将显示 `total_relation: gte`，意味着实际的匹配数量是 **大于或等于** 报告的 `total_found`。
-  - 如果 `total_found` 值是准确的，将显示 `total_relation: eq`。
-* `time`: 处理搜索查询所花费的时间（以秒为单位）。
-* `keyword[N]`: 在搜索查询中使用的第 n 个关键字。请注意，关键字可以以通配符的形式呈现，例如，`abc*`。
-* `docs[N]`: 包含搜索查询中第 n 个关键字的文档（或记录）的总数。如果关键字以通配符的形式呈现，则此值表示所有扩展子关键字的文档总和，可能超过实际匹配的文档数量。
-* `hits[N]`: 所有文档中第 n 个关键字的总出现次数（或命中次数）。
-* `index`: 有关使用的索引的信息（例如，二级索引）。
+包含的项有：
+* `total`：实际上检索到并发送给客户端的匹配数。此值通常受 [LIMIT/size](../Searching/Pagination.md#Pagination-of-search-results) 搜索选项的限制。
+* `total_found`：
+  - 查询在索引中估计的总匹配数。如果需要准确的匹配数，请使用 `SELECT COUNT(*)`，而不要依赖此值。
+  - 对于带有 `GROUP BY` 的查询，`total_found` 表示分组数而非单个匹配数。
+  - 对于 [GROUP N BY](../Searching/Grouping.md#Give-me-N-rows) 查询，无论 N 的值为何，`total_found` 仍表示分组数。
+* `total_relation`：指示 `total_found` 值是精确值还是估计值。
+  - 如果 Manticore 无法确定精确的 `total_found` 值，此字段将显示 `total_relation: gte`，表示实际匹配数**大于或等于**报告的 `total_found`。
+  - 如果 `total_found` 是精确值，则显示 `total_relation: eq`。
+* `time`：处理搜索查询所用的时间（秒）。
+* `keyword[N]`：搜索查询中使用的第 n 个关键字。请注意，关键字可以是通配符形式，如 `abc*`。
+* `docs[N]`：包含搜索查询中第 n 个关键字的文档（或记录）总数。如果该关键字是通配符，则该值表示所有展开子关键字的文档总和，可能超过实际匹配文档数。
+* `hits[N]`：所有文档中第 n 个关键字的出现总次数（或命中数）。
+* `index`：有关所用索引（例如二级索引）的信息。
 
 <!-- intro -->
 ##### SQL:
@@ -69,7 +69,7 @@ show meta;
 <!-- end -->
 
 <!-- example show meta iostats cpustats -->
-`SHOW META` 可以显示 I/O 和 CPU 计数器，但它们仅在使用 `--iostats` 和 `--cpustats` 开关启动 searchd 时可用。
+`SHOW META` 可以显示 I/O 和 CPU 计数器，但前提是 searchd 启动时分别带有 `--iostats` 和 `--cpustats` 开关。
 
 <!-- intro -->
 ##### SQL:
@@ -132,7 +132,7 @@ SHOW META;
 <!-- end -->
 
 <!-- example show meta predicted_time -->
-额外的值，例如 `predicted_time`、`dist_predicted_time`、`local_fetched_docs`、`local_fetched_hits`、`local_fetched_skips` 及其各自的 `dist_fetched_*` 对应项，仅在 `searchd` 配置了 [预测时间成本](../Server_settings/Searchd.md#predicted_time_costs) 且查询在 `OPTION` 子句中包含 `predicted_time` 时可用。
+额外的值，如 `predicted_time`、`dist_predicted_time`、`local_fetched_docs`、`local_fetched_hits`、`local_fetched_skips` 及其对应的 `dist_fetched_*`，只有当 `searchd` 配置了[预测时间成本](../Server_settings/Searchd.md#predicted_time_costs)且查询的 `OPTION` 子句中包含 `predicted_time` 时才会显示。
 
 <!-- intro -->
 ##### SQL:
@@ -187,7 +187,7 @@ mysql> show meta;
 
 <!-- example show meta single statement -->
 
-`SHOW META` 必须在 **相同** 会话中在查询之后立即执行。由于某些 MySQL 连接器/库使用连接池，单独运行 `SHOW META` 可能会导致意外结果，例如从另一个查询中检索元数据。在这些情况下（并且通常推荐），运行一个包含查询和 `SHOW META` 的多条语句。一些连接器/库支持在同一方法中进行多条语句，而其他的可能需要在连接设置期间使用专用方法进行多条语句或设置特定选项。
+`SHOW META` 必须紧接在同一会话中的查询之后执行。由于某些 MySQL 连接器/库使用连接池，单独执行 `SHOW META` 可能导致意外结果，比如检索到其他查询的元数据。在这种情况下（并且通常建议这样做），请使用包含查询和 `SHOW META` 的多语句执行。一些连接器/库支持在一个方法中执行多查询，而其他的可能需要专用的方法支持多查询或在连接设置时配置特定选项。
 
 <!-- intro -->
 ##### SQL:
@@ -235,7 +235,7 @@ SELECT id,story_author FROM hn_small WHERE MATCH('one|two|three') LIMIT 5; SHOW 
 
 <!-- example SHOW META LIKE -->
 
-您还可以使用可选的 LIKE 子句，这允许您仅选择匹配特定模式的变量。模式语法遵循标准 SQL 通配符，其中 `%` 代表任意数量的任意字符，而 `_` 代表单个字符。
+你也可以使用可选的 LIKE 子句，它允许你仅选择匹配特定模式的变量。模式语法遵循标准 SQL 通配符规则，其中 `%` 表示任意数量的任意字符，`_` 表示单个字符。
 
 <!-- intro -->
 ##### SQL:
@@ -264,7 +264,7 @@ SHOW META LIKE 'total%';
 
 <!-- example show meta facets -->
 
-在使用 [分面搜索](../Searching/Faceted_search.md) 时，您可以查看 `SHOW META` 输出中的 `multiplier` 字段，以确定在优化组中执行了多少查询。
+使用[分面搜索](../Searching/Faceted_search.md)时，你可以检查 `SHOW META` 输出中的 `multiplier` 字段，以了解优化分组中执行了多少查询。
 
 <!-- intro -->
 ##### SQL:
@@ -315,9 +315,10 @@ SHOW META LIKE 'multiplier';
 ## SHOW META 和查询优化器
 
 <!-- example of show meta vs query optimizer -->
-当 [基于成本的查询优化器](../Searching/Cost_based_optimizer.md) 选择使用 `DocidIndex`、`ColumnarScan` 或 `SecondaryIndex` 而不是普通过滤器时，这在 `SHOW META` 命令中得到了反映。
 
-`index` 变量显示在查询执行期间使用的次级索引的名称和类型。百分比指示多少磁盘块（在 RT 表的情况下）或伪分片（在普通表的情况下）使用了次级索引。
+当[基于成本的查询优化器](../Searching/Cost_based_optimizer.md)选择使用 `DocidIndex`、`ColumnarScan` 或 `SecondaryIndex` 替代普通过滤器时，这会在 `SHOW META` 命令中得到反映。
+
+`index` 变量显示查询执行期间使用的二级索引的名称和类型。百分比表示使用了二级索引的磁盘块数（RT表情况）或伪分片数（普通表情况）。
 
 <!-- intro -->
 ##### SQL:
@@ -345,19 +346,19 @@ SHOW META;
 
 <!-- end -->
 
-## SHOW META for PQ tables
+## SHOW META 针对 PQ 表
 
 <!-- example show meta PQ -->
 
-`SHOW META` 可以在执行 [CALL PQ](../Searching/Percolate_query.md#Performing-a-percolate-query-with-CALL-PQ) 语句后使用，在这种情况下，它提供不同的输出。
+`SHOW META` 可用于执行完[CALL PQ](../Searching/Percolate_query.md#Performing-a-percolate-query-with-CALL-PQ)语句后，此时会提供不同的输出。
 
-`SHOW META` 在 `CALL PQ` 语句后包括：
+`CALL PQ` 语句后的 `SHOW META` 包括：
 
 * `total` - 匹配文档所花费的总时间
-* `queries_matched` - 匹配文档的存储查询数量
-* `document_matches` - 与表中存储的查询匹配的文档数量
+* `queries_matched` - 匹配文档的存储查询数
+* `document_matches` - 匹配表中存储查询的文档数
 * `total_queries_stored` - 表中存储的查询总数
-* `term_only_queries` - 表中具有术语的查询数量；其余查询使用扩展查询语法。
+* `term_only_queries` - 表中含有词项的查询数；其余查询使用扩展查询语法。
 
 <!-- intro -->
 ##### SQL:
@@ -395,15 +396,15 @@ CALL PQ ('pq', ('{"title":"angry", "gid":3 }')); SHOW META;
 
 <!-- example call pq verbose meta  -->
 
-使用 `CALL PQ` 和 `verbose` 选项会提供更详细的输出。
+使用带有 `verbose` 选项的 `CALL PQ` 可提供更详细的输出。
 
-它包括以下额外条目：
+它包括以下附加条目：
 
-* `Setup` - 在匹配过程的初始设置中花费的时间，例如解析文档和设置选项
+* `Setup` - 用于匹配过程初始设置的时间，例如解析文档和设置选项
 * `Queries failed` - 失败的查询数量
-* `Fast rejected queries` - 未完全评估但通过过滤器或其他条件快速匹配并拒绝的查询数量
+* `Fast rejected queries` - 未被完全评估但通过过滤器或其他条件快速匹配并被拒绝的查询数量
 * `Time per query` - 每个查询的详细时间
-* `Time of matched queries` - 匹配任何文档的查询所花费的总时间
+* `Time of matched queries` - 与匹配任何文档的查询相关的总时间
 
 
 <!-- intro -->

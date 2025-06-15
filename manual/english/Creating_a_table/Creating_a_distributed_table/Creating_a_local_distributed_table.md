@@ -93,3 +93,4 @@ utils_api.sql("CREATE TABLE local_dist type='distributed' local='index1' local='
 
 <!-- end -->
 <!-- proofread -->
+

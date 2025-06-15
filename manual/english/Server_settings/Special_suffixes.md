@@ -18,3 +18,4 @@ Manticore Search supports the use of special suffixes to simplify numeric values
   - `w` for weeks
 
 <!-- proofread -->
+

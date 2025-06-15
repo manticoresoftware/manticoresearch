@@ -7,7 +7,7 @@ To declare the XML stream, the `xmlpipe_command` directive is mandatory and cont
 
 ## XML file format
 
-When indexing an xmlpipe2 source, the indexer runs the specified command, opens a pipe to its stdout, and expects a well-formed XML stream. 
+When indexing an xmlpipe2 source, the indexer runs the specified command, opens a pipe to its stdout, and expects a well-formed XML stream.
 
 Here's an example of what the XML stream data might look like:
 
@@ -121,3 +121,4 @@ source xml_test_2
 }
 ```
 <!-- proofread -->
+

@@ -6,13 +6,13 @@ However, this also poses challenges. Let's examine several scenarios, using a cl
 
 ### Case 1
 
- When node A is stopped, the other nodes receive a "normal shutdown" message. The cluster size is reduced, and a quorum re-calculation takes place. 
- 
+ When node A is stopped, the other nodes receive a "normal shutdown" message. The cluster size is reduced, and a quorum re-calculation takes place.
+
 Upon starting node A, it joins the cluster and will not serve any write transactions until it is fully synchronized with the cluster. If the writeset cache on donor nodes B or C (which can be controlled with the Galera cluster's [gcache.size](https://galeracluster.com/library/documentation/galera-parameters.html#gcache-size)) still contains all of the transactions missed at node A, node A will receive a fast incremental state transfer ([IST](https://galeracluster.com/library/documentation/state-transfer.html#state-transfer-ist)), that is, a transfer of only missed transactions. If not, a snapshot state transfer  ([SST](https://galeracluster.com/library/documentation/state-transfer.html#state-transfer-sst)) will occur, which involves the transfer of table files.
 
 ### Case 2
 
-In the scenario where nodes A and B are stopped, the cluster size is reduced to one, with node C forming the primary component to handle write transactions. 
+In the scenario where nodes A and B are stopped, the cluster size is reduced to one, with node C forming the primary component to handle write transactions.
 
 Nodes A and B can then be started as usual and will join the cluster after start-up. Node C acts as the donor, providing the state transfer to nodes A and B.
 
@@ -72,7 +72,7 @@ On Linux, you can also use the `manticore_new_cluster --force`, command, which w
 Split-brain can cause the cluster to transition into a non-primary state. For example, consider a cluster comprised of an even number of nodes (four), such as two pairs of nodes located in different data centers. If a network failure interrupts the connection between the data centers, split-brain occurs as each group of nodes holds exactly half of the quorum. As a result, both groups stop handling write transactions, since the Galera replication model prioritizes data consistency, and the cluster cannot accept write transactions without a quorum. However, nodes in both groups attempt to reconnect with the nodes from the other group in an effort to restore the cluster.
 
 <!-- example case 7 -->
-If someone wants to restore the cluster before the network is restored, the same steps outlined in [Case 5](../../Creating_a_cluster/Setting_up_replication/Cluster_recovery.md#Case-5) hould be taken, but only at one group of nodes. 
+If someone wants to restore the cluster before the network is restored, the same steps outlined in [Case 5](../../Creating_a_cluster/Setting_up_replication/Cluster_recovery.md#Case-5) hould be taken, but only at one group of nodes.
 
 After the statement is executed, the group with the node that it was run on will be able to handle write transactions once again.
 
@@ -96,3 +96,4 @@ SET CLUSTER posts GLOBAL 'pc.bootstrap' = 1
 
 However, it's important to note that if the statement is issued at both groups, it will result in the formation of two separate clusters, and the subsequent network recovery will not result in the groups rejoining.
 <!-- proofread -->
+

@@ -88,3 +88,4 @@ The table below lists all supported languages and indicates how to enable:
 | Yoruba | charset_table=non_cont | yo | - | |
 | Zulu | charset_table=non_cont | zu | - |  |
 <!-- proofread -->
+

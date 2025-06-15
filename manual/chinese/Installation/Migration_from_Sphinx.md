@@ -1,79 +1,80 @@
-# 从Sphinx Search迁移
+# 从 Sphinx Search 迁移
 
 ## Sphinx 2.x -> Manticore 2.x
-Manticore Search 2.x 兼容 Sphinxsearch 2.x，并且可以加载已由 Sphinxsearch 创建的现有表。 在大多数情况下，升级仅需替换二进制文件。
+Manticore Search 2.x 与 Sphinxsearch 2.x 兼容，可以加载由 Sphinxsearch 创建的现有表。在大多数情况下，升级只需替换二进制文件。
 
-Manticore 默认使用的配置文件是 `/etc/manticoresearch/manticore.conf`，而不是 sphinx.conf（在 Linux 中通常位于 `/etc/sphinxsearch/sphinx.conf`）。 它还在不同的用户下运行，并使用不同的文件夹。
+Manticore 默认使用 `/etc/manticoresearch/manticore.conf`，而不是 sphinx.conf （在 Linux 中通常位于 `/etc/sphinxsearch/sphinx.conf`）。它也以不同的用户身份运行，并使用不同的文件夹。
 
-Systemd 服务名称已从 `sphinx/sphinxsearch` 更改为 `manticore`，服务以用户 `manticore` 运行（Sphinx 使用的是 `sphinx` 或 `sphinxsearch`）。 它还使用了一个不同的文件夹来存放 PID 文件。
+Systemd 服务名称已由 `sphinx/sphinxsearch` 改为 `manticore`，服务以 `manticore` 用户身份运行（Sphinx 使用 `sphinx` 或 `sphinxsearch`）。它还使用了不同的 PID 文件夹。
 
-默认使用的文件夹是 `/var/lib/manticore`、`/var/log/manticore`、`/var/run/manticore`。 您仍可以使用现有的 Sphinx 配置，但您需要手动更改 `/var/lib/sphinxsearch` 和 `/var/log/sphinxsearch` 文件夹的权限。 或者，只需在系统文件中将所有 'sphinx' 全局更改为 'manticore'。 如果您使用其他文件夹（用于数据、词形文件等），则所有权也必须切换到用户 `manticore`。 `pid_file` 的位置应更改为匹配 manticore.service 的 `/var/run/manticore/searchd.pid`。
+默认使用的文件夹是 `/var/lib/manticore`、`/var/log/manticore`、`/var/run/manticore`。您仍然可以使用现有的 Sphinx 配置，但需要手动更改 `/var/lib/sphinxsearch` 和 `/var/log/sphinxsearch` 文件夹的权限。或者，直接在系统文件中全局将 'sphinx' 重命名为 'manticore'。如果您使用其他文件夹（用于数据、词形文件等），所有权也必须切换为 `manticore` 用户。`pid_file` 位置应更改为与 manticore.service 匹配，即 `/var/run/manticore/searchd.pid`。
 
-如果您想使用 Manticore 文件夹，则需要将表文件移动到新数据文件夹（`/var/lib/manticore`），并且必须将权限更改为用户 `manticore`。
+如果您想使用 Manticore 的文件夹，表文件需要移动到新的数据文件夹（`/var/lib/manticore`），并且权限必须改为 `manticore` 用户。
 
 ## Sphinx 2.x / Manticore 2.x -> Manticore 3.x
-从 Sphinx / Manticore 2.x 升级到 3.x 并不简单，因为表存储引擎经历了重大升级，新的 searchd 无法加载旧表并在运行时将其升级到新格式。
+从 Sphinx / Manticore 2.x 升级到 3.x 并非简单，因为表存储引擎经过了重大升级，新的 searchd 无法加载旧表并即时升级到新格式。
 
-Manticore Search 3 重新设计了表存储。 使用 Manticore/Sphinx 2.x 创建的表无法被 Manticore Search 3 加载，除非经过 [转换](../Installation/Migration_from_Sphinx.md#index_converter)。 由于 4GB 的限制，2.x 中的实时表在优化操作后仍可能有若干个磁盘块。 升级到 3.x 后，这些表现在可以使用常规的 [OPTIMIZE](../Securing_and_compacting_a_table/Compacting_a_table.md#OPTIMIZE-TABLE) 命令优化为 1 磁盘块。 索引文件也有所更改。 唯一没有任何结构变化的组件是 `.spp` 文件（命中列表）。 `.sps`（字符串/json）和 `.spm`（MVA）现在由 `.spb`（可变长度属性）持有。 新格式中存在 `.spm` 文件，但它用于行映射（之前专用于 MVA 属性）。 新增加的扩展名有 `.spt`（docid 查找）、`.sphi`（二级索引直方图）、`.spds`（文档存储）。 在您使用操作表文件的脚本的情况下，应该将它们调整为新的文件扩展名。
+Manticore Search 3 采用了重新设计的表存储结构。用 Manticore/Sphinx 2.x 创建的表无法被 Manticore Search 3 加载，必须进行[转换](../Installation/Migration_from_Sphinx.md#index_converter)。由于 4GB 限制，2.x 中的实时表在优化操作后仍可能存在多个磁盘块。升级到 3.x 后，这些表可以通过常用的 [OPTIMIZE](../Securing_and_compacting_a_table/Compacting_a_table.md#OPTIMIZE-TABLE) 命令优化为单个磁盘块。索引文件也发生了变化。唯一没有结构变化的是 `.spp` 文件（hitlists）。`.sps`（字符串/json）和 `.spm`（MVA）现在放在 `.spb`（变长属性）中。新的格式中 `.spm` 文件仍然存在，但用于行映射（之前专用于 MVA 属性）。新增的扩展名有 `.spt`（docid 查找）、`.sphi`（二级索引直方图）、`.spds`（文档存储）。如果您使用脚本操作表文件，应适配新文件扩展名。
 
-升级过程可能因您的设置（集群中的服务器数量、是否具有高可用性等）而异，但一般来说，它涉及创建新的 3.x 表版本并替换现有的表，以及用新的二进制文件替换旧的 2.x 二进制文件。
+升级步骤可能因设置不同（集群中服务器数量，是否有高可用等）而异，但总体上，涉及创建新的 3.x 版本表，替换现有表，以及替换旧的 2.x 二进制文件为新版本。
 
-需要注意两个特殊要求：
+有两个特别需求需注意：
 
 * 需要使用 [FLUSH RAMCHUNK](../Securing_and_compacting_a_table/Flushing_RAM_chunk_to_a_new_disk_chunk.md#FLUSH-RAMCHUNK) 刷新实时表
-* 带有杀死列表的普通表需要在表配置中添加新指令（参见 [killlist_target](../Creating_a_table/Local_tables/Plain_and_real-time_table_settings.md#killlist_target)）
+* 带有 kill-lists 的普通表需要在表配置中添加新指令（见 [killlist_target](../Creating_a_table/Local_tables/Plain_and_real-time_table_settings.md#killlist_target)）
 
-Manticore Search 3 包含一个新工具 - [index_converter](../Installation/Migration_from_Sphinx.md#index_converter) - 可以将 Sphinx 2.x / Manticore 2.x 表转换为 3.x 格式。 `index_converter` 作为单独的包提供，首先应该安装它。 使用转换工具创建 3.x 版本的表。 `index_converter` 可以在现有数据文件夹中写入新文件并备份旧文件，或者可以将新文件写入选定的文件夹。
+Manticore Search 3 包含了新工具 - [index_converter](../Installation/Migration_from_Sphinx.md#index_converter)，用于将 Sphinx 2.x / Manticore 2.x 表转换为 3.x 格式。`index_converter` 是单独的包，需要先安装。使用转换工具创建 3.x 版本的表。`index_converter` 可以将新文件写入现有数据文件夹并备份旧文件，或者写入选定文件夹。
 
-## 基本升级说明
+## 基础升级说明
 
-如果您有一台独立服务器：
+如果只有单台服务器：
 
 * 安装 manticore-converter 包
-* 使用 index_converter 在与现有数据文件夹不同的文件夹中创建表的新版本（使用 `--output-dir` 选项）
-* 停止现有的 Manticore/Sphinx，升级到 3.0，将新表移动到数据文件夹，并启动 Manticore
+* 使用 index_converter 在不同于现有数据文件夹的文件夹中创建新版本表（使用 `--output-dir` 选项）
+* 停止现有 Manticore/Sphinx，升级到 3.0，将新表移动到数据文件夹，启动 Manticore
 
-为了最小化停机时间，您可以将 2.x 表、配置（您需要在此处编辑表、日志和不同端口的路径）和二进制文件复制到另一个位置，并在另一个端口上启动它。 将您的应用程序指向它。 升级到 3.0 并且新的服务器启动后，您可以将应用程序指回正常端口。 如果一切正常，停止 2.x 副本并删除文件以释放空间。
+为了减少停机时间，您可以复制 2.x 表、配置（需要在这里编辑表路径、日志路径和端口等）和二进制文件到一个单独位置，并在不同端口启动。将应用指向该端口。升级到 3.0 并启动新服务器后，您可以将应用指向正常端口。如果一切正常，停止 2.x 副本并删除相关文件以释放空间。
 
-如果您有一台备用机器（例如测试或暂存服务器），您可以首先在上面进行表升级，甚至安装 Manticore 3 进行几次测试。 如果一切正常，将新的表文件复制到生产服务器。如果有多台服务器可以从生产中拔出，请逐一进行，并在每台上执行升级。 对于分布式设置，2.x 的 searchd 可以作为主节点与 3.x 的节点协作，因此您可以先对数据节点进行升级，然后再对主节点进行升级。
+如果有备用服务器（如测试或预发布服务器），可先在那里升级表并安装 Manticore 3 进行测试。若无误，将新表复制到生产服务器。如果有多台服务器可从生产环境下线，一台台地升级。对于分布式环境，2.x 的 searchd 可以作为主节点配合 3.x 节点使用，因此可以先升级数据节点，再升级主节点。
 
-客户端连接引擎的方式、查询模式或查询行为没有任何更改。
+客户端连接引擎的方式，查询模式及查询行为均未更改。
 
-## Sphinx / Manticore 2.x 随 Kill-lists vs Manticore 3.x
-[杀死列表](../Data_creation_and_modification/Adding_data_from_external_storages/Adding_data_to_tables/Killlist_in_plain_tables.md) 在 Manticore Search 3 中进行了重新设计。 在以前的版本中，杀死列表在查询时应用于每个先前搜索的表提供的结果集。
+## Sphinx / Manticore 2.x 与 Manticore 3.x 中的 kill-lists 对比
+Manticore Search 3 中的[Kill-lists](../Data_creation_and_modification/Adding_data_from_external_storages/Adding_data_to_tables/Killlist_in_plain_tables.md) 经过重新设计。在之前版本中，kill-lists 在查询时应用于每个已查询表返回的结果集合。
 
-因此，在 2.x 中，查询时的表顺序很重要。 例如，如果增量表具有杀死列表，则为了将其应用于主表，顺序必须是主表、增量表（无论是在分布式表中还是在 FROM 子句中）。
-在Manticore 3中，杀死列表在搜索启动或旋转期间加载表时应用。表配置中的新指令`killlist_target`指定目标表，并定义应该使用源表中的哪些文档ID进行抑制。这些可以是定义的杀死列表中的ID，表的实际文档ID或两者。
+因此，在 2.x 中，查询时表的顺序很重要。例如，如果增量表有 kill-list，为使其作用于主表，查询顺序必须是主表、增量表（无论是在分布式表中还是 FROM 子句中）。
 
-来自杀死列表的文档将从目标表中删除，即使搜索不包括提供杀死列表的表，它们也不会出现在结果中。因此，搜索表的顺序不再重要。现在，`delta, main` 和 `main, delta` 将提供相同的结果。
+在 Manticore 3 中，kill-lists 会在 searchd 启动加载表或表旋转时应用。表配置中新指令 `killlist_target` 指定目标表，并定义应从源表中使用哪些文档 ID 进行屏蔽。这些可以是定义的 kill-list 中的 ID，表的实际文档 ID，或者两者兼有。
 
-在以前的版本中，表按照配置文件中的顺序进行轮换。在Manticore 3中，表的轮换顺序更智能，并根据杀死列表目标进行工作。在开始轮换表之前，服务器会根据`killlist_target`定义查找表链。然后，它将首先轮换未在任何地方被引用为杀死列表目标的表。接下来，它将旋转由已旋转表所针对的表，依此类推。例如，如果我们执行`indexer --all`并且我们有3个表：main、delta_big（目标为main）和delta_small（目标为delta_big），首先旋转delta_small，然后是delta_big，最后是main。这是为了确保当一个依赖表被旋转时，它会从其他表获取最新的杀死列表。
+来自 kill-lists 的文档会从目标表中删除，即使搜索不包含提供 kill-lists 的表，也不会返回这些文档。因此，搜索表的顺序不再重要。现在，`delta, main` 和 `main, delta` 会提供相同的结果。
 
-## 在Manticore 3.x中删除的配置键
-* `docinfo` - 一切现在都是extern
+在之前的版本中，表的旋转顺序遵循配置文件中的顺序。在 Manticore 3 中，表的旋转顺序更加智能，并且与 killlist 目标保持一致。服务器在开始旋转表之前，会根据 `killlist_target` 定义寻找表链。然后，它会先旋转未被任何地方作为 kill-list 目标引用的表。接下来旋转已被已旋转表作为目标的表，依此类推。例如，如果执行 `indexer --all` 并且有三个表：main、delta_big（目标为 main）和 delta_small（目标为 delta_big），则首先旋转 delta_small，接着是 delta_big，最后是 main。这样可以确保当依赖表被旋转时，它获得来自其他表的最新 kill-list。
+
+## Manticore 3.x 中移除的配置键
+* `docinfo` - 现在一切均为 extern
 * `inplace_docinfo_gap` - 不再需要
-* `mva_updates_pool` - MVAs不再有专用的更新池，现在可以直接在blob中更新（见下文）。
+* `mva_updates_pool` - MVA 不再拥有专用的更新池，因为现在它们可以直接在 blob 中更新（见下文）。
 
-## 在Manticore 3.x中更新可变长度属性
-字符串、JSON和MVA属性可以使用`UPDATE`语句在Manticore 3.x中更新。
+## Manticore 3.x 中可变长度属性的更新
+字符串、JSON 和 MVA 属性可以在 Manticore 3.x 中使用 `UPDATE` 语句更新。
 
-在2.x中，字符串属性需要`REPLACE`，对于JSON，仅可以更新标量属性（因它们为固定宽度），MVAs可以使用MVA池进行更新。现在更新直接在blob组件上进行。一个可能需要调整的设置是[attr_update_reserve](../Data_creation_and_modification/Updating_documents/UPDATE.md#attr_update_reserve)，它允许更改用于避免频繁调整大小的blob末尾的额外空间，以防新的值大于blob中现有的值。
+在 2.x 中，字符串属性需要使用 `REPLACE`，JSON 只能更新标量属性（因为它们是固定宽度的），MVA 可以使用 MVA 池更新。现在更新直接在 blob 组件上执行。一个可能需要调整的设置是 [attr_update_reserve](../Data_creation_and_modification/Updating_documents/UPDATE.md#attr_update_reserve)，它允许更改在 blob 末尾分配的额外空间，用来避免在新值比现有值更大时频繁调整大小。
 
-## 在Manticore 3.x中的文档ID
-文档ID曾是无符号64位整数。现在它们是正签名64位整数。
+## Manticore 3.x 中的文档 ID
+文档 ID 以前是无符号 64 位整数。现在它们是正有符号 64 位整数。
 
-## 在Manticore 3.x中的实时模式
-点击这里查看[实时模式](../Read_this_first.md#Real-time-mode-vs-plain-mode)
+## Manticore 3.x 中的 RT 模式
+请在此处阅读有关 [RT 模式](../Read_this_first.md#Real-time-mode-vs-plain-mode) 的内容
 
-## 自Manticore 3.x以来的特殊后缀
-Manticore 3.x识别并解析特殊后缀，使使用具有特殊含义的数字值更容易。它们的常见形式是整数数字+字面量，如10k或100d，但不是40.3s（因为40.3不是整数），或者不是2d 4h（因为有两个，而不是一个值）。字面量不区分大小写，因此10W与10w是相同的。目前支持这两种类型的后缀：
+## Manticore 3.x 起的特殊后缀
+Manticore 3.x 识别并解析特殊后缀，这使得具有特殊含义的数字值使用更加方便。它们的常见形式是整数 + 字面量，比如 10k 或 100d，但不包括 40.3s（因为 40.3 不是整数），也不包括 2d 4h（因为有两个值，而非一个）。字面量不区分大小写，因此 10W 与 10w 相同。目前支持两种此类后缀：
 
-* 大小后缀 - 可以用于定义某物（内存缓冲区、磁盘文件、RAM限制等）大小的参数，以字节为单位。那地方的“裸体”数字字面意思是字节大小（八位字）。大小值使用后缀`k`表示千字节（1k=1024），`m`表示兆字节（1m=1024k），`g`表示千兆字节（1g=1024m），`t`表示太字节（1t=1024g）。
-* 时间后缀 - 可以用于定义某些时间间隔值的参数，如延迟、超时等。这些参数的“裸体”值通常有文档规范，您必须知道它们的数字，比如说100，意味着“100秒”或“100毫秒”。但是，您可以直接写带后缀的值，它将完全由其后缀决定。时间值使用后缀`us`表示微秒，`ms`表示毫秒，`s`表示秒，`m`表示分钟，`h`表示小时，`d`表示天，`w`表示周。
+* 大小后缀 - 用于定义大小（内存缓冲区、磁盘文件、RAM 限制等）参数中的字节数。在这些位置裸数字表示字节数（八位组）。大小值的后缀为 `k` 表示千字节（1k=1024），`m` 表示兆字节（1m=1024k），`g` 表示千兆字节（1g=1024m），`t` 表示太字节（1t=1024g）。
+* 时间后缀 - 用于定义时间间隔参数如延迟、超时等。一般裸数值在文档中有说明其计量单位，你必须知道数字 100 代表“100秒”还是“100毫秒”。但你可以直接写带后缀的数值，后缀决定了单位。时间值后缀为 `us`（微秒）、`ms`（毫秒）、`s`（秒）、`m`（分钟）、`h`（小时）、`d`（天）、`w`（周）。
 
 ## index_converter
 
-`index_converter`是一个将使用Sphinx/Manticore Search 2.x创建的表转换为Manticore Search 3.x表格式的工具。该工具可以以几种不同的方式使用：
+`index_converter` 是一个工具，用于将使用 Sphinx/Manticore Search 2.x 创建的表转换为 Manticore Search 3.x 的表格式。该工具可以通过多种方式使用：
 
 #### 一次转换一个表
 
@@ -87,43 +88,43 @@ $ index_converter --config /home/myuser/manticore.conf --index tablename
 $ index_converter --config /home/myuser/manticore.conf --all
 ```
 
-#### 转换在文件夹中的表
+#### 转换文件夹中找到的表
 
 ```ini
 $ index_converter  --path /var/lib/manticoresearch/data --all
 ```
 
-新版本的表默认写入同一文件夹。之前版本的文件保存在其名称中带有`.old`扩展名。一个例外是`.spp`（命中列表）文件，这是新格式中唯一没有任何更改的表组件。
+新版本的表默认写入同一文件夹。之前版本的文件以 `.old` 扩展名备份。例外的是 `.spp`（hitlists） 文件，它是唯一在新格式中没有变化的表组件。
 
-您可以使用`-–output-dir`选项将新表版本保存到不同文件夹
+你可以使用 `--output-dir` 选项将新表版本保存到不同的文件夹
 
 ```ini
 $ index_converter --config /home/myuser/manticore.conf --all --output-dir /new/path
 ```
 
-#### 转换杀死列表
+#### 转换 kill lists
 
-针对包含杀死列表的表的特殊情况。由于杀死列表的工作行为发生了变化（见[killlist_target](../Creating_a_table/Local_tables/Plain_and_real-time_table_settings.md#killlist_target)），增量表应该知道哪些是应用杀死列表的目标表。有3种方法可以使转换后的表准备好设置目标表以应用杀死列表：
+kill-lists 表是个特殊情况。由于 kill-lists 的工作方式发生变化（见 [killlist_target](../Creating_a_table/Local_tables/Plain_and_real-time_table_settings.md#killlist_target)），delta 表应知道哪些是应用 kill-lists 的目标表。有三种方式使转换后的表准备好设置目标表来应用 kill-lists：
 
-* 在转换表时使用`-–killlist-target`
+* 转换表时使用 `--killlist-target`
   ```ini
   $ index_converter --config /home/myuser/manticore.conf --index deltaindex --killlist-target mainindex:kl
   ```
-* 在进行转换之前在配置中添加killlist_target
-* 在转换后使用[ALTER ... KILLIST_TARGET](../Data_creation_and_modification/Adding_data_from_external_storages/Adding_data_to_tables/Killlist_in_plain_tables.md#killlist_target)命令
+* 在转换前在配置中添加 killlist_target
+* 转换后使用 [ALTER ... KILLIST_TARGET](../Data_creation_and_modification/Adding_data_from_external_storages/Adding_data_to_tables/Killlist_in_plain_tables.md#killlist_target) 命令
 
-#### index_converter选项的完整列表
+#### index_converter 选项完整清单
 
-这是 `index_converter` 选项的完整列表：
+以下是 `index_converter` 的完整选项列表：
 
-* `--config <file>`（短格式为 `-c <file>`）告诉 index_converter 使用给定的文件作为其配置。通常，它将在安装目录中查找 manticore.conf（例如，如果安装在 `/usr/local/sphinx`，则为 `/usr/local/manticore/etc/manticore.conf`），随后是在从 shell 调用 index_converter 时所在的当前目录。
-* `--index` 指定应转换哪个表
-* `--path` - 可以使用包含表的路径，而不是使用配置文件
-* `--strip-path` - 从表中引用的文件名中剥离路径：停用词、例外和词形
-* `--large-docid` - 允许转换 ID 大于 2^63 的文档并显示警告，否则它将只是在大 ID 处以错误退出。此选项的添加是因为在 Manticore 3.x 中文档 ID 是有符号的 bigint，而之前是无符号的
-* `--output-dir <dir>` - 将新文件写入所选文件夹，而不是与现有表文件位于同一位置。当设置此选项时，现有表文件将保持在其位置不变。
-* `--all` - 从配置中转换所有表
-* `--killlist-target <targets>` 设置将应用杀死列表的目标表。此选项应仅与 `--index` 选项结合使用
+* `--config <file>`（缩写为 `-c <file>`）指示 index_converter 使用指定配置文件。通常，它会优先查找安装目录中的 manticore.conf 文件（例如，安装到 `/usr/local/sphinx` 时为 `/usr/local/manticore/etc/manticore.conf`），其次是你从 shell 调用 index_converter 时的当前目录。
+* `--index` 指定哪个表将被转换
+* `--path` - 不使用配置文件，而是使用包含表的路径
+* `--strip-path` - 从表引用的文件名中去除路径：停用词、例外和词形变化文件
+* `--large-docid` - 允许转换 ID 大于 2^63 的文档并显示警告，否则遇到大 ID 时会错误退出。添加此选项是因为在 Manticore 3.x 中，文档 ID 是有符号 bigint，而之前是无符号的
+* `--output-dir <dir>` - 将新文件写入所选文件夹，而不是和现有表文件相同的位置。设置此选项时，现有表文件将在其原位置保持不变。
+* `--all` - 转换配置中的所有表
+* `--killlist-target <targets>` 设置应用 kill-list 的目标表。此选项应仅与 `--index` 选项一起使用。
 
 <!-- proofread -->
 

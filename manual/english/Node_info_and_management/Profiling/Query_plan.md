@@ -539,3 +539,4 @@ Variable: transformed_tree
 
 ![SHOW PLAN graphviz example](graphviz.png)
 <!-- proofread -->
+

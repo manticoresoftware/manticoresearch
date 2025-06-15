@@ -1,4 +1,4 @@
-# Replication cluster status 
+# Replication cluster status
 
 <!-- example Example -->
 
@@ -6,7 +6,7 @@ You can view the cluster status information by checking the node status. This ca
 
 The output format for the cluster status variables is as follows:  `cluster_name_variable_name` `variable_value`. Most of the variables are described in the [Galera Documentation Status Variables](https://galeracluster.com/library/documentation/galera-status-variables.html). In addition to these variables, Manticore Search also displays:
 
-* cluster_name - the name of the cluster, as defined in the [replication setup](../../Creating_a_cluster/Setting_up_replication/Setting_up_replication.md#Replication-cluster) 
+* cluster_name - the name of the cluster, as defined in the [replication setup](../../Creating_a_cluster/Setting_up_replication/Setting_up_replication.md#Replication-cluster)
 * node_state - the current state of the node: `closed`, `destroyed`, `joining`, `donor`, `synced`
 * indexes_count - the number of tables managed by the cluster
 * indexes - a list of table names managed by the cluster
@@ -80,7 +80,7 @@ SHOW STATUS
 $params = [
     'body' => []
 ];
-$response = $client->nodes()->status($params);         
+$response = $client->nodes()->status($params);
 ```
 
 <!-- response PHP -->
@@ -283,3 +283,4 @@ utils_api.sql("SHOW STATUS", Some(true)).await;
 
 <!-- end -->
 <!-- proofread -->
+

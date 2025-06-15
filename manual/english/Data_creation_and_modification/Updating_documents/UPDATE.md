@@ -888,7 +888,7 @@ doc = new HashMap<String,Object>(){{
         }});
 
 }};
-newdoc.index("products").id(100L).setDoc(doc);        
+newdoc.index("products").id(100L).setDoc(doc);
 indexApi.insert(newdoc);
 
 updatedoc = new UpdateDocumentRequest();
@@ -1667,7 +1667,7 @@ $client->bulk([
             ],
             'query' => [
                 'range' => ['price'=>['gte'=>1000]]
-            ]   
+            ]
         ]
     ],
     ['update'=>[
@@ -1677,7 +1677,7 @@ $client->bulk([
             ],
             'query' => [
                 'range' => ['price'=>['lt'=>1000]]
-            ]   
+            ]
         ]
     ]
 ]);
@@ -1693,13 +1693,13 @@ Array(
                 [_index] => products
                 [updated] => 1
             )
-        )   
+        )
         Array(
              [update] => Array(
                  [_index] => products
                  [updated] => 3
              )
-        )    
+        )
 )
 
 ```
@@ -1766,7 +1766,7 @@ res =  await indexApi.bulk(docs.map(e=>JSON.stringify(e)).join('\n'));
 <!-- request Java -->
 ``` java
 String   body = "{ \"update\" : { \"index\" : \"products\", \"doc\": { \"coeff\" : 1000 }, \"query\": { \"range\": { \"price\": { \"gte\": 1000 } } } }} "+"\n"+
-    "{ \"update\" : { \"index\" : \"products\", \"doc\": { \"coeff\" : 0 }, \"query\": { \"range\": { \"price\": { \"lt\": 1000 } } } } }"+"\n";         
+    "{ \"update\" : { \"index\" : \"products\", \"doc\": { \"coeff\" : 0 }, \"query\": { \"range\": { \"price\": { \"lt\": 1000 } } } } }"+"\n";
 indexApi.bulk(body);
 ```
 
@@ -1785,7 +1785,7 @@ class BulkResponse {
 <!-- request C# -->
 ``` clike
 string   body = "{ \"update\" : { \"index\" : \"products\", \"doc\": { \"coeff\" : 1000 }, \"query\": { \"range\": { \"price\": { \"gte\": 1000 } } } }} "+"\n"+
-    "{ \"update\" : { \"index\" : \"products\", \"doc\": { \"coeff\" : 0 }, \"query\": { \"range\": { \"price\": { \"lt\": 1000 } } } } }"+"\n";         
+    "{ \"update\" : { \"index\" : \"products\", \"doc\": { \"coeff\" : 0 }, \"query\": { \"range\": { \"price\": { \"lt\": 1000 } } } } }"+"\n";
 indexApi.Bulk(body);
 ```
 
@@ -2045,3 +2045,4 @@ attr_flush_period = 900 # persist updates to disk every 15 minutes
 When updating attributes the changes are first written to in-memory copy of attributes. This setting allows to set the interval between flushing the updates to disk. It defaults to 0, which disables the periodic flushing, but flushing will still occur at normal shut-down.
 
 <!-- proofread -->
+

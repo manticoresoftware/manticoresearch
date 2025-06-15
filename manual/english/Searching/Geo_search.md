@@ -1,6 +1,6 @@
 # Geo search
 
-One of the greatest features of Manticore Search is the ability to combine full-text searching with geo-location. For example, a retailer can offer a search where a user looks for a product, and the result set can indicate the closest shop that has the product in stock, so the user can go in-store and pick it up. A travel site can provide results based on a search limited to a certain area and have the results sorted by the distance from a point (for example, 'search museums near a hotel'). 
+One of the greatest features of Manticore Search is the ability to combine full-text searching with geo-location. For example, a retailer can offer a search where a user looks for a product, and the result set can indicate the closest shop that has the product in stock, so the user can go in-store and pick it up. A travel site can provide results based on a search limited to a certain area and have the results sorted by the distance from a point (for example, 'search museums near a hotel').
 
 To perform geo-searching, a document needs to contain pairs of latitude/longitude coordinates. The coordinates can be stored as float attributes. If the document has multiple locations, it may be convenient to use a JSON attribute to store coordinate pairs.
 
@@ -57,3 +57,4 @@ There are two functions available for creating the polygon:
 SELECT *,CONTAINS(GEOPOLY2D(40.76439, -73.9997, 42.21211, -73.999,  42.21211, -76.123, 40.76439, -76.123), 41.5445, -74.973) AS inside FROM myindex WHERE MATCH('...') AND inside=1;
 ```
 <!-- proofread -->
+

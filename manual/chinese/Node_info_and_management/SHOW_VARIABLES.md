@@ -1,10 +1,10 @@
-# 显示变量
+# SHOW VARIABLES
 
 ```sql
 SHOW [{GLOBAL | SESSION}] VARIABLES LIKE 'pattern'
 ```
 
-它返回当前的几个全局服务器变量的值。还添加了对 `GLOBAL` 和 `SESSION` 子句的支持。
+它返回了一些服务器范围内变量的当前值。同时，添加了对 `GLOBAL` 和 `SESSION` 子句的支持。
 
 ```sql
 mysql> SHOW GLOBAL VARIABLES;
@@ -45,3 +45,4 @@ mysql> show session variables like 'autocommit';
 1 row in set (0.00 sec)
 ```
 <!-- proofread -->
+

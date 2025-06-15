@@ -43,7 +43,7 @@ SHOW THREADS;
        CPU activity: 94%
           Jobs done: 2490
       Thread status: working
-               Info: SHOW THREADS 
+               Info: SHOW THREADS
 *************************** 2. row ***************************
                 TID: 84
                Name: work_2
@@ -814,3 +814,4 @@ apiClient.UtilsAPI.Sql(context.Background()).Body("SHOW THREADS OPTION columns=3
 
 <!-- end -->
 <!-- proofread -->
+

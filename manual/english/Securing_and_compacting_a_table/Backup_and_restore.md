@@ -338,3 +338,4 @@ For a comprehensive list of settings and their thorough descriptions, kindly ref
 * Note that `mysqldump` does not support backing up distributed tables and cannot back up tables containing non-stored fields. For such cases, consider using `manticore-backup` or the `BACKUP` SQL command. If you have distributed tables, it is recommended to always specify the tables to be dumped.
 
 <!-- proofread -->
+

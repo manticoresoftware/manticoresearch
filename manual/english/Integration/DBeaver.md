@@ -67,3 +67,4 @@ Note that the `TIME` type is not supported.
   - Press `Ok`
 
   After that, you'll be able to update your data safely.
+

@@ -327,18 +327,18 @@ C#
 ```clike
 utilsApi.Sql("create table products(title text, color string) type='pq'", true);
 
-Dictionary<string, Object> doc = new Dictionary<string, Object>(); 
+Dictionary<string, Object> doc = new Dictionary<string, Object>();
 doc.Add("query", "@title bag");
 InsertDocumentRequest newdoc = new InsertDocumentRequest(index: "products", doc: doc);
 indexApi.Insert(newdoc);
 
-doc = new Dictionary<string, Object>(); 
+doc = new Dictionary<string, Object>();
 doc.Add("query", "@title shoes");
 doc.Add("filters", "color='red'");
 newdoc = new InsertDocumentRequest(index: "products", doc: doc);
 indexApi.Insert(newdoc);
 
-doc = new Dictionary<string, Object>(); 
+doc = new Dictionary<string, Object>();
 doc.Add("query", "@title bag");
 doc.Add("filters", "color IN ('blue', 'green')");
 newdoc = new InsertDocumentRequest(index: "products", doc: doc);
@@ -759,9 +759,9 @@ C#
 <!-- request C# -->
 
 ```clike
-Dictionary<string, Object> percolateDoc = new Dictionary<string, Object>(); 
+Dictionary<string, Object> percolateDoc = new Dictionary<string, Object>();
 percolateDoc.Add("document", new Dictionary<string, Object> {{ "title", "what a nice bag" }});
-Dictionary<string, Object> query = new Dictionary<string, Object> {{ "percolate", percolateDoc }}; 
+Dictionary<string, Object> query = new Dictionary<string, Object> {{ "percolate", percolateDoc }};
 PercolateRequest percolateRequest = new PercolateRequest(query=query);
 searchApi.Percolate("test_pq",percolateRequest);
 
@@ -790,9 +790,9 @@ Rust
 let mut percolate_doc_fields = HashMap::new();
 percolate_doc_fileds.insert("title".to_string(), "what a nice bag");
 let mut percolate_doc = HashMap::new();
-percolate_doc.insert("document".to_string(), percolate_doc_fields); 
+percolate_doc.insert("document".to_string(), percolate_doc_fields);
 let percolate_query = PercolateRequestQuery::new(serde_json::json!(percolate_doc));
-let percolate_req = PercolateRequest::new(percolate_query); 
+let percolate_req = PercolateRequest::new(percolate_query);
 search_api.percolate("test_pq", percolate_req).await;
 ```
 <!-- response Rust -->
@@ -1130,9 +1130,9 @@ C#
 <!-- request C# -->
 
 ```clike
-Dictionary<string, Object> percolateDoc = new Dictionary<string, Object>(); 
+Dictionary<string, Object> percolateDoc = new Dictionary<string, Object>();
 percolateDoc.Add("document", new Dictionary<string, Object> {{ "title", "what a nice bag" }});
-Dictionary<string, Object> query = new Dictionary<string, Object> {{ "percolate", percolateDoc }}; 
+Dictionary<string, Object> query = new Dictionary<string, Object> {{ "percolate", percolateDoc }};
 PercolateRequest percolateRequest = new PercolateRequest(query=query);
 searchApi.Percolate("test_pq",percolateRequest);
 
@@ -1161,9 +1161,9 @@ Rust
 let mut percolate_doc_fields = HashMap::new();
 percolate_doc_fileds.insert("title".to_string(), "what a nice bag");
 let mut percolate_doc = HashMap::new();
-percolate_doc.insert("document".to_string(), percolate_doc_fields); 
+percolate_doc.insert("document".to_string(), percolate_doc_fields);
 let percolate_query = PercolateRequestQuery::new(serde_json::json!(percolate_doc));
-let percolate_req = PercolateRequest::new(percolate_query); 
+let percolate_req = PercolateRequest::new(percolate_query);
 search_api.percolate("test_pq", percolate_req).await;
 
 ```
@@ -1615,8 +1615,8 @@ doc1.Add("color","blue");
 var doc2 = new Dictionary<string, Object>();
 doc2.Add("title","beautiful bag");
 var docs = new List<Object> {doc1, doc2};
-Dictionary<string, Object> percolateDoc = new Dictionary<string, Object> {{ "documents", docs }}; 
-Dictionary<string, Object> query = new Dictionary<string, Object> {{ "percolate", percolateDoc }}; 
+Dictionary<string, Object> percolateDoc = new Dictionary<string, Object> {{ "documents", docs }};
+Dictionary<string, Object> query = new Dictionary<string, Object> {{ "percolate", percolateDoc }};
 PercolateRequest percolateRequest = new PercolateRequest(query=query);
 searchApi.Percolate("products",percolateRequest);
 ```
@@ -1648,9 +1648,9 @@ let mut percolate_doc_fields2 = HashMap::new();
 percolate_doc_fields2.insert("title".to_string(), "beautiful bag");
 let mut percolate_doc_fields_list: [HashMap; 2] = [percolate_doc_fields1, percolate_doc_fields2];
 let mut percolate_doc = HashMap::new();
-percolate_doc.insert("documents".to_string(), percolate_doc_fields_list); 
+percolate_doc.insert("documents".to_string(), percolate_doc_fields_list);
 let percolate_query = PercolateRequestQuery::new(serde_json::json!(percolate_doc));
-let percolate_req = PercolateRequest::new(percolate_query); 
+let percolate_req = PercolateRequest::new(percolate_query);
 search_api.percolate("products", percolate_req).await;
 ```
 <!-- response Rust -->
@@ -1674,7 +1674,7 @@ TypeScript
 <!-- request TypeScript -->
 
 ```typescript
-docs = [ {title : 'What a nice bag'}, {title : 'Really nice shoes'} ]; 
+docs = [ {title : 'What a nice bag'}, {title : 'Really nice shoes'} ];
 res = await searchApi.percolate('test_pq', { query: { percolate: { documents : docs } } } );
 ```
 <!-- response TypeScript -->
@@ -2112,8 +2112,8 @@ doc1.Add("color","blue");
 var doc2 = new Dictionary<string, Object>();
 doc2.Add("title","beautiful bag");
 var docs = new List<Object> {doc1, doc2};
-Dictionary<string, Object> percolateDoc = new Dictionary<string, Object> {{ "documents", docs }}; 
-Dictionary<string, Object> query = new Dictionary<string, Object> {{ "percolate", percolateDoc }}; 
+Dictionary<string, Object> percolateDoc = new Dictionary<string, Object> {{ "documents", docs }};
+Dictionary<string, Object> query = new Dictionary<string, Object> {{ "percolate", percolateDoc }};
 PercolateRequest percolateRequest = new PercolateRequest(query=query);
 searchApi.Percolate("products",percolateRequest);
 ```
@@ -2145,9 +2145,9 @@ let mut percolate_doc_fields2 = HashMap::new();
 percolate_doc_fields2.insert("title".to_string(), "beautiful bag");
 let mut percolate_doc_fields_list: [HashMap; 2] = [percolate_doc_fields1, percolate_doc_fields2];
 let mut percolate_doc = HashMap::new();
-percolate_doc.insert("documents".to_string(), percolate_doc_fields_list); 
+percolate_doc.insert("documents".to_string(), percolate_doc_fields_list);
 let percolate_query = PercolateRequestQuery::new(serde_json::json!(percolate_doc));
-let percolate_req = PercolateRequest::new(percolate_query); 
+let percolate_req = PercolateRequest::new(percolate_query);
 search_api.percolate("products", percolate_req).await;
 ```
 <!-- response Rust -->
@@ -2171,7 +2171,7 @@ TypeScript
 <!-- request TypeScript -->
 
 ```typescript
-docs = [ {title : 'What a nice bag'}, {title : 'Really nice shoes'} ]; 
+docs = [ {title : 'What a nice bag'}, {title : 'Really nice shoes'} ];
 res = await searchApi.percolate('test_pq', { query: { percolate: { documents : docs } } } );
 ```
 <!-- response TypeScript -->
@@ -2420,7 +2420,7 @@ POST /pq/pq/_search
                     "tags":"",
                     "filters":"gid>=10 OR gid<=3"
                 }
-            }            
+            }
         ]
     }
 }
@@ -2675,11 +2675,11 @@ res = await searchApi.search({"table":"test_pq","query":{"match_all":{}}});
 {
 	'hits':
 	{
-		'hits': 
+		'hits':
 		[{
 			'_id': '2811025403043381501',
             '_score': 1,
-            '_source': 
+            '_source':
             {
             	'filters': "gid>=10",
                 'query': 'filter test',
@@ -2687,10 +2687,10 @@ res = await searchApi.search({"table":"test_pq","query":{"match_all":{}}});
             }
         },
         {
-         	'_id': 
+         	'_id':
          	'2811025403043381502',
             '_score': 1,
-            '_source': 
+            '_source':
             {
             	'filters': "gid>=10 OR gid<=3",
                  'query': 'angry',
@@ -2712,7 +2712,7 @@ Go
 ```go
 query := map[string]interface{} {}
 percolateRequestQuery := manticoreclient.NewPercolateRequestQuery(query)
-percolateRequest := manticoreclient.NewPercolateRequest(percolateRequestQuery) 
+percolateRequest := manticoreclient.NewPercolateRequest(percolateRequestQuery)
 res, _, _ := apiClient.SearchAPI.Percolate(context.Background(), "test_pq").PercolateRequest(*percolateRequest).Execute()
 ```
 <!-- response Go -->
@@ -2720,11 +2720,11 @@ res, _, _ := apiClient.SearchAPI.Percolate(context.Background(), "test_pq").Perc
 {
 	'hits':
 	{
-		'hits': 
+		'hits':
 		[{
 			'_id': '2811025403043381501',
             '_score': 1,
-            '_source': 
+            '_source':
             {
             	'filters': "gid>=10",
                 'query': 'filter test',
@@ -2732,10 +2732,10 @@ res, _, _ := apiClient.SearchAPI.Percolate(context.Background(), "test_pq").Perc
             }
         },
         {
-         	'_id': 
+         	'_id':
          	'2811025403043381502',
             '_score': 1,
-            '_source': 
+            '_source':
             {
             	'filters': "gid>=10 OR gid<=3",
                  'query': 'angry',
@@ -2864,8 +2864,8 @@ $response = $client->pq()->search($params);
                 (
                     [0] =>
                         (
-                            [_index] => pq  
-                            [_type] => doc                            
+                            [_index] => pq
+                            [_type] => doc
                             [_id] => 2
                             [_score] => 1
                             [_source] =>
@@ -2888,7 +2888,7 @@ $response = $client->pq()->search($params);
                         ),
                     [1] =>
                         (
-                            [_index] => pq                            
+                            [_index] => pq
                             [_id] => 1
                             [_score] => 1
                             [_source] =>
@@ -3044,8 +3044,8 @@ var doc2 = new Dictionary<string, Object>();
 doc2.Add("title","filter test doc2");
 doc2.Add("gid",13);
 var docs = new List<Object> {doc1, doc2};
-Dictionary<string, Object> percolateDoc = new Dictionary<string, Object> {{ "documents", docs }}; 
-Dictionary<string, Object> query = new Dictionary<string, Object> {{ "percolate", percolateDoc }}; 
+Dictionary<string, Object> percolateDoc = new Dictionary<string, Object> {{ "documents", docs }};
+Dictionary<string, Object> query = new Dictionary<string, Object> {{ "percolate", percolateDoc }};
 PercolateRequest percolateRequest = new PercolateRequest(query=query);
 searchApi.Percolate("pq",percolateRequest);
 ```
@@ -3078,9 +3078,9 @@ percolate_doc_fields2.insert("title".to_string(), "filter test doc2");
 percolate_doc_fields2.insert("gid".to_string(), 13);
 let mut percolate_doc_fields_list: [HashMap; 2] = [percolate_doc_fields1, percolate_doc_fields2];
 let mut percolate_doc = HashMap::new();
-percolate_doc.insert("documents".to_string(), percolate_doc_fields_list); 
+percolate_doc.insert("documents".to_string(), percolate_doc_fields_list);
 let percolate_query = PercolateRequestQuery::new(serde_json::json!(percolate_doc));
-let percolate_req = PercolateRequest::new(percolate_query); 
+let percolate_req = PercolateRequest::new(percolate_query);
 search_api.percolate("pq", percolate_req).await;
 ```
 <!-- response Rust -->
@@ -3104,7 +3104,7 @@ TypeScript
 <!-- request TypeScript -->
 
 ```typescript
-docs = [ {title : 'What a nice bag'}, {title : 'Really nice shoes'} ]; 
+docs = [ {title : 'What a nice bag'}, {title : 'Really nice shoes'} ];
 res = await searchApi.percolate('test_pq', { query: { percolate: { documents : docs } } } );
 ```
 <!-- response TypeScript -->
@@ -3313,3 +3313,4 @@ CALL PQ('products', ('{"title": "nice pair of shoes", "color": "blue"}', '{"titl
 ```
 <!-- end -->
 <!-- proofread -->
+

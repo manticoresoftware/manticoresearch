@@ -70,3 +70,4 @@ Example:
 plugin_dir = /usr/local/lib/manticore/
 ```
 <!-- proofread -->
+

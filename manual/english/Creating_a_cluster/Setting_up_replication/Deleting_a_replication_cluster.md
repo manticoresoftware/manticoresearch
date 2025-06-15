@@ -1,4 +1,4 @@
-# Deleting a replication cluster 
+# Deleting a replication cluster
 
 <!-- example deleting a replication cluster  1 -->
 The `DELETE CLUSTER` statement removes the specified cluster with its  [name](../../Creating_a_cluster/Setting_up_replication/Setting_up_replication.md#name). Once the cluster is deleted, it is removed from all nodes, but its tables remain intact and become active local non-replicated tables.
@@ -27,7 +27,7 @@ $params = [
     'cluster' => 'click_query',
     'body' => []
 ];
-$response = $client->cluster()->delete($params);                
+$response = $client->cluster()->delete($params);
 ```
 <!-- intro -->
 ##### Python:
@@ -100,3 +100,4 @@ utils_api.Sql("DELETE CLUSTER click_query", Some(true)).await;
 
 <!-- end -->
 <!-- proofread -->
+

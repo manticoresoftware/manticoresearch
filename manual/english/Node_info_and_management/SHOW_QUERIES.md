@@ -37,3 +37,4 @@ mysql> SHOW QUERIES;
 Refer to [SHOW THREADS](../Node_info_and_management/SHOW_THREADS.md) if you'd like to gain insight from the perspective of the threads themselves.
 
 <!-- proofread -->
+

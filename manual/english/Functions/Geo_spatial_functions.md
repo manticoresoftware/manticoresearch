@@ -28,3 +28,4 @@ The default method is "adaptive". It is a well-optimized implementation that is 
 `POLY2D(x1,y1,x2,y2,x3,y3...)` creates a polygon to be used with the [CONTAINS()](../Functions/Arrays_and_conditions_functions.md#CONTAINS%28%29) function. This polygon assumes a flat Earth, so it should not be too large; for large areas, the [GEOPOLY2D()](../Functions/Geo_spatial_functions.md#GEOPOLY2D%28%29) function, which takes Earth's curvature into consideration, should be used.
 
 <!-- proofread -->
+

@@ -432,7 +432,7 @@ $params = [
 
   ]
 ];
-$response = $client->cluster()->alter($params);   
+$response = $client->cluster()->alter($params);
 ```
 <!-- intro -->
 ##### Python:
@@ -696,3 +696,4 @@ let insert_res = index_api.insert(insert_req).await;
 
 All queries that modify tables in the cluster are now replicated to all nodes in the cluster.
 <!-- proofread -->
+

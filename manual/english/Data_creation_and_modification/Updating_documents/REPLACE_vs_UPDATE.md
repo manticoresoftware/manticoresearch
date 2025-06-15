@@ -13,3 +13,4 @@ Both `UPDATE` and a [partial REPLACE](../../Data_creation_and_modification/Updat
 - A partial `REPLACE` can change any field in a document, but it requires that all fields in the table be set to "stored" (though this is the default setting). This is not necessary with `UPDATE`.
 
 <!-- proofread -->
+

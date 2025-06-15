@@ -1,6 +1,6 @@
-# 刷新RAM块到新的磁盘块
+# 将 RAM chunk 刷写到新的磁盘 chunk
 
-## 刷新RAM块
+## FLUSH RAMCHUNK
 
 <!-- example flush_ramchunk -->
 
@@ -8,9 +8,9 @@
 FLUSH RAMCHUNK rt_table
 ```
 
-`FLUSH RAMCHUNK` 命令在RT表中创建一个新的磁盘块。
+`FLUSH RAMCHUNK` 命令会在 RT 表中创建一个新的磁盘 chunk。
 
-通常，当RAM块达到允许的最大 [rt_mem_limit](../Creating_a_table/Local_tables/Plain_and_real-time_table_settings.md#rt_mem_limit) 大小时，RT表会自动刷新并将RAM块的内容转换为新的磁盘块。然而，为了调试和测试目的，强制创建一个新的磁盘块可能是有用的，而`FLUSH RAMCHUNK`语句正是如此。
+通常，RT 表会在满足[特殊条件](../Creating_a_table/Local_tables/Plain_and_real-time_table_settings.md#ram-chunk-flushing-conditions)中的某一项时，自动将 RAM chunk 的内容刷写并转换为新的磁盘 chunk。但在某些情况下，你可能希望手动触发刷写——此时 `FLUSH RAMCHUNK` 语句允许你这样做。
 
 <!-- intro -->
 ##### SQL:
@@ -26,3 +26,4 @@ Query OK, 0 rows affected (0.05 sec)
 ```
 <!-- end -->
 <!-- proofread -->
+

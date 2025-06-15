@@ -350,3 +350,4 @@ Kafka offsets commit after each batch or when processing times out. If the proce
 - **Cleanup:** The buffer table is cleared after each batch, ensuring it’s ready for the next set of data.
 
 <!-- proofread -->
+

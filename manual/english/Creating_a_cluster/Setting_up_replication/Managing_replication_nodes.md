@@ -1,4 +1,4 @@
-# Managing replication nodes 
+# Managing replication nodes
 
 <!-- example managing replication nodes 1 -->
 The `ALTER CLUSTER <cluster_name> UPDATE nodes`  statement updates the node lists on each node within the specified cluster to include all active nodes in the cluster. For more information on node lists, see [Joining a cluster](../../Creating_a_cluster/Setting_up_replication/Joining_a_replication_cluster.md).
@@ -28,10 +28,10 @@ $params = [
   'cluster' => 'posts',
   'body' => [
      'operation' => 'update',
-     
+
   ]
 ];
-$response = $client->cluster()->alter($params); 
+$response = $client->cluster()->alter($params);
 ```
 <!-- intro -->
 ##### Python:
@@ -107,7 +107,7 @@ utils_api.sql("ALTER CLUSTER posts UPDATE nodes", Some(true)).await;
 
 For instance, when the cluster was initially established, the list of nodes used to rejoin the cluster was `10.10.0.1:9312,10.10.1.1:9312`. Since then, other nodes joined the cluster and now the active nodes are `10.10.0.1:9312,10.10.1.1:9312,10.15.0.1:9312,10.15.0.3:9312`.However, the list of nodes used to rejoin the cluster has not been updated.
 
-To rectify this, you can run the `ALTER CLUSTER ... UPDATE nodes` statement to copy the list of active nodes to the list of nodes used to rejoin the cluster. After this, the list of nodes used to rejoin the cluster will include all the active nodes in the cluster. 
+To rectify this, you can run the `ALTER CLUSTER ... UPDATE nodes` statement to copy the list of active nodes to the list of nodes used to rejoin the cluster. After this, the list of nodes used to rejoin the cluster will include all the active nodes in the cluster.
 
 Both lists of nodes can be viewed using the [Cluster status](../../Creating_a_cluster/Setting_up_replication/Replication_cluster_status.md) statement (`cluster_post_nodes_set` and `cluster_post_nodes_view`).
 
@@ -120,3 +120,4 @@ To remove a node from the replication cluster, follow these steps:
 
 After these steps, the other nodes will forget about the detached node and the detached node will forget about the cluster. This action will not impact the tables in the cluster or on the detached node.
 <!-- proofread -->
+

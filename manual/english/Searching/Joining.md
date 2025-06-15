@@ -878,7 +878,7 @@ POST /search
   },
   "join": [
     {
-      "type": "inner", 
+      "type": "inner",
       "table": "customers",
       "query": {
         "query_string": "maple"
@@ -956,7 +956,7 @@ POST /search
 
 When performing table joins, Manticore Search processes the results in batches to optimize performance and resource usage. Here's how it works:
 
-- **How Batching Works**: 
+- **How Batching Works**:
   - The query on the left table is executed first, and the results are accumulated into a batch.
   - This batch is then used as input for the query on the right table, which is executed as a single operation.
   - This approach minimizes the number of queries sent to the right table, improving efficiency.
@@ -1019,7 +1019,7 @@ When using JOINs in Manticore Search, keep the following points in mind:
    ```sql
    -- Correct:
    SELECT * FROM t1 LEFT JOIN t2 ON int(t1.json_attr.id) = t2.json_attr.id
-   
+
    -- Incorrect:
    SELECT * FROM t1 LEFT JOIN t2 ON t1.json_attr.id = t2.json_attr.id
    ```
@@ -1041,3 +1041,4 @@ When using JOINs in Manticore Search, keep the following points in mind:
 By following these guidelines, you can effectively use JOINs in Manticore Search to combine data from multiple indexes and perform complex queries.
 
 <!-- proofread -->
+

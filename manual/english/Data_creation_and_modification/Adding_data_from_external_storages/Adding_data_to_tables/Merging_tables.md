@@ -22,3 +22,4 @@ This switch allows you to apply filters to the destination table along with merg
 
 `--drop-src` enables dropping SRCINDEX after the merge and before rotating the tables, which is important if you specify DSTINDEX in `killlist_target` of DSTINDEX. Otherwise, when rotating the tables, the documents that have been merged into DSTINDEX may be suppressed by SRCINDEX.
 <!-- proofread -->
+

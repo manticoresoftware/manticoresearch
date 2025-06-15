@@ -43,3 +43,4 @@ mysql> SHOW STATUS LIKE 'qcache%';
 6 rows in set (0.00 sec)
 ```
 <!-- proofread -->
+

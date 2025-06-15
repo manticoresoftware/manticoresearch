@@ -3,17 +3,17 @@
 ## СТАТУС
 
 <!-- example status -->
-Самый простой способ просмотра информации высокого уровня о вашем узле Manticore — это выполнить команду `status` в клиенте MySQL. Это отобразит информацию о различных аспектах, таких как:
+Самый простой способ получить информацию высокого уровня о вашем узле Manticore — выполнить команду `status` в клиенте MySQL. Она отобразит информацию о различных аспектах, таких как:
 * Текущая версия
-* Включён ли SSL или нет
-* Текущий TCP-порт/Unix-сокет
+* Используется ли SSL
+* Текущий TCP порт/Unix сокет
 * Время работы
 * Количество [потоков](../Server_settings/Searchd.md#threads)
-* Количество [задач в очереди](../Server_settings/Searchd.md#jobs_queue_size)
+* Количество [заданий в очереди](../Server_settings/Searchd.md#jobs_queue_size)
 * Количество подключений (`clients`)
-* Количество задач, которые в настоящее время обрабатываются
-* Количество запросов, выполненных с момента старта
-* Количество задач в очереди и количество задач, нормализованных по количеству потоков
+* Количество выполняемых задач в данный момент
+* Количество запросов, выполненных с запуска
+* Количество заданий в очереди и количество задач, нормализованное по числу потоков
 
 <!-- request SQL -->
 ```sql
@@ -50,7 +50,7 @@ Queue/Th: 0.2  Tasks/Th: 0.4
 
 <!-- end-->
 
-## ПОКАЗАТЬ СТАТУС
+## SHOW STATUS
 
 ```sql
 SHOW STATUS [ LIKE pattern ]
@@ -58,7 +58,7 @@ SHOW STATUS [ LIKE pattern ]
 
 <!-- example show status -->
 
-`SHOW STATUS` - это SQL-запрос, который представляет различные полезные счётчики производительности. Счётчики ввода-вывода и CPU будут доступны только если `searchd` был запущен с переключателями `--iostats` и `--cpustats`, соответственно (или если они были включены через `SET GLOBAL iostats/cpustats=1`).
+`SHOW STATUS` — это SQL-запрос, который выводит различные полезные счетчики производительности. Счетчики IO и CPU будут доступны только если `searchd` был запущен с параметрами `--iostats` и `--cpustats` соответственно (или если они были включены через `SET GLOBAL iostats/cpustats=1`).
 
 <!-- intro -->
 ##### SQL:
@@ -155,7 +155,7 @@ SHOW STATUS;
 
 <!-- example show status like -->
 
-Поддерживается необязательный оператор `LIKE`, который позволяет вам выбирать только те переменные, которые совпадают с определённым шаблоном. Синтаксис шаблона следует стандартным символам подстановки SQL, где `%` представляет любое количество любых символов, а `_` представляет один символ.
+Поддерживается необязательный оператор `LIKE`, позволяющий выбирать только переменные, соответствующие определенному шаблону. Синтаксис шаблона соответствует стандартным SQL-джокерам, где `%` обозначает любое количество любых символов, а `_` — одиночный символ.
 
 <!-- request qcache -->
 
@@ -208,24 +208,24 @@ SHOW STATUS LIKE '%stats_ms%';
 
 <!-- end -->
 
-### Статистика времени запросов
+### Статистика времени выполнения запросов
 
 <!-- example show status like stats_ms -->
 
-Команда `SHOW STATUS` предоставляет подробный отчёт о различных метриках производительности в Manticore, включая статистику времени запросов для вставки/замены, поиска и обновления запросов. Эти статистические данные рассчитываются за скользящие интервалы в 1, 5 и 15 минут, показывая средние, минимальные, максимальные значения и 95-й/99-й процентиль для времени запросов.
+Команда `SHOW STATUS` предоставляет подробный отчет по различным показателям производительности в Manticore, включая статистику времени выполнения для запросов вставки/замены, поиска и обновления. Эти данные рассчитываются за скользящие окна в 1, 5 и 15 минут, показывая средние, минимальные, максимальные и 95-й/99-й порядковые показатели времени выполнения запросов.
 
-Эти метрики помогают отслеживать производительность за определённые временные интервалы, облегчая выявление трендов во времени отклика запросов и возможных узких мест.
+Эти метрики помогают отслеживать производительность за конкретные промежутки времени, облегчая выявление тенденций во времени отклика запросов и возможных узких мест.
 
-Следующие метрики являются частью вывода `SHOW STATUS`:
-- `*_avg`: Среднее время запроса для каждого типа запроса за последние 1, 5 и 15 минут.
-- `*_min`: Самое короткое время запроса, зарегистрированное для каждого типа запроса.
-- `*_max`: Самое длительное время запроса, зарегистрированное для каждого типа запроса.
-- `*_pct95`: Время, в течение которого 95% запросов завершаются.
-- `*_pct99`: Время, в течение которого 99% запросов завершаются.
+Следующие показатели включены в вывод `SHOW STATUS`:
+- `*_avg`: Среднее время выполнения каждого типа запроса за последние 1, 5 и 15 минут.
+- `*_min`: Минимальное время выполнения каждого типа запроса.
+- `*_max`: Максимальное время выполнения каждого типа запроса.
+- `*_pct95`: Время, в пределах которого выполняется 95% запросов.
+- `*_pct99`: Время, в пределах которого выполняется 99% запросов.
 
-Эти статистические данные предоставляются отдельно для вставки/замены (`insert_replace_stats_*`), поиска (`search_stats_*`) и обновления (`update_stats_*`) запросов, предлагая подробное представление о производительности различных операций.
+Эта статистика предоставляется отдельно для вставки/замены (`insert_replace_stats_*`), поиска (`search_stats_*`) и обновления (`update_stats_*`), обеспечивая подробный анализ производительности различных операций.
 
-Если во время контролируемого интервала не было выполнено запросов, система отобразит `N/A`.
+Если за отслеживаемый промежуток запросы не выполнялись, система покажет `N/A`.
 
 <!-- request perf_stats -->
 
@@ -258,15 +258,15 @@ SHOW STATUS LIKE '%stats_ms%';
 
 <!-- end -->
 
-## ПОКАЗАТЬ НАСТРОЙКИ
+## SHOW SETTINGS
 
 <!-- example show settings -->
 
-`SHOW SETTINGS` - это SQL-запрос, который отображает текущие настройки из вашего файла конфигурации. Имена настроек представлены в следующем формате: `'config_section_name'.'setting_name'`
+`SHOW SETTINGS` — это SQL-запрос, который отображает текущие настройки из вашего конфигурационного файла. Названия настроек представлены в формате: `'config_section_name'.'setting_name'`.
 
-Результат также включает два дополнительных значения:
-- `configuration_file` - Путь к файлу конфигурации
-- `worker_pid` - Идентификатор процесса запущенного экземпляра `searchd`
+Результат также включает два дополнительных поля:
+- `configuration_file` — путь к конфигурационному файлу
+- `worker_pid` — идентификатор процесса запущенного экземпляра `searchd`
 
 <!-- intro -->
 ##### SQL:
@@ -300,14 +300,14 @@ SHOW SETTINGS;
 
 <!-- end -->
 
-## ПОКАЗАТЬ СТАТУС АГЕНТА
+## SHOW AGENT STATUS
 ```sql
 SHOW AGENT ['agent_or_index'] STATUS [ LIKE pattern ]
 ```
 
 <!-- example SHOW AGENT STATUS -->
 
-`SHOW AGENT STATUS` отображает статистику [удалённых агентов](../Creating_a_table/Creating_a_distributed_table/Remote_tables.md#agent) или распределённой таблицы. Это включает такие значения, как возраст последнего запроса, последний ответ, количество различных типов ошибок и успешных операций и так далее. Статистика отображается для каждого агента за последние 1, 5 и 15 интервалов, каждый из которых состоит из [ha_period_karma](../Server_settings/Searchd.md#ha_period_karma) секунд.
+`SHOW AGENT STATUS` отображает статистику по [удалённым агентам](../Creating_a_table/Creating_a_distributed_table/Remote_tables.md#agent) или распределённой таблице. Включает значения, такие как возраст последнего запроса, последний ответ, количество различных ошибок и успешных операций и т.д. Статистика показывается для каждого агента за последние интервалы 1, 5 и 15, каждый из которых состоит из [ha_period_karma](../Server_settings/Searchd.md#ha_period_karma) секунд.
 
 <!-- intro -->
 ##### SQL:
@@ -397,7 +397,7 @@ Array(
 	[ag_0_references] => 2
 	[ag_0_lastquery] => 0.41
 	[ag_0_lastanswer] => 0.19
-	[ag_0_lastperiodmsec] => 222  
+	[ag_0_lastperiodmsec] => 222
 	[ag_0_errorsarow] => 0
 	[ag_0_1periods_query_timeouts] => 0
 	[ag_0_1periods_connect_timeouts] => 0
@@ -415,13 +415,13 @@ Array(
 	[ag_0_5periods_wrong_replies] => 0
 	[ag_0_5periods_unexpected_closings] => 0
 	[ag_0_5periods_warnings] => 0
-	[ag_0_5periods_succeeded_queries] => 146  
+	[ag_0_5periods_succeeded_queries] => 146
 	[ag_0_5periods_msecsperquery] => 231.83
 	[ag_1_hostname 192.168.0.202:6714
 	[ag_1_references] => 2
 	[ag_1_lastquery] => 0.41
 	[ag_1_lastanswer] => 0.19
-	[ag_1_lastperiodmsec] => 220  
+	[ag_1_lastperiodmsec] => 220
 	[ag_1_errorsarow] => 0
 	[ag_1_1periods_query_timeouts] => 0
 	[ag_1_1periods_connect_timeouts] => 0
@@ -439,7 +439,7 @@ Array(
 	[ag_1_5periods_wrong_replies] => 0
 	[ag_1_5periods_unexpected_closings
 	[ag_1_5periods_warnings] => 0
-	[ag_1_5periods_succeeded_queries] => 146  
+	[ag_1_5periods_succeeded_queries] => 146
 	[ag_1_5periods_msecsperquery] => 230.85
 )
 ```
@@ -1022,7 +1022,7 @@ res := apiClient.UtilsAPI.Sql(context.Background()).Body("SHOW AGENT STATUS").Ex
 
 <!-- example SHOW AGENT LIKE -->
 
-Поддерживается необязательный оператор `LIKE`, синтаксис которого такой же, как и в `SHOW STATUS`.
+Поддерживается необязательный оператор `LIKE` с таким же синтаксисом, как в `SHOW STATUS`.
 
 <!-- intro -->
 ##### SQL:
@@ -1266,7 +1266,7 @@ apiClient.UtilsAPI.Sql(context.Background()).Body("SHOW AGENT STATUS LIKE \"%5pe
 
 <!-- example show specific agent -->
 
-Вы можете указать конкретного агента по адресу. В этом случае будут отображены только данные этого агента. Кроме того, будет использован префикс `agent_` вместо `ag_N_`:
+Вы можете указать конкретного агента по его адресу. В этом случае будут отображены данные только этого агента. Кроме того, вместо `ag_N_` будет использоваться префикс `agent_`:
 
 <!-- intro -->
 ##### SQL:
@@ -1583,7 +1583,7 @@ apiClient.UtilsAPI.Sql(context.Background()).Body("SHOW AGENT \"192.168.0.202:67
 <!-- end -->
 <!-- example show agent table status -->
 
-Наконец, вы можете проверить статус агентов в конкретной распределенной таблице, используя оператор `SHOW AGENT table_name STATUS`. Этот оператор отображает статус HA таблицы (т.е. использует ли она зеркала агентов) и предоставляет информацию о зеркалах, включая: адрес, черную дыру и постоянные флаги, а также вероятность выбора зеркала, используемую, когда одна из [стратегий взвешенной вероятности](../Creating_a_cluster/Remote_nodes/Load_balancing.md) находится в действии.
+Наконец, вы можете проверить состояние агентов в конкретной распределённой таблице, используя оператор `SHOW AGENT table_name STATUS`. Этот оператор показывает статус высокой доступности (HA) таблицы (т.е. используется ли вообще зеркалирование агентов) и предоставляет информацию о зеркалах, включая: адрес, флаги blackhole и persistent, а также вероятность выбора зеркала, применяемую при использовании одной из [стратегий взвешенной вероятности](../Creating_a_cluster/Remote_nodes/Load_balancing.md).
 
 <!-- intro -->
 ##### SQL:
@@ -1673,7 +1673,7 @@ utilsApi.sql('SHOW AGENT \'192.168.0.202:6714\' STATUS LIKE \'%15periods%\'')
     {u'Key': u'dstindex_1mirror3_id', u'Value': u'dev1.manticoresearch.com:6714:loc'},
     {u'Key': u'dstindex_1mirror3_probability_weight', u'Value': u' 0.252501'},
     {u'Key': u'dstindex_1mirror3_is_blackhole', u'Value': u'0'},
-    {u'Key': u'dstindex_1mirror3_is_persistent', u'Value': u'439'}    
+    {u'Key': u'dstindex_1mirror3_is_persistent', u'Value': u'439'}
     ],
  u'error': u'',
  u'total': 0,
@@ -1706,7 +1706,7 @@ await utilsApi.sql('SHOW AGENT \'192.168.0.202:6714\' STATUS LIKE \'%15periods%\
     {u'Key': u'dstindex_1mirror3_id', u'Value': u'dev1.manticoresearch.com:6714:loc'},
     {u'Key': u'dstindex_1mirror3_probability_weight', u'Value': u' 0.252501'},
     {u'Key': u'dstindex_1mirror3_is_blackhole', u'Value': u'0'},
-    {u'Key': u'dstindex_1mirror3_is_persistent', u'Value': u'439'}    
+    {u'Key': u'dstindex_1mirror3_is_persistent', u'Value': u'439'}
     ],
  u'error': u'',
  u'total': 0,
@@ -1739,7 +1739,7 @@ res = await utilsApi.sql("SHOW AGENT \"192.168.0.202:6714\" STATUS LIKE \"%15per
     {"Key": "dstindex_1mirror3_id", "Value": "dev1.manticoresearch.com:6714:loc"},
     {"Key": "dstindex_1mirror3_probability_weight", "Value": " 0.252501"},
     {"Key": "dstindex_1mirror3_is_blackhole", "Value": "0"},
-    {"Key": "dstindex_1mirror3_is_persistent", "Value": "439"}    
+    {"Key": "dstindex_1mirror3_is_persistent", "Value": "439"}
     ],
  "error": "",
  "total": 0,
@@ -1772,7 +1772,7 @@ utilsApi.sql("SHOW AGENT \"192.168.0.202:6714\" STATUS LIKE \"%15periods%\"");
     {Key=dstindex_1mirror3_id, Value=dev1.manticoresearch.com:6714:loc},
     {Key=dstindex_1mirror3_probability_weight, Value= 0.252501},
     {Key=dstindex_1mirror3_is_blackhole, Value=0},
-    {Key=dstindex_1mirror3_is_persistent, Value=439}    
+    {Key=dstindex_1mirror3_is_persistent, Value=439}
     ],
  error=,
  total=0,
@@ -1805,7 +1805,7 @@ utilsApi.Sql("SHOW AGENT \"192.168.0.202:6714\" STATUS LIKE \"%15periods%\"");
     {Key=dstindex_1mirror3_id, Value=dev1.manticoresearch.com:6714:loc},
     {Key=dstindex_1mirror3_probability_weight, Value= 0.252501},
     {Key=dstindex_1mirror3_is_blackhole, Value=0},
-    {Key=dstindex_1mirror3_is_persistent, Value=439}    
+    {Key=dstindex_1mirror3_is_persistent, Value=439}
     ],
  error="",
  total=0,
@@ -1838,7 +1838,7 @@ utils_api.sql("SHOW AGENT \"192.168.0.202:6714\" STATUS LIKE \"%15periods%\"", S
     {Key=dstindex_1mirror3_id, Value=dev1.manticoresearch.com:6714:loc},
     {Key=dstindex_1mirror3_probability_weight, Value= 0.252501},
     {Key=dstindex_1mirror3_is_blackhole, Value=0},
-    {Key=dstindex_1mirror3_is_persistent, Value=439}    
+    {Key=dstindex_1mirror3_is_persistent, Value=439}
     ],
  error="",
  total=0,
@@ -1876,7 +1876,7 @@ res = await utilsApi.sql("SHOW AGENT \"192.168.0.202:6714\" STATUS LIKE \"%15per
 	    {"Key": "dstindex_1mirror3_id", "Value": "dev1.manticoresearch.com:6714:loc"},
 	    {"Key": "dstindex_1mirror3_probability_weight", "Value": " 0.252501"},
 	    {"Key": "dstindex_1mirror3_is_blackhole", "Value": "0"},
-	    {"Key": "dstindex_1mirror3_is_persistent", "Value": "439"}    
+	    {"Key": "dstindex_1mirror3_is_persistent", "Value": "439"}
     ],
 	"error": "",
 	"total": 0,
@@ -1915,7 +1915,7 @@ apiClient.UtilsAPI.Sql(context.Background()).Body("SHOW AGENT \"192.168.0.202:67
 	    {"Key": "dstindex_1mirror3_id", "Value": "dev1.manticoresearch.com:6714:loc"},
 	    {"Key": "dstindex_1mirror3_probability_weight", "Value": " 0.252501"},
 	    {"Key": "dstindex_1mirror3_is_blackhole", "Value": "0"},
-	    {"Key": "dstindex_1mirror3_is_persistent", "Value": "439"}    
+	    {"Key": "dstindex_1mirror3_is_persistent", "Value": "439"}
     ],
 	"error": "",
 	"total": 0,
@@ -1925,4 +1925,48 @@ apiClient.UtilsAPI.Sql(context.Background()).Body("SHOW AGENT \"192.168.0.202:67
 
 <!-- end -->
 
+## Prometheus Exporter
+
+<!-- example prometheus exporter -->
+
+В Manticore Search встроен экспортер для Prometheus.
+Чтобы запросить метрики, убедитесь, что HTTP-порт открыт, и просто вызовите эндпоинт /metrics.
+
+**Примечание:** для работы экспортера требуется включённый **Buddy**.
+
+<!-- intro -->
+##### HTTP:
+
+<!-- request http -->
+
+```go
+curl -s 0:9308/metrics
+```
+<!-- response http -->
+
+```http
+# HELP manticore_uptime_seconds Time in seconds since start
+# TYPE manticore_uptime_seconds counter
+manticore_uptime_seconds 25
+# HELP manticore_connections_count Connections count since start
+# TYPE manticore_connections_count gauge
+manticore_connections_count 55
+# HELP manticore_maxed_out_error_count Count of maxed_out errors since start
+# TYPE manticore_maxed_out_error_count counter
+manticore_maxed_out_error_count 0
+# HELP manticore_version Manticore Search version
+# TYPE manticore_version gauge
+manticore_version {version="0.0.0 c88e811b2@25060409 (columnar 5.0.1 59c7092@25060304) (secondary 5.0.1 59c7092@25060304) (knn 5.0.1 59c7092@25060304) (embeddings 1.0.0) (buddy v3.28.6-7-g14ee10)"} 1
+# HELP manticore_mysql_version Manticore Search version
+# TYPE manticore_mysql_version gauge
+manticore_mysql_version {version="0.0.0 c88e811b2@25060409 (columnar 5.0.1 59c7092@25060304) (secondary 5.0.1 59c7092@25060304) (knn 5.0.1 59c7092@25060304) (embeddings 1.0.0)"} 1
+# HELP manticore_command_search_count Count of search queries since start
+# TYPE manticore_command_search_count counter
+manticore_command_search_count 1
+......
+```
+
+<!-- end -->
+
 <!-- proofread -->
+

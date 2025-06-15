@@ -93,3 +93,4 @@ SELECT double (upper ('1.2e3')); /* 1200.000000 */
 SELECT integer (lower ('12345')); /* 12345 */
 ```
 <!-- proofread -->
+

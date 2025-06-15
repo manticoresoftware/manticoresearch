@@ -53,9 +53,9 @@ WARNING: failed to load RAM chunks, checking only N disk chunks
 
 To avoid these warning and ensure a proper check of an RT table, consider the following approaches:
 
-- stop the daemon before running `indextool --check`.  
-- ensure that the RT table is not actively served by the daemon.  
-- check a separate copy of the RT table instead of the live one.  
+- stop the daemon before running `indextool --check`.
+- ensure that the RT table is not actively served by the daemon.
+- check a separate copy of the RT table instead of the live one.
 
 If stopping the daemon is not an option, you can prevent unintended modifications to the RT table by executing the following MySQL statement before running `indextool --check`:
 
@@ -125,3 +125,4 @@ indexer --buildstops dict.txt 100000 --buildfreqs myindex -c /path/to/manticore.
 which will produce a text file named `dict.txt` that contains the 100,000 most frequently occurring words from `myindex`, along with their respective counts. Since this output file is a simple text document, you have the flexibility to manually edit it whenever needed. Feel free to add or remove words as required.
 
 <!-- proofread -->
+

@@ -64,3 +64,4 @@ By following these steps and guidelines, you can effectively integrate Manticore
 ## References
 Please refer to the following resources for more information on Apache Superset and Manticore Search:
 - [Apache Superset Integration](https://manticoresearch.com/blog/manticoresearch-apache-superset-integration/)
+

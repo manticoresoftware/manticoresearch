@@ -1,13 +1,13 @@
-# Перечень плагинов
+# Список плагинов
 
-## ПОКАЗАТЬ ПЛАГИНЫ
+## SHOW PLUGINS
 <!-- example Example -->
 
 ```sql
 SHOW PLUGINS
 ```
 
-Отображает все загруженные плагины (за исключением плагинов Buddy, см. ниже) и UDF. Столбец "Type" должен быть одним из `udf`, `ranker`, `index_token_filter` или `query_token_filter`. Столбец "Users" является числом потоков, которые в данный момент используют этот плагин в запросе. Столбец "Extra" предназначен для различной дополнительной информации, специфичной для типа плагина; в настоящее время он показывает тип возвращаемого значения для UDF и пуст для всех других типов плагинов.
+Отображает все загруженные плагины (кроме Buddy-плагинов, см. ниже) и UDF. Столбец "Type" должен содержать одно из значений: `udf`, `ranker`, `index_token_filter` или `query_token_filter`. Столбец "Users" показывает количество потоков, которые в данный момент используют этот плагин в запросе. Столбец "Extra" предназначен для различной дополнительной информации специфичной для типа плагина; в настоящее время он показывает возвращаемый тип для UDF и пуст для всех остальных типов плагинов.
 
 
 <!-- intro -->
@@ -32,7 +32,7 @@ SHOW PLUGINS;
 
 <!-- end -->
 
-## ПОКАЗАТЬ ПЛАГИНЫ BUDDY
+## SHOW BUDDY PLUGINS
 
 <!-- example Example_buddy -->
 
@@ -40,10 +40,10 @@ SHOW PLUGINS;
 SHOW BUDDY PLUGINS
 ```
 
-> ЗАМЕТКА: `SHOW BUDDY PLUGINS` требует [Manticore Buddy](../Installation/Manticore_Buddy.md). Если это не работает, убедитесь, что Buddy установлен.
+> ПРИМЕЧАНИЕ: `SHOW BUDDY PLUGINS` требует [Manticore Buddy](../../Installation/Manticore_Buddy.md). Если команда не работает, убедитесь, что Buddy установлен.
 
 Это отобразит все доступные плагины, включая основные и локальные.
-Чтобы удалить плагин, убедитесь, что используете имя, указанное в столбце Package.
+Чтобы удалить плагин, используйте имя, указанное в столбце Package.
 
 <!-- request Example -->
 
@@ -57,22 +57,23 @@ SHOW BUDDY PLUGINS;
 +------------------------------------------------+-----------------+---------+------+----------------------------------------------------------------------------------------------------------------------------------------------------------+
 | Package                                        | Plugin          | Version | Type | Info                                                                                                                                                     |
 +------------------------------------------------+-----------------+---------+------+----------------------------------------------------------------------------------------------------------------------------------------------------------+
-| manticoresoftware/buddy-plugin-empty-string    | empty-string    | 2.1.5   | core | Обрабатывает пустые запросы, которые могут возникнуть при обрезке комментариев или работе с определенными инструкциями SQL-протокола в комментариях, которые не поддерживаются      |
-| manticoresoftware/buddy-plugin-backup          | backup          | 2.1.5   | core | SQL оператор BACKUP                                                                                                                                     |
-| manticoresoftware/buddy-plugin-emulate-elastic | emulate-elastic | 2.1.5   | core | Эмулирует некоторые запросы Elastic и генерирует ответы так, как если бы они были выполнены ES                                                                         |
-| manticoresoftware/buddy-plugin-insert          | insert          | 2.1.5   | core | Поддержка авто-схемы. Когда выполняется операция вставки, и таблица не существует, она создаёт её с автоопределением типов данных                    |
+| manticoresoftware/buddy-plugin-empty-string    | empty-string    | 2.1.5   | core | Handles empty queries, which can occur when trimming comments or dealing with specific SQL protocol instructions in comments that are not supported      |
+| manticoresoftware/buddy-plugin-backup          | backup          | 2.1.5   | core | BACKUP sql statement                                                                                                                                     |
+| manticoresoftware/buddy-plugin-emulate-elastic | emulate-elastic | 2.1.5   | core | Emulates some Elastic queries and generates responses as if they were made by ES                                                                         |
+| manticoresoftware/buddy-plugin-insert          | insert          | 2.1.5   | core | Auto schema support. When an insert operation is performed and the table does not exist, it creates it with data types auto-detection                    |
 | manticoresoftware/buddy-plugin-alias           | alias           | 2.1.5   | core |                                                                                                                                                          |
-| manticoresoftware/buddy-plugin-select          | select          | 2.1.5   | core | Различные обработчики SELECT, необходимые для mysqldump и поддержки другого программного обеспечения, в основном нацелены на работу аналогично MySQL                                       |
-| manticoresoftware/buddy-plugin-show            | show            | 2.1.5   | core | Различные обработчики запросов "show", например, `show queries`, `show fields`, `show full tables` и т.д.                                                     |
-| manticoresoftware/buddy-plugin-cli-table       | cli-table       | 2.1.5   | core | /cli конечная точка, основанная на /cli_json - выводит результат запроса в виде таблицы                                                                                       |
-| manticoresoftware/buddy-plugin-plugin          | plugin          | 2.1.5   | core | Основная логика для поддержки плагинов и вспомогательных функций. Также обрабатывает `create buddy plugin`, `delete buddy plugin` и `show buddy plugins`                           |
-| manticoresoftware/buddy-plugin-test            | test            | 2.1.5   | core | Тестовый плагин, используемый исключительно для тестов                                                                                                                  |
-| manticoresoftware/buddy-plugin-insert-mva      | insert-mva      | 2.1.5   | core | Управляет восстановлением полей MVA с помощью mysqldump                                                                                                     |
-| manticoresoftware/buddy-plugin-modify-table    | modify-table    | 2.1.5   | core | Помогает стандартизировать параметры в операторах создания и изменения таблиц, чтобы показывать option=1 для целых чисел. Также управляет логикой для создания шардинг-таблиц. |
-| manticoresoftware/buddy-plugin-knn             | knn             | 2.1.5   | core | Включает KNN по идентификатору документа                                                                                                                               |
-| manticoresoftware/buddy-plugin-replace         | replace         | 2.1.5   | core | Включает частичную замену                                                                                                                                 |
+| manticoresoftware/buddy-plugin-select          | select          | 2.1.5   | core | Various SELECTs handlers needed for mysqldump and other software support, mostly aiming to work similarly to MySQL                                       |
+| manticoresoftware/buddy-plugin-show            | show            | 2.1.5   | core | Various "show" queries handlers, for example, `show queries`, `show fields`, `show full tables`, etc                                                     |
+| manticoresoftware/buddy-plugin-cli-table       | cli-table       | 2.1.5   | core | /cli endpoint based on /cli_json - outputs query result as a table                                                                                       |
+| manticoresoftware/buddy-plugin-plugin          | plugin          | 2.1.5   | core | Core logic for plugin support and helpers. Also handles `create buddy plugin`, `delete buddy plugin`, and `show buddy plugins`                           |
+| manticoresoftware/buddy-plugin-test            | test            | 2.1.5   | core | Test plugin, used exclusively for tests                                                                                                                  |
+| manticoresoftware/buddy-plugin-insert-mva      | insert-mva      | 2.1.5   | core | Manages the restoration of MVA fields with mysqldump                                                                                                     |
+| manticoresoftware/buddy-plugin-modify-table    | modify-table    | 2.1.5   | core | Assists in standardizing options in create and alter table statements to show option=1 for integers. Also manages the logic for creating sharded tables. |
+| manticoresoftware/buddy-plugin-knn             | knn             | 2.1.5   | core | Enables KNN by document id                                                                                                                               |
+| manticoresoftware/buddy-plugin-replace         | replace         | 2.1.5   | core | Enables partial replaces                                                                                                                                 |
 +------------------------------------------------+-----------------+---------+------+----------------------------------------------------------------------------------------------------------------------------------------------------------+-----+
 ```
 
 <!-- end -->
 <!-- proofread -->
+

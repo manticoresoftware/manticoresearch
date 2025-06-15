@@ -33,12 +33,13 @@ SELECT
 **JSON**:
 ```json
 POST /search
-{   
+{
     "table" : "table_name",
-    "options":   
+    "options":
     {
       ...
     }
 }
 ```
 <!-- proofread -->
+

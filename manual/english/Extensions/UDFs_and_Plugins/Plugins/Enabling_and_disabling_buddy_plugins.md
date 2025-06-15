@@ -43,3 +43,4 @@ DISABLE BUDDY PLUGIN manticoresoftware/buddy-plugin-show
 
 After disabling, if you try the `SHOW QUERIES` command, you'll encounter an error because the plugin is disabled.
 <!-- end -->
+

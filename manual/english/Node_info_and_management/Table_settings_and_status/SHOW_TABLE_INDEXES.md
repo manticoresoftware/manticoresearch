@@ -65,3 +65,4 @@ SHOW TABLE test INDEXES;
 29 rows in set (0.00 sec)
 ```
 <!-- end -->
+

@@ -76,3 +76,4 @@ path: /var/log/dpkg.log
 @timestamp: 2023-06-16T09:23:57.405Z
 @version: 1
 ```
+

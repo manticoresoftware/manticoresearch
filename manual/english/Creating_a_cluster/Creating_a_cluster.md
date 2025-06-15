@@ -9,3 +9,4 @@ Manticore Search is a highly distributed system that provides all the necessary 
 Manticore Search offers great flexibility in terms of how you set up your cluster. There are no limitations, so it's up to you to design your cluster according to your needs. Simply learn about the tools mentioned above and use them to achieve your desired goal.
 
 <!-- proofread -->
+

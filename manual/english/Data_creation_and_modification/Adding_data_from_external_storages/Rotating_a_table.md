@@ -87,3 +87,4 @@ Example:
 seamless_rotate = 1
 ```
 <!-- proofread -->
+

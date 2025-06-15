@@ -4,3 +4,4 @@ The Manticore Search API is documented using the OpenAPI specification, which ca
 
 You can also view the specification visualized with the online Swagger Editor [here](https://editor.swagger.io).
 <!-- proofread -->
+

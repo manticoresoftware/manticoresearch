@@ -41,12 +41,12 @@ grep 'started v' /var/log/manticore-{1,2,3,4,5}/searchd.log | cut -d\' -f3 | cut
 for i in 1 2 3 4 5; do echo "#{$i}"; mysql -h0 -P${i}306 -e "show create table t option force=1\G" | grep 'Create Table'; done
 ––– output –––
 #{1}
-Create Table: CREATE TABLE t type='distributed' local='system.t_s0' local='system.t_s1' local='system.t_s3' agent='127.0.0.1:2312:system.t_s2|127.0.0.1:3312:system.t_s2|127.0.0.1:4312:system.t_s2' agent='127.0.0.1:2312:system.t_s4|127.0.0.1:3312:system.t_s4|127.0.0.1:5312:system.t_s4'
+Create Table: CREATE TABLE t type='distributed' local='system.t_s0' local='system.t_s1' local='system.t_s3' agent='127.0.0.1:2312:system.t_s1|127.0.0.1:4312:system.t_s1' agent='127.0.0.1:3312:system.t_s0|127.0.0.1:5312:system.t_s0' agent='127.0.0.1:4312:system.t_s3|127.0.0.1:5312:system.t_s3'
 #{2}
-Create Table: CREATE TABLE t type='distributed' local='system.t_s1' local='system.t_s2' local='system.t_s4' agent='127.0.0.1:1312:system.t_s0|127.0.0.1:3312:system.t_s0|127.0.0.1:5312:system.t_s0' agent='127.0.0.1:1312:system.t_s3|127.0.0.1:4312:system.t_s3|127.0.0.1:5312:system.t_s3'
+Create Table: CREATE TABLE t type='distributed' local='system.t_s1' local='system.t_s2' local='system.t_s4' agent='127.0.0.1:2312:system.t_s1|127.0.0.1:4312:system.t_s1' agent='127.0.0.1:2312:system.t_s2|127.0.0.1:3312:system.t_s2|127.0.0.1:4312:system.t_s2' agent='127.0.0.1:2312:system.t_s4|127.0.0.1:3312:system.t_s4|127.0.0.1:5312:system.t_s4'
 #{3}
-Create Table: CREATE TABLE t type='distributed' local='system.t_s0' local='system.t_s2' local='system.t_s4' agent='127.0.0.1:1312:system.t_s1|127.0.0.1:2312:system.t_s1|127.0.0.1:4312:system.t_s1' agent='127.0.0.1:1312:system.t_s3|127.0.0.1:4312:system.t_s3|127.0.0.1:5312:system.t_s3'
+Create Table: CREATE TABLE t type='distributed' local='system.t_s0' local='system.t_s2' local='system.t_s4' agent='127.0.0.1:2312:system.t_s2|127.0.0.1:3312:system.t_s2|127.0.0.1:4312:system.t_s2' agent='127.0.0.1:2312:system.t_s4|127.0.0.1:3312:system.t_s4|127.0.0.1:5312:system.t_s4' agent='127.0.0.1:3312:system.t_s0|127.0.0.1:5312:system.t_s0'
 #{4}
-Create Table: CREATE TABLE t type='distributed' local='system.t_s1' local='system.t_s2' local='system.t_s3' agent='127.0.0.1:1312:system.t_s0|127.0.0.1:3312:system.t_s0|127.0.0.1:5312:system.t_s0' agent='127.0.0.1:2312:system.t_s4|127.0.0.1:3312:system.t_s4|127.0.0.1:5312:system.t_s4'
+Create Table: CREATE TABLE t type='distributed' local='system.t_s1' local='system.t_s2' local='system.t_s3' agent='127.0.0.1:2312:system.t_s1|127.0.0.1:4312:system.t_s1' agent='127.0.0.1:2312:system.t_s2|127.0.0.1:3312:system.t_s2|127.0.0.1:4312:system.t_s2' agent='127.0.0.1:4312:system.t_s3|127.0.0.1:5312:system.t_s3'
 #{5}
-Create Table: CREATE TABLE t type='distributed' local='system.t_s0' local='system.t_s3' local='system.t_s4' agent='127.0.0.1:1312:system.t_s1|127.0.0.1:2312:system.t_s1|127.0.0.1:4312:system.t_s1' agent='127.0.0.1:2312:system.t_s2|127.0.0.1:3312:system.t_s2|127.0.0.1:4312:system.t_s2'
+Create Table: CREATE TABLE t type='distributed' local='system.t_s0' local='system.t_s3' local='system.t_s4' agent='127.0.0.1:2312:system.t_s4|127.0.0.1:3312:system.t_s4|127.0.0.1:5312:system.t_s4' agent='127.0.0.1:3312:system.t_s0|127.0.0.1:5312:system.t_s0' agent='127.0.0.1:4312:system.t_s3|127.0.0.1:5312:system.t_s3'

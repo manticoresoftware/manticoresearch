@@ -699,6 +699,7 @@ private:
 	void		AddStarItemsToJoinSelectList();
 	void		AddQueryItemsToJoinSelectList();
 	void		AddGroupbyItemsToJoinSelectList();
+	void		AddOrderbyItemsToJoinSelectList();
 	void		AddRemappedStringItemsToJoinSelectList();
 	void		AddExpressionItemsToJoinSelectList();
 	void		AddDocidToJoinSelectList();
@@ -1633,9 +1634,6 @@ bool JoinSorter_c::SetupRightFilters ( CSphString & sError )
 	ARRAY_FOREACH ( i, dRightFilters )
 	{
 		const auto & tFilter = m_tQuery.m_dFilters[dRightFilters[i].first];
-		if ( tFilter.m_eType==SPH_FILTER_NULL )
-			continue;
-
 		m_tJoinQuery.m_dFilters.Add(tFilter);
 		if ( dRightFilters[i].second )
 			RemoveTableNamePrefix ( m_tJoinQuery.m_dFilters.Last().m_sAttrName, tFilter, sPrefix );
@@ -1941,6 +1939,31 @@ void JoinSorter_c::AddGroupbyItemsToJoinSelectList()
 }
 
 
+void JoinSorter_c::AddOrderbyItemsToJoinSelectList()
+{
+	for ( const auto & tQuery : m_dQueries )
+	{
+		if ( tQuery.m_sSortBy.IsEmpty() )
+			continue;
+
+		ESphSortFunc eFunc = FUNC_REL_DESC;
+		CSphMatchComparatorState tState;
+		CSphVector<ExtraSortExpr_t> dExtraExprs;
+		CSphString sError;
+		ESortClauseParseResult eRes = sphParseSortClause ( tQuery, tQuery.m_sSortBy.cstr(), *m_pSorterSchema, eFunc, tState, dExtraExprs, nullptr, sError );
+		if ( eRes!=SORT_CLAUSE_OK )
+			continue;
+
+		for ( auto iAttr : tState.m_dAttrs )
+			if ( iAttr!=-1 )
+			{
+				const auto & tAttr = m_pSorterSchema->GetAttr(iAttr);
+				AddToJoinSelectList ( tAttr.m_sName, tAttr.m_sName );
+			}
+	}
+}
+
+
 void JoinSorter_c::AddRemappedStringItemsToJoinSelectList()
 {
 	auto * pSorterSchema = m_pSorter->GetSchema();
@@ -2047,6 +2070,7 @@ void JoinSorter_c::SetupJoinSelectList()
 	AddStarItemsToJoinSelectList();
 	AddQueryItemsToJoinSelectList();
 	AddGroupbyItemsToJoinSelectList();
+	AddOrderbyItemsToJoinSelectList();
 	AddRemappedStringItemsToJoinSelectList();
 	AddExpressionItemsToJoinSelectList();
 	AddDocidToJoinSelectList();

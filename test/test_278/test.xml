@@ -378,6 +378,16 @@ select id,join2.weight() as jw from join1 join join2 on join1.string_id = join2.
 <!-- implicit cutoff vs join batching -->
 select * from join1 left join join2 on join1.string_id = join2.id where join2.id=2 limit 1;
 
+<!-- IS NULL filter vs inner join -->
+select * from join1 inner join join2 on join1.id = join2.id where join2.j.b is null order by id asc;
+select * from join1 inner join join2 on join1.id = join2.id where join2.j.b is not null order by id asc;
+select id from join1 inner join join2 on join1.id = join2.id where join2.j.b is null order by id asc;
+select id from join1 inner join join2 on join1.id = join2.id where join2.j.b is not null order by id asc;
+
+<!-- json string filter -->
+select id from join1 inner join join2 on join1.id = join2.id where join2.j.table='join2' order by id asc;
+select id from join1 inner join join2 on join1.id = join2.id where join2.j.table!='join2' order by id asc;
+
 </sphinxql>
 
 <query endpoint="json/search">

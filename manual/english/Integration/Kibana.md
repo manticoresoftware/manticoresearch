@@ -61,3 +61,4 @@
 
 ## Data Ingestion and Exploration
 Integrate Manticore with tools like [Logstash](../Integration/Logstash.md), [Filebeat](../Integration/Filebeat.md), [Fluentbit](https://manticoresearch.com/blog/integration-of-manticore-with-fluentbit/), or [Vector.dev](https://manticoresearch.com/blog/integration-of-manticore-with-vectordev/) to ingest data from sources like web logs. Once the data is loaded into Manticore, you can explore and visualize it in Kibana.
+

@@ -82,7 +82,7 @@ POST /delete -d '
     "table":"test",
     "deleted":2,
 }
-```    
+```
 <!-- intro -->
 ##### PHP:
 
@@ -289,9 +289,9 @@ POST /delete -d '
     "table": "test",
     "_id": 1,
     "found": true,
-    "result": "deleted"      
+    "result": "deleted"
 }
-```    
+```
 <!-- intro -->
 ##### PHP:
 
@@ -489,9 +489,9 @@ POST /delete -d '
         "table":"test",
         "_id":1,
         "found":true,
-        "result":"deleted"      
+        "result":"deleted"
     }
-```    
+```
 
 <!-- intro -->
 ##### PHP:
@@ -895,7 +895,7 @@ res =  await indexApi.bulk(docs.map(e=>JSON.stringify(e)).join('\n'));
 <!-- request Java -->
 ``` java
 String   body = "{ "delete" : { "table" : "test", "id": 1 } } "+"\n"+
-    "{ "delete" : { "table" : "test", "query": { "equals": { "int_data": 20 } } } }"+"\n";         
+    "{ "delete" : { "table" : "test", "query": { "equals": { "int_data": 20 } } } }"+"\n";
 indexApi.bulk(body);
 ```
 
@@ -914,7 +914,7 @@ class BulkResponse {
 <!-- request C# -->
 ``` clike
 string   body = "{ "delete" : { "table" : "test", "id": 1 } } "+"\n"+
-    "{ "delete" : { "table" : "test", "query": { "equals": { "int_data": 20 } } } }"+"\n";         
+    "{ "delete" : { "table" : "test", "query": { "equals": { "int_data": 20 } } } }"+"\n";
 indexApi.Bulk(body);
 ```
 
@@ -933,7 +933,7 @@ class BulkResponse {
 <!-- request Rust -->
 ``` rust
 let bulk_body = r#"{ "delete" : { "table" : "test", "id": 1 } }
-    { "delete" : { "table" : "test", "query": { "equals": { "int_data": 20 } } } }"         
+    { "delete" : { "table" : "test", "query": { "equals": { "int_data": 20 } } } }"
 "#;
 index_api.bulk(bulk_body).await;
 ```
@@ -959,7 +959,7 @@ docs = [
 ];
 body = await indexApi.bulk(
   docs.map((e) => JSON.stringify(e)).join("\n")
-);            
+);
 res = await indexApi.bulk(body);
 ```
 
@@ -993,3 +993,4 @@ resp, httpRes, err := manticoreclient.IndexAPI.Bulk(context.Background()).Body(b
 
 <!-- end -->
 <!-- proofread -->
+

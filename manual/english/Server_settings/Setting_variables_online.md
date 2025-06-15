@@ -144,3 +144,4 @@ Query OK, 0 rows affected (0.01 sec)
 
 To make user variables persistent, make sure [sphinxql_state](../Server_settings/Searchd.md#sphinxql_state) is enabled.
 <!-- proofread -->
+

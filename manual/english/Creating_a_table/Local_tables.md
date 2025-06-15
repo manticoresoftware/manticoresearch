@@ -32,3 +32,4 @@ All table types are supported in this mode.
 | Template    | not supported  | supported   |
 
 <!-- proofread -->
+

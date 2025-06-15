@@ -1,11 +1,12 @@
-# Документирование Docker
+# Docker logging
 
-Когда вы используете [официальный образ Manticore для Docker](https://hub.docker.com/r/manticoresearch/manticore/), серверный журнал отправляется в `/dev/stdout`, который можно просмотреть с хоста с помощью:
+When you use the [official Manticore docker image](https://hub.docker.com/r/manticoresearch/manticore/), the server log is sent to `/dev/stdout` which can be viewed from host with:
 
 ```bash
 docker logs manticore
 ```
-Журнал запросов может быть перенаправлен в журнал Docker, передав переменную `QUERY_LOG_TO_STDOUT=true`.
+The query log can be diverted to the Docker log by passing the variable `QUERY_LOG_TO_STDOUT=true`.
 
-Папка журналов такая же, как и в случае пакета для Linux, установлена в `/var/log/manticore`. Если необходимо, ее можно смонтировать на локальный путь для просмотра или обработки журналов.
+The log folder is the same as in the case of the Linux package, set to `/var/log/manticore`. If desired, it can be mounted to a local path to view or process the logs.
 <!-- proofread -->
+

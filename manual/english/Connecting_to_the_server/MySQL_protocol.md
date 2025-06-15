@@ -10,7 +10,7 @@ Some MySQL clients/connectors require values for user/password and/or database n
 
 ## Configuration
 
-**The default port for the SQL interface is 9306** and it's enabled by default. 
+**The default port for the SQL interface is 9306** and it's enabled by default.
 
 You can configure the MySQL port in the searchd section of the configuration file using the `listen` directive like this:
 
@@ -20,7 +20,7 @@ searchd {
    listen = 127.0.0.1:9306:mysql
 ...
 }
-``` 
+```
 
 Keep in mind that Manticore doesn't have user authentication, so make sure that the MySQL port is not accessible to anyone outside of your network.
 
@@ -34,7 +34,7 @@ searchd {
    listen = 127.0.0.1:9307:mysql_vip
 ...
 }
-``` 
+```
 
 ## Connecting via standard MySQL client
 The easiest way to connect to Manticore is by using a standard MySQL client:
@@ -58,7 +58,7 @@ mysql -P9306 -h0 -C
 ```
 
 Compression can be used in both secured and non-secured connections.
- 
+
 ## Notes on MySQL connectors
 The official MySQL connectors can be used to connect to Manticore Search, however they might require certain settings passed in the DSN string as the connector can try running certain SQL commands not implemented yet in Manticore.
 
@@ -75,7 +75,7 @@ searchd {
    mysql_version_string = 5.0.37
 ...
 }
-``` 
+```
 
 .NET MySQL connector uses connection pools by default. To correctly get the statistics of `SHOW META`, queries along with `SHOW META` command should be sent as a single multistatement (`SELECT ...;SHOW META`). If pooling is enabled option `Allow Batch=True` is required to be added to the connection string to allow multistatements:
 ```ini
@@ -93,3 +93,4 @@ Manticore SQL over MySQL supports C-style comment syntax. Everything from an ope
 SELECT /*! SQL_CALC_FOUND_ROWS */ col1 FROM table1 WHERE ...
 ```
 <!-- proofread -->
+

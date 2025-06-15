@@ -1,4 +1,4 @@
-# Adding and removing a table from a replication cluster 
+# Adding and removing a table from a replication cluster
 
 <!-- example adding and removing a table from a replication cluster 1 -->
 `ALTER CLUSTER <cluster_name> ADD <table_name>[, <table_name>]` adds one or more existing local tables to the cluster. The node that receives the ALTER query sends the table(s) to the other nodes in the cluster. All the local tables with the same name on the other nodes of the cluster are replaced with the new table(s).
@@ -31,10 +31,10 @@ $params = [
   'body' => [
      'operation' => 'add',
      'table' => 'clicks_daily_index'
-      
+
   ]
 ];
-$response = $client->cluster()->alter($params);        
+$response = $client->cluster()->alter($params);
 ```
 
 
@@ -140,7 +140,7 @@ $params = [
   'body' => [
      'operation' => 'drop',
      'table' => 'weekly_index'
-      
+
   ]
 ];
 $response = $client->cluster->alter($params);
@@ -216,3 +216,4 @@ utils_api.sql("ALTER CLUSTER posts DROP weekly_index", Some(true)).await;
 
 <!-- end -->
 <!-- proofread -->
+

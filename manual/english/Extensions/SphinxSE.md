@@ -389,3 +389,4 @@ SELECT title, sphinx_snippets(text, 'table', 'mysql php') AS text
     WHERE query='mysql php' AND sphinx.id=documents.id;
 ```
 <!-- proofread -->
+

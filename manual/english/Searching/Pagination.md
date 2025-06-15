@@ -28,14 +28,14 @@ SELECT  ... FROM ...  [LIMIT row_count][ OFFSET offset]
 {
   "table": "<table_name>",
   "query": ...
-  ...  
+  ...
   "limit": 20,
   "offset": 0
 }
 {
   "table": "<table_name>",
   "query": ...
-  ...  
+  ...
   "size": 20,
   "from": 0
 }
@@ -83,7 +83,7 @@ SELECT  ... FROM ...   OPTION max_matches=<value>
 ## Scroll Search Option
 
 The scroll search option provides an efficient and reliable way to paginate through large result sets. Unlike traditional offset-based pagination, scroll search offers better performance for deep pagination and provides an easier way to implement pagination.
-While it utilizes the same `max_matches` window as offset-based pagination, scroll search **can return more documents than the `max_matches` value** by retrieving results over multiple requests using a scroll token. 
+While it utilizes the same `max_matches` window as offset-based pagination, scroll search **can return more documents than the `max_matches` value** by retrieving results over multiple requests using a scroll token.
 When using scroll pagination, there's no need to use `offset` and `limit` together — it's redundant and generally considered overengineering. Instead, just specify a `limit` along with the `scroll` token to fetch each subsequent page.
 
 #### Scrolling via SQL
@@ -121,7 +121,7 @@ SELECT weight(), id FROM test WHERE match('hello') ORDER BY weight() desc, id as
 **Retrieving the Scroll Token**
 
 After executing the initial query, retrieve the scroll token by executing the `SHOW SCROLL` command.
-You must call `SHOW SCROLL` after **every** query in the scroll sequence to obtain the updated scroll token for the next page. 
+You must call `SHOW SCROLL` after **every** query in the scroll sequence to obtain the updated scroll token for the next page.
 Each query generates a new token that reflects the latest scroll position.
 
 ```sql
@@ -198,14 +198,14 @@ In the initial request, specify `"scroll": true` in the options and the desired 
 
 ```json
 POST /search
-{ 
+{
   "table": "<table_names>",
   "options": {
 	  "scroll": true
-  }, 
-  
+  },
+
   ...
-  
+
   "sort": [
     ...
     { "id":{ "order":"{asc|desc}"} }
@@ -221,7 +221,7 @@ Example output:
     "hits": {
 
 		...
-    
+
     },
     "scroll": "<base64 encoded scroll token>"
 }
@@ -230,14 +230,14 @@ Example output:
 <!-- request Initial Request Example -->
 ```json
 POST /search
-{ 
+{
   "table": "test",
   "options":
   {
 	"scroll": true
   },
   "query":
-  {  
+  {
 	"query_string":"hello"
   },
   "sort":
@@ -291,7 +291,7 @@ To continue pagination, include the scroll token obtained from the previous resp
 
 ```json
 POST /search
-{ 
+{
   "table": "<table_names>",
   "options": {
     "scroll": "<base64 encoded scroll token>"
@@ -306,14 +306,14 @@ POST /search
 
 ```json
 POST /search
-{ 
+{
   "table": "test",
   "options":
   {
 	"scroll": "eyJvcmRlcl9ieV9zdHIiOiJAd2VpZ2h0IGRlc2MsIGlkIGFzYyIsIm9yZGVyX2J5IjpbeyJhdHRyIjoid2VpZ2h0KCkiLCJkZXNjIjp0cnVlLCJ2YWx1ZSI6MTI4MSwidHlwZSI6ImludCJ9LHsiYXR0ciI6ImlkIiwiZGVzYyI6ZmFsc2UsInZhbHVlIjoyLCJ0eXBlIjoiaW50In1dfQ=="
   },
   "query":
-  {  
+  {
 	"query_string":"hello"
   },
   "track_scores": true,
@@ -357,3 +357,4 @@ POST /search
 <!-- end -->
 
 <!-- proofread -->
+

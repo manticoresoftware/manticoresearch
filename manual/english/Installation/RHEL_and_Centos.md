@@ -86,3 +86,4 @@ pip3.9 install pymorphy2[fast]
 pip3.9 install pymorphy2-dicts-uk
 ```
 <!-- proofread -->
+

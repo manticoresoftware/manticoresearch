@@ -8,3 +8,4 @@ The same applies to flushing a RAM chunk, where suitable RAM segments are merged
 
 Furthermore, these operations are transparent for replaces and updates. If you update an attribute in a document that belongs to a disk chunk being merged with another one, the update will be applied to both that chunk and the resulting merged chunk. If you delete a document during a merge, it will be deleted in the original chunk and also in the resulting merged chunk, which will either have the document marked as deleted or have no such document at all if the deletion happened early in the merging process.
 <!-- proofread -->
+

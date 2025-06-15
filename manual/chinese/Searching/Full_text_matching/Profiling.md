@@ -1,96 +1,74 @@
-# 搜索性能分析
+# 搜索分析
 
-## 查询如何被解析
+## 查询是如何被解释的
 
-请考虑以下复杂查询示例：
-
+考虑这个复杂的查询示例：
 ```sql
-
 "hello world" @title "example program"~5 @body python -(php|perl) @* code
-
 ```
+该搜索的完整含义是：
 
-此搜索的完整含义是：
+* 在文档的任意字段中定位“hello”和“world”两个词相邻出现；
+* 此外，同一文档的标题字段中必须包含单词“example”和“program”，两词之间最多有但不包括5个词；（例如，“example PHP program”会匹配，但“example script to introduce outside data into the correct context for your program”不会，因为两词之间有5个或更多词）
+* 而且，同一文档的正文字段中必须包含单词“python”，同时排除“php”或“perl”；
+* 最后，同一文档的任意字段中必须包含单词“code”。
 
-* 在文档的任一字段中查找相邻的单词 'hello' 和 'world'；
+OR 运算符优先于 AND，因此“looking for cat | dog | mouse”意味着“looking for (cat | dog | mouse)”，而不是“(looking for cat) | dog | mouse”。
 
-* 此外，文档在标题字段中还必须包含单词 'example' 和 'program'，它们之间最多可有但不包括 5 个单词间隔； (例如，“example PHP program” 会匹配，但 “example script to introduce outside data into the correct context for your program” 则不会，因为两个词之间有 5 个或更多单词)
-
-* 此外，文档的正文字段中必须包含单词 'python'，同时排除 'php' 或 'perl'；
-
-* 最后，文档的任一字段中必须包含单词 'code'.
-
-OR 运算符优先于 AND 运算符，因此 "looking for cat | dog | mouse" 表示 "looking for (cat | dog | mouse)" 而不是 "(looking for cat) | dog | mouse".
-
-为了理解查询将如何执行，Manticore Search 提供了查询性能分析工具，以检查查询表达式生成的查询树。
+为了理解查询将如何被执行，Manticore Search 提供了查询分析工具，用以检查查询表达式生成的查询树。
 
 <!-- example profiling -->
 
-## 在 SQL 中进行查询树性能分析
+## 在 SQL 中分析查询树
 
-要使用 SQL 语句启用全文查询性能分析，必须在执行所需查询之前激活该功能:
+要启用全文本查询的分析功能，必须在执行目标查询前激活它：
 
 ```sql
-
 SET profiling =1;
-
 SELECT * FROM test WHERE MATCH('@title abc* @body hey');
-
 ```
 
-要查看查询树，请在运行查询后立即执行 `SHOW PLAN`  命令:
+执行查询后，立即运行 `SHOW PLAN` 命令以查看查询树：
 
 ```sql
-
 SHOW PLAN;
-
 ```
 
-此命令将返回已执行查询的结构。请记住，SET profiling、查询以及 SHOW 这三条语句必须在同一会话中执行.
+此命令将返回执行查询的结构。请注意，这三个语句——SET profiling、查询语句和 SHOW——必须在同一会话中执行。
 
 
+## 在 HTTP JSON 中分析查询
 
-## 在 HTTP JSON 中进行查询性能分析
-
-使用 HTTP JSON 协议时，只需启用 `"profile":true` 即可在响应中获取全文查询树结构.
+使用 HTTP JSON 协议时，我们只需启用 `"profile":true`，即可在响应中获得全文本查询树的结构。
 
 ```json
-
 {
-
   "table":"test",
-
   "profile":true,
-
   "query":
-
   {
-
     "match_phrase": { "_all" : "had grown quite" }
-
   }
-
 }
-
 ```
-响应将包括一个包含 `query` 成员的 `profile` 对象.
+响应将包含一个 `profile` 对象，其中含有一个 `query` 成员。
 
-`query` 属性保存转换后的全文查询树. 每个节点由以下部分组成:
+`query` 属性保存转换后的全文本查询树。每个节点包含：
 
-* `type`: 节点类型, 可以是 AND, OR, PHRASE, KEYWORD, 等.
-* `description`: 以字符串形式表示的该节点的查询子树 (以 `SHOW PLAN` 格式).
-* `children`: 任何子节点, 如果存在.
-* `max_field_pos`: 字段内的最大位置.
+* `type`：节点类型，可能是 AND、OR、PHRASE、KEYWORD 等。
+* `description`：该节点的查询子树，字符串形式表示（采用 `SHOW PLAN` 格式）
+* `children`：若存在，则为子节点
+* `max_field_pos`：字段中的最大位置
 
- 关键词节点还将包含:
+关键词节点还包括：
 
-* `word`: 转换后的关键词.
-* `querypos`: 关键词在查询中的位置.
-* `excluded`: 被排除在查询之外的关键词.
-* `expanded`: 通过前缀扩展添加的关键词.
-* `field_start`: 关键词必须出现在字段的开头.
-* `field_end`: 关键词必须出现在字段的结尾.
-* `boost`: 关键词的 IDF 将乘以此值.
+* `word`：转换后的关键词。
+* `querypos`：此关键词在查询中的位置。
+* `excluded`：关键词是否被查询排除。
+* `expanded`：关键词是否通过前缀扩展添加。
+* `field_start`：关键词必须出现在字段的开头。
+* `field_end`：关键词必须出现在字段的结尾。
+* `boost`：关键词的逆文档频率（IDF）将乘以此值。
 
 
 <!-- intro -->
@@ -99,168 +77,93 @@ SHOW PLAN;
 <!-- request SQL -->
 
 ```sql
-
 SET profiling=1;
-
 SELECT * FROM test WHERE MATCH('@title abc* @body hey');
-
-SHOW PLAN G
-
+SHOW PLAN \G
 ```
 <!-- response SQL -->
 
 ```sql
-
-*************************** 1. row ***************************
-
+*************************** 1\. row ***************************
 Variable: transformed_tree
-
    Value: AND(
-
   OR(fields=(title), KEYWORD(abcx, querypos=1, expanded), KEYWORD(abcm, querypos=1, expanded)),
-
   AND(fields=(body), KEYWORD(hey, querypos=2)))
-
 1 row in set (0.00 sec)
-
 ```
 
 <!-- request JSON -->
 
 ```JSON
-
 POST /search
-
 {
-
   "table": "forum",
-
   "query": {"query_string": "i me"},
-
   "_source": { "excludes":["*"] },
-
   "limit": 1,
-
   "profile":true
-
 }
-
 ```
 
 <!-- response JSON -->
 ```JSON
-
 {
-
   "took":1503,
-
   "timed_out":false,
-
   "hits":
-
   {
-
     "total":406301,
-
     "hits":
-
     [
-
        {
-
           "_id": 406443,
-
           "_score":3493,
-
           "_source":{}
-
        }
-
     ]
-
   },
-
   "profile":
-
   {
-
     "query":
-
     {
-
       "type":"AND",
-
       "description":"AND( AND(KEYWORD(i, querypos=1)),  AND(KEYWORD(me, querypos=2)))",
-
       "children":
-
       [
-
         {
-
           "type":"AND",
-
           "description":"AND(KEYWORD(i, querypos=1))",
-
           "children":
-
           [
-
             {
-
               "type":"KEYWORD",
-
               "word":"i",
-
               "querypos":1
-
             }
-
           ]
-
         },
-
         {
-
           "type":"AND",
-
           "description":"AND(KEYWORD(me, querypos=2))",
-
           "children":
-
           [
-
             {
-
               "type":"KEYWORD",
-
               "word":"me",
-
               "querypos":2
-
             }
-
           ]
-
         }
-
       ]
-
     }
-
   }
-
 }
-
 ```
 
 <!-- request PHP -->
 ```php
-
 $result = $index->search('i me')->setSource(['excludes'=>['*']])->setLimit(1)->profile()->get();
-
 print_r($result->getProfile());
-
 ```
 <!-- response PHP -->
 ``` php
@@ -487,7 +390,7 @@ TypeScript
 ```typescript
 res = await searchApi.search({
   index: 'test',
-  query: { query_string: 'Text' }, 
+  query: { query_string: 'Text' },
   _source: { excludes: ['*'] },
   limit: 1,
   profile: true
@@ -496,75 +399,46 @@ res = await searchApi.search({
 <!-- response TypeScript -->
 ``` typescript
 {
-
-"hits": 
-
-{
-
-"hits": 
-
-[{
-
-"_id": 1,
-
-"_score": 1480,
-
-"_source": {}
-
-}],
+	"hits":
+	{
+		"hits":
+		[{
+			"_id": 1,
+			"_score": 1480,
+			"_source": {}
+		}],
         "total": 1
-
-},
-
-"profile":
-
-{
-
-"query": {
-
-"children": 
-
-[{
-
-"children": 
-
-[{
-
-"querypos": 1,
+	},
+	"profile":
+	{
+		"query": {
+			"children":
+			[{
+				"children":
+				[{
+					"querypos": 1,
                     "type": "KEYWORD",
                     "word": "i"
                 }],
-
-"description": "AND(KEYWORD(i, querypos=1))",
-
-"type": "AND"
-
-},
+				"description": "AND(KEYWORD(i, querypos=1))",
+				"type": "AND"
+			},
             {
-            
-"children": 
-            
-[{
-            
-"querypos": 2,
+            	"children":
+            	[{
+            		"querypos": 2,
                     "type": "KEYWORD",
                     "word": "me"
                 }],
                 "description": "AND(KEYWORD(me, querypos=2))",
-
-"type": "AND"
-
-}],
+				"type": "AND"
+			}],
             "description": "AND( AND(KEYWORD(i, querypos=1)),  AND(KEYWORD(me, querypos=2)))",
             "type": "AND"
-
-}
-
-},
-
-"timed_out": False,
-
-"took": 0
+		}
+	},
+	"timed_out": False,
+	"took": 0
 }
 ```
 
@@ -585,75 +459,46 @@ res, _, _ := apiClient.SearchAPI.Search(context.Background()).SearchRequest(*sea
 <!-- response Go -->
 ``` Go
 {
-
-"hits": 
-
-{
-
-"hits": 
-
-[{
-
-"_id": 1,
-
-"_score": 1480,
-
-"_source": {}
-
-}],
+	"hits":
+	{
+		"hits":
+		[{
+			"_id": 1,
+			"_score": 1480,
+			"_source": {}
+		}],
         "total": 1
-
-},
-
-"profile":
-
-{
-
-"query": {
-
-"children": 
-
-[{
-
-"children": 
-
-[{
-
-"querypos": 1,
+	},
+	"profile":
+	{
+		"query": {
+			"children":
+			[{
+				"children":
+				[{
+					"querypos": 1,
                     "type": "KEYWORD",
                     "word": "i"
                 }],
-
-"description": "AND(KEYWORD(i, querypos=1))",
-
-"type": "AND"
-
-},
+				"description": "AND(KEYWORD(i, querypos=1))",
+				"type": "AND"
+			},
             {
-            
-"children": 
-            
-[{
-            
-"querypos": 2,
+            	"children":
+            	[{
+            		"querypos": 2,
                     "type": "KEYWORD",
                     "word": "me"
                 }],
                 "description": "AND(KEYWORD(me, querypos=2))",
-
-"type": "AND"
-
-}],
+				"type": "AND"
+			}],
             "description": "AND( AND(KEYWORD(i, querypos=1)),  AND(KEYWORD(me, querypos=2)))",
             "type": "AND"
-
-}
-
-},
-
-"timed_out": False,
-
-"took": 0
+		}
+	},
+	"timed_out": False,
+	"took": 0
 }
 ```
 
@@ -662,7 +507,7 @@ res, _, _ := apiClient.SearchAPI.Search(context.Background()).SearchRequest(*sea
 
 <!-- example SHOW PLAN EXPANSION -->
 
-在某些情况下，评估的查询树可能与原始查询树有显著不同，原因是扩展和其他转换。
+在某些情况下，评估后的查询树可能因扩展和其他转换而与原始查询树有很大差异。
 
 <!-- intro -->
 ##### SQL:
@@ -748,7 +593,7 @@ POST /search
       [
         {
           "type":"OR",
-          "description":"OR( OR( AND(fields=(title), KEYWORD(wayne, querypos=1, expanded)),  OR( AND(fields=(title), KEYWORD(ways, querypos=1, expanded)),  AND(fields=(title), KEYWORD(wayyy, querypos=1, expanded))))",
+          "description":"OR( OR( AND(fields=(title), KEYWORD(wayne, querypos=1, expanded)),  OR( AND(fields=(title), KEYWORD(ways, querypos=1, expanded)),  AND(fields=(title), KEYWORD(wayyy, querypos=1, expanded)))),  AND(fields=(title), KEYWORD(way, querypos=1, expanded)),  OR(fields=(title), KEYWORD(way*, querypos=1, expanded)))",
           "children":
           [
             {
@@ -851,7 +696,7 @@ POST /search
           [
             {
               "type":"KEYWORD",
-              "word":"嘿",
+              "word":"hey",
               "querypos":2
             }
           ]
@@ -880,7 +725,7 @@ Array
     [query] => Array
         (
             [type] => AND
-            [description] => AND( OR( OR( AND(fields=(title), KEYWORD(wayne, querypos=1, expanded)),  OR( AND(fields=(title), KEYWORD(ways, querypos=1, expanded)),  AND(fields=(title), KEYWORD(wayyy, querypos=1, expanded)))),  AND(fields=(title), KEYWORD(way, querypos=1, expanded)),  OR(fields=(title), KEYWORD(way*, querypos=1, expanded))),  AND(fields=(content), KEYWORD(嘿, querypos=2)))
+            [description] => AND( OR( OR( AND(fields=(title), KEYWORD(wayne, querypos=1, expanded)),  OR( AND(fields=(title), KEYWORD(ways, querypos=1, expanded)),  AND(fields=(title), KEYWORD(wayyy, querypos=1, expanded)))),  AND(fields=(title), KEYWORD(way, querypos=1, expanded)),  OR(fields=(title), KEYWORD(way*, querypos=1, expanded))),  AND(fields=(content), KEYWORD(hey, querypos=2)))
             [children] => Array
                 (
                     [0] => Array
@@ -942,23 +787,23 @@ Array
                                                                                         )
                                                                                 )
                                                                         )
-                                                                    [1] => 数组
+                                                                    [1] => Array
                                                                         (
-                                                                            [类型] => AND
-                                                                            [描述] => AND(字段=(标题), 关键字(wayyy, 查询位置=1, 扩展))
-                                                                            [字段] => 数组
+                                                                            [type] => AND
+                                                                            [description] => AND(fields=(title), KEYWORD(wayyy, querypos=1, expanded))
+                                                                            [fields] => Array
                                                                                 (
-                                                                                    [0] => 标题
+                                                                                    [0] => title
                                                                                 )
-                                                                            [最大字段位置] => 0
-                                                                            [子项] => 数组
+                                                                            [max_field_pos] => 0
+                                                                            [children] => Array
                                                                                 (
-                                                                                    [0] => 数组
+                                                                                    [0] => Array
                                                                                         (
-                                                                                            [类型] => 关键字
-                                                                                            [词] => wayyy
-                                                                                            [查询位置] => 1
-                                                                                            [扩展] => 1
+                                                                                            [type] => KEYWORD
+                                                                                            [word] => wayyy
+                                                                                            [querypos] => 1
+                                                                                            [expanded] => 1
                                                                                         )
                                                                                 )
                                                                         )
@@ -966,64 +811,64 @@ Array
                                                         )
                                                 )
                                         )
-                                    [1] => 数组
+                                    [1] => Array
                                         (
-                                            [类型] => AND
-                                            [描述] => AND(字段=(标题), 关键字(way, 查询位置=1, 扩展))
-                                            [字段] => 数组
+                                            [type] => AND
+                                            [description] => AND(fields=(title), KEYWORD(way, querypos=1, expanded))
+                                            [fields] => Array
                                                 (
-                                                    [0] => 标题
+                                                    [0] => title
                                                 )
-                                            [最大字段位置] => 0
-                                            [子项] => 数组
+                                            [max_field_pos] => 0
+                                            [children] => Array
                                                 (
-                                                    [0] => 数组
+                                                    [0] => Array
                                                         (
-                                                            [类型] => 关键字
-                                                            [词] => way
-                                                            [查询位置] => 1
-                                                            [扩展] => 1
+                                                            [type] => KEYWORD
+                                                            [word] => way
+                                                            [querypos] => 1
+                                                            [expanded] => 1
                                                         )
                                                 )
                                         )
-                                    [2] => 数组
+                                    [2] => Array
                                         (
-                                            [类型] => OR
-                                            [描述] => OR(字段=(标题), 关键字(way*, 查询位置=1, 扩展))
-                                            [字段] => 数组
+                                            [type] => OR
+                                            [description] => OR(fields=(title), KEYWORD(way*, querypos=1, expanded))
+                                            [fields] => Array
                                                 (
-                                                    [0] => 标题
+                                                    [0] => title
                                                 )
-                                            [最大字段位置] => 0
-                                            [子项] => 数组
+                                            [max_field_pos] => 0
+                                            [children] => Array
                                                 (
-                                                    [0] => 数组
+                                                    [0] => Array
                                                         (
-                                                            [类型] => 关键字
-                                                            [词] => way*
-                                                            [查询位置] => 1
-                                                            [扩展] => 1
+                                                            [type] => KEYWORD
+                                                            [word] => way*
+                                                            [querypos] => 1
+                                                            [expanded] => 1
                                                         )
                                                 )
                                         )
                                 )
                         )
-                    [1] => 数组
+                    [1] => Array
                         (
-                            [类型] => AND
-                            [描述] => AND(字段=(内容), 关键字(嘿, 查询位置=2))
-                            [字段] => 数组
+                            [type] => AND
+                            [description] => AND(fields=(content), KEYWORD(hey, querypos=2))
+                            [fields] => Array
                                 (
-                                    [0] => 内容
+                                    [0] => content
                                 )
-                            [最大字段位置] => 0
-                            [子项] => 数组
+                            [max_field_pos] => 0
+                            [children] => Array
                                 (
-                                    [0] => 数组
+                                    [0] => Array
                                         (
-                                            [类型] => 关键字
-                                            [词] => 嘿
-                                            [查询位置] => 2
+                                            [type] => KEYWORD
+                                            [word] => hey
+                                            [querypos] => 2
                                         )
                                 )
                         )
@@ -1163,6 +1008,7 @@ class SearchResponse {
     profile: {query={type=AND, description=AND( AND(fields=(title), KEYWORD(way*, querypos=1, expanded)),  AND(fields=(content), KEYWORD(hey, querypos=2))), children=[{type=AND, description=AND(fields=(title), KEYWORD(way*, querypos=1, expanded)), fields=[title], children=[{type=KEYWORD, word=way*, querypos=1, expanded=true}]}, {type=AND, description=AND(fields=(content), KEYWORD(hey, querypos=2)), fields=[content], children=[{type=KEYWORD, word=hey, querypos=2}]}]}}
 }
 ```
+
 <!-- intro -->
 C#
 <!-- request C# -->
@@ -1238,1011 +1084,9 @@ res = await searchApi.search({
 <!-- response TypeScript -->
 ``` typescript
 {
-
-"hits": 
-
-{
-
-"hits": 
-
-[{
-
-"_id": 1,
-            "_score": 1480,
-            "_source": {}
-        }],
-        "total": 1
-    },
- 
-"profile": 
- 
-{
- 
-"query": 
- 
-{
- 
-"children": 
- 
-[{
- 
-"children": 
- 
-[{
- 
-"expanded": True,
-                    "querypos": 1,
-                    "type": "KEYWORD",
-# 搜索分析
-
-## 查询的解释方法
-
-考虑以下复杂查询示例：
-```sql
-"hello world" @title "example program"~5 @body python -(php|perl) @* code
-```
-这个搜索的完整含义是：
-
-* 在文档的任何字段中定位'hello'和'world'连续出现；
-* 此外，同一文档还必须包含‘example’和‘program’两个词在标题字段中，且两者之间最多间隔不到5个词；（例如，“example PHP program”会匹配，但是“example script to introduce outside data into the correct context for your program”则不会，因为这两者之间间隔了5个或更多词）
-* 此外，同一文档中必须在正文字段中包含‘python’一词，同时排除‘php’或‘perl’；
-* 最后，同一文档必须在任一字段中包含‘code’一词。
-
-OR 运算符优先级高于 AND，所以“looking for cat | dog | mouse”表示“looking for (cat | dog | mouse)”而不是“(looking for cat) | dog | mouse”。
-
-为了理解查询如何执行，Manticore Search 提供查询分析工具以检查通过查询表达式生成的查询树。
-
-<!-- example profiling -->
-
-## 在 SQL 中分析查询树
-
-要通过 SQL 语句启用全文查询分析，必须在执行所需查询之前激活它：
-
-```sql
-SET profiling =1;
-SELECT * FROM test WHERE MATCH('@title abc* @body hey');
-```
-
-要查看查询树，请在运行查询后立即执行 `SHOW PLAN` 命令：
-
-```sql
-SHOW PLAN;
-```
-
-此命令将返回已执行查询的结构。请记住，3个语句 —— SET profiling、查询和 SHOW —— 必须在同一会话中执行。
-
-
-## 在 HTTP JSON 中分析查询
-
-使用 HTTP JSON 协议时，我们只需启用 `"profile":true` 以在响应中获取全文查询树结构。
-
-```json
-{
-  "table":"test",
-  "profile":true,
-  "query":
-  {
-    "match_phrase": { "_all" : "had grown quite" }
-  }
-}
-```
-响应将包括一个包含 `query` 成员的 `profile` 对象。
-
-`query` 属性包含转换后的全文查询树。每个节点包含：
-
-* `type`: 节点类型，可以是 AND、OR、PHRASE、KEYWORD 等。
-* `description`: 以字符串表示的此节点的查询子树（在 `SHOW PLAN` 格式中）
-* `children`: 任何子节点（如果存在）
-* `max_field_pos`: 字段中的最大位置
-
- 一个关键词节点还将包括：
-
-* `word`: 转换后的关键词。
-* `querypos`: 此关键词在查询中的位置。
-* `excluded`: 从查询中排除的关键词。
-* `expanded`: 通过前缀扩展添加的关键词。
-* `field_start`: 关键词必须出现在字段的开始。
-* `field_end`: 关键词必须出现在字段的结束。
-* `boost`: 关键词的IDF将乘以这个值。
-
-
-<!-- intro -->
-##### SQL:
-
-<!-- request SQL -->
-
-```sql
-SET profiling=1;
-SELECT * FROM test WHERE MATCH('@title abc* @body hey');
-SHOW PLAN \G
-```
-<!-- response SQL -->
-
-```sql
-*************************** 1\. row ***************************
-Variable: transformed_tree
-   Value: AND(
-  OR(fields=(title), KEYWORD(abcx, querypos=1, expanded), KEYWORD(abcm, querypos=1, expanded)),
-  AND(fields=(body), KEYWORD(hey, querypos=2)))
-1 row in set (0.00 sec)
-```
-
-<!-- request JSON -->
-
-```JSON
-POST /search
-{
-  "table": "forum",
-  "query": {"query_string": "i me"},
-  "_source": { "excludes":["*"] },
-  "limit": 1,
-  "profile":true
-}
-```
-
-<!-- response JSON -->
-```JSON
-{
-  "took":1503,
-  "timed_out":false,
-  "hits":
-  {
-    "total":406301,
-    "hits":
-    [
-       {
-          "_id": 406443,
-          "_score":3493,
-          "_source":{}
-       }
-    ]
-  },
-  "profile":
-  {
-    "query":
-    {
-      "type":"AND",
-      "description":"AND( AND(KEYWORD(i, querypos=1)),  AND(KEYWORD(me, querypos=2)))",
-      "children":
-      [
-        {
-          "type":"AND",
-          "description":"AND(KEYWORD(i, querypos=1))",
-          "children":
-          [
-            {
-              "type":"KEYWORD",
-              "word":"i",
-              "querypos":1
-            }
-          ]
-        },
-        {
-          "type":"AND",
-          "description":"AND(KEYWORD(me, querypos=2))",
-          "children":
-          [
-            {
-              "type":"KEYWORD",
-              "word":"me",
-              "querypos":2
-            }
-          ]
-        }
-      ]
-    }
-  }
-}
-```
-
-<!-- request PHP -->
-```php
-$result = $index->search('i me')->setSource(['excludes'=>['*']])->setLimit(1)->profile()->get();
-print_r($result->getProfile());
-```
-<!-- response PHP -->
-``` php
-Array
-(
-    [query] => Array
-        (
-            [type] => AND
-            [description] => AND( AND(KEYWORD(i, querypos=1)),  AND(KEYWORD(me, querypos=2)))
-            [children] => Array
-                (
-                    [0] => Array
-                        (
-                            [type] => AND
-                            [description] => AND(KEYWORD(i, querypos=1))
-                            [children] => Array
-                                (
-                                    [0] => Array
-                                        (
-                                            [type] => KEYWORD
-                                            [word] => i
-                                            [querypos] => 1
-                                        )
-                                )
-                        )
-                    [1] => Array
-                        (
-                            [type] => AND
-                            [description] => AND(KEYWORD(me, querypos=2))
-                            [children] => Array
-                                (
-                                    [0] => Array
-                                        (
-                                            [type] => KEYWORD
-                                            [word] => me
-                                            [querypos] => 2
-                                        )
-                                )
-                        )
-                )
-        )
-)
-
-```  
-<!-- intro -->
-Python
-<!-- request Python -->
-
-```python
-searchApi.search({"table":"forum","query":{"query_string":"i me"},"_source":{"excludes":["*"]},"limit":1,"profile":True})
-```
-<!-- response Python -->
-``` python
-{'hits': {'hits': [{u'_id': u'100', u'_score': 2500, u'_source': {}}],
-          'total': 1},
- 'profile': {u'query': {u'children': [{u'children': [{u'querypos': 1,
-                                                      u'type': u'KEYWORD',
-                                                      u'word': u'i'}],
-                                       u'description': u'AND(KEYWORD(i, querypos=1))',
-                                       u'type': u'AND'},
-                                      {u'children': [{u'querypos': 2,
-                                                      u'type': u'KEYWORD',
-                                                      u'word': u'me'}],
-                                       u'description': u'AND(KEYWORD(me, querypos=2))',
-                                       u'type': u'AND'}],
-                        u'description': u'AND( AND(KEYWORD(i, querypos=1)),  AND(KEYWORD(me, querypos=2)))',
-                        u'type': u'AND'}},
- 'timed_out': False,
- 'took': 0}
-
-```
-
-<!-- intro -->
-javascript
-<!-- request javascript -->
-
-```javascript
-res = await searchApi.search({"table":"forum","query":{"query_string":"i me"},"_source":{"excludes":["*"]},"limit":1,"profile":true});
-```
-<!-- response javascript -->
-``` javascript
-{"hits": {"hits": [{"_id": 100, "_score": 2500, "_source": {}}],
-          "total": 1},
- "profile": {"query": {"children": [{"children": [{"querypos": 1,
-                                                      "type": "KEYWORD",
-                                                      "word": "i"}],
-                                       "description": "AND(KEYWORD(i, querypos=1))",
-                                       "type": "AND"},
-                                      {"children": [{"querypos": 2,
-                                                      "type": "KEYWORD",
-                                                      "word": "me"}],
-                                       "description": "AND(KEYWORD(me, querypos=2))",
-                                       "type": "AND"}],
-                        "description": "AND( AND(KEYWORD(i, querypos=1)),  AND(KEYWORD(me, querypos=2)))",
-                        "type": "AND"}},
- "timed_out": False,
- "took": 0}
-
-```
-
-<!-- intro -->
-java
-<!-- request Java -->
-
-```java
-query = new HashMap<String,Object>();
-query.put("query_string","i me");
-searchRequest = new SearchRequest();
-searchRequest.setIndex("forum");
-searchRequest.setQuery(query);
-searchRequest.setProfile(true);
-searchRequest.setLimit(1);
-searchRequest.setSort(new ArrayList<String>(){{
-    add("*");
-}});
-searchResponse = searchApi.search(searchRequest);
-```
-<!-- response Java -->
-```java
-class SearchResponse {
-    took: 18
-    timedOut: false
-    hits: class SearchResponseHits {
-        total: 1
-        hits: [{_id=100, _score=2500, _source={}}]
-        aggregations: null
-    }
-    profile: {query={type=AND, description=AND( AND(KEYWORD(i, querypos=1)),  AND(KEYWORD(me, querypos=2))), children=[{type=AND, description=AND(KEYWORD(i, querypos=1)), children=[{type=KEYWORD, word=i, querypos=1}]}, {type=AND, description=AND(KEYWORD(me, querypos=2)), children=[{type=KEYWORD, word=me, querypos=2}]}]}
-}
-```
-
-<!-- intro -->
-C#
-<!-- request C# -->
-
-```clike
-object query =  new { query_string="i me" };
-var searchRequest = new SearchRequest("forum", query);
-searchRequest.Profile = true;
-searchRequest.Limit = 1;
-searchRequest.Sort = new List<Object> { "*" };
-var searchResponse = searchApi.Search(searchRequest);
-```
-<!-- response C# -->
-```clike
-class SearchResponse {
-    took: 18
-    timedOut: false
-    hits: class SearchResponseHits {
-        total: 1
-        hits: [{_id=100, _score=2500, _source={}}]
-        aggregations: null
-    }
-    profile: {query={type=AND, description=AND( AND(KEYWORD(i, querypos=1)),  AND(KEYWORD(me, querypos=2))), children=[{type=AND, description=AND(KEYWORD(i, querypos=1)), children=[{type=KEYWORD, word=i, querypos=1}]}, {type=AND, description=AND(KEYWORD(me, querypos=2)), children=[{type=KEYWORD, word=me, querypos=2}]}]}
-}
-```
-
-<!-- intro -->
-TypeScript
-<!-- request TypeScript -->
-
-```typescript
-res = await searchApi.search({
-  index: 'test',
-  query: { query_string: 'Text' }, 
-  _source: { excludes: ['*'] },
-  limit: 1,
-  profile: true
-});
-```
-<!-- response TypeScript -->
-``` typescript
-{
-	"hits": 
+	"hits":
 	{
-		"hits": 
-		[{
-			"_id": 1,
-			"_score": 1480,
-			"_source": {}
-		}],
-        "total": 1
-	},
-	"profile":
-	{
-		"query": {
-			"children": 
-			[{
-				"children": 
-				[{
-					"querypos": 1,
-                    "type": "KEYWORD",
-                    "word": "i"
-                }],
-				"description": "AND(KEYWORD(i, querypos=1))",
-				"type": "AND"
-			},
-            {
-            	"children": 
-            	[{
-            		"querypos": 2,
-                    "type": "KEYWORD",
-                    "word": "me"
-                }],
-                "description": "AND(KEYWORD(me, querypos=2))",
-				"type": "AND"
-			}],
-            "description": "AND( AND(KEYWORD(i, querypos=1)),  AND(KEYWORD(me, querypos=2)))",
-            "type": "AND"
-		}
-	},
-	"timed_out": False,
-	"took": 0
-}
-```
-
-<!-- intro -->
-Go
-<!-- request Go -->
-
-```go
-searchRequest := manticoresearch.NewSearchRequest("test")
-query := map[string]interface{} {"query_string": "Text"}
-source := map[string]interface{} { "excludes": []string {"*"} }
-searchRequest.SetQuery(query)
-searchRequest.SetSource(source)
-searchReq.SetLimit(1)
-searchReq.SetProfile(true)
-res, _, _ := apiClient.SearchAPI.Search(context.Background()).SearchRequest(*searchRequest).Execute()
-```
-
-<!-- response Go -->
-``` Go
-{
-	"hits": 
-	{
-		"hits": 
-		[{
-			"_id": 1,
-			"_score": 1480,
-			"_source": {}
-		}],
-        "total": 1
-	},
-	"profile":
-	{
-		"query": {
-			"children": 
-			[{
-				"children": 
-				[{
-					"querypos": 1,
-                    "type": "KEYWORD",
-                    "word": "i"
-                }],
-				"description": "AND(KEYWORD(i, querypos=1))",
-				"type": "AND"
-			},
-            {
-            	"children": 
-            	[{
-            		"querypos": 2,
-                    "type": "KEYWORD",
-                    "word": "me"
-                }],
-                "description": "AND(KEYWORD(me, querypos=2))",
-				"type": "AND"
-			}],
-            "description": "AND( AND(KEYWORD(i, querypos=1)),  AND(KEYWORD(me, querypos=2)))",
-            "type": "AND"
-		}
-	},
-	"timed_out": False,
-	"took": 0
-}
-```
-
-<!-- end -->
-
-
-<!-- example SHOW PLAN EXPANSION -->
-
-在某些情况下，由于扩展和其他转换，评估后的查询树可能与原始查询树有显著不同。
-
-<!-- intro -->
-##### SQL:
-<!-- request SQL -->
-
-```sql
-SET profiling=1;
-
-SELECT id FROM forum WHERE MATCH('@title way* @content hey') LIMIT 1;
-
-SHOW PLAN;
-```
-
-<!-- response SQL -->
-
-```sql
-Query OK, 0 rows affected (0.00 sec)
-
-+--------+
-| id     |
-+--------+
-| 711651 |
-+--------+
-1 row in set (0.04 sec)
-
-+------------------+-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
-| Variable         | Value                                                                                                                                                                                                                                                                                                                                                                                                                   |
-+------------------+-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
-| transformed_tree | AND(
-
-  OR(
-
-    OR(
-
-      AND(fields=(title), KEYWORD(wayne, querypos=1, expanded)),
-
-      OR(
-
-        AND(fields=(title), KEYWORD(ways, querypos=1, expanded)),
-
-        AND(fields=(title), KEYWORD(wayyy, querypos=1, expanded)))),
-
-    AND(fields=(title), KEYWORD(way, querypos=1, expanded)),
-
-    OR(fields=(title), KEYWORD(way*, querypos=1, expanded))),
-
-  AND(fields=(content), KEYWORD(hey, querypos=2))) |
-+------------------+-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
-1 row in set (0.00 sec)
-```
-
-<!-- intro -->
-##### JSON:
-
-<!-- request JSON -->
-
-```JSON
-POST /search
-{
-  "table": "forum",
-  "query": {"query_string": "@title way* @content hey"},
-  "_source": { "excludes":["*"] },
-  "limit": 1,
-  "profile":true
-}
-```
-
-<!-- response JSON -->
-```JSON
-{
-  "took":33,
-  "timed_out":false,
-  "hits":
-  {
-    "total":105,
-    "hits":
-    [
-       {
-          "_id": 711651,
-          "_score":2539,
-          "_source":{}
-       }
-    ]
-  },
-  "profile":
-  {
-    "query":
-    {
-      "type":"AND",
-      "description":"AND( OR( OR( AND(fields=(title), KEYWORD(wayne, querypos=1, expanded)),  OR( AND(fields=(title), KEYWORD(ways, querypos=1, expanded)),  AND(fields=(title), KEYWORD(wayyy, querypos=1, expanded)))),  AND(fields=(title), KEYWORD(way, querypos=1, expanded)),  OR(fields=(title), KEYWORD(way*, querypos=1, expanded))),  AND(fields=(content), KEYWORD(hey, querypos=2))",
-      "children":
-      [
-        {
-          "type":"OR",
-          "description":"OR( OR( AND(fields=(title), KEYWORD(wayne, querypos=1, expanded)),  OR( AND(fields=(title), KEYWORD(ways, querypos=1, expanded)),  AND(fields=(title), KEYWORD(wayyy, querypos=1, expanded)))),  AND(fields=(title), KEYWORD(way, querypos=1, expanded)),  OR(fields=(title), KEYWORD(way*, querypos=1, expanded))",
-          "children":
-          [
-            {
-               "type":"OR",
-               "description":"或( 与(字段=(标题), 关键字(wayne, querypos=1, expanded)),  或( 与(字段=(标题), 关键字(ways, querypos=1, expanded)),  与(字段=(标题), 关键字(wayyy, querypos=1, expanded))))",
-               "children":
-               [
-                 {
-                   "type":"与",
-                   "description":"与(字段=(标题), 关键字(wayne, querypos=1, expanded))",
-                   "fields":["标题"],
-                   "max_field_pos":0,
-                   "children":
-                   [
-                     {
-                       "type":"关键字",
-                       "word":"wayne",
-                       "querypos":1,
-                       "expanded":true
-                     }
-                   ]
-                 },
-                 {
-                   "type":"或",
-                   "description":"或( 与(字段=(标题), 关键字(ways, querypos=1, expanded)),  与(字段=(标题), 关键字(wayyy, querypos=1, expanded)))",
-                   "children":
-                   [
-                     {
-                       "type":"与",
-                       "description":"与(字段=(标题), 关键字(ways, querypos=1, expanded))",
-                       "fields":["标题"],
-                       "max_field_pos":0,
-                       "children":
-                       [
-                         {
-                           "type":"关键字",
-                           "word":"ways",
-                           "querypos":1,
-                           "expanded":true
-                         }
-                       ]
-                     },
-                     {
-                       "type":"与",
-                       "description":"与(字段=(标题), 关键字(wayyy, querypos=1, expanded))",
-                       "fields":["标题"],
-                       "max_field_pos":0,
-                       "children":
-                       [
-                         {
-                           "type":"关键字",
-                           "word":"wayyy",
-                           "querypos":1,
-                           "expanded":true
-                         }
-                       ]
-                     }
-                   ]
-                 }
-               ]
-            },
-            {
-              "type":"与",
-              "description":"与(字段=(标题), 关键字(way, querypos=1, expanded))",
-              "fields":["标题"],
-              "max_field_pos":0,
-              "children":
-              [
-                 {
-                    "type":"关键字",
-                    "word":"way",
-                    "querypos":1,
-                    "expanded":true
-                 }
-              ]
-            },
-            {
-              "type":"或",
-              "description":"或(字段=(标题), 关键字(way*, querypos=1, expanded))",
-              "fields":["标题"],
-              "max_field_pos":0,
-              "children":
-              [
-                {
-                  "type":"关键字",
-                  "word":"way*",
-                  "querypos":1,
-                  "expanded":true
-                }
-              ]
-            }
-          ]
-        },
-        {
-          "type":"与",
-          "description":"与(字段=(内容), 关键字(hey, querypos=2))",
-          "fields":["内容"],
-          "max_field_pos":0,
-          "children":
-          [
-            {
-              "type":"关键字",
-              "word":"hey",
-              "querypos":2
-            }
-          ]
-        }
-      ]
-    }
-  }
-}
-```
-
-<!-- intro -->
-##### PHP:
-
-<!-- request PHP -->
-
-```php
-$result = $index->search('@title way* @content hey')->setSource(['excludes'=>['*']])->setLimit(1)->profile()->get();
-print_r($result->getProfile());
-
-```
-
-<!-- response PHP -->
-```php
-Array
-(
-    [query] => Array
-        (
-            [type] => 与
-            [description] => 与( 或( 或( 与(字段=(标题), 关键字(wayne, querypos=1, expanded)),  或( 与(字段=(标题), 关键字(ways, querypos=1, expanded)),  与(字段=(标题), 关键字(wayyy, querypos=1, expanded)))),  与(字段=(标题), 关键字(way, querypos=1, expanded)),  或(字段=(标题), 关键字(way*, querypos=1, expanded))),  与(字段=(内容), 关键字(hey, querypos=2)))
-            [children] => Array
-                (
-                    [0] => Array
-                        (
-                            [type] => 或
-                            [description] => 或( 或( 与(字段=(标题), 关键字(wayne, querypos=1, expanded)),  或( 与(字段=(标题), 关键字(ways, querypos=1, expanded)),  与(字段=(标题), 关键字(wayyy, querypos=1, expanded)))),  与(字段=(标题), 关键字(way, querypos=1, expanded)),  或(字段=(标题), 关键字(way*, querypos=1, expanded)))
-                            [children] => Array
-                                (
-                                    [0] => Array
-                                        (
-                                            [type] => 或
-                                            [description] => 或( 与(字段=(标题), 关键字(wayne, querypos=1, expanded)),  或( 与(字段=(标题), 关键字(ways, querypos=1, expanded)),  与(字段=(标题), 关键字(wayyy, querypos=1, expanded))))
-                                            [children] => Array
-                                                (
-                                                    [0] => Array
-                                                        (
-                                                            [type] => 与
-                                                            [description] => 与(字段=(标题), 关键字(wayne, querypos=1, expanded))
-                                                            [fields] => 数组
-                                                                (
-                                                                    [0] => title
-                                                                )
-                                                            [max_field_pos] => 0
-                                                            [children] => 数组
-                                                                (
-                                                                    [0] => 数组
-                                                                        (
-                                                                            [type] => 关键词
-                                                                            [word] => wayne
-                                                                            [querypos] => 1
-                                                                            [expanded] => 1
-                                                                        )
-                                                                )
-                                                        )
-                                                    [1] => 数组
-                                                        (
-                                                            [type] => 或
-                                                            [description] => OR( AND(fields=(title), KEYWORD(ways, querypos=1, expanded)),  AND(fields=(title), KEYWORD(wayyy, querypos=1, expanded)))
-                                                            [children] => 数组
-                                                                (
-                                                                    [0] => 数组
-                                                                        (
-                                                                            [type] => AND
-                                                                            [description] => AND(fields=(title), KEYWORD(ways, querypos=1, expanded))
-                                                                            [fields] => 数组
-                                                                                (
-                                                                                    [0] => title
-                                                                                )
-
-                                                                            [max_field_pos] => 0
-                                                                            [children] => 数组
-                                                                                (
-                                                                                    [0] => 数组
-                                                                                        (
-                                                                                            [type] => 关键词
-                                                                                            [word] => ways
-                                                                                            [querypos] => 1
-                                                                                            [expanded] => 1
-                                                                                        )
-                                                                                )
-                                                                        )
-                                                                    [1] => 数组
-                                                                        (
-                                                                            [type] => AND
-                                                                            [description] => AND(fields=(title), KEYWORD(wayyy, querypos=1, expanded))
-                                                                            [fields] => 数组
-                                                                                (
-                                                                                    [0] => title
-                                                                                )
-                                                                            [max_field_pos] => 0
-                                                                            [children] => 数组
-                                                                                (
-                                                                                    [0] => 数组
-                                                                                        (
-                                                                                            [type] => 关键词
-                                                                                            [word] => wayyy
-                                                                                            [querypos] => 1
-                                                                                            [expanded] => 1
-                                                                                        )
-                                                                                )
-                                                                        )
-                                                                )
-                                                        )
-                                                )
-                                        )
-                                    [1] => 数组
-                                        (
-                                            [type] => 和
-                                            [description] => AND(fields=(title), KEYWORD(way, querypos=1, expanded))
-                                            [fields] => Array
-                                                (
-                                                    [0] => title
-                                                )
-                                            [max_field_pos] => 0
-                                            [children] => Array
-                                                (
-                                                    [0] => Array
-                                                        (
-                                                            [type] => KEYWORD
-                                                            [word] => way
-                                                            [querypos] => 1
-                                                            [expanded] => 1
-                                                        )
-                                                )
-                                        )
-                                    [2] => Array
-                                        (
-                                            [type] => OR
-                                            [description] => OR(fields=(title), KEYWORD(way*, querypos=1, expanded))
-                                            [fields] => Array
-                                                (
-                                                    [0] => title
-                                                )
-                                            [max_field_pos] => 0
-                                            [children] => Array
-                                                (
-                                                    [0] => Array
-                                                        (
-                                                            [type] => KEYWORD
-                                                            [word] => way*
-                                                            [querypos] => 1
-                                                            [expanded] => 1
-                                                        )
-                                                )
-                                        )
-                                )
-                        )
-                    [1] => Array
-                        (
-                            [type] => AND
-                            [description] => AND(fields=(content), KEYWORD(hey, querypos=2))
-                            [fields] => Array
-                                (
-                                    [0] => content
-                                )
-                            [max_field_pos] => 0
-                            [children] => Array
-                                (
-                                    [0] => Array
-                                        (
-                                            [type] => KEYWORD
-                                            [word] => hey
-                                            [querypos] => 2
-                                        )
-                                )
-                        )
-                )
-        )
-)
-
-```
-
-
-<!-- intro -->
-Python
-<!-- request Python -->
-
-```python
-searchApi.search({"table":"forum","query":{"query_string":"@title way* @content hey"},"_source":{"excludes":["*"]},"limit":1,"profile":true})
-```
-<!-- response Python -->
-``` python
-{'hits': {'hits': [{u'_id': u'2811025403043381551',
-                    u'_score': 2643,
-                    u'_source': {}}],
-          'total': 1},
- 'profile': {u'query': {u'children': [{u'children': [{u'expanded': True,
-                                                      u'querypos': 1,
-                                                      u'type': u'KEYWORD',
-                                                      u'word': u'way*'}],
-                                       u'description': u'AND(fields=(title), KEYWORD(way*, querypos=1, expanded))',
-                                       u'fields': [u'title'],
-                                       u'type': u'AND'},
-                                      {u'children': [{u'querypos': 2,
-                                                      u'type': u'KEYWORD',
-                                                      u'word': u'hey'}],
-                                       u'description': u'AND(fields=(content), KEYWORD(hey, querypos=2))',
-                                       u'fields': [u'content'],
-                                       u'type': u'AND'}],
-                        u'description': u'AND( AND(fields=(title), KEYWORD(way*, querypos=1, expanded)),  AND(fields=(content), KEYWORD(hey, querypos=2)))',
-                        u'type': u'AND'}},
- 'timed_out': False,
- 'took': 0}
-
-```
-<!-- intro -->
-javascript
-<!-- request javascript -->
-
-```javascript
-res = await searchApi.search({"table":"forum","query":{"query_string":"@title way* @content hey"},"_source":{"excludes":["*"]},"limit":1,"profile":true});
-```
-<!-- response javascript -->
-``` javascript
-{"hits": {"hits": [{"_id": 2811025403043381551,
-                    "_score": 2643,
-                    "_source": {}}],
-          "total": 1},
- "profile": {"query": {"children": [{"children": [{"expanded": True,
-                                                      "querypos": 1,
-                                                      "type": "KEYWORD",
-                                                      "word": "way*"}],
-                                       "description": "AND(fields=(title), KEYWORD(way*, querypos=1, expanded))",
-                                       "fields": ["title"],
-                                       "type": "AND"},
-                                      {"children": [{"querypos": 2,
-                                                      "type": "KEYWORD",
-                                                      "word": "hey"}],
-                                       "description": "AND(fields=(content), KEYWORD(hey, querypos=2))",
-                                       "fields": ["content"],
-                                       "type": "AND"}],
-                        "description": "AND( AND(fields=(title), KEYWORD(way*, querypos=1, expanded)),  AND(fields=(content), KEYWORD(hey, querypos=2)))",
-                        "type": "AND"}},
- "timed_out": False,
- "took": 0}
-```
-
-<!-- intro -->
-java
-<!-- request Java -->
-
-```java
-
-query = new HashMap<String,Object>();
-query.put("query_string","@title way* @content hey");
-searchRequest = new SearchRequest();
-searchRequest.setIndex("forum");
-searchRequest.setQuery(query);
-searchRequest.setProfile(true);
-searchRequest.setLimit(1);
-searchRequest.setSort(new ArrayList<String>(){{
-    add("*");
-}});
-searchResponse = searchApi.search(searchRequest);
-```
-<!-- response Java -->
-```java
-class SearchResponse {
-    took: 18
-    timedOut: false
-    hits: class SearchResponseHits {
-        total: 1
-        hits: [{_id=2811025403043381551, _score=2643, _source={}}]
-        aggregations: null
-    }
-    profile: {query={type=AND, description=AND( AND(fields=(title), KEYWORD(way*, querypos=1, expanded)),  AND(fields=(content), KEYWORD(hey, querypos=2))), children=[{type=AND, description=AND(fields=(title), KEYWORD(way*, querypos=1, expanded)), fields=[title], children=[{type=KEYWORD, word=way*, querypos=1, expanded=true}]}, {type=AND, description=AND(fields=(content), KEYWORD(hey, querypos=2)), fields=[content], children=[{type=KEYWORD, word=hey, querypos=2}]}]}}
-}
-```
-
-<!-- intro -->
-C#
-<!-- request C# -->
-
-```clike
-object query =  new { query_string="@title way* @content hey" };
-var searchRequest = new SearchRequest("forum", query);
-searchRequest.Profile = true;
-searchRequest.Limit = 1;
-searchRequest.Sort = new List<Object> { "*" };
-var searchResponse = searchApi.Search(searchRequest);
-```
-<!-- response C# -->
-```clike
-class SearchResponse {
-    took: 18
-    timedOut: false
-    hits: class SearchResponseHits {
-        total: 1
-        hits: [{_id=2811025403043381551, _score=2643, _source={}}]
-        aggregations: null
-    }
-    profile: {query={type=AND, description=AND( AND(fields=(title), KEYWORD(way*, querypos=1, expanded)),  AND(fields=(content), KEYWORD(hey, querypos=2))), children=[{type=AND, description=AND(fields=(title), KEYWORD(way*, querypos=1, expanded)), fields=[title], children=[{type=KEYWORD, word=way*, querypos=1, expanded=true}]}, {type=AND, description=AND(fields=(content), KEYWORD(hey, querypos=2)), fields=[content], children=[{type=KEYWORD, word=hey, querypos=2}]}]}}
-}
-```
-
-<!-- intro -->
-TypeScript
-<!-- request TypeScript -->
-
-```typescript
-res = await searchApi.search({
-  index: 'test',
-  query: { query_string: '@content 1'},
-  _source: { excludes: ["*"] },
-  limit:1,
-  profile":true
-});
-```
-<!-- response TypeScript -->
-``` typescript
-{
-	"hits": 
-	{
-		"hits": 
+		"hits":
 		[{
 			"_id": 1,
             "_score": 1480,
@@ -2250,13 +1094,13 @@ res = await searchApi.search({
         }],
         "total": 1
     },
- 	"profile": 
+ 	"profile":
  	{
- 		"query": 
+ 		"query":
  		{
- 			"children": 
+ 			"children":
  			[{
- 				"children": 
+ 				"children":
  				[{
  					"expanded": True,
                     "querypos": 1,
@@ -2292,9 +1136,9 @@ res, _, _ := apiClient.SearchAPI.Search(context.Background()).SearchRequest(*sea
 <!-- response Go -->
 ``` go
 {
-	"hits": 
+	"hits":
 	{
-		"hits": 
+		"hits":
 		[{
 			"_id": 1,
             "_score": 1480,
@@ -2302,13 +1146,13 @@ res, _, _ := apiClient.SearchAPI.Search(context.Background()).SearchRequest(*sea
         }],
         "total": 1
     },
- 	"profile": 
+ 	"profile":
  	{
- 		"query": 
+ 		"query":
  		{
- 			"children": 
+ 			"children":
  			[{
- 				"children": 
+ 				"children":
  				[{
  					"expanded": True,
                     "querypos": 1,
@@ -2330,10 +1174,10 @@ res, _, _ := apiClient.SearchAPI.Search(context.Background()).SearchRequest(*sea
 <!-- end -->
 
 
-## 在不运行查询的情况下进行分析
+## 在不执行查询的情况下分析查询
 
 <!-- Example Explain_query -->
-SQL语句 `EXPLAIN QUERY` 能够显示给定全文查询的执行树，而无需在表上执行实际搜索查询。
+SQL 语句 `EXPLAIN QUERY` 允许显示指定全文查询的执行树，而不实际在表上执行搜索查询。
 
 
 
@@ -2360,7 +1204,7 @@ Variable: transformed_tree
 <!-- end -->
 
 <!-- Example Explain_query_dot -->
-`EXPLAIN QUERY ... option format=dot` 允许以适合现有工具可视化的层次格式显示提供的全文查询的执行树，例如 https://dreampuf.github.io/GraphvizOnline：
+`EXPLAIN QUERY ... option format=dot` 允许以分层格式显示指定全文查询的执行树，适合使用现有工具可视化，如 https://dreampuf.github.io/GraphvizOnline：
 
 ![EXPLAIN QUERY graphviz example](graphviz.png)
 
@@ -2396,19 +1240,19 @@ Variable: transformed_tree
 
 ## 查看匹配因子的值
 <!-- example factors -->
-使用表达式排名器时，可以通过 [PACKEDFACTORS()](../../Functions/Searching_and_ranking_functions.md#PACKEDFACTORS%28%29) 函数揭示计算因子的值。
+使用表达式排序器时，可以使用 [PACKEDFACTORS()](../../Functions/Searching_and_ranking_functions.md#PACKEDFACTORS%28%29) 函数揭示计算出的因子值。
 
 该函数返回：
 
-* 文档级因子的值（例如 bm25，field_mask，doc_word_count）
-* 生成命中的每个字段的列表（包括 lcs，hit_count，word_count，sum_idf，min_hit_pos 等）
-* 查询中每个关键字的 tf 和 idf 值列表
+* 文档级别因素的值（例如 bm25、field_mask、doc_word_count）
+* 生成匹配的每个字段的列表（包括 lcs、hit_count、word_count、sum_idf、min_hit_pos 等）
+* 查询中每个关键词及其 tf 和 idf 值的列表
 
 
-这些值可以用来理解为什么某些文档在搜索中得分较低或较高，或用于改进现有的排名表达式。
+这些值可用于理解为何某些文档在搜索中得分较低或较高，或用于改进现有的排序表达式。
 
 <!-- intro -->
-示例：
+Example:
 
 <!-- request SQL -->
 ```sql
@@ -2419,3 +1263,14 @@ SELECT id, PACKEDFACTORS() FROM test1 WHERE MATCH('test one') OPTION ranker=expr
 ```sql
              id: 1
 packedfactors(): bm25=569, bm25a=0.617197, field_mask=2, doc_word_count=2,
+    field1=(lcs=1, hit_count=2, word_count=2, tf_idf=0.152356,
+        min_idf=-0.062982, max_idf=0.215338, sum_idf=0.152356, min_hit_pos=4,
+        min_best_span_pos=4, exact_hit=0, max_window_hits=1, min_gaps=2,
+        exact_order=1, lccs=1, wlccs=0.215338, atc=-0.003974),
+    word0=(tf=1, idf=-0.062982),
+    word1=(tf=1, idf=0.215338)
+1 row in set (0.00 sec)
+```
+<!-- end -->
+<!-- proofread -->
+

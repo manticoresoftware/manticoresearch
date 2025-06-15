@@ -526,3 +526,4 @@ Here are some examples of how you might use date math:
 - `2010-04-20||+2M/d` is June 20, 2010, rounded to the nearest day.
 
 <!-- proofread -->
+

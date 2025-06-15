@@ -18,3 +18,4 @@ Alternatively, if you don't install Manticore as a Windows service, you can star
 ```
 This command assumes that you have the Manticore's binary and the configuration file in the current directory.
 <!-- proofread -->
+

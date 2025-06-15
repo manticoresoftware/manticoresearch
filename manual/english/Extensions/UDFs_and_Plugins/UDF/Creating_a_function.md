@@ -23,3 +23,4 @@ mysql> SELECT *, AVGMVA(tag) AS q from test1;
 +------+--------+---------+-----------+
 ```
 <!-- proofread -->
+

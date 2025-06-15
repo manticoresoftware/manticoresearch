@@ -74,3 +74,4 @@ Each metric comes with the following labels:
 | `buddy_version`| Version of Manticore Buddy |
 
 <!-- proofread -->
+

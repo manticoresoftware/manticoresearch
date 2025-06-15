@@ -1,4 +1,4 @@
-# Ranged queries 
+# Ranged queries
 
 
 Main query, which needs to fetch all the documents, can impose a read lock on the whole table and stall the concurrent queries (e.g. INSERTs to MyISAM table), waste a lot of memory for result set, etc. To avoid this, Manticore supports so-called *ranged queries*. With ranged queries, Manticore first fetches min and max document IDs from the table, and then substitutes different ID intervals into main query text and runs the modified query to fetch another chunk of documents. Here's an example.
@@ -22,7 +22,7 @@ Obviously, that's not much of a difference for 2000-row table, but when it comes
 ### sql_query_range
 
 Defines the range query. The query specified in this option must fetch min and max document IDs that will be used as range boundaries. It must return exactly two integer fields, min ID first and max ID second; the field names are ignored. When enabled, `sql_query` will be required to contain $start and $end macros. Note that the intervals specified by $start..$end will not overlap, so you should not remove document IDs that are exactly equal to $start or $end from your query.
- 
+
 ### sql_range_step
 
 This directive defines the range query step. The default value is 1024.
@@ -37,3 +37,4 @@ Throttling can be useful when the indexer imposes too much load on the database 
 sql_ranged_throttle = 1000 # sleep for 1 sec before each query step
 ```
 <!-- proofread -->
+

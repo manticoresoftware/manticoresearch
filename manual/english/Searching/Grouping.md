@@ -340,7 +340,7 @@ HashMap<String,Object> aggs = new HashMap<String,Object>(){{
 }};
 
 searchRequest = new SearchRequest();
-searchRequest.setIndex("films");        
+searchRequest.setIndex("films");
 searchRequest.setLimit(0);
 query = new HashMap<String,Object>();
 query.put("match_all",null);
@@ -399,7 +399,7 @@ let agg1 = Aggregation {
     ..Default::default(),
 };
 let mut aggs = HashMap::new();
-aggs.insert("release_year".to_string(), agg1); 
+aggs.insert("release_year".to_string(), agg1);
 
 let search_req = SearchRequest {
     table: "films".to_string(),
@@ -986,7 +986,7 @@ HashMap<String,Object> aggs = new HashMap<String,Object>(){{
 }};
 
 searchRequest = new SearchRequest();
-searchRequest.setIndex("films");        
+searchRequest.setIndex("films");
 searchRequest.setLimit(0);
 query = new HashMap<String,Object>();
 query.put("match_all",null);
@@ -1048,7 +1048,7 @@ let agg1 = Aggregation {
     ..Default::default(),
 };
 let mut aggs = HashMap::new();
-aggs.insert("release_year".to_string(), agg1); 
+aggs.insert("release_year".to_string(), agg1);
 
 let search_req = SearchRequest {
     table: "films".to_string(),
@@ -1322,7 +1322,7 @@ HashMap<String,Object> aggs = new HashMap<String,Object>(){{
 }};
 
 searchRequest = new SearchRequest();
-searchRequest.setIndex("products");        
+searchRequest.setIndex("products");
 searchRequest.setLimit(0);
 query = new HashMap<String,Object>();
 query.put("match_all",null);
@@ -1384,7 +1384,7 @@ let agg1 = Aggregation {
     ..Default::default(),
 };
 let mut aggs = HashMap::new();
-aggs.insert("color".to_string(), agg1); 
+aggs.insert("color".to_string(), agg1);
 
 let search_req = SearchRequest {
     table: "products".to_string(),
@@ -1657,3 +1657,4 @@ MySQL [(none)]> SELECT release_year year, count(*) FROM films GROUP BY year limi
 ```
 <!-- end -->
 <!-- proofread -->
+

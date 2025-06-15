@@ -73,7 +73,7 @@ The result set will contain an `aggregations` node with the returned facets, whe
             }
             ]
         }
-    }   
+    }
 ```
 
 <!-- intro -->
@@ -502,11 +502,11 @@ aggs = new HashMap<String,Object>(){{
 
 
         }});
-    }});            
+    }});
 }};
 
 searchRequest = new SearchRequest();
-searchRequest.setIndex("facetdemo");        
+searchRequest.setIndex("facetdemo");
 searchRequest.setLimit(5);
 query = new HashMap<String,Object>();
 query.put("match_all",null);
@@ -576,7 +576,7 @@ let agg2 = Aggregation {
     ..Default::default(),
 };
 let mut aggs = HashMap::new();
-aggs.insert("group_property".to_string(), agg1); 
+aggs.insert("group_property".to_string(), agg1);
 aggs.insert("group_brand_id".to_string(), agg2);
 
 let search_req = SearchRequest {
@@ -667,7 +667,7 @@ res =  await searchApi.search({
           "key": 1,
           "doc_count": 2
         },
-...        
+...
         {
           "key": 4,
           "doc_count": 1
@@ -744,7 +744,7 @@ res, _, _ := apiClient.SearchAPI.Search(context.Background()).SearchRequest(*sea
           "key": 1,
           "doc_count": 2
         },
-...        
+...
         {
           "key": 4,
           "doc_count": 1
@@ -1295,7 +1295,7 @@ aggs = new HashMap<String,Object>(){{
     }});
 
 }};
-searchRequest.setIndex("facetdemo");        
+searchRequest.setIndex("facetdemo");
 searchRequest.setLimit(5);
 query = new HashMap<String,Object>();
 query.put("match_all",null);
@@ -1356,7 +1356,7 @@ let agg1 = Aggregation {
 };
 let mut aggs = HashMap::new();
 aggs.insert("group_property".to_string(), agg1);
-let mut expr = HashMap::new(); 
+let mut expr = HashMap::new();
 expr.insert("price_range".to_string(), "INTERVAL(price,200,400,600,800");
 let expressions: [HashMap; 1] = [expr];
 
@@ -2573,9 +2573,9 @@ aggs = new HashMap<String,Object>(){{
 
 
         }});
-    }});            
+    }});
 }};
-searchRequest.setIndex("facetdemo");        
+searchRequest.setIndex("facetdemo");
 searchRequest.setLimit(5);
 query = new HashMap<String,Object>();
 query.put("match_all",null);
@@ -2645,7 +2645,7 @@ let agg2 = Aggregation {
     ..Default::default(),
 };
 let mut aggs = HashMap::new();
-aggs.insert("group_property".to_string(), agg1); 
+aggs.insert("group_property".to_string(), agg1);
 aggs.insert("group_brand_id".to_string(), agg2);
 
 let search_req = SearchRequest {
@@ -2731,7 +2731,7 @@ res =  await searchApi.search({
           "key": 1,
           "doc_count": 2
         },
-...        
+...
         {
           "key": 4,
           "doc_count": 1
@@ -2804,7 +2804,7 @@ res, _, _ := apiClient.SearchAPI.Search(context.Background()).SearchRequest(*sea
           "key": 1,
           "doc_count": 2
         },
-...        
+...
         {
           "key": 4,
           "doc_count": 1
@@ -2872,3 +2872,4 @@ SHOW META LIKE 'multiplier';
 
 <!-- end -->
 <!-- proofread -->
+

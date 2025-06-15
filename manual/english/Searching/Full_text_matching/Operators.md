@@ -279,3 +279,4 @@ only in a (single) title
 The `ZONESPAN` limit operator resembles the `ZONE` operator but mandates that the match occurs within a single continuous span. In the example provided earlier, `ZONESPAN:th hello world` would not match the document, as "hello" and "world" do not appear within the same span.
 
 <!-- proofread -->
+

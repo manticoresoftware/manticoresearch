@@ -56,3 +56,4 @@ Manticore provides multiple ways and interfaces to manage your schemas and data,
 * **JSON**. Most functionality is also available via JSON domain specific language. This is especially useful when you integrate Manticore with your application as with JSON you can do it more programmatically than with SQL. The best practice is to **first explore how to do something via SQL and then use JSON to integrate it into your application.**
 
 <!-- proofread -->
+

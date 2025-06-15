@@ -1,14 +1,14 @@
-# 显示警告
+# SHOW WARNINGS
 
-`SHOW WARNINGS` 语句可用于检索最新查询产生的警告。错误信息将与查询本身一同返回：
+`SHOW WARNINGS` 语句可用于检索最近一次查询产生的警告。错误信息将与查询本身一起返回：
 
 ```sql
 mysql> SELECT * FROM test1 WHERE MATCH('@@title hello') \G
-ERROR 1064 (42000): index test1: 语法错误，意外的 TOK_FIELDLIMIT
-在 '@title hello' 附近
+ERROR 1064 (42000): index test1: syntax error, unexpected TOK_FIELDLIMIT
+near '@title hello'
 
 mysql> SELECT * FROM test1 WHERE MATCH('@title -hello') \G
-ERROR 1064 (42000): index test1: 查询无法计算（单一 NOT 操作符）
+ERROR 1064 (42000): index test1: query is non-computable (single NOT operator)
 
 mysql> SELECT * FROM test1 WHERE MATCH('"test doc"/3') \G
 *************************** 1\. row ***************************
@@ -27,3 +27,4 @@ Message: quorum threshold too high (words=2, thresh=3); replacing quorum operato
 1 row in set (0.00 sec)
 ```
 <!-- proofread -->
+

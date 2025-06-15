@@ -229,3 +229,4 @@ The `JOIN CLUSTER` command works synchronously and completes as soon as the node
 
 The `JOIN CLUSTER` operation can fail with an error message indicating a duplicate [server_id](../../Server_settings/Searchd.md#server_id). This occurs when the joining node has the same `server_id` as an existing node in the cluster. To resolve this issue, ensure that each node in the replication cluster has a unique [server_id](../../Server_settings/Searchd.md#server_id). You can change the default [server_id](../../Server_settings/Searchd.md#server_id) in the "searchd" section of your configuration file to a unique value before attempting to join the cluster.
 <!-- proofread -->
+

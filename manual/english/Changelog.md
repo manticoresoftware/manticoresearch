@@ -125,8 +125,8 @@ This release includes multiple bug fixes and stability improvements, better tabl
 * 🪲 [v9.3.1](https://github.com/manticoresoftware/manticoresearch/releases/tag/9.3.1) [ Issue #3343](https://github.com/manticoresoftware/manticoresearch/issues/3343) Fixed leftover `tmp.spidx` files when the optimize process was interrupted.
 * 🆕 [v9.3.0](https://github.com/manticoresoftware/manticoresearch/releases/tag/9.3.0) [ PR #3337](https://github.com/manticoresoftware/manticoresearch/pull/3337) Added a per-table command counter and detailed table usage statistics.
 * 🪲 [v9.2.39](https://github.com/manticoresoftware/manticoresearch/releases/tag/9.2.39) [ Issue #3236](https://github.com/manticoresoftware/manticoresearch/issues/3236) Fix: prevent table damage by removing complex chunk updates. Using wait functions inside the serial worker broke serial processing, which could damage tables.
-	Reimplemented autoflush. Removed external polling queue to avoid unnecessary table locks. Added "small table" condition: if the number of documents is below the 'small table limit' (8192) and no Secondary Index (SI) is used, flushing is skipped. 
-	
+	Reimplemented autoflush. Removed external polling queue to avoid unnecessary table locks. Added "small table" condition: if the number of documents is below the 'small table limit' (8192) and no Secondary Index (SI) is used, flushing is skipped.
+
 * 🪲 [v9.2.38](https://github.com/manticoresoftware/manticoresearch/releases/tag/9.2.38)  Fix: skip creating Secondary Index (SI) for filters using `ALL`/`ANY` on string lists, without affecting JSON attributes.
 * 🪲 [v9.2.37](https://github.com/manticoresoftware/manticoresearch/releases/tag/9.2.37) [ Issue #2898](https://github.com/manticoresoftware/manticoresearch/issues/2898) Added backtick support for system tables.
 * 🪲 [v9.2.36](https://github.com/manticoresoftware/manticoresearch/releases/tag/9.2.36)  Fix: use a placeholder for cluster operations in legacy code. In the parser, we now clearly separate fields for table and cluster names.
@@ -146,10 +146,10 @@ This release includes multiple bug fixes and stability improvements, better tabl
 * 🪲 [v9.2.22](https://github.com/manticoresoftware/manticoresearch/releases/tag/9.2.22) [ Issue #2763](https://github.com/manticoresoftware/manticoresearch/issues/2763) Fix: global idf file was not loaded when using `ALTER TABLE`.
 * 🪲 [v9.2.21](https://github.com/manticoresoftware/manticoresearch/releases/tag/9.2.21)  Fix: global idf files can be large. We now release tables sooner to avoid holding unnecessary resources.
 * 🪲 [v9.2.20](https://github.com/manticoresoftware/manticoresearch/releases/tag/9.2.20) [ PR #3277](https://github.com/manticoresoftware/manticoresearch/pull/3277) Improvement: better validatation of sharding options.
-	
+
 * 🪲 [v9.2.19](https://github.com/manticoresoftware/manticoresearch/releases/tag/9.2.19) [ PR #3275](https://github.com/manticoresoftware/manticoresearch/pull/3275) Fix: build compatibility with Boost 1.88.0.
 * 🪲 [v9.2.18](https://github.com/manticoresoftware/manticoresearch/releases/tag/9.2.18) [ Issue #3228](https://github.com/manticoresoftware/manticoresearch/issues/3228) Fix: crash during distributed table creation (invalid pointer issue).
-	
+
 * 🪲 [v9.2.17](https://github.com/manticoresoftware/manticoresearch/releases/tag/9.2.17) [ PR #3272](https://github.com/manticoresoftware/manticoresearch/pull/3272) Fix: multiline fuzzy `FACET` issue.
 * 🪲 [v9.2.16](https://github.com/manticoresoftware/manticoresearch/releases/tag/9.2.16) [ Issue #3063](https://github.com/manticoresoftware/manticoresearch/issues/3063) Fix: bug in distance calculation when using the `GEODIST` function.
 * 🪲 [v9.2.15](https://github.com/manticoresoftware/manticoresearch/releases/tag/9.2.15) [ Issue #3027](https://github.com/manticoresoftware/manticoresearch/issues/3027) Minor improvement: support for Elastic's `query_string` filter format.
@@ -832,7 +832,7 @@ Released: March 15 2023
 
 ### New features
 * Improved integration with Logstash, Beats etc. including:
-  - Support for Logstash versions 7.6 - 7.15, Filebeat versions 7.7 - 7.12  
+  - Support for Logstash versions 7.6 - 7.15, Filebeat versions 7.7 - 7.12
   - Auto-schema support.
   - Added handling of bulk requests in Elasticsearch-like format.
 * [Buddy commit ce90](https://github.com/manticoresoftware/manticoresearch-buddy/commit/ce907ea) Log Buddy version on Manticore start.
@@ -2413,3 +2413,4 @@ Manticore Search is built using cmake and the minimum gcc version required for c
 
 ## Version 2.3.3, 06 July 2017
 * Manticore branding
+

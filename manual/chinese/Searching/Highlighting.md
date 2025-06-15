@@ -2,9 +2,9 @@
 
 <!-- example highlighting -->
 
-高亮使您能够从包含匹配关键字的文档中获取高亮的文本片段（称为片段）。
+高亮功能使您能够从包含匹配关键词的文档中获取高亮的文本片段（称为 snippets）。
 
-SQL `HIGHLIGHT()` 函数，通过HTTP的`"highlight"` JSON查询属性，以及PHP客户端中的`highlight()`函数都利用内置文档存储来检索原始字段内容（默认启用）。
+SQL 中的 `HIGHLIGHT()` 函数、通过 HTTP 的 JSON 查询中的 `"highlight"` 属性以及 PHP 客户端中的 `highlight()` 函数都使用内置文档存储来检索原始字段内容（默认启用）。
 
 <!-- intro -->
 ##### SQL:
@@ -168,7 +168,7 @@ searchRequest.setIndex("books");
 query = new HashMap<String,Object>();
 query.put("match",new HashMap<String,Object>(){{
     put("*","try|gets|down|said");
-}});        
+}});
 searchRequest.setQuery(query);
 highlight = new HashMap<String,Object>(){{
 
@@ -335,68 +335,68 @@ res, _, _ := apiClient.SearchAPI.Search(context.Background()).SearchRequest(*sea
 
 <!-- end -->
 
-在使用SQL进行高亮搜索结果时，您将从多个字段中接收片段组合成一个字符串，这是由于MySQL协议的限制。您可以通过`field_separator`和`snippet_separator`选项调整连接分隔符，具体如下所述。
+在使用 SQL 进行搜索结果高亮时，由于 MySQL 协议的限制，您将收到来自各个字段合并为单个字符串的片段。您可以通过下面详细说明的 `field_separator` 和 `snippet_separator` 选项来调整拼接分隔符。
 
-在通过HTTP执行JSON查询或使用PHP客户端时，没有这种限制，结果集包括包含片段数组的字段数组（没有分隔符）。
+通过 HTTP 执行 JSON 查询或使用 PHP 客户端时，没有此类限制，结果集中包含包含片段数组的字段数组（无分隔符）。
 
-请记住，片段生成选项如`limit`、`limit_words`和`limit_snippets`默认适用于每个字段。您可以使用`limits_per_field`选项更改此行为，但可能会导致不必要的结果。例如，一个字段可能有匹配的关键字，但该字段没有包含在结果集中的片段，因为它们在高亮引擎中的排名不如其他字段的片段高。
+请注意，片段生成选项如 `limit`、`limit_words` 和 `limit_snippets` 默认分别适用于每个字段。您可以通过 `limits_per_field` 选项更改此行为，但这可能导致不希望出现的结果。例如，一个字段可能包含匹配关键词，但该字段的片段未被包含在结果集中，因为它们在高亮引擎中没有其他字段的片段排名高。
 
-高亮算法目前优先考虑更好的片段（具有更接近的短语匹配），然后是尚未包含在结果中的关键字片段。通常，它旨在高亮查询的最佳匹配，并在允许的范围内高亮所有查询关键字。如果在当前字段中未找到匹配，则文档的开头将根据限制进行裁剪并默认返回。要返回空字符串，请将`allow_empty`选项设置为1。
+当前高亮算法优先考虑更好的片段（具有更紧密的短语匹配），然后考虑包含尚未出现在结果中的关键词的片段。通常，其目标是在允许的限制内突出显示查询的最佳匹配并突出显示所有查询关键词。如果当前字段中未找到匹配，则默认情况下会根据限制修剪文档开头并返回。若想返回空字符串，请将 `allow_empty` 选项设置为 1。
 
-高亮在所谓的`post limit`阶段执行，这意味着片段生成延迟至整个最终结果集准备好之后，并且在应用LIMIT子句之后。例如，使用LIMIT 20,10子句时，`HIGHLIGHT()`函数最多将被调用10次。
+高亮是在所谓的“后期限制”（post limit）阶段进行的，这意味着片段生成不仅延迟至最终结果集准备完成后，还延迟至 LIMIT 子句应用后。例如，在 `LIMIT 20,10` 子句中，`HIGHLIGHT()` 函数最多会被调用 10 次。
 
 ## 高亮选项
 
 <!-- example highlighting options -->
 
-有几种可选的高亮选项可用于微调片段生成，这些选项在SQL、HTTP和PHP客户端中都是通用的。
+有几个可选的高亮选项可用于微调片段生成，它们对 SQL、HTTP 和 PHP 客户端都是通用的。
 
 #### before_match
-在关键字匹配之前插入的字符串。此字符串中可以使用`%SNIPPET_ID%`宏。宏的第一次出现将替换为当前片段内递增的片段编号。默认情况下编号从1开始，但可以通过`start_snippet_id`选项覆盖。%SNIPPET_ID%在每个新文档的开头重新开始。默认值是`<b>`。
+匹配关键词前要插入的字符串。此字符串中可以使用 `%SNIPPET_ID%` 宏。宏的第一个出现将被替换为当前片段内递增的片段编号。编号默认从 1 开始，但可通过 `start_snippet_id` 选项覆盖。每个新文档开始时 `%SNIPPET_ID%` 都会重置。默认值为 `<b>`。
 
 #### after_match
-在关键字匹配之后插入的字符串。默认值是`</b>`。
+匹配关键词后要插入的字符串。默认值是 `</b>`。
 
 #### limit
-最大片段大小，以符号（代码点）为单位。默认值是256。默认情况下这是按字段应用的，见`limits_per_field`。
+片段的最大大小，单位为符号（代码点）。默认是 256。默认情况下，按字段应用，详见 `limits_per_field`。
 
 #### limit_words
-限制可以包含在结果中的最大单词数。请注意，此限制适用于所有单词，而不只是匹配的关键字。例如，如果高亮`Mary`并选择片段`Mary had a little lamb`，则它为此限制贡献了5个单词，而不仅仅是1个。默认值是0（无限制）。默认情况下这是按字段应用的，见`limits_per_field`。
+限制结果中可包含的最大单词数。注意，这个限制适用于所有单词，而不仅仅是要高亮的匹配关键词。例如，如果高亮关键词是 `Mary`，且选中的片段是 `Mary had a little lamb`，该片段计入该限制的是 5 个单词，而非仅 1 个。默认是 0（无限制）。默认情况下，按字段应用，详见 `limits_per_field`。
 
 #### limit_snippets
-限制可以包含在结果中的最大片段数。默认值是0（无限制）。默认情况下这是按字段应用的，见`limits_per_field`。
+限制结果中可包含的最大片段数。默认是 0（无限制）。默认情况下，按字段应用，详见 `limits_per_field`。
 
 #### limits_per_field
-确定`limit`、`limit_words`和`limit_snippets`是作为每个文档的单独限制操作，还是作为整个文档的全局限制。将此选项设置为0意味着一个文档的所有组合高亮结果必须在指定的限制范围内。缺点是，您可能在一个字段中有几个片段被高亮，而在另一个字段中没有任何片段，如果高亮引擎认为它们更相关。默认值是1（使用每字段限制）。
+确定 `limit`、`limit_words` 和 `limit_snippets` 是作为每个被高亮文档字段的单独限制，还是作为整个文档的全局限制。设置该选项为 0 表示一个文档的所有组合高亮结果必须在指定限制内。缺点是如果高亮引擎认为某些片段更相关，可能会导致一个字段中高亮多个片段，而另一个字段则不高亮。默认值是 1（使用每字段限制）。
 #### around
-在每个匹配关键字块周围选择的单词数。默认值是5。
+在每个匹配关键词块周围选取的单词数。默认是 5。
 
 #### use_boundaries
-确定是否根据短语边界字符进一步分割片段，如使用[phrase_boundary](../Creating_a_table/NLP_and_tokenization/Low-level_tokenization.md#phrase_boundary)指令在表设置中配置的。默认值是0（不使用边界）。
+是否根据表设置中通过 [phrase_boundary](../Creating_a_table/NLP_and_tokenization/Low-level_tokenization.md#phrase_boundary) 指令配置的短语边界字符，在片段中额外断开。默认是 0（不使用边界）。
 
 #### weight_order
-指定是否按相关性（递减权重）或按文档中出现的顺序（递增位置）对提取的片段进行排序。默认值是0（不使用权重顺序）。
+指定是否按相关性（权重递减）排序提取的片段，或按文档中出现顺序（位置递增）排序。默认是 0（不使用权重排序）。
 
 #### force_all_words
-在结果中包含所有关键字之前忽略长度限制。默认值是0（不强制所有关键字）。
+忽略长度限制，直到结果包含所有关键词。默认是 0（不强制包含所有关键词）。
 
 #### start_snippet_id
-设置`%SNIPPET_ID%`宏的起始值（在`before_match`、`after_match`字符串中检测并展开）。默认值是1。
+设置 `%SNIPPET_ID%` 宏的起始值（该宏在 `before_match`、`after_match` 字符串中被检测和展开）。默认是 1。
 
 #### html_strip_mode
-定义HTML剥离模式设置。默认为`index`，这意味着将使用表设置。其他值包括`none`和`strip`，它们无论表设置如何都强制跳过或应用剥离；而`retain`则保留HTML标记，并保护其不被高亮。`retain`模式仅可在高亮整个文档时使用，因此要求不设置片段大小限制。允许的字符串值为`none`、`strip`、`index`和`retain`。
+定义HTML去除模式设置。默认值为`index`，意味着将使用表的设置。其他值包括`none`和`strip`，无论表的设置如何，都强制跳过或应用去除；以及`retain`，保留HTML标记并保护其不被高亮。`retain`模式只能在高亮完整文档时使用，因此要求不设置片段大小限制。允许的字符串值为`none`、`strip`、`index`和`retain`。
 
 #### allow_empty
-允许在当前字段中无法生成片段时返回空字符串作为高亮结果（没有关键词匹配或没有适合限制的片段）。默认情况下，会返回原始文本的开头，而不是空字符串。默认值为0（不允许空结果）。
+允许在当前字段无法生成片段（无关键词匹配或无片段符合限制）时返回空字符串作为高亮结果。默认情况下，会返回原始文本的开头而不是空字符串。默认值为0（不允许空结果）。
 
 #### snippet_boundary
-确保片段不会跨越句子、段落或区域边界（当与具有相应索引设置的表一起使用时）。允许的值为`sentence`、`paragraph`和`zone`。
+确保片段不会跨越句子、段落或区域边界（当与启用相应索引设置的表一起使用时）。允许的值为`sentence`、`paragraph`和`zone`。
 
 #### emit_zones
-在每个片段之前发出一个包含区域名称的HTML标签。默认值为0（不发出区域名称）。
+在每个片段前发出一个包含区域名称的HTML标签。默认值为0（不发出区域名称）。
 
 #### force_snippets
-确定是否强制生成片段，即使限制允许高亮整个文本。默认值为0（不强制生成片段）。
+决定是否强制生成片段，即使限制允许高亮整个文本。默认值为0（不强制生成片段）。
 
 <!-- intro -->
 ##### SQL:
@@ -622,7 +622,7 @@ searchRequest.setIndex("books");
 query = new HashMap<String,Object>();
 query.put("match",new HashMap<String,Object>(){{
     put("*","try|gets|down|said");
-}});        
+}});
 searchRequest.setQuery(query);
 highlight = new HashMap<String,Object>(){{
     put("limit",50);
@@ -830,16 +830,16 @@ res, _, _ := apiClient.SearchAPI.Search(context.Background()).SearchRequest(*sea
 <!-- end -->
 
 
-## 通过SQL高亮
+## 通过SQL进行高亮
 
-可以使用`HIGHLIGHT()`函数来高亮搜索结果。语法如下：
+`HIGHLIGHT()`函数可用于高亮搜索结果。语法如下：
 
 ```sql
 HIGHLIGHT([options], [field_list], [query] )
 ```
 
 <!-- example highlight() no args -->
-默认情况下，无需任何参数即可使用。
+默认情况下，无需参数即可使用。
 
 <!-- intro -->
 ##### SQL:
@@ -864,7 +864,7 @@ SELECT HIGHLIGHT() FROM books WHERE MATCH('before');
 
 <!-- example highlight() field syntax -->
 
-`HIGHLIGHT()`从文档存储中检索所有可用的全文字段，并针对提供的查询进行高亮。查询中的字段语法受到支持。字段文本由`field_separator`分隔，可以在选项中进行修改。
+`HIGHLIGHT()`从文档存储中检索所有可用的全文字段，并根据提供的查询对其进行高亮。查询中支持字段语法。字段文本由`field_separator`分隔，该选项可在设置中修改。
 
 <!-- intro -->
 ##### SQL:
@@ -888,7 +888,7 @@ SELECT HIGHLIGHT() FROM books WHERE MATCH('@title one');
 <!-- end -->
 
 <!-- example highlight() options -->
-`HIGHLIGHT()`中的可选第一个参数是选项列表。
+`HIGHLIGHT()`的可选第一个参数是选项列表。
 
 <!-- intro -->
 ##### SQL:
@@ -913,7 +913,7 @@ SELECT HIGHLIGHT({before_match='[match]',after_match='[/match]'}) FROM books WHE
 
 <!-- example highlight() field list -->
 
-可选的第二个参数是包含单个字段或逗号分隔字段列表的字符串。如果此参数存在，只有指定的字段将从文档存储中获取并进行高亮。作为第二个参数的空字符串表示“获取所有可用字段”。
+可选的第二个参数是一个字符串，包含单个字段或逗号分隔的字段列表。如果此参数存在，则只会从文档存储中获取并高亮指定的字段。第二个参数为空字符串表示“获取所有可用字段”。
 
 <!-- intro -->
 ##### SQL:
@@ -939,7 +939,7 @@ SELECT HIGHLIGHT({},'title,content') FROM books WHERE MATCH('one|robots');
 
 <!-- example highlight() string attr -->
 
-另外，您可以使用第二个参数指定一个字符串属性或字段名称，而不加引号。在这种情况下，提供的字符串将针对所提供的查询进行高亮，但字段语法将被忽略。
+或者，可以使用第二个参数指定字符串属性或字段名称（不加引号）。在这种情况下，提供的字符串将针对提供的查询进行高亮，但字段语法将被忽略。
 
 <!-- intro -->
 ##### SQL:
@@ -965,7 +965,7 @@ SELECT HIGHLIGHT({}, title) FROM books WHERE MATCH('one');
 
 <!-- example highlight() query -->
 
-可选的第三个参数是查询。这用于对与用于搜索的查询不同的查询进行高亮搜索结果。
+可选的第三个参数是查询。用于针对与搜索使用的查询不同的查询对搜索结果进行高亮。
 
 <!-- intro -->
 ##### SQL:
@@ -991,7 +991,7 @@ SELECT HIGHLIGHT({},'title', 'five') FROM books WHERE MATCH('one');
 
 <!-- example HIGHLIGHT TO_STRING -->
 
-尽管`HIGHLIGHT()`旨在用于存储的全文字段和字符串属性，但它也可以用于高亮任意文本。请记住，如果查询包含任何字段搜索操作符（例如，`@title hello @body world`），则在这种情况下将忽略其字段部分。
+尽管`HIGHLIGHT()`设计用于处理存储的全文字段和字符串属性，但也可以用于高亮任意文本。请注意，如果查询包含任何字段搜索操作符（例如，`@title hello @body world`），则在此情况下会忽略它们的字段部分。
 
 <!-- intro -->
 ##### SQL:
@@ -1014,24 +1014,24 @@ SELECT HIGHLIGHT({},TO_STRING('some text to highlight'), 'highlight') FROM books
 
 <!-- end -->
 
-某些选项仅在生成单个字符串作为结果时相关（而不是片段数组）。这仅适用于SQL `HIGHLIGHT()`函数：
+有些选项仅在生成单个字符串作为结果时相关（而不是片段数组）。这仅适用于SQL的`HIGHLIGHT()`函数：
 
 #### snippet_separator
-在片段之间插入的字符串。默认值为` ... `。
+插入在片段之间的字符串。默认值为` ... `。
 #### field_separator
-在字段之间插入的字符串。默认值为`|`。
+插入在字段之间的字符串。默认值为`|`。
 
 
-另一种高亮文本的方法是使用[CALL SNIPPETS](../Searching/Highlighting.md#CALL-SNIPPETS)语句。这主要复制了`HIGHLIGHT()`的功能，但无法使用内置文档存储。然而，它可以从文件加载源文本。
+另一种高亮文本的方式是使用[CALL SNIPPETS](../Searching/Highlighting.md#CALL-SNIPPETS)语句。它大部分功能与`HIGHLIGHT()`相同，但不能使用内置文档存储。然而，它可以从文件加载源文本。
 
 
-## 通过HTTP高亮
+## 通过HTTP进行高亮
 
 <!-- example highlight in JSON -->
 
-通过HTTP对JSON查询中的全文搜索结果进行高亮时，字段内容必须存储在文档存储中（默认情况下已启用）。在示例中，全文字段`content`和`title`从文档存储中获取，并针对`query`子句中指定的查询进行高亮。
+要通过HTTP在JSON查询中高亮全文搜索结果，字段内容必须存储在文档存储中（默认启用）。示例中，从文档存储中获取全文字段`content`和`title`，并根据`query`子句中指定的查询进行高亮。
 
-高亮的片段在`hits`数组的`highlight`属性中返回。
+高亮的片段作为`hits`数组中`highlight`属性返回。
 
 <!-- intro -->
 ##### JSON:
@@ -1178,7 +1178,7 @@ searchRequest.setIndex("books");
 query = new HashMap<String,Object>();
 query.put("match",new HashMap<String,Object>(){{
     put("*","one|robots");
-}});        
+}});
 searchRequest.setQuery(query);
 highlight = new HashMap<String,Object>(){{
     put("fields",new String[] {"content"});
@@ -1245,7 +1245,7 @@ let query = SearchQuery {
     match: Some(serde_json::json!(match_filter).into()),
     ..Default::default(),
 };
-let highlight_fields [String; 1] = ["content".to_string()]; 
+let highlight_fields [String; 1] = ["content".to_string()];
 let highlight = Highlight {
     fields: Some(serde_json::json!(highlight_fields)),
     ..Default::default(),
@@ -1360,7 +1360,7 @@ res, _, _ := apiClient.SearchAPI.Search(context.Background()).SearchRequest(*sea
 
 <!-- example highlight JSON all field  -->
 
-为了突出所有可能的字段，作为 `highlight` 属性传递一个空对象。
+要突出显示所有可能的字段，请传递一个空对象作为 `highlight` 属性。
 
 <!-- intro -->
 ##### JSON:
@@ -1511,7 +1511,7 @@ searchRequest.setIndex("books");
 query = new HashMap<String,Object>();
 query.put("match",new HashMap<String,Object>(){{
     put("*","one|robots");
-}});        
+}});
 searchRequest.setQuery(query);
 highlight = new HashMap<String,Object>(){{
 }};
@@ -1692,19 +1692,19 @@ res, _, _ := apiClient.SearchAPI.Search(context.Background()).SearchRequest(*sea
 
 <!-- end -->
 
-除了常见的高亮选项外，通过HTTP进行JSON查询时，还可以使用几个同义词：
+除了一般的高亮选项，通过 HTTP 对 JSON 查询还提供了多个同义词：
 
 #### fields
-`fields` 对象包含属性名称及其选项。它也可以是字段名称的数组（不带任何选项）。
+`fields` 对象包含带有选项的属性名称。它也可以是字段名称的数组（没有任何选项）。
 
-请注意，默认情况下，高亮尝试突出显示与全文查询后面的结果。在一般情况下，当您未指定要高亮显示的字段时，高亮是基于您的全文查询。然而，如果您指定要高亮显示的字段，它仅在全文查询与所选字段匹配时高亮。
+请注意，默认情况下，高亮尝试突出显示全文查询的结果。通常情况下，如果你不指定要高亮的字段，高亮是基于全文查询的。但是，如果你指定了要高亮的字段，只有当全文查询匹配所选字段时才会高亮。
 
 #### encoder
-`encoder` 可以设置为 `default` 或 `html`。设置为 `html` 时，在高亮显示时保留HTML标记。这与 `html_strip_mode=retain` 选项的功能相似。
+`encoder` 可以设置为 `default` 或 `html`。当设置为 `html` 时，高亮时会保留 HTML 标记。其工作方式类似于 `html_strip_mode=retain` 选项。
 
 <!-- example highlight_query -->
 #### highlight_query
-`highlight_query` 选项允许您对与搜索查询不同的查询进行高亮显示。语法与主 `query` 相同。
+`highlight_query` 选项允许你基于除搜索查询外的查询进行高亮。语法与主 `query` 相同。
 
 <!-- intro -->
 ##### JSON:
@@ -1810,7 +1810,7 @@ searchRequest.setIndex("books");
 query = new HashMap<String,Object>();
 query.put("match",new HashMap<String,Object>(){{
     put("*","one|robots");
-}});        
+}});
 searchRequest.setQuery(query);
 highlight = new HashMap<String,Object>(){{
 put("fields",new String[] {"content","title"});
@@ -1835,9 +1835,9 @@ var searchRequest = new SearchRequest("books");
 searchRequest.FulltextFilter = new MatchFilter("*", "one|robots");
 var highlight = new Highlight();
 highlight.Fieldnames = new List<string> {"content", "title"};
-Dictionary<string, Object> match = new Dictionary<string, Object>(); 
+Dictionary<string, Object> match = new Dictionary<string, Object>();
 match.Add("*", "polite distance");
-Dictionary<string, Object> highlightQuery = new Dictionary<string, Object>(); 
+Dictionary<string, Object> highlightQuery = new Dictionary<string, Object>();
 highlightQuery.Add("match", match);
 highlight.HighlightQuery = highlightQuery;
 searchRequest.Highlight = highlight;
@@ -1856,13 +1856,13 @@ let query = SearchQuery {
     match: Some(serde_json::json!(match_filter).into()),
     ..Default::default(),
 };
-let mut highlight_match_filter = HashMap::new(); 
+let mut highlight_match_filter = HashMap::new();
 highlight_match_filter.insert("*".to_string(), "polite distance".to_string());
 let highlight_query = QueryFilter {
     r#match: Some(serde_json::json!(highlight_match_filter)),
     ..Default::default(),
 };
-let highlight_fields [String; 2] = ["content".to_string(), "title".to_string()]; 
+let highlight_fields [String; 2] = ["content".to_string(), "title".to_string()];
 let highlight = Highlight {
     fields: Some(serde_json::json!(highlight_fields)),
     highlight_query: Some(Box::new(highlight_query)),
@@ -1932,7 +1932,7 @@ query := map[string]interface{} {"match": matchClause};
 searchRequest.SetQuery(query);
 highlight := manticoreclient.NewHighlight()
 highlightField := manticoreclient.NetHighlightField("content")
-highlightFields := []interface{} { highlightField } 
+highlightFields := []interface{} { highlightField }
 highlight.SetFields(highlightFields)
 queryMatchClause := map[string]interface{} {"*": "Text"};
 highlightQuery := map[string]interface{} {"match": queryMatchClause};
@@ -1975,7 +1975,7 @@ res, _, _ := apiClient.SearchAPI.Search(context.Background()).SearchRequest(*sea
 <!-- example pre_tags  -->
 
 #### pre_tags 和 post_tags
-`pre_tags` 和 `post_tags` 设置高亮文本片段的开闭标签。它们的功能类似于 `before_match` 和 `after_match` 选项。这些是可选的，默认值为 `<b>` 和 `</b>`。
+`pre_tags` 和 `post_tags` 设置高亮文本片段的起始和结束标签。它们的功能类似于 `before_match` 和 `after_match` 选项。这些是可选项，默认值分别是 `<b>` 和 `</b>`。
 
 <!-- intro -->
 ##### JSON:
@@ -2100,7 +2100,7 @@ searchRequest.setIndex("books");
 query = new HashMap<String,Object>();
 query.put("match",new HashMap<String,Object>(){{
     put("*","one|robots");
-}});        
+}});
 searchRequest.setQuery(query);
 highlight = new HashMap<String,Object>(){{
     put("fields",new String[] {"content","title"});
@@ -2139,7 +2139,7 @@ let query = SearchQuery {
     match: Some(serde_json::json!(match_filter).into()),
     ..Default::default(),
 };
-let highlight_fields [String; 2] = ["content".to_string(), "title".to_string()]; 
+let highlight_fields [String; 2] = ["content".to_string(), "title".to_string()];
 let highlight = Highlight {
     fields: Some(serde_json::json!(highlight_fields)),
     pre_tags: Some("before_".to_string()),
@@ -2246,7 +2246,7 @@ res, _, _ := apiClient.SearchAPI.Search(context.Background()).SearchRequest(*sea
 
 <!-- example no_match_size  -->
 #### no_match_size
-`no_match_size` 的功能类似于 `allow_empty` 选项。如果设置为0，它的作用是 `allow_empty=1`，在无法生成片段时允许返回空字符串作为高亮结果。否则，将返回字段的开头。这个选项是可选的，默认值为1。
+`no_match_size` 的功能类似于 `allow_empty` 选项。如果设置为 0，则相当于 `allow_empty=1`，允许当无法生成高亮片段时返回空字符串作为高亮结果。否则，将返回字段的开头部分。此选项是可选的，默认值为 1。
 
 <!-- intro -->
 ##### JSON:
@@ -2369,7 +2369,7 @@ searchRequest.setIndex("books");
 query = new HashMap<String,Object>();
 query.put("match",new HashMap<String,Object>(){{
     put("*","one|robots");
-}});        
+}});
 searchRequest.setQuery(query);
 highlight = new HashMap<String,Object>(){{
     put("fields",new String[] {"content","title"});
@@ -2406,7 +2406,7 @@ let query = SearchQuery {
     match: Some(serde_json::json!(match_filter).into()),
     ..Default::default(),
 };
-let highlight_fields [String; 2] = ["content".to_string(), "title".to_string()]; 
+let highlight_fields [String; 2] = ["content".to_string(), "title".to_string()];
 let highlight = Highlight {
     fields: Some(serde_json::json!(highlight_fields)),
     no_match_size: Some(NoMatchSize::Variant0),
@@ -2508,7 +2508,7 @@ res, _, _ := apiClient.SearchAPI.Search(context.Background()).SearchRequest(*sea
 
 <!-- example order  -->
 #### order
-`order` 设置提取片段的排序顺序。如果设置为 `"score"`，则按相关性排序提取的片段。这个选项是可选的，工作方式与 `weight_order` 选项类似。
+`order` 设置提取片段的排序顺序。如果设置为 `"score"`，则按相关性对提取的片段进行排序。此项为可选，工作方式类似于 `weight_order` 选项。
 
 <!-- intro -->
 ##### JSON:
@@ -2629,7 +2629,7 @@ searchRequest.setIndex("books");
 query = new HashMap<String,Object>();
 query.put("match",new HashMap<String,Object>(){{
     put("*","one|robots");
-}});        
+}});
 searchRequest.setQuery(query);
 highlight = new HashMap<String,Object>(){{
     put("fields",new String[] {"content","title"});
@@ -2666,7 +2666,7 @@ let query = SearchQuery {
     match: Some(serde_json::json!(match_filter).into()),
     ..Default::default(),
 };
-let highlight_fields [String; 2] = ["content".to_string(), "title".to_string()]; 
+let highlight_fields [String; 2] = ["content".to_string(), "title".to_string()];
 let highlight = Highlight {
     fields: Some(serde_json::json!(highlight_fields)),
     order: Some(Order::Score),
@@ -2770,7 +2770,7 @@ res, _, _ := apiClient.SearchAPI.Search(context.Background()).SearchRequest(*sea
 
 <!-- example fragment_size -->
 #### fragment_size
-`fragment_size` 设置片段大小的最大值（以符号为单位）。它可以是全局的或按字段设置。按字段的设置会覆盖全局设置。这是可选的，默认值为 256。它的工作方式与 `limit` 选项类似。
+`fragment_size` 设置片段的最大符号数。它可以是全局设置，也可以是针对字段的设置。针对字段的选项会覆盖全局选项。这是可选的，默认值为 256。其工作方式类似于 `limit` 选项。
 
 <!-- intro -->
 ##### JSON:
@@ -2885,7 +2885,7 @@ searchRequest.setIndex("books");
 query = new HashMap<String,Object>();
 query.put("match",new HashMap<String,Object>(){{
     put("*","one|robots");
-}});        
+}});
 searchRequest.setQuery(query);
 highlight = new HashMap<String,Object>(){{
     put("fields",new String[] {"content","title"});
@@ -2922,7 +2922,7 @@ let query = SearchQuery {
     match: Some(serde_json::json!(match_filter).into()),
     ..Default::default(),
 };
-let highlight_fields [String; 2] = ["content".to_string(), "title".to_string()]; 
+let highlight_fields [String; 2] = ["content".to_string(), "title".to_string()];
 let highlight = Highlight {
     fields: Some(serde_json::json!(highlight_fields)),
     fragment_size: Some(serde_json::json!(100)),
@@ -3024,7 +3024,7 @@ res, _, _ := apiClient.SearchAPI.Search(context.Background()).SearchRequest(*sea
 
 <!-- example number_of_fragments -->
 #### number_of_fragments
-`number_of_fragments` 限制结果中的最大片段数量。与 `fragment_size` 类似，它可以是全局的或按字段设置。这是可选的，默认值为 0（不限制）。它的工作方式与 `limit_snippets` 选项类似。
+`number_of_fragments` 限制结果中片段的最大数量。与 `fragment_size` 类似，它可以是全局设置，也可以是针对字段的设置。这是可选的，默认值为 0（无上限）。其工作方式类似于 `limit_snippets` 选项。
 
 <!-- intro -->
 ##### JSON:
@@ -3145,7 +3145,7 @@ searchRequest.setIndex("books");
 query = new HashMap<String,Object>();
 query.put("match",new HashMap<String,Object>(){{
     put("*","one|robots");
-}});        
+}});
 searchRequest.setQuery(query);
 highlight = new HashMap<String,Object>(){{
     put("fields",new String[] {"content","title"});
@@ -3182,7 +3182,7 @@ let query = SearchQuery {
     match: Some(serde_json::json!(match_filter).into()),
     ..Default::default(),
 };
-let highlight_fields [String; 2] = ["content".to_string(), "title".to_string()]; 
+let highlight_fields [String; 2] = ["content".to_string(), "title".to_string()];
 let highlight = Highlight {
     fields: Some(serde_json::json!(highlight_fields)),
     number_of_fragments: Some(serde_json::json!(10)),
@@ -3285,7 +3285,7 @@ res, _, _ := apiClient.SearchAPI.Search(context.Background()).SearchRequest(*sea
 <!-- example highlight json per-field limits -->
 
 #### limit, limit_words, limit_snippets
-像 `limit`、`limit_words` 和 `limit_snippets` 这样的选项可以设置为全局或按字段的选项。全局选项被用作按字段限制，除非按字段的选项覆盖它们。在这个例子中，`title` 字段使用默认的限制设置进行高亮，而 `content` 字段使用不同的限制。
+选项如 `limit`、`limit_words` 和 `limit_snippets` 可以设置为全局或针对字段的选项。全局选项作为针对字段的默认限制，除非被针对字段的选项覆盖。在此示例中，`title` 字段使用默认限制进行高亮，而 `content` 字段使用不同的限制。
 
 <!-- intro -->
 ##### JSON:
@@ -3400,7 +3400,7 @@ searchRequest.setIndex("books");
 query = new HashMap<String,Object>();
 query.put("match",new HashMap<String,Object>(){{
     put("*","one|robots");
-}});        
+}});
 searchRequest.setQuery(query);
 highlight = new HashMap<String,Object>(){{
     put("fields",new HashMap<String,Object>(){{
@@ -3443,7 +3443,7 @@ let query = SearchQuery {
     match: Some(serde_json::json!(match_filter).into()),
     ..Default::default(),
 };
-let highlight_fields [String; 1] = ["title".to_string()]; 
+let highlight_fields [String; 1] = ["title".to_string()];
 let highlight = Highlight {
     fields: Some(serde_json::json!(highlight_fields)),
     limit: Some(serde_json::json!(50)),
@@ -3513,7 +3513,7 @@ searchRequest.SetQuery(query);
 highlight := manticoreclient.NewHighlight()
 highlightField := manticoreclient.NetHighlightField("content")
 highlightField.SetLimit(1);
-highlightFields := []interface{} { highlightField } 
+highlightFields := []interface{} { highlightField }
 highlight.SetFields(highlightFields)
 searchRequest.SetHighlight(highlight)
 res, _, _ := apiClient.SearchAPI.Search(context.Background()).SearchRequest(*searchRequest).Execute()
@@ -3553,7 +3553,7 @@ res, _, _ := apiClient.SearchAPI.Search(context.Background()).SearchRequest(*sea
 <!-- example highlight json global limits -->
 
 #### limits_per_field
-可以通过指定 `limits_per_field=0` 来强制执行全局限制。设置此选项意味着所有组合的高亮结果必须在指定的限制范围内。缺点是，如果高亮引擎决定某一字段的片段更相关，可能会在一个字段中获取多个高亮片段，而在另一个字段中没有片段。
+全局限制也可以通过指定 `limits_per_field=0` 来强制执行。设置此选项意味着所有合并的高亮结果必须在指定的限制范围内。缺点是如果高亮引擎认为某些片段更相关，可能会导致一个字段内出现多个高亮片段，而另一个字段没有高亮。
 
 <!-- intro -->
 ##### JSON:
@@ -3667,7 +3667,7 @@ searchRequest.setIndex("books");
 query = new HashMap<String,Object>();
 query.put("match",new HashMap<String,Object>(){{
     put("*","one|robots");
-}});        
+}});
 searchRequest.setQuery(query);
 highlight = new HashMap<String,Object>(){{
     put("limits_per_field",0);
@@ -3710,7 +3710,7 @@ let query = SearchQuery {
     match: Some(serde_json::json!(match_filter).into()),
     ..Default::default(),
 };
-let highlight_fields [String; 1] = ["title".to_string()]; 
+let highlight_fields [String; 1] = ["title".to_string()];
 let highlight = Highlight {
     fields: Some(serde_json::json!(highlight_fields)),
     limit_per_field: Some(serde_json::json!(false)),
@@ -3755,7 +3755,7 @@ res, _, _ := apiClient.SearchAPI.Search(context.Background()).SearchRequest(*sea
 
 <!-- example CALL SNIPPETS -->
 
-`CALL SNIPPETS` 语句根据提供的数据和查询使用指定的表设置构建片段。它不能访问内置文档存储，因此建议使用 [HIGHLIGHT() function](../Searching/Highlighting.md) 替代。
+`CALL SNIPPETS` 语句根据指定的表设置，从提供的数据和查询中构建片段。它无法访问内置文档存储，因此推荐使用 [HIGHLIGHT() 函数](../Searching/Highlighting.md)。
 
 语法为：
 
@@ -3764,13 +3764,13 @@ CALL SNIPPETS(data, table, query[, opt_value AS opt_name[, ...]])
 ```
 
 #### data
-`data` 作为提取片段的来源。它可以是单个字符串或用花括号括起来的字符串列表。
+`data` 作为提取片段的源数据。它可以是单个字符串，也可以是用花括号括起来的字符串列表。
 #### table
-`table` 指的是提供片段生成文本处理设置的表的名称。
+`table` 指明提供文本处理设置以生成片段的表名称。
 #### query
 `query` 是用于构建片段的全文查询。
 #### opt_value 和 opt_name
-`opt_value` 和 `opt_name` 代表 [片段生成选项](../Searching/Highlighting.md)。
+`opt_value` 和 `opt_name` 表示[片段生成选项](../Searching/Highlighting.md)。
 
 <!-- intro -->
 ##### SQL:
@@ -3792,18 +3792,18 @@ CALL SNIPPETS(('this is my document text','this is my another text'), 'forum', '
 
 <!-- end -->
 
-大多数选项与 [HIGHLIGHT() 函数](../Searching/Highlighting.md) 相同。然而，仍有几个选项只能与 `CALL SNIPPETS` 一起使用。
+大多数选项与[HIGHLIGHT() 函数](../Searching/Highlighting.md)中的相同。然而，有一些选项只能与 `CALL SNIPPETS` 一起使用。
 
 <!-- example CALL SNIPPETS load files -->
-以下选项可用于突出显示存储在单独文件中的文本：
+以下选项可用于高亮存储在单独文件中的文本：
 
 #### load_files
-启用此选项时，将第一个参数视为文件名，而不是要提取片段的数据。指定的服务器端文件将用于数据。当启用此标志时，每个请求最多将使用 [max_threads_per_query](../Server_settings/Searchd.md#max_threads_per_query) 工作线程来并行化工作。默认值为 0（无限制）。要在远程代理之间分配片段生成，请在仅包含一个(!) 本地代理和多个远程代理的分布式表中调用片段生成。 [snippets_file_prefix](../Creating_a_table/Creating_a_distributed_table/Remote_tables.md#snippets_file_prefix) 选项用于生成最终的文件名。例如，当 searchd 配置为 `snippets_file_prefix = /var/data_` 并提供了 `text.txt` 作为文件名时，片段将从 `/var/data_text.txt` 的内容生成。
+启用此选项时，将第一个参数视为文件名，而不是用于提取片段的数据。服务器端将加载指定的文件以获取数据。当启用此标志时，每个请求将使用最多[ max_threads_per_query](../Server_settings/Searchd.md#max_threads_per_query) 个工作线程来并行处理任务。默认值为 0（无限制）。要在远程代理之间分配片段生成任务，请在分布式表中调用片段生成，该表仅包含一个（！）本地代理和多个远程代理。[snippets_file_prefix](../Creating_a_table/Creating_a_distributed_table/Remote_tables.md#snippets_file_prefix) 选项用于生成最终文件名。例如，当 searchd 配置了 `snippets_file_prefix = /var/data_` 并且提供了文件名 `text.txt` 时，片段将从 `/var/data_text.txt` 的内容生成。
 
 #### load_files_scattered
-此选项仅与具有远程代理的分布式片段生成一起使用。片段生成的源文件可以分布在不同的代理之间，主服务器将合并所有无错误的结果。例如，如果分布式表的一个代理有 `file1.txt`，另一个代理有 `file2.txt`，而您使用 `CALL SNIPPETS` 同时使用这两个文件，searchd 将合并代理结果，因此您将从 `file1.txt` 和 `file2.txt` 获取结果。默认值为 0。
+此选项仅适用于带有远程代理的分布式片段生成。用于片段生成的源文件可以分布在不同的代理之间，主服务器将合并所有无误的结果。例如，如果分布式表的一个代理拥有 `file1.txt`，另一个代理拥有 `file2.txt`，并且你使用 `CALL SNIPPETS` 并指定了这两个文件，searchd 将合并代理的结果，因此你将获得来自 `file1.txt` 和 `file2.txt` 的结果。默认值为 0。
 
-如果 `load_files` 选项也启用，则如果任何文件在任何地方不可用，请求将返回错误。否则（如果未启用 `load_files`），它将返回所有缺失文件的空字符串。Searchd 不会将此标志传递给代理，因此如果文件不存在，代理不会生成关键错误。如果要确保所有源文件均已加载，请将 `load_files_scattered` 和 `load_files` 都设置为 1。如果某些代理上的某些源文件的缺失不是关键的，则仅将 `load_files_scattered` 设置为 1。
+如果同时启用了 `load_files` 选项，则如果任何文件在任何地方不可用，请求将返回错误。否则（如果未启用 `load_files`），对所有缺失的文件将返回空字符串。searchd 不会将此标志传递给代理，因此如果文件不存在，代理不会生成严重错误。如果你想确保所有源文件都被加载，设置 `load_files_scattered` 和 `load_files` 均为 1。如果某些代理上缺少某些源文件不是严重问题，则只需将 `load_files_scattered` 设置为 1。
 
 <!-- intro -->
 ##### SQL:
@@ -3826,3 +3826,4 @@ CALL SNIPPETS(('data/doc1.txt','data/doc2.txt'), 'forum', 'is text', 1 AS load_f
 
 <!-- end -->
 <!-- proofread -->
+

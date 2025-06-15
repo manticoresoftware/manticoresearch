@@ -537,3 +537,4 @@ expansion_limit = number
 Maximum number of expanded keywords for a single wildcard. Details are [here](../../Server_settings/Searchd.md#expansion_limit).
 
 <!-- proofread -->
+

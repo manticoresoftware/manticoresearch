@@ -1,6 +1,6 @@
-# 更新表架构
+# 更新表结构
 
-## 在实时模式中更新表架构
+## 在 RT 模式下更新表结构
 
 <!-- example ALTER -->
 
@@ -12,7 +12,7 @@ ALTER TABLE table DROP COLUMN column_name
 ALTER TABLE table MODIFY COLUMN column_name bigint
 ```
 
-此功能仅支持一次为实时表添加一个字段或将 `int` 列扩展为 `bigint`。支持的数据类型包括：
+此功能仅支持一次为 RT 表添加一个字段或将 `int` 列扩展为 `bigint`。支持的数据类型包括：
 * `int` - 整数属性
 * `timestamp` - 时间戳属性
 * `bigint` - 大整数属性
@@ -22,27 +22,27 @@ ALTER TABLE table MODIFY COLUMN column_name bigint
 * `multi64` - 多值大整数属性
 * `json` - json 属性
 * `string` / `text attribute` / `string attribute` - 字符串属性
-* `text` / `text indexed stored` / `string indexed stored` - 带原始值存储在文档库中的全文索引字段
-* `text indexed` / `string indexed` - 仅索引的全文索引字段（原始值不存储在文档库中）
-* `text indexed attribute` / `string indexed attribute` - 全文索引字段 + 字符串属性（不在文档库中存储原始值）
-* `text stored` / `string stored` - 值仅存储在文档库中，不是全文索引字段，不是字符串属性
-* 将 `engine='columnar'` 添加到任何属性（除了 json）将使其存储在 [列式存储](Creating_a_table/Data_types.md#Row-wise-and-columnar-attribute-storages)
+* `text` / `text indexed stored` / `string indexed stored` - 具有全文索引且原始值存储在文档存储中的字段
+* `text indexed` / `string indexed` - 仅索引的全文字段（原始值不存储在文档存储中）
+* `text indexed attribute` / `string indexed attribute` - 全文索引字段 + 字符串属性（不在文档存储中保存原始值）
+* `text stored` / `string stored` - 仅存储在文档存储中，不做全文索引，也不是字符串属性的值
+* 在任何属性上添加 `engine='columnar'`（json 除外）将使其存储在[列存储](Creating_a_table/Data_types.md#Row-wise-and-columnar-attribute-storages)中
 
-#### 重要注意事项：
-* ❗建议在 `ALTER` 表之前 **备份表文件**，以避免在突然断电或其他类似问题时数据损坏。
-* 在添加列时无法查询表。
-* 新创建的属性的值默认设置为 0。
-* `ALTER` 不适用于分布式表和没有任何属性的表。
+#### 重要提示：
+* ❗建议在执行 `ALTER` 之前**备份表文件**，以防止突发断电或其他类似问题导致数据损坏。
+* 添加列时无法查询表。
+* 新创建的属性值默认为 0。
+* `ALTER` 不适用于分布式表和无属性表。
 * 不能删除 `id` 列。
-* 当删除一个既是全文字段又是字符串属性的字段时，第一个 `ALTER DROP` 删除属性，第二个删除全文字段。
-* 仅在 [实时模式](Read_this_first.md#Real-time-mode-vs-plain-mode) 中支持添加/删除全文字段。
+* 当删除一个既是全文字段又是字符串属性的字段时，第一次 `ALTER DROP` 删除属性，第二次删除全文字段。
+* 添加/删除全文字段仅支持在[RT 模式](Read_this_first.md#Real-time-mode-vs-plain-mode)下进行。
 
 <!-- request Example -->
 ```sql
 
 mysql> desc rt;
 +------------+-----------+
-| 字段       | 类型      |
+| Field      | Type      |
 +------------+-----------+
 | id         | bigint    |
 | text       | field     |
@@ -54,7 +54,7 @@ mysql> alter table rt add column test integer;
 
 mysql> desc rt;
 +------------+-----------+
-| 字段       | 类型      |
+| Field      | Type      |
 +------------+-----------+
 | id         | bigint    |
 | text       | field     |
@@ -67,7 +67,7 @@ mysql> alter table rt drop column group_id;
 
 mysql> desc rt;
 +------------+-----------+
-| 字段       | 类型      |
+| Field      | Type      |
 +------------+-----------+
 | id         | bigint    |
 | text       | field     |
@@ -79,7 +79,7 @@ mysql> alter table rt add column title text indexed;
 
 mysql> desc rt;
 +------------+-----------+------------+
-| 字段       | 类型      | 属性      |
+| Field      | Type      | Properties |
 +------------+-----------+------------+
 | id         | bigint    |            |
 | text       | text      | indexed    |
@@ -92,7 +92,7 @@ mysql> alter table rt add column title text attribute;
 
 mysql> desc rt;
 +------------+-----------+------------+
-| 字段       | 类型      | 属性      |
+| Field      | Type      | Properties |
 +------------+-----------+------------+
 | id         | bigint    |            |
 | text       | text      | indexed    |
@@ -106,7 +106,7 @@ mysql> alter table rt drop column title;
 
 mysql> desc rt;
 +------------+-----------+------------+
-| 字段       | 类型      | 属性      |
+| Field      | Type      | Properties |
 +------------+-----------+------------+
 | id         | bigint    |            |
 | text       | text      | indexed    |
@@ -118,7 +118,7 @@ mysql> alter table rt drop column title;
 
 mysql> desc rt;
 +------------+-----------+------------+
-| 字段       | 类型      | 属性      |
+| Field      | Type      | Properties |
 +------------+-----------+------------+
 | id         | bigint    |            |
 | text       | text      | indexed    |
@@ -129,7 +129,7 @@ mysql> desc rt;
 
 <!-- end -->
 
-## 在实时模式中更新表的全文设置
+## 在 RT 模式下更新表的全文设置
 
 <!-- example ALTER FT -->
 
@@ -137,14 +137,14 @@ mysql> desc rt;
 ALTER TABLE table ft_setting='value'[, ft_setting2='value']
 ```
 
-您可以使用 `ALTER` 来修改表在 [实时模式](Read_this_first.md#Real-time-mode-vs-plain-mode) 中的全文设置。然而，这仅影响新文档，而不影响现有文档。
+你可以使用 `ALTER` 修改表的全文设置（在[RT 模式](Read_this_first.md#Real-time-mode-vs-plain-mode)下），但这只影响新文档，已有文档不受影响。
 示例：
-* 创建一个具有全文字段和仅允许 3 个可搜索字符的 `charset_table` 的表：`a`、`b` 和 `c`。
-* 然后我们插入文档 'abcd'，并通过查询 `abcd` 找到它，`d` 被忽略，因为它不在 `charset_table` 数组中
-* 然后我们明白，我们也想让 `d` 可搜索，所以我们借助 `ALTER` 添加它
-* 但是相同的查询 `where match('abcd')` 仍然表示它搜索的是 `abc`，因为现有文档记住了之前的 `charset_table` 内容
-* 然后我们添加另一个文档 `abcd` 并再次按 `abcd` 搜索
-* 现在它找到了两个文档，`show meta` 显示它使用了两个关键字： `abc` （找到旧文档）和 `abcd` （找到新文档）。
+* 创建一个带有全文字段和只允许搜索字符为 `a`、`b`、`c` 的 `charset_table` 的表。
+* 插入文档 'abcd' 并使用查询 `abcd`，由于 `d` 不在 `charset_table` 中，因此会被忽略。
+* 之后想让 `d` 也能被搜索，于是通过 `ALTER` 添加它。
+* 但相同的查询 `where match('abcd')` 仍只搜索到 `abc`，因为现有文档保留了之前的 `charset_table` 内容。
+* 之后插入另一个文档 `abcd` 并再次搜索 `abcd`。
+* 现在它能找到两个文档，且 `show meta` 显示用了两个关键词：`abc`（用于旧文档）和 `abcd`（用于新文档）。
 
 <!-- request Example -->
 ```sql
@@ -222,12 +222,12 @@ mysql> show meta;
 
 <!-- example Renaming RT tables -->
 
-您可以在 RT 模式下更改实时表的名称。
+你可以在 RT 模式下更改实时表的名称。
 ```sql
 ALTER TABLE table_name RENAME new_table_name;
 ```
 
-> 注意：重命名实时表需要 [Manticore Buddy](../Installation/Manticore_Buddy.md)。如果它不起作用，请确保 Buddy 已安装。
+> 注意：重命名实时表需要使用 [Manticore Buddy](Installation/Manticore_Buddy.md)。如果不生效，请确认 Buddy 已安装。
 
 <!-- request Example -->
 ```sql
@@ -242,14 +242,14 @@ Query OK, 0 rows affected (0.00 sec)
 
 <!-- end -->
 
-## 更新普通模式下的表 FT 设置
+## 在 Plain 模式下更新表的全文设置
 
 <!-- example ALTER RECONFIGURE -->
 ```sql
 ALTER TABLE table RECONFIGURE
 ```
 
-`ALTER` 还可以在 [普通模式](Creating_a_table/Local_tables.md#Defining-table-schema-in-config-%28Plain-mode%29) 下重新配置 RT 表，以便来自配置文件的新标记、形态学和其他文本处理设置在新文档上生效。请注意，现有文档将保持不变。在内部，它会强制将当前 RAM 块保存为新的磁盘块并调整表头，以便使用更新的全文设置对新文档进行标记。
+`ALTER` 也可以重新配置 [plain 模式](Creating_a_table/Local_tables.md#Defining-table-schema-in-config-%28Plain-mode%29) 下的 RT 表，使得配置文件中的新分词、形态变化和其他文本处理设置对新文档生效。注意，已有文档不会变化。内部流程是强制将当前 RAM 块保存为新的磁盘块并调整表头，以便新文档用更新后的全文设置进行分词。
 
 <!-- request Example -->
 ```sql
@@ -281,13 +281,13 @@ mysql> show table rt settings;
 ALTER TABLE table REBUILD SECONDARY
 ```
 
-您还可以使用 `ALTER` 重建给定表中的二级索引。有时，整个表或表中的一个或多个属性的二级索引可能会被禁用：
-* 当更新属性时，其二级索引会被禁用。
-* 如果 Manticore 加载了一个旧版本的二级索引而不再支持，则整个表的二级索引将被禁用。
+你也可以使用 `ALTER` 重建表中的二级索引。有时下列情况会导致二级索引被禁用：
+* 属性更新后，其二级索引会被禁用。
+* 当 Manticore 加载表时，如果二级索引版本过旧且不再支持，则整个表的二级索引将被禁用。
 
-`ALTER TABLE table REBUILD SECONDARY` 从属性数据重建二级索引并重新启用它们。
+`ALTER TABLE table REBUILD SECONDARY` 会根据属性数据重建并重新启用二级索引。
 
-此外，虽然可能支持旧版本的二级索引，但某些功能可能缺失。可以使用 `REBUILD SECONDARY` 来更新二级索引。
+另外，旧版二级索引可能得到支持但缺少某些功能，使用 `REBUILD SECONDARY` 可更新二级索引。
 
 <!-- request Example -->
 ```sql
@@ -302,17 +302,39 @@ Query OK, 0 rows affected (0.00 sec)
 
 <!-- end -->
 
-## 更改分布式表
+
+## 重建 KNN 索引
+
+<!-- example ALTER REBUILD KNN -->
+```sql
+ALTER TABLE table REBUILD KNN
+```
+
+该命令会重新处理表中的所有向量数据，并从头重建 KNN 索引。
+
+<!-- request Example -->
+```sql
+ALTER TABLE rt REBUILD KNN;
+```
+
+<!-- response Example -->
+```sql
+Query OK, 0 rows affected (0.00 sec)
+```
+
+<!-- end -->
+
+## 修改分布式表
 
 <!-- example local_dist -->
 
-要更改分布式表中的本地或远程节点列表，请遵循与 [创建表](../Creating_a_table/Creating_a_distributed_table/Creating_a_local_distributed_table.md#Creating-a-local-distributed-table) 相同的语法。只需将命令中的 `CREATE` 替换为 `ALTER` 并删除 `type='distributed'`：
+要更改分布式表中的本地或远程节点列表，使用与[创建表时](Creating_a_table/Creating_a_distributed_table/Creating_a_local_distributed_table.md#Creating-a-local-distributed-table)相同的语法。只需将命令中的 `CREATE` 替换为 `ALTER`，并移除 `type='distributed'`：
 
 ```sql
 ALTER TABLE `distr_table_name` [[local='local_table_name'], [agent='host:port:remote_table'] ... ]
 ```
 
-> 注意：在线更改分布式表的架构需要 [Manticore Buddy](../Installation/Manticore_Buddy.md)。如果它不起作用，请确保 Buddy 已安装。
+> 注意：在线更改分布式表结构需要 [Manticore Buddy](Installation/Manticore_Buddy.md)。如果不生效，请确认 Buddy 已安装。
 
 <!-- request Example -->
 ```sql
@@ -321,3 +343,4 @@ ALTER TABLE local_dist local='index1' local='index2' agent='127.0.0.1:9312:remot
 
 <!-- end -->
 <!-- proofread -->
+

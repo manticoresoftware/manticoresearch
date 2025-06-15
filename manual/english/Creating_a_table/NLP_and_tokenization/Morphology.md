@@ -26,7 +26,7 @@ Manticore comes with built-in morphological preprocessors for:
 * Chinese word breaking algorithm
 * Snowball (libstemmer) stemmers for more than [15 other languages](../../Creating_a_table/NLP_and_tokenization/Supported_languages.md) are also available.
 
-Lemmatizers require dictionary `.pak` files that can be installed using the `manticore-language-packs` packages or [downloaded from the Manticore website](https://manticoresearch.com/install/#other-downloads). In the latter case the dictionaries need to be put in the directory specified by [lemmatizer_base](../../Server_settings/Common.md#lemmatizer_base). 
+Lemmatizers require dictionary `.pak` files that can be installed using the `manticore-language-packs` packages or [downloaded from the Manticore website](https://manticoresearch.com/install/#other-downloads). In the latter case the dictionaries need to be put in the directory specified by [lemmatizer_base](../../Server_settings/Common.md#lemmatizer_base).
 
 Additionally, the [lemmatizer_cache](../../Data_creation_and_modification/Adding_data_from_external_storages/Plain_tables_creation.md#lemmatizer_cache) setting can be used to speed up lemmatizing by spending more RAM for an uncompressed dictionary cache.
 
@@ -790,3 +790,4 @@ table products {
 ```
 <!-- end -->
 <!-- proofread -->
+

@@ -1,4 +1,4 @@
-# Low-level tokenization  
+# Low-level tokenization
 
 When text is indexed in Manticore, it is split into words and case folding is done so that words like "Abc", "ABC", and "abc" are treated as the same word.
 
@@ -1662,7 +1662,7 @@ By default, Manticore full-text index stores not only a list of matching documen
 
 `hitless_words` lets you create indexes that either do not have positional information (hitlists) at all, or skip it for specific keywords.
 
-Hitless index will generally use less space than the respective regular full-text index (about 1.5x can be expected). Both indexing and searching should be faster, at a cost of missing positional query and ranking support.  
+Hitless index will generally use less space than the respective regular full-text index (about 1.5x can be expected). Both indexing and searching should be faster, at a cost of missing positional query and ranking support.
 
 If used in positional queries (e.g. phrase queries) the hitless words are taken out from them and used as operand without a position.  For example if "hello" and "world" are hitless and "simon" and "says" are not hitless, the phrase query  `"simon says hello world"` will be converted to `("simon says" & hello & world)`, matching "hello" and "world" anywhere in the document and "simon says" as an exact phrase.
 
@@ -2409,3 +2409,4 @@ table products {
 ```
 <!-- end -->
 <!-- proofread -->
+

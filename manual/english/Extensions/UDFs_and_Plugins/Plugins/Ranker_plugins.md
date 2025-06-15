@@ -1,4 +1,4 @@
-# Ranker plugins 
+# Ranker plugins
 
 Ranker plugins let you implement a custom ranker that receives all the occurrences of the keywords matched in the document, and computes a  `WEIGHT()` value. They can be called as follows:
 
@@ -14,3 +14,4 @@ The call workflow proceeds as follows:
 
 
 <!-- proofread -->
+

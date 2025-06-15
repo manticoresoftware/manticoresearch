@@ -48,7 +48,7 @@ mysql> select LAST_INSERT_ID();
 +------------------+
 | 25,26,29         |
 +------------------+
-1 rows in set   
+1 rows in set
 ```
 
 ### UUID_SHORT()
@@ -76,3 +76,4 @@ mysql> select uuid_short();
 ```
 
 <!-- proofread -->
+

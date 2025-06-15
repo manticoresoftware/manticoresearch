@@ -967,3 +967,4 @@ The following settings are supported. They are all described in section [NLP and
 * [stored_only_fields](../../Creating_a_table/Local_tables/Plain_and_real-time_table_settings.md)
 * [wordforms](../../Creating_a_table/NLP_and_tokenization/Wordforms.md#wordforms)
 <!-- proofread -->
+

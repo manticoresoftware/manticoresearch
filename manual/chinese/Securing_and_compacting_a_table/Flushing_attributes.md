@@ -1,10 +1,10 @@
-# 刷新属性
+# 清除属性
 
 ```sql
 FLUSH ATTRIBUTES
 ```
 
-FLUSH ATTRIBUTES 命令将所有活动磁盘表中的所有内存属性更新刷新到磁盘。它返回一个标记，标识在磁盘上的结果状态（这基本上是自服务器启动以来执行的实际磁盘属性保存的数量）。
+FLUSH ATTRIBUTES 命令将所有活跃磁盘表中内存中的属性更新刷新到磁盘。它返回一个标记，用于标识结果的磁盘状态（基本上是自服务器启动以来实际执行的磁盘属性保存次数）。
 
 ```sql
 mysql> UPDATE testindex SET channel_id=1107025 WHERE id=1;
@@ -20,3 +20,4 @@ mysql> FLUSH ATTRIBUTES;
 ```
 
 <!-- proofread -->
+

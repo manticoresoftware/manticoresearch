@@ -43,7 +43,7 @@ $params = [
     'cluster' => 'click_query',
     'body' => [
         'path' => '/var/data/click_query/'
-    ]    
+    ]
     ]
 ];
 $response = $client->cluster()->create($params);
@@ -52,7 +52,7 @@ $params = [
     'body' => [
         'path' => '/var/data/click_query/',
         'nodes' => 'clicks_mirror1:9312,clicks_mirror2:9312,clicks_mirror3:9312'
-    ]    
+    ]
     ]
 ];
 $response = $client->cluster()->create($params);
@@ -130,3 +130,4 @@ utils_api.sql("CREATE CLUSTER click_query '/var/data/click_query/' as path, 'cli
 If the [nodes](../../Creating_a_cluster/Setting_up_replication/Setting_up_replication.md#nodes) option is not specified when creating a cluster, the first node that joins the cluster will be saved as the [nodes](../../Creating_a_cluster/Setting_up_replication/Setting_up_replication.md#nodes) option.
 
 <!-- proofread -->
+

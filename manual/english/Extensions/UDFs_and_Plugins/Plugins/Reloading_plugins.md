@@ -21,3 +21,4 @@ mysql> RELOAD PLUGINS FROM SONAME 'udfexample.dll';
 Query OK, 0 rows affected (0.00 sec)
 ```
 <!-- proofread -->
+

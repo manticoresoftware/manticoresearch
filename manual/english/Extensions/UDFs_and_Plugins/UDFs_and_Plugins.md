@@ -78,3 +78,4 @@ mysql> SELECT id, weight() FROM test1 WHERE MATCH('test') OPTION ranker=myrank('
 ```
 <!-- proofread -->
 
+

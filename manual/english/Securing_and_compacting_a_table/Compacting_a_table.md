@@ -111,3 +111,4 @@ Once the table is added back to the cluster, you must resume write operations on
 Search operations are available as usual during the process on any of the nodes.
 
 <!-- proofread -->
+

@@ -45,3 +45,4 @@ The essence of a distributed table lies in its list of child tables, to which it
 2. [Remote tables](../../Creating_a_table/Creating_a_distributed_table/Remote_tables.md#agent): These are tables that are served anywhere outside the server. To enumerate remote tables, you use the syntax `agent =`. Each line represents one endpoint or agent. Each agent can have multiple external locations and options for how it should work. More details [here](../../Creating_a_table/Creating_a_distributed_table/Remote_tables.md#agent). It is important to note that the server does not have any information about the type of table it is working with. This may lead to errors if, for example, you issue a `CALL PQ` to a remote table 'foo' that is not a percolate table.
 
 <!-- proofread -->
+

@@ -17,3 +17,4 @@ Note that optimizing queries consumes CPU time, so for simple queries or hand-op
 Queries like `-dog`, which could potentially include all documents from the collection are not allowed by default. To allow them, you must specify `not_terms_only_allowed=1` either as a [global setting](../../Server_settings/Searchd.md#not_terms_only_allowed) or as a [search option](../../Server_settings/Searchd.md#not_terms_only_allowed).
 
 <!-- proofread -->
+

@@ -99,3 +99,4 @@ MySQL [(none)]> select * from t where json.`a:b`=123;
 +---------------------+-------------+------+
 ```
 <!-- proofread -->
+

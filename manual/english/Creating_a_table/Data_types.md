@@ -384,7 +384,7 @@ DESC tbl;
 | id      | bigint |                |
 | content | text   | indexed stored |
 +---------+--------+----------------+
-2 rows in set (0.00 sec) 
+2 rows in set (0.00 sec)
 ```
 
 When working with document IDs, it's important to know that they are stored internally as unsigned 64-bit integers but are handled differently depending on the interface:
@@ -1861,7 +1861,7 @@ var searchResponse = searchApi.Search(searchRequest);
 
 ``` rust
 let query = SearchQuery::new();
-let mut expr = HashMap::new(); 
+let mut expr = HashMap::new();
 expr.insert("ebs".to_string(), serde_json::json!("abs(a-b)"));
 let expressions: [HashMap; 1] = [expr];
 
@@ -1974,7 +1974,7 @@ var searchResponse = searchApi.Search(searchRequest);
 
 ``` rust
 let query = SearchQuery::new();
-let mut expr = HashMap::new(); 
+let mut expr = HashMap::new();
 expr.insert("ebs".to_string(), serde_json::json!("in(ceil(attr*100),200,250,350)"));
 let expressions: [HashMap; 1] = [expr];
 
@@ -2228,7 +2228,7 @@ var searchResponse = searchApi.Search(searchRequest);
 
 ``` rust
 let query = SearchQuery::new();
-let mut expr = HashMap::new(); 
+let mut expr = HashMap::new();
 expr.insert("idx".to_string(), serde_json::json!("indexof(x>2 for x in data.intarray)"));
 let expressions: [HashMap; 1] = [expr];
 
@@ -2355,7 +2355,7 @@ var searchResponse = searchApi.Search(searchRequest);
 
 ``` rust
 let query = SearchQuery::new();
-let mut expr = HashMap::new(); 
+let mut expr = HashMap::new();
 expr.insert("idx".to_string(), serde_json::json!("indexof(x>2 for x in data.intarray)"));
 let expressions: [HashMap; 1] = [expr];
 
@@ -2929,7 +2929,7 @@ searchResponse = searchApi.Search(searchRequest);
 
 ``` rust
 let query = SearchQuery::new();
-let mut sort_opts = HashMap::new(); 
+let mut sort_opts = HashMap::new();
 sort_opts.insert("order".to_string(), serde_json::json!("asc"));
 sort_opts.insert("mode".to_string(), serde_json::json!("min"));
 sort_expr.insert("product_codes".to_string(), serde_json::json!(sort_opts));
@@ -3461,3 +3461,4 @@ table tbl {
 ```
 
 <!-- end -->
+

@@ -1,22 +1,22 @@
 # 查询计划
 
-<!-- 示例 SHOW PLAN -->
+<!-- example SHOW PLAN -->
 
-`SHOW PLAN` SQL 语句以及 `"plan": N` JSON 接口选项显示查询执行计划。该计划在实际执行期间生成并存储，因此在 SQL 的情况下，必须在当前会话中 **在** 运行该语句之前启用 Profiling。这可以通过 `SET profiling=1` 语句完成。
+`SHOW PLAN` SQL 语句和 `"plan": N` JSON 接口选项显示查询执行计划。计划在实际执行期间生成并存储，因此在 SQL 的情况下，必须在运行该语句之前**在当前会话中启用 profiling**。这可以通过 `SET profiling=1` 语句完成。
 
-在 SQL 模式下返回两个项目：
-* `transformed_tree`，显示全文查询分解。
-* `enabled_indexes`，提供有效的次级索引的信息。
+在 SQL 模式下返回两项：
+* `transformed_tree`，显示全文查询的分解文本。
+* `enabled_indexes`，提供有关有效辅助索引的信息。
 
-要在 JSON 查询中查看查询执行计划，请向查询添加 `"plan": N`。结果将作为结果集中的 `plan` 属性出现。 `N` 可以是以下之一：
-* 1 - 仅显示根节点的文本计划，类似于在 `SHOW PLAN` SQL 查询中返回的内容。这是最紧凑的形式。
-* 2 - 仅显示 JSON 对象计划，适合处理。
-* 3 - 显示包含每个节点文本描述的 JSON 对象。请注意，子节点的描述也存在，并且重复了部分父节点的描述，这使得整个表示相当庞大。
+要在 JSON 查询中查看查询执行计划，请在查询中添加 `"plan": N`。结果将作为结果集中的一个 `plan` 属性出现。`N` 可以是以下值之一：
+* 1 - 仅显示根节点的文本计划，类似于 `SHOW PLAN` SQL 查询返回的内容。这是最紧凑的形式。
+* 2 - 仅显示 JSON 对象计划，便于处理。
+* 3 - 显示一个包含每个节点文本描述的 JSON 对象。请注意，子节点的描述也存在，并且重复了父节点的部分描述，这使得整个表示相当大。
 
 
-<!-- 介绍 -->
-##### SQL:
-<!-- 请求 SQL -->
+<!-- intro -->
+##### SQL：
+<!-- request SQL -->
 
 ```sql
 set profiling=1;
@@ -26,7 +26,7 @@ select * from hn_small where match('dog|cat') limit 0;
 show plan;
 ```
 
-<!-- 响应 SQL -->
+<!-- response SQL -->
 
 ```sql
 *************************** 1. row ***************************
@@ -40,10 +40,10 @@ Variable: enabled_indexes
 2 rows in set (0.00 sec)
 ```
 
-<!-- 介绍 -->
-##### JSON:
+<!-- intro -->
+##### JSON：
 
-<!-- 请求 JSON -->
+<!-- request JSON -->
 
 ```json
 POST /search
@@ -56,7 +56,7 @@ POST /search
 }
 ```
 
-<!-- 响应 JSON -->
+<!-- response JSON -->
 ```json
 {
   "took": 0,
@@ -99,15 +99,15 @@ POST /search
 }
 ```
 
-<!-- 结束 -->
+<!-- end -->
 
-<!-- 示例 SHOW PLAN 扩展 -->
+<!-- example SHOW PLAN EXPANSION -->
 
-在某些情况下，由于扩展和其他变换，评估的查询树可能与原始查询相差甚远。
+在某些情况下，由于展开和其他转换，评估的查询树可能与原始查询树有很大不同。
 
-<!-- 介绍 -->
-##### SQL:
-<!-- 请求 SQL -->
+<!-- intro -->
+##### SQL：
+<!-- request SQL -->
 
 ```sql
 SET profiling=1;
@@ -117,7 +117,7 @@ SELECT id FROM forum WHERE MATCH('@title way* @content hey') LIMIT 1;
 SHOW PLAN;
 ```
 
-<!-- 响应 SQL -->
+<!-- response SQL -->
 
 ```sql
 Query OK, 0 rows affected (0.00 sec)
@@ -146,10 +146,10 @@ Query OK, 0 rows affected (0.00 sec)
 1 row in set (0.00 sec)
 ```
 
-<!-- 介绍 -->
-##### JSON 完整格式：
+<!-- intro -->
+##### JSON 全格式：
 
-<!-- 请求 JSON -->
+<!-- request JSON -->
 
 ```JSON
 POST /search
@@ -162,7 +162,7 @@ POST /search
 }
 ```
 
-<!-- 响应 JSON -->
+<!-- response JSON -->
 ```JSON
 {
   "took":33,
@@ -305,7 +305,7 @@ POST /search
 
 <!-- intro -->
 
-##### JSON对象格式:
+##### JSON 对象格式：
 
 <!-- request JSON -->
 
@@ -439,7 +439,7 @@ POST /search
           "children": [
             {
               "type": "KEYWORD",
-              "word": "嘿",
+              "word": "hey",
               "querypos": 2
             }
           ]
@@ -452,7 +452,7 @@ POST /search
 
 <!-- intro -->
 
-##### JSON简短格式:
+##### JSON 简短格式：
 
 <!-- request JSON -->
 
@@ -497,26 +497,26 @@ POST /search
 
 <!-- end -->
 
-另见 [EXPLAIN QUERY](../../Searching/Full_text_matching/Profiling.md#Profiling-without-running-a-query)。它显示了一个全文查询的执行树 **而不实际执行查询**。 请注意，在对实时表使用 `SHOW PLAN` 进行查询时，结果将基于随机磁盘/RAM 块。因此，如果您最近修改了表的标记设置，或者如果块在字典等方面有显著差异，您可能不会获得所期望的结果。 请考虑这一点，并考虑使用 `EXPLAIN QUERY`。
+另见 [EXPLAIN QUERY](../../Searching/Full_text_matching/Profiling.md#Profiling-without-running-a-query)。它显示全文查询的执行树，**但不实际执行查询**。请注意，当在实时表的查询之后使用 `SHOW PLAN` 时，结果将基于随机的磁盘/RAM chunk。因此，如果您最近修改了表的分词设置，或者 chunks 在词典等方面差异很大，您可能无法获得预期结果。请考虑这一点，并可同时使用 `EXPLAIN QUERY`。
 
-## JSON结果集说明
+## JSON 结果集说明
 
-`query` 属性包含转换后的全文查询树。每个节点包含:
+`query` 属性包含转换后的全文查询树。每个节点包含：
 
-* `type`: 节点类型。可以是 `AND`，`OR`，`PHRASE`，`KEYWORD` 等。
-* `description`: 显示为字符串的此节点的查询子树（以 `SHOW PLAN` 格式）。
-* `children`: 子节点（如果有）。
-* `max_field_pos`: 字段内的最大位置。
-* `word`: 转换后的关键词。仅限关键词节点。
-* `querypos`: 此关键词在查询中的位置。仅限关键词节点。
-* `excluded`: 从查询中排除的关键词。仅限关键词节点。
-* `expanded`: 通过前缀扩展添加的关键词。仅限关键词节点。
-* `field_start`: 关键词必须出现在字段的开始。仅限关键词节点。
-* `field_end`: 关键词必须出现在字段的末尾。仅限关键词节点。
-* `boost`: 关键词 IDF 将乘以此值。仅限关键词节点。
+* `type`：节点类型。可能是 `AND`、`OR`、`PHRASE`、`KEYWORD` 等。
+* `description`：该节点的查询子树，作为字符串显示（以 `SHOW PLAN` 格式）。
+* `children`：子节点（如果有）。
+* `max_field_pos`：字段中的最大位置。
+* `word`：转换后的关键词。仅限关键词节点。
+* `querypos`：此关键词在查询中的位置。仅限关键词节点。
+* `excluded`：关键词是否被查询排除。仅限关键词节点。
+* `expanded`：关键词是否由前缀展开添加。仅限关键词节点。
+* `field_start`：关键词必须出现在字段的开头。仅限关键词节点。
+* `field_end`：关键词必须出现在字段的结尾。仅限关键词节点。
+* `boost`：关键词的 IDF 将乘以该值。仅限关键词节点。
 
-## SHOW PLAN 的点格式
-`SHOW PLAN format=dot` 允许以适合现有工具可视化的层次格式返回全文查询执行树，例如 https://dreampuf.github.io/GraphvizOnline：
+## SHOW PLAN 的 Dot 格式
+`SHOW PLAN format=dot` 允许以层次格式返回全文查询执行树，适合通过现有工具（如 https://dreampuf.github.io/GraphvizOnline）进行可视化：
 
 ```sql
 MySQL [(none)]> show plan option format=dot\G
@@ -539,3 +539,4 @@ Variable: transformed_tree
 
 ![SHOW PLAN graphviz example](graphviz.png)
 <!-- proofread -->
+

@@ -1,16 +1,16 @@
-# 显示表设置
+# SHOW TABLE SETTINGS
 
 <!-- example SHOW TABLE SETTINGS -->
 
 `SHOW TABLE SETTINGS` 是一个 SQL 语句，用于以与配置文件兼容的格式显示每个表的设置。
 
-语法是：
+语法为：
 
 ```sql
 SHOW TABLE table_name[.N | CHUNK N] SETTINGS
 ```
 
-输出类似于 [--dumpconfig](../../Miscellaneous_tools.md#indextool) 选项的 [indextool](../../Miscellaneous_tools.md#indextool) 工具。报告提供了所有表设置的详细信息，包括分词器和字典选项。
+输出类似于 [indextool](../../Miscellaneous_tools.md#indextool) 工具的 [--dumpconfig](../../Miscellaneous_tools.md#indextool) 选项。报告提供了所有表设置的详细分解，包括分词器和字典选项。
 
 <!-- intro -->
 ##### SQL:
@@ -35,7 +35,7 @@ charset_table = 0..9, A..Z->a..z, _, -, a..z, U+410..U+42F->U+430..U+44F, U+430.
 
 <!-- example SHOW TABLE SETTINGS N -->
 
-你还可以指定特定的块编号来查看 RT 表中特定块的设置。编号是从 0 开始的。
+你也可以指定特定的块编号，以查看 RT 表中某个特定块的设置。编号从 0 开始。
 
 <!-- intro -->
 ##### SQL:
@@ -58,3 +58,4 @@ charset_table = 0..9, A..Z->a..z, _, -, a..z, U+410..U+42F->U+430..U+44F, U+430.
 
 <!-- end -->
 <!-- proofread -->
+

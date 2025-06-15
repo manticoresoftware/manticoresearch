@@ -101,3 +101,4 @@ The following table outlines the various file extensions used in a plain table a
 |`.old.sp*` | old version of a plain table after rotation |
 
 <!-- proofread -->
+

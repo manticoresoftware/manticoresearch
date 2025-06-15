@@ -357,3 +357,4 @@ MySQL [(none)]> CALL KEYWORDS('cat*', 't', 1 as stats, 'hits' as sort_mode);
 
 `CALL KEYWORDS` supports distributed tables so no matter how big your data set you can benefit from using it.
 <!-- proofread -->
+

@@ -15,3 +15,4 @@ If you follow the installation instructions above or [on the website](https://ma
 ## Disabling Manticore Buddy
 
 To disable Manticore Buddy, please use the [buddy_path](../Server_settings/Searchd.md#buddy_path) setting.
+

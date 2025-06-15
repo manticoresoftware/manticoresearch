@@ -1,4 +1,4 @@
-# СОЗДАТЬ ФУНКЦИЮ
+# CREATE FUNCTION
 
 ```sql
 CREATE FUNCTION udf_name
@@ -6,7 +6,7 @@ CREATE FUNCTION udf_name
     SONAME 'udf_lib_file'
 ```
 
-Оператор `CREATE FUNCTION` устанавливает пользовательскую функцию [UDF](../../../Extensions/UDFs_and_Plugins/UDF.md) с указанным именем и типом из предоставленного библиотеки. Библиотека должна находиться в доверенной директории [plugin_dir](../../../Server_settings/Common.md#plugin_dir). После успешной установки функция становится доступной для использования во всех последующих запросах, полученных сервером. Пример:
+Оператор `CREATE FUNCTION` устанавливает пользовательскую функцию [UDF](../../../Extensions/UDFs_and_Plugins/UDF.md) с указанным именем и типом из предоставленного файла библиотеки. Файл библиотеки должен находиться в доверенной директории [plugin_dir](../../../Server_settings/Common.md#plugin_dir). После успешной установки функция становится доступна для использования во всех последующих запросах, получаемых сервером. Пример:
 
 ```sql
 mysql> CREATE FUNCTION avgmva RETURNS INTEGER SONAME 'udfexample.dll';
@@ -23,3 +23,4 @@ mysql> SELECT *, AVGMVA(tag) AS q from test1;
 +------+--------+---------+-----------+
 ```
 <!-- proofread -->
+

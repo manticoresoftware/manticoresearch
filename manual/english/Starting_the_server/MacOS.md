@@ -15,3 +15,4 @@ To stop Manticore, run the following command:
 brew services stop manticoresearch
 ```
 <!-- proofread -->
+

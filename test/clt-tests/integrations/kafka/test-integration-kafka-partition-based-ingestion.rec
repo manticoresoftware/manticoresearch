@@ -95,7 +95,6 @@ Wait until lag becomes zero and current offset is not zero for all partitions
 ––– input –––
 timeout 120 bash -c 'while true; do STATS=$(docker exec kafka kafka-consumer-groups.sh --bootstrap-server localhost:9092 --describe --group manticore 2>/dev/null | grep -E "^manticore.*my-data"); if [ -z "$STATS" ]; then sleep 3; continue; fi; ALL_READY=true; while IFS= read -r line; do if [[ -n "$line" ]]; then read -r group topic partition current_offset log_end_offset lag rest <<< "$line"; if [[ "$lag" -ne 0 ]] || [[ "$current_offset" -eq 0 ]]; then ALL_READY=false; fi; fi; done <<< "$STATS"; if [ "$ALL_READY" = true ]; then echo "All partitions processed successfully"; break; fi; sleep 3; done' || echo "Processing timeout reached"
 ––– output –––
-{"brokers":[{"broker":0,"logDirs":[{"partitions":[{"partition":"my-data-1","size":#!/[0-9]+/!#,"offsetLag":0,"isFuture":false},{"partition":"my-data-0","size":#!/[0-9]+/!#,"offsetLag":0,"isFuture":false}],"error":null,"logDir":"/bitnami/kafka/data"}]}],"version":1}
 All partitions processed successfully
 ––– comment –––
 Verify final Kafka consumer group state shows zero lag and processed offsets

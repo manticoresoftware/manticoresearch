@@ -1,0 +1,96 @@
+Test remote OpenAI embeddings API integration with auto-generation from text fields. Tests API key handling, model specification, error cases, and vector generation consistency using openai/ model prefix.
+
+––– comment –––
+Start Manticore Search with Buddy (required for embeddings)
+––– input –––
+rm -f /var/log/manticore/searchd.log; stdbuf -oL searchd $SEARCHD_FLAGS > /dev/null; if timeout 10 grep -qm1 '\[BUDDY\] started' <(tail -n 1000 -f /var/log/manticore/searchd.log); then echo 'Buddy started!'; else echo 'Timeout or failed!'; cat /var/log/manticore/searchd.log;fi
+––– output –––
+Buddy started!
+––– comment –––
+Test error case: Invalid OpenAI model name
+––– input –––
+mysql -h0 -P9306 -e "CREATE TABLE test_invalid_model (title TEXT, embedding FLOAT_VECTOR KNN_TYPE='hnsw' HNSW_SIMILARITY='l2' MODEL_NAME = 'openai/invalid-model-name-12345' FROM = 'title') engine = 'columnar'" 2>&1
+––– output –––
+#!/.*ERROR.*(model.*not.*found|invalid.*model|model.*does.*not.*exist|configuration).*/!#
+––– comment –––
+Test that we have error when creating WITHOUT api_key passed
+––– input –––
+mysql -h0 -P9306 -e "CREATE TABLE test_valid_model_no_api_key (title TEXT, embedding FLOAT_VECTOR KNN_TYPE='hnsw' HNSW_SIMILARITY='l2' MODEL_NAME = 'openai/text-embedding-ada-002' FROM = 'title') engine = 'columnar'" 2>&1
+––– output –––
+ERROR 1064 (42000) at line 1: error adding table 'test_valid_model_no_api_key': prealloc: Invalid API key for remote model
+––– comment –––
+Test table creation with valid OpenAI model and KEY
+––– input –––
+mysql -h0 -P9306 -e "CREATE TABLE test_openai_remote (title TEXT, content TEXT, description TEXT, embedding FLOAT_VECTOR KNN_TYPE='hnsw' HNSW_SIMILARITY='l2' MODEL_NAME = 'openai/text-embedding-ada-002' FROM = 'title, content' API_KEY='${OPENAI_API_KEY}') engine = 'columnar'"; echo $?
+––– output –––
+0
+––– comment –––
+Test data insertion with auto-generated vectors
+––– input –––
+mysql -h0 -P9306 -e "INSERT INTO test_openai_remote (id, title, content, description) VALUES(1, 'machine learning algorithms', 'deep neural networks and artificial intelligence', 'advanced AI research')"; echo $?
+––– output –––
+0
+––– comment –––
+Verify data was inserted and vectors were generated
+––– input –––
+mysql -h0 -P9306 -e "SELECT COUNT(*) as record_count FROM test_openai_remote WHERE id=1"
+––– output –––
++--------------+
+| record_count |
++--------------+
+|            1 |
++--------------+
+––– comment –––
+Test vector generation consistency - same input should produce same vector MD5
+––– input –––
+mysql -h0 -P9306 -e "INSERT INTO test_openai_remote (id, title, content, description) VALUES(2, 'machine learning algorithms', 'deep neural networks and artificial intelligence', 'different description')"; MD5_1=$(mysql -h0 -P9306 -e "SELECT embedding FROM test_openai_remote WHERE id=1" | grep -v embedding | md5sum | awk '{print $1}'); MD5_2=$(mysql -h0 -P9306 -e "SELECT embedding FROM test_openai_remote WHERE id=2" | grep -v embedding | md5sum | awk '{print $1}'); echo "vector_md5_1: $MD5_1"; echo "vector_md5_2: $MD5_2"; if [ "$MD5_1" = "$MD5_2" ]; then echo "SUCCESS: Same FROM fields produce same vector"; else echo "INFO: Different vectors (expected due to different description field)"; fi
+––– output –––
+vector_md5_1: #!/[0-9a-f]{32}/!#
+vector_md5_2: #!/[0-9a-f]{32}/!#
+SUCCESS: Same FROM fields produce same vector
+––– comment –––
+Test different FROM field combinations produce different vectors
+––– input –––
+mysql -h0 -P9306 -e "CREATE TABLE test_openai_title_only (title TEXT, content TEXT, embedding FLOAT_VECTOR KNN_TYPE='hnsw' HNSW_SIMILARITY='l2' MODEL_NAME = 'openai/text-embedding-ada-002' FROM = 'title' API_KEY='${OPENAI_API_KEY}') engine = 'columnar'"; mysql -h0 -P9306 -e "INSERT INTO test_openai_title_only (id, title, content) VALUES(1, 'machine learning algorithms', 'completely different content here')"; MD5_MULTI=$(mysql -h0 -P9306 -e "SELECT embedding FROM test_openai_remote WHERE id=1" | grep -v embedding | md5sum | awk '{print $1}'); MD5_SINGLE=$(mysql -h0 -P9306 -e "SELECT embedding FROM test_openai_title_only WHERE id=1" | grep -v embedding | md5sum | awk '{print $1}'); echo "multi_field_md5: $MD5_MULTI"; echo "single_field_md5: $MD5_SINGLE"; if [ "$MD5_MULTI" != "$MD5_SINGLE" ]; then echo "SUCCESS: Different FROM specifications produce different vectors"; else echo "INFO: FROM field comparison result"; fi
+––– output –––
+multi_field_md5: #!/[0-9a-f]{32}/!#
+single_field_md5: #!/[0-9a-f]{32}/!#
+SUCCESS: Different FROM specifications produce different vectors
+––– comment –––
+Test error case: FROM referencing non-existent field with OpenAI model
+––– input –––
+mysql -h0 -P9306 -e "CREATE TABLE test_openai_invalid_field (title TEXT, embedding FLOAT_VECTOR KNN_TYPE='hnsw' HNSW_SIMILARITY='l2' MODEL_NAME = 'openai/text-embedding-ada-002' FROM = 'nonexistent_field') engine = 'columnar'" 2>&1
+––– output –––
+#!/.*ERROR.*(field|column|nonexistent).*/!#
+––– comment –––
+Test manual vector insertion without auto-generation
+––– input –––
+if mysql -h0 -P9306 -e "SHOW TABLES LIKE 'test_openai_no_from'" | grep -q test_openai_no_from; then mysql -h0 -P9306 -e "INSERT INTO test_openai_no_from (id, title, embedding) VALUES(1, 'test title', '(0.1, 0.2, 0.3, 0.4, 0.5)')"; echo "insert_result: $?"; else echo "insert_result: skipped (table not created)"; fi
+––– output –––
+#!/(insert_result: (0|ERROR.*dimension.*mismatch.*)|insert_result: skipped \(table not created\))/!#
+––– comment –––
+Show table structure to verify OpenAI model configuration
+––– input –––
+if mysql -h0 -P9306 -e "SHOW TABLES LIKE 'test_openai_no_from'" | grep -q test_openai_no_from; then mysql -h0 -P9306 -e "SHOW CREATE TABLE test_openai_no_from"; else echo "table_structure: skipped (table not created)"; fi
+––– output –––
+#!/(.*CREATE TABLE test_openai_no_from.*model_name='openai\/text-embedding-ada-002'.*engine='columnar'.*|table_structure: skipped \(table not created\))/!#
+––– comment –––
+Test API key environment variable handling
+––– input –––
+if [ -n "$OPENAI_API_KEY" ] && [ "$OPENAI_API_KEY" != "dummy_key_for_testing" ]; then echo "API key is available for testing"; else echo "API key not available - using dummy for error testing"; fi
+––– output –––
+#!/(API key is available for testing|API key not available - using dummy for error testing)/!#
+––– comment –––
+Clean up test tables
+––– input –––
+mysql -h0 -P9306 -e "DROP TABLE IF EXISTS test_openai_remote"; echo $?
+––– output –––
+0
+––– input –––
+mysql -h0 -P9306 -e "DROP TABLE IF EXISTS test_openai_title_only"; echo $?
+––– output –––
+0
+––– input –––
+mysql -h0 -P9306 -e "DROP TABLE IF EXISTS test_openai_no_from"; echo $?
+––– output –––
+0

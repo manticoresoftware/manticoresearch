@@ -2608,7 +2608,7 @@ table products
 
 <!-- end -->
 
-For information about using float vectors in searches, see [KNN search](../Searching/KNN.md).
+For information about configuring and using float vectors in searches, see [KNN search](../Searching/KNN.md).
 
 ## Multi-value integer (MVA)
 

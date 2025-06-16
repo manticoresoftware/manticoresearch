@@ -1330,6 +1330,11 @@ named_const:
 			$$ = $1;
 			$$.SetValueInt ( $3.GetValueInt() );
 		}
+	| identcol '=' const_float
+		{
+			$$ = $1;
+			$$.SetValueFloat ( $3.GetValueFloat() );
+		}
 	;
 
 opt_hint_clause:

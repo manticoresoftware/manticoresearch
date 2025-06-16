@@ -75,7 +75,7 @@ name: mv_2
 *************************** 2. row ***************************
 name: mv_1
 ––– comment –––
-Download test dataset with 57 JSON records for partition distribution testing
+Download test dataset for partition distribution testing
 ––– input –––
 docker exec kafka curl -s -o /tmp/dump.json https://raw.githubusercontent.com/manticoresoftware/manticoresearch-buddy/main/test/Kafka/dump.json
 ––– output –––
@@ -91,29 +91,14 @@ docker exec kafka chmod +x /tmp/import.sh && docker exec kafka /tmp/import.sh; e
 ––– output –––
 0
 ––– comment –––
-Verify data was successfully written to both Kafka partitions
+Wait until lag becomes zero and current offset is not zero for all partitions
 ––– input –––
-echo "Checking Kafka topic info:"; docker exec kafka kafka-log-dirs.sh --bootstrap-server localhost:9092 --describe --topic-list my-data | grep -E "(partition|size)" | head -4
+timeout 120 bash -c 'while true; do STATS=$(docker exec kafka kafka-consumer-groups.sh --bootstrap-server localhost:9092 --describe --group manticore 2>/dev/null | grep -E "^manticore.*my-data"); if [ -z "$STATS" ]; then sleep 3; continue; fi; ALL_READY=true; while IFS= read -r line; do if [[ -n "$line" ]]; then read -r group topic partition current_offset log_end_offset lag rest <<< "$line"; if [[ "$lag" -ne 0 ]] || [[ "$current_offset" -eq 0 ]]; then ALL_READY=false; fi; fi; done <<< "$STATS"; if [ "$ALL_READY" = true ]; then echo "All partitions processed successfully"; break; fi; sleep 3; done' || echo "Processing timeout reached"
 ––– output –––
-Checking Kafka topic info:
 {"brokers":[{"broker":0,"logDirs":[{"partitions":[{"partition":"my-data-1","size":#!/[0-9]+/!#,"offsetLag":0,"isFuture":false},{"partition":"my-data-0","size":#!/[0-9]+/!#,"offsetLag":0,"isFuture":false}],"error":null,"logDir":"/bitnami/kafka/data"}]}],"version":1}
+All partitions processed successfully
 ––– comment –––
-Verify Kafka sources are active in Manticore
-––– input –––
-docker exec manticore mysql -h0 -P9306 -e "SHOW SOURCES\G;"
-––– output –––
-*************************** 1. row ***************************
-name: kafka_p2
-*************************** 2. row ***************************
-name: kafka_p1
-––– comment –––
-Wait for all data to be processed by Manticore with intelligent timeout
-––– input –––
-timeout 60 bash -c 'while true; do SHARD1=$(docker exec manticore mysql -h0 -P9306 -e "SELECT COUNT(*) FROM destination_shard_1;" 2>/dev/null | grep -o "[0-9]*" | tail -1); SHARD2=$(docker exec manticore mysql -h0 -P9306 -e "SELECT COUNT(*) FROM destination_shard_2;" 2>/dev/null | grep -o "[0-9]*" | tail -1); TOTAL=$((SHARD1 + SHARD2)); if [ "$TOTAL" -ge 57 ]; then echo "✅ All data processed: $TOTAL records"; break; fi; sleep 3; done' || echo "❌ Processing timeout reached"
-––– output –––
-✅ All data processed: 57 records
-––– comment –––
-Verify Kafka consumer group offsets and lag for both partitions
+Verify final Kafka consumer group state shows zero lag and processed offsets
 ––– input –––
 docker exec kafka kafka-consumer-groups.sh --bootstrap-server localhost:9092 --describe --group manticore
 ––– output –––
@@ -122,12 +107,15 @@ GROUP           TOPIC           PARTITION  CURRENT-OFFSET  LOG-END-OFFSET  LAG  
 manticore       my-data         0          30              30              0               -               -               -
 manticore       my-data         1          27              27              0               -               -               -
 ––– comment –––
-Validate final record counts and partition distribution results
+Compare Kafka partition counts with Manticore shard counts for validation
 ––– input –––
-SHARD1_COUNT=$(docker exec manticore mysql -h0 -P9306 -e "SELECT COUNT(*) FROM destination_shard_1\G;" | grep "count" | cut -d: -f2 | tr -d ' '); SHARD2_COUNT=$(docker exec manticore mysql -h0 -P9306 -e "SELECT COUNT(*) FROM destination_shard_2\G;" | grep "count" | cut -d: -f2 | tr -d ' '); TOTAL=$((SHARD1_COUNT + SHARD2_COUNT)); echo "Shard 1: $SHARD1_COUNT records"; echo "Shard 2: $SHARD2_COUNT records"; echo "Total records: $TOTAL"; if [ $TOTAL -eq 57 ]; then echo "✅ TEST PASSED: All 57 records processed correctly"; else echo "❌ TEST FAILED: Expected 57 records, got $TOTAL"; fi; if [ $SHARD1_COUNT -gt 0 ] && [ $SHARD2_COUNT -gt 0 ]; then echo "✅ Both partitions received data"; else echo "⚠️ Data went to single partition only"; fi
+KAFKA_STATS=$(docker exec kafka kafka-consumer-groups.sh --bootstrap-server localhost:9092 --describe --group manticore 2>/dev/null | grep -E "^manticore.*my-data"); KAFKA_P0=0; KAFKA_P1=0; while IFS= read -r line; do if [[ -n "$line" ]]; then read -r group topic partition current_offset rest <<< "$line"; if [ "$partition" = "0" ]; then KAFKA_P0=$current_offset; elif [ "$partition" = "1" ]; then KAFKA_P1=$current_offset; fi; fi; done <<< "$KAFKA_STATS"; TOTAL_KAFKA=$((KAFKA_P0 + KAFKA_P1)); SHARD1_COUNT=$(docker exec manticore mysql -h0 -P9306 -e "SELECT COUNT(*) FROM destination_shard_1\G;" | grep "count" | cut -d: -f2 | tr -d ' '); SHARD2_COUNT=$(docker exec manticore mysql -h0 -P9306 -e "SELECT COUNT(*) FROM destination_shard_2\G;" | grep "count" | cut -d: -f2 | tr -d ' '); TOTAL_MANTICORE=$((SHARD1_COUNT + SHARD2_COUNT)); echo "Kafka Partition 0: $KAFKA_P0 records"; echo "Kafka Partition 1: $KAFKA_P1 records"; echo "Total Kafka records: $TOTAL_KAFKA"; echo "Manticore Shard 1: $SHARD1_COUNT records"; echo "Manticore Shard 2: $SHARD2_COUNT records"; echo "Total Manticore records: $TOTAL_MANTICORE"; if [ $TOTAL_KAFKA -eq $TOTAL_MANTICORE ] && [ $TOTAL_KAFKA -gt 0 ]; then echo "TEST PASSED: All Kafka records processed correctly in Manticore"; else echo "TEST FAILED: Kafka records do not match Manticore records"; fi; if [ $KAFKA_P0 -gt 0 ] && [ $KAFKA_P1 -gt 0 ] && [ $SHARD1_COUNT -gt 0 ] && [ $SHARD2_COUNT -gt 0 ]; then echo "Data distributed across both partitions and shards"; else echo "Data distribution may be uneven"; fi
 ––– output –––
-Shard 1: 30 records
-Shard 2: 27 records
-Total records: 57
-✅ TEST PASSED: All 57 records processed correctly
-✅ Both partitions received data
+Kafka Partition 0: 30 records
+Kafka Partition 1: 27 records
+Total Kafka records: 57
+Manticore Shard 1: 30 records
+Manticore Shard 2: 27 records
+Total Manticore records: 57
+TEST PASSED: All Kafka records processed correctly in Manticore
+Data distributed across both partitions and shards

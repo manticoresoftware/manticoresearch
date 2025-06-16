@@ -27,10 +27,9 @@ docker exec manticore bash -c "curl -s https://hub.docker.com/v2/repositories/li
 10.5
 10.6
 10.11
-11.2
 11.4
-11.6
 11.7
+11.8
 ––– input –––
 docker exec manticore bash -c "curl -s https://hub.docker.com/v2/repositories/library/mysql/tags/?page_size=100 | jq -r '.results[].name' | grep -E '^[0-9]{1}\.[0-9]+$' | sort -V"
 ––– output –––

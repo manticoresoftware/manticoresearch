@@ -387,166 +387,166 @@ curl -sX POST http://localhost:9308/search -d '{"index":"name","query":{"bool":{
   "took": %{NUMBER},
   "timed_out": false,
   "hits": {
-    "total": 2200,
+    "total": 1813,
     "total_relation": "eq",
     "hits": [
       {
-        "_id": 1721,
-        "_score": 1531,
+        "_id": 800363,
+        "_score": 1547,
         "_source": {
-          "username": "JOE TONG",
+          "username": "TOBY BEAULIEU",
           "s": "a"
         }
       },
       {
-        "_id": 5292,
-        "_score": 1531,
+        "_id": 807095,
+        "_score": 1547,
         "_source": {
-          "username": "TONA VALENTIN",
+          "username": "TOBY HOFER",
           "s": "a"
         }
       },
       {
-        "_id": 6962,
-        "_score": 1531,
+        "_id": 807096,
+        "_score": 1547,
         "_source": {
-          "username": "TONA DAVIDSON",
+          "username": "TOBY DEMPSEY",
           "s": "a"
         }
       },
       {
-        "_id": 8174,
-        "_score": 1531,
+        "_id": 808820,
+        "_score": 1547,
         "_source": {
-          "username": "TONA CARRILLO",
+          "username": "TOBY RAYMOND",
           "s": "a"
         }
       },
       {
-        "_id": 8700,
-        "_score": 1531,
+        "_id": 808863,
+        "_score": 1547,
         "_source": {
-          "username": "TONA FLETCHER",
+          "username": "TOBY BATEMAN",
           "s": "a"
         }
       },
       {
-        "_id": 11975,
-        "_score": 1531,
+        "_id": 813761,
+        "_score": 1547,
         "_source": {
-          "username": "CAMILLA TONG",
+          "username": "TOBY VANWINKLE",
           "s": "a"
         }
       },
       {
-        "_id": 15241,
-        "_score": 1531,
+        "_id": 818229,
+        "_score": 1547,
         "_source": {
-          "username": "TONA FENG",
+          "username": "TOBY BROCK",
           "s": "a"
         }
       },
       {
-        "_id": 15914,
-        "_score": 1531,
+        "_id": 825472,
+        "_score": 1547,
         "_source": {
-          "username": "TONA POINDEXTER",
+          "username": "TOBY LINDQUIST",
           "s": "a"
         }
       },
       {
-        "_id": 16361,
-        "_score": 1531,
+        "_id": 826251,
+        "_score": 1547,
         "_source": {
-          "username": "TONA HIGGS",
+          "username": "TOBY KAUFFMAN",
           "s": "a"
         }
       },
       {
-        "_id": 17120,
-        "_score": 1531,
+        "_id": 827886,
+        "_score": 1547,
         "_source": {
-          "username": "TONA ARCHER",
+          "username": "TOBY PITMAN",
           "s": "a"
         }
       },
       {
-        "_id": 18205,
-        "_score": 1531,
+        "_id": 832558,
+        "_score": 1547,
         "_source": {
-          "username": "KIMBRA TONG",
+          "username": "TOBY KELLEY",
           "s": "a"
         }
       },
       {
-        "_id": 19344,
-        "_score": 1531,
+        "_id": 833689,
+        "_score": 1547,
         "_source": {
-          "username": "JOSEF TONG",
+          "username": "TOBY HANDY",
           "s": "a"
         }
       },
       {
-        "_id": 23070,
-        "_score": 1531,
+        "_id": 834136,
+        "_score": 1547,
         "_source": {
-          "username": "TONA YUN",
+          "username": "TOBY HOPPE",
           "s": "a"
         }
       },
       {
-        "_id": 25266,
-        "_score": 1531,
+        "_id": 836413,
+        "_score": 1547,
         "_source": {
-          "username": "TONA OVIEDO",
+          "username": "TOBY STOVALL",
           "s": "a"
         }
       },
       {
-        "_id": 27082,
-        "_score": 1531,
+        "_id": 839075,
+        "_score": 1547,
         "_source": {
-          "username": "ROZELLA TONG",
+          "username": "TOBY JEROME",
           "s": "a"
         }
       },
       {
-        "_id": 31839,
-        "_score": 1531,
+        "_id": 839512,
+        "_score": 1547,
         "_source": {
-          "username": "MELANI TONG",
+          "username": "TOBY LEONARD",
           "s": "a"
         }
       },
       {
-        "_id": 36735,
-        "_score": 1531,
+        "_id": 841923,
+        "_score": 1547,
         "_source": {
-          "username": "KANESHA TONG",
+          "username": "TOBY PARNELL",
           "s": "a"
         }
       },
       {
-        "_id": 39741,
-        "_score": 1531,
+        "_id": 842450,
+        "_score": 1547,
         "_source": {
-          "username": "TONA GRAFF",
+          "username": "TOBY LOWE",
           "s": "a"
         }
       },
       {
-        "_id": 41701,
-        "_score": 1531,
+        "_id": 843217,
+        "_score": 1547,
         "_source": {
-          "username": "KARISA TONG",
+          "username": "TOBY ROBISON",
           "s": "a"
         }
       },
       {
-        "_id": 53822,
-        "_score": 1531,
+        "_id": 846291,
+        "_score": 1547,
         "_source": {
-          "username": "ROSALINDA TONG",
+          "username": "TOBY BITTNER",
           "s": "a"
         }
       }
@@ -733,17 +733,9 @@ curl -sX POST http://localhost:9308/search -d '{"index":"name","query":{"bool":{
   "took": %{NUMBER},
   "timed_out": false,
   "hits": {
-    "total": 1567,
+    "total": 773,
     "total_relation": "eq",
     "hits": [
-      {
-        "_id": 999921,
-        "_score": 1,
-        "_source": {
-          "username": "VICKI SOUTHARD",
-          "s": "a"
-        }
-      },
       {
         "_id": 998829,
         "_score": 1,
@@ -769,22 +761,6 @@ curl -sX POST http://localhost:9308/search -d '{"index":"name","query":{"bool":{
         }
       },
       {
-        "_id": 995690,
-        "_score": 1,
-        "_source": {
-          "username": "ROBERTO SOUTHARD",
-          "s": "a"
-        }
-      },
-      {
-        "_id": 995663,
-        "_score": 1,
-        "_source": {
-          "username": "CHUNG SOUTH",
-          "s": "a"
-        }
-      },
-      {
         "_id": 995119,
         "_score": 1,
         "_source": {
@@ -797,14 +773,6 @@ curl -sX POST http://localhost:9308/search -d '{"index":"name","query":{"bool":{
         "_score": 1,
         "_source": {
           "username": "EDYTH ROSADO",
-          "s": "a"
-        }
-      },
-      {
-        "_id": 993278,
-        "_score": 1,
-        "_source": {
-          "username": "LAKITA SOUTHARD",
           "s": "a"
         }
       },
@@ -825,26 +793,10 @@ curl -sX POST http://localhost:9308/search -d '{"index":"name","query":{"bool":{
         }
       },
       {
-        "_id": 988936,
-        "_score": 1,
-        "_source": {
-          "username": "LARISA SOUTHERLAND",
-          "s": "a"
-        }
-      },
-      {
         "_id": 988823,
         "_score": 1,
         "_source": {
           "username": "SETH WHITTAKER",
-          "s": "a"
-        }
-      },
-      {
-        "_id": 988759,
-        "_score": 1,
-        "_source": {
-          "username": "LIEN SOUTHARD",
           "s": "a"
         }
       },
@@ -865,34 +817,82 @@ curl -sX POST http://localhost:9308/search -d '{"index":"name","query":{"bool":{
         }
       },
       {
-        "_id": 987165,
+        "_id": 986580,
         "_score": 1,
         "_source": {
-          "username": "TULA SOUTHARD",
+          "username": "DARNELL SMYTH",
           "s": "a"
         }
       },
       {
-        "_id": 987136,
+        "_id": 986231,
         "_score": 1,
         "_source": {
-          "username": "LUANN SOUTHARD",
+          "username": "EDYTH BLODGETT",
           "s": "a"
         }
       },
       {
-        "_id": 986847,
+        "_id": 985595,
         "_score": 1,
         "_source": {
-          "username": "JORDAN SOUTHERN",
+          "username": "SETH BACON",
           "s": "a"
         }
       },
       {
-        "_id": 986711,
+        "_id": 982423,
         "_score": 1,
         "_source": {
-          "username": "MARLIN SOUTHERN",
+          "username": "SETH CHATMAN",
+          "s": "a"
+        }
+      },
+      {
+        "_id": 981115,
+        "_score": 1,
+        "_source": {
+          "username": "KATIE SMYTH",
+          "s": "a"
+        }
+      },
+      {
+        "_id": 979541,
+        "_score": 1,
+        "_source": {
+          "username": "EDYTHE CLAYTON",
+          "s": "a"
+        }
+      },
+      {
+        "_id": 979093,
+        "_score": 1,
+        "_source": {
+          "username": "SETH BURROUGHS",
+          "s": "a"
+        }
+      },
+      {
+        "_id": 978812,
+        "_score": 1,
+        "_source": {
+          "username": "EDYTH GULLEY",
+          "s": "a"
+        }
+      },
+      {
+        "_id": 975994,
+        "_score": 1,
+        "_source": {
+          "username": "SETH PARHAM",
+          "s": "a"
+        }
+      },
+      {
+        "_id": 975841,
+        "_score": 1,
+        "_source": {
+          "username": "ALEIDA SMYTH",
           "s": "a"
         }
       }
@@ -1184,98 +1184,6 @@ curl -sX POST http://localhost:9308/autocomplete -d '{"table":"name","query":"jo
 ––– input –––
 curl -sX POST http://localhost:9308/autocomplete -d '{"table":"name","query":"gr","options":{"fuzziness":1,"layouts":"ru","append":1,"prepend":1}}' | jq -M
 ––– output –––
-[
-  {
-    "total": 10,
-    "error": "",
-    "warning": "",
-    "columns": [
-      {
-        "query": {
-          "type": "string"
-        }
-      }
-    ],
-    "data": [
-      {
-        "query": "gregory"
-      },
-      {
-        "query": "grover"
-      },
-      {
-        "query": "grady"
-      },
-      {
-        "query": "grant"
-      },
-      {
-        "query": "gregg"
-      },
-      {
-        "query": "grace"
-      },
-      {
-        "query": "gracia"
-      },
-      {
-        "query": "graham"
-      },
-      {
-        "query": "grey"
-      },
-      {
-        "query": "grogan"
-      }
-    ]
-  }
-]
-––– input –––
-curl -sX POST http://localhost:9308/autocomplete -d '{"table":"name","query":"jo","options":{"fuzziness":1}}' | jq -M
-––– output –––
-[
-  {
-    "total": 10,
-    "error": "",
-    "warning": "",
-    "columns": [
-      {
-        "query": {
-          "type": "string"
-        }
-      }
-    ],
-    "data": [
-      {
-        "query": "jordan"
-      },
-      {
-        "query": "joseph"
-      },
-      {
-        "query": "jose"
-      },
-      {
-        "query": "joe"
-      },
-      {
-        "query": "john"
-      },
-      {
-        "query": "joy"
-      },
-      {
-        "query": "joyce"
-      },
-      {
-        "query": "joey"
-      },
-      {
-        "query": "jon"
-      },
-      {
-        "query": "major"
-      }
-    ]
-  }
-]
+{
+  "error": "At least two languages are required in layouts"
+}

@@ -32,7 +32,7 @@ mysql -h0 -P9306 -e "SELECT * FROM name WHERE MATCH('jane') OPTION fuzzy=@;"
 ––– output –––
 ERROR 1064 (42000) at line 1: Invalid value for option 'fuzzy'
 ––– input –––
-mysql -h0 -P9306 -e "CALL AUTOCOMPLETE('j', 'name', 'us' AS layouts);"
+mysql -h0 -P9306 -e "CALL AUTOCOMPLETE('j', 'name', 'us,ru' AS layouts);"
 ––– output –––
 ERROR 1064 (42000) at line 1: Autocomplete requires min_infix_len to be set
 ––– input –––
@@ -42,23 +42,23 @@ ERROR 1064 (42000) at line 1: Failed to parse query
 ––– input –––
 mysql -h0 -P9306 -e "CALL AUTOCOMPLETE('', 'name', 'us' AS layouts);"
 ––– output –––
-ERROR 1064 (42000) at line 1: Autocomplete requires min_infix_len to be set
+ERROR 1064 (42000) at line 1: At least two languages are required in layouts
 ––– input –––
 mysql -h0 -P9306 -e "CALL AUTOCOMPLETE('@#$', 'name', 'us' AS layouts);"
 ––– output –––
-ERROR 1064 (42000) at line 1: Autocomplete requires min_infix_len to be set
+ERROR 1064 (42000) at line 1: At least two languages are required in layouts
 ––– input –––
-mysql -h0 -P9306 -e "CALL AUTOCOMPLETE('thisisaverylonginputstring', 'name', 'us' AS layouts);"
+mysql -h0 -P9306 -e "CALL AUTOCOMPLETE('thisisaverylonginputstring', 'name', 'us,ru' AS layouts);"
 ––– output –––
 ERROR 1064 (42000) at line 1: Autocomplete requires min_infix_len to be set
 ––– input –––
-mysql -h0 -P9306 -e "CALL AUTOCOMPLETE('jo', 'non_existing_table', 'us' AS layouts);"
+mysql -h0 -P9306 -e "CALL AUTOCOMPLETE('jo', 'non_existing_table', 'us,ru' AS layouts);"
 ––– output –––
 ERROR 1064 (42000) at line 1: no such table 'non_existing_table'
 ––– input –––
 mysql -h0 -P9306 -e "CALL AUTOCOMPLETE('jo', 'name', 123 AS layouts);"
 ––– output –––
-ERROR 1064 (42000) at line 1: Autocomplete requires min_infix_len to be set
+ERROR 1064 (42000) at line 1: At least two languages are required in layouts
 ––– input –––
 mysql -h0 -P9306 -e "SELECT * FROM test WHERE MATCH('hello') OPTION fuzzy=1 layouts='';"
 ––– output –––

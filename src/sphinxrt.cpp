@@ -11176,7 +11176,7 @@ bool RtIndex_c::AlterRebuild ( AlterOp_fn && fnOp, CSphString & sError, const ch
 {
 	// strength single-fiber access (don't rely upon to upstream w-lock)
 	ScopedScheduler_c tSerialFiber ( m_tWorkers.SerialChunkAccess() );
-	TRACE_SCHED ( "rt", sTrace );
+	TRACE_SCHED ( "rt", perfetto::StaticString{sTrace} );
 
 	auto pChunks = m_tRtChunks.DiskChunks();
 	for ( auto & tChunk : *pChunks )

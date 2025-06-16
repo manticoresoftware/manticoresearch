@@ -1,5 +1,50 @@
 # Changelog
 
+## Version 10.1.0
+**Released**: June 9th 2025
+
+This version represents an update with new features, one breaking change and numerous stability improvements and bug fixes. The changes focus on enhancing monitoring capabilities, improving search functionality, and fixing various critical issues that affected system stability and performance.
+
+**Starting with version 10.1.0, CentOS 7 is no longer supported. Users are encouraged to upgrade to a supported operating system.**
+
+### Breaking Changes
+* ⚠️ [v10.0.0](https://github.com/manticoresoftware/manticoresearch/releases/tag/10.0.0) [ Issue #540](https://github.com/manticoresoftware/manticoresearch-buddy/issues/540) BREAKING CHANGE: set `layouts=''` as the default for [fuzzy search](Searching/Spell_correction.md#Fuzzy-Search)
+
+### New Features and Improvements
+* 🆕 [v10.1.0](https://github.com/manticoresoftware/manticoresearch/releases/tag/10.1.0) [ Issue #537](https://github.com/manticoresoftware/manticoresearch-buddy/issues/537) Added built-in [Prometheus exporter](Node_info_and_management/Node_status.md#Prometheus-Exporter)
+* 🆕 [v9.8.0](https://github.com/manticoresoftware/manticoresearch/releases/tag/9.8.0) [ Issue #3409](https://github.com/manticoresoftware/manticoresearch/issues/3409) Added [ALTER TABLE tbl REBUILD KNN](Updating_table_schema_and_settings.md#Rebuilding-a-KNN-index)
+* 🆕 [v9.7.0](https://github.com/manticoresoftware/manticoresearch/releases/tag/9.7.0) [ Issue #1778](https://github.com/manticoresoftware/manticoresearch/issues/1778) Added automatic embeddings generation (we're not officially announcing it yet, as the code is in the main branch but still needs more testing)
+* 🆕 [v9.6.0](https://github.com/manticoresoftware/manticoresearch/releases/tag/9.6.0)  Bumped KNN API version for auto-embeddings support
+* 🆕 [v9.5.0](https://github.com/manticoresoftware/manticoresearch/releases/tag/9.5.0) [ Issue #1894](https://github.com/manticoresoftware/manticoresearch/issues/1894) Improved cluster recovery: save `seqno` periodically for faster node restart after crash
+* 🆕 [v9.4.0](https://github.com/manticoresoftware/manticoresearch/releases/tag/9.4.0) [ Issue #2400](https://github.com/manticoresoftware/manticoresearch/issues/2400) Added support for latest [Logstash](Integration/Logstash.md#Integration-with-Logstash) and Beats
+
+### Bug Fixes
+* 🪲 [v10.0.1](https://github.com/manticoresoftware/manticoresearch/releases/tag/10.0.1)  Fixed wordform handling: user-defined forms now override auto-generated ones; added test cases to test 22
+* 🪲 [v9.8.2](https://github.com/manticoresoftware/manticoresearch/releases/tag/9.8.2)  Fix: updated deps.txt again to include packaging fixes in MCL related to the embeddings library
+* 🪲 [v9.8.1](https://github.com/manticoresoftware/manticoresearch/releases/tag/9.8.1)  Fix: updated deps.txt with packaging fixes for MCL and the embeddings library
+* 🪲 [v9.7.3](https://github.com/manticoresoftware/manticoresearch/releases/tag/9.7.3) [ Issue #3306](https://github.com/manticoresoftware/manticoresearch/issues/3306) Fixed crash with signal 11 during indexing
+* 🪲 [v9.7.2](https://github.com/manticoresoftware/manticoresearch/releases/tag/9.7.2) [ Issue #3109](https://github.com/manticoresoftware/manticoresearch/issues/3109) Fixed issue where non-existent `@@variables` always returned 0
+* 🪲 [v9.7.1](https://github.com/manticoresoftware/manticoresearch/releases/tag/9.7.1) [ Issue #3377](https://github.com/manticoresoftware/manticoresearch/issues/3377) Fixed crash related to [remove_repeats()](Functions/Searching_and_ranking_functions.md#REMOVE_REPEATS%28%29)
+* 🪲 [v9.6.3](https://github.com/manticoresoftware/manticoresearch/releases/tag/9.6.3) [ PR #3411](https://github.com/manticoresoftware/manticoresearch/pull/3411) Fix: use dynamic versions detection for telemetry metrics
+* 🪲 [v9.6.2](https://github.com/manticoresoftware/manticoresearch/releases/tag/9.6.2)  Fix: small fix in [SHOW VERSION](Node_info_and_management/SHOW_VERSION.md#SHOW-VERSION) output
+* 🪲 [v9.6.1](https://github.com/manticoresoftware/manticoresearch/releases/tag/9.6.1)  Fix: crash when creating a table with a KNN attribute but no model
+* 🪲 [v9.5.16](https://github.com/manticoresoftware/manticoresearch/releases/tag/9.5.16) [ Issue #3342](https://github.com/manticoresoftware/manticoresearch/issues/3342) Fixed issue where `SELECT ... FUZZY=0` didn't always disable fuzzy search
+* 🪲 [v9.5.15](https://github.com/manticoresoftware/manticoresearch/releases/tag/9.5.15) [ PR #3397](https://github.com/manticoresoftware/manticoresearch/pull/3397) Added support for [MCL](https://github.com/manticoresoftware/columnar) 4.2.2; fixes errors with older storage formats
+* 🪲 [v9.5.14](https://github.com/manticoresoftware/manticoresearch/releases/tag/9.5.14) [ Issue #3392](https://github.com/manticoresoftware/manticoresearch/issues/3392) Fixed incorrect handling of strings in HTTP JSON replies
+* 🪲 [v9.5.13](https://github.com/manticoresoftware/manticoresearch/releases/tag/9.5.13) [ Issue #3356](https://github.com/manticoresoftware/manticoresearch/issues/3356) Fixed crash in tricky full-text query case (common-sub-term)
+* 🪲 [v9.5.12](https://github.com/manticoresoftware/manticoresearch/releases/tag/9.5.12)  Fixed typo in disk chunk auto flush error message
+* 🪲 [v9.5.11](https://github.com/manticoresoftware/manticoresearch/releases/tag/9.5.11) [ Issue #3195](https://github.com/manticoresoftware/manticoresearch/issues/3195) Improved [auto disk chunk flush](Securing_and_compacting_a_table/Flushing_RAM_chunk_to_disk.md#Flushing-RAM-chunk-to-disk): skip saving if optimization is running
+* 🪲 [v9.5.10](https://github.com/manticoresoftware/manticoresearch/releases/tag/9.5.10) [ Issue #3313](https://github.com/manticoresoftware/manticoresearch/issues/3313) Fixed duplicate ID check for all disk chunks in RT table using [indextool](Miscellaneous_tools.md#indextool)
+* 🪲 [v9.5.9](https://github.com/manticoresoftware/manticoresearch/releases/tag/9.5.9) [ Issue #3132](https://github.com/manticoresoftware/manticoresearch/issues/3132) Added support for `_random` sorting in JSON API
+* 🪲 [v9.5.8](https://github.com/manticoresoftware/manticoresearch/releases/tag/9.5.8) [ Issue #3382](https://github.com/manticoresoftware/manticoresearch/issues/3382) Fixed issue: couldn't use uint64 document ID via JSON HTTP API
+* 🪲 [v9.5.7](https://github.com/manticoresoftware/manticoresearch/releases/tag/9.5.7) [ Issue #3385](https://github.com/manticoresoftware/manticoresearch/issues/3385) Fixed incorrect results when filtering by `id != value`
+* 🪲 [v9.5.6](https://github.com/manticoresoftware/manticoresearch/releases/tag/9.5.6) [ PR #538](https://github.com/manticoresoftware/manticoresearch-buddy/pull/538) Fixed a critical bug with fuzzy matching in some cases
+* 🪲 [v9.5.5](https://github.com/manticoresoftware/manticoresearch/releases/tag/9.5.5) [ Issue #3199](https://github.com/manticoresoftware/manticoresearch/issues/3199) Fixed space decoding in Buddy HTTP query parameters (e.g., `%20` and `+`)
+* 🪲 [v9.5.4](https://github.com/manticoresoftware/manticoresearch/releases/tag/9.5.4) [ Issue #3133](https://github.com/manticoresoftware/manticoresearch/issues/3133) Fixed incorrect sorting on `json.field` in facet search
+* 🪲 [v9.5.3](https://github.com/manticoresoftware/manticoresearch/releases/tag/9.5.3) [ Issue #3091](https://github.com/manticoresoftware/manticoresearch/issues/3091) Fixed inconsistent search results for delimiters in SQL vs JSON API
+* 🪲 [v9.5.2](https://github.com/manticoresoftware/manticoresearch/releases/tag/9.5.2) [ Issue #2819](https://github.com/manticoresoftware/manticoresearch/issues/2819) Improved performance: replaced `DELETE FROM` with `TRUNCATE` for distributed tables
+* 🪲 [v9.5.1](https://github.com/manticoresoftware/manticoresearch/releases/tag/9.5.1) [ Issue #3080](https://github.com/manticoresoftware/manticoresearch/issues/3080) Fixed crash when filtering aliased `geodist()` with JSON attributes
+
 ## Version 9.3.2
 Released: May 2nd 2025
 

@@ -58,7 +58,7 @@ Port 1306: Node is synced.
 Checking status for port 2306:
 Port 2306: Node is synced.
 ––– input –––
-mysql -h0 -P1306 -e "CREATE TABLE replication:test2 (id BIGINT, name TEXT) SHARDS='3' RF='2';"; echo $?
+mysql -h0 -P1306 -e "CREATE TABLE replication:test2 (id BIGINT, value integer) SHARDS='3' RF='2';"; echo $?
 ––– output –––
 0
 ––– input –––
@@ -88,22 +88,22 @@ system.test2_s0
 system.test2_s1
 system.test2_s2
 ––– input –––
-curl -s -X POST http://localhost:1308/insert -d '{"cluster": "replication", "table": "test2", "id": 1, "doc": {"name": "iPhone 13 Pro"}}' | jq '.result'
+curl -s -X POST http://localhost:1308/insert -d '{"cluster": "replication", "table": "test2", "id": 1, "doc": {"value":1}}' | jq '.result'
 ––– output –––
 "created"
 ––– input –––
-curl -s -X POST http://localhost:1308/insert -d '{"cluster": "replication", "table": "test2", "id": 2, "doc": {"name": "iPhone 14 Pro"}}' | jq '.result'
+curl -s -X POST http://localhost:1308/insert -d '{"cluster": "replication", "table": "test2", "id": 2, "doc": {"value":2}}' | jq '.result'
 ––– output –––
 "created"
 ––– input –––
 mysql -h0 -P1306 -e "SELECT * FROM test2 ORDER BY id ASC;"
 ––– output –––
-+------+---------------+
-| id   | name          |
-+------+---------------+
-|    1 | iPhone 13 Pro |
-|    2 | iPhone 14 Pro |
-+------+---------------+
++------+-------+
+| id   | value |
++------+-------+
+|    1 |     1 |
+|    2 |     2 |
++------+-------+
 ––– input –––
 mysql -h0 -P1306 -e "SELECT count(*) FROM test2;"
 ––– output –––
@@ -115,12 +115,12 @@ mysql -h0 -P1306 -e "SELECT count(*) FROM test2;"
 ––– input –––
 mysql -h0 -P2306 -e 'DESC system.test2_s2 OPTION force=1'
 ––– output –––
-+-------+--------+----------------+
-| Field | Type   | Properties     |
-+-------+--------+----------------+
-| id    | bigint |                |
-| name  | text   | indexed stored |
-+-------+--------+----------------+
++-------+--------+------------+
+| Field | Type   | Properties |
++-------+--------+------------+
+| id    | bigint |            |
+| value | uint   |            |
++-------+--------+------------+
 ––– input –––
 mysql -h0 -P2306 -e "SHOW STATUS LIKE 'cluster_e3d112439806feecd6da4d4cb4544210_status'\G"
 ––– output –––
@@ -131,7 +131,7 @@ Counter: cluster_e3d112439806feecd6da4d4cb4544210_status
 cp /var/log/manticore-2/query.log /tmp/query.log
 ––– output –––
 ––– input –––
-curl -s -X POST http://localhost:1308/update -d '{"cluster": "replication", "table": "test2", "id": 2, "doc": {"name": "iPhone 15 Pro"}}'
+curl -s -X POST http://localhost:1308/update -d '{"cluster": "replication", "table": "test2", "id": 2, "doc": {"value": 5}}'
 ––– output –––
 ––– comment –––
 Get lines that added to query log after snapshot on the crash
@@ -153,9 +153,9 @@ cat /var/log/manticore-2/query.log
 ––– input –––
 mysql -h0 -P2306 -e 'DESC system.test2_s2 OPTION force=1'
 ––– output –––
-+-------+--------+----------------+
-| Field | Type   | Properties     |
-+-------+--------+----------------+
-| id    | bigint |                |
-| name  | text   | indexed stored |
-+-------+--------+----------------+
++-------+--------+------------+
+| Field | Type   | Properties |
++-------+--------+------------+
+| id    | bigint |            |
+| value | uint   |            |
++-------+--------+------------+

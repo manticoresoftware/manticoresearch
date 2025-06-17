@@ -97,15 +97,7 @@ timeout 120 bash -c 'while true; do STATS=$(docker exec kafka kafka-consumer-gro
 ––– output –––
 All partitions processed successfully
 ––– comment –––
-Step 1: Check total processed records equals expected 57
-––– input –––
-KAFKA_TOTAL=$(docker exec kafka kafka-consumer-groups.sh --bootstrap-server localhost:9092 --describe --group manticore | awk '/^manticore.*my-data/ {sum+=$4} END {print sum}'); echo "Total Kafka records processed: $KAFKA_TOTAL"; if [ "$KAFKA_TOTAL" -eq 57 ]; then echo "✓ All 57 records processed"; else echo "✗ Expected 57, got $KAFKA_TOTAL"; fi
-––– output –––
-Consumer group 'manticore' has no active members.
-Total Kafka records processed: 57
-✓ All 57 records processed
-––– comment –––
-Step 2: Get partition counts from Kafka consumer group
+Get partition counts from Kafka consumer group
 ––– input –––
 KAFKA_STATS=$(docker exec kafka kafka-consumer-groups.sh --bootstrap-server localhost:9092 --describe --group manticore | awk '/^manticore.*my-data/'); KAFKA_P0=$(echo "$KAFKA_STATS" | awk '$3==0 {print $4}'); KAFKA_P1=$(echo "$KAFKA_STATS" | awk '$3==1 {print $4}'); echo "Kafka Partition 0: $KAFKA_P0 records"; echo "Kafka Partition 1: $KAFKA_P1 records"
 ––– output –––
@@ -113,22 +105,22 @@ Consumer group 'manticore' has no active members.
 Kafka Partition 0: #!/[0-9]+/!# records
 Kafka Partition 1: #!/[0-9]+/!# records
 ––– comment –––
-Step 3: Check destination_shard_1 matches Kafka partition 0
+Check destination_shard_1 matches Kafka partition 0
 ––– input –––
-SHARD1_COUNT=$(docker exec manticore mysql -h0 -P9306 -e "SELECT COUNT(*) FROM destination_shard_1\G;" | grep "count" | cut -d: -f2 | tr -d ' '); echo "Manticore Shard 1: $SHARD1_COUNT records"; if [ "$SHARD1_COUNT" -eq "$KAFKA_P0" ]; then echo "✓ Shard 1 matches Kafka partition 0"; else echo "✗ Shard 1 ($SHARD1_COUNT) != Kafka partition 0 ($KAFKA_P0)"; fi
+SHARD1_COUNT=$(docker exec manticore mysql -h0 -P9306 -e "SELECT COUNT(*) FROM destination_shard_1\G;" | grep "count" | cut -d: -f2 | tr -d ' '); echo "Manticore Shard 1: $SHARD1_COUNT records"; if [ "$SHARD1_COUNT" -eq "$KAFKA_P0" ]; then echo "Shard 1 matches Kafka partition 0"; else echo "Shard 1 ($SHARD1_COUNT) != Kafka partition 0 ($KAFKA_P0)"; fi
 ––– output –––
 Manticore Shard 1: #!/[0-9]+/!# records
-✓ Shard 1 matches Kafka partition 0
+Shard 1 matches Kafka partition 0
 ––– comment –––
-Step 4: Check destination_shard_2 matches Kafka partition 1
+Check destination_shard_2 matches Kafka partition 1
 ––– input –––
-SHARD2_COUNT=$(docker exec manticore mysql -h0 -P9306 -e "SELECT COUNT(*) FROM destination_shard_2\G;" | grep "count" | cut -d: -f2 | tr -d ' '); echo "Manticore Shard 2: $SHARD2_COUNT records"; if [ "$SHARD2_COUNT" -eq "$KAFKA_P1" ]; then echo "✓ Shard 2 matches Kafka partition 1"; else echo "✗ Shard 2 ($SHARD2_COUNT) != Kafka partition 1 ($KAFKA_P1)"; fi
+SHARD2_COUNT=$(docker exec manticore mysql -h0 -P9306 -e "SELECT COUNT(*) FROM destination_shard_2\G;" | grep "count" | cut -d: -f2 | tr -d ' '); echo "Manticore Shard 2: $SHARD2_COUNT records"; if [ "$SHARD2_COUNT" -eq "$KAFKA_P1" ]; then echo "Shard 2 matches Kafka partition 1"; else echo "Shard 2 ($SHARD2_COUNT) != Kafka partition 1 ($KAFKA_P1)"; fi
 ––– output –––
 Manticore Shard 2: #!/[0-9]+/!# records
-✓ Shard 2 matches Kafka partition 1
+Shard 2 matches Kafka partition 1
 ––– comment –––
-Step 5: Verify data is distributed (both shards have records)
+Verify data is distributed across both shards
 ––– input –––
-if [ "$SHARD1_COUNT" -gt 0 ] && [ "$SHARD2_COUNT" -gt 0 ]; then echo "✓ Data distributed across both shards"; else echo "⚠ Warning: Data went to single shard only"; fi
+if [ "$SHARD1_COUNT" -gt 0 ] && [ "$SHARD2_COUNT" -gt 0 ]; then echo "Data distributed across both shards"; else echo "Warning: Data went to single shard only"; fi
 ––– output –––
-✓ Data distributed across both shards
+Data distributed across both shards

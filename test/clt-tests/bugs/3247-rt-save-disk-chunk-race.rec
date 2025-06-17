@@ -1,0 +1,62 @@
+
+–––– comment –––
+Test verifies that RT table locking functions wait for active disk chunk write completion and prevent changes after table lock
+––– input –––
+export INSTANCE=1
+––– output –––
+––– block: ../base/replication/start-searchd-precach –––
+––– input –––
+export INSTANCE=2
+––– output –––
+––– block: ../base/replication/start-searchd-precach –––
+––– input –––
+mysql -h0 -P1306 -e "CREATE TABLE t2 ( id bigint, f1 text, f2 text, idd bigint, tag bigint ) optimize_cutoff='4' rt_mem_limit='64M';"
+––– output –––
+––– input –––
+mysql -h0 -P1306 -e "create cluster test;"
+––– output –––
+––– input –––
+mysql -h0 -P1306 -e "alter cluster test add t2;"
+––– output –––
+––– input –––
+manticore-load --quiet --port=1306 --batch-size=1000 --threads=2 --total=1000000 --load="replace INTO test:t2(idd,tag,f1) VALUES(<increment>,<int/1/100>,'<text/10/100>')" --together --batch-size=1000 --threads=2 --total=1000000 --load="replace INTO test:t2(idd,tag,f1) VALUES(<increment>,<int/1/100>,'<text/10/100>')" --together --batch-size=1000 --threads=2 --total=1000000 --load="replace INTO test:t2(idd,tag,f1) VALUES(<increment>,<int/1/100>,'<text/10/100>')" --together --batch-size=1000 --threads=2 --total=1000000 --load="replace INTO test:t2(idd,tag,f1) VALUES(<increment>,<int/1/100>,'<text/10/100>')" > /dev/null 2>&1 &
+––– output –––
+––– input –––
+mysql -h0 -P2306 -e "join cluster test at '127.0.0.1:1312';"
+––– output –––
+––– input –––
+sleep 20
+––– output –––
+––– input –––
+mysql -h0 -P2306 -e "SHOW TABLES;"
+––– output –––
++-------+------+
+| Table | Type |
++-------+------+
+| t2    | rt   |
++-------+------+
+––– input –––
+mysql -h0 -P1306 -e "SHOW TABLE t2 STATUS\G" | grep -A1 -E "ram_bytes|disk_bytes"
+––– output –––
+Variable_name: ram_bytes
+        Value: %{NUMBER}
+--
+Variable_name: disk_bytes
+        Value: %{NUMBER}
+--
+Variable_name: ram_bytes_retired
+        Value: 0
+––– input –––
+mysql -h0 -P2306 -e "SHOW TABLE t2 STATUS\G" | grep -A1 -E "ram_bytes|disk_bytes"
+––– output –––
+Variable_name: ram_bytes
+        Value: %{NUMBER}
+--
+Variable_name: disk_bytes
+        Value: %{NUMBER}
+--
+Variable_name: ram_bytes_retired
+        Value: 0
+––– input –––
+pkill -f manticore-load
+––– output –––

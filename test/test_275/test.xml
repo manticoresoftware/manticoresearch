@@ -88,7 +88,10 @@ searchd
     select id, knn_dist() from t where knn ( bge_vector, 5, (0.286569,-0.031816,0.066684,0.032926, 0.286569,-0.031816,0.066684,0.032926) );
     
     drop table t;
-    
+
+	<!-- regression for a crash -->
+	create table t ( test_vector float_vector knn_type='hnsw' knn_dims='2' hnsw_similarity='l2' );
+    drop table t;
 </sphinxql>
 </queries>
 

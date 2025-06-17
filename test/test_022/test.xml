@@ -106,6 +106,24 @@ index multi22
 	morphology		= stem_en
 	index_exact_words = 1	
 }
+
+source src_multi31
+{
+	type			= mysql
+	<sql_settings/>
+
+	sql_query		= SELECT document_id as id, document_id * 10 as idd, title from test_table31
+	sql_attr_uint = idd
+}
+
+index multi_31
+{
+	source			= src_multi31
+	path			= <data_path/>/multi_31
+	wordforms		= <this_test/>/wf_multi3.txt
+	embedded_limit      = 0
+}
+
 </config>
 
 <queries>
@@ -204,6 +222,15 @@ index multi22
 	show meta;
 	SELECT * FROM multi22 WHERE (MATCH('man'));
 	show meta;
+    
+	<!-- user defined dest transform at wordforms -->
+	SELECT *, weight() as w FROM multi_31 WHERE MATCH('oven broil') order by id asc;
+    show meta;
+	SELECT *, weight() as w FROM multi_31 WHERE MATCH('broil') order by id asc;
+    show meta;
+	SELECT *, weight() as w FROM multi_31 WHERE MATCH('bake') order by id asc;
+    show meta;
+    
 </sphinxql>
 </queries>
 
@@ -227,4 +254,20 @@ INSERT INTO `test_table` VALUES
 ( 4, 'SomeWhatMoreLongFormThatWouldOverflowShortFormBuffer' )
 </db_insert>
 
+<db_create>
+CREATE TABLE `test_table31`
+(
+	`document_id` int(11) NOT NULL default '0',
+	`title` varchar(255) NOT NULL default ''
+)
+</db_create>
+
+<db_drop>DROP TABLE IF EXISTS `test_table31`</db_drop>
+
+<db_insert>
+INSERT INTO `test_table31` VALUES
+( 1, 'oven broil text' ),
+( 2, 'broil text' ),
+( 3, 'bake text' )
+</db_insert>
 </test>

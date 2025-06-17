@@ -628,7 +628,7 @@ CSphWordforms* TemplateDictTraits_c::GetWordformContainer ( const CSphVector<CSp
 	return pContainer;
 }
 
-void TemplateDictTraits_c::AddWordform ( CSphWordforms* pContainer, char* sBuffer, int iLen, const TokenizerRefPtr_c& pTokenizer, const char* szFile, const CSphVector<int>& dBlended, int iFileId )
+void TemplateDictTraits_c::AddWordform ( CSphWordforms* pContainer, char* sBuffer, int iLen, const TokenizerRefPtr_c& pTokenizer, const char* szFile, const CSphVector<int>& dBlended, int iFileId, StrVec_t & dDst2Norm )
 {
 	StrVec_t dTokens;
 
@@ -849,18 +849,7 @@ void TemplateDictTraits_c::AddWordform ( CSphWordforms* pContainer, char* sBuffe
 		// let's add destination form to regular wordform to keep destination from being stemmed
 		// FIXME!!! handle multiple destination tokens and ~flag for wordforms
 		if ( !bAfterMorphology && dDestTokens.GetLength() == 1 && !pContainer->m_hHash.Exists ( dDestTokens[0].m_sForm ) )
-		{
-			CSphStoredNF tStoredForm;
-			tStoredForm.m_sWord = dDestTokens[0].m_sForm;
-			tStoredForm.m_bAfterMorphology = bAfterMorphology;
-			pContainer->m_bHavePostMorphNF |= bAfterMorphology;
-			if ( !pContainer->m_dNormalForms.GetLength()
-				 || pContainer->m_dNormalForms.Last().m_sWord != dDestTokens[0].m_sForm
-				 || pContainer->m_dNormalForms.Last().m_bAfterMorphology != bAfterMorphology )
-				pContainer->m_dNormalForms.Add ( tStoredForm );
-
-			pContainer->m_hHash.Add ( pContainer->m_dNormalForms.GetLength() - 1, dDestTokens[0].m_sForm );
-		}
+			dDst2Norm.Add ( dDestTokens[0].m_sForm );
 	} else
 	{
 		if ( bAfterMorphology )
@@ -909,6 +898,29 @@ void TemplateDictTraits_c::AddWordform ( CSphWordforms* pContainer, char* sBuffe
 	}
 }
 
+void TemplateDictTraits_c::AddDst2Norm ( CSphWordforms* pContainer, StrVec_t & dDst2Norm )
+{
+	dDst2Norm.Sort ( Lesser ( [] ( const CSphString & sA, const CSphString & sB ) { return sA<sB; } ) );
+	for ( const CSphString & sDst : dDst2Norm )
+	{
+		// let's add destination form to regular wordform to keep destination from being stemmed
+		// but only not user already set
+		if ( pContainer->m_hHash.Exists ( sDst ) )
+			continue;
+
+		if ( !pContainer->m_dNormalForms.GetLength()
+			|| pContainer->m_dNormalForms.Last().m_sWord!=sDst
+			|| pContainer->m_dNormalForms.Last().m_bAfterMorphology )
+		{
+			CSphStoredNF tStoredForm;
+			tStoredForm.m_sWord = sDst;
+			tStoredForm.m_bAfterMorphology = false;
+			pContainer->m_dNormalForms.Add ( tStoredForm );
+		}
+
+		pContainer->m_hHash.Add ( pContainer->m_dNormalForms.GetLength()-1, sDst );
+	}
+}
 
 CSphWordforms* TemplateDictTraits_c::LoadWordformContainer ( const CSphVector<CSphSavedFile>& dFileInfos, const StrVec_t* pEmbeddedWordforms, const TokenizerRefPtr_c& pTokenizer, const char* szIndex )
 {
@@ -960,11 +972,15 @@ CSphWordforms* TemplateDictTraits_c::LoadWordformContainer ( const CSphVector<CS
 
 		CSphString sAllFiles;
 		ConcatReportStrings ( dFilenames, sAllFiles );
+		StrVec_t dDst2Norm;
 
 		for ( auto& sWordForm : ( *pEmbeddedWordforms ) )
-			AddWordform ( pContainer.get(), const_cast<char*> ( sWordForm.cstr() ), sWordForm.Length(), pMyTokenizer, sAllFiles.cstr(), dBlended, -1 );
+			AddWordform ( pContainer.get(), const_cast<char*> ( sWordForm.cstr() ), sWordForm.Length(), pMyTokenizer, sAllFiles.cstr(), dBlended, -1, dDst2Norm );
+
+		AddDst2Norm ( pContainer.get(), dDst2Norm );
 	} else
 	{
+		StrVec_t dDst2Norm;
 		char sBuffer[6 * SPH_MAX_WORD_LEN + 512]; // enough to hold 2 UTF-8 words, plus some whitespace overhead
 
 		ARRAY_FOREACH ( i, dFileInfos )
@@ -980,8 +996,10 @@ CSphWordforms* TemplateDictTraits_c::LoadWordformContainer ( const CSphVector<CS
 
 			int iLen;
 			while ( ( iLen = rdWordforms.GetLine ( sBuffer, sizeof ( sBuffer ) ) ) >= 0 )
-				AddWordform ( pContainer.get(), sBuffer, iLen, pMyTokenizer, szFile, dBlended, i );
+				AddWordform ( pContainer.get(), sBuffer, iLen, pMyTokenizer, szFile, dBlended, i, dDst2Norm );
 		}
+
+		AddDst2Norm ( pContainer.get(), dDst2Norm );
 	}
 
 	return pContainer.release();

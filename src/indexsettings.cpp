@@ -1491,7 +1491,9 @@ void IndexSettingsContainer_c::SetupKNNAttrs ( const CreateTableSettings_t & tCr
 		{
 			NamedKNNSettings_t & tNamedKNN = dKNNAttrs.Add();
 			(knn::IndexSettings_t&)tNamedKNN = i.m_tKNN;
+			(knn::ModelSettings_t&)tNamedKNN = i.m_tKNNModel;
 			tNamedKNN.m_sName = i.m_tAttr.m_sName;
+			tNamedKNN.m_sFrom = i.m_sKNNFrom;
 		}
 
 	if ( !dKNNAttrs.GetLength() )
@@ -2214,7 +2216,7 @@ static void AddStorageSettings ( StringBuilder_c & sRes, const CSphColumnInfo & 
 	bool bColumnar = CombineEngines ( tIndex.GetSettings().m_eEngine, tAttr.m_eEngine )==AttrEngine_e::COLUMNAR;
 	if ( bColumnar )
 	{
-		if ( tAttr.m_eAttrType!=SPH_ATTR_JSON && !(tAttr.m_uAttrFlags & CSphColumnInfo::ATTR_STORED) && iNumColumnar>1 )
+		if ( tAttr.m_eAttrType!=SPH_ATTR_JSON && !tAttr.IsStored() && iNumColumnar>1 )
 			sRes << " fast_fetch='0'";
 
 		if ( tAttr.m_eAttrType==SPH_ATTR_STRING && !(tAttr.m_uAttrFlags & CSphColumnInfo::ATTR_COLUMNAR_HASHES) )

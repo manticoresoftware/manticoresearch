@@ -50,7 +50,7 @@ jobs:
         include:
           - name: Centos 7 release installation
             image: centos:7
-            test_prefix: test/clt-tests/installation/rhel-release-
+            test_prefix: test/clt-tests/installation/rhel7-release-install
           - name: Alma 8 release installation
             image: almalinux:8
             test_prefix: test/clt-tests/installation/rhel-release-
@@ -84,9 +84,6 @@ jobs:
           - name: Noble release installation
             image: ubuntu:noble
             test_prefix: test/clt-tests/installation/deb-release-
-          - name: Centos 7 upgrade to dev
-            image: centos:7
-            test_prefix: test/clt-tests/installation/rhel-dev-u
           - name: Alma 8 upgrade to dev
             image: almalinux:8
             test_prefix: test/clt-tests/installation/rhel-dev-u
@@ -169,7 +166,7 @@ jobs:
         include:
           - name: Centos 7 release installation
             image: centos:7
-            test_prefix: test/clt-tests/installation/rhel-release-
+            test_prefix: test/clt-tests/installation/rhel7-release-install
           - name: Alma 8 release installation
             image: almalinux:8
             test_prefix: test/clt-tests/installation/rhel-release-
@@ -203,9 +200,6 @@ jobs:
           - name: Noble release installation
             image: ubuntu:noble
             test_prefix: test/clt-tests/installation/deb-release-
-          - name: Centos 7 upgrade to dev
-            image: centos:7
-            test_prefix: test/clt-tests/installation/rhel-dev-u
           - name: Alma 8 upgrade to dev
             image: almalinux:8
             test_prefix: test/clt-tests/installation/rhel-dev-u

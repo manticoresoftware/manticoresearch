@@ -512,13 +512,13 @@ rt_mem_limit = 512M
 
 Memory limit for a RAM chunk of the table. Optional, default is 128M.
 
-RT tables store some data in memory, known as the "RAM chunk," and also maintain a number of on-disk tables, referred to as "disk chunks." This directive allows you to control the size of the RAM chunk. When there is too much data to keep in memory, RT tables will flush it to disk, activate a newly created disk chunk, and reset the RAM chunk.
+RT tables store some data in memory, known as the "RAM chunk", and also maintain a number of on-disk tables, referred to as "disk chunks." This directive allows you to control the size of the RAM chunk. When there is too much data to keep in memory, RT tables will flush it to disk, activate a newly created disk chunk, and reset the RAM chunk.
 
 Please note that the limit is strict, and RT tables will never allocate more memory than what is specified in the rt_mem_limit. Additionally, memory is not preallocated, so specifying a 512MB limit and only inserting 3MB of data will result in allocating only 3MB, not 512MB.
 
 The `rt_mem_limit` is never exceeded, but the actual RAM chunk size can be significantly lower than the limit. RT tables adapt to the data insertion pace and adjust the actual limit dynamically to minimize memory usage and maximize data write speed. This is how it works:
-* By default, the RAM chunk size is 50% of the  `rt_mem_limit`, referred to as the  "`rt_mem_limit`".
-* As soon as the RAM chunk accumulates data equivalent to `rt_mem_limit * rate` data (50% of `rt_mem_limit`  by default), Manticore starts saving the RAM chunk as a new disk chunk.
+* By default, the RAM chunk size is 50% of the  `rt_mem_limit`, referred to as the  "`rt_mem_limit` limit".
+* As soon as the RAM chunk accumulates data equivalent to `rt_mem_limit * rate` data (50% of `rt_mem_limit` by default), Manticore starts saving the RAM chunk as a new disk chunk.
 * While a new disk chunk is being saved, Manticore assesses the number of new/updated documents.
 * After saving a new disk chunk, the `rt_mem_limit` rate is updated.
 * The rate is reset to 50% each time you restart the searchd.
@@ -527,7 +527,7 @@ For instance, if 90MB of data is saved to a disk chunk and an additional 10MB of
 
 ##### How to change rt_mem_limit and optimize_cutoff
 
-In real-time mode, you can adjust the size limit of RAM chunks and the maximum number of disk chunks using the `ALTER TABLE` statement. To set `rt_mem_limit` to 1 gigabyte for the table "t," run the following query: `ALTER TABLE t rt_mem_limit='1G'`. To change the maximum number of disk chunks, run the query: `ALTER TABLE t optimize_cutoff='5'`.
+In real-time mode, you can adjust the size limit of RAM chunks and the maximum number of disk chunks using the `ALTER TABLE` statement. To set `rt_mem_limit` to 1 gigabyte for the table "t", run the following query: `ALTER TABLE t rt_mem_limit='1G'`. To change the maximum number of disk chunks, run the query: `ALTER TABLE t optimize_cutoff='5'`.
 
 In the plain mode, you can change the values of `rt_mem_limit` and `optimize_cutoff` by updating the table configuration or running the command `ALTER TABLE <table_name> RECONFIGURE`
 
@@ -545,12 +545,23 @@ In the plain mode, you can change the values of `rt_mem_limit` and `optimize_cut
 * A large RAM chunk puts more pressure on storage, both when flushing to disk into the `.ram` file and when the RAM chunk is full and dumped to disk as a disk chunk.
 * The RAM chunk is backed up by a [binary log](../../Logging/Binary_logging.md) until it is flushed to disk, and a larger `rt_mem_limit`, setting will increase the time it takes to replay the binary log and recover the RAM chunk.
 * The RAM chunk may be slightly slower than a disk chunk.
-* Although the RAM chunk itself doesn't take up more memory than `rt_mem_limit` Manticore may take up more memory in some cases, such as when you start a transaction to insert data and don't commit it for a while. In this case, the data you have already transmitted within the transaction will remain in memory.
+* Although the RAM chunk itself doesn't take up more memory than `rt_mem_limit`, Manticore may take up more memory in some cases, such as when you start a transaction to insert data and don't commit it for a while. In this case, the data you have already transmitted within the transaction will remain in memory.
 
-In addition to `rt_mem_limit`, the flushing behavior of RAM chunks is also influenced by the following settings: [diskchunk_flush_write_timeout](../../Server_settings/Searchd.md#diskchunk_flush_write_timeout) and [diskchunk_flush_search_timeout](../../Server_settings/Searchd.md#diskchunk_flush_search_timeout).
+##### RAM chunk flushing conditions
 
-* `diskchunk_flush_write_timeout`: This option defines the timeout for auto-flushing a RAM chunk if there are no writes to it.  If no write occurs within this time, the chunk will be flushed to disk.  Setting it to `-1` disables auto-flushing based on write activity. The default value is 1 second.
-* `diskchunk_flush_search_timeout`: This option sets the timeout for preventing auto-flushing a RAM chunk if there are no searches in the table. Auto-flushing will only occur if there has been at least one search within this time. The default value is 30 seconds.
+In addition to `rt_mem_limit`, the flushing behavior of RAM chunks is also influenced by the following options and conditions:
+
+* Frozen state. If the table is [frozen](../../Securing_and_compacting_a_table/Freezing_a_table.md), flushing is deferred. That is a permanent rule; nothing can override it. If the `rt_mem_limit` condition is reached while the table is frozen, all further inserts will be delayed until the table is unfrozen.
+
+* [diskchunk_flush_write_timeout](../../Server_settings/Searchd.md#diskchunk_flush_write_timeout): This option defines the timeout (in seconds) for auto-flushing a RAM chunk if there are no writes to it.  If no write occurs within this time, the chunk will be flushed to disk. Setting it to `-1` disables auto-flushing based on write activity. The default value is 1 second.
+
+* [diskchunk_flush_search_timeout](../../Server_settings/Searchd.md#diskchunk_flush_search_timeout): This option sets the timeout (in seconds) for preventing auto-flushing a RAM chunk if there are no searches in the table. Auto-flushing will only occur if there has been at least one search within this time. The default value is 30 seconds.
+
+* ongoing optimization: If an optimization process is currently running, and the number of existing disk chunks has
+  reached or exceeded a configured internal `cutoff` threshold, the flush triggered by the `diskchunk_flush_write_timeout` or `diskchunk_flush_search_timeout` timeout will be skipped.
+
+* too few documents in RAM segments: If the number of documents across RAM segments is below a minimum threshold (8192),
+  the flush triggered by the `diskchunk_flush_write_timeout` or `diskchunk_flush_search_timeout` timeout will be skipped to avoid creating very small disk chunks. This helps minimize unnecessary disk writes and chunk fragmentation.
 
 These timeouts work in conjunction.  A RAM chunk will be flushed if *either* timeout is reached.  This ensures that even if there are no writes, the data will eventually be persisted to disk, and conversely, even if there are constant writes but no searches, the data will also be persisted.  These settings provide more granular control over how frequently RAM chunks are flushed, balancing the need for data durability with performance considerations.  Per-table directives for these settings have higher priority and will override the instance-wide defaults.
 
@@ -564,7 +575,7 @@ source = srcpart2
 source = srcpart3
 ```
 
-The source field specifies the source from which documents will be obtained during indexing of the current table. There must be at least one source. The sources can be of different types (e.g. one could be MySQL, another PostgreSQL). For more information on indexing from external storages, [indexing from external storages here](../../Data_creation_and_modification/Adding_data_from_external_storages/Plain_tables_creation.md)
+The source field specifies the source from which documents will be obtained during indexing of the current table. There must be at least one source. The sources can be of different types (e.g. one could be MySQL, another PostgreSQL). For more information on indexing from external storages, [read here](../../Data_creation_and_modification/Adding_data_from_external_storages/Plain_tables_creation.md)
 
 Value: The name of the source is **mandatory**. Multiple values are allowed.
 
@@ -656,7 +667,7 @@ create table ... engine='rowwise';
 
 The engine setting changes the default [attribute storage](../../Creating_a_table/Data_types.md#Row-wise-and-columnar-attribute-storages) for all attributes in the table. You can also specify `engine` [separately for each attribute](../../Creating_a_table/Data_types.md#How-to-switch-between-the-storages).
 
-For information on how to enable columnar storage for a plain table, see  [columnar_attrs](../../Creating_a_table/Local_tables/Plain_and_real-time_table_settings.md#columnar_attrs) .
+For information on how to enable columnar storage for a plain table, see [columnar_attrs](../../Creating_a_table/Local_tables/Plain_and_real-time_table_settings.md#columnar_attrs) .
 
 Values:
 * columnar - Enables columnar storage for all table attributes, except for [json](../../Creating_a_table/Data_types.md#JSON)
@@ -671,7 +682,7 @@ The following settings are applicable for both real-time and plain tables, regar
 #### Accessing table files
 Manticore supports two access modes for reading table data: seek+read and mmap.
 
-In seek+read mode, the server uses the `pread` system call to read document lists and keyword positions, represented by the`*.spd` and `*.spp`  files. The server uses internal read buffers to optimize the reading process, and the size of these buffers can be adjusted using the options [read_buffer_docs](../../Server_settings/Searchd.md#read_buffer_docs) and [read_buffer_hits](../../Server_settings/Searchd.md#read_buffer_hits).There is also the option  [preopen](../../Creating_a_table/Local_tables/Plain_and_real-time_table_settings.md#preopen) that controls how Manticore opens files at start.
+In seek+read mode, the server uses the `pread` system call to read document lists and keyword positions, represented by the `*.spd` and `*.spp`  files. The server uses internal read buffers to optimize the reading process, and the size of these buffers can be adjusted using the options [read_buffer_docs](../../Server_settings/Searchd.md#read_buffer_docs) and [read_buffer_hits](../../Server_settings/Searchd.md#read_buffer_hits).There is also the option  [preopen](../../Creating_a_table/Local_tables/Plain_and_real-time_table_settings.md#preopen) that controls how Manticore opens files at start.
 
 In mmap access mode, the search server maps the table's file into memory using the `mmap` system call, and the OS caches the file contents. The options [read_buffer_docs](../../Server_settings/Searchd.md#read_buffer_docs) and [read_buffer_hits](../../Server_settings/Searchd.md#read_buffer_hits) have no effect for corresponding files in this mode. The mmap reader can also lock the table's data in memory using the`mlock` privileged call, which prevents the OS from swapping the cached data out to disk.
 
@@ -707,7 +718,7 @@ Here is a table which can help you select your desired mode:
 ##### The recommendations are:
 
 * For the **fastest search response time** and ample memory availability, use [row-wise](../../Creating_a_table/Data_types.md#JSON) attributes and lock them in memory using `mlock`. Additionally, use mlock for doclists/hitlists.
-* If you prioritize **can't afford lower performance after start** and are willing to sacrifice longer startup time, use the [--force-preread](../../Starting_the_server/Manually.md#searchd-command-line-options). option. If you desire faster searchd restart, stick to the default  `mmap_preread` option.
+* If you prioritize **can't afford lower performance after start** and are willing to accept longer startup time, use the [--force-preread](../../Starting_the_server/Manually.md#searchd-command-line-options). option. If you desire faster searchd restart, stick to the default  `mmap_preread` option.
 * If you are looking to **conserve memory**, while still having enough memory for all attributes, skip the use of `mlock`. The operating system will determine what should be kept in memory based on frequent disk reads.
 * If row-wise attributes  **do not fit into memory**, opt for [columnar attributes](../../Creating_a_table/Data_types.md#Row-wise-and-columnar-attribute-storages)
 * If full-text search **performance is not a concern**, and you wish to save memory, use `access_doclists/access_hitlists=file`

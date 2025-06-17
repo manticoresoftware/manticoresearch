@@ -20,6 +20,7 @@
 #include "binlog.h"
 #include "accumulator.h"
 #include "sphinxudf.h"
+#include "sphinxquery/xqparser.h"
 
 #include <gmock/gmock.h>
 

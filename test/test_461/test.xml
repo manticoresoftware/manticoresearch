@@ -61,6 +61,27 @@ searchd
     select * from test1 where tags ANY('test')  /*+ SecondaryIndex(tags) */; show meta;
     drop table test1;
 </sphinxql>    
+
+<sphinxql>create table test1 ( extra string )</sphinxql>    
+
+<repeat count="1" vars="tmp" init="1" inc="1" >
+<var name="vals"/>
+<repeat count="2000" vars="i" init="1" inc="1"><var name="vals" delimiter=",">(<i/>,'')</var></repeat>
+<sphinxql skip="1">
+INSERT INTO test1 (id,extra) VALUES <vals/>
+</sphinxql>
+</repeat>
+
+<sphinxql>    
+	flush ramchunk test1;
+    <!-- implicit cutoff -->
+	select id, length(extra) as l, extra from test1 where extra!='' /*+ SecondaryIndex(extra) */;
+    <!-- eplicit cutoff -->
+	select id, length(extra) as l, extra from test1 where extra!='' option cutoff=2 /*+ SecondaryIndex(extra) */;
+    <!-- no cutoff as non default sort disables it -->
+    select id, length(extra) as l, extra from test1 where extra!='' order by id desc /*+ SecondaryIndex(extra) */;
+    drop table test1;
+</sphinxql>    
 </queries>
 
 </test>

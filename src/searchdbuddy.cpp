@@ -77,6 +77,7 @@ static BuddyState_e TryToStart ( const char * sArgs, CSphString & sError );
 static CSphString GetUrl ( const ListenerDesc_t & tDesc );
 static CSphString BuddyGetPath ( const CSphString & sPath, const CSphString & sPluginDir, bool bHasBuddyPath, int iHostPort, const CSphString & sDataDir );
 static void BuddyStop ();
+static CSphString GetLogLevel();
 
 #if _WIN32
 static CSphString g_sBuddyBind = "--bind=0.0.0.0:9999";
@@ -482,12 +483,14 @@ void BuddyStart ( const CSphString & sConfigPath, const CSphString & sPluginDir,
 	g_dLogBuf.Resize ( 0 );
 	g_sPath = sPath;
 
-	g_sStartArgs.SetSprintf ( "%s --listen=%s %s %s --threads=%d",
+	CSphString sLogLevel = GetLogLevel();
+
+	g_sStartArgs.SetSprintf ( "%s --listen=%s %s %s --threads=%d %s",
 		g_sPath.cstr(),
 		g_sListener4Buddy.cstr(),
 		g_sBuddyBind.scstr(),
 		( bTelemetry ? "" : "--disable-telemetry" ),
-		iThreads );
+		iThreads, sLogLevel.scstr() );
 
 	sphLogDebug ( "[BUDDY] start args: %s", g_sStartArgs.cstr() );
 
@@ -572,6 +575,13 @@ static bool BuddyQueryAddErrorBody ( JsonEscapedBuilder & tBuddyQuery, const Vec
 	return true;
 }
 
+// disable Expect: 100-continue
+// as Expect: 100-continue header option added by curl library does not work with the buddy
+static void DisableExpectHeader ( StrVec_t & dHeaders )
+{
+	dHeaders.Add ( "Expect:" );
+}
+
 static std::pair<bool, CSphString> BuddyQuery ( bool bHttp, Str_t sQueryError, Str_t sPathQuery, Str_t sQuery, http_method eRequestType, const VecTraits_T<BYTE> & dSrcHttpReply )
 {
 	if ( !HasBuddy() )
@@ -604,9 +614,7 @@ static std::pair<bool, CSphString> BuddyQuery ( bool bHttp, Str_t sQueryError, S
 
 	StrVec_t dHeaders;
 	dHeaders.Add ( SphSprintf ( "Request-ID: %d_%u", session::GetConnID(), sphCRC32 ( sQuery.first, sQuery.second, sphRand() ) ) );
-	// disable Expect: 100-continue
-	// as Expect: 100-continue header added by curl library do not with the buddy
-	dHeaders.Add ( "Expect:" );
+	DisableExpectHeader ( dHeaders );
 
 	return PostToHelperUrl ( g_sUrlBuddy, (Str_t)tBuddyQuery, dHeaders );
 }
@@ -804,8 +812,11 @@ bool ProcessHttpQueryBuddy ( HttpProcessResult_t & tRes, Str_t sSrcQuery, Option
 
 	} else
 	{
+		// kubana related endpoints should be converted
+		bool bConvert = ( bHttpEndpoint && hOptions["endpoint"].Begins ( "_" ) );
+
 		CSphVector<BYTE> dBson;
-		bson::JsonObjToBson ( tReplyParsed.m_tMessage, dBson, true, false );
+		bson::JsonObjToBson ( tReplyParsed.m_tMessage, dBson, bConvert, false );
 		bson::Bson_c ( dBson ).BsonToJson ( sDumpBuf, false );
 		sDump = FromStr ( sDumpBuf );
 	}
@@ -944,3 +955,46 @@ CSphString BuddyGetPath ( const CSphString & sConfigPath, const CSphString & sPl
 	return sFullPath;
 }
 #endif
+
+static const char * GetBuddyLogLevel ( ESphLogLevel eLogLevel )
+{
+	switch ( eLogLevel )
+	{
+	case SPH_LOG_DEBUG: return "debug";
+	case SPH_LOG_RPL_DEBUG: return "debug";
+	case SPH_LOG_VERBOSE_DEBUG: return "debugv";
+	case SPH_LOG_VERY_VERBOSE_DEBUG: return "debugvv";
+
+	default: return "info";
+	}
+}
+
+CSphString GetLogLevel()
+{
+	CSphString sLogLevel;
+	if ( g_eLogLevel==SPH_LOG_INFO )
+		return sLogLevel;
+
+	sLogLevel.SetSprintf ( "--log-level=%s", GetBuddyLogLevel ( g_eLogLevel ) );
+	return sLogLevel;
+}
+
+void BuddySetLogLevel ( ESphLogLevel eLogLevel )
+{
+	if ( !HasBuddy() )
+		return;
+
+	JsonEscapedBuilder tBuddyQuery;
+	{
+		auto tRoot = tBuddyQuery.Object();
+		tBuddyQuery.NamedString ( "log_level", GetBuddyLogLevel ( eLogLevel ) );
+	}
+
+	StrVec_t dHeaders;
+	DisableExpectHeader ( dHeaders );
+
+	CSphString sUrl;
+	sUrl.SetSprintf ( "%s/config", g_sUrlBuddy.cstr() );
+
+	PostToHelperUrl ( sUrl, (Str_t)tBuddyQuery, dHeaders );
+}

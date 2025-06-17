@@ -42,6 +42,7 @@
 #include "skip_cache.h"
 #include "jieba.h"
 #include "sphinxexcerpt.h"
+#include "sphinxquery/xqparser.h"
 #include "daemon/winservice.h"
 #include "daemon/crash_logger.h"
 #include "daemon/logger.h"
@@ -141,9 +142,7 @@ static int g_iReplRetryCount		= 3;
 static int g_iReplRetryDelayMs		= DAEMON_MAX_RETRY_DELAY/2;
 
 bool					g_bHostnameLookup = false;
-CSphString				g_sMySQLVersion = szMANTICORE_VERSION;
-CSphString				g_sDbName = "Manticore";
-
+CSphString				g_sMySQLVersion { szMANTICORE_VERSION };
 CSphString				g_sBannerVersion { szMANTICORE_NAME };
 CSphString				g_sBanner;
 CSphString				g_sStatusVersion = szMANTICORE_VERSION;
@@ -5963,7 +5962,7 @@ static CSphString DescribeAttributeProperties ( const CSphColumnInfo & tAttr )
 	if ( tAttr.IsIndexedSI() )
 		sProps << "indexed";
 
-	if ( tAttr.m_uAttrFlags & CSphColumnInfo::ATTR_STORED )
+	if ( tAttr.IsStored() )
 		sProps << "fast_fetch";
 
 	if ( tAttr.IsColumnar() && tAttr.m_eAttrType==SPH_ATTR_STRING && !(tAttr.m_uAttrFlags & CSphColumnInfo::ATTR_COLUMNAR_HASHES) )
@@ -6351,6 +6350,14 @@ static bool CheckCreateTable ( const SqlStmt_t & tStmt, CSphString & sError )
 	if ( !CheckAttrs ( tStmt.m_tCreateTable.m_dFields, []( const CSphColumnInfo & tAttr ) { return tAttr.m_sName; }, sError ) )
 		return false;
 
+	for ( auto & i : tStmt.m_tCreateTable.m_dAttrs )
+		if ( i.m_bKNN && !i.m_tKNNModel.m_sModelName.empty() && !IsKNNEmbeddingsLibLoaded() )
+		{
+			sError.SetSprintf ( "model_name specified for '%s', but embeddings library is not loded", i.m_tAttr.m_sName.cstr() );
+			return false;
+		}
+
+
 	// cross-checks attrs and fields
 	for ( const auto & i : tStmt.m_tCreateTable.m_dAttrs )
 		for ( const auto & j : tStmt.m_tCreateTable.m_dFields )
@@ -6574,9 +6581,11 @@ void HandleMysqlShowCreateTable ( RowBuffer_i & tOut, const SqlStmt_t & tStmt )
 void HandleMysqlShowDatabases ( RowBuffer_i & tOut, SqlStmt_t & )
 {
 	tOut.HeadBegin ();
-	tOut.HeadColumn ( "Databases" );
+	tOut.HeadColumn ( "Database" );
 	tOut.HeadEnd();
-	tOut.PutString ( g_sDbName );
+	tOut.PutString ( "information_schema" );
+	tOut.Commit ();
+	tOut.PutString ( "Manticore" );
 	tOut.Commit ();
 	tOut.Eof();
 }
@@ -8008,7 +8017,7 @@ bool IsDot ( const SqlStmt_t & tStmt )
 {
 	if ( tStmt.m_sThreadFormat=="dot" )
 		return true;
-	else if ( tStmt.m_sThreadFormat=="plain" )
+	if ( tStmt.m_sThreadFormat=="plain" )
 		return false;
 	return session::IsDot();
 }
@@ -8016,14 +8025,14 @@ bool IsDot ( const SqlStmt_t & tStmt )
 Profile_e ParseProfileFormat ( const SqlStmt_t & tStmt )
 {
 	if ( tStmt.m_sSetValue=="dot" )
-		return Profile_e::DOT;
-	else if ( tStmt.m_sSetValue=="expr" )
-		return Profile_e::DOTEXPR;
-	else if ( tStmt.m_sSetValue=="exprurl" )
-		return Profile_e::DOTEXPRURL;
-	else if ( tStmt.m_iSetValue!=0 )
-		return Profile_e::PLAIN;
-	return Profile_e::NONE;
+		return DOT;
+	if ( tStmt.m_sSetValue=="expr" )
+		return DOTEXPR;
+	if ( tStmt.m_sSetValue=="exprurl" )
+		return DOTEXPRURL;
+	if ( tStmt.m_iSetValue!=0 )
+		return PLAIN;
+	return NONE;
 }
 
 void HandleMysqlMultiStmt ( const CSphVector<SqlStmt_t> & dStmt, CSphQueryResultMeta & tLastMeta, RowBuffer_i & dRows,
@@ -8327,7 +8336,12 @@ static bool HandleSetGlobal ( CSphString & sError, const CSphString & sName, int
 			if ( !HttpSetLogVerbosity ( sSetValue ) )
 				sError = "Unknown log_level value (http_on, http_off, http_bad_req_on, http_bad_req_off)";
 		} else
+		{
 			sError = "Unknown log_level value (must be one of info, debug, debugv, debugvv, replication)";
+		}
+		if ( sError.IsEmpty() )
+			BuddySetLogLevel ( g_eLogLevel );
+
 		return true;
 	}
 
@@ -8972,6 +8986,18 @@ void HandleMysqlOptimize ( RowBuffer_i & tOut, const SqlStmt_t & tStmt )
 		tOut.Ok ();
 }
 
+static CSphString GetLastInsertId ( const ClientSession_c * pSession )
+{
+    StringBuilder_c sBuf ( "," );
+
+	if ( pSession->m_dLastIds.IsEmpty() )
+		sBuf << 0;
+	else
+		pSession->m_dLastIds.Apply ( [&sBuf] ( int64_t iID ) { sBuf << iID; } );
+
+    return CSphString ( sBuf );
+}
+
 class ExtraLastInsertID_c final: public ISphExtra
 {
 	bool ExtraDataImpl ( ExtraData_e eCmd, void** pData ) final
@@ -8981,9 +9007,7 @@ class ExtraLastInsertID_c final: public ISphExtra
 
 		auto* sVal = (CSphString*)pData;
 		assert ( sVal );
-		StringBuilder_c tBuf ( "," );
-		session::Info().GetClientSession()->m_dLastIds.for_each ( [&tBuf] ( auto& iId ) { tBuf << iId; } );
-		tBuf.MoveTo ( *sVal );
+		*sVal = GetLastInsertId ( session::Info().GetClientSession() );
 		return true;
 	}
 };
@@ -9000,27 +9024,20 @@ void HandleMysqlSelectColumns ( RowBuffer_i & tOut, const SqlStmt_t & tStmt, Cli
 		std::function<CSphString ( void )> m_fnValue;
 	};
 
-	const bool bHasBuddy = HasBuddy();
-	const SysVar_t tDefaultStr { MYSQL_COL_STRING, nullptr, [] { return "<empty>"; } };
-	const SysVar_t tDefaultNum { MYSQL_COL_LONG, nullptr, [] { return "0"; } };
-
 	const SysVar_t dSysvars[] =
-	{	bHasBuddy ? tDefaultNum : tDefaultStr, // stub
+	{
+		{ MYSQL_COL_STRING,	nullptr, [] { return "<empty>"; } }, // stub
 		{ MYSQL_COL_LONG,	"@@session.auto_increment_increment",	[] {return "1";}},
 		{ MYSQL_COL_STRING,	"@@character_set_client", [] {return "utf8";}},
 		{ MYSQL_COL_STRING,	"@@character_set_connection", [] {return "utf8";}},
 		{ MYSQL_COL_LONG,	"@@max_allowed_packet", [] { StringBuilder_c s; s << g_iMaxPacketSize; return CSphString(s); }},
 		{ MYSQL_COL_STRING,	"@@version_comment", [] { return szGIT_BRANCH_ID;}},
 		{ MYSQL_COL_LONG,	"@@lower_case_table_names", [] { return "1"; }},
-		{ MYSQL_COL_STRING,	"@@session.last_insert_id", [pSession] {
-			StringBuilder_c s ( "," );
-			pSession->m_dLastIds.Apply ( [&s] ( int64_t iID ) { s << iID; } );
-			return CSphString ( s );
-		}},
+		{ MYSQL_COL_STRING,	"@@session.last_insert_id", [pSession] { return GetLastInsertId ( pSession ); } },
 		{ MYSQL_COL_LONG, "@@autocommit", [pSession] { return pSession->m_bAutoCommit ? "1" : "0"; } },
 	};
 
-	auto VarIdxByName = [&dSysvars] ( const CSphString& sName ) noexcept -> int
+	auto fnVarIdxByName = [&dSysvars] ( const CSphString& sName ) noexcept -> int
 	{
 		constexpr auto iSysvars = sizeof ( dSysvars ) / sizeof ( dSysvars[0] );
 		for ( int i = 1; i<(int)iSysvars; ++i )
@@ -9042,17 +9059,17 @@ void HandleMysqlSelectColumns ( RowBuffer_i & tOut, const SqlStmt_t & tStmt, Cli
 
 	CSphVector<PreparedItem_t> dColumns;
 
+	const bool bHasBuddy = HasBuddy();
 	bool bHaveValidExpressions = false; // whether we have at least one expression among @@sysvars
 	bool bHaveInvalidExpressions = false; // whether at least one expression is erroneous
 
-	for ( const auto& dItem : dItems )
+	for ( const auto & tItem : dItems )
 	{
-		bool bIsExpr = !dItem.m_sExpr.Begins ( "@@" );
 		CSphString sError;
-		auto iVar = VarIdxByName ( dItem.m_sExpr );
+		auto iVar = fnVarIdxByName ( tItem.m_sExpr );
 		if ( !iVar )
 		{
-			CSphString sVar = dItem.m_sExpr;
+			CSphString sVar = tItem.m_sExpr;
 			CSphSchema tSchema;
 			ESphAttr eAttrType;
 			ExprParseArgs_t tExprArgs;
@@ -9060,18 +9077,28 @@ void HandleMysqlSelectColumns ( RowBuffer_i & tOut, const SqlStmt_t & tStmt, Cli
 			ISphExprRefPtr_c pExpr { sphExprParse ( sVar.cstr(), tSchema, nullptr, sError, tExprArgs ) };
 			if ( pExpr )
 			{
-				dColumns.Add ( { eAttrType, ESphAttr2MysqlColumn ( eAttrType ), pExpr, -1, dItem.m_sAlias.cstr() } );
+				dColumns.Add ( { eAttrType, ESphAttr2MysqlColumn ( eAttrType ), pExpr, -1, tItem.m_sAlias.cstr() } );
 				bHaveValidExpressions = true;
 				continue;
 			}
-			bHaveInvalidExpressions |= bIsExpr;
+
+			// failure:
+			// - if a buddy exists and any unknown sysvar is requested
+			// - if no buddy exists and a non-sysvar is requested or the expression parser failed
+			bool bSysVar = tItem.m_sExpr.Begins ( "@@" );
+			if ( bSysVar && bHasBuddy )
+			{
+				sError.SetSprintf ( "unknown sysvar %s", tItem.m_sExpr.cstr() );
+				bHaveInvalidExpressions = true;
+			} else if ( !bSysVar )
+				bHaveInvalidExpressions = true;
 		}
-		dColumns.Add ( { SPH_ATTR_NONE, dSysvars[iVar].m_eType, nullptr, iVar, dItem.m_sAlias.cstr(), sError } );
+		dColumns.Add ( { SPH_ATTR_NONE, dSysvars[iVar].m_eType, nullptr, iVar, tItem.m_sAlias.cstr(), sError } );
 	}
 
 	assert ( dColumns.GetLength() == dItems.GetLength() );
 
-	// fail when we have error(s) in expression(s).
+	// fail when we have error in expression or any unknown sysvar - buddy should handle that
 	if ( bHaveInvalidExpressions )
 	{
 		StringBuilder_c sError ("; ");
@@ -9236,12 +9263,7 @@ void HandleMysqlShowVariables ( RowBuffer_i & dRows, const SqlStmt_t & tStmt )
 		dTable.MatchTuplet ( "character_set_connection", "utf8" );
 		dTable.MatchTuplet ( "grouping_in_utc", GetGroupingInUTC() ? "1" : "0" );
 		dTable.MatchTuplet ( "timezone", GetTimeZoneName().cstr() );
-		dTable.MatchTupletFn ( "last_insert_id" , [&pVars]
-		{
-			StringBuilder_c tBuf ( "," );
-			pVars->m_dLastIds.Apply ( [&tBuf] ( int64_t iID ) { tBuf << iID; } );
-			return tBuf;
-		});
+		dTable.MatchTupletFn ( "last_insert_id" , [&pVars]  { return GetLastInsertId ( pVars ); } );
 	}
 	dTable.MatchTuplet ( "pseudo_sharding", GetPseudoSharding() ? "1" : "0" );
 
@@ -10011,6 +10033,7 @@ enum class Alter_e
 	DropColumn,
 	ModifyColumn,
 	RebuildSI,
+	RebuildKNN
 };
 
 static void HandleMysqlAlter ( RowBuffer_i & tOut, const SqlStmt_t & tStmt, Alter_e eAction )
@@ -10073,6 +10096,10 @@ static void HandleMysqlAlter ( RowBuffer_i & tOut, const SqlStmt_t & tStmt, Alte
 		else if ( eAction==Alter_e::RebuildSI )
 		{
 			WIdx_c ( pServed )->AlterSI ( sAddError );
+
+		} else if ( eAction==Alter_e::RebuildKNN )
+		{
+			WIdx_c ( pServed )->AlterKNN ( sAddError );
 		}
 
 		if ( !sAddError.IsEmpty() )
@@ -11201,6 +11228,10 @@ bool ClientSession_c::Execute ( Str_t sQuery, RowBuffer_i & tOut )
 		HandleMysqlAlter ( tOut, *pStmt, Alter_e::RebuildSI );
 		return true;
 
+	case STMT_ALTER_REBUILD_KNN:
+		HandleMysqlAlter ( tOut, *pStmt, Alter_e::RebuildKNN );
+		return true;
+
 	case STMT_SHOW_PLAN:
 		HandleMysqlShowPlan ( tOut, m_tLastProfile, false, ::IsDot ( *pStmt ) );
 		return false; // do not profile this call, keep last query profile
@@ -11402,6 +11433,16 @@ void session::SetFederatedUser ()
 void session::SetUser ( const CSphString & sUser )
 {
 	GetClientSession()->m_sUser = sUser;
+}
+
+void session::SetCurrentDbName ( CSphString sDb )
+{
+	GetClientSession()->m_sCurrentDbName = std::move(sDb);
+}
+
+const char* session::GetCurrentDbName ()
+{
+	return GetClientSession() ? GetClientSession()->m_sCurrentDbName.cstr() : nullptr;
 }
 
 void session::SetAutoCommit ( bool bAutoCommit )
@@ -14114,10 +14155,15 @@ static void InitBanner()
 	if ( szKNNVer )
 		sKNN.SetSprintf ( " (knn %s)", szKNNVer );
 
-	g_sBannerVersion.SetSprintf ( "%s%s%s%s", szMANTICORE_NAME, sColumnar.cstr(), sSi.cstr(), sKNN.cstr() );
+	const char * szKNNEmbVer = GetKNNEmbeddingsVersionStr();
+	CSphString sKNNEmb = "";
+	if ( szKNNEmbVer )
+		sKNNEmb.SetSprintf ( " (embeddings %s)", szKNNEmbVer );
+
+	g_sBannerVersion.SetSprintf ( "%s%s%s%s%s", szMANTICORE_NAME, sColumnar.cstr(), sSi.cstr(), sKNN.cstr(), sKNNEmb.cstr() );
 	g_sBanner.SetSprintf ( "%s%s", g_sBannerVersion.cstr(), szMANTICORE_BANNER_TEXT );
-	g_sMySQLVersion.SetSprintf ( "%s%s%s%s", szMANTICORE_VERSION, sColumnar.cstr(), sSi.cstr(), sKNN.cstr() );
-	g_sStatusVersion.SetSprintf ( "%s%s%s%s", szMANTICORE_VERSION, sColumnar.cstr(), sSi.cstr(), sKNN.cstr() );
+	g_sMySQLVersion.SetSprintf ( "%s%s%s%s%s", szMANTICORE_VERSION, sColumnar.cstr(), sSi.cstr(), sKNN.cstr(), sKNNEmb.cstr() );
+	g_sStatusVersion.SetSprintf ( "%s%s%s%s%s", szMANTICORE_VERSION, sColumnar.cstr(), sSi.cstr(), sKNN.cstr(), sKNNEmb.cstr() );
 }
 
 
@@ -14632,21 +14678,24 @@ int WINAPI ServiceMain ( int argc, char **argv ) EXCLUDES (MainThread)
 		g_sSnippetsFilePrefix.SetSprintf ( "%s/", g_sExePath.scstr() );
 	FixPathAbsolute ( g_sSnippetsFilePrefix );
 
-	auto sLogFormat = hSearchd.GetStr ( "query_log_format", "sphinxql" );
 	bool bLogCompactIn = false;
 	LOG_FORMAT eFormat = LOG_FORMAT::SPHINXQL;
-	if ( sLogFormat != "sphinxql" )
-	{
-		StrVec_t dParams;
-		sphSplit ( dParams, sLogFormat.cstr() );
-		for ( const auto& sParam : dParams )
+
+	{ // scope for sLogFormat to avoid valgrind's complains
+		auto sLogFormat = hSearchd.GetStr ( "query_log_format", "sphinxql" );
+		if ( sLogFormat != "sphinxql" )
 		{
-			if ( sParam=="sphinxql" )
-				eFormat = LOG_FORMAT::SPHINXQL;
-			else if ( sParam=="plain" )
-				eFormat = LOG_FORMAT::_PLAIN;
-			else if ( sParam=="compact_in" )
-				bLogCompactIn = true;
+			StrVec_t dParams;
+			sphSplit ( dParams, sLogFormat.cstr() );
+			for ( const auto& sParam : dParams )
+			{
+				if ( sParam=="sphinxql" )
+					eFormat = LOG_FORMAT::SPHINXQL;
+				else if ( sParam=="plain" )
+					eFormat = LOG_FORMAT::_PLAIN;
+				else if ( sParam=="compact_in" )
+					bLogCompactIn = true;
+			}
 		}
 	}
 	if ( bLogCompactIn && eFormat==LOG_FORMAT::_PLAIN )

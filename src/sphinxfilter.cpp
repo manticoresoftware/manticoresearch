@@ -1618,7 +1618,7 @@ bool FixupFilterSettings ( const CSphFilterSettings & tSettings, CommonFilterSet
 	}
 
 	bool bStrFilter = tSettings.m_eType==SPH_FILTER_STRING || tSettings.m_eType==SPH_FILTER_STRING_LIST;
-	if ( bStrFilter && ( tAttr.m_eAttrType!=SPH_ATTR_STRING && tAttr.m_eAttrType!=SPH_ATTR_STRINGPTR && tAttr.m_eAttrType!=SPH_ATTR_JSON && tAttr.m_eAttrType!=SPH_ATTR_JSON_FIELD ) )
+	if ( bStrFilter && ( tAttr.m_eAttrType!=SPH_ATTR_STRING && tAttr.m_eAttrType!=SPH_ATTR_STRINGPTR && tAttr.m_eAttrType!=SPH_ATTR_JSON && tAttr.m_eAttrType!=SPH_ATTR_JSON_FIELD && tAttr.m_eAttrType!=SPH_ATTR_JSON_FIELD_PTR ) )
 	{
 		sError.SetSprintf ( "unsupported filter type '%s' on attribute '%s'", FilterType2Str(tSettings.m_eType).cstr(), tAttr.m_sName.cstr() );
 		return false;

@@ -130,7 +130,7 @@ $open = function ()
 	$sockStr = "$sd_address:$sd_sphinxql_port";
 	if ($sd_address == "localhost")
 		$sockStr = "127.0.0.1:$sd_sphinxql_port";
-	$sock = @mysql_connect ($sockStr,"","",	true );
+	$sock = @mysql_test_connect ($sockStr );
 	return $sock;
 };
 

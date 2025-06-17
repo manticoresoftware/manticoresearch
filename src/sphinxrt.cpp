@@ -41,6 +41,7 @@
 #include "tracer.h"
 #include "pseudosharding.h"
 #include "knnmisc.h"
+#include "knnlib.h"
 #include "jsonsi.h"
 #include "std/sys.h"
 #include "dict/infix/infix_builder.h"
@@ -97,7 +98,6 @@ constexpr int MAX_TOLERATE_LOAD_SEGMENTS		= MAX_SEGMENTS * ( SIMULTANEOUS_SAVE_L
 
 #define LOG_LEVEL_RTRDIAG false
 #define LOG_LEVEL_RTDDIAG false
-#define LOG_LEVEL_RTSAVEDIAG false
 #define LOG_LEVEL_RTDIAGV false
 #define LOG_LEVEL_RTDIAGVV false
 #define LOG_LEVEL_DEBUGV false
@@ -110,9 +110,9 @@ constexpr int MAX_TOLERATE_LOAD_SEGMENTS		= MAX_SEGMENTS * ( SIMULTANEOUS_SAVE_L
 #define RTDLOG LOGINFO ( RTDDIAG, RTSEG )
 
 // ops for save RAM segments as disk chunk
+static bool LOG_LEVEL_RTSAVEDIAG = val_from_env ( "MANTICORE_LOG_RTSAVEDIAG", false );
 #define RTSAVELOG LOGINFO ( RTSAVEDIAG, RTSEG )
 #define RTLOGV LOGINFO ( RTDIAGV, RTSEG )
-#define RTLOGVV LOGINFO ( RTDIAGVV, RTSEG )
 
 static bool LOG_LEVEL_RTSPLIT_QUERY = val_from_env ( "MANTICORE_LOG_RTSPLIT_QUERY", false ); // verbose logging split query events, ruled by this env variable
 #define LOG_COMPONENT_RTQUERYINFO __LINE__ << " "
@@ -1334,7 +1334,9 @@ enum class MergeSeg_e : BYTE
 	EXIT 	= 4,	// shutdown and exit
 };
 
-class RtIndex_c final : public RtIndex_i, public ISphNoncopyable, public ISphWordlist, public ISphWordlistSuggest, public IndexAlterHelper_c, public DebugCheckHelper_c
+using AlterOp_fn = std::function < bool( CSphIndex & , CSphString & ) >;
+
+class RtIndex_c final : public RtIndex_i, public ISphNoncopyable, public ISphWordlist, public ISphWordlistSuggest, public IndexAlterHelper_c
 {
 public:
 						RtIndex_c ( CSphString sIndexName, CSphString sPath, CSphSchema tSchema, int64_t iRamSize, bool bKeywordDict );
@@ -1522,6 +1524,9 @@ private:
 	mutable int					m_iTrackFailedRamActions;
 	int							m_iAlterGeneration = 0;		// increased every time index altered
 
+	std::unique_ptr<TableEmbeddings_c> m_pEmbeddings;
+	CSphVector<AttrWithModel_t> m_dAttrsWithModels;
+
 	bool						BindAccum ( RtAccum_t * pAccExt, CSphString* pError = nullptr ) final;
 
 	int							CompareWords ( const RtWord_t * pWord1, const RtWord_t * pWord2 ) const;
@@ -1591,6 +1596,8 @@ private:
 	void						StopMergeSegmentsWorker();
 	bool						NeedStoreWordID () const override;
 	int64_t						GetMemLimit() const final { return m_iRtMemLimit; }
+
+	bool						LoadEmbeddingModels ( CSphString & sError );
 	bool						VerifyKNN ( InsertDocData_c & tDoc, CSphString & sError ) const;
 
 	template<typename PRED>
@@ -1635,6 +1642,8 @@ private:
 	void						RaiseAlterGeneration();
 	int							GetAlterGeneration() const override;
 	bool						AlterSI ( CSphString & sError ) override;
+	bool						AlterKNN ( CSphString & sError ) override;
+	bool						AlterRebuild ( AlterOp_fn && operation, CSphString & sError, const char * sTrace );
 
 	bool						CanAttach ( const CSphIndex * pIndex, CSphString & sError ) const;
 	bool						AttachDiskChunkMove ( CSphIndex * pIndex, bool & bFatal, CSphString & sError ) REQUIRES ( m_tWorkers.SerialChunkAccess() );
@@ -2049,7 +2058,15 @@ bool RtIndex_c::VerifyKNN ( InsertDocData_c & tDoc, CSphString & sError ) const
 		if ( tAttr.m_eAttrType!=SPH_ATTR_FLOAT_VECTOR || !tAttr.IsIndexedKNN() )
 			continue;
 
-		if ( !bDefault && iNumValues!=tAttr.m_tKNN.m_iDims )
+		if ( m_dAttrsWithModels.GetLength() && m_dAttrsWithModels[i].m_pModel )
+		{
+			if ( iNumValues!=0 )
+			{
+				sError.SetSprintf ( "attribute '%s' has model_name=%s specified, but vector contents with %d values is provided", tAttr.m_sName.cstr(), tAttr.m_tKNNModel.m_sModelName.c_str(), iNumValues );
+				return false;
+			}
+		}
+		else if ( !bDefault && iNumValues!=tAttr.m_tKNN.m_iDims )
 		{
 			sError.SetSprintf ( "KNN error: data has %d values, index '%s' needs %d values", iNumValues, tAttr.m_sName.cstr(), tAttr.m_tKNN.m_iDims );
 			return false;
@@ -2156,6 +2173,9 @@ bool RtIndex_c::AddDocument ( InsertDocData_c & tDoc, bool bReplace, const CSphS
 
 	ISphHits * pHits = tSrc.IterateHits ( sError );
 	pAcc->GrabLastWarning ( sWarning );
+
+	if ( m_pEmbeddings )
+		pAcc->FetchEmbeddingsSrc ( tDoc, m_dAttrsWithModels );
 
 	if ( !VerifyKNN ( tDoc, sError ) )
 		return false;
@@ -2568,49 +2588,83 @@ private:
 	RowID_t NextAliveRow ( RowID_t tRowID ) const { return SkipDeadRows ( tRowID+1 ); }
 };
 
-template <typename BLOOM_TRAITS>
-inline bool BuildBloom_T ( const BYTE * sWord, int iLen, int iInfixCodepointCount, bool bUtf8, int iKeyValCount, BLOOM_TRAITS & tBloom )
+template <typename BLOOM_TRAITS, BYTE INFIX_CODEPOINT_COUNT, BYTE KEY_VAL_COUNT, bool UTF8>
+bool BuildBloom_T ( const BYTE * sWord, int iLen, BLOOM_TRAITS & tBloom )
 {
-	if ( iLen<iInfixCodepointCount )
+	if ( iLen<INFIX_CODEPOINT_COUNT )
 		return false;
-	// byte offset for each codepoints
-	std::array<BYTE, SPH_MAX_WORD_LEN+1> dOffsets { 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19,
-		20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40, 41, 42 };
-	assert ( iLen<=SPH_MAX_WORD_LEN || ( bUtf8 && iLen<=SPH_MAX_WORD_LEN*3 ) );
-	int iCodes = iLen;
-	if ( bUtf8 )
+
+	constexpr int uKEYMASK = KEY_VAL_COUNT * 64 - 1; // KEY_VAL_COUNT is 8 or 32
+	if constexpr ( UTF8 )
 	{
+		assert ( iLen<=SPH_MAX_WORD_LEN*3 );
+		// byte offset for each codepoints
+		std::array<BYTE, SPH_MAX_WORD_LEN+1> dOffsets { 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19,
+			20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40, 41, 42 };
+
 		// build an offsets table into the bytestring
-		iCodes = 0;
 		const BYTE * s = sWord;
 		const BYTE * sEnd = sWord + iLen;
-		while ( s<sEnd )
+		int iCodes = 0;
+		while ( s<sEnd && iCodes<SPH_MAX_WORD_LEN )
 		{
-			int iCodepoints = sphUtf8CharBytes ( *s );
-			assert ( iCodepoints>=1 && iCodepoints<=4 );
-			dOffsets[iCodes+1] = dOffsets[iCodes] + (BYTE)iCodepoints;
-			s += iCodepoints;
-			iCodes++;
+			const BYTE uCodepoints = sphUtf8CharBytes ( *s );
+			assert ( uCodepoints>=1 && uCodepoints<=4 );
+			dOffsets[iCodes+1] = dOffsets[iCodes] + uCodepoints;
+			s += uCodepoints;
+			++iCodes;
+		}
+
+		if ( iCodes<INFIX_CODEPOINT_COUNT )
+			return false;
+
+		for ( int i=0; i<=iCodes-INFIX_CODEPOINT_COUNT && tBloom.IterateNext(); ++i )
+		{
+			const int iFrom = dOffsets[i];
+			const int iTo = dOffsets[i+INFIX_CODEPOINT_COUNT];
+			uint64_t uHash64 = sphFNV64 ( sWord+iFrom, iTo-iFrom );
+			uHash64 = ( uHash64>>32 ) ^ ( uHash64 & 0xFFFFFFFF );
+			const int iByte = static_cast<int> (uHash64 & uKEYMASK);
+			const int iPos = iByte >> 6;
+			const uint64_t uVal = U64C(1) << ( iByte & 63 );
+			tBloom.Set ( iPos, uVal );
+		}
+	} else // if constexpr ( !UTF8 )
+	{
+		assert ( iLen<=SPH_MAX_WORD_LEN );
+		for ( int i=0; i<=iLen-INFIX_CODEPOINT_COUNT && tBloom.IterateNext(); ++i )
+		{
+			const int iFrom = i;
+			const int iTo = i+INFIX_CODEPOINT_COUNT;
+			uint64_t uHash64 = sphFNV64 ( sWord+iFrom, iTo-iFrom );
+			uHash64 = ( uHash64>>32 ) ^ ( uHash64 & 0xFFFFFFFF );
+			const int iByte = static_cast<int> (uHash64 & uKEYMASK);
+			const int iPos = iByte >> 6;
+			const uint64_t uVal = U64C(1) << ( iByte & 63 );
+			tBloom.Set ( iPos, uVal );
 		}
 	}
-	if ( iCodes<iInfixCodepointCount )
-		return false;
-
-	int iKeyBytes = iKeyValCount * 64;
-	for ( int i=0; i<=iCodes-iInfixCodepointCount && tBloom.IterateNext(); i++ )
-	{
-		int iFrom = dOffsets[i];
-		int iTo = dOffsets[i+iInfixCodepointCount];
-		uint64_t uHash64 = sphFNV64 ( sWord+iFrom, iTo-iFrom );
-
-		uHash64 = ( uHash64>>32 ) ^ ( (DWORD)uHash64 );
-		int iByte = (int)( uHash64 % iKeyBytes );
-		int iPos = iByte/64;
-		uint64_t uVal = U64C(1) << ( iByte % 64 );
-
-		tBloom.Set ( iPos, uVal );
-	}
 	return true;
+}
+
+template <typename TRAITS>
+bool BuildBloom_T ( const BYTE * sWord, int iLen, int iInfixCodepointCount, bool bUtf8, int iKeyValCount, TRAITS &tBloom )
+{
+	assert ( (iInfixCodepointCount == BLOOM_NGRAM_0) || (iInfixCodepointCount == BLOOM_NGRAM_1) );
+	assert ( (iKeyValCount == BLOOM_PER_ENTRY_VALS_COUNT) || (iKeyValCount == PERCOLATE_BLOOM_WILD_COUNT) );
+	switch ( 4*(iInfixCodepointCount == BLOOM_NGRAM_1) + 2*(iKeyValCount == PERCOLATE_BLOOM_WILD_COUNT) + !!bUtf8 )
+	{
+	case 0: return BuildBloom_T<TRAITS, BLOOM_NGRAM_0, BLOOM_PER_ENTRY_VALS_COUNT, false> (sWord, iLen, tBloom);
+	case 1: return BuildBloom_T<TRAITS, BLOOM_NGRAM_0, BLOOM_PER_ENTRY_VALS_COUNT, true>  (sWord, iLen, tBloom);
+	case 2: return BuildBloom_T<TRAITS, BLOOM_NGRAM_0, PERCOLATE_BLOOM_WILD_COUNT, false> (sWord, iLen, tBloom);
+	case 3: return BuildBloom_T<TRAITS, BLOOM_NGRAM_0, PERCOLATE_BLOOM_WILD_COUNT, true>  (sWord, iLen, tBloom);
+	case 4: return BuildBloom_T<TRAITS, BLOOM_NGRAM_1, BLOOM_PER_ENTRY_VALS_COUNT, false> (sWord, iLen, tBloom);
+	case 5: return BuildBloom_T<TRAITS, BLOOM_NGRAM_1, BLOOM_PER_ENTRY_VALS_COUNT, true>  (sWord, iLen, tBloom);
+	case 6: return BuildBloom_T<TRAITS, BLOOM_NGRAM_1, PERCOLATE_BLOOM_WILD_COUNT, false> (sWord, iLen, tBloom);
+	case 7: return BuildBloom_T<TRAITS, BLOOM_NGRAM_1, PERCOLATE_BLOOM_WILD_COUNT, true>  (sWord, iLen, tBloom);
+	}
+	assert(0);
+	return false;
 }
 
 // explicit instantiations
@@ -3023,6 +3077,15 @@ bool RtIndex_c::Commit ( int * pDeleted, RtAccum_t * pAcc, CSphString * pError )
 	pAcc->Sort();
 	CleanupHitDuplicates ( pAcc->m_dAccum );
 
+	CSphString sError;
+	if ( !pAcc->FetchEmbeddings ( m_pEmbeddings.get(), m_dAttrsWithModels, sError ) )
+	{
+		if ( pError )
+			*pError = sError;
+
+		return false;
+	}
+
 	CSphString sCreateError;
 	RtSegmentRefPtf_t pNewSeg { CreateSegment ( pAcc, m_iWordsCheckpoint, m_tSettings.m_eHitless, m_dHitlessWords, sCreateError ) };
 	if ( !pNewSeg && !sCreateError.IsEmpty() )
@@ -3047,7 +3110,6 @@ bool RtIndex_c::Commit ( int * pDeleted, RtAccum_t * pAcc, CSphString * pError )
 
 	// now on to the stuff that needs locking and recovery
 	int iKilled = 0;
-	CSphString sError;
 	if ( !CommitReplayable ( pNewSeg, pAcc->m_dAccumKlist, pAcc->m_iAccumBytes, iKilled, sError ) )
 	{
 		if ( pError )
@@ -3496,6 +3558,8 @@ bool RtIndex_c::DeleteDocument ( const VecTraits_T<DocID_t> & dDocs, CSphString 
 // LOAD/SAVE
 //////////////////////////////////////////////////////////////////////////
 
+static int GetCutOff ( const MutableIndexSettings_c & tSettings, bool bKNN );
+
 struct Checkpoint_t
 {
 	uint64_t m_uWord;
@@ -3552,6 +3616,19 @@ void RtIndex_c::ConditionalDiskChunk ( )
 		RTSAVELOG << "not flush because WriteSearch not exceeded; engage to be run after " << tmNextFlushByWriteUs - tmNow;
 		m_dSavingTimer.EngageAt ( tmNextFlushByWriteUs );
 		return;
+	}
+
+	// no need to auto-flush during optimize
+	if ( OptimizesRunning() )
+	{
+		int iCutoff = GetCutOff ( m_tMutableSettings, m_tSchema.HasKNNAttrs() );
+		int iFinalChunks = ( m_tRtChunks.DiskChunks()->GetLength() - 1 );
+		if ( iFinalChunks>=iCutoff )
+		{
+			RTSAVELOG << "not flush because optimize running; engage to be run after " << tmFlushWriteUs;
+			m_dSavingTimer.EngageAt ( tmNow + tmFlushWriteUs );
+			return;
+		}
 	}
 
 	Coro::Go ( [this]() REQUIRES ( m_tWorkers.SerialChunkAccess() )
@@ -4300,8 +4377,8 @@ void RtIndex_c::WriteMeta ( int64_t iTID, const VecTraits_T<int>& dChunkNames, C
 
 	// meta v.7
 	sNewMeta.NamedValNonDefault ( "max_codepoint_length", m_iMaxCodepointLength );
-	sNewMeta.NamedValNonDefault ( "bloom_per_entry_vals_count", BLOOM_PER_ENTRY_VALS_COUNT, 8 );
-	sNewMeta.NamedValNonDefault ( "bloom_hashes_count",  BLOOM_HASHES_COUNT, 2 );
+	sNewMeta.NamedValNonDefault ( "bloom_per_entry_vals_count", (int)BLOOM_PER_ENTRY_VALS_COUNT, 8 );
+	sNewMeta.NamedValNonDefault ( "bloom_hashes_count",  (int)BLOOM_HASHES_COUNT, 2 );
 
 	// meta v.11
 	CSphFieldFilterSettings tFieldFilterSettings;
@@ -4965,6 +5042,83 @@ bool RtIndex_c::PreallocDiskChunks ( FilenameBuilder_i * pFilenameBuilder, StrVe
 }
 
 
+static bool ParseKNNFrom ( AttrWithModel_t & tAttrWithModel, const CSphString & sFrom, const ISphSchema & tSchema, CSphString & sError )
+{
+	StrVec_t dFrom;
+	sphSplit ( dFrom, sFrom.cstr(), " \t," );
+
+	for ( const auto & i : dFrom )
+	{
+		int iAttrId = tSchema.GetAttrIndex ( i.cstr() );
+		int iFieldId = tSchema.GetFieldIndex ( i.cstr() );
+
+		if ( iFieldId==-1 && iAttrId==-1 )
+		{
+			sError.SetSprintf ( "embedding source '%s' not found", i.cstr() );
+			return false;
+		}
+
+		if ( iAttrId!=-1 && tSchema.GetAttr(iAttrId).m_eAttrType!=SPH_ATTR_STRING )
+		{
+			sError.SetSprintf ( "embedding source attribute '%s' is not a string", i.cstr() );
+			return false;
+		}
+
+		tAttrWithModel.m_dFrom.Add ( { iFieldId==-1 ? iAttrId : iFieldId, iFieldId!=-1 } );
+	}
+
+	return true;
+}
+
+
+bool RtIndex_c::LoadEmbeddingModels ( CSphString & sError )
+{
+	if ( m_pEmbeddings )
+		return true;
+
+	bool bHaveModels = false;
+	for ( int i = 0 ; i < m_tSchema.GetAttrsCount(); i++ )
+		bHaveModels |= !m_tSchema.GetAttr(i).m_tKNNModel.m_sModelName.empty();
+
+	if ( !bHaveModels )
+		return true;
+
+	m_dAttrsWithModels.Resize ( m_tSchema.GetAttrsCount() );
+
+	m_pEmbeddings = std::make_unique<TableEmbeddings_c>();
+	for ( int i = 0; i < m_tSchema.GetAttrsCount(); i++ )
+	{
+		const auto & tAttr = m_tSchema.GetAttr(i);
+		m_dAttrsWithModels[i].m_pModel = nullptr;
+
+		if ( tAttr.m_tKNNModel.m_sModelName.empty() )
+			continue;
+
+		if ( !ParseKNNFrom ( m_dAttrsWithModels[i], tAttr.m_sKNNFrom, m_tSchema, sError ) )
+		{
+			m_pEmbeddings.reset();
+			return false;
+		}
+
+		if ( !m_pEmbeddings->Load ( tAttr.m_sName, tAttr.m_tKNNModel, sError ) )
+		{
+			m_pEmbeddings.reset();
+			return false;
+		}
+
+		auto pModel = m_pEmbeddings->GetModel ( tAttr.m_sName );
+		assert(pModel);
+
+		m_dAttrsWithModels[i].m_pModel = pModel;
+
+		// fixme! modifying the schema
+		const_cast<CSphColumnInfo&>(tAttr).m_tKNN.m_iDims = pModel->GetDims();
+	}
+
+	return true;
+}
+
+
 bool RtIndex_c::Prealloc ( bool bStripPath, FilenameBuilder_i * pFilenameBuilder, StrVec_t & dWarnings )
 {
 	MEMORY ( MEM_INDEX_RT );
@@ -4999,7 +5153,6 @@ bool RtIndex_c::Prealloc ( bool bStripPath, FilenameBuilder_i * pFilenameBuilder
 	if ( !LoadMeta ( pFilenameBuilder, bStripPath, uVersion, bRebuildInfixes, dWarnings ) )
 		return false;
 
-
 	CSphString sMutableFile = GetFilename ( SPH_EXT_SETTINGS );
 	m_tMutableSettings.m_iMemLimit = m_iRtMemLimit; // to avoid overriding value from meta by default value, if no settings provided
 	if ( !m_tMutableSettings.Load ( sMutableFile.cstr(), GetName() ) )
@@ -5013,6 +5166,12 @@ bool RtIndex_c::Prealloc ( bool bStripPath, FilenameBuilder_i * pFilenameBuilder
 	if ( m_tSchema.HasColumnarAttrs() && !IsColumnarLibLoaded() )
 	{
 		m_sLastError.SetSprintf ( "failed to load table with columnar attributes without columnar library" );
+		return false;
+	}
+
+	if ( m_tSchema.HasKNNAttrs() && !IsKNNLibLoaded() )
+	{
+		m_sLastError.SetSprintf ( "failed to load table with knn attributes without knn library" );
 		return false;
 	}
 
@@ -5036,6 +5195,9 @@ bool RtIndex_c::Prealloc ( bool bStripPath, FilenameBuilder_i * pFilenameBuilder
 	// field lengths
 	ARRAY_FOREACH ( i, m_dFieldLens )
 		m_dFieldLens[i] = m_dFieldLensDisk[i] + m_dFieldLensRam[i];
+
+	if ( !LoadEmbeddingModels(m_sLastError) )
+		return false;
 
 	// set up values for on timer save
 	m_iSavedTID = m_iTID;
@@ -5998,6 +6160,8 @@ public:
 	void Progress ( const char* szFmt, ... ) override {};
 	void Done() override {};
 	int64_t GetNumFails() const override;
+	void CheckDocidDup ( DocID_t tDocid, DWORD uRowid ) override {};
+	void FinishDiskChunk ( int64_t iNumRows ) override {};
 
 	inline const char* cstr() const { return m_sMsg.cstr(); }
 };
@@ -10201,7 +10365,7 @@ int RtIndex_c::ClassicOptimize ()
 	return iAffected;
 }
 
-static int GetCutOff ( const MutableIndexSettings_c & tSettings, bool bKNN )
+int GetCutOff ( const MutableIndexSettings_c & tSettings, bool bKNN )
 {
 	if ( tSettings.IsSet ( MutableName_e::OPTIMIZE_CUTOFF ) )
 		return tSettings.m_iOptimizeCutoff;
@@ -11006,21 +11170,31 @@ void RtIndex_c::RecalculateRateLimit ( int64_t iSaved, int64_t iInserted, bool b
 	TRACE_COUNTER ( "mem", perfetto::CounterTrack ( "Ratio", "%" ), m_fSaveRateLimit );
 }
 
-bool RtIndex_c::AlterSI ( CSphString & sError )
+bool RtIndex_c::AlterRebuild ( AlterOp_fn && fnOp, CSphString & sError, const char * sTrace )
 {
 	// strength single-fiber access (don't rely upon to upstream w-lock)
 	ScopedScheduler_c tSerialFiber ( m_tWorkers.SerialChunkAccess() );
-	TRACE_SCHED ( "rt", "alter-si" );
+	TRACE_SCHED ( "rt", perfetto::StaticString{sTrace} );
 
 	auto pChunks = m_tRtChunks.DiskChunks();
 	for ( auto & tChunk : *pChunks )
 	{
-		if ( !tChunk->CastIdx().AlterSI ( sError ) )
+		if ( !fnOp ( tChunk->CastIdx(), sError ) )
 			return false;
 	}
 
 	RaiseAlterGeneration();
 	return true;
+}
+
+bool RtIndex_c::AlterSI ( CSphString & sError )
+{
+	return AlterRebuild ( []( CSphIndex & tIndex, CSphString & sError ) { return tIndex.AlterSI ( sError ); }, sError, "alter-si" );
+}
+
+bool RtIndex_c::AlterKNN ( CSphString & sError )
+{
+	return AlterRebuild ( []( CSphIndex & tIndex, CSphString & sError ) { return tIndex.AlterKNN ( sError ); }, sError, "alter-knn" );
 }
 
 void RtIndex_c::SetGlobalIDFPath ( const CSphString & sPath )

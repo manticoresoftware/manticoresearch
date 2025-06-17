@@ -12,7 +12,7 @@ Manticore Search enables k-nearest neighbor (KNN) vector searches using the HNSW
 
 ### Configuring a table for KNN search
 
-To run KNN searches, you must first configure your table. It needs to have at least one float_vector attribute, which serves as a data vector. You need to specify the following properties:
+To run KNN searches, you must first configure your table. Float vectors and KNN search are only supported in real-time tables (not in plain tables). The table needs to have at least one float_vector attribute, which serves as a data vector. You need to specify the following properties:
 * `knn_type`: A mandatory setting; currently, only `hnsw` is supported.
 * `knn_dims`: A mandatory setting that specifies the dimensions of the vectors being indexed.
 * `hnsw_similarity`: A mandatory setting that specifies the distance function used by the HNSW index. Acceptable values are:
@@ -23,18 +23,32 @@ To run KNN searches, you must first configure your table. It needs to have at le
 * `hnsw_ef_construction`: An optional setting that defines a construction time/accuracy trade-off.
 
 <!-- intro -->
-##### SQL:
+##### SQL
 
 <!-- request SQL -->
-
 ```sql
 create table test ( title text, image_vector float_vector knn_type='hnsw' knn_dims='4' hnsw_similarity='l2' );
 ```
-<!-- response -->
+
+<!-- response SQL -->
 
 ```sql
 Query OK, 0 rows affected (0.01 sec)
 ```
+
+<!-- intro -->
+##### Plain mode (using configuration file):
+
+<!-- request Config -->
+```ini
+table test_vec {
+    type = rt
+	...
+    rt_attr_float_vector = image_vector
+    knn = {"attrs":[{"name":"image_vector","type":"hnsw","dims":4,"hnsw_similarity":"L2","hnsw_m":16,"hnsw_ef_construction":200}]}
+}
+```
+
 <!-- end -->
 
 <!-- example knn_insert -->

@@ -3,7 +3,7 @@ export INSTANCE=1
 ––– output –––
 ––– block: ../base/replication/start-searchd-precach –––
 ––– comment –––
-Создаем тестовые индексы
+Create test tables
 ––– input –––
 mysql -h0 -P1306 -e "CREATE TABLE video_rt (id BIGINT, title TEXT, content TEXT, created_at BIGINT) morphology='stem_en'"; echo $?
 ––– output –––
@@ -13,7 +13,7 @@ mysql -h0 -P1306 -e "CREATE TABLE tencent_rt (id BIGINT, title TEXT, category IN
 ––– output –––
 0
 ––– comment –––
-Проверяем начальное состояние счетчиков
+Check initial state of counters
 ––– input –––
 mysql -h0 -P1306 -e "SHOW INDEX video_rt STATUS" | grep -E "command_" | tr -d '|' | awk '{print $1, $2}' | sort
 ––– output –––
@@ -30,7 +30,7 @@ command_status %{NUMBER}
 command_suggest 0
 command_update 0
 ––– comment –––
-Выполняем операции INSERT
+Execute INSERT operations
 ––– input –––
 mysql -h0 -P1306 -e "INSERT INTO video_rt (id, title, content, created_at) VALUES (1, 'Test Video 1', 'Content about cats and dogs', 1640995200)"; echo $?
 ––– output –––
@@ -44,7 +44,7 @@ mysql -h0 -P1306 -e "INSERT INTO tencent_rt (id, title, category, views) VALUES 
 ––– output –––
 0
 ––– comment –––
-Выполняем операции REPLACE
+Execute REPLACE operations
 ––– input –––
 mysql -h0 -P1306 -e "REPLACE INTO video_rt (id, title, content, created_at) VALUES (3, 'Replaced Video', 'New content', 1640995400)"; echo $?
 ––– output –––
@@ -54,7 +54,7 @@ mysql -h0 -P1306 -e "REPLACE INTO tencent_rt (id, title, category, views) VALUES
 ––– output –––
 0
 ––– comment –––
-Выполняем операции SELECT (поиск)
+Execute SELECT operations (search)
 ––– input –––
 mysql -h0 -P1306 -e "SELECT * FROM video_rt WHERE MATCH('cats') \G"
 ––– output –––
@@ -103,7 +103,7 @@ mysql -h0 -P1306 -e "SELECT COUNT(*) FROM tencent_rt \G"
 *************************** 1. row ***************************
 count(*): 2
 ––– comment –––
-Выполняем операции UPDATE (только числовые поля)
+Execute UPDATE operations (numeric fields only)
 ––– input –––
 mysql -h0 -P1306 -e "UPDATE video_rt SET created_at = 1640995500 WHERE id = 2"; echo $?
 ––– output –––
@@ -113,19 +113,19 @@ mysql -h0 -P1306 -e "UPDATE tencent_rt SET views = 3000 WHERE id = 1"; echo $?
 ––– output –––
 0
 ––– comment –––
-Выполняем операцию DELETE
+Execute DELETE operation
 ––– input –––
 mysql -h0 -P1306 -e "DELETE FROM video_rt WHERE id = 3"; echo $?
 ––– output –––
 0
 ––– comment –––
-Выполняем команду COMMIT для flush данных
+Execute COMMIT command to flush data
 ––– input –––
 mysql -h0 -P1306 -e "COMMIT"; echo $?
 ––– output –––
 0
 ––– comment –––
-Проверяем счетчики команд для video_rt после операций
+Check command counters for video_rt after operations
 ––– input –––
 mysql -h0 -P1306 -e "SHOW INDEX video_rt STATUS" | grep -E "command_" | tr -d '|' | awk '{print $1, $2}' | sort
 ––– output –––
@@ -142,7 +142,7 @@ command_status %{NUMBER}
 command_suggest 0
 command_update 1
 ––– comment –––
-Проверяем счетчики команд для tencent_rt
+Check command counters for tencent_rt
 ––– input –––
 mysql -h0 -P1306 -e "SHOW INDEX tencent_rt STATUS" | grep -E "command_" | tr -d '|' | awk '{print $1, $2}' | sort
 ––– output –––
@@ -159,7 +159,7 @@ command_status %{NUMBER}
 command_suggest 0
 command_update 1
 ––– comment –––
-Проверяем статистику времени выполнения для video_rt
+Check execution time statistics for video_rt
 ––– input –––
 mysql -h0 -P1306 -e "SHOW INDEX video_rt STATUS" | grep -E "(insert_replace_stats_ms|search_stats_ms|update_stats_ms)" | tr -d '|' | awk '{print $1, $2}' | sort
 ––– output –––
@@ -179,14 +179,14 @@ update_stats_ms_min #!/[0-9]{1}.[0-9]{3}/!#
 update_stats_ms_pct95 #!/[0-9]{1}.[0-9]{3}/!#
 update_stats_ms_pct99 #!/[0-9]{1}.[0-9]{3}/!#
 ––– comment –––
-Проверяем статистику query_time и found_rows
+Check query_time and found_rows statistics
 ––– input –––
 mysql -h0 -P1306 -e "SHOW INDEX video_rt STATUS" | grep -E "(query_time_total|found_rows_total)" | tr -d '|' | awk '{print $1, $2}' | sort
 ––– output –––
 found_rows_total {"queries":3,
 query_time_total {"queries":3,
 ––– comment –––
-Проверяем наличие всех новых метрик статистики
+Check presence of all new statistics metrics
 ––– input –––
 mysql -h0 -P1306 -e "SHOW INDEX video_rt STATUS" | grep -E "(command_|_stats_ms_|query_time_|found_rows_)" | tr -d '|' | awk '{print $1, $2}' | sort
 ––– output –––
@@ -243,14 +243,14 @@ mysql -h0 -P1306 -e "SHOW INDEX video_rt STATUS" | grep -E "command_keywords" | 
 ––– output –––
 command_keywords 1
 ––– comment –––
-Тестируем команду SNIPPET/EXCERPT
+Test SNIPPET/EXCERPT command
 ––– input –––
 mysql -h0 -P1306 -e "SELECT SNIPPET(content, 'cats') as excerpt FROM video_rt WHERE MATCH('cats') \G"
 ––– output –––
 *************************** 1. row ***************************
 excerpt: Content about <b>cats</b> and dogs
 ––– comment –––
-Финальная проверка всех счетчиков video_rt
+Final check of all video_rt counters
 ––– input –––
 mysql -h0 -P1306 -e "SHOW INDEX video_rt STATUS" | grep -E "command_" | tr -d '|' | awk '{print $1, $2}' | sort
 ––– output –––
@@ -267,7 +267,7 @@ command_status %{NUMBER}
 command_suggest 0
 command_update 1
 ––– comment –––
-Финальная проверка всех счетчиков tencent_rt
+Final check of all tencent_rt counters
 ––– input –––
 mysql -h0 -P1306 -e "SHOW INDEX tencent_rt STATUS" | grep -E "command_" | tr -d '|' | awk '{print $1, $2}' | sort
 ––– output –––

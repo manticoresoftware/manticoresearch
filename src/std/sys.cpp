@@ -21,7 +21,9 @@
 	#include <cpuid.h>
 #endif
 
-#if !_WIN32
+#if _WIN32
+	#include <immintrin.h>
+#else
 	#include <unistd.h>
 #endif
 

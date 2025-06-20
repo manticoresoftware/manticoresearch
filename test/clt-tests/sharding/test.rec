@@ -1,0 +1,179 @@
+––– comment –––
+Start of all 5 nodes
+––– input –––
+export INSTANCE=1
+––– output –––
+––– block: ../base/replication/start-searchd-precach –––
+––– input –––
+export INSTANCE=2
+––– output –––
+––– block: ../base/replication/start-searchd-precach –––
+––– input –––
+export INSTANCE=3
+––– output –––
+––– block: ../base/replication/start-searchd-precach –––
+––– input –––
+export INSTANCE=4
+––– output –––
+––– block: ../base/replication/start-searchd-precach –––
+––– input –––
+export INSTANCE=5
+––– output –––
+––– block: ../base/replication/start-searchd-precach –––
+––– comment –––
+Creating a cluster and adding nodes
+––– input –––
+export CLUSTER_NAME=c
+––– output –––
+––– block: ../base/replication/create-cluster –––
+––– block: ../base/replication/join-cluster-on-all-nodes –––
+––– comment –––
+Creating a table with 3 shards and rf=2 + measuring time
+––– input –––
+SECONDS=0; mysql -h0 -P1306 -e "create table c:testrt(id bigint, title text, content text, gid uint) shards='3' rf='2' timeout='60';"; echo "Create time: $SECONDS sec"
+––– output –––
+Create time: 6 sec
+––– comment –––
+Checking that shards are correct on all nodes
+––– input –––
+for port in 1306 2306 3306 4306 5306; do mysql -h0 -P$port -e "show tables from system\G" | grep Table; done
+––– output –––
+Table: system.sharding_queue
+Table: system.sharding_state
+Table: system.sharding_table
+Table: system.testrt_s0
+Table: system.sharding_queue
+Table: system.sharding_state
+Table: system.sharding_table
+Table: system.testrt_s1
+Table: system.sharding_queue
+Table: system.sharding_state
+Table: system.sharding_table
+Table: system.testrt_s0
+Table: system.sharding_queue
+Table: system.sharding_state
+Table: system.sharding_table
+Table: system.testrt_s1
+Table: system.testrt_s2
+Table: system.sharding_queue
+Table: system.sharding_state
+Table: system.sharding_table
+Table: system.testrt_s2
+––– comment –––
+Filling the table with data
+––– input –––
+for i in {1..100}; do mysql -h0 -P1306 -e "insert into testrt (id,title,content,gid) values ($i,'title $i','content $i',$i)"; done
+––– output –––
+ъ
+––– comment –––
+Фоновая вставка через безопасный echo-pipe
+––– input –––
+nohup bash -c 'while true; do id=$((RANDOM + RANDOM)); echo "INSERT INTO testrt(id, title, content, gid) VALUES ($id, '\''title'\'', '\''content'\'', $id);" | mysql -h0 -P1306; sleep 0.1; done' &
+––– output –––
+Остановка 5-й ноды
+––– input –––
+export INSTANCE=5
+––– output –––
+––– block: ../base/replication/stop-searchd –––
+––– input –––
+sleep 5
+––– output –––
+––– comment –––
+Checking shards after the fall of the 5th node - no rebalancing
+––– input –––
+mysql -h0 -P1306 -e "select * from system.sharding_table\G"
+––– output –––
+*************************** 1. row ***************************
+     id: %{NUMBER}
+cluster: c
+   node: 127.0.0.1:3312
+  table: testrt
+ shards: 0,2
+*************************** 2. row ***************************
+     id: %{NUMBER}
+cluster: c
+   node: 127.0.0.1:4312
+  table: testrt
+ shards: 1,2
+*************************** 3. row ***************************
+     id: %{NUMBER}
+cluster: c
+   node: 127.0.0.1:1312
+  table: testrt
+ shards: 0
+*************************** 4. row ***************************
+     id: %{NUMBER}
+cluster: c
+   node: 127.0.0.1:2312
+  table: testrt
+ shards: 1
+––– input –––
+mkdir -p /var/{run,lib,log}/manticore-${INSTANCE}
+––– output –––
+––– input –––
+stdbuf -oL searchd -c test/clt-tests/base/searchd-with-flexible-ports.conf > /dev/null
+––– output –––
+––– input –––
+if timeout 10 grep -qm1 '\[BUDDY\] started' <(tail -n 1000 -f /var/log/manticore-${INSTANCE}/searchd.log); then echo 'Buddy started!'; else echo 'Timeout or failed!'; cat /var/log/manticore-${INSTANCE}/searchd.log; exit 1; fi
+––– output –––
+Buddy started!
+––– input –––
+export INSTANCE=6
+––– output –––
+––– input –––
+mkdir -p /var/{run,lib,log}/manticore-${INSTANCE}
+––– output –––
+––– input –––
+stdbuf -oL searchd -c test/clt-tests/base/searchd-with-flexible-ports.conf > /dev/null
+––– output –––
+––– input –––
+if timeout 10 grep -qm1 '\[BUDDY\] started' <(tail -n 1000 -f /var/log/manticore-${INSTANCE}/searchd.log); then echo 'Buddy started!'; else echo 'Timeout or failed!'; cat /var/log/manticore-${INSTANCE}/searchd.log; exit 1; fi
+––– output –––
+Buddy started!
+––– input –––
+mysql -h0 -P6306 -e "join cluster c at '127.0.0.1:1312';"
+––– output –––
+––– input –––
+SECONDS=0; timeout 70 bash -c 'until mysql -h0 -P1306 -e "select * from system.sharding_table\G" | grep -q "node: 127.0.0.1:5312"; do sleep 1; done'; echo "Rebalance time: $SECONDS sec"
+mysql -h0 -P1306 -e "select * from system.sharding_table\G"
+––– output –––
+Rebalance time: 0 sec
+*************************** 1. row ***************************
+     id: %{NUMBER}
+cluster: c
+   node: 127.0.0.1:4312
+  table: testrt
+ shards: 1,2
+*************************** 2. row ***************************
+     id: %{NUMBER}
+cluster: c
+   node: 127.0.0.1:1312
+  table: testrt
+ shards: 0
+*************************** 3. row ***************************
+     id: %{NUMBER}
+cluster: c
+   node: 127.0.0.1:2312
+  table: testrt
+ shards: 1
+*************************** 4. row ***************************
+     id: %{NUMBER}
+cluster: c
+   node: 127.0.0.1:5312
+  table: testrt
+ shards:
+*************************** 5. row ***************************
+     id: %{NUMBER}
+cluster: c
+   node: 127.0.0.1:3312
+  table: testrt
+ shards: 0,2
+––– input –––
+SECONDS=0; mysql -h0 -P1306 -e "select count(*) from testrt"; echo "Select time: $SECONDS sec"
+––– output –––
++----------+
+| count(*) |
++----------+
+|       %{NUMBER} |
++----------+
+Select time: 0 sec

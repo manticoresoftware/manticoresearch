@@ -832,7 +832,7 @@ bool CSphIndexSettings::ParseKNNSettings ( const CSphConfigSection & hIndex, CSp
 		return false;
 	}
 
- 	return ParseKNNConfigStr ( hIndex.GetStr("knn"), m_dKNN, sError );
+	return ParseKNNConfigStr ( hIndex.GetStr("knn"), m_dKNN, sError );
 }
 
 
@@ -1284,7 +1284,7 @@ private:
 	AttrEngine_e	m_eEngine = AttrEngine_e::DEFAULT;
 
 	void			SetupColumnarAttrs ( const CreateTableSettings_t & tCreateTable );
-	void			SetupKNNAttrs ( const CreateTableSettings_t & tCreateTable );
+	bool			SetupKNNAttrs ( const CreateTableSettings_t & tCreateTable );
 	void			SetupSIAttrs ( const CreateTableSettings_t & tCreateTable );
 
 	void			SetDefaults();
@@ -1481,7 +1481,7 @@ void IndexSettingsContainer_c::SetupColumnarAttrs ( const CreateTableSettings_t 
 }
 
 
-void IndexSettingsContainer_c::SetupKNNAttrs ( const CreateTableSettings_t & tCreateTable )
+bool IndexSettingsContainer_c::SetupKNNAttrs ( const CreateTableSettings_t & tCreateTable )
 {
 	StringBuilder_c sColumnarAttrs(",");
 
@@ -1494,12 +1494,19 @@ void IndexSettingsContainer_c::SetupKNNAttrs ( const CreateTableSettings_t & tCr
 			(knn::ModelSettings_t&)tNamedKNN = i.m_tKNNModel;
 			tNamedKNN.m_sName = i.m_tAttr.m_sName;
 			tNamedKNN.m_sFrom = i.m_sKNNFrom;
+
+			if ( !tNamedKNN.m_sModelName.empty() && tNamedKNN.m_sFrom.IsEmpty() )
+			{
+				m_sError.SetSprintf ( "'from' setting empty for KNN attribute '%s'", tNamedKNN.m_sName.cstr() );
+				return false;
+			}
 		}
 
 	if ( !dKNNAttrs.GetLength() )
-		return;
+		return true;
 
 	Add ( "knn", FormatKNNConfigStr(dKNNAttrs).cstr() );
+	return true;
 }
 
 
@@ -1562,7 +1569,9 @@ bool IndexSettingsContainer_c::Populate ( const CreateTableSettings_t & tCreateT
 			return false;
 
 	SetupColumnarAttrs(tCreateTable);
-	SetupKNNAttrs(tCreateTable);
+	if ( !SetupKNNAttrs(tCreateTable) )
+		return false;
+
 	SetupSIAttrs(tCreateTable);
 
 	if ( !Contains("type") )

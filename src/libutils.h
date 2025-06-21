@@ -62,4 +62,4 @@ bool LoadFunc ( T & pFunc, void * pHandle, const char * szFunc, const CSphString
 	return !!pFunc;
 }
 
-CSphString TryDifferentPaths ( const CSphString & sLibfile, const CSphString & sFullpath, int iVersion );
+CSphString TryDifferentPaths ( const CSphString & sLibfile, const CSphString & sFullpath, int iVersion, const char * szPostfix = nullptr );

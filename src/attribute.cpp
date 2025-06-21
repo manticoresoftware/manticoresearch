@@ -13,6 +13,7 @@
 #include "sphinxint.h"
 #include "sphinxjson.h"
 #include "indexcheck.h"
+#include "knnmisc.h"
 #include "schema/locator.h"
 
 #if __has_include( <charconv>)
@@ -1199,7 +1200,7 @@ static void FloatVec2Str ( const float * pFloatVec, int iLengthBytes, StringBuil
 
 bool sphIsInternalAttr ( const CSphString & sAttrName )
 {
-	return sAttrName==sphGetBlobLocatorName() || sAttrName==GetNullMaskAttrName();
+	return sAttrName==sphGetBlobLocatorName() || sAttrName==GetNullMaskAttrName() || sAttrName==GetKnnDistRescoreAttrName();
 }
 
 

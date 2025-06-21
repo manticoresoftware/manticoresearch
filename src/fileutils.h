@@ -159,6 +159,7 @@ CSphString		GetExecutablePath();
 CSphString &	StripPath ( CSphString & sPath );
 CSphString		GetPathOnly ( const CSphString & sFullPath );
 const char *	GetExtension ( const CSphString & sFullPath );
+CSphString		GetPathNoExtension ( const CSphString & sFullPath );
 
 CSphString		RealPath ( const CSphString& sPath );
 bool			IsSymlink ( const CSphString & sFile );

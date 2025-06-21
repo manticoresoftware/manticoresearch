@@ -270,13 +270,16 @@ void SearchRequestBuilder_c::SendQuery ( const char * sIndexes, ISphOutputBuffer
 		tOut.SendInt ( (int)i.m_eTypeCast2 );
 	}
 
-	tOut.SendString ( q.m_sKNNAttr.cstr() );
-	if ( !q.m_sKNNAttr.IsEmpty() )
+	const auto & tKNN = q.m_tKnnSettings;
+	tOut.SendString ( tKNN.m_sAttr.cstr() );
+	if ( !tKNN.m_sAttr.IsEmpty() )
 	{
-		tOut.SendInt ( q.m_iKNNK );
-		tOut.SendInt ( q.m_iKnnEf );
-		tOut.SendInt ( q.m_dKNNVec.GetLength() );
-		for ( const auto & i : q.m_dKNNVec )
+		tOut.SendInt ( tKNN.m_iK );
+		tOut.SendInt ( tKNN.m_iEf );
+		tOut.SendInt ( tKNN.m_bRescore );
+		tOut.SendFloat ( tKNN.m_fOversampling );
+		tOut.SendInt ( tKNN.m_dVec.GetLength() );
+		for ( const auto & i : tKNN.m_dVec )
 			tOut.SendFloat(i);
 	}
 
@@ -1027,13 +1030,20 @@ bool ParseSearchQuery ( InputBuffer_c & tReq, ISphOutputBuffer & tOut, CSphQuery
 
 	if ( uMasterVer>=22 )
 	{
-		tQuery.m_sKNNAttr = tReq.GetString();
-		if ( !tQuery.m_sKNNAttr.IsEmpty() )
+		auto & tKNN = tQuery.m_tKnnSettings;
+		tKNN.m_sAttr = tReq.GetString();
+		if ( !tKNN.m_sAttr.IsEmpty() )
 		{
-			tQuery.m_iKNNK = tReq.GetInt();
-			tQuery.m_iKnnEf = tReq.GetInt();
-			tQuery.m_dKNNVec.Resize ( tReq.GetInt() );
-			for ( auto & i : tQuery.m_dKNNVec )
+			tKNN.m_iK = tReq.GetInt();
+			tKNN.m_iEf = tReq.GetInt();
+			if ( uMasterVer>=25 )
+			{
+				tKNN.m_bRescore = !!tReq.GetInt();
+				tKNN.m_fOversampling = tReq.GetFloat();
+			}
+
+			tKNN.m_dVec.Resize ( tReq.GetInt() );
+			for ( auto & i : tKNN.m_dVec )
 				i = tReq.GetFloat();
 		}
 	}

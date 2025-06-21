@@ -118,7 +118,9 @@ bool AttrMerger_c::Impl_c::Prepare ( const CSphIndex * pSrcIndex, const CSphInde
 	if ( tDstSchema.HasKNNAttrs() )
 	{
 		CSphVector<std::pair<PlainOrColumnar_t,int>> dAllKNNAttrs;
-		m_pKNNBuilder = BuildCreateKNN ( tDstSchema, m_iTotalDocs, dAllKNNAttrs, m_sError );
+		CSphString sTmpFilename = GetTmpFilename ( pDstIndex, SPH_EXT_SPKNN );
+		sTmpFilename.SetSprintf ( "%s.4bit", sTmpFilename.cstr() );
+		m_pKNNBuilder = BuildCreateKNN ( tDstSchema, m_iTotalDocs, dAllKNNAttrs, sTmpFilename, m_sError );
 		if ( !m_pKNNBuilder )
 			return false;
 

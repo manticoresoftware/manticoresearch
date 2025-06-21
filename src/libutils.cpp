@@ -82,16 +82,33 @@ std::optional<CSphString> TryPath ( const CSphString & sFullpath, int iVersion )
 	return std::nullopt;
 }
 
-CSphString TryDifferentPaths ( const CSphString & sLibfile, const CSphString & sFullpath, int iVersion )
+
+static CSphString AddLibPostfix ( const CSphString & sFilename, const char * szPostfix )
 {
-	auto sAnyPath = TryPath ( sFullpath, iVersion );
+	if ( !szPostfix )
+		return sFilename;
+
+	CSphString sExt = GetExtension(sFilename);
+	CSphString sPathName = GetPathNoExtension(sFilename);
+	CSphString sRes;
+	sRes.SetSprintf ( "%s%s.%s", sPathName.cstr(), szPostfix, sExt.cstr() );
+	return sRes;
+}
+
+
+CSphString TryDifferentPaths ( const CSphString & sLibfile, const CSphString & sFullpath, int iVersion, const char * szPostfix )
+{
+	CSphString sPathWithPostfix = AddLibPostfix ( sFullpath, szPostfix );
+
+	auto sAnyPath = TryPath ( sPathWithPostfix, iVersion );
 	if ( sAnyPath )
 		return sAnyPath.value();
 
 #if _WIN32
 	CSphString sPathToExe = GetPathOnly ( GetExecutablePath() );
 	CSphString sPath;
-	sPath.SetSprintf ( "%s%s", sPathToExe.cstr(), sLibfile.cstr() );
+	CSphString sLibWithPostfix = AddLibPostfix (  sLibfile, szPostfix );
+	sPath.SetSprintf ( "%s%s", sPathToExe.cstr(), sLibWithPostfix.cstr() );
 	sAnyPath = TryPath ( sPath, iVersion );
 #endif
 

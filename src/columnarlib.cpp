@@ -130,7 +130,13 @@ bool InitColumnar ( CSphString & sError )
 {
 	assert ( !g_pColumnarLib );
 
-	CSphString sLibfile = TryDifferentPaths ( LIB_MANTICORE_COLUMNAR, GetColumnarFullpath(), columnar::LIB_VERSION );
+	CSphString sLibfile;
+	if ( IsAVX2Supported() )
+		sLibfile = TryDifferentPaths ( LIB_MANTICORE_COLUMNAR, GetKNNFullpath(), columnar::LIB_VERSION, "_avx2" );
+
+	if ( sLibfile.IsEmpty() )
+		sLibfile = TryDifferentPaths ( LIB_MANTICORE_COLUMNAR, GetColumnarFullpath(), columnar::LIB_VERSION );
+
 	if ( sLibfile.IsEmpty() )
 		return true;
 

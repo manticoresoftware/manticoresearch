@@ -33,6 +33,7 @@ void SqlNode_t::SetValueInt ( int64_t iValue ) noexcept
 	m_uValue = abs(iValue);
 	m_bNegative = iValue<0;
 	m_fValue = (float)iValue;
+	m_bFloat = false;
 }
 
 
@@ -41,6 +42,7 @@ void SqlNode_t::SetValueInt ( uint64_t uValue, bool bNegative ) noexcept
 	m_uValue = uValue;
 	m_bNegative = bNegative;
 	m_fValue = bNegative ? -float(uValue) : float(uValue);
+	m_bFloat = false;
 }
 
 
@@ -49,6 +51,7 @@ void SqlNode_t::SetValueFloat ( float fValue ) noexcept
 	m_fValue = fValue;
 	m_uValue = abs((int64_t)fValue);
 	m_bNegative = fValue<0;
+	m_bFloat = true;
 }
 
 
@@ -376,7 +379,7 @@ public:
 	bool			AddSchemaItem ( SqlNode_t * pNode );
 	bool			SetMatch ( const SqlNode_t & tValue );
 	bool			AddMatch ( const SqlNode_t & tValue, const SqlNode_t & tIndex );
-	bool			SetKNN ( const SqlNode_t & tAttr, const SqlNode_t & tK, const SqlNode_t & tValues, const SqlNode_t * pEf );
+	bool			SetKNN ( const SqlNode_t & tAttr, const SqlNode_t & tK, const SqlNode_t & tValues, const CSphVector<CSphNamedVariant> * pOpts );
 	void			AddConst ( int iList, const SqlNode_t& tValue );
 	void			SetLocalStatement ( const SqlNode_t & tName );
 	bool			AddFloatRangeFilter ( const SqlNode_t & tAttr, float fMin, float fMax, bool bHasEqual, bool bExclude=false );
@@ -419,7 +422,7 @@ public:
 	bool			IsDeprecatedSyntax() const;
 
 	int				AllocNamedVec ();
-	CSphVector<CSphNamedInt> & GetNamedVec ( int iIndex );
+	CSphVector<CSphNamedVariant> & GetNamedVec ( int iIndex );
 	void			FreeNamedVec ( int iIndex );
 	void			GenericStatement ( SqlNode_t * pNode );
 	void 			SwapSubkeys();
@@ -445,7 +448,7 @@ private:
 	bool						m_bJoinMatchClause = false;
 	BYTE						m_uSyntaxFlags = 0;
 	bool						m_bNamedVecBusy = false;
-	CSphVector<CSphNamedInt>	m_dNamedVec;
+	CSphVector<CSphNamedVariant> m_dNamedVec;
 	ESphAttr					m_eJoinTypeCast = SPH_ATTR_NONE;
 
 	void			AutoAlias ( CSphQueryItem & tItem, SqlNode_t * pStart, SqlNode_t * pEnd );
@@ -949,7 +952,7 @@ AddOption_e AddOption ( CSphQuery & tQuery, const CSphString & sOpt, const CSphS
 }
 
 
-AddOption_e AddOption ( CSphQuery & tQuery, const CSphString & sOpt, CSphVector<CSphNamedInt> & dNamed, SqlStmt_e eStmt, CSphString & sError )
+AddOption_e AddOption ( CSphQuery & tQuery, const CSphString & sOpt, CSphVector<CSphNamedVariant> & dNamed, SqlStmt_e eStmt, CSphString & sError )
 {
 	auto FAILED = fnFailer ( sError );
 	auto eOpt = ParseOption ( sOpt );
@@ -958,8 +961,16 @@ AddOption_e AddOption ( CSphQuery & tQuery, const CSphString & sOpt, CSphVector<
 
 	switch ( eOpt )
 	{
-	case Option_e::FIELD_WEIGHTS:	tQuery.m_dFieldWeights.SwapData ( dNamed ); break;
-	case Option_e::INDEX_WEIGHTS:	tQuery.m_dIndexWeights.SwapData ( dNamed ); break;
+	case Option_e::FIELD_WEIGHTS:
+		for ( const auto & i : dNamed )
+			tQuery.m_dFieldWeights.Add ( { i.m_sKey, i.m_iValue } );
+		break;
+
+	case Option_e::INDEX_WEIGHTS:
+		for ( const auto & i : dNamed )
+			tQuery.m_dIndexWeights.Add ( { i.m_sKey, i.m_iValue } );
+		break;
+
 	default:
 		return AddOption_e::NOT_FOUND;
 	}
@@ -1081,7 +1092,7 @@ bool SqlParserTraits_c::AddOption ( const SqlNode_t & tIdent, const SqlNode_t & 
 }
 
 
-bool SqlParserTraits_c::AddOption ( const SqlNode_t & tIdent, CSphVector<CSphNamedInt> & dNamed )
+bool SqlParserTraits_c::AddOption ( const SqlNode_t & tIdent, CSphVector<CSphNamedVariant> & dNamed )
 {
 	CSphString sOpt;
 	ToString ( sOpt, tIdent ).ToLower ();
@@ -1372,18 +1383,62 @@ bool SqlParser_c::AddMatch ( const SqlNode_t & tValue, const SqlNode_t & tIndex 
 	return true;
 }
 
-bool SqlParser_c::SetKNN ( const SqlNode_t & tAttr, const SqlNode_t & tK, const SqlNode_t & tValues, const SqlNode_t * pEf )
+
+static bool ParseKNNOption ( const CSphNamedVariant & tOpt, KnnSearchSettings_t & tKNN )
 {
-	ToString ( m_pQuery->m_sKNNAttr, tAttr );
-	m_pQuery->m_iKNNK = tK.GetValueInt();
-	if ( pEf )
-		m_pQuery->m_iKnnEf = pEf->GetValueInt();
+	CSphString sName = tOpt.m_sKey;
+	sName.ToLower();
+	if ( sName=="ef" )
+	{
+		if ( tOpt.m_eType!=VariantType_e::BIGINT )
+			return false;
+
+		tKNN.m_iEf = (int)tOpt.m_iValue;
+		return true;
+	}
+	else if ( sName=="oversampling" )
+	{
+		if ( tOpt.m_eType!=VariantType_e::FLOAT )
+			return false;
+
+		tKNN.m_fOversampling = tOpt.m_fValue;
+		return true;
+	}
+	else if ( sName=="rescore" )
+	{
+		if ( tOpt.m_eType!=VariantType_e::BIGINT )
+			return false;
+
+		tKNN.m_bRescore = !!tOpt.m_iValue;
+		return true;
+	}
+
+	return false;
+}
+
+
+bool SqlParser_c::SetKNN ( const SqlNode_t & tAttr, const SqlNode_t & tK, const SqlNode_t & tValues, const CSphVector<CSphNamedVariant> * pOpts )
+{
+	auto & tKNN = m_pQuery->m_tKnnSettings;
+
+	ToString ( tKNN.m_sAttr, tAttr );
+	tKNN.m_iK = tK.GetValueInt();
+	if ( pOpts )
+		for ( auto & i : *pOpts )
+			if ( !ParseKNNOption ( i, tKNN ) )
+			{
+				CSphString sError;
+				sError.SetSprintf ( "Unable to parse KNN option '%s'", i.m_sKey.cstr() );
+				yyerror ( this, sError.cstr() );
+				return false;
+			}
+
 	if ( tValues.m_iValues>=0 )
 	{
 		const auto & dValues = GetMvaVec ( tValues.m_iValues );
-		m_pQuery->m_dKNNVec.Reserve ( dValues.GetLength() );
+		tKNN.m_dVec.Reserve ( dValues.GetLength() );
 		for ( const auto & i : dValues )
-			m_pQuery->m_dKNNVec.Add( i.m_fValue );
+			tKNN.m_dVec.Add( i.m_fValue );
 	}
 	
 	return true;
@@ -1392,12 +1447,15 @@ bool SqlParser_c::SetKNN ( const SqlNode_t & tAttr, const SqlNode_t & tK, const 
 
 void SqlParser_c::AddConst ( int iList, const YYSTYPE& tValue )
 {
-	CSphVector<CSphNamedInt> & dVec = GetNamedVec ( iList );
+	CSphVector<CSphNamedVariant> & dVec = GetNamedVec(iList);
 
-	dVec.Add();
-	ToString ( dVec.Last().first, tValue ).ToLower();
-	dVec.Last().second = (int) tValue.GetValueInt();
+	auto & tAdded = dVec.Add();
+	ToString ( tAdded.m_sKey, tValue ).ToLower();
+	tAdded.m_iValue = tValue.GetValueInt();
+	tAdded.m_fValue = tValue.GetValueFloat();
+	tAdded.m_eType = tValue.m_bFloat ? VariantType_e::FLOAT : VariantType_e::BIGINT;
 }
+
 
 void SqlParser_c::SetLocalStatement ( const YYSTYPE & tName )
 {
@@ -1803,7 +1861,7 @@ void SqlParser_c::SetLimit ( int iOffset, int iLimit )
 	m_pQuery->m_iLimit = iLimit;
 }
 
-CSphVector<CSphNamedInt> & SqlParser_c::GetNamedVec ( [[maybe_unused]] int iIndex )
+CSphVector<CSphNamedVariant> & SqlParser_c::GetNamedVec ( [[maybe_unused]] int iIndex )
 {
 	assert ( m_bNamedVecBusy && iIndex==0 );
 	return m_dNamedVec;
@@ -1998,8 +2056,7 @@ static bool SetupFacets ( CSphVector<SqlStmt_t> & dStmt )
 			tStmt.m_tQuery.m_sSelect	= tStmt.m_tQuery.m_sFacetBy;
 			tStmt.m_tQuery.m_sQuery		= tHeadQuery.m_sQuery;
 			tStmt.m_tQuery.m_iMaxMatches = tHeadQuery.m_iMaxMatches;
-			tStmt.m_tQuery.m_sKNNAttr	= tHeadQuery.m_sKNNAttr;
-			tStmt.m_tQuery.m_dKNNVec	= tHeadQuery.m_dKNNVec;
+			tStmt.m_tQuery.m_tKnnSettings= tHeadQuery.m_tKnnSettings;
 			tStmt.m_tQuery.m_sJoinIdx	= tHeadQuery.m_sJoinIdx;
 			tStmt.m_tQuery.m_eJoinType	= tHeadQuery.m_eJoinType;
 			tStmt.m_tQuery.m_dOnFilters = tHeadQuery.m_dOnFilters;

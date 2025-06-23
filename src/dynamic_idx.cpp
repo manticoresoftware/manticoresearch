@@ -184,12 +184,26 @@ public:
 		}
 	}
 
-	void PutPercentAsString ( int64_t iVal, int64_t iBase ) override
+	void PutPercentAsString ( int64_t iVal, int64_t iBase, bool bAsInteger = false ) override
 	{
 		if ( iBase )
-			PutFloatAsString ( iVal * 100.0f / iBase, nullptr );
+		{
+			if ( bAsInteger )
+			{
+				StringBuilder_c sData;
+				sData.Sprintf ( "%d%%", (int)(iVal*100/iBase) );
+				PutString ( sData );
+			}
+			else
+				PutFloatAsString ( iVal * 100.0f / iBase, nullptr );
+		}
 		else
-			PutFloatAsString ( 100.0f, nullptr );
+		{
+			if ( bAsInteger )
+				PutString ( "100%" );
+			else
+				PutFloatAsString ( 100.0f, nullptr );
+		}
 	}
 
 	void PutNumAsString ( int64_t iVal ) override
@@ -457,7 +471,7 @@ public:
 	// match constructing routines (empty for schema only)
 	void PutFloatAsString ( float, const char * ) override {}
 	void PutDoubleAsString ( double, const char * ) override {}
-	void PutPercentAsString ( int64_t, int64_t ) override {}
+	void PutPercentAsString ( int64_t, int64_t, bool = false ) override {}
 	void PutNumAsString ( int64_t ) override {}
 	void PutNumAsString ( uint64_t ) override {}
 	void PutNumAsString ( int ) override {}

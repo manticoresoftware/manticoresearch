@@ -15,7 +15,7 @@
 #include "schema/schema.h"
 
 using Create_fn =				knn::KNN_i * (*) ();
-using CreateBuilder_fn =		knn::Builder_i * (*) ( const knn::Schema_t & tSchema, int64_t iNumElements );
+using CreateBuilder_fn =		knn::Builder_i * (*) ( const knn::Schema_t & tSchema, int64_t iNumElements, const std::string & sTmpFilename );
 using CreateDistanceCalc_fn =	knn::Distance_i * (*) ( const knn::IndexSettings_t & tSettings );
 using LoadEmbeddingsLib_fn =	knn::EmbeddingsLib_i * (*) ( const std::string & sLibPath, std::string & sError );
 using VersionStr_fn =			const char * (*)();
@@ -45,7 +45,7 @@ std::unique_ptr<knn::KNN_i>	CreateKNN ( CSphString & sError )
 }
 
 
-std::unique_ptr<knn::Builder_i>	CreateKNNBuilder ( const ISphSchema & tSchema, int64_t iNumElements, CSphString & sError )
+std::unique_ptr<knn::Builder_i>	CreateKNNBuilder ( const ISphSchema & tSchema, int64_t iNumElements, const CSphString & sTmpFilename, CSphString & sError )
 {
 	if ( !IsKNNLibLoaded() )
 	{
@@ -75,7 +75,7 @@ std::unique_ptr<knn::Builder_i>	CreateKNNBuilder ( const ISphSchema & tSchema, i
 		return nullptr;
 
 	assert ( g_fnCreateKNNBuilder );
-	std::unique_ptr<knn::Builder_i> pBuilder { g_fnCreateKNNBuilder ( tKNNSchema, iNumElements ) };
+	std::unique_ptr<knn::Builder_i> pBuilder { g_fnCreateKNNBuilder ( tKNNSchema, iNumElements, sTmpFilename.cstr() ) };
 	if ( !pBuilder )
 		sError = "error creating knn index builder";
 
@@ -115,7 +115,13 @@ bool InitKNN ( CSphString & sError )
 {
 	assert ( !g_pKNNLib );
 
-	CSphString sLibfile = TryDifferentPaths ( LIB_MANTICORE_KNN, GetKNNFullpath(), knn::LIB_VERSION );
+	CSphString sLibfile;
+	if ( IsAVX2Supported() )
+		sLibfile = TryDifferentPaths ( LIB_MANTICORE_KNN, GetKNNFullpath(), knn::LIB_VERSION, "_avx2" );
+
+	if ( sLibfile.IsEmpty() )
+		sLibfile = TryDifferentPaths ( LIB_MANTICORE_KNN, GetKNNFullpath(), knn::LIB_VERSION );
+
 	if ( sLibfile.IsEmpty() )
 		return true;
 

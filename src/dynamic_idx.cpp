@@ -186,21 +186,36 @@ public:
 
 	void PutPercentAsString ( int64_t iVal, int64_t iBase, bool bAsInteger = false ) override
 	{
-		if ( iBase )
+		if ( !m_pMatch )
+			return;
+
+		auto & tCol = GetNextCol ();
+		auto & tMatch = *m_pMatch;
+
+		if ( bAsInteger )
 		{
-			if ( bAsInteger )
+			if ( tCol.m_eAttrType != SPH_ATTR_STRINGPTR )
 			{
-				StringBuilder_c sData;
-				sData.Sprintf ( "%d%%", (int)(iVal*100/iBase) );
-				PutString ( sData );
+				// For integer attributes, store the percentage value directly
+				int iPercent = iBase ? (int)(iVal*100/iBase) : 100;
+				tMatch.SetAttr ( tCol.m_tLocator, iPercent );
 			}
 			else
-				PutFloatAsString ( iVal * 100.0f / iBase, nullptr );
+			{
+				// For string attributes, format as "XX%"
+				StringBuilder_c sData;
+				if ( iBase )
+					sData.Sprintf ( "%d%%", (int)(iVal*100/iBase) );
+				else
+					sData << "100%";
+				PutStr ( tCol, sData );
+			}
 		}
 		else
 		{
-			if ( bAsInteger )
-				PutString ( "100%" );
+			// Use existing float logic for backward compatibility
+			if ( iBase )
+				PutFloatAsString ( iVal * 100.0f / iBase, nullptr );
 			else
 				PutFloatAsString ( 100.0f, nullptr );
 		}

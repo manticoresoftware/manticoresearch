@@ -1458,7 +1458,7 @@ public:
 	{
 		StringBuilder_c sTime;
 		if ( iBase )
-			sTime.Sprintf ( "%0.2F%%", iVal*10000/iBase );
+			sTime.Sprintf ( "%d%%", (int)(iVal*100/iBase) );
 		else
 			sTime << "100%";
 		PutString ( sTime );

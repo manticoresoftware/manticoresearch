@@ -184,41 +184,12 @@ public:
 		}
 	}
 
-	void PutPercentAsString ( int64_t iVal, int64_t iBase, bool bAsInteger = false ) override
+	void PutPercentAsString ( int64_t iVal, int64_t iBase ) override
 	{
-		if ( !m_pMatch )
-			return;
-
-		auto & tCol = GetNextCol ();
-		auto & tMatch = *m_pMatch;
-
-		if ( bAsInteger )
-		{
-			if ( tCol.m_eAttrType != SPH_ATTR_STRINGPTR )
-			{
-				// For integer attributes, store the percentage value directly
-				int iPercent = iBase ? (int)(iVal*100/iBase) : 100;
-				tMatch.SetAttr ( tCol.m_tLocator, iPercent );
-			}
-			else
-			{
-				// For string attributes, format as "XX%"
-				StringBuilder_c sData;
-				if ( iBase )
-					sData.Sprintf ( "%d%%", (int)(iVal*100/iBase) );
-				else
-					sData << "100%";
-				PutStr ( tCol, sData );
-			}
-		}
+		if ( iBase )
+			PutNumAsString ( iVal * 100 / iBase );
 		else
-		{
-			// Use existing float logic for backward compatibility
-			if ( iBase )
-				PutFloatAsString ( iVal * 100.0f / iBase, nullptr );
-			else
-				PutFloatAsString ( 100.0f, nullptr );
-		}
+			PutNumAsString ( 100 );
 	}
 
 	void PutNumAsString ( int64_t iVal ) override
@@ -486,7 +457,7 @@ public:
 	// match constructing routines (empty for schema only)
 	void PutFloatAsString ( float, const char * ) override {}
 	void PutDoubleAsString ( double, const char * ) override {}
-	void PutPercentAsString ( int64_t, int64_t, bool = false ) override {}
+	void PutPercentAsString ( int64_t, int64_t ) override {}
 	void PutNumAsString ( int64_t ) override {}
 	void PutNumAsString ( uint64_t ) override {}
 	void PutNumAsString ( int ) override {}

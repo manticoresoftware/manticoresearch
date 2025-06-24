@@ -37,7 +37,7 @@ bool InitSecondary ( CSphString & sError )
 
 	CSphString sLibfile;
 	if ( IsAVX2Supported() )
-		sLibfile = TryDifferentPaths ( LIB_MANTICORE_SECONDARY, GetKNNFullpath(), SI::LIB_VERSION, "_avx2" );
+		sLibfile = TryDifferentPaths ( LIB_MANTICORE_SECONDARY, GetSecondaryFullpath(), SI::LIB_VERSION, "_avx2" );
 
 	if ( sLibfile.IsEmpty() )
 		sLibfile = TryDifferentPaths ( LIB_MANTICORE_SECONDARY, GetSecondaryFullpath(), SI::LIB_VERSION );

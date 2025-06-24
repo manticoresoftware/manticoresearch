@@ -198,4 +198,4 @@ Verify total count of JOIN queries logged correctly
 ––– input –––
 tail -50 /var/log/manticore-${INSTANCE}/query.log | grep -c "JOIN.*ON.*="
 ––– output –––
-#!/[0-9]+/!#
+16

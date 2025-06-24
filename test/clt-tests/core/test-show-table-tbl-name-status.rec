@@ -1,0 +1,313 @@
+––– input –––
+export INSTANCE=1
+––– output –––
+––– block: ../base/replication/start-searchd-precach –––
+––– comment –––
+Create test tables
+––– input –––
+mysql -h0 -P1306 -e "CREATE TABLE video_rt (id BIGINT, title TEXT, content TEXT, created_at BIGINT) morphology='stem_en'"; echo $?
+––– output –––
+0
+––– input –––
+mysql -h0 -P1306 -e "CREATE TABLE tencent_rt (id BIGINT, title TEXT, category INT, views BIGINT) morphology='stem_en'"; echo $?
+––– output –––
+0
+––– comment –––
+Check initial state of counters
+––– input –––
+mysql -h0 -P1306 -e "SHOW INDEX video_rt STATUS" | grep -E "command_" | tr -d '|' | awk '{print $1, $2}' | sort
+––– output –––
+command_callpq 0
+command_commit 0
+command_delete 0
+command_excerpt 0
+command_getfield 0
+command_insert 0
+command_keywords 0
+command_replace 0
+command_search 0
+command_status %{NUMBER}
+command_suggest 0
+command_update 0
+––– comment –––
+Execute INSERT operations
+––– input –––
+mysql -h0 -P1306 -e "INSERT INTO video_rt (id, title, content, created_at) VALUES (1, 'Test Video 1', 'Content about cats and dogs', 1640995200)"; echo $?
+––– output –––
+0
+––– input –––
+mysql -h0 -P1306 -e "INSERT INTO video_rt (id, title, content, created_at) VALUES (2, 'Test Video 2', 'Content about technology', 1640995300)"; echo $?
+––– output –––
+0
+––– input –––
+mysql -h0 -P1306 -e "INSERT INTO tencent_rt (id, title, category, views) VALUES (1, 'Tencent News 1', 100, 1500)"; echo $?
+––– output –––
+0
+––– comment –––
+Execute REPLACE operations
+––– input –––
+mysql -h0 -P1306 -e "REPLACE INTO video_rt (id, title, content, created_at) VALUES (3, 'Replaced Video', 'New content', 1640995400)"; echo $?
+––– output –––
+0
+––– input –––
+mysql -h0 -P1306 -e "REPLACE INTO tencent_rt (id, title, category, views) VALUES (2, 'Tencent Replace', 200, 2500)"; echo $?
+––– output –––
+0
+––– comment –––
+Execute SELECT operations (search)
+––– input –––
+mysql -h0 -P1306 -e "SELECT * FROM video_rt WHERE MATCH('cats') \G"
+––– output –––
+*************************** 1. row ***************************
+        id: 1
+     title: Test Video 1
+   content: Content about cats and dogs
+created_at: 1640995200
+––– input –––
+mysql -h0 -P1306 -e "SELECT * FROM video_rt WHERE MATCH('technology') \G"
+––– output –––
+*************************** 1. row ***************************
+        id: 2
+     title: Test Video 2
+   content: Content about technology
+created_at: 1640995300
+––– input –––
+mysql -h0 -P1306 -e "SELECT * FROM video_rt WHERE id > 0 \G"
+––– output –––
+*************************** 1. row ***************************
+        id: 2
+     title: Test Video 2
+   content: Content about technology
+created_at: 1640995300
+*************************** 2. row ***************************
+        id: 3
+     title: Replaced Video
+   content: New content
+created_at: 1640995400
+*************************** 3. row ***************************
+        id: 1
+     title: Test Video 1
+   content: Content about cats and dogs
+created_at: 1640995200
+––– input –––
+mysql -h0 -P1306 -e "SELECT * FROM tencent_rt WHERE category = 100 \G"
+––– output –––
+*************************** 1. row ***************************
+      id: 1
+   title: Tencent News 1
+category: 100
+   views: 1500
+––– input –––
+mysql -h0 -P1306 -e "SELECT COUNT(*) FROM tencent_rt \G"
+––– output –––
+*************************** 1. row ***************************
+count(*): 2
+––– comment –––
+Execute UPDATE operations (numeric fields only)
+––– input –––
+mysql -h0 -P1306 -e "UPDATE video_rt SET created_at = 1640995500 WHERE id = 2"; echo $?
+––– output –––
+0
+––– input –––
+mysql -h0 -P1306 -e "UPDATE tencent_rt SET views = 3000 WHERE id = 1"; echo $?
+––– output –––
+0
+––– comment –––
+Execute DELETE operation for video_rt
+––– input –––
+mysql -h0 -P1306 -e "DELETE FROM video_rt WHERE id = 3"; echo $?
+––– output –––
+0
+––– comment –––
+Execute DELETE operation for tencent_rt (add record first)
+––– input –––
+mysql -h0 -P1306 -e "INSERT INTO tencent_rt (id, title, category, views) VALUES (3, 'Test Delete Record', 300, 500)"; echo $?
+––– output –––
+0
+––– input –––
+mysql -h0 -P1306 -e "DELETE FROM tencent_rt WHERE id = 3"; echo $?
+––– output –––
+0
+––– comment –––
+Execute COMMIT command to flush data
+––– input –––
+mysql -h0 -P1306 -e "COMMIT"; echo $?
+––– output –––
+0
+––– comment –––
+Check command counters for video_rt after operations
+––– input –––
+mysql -h0 -P1306 -e "SHOW INDEX video_rt STATUS" | grep -E "command_" | tr -d '|' | awk '{print $1, $2}' | sort
+––– output –––
+command_callpq 0
+command_commit 0
+command_delete 1
+command_excerpt 0
+command_getfield 0
+command_insert 2
+command_keywords 0
+command_replace 1
+command_search 3
+command_status %{NUMBER}
+command_suggest 0
+command_update 1
+––– comment –––
+Check command counters for tencent_rt
+––– input –––
+mysql -h0 -P1306 -e "SHOW INDEX tencent_rt STATUS" | grep -E "command_" | tr -d '|' | awk '{print $1, $2}' | sort
+––– output –––
+command_callpq 0
+command_commit 0
+command_delete 1
+command_excerpt 0
+command_getfield 0
+command_insert 2
+command_keywords 0
+command_replace 1
+command_search 2
+command_status %{NUMBER}
+command_suggest 0
+command_update 1
+––– comment –––
+Check execution time statistics for video_rt
+––– input –––
+mysql -h0 -P1306 -e "SHOW INDEX video_rt STATUS" | grep -E "(insert_replace_stats_ms|search_stats_ms|update_stats_ms)" | tr -d '|' | awk '{print $1, $2}' | sort
+––– output –––
+insert_replace_stats_ms_avg #!/[0-9]{1}.[0-9]{3}/!#
+insert_replace_stats_ms_max #!/[0-9]{1}.[0-9]{3}/!#
+insert_replace_stats_ms_min #!/[0-9]{1}.[0-9]{3}/!#
+insert_replace_stats_ms_pct95 #!/[0-9]{1}.[0-9]{3}/!#
+insert_replace_stats_ms_pct99 #!/[0-9]{1}.[0-9]{3}/!#
+search_stats_ms_avg #!/[0-9]{1}.[0-9]{3}/!#
+search_stats_ms_max #!/[0-9]{1}.[0-9]{3}/!#
+search_stats_ms_min #!/[0-9]{1}.[0-9]{3}/!#
+search_stats_ms_pct95 #!/[0-9]{1}.[0-9]{3}/!#
+search_stats_ms_pct99 #!/[0-9]{1}.[0-9]{3}/!#
+update_stats_ms_avg #!/[0-9]{1}.[0-9]{3}/!#
+update_stats_ms_max #!/[0-9]{1}.[0-9]{3}/!#
+update_stats_ms_min #!/[0-9]{1}.[0-9]{3}/!#
+update_stats_ms_pct95 #!/[0-9]{1}.[0-9]{3}/!#
+update_stats_ms_pct99 #!/[0-9]{1}.[0-9]{3}/!#
+––– comment –––
+Check query_time and found_rows statistics
+––– input –––
+mysql -h0 -P1306 -e "SHOW INDEX video_rt STATUS" | grep -E "(query_time_total|found_rows_total)" | tr -d '|' | awk '{print $1, $2}' | sort
+––– output –––
+found_rows_total {"queries":3,
+query_time_total {"queries":3,
+––– comment –––
+Check presence of all new statistics metrics
+––– input –––
+mysql -h0 -P1306 -e "SHOW INDEX video_rt STATUS" | grep -E "(command_|_stats_ms_|query_time_|found_rows_)" | tr -d '|' | awk '{print $1, $2}' | sort
+––– output –––
+command_callpq 0
+command_commit 0
+command_delete 1
+command_excerpt 0
+command_getfield 0
+command_insert 2
+command_keywords 0
+command_replace 1
+command_search 3
+command_status %{NUMBER}
+command_suggest 0
+command_update 1
+found_rows_15min {"queries":3,
+found_rows_1min {"queries":3,
+found_rows_5min {"queries":3,
+found_rows_total {"queries":3,
+insert_replace_stats_ms_avg #!/[0-9]{1}.[0-9]{3}/!#
+insert_replace_stats_ms_max #!/[0-9]{1}.[0-9]{3}/!#
+insert_replace_stats_ms_min #!/[0-9]{1}.[0-9]{3}/!#
+insert_replace_stats_ms_pct95 #!/[0-9]{1}.[0-9]{3}/!#
+insert_replace_stats_ms_pct99 #!/[0-9]{1}.[0-9]{3}/!#
+query_time_15min {"queries":3,
+query_time_1min {"queries":3,
+query_time_5min {"queries":3,
+query_time_total {"queries":3,
+search_stats_ms_avg #!/[0-9]{1}.[0-9]{3}/!#
+search_stats_ms_max #!/[0-9]{1}.[0-9]{3}/!#
+search_stats_ms_min #!/[0-9]{1}.[0-9]{3}/!#
+search_stats_ms_pct95 #!/[0-9]{1}.[0-9]{3}/!#
+search_stats_ms_pct99 #!/[0-9]{1}.[0-9]{3}/!#
+update_stats_ms_avg #!/[0-9]{1}.[0-9]{3}/!#
+update_stats_ms_max #!/[0-9]{1}.[0-9]{3}/!#
+update_stats_ms_min #!/[0-9]{1}.[0-9]{3}/!#
+update_stats_ms_pct95 #!/[0-9]{1}.[0-9]{3}/!#
+update_stats_ms_pct99 #!/[0-9]{1}.[0-9]{3}/!#
+––– comment –––
+Test KEYWORDS command for video_rt
+––– input –––
+mysql -h0 -P1306 -e "CALL KEYWORDS('cats dogs', 'video_rt') \G"
+––– output –––
+*************************** 1. row ***************************
+      qpos: 1
+ tokenized: cats
+normalized: cat
+*************************** 2. row ***************************
+      qpos: 2
+ tokenized: dogs
+normalized: dog
+––– input –––
+mysql -h0 -P1306 -e "SHOW INDEX video_rt STATUS" | grep -E "command_keywords" | tr -d '|' | awk '{print $1, $2}' | sort
+––– output –––
+command_keywords 1
+––– comment –––
+Test KEYWORDS command for tencent_rt
+––– input –––
+mysql -h0 -P1306 -e "CALL KEYWORDS('tencent news', 'tencent_rt') \G"
+––– output –––
+*************************** 1. row ***************************
+      qpos: 1
+ tokenized: tencent
+normalized: tencent
+*************************** 2. row ***************************
+      qpos: 2
+ tokenized: news
+normalized: news
+––– comment –––
+Test SNIPPET/EXCERPT command
+––– input –––
+mysql -h0 -P1306 -e "SELECT SNIPPET(content, 'cats') as excerpt FROM video_rt WHERE MATCH('cats')\G"
+––– output –––
+*************************** 1. row ***************************
+excerpt: Content about <b>cats</b> and dogs
+––– input –––
+mysql -h0 -P1306 -e "CALL SNIPPETS('Content about cats and dogs', 'video_rt', 'cats')\G"
+––– output –––
+*************************** 1. row ***************************
+snippet: Content about <b>cats</b> and dogs
+––– comment –––
+Final check of all video_rt counters
+––– input –––
+mysql -h0 -P1306 -e "SHOW INDEX video_rt STATUS" | grep -E "command_" | tr -d '|' | awk '{print $1, $2}' | sort
+––– output –––
+command_callpq 0
+command_commit 0
+command_delete 1
+command_excerpt 1
+command_getfield 0
+command_insert 2
+command_keywords 1
+command_replace 1
+command_search 4
+command_status %{NUMBER}
+command_suggest 0
+command_update 1
+––– comment –––
+Final check of all tencent_rt counters
+––– input –––
+mysql -h0 -P1306 -e "SHOW INDEX tencent_rt STATUS" | grep -E "command_" | tr -d '|' | awk '{print $1, $2}' | sort
+––– output –––
+command_callpq 0
+command_commit 0
+command_delete 1
+command_excerpt 0
+command_getfield 0
+command_insert 2
+command_keywords 1
+command_replace 1
+command_search 2
+command_status %{NUMBER}
+command_suggest 0
+command_update 1

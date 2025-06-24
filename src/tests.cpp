@@ -24,6 +24,7 @@
 #include "histogram.h"
 #include "secondaryindex.h"
 #include "secondarylib.h"
+#include "sphinxquery/xqparser.h"
 #include <cmath>
 
 #define SNOWBALL 0

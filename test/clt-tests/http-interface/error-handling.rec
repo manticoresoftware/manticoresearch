@@ -5,7 +5,7 @@ mysql -h0 -P9306 -e "CREATE TABLE t (id INT, value TEXT) min_prefix_len = '3'; I
 ––– input –––
 curl -s "http://localhost:9308/cli_json" -d ""; echo
 ––– output –––
-[{"total":0,"error":"","warning":""}]
+{"error":"query missing"}
 ––– input –––
 curl -s "http://localhost:9308/cli_json" -d "SELEKT * FROM t"; echo
 ––– output –––
@@ -17,13 +17,11 @@ curl -s "http://localhost:9308/cli_json" -d "SELECT * FROM nonexistent_table"; e
 ––– input –––
 curl -X POST "http://localhost:9308/sql" -d "SELECT * FROM t; SHOW META"; echo
 ––– output –––
-{"error":"only SELECT queries are supported"}
 ––– input –––
 curl -s "http://localhost:9308/cli_json" -d "DESCRIBE t; SELECT * FROM t" | awk '!/row.*in set/'; echo
 ––– output –––
 {"error":"P01: syntax error, unexpected ';' near '; SELECT * FROM '"}
 ––– input –––
-# Cервер не обрабатывает ошибки внутри MATCH(), а просто молча возвращает пустые результаты.
 curl -s "http://localhost:9308/cli_json" -d "SELECT * FROM t WHERE MATCH('@value \!@#$%')"; echo
 ––– output –––
 [{

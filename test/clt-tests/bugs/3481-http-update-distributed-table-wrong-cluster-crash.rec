@@ -4,7 +4,7 @@ http update + distributed table + wrong replication cluster = crash
 ––– comment –––
 Start Manticore Search
 ––– input –––
-rm -f /var/log/manticore/searchd.log; stdbuf -oL searchd --stopwait > /dev/null; stdbuf -oL searchd > /dev/null
+rm -f /var/log/manticore/searchd.log; stdbuf -oL searchd --stopwait > /dev/null; stdbuf -oL searchd --logdebugv > /dev/null
 ––– output –––
 ––– input –––
 if timeout 10 grep -qm1 'accepting connections' <(tail -n 1000 -f /var/log/manticore/searchd.log); then echo 'Manticore started!'; else echo 'Timeout or failed!'; fi
@@ -33,3 +33,7 @@ Test HTTP update with wrong cluster - should not crash
 curl -s -X POST http://localhost:9312/update -d '{"cluster": "unknown_cluster", "table": "d", "id": 2, "doc": {"f": 5}}'
 ––– output –––
 {"error":{"type":"action_request_validation_exception","reason":"","table":"d"},"status":409}
+––– input –––
+cat /var/log/manticore/searchd.log | grep 'response data' | cut -d' ' -f11-
+––– output –––
+{"version":3,"type":"json response","message":{"error":{"type":"action_request_validation_exception","reason":"table t: table 't' is not in any cluster, use just 't'","table":"t"},"status":409},"meta":null,"error_code":0}

@@ -70,18 +70,18 @@ mysql -h0 -P9306 -e "CREATE TABLE test_no_model (title1 TEXT, image_vector FLOAT
 ––– output –––
 ERROR 1064 (42000) at line 1: P03: knn_dims and hnsw_similarity are required if knn_type='hnsw' near ') engine = 'columnar''
 ––– comment –––
-Test case: MODEL_NAME without FROM clause (should succeed)
+Test case: MODEL_NAME without FROM clause (should fail)
 ––– input –––
-mysql -h0 -P9306 -e "CREATE TABLE test_no_from (title1 TEXT, image_vector FLOAT_VECTOR KNN_TYPE='hnsw' HNSW_SIMILARITY='l2' MODEL_NAME = 'sentence-transformers/all-MiniLM-L6-v2') engine = 'columnar'"; echo $?
+mysql -h0 -P9306 -e "CREATE TABLE test_no_from (title1 TEXT, image_vector FLOAT_VECTOR KNN_TYPE='hnsw' HNSW_SIMILARITY='l2' MODEL_NAME = 'sentence-transformers/all-MiniLM-L6-v2') engine = 'columnar'"
 ––– output –––
-0
+ERROR 1064 (42000) at line 1: error adding table 'test_no_from': 'from' setting empty for KNN attribute 'image_vector'
 ––– comment –––
-Test insert without FROM clause (succeeds but no auto-generation)
+Test insert without FROM clause (should fail)
 ––– input –––
 mysql -h0 -P9306 -e "INSERT INTO test_no_from VALUES(1,'test title',())"
 ––– output –––
 ––– comment –––
-Test error case: FROM referencing non-existent field
+ERROR 1064 (42000) at line 1: Cannot create table with column names missing
 ––– input –––
 mysql -h0 -P9306 -e "CREATE TABLE test_invalid_field (title1 TEXT, image_vector FLOAT_VECTOR KNN_TYPE='hnsw' HNSW_SIMILARITY='l2' MODEL_NAME = 'sentence-transformers/all-MiniLM-L6-v2' FROM = 'nonexistent_field') engine = 'columnar'" 2>&1
 ––– output –––
@@ -105,7 +105,7 @@ mysql -h0 -P9306 -e "INSERT INTO test_single_field (image_vector) VALUES(())"; e
 ––– output –––
 #!/.*ERROR.*(field|column|nonexistent).*/!#
 ––– input –––
-mysql -h0 -P9306 -e "INSERT INTO test_single_field (image_vector) VALUES('(1, 2, 3)')"; echo $?
+mysql -h0 -P9306 -e "INSERT INTO test_single_field (image_vector) VALUES('(1, 2, 3)')"
 ––– output –––
 #!/.*ERROR.*(field|column|nonexistent).*/!#
 ––– comment –––

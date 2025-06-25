@@ -1,0 +1,66 @@
+Test starting and stopping Manticore Search daemon with proper verification of startup and shutdown processes
+
+––– comment –––
+Clean up any existing logs and start Manticore Search
+––– input –––
+rm -f /var/log/manticore/searchd.log; stdbuf -oL searchd --stopwait > /dev/null; stdbuf -oL searchd > /dev/null
+––– output –––
+––– comment –––
+Verify Manticore started successfully by checking for 'accepting connections' message
+––– input –––
+if timeout 10 grep -qm1 'accepting connections' <(tail -n 1000 -f /var/log/manticore/searchd.log); then echo 'Manticore started successfully!'; else echo 'Timeout or failed to start!'; fi
+––– output –––
+Manticore started successfully!
+––– comment –––
+Test basic functionality to confirm the daemon is working
+––– input –––
+mysql -h0 -P9306 -e "SHOW STATUS LIKE 'uptime'"
+––– output –––
++---------+-------+
+| Counter | Value |
++---------+-------+
+| uptime  | %{NUMBER}     |
++---------+-------+
+––– comment –––
+Stop Manticore Search daemon and verify the stop message
+––– input –––
+stdbuf -oL searchd --stopwait 2>&1 | grep -i 'SIGTERM'
+––– output –––
+[#!/[A-Za-z]{3} [A-Za-z]{3} [0-9]{1,2} [0-9]{2}:[0-9]{2}:[0-9]{2}\.[0-9]{3} [0-9]{4}/!#] [#!/[0-9]+/!#] stop: successfully sent SIGTERM to pid %{NUMBER}
+––– comment –––
+Verify connection is no longer available after stopping
+––– input –––
+sleep 2; timeout 3 mysql -h0 -P9306 -e "SHOW STATUS" 2>&1 || echo 'Connection refused as expected'
+––– output –––
+#!/ERROR [0-9]+ \(HY000\): Can't connect to MySQL server on '0:9306' \([0-9]+\)/!#
+Connection refused as expected
+––– comment –––
+Test restart functionality - start Manticore again
+––– input –––
+rm -f /var/log/manticore/searchd.log; stdbuf -oL searchd > /dev/null
+––– output –––
+––– input –––
+if timeout 10 grep -qm1 'accepting connections' <(tail -n 1000 -f /var/log/manticore/searchd.log); then echo 'Manticore restarted successfully!'; else echo 'Timeout or failed to restart!'; fi
+––– output –––
+Manticore restarted successfully!
+––– comment –––
+Test that attempting to start when already running shows version info
+––– input –––
+stdbuf -oL searchd 2>&1 | head -1
+––– output –––
+Manticore #!/[0-9]+\.[0-9]+\.[0-9]+/!# #!/[a-f0-9]+@[0-9]+/!# #!/\(.*\)/!#
+––– comment –––
+Verify original daemon is still running after second start attempt
+––– input –––
+mysql -h0 -P9306 -e "SELECT 'Still working!'"
+––– output –––
++----------------+
+| Value          |
++----------------+
+| Still working! |
++----------------+
+––– comment –––
+Final cleanup - stop the daemon
+––– input –––
+stdbuf -oL searchd --stopwait > /dev/null
+––– output –––

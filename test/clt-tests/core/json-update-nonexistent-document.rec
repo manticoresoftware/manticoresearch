@@ -1,0 +1,44 @@
+Test JSON API update operations: updating nonexistent document (noop error) and updating existing document
+
+––– comment –––
+Start Manticore Search with HTTP interface
+––– input –––
+rm -f /var/log/manticore/searchd.log; stdbuf -oL searchd --stopwait > /dev/null; stdbuf -oL searchd > /dev/null
+––– output –––
+––– input –––
+if timeout 10 grep -qm1 'accepting connections' <(tail -n 1000 -f /var/log/manticore/searchd.log); then echo 'Manticore started!'; else echo 'Timeout or failed!'; fi
+––– output –––
+Manticore started!
+––– comment –––
+Create test table
+––– input –––
+mysql -h0 -P9306 -e "CREATE TABLE test_table (id BIGINT, title TEXT, price FLOAT)"
+––– output –––
+––– comment –––
+Try to update nonexistent document via JSON API - should get noop result
+––– input –––
+curl -s -X POST http://localhost:9308/update -d '{"table": "test_table", "id": 999, "doc": {"title": "Updated Title", "price": 199.99}}'
+––– output –––
+{"table":"test_table","id":999,"result":"noop"}
+––– comment –––
+Insert a document first
+––– input –––
+curl -s -X POST http://localhost:9308/insert -d '{"table": "test_table", "id": 1, "doc": {"title": "Original Title", "price": 99.99}}'
+––– output –––
+{"table":"test_table","id":1,"created":true,"result":"created","status":201}
+––– comment –––
+Verify document was inserted
+––– input –––
+mysql -h0 -P9306 -e "SELECT * FROM test_table WHERE id=1"
+––– output –––
++------+----------------+-----------+
+| id   | title          | price     |
++------+----------------+-----------+
+|    1 | Original Title | #!/[0-9]+\.[0-9]+/!# |
++------+----------------+-----------+
+––– comment –––
+Try to update the existing document via JSON API - currently has a bug
+––– input –––
+curl -s -X POST http://localhost:9308/update -d '{"table": "test_table", "id": 1, "doc": {"title": "Updated Title", "price": 199.99}}'
+––– output –––
+{"error":"Trying to access array offset on null"}

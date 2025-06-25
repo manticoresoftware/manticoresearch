@@ -513,6 +513,12 @@ bool ParseKNNConfigStr ( const CSphString & sStr, CSphVector<NamedKNNSettings_t>
 				return false;
 		}
 
+		if ( tParsed.m_eQuantization==knn::Quantization_e::BIT4 )
+		{
+			sError = "4-bit quantization is no longer supported";
+			return false;
+		}
+
 		if ( !i.FetchStrItem ( tParsed.m_sModelName, "model_name", sError, true ) ) return false;
 
 		if ( !tParsed.m_sModelName.empty() )

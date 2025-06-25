@@ -29,3 +29,7 @@ mkdir -p data; rm -f searchd.log; stdbuf -oL searchd --stopwait > /dev/null; std
 grep 'FATAL: invalid replication ports count 1, should be at least 2' searchd.log |wc -l
 ––– output –––
 1
+––– input –––
+echo 123
+––– output –––
+123

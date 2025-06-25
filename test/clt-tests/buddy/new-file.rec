@@ -2,5 +2,8 @@
 echo 123
 ––– output –––
 ––– input –––
+whoami
+––– output –––
+––– input –––
 ls -lt
 ––– output –––

@@ -1,8 +1,8 @@
 ––– block: start-searchd –––
 ––– input –––
-mysql -h0 -P9306 -e 'BACKUP TABLES users, posts TO '/backup/location';'
+mysql -h0 -P9306 -e "BACKUP TABLES users, posts TO '/backup/location';"
 ––– output –––
-ERROR 1064 (42000) at line 1: P02: syntax error, unexpected identifier near 'BACKUP TABLES users, posts TO /backup/location'
+ERROR 1064 (42000) at line 1: P02: syntax error, unexpected identifier near 'BACKUP TABLES users, posts TO '/backup/location''
 ––– input –––
 mysql -h0 -P9306 -e 'BACKUP TABLES users, posts TO '/backup/location' OPTIONS compress=true, async=false;'
 ––– output –––

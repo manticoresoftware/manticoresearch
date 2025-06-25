@@ -1,0 +1,206 @@
+Comprehensive test of all full-text search operators in Manticore Search i
+ncluding basic matching, boolean operators, wildcards, proximity, quorum,
+field-specific searches, and complex expressions
+
+––– comment –––
+Start Manticore Search
+––– input –––
+rm -f /var/log/manticore/searchd.log; stdbuf -oL searchd --stopwait > /dev/null; stdbuf -oL searchd > /dev/null
+––– output –––
+––– input –––
+if timeout 10 grep -qm1 'accepting connections' <(tail -n 1000 -f /var/log/manticore/searchd.log); then echo 'Manticore started!'; else echo 'Timeout or failed!'; fi
+––– output –––
+Manticore started!
+––– comment –––
+Setup test table with comprehensive sample data
+––– input –––
+mysql -h0 -P9306 -e "CREATE TABLE articles (id INT, title TEXT, content TEXT, category TEXT) morphology='stem_en' min_infix_len='2'"
+––– output –––
+––– input –––
+mysql -h0 -P9306 -e "INSERT INTO articles VALUES (1, 'First Article About Search', 'This is the first test article about search engines and information retrieval', 'technology'), (2, 'Second Article on Techniques', 'Another article discussing advanced search techniques and algorithms', 'science'), (3, 'Third Article Search Info', 'Search is important for finding information quickly in databases', 'database'), (4, 'Machine Learning Guide', 'A comprehensive guide to machine learning algorithms and neural networks', 'ai'), (5, 'Database Design Patterns', 'Best practices for database design and optimization techniques', 'database')"
+––– output –––
+––– comment –––
+1. Basic word matching
+––– input –––
+mysql -h0 -P9306 -e "SELECT id, title FROM articles WHERE MATCH('search') ORDER BY id ASC"
+––– output –––
++------+------------------------------+
+| id   | title                        |
++------+------------------------------+
+|    1 | First Article About Search   |
+|    2 | Second Article on Techniques |
+|    3 | Third Article Search Info    |
+––– comment –––
+2. Phrase matching - exact phrase
+––– input –––
+mysql -h0 -P9306 -e "SELECT id, title FROM articles WHERE MATCH('\"search techniques\"') ORDER BY id ASC"
+––– output –––
++------+------------------------------+
+| id   | title                        |
++------+------------------------------+
+|    2 | Second Article on Techniques |
++------+------------------------------+
+––– comment –––
+3. Boolean AND operator
+––– input –––
+mysql -h0 -P9306 -e "SELECT id, title FROM articles WHERE MATCH('search &
+article') ORDER BY id ASC"
+––– output –––
++------+------------------------------+
+| id   | title                        |
++------+------------------------------+
+|    1 | First Article About Search   |
+|    2 | Second Article on Techniques |
+|    3 | Third Article Search Info    |
++------+------------------------------+
+––– comment –––
+4. Boolean OR operator
+––– input –––
+mysql -h0 -P9306 -e "SELECT id, title FROM articles WHERE MATCH('machine | database') ORDER BY id ASC"
+––– output –––
++------+---------------------------+
+| id   | title                     |
++------+---------------------------+
+|    3 | Third Article Search Info |
+|    4 | Machine Learning Guide    |
+|    5 | Database Design Patterns  |
++------+---------------------------+
+––– comment –––
+5. Boolean NOT operator
+––– input –––
+mysql -h0 -P9306 -e "SELECT id, title FROM articles WHERE MATCH('article - first') ORDER BY id ASC"
+––– output –––
++------+------------------------------+
+| id   | title                        |
++------+------------------------------+
+|    2 | Second Article on Techniques |
+|    3 | Third Article Search Info    |
++------+------------------------------+
+––– comment –––
+6. Field-specific search - title field
+––– input –––
+mysql -h0 -P9306 -e "SELECT id, title FROM articles WHERE MATCH('@title search') ORDER BY id ASC"
+––– output –––
++------+----------------------------+
+| id   | title                      |
++------+----------------------------+
+|    1 | First Article About Search |
+|    3 | Third Article Search Info  |
++------+----------------------------+
+––– comment –––
+7. Field-specific search - content field
+––– input –––
+mysql -h0 -P9306 -e "SELECT id, title FROM articles WHERE MATCH('@content algorithms') ORDER BY id ASC"
+––– output –––
++------+------------------------------+
+| id   | title                        |
++------+------------------------------+
+|    2 | Second Article on Techniques |
+|    4 | Machine Learning Guide       |
++------+------------------------------+
+––– comment –––
+8. Wildcard search
+––– input –––
+mysql -h0 -P9306 -e "SELECT id, title FROM articles WHERE MATCH('tech*') ORDER BY id ASC"
+––– output –––
++------+------------------------------+
+| id   | title                        |
++------+------------------------------+
+|    1 | First Article About Search   |
+|    2 | Second Article on Techniques |
+|    5 | Database Design Patterns     |
++------+------------------------------+
+––– comment –––
+9. Multiple field search with zone operator
+––– input –––
+mysql -h0 -P9306 -e "SELECT id, title FROM articles WHERE MATCH('@(title,category) database') ORDER BY id ASC"
+––– output –––
++------+---------------------------+
+| id   | title                     |
++------+---------------------------+
+|    3 | Third Article Search Info |
+|    5 | Database Design Patterns  |
++------+---------------------------+
+––– comment –––
+10. Proximity search - words within distance
+––– input –––
+mysql -h0 -P9306 -e "SELECT id, title FROM articles WHERE MATCH('\"search information\"~10') ORDER BY id ASC"
+––– output –––
++------+----------------------------+
+| id   | title                      |
++------+----------------------------+
+|    1 | First Article About Search |
+|    3 | Third Article Search Info  |
++------+----------------------------+
+––– comment –––
+11. Quorum search - at least N words must match
+––– input –––
+mysql -h0 -P9306 -e "SELECT id, title FROM articles WHERE MATCH('\"machine learning algorithms neural\"/2') ORDER BY id ASC"
+––– output –––
++------+------------------------+
+| id   | title                  |
++------+------------------------+
+|    4 | Machine Learning Guide |
++------+------------------------+
+––– comment –––
+12. Strict order search
+––– input –––
+mysql -h0 -P9306 -e "SELECT id, title FROM articles WHERE MATCH('\"database << design\"') ORDER BY id ASC"
+––– output –––
++------+--------------------------+
+| id   | title                    |
++------+--------------------------+
+|    5 | Database Design Patterns |
++------+--------------------------+
+––– comment –––
+13. Complex nested boolean expression
+––– input –––
+mysql -h0 -P9306 -e "SELECT id, title FROM articles WHERE MATCH('(search | machine) & (article | guide)') ORDER BY id ASC"
+––– output –––
++------+------------------------------+
+| id   | title                        |
++------+------------------------------+
+|    1 | First Article About Search   |
+|    2 | Second Article on Techniques |
+|    3 | Third Article Search Info    |
+|    4 | Machine Learning Guide       |
++------+------------------------------+
+––– comment –––
+14. Test wildcard with infix matching
+––– input –––
+mysql -h0 -P9306 -e "SELECT id, title FROM articles WHERE MATCH('*earch*') ORDER BY id ASC"
+––– output –––
++------+------------------------------+
+| id   | title                        |
++------+------------------------------+
+|    1 | First Article About Search   |
+|    2 | Second Article on Techniques |
+|    3 | Third Article Search Info    |
++------+------------------------------+
+––– comment –––
+15. Test empty result set
+––– input –––
+mysql -h0 -P9306 -e "SELECT id, title FROM articles WHERE MATCH('nonexistent') ORDER BY id ASC"
+––– output –––
+––– comment –––
+16. Test MATCH with relevance scoring
+––– input –––
+mysql -h0 -P9306 -e "SELECT id, title, WEIGHT() as relevance FROM articles WHERE MATCH('search techniques') ORDER BY relevance DESC, id ASC"
+––– output –––
++------+------------------------------+-----------+
+| id   | title                        | relevance |
++------+------------------------------+-----------+
+|    2 | Second Article on Techniques |      #!/[0-9]+/!# |
++------+------------------------------+-----------+
+––– comment –––
+Cleanup
+––– input –––
+mysql -h0 -P9306 -e "DROP TABLE articles"
+––– output –––
+––– comment –––
+Stop Manticore Search
+––– input –––
+searchd --stopwait > /dev/null 2>&1; echo 'Manticore stopped'
+––– output –––
+Manticore stopped
+

@@ -1,0 +1,187 @@
+You can use regex in the output sections.
+More info here: https://github.com/manticoresoftware/clt#refine
+Time taken for test: 1932ms
+––– input –––
+rm -f /var/log/manticore/searchd.log; stdbuf -oL searchd --stopwait > /dev/null; stdbuf -oL searchd > /dev/null
+––– output –––
+––– duration: 344ms (17.81%) –––
+––– input –––
+if timeout 10 grep -qm1 'accepting connections' <(tail -n 1000 -f /var/log/manticore/searchd.log); then echo 'Accepting connections!'; else echo 'Timeout or failed!'; fi
+––– output –––
+Accepting connections!
+––– duration: 58ms (3.00%) –––
+––– input –––
+mysql -h0 -P9306 -e "CREATE TABLE articles (id INT, title TEXT, content TEXT, category TEXT) morphology='stem_en' min_infix_len='2'"
+––– output –––
+––– duration: 83ms (4.30%) –––
+––– input –––
+mysql -h0 -P9306 -e "INSERT INTO articles VALUES (1, 'First Article About Search', 'This is the first test article about search engines and information retrieval', 'technology'), (2, 'Second Article on Techniques', 'Another article discussing advanced search techniques and algorithms', 'science'), (3, 'Third Article Search Info', 'Search is important for finding information quickly in databases', 'database'), (4, 'Machine Learning Guide', 'A comprehensive guide to machine learning algorithms and neural networks', 'ai'), (5, 'Database Design Patterns', 'Best practices for database design and optimization techniques', 'database')"
+––– output –––
+––– duration: 91ms (4.71%) –––
+––– input –––
+mysql -h0 -P9306 -e "SELECT id, title FROM articles WHERE MATCH('search') ORDER BY id ASC"
+––– output –––
++------+------------------------------+
+| id   | title                        |
++------+------------------------------+
+|    1 | First Article About Search   |
+|    2 | Second Article on Techniques |
+|    3 | Third Article Search Info    |
++------+------------------------------+
+––– duration: 67ms (3.47%) –––
+––– input –––
+mysql -h0 -P9306 -e "SELECT id, title FROM articles WHERE MATCH('\"search techniques\"') ORDER BY id ASC"
+––– output –––
++------+------------------------------+
+| id   | title                        |
++------+------------------------------+
+|    2 | Second Article on Techniques |
++------+------------------------------+
+––– duration: 88ms (4.55%) –––
+––– input –––
+mysql -h0 -P9306 -e "SELECT id, title FROM articles WHERE MATCH('search &
+article') ORDER BY id ASC"
+––– output –––
++------+------------------------------+
+| id   | title                        |
++------+------------------------------+
+|    1 | First Article About Search   |
+|    2 | Second Article on Techniques |
+|    3 | Third Article Search Info    |
++------+------------------------------+
+––– duration: 53ms (2.74%) –––
+––– input –––
+mysql -h0 -P9306 -e "SELECT id, title FROM articles WHERE MATCH('machine | database') ORDER BY id ASC"
+––– output –––
++------+---------------------------+
+| id   | title                     |
++------+---------------------------+
+|    3 | Third Article Search Info |
+|    4 | Machine Learning Guide    |
+|    5 | Database Design Patterns  |
++------+---------------------------+
+––– duration: 56ms (2.90%) –––
+––– input –––
+mysql -h0 -P9306 -e "SELECT id, title FROM articles WHERE MATCH('article - first') ORDER BY id ASC"
+––– output –––
++------+------------------------------+
+| id   | title                        |
++------+------------------------------+
+|    2 | Second Article on Techniques |
+|    3 | Third Article Search Info    |
++------+------------------------------+
+––– duration: 45ms (2.33%) –––
+––– input –––
+mysql -h0 -P9306 -e "SELECT id, title FROM articles WHERE MATCH('@title search') ORDER BY id ASC"
+––– output –––
++------+----------------------------+
+| id   | title                      |
++------+----------------------------+
+|    1 | First Article About Search |
+|    3 | Third Article Search Info  |
++------+----------------------------+
+––– duration: 46ms (2.38%) –––
+––– input –––
+mysql -h0 -P9306 -e "SELECT id, title FROM articles WHERE MATCH('@content algorithms') ORDER BY id ASC"
+––– output –––
++------+------------------------------+
+| id   | title                        |
++------+------------------------------+
+|    2 | Second Article on Techniques |
+|    4 | Machine Learning Guide       |
++------+------------------------------+
+––– duration: 46ms (2.38%) –––
+––– input –––
+mysql -h0 -P9306 -e "SELECT id, title FROM articles WHERE MATCH('tech*') ORDER BY id ASC"
+––– output –––
++------+------------------------------+
+| id   | title                        |
++------+------------------------------+
+|    1 | First Article About Search   |
+|    2 | Second Article on Techniques |
+|    5 | Database Design Patterns     |
++------+------------------------------+
+––– duration: 48ms (2.48%) –––
+––– input –––
+mysql -h0 -P9306 -e "SELECT id, title FROM articles WHERE MATCH('@(title,category) database') ORDER BY id ASC"
+––– output –––
++------+---------------------------+
+| id   | title                     |
++------+---------------------------+
+|    3 | Third Article Search Info |
+|    5 | Database Design Patterns  |
++------+---------------------------+
+––– duration: 46ms (2.38%) –––
+––– input –––
+mysql -h0 -P9306 -e "SELECT id, title FROM articles WHERE MATCH('\"search information\"~10') ORDER BY id ASC"
+––– output –––
++------+----------------------------+
+| id   | title                      |
++------+----------------------------+
+|    1 | First Article About Search |
+|    3 | Third Article Search Info  |
++------+----------------------------+
+––– duration: 48ms (2.48%) –––
+––– input –––
+mysql -h0 -P9306 -e "SELECT id, title FROM articles WHERE MATCH('\"machine learning algorithms neural\"/2') ORDER BY id ASC"
+––– output –––
++------+------------------------+
+| id   | title                  |
++------+------------------------+
+|    4 | Machine Learning Guide |
++------+------------------------+
+––– duration: 48ms (2.48%) –––
+––– input –––
+mysql -h0 -P9306 -e "SELECT id, title FROM articles WHERE MATCH('\"database << design\"') ORDER BY id ASC"
+––– output –––
++------+--------------------------+
+| id   | title                    |
++------+--------------------------+
+|    5 | Database Design Patterns |
++------+--------------------------+
+––– duration: 46ms (2.38%) –––
+––– input –––
+mysql -h0 -P9306 -e "SELECT id, title FROM articles WHERE MATCH('(search | machine) & (article | guide)') ORDER BY id ASC"
+––– output –––
++------+------------------------------+
+| id   | title                        |
++------+------------------------------+
+|    1 | First Article About Search   |
+|    2 | Second Article on Techniques |
+|    3 | Third Article Search Info    |
+|    4 | Machine Learning Guide       |
++------+------------------------------+
+––– duration: 47ms (2.43%) –––
+––– input –––
+mysql -h0 -P9306 -e "SELECT id, title FROM articles WHERE MATCH('*earch*') ORDER BY id ASC"
+––– output –––
++------+------------------------------+
+| id   | title                        |
++------+------------------------------+
+|    1 | First Article About Search   |
+|    2 | Second Article on Techniques |
+|    3 | Third Article Search Info    |
++------+------------------------------+
+––– duration: 48ms (2.48%) –––
+––– input –––
+mysql -h0 -P9306 -e "SELECT id, title FROM articles WHERE MATCH('nonexistent') ORDER BY id ASC"
+––– output –––
+––– duration: 47ms (2.43%) –––
+––– input –––
+mysql -h0 -P9306 -e "SELECT id, title, WEIGHT() as relevance FROM articles WHERE MATCH('search techniques') ORDER BY relevance DESC, id ASC"
+––– output –––
++------+------------------------------+-----------+
+| id   | title                        | relevance |
++------+------------------------------+-----------+
+|    2 | Second Article on Techniques |      3560 |
++------+------------------------------+-----------+
+––– duration: 48ms (2.48%) –––
+––– input –––
+mysql -h0 -P9306 -e "DROP TABLE articles"
+––– output –––
+––– duration: 49ms (2.54%) –––
+––– input –––
+searchd --stopwait > /dev/null 2>&1; echo 'Manticore stopped'
+––– output –––
+Manticore stopped
+––– duration: 246ms (12.73%) –––

@@ -70,3 +70,6 @@ mysql -P9306 -h0 -e "SELECT COUNT(*) FROM products; SELECT COUNT(*) FROM reviews
 +----------+
 |   100000 |
 +----------+
+––– input –––
+echo 123
+––– output –––

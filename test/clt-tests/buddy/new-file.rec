@@ -2,6 +2,9 @@
 echo 123
 ––– output –––
 ––– input –––
+ls /tmp
+––– output –––
+––– input –––
 uname -a
 ––– output –––
 ––– input –––

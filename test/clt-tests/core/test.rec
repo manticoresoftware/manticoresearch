@@ -1,3 +1,6 @@
 ––– input –––
 whoami
 ––– output –––
+––– input –––
+ls -lt /tmp
+––– output –––

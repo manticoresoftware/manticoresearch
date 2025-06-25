@@ -2,6 +2,9 @@
 echo 123
 ––– output –––
 ––– input –––
+whoami
+––– output –––
+––– input –––
 date
 ––– output –––
 ––– input –––

@@ -1,3 +1,6 @@
 ––– input –––
 echo 123
 ––– output –––
+––– input –––
+ls -lt
+––– output –––

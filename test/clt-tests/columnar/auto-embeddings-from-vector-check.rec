@@ -103,13 +103,13 @@ Test error case: FROM not specified
 ––– input –––
 mysql -h0 -P9306 -e "CREATE TABLE test_no_from_specified (title1 TEXT, image_vector FLOAT_VECTOR KNN_TYPE='hnsw' HNSW_SIMILARITY='l2' MODEL_NAME = 'sentence-transformers/all-MiniLM-L6-v2') engine = 'columnar'" 2>&1
 ––– output –––
-#!/.*ERROR.*(field|column|nonexistent).*/!#
+ERROR 1064 (42000) at line 1: error adding table 'test_no_from_specified': 'from' setting empty for KNN attribute 'image_vector'
 ––– comment –––
 Test error case: FROM specified but empty
 ––– input –––
 mysql -h0 -P9306 -e "CREATE TABLE test_from_set_to_empty (title1 TEXT, image_vector FLOAT_VECTOR KNN_TYPE='hnsw' HNSW_SIMILARITY='l2' MODEL_NAME = 'sentence-transformers/all-MiniLM-L6-v2' FROM = '') engine = 'columnar'" 2>&1
 ––– output –––
-#!/.*ERROR.*(field|column|nonexistent).*/!#
+ERROR 1064 (42000) at line 1: error adding table 'test_from_set_to_empty': 'from' setting empty for KNN attribute 'image_vector'
 ––– comment –––
 Test multiple fields in FROM clause
 ––– input –––
@@ -135,11 +135,11 @@ multi_field_md5: #!/[a-f0-9]{32}/!#
 single_field_md5: #!/[a-f0-9]{32}/!#
 #!/SUCCESS: Multi-field FROM produces different vector|INFO: Multi-field vs single-field comparison/!#
 ––– comment –––
-Test MODEL_NAME without FROM clause (no auto-generation)
+Test MODEL_NAME without FROM clause (fails)
 ––– input –––
-mysql -h0 -P9306 -e "CREATE TABLE test_no_from (title1 TEXT, image_vector FLOAT_VECTOR KNN_TYPE='hnsw' HNSW_SIMILARITY='l2' MODEL_NAME = 'sentence-transformers/all-MiniLM-L6-v2') engine = 'columnar'"; echo $?
+mysql -h0 -P9306 -e "CREATE TABLE test_no_from (title1 TEXT, image_vector FLOAT_VECTOR KNN_TYPE='hnsw' HNSW_SIMILARITY='l2' MODEL_NAME = 'sentence-transformers/all-MiniLM-L6-v2') engine = 'columnar'"
 ––– output –––
-0
+ERROR 1064 (42000) at line 1: error adding table 'test_no_from': 'from' setting empty for KNN attribute 'image_vector'
 ––– comment –––
 Without FROM, auto-generation should not happen
 ––– input –––

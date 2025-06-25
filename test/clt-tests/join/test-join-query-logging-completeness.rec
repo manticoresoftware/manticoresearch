@@ -1,0 +1,201 @@
+––– input –––
+export INSTANCE=1
+––– output –––
+––– block: ../base/replication/start-searchd-precach –––
+––– comment –––
+Wait for Manticore to be ready
+––– input –––
+timeout 30 bash -c 'until mysql -h0 -P1306 -e "SELECT 1" 2>/dev/null; do sleep 1; done'; echo $?
+––– output –––
++------+
+| 1    |
++------+
+|    1 |
++------+
+0
+––– comment –––
+Create simple customers table for JOIN testing
+––– input –––
+mysql -h0 -P1306 -e "CREATE TABLE customers (id BIGINT, name TEXT, email TEXT, address TEXT) morphology='stem_en'"; echo $?
+––– output –––
+0
+––– comment –––
+Create simple orders table for JOIN testing
+––– input –––
+mysql -h0 -P1306 -e "CREATE TABLE orders (id BIGINT, customer_id BIGINT, product TEXT, quantity INT, details JSON) morphology='stem_en'"; echo $?
+––– output –––
+0
+––– comment –––
+Insert sample customer data
+––– input –––
+mysql -h0 -P1306 -e "INSERT INTO customers (id, name, email, address) VALUES (1, 'Alice Johnson', 'alice@example.com', '123 Maple St'), (2, 'Bob Smith', 'bob@example.com', '456 Oak Ave'), (3, 'Carol White', 'carol@example.com', '789 Pine Rd'), (4, 'John Smith', 'john@example.com', '321 Elm St')"; echo $?
+––– output –––
+0
+––– comment –––
+Insert sample order data
+––– input –––
+mysql -h0 -P1306 -e "INSERT INTO orders (id, customer_id, product, quantity, details) VALUES (1, 1, 'Laptop', 1, '{\"price\": 1200, \"warranty\": \"2 years\"}'), (2, 1, 'Tablet', 1, '{\"price\": 300, \"warranty\": \"1 year\"}'), (3, 2, 'Phone', 2, '{\"price\": 800, \"warranty\": \"1 year\"}'), (4, 3, 'Monitor', 1, '{\"price\": 400, \"warranty\": \"3 years\"}')"; echo $?
+––– output –––
+0
+––– comment –––
+Test INNER JOIN with text search on customer address
+––– input –––
+mysql -h0 -P1306 -e "SELECT product, customers.email, customers.name, customers.address FROM orders INNER JOIN customers ON customers.id = orders.customer_id WHERE MATCH('maple', customers) ORDER BY customers.email ASC \G"
+––– output –––
+*************************** 1. row ***************************
+          product: Laptop
+  customers.email: alice@example.com
+   customers.name: Alice Johnson
+customers.address: 123 Maple St
+*************************** 2. row ***************************
+          product: Tablet
+  customers.email: alice@example.com
+   customers.name: Alice Johnson
+customers.address: 123 Maple St
+––– comment –––
+Test LEFT JOIN to show all customers including those without orders
+––– input –––
+mysql -h0 -P1306 -e "SELECT name, orders.quantity FROM customers LEFT JOIN orders ON orders.customer_id = customers.id ORDER BY email ASC \G"
+––– output –––
+*************************** 1. row ***************************
+           name: Alice Johnson
+orders.quantity: 1
+@int_attr_email:
+*************************** 2. row ***************************
+           name: Alice Johnson
+orders.quantity: 1
+@int_attr_email:
+*************************** 3. row ***************************
+           name: Bob Smith
+orders.quantity: 2
+@int_attr_email:
+*************************** 4. row ***************************
+           name: Carol White
+orders.quantity: 1
+@int_attr_email:
+*************************** 5. row ***************************
+           name: John Smith
+orders.quantity: NULL
+@int_attr_email:
+––– comment –––
+Test LEFT JOIN with text search on product names
+––– input –––
+mysql -h0 -P1306 -e "SELECT orders.product, name, orders.details FROM customers LEFT JOIN orders ON customers.id = orders.customer_id WHERE MATCH('laptop|phone|monitor', orders) ORDER BY id ASC \G"
+––– output –––
+*************************** 1. row ***************************
+orders.product: Laptop
+          name: Alice Johnson
+orders.details: {"price":1200,"warranty":"2 years"}
+*************************** 2. row ***************************
+orders.product: Phone
+          name: Bob Smith
+orders.details: {"price":800,"warranty":"1 year"}
+*************************** 3. row ***************************
+orders.product: Monitor
+          name: Carol White
+orders.details: {"price":400,"warranty":"3 years"}
+––– comment –––
+Test INNER JOIN with text search and field weights
+––– input –––
+mysql -h0 -P1306 -e "SELECT product, customers.email, customers.name, customers.address, customers.weight() FROM orders INNER JOIN customers ON customers.id = orders.customer_id WHERE MATCH('maple', customers) OPTION(customers) field_weights=(address=1500) \G"
+––– output –––
+*************************** 1. row ***************************
+           product: Laptop
+   customers.email: alice@example.com
+    customers.name: Alice Johnson
+ customers.address: 123 Maple St
+customers.weight(): #!/[0-9]+/!#
+*************************** 2. row ***************************
+           product: Tablet
+   customers.email: alice@example.com
+    customers.name: Alice Johnson
+ customers.address: 123 Maple St
+customers.weight(): #!/[0-9]+/!#
+––– comment –––
+Test INNER JOIN with custom join batch size option
+––– input –––
+mysql -h0 -P1306 -e "SELECT product, customers.name FROM orders INNER JOIN customers ON customers.id = orders.customer_id ORDER BY id ASC OPTION join_batch_size=500 \G"
+––– output –––
+*************************** 1. row ***************************
+       product: Laptop
+customers.name: Alice Johnson
+*************************** 2. row ***************************
+       product: Tablet
+customers.name: Alice Johnson
+*************************** 3. row ***************************
+       product: Phone
+customers.name: Bob Smith
+*************************** 4. row ***************************
+       product: Monitor
+customers.name: Carol White
+––– comment –––
+Test LEFT JOIN with arithmetic expression in SELECT
+––– input –––
+mysql -h0 -P1306 -e "SELECT product, quantity, (quantity + 3) AS qty_plus_three FROM orders LEFT JOIN customers ON customers.id = orders.customer_id WHERE customers.name IS NOT NULL ORDER BY id ASC \G"
+––– output –––
+*************************** 1. row ***************************
+       product: Laptop
+      quantity: 1
+qty_plus_three: 4
+*************************** 2. row ***************************
+       product: Tablet
+      quantity: 1
+qty_plus_three: 4
+*************************** 3. row ***************************
+       product: Phone
+      quantity: 2
+qty_plus_three: 5
+*************************** 4. row ***************************
+       product: Monitor
+      quantity: 1
+qty_plus_three: 4
+––– comment –––
+Test LEFT JOIN to find customers without any orders
+––– input –––
+mysql -h0 -P1306 -e "SELECT name, orders.product FROM customers LEFT JOIN orders ON customers.id = orders.customer_id WHERE orders.product IS NULL \G"
+––– output –––
+*************************** 1. row ***************************
+          name: John Smith
+orders.product: NULL
+––– comment –––
+Test LEFT JOIN filtering for non-null customer names
+––– input –––
+mysql -h0 -P1306 -e "SELECT product, customers.name FROM orders LEFT JOIN customers ON customers.id = orders.customer_id WHERE customers.name IS NOT NULL ORDER BY id ASC \G"
+––– output –––
+*************************** 1. row ***************************
+       product: Laptop
+customers.name: Alice Johnson
+*************************** 2. row ***************************
+       product: Tablet
+customers.name: Alice Johnson
+*************************** 3. row ***************************
+       product: Phone
+customers.name: Bob Smith
+*************************** 4. row ***************************
+       product: Monitor
+customers.name: Carol White
+––– comment –––
+Flush logs to ensure all queries are written to query.log
+––– input –––
+mysql -h0 -P1306 -e "FLUSH LOGS"; echo $?
+––– output –––
+0
+––– comment –––
+Check that all JOIN queries are logged with complete syntax
+––– input –––
+tail -30 /var/log/manticore-${INSTANCE}/query.log | grep -E "JOIN.*ON" | head -8
+––– output –––
+/* #!/[A-Za-z]{3}\s+[A-Za-z]{3}\s+[0-9]{1,2}\s[0-9]{2}:[0-9]{2}:[0-9]{2}\.[0-9]{3}\s[0-9]{4}/!# conn #!/[0-9]+/!# (#!/[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}:[0-9]+/!#) real #!/[0-9]+\.[0-9]{3}/!# */ SELECT name, orders.quantity FROM customers LEFT JOIN orders ON orders.customer_id = customers.id ORDER BY email ASC;
+/* #!/[A-Za-z]{3}\s+[A-Za-z]{3}\s+[0-9]{1,2}\s[0-9]{2}:[0-9]{2}:[0-9]{2}\.[0-9]{3}\s[0-9]{4}/!# conn #!/[0-9]+/!# (#!/[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}:[0-9]+/!#) real #!/[0-9]+\.[0-9]{3}/!# wall #!/[0-9]+\.[0-9]{3}/!# found #!/[0-9]+/!# */ SELECT name, orders.quantity FROM customers LEFT JOIN orders ON orders.customer_id=customers.id ORDER BY email ASC;
+/* #!/[A-Za-z]{3}\s+[A-Za-z]{3}\s+[0-9]{1,2}\s[0-9]{2}:[0-9]{2}:[0-9]{2}\.[0-9]{3}\s[0-9]{4}/!# conn #!/[0-9]+/!# (#!/[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}:[0-9]+/!#) real #!/[0-9]+\.[0-9]{3}/!# */ SELECT orders.product, name, orders.details FROM customers LEFT JOIN orders ON customers.id = orders.customer_id WHERE MATCH('laptop|phone|monitor', orders) ORDER BY id ASC;
+/* #!/[A-Za-z]{3}\s+[A-Za-z]{3}\s+[0-9]{1,2}\s[0-9]{2}:[0-9]{2}:[0-9]{2}\.[0-9]{3}\s[0-9]{4}/!# conn #!/[0-9]+/!# (#!/[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}:[0-9]+/!#) real #!/[0-9]+\.[0-9]{3}/!# wall #!/[0-9]+\.[0-9]{3}/!# found #!/[0-9]+/!# */ SELECT orders.product, name, orders.details FROM customers LEFT JOIN orders ON customers.id=orders.customer_id WHERE MATCH('laptop|phone|monitor',orders) ORDER BY id ASC;
+/* #!/[A-Za-z]{3}\s+[A-Za-z]{3}\s+[0-9]{1,2}\s[0-9]{2}:[0-9]{2}:[0-9]{2}\.[0-9]{3}\s[0-9]{4}/!# conn #!/[0-9]+/!# (#!/[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}:[0-9]+/!#) real #!/[0-9]+\.[0-9]{3}/!# */ SELECT product, customers.email, customers.name, customers.address, customers.weight() FROM orders INNER JOIN customers ON customers.id = orders.customer_id WHERE MATCH('maple', customers) OPTION(customers) field_weights=(address=1500);
+/* #!/[A-Za-z]{3}\s+[A-Za-z]{3}\s+[0-9]{1,2}\s[0-9]{2}:[0-9]{2}:[0-9]{2}\.[0-9]{3}\s[0-9]{4}/!# conn #!/[0-9]+/!# (#!/[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}:[0-9]+/!#) real #!/[0-9]+\.[0-9]{3}/!# wall #!/[0-9]+\.[0-9]{3}/!# found #!/[0-9]+/!# */ SELECT product, customers.email, customers.name, customers.address, customers.weight() FROM orders INNER JOIN customers ON customers.id=orders.customer_id WHERE MATCH('maple',customers) OPTION(customers) field_weights=(address=1500);
+/* #!/[A-Za-z]{3}\s+[A-Za-z]{3}\s+[0-9]{1,2}\s[0-9]{2}:[0-9]{2}:[0-9]{2}\.[0-9]{3}\s[0-9]{4}/!# conn #!/[0-9]+/!# (#!/[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}:[0-9]+/!#) real #!/[0-9]+\.[0-9]{3}/!# */ SELECT product, customers.name FROM orders INNER JOIN customers ON customers.id = orders.customer_id ORDER BY id ASC OPTION join_batch_size=500;
+/* #!/[A-Za-z]{3}\s+[A-Za-z]{3}\s+[0-9]{1,2}\s[0-9]{2}:[0-9]{2}:[0-9]{2}\.[0-9]{3}\s[0-9]{4}/!# conn #!/[0-9]+/!# (#!/[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}:[0-9]+/!#) real #!/[0-9]+\.[0-9]{3}/!# wall #!/[0-9]+\.[0-9]{3}/!# found #!/[0-9]+/!# */ SELECT product, customers.name FROM orders INNER JOIN customers ON customers.id=orders.customer_id ORDER BY id ASC;
+––– comment –––
+Verify total count of JOIN queries logged correctly
+––– input –––
+tail -50 /var/log/manticore-${INSTANCE}/query.log | grep -c "JOIN.*ON.*="
+––– output –––
+16

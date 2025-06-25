@@ -1,0 +1,18 @@
+You can use regex in the output sections.
+More info here: https://github.com/manticoresoftware/clt#refine
+Time taken for test: 30ms
+––– input –––
+whoami
+––– output –––
+root
+––– duration: 1ms (3.33%) –––
+––– input –––
+echo 'Hello World'
+––– output –––
+Hello World
+––– duration: 0ms (0.00%) –––
+––– input –––
+date
+––– output –––
+Fri Jun 20 04:51:38 PM UTC 2025
+––– duration: 0ms (0.00%) –––

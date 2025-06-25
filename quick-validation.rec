@@ -1,0 +1,12 @@
+Quick validation test with whoami and echo with time
+
+––– comment –––
+Simple validation test
+––– input –––
+whoami
+––– output –––
+root
+––– input –––
+echo "Current time: $(date)"
+––– output –––
+Current time: %{DATETIME}

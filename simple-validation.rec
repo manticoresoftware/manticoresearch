@@ -1,0 +1,10 @@
+Very simple validation test
+
+––– input –––
+whoami
+––– output –––
+root
+––– input –––
+echo 'Hello World'
+––– output –––
+Hello World

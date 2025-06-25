@@ -1,0 +1,16 @@
+Quick validation test with basic commands
+
+––– comment –––
+Basic system validation
+––– input –––
+whoami
+––– output –––
+root
+––– input –––
+echo 'Test completed successfully'
+––– output –––
+Test completed successfully
+––– input –––
+date '+%Y-%m-%d %H:%M:%S'
+––– output –––
+%{DATETIME}

@@ -1,0 +1,54 @@
+Comprehensive test for fuzzy search functionality, covering various scenarios and edge cases
+
+––– comment –––
+Prepare test database with various words
+––– input –––
+mysql -h0 -P9306 -e "CREATE TABLE fuzzy_test (id INT, title TEXT, content TEXT)"
+––– output –––
+Query OK
+––– input –––
+mysql -h0 -P9306 -e "INSERT INTO fuzzy_test VALUES (1, 'Hello World', 'First document with normal text'), (2, 'Helo Wrld', 'Document with slight misspellings'), (3, 'Hallo Werld', 'Another misspelled document')"
+––– output –––
+Query OK
+––– comment –––
+Fuzzy search with minimal settings
+––– input –––
+mysql -h0 -P9306 -e "SELECT * FROM fuzzy_test WHERE MATCH('Hello') OPTION fuzzy=1"
+––– output –––
+| 1 | Hello World | First document with normal text |
+––– comment –––
+Fuzzy search with misspelled word - should match similar entries
+––– input –––
+mysql -h0 -P9306 -e "SELECT * FROM fuzzy_test WHERE MATCH('Helo') OPTION fuzzy=1"
+––– output –––
+| 2 | Helo Wrld | Document with slight misspellings |
+––– comment –––
+Fuzzy search with more significant misspelling
+––– input –––
+mysql -h0 -P9306 -e "SELECT * FROM fuzzy_test WHERE MATCH('Hallo') OPTION fuzzy=1"
+––– output –––
+| 3 | Hallo Werld | Another misspelled document |
+––– comment –––
+Fuzzy search with no matches
+––– input –––
+mysql -h0 -P9306 -e "SELECT * FROM fuzzy_test WHERE MATCH('Nonexistent') OPTION fuzzy=1"
+––– output –––
+Empty set
+––– comment –––
+Fuzzy search with multiple word match
+––– input –––
+mysql -h0 -P9306 -e "SELECT * FROM fuzzy_test WHERE MATCH('Helo Wrld') OPTION fuzzy=1"
+––– output –––
+| 2 | Helo Wrld | Document with slight misspellings |
+––– comment –––
+Fuzzy search disabled - should not match misspellings
+––– input –––
+mysql -h0 -P9306 -e "SELECT * FROM fuzzy_test WHERE MATCH('Helo') OPTION fuzzy=0"
+––– output –––
+Empty set
+––– comment –––
+Cleanup test table
+––– input –––
+mysql -h0 -P9306 -e "DROP TABLE fuzzy_test"
+––– output –––
+Query OK

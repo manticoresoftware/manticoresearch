@@ -10,6 +10,9 @@
 echo -e 'searchd\n{\n\tlisten = 3103\n\tlisten = 9315:mysql\n\tlisten = 127.0.0.1:3104:replication\n\tdata_dir = data\n\n\tlog = searchd.log\n\tpid_file = searchd.pid\n\tbinlog_path =\n}' > /replication.conf
 ––– output –––
 ––– input –––
+whoami
+––– output –––
+––– input –––
 cat /replication.conf
 ––– output –––
 searchd
@@ -28,7 +31,11 @@ mkdir -p data; rm -f searchd.log; stdbuf -oL searchd --stopwait > /dev/null; std
 ––– input –––
 grep 'FATAL: invalid replication ports count 1, should be at least 2' searchd.log |wc -l
 ––– output –––
+<<<<<<< Updated upstream
 1
 ––– input –––
 echo 123
 ––– output –––
+=======
+1
+>>>>>>> Stashed changes

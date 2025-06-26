@@ -7,8 +7,6 @@ debconf: delaying package configuration, since apt-utils is not installed
 ––– input –––
 mysql -h0 -P9306 -e "CREATE TABLE t (id INT, value TEXT, value_attr STRING) min_infix_len = '3' min_prefix_len = '3'; INSERT INTO t VALUES (1, 'example', 'example'), (2, 'test', 'test');"
 ––– output –––
-––– comment –––
-Test SHOW VERSION command
 ––– input –––
 curl -s -X POST "http://localhost:9308/sql?mode=raw" -d "show version" | jq '.[0].data'
 ––– output –––
@@ -38,8 +36,6 @@ curl -s -X POST "http://localhost:9308/sql?mode=raw" -d "show version" | jq '.[0
     "Version": "buddy %{VERSION}"
   }
 ]
-––– comment –––
-Test SHOW BUDDY PLUGINS command
 ––– input –––
 curl -s -X POST "http://localhost:9308/sql?mode=raw" -d "show buddy plugins" | jq '.[0].data | .[0:3] | .[] | {Plugin, Type, Info}'
 ––– output –––
@@ -58,8 +54,6 @@ curl -s -X POST "http://localhost:9308/sql?mode=raw" -d "show buddy plugins" | j
   "Type": "core",
   "Info": "Emulates some Elastic queries and generates responses as if they were made by ES"
 }
-––– comment –––
-Test SELECT with fuzzy search
 ––– input –––
 curl -s -X POST "http://localhost:9308/sql?mode=raw" -d "select * from t where match('exmaple') option fuzzy=1" | jq '.[0].data'
 ––– output –––
@@ -70,8 +64,6 @@ curl -s -X POST "http://localhost:9308/sql?mode=raw" -d "select * from t where m
     "value_attr": "example"
   }
 ]
-––– comment –––
-Test SHOW FIELDS command
 ––– input –––
 curl -s -X POST "http://localhost:9308/sql?mode=raw" -d "show fields from t" | jq '.[0].data'
 ––– output –––
@@ -101,8 +93,6 @@ curl -s -X POST "http://localhost:9308/sql?mode=raw" -d "show fields from t" | j
     "Extra": ""
   }
 ]
-––– comment –––
-Test CREATE TABLE LIKE command
 ––– input –––
 curl -s -X POST "http://localhost:9308/sql?mode=raw" -d "create table t_copy like t" | jq '.[0] | {total, error, warning}'
 ––– output –––
@@ -111,8 +101,6 @@ curl -s -X POST "http://localhost:9308/sql?mode=raw" -d "create table t_copy lik
   "error": "",
   "warning": ""
 }
-––– comment –––
-Test SHOW FULL TABLES command
 ––– input –––
 curl -s -X POST "http://localhost:9308/sql?mode=raw" -d "show full tables" | jq '.[0].data'
 ––– output –––
@@ -126,8 +114,6 @@ curl -s -X POST "http://localhost:9308/sql?mode=raw" -d "show full tables" | jq 
     "Table_type": "BASE TABLE"
   }
 ]
-––– comment –––
-Test SELECT query
 ––– input –––
 curl -s -X POST "http://localhost:9308/sql?mode=raw" -d "select * from t limit 1" | jq '.[0].data'
 ––– output –––
@@ -138,8 +124,6 @@ curl -s -X POST "http://localhost:9308/sql?mode=raw" -d "select * from t limit 1
     "value_attr": "example"
   }
 ]
-––– comment –––
-Test GET method
 ––– input –––
 curl -s "http://localhost:9308/sql?mode=raw&query=select%20count(*)%20from%20t" | jq '.[0].data'
 ––– output –––

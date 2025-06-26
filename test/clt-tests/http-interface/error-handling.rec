@@ -15,12 +15,12 @@ curl -s "http://localhost:9308/cli_json" -d "SELECT * FROM nonexistent_table"; e
 ––– output –––
 {"error":"unknown local table(s) 'nonexistent_table' in search request"}
 ––– input –––
-curl -X POST "http://localhost:9308/sql" -d "SELECT * FROM t; SHOW META"; echo
+curl -s -X POST "http://localhost:9308/sql" -d "SELECT * FROM t; SHOW META"; echo
 ––– output –––
+{"error":"only SELECT queries are supported"}
 ––– input –––
 curl -s "http://localhost:9308/cli_json" -d "DESCRIBE t; SELECT * FROM t" | awk '!/row.*in set/'; echo
 ––– output –––
-{"error":"P01: syntax error, unexpected ';' near '; SELECT * FROM '"}
 ––– input –––
 curl -s "http://localhost:9308/cli_json" -d "SELECT * FROM t WHERE MATCH('@value \!@#$%')"; echo
 ––– output –––
@@ -44,3 +44,7 @@ curl -s "http://localhost:9308/cli_json" -d "SELECT * FROM t LIMIT -5"; echo
 curl -s "http://localhost:9308/cli_json" -d "UPDATE t SET value='new_value' WHERE id=1"; echo
 ––– output –––
 {"error":"table t: attribute 'value' not found"}
+––– input –––
+curl -s -X POST "http://localhost:9308/sql" -d "show version"
+––– output –––
+{"error":"only SELECT queries are supported"}

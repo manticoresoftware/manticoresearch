@@ -18,7 +18,7 @@ curl -s "http://localhost:9308/cli?show%20version" | grep -v 'rows in set'
 | Buddy      | buddy %{VERSION}            |
 +------------+----------------------------------+
 ––– input –––
-curl -s "http://localhost:9308/cli?show%20buddy%20plugins" | head -8 | grep -v 'rows in set'
+curl -s "http://localhost:9308/cli?show%20buddy%20plugins" | grep -v 'rows in set'
 ––– output –––
 +--------------------------------------------------------+-------------------------+----------------+------+-----------------------------------------------------------------------------------------------------------------------------------------------------+
 | Package                                                | Plugin                  | Version        | Type | Info                                                                                                                                                |
@@ -28,16 +28,29 @@ curl -s "http://localhost:9308/cli?show%20buddy%20plugins" | head -8 | grep -v '
 | manticoresoftware/buddy-plugin-emulate-elastic         | emulate-elastic         | %{VERSION} | core | Emulates some Elastic queries and generates responses as if they were made by ES                                                                    |
 | manticoresoftware/buddy-plugin-fuzzy                   | fuzzy                   | %{VERSION} | core | Fuzzy search plugin. It helps to find the best match for a given query.                                                                             |
 | manticoresoftware/buddy-plugin-create-table            | create-table            | %{VERSION} | core | Enables tables copying; handles CREATE TABLE statements with MySQL options not supported by Manticore                                               |
-––– input –––
-curl -s "http://localhost:9308/cli?show%20queries" | grep -v 'rows in set'
-––– output –––
-+----+---------------+---------+----------+-----------------+
-| id | query         | time    | protocol | host            |
-+----+---------------+---------+----------+-----------------+
-| %{NUMBER}  | select        | %{NUMBER}#!/\b(?:us|ms)\b/!# ago | http     | %{IPADDR}:%{NUMBER} |
-| %{NUMBER} | show queries  | %{NUMBER}#!/\b(?:us|ms)\b/!# ago | http     | %{IPADDR}:%{NUMBER} |
-| %{NUMBER}  | show_settings | %{NUMBER}#!/\b(?:us|ms)\b/!#    | http     | %{IPADDR}:%{NUMBER} |
-+----+---------------+---------+----------+-----------------+
+| manticoresoftware/buddy-plugin-create-cluster          | create-cluster          | %{VERSION} | core | Enable CREATE CLUSTER IF NOT EXISTS statements                                                                                                      |
+| manticoresoftware/buddy-plugin-drop                    | drop                    | %{VERSION} | core | Handles DROP statements with MySQL options not supported by Manticore                                                                               |
+| manticoresoftware/buddy-plugin-insert                  | insert                  | %{VERSION} | core | Auto schema support. When an insert operation is performed and the table does not exist, it creates it with data types auto-detection               |
+| manticoresoftware/buddy-plugin-alias                   | alias                   | %{VERSION} | core |                                                                                                                                                     |
+| manticoresoftware/buddy-plugin-select                  | select                  | %{VERSION} | core | Various SELECTs handlers needed for mysqldump and other software support, mostly aiming to work similarly to MySQL                                  |
+| manticoresoftware/buddy-plugin-show                    | show                    | %{VERSION} | core | Various "show" queries handlers, for example, `show queries`, `show fields`, `show full tables`, etc                                                |
+| manticoresoftware/buddy-plugin-plugin                  | plugin                  | %{VERSION} | core | Core logic for plugin support and helpers. Also handles `create buddy plugin`, `delete buddy plugin`, and `show buddy plugins`                      |
+| manticoresoftware/buddy-plugin-test                    | test                    | %{VERSION} | core | Test plugin, used exclusively for tests                                                                                                             |
+| manticoresoftware/buddy-plugin-alter-column            | alter-column            | %{VERSION} | core | Enables adding/dropping table fields(columns)                                                                                                       |
+| manticoresoftware/buddy-plugin-alter-distributed-table | alter-distributed-table | %{VERSION} | core | Enables alter for distributed tables                                                                                                                |
+| manticoresoftware/buddy-plugin-alter-rename-table      | alter-rename-table      | %{VERSION} | core | Enables alter table rename                                                                                                                          |
+| manticoresoftware/buddy-plugin-modify-table            | modify-table            | %{VERSION} | core | Assists in standardizing options in create and alter table statements to show option=1 for integers.                                                |
+| manticoresoftware/buddy-plugin-knn                     | knn                     | %{VERSION} | core | Enables KNN by document id                                                                                                                          |
+| manticoresoftware/buddy-plugin-replace                 | replace                 | %{VERSION} | core | Enables partial replaces                                                                                                                            |
+| manticoresoftware/buddy-plugin-queue                   | queue                   | %{VERSION} | core |                                                                                                                                                     |
+| manticoresoftware/buddy-plugin-sharding                | sharding                | %{VERSION} | core | Enables sharded tables.                                                                                                                             |
+| manticoresoftware/buddy-plugin-update                  | update                  | %{VERSION} | core | Handles UPDATE statements sent by MySQL tools making possible for them to update full-text fields                                                   |
+| manticoresoftware/buddy-plugin-autocomplete            | autocomplete            | %{VERSION} | core | Autocomplete plugin that offers suggestions based on the starting query                                                                             |
+| manticoresoftware/buddy-plugin-cli-table               | cli-table               | %{VERSION} | core | /cli endpoint based on /cli_json - outputs query result as a table                                                                                  |
+| manticoresoftware/buddy-plugin-distributed-insert      | distributed-insert      | %{VERSION} | core | The plugin enables data insertion into distributed sharded tables.                                                                                  |
+| manticoresoftware/buddy-plugin-truncate                | truncate                | %{VERSION} | core | Handles TRUNCATE statements on distributed tables                                                                                                   |
+| manticoresoftware/buddy-plugin-metrics                 | metrics                 | %{VERSION} | core | Returns Prometheus metrics                                                                                                                          |
++--------------------------------------------------------+-------------------------+----------------+------+-----------------------------------------------------------------------------------------------------------------------------------------------------+
 ––– input –––
 curl -s "http://localhost:9308/cli?select%20*%20from%20t%20where%20match('exmaple')%20option%20fuzzy=1" | grep -v 'row in set'
 ––– output –––

@@ -55,7 +55,7 @@ table test_vec {
 
 ### Inserting vector data
 
-After creating the table, you need to insert your vector data, ensuring it matches the dimensions you specified when creating the table.
+After creating the table, you need to insert your vector data, ensuring it matches the dimensions you specified when creating the table. You can also insert an empty vector; this means that the document will be excluded from vector search results.
 
 <!-- intro -->
 ##### SQL:

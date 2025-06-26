@@ -7179,31 +7179,13 @@ bool CSphIndex_VLN::AddRemoveFromKNN ( const CSphSchema & tOldSchema, const CSph
 		if ( !pRow )
 			iStride = 0;
 
-		CSphVector<float> dStubFloatVec;
-		dStubFloatVec.Resize(iMaxDims);
-		dStubFloatVec.ZeroVec();
-
 		auto pBlobs = GetRawBlobAttrs();
 		for ( RowID_t tRowID = 0; tRowID < RowID_t(m_iDocinfo); ++tRowID, pRow += iStride )
-		{
 			BuildTrainKNN ( tRowID, pRow, pBlobs, dColumnarIterators, dOldAttrsForKNN, *pKNNBuilder );
-			for ( auto i : dNewAttrsForKNN )
-			{
-				int iDims = tNewSchema.GetAttr ( dAllAttrsForKNN[i].second ).m_tKNN.m_iDims;
-				pKNNBuilder->Train ( i, { dStubFloatVec.Begin(), size_t(iDims) } );
-			}
-		}
 
 		pRow = GetRawAttrs();
 		for ( RowID_t tRowID = 0; tRowID < RowID_t(m_iDocinfo); ++tRowID, pRow += iStride )
-		{
 			BuildStoreKNN ( tRowID, pRow, pBlobs, dColumnarIterators, dOldAttrsForKNN, *pKNNBuilder );
-			for ( auto i : dNewAttrsForKNN )
-			{
-				int iDims = tNewSchema.GetAttr ( dAllAttrsForKNN[i].second ).m_tKNN.m_iDims;
-				pKNNBuilder->SetAttr ( i, { dStubFloatVec.Begin(), size_t(iDims) } );
-			}
-		}
 
 		BuildBufferSettings_t tSettings; // use default buffer settings
 

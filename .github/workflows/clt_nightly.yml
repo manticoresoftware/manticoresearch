@@ -132,6 +132,9 @@ jobs:
           - name: Tables interaction
             image: manticoresearch/dind:v1
             test_prefix: test/clt-tests/tables-interaction/test-tables-interaction
+          - name: Drop sharded table
+            image: manticoresearch/dind:v1
+            test_prefix: test/clt-tests/sharding/drop/test-drop-sharded-table
 
 # Disabled as it works unstable.
 #          - name: Tests performance JSON vs SQL

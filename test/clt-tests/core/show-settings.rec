@@ -24,3 +24,5 @@ mysql -h0 -P1306 -e "SHOW SETTINGS;"
 | common.plugin_dir          | /usr/local/lib/manticore                                   |
 | common.lemmatizer_base     | /usr/share/manticore/                                      |
 +----------------------------+------------------------------------------------------------+
+––– comment –––
+Add your comment here

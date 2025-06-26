@@ -69,6 +69,22 @@ index test_vec
 }
 </query>
 
+<query endpoint="json/insert">
+{
+	"index":"test_vec",
+	"id":6,
+	"doc": 	{ "title" : "doc six", "vec" : [] }
+}
+</query>
+
+<query endpoint="json/insert">
+{
+	"index":"test_vec",
+	"id":7,
+	"doc": 	{ "title" : "doc seven" }
+}
+</query>
+
 <query endpoint="json/search">{ "index": "test_vec", "query": { "match_all": {} }, "sort": [ { "id": "asc" } ] }</query>
 
 <query endpoint="json/search">

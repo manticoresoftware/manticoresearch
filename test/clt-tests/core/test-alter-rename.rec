@@ -122,3 +122,5 @@ ERROR 1064 (42000) at line 1: Source table nonexistent not exists
 mysql -h0 -P9306 -e "ALTER TABLE invalid-name RENAME new_invalid_name;"
 ––– output –––
 ERROR 1064 (42000) at line 1: P03: syntax error, unexpected $undefined, expecting $end near '-name RENAME new_invalid_name'
+––– comment –––
+Add your comment here

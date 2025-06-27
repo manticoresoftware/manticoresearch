@@ -30,6 +30,8 @@ jobs:
     runs-on: ubuntu-22.04
     timeout-minutes: 15
     continue-on-error: ${{ inputs.continue_on_error }}
+    env:
+      OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
     strategy:
       fail-fast: false
       matrix:
@@ -88,3 +90,4 @@ jobs:
           ref: ${{ inputs.ref }}
           test_prefix: ${{ matrix.test-suite.test_prefix }}
           comment_mode: failures
+          run_args: "-e OPENAI_API_KEY"

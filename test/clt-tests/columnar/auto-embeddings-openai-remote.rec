@@ -3,7 +3,7 @@ Test remote OpenAI embeddings API integration with auto-generation from text fie
 ––– comment –––
 Start Manticore Search with Buddy (required for embeddings)
 ––– input –––
-rm -f /var/log/manticore/searchd.log; stdbuf -oL searchd $SEARCHD_FLAGS > /dev/null; if timeout 10 grep -qm1 '\[BUDDY\] started' <(tail -n 1000 -f /var/log/manticore/searchd.log); then echo 'Buddy started!'; else echo 'Timeout or failed!'; cat /var/log/manticore/searchd.log;fi
+rm -f /var/log/manticore/searchd.log; stdbuf -oL searchd > /dev/null; if timeout 10 grep -qm1 '\[BUDDY\] started' <(tail -n 1000 -f /var/log/manticore/searchd.log); then echo 'Buddy started!'; else echo 'Timeout or failed!'; cat /var/log/manticore/searchd.log;fi
 ––– output –––
 Buddy started!
 ––– comment –––
@@ -24,6 +24,22 @@ Test table creation with valid OpenAI model and KEY
 mysql -h0 -P9306 -e "CREATE TABLE test_openai_remote (title TEXT, content TEXT, description TEXT, embedding FLOAT_VECTOR KNN_TYPE='hnsw' HNSW_SIMILARITY='l2' MODEL_NAME = 'openai/text-embedding-ada-002' FROM = 'title, content' API_KEY='${OPENAI_API_KEY}') engine = 'columnar'"; echo $?
 ––– output –––
 0
+––– comment –––
+Check that the table was created and not display API_KEY
+––– input –––
+mysql -h0 -P9306 -e "SHOW CREATE TABLE test_openai_remote"
+––– output –––
++--------------------+------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
+| Table              | Create Table                                                                                                                                                                                                                       |
++--------------------+------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
+| test_openai_remote | CREATE TABLE test_openai_remote (
+id bigint,
+title text,
+content text,
+description text,
+embedding float_vector knn_type='hnsw' knn_dims='768' hnsw_similarity='L2' model_name='openai/text-embedding-ada-002'
+) engine='columnar' |
++--------------------+------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
 ––– comment –––
 Test data insertion with auto-generated vectors
 ––– input –––

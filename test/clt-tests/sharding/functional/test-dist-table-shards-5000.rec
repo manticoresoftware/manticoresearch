@@ -1,4 +1,4 @@
-––– block: ../base/start-searchd-with-buddy –––
+––– block: ../../base/start-searchd-with-buddy –––
 ––– input –––
 locals=()
 for n in $(seq 1 5000); do

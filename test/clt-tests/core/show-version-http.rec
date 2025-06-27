@@ -1,0 +1,14 @@
+––– block: ../base/start-searchd-with-buddy –––
+––– input –––
+curl -s "http://localhost:9308/cli?show%20version" | sed 's/ *|/|/g' | awk '!/row.*in set/'; echo
+––– output –––
++------------+----------------------------------+
+| Component| Version|
++------------+----------------------------------+
+| Daemon| %{VERSION}|
+| Columnar| columnar %{VERSION}|
+| Secondary| secondary %{VERSION}|
+| Knn| knn %{VERSION}|
+| Embeddings| embeddings %{VERSION}|
+| Buddy| buddy %{VERSION}|
++------------+----------------------------------+

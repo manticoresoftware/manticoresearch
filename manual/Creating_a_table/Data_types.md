@@ -2504,6 +2504,8 @@ Float vector attributes allow storing variable-length lists of floats, primarily
 - Feature vectors for machine learning
 - Recommendation system vectors
 
+** Keep in mind that the `float_vector` data type is not compatible with the [Auto schema](../Data_creation_and_modification/Adding_documents_to_a_table/Adding_documents_to_a_real-time_table.md#Auto-schema) mechanism. **
+
 <!-- intro -->
 ##### SQL:
 <!-- request SQL -->

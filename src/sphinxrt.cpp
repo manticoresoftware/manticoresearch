@@ -3840,7 +3840,7 @@ bool RtIndex_c::WriteAttributes ( SaveDiskDataContext_t & tCtx, CSphString & sEr
 			}
 
 			if ( pKNNBuilder )
-				BuildTrainKNN ( tRowID, pRow, tSeg.m_dBlobs.Begin(), dColumnarIterators, dAttrsForKNN, *pKNNBuilder );
+				BuildTrainKNN ( tRowID, tNextRowID, pRow, tSeg.m_dBlobs.Begin(), dColumnarIterators, dAttrsForKNN, *pKNNBuilder );
 
 			tCtx.m_dRowMaps[i][tRowID] = tNextRowID++;
 		}
@@ -3861,7 +3861,7 @@ bool RtIndex_c::WriteAttributes ( SaveDiskDataContext_t & tCtx, CSphString & sEr
 			for ( auto tRowID : RtLiveRows_c(tSeg) )
 			{
 				const CSphRowitem * pRow = tSeg.m_dRows.Begin() + (int64_t)tRowID*iStride;
-				if ( !BuildStoreKNN ( tRowIDForKNN++, pRow, tSeg.m_dBlobs.Begin(), dColumnarIterators, dAttrsForKNN, *pKNNBuilder ) )
+				if ( !BuildStoreKNN ( tRowID, tRowIDForKNN++, pRow, tSeg.m_dBlobs.Begin(), dColumnarIterators, dAttrsForKNN, *pKNNBuilder ) )
 				{
 					sError = pKNNBuilder->GetError().c_str();
 					return false;

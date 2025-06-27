@@ -1,11 +1,8 @@
 Test remote OpenAI embeddings API integration with auto-generation from text fields. Tests API key handling, model specification, error cases, and vector generation consistency using openai/ model prefix.
 
 ––– comment –––
-Start Manticore Search with Buddy (required for embeddings)
-––– input –––
-rm -f /var/log/manticore/searchd.log; stdbuf -oL searchd > /dev/null; if timeout 10 grep -qm1 '\[BUDDY\] started' <(tail -n 1000 -f /var/log/manticore/searchd.log); then echo 'Buddy started!'; else echo 'Timeout or failed!'; cat /var/log/manticore/searchd.log;fi
-––– output –––
-Buddy started!
+Start Manticore Search
+––– block: ../base/start-searchd –––
 ––– comment –––
 Test error case: Invalid OpenAI model name
 ––– input –––

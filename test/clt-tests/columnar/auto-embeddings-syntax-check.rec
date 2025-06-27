@@ -1,8 +1,8 @@
 Test vector search with MODEL_NAME and FROM clause for automatic vector generation from text fields
 
 ––– comment –––
-Start Manticore Search with Buddy
-––– block: ../base/start-searchd-with-buddy –––
+Start Manticore Search
+––– block: ../base/start-searchd –––
 ––– comment –––
 Test successful table creation with MODEL_NAME and FROM
 ––– input –––

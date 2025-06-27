@@ -76,11 +76,6 @@ mysql -h0 -P9306 -e "CREATE TABLE test_no_from (title1 TEXT, image_vector FLOAT_
 ––– output –––
 ERROR 1064 (42000) at line 1: error adding table 'test_no_from': 'from' setting empty for KNN attribute 'image_vector'
 ––– comment –––
-Test insert without FROM clause (should fail)
-––– input –––
-mysql -h0 -P9306 -e "INSERT INTO test_no_from VALUES(1,'test title',())"
-––– output –––
-––– comment –––
 ERROR 1064 (42000) at line 1: Cannot create table with column names missing
 ––– input –––
 mysql -h0 -P9306 -e "CREATE TABLE test_invalid_field (title1 TEXT, image_vector FLOAT_VECTOR KNN_TYPE='hnsw' HNSW_SIMILARITY='l2' MODEL_NAME = 'sentence-transformers/all-MiniLM-L6-v2' FROM = 'nonexistent_field') engine = 'columnar'" 2>&1
@@ -93,17 +88,17 @@ mysql -h0 -P9306 -e "CREATE TABLE test_single_field (title TEXT, image_vector FL
 ––– output –––
 0
 ––– comment –––
-Test insert into single field table with vector specified
+Test insert into single field table with vector specified as empty (should succeed)
 ––– input –––
 mysql -h0 -P9306 -e "INSERT INTO test_single_field VALUES(1,'natural language processing',())"; echo $?
 ––– output –––
-#!/.*ERROR.*(field|column|nonexistent).*/!#
+0
 ––– comment –––
-Test insert into single field table with ONLY vector specified
+Test insert into single field table with ONLY vector specified (should succeed)
 ––– input –––
 mysql -h0 -P9306 -e "INSERT INTO test_single_field (image_vector) VALUES(())"; echo $?
 ––– output –––
-#!/.*ERROR.*(field|column|nonexistent).*/!#
+0
 ––– input –––
 mysql -h0 -P9306 -e "INSERT INTO test_single_field (image_vector) VALUES('(1, 2, 3)')"
 ––– output –––

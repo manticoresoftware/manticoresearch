@@ -14,3 +14,6 @@ This/prev job time: %{NUMBER}#!/(s|ms|us)/!#
          Jobs done: %{NUMBER}
      Thread status: working
               Info: SHOW THREADS
+––– input –––
+echo 123
+––– output –––

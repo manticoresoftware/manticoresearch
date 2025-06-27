@@ -10,3 +10,7 @@ searchd {
     pid_file = /var/run/manticore/searchd.pid
     data_dir = /var/lib/manticore
 }
+--- input ---
+echo 123
+--- output ---
+123

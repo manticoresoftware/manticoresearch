@@ -16,7 +16,6 @@
 #include "searchdaemon.h"
 #include "http/http_parser.h"
 
-using OptionsHash_t = SmallStringHash_T<CSphString>;
 class AsyncNetInputBuffer_c;
 
 class HttpRequestParser_c : public ISphNoncopyable

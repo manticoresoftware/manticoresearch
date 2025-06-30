@@ -21,7 +21,7 @@
 
 struct QueryStat_t
 {
-	uint64_t	m_uQueryTime = 0;
+	uint64_t	m_tmQueryTime = 0; // time in microseconds
 	uint64_t	m_uFoundRows = 0;
 	int			m_iSuccesses = 0;
 };

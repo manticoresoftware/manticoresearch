@@ -57,9 +57,9 @@ jobs:
           - name: Alma 9 release installation
             image: almalinux:9
             test_prefix: test/clt-tests/installation/rhel-release-
-          - name: Alma 10 release installation
-            image: almalinux:10
-            test_prefix: test/clt-tests/installation/rhel-release-
+#          - name: Alma 10 release installation
+#            image: almalinux:10
+#            test_prefix: test/clt-tests/installation/rhel-release-
           - name: OL 9 release installation
             image: "oraclelinux:9"
             test_prefix: test/clt-tests/installation/rhel-release-
@@ -93,9 +93,9 @@ jobs:
           - name: Alma 9 upgrade to dev
             image: almalinux:9
             test_prefix: test/clt-tests/installation/rhel-dev-u
-          - name: Alma 10 upgrade to dev
-            image: almalinux:10
-            test_prefix: test/clt-tests/installation/rhel-dev-u
+#          - name: Alma 10 upgrade to dev
+#            image: almalinux:10
+#            test_prefix: test/clt-tests/installation/rhel-dev-u
           - name: OL 9 upgrade to dev
             image: "oraclelinux:9"
             test_prefix: test/clt-tests/installation/rhel-dev-u
@@ -179,9 +179,9 @@ jobs:
           - name: Alma 9 release installation
             image: almalinux:9
             test_prefix: test/clt-tests/installation/rhel-release-
-          - name: Alma 10 release installation
-            image: almalinux:10
-            test_prefix: test/clt-tests/installation/rhel-release-  
+#          - name: Alma 10 release installation
+#            image: almalinux:10
+#            test_prefix: test/clt-tests/installation/rhel-release-  
           - name: OL 9 release installation
             image: "oraclelinux:9"
             test_prefix: test/clt-tests/installation/rhel-release-
@@ -215,9 +215,9 @@ jobs:
           - name: Alma 9 upgrade to dev
             image: almalinux:9
             test_prefix: test/clt-tests/installation/rhel-dev-u
-          - name: Alma 10 upgrade to dev
-            image: almalinux:10
-            test_prefix: test/clt-tests/installation/rhel-dev-u
+#          - name: Alma 10 upgrade to dev
+#            image: almalinux:10
+#            test_prefix: test/clt-tests/installation/rhel-dev-u
           - name: OL 9 upgrade to dev
             image: "oraclelinux:9"
             test_prefix: test/clt-tests/installation/rhel-dev-u

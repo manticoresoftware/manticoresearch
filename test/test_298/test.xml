@@ -147,6 +147,58 @@ searchd
 	select id, knn_dist() from t where knn(emp2,3,(-0.11468425393104553,0.3873162567615509,-0.26252424716949463,0.007096240296959877,0.24166066944599152,-0.24653761088848114,0.060873936861753464,0.23045268654823303));
 
     drop table t;
+
+	<!-- regression for a crash on 1-bit quantization with empty vectors -->
+    create table t (title text, tag integer, emp float_vector knn_type='hnsw' knn_dims='8' hnsw_similarity='COSINE' quantization='1bit');
+	show create table t;
+	insert into t (id, title, tag) values (1, 'title1', 1);
+	insert into t (id, title, tag) values (2, 'title2', 1);
+	insert into t (id, title, tag) values (3, 'title3', 2);
+	insert into t (id, title, tag) values (4, 'title4', 2);
+	insert into t (id, title, tag) values (5, 'title5', 3);
+	insert into t (id, title, tag) values (6, 'title6', 3);
+	flush ramchunk t;
+    drop table t;
+
+    create table t (title text, tag integer, emp float_vector knn_type='hnsw' knn_dims='8' hnsw_similarity='COSINE' quantization='1bitsimple');
+	show create table t;
+	insert into t (id, title, tag) values (1, 'title1', 1);
+	insert into t (id, title, tag) values (2, 'title2', 1);
+	insert into t (id, title, tag) values (3, 'title3', 2);
+	insert into t (id, title, tag) values (4, 'title4', 2);
+	insert into t (id, title, tag) values (5, 'title5', 3);
+	insert into t (id, title, tag) values (6, 'title6', 3);
+	flush ramchunk t;
+    drop table t;
+
+    create table t (title text, tag integer, emp float_vector knn_type='hnsw' knn_dims='8' hnsw_similarity='COSINE' quantization='8bit');
+	show create table t;
+	insert into t (id, title, tag) values (1, 'title1', 1);
+	insert into t (id, title, tag) values (2, 'title2', 1);
+	insert into t (id, title, tag) values (3, 'title3', 2);
+	insert into t (id, title, tag) values (4, 'title4', 2);
+	insert into t (id, title, tag) values (5, 'title5', 3);
+	insert into t (id, title, tag) values (6, 'title6', 3);
+	flush ramchunk t;
+    drop table t;
+
+    create table t (title text, tag integer, emp float_vector knn_type='hnsw' knn_dims='8' hnsw_similarity='COSINE' quantization='1bit');
+	show create table t;
+	insert into t (id, title, tag) values (1, 'title1', 1);
+	insert into t (id, title, tag) values (2, 'title2', 1);
+	insert into t (id, title, tag) values (3, 'title3', 2);
+	insert into t (id, title, tag) values (4, 'title4', 2);
+	insert into t (id, title, tag) values (5, 'title5', 3);
+	insert into t (id, title, tag) values (6, 'title6', 3);
+	insert into t values (7, 'title7', 4, (-0.03529544919729233,0.44717246294021606,-0.3653179109096527,-0.16520369052886963,-0.28060752153396606,0.024058140814304352,-0.6397897601127625,0.4281712472438812));
+	insert into t values (8, 'title8', 4, (-0.1488940566778183,0.7482781410217285,0.09189224243164062,-0.09540678560733795,0.1863720566034317,-0.20858603715896606,-0.226043701171875,-0.06464707106351852));
+	insert into t values (9, 'title9', 5, (0.6534488201141357,0.19247837364673615,0.017971690744161606,0.3398212492465973,0.26752832531929016,0.24325883388519287,-0.10399176180362701,0.1764550507068634));
+	insert into t values (10, 'title10', 5, (0.4089451730251312,0.0306655615568161,-0.15218715369701385,-0.6105571389198303,-0.29428744316101074,-0.07567915320396423,0.3454975187778473,-0.49481201171875));
+	select id, knn_dist() from t where knn(emp,3,(-0.11468425393104553,0.3873162567615509,-0.26252424716949463,0.007096240296959877,0.24166066944599152,-0.24653761088848114,0.060873936861753464,0.23045268654823303));
+	flush ramchunk t;
+	select id, knn_dist() from t where knn(emp,3,(-0.11468425393104553,0.3873162567615509,-0.26252424716949463,0.007096240296959877,0.24166066944599152,-0.24653761088848114,0.060873936861753464,0.23045268654823303));
+
+    drop table t;
 </sphinxql>
 </queries>
 

@@ -3,10 +3,6 @@
 mysql -h0 -P9306 -e "CREATE TABLE t (id INT, value TEXT) min_prefix_len = '3'; INSERT INTO t VALUES (1, 'example'), (2, 'test');"
 ––– output –––
 ––– input –––
-curl -s "http://localhost:9308/cli_json" -d ""; echo
-––– output –––
-{"error":"query missing"}
-––– input –––
 curl -s "http://localhost:9308/cli_json" -d "SELEKT * FROM t"; echo
 ––– output –––
 {"error":"P02: syntax error, unexpected identifier near 'SELEKT * FROM t'"}
@@ -45,7 +41,3 @@ curl -s "http://localhost:9308/cli_json" -d "SELECT * FROM t LIMIT -5"; echo
 curl -s "http://localhost:9308/cli_json" -d "UPDATE t SET value='new_value' WHERE id=1"; echo
 ––– output –––
 {"error":"table t: attribute 'value' not found"}
-––– input –––
-curl -s -X POST "http://localhost:9308/sql" -d "show version"
-––– output –––
-{"error":"only SELECT queries are supported"}

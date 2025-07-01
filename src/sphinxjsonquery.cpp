@@ -2928,7 +2928,7 @@ JsonObj_c sphEncodeInsertErrorJson ( const char * szIndex, const char * szError,
 }
 
 
-bool sphGetResultStats ( const char * szResult, int & iAffected, int & iWarnings, bool bUpdate )
+bool sphGetResultStats ( const char * szResult, int & iAffected, int & iWarnings, bool bUpdate, CSphString & sError )
 {
 	JsonObj_c tJsonRoot ( szResult );
 	if ( !tJsonRoot )
@@ -2937,15 +2937,25 @@ bool sphGetResultStats ( const char * szResult, int & iAffected, int & iWarnings
 	// no warnings in json results for now
 	iWarnings = 0;
 
+	CSphString sParseError;
 	if ( tJsonRoot.HasItem("error") )
 	{
+		JsonObj_c tReplyError = tJsonRoot.GetItem ( "error" );
+		if ( tReplyError.IsObj() )
+		{
+			JsonObj_c tReason = tReplyError.GetItem ( "reason" );
+			if ( tReason && tReason.IsStr() )
+				sError = tReason.StrVal();
+		}
+		if ( sError.IsEmpty() )
+			sError = tReplyError.AsString();
+
 		iAffected = 0;
-		return true;
+		return false;
 	}
 
 	// its either update or delete
-	CSphString sError;
-	JsonObj_c tAffected = tJsonRoot.GetIntItem ( bUpdate ? "updated" : "deleted", sError );
+	JsonObj_c tAffected = tJsonRoot.GetIntItem ( bUpdate ? "updated" : "deleted", sParseError );
 	if ( tAffected )
 	{
 		iAffected = (int)tAffected.IntVal();
@@ -2953,7 +2963,7 @@ bool sphGetResultStats ( const char * szResult, int & iAffected, int & iWarnings
 	}
 
 	// it was probably a query with an "id"
-	JsonObj_c tId = tJsonRoot.GetIntItem ( "id", sError );
+	JsonObj_c tId = tJsonRoot.GetIntItem ( "id", sParseError );
 	if ( tId )
 	{
 		iAffected = 1;

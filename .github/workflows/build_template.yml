@@ -83,7 +83,7 @@ jobs:
       env:
         CACHEB: "../cache"
         DIAGNOSTIC: 1
-        PACK_ICUDATA: 0
+        PACK_ICUDATA: 1
         NO_TESTS: 1
         DISTR: ${{ inputs.DISTR }}
         boost: ${{ inputs.boost_url_key }}

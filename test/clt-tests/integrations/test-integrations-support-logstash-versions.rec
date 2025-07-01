@@ -38,128 +38,30 @@ curl -s "https://hub.docker.com/v2/repositories/library/logstash/tags/?page_size
 8.18
 9.0
 ––– input –––
-for i in {1..3}; do wget -q --timeout=60 --tries=1 "https://artifacts.elastic.co/downloads/logstash/logstash-7.17.0-linux-x86_64.tar.gz" -O logstash-7.17.0.tar.gz && gzip -t logstash-7.17.0.tar.gz 2>/dev/null && tar -tzf logstash-7.17.0.tar.gz | grep -q "bin/logstash" && { echo "✓ Logstash 7.17.0 downloaded successfully"; break; } || { [ $i -eq 3 ] && echo "✗ Failed to download Logstash 7.17.0 after 3 attempts" >&2 || rm -f logstash-7.17.0.tar.gz >/dev/null 2>&1; sleep 2; }; done
-––– output –––
-✓ Logstash 7.17.0 downloaded successfully
-––– input –––
-for i in {1..3}; do wget -q --timeout=60 --tries=1 "https://artifacts.elastic.co/downloads/logstash/logstash-8.0.0-linux-x86_64.tar.gz" -O logstash-8.0.0.tar.gz && gzip -t logstash-8.0.0.tar.gz 2>/dev/null && tar -tzf logstash-8.0.0.tar.gz | grep -q "bin/logstash" && { echo "✓ Logstash 8.0.0 downloaded successfully"; break; } || { [ $i -eq 3 ] && echo "✗ Failed to download Logstash 8.0.0 after 3 attempts" >&2 || rm -f logstash-8.0.0.tar.gz >/dev/null 2>&1; sleep 2; }; done
-––– output –––
-✓ Logstash 8.0.0 downloaded successfully
-––– input –––
-for i in {1..3}; do wget -q --timeout=60 --tries=1 "https://artifacts.elastic.co/downloads/logstash/logstash-8.1.0-linux-x86_64.tar.gz" -O logstash-8.1.0.tar.gz && gzip -t logstash-8.1.0.tar.gz 2>/dev/null && tar -tzf logstash-8.1.0.tar.gz | grep -q "bin/logstash" && { echo "✓ Logstash 8.1.0 downloaded successfully"; break; } || { [ $i -eq 3 ] && echo "✗ Failed to download Logstash 8.1.0 after 3 attempts" >&2 || rm -f logstash-8.1.0.tar.gz >/dev/null 2>&1; sleep 2; }; done
-––– output –––
-✓ Logstash 8.1.0 downloaded successfully
-––– input –––
-for i in {1..3}; do wget -q --timeout=60 --tries=1 "https://artifacts.elastic.co/downloads/logstash/logstash-8.2.0-linux-x86_64.tar.gz" -O logstash-8.2.0.tar.gz && gzip -t logstash-8.2.0.tar.gz 2>/dev/null && tar -tzf logstash-8.2.0.tar.gz | grep -q "bin/logstash" && { echo "✓ Logstash 8.2.0 downloaded successfully"; break; } || { [ $i -eq 3 ] && echo "✗ Failed to download Logstash 8.2.0 after 3 attempts" >&2 || rm -f logstash-8.2.0.tar.gz >/dev/null 2>&1; sleep 2; }; done
-––– output –––
-✓ Logstash 8.2.0 downloaded successfully
-––– input –––
-for i in {1..3}; do wget -q --timeout=60 --tries=1 "https://artifacts.elastic.co/downloads/logstash/logstash-8.3.0-linux-x86_64.tar.gz" -O logstash-8.3.0.tar.gz && gzip -t logstash-8.3.0.tar.gz 2>/dev/null && tar -tzf logstash-8.3.0.tar.gz | grep -q "bin/logstash" && { echo "✓ Logstash 8.3.0 downloaded successfully"; break; } || { [ $i -eq 3 ] && echo "✗ Failed to download Logstash 8.3.0 after 3 attempts" >&2 || rm -f logstash-8.3.0.tar.gz >/dev/null 2>&1; sleep 2; }; done
-––– output –––
-✓ Logstash 8.3.0 downloaded successfully
-––– input –––
-for i in {1..3}; do wget -q --timeout=60 --tries=1 "https://artifacts.elastic.co/downloads/logstash/logstash-8.4.0-linux-x86_64.tar.gz" -O logstash-8.4.0.tar.gz && gzip -t logstash-8.4.0.tar.gz 2>/dev/null && tar -tzf logstash-8.4.0.tar.gz | grep -q "bin/logstash" && { echo "✓ Logstash 8.4.0 downloaded successfully"; break; } || { [ $i -eq 3 ] && echo "✗ Failed to download Logstash 8.4.0 after 3 attempts" >&2 || rm -f logstash-8.4.0.tar.gz >/dev/null 2>&1; sleep 2; }; done
-––– output –––
-✓ Logstash 8.4.0 downloaded successfully
-––– input –––
-for i in {1..3}; do wget -q --timeout=60 --tries=1 "https://artifacts.elastic.co/downloads/logstash/logstash-8.5.0-linux-x86_64.tar.gz" -O logstash-8.5.0.tar.gz && gzip -t logstash-8.5.0.tar.gz 2>/dev/null && tar -tzf logstash-8.5.0.tar.gz | grep -q "bin/logstash" && { echo "✓ Logstash 8.5.0 downloaded successfully"; break; } || { [ $i -eq 3 ] && echo "✗ Failed to download Logstash 8.5.0 after 3 attempts" >&2 || rm -f logstash-8.5.0.tar.gz >/dev/null 2>&1; sleep 2; }; done
-––– output –––
-✓ Logstash 8.5.0 downloaded successfully
-––– input –––
-for i in {1..3}; do wget -q --timeout=60 --tries=1 "https://artifacts.elastic.co/downloads/logstash/logstash-8.6.0-linux-x86_64.tar.gz" -O logstash-8.6.0.tar.gz && gzip -t logstash-8.6.0.tar.gz 2>/dev/null && tar -tzf logstash-8.6.0.tar.gz | grep -q "bin/logstash" && { echo "✓ Logstash 8.6.0 downloaded successfully"; break; } || { [ $i -eq 3 ] && echo "✗ Failed to download Logstash 8.6.0 after 3 attempts" >&2 || rm -f logstash-8.6.0.tar.gz >/dev/null 2>&1; sleep 2; }; done
-––– output –––
-✓ Logstash 8.6.0 downloaded successfully
-––– input –––
-for i in {1..3}; do wget -q --timeout=60 --tries=1 "https://artifacts.elastic.co/downloads/logstash/logstash-8.7.0-linux-x86_64.tar.gz" -O logstash-8.7.0.tar.gz && gzip -t logstash-8.7.0.tar.gz 2>/dev/null && tar -tzf logstash-8.7.0.tar.gz | grep -q "bin/logstash" && { echo "✓ Logstash 8.7.0 downloaded successfully"; break; } || { [ $i -eq 3 ] && echo "✗ Failed to download Logstash 8.7.0 after 3 attempts" >&2 || rm -f logstash-8.7.0.tar.gz >/dev/null 2>&1; sleep 2; }; done
-––– output –––
-✓ Logstash 8.7.0 downloaded successfully
-––– input –––
-for i in {1..3}; do wget -q --timeout=60 --tries=1 "https://artifacts.elastic.co/downloads/logstash/logstash-8.8.0-linux-x86_64.tar.gz" -O logstash-8.8.0.tar.gz && gzip -t logstash-8.8.0.tar.gz 2>/dev/null && tar -tzf logstash-8.8.0.tar.gz | grep -q "bin/logstash" && { echo "✓ Logstash 8.8.0 downloaded successfully"; break; } || { [ $i -eq 3 ] && echo "✗ Failed to download Logstash 8.8.0 after 3 attempts" >&2 || rm -f logstash-8.8.0.tar.gz >/dev/null 2>&1; sleep 2; }; done
-––– output –––
-✓ Logstash 8.8.0 downloaded successfully
-––– input –––
-for i in {1..3}; do wget -q --timeout=60 --tries=1 "https://artifacts.elastic.co/downloads/logstash/logstash-8.9.0-linux-x86_64.tar.gz" -O logstash-8.9.0.tar.gz && gzip -t logstash-8.9.0.tar.gz 2>/dev/null && tar -tzf logstash-8.9.0.tar.gz | grep -q "bin/logstash" && { echo "✓ Logstash 8.9.0 downloaded successfully"; break; } || { [ $i -eq 3 ] && echo "✗ Failed to download Logstash 8.9.0 after 3 attempts" >&2 || rm -f logstash-8.9.0.tar.gz >/dev/null 2>&1; sleep 2; }; done
-––– output –––
-✓ Logstash 8.9.0 downloaded successfully
-––– input –––
-for i in {1..3}; do wget -q --timeout=60 --tries=1 "https://artifacts.elastic.co/downloads/logstash/logstash-8.10.0-linux-x86_64.tar.gz" -O logstash-8.10.0.tar.gz && gzip -t logstash-8.10.0.tar.gz 2>/dev/null && tar -tzf logstash-8.10.0.tar.gz | grep -q "bin/logstash" && { echo "✓ Logstash 8.10.0 downloaded successfully"; break; } || { [ $i -eq 3 ] && echo "✗ Failed to download Logstash 8.10.0 after 3 attempts" >&2 || rm -f logstash-8.10.0.tar.gz >/dev/null 2>&1; sleep 2; }; done
-––– output –––
-✓ Logstash 8.10.0 downloaded successfully
-––– input –––
-for i in {1..3}; do wget -q --timeout=60 --tries=1 "https://artifacts.elastic.co/downloads/logstash/logstash-8.11.0-linux-x86_64.tar.gz" -O logstash-8.11.0.tar.gz && gzip -t logstash-8.11.0.tar.gz 2>/dev/null && tar -tzf logstash-8.11.0.tar.gz | grep -q "bin/logstash" && { echo "✓ Logstash 8.11.0 downloaded successfully"; break; } || { [ $i -eq 3 ] && echo "✗ Failed to download Logstash 8.11.0 after 3 attempts" >&2 || rm -f logstash-8.11.0.tar.gz >/dev/null 2>&1; sleep 2; }; done
-––– output –––
-✓ Logstash 8.11.0 downloaded successfully
-––– input –––
-for i in {1..3}; do wget -q --timeout=60 --tries=1 "https://artifacts.elastic.co/downloads/logstash/logstash-8.12.0-linux-x86_64.tar.gz" -O logstash-8.12.0.tar.gz && gzip -t logstash-8.12.0.tar.gz 2>/dev/null && tar -tzf logstash-8.12.0.tar.gz | grep -q "bin/logstash" && { echo "✓ Logstash 8.12.0 downloaded successfully"; break; } || { [ $i -eq 3 ] && echo "✗ Failed to download Logstash 8.12.0 after 3 attempts" >&2 || rm -f logstash-8.12.0.tar.gz >/dev/null 2>&1; sleep 2; }; done
-––– output –––
-✓ Logstash 8.12.0 downloaded successfully
-––– input –––
-for i in {1..3}; do wget -q --timeout=60 --tries=1 "https://artifacts.elastic.co/downloads/logstash/logstash-8.13.0-linux-x86_64.tar.gz" -O logstash-8.13.0.tar.gz && gzip -t logstash-8.13.0.tar.gz 2>/dev/null && tar -tzf logstash-8.13.0.tar.gz | grep -q "bin/logstash" && { echo "✓ Logstash 8.13.0 downloaded successfully"; break; } || { [ $i -eq 3 ] && echo "✗ Failed to download Logstash 8.13.0 after 3 attempts" >&2 || rm -f logstash-8.13.0.tar.gz >/dev/null 2>&1; sleep 2; }; done
-––– output –––
-✓ Logstash 8.13.0 downloaded successfully
-––– input –––
-for i in {1..3}; do wget -q --timeout=60 --tries=1 "https://artifacts.elastic.co/downloads/logstash/logstash-8.14.0-linux-x86_64.tar.gz" -O logstash-8.14.0.tar.gz && gzip -t logstash-8.14.0.tar.gz 2>/dev/null && tar -tzf logstash-8.14.0.tar.gz | grep -q "bin/logstash" && { echo "✓ Logstash 8.14.0 downloaded successfully"; break; } || { [ $i -eq 3 ] && echo "✗ Failed to download Logstash 8.14.0 after 3 attempts" >&2 || rm -f logstash-8.14.0.tar.gz >/dev/null 2>&1; sleep 2; }; done
-––– output –––
-✓ Logstash 8.14.0 downloaded successfully
-––– input –––
-for i in {1..3}; do wget -q --timeout=60 --tries=1 "https://artifacts.elastic.co/downloads/logstash/logstash-8.15.0-linux-x86_64.tar.gz" -O logstash-8.15.0.tar.gz && gzip -t logstash-8.15.0.tar.gz 2>/dev/null && tar -tzf logstash-8.15.0.tar.gz | grep -q "bin/logstash" && { echo "✓ Logstash 8.15.0 downloaded successfully"; break; } || { [ $i -eq 3 ] && echo "✗ Failed to download Logstash 8.15.0 after 3 attempts" >&2 || rm -f logstash-8.15.0.tar.gz >/dev/null 2>&1; sleep 2; }; done
-––– output –––
-✓ Logstash 8.15.0 downloaded successfully
-––– input –––
-for i in {1..3}; do wget -q --timeout=60 --tries=1 "https://artifacts.elastic.co/downloads/logstash/logstash-8.16.0-linux-x86_64.tar.gz" -O logstash-8.16.0.tar.gz && gzip -t logstash-8.16.0.tar.gz 2>/dev/null && tar -tzf logstash-8.16.0.tar.gz | grep -q "bin/logstash" && { echo "✓ Logstash 8.16.0 downloaded successfully"; break; } || { [ $i -eq 3 ] && echo "✗ Failed to download Logstash 8.16.0 after 3 attempts" >&2 || rm -f logstash-8.16.0.tar.gz >/dev/null 2>&1; sleep 2; }; done
-––– output –––
-✓ Logstash 8.16.0 downloaded successfully
-––– input –––
-for i in {1..3}; do wget -q --timeout=60 --tries=1 "https://artifacts.elastic.co/downloads/logstash/logstash-8.17.0-linux-x86_64.tar.gz" -O logstash-8.17.0.tar.gz && gzip -t logstash-8.17.0.tar.gz 2>/dev/null && tar -tzf logstash-8.17.0.tar.gz | grep -q "bin/logstash" && { echo "✓ Logstash 8.17.0 downloaded successfully"; break; } || { [ $i -eq 3 ] && echo "✗ Failed to download Logstash 8.17.0 after 3 attempts" >&2 || rm -f logstash-8.17.0.tar.gz >/dev/null 2>&1; sleep 2; }; done
-––– output –––
-✓ Logstash 8.17.0 downloaded successfully
-––– input –––
-for i in {1..3}; do wget -q --timeout=60 --tries=1 "https://artifacts.elastic.co/downloads/logstash/logstash-8.18.0-linux-x86_64.tar.gz" -O logstash-8.18.0.tar.gz && gzip -t logstash-8.18.0.tar.gz 2>/dev/null && tar -tzf logstash-8.18.0.tar.gz | grep -q "bin/logstash" && { echo "✓ Logstash 8.18.0 downloaded successfully"; break; } || { [ $i -eq 3 ] && echo "✗ Failed to download Logstash 8.18.0 after 3 attempts" >&2 || rm -f logstash-8.18.0.tar.gz >/dev/null 2>&1; sleep 2; }; done
-––– output –––
-✓ Logstash 8.18.0 downloaded successfully
-––– input –––
-for i in {1..3}; do wget -q --timeout=60 --tries=1 "https://artifacts.elastic.co/downloads/logstash/logstash-9.0.0-linux-x86_64.tar.gz" -O logstash-9.0.0.tar.gz && gzip -t logstash-9.0.0.tar.gz 2>/dev/null && tar -tzf logstash-9.0.0.tar.gz | grep -q "bin/logstash" && { echo "✓ Logstash 9.0.0 downloaded successfully"; break; } || { [ $i -eq 3 ] && echo "✗ Failed to download Logstash 9.0.0 after 3 attempts" >&2 || rm -f logstash-9.0.0.tar.gz >/dev/null 2>&1; sleep 2; }; done
-––– output –––
-✓ Logstash 9.0.0 downloaded successfully
-––– input –––
 cat << 'EOF' > /tmp/logstash-single-test.sh
 #!/bin/bash
 set -euo pipefail
-
-# Check version argument
 if [ $# -ne 1 ]; then
     echo "✗ Usage: $0 <logstash_version>" >&2
     echo "✗ Example: $0 8.14" >&2
     exit 1
 fi
-
 VERSION="$1"
 LOG_DIR="/var/log"
 LOGSTASH_LOG="$LOG_DIR/logstash.log"
 TEMP_DATA_DIR="/tmp/logstash_test_${VERSION}"
 TEST_LOG="/var/log/dpkg.log"
-
-# Cleanup before start
 killall -9 java logstash ruby 2>/dev/null || true
 sleep 2
-
-# Clean temporary directories
 rm -rf "$TEMP_DATA_DIR" 2>/dev/null || true
 mkdir -p "$TEMP_DATA_DIR"
 chmod 777 "$TEMP_DATA_DIR"
-
 rm -f "$LOGSTASH_LOG"
 touch "$LOGSTASH_LOG"
 chmod 644 "$LOGSTASH_LOG"
-
-# Test header
 echo ">>> Testing Logstash version: $VERSION"
-
-# Create test log
 echo -e "2023-05-31 10:42:51 trigproc systemd:amd64 245.4-4ubuntu3.21 <none>\n2023-05-31 10:42:52 trigproc libc-bin:amd64 2.31-0ubuntu9.9 <none>\n2023-05-31 10:42:53 status triggers-awaited ca-certificates-java:all 20190405ubuntu1.1\n2023-05-31 10:42:54 status installed libc-bin:amd64 2.31-0ubuntu9.9\n2023-05-31 10:42:55 status half-configured libc-bin:amd64 2.31-0ubuntu9.9" > "$TEST_LOG"
 chmod 644 "$TEST_LOG"
-
-# Check line count in log
 log_lines=$(wc -l < "$TEST_LOG")
 if [ "$log_lines" -eq 5 ]; then
     echo "✓ Log file has 5 lines"
@@ -167,30 +69,21 @@ else
     echo "✗ Error: Expected 5 lines, got $log_lines" >&2
     exit 1
 fi
-
-# Check Manticore Search availability
 if curl -s localhost:9308/cli_json -d 'show status' > /dev/null; then
     echo "✓ Manticore Search available"
 else
     echo "✗ Error: Manticore Search unavailable" >&2
     exit 1
 fi
-
-# Create table in Manticore
 mysql -h0 -P9306 -e "DROP TABLE IF EXISTS dpkg_log" > /dev/null 2>&1
 mysql -h0 -P9306 -e "CREATE TABLE dpkg_log (id bigint, message string attribute indexed, host string attribute indexed, path string attribute indexed, \`@version\` string attribute indexed, \`@timestamp\` timestamp)" > /dev/null 2>&1 || {
     echo "✗ Error: Failed to create table dpkg_log" >&2
     exit 1
 }
-
-# Create directory and symlink for running needed version
 if [ ! -d "/usr/share/logstash" ]; then
     mkdir -p /usr/share/logstash
 fi
-
-# Check that Logstash version exists and is unpacked
 if [ ! -d "/usr/share/logstash/logstash-${VERSION}.0" ]; then
-    # Look for archive and unpack it
     if [ -f "logstash-${VERSION}.0.tar.gz" ]; then
         tar -xzf "logstash-${VERSION}.0.tar.gz" -C /usr/share/logstash/ > /dev/null 2>&1
     elif [ -f "/tmp/logstash-${VERSION}.0.tar.gz" ]; then
@@ -200,44 +93,29 @@ if [ ! -d "/usr/share/logstash/logstash-${VERSION}.0" ]; then
         exit 1
     fi
 fi
-
-# Create symlink
 if [ -f "/usr/share/logstash/logstash-${VERSION}.0/bin/logstash" ]; then
     ln -sf "/usr/share/logstash/logstash-${VERSION}.0/bin/logstash" /usr/bin/logstash > /dev/null 2>&1
 else
     echo "✗ Error: Logstash $VERSION binary not found" >&2
     exit 1
 fi
-
-# Define version-specific parameters
 version_major=$(echo "$VERSION" | cut -d. -f1)
 version_minor=$(echo "$VERSION" | cut -d. -f2)
-
-# ECS compatibility available since version 7.5+
 ecs_args=""
 if [ "$version_major" -gt 7 ] || ([ "$version_major" -eq 7 ] && [ "$version_minor" -ge 5 ]); then
     ecs_args="--pipeline.ecs_compatibility v1"
 fi
-
-# Settings for elasticsearch output depending on version
 ilm_settings=""
 if [ "$version_major" -ge 8 ]; then
     ilm_settings="ilm_enabled => false
     manage_template => false"
 fi
-
-# Allow superuser for version 9.0+ (CRITICAL FIX)
 if [ "$version_major" -ge 9 ]; then
     export ALLOW_SUPERUSER=1
-    # Fix superuser check in Logstash 9.0 code
     sed -i '259s/^/# /' /usr/share/logstash/logstash-9.0.0/logstash-core/lib/logstash/runner.rb 2>/dev/null || true
 fi
-
-# Create Logstash configuration with version-specific handling
 CONFIG_FILE="/tmp/logstash_config_${VERSION}.conf"
-
 if [ "$version_major" -ge 9 ]; then
-    # Configuration for Logstash 9.0+ with new data structure
     cat > "$CONFIG_FILE" << CONF
 input {
   file {
@@ -253,9 +131,7 @@ filter {
       "@version" => "1"
       "path" => "$TEST_LOG"
     }
-    # Extract host name from nested structure in v9.0+
     add_field => { "host" => "%{[host][name]}" }
-    # Remove new fields introduced in v9.0
     remove_field => ["event", "log", "[host][name]"]
   }
 }
@@ -270,7 +146,6 @@ output {
 }
 CONF
 else
-    # Legacy configuration for versions 7.17-8.18
     cat > "$CONFIG_FILE" << CONF
 input {
   file {
@@ -301,30 +176,17 @@ output {
 }
 CONF
 fi
-
-# Parameters for running Logstash
 batch_size=10
-
-# Additional JVM options
 export LS_JAVA_OPTS="-Xms256m -Xmx512m"
-
-# Define wait time depending on version
 wait_time=60
-
-# Run Logstash
 timeout $wait_time logstash --path.data="$TEMP_DATA_DIR" \
   -f "$CONFIG_FILE" \
   --log.level=error \
   --pipeline.batch.size $batch_size \
   $ecs_args \
   > /dev/null 2>&1 || true
-
-# Additional wait for indexing completion
 sleep 10
-
 echo "✓ Logstash $VERSION started and processed logs"
-
-# Check row count
 row_count=$(mysql -h0 -P9306 -N -B -e "SELECT COUNT(*) FROM dpkg_log" | grep -o '[0-9]\+' || echo "0")
 if [ "$row_count" -eq 5 ]; then
     echo "✓ Row count check for $VERSION: $row_count rows"
@@ -333,8 +195,6 @@ else
     mysql -h0 -P9306 -e "SELECT * FROM dpkg_log\G" >&2
     exit 1
 fi
-
-# Check table structure
 structure_ok=true
 for field in "id" "message" "host" "path" "@version" "@timestamp"; do
     if ! mysql -h0 -P9306 -N -B -e "SELECT $field FROM dpkg_log LIMIT 1" > /dev/null 2>&1; then
@@ -343,7 +203,6 @@ for field in "id" "message" "host" "path" "@version" "@timestamp"; do
         break
     fi
 done
-
 if $structure_ok; then
     echo "✓ Structure check for $VERSION: passed"
 else
@@ -351,10 +210,7 @@ else
     mysql -h0 -P9306 -e "DESCRIBE dpkg_log" >&2
     exit 1
 fi
-
 echo "✓ Logstash version $VERSION tested successfully"
-
-# Clean temporary files
 rm -f "$CONFIG_FILE" "$TEST_LOG" > /dev/null 2>&1
 EOF
 ––– output –––
@@ -362,6 +218,10 @@ EOF
 chmod +x /tmp/logstash-single-test.sh; echo $?
 ––– output –––
 0
+––– input –––
+for i in {1..3}; do wget -q --timeout=60 --tries=1 "https://artifacts.elastic.co/downloads/logstash/logstash-7.17.0-linux-x86_64.tar.gz" -O logstash-7.17.0.tar.gz && gzip -t logstash-7.17.0.tar.gz 2>/dev/null && tar -tzf logstash-7.17.0.tar.gz | grep -q "bin/logstash" && { echo "✓ Logstash 7.17.0 downloaded successfully"; break; } || { [ $i -eq 3 ] && echo "✗ Failed to download Logstash 7.17.0 after 3 attempts" >&2 || rm -f logstash-7.17.0.tar.gz >/dev/null 2>&1; sleep 2; }; done
+––– output –––
+✓ Logstash 7.17.0 downloaded successfully
 ––– input –––
 timeout 300 bash /tmp/logstash-single-test.sh 7.17
 ––– output –––
@@ -373,6 +233,13 @@ timeout 300 bash /tmp/logstash-single-test.sh 7.17
 ✓ Structure check for 7.17: passed
 ✓ Logstash version 7.17 tested successfully
 ––– input –––
+rm -rf /usr/share/logstash/logstash-7.17.0 logstash-7.17.0.tar.gz /tmp/logstash_test_7.17
+––– output –––
+––– input –––
+for i in {1..3}; do wget -q --timeout=60 --tries=1 "https://artifacts.elastic.co/downloads/logstash/logstash-8.0.0-linux-x86_64.tar.gz" -O logstash-8.0.0.tar.gz && gzip -t logstash-8.0.0.tar.gz 2>/dev/null && tar -tzf logstash-8.0.0.tar.gz | grep -q "bin/logstash" && { echo "✓ Logstash 8.0.0 downloaded successfully"; break; } || { [ $i -eq 3 ] && echo "✗ Failed to download Logstash 8.0.0 after 3 attempts" >&2 || rm -f logstash-8.0.0.tar.gz >/dev/null 2>&1; sleep 2; }; done
+––– output –––
+✓ Logstash 8.0.0 downloaded successfully
+––– input –––
 timeout 300 bash /tmp/logstash-single-test.sh 8.0
 ––– output –––
 >>> Testing Logstash version: 8.0
@@ -382,6 +249,13 @@ timeout 300 bash /tmp/logstash-single-test.sh 8.0
 ✓ Row count check for 8.0: 5 rows
 ✓ Structure check for 8.0: passed
 ✓ Logstash version 8.0 tested successfully
+––– input –––
+rm -rf /usr/share/logstash/logstash-8.0.0 logstash-8.0.0.tar.gz /tmp/logstash_test_8.0
+––– output –––
+––– input –––
+for i in {1..3}; do wget -q --timeout=60 --tries=1 "https://artifacts.elastic.co/downloads/logstash/logstash-8.1.0-linux-x86_64.tar.gz" -O logstash-8.1.0.tar.gz && gzip -t logstash-8.1.0.tar.gz 2>/dev/null && tar -tzf logstash-8.1.0.tar.gz | grep -q "bin/logstash" && { echo "✓ Logstash 8.1.0 downloaded successfully"; break; } || { [ $i -eq 3 ] && echo "✗ Failed to download Logstash 8.1.0 after 3 attempts" >&2 || rm -f logstash-8.1.0.tar.gz >/dev/null 2>&1; sleep 2; }; done
+––– output –––
+✓ Logstash 8.1.0 downloaded successfully
 ––– input –––
 timeout 300 bash /tmp/logstash-single-test.sh 8.1
 ––– output –––
@@ -393,6 +267,13 @@ timeout 300 bash /tmp/logstash-single-test.sh 8.1
 ✓ Structure check for 8.1: passed
 ✓ Logstash version 8.1 tested successfully
 ––– input –––
+rm -rf /usr/share/logstash/logstash-8.1.0 logstash-8.1.0.tar.gz /tmp/logstash_test_8.1
+––– output –––
+––– input –––
+for i in {1..3}; do wget -q --timeout=60 --tries=1 "https://artifacts.elastic.co/downloads/logstash/logstash-8.2.0-linux-x86_64.tar.gz" -O logstash-8.2.0.tar.gz && gzip -t logstash-8.2.0.tar.gz 2>/dev/null && tar -tzf logstash-8.2.0.tar.gz | grep -q "bin/logstash" && { echo "✓ Logstash 8.2.0 downloaded successfully"; break; } || { [ $i -eq 3 ] && echo "✗ Failed to download Logstash 8.2.0 after 3 attempts" >&2 || rm -f logstash-8.2.0.tar.gz >/dev/null 2>&1; sleep 2; }; done
+––– output –––
+✓ Logstash 8.2.0 downloaded successfully
+––– input –––
 timeout 300 bash /tmp/logstash-single-test.sh 8.2
 ––– output –––
 >>> Testing Logstash version: 8.2
@@ -402,6 +283,13 @@ timeout 300 bash /tmp/logstash-single-test.sh 8.2
 ✓ Row count check for 8.2: 5 rows
 ✓ Structure check for 8.2: passed
 ✓ Logstash version 8.2 tested successfully
+––– input –––
+rm -rf /usr/share/logstash/logstash-8.2.0 logstash-8.2.0.tar.gz /tmp/logstash_test_8.2
+––– output –––
+––– input –––
+for i in {1..3}; do wget -q --timeout=60 --tries=1 "https://artifacts.elastic.co/downloads/logstash/logstash-8.3.0-linux-x86_64.tar.gz" -O logstash-8.3.0.tar.gz && gzip -t logstash-8.3.0.tar.gz 2>/dev/null && tar -tzf logstash-8.3.0.tar.gz | grep -q "bin/logstash" && { echo "✓ Logstash 8.3.0 downloaded successfully"; break; } || { [ $i -eq 3 ] && echo "✗ Failed to download Logstash 8.3.0 after 3 attempts" >&2 || rm -f logstash-8.3.0.tar.gz >/dev/null 2>&1; sleep 2; }; done
+––– output –––
+✓ Logstash 8.3.0 downloaded successfully
 ––– input –––
 timeout 300 bash /tmp/logstash-single-test.sh 8.3
 ––– output –––
@@ -413,6 +301,13 @@ timeout 300 bash /tmp/logstash-single-test.sh 8.3
 ✓ Structure check for 8.3: passed
 ✓ Logstash version 8.3 tested successfully
 ––– input –––
+rm -rf /usr/share/logstash/logstash-8.3.0 logstash-8.3.0.tar.gz /tmp/logstash_test_8.3
+––– output –––
+––– input –––
+for i in {1..3}; do wget -q --timeout=60 --tries=1 "https://artifacts.elastic.co/downloads/logstash/logstash-8.4.0-linux-x86_64.tar.gz" -O logstash-8.4.0.tar.gz && gzip -t logstash-8.4.0.tar.gz 2>/dev/null && tar -tzf logstash-8.4.0.tar.gz | grep -q "bin/logstash" && { echo "✓ Logstash 8.4.0 downloaded successfully"; break; } || { [ $i -eq 3 ] && echo "✗ Failed to download Logstash 8.4.0 after 3 attempts" >&2 || rm -f logstash-8.4.0.tar.gz >/dev/null 2>&1; sleep 2; }; done
+––– output –––
+✓ Logstash 8.4.0 downloaded successfully
+––– input –––
 timeout 300 bash /tmp/logstash-single-test.sh 8.4
 ––– output –––
 >>> Testing Logstash version: 8.4
@@ -422,6 +317,13 @@ timeout 300 bash /tmp/logstash-single-test.sh 8.4
 ✓ Row count check for 8.4: 5 rows
 ✓ Structure check for 8.4: passed
 ✓ Logstash version 8.4 tested successfully
+––– input –––
+rm -rf /usr/share/logstash/logstash-8.4.0 logstash-8.4.0.tar.gz /tmp/logstash_test_8.4
+––– output –––
+––– input –––
+for i in {1..3}; do wget -q --timeout=60 --tries=1 "https://artifacts.elastic.co/downloads/logstash/logstash-8.5.0-linux-x86_64.tar.gz" -O logstash-8.5.0.tar.gz && gzip -t logstash-8.5.0.tar.gz 2>/dev/null && tar -tzf logstash-8.5.0.tar.gz | grep -q "bin/logstash" && { echo "✓ Logstash 8.5.0 downloaded successfully"; break; } || { [ $i -eq 3 ] && echo "✗ Failed to download Logstash 8.5.0 after 3 attempts" >&2 || rm -f logstash-8.5.0.tar.gz >/dev/null 2>&1; sleep 2; }; done
+––– output –––
+✓ Logstash 8.5.0 downloaded successfully
 ––– input –––
 timeout 300 bash /tmp/logstash-single-test.sh 8.5
 ––– output –––
@@ -433,6 +335,13 @@ timeout 300 bash /tmp/logstash-single-test.sh 8.5
 ✓ Structure check for 8.5: passed
 ✓ Logstash version 8.5 tested successfully
 ––– input –––
+rm -rf /usr/share/logstash/logstash-8.5.0 logstash-8.5.0.tar.gz /tmp/logstash_test_8.5
+––– output –––
+––– input –––
+for i in {1..3}; do wget -q --timeout=60 --tries=1 "https://artifacts.elastic.co/downloads/logstash/logstash-8.6.0-linux-x86_64.tar.gz" -O logstash-8.6.0.tar.gz && gzip -t logstash-8.6.0.tar.gz 2>/dev/null && tar -tzf logstash-8.6.0.tar.gz | grep -q "bin/logstash" && { echo "✓ Logstash 8.6.0 downloaded successfully"; break; } || { [ $i -eq 3 ] && echo "✗ Failed to download Logstash 8.6.0 after 3 attempts" >&2 || rm -f logstash-8.6.0.tar.gz >/dev/null 2>&1; sleep 2; }; done
+––– output –––
+✓ Logstash 8.6.0 downloaded successfully
+––– input –––
 timeout 300 bash /tmp/logstash-single-test.sh 8.6
 ––– output –––
 >>> Testing Logstash version: 8.6
@@ -442,6 +351,13 @@ timeout 300 bash /tmp/logstash-single-test.sh 8.6
 ✓ Row count check for 8.6: 5 rows
 ✓ Structure check for 8.6: passed
 ✓ Logstash version 8.6 tested successfully
+––– input –––
+rm -rf /usr/share/logstash/logstash-8.6.0 logstash-8.6.0.tar.gz /tmp/logstash_test_8.6
+––– output –––
+––– input –––
+for i in {1..3}; do wget -q --timeout=60 --tries=1 "https://artifacts.elastic.co/downloads/logstash/logstash-8.7.0-linux-x86_64.tar.gz" -O logstash-8.7.0.tar.gz && gzip -t logstash-8.7.0.tar.gz 2>/dev/null && tar -tzf logstash-8.7.0.tar.gz | grep -q "bin/logstash" && { echo "✓ Logstash 8.7.0 downloaded successfully"; break; } || { [ $i -eq 3 ] && echo "✗ Failed to download Logstash 8.7.0 after 3 attempts" >&2 || rm -f logstash-8.7.0.tar.gz >/dev/null 2>&1; sleep 2; }; done
+––– output –––
+✓ Logstash 8.7.0 downloaded successfully
 ––– input –––
 timeout 300 bash /tmp/logstash-single-test.sh 8.7
 ––– output –––
@@ -453,6 +369,13 @@ timeout 300 bash /tmp/logstash-single-test.sh 8.7
 ✓ Structure check for 8.7: passed
 ✓ Logstash version 8.7 tested successfully
 ––– input –––
+rm -rf /usr/share/logstash/logstash-8.7.0 logstash-8.7.0.tar.gz /tmp/logstash_test_8.7
+––– output –––
+––– input –––
+for i in {1..3}; do wget -q --timeout=60 --tries=1 "https://artifacts.elastic.co/downloads/logstash/logstash-8.8.0-linux-x86_64.tar.gz" -O logstash-8.8.0.tar.gz && gzip -t logstash-8.8.0.tar.gz 2>/dev/null && tar -tzf logstash-8.8.0.tar.gz | grep -q "bin/logstash" && { echo "✓ Logstash 8.8.0 downloaded successfully"; break; } || { [ $i -eq 3 ] && echo "✗ Failed to download Logstash 8.8.0 after 3 attempts" >&2 || rm -f logstash-8.8.0.tar.gz >/dev/null 2>&1; sleep 2; }; done
+––– output –––
+✓ Logstash 8.8.0 downloaded successfully
+––– input –––
 timeout 300 bash /tmp/logstash-single-test.sh 8.8
 ––– output –––
 >>> Testing Logstash version: 8.8
@@ -462,6 +385,13 @@ timeout 300 bash /tmp/logstash-single-test.sh 8.8
 ✓ Row count check for 8.8: 5 rows
 ✓ Structure check for 8.8: passed
 ✓ Logstash version 8.8 tested successfully
+––– input –––
+rm -rf /usr/share/logstash/logstash-8.8.0 logstash-8.8.0.tar.gz /tmp/logstash_test_8.8
+––– output –––
+––– input –––
+for i in {1..3}; do wget -q --timeout=60 --tries=1 "https://artifacts.elastic.co/downloads/logstash/logstash-8.9.0-linux-x86_64.tar.gz" -O logstash-8.9.0.tar.gz && gzip -t logstash-8.9.0.tar.gz 2>/dev/null && tar -tzf logstash-8.9.0.tar.gz | grep -q "bin/logstash" && { echo "✓ Logstash 8.9.0 downloaded successfully"; break; } || { [ $i -eq 3 ] && echo "✗ Failed to download Logstash 8.9.0 after 3 attempts" >&2 || rm -f logstash-8.9.0.tar.gz >/dev/null 2>&1; sleep 2; }; done
+––– output –––
+✓ Logstash 8.9.0 downloaded successfully
 ––– input –––
 timeout 300 bash /tmp/logstash-single-test.sh 8.9
 ––– output –––
@@ -473,6 +403,13 @@ timeout 300 bash /tmp/logstash-single-test.sh 8.9
 ✓ Structure check for 8.9: passed
 ✓ Logstash version 8.9 tested successfully
 ––– input –––
+rm -rf /usr/share/logstash/logstash-8.9.0 logstash-8.9.0.tar.gz /tmp/logstash_test_8.9
+––– output –––
+––– input –––
+for i in {1..3}; do wget -q --timeout=60 --tries=1 "https://artifacts.elastic.co/downloads/logstash/logstash-8.10.0-linux-x86_64.tar.gz" -O logstash-8.10.0.tar.gz && gzip -t logstash-8.10.0.tar.gz 2>/dev/null && tar -tzf logstash-8.10.0.tar.gz | grep -q "bin/logstash" && { echo "✓ Logstash 8.10.0 downloaded successfully"; break; } || { [ $i -eq 3 ] && echo "✗ Failed to download Logstash 8.10.0 after 3 attempts" >&2 || rm -f logstash-8.10.0.tar.gz >/dev/null 2>&1; sleep 2; }; done
+––– output –––
+✓ Logstash 8.10.0 downloaded successfully
+––– input –––
 timeout 300 bash /tmp/logstash-single-test.sh 8.10
 ––– output –––
 >>> Testing Logstash version: 8.10
@@ -482,6 +419,13 @@ timeout 300 bash /tmp/logstash-single-test.sh 8.10
 ✓ Row count check for 8.10: 5 rows
 ✓ Structure check for 8.10: passed
 ✓ Logstash version 8.10 tested successfully
+––– input –––
+rm -rf /usr/share/logstash/logstash-8.10.0 logstash-8.10.0.tar.gz /tmp/logstash_test_8.10
+––– output –––
+––– input –––
+for i in {1..3}; do wget -q --timeout=60 --tries=1 "https://artifacts.elastic.co/downloads/logstash/logstash-8.11.0-linux-x86_64.tar.gz" -O logstash-8.11.0.tar.gz && gzip -t logstash-8.11.0.tar.gz 2>/dev/null && tar -tzf logstash-8.11.0.tar.gz | grep -q "bin/logstash" && { echo "✓ Logstash 8.11.0 downloaded successfully"; break; } || { [ $i -eq 3 ] && echo "✗ Failed to download Logstash 8.11.0 after 3 attempts" >&2 || rm -f logstash-8.11.0.tar.gz >/dev/null 2>&1; sleep 2; }; done
+––– output –––
+✓ Logstash 8.11.0 downloaded successfully
 ––– input –––
 timeout 300 bash /tmp/logstash-single-test.sh 8.11
 ––– output –––
@@ -493,6 +437,13 @@ timeout 300 bash /tmp/logstash-single-test.sh 8.11
 ✓ Structure check for 8.11: passed
 ✓ Logstash version 8.11 tested successfully
 ––– input –––
+rm -rf /usr/share/logstash/logstash-8.11.0 logstash-8.11.0.tar.gz /tmp/logstash_test_8.11
+––– output –––
+––– input –––
+for i in {1..3}; do wget -q --timeout=60 --tries=1 "https://artifacts.elastic.co/downloads/logstash/logstash-8.12.0-linux-x86_64.tar.gz" -O logstash-8.12.0.tar.gz && gzip -t logstash-8.12.0.tar.gz 2>/dev/null && tar -tzf logstash-8.12.0.tar.gz | grep -q "bin/logstash" && { echo "✓ Logstash 8.12.0 downloaded successfully"; break; } || { [ $i -eq 3 ] && echo "✗ Failed to download Logstash 8.12.0 after 3 attempts" >&2 || rm -f logstash-8.12.0.tar.gz >/dev/null 2>&1; sleep 2; }; done
+––– output –––
+✓ Logstash 8.12.0 downloaded successfully
+––– input –––
 timeout 300 bash /tmp/logstash-single-test.sh 8.12
 ––– output –––
 >>> Testing Logstash version: 8.12
@@ -502,6 +453,13 @@ timeout 300 bash /tmp/logstash-single-test.sh 8.12
 ✓ Row count check for 8.12: 5 rows
 ✓ Structure check for 8.12: passed
 ✓ Logstash version 8.12 tested successfully
+––– input –––
+rm -rf /usr/share/logstash/logstash-8.12.0 logstash-8.12.0.tar.gz /tmp/logstash_test_8.12
+––– output –––
+––– input –––
+for i in {1..3}; do wget -q --timeout=60 --tries=1 "https://artifacts.elastic.co/downloads/logstash/logstash-8.13.0-linux-x86_64.tar.gz" -O logstash-8.13.0.tar.gz && gzip -t logstash-8.13.0.tar.gz 2>/dev/null && tar -tzf logstash-8.13.0.tar.gz | grep -q "bin/logstash" && { echo "✓ Logstash 8.13.0 downloaded successfully"; break; } || { [ $i -eq 3 ] && echo "✗ Failed to download Logstash 8.13.0 after 3 attempts" >&2 || rm -f logstash-8.13.0.tar.gz >/dev/null 2>&1; sleep 2; }; done
+––– output –––
+✓ Logstash 8.13.0 downloaded successfully
 ––– input –––
 timeout 300 bash /tmp/logstash-single-test.sh 8.13
 ––– output –––
@@ -513,6 +471,13 @@ timeout 300 bash /tmp/logstash-single-test.sh 8.13
 ✓ Structure check for 8.13: passed
 ✓ Logstash version 8.13 tested successfully
 ––– input –––
+rm -rf /usr/share/logstash/logstash-8.13.0 logstash-8.13.0.tar.gz /tmp/logstash_test_8.13
+––– output –––
+––– input –––
+for i in {1..3}; do wget -q --timeout=60 --tries=1 "https://artifacts.elastic.co/downloads/logstash/logstash-8.14.0-linux-x86_64.tar.gz" -O logstash-8.14.0.tar.gz && gzip -t logstash-8.14.0.tar.gz 2>/dev/null && tar -tzf logstash-8.14.0.tar.gz | grep -q "bin/logstash" && { echo "✓ Logstash 8.14.0 downloaded successfully"; break; } || { [ $i -eq 3 ] && echo "✗ Failed to download Logstash 8.14.0 after 3 attempts" >&2 || rm -f logstash-8.14.0.tar.gz >/dev/null 2>&1; sleep 2; }; done
+––– output –––
+✓ Logstash 8.14.0 downloaded successfully
+––– input –––
 timeout 300 bash /tmp/logstash-single-test.sh 8.14
 ––– output –––
 >>> Testing Logstash version: 8.14
@@ -522,6 +487,13 @@ timeout 300 bash /tmp/logstash-single-test.sh 8.14
 ✓ Row count check for 8.14: 5 rows
 ✓ Structure check for 8.14: passed
 ✓ Logstash version 8.14 tested successfully
+––– input –––
+rm -rf /usr/share/logstash/logstash-8.14.0 logstash-8.14.0.tar.gz /tmp/logstash_test_8.14
+––– output –––
+––– input –––
+for i in {1..3}; do wget -q --timeout=60 --tries=1 "https://artifacts.elastic.co/downloads/logstash/logstash-8.15.0-linux-x86_64.tar.gz" -O logstash-8.15.0.tar.gz && gzip -t logstash-8.15.0.tar.gz 2>/dev/null && tar -tzf logstash-8.15.0.tar.gz | grep -q "bin/logstash" && { echo "✓ Logstash 8.15.0 downloaded successfully"; break; } || { [ $i -eq 3 ] && echo "✗ Failed to download Logstash 8.15.0 after 3 attempts" >&2 || rm -f logstash-8.15.0.tar.gz >/dev/null 2>&1; sleep 2; }; done
+––– output –––
+✓ Logstash 8.15.0 downloaded successfully
 ––– input –––
 timeout 300 bash /tmp/logstash-single-test.sh 8.15
 ––– output –––
@@ -533,6 +505,47 @@ timeout 300 bash /tmp/logstash-single-test.sh 8.15
 ✓ Structure check for 8.15: passed
 ✓ Logstash version 8.15 tested successfully
 ––– input –––
+rm -rf /usr/share/logstash/logstash-8.15.0 logstash-8.15.0.tar.gz /tmp/logstash_test_8.15
+––– output –––
+––– input –––
+for i in {1..3}; do wget -q --timeout=60 --tries=1 "https://artifacts.elastic.co/downloads/logstash/logstash-8.16.0-linux-x86_64.tar.gz" -O logstash-8.16.0.tar.gz && gzip -t logstash-8.16.0.tar.gz 2>/dev/null && tar -tzf logstash-8.16.0.tar.gz | grep -q "bin/logstash" && { echo "✓ Logstash 8.16.0 downloaded successfully"; break; } || { [ $i -eq 3 ] && echo "✗ Failed to download Logstash 8.16.0 after 3 attempts" >&2 || rm -f logstash-8.16.0.tar.gz >/dev/null 2>&1; sleep 2; }; done
+––– output –––
+✓ Logstash 8.16.0 downloaded successfully
+––– input –––
+timeout 300 bash /tmp/logstash-single-test.sh 8.16
+––– output –––
+>>> Testing Logstash version: 8.16
+✓ Log file has 5 lines
+✓ Manticore Search available
+✓ Logstash 8.16 started and processed logs
+✓ Row count check for 8.16: 5 rows
+✓ Structure check for 8.16: passed
+✓ Logstash version 8.16 tested successfully
+––– input –––
+rm -rf /usr/share/logstash/logstash-8.16.0 logstash-8.16.0.tar.gz /tmp/logstash_test_8.16
+––– output –––
+––– input –––
+for i in {1..3}; do wget -q --timeout=60 --tries=1 "https://artifacts.elastic.co/downloads/logstash/logstash-8.17.0-linux-x86_64.tar.gz" -O logstash-8.17.0.tar.gz && gzip -t logstash-8.17.0.tar.gz 2>/dev/null && tar -tzf logstash-8.17.0.tar.gz | grep -q "bin/logstash" && { echo "✓ Logstash 8.17.0 downloaded successfully"; break; } || { [ $i -eq 3 ] && echo "✗ Failed to download Logstash 8.17.0 after 3 attempts" >&2 || rm -f logstash-8.17.0.tar.gz >/dev/null 2>&1; sleep 2; }; done
+––– output –––
+✓ Logstash 8.17.0 downloaded successfully
+––– input –––
+timeout 300 bash /tmp/logstash-single-test.sh 8.17
+––– output –––
+>>> Testing Logstash version: 8.17
+✓ Log file has 5 lines
+✓ Manticore Search available
+✓ Logstash 8.17 started and processed logs
+✓ Row count check for 8.17: 5 rows
+✓ Structure check for 8.17: passed
+✓ Logstash version 8.17 tested successfully
+––– input –––
+rm -rf /usr/share/logstash/logstash-8.17.0 logstash-8.17.0.tar.gz /tmp/logstash_test_8.17
+––– output –––
+––– input –––
+for i in {1..3}; do wget -q --timeout=60 --tries=1 "https://artifacts.elastic.co/downloads/logstash/logstash-8.18.0-linux-x86_64.tar.gz" -O logstash-8.18.0.tar.gz && gzip -t logstash-8.18.0.tar.gz 2>/dev/null && tar -tzf logstash-8.18.0.tar.gz | grep -q "bin/logstash" && { echo "✓ Logstash 8.18.0 downloaded successfully"; break; } || { [ $i -eq 3 ] && echo "✗ Failed to download Logstash 8.18.0 after 3 attempts" >&2 || rm -f logstash-8.18.0.tar.gz >/dev/null 2>&1; sleep 2; }; done
+––– output –––
+✓ Logstash 8.18.0 downloaded successfully
+––– input –––
 timeout 300 bash /tmp/logstash-single-test.sh 8.18
 ––– output –––
 >>> Testing Logstash version: 8.18
@@ -542,6 +555,13 @@ timeout 300 bash /tmp/logstash-single-test.sh 8.18
 ✓ Row count check for 8.18: 5 rows
 ✓ Structure check for 8.18: passed
 ✓ Logstash version 8.18 tested successfully
+––– input –––
+rm -rf /usr/share/logstash/logstash-8.18.0 logstash-8.18.0.tar.gz /tmp/logstash_test_8.18
+––– output –––
+––– input –––
+for i in {1..3}; do wget -q --timeout=60 --tries=1 "https://artifacts.elastic.co/downloads/logstash/logstash-9.0.0-linux-x86_64.tar.gz" -O logstash-9.0.0.tar.gz && gzip -t logstash-9.0.0.tar.gz 2>/dev/null && tar -tzf logstash-9.0.0.tar.gz | grep -q "bin/logstash" && { echo "✓ Logstash 9.0.0 downloaded successfully"; break; } || { [ $i -eq 3 ] && echo "✗ Failed to download Logstash 9.0.0 after 3 attempts" >&2 || rm -f logstash-9.0.0.tar.gz >/dev/null 2>&1; sleep 2; }; done
+––– output –––
+✓ Logstash 9.0.0 downloaded successfully
 ––– input –––
 timeout 300 bash /tmp/logstash-single-test.sh 9.0
 ––– output –––

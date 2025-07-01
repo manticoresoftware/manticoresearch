@@ -934,12 +934,13 @@ private:
 class JsonReplyParser_c : public ReplyParser_i
 {
 public:
-	JsonReplyParser_c ( int & iAffected, int & iWarnings )
+	JsonReplyParser_c ( int & iAffected, int & iWarnings, SearchFailuresLog_c & tFails )
 		: m_iAffected ( iAffected )
 		, m_iWarnings ( iWarnings )
+		, m_tFails  ( tFails )
 	{}
 
-	bool ParseReply ( MemInputBuffer_c & tReq, AgentConn_t & ) const final
+	bool ParseReply ( MemInputBuffer_c & tReq, AgentConn_t & tAgent ) const final
 	{
 		CSphString sEndpoint = tReq.GetString();
 		EHTTP_ENDPOINT eEndpoint = StrToHttpEndpoint ( sEndpoint );
@@ -951,12 +952,18 @@ public:
 		tReq.GetBytes ( dResult.Begin(), (int)uLength );
 		dResult[uLength] = '\0';
 
-		return sphGetResultStats ( (const char *)dResult.Begin(), m_iAffected, m_iWarnings, eEndpoint==EHTTP_ENDPOINT::JSON_UPDATE );
+		CSphString sError;
+		bool bOk = sphGetResultStats ( (const char *)dResult.Begin(), m_iAffected, m_iWarnings, eEndpoint==EHTTP_ENDPOINT::JSON_UPDATE, sError );
+		if ( !sError.IsEmpty() )
+			m_tFails.Submit ( tAgent.m_tDesc.m_sIndexes, nullptr, sError.cstr() );
+
+		return bOk;
 	}
 
 protected:
 	int &	m_iAffected;
 	int &	m_iWarnings;
+	SearchFailuresLog_c & m_tFails;
 };
 
 std::unique_ptr<QueryParser_i> CreateQueryParser ( bool bJson ) noexcept
@@ -976,10 +983,10 @@ std::unique_ptr<RequestBuilder_i> CreateRequestBuilder ( Str_t sQuery, const Sql
 	}
 }
 
-std::unique_ptr<ReplyParser_i> CreateReplyParser ( bool bJson, int & iUpdated, int & iWarnings )
+std::unique_ptr<ReplyParser_i> CreateReplyParser ( bool bJson, int & iUpdated, int & iWarnings, SearchFailuresLog_c & tFails )
 {
 	if ( bJson )
-		return std::make_unique<JsonReplyParser_c> ( iUpdated, iWarnings );
+		return std::make_unique<JsonReplyParser_c> ( iUpdated, iWarnings, tFails );
 	else
 		return std::make_unique<SphinxqlReplyParser_c> ( &iUpdated, &iWarnings );
 }
@@ -2419,7 +2426,7 @@ HttpProcessResult_t ProcessHttpQuery ( CharStream_c & tSource, Str_t & sSrcQuery
 	return tRes;
 }
 
-void sphProcessHttpQueryNoResponce ( const CSphString & sQuery, OptionsHash_t & hOptions, CSphVector<BYTE> & dResult )
+void ProcessHttpJsonQuery ( const CSphString & sQuery, OptionsHash_t & hOptions, CSphVector<BYTE> & dResult )
 {
 	http_method eReqType = HTTP_POST;
 

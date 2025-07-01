@@ -1,0 +1,60 @@
+Test that global search statistics are consistent with per-table statistics during concurrent load and search operations. Verifies that global stats do not differ from per-table stats by more than 20%.
+
+––– comment –––
+Start Manticore Search
+––– input –––
+rm -f /var/log/manticore/searchd.log; stdbuf -oL searchd --stopwait > /dev/null; stdbuf -oL searchd > /dev/null
+––– output –––
+––– input –––
+if timeout 10 grep -qm1 'accepting connections' <(tail -n 1000 -f /var/log/manticore/searchd.log); then echo 'Manticore started!'; else echo 'Timeout or failed!'; fi
+––– output –––
+Manticore started!
+––– comment –––
+Load data with concurrent searches using manticore-load
+––– input –––
+manticore-load --host=127.0.0.1 --drop --batch-size=1000 --threads=4 --total=1000000 --init="CREATE TABLE test(id bigint, name text, type int)" --load="INSERT INTO test(id,name,type) VALUES(<increment>,'<text/10/100>',<int/1/100>)" --together --threads=1 --total=5000 --load="SELECT * FROM test WHERE MATCH('<text/1/1>')" > /dev/null; echo $?
+––– output –––
+0
+––– comment –––
+Wait a moment for statistics to be calculated
+––– input –––
+sleep 2
+––– output –––
+––– comment –––
+Get per-table search statistics
+––– input –––
+mysql -P9306 -h0 -e "show table test status like '%search_stats_%'" | tr -d '|' | awk 'NF==2 {print $1, $2}' | sort
+––– output –––
+search_stats_ms_avg #!/[0-9]+\.[0-9]+/!#
+search_stats_ms_max #!/[0-9]+\.[0-9]+/!#
+search_stats_ms_min #!/[0-9]+\.[0-9]+/!#
+search_stats_ms_pct95 #!/[0-9]+\.[0-9]+/!#
+search_stats_ms_pct99 #!/[0-9]+\.[0-9]+/!#
+––– comment –––
+Get global search statistics
+––– input –––
+mysql -P9306 -h0 -e "show status like 'search_stats%'" | tr -d '|' | awk 'NF==2 {print $1, $2}' | sort
+––– output –––
+search_stats_ms_avg #!/[0-9]+\.[0-9]+/!#
+search_stats_ms_max #!/[0-9]+\.[0-9]+/!#
+search_stats_ms_min #!/[0-9]+\.[0-9]+/!#
+search_stats_ms_pct95 #!/[0-9]+\.[0-9]+/!#
+search_stats_ms_pct99 #!/[0-9]+\.[0-9]+/!#
+––– comment –––
+Compare global vs table stats to ensure they don't differ by more than 20%
+––– input –––
+TABLE_AVG=$(mysql -P9306 -h0 -e "show table test status like 'search_stats_ms_avg'" | grep search_stats_ms_avg | awk '{print $2}'); GLOBAL_AVG=$(mysql -P9306 -h0 -e "show status like 'search_stats_ms_avg'" | grep search_stats_ms_avg | awk '{print $2}'); python3 -c "import sys; table_avg=float('$TABLE_AVG'); global_avg=float('$GLOBAL_AVG'); diff_pct=abs(table_avg-global_avg)/max(table_avg,global_avg)*100 if max(table_avg,global_avg) > 0 else 0; print(f'Table avg: {table_avg}, Global avg: {global_avg}, Diff: {diff_pct:.1f}%'); sys.exit(0 if diff_pct <= 20 else 1)"
+––– output –––
+Table avg: #!/[0-9]+\.[0-9]+/!#, Global avg: #!/[0-9]+\.[0-9]+/!#, Diff: #!/[0-9]+\.[0-9]+/!#%
+––– comment –––
+Compare max values
+––– input –––
+TABLE_MAX=$(mysql -P9306 -h0 -e "show table test status like 'search_stats_ms_max'" | grep search_stats_ms_max | awk '{print $2}'); GLOBAL_MAX=$(mysql -P9306 -h0 -e "show status like 'search_stats_ms_max'" | grep search_stats_ms_max | awk '{print $2}'); python3 -c "import sys; table_max=float('$TABLE_MAX'); global_max=float('$GLOBAL_MAX'); diff_pct=abs(table_max-global_max)/max(table_max,global_max)*100 if max(table_max,global_max) > 0 else 0; print(f'Table max: {table_max}, Global max: {global_max}, Diff: {diff_pct:.1f}%'); sys.exit(0 if diff_pct <= 20 else 1)"
+––– output –––
+Table max: #!/[0-9]+\.[0-9]+/!#, Global max: #!/[0-9]+\.[0-9]+/!#, Diff: #!/[0-9]+\.[0-9]+/!#%
+––– comment –––
+Verify that searches were actually executed
+––– input –––
+mysql -P9306 -h0 -e "show table test status like 'command_search'" | grep command_search | awk '{print $2}'
+––– output –––
+%{NUMBER}

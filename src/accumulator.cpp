@@ -197,7 +197,7 @@ bool RtAccum_t::RebuildStoragesForEmbeddings ( RowID_t tRowID, CSphRowitem * pRo
 }
 
 
-bool RtAccum_t::GenerateEmbeddings ( int iAttr, int iAttrWithModel, const CSphVector<AttrWithModel_t> & dAttrsWithModels, std::vector<std::vector<std::vector<float>>> & dAllEmbeddings, CSphString & sError )
+bool RtAccum_t::GenerateEmbeddings ( int iAttr, int iAttrWithModel, const CSphVector<AttrWithModel_t> & dAttrsWithModels, std::vector<std::vector<std::vector<float>>> & dAllEmbeddings, columnar::Iterator_i * pColumnarIterator, CSphString & sError )
 {
 	const AttrWithModel_t & tAttrWithModel = dAttrsWithModels[iAttr];
 	if ( !tAttrWithModel.m_pModel )
@@ -205,22 +205,65 @@ bool RtAccum_t::GenerateEmbeddings ( int iAttr, int iAttrWithModel, const CSphVe
 
 	assert(m_pIndex);
 	const CSphSchema & tSchema = m_pIndex->GetInternalSchema();
+	const auto & tAttr = tSchema.GetAttr(iAttr);
+	const CSphColumnInfo * pBlobLoc = tSchema.GetAttr ( sphGetBlobLocatorName() );
 
 	int iRowSize = tSchema.GetRowSize();
 	std::vector<std::vector<float>> & dEmbeddingsForAttr = dAllEmbeddings[iAttr];
 	std::vector<std::string_view> dTexts;
+	bool bHaveSkipped = false;
+	IntVec_t dResultIds(m_uAccumDocs);
 	CSphRowitem * pRow = m_dAccumRows.Begin();
 	for ( RowID_t tRowID = 0; tRowID < m_uAccumDocs; ++tRowID, pRow += iRowSize )
 	{
-		const auto & dConcat = m_pEmbeddingsSrc->Get ( tRowID, iAttrWithModel );
-		dTexts.push_back ( { dConcat.Begin(), (size_t)dConcat.GetLength() } );
+		bool bDefault;
+		if ( pColumnarIterator )
+		{
+			const BYTE * pResult = nullptr;
+			int iBytes = pColumnarIterator->Get ( tRowID, pResult );
+			assert ( iBytes==sizeof(DWORD) );
+			bDefault = *(const DWORD*)pResult;
+		}
+		else
+		{
+			assert(pBlobLoc);
+			SphAttr_t tBlobRowOffset = sphGetRowAttr ( pRow, pBlobLoc->m_tLocator );
+			const BYTE * pBlobRow = m_dBlobs.Begin() + tBlobRowOffset;
+			ByteBlob_t tBlob = sphGetBlobAttr ( pBlobRow, tAttr.m_tLocator );
+			assert ( tBlob.second==sizeof(DWORD) );
+			bDefault = *(const DWORD*)tBlob.first;
+		}
+
+		if ( bDefault )
+		{
+			dResultIds[tRowID] = dTexts.size();
+			const auto & dConcat = m_pEmbeddingsSrc->Get ( tRowID, iAttrWithModel );
+			dTexts.push_back ( { dConcat.Begin(), (size_t)dConcat.GetLength() } );
+		}
+		else
+		{
+			dResultIds[tRowID] = -1;
+			bHaveSkipped = true;
+		}
 	}
 
 	std::string sErrorSTL;
-	if ( !tAttrWithModel.m_pModel->Convert ( dTexts, dEmbeddingsForAttr, sErrorSTL ) )
+	std::vector<std::vector<float>> dEmbeddingsForAttrTmp;
+	if ( !tAttrWithModel.m_pModel->Convert ( dTexts, bHaveSkipped ? dEmbeddingsForAttrTmp : dEmbeddingsForAttr, sErrorSTL ) )
 	{
 		sError = sErrorSTL.c_str();
 		return false;
+	}
+
+	if ( bHaveSkipped )
+	{
+		dEmbeddingsForAttr.resize ( dResultIds.GetLength() );
+		ARRAY_FOREACH ( i, dResultIds )
+		{
+			int iResultId = dResultIds[i];
+			if ( iResultId!=-1 )
+				dEmbeddingsForAttr[i] = dEmbeddingsForAttrTmp[iResultId];
+		}
 	}
 
 	return true;
@@ -276,15 +319,20 @@ bool RtAccum_t::FetchEmbeddings ( TableEmbeddings_c * pEmbeddings, const CSphVec
 	// 1st pass - generate all embeddings for each attribute
 	int iRowSize = tSchema.GetRowSize();
 	int iAttrWithModel = 0;
+	int iColumnarAttr = 0;
 	std::vector<std::vector<std::vector<float>>> dAllEmbeddings;
 	dAllEmbeddings.resize ( dAttrsWithModels.GetLength() );
 	ARRAY_FOREACH ( i, dAttrsWithModels )
 	{
-		if ( !GenerateEmbeddings( i, iAttrWithModel, dAttrsWithModels, dAllEmbeddings, sError ) )
+		bool bColumnar = tSchema.GetAttr(i).IsColumnar();
+		if ( !GenerateEmbeddings( i, iAttrWithModel, dAttrsWithModels, dAllEmbeddings, bColumnar ? dAllIterators[iColumnarAttr].first.get() : nullptr, sError ) )
 			return false;
 
 		if ( dAttrsWithModels[i].m_pModel )
 			iAttrWithModel++;
+
+		if ( bColumnar )
+			iColumnarAttr++;
 	}
 
 	// 2nd pass - rebuild attribute storages
@@ -504,13 +552,11 @@ void RtAccum_t::AddDocument ( ISphHits* pHits, const InsertDocData_c& tDoc, bool
 	int iColumnarAttr = 0;
 	int iMva = 0;
 
-	CSphVector<int64_t> dTempKNN;
-
 	const char** ppStr = tDoc.m_dStrings.Begin();
 	const CSphSchema& tSchema = m_pIndex->GetInternalSchema();
 	for ( int i = 0; i < tSchema.GetAttrsCount(); ++i )
 	{
-		const CSphColumnInfo& tColumn = tSchema.GetAttr ( i );
+		const CSphColumnInfo & tColumn = tSchema.GetAttr(i);
 
 		switch ( tColumn.m_eAttrType )
 		{
@@ -541,13 +587,14 @@ void RtAccum_t::AddDocument ( ISphHits* pHits, const InsertDocData_c& tDoc, bool
 				std::tie ( iNumValues, bDefault ) = tDoc.ReadMVALength(pMva);
 				iMva += iNumValues + 1;
 
-				// fill default/missing float_vector+knn attributes with zeroes
-				if ( tColumn.m_eAttrType==SPH_ATTR_FLOAT_VECTOR && tColumn.IsIndexedKNN() && bDefault )
+				int64_t iTmpMVA = 0;
+				if ( !tColumn.m_tKNNModel.m_sModelName.empty() )
 				{
-					dTempKNN.Resize ( tColumn.m_tKNN.m_iDims );
-					dTempKNN.ZeroVec();
-					pMva = dTempKNN.Begin();
-					iNumValues = dTempKNN.GetLength(); 
+					// store a temporary flag for later checks in the accumulator
+					assert(!iNumValues);
+					iNumValues = 1;
+					iTmpMVA = (int64_t)bDefault;
+					pMva = &iTmpMVA;
 				}
 
 				if ( tColumn.IsColumnar() )

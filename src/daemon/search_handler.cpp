@@ -927,7 +927,7 @@ bool SearchHandler_c::SubmitSuccess ( CSphVector<ISphMatchSorter *> & dSorters, 
 	tNRes.m_iPredictedTime = tNRes.m_bHasPrediction ? CalcPredictedTimeMsec ( tNRes ) : 0;
 
 	m_dQueryIndexStats[iLocal].m_dStats[iQuery].m_iSuccesses = 1;
-	m_dQueryIndexStats[iLocal].m_dStats[iQuery].m_uQueryTime = iQTimeForStats;
+	m_dQueryIndexStats[iLocal].m_dStats[iQuery].m_tmQueryTime = iQTimeForStats * 1000; // FIME!!! change time in meta into miscroseconds
 	m_dQueryIndexStats[iLocal].m_dStats[iQuery].m_uFoundRows = pSorter->GetTotalCount();
 
 	// extract matches from sorter
@@ -1160,7 +1160,7 @@ void SearchHandler_c::RunLocalSearches()
 		{
 			QueryStat_t & tStat = m_dQueryIndexStats[iLocal].m_dStats[iQuery];
 			if ( tStat.m_iSuccesses )
-				tStat.m_uQueryTime = (int) ( tmLocal / 1000 / iTotalSuccessesInt );
+				tStat.m_tmQueryTime = tmLocal / iTotalSuccessesInt;
 		}
 }
 
@@ -1560,23 +1560,23 @@ void SearchHandler_c::CalcTimeStats ( int64_t tmCpu, int64_t tmSubset, const CSp
 	int64_t tmDelta = tmSubset - tmAccountedWall;
 
 	auto nValidDistrIndexes = dDistrServedByAgent.count_of ( [] ( auto& t ) { return t.m_dStats.any_of ( [] ( auto& i ) { return i.m_iSuccesses; } ); } );
-	int64_t nDistrDivider = iTotalSuccesses * nValidDistrIndexes * 1000;
+	int64_t nDistrDivider = iTotalSuccesses * nValidDistrIndexes;
 	if ( nDistrDivider )
 		for ( auto &tDistrStat : dDistrServedByAgent )
 			for ( QueryStat_t& tStat : tDistrStat.m_dStats )
 			{
 				auto tmDeltaWallAgent = tmDelta * tStat.m_iSuccesses / nDistrDivider;
-				tStat.m_uQueryTime += (int)tmDeltaWallAgent;
+				tStat.m_tmQueryTime += tmDeltaWallAgent;
 			}
 
 	auto nValidLocalIndexes = m_dQueryIndexStats.count_of ( [] ( auto& t ) { return t.m_dStats.any_of ( [] ( auto& i ) { return i.m_iSuccesses; } ); } );
-	int64_t nLocalDivider = iTotalSuccesses * nValidLocalIndexes * 1000;
+	int64_t nLocalDivider = iTotalSuccesses * nValidLocalIndexes;
 	if ( nLocalDivider )
 		for ( auto &dQueryIndexStat : m_dQueryIndexStats )
 			for ( QueryStat_t& tStat : dQueryIndexStat.m_dStats )
 			{
 				int64_t tmDeltaWallLocal = tmDelta * tStat.m_iSuccesses / nLocalDivider;
-				tStat.m_uQueryTime += (int)tmDeltaWallLocal;
+				tStat.m_tmQueryTime += tmDeltaWallLocal;
 			}
 }
 
@@ -1594,12 +1594,12 @@ void SearchHandler_c::CalcPerIndexStats ( const CSphVector<DistrServedByAgent_t>
 			if ( !tStat.m_iSuccesses )
 				continue;
 
-			pServed->m_pStats->AddQueryStat ( tStat.m_uFoundRows, tStat.m_uQueryTime );
+			pServed->m_pStats->AddQueryStat ( tStat.m_uFoundRows, tStat.m_tmQueryTime );
 			for ( auto &tDistr : dDistrServedByAgent )
 			{
 				if ( tDistr.m_dLocalNames.Contains ( m_dLocal[iLocal].m_sName ) )
 				{
-					tDistr.m_dStats[iQuery].m_uQueryTime += tStat.m_uQueryTime;
+					tDistr.m_dStats[iQuery].m_tmQueryTime += tStat.m_tmQueryTime;
 					tDistr.m_dStats[iQuery].m_uFoundRows += tStat.m_uFoundRows;
 					++tDistr.m_dStats[iQuery].m_iSuccesses;
 				}
@@ -1617,7 +1617,7 @@ void SearchHandler_c::CalcPerIndexStats ( const CSphVector<DistrServedByAgent_t>
 				if ( !tStat.m_iSuccesses )
 					continue;
 
-				pServedDistIndex->m_tStats.AddQueryStat ( tStat.m_uFoundRows, tStat.m_uQueryTime );
+				pServedDistIndex->m_tStats.AddQueryStat ( tStat.m_uFoundRows, tStat.m_tmQueryTime );
 			}
 	}
 }
@@ -2058,7 +2058,7 @@ void SearchHandler_c::RunSubset ( int iStart, int iEnd )
 
 					if ( pDistr )
 					{
-						pDistr->m_dStats[iRes].m_uQueryTime += tRemoteResult.m_iQueryTime;
+						pDistr->m_dStats[iRes].m_tmQueryTime += tRemoteResult.m_iQueryTime * 1000; // FIME!!! change time in meta into miscroseconds
 						pDistr->m_dStats[iRes].m_uFoundRows += tRemoteResult.m_iTotalMatches;
 						++pDistr->m_dStats[iRes].m_iSuccesses;
 					}

@@ -592,6 +592,9 @@ protected:
 
 	virtual	bool RunFinalBatch();
 
+	FORCE_INLINE void SetBlobPoolImpl ( const BYTE * pBlobPool );
+	FORCE_INLINE void SetColumnarImpl ( columnar::Columnar_i * pColumnar );
+
 private:
 	struct JoinAttrNameRemap_t
 	{
@@ -712,9 +715,6 @@ private:
 	void		RepackJsonFieldAsStr ( const CSphMatch & tSrcMatch, const CSphAttrLocator & tLocSrc, const CSphAttrLocator & tLocDst );
 	void		ProduceCacheSizeWarning ( CSphString & sWarning );
 	void		PopulateStoredFields();
-
-	FORCE_INLINE void SetBlobPoolImpl ( const BYTE * pBlobPool );
-	FORCE_INLINE void SetColumnarImpl ( columnar::Columnar_i * pColumnar );
 
 	FORCE_INLINE void AddToBatch ( const CSphMatch & tEntry, uint64_t uFilterHash );
 	FORCE_INLINE bool IsBatchFull() const;
@@ -1037,8 +1037,8 @@ bool JoinSorter_c::PushJoinedMatches ( const CSphMatch & tEntry, const MATCHES &
 
 	if ( m_bCanBatch )
 	{
-		SetBlobPoolImpl(pBlobPool);
-		SetColumnarImpl(pColumnar);
+		SetBlobPool(pBlobPool);
+		SetColumnar(pColumnar);
 	}
 
 	bool bAnythingPushed = false;
@@ -2103,6 +2103,9 @@ public:
 	// for cloning to work we would need to clone the sorters that we hold and also somehow sync them with dSorters
 	bool	CanBeCloned() const override { return false; }
 
+	void	SetBlobPool ( const BYTE * pBlobPool ) override;
+	void	SetColumnar ( columnar::Columnar_i * pColumnar ) override;
+
 protected:
 	bool	RunFinalBatch() override;
 
@@ -2146,6 +2149,22 @@ bool JoinMultiSorter_c::PushGrouped ( const CSphMatch & tEntry, bool bNewSet )
 		},
 		true
 	);
+}
+
+
+void JoinMultiSorter_c::SetBlobPool ( const BYTE * pBlobPool )
+{
+	JoinSorter_c::SetBlobPoolImpl(pBlobPool);
+	for ( auto & i : m_dSorters )
+		i->SetBlobPool(pBlobPool);
+}
+
+
+void JoinMultiSorter_c::SetColumnar ( columnar::Columnar_i * pColumnar )
+{
+	JoinSorter_c::SetColumnarImpl(pColumnar);
+	for ( auto & i : m_dSorters )
+		i->SetColumnar(pColumnar);
 }
 
 

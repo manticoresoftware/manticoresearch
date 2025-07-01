@@ -138,6 +138,7 @@ LOG_DIR="/var/log"
 LOGSTASH_LOG="$LOG_DIR/logstash.log"
 TEMP_DATA_DIR="/tmp/logstash_test_${VERSION}"
 TEST_LOG="/var/log/dpkg.log"
+
 # Cleanup before start
 killall -9 java logstash ruby 2>/dev/null || true
 sleep 2
@@ -183,7 +184,6 @@ mysql -h0 -P9306 -e "CREATE TABLE dpkg_log (id bigint, message string attribute 
 }
 
 # Create directory and symlink for running needed version
-# Ensure directories exist
 if [ ! -d "/usr/share/logstash" ]; then
     mkdir -p /usr/share/logstash
 fi
@@ -221,16 +221,57 @@ fi
 
 # Settings for elasticsearch output depending on version
 ilm_settings=""
-
-# Settings for version 8.0+
 if [ "$version_major" -ge 8 ]; then
     ilm_settings="ilm_enabled => false
     manage_template => false"
 fi
 
-# Create Logstash configuration
+# Allow superuser for version 9.0+ (CRITICAL FIX)
+if [ "$version_major" -ge 9 ]; then
+    export ALLOW_SUPERUSER=1
+    # Fix superuser check in Logstash 9.0 code
+    sed -i '259s/^/# /' /usr/share/logstash/logstash-9.0.0/logstash-core/lib/logstash/runner.rb 2>/dev/null || true
+fi
+
+# Create Logstash configuration with version-specific handling
 CONFIG_FILE="/tmp/logstash_config_${VERSION}.conf"
-cat > "$CONFIG_FILE" << CONF
+
+if [ "$version_major" -ge 9 ]; then
+    # Configuration for Logstash 9.0+ with new data structure
+    cat > "$CONFIG_FILE" << CONF
+input {
+  file {
+    path => ["$TEST_LOG"]
+    start_position => "beginning"
+    sincedb_path => "/dev/null"
+    mode => "read"
+  }
+}
+filter {
+  mutate {
+    replace => {
+      "@version" => "1"
+      "path" => "$TEST_LOG"
+    }
+    # Extract host name from nested structure in v9.0+
+    add_field => { "host" => "%{[host][name]}" }
+    # Remove new fields introduced in v9.0
+    remove_field => ["event", "log", "[host][name]"]
+  }
+}
+output {
+  elasticsearch {
+    hosts => ["http://localhost:9308"]
+    index => "dpkg_log"
+    action => "index"
+    timeout => 30
+    $ilm_settings
+  }
+}
+CONF
+else
+    # Legacy configuration for versions 7.17-8.18
+    cat > "$CONFIG_FILE" << CONF
 input {
   file {
     path => ["$TEST_LOG"]
@@ -259,6 +300,7 @@ output {
   }
 }
 CONF
+fi
 
 # Parameters for running Logstash
 batch_size=10
@@ -500,6 +542,16 @@ timeout 300 bash /tmp/logstash-single-test.sh 8.18
 ✓ Row count check for 8.18: 5 rows
 ✓ Structure check for 8.18: passed
 ✓ Logstash version 8.18 tested successfully
+––– input –––
+timeout 300 bash /tmp/logstash-single-test.sh 9.0
+––– output –––
+>>> Testing Logstash version: 9.0
+✓ Log file has 5 lines
+✓ Manticore Search available
+✓ Logstash 9.0 started and processed logs
+✓ Row count check for 9.0: 5 rows
+✓ Structure check for 9.0: passed
+✓ Logstash version 9.0 tested successfully
 ––– input –––
 rm -f logstash-*.tar.gz
 ––– output –––

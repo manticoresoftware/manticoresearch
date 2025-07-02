@@ -163,8 +163,6 @@ Query OK, 0 rows affected (0.01 sec)
 ```
 <!-- end -->
 
-<!-- Example knn_similar_docs -->
-
 <!-- example knn_quantization -->
 
 ### Vector quantization.
@@ -191,7 +189,7 @@ Query OK, 0 rows affected (0.01 sec)
 ```
 <!-- end -->
 
-<!-- Example knn_quantization -->
+<!-- Example knn_similar_docs -->
 
 ### Find similar docs by id
 

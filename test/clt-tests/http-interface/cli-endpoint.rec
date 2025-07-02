@@ -13,14 +13,14 @@ curl -s "http://localhost:9308/cli?show%20version" | grep -v 'rows in set'
 | Secondary  | secondary %{VERSION} |
 | Knn        | knn %{VERSION}       |
 | Embeddings | embeddings %{VERSION}                 |
-| Buddy      | buddy %{VERSION}            |
+| Buddy      | buddy %{VERSION}          |
 +------------+----------------------------------+
 ––– input –––
 curl -s "http://localhost:9308/cli?show%20buddy%20plugins" | grep -v 'rows in set'
 ––– output –––
-+--------------------------------------------------------+-------------------------+----------------+------+-----------------------------------------------------------------------------------------------------------------------------------------------------+
-| Package                                                | Plugin                  | Version        | Type | Info                                                                                                                                                |
-+--------------------------------------------------------+-------------------------+----------------+------+-----------------------------------------------------------------------------------------------------------------------------------------------------+
++--------------------------------------------------------+-------------------------+------------------+------+-----------------------------------------------------------------------------------------------------------------------------------------------------+
+| Package                                                | Plugin                  | Version          | Type | Info                                                                                                                                                |
++--------------------------------------------------------+-------------------------+------------------+------+-----------------------------------------------------------------------------------------------------------------------------------------------------+
 | manticoresoftware/buddy-plugin-empty-string            | empty-string            | %{VERSION} | core | Handles empty queries, which can occur when trimming comments or dealing with specific SQL protocol instructions in comments that are not supported |
 | manticoresoftware/buddy-plugin-backup                  | backup                  | %{VERSION} | core | BACKUP sql statement                                                                                                                                |
 | manticoresoftware/buddy-plugin-emulate-elastic         | emulate-elastic         | %{VERSION} | core | Emulates some Elastic queries and generates responses as if they were made by ES                                                                    |
@@ -48,7 +48,7 @@ curl -s "http://localhost:9308/cli?show%20buddy%20plugins" | grep -v 'rows in se
 | manticoresoftware/buddy-plugin-distributed-insert      | distributed-insert      | %{VERSION} | core | The plugin enables data insertion into distributed sharded tables.                                                                                  |
 | manticoresoftware/buddy-plugin-truncate                | truncate                | %{VERSION} | core | Handles TRUNCATE statements on distributed tables                                                                                                   |
 | manticoresoftware/buddy-plugin-metrics                 | metrics                 | %{VERSION} | core | Returns Prometheus metrics                                                                                                                          |
-+--------------------------------------------------------+-------------------------+----------------+------+-----------------------------------------------------------------------------------------------------------------------------------------------------+
++--------------------------------------------------------+-------------------------+------------------+------+-----------------------------------------------------------------------------------------------------------------------------------------------------+
 ––– input –––
 curl -s "http://localhost:9308/cli?select%20*%20from%20t%20where%20match('exmaple')%20option%20fuzzy=1" | grep -v 'row in set'
 ––– output –––

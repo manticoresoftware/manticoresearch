@@ -639,24 +639,25 @@ drop table join1;
 drop table join2;
 
 <!-- regression for a crash on grouping on MVA in batched queries -->
-create table join1 ( id bigint, title text, string_id integer, mva multi );
+create table join1 ( id bigint, title text, string_id integer, mva1 multi, mva2 multi );
 create table join2 ( id bigint, title text );
 
-insert into join1 values (1, 'title1', 1, (1,2,3));
-insert into join1 values (2, 'title2', 1, (4,5,6));
+insert into join1 values (1, 'title1', 1, (1,2,3),(100,200,300));
+insert into join1 values (2, 'title2', 1, (4,5,6),(400,500,600));
 flush ramchunk join1;
-insert into join1 values (3, 'title3', 2, (1,2,3));
-insert into join1 values (4, 'title4', 2, (4,5,6));
+insert into join1 values (3, 'title3', 2, (1,2,3),(100,200,300));
+insert into join1 values (4, 'title4', 2, (4,5,6),(400,500,600));
 flush ramchunk join1;
-insert into join1 values (5, 'title3', 3, (1,2,3));
-insert into join1 values (6, 'title4', 3, (4,5,6));
+insert into join1 values (5, 'title3', 3, (1,2,3),(100,200,300));
+insert into join1 values (6, 'title4', 3, (4,5,6),(400,500,600));
 flush ramchunk join1;
 
 insert into join2 values (1, 'name1');
 insert into join2 values (2, 'name2');
 insert into join2 values (3, 'name1 name2');
 
-select id, join2.id, groupby() from join1 left join join2 on join1.string_id = join2.id where match('name1 | name2',join2) group by mva order by id asc, groupby() asc;
+select id, join2.id, groupby() from join1 left join join2 on join1.string_id = join2.id where match('name1 | name2',join2) group by mva1 order by id asc, groupby() asc;
+select id, join2.id, groupby() from join1 left join join2 on join1.string_id = join2.id where match('name1 | name2',join2) facet mva1 distinct facet mva2 distinct order by id asc, groupby() asc;;
 
 drop table join1;
 drop table join2;

@@ -40,7 +40,7 @@ SHOW THREADS;
     Connection from: 172.17.0.1:43300
              ConnID: 8
  This/prev job time: 630us
-       CPU activity: 94.15%
+       CPU activity: 94%
           Jobs done: 2490
       Thread status: working
                Info: SHOW THREADS 
@@ -52,7 +52,7 @@ SHOW THREADS;
     Connection from: 172.17.0.1:43301
              ConnID: 9
  This/prev job time: 689us
-       CPU activity: 89.23%
+       CPU activity: 89%
           Jobs done: 1830
       Thread status: working
                Info: show threads
@@ -101,7 +101,7 @@ Array
             [Connection from] => 127.0.0.1:38072
             [ConnID] => 17
             [This/prev job time, s] => 231us
-            [CPU activity] => 93.54%
+            [CPU activity] => 94%
             [Jobs done] => 8
             [Thread status] => working
             [Info] => show_threads
@@ -126,7 +126,7 @@ print(utilsApi.sql('SHOW THREADS'))
 <!-- response Python -->
 
 ```python
-[{'columns': [{'TID': {'type': 'long'}}, {'Name': {'type': 'string'}}, {'Proto': {'type': 'string'}}, {'State': {'type': 'string'}}, {'Connection from': {'type': 'string'}}, {'ConnID': {'type': 'long long'}}, {'This/prev job time, s': {'type': 'string'}}, {'CPU activity': {'type': 'float'}}, {'Jobs done': {'type': 'long'}}, {'Thread status': {'type': 'string'}}, {'Info': {'type': 'string'}}], 'data': [{'TID': 506958, 'Name': 'work_6', 'Proto': 'http', 'State': 'query', 'Connection from': '127.0.0.1:38600', 'ConnID': 834, 'This/prev job time, s': '206us', 'CPU activity': '91.85%', 'Jobs done': 943, 'Thread status': 'working', 'Info': 'show_threads'}], 'total': 1, 'error': '', 'warning': ''}]
+[{'columns': [{'TID': {'type': 'long'}}, {'Name': {'type': 'string'}}, {'Proto': {'type': 'string'}}, {'State': {'type': 'string'}}, {'Connection from': {'type': 'string'}}, {'ConnID': {'type': 'long long'}}, {'This/prev job time, s': {'type': 'string'}}, {'CPU activity': {'type': 'string'}}, {'Jobs done': {'type': 'long'}}, {'Thread status': {'type': 'string'}}, {'Info': {'type': 'string'}}], 'data': [{'TID': 506958, 'Name': 'work_6', 'Proto': 'http', 'State': 'query', 'Connection from': '127.0.0.1:38600', 'ConnID': 834, 'This/prev job time, s': '206us', 'CPU activity': '92%', 'Jobs done': 943, 'Thread status': 'working', 'Info': 'show_threads'}], 'total': 1, 'error': '', 'warning': ''}]
 ```
 
 <!-- intro -->
@@ -147,7 +147,7 @@ print(res)
 <!-- response Python-asyncio -->
 
 ```python
-[{'columns': [{'TID': {'type': 'long'}}, {'Name': {'type': 'string'}}, {'Proto': {'type': 'string'}}, {'State': {'type': 'string'}}, {'Connection from': {'type': 'string'}}, {'ConnID': {'type': 'long long'}}, {'This/prev job time, s': {'type': 'string'}}, {'CPU activity': {'type': 'float'}}, {'Jobs done': {'type': 'long'}}, {'Thread status': {'type': 'string'}}, {'Info': {'type': 'string'}}], 'data': [{'TID': 506958, 'Name': 'work_6', 'Proto': 'http', 'State': 'query', 'Connection from': '127.0.0.1:38600', 'ConnID': 834, 'This/prev job time, s': '206us', 'CPU activity': '91.85%', 'Jobs done': 943, 'Thread status': 'working', 'Info': 'show_threads'}], 'total': 1, 'error': '', 'warning': ''}]
+[{'columns': [{'TID': {'type': 'long'}}, {'Name': {'type': 'string'}}, {'Proto': {'type': 'string'}}, {'State': {'type': 'string'}}, {'Connection from': {'type': 'string'}}, {'ConnID': {'type': 'long long'}}, {'This/prev job time, s': {'type': 'string'}}, {'CPU activity': {'type': 'string'}}, {'Jobs done': {'type': 'long'}}, {'Thread status': {'type': 'string'}}, {'Info': {'type': 'string'}}], 'data': [{'TID': 506958, 'Name': 'work_6', 'Proto': 'http', 'State': 'query', 'Connection from': '127.0.0.1:38600', 'ConnID': 834, 'This/prev job time, s': '206us', 'CPU activity': '92%', 'Jobs done': 943, 'Thread status': 'working', 'Info': 'show_threads'}], 'total': 1, 'error': '', 'warning': ''}]
 ```
 
 <!-- intro -->
@@ -210,7 +210,7 @@ showThreads();
             },
             {
                 "CPU activity": {
-                    "type": "float"
+                    "type": "string"
                 }
             },
             {
@@ -238,7 +238,7 @@ showThreads();
                 "Connection from": "127.0.0.1:36656",
                 "ConnID": 2884,
                 "This/prev job time, s": "236us",
-                "CPU activity": "91.73%",
+                "CPU activity": "92%",
                 "Jobs done": 3328,
                 "Thread status": "working",
                 "Info": "show_threads"
@@ -330,7 +330,7 @@ utilsApi.sql("SHOW THREADS");
       Connection from=172.17.0.1:60550,
       ConnID=163,
       This/prev job time=105us,
-      CPU activity=44.68%,
+      CPU activity=45%,
       Jobs done=849,
       Thread status=working,
       Info=show_threads
@@ -564,7 +564,7 @@ res = await utilsApi.sql('SHOW THREADS');
             },
             {
                 "CPU activity": {
-                    "type": "float"
+                    "type": "string"
                 }
             },
             {
@@ -592,7 +592,7 @@ res = await utilsApi.sql('SHOW THREADS');
                 "Connection from": "127.0.0.1:36656",
                 "ConnID": 2884,
                 "This/prev job time, s": "236us",
-                "CPU activity": "91.73%",
+                "CPU activity": "92%",
                 "Jobs done": 3328,
                 "Thread status": "working",
                 "Info": "show_threads"
@@ -657,7 +657,7 @@ apiClient.UtilsAPI.Sql(context.Background()).Body("SHOW THREADS").Execute()
             },
             {
                 "CPU activity": {
-                    "type": "float"
+                    "type": "string"
                 }
             },
             {
@@ -685,7 +685,7 @@ apiClient.UtilsAPI.Sql(context.Background()).Body("SHOW THREADS").Execute()
                 "Connection from": "127.0.0.1:36656",
                 "ConnID": 2884,
                 "This/prev job time, s": "236us",
-                "CPU activity": "91.73%",
+                "CPU activity": "92%",
                 "Jobs done": 3328,
                 "Thread status": "working",
                 "Info": "show_threads"

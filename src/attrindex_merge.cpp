@@ -118,7 +118,9 @@ bool AttrMerger_c::Impl_c::Prepare ( const CSphIndex * pSrcIndex, const CSphInde
 	if ( tDstSchema.HasKNNAttrs() )
 	{
 		CSphVector<std::pair<PlainOrColumnar_t,int>> dAllKNNAttrs;
-		m_pKNNBuilder = BuildCreateKNN ( tDstSchema, m_iTotalDocs, dAllKNNAttrs, m_sError );
+		CSphString sTmpFilename = GetTmpFilename ( pDstIndex, SPH_EXT_SPKNN );
+		sTmpFilename.SetSprintf ( "%s.4bit", sTmpFilename.cstr() );
+		m_pKNNBuilder = BuildCreateKNN ( tDstSchema, m_iTotalDocs, dAllKNNAttrs, sTmpFilename, m_sError );
 		if ( !m_pKNNBuilder )
 			return false;
 
@@ -230,7 +232,7 @@ bool AttrMerger_c::Impl_c::CopyMixedAttributes_T ( const CSphIndex & tIndex, con
 		}
 
 		if constexpr ( WITH_KNN )
-			if ( !BuildStoreKNN ( tRowID, pRow, tIndex.GetRawBlobAttrs(), dColumnarIterators, m_dAttrsForKNN, *m_pKNNBuilder ) )
+			if ( !BuildStoreKNN ( tRowID, m_tResultRowID, pRow, tIndex.GetRawBlobAttrs(), dColumnarIterators, m_dAttrsForKNN, *m_pKNNBuilder ) )
 			{
 				m_sError = m_pKNNBuilder->GetError().c_str();
 				return false;
@@ -259,6 +261,7 @@ bool AttrMerger_c::Impl_c::AnalyzeMixedAttributes ( const CSphIndex & tIndex, co
 
 	m_tMonitor.SetEvent ( MergeCb_c::E_MERGEATTRS_START, iChunk );
 	AT_SCOPE_EXIT ( [this, iChunk] { m_tMonitor.SetEvent ( MergeCb_c::E_MERGEATTRS_FINISHED, iChunk ); } );
+	RowID_t tResultRowID = 0;
 	for ( RowID_t tRowID = 0, tRows = (RowID_t)dRowMap.GetLength64(); tRowID < tRows; ++tRowID, pRow += iStride )
 	{
 		if ( dRowMap[tRowID]==INVALID_ROWID )
@@ -268,7 +271,7 @@ bool AttrMerger_c::Impl_c::AnalyzeMixedAttributes ( const CSphIndex & tIndex, co
 		if ( m_tMonitor.NeedStop() )
 			return false;
 
-		BuildTrainKNN ( tRowID, pRow, tIndex.GetRawBlobAttrs(), dColumnarIterators, m_dAttrsForKNN, *m_pKNNBuilder );
+		BuildTrainKNN ( tRowID, tResultRowID++, pRow, tIndex.GetRawBlobAttrs(), dColumnarIterators, m_dAttrsForKNN, *m_pKNNBuilder );
 	}
 
 	return true;

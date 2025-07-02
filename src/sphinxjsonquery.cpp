@@ -354,6 +354,23 @@ static JsonObj_c FindFullTextQueryNode ( const JsonObj_c & tRoot )
 	return tRoot[0];
 }
 
+static bool HasFulltext ( const XQNode_t * pRoot )
+{
+	CSphVector<const XQNode_t *> dNodes;
+	dNodes.Add ( pRoot );
+
+	ARRAY_FOREACH ( iNode, dNodes )
+	{
+		const XQNode_t * pNode = dNodes[iNode];
+
+		if ( pNode->dWords().GetLength() )
+			return true;
+
+		dNodes.Append ( pNode->dChildren() );
+	}
+
+	return false;
+}
 
 bool QueryParserJson_c::ParseQuery ( XQQuery_t & tParsed, const char * szQuery, const CSphQuery * pQuery, TokenizerRefPtr_c pQueryTokenizerQL, TokenizerRefPtr_c pQueryTokenizerJson, const CSphSchema * pSchema, const DictRefPtr_c & pDict, const CSphIndexSettings & tSettings, const CSphBitvec * pMorphFields ) const
 {
@@ -389,7 +406,7 @@ bool QueryParserJson_c::ParseQuery ( XQQuery_t & tParsed, const char * szQuery, 
 		return false;
 	}
 
-	tParsed.m_bWasFullText = ( pRoot && ( pRoot->dChildren().GetLength () || pRoot->dWords().GetLength () ) );
+	tParsed.m_bWasFullText = HasFulltext ( pRoot );
 
 	XQLimitSpec_t tLimitSpec;
 	pRoot = tBuilder.FixupTree ( pRoot, tLimitSpec, pMorphFields, IsAllowOnlyNot() );
@@ -1117,7 +1134,7 @@ static bool ParseOptions ( const JsonObj_c & tOptions, CSphQuery & tQuery, CSphS
 		}
 		else if ( i.IsObj() )
 		{
-			CSphVector<CSphNamedInt> dNamed;
+			CSphVector<CSphNamedVariant> dNamed;
 			for ( const auto & tNamed : i )
 			{
 				if ( !tNamed.IsInt() )
@@ -1126,7 +1143,7 @@ static bool ParseOptions ( const JsonObj_c & tOptions, CSphQuery & tQuery, CSphS
 					return false;
 				}
 
-				dNamed.Add ( { tNamed.Name(), tNamed.IntVal() } );
+				dNamed.Add( { .m_sKey = tNamed.Name(), .m_iValue = tNamed.IntVal(), .m_eType = VariantType_e::BIGINT } );
 			}
 
 			eAdd = ::AddOption ( tQuery, sOpt, dNamed, STMT_SELECT, sError );
@@ -1201,9 +1218,12 @@ static bool ParseKNNQuery ( const JsonObj_c & tJson, CSphQuery & tQuery, CSphStr
 		return false;
 	}
 
-	if ( !tJson.FetchStrItem ( tQuery.m_sKNNAttr, "field", sError ) )	return false;
-	if ( !tJson.FetchIntItem ( tQuery.m_iKNNK, "k", sError ) )			return false;
-	if ( !tJson.FetchIntItem ( tQuery.m_iKnnEf, "ef", sError, true ) )		return false;
+	auto & tKNN = tQuery.m_tKnnSettings;
+	if ( !tJson.FetchStrItem ( tKNN.m_sAttr, "field", sError ) )	return false;
+	if ( !tJson.FetchIntItem ( tKNN.m_iK, "k", sError ) )			return false;
+	if ( !tJson.FetchIntItem ( tKNN.m_iEf, "ef", sError, true ) )	return false;
+	if ( !tJson.FetchBoolItem ( tKNN.m_bRescore, "rescore", sError, true ) )			return false;
+	if ( !tJson.FetchFltItem ( tKNN.m_fOversampling, "oversampling", sError, true ) )	return false;
 
 	JsonObj_c tQueryVec = tJson.GetArrayItem ( "query_vector", sError );
 	if ( !tQueryVec )
@@ -1217,7 +1237,7 @@ static bool ParseKNNQuery ( const JsonObj_c & tJson, CSphQuery & tQuery, CSphStr
 			return false;
 		}
 
-		tQuery.m_dKNNVec.Add ( tArrayItem.FltVal() );
+		tKNN.m_dVec.Add ( tArrayItem.FltVal() );
 	}
 
 	return true;

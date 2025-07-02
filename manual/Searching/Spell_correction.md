@@ -160,7 +160,7 @@ POST /search
     "fuzzy": {true|false}
     [,"layouts": ["be","bg","br","ch","de","dk","es","fr","uk","gr","it","no","pt","ru","se","ua","us"]]
     [,"distance": N]
-    [,\"preserve\": {0|1}]
+    [,"preserve": {0|1}]
   }
 }
 ```

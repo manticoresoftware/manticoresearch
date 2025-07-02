@@ -2060,13 +2060,13 @@ bool RtIndex_c::VerifyKNN ( InsertDocData_c & tDoc, CSphString & sError ) const
 
 		if ( m_dAttrsWithModels.GetLength() && m_dAttrsWithModels[i].m_pModel )
 		{
-			if ( iNumValues!=0 )
+			if ( !bDefault && iNumValues!=0 )
 			{
 				sError.SetSprintf ( "attribute '%s' has model_name=%s specified, but vector contents with %d values is provided", tAttr.m_sName.cstr(), tAttr.m_tKNNModel.m_sModelName.c_str(), iNumValues );
 				return false;
 			}
 		}
-		else if ( !bDefault && iNumValues!=tAttr.m_tKNN.m_iDims )
+		else if ( !bDefault && iNumValues && iNumValues!=tAttr.m_tKNN.m_iDims )
 		{
 			sError.SetSprintf ( "KNN error: data has %d values, index '%s' needs %d values", iNumValues, tAttr.m_sName.cstr(), tAttr.m_tKNN.m_iDims );
 			return false;
@@ -3761,7 +3761,9 @@ bool RtIndex_c::WriteAttributes ( SaveDiskDataContext_t & tCtx, CSphString & sEr
 	std::unique_ptr<knn::Builder_i> pKNNBuilder;
 	if ( m_tSchema.HasKNNAttrs() )
 	{
-		pKNNBuilder = BuildCreateKNN ( m_tSchema, tCtx.m_iTotalDocuments, dAllAttrsForKNN, sError );
+		CSphString sTmpFilename = tCtx.m_tFilebase.GetTmpFilename(SPH_EXT_SPKNN);
+		sTmpFilename.SetSprintf ( "%s.4bit", sTmpFilename.cstr() );
+		pKNNBuilder = BuildCreateKNN ( m_tSchema, tCtx.m_iTotalDocuments, dAllAttrsForKNN, sTmpFilename, sError );
 		if ( !pKNNBuilder )
 			return false;
 
@@ -3838,13 +3840,15 @@ bool RtIndex_c::WriteAttributes ( SaveDiskDataContext_t & tCtx, CSphString & sEr
 			}
 
 			if ( pKNNBuilder )
-				BuildTrainKNN ( tRowID, pRow, tSeg.m_dBlobs.Begin(), dColumnarIterators, dAttrsForKNN, *pKNNBuilder );
+				BuildTrainKNN ( tRowID, tNextRowID, pRow, tSeg.m_dBlobs.Begin(), dColumnarIterators, dAttrsForKNN, *pKNNBuilder );
 
 			tCtx.m_dRowMaps[i][tRowID] = tNextRowID++;
 		}
 	}
 
 	if ( pKNNBuilder )
+	{
+		RowID_t tRowIDForKNN = 0;
 		ARRAY_FOREACH ( i, tCtx.m_tRamSegments )
 		{
 			const auto & tSeg = *tCtx.m_tRamSegments[i];
@@ -3857,13 +3861,14 @@ bool RtIndex_c::WriteAttributes ( SaveDiskDataContext_t & tCtx, CSphString & sEr
 			for ( auto tRowID : RtLiveRows_c(tSeg) )
 			{
 				const CSphRowitem * pRow = tSeg.m_dRows.Begin() + (int64_t)tRowID*iStride;
-				if ( !BuildStoreKNN ( tRowID, pRow, tSeg.m_dBlobs.Begin(), dColumnarIterators, dAttrsForKNN, *pKNNBuilder ) )
+				if ( !BuildStoreKNN ( tRowID, tRowIDForKNN++, pRow, tSeg.m_dBlobs.Begin(), dColumnarIterators, dAttrsForKNN, *pKNNBuilder ) )
 				{
 					sError = pKNNBuilder->GetError().c_str();
 					return false;
 				}
 			}
 		}
+	}
 
 	// rows could be killed during index save and tNextRowID could be less than tCtx.m_iTotalDocuments \ initial count
 	assert ( tNextRowID<=(RowID_t)dRawLookup.GetLength() );
@@ -7731,6 +7736,7 @@ static bool SetupFilters ( const CSphQuery & tQuery, const ISphSchema & tMatchSc
 	tFlx.m_eCollation = tQuery.m_eCollation;
 	tFlx.m_bScan = bFullscan;
 	tFlx.m_sJoinIdx = tQuery.m_sJoinIdx;
+	tFlx.m_bAddKNNDistFilter = true;
 
 	std::unique_ptr<ISphSchema> pModifiedMatchSchema;
 	if ( !TransformFilters ( tFlx, dTransformedFilters, dTransformedFilterTree, pModifiedMatchSchema, tQuery.m_dItems, tMeta.m_sError ) )
@@ -9539,7 +9545,7 @@ int64_t RtIndex_c::GetCount() const
 	if ( MustRunInSingleThread ( dQueries, false, dMaxCountDistinct, bForceSingleThread ) )
 		return { 0, 1 };
 
-	bool bHaveKNN = dQueries.any_of ( []( auto & tQuery ){ return !tQuery.m_sKNNAttr.IsEmpty(); } );	 
+	bool bHaveKNN = dQueries.any_of ( []( auto & tQuery ){ return !tQuery.m_tKnnSettings.m_sAttr.IsEmpty(); } );	 
 
 	auto tGuard = RtGuard();
 	int iDiskChunks = tGuard.m_dDiskChunks.GetLength();

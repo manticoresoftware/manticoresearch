@@ -21,7 +21,9 @@
 	#include <cpuid.h>
 #endif
 
-#if !_WIN32
+#if _WIN32
+	#include <immintrin.h>
+#else
 	#include <unistd.h>
 #endif
 
@@ -128,6 +130,41 @@ bool IsSSE42Supported()
 {
 	static bool bSSE = IsSSE42SupportedImpl();
 	return bSSE;
+}
+
+
+static bool IsAVX2SupportedImpl()
+{
+#if defined(__x86_64__) || defined(__i386__)
+    uint32_t dInfo[4];
+    __cpuid ( 1, dInfo[0], dInfo[1], dInfo[2], dInfo[3] );
+    bool bHasAVX = (dInfo[2] & (1 << 28)) != 0;
+    bool bHasOSXSAVE = (dInfo[2] & (1 << 27)) != 0;
+    if ( !bHasAVX || !bHasOSXSAVE )
+        return false;
+
+#if defined(_MSC_VER)
+    uint64_t uXcrFeatureMask = _xgetbv(_XCR_XFEATURE_ENABLED_MASK);
+#else
+    uint32_t eax, edx;
+    __asm__ volatile ( "xgetbv" : "=a"(eax), "=d"(edx) : "c"(0) );
+    uint64_t uXcrFeatureMask = ((uint64_t)edx << 32) | eax;
+#endif
+    if ( ( uXcrFeatureMask & 0x6 ) != 0x6 )
+        return false;
+
+    __cpuid_count ( 7, 0, dInfo[0], dInfo[1], dInfo[2], dInfo[3] );
+    return (dInfo[1] & (1 << 5)) != 0;
+#else
+    return true;	// assumes that it's ARM and simde is used
+#endif
+}
+
+
+bool IsAVX2Supported()
+{
+	static bool bAVX2 = IsAVX2SupportedImpl();
+	return bAVX2;
 }
 
 

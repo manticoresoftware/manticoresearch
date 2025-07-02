@@ -2105,7 +2105,7 @@ static bool DetectPrecalcSorters ( const CSphQuery & tQuery, const ISphSchema & 
 	if ( !tQuery.m_sQuery.IsEmpty() )
 		return false;
 
-	if ( !tQuery.m_sKNNAttr.IsEmpty() )
+	if ( !tQuery.m_tKnnSettings.m_sAttr.IsEmpty() )
 		return false;
 
 	bool bDistinct = !tQuery.m_sGroupDistinct.IsEmpty();
@@ -3260,7 +3260,7 @@ std::pair<int64_t,int> CSphIndex_VLN::GetPseudoShardingMetric ( const VecTraits_
 		if ( bFulltext )
 			iThreadCap = iThreadCap ? Min ( iThreadCap, iNumProc ) : iNumProc;
 
-		if ( !tQuery.m_sKNNAttr.IsEmpty() )
+		if ( !tQuery.m_tKnnSettings.m_sAttr.IsEmpty() )
 			iThreadCap = 1;
 
 		if ( !CheckQueryFilters ( tQuery, m_tSchema ) )
@@ -7150,7 +7150,9 @@ bool CSphIndex_VLN::AddRemoveFromKNN ( const CSphSchema & tOldSchema, const CSph
 	if ( iNewNumKNN )
 	{
 		CSphVector<std::pair<PlainOrColumnar_t,int>> dAllAttrsForKNN;
-		std::unique_ptr<knn::Builder_i> pKNNBuilder = BuildCreateKNN ( tNewSchema, m_iDocinfo, dAllAttrsForKNN, sError );
+		CSphString sTmpFilename = GetTmpFilename(SPH_EXT_SPKNN);
+		sTmpFilename.SetSprintf ( "%s.4bit", sTmpFilename.cstr() );
+		std::unique_ptr<knn::Builder_i> pKNNBuilder = BuildCreateKNN ( tNewSchema, m_iDocinfo, dAllAttrsForKNN, sTmpFilename, sError );
 		if ( !pKNNBuilder )
 			return false;
 
@@ -7177,31 +7179,13 @@ bool CSphIndex_VLN::AddRemoveFromKNN ( const CSphSchema & tOldSchema, const CSph
 		if ( !pRow )
 			iStride = 0;
 
-		CSphVector<float> dStubFloatVec;
-		dStubFloatVec.Resize(iMaxDims);
-		dStubFloatVec.ZeroVec();
-
 		auto pBlobs = GetRawBlobAttrs();
 		for ( RowID_t tRowID = 0; tRowID < RowID_t(m_iDocinfo); ++tRowID, pRow += iStride )
-		{
-			BuildTrainKNN ( tRowID, pRow, pBlobs, dColumnarIterators, dOldAttrsForKNN, *pKNNBuilder );
-			for ( auto i : dNewAttrsForKNN )
-			{
-				int iDims = tNewSchema.GetAttr ( dAllAttrsForKNN[i].second ).m_tKNN.m_iDims;
-				pKNNBuilder->Train ( i, { dStubFloatVec.Begin(), size_t(iDims) } );
-			}
-		}
+			BuildTrainKNN ( tRowID, tRowID, pRow, pBlobs, dColumnarIterators, dOldAttrsForKNN, *pKNNBuilder );
 
 		pRow = GetRawAttrs();
 		for ( RowID_t tRowID = 0; tRowID < RowID_t(m_iDocinfo); ++tRowID, pRow += iStride )
-		{
-			BuildStoreKNN ( tRowID, pRow, pBlobs, dColumnarIterators, dOldAttrsForKNN, *pKNNBuilder );
-			for ( auto i : dNewAttrsForKNN )
-			{
-				int iDims = tNewSchema.GetAttr ( dAllAttrsForKNN[i].second ).m_tKNN.m_iDims;
-				pKNNBuilder->SetAttr ( i, { dStubFloatVec.Begin(), size_t(iDims) } );
-			}
-		}
+			BuildStoreKNN ( tRowID, tRowID, pRow, pBlobs, dColumnarIterators, dOldAttrsForKNN, *pKNNBuilder );
 
 		BuildBufferSettings_t tSettings; // use default buffer settings
 
@@ -8073,7 +8057,7 @@ static void RemoveOptionalFilters ( const CSphVector<CSphFilterSettings> & dFilt
 bool CSphIndex_VLN::ChooseIterators ( CSphVector<SecondaryIndexInfo_t> & dSIInfo, const CSphQuery & tQuery, const CSphVector<CSphFilterSettings> & dFilters, CSphQueryContext & tCtx, CreateFilterContext_t & tFlx, const ISphSchema & tMaxSorterSchema, CSphQueryResultMeta & tMeta, int iCutoff, int iThreads, CSphVector<CSphFilterSettings> & dModifiedFilters, ISphRanker * pRanker ) const
 {
 	StrVec_t dWarnings;
-	bool bKNN = !tQuery.m_sKNNAttr.IsEmpty();
+	bool bKNN = !tQuery.m_tKnnSettings.m_sAttr.IsEmpty();
 	float fBestCost = FLT_MAX;
 
 	if ( bKNN )
@@ -8081,7 +8065,7 @@ bool CSphIndex_VLN::ChooseIterators ( CSphVector<SecondaryIndexInfo_t> & dSIInfo
 		SelectIteratorCtx_t tSelectIteratorCtx ( tQuery, dFilters, m_tSchema, tMaxSorterSchema, m_pHistograms, m_pColumnar.get(), m_tSI, iCutoff, m_iDocinfo, 1 );
 		tSelectIteratorCtx.m_bFromIterator = true;
 
-		int iRequestedKNNDocs = Min ( tQuery.m_iKNNK, m_iDocinfo );
+		int iRequestedKNNDocs = Min ( int64_t(tQuery.m_tKnnSettings.m_iK * tQuery.m_tKnnSettings.m_fOversampling), m_iDocinfo );
 		tSelectIteratorCtx.m_fDocsLeft = float(iRequestedKNNDocs)/m_iDocinfo;
 		dSIInfo = SelectIterators ( tSelectIteratorCtx, fBestCost, dWarnings );
 	}
@@ -8119,7 +8103,7 @@ std::pair<RowidIterator_i *, bool> CSphIndex_VLN::SpawnIterators ( const CSphQue
 {
 	if ( !dFilters.GetLength() )
 	{
-		if ( !tQuery.m_sKNNAttr.IsEmpty() )
+		if ( !tQuery.m_tKnnSettings.m_sAttr.IsEmpty() )
 			return CreateKNNIterator ( m_pKNN.get(), tQuery, m_tSchema, tMaxSorterSchema, tMeta.m_sError );
 
 		return { nullptr, false };
@@ -11930,8 +11914,11 @@ bool CSphIndex_VLN::AlterKNN ( CSphString & sError )
 
 	bool bHasKnnFile = sphFileExists ( GetFilename ( SPH_EXT_SPKNN ).cstr() );
 
+	CSphString sTmpFilename = GetTmpFilename(SPH_EXT_SPKNN);
+	sTmpFilename.SetSprintf ( "%s.4bit", sTmpFilename.cstr() );
+
 	CSphVector< std::pair < PlainOrColumnar_t, int > > dAllAttrsForKNN;
-	std::unique_ptr<knn::Builder_i> pKNNBuilder = BuildCreateKNN ( m_tSchema, m_iDocinfo, dAllAttrsForKNN, sError );
+	std::unique_ptr<knn::Builder_i> pKNNBuilder = BuildCreateKNN ( m_tSchema, m_iDocinfo, dAllAttrsForKNN, sTmpFilename, sError );
 	if ( !pKNNBuilder )
 		return false;
 
@@ -11946,14 +11933,14 @@ bool CSphIndex_VLN::AlterKNN ( CSphString & sError )
 	const CSphRowitem * pCur = GetRawAttrs();
 	for ( RowID_t tRowID=0; tRowID<tRows; ++tRowID )
 	{
-		BuildTrainKNN ( tRowID, pCur, GetRawBlobAttrs(), dColumnarIterators, dAttrs, *pKNNBuilder );
+		BuildTrainKNN ( tRowID, tRowID, pCur, GetRawBlobAttrs(), dColumnarIterators, dAttrs, *pKNNBuilder );
 		pCur += iStride;
 	}
 
 	pCur = GetRawAttrs();
 	for ( RowID_t tRowID=0; tRowID<tRows; ++tRowID )
 	{
-		BuildStoreKNN ( tRowID, pCur, GetRawBlobAttrs(), dColumnarIterators, dAttrs, *pKNNBuilder );
+		BuildStoreKNN ( tRowID, tRowID, pCur, GetRawBlobAttrs(), dColumnarIterators, dAttrs, *pKNNBuilder );
 		pCur += iStride;
 	}
 

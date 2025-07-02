@@ -152,82 +152,46 @@ Documents are always sorted by their distance to the search vector. Any addition
 ##### SQL:
 
 <!-- request SQL -->
-
 ```sql
-select id, knn_dist() from test where knn ( image_vector, 5, (0.286569,-0.031816,0.066684,0.032926), { ef=2000 } );
+create table test ( title text, image_vector float_vector knn_type='hnsw' knn_dims='4' hnsw_similarity='l2' );
 ```
+
 <!-- response SQL -->
 
 ```sql
-+------+------------+
-| id   | knn_dist() |
-+------+------------+
-|    1 | 0.28146550 |
-|    2 | 0.81527930 |
-+------+------------+
-2 rows in set (0.00 sec)
+Query OK, 0 rows affected (0.01 sec)
 ```
-
-<!-- intro -->
-##### JSON:
-
-<!-- request JSON -->
-
-```json
-POST /search
-{
-	"table": "test",
-	"knn":
-	{
-		"field": "image_vector",
-		"query_vector": [0.286569,-0.031816,0.066684,0.032926],
-		"k": 5,
-		"ef": 2000
-	}
-}
-```
-
-<!-- response JSON -->
-
-```json
-{
-	"took":0,
-	"timed_out":false,
-	"hits":
-	{
-		"total":2,
-		"total_relation":"eq",
-		"hits":
-		[
-			{
-				"_id": 1,
-				"_score":1,
-				"_knn_dist":0.28146550,
-				"_source":
-				{
-					"title":"yellow bag",
-					"image_vector":[0.653448,0.192478,0.017971,0.339821]
-				}
-			},
-			{
-				"_id": 2,
-				"_score":1,
-				"_knn_dist":0.81527930,
-				"_source":
-				{
-					"title":"white bag",
-					"image_vector":[-0.148894,0.748278,0.091892,-0.095406]
-				}
-			}
-		]
-	}
-}
-```
-
 <!-- end -->
 
 <!-- Example knn_similar_docs -->
 
+<!-- example knn_quantization -->
+
+### Vector quantization.
+
+HNSW indexes need to be fully loaded into memory to perform KNN search, which can lead to significant memory consumption. To reduce memory usage, scalar quantization can be applied - a technique that compresses high-dimensional vectors by representing each component (dimension) with a limited number of discrete values. Manticore supports 8-bit and 1-bit quantization, meaning each vector component is compressed from a 32-bit float to 8 bits or even 1 bit, reducing memory usage by 4x or 32x, respectively. These compressed representations also allow for faster distance calculations, as more vector components can be processed in a single SIMD instruction. Although scalar quantization introduces some approximation error, it is often a worthwhile trade-off between search accuracy and resource efficiency. For even better accuracy, quantization can be combined with rescoring and oversampling: more candidates are retrieved than requested, and distances for these candidates are recalculated using the original 32-bit float vectors.
+
+Supported quantization types include:
+* `8bit`: Each vector component is quantized to 8 bits.
+* `1bit`: Each vector component is quantized to 1 bit. Asymmetric quantization is used, with query vectors quantized to 4 bits and stored vectors to 1 bit. This approach offers greater precision than simpler methods, though with some performance trade-off.
+* `1bitsimple`: Each vector component is quantized to 1 bit. This method is faster than `1bit`, but typically less accurate.
+
+<!-- intro -->
+##### SQL:
+
+<!-- request SQL -->
+```sql
+create table test ( title text, image_vector float_vector knn_type='hnsw' knn_dims='4' hnsw_similarity='l2' quantization='1bit');
+```
+
+<!-- response SQL -->
+
+```sql
+Query OK, 0 rows affected (0.01 sec)
+```
+<!-- end -->
+
+<!-- Example knn_quantization -->
 
 ### Find similar docs by id
 

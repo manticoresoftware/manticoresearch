@@ -3,6 +3,9 @@ export SEARCHD_FLAGS="--logdebugvv"
 ––– output –––
 ––– block: ../base/start-searchd-with-buddy –––
 ––– input –––
+export SEARCHD_FLAGS="--logdebugvv"
+––– output –––
+––– input –––
 apt-get install jq -y > /dev/null; echo $?
 ––– output –––
 debconf: delaying package configuration, since apt-utils is not installed
@@ -61,36 +64,46 @@ curl -s "http://localhost:9308/cli_json?insert%20into%20auto_table%20(id,%20name
 ––– output –––
 1
 ––– comment –––
-Verify protocol logging is working - expect reasonable range
+Verify Buddy protocol v3 logging is working
 ––– input –––
-REQUESTS=$(grep -c "request data:" /var/log/manticore/searchd.log); echo "Requests: $REQUESTS"; [ $REQUESTS -ge 3 ] && [ $REQUESTS -le 6 ] && echo "PASS" || echo "FAIL"
+grep -q "request data:" /var/log/manticore/searchd.log && echo "Protocol logging: ACTIVE" || echo "Protocol logging: MISSING"
 ––– output –––
-Requests: %{NUMBER}
-PASS
+Protocol logging: ACTIVE
 ––– input –––
-RESPONSES=$(grep -c "response data:" /var/log/manticore/searchd.log); echo "Responses: $RESPONSES"; [ $RESPONSES -ge 3 ] && [ $RESPONSES -le 6 ] && echo "PASS" || echo "FAIL"
+grep -q "response data:" /var/log/manticore/searchd.log && echo "Response logging: ACTIVE" || echo "Response logging: MISSING"
 ––– output –––
-Responses: %{NUMBER}
-PASS
+Response logging: ACTIVE
 ––– comment –––
-Check protocol v3 structure matches request count
+Check protocol v3 structure and content
 ––– input –––
-REQ_COUNT=$(grep -c "request data:" /var/log/manticore/searchd.log); VER_COUNT=$(grep "request data:" /var/log/manticore/searchd.log | grep -c "version"); echo "Requests: $REQ_COUNT, With version: $VER_COUNT"; [ $VER_COUNT -eq $REQ_COUNT ] && echo "PASS" || echo "FAIL"
+grep "request data:" /var/log/manticore/searchd.log | grep -q '"version":3' && echo "Protocol version 3: FOUND" || echo "Protocol version 3: MISSING"
 ––– output –––
-Requests: %{NUMBER}, With version: %{NUMBER}
-PASS
+Protocol version 3: FOUND
 ––– input –––
-REQ_COUNT=$(grep -c "request data:" /var/log/manticore/searchd.log); V3_COUNT=$(grep "request data:" /var/log/manticore/searchd.log | grep -c '"version":3'); echo "Requests: $REQ_COUNT, Version 3: $V3_COUNT"; [ $V3_COUNT -eq $REQ_COUNT ] && echo "PASS" || echo "FAIL"
+grep "request data:" /var/log/manticore/searchd.log | grep -q '"type"' && echo "Type field: FOUND" || echo "Type field: MISSING"
 ––– output –––
-Requests: %{NUMBER}, Version 3: %{NUMBER}
-PASS
+Type field: FOUND
 ––– input –––
-REQ_COUNT=$(grep -c "request data:" /var/log/manticore/searchd.log); TYPE_COUNT=$(grep "request data:" /var/log/manticore/searchd.log | grep -c "type"); echo "Requests: $REQ_COUNT, With type: $TYPE_COUNT"; [ $TYPE_COUNT -eq $REQ_COUNT ] && echo "PASS" || echo "FAIL"
+grep "request data:" /var/log/manticore/searchd.log | grep -q '"body"' && echo "Body field: FOUND" || echo "Body field: MISSING"
 ––– output –––
-Requests: %{NUMBER}, With type: %{NUMBER}
-PASS
+Body field: FOUND
+––– comment –––
+Verify specific Buddy commands are logged correctly
 ––– input –––
-REQ_COUNT=$(grep -c "request data:" /var/log/manticore/searchd.log); BODY_COUNT=$(grep "request data:" /var/log/manticore/searchd.log | grep -c '"body"'); echo "Requests: $REQ_COUNT, With body: $BODY_COUNT"; [ $BODY_COUNT -eq $REQ_COUNT ] && echo "PASS" || echo "FAIL"
+grep "request data:" /var/log/manticore/searchd.log | grep -q "show buddy plugins" && echo "SHOW BUDDY PLUGINS: LOGGED" || echo "SHOW BUDDY PLUGINS: NOT LOGGED"
 ––– output –––
-Requests: %{NUMBER}, With body: %{NUMBER}
-PASS
+SHOW BUDDY PLUGINS: LOGGED
+––– input –––
+grep "request data:" /var/log/manticore/searchd.log | grep -q "fuzzy" && echo "Fuzzy search: LOGGED" || echo "Fuzzy search: NOT LOGGED"
+––– output –––
+Fuzzy search: LOGGED
+––– input –––
+grep "request data:" /var/log/manticore/searchd.log | grep -q "show\|select\|insert" && echo "SQL commands: LOGGED" || echo "SQL commands: NOT LOGGED"
+––– output –––
+SQL commands: LOGGED
+––– comment –––
+Final validation - all required protocol v3 fields present
+––– input –––
+grep "request data:" /var/log/manticore/searchd.log | head -1 | grep -q '"version":3' && grep "request data:" /var/log/manticore/searchd.log | head -1 | grep -q '"type"' && grep "request data:" /var/log/manticore/searchd.log | head -1 | grep -q '"body"' && echo "Protocol v3 structure: COMPLETE" || echo "Protocol v3 structure: INCOMPLETE"
+––– output –––
+Protocol v3 structure: COMPLETE

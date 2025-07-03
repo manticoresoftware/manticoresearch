@@ -64,7 +64,7 @@ curl -s "http://localhost:9308/cli?show%20fields%20from%20t" | grep -v 'rows in 
 ––– input –––
 curl -s "http://localhost:9308/cli?show%20full%20tables" | grep -v 'row in set' | grep -v "\-\-\-" | sed 's/ *|/|/g'
 ––– output –––
-| Tables_in_Manticore | Table_type |
+| Tables_in_Manticore| Table_type|
 | t| BASE TABLE|
 ––– input –––
 curl -s "http://localhost:9308/cli?create%20table%20t_copy%20like%20t" > /dev/null; echo $?

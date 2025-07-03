@@ -412,6 +412,8 @@ namespace CustomLog {
 
 /// async safe, BUT NOT THREAD SAFE, fprintf
 void sphSafeInfo ( int iFD, const char * sFmt, ... );
+void sphSafeInfoStdOut ( bool bEnableTee );
+void sphSafeInfoWrite ( int iFD, const void * sBuf, int iLen );
 
 #if !_WIN32
 /// UNIX backtrace gets printed out to a stream

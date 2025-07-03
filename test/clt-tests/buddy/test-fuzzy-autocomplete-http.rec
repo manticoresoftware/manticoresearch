@@ -35,351 +35,51 @@ mysql -h0 -P9306 -e "SELECT COUNT(*) FROM name;"
 mysql -h0 -P9306 -e "OPTIMIZE TABLE name OPTION sync=1;"
 ––– output –––
 ––– input –––
-curl -sX POST http://localhost:9308/search -d '{"index":"name","query":{"bool":{"must":[{"match":{"*":"EBGRNA"}}]}},"options":{"fuzzy":true}}' | jq -M
+curl -sX POST http://localhost:9308/search -d '{"index":"name","query":{"bool":{"must":[{"match":{"*":"EBGRNA"}}]}},"options":{"fuzzy":true}}' | jq -r '.hits.hits[]._source.username'
 ––– output –––
-{
-  "took": %{NUMBER},
-  "timed_out": false,
-  "hits": {
-    "total": 4300,
-    "total_relation": "eq",
-    "hits": [
-      {
-        "_id": 100610,
-        "_score": 2555,
-        "_source": {
-          "username": "BERNARDINE BERNAL",
-          "s": "a"
-        }
-      },
-      {
-        "_id": 82019,
-        "_score": 2547,
-        "_source": {
-          "username": "BERNARDA HERNANDES",
-          "s": "a"
-        }
-      },
-      {
-        "_id": 283145,
-        "_score": 2547,
-        "_source": {
-          "username": "BERNARDINE HERNANDES",
-          "s": "a"
-        }
-      },
-      {
-        "_id": 803455,
-        "_score": 1596,
-        "_source": {
-          "username": "BERNA PFEIFFER",
-          "s": "a"
-        }
-      },
-      {
-        "_id": 806796,
-        "_score": 1596,
-        "_source": {
-          "username": "BERNA SAGE",
-          "s": "a"
-        }
-      },
-      {
-        "_id": 806801,
-        "_score": 1596,
-        "_source": {
-          "username": "BERNA PANG",
-          "s": "a"
-        }
-      },
-      {
-        "_id": 808007,
-        "_score": 1596,
-        "_source": {
-          "username": "BERNA STOLTZFUS",
-          "s": "a"
-        }
-      },
-      {
-        "_id": 823479,
-        "_score": 1596,
-        "_source": {
-          "username": "BERNA HALVERSON",
-          "s": "a"
-        }
-      },
-      {
-        "_id": 835281,
-        "_score": 1596,
-        "_source": {
-          "username": "BERNA PLASCENCIA",
-          "s": "a"
-        }
-      },
-      {
-        "_id": 839460,
-        "_score": 1596,
-        "_source": {
-          "username": "BERNA CALLAWAY",
-          "s": "a"
-        }
-      },
-      {
-        "_id": 841134,
-        "_score": 1596,
-        "_source": {
-          "username": "BERNA STONER",
-          "s": "a"
-        }
-      },
-      {
-        "_id": 845181,
-        "_score": 1596,
-        "_source": {
-          "username": "BERNA MARSH",
-          "s": "a"
-        }
-      },
-      {
-        "_id": 852425,
-        "_score": 1596,
-        "_source": {
-          "username": "BERNA LEI",
-          "s": "a"
-        }
-      },
-      {
-        "_id": 863448,
-        "_score": 1596,
-        "_source": {
-          "username": "BERNA SOUSA",
-          "s": "a"
-        }
-      },
-      {
-        "_id": 868495,
-        "_score": 1596,
-        "_source": {
-          "username": "BERNA LIAO",
-          "s": "a"
-        }
-      },
-      {
-        "_id": 875373,
-        "_score": 1596,
-        "_source": {
-          "username": "BERNA TROTTER",
-          "s": "a"
-        }
-      },
-      {
-        "_id": 880282,
-        "_score": 1596,
-        "_source": {
-          "username": "BERNA VALDOVINOS",
-          "s": "a"
-        }
-      },
-      {
-        "_id": 884675,
-        "_score": 1596,
-        "_source": {
-          "username": "BERNA VALLE",
-          "s": "a"
-        }
-      },
-      {
-        "_id": 887986,
-        "_score": 1596,
-        "_source": {
-          "username": "BERNA ELKINS",
-          "s": "a"
-        }
-      },
-      {
-        "_id": 891400,
-        "_score": 1596,
-        "_source": {
-          "username": "BERNA HURD",
-          "s": "a"
-        }
-      }
-    ]
-  }
-}
+BERNA PFEIFFER
+BERNA SAGE
+BERNA PANG
+BERNA STOLTZFUS
+BERNA HALVERSON
+BERNA PLASCENCIA
+BERNA CALLAWAY
+BERNA STONER
+BERNA MARSH
+BERNA LEI
+BERNA SOUSA
+BERNA LIAO
+BERNA TROTTER
+BERNA VALDOVINOS
+BERNA VALLE
+BERNA ELKINS
+BERNA HURD
+BERNA DUARTE
+BERNA HAUGEN
+BERNA LISTER
 ––– input –––
-curl -sX POST http://localhost:9308/search -d '{"index":"name","query":{"bool":{"must":[{"match":{"*":"ANT"}}]}},"options":{"fuzzy":true}}' | jq -M
+curl -sX POST http://localhost:9308/search -d '{"index":"name","query":{"bool":{"must":[{"match":{"*":"ANT"}}]}},"options":{"fuzzy":true}}' | jq -r '.hits.hits[]._source.username'
 ––– output –––
-{
-  "took": %{NUMBER},
-  "timed_out": false,
-  "hits": {
-    "total": 248249,
-    "total_relation": "eq",
-    "hits": [
-      {
-        "_id": 91532,
-        "_score": 2503,
-        "_source": {
-          "username": "AN GANT",
-          "s": "a"
-        }
-      },
-      {
-        "_id": 108119,
-        "_score": 2503,
-        "_source": {
-          "username": "KEENAN GANT",
-          "s": "a"
-        }
-      },
-      {
-        "_id": 213976,
-        "_score": 2503,
-        "_source": {
-          "username": "FRANK GANT",
-          "s": "a"
-        }
-      },
-      {
-        "_id": 241083,
-        "_score": 2503,
-        "_source": {
-          "username": "MARYANNA GANT",
-          "s": "a"
-        }
-      },
-      {
-        "_id": 275719,
-        "_score": 2503,
-        "_source": {
-          "username": "RYANN GANT",
-          "s": "a"
-        }
-      },
-      {
-        "_id": 359068,
-        "_score": 2503,
-        "_source": {
-          "username": "ANNALEE GANT",
-          "s": "a"
-        }
-      },
-      {
-        "_id": 456416,
-        "_score": 2503,
-        "_source": {
-          "username": "SANTOS GANT",
-          "s": "a"
-        }
-      },
-      {
-        "_id": 477232,
-        "_score": 2503,
-        "_source": {
-          "username": "SUSANNA GANT",
-          "s": "a"
-        }
-      },
-      {
-        "_id": 523489,
-        "_score": 2503,
-        "_source": {
-          "username": "ANNEMARIE GANT",
-          "s": "a"
-        }
-      },
-      {
-        "_id": 527307,
-        "_score": 2503,
-        "_source": {
-          "username": "SANTOS GANT",
-          "s": "a"
-        }
-      },
-      {
-        "_id": 667223,
-        "_score": 2503,
-        "_source": {
-          "username": "MARIANNA GANT",
-          "s": "a"
-        }
-      },
-      {
-        "_id": 750725,
-        "_score": 2503,
-        "_source": {
-          "username": "SUZANN GANT",
-          "s": "a"
-        }
-      },
-      {
-        "_id": 70778,
-        "_score": 2502,
-        "_source": {
-          "username": "JEANICE GANT",
-          "s": "a"
-        }
-      },
-      {
-        "_id": 123892,
-        "_score": 2502,
-        "_source": {
-          "username": "JOLANDA GANT",
-          "s": "a"
-        }
-      },
-      {
-        "_id": 178241,
-        "_score": 2502,
-        "_source": {
-          "username": "FRANCES GANTT",
-          "s": "a"
-        }
-      },
-      {
-        "_id": 179715,
-        "_score": 2502,
-        "_source": {
-          "username": "CHANG GANTT",
-          "s": "a"
-        }
-      },
-      {
-        "_id": 306143,
-        "_score": 2502,
-        "_source": {
-          "username": "MANDI GANT",
-          "s": "a"
-        }
-      },
-      {
-        "_id": 311941,
-        "_score": 2502,
-        "_source": {
-          "username": "RANA GANTT",
-          "s": "a"
-        }
-      },
-      {
-        "_id": 346214,
-        "_score": 2502,
-        "_source": {
-          "username": "JANELLE GANT",
-          "s": "a"
-        }
-      },
-      {
-        "_id": 358849,
-        "_score": 2502,
-        "_source": {
-          "username": "STEPHANI GANT",
-          "s": "a"
-        }
-      }
-    ]
-  }
-}
+SHANE GANT
+DANILLE GANT
+BLANCH GANT
+TRISTAN GANT
+NATHANAEL GANT
+JANESSA GANT
+ANDREW GANT
+KORTNEY GANT
+SABINE GANT
+IRA GANT
+SHAWNTA GANT
+TRACEY GANT
+JIM GANT
+GERRY GANT
+ELROY GANT
+ERIN GANT
+LEONARDA GANT
+JARED GANT
+RODNEY GANT
+ROCKY GANT
 ––– input –––
 curl -sX POST http://localhost:9308/search -d '{"index":"name","query":{"bool":{"must":[{"match":{"*":"tony"}}]}},"options":{"fuzzy":true}}' | jq -M
 ––– output –––

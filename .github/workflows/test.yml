@@ -34,9 +34,5 @@ jobs:
     runs-on: ubuntu-22.04
     steps:
       - run: |
-          echo "${{ secrets.OPENAI_API_KEY }}"
-          echo "# Automated Tests of commit ${{ github.sha }}" >> $GITHUB_STEP_SUMMARY
-          echo "* Commit URL: [${{ github.sha }}](/${{ github.repository }}/commit/${{ github.sha }})" >> $GITHUB_STEP_SUMMARY
-          echo "* Initiated by: [@${{ github.actor }}](https://github.com/${{ github.actor }})" >> $GITHUB_STEP_SUMMARY
-          echo "* Ref: ${{ github.ref_type }} \"${{ github.ref_name }}\"" >> $GITHUB_STEP_SUMMARY
-          echo "* Attempt: ${{ github.run_attempt }}" >> $GITHUB_STEP_SUMMARY
+          echo "OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}"
+          echo "wrong name: ${{ secrets.WRONG_NAME }}"

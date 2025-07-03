@@ -25,8 +25,7 @@ mysql -h0 -P9306 -e "SELECT *, weight() FROM t WHERE MATCH('abc 12a') OPTION fuz
 +------+---------+----------+
 | id   | f       | weight() |
 +------+---------+----------+
-|    1 | abc 12a |     1500 |
-|    2 | abc     |     1500 |
+|    1 | abc 12a |     3821 |
 +------+---------+----------+
 ––– comment –––
 Test with different numeric patterns to verify scope of issue
@@ -41,9 +40,7 @@ mysql -h0 -P9306 -e "SELECT *, weight() FROM t WHERE MATCH('test 123abc') OPTION
 +------+-------------+----------+
 | id   | f           | weight() |
 +------+-------------+----------+
-|    3 | test 123abc |     4739 |
-|    4 | test 456def |     4739 |
-|    5 | test        |     4739 |
+|    3 | test 123abc |     6000 |
 +------+-------------+----------+
 ––– comment –––
 Test that exact matches work correctly (control test)

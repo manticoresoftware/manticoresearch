@@ -1,0 +1,96 @@
+––– input –––
+export SEARCHD_FLAGS="--logdebugvv"
+––– output –––
+––– block: ../base/start-searchd-with-buddy –––
+––– input –––
+apt-get install jq -y > /dev/null; echo $?
+––– output –––
+debconf: delaying package configuration, since apt-utils is not installed
+0
+––– input –––
+mysql -h0 -P9306 -e "CREATE TABLE t (id INT, value TEXT, value_attr STRING) min_infix_len = '3'; INSERT INTO t VALUES (1, 'example', 'example'), (2, 'test', 'test');"
+––– output –––
+––– comment –––
+Test MySQL commands that route to Buddy
+––– input –––
+mysql -h0 -P9306 -e "CREATE TABLE t_mysql_copy LIKE t;" && echo "OK"
+––– output –––
+OK
+––– input –––
+mysql -h0 -P9306 -e "DESCRIBE t;" | grep "id" | wc -l
+––– output –––
+1
+––– comment –––
+Test HTTP /cli_json commands that route to Buddy
+––– input –––
+curl -s "http://localhost:9308/cli_json?show%20buddy%20plugins" | jq '.[] | .data[0].Plugin'
+––– output –––
+"empty-string"
+––– input –––
+curl -s "http://localhost:9308/cli_json?select%20*%20from%20t%20where%20match('exmaple')%20option%20fuzzy=1" | jq '.[] | .data | length'
+––– output –––
+1
+––– input –––
+curl -s "http://localhost:9308/cli_json?create%20table%20t_copy%20like%20t" | jq '.[] | .total'
+––– output –––
+0
+––– comment –––
+Test HTTP /sql?mode=raw commands that route to Buddy
+––– input –––
+curl -s -X POST "http://localhost:9308/sql?mode=raw" -d "show buddy plugins" | jq '.[0].data[0].Plugin'
+––– output –––
+"empty-string"
+––– input –––
+curl -s -X POST "http://localhost:9308/sql?mode=raw" -d "describe t" | jq '.[0].data[0].Field'
+––– output –––
+"id"
+––– comment –––
+Test multi-query HTTP commands that route to Buddy
+––– input –––
+curl -s "http://localhost:9308/cli_json?select%20count(*)%20from%20t;show%20meta" | jq 'length'
+––– output –––
+2
+––– comment –––
+Test JSON HTTP commands that route to Buddy
+––– input –––
+curl -s -X POST "http://localhost:9308/search" -H "Content-Type: application/json" -d '{"index": "t", "query": {"match": {"value": "example"}}}' | jq '.hits.total'
+––– output –––
+1
+––– input –––
+curl -s "http://localhost:9308/cli_json?insert%20into%20auto_table%20(id,%20name)%20values%20(1,%20'test')" | jq '.[] | .total'
+––– output –––
+1
+––– comment –––
+Verify protocol logging is working - expect reasonable range
+––– input –––
+REQUESTS=$(grep -c "request data:" /var/log/manticore/searchd.log); echo "Requests: $REQUESTS"; [ $REQUESTS -ge 3 ] && [ $REQUESTS -le 6 ] && echo "PASS" || echo "FAIL"
+––– output –––
+Requests: %{NUMBER}
+PASS
+––– input –––
+RESPONSES=$(grep -c "response data:" /var/log/manticore/searchd.log); echo "Responses: $RESPONSES"; [ $RESPONSES -ge 3 ] && [ $RESPONSES -le 6 ] && echo "PASS" || echo "FAIL"
+––– output –––
+Responses: %{NUMBER}
+PASS
+––– comment –––
+Check protocol v3 structure matches request count
+––– input –––
+REQ_COUNT=$(grep -c "request data:" /var/log/manticore/searchd.log); VER_COUNT=$(grep "request data:" /var/log/manticore/searchd.log | grep -c "version"); echo "Requests: $REQ_COUNT, With version: $VER_COUNT"; [ $VER_COUNT -eq $REQ_COUNT ] && echo "PASS" || echo "FAIL"
+––– output –––
+Requests: %{NUMBER}, With version: %{NUMBER}
+PASS
+––– input –––
+REQ_COUNT=$(grep -c "request data:" /var/log/manticore/searchd.log); V3_COUNT=$(grep "request data:" /var/log/manticore/searchd.log | grep -c '"version":3'); echo "Requests: $REQ_COUNT, Version 3: $V3_COUNT"; [ $V3_COUNT -eq $REQ_COUNT ] && echo "PASS" || echo "FAIL"
+––– output –––
+Requests: %{NUMBER}, Version 3: %{NUMBER}
+PASS
+––– input –––
+REQ_COUNT=$(grep -c "request data:" /var/log/manticore/searchd.log); TYPE_COUNT=$(grep "request data:" /var/log/manticore/searchd.log | grep -c "type"); echo "Requests: $REQ_COUNT, With type: $TYPE_COUNT"; [ $TYPE_COUNT -eq $REQ_COUNT ] && echo "PASS" || echo "FAIL"
+––– output –––
+Requests: %{NUMBER}, With type: %{NUMBER}
+PASS
+––– input –––
+REQ_COUNT=$(grep -c "request data:" /var/log/manticore/searchd.log); BODY_COUNT=$(grep "request data:" /var/log/manticore/searchd.log | grep -c '"body"'); echo "Requests: $REQ_COUNT, With body: $BODY_COUNT"; [ $BODY_COUNT -eq $REQ_COUNT ] && echo "PASS" || echo "FAIL"
+––– output –––
+Requests: %{NUMBER}, With body: %{NUMBER}
+PASS

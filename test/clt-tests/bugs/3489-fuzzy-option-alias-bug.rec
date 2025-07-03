@@ -1,0 +1,85 @@
+Test for issue #3489: Fuzzy icm with specific alias in SELECT gives SQL error
+When using OPTION fuzzy=1 with column alias named 'option' or 'option2', SQL parser fails.
+This should work without syntax errors.
+
+––– comment –––
+Start Manticore Search with Buddy
+––– block: ../base/start-searchd-with-buddy –––
+––– comment –––
+Create test table with required configuration for fuzzy search
+––– input –––
+mysql -h0 -P9306 -e "CREATE TABLE test_table (id BIGINT, field INT, content TEXT) min_infix_len='2';"
+––– output –––
+––– comment –––
+Insert test data
+––– input –––
+mysql -h0 -P9306 -e "INSERT INTO test_table (id, field, content) VALUES (1, 1, 'test document'), (2, 0, 'best result'), (3, 1, 'west coast');"
+––– output –––
+––– comment –––
+Test case 1: Basic query with alias 'option' - should work
+––– input –––
+mysql -h0 -P9306 -e "SELECT IF(field = 1, 1, 0) AS option FROM test_table WHERE MATCH('test');"
+––– output –––
++--------+
+| option |
++--------+
+|      1 |
++--------+
+––– comment –––
+Test case 2: Query with alias 'option' and OPTION fuzzy=1 - this was failing before fix
+––– input –––
+mysql -h0 -P9306 -e "SELECT IF(field = 1, 1, 0) AS option FROM test_table WHERE MATCH('test') OPTION fuzzy=1;"
+––– output –––
++--------+
+| option |
++--------+
+|      1 |
+|      0 |
+|      1 |
++--------+
+––– comment –––
+Test case 3: Query with alias 'option2' and OPTION fuzzy=1 - this was also failing before fix
+––– input –––
+mysql -h0 -P9306 -e "SELECT IF(field = 1, 1, 0) AS option2 FROM test_table WHERE MATCH('test') OPTION fuzzy=1;"
+––– output –––
++---------+
+| option2 |
++---------+
+|       1 |
+|       0 |
+|       1 |
++---------+
+––– comment –––
+Test case 4: Query with different alias 'something' and OPTION fuzzy=1 - this was working before
+––– input –––
+mysql -h0 -P9306 -e "SELECT IF(field = 1, 1, 0) AS something FROM test_table WHERE MATCH('test') OPTION fuzzy=1;"
+––– output –––
++-----------+
+| something |
++-----------+
+|         1 |
+|         0 |
+|         1 |
++-----------+
+––– comment –––
+Test case 5: Query with alias 'option' and different OPTION - this was working before
+––– input –––
+mysql -h0 -P9306 -e "SELECT IF(field = 1, 1, 0) AS option FROM test_table WHERE MATCH('test') OPTION cutoff=1;"
+––– output –––
++--------+
+| option |
++--------+
+|      1 |
++--------+
+––– comment –––
+Test case 6: Verify fuzzy search actually works with expanded matches
+––– input –––
+mysql -h0 -P9306 -e "SELECT id, IF(field = 1, 1, 0) AS option FROM test_table WHERE MATCH('test') OPTION fuzzy=1;"
+––– output –––
++------+--------+
+| id   | option |
++------+--------+
+|    1 |      1 |
+|    2 |      0 |
+|    3 |      1 |
++------+--------+

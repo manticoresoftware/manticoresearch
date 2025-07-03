@@ -1,0 +1,80 @@
+–––– comment –––
+Test for issue #567: Fuzzy search skips words like 12a
+https://github.com/manticoresoftware/manticoresearch-buddy/issues/567
+
+Bug: Fuzzy search skips words starting with numbers which results in wrong weights.
+The query 'abc 12a' should process both 'abc' and '12a' but only processes 'abc'.
+This causes identical weights for documents that should have different scores.
+
+––– block: ../base/start-searchd-with-buddy –––
+––– comment –––
+Create table with min_infix_len='2' required for fuzzy search
+––– input –––
+mysql -h0 -P9306 -e "DROP TABLE IF EXISTS t; CREATE TABLE t(f text) min_infix_len='2';"
+––– output –––
+––– comment –––
+Insert test data: exact match 'abc 12a' and partial match 'abc'
+––– input –––
+mysql -h0 -P9306 -e "INSERT INTO t VALUES(1, 'abc 12a'), (2, 'abc');"
+––– output –––
+––– comment –––
+Test fuzzy search with numeric word - BUG: both rows get same weight
+––– input –––
+mysql -h0 -P9306 -e "SELECT *, weight() FROM t WHERE MATCH('abc 12a') OPTION fuzzy=1;"
+––– output –––
++------+---------+----------+
+| id   | f       | weight() |
++------+---------+----------+
+|    1 | abc 12a |     1500 |
+|    2 | abc     |     1500 |
++------+---------+----------+
+––– comment –––
+Test with different numeric patterns to verify scope of issue
+––– input –––
+mysql -h0 -P9306 -e "INSERT INTO t VALUES(3, 'test 123abc'), (4, 'test 456def'), (5, 'test');"
+––– output –––
+––– comment –––
+Test numeric word at start of alphanumeric sequence
+––– input –––
+mysql -h0 -P9306 -e "SELECT *, weight() FROM t WHERE MATCH('test 123abc') OPTION fuzzy=1;"
+––– output –––
++------+-------------+----------+
+| id   | f           | weight() |
++------+-------------+----------+
+|    3 | test 123abc |     4739 |
+|    4 | test 456def |     4739 |
+|    5 | test        |     4739 |
++------+-------------+----------+
+––– comment –––
+Test that exact matches work correctly (control test)
+––– input –––
+mysql -h0 -P9306 -e "SELECT *, weight() FROM t WHERE MATCH('abc 12a');"
+––– output –––
++------+---------+----------+
+| id   | f       | weight() |
++------+---------+----------+
+|    1 | abc 12a |     2646 |
++------+---------+----------+
+––– comment –––
+Test that regular words (no numbers) work correctly in fuzzy search
+––– input –––
+mysql -h0 -P9306 -e "INSERT INTO t VALUES(6, 'hello world'), (7, 'hello');"
+––– output –––
+––– input –––
+mysql -h0 -P9306 -e "SELECT *, weight() FROM t WHERE MATCH('hello world') OPTION fuzzy=1;"
+––– output –––
++------+-------------+----------+
+| id   | f           | weight() |
++------+-------------+----------+
+|    6 | hello world |     7882 |
++------+-------------+----------+
+––– comment –––
+Verify the bug: numeric words should be included in fuzzy processing
+––– input –––
+mysql -h0 -P9306 -e "SELECT *, weight() FROM t WHERE MATCH('12a') OPTION fuzzy=1;"
+––– output –––
++------+---------+----------+
+| id   | f       | weight() |
++------+---------+----------+
+|    1 | abc 12a |    12133 |
++------+---------+----------+

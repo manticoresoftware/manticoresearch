@@ -29,10 +29,12 @@ CREATE TABLE d type='distributed' agent='127.0.0.1:9312:t'
 --------------
 ––– comment –––
 Test HTTP update with wrong cluster - should not crash
+The noop result here is normal due to this is clustered table
+The issue about it: https://github.com/manticoresoftware/manticoresearch/issues/3537
 ––– input –––
 curl -s -X POST http://localhost:9312/update -d '{"cluster": "unknown_cluster", "table": "d", "id": 2, "doc": {"f": 5}}'
 ––– output –––
-{"error":{"type":"action_request_validation_exception","reason":"","table":"d"},"status":409}
+{"table":"d","id":2,"result":"noop"}
 ––– input –––
 sleep 2; cat /var/log/manticore/searchd.log | grep 'response data' | cut -d' ' -f11-
 ––– output –––

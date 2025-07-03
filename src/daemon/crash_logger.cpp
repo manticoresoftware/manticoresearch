@@ -23,7 +23,9 @@
 
 #include <sys/types.h>
 #include <ostream>
+#if _WIN32
 #include <boost/stacktrace.hpp>
+#endif
 
 constexpr int SPH_TIME_PID_MAX_SIZE = 256;
 

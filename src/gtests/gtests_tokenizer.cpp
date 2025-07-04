@@ -695,60 +695,54 @@ protected:
 		ASSERT_TRUE ( pDict );
 	}
 
+	void Transform( const char * szQuery, const char * szReconst, const char * szReconstTransformed, const struct CKeywordHits * pKeywordHits = nullptr) const;
+	void TestMany ( const char * szQuery, const char * szReconst );
+
 	DictRefPtr_c pDict;
 	CSphSchema tSchema;
 	CSphIndexSettings tTmpSettings;
 };
 
-TEST_F ( QueryParser, test_many )
+void QueryParser::TestMany (const char* szQuery, const char* szReconst)
 {
-	struct QueryTest_t
-	{
-		const char * m_sQuery;
-		const char * m_sReconst;
-	};
-	const QueryTest_t dTests[] =
-	{
-		{   "aaa bbb ccc"                                     , "( aaa   bbb   ccc )" }
-		, { "aaa|bbb ccc"                                     , "( ( aaa | bbb )   ccc )" }
-		, { "aaa bbb|ccc"                                     , "( aaa   ( bbb | ccc ) )" }
-		, { "aaa (bbb ccc)|ddd"                               , "( aaa   ( ( bbb   ccc ) | ddd ) )" }
-		, { "aaa bbb|(ccc ddd)"                               , "( aaa   ( bbb | ( ccc   ddd ) ) )" }
-		, { "aaa bbb|(ccc ddd)|eee|(fff)"                     , "( aaa   ( bbb | ( ccc   ddd ) | eee | fff ) )" }
-		, { "aaa bbb|(ccc ddd) eee|(fff)"                     , "( aaa   ( bbb | ( ccc   ddd ) )   ( eee | fff ) )" }
-		, { "aaa (ccc ddd)|bbb|eee|(fff)"                     , "( aaa   ( ( ccc   ddd ) | bbb | eee | fff ) )" }
-		, { "aaa (ccc ddd)|bbb eee|(fff)"                     , "( aaa   ( ( ccc   ddd ) | bbb )   ( eee | fff ) )" }
-		, { "aaa \"bbb ccc\"~5|ddd"                           , "( aaa   ( \"bbb ccc\"~5 | ddd ) )" }
-		, { "aaa bbb|\"ccc ddd\"~5"                           , "( aaa   ( bbb | \"ccc ddd\"~5 ) )" }
-		, { "aaa ( ( \"bbb ccc\"~3|ddd ) eee | ( fff -ggg ) )", "( aaa   ( ( \"bbb ccc\"~3 | ddd )   ( eee | ( fff AND NOT ggg ) ) ) )" }
-		, { "@title aaa @body ccc|(@title ddd eee)|fff ggg"   , "( ( @title: aaa )   ( ( @body: ccc ) | ( ( @title: ddd )   ( @title: eee ) ) | ( @body: fff ) )   ( @body: ggg ) )" }
-		, { "@title hello world | @body sample program"       , "( ( @title: hello )   ( ( @title: world ) | ( @body: sample ) )   ( @body: program ) )" }
-		, { "@title one two three four"                       , "( ( @title: one )   ( @title: two )   ( @title: three )   ( @title: four ) )" }
-		, { "@title one (@body two three) four"               , "( ( @title: one )   ( ( @body: two )   ( @body: three ) )   ( @title: four ) )" }
-		, { "windows 7 2000"                                  , "( windows   2000 )" }
-		, { "aaa a|bbb"                                       , "( aaa   bbb )" }
-		, { "aaa bbb|x y z|ccc"                               , "( aaa   bbb   ccc )" }
-		, { "a"                                               , "" }
-		, { "hello -world"                                    , "( hello AND NOT world )" }
-		, { "-hello world"                                    , "( world AND NOT hello )" }
-		, { "\"phrase (query)/3 ~on steroids\""               , "\"phrase query on steroids\"" }
-		, { "hello a world"                                   , "( hello   world )" }
-		, { "-one"                                            , "" }
-		, { "-one -two"                                       , "" }
-		, { "\"\""                                            , "" }
-		, { "\"()\""                                          , "" }
-		, { "\"]\""                                           , "" }
-		, { "@title hello @body -world"                       , "( ( @title: hello ) AND NOT ( @body: world ) )" }
-		, { "Ms-Dos"                                          , "MS-DOS" }
-	};
-	for ( auto & dTest : dTests )
-	{
-		XQQuery_t tQuery;
-		sphParseExtendedQuery ( tQuery, dTest.m_sQuery, nullptr, pTokenizer, &tSchema, pDict, tTmpSettings, nullptr );
-		CSphString sReconst = sphReconstructNode ( tQuery.m_pRoot, &tSchema );
-		ASSERT_STREQ ( sReconst.cstr(), dTest.m_sReconst );
-	}
+	XQQuery_t tQuery;
+	sphParseExtendedQuery ( tQuery, szQuery, nullptr, pTokenizer, &tSchema, pDict, tTmpSettings, nullptr );
+	CSphString sReconst = sphReconstructNode ( tQuery.m_pRoot, &tSchema );
+	ASSERT_STREQ ( sReconst.cstr(), szReconst );
 }
+
+TEST_F ( QueryParser, test_many_01 ) { TestMany ( "aaa bbb ccc"                                     , "( aaa   bbb   ccc )" ); }
+TEST_F ( QueryParser, test_many_02 ) { TestMany ( "aaa|bbb ccc"                                     , "( ( aaa | bbb )   ccc )" ); }
+TEST_F ( QueryParser, test_many_03 ) { TestMany ( "aaa bbb|ccc"                                     , "( aaa   ( bbb | ccc ) )" ); }
+TEST_F ( QueryParser, test_many_04 ) { TestMany ( "aaa (bbb ccc)|ddd"                               , "( aaa   ( ( bbb   ccc ) | ddd ) )" ); }
+TEST_F ( QueryParser, test_many_05 ) { TestMany ( "aaa bbb|(ccc ddd)"                               , "( aaa   ( bbb | ( ccc   ddd ) ) )" ); }
+TEST_F ( QueryParser, test_many_06 ) { TestMany ( "aaa bbb|(ccc ddd)|eee|(fff)"                     , "( aaa   ( bbb | ( ccc   ddd ) | eee | fff ) )" ); }
+TEST_F ( QueryParser, test_many_07 ) { TestMany ( "aaa bbb|(ccc ddd) eee|(fff)"                     , "( aaa   ( bbb | ( ccc   ddd ) )   ( eee | fff ) )" ); }
+TEST_F ( QueryParser, test_many_08 ) { TestMany ( "aaa (ccc ddd)|bbb|eee|(fff)"                     , "( aaa   ( ( ccc   ddd ) | bbb | eee | fff ) )" ); }
+TEST_F ( QueryParser, test_many_09 ) { TestMany ( "aaa (ccc ddd)|bbb eee|(fff)"                     , "( aaa   ( ( ccc   ddd ) | bbb )   ( eee | fff ) )" ); }
+TEST_F ( QueryParser, test_many_10 ) { TestMany ( "aaa \"bbb ccc\"~5|ddd"                           , "( aaa   ( \"bbb ccc\"~5 | ddd ) )" ); }
+TEST_F ( QueryParser, test_many_11 ) { TestMany ( "aaa bbb|\"ccc ddd\"~5"                           , "( aaa   ( bbb | \"ccc ddd\"~5 ) )" ); }
+TEST_F ( QueryParser, test_many_12 ) { TestMany ( "aaa ( ( \"bbb ccc\"~3|ddd ) eee | ( fff -ggg ) )", "( aaa   ( ( \"bbb ccc\"~3 | ddd )   ( eee | ( fff AND NOT ggg ) ) ) )" ); }
+TEST_F ( QueryParser, test_many_13 ) { TestMany ( "@title aaa @body ccc|(@title ddd eee)|fff ggg"   , "( ( @title: aaa )   ( ( @body: ccc ) | ( ( @title: ddd )   ( @title: eee ) ) | ( @body: fff ) )   ( @body: ggg ) )" ); }
+TEST_F ( QueryParser, test_many_14 ) { TestMany ( "@title hello world | @body sample program"       , "( ( @title: hello )   ( ( @title: world ) | ( @body: sample ) )   ( @body: program ) )" ); }
+TEST_F ( QueryParser, test_many_15 ) { TestMany ( "@title one two three four"                       , "( ( @title: one )   ( @title: two )   ( @title: three )   ( @title: four ) )" ); }
+TEST_F ( QueryParser, test_many_16 ) { TestMany ( "@title one (@body two three) four"               , "( ( @title: one )   ( ( @body: two )   ( @body: three ) )   ( @title: four ) )" ); }
+TEST_F ( QueryParser, test_many_17 ) { TestMany ( "windows 7 2000"                                  , "( windows   2000 )" ); }
+TEST_F ( QueryParser, test_many_18 ) { TestMany ( "aaa a|bbb"                                       , "( aaa   bbb )" ); }
+TEST_F ( QueryParser, test_many_19 ) { TestMany ( "aaa bbb|x y z|ccc"                               , "( aaa   bbb   ccc )" ); }
+TEST_F ( QueryParser, test_many_20 ) { TestMany ( "a"                                               , "" ); }
+TEST_F ( QueryParser, test_many_21 ) { TestMany ( "hello -world"                                    , "( hello AND NOT world )" ); }
+TEST_F ( QueryParser, test_many_22 ) { TestMany ( "-hello world"                                    , "( world AND NOT hello )" ); }
+TEST_F ( QueryParser, test_many_23 ) { TestMany ( "\"phrase (query)/3 ~on steroids\""               , "\"phrase query on steroids\"" ); }
+TEST_F ( QueryParser, test_many_24 ) { TestMany ( "hello a world"                                   , "( hello   world )" ); }
+TEST_F ( QueryParser, test_many_25 ) { TestMany ( "-one"                                            , "" ); }
+TEST_F ( QueryParser, test_many_26 ) { TestMany ( "-one -two"                                       , "" ); }
+TEST_F ( QueryParser, test_many_27 ) { TestMany ( "\"\""                                            , "" ); }
+TEST_F ( QueryParser, test_many_28 ) { TestMany ( "\"()\""                                          , "" ); }
+TEST_F ( QueryParser, test_many_29 ) { TestMany ( "\"]\""                                           , "" ); }
+TEST_F ( QueryParser, test_many_30 ) { TestMany ( "@title hello @body -world"                       , "( ( @title: hello ) AND NOT ( @body: world ) )" ); }
+TEST_F ( QueryParser, test_many_31 ) { TestMany ( "Ms-Dos"                                          , "MS-DOS" ); }
+TEST_F ( QueryParser, test_many_32 ) { TestMany ( "(@title ^hello @body !aaa)|( hello @body !bbb)"  , "( ( ( @title: hello ) AND NOT ( @body: aaa ) ) | ( hello AND NOT ( @body: bbb ) ) )" ); }
 
 TEST_F ( QueryParser, NEAR_with_NOT )
 {
@@ -816,359 +810,478 @@ bool CSphDummyIndex::FillKeywords ( CSphVector <CSphKeywordInfo> & dKeywords ) c
 	return true;
 }
 
-TEST_F ( QueryParser, query_transforms )
+struct CKeywordHits
 {
-	struct CKeywordHits {
-		const char * 	m_sKeyword;
-		int 			m_iHits;
-	};
+	const char * m_szKeyword;
+	int m_iHits;
+};
 
-	struct QueryTest_t
-	{
-		const char *			m_sQuery;
-		const char *			m_sReconst;
-		const char *			m_sReconstTransformed;
-		const CKeywordHits *	m_pKeywordHits;
-	};
-
-	const CKeywordHits dPseudoHits [][10] =
-	{
-		{ { "nnn", 10 }, { "aaa", 1 }, { "bbb", 1 }, { 0, 0 } },
-		{ { "nnn", 10 }, { "aaa", 100 }, { "bbb", 200 }, { 0, 0 } },
-		{ { "nnn", 10 }, { "aaa", 1 }, { "bbb", 2 }, { "qqq", 500 }, { "www", 100 }, { 0, 0 } },
-		{ {"aaa",0}, {"bbb",0}, {"ccc",0}, {"ddd",0}, {"eee",0}, {"fff",0}, {"ggg",35}, {"hhh",63}, {"iii",2445}, {0,0} }, // obfuscated from #3356
-	};
-
-	const QueryTest_t dTest[] =
-	{
-		// COMMON NOT
-		{
-			"( aaa !ccc ) | ( bbb !ccc )",
-			"( ( aaa AND NOT ccc ) | ( bbb AND NOT ccc ) )",
-			"( ( aaa | bbb ) AND NOT ccc )",
-			NULL
-		},
-		{
-			"( aaa bbb !ccc) | ( ddd eee !ccc ) ",
-			"( ( ( aaa   bbb ) AND NOT ccc ) | ( ( ddd   eee ) AND NOT ccc ) )",
-			"( ( ( aaa   bbb ) | ( ddd   eee ) ) AND NOT ccc )",
-			NULL
-		},
-		{
-			"( aaa bbb !ccc) | ( ddd eee !ccc ) | fff | ( ggg !jjj )",
-			"( ( ( aaa   bbb ) AND NOT ccc ) | ( ( ddd   eee ) AND NOT ccc ) | fff | ( ggg AND NOT jjj ) )",
-			"( ( ( ( aaa   bbb ) | ( ddd   eee ) ) AND NOT ccc ) | fff | ( ggg AND NOT jjj ) )",
-			NULL
-		},
-		{
-			"(aaa !bbb) | (ccc !bbb) | (ccc !eee) | (ddd !eee)",
-			"( ( aaa AND NOT bbb ) | ( ccc AND NOT bbb ) | ( ccc AND NOT eee ) | ( ddd AND NOT eee ) )",
-			"( ( ( aaa | ccc ) AND NOT bbb ) | ( ( ccc | ddd ) AND NOT eee ) )",
-			NULL
-		},
-		{
-			"((( aaa & bbb & ccc ) !eee) | ((kkk | jjj & kkk & (zzz | jjj)) !eee))",
-			"( ( ( aaa   bbb   ccc ) AND NOT eee ) | ( ( ( kkk | jjj )   kkk   ( zzz | jjj ) ) AND NOT eee ) )",
-			"( ( ( aaa   bbb   ccc ) | ( ( kkk | jjj )   kkk   ( zzz | jjj ) ) ) AND NOT eee )",
-			NULL
-		},
-		{
-			"(aaa !(aaa !nnn)) | (bbb !(aaa !nnn))",
-			"( ( aaa AND NOT ( aaa AND NOT nnn ) ) | ( bbb AND NOT ( aaa AND NOT nnn ) ) )",
-			"( ( aaa | bbb ) AND NOT ( aaa AND NOT nnn ) )",
-			NULL
-		},
-
-		// COMMON NOT WITH MIXED PHRASES/PROXIMITY terms
-		{
-			"(aaa !(\"zzz yyy\")) | (bbb !(\"zzz yyy\"~30)) | (ccc !(\"zzz yyy\"~20))",
-			"( ( aaa AND NOT \"zzz yyy\" ) | ( bbb AND NOT \"zzz yyy\"~30 ) | ( ccc AND NOT \"zzz yyy\"~20 ) )",
-			"( ( aaa | bbb | ccc ) AND NOT \"zzz yyy\"~30 )",
-			NULL
-		},
-
-		// COMMON COMPOUND NOT
-		{
-			"(aaa !(nnn ccc)) | (bbb !(nnn ddd))",
-			"( ( aaa AND NOT ( nnn   ccc ) ) | ( bbb AND NOT ( nnn   ddd ) ) )",
-			"( ( aaa AND NOT ccc ) | ( bbb AND NOT ddd ) | ( ( aaa | bbb ) AND NOT nnn ) )",
-			( const CKeywordHits * ) &dPseudoHits[0]
-		},
-		{
-			"(aaa !(ccc nnn)) | (bbb !(nnn ddd)) | (ccc !nnn)",
-			"( ( aaa AND NOT ( ccc   nnn ) ) | ( bbb AND NOT ( nnn   ddd ) ) | ( ccc AND NOT nnn ) )",
-			"( ( aaa AND NOT ccc ) | ( bbb AND NOT ddd ) | ( ( ccc | aaa | bbb ) AND NOT nnn ) )",
-			( const CKeywordHits * ) &dPseudoHits[0]
-		},
-		{
-			"(aaa !(ccc nnn)) | (bbb !(nnn ddd))",
-			"( ( aaa AND NOT ( ccc   nnn ) ) | ( bbb AND NOT ( nnn   ddd ) ) )",
-			"( ( aaa AND NOT ( ccc   nnn ) ) | ( bbb AND NOT ( nnn   ddd ) ) )",
-			( const CKeywordHits * ) &dPseudoHits[1]
-		},
-
-		// COMMON COMPOUND NOT WITH MIXED PHRASES/PROXIMITY terms
-		{
-			"(aaa !(ccc \"nnn zzz\"~20)) | (bbb !(\"nnn zzz\"~10 ddd)) | (ccc !\"nnn zzz\")",
-			"( ( aaa AND NOT ( ccc   \"nnn zzz\"~20 ) ) | ( bbb AND NOT ( \"nnn zzz\"~10   ddd ) ) | ( ccc AND NOT \"nnn zzz\" ) )",
-			"( ( aaa AND NOT ccc ) | ( bbb AND NOT ddd ) | ( ( ccc | aaa | bbb ) AND NOT \"nnn zzz\"~20 ) )",
-			( const CKeywordHits * ) &dPseudoHits[0]
-		},
-
-		// COMMON SUBTERM
-		{
-			"(aaa (nnn | ccc)) | (bbb (nnn | ddd))",
-			"( ( aaa   ( nnn | ccc ) ) | ( bbb   ( nnn | ddd ) ) )",
-			"( ( aaa   ccc ) | ( bbb   ddd ) | ( ( aaa | bbb )   nnn ) )",
-			( const CKeywordHits * ) &dPseudoHits[0]
-		},
-		{
-			"(aaa (ccc | nnn)) | (bbb (nnn | ddd)) | (ccc | nnn)",
-			"( ( aaa   ( ccc | nnn ) ) | ( bbb   ( nnn | ddd ) ) | ( ccc | nnn ) )",
-			"( ( aaa   ccc ) | ( bbb   ddd ) | ccc | nnn | ( ( aaa | bbb )   nnn ) )",
-			( const CKeywordHits * ) &dPseudoHits[0]
-		},
-		{
-			"(aaa (ccc | nnn)) | (bbb (nnn | ddd))",
-			"( ( aaa   ( ccc | nnn ) ) | ( bbb   ( nnn | ddd ) ) )",
-			"( ( aaa   ( ccc | nnn ) ) | ( bbb   ( nnn | ddd ) ) )",
-			( const CKeywordHits * ) &dPseudoHits[1]
-		},
-		{	// obfuscated test case based on #3356. M.b. need XQDEBUG 1
-			"(aaa (( ccc (hhh | iii)) | (ddd (fff | iii)) | (eee (ggg | iii)))) | (bbb ((ccc (hhh | iii)) | (ddd (fff | iii)) | (eee (ggg | iii))))",
-			"( ( aaa   ( ( ccc   ( hhh | iii ) ) | ( ddd   ( fff | iii ) ) | ( eee   ( ggg | iii ) ) ) ) | ( bbb   ( ( ccc   ( hhh | iii ) ) | ( ddd   ( fff | iii ) ) | ( eee   ( ggg | iii ) ) ) ) )",
-			"( ( aaa   eee   iii ) | ( bbb   eee   iii ) | ( ( aaa | bbb )   ccc   hhh ) | ( ( aaa | bbb )   ddd   fff ) | ( ( ( aaa   eee ) | ( bbb   eee ) )   ggg ) | ( ( ( ( aaa | bbb )   ccc ) | ( ( aaa | bbb )   ddd ) )   iii ) )",
-			(const CKeywordHits *) &dPseudoHits[3]
-		},
-
-		// COMMON SUBTERM WITH MIXED PHRASES/PROXIMITY terms
-		{
-			"(aaa (ccc | \"qqq www\"~10)) | (bbb (\"qqq www\" | ddd)) | (ccc | \"qqq www\"~20)",
-			"( ( aaa   ( ccc | \"qqq www\"~10 ) ) | ( bbb   ( \"qqq www\" | ddd ) ) | ( ccc | \"qqq www\"~20 ) )",
-			"( ( aaa   ccc ) | ( bbb   ddd ) | ccc | \"qqq www\"~20 | ( ( aaa | bbb )   \"qqq www\"~10 ) )",
-			( const CKeywordHits * ) &dPseudoHits[2]
-		},
-
-		// COMMON KEYWORDS
-		{
-			"\"aaa bbb ccc ddd jjj\" | \"aaa bbb\"",
-			"( \"aaa bbb ccc ddd jjj\" | \"aaa bbb\" )",
-			"\"aaa bbb\"",
-			NULL
-		},
-		{
-			"bbb | \"aaa bbb ccc\"",
-			"( bbb | \"aaa bbb ccc\" )",
-			"bbb",
-			NULL
-		},
-		{
-			"\"aaa bbb ccc ddd jjj\" | \"bbb ccc\"",
-			"( \"aaa bbb ccc ddd jjj\" | \"bbb ccc\" )",
-			"\"bbb ccc\"",
-			NULL
-		},
-		{
-			"\"aaa bbb ccc ddd jjj\" | \"bbb jjj\"",
-			"( \"aaa bbb ccc ddd jjj\" | \"bbb jjj\" )",
-			"( \"aaa bbb ccc ddd jjj\" | \"bbb jjj\" )",
-			NULL
-		},
-		// FIXME!!! add exact phrase elimination
-		{
-			"\"aaa bbb ccc\"~10 | \"aaa bbb ccc ddd\"~20 | \"aaa bbb ccc\"~10 | \"aaa bbb ccc\"~10",
-			"( \"aaa bbb ccc\"~10 | \"aaa bbb ccc ddd\"~20 | \"aaa bbb ccc\"~10 | \"aaa bbb ccc\"~10 )",
-			// "( \"aaa bbb ccc ddd\"~20 | \"aaa bbb ccc\"~10 )",
-			"( \"aaa bbb ccc\"~10 | \"aaa bbb ccc ddd\"~20 | \"aaa bbb ccc\"~10 | \"aaa bbb ccc\"~10 )",
-			NULL
-		},
-		{
-			"\"aaa bbb ccc\"~10 | \"aaa bbb ccc ddd\"~10",
-			"( \"aaa bbb ccc\"~10 | \"aaa bbb ccc ddd\"~10 )",
-			"\"aaa bbb ccc\"~10",
-			NULL
-		},
-		{
-			"\"aaa bbb ccc\"~10 | \"aaa bbb ccc\"~10",
-			"( \"aaa bbb ccc\"~10 | \"aaa bbb ccc\"~10 )",
-			// "\"aaa bbb ccc\"~10",
-			"( \"aaa bbb ccc\"~10 | \"aaa bbb ccc\"~10 )",
-			NULL
-		},
-		{
-			"\"aaa bbb ccc\"~10 | \"aaa bbb ccc\"~9",
-			"( \"aaa bbb ccc\"~10 | \"aaa bbb ccc\"~9 )",
-			// "\"aaa bbb ccc\"~10",
-			"( \"aaa bbb ccc\"~10 | \"aaa bbb ccc\"~9 )",
-			NULL
-		},
-		{
-			"\"aaa bbb ccc ddd eee\" | \"bbb ccc ddd\"~10",
-			"( \"aaa bbb ccc ddd eee\" | \"bbb ccc ddd\"~10 )",
-			"\"bbb ccc ddd\"~10",
-			NULL
-		},
-		{
-			"\"bbb ccc ddd\"~10 | \"ccc ddd\" | \"aaa bbb\"",
-			"( \"bbb ccc ddd\"~10 | \"ccc ddd\" | \"aaa bbb\" )",
-			"( \"bbb ccc ddd\"~10 | \"ccc ddd\" | \"aaa bbb\" )",
-			NULL
-		},
-		{
-			"\"aaa bbb ccc ddd eee\" | \"bbb ccc ddd\"~10 | \"ccc ddd\" | \"aaa bbb\"",
-			"( \"aaa bbb ccc ddd eee\" | \"bbb ccc ddd\"~10 | \"ccc ddd\" | \"aaa bbb\" )",
-			"( \"bbb ccc ddd\"~10 | \"ccc ddd\" | \"aaa bbb\" )",
-			NULL
-		},
-		{
-			"aaa | \"aaa bbb\"~10 | \"aaa ccc\"",
-			"( aaa | \"aaa bbb\"~10 | \"aaa ccc\" )",
-			"aaa",
-			NULL
-		},
-
-		// COMMON PHRASES
-		{
-			"\"aaa bbb ccc ddd\" | \"eee fff ccc ddd\"",
-			"( \"aaa bbb ccc ddd\" | \"eee fff ccc ddd\" )",
-			"( \"( \"aaa bbb\" | \"eee fff\" ) \"ccc ddd\"\" )",
-			NULL
-		},
-		{
-			"\"ccc ddd aaa bbb\" | \"ccc ddd eee fff\"",
-			"( \"ccc ddd aaa bbb\" | \"ccc ddd eee fff\" )",
-			"( \"\"ccc ddd\" ( \"aaa bbb\" | \"eee fff\" )\" )",
-			NULL
-		},
-		{
-			"\"aaa bbb ccc ddd\" | \"eee fff ccc ddd\" | \"jjj lll\"",
-			"( \"aaa bbb ccc ddd\" | \"eee fff ccc ddd\" | \"jjj lll\" )",
-			"( \"jjj lll\" | ( \"( \"aaa bbb\" | \"eee fff\" ) \"ccc ddd\"\" ) )",
-			NULL
-		},
-		{
-			"\"ccc ddd aaa bbb\" | \"ccc ddd eee fff\" | \"jjj lll\"",
-			"( \"ccc ddd aaa bbb\" | \"ccc ddd eee fff\" | \"jjj lll\" )",
-			"( \"jjj lll\" | ( \"\"ccc ddd\" ( \"aaa bbb\" | \"eee fff\" )\" ) )",
-			NULL
-		},
-		{
-			"\"aaa bbb ccc ddd xxx yyy zzz\" | \"eee fff ddd xxx yyy zzz\" | \"jjj lll\"",
-			"( \"aaa bbb ccc ddd xxx yyy zzz\" | \"eee fff ddd xxx yyy zzz\" | \"jjj lll\" )",
-			"( \"jjj lll\" | ( \"( \"aaa bbb ccc\" | \"eee fff\" ) \"ddd xxx yyy zzz\"\" ) )",
-			NULL
-		},
-		{
-			"\"ddd xxx yyy zzz aaa bbb\" | \"ddd xxx yyy zzz ccc eee fff\" | \"jjj lll\"",
-			"( \"ddd xxx yyy zzz aaa bbb\" | \"ddd xxx yyy zzz ccc eee fff\" | \"jjj lll\" )",
-			"( \"jjj lll\" | ( \"\"ddd xxx yyy zzz\" ( \"aaa bbb\" | \"ccc eee fff\" )\" ) )",
-			NULL
-		},
-		{
-			"\"xxx zzz ccc ddd\" | \"xxx zzz yyy jjj kkk\" | \"xxx zzz yyy mmm nnn\"",
-			"( \"xxx zzz ccc ddd\" | \"xxx zzz yyy jjj kkk\" | \"xxx zzz yyy mmm nnn\" )",
-			"( \"\"xxx zzz\" ( \"ccc ddd\" | \"yyy jjj kkk\" | \"yyy mmm nnn\" )\" )",
-			NULL
-		},
-		{
-			"\"aaa bbb ddd www xxx yyy zzz\" | \"aaa bbb eee www xxx yyy zzz\"",
-			"( \"aaa bbb ddd www xxx yyy zzz\" | \"aaa bbb eee www xxx yyy zzz\" )",
-			"( \"( \"aaa bbb ddd\" | \"aaa bbb eee\" ) \"www xxx yyy zzz\"\" )",
-			NULL
-		},
-		{
-			"\"www xxx yyy zzz ddd aaa bbb\" | \"www xxx yyy zzz eee aaa bbb\"",
-			"( \"www xxx yyy zzz ddd aaa bbb\" | \"www xxx yyy zzz eee aaa bbb\" )",
-			"( \"\"www xxx yyy zzz\" ( \"ddd aaa bbb\" | \"eee aaa bbb\" )\" )",
-			NULL
-		},
-		{
-			"\"xxx yyy zzz ddd\" | \"xxx yyy zzz eee\"",
-			"( \"xxx yyy zzz ddd\" | \"xxx yyy zzz eee\" )",
-			"( \"\"xxx yyy zzz\" ( ddd | eee )\" )",
-			NULL
-		},
-		{
-			"\"ddd xxx yyy zzz\" | \"eee xxx yyy zzz\"",
-			"( \"ddd xxx yyy zzz\" | \"eee xxx yyy zzz\" )",
-			"( \"( ddd | eee ) \"xxx yyy zzz\"\" )",
-			NULL
-		},
-
-		// COMMON AND NOT FACTOR
-		{
-			"( aaa !xxx ) | ( aaa !yyy ) | ( aaa !zzz )",
-			"( ( aaa AND NOT xxx ) | ( aaa AND NOT yyy ) | ( aaa AND NOT zzz ) )",
-			"( aaa AND NOT ( xxx   yyy   zzz ) )",
-			NULL
-		},
-
-		{
-			"( aaa !xxx ) | ( aaa !yyy ) | ( aaa !zzz ) | ( bbb !xxx ) | ( bbb !yyy ) | ( bbb !zzz )",
-			"( ( aaa AND NOT xxx ) | ( aaa AND NOT yyy ) | ( aaa AND NOT zzz ) | ( bbb AND NOT xxx ) | ( bbb AND NOT yyy ) | ( bbb AND NOT zzz ) )",
-			"( ( aaa | bbb ) AND NOT ( xxx   yyy   zzz ) )",
-			NULL
-		},
-
-		// COMMON AND NOT FACTOR WITH MIXED PHRASES/PROXIMITY terms
-		{
-			"( \"aaa bbb\"~10 !xxx ) | ( \"aaa bbb\"~20 !yyy ) | ( \"aaa bbb\" !zzz )",
-			"( ( \"aaa bbb\"~10 AND NOT xxx ) | ( \"aaa bbb\"~20 AND NOT yyy ) | ( \"aaa bbb\" AND NOT zzz ) )",
-			"( \"aaa bbb\"~20 AND NOT ( yyy   xxx   zzz ) )",
-			NULL
-		},
-
-		// COMMON | NOT
-		{
-			"( aaa !(nnn | nnn1) ) | ( bbb !(nnn2 | nnn) )",
-			"( ( aaa AND NOT ( nnn | nnn1 ) ) | ( bbb AND NOT ( nnn2 | nnn ) ) )",
-			"( ( ( aaa AND NOT nnn1 ) | ( bbb AND NOT nnn2 ) ) AND NOT nnn )",
-			NULL
-		},
-
-		// ExcessAndNot
-		{
-			"( (aaa ( ( ( (fff (xxx !hhh)) !kkk ) ) bbb !ccc)) !ddd ) ( ( (zzz (xxx !vvv)) !kkk ) )",
-			"( ( aaa   ( ( fff   ( xxx AND NOT hhh )   bbb ) AND NOT ( kkk | ccc ) )   ( ( zzz   ( xxx AND NOT vvv ) ) AND NOT kkk ) ) AND NOT ddd )",
-			"( ( aaa   fff   xxx   bbb   zzz   xxx ) AND NOT ( vvv | hhh | kkk | kkk | ccc | ddd ) )",
-			NULL
-		},
-
-		// COMMON | NOT WITH MIXED PHRASES/PROXIMITY terms
-		{
-			"( aaa !( \"jjj kkk\"~10 | (aaa|nnn) ) ) | ( bbb !( fff | \"jjj kkk\" ) ) | ( ccc !( (hhh kkk) | \"jjj kkk\"~20 ) )",
-			"( ( aaa AND NOT ( \"jjj kkk\"~10 | ( aaa | nnn ) ) ) | ( bbb AND NOT ( fff | \"jjj kkk\" ) ) | ( ccc AND NOT ( ( hhh   kkk ) | \"jjj kkk\"~20 ) ) )",
-			"( ( ( aaa AND NOT ( aaa | nnn ) ) | ( bbb AND NOT fff ) | ( ccc AND NOT ( hhh   kkk ) ) ) AND NOT \"jjj kkk\"~20 )",
-			NULL
-		},
-
-		{
-			NULL, NULL, NULL, NULL
-		}
-	};
+void QueryParser::Transform ( const char * szQuery, const char * szReconst, const char *szReconstTransformed, const CKeywordHits * pKeywordHits ) const
+{
 	CSphIndexSettings tTmpSettings;
-	const QueryTest_t * pTest = dTest;
-	while ( pTest->m_sQuery )
+	XQQuery_t tQuery;
+	sphParseExtendedQuery ( tQuery, szQuery, nullptr, pTokenizer, &tSchema, pDict, tTmpSettings, nullptr );
+
+	CSphString sReconst = sphReconstructNode ( tQuery.m_pRoot, &tSchema );
+
+	CSphDummyIndex tIndex;
+	if ( pKeywordHits )
 	{
-		XQQuery_t tQuery;
-		sphParseExtendedQuery ( tQuery, pTest->m_sQuery, nullptr, pTokenizer, &tSchema, pDict, tTmpSettings, nullptr );
-
-		CSphString sReconst = sphReconstructNode ( tQuery.m_pRoot, &tSchema );
-
-		CSphDummyIndex tIndex;
-		if ( pTest->m_pKeywordHits )
-		{
-			for ( const CKeywordHits * pHits = pTest->m_pKeywordHits; pHits->m_sKeyword; ++pHits )
-				EXPECT_TRUE ( tIndex.m_hHits.Add ( pHits->m_iHits, pHits->m_sKeyword ) );
-		}
-
-		sphTransformExtendedQuery ( &tQuery.m_pRoot, tTmpSettings, true, &tIndex );
-
-		CSphString sReconstTransformed = sphReconstructNode ( tQuery.m_pRoot, &tSchema );
-		ASSERT_STREQ ( sReconst.cstr(), pTest->m_sReconst );
-		ASSERT_STREQ ( sReconstTransformed.cstr(), pTest->m_sReconstTransformed );
-		pTest++;
+		for ( const CKeywordHits * pHits = pKeywordHits; pHits->m_szKeyword; ++pHits )
+			EXPECT_TRUE ( tIndex.m_hHits.Add ( pHits->m_iHits, pHits->m_szKeyword ) );
 	}
+
+	sphTransformExtendedQuery ( &tQuery.m_pRoot, tTmpSettings, true, &tIndex );
+
+	CSphString sReconstTransformed = sphReconstructNode ( tQuery.m_pRoot, &tSchema );
+	EXPECT_STREQ ( sReconst.cstr(), szReconst );
+	ASSERT_STREQ ( sReconstTransformed.cstr(), szReconstTransformed );
+}
+
+TEST_F ( QueryParser, transform_common_not_1 )
+{
+	Transform (
+		"( aaa !ccc ) | ( bbb !ccc )",
+		"( ( aaa AND NOT ccc ) | ( bbb AND NOT ccc ) )",
+		"( ( aaa | bbb ) AND NOT ccc )"
+	);
+}
+
+TEST_F ( QueryParser, transform_common_not_2 )
+{
+	Transform (
+		"( aaa bbb !ccc) | ( ddd eee !ccc ) ",
+		"( ( ( aaa   bbb ) AND NOT ccc ) | ( ( ddd   eee ) AND NOT ccc ) )",
+		"( ( ( aaa   bbb ) | ( ddd   eee ) ) AND NOT ccc )"
+	);
+}
+
+TEST_F ( QueryParser, transform_common_not_3 )
+{
+	Transform (
+		"( aaa bbb !ccc) | ( ddd eee !ccc ) | fff | ( ggg !jjj )",
+		"( ( ( aaa   bbb ) AND NOT ccc ) | ( ( ddd   eee ) AND NOT ccc ) | fff | ( ggg AND NOT jjj ) )",
+		"( ( ( ( aaa   bbb ) | ( ddd   eee ) ) AND NOT ccc ) | fff | ( ggg AND NOT jjj ) )"
+	);
+}
+
+TEST_F ( QueryParser, transform_common_not_4 )
+{
+	Transform (
+		"(aaa !bbb) | (ccc !bbb) | (ccc !eee) | (ddd !eee)",
+		"( ( aaa AND NOT bbb ) | ( ccc AND NOT bbb ) | ( ccc AND NOT eee ) | ( ddd AND NOT eee ) )",
+		"( ( ( aaa | ccc ) AND NOT bbb ) | ( ( ccc | ddd ) AND NOT eee ) )"
+	);
+}
+
+TEST_F ( QueryParser, transform_common_not_5 )
+{
+	Transform (
+		"((( aaa & bbb & ccc ) !eee) | ((kkk | jjj & kkk & (zzz | jjj)) !eee))",
+		"( ( ( aaa   bbb   ccc ) AND NOT eee ) | ( ( ( kkk | jjj )   kkk   ( zzz | jjj ) ) AND NOT eee ) )",
+		"( ( ( aaa   bbb   ccc ) | ( ( kkk | jjj )   kkk   ( zzz | jjj ) ) ) AND NOT eee )"
+	);
+}
+
+TEST_F ( QueryParser, transform_common_not_6 )
+{
+	Transform (
+		"(aaa !(aaa !nnn)) | (bbb !(aaa !nnn))",
+		"( ( aaa AND NOT ( aaa AND NOT nnn ) ) | ( bbb AND NOT ( aaa AND NOT nnn ) ) )",
+		"( ( aaa | bbb ) AND NOT ( aaa AND NOT nnn ) )"
+	);
+}
+
+// COMMON NOT WITH MIXED PHRASES/PROXIMITY terms
+TEST_F ( QueryParser, transform_common_not_with_mixed_phrases_terms_1 )
+{
+	Transform (
+		"(aaa !(\"zzz yyy\")) | (bbb !(\"zzz yyy\"~30)) | (ccc !(\"zzz yyy\"~20))",
+		"( ( aaa AND NOT \"zzz yyy\" ) | ( bbb AND NOT \"zzz yyy\"~30 ) | ( ccc AND NOT \"zzz yyy\"~20 ) )",
+		"( ( aaa | bbb | ccc ) AND NOT \"zzz yyy\"~30 )",
+		NULL
+	);
+}
+
+constexpr CKeywordHits dPseudoHits0[] = { { "nnn", 10 }, { "aaa", 1 }, { "bbb", 1 }, { 0, 0 } };
+
+// COMMON COMPOUND NOT
+TEST_F ( QueryParser, transform_common_compound_not_1 )
+{
+	Transform (
+		"(aaa !(nnn ccc)) | (bbb !(nnn ddd))",
+		"( ( aaa AND NOT ( nnn   ccc ) ) | ( bbb AND NOT ( nnn   ddd ) ) )",
+		"( ( aaa AND NOT ccc ) | ( bbb AND NOT ddd ) | ( ( aaa | bbb ) AND NOT nnn ) )",
+		dPseudoHits0
+	);
+}
+
+TEST_F ( QueryParser, transform_common_compound_not_2 )
+{
+	Transform (
+		"(aaa !(ccc nnn)) | (bbb !(nnn ddd)) | (ccc !nnn)",
+		"( ( aaa AND NOT ( ccc   nnn ) ) | ( bbb AND NOT ( nnn   ddd ) ) | ( ccc AND NOT nnn ) )",
+		"( ( aaa AND NOT ccc ) | ( bbb AND NOT ddd ) | ( ( ccc | aaa | bbb ) AND NOT nnn ) )",
+		dPseudoHits0
+	);
+}
+
+// COMMON COMPOUND NOT WITH MIXED PHRASES/PROXIMITY terms
+TEST_F ( QueryParser, transform_common_compound_not_with_mixed_phrases )
+{	Transform (
+		"(aaa !(ccc \"nnn zzz\"~20)) | (bbb !(\"nnn zzz\"~10 ddd)) | (ccc !\"nnn zzz\")",
+		"( ( aaa AND NOT ( ccc   \"nnn zzz\"~20 ) ) | ( bbb AND NOT ( \"nnn zzz\"~10   ddd ) ) | ( ccc AND NOT \"nnn zzz\" ) )",
+		"( ( aaa AND NOT ccc ) | ( bbb AND NOT ddd ) | ( ( ccc | aaa | bbb ) AND NOT \"nnn zzz\"~20 ) )",
+		dPseudoHits0
+	);
+}
+
+// COMMON SUBTERM
+TEST_F ( QueryParser, transform_common_subterm_1 )
+{
+	Transform (
+		"(aaa (nnn | ccc)) | (bbb (nnn | ddd))",
+		"( ( aaa   ( nnn | ccc ) ) | ( bbb   ( nnn | ddd ) ) )",
+		"( ( aaa   ccc ) | ( bbb   ddd ) | ( ( aaa | bbb )   nnn ) )",
+		dPseudoHits0
+	);
+}
+
+TEST_F ( QueryParser, transform_common_subterm_2 )
+{
+	Transform (
+		"(aaa (ccc | nnn)) | (bbb (nnn | ddd)) | (ccc | nnn)",
+		"( ( aaa   ( ccc | nnn ) ) | ( bbb   ( nnn | ddd ) ) | ( ccc | nnn ) )",
+		"( ( aaa   ccc ) | ( bbb   ddd ) | ccc | nnn | ( ( aaa | bbb )   nnn ) )",
+		dPseudoHits0
+	);
+}
+
+constexpr CKeywordHits dPseudoHits1[] = { { "nnn", 10 }, { "aaa", 100 }, { "bbb", 200 }, { 0, 0 } };
+TEST_F ( QueryParser, transform_common_compound_not_3 )
+{
+	Transform (
+		"(aaa !(ccc nnn)) | (bbb !(nnn ddd))",
+		"( ( aaa AND NOT ( ccc   nnn ) ) | ( bbb AND NOT ( nnn   ddd ) ) )",
+		"( ( aaa AND NOT ( ccc   nnn ) ) | ( bbb AND NOT ( nnn   ddd ) ) )",
+		dPseudoHits1
+	);
+}
+
+TEST_F ( QueryParser, transform_common_subterm_3 )
+{
+	Transform (
+		"(aaa (ccc | nnn)) | (bbb (nnn | ddd))",
+		"( ( aaa   ( ccc | nnn ) ) | ( bbb   ( nnn | ddd ) ) )",
+		"( ( aaa   ( ccc | nnn ) ) | ( bbb   ( nnn | ddd ) ) )",
+		dPseudoHits1
+	);
+}
+
+TEST_F ( QueryParser, transform_common_3356 )
+{
+	constexpr CKeywordHits dPseudoHits[] = { {"aaa",0}, {"bbb",0}, {"ccc",0}, {"ddd",0}, {"eee",0}, {"fff",0}, {"ggg",35}, {"hhh",63}, {"iii",2445}, {0,0} };
+	Transform ( // obfuscated test case based on #3356. M.b. need XQDEBUG 1
+		"(aaa (( ccc (hhh | iii)) | (ddd (fff | iii)) | (eee (ggg | iii)))) | (bbb ((ccc (hhh | iii)) | (ddd (fff | iii)) | (eee (ggg | iii))))",
+		"( ( aaa   ( ( ccc   ( hhh | iii ) ) | ( ddd   ( fff | iii ) ) | ( eee   ( ggg | iii ) ) ) ) | ( bbb   ( ( ccc   ( hhh | iii ) ) | ( ddd   ( fff | iii ) ) | ( eee   ( ggg | iii ) ) ) ) )",
+		"( ( aaa   eee   iii ) | ( bbb   eee   iii ) | ( ( aaa | bbb )   ccc   hhh ) | ( ( aaa | bbb )   ddd   fff ) | ( ( ( aaa   eee ) | ( bbb   eee ) )   ggg ) | ( ( ( ( aaa | bbb )   ccc ) | ( ( aaa | bbb )   ddd ) )   iii ) )",
+		dPseudoHits
+	);
+}
+
+// COMMON SUBTERM WITH MIXED PHRASES/PROXIMITY terms
+TEST_F ( QueryParser, transform_common_subterm_with_mixed_phrases )
+{
+	constexpr CKeywordHits dPseudoHits[] = { { "nnn", 10 }, { "aaa", 1 }, { "bbb", 2 }, { "qqq", 500 }, { "www", 100 }, { 0, 0 } };
+	Transform (
+		"(aaa (ccc | \"qqq www\"~10)) | (bbb (\"qqq www\" | ddd)) | (ccc | \"qqq www\"~20)",
+		"( ( aaa   ( ccc | \"qqq www\"~10 ) ) | ( bbb   ( \"qqq www\" | ddd ) ) | ( ccc | \"qqq www\"~20 ) )",
+		"( ( aaa   ccc ) | ( bbb   ddd ) | ccc | \"qqq www\"~20 | ( ( aaa | bbb )   \"qqq www\"~10 ) )",
+		dPseudoHits
+	);
+}
+
+// COMMON KEYWORDS
+TEST_F ( QueryParser, transform_common_keywords_1 )
+{
+	Transform (
+		"\"aaa bbb ccc ddd jjj\" | \"aaa bbb\"",
+		"( \"aaa bbb ccc ddd jjj\" | \"aaa bbb\" )",
+		"\"aaa bbb\""
+	);
+}
+
+TEST_F ( QueryParser, transform_common_keywords_2 )
+{
+	Transform (
+		"bbb | \"aaa bbb ccc\"",
+		"( bbb | \"aaa bbb ccc\" )",
+		"bbb"
+	);
+}
+
+TEST_F ( QueryParser, transform_common_keywords_3 )
+{
+	Transform (
+		"\"aaa bbb ccc ddd jjj\" | \"bbb ccc\"",
+		"( \"aaa bbb ccc ddd jjj\" | \"bbb ccc\" )",
+		"\"bbb ccc\""
+	);
+}
+
+TEST_F ( QueryParser, transform_common_keywords_4 )
+{
+	Transform (
+		"\"aaa bbb ccc ddd jjj\" | \"bbb jjj\"",
+		"( \"aaa bbb ccc ddd jjj\" | \"bbb jjj\" )",
+		"( \"aaa bbb ccc ddd jjj\" | \"bbb jjj\" )"
+	);
+}
+
+TEST_F ( QueryParser, transform_common_keywords_5 )
+{
+	Transform (
+		// FIXME!!! add exact phrase elimination
+		"\"aaa bbb ccc\"~10 | \"aaa bbb ccc ddd\"~20 | \"aaa bbb ccc\"~10 | \"aaa bbb ccc\"~10",
+		"( \"aaa bbb ccc\"~10 | \"aaa bbb ccc ddd\"~20 | \"aaa bbb ccc\"~10 | \"aaa bbb ccc\"~10 )",
+		// "( \"aaa bbb ccc ddd\"~20 | \"aaa bbb ccc\"~10 )",
+		"( \"aaa bbb ccc\"~10 | \"aaa bbb ccc ddd\"~20 | \"aaa bbb ccc\"~10 | \"aaa bbb ccc\"~10 )"
+	);
+}
+
+TEST_F ( QueryParser, transform_common_keywords_6 )
+{
+	Transform (
+		"\"aaa bbb ccc\"~10 | \"aaa bbb ccc ddd\"~10",
+		"( \"aaa bbb ccc\"~10 | \"aaa bbb ccc ddd\"~10 )",
+		"\"aaa bbb ccc\"~10"
+	);
+}
+
+TEST_F ( QueryParser, transform_common_keywords_7 )
+{
+	Transform (
+		"\"aaa bbb ccc\"~10 | \"aaa bbb ccc\"~10",
+		"( \"aaa bbb ccc\"~10 | \"aaa bbb ccc\"~10 )",
+		// "\"aaa bbb ccc\"~10",
+		"( \"aaa bbb ccc\"~10 | \"aaa bbb ccc\"~10 )"
+	);
+}
+
+TEST_F ( QueryParser, transform_common_keywords_8 )
+{
+	Transform (
+		"\"aaa bbb ccc\"~10 | \"aaa bbb ccc\"~9",
+		"( \"aaa bbb ccc\"~10 | \"aaa bbb ccc\"~9 )",
+		// "\"aaa bbb ccc\"~10",
+		"( \"aaa bbb ccc\"~10 | \"aaa bbb ccc\"~9 )"
+	);
+}
+
+TEST_F ( QueryParser, transform_common_keywords_9 )
+{
+	Transform (
+		"\"aaa bbb ccc ddd eee\" | \"bbb ccc ddd\"~10",
+		"( \"aaa bbb ccc ddd eee\" | \"bbb ccc ddd\"~10 )",
+		"\"bbb ccc ddd\"~10"
+	);
+}
+
+TEST_F ( QueryParser, transform_common_keywords_10 )
+{
+	Transform (
+		"\"bbb ccc ddd\"~10 | \"ccc ddd\" | \"aaa bbb\"",
+		"( \"bbb ccc ddd\"~10 | \"ccc ddd\" | \"aaa bbb\" )",
+		"( \"bbb ccc ddd\"~10 | \"ccc ddd\" | \"aaa bbb\" )"
+	);
+}
+
+TEST_F ( QueryParser, transform_common_keywords_11 )
+{
+	Transform (
+		"\"aaa bbb ccc ddd eee\" | \"bbb ccc ddd\"~10 | \"ccc ddd\" | \"aaa bbb\"",
+		"( \"aaa bbb ccc ddd eee\" | \"bbb ccc ddd\"~10 | \"ccc ddd\" | \"aaa bbb\" )",
+		"( \"bbb ccc ddd\"~10 | \"ccc ddd\" | \"aaa bbb\" )"
+	);
+}
+
+TEST_F ( QueryParser, transform_common_keywords_12 )
+{
+	Transform (
+		"aaa | \"aaa bbb\"~10 | \"aaa ccc\"",
+		"( aaa | \"aaa bbb\"~10 | \"aaa ccc\" )",
+		"aaa"
+	);
+}
+
+// COMMON PHRASES
+TEST_F ( QueryParser, transform_common_phrases_1 )
+{
+	Transform (
+		"\"aaa bbb ccc ddd\" | \"eee fff ccc ddd\"",
+		"( \"aaa bbb ccc ddd\" | \"eee fff ccc ddd\" )",
+		"( \"( \"aaa bbb\" | \"eee fff\" ) \"ccc ddd\"\" )"
+	);
+}
+
+TEST_F ( QueryParser, transform_common_phrases_2 )
+{
+	Transform (
+		"\"ccc ddd aaa bbb\" | \"ccc ddd eee fff\"",
+		"( \"ccc ddd aaa bbb\" | \"ccc ddd eee fff\" )",
+		"( \"\"ccc ddd\" ( \"aaa bbb\" | \"eee fff\" )\" )"
+	);
+}
+
+TEST_F ( QueryParser, transform_common_phrases_3 )
+{
+	Transform (
+		"\"aaa bbb ccc ddd\" | \"eee fff ccc ddd\" | \"jjj lll\"",
+		"( \"aaa bbb ccc ddd\" | \"eee fff ccc ddd\" | \"jjj lll\" )",
+		"( \"jjj lll\" | ( \"( \"aaa bbb\" | \"eee fff\" ) \"ccc ddd\"\" ) )"
+	);
+}
+
+TEST_F ( QueryParser, transform_common_phrases_4 )
+{
+	Transform (
+		"\"ccc ddd aaa bbb\" | \"ccc ddd eee fff\" | \"jjj lll\"",
+		"( \"ccc ddd aaa bbb\" | \"ccc ddd eee fff\" | \"jjj lll\" )",
+		"( \"jjj lll\" | ( \"\"ccc ddd\" ( \"aaa bbb\" | \"eee fff\" )\" ) )",
+		NULL
+	);
+}
+
+TEST_F ( QueryParser, transform_common_phrases_5 )
+{
+	Transform (
+		"\"aaa bbb ccc ddd xxx yyy zzz\" | \"eee fff ddd xxx yyy zzz\" | \"jjj lll\"",
+		"( \"aaa bbb ccc ddd xxx yyy zzz\" | \"eee fff ddd xxx yyy zzz\" | \"jjj lll\" )",
+		"( \"jjj lll\" | ( \"( \"aaa bbb ccc\" | \"eee fff\" ) \"ddd xxx yyy zzz\"\" ) )"
+	);
+}
+
+TEST_F ( QueryParser, transform_common_phrases_6 )
+{
+	Transform (
+		"\"ddd xxx yyy zzz aaa bbb\" | \"ddd xxx yyy zzz ccc eee fff\" | \"jjj lll\"",
+		"( \"ddd xxx yyy zzz aaa bbb\" | \"ddd xxx yyy zzz ccc eee fff\" | \"jjj lll\" )",
+		"( \"jjj lll\" | ( \"\"ddd xxx yyy zzz\" ( \"aaa bbb\" | \"ccc eee fff\" )\" ) )"
+	);
+}
+
+TEST_F ( QueryParser, transform_common_phrases_7 )
+{
+	Transform (
+		"\"xxx zzz ccc ddd\" | \"xxx zzz yyy jjj kkk\" | \"xxx zzz yyy mmm nnn\"",
+		"( \"xxx zzz ccc ddd\" | \"xxx zzz yyy jjj kkk\" | \"xxx zzz yyy mmm nnn\" )",
+		"( \"\"xxx zzz\" ( \"ccc ddd\" | \"yyy jjj kkk\" | \"yyy mmm nnn\" )\" )"
+	);
+}
+
+TEST_F ( QueryParser, transform_common_phrases_8 )
+{
+	Transform (
+		"\"aaa bbb ddd www xxx yyy zzz\" | \"aaa bbb eee www xxx yyy zzz\"",
+		"( \"aaa bbb ddd www xxx yyy zzz\" | \"aaa bbb eee www xxx yyy zzz\" )",
+		"( \"( \"aaa bbb ddd\" | \"aaa bbb eee\" ) \"www xxx yyy zzz\"\" )"
+	);
+}
+
+TEST_F ( QueryParser, transform_common_phrases_9 )
+{
+	Transform (
+		"\"www xxx yyy zzz ddd aaa bbb\" | \"www xxx yyy zzz eee aaa bbb\"",
+		"( \"www xxx yyy zzz ddd aaa bbb\" | \"www xxx yyy zzz eee aaa bbb\" )",
+		"( \"\"www xxx yyy zzz\" ( \"ddd aaa bbb\" | \"eee aaa bbb\" )\" )"
+	);
+}
+
+TEST_F ( QueryParser, transform_common_phrases_10 )
+{
+	Transform (
+		"\"xxx yyy zzz ddd\" | \"xxx yyy zzz eee\"",
+		"( \"xxx yyy zzz ddd\" | \"xxx yyy zzz eee\" )",
+		"( \"\"xxx yyy zzz\" ( ddd | eee )\" )"
+	);
+}
+
+TEST_F ( QueryParser, transform_common_phrases_11 )
+{
+	Transform (
+		"\"ddd xxx yyy zzz\" | \"eee xxx yyy zzz\"",
+		"( \"ddd xxx yyy zzz\" | \"eee xxx yyy zzz\" )",
+		"( \"( ddd | eee ) \"xxx yyy zzz\"\" )"
+	);
+}
+
+// COMMON AND NOT FACTOR
+TEST_F ( QueryParser, transform_common_and_not_factor_1 )
+{
+	Transform (
+		"( aaa !xxx ) | ( aaa !yyy ) | ( aaa !zzz )",
+		"( ( aaa AND NOT xxx ) | ( aaa AND NOT yyy ) | ( aaa AND NOT zzz ) )",
+		"( aaa AND NOT ( xxx   yyy   zzz ) )"
+	);
+}
+
+// different fields
+TEST_F ( QueryParser, transform_different_fields )
+{
+	Transform (
+		"( @title aaa @body !xxx ) | ( @body aaa @body !yyy )",
+		"( ( ( @title: aaa ) AND NOT ( @body: xxx ) ) | ( ( @body: aaa ) AND NOT ( @body: yyy ) ) )",
+		"( ( @title: aaa ) AND NOT ( ( @body: xxx )   ( @body: yyy ) ) )"
+	);
+}
+
+TEST_F ( QueryParser, transform_common_and_not_factor_2 )
+{
+	Transform (
+		"( aaa !xxx ) | ( aaa !yyy ) | ( aaa !zzz ) | ( bbb !xxx ) | ( bbb !yyy ) | ( bbb !zzz )",
+		"( ( aaa AND NOT xxx ) | ( aaa AND NOT yyy ) | ( aaa AND NOT zzz ) | ( bbb AND NOT xxx ) | ( bbb AND NOT yyy ) | ( bbb AND NOT zzz ) )",
+		"( ( aaa | bbb ) AND NOT ( xxx   yyy   zzz ) )"
+	);
+}
+
+// COMMON AND NOT FACTOR WITH MIXED PHRASES/PROXIMITY terms
+TEST_F ( QueryParser, transform_common_and_not_factor_with_mixed_phrases_1 )
+{
+	Transform (
+		"( \"aaa bbb\"~10 !xxx ) | ( \"aaa bbb\"~20 !yyy ) | ( \"aaa bbb\" !zzz )",
+		"( ( \"aaa bbb\"~10 AND NOT xxx ) | ( \"aaa bbb\"~20 AND NOT yyy ) | ( \"aaa bbb\" AND NOT zzz ) )",
+		"( \"aaa bbb\"~20 AND NOT ( yyy   xxx   zzz ) )"
+	);
+}
+
+// COMMON | NOT
+TEST_F ( QueryParser, transform_common_or_not )
+{
+	Transform (
+		"( aaa !(nnn | nnn1) ) | ( bbb !(nnn2 | nnn) )",
+		"( ( aaa AND NOT ( nnn | nnn1 ) ) | ( bbb AND NOT ( nnn2 | nnn ) ) )",
+		"( ( ( aaa AND NOT nnn1 ) | ( bbb AND NOT nnn2 ) ) AND NOT nnn )"
+	);
+}
+
+// ExcessAndNot
+TEST_F ( QueryParser, transform_excess_and_not )
+{
+	Transform (
+		"( (aaa ( ( ( (fff (xxx !hhh)) !kkk ) ) bbb !ccc)) !ddd ) ( ( (zzz (xxx !vvv)) !kkk ) )",
+		"( ( aaa   ( ( fff   ( xxx AND NOT hhh )   bbb ) AND NOT ( kkk | ccc ) )   ( ( zzz   ( xxx AND NOT vvv ) ) AND NOT kkk ) ) AND NOT ddd )",
+		"( ( aaa   fff   xxx   bbb   zzz   xxx ) AND NOT ( vvv | hhh | kkk | kkk | ccc | ddd ) )"
+	);
+}
+
+// COMMON | NOT WITH MIXED PHRASES/PROXIMITY terms
+TEST_F ( QueryParser, transform_common_or_not_with_mixed_phrases )
+{
+	Transform (
+		"( aaa !( \"jjj kkk\"~10 | (aaa|nnn) ) ) | ( bbb !( fff | \"jjj kkk\" ) ) | ( ccc !( (hhh kkk) | \"jjj kkk\"~20 ) )",
+		"( ( aaa AND NOT ( \"jjj kkk\"~10 | ( aaa | nnn ) ) ) | ( bbb AND NOT ( fff | \"jjj kkk\" ) ) | ( ccc AND NOT ( ( hhh   kkk ) | \"jjj kkk\"~20 ) ) )",
+		"( ( ( aaa AND NOT ( aaa | nnn ) ) | ( bbb AND NOT fff ) | ( ccc AND NOT ( hhh   kkk ) ) ) AND NOT \"jjj kkk\"~20 )"
+	);
 }
 
 TEST_F ( QueryParser, test_NOT )

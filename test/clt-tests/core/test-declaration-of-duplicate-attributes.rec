@@ -9,3 +9,4 @@ indexer -c /tmp/xml_crash.conf --all 2>&1 | grep -i 'idx'
 ––– output –––
 indexing table 'idx'...
 ERROR: table 'idx': source 'min': attribute 'a' is added twice (line=1, pos=143, docid=0).
+––– block: path/to/file –––

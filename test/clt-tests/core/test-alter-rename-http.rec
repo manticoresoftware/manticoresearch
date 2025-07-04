@@ -83,3 +83,6 @@ mysql -h0 -P9306 -e "SHOW TABLES"
 | articles     | rt   |
 | products_new | rt   |
 +--------------+------+
+––– input –––
+echo 123
+––– output –––

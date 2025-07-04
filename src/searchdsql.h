@@ -327,6 +327,8 @@ public:
 
 	bool					m_bJson = false;
 	CSphString				m_sEndpoint;
+	CSphString				m_sRawQuery;
+	CSphString				m_sFullUrl;
 
 	CSphVector<CSphString>	m_dStringSubkeys;
 	CSphVector<int64_t>		m_dIntSubkeys;

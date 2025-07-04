@@ -87,7 +87,7 @@ JsonObj_c 		sphEncodeDeleteResultJson ( const char * szIndex, DocID_t tDocId, in
 JsonObj_c		sphEncodeInsertErrorJson ( const char * szIndex, const char * szError, ResultSetFormat_e eFormat );
 JsonObj_c		sphEncodeTxnResultJson ( const char* szIndex, DocID_t tDocId, int iInserts, int iDeletes, int iUpdates, ResultSetFormat_e eFormat );
 
-bool			sphGetResultStats ( const char * szResult, int & iAffected, int & iWarnings, bool bUpdate );
+bool			sphGetResultStats ( const char * szResult, int & iAffected, int & iWarnings, bool bUpdate, CSphString & sError );
 
 bool			NonEmptyQuery ( const JsonObj_c & tQuery );
 bool			CheckRootNode ( const JsonObj_c & tRoot, CSphString & sError );

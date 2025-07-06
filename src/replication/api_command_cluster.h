@@ -35,6 +35,7 @@ enum class E_CLUSTER : WORD
 	GET_NODE_STATE		= 9,
 	GET_NODE_VER		= 10,
 	GET_NODE_VER_ID		= 11,
+	GET_NODE_AUTH		= 12,
 };
 
 inline constexpr const char* szClusterCmd ( E_CLUSTER eCmd )
@@ -52,6 +53,7 @@ inline constexpr const char* szClusterCmd ( E_CLUSTER eCmd )
 	case E_CLUSTER::GET_NODE_STATE: return "get_node_state";
 	case E_CLUSTER::GET_NODE_VER: return "get_node_ver";
 	case E_CLUSTER::GET_NODE_VER_ID: return "get_node_ver_id";
+	case E_CLUSTER::GET_NODE_AUTH: return "get_node_auth";
 	default: return "unknown";
 	}
 }
@@ -156,25 +158,27 @@ public:
 	{
 		//sphLogDebugRpl ( "%d, token(%d) %s", static_cast<DWORD> ( CMD ), tAgent.m_tAuthToken.m_dToken.GetLength(), BinToHex ( tAgent.m_tAuthToken.m_dToken.Begin(), tAgent.m_tAuthToken.m_dToken.GetLength() ).cstr() ); // !COMMIT
 
-		if ( CMD==E_CLUSTER::FILE_SEND )
-		{
-			{
-				auto tHdr = APIHeader ( tOut, SEARCHD_COMMAND_PERSIST, 0, ApiAuthToken_t() );
-				tOut.SendInt ( 1 ); // set persistent to 1
-			}
-		}
+		// FIXME!!! add !IsAuthEnabled()
+		//if ( CMD==E_CLUSTER::FILE_SEND )
+		//{
+		//	{
+		//		auto tHdr = APIHeader ( tOut, SEARCHD_COMMAND_PERSIST, 0, ApiAuthToken_t() );
+		//		tOut.SendInt ( 1 ); // set persistent to 1
+		//	}
+		//}
 		// API header
 		auto tReply = APIHeader ( tOut, SEARCHD_COMMAND_CLUSTER, VER_COMMAND_CLUSTER, tAgent.m_tAuthToken );
 		tOut.SendWord ( static_cast<WORD> ( CMD ) );
 		tOut << GetReq ( tAgent );
 
-		if ( CMD==E_CLUSTER::FILE_SEND )
-		{
-			{
-				auto tHdr = APIHeader ( tOut, SEARCHD_COMMAND_PERSIST, 0, ApiAuthToken_t() );
-				tOut.SendInt ( 0 ); // set persistent to 0
-			}
-		}
+		// FIXME!!! add !IsAuthEnabled()
+		//if ( CMD==E_CLUSTER::FILE_SEND )
+		//{
+		//	{
+		//		auto tHdr = APIHeader ( tOut, SEARCHD_COMMAND_PERSIST, 0, ApiAuthToken_t() );
+		//		tOut.SendInt ( 0 ); // set persistent to 0
+		//	}
+		//}
 
 		VerboseProto ( "BldRq", GetReq ( tAgent ) );
 	}

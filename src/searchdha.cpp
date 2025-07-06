@@ -1068,7 +1068,7 @@ SearchdStats_t & gStats ()
 }
 
 // generic stats track - always to agent stats, separately to dashboard.
-static void agent_stats_inc ( AgentConn_t &tAgent, AgentStats_e iCountID )
+void agent_stats_inc ( AgentConn_t &tAgent, AgentStats_e iCountID )
 {
 	assert ( iCountID<=eMaxAgentStat );
 	assert ( tAgent.m_tDesc.m_pDash );
@@ -1099,7 +1099,7 @@ static void agent_stats_inc ( AgentConn_t &tAgent, AgentStats_e iCountID )
 }
 
 // special case of stats - all is ok, just need to track the time in dashboard.
-static void track_processing_time ( AgentConn_t &tAgent )
+void track_processing_time ( AgentConn_t & tAgent )
 {
 	// first we count temporary statistic (into dashboard)
 	assert ( tAgent.m_tDesc.m_pDash );
@@ -1750,6 +1750,18 @@ void AgentConn_t::SendingState ()
 	}
 }
 
+void AgentConn_t::SetDescMultiAgent()
+{
+	if ( m_pMultiAgent )
+		m_tDesc.CloneFrom ( m_pMultiAgent->ChooseAgent () );
+}
+
+void AgentConn_t::SetRecvBuf ( ByteBlob_t tBuf )
+{
+	m_dReplyBuf.Reset ( 0 );
+	m_dReplyBuf.Set ( (BYTE *)tBuf.first, tBuf.second );
+}
+
 /// prepare all necessary things to connect
 /// assume socket is NOT connected
 bool AgentConn_t::StartNextRetry ()
@@ -2138,13 +2150,13 @@ int AgentConn_t::DoTFO ( struct sockaddr * pSs, int iLen )
 }
 
 //! Simplified wrapper for ScheduleDistrJobs, wait for finish and return succeeded
-int PerformRemoteTasks ( VectorAgentConn_t &dRemotes, RequestBuilder_i * pQuery, ReplyParser_i * pParser, int iQueryRetry, int iQueryDelay )
+int PerformRemoteTasksApi ( VectorAgentConn_t &dRemotes, RequestBuilder_i * pQuery, ReplyParser_i * pParser, int iQueryRetry, int iQueryDelay )
 {
 	if ( dRemotes.IsEmpty() )
 		return 0;
 
 	CSphRefcountedPtr<RemoteAgentsObserver_i> tReporter { GetObserver () };
-	ScheduleDistrJobs ( dRemotes, pQuery, pParser, tReporter, iQueryRetry, iQueryDelay );
+	ScheduleDistrJobsApi ( dRemotes, pQuery, pParser, tReporter, iQueryRetry, iQueryDelay );
 	tReporter->Finish ();
 	return (int)tReporter->GetSucceeded ();
 }
@@ -2154,18 +2166,18 @@ int PerformRemoteTasks ( VectorAgentConn_t &dRemotes, RequestBuilder_i * pQuery,
 /// jobs themselves are ref-counted and owned by nobody (they're just released on finish, so
 /// if nobody waits them (say, blackhole), they just dissapeared).
 /// on return blackholes removed from dRemotes
-void ScheduleDistrJobs ( VectorAgentConn_t &dRemotes, RequestBuilder_i * pQuery, ReplyParser_i * pParser,
+void ScheduleDistrJobsApi ( VectorAgentConn_t &dRemotes, RequestBuilder_i * pQuery, ReplyParser_i * pParser,
 	Reporter_i * pReporter, int iQueryRetry, int iQueryDelay )
 {
 //	sphLogSupress ( "L ", SPH_LOG_VERBOSE_DEBUG );
 //	sphLogSupress ( "- ", SPH_LOG_VERBOSE_DEBUG );
 //	TimePrefixed::TimeStart();
 	assert ( pReporter );
-	sphLogDebugv ( "S ==========> ScheduleDistrJobs() for %d remotes", dRemotes.GetLength () );
+	sphLogDebugv ( "S ==========> ScheduleDistrJobsApi() for %d remotes", dRemotes.GetLength () );
 
 	if ( dRemotes.IsEmpty () )
 	{
-		sphWarning ("Empty remotes provided to ScheduleDistrJobs. Consider to save resources and avoid it");
+		sphWarning ("Empty remotes provided to ScheduleDistrJobsApi. Consider to save resources and avoid it");
 		return;
 	}
 
@@ -2198,7 +2210,7 @@ void ScheduleDistrJobs ( VectorAgentConn_t &dRemotes, RequestBuilder_i * pQuery,
 		FirePoller ();
 	}
 
-	sphLogDebugv ( "S ScheduleDistrJobs() done. Total %d", dRemotes.GetLength () );
+	sphLogDebugv ( "S ScheduleDistrJobsApi() done. Total %d", dRemotes.GetLength () );
 }
 
 class ReportCallback_c : public Reporter_i

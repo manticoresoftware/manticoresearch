@@ -559,3 +559,8 @@ bool MakeSecureLayer ( std::unique_ptr<AsyncNetBuffer_c>& pSource )
 	return true;
 }
 #endif
+
+const CSphString & GetSslCert()
+{
+	return g_sSslCert;
+}

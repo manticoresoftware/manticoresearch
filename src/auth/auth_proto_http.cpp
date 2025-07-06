@@ -146,3 +146,16 @@ bool HttpCheckPerms ( const CSphString & sUser, AuthAction_e eAction, const CSph
 	sphHttpErrorReply ( dReply, eReplyHttpCode, sError.cstr() );
 	return false;
 }
+
+CSphString GetBearer ( const CSphString & sUser )
+{
+	if ( sUser.IsEmpty() || !IsAuthEnabled() )
+		return CSphString();
+
+	AuthUsersPtr_t pUsers = GetAuth();
+	const AuthUserCred_t * pUser = pUsers->m_hUserToken ( sUser );
+	if ( !pUser )
+		return CSphString();
+
+	return pUser->m_sRawBearerSha256;
+}

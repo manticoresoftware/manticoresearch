@@ -578,6 +578,11 @@ static bool BuddyQueryAddErrorBody ( JsonEscapedBuilder & tBuddyQuery, const Vec
 	return true;
 }
 
+std::pair<bool, CSphString> GetReply ( UrlResult_t && tRes )
+{
+	return std::make_pair ( tRes.m_bOk, std::move ( tRes.m_sRes ) );
+}
+
 static std::pair<bool, CSphString> BuddyQuery ( bool bHttp, Str_t sQueryError, Str_t sPathQuery, Str_t sQuery, http_method eRequestType, const VecTraits_T<BYTE> & dSrcHttpReply )
 {
 	if ( !HasBuddy() )
@@ -614,7 +619,7 @@ static std::pair<bool, CSphString> BuddyQuery ( bool bHttp, Str_t sQueryError, S
 	// as Expect: 100-continue header added by curl library do not with the buddy
 	dHeaders.Add ( "Expect:" );
 
-	return PostToHelperUrl ( g_sUrlBuddy, (Str_t)tBuddyQuery, dHeaders );
+	return GetReply ( PostToHelperUrl ( g_sUrlBuddy, (Str_t)tBuddyQuery, dHeaders ) );
 }
 
 bool IsBuddyQuery ( const OptionsHash_t & hOptions )

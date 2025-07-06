@@ -22198,7 +22198,12 @@ int WINAPI ServiceMain ( int argc, char **argv ) EXCLUDES (MainThread)
 
 	g_pTickPoolThread = Threads::MakeThreadPool ( g_iNetWorkers, "TickPool" );
 	WipeSchedulerOnFork ( g_pTickPoolThread );
-	PrepareClustersOnStartup ( dListenerDescs, bNewClusterForce );
+	RplBootstrap_e eBs = RplBootstrap_e::OFF;
+	if ( bNewClusterForce )
+		eBs = RplBootstrap_e::FORCED;
+	else if ( bNewCluster )
+		eBs = RplBootstrap_e::ON;
+	PrepareClustersOnStartup ( dListenerDescs, eBs );
 
 	g_dNetLoops.Resize ( g_iNetWorkers );
 	for ( auto & pNetLoop : g_dNetLoops )
@@ -22216,7 +22221,7 @@ int WINAPI ServiceMain ( int argc, char **argv ) EXCLUDES (MainThread)
 
 	// time for replication to sync with cluster
 	searchd::AddShutdownCb ( ReplicationServiceShutdown );
-	ReplicationServiceStart ( bNewCluster || bNewClusterForce );
+	ReplicationServiceStart ( eBs );
 	searchd::AddShutdownCb ( BuddyShutdown );
 	// --test should not guess buddy path
 	// otherwise daemon generates warning message that counts as bad daemon restart by ubertest

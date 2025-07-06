@@ -67,3 +67,5 @@ void AddUser ( const AuthUserCred_t & tEntry, AuthUsersMutablePtr_t & tAuth );
 CSphString ReadHex ( Str_t sRaw, int iHashLen, CSphString & sError );
 CSphString ReadHex ( const char * sName, int iHashLen, const bson::Bson_c & tNode, CSphString & sError );
 void SortUserPerms ( UserPerms_t & dPerms );
+CSphString WriteJson ( const AuthUsers_t & tAuth );
+AuthUsersMutablePtr_t ReadAuth ( char * sSrc, const CSphString & sSrcName, CSphString & sError );

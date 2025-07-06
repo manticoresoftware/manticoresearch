@@ -174,39 +174,44 @@ bool SqlCheckPerms ( const CSphString & sUser, const CSphVector<SqlStmt_t> & dSt
 	case STMT_FLUSH_LOGS:
 		return CheckPerms ( sUser, AuthAction_e::WRITE, tStmt.m_sIndex, true, sError );
 
-	case STMT_SHOW_STATUS:
 	case STMT_CREATE_TABLE:
 	case STMT_CREATE_TABLE_LIKE:
 	case STMT_DROP_TABLE:
 	case STMT_CREATE_FUNCTION:
 	case STMT_DROP_FUNCTION:
-	case STMT_SHOW_VARIABLES:
-	case STMT_SHOW_COLLATION:
-	case STMT_SHOW_CHARACTER_SET:
 	case STMT_ALTER_ADD:
 	case STMT_ALTER_DROP:
 	case STMT_ALTER_MODIFY:
-	case STMT_SHOW_DATABASES:
 	case STMT_CREATE_PLUGIN:
 	case STMT_DROP_PLUGIN:
-	case STMT_SHOW_PLUGINS:
-	case STMT_SHOW_THREADS:
 	case STMT_ALTER_RECONFIGURE:
 	case STMT_RELOAD_PLUGINS:
 	case STMT_RELOAD_INDEX:
 	case STMT_RELOAD_INDEXES:
 	case STMT_ALTER_INDEX_SETTINGS:
+	case STMT_IMPORT_TABLE:
+	case STMT_ALTER_REBUILD_SI:
+		return CheckPerms ( sUser, AuthAction_e::SCHEMA, tStmt.m_sIndex, false, sError );
+
 	case STMT_JOIN_CLUSTER:
 	case STMT_CLUSTER_CREATE:
 	case STMT_CLUSTER_DELETE:
 	case STMT_CLUSTER_ALTER_ADD:
 	case STMT_CLUSTER_ALTER_DROP:
 	case STMT_CLUSTER_ALTER_UPDATE:
-	case STMT_IMPORT_TABLE:
+		return CheckPerms ( sUser, AuthAction_e::SCHEMA, tStmt.m_sCluster, false, sError );
+
+
+	case STMT_SHOW_STATUS:
+	case STMT_SHOW_VARIABLES:
+	case STMT_SHOW_COLLATION:
+	case STMT_SHOW_CHARACTER_SET:
+	case STMT_SHOW_DATABASES:
+	case STMT_SHOW_PLUGINS:
+	case STMT_SHOW_THREADS:
 	case STMT_SHOW_SETTINGS:
-	case STMT_ALTER_REBUILD_SI:
 	case STMT_SHOW_LOCKS:
-		return CheckPerms ( sUser, AuthAction_e::SCHEMA, tStmt.m_sIndex, false, sError );
+		return CheckPerms ( sUser, AuthAction_e::SCHEMA, tStmt.m_sIndex, true, sError );
 
 	case STMT_RELOAD_AUTH:
 	case STMT_DEBUG:

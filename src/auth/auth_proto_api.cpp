@@ -121,3 +121,19 @@ bool ApiCheckPerms ( const CSphString & sUser, AuthAction_e eAction, const CSphS
 	SendErrorReply ( tOut, "%s", sError.cstr() );
 	return false;
 }
+
+bool ApiCheckClusterPerms ( const CSphString & sUser, ISphOutputBuffer & tOut )
+{
+	if ( !IsAuthEnabled() )
+	{
+		sphLogDebug ( "no users found in config, permission granted" );
+		return true;
+	}
+
+	CSphString sError;
+	if ( CheckPerms ( sUser, AuthAction_e::REPLICATION, CSphString(), true, sError ) )
+		return true;
+
+	SendErrorReply ( tOut, "%s", sError.cstr() );
+	return false;
+}

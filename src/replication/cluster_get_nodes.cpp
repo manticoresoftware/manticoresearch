@@ -17,6 +17,8 @@
 #include "nodes.h"
 #include "searchdreplication.h"
 #include "serialize.h"
+#include "auth/auth.h"
+#include "auth/auth_common.h"
 
 // API command to remote node to get nodes it sees
 using ClusterGetNodes_c = ClusterCommand_T<E_CLUSTER::GET_NODES, ClusterRequest_t, StrVec_t>;
@@ -338,4 +340,137 @@ bool CheckRemoteVersionsId ( const ClusterDesc_t & tDesc, const AgentConn_t * pA
 	{
 		return true;
 	}
+}
+
+/////////////////////////////////////////////////////////////////////////////
+// cluster get auth
+
+struct ClusterAuthReply_t
+{
+	bool m_bWithAuth = false;
+	uint64_t m_uAuthHash = 0;
+	CSphString m_sAuth;
+
+	void Save ( ISphOutputBuffer & tOut ) const
+	{
+		tOut.SendByte ( m_bWithAuth );
+		tOut.SendUint64 ( m_uAuthHash );
+		tOut.SendString ( m_sAuth.cstr() );
+	}
+
+	void Load ( InputBuffer_c & tIn )
+	{
+		m_bWithAuth = tIn.GetByte();
+		m_uAuthHash = tIn.GetUint64();
+		m_sAuth = tIn.GetString();
+		int iLen = m_sAuth.Length();
+		// json parser needs double trail zero
+		if ( iLen )
+		{
+			char * sAuth = const_cast<char *>( m_sAuth.cstr() );
+			sAuth[iLen] = '\0'; // safe gap
+			sAuth[iLen+1] = '\0';
+		}
+	}
+};
+
+void operator<< ( ISphOutputBuffer & tOut, const ClusterAuthReply_t & tReq )
+{
+	tReq.Save ( tOut );
+}
+
+void operator>> ( InputBuffer_c & tIn, ClusterAuthReply_t & tReq )
+{
+	tReq.Load ( tIn );
+}
+
+// API command to remote node to get auth
+using ClusterAuth_c = ClusterCommand_T<E_CLUSTER::GET_NODE_AUTH, ClusterAuthReply_t, ClusterAuthReply_t>;
+
+void ReceiveClusterGetAuth ( ISphOutputBuffer & tOut, InputBuffer_c & tBuf )
+{
+	ClusterAuthReply_t tReq;
+	tReq.Load ( tBuf );
+
+	ClusterAuthReply_t tReply;
+	if ( tReq.m_bWithAuth && IsAuthEnabled() )
+	{
+		tReply.m_bWithAuth = true;
+		const AuthUsersPtr_t tAuth = GetAuth();
+		tReply.m_sAuth = WriteJson ( *tAuth.get() );
+		tReply.m_uAuthHash = sphFNV64 ( tReply.m_sAuth.cstr(), tReply.m_sAuth.Length() );
+		// no need to send back the same auth data as joiner already has
+		if ( tReq.m_uAuthHash==tReply.m_uAuthHash )
+			tReply.m_sAuth = "";
+			
+	}
+	ClusterAuth_c::BuildReply ( tOut, tReply );
+}
+
+bool SetAuth ( const ClusterDesc_t & tDesc, const AgentConn_t * pAgent, const ClusterAuthReply_t & tReq, StringBuilder_c & sError )
+{
+	ClusterAuthReply_t tReply = ClusterAuth_c::GetRes ( *pAgent );
+
+	if ( tReply.m_uAuthHash==tReq.m_uAuthHash )
+		return true;
+
+	CSphString sTmp;
+	if ( !ChangeAuth ( const_cast<char *>( tReply.m_sAuth.cstr() ), tDesc.m_sName, sTmp ) )
+	{
+		sError += sTmp.cstr();
+		return false;
+	}
+
+	return true;
+}
+
+
+bool GetRemotesAuth ( const ClusterDesc_t & tDesc )
+{
+	if ( !IsAuthEnabled() )
+		return true;
+
+	ClusterAuth_c::REQUEST_T tReq;
+	tReq.m_bWithAuth = true;
+	const AuthUsersPtr_t tAuth = GetAuth();
+	CSphString sAuth = WriteJson ( *tAuth.get() );
+	tReq.m_uAuthHash = sphFNV64 ( sAuth.cstr(), sAuth.Length() );
+
+	VecRefPtrs_t<AgentConn_t*> dAgents = ClusterAuth_c::MakeAgents ( GetDescAPINodes ( tDesc.m_dClusterNodes, Resolve_e::QUICK ), tDesc.m_sUser, ReplicationTimeoutAnyNode(), tReq );
+	// no nodes is a valid case
+	if ( dAgents.IsEmpty() )
+		return true;
+
+	ClusterAuth_c tReply;
+	PerformRemoteTasksWrap ( dAgents, tReply, tReply, false );
+
+	StringBuilder_c sError ( "; " );
+
+	// loop for successful agents
+	// returns true on the first successful auth received and set
+	// faulure at the set auth reports the error
+	for ( const AgentConn_t * pAgent : dAgents )
+	{
+		if ( pAgent->m_bSuccess && SetAuth ( tDesc, pAgent, tReq, sError ) )
+			return true;
+	}
+
+	// all auth setup errors retred first
+	if ( !sError.IsEmpty() )
+	{
+		TlsMsg::ResetErr();
+		TlsMsg::Err ( sError.cstr() );
+		return false;
+	}
+
+	// loop for failed agents and report its errros
+	for ( const AgentConn_t * pAgent : dAgents )
+	{
+		if ( !pAgent->m_bSuccess )
+			sError += pAgent->m_sFailure.cstr();
+	}
+
+	TlsMsg::ResetErr();
+	TlsMsg::Err ( sError.cstr() );
+	return false;
 }

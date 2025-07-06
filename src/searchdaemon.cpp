@@ -59,16 +59,31 @@
 // MISC GLOBALS
 /////////////////////////////////////////////////////////////////////////////
 
+static const char* g_sCommands[SEARCHD_COMMAND_TOTAL] = {"command_search", "command_excerpt", "command_update",
+	"command_keywords", "command_persist", "command_status", "gap_6", "command_flushattrs", "command_sphinxql",
+	"command_ping", "command_delete", "command_set", "command_insert", "command_replace", "command_commit",
+	"command_suggest", "command_json", "command_callpq", "command_cluster", "command_getfield"};
+
 const char * szCommand ( int eCmd)
 {
-	const char* szCommands[SEARCHD_COMMAND_TOTAL] = {"command_search", "command_excerpt", "command_update",
-		"command_keywords", "command_persist", "command_status", "gap_6", "command_flushattrs", "command_sphinxql",
-		"command_ping", "command_delete", "command_set", "command_insert", "command_replace", "command_commit",
-		"command_suggest", "command_json", "command_callpq", "command_cluster", "command_getfield"};
 	if ( eCmd<SEARCHD_COMMAND_TOTAL )
-		return szCommands[eCmd];
+		return g_sCommands[eCmd];
 	return "***WRONG COMMAND!***";
 }
+
+
+SearchdCommand_e ParseCommand ( const CSphString & sCommand )
+{
+	for ( int i=0; i<SEARCHD_COMMAND_TOTAL; i++ )
+	{
+		const char * sCmdName = g_sCommands[i];
+		if ( sCommand==sCmdName )
+			return SearchdCommand_e(i);
+	}
+
+	return SEARCHD_COMMAND_WRONG;
+}
+
 
 // 'like' matcher
 CheckLike::CheckLike( const char* sPattern )

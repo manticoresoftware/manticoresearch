@@ -32,3 +32,5 @@ struct ApiAuthToken_t
 };
 
 bool ApiCheckPerms ( const CSphString & sUser, AuthAction_e eAction, const CSphString & sTarget, ISphOutputBuffer & tOut );
+// FIXME!!! add cluster name to all api replication command and check proper perms
+bool ApiCheckClusterPerms ( const CSphString & sUser, ISphOutputBuffer & tOut ); // !COMMIT

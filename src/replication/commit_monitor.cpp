@@ -14,6 +14,7 @@
 
 #include "tracer.h"
 #include "searchdreplication.h"
+#include "auth/auth.h"
 
 // commit for common commands
 bool CommitMonitor_c::Commit ()
@@ -29,6 +30,17 @@ bool CommitMonitor_c::Commit ()
 	ReplicationCommand_t& tCmd = *m_tAcc.m_dCmd[0];
 	bool bTruncate = tCmd.m_eCommand == ReplCmd_e::TRUNCATE;
 	bool bOnlyTruncate = bTruncate && ( m_tAcc.m_dCmd.GetLength() == 1 );
+
+	if ( tCmd.m_eCommand==ReplCmd_e::AUTH_DELETE )
+	{
+		TLS_MSG_STRING ( sError );
+		return DeleteAuthDocuments ( m_tAcc, m_pDeletedCount, sError );
+	}
+	if ( tCmd.m_eCommand==ReplCmd_e::AUTH_ADD )
+	{
+		TLS_MSG_STRING ( sError );
+		return InsertAuthDocuments ( m_tAcc, sError );
+	}
 
 	// process with index from accum (no need to lock/unlock it)
 	if ( pIndex )

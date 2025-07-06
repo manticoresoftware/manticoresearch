@@ -38,12 +38,14 @@ bool HandleCmdReplicated ( RtAccum_t& m_tAcc );
 // delete all clusters on daemon shutdown
 void ReplicationServiceShutdown();
 
+enum class RplBootstrap_e { OFF, ON, FORCED };
+
 // prepare saved clusters (but not yet touch wsrep or even update nodes from remotes; only offline actions)
 // bForce will cause 'safe_to_bootstrap: 1' added to grastate.data
-void PrepareClustersOnStartup ( const VecTraits_T<ListenerDesc_t> & dListeners, bool bForce );
+void PrepareClustersOnStartup ( const VecTraits_T<ListenerDesc_t> & dListeners, RplBootstrap_e eBs );
 
 // start clusters on daemon start
-void ReplicationServiceStart ( bool bBootStrap );
+void ReplicationServiceStart ( RplBootstrap_e eBs );
 
 // cluster joins to existed nodes
 bool ClusterJoin ( const CSphString & sCluster, const StrVec_t & dNames, const CSphVector<SqlInsert_t> & dValues, bool bUpdateNodes );
@@ -79,5 +81,15 @@ bool SetIndexesClusterTOI ( const ReplicationCommand_t * pCmd );
 
 CSphString WaitClusterReady ( const CSphString& sCluster, int64_t iTimeoutS );
 std::pair<int,CSphString> WaitClusterCommit ( const CSphString& sCluster, int iTxn, int64_t iTimeoutS );
+
+class ReplicationData_i : private ISphNonCopyMovable
+{
+public:
+	virtual ~ReplicationData_i () = default;
+	virtual void Commit() = 0;
+	virtual void SaveData ( CSphVector<uint64_t> & dKeys, CSphVector<BYTE> & dQueries ) = 0;
+};
+
+CSphString GetFirstClusterName();
 
 #endif // _searchdreplication_

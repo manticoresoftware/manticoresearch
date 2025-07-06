@@ -27,6 +27,7 @@
 #include "aggrexpr.h"
 #include "compressed_http.h"
 #include "auth/auth_proto_http.h"
+#include "netfetch.h"
 
 static bool g_bLogBadHttpReq = val_from_env ( "MANTICORE_LOG_HTTP_BAD_REQ", false ); // log content of bad http requests, ruled by this env variable
 static int g_iLogHttpData = val_from_env ( "MANTICORE_LOG_HTTP_DATA", 0 ); // verbose logging of http data, ruled by this env variable
@@ -173,7 +174,8 @@ static Endpoint_t g_dEndpoints[(size_t)EHTTP_ENDPOINT::TOTAL] =
 		{ "cli", nullptr },
 		{ "cli_json", nullptr },
 		{ "_bulk", nullptr },
-		{ "token", nullptr }
+		{ "token", nullptr },
+		{ "api", nullptr },
 };
 
 EHTTP_ENDPOINT StrToHttpEndpoint ( const CSphString& sEndpoint ) noexcept
@@ -2521,6 +2523,19 @@ public:
 	bool Process () final;
 };
 
+class HttpApiHandler_c final: public HttpHandler_c, public HttpOptionTrait_t
+{
+public:
+	explicit HttpApiHandler_c ( const OptionsHash_t & tOptions, const Str_t & sQuery );
+	bool Process () final;
+
+private:
+	bool ParseOptions ( InputBuffer_c & tIn, int & iLen );
+	const Str_t & m_sQuery;
+	SearchdCommand_e m_eCmd = SEARCHD_COMMAND_WRONG;
+	WORD m_uVer = 0;
+};
+
 static std::unique_ptr<HttpHandler_c> CreateHttpHandler ( EHTTP_ENDPOINT eEndpoint, CharStream_c & tSource, Str_t & sQuery, OptionsHash_t & tOptions, http_method eRequestType )
 {
 	const CSphString * pOption = nullptr;
@@ -2642,6 +2657,12 @@ static std::unique_ptr<HttpHandler_c> CreateHttpHandler ( EHTTP_ENDPOINT eEndpoi
 
 	case EHTTP_ENDPOINT::TOKEN:
 		return std::make_unique<HttpTokenHandler_c> ( tOptions );
+
+	case EHTTP_ENDPOINT::API:
+		SetQuery ( tSource.ReadAll() );
+		if ( tSource.GetError() )
+			return nullptr;
+		return std::make_unique<HttpApiHandler_c> ( tOptions, sQuery );
 
 	case EHTTP_ENDPOINT::TOTAL:
 		SetQuery ( tSource.ReadAll() );
@@ -3779,5 +3800,75 @@ bool HttpTokenHandler_c::Process ()
 	tOut.Sprintf ( R"( {"token":"%s"} )", sToken.cstr() );
 
 	BuildReply ( tOut.cstr(), EHTTP_STATUS::_200 );
+	return true;
+}
+
+///////////////////////////////////////////////////////////////////////
+/// API over HTTP(S)
+
+class MemoryBuffer_c : public GenericOutputBuffer_c
+{
+public:
+	MemoryBuffer_c ( CSphVector<BYTE> & dData, const EHTTP_STATUS & eHttpCode );
+	bool SendBuffer ( const VecTraits_T<BYTE> & dData ) final;
+	void SetWTimeoutUS ( int64_t iTimeoutUS ) final {}
+	int64_t GetWTimeoutUS () const final { return 0ll; }
+	int64_t GetTotalSent() const final { return 0ll; }
+
+	CSphVector<BYTE> & m_dReply;
+	const EHTTP_STATUS & m_eHttpCode;
+};
+
+HttpApiHandler_c::HttpApiHandler_c ( const OptionsHash_t & tOptions, const Str_t & sQuery )
+	: HttpOptionTrait_t ( tOptions )
+	, m_sQuery ( sQuery )
+{
+}
+
+
+bool HttpApiHandler_c::Process()
+{
+	TRACE_CONN ( "conn", "HttpApiHandler_c::Process" );
+
+	InputBuffer_c tIn ( (const BYTE *)m_sQuery.first, m_sQuery.second );
+	MemoryBuffer_c tOut ( m_dData, m_eHttpCode );
+
+	int iLen = 0;
+	if ( !ParseOptions ( tIn, iLen ) )
+		return false;
+
+	ExecuteApiCommand ( m_eCmd, m_uVer, iLen, tIn, tOut );
+	m_eHttpCode = EHTTP_STATUS::_200;
+	tOut.Flush();
+
+	return true;
+}
+
+bool HttpApiHandler_c::ParseOptions ( InputBuffer_c & tIn, int & iLen )
+{
+	ApiAuth_e eApiAuth = (ApiAuth_e)tIn.GetByte();
+	int iApiTokenSize = GetApiTokenSize ( eApiAuth );
+	tIn.SetBufferPos ( tIn.GetBufferPos() + iApiTokenSize );
+
+	m_eCmd = (SearchdCommand_e)tIn.GetWord ();
+	m_uVer = tIn.GetWord();
+	iLen = tIn.GetInt();
+	return true;
+}
+
+MemoryBuffer_c::MemoryBuffer_c ( CSphVector<BYTE> & dData, const EHTTP_STATUS & eHttpCode )
+	: m_dReply ( dData )
+	, m_eHttpCode ( eHttpCode )
+{}
+
+bool MemoryBuffer_c::SendBuffer ( const VecTraits_T<BYTE> & dData )
+{
+	StringBuilder_c sHttp;
+	sHttp.Sprintf ( "HTTP/1.1 %s\r\nServer: %s\r\nContent-Type: application/octet-stream; charset=UTF-8\r\nContent-Length: %d\r\n\r\n", HttpGetStatusName ( m_eHttpCode ), g_sStatusVersion.cstr(), dData.GetLength() );
+
+	m_dReply.Reserve ( sHttp.GetLength() + dData.GetLength() );
+	m_dReply.Append ( (Str_t)sHttp );
+	m_dReply.Append ( dData );
+
 	return true;
 }

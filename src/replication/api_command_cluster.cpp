@@ -112,7 +112,7 @@ void HandleAPICommandCluster ( ISphOutputBuffer & tOut, WORD uCommandVer, InputB
 	if ( !bNodeVer && !CheckCommandVersion ( uCommandVer, VER_COMMAND_CLUSTER, tOut ) )
 		return;
 
-	if ( !ApiCheckPerms ( session::GetUser(), AuthAction_e::REPLICATION, CSphString(), tOut ) )
+	if ( !ApiCheckClusterPerms ( session::GetUser(), tOut ) )
 		return;
 
 	if ( eClusterCmd!=E_CLUSTER::FILE_SEND )
@@ -163,6 +163,10 @@ void HandleAPICommandCluster ( ISphOutputBuffer & tOut, WORD uCommandVer, InputB
 
 	case E_CLUSTER::GET_NODE_VER_ID:
 		ReceiveClusterGetVer ( true, tOut );
+		break;
+
+	case E_CLUSTER::GET_NODE_AUTH:
+		ReceiveClusterGetAuth ( tOut, tBuf );
 		break;
 
 	default:

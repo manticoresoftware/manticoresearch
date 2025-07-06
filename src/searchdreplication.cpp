@@ -937,6 +937,12 @@ bool HandleCmdReplicated ( RtAccum_t & tAcc )
 		return tCommit.CommitTOI();
 	}
 
+	if ( tCmd.m_eCommand==ReplCmd_e::AUTH_ADD || tCmd.m_eCommand==ReplCmd_e::AUTH_DELETE )
+	{
+		CommitMonitor_c tCommit ( tAcc );
+		return tCommit.Commit();
+	}
+
 	if ( tAcc.m_dCmd.GetLength()==1 &&
 		( tCmd.m_eCommand== ReplCmd_e::UPDATE_API
 			 || tCmd.m_eCommand== ReplCmd_e::UPDATE_QL
@@ -1098,6 +1104,15 @@ static bool HandleRealCmdReplicate ( RtAccum_t & tAcc, CommitMonitor_c && tMonit
 
 			SaveAttrUpdate ( *pUpd, tWriter );
 			SaveUpdate ( *tCmd.m_pUpdateCond, tWriter );
+		}
+		break;
+
+		case ReplCmd_e::AUTH_ADD:
+		case ReplCmd_e::AUTH_DELETE:
+		{
+			auto iStartPos = dBufQueries.GetLengthBytes();
+			tAcc.SaveRtTrx ( tWriter );
+			uQueryHash = sphFNV64cont( { dBufQueries.begin() + iStartPos, (int64_t)(dBufQueries.GetLengthBytes() - iStartPos) }, uQueryHash);
 		}
 		break;
 
@@ -1405,9 +1420,9 @@ static bool ClusterDescOk ( const ClusterDesc_t& tDesc, bool bForce ) noexcept
 }
 
 // called from ReplicationServiceStart - see below
-static void CoReplicationServiceStart ( bool bBootStrap ) EXCLUDES ( g_tClustersLock )
+static void CoReplicationServiceStart ( RplBootstrap_e eBs ) EXCLUDES ( g_tClustersLock )
 {
-	const auto eBootStrap = (BOOTSTRAP_E)bBootStrap;
+	const BOOTSTRAP_E eBootStrap = ( eBs==RplBootstrap_e::OFF ? BOOTSTRAP_E::NO : BOOTSTRAP_E::YES ) ;
 	assert ( Threads::IsInsideCoroutine() );
 	StrVec_t dFailedClustersToRemove;
 	auto fnRemoveFailedCluster = [&dFailedClustersToRemove] ( std::pair<CSphString, CSphRefcountedPtr<ReplicationCluster_t>>& hCluster ) {
@@ -1423,6 +1438,20 @@ static void CoReplicationServiceStart ( bool bBootStrap ) EXCLUDES ( g_tClusters
 		TlsMsg::ResetErr();
 		auto& sName = hCluster.first;
 		auto& pCluster = hCluster.second;
+
+		if ( !CheckRemotesVersions ( *pCluster, false ) )
+		{
+			sphWarning ( "remote version check failed: %s", TlsMsg::szError() );
+			continue;
+		}
+
+		// need to fetch auth from all other nodes only for non leader
+		if ( eBs==RplBootstrap_e::OFF && !GetRemotesAuth ( *pCluster ) )
+		{
+			sphWarning ( "auth failed: %s", TlsMsg::szError() );
+			continue;
+		}
+
 		if ( !PrepareNodesAndInitCluster ( *pCluster, eBootStrap ) )
 		{
 			fnRemoveFailedCluster ( hCluster );
@@ -1449,7 +1478,7 @@ static void CoReplicationServiceStart ( bool bBootStrap ) EXCLUDES ( g_tClusters
 }
 
 // start clusters on daemon start
-void ReplicationServiceStart ( bool bBootStrap ) EXCLUDES ( g_tClustersLock )
+void ReplicationServiceStart ( RplBootstrap_e eBs ) EXCLUDES ( g_tClustersLock )
 {
 	// should be lined up with PrepareClustersOnStartup
 	if ( !ReplicationEnabled() )
@@ -1460,24 +1489,18 @@ void ReplicationServiceStart ( bool bBootStrap ) EXCLUDES ( g_tClustersLock )
 		return;
 	}
 
-	Threads::CallCoroutine ( [=]() EXCLUDES ( g_tClustersLock ) { CoReplicationServiceStart ( bBootStrap ); } );
+	Threads::CallCoroutine ( [=]() EXCLUDES ( g_tClustersLock ) { CoReplicationServiceStart ( eBs ); } );
 }
 
 // called from ReplicationServiceStart - see below
-static void CoPrepareClustersOnStartup ( bool bForce ) EXCLUDES ( g_tClustersLock )
+static void CoPrepareClustersOnStartup ( RplBootstrap_e eBs ) EXCLUDES ( g_tClustersLock )
 {
 	SmallStringHash_T<ReplicationClusterRefPtr_c> hClusters;
 	assert ( Threads::IsInsideCoroutine() );
 	for ( const ClusterDesc_t& tDesc : GetClustersInt() )
 	{
-		if ( !ClusterDescOk ( tDesc, bForce ) )
+		if ( !ClusterDescOk ( tDesc, eBs==RplBootstrap_e::FORCED ) )
 			continue;
-
-		if ( !CheckRemotesVersions ( tDesc, false ) )
-		{
-			sphWarning ( "%s", TlsMsg::szError() );
-			continue;
-		}
 
 		CSphRefcountedPtr<ReplicationCluster_t> pNewCluster { MakeClusterOffline ( tDesc ) };
 		if ( !pNewCluster ) {
@@ -1518,7 +1541,7 @@ static void CoPrepareClustersOnStartup ( bool bForce ) EXCLUDES ( g_tClustersLoc
 	for_each ( hClusters, [&] ( auto& hCluster ) REQUIRES ( g_tClustersLock ) { g_hClusters.Add ( hCluster.second, hCluster.first ); } );
 }
 
-void PrepareClustersOnStartup ( const VecTraits_T<ListenerDesc_t>& dListeners, bool bForce ) EXCLUDES ( g_tClustersLock )
+void PrepareClustersOnStartup ( const VecTraits_T<ListenerDesc_t>& dListeners, RplBootstrap_e eBs ) EXCLUDES ( g_tClustersLock )
 {
 	if ( !SetReplicationListener ( dListeners, g_sReplicationStartError ) )
 	{
@@ -1530,7 +1553,7 @@ void PrepareClustersOnStartup ( const VecTraits_T<ListenerDesc_t>& dListeners, b
 	}
 	g_bReplicationEnabled = true;
 
-	Threads::CallCoroutine ( [=]() EXCLUDES ( g_tClustersLock ) { CoPrepareClustersOnStartup ( bForce ); } );
+	Threads::CallCoroutine ( [=]() EXCLUDES ( g_tClustersLock ) { CoPrepareClustersOnStartup ( eBs ); } );
 }
 
 // validate cluster option at SphinxQL statement
@@ -1637,7 +1660,7 @@ bool ClusterJoin ( const CSphString & sCluster, const StrVec_t & dNames, const C
 
 	CSphString sError;
 	// cluster user (might be not the session user) should be able to perform replication actions
-	if ( IsAuthEnabled() && !CheckPerms ( tDesc->m_sUser, AuthAction_e::REPLICATION, CSphString(), true, sError ) )
+	if ( IsAuthEnabled() && !CheckPerms ( tDesc->m_sUser, AuthAction_e::REPLICATION, sCluster, true, sError ) )
 		return false;
 
 	sphLogDebugRpl ( "joining cluster '%s', nodes: %s", sCluster.cstr(), StrVec2Str ( tDesc->m_dClusterNodes ).cstr() );
@@ -1646,6 +1669,9 @@ bool ClusterJoin ( const CSphString & sCluster, const StrVec_t & dNames, const C
 	CleanClusterFiles ( GetDatadirPath ( tDesc->m_sPath ) );
 
 	if ( !CheckRemotesVersions ( tDesc.value(), true ) )
+		return false;
+
+	if ( !GetRemotesAuth ( tDesc.value() ) )
 		return false;
 
 	ReplicationClusterRefPtr_c pCluster { MakeCluster ( tDesc.value(), BOOTSTRAP_E::NO ) };
@@ -1702,7 +1728,7 @@ bool ClusterCreate ( const CSphString & sCluster, const StrVec_t & dNames, const
 
 	CSphString sPermError;
 	// cluster user (might be not the session user) should be able to perform replication actions
-	if ( IsAuthEnabled() && !CheckPerms ( tDesc->m_sUser, AuthAction_e::REPLICATION, CSphString(), true, sPermError ) )
+	if ( IsAuthEnabled() && !CheckPerms ( tDesc->m_sUser, AuthAction_e::REPLICATION, sCluster, true, sPermError ) )
 		return TlsMsg::Err ( sPermError );
 
 	// need to clean up Galera system files left from previous cluster
@@ -2345,4 +2371,16 @@ bool ClusterUpdateNodes ( const CSphString & sCluster, NODES_E eNodes, StrVec_t 
 		bOk = SaveConfigInt ( sError );
 
 	return bOk;
+}
+
+CSphString GetFirstClusterName()
+{
+	CSphString sCluster;
+	{
+		Threads::SccRL_t tLock ( g_tClustersLock );
+		if ( g_hClusters.GetLength()==1 )
+			sCluster = g_hClusters.begin()->second->m_sName;
+	}
+
+	return sCluster;
 }

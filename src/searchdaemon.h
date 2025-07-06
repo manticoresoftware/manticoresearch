@@ -158,6 +158,7 @@ enum SearchdCommand_e : WORD
 };
 
 const char* szCommand ( int );
+SearchdCommand_e ParseCommand ( const CSphString & sCommand );
 
 /// master-agent API SEARCH command protocol extensions version
 enum
@@ -1403,6 +1404,7 @@ enum class EHTTP_ENDPOINT : BYTE
 	CLI_JSON,
 	ES_BULK,
 	TOKEN,
+	API,
 
 	TOTAL
 };

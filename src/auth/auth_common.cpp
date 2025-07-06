@@ -95,14 +95,13 @@ CSphString ReadHex ( const char * sName, int iHashLen, const bson::Bson_c & tNod
 
 static bool ReadUsers ( const CSphString & sFile, bson::Bson_c & tBson, AuthUsersMutablePtr_t & tAuth, CSphString & sError );
 static bool ReadPerms ( const CSphString & sFile, bson::Bson_c & tBson, AuthUsersMutablePtr_t & tAuth, CSphString & sError );
+AuthUsersMutablePtr_t ReadAuth ( char * sSrc, const CSphString & sSrcName, CSphString & sError );
 
 AuthUsersMutablePtr_t ReadAuthFile ( const CSphString & sFile, CSphString & sError )
 {
-	AuthUsersMutablePtr_t tAuth { new AuthUsers_t() };
-
 	// ok to skip auth init if the is no filename set
 	if ( sFile.IsEmpty() )
-		return tAuth;
+		return AuthUsersMutablePtr_t { new AuthUsers_t() };
 	
 	if ( !sphIsReadable ( sFile, &sError ) )
 	{
@@ -146,24 +145,32 @@ AuthUsersMutablePtr_t ReadAuthFile ( const CSphString & sFile, CSphString & sErr
 
 	dRawJson[iSize] = '\0'; // safe gap
 	dRawJson[iSize+1] = '\0';
+	return ReadAuth ( dRawJson.begin(), sFile, sError );
+}
+
+AuthUsersMutablePtr_t ReadAuth ( char * sSrc, const CSphString & sSrcName, CSphString & sError )
+{
+	assert ( sSrc );
 
 	CSphVector<BYTE> tRawBson;
-	if ( !sphJsonParse ( tRawBson, dRawJson.begin(), false, false, false, sError ) )
+	if ( !sphJsonParse ( tRawBson, sSrc, false, false, false, sError ) )
 	{
-		sError.SetSprintf ( "can not read users from the '%s', error: %s", sFile.cstr(), sError.cstr() );
+		sError.SetSprintf ( "can not read users from the '%s', error: %s", sSrcName.cstr(), sError.cstr() );
 		return nullptr;
 	}
 
 	bson::Bson_c tBsonSrc ( tRawBson );
 	if ( tBsonSrc.IsEmpty() || !tBsonSrc.IsAssoc() )
 	{
-		sError.SetSprintf ( "can not read users from the '%s', error: wrong json", sFile.cstr() );
+		sError.SetSprintf ( "can not read users from the '%s', error: wrong json", sSrcName.cstr() );
 		return nullptr;
 	}
 
-	if ( !ReadUsers ( sFile, tBsonSrc, tAuth, sError ) )
+	AuthUsersMutablePtr_t tAuth { new AuthUsers_t() };
+
+	if ( !ReadUsers ( sSrcName, tBsonSrc, tAuth, sError ) )
 		return nullptr;
-	if ( !ReadPerms ( sFile, tBsonSrc, tAuth, sError ) )
+	if ( !ReadPerms ( sSrcName, tBsonSrc, tAuth, sError ) )
 		return nullptr;
 
 	return tAuth;
@@ -353,7 +360,7 @@ bool ReadPerms ( const CSphString & sFile, bson::Bson_c & tBson, AuthUsersMutabl
 	return true;
 }
 
-static CSphString WriteJson ( const AuthUsers_t & tAuth )
+CSphString WriteJson ( const AuthUsers_t & tAuth )
 {
 	JsonEscapedBuilder tWriter;
 	tWriter.StartBlock ( nullptr, "{", "\n}" );

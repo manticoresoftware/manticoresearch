@@ -1569,7 +1569,7 @@ LONG WINAPI sigsegv ( EXCEPTION_POINTERS * pExc )
 void SetSignalHandlers ()
 {
 	snprintf ( g_sMinidump, sizeof(g_sMinidump), "indexer.%d.mdmp", GetCurrentProcessId() );
-	SetUnhandledExceptionFilter ( sigsegv );
+	AddVectoredExceptionHandler ( TRUE, sigsegv );
 }
 
 #endif // _WIN32

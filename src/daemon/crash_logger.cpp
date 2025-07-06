@@ -22,12 +22,16 @@
 #include "client_task_info.h"
 
 #include <sys/types.h>
+#include <ostream>
+#if _WIN32
+#include <boost/stacktrace.hpp>
+#endif
 
 constexpr int SPH_TIME_PID_MAX_SIZE = 256;
 
 static bool g_bCoreDump = false;
 static bool g_bSafeTrace = false;
-static BYTE g_dCrashQueryBuff[4096];
+static BYTE g_dCrashQueryBuff[16 * 1024];
 static char g_sCrashInfo[SPH_TIME_PID_MAX_SIZE] = "[][]\n";
 static int g_iCrashInfoLen = 0;
 const char g_sCrashedBannerAPI[] = "\n--- crashed SphinxAPI request dump ---\n";
@@ -166,6 +170,37 @@ static bool sphCopySphinxHttp ( QueryCopyState_t & tState )
 	return (tState.m_pSrc < tState.m_pSrcEnd);
 }
 
+class FixedStreamBuf : public std::streambuf
+{
+public:
+    FixedStreamBuf ( char * pBuf, int iSize )
+	{
+		char * pEnd = pBuf + iSize;
+        setp ( pBuf, pEnd );
+    }
+
+	int GetPos() const { return (int)( pptr()-pbase() ); }
+
+protected:
+    int overflow ( int c ) override
+	{
+        if ( c!=EOF && pptr()<epptr() )
+		{
+            *pptr() = c;
+            pbump ( 1 );
+            return c;
+        }
+        return EOF;
+    }
+
+    std::streamsize xsputn ( const char * sBuf, std::streamsize iBufSize ) override
+	{
+        std::streamsize iCopied = std::min ( iBufSize, static_cast<std::streamsize> ( epptr() - pptr() ) );
+        std::copy ( sBuf, sBuf+iCopied, pptr() );
+        pbump ( iCopied );
+        return iCopied;
+    }
+};
 
 extern CSphString g_sBannerVersion;
 extern CSphString g_sPidFile;
@@ -189,9 +224,11 @@ LONG WINAPI HandleCrash ( EXCEPTION_POINTERS * pExc )
 		}
 	}
 
+	sphSafeInfoStdOut ( ForceLogStdout() );
+
 	// log [time][pid]
 	sphSeek ( iLogFile, 0, SEEK_END );
-	sphWrite ( iLogFile, g_sCrashInfo, g_iCrashInfoLen );
+	sphSafeInfoWrite ( iLogFile, g_sCrashInfo, g_iCrashInfoLen );
 
 	// log query
 	auto & tQuery = GlobalCrashQueryGetRef();
@@ -231,7 +268,7 @@ LONG WINAPI HandleCrash ( EXCEPTION_POINTERS * pExc )
 	if ( !bValidQuery )
 		dBanner = { g_sCrashedBannerBad, sizeof (g_sCrashedBannerBad) - 1 };
 
-	sphWrite ( iLogFile, dBanner );
+	sphSafeInfoWrite ( iLogFile, dBanner.first, dBanner.second );
 
 	// query
 	if ( bValidQuery )
@@ -279,24 +316,24 @@ LONG WINAPI HandleCrash ( EXCEPTION_POINTERS * pExc )
 
 		while ( pfnCopy ( tCopyState ) )
 		{
-			sphWrite ( iLogFile, g_dCrashQueryBuff, tCopyState.m_pDst - g_dCrashQueryBuff );
+			sphSafeInfoWrite ( iLogFile, g_dCrashQueryBuff, tCopyState.m_pDst - g_dCrashQueryBuff );
 			tCopyState.m_pDst = g_dCrashQueryBuff; // reset the destination buffer
 		}
 		assert ( tCopyState.m_pSrc==tCopyState.m_pSrcEnd );
 
 		int iLeft = int ( tCopyState.m_pDst - g_dCrashQueryBuff );
 		if ( iLeft > 0 )
-			sphWrite ( iLogFile, g_dCrashQueryBuff, iLeft );
+			sphSafeInfoWrite ( iLogFile, g_dCrashQueryBuff, iLeft );
 	}
 
 	// tail
-	sphWrite ( iLogFile, g_sCrashedBannerTail, sizeof(g_sCrashedBannerTail) - 1 );
+	sphSafeInfoWrite ( iLogFile, g_sCrashedBannerTail, sizeof(g_sCrashedBannerTail) - 1 );
 
 	// index name
-	sphWrite ( iLogFile, g_sCrashedIndex, sizeof (g_sCrashedIndex) - 1 );
+	sphSafeInfoWrite ( iLogFile, g_sCrashedIndex, sizeof (g_sCrashedIndex) - 1 );
 	if ( IsFilled ( tQuery.m_dIndex ) )
-		sphWrite ( iLogFile, tQuery.m_dIndex );
-	sphWrite ( iLogFile, g_sEndLine, sizeof (g_sEndLine) - 1 );
+		sphSafeInfoWrite ( iLogFile, tQuery.m_dIndex.first, tQuery.m_dIndex.second );
+	sphSafeInfoWrite ( iLogFile, g_sEndLine, sizeof (g_sEndLine) - 1 );
 
 	sphSafeInfo ( iLogFile, g_sBannerVersion.cstr() );
 
@@ -304,17 +341,21 @@ LONG WINAPI HandleCrash ( EXCEPTION_POINTERS * pExc )
 	// mini-dump reference
 	int iMiniDumpLen = snprintf ( (char *)g_dCrashQueryBuff, sizeof(g_dCrashQueryBuff),
 		"%s %s.%p.mdmp\n", g_sMinidumpBanner, g_sMinidump, tQuery.m_dQuery.first );
-	sphWrite ( iLogFile, g_dCrashQueryBuff, iMiniDumpLen );
+	sphSafeInfoWrite ( iLogFile, g_dCrashQueryBuff, iMiniDumpLen );
 	snprintf ( (char *)g_dCrashQueryBuff, sizeof(g_dCrashQueryBuff), "%s.%p.mdmp",
 		g_sMinidump, tQuery.m_dQuery.first );
 	sphBacktrace ( pExc, (char *)g_dCrashQueryBuff );
+
+	// backtrace dump with boost - similar to we got on linux
+	FixedStreamBuf tStreamBuf ( (char *)g_dCrashQueryBuff, sizeof ( g_dCrashQueryBuff ) );
+	std::ostream tOStream ( &tStreamBuf );
+	tOStream << boost::stacktrace::stacktrace();
+	int iStacktraceLen = tStreamBuf.GetPos();
+	sphSafeInfoWrite ( iLogFile, g_dCrashQueryBuff, iStacktraceLen );
 #else
 
 	// log trace
 	sphSafeInfo ( iLogFile, "Handling signal %d", sig );
-	// print message to stdout during daemon start
-	if ( ForceLogStdout() )
-		sphSafeInfo ( STDOUT_FILENO, "Crash!!! Handling signal %d", sig );
 	sphBacktrace ( iLogFile, g_bSafeTrace );
 #endif
 
@@ -344,7 +385,7 @@ LONG WINAPI HandleCrash ( EXCEPTION_POINTERS * pExc )
 
 	// memory info
 #if SPH_ALLOCS_PROFILER
-	sphWrite ( iLogFile, g_sMemoryStatBanner, sizeof ( g_sMemoryStatBanner )-1 );
+	sphSafeInfoWrite ( iLogFile, g_sMemoryStatBanner, sizeof ( g_sMemoryStatBanner )-1 );
 	sphMemStatDump ( iLogFile );
 #endif
 
@@ -369,10 +410,14 @@ void CrashLogger::SetupTimePID ()
 	                             "------- FATAL: CRASH DUMP -------\n[%s] [%5d]\n", sTimeBuf, (int) getpid() );
 }
 #if _WIN32
-bool CrashLogger::SetCrashHandler (  )
+bool CrashLogger::SetCrashHandler()
 {
-	snprintf ( g_sMinidump, SPH_TIME_PID_MAX_SIZE-1, "%s.%d", g_sPidFile.scstr(), (int)getpid() );
-	SetUnhandledExceptionFilter ( HandleCrash );
+	CSphString sPrefix = "searchd";
+	if ( !g_sPidFile.IsEmpty() )
+		sPrefix = g_sPidFile;
+
+	snprintf ( g_sMinidump, SPH_TIME_PID_MAX_SIZE-1, "%s.%d", sPrefix.scstr(), (int)getpid() );
+	AddVectoredExceptionHandler ( TRUE, HandleCrash );
 	return true;
 }
 #else

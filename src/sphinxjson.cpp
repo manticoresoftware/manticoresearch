@@ -1947,7 +1947,7 @@ bool JsonObj_c::FetchBoolItem ( bool & bValue, const char * szName, CSphString &
 
 bool JsonObj_c::FetchFltItem ( float & fValue, const char * szName, CSphString & sError, bool bIgnoreMissing ) const
 {
-	JsonObj_c tItem = GetBoolItem ( szName, sError, bIgnoreMissing );
+	JsonObj_c tItem = GetFltItem ( szName, sError, bIgnoreMissing );
 	if ( tItem )
 		fValue = tItem.FltVal();
 	else if ( !sError.IsEmpty() )

@@ -143,8 +143,8 @@ The parameters are:
 * `k`: This represents the number of documents to return and is a key parameter for Hierarchical Navigable Small World (HNSW) indexes. It specifies the quantity of documents that a single HNSW index should return. However, the actual number of documents included in the final results may vary. For instance, if the system is dealing with real-time tables divided into disk chunks, each chunk could return `k` documents, leading to a total that exceeds the specified `k` (as the cumulative count would be `num_chunks * k`). On the other hand, the final document count might be less than `k` if, after requesting `k` documents, some are filtered out based on specific attributes. It's important to note that the parameter `k` does not apply to ramchunks. In the context of ramchunks, the retrieval process operates differently, and thus, the `k` parameter's effect on the number of documents returned is not applicable.
 * `query_vector`: This is the search vector.
 * `ef`: optional size of the dynamic list used during the search. A higher `ef` leads to more accurate but slower search.
-* `rescore`: Enables KNN rescoring (disabled by default). After the KNN search is completed using quantized vectors (with possible oversampling), distances are recalculated with the original (full-precision) vectors and results are re-sorted to improve ranking accuracy.
-* `oversampling`: Sets a factor by which k is multiplied when executing the KNN search, causing more candidates to be retrieved than needed using quantized vectors. These candidates can be re-evaluated later if rescoring is enabled.
+* `rescore`: Enables KNN rescoring (disabled by default). Set to `1` in SQL or `true` in JSON to enable rescoring. After the KNN search is completed using quantized vectors (with possible oversampling), distances are recalculated with the original (full-precision) vectors and results are re-sorted to improve ranking accuracy.
+* `oversampling`: Sets a factor (float value) by which `k` is multiplied when executing the KNN search, causing more candidates to be retrieved than needed using quantized vectors. No oversampling is applied by default. These candidates can be re-evaluated later if rescoring is enabled.
 
 Documents are always sorted by their distance to the search vector. Any additional sorting criteria you specify will be applied after this primary sort condition. For retrieving the distance, there is a built-in function called [knn_dist()](../Functions/Other_functions.md#KNN_DIST%28%29).
 
@@ -154,7 +154,7 @@ Documents are always sorted by their distance to the search vector. Any addition
 <!-- request SQL -->
 
 ```sql
-select id, knn_dist() from test where knn ( image_vector, 5, (0.286569,-0.031816,0.066684,0.032926), { ef=2000 } );
+select id, knn_dist() from test where knn ( image_vector, 5, (0.286569,-0.031816,0.066684,0.032926), { ef=2000, oversampling=3.0, rescore=1 } );
 ```
 <!-- response SQL -->
 
@@ -182,7 +182,9 @@ POST /search
 		"field": "image_vector",
 		"query_vector": [0.286569,-0.031816,0.066684,0.032926],
 		"k": 5,
-		"ef": 2000
+		"ef": 2000, 
+		"rescore": true,
+		"oversampling": 3.0
 	}
 }
 ```
@@ -226,8 +228,33 @@ POST /search
 
 <!-- end -->
 
-<!-- Example knn_similar_docs -->
+<!-- example knn_quantization -->
 
+### Vector quantization.
+
+HNSW indexes need to be fully loaded into memory to perform KNN search, which can lead to significant memory consumption. To reduce memory usage, scalar quantization can be applied - a technique that compresses high-dimensional vectors by representing each component (dimension) with a limited number of discrete values. Manticore supports 8-bit and 1-bit quantization, meaning each vector component is compressed from a 32-bit float to 8 bits or even 1 bit, reducing memory usage by 4x or 32x, respectively. These compressed representations also allow for faster distance calculations, as more vector components can be processed in a single SIMD instruction. Although scalar quantization introduces some approximation error, it is often a worthwhile trade-off between search accuracy and resource efficiency. For even better accuracy, quantization can be combined with rescoring and oversampling: more candidates are retrieved than requested, and distances for these candidates are recalculated using the original 32-bit float vectors.
+
+Supported quantization types include:
+* `8bit`: Each vector component is quantized to 8 bits.
+* `1bit`: Each vector component is quantized to 1 bit. Asymmetric quantization is used, with query vectors quantized to 4 bits and stored vectors to 1 bit. This approach offers greater precision than simpler methods, though with some performance trade-off.
+* `1bitsimple`: Each vector component is quantized to 1 bit. This method is faster than `1bit`, but typically less accurate.
+
+<!-- intro -->
+##### SQL:
+
+<!-- request SQL -->
+```sql
+create table test ( title text, image_vector float_vector knn_type='hnsw' knn_dims='4' hnsw_similarity='l2' quantization='1bit');
+```
+
+<!-- response SQL -->
+
+```sql
+Query OK, 0 rows affected (0.01 sec)
+```
+<!-- end -->
+
+<!-- Example knn_similar_docs -->
 
 ### Find similar docs by id
 

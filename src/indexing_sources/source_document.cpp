@@ -511,6 +511,7 @@ bool CSphSource::BuildZoneHits ( RowID_t tRowID, BYTE uCode )
 			if ( *pEnd==MAGIC_CODE_ZONE )
 			{
 				*pEnd = '\0';
+				assert ( (pEnd - pZone) < 140 );
 				m_tHits.Add ( { tRowID, m_pDict->GetWordID ( pZone-1 ), m_tState.m_iHitPos } );
 				m_pTokenizer->SetBufferPtr ( (const char *) pEnd+1 );
 			}

@@ -9747,7 +9747,7 @@ bool CSphIndex_VLN::DoGetKeywords ( CSphVector <CSphKeywordInfo> & dKeywords, co
 	}
 
 	// short-cut if no query or keywords to fill
-	if ( ( bFillOnly && !dKeywords.GetLength() ) || ( !bFillOnly && ( !szQuery || !szQuery[0] ) ) )
+	if ( ( bFillOnly && dKeywords.IsEmpty() ) || ( !bFillOnly && ( !szQuery || !szQuery[0] ) ) )
 		return true;
 
 	DictRefPtr_c pDict = GetStatelessDict ( m_pDict );

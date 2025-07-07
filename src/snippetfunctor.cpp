@@ -1476,7 +1476,13 @@ void HitCollector_c::OnSPZ ( BYTE iSPZ, DWORD uPosition, const char * sZoneName,
 		assert ( ( ( m_dZones.Last()>>32 ) & UINT32_MASK )==uPosition );
 		assert ( sZoneName );
 
-		m_tContainer.AddHits ( m_pDict->GetWordID ( (BYTE *)const_cast<char*>(sZoneName) ), NULL, 0, HITMAN::Create ( m_iField, uPosition ) );
+		{
+			BYTE sTmp[3 * SPH_MAX_WORD_LEN + 16];
+			int iLen = Min ( strlen(sZoneName), sizeof(sTmp) - 1 );
+			memcpy ( sTmp, sZoneName, iLen );
+			sTmp[iLen] = '\0';
+			m_tContainer.AddHits ( m_pDict->GetWordID (sTmp), NULL, 0, HITMAN::Create ( m_iField, uPosition ) );
+		}
 		break;
 	default: assert ( 0 && "impossible SPZ" );
 	}

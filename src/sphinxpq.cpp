@@ -281,7 +281,7 @@ static void DoQueryGetRejects ( const XQNode_t * pNode, const DictRefPtr_c& pDic
 	BYTE sTmp[3 * SPH_MAX_WORD_LEN + 16];
 	for ( const XQKeyword_t & tWord : pNode->dWords() )
 	{
-		int iLen = tWord.m_sWord.Length();
+		int iLen = Min (tWord.m_sWord.Length(), sizeof(sTmp)-1 );
 		assert ( iLen < (int)sizeof( sTmp ) );
 
 		if ( !iLen )
@@ -372,7 +372,7 @@ static void DoQueryGetTerms ( const XQNode_t * pNode, const DictRefPtr_c& pDict,
 		if ( hDict.m_hTerms.Find ( uHash ) )
 			continue;
 
-		int iLen = tWord.m_sWord.Length();
+		int iLen = Min ( tWord.m_sWord.Length(), sizeof(sTmp)-1 );
 		assert ( iLen < (int)sizeof( sTmp ) );
 
 		if ( !iLen )

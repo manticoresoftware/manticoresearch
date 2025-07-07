@@ -34,8 +34,8 @@ The issue about it: https://github.com/manticoresoftware/manticoresearch/issues/
 ––– input –––
 curl -s -X POST http://localhost:9312/update -d '{"cluster": "unknown_cluster", "table": "d", "id": 2, "doc": {"f": 5}}'
 ––– output –––
-{"table":"d","id":2,"result":"noop"}
+{"error":{"type":"action_request_validation_exception","reason":"","table":"d"},"status":409}
 ––– input –––
-sleep 2; cat /var/log/manticore/searchd.log | grep 'response data' | cut -d' ' -f11-
+sleep 2; cat /var/log/manticore/searchd.log | grep 'response data' | cut -d' ' -f12-
 ––– output –––
-{"version":3,"type":"json response","message":{"error":{"type":"action_request_validation_exception","reason":"table t: table 't' is not in any cluster, use just 't'","table":"t"},"status":409},"meta":null,"error_code":0}
+{"version":3,"type":"json response","message":{"error":{"type":"action_request_validation_exception","reason":"","table":"d"},"status":409},"meta":null,"error_code":0}

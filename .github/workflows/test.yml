@@ -302,6 +302,8 @@ jobs:
     name: CLT
     needs: test_kit_docker_build
     uses: ./.github/workflows/clt_tests.yml
+    secrets:
+      OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
     with:
       docker_image: test-kit:img
       artifact_name: manticore_test_kit.img

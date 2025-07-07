@@ -1231,7 +1231,7 @@ TEST_F ( QueryParser, transform_different_fields )
 	Transform (
 		"( @title aaa @body !xxx ) | ( @body aaa @body !yyy )",
 		"( ( ( @title: aaa ) AND NOT ( @body: xxx ) ) | ( ( @body: aaa ) AND NOT ( @body: yyy ) ) )",
-		"( ( @title: aaa ) AND NOT ( ( @body: xxx )   ( @body: yyy ) ) )"
+		"( ( ( @title: aaa ) AND NOT ( @body: xxx ) ) | ( ( @body: aaa ) AND NOT ( @body: yyy ) ) )"
 	);
 }
 

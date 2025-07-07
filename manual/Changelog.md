@@ -1,5 +1,41 @@
 # Changelog
 
+## Version 13.2.3
+**Released**: Jul ?? 2025
+
+### Breaking Changes
+* ⚠️ [v13.0.0](https://github.com/manticoresoftware/manticoresearch/releases/tag/13.0.0)  Updated the KNN library API to support empty [float_vector](https://manual.manticoresearch.com/Creating_a_table/Data_types#Float-vector) values. This update doesn’t change the data format but does increase the Manticore Search / MCL API version.
+* ⚠️ [v12.0.0](https://github.com/manticoresoftware/manticoresearch/releases/tag/12.0.0) [ PR #3516](https://github.com/manticoresoftware/manticoresearch/pull/3516) Fixed a bug with incorrect source and destination row IDs during KNN index training and building. This update doesn’t change the data format but increases the Manticore Search / MCL API version.
+* ⚠️ [v11.0.0](https://github.com/manticoresoftware/manticoresearch/releases/tag/11.0.0)  Added support for new KNN vector search features like quantization, rescoring, and oversampling. This version changes the KNN data format and the [KNN_DIST() SQL syntax](https://manual.manticoresearch.com/Searching/KNN?client=SQL#KNN-vector-search). The new version can read older data, but older versions won't be able to read the new format.
+
+### New Features and Improvements
+* 🆕 [v13.2.0](https://github.com/manticoresoftware/manticoresearch/releases/tag/13.2.0) [ PR #3549](https://github.com/manticoresoftware/manticoresearch/issues/3525) Fixed an issue with `@@collation_database` that caused incompatibility with certain mysqldump versions
+* 🆕 [v13.1.0](https://github.com/manticoresoftware/manticoresearch/releases/tag/13.1.0) [ Issue #3489](https://github.com/manticoresoftware/manticoresearch/issues/3489) Fixed a bug in Fuzzy Search that prevented parsing of certain SQL queries
+* 🆕 [v12.1.0](https://github.com/manticoresoftware/manticoresearch/releases/tag/12.1.0) [ Issue #3426](https://github.com/manticoresoftware/manticoresearch/issues/3426) Added support for RHEL 10 operating systems
+* 🆕 [v11.1.0](https://github.com/manticoresoftware/manticoresearch/releases/tag/11.1.0)  Added support for empty float vectors in [KNN search](https://manual.manticoresearch.com/Searching/KNN#KNN-vector-search)
+* 🆕 [v10.2.0](https://github.com/manticoresoftware/manticoresearch/releases/tag/10.2.0) [ Issue #3252](https://github.com/manticoresoftware/manticoresearch/issues/3252) [log_level](https://manual.manticoresearch.com/Server_settings/Setting_variables_online#SET) now also adjusts Buddy's logging verbosity
+
+### Bug Fixes
+* 🪲 [v13.2.3](https://github.com/manticoresoftware/manticoresearch/releases/tag/13.2.3) [ PR #3556](https://github.com/manticoresoftware/manticoresearch/pull/3556) Fixed "oversampling" option parsing in JSON queries
+* 🪲 [v13.2.2](https://github.com/manticoresoftware/manticoresearch/releases/tag/13.2.2)  Fixed crash logging on Linux and FreeBSD by removing usage of Boost stacktrace
+* 🪲 [v13.2.1](https://github.com/manticoresoftware/manticoresearch/releases/tag/13.2.1) [ Issue #3298](https://github.com/manticoresoftware/manticoresearch/issues/3298) Fixed crash logging when running inside a container
+* 🪲 [v12.0.2](https://github.com/manticoresoftware/manticoresearch/releases/tag/12.0.2)  Improved accuracy of per-table statistics by counting in microseconds
+* 🪲 [v12.0.1](https://github.com/manticoresoftware/manticoresearch/releases/tag/12.0.1) [ PR #3522](https://github.com/manticoresoftware/manticoresearch/pull/3522) Fixed a crash when faceting by MVA in a joined query
+* 🪲 [v11.0.3](https://github.com/manticoresoftware/manticoresearch/releases/tag/11.0.3) [ Issue #3502](https://github.com/manticoresoftware/manticoresearch/issues/3502) Fixed a crash related to Vector Search Quantization
+* 🪲 [v11.0.2](https://github.com/manticoresoftware/manticoresearch/releases/tag/11.0.2) [ Issue #3493](https://github.com/manticoresoftware/manticoresearch/issues/3493) Changed `SHOW THREADS` to display CPU utilization as an integer
+* 🪲 [v11.0.1](https://github.com/manticoresoftware/manticoresearch/releases/tag/11.0.1)  Fixed paths for columnar and secondary libraries
+* 🪲 [v10.2.7](https://github.com/manticoresoftware/manticoresearch/releases/tag/10.2.7)  Added support for MCL 5.0.5, including a fix for the embeddings library filename
+* 🪲 [v10.2.6](https://github.com/manticoresoftware/manticoresearch/releases/tag/10.2.6) [ Issue #3469](https://github.com/manticoresoftware/manticoresearch/issues/3469) Applied another fix related to issue #3469
+* 🪲 [v10.2.4](https://github.com/manticoresoftware/manticoresearch/releases/tag/10.2.4) [ Issue #3469](https://github.com/manticoresoftware/manticoresearch/issues/3469) Fixed an issue where HTTP requests with bool queries returned empty results
+* 🪲 [v10.2.5](https://github.com/manticoresoftware/manticoresearch/releases/tag/10.2.5)  Changed default filename for the embeddings library and added checks for the 'from' field in KNN vectors
+* 🪲 [v10.2.3](https://github.com/manticoresoftware/manticoresearch/releases/tag/10.2.3) [ PR #3464](https://github.com/manticoresoftware/manticoresearch/pull/3464) Updated Buddy to version 3.30.2, which includes [PR #565 about memory usage and error logging](https://github.com/manticoresoftware/manticoresearch-buddy/pull/565)
+* 🪲 [v10.2.2](https://github.com/manticoresoftware/manticoresearch/releases/tag/10.2.2) [ Issue #3470](https://github.com/manticoresoftware/manticoresearch/pull/3470) Fixed JSON string filters, null filters, and ordering issues in JOIN queries
+* 🪲 [v10.2.1](https://github.com/manticoresoftware/manticoresearch/releases/tag/10.2.1)  Fixed a bug in `dist/test_kit_docker_build.sh` that caused the Buddy commit to be missing
+* 🪲 [v10.1.4](https://github.com/manticoresoftware/manticoresearch/releases/tag/10.1.4)  Fixed a crash when grouping by MVA in a joined query
+* 🪲 [v10.1.3](https://github.com/manticoresoftware/manticoresearch/releases/tag/10.1.3) [ Issue #3434](https://github.com/manticoresoftware/manticoresearch/issues/3434) Fixed a bug with filtering empty strings
+* 🪲 [v10.1.2](https://github.com/manticoresoftware/manticoresearch/releases/tag/10.1.2) [ PR #3452](https://github.com/manticoresoftware/manticoresearch/pull/3452) Updated Buddy to version 3.29.7, which resolves [Buddy #507 - error on multi-query requests with fuzzy search](https://github.com/manticoresoftware/manticoresearch-buddy/issues/507) and [Buddy #561 - Fix for metrics rate](https://github.com/manticoresoftware/manticoresearch-buddy/pull/561), required for [Helm Release 10.1.0](https://github.com/manticoresoftware/manticoresearch-helm/releases/tag/manticoresearch-10.1.0)
+* 🪲 [v10.1.1](https://github.com/manticoresoftware/manticoresearch/releases/tag/10.1.1)  Updated Buddy to version 3.29.4, resolving [#3388 - "Undefined array key 'Field'"](https://github.com/manticoresoftware/manticoresearch/issues/3388) and [Buddy #547 - layouts='ru' may not work](https://github.com/manticoresoftware/manticoresearch-buddy/issues/547)
+
 ## Version 10.1.0
 **Released**: June 9th 2025
 

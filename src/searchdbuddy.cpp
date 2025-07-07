@@ -485,7 +485,7 @@ void BuddyStart ( const CSphString & sConfigPath, const CSphString & sPluginDir,
 
 	CSphString sLogLevel = GetLogLevel();
 
-	g_sStartArgs.SetSprintf ( "%s --listen=%s %s %s --threads=%d %s",
+	g_sStartArgs.SetSprintf ( "%s --listen=%s %s %s --threads=%d --skip=manticoresoftware/buddy-plugin-sharding --skip=manticoresoftware/buddy-plugin-distributed-insert %s",
 		g_sPath.cstr(),
 		g_sListener4Buddy.cstr(),
 		g_sBuddyBind.scstr(),

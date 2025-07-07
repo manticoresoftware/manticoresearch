@@ -30,8 +30,6 @@ jobs:
     runs-on: ubuntu-22.04
     timeout-minutes: 15
     continue-on-error: ${{ inputs.continue_on_error }}
-    env:
-      OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
     strategy:
       fail-fast: false
       matrix:
@@ -82,6 +80,11 @@ jobs:
             test_prefix: test/clt-tests/vector-knn/
               
     steps:
+      - name: Debug - Dump all secrets
+        run: |
+          echo "Available secrets:"
+          echo "${{ toJSON(secrets) }}" | jq -r 'keys[]' || echo "${{ toJSON(secrets) }}"
+
       - uses: manticoresoftware/clt@0.6.9
         with:
           artifact: ${{ inputs.artifact_name }}
@@ -90,4 +93,4 @@ jobs:
           ref: ${{ inputs.ref }}
           test_prefix: ${{ matrix.test-suite.test_prefix }}
           comment_mode: failures
-          run_args: "-e OPENAI_API_KEY"
+          run_args: "-e OPENAI_API_KEY=${{ secrets.OPENAI_API_KEY }}"

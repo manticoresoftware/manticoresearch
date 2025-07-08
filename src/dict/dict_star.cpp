@@ -60,7 +60,7 @@ SphWordID_t DictStar_c::GetWordID ( BYTE* pWord )
 	}
 
 	iLen = (int)strlen ( (const char*)pWord );
-	assert ( iLen < 16 + 3 * SPH_MAX_WORD_LEN ); // < 140
+	assert ( iLen < 16 + 3 * SPH_MAX_WORD_LEN ); // < 142
 
 	if ( !iLen || ( bHeadStar && iLen == 1 ) )
 		return 0;

@@ -21,6 +21,7 @@ on:
       - maintenance-release
       - manticore-*
 
+      
 # cancels the previous workflow run when a new one appears in the same branch (e.g. master or a PR's branch)
 concurrency:
   group: pack_galera_${{ github.ref }}

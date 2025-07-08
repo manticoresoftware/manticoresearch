@@ -587,7 +587,7 @@ bool CSphTokenizerIndex::GetKeywords ( CSphVector <CSphKeywordInfo> & dKeywords,
 	if ( IsStarDict ( pDict->GetSettings().m_bWordDict ) )
 	{
 		pTokenizer->AddPlainChars ( "*" );
-		SetupStarDictOld ( pDict );
+		SetupStarDictV8 ( pDict, false );
 	}
 
 	if ( m_tSettings.m_bIndexExactWords )

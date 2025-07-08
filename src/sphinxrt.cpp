@@ -7845,7 +7845,7 @@ static bool PerformFullscan ( const VecTraits_T<RtSegmentRefPtf_t> & dRamChunks,
 }
 
 
-static bool DoFullScanQuery ( const RtSegVec_c & dRamChunks, const ISphSchema & tMaxSorterSchema, const ISphSchema & tIndexSchema, const CSphQuery & tQuery, const CSphMultiQueryArgs & tArgs, int iStride, int64_t tmMaxTimer, QueryProfile_c * pProfiler, CSphQueryContext & tCtx, VecTraits_T<ISphMatchSorter*> & dSorters, CSphQueryResultMeta & tMeta )
+static bool DoFullScanQuery ( const RtSegVec_c & dRamChunks, const ISphSchema & tMaxSorterSchema, const CSphQuery & tQuery, const CSphMultiQueryArgs & tArgs, int iStride, int64_t tmMaxTimer, QueryProfile_c * pProfiler, CSphQueryContext & tCtx, VecTraits_T<ISphMatchSorter*> & dSorters, CSphQueryResultMeta & tMeta )
 {
 	// probably redundant, but just in case
 	SwitchProfile ( pProfiler, SPH_QSTATE_INIT );
@@ -7967,8 +7967,7 @@ static void PerformFullTextSearch ( const RtSegVec_c & dRamChunks, RtQwordSetup_
 	}
 }
 
-
-static bool DoFullTextSearch ( const RtSegVec_c & dRamChunks, const ISphSchema & tMaxSorterSchema, const ISphSchema & tIndexSchema, const CSphQuery & tQuery, const char * szIndexName, const CSphMultiQueryArgs & tArgs, int iMatchPoolSize, int iStackNeed, RtQwordSetup_t & tTermSetup, QueryProfile_c * pProfiler, CSphQueryContext & tCtx, VecTraits_T<ISphMatchSorter*> & dSorters, XQQuery_t & tParsed, CSphQueryResultMeta & tMeta, ISphMatchSorter * pSorter )
+static bool DoFullTextSearch ( const RtSegVec_c & dRamChunks, const ISphSchema & tMaxSorterSchema, const CSphQuery & tQuery, const CSphMultiQueryArgs & tArgs, int iMatchPoolSize, int iStackNeed, RtQwordSetup_t & tTermSetup, QueryProfile_c * pProfiler, CSphQueryContext & tCtx, VecTraits_T<ISphMatchSorter*> & dSorters, XQQuery_t & tParsed, CSphQueryResultMeta & tMeta, ISphMatchSorter * pSorter )
 {
 	// set zonespanlist settings
 	tParsed.m_bNeedSZlist = tQuery.m_bZSlist;
@@ -8121,7 +8120,7 @@ bool RtIndex_c::MultiQuery ( CSphQueryResult & tResult, const CSphQuery & tQuery
 	DictRefPtr_c pDict = GetStatelessDict ( m_pDict );
 
 	if ( m_bKeywordDict && IsStarDict ( m_bKeywordDict ) )
-		SetupStarDictV8 ( pDict );
+		SetupStarDict ( pDict );
 
 	if ( m_tSettings.m_bIndexExactWords )
 		SetupExactDict ( pDict );
@@ -8286,14 +8285,14 @@ bool RtIndex_c::MultiQuery ( CSphQueryResult & tResult, const CSphQuery & tQuery
 
 	bool bResult;
 	if ( bParsedFullscan )
-		bResult = DoFullScanQuery ( tGuard.m_dRamSegs, tMaxSorterSchema, m_tSchema, tQuery, tArgs, m_iStride, tmMaxTimer, pProfiler, tCtx, dSorters, tMeta );
+		bResult = DoFullScanQuery ( tGuard.m_dRamSegs, tMaxSorterSchema, tQuery, tArgs, m_iStride, tmMaxTimer, pProfiler, tCtx, dSorters, tMeta );
 	else
 	{
 		CSphMultiQueryArgs tFTArgs ( tArgs.m_iIndexWeight );
 		tFTArgs.m_bFinalizeSorters = tArgs.m_bFinalizeSorters;
 		tMeta.m_bBigram = ( m_tSettings.m_eBigramIndex!=SPH_BIGRAM_NONE );
 
-		bResult = DoFullTextSearch ( tGuard.m_dRamSegs, tMaxSorterSchema, m_tSchema, tQuery, GetName(), tFTArgs, iMatchPoolSize, iStackNeed, tTermSetup, pProfiler, tCtx, dSorters, tParsed, tMeta, dSorters.GetLength()==1 ? dSorters[0] : nullptr );
+		bResult = DoFullTextSearch ( tGuard.m_dRamSegs, tMaxSorterSchema, tQuery, tFTArgs, iMatchPoolSize, iStackNeed, tTermSetup, pProfiler, tCtx, dSorters, tParsed, tMeta, dSorters.GetLength()==1 ? dSorters[0] : nullptr );
 	}
 
 	if (!bResult)
@@ -8389,7 +8388,7 @@ bool RtIndex_c::DoGetKeywords ( CSphVector<CSphKeywordInfo> & dKeywords, const c
 	{
 		SetupStarTokenizer ( pTokenizer );
 		if ( m_bKeywordDict )
-			SetupStarDictV8 ( pDict );
+			SetupStarDict ( pDict );
 	}
 
 	if ( m_tSettings.m_bIndexExactWords )
@@ -10918,7 +10917,7 @@ Bson_t RtIndex_c::ExplainQuery ( const CSphString & sQuery ) const
 	SetupExactTokenizer ( pQueryTokenizer );
 
 	tArgs.m_pDict = GetStatelessDict ( m_pDict );
-	SetupStarDictV8 ( tArgs.m_pDict );
+	SetupStarDict ( tArgs.m_pDict );
 	SetupExactDict ( tArgs.m_pDict );
 	if ( m_pFieldFilter )
 		tArgs.m_pFieldFilter = m_pFieldFilter->Clone();

@@ -47,6 +47,8 @@ declare -a urls=(
   "centos-8-aarch64.html https://repo.manticoresearch.com/repository/manticoresearch/${REPO_TYPE}/centos/8/aarch64/"
   "centos-9-x86_64.html https://repo.manticoresearch.com/repository/manticoresearch/${REPO_TYPE}/centos/9/x86_64/"
   "centos-9-aarch64.html https://repo.manticoresearch.com/repository/manticoresearch/${REPO_TYPE}/centos/9/aarch64/"
+  "centos-10-x86_64.html https://repo.manticoresearch.com/repository/manticoresearch/${REPO_TYPE}/centos/10/x86_64/"
+  "centos-10-aarch64.html https://repo.manticoresearch.com/repository/manticoresearch/${REPO_TYPE}/centos/10/aarch64/"
   "macos.html https://repo.manticoresearch.com/repository/manticoresearch_macos/${REPO_TYPE}/"
   "windows-x64.html https://repo.manticoresearch.com/repository/manticoresearch_windows/${REPO_TYPE}/x64/"
 )

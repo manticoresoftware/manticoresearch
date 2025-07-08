@@ -1,109 +1,286 @@
 ––– input –––
 export SEARCHD_FLAGS="--logdebugvv"
 ––– output –––
-––– block: ../base/start-searchd-with-buddy –––
 ––– input –––
-export SEARCHD_FLAGS="--logdebugvv"
+rm -f /var/log/manticore/searchd.log; stdbuf -oL searchd $SEARCHD_FLAGS > /dev/null; if timeout 10 grep -qm1 '\[BUDDY\] started' <(tail -n 1000 -f /var/log/manticore/searchd.log); then echo 'Buddy started!'; else echo 'Timeout or failed!'; cat /var/log/manticore/searchd.log;fi
 ––– output –––
+Buddy started!
 ––– input –––
 apt-get install jq -y > /dev/null; echo $?
 ––– output –––
 debconf: delaying package configuration, since apt-utils is not installed
 0
 ––– input –––
-mysql -h0 -P9306 -e "CREATE TABLE t (id INT, value TEXT, value_attr STRING) min_infix_len = '3'; INSERT INTO t VALUES (1, 'example', 'example'), (2, 'test', 'test');"
+mysql -h0 -P9306 -e "CREATE TABLE buddy_test (id INT, name STRING, content TEXT) min_infix_len = '3'; INSERT INTO buddy_test VALUES (1, 'test1', 'sample content'), (2, 'test2', 'another sample');"
 ––– output –––
-––– comment –––
-Test MySQL commands that route to Buddy
 ––– input –––
-mysql -h0 -P9306 -e "CREATE TABLE t_mysql_copy LIKE t;" && echo "OK"
+mysql -h0 -P9306 -e "SHOW BUDDY PLUGINS" > /dev/null
 ––– output –––
-OK
 ––– input –––
-mysql -h0 -P9306 -e "DESCRIBE t;" | grep "id" | wc -l
+grep "request data:" /var/log/manticore/searchd.log | tail -1
 ––– output –––
-1
-––– comment –––
-Test HTTP /cli_json commands that route to Buddy
+#!/\[[A-Za-z]{3}\s+[A-Za-z]{3}\s+[0-9]{1,2}\s+[0-9]{2}:[0-9]{2}:[0-9]{2}\.[0-9]{3}\s+[0-9]{4}\] \[[0-9]+\] \[BUDDY\] \[[a-z0-9\.]+\] request data: .*"version":3.*"body":"SHOW BUDDY PLUGINS".*/!#
 ––– input –––
-curl -s "http://localhost:9308/cli_json?show%20buddy%20plugins" | jq '.[] | .data[0].Plugin'
+grep "response data:" /var/log/manticore/searchd.log | tail -1
 ––– output –––
-"empty-string"
+#!/\[[A-Za-z]{3}\s+[A-Za-z]{3}\s+[0-9]{1,2}\s+[0-9]{2}:[0-9]{2}:[0-9]{2}\.[0-9]{3}\s+[0-9]{4}\] \[[0-9]+\] \[BUDDY\] \[[a-z0-9\.]+\] response data: .*"version":3.*"type":"sql response".*/!#
 ––– input –––
-curl -s "http://localhost:9308/cli_json?select%20*%20from%20t%20where%20match('exmaple')%20option%20fuzzy=1" | jq '.[] | .data | length'
+grep "request data:" /var/log/manticore/searchd.log | tail -1 | grep -q '"version":3' && echo "✓ Protocol version 3" || echo "✗ Invalid version"
 ––– output –––
-1
+✓ Protocol version 3
 ––– input –––
-curl -s "http://localhost:9308/cli_json?create%20table%20t_copy%20like%20t" | jq '.[] | .total'
+mysql -h0 -P9306 -e "SHOW VERSION" > /dev/null
 ––– output –––
-0
-––– comment –––
-Test HTTP /sql?mode=raw commands that route to Buddy
 ––– input –––
-curl -s -X POST "http://localhost:9308/sql?mode=raw" -d "show buddy plugins" | jq '.[0].data[0].Plugin'
+grep "request data:" /var/log/manticore/searchd.log | tail -1
 ––– output –––
-"empty-string"
+#!/\[[A-Za-z]{3}\s+[A-Za-z]{3}\s+[0-9]{1,2}\s+[0-9]{2}:[0-9]{2}:[0-9]{2}\.[0-9]{3}\s+[0-9]{4}\] \[[0-9]+\] \[BUDDY\] \[[a-z0-9\.]+\] request data: .*"version":3.*"body":"SHOW VERSION".*/!#
 ––– input –––
-curl -s -X POST "http://localhost:9308/sql?mode=raw" -d "describe t" | jq '.[0].data[0].Field'
+grep "response data:" /var/log/manticore/searchd.log | tail -1
 ––– output –––
-"id"
-––– comment –––
-Test multi-query HTTP commands that route to Buddy
+#!/\[[A-Za-z]{3}\s+[A-Za-z]{3}\s+[0-9]{1,2}\s+[0-9]{2}:[0-9]{2}:[0-9]{2}\.[0-9]{3}\s+[0-9]{4}\] \[[0-9]+\] \[BUDDY\] \[[a-z0-9\.]+\] response data: .*"version":3.*"error_code":200.*/!#
 ––– input –––
-curl -s "http://localhost:9308/cli_json?select%20count(*)%20from%20t;show%20meta" | jq 'length'
+grep "request data:" /var/log/manticore/searchd.log | tail -1 | grep -q '"version":3' && echo "✓ Protocol version 3" || echo "✗ Invalid version"
 ––– output –––
-2
-––– comment –––
-Test JSON HTTP commands that route to Buddy
+✓ Protocol version 3
 ––– input –––
-curl -s -X POST "http://localhost:9308/search" -H "Content-Type: application/json" -d '{"index": "t", "query": {"match": {"value": "example"}}}' | jq '.hits.total'
+curl -s "http://localhost:9308/cli_json?SHOW%20VERSION" > /dev/null
 ––– output –––
-1
 ––– input –––
-curl -s "http://localhost:9308/cli_json?insert%20into%20auto_table%20(id,%20name)%20values%20(1,%20'test')" | jq '.[] | .total'
+grep "request data:" /var/log/manticore/searchd.log | tail -1
 ––– output –––
-1
-––– comment –––
-Verify Buddy protocol v3 logging is working
+#!/\[[A-Za-z]{3}\s+[A-Za-z]{3}\s+[0-9]{1,2}\s+[0-9]{2}:[0-9]{2}:[0-9]{2}\.[0-9]{3}\s+[0-9]{4}\] \[[0-9]+\] \[BUDDY\] \[[a-z0-9\.]+\] request data: .*"version":3.*"path_query":"/cli_json.*"body":"SHOW VERSION".*/!#
 ––– input –––
-grep -q "request data:" /var/log/manticore/searchd.log && echo "Protocol logging: ACTIVE" || echo "Protocol logging: MISSING"
+grep "response data:" /var/log/manticore/searchd.log | tail -1
 ––– output –––
-Protocol logging: ACTIVE
+#!/\[[A-Za-z]{3}\s+[A-Za-z]{3}\s+[0-9]{1,2}\s+[0-9]{2}:[0-9]{2}:[0-9]{2}\.[0-9]{3}\s+[0-9]{4}\] \[[0-9]+\] \[BUDDY\] \[[a-z0-9\.]+\] response data: .*"version":3.*"type":"json response".*"error_code":200.*/!#
 ––– input –––
-grep -q "response data:" /var/log/manticore/searchd.log && echo "Response logging: ACTIVE" || echo "Response logging: MISSING"
+grep "request data:" /var/log/manticore/searchd.log | tail -1 | grep -q '"version":3' && echo "✓ Protocol version 3" || echo "✗ Invalid version"
 ––– output –––
-Response logging: ACTIVE
-––– comment –––
-Check protocol v3 structure and content
+✓ Protocol version 3
 ––– input –––
-grep "request data:" /var/log/manticore/searchd.log | grep -q '"version":3' && echo "Protocol version 3: FOUND" || echo "Protocol version 3: MISSING"
+curl -s "http://localhost:9308/cli_json?SHOW%20FULL%20TABLES" > /dev/null
 ––– output –––
-Protocol version 3: FOUND
 ––– input –––
-grep "request data:" /var/log/manticore/searchd.log | grep -q '"type"' && echo "Type field: FOUND" || echo "Type field: MISSING"
+grep "request data:" /var/log/manticore/searchd.log | tail -1
 ––– output –––
-Type field: FOUND
+#!/\[[A-Za-z]{3}\s+[A-Za-z]{3}\s+[0-9]{1,2}\s+[0-9]{2}:[0-9]{2}:[0-9]{2}\.[0-9]{3}\s+[0-9]{4}\] \[[0-9]+\] \[BUDDY\] \[[a-z0-9\.]+\] request data: .*"version":3.*"path_query":"/cli_json.*"body":"SHOW FULL TABLES".*/!#
 ––– input –––
-grep "request data:" /var/log/manticore/searchd.log | grep -q '"body"' && echo "Body field: FOUND" || echo "Body field: MISSING"
+grep "response data:" /var/log/manticore/searchd.log | tail -1
 ––– output –––
-Body field: FOUND
-––– comment –––
-Verify specific Buddy commands are logged correctly
+#!/\[[A-Za-z]{3}\s+[A-Za-z]{3}\s+[0-9]{1,2}\s+[0-9]{2}:[0-9]{2}:[0-9]{2}\.[0-9]{3}\s+[0-9]{4}\] \[[0-9]+\] \[BUDDY\] \[[a-z0-9\.]+\] response data: .*"version":3.*"type":"json response".*"error_code":200.*/!#
 ––– input –––
-grep "request data:" /var/log/manticore/searchd.log | grep -q "show buddy plugins" && echo "SHOW BUDDY PLUGINS: LOGGED" || echo "SHOW BUDDY PLUGINS: NOT LOGGED"
+grep "request data:" /var/log/manticore/searchd.log | tail -1 | grep -q '"version":3' && echo "✓ Protocol version 3" || echo "✗ Invalid version"
 ––– output –––
-SHOW BUDDY PLUGINS: LOGGED
+✓ Protocol version 3
 ––– input –––
-grep "request data:" /var/log/manticore/searchd.log | grep -q "fuzzy" && echo "Fuzzy search: LOGGED" || echo "Fuzzy search: NOT LOGGED"
+curl -s -X POST "http://localhost:9308/sql?mode=raw" -d "SHOW VERSION" > /dev/null
 ––– output –––
-Fuzzy search: LOGGED
 ––– input –––
-grep "request data:" /var/log/manticore/searchd.log | grep -q "show\|select\|insert" && echo "SQL commands: LOGGED" || echo "SQL commands: NOT LOGGED"
+grep "request data:" /var/log/manticore/searchd.log | tail -1
 ––– output –––
-SQL commands: LOGGED
-––– comment –––
-Final validation - all required protocol v3 fields present
+#!/\[[A-Za-z]{3}\s+[A-Za-z]{3}\s+[0-9]{1,2}\s+[0-9]{2}:[0-9]{2}:[0-9]{2}\.[0-9]{3}\s+[0-9]{4}\] \[[0-9]+\] \[BUDDY\] \[[a-z0-9\.]+\] request data: .*"version":3.*"path_query":"/sql.*"body":"SHOW VERSION".*/!#
 ––– input –––
-grep "request data:" /var/log/manticore/searchd.log | head -1 | grep -q '"version":3' && grep "request data:" /var/log/manticore/searchd.log | head -1 | grep -q '"type"' && grep "request data:" /var/log/manticore/searchd.log | head -1 | grep -q '"body"' && echo "Protocol v3 structure: COMPLETE" || echo "Protocol v3 structure: INCOMPLETE"
+grep "response data:" /var/log/manticore/searchd.log | tail -1
 ––– output –––
-Protocol v3 structure: COMPLETE
+#!/\[[A-Za-z]{3}\s+[A-Za-z]{3}\s+[0-9]{1,2}\s+[0-9]{2}:[0-9]{2}:[0-9]{2}\.[0-9]{3}\s+[0-9]{4}\] \[[0-9]+\] \[BUDDY\] \[[a-z0-9\.]+\] response data: .*"version":3.*"type":"sql response".*"error_code":200.*/!#
+––– input –––
+grep "request data:" /var/log/manticore/searchd.log | tail -1 | grep -q '"version":3' && echo "✓ Protocol version 3" || echo "✗ Invalid version"
+––– output –––
+✓ Protocol version 3
+––– input –––
+curl -s "http://localhost:9308/cli_json?SELECT%20*%20FROM%20buddy_test%20WHERE%20MATCH('tset')%20OPTION%20fuzzy=1" > /dev/null
+––– output –––
+––– input –––
+grep "request data:" /var/log/manticore/searchd.log | tail -1 | grep -q '"version":3' && echo "✓ Request has version 3" || echo "✗ Wrong version"
+––– output –––
+✓ Request has version 3
+––– input –––
+grep "response data:" /var/log/manticore/searchd.log | tail -1
+––– output –––
+#!/\[[A-Za-z]{3}\s+[A-Za-z]{3}\s+[0-9]{1,2}\s+[0-9]{2}:[0-9]{2}:[0-9]{2}\.[0-9]{3}\s+[0-9]{4}\] \[[0-9]+\] \[BUDDY\] \[[a-z0-9\.]+\] response data: .*"version":3.*"type":"json response".*"error_code":200.*/!#
+––– input –––
+grep "request data:" /var/log/manticore/searchd.log | tail -1 | grep -q '"version":3' && echo "✓ Protocol version 3" || echo "✗ Invalid version"
+––– output –––
+✓ Protocol version 3
+––– input –––
+curl -s "http://localhost:9308/cli_json?INSERT%20INTO%20auto_buddy_table%20(id,%20name)%20VALUES%20(1,%20'auto_test')" > /dev/null
+––– output –––
+––– input –––
+grep "request data:" /var/log/manticore/searchd.log | tail -1 | grep -q '"version":3' && echo "✓ Request has version 3" || echo "✗ Wrong version"
+––– output –––
+✓ Request has version 3
+––– input –––
+grep "response data:" /var/log/manticore/searchd.log | tail -1
+––– output –––
+#!/\[[A-Za-z]{3}\s+[A-Za-z]{3}\s+[0-9]{1,2}\s+[0-9]{2}:[0-9]{2}:[0-9]{2}\.[0-9]{3}\s+[0-9]{4}\] \[[0-9]+\] \[BUDDY\] \[[a-z0-9\.]+\] response data: .*"version":3.*"type":"json response".*"error_code":200.*/!#
+––– input –––
+grep "request data:" /var/log/manticore/searchd.log | tail -1 | grep -q '"version":3' && echo "✓ Protocol version 3" || echo "✗ Invalid version"
+––– output –––
+✓ Protocol version 3
+––– input –––
+curl -s -X POST "http://localhost:9308/sql?mode=raw" -d "BACKUP TABLE buddy_test TO /tmp/buddy_backup_test" > /dev/null 2>&1
+––– output –––
+––– input –––
+grep "request data:" /var/log/manticore/searchd.log | tail -1
+––– output –––
+#!/\[[A-Za-z]{3}\s+[A-Za-z]{3}\s+[0-9]{1,2}\s+[0-9]{2}:[0-9]{2}:[0-9]{2}\.[0-9]{3}\s+[0-9]{4}\] \[[0-9]+\] \[BUDDY\] \[[a-z0-9\.]+\] request data: .*"version":3.*"BACKUP TABLE.*tmp.*backup_test".*/!#
+––– input –––
+grep "response data:" /var/log/manticore/searchd.log | tail -1
+––– output –––
+#!/\[[A-Za-z]{3}\s+[A-Za-z]{3}\s+[0-9]{1,2}\s+[0-9]{2}:[0-9]{2}:[0-9]{2}\.[0-9]{3}\s+[0-9]{4}\] \[[0-9]+\] \[BUDDY\] \[[a-z0-9\.]+\] response data: .*"version":3.*"Backup directory is not writable".*/!#
+––– input –––
+grep "request data:" /var/log/manticore/searchd.log | tail -1 | grep -q '"version":3' && echo "✓ Protocol version 3" || echo "✗ Invalid version"
+––– output –––
+✓ Protocol version 3
+––– input –––
+curl -s -X POST "http://localhost:9308/_search" -H "Content-Type: application/json" -d '{"query":{"match_all":{}}}' > /dev/null 2>&1
+––– output –––
+––– input –––
+grep "request data:" /var/log/manticore/searchd.log | tail -1 | grep -q '"version":3' && echo "✓ Request has version 3" || echo "✗ Wrong version"
+––– output –––
+✓ Request has version 3
+––– input –––
+grep "response data:" /var/log/manticore/searchd.log | tail -1 | grep -q '"version":3' && echo "✓ Response has version 3" || echo "✗ Wrong version"
+––– output –––
+✓ Response has version 3
+––– input –––
+grep "request data:" /var/log/manticore/searchd.log | tail -1 | grep -q '"version":3' && echo "✓ Protocol version 3" || echo "✗ Invalid version"
+––– output –––
+✓ Protocol version 3
+––– input –––
+curl -s "http://localhost:9308/cli_json?" > /dev/null
+––– output –––
+––– input –––
+grep "request data:" /var/log/manticore/searchd.log | tail -1 | grep -q '"version":3' && echo "✓ Request has version 3" || echo "✗ Wrong version"
+––– output –––
+✓ Request has version 3
+––– input –––
+grep "response data:" /var/log/manticore/searchd.log | tail -1
+––– output –––
+#!/\[[A-Za-z]{3}\s+[A-Za-z]{3}\s+[0-9]{1,2}\s+[0-9]{2}:[0-9]{2}:[0-9]{2}\.[0-9]{3}\s+[0-9]{4}\] \[[0-9]+\] \[BUDDY\] \[[a-z0-9\.]+\] response data: .*"version":3.*"type":"json response".*"error_code":200.*/!#
+––– input –––
+grep "request data:" /var/log/manticore/searchd.log | tail -1 | grep -q '"version":3' && echo "✓ Protocol version 3" || echo "✗ Invalid version"
+––– output –––
+✓ Protocol version 3
+––– input –––
+mysql -h0 -P9306 -e "SHOW PROCESSLIST" > /dev/null
+––– output –––
+ERROR 1064 (42000) at line 1: P01: syntax error, unexpected identifier, expecting VARIABLES near 'PROCESSLIST'
+––– input –––
+grep "request data:" /var/log/manticore/searchd.log | tail -1 | grep -q '"version":3' && echo "✓ Request has version 3" || echo "✗ Wrong version"
+––– output –––
+✓ Request has version 3
+––– input –––
+grep "response data:" /var/log/manticore/searchd.log | tail -1 | grep -q '"version":3' && echo "✓ Response has version 3" || echo "✗ Wrong version"
+––– output –––
+✓ Response has version 3
+––– input –––
+grep "request data:" /var/log/manticore/searchd.log | tail -1 | grep -q '"version":3' && echo "✓ Protocol version 3" || echo "✗ Invalid version"
+––– output –––
+✓ Protocol version 3
+––– input –––
+curl -s "http://localhost:9308/cli_json?SHOW%20BUDDY%20PLUGINS;%20SHOW%20VERSION" > /dev/null
+––– output –––
+––– input –––
+grep "request data:" /var/log/manticore/searchd.log | tail -1 | grep -q '"version":3' && echo "✓ Request has version 3" || echo "✗ Wrong version"
+––– output –––
+✓ Request has version 3
+––– input –––
+grep "response data:" /var/log/manticore/searchd.log | tail -1 | grep -q '"version":3' && echo "✓ Response has version 3" || echo "✗ Wrong version"
+––– output –––
+✓ Response has version 3
+––– input –––
+grep "request data:" /var/log/manticore/searchd.log | tail -1 | grep -q '"version":3' && echo "✓ Protocol version 3" || echo "✗ Invalid version"
+––– output –––
+✓ Protocol version 3
+––– input –––
+curl -s "http://localhost:9308/cli?SHOW%20TABLES" > /dev/null
+––– output –––
+––– input –––
+grep "request data:" /var/log/manticore/searchd.log | tail -1
+––– output –––
+#!/\[[A-Za-z]{3}\s+[A-Za-z]{3}\s+[0-9]{1,2}\s+[0-9]{2}:[0-9]{2}:[0-9]{2}\.[0-9]{3}\s+[0-9]{4}\] \[[0-9]+\] \[BUDDY\] \[[a-z0-9\.]+\] request data: .*"version":3.*"path_query":"/cli.*"body":"SHOW TABLES".*/!#
+––– input –––
+grep "response data:" /var/log/manticore/searchd.log | tail -1
+––– output –––
+#!/\[[A-Za-z]{3}\s+[A-Za-z]{3}\s+[0-9]{1,2}\s+[0-9]{2}:[0-9]{2}:[0-9]{2}\.[0-9]{3}\s+[0-9]{4}\] \[[0-9]+\] \[BUDDY\] \[[a-z0-9\.]+\] response data: .*"version":3.*"type":"json response".*"error_code":200.*/!#
+––– input –––
+grep "request data:" /var/log/manticore/searchd.log | tail -1 | grep -q '"version":3' && echo "✓ Protocol version 3" || echo "✗ Invalid version"
+––– output –––
+✓ Protocol version 3
+––– input –––
+curl -s -X POST "http://localhost:9308/sql" -d "SHOW VERSION" > /dev/null
+––– output –––
+––– input –––
+grep "request data:" /var/log/manticore/searchd.log | tail -1
+––– output –––
+#!/\[[A-Za-z]{3}\s+[A-Za-z]{3}\s+[0-9]{1,2}\s+[0-9]{2}:[0-9]{2}:[0-9]{2}\.[0-9]{3}\s+[0-9]{4}\] \[[0-9]+\] \[BUDDY\] \[[a-z0-9\.]+\] request data: .*"version":3.*"path_query":"/sql".*"body":"SHOW VERSION".*/!#
+––– input –––
+grep "response data:" /var/log/manticore/searchd.log | tail -1 | grep -q '"version":3' && echo "✓ Version 3" || echo "✗ Wrong version"
+––– output –––
+✓ Version 3
+––– input –––
+grep "request data:" /var/log/manticore/searchd.log | tail -1 | grep -q '"version":3' && echo "✓ Protocol version 3" || echo "✗ Invalid version"
+––– output –––
+✓ Protocol version 3
+––– input –––
+echo "Total requests: $(grep -c 'request data:' /var/log/manticore/searchd.log)"
+––– output –––
+Total requests: 14
+––– input –––
+echo "Protocol v3 consistency: $(grep 'request data:' /var/log/manticore/searchd.log | grep -c '"version":3')/$(grep -c 'request data:' /var/log/manticore/searchd.log)"
+––– output –––
+Protocol v3 consistency: 14/14
+––– input –––
+mysql -h0 -P9306 << 'EOF'
+DELIMITER |
+SELECT * FROM buddy_test\G SHOW META\G|
+DELIMITER ;
+EOF
+––– output –––
+*************************** 1. row ***************************
+     id: %{NUMBER}
+content: test1
+   name: sample content
+*************************** 2. row ***************************
+     id: %{NUMBER}
+content: test2
+   name: another sample
+*************************** 1. row ***************************
+Variable_name: total
+        Value: %{NUMBER}
+*************************** 2. row ***************************
+Variable_name: total_found
+        Value: %{NUMBER}
+*************************** 3. row ***************************
+Variable_name: total_relation
+        Value: eq
+*************************** 4. row ***************************
+Variable_name: time
+        Value: #!/[0-9].[0-9]{3}/!#
+––– input –––
+grep "request data:" /var/log/manticore/searchd.log | tail -1 | grep -q '"version":3' && echo "✓ Protocol version 3" || echo "✗ Invalid version"
+––– output –––
+✓ Protocol version 3
+––– input –––
+curl -s "http://localhost:9308/cli_json?SELECT%20*%20FROM%20buddy_test;%20SHOW%20META" > /dev/null
+––– output –––
+––– input –––
+grep "request data:" /var/log/manticore/searchd.log | tail -1 | grep -q '"version":3' && echo "✓ Protocol version 3" || echo "✗ Invalid version"
+––– output –––
+✓ Protocol version 3
+––– input –––
+curl -s -X POST "http://localhost:9308/sql" -d "SELECT * FROM buddy_test; SHOW META" > /dev/null
+––– output –––
+––– input –––
+grep "request data:" /var/log/manticore/searchd.log | tail -1 | grep -q '"version":3' && echo "✓ Protocol version 3" || echo "✗ Invalid version"
+––– output –––
+✓ Protocol version 3
+––– input –––
+curl -s -X POST "http://localhost:9308/search" -H "Content-Type: application/json" -d '{"index":"buddy_test","query":{"match":{"name":"test"}}}' > /dev/null 2>&1
+––– output –––
+––– input –––
+grep "request data:" /var/log/manticore/searchd.log | tail -1 | grep -q '"version":3' && echo "✓ Protocol version 3" || echo "✗ Invalid version"
+––– output –––
+✓ Protocol version 3

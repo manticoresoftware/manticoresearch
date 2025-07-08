@@ -4,7 +4,6 @@
 <name>SENTENCE, PARAGRAPH, and ZONE operators</name>
 
 <requires>
-	<variant_match/>
 	<non-rt/>
 </requires>
 

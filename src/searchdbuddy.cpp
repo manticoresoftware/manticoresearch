@@ -36,6 +36,7 @@
 #include "searchdbuddy.h"
 #include "auth/auth.h"
 #include "auth/auth_proto_http.h"
+#include "searchdssl.h"
 
 static std::unique_ptr<boost::process::child> g_pBuddy;
 static CSphString g_sPath;
@@ -70,6 +71,8 @@ static bool g_bBuddyVersion = false;
 extern CSphString g_sStatusVersion;
 static CSphString g_sContainerName;
 static const CSphString g_sBuddyTokenName ( "BUDDY_TOKEN" );
+static const CSphString g_sBuddySslCertName ( "BUDDY_SSL_CERT_CONTENT" );
+static const CSphString g_sBuddySslKeyName ( "BUDDY_SSL_KEY_CONTENT" );
 
 // windows docker needs port XXX:9999 port mapping
 static std::unique_ptr<FreePortList_i> g_pBuddyPortList { nullptr };
@@ -379,6 +382,16 @@ BuddyState_e TryToStart ( const char * sArgs, CSphString & sError )
 	boost::process::environment tEnv = boost::this_process::environment();
 	if ( IsAuthEnabled() )
 		tEnv[g_sBuddyTokenName.cstr()] = GetBuddyToken().scstr();
+	if ( CheckWeCanUseSSL() )
+	{
+		CSphString sSslCert = GetSslCert();
+		CSphString sSslKey = GetSslKey();
+		if ( !sSslCert.IsEmpty() && !sSslKey.IsEmpty() )
+		{
+			tEnv[g_sBuddySslCertName.cstr()] = sSslCert.scstr();
+			tEnv[g_sBuddySslKeyName.cstr()] = sSslKey.scstr();
+		}
+	}
 
 #if _WIN32
 	BuddyWindow_t tWnd;
@@ -611,6 +624,10 @@ static std::pair<bool, CSphString> BuddyQuery ( bool bHttp, Str_t sQueryError, S
 			tBuddyQuery.NamedString ( "body", sQuery );
 			tBuddyQuery.NamedString ( "http_method", ( bHttp ? http_method_str ( eRequestType ) : "" ) );
 		}
+
+		// set user bearer that buddy should send back as request for that user
+		CSphString sBearer = GetBearer ( session::GetUser() );
+		tBuddyQuery.NamedString ( "Bearer", sBearer );
 	}
 
 	StrVec_t dHeaders;

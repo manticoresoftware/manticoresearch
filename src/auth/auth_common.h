@@ -40,6 +40,7 @@ public:
 	SmallStringHash_T<CSphString> m_hHttpToken2User;
 
 	SmallStringHash_T<UserPerms_t> m_hUserPerms;
+	bool m_bEnabled = false;
 
 	AuthUsers_t() = default;
 	~AuthUsers_t() = default;
@@ -69,3 +70,4 @@ CSphString ReadHex ( const char * sName, int iHashLen, const bson::Bson_c & tNod
 void SortUserPerms ( UserPerms_t & dPerms );
 CSphString WriteJson ( const AuthUsers_t & tAuth );
 AuthUsersMutablePtr_t ReadAuth ( char * sSrc, const CSphString & sSrcName, CSphString & sError );
+bool CreateAuthFile ( const CSphString & sFile, CSphString & sError );

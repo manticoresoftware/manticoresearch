@@ -37,20 +37,32 @@ static void AddBuddyToken ( const AuthUserCred_t * pSrcBuddy, AuthUsers_t & tDst
 
 void AuthConfigure ( const CSphConfigSection & hSearchd )
 {
-	CSphString sFile = hSearchd.GetStr ( "auth_user_file" );
-	if ( sFile.IsEmpty() )
+	CSphString sFile = hSearchd.GetStr ( "auth" );
+	if ( sFile.IsEmpty() || sFile=="0" )
 		return;
 
 	if ( !IsCurlAvailable() )
 		sphFatal ( "no curl found, can not start auth" );
 
-	g_sAuthFile = RealPath ( sFile );
 	CSphString sError;
+	if ( IsConfigless() )
+	{
+		if ( sFile!="1" )
+			sphFatal ( "cat not set file name in RT mode, enable auth with the '1'" );
+		sFile = GetDatadirPath ( "auth.json" );
+
+		// need to create ewmpty file in the RT mode
+		if ( !sphIsReadable ( sFile, nullptr ) && !CreateAuthFile ( sFile, sError ) )
+			sphFatal ( "%s", sError.cstr() );
+	}
+
+	g_sAuthFile = RealPath ( sFile );
 	AuthUsersMutablePtr_t tAuth = ReadAuthFile ( g_sAuthFile, sError );
 	if ( !tAuth )
 		sphFatal ( "%s", sError.cstr() );
 
 	AddBuddyToken ( nullptr, *tAuth );
+	tAuth->m_bEnabled = true;
 	
 	ScopedMutex_t tLock ( g_tAuthLock );
 	g_tAuth = std::move ( tAuth );
@@ -61,8 +73,7 @@ bool IsAuthEnabled()
 	if ( !g_tAuth )
 		return false;
 
-	ScopedMutex_t tLock ( g_tAuthLock );
-	return g_tAuth->m_hUserToken.GetLength();
+	return g_tAuth->m_bEnabled;
 }
 
 CSphString GetBuddyToken()
@@ -120,6 +131,7 @@ bool AuthReload ( CSphString & sError )
 	ScopedMutex_t tLock ( g_tAuthLock );
 	const AuthUserCred_t * pSrcBuddy = g_tAuth->m_hUserToken ( GetAuthBuddyName() );
 	AddBuddyToken ( pSrcBuddy, *tAuth );
+	tAuth->m_bEnabled = true;
 	g_tAuth = std::move ( tAuth );
 
 	return true;
@@ -165,6 +177,18 @@ void AddBuddyToken ( const AuthUserCred_t * pSrcBuddy, AuthUsers_t & tAuth )
 	tAuth.m_hUserToken.AddUnique ( pSrcBuddy->m_sUser ) = *pSrcBuddy;
 	tAuth.m_hHttpToken2User.AddUnique ( pSrcBuddy->m_sRawBearerSha256 ) = pSrcBuddy->m_sUser;
 	tAuth.m_hApiToken2User.AddUnique ( pSrcBuddy->m_sBearerSha256 ) = pSrcBuddy->m_sUser;
+
+	if ( !tAuth.m_hUserPerms.Exists ( pSrcBuddy->m_sUser ) )
+	{
+		UserPerms_t & tPerms = tAuth.m_hUserPerms[ pSrcBuddy->m_sUser ];
+		for ( int iAction=0; iAction<(int)AuthAction_e::UNKNOWN; iAction++ )
+		{
+			UserPerm_t & tPerm = tPerms.Add();
+			tPerm.m_eAction = (AuthAction_e)iAction;
+			tPerm.m_bAllow = true;
+			tPerm.SetTarget ( "*" );
+		};
+	}
 }
 
 class DynamicAuthIndex_c : public GenericTableIndex_c
@@ -465,6 +489,7 @@ static bool SaveAuth ( AuthUsersMutablePtr_t && tAuth, CSphString & sError )
 	if ( !bSaved )
 		return false;
 
+	tAuth->m_bEnabled = true;
 	g_tAuth = std::move ( tAuth );
 	return true;
 }
@@ -804,10 +829,7 @@ static bool SetPermMember ( const AuthPermsIndex_c::SchemaColumn_e eCol, const S
 	return true;
 
 	case AuthPermsIndex_c::SchemaColumn_e::Target:
-		tPerm.m_sTarget = tVal.m_sVal;
-		tPerm.m_sTarget.Trim();
-		tPerm.m_bTargetWildcard = HasWildcard ( tPerm.m_sTarget.cstr() );
-		tPerm.m_bTargetWildcardAll = ( tPerm.m_sTarget=="*" );
+		tPerm.SetTarget ( tVal.m_sVal );
 		if ( tPerm.m_sTarget.IsEmpty() )
 		{
 			sError.SetSprintf ( "empty 'target' at %d document", iRow );

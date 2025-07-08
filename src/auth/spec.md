@@ -930,17 +930,17 @@ Examples:
 ### Configuration
 
 - RT mode:
-  ```yaml
-  auth: true
+  ```ini
+  auth = 1
   ```
 - Plain mode:
-  ```yaml
-  auth: true
+  ```ini
+  auth = 1
   ```
   (in this case `auth.json` is put to the same directory where we put a binlog by default)
   or
-  ```yaml
-  auth: /path/to/file
+  ```ini
+  auth = /path/to/file
   ```
 
 If the `system.auth*` tables (RT Mode) or the authentication file (Plain Mode) do not exist, Manticore should create them. If they already exist, Manticore should validate them during startup. If validation fails, Manticore should not start.
@@ -1029,79 +1029,65 @@ User '<username>' is not permitted to do the "replication" action with the targe
 
 ### Manticore Buddy Authentication and Authorization
 
-Manticore Buddy, when started by Manticore Search, uses a secure token-based authentication method:
+Manticore Buddy and the Manticore Search daemon communicate via a secure HTTPS channel. Authentication is handled using a standard bearer token model, where Buddy acts as a highly privileged user. The daemon uses a unified process to authenticate all requests it receives.
 
 ```mermaid
 sequenceDiagram
+    participant ManticoreTool as manticore tool
     participant ManticoreSearch as Manticore Search
     participant Buddy as Manticore Buddy
-    participant Client as Client
+    participant Client as User's Client
 
-    Note over ManticoreSearch: On start, Manticore Search generates a random token.
+    Note over ManticoreSearch: On start, generates and holds BUDDY_TOKEN.
+    ManticoreSearch->>Buddy: Starts Buddy, passing BUDDY_TOKEN via env var.
 
-    ManticoreSearch->>Buddy: Pass unique token via environment variable
-    Note over Buddy: Token is read and stored in memory
-    ManticoreSearch->>ManticoreSearch: Unset environment variable to clear token
+    alt Administrative Path (e.g., manticore user add)
+        ManticoreTool->>Buddy: Send command
+        Buddy->>ManticoreSearch: Send request with `Authorization: Bearer BUDDY_TOKEN`
+        ManticoreSearch->>ManticoreSearch: Authenticate BUDDY_TOKEN (grants admin rights)
+        ManticoreSearch->>Buddy: Return result
+        Buddy->>ManticoreTool: Return result
+    end
 
-    %% Client sends request to Manticore Search
-    Client->>ManticoreSearch: Send query
-
-    %% Manticore Search forwards request to Buddy with username and permissions
-    ManticoreSearch->>Buddy: Send query/token + username
-
-    %% Buddy computes secure hash for authentication
-    Buddy->>Buddy: Compute request_hash = sha256(request)
-    Buddy->>Buddy: Compute secure_hash = sha256(token + request_hash)
-
-    %% Buddy validates username and permissions (after computing secure_hash)
-
-    %% Buddy sends authenticated request to Manticore Search (with username/token only)
-    Buddy->>ManticoreSearch: Send request with 'Authorization: Bearer <secure_hash>' and 'username'
-
-    %% Manticore Search validates the token
-    ManticoreSearch->>ManticoreSearch: Compute verify_hash = sha256(token + sha256(request))
-    ManticoreSearch->>ManticoreSearch: Compare verify_hash with received secure_hash
-
-    alt Hash matches
-        %% Additional Authorization Check in Manticore Search
-        ManticoreSearch->>ManticoreSearch: Verify user's permissions for the query
-        alt Permissions allow
-            ManticoreSearch->>Client: Return results (approved)
-        else Permissions deny
-            ManticoreSearch->>Client: Return error (permissions denied)
-        end
-    else Hash does not match
-        ManticoreSearch->>Client: Return error (authentication failed)
+    alt User Request Path (e.g., /search)
+        Client->>ManticoreSearch: Send request with `Authorization: Bearer <user_token>`
+        Note over ManticoreSearch: Forwards request to a Buddy plugin
+        ManticoreSearch->>Buddy: Send request with original `Authorization: Bearer <user_token>`
+        Note over Buddy: Buddy processes the request...
+        Buddy->>ManticoreSearch: Forwards request back with original `Authorization: Bearer <user_token>`
+        ManticoreSearch->>ManticoreSearch: Authenticate <user_token> and check permissions
+        ManticoreSearch->>Client: Return final result
     end
 ```
 
-1. **Token Initialization**:
-   - When Manticore Search starts Manticore Buddy, it generates a random, unique token.
-   - The token is passed to Buddy using an environment variable before launching the Buddy process from the C++ code.
+1. **Token Initialization for Buddy User**:
+    - When Manticore Search starts Manticore Buddy, it generates a random, unique token for Buddy user with all necessary permissions. 
+    - The token is passed to Buddy using an environment variable `BUDDY_TOKEN` along with SSL materials via environment variables: `BUDDY_SSL_CERT_CONTENT`, and `BUDDY_SSL_KEY_CONTENT`.
+    - All communication between the daemon and Buddy occurs exclusively over a secure HTTPS channel.
 
-2. **Token Usage**:
+2. **Token Usage and Secure Communication**:
    - Buddy reads the token from the environment variable during startup and stores it in memory.
-   - When preparing a query to the daemon, Buddy creates a `secure_hash` in the format:
-     `secure_hash = sha256(token_from_env + sha256(request))`.
-   - Manticore Buddy includes this hash in the `Authorization` header of each HTTP request it sends to Manticore Search, formatted as:
-     ```text
-     Authorization: Bearer <secure_hash>
-     ```
+   - Buddy reads the SSL data the environment variable during startup and uses it for TLS setup.
+   - Buddy communicates with the daemon via HTTPS for enhanced security. These variables contain the full content of the certificate and key, not file paths.
+    - Buddy sends the request with an `Authorization` header containing the raw token it received at startup:
+      ```text
+      Authorization: Bearer <BUDDY_TOKEN>
+      ```
+    - The daemon authenticates this token against the `system.auth_users` table. The `manticore_buddy` user must have the required permissions for the operation to succeed.
 
-3. **Token Validation**:
-   - When Manticore Search receives a query from Buddy, it validates the token by comparing the received hash with its own computed value:
-     `sha256(token_from_env + sha256(request))`.
-   - If the token is invalid or missing, the request is denied.
-   - This approach ensures that even if the token is intercepted, it can only be used for the exact same request.
+3. **User Request**:
+    - The daemon forwards the user request to Buddy, preserving the user's original `Authorization` header (e.g., `Authorization: Bearer <user_token>`).
+    - After Buddy processes the data, it forwards the request back to the daemon with the user's original `Authorization` header. Buddy does not need to interpret or validate the user's token.
 
 4. **Authorization**:
-   - When sending any request to Buddy, Manticore Search includes the username/token.
-   - When forwarding the request to Manticore Search, Buddy includes the username/token. In this case, authentication relies on the `secure_hash`, while authorization is based on the provided username/token.
+    - The daemon uses a single, unified authentication process for all requests received from Buddy. It extracts the bearer token from the `Authorization` header, hashes it, and looks for a matching user in the `system.auth_users` table.
+    - Whether the token identifies the Buddy system user or a regular end-user, the daemon proceeds to the authorization step, where it verifies that the identified user has the required permissions for the requested action.
 
 5. **Security**:
-   - The token is not logged or stored permanently to maintain confidentiality.
-   - After initializing Buddy, Manticore Search clears the environment variable to prevent unintended exposure.
-   - The token is kept in memory by Buddy for its lifetime and is not transmitted over the network unless securely hashed.
+    - The security of this model relies on protecting the plaintext token of the highly privileged Buddy user, which is guarded by the integrity of the HTTPS channel.
+    - Sensitive information, including the token and SSL materials, is not logged or stored permanently.
+    - To prevent unintended exposure, Buddy must clear the sensitive environment variables (`BUDDY_TOKEN`, `BUDDY_SSL_CERT_CONTENT`, `BUDDY_SSL_KEY_CONTENT`) from its own process environment immediately after reading them at startup. As it is impossible to clear child process environment from the parent process with c++ code.
+    - The token and SSL materials are kept in memory by Buddy only for its lifetime.
 
 ---
 

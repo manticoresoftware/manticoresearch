@@ -16,7 +16,7 @@
 
 enum class AuthAction_e
 {
-	READ,
+	READ = 0,
 	WRITE,
 	SCHEMA,
 	REPLICATION,
@@ -34,6 +34,8 @@ struct UserPerm_t
 
 	bool m_bTargetWildcard = false;
 	bool m_bTargetWildcardAll = false;
+
+	void SetTarget ( const CSphString & sTarget );
 };
 
 // FIME!!! add offset for each action inside perms vector

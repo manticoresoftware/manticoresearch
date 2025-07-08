@@ -564,3 +564,8 @@ const CSphString & GetSslCert()
 {
 	return g_sSslCert;
 }
+
+const CSphString & GetSslKey()
+{
+	return g_sSslKey;
+}

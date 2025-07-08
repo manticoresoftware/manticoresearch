@@ -18,6 +18,10 @@
 #include "sphinxjson.h"
 #include <filesystem>
 
+#ifdef _WIN32
+#include <aclapi.h>
+#endif
+
 #include "auth_perms.h"
 #include "auth_common.h"
 
@@ -96,50 +100,40 @@ CSphString ReadHex ( const char * sName, int iHashLen, const bson::Bson_c & tNod
 static bool ReadUsers ( const CSphString & sFile, bson::Bson_c & tBson, AuthUsersMutablePtr_t & tAuth, CSphString & sError );
 static bool ReadPerms ( const CSphString & sFile, bson::Bson_c & tBson, AuthUsersMutablePtr_t & tAuth, CSphString & sError );
 AuthUsersMutablePtr_t ReadAuth ( char * sSrc, const CSphString & sSrcName, CSphString & sError );
+static bool CheckFileIsPrivate ( const CSphString & sFile, CSphString & sError );
 
 AuthUsersMutablePtr_t ReadAuthFile ( const CSphString & sFile, CSphString & sError )
 {
-	// ok to skip auth init if the is no filename set
-	if ( sFile.IsEmpty() )
-		return AuthUsersMutablePtr_t { new AuthUsers_t() };
-	
 	if ( !sphIsReadable ( sFile, &sError ) )
 	{
-		sError.SetSprintf ( "can not read users from the '%s': %s", sFile.cstr(), sError.cstr() );
+		sError.SetSprintf ( "can not read the '%s': %s", sFile.cstr(), sError.cstr() );
 		return nullptr;
 	}
 
-	// FIXME!!! fix file permission on windows
-#if !_WIN32
-	auto tPerms = std::filesystem::status ( sFile.cstr() ).permissions();
-	if ( ( tPerms & ( std::filesystem::perms::group_all | std::filesystem::perms::others_all ) )!=std::filesystem::perms::none )
-	{
-		sError.SetSprintf ( "file '%s' has permissions to all", sFile.cstr() );
+	if ( !CheckFileIsPrivate ( sFile, sError ) )
 		return nullptr;
-	}
-#endif
 
 	CSphAutoreader tReader;
 	if ( !tReader.Open ( sFile, sError ) )
 	{
-		sError.SetSprintf ( "can not read users from the '%s', error: %s", sFile.cstr(), sError.cstr() );
+		sError.SetSprintf ( "can not read the '%s', error: %s", sFile.cstr(), sError.cstr() );
 		return nullptr;
 	}
 
 	int iSize = (int)tReader.GetFilesize();
 	if ( !iSize )
-		sError.SetSprintf ( "can not read users from the '%s', error: file empty", sFile.cstr() );
+		sError.SetSprintf ( "can not read the '%s', error: file empty", sFile.cstr() );
 
 	CSphFixedVector<char> dRawJson ( iSize + 2 );
 	auto iRead = (int64_t)sphReadThrottled ( tReader.GetFD(), dRawJson.begin(), iSize );
 	if ( iRead!=iSize )
 	{
-		sError.SetSprintf ( "can not read users from the'%s', error: wrong size %d(%d)", sFile.cstr(), (int)iRead, iSize );
+		sError.SetSprintf ( "can not read the'%s', error: wrong size %d(%d)", sFile.cstr(), (int)iRead, iSize );
 		return nullptr;
 	}
 	if ( tReader.GetErrorFlag() )
 	{
-		sError.SetSprintf ( "can not read users from the '%s', error: %s", sFile.cstr(), tReader.GetErrorMessage().cstr() );
+		sError.SetSprintf ( "can not read the '%s', error: %s", sFile.cstr(), tReader.GetErrorMessage().cstr() );
 		return nullptr;
 	}
 
@@ -155,18 +149,22 @@ AuthUsersMutablePtr_t ReadAuth ( char * sSrc, const CSphString & sSrcName, CSphS
 	CSphVector<BYTE> tRawBson;
 	if ( !sphJsonParse ( tRawBson, sSrc, false, false, false, sError ) )
 	{
-		sError.SetSprintf ( "can not read users from the '%s', error: %s", sSrcName.cstr(), sError.cstr() );
+		sError.SetSprintf ( "can not read the '%s', error: %s", sSrcName.cstr(), sError.cstr() );
 		return nullptr;
 	}
 
 	bson::Bson_c tBsonSrc ( tRawBson );
-	if ( tBsonSrc.IsEmpty() || !tBsonSrc.IsAssoc() )
-	{
-		sError.SetSprintf ( "can not read users from the '%s', error: wrong json", sSrcName.cstr() );
-		return nullptr;
-	}
 
 	AuthUsersMutablePtr_t tAuth { new AuthUsers_t() };
+	// empty auth is ok
+	if ( tBsonSrc.IsEmpty() )
+		return tAuth;
+
+	if ( !tBsonSrc.IsAssoc() )
+	{
+		sError.SetSprintf ( "can not read the '%s', error: wrong json", sSrcName.cstr() );
+		return nullptr;
+	}
 
 	if ( !ReadUsers ( sSrcName, tBsonSrc, tAuth, sError ) )
 		return nullptr;
@@ -238,13 +236,7 @@ bool ReadUsers ( const CSphString & sFile, bson::Bson_c & tBson, AuthUsersMutabl
 	if ( !sError.IsEmpty() )
 		return false;
 
-	// should fail daemon start if file provided but no users read
-	if ( tAuth->m_hUserToken.IsEmpty() )
-	{
-		sError.SetSprintf ( "no users read from the file '%s'", sFile.cstr() );
-		return false;
-	}
-
+	// should NOT fail daemon start if file provided but no users read
 	return true;
 }
 
@@ -317,33 +309,30 @@ bool ReadPerms ( const CSphString & sFile, bson::Bson_c & tBson, AuthUsersMutabl
 
 		UserPerm_t tPerm;
 		tPerm.m_eAction = ReadAction ( bson::ToStr ( tNode.ChildByName ( "action" ) ) );
-		tPerm.m_sTarget = bson::String ( tNode.ChildByName ( "target" ) );
-		tPerm.m_sTarget.Trim();
+		tPerm.SetTarget ( bson::String ( tNode.ChildByName ( "target" ) ) );
 		tPerm.m_bAllow = bson::Bool ( tNode.ChildByName ( "allow" ) );
-		tPerm.m_bTargetWildcard = HasWildcard ( tPerm.m_sTarget.cstr() );
-		tPerm.m_bTargetWildcardAll = ( tPerm.m_sTarget=="*" );
 		if ( tNode.HasAnyOf ( { "budget" } ) )
 			bson::Bson_c ( tNode.ChildByName ( "budget" ) ).BsonToJson ( tPerm.m_sBudget );
 
 		if ( tNode.HasError() )
 		{
-			sError.SetSprintf ( "can not read users from the '%s', error: %s", sFile.cstr(), tNode.Error() );
+			sError.SetSprintf ( "can not read perms from the '%s', error: %s", sFile.cstr(), tNode.Error() );
 			return;
 		}
 		if ( tPerm.m_eAction==AuthAction_e::UNKNOWN )
 		{
-			sError.SetSprintf ( "can not read users from the '%s', user: %s, uknown action", sFile.cstr(), sUser.cstr() );
+			sError.SetSprintf ( "can not read perms from the '%s', user: %s, uknown action", sFile.cstr(), sUser.cstr() );
 			return;
 		}
 		if ( tPerm.m_sTarget.IsEmpty() )
 		{
-			sError.SetSprintf ( "can not read users from the '%s', user: %s, empty target", sFile.cstr(), sUser.cstr() );
+			sError.SetSprintf ( "can not read perms from the '%s', user: %s, empty target", sFile.cstr(), sUser.cstr() );
 			return;
 		}
 		AuthUserCred_t * pUser = tAuth->m_hUserToken ( sUser );
 		if ( !pUser )
 		{
-			sError.SetSprintf ( "can not read users from the '%s', permission for unknown user: %s", sFile.cstr(), sUser.cstr() );
+			sError.SetSprintf ( "can not read perms from the '%s', permission for unknown user: %s", sFile.cstr(), sUser.cstr() );
 			return;
 		}
 
@@ -438,3 +427,282 @@ bool SaveAuthFile ( const AuthUsers_t & tAuth, const CSphString & sFile, CSphStr
 
 	return true;
 }
+
+static bool SaveEmptyAuth ( const CSphString & sFile, CSphString & sError )
+{
+	CSphWriter tWriter;
+	if ( !tWriter.OpenFile ( sFile, sError ) )
+		return false;
+	char sBuf[] = "{}";
+	tWriter.PutBytes ( sBuf, sizeof ( sBuf ) );
+	tWriter.CloseFile();
+
+	return !tWriter.IsError();
+}
+
+#ifdef _WIN32
+static CSphFixedVector<BYTE> GetCurUserSid()
+{
+	auto dUserSid = CSphFixedVector<BYTE> ( 0 );
+
+	HANDLE hToken = NULL;
+	if ( !OpenProcessToken ( GetCurrentProcess(), TOKEN_QUERY, &hToken ) )
+		return dUserSid;
+
+	DWORD uTokenSize = 0;
+	GetTokenInformation ( hToken, TokenUser, NULL, 0, &uTokenSize );
+	if ( ::GetLastError()!=ERROR_INSUFFICIENT_BUFFER )
+	{
+		CloseHandle ( hToken );
+		return dUserSid;
+	}
+
+	auto pTokenUser = CSphFixedVector<BYTE> ( uTokenSize );
+	bool bGotToken = GetTokenInformation ( hToken, TokenUser, pTokenUser.Begin(), uTokenSize, &uTokenSize );
+
+	CloseHandle ( hToken );
+	if ( !bGotToken )
+		return dUserSid;
+
+	PTOKEN_USER pTU = (PTOKEN_USER)pTokenUser.Begin();
+	DWORD uSidSize = GetLengthSid ( pTU->User.Sid );
+	dUserSid.Reset ( uSidSize );
+	if ( !CopySid ( uSidSize, (PSID)dUserSid.Begin(), pTU->User.Sid ) )
+		return dUserSid;
+
+	return dUserSid;
+}
+
+bool CheckFileIsPrivate ( const CSphString & sFile, CSphString & sError )
+{
+	PACL pDacl = NULL;
+	PSECURITY_DESCRIPTOR pSecDesc = NULL;
+	
+	AT_SCOPE_EXIT ( [&pSecDesc] { if ( pSecDesc ) LocalFree ( pSecDesc ); } );
+
+	DWORD uRes = GetNamedSecurityInfoA ( sFile.cstr(), SE_FILE_OBJECT, DACL_SECURITY_INFORMATION, NULL, NULL, &pDacl, NULL, (PSECURITY_DESCRIPTOR*)&pSecDesc );
+	if ( uRes!=ERROR_SUCCESS )
+	{
+		sError.SetSprintf ( "file '%s' failed to get permissions", sFile.cstr() );
+		return false;
+	}
+
+	if ( pDacl==NULL )
+	{
+		// NULL DACL - unrestricted access to everyone - failure
+		sError.SetSprintf ( "file '%s' has NULL DACL, granting unrestricted access", sFile.cstr() );
+		return false;
+	}
+	
+	// SID for well-known accounts considered safe
+	auto dCurUserSid = GetCurUserSid();
+	if ( dCurUserSid.IsEmpty() )
+	{
+		sError.SetSprintf ( "file '%s' could not get current user SID", sFile.cstr() );
+		return false;
+	}
+
+	BYTE dSidSystem[SECURITY_MAX_SID_SIZE];
+	DWORD uSidSystem = sizeof(dSidSystem);
+	if ( !CreateWellKnownSid ( WinLocalSystemSid, NULL, dSidSystem, &uSidSystem ) )
+	{
+		sError.SetSprintf ( "file '%s' CreateWellKnownSid for system failed", sFile.cstr() );
+		return false;
+	}
+
+	BYTE dSidAdmins[SECURITY_MAX_SID_SIZE];
+	DWORD uSidAdmins = sizeof(dSidAdmins);
+	if ( !CreateWellKnownSid ( WinBuiltinAdministratorsSid, NULL, dSidAdmins, &uSidAdmins ) )
+	{
+		sError.SetSprintf ( "file '%s' CreateWellKnownSid for admins failed", sFile.cstr() );
+		return false;
+	}
+
+	// iterate over ACE in the DACL
+	for ( DWORD i=0; i<pDacl->AceCount; i++ )
+	{
+		ACCESS_ALLOWED_ACE * pAce = NULL;
+
+		// can not get ACE - skip
+		if ( GetAce ( pDacl, i, (LPVOID*)&pAce )==0 )
+			continue;
+
+		// access allowed entries check, all deny entries are fine
+		if ( pAce->Header.AceType!=ACCESS_ALLOWED_ACE_TYPE )
+			continue;
+
+		PSID pAceSid = (PSID)( &pAce->SidStart );
+
+		// if ACE SID matches one of allowed SID
+		// then SID is ok, continue to the next
+		if ( EqualSid ( pAceSid, dCurUserSid.Begin() ) || EqualSid ( pAceSid, dSidSystem ) || EqualSid ( pAceSid, dSidAdmins ) )
+			continue;
+		
+		// found an ACE for an unauthorized user/group
+		// convert SID to name for good error
+		sError.SetSprintf ( "file '%s' has permissions for an unauthorized principal", sFile.cstr() );
+		char sName[256], sDomain[256];
+		DWORD uNameSizs = sizeof ( sName );
+		DWORD uDomainSize = sizeof ( sDomain );
+		SID_NAME_USE tNameUse;
+		if ( LookupAccountSidA ( NULL, pAceSid, sName, &uNameSizs, sDomain, &uDomainSize, &tNameUse ) )
+			sError.SetSprintf ( "%s %s:%s", sError.cstr(), sDomain, sName );
+
+		return false;
+	}
+
+	// all ACEs iteration found no problems - the file is private
+	return true;
+}
+
+bool CreateAuthFile ( const CSphString & sFile, CSphString & sError )
+{
+	HANDLE hToken = NULL;
+	if ( !OpenProcessToken ( GetCurrentProcess(), TOKEN_QUERY, &hToken ) )
+	{
+		sError.SetSprintf ( "failed to create file '%s', errno: %u", sFile.cstr(), ::GetLastError() );
+		return false;
+	}
+    
+	DWORD uTokenSize = 0;
+	GetTokenInformation ( hToken, TokenUser, NULL, 0, &uTokenSize );
+	if ( ::GetLastError()!=ERROR_INSUFFICIENT_BUFFER )
+	{
+		CloseHandle ( hToken );
+		sError.SetSprintf ( "failed to create file '%s', errno: %u", sFile.cstr(), ::GetLastError() );
+		return false;
+	}
+
+	CSphFixedVector<BYTE> dTokenUser = CSphFixedVector<BYTE> ( uTokenSize );
+	bool bGotToken = GetTokenInformation ( hToken, TokenUser, dTokenUser.Begin(), uTokenSize, &uTokenSize );
+	CloseHandle ( hToken );
+
+	if ( !bGotToken )
+	{
+		sError.SetSprintf ( "failed to create file '%s', errno: %u", sFile.cstr(), ::GetLastError() );
+		return false;
+	}
+    
+	PSID pUserSid = ( ( PTOKEN_USER )dTokenUser.Begin() )->User.Sid;
+
+	EXPLICIT_ACCESS_A tEA[3];
+	ZeroMemory ( &tEA, sizeof ( tEA ) );
+
+	// current user
+	tEA[0].grfAccessPermissions = GENERIC_ALL;
+	tEA[0].grfAccessMode = SET_ACCESS;
+	tEA[0].grfInheritance = NO_INHERITANCE;
+	tEA[0].Trustee.TrusteeForm = TRUSTEE_IS_SID;
+	tEA[0].Trustee.TrusteeType = TRUSTEE_IS_USER;
+	tEA[0].Trustee.ptstrName = (LPSTR)pUserSid;
+
+	// system
+	BYTE dSidSystem[SECURITY_MAX_SID_SIZE];
+	DWORD uSidSystemSize = sizeof ( dSidSystem );
+	if ( !CreateWellKnownSid ( WinLocalSystemSid, NULL, dSidSystem, &uSidSystemSize ) )
+	{
+		sError.SetSprintf ( "failed to create file '%s', errno: %u", sFile.cstr(), ::GetLastError() );
+		return false;
+	}
+	tEA[1].grfAccessPermissions = GENERIC_ALL;
+	tEA[1].grfAccessMode = SET_ACCESS;
+	tEA[1].grfInheritance = NO_INHERITANCE;
+	tEA[1].Trustee.TrusteeForm = TRUSTEE_IS_SID;
+	tEA[1].Trustee.TrusteeType = TRUSTEE_IS_WELL_KNOWN_GROUP;
+	tEA[1].Trustee.ptstrName = (LPSTR)dSidSystem;
+
+	// admins
+	BYTE dSidAdmins[SECURITY_MAX_SID_SIZE];
+	DWORD uSidAdminsSize = sizeof ( dSidAdmins );
+	if ( !CreateWellKnownSid ( WinBuiltinAdministratorsSid, NULL, dSidAdmins, &uSidAdminsSize ) )
+	{
+		sError.SetSprintf ( "failed to create file '%s', errno: %u", sFile.cstr(), ::GetLastError() );
+		return false;
+	}
+	tEA[2].grfAccessPermissions = GENERIC_ALL;
+	tEA[2].grfAccessMode = SET_ACCESS;
+	tEA[2].grfInheritance = NO_INHERITANCE;
+	tEA[2].Trustee.TrusteeForm = TRUSTEE_IS_SID;
+	tEA[2].Trustee.TrusteeType = TRUSTEE_IS_GROUP;
+	tEA[2].Trustee.ptstrName = (LPSTR)dSidAdmins;
+
+	// ACL contains the new ACE
+	PACL pAcl = NULL;
+	if ( SetEntriesInAclA ( 3, tEA, NULL, &pAcl )!= ERROR_SUCCESS )
+	{
+		sError.SetSprintf ( "failed to create file '%s', errno: %u", sFile.cstr(), ::GetLastError() );
+		return false;
+	}
+
+	AT_SCOPE_EXIT ( [&pAcl] { if ( pAcl ) LocalFree ( pAcl ); } );
+
+	// init security desc
+	PSECURITY_DESCRIPTOR pSD = (PSECURITY_DESCRIPTOR)LocalAlloc ( LPTR, SECURITY_DESCRIPTOR_MIN_LENGTH );
+	if ( pSD==NULL )
+	{
+		sError.SetSprintf ( "failed to create file '%s', errno: %u", sFile.cstr(), ::GetLastError() );
+		return false;
+	}
+
+	AT_SCOPE_EXIT ( [&pSD] { if ( pSD ) LocalFree ( pSD ); } );
+
+	if ( !InitializeSecurityDescriptor ( pSD, SECURITY_DESCRIPTOR_REVISION ) )
+	{
+		sError.SetSprintf ( "failed to create file '%s', errno: %u", sFile.cstr(), ::GetLastError() );
+		return false;
+	}
+
+	// фdd ACL to the security desc
+	if ( !SetSecurityDescriptorDacl ( pSD, TRUE, pAcl, FALSE ) )
+	{
+		sError.SetSprintf ( "failed to create file '%s', errno: %u", sFile.cstr(), ::GetLastError() );
+		return false;
+	}
+
+	// init security attr
+	SECURITY_ATTRIBUTES tSA;
+	tSA.nLength = sizeof ( SECURITY_ATTRIBUTES );
+	tSA.lpSecurityDescriptor = pSD;
+	tSA.bInheritHandle = FALSE;
+
+	// create file with the specified security attr
+	HANDLE hFile = CreateFileA ( sFile.cstr(), GENERIC_WRITE, 0, &tSA, CREATE_NEW, FILE_ATTRIBUTE_NORMAL, NULL );
+	if ( hFile==INVALID_HANDLE_VALUE )
+	{
+		sError.SetSprintf ( "failed to create file '%s', errno: %u", sFile.cstr(), ::GetLastError() );
+		return false;
+	}
+
+	CloseHandle ( hFile );
+
+	return SaveEmptyAuth ( sFile, sError );
+}
+
+#else
+
+bool CheckFileIsPrivate ( const CSphString & sFile, CSphString & sError )
+{
+	auto tPerms = std::filesystem::status ( sFile.cstr() ).permissions();
+	if ( ( tPerms & ( std::filesystem::perms::group_all | std::filesystem::perms::others_all ) )!=std::filesystem::perms::none )
+	{
+		sError.SetSprintf ( "file '%s' has permissions to all", sFile.cstr() );
+		return false;
+	}
+
+	return true;
+}
+
+bool CreateAuthFile ( const CSphString & sFile, CSphString & sError )
+{
+	int iFD = ::open ( sFile.cstr(), SPH_O_NEW, 0600);
+	if ( iFD==-1 )
+	{
+		sError.SetSprintf ( "failed to open %s: %s", sFile.cstr(), strerrorm(errno) );
+		return false;
+	}
+
+	SafeClose ( iFD );
+	return SaveEmptyAuth ( sFile, sError );;
+}
+
+#endif

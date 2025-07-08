@@ -43,3 +43,4 @@
 #endif
 
 const CSphString & GetSslCert();
+const CSphString & GetSslKey();

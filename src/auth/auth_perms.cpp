@@ -60,3 +60,11 @@ bool CheckPerms ( const CSphString & sUser, AuthAction_e eAction, const CSphStri
 	sError.SetSprintf ( "Permission denied for user '%s'", sUser.cstr() );
 	return false;
 }
+
+void UserPerm_t::SetTarget ( const CSphString & sTarget )
+{
+	m_sTarget = sTarget;
+	m_sTarget.Trim();
+	m_bTargetWildcard = HasWildcard ( m_sTarget.cstr() );
+	m_bTargetWildcardAll = ( m_sTarget=="*" );
+}

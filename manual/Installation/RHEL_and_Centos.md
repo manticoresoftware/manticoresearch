@@ -5,6 +5,7 @@
 * CentOS 8, RHEL 8, Oracle Linux 8, CentOS Stream 8
 * Amazon Linux 2
 * CentOS 9, RHEL 9, AlmaLinux 9
+* AlmaLinux 10, other RHEL 10-based distributions
 
 ### YUM repository
 

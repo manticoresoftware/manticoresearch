@@ -1,7 +1,7 @@
 # Changelog
 
 ## Version 13.2.3
-**Released**: Jul 7 2025
+**Released**: Jul 8 2025
 
 ### Breaking Changes
 * ⚠️ [v13.0.0](https://github.com/manticoresoftware/manticoresearch/releases/tag/13.0.0)  Updated the KNN library API to support empty [float_vector](https://manual.manticoresearch.com/Creating_a_table/Data_types#Float-vector) values. This update doesn’t change the data format but does increase the Manticore Search / MCL API version.

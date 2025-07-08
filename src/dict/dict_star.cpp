@@ -11,16 +11,14 @@
 //
 
 #include "dict_proxy.h"
-
 #include "sphinxint.h"
 
-/// star dict for index v.8+
-class DictStarV8_c: public DictProxy_c
+class DictStar_c: public DictProxy_c
 {
 	using DictProxy_c::GetWordID;
 
 public:
-	DictStarV8_c ( DictRefPtr_c pDict, bool bInfixes )
+	DictStar_c ( DictRefPtr_c pDict, bool bInfixes )
 		: DictProxy_c ( std::move (pDict) )
 		, m_bInfixes ( bInfixes )
 	{}
@@ -32,7 +30,7 @@ private:
 };
 
 
-SphWordID_t DictStarV8_c::GetWordID ( BYTE* pWord )
+SphWordID_t DictStar_c::GetWordID ( BYTE* pWord )
 {
 	char sBuf[16 + 3 * SPH_MAX_WORD_LEN];
 
@@ -134,7 +132,7 @@ SphWordID_t DictStarV8_c::GetWordID ( BYTE* pWord )
 }
 
 
-void SetupStarDictV8( DictRefPtr_c& pDict, bool bInfixes )
+void SetupStarDict( DictRefPtr_c& pDict, bool bInfixes )
 {
-	pDict = new DictStarV8_c ( pDict, bInfixes );
+	pDict = new DictStar_c ( pDict, bInfixes );
 }

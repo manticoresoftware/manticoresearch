@@ -34,7 +34,7 @@ jobs:
       - uses: manticoresoftware/clt@0.6.9
         with:
           image: manticoresearch/dind:v1
-          test_prefix: test/clt-tests/mysqldump/versions/test-supported-mysqldump-versions.rec
+          test_prefix: test/clt-tests/mysqldump/versions/
           run_args: --privileged
 
   clt_test_migration_es_ms:
@@ -47,7 +47,7 @@ jobs:
       - uses: manticoresoftware/clt@0.6.9
         with:
           image: manticoresearch/dind:v1
-          test_prefix: test/clt-tests/migration-es-ms/test-migration-es-ms.rec
+          test_prefix: test/clt-tests/migration-es-ms/
           run_args: --privileged
       - name: Upload .rep File
         if: always()  

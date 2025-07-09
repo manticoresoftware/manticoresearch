@@ -543,7 +543,7 @@ private:
 class JoinSorter_c : public ISphMatchSorter
 {
 public:
-				JoinSorter_c ( const CSphIndex * pIndex, const CSphIndex * pJoinedIndex, const CSphQuery & tQuery, const CSphQuery & tJoinQueryOptions, ISphMatchSorter * pSorter, bool bJoinedGroupSort, int iBatchSize );
+				JoinSorter_c ( const CSphIndex * pIndex, const CSphIndex * pJoinedIndex, const CSphQuery & tQuery, const CSphQuery & tJoinQueryOptions, ISphMatchSorter * pSorter, bool bJoinedGroupSort, int iBatchSize, const char * szParent );
 				JoinSorter_c ( const CSphIndex * pIndex, const CSphIndex * pJoinedIndex, const VecTraits_T<const CSphQuery> & dQueries, const VecTraits_T<const CSphQuery> & dJoinQueryOptions, ISphMatchSorter * pSorter, bool bJoinedGroupSort, int iBatchSize );
 
 	bool		IsGroupby() const override											{ return m_pSorter->IsGroupby(); }
@@ -734,7 +734,7 @@ private:
 };
 
 
-JoinSorter_c::JoinSorter_c ( const CSphIndex * pIndex, const CSphIndex * pJoinedIndex, const CSphQuery & tQuery, const CSphQuery & tJoinQueryOptions, ISphMatchSorter * pSorter, bool bJoinedGroupSort, int iBatchSize )
+JoinSorter_c::JoinSorter_c ( const CSphIndex * pIndex, const CSphIndex * pJoinedIndex, const CSphQuery & tQuery, const CSphQuery & tJoinQueryOptions, ISphMatchSorter * pSorter, bool bJoinedGroupSort, int iBatchSize, const char * szParent )
 	: JoinSorter_c ( pIndex, pJoinedIndex, { &tQuery, 1 }, { &tJoinQueryOptions, 1 }, pSorter, bJoinedGroupSort, iBatchSize )
 {}
 
@@ -2227,7 +2227,7 @@ private:
 
 //////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
-bool CheckJoinOnFilters ( const CSphIndex * pIndex, const CSphIndex * pJoinedIndex, const CSphQuery & tQuery, CSphString & sError )
+static bool CheckJoinOnFilters ( const CSphIndex * pIndex, const CSphIndex * pJoinedIndex, const CSphQuery & tQuery, const char * szParent, CSphString & sError )
 {
 	if ( !tQuery.m_dOnFilters.GetLength() )
 	{
@@ -2237,13 +2237,13 @@ bool CheckJoinOnFilters ( const CSphIndex * pIndex, const CSphIndex * pJoinedInd
 
 	for ( const auto & i : tQuery.m_dOnFilters )
 	{
-		if ( i.m_sIdx1!=pIndex->GetName() && i.m_sIdx1!=pJoinedIndex->GetName() )
+		if ( i.m_sIdx1!=pIndex->GetName() && i.m_sIdx1!=pJoinedIndex->GetName() && ( !szParent || i.m_sIdx1!=szParent ) )
 		{
 			sError.SetSprintf ( "JOIN ON table '%s' not found", i.m_sIdx1.cstr() );
 			return false;
 		}
 
-		if ( i.m_sIdx2!=pIndex->GetName() && i.m_sIdx2!=pJoinedIndex->GetName() )
+		if ( i.m_sIdx2!=pIndex->GetName() && i.m_sIdx2!=pJoinedIndex->GetName() && ( !szParent || i.m_sIdx2!=szParent ) )
 		{
 			sError.SetSprintf ( "JOIN ON table '%s' not found", i.m_sIdx2.cstr() );
 			return false;
@@ -2282,18 +2282,18 @@ std::unique_ptr<ISphFilter> CreateJoinNullFilter ( const CSphFilterSettings & tS
 
 //////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
-ISphMatchSorter * CreateJoinSorter ( const CSphIndex * pIndex, const CSphIndex * pJoinedIndex, const SphQueueSettings_t & tSettings, const CSphQuery & tQuery, ISphMatchSorter * pSorter, const CSphQuery & tJoinQueryOptions, bool bJoinedGroupSort, int iBatchSize, CSphString & sError )
+ISphMatchSorter * CreateJoinSorter ( const CSphIndex * pIndex, const CSphIndex * pJoinedIndex, const SphQueueSettings_t & tSettings, const CSphQuery & tQuery, ISphMatchSorter * pSorter, const CSphQuery & tJoinQueryOptions, bool bJoinedGroupSort, int iBatchSize, const char * szParent, CSphString & sError )
 {
 	if ( !tSettings.m_pJoinArgs )
 		return pSorter;
 
-	if ( !CheckJoinOnFilters ( pIndex, pJoinedIndex, tQuery, sError ) )
+	if ( !CheckJoinOnFilters ( pIndex, pJoinedIndex, tQuery, szParent, sError ) )
 	{
 		SafeDelete(pSorter);
 		return nullptr;
 	}
 
-	std::unique_ptr<JoinSorter_c> pJoinSorter = std::make_unique<JoinSorter_c> ( pIndex, pJoinedIndex, tQuery, tJoinQueryOptions, pSorter, bJoinedGroupSort, iBatchSize );
+	std::unique_ptr<JoinSorter_c> pJoinSorter = std::make_unique<JoinSorter_c> ( pIndex, pJoinedIndex, tQuery, tJoinQueryOptions, pSorter, bJoinedGroupSort, iBatchSize, szParent );
 	if ( pJoinSorter->GetErrorFlag() )
 	{
 		sError = pJoinSorter->GetErrorMessage();
@@ -2304,12 +2304,12 @@ ISphMatchSorter * CreateJoinSorter ( const CSphIndex * pIndex, const CSphIndex *
 }
 
 
-bool CreateJoinMultiSorter ( const CSphIndex * pIndex, const CSphIndex * pJoinedIndex, const SphQueueSettings_t & tSettings, const VecTraits_T<CSphQuery> & dQueries, const VecTraits_T<CSphQuery> & dJoinQueryOptions, VecTraits_T<ISphMatchSorter *> & dSorters, int iBatchSize, CSphString & sError )
+bool CreateJoinMultiSorter ( const CSphIndex * pIndex, const CSphIndex * pJoinedIndex, const SphQueueSettings_t & tSettings, const VecTraits_T<CSphQuery> & dQueries, const VecTraits_T<CSphQuery> & dJoinQueryOptions, VecTraits_T<ISphMatchSorter *> & dSorters, int iBatchSize, const char * szParent, CSphString & sError )
 {
 	if ( !tSettings.m_pJoinArgs )
 		return true;
 
-	if ( !CheckJoinOnFilters ( pIndex, pJoinedIndex, dQueries.First(), sError ) )
+	if ( !CheckJoinOnFilters ( pIndex, pJoinedIndex, dQueries.First(), szParent, sError ) )
 		return false;
 
 	// the idea is that 1st sorter does the join AND it also pushes joined matches to all other sorters

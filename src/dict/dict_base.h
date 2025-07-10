@@ -218,11 +218,8 @@ DictRefPtr_c sphCreateDictionaryKeywords ( const CSphDictSettings& tSettings, co
 /// exact dict
 void SetupExactDict ( DictRefPtr_c& pDict );
 
-/// star dict old format (pre v8)
-void SetupStarDictOld ( DictRefPtr_c& pDict );
-
-/// star dict v8
-void SetupStarDictV8 ( DictRefPtr_c& pDict, bool bInfixes = true );
+/// star dict
+void SetupStarDict ( DictRefPtr_c& pDict, bool bInfixes = true );
 
 /// clear wordform cache
 void sphShutdownWordforms();

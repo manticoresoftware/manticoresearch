@@ -407,7 +407,10 @@ static bool sphWildcardMatchDP ( const T1 * sString, const T2 * sPattern )
 
 		while ( *s )
 		{
-			int j = int (s - sString) + 1;
+			const int j = int (s - sString) + 1;
+			if ( j >= iBufLenMax )
+				return false;
+
 			if ( !bEsc && *p=='*' )
 			{
 				dTmp[iCur][j] = dTmp[iPrev][j-1] || dTmp[iCur][j-1] || dTmp[iPrev][j];
@@ -446,8 +449,7 @@ bool sphWildcardMatchSpec ( const T1 * sString, const T2 * sPattern )
 
 	if ( iStars>10 || ( iStars>5 && iLen>17 ) )
 		return sphWildcardMatchDP ( sString, sPattern );
-	else
-		return sphWildcardMatchRec ( sString, sPattern );
+	return sphWildcardMatchRec ( sString, sPattern );
 }
 
 

@@ -9775,7 +9775,7 @@ bool CSphIndex_VLN::DoGetKeywords ( CSphVector <CSphKeywordInfo> & dKeywords, co
 		ARRAY_FOREACH ( i, dKeywords )
 		{
 			CSphKeywordInfo &tInfo = dKeywords[i];
-			int iLen = tInfo.m_sTokenized.Length ();
+			int iLen = Min ( MAX_KEYWORD_BYTES, tInfo.m_sTokenized.Length() );
 			memcpy ( sWord, tInfo.m_sTokenized.cstr (), iLen );
 			sWord[iLen] = '\0';
 

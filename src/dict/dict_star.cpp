@@ -34,8 +34,8 @@ SphWordID_t DictStar_c::GetWordID ( BYTE* pWord )
 {
 	char sBuf[16 + 3 * SPH_MAX_WORD_LEN];
 
-	auto iLen = (int)strlen ( (const char*)pWord );
-	iLen = Min ( iLen, 16 + 3 * SPH_MAX_WORD_LEN - 1 );
+	auto iRawLen = (int)strlen ( (const char*)pWord );
+	int iLen = Min ( iRawLen, 16 + 3 * SPH_MAX_WORD_LEN - 1 );
 
 	if ( !iLen )
 		return 0;
@@ -49,7 +49,8 @@ SphWordID_t DictStar_c::GetWordID ( BYTE* pWord )
 		if ( m_pDict->GetSettings().m_bStopwordsUnstemmed && IsStopWord ( pWord ) )
 			return 0;
 
-		m_pDict->ApplyStemmers ( pWord );
+		if ( iRawLen <= ( 16 + 3 * SPH_MAX_WORD_LEN - 1 ) )
+			m_pDict->ApplyStemmers ( pWord );
 
 		// stemmer might squeeze out the word
 		if ( !pWord[0] )
@@ -59,7 +60,9 @@ SphWordID_t DictStar_c::GetWordID ( BYTE* pWord )
 			return 0;
 	}
 
-	iLen = (int)strlen ( (const char*)pWord );
+	if ( iRawLen <= (16 + 3 * SPH_MAX_WORD_LEN - 1) )
+		iRawLen = (int) strlen ( (const char *) pWord );
+	iLen = Min ( iRawLen, 16 + 3 * SPH_MAX_WORD_LEN - 1 );
 	assert ( iLen < 16 + 3 * SPH_MAX_WORD_LEN ); // < 142
 
 	if ( !iLen || ( bHeadStar && iLen == 1 ) )

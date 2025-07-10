@@ -83,8 +83,6 @@ void CSphTransformation::SetCosts ( XQNode_t * pNode, const CSphVector<XQNode_t 
 		}
 		for ( const auto& dWord : pChild->dWords() )
 		{
-			if ( dWord.m_bRegex )
-				continue;
 			const CSphString & sWord = dWord.m_sWord;
 			int * pCost = hCosts ( sWord );
 			if ( pCost )
@@ -109,7 +107,7 @@ void CSphTransformation::SetCosts ( XQNode_t * pNode, const CSphVector<XQNode_t 
 	{
 		XQNode_t * pChild = dChildren[i];
 		int iCost = 0;
-		for_each ( pChild->dWords(), [&iCost,&hCosts] (const auto& dWord) { if (!dWord.m_bRegex) iCost += hCosts[dWord.m_sWord]; } );
+		for_each ( pChild->dWords(), [&iCost,&hCosts] (const auto& dWord) { iCost += hCosts[dWord.m_sWord]; } );
 		pChild->m_iUser += iCost;
 		if ( pChild->m_pParent )
 			pChild->m_pParent->m_iUser += pChild->m_iUser;

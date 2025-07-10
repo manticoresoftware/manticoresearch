@@ -1,25 +1,25 @@
 # 向实时表添加文档
 
-> 如果您想了解如何向普通表添加文档，请参阅[从外部存储添加数据](../../Data_creation_and_modification/Adding_data_from_external_storages/Plain_tables_creation.md)一节。
+> 如果您正在查找有关向普通表添加文档的信息，请参阅[从外部存储添加数据](../../Data_creation_and_modification/Adding_data_from_external_storages/Plain_tables_creation.md)一节。
 
 <!-- example insert -->
-实时添加文档仅支持[实时表](../../Creating_a_table/Local_tables/Real-time_table.md)和[percolate 表](../../Creating_a_table/Local_tables/Percolate_table.md)。对应的 SQL 命令、HTTP 端点或客户端函数会将具有指定字段值的新行（文档）插入表中。添加文档时不要求表必须事先存在。如果表不存在，Manticore 会尝试自动创建。更多信息请参阅[自动模式](../../Data_creation_and_modification/Adding_documents_to_a_table/Adding_documents_to_a_real-time_table.md#Auto-schema)。
+实时添加文档仅支持[实时表](../../Creating_a_table/Local_tables/Real-time_table.md)和[Percolate表](../../Creating_a_table/Local_tables/Percolate_table.md)。相应的SQL命令、HTTP端点或客户端函数会将带有提供字段值的新行（文档）插入表中。添加文档之前表不必存在。如果表不存在，Manticore将尝试自动创建它。更多信息，请参见[自动模式](../../Data_creation_and_modification/Adding_documents_to_a_table/Adding_documents_to_a_real-time_table.md#Auto-schema)。
 
-您可以插入单个或[多个文档](../../Data_creation_and_modification/Adding_documents_to_a_table/Adding_documents_to_a_real-time_table.md#Bulk-adding-documents)，为表的所有字段或部分字段提供值。此时，其他字段将填充为默认值（标量类型为 0，文本类型为空字符串）。
+您可以插入单个或[多个文档](../../Data_creation_and_modification/Adding_documents_to_a_table/Adding_documents_to_a_real-time_table.md#Bulk-adding-documents)，提供表中所有字段的值或其中一部分。在这种情况下，其他字段将填充其默认值（标量类型为0，文本类型为空字符串）。
 
-`INSERT` 当前不支持表达式，因此必须显式指定值。
+`INSERT`目前不支持表达式，因此必须显式指定值。
 
-ID 字段/值可省略，因为 RT 和 PQ 表支持[自动 ID](../../Data_creation_and_modification/Adding_documents_to_a_table/Adding_documents_to_a_real-time_table.md#Auto-ID)功能。您也可以使用 `0` 作为 id 值以强制自动生成 ID。对于重复 ID 的行，`INSERT` 不会覆盖。欲覆盖请使用[REPLACE](../../Data_creation_and_modification/Updating_documents/REPLACE.md)。
+ID字段/值可以省略，因为RT和PQ表支持[自动ID](../../Data_creation_and_modification/Adding_documents_to_a_table/Adding_documents_to_a_real-time_table.md#Auto-ID)功能。您也可以使用`0`作为id值以强制自动生成ID。具有重复ID的行不会被`INSERT`覆盖，若要覆盖请使用[REPLACE](../../Data_creation_and_modification/Updating_documents/REPLACE.md)。
 
-使用 HTTP JSON 协议时，您可选择两种不同的请求格式：通用 Manticore 格式和类似 Elasticsearch 的格式。以下示例展示了两种格式。
+使用HTTP JSON协议时，您可以选择两种不同的请求格式：通用的Manticore格式和类似Elasticsearch的格式。两种格式的示例见下文。
 
-此外，使用 Manticore JSON 请求格式时，请注意需要 `doc` 节点，所有值应包含在该节点中。
+另外，使用Manticore JSON请求格式时，请注意`doc`节点是必须的，所有值应包含在其中。
 
 
 <!-- intro -->
 ##### SQL:
 <!-- request SQL -->
-通用语法：
+General syntax:
 
 ```sql
 INSERT INTO <table name> [(column, ...)]
@@ -111,7 +111,7 @@ POST /insert
 
 <!-- request Elasticsearch -->
 
-> 注意：`_create` 需要[Manticore Buddy](Installation/Manticore_Buddy.md)。如果无法使用，请确保 Buddy 已安装。
+> 注意：`_create`操作需要[Manticore Buddy](Installation/Manticore_Buddy.md)。如果不起作用，请确保Buddy已安装。
 
 ```json
 POST /products/_create/3
@@ -306,20 +306,22 @@ insert_res = index_api.insert(insert_req).await;
 
 ## 自动模式
 
-> 注意：自动模式需要[Manticore Buddy](Installation/Manticore_Buddy.md)。如果无法使用，请确保 Buddy 已安装。
+> 注意：自动模式需要[Manticore Buddy](Installation/Manticore_Buddy.md)。如果不起作用，请确保Buddy已安装。
 
-Manticore 提供自动表创建机制，当插入查询中指定的表尚不存在时会自动触发。该机制默认启用。若需禁用，请在 Manticore 配置文件的 [Searchd](../../Server_settings/Searchd.md#auto_schema) 部分设置 `auto_schema = 0`。
+Manticore具有自动表创建机制，当插入查询中指定的表尚不存在时，该机制激活。该机制默认启用。要禁用它，请在Manticore配置文件的[Searchd](../../Server_settings/Searchd.md#auto_schema)部分设置`auto_schema = 0`。
 
 <!-- example auto-schema -->
 
-默认情况下，`VALUES` 子句中的所有文本值均视为 `text` 类型，除非为有效的邮件地址，这种情况下视为 `string` 类型。
+默认情况下，`VALUES`子句中所有文本值均视为`text`类型，除了那些表示有效电子邮件地址的值，这些被视为`string`类型。
 
-若 INSERT 多行时同一字段出现不同且不兼容的值类型，则自动创建表操作将取消，并返回错误信息。但如果不同的值类型兼容，则结果字段类型为能够包含所有值的类型。可能发生的一些自动数据类型转换包括：
+如果您尝试插入多行，对同一字段使用不同且不兼容的数据类型，自动表创建将取消，并返回错误消息。然而，如果不同的数据类型兼容，最终字段类型将是能够容纳所有值的类型。可能发生的一些自动数据类型转换包括：
 * mva -> mva64
-* uint -> bigint -> float（可能导致精度丢失）
+* uint -> bigint -> float（这可能导致一定的精度损失）
 * string -> text
 
-此外，以下日期格式将被识别并转为时间戳，所有其他日期格式将作为字符串处理：
+自动模式机制不支持使用用于[KNN](../../Searching/KNN.md#Configuring-a-table-for-KNN-search)（K近邻）相似度搜索的向量字段（`float_vector`类型）创建表。要在表中使用向量字段，必须显式创建包含这些字段的表模式。如果您需要在普通表中存储向量数据且不具备KNN搜索能力，可以使用标准JSON语法将其存储为JSON数组，例如：`INSERT INTO table_name (vector_field) VALUES ('[1.0, 2.0, 3.0]')`。
+
+此外，以下日期格式将被识别并转换为时间戳，其它日期格式将被视为字符串：
 - `%Y-%m-%dT%H:%M:%E*S%Z`
 - `%Y-%m-%d'T'%H:%M:%S%Z`
 - `%Y-%m-%dT%H:%M:%E*S`
@@ -328,7 +330,7 @@ Manticore 提供自动表创建机制，当插入查询中指定的表尚不存�
 - `%Y-%m-%dT%H`
 
 
-注意，`/bulk` HTTP 端点不支持自动建表（自动模式）。仅 `/_bulk`（类似 Elasticsearch）HTTP 端点和 SQL 接口支持此功能。
+请注意，`/bulk` HTTP端点不支持自动表创建（自动模式）。仅`/_bulk`（Elasticsearch样式）HTTP端点和SQL接口支持此功能。
 
 <!-- intro -->
 ##### SQL:
@@ -414,23 +416,23 @@ POST /insert  -d
 
 <!-- end -->
 
-## 自动 ID
+## 自动ID
 <!-- example autoid -->
-Manticore 为插入或替换到实时或[Percolate 表](../../Creating_a_table/Local_tables/Percolate_table.md)中的文档的 ID 列提供自动 ID 生成。该生成器为文档生成唯一 ID，具备一定保证，但不应被视为自增 ID。
+Manticore为插入或替换到实时表或[Percolate表](../../Creating_a_table/Local_tables/Percolate_table.md)中的文档的ID列提供自动ID生成功能。生成器生成的ID在一定保证下是唯一的，但不应被视为自增ID。
 
-生成的 ID 值在以下条件下保证唯一：
-* 当前服务器的 [server_id](../../Server_settings/Searchd.md#server_id) 值位于 0 到 127 范围内，且在集群节点中唯一，或使用由 MAC 地址生成的默认值作为种子
-* Manticore 节点重启间系统时间不发生变动
-* 在搜索服务器重启间，自动 ID 生成次数少于每秒 1600 万次
+生成的ID值在以下条件下保证唯一：
+* 当前服务器的 [server_id](../../Server_settings/Searchd.md#server_id) 值在 0 到 127 范围内，并且在集群节点中唯一，或使用默认值，该默认值是从 MAC 地址生成的种子
+* Manticore 节点在服务器重启之间系统时间不变化
+* 在搜索服务器重启之间，自动 ID 的生成次数少于每秒 1600 万次
 
-自动 ID 生成器为文档 ID 创建 64 位整数，采用以下方案：
-* 第 0 到 23 位构成计数器，每次调用自动 ID 生成器时自增
-* 第24至55位表示服务器启动的Unix时间戳
-* 第56至63位对应server_id
+自动 ID 生成器为文档 ID 创建 64 位整数，并使用以下模式：
+* 位 0 到 23 形成一个计数器，每次调用自动 ID 生成器时递增
+* 位 24 到 55 表示服务器启动的 Unix 时间戳
+* 位 56 到 63 对应 server_id
 
-此架构确保生成的ID在集群的所有节点中是唯一的，并且插入到不同集群节点的数据不会在节点之间产生冲突。
+该模式确保生成的 ID 在集群所有节点中唯一，且插入到不同集群节点的数据不会在节点间产生冲突。
 
-因此，用于自动ID的生成器生成的第一个ID不是1，而是一个较大的数字。此外，如果在调用之间对其他表进行插入，则插入到表中的文档流的ID值可能不是连续的，因为ID生成器在服务器中是单一的，并在其所有表之间共享。
+因此，自动 ID 生成器产生的第一个 ID 不是 1，而是更大的一个数。此外，插入到表中的文档流可能具有非连续的 ID 值，如果调用之间有其他表的插入发生，因为 ID 生成器在服务器中是单一的，并且在所有表之间共享。
 
 <!-- intro -->
 ##### SQL:
@@ -578,16 +580,16 @@ let insert_res = index_api.insert(insert_req).await;
 <!-- end -->
 
 <!-- example call -->
-### UUID_SHORT 多ID生成
+### UUID_SHORT 多 ID 生成
 
 ```sql
 CALL UUID_SHORT(N)
 ```
 
-`CALL UUID_SHORT(N)` 语句允许在一次调用中生成N个唯一的64位ID，而无需插入任何文档。当您需要在Manticore中预生成ID以供其他系统或存储方案使用时，这尤其有用。例如，您可以在Manticore中生成自动ID，然后在其他数据库、应用程序或工作流程中使用它们，确保不同环境中的标识符一致且唯一。
+`CALL UUID_SHORT(N)` 语句允许单次调用生成 N 个唯一的 64 位 ID，而无需插入任何文档。它特别适合需要在 Manticore 中预生成 ID 以供其他系统或存储解决方案使用的场景。例如，您可以在 Manticore 中生成自动 ID，然后在另一个数据库、应用程序或工作流中使用它们，从而确保不同环境中标识符的一致性和唯一性。
 
 <!-- intro -->
-##### 示例：
+##### 示例:
 <!-- request Example -->
 
 ```sql
@@ -607,15 +609,15 @@ CALL UUID_SHORT(3)
 
 <!-- example bulk_insert -->
 ## 批量添加文档
-您不仅可以向实时表插入单个文档，还可以插入任意数量的文档。完全可以向实时表批量插入成千上万的文档。但需要注意以下几点：
+您不仅可以向实时表插入单个文档，还可以插入任意数量的文档。批量插入数万个文档到实时表是完全可行的。但需要注意以下几点：
 * 批量越大，每次插入操作的延迟越高
-* 批量越大，您可以期待更高的索引速度
-* 您可能需要增加 [max_packet_size](../../Server_settings/Searchd.md#max_packet_size) 的值，以允许插入更大的批量
-* 通常，每次批量插入操作被视为单个具有原子性保证的 [事务](../../Data_creation_and_modification/Transactions.md)，因此您要么一次性在表中获得所有新文档，要么如果失败，则不会添加任何文档。有关空行或切换到另一表的更多详细信息，请参见“JSON”示例。
+* 批量越大，索引速度越高
+* 您可能需要增加 [max_packet_size](../../Server_settings/Searchd.md#max_packet_size) 以支持更大的批量
+* 通常，每个批量插入操作被视为单个具有原子性保证的 [事务](../../Data_creation_and_modification/Transactions.md)，因此要么表中一次性有所有新文档，要么在失败时一个都不会添加。关于空行或切换到另一个表的更多细节，请参见“JSON”示例。
 
-请注意，`/bulk` HTTP端点不支持自动创建表（自动架构）。只有`/_bulk`（类似Elasticsearch）HTTP端点和SQL接口支持此功能。`/_bulk`（类似Elasticsearch）HTTP端点允许表名中包含集群名称，格式为`cluster_name:table_name`。
+请注意，`/bulk` HTTP 端点不支持自动创建表（自动模式）。仅有 `/_bulk`（类似 Elasticsearch）HTTP 端点和 SQL 接口支持该功能。`/_bulk`（类似 Elasticsearch）HTTP 端点允许表名包含格式为 `cluster_name:table_name` 的集群名称。
 
-`/_bulk`端点接受与Elasticsearch相同格式的文档ID，您也可以在文档本身中包含`id`：
+`/_bulk` 端点接受与 Elasticsearch 相同格式的文档 ID，您也可以在文档本身内包含 `id`：
 ```json
 { "index": { "table" : "products", "_id" : "1" } }
 { "title" : "Crossbody Bag with Tassel", "price": 19.85 }
@@ -628,23 +630,23 @@ CALL UUID_SHORT(3)
 { "title" : "Crossbody Bag with Tassel", "price": 19.85, "id": "1" }
 ```
 
-#### /bulk中的分块传输
-`/bulk`（Manticore模式）端点支持[分块传输编码](https://en.wikipedia.org/wiki/Chunked_transfer_encoding)。您可以使用它传输大型批量。它：
-* 减少峰值内存使用，降低OOM风险
+#### /bulk 中的分块传输
+`/bulk`（Manticore 模式）端点支持[分块传输编码](https://en.wikipedia.org/wiki/Chunked_transfer_encoding)。您可以用它来传输大型批量数据。它：
+* 减少峰值内存使用，降低 OOM（内存溢出）风险
 * 缩短响应时间
-* 允许您绕过 [max_packet_size](../../Server_settings/Searchd.md#max_packet_size) 限制，传输远大于 `max_packet_size`（128MB）最大允许值的批量，例如一次传输1GB。
+* 允许您绕过 [max_packet_size](../../Server_settings/Searchd.md#max_packet_size) 限制，传输远大于最大允许值（128MB）的批次，例如一次传输 1GB。
 
 <!-- intro -->
 ### 批量插入示例
 ##### SQL:
 <!-- request SQL -->
-对于批量插入，只需在`VALUES()`后提供更多的文档。语法是：
+批量插入时，只需在 `VALUES()` 后提供更多文档，语法为：
 
 ```sql
 INSERT INTO <table name>[(column1, column2, ...)] VALUES(value1[, value2 , ...]), (...)
 ```
 
-可选的列名列表允许显式指定表中某些列的值。所有其它列将使用默认值（标量类型为0，字符串类型为空字符串）。
+可选的列名列表允许您显式指定某些表中列的值。所有其他列将填充默认值（标量类型为 0，字符串类型为空字符串）。
 
 例如：
 
@@ -657,22 +659,22 @@ INSERT INTO products(title,price) VALUES ('Crossbody Bag with Tassel', 19.85), (
 Query OK, 3 rows affected (0.01 sec)
 ```
 
-当前`INSERT`不支持表达式，值应明确指定。
+当前 `INSERT` 不支持表达式，值需要显式指定。
 
 <!-- intro -->
 ##### JSON:
 <!-- request JSON -->
-语法通常与[插入单个文档](../../Quick_start_guide.md#Add-documents)相同。只需提供更多行，每行一个文档，使用`/bulk`端点替代`/insert`。将每个文档放在“insert”节点中。注意它还需要：
+语法通常与[插入单个文档](../../Quick_start_guide.md#Add-documents)相同。只需提供更多行，每行一个文档，并使用 `/bulk` 端点代替 `/insert`。每个文档用 "insert" 节点括起来。注意它还要求：
 * `Content-Type: application/x-ndjson`
-* 数据应格式为换行分隔JSON（NDJSON）。基本上这意味着每行应包含正好一个JSON语句，并以换行符`\n`和可能的`\r`结束。
+* 数据应为换行分隔的 JSON（NDJSON）格式。本质上，这意味着每行应包含一个完整的 JSON 语句，并以换行符 `\n`（可能还有 `\r`）结尾。
 
-`/bulk`端点支持“insert”、“replace”、“delete”和“update”查询。请记住，您可以对多个表执行操作，但事务只支持单个表。如果指定多个，Manticore会将指向同一表的操作聚集为一个事务。当表名更换时，它会提交已收集的操作并在新表启动新的事务。批次之间的空行也会导致提交前一批次并启动新事务。
+/bulk 端点支持 'insert'、'replace'、'delete' 和 'update' 查询。请记住，您可以将操作指向多个表，但事务只能针对单个表。如果您指定了多个，Manticore 会将指向同一表的操作汇集到一个事务中。当表发生变化时，它会提交收集的操作，并在新表上启动一个新事务。分批之间的空行也会导致提交前一批次并开始一个新事务。
 
-在`/bulk`请求的响应中，您可以找到以下字段：
-* "errors"：显示是否发生任何错误（true/false）
+在 /bulk 请求的响应中，您可以找到以下字段：
+* "errors"：显示是否发生了任何错误（true/false）
 * "error"：描述发生的错误
-* "current_line"：执行停止（或失败）的行号；空行包括第一个空行也计数
-* "skipped_lines"：未提交行的计数，从`current_line`开始向前计算
+* "current_line"：执行停止（或失败）时的行号；空行，包括第一个空行，也计数在内
+* "skipped_lines"：未提交行的计数，从 `current_line` 向后计数
 
 ```json
 POST /bulk
@@ -759,7 +761,7 @@ POST /bulk
 
 <!-- request Elasticsearch -->
 
-> 注意：如果表尚不存在，`_bulk` 需要 [Manticore Buddy](Installation/Manticore_Buddy.md)。如果不起作用，请确保已安装 Buddy。
+> 注意：如果表尚不存在，`_bulk` 需要 [Manticore Buddy](Installation/Manticore_Buddy.md)。如果不起作用，请确保 Buddy 已安装。
 
 ```json
 POST /_bulk
@@ -908,7 +910,7 @@ index_api.bulk(bulk_body).await;
 <!-- example MVA_insert -->
 ## 插入多值属性 (MVA) 值
 
-多值属性 (MVA) 以数字数组的形式插入。
+多值属性 (MVA) 以数字数组形式插入。
 <!-- intro -->
 ### 示例
 ##### SQL
@@ -946,7 +948,7 @@ POST /products/_create/1
 }
 ```
 
-或者，另选：
+或者，另一种方式
 ```json
 POST /products/_doc/
 {
@@ -1099,7 +1101,7 @@ POST /products/_create/1
 }
 ```
 
-或者，另选：
+或者，另一种方式
 ```json
 POST /products/_doc/
 {

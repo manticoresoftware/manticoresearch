@@ -10,16 +10,16 @@ SHOW THREADS [ OPTION columns=width[,format=sphinxql][,format=all] ]
 
 结果表包含以下列：
 
-* `TID`: 内核分配给线程的 ID
-* `Name`: 线程名称，在 `top`、`htop`、`ps` 以及其他进程查看工具中也可见
-* `Proto`: 连接协议；可能的值包括 `sphinx`、`mysql`、`http`、`ssl`、`compressed`、`replication`，或组合（例如 `http,ssl` 或 `compressed,mysql`）
-* `State`: 线程状态；可能的取值有 `handshake`、`net_read`、`net_write`、`query`、`net_idle`
-* `Connection from`: 客户端的 `ip:port`
-* `ConnID`: 连接 ID（从 0 开始）
-* `This/prev job time`: 当线程忙碌时——当前任务运行多长时间；当线程空闲时——前一个任务持续时间 + 后缀 `prev`
-* `Jobs done`: 此线程完成的任务数量
-* `Thread status`: `idling` 或 `working`
-* `Info`: 关于查询的信息，如果查询针对分布式表或实时表，可能包含多个查询
+* `TID`：内核分配给线程的 ID
+* `Name`：线程名称，在 `top`、`htop`、`ps` 以及其他进程查看工具中也可见
+* `Proto`：连接协议；可能的值包括 `sphinx`、`mysql`、`http`、`ssl`、`compressed`、`replication`，或组合（例如，`http,ssl` 或 `compressed,mysql`）
+* `State`：线程状态；可能的值为 `handshake`、`net_read`、`net_write`、`query`、`net_idle`
+* `Connection from`：客户端的 `ip:port`
+* `ConnID`：连接 ID（从 0 开始）
+* `This/prev job time`：当线程忙碌时 - 当前任务已运行的时长；当线程空闲时 - 上一个任务的时长 + 后缀 `prev`
+* `Jobs done`：该线程完成的任务数
+* `Thread status`：`idling` 或 `working`
+* `Info`：关于查询的信息，如果查询针对分布式表或实时表，可能包含多个查询
 
 <!-- intro -->
 ##### SQL:
@@ -40,7 +40,7 @@ SHOW THREADS;
     Connection from: 172.17.0.1:43300
              ConnID: 8
  This/prev job time: 630us
-       CPU activity: 94.15%
+       CPU activity: 94%
           Jobs done: 2490
       Thread status: working
                Info: SHOW THREADS
@@ -52,7 +52,7 @@ SHOW THREADS;
     Connection from: 172.17.0.1:43301
              ConnID: 9
  This/prev job time: 689us
-       CPU activity: 89.23%
+       CPU activity: 89%
           Jobs done: 1830
       Thread status: working
                Info: show threads
@@ -101,7 +101,7 @@ Array
             [Connection from] => 127.0.0.1:38072
             [ConnID] => 17
             [This/prev job time, s] => 231us
-            [CPU activity] => 93.54%
+            [CPU activity] => 94%
             [Jobs done] => 8
             [Thread status] => working
             [Info] => show_threads
@@ -126,7 +126,7 @@ print(utilsApi.sql('SHOW THREADS'))
 <!-- response Python -->
 
 ```python
-[{'columns': [{'TID': {'type': 'long'}}, {'Name': {'type': 'string'}}, {'Proto': {'type': 'string'}}, {'State': {'type': 'string'}}, {'Connection from': {'type': 'string'}}, {'ConnID': {'type': 'long long'}}, {'This/prev job time, s': {'type': 'string'}}, {'CPU activity': {'type': 'float'}}, {'Jobs done': {'type': 'long'}}, {'Thread status': {'type': 'string'}}, {'Info': {'type': 'string'}}], 'data': [{'TID': 506958, 'Name': 'work_6', 'Proto': 'http', 'State': 'query', 'Connection from': '127.0.0.1:38600', 'ConnID': 834, 'This/prev job time, s': '206us', 'CPU activity': '91.85%', 'Jobs done': 943, 'Thread status': 'working', 'Info': 'show_threads'}], 'total': 1, 'error': '', 'warning': ''}]
+[{'columns': [{'TID': {'type': 'long'}}, {'Name': {'type': 'string'}}, {'Proto': {'type': 'string'}}, {'State': {'type': 'string'}}, {'Connection from': {'type': 'string'}}, {'ConnID': {'type': 'long long'}}, {'This/prev job time, s': {'type': 'string'}}, {'CPU activity': {'type': 'string'}}, {'Jobs done': {'type': 'long'}}, {'Thread status': {'type': 'string'}}, {'Info': {'type': 'string'}}], 'data': [{'TID': 506958, 'Name': 'work_6', 'Proto': 'http', 'State': 'query', 'Connection from': '127.0.0.1:38600', 'ConnID': 834, 'This/prev job time, s': '206us', 'CPU activity': '92%', 'Jobs done': 943, 'Thread status': 'working', 'Info': 'show_threads'}], 'total': 1, 'error': '', 'warning': ''}]
 ```
 
 <!-- intro -->
@@ -147,7 +147,7 @@ print(res)
 <!-- response Python-asyncio -->
 
 ```python
-[{'columns': [{'TID': {'type': 'long'}}, {'Name': {'type': 'string'}}, {'Proto': {'type': 'string'}}, {'State': {'type': 'string'}}, {'Connection from': {'type': 'string'}}, {'ConnID': {'type': 'long long'}}, {'This/prev job time, s': {'type': 'string'}}, {'CPU activity': {'type': 'float'}}, {'Jobs done': {'type': 'long'}}, {'Thread status': {'type': 'string'}}, {'Info': {'type': 'string'}}], 'data': [{'TID': 506958, 'Name': 'work_6', 'Proto': 'http', 'State': 'query', 'Connection from': '127.0.0.1:38600', 'ConnID': 834, 'This/prev job time, s': '206us', 'CPU activity': '91.85%', 'Jobs done': 943, 'Thread status': 'working', 'Info': 'show_threads'}], 'total': 1, 'error': '', 'warning': ''}]
+[{'columns': [{'TID': {'type': 'long'}}, {'Name': {'type': 'string'}}, {'Proto': {'type': 'string'}}, {'State': {'type': 'string'}}, {'Connection from': {'type': 'string'}}, {'ConnID': {'type': 'long long'}}, {'This/prev job time, s': {'type': 'string'}}, {'CPU activity': {'type': 'string'}}, {'Jobs done': {'type': 'long'}}, {'Thread status': {'type': 'string'}}, {'Info': {'type': 'string'}}], 'data': [{'TID': 506958, 'Name': 'work_6', 'Proto': 'http', 'State': 'query', 'Connection from': '127.0.0.1:38600', 'ConnID': 834, 'This/prev job time, s': '206us', 'CPU activity': '92%', 'Jobs done': 943, 'Thread status': 'working', 'Info': 'show_threads'}], 'total': 1, 'error': '', 'warning': ''}]
 ```
 
 <!-- intro -->
@@ -210,7 +210,7 @@ showThreads();
             },
             {
                 "CPU activity": {
-                    "type": "float"
+                    "type": "string"
                 }
             },
             {
@@ -238,7 +238,7 @@ showThreads();
                 "Connection from": "127.0.0.1:36656",
                 "ConnID": 2884,
                 "This/prev job time, s": "236us",
-                "CPU activity": "91.73%",
+                "CPU activity": "92%",
                 "Jobs done": 3328,
                 "Thread status": "working",
                 "Info": "show_threads"
@@ -330,7 +330,7 @@ utilsApi.sql("SHOW THREADS");
       Connection from=172.17.0.1:60550,
       ConnID=163,
       This/prev job time=105us,
-      CPU activity=44.68%,
+      CPU activity=45%,
       Jobs done=849,
       Thread status=working,
       Info=show_threads
@@ -564,7 +564,7 @@ res = await utilsApi.sql('SHOW THREADS');
             },
             {
                 "CPU activity": {
-                    "type": "float"
+                    "type": "string"
                 }
             },
             {
@@ -592,7 +592,7 @@ res = await utilsApi.sql('SHOW THREADS');
                 "Connection from": "127.0.0.1:36656",
                 "ConnID": 2884,
                 "This/prev job time, s": "236us",
-                "CPU activity": "91.73%",
+                "CPU activity": "92%",
                 "Jobs done": 3328,
                 "Thread status": "working",
                 "Info": "show_threads"
@@ -657,7 +657,7 @@ apiClient.UtilsAPI.Sql(context.Background()).Body("SHOW THREADS").Execute()
             },
             {
                 "CPU activity": {
-                    "type": "float"
+                    "type": "string"
                 }
             },
             {
@@ -685,7 +685,7 @@ apiClient.UtilsAPI.Sql(context.Background()).Body("SHOW THREADS").Execute()
                 "Connection from": "127.0.0.1:36656",
                 "ConnID": 2884,
                 "This/prev job time, s": "236us",
-                "CPU activity": "91.73%",
+                "CPU activity": "92%",
                 "Jobs done": 3328,
                 "Thread status": "working",
                 "Info": "show_threads"
@@ -704,15 +704,15 @@ apiClient.UtilsAPI.Sql(context.Background()).Body("SHOW THREADS").Execute()
 `Info` 列显示：
 
 * 通过 Manticore SQL 接口执行的查询的原始文本
-* 通过内部 Manticore 二进制协议执行的查询的完整文本语法、注释以及数据大小（例如来自远程 Manticore 实例）
+* 通过内部 Manticore 二进制协议（例如，从远程 Manticore 实例）运行的查询的完整语法、注释及数据大小
 
 <!-- example SHOW THREADS WIDTH -->
 
-您可以通过指定 `columns=N` 选项限制 `Info` 列的最大宽度。
+您可以通过指定 `columns=N` 选项来限制 `Info` 列的最大宽度。
 
-默认情况下，查询以其原始格式显示。不过，当使用 `format=sphinxql` 选项时，无论通过何种协议执行，查询都会以 SQL 格式显示。
+默认情况下，查询以其原始格式显示。然而，当使用 `format=sphinxql` 选项时，查询将以 SQL 格式显示，无论执行使用何种协议。
 
-使用 `format=all` 将显示所有线程，否则空闲及系统线程默认隐藏（例如，正在执行 [OPTIMIZE](../Securing_and_compacting_a_table/Compacting_a_table.md#OPTIMIZE-TABLE) 的线程）。
+使用 `format=all` 会显示所有线程，而不使用此选项则会隐藏空闲和系统线程（例如，正忙于执行 [OPTIMIZE](../Securing_and_compacting_a_table/Compacting_a_table.md#OPTIMIZE-TABLE) 的线程）。
 
 <!-- intro -->
 ##### SQL:

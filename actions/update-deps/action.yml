@@ -91,6 +91,7 @@ runs:
         if ! git ls-remote --exit-code --heads origin ${{ steps.branch.outputs.branch }}; then
           git checkout -b ${{ steps.branch.outputs.branch }} origin/master
         else
+          echo "HERE"
           git checkout ${{ steps.branch.outputs.branch }}
         fi
 

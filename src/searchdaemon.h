@@ -150,7 +150,7 @@ enum SearchdCommandV_e : WORD
 	VER_COMMAND_STATUS		= 0x101,
 	VER_COMMAND_FLUSHATTRS	= 0x100,
 	VER_COMMAND_SPHINXQL	= 0x100,
-	VER_COMMAND_JSON		= 0x101,
+	VER_COMMAND_JSON		= 0x102,
 	VER_COMMAND_PING		= 0x100,
 	VER_COMMAND_UVAR		= 0x100,
 	VER_COMMAND_CALLPQ		= 0x100,
@@ -1254,10 +1254,11 @@ public:
 class QueryParser_i;
 class RequestBuilder_i;
 class ReplyParser_i;
+class SearchFailuresLog_c;
 
 std::unique_ptr<QueryParser_i> CreateQueryParser ( bool bJson ) noexcept;
 std::unique_ptr<RequestBuilder_i> CreateRequestBuilder ( Str_t sQuery, const SqlStmt_t & tStmt );
-std::unique_ptr<ReplyParser_i> CreateReplyParser ( bool bJson, int & iUpdated, int & iWarnings );
+std::unique_ptr<ReplyParser_i> CreateReplyParser ( bool bJson, int & iUpdated, int & iWarnings, SearchFailuresLog_c & dFails );
 StmtErrorReporter_i * CreateHttpErrorReporter();
 
 enum class EHTTP_STATUS : BYTE
@@ -1313,7 +1314,8 @@ bool sphCheckWeCanModify ( RowBuffer_i& tOut );
 bool PollOptimizeRunning ( const CSphString & sIndex );
 void FixPathAbsolute ( CSphString & sPath );
 
-void				sphProcessHttpQueryNoResponce ( const CSphString& sEndpoint, const CSphString& sQuery, CSphVector<BYTE> & dResult );
+using OptionsHash_t = SmallStringHash_T<CSphString>;
+void				ProcessHttpJsonQuery ( const CSphString & sQuery, OptionsHash_t & hOptions, CSphVector<BYTE> & dResult );
 void				sphHttpErrorReply ( CSphVector<BYTE> & dData, EHTTP_STATUS eCode, const char * szError );
 void				LoadCompatHttp ( const char * sData );
 void				SaveCompatHttp ( JsonEscapedBuilder & tOut );

@@ -1,0 +1,41 @@
+http update + distributed table + wrong replication cluster = crash
+#3481
+
+––– comment –––
+Start Manticore Search
+––– input –––
+rm -f /var/log/manticore/searchd.log; stdbuf -oL searchd --stopwait > /dev/null; stdbuf -oL searchd --logdebugv > /dev/null
+––– output –––
+––– input –––
+if timeout 10 grep -qm1 'accepting connections' <(tail -n 1000 -f /var/log/manticore/searchd.log); then echo 'Manticore started!'; else echo 'Timeout or failed!'; fi
+––– output –––
+Manticore started!
+––– comment –––
+Execute the MRE commands
+––– input –––
+mysql -v -P9306 -h0 -e "drop table if exists t; create table t(f int); drop table if exists d; CREATE TABLE d type='distributed' agent='127.0.0.1:9312:t'"
+––– output –––
+--------------
+drop table if exists t
+--------------
+--------------
+create table t(f int)
+--------------
+--------------
+drop table if exists d
+--------------
+--------------
+CREATE TABLE d type='distributed' agent='127.0.0.1:9312:t'
+--------------
+––– comment –––
+Test HTTP update with wrong cluster - should not crash
+The noop result here is normal due to this is clustered table
+The issue about it: https://github.com/manticoresoftware/manticoresearch/issues/3537
+––– input –––
+curl -s -X POST http://localhost:9312/update -d '{"cluster": "unknown_cluster", "table": "d", "id": 2, "doc": {"f": 5}}'
+––– output –––
+{"error":{"type":"action_request_validation_exception","reason":"table t: table t: table 't' is not in any cluster, use just 't'","table":"d"},"status":409}
+––– input –––
+sleep 2; cat /var/log/manticore/searchd.log | grep 'response data' | head -n 1 | awk -F 'response data: ' '{print $2}'
+––– output –––
+{"version":3,"type":"json response","message":{"error":{"type":"action_request_validation_exception","reason":"table t: table 't' is not in any cluster, use just 't'","table":"t"},"status":409},"meta":null,"error_code":0}

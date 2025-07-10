@@ -76,7 +76,6 @@ runs:
       id: branch
       shell: bash
       run: |
-        echo "branch=update-${{ inputs.name }}-version"
         echo "branch=update-${{ inputs.name }}-version" >> $GITHUB_OUTPUT
         echo "source_branch=${{ github.head_ref }}" >> $GITHUB_OUTPUT
         echo "target=master" >> $GITHUB_OUTPUT

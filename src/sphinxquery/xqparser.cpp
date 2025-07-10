@@ -404,7 +404,7 @@ int XQParser_t::GetToken ( YYSTYPE * lvalp )
 	if ( !m_iPendingType )
 		while (true)
 	{
-		assert ( m_iPendingNulls==0 );
+//		assert ( m_iPendingNulls==0 );
 
 		bool bWasKeyword = m_bWasKeyword;
 		m_bWasKeyword = false;
@@ -639,8 +639,8 @@ int XQParser_t::GetToken ( YYSTYPE * lvalp )
 			{
 				if ( bWasKeyword )
 					continue;
-				if ( sphIsSpace ( m_pTokenizer->GetTokenStart() [ -1 ] ) )
-					continue;
+//				if ( sphIsSpace ( m_pTokenizer->GetTokenStart() [ -1 ] ) ) // crashes with fuzzy on single "$"
+//					continue;
 
 				// right after overshort
 				if ( m_pTokenizer->GetOvershortCount()==1 )

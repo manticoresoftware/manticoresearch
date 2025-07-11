@@ -54,7 +54,66 @@ cmake --build .
 ```
 The long source directory path is required or it may fail to build the sources in some cases (e.g. Centos).
 
-The same process can be used to build binaries/packages not only for popular Linux distributions, but also for FreeBSD, Windows, and macOS.
+In the same way, you can build binaries or packages not just for popular Linux distributions, but also for FreeBSD, Windows, and macOS.
+
+#### Building SRPMs using Docker
+
+You can also you the same special docker image to build SRPMs:
+
+```bash
+docker run -it --rm \
+-e CACHEB="../cache" \
+-e DIAGNOSTIC=1 \
+-e PACK_ICUDATA=0 \
+-e NO_TESTS=1 \
+-e DISTR=rhel8 \
+-e boost=boost_rhel_feb17 \
+-e sysroot=roots_nov22 \
+-e arch=x86_64 \
+-e CTEST_CMAKE_GENERATOR=Ninja \
+-e CTEST_CONFIGURATION_TYPE=RelWithDebInfo \
+-e WITH_COVERAGE=0 \
+-e SYSROOT_URL="https://repo.manticoresearch.com/repository/sysroots" \
+-e HOMEBREW_PREFIX="" \
+-e PACK_GALERA=0 \
+-e UNITY_BUILD=1 \
+-v $(pwd):/manticore_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa \
+manticoresearch/external_toolchain:vcpkg331_20250114 bash
+
+# following is to be run inside docker shell
+cd /manticore_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/
+mkdir build && cd build
+cmake -DPACK=1 ..
+export CMAKE_TOOLCHAIN_FILE=$(pwd)/../dist/build_dockers/cross/linux.cmake
+# The CPackSourceConfig.cmake file is now generated in the build directory
+cpack -G RPM --config ./CPackSourceConfig.cmake
+```
+
+This will generate a Source RPM (`.src.rpm` file) containing all the source code.
+
+#### Building binary RPMs from the SRPM
+
+Once you have generated the SRPM, you can use it to build the complete set of binary RPM packages:
+
+```bash
+# Install build tools and dependencies
+dnf install -y rpm-build cmake gcc-c++ boost-devel epel-release
+
+# Install SRPM dependencies automatically
+dnf builddep -y manticore-*.src.rpm
+
+# Build all binary RPMs from the SRPM
+rpmbuild --rebuild manticore-*.src.rpm
+
+# Find the generated packages
+ls ~/rpmbuild/RPMS/*/manticore*
+```
+
+> NOTE: **To build RPMs from the SRPM, you need to make sure all the dependencies listed in the SRPM are fully installed, which can be challenging.** The SRPM can still be useful for:
+> - Auditing the build process or inspecting the source and spec files
+> - Making custom modifications or patches to the build
+> - Understanding how the binaries were produced
+> - Meeting open-source license compliance requirements
 
 ## Building manually
 
@@ -146,6 +205,7 @@ To disable it, use `-DFOO=0`. If not explicitly noted, enabling a feature that i
   time will hardcode `LOCALDATADIR` as `/my/custom/var/lib/manticore/data`, and `FULL_SHARE_DIR` as
   `/my/custom/usr/share/manticore`.
 - **BUILD_TESTING** (bool) whether to support testing. If enabled, after the build, you can run 'ctest' and test the build. Note that testing implies additional dependencies, like at least the presence of PHP cli, Python, and an available MySQL server with a test database. By default, this parameter is on. So, for 'just build', you might want to disable the option by explicitly specifying 'off' value.
+- **BUILD_SRPMS** (bool) whether to show instructions for building Source RPMs (SRPMs). Due to CPack limitations with component-based packaging, SRPMs cannot be generated directly alongside binary RPMs. When enabled, the build system will display instructions for proper SRPM generation using the source configuration method. By default, this parameter is off.
 - **LIBS_BUNDLE** - path to a folder with different libraries. This is mostly relevant for Windows building, but may also be helpful if you have to build often in order to avoid downloading third-party sources each time. By default, this path is never modified by the configuration script; you should put everything there manually. When, say, we want support for a stemmer - the sources will be downloaded from Snowball homepage, then extracted, configured, built, etc. Instead, you can store the original source tarball (which is `libstemmer_c.tgz`) in this folder. Next time you want to build from scratch, the configuration script will first look up in the bundle, and if it finds the stemmer there, it will not download it again from the Internet.
 - **CACHEB** - path to a folder with stored builds of 3-rd party libraries. Usually features like galera, re2, icu, etc. first downloaded or being got from bundle, then unpacked, built, and installed into a temporary internal folder. When building manticore, that folder is then used as the place where the things required to support the asked feature are live. Finally, they either link with manticore, if it is a library; either go directly to distribution/installation (like galera or icu data). When **CACHEB** is defined either as cmake config param, either as a system environment variable, it is used as the target folder for that builds. This folder might be kept across builds, so that stored libraries there will not be rebuilt anymore, making the whole build process much shorter.
 

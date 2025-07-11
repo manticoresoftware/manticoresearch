@@ -119,19 +119,40 @@ This will generate all the component RPMs that would normally be built:
 
 **Build system generator mismatch (make vs ninja)**
 
-If you encounter an error like `make: *** No targets specified and no makefile found. Stop.`, this means the SRPM was configured to use Ninja as the build system generator, but the spec file is trying to use `make`. This has been fixed in the current version by forcing Unix Makefiles for SRPM builds.
+If you encounter an error like `make: *** No targets specified and no makefile found. Stop.` or `CMake Error: No generator specified for -G`, this means the SRPM was configured to use Ninja as the build system generator, but the spec file is trying to use `make`. This issue has been fixed in current versions by automatically using `cmake --build` instead of `make`.
 
-If you have an older SRPM with this issue, you can fix it by:
+For older SRPMs with this issue, you can fix it manually:
 
 ```bash
 # Extract the SRPM to modify the spec file
 rpm -ivh manticore-*.src.rpm
 
-# Edit the spec file to use cmake --build instead of make
-sed -i 's/make -j%{?_smp_mflags}/cmake --build . --parallel %{?_smp_mflags}/g' ~/rpmbuild/SPECS/manticore.spec
-
-# Or alternatively, add -G "Unix Makefiles" to the cmake command
+# Fix the cmake command to use Unix Makefiles generator
 sed -i 's/cmake /cmake -G "Unix Makefiles" /g' ~/rpmbuild/SPECS/manticore.spec
+
+# If the -G parameter was split across lines, fix that too
+sed -i '/^-G$/N;s/-G\n/-G "Unix Makefiles"/g' ~/rpmbuild/SPECS/manticore.spec
+
+# Also fix any orphaned -G parameter at the end of the cmake command
+sed -i 's/-G$/-G "Unix Makefiles"/g' ~/rpmbuild/SPECS/manticore.spec
+
+# Verify the fix by checking the cmake command
+grep -A 3 -B 3 "cmake.*-G" ~/rpmbuild/SPECS/manticore.spec
+
+# Build from the modified spec
+rpmbuild -ba ~/rpmbuild/SPECS/manticore.spec
+```
+
+**Alternative approach: Use cmake --build instead of make**
+
+Instead of fixing the generator, you can modify the spec file to use cmake's universal build command:
+
+```bash
+# Extract the SRPM to modify the spec file
+rpm -ivh manticore-*.src.rpm
+
+# Replace make with cmake --build
+sed -i 's/make -j%{?_smp_mflags}/cmake --build . --parallel %{?_smp_mflags}/g' ~/rpmbuild/SPECS/manticore.spec
 
 # Build from the modified spec
 rpmbuild -ba ~/rpmbuild/SPECS/manticore.spec
@@ -430,7 +451,7 @@ cpack -G RPM --config ./CPackSourceConfig.cmake
 
 This will create a Source RPM that contains all the source code and can be used to build the complete set of binary RPMs.
 
-**Note**: The generated SRPM is pre-configured to disable Galera replication (`-DWITH_GALERA=0`) by default to avoid complex build dependencies, and uses Unix Makefiles as the build system generator to ensure compatibility with standard RPM building tools. This makes the SRPM easier to build on standard systems.
+**Note**: The generated SRPM is pre-configured to disable Galera replication (`-DWITH_GALERA=0`) by default to avoid complex build dependencies, and automatically uses `cmake --build` instead of `make` to handle any build system generator (Unix Makefiles, Ninja, etc.). This makes the SRPM compatible with any build environment.
 
 #### Alternative: Using BUILD_SRPMS flag
 

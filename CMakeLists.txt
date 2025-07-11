@@ -495,7 +495,8 @@ set ( CPACK_SOURCE_IGNORE_FILES
 set ( CPACK_RPM_BUILDREQUIRES "cmake >= 3.17, gcc-c++, boost-devel >= 1.61.0, libcurl-devel, openssl-devel, zlib-devel, expat-devel, mariadb-connector-c-devel, postgresql-devel, unixODBC-devel, systemd-devel, git, make, flex, bison" )
 
 # Configure cmake parameters for SRPM builds - disable problematic components by default
-set ( CPACK_RPM_SOURCE_PKG_BUILD_PARAMS "-DWITH_GALERA=0 -DWITH_RE2_FORCE_STATIC=1 -DWITH_STEMMER_FORCE_STATIC=1" )
+# Force Unix Makefiles generator for SRPM builds since the spec file uses 'make'
+set ( CPACK_RPM_SOURCE_PKG_BUILD_PARAMS "-DWITH_GALERA=0 -DWITH_RE2_FORCE_STATIC=1 -DWITH_STEMMER_FORCE_STATIC=1 -G \"Unix Makefiles\"" )
 
 if (NOT CPack_CMake_INCLUDED)
 	include ( CPack )

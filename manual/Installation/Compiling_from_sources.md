@@ -82,7 +82,7 @@ manticoresearch/external_toolchain:vcpkg331_20250114 bash
 cd /manticore_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/
 mkdir build && cd build
 cmake -DPACK=1 ..
-export CMAKE_TOOLCHAIN_FILE=$(pwd)/dist/build_dockers/cross/linux.cmake
+export CMAKE_TOOLCHAIN_FILE=$(pwd)/../dist/build_dockers/cross/linux.cmake
 # The CPackSourceConfig.cmake file is now generated in the build directory
 cpack -G RPM --config ./CPackSourceConfig.cmake
 ```
@@ -116,6 +116,28 @@ This will generate all the component RPMs that would normally be built:
 - `manticore-*.rpm` - Meta-package that depends on all components
 
 #### Troubleshooting SRPM builds
+
+**Build system generator mismatch (make vs ninja)**
+
+If you encounter an error like `make: *** No targets specified and no makefile found. Stop.`, this means the SRPM was configured to use Ninja as the build system generator, but the spec file is trying to use `make`. This has been fixed in the current version by forcing Unix Makefiles for SRPM builds.
+
+If you have an older SRPM with this issue, you can fix it by:
+
+```bash
+# Extract the SRPM to modify the spec file
+rpm -ivh manticore-*.src.rpm
+
+# Edit the spec file to use cmake --build instead of make
+sed -i 's/make -j%{?_smp_mflags}/cmake --build . --parallel %{?_smp_mflags}/g' ~/rpmbuild/SPECS/manticore.spec
+
+# Or alternatively, add -G "Unix Makefiles" to the cmake command
+sed -i 's/cmake /cmake -G "Unix Makefiles" /g' ~/rpmbuild/SPECS/manticore.spec
+
+# Build from the modified spec
+rpmbuild -ba ~/rpmbuild/SPECS/manticore.spec
+```
+
+**Missing cmake or wrong cmake path**
 
 If you encounter errors about cmake not being found at a specific path (like `/cmake-3.31.2-linux-x86_64/bin/cmake`), this is because the SRPM was built in a Docker container with cmake at that specific location. Here are solutions:
 
@@ -408,7 +430,7 @@ cpack -G RPM --config ./CPackSourceConfig.cmake
 
 This will create a Source RPM that contains all the source code and can be used to build the complete set of binary RPMs.
 
-**Note**: The generated SRPM is pre-configured to disable Galera replication (`-DWITH_GALERA=0`) by default to avoid complex build dependencies. This makes the SRPM easier to build on standard systems.
+**Note**: The generated SRPM is pre-configured to disable Galera replication (`-DWITH_GALERA=0`) by default to avoid complex build dependencies, and uses Unix Makefiles as the build system generator to ensure compatibility with standard RPM building tools. This makes the SRPM easier to build on standard systems.
 
 #### Alternative: Using BUILD_SRPMS flag
 

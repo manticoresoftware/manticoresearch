@@ -180,7 +180,7 @@ void AddBuddyToken ( const AuthUserCred_t * pSrcBuddy, AuthUsers_t & tAuth )
 
 	if ( !tAuth.m_hUserPerms.Exists ( pSrcBuddy->m_sUser ) )
 	{
-		UserPerms_t & tPerms = tAuth.m_hUserPerms[ pSrcBuddy->m_sUser ];
+		UserPerms_t & tPerms = tAuth.m_hUserPerms.AddUnique ( pSrcBuddy->m_sUser );
 		for ( int iAction=0; iAction<(int)AuthAction_e::UNKNOWN; iAction++ )
 		{
 			UserPerm_t & tPerm = tPerms.Add();

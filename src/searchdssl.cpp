@@ -172,6 +172,7 @@ static void SslFreeCtx ( SSL_CTX * pCtx )
 }
 
 using SmartSSL_CTX_t = SharedPtrCustom_t<SSL_CTX>;
+static const BYTE g_SslSessionContext[] = "ManticoreSearchDaemon";
 
 // init SSL library and global context by demand
 static SmartSSL_CTX_t GetSslCtx ()
@@ -207,6 +208,13 @@ static SmartSSL_CTX_t GetSslCtx ()
 			SslFreeCtx ( pCtx );
 		});
 		SSL_CTX_set_verify ( pSslCtx, SSL_VERIFY_NONE, nullptr );
+		// set server cache
+		SSL_CTX_set_ciphersuites ( pSslCtx, "TLS_AES_256_GCM_SHA384:TLS_CHACHA20_POLY1305_SHA256:TLS_AES_128_GCM_SHA256" );
+		SSL_CTX_set_cipher_list ( pSslCtx, "ECDHE-ECDSA-AES256-GCM-SHA384:ECDHE-RSA-AES256-GCM-SHA384:ECDHE-ECDSA-CHACHA20-POLY1305:ECDHE-RSA-CHACHA20-POLY1305:ECDHE-ECDSA-AES128-GCM-SHA256:ECDHE-RSA-AES128-GCM-SHA256" );
+		SSL_CTX_set_min_proto_version ( pSslCtx, TLS1_2_VERSION );
+
+        SSL_CTX_set_session_id_context ( pSslCtx, g_SslSessionContext, sizeof ( g_SslSessionContext )-1 );
+		SSL_CTX_set_session_cache_mode ( pSslCtx, SSL_SESS_CACHE_SERVER );
 
 		// shedule callback for final shutdown.
 		searchd::AddShutdownCb ( [pRefCtx = pSslCtx] {
@@ -465,6 +473,23 @@ class AsyncSSBufferedSocket_c final : public AsyncNetBuffer_c
 		auto iRes = BIO_flush ( m_pSslBackend );
 		sphLogDebugv ( FRONT ">> BioFrontWrite (%p) done (%d) %d bytes of %d" NORM, (BIO*)m_pSslBackend, iRes, iSent, dData.GetLength () );
 		m_iSendTotal += dData.GetLength();
+
+		SSL * pSSL = nullptr;
+		if ( BIO_get_ssl(m_pSslBackend, &pSSL) == 1 && pSSL )
+		{
+			const SSL_SESSION *sess = SSL_get_session(pSSL);
+			if (sess)
+			{
+				unsigned int iIdLen = 0;
+				const unsigned char *session_id = SSL_SESSION_get_id(sess, &iIdLen);
+
+				sphInfo("server at SendBuffer: TLS session %s, cache size %d, session ID len %d",
+					(SSL_session_reused(pSSL) ? "reused" : "new"),
+					(int)SSL_CTX_sess_number(SSL_get_SSL_CTX(pSSL)),
+					iIdLen);
+			}
+		}
+
 		return ( iRes>0 );
 	}
 
@@ -554,6 +579,9 @@ bool MakeSecureLayer ( std::unique_ptr<AsyncNetBuffer_c>& pSource )
 
 	BIO_get_ssl ( pFrontEnd, &pSSL );
 	SSL_set_mode ( pSSL, SSL_MODE_AUTO_RETRY );
+
+	sphInfo ( "server at MakeSecureLayer: TLS session %s, cache size %d", ( SSL_session_reused ( pSSL ) ? "reused" : "new" ), (int)( SSL_CTX_sess_number ( SSL_get_SSL_CTX ( pSSL ) ) ) ); // !COMMIT
+
 	BIO_push ( pFrontEnd, BIO_new_coroAsync ( std::move ( pSource ) ) );
 	pSource = std::make_unique<AsyncSSBufferedSocket_c> ( std::move ( pFrontEnd ) );
 	return true;

@@ -18,7 +18,7 @@
 #define LOG_LEVEL_MULTIINFO false
 #define LOG_LEVEL_TIMERCB ( LOG_LEVEL_MULTIINFO && false )
 #define LOG_LEVEL_CULRSOCKET false
-#define LOG_LEVEL_CURLEASY false
+#define LOG_LEVEL_CURLEASY true
 #define LOG_LEVEL_CB false
 
 #define CURL_VERBOSE false
@@ -131,7 +131,9 @@ static decltype ( &curl_slist_free_all ) sph_curl_slist_free_all = nullptr;
 static decltype ( &curl_multi_perform ) sph_curl_multi_perform = nullptr;
 static decltype ( &curl_multi_wait ) sph_curl_multi_wait = nullptr;
 static decltype ( &curl_easy_strerror ) sph_curl_easy_strerror = nullptr;
-
+static decltype ( &curl_share_init ) sph_curl_share_init = nullptr;
+static decltype ( &curl_share_cleanup ) sph_curl_share_cleanup = nullptr;
+static decltype ( &curl_share_setopt ) sph_curl_share_setopt = nullptr;
 
 static bool InitDynamicCurl()
 {
@@ -154,7 +156,10 @@ static bool InitDynamicCurl()
 		"curl_slist_free_all",
 		"curl_multi_perform",
 		"curl_multi_wait",
-		"curl_easy_strerror"
+		"curl_easy_strerror",
+		"curl_share_init",
+		"curl_share_cleanup",
+		"curl_share_setopt"
 	};
 	void** pFuncs[] = {
 		(void**)&sph_curl_global_init,
@@ -176,6 +181,9 @@ static bool InitDynamicCurl()
 		(void**)&sph_curl_multi_perform,
 		(void**)&sph_curl_multi_wait,
 		(void**)&sph_curl_easy_strerror,
+		(void**)&sph_curl_share_init,
+		(void**)&sph_curl_share_cleanup,
+		(void**)&sph_curl_share_setopt
 	};
 
 	static CSphDynamicLibrary dLib ( CURL_LIB );
@@ -233,7 +241,8 @@ class CurlSocket_c;
 class CurlMulti_c
 {
 private:
-	CURLM* m_pCurlMulti;
+	CURLM * m_pCurlMulti;
+	CURLSH * m_pCurlShare;
 	Threads::RoledSchedulerSharedPtr_t m_tStrand;
 	MiniTimer_c m_tTimer;
 	static bool m_bInitialized;
@@ -303,6 +312,9 @@ public:
 		sph_curl_multi_setopt ( m_pCurlMulti, CURLMOPT_TIMERFUNCTION, &CmTimerCbJump );
 		sph_curl_multi_setopt ( m_pCurlMulti, CURLMOPT_TIMERDATA, this );
 
+		m_pCurlShare = sph_curl_share_init();
+		sph_curl_share_setopt ( m_pCurlShare, CURLSHOPT_SHARE, CURL_LOCK_DATA_SSL_SESSION );
+
 		m_tStrand = MakeAloneScheduler ( GlobalWorkPool(), "curl_serial" );
 		m_bInitialized = true;
 		MULTI_INFO;
@@ -326,9 +338,14 @@ public:
 		return m_tStrand;
 	}
 
-	CURLM* GetMultiPtr() const
+	CURLM * GetMultiPtr() const
 	{
 		return m_pCurlMulti;
+	}
+
+	CURLSH * GetSharePtr() const
+	{
+		return m_pCurlShare;
 	}
 
 	inline static bool IsInitialized()
@@ -341,6 +358,7 @@ public:
 		MULTI_INFO;
 		if ( !m_bInitialized )
 			return;
+		sph_curl_share_cleanup ( m_pCurlShare );
 		sph_curl_multi_cleanup ( m_pCurlMulti );
 		sph_curl_global_cleanup();
 		m_bInitialized = false;
@@ -616,12 +634,24 @@ private:
 		m_pCurlEasy = sph_curl_easy_init();
 		assert ( m_pCurlEasy );
 
+		SetCurlOpt ( CURLOPT_SHARE, CurlMulti().GetSharePtr() );
+		SetCurlOpt ( CURLOPT_TLS13_CIPHERS, "TLS_AES_256_GCM_SHA384:TLS_CHACHA20_POLY1305_SHA256" );
+		SetCurlOpt ( CURLOPT_SSL_CIPHER_LIST, "ECDHE-ECDSA-AES256-GCM-SHA384:ECDHE-RSA-AES256-GCM-SHA384:ECDHE-ECDSA-CHACHA20-POLY1305:ECDHE-RSA-CHACHA20-POLY1305" );
+		SetCurlOpt ( CURLOPT_SSLVERSION, CURL_SSLVERSION_TLSv1_2 );
+
 		SetCurlOpt ( CURLOPT_FOLLOWLOCATION, 1 );
 		SetCurlOpt ( CURLOPT_NOSIGNAL, 1 );
 		SetCurlOpt ( CURLOPT_WRITEFUNCTION, WriteCbJump );
 		SetCurlOpt ( CURLOPT_WRITEDATA, this );
 		SetCurlOpt ( CURLOPT_ERRORBUFFER, m_sError );
 		SetCurlOpt ( CURLOPT_PRIVATE, this );
+
+		SetCurlOpt ( CURLOPT_FORBID_REUSE, 0L );
+		SetCurlOpt ( CURLOPT_SSL_SESSIONID_CACHE, 1L );
+		SetCurlOpt ( CURLOPT_HTTP_VERSION, CURL_HTTP_VERSION_2TLS );
+		SetCurlOpt ( CURLOPT_TCP_KEEPALIVE, 1L );
+		SetCurlOpt ( CURLOPT_TCP_KEEPIDLE, 30L );
+		SetCurlOpt ( CURLOPT_TCP_KEEPINTVL, 15L );
 	}
 
 	void RemoveFromMulti() REQUIRES(CurlStrand())
@@ -728,6 +758,12 @@ void CurlConn_t::OnDoneMulti ( CURLcode uResult )
 			// could be remote error object stored in the reply data
 			SetReplyError ( m_dData, m_pRemote );
 		}
+
+		// !COMMIT
+		long iVer = 0;
+		sph_curl_easy_getinfo ( m_pCurlEasy, CURLINFO_HTTP_VERSION, &iVer );
+		sphInfo ( "curl ver %d: 1.1(%d), 2.0(%d), 2TLS(%d) ", (int)iVer, (int)CURL_HTTP_VERSION_1_1, (int)CURL_HTTP_VERSION_2_0, (int)CURL_HTTP_VERSION_2TLS );
+
 	} else
 	{
 		agent_stats_inc ( *m_pRemote, eNetworkErrors );

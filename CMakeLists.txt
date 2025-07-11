@@ -53,6 +53,14 @@ set ( CPACK_PACKAGE_NAME "${PACKAGE_NAME}" )
 include ( setup_distribution_build ) # process PACK, DISTR_BUILD and ENV{DISTR}
 include ( FeatureSummary )
 
+# Option to build Source RPMs (SRPMs) - provides instructions for proper SRPM generation
+set ( BUILD_SRPMS OFF CACHE BOOL "Show instructions for building Source RPMs (SRPMs)" )
+if (BUILD_SRPMS)
+	set ( CPACK_RPM_PACKAGE_SOURCES ON )
+	message ( STATUS "SRPM generation requested - will provide instructions for proper SRPM creation" )
+endif ()
+add_feature_info ( "SRPM generation" BUILD_SRPMS "Show instructions for building Source RPM packages" )
+
 # cast away too old gcc compiler (Minspec is 4.7.2)
 if (CXX_COMPILER_ID STREQUAL GNU AND CXX_COMPILER_VERSION VERSION_LESS 4.7.2)
 	message ( FATAL_ERROR "Gcc version error. Minspec is 4.7.2" )
@@ -422,6 +430,69 @@ cmake_print_variables ( CMAKE_INSTALL_PREFIX )
 foreach (var BINDIR SBINDIR LIBEXECDIR SYSCONFDIR SHAREDSTATEDIR LOCALSTATEDIR RUNSTATEDIR LIBDIR INCLUDEDIR OLDINCLUDEDIR DATAROOTDIR DATADIR INFODIR LOCALEDIR MANDIR DOCDIR LOCALLIBDIR)
 	cmake_print_variables ( CMAKE_INSTALL_${var} CMAKE_INSTALL_FULL_${var} )
 endforeach ()
+
+# Configure CPack source packaging for SRPM generation
+set ( CPACK_SOURCE_GENERATOR "RPM" )
+set ( CPACK_SOURCE_PACKAGE_FILE_NAME "${CPACK_PACKAGE_NAME}-${CPACK_PACKAGE_VERSION}" )
+set ( CPACK_SOURCE_IGNORE_FILES
+	"/\\.git/"
+	"/\\.gitignore$"
+	"/\\.gitmodules$"
+	"/build/"
+	"/\\.DS_Store$"
+	"/Thumbs\\.db$"
+	"\\.swp$"
+	"\\.swo$"
+	"\\.orig$"
+	"\\.rej$"
+	"~$"
+	"\\.tmp$"
+	"/\\.vscode/"
+	"/\\.idea/"
+	"/\\.vs/"
+	"/CMakeFiles/"
+	"/CMakeCache\\.txt$"
+	"/CPackConfig\\.cmake$"
+	"/CPackSourceConfig\\.cmake$"
+	"/cmake_install\\.cmake$"
+	"/install_manifest\\.txt$"
+	"/Makefile$"
+	"/\\.ninja"
+	"/build\\.ninja$"
+	"/rules\\.ninja$"
+	"/Testing/"
+	"/test/results/"
+	"/test/test_[0-9].*\\.log$"
+	"/test/test_[0-9].*\\.report$"
+	"/\\.ctest/"
+	"/\\.mypy_cache/"
+	"/\\.pytest_cache/"
+	"/\\.tox/"
+	"/__pycache__/"
+	"/\\.coverage$"
+	"/htmlcov/"
+	"/\\.nyc_output/"
+	"/coverage/"
+	"/node_modules/"
+	"/\\.npm/"
+	"/\\.bower/"
+	"/\\.sass-cache/"
+	"/\\.tmp/"
+	"/\\.temp/"
+	"/\\.cache/"
+	"/\\.vagrant/"
+	"/\\.svn/"
+	"/\\.hg/"
+	"/\\.bzr/"
+	"/\\.CVS/"
+	"/\\.cvsignore$"
+	"/\\.hgignore$"
+	"/\\.bzrignore$"
+	"/\\.svnignore$"
+	)
+
+# Set build requirements for SRPM - these will be used when building from SRPM
+set ( CPACK_RPM_BUILDREQUIRES "cmake >= 3.17, gcc-c++, boost-devel >= 1.61.0, libcurl-devel, openssl-devel, zlib-devel, expat-devel, mariadb-connector-c-devel, postgresql-devel, unixODBC-devel, systemd-devel" )
 
 if (NOT CPack_CMake_INCLUDED)
 	include ( CPack )

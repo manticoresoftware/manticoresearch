@@ -1,0 +1,19 @@
+# Project translation configuration
+
+# Source and target directories
+source_directory: manual/english
+target_directory: manual
+
+# Translation parameters
+translation_chunk_size: 6144
+main_branch: master
+
+# MD5 tracking file for changes
+md5_file: translation.json
+
+# Role template location (project-specific)
+role_template: translator.role.tpl
+
+# If the translated md has yaml files, like in Hugo, we dont
+check_yaml_keys: false
+

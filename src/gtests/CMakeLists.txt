@@ -24,7 +24,7 @@ set ( GTESTS_SRC
 
 add_executable ( gmanticoretest ${GTESTS_SRC} )
 target_include_directories ( gmanticoretest PRIVATE "${MANTICORE_SOURCE_DIR}/src" )
-target_link_libraries ( gmanticoretest
+target_link_libraries ( gmanticoretest PRIVATE
 		GTest::gmock_main
 		lmanticore
 		lsearchd
@@ -34,7 +34,7 @@ target_link_libraries ( gmanticoretest
 )
 
 if (WITH_EXPAT)
-	target_link_libraries ( gmanticoretest source_xmlpipe2 )
+	target_link_libraries ( gmanticoretest PRIVATE source_xmlpipe2 )
 endif ()
 
 target_compile_options ( gmanticoretest PRIVATE $<$<OR:$<COMPILE_LANG_AND_ID:CXX,GNU>,$<COMPILE_LANG_AND_ID:C,GNU>>:-Wno-array-bounds -Wno-stringop-truncation -Wno-restrict -Wno-stringop-overflow> )
@@ -52,3 +52,7 @@ if (WIN32)
 	add_custom_command ( TARGET gmanticoretest POST_BUILD COMMAND ${CMAKE_COMMAND} -E copy ${libs} "$<TARGET_FILE_DIR:gmanticoretest>" VERBATIM )
 	message ( STATUS "Collected libs is ${libs}" )
 endif ()
+
+if (QFUZZER)
+	target_link_libraries ( gmanticoretest PRIVATE -fsanitize=address )
+endif()

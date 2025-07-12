@@ -41,6 +41,7 @@ private:
 	void SetCosts ( XQNode_t * pNode, const CSphVector<XQNode_t *> & dNodes ) const noexcept;
 
 	static int GetWeakestIndex ( const CSphVector<XQNode_t *> & dNodes );
+	static int GetWeakestChildIndex ( const CSphVector<XQNode_t *> & dNodes );
 
 	template<typename Group, typename SubGroup>
 	void TreeCollectInfo ( XQNode_t * pNode, Checker_fn pfnChecker, int iDeep );

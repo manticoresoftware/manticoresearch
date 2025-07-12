@@ -183,7 +183,7 @@ void CSphTransformation::Transform ()
 		}
 
 		// ((A !X) | (A !Y) | (A !Z)) -> (A !(X Y Z))
-		if ( CollectInfo <Grand2Node, CurrentNode> ( *m_ppRoot, &CheckCommonAndNotFactor ) )
+		if ( CollectInfo <GrandNode, CurrentNode> ( *m_ppRoot, &CheckCommonAndNotFactor ) )
 		{
 			bool bDump = TransformCommonAndNotFactor ();
 			bRecollect |= bDump;

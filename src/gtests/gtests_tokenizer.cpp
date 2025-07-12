@@ -838,6 +838,15 @@ void QueryParser::Transform ( const char * szQuery, const char * szReconst, cons
 	ASSERT_STREQ ( sReconstTransformed.cstr(), szReconstTransformed );
 }
 
+TEST_F ( QueryParser, query_transforms_different_order )
+{
+	Transform (
+		"( aaa bbb !xxx ) | ( bbb aaa !yyy )",
+		"( ( ( aaa   bbb ) AND NOT xxx ) | ( ( bbb   aaa ) AND NOT yyy ) )",
+		"( ( aaa   bbb ) AND NOT ( xxx   yyy ) )"
+	);
+}
+
 TEST_F ( QueryParser, transform_common_not_1 )
 {
 	Transform (

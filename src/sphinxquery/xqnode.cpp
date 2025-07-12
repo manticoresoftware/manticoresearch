@@ -97,11 +97,13 @@ uint64_t XQNode_t::GetHash () const noexcept
 	dZeroOp[1] = (XQOperator_e) 0;
 
 	for ( const auto& dWord : dWords() )
-		m_iMagicHash = 100 + ( m_iMagicHash ^ sphFNV64 ( dWord.m_sWord.cstr() ) ); // +100 to make it non-transitive
+		m_iMagicHash = (dWord.m_bFieldStart?5:0) + (dWord.m_bFieldEnd?11:0) + sphFNV64cont ( dWord.m_sWord.cstr(), m_iMagicHash );
 	for ( const auto* pChild : m_dChildren )
-		m_iMagicHash = 100 + ( m_iMagicHash ^ pChild->GetHash() ); // +100 to make it non-transitive
+		m_iMagicHash ^= pChild->GetHash();
 	m_iMagicHash += 1000000; // to immerse difference between parents and children
-	m_iMagicHash ^= sphFNV64 ( dZeroOp );
+	m_iMagicHash^= sphFNV64cont ( dZeroOp, m_iMagicHash );
+	if ( m_dSpec.m_bFieldSpec )
+		m_iMagicHash = sphFNV64 ( m_dSpec.m_dFieldMask.m_dMask, FieldMask_t::SIZE * sizeof ( DWORD ), m_iMagicHash );
 
 	return m_iMagicHash;
 }
@@ -117,7 +119,7 @@ uint64_t XQNode_t::GetFuzzyHash () const noexcept
 	dZeroOp[1] = (XQOperator_e) 0;
 
 	for ( const auto& dWord : dWords() )
-		m_iFuzzyHash ^= 100 + (dWord.m_bFieldStart?5:0) + (dWord.m_bFieldEnd?11:0) + sphFNV64 ( dWord.m_sWord.cstr() ); // +100 to make it non-transitive
+		m_iFuzzyHash = (dWord.m_bFieldStart?5:0) + (dWord.m_bFieldEnd?11:0) + sphFNV64cont ( dWord.m_sWord.cstr(), m_iFuzzyHash );
 	for ( const auto* pChild : m_dChildren )
 		m_iFuzzyHash ^= pChild->GetFuzzyHash ();
 	m_iFuzzyHash += 1000000; // to immerse difference between parents and children

@@ -847,6 +847,25 @@ TEST_F ( QueryParser, query_transforms_different_order )
 	);
 }
 
+TEST_F ( QueryParser, query_transforms_different_phrases )
+{
+	Transform (
+		"( \"aaa bbb\" !xxx ) | ( \"aaa bbb\" !yyy )",
+		"( ( \"aaa bbb\" AND NOT xxx ) | ( \"aaa bbb\" AND NOT yyy ) )",
+		"( \"aaa bbb\" AND NOT ( xxx   yyy ) )"
+	);
+}
+
+TEST_F ( QueryParser, query_transforms_inverted_phrases )
+{
+	Transform (
+		"( \"aaa bbb\" !xxx ) | ( \"bbb aaa\" !yyy )",
+		"( ( \"aaa bbb\" AND NOT xxx ) | ( \"bbb aaa\" AND NOT yyy ) )",
+		"( ( \"aaa bbb\" AND NOT xxx ) | ( \"bbb aaa\" AND NOT yyy ) )"
+	);
+}
+
+
 TEST_F ( QueryParser, transform_common_not_1 )
 {
 	Transform (
@@ -855,6 +874,7 @@ TEST_F ( QueryParser, transform_common_not_1 )
 		"( ( aaa | bbb ) AND NOT ccc )"
 	);
 }
+
 
 TEST_F ( QueryParser, transform_common_not_2 )
 {

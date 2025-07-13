@@ -46,9 +46,32 @@ const char * dlerror()
 
 #endif // _WIN32
 
-std::optional<CSphString> TryPath ( const CSphString& sFullpath, int iVersion )
+ScopedHandle_c::~ScopedHandle_c ()
 {
-	// first try versioned variant. So, that non-versioned libs from 'ancient age' doesn't suppress new one one
+	if ( m_pHandle )
+		dlclose ( m_pHandle );
+}
+
+void * DlSym ( void * pHandle, const char * szFunc, const CSphString & sLib, CSphString & sError )
+{
+#if HAVE_DLOPEN
+	auto * pSym = dlsym ( pHandle, szFunc );
+	if ( !pSym )
+	{
+		sError.SetSprintf ( "symbol '%s' not found in '%s'", szFunc, sLib.cstr() );
+		dlclose ( pHandle );
+	}
+
+	return pSym;
+#else
+	return nullptr;
+#endif
+}
+
+
+std::optional<CSphString> TryPath ( const CSphString & sFullpath, int iVersion )
+{
+	// first try versioned variant. So, that non-versioned libs from 'ancient age' doesn't suppress new one
 	auto sVersionedFullPath = SphSprintf ( "%s.%i", sFullpath.cstr(), iVersion );
 	if ( sphFileExists ( sVersionedFullPath.cstr() ) )
 		return sVersionedFullPath;
@@ -59,16 +82,33 @@ std::optional<CSphString> TryPath ( const CSphString& sFullpath, int iVersion )
 	return std::nullopt;
 }
 
-CSphString TryDifferentPaths ( const CSphString & sLibfile, const CSphString & sFullpath, int iVersion )
+
+static CSphString AddLibPostfix ( const CSphString & sFilename, const char * szPostfix )
 {
-	auto sAnyPath = TryPath ( sFullpath, iVersion );
+	if ( !szPostfix )
+		return sFilename;
+
+	CSphString sExt = GetExtension(sFilename);
+	CSphString sPathName = GetPathNoExtension(sFilename);
+	CSphString sRes;
+	sRes.SetSprintf ( "%s%s.%s", sPathName.cstr(), szPostfix, sExt.cstr() );
+	return sRes;
+}
+
+
+CSphString TryDifferentPaths ( const CSphString & sLibfile, const CSphString & sFullpath, int iVersion, const char * szPostfix )
+{
+	CSphString sPathWithPostfix = AddLibPostfix ( sFullpath, szPostfix );
+
+	auto sAnyPath = TryPath ( sPathWithPostfix, iVersion );
 	if ( sAnyPath )
 		return sAnyPath.value();
 
 #if _WIN32
 	CSphString sPathToExe = GetPathOnly ( GetExecutablePath() );
 	CSphString sPath;
-	sPath.SetSprintf ( "%s%s", sPathToExe.cstr(), sLibfile.cstr() );
+	CSphString sLibWithPostfix = AddLibPostfix (  sLibfile, szPostfix );
+	sPath.SetSprintf ( "%s%s", sPathToExe.cstr(), sLibWithPostfix.cstr() );
 	sAnyPath = TryPath ( sPath, iVersion );
 #endif
 

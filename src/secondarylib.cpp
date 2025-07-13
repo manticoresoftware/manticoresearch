@@ -11,11 +11,9 @@
 
 #include "sphinxutils.h"
 #include "libutils.h"
-#include "fileutils.h"
-#include "schema/columninfo.h"
-#include "schema/schema.h"
-#include "columnarmisc.h"
 #include "secondarylib.h"
+#include "std/env.h"
+#include "std/sys.h"
 
 namespace sec {
 using CheckStorage_fn =			void (*) ( const std::string & sFilename, uint32_t uNumRows, std::function<void (const char*)> & fnError, std::function<void (const char*)> & fnProgress );
@@ -37,7 +35,13 @@ bool InitSecondary ( CSphString & sError )
 {
 	assert ( !g_pSecondaryLib );
 
-	CSphString sLibfile = TryDifferentPaths ( LIB_MANTICORE_SECONDARY, GetSecondaryFullpath(), SI::LIB_VERSION );
+	CSphString sLibfile;
+	if ( IsAVX2Supported() )
+		sLibfile = TryDifferentPaths ( LIB_MANTICORE_SECONDARY, GetSecondaryFullpath(), SI::LIB_VERSION, "_avx2" );
+
+	if ( sLibfile.IsEmpty() )
+		sLibfile = TryDifferentPaths ( LIB_MANTICORE_SECONDARY, GetSecondaryFullpath(), SI::LIB_VERSION );
+
 	if ( sLibfile.IsEmpty() )
 		return true;
 

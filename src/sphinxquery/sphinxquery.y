@@ -31,6 +31,7 @@
 	int				iZoneVec;
 };
 
+%token	END 0 "$end"
 %token <pNode>			TOK_KEYWORD
 %token <tInt>			TOK_NEAR
 %token <tInt>			TOK_INT
@@ -103,9 +104,9 @@ atom:
 	| '"' '"' '/' TOK_INT				{ $$ = NULL; }
 	| '"' '"' '/' TOK_FLOAT				{ $$ = NULL; }
 	| '"' phrase '"'					{ $$ = $2; pParser->SetPhrase ( $$, false ); }
-	| '"' phrase '"' '~' TOK_INT		{ $$ = $2; if ( $$ ) { assert ( $$->m_dWords.GetLength() ); $$->SetOp ( SPH_QUERY_PROXIMITY ); $$->m_iOpArg = $5.iValue; pParser->m_iAtomPos = $$->FixupAtomPos(); } }
-	| '"' phrase '"' '/' TOK_INT		{ $$ = $2; if ( $$ ) { assert ( $$->m_dWords.GetLength() ); $$->SetOp ( SPH_QUERY_QUORUM ); $$->m_iOpArg = $5.iValue; } }
-	| '"' phrase '"' '/' TOK_FLOAT		{ $$ = $2; if ( $$ ) { assert ( $$->m_dWords.GetLength() ); $$->SetOp ( SPH_QUERY_QUORUM ); $$->m_iOpArg = $5.fValue * 100; $$->m_bPercentOp = true; } }
+	| '"' phrase '"' '~' TOK_INT		{ $$ = $2; if ( $$ ) { assert ( $$->dWords().GetLength() ); $$->SetOp ( SPH_QUERY_PROXIMITY ); $$->m_iOpArg = $5.iValue; pParser->m_iAtomPos = $$->FixupAtomPos(); } }
+	| '"' phrase '"' '/' TOK_INT		{ $$ = $2; if ( $$ ) { assert ( $$->dWords().GetLength() ); $$->SetOp ( SPH_QUERY_QUORUM ); $$->m_iOpArg = $5.iValue; } }
+	| '"' phrase '"' '/' TOK_FLOAT		{ $$ = $2; if ( $$ ) { assert ( $$->dWords().GetLength() ); $$->SetOp ( SPH_QUERY_QUORUM ); $$->m_iOpArg = $5.fValue * 100; $$->m_bPercentOp = true; } }
 	| '(' expr ')'						{ $$ = $2; }
 	| '=' '"' phrase '"'				{ $$ = $3; pParser->SetPhrase ( $$, true ); }
 	| atom TOK_NOTNEAR atom				{ $$ = pParser->AddOp ( SPH_QUERY_NOTNEAR, $1, $3, $2.iValue ); }
@@ -115,7 +116,7 @@ keyword:
 	TOK_KEYWORD							{ $$ = $1; }
 	| TOK_INT							{ $$ = pParser->AddKeyword ( ( $1.iStrIndex>=0 ) ? pParser->m_dIntTokens[$1.iStrIndex].cstr() : NULL ); }
 	| TOK_FLOAT							{ $$ = pParser->AddKeyword ( ( $1.iStrIndex>=0 ) ? pParser->m_dIntTokens[$1.iStrIndex].cstr() : NULL ); }
-	| '=' keyword						{ $$ = $2; assert ( $$->m_dWords.GetLength()==1 ); if ( !($$->m_dWords[0].m_sWord.IsEmpty()) ) $$->m_dWords[0].m_sWord.SetSprintf ( "=%s", $$->m_dWords[0].m_sWord.cstr() ); }
+	| '=' keyword						{ $$ = $2; assert ( $$->dWords().GetLength()==1 ); $$->WithWord(0,[] (auto& dWord) {if (!dWord.m_sWord.IsEmpty()) dWord.m_sWord.SetSprintf ( "=%s", dWord.m_sWord.cstr() );}); }
 	| TOK_REGEX							{ $$ = $1; }
 	;
 
@@ -131,7 +132,7 @@ paragraph:
 
 sp_item:
 	keyword								{ $$ = $1; }
-	| '"' phrase '"'					{ $$ = $2; if ( $$ ) { assert ( $$->m_dWords.GetLength() ); $$->SetOp ( SPH_QUERY_PHRASE); } }
+	| '"' phrase '"'					{ $$ = $2; if ( $$ ) { assert ( $$->dWords().GetLength() ); $$->SetOp ( SPH_QUERY_PHRASE); } }
 	;
 
 phrase:

@@ -12,7 +12,7 @@
 
 #include "snippetindex.h"
 #include "sphinxint.h"
-
+#include "sphinxexcerpt.h"
 
 struct KeywordCmp_t
 {
@@ -208,7 +208,7 @@ void SnippetsDocIndex_c::ParseQuery ( const DictRefPtr_c& pDict, DWORD eExtQuery
 	// should be in sync with ExtRanker_c constructor
 	ARRAY_FOREACH ( i, m_tQuery.m_dZones )
 	{
-		snprintf ( (char *)m_sTmpWord, sizeof(m_sTmpWord)-1, "%c%s", MAGIC_CODE_ZONE, m_tQuery.m_dZones[i].cstr() );
+		snprintf ( (char *)m_sTmpWord, sizeof(m_sTmpWord), "%c%s", MAGIC_CODE_ZONE, m_tQuery.m_dZones[i].cstr() );
 		AddWord ( pDict->GetWordID ( m_sTmpWord ), (int) strlen ( (char*)m_sTmpWord ), iQPos );
 		iQPos++;
 	}
@@ -263,21 +263,22 @@ void SnippetsDocIndex_c::ParseQuery ( const DictRefPtr_c& pDict, DWORD eExtQuery
 			if ( !pChild )
 				continue;
 
-			for ( const auto & dChild : pChild->m_dChildren )
+			for ( const auto & dChild : pChild->dChildren() )
 				dChildren.Add ( dChild );
 
-			for ( const auto& dWord : pChild->m_dWords )
+			for ( const auto& dWord : pChild->dWords() )
 			{
 				if ( HasWildcards ( dWord.m_sWord.cstr() ) )
 					continue;
 
 				const auto * sWord = (const BYTE *) dWord.m_sWord.cstr();
-				int iLen = dWord.m_sWord.Length();
+				int iLen = Min ( 3*SPH_MAX_WORD_LEN + 16-1, dWord.m_sWord.Length() );
 				for ( const auto& dStar : m_dStars )
 				{
 					if ( MatchStar ( dStar, sWord ) )
 					{
 						memcpy ( m_sTmpWord, sWord, iLen );
+						m_sTmpWord[iLen] = '\0';
 						m_dStarred.Add ( pDict->GetWordID ( m_sTmpWord ) );
 						break;
 					}
@@ -334,9 +335,9 @@ int SnippetsDocIndex_c::ExtractWords ( XQNode_t * pNode, const DictRefPtr_c& pDi
 	if ( !pNode )
 		return iQpos;
 
-	ARRAY_FOREACH ( i, pNode->m_dWords )
+	ARRAY_FOREACH ( i, pNode->dWords() )
 	{
-		const XQKeyword_t & tWord = pNode->m_dWords[i];
+		const XQKeyword_t & tWord = pNode->dWord(i);
 
 		int iLenCP = sphUTF8Len ( tWord.m_sWord.cstr() );
 		if ( HasWildcards ( tWord.m_sWord.cstr() ) )
@@ -346,6 +347,7 @@ int SnippetsDocIndex_c::ExtractWords ( XQNode_t * pNode, const DictRefPtr_c& pDi
 		} else
 		{
 			strncpy ( (char *)m_sTmpWord, tWord.m_sWord.cstr(), sizeof(m_sTmpWord)-1 );
+			m_sTmpWord[sizeof(m_sTmpWord)-1] = '\0';
 			SphWordID_t iWordID = pDict->GetWordID ( m_sTmpWord );
 			if ( iWordID )
 			{
@@ -355,8 +357,8 @@ int SnippetsDocIndex_c::ExtractWords ( XQNode_t * pNode, const DictRefPtr_c& pDi
 		}
 	}
 
-	ARRAY_FOREACH ( i, pNode->m_dChildren )
-		iQpos = ExtractWords ( pNode->m_dChildren[i], pDict, iQpos );
+	ARRAY_FOREACH ( i, pNode->dChildren() )
+		iQpos = ExtractWords ( pNode->dChildren()[i], pDict, iQpos );
 
 	return iQpos;
 }
@@ -370,6 +372,7 @@ const CSphVector<DWORD> * SnippetsDocIndex_c::GetHitlist ( const XQKeyword_t & t
 	else
 	{
 		strncpy ( (char *)m_sTmpWord, tWord.m_sWord.cstr(), sizeof(m_sTmpWord)-1 );
+		m_sTmpWord[sizeof(m_sTmpWord) - 1] = '\0';
 		SphWordID_t iWordID = pDict->GetWordID(m_sTmpWord);
 		if ( iWordID )
 			iWord = FindWord ( iWordID, NULL, 0 );

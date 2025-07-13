@@ -23,6 +23,7 @@
 #include "joinsorter.h"
 #include "secondaryindex.h"
 #include "jsonsi.h"
+#include "knnmisc.h"
 
 #include <boost/icl/interval.hpp>
 
@@ -1618,7 +1619,7 @@ bool FixupFilterSettings ( const CSphFilterSettings & tSettings, CommonFilterSet
 	}
 
 	bool bStrFilter = tSettings.m_eType==SPH_FILTER_STRING || tSettings.m_eType==SPH_FILTER_STRING_LIST;
-	if ( bStrFilter && ( tAttr.m_eAttrType!=SPH_ATTR_STRING && tAttr.m_eAttrType!=SPH_ATTR_STRINGPTR && tAttr.m_eAttrType!=SPH_ATTR_JSON && tAttr.m_eAttrType!=SPH_ATTR_JSON_FIELD ) )
+	if ( bStrFilter && ( tAttr.m_eAttrType!=SPH_ATTR_STRING && tAttr.m_eAttrType!=SPH_ATTR_STRINGPTR && tAttr.m_eAttrType!=SPH_ATTR_JSON && tAttr.m_eAttrType!=SPH_ATTR_JSON_FIELD && tAttr.m_eAttrType!=SPH_ATTR_JSON_FIELD_PTR ) )
 	{
 		sError.SetSprintf ( "unsupported filter type '%s' on attribute '%s'", FilterType2Str(tSettings.m_eType).cstr(), tAttr.m_sName.cstr() );
 		return false;
@@ -1701,6 +1702,9 @@ static void TryToAddGeodistFilters ( const CreateFilterContext_t & tCtx, const C
 
 	assert ( tSettingsPair.first );
 	const GeoDistSettings_t & tSettings = *tSettingsPair.first;
+	// could be JSON field or expression these should be handled different
+	if ( tSettings.m_sAttrLat.IsEmpty() || tSettings.m_sAttrLon.IsEmpty() )
+		return;
 
 	const CSphColumnInfo * pLat = tCtx.m_pMatchSchema->GetAttr ( tSettings.m_sAttrLat.cstr() );
 	const CSphColumnInfo * pLon = tCtx.m_pMatchSchema->GetAttr ( tSettings.m_sAttrLon.cstr() );
@@ -1808,6 +1812,33 @@ static void TryToAddPoly2dFilters ( const CreateFilterContext_t & tCtx, const CS
 		if ( CanAddGeodist ( *pLon, tCtx ) )
 			dModified.Add ( tFilterLon );
 	}
+}
+
+
+static void AddKNNDistFilter ( const CreateFilterContext_t & tCtx, CSphVector<CSphFilterSettings> & dModified, std::unique_ptr<ISphSchema> & pModifiedMatchSchema )
+{
+	if ( !tCtx.m_bAddKNNDistFilter )
+		return;
+
+	assert ( tCtx.m_pMatchSchema );
+	if ( !tCtx.m_pMatchSchema->GetAttr ( GetKnnDistAttrName() ) )
+		return;
+
+	pModifiedMatchSchema = std::unique_ptr<ISphSchema> ( pModifiedMatchSchema ? pModifiedMatchSchema->CloneMe() : tCtx.m_pMatchSchema->CloneMe() );
+	const auto * pKNNDistAttr = pModifiedMatchSchema->GetAttr ( GetKnnDistAttrName() );
+	assert(pKNNDistAttr);
+
+	(const_cast<CSphColumnInfo*>(pKNNDistAttr))->m_eStage = Min ( pKNNDistAttr->m_eStage, SPH_EVAL_PREFILTER );
+
+	CSphFilterSettings tFilter;
+	tFilter.m_eType = SPH_FILTER_FLOATRANGE;
+	tFilter.m_sAttrName = pKNNDistAttr->m_sName;
+	tFilter.m_bHasEqualMin = true;
+	tFilter.m_bHasEqualMax = false;
+	tFilter.m_bOptional = false;
+	tFilter.m_fMinValue = -FLT_MAX;
+	tFilter.m_fMaxValue = FLT_MAX;
+	dModified.Add(tFilter);
 }
 
 
@@ -1959,6 +1990,8 @@ bool TransformFilters ( const CreateFilterContext_t & tCtx, CSphVector<CSphFilte
 	// FIXME: no further transformations if we have a filter tree
 	if ( tCtx.m_pFilterTree && tCtx.m_pFilterTree->GetLength() )
 		return true;
+
+	AddKNNDistFilter ( tCtx, dModified, pModifiedMatchSchema );
 
 	int iNumModified = dModified.GetLength();
 	for ( int i = 0; i < iNumModified; i++ )

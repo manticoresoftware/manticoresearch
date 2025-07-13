@@ -1,0 +1,68 @@
+––– block: ../base/start-searchd-with-buddy –––
+––– input –––
+mysql -h0 -P9306 -e "CREATE TABLE t (id INT, value TEXT, value_attr STRING) min_infix_len = '3' min_prefix_len = '3'; INSERT INTO t VALUES (1, 'example', 'example'), (2, 'test', 'test');"
+––– output –––
+––– input –––
+curl -s "http://localhost:9308/cli?show%20version" | grep -v 'rows in set' | head -n 4
+––– output –––
+%{TABLE_LINE}
+%{TABLE_ROW}
+%{TABLE_LINE}
+%{TABLE_ROW}
+––– input –––
+curl -s "http://localhost:9308/cli?show%20buddy%20plugins" | grep -v 'rows in set' | head -n 4
+––– output –––
+%{TABLE_LINE}
+%{TABLE_ROW}
+%{TABLE_LINE}
+%{TABLE_ROW}
+––– input –––
+curl -s "http://localhost:9308/cli?select%20*%20from%20t%20where%20match('exmaple')%20option%20fuzzy=1" | grep -v 'row in set'
+––– output –––
++----+---------+------------+
+| id | value   | value_attr |
++----+---------+------------+
+| 1  | example | example    |
++----+---------+------------+
+––– input –––
+curl -s "http://localhost:9308/cli?show%20fields%20from%20t" | grep -v 'rows in set'
+––– output –––
++------------+--------+------+-----+---------+-------+
+| Field      | Type   | Null | Key | Default | Extra |
++------------+--------+------+-----+---------+-------+
+| id         | bigint | NO   |     |         |       |
+| value      | text   | NO   |     |         |       |
+| value_attr | string | NO   |     |         |       |
++------------+--------+------+-----+---------+-------+
+––– input –––
+curl -s "http://localhost:9308/cli?show%20full%20tables" | grep -v 'row in set'
+––– output –––
++---------------------+------------+
+| Tables_in_Manticore | Table_type |
++---------------------+------------+
+| t                   | BASE TABLE |
++---------------------+------------+
+––– input –––
+curl -s "http://localhost:9308/cli?create%20table%20t_copy%20like%20t" > /dev/null; echo $?
+––– output –––
+0
+––– input –––
+curl -s "http://localhost:9308/cli?insert%20into%20auto_created%20(id,%20value)%20values%20(10,%20'abc')" > /dev/null; echo $?
+––– output –––
+0
+––– input –––
+curl -s "http://localhost:9308/cli?alter%20table%20t%20add%20column%20extra_field%20int" > /dev/null; echo $?
+––– output –––
+0
+––– input –––
+curl -s "http://localhost:9308/cli?replace%20into%20t%20(id,%20value)%20values%20(1,%20'replaced_value')" > /dev/null; echo $?
+––– output –––
+0
+––– input –––
+curl -s "http://localhost:9308/cli?select%20*%20from%20t%20limit%201" | grep -v 'row in set'
+––– output –––
++----+-------+------------+-------------+
+| id | value | value_attr | extra_field |
++----+-------+------------+-------------+
+| %{NUMBER}  | %{PATH}  | %{PATH}       | %{NUMBER}           |
++----+-------+------------+-------------+

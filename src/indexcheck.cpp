@@ -20,6 +20,7 @@
 #include "conversion.h"
 #include "columnarlib.h"
 #include "indexfiles.h"
+#include "roaring/roaring64map.hh"
 
 #include "killlist.h"
 
@@ -38,6 +39,9 @@ public:
 	int64_t GetNumFails() const final;
 	const DocID_t* GetExtractDocs() const final { return m_pExtract; };
 
+	void CheckDocidDup ( DocID_t tDocid, DWORD uRowid ) final;
+	void FinishDiskChunk ( int64_t iNumRows ) final;
+
 private:
 	FILE* m_pFile { nullptr };
 	bool m_bProgress { false };
@@ -45,6 +49,8 @@ private:
 	int64_t m_nFails { 0 };
 	int64_t m_nFailsPrinted { 0 };
 	const DocID_t* m_pExtract;
+
+	roaring::Roaring64Map m_tDocids;
 };
 
 DebugCheckError_c::DebugCheckError_c ( FILE * pFile, const DocID_t* pExtract )
@@ -129,6 +135,19 @@ int64_t DebugCheckError_c::GetNumFails() const
 	return m_nFails;
 }
 
+void DebugCheckError_c::CheckDocidDup ( DocID_t tDocid, DWORD uRowid )
+{
+	if ( !m_tDocids.addChecked ( (uint64_t)tDocid ) )
+		Fail ( "duplicate of docid " INT64_FMT " found at row %u", tDocid, uRowid );
+}
+
+void DebugCheckError_c::FinishDiskChunk ( int64_t iNumRows )
+{
+	m_tDocids.runOptimize();
+	m_tDocids.shrinkToFit();
+}
+
+
 DebugCheckError_i* MakeDebugCheckError ( FILE* fp, DocID_t* pExtract )
 {
 	return new DebugCheckError_c ( fp, pExtract );
@@ -171,7 +190,7 @@ private:
 };
 
 
-void DebugCheckHelper_c::DebugCheck_Attributes ( DebugCheckReader_i & tAttrs, DebugCheckReader_i & tBlobs, int64_t nRows, int64_t iMinMaxBytes, const CSphSchema & tSchema, DebugCheckError_i & tReporter ) const
+void DebugCheck_Attributes ( DebugCheckReader_i & tAttrs, DebugCheckReader_i & tBlobs, int64_t nRows, int64_t iMinMaxBytes, const CSphSchema & tSchema, DebugCheckError_i & tReporter )
 {
 	// empty?
 	if ( !tAttrs.GetLengthBytes() )
@@ -276,7 +295,7 @@ void DebugCheckHelper_c::DebugCheck_Attributes ( DebugCheckReader_i & tAttrs, De
 }
 
 
-void DebugCheckHelper_c::DebugCheck_DeadRowMap ( int64_t iSizeBytes, int64_t nRows, DebugCheckError_i & tReporter ) const
+void DebugCheck_DeadRowMap ( int64_t iSizeBytes, int64_t nRows, DebugCheckError_i & tReporter )
 {
 	tReporter.Msg ( "checking dead row map..." );
 
@@ -342,7 +361,7 @@ static JsonEscapedBuilder& operator<< ( JsonEscapedBuilder& dOut, const Wordid_t
 
 using cbWordidFn = std::function<void ( RowID_t, Wordid_t, int iField, int iPos, bool bIsEnd )>;
 
-class DiskIndexChecker_c::Impl_c : public DebugCheckHelper_c
+class DiskIndexChecker_c::Impl_c
 {
 public:
 			Impl_c ( CSphIndex & tIndex, DebugCheckError_i & tReporter );
@@ -1614,31 +1633,30 @@ struct DocRow_fn
 	}
 };
 
-
 void DiskIndexChecker_c::Impl_c::CheckDocids()
 {
+	m_tReporter.Msg ( "checking docid duplicates ..." );
+
 	CSphString sError;
-	m_tReporter.Msg ( "checking docid douplicates ..." );
+	DeadRowMap_Disk_c tDeadRowMap;
+	tDeadRowMap.Prealloc ( (DWORD)m_iNumRows, GetFilename ( SPH_EXT_SPM ), sError );
+	tDeadRowMap.Preread ( GetFilename ( SPH_EXT_SPM ).cstr(), "checking docid duplicates", false );
 
 	CSphFixedVector<CSphRowitem> dRow ( m_tSchema.GetRowSize() );
 	m_tAttrReader.SeekTo ( 0, (int) dRow.GetLengthBytes() );
 
-	CSphFixedVector<DocidRowidPair_t> dRows ( m_iNumRows );
-	for ( int i=0; i<m_iNumRows; i++ )
+	for ( int iRowID=0; iRowID<m_iNumRows; iRowID++ )
 	{
-		m_tAttrReader.SeekTo ( dRow.GetLengthBytes() * i, sizeof(DocID_t) );
+		if ( tDeadRowMap.IsSet ( iRowID ) )
+			continue;
+
+		m_tAttrReader.SeekTo ( dRow.GetLengthBytes() * iRowID, sizeof(DocID_t) );
 		m_tAttrReader.GetBytes ( dRow.Begin(), sizeof(DocID_t) );
 
-		dRows[i].m_tRowID = i;
-		dRows[i].m_tDocID = sphGetDocID ( dRow.Begin() );
+		m_tReporter.CheckDocidDup ( sphGetDocID ( dRow.Begin() ), iRowID );
 	}
 
-	dRows.Sort ( DocRow_fn() );
-	for ( int i=1; i<dRows.GetLength(); i++ )
-	{
-		if ( dRows[i].m_tDocID==dRows[i-1].m_tDocID )
-			m_tReporter.Fail ( "duplicate of docid " INT64_FMT " found at rows %u %u", dRows[i].m_tDocID, dRows[i-1].m_tRowID, dRows[i].m_tRowID );
-	}
+	m_tReporter.FinishDiskChunk ( m_iNumRows );
 }
 
 
@@ -1761,4 +1779,28 @@ bool DebugCheckSchema ( const ISphSchema & tSchema, CSphString & sError )
 void DebugCheckSchema ( const ISphSchema & tSchema, DebugCheckError_i & tReporter )
 {
 	DebugCheckSchema_T ( tSchema, tReporter );
+}
+
+
+bool SchemaConfigureCheckAttribute ( const CSphSchema & tSchema, const CSphColumnInfo & tCol, CSphString & sError )
+{
+	if ( tCol.m_sName.IsEmpty() )
+	{
+		sError.SetSprintf ( "column number %d has no name", tCol.m_iIndex );
+		return false;
+	}
+
+	if ( tSchema.GetAttr ( tCol.m_sName.cstr() ) )
+	{
+		sError.SetSprintf ( "can not add multiple attributes with same name '%s'", tCol.m_sName.cstr () );
+		return false;
+	}
+
+	if ( CSphSchema::IsReserved ( tCol.m_sName.cstr() ) )
+	{
+		sError.SetSprintf ( "%s is not a valid attribute name", tCol.m_sName.cstr() );
+		return false;
+	}
+
+	return true;
 }

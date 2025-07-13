@@ -832,7 +832,7 @@ bool CSphIndexSettings::ParseKNNSettings ( const CSphConfigSection & hIndex, CSp
 		return false;
 	}
 
- 	return ParseKNNConfigStr ( hIndex.GetStr("knn"), m_dKNN, sError );
+	return ParseKNNConfigStr ( hIndex.GetStr("knn"), m_dKNN, sError );
 }
 
 
@@ -1284,7 +1284,7 @@ private:
 	AttrEngine_e	m_eEngine = AttrEngine_e::DEFAULT;
 
 	void			SetupColumnarAttrs ( const CreateTableSettings_t & tCreateTable );
-	void			SetupKNNAttrs ( const CreateTableSettings_t & tCreateTable );
+	bool			SetupKNNAttrs ( const CreateTableSettings_t & tCreateTable );
 	void			SetupSIAttrs ( const CreateTableSettings_t & tCreateTable );
 
 	void			SetDefaults();
@@ -1481,7 +1481,7 @@ void IndexSettingsContainer_c::SetupColumnarAttrs ( const CreateTableSettings_t 
 }
 
 
-void IndexSettingsContainer_c::SetupKNNAttrs ( const CreateTableSettings_t & tCreateTable )
+bool IndexSettingsContainer_c::SetupKNNAttrs ( const CreateTableSettings_t & tCreateTable )
 {
 	StringBuilder_c sColumnarAttrs(",");
 
@@ -1491,13 +1491,22 @@ void IndexSettingsContainer_c::SetupKNNAttrs ( const CreateTableSettings_t & tCr
 		{
 			NamedKNNSettings_t & tNamedKNN = dKNNAttrs.Add();
 			(knn::IndexSettings_t&)tNamedKNN = i.m_tKNN;
+			(knn::ModelSettings_t&)tNamedKNN = i.m_tKNNModel;
 			tNamedKNN.m_sName = i.m_tAttr.m_sName;
+			tNamedKNN.m_sFrom = i.m_sKNNFrom;
+
+			if ( !tNamedKNN.m_sModelName.empty() && tNamedKNN.m_sFrom.IsEmpty() )
+			{
+				m_sError.SetSprintf ( "'from' setting empty for KNN attribute '%s'", tNamedKNN.m_sName.cstr() );
+				return false;
+			}
 		}
 
 	if ( !dKNNAttrs.GetLength() )
-		return;
+		return true;
 
 	Add ( "knn", FormatKNNConfigStr(dKNNAttrs).cstr() );
+	return true;
 }
 
 
@@ -1560,7 +1569,9 @@ bool IndexSettingsContainer_c::Populate ( const CreateTableSettings_t & tCreateT
 			return false;
 
 	SetupColumnarAttrs(tCreateTable);
-	SetupKNNAttrs(tCreateTable);
+	if ( !SetupKNNAttrs(tCreateTable) )
+		return false;
+
 	SetupSIAttrs(tCreateTable);
 
 	if ( !Contains("type") )
@@ -2214,7 +2225,7 @@ static void AddStorageSettings ( StringBuilder_c & sRes, const CSphColumnInfo & 
 	bool bColumnar = CombineEngines ( tIndex.GetSettings().m_eEngine, tAttr.m_eEngine )==AttrEngine_e::COLUMNAR;
 	if ( bColumnar )
 	{
-		if ( tAttr.m_eAttrType!=SPH_ATTR_JSON && !(tAttr.m_uAttrFlags & CSphColumnInfo::ATTR_STORED) && iNumColumnar>1 )
+		if ( tAttr.m_eAttrType!=SPH_ATTR_JSON && !tAttr.IsStored() && iNumColumnar>1 )
 			sRes << " fast_fetch='0'";
 
 		if ( tAttr.m_eAttrType==SPH_ATTR_STRING && !(tAttr.m_uAttrFlags & CSphColumnInfo::ATTR_COLUMNAR_HASHES) )
@@ -3151,7 +3162,7 @@ void SaveMutableSettings ( const MutableIndexSettings_c & tSettings, const CSphS
 	CSphString sError;
 	CSphString sSettingsFileNew = SphSprintf ( "%s.new", sSettingsFile.cstr() );
 
-	CSphWriter tWriter;
+	CSphWriterNonThrottled tWriter;
 	if ( !tWriter.OpenFile ( sSettingsFileNew, sError ) )
 		sphDie ( "failed to serialize mutable settings: %s", sError.cstr() ); // !COMMIT handle this gracefully
 

@@ -1,0 +1,34 @@
+––– input –––
+export INSTANCE=1
+––– output –––
+––– block: ../base/replication/start-searchd-precach –––
+––– input –––
+export INSTANCE=2
+––– output –––
+––– block: ../base/replication/start-searchd-precach –––
+––– input –––
+mysql -h0 -P1306 -e "
+CREATE TABLE t1 (title TEXT, content TEXT);
+INSERT INTO t1 (title, content) VALUES ('Local Title 1', 'Local Content 1'), ('Local Title 2', 'Local Content 2');
+"
+––– output –––
+––– input –––
+mysql -h0 -P2306 -e "
+CREATE TABLE t2 (title TEXT, content TEXT);
+INSERT INTO t2 (title, content) VALUES ('Local Title 3', 'Local Content 3'), ('Local Title 4', 'Local Content 4');
+"
+––– output –––
+––– input –––
+mysql -h0 -P1306 -e " CREATE TABLE dist_table type='distributed' local='t1' agent='127.0.0.1:2312:t2' "
+––– output –––
+––– input –––
+mysql -h0 -P1306 -e "SELECT COUNT(*) FROM dist_table\G" | grep count
+––– output –––
+count(*): 4
+––– input –––
+mysql -h0 -P1306 -e "TRUNCATE TABLE dist_table"
+––– output –––
+––– input –––
+mysql -h0 -P1306 -e "SELECT COUNT(*) FROM dist_table\G" | grep count
+––– output –––
+count(*): 0

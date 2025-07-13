@@ -471,7 +471,7 @@ In Jieba, the HMM (Hidden Markov Model) option refers to an algorithm used for w
 
 Jieba primarily uses a dictionary-based method for segmenting known words, but when the HMM option is enabled, it applies a statistical model to identify probable word boundaries for words or phrases that are not in its dictionary. This is particularly useful for segmenting new or rare words, names, and slang.
 
-In summary, the `jieba_hmm` option helps improve segmentation accuracy at the expense of indexing performance. It must be used with `morphology = jieba_chinese`, see [Chinese, Japanese and Korean (CJK) and Thai languages](Creating_a_table/NLP_and_tokenization/Languages_with_continuous_scripts.md).
+In summary, the `jieba_hmm` option helps improve segmentation accuracy at the expense of indexing performance. It must be used with `morphology = jieba_chinese`, see [Chinese, Japanese and Korean (CJK) and Thai languages](../../Creating_a_table/NLP_and_tokenization/Languages_with_continuous_scripts.md).
 
 <!-- request SQL -->
 
@@ -581,7 +581,7 @@ In full mode, Jieba tries to split the sentence into every possible word combina
 
 In search mode, Jieba breaks the text into both whole words and smaller parts, combining precise segmentation with extra detail by providing overlapping word fragments. This mode balances precision and recall, making it useful for search engines.
 
-`jieba_mode` should be used with `morphology = jieba_chinese`. See [Chinese, Japanese, Korean (CJK) and Thai languages](Creating_a_table/NLP_and_tokenization/Languages_with_continuous_scripts.md).
+`jieba_mode` should be used with `morphology = jieba_chinese`. See [Chinese, Japanese, Korean (CJK) and Thai languages](../../Creating_a_table/NLP_and_tokenization/Languages_with_continuous_scripts.md).
 
 <!-- request SQL -->
 
@@ -696,7 +696,7 @@ Example:
 台中
 ```
 
-`jieba_user_dict_path` should be used with `morphology = jieba_chinese`. For more details, see [Chinese, Japanese, Korean (CJK), and Thai languages](Creating_a_table/NLP_and_tokenization/Languages_with_continuous_scripts.md).
+`jieba_user_dict_path` should be used with `morphology = jieba_chinese`. For more details, see [Chinese, Japanese, Korean (CJK), and Thai languages](../../Creating_a_table/NLP_and_tokenization/Languages_with_continuous_scripts.md).
 
 <!-- request SQL -->
 

@@ -275,3 +275,6 @@ namespace Detail {
 
 } // namespace Detail
 } // namespace Tokenizer
+
+/// setup tokenizer for query parsing (ie. add all specials and whatnot)
+TokenizerRefPtr_c sphCloneAndSetupQueryTokenizer ( const TokenizerRefPtr_c& pTokenizer, bool bWildcards, bool bExact, bool bJson );

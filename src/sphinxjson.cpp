@@ -19,6 +19,8 @@
 #include <io.h> // for isatty() in sphinxjson.c
 #endif
 
+// for UNALIGNED_RAM_ACCESS
+#include "config.h"
 
 //////////////////////////////////////////////////////////////////////////
 // helpers
@@ -1725,7 +1727,7 @@ bool JsonObj_c::IsDbl() const
 bool JsonObj_c::IsNum() const
 {
 	assert ( m_pRoot );
-	return !!cJSON_IsNumeric ( m_pRoot );
+	return !! ( cJSON_IsNumeric ( m_pRoot ) ||  cJSON_IsUInteger(m_pRoot) );
 }
 
 
@@ -1945,7 +1947,7 @@ bool JsonObj_c::FetchBoolItem ( bool & bValue, const char * szName, CSphString &
 
 bool JsonObj_c::FetchFltItem ( float & fValue, const char * szName, CSphString & sError, bool bIgnoreMissing ) const
 {
-	JsonObj_c tItem = GetBoolItem ( szName, sError, bIgnoreMissing );
+	JsonObj_c tItem = GetFltItem ( szName, sError, bIgnoreMissing );
 	if ( tItem )
 		fValue = tItem.FltVal();
 	else if ( !sError.IsEmpty() )
@@ -1964,6 +1966,15 @@ bool JsonObj_c::FetchStrItem ( CSphString & sValue, const char * szName, CSphStr
 		return false;
 
 	return true;
+}
+
+
+bool JsonObj_c::FetchStrItem ( std::string & sValue, const char * szName, CSphString & sError, bool bIgnoreMissing ) const
+{
+	CSphString sTmp;
+	bool bRes = FetchStrItem ( sTmp, szName, sError, bIgnoreMissing );
+	sValue = sTmp.scstr();
+	return bRes;
 }
 
 

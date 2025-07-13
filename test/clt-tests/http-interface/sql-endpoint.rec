@@ -1,0 +1,36 @@
+––– block: ../base/start-searchd-with-buddy –––
+––– input –––
+mysql -h0 -P9306 -e "CREATE TABLE t (id INT, value TEXT, value_attr STRING) min_infix_len = '3' min_prefix_len = '3'; INSERT INTO t VALUES (1, 'example', 'example'), (2, 'test', 'test');"
+––– output –––
+––– input –––
+curl -s -X POST "http://localhost:9308/sql" -d "select * from t limit 1"
+––– output –––
+{"took":%{NUMBER},"timed_out":false,"hits":{"total":%{NUMBER},"total_relation":"gte","hits":[{"_id":1,"_score":%{NUMBER},"_source":{"value":"example","value_attr":"example"}}]}}
+––– input –––
+curl -s -X POST "http://localhost:9308/sql" -d "select * from t where match('test')"
+––– output –––
+{"took":%{NUMBER},"timed_out":false,"hits":{"total":%{NUMBER},"total_relation":"eq","hits":[{"_id":2,"_score":%{NUMBER},"_source":{"value":"test","value_attr":"test"}}]}}
+––– input –––
+curl -s -X POST "http://localhost:9308/sql" -d "select count(*) from t"
+––– output –––
+{"took":%{NUMBER},"timed_out":false,"hits":{"total":%{NUMBER},"total_relation":"gte","hits":[{"_score":%{NUMBER},"_source":{"count(*)":2}}]}}
+––– input –––
+curl -s -X POST "http://localhost:9308/sql" -d "select * from t where match('exmaple') option fuzzy=1"
+––– output –––
+{"error":"only SELECT queries are supported"}
+––– input –––
+curl -s -X POST "http://localhost:9308/sql" -d "create table t_copy like t"
+––– output –––
+{"error":"only SELECT queries are supported"}
+––– input –––
+curl -s -X POST "http://localhost:9308/sql" -d "show tables"
+––– output –––
+{"error":"only SELECT queries are supported"}
+––– input –––
+curl -s -X POST "http://localhost:9308/sql" -d "insert into t values (3, 'new', 'new')"
+––– output –––
+{"error":"only SELECT queries are supported"}
+––– input –––
+curl -s "http://localhost:9308/sql?query=select%20count(*)%20from%20t"
+––– output –––
+{"took":%{NUMBER},"timed_out":false,"hits":{"total":%{NUMBER},"total_relation":"gte","hits":[{"_score":1,"_source":{"count(*)":2}}]}}

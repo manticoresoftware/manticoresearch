@@ -48,6 +48,16 @@ FORCE_INLINE int64_t count_of ( const CONTAINER& dData, FILTER cond ) NO_THREAD_
 	return iRes;
 }
 
+template<typename INT, typename CONTAINER, typename SIZER>
+FORCE_INLINE INT sum_of ( const CONTAINER& dData, SIZER amount ) NO_THREAD_SAFETY_ANALYSIS
+{
+	INT iRes = 0;
+	for ( const auto& dItem : dData )
+		iRes += amount (dItem);
+
+	return iRes;
+}
+
 template<typename CONTAINER, typename ACTION>
 FORCE_INLINE void for_each ( CONTAINER&& dData, ACTION fnAction ) NO_THREAD_SAFETY_ANALYSIS
 {

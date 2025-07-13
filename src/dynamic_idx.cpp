@@ -187,9 +187,9 @@ public:
 	void PutPercentAsString ( int64_t iVal, int64_t iBase ) override
 	{
 		if ( iBase )
-			PutFloatAsString ( iVal * 100.0f / iBase, nullptr );
+			PutNumAsString ( iVal * 100 / iBase );
 		else
-			PutFloatAsString ( 100.0f, nullptr );
+			PutNumAsString ( 100 );
 	}
 
 	void PutNumAsString ( int64_t iVal ) override

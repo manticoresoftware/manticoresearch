@@ -12,7 +12,7 @@
 
 #include "searchdsql.h"
 #include "searchdhttp.h"
-
+#include "daemon/search_handler.h"
 #include "nlohmann/json.hpp"
 
 #include <iostream>
@@ -1114,27 +1114,19 @@ static bool DoSearch ( const CSphString & sDefaultIndex, nljson & tReq, const CS
 	if ( !tParsedQuery.m_sWarning.IsEmpty() )
 		CompatWarning ( "%s", tParsedQuery.m_sWarning.cstr() );
 
-	std::unique_ptr<PubSearchHandler_c> tHandler ( CreateMsearchHandler ( sphCreateJsonQueryParser(), QUERY_JSON, tParsedQuery ) );
-	tHandler->RunQueries();
+	auto tHandler = CreateMsearchHandler ( sphCreateJsonQueryParser(), QUERY_JSON, tParsedQuery );
+	tHandler.RunQueries();
 
-	CSphFixedVector<AggrResult_t *> dAggsRes ( tQuery.m_bGroupEmulation ? 1 : ( 1 + tQuery.m_dAggs.GetLength() ) );
-	dAggsRes[0] = tHandler->GetResult ( 0 );
-	if ( !tQuery.m_bGroupEmulation )
-	{
-		ARRAY_FOREACH ( i, tQuery.m_dAggs )
-			dAggsRes[i+1] = tHandler->GetResult ( i+1 );
-	}
-	sRes = sphEncodeResultJson ( dAggsRes, tQuery, nullptr, ResultSetFormat_e::ES );
-
+	sRes = sphEncodeResultJson ( tHandler.m_dAggrResults, tQuery, nullptr, ResultSetFormat_e::ES );
 	bool bOk = true;
 	// want to see at log url and query for search error
-	for ( const AggrResult_t * pAggr : dAggsRes )
+	for ( const AggrResult_t& tAggr : tHandler.m_dAggrResults )
 	{
-		if ( !pAggr->m_iSuccesses )
+		if ( !tAggr.m_iSuccesses )
 		{
-			CompatWarning ( "'%s' at '%s' body '%s'", pAggr->m_sError.cstr(), sURL.cstr(), tQuery.m_sRawQuery.cstr() );
+			CompatWarning ( "'%s' at '%s' body '%s'", tAggr.m_sError.cstr(), sURL.cstr(), tQuery.m_sRawQuery.cstr() );
 			bOk = false;
-			TlsMsg::Err ( pAggr->m_sError );
+			TlsMsg::Err ( tAggr.m_sError );
 		}
 	}
 
@@ -1253,26 +1245,27 @@ static bool GetDocIds ( const char * sIndexName, const char * sFilterID, DocIdVe
 		tFilter.m_bExclude = false;
 	}
 
-	std::unique_ptr<PubSearchHandler_c> tHandler ( CreateMsearchHandler ( sphCreateJsonQueryParser(), QUERY_JSON, tParsed ) );
-	tHandler->RunQueries();
-	const AggrResult_t * pRes = tHandler->GetResult ( 0 );
+	auto tHandler = CreateMsearchHandler ( sphCreateJsonQueryParser(), QUERY_JSON, tParsed );
+	tHandler.RunQueries();
 
-	if ( !pRes )
+	if ( tHandler.m_dAggrResults.IsEmpty() )
 	{
 		sError.SetSprintf ( "invalid search for index '%s'", sIndexName );
 		return false;
 	}
 
-	if ( !pRes->m_iSuccesses )
+	const AggrResult_t & tRes = tHandler.m_dAggrResults.First();
+
+	if ( !tRes.m_iSuccesses )
 	{
-		sError.SetSprintf ( "%s", pRes->m_sError.cstr() );
+		sError.SetSprintf ( "%s", tRes.m_sError.cstr() );
 		return false;
 	}
 
-	if ( !pRes->m_sWarning.IsEmpty() )
-		CompatWarning ( "%s", pRes->m_sWarning.cstr() );
+	if ( !tRes.m_sWarning.IsEmpty() )
+		CompatWarning ( "%s", tRes.m_sWarning.cstr() );
 
-	const ISphSchema & tSchema = pRes->m_tSchema;
+	const ISphSchema & tSchema = tRes.m_tSchema;
 	const CSphColumnInfo * pColId = tSchema.GetAttr ( sIdName );
 	const CSphColumnInfo * pColVer = tSchema.GetAttr ( sVerName );
 
@@ -1295,7 +1288,7 @@ static bool GetDocIds ( const char * sIndexName, const char * sFilterID, DocIdVe
 	const CSphAttrLocator & tLocId = pColId->m_tLocator;
 	const CSphAttrLocator & tLocVer = pColVer->m_tLocator;
 
-	auto dMatches = pRes->m_dResults.First ().m_dMatches.Slice ( pRes->m_iOffset, pRes->m_iCount );
+	auto dMatches = tRes.m_dResults.First ().m_dMatches.Slice ( tRes.m_iOffset, tRes.m_iCount );
 	for ( const CSphMatch & tMatch : dMatches )
 	{
 		const BYTE * pData = ( const BYTE * ) tMatch.GetAttr ( tLocId );

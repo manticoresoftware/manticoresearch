@@ -33,6 +33,7 @@ download_package() {
 		
 		if wget -q --spider "$file_url" 2>/dev/null; then
 			echo "Package found at $file_url"
+			mkdir -p "../build"
 			wget -q -O "../build/${file_name}" "$file_url"
 			
 			# For executor, we need to download the dev version and also extra package
@@ -85,14 +86,24 @@ do
 		break
 	fi
 
-    if [[ "$line" =~ ^([^[:space:]]+)[[:space:]]+([^[:space:]]+)\+([0-9]+)-([a-f0-9]+)-?([a-zA-Z0-9]+)?$ ]]; then
-        # Format: <package> <version>+<date>-<commit>-<optional_suffix>
+    if [[ "$line" =~ ^([^[:space:]]+)[[:space:]]+([^[:space:]]+)\+([0-9]+)-([a-f0-9]+)(-?[a-zA-Z0-9]+)?$ ]]; then
+        # Format: <package> <version>+<date>-<commit>[-<optional_suffix>]
         package="${BASH_REMATCH[1]}"
-        version_string="${BASH_REMATCH[2]}+${BASH_REMATCH[3]}-${BASH_REMATCH[4]}"
+        version="${BASH_REMATCH[2]}"
+        date="${BASH_REMATCH[3]}"
+        commit="${BASH_REMATCH[4]}"
+        version_string="${version}+${date}-${commit}"
         if [ -n "${BASH_REMATCH[5]}" ]; then
-            version_string="${version_string}-${BASH_REMATCH[5]}"
+            version_string="${version_string}${BASH_REMATCH[5]}"
         fi
         suffix="${BASH_REMATCH[5]}" # Optional suffix without leading "-"
+        echo "Parsed new format:"
+        echo "  Package: $package"
+        echo "  Version: $version"
+        echo "  Date: $date"
+        echo "  Commit: $commit"
+        echo "  Suffix: $suffix"
+        echo "  Full version string: $version_string"
     elif [[ "$line" =~ ^([^[:space:]]+)[[:space:]]+([^[:space:]]+)[[:space:]]+([^[:space:]]+)[[:space:]]+([^[:space:]]+)$ ]]; then
         # Old format: <package> <version> <date> <commit>
         package="${BASH_REMATCH[1]}"
@@ -100,6 +111,11 @@ do
         date="${BASH_REMATCH[3]}"
         commit="${BASH_REMATCH[4]}"
         suffix=""
+        echo "Parsed old format:"
+        echo "  Package: $package"
+        echo "  Version: $version"
+        echo "  Date: $date"
+        echo "  Commit: $commit"
     else
         echo "ERROR: Unable to parse line: $line" >&2
         exit 1
@@ -173,6 +189,7 @@ docker exec manticore-test-kit bash -c \
 docker exec manticore-test-kit bash -c \
 	"curl -sSL https://getcomposer.org/download/2.7.0/composer.phar > /usr/bin/composer; chmod +x /usr/bin/composer"
 
+echo "Installing custom buddy from git repo with commit $buddy_commit"
 # Install custom buddy from git repo
 #
 buddy_path=/usr/share/manticore/modules/manticore-buddy

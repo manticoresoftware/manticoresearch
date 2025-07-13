@@ -1,22 +1,22 @@
 ––– input –––
 export INSTANCE=1
 ––– output –––
-––– block: ../base/replication/start-searchd-precach –––
+––– block: ../../base/replication/start-searchd-precach –––
 ––– input –––
 export INSTANCE=2
 ––– output –––
-––– block: ../base/replication/start-searchd-precach –––
+––– block: ../../base/replication/start-searchd-precach –––
 ––– input –––
 export CLUSTER_NAME=c
 ––– output –––
-––– block: ../base/replication/create-cluster –––
-––– block: ../base/replication/join-cluster-on-all-nodes –––
+––– block: ../../base/replication/create-cluster –––
+––– block: ../../base/replication/join-cluster-on-all-nodes –––
 ––– input –––
 mysql -h0 -P1306 -e "create table ${CLUSTER_NAME}:tbl1(id bigint) shards='3' rf='2';"; echo $?;
 ––– output –––
 0
 ––– input –––
-echo "=== Node 1306 ==="; mysql -h0 -P1306 -e "SHOW TABLES\G" || echo "Node 1306 failed!"; echo "=== Node 2306 ==="; mysql -h0 -P2306 -e "SHOW TABLES\G" || echo "Node 2306 failed!"
+echo "=== Node 1306 ==="; mysql -h0 -P1306 -e "SHOW TABLES\G" | sed 's/^[[:space:]]*//' || echo "Node 1306 failed!"; echo "=== Node 2306 ==="; mysql -h0 -P2306 -e "SHOW TABLES\G" | sed 's/^[[:space:]]*//' || echo "Node 2306 failed!"
 ––– output –––
 === Node 1306 ===
 *************************** 1. row ***************************
@@ -31,7 +31,7 @@ mysql -h0 -P1306 -e "DROP TABLE ${CLUSTER_NAME}:tbl1;"; echo $?;
 ––– output –––
 0
 ––– input –––
-echo "=== Node 1306 ==="; mysql -h0 -P1306 -e "SHOW TABLES\G" || echo "Node 1306 failed!"; echo "=== Node 2306 ==="; mysql -h0 -P2306 -e "SHOW TABLES\G" || echo "Node 2306 failed!"
+echo "=== Node 1306 ==="; mysql -h0 -P1306 -e "SHOW TABLES\G" | sed 's/^[[:space:]]*//' || echo "Node 1306 failed!"; echo "=== Node 2306 ==="; mysql -h0 -P2306 -e "SHOW TABLES\G" | sed 's/^[[:space:]]*//' || echo "Node 2306 failed!"
 ––– output –––
 === Node 1306 ===
 === Node 2306 ===
@@ -40,7 +40,7 @@ mysql -h0 -P1306 -e "create table ${CLUSTER_NAME}:Tbl2(id bigint) shards='3' rf=
 ––– output –––
 0
 ––– input –––
-echo "=== Node 1306 ==="; mysql -h0 -P1306 -e "SHOW TABLES\G" || echo "Node 1306 failed!"; echo "=== Node 2306 ==="; mysql -h0 -P2306 -e "SHOW TABLES\G" || echo "Node 2306 failed!"
+echo "=== Node 1306 ==="; mysql -h0 -P1306 -e "SHOW TABLES\G" | sed 's/^[[:space:]]*//' || echo "Node 1306 failed!"; echo "=== Node 2306 ==="; mysql -h0 -P2306 -e "SHOW TABLES\G" | sed 's/^[[:space:]]*//' || echo "Node 2306 failed!"
 ––– output –––
 === Node 1306 ===
 *************************** 1. row ***************************
@@ -55,7 +55,7 @@ mysql -h0 -P1306 -e "DROP TABLE ${CLUSTER_NAME}:Tbl2;"; echo $?
 ––– output –––
 0
 ––– input –––
-echo "=== Node 1306 ==="; mysql -h0 -P1306 -e "SHOW TABLES\G" || echo "Node 1306 failed!"; echo "=== Node 2306 ==="; mysql -h0 -P2306 -e "SHOW TABLES\G" || echo "Node 2306 failed!"
+echo "=== Node 1306 ==="; mysql -h0 -P1306 -e "SHOW TABLES\G" | sed 's/^[[:space:]]*//' || echo "Node 1306 failed!"; echo "=== Node 2306 ==="; mysql -h0 -P2306 -e "SHOW TABLES\G" | sed 's/^[[:space:]]*//' || echo "Node 2306 failed!"
 ––– output –––
 === Node 1306 ===
 === Node 2306 ===
@@ -63,7 +63,7 @@ echo "=== Node 1306 ==="; mysql -h0 -P1306 -e "SHOW TABLES\G" || echo "Node 1306
 mysql -h0 -P1306 -e "create table ${CLUSTER_NAME}:tbl_missing_type(id) shards='3' rf='1';"
 ––– output –––
 ––– input –––
-echo "=== Node 1306 ==="; mysql -h0 -P1306 -e "SHOW TABLES\G" || echo "Node 1306 failed!"; echo "=== Node 2306 ==="; mysql -h0 -P2306 -e "SHOW TABLES\G" || echo "Node 2306 failed!"
+echo "=== Node 1306 ==="; mysql -h0 -P1306 -e "SHOW TABLES\G" | sed 's/^[[:space:]]*//' || echo "Node 1306 failed!"; echo "=== Node 2306 ==="; mysql -h0 -P2306 -e "SHOW TABLES\G" | sed 's/^[[:space:]]*//' || echo "Node 2306 failed!"
 ––– output –––
 === Node 1306 ===
 *************************** 1. row ***************************
@@ -78,7 +78,7 @@ mysql -h0 -P1306 -e "DROP TABLE ${CLUSTER_NAME}:tbl_missing_type;"; echo $?
 ––– output –––
 0
 ––– input –––
-echo "=== Node 1306 ==="; mysql -h0 -P1306 -e "SHOW TABLES\G" || echo "Node 1306 failed!"; echo "=== Node 2306 ==="; mysql -h0 -P2306 -e "SHOW TABLES\G" || echo "Node 2306 failed!"
+echo "=== Node 1306 ==="; mysql -h0 -P1306 -e "SHOW TABLES\G" | sed 's/^[[:space:]]*//' || echo "Node 1306 failed!"; echo "=== Node 2306 ==="; mysql -h0 -P2306 -e "SHOW TABLES\G" | sed 's/^[[:space:]]*//' || echo "Node 2306 failed!"
 ––– output –––
 === Node 1306 ===
 === Node 2306 ===
@@ -89,7 +89,7 @@ LONG_TABLE_NAME=$(printf "tbl%065d" 1)
 mysql -h0 -P1306 -e "create table ${CLUSTER_NAME}:${LONG_TABLE_NAME}(id bigint) shards='3' rf='1';"
 ––– output –––
 ––– input –––
-echo "=== Node 1306 ==="; mysql -h0 -P1306 -e "SHOW TABLES\G" || echo "Node 1306 failed!"; echo "=== Node 2306 ==="; mysql -h0 -P2306 -e "SHOW TABLES\G" || echo "Node 2306 failed!"
+echo "=== Node 1306 ==="; mysql -h0 -P1306 -e "SHOW TABLES\G" | sed 's/^[[:space:]]*//' || echo "Node 1306 failed!"; echo "=== Node 2306 ==="; mysql -h0 -P2306 -e "SHOW TABLES\G" | sed 's/^[[:space:]]*//' || echo "Node 2306 failed!"
 ––– output –––
 === Node 1306 ===
 *************************** 1. row ***************************
@@ -103,7 +103,7 @@ Type: distributed
 mysql -h0 -P1306 -e "DROP TABLE ${CLUSTER_NAME}:${LONG_TABLE_NAME};"
 ––– output –––
 ––– input –––
-echo "=== Node 1306 ==="; mysql -h0 -P1306 -e "SHOW TABLES\G" || echo "Node 1306 failed!"; echo "=== Node 2306 ==="; mysql -h0 -P2306 -e "SHOW TABLES\G" || echo "Node 2306 failed!"
+echo "=== Node 1306 ==="; mysql -h0 -P1306 -e "SHOW TABLES\G" | sed 's/^[[:space:]]*//' || echo "Node 1306 failed!"; echo "=== Node 2306 ==="; mysql -h0 -P2306 -e "SHOW TABLES\G" | sed 's/^[[:space:]]*//' || echo "Node 2306 failed!"
 ––– output –––
 === Node 1306 ===
 === Node 2306 ===

@@ -46,6 +46,7 @@ struct SqlNode_t final
 	uint64_t				m_uValue = 0;
 	int						m_iParsedOp = -1;
 	bool					m_bNegative = false;	// this flag means that '-' was explicitly specified before the integer const
+	bool					m_bFloat = false;
 
 							SqlNode_t() = default;
 
@@ -84,7 +85,7 @@ enum
 };
 
 
-enum SqlStmt_e
+enum SqlStmt_e : BYTE
 {
 	STMT_PARSE_ERROR = 0,
 	STMT_DUMMY,
@@ -162,6 +163,7 @@ enum SqlStmt_e
 	STMT_SHOW_LOCKS,
 	STMT_SHOW_SCROLL,
 	STMT_SHOW_TABLE_INDEXES,
+	STMT_ALTER_REBUILD_KNN,
 	STMT_RELOAD_AUTH,
 	STMT_SHOW_PERMISSIONS,
 	STMT_SHOW_USERS,
@@ -169,6 +171,27 @@ enum SqlStmt_e
 
 	STMT_TOTAL
 };
+
+constexpr const char* SqlStmt2Str(SqlStmt_e eStmt)
+{
+	constexpr const char* dNames[STMT_TOTAL]
+	{
+	"parse_error", "dummy", "select", "insert", "replace", "delete", "show_warnings",
+	"show_status", "show_meta", "set", "begin", "commit", "rollback", "call",
+	"desc", "show_tables", "create_table", "create_table_like", "drop_table", "show_create_table", "update", "create_func",
+	"drop_func", "attach_index", "flush_rtindex", "flush_ramchunk", "show_variables", "truncate_rtindex",
+	"select_columns", "show_collation", "show_character_set", "optimize_index", "show_agent_status",
+	"show_index_status", "show_index_status", "show_profile", "alter_add", "alter_drop", "alter_modify", "show_plan",
+	"show_databases", "create_plugin", "drop_plugin", "show_plugins", "show_threads",
+	"facet", "alter_reconfigure", "show_index_settings", "flush_index", "reload_plugins", "reload_index",
+	"flush_hostnames", "flush_logs", "reload_indexes", "sysfilters", "debug", "alter_killlist_target",
+	"alter_index_settings", "join_cluster", "cluster_create", "cluster_delete", "cluster_index_add",
+	"cluster_index_delete", "cluster_update", "explain", "import_table", "freeze_indexes", "unfreeze_indexes",
+	"show_settings", "alter_rebuild_si", "kill", "show_locks", "show_scroll", "show_table_indexes", "alter_rebuild_knn",
+	"reload_auth", "show_permissions", "show_users", "show_token"
+	};
+	return dNames[eStmt];
+}
 
 
 enum SqlSet_e
@@ -309,6 +332,8 @@ public:
 
 	bool					m_bJson = false;
 	CSphString				m_sEndpoint;
+	CSphString				m_sRawQuery;
+	CSphString				m_sFullUrl;
 
 	CSphVector<CSphString>	m_dStringSubkeys;
 	CSphVector<int64_t>		m_dIntSubkeys;
@@ -365,7 +390,7 @@ public:
 
 	bool			AddOption ( const SqlNode_t & tIdent, const SqlNode_t & tValue );
 	bool			AddOption ( const SqlNode_t & tIdent, const SqlNode_t & tValue, const SqlNode_t & sArg );
-	bool			AddOption ( const SqlNode_t & tIdent, CSphVector<CSphNamedInt> & dNamed );
+	bool			AddOption ( const SqlNode_t & tIdent, CSphVector<CSphNamedVariant> & dNamed );
 	void			DefaultOk ( std::initializer_list<const char*> sList = {} );
 	void			SetIndex ( const SqlNode_t& tNode ) const;
 	void			SetIndex ( const CSphString& sIndex ) const;
@@ -408,7 +433,7 @@ enum class AddOption_e
 
 AddOption_e AddOption ( CSphQuery & tQuery, const CSphString & sOpt, const CSphString & sVal, const CSphString & sValOrig, const std::function<CSphString ()> & fnGetUnescaped, SqlStmt_e eStmt, CSphString & sError );
 AddOption_e AddOption ( CSphQuery & tQuery, const CSphString & sOpt, const CSphString & sValue, int64_t iValue, SqlStmt_e eStmt, CSphString & sError );
-AddOption_e AddOption ( CSphQuery & tQuery, const CSphString & sOpt, CSphVector<CSphNamedInt> & dNamed, SqlStmt_e eStmt, CSphString & sError );
+AddOption_e AddOption ( CSphQuery & tQuery, const CSphString & sOpt, CSphVector<CSphNamedVariant> & dNamed, SqlStmt_e eStmt, CSphString & sError );
 AddOption_e AddOptionRanker ( CSphQuery & tQuery, const CSphString & sOpt, const CSphString & sVal, const std::function<CSphString ()> & fnGetUnescaped, SqlStmt_e eStmt, CSphString & sError );
 
 enum class ParseResult_e { PARSE_OK, PARSE_ERROR, PARSE_SYNTAX_ERROR };

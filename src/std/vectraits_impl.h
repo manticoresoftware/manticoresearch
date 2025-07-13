@@ -10,13 +10,14 @@
 // did not, you can find it at http://www.gnu.org
 //
 
+#pragma once
+
 #include <utility>
 #include <cassert>
 #include <type_traits>
 #include <climits>
 
 #include "thread_annotations.h"
-#include "checks.h"
 #include "comp.h"
 #include "sort.h"
 #include "binarysearch.h"
@@ -51,7 +52,7 @@ VecTraits_T<T>::VecTraits_T ( const std::pair<const TT*, INT>& dData )
 {}
 
 template<typename T>
-VecTraits_T<T> VecTraits_T<T>::Slice ( int64_t iBegin, int64_t iCount ) const
+VecTraits_T<T> VecTraits_T<T>::Slice ( int64_t iBegin, int64_t iCount ) const noexcept
 {
 	// calculate starting bound
 	if ( iBegin < 0 )
@@ -65,28 +66,28 @@ VecTraits_T<T> VecTraits_T<T>::Slice ( int64_t iBegin, int64_t iCount ) const
 
 /// accessor by forward index
 template<typename T>
-T& VecTraits_T<T>::operator[] ( int64_t iIndex ) const
+T& VecTraits_T<T>::operator[] ( int64_t iIndex ) const noexcept
 {
 	assert ( iIndex >= 0 && iIndex < m_iCount );
 	return m_pData[iIndex];
 }
 
 template<typename T>
-T& VecTraits_T<T>::At ( int64_t iIndex ) const
+T& VecTraits_T<T>::At ( int64_t iIndex ) const noexcept
 {
 	return this->operator[] ( iIndex );
 }
 
 /// get first entry ptr
 template<typename T>
-T* VecTraits_T<T>::Begin() const
+T* VecTraits_T<T>::Begin() const noexcept
 {
 	return m_iCount ? m_pData : nullptr;
 }
 
 /// pointer to the item after the last
 template<typename T>
-T* VecTraits_T<T>::End() const
+T* VecTraits_T<T>::End() const noexcept
 {
 	return m_pData + m_iCount;
 }
@@ -106,21 +107,21 @@ T* VecTraits_T<T>::end() const noexcept
 
 /// get first entry
 template<typename T>
-T& VecTraits_T<T>::First() const
+T& VecTraits_T<T>::First() const noexcept
 {
 	return ( *this )[0];
 }
 
 /// get last entry
 template<typename T>
-T& VecTraits_T<T>::Last() const
+T& VecTraits_T<T>::Last() const noexcept
 {
 	return ( *this )[m_iCount - 1];
 }
 
 /// return idx of the item pointed by pBuf, or -1
 template<typename T>
-int VecTraits_T<T>::Idx ( const T* pBuf ) const
+int VecTraits_T<T>::Idx ( const T* pBuf ) const noexcept
 {
 	if ( !pBuf )
 		return -1;
@@ -128,62 +129,68 @@ int VecTraits_T<T>::Idx ( const T* pBuf ) const
 	if ( pBuf < m_pData || pBuf >= m_pData + m_iCount )
 		return -1;
 
-	return int ( pBuf - m_pData );
+	return static_cast<int> (pBuf - m_pData);
 }
 
 /// make possible to pass VecTraits_T<T*> into funcs which need VecTraits_T<const T*>
 /// fixme! M.b. add check and fire error if T is not a pointer?
 template<typename T>
-VecTraits_T<T>::operator VecTraits_T<const typename std::remove_pointer<T>::type*>&() const
+VecTraits_T<T>::operator VecTraits_T<const typename std::remove_pointer<T>::type*>&() const noexcept
 {
-	return *(VecTraits_T<const typename std::remove_pointer<T>::type*>*)( const_cast<VecTraits_T<T>*> ( this ) );
+	return *(VecTraits_T<const typename std::remove_pointer<T>::type*>*)( const_cast<VecTraits_T*> ( this ) );
 }
 
 template<typename T>
 template<typename TT>
-VecTraits_T<T>::operator VecTraits_T<TT>&() const
+VecTraits_T<T>::operator VecTraits_T<TT>&() const noexcept
 {
-	STATIC_ASSERT ( sizeof ( T ) == sizeof ( TT ), SIZE_OF_DERIVED_NOT_SAME_AS_ORIGIN );
-	return *(VecTraits_T<TT>*)( const_cast<VecTraits_T<T>*> ( this ) );
+	static_assert ( sizeof ( T ) == sizeof ( TT ), "size of derived not same as origin" );
+	return *(VecTraits_T<TT>*)const_cast<VecTraits_T*> ( this );
 }
 
 template<typename T>
 template<typename TT, typename INT>
-VecTraits_T<T>::operator std::pair<TT*, INT>() const
+VecTraits_T<T>::operator std::pair<TT*, INT>() const noexcept
 {
 	return { (TT*)m_pData, INT ( m_iCount * sizeof ( T ) / sizeof ( TT ) ) };
 }
 
 /// check if i'm empty
 template<typename T>
-bool VecTraits_T<T>::IsEmpty() const
+bool VecTraits_T<T>::IsEmpty() const noexcept
 {
 	return ( m_pData == nullptr || m_iCount == 0 );
 }
 
 /// query current length, in elements
 template<typename T>
-int64_t VecTraits_T<T>::GetLength64() const
+int64_t VecTraits_T<T>::GetLength64() const noexcept
 {
 	return m_iCount;
 }
 
 template<typename T>
-int VecTraits_T<T>::GetLength() const
+int VecTraits_T<T>::GetLength() const noexcept
 {
 	return (int)m_iCount;
 }
 
+template<typename T>
+DWORD VecTraits_T<T>::GetULength () const noexcept
+{
+	return static_cast<DWORD> (m_iCount);
+}
+
 /// get length in bytes
 template<typename T>
-size_t VecTraits_T<T>::GetLengthBytes() const
+size_t VecTraits_T<T>::GetLengthBytes() const noexcept
 {
 	return sizeof ( T ) * (size_t)m_iCount;
 }
 
 /// get length in bytes
 template<typename T>
-int64_t VecTraits_T<T>::GetLengthBytes64() const
+int64_t VecTraits_T<T>::GetLengthBytes64() const noexcept
 {
 	return m_iCount * sizeof ( T );
 }
@@ -226,7 +233,7 @@ void VecTraits_T<T>::Sort ( F&& COMP, int64_t iStart, int64_t iEnd ) NO_THREAD_S
 /// assumes that the array is sorted in ascending order
 template<typename T>
 template<typename U, typename PRED>
-T* VecTraits_T<T>::BinarySearch ( const PRED& tPred, U tRef ) const NO_THREAD_SAFETY_ANALYSIS
+T* VecTraits_T<T>::BinarySearch ( const PRED& tPred, U tRef ) const noexcept NO_THREAD_SAFETY_ANALYSIS
 {
 	return sphBinarySearch ( m_pData, m_pData + m_iCount - 1, tPred, tRef );
 }
@@ -234,14 +241,14 @@ T* VecTraits_T<T>::BinarySearch ( const PRED& tPred, U tRef ) const NO_THREAD_SA
 /// generic binary search
 /// assumes that the array is sorted in ascending order
 template<typename T>
-T* VecTraits_T<T>::BinarySearch ( T tRef ) const
+T* VecTraits_T<T>::BinarySearch ( T tRef ) const noexcept
 {
 	return sphBinarySearch ( m_pData, m_pData + m_iCount - 1, tRef );
 }
 
 template<typename T>
 template<typename FILTER>
-int64_t VecTraits_T<T>::GetFirst ( FILTER&& cond ) const NO_THREAD_SAFETY_ANALYSIS
+int64_t VecTraits_T<T>::GetFirst ( FILTER&& cond ) const noexcept NO_THREAD_SAFETY_ANALYSIS
 {
 	for ( int64_t i = 0; i < m_iCount; ++i )
 		if ( cond ( m_pData[i] ) )
@@ -252,7 +259,7 @@ int64_t VecTraits_T<T>::GetFirst ( FILTER&& cond ) const NO_THREAD_SAFETY_ANALYS
 /// generic 'ARRAY_ALL'
 template<typename T>
 template<typename FILTER>
-bool VecTraits_T<T>::all_of ( FILTER&& cond ) const
+bool VecTraits_T<T>::all_of ( FILTER&& cond ) const noexcept
 {
 	return ::all_of ( *this, std::forward<FILTER> ( cond ) );
 }
@@ -261,7 +268,7 @@ bool VecTraits_T<T>::all_of ( FILTER&& cond ) const
 /// see 'Contains()' below for examlpe of usage.
 template<typename T>
 template<typename FILTER>
-bool VecTraits_T<T>::any_of ( FILTER&& cond ) const
+bool VecTraits_T<T>::any_of ( FILTER&& cond ) const noexcept
 {
 	return ::any_of ( *this, std::forward<FILTER> ( cond ) );
 }
@@ -269,7 +276,7 @@ bool VecTraits_T<T>::any_of ( FILTER&& cond ) const
 
 template<typename T>
 template<typename FILTER>
-bool VecTraits_T<T>::none_of ( FILTER&& cond ) const
+bool VecTraits_T<T>::none_of ( FILTER&& cond ) const noexcept
 {
 	return !any_of ( cond );
 }
@@ -277,30 +284,37 @@ bool VecTraits_T<T>::none_of ( FILTER&& cond ) const
 
 template<typename T>
 template<typename FILTER>
-int64_t VecTraits_T<T>::count_of ( FILTER&& cond ) const
+int64_t VecTraits_T<T>::count_of ( FILTER&& cond ) const noexcept
 {
 	return ::count_of ( *this, std::forward<FILTER> ( cond ) );
+}
+
+template<typename T>
+template<typename INT, typename FILTER>
+INT VecTraits_T<T>::sum_of ( FILTER&& cond ) const noexcept
+{
+	return ::sum_of<INT> ( *this, std::forward<FILTER> ( cond ) );
 }
 
 /// Apply an action to every member
 /// Apply ( [] (T& item) {...} );
 template<typename T>
 template<typename ACTION>
-void VecTraits_T<T>::Apply ( ACTION&& Verb ) const
+void VecTraits_T<T>::Apply ( ACTION&& Verb ) const noexcept
 {
 	::for_each ( *this, std::forward<ACTION> ( Verb ) );
 }
 
 template<typename T>
 template<typename ACTION>
-void VecTraits_T<T>::for_each ( ACTION&& tAction ) const
+void VecTraits_T<T>::for_each ( ACTION&& tAction ) const noexcept
 {
 	::for_each ( *this, std::forward<ACTION> ( tAction ) );
 }
 
 /// generic linear search
 template<typename T>
-bool VecTraits_T<T>::Contains ( T tRef ) const NO_THREAD_SAFETY_ANALYSIS
+bool VecTraits_T<T>::Contains ( T tRef ) const noexcept NO_THREAD_SAFETY_ANALYSIS
 {
 	return any_of ( [&] ( const T& v ) { return tRef == v; } );
 }

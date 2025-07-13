@@ -23,6 +23,7 @@ on:
       - 'galera_packaging/**'
     tags:
       - 'release*'
+      - 'pack_publish'
 
 # cancels the previous workflow run when a new one appears in the same branch (e.g. master or a PR's branch)
 concurrency:
@@ -30,13 +31,42 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-
+  check_branch:
+    name: Check branch existence
+    runs-on: ubuntu-22.04
+    outputs:
+      columnar_locator: ${{ steps.set_locator.outputs.columnar_locator }}
+    steps:
+      - name: Check if branch exists in manticoresoftware/manticoresearch
+        id: check_branch
+        if: github.ref_name != 'master'
+        run: |
+          # Extract the actual branch name for pull requests
+          if [[ "${{ github.event_name }}" == "pull_request" ]]; then
+            BRANCH_NAME="${{ github.event.pull_request.head.ref }}"
+          else
+            BRANCH_NAME="${{ github.ref_name }}"
+          fi
+          
+          HTTP_STATUS=$(curl -s -o /dev/null -w "%{http_code}" https://api.github.com/repos/manticoresoftware/columnar/branches/$BRANCH_NAME)
+          if [ "$HTTP_STATUS" -eq "200" ]; then
+            echo "branch_exists=true" >> $GITHUB_OUTPUT
+            echo "branch_name=$BRANCH_NAME" >> $GITHUB_OUTPUT
+          else
+            echo "branch_exists=false" >> $GITHUB_OUTPUT
+            echo "branch_name=$BRANCH_NAME" >> $GITHUB_OUTPUT
+          fi
+      - name: Set Columnar Locator
+        id: set_locator
+        run: |
+          if [[ "${{ github.ref_name }}" != "master" && "${{ steps.check_branch.outputs.branch_exists }}" == "true" ]]; then
+            echo "columnar_locator=GIT_REPOSITORY https://github.com/manticoresoftware/columnar.git GIT_TAG ${{ steps.check_branch.outputs.branch_name }}" >> $GITHUB_OUTPUT
+          else
+            echo "columnar_locator=" >> $GITHUB_OUTPUT
+          fi
   pack:
     name: OK to pack?
     runs-on: ubuntu-22.04
-    permissions:
-      contents: write
-      pull-requests: read
     outputs:
       version: ${{ steps.semver-tagger.outputs.version }}
       version_full: ${{ steps.semver-tagger.outputs.version_full }}
@@ -70,8 +100,14 @@ jobs:
       (
         github.event_name == 'push'
         &&
-        startsWith(
-          github.ref, 'refs/heads/manticore-'
+        (
+          startsWith(
+            github.ref, 'refs/heads/manticore-'
+          )
+          ||
+          contains(
+            github.ref, 'refs/tags/pack_publish'
+          )
         )
       )
     steps:
@@ -79,25 +115,32 @@ jobs:
         uses: actions/checkout@v3
         with:
           fetch-depth: 0
-          token: ${{ secrets.WORKFLOW_TOKEN }}
+          token: ${{ secrets.GITHUB_TOKEN }}
       - name: Update version
         id: semver-tagger
         uses: manticoresoftware/semver-tagger-action@main  
         with:
-          github_token: ${{ secrets.WORKFLOW_TOKEN }}
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          conventional_commits_authors: alexey@manticoresearch.com
           ignore_patterns: '\.md$|^test/|^manual/|\.clt|\.github|\.patterns|\.yml|\.gitignore'
       - name: Check if we should continue packing
         id: check-should-continue
         run: |
-          # Continue if version was updated or if we have the "pack" label on PR
+          # Continue if version was updated, if we have the "pack" label on PR, or if target is "release"
           if [[ "${{ steps.semver-tagger.outputs.version_updated }}" == "true" ]]; then
             echo "Continuing because version was updated"
+            echo "should_continue=true" >> $GITHUB_OUTPUT
+          elif [[ "${{ steps.semver-tagger.outputs.target }}" == "release" ]]; then
+            echo "Continuing because target is release"
             echo "should_continue=true" >> $GITHUB_OUTPUT
           elif [[ "${{ github.event_name }}" == "pull_request" && "${{ contains(github.event.pull_request.labels.*.name, 'pack') }}" == "true" ]]; then
             echo "Continuing because PR has 'pack' label"
             echo "should_continue=true" >> $GITHUB_OUTPUT
+          elif [[ "${{ contains(github.ref, 'refs/tags/pack_publish') }}" == "true" ]]; then
+            echo "Continuing because commit has 'pack_publish' tag"
+            echo "should_continue=true" >> $GITHUB_OUTPUT
           else
-            echo "Skipping packing because version wasn't updated and there's no 'pack' label"
+            echo "Skipping packing because version wasn't updated, target is not release, and there's no 'pack' label or tag"
             echo "should_continue=false" >> $GITHUB_OUTPUT
           fi
       - run: |
@@ -109,11 +152,43 @@ jobs:
           echo "* Version updated: ${{ steps.semver-tagger.outputs.version_updated }}" >> $GITHUB_STEP_SUMMARY
           echo "* Should continue packing: ${{ steps.check-should-continue.outputs.should_continue }}" >> $GITHUB_STEP_SUMMARY
 
+#  debug_info:
+#    name: Debug GitHub Event Info
+#    runs-on: ubuntu-22.04
+#    steps:
+#      - name: Print GitHub Event Info
+#        run: |
+#          echo "GitHub Event Name: ${{ github.event_name }}"
+#          echo "GitHub Ref: ${{ github.ref }}"
+#          echo "GitHub Ref Type: ${{ github.ref_type }}"
+#          echo "GitHub Ref Name: ${{ github.ref_name }}"
+#          echo "GitHub Actor: ${{ github.actor }}"
+#          echo "GitHub Repository: ${{ github.repository }}"
+#          echo "GitHub SHA: ${{ github.sha }}"
+#          echo "GitHub Run Number: ${{ github.run_number }}"
+#          echo "GitHub Run Attempt: ${{ github.run_attempt }}"
+#          echo "GitHub Workflow: ${{ github.workflow }}"
+#          echo "GitHub Event JSON:"
+#          echo '${{ toJSON(github.event) }}'
+
+  # Job to check dependencies using check_deps_in_repos.sh
+  # Runs on every PR, workflow_run, or push event matching the conditions
+  check_deps:
+    needs: pack
+    if: needs.pack.outputs.should_continue == 'true'
+    name: Check deps test
+    runs-on: ubuntu-22.04
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v3
+      - name: Run dependency check script
+        run: |
+          bash dist/check_deps_in_repos.sh --target ${{ needs.pack.outputs.target }}
 
   pack_debian_ubuntu:
     name: Debian/Ubuntu packages
     uses: ./.github/workflows/build_template.yml
-    needs: pack
+    needs: [pack, check_branch, check_deps]
     if: needs.pack.outputs.should_continue == 'true'
     strategy:
       fail-fast: false
@@ -121,6 +196,7 @@ jobs:
         DISTR: [bionic, focal, jammy, buster, bullseye, bookworm]
         arch: [x86_64, aarch64]
     with:
+      COLUMNAR_LOCATOR: ${{ needs.check_branch.outputs.columnar_locator }}
       DISTR: ${{ matrix.DISTR }}
       arch: ${{ matrix.arch }}
       cmake_command: |
@@ -137,14 +213,15 @@ jobs:
   pack_rhel:
     name: RHEL packages
     uses: ./.github/workflows/build_template.yml
-    needs: pack
+    needs: [pack, check_branch, check_deps]
     if: needs.pack.outputs.should_continue == 'true'
     strategy:
       fail-fast: false
       matrix:
-        DISTR: [rhel7, rhel8, rhel9]
+        DISTR: [rhel7, rhel8, rhel9, rhel10]
         arch: [x86_64, aarch64]
     with:
+      COLUMNAR_LOCATOR: ${{ needs.check_branch.outputs.columnar_locator }}
       DISTR: ${{ matrix.DISTR }}
       arch: ${{ matrix.arch }}
       boost_url_key: boost_rhel_feb17
@@ -164,7 +241,7 @@ jobs:
   pack_macos:
     name: MacOS packages
     uses: ./.github/workflows/build_template.yml
-    needs: pack
+    needs: [pack, check_branch, check_deps]
     if: needs.pack.outputs.should_continue == 'true'
     strategy:
       fail-fast: false
@@ -172,6 +249,7 @@ jobs:
         DISTR: [macos]
         arch: [x86_64, arm64]
     with:
+      COLUMNAR_LOCATOR: ${{ needs.check_branch.outputs.columnar_locator }}
       DISTR: ${{ matrix.DISTR }}
       arch: ${{ matrix.arch }}
       HOMEBREW_PREFIX: /opt/homebrew
@@ -189,9 +267,10 @@ jobs:
   pack_windows:
     name: Windows x64 package
     uses: ./.github/workflows/build_template.yml
-    needs: pack
+    needs: [pack, check_branch, check_deps]
     if: needs.pack.outputs.should_continue == 'true'
     with:
+      COLUMNAR_LOCATOR: ${{ needs.check_branch.outputs.columnar_locator }}
       DISTR: windows
       arch: x64
       sysroot_url_key: roots_mysql83_jan17
@@ -206,7 +285,6 @@ jobs:
       artifact_list: "build/manticore*exe build/manticore*zip"
       version: ${{ needs.pack.outputs.version }}
       build_tag: ${{ needs.pack.outputs.target == 'dev' && 'dev' || '' }}
-      
   build_nsis:
     name: Making Windows NSIS installer
     needs: [pack_windows, pack]
@@ -250,6 +328,7 @@ jobs:
         (github.event_name == 'pull_request' && (contains(github.event.pull_request.labels.*.name, 'publish')))
         || (github.event_name == 'workflow_run' && github.event.workflow_run.conclusion == 'success')
         || (github.event_name == 'push' && startsWith(github.ref, 'refs/heads/manticore-'))
+        || (github.event_name == 'push' && contains(github.ref, 'refs/tags/pack_publish'))
       )
     steps:
       - run: echo "Ready to publish"
@@ -279,7 +358,7 @@ jobs:
     strategy:
       fail-fast: true
       matrix:
-        DISTR: [7, 8, 9]
+        DISTR: [7, 8, 9, 10]
         arch: [x86_64, aarch64]
     runs-on: ubuntu-22.04
     name: RHEL ${{ matrix.DISTR }} ${{ matrix.arch }} publishing
@@ -374,10 +453,10 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        image: [ "centos:7", "almalinux:8", "almalinux:9", "oraclelinux:9", "amazonlinux:latest" ]
+        image: [ "almalinux:8", "almalinux:9", "almalinux:10", "oraclelinux:9", "amazonlinux:latest" ]
     runs-on: ubuntu-22.04
     steps:
-      - uses: manticoresoftware/clt@0.6.7
+      - uses: manticoresoftware/clt@0.6.9
         with:
           image: ${{ matrix.image }}
           test_prefix: test/clt-tests/installation/rhel-dev-
@@ -392,7 +471,7 @@ jobs:
         image: [ "ubuntu:bionic", "ubuntu:focal", "ubuntu:jammy", "debian:buster", "debian:bullseye", "debian:bookworm" ]
     runs-on: ubuntu-22.04
     steps:
-      - uses: manticoresoftware/clt@0.6.7
+      - uses: manticoresoftware/clt@0.6.9
         with:
           image: ${{ matrix.image }}
           test_prefix: test/clt-tests/installation/deb-dev-

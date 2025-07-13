@@ -23,6 +23,7 @@
 #include "tokenizer/tokenizer.h"
 #include "task_dispatcher.h"
 #include "stackmock.h"
+#include "sphinxquery/xqparser.h"
 
 #include <atomic>
 
@@ -107,7 +108,7 @@ public:
 	// RT index stub
 	bool MultiQuery ( CSphQueryResult &, const CSphQuery &, const VecTraits_T<ISphMatchSorter *> &, const CSphMultiQueryArgs & ) const override;
 	bool DeleteDocument ( const VecTraits_T<DocID_t> &, CSphString & , RtAccum_t * pAccExt ) override { RollBack ( pAccExt ); return true; }
-	void ForceRamFlush ( const char* szReason ) EXCLUDES ( m_tLock ) final;
+	void ForceRamFlush ( const char* szReason ) final EXCLUDES ( m_tLock );
 	bool IsFlushNeed() const override;
 	bool ForceDiskChunk () override;
 	bool IsSameSettings ( CSphReconfigureSettings & tSettings, CSphReconfigureSetup & tSetup, StrVec_t & dWarnings, CSphString & sError ) const override;
@@ -189,9 +190,8 @@ private:
 //////////////////////////////////////////////////////////////////////////
 // percolate functions
 
-#define PERCOLATE_BLOOM_WILD_COUNT 32
-#define PERCOLATE_BLOOM_SIZE PERCOLATE_BLOOM_WILD_COUNT * 2
-#define PERCOLATE_WORDS_PER_CP 128
+static constexpr DWORD PERCOLATE_BLOOM_SIZE = PERCOLATE_BLOOM_WILD_COUNT * BLOOM_HASHES_COUNT;
+static constexpr DWORD PERCOLATE_WORDS_PER_CP = 128;
 
 /// percolate query index factory
 std::unique_ptr<PercolateIndex_i> CreateIndexPercolate ( CSphString sIndexName, CSphString sPath, CSphSchema tSchema )
@@ -279,10 +279,9 @@ static void DoQueryGetRejects ( const XQNode_t * pNode, const DictRefPtr_c& pDic
 		return;
 
 	BYTE sTmp[3 * SPH_MAX_WORD_LEN + 16];
-	ARRAY_FOREACH ( i, pNode->m_dWords )
+	for ( const XQKeyword_t & tWord : pNode->dWords() )
 	{
-		const XQKeyword_t & tWord = pNode->m_dWords[i];
-		int iLen = tWord.m_sWord.Length();
+		int iLen = Min (tWord.m_sWord.Length(), sizeof(sTmp)-1 );
 		assert ( iLen < (int)sizeof( sTmp ) );
 
 		if ( !iLen )
@@ -345,11 +344,11 @@ static void DoQueryGetRejects ( const XQNode_t * pNode, const DictRefPtr_c& pDic
 
 	// composite nodes children recursion
 	// for AND-NOT node NOT children should be skipped
-	int iCount = pNode->m_dChildren.GetLength();
+	int iCount = pNode->dChildren().GetLength();
 	if ( pNode->GetOp()==SPH_QUERY_ANDNOT && iCount>1 )
 		iCount = 1;
 	for ( int i=0; i<iCount; i++ )
-		DoQueryGetRejects ( pNode->m_dChildren[i], pDict, dRejectTerms, dRejectBloom, dSuffixes, bOnlyTerms, bUtf8 );
+		DoQueryGetRejects ( pNode->dChildren()[i], pDict, dRejectTerms, dRejectBloom, dSuffixes, bOnlyTerms, bUtf8 );
 }
 
 static void QueryGetRejects ( const XQNode_t * pNode, const DictRefPtr_c& pDict, CSphFixedVector<uint64_t> & dRejectTerms, CSphFixedVector<uint64_t> & dRejectBloom, CSphVector<CSphString> & dSuffixes, bool & bOnlyTerms, bool bUtf8 )
@@ -367,14 +366,13 @@ static void DoQueryGetTerms ( const XQNode_t * pNode, const DictRefPtr_c& pDict,
 		return;
 
 	BYTE sTmp[3 * SPH_MAX_WORD_LEN + 16];
-	ARRAY_FOREACH ( i, pNode->m_dWords )
+	for ( const XQKeyword_t & tWord : pNode->dWords() )
 	{
-		const XQKeyword_t & tWord = pNode->m_dWords[i];
 		uint64_t uHash = sphFNV64 ( tWord.m_sWord.cstr() );
 		if ( hDict.m_hTerms.Find ( uHash ) )
 			continue;
 
-		int iLen = tWord.m_sWord.Length();
+		int iLen = Min ( tWord.m_sWord.Length(), sizeof(sTmp)-1 );
 		assert ( iLen < (int)sizeof( sTmp ) );
 
 		if ( !iLen )
@@ -401,7 +399,7 @@ static void DoQueryGetTerms ( const XQNode_t * pNode, const DictRefPtr_c& pDict,
 		dKeywords.Append ( sTmp, iLen );
 	}
 
-	for ( const XQNode_t * pChild : pNode->m_dChildren )
+	for ( const XQNode_t * pChild : pNode->dChildren() )
 		DoQueryGetTerms ( pChild, pDict, hDict, dKeywords );
 }
 
@@ -1666,13 +1664,13 @@ class XQTreeCompressor_t
 		if ( !pNode )
 			return;
 
-		if ( pNode->m_dWords.GetLength() && pNode->m_dWords.GetLength()!=pNode->m_dWords.GetLimit() )
+		if ( pNode->dWords().GetLength() && pNode->dWords().GetLength()!=pNode->dWords().GetLimit() )
 			m_dWords.Add ( pNode );
 
-		if ( pNode->m_dChildren.GetLength() && pNode->m_dChildren.GetLength()!=pNode->m_dChildren.GetLimit() )
+		if ( pNode->dChildren().GetLength() && pNode->dChildren().GetLength()!=pNode->dChildren().GetLimit() )
 			m_dChildren.Add ( pNode );
 
-		for ( auto & tChild : pNode->m_dChildren )
+		for ( auto & tChild : pNode->dChildren() )
 			WalkNodes ( tChild );
 	}
 
@@ -1682,29 +1680,32 @@ class XQTreeCompressor_t
 		CSphFixedVector< CSphVector<XQKeyword_t> > dWords2Free ( m_dWords.GetLength() );
 		CSphFixedVector< CSphVector<XQNode_t *> > dChildren2Free ( m_dChildren.GetLength() );
 
-		for ( int i=0; i<m_dWords.GetLength(); i++ )
+		for ( int i=0; i<m_dWords.GetLength(); ++i )
 		{
-			auto & dSrcWords = m_dWords[i]->m_dWords;
-			int iLen = dSrcWords.GetLength();
-			
-			CSphFixedVector<XQKeyword_t> dDstWords ( iLen );
-			dDstWords.CopyFrom ( dSrcWords );
+			m_dWords[i]->WithWords ( [i,&dWords2Free] (auto & dSrcWords) {
 
-			dWords2Free[i].SwapData ( dSrcWords ); // remove all collected vectors m_pData on exit
-			dSrcWords.AdoptData ( dDstWords.LeakData(), iLen, iLen );
+				int iLen = dSrcWords.GetLength();
+				CSphFixedVector<XQKeyword_t> dDstWords ( iLen );
+				dDstWords.CopyFrom ( dSrcWords );
+
+				dWords2Free[i].SwapData ( dSrcWords ); // remove all collected vectors m_pData on exit
+				dSrcWords.AdoptData ( dDstWords.LeakData(), iLen, iLen );
+			});
 		}
+
 
 		for ( int i=0; i<m_dChildren.GetLength(); i++ )
 		{
-			auto & dSrcChild = m_dChildren[i]->m_dChildren;
+			m_dChildren[i]->WithChildren([&dChildren2Free,i](auto& dSrcChild) {
 			int iLen = dSrcChild.GetLength();
 			
 			CSphFixedVector<XQNode_t *> dDstChildren ( iLen );
 			dDstChildren.CopyFrom ( dSrcChild );
-			dSrcChild.Resize ( 0 ); // XQNode_t poionter moved into new fixed-vector
+			dSrcChild.Resize ( 0 ); // XQNode_t pointer moved into new fixed-vector
 
 			dChildren2Free[i].SwapData ( dSrcChild ); // remove all collected vectors m_pData on exit
 			dSrcChild.AdoptData ( dDstChildren.LeakData(), iLen, iLen );
+			});
 		}
 	}
 
@@ -1730,7 +1731,7 @@ std::unique_ptr<StoredQuery_i> PercolateIndex_c::CreateQuery ( PercolateQueryArg
 	DictRefPtr_c pDict = GetStatelessDict ( m_pDict );
 
 	if ( IsStarDict ( bWordDict ) )
-		SetupStarDictV8 ( pDict );
+		SetupStarDict ( pDict );
 
 	if ( m_tSettings.m_bIndexExactWords )
 		SetupExactDict ( pDict );
@@ -1757,9 +1758,8 @@ void SetPercolateQueryParserFactory ( CreateQueryParser_fn * pCall )
 static void FixExpandedNode ( XQNode_t * pNode )
 {
 	assert ( pNode );
-	ARRAY_FOREACH ( i, pNode->m_dWords )
+	for ( const XQKeyword_t & tKw : pNode->dWords() )
 	{
-		XQKeyword_t & tKw = pNode->m_dWords[i];
 		if ( sphHasExpandableWildcards ( tKw.m_sWord.cstr() ) )
 		{
 			tKw.m_bExpanded = true;
@@ -1769,8 +1769,8 @@ static void FixExpandedNode ( XQNode_t * pNode )
 		}
 	}
 
-	ARRAY_FOREACH ( i, pNode->m_dChildren )
-		FixExpandedNode ( pNode->m_dChildren[i] );
+	ARRAY_FOREACH ( i, pNode->dChildren() )
+		FixExpandedNode ( pNode->dChildren()[i] );
 }
 
 static XQNode_t * FixExpanded ( XQNode_t * pNode, int iMinPrefix, int iMinInfix, bool bExactForm )
@@ -2447,7 +2447,7 @@ void PercolateIndex_c::PostSetupUnl()
 	DictRefPtr_c pDict = GetStatelessDict ( m_pDict );
 
 	if ( IsStarDict ( bWordDict ) )
-		SetupStarDictV8 ( pDict );
+		SetupStarDict ( pDict );
 
 	if ( m_tSettings.m_bIndexExactWords )
 		SetupExactDict ( pDict );
@@ -3302,7 +3302,7 @@ Bson_t PercolateIndex_c::ExplainQuery ( const CSphString & sQuery ) const
 	tArgs.m_szQuery = sQuery.cstr();
 	tArgs.m_pSchema = &GetInternalSchema();
 	tArgs.m_pDict = GetStatelessDict ( m_pDict );
-	SetupStarDictV8 ( tArgs.m_pDict );
+	SetupStarDict ( tArgs.m_pDict );
 	SetupExactDict ( tArgs.m_pDict );
 	if ( m_pFieldFilter )
 		tArgs.m_pFieldFilter = m_pFieldFilter->Clone();

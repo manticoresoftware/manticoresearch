@@ -2,10 +2,10 @@
 
 ### Supported releases:
 
-* CentOS 7, RHEL 7, Oracle Linux 7
 * CentOS 8, RHEL 8, Oracle Linux 8, CentOS Stream 8
 * Amazon Linux 2
 * CentOS 9, RHEL 9, AlmaLinux 9
+* AlmaLinux 10, other RHEL 10-based distributions
 
 ### YUM repository
 
@@ -59,7 +59,7 @@ if you get error `sql_connect: MySQL source wasn't initialized. Wrong name in dl
 #### Ukrainian lemmatizer
 The lemmatizer requires Python 3.9+. **Make sure you have it installed and that it's configured with `--enable-shared`.**
 
-Here's how to install Python 3.9 and the Ukrainian lemmatizer in Centos 7/8:
+Here's how to install Python 3.9 and the Ukrainian lemmatizer in Centos 8:
 
 ```bash
 # install Manticore Search and UK lemmatizer from YUM repository

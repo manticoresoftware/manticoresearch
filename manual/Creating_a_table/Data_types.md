@@ -387,11 +387,17 @@ DESC tbl;
 2 rows in set (0.00 sec) 
 ```
 
-When working with document IDs, it's important to know that they are stored internally as unsigned 64-bit integers but are exposed as signed 64-bit integers in queries and results. This means:
+When working with document IDs, it's important to know that they are stored internally as unsigned 64-bit integers but are handled differently depending on the interface:
 
+**MySQL/SQL interface:**
 * IDs greater than 2^63-1 will appear as negative numbers.
 * When filtering by such large IDs, you must use their signed representation.
-* Use the [UINT64()](Functions/Type_casting_functions.md#UINT64%28%29) function to view the actual unsigned value.
+* Use the [UINT64()](../Functions/Type_casting_functions.md#UINT64%28%29) function to view the actual unsigned value.
+
+**JSON/HTTP interface:**
+* IDs are always displayed as their original unsigned values, regardless of size.
+* Both signed and unsigned representations can be used for filtering.
+* Insert operations accept the full unsigned 64-bit range.
 
 For example, let's create a table and insert some values around 2^63:
 ```sql
@@ -451,6 +457,72 @@ Values that do not fit within 64 bits will trigger a similar error:
 mysql> select * from t where id = -9223372036854775809;
 ERROR 1064 (42000): number -9223372036854775809 is out of range [-9223372036854775808..9223372036854775807]
 ```
+
+### Interface differences with large IDs
+
+The behavior differences between MySQL/SQL and JSON/HTTP interfaces become more apparent with very large document IDs. Here's a comprehensive example:
+
+**MySQL/SQL interface:**
+```sql
+mysql> drop table if exists t; create table t; insert into t values(17581446260360033510);
+Query OK, 0 rows affected (0.01 sec)
+
+mysql> select * from t;
++---------------------+
+| id                  |
++---------------------+
+| -865297813349518106 |
++---------------------+
+
+mysql> select *, uint64(id) from t;
++---------------------+----------------------+
+| id                  | uint64(id)           |
++---------------------+----------------------+
+| -865297813349518106 | 17581446260360033510 |
++---------------------+----------------------+
+
+mysql> select * from t where id = -865297813349518106;
++---------------------+
+| id                  |
++---------------------+
+| -865297813349518106 |
++---------------------+
+
+mysql> select * from t where id = 17581446260360033510;
+ERROR 1064 (42000): number 17581446260360033510 is out of range [-9223372036854775808..9223372036854775807]
+```
+
+**JSON/HTTP interface:**
+```bash
+# Search returns the original unsigned value
+curl -s 0:9308/search -d '{"table": "t"}'
+{
+  "took": 0,
+  "timed_out": false,
+  "hits": {
+    "total": 1,
+    "total_relation": "eq",
+    "hits": [
+      {
+        "_id": 17581446260360033510,
+        "_score": 1,
+        "_source": {}
+      }
+    ]
+  }
+}
+
+# Both signed and unsigned values work for filtering
+curl -s 0:9308/search -d '{"table": "t", "query": {"equals": {"id": 17581446260360033510}}}'
+curl -s 0:9308/search -d '{"table": "t", "query": {"equals": {"id": -865297813349518106}}}'
+
+# Insert with maximum unsigned 64-bit value
+curl -s 0:9308/insert -d '{"table": "t", "id": 18446744073709551615, "doc": {}}'
+```
+
+This means when working with large document IDs:
+1. **MySQL interface** requires using the signed representation for queries but can display the unsigned value with `UINT64()`
+2. **JSON interface** consistently uses unsigned values for display and accepts both representations for filtering
 
 ## Character data types
 
@@ -2432,6 +2504,8 @@ Float vector attributes allow storing variable-length lists of floats, primarily
 - Feature vectors for machine learning
 - Recommendation system vectors
 
+** Keep in mind that the `float_vector` data type is not compatible with the [Auto schema](../Data_creation_and_modification/Adding_documents_to_a_table/Adding_documents_to_a_real-time_table.md#Auto-schema) mechanism. **
+
 <!-- intro -->
 ##### SQL:
 <!-- request SQL -->
@@ -2536,7 +2610,7 @@ table products
 
 <!-- end -->
 
-For information about using float vectors in searches, see [KNN search](../Searching/KNN.md).
+For information about configuring and using float vectors in searches, see [KNN search](../Searching/KNN.md).
 
 ## Multi-value integer (MVA)
 

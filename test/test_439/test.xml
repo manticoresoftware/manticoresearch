@@ -114,6 +114,17 @@ searchd
 	flush ramchunk t;
 	select in(columnar_str,'0','1','2','3','4') as a from t where a=1;
 	drop table t;
+
+	<!-- regression for a crash on empty columnar mva -->
+	create table test(f text,mvacol multi) engine='columnar';
+	insert into test (id,f) values (1, '');
+	insert into test (id,f) values (2, '');
+	insert into test (id,f) values (3, '');
+	select * from test;
+	flush ramchunk test;
+	select * from test;
+	drop table test;
+
 </sphinxql>
 </queries>
 

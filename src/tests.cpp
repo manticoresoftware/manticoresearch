@@ -12,7 +12,7 @@
 
 #include "sphinxexpr.h"
 #include "sphinxutils.h"
-#include "sphinxquery.h"
+#include "sphinxquery/sphinxquery.h"
 #include "sphinxrt.h"
 #include "sphinxint.h"
 #include "threadutils.h"
@@ -24,6 +24,7 @@
 #include "histogram.h"
 #include "secondaryindex.h"
 #include "secondarylib.h"
+#include "sphinxquery/xqparser.h"
 #include <cmath>
 
 #define SNOWBALL 0

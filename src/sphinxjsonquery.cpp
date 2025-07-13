@@ -8,7 +8,8 @@
 // did not, you can find it at http://www.gnu.org/
 //
 
-#include "sphinxquery.h"
+#include "sphinxquery/xqparser.h"
+#include "sphinxquery/parse_helper.h"
 #include "sphinxsearch.h"
 #include "sphinxplugin.h"
 #include "sphinxutils.h"
@@ -18,10 +19,8 @@
 #include "searchdsql.h"
 #include "searchdha.h"
 #include "knnmisc.h"
-#include "datetime.h"
 #include "sorterscroll.h"
-
-#include "json/cJSON.h"
+#include "sphinxexcerpt.h"
 
 static const char * g_szAll = "_all";
 static const char * g_szHighlight = "_@highlight_";
@@ -202,9 +201,8 @@ XQNode_t * QueryTreeBuilder_c::AddChildKeyword ( XQNode_t * pParent, const char 
 	tKeyword.m_iSkippedBefore = iSkippedPosBeforeToken;
 	tKeyword.m_fBoost = fBoost;
 	auto * pNode = new XQNode_t ( tLimitSpec );
-	pNode->m_pParent = pParent;
-	pNode->m_dWords.Add ( tKeyword );
-	pParent->m_dChildren.Add ( pNode );
+	pNode->AddDirtyWord ( tKeyword );
+	pParent->AddNewChild ( pNode );
 	m_dSpawned.Add ( pNode );
 
 	return pNode;
@@ -271,7 +269,6 @@ class QueryParserJson_c : public QueryParser_i
 {
 public:
 	bool	IsFullscan ( const CSphQuery & tQuery ) const final;
-	bool	IsFullscan ( const XQQuery_t & tQuery ) const final;
 	bool	ParseQuery ( XQQuery_t & tParsed, const char * sQuery, const CSphQuery * pQuery, TokenizerRefPtr_c pQueryTokenizer, TokenizerRefPtr_c pQueryTokenizerJson, const CSphSchema * pSchema, const DictRefPtr_c& pDict, const CSphIndexSettings & tSettings, const CSphBitvec * pMorphFields ) const final;
 	QueryParser_i * Clone() const final { return new QueryParserJson_c; }
 
@@ -302,11 +299,6 @@ bool QueryParserJson_c::IsFullscan ( const CSphQuery & tQuery ) const
 	return true;
 }
 
-
-bool QueryParserJson_c::IsFullscan ( const XQQuery_t & tQuery ) const
-{
-	return !( tQuery.m_pRoot && ( tQuery.m_pRoot->m_dChildren.GetLength () || tQuery.m_pRoot->m_dWords.GetLength () ) );
-}
 
 static bool IsFullText ( const CSphString & sName );
 static bool IsBoolNode ( const CSphString & sName );
@@ -362,6 +354,23 @@ static JsonObj_c FindFullTextQueryNode ( const JsonObj_c & tRoot )
 	return tRoot[0];
 }
 
+static bool HasFulltext ( const XQNode_t * pRoot )
+{
+	CSphVector<const XQNode_t *> dNodes;
+	dNodes.Add ( pRoot );
+
+	ARRAY_FOREACH ( iNode, dNodes )
+	{
+		const XQNode_t * pNode = dNodes[iNode];
+
+		if ( pNode->dWords().GetLength() )
+			return true;
+
+		dNodes.Append ( pNode->dChildren() );
+	}
+
+	return false;
+}
 
 bool QueryParserJson_c::ParseQuery ( XQQuery_t & tParsed, const char * szQuery, const CSphQuery * pQuery, TokenizerRefPtr_c pQueryTokenizerQL, TokenizerRefPtr_c pQueryTokenizerJson, const CSphSchema * pSchema, const DictRefPtr_c & pDict, const CSphIndexSettings & tSettings, const CSphBitvec * pMorphFields ) const
 {
@@ -397,6 +406,8 @@ bool QueryParserJson_c::ParseQuery ( XQQuery_t & tParsed, const char * szQuery, 
 		return false;
 	}
 
+	tParsed.m_bWasFullText = HasFulltext ( pRoot );
+
 	XQLimitSpec_t tLimitSpec;
 	pRoot = tBuilder.FixupTree ( pRoot, tLimitSpec, pMorphFields, IsAllowOnlyNot() );
 	if ( tBuilder.IsError() )
@@ -405,7 +416,7 @@ bool QueryParserJson_c::ParseQuery ( XQQuery_t & tParsed, const char * szQuery, 
 		return false;
 	}
 
-	tParsed.m_bSingleWord = ( pRoot && pRoot->m_dChildren.IsEmpty() && pRoot->m_dWords.GetLength() == 1 );
+	tParsed.m_bSingleWord = ( pRoot && pRoot->dChildren().IsEmpty() && pRoot->dWords().GetLength() == 1 );
 	tParsed.m_pRoot = pRoot;
 	return true;
 }
@@ -683,10 +694,7 @@ XQNode_t * QueryParserJson_c::ConstructBoolNode ( const JsonObj_c & tJson, Query
 			pAndNode->SetOp ( SPH_QUERY_AND );
 
 			for ( auto & i : dMust )
-			{
-				pAndNode->m_dChildren.Add(i);
-				i->m_pParent = pAndNode;
-			}
+				pAndNode->AddNewChild ( i);
 
 			pMustNode = pAndNode;
 		}
@@ -702,10 +710,7 @@ XQNode_t * QueryParserJson_c::ConstructBoolNode ( const JsonObj_c & tJson, Query
 			pOrNode->SetOp ( SPH_QUERY_OR );
 
 			for ( auto & i : dShould )
-			{
-				pOrNode->m_dChildren.Add(i);
-				i->m_pParent = pOrNode;
-			}
+				pOrNode->AddNewChild (i);
 
 			pShouldNode = pOrNode;
 		}
@@ -719,21 +724,16 @@ XQNode_t * QueryParserJson_c::ConstructBoolNode ( const JsonObj_c & tJson, Query
 
 		if ( dMustNot.GetLength()==1 )
 		{
-			pNotNode->m_dChildren.Add ( dMustNot[0] );
-			dMustNot[0]->m_pParent = pNotNode;
+			pNotNode->AddNewChild ( dMustNot[0] );
 		} else
 		{
 			XQNode_t * pOrNode = tBuilder.CreateNode ( tLimitSpec );
 			pOrNode->SetOp ( SPH_QUERY_OR );
 
 			for ( auto & i : dMustNot )
-			{
-				pOrNode->m_dChildren.Add ( i );
-				i->m_pParent = pOrNode;
-			}
+				pOrNode->AddNewChild ( i );
 
-			pNotNode->m_dChildren.Add ( pOrNode );
-			pOrNode->m_pParent = pNotNode;
+			pNotNode->AddNewChild (  pOrNode );
 		}
 
 		pMustNotNode = pNotNode;
@@ -768,10 +768,8 @@ XQNode_t * QueryParserJson_c::ConstructBoolNode ( const JsonObj_c & tJson, Query
 		{
 			XQNode_t * pAndNode = tBuilder.CreateNode(tLimitSpec);
 			pAndNode->SetOp(SPH_QUERY_AND);
-			pAndNode->m_dChildren.Add ( pMustNode );
-			pAndNode->m_dChildren.Add ( pMustNotNode );
-			pMustNode->m_pParent = pAndNode;
-			pMustNotNode->m_pParent = pAndNode;
+			pAndNode->AddNewChild ( pMustNode );
+			pAndNode->AddNewChild ( pMustNotNode );
 
 			pResultNode = pAndNode;
 		}
@@ -781,10 +779,8 @@ XQNode_t * QueryParserJson_c::ConstructBoolNode ( const JsonObj_c & tJson, Query
 		{
 			XQNode_t * pMaybeNode = tBuilder.CreateNode ( tLimitSpec );
 			pMaybeNode->SetOp ( SPH_QUERY_MAYBE );
-			pMaybeNode->m_dChildren.Add ( pResultNode );
-			pMaybeNode->m_dChildren.Add ( pShouldNode );
-			pShouldNode->m_pParent = pMaybeNode;
-			pResultNode->m_pParent = pMaybeNode;
+			pMaybeNode->AddNewChild ( pResultNode );
+			pMaybeNode->AddNewChild ( pShouldNode );
 
 			pResultNode = pMaybeNode;
 		}
@@ -1138,7 +1134,7 @@ static bool ParseOptions ( const JsonObj_c & tOptions, CSphQuery & tQuery, CSphS
 		}
 		else if ( i.IsObj() )
 		{
-			CSphVector<CSphNamedInt> dNamed;
+			CSphVector<CSphNamedVariant> dNamed;
 			for ( const auto & tNamed : i )
 			{
 				if ( !tNamed.IsInt() )
@@ -1147,7 +1143,7 @@ static bool ParseOptions ( const JsonObj_c & tOptions, CSphQuery & tQuery, CSphS
 					return false;
 				}
 
-				dNamed.Add ( { tNamed.Name(), tNamed.IntVal() } );
+				dNamed.Add( { .m_sKey = tNamed.Name(), .m_iValue = tNamed.IntVal(), .m_eType = VariantType_e::BIGINT } );
 			}
 
 			eAdd = ::AddOption ( tQuery, sOpt, dNamed, STMT_SELECT, sError );
@@ -1222,9 +1218,12 @@ static bool ParseKNNQuery ( const JsonObj_c & tJson, CSphQuery & tQuery, CSphStr
 		return false;
 	}
 
-	if ( !tJson.FetchStrItem ( tQuery.m_sKNNAttr, "field", sError ) )	return false;
-	if ( !tJson.FetchIntItem ( tQuery.m_iKNNK, "k", sError ) )			return false;
-	if ( !tJson.FetchIntItem ( tQuery.m_iKnnEf, "ef", sError, true ) )		return false;
+	auto & tKNN = tQuery.m_tKnnSettings;
+	if ( !tJson.FetchStrItem ( tKNN.m_sAttr, "field", sError ) )	return false;
+	if ( !tJson.FetchIntItem ( tKNN.m_iK, "k", sError ) )			return false;
+	if ( !tJson.FetchIntItem ( tKNN.m_iEf, "ef", sError, true ) )	return false;
+	if ( !tJson.FetchBoolItem ( tKNN.m_bRescore, "rescore", sError, true ) )			return false;
+	if ( !tJson.FetchFltItem ( tKNN.m_fOversampling, "oversampling", sError, true ) )	return false;
 
 	JsonObj_c tQueryVec = tJson.GetArrayItem ( "query_vector", sError );
 	if ( !tQueryVec )
@@ -1238,7 +1237,7 @@ static bool ParseKNNQuery ( const JsonObj_c & tJson, CSphQuery & tQuery, CSphStr
 			return false;
 		}
 
-		tQuery.m_dKNNVec.Add ( tArrayItem.FltVal() );
+		tKNN.m_dVec.Add ( tArrayItem.FltVal() );
 	}
 
 	return true;
@@ -2628,11 +2627,10 @@ static void AddJoinedWeight ( JsonEscapedBuilder & tOut, const CSphQuery & tQuer
 }
 
 
-CSphString sphEncodeResultJson ( const VecTraits_T<const AggrResult_t *> & dRes, const JsonQuery_c & tQuery, QueryProfile_c * pProfile, ResultSetFormat_e eFormat )
+CSphString sphEncodeResultJson ( const VecTraits_T<AggrResult_t>& dRes, const JsonQuery_c & tQuery, QueryProfile_c * pProfile, ResultSetFormat_e eFormat )
 {
 	assert ( dRes.GetLength()>=1 );
-	assert ( dRes[0]!=nullptr );
-	const AggrResult_t & tRes = *dRes[0];
+	const AggrResult_t & tRes = dRes[0];
 
 	if ( !tRes.m_iSuccesses )
 		return JsonEncodeResultError ( tRes.m_sError );
@@ -2801,14 +2799,14 @@ CSphString sphEncodeResultJson ( const VecTraits_T<const AggrResult_t *> & dRes,
 			{
 				sDistinctName = tItem.m_sAlias;
 				return true;
-			} else
-				return false;
+			}
+			return false;
 		});
 
 		if ( tQuery.m_bGroupEmulation )
 		{
 			tOut.StartBlock ( ",", R"("aggregations":{)", "}");
-			EncodeAggr ( tQuery.m_dAggs[0], 1, *dRes[0], eFormat, hDatetime, tQuery.m_iNow, sDistinctName, tOut );
+			EncodeAggr ( tQuery.m_dAggs[0], 1, dRes[0], eFormat, hDatetime, tQuery.m_iNow, sDistinctName, tOut );
 			tOut.FinishBlock ( false ); // aggregations obj
 
 		} else
@@ -2817,13 +2815,13 @@ CSphString sphEncodeResultJson ( const VecTraits_T<const AggrResult_t *> & dRes,
 			assert ( dRes.GetLength()==tQuery.m_dAggs.GetLength()+1 );
 			tOut.StartBlock ( ",", R"("aggregations":{)", "}");
 			ARRAY_FOREACH ( i, tQuery.m_dAggs )
-				EncodeAggr ( tQuery.m_dAggs[i], i, *dRes[i+1], eFormat, hDatetime, tQuery.m_iNow, sDistinctName, tOut );
+				EncodeAggr ( tQuery.m_dAggs[i], i, dRes[i+1], eFormat, hDatetime, tQuery.m_iNow, sDistinctName, tOut );
 			tOut.FinishBlock ( false ); // aggregations obj
 		}
 	}
 
 	CSphString sScroll;
-	if ( dRes.GetLength() && FormatScrollSettings ( *dRes.Last(), tQuery, sScroll ) )
+	if ( dRes.GetLength() && FormatScrollSettings ( dRes.Last(), tQuery, sScroll ) )
 		tOut.Sprintf ( R"("scroll":"%s")", sScroll.cstr() );
 
 	if ( eFormat==ResultSetFormat_e::ES )
@@ -2930,7 +2928,7 @@ JsonObj_c sphEncodeInsertErrorJson ( const char * szIndex, const char * szError,
 }
 
 
-bool sphGetResultStats ( const char * szResult, int & iAffected, int & iWarnings, bool bUpdate )
+bool sphGetResultStats ( const char * szResult, int & iAffected, int & iWarnings, bool bUpdate, CSphString & sError )
 {
 	JsonObj_c tJsonRoot ( szResult );
 	if ( !tJsonRoot )
@@ -2939,15 +2937,25 @@ bool sphGetResultStats ( const char * szResult, int & iAffected, int & iWarnings
 	// no warnings in json results for now
 	iWarnings = 0;
 
+	CSphString sParseError;
 	if ( tJsonRoot.HasItem("error") )
 	{
+		JsonObj_c tReplyError = tJsonRoot.GetItem ( "error" );
+		if ( tReplyError.IsObj() )
+		{
+			JsonObj_c tReason = tReplyError.GetItem ( "reason" );
+			if ( tReason && tReason.IsStr() )
+				sError = tReason.StrVal();
+		}
+		if ( sError.IsEmpty() )
+			sError = tReplyError.AsString();
+
 		iAffected = 0;
-		return true;
+		return false;
 	}
 
 	// its either update or delete
-	CSphString sError;
-	JsonObj_c tAffected = tJsonRoot.GetIntItem ( bUpdate ? "updated" : "deleted", sError );
+	JsonObj_c tAffected = tJsonRoot.GetIntItem ( bUpdate ? "updated" : "deleted", sParseError );
 	if ( tAffected )
 	{
 		iAffected = (int)tAffected.IntVal();
@@ -2955,7 +2963,7 @@ bool sphGetResultStats ( const char * szResult, int & iAffected, int & iWarnings
 	}
 
 	// it was probably a query with an "id"
-	JsonObj_c tId = tJsonRoot.GetIntItem ( "id", sError );
+	JsonObj_c tId = tJsonRoot.GetIntItem ( "id", sParseError );
 	if ( tId )
 	{
 		iAffected = 1;
@@ -3419,6 +3427,9 @@ static bool ParseSort ( const JsonObj_c & tSort, JsonQuery_c & tQuery, bool & bG
 				tSortField.m_sName = tItem.StrVal();
 				// order defaults to desc when sorting on the _score, and defaults to asc when sorting on anything else
 				tSortField.m_bAsc = ( tSortField.m_sName!="_score" );
+				// _random name should be on pair with _score \ _geo_distance
+				if ( tSortField.m_sName=="_random" )
+					tSortField.m_sName = "@random";
 				continue;
 			}
 

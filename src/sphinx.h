@@ -184,7 +184,7 @@ public:
 struct FieldMask_t
 {
 	static const int SIZE = SPH_MAX_FIELDS/32;
-	STATIC_ASSERT ( ( SPH_MAX_FIELDS%32 )==0, ASSUME_MAX_FIELDS_ARE_REPRESENTABLE_BY_DWORD );
+	static_assert ( ( SPH_MAX_FIELDS%32 )==0, "assume SPH_MAX_FIELDS are representable by a dword" );
 	DWORD m_dMask [ SIZE ];
 
 	// no custom cstr and d-tor - to be usable from inside unions
@@ -484,16 +484,18 @@ enum class JoinType_e
 	LEFT
 };
 
-const int DEFAULT_MAX_MATCHES = 1000;
-const int DEFAULT_QUERY_TIMEOUT = 0;
-const int DEFAULT_QUERY_RETRY = -1;
-const int DEFAULT_QUERY_EXPANSION_LIMIT = -1;
+constexpr int DEFAULT_MAX_MATCHES = 1000;
+constexpr int DEFAULT_QUERY_TIMEOUT = 0;
+constexpr int DEFAULT_QUERY_RETRY = -1;
+constexpr int DEFAULT_QUERY_EXPANSION_LIMIT = -1;
+constexpr int DAEMON_MAX_RETRY_COUNT = 8;
+constexpr int DAEMON_MAX_RETRY_DELAY = 1000;
 
 struct ScrollAttr_t
 {
-	CSphString	m_sSortAttr;
-	bool		m_bDesc = true;
-	ESphAttr	m_eType = SPH_ATTR_INTEGER;
+	CSphString m_sSortAttr;
+	bool m_bDesc = true;
+	ESphAttr m_eType = SPH_ATTR_INTEGER;
 	SphAttr_t	m_tValue = 0;
 	float		m_fValue = 0.0f;
 	CSphString	m_sValue;
@@ -504,6 +506,17 @@ struct ScrollSettings_t
 	CSphString					m_sSortBy;
 	bool						m_bRequested = true;
 	CSphVector<ScrollAttr_t>	m_dAttrs;
+};
+
+
+struct KnnSearchSettings_t
+{
+	CSphString		m_sAttr;				///< which attr to use for KNN search (enables KNN if not empty)
+	int				m_iK = 0;				///< KNN K
+	int				m_iEf = 0;				///< KNN ef
+	bool			m_bRescore = false;		///< KNN rescoring
+	float			m_fOversampling = 1.0f;	///< KNN oversampling
+	CSphVector<float> m_dVec;				///< KNN anchor vector
 };
 
 /// search query. Pure struct, no member functions
@@ -527,10 +540,7 @@ struct CSphQuery
 	int				m_iMaxMatches = DEFAULT_MAX_MATCHES;	///< max matches to retrieve, default is 1000. more matches use more memory and CPU time to hold and sort them
 	bool			m_bExplicitMaxMatches = false; ///< did we specify the max_matches explicitly?
 
-	CSphString		m_sKNNAttr;					///< which attr to use for KNN search (enables KNN if not empty)
-	int				m_iKNNK = 0;				///< KNN K
-	int				m_iKnnEf = 0;				///< KNN ef
-	CSphVector<float> m_dKNNVec;				///< KNN anchor vector
+	KnnSearchSettings_t m_tKnnSettings;
 
 	JiebaMode_e		m_eJiebaMode = JiebaMode_e::NONE;	///< separate optional jieba mode for searches
 
@@ -642,8 +652,10 @@ struct CSphQuery
 	Dispatcher::Template_t	m_tPseudoShardingDispatcher;
 };
 
+void CheckQuery ( const CSphQuery & tQuery, CSphString & sError, bool bCanLimitless = false );
+
 /// parse select list string into items
-bool ParseSelectList ( CSphString &sError, CSphQuery &pResult );
+bool ParseSelectList ( CSphString & sError, CSphQuery &pResult );
 
 void SetQueryDefaultsExt2 ( CSphQuery & tQuery );
 
@@ -724,7 +736,7 @@ public:
 	void					AddStat ( const ExpansionStats_t & tExpansionStats );
 
 	void					MergeWordStats ( const CSphQueryResultMeta& tOther );// sort wordstat to achieve reproducable result over different runs
-	CSphFixedVector<SmallStringHash_T<CSphQueryResultMeta::WordStat_t>::KeyValue_t *>	MakeSortedWordStat () const;
+	CSphFixedVector<SmallStringHash_T<WordStat_t>::KeyValue_t *>	MakeSortedWordStat () const;
 };
 
 
@@ -778,7 +790,7 @@ struct AttrUpdateInc_t // for cascade (incremental) update
 {
 	AttrUpdateSharedPtr_t			m_pUpdate;	///< the unchangeable update pool
 	CSphBitvec						m_dUpdated;			///< bitmask of updated rows
-	int								m_iAffected = 0;	///< num of updated rows.
+	DWORD							m_uAffected = 0;	///< num of updated rows.
 
 	explicit AttrUpdateInc_t ( AttrUpdateSharedPtr_t pUpd )
 		: m_pUpdate ( std::move(pUpd) )
@@ -790,14 +802,14 @@ struct AttrUpdateInc_t // for cascade (incremental) update
 		if ( m_dUpdated.BitGet ( iUpd ) )
 			return;
 
-		++m_iAffected;
+		++m_uAffected;
 		m_dUpdated.BitSet ( iUpd );
 	}
 
 	bool AllApplied () const
 	{
-		assert ( m_dUpdated.GetSize() >= m_iAffected );
-		return m_dUpdated.GetSize() == m_iAffected;
+		assert ( m_dUpdated.GetSize() >= m_uAffected );
+		return m_dUpdated.GetSize() == m_uAffected;
 	}
 };
 
@@ -1318,6 +1330,7 @@ public:
 	virtual const DWORD *			GetRawAttrs() const { return nullptr; }
 	virtual const BYTE *			GetRawBlobAttrs() const { return nullptr; }
 	virtual bool					AlterSI ( CSphString & sError ) { return true; }
+	virtual bool					AlterKNN ( CSphString & sError ) { return true; }
 	const CSphBitvec &				GetMorphFields () const { return m_tMorphFields; }
 
 public:

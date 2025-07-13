@@ -69,6 +69,22 @@ index test_vec
 }
 </query>
 
+<query endpoint="json/insert">
+{
+	"index":"test_vec",
+	"id":6,
+	"doc": 	{ "title" : "doc six", "vec" : [] }
+}
+</query>
+
+<query endpoint="json/insert">
+{
+	"index":"test_vec",
+	"id":7,
+	"doc": 	{ "title" : "doc seven" }
+}
+</query>
+
 <query endpoint="json/search">{ "index": "test_vec", "query": { "match_all": {} }, "sort": [ { "id": "asc" } ] }</query>
 
 <query endpoint="json/search">
@@ -151,6 +167,20 @@ index test_vec
       }
     }
   }
+}
+</query>
+
+<query endpoint="json/search">
+{
+"index": "test_vec",
+"knn":
+{
+    "field": "vec",
+    "query_vector": [0.0452, 0.3906, -0.0110],
+    "k": 5,
+	"ef": 2000,
+	"rescore": true,
+	"oversampling": 3.0
 }
 </query>
 

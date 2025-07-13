@@ -222,19 +222,33 @@ table products {
 stored_only_fields = title,content
 ```
 
-List of fields that will be stored in the table, but not indexed. This setting works similarly to [stored_fields](../../Creating_a_table/Local_tables/Plain_and_real-time_table_settings.md#stored_fields) except that when a field is specified in `stored_only_fields` t will only be stored, not indexed, and cannot be searched using full-text queries. It can only be retrieved in search results.
+Use `stored_only_fields` when you want Manticore to store some fields of a plain or real-time table **on disk but not index them**. These fields won't be searchable with full-text queries, but you can still retrieve their values in search results.
 
-The value is a comma-separated list of fields that should be stored only, not indexed. By default, this value is empty. If a real-time table is being defined, the fields listed in `stored_only_fields` must also be declared as [rt_field](../../Creating_a_table/Local_tables/Plain_and_real-time_table_settings.md#rt_field).
+For example, this is useful if you want to store data like JSON documents that should be returned with each result, but don't need to be searched, filtered, or grouped. In that case, storing them only — and not indexing them — saves memory and improves performance.
 
-Note also, that you don't need to list attributes in`stored_only_fields`,since their original values are stored anyway. If to compare `stored_only_fields`  to string attributes the former (stored field):
-* is stored on disk and does not take up memory
-* is stored in a compressed format
-* can only be fetched, it cannot be used for sorting, filtering or grouping
+You can do this in two ways:
+- In [plain mode](../../Creating_a_table/Local_tables.md#Defining-table-schema-in-config-%28Plain-mode%29) in a table config, use the `stored_only_fields` setting.
+- In the SQL interface ([RT mode](../../Creating_a_table/Local_tables.md#Online-schema-management-%28RT-mode%29)), use the [stored](../../Creating_a_table/Data_types.md#Storing-binary-data-in-Manticore) property when defining a text field (instead of `indexed` or `indexed stored`). In SQL, you don't need to include `stored_only_fields` — it's not supported in `CREATE TABLE` statements.
 
-In contrast, the latter (string attribute):
-* is stored on disk and in memory
-* is stored in an uncompressed format
-* can be used for sorting, grouping, filtering, and any other actions you want to take with attributes.
+The value of `stored_only_fields` is a comma-separated list of field names. By default, it's empty. If you're using a real-time table, each field listed in `stored_only_fields` must also be declared as an [rt_field](../../Creating_a_table/Local_tables/Plain_and_real-time_table_settings.md#rt_field).
+
+Note: you don't need to list attributes in `stored_only_fields`, since their original values are stored anyway.
+
+How stored-only fields compare to string attributes:
+
+- **Stored-only field**:
+  - Stored on disk only
+  - Compressed format
+  - Can only be retrieved (not used for filtering, sorting, etc.)
+
+- **String attribute**:
+  - Stored on disk and in memory
+  - Uncompressed format (unless you are using columnar storage)
+  - Can be used for sorting, filtering, grouping, etc.
+
+If you are looking to have Manticore store text data for you that you _only_ want stored on disk (eg: json data that is returned with every result), and not in memory or searchable/filterable/groupable, use `stored_only_fields`, or `stored` as your text field property.
+
+When creating your tables using the SQL interface, label your text field as `stored` (and not `indexed` or `indexed stored`). You will not need the `stored_only_fields` option in your `CREATE TABLE` statement; including it may result in a failed query.
 
 #### json_secondary_indexes
 
@@ -498,13 +512,13 @@ rt_mem_limit = 512M
 
 Memory limit for a RAM chunk of the table. Optional, default is 128M.
 
-RT tables store some data in memory, known as the "RAM chunk," and also maintain a number of on-disk tables, referred to as "disk chunks." This directive allows you to control the size of the RAM chunk. When there is too much data to keep in memory, RT tables will flush it to disk, activate a newly created disk chunk, and reset the RAM chunk.
+RT tables store some data in memory, known as the "RAM chunk", and also maintain a number of on-disk tables, referred to as "disk chunks." This directive allows you to control the size of the RAM chunk. When there is too much data to keep in memory, RT tables will flush it to disk, activate a newly created disk chunk, and reset the RAM chunk.
 
 Please note that the limit is strict, and RT tables will never allocate more memory than what is specified in the rt_mem_limit. Additionally, memory is not preallocated, so specifying a 512MB limit and only inserting 3MB of data will result in allocating only 3MB, not 512MB.
 
 The `rt_mem_limit` is never exceeded, but the actual RAM chunk size can be significantly lower than the limit. RT tables adapt to the data insertion pace and adjust the actual limit dynamically to minimize memory usage and maximize data write speed. This is how it works:
-* By default, the RAM chunk size is 50% of the  `rt_mem_limit`, referred to as the  "`rt_mem_limit`".
-* As soon as the RAM chunk accumulates data equivalent to `rt_mem_limit * rate` data (50% of `rt_mem_limit`  by default), Manticore starts saving the RAM chunk as a new disk chunk.
+* By default, the RAM chunk size is 50% of the  `rt_mem_limit`, referred to as the  "`rt_mem_limit` limit".
+* As soon as the RAM chunk accumulates data equivalent to `rt_mem_limit * rate` data (50% of `rt_mem_limit` by default), Manticore starts saving the RAM chunk as a new disk chunk.
 * While a new disk chunk is being saved, Manticore assesses the number of new/updated documents.
 * After saving a new disk chunk, the `rt_mem_limit` rate is updated.
 * The rate is reset to 50% each time you restart the searchd.
@@ -513,7 +527,7 @@ For instance, if 90MB of data is saved to a disk chunk and an additional 10MB of
 
 ##### How to change rt_mem_limit and optimize_cutoff
 
-In real-time mode, you can adjust the size limit of RAM chunks and the maximum number of disk chunks using the `ALTER TABLE` statement. To set `rt_mem_limit` to 1 gigabyte for the table "t," run the following query: `ALTER TABLE t rt_mem_limit='1G'`. To change the maximum number of disk chunks, run the query: `ALTER TABLE t optimize_cutoff='5'`.
+In real-time mode, you can adjust the size limit of RAM chunks and the maximum number of disk chunks using the `ALTER TABLE` statement. To set `rt_mem_limit` to 1 gigabyte for the table "t", run the following query: `ALTER TABLE t rt_mem_limit='1G'`. To change the maximum number of disk chunks, run the query: `ALTER TABLE t optimize_cutoff='5'`.
 
 In the plain mode, you can change the values of `rt_mem_limit` and `optimize_cutoff` by updating the table configuration or running the command `ALTER TABLE <table_name> RECONFIGURE`
 
@@ -531,12 +545,23 @@ In the plain mode, you can change the values of `rt_mem_limit` and `optimize_cut
 * A large RAM chunk puts more pressure on storage, both when flushing to disk into the `.ram` file and when the RAM chunk is full and dumped to disk as a disk chunk.
 * The RAM chunk is backed up by a [binary log](../../Logging/Binary_logging.md) until it is flushed to disk, and a larger `rt_mem_limit`, setting will increase the time it takes to replay the binary log and recover the RAM chunk.
 * The RAM chunk may be slightly slower than a disk chunk.
-* Although the RAM chunk itself doesn't take up more memory than `rt_mem_limit` Manticore may take up more memory in some cases, such as when you start a transaction to insert data and don't commit it for a while. In this case, the data you have already transmitted within the transaction will remain in memory.
+* Although the RAM chunk itself doesn't take up more memory than `rt_mem_limit`, Manticore may take up more memory in some cases, such as when you start a transaction to insert data and don't commit it for a while. In this case, the data you have already transmitted within the transaction will remain in memory.
 
-In addition to `rt_mem_limit`, the flushing behavior of RAM chunks is also influenced by the following settings: [diskchunk_flush_write_timeout](../../Server_settings/Searchd.md#diskchunk_flush_write_timeout) and [diskchunk_flush_search_timeout](../../Server_settings/Searchd.md#diskchunk_flush_search_timeout).
+##### RAM chunk flushing conditions
 
-* `diskchunk_flush_write_timeout`: This option defines the timeout for auto-flushing a RAM chunk if there are no writes to it.  If no write occurs within this time, the chunk will be flushed to disk.  Setting it to `-1` disables auto-flushing based on write activity. The default value is 1 second.
-* `diskchunk_flush_search_timeout`: This option sets the timeout for preventing auto-flushing a RAM chunk if there are no searches in the table. Auto-flushing will only occur if there has been at least one search within this time. The default value is 30 seconds.
+In addition to `rt_mem_limit`, the flushing behavior of RAM chunks is also influenced by the following options and conditions:
+
+* Frozen state. If the table is [frozen](../../Securing_and_compacting_a_table/Freezing_a_table.md), flushing is deferred. That is a permanent rule; nothing can override it. If the `rt_mem_limit` condition is reached while the table is frozen, all further inserts will be delayed until the table is unfrozen.
+
+* [diskchunk_flush_write_timeout](../../Server_settings/Searchd.md#diskchunk_flush_write_timeout): This option defines the timeout (in seconds) for auto-flushing a RAM chunk if there are no writes to it.  If no write occurs within this time, the chunk will be flushed to disk. Setting it to `-1` disables auto-flushing based on write activity. The default value is 1 second.
+
+* [diskchunk_flush_search_timeout](../../Server_settings/Searchd.md#diskchunk_flush_search_timeout): This option sets the timeout (in seconds) for preventing auto-flushing a RAM chunk if there are no searches in the table. Auto-flushing will only occur if there has been at least one search within this time. The default value is 30 seconds.
+
+* ongoing optimization: If an optimization process is currently running, and the number of existing disk chunks has
+  reached or exceeded a configured internal `cutoff` threshold, the flush triggered by the `diskchunk_flush_write_timeout` or `diskchunk_flush_search_timeout` timeout will be skipped.
+
+* too few documents in RAM segments: If the number of documents across RAM segments is below a minimum threshold (8192),
+  the flush triggered by the `diskchunk_flush_write_timeout` or `diskchunk_flush_search_timeout` timeout will be skipped to avoid creating very small disk chunks. This helps minimize unnecessary disk writes and chunk fragmentation.
 
 These timeouts work in conjunction.  A RAM chunk will be flushed if *either* timeout is reached.  This ensures that even if there are no writes, the data will eventually be persisted to disk, and conversely, even if there are constant writes but no searches, the data will also be persisted.  These settings provide more granular control over how frequently RAM chunks are flushed, balancing the need for data durability with performance considerations.  Per-table directives for these settings have higher priority and will override the instance-wide defaults.
 
@@ -550,7 +575,7 @@ source = srcpart2
 source = srcpart3
 ```
 
-The source field specifies the source from which documents will be obtained during indexing of the current table. There must be at least one source. The sources can be of different types (e.g. one could be MySQL, another PostgreSQL). For more information on indexing from external storages, [indexing from external storages here](../../Data_creation_and_modification/Adding_data_from_external_storages/Plain_tables_creation.md)
+The source field specifies the source from which documents will be obtained during indexing of the current table. There must be at least one source. The sources can be of different types (e.g. one could be MySQL, another PostgreSQL). For more information on indexing from external storages, [read here](../../Data_creation_and_modification/Adding_data_from_external_storages/Plain_tables_creation.md)
 
 Value: The name of the source is **mandatory**. Multiple values are allowed.
 
@@ -642,7 +667,7 @@ create table ... engine='rowwise';
 
 The engine setting changes the default [attribute storage](../../Creating_a_table/Data_types.md#Row-wise-and-columnar-attribute-storages) for all attributes in the table. You can also specify `engine` [separately for each attribute](../../Creating_a_table/Data_types.md#How-to-switch-between-the-storages).
 
-For information on how to enable columnar storage for a plain table, see  [columnar_attrs](../../Creating_a_table/Local_tables/Plain_and_real-time_table_settings.md#columnar_attrs) .
+For information on how to enable columnar storage for a plain table, see [columnar_attrs](../../Creating_a_table/Local_tables/Plain_and_real-time_table_settings.md#columnar_attrs) .
 
 Values:
 * columnar - Enables columnar storage for all table attributes, except for [json](../../Creating_a_table/Data_types.md#JSON)
@@ -657,7 +682,7 @@ The following settings are applicable for both real-time and plain tables, regar
 #### Accessing table files
 Manticore supports two access modes for reading table data: seek+read and mmap.
 
-In seek+read mode, the server uses the `pread` system call to read document lists and keyword positions, represented by the`*.spd` and `*.spp`  files. The server uses internal read buffers to optimize the reading process, and the size of these buffers can be adjusted using the options [read_buffer_docs](../../Server_settings/Searchd.md#read_buffer_docs) and [read_buffer_hits](../../Server_settings/Searchd.md#read_buffer_hits).There is also the option  [preopen](../../Creating_a_table/Local_tables/Plain_and_real-time_table_settings.md#preopen) that controls how Manticore opens files at start.
+In seek+read mode, the server uses the `pread` system call to read document lists and keyword positions, represented by the `*.spd` and `*.spp`  files. The server uses internal read buffers to optimize the reading process, and the size of these buffers can be adjusted using the options [read_buffer_docs](../../Server_settings/Searchd.md#read_buffer_docs) and [read_buffer_hits](../../Server_settings/Searchd.md#read_buffer_hits).There is also the option  [preopen](../../Creating_a_table/Local_tables/Plain_and_real-time_table_settings.md#preopen) that controls how Manticore opens files at start.
 
 In mmap access mode, the search server maps the table's file into memory using the `mmap` system call, and the OS caches the file contents. The options [read_buffer_docs](../../Server_settings/Searchd.md#read_buffer_docs) and [read_buffer_hits](../../Server_settings/Searchd.md#read_buffer_hits) have no effect for corresponding files in this mode. The mmap reader can also lock the table's data in memory using the`mlock` privileged call, which prevents the OS from swapping the cached data out to disk.
 
@@ -693,7 +718,7 @@ Here is a table which can help you select your desired mode:
 ##### The recommendations are:
 
 * For the **fastest search response time** and ample memory availability, use [row-wise](../../Creating_a_table/Data_types.md#JSON) attributes and lock them in memory using `mlock`. Additionally, use mlock for doclists/hitlists.
-* If you prioritize **can't afford lower performance after start** and are willing to sacrifice longer startup time, use the [--force-preread](../../Starting_the_server/Manually.md#searchd-command-line-options). option. If you desire faster searchd restart, stick to the default  `mmap_preread` option.
+* If you prioritize **can't afford lower performance after start** and are willing to accept longer startup time, use the [--force-preread](../../Starting_the_server/Manually.md#searchd-command-line-options). option. If you desire faster searchd restart, stick to the default  `mmap_preread` option.
 * If you are looking to **conserve memory**, while still having enough memory for all attributes, skip the use of `mlock`. The operating system will determine what should be kept in memory based on frequent disk reads.
 * If row-wise attributes  **do not fit into memory**, opt for [columnar attributes](../../Creating_a_table/Data_types.md#Row-wise-and-columnar-attribute-storages)
 * If full-text search **performance is not a concern**, and you wish to save memory, use `access_doclists/access_hitlists=file`

@@ -5,7 +5,7 @@ Compiling Manticore Search from sources enables custom build configurations, suc
 ## Building using CI Docker
 To prepare [official release and development packages](https://repo.manticoresearch.com/), we use Docker and a special building image. This image includes essential tooling and is designed to be used with external sysroots, so one container can build packages for all operating systems. You can build the image using the [Dockerfile](https://github.com/manticoresoftware/manticoresearch/blob/master/dist/build_dockers/cross/external_toolchain/Dockerfile) and [README](https://github.com/manticoresoftware/manticoresearch/blob/master/dist/build_dockers/README.md) or use an image from [Docker Hub](https://hub.docker.com/r/manticoresearch/external_toolchain/tags). This is the easiest way to create binaries for any supported operating system and architecture. You'll also need to specify the following environment variables when running the container:
 
-* `DISTR`: the target platform: `bionic`, `focal`, `jammy`, `buster`, `bullseye`, `bookworm`, `rhel7`, `rhel8`, `rhel9`, `macos`, `windows`, `freebsd13`
+* `DISTR`: the target platform: `bionic`, `focal`, `jammy`, `buster`, `bullseye`, `bookworm`, `rhel7`, `rhel8`, `rhel9`, `rhel10`, `macos`, `windows`, `freebsd13`
 * `arch`: the architecture: `x86_64`, `x64` (for Windows), `aarch64`, `arm64` (for Macos)
 * `SYSROOT_URL`: the URL to the system roots archives. You can use https://repo.manticoresearch.com/repository/sysroots unless you are building the sysroots yourself (instructions can be found [here](https://github.com/manticoresoftware/manticoresearch/tree/master/dist/build_dockers/cross/sysroots)).
 * Use the CI workflow files as a reference to find the other environment variables you might need to use:
@@ -108,7 +108,7 @@ To disable it, use `-DFOO=0`. If not explicitly noted, enabling a feature that i
 
 #### Configuration flags and options
 
-- **USE_SYSLOG** - allows the use of`syslog` in [query logging](Logging/Query_logging.md).
+- **USE_SYSLOG** - allows the use of`syslog` in [query logging](../Logging/Query_logging.md).
 - **WITH_GALERA** -Enables support for replication on the search daemon. Support will be configured for the build, and the sources for the Galera library will be downloaded, built, and included in the distribution/installation. Usually, it is safe to build with Galera, but not distribute the library itself (so no Galera module, no replication). However, sometimes you may need to explicitly disable it, such as if you want to build a static binary that by design cannot load any libraries, so that even the presence of a call to the 'dlopen' function inside the daemon will cause a link error.
 - **WITH_RE2** - Builds with the use of the RE2 regular expression library. This is necessary for functions like [REGEX()](../Functions/String_functions.md#REGEX%28%29), and the [regexp_filter](../Creating_a_table/NLP_and_tokenization/Low-level_tokenization.md#regexp_filter)
   feature.

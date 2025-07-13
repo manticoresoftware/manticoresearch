@@ -169,12 +169,6 @@ static bool ExprHasJoinPrefix ( const CSphString & sExpr, const JoinArgs_t * pAr
 }
 
 
-static bool IsKnnDist ( const CSphString & sExpr )
-{
-	return sExpr==GetKnnDistAttrName() || sExpr=="knn_dist()";
-}
-
-
 static inline ESphSortKeyPart Attr2Keypart ( ESphAttr eType )
 {
 	switch ( eType )
@@ -335,7 +329,7 @@ private:
 	bool	SetupDistinctAttr();
 	bool	PredictAggregates() const;
 	bool	ReplaceWithColumnarItem ( const CSphString & sAttr, ESphEvalStage eStage );
-	int		ReduceMaxMatches() const;
+	int		ReduceOrIncreaseMaxMatches() const;
 	int		AdjustMaxMatches ( int iMaxMatches ) const;
 	bool	ConvertColumnarToDocstore();
 	CSphString GetAliasedColumnarAttrName ( const CSphColumnInfo & tAttr ) const;
@@ -1509,34 +1503,44 @@ bool QueueCreator_c::MaybeAddGroupbyMagic ( bool bGotDistinct )
 
 bool QueueCreator_c::AddKNNDistColumn()
 {
-	if ( m_tQuery.m_sKNNAttr.IsEmpty() || m_pSorterSchema->GetAttrIndex ( GetKnnDistAttrName() )>=0 )
+	const auto & tKNN = m_tQuery.m_tKnnSettings;
+
+	if ( tKNN.m_sAttr.IsEmpty() || m_pSorterSchema->GetAttrIndex ( GetKnnDistAttrName() )>=0 )
 		return true;
 
-	auto pAttr = m_pSorterSchema->GetAttr ( m_tQuery.m_sKNNAttr.cstr() );
+	auto pAttr = m_pSorterSchema->GetAttr ( tKNN.m_sAttr.cstr() );
 	if ( !pAttr )
 	{
-		m_sError.SetSprintf ( "requested KNN search attribute '%s' not found", m_tQuery.m_sKNNAttr.cstr() );
+		m_sError.SetSprintf ( "requested KNN search attribute '%s' not found", tKNN.m_sAttr.cstr() );
 		return false;
 	}
 
 	if ( !pAttr->IsIndexedKNN() )
 	{
-		m_sError.SetSprintf ( "KNN index not enabled for attribute '%s'", m_tQuery.m_sKNNAttr.cstr() );
+		m_sError.SetSprintf ( "KNN index not enabled for attribute '%s'", tKNN.m_sAttr.cstr() );
 		return false;
 	}
 
-	if ( pAttr->m_tKNN.m_iDims!=m_tQuery.m_dKNNVec.GetLength() )
+	if ( pAttr->m_tKNN.m_iDims!=tKNN.m_dVec.GetLength() )
 	{
-		m_sError.SetSprintf ( "KNN index '%s' requires a vector of %d entries; %d entries specified", m_tQuery.m_sKNNAttr.cstr(), pAttr->m_tKNN.m_iDims, m_tQuery.m_dKNNVec.GetLength() );
+		m_sError.SetSprintf ( "KNN index '%s' requires a vector of %d entries; %d entries specified", tKNN.m_sAttr.cstr(), pAttr->m_tKNN.m_iDims, tKNN.m_dVec.GetLength() );
 		return false;
 	}
 
 	CSphColumnInfo tKNNDist ( GetKnnDistAttrName(), SPH_ATTR_FLOAT );
 	tKNNDist.m_eStage = SPH_EVAL_PRESORT;
-	tKNNDist.m_pExpr = CreateExpr_KNNDist ( m_tQuery.m_dKNNVec, *pAttr );
+	tKNNDist.m_pExpr = CreateExpr_KNNDist ( tKNN.m_dVec, *pAttr );
 
 	m_pSorterSchema->AddAttr ( tKNNDist, true );
 	m_hQueryColumns.Add ( tKNNDist.m_sName );
+
+	CSphColumnInfo tKNNDistRescored ( GetKnnDistRescoreAttrName(), SPH_ATTR_FLOAT );
+	tKNNDistRescored.m_eStage = SPH_EVAL_FINAL;
+	tKNNDistRescored.m_pExpr = CreateExpr_KNNDistRescore ( tKNN.m_dVec, *pAttr );
+
+	m_pSorterSchema->AddAttr ( tKNNDistRescored, true );
+	m_hQueryColumns.Add ( tKNNDistRescored.m_sName );
+
 
 	return true;
 }
@@ -1944,7 +1948,7 @@ void QueueCreator_c::ReplaceStaticStringsWithExprs ( CSphMatchComparatorState & 
 			
 			CSphColumnInfo tRemapCol ( sAttrName.cstr(), SPH_ATTR_STRINGPTR );
 			tRemapCol.m_eStage = SPH_EVAL_PRESORT;
-			tRemapCol.m_pExpr = CreateExpr_GetColumnarString ( sAttrName, tAttr.m_uAttrFlags & CSphColumnInfo::ATTR_STORED );
+			tRemapCol.m_pExpr = CreateExpr_GetColumnarString ( sAttrName, tAttr.IsStored() );
 			tSorterSchema.AddAttr ( tRemapCol, true );
 
 			iRemap = tSorterSchema.GetAttrIndex ( sAttrName.cstr() );
@@ -2294,9 +2298,16 @@ bool QueueCreator_c::PredictAggregates() const
 }
 
 
-int QueueCreator_c::ReduceMaxMatches() const
+int QueueCreator_c::ReduceOrIncreaseMaxMatches() const
 {
 	assert ( !m_bGotGroupby );
+	const auto & tKNN = m_tQuery.m_tKnnSettings;
+	if ( !tKNN.m_sAttr.IsEmpty() && tKNN.m_fOversampling > 1.0f )
+	{
+		int64_t iRequested = tKNN.m_iK * tKNN.m_fOversampling;
+		return Max ( Max ( m_tSettings.m_iMaxMatches, iRequested ), 1 );
+	}
+
 	if ( m_tQuery.m_bExplicitMaxMatches || m_tQuery.m_bHasOuter || !m_tSettings.m_bComputeItems )
 		return Max ( m_tSettings.m_iMaxMatches, 1 );
 
@@ -2326,21 +2337,21 @@ int QueueCreator_c::AdjustMaxMatches ( int iMaxMatches ) const
 bool QueueCreator_c::CanCalcFastCountDistinct() const
 {
 	bool bHasAggregates = PredictAggregates();
-	return !bHasAggregates && m_tGroupSorterSettings.m_bImplicit && m_tGroupSorterSettings.m_bDistinct && m_tQuery.m_dFilters.IsEmpty() && m_tQuery.m_sQuery.IsEmpty() && m_tQuery.m_sKNNAttr.IsEmpty() && m_tQuery.m_eJoinType!=JoinType_e::INNER;
+	return !bHasAggregates && m_tGroupSorterSettings.m_bImplicit && m_tGroupSorterSettings.m_bDistinct && m_tQuery.m_dFilters.IsEmpty() && m_tQuery.m_sQuery.IsEmpty() && m_tQuery.m_tKnnSettings.m_sAttr.IsEmpty() && m_tQuery.m_eJoinType!=JoinType_e::INNER;
 }
 
 
 bool QueueCreator_c::CanCalcFastCountFilter() const
 {
 	bool bHasAggregates = PredictAggregates();
-	return !bHasAggregates && m_tGroupSorterSettings.m_bImplicit && !m_tGroupSorterSettings.m_bDistinct && m_tQuery.m_dFilters.GetLength()==1 && m_tQuery.m_sQuery.IsEmpty() && m_tQuery.m_sKNNAttr.IsEmpty() && m_tQuery.m_eJoinType!=JoinType_e::INNER;
+	return !bHasAggregates && m_tGroupSorterSettings.m_bImplicit && !m_tGroupSorterSettings.m_bDistinct && m_tQuery.m_dFilters.GetLength()==1 && m_tQuery.m_sQuery.IsEmpty() && m_tQuery.m_tKnnSettings.m_sAttr.IsEmpty() && m_tQuery.m_eJoinType!=JoinType_e::INNER;
 }
 
 
 bool QueueCreator_c::CanCalcFastCount() const
 {
 	bool bHasAggregates = PredictAggregates();
-	return !bHasAggregates && m_tGroupSorterSettings.m_bImplicit && !m_tGroupSorterSettings.m_bDistinct && m_tQuery.m_dFilters.IsEmpty() && m_tQuery.m_sQuery.IsEmpty() && m_tQuery.m_sKNNAttr.IsEmpty() && m_tQuery.m_eJoinType!=JoinType_e::INNER;
+	return !bHasAggregates && m_tGroupSorterSettings.m_bImplicit && !m_tGroupSorterSettings.m_bDistinct && m_tQuery.m_dFilters.IsEmpty() && m_tQuery.m_sQuery.IsEmpty() && m_tQuery.m_tKnnSettings.m_sAttr.IsEmpty() && m_tQuery.m_eJoinType!=JoinType_e::INNER;
 }
 
 
@@ -2385,19 +2396,23 @@ ISphMatchSorter * QueueCreator_c::SpawnQueue()
 	if ( m_tSettings.m_pCollection )
 		return CreateCollectQueue ( m_tSettings.m_iMaxMatches, *m_tSettings.m_pCollection );
 
-	int iMaxMatches = ReduceMaxMatches();
+	int iMaxMatches = ReduceOrIncreaseMaxMatches();
 	if ( m_pProfile )
 		m_pProfile->m_iMaxMatches = iMaxMatches;
 
-	ISphMatchSorter * pPlainSorter = CreatePlainSorter ( m_eMatchFunc, m_tQuery.m_bSortKbuffer, iMaxMatches, bNeedFactors );
-	if ( !pPlainSorter )
+	ISphMatchSorter * pSorter = CreatePlainSorter ( m_eMatchFunc, m_tQuery.m_bSortKbuffer, iMaxMatches, bNeedFactors );
+	if ( !pSorter )
 		return nullptr;
 
-	ISphMatchSorter * pScrollSorter = CreateScrollSorter ( pPlainSorter, *m_pSorterSchema, m_eMatchFunc, m_tQuery.m_tScrollSettings, m_bMulti );
-	if ( !pScrollSorter )
+	pSorter = CreateScrollSorter ( pSorter, *m_pSorterSchema, m_eMatchFunc, m_tQuery.m_tScrollSettings, m_bMulti );
+	if ( !pSorter )
 		return nullptr;
 
-	return CreateColumnarProxySorter ( pScrollSorter, iMaxMatches, *m_pSorterSchema, m_tStateMatch, m_eMatchFunc, bNeedFactors, m_tSettings.m_bComputeItems, m_bMulti );
+	pSorter = CreateKNNRescoreSorter ( pSorter, m_tQuery.m_tKnnSettings );
+	if ( !pSorter )
+		return nullptr;
+
+	return CreateColumnarProxySorter ( pSorter, iMaxMatches, *m_pSorterSchema, m_tStateMatch, m_eMatchFunc, bNeedFactors, m_tSettings.m_bComputeItems, m_bMulti );
 }
 
 
@@ -2501,20 +2516,32 @@ ISphMatchSorter * QueueCreator_c::CreateQueue ()
 	return pTop;
 }
 
-static void ResetRemaps ( CSphMatchComparatorState & tState )
+static void ResetRemaps ( CSphMatchComparatorState & tState, const CSphRsetSchema & tOldSchema  )
 {
 	for ( int i = 0; i<CSphMatchComparatorState::MAX_ATTRS; i++ )
 	{
-		if ( tState.m_dRemapped.BitGet ( i ) && tState.m_eKeypart[i]==SPH_KEYPART_STRINGPTR )
-			tState.m_dRemapped.BitClear ( i );
+		if ( tState.m_dRemapped.BitGet ( i ) )
+		{
+			bool bStrAttr = ( tState.m_eKeypart[i]==SPH_KEYPART_STRINGPTR );
+			bool bJsonAttr = false;
+			if ( !bStrAttr )
+			{
+				const CSphColumnInfo & tCol = tOldSchema.GetAttr ( tState.m_dAttrs[i] );
+				bool bTmp = false;
+				bJsonAttr = ( tCol.m_eAttrType==SPH_ATTR_JSON || tCol.m_eAttrType==SPH_ATTR_JSON_FIELD || ( tCol.m_pExpr && tCol.m_pExpr->IsJson ( bTmp ) ) );
+			}
+
+			if ( bStrAttr || bJsonAttr )
+				tState.m_dRemapped.BitClear ( i );
+		}
 	}
 }
 
 bool QueueCreator_c::SetSchemaGroupQueue ( const CSphRsetSchema & tNewSchema )
 {
 	// need to reissue remap but with existed attributes
-	ResetRemaps ( m_tStateMatch );
-	ResetRemaps ( m_tStateGroup );
+	ResetRemaps ( m_tStateMatch, *m_pSorterSchema );
+	ResetRemaps ( m_tStateGroup, *m_pSorterSchema );
 
 	*m_pSorterSchema = tNewSchema;
 

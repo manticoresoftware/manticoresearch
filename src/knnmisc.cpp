@@ -15,7 +15,69 @@
 #include "sphinxint.h"
 #include "fileio.h"
 #include "sphinxjson.h"
+#include "sphinxsort.h"
 
+
+bool TableEmbeddings_c::Load ( const CSphString & sAttr, const knn::ModelSettings_t & tSettings, CSphString & sError )
+{
+	if ( m_hModels.Exists(sAttr) )
+	{
+		sError.SetSprintf ( "Unable to load model '%s' for attribute '%s': already loaded", tSettings.m_sModelName.c_str(), sAttr.cstr() );
+		return false;
+	}
+
+	std::unique_ptr<knn::TextToEmbeddings_i> pModel = CreateTextToEmbeddings ( tSettings, sError );
+	if ( !pModel )
+		return false;
+
+	m_hModels.Add ( std::move(pModel), sAttr );
+	return true;
+}
+
+
+knn::TextToEmbeddings_i * TableEmbeddings_c::GetModel ( const CSphString & sAttr ) const
+{
+	std::unique_ptr<knn::TextToEmbeddings_i> * pFound = m_hModels(sAttr);
+	return pFound ? pFound->get() : nullptr;
+}
+
+///////////////////////////////////////////////////////////////////////////////
+
+EmbeddingsSrc_c::EmbeddingsSrc_c ( int iAttrs )
+{
+	m_dStored.Resize(iAttrs);
+}
+
+
+void EmbeddingsSrc_c::Add ( int iAttr, CSphVector<char> & dSrc )
+{
+	auto & tNew = m_dStored[iAttr].Add();
+	tNew.SwapData(dSrc);
+}
+
+
+void EmbeddingsSrc_c::Remove ( const CSphFixedVector<RowID_t> & dRowMap )
+{
+	for ( auto & i : m_dStored  )
+		for ( auto tRowID : dRowMap )
+			if ( tRowID==INVALID_ROWID )
+				i.Remove(tRowID);
+}
+
+///////////////////////////////////////////////////////////////////////////////
+
+const VecTraits_T<char> EmbeddingsSrc_c::Get ( RowID_t tRowID, int iAttr ) const
+{
+	return m_dStored[iAttr][tRowID];
+}
+
+
+bool IsKnnDist ( const CSphString & sExpr )
+{
+	return sExpr==GetKnnDistAttrName() || sExpr=="knn_dist()";
+}
+
+///////////////////////////////////////////////////////////////////////////////
 
 void NormalizeVec ( VecTraits_T<float> & dData )
 {
@@ -44,10 +106,14 @@ public:
 
 	void		SetData ( const util::Span_T<const knn::DocDist_t> & dData );
 
+protected:
+	CSphVector<float>	m_dAnchor;
+	CSphColumnInfo		m_tAttr;
+
+	float				CalcDist ( const CSphMatch & tMatch ) const;
+
 private:
 	std::unique_ptr<knn::Distance_i>	m_pDistCalc;
-	CSphVector<float>					m_dAnchor;
-	CSphColumnInfo						m_tAttr;
 	const BYTE *						m_pBlobPool = nullptr;
 	std::unique_ptr<columnar::Iterator_i> m_pIterator;
 
@@ -62,7 +128,8 @@ Expr_KNNDist_c::Expr_KNNDist_c ( const CSphVector<float> & dAnchor, const CSphCo
 {
 	knn::IndexSettings_t tDistSettings = tAttr.m_tKNN;
 	tDistSettings.m_eQuantization = knn::Quantization_e::NONE; // we operate on non-quantized data
-	m_pDistCalc = CreateKNNDistanceCalc(tDistSettings);
+	CSphString sError; // fixme! report it
+	m_pDistCalc = CreateKNNDistanceCalc ( tDistSettings, sError );
 
 	if ( tAttr.m_tKNN.m_eHNSWSimilarity==knn::HNSWSimilarity_e::COSINE )
 		NormalizeVec(m_dAnchor);
@@ -71,29 +138,15 @@ Expr_KNNDist_c::Expr_KNNDist_c ( const CSphVector<float> & dAnchor, const CSphCo
 
 float Expr_KNNDist_c::Eval ( const CSphMatch & tMatch ) const
 {
-	if ( m_pStart ) // use precalculated data
-	{
-		const knn::DocDist_t * pEnd = m_dData.end();
-		const knn::DocDist_t * pPtr = std::lower_bound ( m_pStart, pEnd, tMatch.m_tRowID, []( auto & tEntry, RowID_t tValue ){ return tEntry.m_tRowID < tValue; } );
-		assert ( pPtr!=pEnd && pPtr->m_tRowID==tMatch.m_tRowID );
-		m_pStart = pPtr;
-		return m_pStart->m_fDist;
-	}
-	else // calculate distance
-	{
-		// this code path is used when no iterator is available, i.e. in ram chunk
-		ByteBlob_t tRes;
-		if ( m_tAttr.IsColumnar() )
-			tRes.second = m_pIterator->Get ( tMatch.m_tRowID, tRes.first );
-		else
-			tRes = tMatch.FetchAttrData ( m_tAttr.m_tLocator, m_pBlobPool );
+	if ( !m_pStart )
+		return CalcDist(tMatch);
 
-		VecTraits_T<float> dData ( (float*)tRes.first, tRes.second / sizeof(float) );
-		if ( dData.GetLength()!=m_tAttr.m_tKNN.m_iDims )
-			return FLT_MAX;
-
-		return m_pDistCalc->CalcDist ( { dData.Begin(), (size_t)dData.GetLength() }, { m_dAnchor.Begin(), (size_t)m_dAnchor.GetLength() } );
-	}
+	// use precalculated data
+	const knn::DocDist_t * pEnd = m_dData.end();
+	const knn::DocDist_t * pPtr = std::lower_bound ( m_pStart, pEnd, tMatch.m_tRowID, []( auto & tEntry, RowID_t tValue ){ return tEntry.m_tRowID < tValue; } );
+	assert ( pPtr!=pEnd && pPtr->m_tRowID==tMatch.m_tRowID );
+	m_pStart = pPtr;
+	return m_pStart->m_fDist;
 }
 
 
@@ -141,6 +194,44 @@ uint64_t Expr_KNNDist_c::GetHash ( const ISphSchema & tSorterSchema, uint64_t uP
 	return CALC_DEP_HASHES();
 }
 
+
+float Expr_KNNDist_c::CalcDist ( const CSphMatch & tMatch ) const
+{
+	// this code path is used when no iterator is available, i.e. in ram chunk
+	ByteBlob_t tRes;
+	if ( m_tAttr.IsColumnar() )
+		tRes.second = m_pIterator->Get ( tMatch.m_tRowID, tRes.first );
+	else
+		tRes = tMatch.FetchAttrData ( m_tAttr.m_tLocator, m_pBlobPool );
+
+	VecTraits_T<float> dData ( (float*)tRes.first, tRes.second / sizeof(float) );
+	if ( dData.GetLength()!=m_tAttr.m_tKNN.m_iDims )
+		return FLT_MAX;
+
+	return m_pDistCalc->CalcDist ( { dData.Begin(), (size_t)dData.GetLength() }, { m_dAnchor.Begin(), (size_t)m_dAnchor.GetLength() } );
+}
+
+/////////////////////////////////////////////////////////////////////
+
+class Expr_KNNDistRescore_c : public Expr_KNNDist_c
+{
+	using Expr_KNNDist_c::Expr_KNNDist_c;
+
+public:
+	float		Eval ( const CSphMatch & tMatch ) const override		{ return CalcDist(tMatch); }
+
+protected:
+	uint64_t	GetHash ( const ISphSchema & tSorterSchema, uint64_t uPrevHash, bool & bDisable ) override;
+	ISphExpr *	Clone() const override									{ return new Expr_KNNDistRescore_c ( m_dAnchor, m_tAttr ); }
+};
+
+
+uint64_t Expr_KNNDistRescore_c ::GetHash ( const ISphSchema & tSorterSchema, uint64_t uPrevHash, bool & bDisable )
+{
+	EXPR_CLASS_NAME("Expr_KNNDistRescore_c");
+	return CALC_DEP_HASHES();
+}
+
 /////////////////////////////////////////////////////////////////////
 
 const char * GetKnnDistAttrName()
@@ -150,9 +241,21 @@ const char * GetKnnDistAttrName()
 }
 
 
+const char * GetKnnDistRescoreAttrName()
+{
+	static const char * szName = "@knn_dist_rescore";
+	return szName;
+}
+
 ISphExpr * CreateExpr_KNNDist ( const CSphVector<float> & dAnchor, const CSphColumnInfo & tAttr )
 {
 	return new Expr_KNNDist_c ( dAnchor, tAttr );
+}
+
+
+ISphExpr * CreateExpr_KNNDistRescore ( const CSphVector<float> & dAnchor, const CSphColumnInfo & tAttr )
+{
+	return new Expr_KNNDistRescore_c ( dAnchor, tAttr );
 }
 
 
@@ -173,6 +276,7 @@ static const char * Quantization2Str ( knn::Quantization_e eQuant )
 	switch ( eQuant )
 	{
 	case knn::Quantization_e::BIT1: return "1BIT";
+	case knn::Quantization_e::BIT1SIMPLE: return "1BITSIMPLE";
 	case knn::Quantization_e::BIT4: return "4BIT";
 	case knn::Quantization_e::BIT8: return "8BIT";
 	default: return nullptr;
@@ -227,6 +331,12 @@ bool Str2Quantization ( const CSphString & sQuantization, knn::Quantization_e & 
 		return true;
 	}
 
+	if ( sQuant=="1BITSIMPLE" )
+	{
+		eQuantization = knn::Quantization_e::BIT1SIMPLE;
+		return true;
+	}
+
 	if ( sQuant=="4BIT" )
 	{
 		eQuantization = knn::Quantization_e::BIT4;
@@ -264,36 +374,59 @@ void AddKNNSettings ( StringBuilder_c & sRes, const CSphColumnInfo & tAttr )
 	if ( tKNN.m_iHNSWEFConstruction!=tDefault.m_iHNSWEFConstruction )
 		sRes << " hnsw_ef_construction='" << tKNN.m_iHNSWEFConstruction << "'";
 
+	const auto & tKNNModel = tAttr.m_tKNNModel;
+	knn::ModelSettings_t tDefaultModel;
+	if ( !tKNNModel.m_sModelName.empty() )
+		sRes << " model_name='" << tKNNModel.m_sModelName.c_str() << "'";
+
+	if ( !tKNNModel.m_sCachePath.empty() )
+		sRes << " cache_path='" << tKNNModel.m_sCachePath.c_str() << "'";
+
+	if ( tKNNModel.m_bUseGPU!=tDefaultModel.m_bUseGPU )
+		sRes << " use_gpu='" << ( tKNNModel.m_bUseGPU ? 1 : 0 ) << "'";
+
 	if ( tKNN.m_eQuantization!=tDefault.m_eQuantization )
 		sRes << " quantization='" << Quantization2Str ( tKNN.m_eQuantization ) << "'";
 }
 
 
-knn::IndexSettings_t ReadKNNJson ( bson::Bson_c tRoot )
+void ReadKNNJson ( bson::Bson_c tRoot, knn::IndexSettings_t & tIS, knn::ModelSettings_t & tMS, CSphString & sKNNFrom )
 {
-	knn::IndexSettings_t tRes;
-	tRes.m_iDims = (int) bson::Int ( tRoot.ChildByName ( "knn_dims" ) );
-	Str2HNSWSimilarity ( bson::String ( tRoot.ChildByName ( "hnsw_similarity" ) ), tRes.m_eHNSWSimilarity );
-	tRes.m_iHNSWM = (int) bson::Int ( tRoot.ChildByName ( "hnsw_m" ), tRes.m_iHNSWM );
-	tRes.m_iHNSWEFConstruction = (int) bson::Int ( tRoot.ChildByName ( "hnsw_ef_construction" ), tRes.m_iHNSWEFConstruction );
-	Str2Quantization ( bson::String ( tRoot.ChildByName ( "quantization" ) ), tRes.m_eQuantization );
+	tIS.m_iDims				= (int) bson::Int ( tRoot.ChildByName ( "knn_dims" ) );
+	Str2HNSWSimilarity ( bson::String ( tRoot.ChildByName ( "hnsw_similarity" ) ), tIS.m_eHNSWSimilarity );
+	tIS.m_iHNSWM			= (int) bson::Int ( tRoot.ChildByName ( "hnsw_m" ), tIS.m_iHNSWM );
+	tIS.m_iHNSWEFConstruction = (int) bson::Int ( tRoot.ChildByName ( "hnsw_ef_construction" ), tIS.m_iHNSWEFConstruction );
+	Str2Quantization ( bson::String ( tRoot.ChildByName ( "quantization" ) ), tIS.m_eQuantization );
 
-	return tRes;
+	tMS.m_sModelName	= bson::String ( tRoot.ChildByName ( "model_name" ) ).cstr();
+	tMS.m_sAPIKey		= bson::String ( tRoot.ChildByName ( "api_key" ) ).cstr();
+	tMS.m_sCachePath	= bson::String ( tRoot.ChildByName ( "cache_path" ) ).cstr();
+	tMS.m_bUseGPU		= bson::Bool ( tRoot.ChildByName ( "use_gpu" ), tMS.m_bUseGPU );
+	sKNNFrom = bson::String ( tRoot.ChildByName ( "from" ) );
 }
 
 
-void operator << ( JsonEscapedBuilder & tOut, const knn::IndexSettings_t & tSettings )
+void FormatKNNSettings ( JsonEscapedBuilder & tOut, const knn::IndexSettings_t & tIS, const knn::ModelSettings_t & tMS, const CSphString & sKNNFrom )
 {
 	auto _ = tOut.Object();
 
-	knn::IndexSettings_t tDefault;
+	knn::IndexSettings_t tDefaultIS;
 
 	tOut.NamedString ( "knn_type", "hnsw" );
-	tOut.NamedVal ( "knn_dims", tSettings.m_iDims );
-	tOut.NamedString ( "hnsw_similarity", HNSWSimilarity2Str ( tSettings.m_eHNSWSimilarity ) );
-	tOut.NamedValNonDefault ( "hnsw_m", tSettings.m_iHNSWM, tDefault.m_iHNSWM );
-	tOut.NamedValNonDefault ( "hnsw_ef_construction", tSettings.m_iHNSWEFConstruction, tDefault.m_iHNSWEFConstruction );
-	tOut.NamedString ( "quantization", Quantization2Str ( tSettings.m_eQuantization ) );
+	tOut.NamedVal ( "knn_dims", tIS.m_iDims );
+	tOut.NamedString ( "hnsw_similarity", HNSWSimilarity2Str ( tIS.m_eHNSWSimilarity ) );
+	tOut.NamedValNonDefault ( "hnsw_m", tIS.m_iHNSWM, tDefaultIS.m_iHNSWM );
+	tOut.NamedValNonDefault ( "hnsw_ef_construction", tIS.m_iHNSWEFConstruction, tDefaultIS.m_iHNSWEFConstruction );
+	tOut.NamedString ( "quantization", Quantization2Str ( tIS.m_eQuantization ) );
+
+	if ( !tMS.m_sModelName.empty() )
+	{
+		tOut.NamedString ( "model_name", tMS.m_sModelName.c_str() );
+		tOut.NamedString ( "from", sKNNFrom );
+		tOut.NamedString ( "cache_path", tMS.m_sCachePath.c_str() );
+		tOut.NamedString ( "api_key", tMS.m_sAPIKey.c_str() );
+		tOut.NamedVal ( "use_gpu", tMS.m_bUseGPU );
+	}
 }
 
 
@@ -312,6 +445,16 @@ CSphString FormatKNNConfigStr ( const CSphVector<NamedKNNSettings_t> & dAttrs )
 		tObj.AddInt ( "hnsw_m", i.m_iHNSWM );
 		tObj.AddInt ( "hnsw_ef_construction", i.m_iHNSWEFConstruction );
 		tObj.AddStr ( "quantization", Quantization2Str ( i.m_eQuantization ) );
+
+		if ( !i.m_sModelName.empty() )
+		{
+			tObj.AddStr ( "model_name", i.m_sModelName.c_str() );
+			tObj.AddStr ( "from", i.m_sFrom.cstr() );
+			tObj.AddStr ( "cache_path", i.m_sCachePath.c_str() );
+			tObj.AddStr ( "api_key", i.m_sAPIKey.c_str() );
+			tObj.AddBool ( "use_gpu", i.m_bUseGPU );
+		}
+
 		tArray.AddItem(tObj);
 	}
 
@@ -369,15 +512,31 @@ bool ParseKNNConfigStr ( const CSphString & sStr, CSphVector<NamedKNNSettings_t>
 			if ( !Str2Quantization ( sQuantization.cstr(), tParsed.m_eQuantization, &sError ) )
 				return false;
 		}
+
+		if ( tParsed.m_eQuantization==knn::Quantization_e::BIT4 )
+		{
+			sError = "4-bit quantization is no longer supported";
+			return false;
+		}
+
+		if ( !i.FetchStrItem ( tParsed.m_sModelName, "model_name", sError, true ) ) return false;
+
+		if ( !tParsed.m_sModelName.empty() )
+		{
+			if ( !i.FetchStrItem ( tParsed.m_sFrom, "from", sError, true ) ) return false;
+			if ( !i.FetchStrItem ( tParsed.m_sAPIKey, "api_key", sError, true ) ) return false;
+			if ( !i.FetchStrItem ( tParsed.m_sCachePath, "cache_path", sError, true ) ) return false;
+			if ( !i.FetchBoolItem ( tParsed.m_bUseGPU, "use_gpu", sError, true ) ) return false;
+		}
 	}
 
 	return true;
 }
 
 
-std::unique_ptr<knn::Builder_i> BuildCreateKNN ( const ISphSchema & tSchema, int64_t iNumElements, CSphVector<std::pair<PlainOrColumnar_t,int>> & dAttrs, CSphString & sError )
+std::unique_ptr<knn::Builder_i> BuildCreateKNN ( const ISphSchema & tSchema, int64_t iNumElements, CSphVector<std::pair<PlainOrColumnar_t,int>> & dAttrs, const CSphString & sTmpFilename, CSphString & sError )
 {
-	std::unique_ptr<knn::Builder_i> pBuilder = CreateKNNBuilder ( tSchema, iNumElements, sError );
+	std::unique_ptr<knn::Builder_i> pBuilder = CreateKNNBuilder ( tSchema, iNumElements, sTmpFilename, sError );
 	if ( !pBuilder )
 		return pBuilder;
 	
@@ -397,7 +556,7 @@ std::unique_ptr<knn::Builder_i> BuildCreateKNN ( const ISphSchema & tSchema, int
 
 
 template <typename ACTION>
-static bool BuildProcessKNN ( RowID_t tRowID, const CSphRowitem * pRow, const BYTE * pPool, CSphVector<ScopedTypedIterator_t> & dIterators, const CSphVector<PlainOrColumnar_t> & dAttrs, ACTION && fnAction )
+static bool BuildProcessKNN ( RowID_t tRowID, const CSphRowitem * pRow, const BYTE * pPool, CSphVector<ScopedTypedIterator_t> & dIterators, const VecTraits_T<PlainOrColumnar_t> & dAttrs, ACTION && fnAction )
 {
 	ARRAY_FOREACH ( i, dAttrs )
 	{
@@ -406,7 +565,7 @@ static bool BuildProcessKNN ( RowID_t tRowID, const CSphRowitem * pRow, const BY
 		int iBytes = dAttrs[i].Get ( tRowID, pRow, pPool, dIterators, pSrc );
 		int iValues = iBytes / sizeof(float);
 
-		if ( !fnAction ( i, { (float*)pSrc, (size_t)iValues } ) )
+		if ( iValues && !fnAction ( i, { (float*)pSrc, (size_t)iValues } ) )
 			return false;
 	}
 
@@ -414,33 +573,34 @@ static bool BuildProcessKNN ( RowID_t tRowID, const CSphRowitem * pRow, const BY
 }
 
 
-void BuildTrainKNN ( RowID_t tRowID, const CSphRowitem * pRow, const BYTE * pPool, CSphVector<ScopedTypedIterator_t> & dIterators, const CSphVector<PlainOrColumnar_t> & dAttrs, knn::Builder_i & tBuilder )
+void BuildTrainKNN ( RowID_t tRowIDSrc, RowID_t tRowIDDst, const CSphRowitem * pRow, const BYTE * pPool, CSphVector<ScopedTypedIterator_t> & dIterators, const VecTraits_T<PlainOrColumnar_t> & dAttrs, knn::Builder_i & tBuilder )
 {
-	BuildProcessKNN ( tRowID, pRow, pPool, dIterators, dAttrs, [&tBuilder]( int iAttr, const util::Span_T<float> & tValues ) { tBuilder.Train ( iAttr, tValues ); return true; } );
+	BuildProcessKNN ( tRowIDSrc, pRow, pPool, dIterators, dAttrs, [&tBuilder, tRowIDDst]( int iAttr, const util::Span_T<float> & tValues ) { tBuilder.Train ( iAttr, tRowIDDst, tValues ); return true; } );
 }
 
 
-bool BuildStoreKNN ( RowID_t tRowID, const CSphRowitem * pRow, const BYTE * pPool, CSphVector<ScopedTypedIterator_t> & dIterators, const CSphVector<PlainOrColumnar_t> & dAttrs, knn::Builder_i & tBuilder )
+bool BuildStoreKNN ( RowID_t tRowIDSrc, RowID_t tRowIDDst, const CSphRowitem * pRow, const BYTE * pPool, CSphVector<ScopedTypedIterator_t> & dIterators, const VecTraits_T<PlainOrColumnar_t> & dAttrs, knn::Builder_i & tBuilder )
 {
-	return BuildProcessKNN ( tRowID, pRow, pPool, dIterators, dAttrs, [&tBuilder]( int iAttr, const util::Span_T<float> & tValues ) { return tBuilder.SetAttr ( iAttr, tValues ); } );
+	return BuildProcessKNN ( tRowIDSrc, pRow, pPool, dIterators, dAttrs, [&tBuilder, tRowIDDst]( int iAttr, const util::Span_T<float> & tValues ) { return tBuilder.SetAttr ( iAttr, tRowIDDst, tValues ); } );
 }
 
 
 std::pair<RowidIterator_i *, bool> CreateKNNIterator ( knn::KNN_i * pKNN, const CSphQuery & tQuery, const ISphSchema & tIndexSchema, const ISphSchema & tSorterSchema, CSphString & sError )
 {
-	if ( tQuery.m_sKNNAttr.IsEmpty() )
+	auto & tKNN = tQuery.m_tKnnSettings;
+	if ( tKNN.m_sAttr.IsEmpty() )
 		return { nullptr, false };
 
-	auto pKNNAttr = tIndexSchema.GetAttr ( tQuery.m_sKNNAttr.cstr() );
+	auto pKNNAttr = tIndexSchema.GetAttr ( tKNN.m_sAttr.cstr() );
 	if ( !pKNNAttr )
 	{
-		sError.SetSprintf ( "KNN search attribute '%s' not found", tQuery.m_sKNNAttr.cstr() );
+		sError.SetSprintf ( "KNN search attribute '%s' not found", tKNN.m_sAttr.cstr() );
 		return { nullptr, true };
 	}
 
 	if ( !pKNNAttr->IsIndexedKNN() )
 	{
-		sError.SetSprintf ( "KNN search attribute '%s' does not have KNN index", tQuery.m_sKNNAttr.cstr() );
+		sError.SetSprintf ( "KNN search attribute '%s' does not have KNN index", tKNN.m_sAttr.cstr() );
 		return { nullptr, true };
 	}
 
@@ -458,12 +618,13 @@ std::pair<RowidIterator_i *, bool> CreateKNNIterator ( knn::KNN_i * pKNN, const 
 
 	auto pKnnDist = (Expr_KNNDist_c*)pExpr;
 
-	CSphVector<float> dPoint ( tQuery.m_dKNNVec );
+	CSphVector<float> dPoint ( tKNN.m_dVec );
 	if ( pKNNAttr->m_tKNN.m_eHNSWSimilarity == knn::HNSWSimilarity_e::COSINE )
 		NormalizeVec(dPoint);
 
 	std::string sErrorSTL;
-	knn::Iterator_i * pIterator = pKNN->CreateIterator ( pKNNAttr->m_sName.cstr(), { dPoint.Begin(), (size_t)dPoint.GetLength() }, tQuery.m_iKNNK, tQuery.m_iKnnEf, sErrorSTL );
+	int64_t iRequested = tKNN.m_iK * tKNN.m_fOversampling;
+	knn::Iterator_i * pIterator = pKNN->CreateIterator ( pKNNAttr->m_sName.cstr(), { dPoint.Begin(), (size_t)dPoint.GetLength() }, iRequested, tKNN.m_iEf, sErrorSTL );
 	if ( !pIterator )
 	{
 		sError = sErrorSTL.c_str();
@@ -490,6 +651,127 @@ RowIteratorsWithEstimates_t	CreateKNNIterators ( knn::KNN_i * pKNN, const CSphQu
 	if ( !tRes.first )
 		return dIterators;
 
-	dIterators.Add ( { tRes.first, tQuery.m_iKNNK } );
+	dIterators.Add ( { tRes.first, int64_t ( tQuery.m_tKnnSettings.m_iK*tQuery.m_tKnnSettings.m_fOversampling ) } );
 	return dIterators;
+}
+
+///////////////////////////////////////////////////////////////////////////////
+
+struct MatchSortRescore_fn : CSphMatchComparatorState
+{
+	const CSphAttrLocator & m_tLocator;
+
+	MatchSortRescore_fn ( const CSphAttrLocator & tLoc ) : m_tLocator(tLoc) {}
+
+	bool IsLess ( const CSphMatch * a, const CSphMatch * b ) const
+	{
+		assert ( a && b );
+		return a->GetAttrFloat(m_tLocator) < b->GetAttrFloat(m_tLocator);
+	}
+};
+
+
+class RescoreSorter_c : public ISphMatchSorter
+{
+public:
+			RescoreSorter_c ( ISphMatchSorter * pSorter ) : m_pSorter ( pSorter ) {}
+
+	bool	Push ( const CSphMatch & tEntry ) final							{ return m_pSorter->Push(tEntry); }
+	void	Push ( const VecTraits_T<const CSphMatch> & dMatches ) override	{ for ( auto & i : dMatches ) m_pSorter->Push(i); }
+
+	bool	IsGroupby() const override										{ return m_pSorter->IsGroupby(); }
+	bool	PushGrouped ( const CSphMatch & tEntry, bool bNewSet ) override	{ return m_pSorter->PushGrouped ( tEntry, bNewSet ); }
+	int		GetLength () override											{ return m_pSorter->GetLength(); }
+	void	Finalize ( MatchProcessor_i & tProcessor, bool bCallProcessInResultSetOrder, bool bFinalizeMatches ) override { m_pSorter->Finalize ( tProcessor, bCallProcessInResultSetOrder, bFinalizeMatches ); }
+	int		Flatten ( CSphMatch * pTo ) override;
+	void	MoveTo ( ISphMatchSorter * pRhs, bool bCopyMeta ) override		{ m_pSorter->MoveTo ( ((RescoreSorter_c*)pRhs)->m_pSorter.get(), bCopyMeta ); }
+
+	ISphMatchSorter * Clone() const override;
+	void	CloneTo ( ISphMatchSorter * pTrg ) const override;
+
+	void	SetState ( const CSphMatchComparatorState & tState ) override	{ m_pSorter->SetState(tState); }
+	const CSphMatchComparatorState & GetState() const override				{ return m_pSorter->GetState(); }
+
+	void	SetSchema ( ISphSchema * pSchema, bool bRemapCmp ) override		{ m_pSorter->SetSchema ( pSchema, bRemapCmp ); }
+	const ISphSchema * GetSchema() const override							{ return m_pSorter->GetSchema(); }
+
+	void	SetColumnar ( columnar::Columnar_i * pColumnar ) override		{ m_pSorter->SetColumnar(pColumnar); }
+	int64_t	GetTotalCount() const override									{ return m_pSorter->GetTotalCount(); }
+
+	void	SetFilteredAttrs ( const sph::StringSet & hAttrs, bool bAddDocid ) override { m_pSorter->SetFilteredAttrs ( hAttrs, bAddDocid ); }
+	void	TransformPooled2StandalonePtrs ( GetBlobPoolFromMatch_fn fnBlobPoolFromMatch, GetColumnarFromMatch_fn fnGetColumnarFromMatch, bool bFinalizeSorters ) override { m_pSorter->TransformPooled2StandalonePtrs ( fnBlobPoolFromMatch, fnGetColumnarFromMatch, bFinalizeSorters ); }
+
+	bool	IsRandom() const override 										{ return m_pSorter->IsRandom(); }
+	void	SetRandom ( bool bRandom ) override								{ m_pSorter->SetRandom(bRandom); }
+
+	int		GetMatchCapacity() const override								{ return m_pSorter->GetMatchCapacity(); }
+
+	RowTagged_t					GetJustPushed() const override				{ return m_pSorter->GetJustPushed(); }
+	VecTraits_T<RowTagged_t>	GetJustPopped() const override				{ return m_pSorter->GetJustPopped(); }
+
+	void	SetMerge ( bool bMerge ) override								{ m_pSorter->SetMerge(bMerge); }
+
+private:
+	std::unique_ptr<ISphMatchSorter> m_pSorter;
+};
+
+
+int RescoreSorter_c::Flatten ( CSphMatch * pTo )
+{
+	int iLen = m_pSorter->GetLength();
+	if ( !iLen )
+		return 0;
+
+	CSphSwapVector<CSphMatch> dMatches;
+	int iCopied = m_pSorter->Flatten ( dMatches.AddN(iLen) );
+	dMatches.Resize(iCopied);
+
+	CSphVector<CSphAttrLocator> dOldKnnDistLoc;
+	for ( int i = 0; i < m_pSorter->GetSchema()->GetAttrsCount(); i++ )
+	{
+		const auto & tAttr = m_pSorter->GetSchema()->GetAttr(i);
+		if ( IsKnnDist ( tAttr.m_sName ) )
+			dOldKnnDistLoc.Add ( tAttr.m_tLocator );
+	}
+
+	auto * pKNNDistRescore = m_pSorter->GetSchema()->GetAttr ( GetKnnDistRescoreAttrName() );
+	assert(pKNNDistRescore);
+
+	MatchSortRescore_fn tRescore ( pKNNDistRescore->m_tLocator );
+	sphSort ( dMatches.Begin(), dMatches.GetLength(), tRescore, MatchSortAccessor_t() );
+
+	// copy rescored dist to old dist
+	for ( auto & tMatch : dMatches )
+		for ( const auto & tLocator : dOldKnnDistLoc )
+			tMatch.SetAttrFloat ( tLocator, tMatch.GetAttrFloat ( pKNNDistRescore->m_tLocator ) );
+
+	for ( auto & i : dMatches )
+		Swap ( i, *pTo++ );
+
+	return iCopied;
+}
+
+
+ISphMatchSorter * RescoreSorter_c::Clone() const
+{
+	auto pClone = new RescoreSorter_c ( m_pSorter->Clone() );
+	CloneTo(pClone);
+	return pClone;
+}
+
+
+void RescoreSorter_c::CloneTo ( ISphMatchSorter * pTrg ) const
+{
+	pTrg->SetRandom ( IsRandom() );
+	pTrg->SetState  ( GetState() );
+	pTrg->SetSchema ( GetSchema()->CloneMe(), false );
+}
+
+
+ISphMatchSorter * CreateKNNRescoreSorter ( ISphMatchSorter * pSorter, const KnnSearchSettings_t & tSettings )
+{
+	if ( tSettings.m_sAttr.IsEmpty() || !tSettings.m_bRescore )
+		return pSorter;
+
+	return new RescoreSorter_c(pSorter);
 }

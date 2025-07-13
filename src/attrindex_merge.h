@@ -23,13 +23,13 @@ class AttrMerger_c
 	std::unique_ptr<Impl_c> m_pImpl;
 
 public:
-	AttrMerger_c ( MergeCb_c& tMonitor, CSphString& sError, int64_t iTotalDocs, const BuildBufferSettings_t & tSettings );
+	AttrMerger_c ( MergeCb_c& tMonitor, CSphString& sError, int64_t iTotalDocs, const BuildBufferSettings_t & tSettings, StrVec_t & dCreatedFiles );
 	~AttrMerger_c();
 
 	bool Prepare ( const CSphIndex * pSrcIndex, const CSphIndex * pDstIndex );
 	bool AnalyzeAttributes ( const CSphIndex& tIndex, const VecTraits_T<RowID_t>& dRowMap, DWORD uAlive );
 	bool CopyAttributes ( const CSphIndex & tIndex, const VecTraits_T<RowID_t> & dRowMap, DWORD uAlive );
-	bool FinishMergeAttributes ( const CSphIndex * pDstIndex, BuildHeader_t & tBuildHeader, StrVec_t* pCreatedFiles );
+	bool FinishMergeAttributes ( const CSphIndex * pDstIndex, BuildHeader_t & tBuildHeader );
 };
 
 bool SiRecreate ( MergeCb_c & tMonitor, const CSphIndex & tIndex, int64_t iNumDocs, StrVec_t & dOldFiles, StrVec_t & dNewFiles, CSphString & sError );

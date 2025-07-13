@@ -572,7 +572,10 @@ void CSphSchema::SetupKNNFlags ( const CSphSourceSettings & tSettings )
 			continue;
 
 		int iId = hKNN[tAttr.m_sName];
-		tAttr.m_tKNN = tSettings.m_dKNN[iId];
+		const auto & tKNN = tSettings.m_dKNN[iId];
+		tAttr.m_tKNN		= tKNN;
+		tAttr.m_tKNNModel	= tKNN;
+		tAttr.m_sKNNFrom	= tKNN.m_sFrom;
 	}
 }
 
@@ -664,7 +667,7 @@ bool CSphSchema::HasStoredFields() const
 
 bool CSphSchema::HasStoredAttrs() const
 {
-	return m_dAttrs.any_of ( []( const CSphColumnInfo & tAttr ){ return tAttr.m_uAttrFlags & CSphColumnInfo::ATTR_STORED; } );
+	return m_dAttrs.any_of ( []( const CSphColumnInfo & tAttr ){ return tAttr.IsStored(); } );
 }
 
 
@@ -700,7 +703,7 @@ bool CSphSchema::IsFieldStored ( int iField ) const
 
 bool CSphSchema::IsAttrStored ( int iAttr ) const
 {
-	return !!( m_dAttrs[iAttr].m_uAttrFlags & CSphColumnInfo::ATTR_STORED );
+	return m_dAttrs[iAttr].IsStored();
 }
 
 ///////////////////////////////////////////////////////////////////////////////

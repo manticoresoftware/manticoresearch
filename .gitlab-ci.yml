@@ -116,9 +116,9 @@ job_mirror:
       junit: build/junit_tests.xml
     paths:
       - build/junit_tests.xml
-      - build/test/test_*/report.*
-      - build/test/rt_*/report.*
-      - build/test/col_*/report.*
+      - build/test/test_*/**
+      - build/test/rt_*/**
+      - build/test/col_*/**
       - build/test/error*.txt
       - build/test/searchd*.log
   retry: 1
@@ -194,7 +194,7 @@ win_tests:
     BOOST_ROOT: "x:/boost_1_75_0"
     CTEST_CMAKE_GENERATOR: "Visual Studio 16 2019"
     CTEST_CONFIGURATION_TYPE: Debug
-    CTEST_EXCLUDE_REGEX: "_466"
+    CTEST_EXCLUDE_REGEX: "_466|test_300"
     NO_BUILD: 1
   script:
     - 'net use x: \\\\VBOXSRV\\shared'

@@ -80,14 +80,14 @@ enum class ResultSetFormat_e : bool
 	MntSearch
 };
 
-CSphString		sphEncodeResultJson ( const VecTraits_T<const AggrResult_t *> & dRes, const JsonQuery_c & tQuery, QueryProfile_c * pProfile, ResultSetFormat_e eFormat );
+CSphString		sphEncodeResultJson ( const VecTraits_T<AggrResult_t>& dRes, const JsonQuery_c & tQuery, QueryProfile_c * pProfile, ResultSetFormat_e eFormat );
 JsonObj_c		sphEncodeInsertResultJson ( const char * szIndex, bool bReplace, DocID_t tDocId, ResultSetFormat_e eFormat );
 JsonObj_c		sphEncodeUpdateResultJson ( const char * szIndex, DocID_t tDocId, int iAffected, ResultSetFormat_e eFormat );
 JsonObj_c 		sphEncodeDeleteResultJson ( const char * szIndex, DocID_t tDocId, int iAffected, ResultSetFormat_e eFormat );
 JsonObj_c		sphEncodeInsertErrorJson ( const char * szIndex, const char * szError, ResultSetFormat_e eFormat );
 JsonObj_c		sphEncodeTxnResultJson ( const char* szIndex, DocID_t tDocId, int iInserts, int iDeletes, int iUpdates, ResultSetFormat_e eFormat );
 
-bool			sphGetResultStats ( const char * szResult, int & iAffected, int & iWarnings, bool bUpdate );
+bool			sphGetResultStats ( const char * szResult, int & iAffected, int & iWarnings, bool bUpdate, CSphString & sError );
 
 bool			NonEmptyQuery ( const JsonObj_c & tQuery );
 bool			CheckRootNode ( const JsonObj_c & tRoot, CSphString & sError );

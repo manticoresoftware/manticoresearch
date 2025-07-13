@@ -12,8 +12,8 @@ mysql -h0 -P1306 -e "show tables from system" | grep 'Table: system.a' | sort
 mysql -h0 -P1306 -e "DESC t\G"
 ––– output –––
 *************************** 1. row ***************************
-Field: id
-Type: bigint
+     Field: id
+      Type: bigint
 Properties:
 ––– input –––
 mysql -h0 -P1306 -e "create table a(id bigint) shards='4' rf='1'"
@@ -29,13 +29,13 @@ Table: system.a_s3
 mysql -h0 -P1306 -e "DESCRIBE a\G"
 ––– output –––
 *************************** 1. row ***************************
-Field: id
-Type: bigint
+     Field: id
+      Type: bigint
 Properties:
 ––– input –––
 mysql -h0 -P1306 -e "DESC a\G"
 ––– output –––
 *************************** 1. row ***************************
-Field: id
-Type: bigint
+     Field: id
+      Type: bigint
 Properties:

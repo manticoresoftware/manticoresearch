@@ -45,8 +45,9 @@ POST /autocomplete
 ```
 
 #### Options
-- `layouts`: A comma-separated string of keyboard layout codes to validate and check for spell correction. Available options: us, ru, ua, se, pt, no, it, gr, uk, fr, es, dk, de, ch, br, bg, be (more details [here](../../Searching/Spell_correction.md#Options)). Default: all enabled
+- `layouts`: A comma-separated string of keyboard layout codes for detecting typing errors caused by keyboard layout mismatches (e.g., typing "ghbdtn" instead of "привет" when using wrong layout). Manticore compares character positions across different layouts to suggest corrections. Requires at least 2 layouts to effectively detect mismatches. Available options: us, ru, ua, se, pt, no, it, gr, uk, fr, es, dk, de, ch, br, bg, be (more details [here](../Searching/Spell_correction.md#Options)). Default: none
 - `fuzziness`: `0`, `1`, or `2` (default: `2`). Maximum Levenshtein distance for finding typos. Set to `0` to disable fuzzy matching
+- `preserve`: `0` or `1` (default: `0`). When set to `1`, keeps words that don't have fuzzy matches in the search results (e.g., "hello wrld" returns both "hello wrld" and "hello world"). When set to `0`, only returns words with successful fuzzy matches (e.g., "hello wrld" returns only "hello world"). Particularly useful for preserving short words or proper nouns that may not exist in Manticore Search
 - `prepend`: Boolean (0/1 in SQL). If true(1), adds an asterisk before the last word for prefix expansion (e.g., `*word`)
 - `append`: Boolean (0/1 in SQL). If true(1), adds an asterisk after the last word for suffix expansion (e.g., `word*`)
 - `expansion_len`: Number of characters to expand in the last word. Default: `10`
@@ -134,6 +135,57 @@ POST /autocomplete
 ]
 ```
 
+<!-- request SQL with preserve option -->
+
+```sql
+mysql> CALL AUTOCOMPLETE('hello wrld', 'comment', 1 as preserve);
++------------+
+| query      |
++------------+
+| hello wrld |
+| hello world|
++------------+
+```
+
+<!-- request JSON with preserve option -->
+
+```json
+POST /autocomplete
+{
+	"table":"comment",
+	"query":"hello wrld",
+	"options": {
+		"preserve": 1
+	}
+}
+```
+
+<!-- response JSON with preserve option -->
+```json
+[
+  {
+    "total": 2,
+    "error": "",
+    "warning": "",
+    "columns": [
+      {
+        "query": {
+          "type": "string"
+        }
+      }
+    ],
+    "data": [
+      {
+        "query": "hello wrld"
+      },
+      {
+        "query": "hello world"
+      }
+    ]
+  }
+]
+```
+
 <!-- end -->
 
 #### Links
@@ -182,7 +234,7 @@ The `CALL KEYWORDS` statement divides text into keywords. It returns the tokeniz
 | 0/1 as fold_blended | Fold blended words, default is 0 |
 | N as expansion_limit | Override [expansion_limit](../Creating_a_table/NLP_and_tokenization/Wildcard_searching_settings.md#expansion_limit) defined in the server configuration, default is 0 (use value from the configuration) |
 | docs/hits as sort_mode | Sorts output results by either 'docs' or 'hits'. No sorting is applied by default. |
-| jieba_mode | Jieba segmentation mode for the query. See [jieba_mode](Creating_a_table/NLP_and_tokenization/Morphology.md#jieba_mode) for more details |
+| jieba_mode | Jieba segmentation mode for the query. See [jieba_mode](../Creating_a_table/NLP_and_tokenization/Morphology.md#jieba_mode) for more details |
 
 The examples show how it works if assuming the user is trying to get an autocomplete for "my cat ...". So on the application side all you need to do is to suggest the user the endings from the column "normalized" for each new word. It often makes sense to sort by hits or docs using `'hits' as sort_mode` or `'docs' as sort_mode`.
 

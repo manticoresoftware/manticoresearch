@@ -26,8 +26,8 @@
 #include "tokenizer/tokenizer.h"
 #include "secondarylib.h"
 #include "knnlib.h"
+#include "config.h"
 
-#include <sys/stat.h>
 #include <sys/types.h>
 #include <ctype.h>
 #include <errno.h>
@@ -1569,7 +1569,7 @@ LONG WINAPI sigsegv ( EXCEPTION_POINTERS * pExc )
 void SetSignalHandlers ()
 {
 	snprintf ( g_sMinidump, sizeof(g_sMinidump), "indexer.%d.mdmp", GetCurrentProcessId() );
-	SetUnhandledExceptionFilter ( sigsegv );
+	AddVectoredExceptionHandler ( TRUE, sigsegv );
 }
 
 #endif // _WIN32

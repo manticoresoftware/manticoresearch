@@ -16,7 +16,7 @@ REPLACE INTO table [(column1, column2, ...)]
     VALUES (value1, value2, ...)
     [, (...)]
 ```
-Columns not explicitly mentioned in the SQL statement are set to 0 / empty string depeneding on their data type.
+Columns not explicitly mentioned in the SQL statement are set to 0 / empty string depending on their data type.
 
 **To replace only selected fields:**
 ```sql

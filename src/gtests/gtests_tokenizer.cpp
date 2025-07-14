@@ -820,7 +820,8 @@ void QueryParser::Transform ( const char * szQuery, const char * szReconst, cons
 {
 	CSphIndexSettings tTmpSettings;
 	XQQuery_t tQuery;
-	sphParseExtendedQuery ( tQuery, szQuery, nullptr, pTokenizer, &tSchema, pDict, tTmpSettings, nullptr );
+	if (!sphParseExtendedQuery ( tQuery, szQuery, nullptr, pTokenizer, &tSchema, pDict, tTmpSettings, nullptr ))
+		return;
 
 	CSphString sReconst = sphReconstructNode ( tQuery.m_pRoot, &tSchema );
 

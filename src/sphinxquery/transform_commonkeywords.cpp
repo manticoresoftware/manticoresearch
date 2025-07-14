@@ -406,6 +406,7 @@ bool CSphTransformation::TransformCommonPhrase () const noexcept
 				tElem.m_pPhrases->Sort ( XQNodeAtomPos_fn() );
 				MakeTransformCommonPhrase ( *tElem.m_pPhrases, tElem.m_iCommonLen, tElem.m_bHead );
 				iActiveDeep = hSimGroup.iDeep;
+				break;
 			}
 		}
 

@@ -153,6 +153,7 @@ bool CSphTransformation::TransformExcessAndNot () const
 				pParentAndNot->dChildren()[0] = nullptr;
 				SafeDelete ( pParentAndNot );
 				iActiveDeep = hSimGroup.iDeep;
+				break;
 			}
 		}
 

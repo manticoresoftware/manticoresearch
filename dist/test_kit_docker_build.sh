@@ -4,8 +4,7 @@ set -e
 git clone https://github.com/manticoresoftware/docker.git docker
 cd docker
 
-# We set it later when parse deps.txt
-executor_dev_path=
+# We don't need executor_dev_path anymore since we use the regular executor package
 
 # Downloads a package from a repository by given package name, version, date, commit, and architecture
 download_package() {
@@ -36,31 +35,8 @@ download_package() {
 			mkdir -p "../build"
 			wget -q -O "../build/${file_name}" "$file_url"
 			
-			# For executor, we need to download the dev version and also extra package
+			# For executor, we also need to download extra package
 			if [ "$package" = 'manticore-executor' ]; then
-				if [[ "$version_string" == *"+"* ]]; then
-					# Handle new format
-					echo "Downloading executor dev package for new format version"
-					# Extract version from version_string (before the +)
-					version=$(echo "$version_string" | cut -d'+' -f1)
-					# Extract date-commit from version_string (after the +)
-					date_commit=$(echo "$version_string" | cut -d'+' -f2)
-					
-					echo "Wgetting from https://github.com/manticoresoftware/executor/releases/download/v${version}/manticore-executor_${version}-${date_commit}_linux_amd64-dev.tar.gz"
-					wget -q -O 'manticore-executor-dev.tar.gz' "https://github.com/manticoresoftware/executor/releases/download/v${version}/manticore-executor_${version}-${date_commit}_linux_amd64-dev.tar.gz"
-				else
-					# Handle old format
-					echo "Wgetting from https://github.com/manticoresoftware/executor/releases/download/v${version}/manticore-executor_${version}-${date}-${commit}_linux_amd64-dev.tar.gz"
-					wget -q -O 'manticore-executor-dev.tar.gz' "https://github.com/manticoresoftware/executor/releases/download/v${version}/manticore-executor_${version}-${date}-${commit}_linux_amd64-dev.tar.gz"
-				fi
-				
-				tar -xzf 'manticore-executor-dev.tar.gz'
-				
-				# Find the extracted directory
-				executor_dev_dir=$(find . -type d -name "manticore-executor_*_linux_amd64-dev" | head -n 1)
-				executor_dev_path=$(realpath "${executor_dev_dir}/manticore-executor")
-				
-				# Also add extra package
 				if [[ "$version_string" == *"+"* ]]; then
 					download_package "manticore-extra" "${version_string}" "all"
 				else
@@ -175,15 +151,15 @@ docker create \
 	-f /dev/null
 	docker start manticore-test-kit
 
-	docker cp "$executor_dev_path" manticore-test-kit:/usr/bin/manticore-executor-dev
-	docker exec manticore-test-kit ln -sf /usr/bin/manticore-executor-dev /usr/bin/php
-
 # Let's list what's in the /build/ inside the container for debug purposes
 docker exec manticore-test-kit bash -c \
 	'echo "Removing /build/manticore_*, because it may depend on manticore-buddy of a newer version while we'\''re installing Buddy via git clone"; rm /build/manticore_*.deb; ls -la /build/'
-# Install deps and add manticore-executor-dev to the container
+# Install deps and link executor to php
 docker exec manticore-test-kit bash -c \
 	'echo "apt list before update" && apt list --installed|grep manticore && apt-get -y update && echo "apt list after update" && apt list --installed|grep manticore && apt-get -y install manticore-galera && apt-get -y remove manticore-repo && rm /etc/apt/sources.list.d/manticoresearch.list && apt-get update -y && apt-get install -y --allow-downgrades /build/*.deb libxml2 libcurl4 libonig5 libzip4 librdkafka1 curl neovim git apache2-utils iproute2 bash && apt-get clean -y'
+
+# Create symlink from executor to php
+docker exec manticore-test-kit ln -sf /usr/bin/manticore-executor /usr/bin/php
 
 # Install composer cuz we need it for buddy from the git and also development
 docker exec manticore-test-kit bash -c \

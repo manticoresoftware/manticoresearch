@@ -148,7 +148,7 @@ bool CSphTransformation::TransformCommonSubTerm () noexcept
 			// because query tree was changed and further transformations
 			// might be invalid.
 			iActiveDeep = hSimGroup.iDeep;
-		//	break;
+			break;
 		}
 
 	return iActiveDeep;

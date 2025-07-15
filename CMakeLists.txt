@@ -53,6 +53,14 @@ set ( CPACK_PACKAGE_NAME "${PACKAGE_NAME}" )
 include ( setup_distribution_build ) # process PACK, DISTR_BUILD and ENV{DISTR}
 include ( FeatureSummary )
 
+# Option to build Source RPMs (SRPMs) - provides instructions for proper SRPM generation
+set ( BUILD_SRPMS OFF CACHE BOOL "Show instructions for building Source RPMs (SRPMs)" )
+if (BUILD_SRPMS)
+	set ( CPACK_RPM_PACKAGE_SOURCES ON )
+	message ( STATUS "SRPM generation requested - will provide instructions for proper SRPM creation" )
+endif ()
+add_feature_info ( "SRPM generation" BUILD_SRPMS "Show instructions for building Source RPM packages" )
+
 # cast away too old gcc compiler (Minspec is 4.7.2)
 if (CXX_COMPILER_ID STREQUAL GNU AND CXX_COMPILER_VERSION VERSION_LESS 4.7.2)
 	message ( FATAL_ERROR "Gcc version error. Minspec is 4.7.2" )
@@ -422,6 +430,21 @@ cmake_print_variables ( CMAKE_INSTALL_PREFIX )
 foreach (var BINDIR SBINDIR LIBEXECDIR SYSCONFDIR SHAREDSTATEDIR LOCALSTATEDIR RUNSTATEDIR LIBDIR INCLUDEDIR OLDINCLUDEDIR DATAROOTDIR DATADIR INFODIR LOCALEDIR MANDIR DOCDIR LOCALLIBDIR)
 	cmake_print_variables ( CMAKE_INSTALL_${var} CMAKE_INSTALL_FULL_${var} )
 endforeach ()
+
+# Configure CPack source packaging for SRPM generation
+set ( CPACK_SOURCE_GENERATOR "RPM" )
+set ( CPACK_SOURCE_PACKAGE_FILE_NAME "${CPACK_PACKAGE_NAME}-${CPACK_PACKAGE_VERSION}" )
+
+# For source RPMs: Override the make command to use cmake --build instead
+# This automatically handles any generator (Unix Makefiles, Ninja, etc.)
+if (CPACK_SOURCE_GENERATOR STREQUAL "RPM" OR CPACK_RPM_PACKAGE_SOURCES)
+    set ( CPACK_RPM_SPEC_MORE_DEFINE "${CPACK_RPM_SPEC_MORE_DEFINE}
+%global __make cmake --build . --parallel")
+endif()
+
+# Configure source directories for debuginfo packages
+# This is required when debuginfo packaging is enabled
+set ( CPACK_BUILD_SOURCE_DIRS "${CMAKE_SOURCE_DIR};${CMAKE_BINARY_DIR}" )
 
 if (NOT CPack_CMake_INCLUDED)
 	include ( CPack )

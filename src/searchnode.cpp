@@ -959,7 +959,7 @@ private:
 static ISphQword * CreateQueryWord ( const XQKeyword_t & tWord, const ISphQwordSetup & tSetup, DictRefPtr_c pZonesDict = nullptr )
 {
 	BYTE sTmp [ 3*SPH_MAX_WORD_LEN + 16 ];
-	strncpy ( (char*)sTmp, tWord.m_sWord.cstr(), sizeof(sTmp) );
+	strncpy ( (char*)sTmp, tWord.m_sWord.cstr(), sizeof(sTmp)-1 );
 	sTmp[sizeof(sTmp)-1] = '\0';
 
 	ISphQword * pWord = tSetup.QwordSpawn ( tWord );

@@ -587,7 +587,7 @@ bool CSphTokenizerIndex::GetKeywords ( CSphVector <CSphKeywordInfo> & dKeywords,
 	if ( IsStarDict ( pDict->GetSettings().m_bWordDict ) )
 	{
 		pTokenizer->AddPlainChars ( "*" );
-		SetupStarDictOld ( pDict );
+		SetupStarDict ( pDict, false );
 	}
 
 	if ( m_tSettings.m_bIndexExactWords )
@@ -637,7 +637,7 @@ Bson_t CSphTokenizerIndex::ExplainQuery ( const CSphString & sQuery ) const
 	tArgs.m_szQuery = sQuery.cstr();
 	tArgs.m_pDict = GetStatelessDict ( m_pDict );
 	if ( IsStarDict ( bWordDict ) )
-		SetupStarDictV8 ( tArgs.m_pDict, m_tSettings.m_iMinInfixLen>0 );
+		SetupStarDict ( tArgs.m_pDict, m_tSettings.m_iMinInfixLen>0 );
 	if ( m_tSettings.m_bIndexExactWords )
 		SetupExactDict ( tArgs.m_pDict );
 	if ( m_pFieldFilter )
@@ -9670,7 +9670,7 @@ void CSphIndex_VLN::SetupStarDict ( DictRefPtr_c &pDict ) const
 	// spawn wrapper, and put it in the box
 	// wrapper type depends on version; v.8 introduced new mangling rules
 	if ( IsStarDict ( pDict->GetSettings().m_bWordDict ) )
-		::SetupStarDictV8 ( pDict, m_tSettings.m_iMinInfixLen>0 );
+		::SetupStarDict ( pDict, m_tSettings.m_iMinInfixLen>0 );
 
 	// FIXME? might wanna verify somehow that the tokenizer has '*' as a character
 }
@@ -9747,7 +9747,7 @@ bool CSphIndex_VLN::DoGetKeywords ( CSphVector <CSphKeywordInfo> & dKeywords, co
 	}
 
 	// short-cut if no query or keywords to fill
-	if ( ( bFillOnly && !dKeywords.GetLength() ) || ( !bFillOnly && ( !szQuery || !szQuery[0] ) ) )
+	if ( ( bFillOnly && dKeywords.IsEmpty() ) || ( !bFillOnly && ( !szQuery || !szQuery[0] ) ) )
 		return true;
 
 	DictRefPtr_c pDict = GetStatelessDict ( m_pDict );
@@ -9775,7 +9775,7 @@ bool CSphIndex_VLN::DoGetKeywords ( CSphVector <CSphKeywordInfo> & dKeywords, co
 		ARRAY_FOREACH ( i, dKeywords )
 		{
 			CSphKeywordInfo &tInfo = dKeywords[i];
-			int iLen = tInfo.m_sTokenized.Length ();
+			int iLen = Min ( MAX_KEYWORD_BYTES, tInfo.m_sTokenized.Length() );
 			memcpy ( sWord, tInfo.m_sTokenized.cstr (), iLen );
 			sWord[iLen] = '\0';
 

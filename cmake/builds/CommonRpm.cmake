@@ -109,9 +109,6 @@ if (CPACK_RPM_PACKAGE_SOURCES)
 	unset ( CPACK_RPM_PACKAGE_SOURCES )
 endif ()
 
-# Always disable source directories for binary RPM builds
-set ( CPACK_BUILD_SOURCE_DIRS OFF )
-
 #set ( CPACK_RPM_EXCLUDE_FROM_AUTO_FILELIST "/usr/include" )
 set ( CPACK_RPM_COMMON_USER_FILELIST
 		"%config(noreplace) %{_sysconfdir}/manticoresearch/manticore.conf"

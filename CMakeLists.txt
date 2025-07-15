@@ -435,18 +435,16 @@ endforeach ()
 set ( CPACK_SOURCE_GENERATOR "RPM" )
 set ( CPACK_SOURCE_PACKAGE_FILE_NAME "${CPACK_PACKAGE_NAME}-${CPACK_PACKAGE_VERSION}" )
 
-# Set build requirements for SRPM - these will be used when building from SRPM
-#set ( CPACK_RPM_BUILDREQUIRES "cmake >= 3.17, gcc-c++, boost-devel >= 1.61.0, libcurl-devel, openssl-devel, zlib-devel, expat-devel, mariadb-connector-c-devel, postgresql-devel, unixODBC-devel, systemd-devel, git, make, flex, bison" )
-
-# Configure cmake parameters for SRPM builds - disable problematic components by default
-#set ( CPACK_RPM_SOURCE_PKG_BUILD_PARAMS "-DWITH_RE2_FORCE_STATIC=1 -DWITH_STEMMER_FORCE_STATIC=1" )
-
 # For source RPMs: Override the make command to use cmake --build instead
 # This automatically handles any generator (Unix Makefiles, Ninja, etc.)
 if (CPACK_SOURCE_GENERATOR STREQUAL "RPM" OR CPACK_RPM_PACKAGE_SOURCES)
     set ( CPACK_RPM_SPEC_MORE_DEFINE "${CPACK_RPM_SPEC_MORE_DEFINE}
 %global __make cmake --build . --parallel")
 endif()
+
+# Configure source directories for debuginfo packages
+# This is required when debuginfo packaging is enabled
+set ( CPACK_BUILD_SOURCE_DIRS "${CMAKE_SOURCE_DIR};${CMAKE_BINARY_DIR}" )
 
 if (NOT CPack_CMake_INCLUDED)
 	include ( CPack )

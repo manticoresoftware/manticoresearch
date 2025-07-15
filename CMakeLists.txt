@@ -434,68 +434,12 @@ endforeach ()
 # Configure CPack source packaging for SRPM generation
 set ( CPACK_SOURCE_GENERATOR "RPM" )
 set ( CPACK_SOURCE_PACKAGE_FILE_NAME "${CPACK_PACKAGE_NAME}-${CPACK_PACKAGE_VERSION}" )
-set ( CPACK_SOURCE_IGNORE_FILES
-	"/\\.git/"
-	"/\\.gitignore$"
-	"/\\.gitmodules$"
-	"/build/"
-	"/\\.DS_Store$"
-	"/Thumbs\\.db$"
-	"\\.swp$"
-	"\\.swo$"
-	"\\.orig$"
-	"\\.rej$"
-	"~$"
-	"\\.tmp$"
-	"/\\.vscode/"
-	"/\\.idea/"
-	"/\\.vs/"
-	"/CMakeFiles/"
-	"/CMakeCache\\.txt$"
-	"/CPackConfig\\.cmake$"
-	"/CPackSourceConfig\\.cmake$"
-	"/cmake_install\\.cmake$"
-	"/install_manifest\\.txt$"
-	"/Makefile$"
-	"/\\.ninja"
-	"/build\\.ninja$"
-	"/rules\\.ninja$"
-	"/Testing/"
-	"/test/results/"
-	"/test/test_[0-9].*\\.log$"
-	"/test/test_[0-9].*\\.report$"
-	"/\\.ctest/"
-	"/\\.mypy_cache/"
-	"/\\.pytest_cache/"
-	"/\\.tox/"
-	"/__pycache__/"
-	"/\\.coverage$"
-	"/htmlcov/"
-	"/\\.nyc_output/"
-	"/coverage/"
-	"/node_modules/"
-	"/\\.npm/"
-	"/\\.bower/"
-	"/\\.sass-cache/"
-	"/\\.tmp/"
-	"/\\.temp/"
-	"/\\.cache/"
-	"/\\.vagrant/"
-	"/\\.svn/"
-	"/\\.hg/"
-	"/\\.bzr/"
-	"/\\.CVS/"
-	"/\\.cvsignore$"
-	"/\\.hgignore$"
-	"/\\.bzrignore$"
-	"/\\.svnignore$"
-	)
 
 # Set build requirements for SRPM - these will be used when building from SRPM
-set ( CPACK_RPM_BUILDREQUIRES "cmake >= 3.17, gcc-c++, boost-devel >= 1.61.0, libcurl-devel, openssl-devel, zlib-devel, expat-devel, mariadb-connector-c-devel, postgresql-devel, unixODBC-devel, systemd-devel, git, make, flex, bison" )
+#set ( CPACK_RPM_BUILDREQUIRES "cmake >= 3.17, gcc-c++, boost-devel >= 1.61.0, libcurl-devel, openssl-devel, zlib-devel, expat-devel, mariadb-connector-c-devel, postgresql-devel, unixODBC-devel, systemd-devel, git, make, flex, bison" )
 
 # Configure cmake parameters for SRPM builds - disable problematic components by default
-set ( CPACK_RPM_SOURCE_PKG_BUILD_PARAMS "-DWITH_GALERA=0 -DWITH_RE2_FORCE_STATIC=1 -DWITH_STEMMER_FORCE_STATIC=1" )
+#set ( CPACK_RPM_SOURCE_PKG_BUILD_PARAMS "-DWITH_RE2_FORCE_STATIC=1 -DWITH_STEMMER_FORCE_STATIC=1" )
 
 # For source RPMs: Override the make command to use cmake --build instead
 # This automatically handles any generator (Unix Makefiles, Ninja, etc.)

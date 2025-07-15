@@ -46,8 +46,8 @@ download_package() {
 					# Extract date-commit from version_string (after the +)
 					date_commit=$(echo "$version_string" | cut -d'+' -f2)
 					
-					echo "Wgetting from https://github.com/manticoresoftware/executor/releases/download/v${version}/manticore-executor_${version}-${date_commit}_linux_amd64-dev.tar.gz"
-					wget -q -O 'manticore-executor-dev.tar.gz' "https://github.com/manticoresoftware/executor/releases/download/v${version}/manticore-executor_${version}-${date_commit}_linux_amd64-dev.tar.gz"
+					echo "Wgetting from https://github.com/manticoresoftware/executor/releases/download/${version}/manticore-executor-${version}+${date_commit}-linux-amd64-dev.tar.gz"
+					wget -q -O 'manticore-executor-dev.tar.gz' "https://github.com/manticoresoftware/executor/releases/download/${version}/manticore-executor-${version}+${date_commit}-linux-amd64-dev.tar.gz"
 				else
 					# Handle old format
 					echo "Wgetting from https://github.com/manticoresoftware/executor/releases/download/v${version}/manticore-executor_${version}-${date}-${commit}_linux_amd64-dev.tar.gz"
@@ -55,9 +55,9 @@ download_package() {
 				fi
 				
 				tar -xzf 'manticore-executor-dev.tar.gz'
-				
+
 				# Find the extracted directory
-				executor_dev_dir=$(find . -type d -name "manticore-executor_*_linux_amd64-dev" | head -n 1)
+				executor_dev_dir=$(find . -type d -name "manticore-executor-*-linux-amd64-dev" | head -n 1)
 				executor_dev_path=$(realpath "${executor_dev_dir}/manticore-executor")
 				
 				# Also add extra package

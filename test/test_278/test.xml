@@ -699,6 +699,113 @@ drop table join1b;
 drop table join2;
 drop table d;
 
+<!-- join over distributed right table -->
+create table join1 ( id bigint, title text, string_id integer );
+insert into join1 values ( 1, 'doc1', 1 );
+insert into join1 values ( 2, 'doc2', 1 );
+insert into join1 values ( 3, 'doc3', 2 );
+insert into join1 values ( 4, 'doc4', 2 );
+insert into join1 values ( 5, 'doc5', 3 );
+insert into join1 values ( 6, 'doc6', 3 );
+insert into join1 values ( 7, 'doc7', 4 );
+insert into join1 values ( 8, 'doc8', 4 );
+insert into join1 values ( 9, 'doc9', 5 );
+insert into join1 values ( 10, 'doc10', 5 );
+insert into join1 values ( 11, 'doc11', 6 );
+insert into join1 values ( 12, 'doc12', 6 );
+insert into join1 values ( 13, 'doc13', 7 );
+insert into join1 values ( 14, 'doc14', 7 );
+insert into join1 values ( 15, 'doc15', 8 );
+insert into join1 values ( 16, 'doc16', 8 );
+select * from join1 order by id asc;
+
+create table join2a ( id bigint, title text, name string attribute );
+insert into join2a values ( 1, 'str1', 'string1' );
+insert into join2a values ( 2, 'str2', 'string2' );
+insert into join2a values ( 3, 'str3', 'string3' );
+insert into join2a values ( 4, 'str4', 'string4' );
+select * from join2a order by id asc;
+
+create table join2b ( id bigint, title text, name string attribute );
+insert into join2b values ( 5, 'str5', 'string5' );
+insert into join2b values ( 6, 'str6', 'string6' );
+insert into join2b values ( 7, 'str7', 'string7' );
+insert into join2b values ( 8, 'str8', 'string8' );
+select * from join2b order by id asc;
+
+flush ramchunk join1;
+flush ramchunk join2a;
+flush ramchunk join2b;
+
+create table d type='distributed' local='join2a' local='join2b';
+
+select id, join2a.name from join1 inner join join2a on join1.string_id=join2a.id order by id asc;
+select id, join2b.name from join1 inner join join2b on join1.string_id=join2b.id order by id asc;
+select id, d.name from join1 inner join d on join1.string_id=d.id order by id asc;
+select id, d.name from join1 inner join d on join1.string_id=d.id where d.id>=3 order by id asc;
+select id, d.name from join1 inner join d on join1.string_id=d.id where d.id>=3 order by d.id desc;
+select id, d.name, (d.id+10)*2 from join1 inner join d on join1.string_id=d.id order by id asc;
+
+drop table join1;
+drop table join2a;
+drop table join2b;
+drop table d;
+
+
+<!-- join over distributed left and right tables -->
+create table join1a ( id bigint, title text, string_id integer );
+insert into join1a values ( 1, 'doc1a', 1 );
+insert into join1a values ( 2, 'doc2a', 1 );
+insert into join1a values ( 3, 'doc3a', 2 );
+insert into join1a values ( 4, 'doc4a', 2 );
+insert into join1a values ( 5, 'doc5a', 3 );
+insert into join1a values ( 6, 'doc6a', 3 );
+insert into join1a values ( 7, 'doc7a', 4 );
+insert into join1a values ( 8, 'doc8a', 4 );
+select * from join1a order by id asc;
+
+create table join1b ( id bigint, title text, string_id integer );
+insert into join1b values ( 9, 'doc9b', 5 );
+insert into join1b values ( 10, 'doc10b', 5 );
+insert into join1b values ( 11, 'doc11b', 6 );
+insert into join1b values ( 12, 'doc12b', 6 );
+insert into join1b values ( 13, 'doc13b', 7 );
+insert into join1b values ( 14, 'doc14b', 7 );
+insert into join1b values ( 15, 'doc15b', 8 );
+insert into join1b values ( 16, 'doc16b', 8 );
+select * from join1b order by id asc;
+
+create table join2a ( id bigint, title text, name string attribute );
+insert into join2a values ( 1, 'str1', 'string1' );
+insert into join2a values ( 2, 'str2', 'string2' );
+insert into join2a values ( 3, 'str3', 'string3' );
+insert into join2a values ( 4, 'str4', 'string4' );
+select * from join2a order by id asc;
+
+create table join2b ( id bigint, title text, name string attribute );
+insert into join2b values ( 5, 'str5', 'string5' );
+insert into join2b values ( 6, 'str6', 'string6' );
+insert into join2b values ( 7, 'str7', 'string7' );
+insert into join2b values ( 8, 'str8', 'string8' );
+select * from join2b order by id asc;
+
+flush ramchunk join1a;
+flush ramchunk join1b;
+flush ramchunk join2a;
+flush ramchunk join2b;
+
+create table d1 type='distributed' local='join1a' local='join1b';
+create table d2 type='distributed' local='join2a' local='join2b';
+
+select id, d2.name from d1 inner join d2 on d1.string_id=d2.id order by id asc;
+
+drop table join1a;
+drop table join1b;
+drop table join2a;
+drop table join2b;
+drop table d1;
+drop table d2;
+
 </sphinxql>
 </queries>
 

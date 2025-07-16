@@ -1314,6 +1314,15 @@ TEST_F ( QueryParser, transform_common_or_not_with_mixed_phrases )
 	);
 }
 
+TEST_F ( QueryParser, query_mixed_fields_zones_relaxed )
+{
+	Transform (
+		"@@relaxed ZONESPAN:aaa bbb | @missed ddd | fff eee",
+		"bbb",
+		"bbb"
+	);
+}
+
 TEST_F ( QueryParser, test_NOT )
 {
 	struct QueryTest_t

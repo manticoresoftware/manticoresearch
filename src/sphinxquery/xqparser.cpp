@@ -49,7 +49,10 @@ int GetZoneIndex ( XQQuery_t * pQuery, const CSphString & sZone )
 
 bool HasMissedField ( const XQLimitSpec_t & tSpec )
 {
-	return (tSpec.m_dFieldMask.TestAll ( false ) && tSpec.m_iFieldMaxPos == 0 && !tSpec.m_bZoneSpan && tSpec.m_dZones.GetLength() == 0);
+	return (tSpec.m_bFieldSpec
+		&& tSpec.m_dFieldMask.TestAll ( false )
+		&& tSpec.m_iFieldMaxPos == 0
+		);
 }
 }
 

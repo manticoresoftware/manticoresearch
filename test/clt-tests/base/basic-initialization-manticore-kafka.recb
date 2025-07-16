@@ -1,6 +1,9 @@
 ––– comment –––
 Create bridge network for container communication
 ––– input –––
+aaa
+––– output –––
+––– input –––
 docker network create app-network --driver bridge > /dev/null; echo $?
 ––– output –––
 0

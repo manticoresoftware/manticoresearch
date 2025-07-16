@@ -2385,3 +2385,5 @@ Manticore Search 使用 cmake 构建，最低 gcc 编译版本要求为 4.7.2。
 * [Commit 86ae](https://github.com/manticoresoftware/manticore/commit/86aeb82) 修复处理错误多查询的问题
 * [提交 2645](https://github.com/manticoresoftware/manticore/commit/2645230) 修复了结果集依赖于多查询顺序的问题
 
+## Version 2.3.3, 2017年7月6日
+Manticore品牌

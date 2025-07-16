@@ -653,6 +653,9 @@ To further optimize join operations, Manticore Search employs a caching mechanis
   - Each thread maintains its own cache, so the total memory usage depends on the number of threads and the cache size.
   - Ensure your server has sufficient memory to accommodate the cache, especially for high-concurrency environments.
 
+## Joining distributed tables
+
+Distributed tables consisting only of local tables are supported on both the left and right sides of a join query. However, distributed tables that include remote tables are not supported.
 
 ## Caveats and best practices
 

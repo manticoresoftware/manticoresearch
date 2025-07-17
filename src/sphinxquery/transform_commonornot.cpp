@@ -48,6 +48,12 @@ bool CSphTransformation::TransformCommonOrNot () noexcept
 			if ( dSimilarNodes.GetLength()<2 )
 				continue;
 
+			CSphVector<const XQNode_t *> dParents;
+			dSimilarNodes.for_each ( [&dParents] ( const auto* pNode ) { dParents.Add ( pNode->m_pParent ); } );
+			dParents.Uniq();
+			if ( dParents.GetLength()<2 )
+				continue;
+
 			if ( CollectRelatedNodes < GrandNode, Grand2Node> ( dSimilarNodes ) )
 			{
 				MakeTransformCommonOrNot ( dSimilarNodes );

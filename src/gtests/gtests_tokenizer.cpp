@@ -1323,6 +1323,14 @@ TEST_F ( QueryParser, query_mixed_fields_zones_relaxed )
 	);
 }
 
+TEST_F ( QueryParser, query_assert_from_fuzzer )
+{
+	CSphIndexSettings tTmpSettings;
+	XQQuery_t tQuery;
+	sphParseExtendedQuery ( tQuery, "aaa << !bbb ccc:x << !ddd | eee", nullptr, pTokenizer, &tSchema, pDict, tTmpSettings, nullptr );
+}
+
+
 TEST_F ( QueryParser, test_NOT )
 {
 	struct QueryTest_t

@@ -739,5 +739,10 @@ XQNode_t * XQParseHelper_c::SpawnNode ( const XQLimitSpec_t & dSpec ) noexcept
 void XQParseHelper_c::DeleteSpawned ( XQNode_t * pNode ) noexcept
 {
 	m_dSpawned.RemoveValue ( pNode ); // OPTIMIZE!
+	pNode->WithChildren([this] ( auto & dChildren ) {
+		for ( auto* pChild : dChildren )
+			DeleteSpawned ( pChild );
+	});
+	pNode->ResetChildren();
 	SafeDelete ( pNode );
 }

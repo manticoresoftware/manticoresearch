@@ -451,8 +451,8 @@ void CSphTransformation::MakeTransformCommonPhrase ( const CSphVector<XQNode_t *
 		});
 	}
 
-	auto * pNewOr = new XQNode_t ( XQLimitSpec_t() );
-	pNewOr->SetOp ( SPH_QUERY_OR );
+
+	std::optional<XQNode_t*> pMaybeNewOr;
 
 	for ( XQNode_t * pPhrase : dCommonNodes )
 	{
@@ -463,6 +463,15 @@ void CSphTransformation::MakeTransformCommonPhrase ( const CSphVector<XQNode_t *
 			SafeDelete ( pPhrase );
 			continue;
 		}
+
+		if (!pMaybeNewOr)
+		{
+			pMaybeNewOr.emplace ( new XQNode_t ( XQLimitSpec_t() ) );
+			(*pMaybeNewOr)->SetOp ( SPH_QUERY_OR );
+		}
+
+		assert ( pMaybeNewOr.has_value() );
+		auto* pNewOr = *pMaybeNewOr;
 
 		// move phrase to new OR
 		pNewOr->AddNewChild ( pPhrase );
@@ -493,22 +502,23 @@ void CSphTransformation::MakeTransformCommonPhrase ( const CSphVector<XQNode_t *
 			pPhrase->SetOp ( SPH_QUERY_AND );
 	}
 
-	if ( pNewOr->dChildren().GetLength() )
-	{
-		// parent phrase need valid atom position of children
-		pNewOr->m_iAtomPos = pNewOr->dChild(0)->dWord(0).m_iAtomPos;
-
-		auto * pNewPhrase = new XQNode_t ( XQLimitSpec_t() );
-		if ( bHeadIsCommon )
-			pNewPhrase->SetOp ( SPH_QUERY_PHRASE, pCommonPhrase, pNewOr );
-		else
-			pNewPhrase->SetOp ( SPH_QUERY_PHRASE, pNewOr, pCommonPhrase );
-
-		pGrandOr->AddNewChild ( pNewPhrase );
-	} else
+	if ( !pMaybeNewOr )
 	{
 		// common phrases with same words elimination
 		pGrandOr->AddNewChild ( pCommonPhrase );
-		SafeDelete ( pNewOr );
+		return;
 	}
+
+	auto * pNewOr = *pMaybeNewOr;
+
+	// parent phrase need valid atom position of children
+	pNewOr->m_iAtomPos = pNewOr->dChild(0)->dWord(0).m_iAtomPos;
+
+	auto * pNewPhrase = new XQNode_t ( XQLimitSpec_t() );
+	if ( bHeadIsCommon )
+		pNewPhrase->SetOp ( SPH_QUERY_PHRASE, pCommonPhrase, pNewOr );
+	else
+		pNewPhrase->SetOp ( SPH_QUERY_PHRASE, pNewOr, pCommonPhrase );
+
+	pGrandOr->AddNewChild ( pNewPhrase );
 }

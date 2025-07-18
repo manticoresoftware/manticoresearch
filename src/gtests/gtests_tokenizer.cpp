@@ -966,6 +966,17 @@ TEST_F ( QueryParser, transform_common_compound_not_3 )
 	);
 }
 
+TEST_F ( QueryParser, transform_common_compound_not_4 )
+{
+	Transform (
+		"((aaa bbb) !(nnn ccc)) | ((mmm bbb) !(nnn ddd))",
+		"( ( ( aaa   bbb ) AND NOT ( nnn   ccc ) ) | ( ( mmm   bbb ) AND NOT ( nnn   ddd ) ) )",
+		"( ( ( aaa   bbb ) AND NOT ccc ) | ( ( mmm   bbb ) AND NOT ddd ) | ( ( ( aaa   bbb ) | ( mmm   bbb ) ) AND NOT nnn ) )",
+		//
+		dPseudoHits0
+	);
+}
+
 // COMMON COMPOUND NOT WITH MIXED PHRASES/PROXIMITY terms
 TEST_F ( QueryParser, transform_common_compound_not_with_mixed_phrases )
 {	Transform (

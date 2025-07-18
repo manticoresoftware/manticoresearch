@@ -866,6 +866,8 @@ XQNode_t * XQParser_t::AddOp ( XQOperator_e eOp, XQNode_t * pLeft, XQNode_t * pR
 	{
 		pLeft->AddNewChild ( pRight );
 		pResult = pLeft;
+		if ( HasMissedField ( pResult->m_dSpec ) )
+			pResult->m_dSpec = pRight->m_dSpec;
 	} else
 	{
 		// however-2, beside all however below, [@@relaxed ((@title hello) | (@missed world)) @body other terms]

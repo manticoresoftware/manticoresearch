@@ -1343,6 +1343,15 @@ TEST_F ( QueryParser, query_mixed_fields_zones_relaxed_2 )
 	);
 }
 
+TEST_F ( QueryParser, query_mixed_fields_zones_relaxed_3 )
+{
+	Transform (
+		"@@relaxed @t r ( ?-?  | y @*xxx  | yyy )",
+		"( xxx | yyy )",
+		"( xxx | yyy )"
+	);
+}
+
 TEST_F ( QueryParser, query_assert_from_fuzzer )
 {
 	CSphIndexSettings tTmpSettings;

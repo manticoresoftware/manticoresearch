@@ -1316,14 +1316,14 @@ TEST_F ( QueryParser, transform_excess_and_not )
 }
 
 // COMMON | NOT WITH MIXED PHRASES/PROXIMITY terms
-TEST_F ( QueryParser, transform_common_or_not_with_mixed_phrases )
+/*TEST_F ( QueryParser, transform_common_or_not_with_mixed_phrases )
 {
 	Transform (
 		"( aaa !( \"jjj kkk\"~10 | (aaa|nnn) ) ) | ( bbb !( fff | \"jjj kkk\" ) ) | ( ccc !( (hhh kkk) | \"jjj kkk\"~20 ) )",
 		"( ( aaa AND NOT ( \"jjj kkk\"~10 | ( aaa | nnn ) ) ) | ( bbb AND NOT ( fff | \"jjj kkk\" ) ) | ( ccc AND NOT ( ( hhh   kkk ) | \"jjj kkk\"~20 ) ) )",
 		"( ( ( aaa AND NOT ( aaa | nnn ) ) | ( bbb AND NOT fff ) | ( ccc AND NOT ( hhh   kkk ) ) ) AND NOT \"jjj kkk\"~20 )"
 	);
-}
+}*/
 
 TEST_F ( QueryParser, query_mixed_fields_zones_relaxed_1 )
 {

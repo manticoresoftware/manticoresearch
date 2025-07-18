@@ -1338,8 +1338,8 @@ TEST_F ( QueryParser, query_mixed_fields_zones_relaxed_2 )
 {
 	Transform (
 		"@@relaxed aaa!bbb | @zzz c",
-		"bbb",
-		"bbb"
+		"( aaa AND NOT bbb )",
+		"( aaa AND NOT bbb )"
 	);
 }
 

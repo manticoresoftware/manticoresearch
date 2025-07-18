@@ -848,7 +848,7 @@ XQNode_t * XQParser_t::AddOp ( XQOperator_e eOp, XQNode_t * pLeft, XQNode_t * pR
 
 	if ( eOp==SPH_QUERY_NOT )
 	{
-		XQNode_t * pNode = SpawnNode ( *m_dStateSpec.Last() );
+		XQNode_t * pNode = SpawnNode ( pLeft ? pLeft->m_dSpec : *m_dStateSpec.Last() );
 		pNode->SetOp ( SPH_QUERY_NOT, pLeft );
 		return pNode;
 	}

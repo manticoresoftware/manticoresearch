@@ -982,7 +982,7 @@ TEST_F ( QueryParser, transform_common_compound_not_with_mixed_phrases )
 {	Transform (
 		"(aaa !(ccc \"nnn zzz\"~20)) | (bbb !(\"nnn zzz\"~10 ddd)) | (ccc !\"nnn zzz\")",
 		"( ( aaa AND NOT ( ccc   \"nnn zzz\"~20 ) ) | ( bbb AND NOT ( \"nnn zzz\"~10   ddd ) ) | ( ccc AND NOT \"nnn zzz\" ) )",
-		"( ( aaa AND NOT ccc ) | ( bbb AND NOT ddd ) | ( ( ccc | aaa | bbb ) AND NOT \"nnn zzz\"~20 ) )",
+		"( ( aaa AND NOT ccc ) | ( bbb AND NOT ddd ) | ( ( ccc | bbb | aaa ) AND NOT \"nnn zzz\"~20 ) )",
 		dPseudoHits0
 	);
 }
@@ -1347,6 +1347,16 @@ TEST_F ( QueryParser, query_common_or_not )
 		"( aaa | ( bbb !( ccc | ccc ) ) )",
 		"( aaa | ( bbb AND NOT ( ccc | ccc ) ) )",
 		"( aaa | ( bbb AND NOT ( ccc | ccc ) ) )" );
+}
+
+TEST_F ( QueryParser, multi_query_common_compoundnot )
+{
+	Transform (
+		"aaa | ( ddag ! ( bbb ccc ccc ) )",
+		"( aaa | ( ddag AND NOT ( bbb   ccc   ccc ) ) )",
+		"( aaa | ( ddag AND NOT ( bbb   ccc ) ) )",
+		dFuzzerPseudoHits
+	);
 }
 
 

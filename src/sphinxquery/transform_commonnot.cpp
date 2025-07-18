@@ -46,6 +46,8 @@ bool CSphTransformation::TransformCommonNot () noexcept
 			if ( dSimilarNodes.GetLength() < 2 )
 				continue;
 
+			assert (!HasSameParent ( dSimilarNodes ));
+
 			if ( !CollectRelatedNodes<ParentNode, GrandNode> ( dSimilarNodes ) )
 				continue;
 

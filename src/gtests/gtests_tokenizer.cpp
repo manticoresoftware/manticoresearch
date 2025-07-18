@@ -982,7 +982,7 @@ TEST_F ( QueryParser, transform_common_compound_not_with_mixed_phrases )
 {	Transform (
 		"(aaa !(ccc \"nnn zzz\"~20)) | (bbb !(\"nnn zzz\"~10 ddd)) | (ccc !\"nnn zzz\")",
 		"( ( aaa AND NOT ( ccc   \"nnn zzz\"~20 ) ) | ( bbb AND NOT ( \"nnn zzz\"~10   ddd ) ) | ( ccc AND NOT \"nnn zzz\" ) )",
-		"( ( aaa AND NOT ccc ) | ( bbb AND NOT ddd ) | ( ( ccc | bbb | aaa ) AND NOT \"nnn zzz\"~20 ) )",
+		"( ( aaa AND NOT ccc ) | ( bbb AND NOT ddd ) | ( ( ccc | aaa | bbb ) AND NOT \"nnn zzz\"~20 ) )",
 		dPseudoHits0
 	);
 }
@@ -1325,10 +1325,19 @@ TEST_F ( QueryParser, transform_common_or_not_with_mixed_phrases )
 	);
 }
 
-TEST_F ( QueryParser, query_mixed_fields_zones_relaxed )
+TEST_F ( QueryParser, query_mixed_fields_zones_relaxed_1 )
 {
 	Transform (
 		"@@relaxed ZONESPAN:aaa bbb | @missed ddd | fff eee",
+		"bbb",
+		"bbb"
+	);
+}
+
+TEST_F ( QueryParser, query_mixed_fields_zones_relaxed_2 )
+{
+	Transform (
+		"@@relaxed aaa!bbb | @zzz c",
 		"bbb",
 		"bbb"
 	);

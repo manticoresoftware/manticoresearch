@@ -103,9 +103,11 @@ void CSphTransformation::MakeTransformCommonCompoundNot ( const CSphVector<XQNod
 	ARRAY_FOREACH ( i, m_dRelatedNodes )
 	{
 		// ANDNOT operation implies AND and NOT nodes.
-		// The related nodes point to AND node that has one child node.
-		assert ( m_dRelatedNodes[i]->dChildren().GetLength()==1 );
-		dNewOrChildren[i] = m_dRelatedNodes[i]->dChild(0)->Clone();
+		// The related nodes point to AND node
+		if ( m_dRelatedNodes[i]->dChildren().GetLength()==1 )
+			dNewOrChildren[i] = m_dRelatedNodes[i]->dChild (0)->Clone();
+		else
+			dNewOrChildren[i] = m_dRelatedNodes[i]->Clone();
 	}
 
 	auto * pNewOr = new XQNode_t ( XQLimitSpec_t() );

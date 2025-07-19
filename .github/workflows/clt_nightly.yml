@@ -75,9 +75,6 @@ jobs:
           - name: Jammy release installation
             image: ubuntu:jammy
             test_prefix: test/clt-tests/installation/deb-release-
-          - name: Buster release installation
-            image: debian:buster
-            test_prefix: test/clt-tests/installation/deb-release-
           - name: Bullseye release installation
             image: debian:bullseye
             test_prefix: test/clt-tests/installation/deb-release-
@@ -110,9 +107,6 @@ jobs:
             test_prefix: test/clt-tests/installation/deb-dev-u
           - name: Jammy upgrade to dev
             image: ubuntu:jammy
-            test_prefix: test/clt-tests/installation/deb-dev-u
-          - name: Buster upgrade to dev
-            image: debian:buster
             test_prefix: test/clt-tests/installation/deb-dev-u
           - name: Bullseye upgrade to dev
             image: debian:bullseye
@@ -200,9 +194,6 @@ jobs:
           - name: Jammy release installation
             image: ubuntu:jammy
             test_prefix: test/clt-tests/installation/deb-release-
-          - name: Buster release installation
-            image: debian:buster
-            test_prefix: test/clt-tests/installation/deb-release-
           - name: Bullseye release installation
             image: debian:bullseye
             test_prefix: test/clt-tests/installation/deb-release-
@@ -235,9 +226,6 @@ jobs:
             test_prefix: test/clt-tests/installation/deb-dev-u
           - name: Jammy upgrade to dev
             image: ubuntu:jammy
-            test_prefix: test/clt-tests/installation/deb-dev-u
-          - name: Buster upgrade to dev
-            image: debian:buster
             test_prefix: test/clt-tests/installation/deb-dev-u
           - name: Bullseye upgrade to dev
             image: debian:bullseye

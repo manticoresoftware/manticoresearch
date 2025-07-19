@@ -77,6 +77,14 @@ set ( THREADS_PREFER_PTHREAD_FLAG ON )
 find_package ( Threads REQUIRED )
 target_link_libraries ( lextra INTERFACE Threads::Threads )
 
+if (QFUZZER)
+if (CMAKE_CXX_COMPILER_ID STREQUAL "Clang")
+	target_compile_options ( lextra INTERFACE -g -fsanitize=address,fuzzer )
+else()
+	message(FATAL_ERROR "QFUZZER requires Clang compiler")
+endif()
+endif()
+
 # Checking for specific headers
 include ( CheckIncludeFile )
 

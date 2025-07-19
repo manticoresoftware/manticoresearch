@@ -47,9 +47,13 @@ bool CSphTransformation::TransformCommonCompoundNot () noexcept
 				continue;
 
 			// Nodes with the same iFuzzyHash
-			if ( dSimilarNodes.GetLength()<2 || !CollectRelatedNodes<GrandNode, Grand2Node> ( dSimilarNodes ) )
+			if ( dSimilarNodes.GetLength()<2
+				|| !CollectRelatedNodes<GrandNode, Grand2Node> ( dSimilarNodes ) )
 				continue;
 
+			// if related similar are from the same tree, related will be the same.
+			// by 'uniq' we will reduce dupes
+			m_dRelatedNodes.Uniq();
 			// Load cost of the first node from the group
 			// of the common nodes. The cost of nodes from
 			// TransformableNodes are the same.
@@ -103,16 +107,23 @@ void CSphTransformation::MakeTransformCommonCompoundNot ( const CSphVector<XQNod
 	ARRAY_FOREACH ( i, m_dRelatedNodes )
 	{
 		// ANDNOT operation implies AND and NOT nodes.
-		// The related nodes point to AND node that has one child node.
-		assert ( m_dRelatedNodes[i]->dChildren().GetLength()==1 );
-		dNewOrChildren[i] = m_dRelatedNodes[i]->dChild(0)->Clone();
+		// The related nodes point to AND node
+		if ( m_dRelatedNodes[i]->dChildren().GetLength()==1 )
+			dNewOrChildren[i] = m_dRelatedNodes[i]->dChild (0)->Clone();
+		else
+			dNewOrChildren[i] = m_dRelatedNodes[i]->Clone();
 	}
 
-	auto * pNewOr = new XQNode_t ( XQLimitSpec_t() );
-	pNewOr->SetOp ( SPH_QUERY_OR, dNewOrChildren );
+	XQNode_t * pSingleRelatedOrNewOr;
+	if ( dNewOrChildren.GetLength()>1 )
+	{
+		pSingleRelatedOrNewOr = new XQNode_t ( XQLimitSpec_t() );
+		pSingleRelatedOrNewOr->SetOp ( SPH_QUERY_OR, dNewOrChildren );
+	} else
+		pSingleRelatedOrNewOr = dNewOrChildren[0];
 
 	auto * pNewAnd = new XQNode_t ( XQLimitSpec_t() );
-	pNewAnd->SetOp ( SPH_QUERY_AND, pNewOr );
+	pNewAnd->SetOp ( SPH_QUERY_AND, pSingleRelatedOrNewOr );
 	auto * pNewAndNot = new XQNode_t ( XQLimitSpec_t() );
 	pNewAndNot->SetOp ( SPH_QUERY_ANDNOT, pNewAnd, pNewNot );
 	pCommonOr->AddNewChild ( pNewAndNot );

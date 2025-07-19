@@ -187,7 +187,10 @@ CSphString sphReconstructNode ( const XQNode_t * pNode, const CSphSchema * pSche
 			else if (!pNode->m_dSpec.m_dFieldMask.TestAll(false))
 				sFields.SetSprintf ( "%s,%u", sFields.cstr(), pNode->m_dSpec.m_dFieldMask.GetMask32() );
 
-			sRes.Sprintf ( "( @%s: %s )", sFields.cstr()+1, sTrim.cstr() );
+			if ( sFields.IsEmpty() )
+				sRes.Sprintf ( "( @missed: %s )", sTrim.cstr() );
+			else
+				sRes.Sprintf ( "( @%s: %s )", sFields.cstr() + 1, sTrim.cstr() );
 		} else
 		{
 			if ( pNode->GetOp()==SPH_QUERY_AND && dWords.GetLength()>1 )

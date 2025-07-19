@@ -41,6 +41,7 @@ private:
 	void SetCosts ( XQNode_t * pNode, const CSphVector<XQNode_t *> & dNodes ) const noexcept;
 
 	static int GetWeakestIndex ( const CSphVector<XQNode_t *> & dNodes );
+	static int GetWeakestChildIndex ( const CSphVector<XQNode_t *> & dNodes );
 
 	template<typename Group, typename SubGroup>
 	void TreeCollectInfo ( XQNode_t * pNode, Checker_fn pfnChecker, int iDeep );
@@ -171,3 +172,5 @@ bool CSphTransformation::CollectRelatedNodes ( const CSphVector<XQNode_t *> & dS
 	}
 	return m_dRelatedNodes.GetLength()>1;
 }
+
+bool HasSameParent ( const VecTraits_T<XQNode_t *> & dSimilarNodes ) noexcept;

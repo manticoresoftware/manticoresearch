@@ -381,7 +381,7 @@ jobs:
       CTEST_CMAKE_GENERATOR: "Ninja Multi-Config"
       CTEST_CONFIGURATION_TYPE: Debug
       cache_key: build_windows_x64
-      artifact_list: "build/xml build/src/Debug/indexer.exe build/src/Debug/searchd.exe build/src/gtests/Debug/gmanticoretest.exe build/src/Debug/*.dll build/src/gtests/Debug/*.dll build/config/*.c build/config/*.h"
+      artifact_list: "build/xml build/src/Debug/indexer.exe build/src/Debug/indexer.pdb build/src/Debug/searchd.exe build/src/Debug/searchd.pdb build/src/gtests/Debug/gmanticoretest.exe build/src/gtests/Debug/gmanticoretest.pdb build/src/Debug/*.dll build/src/gtests/Debug/*.dll build/config/*.c build/config/*.h"
       COLUMNAR_LOCATOR: ${{ needs.check_branch.outputs.columnar_locator }}
 
   test_windows:

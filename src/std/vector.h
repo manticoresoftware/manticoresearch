@@ -24,6 +24,9 @@
 namespace sph
 {
 
+enum Stable_e { stable };
+enum Unstable_e { unstable };
+
 /// generic vector
 /// uses storage, mover and relimit backends
 /// (don't even ask why it's not std::vector)
@@ -126,7 +129,7 @@ public:
 
 	/// Set whole vec to 0. For trivially copyable memset will be used
 	template<typename S = STORE>
-	typename std::enable_if<S::is_constructed>::type ZeroVec();
+	std::enable_if_t<S::is_constructed> ZeroVec();
 
 	/// set the tail [m_iCount..m_iLimit) to zero
 	void ZeroTail();
@@ -139,7 +142,20 @@ public:
 	int64_t AllocatedBytes() const;
 
 	/// filter unique
-	void Uniq ( bool bSort=true );
+
+	/// non-pointer types
+	template<typename TT = T>
+	std::enable_if_t<!std::is_pointer_v<TT>> Uniq ( bool bSort=true );
+
+	/// pointers not critical to ordering. On different platforms/allocators pointers may come in different absolute
+	/// meaning, sorting during Uniq will give non-consistent result on different platforms. If you don't care, call
+	/// Uniq(sph::unstable...)
+	template<typename TT = T>
+	std::enable_if_t<std::is_pointer_v<TT>> Uniq ( Unstable_e, bool bSort=true );
+
+	/// pointers critical to ordering.
+	template<typename TT = T>
+	std::enable_if_t<std::is_pointer_v<TT>> Uniq ( Stable_e );
 
 	void MergeSorted ( const Vector_T<T>& dA, const Vector_T<T>& dB );
 

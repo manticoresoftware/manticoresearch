@@ -52,8 +52,9 @@ bool CSphTransformation::TransformCommonCompoundNot () noexcept
 				continue;
 
 			// if related similar are from the same tree, related will be the same.
-			// by 'uniq' we will reduce dupes
-			m_dRelatedNodes.Uniq();
+			// by 'uniq' we will reduce dupes. Notice, here stable uniq; we don't want change the sequence
+			// depend on pointers values
+			m_dRelatedNodes.Uniq(sph::stable);
 			// Load cost of the first node from the group
 			// of the common nodes. The cost of nodes from
 			// TransformableNodes are the same.

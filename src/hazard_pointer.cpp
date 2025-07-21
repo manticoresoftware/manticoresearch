@@ -218,7 +218,7 @@ CSphVector<Pointer_t> CollectActiveHazardPointers()
 	});
 
 	// stage 2. sort and uniq; we will use binsearch then
-	dActive.Uniq();
+	dActive.Uniq(sph::unstable);
 	return dActive;
 }
 

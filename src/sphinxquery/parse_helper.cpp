@@ -358,7 +358,7 @@ void XQParseHelper_c::Warning ( const char * sTemplate, ... )
 
 void XQParseHelper_c::Cleanup()
 {
-	m_dSpawned.Uniq(); // FIXME! should eliminate this by testing
+	m_dSpawned.Uniq(sph::unstable); // FIXME! should eliminate this by testing
 
 	for ( auto& pSpawned : m_dSpawned )
 	{

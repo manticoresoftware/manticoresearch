@@ -220,7 +220,7 @@ bool CSphTransformation::TransformCommonKeywords () const noexcept
 	}
 
 	const bool bTransformed = ( dPendingDel.GetLength()>0 );
-	dPendingDel.Sort();
+	dPendingDel.Sort(Lesser ( [] ( XQNode_t * a, XQNode_t * b ) { return a < b; } ));
 	// Delete stronger terms
 	XQNode_t * pLast = nullptr;
 	for ( XQNode_t * pPending : dPendingDel ) // by value, as later that pointer will be compared

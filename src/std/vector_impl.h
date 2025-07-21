@@ -15,6 +15,7 @@
 #include <cassert>
 #include "checks.h"
 #include "uniq.h"
+#include "orderedhash.h"
 
 namespace sph
 {
@@ -324,7 +325,7 @@ void Vector_T<T, POLICY, LIMIT, STORE>::Reset()
 /// Set whole vec to 0. For trivially copyable memset will be used
 template<typename T, class POLICY, class LIMIT, class STORE>
 template<typename S>
-typename std::enable_if<S::is_constructed>::type Vector_T<T, POLICY, LIMIT, STORE>::ZeroVec()
+std::enable_if_t<S::is_constructed> Vector_T<T, POLICY, LIMIT, STORE>::ZeroVec()
 {
 	POLICY::Zero ( m_pData, m_iLimit );
 }
@@ -356,7 +357,8 @@ int64_t Vector_T<T, POLICY, LIMIT, STORE>::AllocatedBytes() const
 
 /// filter unique
 template<typename T, class POLICY, class LIMIT, class STORE>
-void Vector_T<T, POLICY, LIMIT, STORE>::Uniq ( bool bSort )
+template<typename TT>
+std::enable_if_t<!std::is_pointer_v<TT>> Vector_T<T, POLICY, LIMIT, STORE>::Uniq(bool bSort)
 {
 	if ( !m_iCount )
 		return;
@@ -367,6 +369,37 @@ void Vector_T<T, POLICY, LIMIT, STORE>::Uniq ( bool bSort )
 	int64_t iLeft = sphUniq ( m_pData, m_iCount );
 	Shrink ( iLeft );
 }
+
+template<typename T, class POLICY, class LIMIT, class STORE>
+template<typename TT>
+std::enable_if_t<std::is_pointer_v<TT>> Vector_T<T, POLICY, LIMIT, STORE>::Uniq(Unstable_e, bool bSort)
+{
+	if ( !m_iCount )
+		return;
+
+	if ( bSort )
+		Sort ( Lesser ( [] ( const T a, const T b ) { return a < b; } ) );
+
+	int64_t iLeft = sphUniq ( m_pData, m_iCount );
+	Shrink ( iLeft );
+}
+
+template<typename T, class POLICY, class LIMIT, class STORE>
+template<typename TT>
+std::enable_if_t<std::is_pointer_v<TT>> Vector_T<T, POLICY, LIMIT, STORE>::Uniq(Stable_e)
+{
+	if ( !m_iCount )
+		return;
+
+	// find uniq by hashing (to avoid non-stable result because of different platforms, allocators)
+	CSphOrderedHash<bool, uintptr_t, IdentityHash_fn, 32> hDupes;
+	for ( int i = 0; i < m_iCount; ++i )
+		hDupes.Add ( false, (uintptr_t) m_pData[i] );
+	Resize(0);
+	for (auto [key, value] : hDupes )
+		Add((T)key);
+}
+
 
 template<typename T, class POLICY, class LIMIT, class STORE>
 void Vector_T<T, POLICY, LIMIT, STORE>::MergeSorted ( const Vector_T<T>& dA, const Vector_T<T>& dB )

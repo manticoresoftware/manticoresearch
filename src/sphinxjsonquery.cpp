@@ -356,6 +356,9 @@ static JsonObj_c FindFullTextQueryNode ( const JsonObj_c & tRoot )
 
 static bool HasFulltext ( const XQNode_t * pRoot )
 {
+	if ( !pRoot )
+		return false;
+
 	CSphVector<const XQNode_t *> dNodes;
 	dNodes.Add ( pRoot );
 

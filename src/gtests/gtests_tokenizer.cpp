@@ -661,6 +661,11 @@ static void CheckQuerySoftSpace ( const XQNode_t * pNode, const int * pQPos, int
 	ASSERT_STREQ ( dTerms.Last ()->m_sWord.cstr (), "off" );
 }
 
+struct CKeywordHits
+{
+	const char * m_szKeyword;
+	int m_iHits;
+};
 
 class QueryParser : public TokenizerGtest
 {
@@ -701,6 +706,7 @@ protected:
 	DictRefPtr_c pDict;
 	CSphSchema tSchema;
 	CSphIndexSettings tTmpSettings;
+	static constexpr CKeywordHits dFuzzerPseudoHits[] = { { "aaa", 0 }, { "bbb", 0 }, { "ccc", 35 }, { "ddd", 63 }, { "eee", 2445 } };
 };
 
 void QueryParser::TestMany (const char* szQuery, const char* szReconst)
@@ -809,12 +815,6 @@ bool CSphDummyIndex::FillKeywords ( CSphVector <CSphKeywordInfo> & dKeywords ) c
 
 	return true;
 }
-
-struct CKeywordHits
-{
-	const char * m_szKeyword;
-	int m_iHits;
-};
 
 void QueryParser::Transform ( const char * szQuery, const char * szReconst, const char *szReconstTransformed, const CKeywordHits * pKeywordHits ) const
 {
@@ -1281,6 +1281,16 @@ TEST_F ( QueryParser, transform_common_or_not_with_mixed_phrases )
 		"( aaa !( \"jjj kkk\"~10 | (aaa|nnn) ) ) | ( bbb !( fff | \"jjj kkk\" ) ) | ( ccc !( (hhh kkk) | \"jjj kkk\"~20 ) )",
 		"( ( aaa AND NOT ( \"jjj kkk\"~10 | ( aaa | nnn ) ) ) | ( bbb AND NOT ( fff | \"jjj kkk\" ) ) | ( ccc AND NOT ( ( hhh   kkk ) | \"jjj kkk\"~20 ) ) )",
 		"( ( ( aaa AND NOT ( aaa | nnn ) ) | ( bbb AND NOT fff ) | ( ccc AND NOT ( hhh   kkk ) ) ) AND NOT \"jjj kkk\"~20 )"
+	);
+}
+
+TEST_F ( QueryParser, multi_query_common_compoundnot )
+{
+	Transform (
+		"aaa | ( ddag ! ( bbb ccc ccc ) )",
+		"( aaa | ( ddag AND NOT ( bbb   ccc   ccc ) ) )",
+		"( aaa | ( ddag AND NOT bbb ) | ( ( ddag | ddag ) AND NOT ccc ) )",
+		dFuzzerPseudoHits
 	);
 }
 

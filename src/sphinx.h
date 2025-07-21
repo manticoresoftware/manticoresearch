@@ -517,6 +517,7 @@ struct KnnSearchSettings_t
 	bool			m_bRescore = false;		///< KNN rescoring
 	float			m_fOversampling = 1.0f;	///< KNN oversampling
 	CSphVector<float> m_dVec;				///< KNN anchor vector
+	CSphString		m_sEmbStr;				///< string to generate embeddings from
 };
 
 /// search query. Pure struct, no member functions

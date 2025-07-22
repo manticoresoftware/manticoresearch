@@ -873,7 +873,8 @@ XQNode_t * XQParser_t::AddOp ( XQOperator_e eOp, XQNode_t * pLeft, XQNode_t * pR
 		// however-2, beside all however below, [@@relaxed ((@title hello) | (@missed world)) @body other terms]
 		// we should use valid (left) field mask for complex (OR) node
 		// as right node in this case has m_bFieldSpec==true but m_dFieldMask==0
-		const XQLimitSpec_t & tSpec = HasMissedField ( pRight->m_dSpec ) ? pLeft->m_dSpec : pRight->m_dSpec;
+		const bool bHasMissedField = HasMissedField ( pRight->m_dSpec );
+		const XQLimitSpec_t & tSpec = bHasMissedField ? pLeft->m_dSpec : pRight->m_dSpec;
 
 		// however, it's right (!) spec which is chosen for the resulting node,
 		// eg. '@title hello' + 'world @body program'

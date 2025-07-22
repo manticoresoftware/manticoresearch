@@ -117,13 +117,9 @@ bool CSphTransformation::TransformCommonSubTerm () noexcept
 				continue;
 
 			// Nodes with the same iFuzzyHash
-			if ( dX.GetLength()<2 )
-				continue;
-
-			// skip common sub-terms from same tree
-			HashUnique_t hDupes;
-			const bool bSame = dX.any_of ([&hDupes] (auto * pX) {return !hDupes.Add (0, (uintptr_t)ParentNode::From(pX));});
-			if ( bSame )
+			if ( dX.GetLength()<2
+				|| HasSameParent ( dX )
+				)
 				continue;
 
 			if ( !CollectRelatedNodes < ParentNode, GrandNode> ( dX ) )

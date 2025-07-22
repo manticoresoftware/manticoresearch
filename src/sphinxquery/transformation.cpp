@@ -227,6 +227,12 @@ void CSphTransformation::Transform ()
 	( *m_ppRoot )->Check ( true );
 }
 
+bool HasSameParent ( const VecTraits_T<XQNode_t *> & dSimilarNodes ) noexcept
+{
+	CSphOrderedHash<int, uintptr_t, IdentityHash_fn, 32> hDupes;
+	return dSimilarNodes.any_of ( [&hDupes] ( auto * pX ) { return !hDupes.Add ( 0, (uintptr_t) pX->m_pParent ); } );
+}
+
 void sphOptimizeBoolean ( XQNode_t ** ppRoot, const ISphKeywordsStat * pKeywords )
 {
 #if XQDEBUG

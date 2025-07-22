@@ -172,3 +172,5 @@ bool CSphTransformation::CollectRelatedNodes ( const CSphVector<XQNode_t *> & dS
 	}
 	return m_dRelatedNodes.GetLength()>1;
 }
+
+bool HasSameParent ( const VecTraits_T<XQNode_t *> & dSimilarNodes ) noexcept;

@@ -391,24 +391,33 @@ bool XQParseHelper_c::CheckQuorumProximity ( const XQNode_t * pNode )
 
 XQNode_t * XQParseHelper_c::FixupTree ( XQNode_t * pRoot, const XQLimitSpec_t & tLimitSpec, const CSphBitvec * pMorphFields, bool bOnlyNotAllowed )
 {
+//	Dump ( pRoot, "raw FixupTree" );
 	FixupDestForms ();
+//	Dump ( pRoot, "FixupDestForms" );
 	DeleteNodesWOFields ( pRoot );
+//	Dump ( pRoot, "DeleteNodesWOFields" );
 	pRoot = SweepNulls ( pRoot, bOnlyNotAllowed );
+//	Dump ( pRoot, "SweepNulls" );
 	FixupDegenerates ( pRoot, m_pParsed->m_sParseWarning );
+//	Dump ( pRoot, "FixupDegenerates" );
 	FixupMorphOnlyFields ( pRoot, pMorphFields );
+//	Dump ( pRoot, "FixupMorphOnlyFields" );
 	FixupNulls ( pRoot );
+//	Dump ( pRoot, "FixupNulls" );
 
 	if ( !FixupNots ( pRoot, bOnlyNotAllowed, &pRoot ) )
 	{
 		Cleanup ();
 		return nullptr;
 	}
+//	Dump ( pRoot, "FixupNots" );
 
 	if ( !CheckQuorumProximity ( pRoot ) )
 	{
 		Cleanup();
 		return nullptr;
 	}
+//	Dump ( pRoot, "CheckQuorumProximity" );
 
 	if ( pRoot && pRoot->GetOp()==SPH_QUERY_NOT )
 	{
@@ -639,6 +648,8 @@ void XQParseHelper_c::DeleteNodesWOFields ( XQNode_t * pNode )
 {
 	if ( !pNode )
 		return;
+
+//	Dump ( pNode, "DeleteNodesWOFields" );
 
 	pNode->WithChildren([this](auto& dChildren) {
 	for ( int i = 0; i < dChildren.GetLength (); ) // no ++i

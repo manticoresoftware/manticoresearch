@@ -50,6 +50,9 @@ bool CSphTransformation::TransformCommonAndNotFactor () const noexcept
 			if ( dSimilarNodes.GetLength()<2 )
 				continue;
 
+//			StringBuilder_c sHead;
+//			sHead << "\nTransformCommonAndNotFactor  ((A !X) | (A !Y) | (A !Z)) -> (A !(X Y Z))";
+//			Dump ( *m_ppRoot, sHead.cstr() );
 			MakeTransformCommonAndNotFactor ( dSimilarNodes );
 			iActiveDeep = hSimGroup.iDeep;
 			break;

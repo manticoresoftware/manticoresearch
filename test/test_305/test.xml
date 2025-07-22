@@ -1,0 +1,59 @@
+<?xml version="1.0" encoding="utf-8"?>
+<test>
+
+<name>knn vs columnar vs empty vectors</name>
+
+<requires>
+	<knn/>
+	<columnar/>
+	<force-rt/>
+</requires>
+
+<skip_indexer/>
+
+<config>
+searchd
+{
+	<searchd_Settings/>
+	data_dir = <data_path path="data0"/>
+	engine = columnar
+}
+</config>
+
+<queries>
+<sphinxql>
+    create table t (title text, emp float_vector knn_type='hnsw' knn_dims='8' hnsw_similarity='COSINE' quantization='1bit');
+	show create table t;
+	insert into t (id, title) values (1, 'title1');
+	insert into t (id, title) values (2, 'title2');
+	insert into t (id, title) values (3, 'title3');
+	insert into t (id, title) values (4, 'title4');
+	insert into t (id, title) values (5, 'title5');
+	flush ramchunk t;
+	insert into t (id, title) values (6, 'title6');
+	insert into t (id, title) values (7, 'title7');
+	insert into t (id, title) values (8, 'title8');
+	insert into t (id, title) values (9, 'title9');
+	insert into t (id, title) values (10, 'title10');
+	flush ramchunk t;
+	insert into t (id, title) values (11, 'title11');
+	insert into t (id, title) values (12, 'title12');
+	insert into t (id, title) values (13, 'title13');
+	insert into t (id, title) values (14, 'title14');
+	insert into t (id, title) values (15, 'title15');
+	flush ramchunk t;
+	insert into t (id, title) values (16, 'title16');
+	insert into t (id, title) values (17, 'title17');
+	insert into t (id, title) values (18, 'title18');
+	insert into t (id, title) values (19, 'title19');
+	insert into t (id, title) values (20, 'title20');
+	flush ramchunk t;
+	optimize table t option sync=1,cutoff=2;
+
+	select count (*) from t;
+
+    drop table t;
+</sphinxql>
+</queries>
+
+</test>

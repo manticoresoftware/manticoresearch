@@ -661,6 +661,11 @@ static void CheckQuerySoftSpace ( const XQNode_t * pNode, const int * pQPos, int
 	ASSERT_STREQ ( dTerms.Last ()->m_sWord.cstr (), "off" );
 }
 
+struct CKeywordHits
+{
+	const char * m_szKeyword;
+	int m_iHits;
+};
 
 class QueryParser : public TokenizerGtest
 {
@@ -701,6 +706,7 @@ protected:
 	DictRefPtr_c pDict;
 	CSphSchema tSchema;
 	CSphIndexSettings tTmpSettings;
+	static constexpr CKeywordHits dFuzzerPseudoHits[] = { { "aaa", 0 }, { "bbb", 0 }, { "ccc", 35 }, { "ddd", 63 }, { "eee", 2445 }, { 0, 0 } };
 };
 
 void QueryParser::TestMany (const char* szQuery, const char* szReconst)
@@ -809,12 +815,6 @@ bool CSphDummyIndex::FillKeywords ( CSphVector <CSphKeywordInfo> & dKeywords ) c
 
 	return true;
 }
-
-struct CKeywordHits
-{
-	const char * m_szKeyword;
-	int m_iHits;
-};
 
 void QueryParser::Transform ( const char * szQuery, const char * szReconst, const char *szReconstTransformed, const CKeywordHits * pKeywordHits ) const
 {
@@ -949,6 +949,16 @@ TEST_F ( QueryParser, transform_common_compound_not_1 )
 TEST_F ( QueryParser, transform_common_compound_not_2 )
 {
 	Transform (
+		"(aaa !(ccc nnn)) | (bbb !(nnn ddd))",
+		"( ( aaa AND NOT ( ccc   nnn ) ) | ( bbb AND NOT ( nnn   ddd ) ) )",
+		"( ( aaa AND NOT ccc ) | ( bbb AND NOT ddd ) | ( ( aaa | bbb ) AND NOT nnn ) )",
+		dPseudoHits0
+	);
+}
+
+TEST_F ( QueryParser, transform_common_compound_not_3 )
+{
+	Transform (
 		"(aaa !(ccc nnn)) | (bbb !(nnn ddd)) | (ccc !nnn)",
 		"( ( aaa AND NOT ( ccc   nnn ) ) | ( bbb AND NOT ( nnn   ddd ) ) | ( ccc AND NOT nnn ) )",
 		"( ( aaa AND NOT ccc ) | ( bbb AND NOT ddd ) | ( ( ccc | aaa | bbb ) AND NOT nnn ) )",
@@ -988,16 +998,6 @@ TEST_F ( QueryParser, transform_common_subterm_2 )
 }
 
 constexpr CKeywordHits dPseudoHits1[] = { { "nnn", 10 }, { "aaa", 100 }, { "bbb", 200 }, { 0, 0 } };
-TEST_F ( QueryParser, transform_common_compound_not_3 )
-{
-	Transform (
-		"(aaa !(ccc nnn)) | (bbb !(nnn ddd))",
-		"( ( aaa AND NOT ( ccc   nnn ) ) | ( bbb AND NOT ( nnn   ddd ) ) )",
-		"( ( aaa AND NOT ( ccc   nnn ) ) | ( bbb AND NOT ( nnn   ddd ) ) )",
-		dPseudoHits1
-	);
-}
-
 TEST_F ( QueryParser, transform_common_subterm_3 )
 {
 	Transform (

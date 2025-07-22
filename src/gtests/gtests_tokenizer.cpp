@@ -1341,6 +1341,14 @@ TEST_F ( QueryParser, query_assert_from_fuzzer )
 	sphParseExtendedQuery ( tQuery, "aaa << !bbb ccc:x << !ddd | eee", nullptr, pTokenizer, &tSchema, pDict, tTmpSettings, nullptr );
 }
 
+TEST_F ( QueryParser, query_common_or_not )
+{
+	Transform (
+		"( aaa | ( bbb !( ccc | ccc ) ) )",
+		"( aaa | ( bbb AND NOT ( ccc | ccc ) ) )",
+		"( aaa | ( bbb AND NOT ( ccc | ccc ) ) )" );
+}
+
 
 TEST_F ( QueryParser, test_NOT )
 {

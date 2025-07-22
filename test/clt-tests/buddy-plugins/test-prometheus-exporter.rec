@@ -1,10 +1,7 @@
 --- comment ---
-# Prometheus Exporter Metrics Validation for Buddy
-
 This test verifies that the Prometheus exporter for Buddy correctly exposes metrics.
 Specifically, it ensures that accessing the /metrics endpoint (on port 0:9308) returns all mandatory metrics derived from the SHOW STATUS command.
-While the exporter may include additional custom metrics, all metrics based on SHOW STATUS fields must be present and accurate.
-
+While the exporter may include additional custom metrics, all metrics based on SHOW STATUS fields must be present and accurate
 ––– input –––
 export SEARCHD_FLAGS="--iostats --cpustats"
 ––– output –––

@@ -95,14 +95,15 @@ XQNode_t * sphMoveSiblingsUp ( const XQNode_t * pNode )
 bool CSphTransformation::CheckExcessAndNot ( const XQNode_t * pNode ) noexcept
 {
 	return Grand2Node::Valid ( pNode )
-			&& pNode->GetOp() == SPH_QUERY_AND
-			&& !(pNode->dChildren().GetLength() == 1 && pNode->dChild ( 0 )->GetOp() == SPH_QUERY_ANDNOT)
-			&& ParentNode::From ( pNode)->GetOp()==SPH_QUERY_ANDNOT
+		&& pNode->GetOp()==SPH_QUERY_AND
+//		&& !(pNode->dChildren().GetLength() == 1 && pNode->dChild(0)->GetOp() == SPH_QUERY_ANDNOT)
+		&& ParentNode::From(pNode)->GetOp()==SPH_QUERY_ANDNOT
 		&& GrandNode::From(pNode)->GetOp()==SPH_QUERY_AND
 		&& Grand2Node::From(pNode)->GetOp()==SPH_QUERY_ANDNOT
 	// FIXME!!! check performance with OR node at 2nd grand instead of regular not NOT
-		&& Grand2Node::From(pNode)->dChildren().GetLength()>1
-		&& Grand2Node::From(pNode)->dChild(1)->GetOp()==SPH_QUERY_NOT;
+//		&& Grand2Node::From(pNode)->dChildren().GetLength()>1
+//		&& Grand2Node::From(pNode)->dChild(1)->GetOp()==SPH_QUERY_NOT;
+	;
 }
 
 

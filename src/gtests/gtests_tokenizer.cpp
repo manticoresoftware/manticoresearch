@@ -661,6 +661,11 @@ static void CheckQuerySoftSpace ( const XQNode_t * pNode, const int * pQPos, int
 	ASSERT_STREQ ( dTerms.Last ()->m_sWord.cstr (), "off" );
 }
 
+struct CKeywordHits
+{
+	const char * m_szKeyword;
+	int m_iHits;
+};
 
 class QueryParser : public TokenizerGtest
 {
@@ -701,6 +706,7 @@ protected:
 	DictRefPtr_c pDict;
 	CSphSchema tSchema;
 	CSphIndexSettings tTmpSettings;
+	static constexpr CKeywordHits dFuzzerPseudoHits[] = { { "aaa", 0 }, { "bbb", 0 }, { "ccc", 35 }, { "ddd", 63 }, { "eee", 2445 }, { 0, 0 } };
 };
 
 void QueryParser::TestMany (const char* szQuery, const char* szReconst)
@@ -810,17 +816,12 @@ bool CSphDummyIndex::FillKeywords ( CSphVector <CSphKeywordInfo> & dKeywords ) c
 	return true;
 }
 
-struct CKeywordHits
-{
-	const char * m_szKeyword;
-	int m_iHits;
-};
-
 void QueryParser::Transform ( const char * szQuery, const char * szReconst, const char *szReconstTransformed, const CKeywordHits * pKeywordHits ) const
 {
 	CSphIndexSettings tTmpSettings;
 	XQQuery_t tQuery;
-	sphParseExtendedQuery ( tQuery, szQuery, nullptr, pTokenizer, &tSchema, pDict, tTmpSettings, nullptr );
+	if (!sphParseExtendedQuery ( tQuery, szQuery, nullptr, pTokenizer, &tSchema, pDict, tTmpSettings, nullptr ))
+		return;
 
 	CSphString sReconst = sphReconstructNode ( tQuery.m_pRoot, &tSchema );
 
@@ -838,6 +839,34 @@ void QueryParser::Transform ( const char * szQuery, const char * szReconst, cons
 	ASSERT_STREQ ( sReconstTransformed.cstr(), szReconstTransformed );
 }
 
+TEST_F ( QueryParser, query_transforms_different_order )
+{
+	Transform (
+		"( aaa bbb !xxx ) | ( bbb aaa !yyy )",
+		"( ( ( aaa   bbb ) AND NOT xxx ) | ( ( bbb   aaa ) AND NOT yyy ) )",
+		"( ( aaa   bbb ) AND NOT ( xxx   yyy ) )"
+	);
+}
+
+TEST_F ( QueryParser, query_transforms_different_phrases )
+{
+	Transform (
+		"( \"aaa bbb\" !xxx ) | ( \"aaa bbb\" !yyy )",
+		"( ( \"aaa bbb\" AND NOT xxx ) | ( \"aaa bbb\" AND NOT yyy ) )",
+		"( \"aaa bbb\" AND NOT ( xxx   yyy ) )"
+	);
+}
+
+TEST_F ( QueryParser, query_transforms_inverted_phrases )
+{
+	Transform (
+		"( \"aaa bbb\" !xxx ) | ( \"bbb aaa\" !yyy )",
+		"( ( \"aaa bbb\" AND NOT xxx ) | ( \"bbb aaa\" AND NOT yyy ) )",
+		"( ( \"aaa bbb\" AND NOT xxx ) | ( \"bbb aaa\" AND NOT yyy ) )"
+	);
+}
+
+
 TEST_F ( QueryParser, transform_common_not_1 )
 {
 	Transform (
@@ -846,6 +875,7 @@ TEST_F ( QueryParser, transform_common_not_1 )
 		"( ( aaa | bbb ) AND NOT ccc )"
 	);
 }
+
 
 TEST_F ( QueryParser, transform_common_not_2 )
 {
@@ -919,9 +949,30 @@ TEST_F ( QueryParser, transform_common_compound_not_1 )
 TEST_F ( QueryParser, transform_common_compound_not_2 )
 {
 	Transform (
+		"(aaa !(ccc nnn)) | (bbb !(nnn ddd))",
+		"( ( aaa AND NOT ( ccc   nnn ) ) | ( bbb AND NOT ( nnn   ddd ) ) )",
+		"( ( aaa AND NOT ccc ) | ( bbb AND NOT ddd ) | ( ( aaa | bbb ) AND NOT nnn ) )",
+		dPseudoHits0
+	);
+}
+
+TEST_F ( QueryParser, transform_common_compound_not_3 )
+{
+	Transform (
 		"(aaa !(ccc nnn)) | (bbb !(nnn ddd)) | (ccc !nnn)",
 		"( ( aaa AND NOT ( ccc   nnn ) ) | ( bbb AND NOT ( nnn   ddd ) ) | ( ccc AND NOT nnn ) )",
 		"( ( aaa AND NOT ccc ) | ( bbb AND NOT ddd ) | ( ( ccc | aaa | bbb ) AND NOT nnn ) )",
+		dPseudoHits0
+	);
+}
+
+TEST_F ( QueryParser, transform_common_compound_not_4 )
+{
+	Transform (
+		"((aaa bbb) !(nnn ccc)) | ((mmm bbb) !(nnn ddd))",
+		"( ( ( aaa   bbb ) AND NOT ( nnn   ccc ) ) | ( ( mmm   bbb ) AND NOT ( nnn   ddd ) ) )",
+		"( ( ( aaa   bbb ) AND NOT ccc ) | ( ( mmm   bbb ) AND NOT ddd ) | ( ( ( aaa   bbb ) | ( mmm   bbb ) ) AND NOT nnn ) )",
+		//
 		dPseudoHits0
 	);
 }
@@ -958,16 +1009,6 @@ TEST_F ( QueryParser, transform_common_subterm_2 )
 }
 
 constexpr CKeywordHits dPseudoHits1[] = { { "nnn", 10 }, { "aaa", 100 }, { "bbb", 200 }, { 0, 0 } };
-TEST_F ( QueryParser, transform_common_compound_not_3 )
-{
-	Transform (
-		"(aaa !(ccc nnn)) | (bbb !(nnn ddd))",
-		"( ( aaa AND NOT ( ccc   nnn ) ) | ( bbb AND NOT ( nnn   ddd ) ) )",
-		"( ( aaa AND NOT ( ccc   nnn ) ) | ( bbb AND NOT ( nnn   ddd ) ) )",
-		dPseudoHits1
-	);
-}
-
 TEST_F ( QueryParser, transform_common_subterm_3 )
 {
 	Transform (
@@ -1283,6 +1324,79 @@ TEST_F ( QueryParser, transform_common_or_not_with_mixed_phrases )
 		"( ( ( aaa AND NOT ( aaa | nnn ) ) | ( bbb AND NOT fff ) | ( ccc AND NOT ( hhh   kkk ) ) ) AND NOT \"jjj kkk\"~20 )"
 	);
 }
+
+TEST_F ( QueryParser, query_mixed_fields_zones_relaxed_1 )
+{
+	Transform (
+		"@@relaxed ZONESPAN:aaa bbb | @missed ddd | fff eee",
+		"bbb",
+		"bbb"
+	);
+}
+
+TEST_F ( QueryParser, query_mixed_fields_zones_relaxed_2 )
+{
+	Transform (
+		"@@relaxed aaa!bbb | @zzz c",
+		"( aaa AND NOT bbb )",
+		"( aaa AND NOT bbb )"
+	);
+}
+
+TEST_F ( QueryParser, query_mixed_fields_zones_relaxed_3 )
+{
+	Transform (
+		"@@relaxed @t r ( ?-?  | y @*xxx  | yyy )",
+		"( xxx | yyy )",
+		"( xxx | yyy )"
+	);
+}
+
+TEST_F ( QueryParser, query_assert_from_fuzzer )
+{
+	CSphIndexSettings tTmpSettings;
+	XQQuery_t tQuery;
+	sphParseExtendedQuery ( tQuery, "aaa << !bbb ccc:x << !ddd | eee", nullptr, pTokenizer, &tSchema, pDict, tTmpSettings, nullptr );
+}
+
+TEST_F ( QueryParser, query_common_or_not_1 )
+{
+	Transform (
+		"( aaa | ( bbb !( ccc | ccc ) ) )",
+		"( aaa | ( bbb AND NOT ( ccc | ccc ) ) )",
+		"( aaa | ( bbb AND NOT ( ccc | ccc ) ) )" );
+}
+
+TEST_F ( QueryParser, query_common_or_not_2 )
+{
+	Transform (
+		"( ( aaa bbb ) ! ( ccc | ddd ) ) | ( ( eee ( fff ( aaa ! ccc ) ) ) ! ( ddd | ggg ) )"
+		,"( ( ( aaa   bbb ) AND NOT ( ccc | ddd ) ) | ( ( eee   ( fff   ( aaa AND NOT ccc ) ) ) AND NOT ( ddd | ggg ) ) )"
+		,"( ( ( ( aaa   bbb ) AND NOT ccc ) | ( ( eee   fff   aaa ) AND NOT ( ccc | ggg ) ) ) AND NOT ddd )"
+	);
+}
+
+
+TEST_F ( QueryParser, query_common_or_not_3 )
+{
+	Transform (
+		"((bod !bbb) |(a !bbb)llo !bab)|(aaa( hell ( bod !bbb) !bab) !bbq)"
+		, "( ( ( ( bod AND NOT bbb )   llo ) AND NOT bab ) | ( ( aaa   ( ( hell   ( bod AND NOT bbb ) ) AND NOT bab ) ) AND NOT bbq ) )"
+		, "( ( ( ( bod   llo ) AND NOT bbb ) | ( ( aaa   hell   bod ) AND NOT ( bbb | bbq ) ) ) AND NOT bab )"
+	);
+}
+
+
+TEST_F ( QueryParser, multi_query_common_compoundnot )
+{
+	Transform (
+		"aaa | ( ddag ! ( bbb ccc ccc ) )",
+		"( aaa | ( ddag AND NOT ( bbb   ccc   ccc ) ) )",
+		"( aaa | ( ddag AND NOT ( bbb   ccc ) ) )",
+		dFuzzerPseudoHits
+	);
+}
+
 
 TEST_F ( QueryParser, test_NOT )
 {

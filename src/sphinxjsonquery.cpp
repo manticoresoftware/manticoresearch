@@ -1146,7 +1146,10 @@ static bool ParseOptions ( const JsonObj_c & tOptions, CSphQuery & tQuery, CSphS
 					return false;
 				}
 
-				dNamed.Add( { .m_sKey = tNamed.Name(), .m_iValue = tNamed.IntVal(), .m_eType = VariantType_e::BIGINT } );
+				auto& dNewNamed = dNamed.Add();
+				dNewNamed.m_sKey = tNamed.Name();
+				dNewNamed.m_iValue = tNamed.IntVal();
+				dNewNamed.m_eType = VariantType_e::BIGINT;
 			}
 
 			eAdd = ::AddOption ( tQuery, sOpt, dNamed, STMT_SELECT, sError );

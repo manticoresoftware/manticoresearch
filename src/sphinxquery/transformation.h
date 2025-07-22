@@ -146,6 +146,8 @@ private:
 	using GrandNode = Grand<2>;
 	using Grand2Node = Grand<3>;
 	using Grand3Node = Grand<4>;
+
+	static void ReplaceNode ( XQNode_t * pNewNode, XQNode_t * pOldNode ) noexcept;
 };
 
 

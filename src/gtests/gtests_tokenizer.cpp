@@ -1359,13 +1359,33 @@ TEST_F ( QueryParser, query_assert_from_fuzzer )
 	sphParseExtendedQuery ( tQuery, "aaa << !bbb ccc:x << !ddd | eee", nullptr, pTokenizer, &tSchema, pDict, tTmpSettings, nullptr );
 }
 
-TEST_F ( QueryParser, query_common_or_not )
+TEST_F ( QueryParser, query_common_or_not_1 )
 {
 	Transform (
 		"( aaa | ( bbb !( ccc | ccc ) ) )",
 		"( aaa | ( bbb AND NOT ( ccc | ccc ) ) )",
 		"( aaa | ( bbb AND NOT ( ccc | ccc ) ) )" );
 }
+
+TEST_F ( QueryParser, query_common_or_not_2 )
+{
+	Transform (
+		"( ( aaa bbb ) ! ( ccc | ddd ) ) | ( ( eee ( fff ( aaa ! ccc ) ) ) ! ( ddd | ggg ) )"
+		,"( ( ( aaa   bbb ) AND NOT ( ccc | ddd ) ) | ( ( eee   ( fff   ( aaa AND NOT ccc ) ) ) AND NOT ( ddd | ggg ) ) )"
+		,"( ( ( ( aaa   bbb ) AND NOT ccc ) | ( ( eee   fff   aaa ) AND NOT ( ccc | ggg ) ) ) AND NOT ddd )"
+	);
+}
+
+
+TEST_F ( QueryParser, query_common_or_not_3 )
+{
+	Transform (
+		"((bod !bbb) |(a !bbb)llo !bab)|(aaa( hell ( bod !bbb) !bab) !bbq)"
+		, "( ( ( ( bod AND NOT bbb )   llo ) AND NOT bab ) | ( ( aaa   ( ( hell   ( bod AND NOT bbb ) ) AND NOT bab ) ) AND NOT bbq ) )"
+		, "( ( ( ( bod   llo ) AND NOT bbb ) | ( ( aaa   hell   bod ) AND NOT ( bbb | bbq ) ) ) AND NOT bab )"
+	);
+}
+
 
 TEST_F ( QueryParser, multi_query_common_compoundnot )
 {

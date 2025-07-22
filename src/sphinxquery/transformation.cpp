@@ -236,6 +236,23 @@ bool HasSameParent ( const VecTraits_T<XQNode_t *> & dSimilarNodes ) noexcept
 	return dSimilarNodes.any_of ( [&hDupes] ( auto * pX ) { return !hDupes.Add ( 0, (uintptr_t) pX->m_pParent ); } );
 }
 
+void CSphTransformation::ReplaceNode ( XQNode_t * pOldNode, XQNode_t * pNewNode ) noexcept
+{
+	XQNode_t * pParent = pOldNode->m_pParent;
+	assert ( pParent->dChildren().Contains ( pOldNode ) );
+	for ( XQNode_t *& pChild: pParent->dChildren() )
+	{
+		if ( pChild != pOldNode )
+			continue;
+
+		pChild = pNewNode;
+		pNewNode->m_pParent = pParent;
+		pParent->Rehash();
+		return;
+	}
+}
+
+
 void sphOptimizeBoolean ( XQNode_t ** ppRoot, const ISphKeywordsStat * pKeywords )
 {
 #if XQDEBUG

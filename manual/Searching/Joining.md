@@ -666,7 +666,7 @@ When using full-text matching with joins, keep these points in mind:
 
 5. **Filtering behavior**: Queries on joined tables act as filters - they restrict results to records that satisfy both join and query conditions.
 
-6. **Full-text operator support**: All [full-text operators](../Full_text_matching/Operators.md) are supported in JOIN queries, including phrase, proximity, field search, NEAR, quorum matching, and advanced operators.
+6. **Full-text operator support**: All [full-text operators](../Searching/Full_text_matching/Operators.md) are supported in JOIN queries, including phrase, proximity, field search, NEAR, quorum matching, and advanced operators.
 
 7. **Score calculation**: Each table maintains its own relevance score, accessible via `table_name.weight()` in SQL or `table_name._score` in JSON responses.
 

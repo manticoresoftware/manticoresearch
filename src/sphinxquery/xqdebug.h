@@ -12,9 +12,10 @@
 
 #pragma once
 
-#define XQDEBUG 0
-#define XQ_DUMP_TRANSFORMED_TREE 0
-#define XQ_DUMP_NODE_ADDR 0
+#define XDEBUG_DEFAULT 0
+#define XQDEBUG XDEBUG_DEFAULT
+#define XQ_DUMP_TRANSFORMED_TREE XDEBUG_DEFAULT
+#define XQ_DUMP_NODE_ADDR XDEBUG_DEFAULT
 
 struct XQNode_t;
 void Dump ( const XQNode_t * pNode, const char * sHeader = "", bool bWithDot = false );

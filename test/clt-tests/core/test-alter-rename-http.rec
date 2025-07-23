@@ -18,12 +18,12 @@ Verify initial table creation
 ––– input –––
 mysql -h0 -P9306 -e "SHOW TABLES"
 ––– output –––
-+–––––––––-+––––––+
++----------+------+
 | Table    | Type |
-+–––––––––-+––––––+
++----------+------+
 | articles | rt   |
 | products | rt   |
-+–––––––––-+––––––+
++----------+------+
 ––– comment –––
 Test ALTER TABLE RENAME via MySQL protocol
 ––– comment –––

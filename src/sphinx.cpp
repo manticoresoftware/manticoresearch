@@ -9453,25 +9453,21 @@ bool CSphIndex_VLN::PreallocKNN()
 	bool bVrongVer = ( sErrorSTL.rfind ( "Unable to load KNN index:", 0 )==0 );
 	if ( bVrongVer )
 	{
-		sphWarning ( "Rebuilding knn due to error: %s", sErrorSTL.c_str() );
+		sphWarning ( "Rebuilding KNN due to error: %s", sErrorSTL.c_str() );
 		CSphString sRebuildError;
 		if ( !AlterKNN ( sRebuildError ) )
 		{
 			m_pKNN.reset();
-			sErrorSTL.append ( "; rebuild knn error: " );
+			sErrorSTL.append ( "; rebuild KNN error: " );
 			sErrorSTL.append ( sRebuildError.cstr() );
 		}
-		sphInfo ( "rebuilded knn" );
+		sphInfo ( "rebuilded KNN" );
 	}
 
 	if ( !m_pKNN )
-	{
-		m_sLastError = sErrorSTL.c_str();
-		return false;
-	} else
-	{
-		return true;
-	}
+		sphWarning ( "%s, KNN disabled", sErrorSTL.c_str() );
+
+	return true;
 }
 
 
@@ -11960,6 +11956,11 @@ bool CSphIndex_VLN::AlterKNN ( CSphString & sError )
 	if ( !PreallocKNN() )
 	{
 		sError = m_sLastError;
+		return false;
+	}
+	if ( !m_pKNN && sError.IsEmpty() )
+	{
+		sError = "failed to rebuild KNN";
 		return false;
 	}
 	return true;

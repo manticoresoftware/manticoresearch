@@ -49,7 +49,10 @@ int GetZoneIndex ( XQQuery_t * pQuery, const CSphString & sZone )
 
 bool HasMissedField ( const XQLimitSpec_t & tSpec )
 {
-	return (tSpec.m_dFieldMask.TestAll ( false ) && tSpec.m_iFieldMaxPos == 0 && !tSpec.m_bZoneSpan && tSpec.m_dZones.GetLength() == 0);
+	return (tSpec.m_bFieldSpec
+		&& tSpec.m_dFieldMask.TestAll ( false )
+		&& tSpec.m_iFieldMaxPos == 0
+		);
 }
 }
 
@@ -404,7 +407,7 @@ int XQParser_t::GetToken ( YYSTYPE * lvalp )
 	if ( !m_iPendingType )
 		while (true)
 	{
-		assert ( m_iPendingNulls==0 );
+//		assert ( m_iPendingNulls==0 );
 
 		bool bWasKeyword = m_bWasKeyword;
 		m_bWasKeyword = false;
@@ -639,8 +642,8 @@ int XQParser_t::GetToken ( YYSTYPE * lvalp )
 			{
 				if ( bWasKeyword )
 					continue;
-				if ( sphIsSpace ( m_pTokenizer->GetTokenStart() [ -1 ] ) )
-					continue;
+//				if ( sphIsSpace ( m_pTokenizer->GetTokenStart() [ -1 ] ) ) // crashes with fuzzy on single "$"
+//					continue;
 
 				// right after overshort
 				if ( m_pTokenizer->GetOvershortCount()==1 )
@@ -845,7 +848,7 @@ XQNode_t * XQParser_t::AddOp ( XQOperator_e eOp, XQNode_t * pLeft, XQNode_t * pR
 
 	if ( eOp==SPH_QUERY_NOT )
 	{
-		XQNode_t * pNode = SpawnNode ( *m_dStateSpec.Last() );
+		XQNode_t * pNode = SpawnNode ( pLeft ? pLeft->m_dSpec : *m_dStateSpec.Last() );
 		pNode->SetOp ( SPH_QUERY_NOT, pLeft );
 		return pNode;
 	}
@@ -863,12 +866,15 @@ XQNode_t * XQParser_t::AddOp ( XQOperator_e eOp, XQNode_t * pLeft, XQNode_t * pR
 	{
 		pLeft->AddNewChild ( pRight );
 		pResult = pLeft;
+		if ( HasMissedField ( pResult->m_dSpec ) )
+			pResult->m_dSpec = pRight->m_dSpec;
 	} else
 	{
 		// however-2, beside all however below, [@@relaxed ((@title hello) | (@missed world)) @body other terms]
 		// we should use valid (left) field mask for complex (OR) node
 		// as right node in this case has m_bFieldSpec==true but m_dFieldMask==0
-		const XQLimitSpec_t & tSpec = HasMissedField ( pRight->m_dSpec ) ? pLeft->m_dSpec : pRight->m_dSpec;
+		const bool bHasMissedField = HasMissedField ( pRight->m_dSpec );
+		const XQLimitSpec_t & tSpec = bHasMissedField ? pLeft->m_dSpec : pRight->m_dSpec;
 
 		// however, it's right (!) spec which is chosen for the resulting node,
 		// eg. '@title hello' + 'world @body program'

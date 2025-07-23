@@ -133,6 +133,14 @@ void CSphTransformation::DumpSimilar () const noexcept
 #endif
 }
 
+#define STEPS ++uSteps;
+//#define STEPS ++uSteps;if(uSteps>10)break;
+#if XQDEBUG
+#define DUMP(descr) do {StringBuilder_c foo; foo << "\n" << uSteps << " " descr; Dump ( bDump ? *m_ppRoot : nullptr, foo.cstr() ); } while (false)
+#else
+#define DUMP(descr)
+#endif
+
 void CSphTransformation::Transform ()
 {
 	// (A | "A B"~N) -> A
@@ -141,7 +149,7 @@ void CSphTransformation::Transform ()
 	if ( CollectInfo <ParentNode, NullNode> ( *m_ppRoot, &CheckCommonKeywords ) )
 	{
 		const bool bDump = TransformCommonKeywords ();
-		Dump ( bDump ? *m_ppRoot : nullptr, "\nAfter  transformation of 'COMMON KEYWORDS'" );
+		Dump ( bDump ? *m_ppRoot : nullptr, "\nAfter transformation of 'COMMON KEYWORDS'" );
 	}
 
 	// ("X A B" | "Y A B") -> (("X|Y") "A B")
@@ -150,10 +158,11 @@ void CSphTransformation::Transform ()
 	{
 //		DumpSimilar();
 		const bool bDump = TransformCommonPhrase ();
-		Dump ( bDump ? *m_ppRoot : nullptr, "\nAfter  transformation of 'COMMON PHRASES'" );
+		Dump ( bDump ? *m_ppRoot : nullptr, "\nAfter transformation of 'COMMON PHRASES'" );
 	}
 
 	bool bRecollect = false;
+	DWORD uSteps=0;
 	do
 	{
 		bRecollect = false;
@@ -163,7 +172,8 @@ void CSphTransformation::Transform ()
 		{
 			const bool bDump = TransformCommonNot ();
 			bRecollect |= bDump;
-			Dump ( bDump ? *m_ppRoot : nullptr, "\nAfter transformation 1, 'COMMON NOT'" );
+			DUMP ( "After transformation 1, 'COMMON NOT' ((A !N) | (B !N)) -> ((A|B) !N)" );
+			STEPS
 		}
 
 		// ((A !(N AA)) | (B !(N BB))) -> (((A|B) !N) | (A !AA) | (B !BB)) [ if cost(N) > cost(A) + cost(B) ]
@@ -171,7 +181,8 @@ void CSphTransformation::Transform ()
 		{
 			const bool bDump = TransformCommonCompoundNot ();
 			bRecollect |= bDump;
-			Dump ( bDump ? *m_ppRoot : nullptr, "\nAfter transformation 2, 'COMMON COMPOUND NOT'" );
+			DUMP ( "After transformation 2, 'COMMON COMPOUND NOT' ((A !(N AA)) | (B !(N BB))) -> (((A|B) !N) | (A !AA) | (B !BB)) [ if cost(N) > cost(A) + cost(B) ]" );
+			STEPS
 		}
 
 		// ((A (AA | X)) | (B (BB | X))) -> ((A AA) | (B BB) | ((A|B) X)) [ if cost(X) > cost(A) + cost(B) ]
@@ -180,7 +191,8 @@ void CSphTransformation::Transform ()
 			// DumpSimilar();
 			const bool bDump = TransformCommonSubTerm ();
 			bRecollect |= bDump;
-			Dump ( bDump ? *m_ppRoot : nullptr, "\nAfter transformation 3, 'COMMON SUBTERM'" );
+			DUMP ( "After transformation 3, 'COMMON SUBTERM' ((A (AA | X)) | (B (BB | X))) -> ((A AA) | (B BB) | ((A|B) X)) [ if cost(X) > cost(A) + cost(B) ]" );
+			STEPS
 		}
 
 		// ((A !X) | (A !Y) | (A !Z)) -> (A !(X Y Z))
@@ -189,7 +201,8 @@ void CSphTransformation::Transform ()
 //			DumpSimilar ();
 			bool bDump = TransformCommonAndNotFactor ();
 			bRecollect |= bDump;
-			Dump ( bDump ? *m_ppRoot : nullptr, "\nAfter transformation 4, 'COMMON ANDNOT FACTOR'" );
+			DUMP ( "After transformation 4, 'COMMON ANDNOT FACTOR' ((A !X) | (A !Y) | (A !Z)) -> (A !(X Y Z))" );
+			STEPS
 		}
 
 		// ((A !(N | N1)) | (B !(N | N2))) -> (( (A !N1) | (B !N2) ) !N)
@@ -198,7 +211,8 @@ void CSphTransformation::Transform ()
 //			DumpSimilar();
 			const bool bDump = TransformCommonOrNot ();
 			bRecollect |= bDump;
-			Dump ( bDump ? *m_ppRoot : nullptr, "\nAfter transformation 5, 'COMMON OR NOT'" );
+			DUMP ( "After transformation 5, 'COMMON OR NOT' ((A !(N | N1)) | (B !(N | N2))) -> (( (A !N1) | (B !N2) ) !N)" );
+			STEPS
 		}
 
 		// AND(OR) node with only 1 child
@@ -206,7 +220,8 @@ void CSphTransformation::Transform ()
 		{
 			const bool bDump = TransformHungOperand ();
 			bRecollect |= bDump;
-			Dump ( bDump ? *m_ppRoot : nullptr, "\nAfter transformation 6, 'HUNG OPERAND'" );
+			DUMP ( "After transformation 6, 'HUNG OPERAND' AND(OR) node with only 1 child" );
+			STEPS
 		}
 
 		// ((A | B) | C) -> ( A | B | C )
@@ -215,7 +230,8 @@ void CSphTransformation::Transform ()
 		{
 			const bool bDump = TransformExcessBrackets ();
 			bRecollect |= bDump;
-			Dump ( bDump ? *m_ppRoot : nullptr, "\nAfter transformation 7, 'EXCESS BRACKETS'" );
+			DUMP ( "After transformation 7, 'EXCESS BRACKETS' ((A B) C) -> ( A B C )" );
+			STEPS
 		}
 
 		// ((A !N1) !N2) -> (A !(N1 | N2))
@@ -224,7 +240,8 @@ void CSphTransformation::Transform ()
 //			DumpSimilar();
 			const bool bDump = TransformExcessAndNot ();
 			bRecollect |= bDump;
-			Dump ( bDump ? *m_ppRoot : nullptr, "\nAfter transformation 8, 'EXCESS AND NOT'" );
+			DUMP ( "After transformation 8, 'EXCESS AND NOT' ((A !N1) !N2) -> (A !(N1 | N2))" );
+			STEPS
 		}
 
 		// (foo -- bar) -> (foo bar)
@@ -233,7 +250,7 @@ void CSphTransformation::Transform ()
 		//	DumpSimilar();
 			const bool bDump = TransformAndNotNotOperand ();
 			bRecollect |= bDump;
-			Dump ( bDump ? *m_ppRoot : nullptr, "\nAfter transformation 9, 'AND NOT NOT'" );
+			DUMP ( "After transformation 9, 'AND NOT NOT' (foo -- bar) -> (foo bar)" );
 		}
 	} while ( bRecollect );
 

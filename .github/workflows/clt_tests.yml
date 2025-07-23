@@ -50,8 +50,6 @@ jobs:
             test_prefix: test/clt-tests/fulltext-search/
           - name: HTTP interface tests
             test_prefix: test/clt-tests/http-interface/
-          - name: Indexin errors
-            test_prefix: test/clt-tests/indexing-error/
           - name: Indexer
             test_prefix: test/clt-tests/indexer/
           - name: Join

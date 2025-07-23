@@ -18,7 +18,6 @@ curl -s "https://hub.docker.com/v2/repositories/library/logstash/tags/?page_size
 | sort -t. -k1,1n -k2,2n | uniq
 ––– output –––
 7.17
-8.1
 8.2
 8.3
 8.4

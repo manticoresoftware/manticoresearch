@@ -107,7 +107,7 @@ ERROR 1064 (42000) at line 1: unknown sysvar @@tx_isolation_fake
 ––– comment –––
 3.1 Test with mysqldump/mariadb-dump
 ––– input –––
-mysqldump -h0 -P9306 manticore tbl --no-data --skip-comments --skip-opt --no-tablespaces > /tmp/dump.sql 2> >(grep -E -v "Warning: column statistics|Warning: version string returned by server is incorrect." >&2)
+mysqldump -h0 -P9306 manticore tbl --no-data --column-statistics=0--skip-comments --skip-opt --no-tablespaces > /tmp/dump.sql 2> >(grep -E -v "Warning: column statistics|Warning: version string returned by server is incorrect." >&2)
 ––– output –––
 ––– input –––
 test -s /tmp/dump.sql && echo "Dump created successfully" || (echo "Dump is empty or failed!" && cat /tmp/dump.sql)

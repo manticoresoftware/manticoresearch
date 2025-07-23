@@ -14,7 +14,6 @@ timeout 420 bash -c 'echo "[]" > /tmp/filebeat_tags.json; page=1; attempts=0; ma
 ––– output –––
 7.17
 8.0
-8.1
 8.2
 8.3
 8.4

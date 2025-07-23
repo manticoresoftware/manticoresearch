@@ -18,7 +18,6 @@ on:
       - 'test/clt-tests/data-manipulation/test-replace-into.rec'
       - 'test/clt-tests/data-manipulation/test-alter-rename-nightly.rec'
       - 'test/clt-tests/performance-nightly/**'
-      - 'test/clt-tests/id-attribute-error-during-indexing/**'
       - 'test/clt-tests/indexer/indexer-latest-mysql-postgres/indexer-latest-mysql-postgres.rec'
       - 'test/clt-tests/integrations/**'
       - 'test/clt-tests/tables-interaction/test-tables-interaction.rec'

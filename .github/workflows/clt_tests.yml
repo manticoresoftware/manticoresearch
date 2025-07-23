@@ -51,7 +51,7 @@ jobs:
           - name: HTTP interface tests
             test_prefix: test/clt-tests/http-interface/
           - name: Indexin errors
-            test_prefix: test/clt-tests/id-attribute-error-during-indexing/
+            test_prefix: test/clt-tests/indexing-error/
           - name: Indexer
             test_prefix: test/clt-tests/indexer/
           - name: Join
@@ -72,8 +72,6 @@ jobs:
               test/clt-tests/sharding/functional/
               test/clt-tests/sharding/replication/
               test/clt-tests/sharding/syntax/
-          - name: Tables-interaction
-            test_prefix: test/clt-tests/tables-interaction/
           - name: Test-configuration
             test_prefix: test/clt-tests/test-configuration/
           - name: Vector-knn

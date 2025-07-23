@@ -148,6 +148,7 @@ private:
 	using Grand3Node = Grand<4>;
 
 	static void ReplaceNode ( XQNode_t * pNewNode, XQNode_t * pOldNode ) noexcept;
+	static void AddOrReplaceNode ( XQNode_t * pParent, XQNode_t * pChild ) noexcept;
 };
 
 

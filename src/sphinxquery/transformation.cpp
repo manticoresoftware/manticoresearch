@@ -148,6 +148,7 @@ void CSphTransformation::Transform ()
 	// ("A B X" | "A B Y") -> (("X|Y") "A B")
 	if ( CollectInfo <ParentNode, NullNode> ( *m_ppRoot, &CheckCommonPhrase ) )
 	{
+//		DumpSimilar();
 		const bool bDump = TransformCommonPhrase ();
 		Dump ( bDump ? *m_ppRoot : nullptr, "\nAfter  transformation of 'COMMON PHRASES'" );
 	}
@@ -239,6 +240,9 @@ bool HasSameParent ( const VecTraits_T<XQNode_t *> & dSimilarNodes ) noexcept
 void CSphTransformation::ReplaceNode ( XQNode_t * pOldNode, XQNode_t * pNewNode ) noexcept
 {
 	XQNode_t * pParent = pOldNode->m_pParent;
+	if ( !pParent )
+		return;
+
 	assert ( pParent->dChildren().Contains ( pOldNode ) );
 	for ( XQNode_t *& pChild: pParent->dChildren() )
 	{
@@ -252,6 +256,17 @@ void CSphTransformation::ReplaceNode ( XQNode_t * pOldNode, XQNode_t * pNewNode 
 	}
 }
 
+void CSphTransformation::AddOrReplaceNode ( XQNode_t * pParent, XQNode_t * pChild ) noexcept
+{
+	if ( pParent->dChildren().IsEmpty() && pParent->m_pParent )
+	{
+		ReplaceNode ( pParent, pChild );
+		pParent->ResetChildren();
+		SafeDelete ( pParent );
+		return;
+	}
+	pParent->AddNewChild ( pChild );
+}
 
 void sphOptimizeBoolean ( XQNode_t ** ppRoot, const ISphKeywordsStat * pKeywords )
 {

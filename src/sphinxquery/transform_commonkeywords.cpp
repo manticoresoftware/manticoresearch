@@ -505,7 +505,7 @@ void CSphTransformation::MakeTransformCommonPhrase ( const CSphVector<XQNode_t *
 	if ( !pMaybeNewOr )
 	{
 		// common phrases with same words elimination
-		pGrandOr->AddNewChild ( pCommonPhrase );
+		AddOrReplaceNode ( pGrandOr, pCommonPhrase );
 		return;
 	}
 
@@ -520,5 +520,5 @@ void CSphTransformation::MakeTransformCommonPhrase ( const CSphVector<XQNode_t *
 	else
 		pNewPhrase->SetOp ( SPH_QUERY_PHRASE, pNewOr, pCommonPhrase );
 
-	pGrandOr->AddNewChild ( pNewPhrase );
+	AddOrReplaceNode ( pGrandOr, pNewPhrase );
 }

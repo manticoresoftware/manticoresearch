@@ -977,6 +977,17 @@ TEST_F ( QueryParser, transform_common_compound_not_4 )
 	);
 }
 
+TEST_F ( QueryParser, transform_common_compound_not_5 )
+{
+	Transform (
+		R"a((-"00 000"|"00 000"(0f))|("00"-f0|"00 000"(0)))a",
+		R"a(( ( 0f AND NOT ( "00 000" | "00 000" ) ) | ( 00 AND NOT ( f0 | "00 000" ) ) ))a",
+		R"a(( ( 0f AND NOT "00 000" ) | ( 00 AND NOT ( f0 | "00 000" ) ) ))a",
+		dPseudoHits0
+	);
+}
+
+
 // COMMON COMPOUND NOT WITH MIXED PHRASES/PROXIMITY terms
 TEST_F ( QueryParser, transform_common_compound_not_with_mixed_phrases )
 {	Transform (

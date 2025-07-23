@@ -37,7 +37,7 @@ bool CSphTransformation::CheckCommonAndNotFactor ( const XQNode_t * pNode ) noex
 }
 
 
-bool CSphTransformation::TransformCommonAndNotFactor () const noexcept
+bool CSphTransformation::TransformCommonAndNotFactor () noexcept
 {
 	int iActiveDeep = 0;
 	for ( auto& [_, hSimGroup] : m_hSimilar )
@@ -88,11 +88,11 @@ int CSphTransformation::GetWeakestChildIndex ( const CSphVector<XQNode_t *> & dN
 // Pick the weakest node from the equal
 // PROXIMITY and PHRASE nodes with same keywords have an equal magic hash
 // so they are considered as equal nodes.
-void CSphTransformation::MakeTransformCommonAndNotFactor ( const CSphVector<XQNode_t *> & dSimilarNodes )
+void CSphTransformation::MakeTransformCommonAndNotFactor ( const CSphVector<XQNode_t *> & dSimilarNodes ) noexcept
 {
 	const int iWeakestIndex = GetWeakestChildIndex ( dSimilarNodes );
 
-	const XQNode_t * pFirstAndNot = ParentNode::From ( dSimilarNodes [iWeakestIndex] );
+	XQNode_t * pFirstAndNot = ParentNode::From ( dSimilarNodes [iWeakestIndex] );
 	XQNode_t * pCommonOr = pFirstAndNot->m_pParent;
 
 	assert ( pFirstAndNot->dChildren().GetLength()==2 );
@@ -126,4 +126,16 @@ void CSphTransformation::MakeTransformCommonAndNotFactor ( const CSphVector<XQNo
 		SafeDelete ( pAndNot );
 	}
 	pAndNew->SetOp ( SPH_QUERY_AND, dAndNewChildren );
+	if (pCommonOr->dChildren().GetLength()>1)
+		return;
+
+	assert ( pCommonOr->dChildren()[0] == pFirstAndNot );
+	if ( !ReplaceNode ( pCommonOr, pFirstAndNot ) )
+	{
+		assert ( pCommonOr == *m_ppRoot );
+		*m_ppRoot = pFirstAndNot;
+		pFirstAndNot->m_pParent = nullptr;
+	}
+	pCommonOr->dChildren()[0] = nullptr;
+	SafeDelete ( pCommonOr );
 }

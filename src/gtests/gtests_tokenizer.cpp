@@ -988,6 +988,17 @@ TEST_F ( QueryParser, transform_common_compound_not_5 )
 }
 
 
+TEST_F ( QueryParser, transform_common_compound_not_6 )
+{
+	Transform (
+		"((0)(@*00 -000000)|(@*-000000((0)(-(00 -000)|(00 -000000)|(00 -000)(*))|(-(00 -000)|(00 -000000)|(00 -000)00((0))))))",
+		"( ( 00 AND NOT 000000 ) | ( ( ( * AND NOT ( ( 00 AND NOT 000 ) | ( 00 AND NOT 000000 ) | ( 00 AND NOT 000 ) ) ) | ( 00 AND NOT ( ( 00 AND NOT 000 ) | ( 00 AND NOT 000000 ) | ( 00 AND NOT 000 ) ) ) ) AND NOT 000000 ) )",
+		"( ( 00 | ( ( * | 00 ) AND NOT ( 00 AND NOT ( 000   000000   000 ) ) ) ) AND NOT 000000 )",
+		dPseudoHits0
+	);
+}
+
+
 // COMMON COMPOUND NOT WITH MIXED PHRASES/PROXIMITY terms
 TEST_F ( QueryParser, transform_common_compound_not_with_mixed_phrases )
 {	Transform (
@@ -1323,6 +1334,16 @@ TEST_F ( QueryParser, transform_excess_and_not )
 		"( (aaa ( ( ( (fff (xxx !hhh)) !kkk ) ) bbb !ccc)) !ddd ) ( ( (zzz (xxx !vvv)) !kkk ) )",
 		"( ( aaa   ( ( fff   ( xxx AND NOT hhh )   bbb ) AND NOT ( kkk | ccc ) )   ( ( zzz   ( xxx AND NOT vvv ) ) AND NOT kkk ) ) AND NOT ddd )",
 		"( ( aaa   fff   xxx   bbb   zzz   xxx ) AND NOT ( vvv | hhh | kkk | kkk | ccc | ddd ) )"
+	);
+}
+
+
+TEST_F ( QueryParser, transform_common_andnotfactor_root_1 )
+{
+	Transform (
+		"(((0)""(0)(00 -000))|((0))|(-00\"00\")(0))",
+		"( ( 00 AND NOT 000 ) | ( 00 AND NOT 00 ) )",
+		"( 00 AND NOT ( 000   00 ) )"
 	);
 }
 

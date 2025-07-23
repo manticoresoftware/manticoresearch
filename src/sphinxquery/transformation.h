@@ -79,8 +79,8 @@ private:
 
 	// ((A !X) | (A !Y) | (A !Z)) -> (A !(X Y Z))
 	static bool CheckCommonAndNotFactor ( const XQNode_t * pNode ) noexcept;
-	bool TransformCommonAndNotFactor () const noexcept;
-	static void MakeTransformCommonAndNotFactor ( const CSphVector<XQNode_t *> & dSimilarNodes );
+	bool TransformCommonAndNotFactor () noexcept;
+	void MakeTransformCommonAndNotFactor ( const CSphVector<XQNode_t *> & dSimilarNodes ) noexcept;
 
 	// ((A !(N | N1)) | (B !(N | N2))) -> (( (A !N1) | (B !N2) ) !N)
 	static bool CheckCommonOrNot ( const XQNode_t * pNode ) noexcept;
@@ -147,7 +147,7 @@ private:
 	using Grand2Node = Grand<3>;
 	using Grand3Node = Grand<4>;
 
-	static void ReplaceNode ( XQNode_t * pNewNode, XQNode_t * pOldNode ) noexcept;
+	static bool ReplaceNode ( XQNode_t * pNewNode, XQNode_t * pOldNode ) noexcept;
 	static void AddOrReplaceNode ( XQNode_t * pParent, XQNode_t * pChild ) noexcept;
 };
 

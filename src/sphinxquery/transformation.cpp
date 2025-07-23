@@ -237,11 +237,11 @@ bool HasSameParent ( const VecTraits_T<XQNode_t *> & dSimilarNodes ) noexcept
 	return dSimilarNodes.any_of ( [&hDupes] ( auto * pX ) { return !hDupes.Add ( 0, (uintptr_t) pX->m_pParent ); } );
 }
 
-void CSphTransformation::ReplaceNode ( XQNode_t * pOldNode, XQNode_t * pNewNode ) noexcept
+bool CSphTransformation::ReplaceNode ( XQNode_t * pOldNode, XQNode_t * pNewNode ) noexcept
 {
 	XQNode_t * pParent = pOldNode->m_pParent;
 	if ( !pParent )
-		return;
+		return false;
 
 	assert ( pParent->dChildren().Contains ( pOldNode ) );
 	for ( XQNode_t *& pChild: pParent->dChildren() )
@@ -252,8 +252,9 @@ void CSphTransformation::ReplaceNode ( XQNode_t * pOldNode, XQNode_t * pNewNode 
 		pChild = pNewNode;
 		pNewNode->m_pParent = pParent;
 		pParent->Rehash();
-		return;
+		break;
 	}
+	return true;
 }
 
 void CSphTransformation::AddOrReplaceNode ( XQNode_t * pParent, XQNode_t * pChild ) noexcept

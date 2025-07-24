@@ -50,7 +50,7 @@ struct CommonDupElimination_fn
 		if ( a.m_pCommon->m_iCommonLen!=b.m_pCommon->m_iCommonLen )
 			return a.m_pCommon->m_iCommonLen>b.m_pCommon->m_iCommonLen;
 
-		return a.m_pCommon->m_bHead;
+		return a.m_pCommon->m_bHead && a.m_pCommon->m_bHead!=b.m_pCommon->m_bHead;
 	}
 };
 

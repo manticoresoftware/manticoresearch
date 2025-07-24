@@ -189,6 +189,51 @@ public:
 
 	// same as above, but without messing of return value/return param
 	std::pair<KEY,VALUE*>	Iterate ( int64_t & iIndex ) const;
+
+	class Iterator_c
+	{
+		const MYTYPE* m_pHash;
+		int64_t m_iIndex = 0;
+		std::pair<KEY, VALUE *> m_uLastVal {0,nullptr};
+
+	public:
+		explicit Iterator_c ( const MYTYPE* pHash = nullptr )
+			: m_pHash ( pHash )
+		{
+			if ( pHash )
+				m_uLastVal = pHash->Iterate( m_iIndex );
+		}
+
+		std::pair<KEY, VALUE *>& operator* () noexcept { return m_uLastVal; }
+		const std::pair<KEY, VALUE *>* operator->() const noexcept { return &m_uLastVal; };
+
+		Iterator_c& operator++() noexcept
+		{
+			m_uLastVal = m_pHash->Iterate(m_iIndex);
+			return *this;
+		}
+
+		bool operator== ( const Iterator_c& rhs ) const noexcept
+		{
+			return m_uLastVal == rhs.m_uLastVal;
+		}
+
+		bool operator!= ( const Iterator_c& rhs ) const noexcept
+		{
+			return !operator== ( rhs );
+		}
+	};
+
+	// c++11 style iteration
+	Iterator_c begin() const
+	{
+		return Iterator_c { this };
+	}
+
+	static Iterator_c end()
+	{
+		return Iterator_c { nullptr };
+	}
 };
 
 template <typename KEY, typename VALUE, typename HASHFUNC=HashFunc_Int64_t, typename ENTRY=OpenHashVersionEntry_T<KEY,VALUE>>

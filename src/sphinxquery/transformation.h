@@ -16,8 +16,6 @@
 #include "std/generics.h"
 #include "xqdebug.h"
 
-using BigramHash_t = CSphOrderedHash<CSphVector<XQNode_t *>, uint64_t, IdentityHash_fn, 128>;
-
 enum class eTransformations : BYTE
 {
 	eHung, eExcessBrackets, eAndNotNot, eExcessAndNot, eCommonAndNotFactor, eCommonNot, eCommonSubterm, eCommonCompoundNot, eCommonOrNot, eSize

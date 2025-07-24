@@ -11,6 +11,9 @@
 //
 
 #include "transformation.h"
+#include "std/openhash.h"
+
+using BigramHash_t = OpenHashTable_T<uint64_t, CSphVector<XQNode_t *>, IdentityHash_fn>;
 
 // common keywords
 // (A | "A B"~N) -> A
@@ -133,12 +136,12 @@ bool sphIsNodeStrongest ( const XQNode_t * pNode, const CSphVector<XQNode_t *> &
 
 int sphBigramAddNode ( XQNode_t * pNode, int64_t uHash, BigramHash_t & hBirgam )
 {
-	CSphVector<XQNode_t *> * ppNodes = hBirgam ( uHash );
+	CSphVector<XQNode_t *> * ppNodes = hBirgam.Find ( uHash );
 	if ( !ppNodes )
 	{
 		const CSphVector<XQNode_t *> dNode ( 1 );
 		dNode[0] = pNode;
-		hBirgam.Add ( dNode, uHash );
+		hBirgam.Add ( uHash, dNode );
 		return 1;
 	}
 
@@ -210,7 +213,7 @@ bool CSphTransformation::TransformCommonKeywords () const noexcept
 			for ( const XQNode_t * pNode : dPhrases )
 			{
 				uint64_t uPhraseHash = sphHashPhrase ( pNode );
-				if ( const CSphVector<XQNode_t *> * ppCommon = hBigrams ( uPhraseHash ); ppCommon && sphIsNodeStrongest ( pNode, *ppCommon ) )
+				if ( const CSphVector<XQNode_t *> * ppCommon = hBigrams.Find ( uPhraseHash ); ppCommon && sphIsNodeStrongest ( pNode, *ppCommon ) )
 				{
 					for ( const auto pCommon : *ppCommon )
 						dPendingDel.Add ( pCommon );
@@ -306,26 +309,26 @@ bool CSphTransformation::TransformCommonPhrase () const noexcept
 
 			// 2nd step find minimum for each phrase group
 			CSphVector<CommonInfo_t> dCommon;
-			for ( auto& [_, dBigrams] : tBigramHead )
+			for ( auto& [_, pBigrams] : tBigramHead )
 			{
 				// only phrases that share same words at head
-				if ( dBigrams.GetLength()<2 )
+				if ( pBigrams->GetLength()<2 )
 					continue;
 
 				CommonInfo_t & tElem = dCommon.Add();
-				tElem.m_pPhrases = &dBigrams;
+				tElem.m_pPhrases = pBigrams;
 				tElem.m_iCommonLen = 2;
 				tElem.m_bHead = true;
 				tElem.m_bHasBetter = false;
 			}
-			for ( auto& [_, dBigrams] : tBigramTail )
+			for ( auto& [_, pBigrams] : tBigramTail )
 			{
 				// only phrases that share same words at tail
-				if ( dBigrams.GetLength()<2 )
+				if ( pBigrams->GetLength()<2 )
 					continue;
 
 				CommonInfo_t & tElem = dCommon.Add();
-				tElem.m_pPhrases = &dBigrams;
+				tElem.m_pPhrases = pBigrams;
 				tElem.m_iCommonLen = 2;
 				tElem.m_bHead = false;
 				tElem.m_bHasBetter = false;

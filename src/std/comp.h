@@ -102,7 +102,9 @@ struct SphEqualityFunctor_T
 struct IdentityHash_fn
 {
 	template<typename INT>
-	static inline INT Hash ( INT iValue ) { return iValue; }
+	static INT Hash ( INT iValue ) { return iValue; }
+	template<typename INT>
+	static INT GetHash ( INT iValue ) { return iValue; }
 };
 
 #include "comp_impl.h"

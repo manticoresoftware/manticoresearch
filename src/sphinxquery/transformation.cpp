@@ -226,6 +226,15 @@ void CSphTransformation::Transform ()
 			bRecollect |= bDump;
 			Dump ( bDump ? *m_ppRoot : nullptr, "\nAfter transformation 8, 'EXCESS AND NOT'" );
 		}
+
+		// (foo -- bar) -> (foo bar)
+		if ( CollectInfo <NullNode, NullNode> ( *m_ppRoot, &CheckAndNotNotOperand ) )
+		{
+		//	DumpSimilar();
+			const bool bDump = TransformAndNotNotOperand ();
+			bRecollect |= bDump;
+			Dump ( bDump ? *m_ppRoot : nullptr, "\nAfter transformation 9, 'AND NOT NOT'" );
+		}
 	} while ( bRecollect );
 
 	( *m_ppRoot )->Check ( true );

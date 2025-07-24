@@ -103,6 +103,11 @@ private:
 	static bool CheckExcessAndNot ( const XQNode_t * pNode ) noexcept;
 	bool TransformExcessAndNot () const;
 
+	// "notnot" operand ( -- node in 'and-not' ) appears after an internal transformation
+	// (A !!B) -> (A B)
+	static bool CheckAndNotNotOperand ( const XQNode_t * pNode ) noexcept;
+	bool TransformAndNotNotOperand () const noexcept;
+
 private:
 	static constexpr uint64_t CONST_GROUP_FACTOR = 0;
 

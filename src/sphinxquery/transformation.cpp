@@ -14,6 +14,7 @@
 
 #include "sphinxquery.h"
 #include "xqdebug.h"
+#include "std/openhash.h"
 
 CSphTransformation::CSphTransformation ( XQNode_t ** ppRoot, const ISphKeywordsStat * pKeywords )
 	: m_pKeywords ( pKeywords )
@@ -53,6 +54,20 @@ bool CSphTransformation::CollectInfo ( XQNode_t * pNode, Checker_fn pfnChecker )
 	return ( m_hSimilar.GetLength()>0 );
 }
 
+struct CSphHornerStrHashFunc
+{
+	static int Hash ( const CSphString& sKey )
+	{
+		int iHash = 0;
+		if ( !sKey.cstr() )
+			return iHash;
+
+		for ( auto * pStr = sKey.cstr(); *pStr; ++pStr )
+			iHash = iHash * 257 + *pStr;
+
+		return iHash;
+	}
+};
 
 void CSphTransformation::SetCosts ( XQNode_t * pNode, const CSphVector<XQNode_t *> & dNodes ) const noexcept
 {
@@ -71,7 +86,7 @@ void CSphTransformation::SetCosts ( XQNode_t * pNode, const CSphVector<XQNode_t 
 
 	// collect unknown keywords from all children
 	CSphVector<CSphKeywordInfo> dKeywords;
-	SmallStringHash_T<int> hCosts;
+	OpenHashTable_T<const CSphString*, int, CSphStrPtrHashFunc<CSphHornerStrHashFunc>> hCosts;
 	ARRAY_FOREACH ( i, dChildren ) // don't use 'ranged for' here, as dChildren modified during the loop
 	{
 		const XQNode_t * pChild = dChildren[i];
@@ -84,11 +99,11 @@ void CSphTransformation::SetCosts ( XQNode_t * pNode, const CSphVector<XQNode_t 
 		for ( const auto& dWord : pChild->dWords() )
 		{
 			const CSphString & sWord = dWord.m_sWord;
-			int * pCost = hCosts ( sWord );
+			int * pCost = hCosts.Find ( &sWord );
 			if ( pCost )
 				continue;
 
-			Verify ( hCosts.Add ( 0, sWord ) );
+			Verify ( hCosts.Add ( &sWord, 0 ) );
 			dKeywords.Add();
 			dKeywords.Last().m_sTokenized = sWord;
 			dKeywords.Last().m_iDocs = 0;
@@ -96,10 +111,10 @@ void CSphTransformation::SetCosts ( XQNode_t * pNode, const CSphVector<XQNode_t 
 	}
 
 	// get keywords info from index dictionary
-	if ( dKeywords.GetLength() )
+	if ( !dKeywords.IsEmpty() )
 	{
 		m_pKeywords->FillKeywords ( dKeywords );
-		for_each ( dKeywords, [&hCosts] (const auto& tKeyword) { hCosts[tKeyword.m_sTokenized] = tKeyword.m_iDocs; } );
+		for_each ( dKeywords, [&hCosts] (const auto& tKeyword) { *hCosts.Find ( &tKeyword.m_sTokenized) = tKeyword.m_iDocs; } );
 	}
 
 	// propagate cost bottom-up (from children to parents)
@@ -107,7 +122,7 @@ void CSphTransformation::SetCosts ( XQNode_t * pNode, const CSphVector<XQNode_t 
 	{
 		XQNode_t * pChild = dChildren[i];
 		int iCost = 0;
-		for_each ( pChild->dWords(), [&iCost,&hCosts] (const auto& dWord) { iCost += hCosts[dWord.m_sWord]; } );
+		for_each ( pChild->dWords(), [&iCost,&hCosts] (const auto& dWord) { iCost += *hCosts.Find(&dWord.m_sWord); } );
 		pChild->m_iUser += iCost;
 		if ( pChild->m_pParent )
 			pChild->m_pParent->m_iUser += pChild->m_iUser;

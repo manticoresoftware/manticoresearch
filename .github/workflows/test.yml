@@ -46,7 +46,7 @@ jobs:
     outputs:
       columnar_locator: ${{ steps.set_locator.outputs.columnar_locator }}
     steps:
-      - name: Check if branch exists in manticoresoftware/manticoresearch
+      - name: Check if branch exists in manticoresoftware/columnar
         id: check_branch
         if: github.ref_name != 'master'
         run: |

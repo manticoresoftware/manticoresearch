@@ -78,22 +78,3 @@ jobs:
         # --timeout may be not working https://gitlab.kitware.com/cmake/cmake/-/issues/23979
         # Add -VV to ctest to display extra debug info
         run: ctest -VV -S misc/ctest/gltest.cmake --no-compress-output --timeout 600
-        continue-on-error: true
-      - name: Remember status
-        if: always()
-        run: echo "${{ steps.test.outcome }}" > build/status_${{ inputs.CTEST_START }}_${{ inputs.CTEST_END }}
-        continue-on-error: true
-      - name: Prepare test results
-        if: always()
-        run: |
-          mkdir build/xml_${{ inputs.CTEST_START }}_${{ inputs.CTEST_END }}
-          cp -r build/Testing/2*/*.xml build/xml_${{ inputs.CTEST_START }}_${{ inputs.CTEST_END }}/
-          mv build/test build/test_${{ inputs.CTEST_START }}_${{ inputs.CTEST_END }}
-        continue-on-error: true
-      - name: Upload test artifacts
-        if: always()
-        continue-on-error: true
-        uses: manticoresoftware/upload_artifact_with_retries@v4
-        with:
-          name: ${{ inputs.artifact_name }}
-          path: "build/xml* build/test_*/test_*/report* build/test_*/error*.txt build/test_*/*log build/status*"

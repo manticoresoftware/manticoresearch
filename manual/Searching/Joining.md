@@ -662,7 +662,7 @@ When using full-text matching with joins, keep these points in mind:
 
 3. **Performance implications**: Full-text matching on both tables may impact query performance, especially with large datasets. Consider using appropriate indexes and batch sizes.
 
-4. **NULL/default value handling**: With LEFT JOIN, if there's no matching record in the right table, full-text conditions on the right table won't be evaluated. SQL returns NULL values while JSON API returns default values (0 for numbers, empty strings for text).
+4. **NULL/default value handling**: With LEFT JOIN, if there's no matching record in the right table, the query optimizer decides whether to evaluate full-text conditions or filtering conditions first based on performance. SQL returns NULL values while JSON API returns default values (0 for numbers, empty strings for text).
 
 5. **Filtering behavior**: Queries on joined tables act as filters - they restrict results to records that satisfy both join and query conditions.
 

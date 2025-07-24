@@ -351,6 +351,14 @@ foreach ( $tests as $test )
 		{
 			file_put_contents($name_err_all, file_get_contents($name_err), FILE_APPEND);
 		}
+		
+		// Check if searchd.log exists in current directory and move it to test's result directory
+		$current_searchd_log = "searchd.log";
+		if ( file_exists($current_searchd_log) )
+		{
+			$target_searchd_log = "$res_path/searchd.log";
+			rename($current_searchd_log, $target_searchd_log);
+		}
 
 		if ( !is_array($res) )
 		{

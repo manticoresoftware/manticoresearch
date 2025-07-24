@@ -900,7 +900,7 @@ TEST_F ( QueryParser, transform_common_not_4 )
 	Transform (
 		"(aaa !bbb) | (ccc !bbb) | (ccc !eee) | (ddd !eee)",
 		"( ( aaa AND NOT bbb ) | ( ccc AND NOT bbb ) | ( ccc AND NOT eee ) | ( ddd AND NOT eee ) )",
-		"( ( ( aaa | ccc ) AND NOT bbb ) | ( ( ccc | ddd ) AND NOT eee ) )"
+		"( ( aaa AND NOT bbb ) | ( ccc AND NOT ( bbb   eee ) ) | ( ddd AND NOT eee ) )"
 	);
 }
 
@@ -1347,6 +1347,15 @@ TEST_F ( QueryParser, transform_common_andnotfactor_root_1 )
 	);
 }
 
+TEST_F ( QueryParser, fuzz_transform_common_andnotfactor_root_1 )
+{
+	Transform (
+		"(((0)-00(00 -000))|((0))|(-00|\"00 00\"\"00\"))",
+		"( ( ( 00 AND NOT 000 ) AND NOT 00 ) | ( 00 AND NOT ( 00 | \"00 00\" ) ) )",
+		"( 00 AND NOT ( ( 000 | 00 )   00 ) )"
+	);
+}
+
 // COMMON | NOT WITH MIXED PHRASES/PROXIMITY terms
 TEST_F ( QueryParser, transform_common_or_not_with_mixed_phrases )
 {
@@ -1404,7 +1413,7 @@ TEST_F ( QueryParser, query_common_or_not_2 )
 	Transform (
 		"( ( aaa bbb ) ! ( ccc | ddd ) ) | ( ( eee ( fff ( aaa ! ccc ) ) ) ! ( ddd | ggg ) )"
 		,"( ( ( aaa   bbb ) AND NOT ( ccc | ddd ) ) | ( ( eee   ( fff   ( aaa AND NOT ccc ) ) ) AND NOT ( ddd | ggg ) ) )"
-		,"( ( ( ( aaa   bbb ) AND NOT ccc ) | ( ( eee   fff   aaa ) AND NOT ( ccc | ggg ) ) ) AND NOT ddd )"
+		,"( ( ( ( aaa   bbb ) AND NOT ddd ) | ( ( eee   fff   aaa ) AND NOT ( ddd | ggg ) ) ) AND NOT ccc )"
 	);
 }
 

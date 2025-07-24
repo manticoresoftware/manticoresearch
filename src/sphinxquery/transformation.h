@@ -18,12 +18,39 @@
 
 using BigramHash_t = CSphOrderedHash<CSphVector<XQNode_t *>, uint64_t, IdentityHash_fn, 128>;
 
+enum class eTransformations : BYTE
+{
+	eHung, eExcessBrackets, eAndNotNot, eExcessAndNot, eCommonAndNotFactor, eCommonNot, eCommonSubterm, eCommonCompoundNot, eCommonOrNot, eSize
+};
+
+constexpr const char * NameOfTransformation ( eTransformations eVal )
+{
+	constexpr const char * list_of_transformations[] = {
+		"'HUNG OPERAND' AND(OR) node with only 1 child",
+		"'EXCESS BRACKETS' ((A B) C) -> ( A B C )",
+		"'AND NOT NOT' (foo -- bar) -> (foo bar)",
+		"'EXCESS AND NOT' ((A !N1) !N2) -> (A !(N1 | N2))",
+		"'COMMON ANDNOT FACTOR' ((A !X) | (A !Y) | (A !Z)) -> (A !(X Y Z))",
+		"'COMMON NOT' ((A !N) | (B !N)) -> ((A|B) !N)",
+		"'COMMON SUBTERM' ((A (AA | X)) | (B (BB | X))) -> ((A AA) | (B BB) | ((A|B) X)) [ if cost(X) > cost(A) + cost(B) ]",
+		"'COMMON COMPOUND NOT' ((A !(N AA)) | (B !(N BB))) -> (((A|B) !N) | (A !AA) | (B !BB)) [ if cost(N) > cost(A) + cost(B) ]",
+		"'COMMON OR NOT' ((A !(N | N1)) | (B !(N | N2))) -> (( (A !N1) | (B !N2) ) !N)",
+	};
+	constexpr size_t NTransformations = std::size ( list_of_transformations );
+	static_assert ( NTransformations==(size_t) eTransformations::eSize );
+	return list_of_transformations[(size_t)eVal];
+}
+
 class CSphTransformation : public ISphNoncopyable
 {
 public:
 	CSphTransformation ( XQNode_t ** ppRoot, const ISphKeywordsStat * pKeywords );
 
 	void Transform ();
+
+	std::array<DWORD,(size_t)eTransformations::eSize> m_dTransformations {0};
+	uint64_t m_uTotalTransformations = 0;
+	uint64_t m_uTurns = 0;
 
 private:
 	using HashSimilar_t = CSphOrderedHash<CSphVector<XQNode_t *>, uintptr_t, IdentityHash_fn, 32>;

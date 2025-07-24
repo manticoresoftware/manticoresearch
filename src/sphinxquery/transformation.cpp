@@ -133,20 +133,26 @@ void CSphTransformation::DumpSimilar () const noexcept
 #endif
 }
 
-#define STEPS ++uSteps;
-//#define STEPS ++uSteps;if(uSteps>10)break;
 #if XQDEBUG
-#define DUMP(descr) do {StringBuilder_c foo; foo << "\n" << uSteps << " " descr; Dump ( bDump ? *m_ppRoot : nullptr, foo.cstr() ); } while (false)
+#define DUMP(n,NameID) do {StringBuilder_c foo; foo << "\n" << m_uTotalTransformations << " After transformation " << (int)NameID+1 << ", " << NameOfTransformation(NameID); Dump ( bDump ? *m_ppRoot : nullptr, foo.cstr() ); } while (false)
 #else
-#define DUMP(descr)
+#define DUMP(n,NameID)
 #endif
+
+#define TRANSFORM(Group,Subgroup,fhChecker,fnTransformer,NameID) if ( CollectInfo <Group, Subgroup> ( *m_ppRoot, &fhChecker ) ) \
+{ \
+	const bool bDump = fnTransformer (); \
+	if ( bDump ) { bRecollect = true; ++m_uTotalTransformations; ++m_dTransformations[size_t(NameID)]; } \
+	DUMP ( m_uTotalTransformations, NameID );\
+}
+
 
 void CSphTransformation::Transform ()
 {
 	// (A | "A B"~N) -> A
 	// ("A B" | "A B C") -> "A B"
 	// ("A B"~N | "A B C"~N) -> ("A B"~N)
-	if ( CollectInfo <ParentNode, NullNode> ( *m_ppRoot, &CheckCommonKeywords ) )
+	if ( CollectInfo<ParentNode, NullNode> ( *m_ppRoot, &CheckCommonKeywords ) )
 	{
 		const bool bDump = TransformCommonKeywords ();
 		Dump ( bDump ? *m_ppRoot : nullptr, "\nAfter transformation of 'COMMON KEYWORDS'" );
@@ -162,100 +168,47 @@ void CSphTransformation::Transform ()
 	}
 
 	bool bRecollect = false;
-	DWORD uSteps=0;
+	m_uTotalTransformations=0;
 	do
 	{
 		bRecollect = false;
 
-		// ((A !N) | (B !N)) -> ((A|B) !N)
-		if ( CollectInfo <Grand2Node, CurrentNode> ( *m_ppRoot, &CheckCommonNot ) )
-		{
-			const bool bDump = TransformCommonNot ();
-			bRecollect |= bDump;
-			DUMP ( "After transformation 1, 'COMMON NOT' ((A !N) | (B !N)) -> ((A|B) !N)" );
-			STEPS
-		}
-
-		// ((A !(N AA)) | (B !(N BB))) -> (((A|B) !N) | (A !AA) | (B !BB)) [ if cost(N) > cost(A) + cost(B) ]
-		if ( CollectInfo <Grand3Node, CurrentNode> ( *m_ppRoot, &CheckCommonCompoundNot ) )
-		{
-			const bool bDump = TransformCommonCompoundNot ();
-			bRecollect |= bDump;
-			DUMP ( "After transformation 2, 'COMMON COMPOUND NOT' ((A !(N AA)) | (B !(N BB))) -> (((A|B) !N) | (A !AA) | (B !BB)) [ if cost(N) > cost(A) + cost(B) ]" );
-			STEPS
-		}
-
-		// ((A (AA | X)) | (B (BB | X))) -> ((A AA) | (B BB) | ((A|B) X)) [ if cost(X) > cost(A) + cost(B) ]
-		if ( CollectInfo <Grand2Node, CurrentNode> ( *m_ppRoot, &CheckCommonSubTerm ) )
-		{
-			// DumpSimilar();
-			const bool bDump = TransformCommonSubTerm ();
-			bRecollect |= bDump;
-			DUMP ( "After transformation 3, 'COMMON SUBTERM' ((A (AA | X)) | (B (BB | X))) -> ((A AA) | (B BB) | ((A|B) X)) [ if cost(X) > cost(A) + cost(B) ]" );
-			STEPS
-		}
-
-		// ((A !X) | (A !Y) | (A !Z)) -> (A !(X Y Z))
-		if ( CollectInfo <GrandNode, CurrentNode> ( *m_ppRoot, &CheckCommonAndNotFactor ) )
-		{
-//			DumpSimilar ();
-			bool bDump = TransformCommonAndNotFactor ();
-			bRecollect |= bDump;
-			DUMP ( "After transformation 4, 'COMMON ANDNOT FACTOR' ((A !X) | (A !Y) | (A !Z)) -> (A !(X Y Z))" );
-			STEPS
-		}
-
-		// ((A !(N | N1)) | (B !(N | N2))) -> (( (A !N1) | (B !N2) ) !N)
-		if ( CollectInfo <Grand3Node, CurrentNode> ( *m_ppRoot, &CheckCommonOrNot ) )
-		{
-//			DumpSimilar();
-			const bool bDump = TransformCommonOrNot ();
-			bRecollect |= bDump;
-			DUMP ( "After transformation 5, 'COMMON OR NOT' ((A !(N | N1)) | (B !(N | N2))) -> (( (A !N1) | (B !N2) ) !N)" );
-			STEPS
-		}
-
 		// AND(OR) node with only 1 child
-		if ( CollectInfo <NullNode, NullNode> ( *m_ppRoot, &CheckHungOperand ) )
-		{
-			const bool bDump = TransformHungOperand ();
-			bRecollect |= bDump;
-			DUMP ( "After transformation 6, 'HUNG OPERAND' AND(OR) node with only 1 child" );
-			STEPS
-		}
+		TRANSFORM ( NullNode, NullNode, CheckHungOperand, TransformHungOperand, eTransformations::eHung );
 
 		// ((A | B) | C) -> ( A | B | C )
 		// ((A B) C) -> ( A B C )
-		if ( CollectInfo <NullNode, NullNode> ( *m_ppRoot, &CheckExcessBrackets ) )
-		{
-			const bool bDump = TransformExcessBrackets ();
-			bRecollect |= bDump;
-			DUMP ( "After transformation 7, 'EXCESS BRACKETS' ((A B) C) -> ( A B C )" );
-			STEPS
-		}
-
-		// ((A !N1) !N2) -> (A !(N1 | N2))
-		if ( CollectInfo <ParentNode, CurrentNode> ( *m_ppRoot, &CheckExcessAndNot ) )
-		{
-//			DumpSimilar();
-			const bool bDump = TransformExcessAndNot ();
-			bRecollect |= bDump;
-			DUMP ( "After transformation 8, 'EXCESS AND NOT' ((A !N1) !N2) -> (A !(N1 | N2))" );
-			STEPS
-		}
+		TRANSFORM ( NullNode, NullNode, CheckExcessBrackets, TransformExcessBrackets, eTransformations::eExcessBrackets );
 
 		// (foo -- bar) -> (foo bar)
-		if ( CollectInfo <NullNode, NullNode> ( *m_ppRoot, &CheckAndNotNotOperand ) )
-		{
-		//	DumpSimilar();
-			const bool bDump = TransformAndNotNotOperand ();
-			bRecollect |= bDump;
-			DUMP ( "After transformation 9, 'AND NOT NOT' (foo -- bar) -> (foo bar)" );
-		}
+		TRANSFORM ( NullNode, NullNode, CheckAndNotNotOperand, TransformAndNotNotOperand, eTransformations::eAndNotNot );
+
+		// ((A !N1) !N2) -> (A !(N1 | N2))
+		TRANSFORM ( ParentNode, CurrentNode, CheckExcessAndNot, TransformExcessAndNot, eTransformations::eExcessAndNot );
+
+		// ((A !X) | (A !Y) | (A !Z)) -> (A !(X Y Z))
+		TRANSFORM ( GrandNode, CurrentNode, CheckCommonAndNotFactor, TransformCommonAndNotFactor, eTransformations::eCommonAndNotFactor );
+
+		// ((A !N) | (B !N)) -> ((A|B) !N)
+		TRANSFORM ( Grand2Node, CurrentNode, CheckCommonNot, TransformCommonNot, eTransformations::eCommonNot );
+
+		// ((A (AA | X)) | (B (BB | X))) -> ((A AA) | (B BB) | ((A|B) X)) [ if cost(X) > cost(A) + cost(B) ]
+		TRANSFORM ( Grand2Node, CurrentNode, CheckCommonSubTerm, TransformCommonSubTerm, eTransformations::eCommonSubterm );
+
+		// ((A !(N AA)) | (B !(N BB))) -> (((A|B) !N) | (A !AA) | (B !BB)) [ if cost(N) > cost(A) + cost(B) ]
+		TRANSFORM ( Grand3Node, CurrentNode, CheckCommonCompoundNot, TransformCommonCompoundNot, eTransformations::eCommonCompoundNot);
+
+		// ((A !(N | N1)) | (B !(N | N2))) -> (( (A !N1) | (B !N2) ) !N)
+		TRANSFORM ( Grand3Node, CurrentNode, CheckCommonOrNot, TransformCommonOrNot, eTransformations::eCommonOrNot );
+
+		++m_uTurns;
 	} while ( bRecollect );
 
 	( *m_ppRoot )->Check ( true );
 }
+
+#undef DUMP
+#undef TRANSFORM
 
 bool HasSameParent ( const VecTraits_T<XQNode_t *> & dSimilarNodes ) noexcept
 {
@@ -297,16 +250,24 @@ void CSphTransformation::AddOrReplaceNode ( XQNode_t * pParent, XQNode_t * pChil
 
 void sphOptimizeBoolean ( XQNode_t ** ppRoot, const ISphKeywordsStat * pKeywords )
 {
-#if XQDEBUG
+#if XQDEBUG_STAT
 	int64_t tmDelta = sphMicroTimer();
 #endif
 
 	CSphTransformation qInfo ( ppRoot, pKeywords );
 	qInfo.Transform ();
 
-#if XQDEBUG
+#if XQDEBUG_STAT
 	tmDelta = sphMicroTimer() - tmDelta;
-	if ( tmDelta>10 )
-		printf ( "optimized boolean in %d.%03d msec\n", (int)(tmDelta/1000), (int)(tmDelta%1000) );
+	if ( tmDelta<11 )
+		return;
+	printf ( "optimized boolean in %d.%03d msec, " UINT64_FMT " loops, " UINT64_FMT " ops\n", (int)(tmDelta/1000), (int)(tmDelta%1000), qInfo.m_uTurns, qInfo.m_uTotalTransformations );
+	for (int i=0; i<std::size(qInfo.m_dTransformations); ++i)
+	{
+		const auto iCounter = qInfo.m_dTransformations[i];
+		if (!iCounter)
+			continue;
+		printf ( "%d\t%s\n", iCounter, NameOfTransformation (static_cast<eTransformations> (i)) );
+	}
 #endif
 }

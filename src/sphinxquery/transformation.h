@@ -128,7 +128,7 @@ private:
 
 	// ((A !N1) !N2) -> (A !(N1 | N2))
 	static bool CheckExcessAndNot ( const XQNode_t * pNode ) noexcept;
-	bool TransformExcessAndNot () const;
+	bool TransformExcessAndNot () const noexcept;
 
 	// "notnot" operand ( -- node in 'and-not' ) appears after an internal transformation
 	// (A !!B) -> (A B)

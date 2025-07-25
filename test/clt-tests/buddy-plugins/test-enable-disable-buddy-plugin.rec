@@ -1,4 +1,4 @@
-––– block: ../base/start-searchd –––
+––– block: ../base/start-searchd-with-buddy –––
 ––– input –––
 mysql -h0 -P9306 -e "SHOW QUERIES\G"|grep "1. row"
 ––– output –––

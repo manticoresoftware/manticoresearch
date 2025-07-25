@@ -219,3 +219,11 @@ bool CSphTransformation::CollectRelatedNodes ( const CSphVector<XQNode_t *> & dS
 }
 
 bool HasSameParent ( const VecTraits_T<XQNode_t *> & dSimilarNodes ) noexcept;
+
+// remove nodes without children up the tree
+bool SubtreeRemoveEmpty ( XQNode_t * pNode );
+
+// eliminate composite ( AND / OR ) nodes with only one child
+void CompositeFixup ( XQNode_t * pNode, XQNode_t ** ppRoot );
+
+void CleanupSubtree ( XQNode_t * pNode, XQNode_t ** ppRoot );

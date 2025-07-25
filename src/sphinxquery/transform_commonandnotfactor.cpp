@@ -126,16 +126,5 @@ void CSphTransformation::MakeTransformCommonAndNotFactor ( const CSphVector<XQNo
 		SafeDelete ( pAndNot );
 	}
 	pAndNew->SetOp ( SPH_QUERY_AND, dAndNewChildren );
-	if (pCommonOr->dChildren().GetLength()>1)
-		return;
-
-	assert ( pCommonOr->dChildren()[0] == pFirstAndNot );
-	if ( !ReplaceNode ( pCommonOr, pFirstAndNot ) )
-	{
-		assert ( pCommonOr == *m_ppRoot );
-		*m_ppRoot = pFirstAndNot;
-		pFirstAndNot->m_pParent = nullptr;
-	}
-	pCommonOr->dChildren()[0] = nullptr;
-	SafeDelete ( pCommonOr );
+	CompositeFixup ( pCommonOr, m_ppRoot );
 }

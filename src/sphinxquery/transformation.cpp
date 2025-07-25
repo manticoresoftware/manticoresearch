@@ -283,6 +283,73 @@ void CSphTransformation::AddOrReplaceNode ( XQNode_t * pParent, XQNode_t * pChil
 	pParent->AddNewChild ( pChild );
 }
 
+// remove nodes without children up the tree
+bool SubtreeRemoveEmpty ( XQNode_t * pNode )
+{
+	if ( !pNode->IsEmpty() )
+		return false;
+
+	// climb up
+	XQNode_t * pParent = pNode->m_pParent;
+	while ( pParent && pParent->dChildren().GetLength()<=1 && pParent->dWords().IsEmpty() )
+		pNode = std::exchange ( pParent, pParent->m_pParent );
+
+	if ( pParent )
+		pParent->RemoveChild ( pNode );
+
+	// free subtree
+	SafeDelete ( pNode );
+	return true;
+}
+
+// eliminate composite ( AND / OR ) nodes with only one child
+void CompositeFixup ( XQNode_t * pNode, XQNode_t ** ppRoot )
+{
+	assert ( pNode );
+	if ( !pNode->dWords().IsEmpty() || pNode->dChildren().GetLength()!=1 || ( pNode->GetOp()!=SPH_QUERY_OR && pNode->GetOp()!=SPH_QUERY_AND ) )
+		return;
+
+	XQNode_t * pChild = pNode->dChildren()[0];
+	pChild->m_pParent = nullptr;
+	pNode->WithChildren ( [] ( auto & dChildren ) { dChildren.Resize ( 0 ); } );
+
+	// climb up
+	XQNode_t * pParent = pNode->m_pParent;
+	while ( pParent && pParent->dChildren().GetLength()==1 && pParent->dWords().IsEmpty() &&
+		( pParent->GetOp()==SPH_QUERY_OR || pParent->GetOp()==SPH_QUERY_AND ) )
+	{
+		pNode = std::exchange (pParent, pParent->m_pParent);
+	}
+
+	if ( pParent )
+	{
+		for ( auto& dChild : pParent->dChildren() )
+		{
+			if ( dChild!=pNode )
+				continue;
+
+			dChild = pChild;
+			pChild->m_pParent = pParent;
+			pParent->Rehash();
+			break;
+		}
+	} else
+	{
+		*ppRoot = pChild;
+	}
+
+	// free subtree
+	SafeDelete ( pNode );
+}
+
+void CleanupSubtree ( XQNode_t * pNode, XQNode_t ** ppRoot )
+{
+	if ( SubtreeRemoveEmpty ( pNode ) )
+		return;
+
+	CompositeFixup ( pNode, ppRoot );
+}
+
 void sphOptimizeBoolean ( XQNode_t ** ppRoot, const ISphKeywordsStat * pKeywords )
 {
 #if XQDEBUG_STAT

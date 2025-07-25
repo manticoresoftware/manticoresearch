@@ -119,7 +119,7 @@ jobs:
         uses: manticoresoftware/upload_artifact_with_retries@v4
         with:
           name: ${{ inputs.artifact_name }}
-          path: "build/xml build/junit*.xml build/status* build/test/error*.txt build/test/*log build/test/test_*/report* build/test/rt_*/report* build/test/col_*/report*"
+          path: "build/xml build/junit*.xml build/status* build/test/error*.txt build/test/*log build/test/test_*/report* build/test/test_*/*.log build/test/rt_*/report* build/test/rt_*/*.log build/test/col_*/report* build/test/col_*/*.log"
 
       - name: Publish test results
         if: always()

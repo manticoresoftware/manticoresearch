@@ -315,9 +315,11 @@ $name_err = $locals['scriptdir'] . error_txt();
 
 foreach ( $tests as $test )
 {
+	print ( "INFO: Processing test $test\n" );
 	$res_path = resdir($test);
 	if ( $windows && !$sd_managed_searchd )
 	{
+		print ( "INFO: Adjusting ports for Windows (test_num: $test_num)\n" );
 		// avoid an issue with daemons stuck in exit(0) for some seconds
 		$sd_port = $sd_port_ref + 10 * ( $test_num % 10 );
 		$agent_port = $agent_port_ref + 10 * ( $test_num % 10 );
@@ -333,18 +335,24 @@ foreach ( $tests as $test )
 			array ( "address" => $agent_address, "port" => $agent_port, "sqlport" => $agent_port_sql, "sqlport_vip" => $agent_port_sql_vip, "replication_port"=>0, "http_port" => $agent_port_http ),
 			array ( "address" => $agent_address, "port" => $agent_port+1, "sqlport" => $agent_port_sql+1, "sqlport_vip" => $agent_port_sql_vip+1, "replication_port"=>0, "http_port" => $agent_port_http+1 )
 		);
+		print ( "INFO: Using ports - searchd: $sd_port, sphinxql: $sd_sphinxql_port, http: $sd_http_port\n" );
 	}
 
 
 	if (!$g_model)
 		if ( !file_exists ( $res_path ) )
+		{
+			print ( "INFO: Creating result directory $res_path\n" );
 			mkdir ( $res_path );
+		}
 
 	if ( file_exists ( $test."/test.xml" ) )
 	{
+		print ( "INFO: Running XML-based test $test\n" );
 		$total_tests++;
 		$res = RunTest ( $test, $g_skipdemo, $g_usemarks );
 
+		print ( "INFO: Copying error logs for test $test\n" );
 		// copy searchd log into a file
 		file_put_contents($name_err_all, "\n*** in test $test ***\n", FILE_APPEND);
 		if ( file_exists ($name_err) )
@@ -362,23 +370,28 @@ foreach ( $tests as $test )
 
 		if ( !is_array($res) )
 		{
+			print ( "INFO: Test $test failed to run completely\n" );
 			// failed to run that test at all
 			$total_tests_failed++;
 			$failed_tests[] = ShortTestName ( $test );
 			continue;
 		}
 
+		print ( "INFO: Test $test completed - subtests: {$res["tests_total"]}, failed: {$res["tests_failed"]}, skipped: {$res["tests_skipped"]}\n" );
 		$total_subtests += $res["tests_total"];
 		$total_skipped += $res["tests_skipped"];
 		if ( $res["tests_failed"] )
 		{
+			print ( "INFO: Test $test has failures, marking as failed\n" );
 			$total_tests_failed++;
 			$total_subtests_failed += $res["tests_failed"];
 			$failed_tests[] = ShortTestName ( $test );
 			if ( $g_strict )
 			{
+				print ( "INFO: Strict mode enabled, stopping on first failure\n" );
 				if ( $g_strictverbose )
 				{
+					print ( "INFO: Copying report to script directory for strict-verbose mode\n" );
 					$report = file_get_contents ( "$res_path/report.txt" );
 					$report.= "\n Test $test failed\n";
 					file_put_contents(scriptdir("report.txt"),$report);
@@ -390,6 +403,7 @@ foreach ( $tests as $test )
 	}
 	elseif ( file_exists ( $test."/test.inc" ) )
 	{
+		print ( "INFO: Running include-based test $test\n" );
 		$run_func = function ( $test_path ) use ($test) { return file_get_contents ( $test."/test.inc" ); };
 
 		$total_tests++;
@@ -397,10 +411,19 @@ foreach ( $tests as $test )
 
 		if ( !$run_func ( $test ) )
 		{
+			print ( "INFO: Include-based test $test failed\n" );
 			$total_tests_failed++;
 			$total_subtests_failed++;
 			$failed_tests[] = ShortTestName ( $test );
 		}
+		else
+		{
+			print ( "INFO: Include-based test $test passed\n" );
+		}
+	}
+	else
+	{
+		print ( "INFO: Skipping $test - no test.xml or test.inc found\n" );
 	}
 }
 

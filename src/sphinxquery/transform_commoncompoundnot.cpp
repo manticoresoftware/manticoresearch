@@ -40,6 +40,7 @@ bool CSphTransformation::CheckCommonCompoundNot ( const XQNode_t * pNode ) noexc
 bool CSphTransformation::TransformCommonCompoundNot () noexcept
 {
 	int iActiveDeep = 0;
+	ResetCostsHash();
 	for ( auto& [_, hSimGroup] : m_hSimilar )
 		for ( auto& [_, dSimilarNodes] : hSimGroup.tHash )
 		{

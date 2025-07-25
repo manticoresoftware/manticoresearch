@@ -54,56 +54,45 @@ bool CSphTransformation::CollectInfo ( XQNode_t * pNode, Checker_fn pfnChecker )
 	return ( m_hSimilar.GetLength()>0 );
 }
 
-struct CSphHornerStrHashFunc
-{
-	static int Hash ( const CSphString& sKey )
-	{
-		int iHash = 0;
-		if ( !sKey.cstr() )
-			return iHash;
-
-		for ( auto * pStr = sKey.cstr(); *pStr; ++pStr )
-			iHash = iHash * 257 + *pStr;
-
-		return iHash;
-	}
-};
-
-void CSphTransformation::SetCosts ( XQNode_t * pNode, const CSphVector<XQNode_t *> & dNodes ) const noexcept
+void CSphTransformation::SetCosts ( XQNode_t * pNode, const CSphVector<XQNode_t *> & dNodes ) noexcept
 {
 	assert ( pNode || dNodes.GetLength() );
 
 	if ( !m_pKeywords )
 		return;
 
-	CSphVector<XQNode_t*> dChildren ( dNodes.GetLength() + 1 );
-	dChildren[dNodes.GetLength()] = pNode;
+	CSphVector<XQNode_t*> dAllNodes ( dNodes.GetLength() + 1 );
 	ARRAY_FOREACH ( i, dNodes )
-	{
-		dChildren[i] = dNodes[i];
-		dChildren[i]->m_iUser = 0;
-	}
+		dAllNodes[i] = dNodes[i];
+	dAllNodes[dNodes.GetLength()] = pNode;
 
 	// collect unknown keywords from all children
 	CSphVector<CSphKeywordInfo> dKeywords;
-	OpenHashTable_T<const CSphString*, int, CSphStrPtrHashFunc<CSphHornerStrHashFunc>> hCosts;
-	ARRAY_FOREACH ( i, dChildren ) // don't use 'ranged for' here, as dChildren modified during the loop
+	ARRAY_FOREACH ( i, dAllNodes ) // don't use 'ranged for' here, as dChildren modified during the loop
 	{
-		const XQNode_t * pChild = dChildren[i];
-		for ( XQNode_t* pGrandChild : pChild->dChildren() )
+		XQNode_t * pNode = dAllNodes[i];
+
+		// always rehash nodes with children; only leaf nodes are persistent
+		if ( !pNode->dChildren().IsEmpty() )
+			pNode->m_iUser = -1;
+
+		for ( XQNode_t* pChild : pNode->dChildren() )
 		{
-			dChildren.Add ( pGrandChild );
-			dChildren.Last()->m_iUser = 0;
-			assert ( dChildren.Last()->m_pParent==pChild );
+			dAllNodes.Add ( pChild );
+			assert ( dAllNodes.Last()->m_pParent==pNode );
 		}
-		for ( const auto& dWord : pChild->dWords() )
+		// this node was already hashed
+		if ( pNode->m_iUser != -1 )
+			continue;
+
+		for ( const auto& dWord : pNode->dWords() )
 		{
 			const CSphString & sWord = dWord.m_sWord;
-			int * pCost = hCosts.Find ( &sWord );
+			int * pCost = m_hCosts.Find ( &sWord );
 			if ( pCost )
 				continue;
 
-			Verify ( hCosts.Add ( &sWord, 0 ) );
+			Verify ( m_hCosts.Add ( &sWord, 0 ) );
 			dKeywords.Add();
 			dKeywords.Last().m_sTokenized = sWord;
 			dKeywords.Last().m_iDocs = 0;
@@ -114,19 +103,28 @@ void CSphTransformation::SetCosts ( XQNode_t * pNode, const CSphVector<XQNode_t 
 	if ( !dKeywords.IsEmpty() )
 	{
 		m_pKeywords->FillKeywords ( dKeywords );
-		for_each ( dKeywords, [&hCosts] (const auto& tKeyword) { *hCosts.Find ( &tKeyword.m_sTokenized) = tKeyword.m_iDocs; } );
+		for_each ( dKeywords, [this] (const auto& tKeyword) { *m_hCosts.Find ( &tKeyword.m_sTokenized) = tKeyword.m_iDocs; } );
 	}
 
 	// propagate cost bottom-up (from children to parents)
-	for ( int i=dChildren.GetLength()-1; i>=0; --i )
+	for ( int i=dAllNodes.GetLength()-1; i>=0; --i )
 	{
-		XQNode_t * pChild = dChildren[i];
-		int iCost = 0;
-		for_each ( pChild->dWords(), [&iCost,&hCosts] (const auto& dWord) { iCost += *hCosts.Find(&dWord.m_sWord); } );
-		pChild->m_iUser += iCost;
-		if ( pChild->m_pParent )
-			pChild->m_pParent->m_iUser += pChild->m_iUser;
+		XQNode_t * pNode = dAllNodes[i];
+		if ( pNode->m_iUser == -1 ) // virgin node, apply the cost
+		{
+			int iCost = 0;
+			for_each ( pNode->dWords(), [&iCost,this] ( const auto & dWord ) { iCost += *m_hCosts.Find ( &dWord.m_sWord ); } );
+			pNode->m_iUser = iCost;
+		}
+
+		if ( pNode->m_pParent )
+		   pNode->m_pParent->m_iUser += pNode->m_iUser + ( pNode->m_pParent->m_iUser==-1 ? 1 : 0);
 	}
+}
+
+void CSphTransformation::ResetCostsHash () noexcept
+{
+	m_hCosts.Clear();
 }
 
 void CSphTransformation::DumpSimilar () const noexcept

@@ -14,6 +14,7 @@
 
 #include "sphinxquery.h"
 #include "std/generics.h"
+#include "std/openhash.h"
 #include "xqdebug.h"
 
 enum class eTransformations : BYTE
@@ -38,6 +39,22 @@ constexpr const char * NameOfTransformation ( eTransformations eVal )
 	static_assert ( NTransformations==(size_t) eTransformations::eSize );
 	return list_of_transformations[(size_t)eVal];
 }
+
+struct CSphHornerStrHashFunc
+{
+	static int Hash ( const CSphString& sKey )
+	{
+		int iHash = 0;
+		if ( !sKey.cstr() )
+			return iHash;
+
+		for ( auto * pStr = sKey.cstr(); *pStr; ++pStr )
+			iHash = iHash * 257 + *pStr;
+
+		return iHash;
+	}
+};
+
 
 class CSphTransformation : public ISphNoncopyable
 {
@@ -72,10 +89,14 @@ private:
 
 	using Checker_fn = bool ( * ) ( const XQNode_t * );
 
+	// no need to rehash each run, as terms are not changed at all during related ops
+	OpenHashTable_T<const CSphString*, int, CSphStrPtrHashFunc<CSphHornerStrHashFunc>> m_hCosts;
+
 private:
 	void DumpSimilar () const noexcept;
 
-	void SetCosts ( XQNode_t * pNode, const CSphVector<XQNode_t *> & dNodes ) const noexcept;
+	void SetCosts ( XQNode_t * pNode, const CSphVector<XQNode_t *> & dNodes ) noexcept;
+	void ResetCostsHash() noexcept;
 
 	static int GetWeakestIndex ( const CSphVector<XQNode_t *> & dNodes );
 	static int GetWeakestChildIndex ( const CSphVector<XQNode_t *> & dNodes );

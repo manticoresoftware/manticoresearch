@@ -163,7 +163,7 @@ public:
 
 	int						m_iOpArg = 0;		///< operator argument (proximity distance, quorum count)
 	int						m_iAtomPos = -1;	///< atom position override (currently only used within expanded nodes)
-	int						m_iUser = 0;
+	int						m_iUser = -1;
 	bool					m_bVirtuallyPlain = false;	///< "virtually plain" flag (currently only used by expanded nodes)
 	bool					m_bNotWeighted = false;	///< this our expanded but empty word's node
 	bool					m_bPercentOp = false;

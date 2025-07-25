@@ -37,6 +37,7 @@ bool CSphTransformation::CheckCommonSubTerm ( const XQNode_t * pNode ) noexcept
 bool CSphTransformation::TransformCommonSubTerm () noexcept
 {
 	int iActiveDeep = 0;
+	ResetCostsHash();
 	for ( auto & [_, hSimGroup]: m_hSimilar )
 		for ( auto & [_, dX] : hSimGroup.tHash )
 		{

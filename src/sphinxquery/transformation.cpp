@@ -149,18 +149,38 @@ void CSphTransformation::DumpSimilar () const noexcept
 }
 
 #if XQDEBUG
-#define DUMP(n,NameID) do {StringBuilder_c foo; foo << "\n" << m_uTotalTransformations << " After transformation " << (int)NameID+1 << ", " << NameOfTransformation(NameID); Dump ( bDump ? *m_ppRoot : nullptr, foo.cstr() ); } while (false)
+#define DUMP(NameID) do {StringBuilder_c foo; foo << "\n" << m_uTotalSuccess << " After transformation " << (int)NameID+1 << ", " << NameOfTransformation(NameID); Dump ( bDump ? *m_ppRoot : nullptr, foo.cstr() ); } while (false)
 #else
-#define DUMP(n,NameID)
+#define DUMP(NameID)
 #endif
 
 #define TRANSFORM(Group,Subgroup,fhChecker,fnTransformer,NameID) if ( CollectInfo <Group, Subgroup> ( *m_ppRoot, &fhChecker ) ) \
 { \
 	const bool bDump = fnTransformer (); \
-	if ( bDump ) { bRecollect = true; ++m_uTotalTransformations; ++m_dTransformations[size_t(NameID)]; } \
-	DUMP ( m_uTotalTransformations, NameID );\
+	Tick (NameID, bDump); \
+	if ( bDump ) { bRecollect = true; } \
+	DUMP ( NameID );\
 }
 
+void CSphTransformation::Tick ( eTransformations eOp, bool bResult) noexcept
+{
+#if XQDEBUG_STAT
+	const auto uTimestamp = sphMicroTimer();
+	const auto uTime = uTimestamp - std::exchange (m_tmStartTime, uTimestamp);
+	auto& tStats = m_dTransStats[size_t ( eOp )];
+	if ( bResult )
+	{
+		++tStats.m_uSuccess;
+		tStats.m_uTimeSuccess += uTime;
+		++m_uTotalSuccess;
+	} else
+	{
+		++tStats.m_uFailed;
+		tStats.m_uTimeFailed += uTime;
+		++m_uTotalFailed;
+	}
+#endif
+}
 
 void CSphTransformation::Transform ()
 {
@@ -183,7 +203,7 @@ void CSphTransformation::Transform ()
 	}
 
 	bool bRecollect = false;
-	m_uTotalTransformations=0;
+	m_tmStartTime = sphMicroTimer();
 	do
 	{
 		bRecollect = false;
@@ -276,13 +296,17 @@ void sphOptimizeBoolean ( XQNode_t ** ppRoot, const ISphKeywordsStat * pKeywords
 	tmDelta = sphMicroTimer() - tmDelta;
 	if ( tmDelta<11 )
 		return;
-	printf ( "optimized boolean in %d.%03d msec, " UINT64_FMT " loops, " UINT64_FMT " ops\n", (int)(tmDelta/1000), (int)(tmDelta%1000), qInfo.m_uTurns, qInfo.m_uTotalTransformations );
-	for (int i=0; i<std::size(qInfo.m_dTransformations); ++i)
+	StringBuilder_c tFormat;
+	tFormat.Sprintf ( "optimized boolean in %.3t, %d loop(s), %d success, %d failed", tmDelta, qInfo.m_uTurns, qInfo.m_uTotalSuccess, qInfo.m_uTotalFailed );
+	printf ( "%s\n", tFormat.cstr() );
+	tFormat.Clear ();
+	for (int i=0; i<std::size(qInfo.m_dTransStats); ++i)
 	{
-		const auto iCounter = qInfo.m_dTransformations[i];
-		if (!iCounter)
-			continue;
-		printf ( "%d\t%s\n", iCounter, NameOfTransformation (static_cast<eTransformations> (i)) );
+		const auto& tStats = qInfo.m_dTransStats[i];
+		if ( 0==(tStats.m_uSuccess+tStats.m_uFailed )) continue;
+		tFormat.Sprintf ( "%d/%d\t%.3Fs/%.3Fs\t%s", tStats.m_uSuccess, tStats.m_uFailed, tStats.m_uTimeSuccess/1000, tStats.m_uTimeFailed/1000, NameOfTransformation (static_cast<eTransformations> (i)));
+		printf ( "%s\n", tFormat.cstr() );
+		tFormat.Clear ();
 	}
 #endif
 }

@@ -46,9 +46,21 @@ public:
 
 	void Transform ();
 
-	std::array<DWORD,(size_t)eTransformations::eSize> m_dTransformations {0};
-	uint64_t m_uTotalTransformations = 0;
-	uint64_t m_uTurns = 0;
+	struct transform_stats_t
+	{
+		DWORD m_uSuccess = 0;
+		DWORD m_uFailed = 0;
+		DWORD m_uTimeSuccess {0};
+		DWORD m_uTimeFailed {0};
+	};
+
+	std::array<transform_stats_t, (size_t) eTransformations::eSize> m_dTransStats;
+	DWORD m_uTotalSuccess = 0;
+	DWORD m_uTotalFailed = 0;
+	DWORD m_uTurns = 0;
+	int64_t m_tmStartTime;
+
+	void Tick (eTransformations eOp, bool bResult) noexcept;
 
 private:
 	using HashSimilar_t = CSphOrderedHash<CSphVector<XQNode_t *>, uintptr_t, IdentityHash_fn, 32>;

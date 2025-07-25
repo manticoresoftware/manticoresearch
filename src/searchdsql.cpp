@@ -379,7 +379,7 @@ public:
 	bool			AddSchemaItem ( SqlNode_t * pNode );
 	bool			SetMatch ( const SqlNode_t & tValue );
 	bool			AddMatch ( const SqlNode_t & tValue, const SqlNode_t & tIndex );
-	bool			SetKNN ( const SqlNode_t & tAttr, const SqlNode_t & tK, const SqlNode_t & tValues, const CSphVector<CSphNamedVariant> * pOpts );
+	bool			SetKNN ( const SqlNode_t & tAttr, const SqlNode_t & tK, const SqlNode_t & tValues, const CSphVector<CSphNamedVariant> * pOpts, bool bAutoEmb );
 	void			AddConst ( int iList, const SqlNode_t& tValue );
 	void			SetLocalStatement ( const SqlNode_t & tName );
 	bool			AddFloatRangeFilter ( const SqlNode_t & tAttr, float fMin, float fMax, bool bHasEqual, bool bExclude=false );
@@ -1417,7 +1417,7 @@ static bool ParseKNNOption ( const CSphNamedVariant & tOpt, KnnSearchSettings_t 
 }
 
 
-bool SqlParser_c::SetKNN ( const SqlNode_t & tAttr, const SqlNode_t & tK, const SqlNode_t & tValues, const CSphVector<CSphNamedVariant> * pOpts )
+bool SqlParser_c::SetKNN ( const SqlNode_t & tAttr, const SqlNode_t & tK, const SqlNode_t & tValues, const CSphVector<CSphNamedVariant> * pOpts, bool bAutoEmb )
 {
 	auto & tKNN = m_pQuery->m_tKnnSettings;
 
@@ -1433,12 +1433,17 @@ bool SqlParser_c::SetKNN ( const SqlNode_t & tAttr, const SqlNode_t & tK, const 
 				return false;
 			}
 
-	if ( tValues.m_iValues>=0 )
+	if ( bAutoEmb )
+		ToString ( tKNN.m_sEmbStr, tValues );
+	else
 	{
-		const auto & dValues = GetMvaVec ( tValues.m_iValues );
-		tKNN.m_dVec.Reserve ( dValues.GetLength() );
-		for ( const auto & i : dValues )
-			tKNN.m_dVec.Add( i.m_fValue );
+		if ( tValues.m_iValues>=0 )
+		{
+			const auto & dValues = GetMvaVec ( tValues.m_iValues );
+			tKNN.m_dVec.Reserve ( dValues.GetLength() );
+			for ( const auto & i : dValues )
+				tKNN.m_dVec.Add( i.m_fValue );
+		}
 	}
 	
 	return true;

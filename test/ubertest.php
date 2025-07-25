@@ -356,8 +356,8 @@ foreach ( $tests as $test )
 		$current_searchd_log = "searchd.log";
 		if ( file_exists($current_searchd_log) )
 		{
-			$target_searchd_log = "$res_path/searchd.log";
-			rename($current_searchd_log, $target_searchd_log);
+			print ( "INFO: renaming $current_searchd_log to $res_path/searchd.log\n" );
+			rename($current_searchd_log, "$res_path/searchd.log");
 		}
 
 		if ( !is_array($res) )

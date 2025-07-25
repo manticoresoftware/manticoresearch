@@ -367,6 +367,12 @@ foreach ( $tests as $test )
 			print ( "INFO: renaming $current_searchd_log to $res_path/searchd.log\n" );
 			rename($current_searchd_log, "$res_path/searchd.log");
 		}
+		else
+		{
+			print ( "DEBUG: $current_searchd_log not found\n" );
+			print ( "DEBUG: Current directory: " . getcwd() . "\n" );
+			print ( "DEBUG: Directory contents: " . implode(", ", scandir(".")) . "\n" );
+		}
 
 		if ( !is_array($res) )
 		{

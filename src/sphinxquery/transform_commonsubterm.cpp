@@ -14,79 +14,6 @@
 
 // common subterm
 // ((A (AA | X)) | (B (BB | X))) -> ((A AA) | (B BB) | ((A|B) X)) [ if cost(X) > cost(A) + cost(B) ]
-
-namespace {
-
-using HashUnique_t = CSphOrderedHash<int, uintptr_t, IdentityHash_fn, 32>;
-
-// remove nodes without children up the tree
-bool SubtreeRemoveEmpty ( XQNode_t * pNode )
-{
-	if ( !pNode->IsEmpty() )
-		return false;
-
-	// climb up
-	XQNode_t * pParent = pNode->m_pParent;
-	while ( pParent && pParent->dChildren().GetLength()<=1 && pParent->dWords().IsEmpty() )
-		pNode = std::exchange ( pParent, pParent->m_pParent );
-
-	if ( pParent )
-		pParent->RemoveChild ( pNode );
-
-	// free subtree
-	SafeDelete ( pNode );
-	return true;
-}
-
-// eliminate composite ( AND / OR ) nodes with only one child
-void CompositeFixup ( XQNode_t * pNode, XQNode_t ** ppRoot )
-{
-	assert ( pNode );
-	if ( !pNode->dWords().IsEmpty() || pNode->dChildren().GetLength()!=1 || ( pNode->GetOp()!=SPH_QUERY_OR && pNode->GetOp()!=SPH_QUERY_AND ) )
-		return;
-
-	XQNode_t * pChild = pNode->dChildren()[0];
-	pChild->m_pParent = nullptr;
-	pNode->WithChildren ( [] ( auto & dChildren ) { dChildren.Resize ( 0 ); } );
-
-	// climb up
-	XQNode_t * pParent = pNode->m_pParent;
-	while ( pParent && pParent->dChildren().GetLength()==1 && pParent->dWords().IsEmpty() &&
-		( pParent->GetOp()==SPH_QUERY_OR || pParent->GetOp()==SPH_QUERY_AND ) )
-	{
-		pNode = std::exchange (pParent, pParent->m_pParent);
-	}
-
-	if ( pParent )
-	{
-		for ( auto& dChild : pParent->dChildren() )
-		{
-			if ( dChild!=pNode )
-				continue;
-
-			dChild = pChild;
-			pChild->m_pParent = pParent;
-			break;
-		}
-	} else
-	{
-		*ppRoot = pChild;
-	}
-
-	// free subtree
-	SafeDelete ( pNode );
-}
-
-void CleanupSubtree ( XQNode_t * pNode, XQNode_t ** ppRoot )
-{
-	if ( SubtreeRemoveEmpty ( pNode ) )
-		return;
-
-	CompositeFixup ( pNode, ppRoot );
-}
-} // namespace
-
-
 //  NOT:
 //        ________OR (gGOr)
 //		/           |
@@ -110,6 +37,7 @@ bool CSphTransformation::CheckCommonSubTerm ( const XQNode_t * pNode ) noexcept
 bool CSphTransformation::TransformCommonSubTerm () noexcept
 {
 	int iActiveDeep = 0;
+	ResetCostsHash();
 	for ( auto & [_, hSimGroup]: m_hSimilar )
 		for ( auto & [_, dX] : hSimGroup.tHash )
 		{
@@ -119,6 +47,7 @@ bool CSphTransformation::TransformCommonSubTerm () noexcept
 			// Nodes with the same iFuzzyHash
 			if ( dX.GetLength()<2
 				|| HasSameParent ( dX )
+				|| HasSameGrand ( dX )
 				)
 				continue;
 
@@ -137,6 +66,7 @@ bool CSphTransformation::TransformCommonSubTerm () noexcept
 				continue;
 
 			MakeTransformCommonSubTerm ( dX );
+			ResetCostsHash();
 //			StringBuilder_c sHead;
 //			sHead << "\nTransformCommonSubTerm #" << ++iTurns << " ((A (X | AA)) | (B (X | BB))) -> (((A|B) X) | (A AA) | (B BB)) [ if cost(X) > cost(A) + cost(B) ]";
 //			Dump ( *m_ppRoot, sHead.cstr() );

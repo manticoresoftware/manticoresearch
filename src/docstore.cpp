@@ -310,6 +310,7 @@ struct BlockUtil_t
 		DWORD uCRC32 = sphCRC32 ( &tKey.m_iIndexId, sizeof(tKey.m_iIndexId) );
 		return sphCRC32 ( &tKey.m_tOffset, sizeof(tKey.m_tOffset), uCRC32 );
 	}
+	static bool Equal ( const HashKey_t & a, const HashKey_t & b ) { return a==b; }
 
 	static DWORD GetSize ( const BlockData_t & tValue )	{ return tValue.m_uSize; }
 	static void Reset ( BlockData_t & tValue )			{ SafeDeleteArray ( tValue.m_pData ); }

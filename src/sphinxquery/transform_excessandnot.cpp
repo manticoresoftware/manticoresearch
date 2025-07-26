@@ -106,7 +106,7 @@ bool CSphTransformation::CheckExcessAndNot ( const XQNode_t * pNode ) noexcept
 }
 
 
-bool CSphTransformation::TransformExcessAndNot () const
+bool CSphTransformation::TransformExcessAndNot () const noexcept
 {
 	int iActiveDeep = 0;
 	CSphOrderedHash<int, XQNode_t *, XQNodeHash_fn, 64> hDeleted;

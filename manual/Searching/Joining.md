@@ -357,22 +357,345 @@ POST /search
 
 <!-- end -->
 
-### Example: Complex JOIN with faceting
+## Full-text matching across joined tables
 
-Building on the previous examples, let's explore a more advanced scenario where we combine table joins with faceting. This allows us to not only retrieve joined data but also aggregate and analyze it in meaningful ways.
+One of the powerful features of table joins in Manticore Search is the ability to perform full-text searches on both the left and right tables simultaneously. This allows you to create complex queries that filter based on text content in multiple tables.
+
+<!-- example fulltext_basic -->
+
+You can use separate `MATCH()` functions for each table in your JOIN query. The query filters results based on text content in both tables.
+
+<!-- request SQL -->
+```sql
+SELECT t1.f, t2.f 
+FROM t1 
+LEFT JOIN t2 ON t1.id = t2.id 
+WHERE MATCH('hello', t1) AND MATCH('goodbye', t2);
+```
+
+<!-- request JSON -->
+```json
+POST /search
+{
+  "table": "t1",
+  "query": {
+    "query_string": "hello"
+  },
+  "join": [
+    {
+      "type": "left",
+      "table": "t2",
+      "query": {
+        "query_string": "goodbye"
+      },
+      "on": [
+        {
+          "left": {
+            "table": "t1",
+            "field": "id"
+          },
+          "operator": "eq",
+          "right": {
+            "table": "t2",
+            "field": "id"
+          }
+        }
+      ]
+    }
+  ],
+  "_source": ["f", "t2.f"]
+}
+```
+
+<!-- response SQL -->
+
+```sql
++-------------+---------------+
+| f           | t2.f          |
++-------------+---------------+
+| hello world | goodbye world |
++-------------+---------------+
+1 row in set (0.00 sec)
+```
+
+<!-- response JSON -->
+
+```json
+{
+  "took": 1,
+  "timed_out": false,
+  "hits": {
+    "total": 1,
+    "total_relation": "eq",
+    "hits": [
+      {
+        "_id": 2,
+        "_score": 1680,
+        "t2._score": 1680,
+        "_source": {
+          "f": "hello world",
+          "t2.f": "goodbye world"
+        }
+      }
+    ]
+  }
+}
+```
+
+<!-- end -->
+
+### JSON query structure for joins
+
+In JSON API queries, table-specific full-text matching is structured differently than SQL:
+
+<!-- example fulltext_json_structure -->
+
+**Main table query**: The `"query"` field at the root level applies to the main table (specified in `"table"`).
+
+**Joined table query**: Each join definition can include its own `"query"` field that applies specifically to that joined table.
+
+<!-- request JSON -->
+```json
+POST /search
+{
+  "table": "t1",
+  "query": {
+    "query_string": "hello"
+  },
+  "join": [
+    {
+      "type": "left",
+      "table": "t2",
+      "query": {
+        "match": {
+          "*": "goodbye"
+        }
+      },
+      "on": [
+        {
+          "left": {
+            "table": "t1",
+            "field": "id"
+          },
+          "operator": "eq",
+          "right": {
+            "table": "t2",
+            "field": "id"
+          }
+        }
+      ]
+    }
+  ]
+}
+```
+
+<!-- response JSON -->
+
+```json
+{
+  "took": 1,
+  "timed_out": false,
+  "hits": {
+    "total": 1,
+    "total_relation": "eq",
+    "hits": [
+      {
+        "_id": 1,
+        "_score": 1680,
+        "t2._score": 1680,
+        "_source": {
+          "f": "hello world",
+          "t2.id": 1,
+          "t2.f": "goodbye world"
+        }
+      }
+    ]
+  }
+}
+```
+
+<!-- end -->
+
+### Understanding query behavior in JOIN operations
+
+<!-- example fulltext_json_behavior -->
+
+**1. Query on main table only**: Returns all matching rows from the main table. For unmatched joined records (LEFT JOIN), SQL returns NULL values while JSON API returns default values (0 for numbers, empty strings for text).
+
+<!-- request SQL -->
+```sql
+SELECT * FROM t1 
+LEFT JOIN t2 ON t1.id = t2.id 
+WHERE MATCH('database', t1);
+```
+
+<!-- response SQL -->
+
+```sql
++------+-----------------+-------+------+
+| id   | f               | t2.id | t2.f |
++------+-----------------+-------+------+
+|    3 | database search |  NULL | NULL |
++------+-----------------+-------+------+
+1 row in set (0.00 sec)
+```
+
+<!-- request JSON -->
+```json
+POST /search
+{
+  "table": "t1",
+  "query": {
+    "query_string": "database"
+  },
+  "join": [
+    {
+      "type": "left",
+      "table": "t2",
+      "on": [
+        {
+          "left": {
+            "table": "t1",
+            "field": "id"
+          },
+          "operator": "eq",
+          "right": {
+            "table": "t2",
+            "field": "id"
+          }
+        }
+      ]
+    }
+  ]
+}
+```
+
+<!-- response JSON -->
+
+```json
+{
+  "took": 0,
+  "timed_out": false,
+  "hits": {
+    "total": 1,
+    "total_relation": "eq",
+    "hits": [
+      {
+        "_id": 3,
+        "_score": 1680,
+        "t2._score": 0,
+        "_source": {
+          "f": "database search",
+          "t2.id": 0,
+          "t2.f": ""
+        }
+      }
+    ]
+  }
+}
+```
+<!--end -->
+
+<!-- example fulltext_json_behavior_2 -->
+**2. Query on joined table acts as filter**: When a joined table has a query, only records matching both the join condition AND the query condition are returned.
+
+<!-- request JSON -->
+```json
+POST /search
+{
+  "table": "t1",
+  "query": {
+    "query_string": "database"
+  },
+  "join": [
+    {
+      "type": "left",
+      "table": "t2",
+      "query": {
+        "query_string": "nonexistent"
+      },
+      "on": [
+        {
+          "left": {
+            "table": "t1",
+            "field": "id"
+          },
+          "operator": "eq",
+          "right": {
+            "table": "t2",
+            "field": "id"
+          }
+        }
+      ]
+    }
+  ]
+}
+```
+
+<!-- response JSON -->
+
+```json
+{
+  "took": 0,
+  "timed_out": false,
+  "hits": {
+    "total": 0,
+    "total_relation": "eq",
+    "hits": []
+  }
+}
+```
+<!-- end -->
+
+**3. JOIN type affects filtering**: INNER JOIN requires both join and query conditions to be satisfied, while LEFT JOIN returns matching left table rows even when right table conditions fail.
+
+
+### Important considerations for full-text matching in JOINs
+
+When using full-text matching with joins, keep these points in mind:
+
+1. **Table-specific matching**: 
+   - **SQL**: Each `MATCH()` function should specify which table to search in: `MATCH('term', table_name)`
+   - **JSON**: Use the root-level `"query"` for the main table and `"query"` within each join definition for joined tables
+
+2. **Query syntax flexibility**: JSON API supports both `"query_string"` and `"match"` syntaxes for full-text queries
+
+3. **Performance implications**: Full-text matching on both tables may impact query performance, especially with large datasets. Consider using appropriate indexes and batch sizes.
+
+4. **NULL/default value handling**: With LEFT JOIN, if there's no matching record in the right table, the query optimizer decides whether to evaluate full-text conditions or filtering conditions first based on performance. SQL returns NULL values while JSON API returns default values (0 for numbers, empty strings for text).
+
+5. **Filtering behavior**: Queries on joined tables act as filters - they restrict results to records that satisfy both join and query conditions.
+
+6. **Full-text operator support**: All [full-text operators](../Searching/Full_text_matching/Operators.md) are supported in JOIN queries, including phrase, proximity, field search, NEAR, quorum matching, and advanced operators.
+
+7. **Score calculation**: Each table maintains its own relevance score, accessible via `table_name.weight()` in SQL or `table_name._score` in JSON responses.
+
+## Example: Complex JOIN with faceting
+
+Building on the previous examples, let's explore a more advanced scenario where we combine table joins with faceting and full-text matching across multiple tables. This demonstrates the full power of Manticore's JOIN capabilities with complex filtering and aggregation.
+
+<details>
+
+Init queries for the following example:
+
+```
+drop table if exists customers; drop table if exists orders; create table customers(name text, email text, address text); create table orders(product text, customer_id int, quantity int, order_date string, tags multi, details json); insert into customers values (1, 'Alice Johnson', 'alice@example.com', '123 Maple St'), (2, 'Bob Smith', 'bob@example.com', '456 Oak St'), (3, 'Carol White', 'carol@example.com', '789 Pine St'), (4, 'John Smith', 'john@example.com', '15 Barclays St'); insert into orders values (1, 'Laptop Computer', 1, 1, '2023-01-01', (101,102), '{"price":1200,"warranty":"2 years"}'), (2, 'Smart Phone', 2, 2, '2023-01-02', (103), '{"price":800,"warranty":"1 year"}'), (3, 'Tablet Device', 1, 1, '2023-01-03', (101,104), '{"price":450,"warranty":"1 year"}'), (4, 'Monitor Display', 3, 1, '2023-01-04', (105), '{"price":300,"warranty":"1 year"}');
+```
+
+</details>
 
 <!-- example basic_complex -->
 
-This query retrieves products, customer names, product prices, and product tags from the `orders` and `customers` tables. It performs a `LEFT JOIN`, ensuring all customers are included even if they have not made an order. The query filters the results to include only orders with a price greater than `500` and matches the products to the terms 'laptop', 'phone', or 'monitor'. The results are ordered by the `id` of the orders in ascending order. Additionally, the query facets the results based on the warranty details from the JSON attributes of the joined `orders` table.
+This query demonstrates full-text matching across both the `customers` and `orders` tables, combined with range filtering and faceting. It searches for customers named "Alice" or "Bob" and their orders containing "laptop", "phone", or "tablet" with prices above $500. The results are ordered by order ID and faceted by warranty terms.
 
 <!-- request SQL -->
 ```sql
 SELECT orders.product, name, orders.details.price, orders.tags
 FROM customers
-LEFT JOIN orders
-ON customers.id = orders.customer_id
+LEFT JOIN orders ON customers.id = orders.customer_id
 WHERE orders.details.price > 500
-AND MATCH('laptop|phone|monitor', orders)
+AND MATCH('laptop | phone | tablet', orders)
+AND MATCH('alice | bob', customers)
 ORDER BY orders.id ASC
 FACET orders.details.warranty;
 ```
@@ -382,12 +705,29 @@ FACET orders.details.warranty;
 POST /search
 {
   "table": "customers",
-	"_source": ["orders.product", "name", "orders.details", "orders.tags"],
-  "sort": [{"orders.id": "asc"}],
+  "query": {
+    "query_string": "alice | bob"
+  },
   "join": [
     {
       "type": "left",
       "table": "orders",
+      "query": {
+        "bool": {
+          "must": [
+            {
+              "range": {
+                "details.price": {
+                  "gt": 500
+                }
+              }
+            },
+            {
+              "query_string": "laptop | phone | tablet"
+            }
+          ]
+        }
+      },
       "on": [
         {
           "left": {
@@ -400,39 +740,30 @@ POST /search
             "field": "customer_id"
           }
         }
-      ],
-      "query": {
-        "range": {
-          "orders.details.price": {
-            "gt": 500
-          }
-        },
-        "match": {
-          "*": "laptop|phone|monitor"
-        }
-      }
+      ]
     }
   ],
-	"aggs":	{
-		"group_property": {
-			"terms": {
-				"field": "orders.details.warranty"
-			}
-		}
-	}
+  "_source": ["orders.product", "name", "orders.details.price", "orders.tags"],
+  "sort": [{"orders.id": "asc"}],
+  "aggs": {
+    "warranty_facet": {
+      "terms": {
+        "field": "orders.details.warranty"
+      }
+    }
+  }
 }
 ```
 
 <!-- response SQL -->
-```
-+----------------+---------------+----------------------+-------------+
-| orders.product | name          | orders.details.price | orders.tags |
-+----------------+---------------+----------------------+-------------+
-| Laptop         | Alice Johnson |                 1200 | 101,102     |
-| Phone          | Bob Smith     |                  800 | 103         |
-+----------------+---------------+----------------------+-------------+
-2 rows in set (0.01 sec)
---- 2 out of 2 results in 0ms ---
+```sql
++-----------------+---------------+----------------------+-------------+
+| orders.product  | name          | orders.details.price | orders.tags |
++-----------------+---------------+----------------------+-------------+
+| Laptop Computer | Alice Johnson |                 1200 | 101,102     |
+| Smart Phone     | Bob Smith     |                  800 | 103         |
++-----------------+---------------+----------------------+-------------+
+2 rows in set (0.00 sec)
 
 +-------------------------+----------+
 | orders.details.warranty | count(*) |
@@ -440,63 +771,69 @@ POST /search
 | 2 years                 |        1 |
 | 1 year                  |        1 |
 +-------------------------+----------+
-2 rows in set (0.01 sec)
---- 2 out of 2 results in 0ms ---
+2 rows in set (0.00 sec)
 ```
 
 <!-- response JSON -->
 
-```
+```json
 {
   "took": 0,
   "timed_out": false,
   "hits": {
-    "total": 2,
+    "total": 3,
     "total_relation": "eq",
     "hits": [
       {
         "_id": 1,
         "_score": 1,
+        "orders._score": 1565,
         "_source": {
           "name": "Alice Johnson",
           "orders.tags": [
             101,
             102
           ],
-          "orders.details": {
-            "price": 1200,
-            "warranty": "2 years"
-          },
-          "orders.product": "Laptop"
+          "orders.product": "Laptop Computer"
         }
       },
       {
         "_id": 2,
         "_score": 1,
+        "orders._score": 1565,
         "_source": {
           "name": "Bob Smith",
           "orders.tags": [
             103
           ],
-          "orders.details": {
-            "price": 800,
-            "warranty": "1 year"
-          },
-          "orders.product": "Phone"
+          "orders.product": "Smart Phone"
+        }
+      },
+      {
+        "_id": 1,
+        "_score": 1,
+        "orders._score": 1565,
+        "_source": {
+          "name": "Alice Johnson",
+          "orders.tags": [
+            101,
+            104
+          ],
+          "orders.product": "Tablet Device"
         }
       }
     ]
   },
   "aggregations": {
-    "group_property": {
+    "warranty_facet": {
       "buckets": [
-        {
-          "key": "1 year",
-          "doc_count": 1
-        },
         {
           "key": "2 years",
           "doc_count": 1
+        },
+        {
+          "key": "1 year",
+          "doc_count": 2
         }
       ]
     }

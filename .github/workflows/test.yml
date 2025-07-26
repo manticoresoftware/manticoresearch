@@ -46,7 +46,7 @@ jobs:
     outputs:
       columnar_locator: ${{ steps.set_locator.outputs.columnar_locator }}
     steps:
-      - name: Check if branch exists in manticoresoftware/manticoresearch
+      - name: Check if branch exists in manticoresoftware/columnar
         id: check_branch
         if: github.ref_name != 'master'
         run: |
@@ -275,7 +275,6 @@ jobs:
         uses: actions/checkout@v3
       - name: Download built x86_64 Ubuntu Jammy packages
         uses: manticoresoftware/download_artifact_with_retries@v3
-        continue-on-error: true
         with:
           name: build_jammy_RelWithDebInfo_x86_64
           path: .

@@ -253,6 +253,7 @@ class OpenHashSet_T : public OpenHashTraits_T<KEY,ENTRY,HASHFUNC,STATE>
 	using BASE::BASE;
 
 public:
+	explicit OpenHashSet_T (int iSize=256) : BASE (iSize) {}
 	FORCE_INLINE bool	Find ( KEY k ) const { return !!BASE::FindEntry(k); }
 	FORCE_INLINE bool	Add ( KEY k );
 

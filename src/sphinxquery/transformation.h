@@ -220,6 +220,8 @@ bool CSphTransformation::CollectRelatedNodes ( const CSphVector<XQNode_t *> & dS
 
 bool HasSameParent ( const VecTraits_T<XQNode_t *> & dSimilarNodes ) noexcept;
 
+bool HasSameGrand ( const VecTraits_T<XQNode_t *> & dSimilarNodes ) noexcept;
+
 // remove nodes without children up the tree
 bool SubtreeRemoveEmpty ( XQNode_t * pNode );
 

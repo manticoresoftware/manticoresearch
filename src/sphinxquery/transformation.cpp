@@ -247,8 +247,14 @@ void CSphTransformation::Transform ()
 
 bool HasSameParent ( const VecTraits_T<XQNode_t *> & dSimilarNodes ) noexcept
 {
-	CSphOrderedHash<int, uintptr_t, IdentityHash_fn, 32> hDupes;
-	return dSimilarNodes.any_of ( [&hDupes] ( auto * pX ) { return !hDupes.Add ( 0, (uintptr_t) pX->m_pParent ); } );
+	OpenHashSet_T<uintptr_t, IdentityHash_fn> hDupes {32};
+	return dSimilarNodes.any_of ( [&hDupes] ( auto * pX ) { return !hDupes.Add ( (uintptr_t) pX->m_pParent ); } );
+}
+
+bool HasSameGrand ( const VecTraits_T<XQNode_t *> & dSimilarNodes ) noexcept
+{
+	OpenHashSet_T<uintptr_t, IdentityHash_fn> hDupes {32};
+	return dSimilarNodes.any_of ( [&hDupes] ( auto * pX ) { return !hDupes.Add ( (uintptr_t) pX->m_pParent->m_pParent ); } );
 }
 
 bool CSphTransformation::ReplaceNode ( XQNode_t * pOldNode, XQNode_t * pNewNode ) noexcept

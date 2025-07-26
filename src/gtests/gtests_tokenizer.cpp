@@ -1356,6 +1356,19 @@ TEST_F ( QueryParser, fuzz_transform_common_andnotfactor_root_1 )
 	);
 }
 
+
+TEST_F ( QueryParser, fuzz_non_executed_common_subterm )
+{
+	Transform (
+		"aaa|(bbb(ccc|eee)(ddd|eee))",
+//		"*|((!00(!(00!00|ccc!00)*)(0((!00|ccc!00)*)!00)|00(0(*!00)(00!00))*)|00\"\"*|00#*|00#*|00#*|00 *|00)",
+		"( aaa | ( bbb   ( ccc | eee )   ( ddd | eee ) ) )",
+		"( aaa | ( bbb   ( ccc | eee )   ( ddd | eee ) ) )",
+		dFuzzerPseudoHits
+	);
+}
+
+
 // COMMON | NOT WITH MIXED PHRASES/PROXIMITY terms
 TEST_F ( QueryParser, transform_common_or_not_with_mixed_phrases )
 {

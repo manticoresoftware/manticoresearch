@@ -46,6 +46,7 @@ bool CSphTransformation::TransformCommonSubTerm () noexcept
 			// Nodes with the same iFuzzyHash
 			if ( dX.GetLength()<2
 				|| HasSameParent ( dX )
+				|| HasSameGrand ( dX )
 				)
 				continue;
 

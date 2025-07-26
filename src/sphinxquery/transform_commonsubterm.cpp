@@ -66,6 +66,7 @@ bool CSphTransformation::TransformCommonSubTerm () noexcept
 				continue;
 
 			MakeTransformCommonSubTerm ( dX );
+			ResetCostsHash();
 //			StringBuilder_c sHead;
 //			sHead << "\nTransformCommonSubTerm #" << ++iTurns << " ((A (X | AA)) | (B (X | BB))) -> (((A|B) X) | (A AA) | (B BB)) [ if cost(X) > cost(A) + cost(B) ]";
 //			Dump ( *m_ppRoot, sHead.cstr() );

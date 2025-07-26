@@ -69,6 +69,7 @@ bool CSphTransformation::TransformCommonCompoundNot () noexcept
 				continue;
 
 			MakeTransformCommonCompoundNot ( dSimilarNodes );
+			ResetCostsHash();
 			iActiveDeep = hSimGroup.iDeep;
 			// Don't make transformation for other nodes from the same OR-node,
 			// because qtree was changed and further transformations

@@ -49,6 +49,7 @@ bool CSphTransformation::TransformCommonCompoundNot () noexcept
 
 			// Nodes with the same iFuzzyHash
 			if ( dSimilarNodes.GetLength()<2
+				|| HasSameGrand ( dSimilarNodes )
 				|| !CollectRelatedNodes<GrandNode, Grand2Node> ( dSimilarNodes ) )
 				continue;
 

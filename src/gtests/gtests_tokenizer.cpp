@@ -1368,6 +1368,16 @@ TEST_F ( QueryParser, fuzz_non_executed_common_subterm )
 	);
 }
 
+TEST_F ( QueryParser, fuzz_common_compound_not )
+{
+	Transform (
+		"aaa|(bbb!(ccc ccc))",
+		"( aaa | ( bbb AND NOT ( ccc   ccc ) ) )",
+		"( aaa | ( bbb AND NOT ( ccc   ccc ) ) )",
+		dFuzzerPseudoHits
+	);
+}
+
 
 // COMMON | NOT WITH MIXED PHRASES/PROXIMITY terms
 TEST_F ( QueryParser, transform_common_or_not_with_mixed_phrases )
@@ -1446,7 +1456,7 @@ TEST_F ( QueryParser, multi_query_common_compoundnot )
 	Transform (
 		"aaa | ( ddag ! ( bbb ccc ccc ) )",
 		"( aaa | ( ddag AND NOT ( bbb   ccc   ccc ) ) )",
-		"( aaa | ( ddag AND NOT ( bbb   ccc ) ) )",
+		"( aaa | ( ddag AND NOT ( bbb   ccc   ccc ) ) )",
 		dFuzzerPseudoHits
 	);
 }

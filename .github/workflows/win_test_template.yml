@@ -96,4 +96,4 @@ jobs:
         uses: manticoresoftware/upload_artifact_with_retries@v4
         with:
           name: ${{ inputs.artifact_name }}
-          path: "build/xml* build/test_*/test_*/report* build/test_*/error*.txt build/test_*/*log build/status* build/test/*.mdmp"
+          path: "build/xml* build/test_*/test_*/report* build/test_*/error*.txt build/test_*/*log build/status* build/test_*/*mdmp"

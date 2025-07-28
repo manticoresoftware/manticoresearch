@@ -1,61 +1,49 @@
-––– comment –––
-Start Manticore Search daemon
-––– comment –––
 ––– block: ../base/start-searchd –––
 ––– comment –––
 Create backup of current query log for comparison
-––– comment –––
 ––– input –––
 TMPLOG=$(mktemp) && cp /var/log/manticore/query.log "$TMPLOG"
 ––– output –––
 ––– comment –––
 Create test table for logging tests
-––– comment –––
 ––– input –––
 mysql -h0 -P9306 -e "create table test (id BIGINT, model TEXT);" || echo "ERROR: Failed to create table"
 ––– output –––
 ––– comment –––
 Insert test data via HTTP API
-––– comment –––
 ––– input –––
 curl -s -X  POST http://localhost:9308/insert -d '{"index":"test","id":1,"doc":{"model":"Test message"}}' > /dev/null 2>&1 || echo "ERROR: Failed to insert data"
 ––– output –––
 ––– comment –––
 Test that SELECT query with 'Manticore Buddy' User-Agent is NOT logged
-Internal Buddy requests should not clutter the query log
 ––– comment –––
 ––– input –––
 curl -s -H 'User-agent: Manticore Buddy/1.0.0' -d 'query=select * from test' 'localhost:9308/sql?mode=raw' > /dev/null 2>&1
 ––– output –––
 ––– comment –––
 Verify that SELECT query was not logged (no new entries in query log)
-––– comment –––
 ––– input –––
 sync && cp /var/log/manticore/query.log "$TMPLOG-diff" && [ "$(diff "$TMPLOG" "$TMPLOG-diff" | wc -l)" -eq 0 ] && echo "Test passed: SELECT query was NOT logged as expected" || echo "ERROR: SELECT query was logged when it should not have been!"
 ––– output –––
 Test passed: SELECT query was NOT logged as expected
 ––– comment –––
 Test that multi-query request with 'Manticore Buddy' User-Agent is NOT logged
-––– comment –––
 ––– input –––
 curl -s -H 'User-agent: Manticore Buddy/1.0.0' -d 'query=select * from test; show meta' 'localhost:9308/sql?mode=raw' > /dev/null 2>&1
 ––– output –––
 ––– comment –––
 Verify that multi-query request was not logged
-––– comment –––
 ––– input –––
 sync && cp /var/log/manticore/query.log "$TMPLOG-diff" && [ "$(diff "$TMPLOG" "$TMPLOG-diff" | wc -l)" -eq 0 ] && echo "Test passed: SHOW META query was NOT logged as expected" || echo "ERROR: SHOW META query was logged when it should not have been!"
 ––– output –––
 Test passed: SHOW META query was NOT logged as expected
 ––– comment –––
 Test that DELETE query with 'Manticore Buddy' User-Agent is NOT logged
-––– comment –––
 ––– input –––
 curl -s -H 'User-agent: Manticore Buddy/1.0.0' -d 'query=delete from test where id=1' 'localhost:9308/sql?mode=raw' > /dev/null 2>&1
 ––– output –––
 ––– comment –––
 Verify that DELETE query was not logged
-––– comment –––
 ––– input –––
 sync && cp /var/log/manticore/query.log "$TMPLOG-diff" && [ "$(diff "$TMPLOG" "$TMPLOG-diff" | wc -l)" -eq 0 ] && echo "Test passed: DELETE query was NOT logged as expected" || echo "ERROR: DELETE query was logged when it should not have been!"
 ––– output –––
@@ -63,13 +51,11 @@ Test passed: DELETE query was NOT logged as expected
 ––– comment –––
 Test that query with empty User-Agent IS logged
 Normal client requests should be logged
-––– comment –––
 ––– input –––
 curl -s -H 'User-agent:' -d 'query=select * from test' 'localhost:9308/sql?mode=raw' > /dev/null 2>&1
 ––– output –––
 ––– comment –––
 Verify that query without User-Agent was logged (new entries in query log)
-––– comment –––
 ––– input –––
 sync && cp /var/log/manticore/query.log "$TMPLOG-diff" && [ "$(diff "$TMPLOG" "$TMPLOG-diff" | wc -l)" -gt 0 ] && echo "Test passed: Query without User-Agent was logged" || echo "ERROR: Query without User-Agent was NOT logged!"
 ––– output –––
@@ -77,20 +63,17 @@ Test passed: Query without User-Agent was logged
 ––– comment –––
 Test that error queries are always logged regardless of User-Agent
 Error queries should be logged for debugging purposes
-––– comment –––
 ––– input –––
 curl -s -H 'User-agent: Manticore Buddy/1.0.0' -d 'query=select * from non_existent_table' 'localhost:9308/sql?mode=raw' > /dev/null 2>&1
 ––– output –––
 ––– comment –––
 Verify that error query was logged despite being from 'Manticore Buddy'
-––– comment –––
 ––– input –––
 sync && cp /var/log/manticore/query.log "$TMPLOG-diff" && [ "$(diff "$TMPLOG" "$TMPLOG-diff" | wc -l)" -gt 0 ] && echo "Test passed: Error query was logged" || echo "ERROR: Error query was NOT logged!"
 ––– output –––
 Test passed: Error query was logged
 ––– comment –––
 Clean up temporary files
-––– comment –––
 ––– input –––
 rm -f "$TMPLOG" "$TMPLOG-diff"
 ––– output –––

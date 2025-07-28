@@ -391,39 +391,41 @@ bool XQParseHelper_c::CheckQuorumProximity ( const XQNode_t * pNode )
 
 XQNode_t * XQParseHelper_c::FixupTree ( XQNode_t * pRoot, const XQLimitSpec_t & tLimitSpec, const CSphBitvec * pMorphFields, bool bOnlyNotAllowed )
 {
-//	Dump ( pRoot, "raw FixupTree" );
+	constexpr bool bDump = false;
+	if constexpr ( bDump ) Dump ( pRoot, "raw FixupTree" );
 	FixupDestForms ();
-//	Dump ( pRoot, "FixupDestForms" );
+	if constexpr ( bDump ) Dump ( pRoot, "FixupDestForms" );
 	DeleteNodesWOFields ( pRoot );
-//	Dump ( pRoot, "DeleteNodesWOFields" );
+	if constexpr ( bDump ) Dump ( pRoot, "DeleteNodesWOFields" );
 	pRoot = SweepNulls ( pRoot, bOnlyNotAllowed );
-//	Dump ( pRoot, "SweepNulls" );
+	if constexpr ( bDump ) Dump ( pRoot, "SweepNulls" );
 	FixupDegenerates ( pRoot, m_pParsed->m_sParseWarning );
-//	Dump ( pRoot, "FixupDegenerates" );
+	if constexpr ( bDump ) Dump ( pRoot, "FixupDegenerates" );
 	FixupMorphOnlyFields ( pRoot, pMorphFields );
-//	Dump ( pRoot, "FixupMorphOnlyFields" );
+	if constexpr ( bDump ) Dump ( pRoot, "FixupMorphOnlyFields" );
 	FixupNulls ( pRoot );
-//	Dump ( pRoot, "FixupNulls" );
+	if constexpr ( bDump ) Dump ( pRoot, "FixupNulls" );
 
 	if ( !FixupNots ( pRoot, bOnlyNotAllowed, &pRoot ) )
 	{
 		Cleanup ();
 		return nullptr;
 	}
-//	Dump ( pRoot, "FixupNots" );
+	if constexpr ( bDump ) Dump ( pRoot, "FixupNots" );
 
 	if ( !CheckQuorumProximity ( pRoot ) )
 	{
 		Cleanup();
 		return nullptr;
 	}
-//	Dump ( pRoot, "CheckQuorumProximity" );
+	if constexpr ( bDump ) Dump ( pRoot, "CheckQuorumProximity" );
 
 	if ( pRoot && pRoot->GetOp()==SPH_QUERY_NOT )
 	{
 		if ( bOnlyNotAllowed  )
 		{
 			pRoot = FixupNot ( pRoot, m_dSpawned );
+			if constexpr ( bDump ) Dump ( pRoot, "FixupNot" );
 		} else if ( !pRoot->m_iOpArg )
 		{
 			Cleanup();
@@ -589,11 +591,13 @@ bool XQParseHelper_c::FixupNots ( XQNode_t * pNode, bool bOnlyNotAllowed, XQNode
 		return Error ( "query is non-computable (node consists of NOT operators only)" );
 
 	// NOT within OR or MAYBE? we can't compute that
-	if ( pNode->GetOp()==SPH_QUERY_OR || pNode->GetOp()==SPH_QUERY_MAYBE || pNode->GetOp()==SPH_QUERY_NEAR )
+	switch ( pNode->GetOp() )
 	{
-		XQOperator_e eOp = pNode->GetOp();
-		const char * sOp = ( eOp==SPH_QUERY_OR ? "OR" : ( eOp==SPH_QUERY_MAYBE ? "MAYBE" : "NEAR" ) );
-		return Error ( "query is non-computable (NOT is not allowed within %s)", sOp );
+	case SPH_QUERY_OR: return Error ("query is non-computable (NOT is not allowed within OR)");
+	case SPH_QUERY_MAYBE: return Error ("query is non-computable (NOT is not allowed within MAYBE)");
+	case SPH_QUERY_NEAR: return Error ("query is non-computable (NOT is not allowed within NEAR)");
+	case SPH_QUERY_NOTNEAR: return Error ("query is non-computable (NOT is not allowed within NOTNEAR)");
+	default: break;
 	}
 
 	// NOT used in before operator

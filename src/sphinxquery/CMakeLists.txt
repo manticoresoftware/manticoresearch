@@ -20,6 +20,7 @@ add_library ( sphinxquery OBJECT
 		transform_commonornot.cpp
 		transform_hungoperand.cpp
 		transform_excessandnot.cpp
+		transform_andnotnotnot.cpp
 )
 
 include ( mybison )

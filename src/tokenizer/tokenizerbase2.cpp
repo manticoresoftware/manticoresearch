@@ -350,7 +350,7 @@ bool CSphTokenizerBase2::CheckException ( const BYTE* pStart, const BYTE* pCur, 
 
 void CSphTokenizerBase2::FlushAccum()
 {
-	assert ( m_pAccum - m_sAccum < (int)sizeof ( m_sAccum ) );
+	assert ( m_pAccum - m_sAccum <= (int)sizeof ( m_sAccum ) );
 	m_iLastTokenLen = m_iAccum;
 	*m_pAccum = 0;
 	m_iAccum = 0;

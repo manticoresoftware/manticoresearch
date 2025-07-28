@@ -391,39 +391,41 @@ bool XQParseHelper_c::CheckQuorumProximity ( const XQNode_t * pNode )
 
 XQNode_t * XQParseHelper_c::FixupTree ( XQNode_t * pRoot, const XQLimitSpec_t & tLimitSpec, const CSphBitvec * pMorphFields, bool bOnlyNotAllowed )
 {
-//	Dump ( pRoot, "raw FixupTree" );
+	constexpr bool bDump = false;
+	if constexpr ( bDump ) Dump ( pRoot, "raw FixupTree" );
 	FixupDestForms ();
-//	Dump ( pRoot, "FixupDestForms" );
+	if constexpr ( bDump ) Dump ( pRoot, "FixupDestForms" );
 	DeleteNodesWOFields ( pRoot );
-//	Dump ( pRoot, "DeleteNodesWOFields" );
+	if constexpr ( bDump ) Dump ( pRoot, "DeleteNodesWOFields" );
 	pRoot = SweepNulls ( pRoot, bOnlyNotAllowed );
-//	Dump ( pRoot, "SweepNulls" );
+	if constexpr ( bDump ) Dump ( pRoot, "SweepNulls" );
 	FixupDegenerates ( pRoot, m_pParsed->m_sParseWarning );
-//	Dump ( pRoot, "FixupDegenerates" );
+	if constexpr ( bDump ) Dump ( pRoot, "FixupDegenerates" );
 	FixupMorphOnlyFields ( pRoot, pMorphFields );
-//	Dump ( pRoot, "FixupMorphOnlyFields" );
+	if constexpr ( bDump ) Dump ( pRoot, "FixupMorphOnlyFields" );
 	FixupNulls ( pRoot );
-//	Dump ( pRoot, "FixupNulls" );
+	if constexpr ( bDump ) Dump ( pRoot, "FixupNulls" );
 
 	if ( !FixupNots ( pRoot, bOnlyNotAllowed, &pRoot ) )
 	{
 		Cleanup ();
 		return nullptr;
 	}
-//	Dump ( pRoot, "FixupNots" );
+	if constexpr ( bDump ) Dump ( pRoot, "FixupNots" );
 
 	if ( !CheckQuorumProximity ( pRoot ) )
 	{
 		Cleanup();
 		return nullptr;
 	}
-//	Dump ( pRoot, "CheckQuorumProximity" );
+	if constexpr ( bDump ) Dump ( pRoot, "CheckQuorumProximity" );
 
 	if ( pRoot && pRoot->GetOp()==SPH_QUERY_NOT )
 	{
 		if ( bOnlyNotAllowed  )
 		{
 			pRoot = FixupNot ( pRoot, m_dSpawned );
+			if constexpr ( bDump ) Dump ( pRoot, "FixupNot" );
 		} else if ( !pRoot->m_iOpArg )
 		{
 			Cleanup();

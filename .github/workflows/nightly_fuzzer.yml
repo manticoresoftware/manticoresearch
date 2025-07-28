@@ -1,0 +1,168 @@
+name: Nightly Fuzz Testing
+run-name: 🌙 Nightly Fuzz Testing ${{ github.sha }}
+
+on:
+  # 📅 Run this workflow every day at 23:00 UTC
+  schedule:
+    - cron: '00 23 * * *'
+  # 🚀 Also run when this file is updated in any branch
+  push:
+    branches:
+      - '**'
+    paths:
+      - '.github/workflows/nightly_fuzzer.yml'    
+
+# 🔁 Cancel older runs if a new one starts on the same branch
+concurrency:
+  group: nightly_fuzzing_${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+
+  recover_build_from_cache:
+    name: ♻️ Recover build from cache
+    runs-on: ubuntu-22.04
+    outputs:
+        cache-hit: ${{ steps.check-cache.outputs.cache-hit }}
+    steps:
+        - name: 📥 Checkout repo
+          uses: actions/checkout@v3        
+        - name: 💾 Attempt to restore build cache
+          id: check-cache
+          uses: actions/cache@v4
+          with:
+            path: build
+            key: build-linux-fuzz-${{ github.sha }}
+#            key: build-linux-fuzz
+        - name: 📦 Upload restored build (if cache was found)
+          if: steps.check-cache.outputs.cache-hit == 'true'
+          uses: actions/upload-artifact@v4
+          with:
+              name: fuzz-build
+              path: build
+
+  build_linux_fuzz:
+    name: 🛠️ Build with fuzzer (Linux)
+    needs: recover_build_from_cache
+    if: needs.recover_build_from_cache.outputs.cache-hit != 'true'
+    uses: ./.github/workflows/build_template.yml
+    with:
+      CTEST_CONFIGURATION_TYPE: "Debug"
+      artifact_name: fuzz-build
+      artifact_list: "build"
+      cache_key: build-linux-fuzz-cache-dir
+      cmake_command: |
+        mkdir build && cd build
+        export CC=`which clang`
+        export CXX=`which clang++`
+        cmake -DQFUZZER=ON ..
+        cmake --build . --target qfuzzer
+
+  cache_build_artifact:
+    name: 🧊 Save build to cache (if new)
+    needs: build_linux_fuzz
+    if: needs.build_linux_fuzz.result == 'success'
+    runs-on: ubuntu-22.04
+    steps:
+        - name: 📥 Download built artifact
+          uses: actions/download-artifact@v4
+          with:
+              name: fuzz-build
+              path: build
+        - name: 💾 Save build to cache
+          uses: actions/cache/save@v4
+          with:
+              path: build
+              key: build-linux-fuzz-${{ github.sha }}
+#              key: build-linux-fuzz
+
+  test_linux_fuzz:
+    name: 🧪 Run fuzz tests
+    needs:
+      - recover_build_from_cache
+      - build_linux_fuzz
+    if: always() && (needs.recover_build_from_cache.outputs.cache-hit == 'true' || needs.build_linux_fuzz.result == 'success')
+    runs-on: ubuntu-22.04
+    defaults:
+      run:
+        shell: bash
+    container:
+      image: ubuntu:jammy
+    steps:
+      - name: 📥 Checkout repository
+        uses: actions/checkout@v3
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          set-safe-directory: true
+      - name: 📦 Download built artifact with retry logic
+        uses: manticoresoftware/download_artifact_with_retries@v3
+        continue-on-error: true
+        with:
+          name: fuzz-build
+          path: .
+      - name: Restore cache
+        uses: actions/cache@v4
+        with:
+          path: build/src/fuzzer/corpus
+          key: fuzz-corpus-cache-to-delete
+          restore-keys: |
+            fuzz-corpus-
+      - name: 🐛 Run fuzzer
+        id: run
+        continue-on-error: true
+        run: |
+            set +e  # allow script to continue even if a command fails
+
+            cd build/src/fuzzer
+            mkdir -p corpus
+            echo "## 🐛 Fuzzer Results" >> $GITHUB_STEP_SUMMARY
+
+            # Run qfuzzer and capture its exit code
+            ./qfuzzer -verbosity=0 -max_total_time=3600 -jobs=4 -workers=4 -dict=../../../src/fuzzer/dict.txt corpus 2>&1 | tee fuzzer_output.txt
+            qfuzzer_exit_code=${PIPESTATUS[0]}
+
+            echo '```' >> $GITHUB_STEP_SUMMARY
+            cat fuzzer_output.txt >> $GITHUB_STEP_SUMMARY
+            echo '```' >> $GITHUB_STEP_SUMMARY
+
+            echo "corpus_size=$(ls corpus | wc -l)" >> $GITHUB_OUTPUT
+
+            # exit with qfuzzer's code (1 if it failed)
+            exit $qfuzzer_exit_code
+      - name: Save cache
+        if: always()
+        uses: actions/cache/save@v4
+        with:
+          path: build/src/fuzzer/corpus
+          key: fuzz-corpus-${{ steps.run.outputs.corpus_size || 'unknown' }}
+      - name: 📦 Upload fuzzer directory
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: fuzzer-dir
+          path: |
+            build/src/fuzzer
+            !build/src/fuzzer/qfuzzer
+            !build/src/fuzzer/CMake*
+            !build/src/fuzzer/cmake*
+            !build/src/fuzzer/CTest*
+      - name: ❌ Fail job if fuzzer failed
+        if: steps.run.outcome == 'failure'
+        run: |
+          echo "Fuzzer failed. Marking the job as failed."
+          exit 1
+
+  delete-cache:
+    name: 🧹 Delete old cache
+    needs: test_linux_fuzz
+    if: always()
+    runs-on: ubuntu-latest
+    permissions:
+        actions: write
+    steps:
+        - name: Delete cache with key "fuzz-corpus-cache-to-delete"
+          run: |
+            curl -s -X DELETE \
+            -H "Authorization: Bearer ${{ secrets.GITHUB_TOKEN }}" \
+            -H "Accept: application/vnd.github+json" \
+            https://api.github.com/repos/${{ github.repository }}/actions/caches?key=fuzz-corpus-cache-to-delete          

@@ -1,4 +1,4 @@
-––– block: ../base/start-searchd –––
+––– block: ../base/start-searchd-with-buddy –––
 ––– input –––
 mysql -h0 -P9306 -e "CREATE TABLE knn_test (id BIGINT, model TEXT, vector float_vector)"; echo $?
 ––– output –––

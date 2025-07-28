@@ -510,3 +510,5 @@ if (NOT TEST_SPECIAL_EXTERNAL)
 #	fixup_test_name ( tst "Internal src/tests" )
 #	add_test ( NAME ${tst} WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}" COMMAND "tests" )
 endif ()
+
+add_subdirectory ( fuzzer )

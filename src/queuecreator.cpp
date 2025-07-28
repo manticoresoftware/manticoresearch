@@ -234,7 +234,7 @@ public:
 	bool				m_bJoinedGroupSort = false;		// do we need joined attrs for sorting/grouping?
 
 
-						QueueCreator_c ( const SphQueueSettings_t & tSettings, const CSphQuery & tQuery, CSphString & sError, StrVec_t * pExtra, QueryProfile_c * pProfile );
+						QueueCreator_c ( const SphQueueSettings_t & tSettings, const CSphQuery & tQuery, CSphString & sError, StrVec_t * pExtra, QueryProfile_c * pProfile, const char * szParent );
 
 	bool				SetupComputeQueue();
 	bool				SetupGroupQueue();
@@ -256,6 +256,7 @@ private:
 	CSphString &				m_sError;
 	StrVec_t *					m_pExtra = nullptr;
 	QueryProfile_c *			m_pProfile = nullptr;
+	const char *				m_szParent = nullptr;
 
 	bool						m_bHasCount = false;
 	bool						m_bHasGroupByExpr = false;
@@ -353,12 +354,13 @@ private:
 };
 
 
-QueueCreator_c::QueueCreator_c ( const SphQueueSettings_t & tSettings, const CSphQuery & tQuery, CSphString & sError, StrVec_t * pExtra, QueryProfile_c * pProfile )
+QueueCreator_c::QueueCreator_c ( const SphQueueSettings_t & tSettings, const CSphQuery & tQuery, CSphString & sError, StrVec_t * pExtra, QueryProfile_c * pProfile, const char * szParent )
 	: m_tSettings ( tSettings )
 	, m_tQuery ( tQuery )
 	, m_sError ( sError )
 	, m_pExtra ( pExtra )
 	, m_pProfile ( pProfile )
+	, m_szParent ( szParent )
 	, m_pSorterSchema { std::make_unique<CSphRsetSchema>() }
 {
 	// short-cuts
@@ -1742,6 +1744,7 @@ bool QueueCreator_c::AddJoinFilterAttrs()
 
 	const CSphString & sLeftIndex = m_tSettings.m_pJoinArgs->m_sIndex1;
 	const CSphString & sRightIndex = m_tSettings.m_pJoinArgs->m_sIndex2;
+
 	for ( const auto & i : m_tQuery.m_dOnFilters )
 	{
 		if ( !CheckJoinOnTypeCast ( i.m_sIdx1, i.m_sAttr1, i.m_eTypeCast1 ) ) return false;
@@ -1749,7 +1752,7 @@ bool QueueCreator_c::AddJoinFilterAttrs()
 
 		ESphAttr eTypeCast = i.m_eTypeCast1!=SPH_ATTR_NONE ? i.m_eTypeCast1 : i.m_eTypeCast2;
 
-		if ( i.m_sIdx1==sLeftIndex )
+		if ( i.m_sIdx1==sLeftIndex || ( m_szParent && i.m_sIdx1==m_szParent ) )
 		{
 			if ( !AddJsonJoinOnFilter ( i.m_sAttr1, i.m_sAttr2, eTypeCast ) )	return false;
 			if ( !AddColumnarJoinOnFilter ( i.m_sAttr1 ) )						return false;
@@ -2592,14 +2595,14 @@ static void CreateSorters ( const VecTraits_T<CSphQuery> & dQueries, const VecTr
 }
 
 
-static void CreateMultiQueue ( RawVector_T<QueueCreator_c> & dCreators, const SphQueueSettings_t & tQueue, const VecTraits_T<CSphQuery> & dQueries, VecTraits_T<ISphMatchSorter*> & dSorters, VecTraits_T<CSphString> & dErrors, SphQueueRes_t & tRes, StrVec_t * pExtra, QueryProfile_c * pProfile )
+static void CreateMultiQueue ( RawVector_T<QueueCreator_c> & dCreators, const SphQueueSettings_t & tQueue, const VecTraits_T<CSphQuery> & dQueries, VecTraits_T<ISphMatchSorter*> & dSorters, VecTraits_T<CSphString> & dErrors, SphQueueRes_t & tRes, StrVec_t * pExtra, QueryProfile_c * pProfile, const char * szParent )
 {
 	assert ( dSorters.GetLength()>1 );
 	assert ( dSorters.GetLength()==dQueries.GetLength() );
 	assert ( dSorters.GetLength()==dErrors.GetLength() );
 
 	dCreators.Reserve_static ( dSorters.GetLength () );
-	dCreators.Emplace_back( tQueue, dQueries[0], dErrors[0], pExtra, pProfile );
+	dCreators.Emplace_back ( tQueue, dQueries[0], dErrors[0], pExtra, pProfile, szParent );
 	dCreators[0].m_bMulti = true;
 
 	// same as SetupQueue
@@ -2618,7 +2621,7 @@ static void CreateMultiQueue ( RawVector_T<QueueCreator_c> & dCreators, const Sp
 	for ( int i=1; i<dSorters.GetLength(); ++i )
 	{
 		// fill extra only for initial pass
-		dCreators.Emplace_back ( tQueue, dQueries[i], dErrors[i], pExtra, pProfile );
+		dCreators.Emplace_back ( tQueue, dQueries[i], dErrors[i], pExtra, pProfile, szParent );
 		dCreators[i].m_bMulti = true;
 		if ( !dCreators[i].SetupQueue () )
 		{
@@ -2729,9 +2732,9 @@ static void CreateMultiQueue ( RawVector_T<QueueCreator_c> & dCreators, const Sp
 
 ///////////////////////////////////////////////////////////////////////////////
 
-ISphMatchSorter * sphCreateQueue ( const SphQueueSettings_t & tQueue, const CSphQuery & tQuery, CSphString & sError, SphQueueRes_t & tRes, StrVec_t * pExtra, QueryProfile_c * pProfile )
+ISphMatchSorter * sphCreateQueue ( const SphQueueSettings_t & tQueue, const CSphQuery & tQuery, CSphString & sError, SphQueueRes_t & tRes, StrVec_t * pExtra, QueryProfile_c * pProfile, const char * szParent )
 {
-	QueueCreator_c tCreator ( tQueue, tQuery, sError, pExtra, pProfile );
+	QueueCreator_c tCreator ( tQueue, tQuery, sError, pExtra, pProfile, szParent );
 	if ( !tCreator.SetupQueue () )
 		return nullptr;
 
@@ -2739,9 +2742,9 @@ ISphMatchSorter * sphCreateQueue ( const SphQueueSettings_t & tQueue, const CSph
 }
 
 
-void sphCreateMultiQueue ( const SphQueueSettings_t & tQueue, const VecTraits_T<CSphQuery> & dQueries, VecTraits_T<ISphMatchSorter *> & dSorters, VecTraits_T<CSphString> & dErrors, SphQueueRes_t & tRes, StrVec_t * pExtra, QueryProfile_c * pProfile )
+void sphCreateMultiQueue ( const SphQueueSettings_t & tQueue, const VecTraits_T<CSphQuery> & dQueries, VecTraits_T<ISphMatchSorter *> & dSorters, VecTraits_T<CSphString> & dErrors, SphQueueRes_t & tRes, StrVec_t * pExtra, QueryProfile_c * pProfile, const char * szParent )
 {
 	RawVector_T<QueueCreator_c> dCreators;
-	CreateMultiQueue ( dCreators, tQueue, dQueries, dSorters, dErrors, tRes, pExtra, pProfile );
+	CreateMultiQueue ( dCreators, tQueue, dQueries, dSorters, dErrors, tRes, pExtra, pProfile, szParent );
 	CreateSorters ( dQueries, dSorters, dCreators, dErrors, tRes );
 }

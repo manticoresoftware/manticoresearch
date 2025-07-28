@@ -171,7 +171,7 @@ private:
 			m_dWorkExternal.Add ( (ISphNetAction*) pWork );
 		});
 
-		m_dWorkExternal.Uniq();
+		m_dWorkExternal.Uniq(sph::unstable);
 		for ( auto* pWork : m_dWorkExternal )
 		{
 			// deal with closed sockets which lives exclusively in m_pPoll (and so, would be removed immediately on RemoveEvent() )

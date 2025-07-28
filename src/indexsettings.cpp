@@ -2385,7 +2385,7 @@ CSphString BuildCreateTable ( const CSphString & sName, const CSphIndex * pIndex
 			dExcludeAttrs.Add(&tAttr);
 	}
 
-	dExcludeAttrs.Uniq();
+	dExcludeAttrs.Uniq(sph::unstable);
 
 	const CSphColumnInfo * pId = tSchema.GetAttr("id");
 	assert(pId);

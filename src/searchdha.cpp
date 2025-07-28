@@ -3411,7 +3411,7 @@ private:
 		SafeDelete ( pExternalQueue );
 
 		auto VARIABLE_IS_NOT_USED uLastLen = m_dInternalTasks.GetLength ();
-		m_dInternalTasks.Uniq ();
+		m_dInternalTasks.Uniq (sph::unstable);
 
 		if ( m_dInternalTasks.IsEmpty () )
 		{

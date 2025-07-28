@@ -65,7 +65,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        DISTR: [bionic, focal, jammy, buster, bullseye, bookworm]
+        DISTR: [bionic, focal, jammy, bullseye, bookworm]
         arch: [x86_64, aarch64]
     with:
       DISTR: ${{ matrix.DISTR }}
@@ -142,7 +142,7 @@ jobs:
     strategy:
       fail-fast: true
       matrix:
-        DISTR: [bionic, focal, jammy, buster, bullseye, bookworm]
+        DISTR: [bionic, focal, jammy, bullseye, bookworm]
         arch: [x86_64, aarch64]
     runs-on: ubuntu-22.04
     name: ${{ matrix.DISTR }} ${{ matrix.arch }} publishing
@@ -216,7 +216,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        image: [ "ubuntu:bionic", "ubuntu:focal", "ubuntu:jammy", "debian:buster", "debian:bullseye", "debian:bookworm" ]
+        image: [ "ubuntu:bionic", "ubuntu:focal", "ubuntu:jammy", "debian:bullseye", "debian:bookworm" ]
     runs-on: ubuntu-22.04
     steps:
       - uses: manticoresoftware/clt@0.6.9

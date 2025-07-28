@@ -358,7 +358,7 @@ void XQParseHelper_c::Warning ( const char * sTemplate, ... )
 
 void XQParseHelper_c::Cleanup()
 {
-	m_dSpawned.Uniq(); // FIXME! should eliminate this by testing
+	m_dSpawned.Uniq(sph::unstable); // FIXME! should eliminate this by testing
 
 	for ( auto& pSpawned : m_dSpawned )
 	{
@@ -391,24 +391,33 @@ bool XQParseHelper_c::CheckQuorumProximity ( const XQNode_t * pNode )
 
 XQNode_t * XQParseHelper_c::FixupTree ( XQNode_t * pRoot, const XQLimitSpec_t & tLimitSpec, const CSphBitvec * pMorphFields, bool bOnlyNotAllowed )
 {
+//	Dump ( pRoot, "raw FixupTree" );
 	FixupDestForms ();
+//	Dump ( pRoot, "FixupDestForms" );
 	DeleteNodesWOFields ( pRoot );
+//	Dump ( pRoot, "DeleteNodesWOFields" );
 	pRoot = SweepNulls ( pRoot, bOnlyNotAllowed );
+//	Dump ( pRoot, "SweepNulls" );
 	FixupDegenerates ( pRoot, m_pParsed->m_sParseWarning );
+//	Dump ( pRoot, "FixupDegenerates" );
 	FixupMorphOnlyFields ( pRoot, pMorphFields );
+//	Dump ( pRoot, "FixupMorphOnlyFields" );
 	FixupNulls ( pRoot );
+//	Dump ( pRoot, "FixupNulls" );
 
 	if ( !FixupNots ( pRoot, bOnlyNotAllowed, &pRoot ) )
 	{
 		Cleanup ();
 		return nullptr;
 	}
+//	Dump ( pRoot, "FixupNots" );
 
 	if ( !CheckQuorumProximity ( pRoot ) )
 	{
 		Cleanup();
 		return nullptr;
 	}
+//	Dump ( pRoot, "CheckQuorumProximity" );
 
 	if ( pRoot && pRoot->GetOp()==SPH_QUERY_NOT )
 	{
@@ -640,6 +649,8 @@ void XQParseHelper_c::DeleteNodesWOFields ( XQNode_t * pNode )
 	if ( !pNode )
 		return;
 
+//	Dump ( pNode, "DeleteNodesWOFields" );
+
 	pNode->WithChildren([this](auto& dChildren) {
 	for ( int i = 0; i < dChildren.GetLength (); ) // no ++i
 	{
@@ -739,5 +750,10 @@ XQNode_t * XQParseHelper_c::SpawnNode ( const XQLimitSpec_t & dSpec ) noexcept
 void XQParseHelper_c::DeleteSpawned ( XQNode_t * pNode ) noexcept
 {
 	m_dSpawned.RemoveValue ( pNode ); // OPTIMIZE!
+	pNode->WithChildren([this] ( auto & dChildren ) {
+		for ( auto* pChild : dChildren )
+			DeleteSpawned ( pChild );
+	});
+	pNode->ResetChildren();
 	SafeDelete ( pNode );
 }

@@ -15,7 +15,11 @@
 /// generic comparator
 template<typename T> struct SphLess_T
 {
-	inline static bool IsLess ( const T& a, const T& b ) noexcept { return a < b; }
+	static bool IsLess ( const T& a, const T& b ) noexcept
+	{
+		static_assert ( !std::is_pointer_v<T>, "Don't implicitly compare pointers" );
+		return a < b;
+	}
 };
 
 

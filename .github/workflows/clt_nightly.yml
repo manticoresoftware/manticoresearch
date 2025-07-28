@@ -28,7 +28,7 @@ concurrency:
 
 jobs:
   commit_info:
-    name: Commit infojr 
+    name: Commit info 
     runs-on: ubuntu-22.04
     steps:
       - name: Checkout repository

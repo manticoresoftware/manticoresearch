@@ -591,11 +591,13 @@ bool XQParseHelper_c::FixupNots ( XQNode_t * pNode, bool bOnlyNotAllowed, XQNode
 		return Error ( "query is non-computable (node consists of NOT operators only)" );
 
 	// NOT within OR or MAYBE? we can't compute that
-	if ( pNode->GetOp()==SPH_QUERY_OR || pNode->GetOp()==SPH_QUERY_MAYBE || pNode->GetOp()==SPH_QUERY_NEAR )
+	switch ( pNode->GetOp() )
 	{
-		XQOperator_e eOp = pNode->GetOp();
-		const char * sOp = ( eOp==SPH_QUERY_OR ? "OR" : ( eOp==SPH_QUERY_MAYBE ? "MAYBE" : "NEAR" ) );
-		return Error ( "query is non-computable (NOT is not allowed within %s)", sOp );
+	case SPH_QUERY_OR: return Error ("query is non-computable (NOT is not allowed within OR)");
+	case SPH_QUERY_MAYBE: return Error ("query is non-computable (NOT is not allowed within MAYBE)");
+	case SPH_QUERY_NEAR: return Error ("query is non-computable (NOT is not allowed within NEAR)");
+	case SPH_QUERY_NOTNEAR: return Error ("query is non-computable (NOT is not allowed within NOTNEAR)");
+	default: break;
 	}
 
 	// NOT used in before operator

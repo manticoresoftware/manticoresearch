@@ -774,6 +774,14 @@ TEST_F ( QueryParser, long_token )
 	ASSERT_TRUE ( tQuery.m_pRoot );
 }
 
+TEST_F ( QueryParser, fuzzer_long_token )
+{
+	XQQuery_t tQuery;
+	ASSERT_FALSE ( sphParseExtendedQuery ( tQuery,
+		"aaa NOTNEAR/1 (-bbb)"
+		, nullptr, pTokenizer, &tSchema, pDict, tTmpSettings, nullptr ) );
+	ASSERT_FALSE ( tQuery.m_pRoot );
+}
 
 TEST_F ( QueryParser, soft_whitespace1 )
 {

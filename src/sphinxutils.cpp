@@ -1088,6 +1088,7 @@ static KeyDesc_t g_dKeysSearchd[] =
 	{ "diskchunk_flush_write_timeout",		0, nullptr },
 	{ "diskchunk_flush_search_timeout",		0, nullptr },
 	{ "kibana_version_string",		0, NULL },
+	{ "auth",					0, NULL },
 	{ NULL,						0, NULL }
 };
 
@@ -3251,7 +3252,7 @@ void CSphDynamicLibrary::CSphDynamicLibraryAlternative ( const char* szPath, boo
 
 	m_pLibrary = dlopen ( szPath, RTLD_NOW | ( bGlobal ? RTLD_GLOBAL : RTLD_LOCAL ) );
 	if ( !m_pLibrary )
-		sphLogDebug ( "dlopen(%s) failed", szPath );
+		sphLogDebug ( "dlopen(%s) failed: %s", szPath, dlerror() );
 	else
 		sphLogDebug ( "dlopen(%s)=%p", szPath, m_pLibrary );
 }

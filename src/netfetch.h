@@ -12,9 +12,20 @@
 
 #include "std/string.h"
 
+struct UrlResult_t
+{
+	UrlResult_t() = default;
+	UrlResult_t ( bool bOk, CSphString && sRes );
+	UrlResult_t ( bool bOk, CSphVector<BYTE> && dRes );
+
+	bool m_bOk = false;
+	CSphString m_sRes;
+	CSphVector<BYTE> m_dRes;
+};
+
 CSphString FetchUrl ( const CSphString& sUrl );
 
-std::pair<bool, CSphString> PostToHelperUrl ( CSphString sUrl, Str_t sQuery, const VecTraits_T<CSphString>& dHeaders );
+UrlResult_t PostToHelperUrl ( CSphString sUrl, Str_t sQuery, const VecTraits_T<CSphString>& dHeaders );
 
 void ShutdownCurl();
 

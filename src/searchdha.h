@@ -27,6 +27,7 @@ bool LoadExFunctions ();
 #include "sphinxutils.h"
 #include "searchdaemon.h"
 #include "timeout_queue.h"
+#include "auth/auth_proto_api.h"
 
 /////////////////////////////////////////////////////////////////////////////
 // SOME SHARED GLOBAL VARIABLES
@@ -493,6 +494,8 @@ public:
 	LPKEY			m_pPollerTask = nullptr; ///< internal for poller. fixme! privatize?
 	volatile bool	m_bSuccess {false};	///< agent got processed, no need to retry
 
+	ApiAuthToken_t m_tAuthToken;
+
 public:
 	AgentConn_t () = default;
 
@@ -521,6 +524,11 @@ public:
 
 	// helper for beautiful logging
 	inline const char * StateName () const 	{ return Agent_e_Name ( m_eConnState ); }
+	
+	int GetRetries() const { return m_iRetries; }
+	int GetDelay() const { return m_iDelay; }
+	void SetDescMultiAgent();
+	void SetRecvBuf ( ByteBlob_t tBuf );
 
 private:
 
@@ -625,6 +633,7 @@ RemoteAgentsObserver_i * GetObserver ();
 
 void ScheduleDistrJobs ( VectorAgentConn_t &dRemotes, RequestBuilder_i * pQuery, ReplyParser_i * pParser,
 	Reporter_i * pReporter, int iQueryRetry = -1, int iQueryDelay = -1 );
+void ScheduleDistrJobsApi ( VectorAgentConn_t &dRemotes, RequestBuilder_i * pQuery, ReplyParser_i * pParser, Reporter_i * pReporter, int iQueryRetry, int iQueryDelay );
 
 // schedule one job. Returns false if connection s blackhole (and so, will not report anything
 using Deffered_f = std::function<void ( bool )>;
@@ -635,7 +644,8 @@ bool RunRemoteTask ( AgentConn_t* pConnection, RequestBuilder_i* pQuery, ReplyPa
 
 // simplified full task - schedule jobs, wait for complete, report num of succeeded
 // uses cooperated wait - i.e. yield instead of pause
-int PerformRemoteTasks ( VectorAgentConn_t &dRemotes, RequestBuilder_i * pQuery, ReplyParser_i * pParser, int iQueryRetry = -1, int iQueryDelay = -1 );
+int PerformRemoteTasks ( VectorAgentConn_t & dRemotes, RequestBuilder_i * pQuery, ReplyParser_i * pParser, int iQueryRetry = -1, int iQueryDelay = -1 );
+int PerformRemoteTasksApi ( VectorAgentConn_t & dRemotes, RequestBuilder_i * pQuery, ReplyParser_i * pParser, int iQueryRetry, int iQueryDelay );
 
 /////////////////////////////////////////////////////////////////////////////
 // DISTRIBUTED QUERIES
@@ -802,5 +812,7 @@ protected:
 
 void RemotesGetField ( AggrResult_t & tRes, const CSphQuery & tQuery );
 void HandleCommandGetField ( ISphOutputBuffer & tOut, WORD uVer, InputBuffer_c & tReq );
+void agent_stats_inc ( AgentConn_t & tAgent, AgentStats_e iCountID );
+void track_processing_time ( AgentConn_t & tAgent );
 
 #endif // _searchdha_

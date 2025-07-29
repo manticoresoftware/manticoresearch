@@ -1,0 +1,325 @@
+Test vector quantization functionality with 8bit, 1bit, and 1bitsimple quantization types. Tests basic functionality, edge cases, and error conditions.
+
+––– comment –––
+Start Manticore Search with Buddy
+––– block: ../base/start-searchd-with-buddy –––
+––– comment –––
+Test 8bit quantization
+––– input –––
+mysql -h0 -P9306 -e "create table test_8bit ( title text, image_vector float_vector knn_type='hnsw' knn_dims='4' hnsw_similarity='l2' quantization='8bit');"
+––– output –––
+––– input –––
+mysql -h0 -P9306 -e "insert into test_8bit values ( 1, 'test vector 1', (0.653448,0.192478,0.017971,0.339821) ), ( 2, 'test vector 2', (-0.148894,0.748278,0.091892,-0.095406) ), ( 3, 'test vector 3', (0.286569,-0.031816,0.066684,0.032926) )"
+––– output –––
+––– input –––
+mysql -h0 -P9306 -e "select id, knn_dist() from test_8bit where knn ( image_vector, 5, (0.286569,-0.031816,0.066684,0.032926) );"
+––– output –––
++------+------------+
+| id   | knn_dist() |
++------+------------+
+|    3 |   0.000000 |
+|    1 | 0.28146550 |
+|    2 | 0.81527930 |
++------+------------+
+––– comment –––
+Test 1bit quantization
+––– input –––
+mysql -h0 -P9306 -e "create table test_1bit ( title text, image_vector float_vector knn_type='hnsw' knn_dims='4' hnsw_similarity='l2' quantization='1bit');"
+––– output –––
+––– input –––
+mysql -h0 -P9306 -e "insert into test_1bit values ( 1, 'test vector 1', (0.653448,0.192478,0.017971,0.339821) ), ( 2, 'test vector 2', (-0.148894,0.748278,0.091892,-0.095406) ), ( 3, 'test vector 3', (0.286569,-0.031816,0.066684,0.032926) );"
+––– output –––
+––– input –––
+mysql -h0 -P9306 -e "select id, knn_dist() from test_1bit where knn ( image_vector, 5, (0.286569,-0.031816,0.066684,0.032926) );"
+––– output –––
++------+------------+
+| id   | knn_dist() |
++------+------------+
+|    3 |   0.000000 |
+|    1 | 0.28146550 |
+|    2 | 0.81527930 |
++------+------------+
+––– input –––
+mysql -h0 -P9306 -e "flush ramchunk test_1bit; select id, knn_dist() from test_1bit where knn ( image_vector, 5, (0.286569,-0.031816,0.066684,0.032926) );"
+––– output –––
++------+------------+
+| id   | knn_dist() |
++------+------------+
+|    3 | #!/\d+\.\d+/!# |
+|    1 | #!/\d+\.\d+/!# |
+|    2 | #!/\d+\.\d+/!# |
++------+------------+
+––– comment –––
+Test 1bitsimple quantization
+––– input –––
+mysql -h0 -P9306 -e "create table test_1bitsimple ( title text, image_vector float_vector knn_type='hnsw' knn_dims='4' hnsw_similarity='l2' quantization='1bitsimple');"
+––– output –––
+––– input –––
+mysql -h0 -P9306 -e "insert into test_1bitsimple values ( 1, 'test vector 1', (0.653448,0.192478,0.017971,0.339821) ), ( 2, 'test vector 2', (-0.148894,0.748278,0.091892,-0.095406) ), ( 3, 'test vector 3', (0.286569,-0.031816,0.066684,0.032926) );"
+––– output –––
+––– input –––
+mysql -h0 -P9306 -e "select id, knn_dist() from test_1bitsimple where knn ( image_vector, 5, (0.286569,-0.031816,0.066684,0.032926) );"
+––– output –––
++------+------------+
+| id   | knn_dist() |
++------+------------+
+|    3 |   0.000000 |
+|    1 | 0.28146550 |
+|    2 | 0.81527930 |
++------+------------+
+––– input –––
+mysql -h0 -P9306 -e "flush ramchunk test_1bitsimple; select id, knn_dist() from test_1bitsimple where knn ( image_vector, 5, (0.286569,-0.031816,0.066684,0.032926) );"
+––– output –––
++------+------------+
+| id   | knn_dist() |
++------+------------+
+|    3 |  -4.000000 |
+|    1 |  -2.000000 |
+|    2 |   2.000000 |
++------+------------+
+––– comment –––
+Test quantization with different similarity metrics
+––– input –––
+mysql -h0 -P9306 -e "create table test_cosine_8bit ( title text, image_vector float_vector knn_type='hnsw' knn_dims='4' hnsw_similarity='cosine' quantization='8bit');"
+––– output –––
+––– input –––
+mysql -h0 -P9306 -e "insert into test_cosine_8bit values ( 1, 'test vector 1', (1.0,0.0,0.0,0.0) ), ( 2, 'test vector 2', (0.0,1.0,0.0,0.0) ), ( 3, 'test vector 3', (0.707,0.707,0.0,0.0) );"
+––– output –––
+––– input –––
+mysql -h0 -P9306 -e "select id, knn_dist() from test_cosine_8bit where knn ( image_vector, 5, (1.0,0.0,0.0,0.0) );"
+––– output –––
++------+------------+
+| id   | knn_dist() |
++------+------------+
+|    1 |   0.000000 |
+|    3 | 0.29289317 |
+|    2 |   1.000000 |
++------+------------+
+––– input –––
+mysql -h0 -P9306 -e "flush ramchunk test_cosine_8bit; select id, knn_dist() from test_cosine_8bit where knn ( image_vector, 5, (1.0,0.0,0.0,0.0) );"
+––– output –––
++------+-------------+
+| id   | knn_dist()  |
++------+-------------+
+|    1 | -0.00000012 |
+|    3 |  0.29411757 |
+|    2 |    1.000000 |
++------+-------------+
+––– comment –––
+Test edge cases - zero vectors
+––– input –––
+mysql -h0 -P9306 -e "create table test_zero_vectors ( title text, image_vector float_vector knn_type='hnsw' knn_dims='4' hnsw_similarity='l2' quantization='8bit');"
+––– output –––
+––– input –––
+mysql -h0 -P9306 -e "insert into test_zero_vectors values ( 1, 'zero vector', (0.0,0.0,0.0,0.0) ), ( 2, 'small vector', (0.001,0.001,0.001,0.001) ), ( 3, 'normal vector', (1.0,1.0,1.0,1.0) );"
+––– output –––
+––– input –––
+mysql -h0 -P9306 -e "select id, knn_dist() from test_zero_vectors where knn ( image_vector, 5, (0.0,0.0,0.0,0.0) );"
+––– output –––
++------+------------+
+| id   | knn_dist() |
++------+------------+
+|    1 |   0.000000 |
+|    2 | 0.00000400 |
+|    3 |   4.000000 |
++------+------------+
+––– input –––
+mysql -h0 -P9306 -e "flush ramchunk test_zero_vectors; select id, knn_dist() from test_zero_vectors where knn ( image_vector, 5, (0.0,0.0,0.0,0.0) );"
+––– output –––
++------+------------+
+| id   | knn_dist() |
++------+------------+
+|    1 |   0.000000 |
+|    2 |   0.000000 |
+|    3 | 0.25196466 |
++------+------------+
+––– comment –––
+Test edge cases - extreme values
+––– input –––
+mysql -h0 -P9306 -e "create table test_extreme_values ( title text, image_vector float_vector knn_type='hnsw' knn_dims='4' hnsw_similarity='l2' quantization='1bit');"
+––– output –––
+––– input –––
+mysql -h0 -P9306 -e "insert into test_extreme_values values ( 1, 'large positive', (1000.0,1000.0,1000.0,1000.0) ), ( 2, 'large negative', (-1000.0,-1000.0,-1000.0,-1000.0) ), ( 3, 'mixed extreme', (1000.0,-1000.0,1000.0,-1000.0) );"
+––– output –––
+––– input –––
+mysql -h0 -P9306 -e "select id, knn_dist() from test_extreme_values where knn ( image_vector, 5, (500.0,500.0,500.0,500.0) );"
+––– output –––
++------+----------------+
+| id   | knn_dist()     |
++------+----------------+
+|    1 | 1000000.000000 |
+|    3 | 5000000.000000 |
+|    2 | 9000000.000000 |
++------+----------------+
+––– comment –––
+Test error cases - invalid quantization type
+––– input –––
+mysql -h0 -P9306 -e "create table test_invalid_quantization ( title text, image_vector float_vector knn_type='hnsw' knn_dims='4' hnsw_similarity='l2' quantization='invalid');"
+––– output –––
+ERROR 1064 (42000) at line 1: P03: Unknown quantization 'invalid' near ''invalid')'
+––– comment –––
+Test quantization with different vector dimensions
+––– input –––
+mysql -h0 -P9306 -e "create table test_high_dim ( title text, image_vector float_vector knn_type='hnsw' knn_dims='8' hnsw_similarity='l2' quantization='8bit');"
+––– output –––
+––– input –––
+mysql -h0 -P9306 -e "insert into test_high_dim values ( 1, 'high dim vector', (0.1,0.2,0.3,0.4,0.5,0.6,0.7,0.8) );"
+––– output –––
+––– input –––
+mysql -h0 -P9306 -e "select count(*) from test_high_dim;"
+––– output –––
++----------+
+| count(*) |
++----------+
+|        1 |
++----------+
+––– comment –––
+Test quantization with single dimension
+––– input –––
+mysql -h0 -P9306 -e "create table test_single_dim ( title text, image_vector float_vector knn_type='hnsw' knn_dims='1' hnsw_similarity='l2' quantization='1bit');"
+––– output –––
+––– input –––
+mysql -h0 -P9306 -e "insert into test_single_dim values ( 1, 'single dim 1', (0.5) ), ( 2, 'single dim 2', (-0.5) ), ( 3, 'single dim 3', (1.0) );"
+––– output –––
+––– input –––
+mysql -h0 -P9306 -e "select id, knn_dist() from test_single_dim where knn ( image_vector, 5, (0.0) );"
+––– output –––
++------+------------+
+| id   | knn_dist() |
++------+------------+
+|    1 |   0.250000 |
+|    2 |   0.250000 |
+|    3 |   1.000000 |
++------+------------+
+––– comment –––
+Test quantization with IP (inner product) similarity
+––– input –––
+mysql -h0 -P9306 -e "create table test_ip_quantization ( title text, image_vector float_vector knn_type='hnsw' knn_dims='4' hnsw_similarity='ip' quantization='8bit');"
+––– output –––
+––– input –––
+mysql -h0 -P9306 -e "insert into test_ip_quantization values ( 1, 'ip vector 1', (1.0,0.0,0.0,0.0) ), ( 2, 'ip vector 2', (0.0,1.0,0.0,0.0) ), ( 3, 'ip vector 3', (1.0,1.0,0.0,0.0) );"
+––– output –––
+––– input –––
+mysql -h0 -P9306 -e "select id, knn_dist() from test_ip_quantization where knn ( image_vector, 5, (1.0,1.0,0.0,0.0) );"
+––– output –––
++------+------------+
+| id   | knn_dist() |
++------+------------+
+|    3 |  -1.000000 |
+|    1 |   0.000000 |
+|    2 |   0.000000 |
++------+------------+
+––– input –––
+mysql -h0 -P9306 -e "flush ramchunk test_ip_quantization; select id, knn_dist() from test_ip_quantization where knn ( image_vector, 5, (1.0,1.0,0.0,0.0) );"
+––– output –––
++------+-------------+
+| id   | knn_dist()  |
++------+-------------+
+|    3 | -1.00000024 |
+|    1 | -0.00000012 |
+|    2 | -0.00000012 |
++------+-------------+
+––– comment –––
+Verify table structure shows quantization parameter
+––– input –––
+mysql -h0 -P9306 -e "describe test_8bit;"
+––– output –––
++--------------+--------------+----------------+
+| Field        | Type         | Properties     |
++--------------+--------------+----------------+
+| id           | bigint       |                |
+| title        | text         | indexed stored |
+| image_vector | float_vector | knn            |
++--------------+--------------+----------------+
+––– comment –––
+Test quantization with rescoring and oversampling
+––– input –––
+mysql -h0 -P9306 -e "create table test_rescoring ( title text, image_vector float_vector knn_type='hnsw' knn_dims='4' hnsw_similarity='l2' quantization='1bit');"
+––– output –––
+––– input –––
+mysql -h0 -P9306 -e "insert into test_rescoring values ( 1, 'vector 1', (0.1,0.2,0.3,0.4) ), ( 2, 'vector 2', (0.5,0.6,0.7,0.8) ), ( 3, 'vector 3', (0.9,1.0,1.1,1.2) ), ( 4, 'vector 4', (1.3,1.4,1.5,1.6) ), ( 5, 'vector 5', (1.7,1.8,1.9,2.0) );"
+––– output –––
+––– input –––
+mysql -h0 -P9306 -e "select id, knn_dist() from test_rescoring where knn ( image_vector, 3, (0.5,0.6,0.7,0.8), {rescore=1} );"
+––– output –––
++------+------------+
+| id   | knn_dist() |
++------+------------+
+|    2 |   0.000000 |
+|    3 |   0.640000 |
+|    1 | 0.64000005 |
+|    4 |   2.560000 |
+|    5 | 5.75999975 |
++------+------------+
+––– input –––
+mysql -h0 -P9306 -e "flush ramchunk test_rescoring; select id, knn_dist() from test_rescoring where knn ( image_vector, 3, (0.5,0.6,0.7,0.8), {rescore=1} );"
+––– output –––
++------+------------+
+| id   | knn_dist() |
++------+------------+
+|    2 |   0.000000 |
+|    3 |   0.640000 |
+|    1 | 0.64000005 |
++------+------------+
+––– comment –––
+Test quantization with different ef parameters
+––– input –––
+mysql -h0 -P9306 -e "select id, knn_dist() from test_rescoring where knn ( image_vector, 3, (0.5,0.6,0.7,0.8), {ef=100} );"
+––– output –––
++------+------------+
+| id   | knn_dist() |
++------+------------+
+|    2 | 0.00000024 |
+|    3 | 0.64000005 |
+|    1 | 0.64020139 |
++------+------------+
+––– comment –––
+Test quantization memory usage comparison
+––– input –––
+mysql -h0 -P9306 -e "create table test_no_quantization ( title text, image_vector float_vector knn_type='hnsw' knn_dims='4' hnsw_similarity='l2');"
+––– output –––
+––– input –––
+mysql -h0 -P9306 -e "insert into test_no_quantization values ( 1, 'no quant vector', (0.1,0.2,0.3,0.4) );"
+––– output –––
+––– input –––
+mysql -h0 -P9306 -e "select id, knn_dist() from test_no_quantization where knn ( image_vector, 5, (0.1,0.2,0.3,0.4) );"
+––– output –––
++------+------------+
+| id   | knn_dist() |
++------+------------+
+|    1 | #!/[0-9]+\.[0-9]+/!# |
++------+------------+
+––– input –––
+mysql -h0 -P9306 -e "flush ramchunk test_no_quantization; select id, knn_dist() from test_no_quantization where knn ( image_vector, 5, (0.1,0.2,0.3,0.4) );"
+––– output –––
++------+------------+
+| id   | knn_dist() |
++------+------------+
+|    1 |   0.000000 |
++------+------------+
+––– comment –––
+Test quantization with normalized vectors
+––– input –––
+mysql -h0 -P9306 -e "create table test_normalized ( title text, image_vector float_vector knn_type='hnsw' knn_dims='4' hnsw_similarity='cosine' quantization='8bit');"
+––– output –––
+––– input –––
+mysql -h0 -P9306 -e "insert into test_normalized values ( 1, 'normalized vector', (0.5,0.5,0.5,0.5) ), ( 2, 'unit vector', (1.0,0.0,0.0,0.0) );"
+––– output –––
+––– input –––
+mysql -h0 -P9306 -e "select id, knn_dist() from test_normalized where knn ( image_vector, 5, (0.707,0.707,0.0,0.0) );"
+––– output –––
++------+------------+
+| id   | knn_dist() |
++------+------------+
+|    1 | 0.29289317 |
+|    2 | 0.29289317 |
++------+------------+
+––– input –––
+mysql -h0 -P9306 -e "flush ramchunk test_normalized; select id, knn_dist() from test_normalized where knn ( image_vector, 5, (0.707,0.707,0.0,0.0) );"
+––– output –––
++------+------------+
+| id   | knn_dist() |
++------+------------+
+|    1 | 0.29134941 |
+|    2 | 0.29411757 |
++------+------------+

@@ -55,6 +55,24 @@ struct CSphHornerStrHashFunc
 	}
 };
 
+constexpr uint64_t fnHornerHash ( const char* szKey, uint64_t uHash=0 )
+{
+	if ( !szKey )
+		return uHash;
+
+	for ( const auto * pStr = szKey; *pStr; ++pStr )
+		uHash = uHash * 257 + *pStr;
+
+	return uHash;
+}
+
+constexpr uint64_t fnHornerHash ( const BYTE* sKey, int iSize, uint64_t uHash=0 )
+{
+	for ( int i = 0; i<iSize; ++i )
+		uHash = uHash * 257 + sKey[i];
+
+	return uHash;
+}
 
 class CSphTransformation : public ISphNoncopyable
 {

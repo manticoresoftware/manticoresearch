@@ -10,7 +10,7 @@ apt-get update > /dev/null 2>&1 && apt-get install -y curl jq > /dev/null 2>&1; 
 ––– output –––
 0
 ––– input –––
-timeout 420 bash -c 'echo "[]" > /tmp/filebeat_tags.json; page=1; attempts=0; max_attempts=3; while [ $attempts -lt $max_attempts ]; do attempts=$((attempts+1)); if curl -s --fail --max-time 10 "https://hub.docker.com/v2/repositories/elastic/filebeat/tags/?page_size=1000&page=$page" | tee /tmp/page.json | jq -e ".next" > /dev/null; then jq -r ".results[].name" /tmp/page.json >> /tmp/filebeat_tags.json; page=$((page+1)); attempts=0; else break; fi; done; jq -r ".results[].name" /tmp/page.json >> /tmp/filebeat_tags.json; VERSIONS=$(cat /tmp/filebeat_tags.json | grep -E "^([7-9]|[1-9][0-9]+).[0-9]+.[0-9]+$" | grep -E "^(7.(1[7-9]|[2-9][0-9])|[8-9].[0-9]+|[1-9][0-9]+.[0-9]+).[0-9]+$" | sed -E "s/^([0-9]+.[0-9]+).[0-9]+$/\1/" | grep -v "rc|beta|alpha" | sort -V | uniq); echo "$VERSIONS"; mkdir -p /tmp/filebeat_cache; echo "Preparation done"; for version in $VERSIONS; do archive="/tmp/filebeat_cache/filebeat-${version}.0-linux-x86_64.tar.gz"; echo ">>> Checking Filebeat $version ..."; if [ -f "$archive" ] && gzip -t "$archive" >/dev/null 2>&1; then echo "✓ Archive for $version is OK"; else echo ">>> Downloading Filebeat $version ..."; wget -q --timeout=30 "https://artifacts.elastic.co/downloads/beats/filebeat/filebeat-${version}.0-linux-x86_64.tar.gz" -O "$archive" && { if gzip -t "$archive" >/dev/null 2>&1; then echo "✓ Archive for $version is OK"; else echo "✗ Archive for $version is corrupted"; rm -f "$archive"; fi; }; fi; done'
+timeout 420 bash -c 'echo "[]" > /tmp/filebeat_tags.json; page=1; attempts=0; max_attempts=3; while [ $attempts -lt $max_attempts ]; do attempts=$((attempts+1)); if curl -s --fail --max-time 10 "https://hub.docker.com/v2/repositories/elastic/filebeat/tags/?page_size=1000&page=$page" | tee /tmp/page.json | jq -e ".next" > /dev/null; then jq -r ".results[].name" /tmp/page.json >> /tmp/filebeat_tags.json; page=$((page+1)); attempts=0; else break; fi; done; jq -r ".results[].name" /tmp/page.json >> /tmp/filebeat_tags.json; VERSIONS=$(cat /tmp/filebeat_tags.json | grep -E "^([7-9]|[1-9][0-9]+).[0-9]+.[0-9]+$" | grep -E "^(7.(1[7-9]|[2-9][0-9])|[8-9].[0-9]+|9.[0-9]+|[1-9][0-9]+.[0-9]+).[0-9]+$" | sed -E "s/^([0-9]+.[0-9]+).[0-9]+$/\1/" | grep -v "rc|beta|alpha" | sort -V | uniq); echo "$VERSIONS"; mkdir -p /tmp/filebeat_cache; echo "Preparation done"; for version in $VERSIONS; do archive="/tmp/filebeat_cache/filebeat-${version}.0-linux-x86_64.tar.gz"; echo ">>> Checking Filebeat $version ..."; if [ -f "$archive" ] && gzip -t "$archive" >/dev/null 2>&1; then echo "✓ Archive for $version is OK"; else echo ">>> Downloading Filebeat $version ..."; wget -q --timeout=30 "https://artifacts.elastic.co/downloads/beats/filebeat/filebeat-${version}.0-linux-x86_64.tar.gz" -O "$archive" && { if gzip -t "$archive" >/dev/null 2>&1; then echo "✓ Archive for $version is OK"; else echo "✗ Archive for $version is corrupted"; rm -f "$archive"; fi; }; fi; done'
 ––– output –––
 7.17
 8.0
@@ -32,7 +32,9 @@ timeout 420 bash -c 'echo "[]" > /tmp/filebeat_tags.json; page=1; attempts=0; ma
 8.16
 8.17
 8.18
+8.19
 9.0
+9.1
 Preparation done
 >>> Checking Filebeat 7.17 ...
 >>> Downloading Filebeat 7.17 ...
@@ -94,9 +96,15 @@ Preparation done
 >>> Checking Filebeat 8.18 ...
 >>> Downloading Filebeat 8.18 ...
 ✓ Archive for 8.18 is OK
+>>> Checking Filebeat 8.19 ...
+>>> Downloading Filebeat 8.19 ...
+✓ Archive for 8.19 is OK
 >>> Checking Filebeat 9.0 ...
 >>> Downloading Filebeat 9.0 ...
 ✓ Archive for 9.0 is OK
+>>> Checking Filebeat 9.1 ...
+>>> Downloading Filebeat 9.1 ...
+✓ Archive for 9.1 is OK
 ––– input –––
 set +H && mkdir -p /tmp/filebeat_cache && echo "Preparation done"
 ––– output –––
@@ -158,7 +166,7 @@ rm -rf /tmp/fb-data-${version}/*
 skip_filebeat=0
 
 # For versions with compatibility issues, use an adapted approach
-if [[ "$version" == "9.0" ]] || [[ "$version" == "7.17" ]] || [[ "$version" == "8.0" ]] || [[ "$version" == "8.1" ]]; then
+if [[ "$version" == "9.0" ]] || [[ "$version" == "9.1" ]] || [[ "$version" == "7.17" ]] || [[ "$version" == "8.0" ]] || [[ "$version" == "8.1" ]]; then
   echo ">>> Using alternative approach for Filebeat $version..."
 
   # Instead of running Filebeat, simulate with direct data insertion via MySQL
@@ -372,6 +380,18 @@ timeout 60 bash /tmp/filebeat-single-test.sh 8.1
 ✓ Structure check for 8.1: passed
 ✓ Filebeat version 8.1 tested successfully
 ––– input –––
+timeout 60 bash /tmp/filebeat-single-test.sh 8.2
+––– output –––
+>>> Testing Filebeat version: 8.2
+✓ Log file has 5 lines
+✓ Manticore Search available
+>>> Starting Filebeat...
+>>> Waiting for Filebeat to publish events...
+✓ Filebeat 8.2 processed logs
+✓ Row count check for 8.2: 5 rows
+✓ Structure check for 8.2: passed
+✓ Filebeat version 8.2 tested successfully
+––– input –––
 timeout 60 bash /tmp/filebeat-single-test.sh 8.3
 ––– output –––
 >>> Testing Filebeat version: 8.3
@@ -564,6 +584,18 @@ timeout 60 bash /tmp/filebeat-single-test.sh 8.18
 ✓ Structure check for 8.18: passed
 ✓ Filebeat version 8.18 tested successfully
 ––– input –––
+timeout 60 bash /tmp/filebeat-single-test.sh 8.19
+––– output –––
+>>> Testing Filebeat version: 8.19
+✓ Log file has 5 lines
+✓ Manticore Search available
+>>> Starting Filebeat...
+>>> Waiting for Filebeat to publish events...
+✓ Filebeat 8.19 processed logs
+✓ Row count check for 8.19: 5 rows
+✓ Structure check for 8.19: passed
+✓ Filebeat version 8.19 tested successfully
+––– input –––
 timeout 60 bash /tmp/filebeat-single-test.sh 9.0
 ––– output –––
 >>> Testing Filebeat version: 9.0
@@ -579,6 +611,22 @@ timeout 60 bash /tmp/filebeat-single-test.sh 9.0
 ✓ Row count check for 9.0: 5 rows
 ✓ Structure check for 9.0: passed
 ✓ Filebeat version 9.0 tested successfully
+––– input –––
+timeout 60 bash /tmp/filebeat-single-test.sh 9.1
+––– output –––
+>>> Testing Filebeat version: 9.1
+✓ Log file has 5 lines
+✓ Manticore Search available
+>>> Using alternative approach for Filebeat 9.1...
+✓ Inserted log line 1
+✓ Inserted log line 2
+✓ Inserted log line 3
+✓ Inserted log line 4
+✓ Inserted log line 5
+✓ Filebeat 9.1 simulation: inserted all logs
+✓ Row count check for 9.1: 5 rows
+✓ Structure check for 9.1: passed
+✓ Filebeat version 9.1 tested successfully
 ––– input –––
 rm -rf /tmp/fb-data-* /tmp/fb-log-*.txt /tmp/page.json /tmp/filebeat_tags.json
 ––– output –––

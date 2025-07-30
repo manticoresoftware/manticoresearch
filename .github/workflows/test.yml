@@ -127,78 +127,45 @@ jobs:
           tar -xf boost_1_75_0.tgz
 
   download_manticore_windows:
-    needs: changes
+    # Remove all conditions to ensure job always executes
     name: Download Manticore Windows installer
     runs-on: ubuntu-22.04
     outputs:
       installer_url: ${{ steps.get_installer.outputs.url }}
       installer_name: ${{ steps.get_installer.outputs.name }}
+      version: ${{ steps.get_installer.outputs.version }}
     steps:
       - name: Get latest Manticore installer URL
         id: get_installer
         run: |
-          echo "Fetching latest release from GitHub API..."
+          echo "Starting installer discovery process..."
           
-          # Use GitHub API to get latest release information
-          LATEST_RELEASE=$(curl -s https://api.github.com/repos/manticoresoftware/manticoresearch/releases/latest)
+          # Use direct working URL while fixing automatic discovery
+          INSTALLER_URL="https://repo.manticoresearch.com/repository/manticoresearch_windows/release/x64/manticore-13.2.4-25073009-9c37cc067-x64.exe"
+          VERSION="13.2.4"
           
-          # Extract version from latest release
-          VERSION=$(echo "$LATEST_RELEASE" | jq -r '.tag_name')
-          echo "Latest version: $VERSION"
-          
-          # Look for Windows x64 installer in release assets
-          INSTALLER_URL=$(echo "$LATEST_RELEASE" | jq -r '.assets[] | select(.name | test(".*x64\\.exe$")) | .browser_download_url')
-          
-          if [ -z "$INSTALLER_URL" ] || [ "$INSTALLER_URL" = "null" ]; then
-            echo "No Windows installer found in latest release, trying alternative methods..."
-            
-            # Alternative method 1: Check several recent releases
-            echo "Checking last 5 releases for Windows installer..."
-            for i in {0..4}; do
-              RELEASE=$(curl -s "https://api.github.com/repos/manticoresoftware/manticoresearch/releases?page=1&per_page=10" | jq -r ".[$i]")
-              RELEASE_VERSION=$(echo "$RELEASE" | jq -r '.tag_name')
-              RELEASE_INSTALLER=$(echo "$RELEASE" | jq -r '.assets[] | select(.name | test(".*x64\\.exe$")) | .browser_download_url')
-              
-              if [ -n "$RELEASE_INSTALLER" ] && [ "$RELEASE_INSTALLER" != "null" ]; then
-                INSTALLER_URL="$RELEASE_INSTALLER"
-                VERSION="$RELEASE_VERSION"
-                echo "Found installer in release $VERSION: $INSTALLER_URL"
-                break
-              fi
-            done
-          fi
-          
-          if [ -z "$INSTALLER_URL" ] || [ "$INSTALLER_URL" = "null" ]; then
-            echo "No installer found in GitHub releases, trying repo.manticoresearch.com..."
-            
-            # Alternative method 2: Construct URL based on Linux package version
-            # Get version from Linux packages as reference
-            LATEST_PACKAGE_VERSION=$(curl -s "https://repo.manticoresearch.com/repository/manticoresearch_jammy/dists/jammy/main/binary-amd64/Packages" | grep "Package: manticore$" -A 10 | grep "Version:" | head -1 | awk '{print $2}' | cut -d'-' -f1)
-            
-            if [ -n "$LATEST_PACKAGE_VERSION" ]; then
-              # Construct potential Windows installer URL
-              POTENTIAL_URL="https://repo.manticoresearch.com/repository/manticoresearch_windows/release/x64/manticore-${LATEST_PACKAGE_VERSION}-x64.exe"
-              
-              # Check if file exists at constructed URL
-              if curl --output /dev/null --silent --head --fail "$POTENTIAL_URL"; then
-                INSTALLER_URL="$POTENTIAL_URL"
-                VERSION="$LATEST_PACKAGE_VERSION"
-                echo "Found installer via package version: $INSTALLER_URL"
-              fi
-            fi
-          fi
-          
-          if [ -z "$INSTALLER_URL" ] || [ "$INSTALLER_URL" = "null" ]; then
-            echo "All methods failed, using fallback to known working version"
-            # Fallback to last known working version
-            INSTALLER_URL="https://github.com/manticoresoftware/manticoresearch/releases/download/13.2.3/manticore-13.2.3-25070806-bf96368a6-x64.exe"
+          # Check URL availability
+          echo "Checking URL availability: $INSTALLER_URL"
+          if curl --output /dev/null --silent --head --fail "$INSTALLER_URL"; then
+            echo "URL is accessible"
+          else
+            echo "URL not accessible, trying alternative..."
+            # Alternative URL
+            INSTALLER_URL="https://repo.manticoresearch.com/repository/manticoresearch_windows/release/x64/manticore-13.2.3-25070806-bf96368a6-x64.exe"
             VERSION="13.2.3"
+            
+            if curl --output /dev/null --silent --head --fail "$INSTALLER_URL"; then
+              echo "Alternative URL is accessible"
+            else
+              echo "Both URLs failed, this needs manual intervention"
+              exit 1
+            fi
           fi
           
           INSTALLER_NAME=$(basename "$INSTALLER_URL")
           
-          echo "Final installer URL: $INSTALLER_URL"
-          echo "Final installer name: $INSTALLER_NAME"
+          echo "Selected installer URL: $INSTALLER_URL"
+          echo "Selected installer name: $INSTALLER_NAME"
           echo "Version: $VERSION"
           
           echo "url=$INSTALLER_URL" >> $GITHUB_OUTPUT

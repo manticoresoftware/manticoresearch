@@ -1104,9 +1104,9 @@ TEST_F ( QueryParser, transform_common_keywords_1 )
 TEST_F ( QueryParser, transform_common_keywords_2 )
 {
 	Transform (
-		"bbb | \"aaa bbb ccc\"",
-		"( bbb | \"aaa bbb ccc\" )",
-		"bbb"
+		"bbb | \"aaa bbb ccc ddd eee fff ggg\" | bbb  | \"aaa bbb ccc ddd eee fff ggg hhh iii jjj\" |\"hhh iii jjj\"| \"aaa bbb ccc ddd eee fff ggg hhh iii jjj\"| bbb |\"aaa bbb ccc ddd eee fff ggg hhh iii jjj\"| \"aaa bbb ccc ddd eee fff ggg\" | bbb",
+		"( bbb | \"aaa bbb ccc ddd eee fff ggg\" | bbb | \"aaa bbb ccc ddd eee fff ggg hhh iii jjj\" | \"hhh iii jjj\" | \"aaa bbb ccc ddd eee fff ggg hhh iii jjj\" | bbb | \"aaa bbb ccc ddd eee fff ggg hhh iii jjj\" | \"aaa bbb ccc ddd eee fff ggg\" | bbb )",
+		"( bbb | bbb | \"hhh iii jjj\" | bbb | bbb )"
 	);
 }
 

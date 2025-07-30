@@ -137,7 +137,7 @@ void CSphTransformation::DumpSimilar () const noexcept
 			printf ( "\t%p %d\n", (void*)hKey2, hSimGroup.iDeep );
 			for ( const XQNode_t * pLeaf : dleaves )
 			{
-				const uint64_t uParentHash = pLeaf->GetHash();
+				const uint64_t uParentHash = pLeaf->GetFuzzyHash();
 				printf ( "\t\t%p, leaf %p\n", (void*)uParentHash, pLeaf );
 			}
 		}

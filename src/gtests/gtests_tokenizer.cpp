@@ -1128,6 +1128,15 @@ TEST_F ( QueryParser, transform_common_keywords_4 )
 	);
 }
 
+TEST_F ( QueryParser, relaxed_missed_field_with_pos )
+{
+	Transform (
+		"@@relaxed aaa ( bbb @missed[1] ccc )",
+		"( aaa   bbb )",
+		"( aaa   bbb )"
+	);
+}
+
 TEST_F ( QueryParser, transform_common_keywords_5 )
 {
 	Transform (

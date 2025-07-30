@@ -51,7 +51,6 @@ bool HasMissedField ( const XQLimitSpec_t & tSpec )
 {
 	return (tSpec.m_bFieldSpec
 		&& tSpec.m_dFieldMask.TestAll ( false )
-		&& tSpec.m_iFieldMaxPos == 0
 		);
 }
 }

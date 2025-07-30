@@ -166,7 +166,6 @@ jobs:
           echo "Found installer: $INSTALLER_URL"
 
   install_test_windows:
-    if: (github.event_name == 'pull_request' && github.event.pull_request.base.ref == 'update-buddy-version') != true
     name: Windows installation and basic functionality test
     needs: [download_manticore_windows, changes]
     runs-on: windows-latest

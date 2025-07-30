@@ -104,7 +104,8 @@ uint64_t XQNode_t::GetHash () const noexcept
 	m_iMagicHash^= sphFNV64cont ( dZeroOp, m_iMagicHash );
 	if ( m_dSpec.m_bFieldSpec )
 		m_iMagicHash = sphFNV64 ( m_dSpec.m_dFieldMask.m_dMask, FieldMask_t::SIZE * sizeof ( DWORD ), m_iMagicHash );
-
+	if ( !m_dSpec.m_dZones.IsEmpty() )
+		m_iMagicHash = sphFNV64 ( m_dSpec.m_dZones.begin(), m_dSpec.m_dZones.GetLength() * sizeof ( int ), m_iMagicHash + ( m_dSpec.m_bZoneSpan ? 257 : 0 ) );
 	return m_iMagicHash;
 }
 
@@ -126,7 +127,8 @@ uint64_t XQNode_t::GetFuzzyHash () const noexcept
 	m_iFuzzyHash = sphFNV64cont ( dZeroOp, m_iFuzzyHash );
 	if ( m_dSpec.m_bFieldSpec )
 		m_iFuzzyHash = sphFNV64 ( m_dSpec.m_dFieldMask.m_dMask, FieldMask_t::SIZE * sizeof ( DWORD ), m_iFuzzyHash );
-
+	if ( !m_dSpec.m_dZones.IsEmpty() )
+		m_iFuzzyHash = sphFNV64 ( m_dSpec.m_dZones.begin(), m_dSpec.m_dZones.GetLength() * sizeof ( int ), m_iFuzzyHash + ( m_dSpec.m_bZoneSpan ? 257 : 0 ) );
 	return m_iFuzzyHash;
 }
 

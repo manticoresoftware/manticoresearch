@@ -1137,6 +1137,25 @@ TEST_F ( QueryParser, relaxed_missed_field_with_pos )
 	);
 }
 
+TEST_F ( QueryParser, different_zones )
+{
+	Transform (
+		"(( ZONE:(h1) ACCEL !aaa)|( ACCEL !bbb))",
+		"( ( accel AND NOT aaa ) | ( accel AND NOT bbb ) )",
+		"( ( accel AND NOT aaa ) | ( accel AND NOT bbb ) )" // not "( accel AND NOT ( aaa   bbb ) )"
+	);
+}
+
+TEST_F ( QueryParser, different_zonespan )
+{
+	Transform (
+		"(( ZONESPAN:(h1) ACCEL !aaa)|( ACCEL !bbb))",
+		"( ( accel AND NOT aaa ) | ( accel AND NOT bbb ) )",
+		"( ( accel AND NOT aaa ) | ( accel AND NOT bbb ) )" // not "( accel AND NOT ( aaa   bbb ) )"
+	);
+}
+
+
 TEST_F ( QueryParser, transform_common_keywords_5 )
 {
 	Transform (

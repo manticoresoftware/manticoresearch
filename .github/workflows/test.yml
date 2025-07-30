@@ -1,6 +1,9 @@
 name: 🔬 Test
 run-name: 🔬 Test ${{ github.sha }}
 
+#on: workflow_call
+
+
 on:
   push:
     branches:
@@ -95,7 +98,6 @@ jobs:
             - '!test/clt-tests/**'
             clt:
             - 'test/clt-tests/**'
-
   win_bundle:
     if: (needs.changes.outputs.source == 'true') && (github.event_name == 'pull_request' && github.event.pull_request.base.ref == 'update-buddy-version') != true
     needs: changes
@@ -123,324 +125,6 @@ jobs:
         run: |
           wget https://repo.manticoresearch.com/repository/ci/boost_1_75_0.tgz
           tar -xf boost_1_75_0.tgz
-
-  find_manticore_installer:
-    name: Find Manticore Windows installer
-    runs-on: ubuntu-22.04
-    outputs:
-      installer_url: ${{ steps.find_url.outputs.installer_url }}
-      installer_name: ${{ steps.find_url.outputs.installer_name }}
-      version: ${{ steps.find_url.outputs.version }}
-    steps:
-      - name: Find working installer URL
-        id: find_url
-        run: |
-          echo "Searching for Manticore Windows installer..."
-          
-          # Список потенциальных URL для проверки
-          POTENTIAL_URLS=(
-            "https://repo.manticoresearch.com/repository/manticoresearch_windows/release/x64/manticore-13.2.4-25073009-9c37cc067-x64.exe"
-            "https://repo.manticoresearch.com/repository/manticoresearch_windows/release/x64/manticore-13.2.3-25070806-bf96368a6-x64.exe"
-          )
-          
-          FOUND_URL=""
-          
-          for url in "${POTENTIAL_URLS[@]}"; do
-            echo "Checking URL: $url"
-            
-            # Получаем размер файла через HEAD запрос
-            size_response=$(curl -sI "$url" 2>/dev/null || true)
-            http_code=$(echo "$size_response" | grep -i "^HTTP" | awk '{print $2}' || echo "000")
-            content_length=$(echo "$size_response" | grep -i "^content-length:" | awk '{print $2}' | tr -d '\r' || echo "0")
-            
-            echo "HTTP Code: $http_code, Content-Length: $content_length"
-            
-            # Проверяем что файл доступен и больше 20MB
-            if [ "$http_code" = "200" ] && [ "$content_length" -gt 20971520 ]; then
-              echo "Found valid installer: $url (size: $((content_length / 1024 / 1024))MB)"
-              FOUND_URL="$url"
-              break
-            fi
-          done
-          
-          if [ -z "$FOUND_URL" ]; then
-            echo "ERROR: No valid installer URL found"
-            exit 1
-          fi
-          
-          INSTALLER_NAME=$(basename "$FOUND_URL")
-          VERSION=$(echo "$INSTALLER_NAME" | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' | head -1 || echo "unknown")
-          
-          echo "installer_url=$FOUND_URL" >> $GITHUB_OUTPUT
-          echo "installer_name=$INSTALLER_NAME" >> $GITHUB_OUTPUT
-          echo "version=$VERSION" >> $GITHUB_OUTPUT
-
-  install_test_windows:
-    name: Windows installation and basic functionality test
-    needs: [find_manticore_installer]
-    runs-on: windows-latest
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
-        
-      - name: Display installer information
-        shell: powershell
-        run: |
-          Write-Host "Installer URL: ${{ needs.find_manticore_installer.outputs.installer_url }}"
-          Write-Host "Installer Name: ${{ needs.find_manticore_installer.outputs.installer_name }}"
-          Write-Host "Version: ${{ needs.find_manticore_installer.outputs.version }}"
-        
-      - name: Download Manticore installer
-        shell: powershell
-        run: |
-          $url = "${{ needs.find_manticore_installer.outputs.installer_url }}"
-          $output = "${{ needs.find_manticore_installer.outputs.installer_name }}"
-          
-          Write-Host "Downloading from: $url"
-          Write-Host "Output file: $output"
-          
-          try {
-            Invoke-WebRequest -Uri $url -OutFile $output -UseBasicParsing
-            
-            if (Test-Path $output) {
-              $fileSize = (Get-Item $output).Length
-              $fileSizeMB = [math]::Round($fileSize / 1MB, 2)
-              Write-Host "Downloaded file size: $fileSizeMB MB"
-              
-              if ($fileSize -lt 20MB) {
-                Write-Host "ERROR: Downloaded file is too small ($fileSizeMB MB)"
-                $bytes = [System.IO.File]::ReadAllBytes($output) | Select-Object -First 10
-                $hex = ($bytes | ForEach-Object { $_.ToString("X2") }) -join " "
-                Write-Host "File header (hex): $hex"
-                exit 1
-              }
-              
-              Write-Host "Download successful - file size looks valid"
-            } else {
-              Write-Host "ERROR: Downloaded file not found"
-              exit 1
-            }
-          }
-          catch {
-            Write-Host "Download failed: $_"
-            exit 1
-          }
-    
-      - name: Install Manticore silently
-        shell: powershell
-        run: |
-          $installer = "${{ needs.find_manticore_installer.outputs.installer_name }}"
-          
-          if (-not (Test-Path $installer)) {
-            Write-Host "ERROR: Installer not found: $installer"
-            exit 1
-          }
-          
-          Write-Host "Installing Manticore..."
-          Write-Host "Installer: $installer"
-          Write-Host "File size: $([math]::Round((Get-Item $installer).Length / 1MB, 2)) MB"
-          
-          try {
-            $arguments = @('/S')
-            $process = Start-Process -FilePath $installer -ArgumentList $arguments -Wait -PassThru
-            
-            Write-Host "Installation completed with exit code: $($process.ExitCode)"
-            
-            if ($process.ExitCode -eq 0) {
-              Write-Host "Manticore installed successfully"
-            } else {
-              Write-Host "Installation failed with exit code: $($process.ExitCode)"
-              exit 1
-            }
-          }
-          catch {
-            Write-Host "Installation error: $_"
-            exit 1
-          }
-    
-      - name: Verify installation files
-        shell: powershell
-        run: |
-          $searchPaths = @(
-            "C:\Program Files\Manticore",
-            "C:\Program Files (x86)\Manticore", 
-            "C:\Manticore",
-            "C:\Program Files\Manticore Search"
-          )
-          
-          $searchdPath = $null
-          $indexerPath = $null
-          
-          foreach ($basePath in $searchPaths) {
-            if (Test-Path $basePath) {
-              Write-Host "Found Manticore installation at: $basePath"
-              
-              $searchdCandidates = @(
-                "$basePath\bin\searchd.exe",
-                "$basePath\searchd.exe"
-              )
-              
-              $indexerCandidates = @(
-                "$basePath\bin\indexer.exe", 
-                "$basePath\indexer.exe"
-              )
-              
-              foreach ($candidate in $searchdCandidates) {
-                if (Test-Path $candidate) {
-                  $searchdPath = $candidate
-                  Write-Host "Found searchd at: $candidate"
-                  break
-                }
-              }
-              
-              foreach ($candidate in $indexerCandidates) {
-                if (Test-Path $candidate) {
-                  $indexerPath = $candidate
-                  Write-Host "Found indexer at: $candidate"
-                  break
-                }
-              }
-              
-              if ($searchdPath -and $indexerPath) {
-                break
-              }
-            }
-          }
-          
-          if (-not $searchdPath) {
-            Write-Host "ERROR: searchd.exe not found in any expected location"
-            
-            foreach ($basePath in $searchPaths) {
-              if (Test-Path $basePath) {
-                Write-Host "Contents of $basePath:"
-                Get-ChildItem $basePath -Recurse -ErrorAction SilentlyContinue | Select-Object Name, FullName | Format-Table
-              }
-            }
-            exit 1
-          }
-          
-          if (-not $indexerPath) {
-            Write-Host "WARNING: indexer.exe not found, but searchd.exe is available"
-          }
-          
-          echo "SEARCHD_PATH=$searchdPath" >> $env:GITHUB_ENV
-          if ($indexerPath) {
-            echo "INDEXER_PATH=$indexerPath" >> $env:GITHUB_ENV
-          }
-    
-      - name: Test binary versions
-        shell: powershell
-        run: |
-          Write-Host "Testing searchd version..."
-          try {
-            $output = & $env:SEARCHD_PATH --version 2>&1
-            Write-Host "searchd version output:"
-            Write-Host $output
-            Write-Host "searchd version check passed"
-          }
-          catch {
-            Write-Host "searchd version check failed: $_"
-            exit 1
-          }
-          
-          if ($env:INDEXER_PATH) {
-            Write-Host "Testing indexer version..."
-            try {
-              $output = & $env:INDEXER_PATH --version 2>&1
-              Write-Host "indexer version output:"
-              Write-Host $output
-              Write-Host "indexer version check passed"
-            }
-            catch {
-              Write-Host "indexer version check failed: $_"
-            }
-          } else {
-            Write-Host "Skipping indexer test - not found"
-          }
-    
-      - name: Test basic searchd functionality
-        shell: powershell
-        run: |
-          $workDir = "C:\manticore_test"
-          New-Item -ItemType Directory -Force -Path $workDir | Out-Null
-          Set-Location $workDir
-          
-          $configContent = @'
-          searchd {
-              listen = 127.0.0.1:9312
-              listen = 127.0.0.1:9306:mysql41
-              listen = 127.0.0.1:9308:http
-              log = searchd.log
-              query_log = query.log
-              pid_file = searchd.pid
-              data_dir = data
-              binlog_path = 
-          }
-          '@
-          $configContent | Out-File -FilePath "manticore.conf" -Encoding UTF8
-          
-          New-Item -ItemType Directory -Force -Path "data" | Out-Null
-          
-          Write-Host "Starting searchd for basic functionality test..."
-          try {
-            $searchdProcess = Start-Process -FilePath $env:SEARCHD_PATH -ArgumentList "--config", "manticore.conf", "--console" -NoNewWindow -PassThru
-            
-            Write-Host "searchd started with PID: $($searchdProcess.Id)"
-            
-            Start-Sleep -Seconds 15
-            
-            if ($searchdProcess.HasExited) {
-              Write-Host "ERROR: searchd process exited unexpectedly"
-              Write-Host "Exit code: $($searchdProcess.ExitCode)"
-              
-              if (Test-Path "searchd.log") {
-                Write-Host "Searchd log content:"
-                Get-Content "searchd.log" -ErrorAction SilentlyContinue
-              }
-              exit 1
-            }
-            
-            Write-Host "searchd is running successfully"
-            
-            $ports = @(9312, 9306, 9308)
-            foreach ($port in $ports) {
-              try {
-                $connection = Test-NetConnection -ComputerName localhost -Port $port -WarningAction SilentlyContinue
-                if ($connection.TcpTestSucceeded) {
-                  Write-Host "Port $port is accessible"
-                } else {
-                  Write-Host "Port $port is not accessible"
-                }
-              }
-              catch {
-                Write-Host "Could not test port $port"
-              }
-            }
-            
-            Write-Host "Stopping searchd..."
-            $searchdProcess | Stop-Process -Force -ErrorAction SilentlyContinue
-            Start-Sleep -Seconds 3
-            
-            Write-Host "Basic searchd functionality test completed successfully"
-          }
-          catch {
-            Write-Host "searchd test failed: $_"
-            
-            if (Test-Path "searchd.log") {
-              Write-Host "Searchd log content:"
-              Get-Content "searchd.log" -ErrorAction SilentlyContinue
-            }
-            exit 1
-          }
-
-      - name: Upload test artifacts
-        if: always()
-        uses: manticoresoftware/upload_artifact_with_retries@v4
-        with:
-          name: windows_installation_test_logs
-          path: |
-            C:\manticore_test\*.log
-            C:\manticore_test\manticore.conf
 
   build_linux_debug:
     if: (needs.changes.outputs.source == 'true') && (github.event_name == 'pull_request' && github.event.pull_request.base.ref == 'update-buddy-version') != true
@@ -492,6 +176,7 @@ jobs:
       artifact_name: release_test_results
       results_name: "Linux release test results"
       timeout: 10
+
 
   pack_jammy_cache_check:
     needs: changes
@@ -562,7 +247,7 @@ jobs:
     needs: [pack_jammy, pack_jammy_cache_check]
     runs-on: ubuntu-22.04
     steps:
-      - name: Checkout repository
+      - name: Checkout repository # We have to checkout to access .github/workflows/ in further steps
         uses: actions/checkout@v3
 
       - name: Download built x86_64 Ubuntu Jammy packages
@@ -586,13 +271,18 @@ jobs:
     outputs:
       out-build: ${{ steps.build.outputs.build_image }}
     steps:
-      - name: Checkout repository
+      - name: Checkout repository # We have to checkout to access .github/workflows/ in further steps
         uses: actions/checkout@v3
       - name: Download built x86_64 Ubuntu Jammy packages
         uses: manticoresoftware/download_artifact_with_retries@v3
         with:
           name: build_jammy_RelWithDebInfo_x86_64
           path: .
+      # Uncomment this shortcut for debug to save time by not preparing the packages in the pack_jammy job
+      # - run: |
+      #     wget http://dev2.manticoresearch.com/build_jammy_RelWithDebInfo_x86_64.zip
+      #     unzip build_jammy_RelWithDebInfo_x86_64.zip
+      #     tar -xvf artifact.tar
       - name: Calculate short commit hash
         id: sha
         run: echo "sha_short=$(git rev-parse --short HEAD)" >> $GITHUB_OUTPUT
@@ -630,7 +320,7 @@ jobs:
       GHCR_PASSWORD: ${{ secrets.GHCR_PASSWORD }}
       REPO_OWNER: ${{ github.repository_owner }}
     steps:
-      - name: Checkout repository
+      - name: Checkout repository # We have to checkout to access .github/workflows/ in further steps
         uses: actions/checkout@v3
       - name: Download artifact
         uses: manticoresoftware/download_artifact_with_retries@main
@@ -650,6 +340,7 @@ jobs:
     needs: [changes, check_branch]
     name: Linux aarch64 build
     uses: ./.github/workflows/build_template.yml
+    # Use -VV instead of -V below for more verbose output
     with:
       arch: aarch64
       COLUMNAR_LOCATOR: ${{ needs.check_branch.outputs.columnar_locator }}
@@ -695,7 +386,7 @@ jobs:
   test_windows:
     if: (github.event_name == 'pull_request' && github.event.pull_request.base.ref == 'update-buddy-version') != true
     name: Windows tests
-    needs: [build_windows, win_bundle, check_branch, install_test_windows]
+    needs: [build_windows, win_bundle, check_branch]
     uses: ./.github/workflows/win_test_template.yml
     strategy:
       fail-fast: false
@@ -761,6 +452,7 @@ jobs:
           files: build/xml_*/junit_tests.xml
           comment_mode: failures
       - name: Per-test results
+        # IMPORTANT: The value of 3 below should correspond to the test shard count, needs.<job_name>.strategy.job-total doesn't work
         run: |
           for file in build/status*; do echo -n "$file: "; cat "$file"; done
           grep -o "success" build/status* | wc -l | awk '{if ($1==3) exit 0; else {print "Found only "$1" successful runs out of 3"; exit 1}}'
@@ -772,3 +464,132 @@ jobs:
         with:
           name: windows_test_resuls
           path: build
+
+  test_windows_manticore:
+    if: (github.event_name == 'pull_request' && github.event.pull_request.base.ref == 'update-buddy-version') != true
+    name: Windows Manticore installation and basic tests
+    runs-on: windows-latest
+    timeout-minutes: 30
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      
+    - name: Find and download Manticore installer
+      id: download
+      shell: pwsh
+      run: |
+        $urls = @(
+            "https://repo.manticoresearch.com/repository/manticoresearch_windows/release/x64/manticore-13.2.4-25073009-9c37cc067-x64.exe",
+            "https://repo.manticoresearch.com/repository/manticoresearch_windows/release/x64/manticore-13.2.3-25070806-bf96368a6-x64.exe"
+        )
+        
+        $foundUrl = ""
+        foreach ($url in $urls) {
+            try {
+                $response = Invoke-WebRequest -Uri $url -Method Head -ErrorAction Stop
+                if ($response.StatusCode -eq 200) {
+                    $foundUrl = $url
+                    break
+                }
+            } catch { }
+        }
+        
+        if ([string]::IsNullOrEmpty($foundUrl)) {
+            throw "No valid installer URL found"
+        }
+        
+        $installerName = Split-Path $foundUrl -Leaf
+        Invoke-WebRequest -Uri $foundUrl -OutFile $installerName
+        
+        "installer_name=$installerName" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
+
+    - name: Install Manticore Search
+      shell: pwsh
+      run: |
+        $installerName = "${{ steps.download.outputs.installer_name }}"
+        Start-Process -FilePath ".\$installerName" -ArgumentList "/S" -Wait -NoNewWindow
+
+    - name: Verify installation and start searchd
+      shell: pwsh
+      run: |
+        $possiblePaths = @(
+            "${env:ProgramFiles}\Manticore Search",
+            "${env:ProgramFiles(x86)}\Manticore Search"
+        )
+        
+        $manticorePath = $possiblePaths | Where-Object { Test-Path $_ } | Select-Object -First 1
+        if (!$manticorePath) {
+            throw "Manticore installation not found"
+        }
+        
+        $searchdPath = Join-Path $manticorePath "bin\searchd.exe"
+        if (!(Test-Path $searchdPath)) {
+            throw "searchd.exe not found"
+        }
+        
+        $configDir = Join-Path $manticorePath "etc"
+        $configFile = Join-Path $configDir "manticore.conf"
+        
+        if (!(Test-Path $configDir)) {
+            New-Item -ItemType Directory -Path $configDir -Force
+        }
+        
+        $configContent = @"
+        searchd {
+            listen = 9312
+            listen = 9306:mysql41
+            log = searchd.log
+            query_log = query.log
+            pid_file = searchd.pid
+            data_dir = data
+            binlog_path = binlog
+        }
+
+        index testrt {
+            type = rt
+            path = testrt
+            rt_field = title
+            rt_field = content
+            rt_attr_uint = gid
+        }
+        "@
+        
+        Set-Content -Path $configFile -Value $configContent -Encoding UTF8
+        
+        $dataDir = Join-Path $manticorePath "data"
+        if (!(Test-Path $dataDir)) {
+            New-Item -ItemType Directory -Path $dataDir -Force
+        }
+        
+        $searchdProcess = Start-Process -FilePath $searchdPath -ArgumentList "--config", $configFile -PassThru -WindowStyle Hidden
+        Start-Sleep -Seconds 5
+        
+        if ($searchdProcess.HasExited) {
+            throw "searchd failed to start"
+        }
+        
+        Write-Host "searchd started successfully"
+
+    - name: Run basic tests
+      shell: pwsh
+      run: |
+        $indexerPath = "${env:ProgramFiles}\Manticore Search\bin\indexer.exe"
+        if (!(Test-Path $indexerPath)) {
+            $indexerPath = "${env:ProgramFiles(x86)}\Manticore Search\bin\indexer.exe"
+        }
+        
+        if (Test-Path $indexerPath) {
+            Write-Host "Running indexer version check..."
+            & $indexerPath --version
+        }
+        
+        Start-Sleep -Seconds 2
+        $searchdProcesses = Get-Process -Name "searchd" -ErrorAction SilentlyContinue
+        if ($searchdProcesses) {
+            Write-Host "searchd is running with PID: $($searchdProcesses.Id)"
+        } else {
+            throw "searchd process not found"
+        }
+        
+        Write-Host "Windows Manticore installation test completed successfully"

@@ -187,7 +187,6 @@ jobs:
             Invoke-WebRequest -Uri $url -OutFile $output -UseBasicParsing
             Write-Host "Downloaded successfully: $output"
             
-            # Verify file size
             $fileSize = (Get-Item $output).Length
             Write-Host "File size: $($fileSize / 1MB) MB"
             
@@ -213,7 +212,6 @@ jobs:
           
           Write-Host "Installing Manticore..."
           try {
-            # Run installer in silent mode
             $process = Start-Process -FilePath $installer -ArgumentList '/S', '/D=C:\Manticore' -Wait -PassThru
             
             if ($process.ExitCode -eq 0) {
@@ -241,7 +239,6 @@ jobs:
           $searchdPath = $null
           $indexerPath = $null
           
-          # Locate executables
           foreach ($path in $installPaths) {
             if (Test-Path $path) {
               if ($path -like "*searchd.exe") {
@@ -257,7 +254,6 @@ jobs:
           
           if (-not $searchdPath) {
             Write-Host "searchd.exe not found in any expected location"
-            # Search for searchd.exe recursively
             Write-Host "Searching for searchd.exe in C:\"
             try {
               $found = Get-ChildItem -Path "C:\" -Name "searchd.exe" -Recurse -ErrorAction SilentlyContinue | Select-Object -First 1
@@ -276,7 +272,6 @@ jobs:
             exit 1
           }
           
-          # Set paths for subsequent steps
           echo "SEARCHD_PATH=$searchdPath" >> $env:GITHUB_ENV
           echo "INDEXER_PATH=$indexerPath" >> $env:GITHUB_ENV
     
@@ -293,7 +288,7 @@ jobs:
             exit 1
           }
           
-          Write-Host "`nTesting indexer version..."
+          Write-Host "Testing indexer version..."
           try {
             & $env:INDEXER_PATH --version
             Write-Host "indexer version check passed"
@@ -306,44 +301,38 @@ jobs:
       - name: Test basic searchd functionality
         shell: powershell
         run: |
-          # Create working directory
           $workDir = "C:\manticore_test"
           New-Item -ItemType Directory -Force -Path $workDir
           Set-Location $workDir
           
-          # Create minimal configuration file
-          $configContent = @"
-searchd {
-    listen = 9312
-    listen = 9306:mysql41
-    log = searchd.log
-    query_log = query.log
-    pid_file = searchd.pid
-    data_dir = data
-    binlog_path = 
-}
-"@
+          $configContent = @'
+          searchd {
+              listen = 127.0.0.1:9312
+              listen = 127.0.0.1:9306:mysql41
+              listen = 127.0.0.1:9308:http
+              log = searchd.log
+              query_log = query.log
+              pid_file = searchd.pid
+              data_dir = data
+              binlog_path = 
+          }
+          '@
           $configContent | Out-File -FilePath "manticore.conf" -Encoding UTF8
           
-          # Create data directory
           New-Item -ItemType Directory -Force -Path "data"
           
           Write-Host "Starting searchd..."
           try {
-            # Start searchd in background
             $searchdProcess = Start-Process -FilePath $env:SEARCHD_PATH -ArgumentList "--config", "manticore.conf", "--console" -NoNewWindow -PassThru
             
-            # Wait for startup
             Start-Sleep -Seconds 10
             
-            # Check if process is still running
             if ($searchdProcess.HasExited) {
               Write-Host "searchd process exited unexpectedly"
               Write-Host "Exit code: $($searchdProcess.ExitCode)"
               
-              # Show logs if available
               if (Test-Path "searchd.log") {
-                Write-Host "`nSearchd log:"
+                Write-Host "Searchd log:"
                 Get-Content "searchd.log"
               }
               exit 1
@@ -351,9 +340,9 @@ searchd {
             
             Write-Host "searchd started successfully (PID: $($searchdProcess.Id))"
             
-            # Check if ports are accessible
             $port9312 = Test-NetConnection -ComputerName localhost -Port 9312 -WarningAction SilentlyContinue
             $port9306 = Test-NetConnection -ComputerName localhost -Port 9306 -WarningAction SilentlyContinue
+            $port9308 = Test-NetConnection -ComputerName localhost -Port 9308 -WarningAction SilentlyContinue
             
             if ($port9312.TcpTestSucceeded) {
               Write-Host "Port 9312 (SphinxAPI) is accessible"
@@ -367,7 +356,12 @@ searchd {
               Write-Host "Port 9306 (MySQL) is not accessible"
             }
             
-            # Stop searchd
+            if ($port9308.TcpTestSucceeded) {
+              Write-Host "Port 9308 (HTTP) is accessible"
+            } else {
+              Write-Host "Port 9308 (HTTP) is not accessible"
+            }
+            
             Write-Host "Stopping searchd..."
             $searchdProcess | Stop-Process -Force
             Start-Sleep -Seconds 2
@@ -377,9 +371,8 @@ searchd {
           catch {
             Write-Host "searchd test failed: $_"
             
-            # Show logs if available
             if (Test-Path "searchd.log") {
-              Write-Host "`nSearchd log:"
+              Write-Host "Searchd log:"
               Get-Content "searchd.log"
             }
             exit 1
@@ -514,7 +507,7 @@ searchd {
     needs: [pack_jammy, pack_jammy_cache_check]
     runs-on: ubuntu-22.04
     steps:
-      - name: Checkout repository # We have to checkout to access .github/workflows/ in further steps
+      - name: Checkout repository
         uses: actions/checkout@v3
 
       - name: Download built x86_64 Ubuntu Jammy packages
@@ -538,18 +531,13 @@ searchd {
     outputs:
       out-build: ${{ steps.build.outputs.build_image }}
     steps:
-      - name: Checkout repository # We have to checkout to access .github/workflows/ in further steps
+      - name: Checkout repository
         uses: actions/checkout@v3
       - name: Download built x86_64 Ubuntu Jammy packages
         uses: manticoresoftware/download_artifact_with_retries@v3
         with:
           name: build_jammy_RelWithDebInfo_x86_64
           path: .
-      # Uncomment this shortcut for debug to save time by not preparing the packages in the pack_jammy job
-      # - run: |
-      #     wget http://dev2.manticoresearch.com/build_jammy_RelWithDebInfo_x86_64.zip
-      #     unzip build_jammy_RelWithDebInfo_x86_64.zip
-      #     tar -xvf artifact.tar
       - name: Calculate short commit hash
         id: sha
         run: echo "sha_short=$(git rev-parse --short HEAD)" >> $GITHUB_OUTPUT
@@ -587,7 +575,7 @@ searchd {
       GHCR_PASSWORD: ${{ secrets.GHCR_PASSWORD }}
       REPO_OWNER: ${{ github.repository_owner }}
     steps:
-      - name: Checkout repository # We have to checkout to access .github/workflows/ in further steps
+      - name: Checkout repository
         uses: actions/checkout@v3
       - name: Download artifact
         uses: manticoresoftware/download_artifact_with_retries@main
@@ -607,7 +595,6 @@ searchd {
     needs: [changes, check_branch]
     name: Linux aarch64 build
     uses: ./.github/workflows/build_template.yml
-    # Use -VV instead of -V below for more verbose output
     with:
       arch: aarch64
       COLUMNAR_LOCATOR: ${{ needs.check_branch.outputs.columnar_locator }}
@@ -719,7 +706,6 @@ searchd {
           files: build/xml_*/junit_tests.xml
           comment_mode: failures
       - name: Per-test results
-        # IMPORTANT: The value of 3 below should correspond to the test shard count, needs.<job_name>.strategy.job-total doesn't work
         run: |
           for file in build/status*; do echo -n "$file: "; cat "$file"; done
           grep -o "success" build/status* | wc -l | awk '{if ($1==3) exit 0; else {print "Found only "$1" successful runs out of 3"; exit 1}}'

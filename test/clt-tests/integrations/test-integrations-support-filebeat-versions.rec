@@ -603,5 +603,9 @@ timeout 60 bash /tmp/filebeat-single-test.sh 9.0
 timeout 60 bash /tmp/filebeat-single-test.sh 9.1
 ––– output –––
 ––– input –––
+<<<<<<< Updated upstream
 rm -rf /tmp/fb-data-* /tmp/fb-log-*.txt /tmp/page.json /tmp/filebeat_tags.json
+=======
+sleep 1
+>>>>>>> Stashed changes
 ––– output –––

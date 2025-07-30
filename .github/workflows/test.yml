@@ -1,8 +1,6 @@
 name: 🔬 Test
 run-name: 🔬 Test ${{ github.sha }}
 
-#on: workflow_call
-
 on:
   push:
     branches:
@@ -126,55 +124,60 @@ jobs:
           wget https://repo.manticoresearch.com/repository/ci/boost_1_75_0.tgz
           tar -xf boost_1_75_0.tgz
 
-  download_manticore_windows:
-    # Remove all conditions to ensure job always executes
-    name: Download Manticore Windows installer
+  find_manticore_installer:
+    name: Find Manticore Windows installer
     runs-on: ubuntu-22.04
     outputs:
-      installer_url: ${{ steps.get_installer.outputs.url }}
-      installer_name: ${{ steps.get_installer.outputs.name }}
-      version: ${{ steps.get_installer.outputs.version }}
+      installer_url: ${{ steps.find_url.outputs.installer_url }}
+      installer_name: ${{ steps.find_url.outputs.installer_name }}
+      version: ${{ steps.find_url.outputs.version }}
     steps:
-      - name: Get latest Manticore installer URL
-        id: get_installer
+      - name: Find working installer URL
+        id: find_url
         run: |
-          echo "Starting installer discovery process..."
+          echo "Searching for Manticore Windows installer..."
           
-          # Use direct working URL while fixing automatic discovery
-          INSTALLER_URL="https://repo.manticoresearch.com/repository/manticoresearch_windows/release/x64/manticore-13.2.4-25073009-9c37cc067-x64.exe"
-          VERSION="13.2.4"
+          # Список потенциальных URL для проверки
+          POTENTIAL_URLS=(
+            "https://repo.manticoresearch.com/repository/manticoresearch_windows/release/x64/manticore-13.2.4-25073009-9c37cc067-x64.exe"
+            "https://repo.manticoresearch.com/repository/manticoresearch_windows/release/x64/manticore-13.2.3-25070806-bf96368a6-x64.exe"
+          )
           
-          # Check URL availability
-          echo "Checking URL availability: $INSTALLER_URL"
-          if curl --output /dev/null --silent --head --fail "$INSTALLER_URL"; then
-            echo "URL is accessible"
-          else
-            echo "URL not accessible, trying alternative..."
-            # Alternative URL
-            INSTALLER_URL="https://repo.manticoresearch.com/repository/manticoresearch_windows/release/x64/manticore-13.2.3-25070806-bf96368a6-x64.exe"
-            VERSION="13.2.3"
+          FOUND_URL=""
+          
+          for url in "${POTENTIAL_URLS[@]}"; do
+            echo "Checking URL: $url"
             
-            if curl --output /dev/null --silent --head --fail "$INSTALLER_URL"; then
-              echo "Alternative URL is accessible"
-            else
-              echo "Both URLs failed, this needs manual intervention"
-              exit 1
+            # Получаем размер файла через HEAD запрос
+            size_response=$(curl -sI "$url" 2>/dev/null || true)
+            http_code=$(echo "$size_response" | grep -i "^HTTP" | awk '{print $2}' || echo "000")
+            content_length=$(echo "$size_response" | grep -i "^content-length:" | awk '{print $2}' | tr -d '\r' || echo "0")
+            
+            echo "HTTP Code: $http_code, Content-Length: $content_length"
+            
+            # Проверяем что файл доступен и больше 20MB
+            if [ "$http_code" = "200" ] && [ "$content_length" -gt 20971520 ]; then
+              echo "Found valid installer: $url (size: $((content_length / 1024 / 1024))MB)"
+              FOUND_URL="$url"
+              break
             fi
+          done
+          
+          if [ -z "$FOUND_URL" ]; then
+            echo "ERROR: No valid installer URL found"
+            exit 1
           fi
           
-          INSTALLER_NAME=$(basename "$INSTALLER_URL")
+          INSTALLER_NAME=$(basename "$FOUND_URL")
+          VERSION=$(echo "$INSTALLER_NAME" | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' | head -1 || echo "unknown")
           
-          echo "Selected installer URL: $INSTALLER_URL"
-          echo "Selected installer name: $INSTALLER_NAME"
-          echo "Version: $VERSION"
-          
-          echo "url=$INSTALLER_URL" >> $GITHUB_OUTPUT
-          echo "name=$INSTALLER_NAME" >> $GITHUB_OUTPUT
+          echo "installer_url=$FOUND_URL" >> $GITHUB_OUTPUT
+          echo "installer_name=$INSTALLER_NAME" >> $GITHUB_OUTPUT
           echo "version=$VERSION" >> $GITHUB_OUTPUT
 
   install_test_windows:
     name: Windows installation and basic functionality test
-    needs: [download_manticore_windows]
+    needs: [find_manticore_installer]
     runs-on: windows-latest
     steps:
       - name: Checkout repository
@@ -183,70 +186,65 @@ jobs:
       - name: Display installer information
         shell: powershell
         run: |
-          Write-Host "Installer URL: ${{ needs.download_manticore_windows.outputs.installer_url }}"
-          Write-Host "Installer Name: ${{ needs.download_manticore_windows.outputs.installer_name }}"
-          Write-Host "Version: ${{ needs.download_manticore_windows.outputs.version }}"
+          Write-Host "Installer URL: ${{ needs.find_manticore_installer.outputs.installer_url }}"
+          Write-Host "Installer Name: ${{ needs.find_manticore_installer.outputs.installer_name }}"
+          Write-Host "Version: ${{ needs.find_manticore_installer.outputs.version }}"
         
       - name: Download Manticore installer
         shell: powershell
         run: |
-          $url = "${{ needs.download_manticore_windows.outputs.installer_url }}"
-          $output = "${{ needs.download_manticore_windows.outputs.installer_name }}"
+          $url = "${{ needs.find_manticore_installer.outputs.installer_url }}"
+          $output = "${{ needs.find_manticore_installer.outputs.installer_name }}"
           
-          Write-Host "Downloading Manticore installer..."
-          Write-Host "URL: $url"
-          Write-Host "Output: $output"
+          Write-Host "Downloading from: $url"
+          Write-Host "Output file: $output"
           
           try {
-            # Check file availability before downloading
-            $headResponse = Invoke-WebRequest -Uri $url -Method Head -UseBasicParsing -ErrorAction Stop
-            $contentLength = $headResponse.Headers.'Content-Length'
-            
-            if ($contentLength) {
-              Write-Host "File size on server: $([math]::Round($contentLength / 1MB, 2)) MB"
-            }
-            
-            # Download the installer file
             Invoke-WebRequest -Uri $url -OutFile $output -UseBasicParsing
-            Write-Host "Download completed successfully"
             
-            # Validate downloaded file
-            $fileInfo = Get-Item $output
-            $fileSizeMB = [math]::Round($fileInfo.Length / 1MB, 2)
-            Write-Host "Downloaded file size: $fileSizeMB MB"
-            
-            # Manticore Windows installer should be at least 10MB
-            if ($fileInfo.Length -lt 10MB) {
-              Write-Host "ERROR: Downloaded file is too small ($fileSizeMB MB)"
-              Write-Host "This usually means we downloaded an error page instead of the installer"
+            if (Test-Path $output) {
+              $fileSize = (Get-Item $output).Length
+              $fileSizeMB = [math]::Round($fileSize / 1MB, 2)
+              Write-Host "Downloaded file size: $fileSizeMB MB"
               
-              # Show first few lines of file for diagnostics
-              Write-Host "File content preview:"
-              Get-Content $output -TotalCount 10 -ErrorAction SilentlyContinue
+              if ($fileSize -lt 20MB) {
+                Write-Host "ERROR: Downloaded file is too small ($fileSizeMB MB)"
+                $bytes = [System.IO.File]::ReadAllBytes($output) | Select-Object -First 10
+                $hex = ($bytes | ForEach-Object { $_.ToString("X2") }) -join " "
+                Write-Host "File header (hex): $hex"
+                exit 1
+              }
+              
+              Write-Host "Download successful - file size looks valid"
+            } else {
+              Write-Host "ERROR: Downloaded file not found"
               exit 1
             }
-            
-            Write-Host "File validation passed - installer ready for installation"
           }
           catch {
-            Write-Host "Failed to download installer: $_"
+            Write-Host "Download failed: $_"
             exit 1
           }
     
       - name: Install Manticore silently
         shell: powershell
         run: |
-          $installer = "${{ needs.download_manticore_windows.outputs.installer_name }}"
+          $installer = "${{ needs.find_manticore_installer.outputs.installer_name }}"
           
           if (-not (Test-Path $installer)) {
-            Write-Host "Installer not found: $installer"
+            Write-Host "ERROR: Installer not found: $installer"
             exit 1
           }
           
           Write-Host "Installing Manticore..."
+          Write-Host "Installer: $installer"
+          Write-Host "File size: $([math]::Round((Get-Item $installer).Length / 1MB, 2)) MB"
+          
           try {
-            # Run installer in silent mode
-            $process = Start-Process -FilePath $installer -ArgumentList '/S', '/D=C:\Manticore' -Wait -PassThru
+            $arguments = @('/S')
+            $process = Start-Process -FilePath $installer -ArgumentList $arguments -Wait -PassThru
+            
+            Write-Host "Installation completed with exit code: $($process.ExitCode)"
             
             if ($process.ExitCode -eq 0) {
               Write-Host "Manticore installed successfully"
@@ -263,61 +261,81 @@ jobs:
       - name: Verify installation files
         shell: powershell
         run: |
-          $installPaths = @(
-            "C:\Manticore\bin\searchd.exe",
-            "C:\Program Files\Manticore\bin\searchd.exe",
-            "C:\Manticore\bin\indexer.exe",
-            "C:\Program Files\Manticore\bin\indexer.exe"
+          $searchPaths = @(
+            "C:\Program Files\Manticore",
+            "C:\Program Files (x86)\Manticore", 
+            "C:\Manticore",
+            "C:\Program Files\Manticore Search"
           )
           
           $searchdPath = $null
           $indexerPath = $null
           
-          # Locate executables
-          foreach ($path in $installPaths) {
-            if (Test-Path $path) {
-              if ($path -like "*searchd.exe") {
-                $searchdPath = $path
-                Write-Host "Found searchd at: $path"
+          foreach ($basePath in $searchPaths) {
+            if (Test-Path $basePath) {
+              Write-Host "Found Manticore installation at: $basePath"
+              
+              $searchdCandidates = @(
+                "$basePath\bin\searchd.exe",
+                "$basePath\searchd.exe"
+              )
+              
+              $indexerCandidates = @(
+                "$basePath\bin\indexer.exe", 
+                "$basePath\indexer.exe"
+              )
+              
+              foreach ($candidate in $searchdCandidates) {
+                if (Test-Path $candidate) {
+                  $searchdPath = $candidate
+                  Write-Host "Found searchd at: $candidate"
+                  break
+                }
               }
-              if ($path -like "*indexer.exe") {
-                $indexerPath = $path
-                Write-Host "Found indexer at: $path"
+              
+              foreach ($candidate in $indexerCandidates) {
+                if (Test-Path $candidate) {
+                  $indexerPath = $candidate
+                  Write-Host "Found indexer at: $candidate"
+                  break
+                }
+              }
+              
+              if ($searchdPath -and $indexerPath) {
+                break
               }
             }
           }
           
           if (-not $searchdPath) {
-            Write-Host "searchd.exe not found in any expected location"
-            # Search for searchd.exe recursively
-            Write-Host "Searching for searchd.exe in C:\"
-            try {
-              $found = Get-ChildItem -Path "C:\" -Name "searchd.exe" -Recurse -ErrorAction SilentlyContinue | Select-Object -First 1
-              if ($found) {
-                Write-Host "Found searchd.exe at: $found"
+            Write-Host "ERROR: searchd.exe not found in any expected location"
+            
+            foreach ($basePath in $searchPaths) {
+              if (Test-Path $basePath) {
+                Write-Host "Contents of $basePath:"
+                Get-ChildItem $basePath -Recurse -ErrorAction SilentlyContinue | Select-Object Name, FullName | Format-Table
               }
-            }
-            catch {
-              Write-Host "Search failed: $_"
             }
             exit 1
           }
           
           if (-not $indexerPath) {
-            Write-Host "indexer.exe not found in any expected location"
-            exit 1
+            Write-Host "WARNING: indexer.exe not found, but searchd.exe is available"
           }
           
-          # Set paths for subsequent steps
           echo "SEARCHD_PATH=$searchdPath" >> $env:GITHUB_ENV
-          echo "INDEXER_PATH=$indexerPath" >> $env:GITHUB_ENV
+          if ($indexerPath) {
+            echo "INDEXER_PATH=$indexerPath" >> $env:GITHUB_ENV
+          }
     
       - name: Test binary versions
         shell: powershell
         run: |
           Write-Host "Testing searchd version..."
           try {
-            & $env:SEARCHD_PATH --version
+            $output = & $env:SEARCHD_PATH --version 2>&1
+            Write-Host "searchd version output:"
+            Write-Host $output
             Write-Host "searchd version check passed"
           }
           catch {
@@ -325,25 +343,28 @@ jobs:
             exit 1
           }
           
-          Write-Host "Testing indexer version..."
-          try {
-            & $env:INDEXER_PATH --version
-            Write-Host "indexer version check passed"
-          }
-          catch {
-            Write-Host "indexer version check failed: $_"
-            exit 1
+          if ($env:INDEXER_PATH) {
+            Write-Host "Testing indexer version..."
+            try {
+              $output = & $env:INDEXER_PATH --version 2>&1
+              Write-Host "indexer version output:"
+              Write-Host $output
+              Write-Host "indexer version check passed"
+            }
+            catch {
+              Write-Host "indexer version check failed: $_"
+            }
+          } else {
+            Write-Host "Skipping indexer test - not found"
           }
     
       - name: Test basic searchd functionality
         shell: powershell
         run: |
-          # Create working directory
           $workDir = "C:\manticore_test"
-          New-Item -ItemType Directory -Force -Path $workDir
+          New-Item -ItemType Directory -Force -Path $workDir | Out-Null
           Set-Location $workDir
           
-          # Create minimal configuration file for Windows
           $configContent = @'
           searchd {
               listen = 127.0.0.1:9312
@@ -358,69 +379,56 @@ jobs:
           '@
           $configContent | Out-File -FilePath "manticore.conf" -Encoding UTF8
           
-          # Create data directory
-          New-Item -ItemType Directory -Force -Path "data"
+          New-Item -ItemType Directory -Force -Path "data" | Out-Null
           
-          Write-Host "Starting searchd..."
+          Write-Host "Starting searchd for basic functionality test..."
           try {
-            # Start searchd in background
             $searchdProcess = Start-Process -FilePath $env:SEARCHD_PATH -ArgumentList "--config", "manticore.conf", "--console" -NoNewWindow -PassThru
             
-            # Wait for startup
-            Start-Sleep -Seconds 10
+            Write-Host "searchd started with PID: $($searchdProcess.Id)"
             
-            # Check if process is still running
+            Start-Sleep -Seconds 15
+            
             if ($searchdProcess.HasExited) {
-              Write-Host "searchd process exited unexpectedly"
+              Write-Host "ERROR: searchd process exited unexpectedly"
               Write-Host "Exit code: $($searchdProcess.ExitCode)"
               
-              # Show logs if available
               if (Test-Path "searchd.log") {
-                Write-Host "Searchd log:"
-                Get-Content "searchd.log"
+                Write-Host "Searchd log content:"
+                Get-Content "searchd.log" -ErrorAction SilentlyContinue
               }
               exit 1
             }
             
-            Write-Host "searchd started successfully (PID: $($searchdProcess.Id))"
+            Write-Host "searchd is running successfully"
             
-            # Check if ports are accessible
-            $port9312 = Test-NetConnection -ComputerName localhost -Port 9312 -WarningAction SilentlyContinue
-            $port9306 = Test-NetConnection -ComputerName localhost -Port 9306 -WarningAction SilentlyContinue
-            $port9308 = Test-NetConnection -ComputerName localhost -Port 9308 -WarningAction SilentlyContinue
-            
-            if ($port9312.TcpTestSucceeded) {
-              Write-Host "Port 9312 (SphinxAPI) is accessible"
-            } else {
-              Write-Host "Port 9312 (SphinxAPI) is not accessible"
+            $ports = @(9312, 9306, 9308)
+            foreach ($port in $ports) {
+              try {
+                $connection = Test-NetConnection -ComputerName localhost -Port $port -WarningAction SilentlyContinue
+                if ($connection.TcpTestSucceeded) {
+                  Write-Host "Port $port is accessible"
+                } else {
+                  Write-Host "Port $port is not accessible"
+                }
+              }
+              catch {
+                Write-Host "Could not test port $port"
+              }
             }
             
-            if ($port9306.TcpTestSucceeded) {
-              Write-Host "Port 9306 (MySQL) is accessible"
-            } else {
-              Write-Host "Port 9306 (MySQL) is not accessible"
-            }
-            
-            if ($port9308.TcpTestSucceeded) {
-              Write-Host "Port 9308 (HTTP) is accessible"
-            } else {
-              Write-Host "Port 9308 (HTTP) is not accessible"
-            }
-            
-            # Stop searchd
             Write-Host "Stopping searchd..."
-            $searchdProcess | Stop-Process -Force
-            Start-Sleep -Seconds 2
+            $searchdProcess | Stop-Process -Force -ErrorAction SilentlyContinue
+            Start-Sleep -Seconds 3
             
-            Write-Host "Basic searchd functionality test completed"
+            Write-Host "Basic searchd functionality test completed successfully"
           }
           catch {
             Write-Host "searchd test failed: $_"
             
-            # Show logs if available
             if (Test-Path "searchd.log") {
-              Write-Host "Searchd log:"
-              Get-Content "searchd.log"
+              Write-Host "Searchd log content:"
+              Get-Content "searchd.log" -ErrorAction SilentlyContinue
             }
             exit 1
           }

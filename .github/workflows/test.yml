@@ -495,9 +495,38 @@ jobs:
       shell: pwsh
       run: |
         $installerName = "manticore-installer.exe"
-        Write-Host "Installing Manticore Search..."
-        Start-Process -FilePath ".\$installerName" -ArgumentList "/S" -Wait -NoNewWindow
-        Write-Host "Installation completed"
+        $installed = $false
+        
+        # List of silent installation parameters to try
+        $silentParams = @("/S", "/SILENT", "/VERYSILENT", "/s", "/quiet", "/Q")
+        
+        foreach ($param in $silentParams) {
+            Write-Host "Trying installation with parameter: $param"
+            try {
+                $process = Start-Process -FilePath ".\$installerName" -ArgumentList $param -PassThru -NoNewWindow
+                if ($process.WaitForExit(300000)) { # 5 minutes timeout
+                    if ($process.ExitCode -eq 0) {
+                        Write-Host "Installation successful with parameter: $param"
+                        $installed = $true
+                        break
+                    } else {
+                        Write-Host "Installation failed with exit code: $($process.ExitCode)"
+                    }
+                } else {
+                    Write-Host "Installation timeout with parameter: $param"
+                    try { $process.Kill() } catch { }
+                }
+            } catch {
+                Write-Host "Installation failed with parameter: $param - $($_.Exception.Message)"
+            }
+            Start-Sleep -Seconds 2
+        }
+        
+        if (-not $installed) {
+            throw "All installation attempts failed"
+        }
+        
+        Write-Host "Installation completed successfully"
 
     - name: Verify installation and start searchd
       shell: pwsh

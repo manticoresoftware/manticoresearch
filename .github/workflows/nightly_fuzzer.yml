@@ -147,6 +147,19 @@ jobs:
             !build/src/fuzzer/CMake*
             !build/src/fuzzer/cmake*
             !build/src/fuzzer/CTest*
+      - name: 📦 Upload fuzzer corpus backup to Manticore S3
+        if: always()
+        run: |
+          if [ -d "build/src/fuzzer/corpus" ]; then
+            cd build/src/fuzzer/
+            tar -czf corpus.tar.gz corpus
+            mkdir -p corpus-backup
+            mv corpus.tar.gz corpus-backup
+            cd corpus-backup
+            docker run --rm -v "$(pwd)":/upload manticoresearch/upload fuzz-tests-corpus
+          else
+            echo "Directory build/src/fuzzer/corpus not found. Skipping corpus upload."
+          fi
       - name: ❌ Fail job if fuzzer failed
         if: steps.run.outcome == 'failure'
         run: |

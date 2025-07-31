@@ -475,40 +475,29 @@ jobs:
     - name: Checkout code
       uses: actions/checkout@v4
       
-    - name: Find and download Manticore installer
-      id: download
+    - name: Download Manticore installer
       shell: pwsh
       run: |
-        $urls = @(
-            "https://repo.manticoresearch.com/repository/manticoresearch_windows/release/x64/manticore-13.2.4-25073009-9c37cc067-x64.exe",
-            "https://repo.manticoresearch.com/repository/manticoresearch_windows/release/x64/manticore-13.2.3-25070806-bf96368a6-x64.exe"
-        )
+        $installerUrl = "https://repo.manticoresearch.com/repository/manticoresearch_windows/release/x64/manticore-13.2.3-25070806-bf96368a6-x64.exe"
+        $installerName = "manticore-installer.exe"
         
-        $foundUrl = ""
-        foreach ($url in $urls) {
-            try {
-                $response = Invoke-WebRequest -Uri $url -Method Head -ErrorAction Stop
-                if ($response.StatusCode -eq 200) {
-                    $foundUrl = $url
-                    break
-                }
-            } catch { }
+        Write-Host "Downloading Manticore from: $installerUrl"
+        Invoke-WebRequest -Uri $installerUrl -OutFile $installerName
+        
+        if (Test-Path $installerName) {
+            $fileSize = (Get-Item $installerName).Length
+            Write-Host "Downloaded installer size: $([math]::Round($fileSize/1KB, 2)) KB"
+        } else {
+            throw "Failed to download installer"
         }
-        
-        if ([string]::IsNullOrEmpty($foundUrl)) {
-            throw "No valid installer URL found"
-        }
-        
-        $installerName = Split-Path $foundUrl -Leaf
-        Invoke-WebRequest -Uri $foundUrl -OutFile $installerName
-        
-        "installer_name=$installerName" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
 
     - name: Install Manticore Search
       shell: pwsh
       run: |
-        $installerName = "${{ steps.download.outputs.installer_name }}"
+        $installerName = "manticore-installer.exe"
+        Write-Host "Installing Manticore Search..."
         Start-Process -FilePath ".\$installerName" -ArgumentList "/S" -Wait -NoNewWindow
+        Write-Host "Installation completed"
 
     - name: Verify installation and start searchd
       shell: pwsh

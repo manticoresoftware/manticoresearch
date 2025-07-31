@@ -21,7 +21,9 @@ TEST_F ( QueryParser, huge_tokenizer )
 	XQQuery_t tQuery;
 	sphParseExtendedQuery ( tQuery, szQuery, nullptr, pTokenizer, &tSchema, pDict, tTmpSettings, nullptr );
 	CSphDummyIndex tIndex;
-	sphTransformExtendedQuery ( &tQuery.m_pRoot, tTmpSettings, true, &tIndex );
+
+	TransformExtendedQueryArgs_t tTranformArgs { true, tQuery.m_bNeedPhraseTransform, &tIndex };
+	sphTransformExtendedQuery ( &tQuery.m_pRoot, tTmpSettings, tQuery.m_sParseError, tTranformArgs );
 
 	ASSERT_TRUE ( tQuery.m_pRoot!=nullptr );
 }

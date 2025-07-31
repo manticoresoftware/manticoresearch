@@ -103,7 +103,8 @@ void QueryParser::Transform ( const char * szQuery ) const
   if (!tQuery.m_pRoot)
     return;
 
-  sphTransformExtendedQuery ( &tQuery.m_pRoot, tTmpSettings, true, &tIndex );
+  TransformExtendedQueryArgs_t tTranformArgs { true, tQuery.m_bNeedPhraseTransform, &tIndex };
+	sphTransformExtendedQuery ( &tQuery.m_pRoot, tTmpSettings, tQuery.m_sParseError, tTranformArgs );
 }
 
 /// fuzzing stuff

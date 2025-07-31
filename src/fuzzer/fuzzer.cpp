@@ -22,53 +22,10 @@
 #include "sphinxint.h"
 
 // stuff taken from gtests_tokenizer.cpp
-
-enum : DWORD
-{
-  TOK_EXCEPTIONS = 1, TOK_NO_DASH = 2, TOK_NO_SHORT = 4
-};
-
-class Tokenizertest
-{
-protected:
-  TokenizerRefPtr_c CreateTestTokenizer ( DWORD uMode )
-  {
-    StrVec_t dWarnings;
-    CSphString sError;
-    CSphTokenizerSettings tSettings;
-    if ( !(uMode & TOK_NO_SHORT) )
-      tSettings.m_iMinWordLen = 2;
-
-    TokenizerRefPtr_c pTokenizer = Tokenizer::Create ( tSettings, nullptr, nullptr, dWarnings, sError );
-    if ( !(uMode & TOK_NO_DASH) )
-    {
-      Verify ( pTokenizer->SetCaseFolding ( "-, 0..9, A..Z->a..z, _, a..z, U+80..U+FF", sError ) );
-      pTokenizer->AddSpecials ( "!-" );
-    } else
-    {
-      Verify ( pTokenizer->SetCaseFolding ( "0..9, A..Z->a..z, _, a..z, U+80..U+FF", sError ) );
-      pTokenizer->AddSpecials ( "!" );
-    }
-
-    // tricky little shit!
-    // we want to create a query mode tokenizer
-    // the official way is to Clone() an indexing mode one, so we do that
-    // however, Clone() adds backslash as a special
-    // and that must be done *after* SetCaseFolding, otherwise it's not special any more
-    return pTokenizer->Clone ( SPH_CLONE_QUERY );
-  }
-
-
-  TokenizerRefPtr_c m_pTokenizer;
-  TokenizerRefPtr_c & pTokenizer = m_pTokenizer;
-  CSphString sError;
-};
-
 class CSphDummyIndex : public CSphIndexStub
 {
 public:
   SmallStringHash_T<int> m_hHits;
-
 
   CSphDummyIndex ()
     : CSphIndexStub ( nullptr, nullptr )
@@ -84,7 +41,7 @@ struct CKeywordHits
 };
 
 
-class QueryParser : public Tokenizertest
+class QueryParser
 {
 protected:
 
@@ -96,11 +53,7 @@ protected:
     TokenizerRefPtr_c pBase = Tokenizer::Detail::CreateUTF8Tokenizer();
     CSphTokenizerSettings tTokenizerSetup;
     tTokenizerSetup.m_iMinWordLen = 2;
-//    tTokenizerSetup.m_sSynonymsFile = g_sTmpfile;
     pBase->Setup ( tTokenizerSetup );
-
-    StrVec_t dWarnings;
-
     pTokenizer = sphCloneAndSetupQueryTokenizer ( pBase, true, false, false );
 
     CSphDictSettings tDictSettings;
@@ -108,12 +61,8 @@ protected:
     pDict = sphCreateDictionaryCRC ( tDictSettings, NULL, pTokenizer, "query", false, 32, nullptr, sError );
     constexpr CKeywordHits dPseudoHits[] = { { "aaa", 0 }, { "bbb", 0 }, { "ccc", 35 }, { "ddd", 63 }, { "eee", 2445 } };
 
-
-//  if ( pKeywordHits )
-//  {
-    for ( const CKeywordHits& tHit : dPseudoHits )
+    for ( const CKeywordHits & tHit: dPseudoHits )
       tIndex.m_hHits.Add ( tHit.m_iHits, tHit.m_szKeyword );
-//  }
   }
 
 public:
@@ -128,6 +77,8 @@ public:
   CSphSchema tSchema;
   CSphIndexSettings tTmpSettings;
   CSphDummyIndex tIndex;
+  TokenizerRefPtr_c pTokenizer;
+  CSphString sError;
 };
 
 

@@ -77,6 +77,12 @@ index tmpl1 : plain1
 	path			= <data_path/>/tmpl1
 }
 
+index exp1
+{
+	source			= plain1
+	path			= <data_path/>/exp1
+}
+
 </config>
 
 <db_create>
@@ -146,6 +152,23 @@ EXPLAIN QUERY plain1 'her @!title box @(title,content) with me';
 EXPLAIN QUERY rt1 'her @!title box @(title,content) with me';
 EXPLAIN QUERY pq1 'her @!title box @(title,content) with me';
 EXPLAIN QUERY tmpl1 'her @!title box @(title,content) with me';
+
+<!-- OR inside phrase related operators -->
+explain query exp1 ' " ( ( a b c ) | d ) e" ';
+explain query exp1 ' " ( ( a b c ) | d ) e"~5 ';
+explain query exp1 ' " ( ( a b c ) | d ) e"/2 ';
+
+explain query exp1 ' " e ( ( a b c ) | d )" ';
+explain query exp1 ' " e ( ( a b c ) | d )"~5 ';
+explain query exp1 ' " e ( ( a b c ) | d )"/2 ';
+
+explain query exp1 ' "dead ( alive | poor ) but all ( ( as good ) | ( as fast ) )" ';
+explain query exp1 ' "dead ( alive | poor ) but all ( ( as good ) | ( as fast ) )"~5 ';
+explain query exp1 ' "dead ( alive | poor ) but all ( ( as good ) | ( as fast ) )"/3 ';
+
+explain query exp1 ' "( a | b | c | aa | bb ) ( d | e | f | dd ) ( g | h | j | gg ) ( k | m | n | kk ) ( o | p | q | oo )" ';
+explain query exp1 ' "( a | b | c | aa | bb ) ( d | e | f | dd ) ( g | h | j | gg ) ( k | m | n | kk ) ( o | p | q | oo )"~5 ';
+explain query exp1 ' "( a | b | c | aa | bb ) ( d | e | f | dd ) ( g | h | j | gg ) ( k | m | n | kk ) ( o | p | q | oo )"/3 ';
 
 </sphinxql></queries>
 

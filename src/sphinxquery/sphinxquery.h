@@ -356,6 +356,7 @@ struct XQQuery_t : ISphNoncopyable
 	bool					m_bEmpty = false;
 	// was node full-text (even folded into empty)
 	bool					m_bWasFullText = false;
+	bool					m_bNeedPhraseTransform = false;
 
 	/// dtor
 	~XQQuery_t ()
@@ -404,3 +405,6 @@ inline int GetExpansionLimit ( int iQueryLimit, int iIndexLimit  )
 {
 	return ( iQueryLimit!=DEFAULT_QUERY_EXPANSION_LIMIT ? iQueryLimit : iIndexLimit );
 }
+
+bool TransformPhraseBased ( XQNode_t ** ppNode, CSphString & sError );
+void SetExpansionPhraseLimit ( int iMaxVariants );

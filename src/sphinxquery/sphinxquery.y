@@ -56,6 +56,9 @@
 %type <pNode>			orlistf
 %type <pNode>			beforelist
 %type <pNode>			expr
+%type <pNode>			phrase_group_atom
+%type <pNode>			phrase_group_sequence
+%type <pNode>			phrase_group_expr
 
 %left TOK_BEFORE TOK_NEAR TOK_NOTNEAR
 
@@ -103,12 +106,12 @@ atom:
 	| '"' '"' '~' TOK_INT				{ $$ = NULL; }
 	| '"' '"' '/' TOK_INT				{ $$ = NULL; }
 	| '"' '"' '/' TOK_FLOAT				{ $$ = NULL; }
-	| '"' phrase '"'					{ $$ = $2; pParser->SetPhrase ( $$, false ); }
-	| '"' phrase '"' '~' TOK_INT		{ $$ = $2; if ( $$ ) { assert ( $$->dWords().GetLength() ); $$->SetOp ( SPH_QUERY_PROXIMITY ); $$->m_iOpArg = $5.iValue; pParser->m_iAtomPos = $$->FixupAtomPos(); } }
-	| '"' phrase '"' '/' TOK_INT		{ $$ = $2; if ( $$ ) { assert ( $$->dWords().GetLength() ); $$->SetOp ( SPH_QUERY_QUORUM ); $$->m_iOpArg = $5.iValue; } }
-	| '"' phrase '"' '/' TOK_FLOAT		{ $$ = $2; if ( $$ ) { assert ( $$->dWords().GetLength() ); $$->SetOp ( SPH_QUERY_QUORUM ); $$->m_iOpArg = $5.fValue * 100; $$->m_bPercentOp = true; } }
+	| '"' phrase '"'					{ $$ = $2; pParser->SetPhrase ( $$, false, SPH_QUERY_PHRASE ); }
+	| '"' phrase '"' '~' TOK_INT		{ $$ = $2; if ( $$ ) { $$->m_iOpArg = $5.iValue; }; pParser->SetPhrase ( $$, false, SPH_QUERY_PROXIMITY ); }
+	| '"' phrase '"' '/' TOK_INT		{ $$ = $2; if ( $$ ) { $$->m_iOpArg = $5.iValue; }; pParser->SetPhrase ( $$, false, SPH_QUERY_QUORUM ); }
+	| '"' phrase '"' '/' TOK_FLOAT		{ $$ = $2; if ( $$ ) { $$->m_iOpArg = $5.fValue * 100; $$->m_bPercentOp = true; }; pParser->SetPhrase ( $$, false, SPH_QUERY_QUORUM ); }
 	| '(' expr ')'						{ $$ = $2; }
-	| '=' '"' phrase '"'				{ $$ = $3; pParser->SetPhrase ( $$, true ); }
+	| '=' '"' phrase '"'				{ $$ = $3; pParser->SetPhrase ( $$, true, SPH_QUERY_PHRASE ); }
 	| atom TOK_NOTNEAR atom				{ $$ = pParser->AddOp ( SPH_QUERY_NOTNEAR, $1, $3, $2.iValue ); }
 	;
 
@@ -137,19 +140,31 @@ sp_item:
 
 phrase:
 	phrasetoken							{ $$ = $1; }
-	| phrase phrasetoken				{ $$ = pParser->AddKeyword ( $1, $2 ); }
+	| phrase phrasetoken				{ $$ = pParser->AddPhraseKeyword ( $1, $2 ); }
 	;
 
 phrasetoken:
 	keyword								{ $$ = $1; }
-	| '('								{ $$ = NULL; }
-	| ')'								{ $$ = NULL; }
+	| '(' phrase_group_expr ')'			{ $$ = $2; }
 	| '-'								{ $$ = NULL; }
-	| '|'								{ $$ = NULL; }
 	| '~'								{ $$ = NULL; }
 	| '/'								{ $$ = NULL; }
 	;
 
+phrase_group_expr:
+	phrase_group_sequence							{ $$ = $1; }
+	| phrase_group_expr '|' phrase_group_sequence	{ $$ = pParser->AddOp ( SPH_QUERY_OR, $1, $3 ); }
+	;
+
+phrase_group_sequence:
+	phrase_group_atom							{ $$ = $1; }
+	| phrase_group_sequence phrase_group_atom	{ $$ = pParser->AddPhraseKeyword ( $1, $2 ); }
+	;
+
+phrase_group_atom:
+	keyword								{ $$ = $1; }
+	| '(' phrase_group_expr ')'			{ $$ = $2; }
+	;
 
 %%
 

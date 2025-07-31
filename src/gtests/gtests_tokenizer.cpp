@@ -857,8 +857,9 @@ void QueryParser::Transform ( const char * szQuery, const char * szReconst, cons
 		for ( const CKeywordHits * pHits = pKeywordHits; pHits->m_szKeyword; ++pHits )
 			EXPECT_TRUE ( tIndex.m_hHits.Add ( pHits->m_iHits, pHits->m_szKeyword ) );
 	}
-
-	sphTransformExtendedQuery ( &tQuery.m_pRoot, tTmpSettings, true, &tIndex );
+	
+	TransformExtendedQueryArgs_t tTranformArgs { true, tQuery.m_bNeedPhraseTransform, &tIndex };
+	EXPECT_TRUE ( sphTransformExtendedQuery ( &tQuery.m_pRoot, tTmpSettings, tQuery.m_sParseError, tTranformArgs ) );
 
 	CSphString sReconstTransformed = sphReconstructNode ( tQuery.m_pRoot, &tSchema );
 	EXPECT_STREQ ( sReconst.cstr(), szReconst );

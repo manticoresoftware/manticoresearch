@@ -143,6 +143,7 @@ jobs:
           path: |
             build/src/fuzzer
             !build/src/fuzzer/qfuzzer
+            !build/src/fuzzer/corpus
             !build/src/fuzzer/CMake*
             !build/src/fuzzer/cmake*
             !build/src/fuzzer/CTest*

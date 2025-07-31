@@ -147,24 +147,40 @@ jobs:
             !build/src/fuzzer/CMake*
             !build/src/fuzzer/cmake*
             !build/src/fuzzer/CTest*
-      - name: 📦 Upload fuzzer corpus backup to Manticore S3
+      - name: 📦 Upload updated fuzzer corpus
         if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: fuzzer-corpus
+          path: build/src/fuzzer/corpus
+      - name: ❌ Fail job if fuzzer failed
+        if: steps.run.outcome == 'failure'
         run: |
-          if [ -d "build/src/fuzzer/corpus" ]; then
-            cd build/src/fuzzer/
+          echo "Fuzzer failed. Marking the job as failed."
+          exit 1
+
+  upload_corpus_to_s3:
+    name: 📦 Upload fuzzer corpus backup to Manticore S3
+    needs: test_linux_fuzz
+    if: always()
+    runs-on: ubuntu-22.04
+    steps:
+      - name: 📥 Download fuzzer-corpus artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: fuzzer-corpus
+          path: corpus
+      - name: ☁️ Upload updated fuzzer corpus backup to Manticore S3
+        run: |
+          if [ -n "$(find corpus -maxdepth 1 -type f -print -quit)" ]; then
             tar -czf corpus.tar.gz corpus
             mkdir -p corpus-backup
             mv corpus.tar.gz corpus-backup
             cd corpus-backup
             docker run --rm -v "$(pwd)":/upload manticoresearch/upload fuzz-tests-corpus
           else
-            echo "Directory build/src/fuzzer/corpus not found. Skipping corpus upload."
+            echo "Directory corpus is empty. Skipping corpus upload."
           fi
-      - name: ❌ Fail job if fuzzer failed
-        if: steps.run.outcome == 'failure'
-        run: |
-          echo "Fuzzer failed. Marking the job as failed."
-          exit 1
 
   delete-cache:
     name: 🧹 Delete old cache
@@ -179,4 +195,4 @@ jobs:
             curl -s -X DELETE \
             -H "Authorization: Bearer ${{ secrets.GITHUB_TOKEN }}" \
             -H "Accept: application/vnd.github+json" \
-            https://api.github.com/repos/${{ github.repository }}/actions/caches?key=fuzz-corpus-cache-to-delete          
+            https://api.github.com/repos/${{ github.repository }}/actions/caches?key=fuzz-corpus-cache-to-delete

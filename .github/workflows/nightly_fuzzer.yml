@@ -111,6 +111,7 @@ jobs:
         id: run
         continue-on-error: true
         run: |
+            apt -y update && apt -y install llvm
             set +e  # allow script to continue even if a command fails
 
             cd build/src/fuzzer
@@ -118,6 +119,7 @@ jobs:
             echo "## 🐛 Fuzzer Results" >> $GITHUB_STEP_SUMMARY
 
             # Run qfuzzer and capture its exit code
+            export ASAN_SYMBOLIZER_PATH=/usr/bin/llvm-symbolizer-14
             ./qfuzzer -verbosity=0 -max_total_time=3600 -jobs=4 -workers=4 -dict=../../../src/fuzzer/dict.txt corpus 2>&1 | tee fuzzer_output.txt
             qfuzzer_exit_code=${PIPESTATUS[0]}
 

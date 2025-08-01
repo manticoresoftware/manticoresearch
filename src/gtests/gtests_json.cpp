@@ -53,8 +53,9 @@ TEST ( CJson, basics )
 		}
 
 		char * szResult = cJSON_Print ( pRoot );
-		sResult.Adopt ( &szResult );
+		sResult = szResult;
 		cJSON_Delete ( pRoot );
+		cJSON_free ( szResult );
 	}
 
 	{
@@ -96,7 +97,7 @@ TEST ( CJson, format )
 	char * szResult = cJSON_PrintUnformatted ( pJson );
 	CSphString sResult ( szResult );
 	printf ( "\n%s\n", szResult );
-	SafeDeleteArray ( szResult );
+	cJSON_free ( szResult );
 	JsonEscapedBuilder tBuild;
 	tBuild.StartBlock (":", "{", "}");
 	tBuild.AppendString ("escaped", '\"');

@@ -78,6 +78,17 @@ bool SearchHandler_c::ParseSysVarsAndTables ()
 	const auto & dSubkeys = m_dNQueries.First().m_dStringSubkeys;
 	bool bAuthTbl = ( sName.Begins ( GetPrefixAuth().cstr() ) );
 	const char * szEssence = ( bAuthTbl ? "table" : "variable" );
+
+	if ( bAuthTbl )
+	{
+		cServedIndexRefPtr_c pIndex { MakeDynamicAuthIndex ( sName, m_sError ) };
+		if ( !pIndex )
+			return false;
+
+		m_dAcquired.AddIndex ( sName, std::move ( pIndex ) );
+		return true;
+	}
+
 	bool bValid = false;
 	AT_SCOPE_EXIT ([&,this] {
 		if ( bValid )
@@ -94,18 +105,7 @@ bool SearchHandler_c::ParseSysVarsAndTables ()
 	bool bSchema = StrEqN ( FROMS ( ".@table" ), szLast );
 	TableFeeder_fn fnFeed;
 	if ( StrEqN ( FROMS ("@@system"), szVar ) )
-	{
 		bValid = ParseSystem ( fnFeed, szFirst, m_pStmt );
-	} else if ( bAuthTbl )
-	{
-		cServedIndexRefPtr_c pIndex { MakeDynamicAuthIndex ( sName, m_sError ) };
-		if ( !pIndex )
-			return false;
-
-		bValid = true;
-		m_dAcquired.AddIndex ( sName, std::move ( pIndex ) );
-		return true;
-	}
 
 	// fixme! Disabled because of conflict with Buddy.
 	// bSysVar = bSysVar || StrEqN ( FROMS ("information_schema"), tQuery.m_sIndexes.cstr() );

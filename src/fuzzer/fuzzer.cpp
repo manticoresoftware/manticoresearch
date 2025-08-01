@@ -21,6 +21,8 @@
 #include "tokenizer/tokenizer.h"
 #include "sphinxint.h"
 
+#include <sanitizer/lsan_interface.h>
+
 // stuff taken from gtests_tokenizer.cpp
 class CSphDummyIndex : public CSphIndexStub
 {
@@ -127,6 +129,8 @@ int LLVMFuzzerTestOneInput ( const uint8_t * Data, size_t Size )
   const char * sParam = cBuilder.cstr();
 //  printf("%s\n", sParam);
   transformer.Transform ( sParam );
+  auto iLeaks = __lsan_do_recoverable_leak_check();
+  assert(iLeaks == 0);
   return 0; // Values other than 0 and -1 are reserved for future use.
 }
 

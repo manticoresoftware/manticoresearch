@@ -59,7 +59,7 @@ class Environment : public ::testing::Environment
 	CSphString m_sTmp2;
 public:
 	// Override this to define how to set up the environment.
-	void SetUp () override
+	void ATTRIBUTE_NO_SANITIZE_ADDRESS SetUp () override
 	{
 		char cTopOfMainStack;
 		Threads::Init ();

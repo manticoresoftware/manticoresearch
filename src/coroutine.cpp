@@ -359,7 +359,7 @@ public:
 		( new Worker_c ( myinfo::StickParent ( std::move ( fnHandler ) ), pScheduler, std::move ( tWait ), iStack ) )->ScheduleContinuation ();
 	}
 
-	static void MockRun ( Handler fnHandler, VecTraits_T<BYTE> dStack )
+	ATTRIBUTE_NO_SANITIZE_ADDRESS static void MockRun ( Handler fnHandler, VecTraits_T<BYTE> dStack )
 	{
 		Worker_c tAction ( std::move ( fnHandler ), dStack );
 		auto pOldStack = Threads::TopOfStack ();
@@ -656,7 +656,7 @@ void CallPlainCoroutine ( Handler fnHandler, Scheduler_i* pScheduler )
 	tEvent.WaitEvent ();
 }
 
-void MockCallCoroutine ( VecTraits_T<BYTE> dStack, Handler fnHandler )
+ATTRIBUTE_NO_SANITIZE_ADDRESS void MockCallCoroutine ( VecTraits_T<BYTE> dStack, Handler fnHandler )
 {
 	Coro::Worker_c::MockRun ( std::move ( fnHandler ), dStack );
 }
@@ -793,8 +793,7 @@ bool IsIMocked ()
 	return false;
 }
 
-
-int64_t GetStackUsed()
+int64_t ATTRIBUTE_NO_SANITIZE_ADDRESS GetStackUsed ()
 {
 	BYTE cStack;
 	auto* pStackTop = (const BYTE*)MyStack();

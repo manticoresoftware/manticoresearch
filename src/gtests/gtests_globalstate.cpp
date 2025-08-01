@@ -15,6 +15,7 @@
 #include "sphinxint.h"
 #include "threadutils.h"
 #include "tracer.h"
+#include "stackmock.h"
 
 // global stuff
 
@@ -64,6 +65,13 @@ public:
 		Threads::Init ();
 		Threads::PrepareMainThread ( &cTopOfMainStack );
 		Tracer::Init();
+
+		StringBuilder_c sStack;
+		DetermineNodeItemStackSize ( sStack );
+		DetermineFilterItemStackSize ( sStack );
+		DetermineMatchStackSize ( sStack );
+		printf ( "%s\n", sStack.cstr() );
+
 		m_szDict = getenv ( "GTEST_DICT" );
 		if ( m_szDict )
 		{

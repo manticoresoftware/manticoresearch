@@ -7974,6 +7974,8 @@ static bool DoFullTextSearch ( const RtSegVec_c & dRamChunks, const ISphSchema &
 {
 	// set zonespanlist settings
 	tParsed.m_bNeedSZlist = tQuery.m_bZSlist;
+	if ( IsIMocked() )
+		iStackNeed = -1;
 
 	return Threads::Coro::ContinueBool ( iStackNeed, [&] {
 

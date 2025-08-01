@@ -34,6 +34,9 @@ const void* MyStack();
 /// get size of the stack (either thread, either coro - depends from context)
 int MyStackSize();
 
+/// whether I run in mocking context
+bool IsIMocked ();
+
 /// get size of used stack (threads or coro - depends from context)
 int64_t GetStackUsed();
 

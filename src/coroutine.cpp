@@ -104,6 +104,11 @@ public:
 		return m_eState==State_e::Finished;
 	}
 
+	bool IsMocked () const noexcept
+	{
+		return m_tStack.second==StackFlavour_E::mocked_prealloc;
+	}
+
 	// yield to external context
 	void Yield_ ()
 	{
@@ -451,6 +456,11 @@ public:
 		return m_tCoroutine.GetStackSize ();
 	}
 
+	bool IsMocked () const noexcept
+	{
+		return m_tCoroutine.IsMocked ();
+	}
+
 	inline Scheduler_i * CurrentScheduler() const noexcept
 	{
 		return m_pScheduler;
@@ -774,6 +784,15 @@ int MyStackSize()
 		return pWorker->GetStackSize();
 	return Threads::STACK_SIZE;
 }
+
+bool IsIMocked ()
+{
+	auto pWorker = Coro::Worker_c::CurrentWorker();
+	if ( pWorker )
+		return pWorker->IsMocked();
+	return false;
+}
+
 
 int64_t GetStackUsed()
 {

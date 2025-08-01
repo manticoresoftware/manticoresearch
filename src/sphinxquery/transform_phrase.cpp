@@ -34,13 +34,10 @@ static VVKw ComputeCartesianProduct ( const VVKw & dNodes, VecTraits_T<int> & dC
 
 		iTotalVariants *= iSize;
 		if ( iTotalVariants>iMaxVariants )
-			break;
-	}
-
-	if ( iTotalVariants>iMaxVariants )
-	{
-		 sError.SetSprintf ( "query too complex, exceeds max variants limit during OR combination (complexity %d, expansion_phrase_limit %d)", iTotalVariants, iMaxVariants );
-		 return {};
+		{
+			sError.SetSprintf ( "query too complex, exceeds max variants limit during OR combination (complexity %d, expansion_phrase_limit %d)", iTotalVariants, iMaxVariants );
+			return {};
+		}
 	}
 
 	VVKw dRes;
@@ -160,7 +157,7 @@ VVKw GenVariants ( const XQNode_t * pRoot, int iMaxVariants, CSphString & sError
 			break;
 
 			default:
-				sError.SetSprintf ( "unsipported node '%s' at the phrase", XQOperatorNameSz ( pCur->GetOp() ) );
+				sError.SetSprintf ( "unsupported node '%s' at the phrase", XQOperatorNameSz ( pCur->GetOp() ) );
 				break;
 		}
 		

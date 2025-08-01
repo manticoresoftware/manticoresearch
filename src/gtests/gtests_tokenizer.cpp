@@ -1155,6 +1155,15 @@ TEST_F ( QueryParser, different_zonespan )
 	);
 }
 
+TEST_F ( QueryParser, memleak_in_transform_phrase )
+{
+	Transform (
+		"\"(aaa|bbb)ccc\"",
+		"( \"( aaa | bbb ) ccc\" )",
+		"( \"aaa ccc\" | \"bbb ccc\" )"
+	);
+}
+
 
 TEST_F ( QueryParser, transform_common_keywords_5 )
 {

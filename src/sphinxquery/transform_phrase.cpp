@@ -214,6 +214,8 @@ static void DoTransform ( XQNode_t * pNode, CSphString & sError )
 	}
 
 	pNode->ResetWords();
+	pNode->WithChildren ( [] ( auto & dChildren ) { for ( auto * pChild : dChildren ) SafeDelete ( pChild ); } );
+	pNode->ResetChildren();
 	pNode->SetOp ( SPH_QUERY_OR, dPhrases );
 }
 

@@ -1164,6 +1164,15 @@ TEST_F ( QueryParser, memleak_in_transform_phrase )
 	);
 }
 
+TEST_F ( QueryParser, lost_tail_tokens_from_brackets )
+{
+	Transform (
+		"\"aaa(bbb ccc ddd eee)\"",
+		"\"aaa bbb ccc ddd eee\"",
+		"\"aaa bbb ccc ddd eee\""
+	);
+}
+
 
 TEST_F ( QueryParser, transform_common_keywords_5 )
 {

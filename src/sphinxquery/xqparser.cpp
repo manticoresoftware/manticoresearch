@@ -831,9 +831,9 @@ XQNode_t * XQParser_t::AddKeyword ( XQNode_t * pLeft, XQNode_t * pRight )
 		return pLeft ? pLeft : pRight;
 
 	assert ( pLeft->dWords().GetLength()>0 );
-	assert ( pRight->dWords().GetLength()==1 );
+//	assert ( pRight->dWords().GetLength()==1 );
 
-	pLeft->AddDirtyWord ( pRight->dWord(0) );
+	pRight->WithWords ( [pLeft] ( auto& dWords ) { for ( const auto & dWord : dWords ) pLeft->AddDirtyWord ( dWord ); });
 	pLeft->Rehash();
 	DeleteSpawned ( pRight );
 	return pLeft;

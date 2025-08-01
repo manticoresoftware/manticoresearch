@@ -10146,6 +10146,7 @@ static void TransformQuorum ( XQNode_t ** ppNode )
 	}
 
 	pNode->ResetWords();
+	assert ( pNode->dChildren().IsEmpty());
 	pNode->SetOp ( SPH_QUERY_OR, dArgs );
 }
 

@@ -136,7 +136,7 @@ uint64_t XQNode_t::GetFuzzyHash () const noexcept
 void XQNode_t::SetOp ( XQOperator_e eOp, XQNode_t * pArg1, XQNode_t * pArg2 )
 {
 	SetOp ( eOp );
-	m_dChildren.Reset();
+	assert ( m_dChildren.IsEmpty() && "Ensure your node has no children. You need to explicitly reset them, or delete - to avoid memleak here" );
 	if ( pArg1 )
 	{
 		m_dChildren.Add ( pArg1 );

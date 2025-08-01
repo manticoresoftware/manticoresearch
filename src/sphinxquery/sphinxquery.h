@@ -301,6 +301,7 @@ public:
 	void SetOp ( XQOperator_e eOp, CSphVector<XQNode_t*> & dArgs )
 	{
 		SetOp (eOp);
+		assert ( m_dChildren.IsEmpty() && "Ensure your node has no children. You need to explicitly reset them, or delete - to avoid memleak here" );
 		m_dChildren.SwapData(dArgs);
 		for ( auto* pChild : m_dChildren )
 			pChild->m_pParent = this;

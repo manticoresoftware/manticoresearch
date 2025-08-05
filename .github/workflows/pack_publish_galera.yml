@@ -142,7 +142,7 @@ jobs:
     strategy:
       fail-fast: true
       matrix:
-        DISTR: [bionic, focal, jammy, bullseye, bookworm]
+        DISTR: [bionic, focal, jammy, bullseye, bookworm, trixie]
         arch: [x86_64, aarch64]
     runs-on: ubuntu-22.04
     name: ${{ matrix.DISTR }} ${{ matrix.arch }} publishing

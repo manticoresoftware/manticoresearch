@@ -119,20 +119,20 @@ private:
 
 	util::Span_T<const  knn::DocDist_t>	m_dData;
 	mutable const knn::DocDist_t *		m_pStart = nullptr;
+
+	void				SetAnchor ( const CSphVector<float> & dAnchor );
 };
 
 
 Expr_KNNDist_c::Expr_KNNDist_c ( const CSphVector<float> & dAnchor, const CSphColumnInfo & tAttr )
-	: m_dAnchor ( dAnchor )
-	, m_tAttr ( tAttr )
+	: m_tAttr ( tAttr )
 {
 	knn::IndexSettings_t tDistSettings = tAttr.m_tKNN;
 	tDistSettings.m_eQuantization = knn::Quantization_e::NONE; // we operate on non-quantized data
 	CSphString sError; // fixme! report it
 	m_pDistCalc = CreateKNNDistanceCalc ( tDistSettings, sError );
 
-	if ( tAttr.m_tKNN.m_eHNSWSimilarity==knn::HNSWSimilarity_e::COSINE )
-		NormalizeVec(m_dAnchor);
+	SetAnchor(dAnchor);
 }
 
 
@@ -175,6 +175,10 @@ void Expr_KNNDist_c::Command ( ESphExprCommand eCmd, void * pArg )
 		m_pStart = nullptr;
 		break;
 
+	case SPH_EXPR_SET_KNN_VEC:
+		SetAnchor ( *(const CSphVector<float>*)pArg );
+		break;
+
 	default:
 		break;
 	}
@@ -209,6 +213,15 @@ float Expr_KNNDist_c::CalcDist ( const CSphMatch & tMatch ) const
 		return FLT_MAX;
 
 	return m_pDistCalc->CalcDist ( { dData.Begin(), (size_t)dData.GetLength() }, { m_dAnchor.Begin(), (size_t)m_dAnchor.GetLength() } );
+}
+
+
+void Expr_KNNDist_c::SetAnchor ( const CSphVector<float> & dAnchor )
+{
+	m_dAnchor = dAnchor;
+
+	if ( m_tAttr.m_tKNN.m_eHNSWSimilarity==knn::HNSWSimilarity_e::COSINE )
+		NormalizeVec(m_dAnchor);
 }
 
 /////////////////////////////////////////////////////////////////////

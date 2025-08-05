@@ -34,38 +34,46 @@ jobs:
       fail-fast: false
       matrix:
         test-suite:
-          - name: Core
-            test_prefix: |-
-              test/clt-tests/core/
-              test/clt-tests/expected-errors/
-          - name: mysqldump
-            test_prefix: |-
-              test/clt-tests/mysqldump/mysql/
-              test/clt-tests/mysqldump/maria/
-          - name: Replication
-            test_prefix: test/clt-tests/replication/
-          - name: Plugins
-            test_prefix: test/clt-tests/plugins/
-          - name: Kibana
-            test_prefix: test/clt-tests/kibana/
           - name: Buddy
             test_prefix: test/clt-tests/buddy/
-          - name: Update
-            test_prefix: test/clt-tests/optimisation-and-update/
+          - name: Buddy-lugins
+            test_prefix: test/clt-tests/buddy-plugins/
+          - name: Bugs
+            test_prefix: test/clt-tests/bugs/
+          - name: Core
+            test_prefix: test/clt-tests/core/
+          - name: Data-manipulation
+            test_prefix: test/clt-tests/data-manipulation/
+          - name: Expected-errors
+            test_prefix: test/clt-tests/expected-errors/
+          - name: Fulltext-search
+            test_prefix: test/clt-tests/fulltext-search/
           - name: HTTP interface tests
             test_prefix: test/clt-tests/http-interface/
           - name: Indexer
             test_prefix: test/clt-tests/indexer/
-          - name: Bugs
-            test_prefix: test/clt-tests/bugs/
+          - name: Join
+            test_prefix: test/clt-tests/join/
+          - name: Kibana
+            test_prefix: test/clt-tests/kibana/
+          - name: mysqldump
+            test_prefix: |-
+              test/clt-tests/mysqldump/mysql/
+              test/clt-tests/mysqldump/maria/
+          - name: Performance
+            test_prefix: test/clt-tests/performance/
+          - name: Replication
+            test_prefix: test/clt-tests/replication/
           - name: Sharding
             test_prefix: |-
               test/clt-tests/sharding/cluster/
               test/clt-tests/sharding/functional/
               test/clt-tests/sharding/replication/
               test/clt-tests/sharding/syntax/
-          - name: Join
-            test_prefix: test/clt-tests/join/
+          - name: Test-configuration
+            test_prefix: test/clt-tests/test-configuration/
+          - name: Vector-knn
+            test_prefix: test/clt-tests/vector-knn/
               
     steps:
       - uses: manticoresoftware/clt@0.6.9

@@ -8,10 +8,10 @@ endif ()
 
 set ( GTESTS_SRC
 		gtests_rtstuff.cpp
-		gtests_tokenizer.cpp
 		gtests_text.cpp
 		gtests_functions.cpp
 		gtests_globalstate.cpp
+		gtests_hugetokenizer.cpp
 		gtests_searchd.cpp
 		gtests_filter.cpp
 		gtests_searchdaemon.cpp

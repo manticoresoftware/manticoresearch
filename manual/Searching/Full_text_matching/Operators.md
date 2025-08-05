@@ -101,6 +101,14 @@ The phrase search operator can include a `match any term` modifier. Within the p
 "exact * phrase * * for terms"
 ```
 
+You can also use the `OR` operator inside the quotes. Each option is checked at the same position, and the phrase matches if any of the options fit that position. Examples:
+
+```sql
+"( a | b ) c"
+"( ( a b c ) | d ) e"
+"man ( happy | sad ) but all ( ( as good ) | ( as fast ) )"
+```
+
 ###  Proximity search operator
 
 ```sql
@@ -109,13 +117,26 @@ The phrase search operator can include a `match any term` modifier. Within the p
 
 Proximity distance is measured in words, accounting for word count, and applies to all words within quotes. For example, the query `"cat dog mouse"~5` indicates that there must be a span of fewer than 8 words containing all 3 words. Therefore, a document with `CAT aaa bbb ccc DOG eee fff MOUSE` will not match this query, as the span is exactly 8 words long.
 
+You can also use the `OR` operator inside a proximity search. Each option is checked separately. Example:
+
+```sql
+"( two | four ) fish chips"~5
+```
+
 ###  Quorum matching operator
 
 ```sql
 "the world is a wonderful place"/3
 ```
 
-The quorum matching operator introduces a type of fuzzy matching. It will match only those documents that meet a given threshold of specified words. In the example above (`"the world is a wonderful place"/3`), it will match all documents containing at least 3 of the 6 specified words. The operator is limited to 255 keywords. Instead of an absolute number, you can also provide a value between 0.0 and 1.0 (representing 0% and 100%), and Manticore will match only documents containing at least the specified percentage of given words. The same example above could also be expressed as `"the world is a wonderful place"/0.5`, and it would match documents with at least 50% of the 6 words.
+The quorum matching operator introduces a type of fuzzy matching. It will match only those documents that meet a given threshold of specified words. In the example above (`"the world is a wonderful place"/3`), it will match all documents containing at least 3 of the 6 specified words. The operator is limited to 255 keywords. Instead of an absolute number, you can also provide a value between 0.0 and 1.0 (representing 0% and 100%), and Manticore will match only documents containing at least the specified percentage of the given words. The same example above could also be expressed as `"the world is a wonderful place"/0.5`, and it would match documents with at least 50% of the 6 words.
+
+The quorum operator supports the `OR` operator. Only one word from each `OR` group counts toward the match. Examples:
+
+```sql
+"( ( a b c ) | d ) e f g"/0.5
+"happy ( sad | angry ) man"/2
+```
 
 ### Strict order operator
 

@@ -94,7 +94,7 @@ protected:
 	BYTE* DoGetToken()
 	{
 		// return pending blending variants
-		if_const ( IS_BLEND )
+		if constexpr ( IS_BLEND )
 		{
 			BYTE* pVar = GetBlendedVariant();
 			if ( pVar )
@@ -143,7 +143,7 @@ protected:
 						if ( m_iLastTokenLen )
 							++m_iOvershortCount;
 						m_iLastTokenLen = 0;
-						if_const ( IS_BLEND )
+						if constexpr ( IS_BLEND )
 							BlendAdjust ( pCur );
 						return nullptr;
 					}
@@ -153,14 +153,17 @@ protected:
 				m_pTokenEnd = m_pCur;
 
 				// return trailing word
-				if_const ( IS_BLEND && !BlendAdjust ( pCur ) ) return nullptr;
-				if_const ( IS_BLEND && m_bBlended ) return GetBlendedVariant();
+				if constexpr ( IS_BLEND )
+				{
+					if ( !BlendAdjust ( pCur ) ) return nullptr;
+					if ( m_bBlended ) return GetBlendedVariant();
+				}
 				return m_sAccum;
 			}
 
 			// handle all the flags..
-			if_const ( IS_QUERY )
-					iCode = CodepointArbitrationQ ( iCode, bWasEscaped, *m_pCur );
+			if constexpr ( IS_QUERY )
+				iCode = CodepointArbitrationQ ( iCode, bWasEscaped, *m_pCur );
 			else if ( m_bDetectSentences )
 				iCode = CodepointArbitrationI ( iCode );
 
@@ -169,7 +172,7 @@ protected:
 				continue;
 
 			// handle blended characters
-			if_const ( IS_BLEND && ( iCode & FLAG_CODEPOINT_BLEND ) )
+			if constexpr ( IS_BLEND ) if ( iCode & FLAG_CODEPOINT_BLEND )
 			{
 				if ( m_pBlendEnd )
 					iCode = 0;
@@ -220,7 +223,7 @@ protected:
 				if ( m_pExc && CheckException ( m_pTokenStart ? m_pTokenStart : pCur, pCur, IS_QUERY ) )
 					return m_sAccum;
 
-				if_const ( IS_BLEND && !BlendAdjust ( pCur ) ) continue;
+				if constexpr ( IS_BLEND ) if ( !BlendAdjust ( pCur ) ) continue;
 
 				if ( m_iLastTokenLen < m_tSettings.m_iMinWordLen
 						&& !( m_bShortTokenFilter && ShortTokenFilter ( m_sAccum, m_iLastTokenLen ) ) )
@@ -231,7 +234,7 @@ protected:
 				} else
 				{
 					m_pTokenEnd = pCur;
-					if_const ( IS_BLEND && m_bBlended ) return GetBlendedVariant();
+					if constexpr ( IS_BLEND ) if ( m_bBlended ) return GetBlendedVariant();
 					return m_sAccum;
 				}
 			}
@@ -272,7 +275,7 @@ protected:
 				if ( m_pExc && m_pTokenStart && CheckException ( m_pTokenStart, pCur, IS_QUERY ) )
 					return m_sAccum;
 
-				if_const ( IS_BLEND )
+				if constexpr ( IS_BLEND )
 				{
 					if ( !BlendAdjust ( pCur ) )
 						continue;
@@ -288,8 +291,8 @@ protected:
 			// tricky bit
 			// heading modifiers must not (!) affected blended status
 			// eg. we want stuff like '=-' (w/o apostrophes) thrown away when pure_blend is on
-			if_const ( IS_BLEND )
-				if_const ( !( IS_QUERY && !m_iAccum && sphIsModifier ( iCode & MASK_CODEPOINT ) ) )
+			if constexpr ( IS_BLEND )
+				if_const ( !IS_QUERY || !!m_iAccum || !sphIsModifier ( iCode & MASK_CODEPOINT ) )
 					m_bNonBlended = m_bNonBlended || !( iCode & FLAG_CODEPOINT_BLEND );
 
 			// just accumulate

@@ -40,6 +40,7 @@ bool CSphTransformation::CheckCommonCompoundNot ( const XQNode_t * pNode ) noexc
 bool CSphTransformation::TransformCommonCompoundNot () noexcept
 {
 	int iActiveDeep = 0;
+	ResetCostsHash();
 	for ( auto& [_, hSimGroup] : m_hSimilar )
 		for ( auto& [_, dSimilarNodes] : hSimGroup.tHash )
 		{
@@ -48,6 +49,7 @@ bool CSphTransformation::TransformCommonCompoundNot () noexcept
 
 			// Nodes with the same iFuzzyHash
 			if ( dSimilarNodes.GetLength()<2
+				|| HasSameGrand ( dSimilarNodes )
 				|| !CollectRelatedNodes<GrandNode, Grand2Node> ( dSimilarNodes ) )
 				continue;
 
@@ -67,6 +69,7 @@ bool CSphTransformation::TransformCommonCompoundNot () noexcept
 				continue;
 
 			MakeTransformCommonCompoundNot ( dSimilarNodes );
+			ResetCostsHash();
 			iActiveDeep = hSimGroup.iDeep;
 			// Don't make transformation for other nodes from the same OR-node,
 			// because qtree was changed and further transformations

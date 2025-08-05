@@ -1088,6 +1088,7 @@ static KeyDesc_t g_dKeysSearchd[] =
 	{ "diskchunk_flush_write_timeout",		0, nullptr },
 	{ "diskchunk_flush_search_timeout",		0, nullptr },
 	{ "kibana_version_string",		0, NULL },
+	{ "expansion_phrase_limit",	0, NULL },
 	{ "auth",					0, NULL },
 	{ NULL,						0, NULL }
 };

@@ -1523,7 +1523,7 @@ bool QueueCreator_c::AddKNNDistColumn()
 		return false;
 	}
 
-	if ( pAttr->m_tKNN.m_iDims!=tKNN.m_dVec.GetLength() )
+	if ( tKNN.m_sEmbStr.IsEmpty() && pAttr->m_tKNN.m_iDims!=tKNN.m_dVec.GetLength() )
 	{
 		m_sError.SetSprintf ( "KNN index '%s' requires a vector of %d entries; %d entries specified", tKNN.m_sAttr.cstr(), pAttr->m_tKNN.m_iDims, tKNN.m_dVec.GetLength() );
 		return false;

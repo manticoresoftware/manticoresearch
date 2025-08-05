@@ -23,6 +23,13 @@ struct CSphStrHashFunc
 	static int Hash ( const CSphString& sKey );
 };
 
+template <typename HashFunc = CSphStrHashFunc>
+struct CSphStrPtrHashFunc : HashFunc
+{
+	static int GetHash ( const CSphString* sKey ) { return HashFunc::Hash ( *sKey ); };
+	static bool Equal ( const CSphString* sKey1, const CSphString* sKey2 ) { return *sKey1 == *sKey2; };
+};
+
 /// small hash with string keys
 template<typename T, int LENGTH = 256>
 using SmallStringHash_T = CSphOrderedHash<T, CSphString, CSphStrHashFunc, LENGTH>;

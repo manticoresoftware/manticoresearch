@@ -14,9 +14,65 @@
 
 #include "sphinxquery.h"
 #include "std/generics.h"
+#include "std/openhash.h"
 #include "xqdebug.h"
 
-using BigramHash_t = CSphOrderedHash<CSphVector<XQNode_t *>, uint64_t, IdentityHash_fn, 128>;
+enum class eTransformations : BYTE
+{
+	eHung, eExcessBrackets, eAndNotNot, eExcessAndNot, eCommonAndNotFactor, eCommonNot, eCommonSubterm, eCommonCompoundNot, eCommonOrNot, eSize
+};
+
+constexpr const char * NameOfTransformation ( eTransformations eVal )
+{
+	constexpr const char * list_of_transformations[] = {
+		"'HUNG OPERAND' AND(OR) node with only 1 child",
+		"'EXCESS BRACKETS' ((A B) C) -> ( A B C )",
+		"'AND NOT NOT' (foo -- bar) -> (foo bar)",
+		"'EXCESS AND NOT' ((A !N1) !N2) -> (A !(N1 | N2))",
+		"'COMMON ANDNOT FACTOR' ((A !X) | (A !Y) | (A !Z)) -> (A !(X Y Z))",
+		"'COMMON NOT' ((A !N) | (B !N)) -> ((A|B) !N)",
+		"'COMMON SUBTERM' ((A (AA | X)) | (B (BB | X))) -> ((A AA) | (B BB) | ((A|B) X)) [ if cost(X) > cost(A) + cost(B) ]",
+		"'COMMON COMPOUND NOT' ((A !(N AA)) | (B !(N BB))) -> (((A|B) !N) | (A !AA) | (B !BB)) [ if cost(N) > cost(A) + cost(B) ]",
+		"'COMMON OR NOT' ((A !(N | N1)) | (B !(N | N2))) -> (( (A !N1) | (B !N2) ) !N)",
+	};
+	constexpr size_t NTransformations = std::size ( list_of_transformations );
+	static_assert ( NTransformations==(size_t) eTransformations::eSize );
+	return list_of_transformations[(size_t)eVal];
+}
+
+struct CSphHornerStrHashFunc
+{
+	static int Hash ( const CSphString& sKey )
+	{
+		int iHash = 0;
+		if ( !sKey.cstr() )
+			return iHash;
+
+		for ( auto * pStr = sKey.cstr(); *pStr; ++pStr )
+			iHash = iHash * 257 + *pStr;
+
+		return iHash;
+	}
+};
+
+constexpr uint64_t fnHornerHash ( const char* szKey, uint64_t uHash=0 )
+{
+	if ( !szKey )
+		return uHash;
+
+	for ( const auto * pStr = szKey; *pStr; ++pStr )
+		uHash = uHash * 257 + *pStr;
+
+	return uHash;
+}
+
+constexpr uint64_t fnHornerHash ( const BYTE* sKey, int iSize, uint64_t uHash=0 )
+{
+	for ( int i = 0; i<iSize; ++i )
+		uHash = uHash * 257 + sKey[i];
+
+	return uHash;
+}
 
 class CSphTransformation : public ISphNoncopyable
 {
@@ -24,6 +80,22 @@ public:
 	CSphTransformation ( XQNode_t ** ppRoot, const ISphKeywordsStat * pKeywords );
 
 	void Transform ();
+
+	struct transform_stats_t
+	{
+		DWORD m_uSuccess = 0;
+		DWORD m_uFailed = 0;
+		DWORD m_uTimeSuccess {0};
+		DWORD m_uTimeFailed {0};
+	};
+
+	std::array<transform_stats_t, (size_t) eTransformations::eSize> m_dTransStats;
+	DWORD m_uTotalSuccess = 0;
+	DWORD m_uTotalFailed = 0;
+	DWORD m_uTurns = 0;
+	int64_t m_tmStartTime;
+
+	void Tick (eTransformations eOp, bool bResult) noexcept;
 
 private:
 	using HashSimilar_t = CSphOrderedHash<CSphVector<XQNode_t *>, uintptr_t, IdentityHash_fn, 32>;
@@ -35,10 +107,14 @@ private:
 
 	using Checker_fn = bool ( * ) ( const XQNode_t * );
 
+	// no need to rehash each run, as terms are not changed at all during related ops
+	OpenHashTable_T<const CSphString*, int, CSphStrPtrHashFunc<CSphHornerStrHashFunc>> m_hCosts;
+
 private:
 	void DumpSimilar () const noexcept;
 
-	void SetCosts ( XQNode_t * pNode, const CSphVector<XQNode_t *> & dNodes ) const noexcept;
+	void SetCosts ( XQNode_t * pNode, const CSphVector<XQNode_t *> & dNodes ) noexcept;
+	void ResetCostsHash() noexcept;
 
 	static int GetWeakestIndex ( const CSphVector<XQNode_t *> & dNodes );
 	static int GetWeakestChildIndex ( const CSphVector<XQNode_t *> & dNodes );
@@ -79,8 +155,8 @@ private:
 
 	// ((A !X) | (A !Y) | (A !Z)) -> (A !(X Y Z))
 	static bool CheckCommonAndNotFactor ( const XQNode_t * pNode ) noexcept;
-	bool TransformCommonAndNotFactor () const noexcept;
-	static void MakeTransformCommonAndNotFactor ( const CSphVector<XQNode_t *> & dSimilarNodes );
+	bool TransformCommonAndNotFactor () noexcept;
+	void MakeTransformCommonAndNotFactor ( const CSphVector<XQNode_t *> & dSimilarNodes ) noexcept;
 
 	// ((A !(N | N1)) | (B !(N | N2))) -> (( (A !N1) | (B !N2) ) !N)
 	static bool CheckCommonOrNot ( const XQNode_t * pNode ) noexcept;
@@ -101,7 +177,12 @@ private:
 
 	// ((A !N1) !N2) -> (A !(N1 | N2))
 	static bool CheckExcessAndNot ( const XQNode_t * pNode ) noexcept;
-	bool TransformExcessAndNot () const;
+	bool TransformExcessAndNot () const noexcept;
+
+	// "notnot" operand ( -- node in 'and-not' ) appears after an internal transformation
+	// (A !!B) -> (A B)
+	static bool CheckAndNotNotOperand ( const XQNode_t * pNode ) noexcept;
+	bool TransformAndNotNotOperand () const noexcept;
 
 private:
 	static constexpr uint64_t CONST_GROUP_FACTOR = 0;
@@ -147,7 +228,8 @@ private:
 	using Grand2Node = Grand<3>;
 	using Grand3Node = Grand<4>;
 
-	static void ReplaceNode ( XQNode_t * pNewNode, XQNode_t * pOldNode ) noexcept;
+	static bool ReplaceNode ( XQNode_t * pNewNode, XQNode_t * pOldNode ) noexcept;
+	static void AddOrReplaceNode ( XQNode_t * pParent, XQNode_t * pChild ) noexcept;
 };
 
 
@@ -176,3 +258,13 @@ bool CSphTransformation::CollectRelatedNodes ( const CSphVector<XQNode_t *> & dS
 }
 
 bool HasSameParent ( const VecTraits_T<XQNode_t *> & dSimilarNodes ) noexcept;
+
+bool HasSameGrand ( const VecTraits_T<XQNode_t *> & dSimilarNodes ) noexcept;
+
+// remove nodes without children up the tree
+bool SubtreeRemoveEmpty ( XQNode_t * pNode );
+
+// eliminate composite ( AND / OR ) nodes with only one child
+void CompositeFixup ( XQNode_t * pNode, XQNode_t ** ppRoot );
+
+void CleanupSubtree ( XQNode_t * pNode, XQNode_t ** ppRoot );

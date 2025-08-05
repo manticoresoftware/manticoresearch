@@ -742,12 +742,22 @@ on_clause:
 knn_item:
 	TOK_KNN '(' ident ',' const_int ',' '(' const_list ')' ')'
 		{
-			if ( !pParser->SetKNN ( $3, $5, $8, nullptr ) )
+			if ( !pParser->SetKNN ( $3, $5, $8, nullptr, false ) )
+				YYERROR;
+		}
+	| TOK_KNN '(' ident ',' const_int ',' TOK_QUOTED_STRING ')'
+		{
+			if ( !pParser->SetKNN ( $3, $5, $7, nullptr, true ) )
 				YYERROR;
 		}
 	| TOK_KNN '(' ident ',' const_int ',' '(' const_list ')' ',' '{' named_const_list '}' ')'
 		{
-			if ( !pParser->SetKNN ( $3, $5, $8, &( pParser->GetNamedVec ( $4.GetValueInt() ) ) ) )
+			if ( !pParser->SetKNN ( $3, $5, $8, &( pParser->GetNamedVec ( $4.GetValueInt() ) ), false ) )
+				YYERROR;
+		}
+	| TOK_KNN '(' ident ',' const_int ',' TOK_QUOTED_STRING ',' '{' named_const_list '}' ')'
+		{
+			if ( !pParser->SetKNN ( $3, $5, $7, &( pParser->GetNamedVec ( $4.GetValueInt() ) ), true ) )
 				YYERROR;
 		}
 	;

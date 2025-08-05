@@ -67,7 +67,11 @@ int BinarySearchFirst ( T* pValues, int iStart, int iEnd, PRED&& tPred, U tRef )
 			iStart = iMid;
 	}
 
-	return iEnd;
+	if ( tPred ( pValues[iStart] ) == tRef )
+		return iStart;
+	if ( tPred ( pValues[iEnd] ) == tRef )
+		return iEnd;
+	return -1;
 }
 
 

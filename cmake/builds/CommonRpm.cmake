@@ -97,6 +97,18 @@ list ( APPEND CPACK_RPM_EXCLUDE_FROM_AUTO_FILELIST_ADDITION "/usr/lib/systemd;/u
 #	set ( CPACK_RPM_BUILD_SOURCE_DIRS_PREFIX "/tmp" )
 #endif ()
 
+# SRPM (Source RPM) configuration
+# Note: CPack's RPM generator cannot generate SRPMs with component-based packaging
+# When SRPM generation is requested, we provide instructions for manual SRPM creation
+if (CPACK_RPM_PACKAGE_SOURCES)
+	message ( WARNING "SRPM generation with component-based packaging is not supported by CPack." )
+	message ( STATUS "To build SRPMs, use the separate source configuration:" )
+	message ( STATUS "  cpack -G RPM --config ./CPackSourceConfig.cmake" )
+	message ( STATUS "The CPackSourceConfig.cmake file is generated during cmake configuration." )
+	message ( STATUS "Disabling CPACK_RPM_PACKAGE_SOURCES to allow binary RPM generation." )
+	unset ( CPACK_RPM_PACKAGE_SOURCES )
+endif ()
+
 #set ( CPACK_RPM_EXCLUDE_FROM_AUTO_FILELIST "/usr/include" )
 set ( CPACK_RPM_COMMON_USER_FILELIST
 		"%config(noreplace) %{_sysconfdir}/manticoresearch/manticore.conf"

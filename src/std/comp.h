@@ -15,7 +15,11 @@
 /// generic comparator
 template<typename T> struct SphLess_T
 {
-	inline static bool IsLess ( const T& a, const T& b ) noexcept { return a < b; }
+	static bool IsLess ( const T& a, const T& b ) noexcept
+	{
+		static_assert ( !std::is_pointer_v<T>, "Don't implicitly compare pointers" );
+		return a < b;
+	}
 };
 
 
@@ -98,7 +102,11 @@ struct SphEqualityFunctor_T
 struct IdentityHash_fn
 {
 	template<typename INT>
-	static inline INT Hash ( INT iValue ) { return iValue; }
+	static INT Hash ( INT iValue ) { return iValue; }
+	template<typename INT>
+	static INT GetHash ( INT iValue ) { return iValue; }
+	template<typename INT>
+	static bool Equal (INT a, INT b) { return a==b; }
 };
 
 #include "comp_impl.h"

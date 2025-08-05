@@ -31,6 +31,8 @@ struct SkipCacheUtil_t
 		return sphCRC32 ( &tKey.m_tWordId, sizeof ( tKey.m_tWordId ), uCRC32 );
 	}
 
+	static bool Equal ( SkipCacheKey_t a, SkipCacheKey_t b) { return a==b; }
+
 	static DWORD GetSize ( SkipData_t* pValue ) { return pValue ? pValue->m_dSkiplist.GetLengthBytes() : 0; }
 	static void Reset ( SkipData_t*& pValue ) { SafeDelete ( pValue ); }
 };

@@ -9453,25 +9453,21 @@ bool CSphIndex_VLN::PreallocKNN()
 	bool bVrongVer = ( sErrorSTL.rfind ( "Unable to load KNN index:", 0 )==0 );
 	if ( bVrongVer )
 	{
-		sphWarning ( "Rebuilding knn due to error: %s", sErrorSTL.c_str() );
+		sphWarning ( "Rebuilding KNN due to error: %s", sErrorSTL.c_str() );
 		CSphString sRebuildError;
 		if ( !AlterKNN ( sRebuildError ) )
 		{
 			m_pKNN.reset();
-			sErrorSTL.append ( "; rebuild knn error: " );
+			sErrorSTL.append ( "; rebuild KNN error: " );
 			sErrorSTL.append ( sRebuildError.cstr() );
 		}
-		sphInfo ( "rebuilded knn" );
+		sphInfo ( "rebuilded KNN" );
 	}
 
 	if ( !m_pKNN )
-	{
-		m_sLastError = sErrorSTL.c_str();
-		return false;
-	} else
-	{
-		return true;
-	}
+		sphWarning ( "%s, KNN disabled", sErrorSTL.c_str() );
+
+	return true;
 }
 
 
@@ -10150,6 +10146,7 @@ static void TransformQuorum ( XQNode_t ** ppNode )
 	}
 
 	pNode->ResetWords();
+	assert ( pNode->dChildren().IsEmpty());
 	pNode->SetOp ( SPH_QUERY_OR, dArgs );
 }
 
@@ -10676,8 +10673,11 @@ static void TransformBigrams ( XQNode_t * pNode, const CSphIndexSettings & tSett
 }
 
 
-void sphTransformExtendedQuery ( XQNode_t ** ppNode, const CSphIndexSettings & tSettings, bool bHasBooleanOptimization, const ISphKeywordsStat * pKeywords )
+bool sphTransformExtendedQuery ( XQNode_t ** ppNode, const CSphIndexSettings & tSettings, CSphString & sError, const TransformExtendedQueryArgs_t & tArgs )
 {
+	if ( tArgs.m_bNeedPhraseTransform && !TransformPhraseBased ( ppNode, sError ) )
+		return false;
+
 	TransformQuorum ( ppNode );
 	( *ppNode )->Check ( true );
 	TransformNear ( ppNode );
@@ -10688,8 +10688,10 @@ void sphTransformExtendedQuery ( XQNode_t ** ppNode, const CSphIndexSettings & t
 	( *ppNode )->Check ( true );
 
 	// boolean optimization
-	if ( bHasBooleanOptimization )
-		sphOptimizeBoolean ( ppNode, pKeywords );
+	if ( tArgs.m_bHasBooleanOptimization )
+		sphOptimizeBoolean ( ppNode, tArgs.m_pKeywords );
+
+	return true;
 }
 
 
@@ -10975,7 +10977,9 @@ bool CSphIndex_VLN::MultiQuery ( CSphQueryResult & tResult, const CSphQuery & tQ
 
 	// transform query if needed (quorum transform, etc.)
 	SwitchProfile ( pProfile, SPH_QSTATE_TRANSFORMS );
-	sphTransformExtendedQuery ( &tParsed.m_pRoot, m_tSettings, tQuery.m_bSimplify, this );
+	TransformExtendedQueryArgs_t tTranformArgs { tQuery.m_bSimplify, tParsed.m_bNeedPhraseTransform, this };
+	if ( !sphTransformExtendedQuery ( &tParsed.m_pRoot, m_tSettings, tMeta.m_sError, tTranformArgs ) )
+		return false;
 
 	bool bWordDict = pDict->GetSettings().m_bWordDict;
 	int iExpandKeywords = ExpandKeywords ( m_tMutableSettings.m_iExpandKeywords, tQuery.m_eExpandKeywords, m_tSettings, bWordDict );
@@ -11072,7 +11076,12 @@ bool CSphIndex_VLN::MultiQueryEx ( int iQueries, const CSphQuery * pQueries, CSp
 		if ( pQueryParser->ParseQuery ( dXQ[i], tCurQuery.m_sQuery.cstr(), &tCurQuery, m_pQueryTokenizer, m_pQueryTokenizerJson, &m_tSchema, pDict, m_tSettings, &m_tMorphFields ) )
 		{
 			// transform query if needed (quorum transform, keyword expansion, etc.)
-			sphTransformExtendedQuery ( &dXQ[i].m_pRoot, m_tSettings, tCurQuery.m_bSimplify, this );
+			TransformExtendedQueryArgs_t tTranformArgs { tCurQuery.m_bSimplify, dXQ[i].m_bNeedPhraseTransform, this };
+			if ( !sphTransformExtendedQuery ( &dXQ[i].m_pRoot, m_tSettings, tMeta.m_sError, tTranformArgs ) )
+			{
+				tMeta.m_iMultiplier = -1;
+				continue;
+			}
 
 			int iExpandKeywords = ExpandKeywords ( m_tMutableSettings.m_iExpandKeywords, tCurQuery.m_eExpandKeywords, m_tSettings, bWordDict );
 			if ( iExpandKeywords!=KWE_DISABLED )
@@ -11793,7 +11802,13 @@ Bson_t Explain ( ExplainQueryArgs_t & tArgs )
 		return EmptyBson ();
 	}
 
-	sphTransformExtendedQuery ( &tParsed.m_pRoot, *tArgs.m_pSettings, false ); // fixme! m.b. explain boolean-simplified?
+	// fixme! m.b. explain boolean-simplified?
+	TransformExtendedQueryArgs_t tTranformArgs { false, tParsed.m_bNeedPhraseTransform };
+	if ( !sphTransformExtendedQuery ( &tParsed.m_pRoot, *tArgs.m_pSettings, tParsed.m_sParseError, tTranformArgs ) )
+	{
+		TlsMsg::Err ( tParsed.m_sParseError );
+		return EmptyBson ();
+	}
 
 	bool bWordDict = tArgs.m_pDict->GetSettings().m_bWordDict;
 	int iExpandKeywords = ExpandKeywords ( tArgs.m_iExpandKeywords, QUERY_OPT_DEFAULT, *tArgs.m_pSettings, bWordDict );
@@ -11960,6 +11975,11 @@ bool CSphIndex_VLN::AlterKNN ( CSphString & sError )
 	if ( !PreallocKNN() )
 	{
 		sError = m_sLastError;
+		return false;
+	}
+	if ( !m_pKNN && sError.IsEmpty() )
+	{
+		sError = "failed to rebuild KNN";
 		return false;
 	}
 	return true;

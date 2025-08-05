@@ -1,0 +1,103 @@
+––– block: ../base/start-searchd-with-buddy –––
+––– input –––
+mysql -P9306 -v -h0 -e "create table t(f text); insert into t values(1, 'abc'); select * from t;"
+––– output –––
+--------------
+create table t(f text)
+--------------
+--------------
+insert into t values(1, 'abc')
+--------------
+--------------
+select * from t
+--------------
++------+------+
+| id   | f    |
++------+------+
+|    1 | abc  |
++------+------+
+––– input –––
+mysql -P9306 -v -h0 -e "alter table t add column v1 FLOAT_VECTOR knn_type='hnsw' knn_dims='3' hnsw_similarity='COSINE'; insert into t(id,v1) values(2, (0.2,0.2,0.2)); select * from t;"
+––– output –––
+--------------
+alter table t add column v1 FLOAT_VECTOR knn_type='hnsw' knn_dims='3' hnsw_similarity='COSINE'
+--------------
+--------------
+insert into t(id,v1) values(2, (0.2,0.2,0.2))
+--------------
+--------------
+select * from t
+--------------
++------+------+----------------------------------+
+| id   | f    | v1                               |
++------+------+----------------------------------+
+|    2 |      | 0.57735032,0.57735032,0.57735032 |
+|    1 | abc  | 0.000000,0.000000,0.000000       |
++------+------+----------------------------------+
+––– input –––
+mysql -P9306 -v -h0 -e "flush ramchunk t; select * from t;"
+––– output –––
+--------------
+flush ramchunk t
+--------------
+--------------
+select * from t
+--------------
++------+------+----------------------------------+
+| id   | f    | v1                               |
++------+------+----------------------------------+
+|    1 | abc  | 0.000000,0.000000,0.000000       |
+|    2 |      | 0.57735032,0.57735032,0.57735032 |
++------+------+----------------------------------+
+––– input –––
+mysql -P9306 -v -h0 -e "alter table t add column v2 FLOAT_VECTOR knn_type='hnsw' knn_dims='3' hnsw_similarity='L2'; insert into t(id,v2) values(3,(1,1,1)); flush ramchunk t; select * from t"
+––– output –––
+--------------
+alter table t add column v2 FLOAT_VECTOR knn_type='hnsw' knn_dims='3' hnsw_similarity='L2'
+--------------
+--------------
+insert into t(id,v2) values(3,(1,1,1))
+--------------
+--------------
+flush ramchunk t
+--------------
+--------------
+select * from t
+--------------
++------+------+----------------------------------+----------------------------+
+| id   | f    | v1                               | v2                         |
++------+------+----------------------------------+----------------------------+
+|    1 | abc  | 0.000000,0.000000,0.000000       | 0.000000,0.000000,0.000000 |
+|    3 |      |                                  | 1.000000,1.000000,1.000000 |
+|    2 |      | 0.57735032,0.57735032,0.57735032 | 0.000000,0.000000,0.000000 |
++------+------+----------------------------------+----------------------------+
+––– input –––
+stdbuf -oL searchd --stopwait > /dev/null
+––– output –––
+––– input –––
+rm -fr /var/lib/manticore/t/*.spknn
+––– output –––
+––– block: ../base/start-searchd-with-buddy –––
+––– input –––
+mysql -P9306 -h0 -v -e "select * from t where knn(v2, 10, (0.5,0.5,0.5))"
+––– output –––
+--------------
+select * from t where knn(v2, 10, (0.5,0.5,0.5))
+--------------
+ERROR 1064 (42000) at line 1: table t: KNN index not loaded
+––– input –––
+mysql -P9306 -h0 -v -e "alter table t rebuild knn; select * from t where knn(v2, 10, (0.5,0.5,0.5))"
+––– output –––
+--------------
+alter table t rebuild knn
+--------------
+--------------
+select * from t where knn(v2, 10, (0.5,0.5,0.5))
+--------------
++------+------+----------------------------------+----------------------------+-----------+
+| id   | f    | v1                               | v2                         | @knn_dist |
++------+------+----------------------------------+----------------------------+-----------+
+|    1 | abc  | 0.000000,0.000000,0.000000       | 0.000000,0.000000,0.000000 |  0.750000 |
+|    2 |      | 0.57735032,0.57735032,0.57735032 | 0.000000,0.000000,0.000000 |  0.750000 |
+|    3 |      |                                  | 1.000000,1.000000,1.000000 |  0.750000 |
++------+------+----------------------------------+----------------------------+-----------+

@@ -45,7 +45,8 @@ bool CSphTransformation::TransformCommonOrNot () noexcept
 				continue;
 
 			// Nodes with the same iFuzzyHash
-			if ( dSimilarNodes.GetLength()<2 )
+			if ( dSimilarNodes.GetLength()<2
+				|| HasSameParent ( dSimilarNodes ) )
 				continue;
 
 			if ( CollectRelatedNodes < GrandNode, Grand2Node> ( dSimilarNodes ) )
@@ -75,36 +76,32 @@ void CSphTransformation::MakeTransformCommonOrNot ( const CSphVector<XQNode_t *>
 	XQNode_t * pCommonOr = Grand3Node::From (pWeakestSimilar);
 
 	// Delete/unlink similar nodes ( except weakest )
-	ARRAY_FOREACH ( i, dSimilarNodes )
+	for ( auto* pSimilar : dSimilarNodes )
 	{
-		XQNode_t * pParent = dSimilarNodes[i]->m_pParent;
-		Verify ( pParent->RemoveChild ( dSimilarNodes[i] ) );
+		auto * pParent = pSimilar->m_pParent;
+		Verify ( pParent->RemoveChild ( pSimilar ) );
 
-		if ( i!=iWeakestIndex )
-			SafeDelete ( dSimilarNodes[i] );
+		if ( pSimilar!=pWeakestSimilar )
+			SafeDelete ( pSimilar );
+
+		if ( pParent->dChildren().GetLength()>1 )
+			continue;
+
+		assert ( pParent->dChildren().GetLength()==1 );
+		auto * pLastChild = pParent->dChildren()[0];
+		ReplaceNode ( pParent, pLastChild );
+		pParent->ResetChildren();
+		SafeDelete ( pParent );
 	}
 
 	auto * pNewAndNot = new XQNode_t ( XQLimitSpec_t() );
 	auto * pNewAnd = new XQNode_t ( XQLimitSpec_t() );
 	auto * pNewNot = new XQNode_t ( XQLimitSpec_t() );
-	if ( !pCommonOr->m_pParent )
-	{
-		*m_ppRoot = pNewAndNot;
-	} else
-	{
-		XQNode_t * pParent = pCommonOr->m_pParent;
-		assert ( pParent->dChildren().Contains ( pCommonOr ) );
-		for ( XQNode_t *& pChild : pParent->dChildren() )
-		{
-			if ( pChild!=pCommonOr )
-				continue;
 
-			pChild = pNewAndNot;
-			pNewAndNot->m_pParent = pParent;
-			pChild->Rehash();
-			break;
-		}
-	}
+	if ( !pCommonOr->m_pParent )
+		*m_ppRoot = pNewAndNot;
+	else
+		ReplaceNode ( pCommonOr, pNewAndNot );
 
 	pNewNot->SetOp ( SPH_QUERY_NOT, pWeakestSimilar );
 	pNewAnd->SetOp ( SPH_QUERY_AND, pCommonOr );

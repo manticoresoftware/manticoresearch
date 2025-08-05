@@ -18,7 +18,6 @@ curl -s "https://hub.docker.com/v2/repositories/library/logstash/tags/?page_size
 | sort -t. -k1,1n -k2,2n | uniq
 ––– output –––
 7.17
-8.1
 8.2
 8.3
 8.4
@@ -36,7 +35,9 @@ curl -s "https://hub.docker.com/v2/repositories/library/logstash/tags/?page_size
 8.16
 8.17
 8.18
+8.19
 9.0
+9.1
 ––– input –––
 cat << 'EOF' > /tmp/logstash-single-test.sh
 #!/bin/bash
@@ -112,10 +113,40 @@ if [ "$version_major" -ge 8 ]; then
 fi
 if [ "$version_major" -ge 9 ]; then
     export ALLOW_SUPERUSER=1
-    sed -i '259s/^/# /' /usr/share/logstash/logstash-9.0.0/logstash-core/lib/logstash/runner.rb 2>/dev/null || true
+    sed -i '259s/^/# /' /usr/share/logstash/logstash-${VERSION}.0/logstash-core/lib/logstash/runner.rb 2>/dev/null || true
 fi
 CONFIG_FILE="/tmp/logstash_config_${VERSION}.conf"
-if [ "$version_major" -ge 9 ]; then
+if [ "$version_major" -gt 9 ] || ([ "$version_major" -eq 9 ] && [ "$version_minor" -ge 1 ]); then
+    cat > "$CONFIG_FILE" << CONF
+input {
+  file {
+    path => ["$TEST_LOG"]
+    start_position => "beginning"
+    sincedb_path => "/dev/null"
+    mode => "read"
+  }
+}
+filter {
+  mutate {
+    replace => {
+      "@version" => "1"
+      "path" => "$TEST_LOG"
+    }
+    add_field => { "host" => "logstash-test" }
+    remove_field => ["event", "log"]
+  }
+}
+output {
+  elasticsearch {
+    hosts => ["http://localhost:9308"]
+    index => "dpkg_log"
+    action => "index"
+    timeout => 30
+    $ilm_settings
+  }
+}
+CONF
+elif [ "$version_major" -ge 9 ]; then
     cat > "$CONFIG_FILE" << CONF
 input {
   file {
@@ -559,6 +590,20 @@ timeout 300 bash /tmp/logstash-single-test.sh 8.18
 rm -rf /usr/share/logstash/logstash-8.18.0 logstash-8.18.0.tar.gz /tmp/logstash_test_8.18
 ––– output –––
 ––– input –––
+for i in {1..3}; do wget -q --timeout=60 --tries=1 "https://artifacts.elastic.co/downloads/logstash/logstash-8.19.0-linux-x86_64.tar.gz" -O logstash-8.19.0.tar.gz && gzip -t logstash-8.19.0.tar.gz 2>/dev/null && tar -tzf logstash-8.19.0.tar.gz | grep -q "bin/logstash" && { echo "✓ Logstash 8.19.0 downloaded successfully"; break; } || { [ $i -eq 3 ] && echo "✗ Failed to download Logstash 8.19.0 after 3 attempts" >&2 || rm -f logstash-8.19.0.tar.gz >/dev/null 2>&1; sleep 2; }; done
+––– output –––
+✓ Logstash 8.19.0 downloaded successfully
+––– input –––
+timeout 300 bash /tmp/logstash-single-test.sh 8.19
+––– output –––
+>>> Testing Logstash version: 8.19
+✓ Log file has 5 lines
+✓ Manticore Search available
+✓ Logstash 8.19 started and processed logs
+✓ Row count check for 8.19: 5 rows
+✓ Structure check for 8.19: passed
+✓ Logstash version 8.19 tested successfully
+––– input –––
 for i in {1..3}; do wget -q --timeout=60 --tries=1 "https://artifacts.elastic.co/downloads/logstash/logstash-9.0.0-linux-x86_64.tar.gz" -O logstash-9.0.0.tar.gz && gzip -t logstash-9.0.0.tar.gz 2>/dev/null && tar -tzf logstash-9.0.0.tar.gz | grep -q "bin/logstash" && { echo "✓ Logstash 9.0.0 downloaded successfully"; break; } || { [ $i -eq 3 ] && echo "✗ Failed to download Logstash 9.0.0 after 3 attempts" >&2 || rm -f logstash-9.0.0.tar.gz >/dev/null 2>&1; sleep 2; }; done
 ––– output –––
 ✓ Logstash 9.0.0 downloaded successfully
@@ -572,6 +617,20 @@ timeout 300 bash /tmp/logstash-single-test.sh 9.0
 ✓ Row count check for 9.0: 5 rows
 ✓ Structure check for 9.0: passed
 ✓ Logstash version 9.0 tested successfully
+––– input –––
+for i in {1..3}; do wget -q --timeout=60 --tries=1 "https://artifacts.elastic.co/downloads/logstash/logstash-9.1.0-linux-x86_64.tar.gz" -O logstash-9.1.0.tar.gz && gzip -t logstash-9.1.0.tar.gz 2>/dev/null && tar -tzf logstash-9.1.0.tar.gz | grep -q "bin/logstash" && { echo "✓ Logstash 9.1.0 downloaded successfully"; break; } || { [ $i -eq 3 ] && echo "✗ Failed to download Logstash 9.1.0 after 3 attempts" >&2 || rm -f logstash-9.1.0.tar.gz >/dev/null 2>&1; sleep 2; }; done
+––– output –––
+✓ Logstash 9.1.0 downloaded successfully
+––– input –––
+timeout 300 bash /tmp/logstash-single-test.sh 9.1
+––– output –––
+>>> Testing Logstash version: 9.1
+✓ Log file has 5 lines
+✓ Manticore Search available
+✓ Logstash 9.1 started and processed logs
+✓ Row count check for 9.1: 5 rows
+✓ Structure check for 9.1: passed
+✓ Logstash version 9.1 tested successfully
 ––– input –––
 rm -f logstash-*.tar.gz
 ––– output –––

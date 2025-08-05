@@ -97,12 +97,15 @@ uint64_t XQNode_t::GetHash () const noexcept
 	dZeroOp[1] = (XQOperator_e) 0;
 
 	for ( const auto& dWord : dWords() )
-		m_iMagicHash = 100 + ( m_iMagicHash ^ sphFNV64 ( dWord.m_sWord.cstr() ) ); // +100 to make it non-transitive
+		m_iMagicHash = (dWord.m_bFieldStart?5:0) + (dWord.m_bFieldEnd?11:0) + sphFNV64cont ( dWord.m_sWord.cstr(), m_iMagicHash );
 	for ( const auto* pChild : m_dChildren )
-		m_iMagicHash = 100 + ( m_iMagicHash ^ pChild->GetHash() ); // +100 to make it non-transitive
+		m_iMagicHash ^= pChild->GetHash();
 	m_iMagicHash += 1000000; // to immerse difference between parents and children
-	m_iMagicHash ^= sphFNV64 ( dZeroOp );
-
+	m_iMagicHash^= sphFNV64cont ( dZeroOp, m_iMagicHash );
+	if ( m_dSpec.m_bFieldSpec )
+		m_iMagicHash = sphFNV64 ( m_dSpec.m_dFieldMask.m_dMask, FieldMask_t::SIZE * sizeof ( DWORD ), m_iMagicHash );
+	if ( !m_dSpec.m_dZones.IsEmpty() )
+		m_iMagicHash = sphFNV64 ( m_dSpec.m_dZones.begin(), m_dSpec.m_dZones.GetLength() * sizeof ( int ), m_iMagicHash + ( m_dSpec.m_bZoneSpan ? 257 : 0 ) );
 	return m_iMagicHash;
 }
 
@@ -117,14 +120,15 @@ uint64_t XQNode_t::GetFuzzyHash () const noexcept
 	dZeroOp[1] = (XQOperator_e) 0;
 
 	for ( const auto& dWord : dWords() )
-		m_iFuzzyHash ^= 100 + (dWord.m_bFieldStart?5:0) + (dWord.m_bFieldEnd?11:0) + sphFNV64 ( dWord.m_sWord.cstr() ); // +100 to make it non-transitive
+		m_iFuzzyHash = (dWord.m_bFieldStart?5:0) + (dWord.m_bFieldEnd?11:0) + sphFNV64cont ( dWord.m_sWord.cstr(), m_iFuzzyHash );
 	for ( const auto* pChild : m_dChildren )
-		m_iFuzzyHash = 100 + ( m_iFuzzyHash ^ pChild->GetFuzzyHash () ); // +100 to make it non-transitive
+		m_iFuzzyHash ^= pChild->GetFuzzyHash ();
 	m_iFuzzyHash += 1000000; // to immerse difference between parents and children
 	m_iFuzzyHash = sphFNV64cont ( dZeroOp, m_iFuzzyHash );
 	if ( m_dSpec.m_bFieldSpec )
 		m_iFuzzyHash = sphFNV64 ( m_dSpec.m_dFieldMask.m_dMask, FieldMask_t::SIZE * sizeof ( DWORD ), m_iFuzzyHash );
-
+	if ( !m_dSpec.m_dZones.IsEmpty() )
+		m_iFuzzyHash = sphFNV64 ( m_dSpec.m_dZones.begin(), m_dSpec.m_dZones.GetLength() * sizeof ( int ), m_iFuzzyHash + ( m_dSpec.m_bZoneSpan ? 257 : 0 ) );
 	return m_iFuzzyHash;
 }
 
@@ -132,7 +136,7 @@ uint64_t XQNode_t::GetFuzzyHash () const noexcept
 void XQNode_t::SetOp ( XQOperator_e eOp, XQNode_t * pArg1, XQNode_t * pArg2 )
 {
 	SetOp ( eOp );
-	m_dChildren.Reset();
+	assert ( m_dChildren.IsEmpty() && "Ensure your node has no children. You need to explicitly reset them, or delete - to avoid memleak here" );
 	if ( pArg1 )
 	{
 		m_dChildren.Add ( pArg1 );

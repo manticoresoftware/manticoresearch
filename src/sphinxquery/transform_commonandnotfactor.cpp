@@ -19,25 +19,25 @@
 //  NOT:
 //		 _______ OR (gGOr) ________________
 // 		/          |                       |
-// 	 ...        AND NOT (grandAndNot)     ...
+// 	 ...        AND NOT (parentAndNot)     ...
 //                /       |
-//               AND     NOT
-//                |       |
-//              pNode  relatedNode
+//         pNode(AND)     NOT
+//                        |
+//                     relatedNode
 //
 bool CSphTransformation::CheckCommonAndNotFactor ( const XQNode_t * pNode ) noexcept
 {
-	return Grand2Node::Valid ( pNode )
-			&& ParentNode::From ( pNode )->GetOp() == SPH_QUERY_AND
-			&& GrandNode::From ( pNode )->GetOp() == SPH_QUERY_ANDNOT
-			&& Grand2Node::From ( pNode )->GetOp() == SPH_QUERY_OR
+	return GrandNode::Valid ( pNode )
+			&& pNode->GetOp() == SPH_QUERY_AND
+			&& ParentNode::From ( pNode )->GetOp() == SPH_QUERY_ANDNOT
+			&& GrandNode::From ( pNode )->GetOp() == SPH_QUERY_OR
 			// FIXME!!! check performance with OR node at 2nd grand instead of regular not NOT
-			&& GrandNode::From(pNode)->dChildren().GetLength()>=2
-			&& GrandNode::From(pNode)->dChild(1)->GetOp()==SPH_QUERY_NOT;
+			&& ParentNode::From(pNode)->dChildren().GetLength()>=2
+			&& ParentNode::From(pNode)->dChild(1)->GetOp()==SPH_QUERY_NOT;
 }
 
 
-bool CSphTransformation::TransformCommonAndNotFactor () const noexcept
+bool CSphTransformation::TransformCommonAndNotFactor () noexcept
 {
 	int iActiveDeep = 0;
 	for ( auto& [_, hSimGroup] : m_hSimilar )
@@ -50,20 +50,49 @@ bool CSphTransformation::TransformCommonAndNotFactor () const noexcept
 			if ( dSimilarNodes.GetLength()<2 )
 				continue;
 
+//			StringBuilder_c sHead;
+//			sHead << "\nTransformCommonAndNotFactor  ((A !X) | (A !Y) | (A !Z)) -> (A !(X Y Z))";
+//			Dump ( *m_ppRoot, sHead.cstr() );
 			MakeTransformCommonAndNotFactor ( dSimilarNodes );
 			iActiveDeep = hSimGroup.iDeep;
+			break;
 		}
 	return iActiveDeep;
+}
+
+// Returns index of the node with weakest child.
+// The example of equal nodes:
+// "aaa bbb" (PHRASE), "aaa bbb"~10 (PROXIMITY), "aaa bbb"~20 (PROXIMITY)
+// Such nodes have the same magic hash value.
+// The weakest is "aaa bbb"~20.
+int CSphTransformation::GetWeakestChildIndex ( const CSphVector<XQNode_t *> & dNodes )
+{
+	int iWeakestIndex = 0;
+	int iProximity = -1;
+
+	ARRAY_CONSTFOREACH ( i, dNodes )
+	{
+		const XQNode_t * pNode = dNodes[i];
+		if ( pNode->dChildren().IsEmpty() )
+			continue;
+		pNode = pNode->dChild ( 0 );
+		if ( pNode->GetOp() == SPH_QUERY_PROXIMITY && pNode->m_iOpArg > iProximity )
+		{
+			iProximity = pNode->m_iOpArg;
+			iWeakestIndex = i;
+		}
+	}
+	return iWeakestIndex;
 }
 
 // Pick the weakest node from the equal
 // PROXIMITY and PHRASE nodes with same keywords have an equal magic hash
 // so they are considered as equal nodes.
-void CSphTransformation::MakeTransformCommonAndNotFactor ( const CSphVector<XQNode_t *> & dSimilarNodes )
+void CSphTransformation::MakeTransformCommonAndNotFactor ( const CSphVector<XQNode_t *> & dSimilarNodes ) noexcept
 {
-	const int iWeakestIndex = GetWeakestIndex ( dSimilarNodes );
+	const int iWeakestIndex = GetWeakestChildIndex ( dSimilarNodes );
 
-	const XQNode_t * pFirstAndNot = GrandNode::From ( dSimilarNodes [iWeakestIndex] );
+	XQNode_t * pFirstAndNot = ParentNode::From ( dSimilarNodes [iWeakestIndex] );
 	XQNode_t * pCommonOr = pFirstAndNot->m_pParent;
 
 	assert ( pFirstAndNot->dChildren().GetLength()==2 );
@@ -76,6 +105,7 @@ void CSphTransformation::MakeTransformCommonAndNotFactor ( const CSphVector<XQNo
 	auto * pAndNew = new XQNode_t ( XQLimitSpec_t() );
 	pFirstNot->dChildren()[0] = pAndNew;
 	pAndNew->m_pParent = pFirstNot;
+	pFirstNot->Rehash();
 
 	ARRAY_CONSTFOREACH ( i, dSimilarNodes )
 	{
@@ -83,7 +113,7 @@ void CSphTransformation::MakeTransformCommonAndNotFactor ( const CSphVector<XQNo
 		if ( i==iWeakestIndex )
 			continue;
 
-		XQNode_t * pAndNot = GrandNode::From ( dSimilarNodes[i] );
+		XQNode_t * pAndNot = ParentNode::From ( dSimilarNodes[i] );
 		assert ( pAndNot->dChildren().GetLength()==2 );
 		const XQNode_t * pNot = pAndNot->dChildren()[1];
 		assert ( pNot->dChildren().GetLength()==1 );
@@ -96,4 +126,5 @@ void CSphTransformation::MakeTransformCommonAndNotFactor ( const CSphVector<XQNo
 		SafeDelete ( pAndNot );
 	}
 	pAndNew->SetOp ( SPH_QUERY_AND, dAndNewChildren );
+	CompositeFixup ( pCommonOr, m_ppRoot );
 }

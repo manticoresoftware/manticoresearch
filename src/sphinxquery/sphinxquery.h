@@ -163,7 +163,7 @@ public:
 
 	int						m_iOpArg = 0;		///< operator argument (proximity distance, quorum count)
 	int						m_iAtomPos = -1;	///< atom position override (currently only used within expanded nodes)
-	int						m_iUser = 0;
+	int						m_iUser = -1;
 	bool					m_bVirtuallyPlain = false;	///< "virtually plain" flag (currently only used by expanded nodes)
 	bool					m_bNotWeighted = false;	///< this our expanded but empty word's node
 	bool					m_bPercentOp = false;
@@ -301,6 +301,7 @@ public:
 	void SetOp ( XQOperator_e eOp, CSphVector<XQNode_t*> & dArgs )
 	{
 		SetOp (eOp);
+		assert ( m_dChildren.IsEmpty() && "Ensure your node has no children. You need to explicitly reset them, or delete - to avoid memleak here" );
 		m_dChildren.SwapData(dArgs);
 		for ( auto* pChild : m_dChildren )
 			pChild->m_pParent = this;
@@ -356,6 +357,7 @@ struct XQQuery_t : ISphNoncopyable
 	bool					m_bEmpty = false;
 	// was node full-text (even folded into empty)
 	bool					m_bWasFullText = false;
+	bool					m_bNeedPhraseTransform = false;
 
 	/// dtor
 	~XQQuery_t ()
@@ -404,3 +406,6 @@ inline int GetExpansionLimit ( int iQueryLimit, int iIndexLimit  )
 {
 	return ( iQueryLimit!=DEFAULT_QUERY_EXPANSION_LIMIT ? iQueryLimit : iIndexLimit );
 }
+
+bool TransformPhraseBased ( XQNode_t ** ppNode, CSphString & sError );
+void SetExpansionPhraseLimit ( int iMaxVariants );

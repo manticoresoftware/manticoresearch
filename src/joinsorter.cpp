@@ -412,7 +412,7 @@ private:
 class StoredFetch_c : public MatchProcessor_i
 {
 public:
-			StoredFetch_c ( const ISphSchema & tSorterSchema, const CSphIndex & tRightIndex, uint64_t uNullMask );
+			StoredFetch_c ( const ISphSchema & tSorterSchema, const CSphIndex & tRightIndex, const CSphString & sRightIndexName, uint64_t uNullMask );
 
 	void	Process ( CSphMatch * pMatch ) override;
 	bool	ProcessInRowIdOrder() const override	{ return false; }
@@ -423,6 +423,7 @@ public:
 private:
 	const ISphSchema &					m_tSorterSchema;
 	const CSphIndex &					m_tRightIndex;
+	CSphString							m_sRightIndexName;
 	const CSphColumnInfo *				m_pId = nullptr;
 	const CSphColumnInfo *				m_pNullMaskAttr = nullptr;
 	std::unique_ptr<DocstoreSession_c>	m_pSession;
@@ -436,9 +437,10 @@ private:
 };
 
 
-StoredFetch_c::StoredFetch_c ( const ISphSchema & tSorterSchema, const CSphIndex & tRightIndex, uint64_t uNullMask )
+StoredFetch_c::StoredFetch_c ( const ISphSchema & tSorterSchema, const CSphIndex & tRightIndex, const CSphString & sRightIndexName, uint64_t uNullMask )
 	: m_tSorterSchema ( tSorterSchema )
 	, m_tRightIndex ( tRightIndex )
+	, m_sRightIndexName ( sRightIndexName )
 	, m_uNullMask ( uNullMask )
 {
 	CreateDocstoreSession();
@@ -499,7 +501,7 @@ void StoredFetch_c::CreateDocstoreSession()
 void StoredFetch_c::SetupAttrRemap()
 {
 	CSphString sAttrName;
-	sAttrName.SetSprintf ( "%s.%s", m_tRightIndex.GetName(), sphGetDocidName() );
+	sAttrName.SetSprintf ( "%s.%s", m_sRightIndexName.cstr(), sphGetDocidName() );
 	m_pId = m_tSorterSchema.GetAttr ( sAttrName.cstr() );
 	assert(m_pId);
 
@@ -511,7 +513,7 @@ void StoredFetch_c::SetupAttrRemap()
 			continue;
 
 		CSphString sAttrName;
-		sAttrName.SetSprintf ( "%s.%s", m_tRightIndex.GetName(), tField.m_sName.cstr() );
+		sAttrName.SetSprintf ( "%s.%s", m_sRightIndexName.cstr(), tField.m_sName.cstr() );
 
 		int iDocStoreFieldId = m_tRightIndex.GetFieldId ( tField.m_sName, DOCSTORE_TEXT );
 		int iAttrId = m_tSorterSchema.GetAttrIndex ( sAttrName.cstr() );
@@ -543,8 +545,8 @@ private:
 class JoinSorter_c : public ISphMatchSorter
 {
 public:
-				JoinSorter_c ( const CSphIndex * pIndex, const CSphIndex * pJoinedIndex, const CSphQuery & tQuery, const CSphQuery & tJoinQueryOptions, ISphMatchSorter * pSorter, bool bJoinedGroupSort, int iBatchSize );
-				JoinSorter_c ( const CSphIndex * pIndex, const CSphIndex * pJoinedIndex, const VecTraits_T<const CSphQuery> & dQueries, const VecTraits_T<const CSphQuery> & dJoinQueryOptions, ISphMatchSorter * pSorter, bool bJoinedGroupSort, int iBatchSize );
+				JoinSorter_c ( const CSphIndex * pIndex, const CSphIndex * pJoinedIndex, const CSphQuery & tQuery, const CSphQuery & tJoinQueryOptions, const CSphString & sRightIndexSchemaName, std::shared_ptr<ISphMatchSorter> pSorter, bool bJoinedGroupSort, int iBatchSize );
+				JoinSorter_c ( const CSphIndex * pIndex, const CSphIndex * pJoinedIndex, const VecTraits_T<const CSphQuery> & dQueries, const VecTraits_T<const CSphQuery> & dJoinQueryOptions, const CSphString & sRightIndexSchemaName, std::shared_ptr<ISphMatchSorter> pSorter, bool bJoinedGroupSort, int iBatchSize );
 
 	bool		IsGroupby() const override											{ return m_pSorter->IsGroupby(); }
 	void		SetState ( const CSphMatchComparatorState & tState ) override		{ m_pSorter->SetState(tState); }
@@ -625,10 +627,11 @@ private:
 	const CSphQuery &				m_tQuery;
 	VecTraits_T<const CSphQuery> 	m_dQueries;
 	VecTraits_T<const CSphQuery> 	m_dJoinQueryOptions;
+	CSphString						m_sRightIndexSchemaName;
 	FilterEval_c					m_tMixedFilter;
 	CSphMatch						m_tMatch;
-	std::unique_ptr<ISphMatchSorter> m_pSorter;
-	std::unique_ptr<ISphMatchSorter> m_pOriginalSorter;
+	std::shared_ptr<ISphMatchSorter> m_pSorter;
+	std::shared_ptr<ISphMatchSorter> m_pOriginalSorter;
 	std::unique_ptr<ISphMatchSorter> m_pRightSorter;
 	std::unique_ptr<ISphSchema>		m_pRightSorterRsetSchema;
 	const BYTE *					m_pBlobPool = nullptr;
@@ -716,6 +719,8 @@ private:
 	void		ProduceCacheSizeWarning ( CSphString & sWarning );
 	void		PopulateStoredFields();
 
+	CSphString	GetJoinedIndexName() const	{ return m_sRightIndexSchemaName.IsEmpty() ?  m_pJoinedIndex->GetName() : m_sRightIndexSchemaName; }
+
 	FORCE_INLINE void AddToBatch ( const CSphMatch & tEntry, uint64_t uFilterHash );
 	FORCE_INLINE bool IsBatchFull() const;
 	void		SetupJoinFiltersBatch();
@@ -734,18 +739,19 @@ private:
 };
 
 
-JoinSorter_c::JoinSorter_c ( const CSphIndex * pIndex, const CSphIndex * pJoinedIndex, const CSphQuery & tQuery, const CSphQuery & tJoinQueryOptions, ISphMatchSorter * pSorter, bool bJoinedGroupSort, int iBatchSize )
-	: JoinSorter_c ( pIndex, pJoinedIndex, { &tQuery, 1 }, { &tJoinQueryOptions, 1 }, pSorter, bJoinedGroupSort, iBatchSize )
+JoinSorter_c::JoinSorter_c ( const CSphIndex * pIndex, const CSphIndex * pJoinedIndex, const CSphQuery & tQuery, const CSphQuery & tJoinQueryOptions, const CSphString & sRightIndexSchemaName, std::shared_ptr<ISphMatchSorter> pSorter, bool bJoinedGroupSort, int iBatchSize )
+	: JoinSorter_c ( pIndex, pJoinedIndex, { &tQuery, 1 }, { &tJoinQueryOptions, 1 }, sRightIndexSchemaName, pSorter, bJoinedGroupSort, iBatchSize )
 {}
 
 
-JoinSorter_c::JoinSorter_c ( const CSphIndex * pIndex, const CSphIndex * pJoinedIndex, const VecTraits_T<const CSphQuery> & dQueries, const VecTraits_T<const CSphQuery> & dJoinQueryOptions, ISphMatchSorter * pSorter, bool bJoinedGroupSort, int iBatchSize )
+JoinSorter_c::JoinSorter_c ( const CSphIndex * pIndex, const CSphIndex * pJoinedIndex, const VecTraits_T<const CSphQuery> & dQueries, const VecTraits_T<const CSphQuery> & dJoinQueryOptions, const CSphString & sRightIndexSchemaName, std::shared_ptr<ISphMatchSorter> pSorter, bool bJoinedGroupSort, int iBatchSize )
 	: m_tJoinQuerySettings ( dJoinQueryOptions[0] )
 	, m_pIndex ( pIndex )
 	, m_pJoinedIndex ( pJoinedIndex )
 	, m_tQuery ( dQueries.First() )
 	, m_dQueries ( dQueries )
 	, m_dJoinQueryOptions ( dJoinQueryOptions )
+	, m_sRightIndexSchemaName ( sRightIndexSchemaName )
 	, m_pSorter ( pSorter )
 	, m_tCache ( GetJoinCacheSize(), iBatchSize )
 	, m_iBatchSize ( iBatchSize )
@@ -871,7 +877,7 @@ void JoinSorter_c::SetupAggregates()
 	for ( int i = 0; i < m_pSorterSchema->GetAttrsCount(); i++ )
 	{
 		const auto & tAttr = m_pSorterSchema->GetAttr(i);
-		if ( tAttr.m_eAggrFunc!=SPH_AGGR_NONE && tAttr.m_eStage==SPH_EVAL_SORTER && GetJoinAttrName ( tAttr.m_sName, CSphString ( m_pJoinedIndex->GetName() ), *m_pSorterSchema ) )
+		if ( tAttr.m_eAggrFunc!=SPH_AGGR_NONE && tAttr.m_eStage==SPH_EVAL_SORTER && GetJoinAttrName ( tAttr.m_sName, GetJoinedIndexName(), *m_pSorterSchema ) )
 			m_dAggregates.Add ( { tAttr.m_tLocator, tAttr.m_eAttrType, tAttr.m_pExpr } );
 	}
 }
@@ -1237,7 +1243,7 @@ bool JoinSorter_c::RunJoinedQuery ( int & iTotalCount )
 	if ( !m_pJoinedIndex->MultiQuery ( tQueryResult, m_tJoinQuery, { &pSorter, 1 }, tArgs ) )
 	{
 		m_bErrorFlag = true;
-		m_sErrorMessage.SetSprintf ( "joined table %s: %s", m_pJoinedIndex->GetName(), tMeta.m_sError.cstr() );
+		m_sErrorMessage.SetSprintf ( "joined table %s: %s", GetJoinedIndexName().cstr(), tMeta.m_sError.cstr() );
 		return false;
 	}
 
@@ -1514,7 +1520,7 @@ void JoinSorter_c::ProduceCacheSizeWarning ( CSphString & sWarning )
 
 void JoinSorter_c::PopulateStoredFields()
 {
-	StoredFetch_c tCalc ( *m_pSorterSchema, *m_pJoinedIndex, m_uNullMask );
+	StoredFetch_c tCalc ( *m_pSorterSchema, *m_pJoinedIndex, m_sRightIndexSchemaName, m_uNullMask );
 	if ( tCalc.HasFieldToFetch() )
 		m_pSorter->Finalize ( tCalc, false, false );
 }
@@ -1523,7 +1529,7 @@ void JoinSorter_c::PopulateStoredFields()
 ISphMatchSorter * JoinSorter_c::Clone() const
 {
 	ISphMatchSorter * pSourceSorter = m_pOriginalSorter ? m_pOriginalSorter.get() : m_pSorter.get();
-	return new JoinSorter_c ( m_pIndex, m_pJoinedIndex, m_dQueries, m_dJoinQueryOptions, pSourceSorter->Clone(), !m_bFinalCalcOnly, m_iBatchSize );
+	return new JoinSorter_c ( m_pIndex, m_pJoinedIndex, m_dQueries, m_dJoinQueryOptions, m_sRightIndexSchemaName, std::shared_ptr<ISphMatchSorter>( pSourceSorter->Clone() ), !m_bFinalCalcOnly, m_iBatchSize );
 }
 
 
@@ -1599,7 +1605,7 @@ bool JoinSorter_c::SetupRightFilters ( CSphString & sError )
 {
 	m_tJoinQuery.m_dFilters.Resize(0);
 
-	CSphVector<std::pair<int,bool>> dRightFilters = FetchJoinRightTableFilters ( m_tQuery.m_dFilters, *m_pSorterSchema, m_pJoinedIndex->GetName() );
+	CSphVector<std::pair<int,bool>> dRightFilters = FetchJoinRightTableFilters ( m_tQuery.m_dFilters, *m_pSorterSchema, GetJoinedIndexName().cstr() );
 	bool bLeftJoin = m_tQuery.m_eJoinType==JoinType_e::LEFT;
 	if ( bLeftJoin || m_tQuery.m_dFilterTree.GetLength() )
 	{
@@ -1614,7 +1620,7 @@ bool JoinSorter_c::SetupRightFilters ( CSphString & sError )
 			tCtx.m_pMatchSchema	= m_pSorterSchema;
 			tCtx.m_pIndexSchema	= &m_pIndex->GetMatchSchema();
 			tCtx.m_bScan		= m_tQuery.m_sQuery.IsEmpty();
-			tCtx.m_sJoinIdx		= m_pJoinedIndex->GetName();
+			tCtx.m_sJoinIdx		= GetJoinedIndexName();
 			if ( !sphCreateFilters ( tCtx, sError, sError ) )
 			{
 				sError.SetSprintf ( "failed to create query filters: %s", sError.cstr() );
@@ -1629,7 +1635,7 @@ bool JoinSorter_c::SetupRightFilters ( CSphString & sError )
 	}
 
 	CSphString sPrefix;
-	sPrefix.SetSprintf ( "%s.", m_pJoinedIndex->GetName() );
+	sPrefix.SetSprintf ( "%s.", GetJoinedIndexName().cstr() );
 
 	ARRAY_FOREACH ( i, dRightFilters )
 	{
@@ -1850,7 +1856,7 @@ void JoinSorter_c::AddToJoinSelectList ( const CSphString & sExpr, const CSphStr
 		return;
 
 	CSphString sJoinExpr;
-	if ( !GetJoinAttrName ( sExpr, CSphString ( m_pJoinedIndex->GetName() ), *m_pSorterSchema, &sJoinExpr ) )
+	if ( !GetJoinAttrName ( sExpr, GetJoinedIndexName(), *m_pSorterSchema, &sJoinExpr ) )
 		return;
 
 	const CSphColumnInfo & tSorterAttr = m_pSorterSchema->GetAttr(iSorterAttrId);
@@ -1882,7 +1888,7 @@ void JoinSorter_c::AddToJoinSelectList ( const CSphString & sExpr )
 void JoinSorter_c::AddToJoinSelectList ( const CSphString & sExpr, const CSphString & sAlias, const char * szRemapPrefix )
 {
 	// maybe it's a JSON attr?
-	if ( !sphJsonNameSplit ( sExpr.cstr(), m_pJoinedIndex->GetName() ) )
+	if ( !sphJsonNameSplit ( sExpr.cstr(), GetJoinedIndexName().cstr() ) )
 		return;
 
 	// try remapped groupby json attr
@@ -1906,7 +1912,7 @@ void JoinSorter_c::AddStarItemsToJoinSelectList()
 			continue;
 
 		CSphString sAttrName;
-		sAttrName.SetSprintf ( "%s.%s", m_pJoinedIndex->GetName(), tAttr.m_sName.cstr() );
+		sAttrName.SetSprintf ( "%s.%s", GetJoinedIndexName().cstr(), tAttr.m_sName.cstr() );
 		AddToJoinSelectList ( sAttrName, sAttrName );
 	}
 }
@@ -2001,14 +2007,14 @@ void JoinSorter_c::AddExpressionItemsToJoinSelectList()
 	const CSphSchema & tJoinedSchema = m_pJoinedIndex->GetMatchSchema();
 	for ( const auto & i : m_tQuery.m_dFilters )
 	{
-		if ( sphJsonNameSplit ( i.m_sAttrName.cstr(), m_pJoinedIndex->GetName() ) )
+		if ( sphJsonNameSplit ( i.m_sAttrName.cstr(), GetJoinedIndexName().cstr() ) )
 		{
 			AddToJoinSelectList ( i.m_sAttrName );
 			continue;
 		}
 
 		CSphString sJoinedAttr;
-		if ( GetJoinAttrName ( i.m_sAttrName, CSphString ( m_pJoinedIndex->GetName() ), *m_pSorterSchema, &sJoinedAttr ) )
+		if ( GetJoinAttrName ( i.m_sAttrName, GetJoinedIndexName(), *m_pSorterSchema, &sJoinedAttr ) )
 		{
 			const CSphColumnInfo * pAttr = tJoinedSchema.GetAttr ( sJoinedAttr.cstr() );
 			if ( pAttr && pAttr->IsColumnar() )
@@ -2022,7 +2028,7 @@ void JoinSorter_c::AddDocidToJoinSelectList()
 {
 	// fetch docid; we need it for docstore queries
 	CSphString sId;
-	sId.SetSprintf ( "%s.%s", m_pJoinedIndex->GetName(), sphGetDocidName() );
+	sId.SetSprintf ( "%s.%s", GetJoinedIndexName().cstr(), sphGetDocidName() );
 	AddToJoinSelectList ( sId, sId );
 }
 
@@ -2033,7 +2039,7 @@ void JoinSorter_c::AddWeightToJoinSelectList()
 		return;
 
 	CSphString sId;
-	sId.SetSprintf ( "%s.weight()", m_pJoinedIndex->GetName());
+	sId.SetSprintf ( "%s.weight()", GetJoinedIndexName().cstr());
 	AddToJoinSelectList ( sId, sId );
 }
 
@@ -2046,10 +2052,10 @@ void JoinSorter_c::AddBatchedFilterItemsToJoinSelectList()
 	for ( auto & i : m_tJoinQuery.m_dFilters )
 	{
 		CSphString sAttr;
-		sAttr.SetSprintf ( "%s.%s", m_pJoinedIndex->GetName(), i.m_sAttrName.cstr() );
+		sAttr.SetSprintf ( "%s.%s", GetJoinedIndexName().cstr(), i.m_sAttrName.cstr() );
 
 		CSphString sJoinExpr;
-		if ( !GetJoinAttrName ( sAttr, CSphString ( m_pJoinedIndex->GetName() ), *m_pSorterSchema, &sJoinExpr ) )
+		if ( !GetJoinAttrName ( sAttr, GetJoinedIndexName(), *m_pSorterSchema, &sJoinExpr ) )
 			continue;
 
 		CSphString sJoinAlias;
@@ -2090,10 +2096,279 @@ void JoinSorter_c::IncreaseJoinedMaxMatches ( int iTotalCount )
 
 //////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
+// Holds multiple join sorters, each works with its own right table. All push to the same sorter
+class JoinSorterN_c : public ISphMatchSorter
+{
+public:
+				JoinSorterN_c ( const CSphIndex * pIndex, VecTraits_T<const CSphIndex *> dJoinedIndexes, const CSphQuery & tQuery, const CSphQuery & tJoinQueryOptions, const char * szRightParent, ISphMatchSorter * pSorter, int iBatchSize );
+				JoinSorterN_c ( const CSphIndex * pIndex, VecTraits_T<const CSphIndex *> dJoinedIndexes, const VecTraits_T<const CSphQuery> & dQueries, const VecTraits_T<const CSphQuery> & dJoinQueryOptions, const char * szRightParent, ISphMatchSorter * pSorter, int iBatchSize );
+
+	bool		IsGroupby() const override											{ return m_dJoinSorters[0]->IsGroupby(); }
+	void		SetState ( const CSphMatchComparatorState & tState ) override;
+	const CSphMatchComparatorState & GetState() const override						{ return m_dJoinSorters[0]->GetState(); }
+	void		SetGroupState ( const CSphMatchComparatorState & tState ) override;
+	void		SetBlobPool ( const BYTE * pBlobPool ) override;
+	void		SetColumnar ( columnar::Columnar_i * pColumnar ) override;
+	void		SetSchema ( ISphSchema * pSchema, bool bRemapCmp ) override;
+	const ISphSchema *	GetSchema() const override									{ return m_dJoinSorters[0]->GetSchema(); }
+	bool		Push ( const CSphMatch & tEntry ) override;
+	void		Push ( const VecTraits_T<const CSphMatch> & dMatches ) override;
+	bool		PushGrouped ( const CSphMatch & tEntry, bool bNewSet ) override;
+	int			GetLength() override												{ return m_dJoinSorters[0]->GetLength(); }
+	int64_t		GetTotalCount() const override;
+	void		Finalize ( MatchProcessor_i & tProcessor, bool bCallProcessInResultSetOrder, bool bFinalizeMatches ) override;
+	int			Flatten ( CSphMatch * pTo ) override;
+	const CSphMatch * GetWorst() const override										{ return m_dJoinSorters[0]->GetWorst();	}
+	bool		CanBeCloned() const override										{ return m_dJoinSorters[0]->CanBeCloned(); }
+	ISphMatchSorter * Clone() const override										{ return new JoinSorterN_c(m_dJoinSorters);	}
+	void		MoveTo ( ISphMatchSorter * pRhs, bool bCopyMeta ) override;
+	void		CloneTo ( ISphMatchSorter * pTrg ) const override					{ m_dJoinSorters[0]->CloneTo(pTrg); }
+	void		SetFilteredAttrs ( const sph::StringSet & hAttrs, bool bAddDocid ) override;
+	void		TransformPooled2StandalonePtrs ( GetBlobPoolFromMatch_fn fnBlobPoolFromMatch, GetColumnarFromMatch_fn fnGetColumnarFromMatch, bool bFinalizeSorters ) override;
+	void		SetRandom ( bool bRandom ) override;
+	bool		IsRandom() const override											{ return m_dJoinSorters[0]->IsRandom(); }
+	int			GetMatchCapacity() const override									{ return m_dJoinSorters[0]->GetMatchCapacity(); }
+	RowTagged_t	GetJustPushed() const override										{ return m_dJoinSorters[0]->GetJustPushed(); }
+	VecTraits_T<RowTagged_t> GetJustPopped() const override							{ return m_dJoinSorters[0]->GetJustPopped(); }
+	bool		IsCutoffDisabled() const override									{ return m_dJoinSorters[0]->IsCutoffDisabled(); }
+	void		SetMerge ( bool bMerge ) override;
+	bool		IsPrecalc() const override											{ return m_dJoinSorters[0]->IsPrecalc(); }
+	bool		IsJoin() const override												{ return true; }
+	bool		FinalizeJoin ( CSphString & sError, CSphString & sWarning ) override;
+
+	bool		GetErrorFlag() const;
+	const CSphString & GetErrorMessage() const;
+
+protected:
+	CSphVector<std::unique_ptr<JoinSorter_c>>	m_dJoinSorters;
+	CSphVector<CSphQuery>						m_dQueries;
+
+				JoinSorterN_c ( const char * szRightParent ) : m_szRightParent ( szRightParent ) {}
+
+	void		ReplaceParentTable ( CSphQuery & tQuery, const CSphString & sTable );
+
+private:
+	const char *								m_szRightParent = nullptr;
+
+				JoinSorterN_c ( const CSphVector<std::unique_ptr<JoinSorter_c>> & dJoinSorters );
+};
+
+
+JoinSorterN_c::JoinSorterN_c ( const CSphIndex * pIndex, VecTraits_T<const CSphIndex *> dJoinedIndexes, const CSphQuery & tQuery, const CSphQuery & tJoinQueryOptions, const char * szRightParent, ISphMatchSorter * pSorter, int iBatchSize )
+	: m_szRightParent ( szRightParent )
+{
+	auto pSharedSorter = std::shared_ptr<ISphMatchSorter>(pSorter);
+	for ( auto i : dJoinedIndexes )
+	{
+		m_dQueries.Resize(0);
+		m_dQueries.Add(tQuery);
+		ReplaceParentTable ( m_dQueries.Last(), i->GetName() );
+
+		m_dJoinSorters.Add ( std::make_unique<JoinSorter_c>( pIndex, i, m_dQueries[0], tJoinQueryOptions, szRightParent ? szRightParent : i->GetName(), pSharedSorter, true, iBatchSize ) );
+	}
+}
+
+
+JoinSorterN_c::JoinSorterN_c ( const CSphIndex * pIndex, VecTraits_T<const CSphIndex *> dJoinedIndexes, const VecTraits_T<const CSphQuery> & dQueries, const VecTraits_T<const CSphQuery> & dJoinQueryOptions, const char * szRightParent, ISphMatchSorter * pSorter, int iBatchSize )
+	: m_szRightParent ( szRightParent )
+{
+	auto pSharedSorter = std::shared_ptr<ISphMatchSorter>(pSorter);
+	for ( auto i : dJoinedIndexes )
+	{
+		m_dQueries.Resize(0);
+		for ( const auto & tQuery : dQueries )
+		{
+			m_dQueries.Add(tQuery);
+			ReplaceParentTable ( m_dQueries.Last(), i->GetName() );
+		}
+
+		m_dJoinSorters.Add ( std::make_unique<JoinSorter_c>( pIndex, i, m_dQueries, dJoinQueryOptions, szRightParent ? szRightParent : i->GetName(), pSharedSorter, true, iBatchSize ) );
+	}
+}
+
+
+void JoinSorterN_c::SetState ( const CSphMatchComparatorState & tState ) 
+{
+	for ( auto & i : m_dJoinSorters )
+		i->SetState(tState);
+}
+
+
+void JoinSorterN_c::SetGroupState ( const CSphMatchComparatorState & tState )
+{
+	for ( auto & i : m_dJoinSorters )
+		i->SetGroupState(tState);
+}
+
+
+void JoinSorterN_c::SetBlobPool ( const BYTE * pBlobPool )
+{
+	for ( auto & i : m_dJoinSorters )
+		i->SetBlobPool(pBlobPool);
+}
+
+
+void JoinSorterN_c::SetColumnar ( columnar::Columnar_i * pColumnar )
+{
+	for ( auto & i : m_dJoinSorters )
+		i->SetColumnar(pColumnar);
+}
+
+
+void JoinSorterN_c::SetSchema ( ISphSchema * pSchema, bool bRemapCmp )
+{
+	for ( auto & i : m_dJoinSorters )
+		i->SetSchema ( pSchema, bRemapCmp );
+}
+
+
+bool JoinSorterN_c::Push ( const CSphMatch & tEntry )
+{
+	bool bPushed = false;
+	for ( auto & i : m_dJoinSorters )
+		bPushed |= i->Push(tEntry);
+
+	return bPushed;
+}
+
+
+void JoinSorterN_c::Push ( const VecTraits_T<const CSphMatch> & dMatches )
+{
+	for ( auto & i : m_dJoinSorters )
+		i->Push(dMatches);
+}
+
+
+bool JoinSorterN_c::PushGrouped ( const CSphMatch & tEntry, bool bNewSet )
+{
+	bool bPushed = false;
+	for ( auto & i : m_dJoinSorters )
+		bPushed |= i->PushGrouped ( tEntry, bNewSet );
+
+	return bPushed;
+}
+
+
+int64_t	JoinSorterN_c::GetTotalCount() const
+{
+	int64_t iTotalCount = 0;
+	for ( auto & i : m_dJoinSorters )
+		iTotalCount += i->GetTotalCount();
+
+	return iTotalCount;
+}
+
+
+void JoinSorterN_c::Finalize ( MatchProcessor_i & tProcessor, bool bCallProcessInResultSetOrder, bool bFinalizeMatches )
+{
+	for ( auto & i : m_dJoinSorters )
+		i->Finalize ( tProcessor, bCallProcessInResultSetOrder, bFinalizeMatches );
+}
+
+
+int	JoinSorterN_c::Flatten ( CSphMatch * pTo )
+{
+	// join sorters share the same underlying sorter. so flattening the first one is enough
+	return m_dJoinSorters[0]->Flatten(pTo);
+}
+
+
+void JoinSorterN_c::MoveTo ( ISphMatchSorter * pRhs, bool bCopyMeta )
+{
+	ARRAY_FOREACH ( i, m_dJoinSorters )
+		m_dJoinSorters[i]->MoveTo ( ((JoinSorterN_c*)pRhs)->m_dJoinSorters[i].get(), bCopyMeta );
+}
+
+
+void JoinSorterN_c::SetFilteredAttrs ( const sph::StringSet & hAttrs, bool bAddDocid )
+{
+	for ( auto & i : m_dJoinSorters )
+		i->SetFilteredAttrs(hAttrs, bAddDocid);
+}
+
+
+void JoinSorterN_c::TransformPooled2StandalonePtrs ( GetBlobPoolFromMatch_fn fnBlobPoolFromMatch, GetColumnarFromMatch_fn fnGetColumnarFromMatch, bool bFinalizeSorters )
+{
+	for ( auto & i : m_dJoinSorters )
+		i->TransformPooled2StandalonePtrs(fnBlobPoolFromMatch, fnGetColumnarFromMatch, bFinalizeSorters);
+}
+
+
+void JoinSorterN_c::SetRandom ( bool bRandom )
+{
+	for ( auto & i : m_dJoinSorters )
+		i->SetRandom(bRandom);
+}
+
+
+void JoinSorterN_c::SetMerge ( bool bMerge )
+{
+	for ( auto & i : m_dJoinSorters )
+		i->SetMerge(bMerge);
+}
+
+
+bool JoinSorterN_c::FinalizeJoin ( CSphString & sError, CSphString & sWarning )
+{
+	bool bRes = false;
+	for ( auto & i : m_dJoinSorters )
+		bRes |= i->FinalizeJoin ( sError, sWarning );
+
+	return bRes;
+}
+
+
+bool JoinSorterN_c::GetErrorFlag() const
+{
+	bool bErrorFlag = false;
+	for ( auto & i : m_dJoinSorters )
+		bErrorFlag |= i->GetErrorFlag();
+
+	return bErrorFlag;
+}
+
+
+const CSphString & JoinSorterN_c::GetErrorMessage() const
+{
+	for ( auto & i : m_dJoinSorters )
+		if ( i->GetErrorFlag() )
+			return i->GetErrorMessage();
+
+	return m_dJoinSorters[0]->GetErrorMessage();
+}
+
+
+JoinSorterN_c::JoinSorterN_c ( const CSphVector<std::unique_ptr<JoinSorter_c>> & dJoinSorters )
+{
+	for ( auto & i : dJoinSorters )
+		m_dJoinSorters.Add ( std::unique_ptr<JoinSorter_c>( (JoinSorter_c*)i->Clone() ) );
+}
+
+
+void JoinSorterN_c::ReplaceParentTable ( CSphQuery & tQuery, const CSphString & sTable )
+{
+	if ( !m_szRightParent )
+		return;
+
+	for ( auto & i : m_dQueries )
+	{
+		for ( auto & tOnFilter : i.m_dOnFilters )
+		{
+			if ( tOnFilter.m_sIdx1==m_szRightParent )
+				tOnFilter.m_sIdx1 = sTable;
+
+			if ( tOnFilter.m_sIdx2==m_szRightParent )
+				tOnFilter.m_sIdx2 = sTable;
+		}
+	}
+}
+
+//////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
 class JoinMultiSorter_c : public JoinSorter_c
 {
 public:
-			JoinMultiSorter_c ( const CSphIndex * pIndex, const CSphIndex * pJoinedIndex, const VecTraits_T<CSphQuery> & dQueries, const VecTraits_T<CSphQuery> & dJoinQueryOptions, VecTraits_T<ISphMatchSorter *> dSorters, int iBatchSize );
+			JoinMultiSorter_c ( const CSphIndex * pIndex, const CSphIndex * pJoinedIndex, const VecTraits_T<CSphQuery> & dQueries, const VecTraits_T<CSphQuery> & dJoinQueryOptions, const CSphString & sRightIndexSchemaName, VecTraits_T<std::shared_ptr<ISphMatchSorter>> dSorters, int iBatchSize );
 
 	bool	Push ( const CSphMatch & tEntry ) override;
 	bool	PushGrouped ( const CSphMatch & tEntry, bool bNewSet ) override;
@@ -2110,15 +2385,16 @@ protected:
 	bool	RunFinalBatch() override;
 
 private:
-	CSphVector<ISphMatchSorter *> m_dSorters;	// we don't own 1..N sorters (JoinSorter_c owns sorter #0)
+	CSphVector<std::shared_ptr<ISphMatchSorter>> m_dSorters;
 };
 
 
-JoinMultiSorter_c::JoinMultiSorter_c ( const CSphIndex * pIndex, const CSphIndex * pJoinedIndex, const VecTraits_T<CSphQuery> & dQueries, const VecTraits_T<CSphQuery> & dJoinQueryOptions, VecTraits_T<ISphMatchSorter *> dSorters, int iBatchSize )
-	: JoinSorter_c ( pIndex, pJoinedIndex, dQueries, dJoinQueryOptions, dSorters[0], true, iBatchSize )
+JoinMultiSorter_c::JoinMultiSorter_c ( const CSphIndex * pIndex, const CSphIndex * pJoinedIndex, const VecTraits_T<CSphQuery> & dQueries, const VecTraits_T<CSphQuery> & dJoinQueryOptions, const CSphString & sRightIndexSchemaName, VecTraits_T<std::shared_ptr<ISphMatchSorter>> dSorters, int iBatchSize )
+	: JoinSorter_c ( pIndex, pJoinedIndex, dQueries, dJoinQueryOptions, sRightIndexSchemaName, dSorters[0], true, iBatchSize )
 {
 	m_dSorters.Resize ( dSorters.GetLength() );
-	memcpy ( m_dSorters.Begin(), dSorters.Begin(), dSorters.GetLengthBytes() );
+	ARRAY_FOREACH ( i, m_dSorters )
+		m_dSorters[i] = dSorters[i];
 }
 
 
@@ -2185,6 +2461,33 @@ bool JoinMultiSorter_c::RunFinalBatch()
 
 //////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
+class JoinMultiSorterN_c : public JoinSorterN_c
+{
+public:
+			JoinMultiSorterN_c ( const CSphIndex * pIndex, VecTraits_T<const CSphIndex *> dJoinedIndexes, const VecTraits_T<const CSphQuery> & dQueries, const VecTraits_T<const CSphQuery> & dJoinQueryOptions, const char * szRightParent, VecTraits_T<std::shared_ptr<ISphMatchSorter>> dSorters, int iBatchSize );
+
+	bool	CanBeCloned() const override { return false; }
+};
+
+
+JoinMultiSorterN_c::JoinMultiSorterN_c ( const CSphIndex * pIndex, VecTraits_T<const CSphIndex *> dJoinedIndexes, const VecTraits_T<const CSphQuery> & dQueries, const VecTraits_T<const CSphQuery> & dJoinQueryOptions, const char * szRightParent, VecTraits_T<std::shared_ptr<ISphMatchSorter>> dSorters, int iBatchSize )
+	: JoinSorterN_c ( szRightParent )
+{
+	for ( auto i : dJoinedIndexes )
+	{
+		m_dQueries.Resize(0);
+		for ( const auto & tQuery : dQueries )
+		{
+			m_dQueries.Add(tQuery);
+			ReplaceParentTable ( m_dQueries.Last(), i->GetName() );
+		}
+
+		m_dJoinSorters.Add ( std::make_unique<JoinMultiSorter_c>( pIndex, i, m_dQueries, dJoinQueryOptions, szRightParent ? szRightParent : i->GetName(), dSorters, iBatchSize ) );
+	}
+}
+
+//////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
 class SorterWrapperNoPush_c : public ISphMatchSorter
 {
 public:
@@ -2208,7 +2511,7 @@ public:
 	const CSphMatch * GetWorst() const override										{ return m_pSorter->GetWorst(); }
 	bool		CanBeCloned() const override										{ return m_pSorter->CanBeCloned(); }
 	ISphMatchSorter * Clone() const override										{ return new SorterWrapperNoPush_c ( m_pSorter->Clone() ); }
-	void		MoveTo ( ISphMatchSorter * pRhs, bool bCopyMeta ) override			{ m_pSorter->MoveTo ( ((SorterWrapperNoPush_c *)pRhs)->m_pSorter.get(), bCopyMeta ); }
+	void		MoveTo ( ISphMatchSorter * pRhs, bool bCopyMeta ) override			{ m_pSorter->MoveTo ( ((SorterWrapperNoPush_c *)pRhs)->m_pSorter, bCopyMeta ); }
 	void		CloneTo ( ISphMatchSorter * pTrg ) const override					{ m_pSorter->CloneTo(pTrg); }
 	void		SetFilteredAttrs ( const sph::StringSet & hAttrs, bool bAddDocid ) override	{ m_pSorter->SetFilteredAttrs(hAttrs, bAddDocid); }
 	void		TransformPooled2StandalonePtrs ( GetBlobPoolFromMatch_fn fnBlobPoolFromMatch, GetColumnarFromMatch_fn fnGetColumnarFromMatch, bool bFinalizeSorters ) override { m_pSorter->TransformPooled2StandalonePtrs(fnBlobPoolFromMatch, fnGetColumnarFromMatch, bFinalizeSorters); }
@@ -2222,12 +2525,12 @@ public:
 	bool		IsPrecalc() const override											{ return m_pSorter->IsPrecalc(); }
 
 private:
-	std::unique_ptr<ISphMatchSorter> m_pSorter;
+	ISphMatchSorter *	m_pSorter = nullptr;		// we don't own the underlying sorter; join multi sorter does
 };
 
 //////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
-bool CheckJoinOnFilters ( const CSphIndex * pIndex, const CSphIndex * pJoinedIndex, const CSphQuery & tQuery, CSphString & sError )
+static bool CheckJoinOnFilters ( const CSphIndex * pIndex, const CSphIndex * pJoinedIndex, const CSphQuery & tQuery, const char * szParentLeft, const char * szParentRight, CSphString & sError )
 {
 	if ( !tQuery.m_dOnFilters.GetLength() )
 	{
@@ -2237,13 +2540,15 @@ bool CheckJoinOnFilters ( const CSphIndex * pIndex, const CSphIndex * pJoinedInd
 
 	for ( const auto & i : tQuery.m_dOnFilters )
 	{
-		if ( i.m_sIdx1!=pIndex->GetName() && i.m_sIdx1!=pJoinedIndex->GetName() )
+		CSphString sJoinedIndexName = szParentRight ? szParentRight : pJoinedIndex->GetName();
+
+		if ( i.m_sIdx1!=pIndex->GetName() && i.m_sIdx1!=sJoinedIndexName && ( !szParentLeft || i.m_sIdx1!=szParentLeft ) )
 		{
 			sError.SetSprintf ( "JOIN ON table '%s' not found", i.m_sIdx1.cstr() );
 			return false;
 		}
 
-		if ( i.m_sIdx2!=pIndex->GetName() && i.m_sIdx2!=pJoinedIndex->GetName() )
+		if ( i.m_sIdx2!=pIndex->GetName() && i.m_sIdx2!=sJoinedIndexName && ( !szParentLeft || i.m_sIdx2!=szParentLeft ) )
 		{
 			sError.SetSprintf ( "JOIN ON table '%s' not found", i.m_sIdx2.cstr() );
 			return false;
@@ -2282,47 +2587,81 @@ std::unique_ptr<ISphFilter> CreateJoinNullFilter ( const CSphFilterSettings & tS
 
 //////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
-ISphMatchSorter * CreateJoinSorter ( const CSphIndex * pIndex, const CSphIndex * pJoinedIndex, const SphQueueSettings_t & tSettings, const CSphQuery & tQuery, ISphMatchSorter * pSorter, const CSphQuery & tJoinQueryOptions, bool bJoinedGroupSort, int iBatchSize, CSphString & sError )
+ISphMatchSorter * CreateJoinSorter ( const CSphIndex * pIndex, const VecTraits_T<const CSphIndex *> & dJoinedIndexes, const SphQueueSettings_t & tSettings, const CSphQuery & tQuery, ISphMatchSorter * pSorter, const CSphQuery & tJoinQueryOptions, bool bJoinedGroupSort, int iBatchSize, const char * szParentLeft, const char * szParentRight, CSphString & sError )
 {
 	if ( !tSettings.m_pJoinArgs )
 		return pSorter;
 
-	if ( !CheckJoinOnFilters ( pIndex, pJoinedIndex, tQuery, sError ) )
+	if ( !CheckJoinOnFilters ( pIndex, dJoinedIndexes[0], tQuery, szParentLeft, szParentRight, sError ) )
 	{
 		SafeDelete(pSorter);
 		return nullptr;
 	}
 
-	std::unique_ptr<JoinSorter_c> pJoinSorter = std::make_unique<JoinSorter_c> ( pIndex, pJoinedIndex, tQuery, tJoinQueryOptions, pSorter, bJoinedGroupSort, iBatchSize );
-	if ( pJoinSorter->GetErrorFlag() )
+	if ( dJoinedIndexes.GetLength()==1 )
 	{
-		sError = pJoinSorter->GetErrorMessage();
-		pJoinSorter.reset();
-	}
+		auto pJoinSorter = std::make_unique<JoinSorter_c> ( pIndex, dJoinedIndexes[0], tQuery, tJoinQueryOptions, dJoinedIndexes[0]->GetName(), std::shared_ptr<ISphMatchSorter>(pSorter), bJoinedGroupSort, iBatchSize );
+		if ( pJoinSorter->GetErrorFlag() )
+		{
+			sError = pJoinSorter->GetErrorMessage();
+			pJoinSorter.reset();
+		}
 
-	return pJoinSorter.release();
+		return pJoinSorter.release();
+	}
+	else
+	{
+		auto pJoinSorter = std::make_unique<JoinSorterN_c> ( pIndex, dJoinedIndexes, tQuery, tJoinQueryOptions, szParentRight, pSorter, iBatchSize );
+		if ( pJoinSorter->GetErrorFlag() )
+		{
+			sError = pJoinSorter->GetErrorMessage();
+			pJoinSorter.reset();
+		}
+
+		return pJoinSorter.release();
+	}
 }
 
 
-bool CreateJoinMultiSorter ( const CSphIndex * pIndex, const CSphIndex * pJoinedIndex, const SphQueueSettings_t & tSettings, const VecTraits_T<CSphQuery> & dQueries, const VecTraits_T<CSphQuery> & dJoinQueryOptions, VecTraits_T<ISphMatchSorter *> & dSorters, int iBatchSize, CSphString & sError )
+bool CreateJoinMultiSorter ( const CSphIndex * pIndex, const VecTraits_T<const CSphIndex *> & dJoinedIndexes, const SphQueueSettings_t & tSettings, const VecTraits_T<CSphQuery> & dQueries, const VecTraits_T<CSphQuery> & dJoinQueryOptions, VecTraits_T<ISphMatchSorter *> & dSorters, int iBatchSize, const char * szParentLeft, const char * szParentRight, CSphString & sError )
 {
 	if ( !tSettings.m_pJoinArgs )
 		return true;
 
-	if ( !CheckJoinOnFilters ( pIndex, pJoinedIndex, dQueries.First(), sError ) )
+	if ( !CheckJoinOnFilters ( pIndex, dJoinedIndexes[0], dQueries.First(), szParentLeft, szParentRight, sError ) )
 		return false;
 
 	// the idea is that 1st sorter does the join AND it also pushes joined matches to all other sorters
 	// to avoid double push to 1..N sorters they are wrapped in a class that prevents pushing matches
-	std::unique_ptr<JoinMultiSorter_c> pJoinSorter = std::make_unique<JoinMultiSorter_c> ( pIndex, pJoinedIndex, dQueries, dJoinQueryOptions, dSorters, iBatchSize );
-	if ( pJoinSorter->GetErrorFlag() )
+	CSphVector<std::shared_ptr<ISphMatchSorter>> dSharedSorters;
+	for ( auto i : dSorters )
+		dSharedSorters.Add ( std::shared_ptr<ISphMatchSorter>(i) );
+
+	if ( dJoinedIndexes.GetLength()==1 )
 	{
-		sError = pJoinSorter->GetErrorMessage();
-		pJoinSorter.reset();
+		auto pJoinSorter = std::make_unique<JoinMultiSorter_c> ( pIndex, dJoinedIndexes[0], dQueries, dJoinQueryOptions, dJoinedIndexes[0]->GetName(), dSharedSorters, iBatchSize );
+		if ( pJoinSorter->GetErrorFlag() )
+		{
+			sError = pJoinSorter->GetErrorMessage();
+			pJoinSorter.reset();
+			return false;
+		}
+
+		dSorters[0] = pJoinSorter.release();
 	}
+	else
+	{
+		auto pJoinSorter = std::make_unique<JoinMultiSorterN_c> ( pIndex, dJoinedIndexes, dQueries, dJoinQueryOptions, szParentRight, dSharedSorters, iBatchSize );
+		if ( pJoinSorter->GetErrorFlag() )
+		{
+			sError = pJoinSorter->GetErrorMessage();
+			pJoinSorter.reset();
+			return false;
+		}
 
-	dSorters[0] = pJoinSorter.release();
-
+		dSorters[0] = pJoinSorter.release();
+	}
+	
 	for ( int i = 1; i < dSorters.GetLength(); i++ )
 	{
 		if ( !dSorters[i] )

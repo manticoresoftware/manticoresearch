@@ -1,0 +1,47 @@
+––– block: ../base/start-searchd-with-buddy –––
+––– input –––
+manticore-load --quiet --json --init="CREATE TABLE test (id bigint, usertest text stored indexed, category string, age int, salary float, discount float, is_active bool, last_login timestamp, product_codes multi, large_values multi64, additional_info json, location_vector float_vector)" --load="INSERT INTO test (id, usertest, category, age, salary, discount, is_active, last_login, product_codes, large_values, additional_info, location_vector) VALUES (<increment>, '<text/5/20>', '<text/5/10>', <int/1/100>, <float/1.0/100.0>, <float/0.0/10.0>, <int/0/1>, <int/1609459200/1704067200>, (<array/1/10/1/100>), (<array/1/10/-100000/100000>), '{\"key\":\"value\"}', (<array/4/4/1.0/10.0>))" --batch-size=10000 --threads=4 --total=1000000
+––– output –––
+{
+    "threads": %{NUMBER},
+    "batch_size": %{NUMBER},
+    "time": "%{NUMBER}:%{NUMBER}",
+    "total_operations": 1000000,
+    "operations_per_second": %{NUMBER},
+    "qps": {
+        "avg": #!/[0-9]+(\.[0-9]+)?/!#,
+        "p99": %{NUMBER},
+        "p95": %{NUMBER},
+        "p5": %{NUMBER},
+        "p1": %{NUMBER}
+    },
+    "latency": {
+        "avg": #!/[0-9]+(\.[0-9]+)?/!#,
+        "p50": %{NUMBER},
+        "p95": %{NUMBER},
+        "p99": %{NUMBER}
+    }
+}
+––– input –––
+mysql -h0 -P9306 -e "SELECT * FROM test ORDER BY id ASC LIMIT 100000 OPTION max_matches=100000;" > /tmp/test_data.txt
+––– output –––
+––– input –––
+md5sum /tmp/test_data.txt
+––– output –––
+8987cd64fedd82fe4f57587bf7328f43  /tmp/test_data.txt
+––– input –––
+mysql -h0 -P9306 -e "SHOW TABLES"
+––– output –––
++-------+------+
+| Table | Type |
++-------+------+
+| test  | rt   |
++-------+------+
+––– input –––
+mysql -P9306 -h0 -e "SELECT COUNT(*) FROM test;"
+––– output –––
++----------+
+| count(*) |
++----------+
+|  1000000 |
++----------+

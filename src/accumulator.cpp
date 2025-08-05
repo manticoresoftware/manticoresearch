@@ -129,7 +129,7 @@ static bool StoreEmbeddings ( const CSphSchema & tSchema, int iAttr, int iBlobAt
 		const BYTE * pStart = tDoc.m_dFields[iId].Begin();
 		for ( auto i : dEmbedding )
 		{
-			*(DWORD*)pStart = sphF2DW ( dEmbedding[i] );
+			*(DWORD*)pStart = sphF2DW(i);
 			pStart += sizeof(DWORD);
 		}
 	}
@@ -482,9 +482,12 @@ static CSphVector<char> ConcatFromFields ( const InsertDocData_c & tDoc, const A
 		}
 
 		int iOldSize = dTmp.GetLength();
-		dTmp.Resize ( iOldSize + dSrc.GetLength() + 1 );
-		dTmp[iOldSize] = ' ';
-		memcpy ( dTmp.Begin() + iOldSize + 1, dSrc.Begin(), dSrc.GetLength() );
+		int iOffset = iOldSize + ( iOldSize ? 1 : 0 );
+		dTmp.Resize ( dSrc.GetLength() + iOffset );
+		if ( iOldSize )
+			dTmp[iOldSize] = ' ';
+
+		memcpy ( dTmp.Begin() + iOffset, dSrc.Begin(), dSrc.GetLength() );
 	}
 
 	return dTmp;

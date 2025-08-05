@@ -1434,7 +1434,7 @@ bool SqlParser_c::SetKNN ( const SqlNode_t & tAttr, const SqlNode_t & tK, const 
 			}
 
 	if ( bAutoEmb )
-		ToString ( tKNN.m_sEmbStr, tValues );
+		ToString ( tKNN.m_sEmbStr, tValues ).Unquote();
 	else
 	{
 		if ( tValues.m_iValues>=0 )

@@ -108,17 +108,15 @@ static bool StoreEmbeddings ( const CSphSchema & tSchema, int iAttr, int iBlobAt
 {
 	const CSphColumnInfo & tAttr = tSchema.GetAttr(iAttr);
 
-	if ( tAttr.IsColumnar() )
-	{
-		dTmp.Resize ( dEmbedding.size() );
-		ARRAY_FOREACH ( iEmb, dTmp )
-			dTmp[iEmb] = sphF2DW ( dEmbedding[iEmb] );
+	dTmp.Resize ( dEmbedding.size() );
+	ARRAY_FOREACH ( iEmb, dTmp )
+		dTmp[iEmb] = sphF2DW ( dEmbedding[iEmb] );
 
+	if ( tAttr.IsColumnar() )
 		pNewColumnarBuilder->SetAttr ( iColumnarAttr, dTmp.Begin(), dTmp.GetLength() );
-	}
 	else
 	{
-		if ( !pNewBlobBuilder->SetAttr ( iBlobAttr, (const BYTE*)dEmbedding.data(), dEmbedding.size()*sizeof(float), sError ) )
+		if ( !pNewBlobBuilder->SetAttr ( iBlobAttr, (const BYTE*)dTmp.Begin(), dTmp.GetLengthBytes(), sError ) )
 			return false;
 	}
 

@@ -2,6 +2,8 @@
 
 ## Dev version
 
+* 🪲 [v13.6.5](https://github.com/manticoresoftware/manticoresearch/releases/tag/13.6.5) [ Issue #3467](https://github.com/manticoresoftware/manticoresearch/issues/3467) Fixed issues with DBeaver and other integrations failing due to "unknown sysvar" errors.
+* 🪲 [v13.6.4](https://github.com/manticoresoftware/manticoresearch/releases/tag/13.6.4) [ Issue #3524](https://github.com/manticoresoftware/manticoresearch/issues/3524) Fixed an issue with concatenating multi-field embeddings; also fixed embedding generation from queries.
 * 🪲 [v13.6.3](https://github.com/manticoresoftware/manticoresearch/releases/tag/13.6.3) [ Issue #3641](https://github.com/manticoresoftware/manticoresearch/issues/3641) Fixed a bug in 13.6.0 where a phrase lost all bracketed keywords except the first one.
 * 🪲 [v13.6.2](https://github.com/manticoresoftware/manticoresearch/releases/tag/13.6.2) Fixed a memleak in transform_phrase.
 * 🪲 [v13.6.1](https://github.com/manticoresoftware/manticoresearch/releases/tag/13.6.1) Fixed a memory leak in version 13.6.0.

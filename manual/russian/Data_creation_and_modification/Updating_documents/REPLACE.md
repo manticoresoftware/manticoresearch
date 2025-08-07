@@ -1,10 +1,10 @@
-# REPLACE
+# ЗАМЕНИТЬ
 
 <!-- example replace -->
 
 `REPLACE` работает аналогично [INSERT](../../Data_creation_and_modification/Adding_documents_to_a_table/Adding_documents_to_a_real-time_table.md), но помечает предыдущий документ с тем же ID как удалённый перед вставкой нового.
 
-Если вас интересуют обновления на месте, пожалуйста, смотрите [этот раздел](../../Data_creation_and_modification/Updating_documents/UPDATE.md).
+Если вам нужны обновления на месте, смотрите [этот раздел](../../Data_creation_and_modification/Updating_documents/UPDATE.md).
 
 ## SQL REPLACE
 
@@ -16,6 +16,7 @@ REPLACE INTO table [(column1, column2, ...)]
     VALUES (value1, value2, ...)
     [, (...)]
 ```
+Столбцы, явно не включённые в SQL-запрос, устанавливаются в значения по умолчанию, например 0 или пустую строку, в зависимости от типа данных.
 
 **Чтобы заменить только выбранные поля:**
 ```sql
@@ -23,13 +24,13 @@ REPLACE INTO table
     SET field1=value1[, ..., fieldN=valueN]
     WHERE id = <id>
 ```
-Обратите внимание, что в этом режиме можно фильтровать только по id.
+Обратите внимание, что фильтровать можно только по id в этом режиме.
 
-> ПРИМЕЧАНИЕ: Частичное замещение требует [Manticore Buddy](Installation/Manticore_Buddy.md). Если это не работает, убедитесь, что Buddy установлен.
+> ПРИМЕЧАНИЕ: Частичная замена требует [Manticore Buddy](Installation/Manticore_Buddy.md). Если она не работает, убедитесь, что Buddy установлен.
 
 Подробнее о `UPDATE` и частичном `REPLACE` читайте [здесь](../../Data_creation_and_modification/Updating_documents/REPLACE_vs_UPDATE.md#UPDATE-vs-partial-REPLACE).
 
-Смотрите примеры для получения дополнительной информации.
+См. примеры для подробностей.
 
 ## JSON REPLACE
 
@@ -47,8 +48,8 @@ REPLACE INTO table
     }
   }
   ```
-  `/index` является псевдонимом конечной точки и работает так же.
-* Точка доступа, похожая на Elasticsearch `<table>/_doc/<id>`:
+  `/index` — это алиас эндпоинта, работает так же.
+* Эндпоинт в стиле Elasticsearch `<table>/_doc/<id>`:
   ```
   PUT/POST /<table name>/_doc/<id>
   {
@@ -57,8 +58,8 @@ REPLACE INTO table
     "<fieldN>": <valueN>
   }
   ```
-  > ПРИМЕЧАНИЕ: Замещение, похожее на Elasticsearch, требует [Manticore Buddy](Installation/Manticore_Buddy.md). Если это не работает, убедитесь, что Buddy установлен.
-* Частичное замещение:
+  > ПРИМЕЧАНИЕ: Замена в стиле Elasticsearch требует [Manticore Buddy](Installation/Manticore_Buddy.md). Если не работает, убедитесь, что Buddy установлен.
+* Частичная замена:
   ```
   POST /<{table | cluster:table}>/_update/<id>
   {
@@ -67,11 +68,11 @@ REPLACE INTO table
     "<fieldN>": <valueN>
   }
   ```
-  `<table name>` может быть просто названием таблицы или в формате `cluster:table`. Это позволяет выполнять обновления в пределах конкретного кластера при необходимости.
+  `<table name>` может быть просто именем таблицы или в формате `cluster:table`. Это позволяет делать обновления по конкретному кластеру при необходимости.
 
-  > ПРИМЕЧАНИЕ: Частичное замещение требует [Manticore Buddy](Installation/Manticore_Buddy.md). Если это не работает, убедитесь, что Buddy установлен.
+  > ПРИМЕЧАНИЕ: Частичная замена требует [Manticore Buddy](Installation/Manticore_Buddy.md). Если не работает, убедитесь, что Buddy установлен.
 
-Смотрите примеры для получения дополнительной информации.
+См. примеры для подробностей.
 
 <!-- intro -->
 ##### SQL:
@@ -135,11 +136,11 @@ POST /replace
 ```
 
 <!-- intro -->
-##### Elasticsearch-like
+##### В стиле Elasticsearch
 
 <!-- request Elasticsearch-like -->
 
-> ПРИМЕЧАНИЕ: Замещение, похожее на Elasticsearch, требует [Manticore Buddy](Installation/Manticore_Buddy.md). Если это не работает, убедитесь, что Buddy установлен.
+> ПРИМЕЧАНИЕ: Замена в стиле Elasticsearch требует [Manticore Buddy](Installation/Manticore_Buddy.md). Если не работает, убедитесь, что Buddy установлен.
 
 ```json
 PUT /products/_doc/2
@@ -189,11 +190,11 @@ POST /products/_doc/3
 ```
 
 <!-- intro -->
-##### Elasticsearch-like partial replace:
+##### Частичная замена в стиле Elasticsearch:
 
 <!-- request Elasticsearch-like partial -->
 
-> ПРИМЕЧАНИЕ: Частичное замещение требует [Manticore Buddy](Installation/Manticore_Buddy.md). Если это не работает, убедитесь, что Buddy установлен.
+> ПРИМЕЧАНИЕ: Частичная замена требует [Manticore Buddy](Installation/Manticore_Buddy.md). Если не работает, убедитесь, что Buddy установлен.
 
 ```json
 POST /products/_update/55
@@ -214,7 +215,7 @@ POST /products/_update/55
 ```
 
 <!-- intro -->
-##### Elasticsearch-like partial replace in cluster:
+##### Частичная замена в стиле Elasticsearch в кластере:
 
 <!-- request Elasticsearch-like partial in cluster -->
 
@@ -434,15 +435,15 @@ res, _, _ := apiClient.IndexAPI.Replace(context.Background()).InsertDocumentRequ
 
 <!-- end -->
 
-`REPLACE` доступен для реал-тайм таблиц и перколейт таблиц. Вы не можете заменить данные в обычной таблице.
+`REPLACE` доступен для таблиц реального времени и percolate. Вы не можете заменить данные в обычной таблице.
 
-При выполнении `REPLACE` предыдущий документ не удаляется, а помечается как удалённый, поэтому размер таблицы растёт до тех пор, пока не произойдёт слияние чанков. Чтобы принудительно выполнить слияние чанков, используйте [OPTIMIZE statement](../../Securing_and_compacting_a_table/Compacting_a_table.md).
+Когда вы выполняете `REPLACE`, предыдущий документ не удаляется, а помечается как удаленный, поэтому размер таблицы растет до тех пор, пока не произойдет слияние чанков. Чтобы принудительно выполнить слияние чанков, используйте [оператор OPTIMIZE](../../Securing_and_compacting_a_table/Compacting_a_table.md).
 
-## Массовое замещение
+## Массовая замена
 
 <!-- example bulk_replace -->
 
-Вы можете заменить несколько документов за один раз. Для получения дополнительной информации смотрите [массовое добавление документов](../../Data_creation_and_modification/Adding_documents_to_a_table/Adding_documents_to_a_real-time_table.md#Bulk-adding-documents).
+Вы можете заменить несколько документов одновременно. Подробнее смотрите в разделе [массовое добавление документов](../../Data_creation_and_modification/Adding_documents_to_a_table/Adding_documents_to_a_real-time_table.md#Bulk-adding-documents).
 
 <!-- intro -->
 ##### HTTP:
@@ -720,7 +721,8 @@ res = await indexApi.bulk(
 
 ``` go
 body := "{\"replace\": {\"index\": \"test\", \"id\": 1, \"doc\": {\"content\": \"Text 11\", \"name\": \"Doc 11\", \"cat\": 1 }}}" + "\n" +
-	"{\"replace\": {\"index\": \"test\", \"id\": 2, \"doc\": {\"content\": \"Text 22\", \"name\": \"Doc 22\", \"cat\": 9 }}}" +"\n";
+
+"{\"replace\": {\"index\": \"test\", \"id\": 2, \"doc\": {\"content\": \"Text 22\", \"name\": \"Doc 22\", \"cat\": 9 }}}" +"\n";
 res, _, _ := apiClient.IndexAPI.Bulk(context.Background()).Body(body).Execute()
 ```
 
@@ -757,4 +759,3 @@ res, _, _ := apiClient.IndexAPI.Bulk(context.Background()).Body(body).Execute()
 <!-- end -->
 
 <!-- proofread -->
-

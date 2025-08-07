@@ -5,10 +5,11 @@
 * CentOS 8, RHEL 8, Oracle Linux 8, CentOS Stream 8
 * Amazon Linux 2
 * CentOS 9, RHEL 9, AlmaLinux 9
+* AlmaLinux 10，其他基于 RHEL 10 的发行版
 
 ### YUM 仓库
 
-在 RedHat/CentOS 上安装 Manticore 的最简单方法是使用我们的 YUM 仓库：
+在 RedHat/CentOS 上安装 Manticore 最简单的方法是使用我们的 YUM 仓库：
 
 安装仓库：
 ```bash
@@ -20,45 +21,45 @@ sudo yum install https://repo.manticoresearch.com/manticore-repo.noarch.rpm
 sudo yum install manticore manticore-extra
 ```
 
-如果您正在从较旧版本升级到 Manticore 6，建议您首先删除旧软件包以避免由于更新的软件包结构造成的冲突：
+如果你正在从旧版本升级到 Manticore 6，建议先删除旧的软件包，以避免由于软件包结构更新引起的冲突：
 
 ```bash
 sudo yum remove manticore*
 ```
 
-这不会删除您的数据和配置文件。
+这不会删除你的数据和配置文件。
 
-###### 开发软件包
-如果您偏好“夜间版”（开发）版本，请执行：
+###### 开发包
+如果你更喜欢“Nightly”（开发）版本，请执行：
 
 ```bash
 sudo yum -y install https://repo.manticoresearch.com/manticore-repo.noarch.rpm && \
 sudo yum -y --enablerepo manticore-dev install manticore manticore-extra manticore-common manticore-server manticore-server-core manticore-tools manticore-executor manticore-buddy manticore-backup manticore-columnar-lib manticore-server-core-debuginfo manticore-tools-debuginfo manticore-columnar-lib-debuginfo  manticore-icudata manticore-galera manticore-galera-debuginfo manticore-language-packs manticore-load
 ```
 
-### 独立的 RPM 软件包
-要从 Manticore 仓库下载独立的 RPM 文件，请按照 https://manticoresearch.com/install/ 上的说明进行操作。
+### 独立 RPM 包
+要从 Manticore 仓库下载独立的 RPM 文件，请按照 https://manticoresearch.com/install/ 上的说明操作。
 
-### 您可能需要的更多软件包
-#### 对于索引器
-如果您计划使用 [indexer](../Data_creation_and_modification/Adding_data_from_external_storages/Plain_tables_creation.md#Indexer-tool) 从外部源创建表，您需要确保已安装相应的客户端库，以便使您希望的索引源可用。下面的命令将一次性安装所有这些库；随意按原样使用，或减少只安装您需要的库（对于仅 mysql 源 - 只需 `mysql-libs` 应该足够，unixODBC 不是必需的）。
+### 你可能需要的更多软件包
+#### 对于 indexer
+如果你计划使用 [indexer](../Data_creation_and_modification/Adding_data_from_external_storages/Plain_tables_creation.md#Indexer-tool) 从外部源创建表格，你需要确保已安装相应的客户端库，以便能够使用你需要的索引源。下面的命令会一次性安装所有库；你可以直接使用，也可以缩减它以仅安装你需要的库（如果只针对 mysql 源，安装 `mysql-libs` 就足够了，unixODBC 不是必需的）。
 
 ```bash
 sudo yum install mysql-libs postgresql-libs expat unixODBC
 ```
 
-在 CentOS Stream 8 中，您可能需要运行：
+在 CentOS Stream 8 上，你可能需要运行：
 
 ```
 dnf install mariadb-connector-c
 ```
 
-如果构建来自 MySQL 的普通表时出现错误 `sql_connect: MySQL source wasn't initialized. Wrong name in dlopen?`。
+如果你尝试从 MySQL 构建平面表时报错 `sql_connect: MySQL source wasn't initialized. Wrong name in dlopen?` 。
 
-#### 乌克兰形态还原器
-形态还原器需要 Python 3.9 及以上版本。**确保您已安装它并且使用 `--enable-shared` 进行配置。**
+#### 乌克兰语词形还原器
+词形还原器需要 Python 3.9 及以上版本。**请确保已安装，并且配置时启用了 `--enable-shared`。**
 
-以下是在 Centos 8 中安装 Python 3.9 和乌克兰形态还原器的方法：
+以下是在 Centos 8 上安装 Python 3.9 和乌克兰语词形还原器的方法：
 
 ```bash
 # install Manticore Search and UK lemmatizer from YUM repository

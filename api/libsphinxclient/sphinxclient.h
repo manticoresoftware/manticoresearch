@@ -255,6 +255,7 @@ sphinx_keyword_info *		sphinx_build_keywords			( sphinx_client * client, const c
 char **						sphinx_status					( sphinx_client * client, int * num_rows, int * num_cols );
 char **						sphinx_status_extended			( sphinx_client * client, int * num_rows, int * num_cols, int local );
 void						sphinx_status_destroy			( char ** status, int num_rows, int num_cols );
+sphinx_bool					sphinx_set_user					( sphinx_client * client, const char * user, const char * password );
 
 /////////////////////////////////////////////////////////////////////////////
 

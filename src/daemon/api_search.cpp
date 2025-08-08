@@ -302,7 +302,7 @@ void SearchRequestBuilder_c::SendQuery ( const char * sIndexes, ISphOutputBuffer
 
 void SearchRequestBuilder_c::BuildRequest ( const AgentConn_t & tAgent, ISphOutputBuffer & tOut ) const
 {
-	auto tHdr = APIHeader ( tOut, SEARCHD_COMMAND_SEARCH, VER_COMMAND_SEARCH ); // API header
+	auto tHdr = APIHeader ( tOut, SEARCHD_COMMAND_SEARCH, VER_COMMAND_SEARCH, tAgent.m_tAuthToken ); // API header
 
 	tOut.SendInt ( VER_COMMAND_SEARCH_MASTER );
 	tOut.SendInt ( m_dQueries.GetLength() );
@@ -1503,6 +1503,12 @@ void HandleCommandSearch ( ISphOutputBuffer & tOut, WORD uVer, InputBuffer_c & t
 	for ( auto & dQuery: dQueries )
 		if ( !ParseSearchQuery ( tReq, tOut, dQuery, uVer, uMasterVer ) )
 			return;
+
+	CSphString sTmpIndex;
+	const CSphString & sIndex = ( dQueries.IsEmpty() ? sTmpIndex.scstr() : dQueries[0].m_sIndexes );
+	// assumes the multiple queries are to the same index
+	if ( !ApiCheckPerms ( session::GetUser(), AuthAction_e::READ, sIndex, tOut ) )
+		return;
 
 	// run queries, send response
 	SearchHandler_c tHandler { std::move (dQueries), !bAgentMode };

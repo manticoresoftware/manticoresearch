@@ -474,6 +474,12 @@ static ServedIndexRefPtr_c MakeDynamicAuthIndex ( const CSphString & sName, bool
 
 ServedIndexRefPtr_c MakeDynamicAuthIndex ( const CSphString & sName, StringBuilder_c & sError )
 {
+	if ( !IsAuthEnabled() )
+	{
+		sError << "authorization is disabled, cannot access table " << sName;
+		return {};
+	}
+
 	ServedIndexRefPtr_c pIndex = MakeDynamicAuthIndex ( sName, false );
 	if ( !pIndex )
 		sError << "no such table " << sName;

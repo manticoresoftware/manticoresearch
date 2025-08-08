@@ -77,9 +77,9 @@ jobs:
           - name: Bookworm release installation
             image: debian:bookworm
             test_prefix: test/clt-tests/installation/deb-release-         
-          - name: Trixie release installation (testing)
+          - name: Trixie release installation
             image: debian:trixie
-            test_prefix: test/clt-tests/installation/deb-release-install-trixie
+            test_prefix: test/clt-tests/installation/deb-release-
           - name: Noble release installation
             image: ubuntu:noble
             test_prefix: test/clt-tests/installation/deb-release-
@@ -113,9 +113,9 @@ jobs:
           - name: Bookworm upgrade to dev
             image: debian:bookworm
             test_prefix: test/clt-tests/installation/deb-dev-update
-          - name: Trixie upgrade to dev (testing)
+          - name: Trixie upgrade to dev
             image: debian:trixie
-            test_prefix: test/clt-tests/installation/deb-dev-update-trixie
+            test_prefix: test/clt-tests/installation/deb-dev-update
           - name: Noble upgrade to dev
             image: ubuntu:noble
             test_prefix: test/clt-tests/installation/deb-dev-update

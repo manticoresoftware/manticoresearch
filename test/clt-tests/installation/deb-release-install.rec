@@ -4,7 +4,6 @@ export PATH=/usr/bin:/usr/local/bin:/usr/sbin:/sbin:/bin
 ––– input –––
 apt-get update -y > /dev/null; echo $?
 ––– output –––
-W: http://repo.manticoresearch.com/repository/manticoresearch_bookworm/dists/bookworm/InRelease: Policy will reject signature within a year, see --audit for details
 0
 ––– input –––
 export DEBIAN_FRONTEND=noninteractive && apt-get install -y unattended-upgrades gnupg2 procps wget mariadb-client > /dev/null 2>&1; echo $?
@@ -21,7 +20,7 @@ dpkg -i manticore-repo.noarch.deb > /dev/null; echo $?
 ––– output –––
 gpg: keyring '/etc/apt/trusted.gpg.d/manticore-keyring.gpg' created
 gpg: directory '/root/.gnupg' created
-gpg: /root/.gnupg/trustdb.gpg: trustdb.gpg: trustdb created
+gpg: /root/.gnupg/trustdb.gpg: trustdb created
 gpg: key 14D612DB3D2730E2: public key "Manticore Search <support@manticoresearch.com>" imported
 gpg: Total number processed: 1
 gpg:               imported: 1
@@ -33,7 +32,6 @@ gpg:               imported: 1
 ––– input –––
 apt-get update -y > /dev/null; echo $?
 ––– output –––
-W: http://repo.manticoresearch.com/repository/manticoresearch_bookworm/dists/bookworm/InRelease: Policy will reject signature within a year, see --audit for details
 0
 ––– input –––
 apt-get install -y manticore manticore-extra > /dev/null 2>&1; echo $?

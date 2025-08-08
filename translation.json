@@ -11,7 +11,6 @@
   "Security/Read_only.md": "080f28da0d84c2933145cdc7e5a54bbd",
   "Securing_and_compacting_a_table/Freezing_a_table.md": "b947093c1b85ba6aae36dbe9bbd89bcf",
   "Securing_and_compacting_a_table/Isolation_during_flushing_and_merging.md": "21f305bb96f7e1de31db99fd39148bea",
-  "Securing_and_compacting_a_table/Flushing_RAM_chunk_to_a_new_disk_chunk.md": "054329432471757df9fc181db74bc1df",
   "Securing_and_compacting_a_table/Flushing_hostnames.md": "92ed6d39eed804cabc5a707845d2e022",
   "Securing_and_compacting_a_table/Compacting_a_table.md": "ede50ebe2a15fd8732402a1661840936",
   "Securing_and_compacting_a_table/Flushing_attributes.md": "0fde3506aabd17888b590223da54b759",
@@ -138,7 +137,6 @@
   "Creating_a_table/Creating_a_distributed_table/Creating_a_local_distributed_table.md": "38771aeb1b5db79124dfc5664ac418f2",
   "Creating_a_table/Creating_a_distributed_table/Remote_tables.md": "4b7b326ae8a823625bb50eba2203dc20",
   "Starting_the_server.md": "598bdd54907b881b11f09ae7c5e9e4ce",
-  "Emptying_a_table.md": "a54f1b988ae6045637cca819474efd70",
   "Openapi.md": "3b2d4332c50f9ad5004afb7673c0208c",
   "Logging/Query_logging.md": "5a6e2a1dd9ba2a1bc40a499d0dfdeb92",
   "Logging/Docker_logging.md": "a6c8f47b7c779bee2a9f5c6109510f35",
@@ -178,5 +176,7 @@
   "Server_settings/Searchd.md": "f8dcc2341971b21cde261c4c66dd89b5",
   "Changelog.md": "484230466a7936b8b52bad0c992ee37d",
   "Creating_a_table.md": "cdfc4d838cb6f52f1d6dd4b1a90059fa",
-  "Installation/RHEL_and_Centos.md": "29819c4ffed5a0dce03fb62f80ad9ac3"
+  "Installation/RHEL_and_Centos.md": "29819c4ffed5a0dce03fb62f80ad9ac3",
+  "Securing_and_compacting_a_table/Flushing_RAM_chunk_to_a_new_disk_chunk.md": "054329432471757df9fc181db74bc1df",
+  "Emptying_a_table.md": "a54f1b988ae6045637cca819474efd70"
 }

@@ -10,7 +10,7 @@ yum install -y -q https://repo.manticoresearch.com/manticore-repo.noarch.rpm > /
 ––– output –––
 0
 ––– input –––
-yum install -y -q manticore manticore-extra > /dev/null 2>&1; echo $?
+yum install -y -q manticore manticore-extra
 ––– output –––
 0
 ––– input –––

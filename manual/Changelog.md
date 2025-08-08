@@ -4,7 +4,7 @@
 **Released**: August 8th 2025
 
 Recommended [MCL](https://github.com/manticoresoftware/columnar) version: 8.0.1  
-Recommended [Buddy](Installation/Manticore_Buddy#Manticore-Buddy) version: 3.34.2  
+Recommended [Buddy](Installation/Manticore_Buddy.md#Manticore-Buddy) version: 3.34.2  
 
 If you follow the [official installation guide](https://manticoresearch.com/install/), you don’t need to worry about this.
 

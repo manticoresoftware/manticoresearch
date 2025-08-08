@@ -3,6 +3,11 @@
 ## Version 13.6.7
 **Released**: August 8th 2025
 
+Recommended [MCL](https://github.com/manticoresoftware/columnar) version: 8.0.1  
+Recommended [Buddy](Installation/Manticore_Buddy#Manticore-Buddy) version: 3.34.2  
+
+If you follow the [official installation guide](https://manticoresearch.com/install/), you don’t need to worry about this.
+
 ### New Features and Improvements
 * 🆕 [v13.6.0](https://github.com/manticoresoftware/manticoresearch/releases/tag/13.6.0) [ Issue #2226](https://github.com/manticoresoftware/manticoresearch/issues/2226) Support for explicit '|' (OR) in PHRASE, PROXIMITY, and QUORUM operators.
 * 🆕 [v13.5.0](https://github.com/manticoresoftware/manticoresearch/releases/tag/13.5.0) [ PR #3591](https://github.com/manticoresoftware/manticoresearch/pull/3591) Automatic embedding generation in queries (Work in Progress, not production-ready yet).

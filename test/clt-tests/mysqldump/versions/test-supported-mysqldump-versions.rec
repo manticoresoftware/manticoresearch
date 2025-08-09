@@ -89,6 +89,37 @@ docker exec manticore mysql -h0 -P9306 -e "select * from t order by id asc limit
 ––– input –––
 bash ./test/clt-tests/mysqldump/versions/script_versions.sh
 ––– output –––
+Downloading all images in parallel...
+✓ Downloaded mariadb:10.7
+✓ Downloaded mariadb:10.9
+✓ Downloaded mariadb:11.0
+✓ Downloaded mariadb:10.5
+✓ Downloaded mariadb:10.8
+✓ Downloaded mariadb:10.6
+✓ Downloaded mariadb:10.11
+✓ Downloaded mariadb:10.10
+✓ Downloaded mariadb:11.3-rc
+✓ Downloaded mariadb:11.4
+✓ Downloaded mariadb:11.5
+✓ Downloaded mariadb:11.2
+✓ Downloaded mariadb:11.1
+✓ Downloaded mariadb:11.7
+✓ Downloaded mariadb:11.6
+✓ Downloaded mariadb:11.8
+✓ Downloaded mariadb:latest
+✓ Downloaded mysql:8.4
+✓ Downloaded mysql:5.6
+✓ Downloaded mysql:5.7
+✓ Downloaded mysql:8.0
+✓ Downloaded mysql:8.3
+✓ Downloaded mysql:8.2
+✓ Downloaded mysql:9.0
+✓ Downloaded mysql:9.1
+✓ Downloaded mysql:9.2
+✓ Downloaded mysql:9.3
+✓ Downloaded mysql:9.4
+✓ Downloaded mysql:latest
+Download phase completed
 Testing version: mariadb:10.5
 +------+----------------------------------------------------------------------------------------------------+--------+-------------------+----------------------------------------------+----------------------------------+----------------------------------------------------------------------------------------------------+------+------------+------------+-------------------+
 | id   | f                                                                                                  | a      | b                 | j                                            | m                                | s                                                                                                  | e    | d          | v          | fv                |

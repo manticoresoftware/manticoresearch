@@ -164,7 +164,8 @@ function mergeEntry(array $entry, array $newEntry): array {
  * @return bool
  */
 function shouldIncludeEntry(array $entry): bool {
-	return !str_starts_with($entry['request']['header:User-Agent'], 'Manticore Buddy');
+	return !isset($entry['request']['header:User-Agent'])
+	|| !str_starts_with($entry['request']['header:User-Agent'], 'Manticore Buddy');
 }
 
 function extractTimestamp($line) {
@@ -186,14 +187,16 @@ function printCLTTest(array $logEntries) {
 			$args[] = '-H ' . escapeshellarg(substr($key, 7) . ': ' . $value);
 		}
 		$method = $entry['request']['http:method'];
-		if ($method === 'POST') {
+		if (in_array($method, ['POST', 'PUT']) && isset($entry['request']['body'])) {
 			$args[] = '-d ' . escapeshellarg($entry['request']['body']);
 		}
 		$argLine = implode(' ', $args);
 		echo "––– input –––\n";
 		echo "curl -X {$entry['request']['http:method']} {$argLine} {$url}\n";
 		echo "––– output –––\n";
-		echo "{$entry['response']['body']}\n";
+		if (isset($entry['response']['body'])) {
+			echo "{$entry['response']['body']}\n";
+		}
 	}
 }
 

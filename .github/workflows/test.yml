@@ -464,3 +464,150 @@ jobs:
         with:
           name: windows_test_resuls
           path: build
+
+  test_windows_manticore:
+    if: (github.event_name == 'pull_request' && github.event.pull_request.base.ref == 'update-buddy-version') != true
+    name: Windows Manticore installation and basic tests
+    runs-on: windows-latest
+    timeout-minutes: 30
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      
+    - name: Download Manticore installer
+      shell: pwsh
+      run: |
+        $installerUrl = "https://repo.manticoresearch.com/repository/manticoresearch_windows/release/x64/manticore-13.2.3-25070806-bf96368a6-x64.exe"
+        $installerName = "manticore-installer.exe"
+        
+        Write-Host "Downloading Manticore from: $installerUrl"
+        Invoke-WebRequest -Uri $installerUrl -OutFile $installerName
+        
+        if (Test-Path $installerName) {
+            $fileSize = (Get-Item $installerName).Length
+            Write-Host "Downloaded installer size: $([math]::Round($fileSize/1KB, 2)) KB"
+        } else {
+            throw "Failed to download installer"
+        }
+
+    - name: Install Manticore Search
+      shell: pwsh
+      run: |
+        $installerName = "manticore-installer.exe"
+        $installed = $false
+        
+        # List of silent installation parameters to try
+        $silentParams = @("/S", "/SILENT", "/VERYSILENT", "/s", "/quiet", "/Q")
+        
+        foreach ($param in $silentParams) {
+            Write-Host "Trying installation with parameter: $param"
+            try {
+                $process = Start-Process -FilePath ".\$installerName" -ArgumentList $param -PassThru -NoNewWindow
+                if ($process.WaitForExit(300000)) { # 5 minutes timeout
+                    if ($process.ExitCode -eq 0) {
+                        Write-Host "Installation successful with parameter: $param"
+                        $installed = $true
+                        break
+                    } else {
+                        Write-Host "Installation failed with exit code: $($process.ExitCode)"
+                    }
+                } else {
+                    Write-Host "Installation timeout with parameter: $param"
+                    try { $process.Kill() } catch { }
+                }
+            } catch {
+                Write-Host "Installation failed with parameter: $param - $($_.Exception.Message)"
+            }
+            Start-Sleep -Seconds 2
+        }
+        
+        if (-not $installed) {
+            throw "All installation attempts failed"
+        }
+        
+        Write-Host "Installation completed successfully"
+
+    - name: Verify installation and start searchd
+      shell: pwsh
+      run: |
+        $possiblePaths = @(
+            "${env:ProgramFiles}\Manticore Search",
+            "${env:ProgramFiles(x86)}\Manticore Search"
+        )
+        
+        $manticorePath = $possiblePaths | Where-Object { Test-Path $_ } | Select-Object -First 1
+        if (!$manticorePath) {
+            throw "Manticore installation not found"
+        }
+        
+        $searchdPath = Join-Path $manticorePath "bin\searchd.exe"
+        if (!(Test-Path $searchdPath)) {
+            throw "searchd.exe not found"
+        }
+        
+        $configDir = Join-Path $manticorePath "etc"
+        $configFile = Join-Path $configDir "manticore.conf"
+        
+        if (!(Test-Path $configDir)) {
+            New-Item -ItemType Directory -Path $configDir -Force
+        }
+        
+        $configContent = @"
+        searchd {
+            listen = 9312
+            listen = 9306:mysql41
+            log = searchd.log
+            query_log = query.log
+            pid_file = searchd.pid
+            data_dir = data
+            binlog_path = binlog
+        }
+
+        index testrt {
+            type = rt
+            path = testrt
+            rt_field = title
+            rt_field = content
+            rt_attr_uint = gid
+        }
+        "@
+        
+        Set-Content -Path $configFile -Value $configContent -Encoding UTF8
+        
+        $dataDir = Join-Path $manticorePath "data"
+        if (!(Test-Path $dataDir)) {
+            New-Item -ItemType Directory -Path $dataDir -Force
+        }
+        
+        $searchdProcess = Start-Process -FilePath $searchdPath -ArgumentList "--config", $configFile -PassThru -WindowStyle Hidden
+        Start-Sleep -Seconds 5
+        
+        if ($searchdProcess.HasExited) {
+            throw "searchd failed to start"
+        }
+        
+        Write-Host "searchd started successfully"
+
+    - name: Run basic tests
+      shell: pwsh
+      run: |
+        $indexerPath = "${env:ProgramFiles}\Manticore Search\bin\indexer.exe"
+        if (!(Test-Path $indexerPath)) {
+            $indexerPath = "${env:ProgramFiles(x86)}\Manticore Search\bin\indexer.exe"
+        }
+        
+        if (Test-Path $indexerPath) {
+            Write-Host "Running indexer version check..."
+            & $indexerPath --version
+        }
+        
+        Start-Sleep -Seconds 2
+        $searchdProcesses = Get-Process -Name "searchd" -ErrorAction SilentlyContinue
+        if ($searchdProcesses) {
+            Write-Host "searchd is running with PID: $($searchdProcesses.Id)"
+        } else {
+            throw "searchd process not found"
+        }
+        
+        Write-Host "Windows Manticore installation test completed successfully"

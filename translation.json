@@ -169,14 +169,14 @@
   "Searching/Spell_correction.md": "3582166d3e005c80d07e4d6c31027939",
   "Searching/KNN.md": "afb839b02d25c187acddddae6abc3567",
   "Installation/Compiling_from_sources.md": "4ca1372b94a832235042f6aab54ecdb0",
-  "References.md": "44f4d7d5f277411b50310b08b1b9040a",
   "Node_info_and_management/SHOW_THREADS.md": "c5f1478f99f19f93f6a9bbe2bbfc69bd",
   "Creating_a_table/Data_types.md": "69fe5ba9e6a448633c2e16f7031c20e4",
   "Data_creation_and_modification/Adding_documents_to_a_table/Adding_documents_to_a_real-time_table.md": "6de805300242d0e9783a17cc03ea8905",
   "Server_settings/Searchd.md": "f8dcc2341971b21cde261c4c66dd89b5",
-  "Changelog.md": "484230466a7936b8b52bad0c992ee37d",
   "Creating_a_table.md": "cdfc4d838cb6f52f1d6dd4b1a90059fa",
   "Installation/RHEL_and_Centos.md": "29819c4ffed5a0dce03fb62f80ad9ac3",
   "Securing_and_compacting_a_table/Flushing_RAM_chunk_to_a_new_disk_chunk.md": "054329432471757df9fc181db74bc1df",
-  "Emptying_a_table.md": "a54f1b988ae6045637cca819474efd70"
+  "Emptying_a_table.md": "a54f1b988ae6045637cca819474efd70",
+  "Changelog.md": "ce8bb6448787740724134b0dd19126b3",
+  "References.md": "3428eb8e9746fe91b41e83cc2cbd7e15"
 }

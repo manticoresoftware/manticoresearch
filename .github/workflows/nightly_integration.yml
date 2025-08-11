@@ -4,7 +4,10 @@ run-name: 🌙 Nightly integration tests ${{ github.sha }}
 on:
   schedule:
     - cron: '00 20 * * *'
-  workflow_dispatch:  # Allow manual trigger for testing
+  workflow_dispatch:
+  push:  
+    branches: 
+      - 'test/separate-kafka-and-i*'
   pull_request:
     branches: [ master ]
     paths:

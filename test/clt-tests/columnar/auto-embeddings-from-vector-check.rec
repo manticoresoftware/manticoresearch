@@ -157,7 +157,3 @@ mysql -h0 -P9306 -e "DROP TABLE IF EXISTS test_from_title2"; echo $?
 mysql -h0 -P9306 -e "DROP TABLE IF EXISTS test_multi_from"; echo $?
 ––– output –––
 0
-––– input –––
-mysql -h0 -P9306 -e "DROP TABLE IF EXISTS test_no_from"; echo $?
-––– output –––
-0

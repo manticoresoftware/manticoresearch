@@ -103,7 +103,7 @@ stored_fields = title, content
 
 另外，请注意，您不需要在 `stored_fields` 中列出属性，因为它们的原始值会被存储。`stored_fields` 仅可用于全文字段。
 
-另请参见 [docstore_block_size](../../Creating_a_table/Local_tables/Plain_and_real-time_table_settings.md#docstore_block_size), [docstore_compression](../../Creating_a_table/Local_tables/Plain_and_real_time_table_settings.md#docstore_compression) 以获取文档存储压缩选项。
+另请参见 [docstore_block_size](../../Creating_a_table/Local_tables/Plain_and_real-time_table_settings.md#docstore_block_size), [docstore_compression](../../Creating_a_table/Local_tables/Plain_and_real-time_table_settings.md#docstore_compression) 以获取文档存储压缩选项。
 
 
 <!-- intro -->
@@ -718,7 +718,7 @@ Manticore 支持两种读取表数据的访问模式：seek+read 和 mmap。
 服务器启动时缓存于内存 | 锁定在内存中 |
 
 | - | - | - | - | - |
-| 以 [逐行](../../Creating_a_table/Data_types.md#Row-wise-and-columnar-attribute-storages)（非列式）存储的普通属性、跳表、词表、查找、已删除文档 | 
+| 以 [逐行](../../Creating_a_table/Data_types.md#Row-wise-and-columnar-attribute-storages)（非列式）存储的普通属性、跳表、词表、查找、已删除文档 |
 mmap | mmap |
 **mmap_preread** (默认) | mlock |
 | 逐行字符串、多值属性 (MVA) 和 json 属性 | mmap | mmap | **mmap_preread** (默认) | mlock |

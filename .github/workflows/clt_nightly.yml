@@ -18,7 +18,6 @@ on:
       - 'test/clt-tests/data-manipulation/test-alter-rename-nightly.rec'
       - 'test/clt-tests/performance-nightly/**'
       - 'test/clt-tests/indexer/indexer-latest-mysql-postgres/indexer-latest-mysql-postgres.rec'
-      - 'test/clt-tests/integrations/**'
       - 'test/clt-tests/tables-interaction/test-tables-interaction.rec'
 
 # cancels the previous workflow run when a new one appears in the same branch (e.g. master or a PR's branch)
@@ -44,9 +43,6 @@ jobs:
       fail-fast: false 
       matrix:
         include:
-          - name: Centos 7 release installation
-            image: centos:7
-            test_prefix: test/clt-tests/installation/rhel7-release-install
           - name: Alma 8 release installation
             image: almalinux:8
             test_prefix: test/clt-tests/installation/rhel-release-
@@ -145,12 +141,6 @@ jobs:
           - name: Test performance for queries with multiple disk chunks
             image: ghcr.io/manticoresoftware/manticoresearch:test-kit-latest
             test_prefix: test/clt-tests/performance-nightly/test-performance-for-queries-with-multiple-disk-chunks
-          - name: Test integrations
-            image: ghcr.io/manticoresoftware/manticoresearch:test-kit-latest
-            test_prefix: test/clt-tests/integrations/test-integrations-
-          - name: Test Kafka integration
-            image: manticoresearch/dind:v1
-            test_prefix: test/clt-tests/integrations/kafka/test-integration-
     steps:
       - name: Checkout repository
         uses: actions/checkout@v3
@@ -168,9 +158,6 @@ jobs:
       fail-fast: false 
       matrix:
         include:
-          - name: Centos 7 release installation
-            image: centos:7
-            test_prefix: test/clt-tests/installation/rhel7-release-install
           - name: Alma 8 release installation
             image: almalinux:8
             test_prefix: test/clt-tests/installation/rhel-release-

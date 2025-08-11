@@ -43,9 +43,6 @@ jobs:
       fail-fast: false 
       matrix:
         include:
-          - name: Centos 7 release installation
-            image: centos:7
-            test_prefix: test/clt-tests/installation/rhel7-release-install
           - name: Alma 8 release installation
             image: almalinux:8
             test_prefix: test/clt-tests/installation/rhel-release-
@@ -155,9 +152,6 @@ jobs:
       fail-fast: false 
       matrix:
         include:
-          - name: Centos 7 release installation
-            image: centos:7
-            test_prefix: test/clt-tests/installation/rhel7-release-install
           - name: Alma 8 release installation
             image: almalinux:8
             test_prefix: test/clt-tests/installation/rhel-release-

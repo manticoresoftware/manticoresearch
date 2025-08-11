@@ -143,13 +143,3 @@ Without FROM, auto-generation should not happen
 mysql -h0 -P9306 -e "INSERT INTO test_no_from (id, title1) VALUES(1, 'test title')"; echo $?
 ––– output –––
 0
-––– comment –––
-Clean up test tables
-––– input –––
-mysql -h0 -P9306 -e "DROP TABLE IF EXISTS test_from_title1"; echo $?
-––– output –––
-0
-––– input –––
-mysql -h0 -P9306 -e "DROP TABLE IF EXISTS test_from_title2"; echo $?
-––– output –––
-0

@@ -404,7 +404,7 @@ if (NOT installed) # GNUInstallDirs wasn't yet included...
 		install ( DIRECTORY DESTINATION ${CMAKE_INSTALL_RUNSTATEDIR}/manticore COMPONENT searchd )
 		install ( DIRECTORY DESTINATION ${CMAKE_INSTALL_LOCALSTATEDIR}/log/manticore COMPONENT searchd )
 		# Install sysctl configuration for Manticore Search
-        install( FILES dist/70-manticore.conf DESTINATION /etc/sysctl.d COMPONENT common )
+        install ( FILES dist/70-manticore.conf DESTINATION /etc/sysctl.d COMPONENT common )
 		if (WITH_ICU AND WITH_ICU_FORCE_STATIC)
 			install_icudata ( ${CMAKE_INSTALL_DATADIR}/manticore/icu )
 		endif ()

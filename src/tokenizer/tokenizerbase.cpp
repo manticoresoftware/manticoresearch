@@ -373,7 +373,7 @@ int CSphTokenizerBase::CodepointArbitrationQ ( int iCode, bool bWasEscaped, BYTE
 		if ( bWasEscaped
 				|| bDashInside
 				|| ( m_iAccum && iSymbol == '$' && !IsBoundary ( uNextByte, m_bPhrase ) )
-				|| ( m_bPhrase && iSymbol != '"' && !sphIsModifier ( iSymbol ) ) )
+				|| ( m_bPhrase && iSymbol != '"' && !sphIsModifier ( iSymbol ) && iSymbol!='|' && iSymbol!='(' && iSymbol!=')' ) )
 		{
 			if ( iCode & FLAG_CODEPOINT_DUAL )
 				iCode &= ~( FLAG_CODEPOINT_SPECIAL | FLAG_CODEPOINT_DUAL );

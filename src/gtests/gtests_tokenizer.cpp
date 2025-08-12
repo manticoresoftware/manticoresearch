@@ -857,8 +857,9 @@ void QueryParser::Transform ( const char * szQuery, const char * szReconst, cons
 		for ( const CKeywordHits * pHits = pKeywordHits; pHits->m_szKeyword; ++pHits )
 			EXPECT_TRUE ( tIndex.m_hHits.Add ( pHits->m_iHits, pHits->m_szKeyword ) );
 	}
-
-	sphTransformExtendedQuery ( &tQuery.m_pRoot, tTmpSettings, true, &tIndex );
+	
+	TransformExtendedQueryArgs_t tTranformArgs { true, tQuery.m_bNeedPhraseTransform, &tIndex };
+	EXPECT_TRUE ( sphTransformExtendedQuery ( &tQuery.m_pRoot, tTmpSettings, tQuery.m_sParseError, tTranformArgs ) );
 
 	CSphString sReconstTransformed = sphReconstructNode ( tQuery.m_pRoot, &tSchema );
 	EXPECT_STREQ ( sReconst.cstr(), szReconst );
@@ -1103,9 +1104,9 @@ TEST_F ( QueryParser, transform_common_keywords_1 )
 TEST_F ( QueryParser, transform_common_keywords_2 )
 {
 	Transform (
-		"bbb | \"aaa bbb ccc\"",
-		"( bbb | \"aaa bbb ccc\" )",
-		"bbb"
+		"bbb | \"aaa bbb ccc ddd eee fff ggg\" | bbb  | \"aaa bbb ccc ddd eee fff ggg hhh iii jjj\" |\"hhh iii jjj\"| \"aaa bbb ccc ddd eee fff ggg hhh iii jjj\"| bbb |\"aaa bbb ccc ddd eee fff ggg hhh iii jjj\"| \"aaa bbb ccc ddd eee fff ggg\" | bbb",
+		"( bbb | \"aaa bbb ccc ddd eee fff ggg\" | bbb | \"aaa bbb ccc ddd eee fff ggg hhh iii jjj\" | \"hhh iii jjj\" | \"aaa bbb ccc ddd eee fff ggg hhh iii jjj\" | bbb | \"aaa bbb ccc ddd eee fff ggg hhh iii jjj\" | \"aaa bbb ccc ddd eee fff ggg\" | bbb )",
+		"( bbb | bbb | \"hhh iii jjj\" | bbb | bbb )"
 	);
 }
 
@@ -1126,6 +1127,52 @@ TEST_F ( QueryParser, transform_common_keywords_4 )
 		"( \"aaa bbb ccc ddd jjj\" | \"bbb jjj\" )"
 	);
 }
+
+TEST_F ( QueryParser, relaxed_missed_field_with_pos )
+{
+	Transform (
+		"@@relaxed aaa ( bbb @missed[1] ccc )",
+		"( aaa   bbb )",
+		"( aaa   bbb )"
+	);
+}
+
+TEST_F ( QueryParser, different_zones )
+{
+	Transform (
+		"(( ZONE:(h1) ACCEL !aaa)|( ACCEL !bbb))",
+		"( ( accel AND NOT aaa ) | ( accel AND NOT bbb ) )",
+		"( ( accel AND NOT aaa ) | ( accel AND NOT bbb ) )" // not "( accel AND NOT ( aaa   bbb ) )"
+	);
+}
+
+TEST_F ( QueryParser, different_zonespan )
+{
+	Transform (
+		"(( ZONESPAN:(h1) ACCEL !aaa)|( ACCEL !bbb))",
+		"( ( accel AND NOT aaa ) | ( accel AND NOT bbb ) )",
+		"( ( accel AND NOT aaa ) | ( accel AND NOT bbb ) )" // not "( accel AND NOT ( aaa   bbb ) )"
+	);
+}
+
+TEST_F ( QueryParser, memleak_in_transform_phrase )
+{
+	Transform (
+		"\"(aaa|bbb)ccc\"",
+		"( \"( aaa | bbb ) ccc\" )",
+		"( \"aaa ccc\" | \"bbb ccc\" )"
+	);
+}
+
+TEST_F ( QueryParser, lost_tail_tokens_from_brackets )
+{
+	Transform (
+		"\"aaa(bbb ccc ddd eee)\"",
+		"\"aaa bbb ccc ddd eee\"",
+		"\"aaa bbb ccc ddd eee\""
+	);
+}
+
 
 TEST_F ( QueryParser, transform_common_keywords_5 )
 {

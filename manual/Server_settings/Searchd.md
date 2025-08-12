@@ -450,6 +450,23 @@ expansion_merge_threshold_hits = 512
 ```
 <!-- end -->
 
+### expansion_phrase_limit
+
+<!-- example conf expansion_phrase_limit -->
+This setting controls the maximum number of alternative phrase variants generated due to `OR` operators inside `PHRASE`, `PROXIMITY`, and `QUORUM` operators. It is optional, with a default value of 1024.
+
+When using the `|` (OR) operator inside phrase-like operator, the total number of expanded combinations may grow exponentially depending on the number of alternatives specified. This setting helps prevent excessive query expansion by capping the number of permutations considered during query processing. If the number of generated variants exceeds this limit, the query will fail with an error.
+
+<!-- intro -->
+##### Example:
+
+<!-- request Example -->
+
+```ini
+expansion_phrase_limit = 4096
+```
+<!-- end -->
+
 ### grouping_in_utc
 
 This setting specifies whether timed grouping in API and SQL will be calculated in the local timezone or in UTC. It is optional, with a default value of 0 (meaning 'local timezone').

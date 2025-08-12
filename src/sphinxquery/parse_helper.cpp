@@ -616,6 +616,7 @@ bool XQParseHelper_c::FixupNots ( XQNode_t * pNode, bool bOnlyNotAllowed, XQNode
 
 		if ( !pNode->m_pParent )
 		{
+			pNode->ResetChildren (true);
 			pNode->SetOp ( SPH_QUERY_OR, dNots );
 			*ppRoot = TransformOnlyNot ( pNode, m_dSpawned );
 			return true;
@@ -624,6 +625,7 @@ bool XQParseHelper_c::FixupNots ( XQNode_t * pNode, bool bOnlyNotAllowed, XQNode
 		if ( /*pNode->m_pParent && */pNode->m_pParent->GetOp()==SPH_QUERY_AND && pNode->m_pParent->dChildren().GetLength()==2 )
 		{
 			pNode->m_pParent->SetOp ( SPH_QUERY_ANDNOT );
+			pNode->ResetChildren (true);
 			pNode->SetOp ( SPH_QUERY_OR, dNots );
 			return true;
 		}
@@ -644,6 +646,7 @@ bool XQParseHelper_c::FixupNots ( XQNode_t * pNode, bool bOnlyNotAllowed, XQNode
 		pNot->SetOp ( SPH_QUERY_OR, dNots );
 	}
 
+	pNode->ResetChildren();
 	pNode->SetOp ( SPH_QUERY_ANDNOT, pAnd, pNot );
 	return true;
 }
@@ -727,6 +730,7 @@ void XQParseHelper_c::FixupDestForms ()
 		dForms[0]->dWord(0).m_bFieldStart = bFieldStart;
 		dForms.Last()->dWord(0).m_bFieldEnd = bFieldEnd;
 
+		assert ( pMultiParent->dChildren().IsEmpty() );
 		pMultiParent->SetOp ( SPH_QUERY_AND, dForms );
 		dForms.Resize ( 0 );
 	}

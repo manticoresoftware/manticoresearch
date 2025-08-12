@@ -111,6 +111,7 @@ jobs:
         id: run
         continue-on-error: true
         run: |
+            apt -y update && apt -y install llvm
             set +e  # allow script to continue even if a command fails
 
             cd build/src/fuzzer
@@ -118,7 +119,8 @@ jobs:
             echo "## 🐛 Fuzzer Results" >> $GITHUB_STEP_SUMMARY
 
             # Run qfuzzer and capture its exit code
-            ./qfuzzer -verbosity=0 -max_total_time=3600 -jobs=4 -workers=4 -dict=../../../src/fuzzer/dict.txt corpus 2>&1 | tee fuzzer_output.txt
+            export ASAN_SYMBOLIZER_PATH=/usr/bin/llvm-symbolizer-14
+            ./qfuzzer -verbosity=0 -max_total_time=12000 -jobs=5 -workers=5-dict=../../../src/fuzzer/dict.txt corpus 2>&1 | tee fuzzer_output.txt
             qfuzzer_exit_code=${PIPESTATUS[0]}
 
             echo '```' >> $GITHUB_STEP_SUMMARY
@@ -143,14 +145,44 @@ jobs:
           path: |
             build/src/fuzzer
             !build/src/fuzzer/qfuzzer
+            !build/src/fuzzer/corpus
             !build/src/fuzzer/CMake*
             !build/src/fuzzer/cmake*
             !build/src/fuzzer/CTest*
+      - name: 📦 Upload updated fuzzer corpus
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: fuzzer-corpus
+          path: build/src/fuzzer/corpus
       - name: ❌ Fail job if fuzzer failed
         if: steps.run.outcome == 'failure'
         run: |
           echo "Fuzzer failed. Marking the job as failed."
           exit 1
+
+  upload_corpus_to_s3:
+    name: 📦 Upload fuzzer corpus backup to Manticore S3
+    needs: test_linux_fuzz
+    if: always()
+    runs-on: ubuntu-22.04
+    steps:
+      - name: 📥 Download fuzzer-corpus artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: fuzzer-corpus
+          path: corpus
+      - name: ☁️ Upload updated fuzzer corpus backup to Manticore S3
+        run: |
+          if [ -n "$(find corpus -maxdepth 1 -type f -print -quit)" ]; then
+            tar -czf corpus.tar.gz corpus
+            mkdir -p corpus-backup
+            mv corpus.tar.gz corpus-backup
+            cd corpus-backup
+            docker run --rm -v "$(pwd)":/upload manticoresearch/upload fuzz-tests-corpus
+          else
+            echo "Directory corpus is empty. Skipping corpus upload."
+          fi
 
   delete-cache:
     name: 🧹 Delete old cache
@@ -165,4 +197,4 @@ jobs:
             curl -s -X DELETE \
             -H "Authorization: Bearer ${{ secrets.GITHUB_TOKEN }}" \
             -H "Accept: application/vnd.github+json" \
-            https://api.github.com/repos/${{ github.repository }}/actions/caches?key=fuzz-corpus-cache-to-delete          
+            https://api.github.com/repos/${{ github.repository }}/actions/caches?key=fuzz-corpus-cache-to-delete

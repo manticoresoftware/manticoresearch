@@ -108,17 +108,15 @@ static bool StoreEmbeddings ( const CSphSchema & tSchema, int iAttr, int iBlobAt
 {
 	const CSphColumnInfo & tAttr = tSchema.GetAttr(iAttr);
 
-	if ( tAttr.IsColumnar() )
-	{
-		dTmp.Resize ( dEmbedding.size() );
-		ARRAY_FOREACH ( iEmb, dTmp )
-			dTmp[iEmb] = sphF2DW ( dEmbedding[iEmb] );
+	dTmp.Resize ( dEmbedding.size() );
+	ARRAY_FOREACH ( iEmb, dTmp )
+		dTmp[iEmb] = sphF2DW ( dEmbedding[iEmb] );
 
+	if ( tAttr.IsColumnar() )
 		pNewColumnarBuilder->SetAttr ( iColumnarAttr, dTmp.Begin(), dTmp.GetLength() );
-	}
 	else
 	{
-		if ( !pNewBlobBuilder->SetAttr ( iBlobAttr, (const BYTE*)dEmbedding.data(), dEmbedding.size()*sizeof(float), sError ) )
+		if ( !pNewBlobBuilder->SetAttr ( iBlobAttr, (const BYTE*)dTmp.Begin(), dTmp.GetLengthBytes(), sError ) )
 			return false;
 	}
 
@@ -129,7 +127,7 @@ static bool StoreEmbeddings ( const CSphSchema & tSchema, int iAttr, int iBlobAt
 		const BYTE * pStart = tDoc.m_dFields[iId].Begin();
 		for ( auto i : dEmbedding )
 		{
-			*(DWORD*)pStart = sphF2DW ( dEmbedding[i] );
+			*(DWORD*)pStart = sphF2DW(i);
 			pStart += sizeof(DWORD);
 		}
 	}
@@ -482,9 +480,12 @@ static CSphVector<char> ConcatFromFields ( const InsertDocData_c & tDoc, const A
 		}
 
 		int iOldSize = dTmp.GetLength();
-		dTmp.Resize ( iOldSize + dSrc.GetLength() + 1 );
-		dTmp[iOldSize] = ' ';
-		memcpy ( dTmp.Begin() + iOldSize + 1, dSrc.Begin(), dSrc.GetLength() );
+		int iOffset = iOldSize + ( iOldSize ? 1 : 0 );
+		dTmp.Resize ( dSrc.GetLength() + iOffset );
+		if ( iOldSize )
+			dTmp[iOldSize] = ' ';
+
+		memcpy ( dTmp.Begin() + iOffset, dSrc.Begin(), dSrc.GetLength() );
 	}
 
 	return dTmp;

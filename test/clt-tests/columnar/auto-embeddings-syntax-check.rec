@@ -114,17 +114,3 @@ mysql -h0 -P9306 -e "SELECT count(*) FROM test_single_field WHERE id=1"
 +----------+
 |        1 |
 +----------+
-––– comment –––
-Clean up test tables
-––– input –––
-mysql -h0 -P9306 -e "DROP TABLE IF EXISTS test"; echo $?
-––– output –––
-0
-––– input –––
-mysql -h0 -P9306 -e "DROP TABLE IF EXISTS test_no_from"; echo $?
-––– output –––
-0
-––– input –––
-mysql -h0 -P9306 -e "DROP TABLE IF EXISTS test_single_field"; echo $?
-––– output –––
-0

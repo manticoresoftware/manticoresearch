@@ -93,17 +93,3 @@ Test API key environment variable handling
 if [ -n "$OPENAI_API_KEY" ] && [ "$OPENAI_API_KEY" != "dummy_key_for_testing" ]; then echo "API key is available for testing"; else echo "API key not available - using dummy for error testing"; fi
 ––– output –––
 #!/(API key is available for testing|API key not available - using dummy for error testing)/!#
-––– comment –––
-Clean up test tables
-––– input –––
-mysql -h0 -P9306 -e "DROP TABLE IF EXISTS test_openai_remote"; echo $?
-––– output –––
-0
-––– input –––
-mysql -h0 -P9306 -e "DROP TABLE IF EXISTS test_openai_title_only"; echo $?
-––– output –––
-0
-––– input –––
-mysql -h0 -P9306 -e "DROP TABLE IF EXISTS test_openai_no_from"; echo $?
-––– output –––
-0

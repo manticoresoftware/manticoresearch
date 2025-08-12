@@ -202,7 +202,7 @@ install ( DIRECTORY DESTINATION ${CMAKE_INSTALL_DATADIR}/manticore/modules COMPO
 install ( DIRECTORY DESTINATION /usr/local/lib/manticore COMPONENT common )
 
 # Install sysctl configuration for Manticore Search
-install ( FILES dist/70-manticore.conf DESTINATION /etc/sysctl.d COMPONENT common )
+install ( FILES dist/70-manticore.conf DESTINATION /etc/sysctl.d COMPONENT server )
 
 if (WITH_ICU AND WITH_ICU_FORCE_STATIC)
 	install_icudata ( ${CMAKE_INSTALL_DATADIR}/manticore/icu )

@@ -5,9 +5,6 @@ usermod -g %{manticore_group} %{manticore_user} 2>/dev/null || true
 chown -R %{manticore_user}:%{manticore_group} @CMAKE_INSTALL_FULL_LOCALSTATEDIR@/lib/manticore
 chown -R %{manticore_user}:%{manticore_group} /usr/local/lib/manticore
 
-sysctl --system || echo "Warning: Failed to apply sysctl settings. Run 'sysctl --system' manually."
-
-
 if [ $1 == 2 ]; then
         if [ -f @CMAKE_INSTALL_FULL_SYSCONFDIR@/sphinx/sphinx.conf ]; then
 	        echo "Moving existing configuration to new location..."

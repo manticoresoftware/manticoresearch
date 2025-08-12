@@ -17,8 +17,6 @@ chown manticore:manticore $DATADIR -R
 chown manticore:manticore $SYSCONFDIR -R
 chown manticore:manticore /usr/local/lib/manticore
 
-sysctl --system || echo "Warning: Failed to apply sysctl settings. Run 'sysctl --system' manually."
-
 case "$1" in
     configure)
         if [ -f @CMAKE_INSTALL_FULL_SYSCONFDIR@/sphinxsearch/sphinx.conf ]; then

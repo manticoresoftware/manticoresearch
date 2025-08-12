@@ -1,2 +1,3 @@
 @CMAKE_INSTALL_FULL_SYSCONFDIR@/default/manticore
 @CMAKE_INSTALL_FULL_SYSCONFDIR@/init.d/manticore
+/etc/sysctl.d/70-manticore.conf

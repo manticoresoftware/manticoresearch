@@ -207,7 +207,7 @@ install ( FILES example.sql DESTINATION ${CMAKE_INSTALL_DOCDIR} COMPONENT tools 
 # stuff going to /usr/share/manticore
 # CMAKE_INSTALL_DATAROOTDIR					usr/share 				/usr/share
 # CMAKE_INSTALL_DATADIR						usr/share 				/usr/share
-install ( DIRECTORY misc/stopwords DESTINATION ${CMAKE_INSTALL_DATADIR}/manticore COMPONENT common )
+install ( DIRECTORY misc/stopwords DESTINATION ${CMAKE_INSTALL_DATADIR}/manticore COMPONENT server )
 
 # stuff going to /usr/local/
 install ( DIRECTORY DESTINATION /usr/local/lib/manticore COMPONENT common )

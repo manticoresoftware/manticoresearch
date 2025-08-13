@@ -23,6 +23,10 @@ on:
         type: boolean
         description: "Continue on error"
         default: false
+    secrets:
+      OPENAI_API_KEY:
+        required: true
+        description: "OpenAI API key for CLT tests"
 
 jobs:
   clt:

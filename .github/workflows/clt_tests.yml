@@ -84,3 +84,4 @@ jobs:
           ref: ${{ inputs.ref }}
           test_prefix: ${{ matrix.test-suite.test_prefix }}
           comment_mode: failures
+          ui_host: "https://clt.manticoresearch.com"

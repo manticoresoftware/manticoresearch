@@ -12,7 +12,7 @@ mysql -h0 -P9306 -e "select id, knn_dist() from test where knn ( image_vector, 5
 | id   | knn_dist() |
 +------+------------+
 |    1 | 0.28146550 |
-|    2 | 0.81527930 |
+|    2 | 0.815279300 |
 +------+------------+
 ––– input –––
 mysql -h0 -P9306 -e "select id, knn_dist() from test where knn ( image_vector, 5, 1 );"

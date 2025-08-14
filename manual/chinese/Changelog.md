@@ -3,8 +3,8 @@
 ## 版本 13.6.7
 **发布于**：2025年8月8日
 
-推荐的 [MCL](https://github.com/manticoresoftware/columnar) 版本：8.0.1  
-推荐的 [Buddy](Installation/Manticore_Buddy.md#Manticore-Buddy) 版本：3.34.2  
+推荐的 [MCL](https://github.com/manticoresoftware/columnar) 版本：8.0.1
+推荐的 [Buddy](Installation/Manticore_Buddy.md#Manticore-Buddy) 版本：3.34.2
 
 如果您遵循[官方安装指南](https://manticoresearch.com/install/)，则无需担心此问题。
 
@@ -1092,14 +1092,11 @@ Version 6.3.4 continues the 6.3 series and includes only minor improvements and 
   <
   * Connection #0 to host localhost left intact
   {"items":[{"insert":{"table":"user","_id":2811798918248005633,"created":true,"result":"created","status":201}},{"insert":{"table":"user","_id":2811798918248005634,"created":true,"result":"created","status":201}},{"insert":{"table":"user","_id":2811798918248005635,"created":true,"result":"created","status":201}},{"insert":{"table":"user","_id":2811798918248005636,"created":true,"result":"created","status":201}}],"errors":false}
-  real
-0m1.022s
-  user
-0m0.001s
-
-  sys
-0m0.010s
+  real	0m1.022s
+  user	0m0.001s
+  sys	0m0.010s
   ```
+
   现在：
   ```bash
   $ time curl -v -sX POST http://localhost:9318/bulk -H "Content-Type: application/x-ndjson" --data '{"insert": {"index": "user", "doc":  {"name":"Prof. Matt Heaney IV","email":"ibergnaum@yahoo.com","description":"Tempora ullam eaque consequatur. Vero aut minima ut et ut omnis officiis vel. Molestiae quis voluptatum sint numquam.","age":15,"active":1}}}
@@ -1128,15 +1125,11 @@ Version 6.3.4 continues the 6.3 series and includes only minor improvements and 
   <
   * 与主机 localhost 的连接 #0 保持
   {"items":[{"bulk":{"table":"user","_id":2811798919590182916,"created":4,"deleted":0,"updated":0,"result":"created","status":201}}],"errors":false}
-  real
-
-0m0.015s
-
-  user
-0m0.005s
-  sys
-0m0.004s
+  real	0m0.015s
+  user	0m0.005s
+  sys	0m0.004s
   ```
+
   </details>
 
 * **⚠️ 重大变更**：[伪分片](Server_settings/Searchd.md#pseudo_sharding) 默认启用。如果您想禁用它，请确保在 Manticore 配置文件的 `searchd` 部分添加 `pseudo_sharding = 0`。
@@ -1186,27 +1179,28 @@ Version 6.3.4 continues the 6.3 series and includes only minor improvements and 
 * ⚠️ 搜索选项 `low_priority` 和 `boolean_simplify` 现在必须带值（`0/1`）：之前可写为 `SELECT ... OPTION low_priority, boolean_simplify`，现在需写为 `SELECT ... OPTION low_priority=1, boolean_simplify=1`。
 * ⚠️ 如果您使用旧版 [php](https://github.com/manticoresoftware/manticoresearch/blob/master/api/sphinxapi.php)、[python](https://github.com/manticoresoftware/manticoresearch/blob/master/api/sphinxapi.py) 或 [java](https://github.com/manticoresoftware/manticoresearch/tree/master/api/java) 客户端，请访问相应链接并获取更新版本。**旧版本与 Manticore 5 不完全兼容。**
 * ⚠️ HTTP JSON 请求在 `query_log_format=sphinxql` 模式下采用不同格式记录。之前只记录全文部分，现在按原样记录。
+
 ### 新增软件包
 * **⚠️ 破坏性变更**：由于新结构，升级到 Manticore 5 时建议先移除旧包再安装新包：
   - 基于 RPM：`yum remove manticore*`
-
   - Debian 和 Ubuntu：`apt remove manticore*`
 * 新的 deb/rpm 包结构。此前版本包含：
   - `manticore-server`，内含 `searchd`（主搜索守护进程）及其所需全部内容
   - `manticore-tools`，包含 `indexer` 和 `indextool`
   - `manticore`，包含全部内容
   - `manticore-all` RPM 作为元包，指向 `manticore-server` 和 `manticore-tools`
+
   新结构为：
   - `manticore` - deb/rpm 元包，安装以上所有依赖
   - `manticore-server-core` - 仅包含 `searchd` 和其运行所需内容
   - `manticore-server` - systemd 文件及其他辅助脚本
-
   - `manticore-tools` - 包含 `indexer`、`indextool` 和其他工具
   - `manticore-common` - 默认配置文件、默认数据目录、默认停用词
   - `manticore-icudata`、`manticore-dev`、`manticore-converter` 变化不大
   - `.tgz` 包含全部软件包
 * 支持 Ubuntu Jammy
 * 支持通过 [YUM 仓库](Installation/RHEL_and_Centos.md#YUM-repository) 的 Amazon Linux 2
+
 ### Bug 修复
 * [Issue #815](https://github.com/manticoresoftware/manticoresearch/issues/815) 使用 UDF 函数时偶发崩溃
 * [Issue #287](https://github.com/manticoresoftware/manticoresearch/issues/287) RT 索引构建时内存溢出
@@ -1248,17 +1242,13 @@ Version 6.3.4 continues the 6.3 series and includes only minor improvements and 
 * [Issue #772](https://github.com/manticoresoftware/manticoresearch/issues/772) 删除/添加列导致值不可见
 * [Issue #773](https://github.com/manticoresoftware/manticoresearch/issues/773) 无法向柱状表添加 bit(N) 列
 * [Issue #774](https://github.com/manticoresoftware/manticoresearch/issues/774) manticore.json 中启动时“cluster”为空
-
 * ❗[Commit 1da4](https://github.com/manticoresoftware/manticoresearch/commits/1da4ce891e4ff13727cfd3331d72771c64ee7949) SHOW STATUS 中未跟踪 HTTP 操作
-
 * [Commit 3810](https://github.com/manticoresoftware/manticoresearch/commits/381000ab4af4c3c98ec8c730699ad7f39039cec8) 禁用低频单关键字查询的 pseudo_sharding
 * [Commit 8003](https://github.com/manticoresoftware/manticoresearch/commits/800325cca283a87801b28929d82420fafc76a0ee) 修复存储属性与索引合并问题
-
 * [Commit cddf](https://github.com/manticoresoftware/manticoresearch/commits/cddfeed6296f2041c6aae18414e5cd9cabf08281) 通用去重值提取器；为柱状字符串添加专用去重提取器
-
 * [Commit fba4](https://github.com/manticoresoftware/manticoresearch/commits/fba4bb4f) 修复从文档存储提取空整数属性
-
 * [Commit f300](https://github.com/manticoresoftware/manticoresearch/commit/f3009a9242fa16956adf871c4887e6e0303ba364) `ranker` 可在查询日志中重复指定
+
 ## 版本 4.2.0，2021年12月23日
 
 ### 主要新特性
@@ -1273,37 +1263,40 @@ Version 6.3.4 continues the 6.3 series and includes only minor improvements and 
 
 <!-- intro -->
 #### 4.0.2
+
 <!-- request 4.0.2 -->
+
 插入100万PQ规则需要**48秒**，而分批次（每批1万）REPLACE仅4万条规则需要**406秒**。
+
 ```sql
 root@perf3 ~ # mysql -P9306 -h0 -e "drop table if exists pq; create table pq (f text, f2 text, j json, s string) type='percolate';"; date; for m in `seq 1 1000`; do (echo -n "insert into pq (id,query,filters,tags) values "; for n in `seq 1 1000`; do echo -n "(0,'@f (cat | ( angry dog ) | (cute mouse)) @f2 def', 'j.json.language=\"en\"', '{\"tag1\":\"tag1\",\"tag2\":\"tag2\"}')"; [ $n != 1000 ] && echo -n ","; done; echo ";")|mysql -P9306 -h0; done; date; mysql -P9306 -h0 -e "select count(*) from pq"
-Wed Dec 22 10:24:30 AM CET 2021
 
+Wed Dec 22 10:24:30 AM CET 2021
 Wed Dec 22 10:25:18 AM CET 2021
 +----------+
 | count(*) |
 +----------+
-
 |  1000000 |
 +----------+
+
 root@perf3 ~ # date; (echo "begin;"; for offset in `seq 0 10000 30000`; do n=0; echo "replace into pq (id,query,filters,tags) values "; for id in `mysql -P9306 -h0 -NB -e "select id from pq limit $offset, 10000 option max_matches=1000000"`; do echo "($id,'@f (tiger | ( angry bear ) | (cute panda)) @f2 def', 'j.json.language=\"de\"', '{\"tag1\":\"tag1\",\"tag2\":\"tag2\"}')"; n=$((n+1)); [ $n != 10000 ] && echo -n ","; done; echo ";"; done; echo "commit;") > /tmp/replace.sql; date
 Wed Dec 22 10:26:23 AM CET 2021
-
 Wed Dec 22 10:26:27 AM CET 2021
-
 root@perf3 ~ # time mysql -P9306 -h0 < /tmp/replace.sql
 
 real	6m46.195s
-
 user	0m0.035s
-
 sys	0m0.008s
 ```
 
 <!-- intro -->
+
 #### 4.2.0
+
 <!-- request 4.2.0 -->
+
 插入100万PQ规则需要**34秒**，而分批次（每批1万）REPLACE这些规则只需**23秒**。
+
 ```sql
 root@perf3 ~ # mysql -P9306 -h0 -e "drop table if exists pq; create table pq (f text, f2 text, j json, s string) type='percolate';"; date; for m in `seq 1 1000`; do (echo -n "insert into pq (id,query,filters,tags) values "; for n in `seq 1 1000`; do echo -n "(0,'@f (cat | ( angry dog ) | (cute mouse)) @f2 def', 'j.json.language=\"en\"', '{\"tag1\":\"tag1\",\"tag2\":\"tag2\"}')"; [ $n != 1000 ] && echo -n ","; done; echo ";")|mysql -P9306 -h0; done; date; mysql -P9306 -h0 -e "select count(*) from pq"
 Wed Dec 22 10:06:38 AM CET 2021
@@ -1312,20 +1305,21 @@ Wed Dec 22 10:07:12 AM CET 2021
 +----------+
 | count(*) |
 +----------+
-
 |  1000000 |
 +----------+
+
 root@perf3 ~ # date; (echo "begin;"; for offset in `seq 0 10000 990000`; do n=0; echo "replace into pq (id,query,filters,tags) values "; for id in `mysql -P9306 -h0 -NB -e "select id from pq limit $offset, 10000 option max_matches=1000000"`; do echo "($id,'@f (tiger | ( angry bear ) | (cute panda)) @f2 def', 'j.json.language=\"de\"', '{\"tag1\":\"tag1\",\"tag2\":\"tag2\"}')"; n=$((n+1)); [ $n != 10000 ] && echo -n ","; done; echo ";"; done; echo "commit;") > /tmp/replace.sql; date
 Wed Dec 22 10:12:31 AM CET 2021
-
 Wed Dec 22 10:14:00 AM CET 2021
-
 root@perf3 ~ # time mysql -P9306 -h0 < /tmp/replace.sql
+
 real	0m23.248s
 user	0m0.891s
 sys	0m0.047s
 ```
+
 <!-- end -->
+
 ### 小幅变更
 *  [optimize_cutoff](Server_settings/Searchd.md#optimize_cutoff) 现已作为 `searchd` 部分的配置选项提供。当你想统一限制所有索引中RT块的数量时非常有用。
 * [提交 0087](https://github.com/manticoresoftware/manticoresearch/commit/00874743823eaf43e2a09a088392fd7e0a617f47) 实现了多个具有相同字段集合或顺序的本地物理索引（实时/普通）上的准确 [count(distinct ...)](Searching/Grouping.md#COUNT%28DISTINCT-field%29) 和 [FACET ... distinct](Searching/Faceted_search.md#Faceting-without-duplicates)。
@@ -1359,53 +1353,51 @@ sys	0m0.047s
 * [问题 #682](https://github.com/manticoresoftware/manticoresearch/issues/682) 创建表失败，但留下目录
 * [问题 #663](https://github.com/manticoresoftware/manticoresearch/issues/663) 配置失败，提示未知键名 'attr_update_reserve'
 * [问题 #632](https://github.com/manticoresoftware/manticoresearch/issues/632) Manticore 批量查询崩溃
-
 * [问题 #679](https://github.com/manticoresoftware/manticoresearch/issues/679) 批量查询在 v4.0.3 版本再次导致崩溃
-
 * [提交 f7f8](https://github.com/manticoresoftware/manticoresearch/commit/f7f8bd8c0dbb23a59a88502dcba16b0918fb2330) 修正守护进程启动时尝试用无效节点列表重新加入集群崩溃问题
 * [问题 #643](https://github.com/manticoresoftware/manticoresearch/issues/643) Manticore 4.0.2 在批量插入后不接受连接
 * [问题 #635](https://github.com/manticoresoftware/manticoresearch/issues/635) 带 ORDER BY JSON.field 或字符串属性的 FACET 查询可能崩溃
 * [问题 #634](https://github.com/manticoresoftware/manticoresearch/issues/634) 查询含 packedfactors 时崩溃（SIGSEGV）
 * [提交 4165](https://github.com/manticoresoftware/manticoresearch/commits/41657f15f8fcf1e93cfad7f835bcf705d6e8349e) create table 未支持 morphology_skip_fields
+
 ## 版本 4.0.2，2021年9月21日
+
 ### 主要新功能
 - **全面支持 [Manticore Columnar Library](https://github.com/manticoresoftware/columnar)**。此前 Manticore Columnar Library 仅支持普通索引。现在支持：
   - 实时索引的 `INSERT`、`REPLACE`、`DELETE`、`OPTIMIZE`
-
   - 复制
-
   - `ALTER`
   - `indextool --check`
 - **自动索引压缩** ([问题 #478](https://github.com/manticoresoftware/manticoresearch/issues/478))。现在您无需手动调用 OPTIMIZE 或通过定时任务或其他自动化方式进行。Manticore 现在默认自动执行。您可以通过全局变量 [optimize_cutoff](Server_settings/Setting_variables_online.md) 设置默认压缩阈值。
 - **块快照和锁系统的重构**。这些变化从表面上可能不明显，但大大改善了实时索引中许多操作的表现。简而言之，此前大多数 Manticore 数据操作依赖于大量锁定，现在改用磁盘块快照机制。
 - **实时索引大批量插入性能显著提升**。举例说明，在 [Hetzner 服务器 AX101](https://www.hetzner.com/dedicated-rootserver/ax101)（配备 SSD，128 GB 内存和 AMD Ryzen™ 9 5950X（16*2 核））上，**3.6.0 版本中向架构为 `name text, email string, description text, age int, active bit(1)` 的表插入文档时，默认 `rt_mem_limit`，批大小 25000，16 并发插入工作者，总插入了 1600 万文档，速度可达 236K 文档/秒**。而在 4.0.2 版本下，相同的并发/批大小/数量下，插入速度提升到 **357K 文档/秒**。
+
   <details>
+
   - 读操作（如 SELECT、复制）使用快照执行
-
   - 仅改变内部索引结构且不修改模式或文档的操作（如合并 RAM 段、保存磁盘块、合并磁盘块）使用只读快照执行，并最终替换现有块
-
   - UPDATE 和 DELETE 针对现有块执行；若进行合并，写入先收集，后应用到新块
   - UPDATE 会依次为每个块获取排他锁。合并在收集块属性阶段获取共享锁。因此同时只有一个（合并或更新）操作可以访问该块的属性。
-
   - 合并进入需要属性的阶段时会设置特殊标志。UPDATE 完成后检查该标志，若设置了，则将整个更新存入特殊集合。合并完成后将更新应用到新生成的磁盘块。
   - ALTER 通过排他锁执行
   - 复制作为常规读操作运行，且在 SST 前保存属性，禁止 SST 期间的更新
+
   </details>
+
 - **[ALTER](Updating_table_schema_and_settings.md) 可以添加/删除全文字段**（在 RT 模式下）。以前它只能添加/删除属性。
-
-
 - 🔬 **实验性功能：用于全扫描查询的伪分片** - 允许并行化任何非全文搜索查询。您现在只需启用新选项 [searchd.pseudo_sharding](Server_settings/Searchd.md#pseudo_sharding)，即可期望非全文搜索查询的响应时间降低到 `CPU 核心数` 级别。注意，这可能会占用所有现有的 CPU 核心，因此如果您不仅关心延迟，还关心吞吐量，请谨慎使用。
-### 小改动
 
+### 小改动
 <!-- example -->
 - 通过 [APT 仓库](Installation/Debian_and_Ubuntu.md#APT-repository) 支持 Linux Mint 和 Ubuntu Hirsute Hippo
 - 在某些情况下，通过 HTTP 根据 id 更新大型索引更快（取决于 id 的分布）
-
 - [671e65a2](https://github.com/manticoresoftware/lemmatizer-uk/commit/671e65a296800537123a3f8b324eeaa3f58b9632) - 为 lemmatizer-uk 添加缓存
-<!-- intro -->
-#### 3.6.0
-<!-- request 3.6.0 -->
 
+<!-- intro -->
+
+#### 3.6.0
+
+<!-- request 3.6.0 -->
 ```
 time curl -X POST -d '{"update":{"index":"idx","id":4611686018427387905,"doc":{"mode":0}}}' -H "Content-Type: application/x-ndjson" http://127.0.0.1:6358/json/bulk
 
@@ -1416,31 +1408,33 @@ sys     0m0.007s
 ```
 <!-- intro -->
 #### 4.0.2
+
 <!-- request 4.0.2 -->
 ```
 time curl -X POST -d '{"update":{"index":"idx","id":4611686018427387905,"doc":{"mode":0}}}' -H "Content-Type: application/x-ndjson" http://127.0.0.1:6358/json/bulk
+
 real    0m0.006s
 user    0m0.004s
 sys     0m0.001s
 ```
 <!-- end -->
 - [systemd 的自定义启动标志](Starting_the_server/Linux.md#Custom-startup-flags-using-systemd)。现在如果需要以某些特定启动标志运行 Manticore，您无需手动启动 searchd
-
 - 新函数 [LEVENSHTEIN()](Functions/String_functions.md#LEVENSHTEIN%28%29)，用于计算 Levenshtein 距离
 - 新增 [searchd 启动标志](Starting_the_server/Manually.md#searchd-command-line-options) `--replay-flags=ignore-trx-errors` 和 `--replay-flags=ignore-all-errors`，使得即使 binlog 损坏仍能启动 searchd
 - [Issue #621](https://github.com/manticoresoftware/manticoresearch/issues/621) - 公开 RE2 的错误信息
 - 针对由本地普通索引组成的分布式索引，[COUNT(DISTINCT)](Searching/Grouping.md#COUNT%28DISTINCT-field%29) 更加准确
 - [FACET DISTINCT](Searching/Faceted_search.md#Faceting-without-duplicates) 用于在进行分面搜索时去重
 - [精确形式修饰符](Searching/Full_text_matching/Operators.md#Exact-form-modifier) 现在不再依赖 [形态学](Creating_a_table/NLP_and_tokenization/Morphology.md#morphology)，并且支持启用了 [infix/prefix](Creating_a_table/NLP_and_tokenization/Morphology.md#morphology) 搜索的索引
+
 ### 重大变更
 - 新版本可以读取旧索引，但旧版本无法读取 Manticore 4 的索引
-
 - 移除默认根据 id 进行隐式排序。如有需求，请显式排序
 - `charset_table` 默认值由 `0..9, A..Z->a..z, _, a..z, U+410..U+42F->U+430..U+44F, U+430..U+44F, U+401->U+451, U+451` 改为 `non_cjk`
 - `OPTIMIZE` 会自动执行。如不需要，请确保在配置文件的 `searchd` 部分设置 `auto_optimize=0`
 - [Issue #616](https://github.com/manticoresoftware/manticoresearch/issues/616) `ondisk_attrs_default` 已弃用，现已移除
 - 针对贡献者：Linux 构建现在使用 Clang 编译器，根据我们的测试它能构建出更快的 Manticore Search 和 Manticore Columnar 库
 - 如果搜索查询中未指定 [max_matches](Searching/Options.md#max_matches)，将隐式更新为性能所需的最低值，以提升新列存储的性能。这可能影响 [SHOW META](Node_info_and_management/SHOW_META.md#SHOW-META) 中的 `total` 指标，但不会影响表示实际找到文档数的 `total_found`
+
 ### 从 Manticore 3 迁移
 - 确保干净地停止 Manticore 3：
   - `/var/lib/manticore/binlog/` 中不应有 binlog 文件（目录中仅应有 `binlog.meta`）
@@ -1467,36 +1461,36 @@ sys     0m0.001s
 - [Issue #620](https://github.com/manticoresoftware/manticoresearch/issues/620) - 纯索引的 `charset_table` 默认值错误
 - [Commit 8f75](https://github.com/manticoresoftware/manticoresearch/commit/8f7536887d4b58a5bab5647fc067b2d0482c2038) - 新的磁盘块不会被 mlock
 - [Issue #607](https://github.com/manticoresoftware/manticoresearch/issues/607) - 当无法根据名称解析节点时，Manticore 集群节点崩溃
-
-
 - [Issue #623](https://github.com/manticoresoftware/manticoresearch/issues/623) - 更新后的索引复制可能导致未定义状态
 - [Commit ca03](https://github.com/manticoresoftware/manticoresearch/commit/ca03d2280c5197e9b311f0f03f551e3b702a8130) - 索引器在索引带有 json 属性的纯索引源时可能挂起
-
 - [Commit 53c7](https://github.com/manticoresoftware/manticoresearch/commit/53c753054558ff3f82c7af365273d32537c5338b) - 修复 PQ 索引上的不等于表达式过滤器
 - [Commit ccf9](https://github.com/manticoresoftware/manticoresearch/commit/ccf94e022ba6763d6286ab5bac767b6f6a846846) - 修复了列表查询中超过 1000 条匹配的选择窗口。之前 `SELECT * FROM pq ORDER BY id desc LIMIT 1000 , 100 OPTION max_matches=1100` 不工作
 - [Commit a048](https://github.com/manticoresoftware/manticoresearch/commit/a0483fe9bef3c45dffe96f5df4f4382aee29c072) - 向 Manticore 发送 HTTPS 请求可能导致警告 "max packet size(8388608) exceeded"
 - [Issue #648](https://github.com/manticoresoftware/manticoresearch/issues/648) - Manticore 3 在字符串属性更新几次后可能挂起
 
+
 ## Version 3.6.0, 2021年5月3日
 **Manticore 4 发布前的维护版本**
+
 ### 主要新功能
 - 支持用于纯索引的 [Manticore Columnar Library](https://github.com/manticoresoftware/columnar/)。纯索引新增设置 [columnar_attrs](Creating_a_table/Local_tables/Plain_and_real-time_table_settings.md#columnar_attrs)
 - 支持 [乌克兰语词形还原器](https://github.com/manticoresoftware/lemmatizer-uk)
 - 完全改进的直方图。在建立索引时，Manticore 会为其中的每个字段构建直方图，以加快过滤速度。在 3.6.0 中，算法全面修订，对于大量数据和频繁过滤可以获得更高性能。
+
 ### 次要变更
 - 工具 `manticore_new_cluster [--force]`，用于通过 systemd 重启复制集群
 - `indexer --merge` 命令新增参数 [--drop-src](Data_creation_and_modification/Adding_data_from_external_storages/Adding_data_to_tables/Merging_tables.md#Merging-tables)
-
 - [新模式](Creating_a_table/NLP_and_tokenization/Morphology.md#morphology) `blend_mode='trim_all'`
 - 增加了使用反引号转义 JSON 路径的支持 [支持转义JSON路径](Searching/Full_text_matching/Escaping.md#Escaping-json-node-names-in-SQL)
 - [indextool --check](Miscellaneous_tools.md#indextool) 可以在 RT 模式下工作
-
 - SELECT/UPDATE 支持 [FORCE/IGNORE INDEX(id)](Data_creation_and_modification/Updating_documents/UPDATE.md#Updates-via-SQL)
 - 合并后的磁盘块 chunk id 现在唯一
 - [indextool --check-disk-chunk CHUNK_NAME](Miscellaneous_tools.md#indextool)
+
 ### 优化
 - [更快的 JSON 解析](https://github.com/manticoresoftware/manticoresearch/commit/0c25fc1788e3f77f60cb7fb8f1623d8466bba606)，我们的测试显示对于 `WHERE json.a = 1` 这类查询延迟降低了 3-4%
 - 未记录命令 `DEBUG SPLIT` 作为自动分片/负载均衡的先决条件
+
 ### Bug 修复
 - [Issue #584](https://github.com/manticoresoftware/manticoresearch/issues/524) - FACET 结果不准确且不稳定
 - [Issue #506](https://github.com/manticoresoftware/manticoresearch/issues/506) - 使用 MATCH 时的异常行为，受影响用户需重建索引，此问题发生在索引构建阶段
@@ -1525,7 +1519,6 @@ sys     0m0.001s
 - [Commit 9341](https://github.com/manticoresoftware/manticoresearch/commit/93411fe6af4246ca4acce758944d513a1660b92b)  - 在高速新增事件时，netloop偶尔因原子'kick'事件在多个事件中只处理一次而丢失实际动作
 查询状态，不是服务器状态
 - [Commit d805](https://github.com/manticoresoftware/manticoresearch/commit/d805fc125244ef08d14fb3d1826e2c356862d539)  - 新刷新磁盘块可能在提交时丢失
-
 - [Commit 63cb](https://github.com/manticoresoftware/manticoresearch/commit/63cbf008d50979cdf7062664fb02a672a3bb1131)  - profiler中的'net_read'不精确
 - [Commit f537](https://github.com/manticoresoftware/manticoresearch/commit/f5379bb27234b25919966c50ccb6f469ead646e2)  - 阿拉伯语（从右向左文本）的渗透问题
 - [Commit 49ee](https://github.com/manticoresoftware/manticoresearch/commit/49eeb4202d4ce4875c07c35087d7108c1e177328)  - 重复列名时id未正确选取
@@ -1536,18 +1529,17 @@ sys     0m0.001s
 ### 破坏性更改：
 - 新的binlog格式：升级前需要干净停止Manticore
 - 索引格式略有变化：新版本可以正常读取现有索引，但如果从3.6.0降级至老版本，新索引将无法读取
-
 - 复制格式变化：不要从老版本复制到3.6.0或反之，必须同时将所有节点切换到新版本
-
 - `reverse_scan`已弃用。确保自3.6.0以来您的查询中不使用该选项，否则查询将失败
 - 本版本起不再提供RHEL6、Debian Jessie及Ubuntu Trusty的构建版本。如您亟需支持，请[联系我们](https://manticoresearch.com/contact-us/)
+
 ### 弃用
 - 不再默认按id隐式排序。如依赖此功能，请更新查询
-
 - 搜索选项`reverse_scan`已弃用
-## 版本 3.5.4，2020年12月10日
-### 新功能
 
+## 版本 3.5.4，2020年12月10日
+
+### 新功能
 - 新的Python、Javascript和Java客户端现已正式发布，手册中有详细文档
 - 实时索引的磁盘块自动丢弃。此优化允许在对实时索引进行[OPTIMIZE](Securing_and_compacting_a_table/Compacting_a_table.md#OPTIMIZE-TABLE)时自动丢弃不再需要的磁盘块（所有文档均被删除）。过去仍需合并，现在可即时丢弃磁盘块。[cutoff](Securing_and_compacting_a_table/Compacting_a_table.md#Number-of-optimized-disk-chunks)选项被忽略，即使没有实际合并，过时的磁盘块也会被移除。此功能在保留索引中删除旧文档时非常有用，压缩此类索引更快。
 - 作为SELECT的选项支持独立的NOT（[standalone NOT](Searching/Options.md#not_terms_only_allowed)）
@@ -1555,60 +1547,62 @@ sys     0m0.001s
 ### 小改动
 - [Issue #453](https://github.com/manticoresoftware/manticoresearch/issues/453) 新增选项 [indexer.ignore_non_plain=1](Data_creation_and_modification/Adding_data_from_external_storages/Plain_tables_creation.md#ignore_non_plain)，适用于运行 `indexer --all` 且配置文件中包含非普通索引的情况。若无此选项，会产生警告并返回相应退出码。
 - [SHOW PLAN ... OPTION format=dot](Node_info_and_management/Profiling/Query_plan.md#Dot-format-for-SHOW-PLAN) 和 [EXPLAIN QUERY ... OPTION format=dot](Searching/Full_text_matching/Profiling.md#Profiling-without-running-a-query) 支持全文查询计划执行的可视化。对理解复杂查询非常有用。
+
 ### 弃用
 - `indexer --verbose` 已被弃用，因为它从未为索引器输出添加任何内容
 - 转储 watchdog 的回溯信号现在应使用 `USR2`，而不是 `USR1`
+
 ###  修复的错误
 - [Issue #423](https://github.com/manticoresoftware/manticoresearch/issues/423) 西里尔字符期间调用片段保留模式不高亮
 - [Issue #435](https://github.com/manticoresoftware/manticoresearch/issues/435) RTINDEX - GROUP N BY 表达式 select 导致致命崩溃
 - [Commit 2b3b](https://github.com/manticoresoftware/manticoresearch/commit/2b3b62bd0ce2b54544733d524a169e81f71b5388) 当处于集群中时，searchd 状态显示段错误
-
-
 - [Commit 9dd2](https://github.com/manticoresoftware/manticoresearch/commit/9dd25c193ed2a53750a0e0e68566fd2b833fcb0c) 'SHOW INDEX index.N SETTINGS' 不能处理大于9的块
-
 - [Issue #389](https://github.com/manticoresoftware/manticoresearch/issues/389) 导致 Manticore 崩溃的错误
-
 - [Commit fba1](https://github.com/manticoresoftware/manticoresearch/commit/fba166178ff35c73a0c70d131cf3aca4a635e961) 转换器创建了损坏的索引
 - [Commit eecd](https://github.com/manticoresoftware/manticoresearch/commit/eecd61d861c742471175be19a5e5455034b5db5f) stopword_step=0 与 CALL SNIPPETS()
 - [Commit ea68](https://github.com/manticoresoftware/manticoresearch/commit/ea6850e449601199190f38a387c04b8a7b7e90f6) 在本地索引上低 max_matches 时 count distinct 返回0
 - [Commit 362f](https://github.com/manticoresoftware/manticoresearch/commit/362f27db3421f09a41c6cce04b5baace00fa4c4d) 使用聚合时，命中中不返回存储的文本
+
+
 ## 版本 3.5.2，2020年10月1日
+
 ### 新功能
 
 * OPTIMIZE 将磁盘块减少到一定数量（默认是 `2* 核心数`），而不是合并为单块。最优块数可通过 [cutoff](Securing_and_compacting_a_table/Compacting_a_table.md#Number-of-optimized-disk-chunks) 选项控制。
-
 * NOT 操作符现在可以单独使用。默认禁用，因单独 NOT 查询可能导致缓慢。可通过设置新的 searchd 指令 [not_terms_only_allowed](Server_settings/Searchd.md#not_terms_only_allowed) 为 `0` 启用。
 * 新设置 [max_threads_per_query](Server_settings/Searchd.md#max_threads_per_query) 控制查询可使用的最大线程数。若未设置，查询可用线程数上限为 [threads](Server_settings/Searchd.md#threads) 的值。
 每个 `SELECT` 查询可用线程数可通过 [OPTION threads=N](Searching/Options.md#threads) 覆盖全局 `max_threads_per_query`。
 * Percolate 索引现在可通过 [IMPORT TABLE](Data_creation_and_modification/Adding_data_from_external_storages/Adding_data_to_tables/Importing_table.md) 导入。
-
 * HTTP API `/search` 通过新的查询结点 `aggs` 获得对[分面](Searching/Faceted_search.md#HTTP-JSON)/[分组](Searching/Grouping.md)的基本支持。
 
 ### 小改动
 
 * 若未声明复制监听指令，引擎会尝试使用定义的 'sphinx' 端口之后最多200个端口。
-
 * `listen=...:sphinx` 必须明确设置用于 SphinxSE 连接或 SphinxAPI 客户端。
-
 * [SHOW INDEX STATUS](Node_info_and_management/Table_settings_and_status/SHOW_TABLE_STATUS.md) 新增指标输出：`killed_documents`、`killed_rate`、`disk_mapped_doclists`、`disk_mapped_cached_doclists`、`disk_mapped_hitlists` 和 `disk_mapped_cached_hitlists`。
-
 * SQL 命令 `status` 现输出 `Queue\Threads` 和 `Tasks\Threads`。
 
 ### 弃用：
+
 * `dist_threads` 现已完全弃用，若仍使用将由 searchd 记录警告。
+
 ### Docker
+
 官方 Docker 镜像基于 Ubuntu 20.04 LTS
+
 ### 打包
+
 除了通常的 `manticore` 包，还可按组件安装 Manticore Search：
 
 - `manticore-server-core` – 提供 `searchd`、手册页、日志目录、API 和 galera 模块。还会安装依赖 `manticore-common`。
-
 - `manticore-server` – 为核心提供自动化脚本（init.d, systemd）和 `manticore_new_cluster` 包装器。还依赖安装 `manticore-server-core`。
 - `manticore-common` – 提供配置、停用词、通用文档和骨架文件夹（datadir，modules 等）。
 - `manticore-tools` – 提供辅助工具（`indexer`、`indextool` 等）、其手册页和示例。也依赖 `manticore-common`。
 - `manticore-icudata`（RPM）或 `manticore-icudata-65l`（DEB）– 提供用于 ICU 形态学的 ICU 数据文件。
 - `manticore-devel`（RPM）或 `manticore-dev`（DEB）– 提供 UDF 的开发头文件。
+
 ### Bug修复
+
 1. [Commit 2a47](https://github.com/manticoresoftware/manticoresearch/commit/2a474dc1a26e8b0f8aaaae95669caf2f1d4b7746) RT 索引不同块时 grouper 守护进程崩溃
 2. [Commit 57a1](https://github.com/manticoresoftware/manticoresearch/commit/57a19e5ad5663ef0ca7436595218fb1221d28c8e) 为空的远程文档的快速路径
 3. [Commit 07dd](https://github.com/manticoresoftware/manticoresearch/commit/07dd3f313c63fb82c22092f9907ef24e3475250e) 表达式堆栈帧检测运行时
@@ -1622,51 +1616,51 @@ sys     0m0.001s
 11. [提交 04af](https://github.com/manticoresoftware/manticoresearch/commit/04af0349c1e784c2230d204592d6272b440bb375) 向包含系统（停用词）文件的集群添加索引
 12. [提交 5014](https://github.com/manticoresoftware/manticoresearch/commit/50148b4eae9f3a924082005cf5d2f9c8339af7f5) 合并含大型词典的索引；RT 优化大型磁盘块
 13. [提交 a2ad](https://github.com/manticoresoftware/manticoresearch/commit/a2adf1582843f63d4dcc1dab8f7598e0917094a2) Indextool 可导出当前版本的元数据
-
 14. [提交 69f6](https://github.com/manticoresoftware/manticoresearch/commit/69f6d5f77c64b97e3f395aea8c555b11c77fb732) GROUP N 中的分组顺序问题
-
 15. [提交 24d5](https://github.com/manticoresoftware/manticoresearch/commit/24d5d80f508576794b751d70f9f9b524564e3c14) 握手后对 SphinxSE 进行显式刷新
 16. [提交 31c4](https://github.com/manticoresoftware/manticoresearch/commit/31c4d78ac03ee85d9a02b86075448a04ac80f9e2) 仅在必要时避免复制超大描述
 17. [提交 2959](https://github.com/manticoresoftware/manticoresearch/commit/2959e2caa8610f98fcdf2e5a82160f58687f4a27) show threads 中出现负时间
 18. [提交 f0b3](https://github.com/manticoresoftware/manticoresearch/commit/f0b357102c70f3ac1d7da260c60b67322940e647) 令牌过滤插件对零位置增量的处理
 19. [提交 a49e](https://github.com/manticoresoftware/manticoresearch/commit/a49e5bc13ea763e6f01dd5993e891858a84d1846) 多重命中时将 'FAIL' 改为 'WARNING'
+
 ## 版本 3.5.0，2020年7月22日
+
 ### 主要新功能：
-
 * 本次发布耗时较长，因为我们致力于将多任务模式从线程切换到**协程**。这使配置更简单，查询并行化更直观：Manticore 仅使用指定数量的线程（参见新设置 [threads](Server_settings/Searchd.md#threads)），新模式确保以最优方式完成任务。
-
 * [高亮](Searching/Highlighting.md#Highlighting-options)方面的变更：
-
   - 任何支持多个字段的高亮（`highlight({},'field1, field2'`）或 JSON 查询中的 `highlight`）现在默认对每个字段应用限制。
-
   - 任何支持纯文本的高亮（`highlight({}, string_attr)` 或 `snippet()`）现在对整个文档应用限制。
   - [每字段限制](Searching/Highlighting.md#limits_per_field)可通过 `limits_per_field=0` 选项切换为全局限制（默认为 `1`）。
   - 通过 HTTP JSON 进行的高亮中，[allow_empty](Searching/Highlighting.md#allow_empty) 默认值改为 `0`。
+
 * 同一端口[现在可用于](Server_settings/Searchd.md#listen) http、https 和二进制 API（以接受来自远程 Manticore 实例的连接）。通过 mysql 协议的连接仍需使用 `listen = *:mysql`。Manticore 现在能自动检测尝试连接的客户端类型，MySQL 除外（因协议限制）。
+
 * 在 RT 模式中，一个字段现在可以同时是[文本和字符串属性](Creating_a_table/Data_types.md#String) — [GitHub issue #331](https://github.com/manticoresoftware/manticoresearch/issues/331)。
+
   在[普通模式](Read_this_first.md#Real-time-mode-vs-plain-mode)中称为 `sql_field_string`，现已在[RT 模式](Read_this_first.md#Real-time-mode-vs-plain-mode)的实时索引中支持。示例用法如下：
+
   <!-- more -->
   ```sql
   create table t(f string attribute indexed);
   insert into t values(0,'abc','abc');
   select * from t where match('abc');
-
   +---------------------+------+
   | id                  | f    |
   +---------------------+------+
   | 2810845392541843463 | abc  |
   +---------------------+------+
   1 row in set (0.01 sec)
+
   mysql> select * from t where f='abc';
   +---------------------+------+
   | id                  | f    |
-
   +---------------------+------+
   | 2810845392541843463 | abc  |
   +---------------------+------+
   1 row in set (0.00 sec)
   ```
   <!-- \more -->
+
 ### 次要变更
 * 现在您可以[高亮字符串属性](Searching/Highlighting.md#Highlighting-via-SQL)。
 * SQL 接口支持 SSL 和压缩。
@@ -1675,19 +1669,19 @@ sys     0m0.001s
 * 通过 HTTP JSON 接口提供过滤器操作符 [`in`](Searching/Filters.md#Set-filters)。
 * HTTP JSON 支持 [`expressions`](Searching/Expressions.md#expressions)。
 * 现在可以在 RT 模式下[动态修改 `rt_mem_limit`](https://github.com/manticoresoftware/manticoresearch/issues/344)，即可以执行 `ALTER ... rt_mem_limit=<new value>`。
-
 * 你现在可以使用[独立的中日韩字符集表](Creating_a_table/NLP_and_tokenization/Morphology.md#morphology)：`chinese`、`japanese` 和 `korean`。
 * [thread_stack](Server_settings/Searchd.md#thread_stack) 现在限制最大线程栈而非初始栈。
 * 改进了 `SHOW THREADS` 的输出。
 * 在 `SHOW THREADS` 中显示长时间运行的 `CALL PQ` 执行进度。
 * 运行时可通过 [SET](Server_settings/Setting_variables_online.md#SET) 修改 cpustat、iostat、coredump。
-
 * 实现了 `SET [GLOBAL] wait_timeout=NUM`。
+
 ### 破坏性变更：
 * **索引格式已更改。** 3.5.0 版本构建的索引无法被低于 3.5.0 版本的 Manticore 加载，但 Manticore 3.5.0 可识别旧格式。
 * [`INSERT INTO PQ VALUES()`](Data_creation_and_modification/Adding_documents_to_a_table/Adding_rules_to_a_percolate_table.md)（即不提供列列表）此前期望的值正好是 `(query, tags)`。现在改为 `(id,query,tags,filters)`。如果希望自动生成 id，可以将其设置为 0。
 * [`allow_empty=0`](Searching/Highlighting.md#allow_empty) 是通过 HTTP JSON 接口高亮显示时的新默认值。
 * 在 `CREATE TABLE`/`ALTER TABLE` 中，外部文件（停用词、例外等）只能使用绝对路径。
+
 ### 弃用项目：
 * `ram_chunks_count` 在 `SHOW INDEX STATUS` 中重命名为 `ram_chunk_segments_count`。
 * `workers` 已废弃。现在只支持单一工作模式。
@@ -1714,19 +1708,19 @@ sys     0m0.001s
   | Field | Type   | Properties     |
   +-------+--------+----------------+
   | id    | bigint |                |
-
-
   | f     | text   | indexed stored |
-
   +-------+--------+----------------+
   ```
 
   <!-- \more -->
 * 西里尔字母 `и` 不会映射到 `i`，在 `non_cjk` charset_table（默认）中如此，因为这对俄语词干提取和词形还原的影响过大。
 * `read_timeout`。改用控制读写的 [network_timeout](Server_settings/Searchd.md#network_timeout)。
+
 ### 软件包
+
 * Ubuntu Focal 20.04 官方软件包
 * deb 包名从 `manticore-bin` 变更为 `manticore`
+
 ### Bug 修复：
 1. [Issue #351](https://github.com/manticoresoftware/manticoresearch/issues/351) searchd 内存泄漏
 2. [Commit ceab](https://github.com/manticoresoftware/manticoresearch/commit/ceabe44f) 碎片中的小范围越界读取
@@ -1778,15 +1772,14 @@ sys     0m0.001s
 48. [Issue #363](https://github.com/manticoresoftware/manticoresearch/issues/363) 在 centos 7 中 json 属性使用 `[null]` 导致插入数据损坏
 49. 重大 [Issue #345](https://github.com/manticoresoftware/manticoresearch/issues/345) 记录未被插入，count() 结果随机，"replace into" 返回 OK
 50. max_query_time 使 SELECT 过度变慢
-
-
 51. [Issue #352](https://github.com/manticoresoftware/manticoresearch/issues/352) Master-agent 通信在 Mac OS 上失败
 52. [Issue #328](https://github.com/manticoresoftware/manticoresearch/issues/328) 使用 Connector.Net/Mysql 8.0.19 连接 Manticore 出错
 53. [Commit daa7](https://github.com/manticoresoftware/manticoresearch/commit/daa760d2fe83668038318f0f384ceefc0d075e18) 修复 \0 转义并优化性能
-
 54. [Commit 9bc5](https://github.com/manticoresoftware/manticoresearch/commit/9bc5c01a493db993b90ff6c1ad51aeae028f629c) 修复 count distinct 与 json 相关问题
 55. [Commit 4f89](https://github.com/manticoresoftware/manticoresearch/commit/4f89a965a3af0db548ae9d1763731ebaebe21f5a) 修复在其他节点删除表失败
 56. [Commit 952a](https://github.com/manticoresoftware/manticoresearch/commit/952af5a5931fd72b87edc169588777778b365231) 修复频繁调用 call pq 时的崩溃
+
+
 ## 版本 3.4.2，2020 年 4 月 10 日
 ### 关键漏洞修复
 * [Commit 2ffe](https://github.com/manticoresoftware/manticoresearch/commit/2ffe2d261793f9681265bc4abe38d695e72c121e) 修复旧版本 RT 索引无法索引数据的问题
@@ -1801,19 +1794,20 @@ sys     0m0.001s
 ### 小改动
 * charset_table 默认使用 non_cjk 别名
 * rt 模式下全文字段默认被索引和存储
-
 * rt 模式下全文字段由 'field' 改名为 'text'
 * ALTER RTINDEX 改名为 ALTER TABLE
 * TRUNCATE RTINDEX 改名为 TRUNCATE TABLE
+
 ### 新功能
 * 仅存储字段
-
 * SHOW CREATE TABLE，IMPORT TABLE
+
 ### 改进
 * 更快的无锁 PQ
 * /sql 支持以 mode=raw 执行任意类型的 SQL 语句
 * mysql 协议别名 mysql41
 * data_dir 中默认包含 state.sql
+
 ### 漏洞修复
 * [Commit a533](https://github.com/manticoresoftware/manticoresearch/commit/a5333644e8e0c69746a9f24da8221fc965478e4a) 修复 highlight() 中错误字段语法导致崩溃
 * [Commit 7fbb](https://github.com/manticoresoftware/manticoresearch/commit/7fbb9f2e618096289cba7f8b834530b46aa94055) 修复复制带 docstore 的 RT 索引时服务器崩溃
@@ -1821,30 +1815,30 @@ sys     0m0.001s
 * [Commit 3465](https://github.com/manticoresoftware/manticoresearch/commit/3465c1ce9c860c09f6ccc5b83a63e3c68c241d8d) 修复空 docstore 和空索引的 dock-id 查找错误警告
 * [Commit a707](https://github.com/manticoresoftware/manticoresearch/commit/b8601b4144b9092be43a7caa7cd6b19cb37e14c7) 修复 #314 SQL 插入命令尾部分号问题
 * [Commit 9562](https://github.com/manticoresoftware/manticoresearch/commit/95628c9b9b8f16fe1bd18599a84e9673575adf1a) 移除查询单词不匹配的警告
-
 * [Commit b860](https://github.com/manticoresoftware/manticoresearch/commit/b8601b4144b9092be43a7caa7cd6b19cb37e14c7) 修复通过 ICU 分段的片段中的查询
 * [Commit 5275](https://github.com/manticoresoftware/manticoresearch/commit/5275516ca4631c584e6e0127fa161a18d2658fd0) 修复 docstore 块缓存中的查找/添加竞态条件
 * [Commit f06e](https://github.com/manticoresoftware/manticoresearch/commit/f06ef97af5c7390427e82525c150535290e42c3e) 修复 docstore 中的内存泄漏
 * [Commit a725](https://github.com/manticoresoftware/manticoresearch/commit/a7258ba8340e246c0d8aaeb4a7a74129eba807eb) 修复 #316 INSERT 时 LAST_INSERT_ID 返回为空
 * [Commit 1ebd](https://github.com/manticoresoftware/manticoresearch/commit/1ebd5bf8d74113bcfa138ce63ce11966990a4215) 修复 #317 json/update HTTP 端点支持 MVA 的数组和 JSON 属性的对象
 * [Commit e426](https://github.com/manticoresoftware/manticoresearch/commit/e426950a536382a142e2a42ed207c341149ff685) 修复索引器无明确 id 时转储 rt 的问题
-## 版本 3.3.0，2020年2月4日
 
+## 版本 3.3.0，2020年2月4日
 ### 新特性
 * 并行实时索引搜索
 * EXPLAIN QUERY 命令
 * 无索引定义的配置文件（测试版）
 * CREATE/DROP TABLE 命令（测试版）
 * indexer --print-rt - 可从源读取并打印实时索引的 INSERT 语句
+
 ### 改进
-
-
 * 更新为 Snowball 2.0 词干提取器
 * SHOW INDEX STATUS 增加 LIKE 过滤器
 * 对高 max_matches 的内存使用进行了改进
 * SHOW INDEX STATUS 为 RT 索引增加了 ram_chunks_count
 * 无锁优先队列
 * 将 LimitNOFILE 改为 65536
+
+
 ### Bug 修复
 * [Commit 9c33](https://github.com/manticoresoftware/manticoresearch/commit/9c33aab8c1fd9059c8644d23d5f58f03010043c6) 增加索引架构检查，防止属性重复 #293
 * [Commit a008](https://github.com/manticoresoftware/manticoresearch/commit/a0085f9477e191da9e0e835b91583fb9cfde698e) 修复无命中的词导致崩溃
@@ -1856,7 +1850,6 @@ sys     0m0.001s
 * [Commit 493a](https://github.com/manticoresoftware/manticoresearch/commit/493a5e916d70fd4a3f14d1ee487234434f4a7ce3) 修复 HIGHLIGHT() 中的 passage 宏
 * [Commit a82d](https://github.com/manticoresoftware/manticoresearch/commit/a82d41c775692f837f267d554d7d4a4b499d69f0) 修复 RT 索引创建大小不同磁盘块时的双缓冲问题
 * [Commit a404](https://github.com/manticoresoftware/manticoresearch/commit/a404c85de0d41d9d1c75b7540479d8a3af9e61aa) 修复 kqueue 的事件删除
-
 * [Commit 8bea](https://github.com/manticoresoftware/manticoresearch/commit/8bea0f6fd1666b817995c4dd6e67f6f1c9161638) 修复 RT 索引 rt_mem_limit 大值时磁盘块保存
 * [Commit 8707](https://github.com/manticoresoftware/manticoresearch/commit/8707f0395b7ace52dc0cba9c8ed92a2bc4392932) 修复索引时浮点溢出
 * [Commit a564](https://github.com/manticoresoftware/manticoresearch/commit/a56434ce71bb7714b4d8e75278aaa075b27ece80) 修复插入负 ID 文档到 RT 索引时的错误
@@ -1870,17 +1863,18 @@ sys     0m0.001s
 * 通过新 HIGHLIGHT() 函数支持 docstore 高亮，HTTP API 亦可用
 * SNIPPET() 可以使用特殊函数 QUERY()，返回当前 MATCH 查询
 * 高亮函数新增 field_separator 选项
+
 ### 改进与变更
 * 远程节点存储字段的延迟获取（可显著提升性能）
 * 字符串和表达式不再破坏多查询和 FACET 优化
 * RHEL/CentOS 8 版本现在使用 mariadb-connector-c-devel 的 mysql libclient
-
 * ICU 数据文件随软件包发布，移除 icu_data_dir
 * systemd 服务文件包含 'Restart=on-failure' 策略
 * indextool 现在可以在线检查实时索引
 * 默认配置文件改为 /etc/manticoresearch/manticore.conf
 * RHEL/CentOS 的服务名由 'searchd' 改为 'manticore'
 * 移除 query_mode 和 exact_phrase 片段的选项
+
 ### Bug 修复
 * [Commit 6ae4](https://github.com/manticoresoftware/manticoresearch/commit/6ae474c7894a6bee222d5b18e59a44fdbf57843a) 修复通过 HTTP 接口执行 SELECT 查询时崩溃
 * [Commit 5957](https://github.com/manticoresoftware/manticoresearch/commit/59577513a49eac5a4a3c5e2cb38394d3246b5d35) 修复 RT 索引保存磁盘块但未标记某些文档为删除
@@ -1893,52 +1887,52 @@ sys     0m0.001s
 * [Commit faed](https://github.com/manticoresoftware/manticoresearch/commit/faed3220b423a96401982bf47117edf1f62c584e) 修正 JSON 仅将数字转换为字符串以及表达式中 JSON 字符串到数字的转换
 * [Commit 5331](https://github.com/manticoresoftware/manticoresearch/commit/533197200249d648ebcbdaca5d605861ee566348) 修正 indextool 在命令行设置多个命令时以错误代码退出
 * [Commit 7955](https://github.com/manticoresoftware/manticoresearch/commit/795520ac351d22e4497ebaf6c249bf25081842b6) 修正 #275 磁盘空间不足错误时二进制日志处于无效状态
-
 * [Commit 2284](https://github.com/manticoresoftware/manticoresearch/commit/2284da5e3ff77bf7be4038a4d950c0580e4159c8) 修正 #279 JSON 属性的 IN 过滤器崩溃
 * [Commit ce2e](https://github.com/manticoresoftware/manticoresearch/commit/ce2e4b4765111a7d331ffc256911f12770a8942d) 修正 #281 错误的管道关闭调用
 * [Commit 5355](https://github.com/manticoresoftware/manticoresearch/commit/535589ba8a37baf5c6056afb5ff969fd70476feb) 修正服务器在调用 PQ 时因递归 JSON 属性编码为字符串而挂起
 * [Commit a5fc](https://github.com/manticoresoftware/manticoresearch/commit/a5fc8a36e1644ee051632408ab8b53e79aeb9ff4) 修正在 multiand 节点中文档列表越界
-
 * [Commit a362](https://github.com/manticoresoftware/manticoresearch/commit/a3628617ef4ee89a811d4ba2c4a04cbbc298c1b5) 修正检索线程公共信息
 * [Commit f8d2](https://github.com/manticoresoftware/manticoresearch/commit/f8d2d7bbbb90af3d2ee97424f97b05927f09d42b) 修正 docstore 缓存锁
+
 ## 版本 3.2.0，2019年10月17日
 ### 新功能
 * 文档存储
-
 * 新指令 stored_fields、docstore_cache_size、docstore_block_size、docstore_compression、docstore_compression_level
+
 ### 改进和更改
 * 改进了 SSL 支持
 * 更新了 non_cjk 内置字符集
 * 禁止 UPDATE/DELETE 语句在查询日志中记录为 SELECT
 * 提供 RHEL/CentOS 8 软件包
+
 ### Bug 修复
 * [Commit 301a](https://github.com/manticoresoftware/manticoresearch/commit/301a806b14725e842300ee225521407464374c41) 修正 RT 索引的磁盘块中替换文档时崩溃
 * [Commit 46c1](https://github.com/manticoresoftware/manticoresearch/commit/46c1cad8fa11c1fc09cc34b20d978fdfcd4e6d27) 修正 #269 LIMIT N OFFSET M
 * [Commit 92a4](https://github.com/manticoresoftware/manticoresearch/commit/92a46edaa196ef33f3ac2225fbdba2c2b88ee45d) 修正显式设置 id 或提供 id 列表的 DELETE 语句跳过搜索问题
-
 * [Commit 8ca7](https://github.com/manticoresoftware/manticoresearch/commit/8ca78c138d837caab30dc6e2343a3c4d1687bb87) 修正 Windows poller 中事件移除后的错误索引
 * [Commit 6036](https://github.com/manticoresoftware/manticoresearch/commit/603631e2bff5cb0acf25f68b85621742490eccd9) 修正通过 HTTP 请求的 JSON 浮点数四舍五入问题
 * [Commit 62f6](https://github.com/manticoresoftware/manticoresearch/commit/62f64cb9e75ec28fc3c29f8414ce9656f5580254) 修正远程片段首先检查空路径问题；修正 Windows 测试
 * [Commit aba2](https://github.com/manticoresoftware/manticoresearch/commit/aba274c2c5abc1029894ba9f95b786bda93e8f22) 修正配置重载在 Windows 上的行为与 Linux 一致
 * [Commit 6b8c](https://github.com/manticoresoftware/manticoresearch/commit/6b8c4242ef77c3fa4d0ccb7d76d81714b6728f0b) 修正 #194 PQ 支持形态学和词干分析器
 * [Commit 174d](https://github.com/manticoresoftware/manticoresearch/commit/174d312905285aa5746f4f404c53e6dc669ef42f) 修正 RT 退役段管理
-## 版本 3.1.2，2019年8月22日
 
+## 版本 3.1.2，2019年8月22日
 ### 新功能和改进
 * HTTP API 的实验性 SSL 支持
 * CALL KEYWORDS 添加字段过滤器
 * /json/search 支持 max_matches
 * Galera gcache.size 默认大小自动调整
 * 改进 FreeBSD 支持
+
 ### Bug 修复
 * [Commit 0a1a](https://github.com/manticoresoftware/manticoresearch/commit/0a1a2c81038794983b4e30c8aefc7cc20e89b03f) 修正 RT 索引复制到存在相同但路径不同的节点时的问题
-
 * [Commit 4adc](https://github.com/manticoresoftware/manticoresearch/commit/4adc075294ac823289f745e2cc419f18c7dcf2e2) 修正无活动索引的刷新重新调度
 * [Commit d6c0](https://github.com/manticoresoftware/manticoresearch/commit/d6c00a6f750c04021747e9c99e0f77707a4cbfc3) 改进 RT/PQ 索引的刷新重新调度
 * [Commit d0a7](https://github.com/manticoresoftware/manticoresearch/commit/d0a7c95906b9b5ba33c98267d54501cfe27508d6) 修正 #250 TSV 和 CSV 管道源的 index_field_lengths 索引选项
 * [Commit 1266](https://github.com/manticoresoftware/manticoresearch/commit/1266d54800242709fbe2c34e72eb69b6595b23bd) 修正 indextool 对空索引块索引检查的错误报告
 * [Commit 553c](https://github.com/manticoresoftware/manticoresearch/commit/553ca73ca111f28e0888d59cd48b0d6df181ecd6) 修正 Manticore SQL 查询日志的空选择列表
 * [Commit 56c8](https://github.com/manticoresoftware/manticoresearch/commit/56c8584456293665ddd4ce4c94307d74473a78b9) 修正 indexer 的 -h/--help 响应
+
 ## 版本 3.1.0，2019年7月16日
 ### 新功能和改进
 * 实时索引的复制
@@ -1947,23 +1941,22 @@ sys     0m0.001s
 * 新指令 icu_data_dir
 * 支持复制事务的多语句执行
 * LAST_INSERT_ID() 和 @session.last_insert_id
-
 * SHOW VARIABLES 支持 LIKE 'pattern'
 * percolate 索引支持多文档插入
 * 配置新增时间解析器
-
 * 内部任务管理器
 * doc 和 hit 列表组件支持 mlock
 * 监狱（jail）片段路径
+
 ### 移除
 * 放弃对RLP库的支持，转而支持ICU；移除所有rlp\*指令
 * 禁用使用UPDATE更新文档ID
+
 ### Bug修复
 * [提交 f047](https://github.com/manticoresoftware/manticoresearch/commit/f047222339fd0e62a07e9ca8b2a829297d5db861) 修正concat和group_concat中的缺陷
 * [提交 b081](https://github.com/manticoresoftware/manticoresearch/commit/b08147ee24712b5eaa51f261626b5d16c6242fdd) 修正percolate索引中的查询uid为BIGINT属性类型
 * [提交 4cd8](https://github.com/manticoresoftware/manticoresearch/commit/4cd85afaf76eef0ce9fa1cd073f3fed160279890) 如果预分配新的磁盘块失败，不会崩溃
 * [提交 1a55](https://github.com/manticoresoftware/manticoresearch/commit/1a551227886474054111088412f2b2396f485652) 为ALTER添加缺失的timestamp数据类型
-
 * [提交 f3a8](https://github.com/manticoresoftware/manticoresearch/commit/f3a8e096fd496a6b001d398aadbb781b2dbad929) 修复错误的mmap读取导致的崩溃
 * [提交 4475](https://github.com/manticoresoftware/manticoresearch/commit/447577115192db7ac7bfea70b5ba58ee2c61229f) 修复复制中的集群锁哈希
 * [提交 ff47](https://github.com/manticoresoftware/manticoresearch/commit/ff476df955f057bd38e8b6ad6056325e9d6fbb9c) 修复复制中的提供者泄漏
@@ -1973,28 +1966,29 @@ sys     0m0.001s
 
 ## 版本 3.0.2，2019年5月31日
 ### 改进
-
 * 为文档和命中列表添加mmap阅读器
 * `/sql` HTTP端点响应现在与`/json/search`响应相同
-
 * 新增指令`access_plain_attrs`、`access_blob_attrs`、`access_doclists`、`access_hitlists`
 * 在复制设置中新增指令`server_id`
+
 ### 删除
 * 删除HTTP `/search` 端点
+
 ### 弃用
 * `read_buffer`、`ondisk_attrs`、`ondisk_attrs_default`、`mlock`由`access_*`指令替代
+
 ### Bug修复
 * [提交 849c](https://github.com/manticoresoftware/manticoresearch/commit/849c16e1040f382795ba0635cb48686f9db4f2d8) 允许选择列表中以数字开头的属性名
 * [提交 48e6](https://github.com/manticoresoftware/manticoresearch/commit/48e6c302ca37bec0bc49c79619c60bf787ed0708) 修复了UDF中的MVAs，修正了MVA别名
 * [提交 0555](https://github.com/manticoresoftware/manticoresearch/commit/055586a9a2ebfa8874f68099c5bc798a145fd4ef) 修复 #187 使用SENTENCE查询时的崩溃
-
-
 * [提交 93bf](https://github.com/manticoresoftware/manticoresearch/commit/93bf52f23f1c53c8a93a603387ca5463e1fc2ae8) 修复 #143 支持MATCH()周围的()
 * [提交 599e](https://github.com/manticoresoftware/manticoresearch/commit/599ee79ccd38cce0023a55cbce8f50c3dca62e38) 修复在ALTER集群语句中的集群状态保存
 * [提交 230c](https://github.com/manticoresoftware/manticoresearch/commit/230c321e277514b191629538eb3f02d219113d95) 修复在具有blob属性的ALTER索引时服务器崩溃
 * [提交 5802](https://github.com/manticoresoftware/manticoresearch/commit/5802b85aa93a81caea77073a3381ef912fdd677c) 修复 #196 按ID过滤
 * [提交 25d2](https://github.com/manticoresoftware/manticoresearch/commit/25d2dabda4a299a29bd375405862126da9b4bfac) 放弃对模板索引进行搜索
 * [提交 2a30](https://github.com/manticoresoftware/manticoresearch/commit/2a30d5b49d76faab031d195f533974938769b8e6) 修复SQL回复中ID列具有常规bigint类型
+
+
 ## 版本 3.0.0，2019年5月6日
 ### 功能和改进
 * 新的索引存储。非标量属性不再限制为每个索引4GB大小
@@ -2004,12 +1998,10 @@ sys     0m0.001s
 * killlist_target指令
 * 多AND搜索加速
 * 更好的平均性能和RAM使用
-
 * 用于升级使用2.x制成的索引的转换工具
 * CONCAT()函数
 * JOIN CLUSTER cluster AT 'nodeaddress:port'
 * ALTER CLUSTER posts UPDATE nodes
-
 * node_address 指令
 * SHOW STATUS中打印的节点列表
 
@@ -2020,31 +2012,33 @@ sys     0m0.001s
 
 ### 移除指令
 * docinfo（现在始终是外部的）、inplace_docinfo_gap、mva_updates_pool
-## 版本 2.8.2 GA，2019年4月2日
 
+## 版本 2.8.2 GA，2019年4月2日
 ### 功能和改进
 * 每次索引的Galera复制
 * OPTION 词形
+
 ### 编译说明
 Cmake最低版本现在是3.13。编译需要Boost和libssl
 开发库。
+
 ### Bug修复
 * [提交 6967](https://github.com/manticoresoftware/manticoresearch/commit/6967fedb2ef818ec1c825d482563edd05e1c9245) 修复在查询许多分布式索引时选择列表中许多星号的崩溃
 * [提交 36df](https://github.com/manticoresoftware/manticoresearch/commit/36df1a407dc08263690e3492518613ace82d69ca) 修复 [\#177](https://github.com/manticoresoftware/manticoresearch/issues/177) 通过Manticore SQL接口的大数据包
 * [提交 5793](https://github.com/manticoresoftware/manticoresearch/commit/57932aec734583fa93359faaf5034b2e2c9d352b) 修复 [\#170](https://github.com/manticoresoftware/manticoresearch/issues/170) MVA更新导致的RT优化崩溃
-
 * [提交 edb2](https://github.com/manticoresoftware/manticoresearch/commit/edb24b870423add86eba471d361e0e5aff098b18) 修复在SIGHUP重新加载配置后RT索引删除导致的binlog被移除时的服务器崩溃
 * [提交 bd3e](https://github.com/manticoresoftware/manticoresearch/commit/bd3e66e0085bc7e2e351b817dfc972fd8158fbce) 修复mysql握手认证插件payloads修正
 * [Commit 6a21](https://github.com/manticoresoftware/manticoresearch/commit/6a217f6ed82fb10f752213b15617b9cedf1e8533) 修复了 RT 索引中的 phrase_boundary 设置问题，详情见 [\#172](https://github.com/manticoresoftware/manticoresearch/issues/172)
 * [Commit 3562](https://github.com/manticoresoftware/manticoresearch/commit/3562f652753e4091fd7b5b0f65b58341c8cbcb31) 修复了 ATTACH 索引自身导致的死锁问题，详情见 [\#168](https://github.com/manticoresoftware/manticoresearch/issues/168)
 * [Commit 250b](https://github.com/manticoresoftware/manticoresearch/commit/250b3f0e74ad18dda34ba080aa13ca87798a9ac9) 修复了 binlog 在服务器崩溃后保存空元数据的问题
-
 * [Commit 4aa6](https://github.com/manticoresoftware/manticoresearch/commit/4aa6c69ad3a181cd7c5dafb990fb528121f68e59) 修复了由于 RT 索引使用磁盘块时 sorter 中字符串导致的服务器崩溃
+
 ## 版本 2.8.1 GA，2019年3月6日
 ### 新特性与改进
 * SUBSTRING_INDEX()
 * 支持 SENTENCE 和 PARAGRAPH 形式的 percolate 查询
 * 为 Debian/Ubuntu 添加了 systemd 生成器；同时添加了 LimitCORE 以允许生成 core dump
+
 ### Bug 修复
 * [Commit 84fe](https://github.com/manticoresoftware/manticoresearch/commit/84fe7405d17b59f4dcde15a6c8e8503923503def) 修复了服务器在匹配模式为 all 且全文查询为空时崩溃的问题
 * [Commit daa8](https://github.com/manticoresoftware/manticoresearch/commit/daa88b579fa373d5d2e869e43a2e178363b0fef1) 修复了删除静态字符串时发生崩溃的问题
@@ -2055,13 +2049,13 @@ Cmake最低版本现在是3.13。编译需要Boost和libssl
 * [Commit 75cd](https://github.com/manticoresoftware/manticoresearch/commit/75cd1342d05cdc352e3dd145cdbc6f79394a165b) 修正了 JSON 文档中 PQ 字段被索引剥离器更改导致来自兄弟字段错误匹配的问题
 * [Commit e2f7](https://github.com/manticoresoftware/manticoresearch/commit/e2f775437df922674d772ed4417780492502e65a) 修复了 RHEL7 构建下 JSON 解析导致服务器崩溃的问题
 * [Commit 3a25](https://github.com/manticoresoftware/manticoresearch/commit/3a25a5808feb3f8b80866991b436d6c1241618c2) 修复了 JSON 转义时斜杠在边缘位置导致的崩溃
-
 * [Commit be9f](https://github.com/manticoresoftware/manticoresearch/commit/be9f497872bea62dbdccd64fc28294fd7776c289) 修复了选项 'skip_empty' 现在能跳过空文档且不警告它们不是有效的 json
 * [Commit 266e](https://github.com/manticoresoftware/manticoresearch/commit/266e0e7b088549722a805fc837bf101ff681a5e8) 修复了 [\#140](https://github.com/manticoresoftware/manticoresearch/issues/161) 中当6位精度不足时浮点数输出8位的问题
 * [Commit 3f6d](https://github.com/manticoresoftware/manticoresearch/commit/3f6d23891064ee8e94030c4231497cdd7da33a6a) 修复了空 jsonobj 创建问题
 * [Commit f3c7](https://github.com/manticoresoftware/manticoresearch/commit/f3c7848a59b7eedc67c3403d6d4b37ce6fa94dc8) 修复了 [\#160](https://github.com/manticoresoftware/manticoresearch/issues/161) 中空 mva 输出 NULL 而非空字符串的问题
 * [Commit 0afa](https://github.com/manticoresoftware/manticoresearch/commit/0afa2ed058e5759470b1d7354c722faab34f98bb) 修复了在无 pthread_getname_np 环境下构建失败的问题
 * [Commit 9405](https://github.com/manticoresoftware/manticoresearch/commit/9405fccdeb27f0302a8d9a848981d30080216777) 修复了线程池工作线程导致服务器关闭时崩溃的问题
+
 ## 版本 2.8.0 GA，2019年1月28日
 ### 改进
 * 支持分布式 percolate 索引
@@ -2074,13 +2068,13 @@ Cmake最低版本现在是3.13。编译需要Boost和libssl
 * 支持 DESCRIBE pq TABLE
 * 不再支持 SELECT FROM pq WHERE UID，请改用 'id'
 * pq 索引的 SELECT 查询达到常规模型（例如，可通过 REGEX() 过滤规则）
-
 * ANY/ALL 可用于 PQ 标签
 * 表达式对 JSON 字段自动转换，无需显式转换
 * 内置 'non_cjk' charset_table 和 'cjk' ngram_chars
 * 内置支持 50 种语言的停用词集合
 * 停用词声明中的多个文件可用逗号分隔
 * CALL PQ 可接受 JSON 数组形式的文档
+
 ### Bug 修复
 * [Commit a4e1](https://github.com/manticoresoftware/manticoresearch/commit/a4e19afee54dafdc04b0da53372dafd8c0d332d6) 修复了 csjon 相关的内存泄漏
 * [Commit 28d8](https://github.com/manticoresoftware/manticoresearch/commit/28d862774874891a03e361da1b0347ebe8066ce0) 修复了 JSON 中缺失值导致的崩溃
@@ -2094,36 +2088,35 @@ Cmake最低版本现在是3.13。编译需要Boost和libssl
 * [Commit 8868](https://github.com/manticoresoftware/manticoresearch/commit/8868b207644f4f8cc1ab0c270adb35493fed22e1) 修复了Manticore SQL错误信息超出512字符被截断的问题
 * [Commit de9d](https://github.com/manticoresoftware/manticoresearch/commit/de9deda9c142823d6dbf529423417b5c670fae94) 修复了无binlog保存percolate索引时的崩溃问题
 * [Commit 2b21](https://github.com/manticoresoftware/manticoresearch/commit/2b219e1a32791e7740bb210b7d408f96abc6374f) 修复了OSX上http接口无法工作的BUG
-
 * [Commit e92c](https://github.com/manticoresoftware/manticoresearch/commit/e92c60240f8f9e1756bfa14fba0bbb402586a389) 修复了indextool在检查MVA时错误的错误信息
 * [Commit 238b](https://github.com/manticoresoftware/manticoresearch/commit/238bdea59bad89f097403f1c978658ce45f16c70) 修复了在FLUSH RTINDEX时写锁问题，不再在保存和定期从rt_flush_period刷新时锁定整个索引
 * [Commit c26a](https://github.com/manticoresoftware/manticoresearch/commit/c26a236bd42b7082db079a51a84172066d337d64) 修复了ALTER percolate索引时等待搜索加载卡住的问题
 * [Commit 9ee5](https://github.com/manticoresoftware/manticoresearch/commit/9ee5703f6c28f57cd5bff5e705966d93fe30d267) 修复了max_children为0时应使用线程池默认工作线程数的问题
 * [Commit 5138](https://github.com/manticoresoftware/manticoresearch/commit/5138fc048a1bd146b271ce6a72fe954344281f69) 修复了使用index_token_filter插件且配置了stopwords和stopword_step=0时向索引写入数据出现的错误
-
 * [Commit 2add](https://github.com/manticoresoftware/manticoresearch/commit/2add3d319ac62fe450bf60e89033100853dc2ecf) 修复了索引定义中仍使用aot词形还原器但缺少lemmatizer_base导致崩溃的问题
+
 ## 版本 2.7.5 GA，2018年12月4日
 ### 改进
 * 增加了REGEX函数
 * json API搜索支持limit/offset
 * qcache的性能分析点
-### Bug修复
 
+### Bug修复
 * [Commit eb3c](https://github.com/manticoresoftware/manticoresearch/commit/eb3c7683b9740cff4cc4cadd2ab9f990b9f7d173) 修复了FACET查询中多属性宽类型导致的服务器崩溃
 * [Commit d915](https://github.com/manticoresoftware/manticoresearch/commit/d915cf6696514f4be365ffb5981bccaa15983e65) 修复了FACET查询主选择列表中隐式GROUP BY的问题
 * [Commit 5c25](https://github.com/manticoresoftware/manticoresearch/commit/5c25dc271a8c11a1c82ca3c88e518acbc6a8c164) 修复了GROUP N BY查询导致的崩溃
 * [Commit 85d3](https://github.com/manticoresoftware/manticoresearch/commit/85d30a232d4ffd89916b673a9b2db946d272a945) 修复了内存操作崩溃处理中的死锁问题
 * [Commit 8516](https://github.com/manticoresoftware/manticoresearch/commit/85166b5ef2be38061d62f2b20f15acaa0311258a) 修复了indextool检查时的内存消耗问题
-
 * [Commit 58fb](https://github.com/manticoresoftware/manticoresearch/commit/58fb03166830d8b23e7ab9ce56309db7ddac22f4) 修复了gmock包含文件不再需要，因上游已解决该问题
+
 ## 版本 2.7.4 GA，2018年11月1日
 ### 改进
 * 远程分布式索引情况下，SHOW THREADS命令打印原始查询而非API调用
 * SHOW THREADS新增`format=sphinxql`选项，以SQL格式打印所有查询
 * SHOW PROFILE打印新增`clone_attrs`阶段
+
 ### Bug修复
 * [Commit 4f15](https://github.com/manticoresoftware/manticoresearch/commit/4f155712a0bccc1bd01cc191647bc8cff814888e) 修复了使用无malloc_stats、malloc_trim的libc时构建失败的问题
-
 * [Commit f974](https://github.com/manticoresoftware/manticoresearch/commit/f974f20bda3214a56877c393a192be1a77150958) 修复了CALL KEYWORDS结果集中的单词内特殊符号问题
 * [Commit 0920](https://github.com/manticoresoftware/manticoresearch/commit/092083282ea8ae0b2e72fb6989c57ccec81e74ac) 修复了通过API或远程代理对分布式索引执行CALL KEYWORDS失败的问题
 * [Commit fd68](https://github.com/manticoresoftware/manticoresearch/commit/fd686bfe88b720ffd7642e36897ba45161cbd7d2) 修复了distributed index中agent_query_timeout未正确传递给代理作为max_query_time的问题
@@ -2137,6 +2130,7 @@ Cmake最低版本现在是3.13。编译需要Boost和libssl
 * VIP连接中的DEBUG可执行'crash <password>'进行服务器的有意SIGEGV操作
 * DEBUG支持执行'malloc_stats'以导出searchd.log中的malloc统计信息，执行'malloc_trim'以调用malloc_trim()
 * 如果系统中存在gdb，则改进了堆栈回溯信息
+
 ### Bug修复
 * [Commit 0f3c](https://github.com/manticoresoftware/manticoresearch/commit/0f3cc333f6129451ad1ae2c97905b6c04ba5d454) 修复了Windows下重命名时的崩溃或失败
 * [Commit 1455](https://github.com/manticoresoftware/manticoresearch/commit/1455ba2bf8079f03ce7f861a8d9662a360d705de) 修复了32位系统上的服务器崩溃
@@ -2188,13 +2182,13 @@ Cmake最低版本现在是3.13。编译需要Boost和libssl
 * 支持带 WITH RECONFIGURE 的 [TRUNCATE](Emptying_a_table.md)
 * 在 SHOW STATUS 中停用 RT 索引的内存计数器
 * 多代理的全局缓存
-
 * 改进了 Windows 下的 IOCP
 * HTTP 协议的 VIP 连接
 * Manticore SQL 的 [DEBUG](Reporting_bugs.md#DEBUG) 命令，可以运行多种子命令
 * [shutdown_token](Server_settings/Searchd.md#shutdown_token) - 调用 DEBUG 命令中的 `shutdown` 所需密码的 SHA1 哈希
 * 新增 SHOW AGENT STATUS 的统计信息 (_ping, _has_perspool, _need_resolve)
 * indexer 的 --verbose 选项现在支持 \[debugvv\] 来打印调试信息
+
 ### 错误修复
 * [Commit 3900](https://github.com/manticoresoftware/manticoresearch/commit/390082a7be0a1f9539b30361d11d54de35c62a44) 删除了优化过程中的写锁
 * [Commit 4c33](https://github.com/manticoresoftware/manticoresearch/commit/4c337648329be22373be33333cbc9c5664d18b80) 修复了重新加载索引设置时的写锁问题
@@ -2217,7 +2211,6 @@ Cmake最低版本现在是3.13。编译需要Boost和libssl
 * [Commit 156e](https://github.com/manticoresoftware/manticoresearch/commit/156edc717dc63d3ea120f42466eba6e022da88be) 修正了 xmlpipe 索引中多出的属性/字段的输出名称
 * [Commit cdac](https://github.com/manticoresoftware/manticoresearch/commit/cdac6d1f17d384bfc8bae49e91241b2f346c3830) 修复了配置文件无 indexer 部分时默认 indexer 的值
 * [Commit e61e](https://github.com/manticoresoftware/manticoresearch/commit/e61ec00b6b27d1d5878247e2ee817f3b1e7fde16) 修复了服务器重启后 RT 索引磁盘块中错误嵌入的停用词
-
 * [Commit 5fba](https://github.com/manticoresoftware/manticoresearch/commit/5fba49d5e28c17de4c0acbd984466127f42de6e8) 修复了跳过幽灵（已关闭但未从轮询器中最终删除）连接的问题
 * [Commit f22a](https://github.com/manticoresoftware/manticoresearch/commit/f22ae34b623906b3c5a05a06198dad2e548dc541) 修复了混合（孤立）网络任务
 * [Commit 4689](https://github.com/manticoresoftware/manticoresearch/commit/46890e70eb8dcd00c1bf1b030538b8f131c601c2) 修复了写入后读取操作崩溃的问题
@@ -2230,14 +2223,15 @@ Cmake最低版本现在是3.13。编译需要Boost和libssl
 * 改进了 PQ 上匹配多个文档时的通配符性能
 * 支持 PQ 上的全表扫描查询
 * 支持 PQ 上的 MVA 属性
-
-
 * 支持 Percolate 索引的正则表达式和 RLP
+
 ### 错误修复
 * [Commit 6885](https://github.com/manticoresoftware/manticoresearch/commit/68856261b41f6950666f9e5122726839fb3c71d0) 修复了查询字符串丢失问题
 * [Commit 0f17](https://github.com/manticoresoftware/manticoresearch/commit/0f1770943cba53bfd2e0edfdf0b1495ff0dd0e89) 修复了 SHOW THREADS 语句中的空信息问题
 * [Commit 53fa](https://github.com/manticoresoftware/manticoresearch/commit/53faa36a916bb87868e83aa79c1a1f972fb20ca0) 修复了使用 NOTNEAR 运算符匹配时崩溃的问题
 * [Commit 2602](https://github.com/manticoresoftware/manticoresearch/commit/26029a7cd77b518fb3a27588d7db6c8bffc73b0f) 修复了 PQ 删除时错误的过滤器消息
+
+
 ## 版本 2.7.0 GA，2018年6月11日
 ### 改进
 * 减少系统调用数量以避免 Meltdown 和 Spectre 补丁的影响
@@ -2247,35 +2241,35 @@ Cmake最低版本现在是3.13。编译需要Boost和libssl
 * 所有节点连接现在都是独立的
 * 协议改进
 * Windows 通信从 wsapoll 切换到 IO 完成端口
-
 * TFO 可用于主节点和子节点之间的通信
 * [SHOW STATUS](Node_info_and_management/Node_status.md#SHOW-STATUS) 现在输出服务器版本和 mysql_version_string
 * 为 CALL PQ 中调用的文档添加了 `docs_id` 选项。
 * 轮询查询过滤器现在可以包含表达式
 * 分布式索引可以与 FEDERATED 一起使用
 * 虚拟 SHOW NAMES COLLATE 和 `SET wait_timeout`（以更好兼容 ProxySQL）
+
 ### 修复漏洞
 * [Commit 5bcf](https://github.com/manticoresoftware/manticoresearch/commit/5bcff05d19e495f1a44f190885b25cbb6f217c4a) 修复了 PQ 的不等于标签添加问题
 * [Commit 9ebc](https://github.com/manticoresoftware/manticoresearch/commit/9ebc58916cd515eaa88da66d0895aebf0d1f2b5f) 修复了 CALL PQ 语句中添加文档 ID 字段到 JSON 文档的问题
 * [Commit 8ae0](https://github.com/manticoresoftware/manticoresearch/commit/8ae0e593a286110d8505d88baa3ac9e433cb38c9) 修复了 PQ 索引的刷新语句处理程序
 * [Commit c24b](https://github.com/manticoresoftware/manticoresearch/commit/c24b152344ecd77661566cddb803487f51d3c1aa) 修复了 PQ 对 JSON 和字符串属性的过滤
 * [Commit 1b8b](https://github.com/manticoresoftware/manticoresearch/commit/1b8bdde19aaa362785ea4c33bdc019154f8fbac4) 修复了解析空 JSON 字符串的问题
-
-
 * [Commit 1ad8](https://github.com/manticoresoftware/manticoresearch/commit/1ad8a07dbfc1131913a8d92c261fbb48f934e8b7) 修复了带 OR 过滤器的多查询时崩溃的问题
 * [Commit 69b8](https://github.com/manticoresoftware/manticoresearch/commit/69b89806380a229e36287ad9daf6f0ea2b5453eb) 修复了 indextool 使用公共配置部分（lemmatizer_base 选项）执行命令（dumpheader）的问题
 * [Commit 6dbe](https://github.com/manticoresoftware/manticoresearch/commit/6dbeaf2389d2af6a9dfccb56bfc986685b9f203e) 修复了结果集和过滤器中的空字符串
 * [Commit 39c4](https://github.com/manticoresoftware/manticoresearch/commit/39c4eb55ecc85f6dd54f6c8c6d6dfcf87fd8748e) 修复了负文档 ID 值的问题
 * [Commit 266b](https://github.com/manticoresoftware/manticoresearch/commit/266b7054f98e7d30fc2829b5c2467dc9f90def92) 修复了非常长词索引时词截取长度的问题
 * [Commit 4782](https://github.com/manticoresoftware/manticoresearch/commit/47823b0bd06cbd016a24345c99bb8693790b43dd) 修复了 PQ 中通配符查询匹配多文档的问题
-## 版本 2.6.4 GA，2018年5月3日
 
+
+## 版本 2.6.4 GA，2018年5月3日
 ### 新功能和改进
 * MySQL FEDERATED 引擎[支持](Extensions/FEDERATED.md)
 * MySQL 数据包现在返回 SERVER_STATUS_AUTOCOMMIT 标志，增强了与 ProxySQL 的兼容性
 * [listen_tfo](Server_settings/Searchd.md#listen_tfo) - 为所有监听器启用 TCP Fast Open 连接
 * indexer --dumpheader 也可以从 .meta 文件中导出 RT 头信息
 * Ubuntu Bionic 的 cmake 构建脚本
+
 ### 修复漏洞
 * [Commit 355b](https://github.com/manticoresoftware/manticoresearch/commit/355b11629174813abd9cd5bf2233be0783f77745) 修复了 RT 索引查询缓存条目无效的问题；
 
@@ -2289,54 +2283,53 @@ Cmake最低版本现在是3.13。编译需要Boost和libssl
 ## 版本 2.6.3 GA，2018年3月28日
 ### 改进
 * 编译时支持 jemalloc。如果系统存在 jemalloc，可通过 cmake 标志 `-DUSE_JEMALLOC=1` 启用
-
-
 ### 修复漏洞
 * [Commit 85a6](https://github.com/manticoresoftware/manticoresearch/commit/85a6d7e3db75f28c491042409bb677ed39eba07b) 修复了将 expand_keywords 选项写入 Manticore SQL 查询日志的问题
 * [Commit caaa](https://github.com/manticoresoftware/manticoresearch/commit/caaa3842f4dbd8507fd9e20bf3371a0c8ec0c087) 修复了 HTTP 接口正确处理大尺寸查询的问题
 * [Commit e386](https://github.com/manticoresoftware/manticoresearch/commit/e386d842b36195719e459b2db1fb20e402f9a51f) 修复了启用 index_field_lengths 的 RT 索引 DELETE 导致服务器崩溃的问题
 * [Commit cd53](https://github.com/manticoresoftware/manticoresearch/commit/ce528f37eb5d8284661928f6f3b340a4a1985253) 修复了 cpustats searchd 命令行选项在不支持的系统上工作的问题
 * [Commit 8740](https://github.com/manticoresoftware/manticoresearch/commit/8740fd63ae842c2ab0e51a8fcd6180d787ed57ec) 修复了定义了最小长度的 utf8 子串匹配问题
+
+
 ## 版本 2.6.2 GA，2018年2月23日
 ### 改进
-
 * 在使用 NOT 操作符和批处理文档的情况下，改进了 [Percolate Queries](Searching/Percolate_query.md) 的性能。
 * [percolate_query_call](Searching/Percolate_query.md) 可以根据 [dist_threads](Server_settings/Searchd.md#threads) 使用多线程。
 * 新增全文匹配操作符 NOTNEAR/N。
 * 针对 percolate 索引的 SELECT 支持 LIMIT。
 * [expand_keywords](Searching/Options.md#expand_keywords) 可以接受 'start','exact'（其中 'start,exact' 的效果与 '1' 相同）。
 * 针对使用 sql_query_range 定义的范围查询的 [joined fields](Data_creation_and_modification/Adding_data_from_external_storages/Fetching_from_databases/Processing_fetched_data.md#sql_joined_field) 支持范围主查询。
+
 ### Bug修复
 * [Commit 72dc](https://github.com/manticoresoftware/manticoresearch/commit/72dcf669744e9b7d636dfc213d24df85ab301f6b) 修复了在搜索内存段时的崩溃；修复了使用双缓冲保存磁盘块时的死锁；修复了优化期间保存磁盘块时的死锁。
 * [Commit 3613](https://github.com/manticoresoftware/manticoresearch/commit/36137149a1c3c0893bdda5a28fc7e8244bf2d4ae) 修复了带有空属性名的 xml 嵌入式模式导致的索引器崩溃。
-
-
 * [Commit 48d7](https://github.com/manticoresoftware/manticoresearch/commit/48d7e8001d2a66466ca64577f27ddc5421a67251) 修复了错误地取消链接非拥有的 pid 文件的问题。
 * [Commit a556](https://github.com/manticoresoftware/manticoresearch/commit/a5563a465ddc59ef71e65f17b68bc33f9700e838) 修复了有时遗留在临时文件夹中的孤立 fifo。
 * [Commit 2376](https://github.com/manticoresoftware/manticoresearch/commit/2376e8fc4508944b96959bd10686c6d51f5145e8) 修复了 FACET 结果集为空且包含错误 NULL 行的问题。
 * [Commit 4842](https://github.com/manticoresoftware/manticoresearch/commit/4842b67acdd5da75672db6c08ac563b48577ddd7) 修复了作为 Windows 服务运行服务器时的损坏索引锁问题。
 * [Commit be35](https://github.com/manticoresoftware/manticoresearch/commit/be35feef54ded59125750916cd211e56108eddae) 修复了 macOS 上错误的 iconv 库问题。
 * [Commit 8374](https://github.com/manticoresoftware/manticoresearch/commit/83744a977d7837d1d87cd506b88b0e7eb199efe6) 修复了错误的 count(*) 统计。
+
+
 ## 版本 2.6.1 GA，2018 年 1 月 26 日
 ### 改进
-
 * [agent_retry_count](Server_settings/Searchd.md#agent_retry_count) 对于具有镜像的代理，返回每个镜像的重试次数，而非每个代理，代理的总重试次数为 agent_retry_count\*mirrors。
 * [agent_retry_count](Creating_a_table/Creating_a_distributed_table/Remote_tables.md#agent_retry_count) 现在可以为每个索引单独指定，覆盖全局值。新增别名 [mirror_retry_count](Creating_a_table/Creating_a_distributed_table/Remote_tables.md#mirror_retry_count)。
 * 可以在代理定义中指定 retry_count，该值表示每个代理的重试次数。
 * Percolate 查询现已通过 HTTP JSON API 提供，路径为 [/json/pq](Searching/Percolate_query.md#Performing-a-percolate-query-with-CALL-PQ)。
 * 为可执行文件新增 -h 和 -v 选项（帮助和版本）。
 * [morphology_skip_fields](Creating_a_table/NLP_and_tokenization/Morphology.md#morphology) 支持实时索引。
+
 ### Bug修复
-
-
 * [Commit a40b](https://github.com/manticoresoftware/manticore/commit/a40b0793feff65e40d10062568d9847c08d10f57) 修复了带有 sql_range_step 的范围主查询在 MVA 字段上的正确工作。
 * [Commit f2f5](https://github.com/manticoresoftware/manticore/commit/f2f53757db45bcfb1544263ce0817e856656a621) 修复了黑洞系统循环挂起问题和黑洞代理看似断开的情况。
 * [Commit 84e1](https://github.com/manticoresoftware/manticore/commit/84e1f54aef25e0fce98870ad2dd784db5116f1d6) 修复了查询 ID 不一致的问题，修复了存储查询重复的 ID。
 * [Commit 1948](https://github.com/manticoresoftware/manticore/commit/19484231814fcb82b21763a3a4a9f45adc6b2d40) 修复了服务器从各种状态关闭时的崩溃。
 * [Commit 9a70](https://github.com/manticoresoftware/manticore/commit/9a706b499a1d61a90076065a1a703029d49db958)  [Commit 3495](https://github.com/manticoresoftware/manticore/commit/3495fd70cba8846b1a50d55d6679b039414c3d2a) 修复了长查询超时问题。
 * [Commit 3359](https://github.com/manticoresoftware/manticore/commit/3359bcd89b4f79a645fe84b8cf8616ce0addff02) 重构了基于 kqueue 的系统（Mac OS X、BSD）上的主-代理网络轮询。
-## 版本 2.6.0，2017 年 12 月 29 日
 
+
+## 版本 2.6.0，2017 年 12 月 29 日
 ### 新功能与改进
 * [HTTP JSON](Connecting_to_the_server/HTTP.md)：JSON 查询现在可以对属性进行等值匹配，MVA 和 JSON 属性可用于插入和更新，分布式索引也可以通过 JSON API 进行更新和删除。
 * [Percolate Queries](Searching/Percolate_query.md)
@@ -2346,13 +2339,14 @@ Cmake最低版本现在是3.13。编译需要Boost和libssl
 
 ### Bug修复
 * [Commit 0cfa](https://github.com/manticoresoftware/manticore/commit/0cfae4c) 修复了服务器（以及可能的发布版本未定义行为）在使用 rlp 构建的调试版本崩溃的问题。
-
 * [Commit 3242](https://github.com/manticoresoftware/manticore/commit/324291e) 修复了启用 progressive 选项的 RT 索引优化中杀死列表合并顺序错误的问题。
 * [Commit ac0e](https://github.com/manticoresoftware/manticore/commit/ac0efee) 修复了 Mac 上的轻微崩溃。
 * 大量通过深入静态代码分析后的微小修复。
 * 其他小幅度 Bug 修复。
+
 ### 升级
 本次发布更改了主节点与代理之间通信所使用的内部协议。如果您在分布式环境下运行 Manticoresearch，包含多个实例，请确保先升级代理，再升级主节点。
+
 ## 版本 2.5.1，2017 年 11 月 23 日
 ### 新功能与改进
 * JSON 查询基于 [HTTP API protocol](Connecting_to_the_server/HTTP.md)。支持搜索、插入、更新、删除、替换操作。数据操作命令也可以批量执行，目前有些限制，比如 MVA 和 JSON 属性不能用于插入、替换或更新。
@@ -2367,13 +2361,13 @@ Cmake最低版本现在是3.13。编译需要Boost和libssl
 * 修复了在 FreeBSD、macOS 和 Alpine 上的编译问题
 ### Bugfixes
 * [Commit 9897](https://github.com/manticoresoftware/manticore/commit/989752b) 修复了块索引的过滤回归问题
-
 * [Commit b1c3](https://github.com/manticoresoftware/manticore/commit/b1c3864) 将 PAGE_SIZE 重命名为 ARENA_PAGE_SIZE 以兼容 musl
 * [Commit f213](https://github.com/manticoresoftware/manticore/commit/f2133cc) 禁用 cmake < 3.1.0 的 googletests
 * [Commit f30e](https://github.com/manticoresoftware/manticore/commit/0839de7) 服务器重启时绑定套接字失败
 * [Commit 0807](https://github.com/manticoresoftware/manticore/commit/0807240) 修复服务器关闭时崩溃
 * [Commit 3e3a](https://github.com/manticoresoftware/manticore/commit/3e3acc3) 修复系统 blackhole 线程的 show threads
 * [Commit 262c](https://github.com/manticoresoftware/manticore/commit/262c3fe) 重构了 iconv 的配置检查，修复了在 FreeBSD 和 Darwin 上的构建问题
+
 ## 版本 2.4.1 GA，2017 年 10 月 16 日
 ### 功能和改进
 * WHERE 子句中属性过滤器间支持 OR 操作符
@@ -2382,22 +2376,22 @@ Cmake最低版本现在是3.13。编译需要Boost和libssl
 * [UTC 分组](Server_settings/Searchd.md#grouping_in_utc)
 * [query_log_mode](Server_settings/Searchd.md#query_log_mode) 可用于自定义日志文件权限
 * 字段权重可以为零或负数
-
 * [max_query_time](Searching/Options.md#max_query_time) 现在可影响全扫描
 * 添加了 [net_wait_tm](Server_settings/Searchd.md#net_wait_tm)、[net_throttle_accept](Server_settings/Searchd.md#net_throttle_accept) 和 [net_throttle_action](Server_settings/Searchd.md#net_throttle_action) 用于网络线程微调（当 workers=thread_pool 时）
-
 * COUNT DISTINCT 支持 facet 搜索
 * IN 操作符可用于 JSON 浮点数组
 * 多查询优化不再被整数/浮点表达式破坏
 * 使用多查询优化时，[SHOW META](Node_info_and_management/SHOW_META.md) 显示 `multiplier` 行
-### 编译
 
+### 编译
 Manticore Search 使用 cmake 构建，最低编译所需的 gcc 版本为 4.7.2。
+
 ### 目录和服务
 * Manticore Search 以 `manticore` 用户身份运行。
 * 默认数据目录现在是 `/var/lib/manticore/`。
 * 默认日志目录现在是 `/var/log/manticore/`。
 * 默认 pid 目录现在是 `/var/run/manticore/`。
+
 ### Bugfixes
 * [Commit a58c](https://github.com/manticoresoftware/manticore/commit/a58c619) 修复了破坏 Java 连接器的 SHOW COLLATION 语句
 * [Commit 631c](https://github.com/manticoresoftware/manticore/commit/631cf4e) 修复了处理分布式索引时的崩溃；给分布式索引哈希添加了锁；从代理中移除移动和拷贝操作符
@@ -2410,7 +2404,13 @@ Manticore Search 使用 cmake 构建，最低编译所需的 gcc 版本为 4.7.2
 * [Commit 123a](https://github.com/manticoresoftware/manticore/commit/123a9f0) 修复 fold_lemmas=1 与命中计数的不一致问题
 * [Commit cb99](https://github.com/manticoresoftware/manticore/commit/cb99164) 修复了 html_strip 行为不一致
 * [Commit e406](https://github.com/manticoresoftware/manticore/commit/e406761) 修复优化 rt 索引时丢失新设置；修复带 sync 选项的优化锁泄漏；
-
 * [Commit 86ae](https://github.com/manticoresoftware/manticore/commit/86aeb82) 修复了错误多查询的处理
+* [提交 7239](https://github.com/manticoresoftware/manticore/commit/72395d9) 修复了带有错误查询的多查询服务器崩溃问题
+* [提交 f353](https://github.com/manticoresoftware/manticore/commit/f353326) 修复了共享锁到独占锁的转换问题
+* [提交 3754](https://github.com/manticoresoftware/manticore/commit/3754785) 修复了没有索引的查询导致服务器崩溃的问题
+* [提交 29f3](https://github.com/manticoresoftware/manticore/commit/29f360e) 修复了服务器死锁问题
+
+## 版本 2.3.3，2017年7月6日
+* Manticore 品牌命名
 * [Commit 2645](https://github.com/manticoresoftware/manticore/commit/2645230) 修复结果集依赖多查询顺序的问题
 

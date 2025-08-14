@@ -3,7 +3,7 @@
 ## Версия 13.6.7
 **Выпущено**: 8 августа 2025
 
-Тест
+Тест 1
 Рекомендуемая версия [MCL](https://github.com/manticoresoftware/columnar): 8.0.1
 Рекомендуемая версия [Buddy](Installation/Manticore_Buddy.md#Manticore-Buddy): 3.34.2
 

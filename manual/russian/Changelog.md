@@ -3,8 +3,8 @@
 ## Версия 13.6.7
 **Выпущено**: 8 августа 2025
 
-Рекомендуемая версия [MCL](https://github.com/manticoresoftware/columnar): 8.0.1  
-Рекомендуемая версия [Buddy](Installation/Manticore_Buddy.md#Manticore-Buddy): 3.34.2  
+Рекомендуемая версия [MCL](https://github.com/manticoresoftware/columnar): 8.0.1
+Рекомендуемая версия [Buddy](Installation/Manticore_Buddy.md#Manticore-Buddy): 3.34.2
 
 Если вы следуете [официальному руководству по установке](https://manticoresearch.com/install/), вам не о чем беспокоиться.
 
@@ -1092,14 +1092,11 @@ Released: July 31st 2024
   <
   * Connection #0 to host localhost left intact
   {"items":[{"insert":{"table":"user","_id":2811798918248005633,"created":true,"result":"created","status":201}},{"insert":{"table":"user","_id":2811798918248005634,"created":true,"result":"created","status":201}},{"insert":{"table":"user","_id":2811798918248005635,"created":true,"result":"created","status":201}},{"insert":{"table":"user","_id":2811798918248005636,"created":true,"result":"created","status":201}}],"errors":false}
-  real
-0m1.022s
-  user
-0m0.001s
-
-  sys
-0m0.010s
+  real	0m1.022s
+  user	0m0.001s
+  sys	0m0.010s
   ```
+
   Теперь:
   ```bash
   $ time curl -v -sX POST http://localhost:9318/bulk -H "Content-Type: application/x-ndjson" --data '{"insert": {"index": "user", "doc":  {"name":"Prof. Matt Heaney IV","email":"ibergnaum@yahoo.com","description":"Tempora ullam eaque consequatur. Vero aut minima ut et ut omnis officiis vel. Molestiae quis voluptatum sint numquam.","age":15,"active":1}}}
@@ -1128,15 +1125,11 @@ Released: July 31st 2024
   <
   * Соединение #0 с хостом localhost оставлено открытым
   {"items":[{"bulk":{"table":"user","_id":2811798919590182916,"created":4,"deleted":0,"updated":0,"result":"created","status":201}}],"errors":false}
-  real
-
-0m0.015s
-
-  user
-0m0.005s
-  sys
-0m0.004s
+  real	0m0.015s
+  user	0m0.005s
+  sys	0m0.004s
   ```
+
   </details>
 
 * **⚠️ КРАЙНЕ ВАЖНОЕ ИЗМЕНЕНИЕ**: [Псевдо шардирование](Server_settings/Searchd.md#pseudo_sharding) включено по умолчанию. Если хотите его отключить, убедитесь, что добавили `pseudo_sharding = 0` в секцию `searchd` вашего конфигурационного файла Manticore.
@@ -1405,15 +1398,14 @@ sys	0m0.047s
 <!-- intro -->
 #### 3.6.0
 <!-- request 3.6.0 -->
-
 ```
 time curl -X POST -d '{"update":{"index":"idx","id":4611686018427387905,"doc":{"mode":0}}}' -H "Content-Type: application/x-ndjson" http://127.0.0.1:6358/json/bulk
 
 real    0m43.783s
 user    0m0.008s
 sys     0m0.007s
-
 ```
+
 <!-- intro -->
 #### 4.0.2
 <!-- request 4.0.2 -->
@@ -2020,14 +2012,16 @@ sys     0m0.001s
 
 ### Удаленные директивы
 * docinfo (теперь всегда extern), inplace_docinfo_gap, mva_updates_pool
-## Версия 2.8.2 GA, 2 апреля 2019
 
+## Версия 2.8.2 GA, 2 апреля 2019
 ### Функции и улучшения
 * Репликация Galera для индексов перколята
 * OPTION морфология
+
 ### Примечания по компиляции
 Минимальная версия Cmake теперь 3.13. Компиляция требует библиотеки boost и libssl
 разработки.
+
 ### Исправления ошибок
 * [Коммит 6967](https://github.com/manticoresoftware/manticoresearch/commit/6967fedb2ef818ec1c825d482563edd05e1c9245) исправлен сбой при использовании множества звезд в списке выборки для запроса в многие распределенные индексы
 * [Коммит 36df](https://github.com/manticoresoftware/manticoresearch/commit/36df1a407dc08263690e3492518613ace82d69ca) исправлен [#177](https://github.com/manticoresoftware/manticoresearch/issues/177) крупный пакет через интерфейс Manticore SQL
@@ -2410,7 +2404,13 @@ Manticore Search собирается с помощью cmake, минималь�
 * [Commit 123a](https://github.com/manticoresoftware/manticore/commit/123a9f0) исправлено fold_lemmas=1 и подсчет совпадений
 * [Commit cb99](https://github.com/manticoresoftware/manticore/commit/cb99164) исправлено непоследовательное поведение html_strip
 * [Commit e406](https://github.com/manticoresoftware/manticore/commit/e406761) исправлена потеря новых настроек при оптимизации rt-индекса; исправлены утечки блокировок при оптимизации с опцией sync;
-
 * [Commit 86ae](https://github.com/manticoresoftware/manticore/commit/86aeb82) исправлена обработка ошибочных мультизапросов
 * [Commit 2645](https://github.com/manticoresoftware/manticore/commit/2645230) исправлено зависимость результата от порядка мультизапросов
+* [Commit 7239](https://github.com/manticoresoftware/manticore/commit/72395d9) fixed server crash on multi-query with bad query
+* [Commit f353](https://github.com/manticoresoftware/manticore/commit/f353326) fixed shared to exclusive lock
+* [Commit 3754](https://github.com/manticoresoftware/manticore/commit/3754785) fixed server crash for query without indexes
+* [Commit 29f3](https://github.com/manticoresoftware/manticore/commit/29f360e) fixed dead lock of server
+
+## Версия 2.3.3, 06 июля 2017
+* Брендинг Manticore
 

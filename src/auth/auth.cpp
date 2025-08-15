@@ -503,12 +503,15 @@ static bool SaveAuth ( AuthUsersMutablePtr_t && tAuth, CSphString & sError )
 /////////////////////////////////////////////////////////////////////////////
 // DELETE
 
-static void DeleteUser ( AuthUsersMutablePtr_t & tAuth, const CSphString & sUserName )
+static void DeleteUser ( AuthUsersMutablePtr_t & tAuth, const CSphString & sUserName, bool bWithPerms )
 {
 	const auto & tUser = tAuth->m_hUserToken[sUserName];
 	tAuth->m_hHttpToken2User.Delete ( tUser.m_sRawBearerSha256 );
 	tAuth->m_hApiToken2User.Delete ( tUser.m_sBearerSha256 );
-	tAuth->m_hUserPerms.Delete ( sUserName );
+	
+	if ( bWithPerms )
+		tAuth->m_hUserPerms.Delete ( sUserName );
+
 	tAuth->m_hUserToken.Delete ( sUserName );
 }
 
@@ -536,7 +539,7 @@ static int DeleteUsers ( const VecTraits_T<DocID_t> & dSrcDocs, CSphString & sEr
 		if ( sUserName.IsEmpty() )
 			continue;
 
-		DeleteUser ( tAuth, sUserName );
+		DeleteUser ( tAuth, sUserName, true );
 		iDeleted++;
 	}
 
@@ -639,7 +642,6 @@ static int GetSchemaColumn ( const AuthPermsIndex_c::SchemaColumn_e eCol, const 
 {
 	return GetSchemaColumn ( AuthPermsIndex_c::GetColumnName ( eCol ), dSchema, sError );
 }
-
 
 static bool SetUserMember ( const AuthUsersIndex_c::SchemaColumn_e eCol, const SqlInsert_t & tVal, int iRow, AuthUserCred_t & tUser, CSphString & sError )
 {
@@ -780,7 +782,10 @@ static bool ApplyUsers ( const SqlStmt_t & tStmt, bool bReplace, MemoryWriter_c 
 		bOk &= SetUserMember ( AuthUsersIndex_c::SchemaColumn_e::Salt, tStmt.m_dInsertValues[dMapping[1] + iRow * dMapping.GetLength()], iRow, tUser, sError );
 		bOk &= SetUserMember ( AuthUsersIndex_c::SchemaColumn_e::Hashes, tStmt.m_dInsertValues[dMapping[2] + iRow * dMapping.GetLength()], iRow, tUser, sError );
 		if ( !bOk )
+		{
+			sError.SetSprintf ( "user '%s' error: %s", tUser.m_sUser.cstr(), sError.cstr() );
 			return false;
+		}
 
 		const auto * pCurUser = tAuth->m_hUserToken ( tUser.m_sUser );
 		if ( pCurUser && !bReplace )
@@ -805,8 +810,9 @@ static void CommitUsers ( const VecTraits_T<BYTE> & dData, AuthUsersMutablePtr_t
 	{
 		UserRead ( tReader, tUser );
 
+		// delete all hashes but keep the existed perms
 		if ( tAuth->m_hUserToken.Exists ( tUser.m_sUser ) )
-			DeleteUser ( tAuth, tUser.m_sUser );
+			DeleteUser ( tAuth, tUser.m_sUser, false );
 
 		AddUser ( tUser, tAuth );
 	}

@@ -88,7 +88,7 @@ CSphString ReadHex ( const char * sName, int iHashLen, const bson::Bson_c & tNod
 	Str_t sRaw = bson::ToStr ( tNode.ChildByName ( sName ) );
 	if ( sRaw.second/2!=iHashLen )
 	{
-		sError.SetSprintf ( "wrong hash size %d, expected %d", sRaw.second/2, iHashLen );
+		sError.SetSprintf ( "node '%s' has wrong hash size %d, expected %d", sName, sRaw.second/2, iHashLen );
 		return sRes;
 	}
 
@@ -202,7 +202,10 @@ bool ReadUsers ( const CSphString & sFile, bson::Bson_c & tBson, AuthUsersMutabl
 		tEntry.m_sRawBearerSha256 = bson::String ( tHashes.ChildByName ( "bearer_sha256" ) );
 
 		if ( !sError.IsEmpty() )
+		{
+			sError.SetSprintf ( "user '%s' error: %s", tEntry.m_sUser.cstr(), sError.cstr() );
 			return;
+		}
 
 		if ( tNode.HasError() )
 		{

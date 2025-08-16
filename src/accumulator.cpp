@@ -263,6 +263,11 @@ bool RtAccum_t::GenerateEmbeddings ( int iAttr, int iAttrWithModel, const CSphVe
 				dEmbeddingsForAttr[i] = dEmbeddingsForAttrTmp[iResultId];
 		}
 	}
+	else if ( dEmbeddingsForAttr.size()!=dResultIds.GetLength() )
+	{
+		sError = "Error generating embeddings";
+		return false;
+	}
 
 	return true;
 }

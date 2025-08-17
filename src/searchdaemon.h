@@ -431,7 +431,7 @@ public:
 struct ApiAuthToken_t;
 
 // RAII Start Sphinx API command/request header
-APIBlob_c APIHeader ( ISphOutputBuffer & dBuff, WORD uCommand, WORD uVer, const ApiAuthToken_t & tToken );
+APIBlob_c APIHeader ( ISphOutputBuffer & dBuff, WORD uCommand, WORD uVer );
 
 // RAII Sphinx API answer
 APIBlob_c APIAnswer ( ISphOutputBuffer & dBuff, WORD uVer = 0, WORD uStatus = 0 /* SEARCHD_OK */ );
@@ -449,9 +449,8 @@ public:
 //	void PrependBuf ( SmartOutputBuffer_t &dBuf );
 	size_t GetIOVec ( CSphVector<sphIovec> &dOut ) const;
 	void Reset();
-#if _WIN32
-	void LeakTo ( CSphVector<ISphOutputBuffer *> dOut );
-#endif
+	void LeakTo ( CSphVector<ISphOutputBuffer *> & dOut );
+	void SwapData ( CSphVector<ISphOutputBuffer *> & dChunks );
 };
 
 class GenericOutputBuffer_c : public ISphOutputBuffer
@@ -1301,7 +1300,6 @@ enum class EHTTP_ENDPOINT : BYTE
 	CLI_JSON,
 	ES_BULK,
 	TOKEN,
-	API,
 
 	TOTAL
 };

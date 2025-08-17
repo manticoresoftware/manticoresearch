@@ -17,6 +17,7 @@
 #include "std/fnv64.h"
 #include "sphinxjson.h"
 #include <filesystem>
+#include "searchdssl.h"
 
 #ifdef _WIN32
 #include <aclapi.h>
@@ -50,51 +51,61 @@ const CSphString & GetAuthBuddyName()
 	return g_sBuddyName;
 }
 
-static void FromString ( Str_t sSrc, CSphString & sRes )
+static void FromString ( Str_t sSrc, CSphFixedVector<BYTE> & dBuf )
 {
+	dBuf.Reset ( sSrc.second/2 );
+
 	// expects hash in form FIPS-180-1, that is:
 	// 45f44fd2db02b08b4189abf21e90edd712c9616d
 	// i.e. 40 symbols hex hash in small letters, space
-
-	ByteBlob_t dBuf ( sRes );
 	for ( int i=0; i<sSrc.second/2; ++i )
 	{
-		BYTE & uCode = (BYTE &)dBuf.first[i];
+		BYTE & uCode = dBuf[i];
 		uCode = HexChar ( sSrc.first[i * 2] );
 		uCode = BYTE ( ( uCode << 4 ) + HexChar ( sSrc.first[i * 2 + 1] ) );
 	}
 }
 
-CSphString ReadHex ( Str_t sRaw, int iHashLen, CSphString & sError )
+CSphFixedVector<BYTE> ReadHexVec ( const char * sName, Str_t sRaw, int iHashLen, CSphString & sError )
 {
-	CSphString sRes;
+	CSphFixedVector<BYTE> dRes ( 0 );
 
-	if ( sRaw.second/2!=iHashLen )
+	if ( IsEmpty ( sRaw ) )
 	{
-		sError.SetSprintf ( "wrong hash size %d, expected %d", sRaw.second/2, iHashLen );
-		return sRes;
+		sError.SetSprintf ( "empty '%s'", sName );
+		return dRes;
 	}
 
-	sRes.Reserve ( sRaw.second/2 );
-	FromString ( sRaw, sRes );
+	if ( iHashLen>0 && sRaw.second/2!=iHashLen )
+	{
+		sError.SetSprintf ( "argument '%s' has wrong hash size %d, expected %d", sName, sRaw.second/2, iHashLen );
+		return dRes;
+	}
 
-	return sRes;
+	FromString ( sRaw, dRes );
+	return dRes;
 }
 
-CSphString ReadHex ( const char * sName, int iHashLen, const bson::Bson_c & tNode, CSphString & sError )
+CSphFixedVector<BYTE> ReadHexVec ( const char * sName, const bson::Bson_c & tRoot, int iHashLen, CSphString & sError )
 {
-	CSphString sRes;
+	CSphFixedVector<BYTE> dRes ( 0 );
 
-	Str_t sRaw = bson::ToStr ( tNode.ChildByName ( sName ) );
+	auto tChild = tRoot.ChildByName ( sName );
+	if ( tChild==bson::nullnode )
+	{
+		sError.SetSprintf ( "missed node '%s'", sName );
+		return dRes;
+	}
+
+	Str_t sRaw = bson::ToStr ( tChild );
 	if ( sRaw.second/2!=iHashLen )
 	{
 		sError.SetSprintf ( "node '%s' has wrong hash size %d, expected %d", sName, sRaw.second/2, iHashLen );
-		return sRes;
+		return dRes;
 	}
 
-	sRes.Reserve ( sRaw.second/2 );
-	FromString ( sRaw, sRes );
-	return sRes;
+	FromString ( sRaw, dRes );
+	return dRes;
 }
 
 static bool ReadUsers ( const CSphString & sFile, bson::Bson_c & tBson, AuthUsersMutablePtr_t & tAuth, CSphString & sError );
@@ -177,8 +188,7 @@ AuthUsersMutablePtr_t ReadAuth ( char * sSrc, const CSphString & sSrcName, CSphS
 void AddUser ( const AuthUserCred_t & tEntry, AuthUsersMutablePtr_t & tAuth )
 {
 	tAuth->m_hUserToken.Add ( tEntry, tEntry.m_sUser );
-	tAuth->m_hHttpToken2User.Add ( tEntry.m_sUser, tEntry.m_sRawBearerSha256 );
-	tAuth->m_hApiToken2User.Add ( tEntry.m_sUser, tEntry.m_sBearerSha256 );
+	tAuth->m_hHttpToken2User.Add ( tEntry.m_sUser, BinToHex ( tEntry.m_dBearerSha256 ) );
 }
 
 bool ReadUsers ( const CSphString & sFile, bson::Bson_c & tBson, AuthUsersMutablePtr_t & tAuth, CSphString & sError )
@@ -191,15 +201,17 @@ bool ReadUsers ( const CSphString & sFile, bson::Bson_c & tBson, AuthUsersMutabl
 
 		AuthUserCred_t tEntry;
 		tEntry.m_sUser = bson::String ( tNode.ChildByName ( "username" ) );
-		tEntry.m_sSalt = ReadHex ( "salt", HASH20_SIZE, tNode, sError );
+		tEntry.m_dSalt = ReadHexVec ( "salt", tNode, HASH20_SIZE, sError );
 
 		bson::Bson_c tHashes { tNode.ChildByName ( "hashes" ) };
 
-		CSphString sSha1 = ReadHex ( "password_sha1_no_salt", HASH20_SIZE, tHashes, sError );
-		memcpy ( tEntry.m_tPwdSha1.data(), sSha1.cstr(), HASH20_SIZE );
-		tEntry.m_sPwdSha256 = ReadHex ( "password_sha256", HASH256_SIZE, tHashes, sError );
-		tEntry.m_sBearerSha256 = ReadHex ( "bearer_sha256", HASH256_SIZE, tHashes, sError );
-		tEntry.m_sRawBearerSha256 = bson::String ( tHashes.ChildByName ( "bearer_sha256" ) );
+		auto dSha1 = ReadHexVec ( "password_sha1_no_salt", tHashes, HASH20_SIZE, sError );
+		if ( !sError.IsEmpty() )
+			return;
+		memcpy ( tEntry.m_tPwdSha1.data(), dSha1.Begin(), HASH20_SIZE );
+
+		tEntry.m_dPwdSha256 = ReadHexVec ( "password_sha256", tHashes, HASH256_SIZE, sError );
+		tEntry.m_dBearerSha256 = ReadHexVec ( "bearer_sha256", tHashes, HASH256_SIZE, sError );
 
 		if ( !sError.IsEmpty() )
 		{
@@ -222,25 +234,28 @@ bool ReadUsers ( const CSphString & sFile, bson::Bson_c & tBson, AuthUsersMutabl
 			sError.SetSprintf ( "can not read users from the '%s', error: multiple user %s entries", sFile.cstr(), tEntry.m_sUser.cstr() );
 			return;
 		}
-		if ( hSalts [ tEntry.m_sSalt ] )
-		{
-			sError.SetSprintf ( "can not read users from the '%s', error: multiple salt entries '%s'", sFile.cstr(), BinToHex ( (const BYTE *)tEntry.m_sSalt.cstr(), tEntry.m_sSalt.Length() ).cstr() );
-			return;
-		}
-		if ( tAuth->m_hHttpToken2User ( tEntry.m_sRawBearerSha256 ) )
-		{
-			sError.SetSprintf ( "can not read users from the '%s', error: multiple bearer entries '%s'", sFile.cstr(), tEntry.m_sRawBearerSha256.cstr() );
-			return;
-		}
+		//if ( hSalts [ tEntry.m_sSalt ] )
+		//{
+		//	sError.SetSprintf ( "can not read users from the '%s', error: multiple salt entries '%s'", sFile.cstr(), BinToHex ( (const BYTE *)tEntry.m_sSalt.cstr(), tEntry.m_sSalt.Length() ).cstr() );
+		//	return;
+		//}
+		//if ( tAuth->m_hHttpToken2User ( tEntry.m_sRawBearerSha256 ) )
+		//{
+		//	sError.SetSprintf ( "can not read users from the '%s', error: multiple bearer entries '%s'", sFile.cstr(), tEntry.m_sRawBearerSha256.cstr() );
+		//	return;
+		//}
 
+		if ( !tEntry.MakeApiKey ( sError ) )
+			return;
+
+		//hSalts.Add ( tEntry.m_sSalt );
 		AddUser ( tEntry, tAuth );
-		hSalts.Add ( tEntry.m_sSalt );
 	});
 	if ( !sError.IsEmpty() )
 		return false;
 
 	// should NOT fail daemon start if file provided but no users read
-	return true;
+	return	Validate ( tAuth, sError );
 }
 
 AuthAction_e ReadAction ( Str_t sAction )
@@ -366,12 +381,12 @@ CSphString WriteJson ( const AuthUsers_t & tAuth )
 
 			tWriter.StartBlock ( ",\n", "{\n", "\n}" );
 			tWriter.NamedString ( "username", tUser.m_sUser );
-			tWriter.NamedString ( "salt", BinToHex ( (const BYTE *)tUser.m_sSalt.scstr(), tUser.m_sSalt.Length() ) );
+			tWriter.NamedString ( "salt", BinToHex ( tUser.m_dSalt ) );
 			{
 				tWriter.StartBlock ( ",\n", "\"hashes\":{\n", "\n}" );
-				tWriter.NamedString ( "password_sha1_no_salt", BinToHex ( tUser.m_tPwdSha1.data(), tUser.m_tPwdSha1.size() ) );
-				tWriter.NamedString ( "password_sha256", BinToHex ( (const BYTE *)tUser.m_sPwdSha256.scstr(), tUser.m_sPwdSha256.Length() ) );
-				tWriter.NamedString ( "bearer_sha256", BinToHex ( (const BYTE *)tUser.m_sBearerSha256.scstr(), tUser.m_sBearerSha256.Length() ) );
+				tWriter.NamedString ( "password_sha1_no_salt", BinToHex ( tUser.m_tPwdSha1 ) );
+				tWriter.NamedString ( "password_sha256", BinToHex ( tUser.m_dPwdSha256 ) );
+				tWriter.NamedString ( "bearer_sha256", BinToHex ( tUser.m_dBearerSha256 ) );
 				tWriter.FinishBlock ( true );
 			}
 			tWriter.FinishBlock ( true );
@@ -709,3 +724,84 @@ bool CreateAuthFile ( const CSphString & sFile, CSphString & sError )
 }
 
 #endif
+
+void CopyVec ( const BYTE * pSrc, int iLen, CSphFixedVector<BYTE> & dDst )
+{
+	dDst.Reset ( iLen );
+	if ( iLen )
+		memcpy ( dDst.Begin(), pSrc, dDst.GetLengthBytes() );
+}
+
+AuthUserCred_t::AuthUserCred_t ( const AuthUserCred_t & tOther )
+{
+	Copy ( tOther );
+}
+
+AuthUserCred_t & AuthUserCred_t::operator= ( const AuthUserCred_t & tOther )
+{
+	if ( this!=&tOther )
+		Copy ( tOther );
+	return *this;
+}
+
+void AuthUserCred_t::Copy ( const AuthUserCred_t & tOther )
+{
+	m_sUser = tOther.m_sUser;
+	m_tPwdSha1 = tOther.m_tPwdSha1;
+	m_dPwdSha256.CopyFrom ( tOther.m_dPwdSha256 );
+	m_dBearerSha256.CopyFrom ( tOther.m_dBearerSha256 );
+	m_dSalt.CopyFrom ( tOther.m_dSalt );
+	m_dApiKey.CopyFrom ( tOther.m_dApiKey );
+}
+
+bool AuthUserCred_t::MakeApiKey ( CSphString & sError )
+{
+	return MakeApiKdf ( m_dPwdSha256, m_dSalt, m_dApiKey, sError );
+}
+
+using Key_fn = std::function<CSphString ( const AuthUserCred_t & )>;
+
+static bool Validate ( const AuthUsersMutablePtr_t & tAuth, Key_fn fnKey, const char * sFieldName, StringBuilder_c & sBuilder )
+{
+	SmallStringHash_T<const AuthUserCred_t *> hFields;
+	StringBuilder_c sUsersDups ( ", " );
+
+	for ( const auto & tIt : tAuth->m_hUserToken )
+	{
+		CSphString sKey = fnKey ( tIt.second );
+		const AuthUserCred_t ** ppExisted = hFields ( sKey );
+		if ( ppExisted )
+			sUsersDups.Appendf ( "%s=%s", tIt.second.m_sUser, ( *ppExisted )->m_sUser );
+		else
+			hFields.Add ( &tIt.second, sKey );
+	}
+
+	if ( sUsersDups.IsEmpty() )
+		return true;
+
+	sBuilder.Appendf ( "duplicate '%s' found, shared by users: %s", sFieldName, sUsersDups.cstr() );
+	return false;
+}
+
+bool Validate ( const AuthUsersMutablePtr_t & tAuth, CSphString & sError )
+{
+	StringBuilder_c sBuilder ( "; " );
+
+	OpenHashTable_T<uint64_t, CSphString> hHash;
+	bool bValid = true;
+
+	Key_fn fnSalt = []( const AuthUserCred_t & tAuthUser ) { return BinToHex ( tAuthUser.m_dSalt ); };
+	bValid &= Validate ( tAuth, fnSalt, "salt", sBuilder );
+
+	Key_fn fnSha1 = []( const AuthUserCred_t & tAuthUser ) { return BinToHex ( tAuthUser.m_tPwdSha1 ); };
+	bValid &= Validate ( tAuth, fnSha1, "password_sha1_no_salt", sBuilder );
+
+	Key_fn fnSha256 = []( const AuthUserCred_t & tAuthUser ) { return BinToHex ( tAuthUser.m_dPwdSha256 ); };
+	bValid &= Validate ( tAuth, fnSha256, "password_sha256", sBuilder );
+
+	Key_fn fnBearer = []( const AuthUserCred_t & tAuthUser ) { return BinToHex ( tAuthUser.m_dBearerSha256 ); };
+	bValid &= Validate ( tAuth, fnBearer, "bearer_sha256", sBuilder );
+
+	sError = sBuilder.cstr();
+	return bValid;
+}

@@ -81,6 +81,7 @@ enum AgentStats_e
 	eTimeoutsConnect,	///< number of time-outed connections
 	eConnectFailures,	///< failed to connect
 	eNetworkErrors,		///< network error
+	eWrongQuery,		///< bad query
 	eWrongReplies,		///< incomplete reply
 	eUnexpectedClose,	///< agent closed the connection
 	eNetworkCritical,		///< agent answered, but with warnings
@@ -494,7 +495,7 @@ public:
 	LPKEY			m_pPollerTask = nullptr; ///< internal for poller. fixme! privatize?
 	volatile bool	m_bSuccess {false};	///< agent got processed, no need to retry
 
-	ApiAuthToken_t m_tAuthToken;
+	ApiKey_t m_tApiKey;
 
 public:
 	AgentConn_t () = default;
@@ -592,7 +593,7 @@ private:
 	void ScheduleCallbacks ();
 	void DisableWrite();
 
-	void BuildData ();
+	bool BuildData ();
 	size_t ReplyBufPlace () const;
 	void InitReplyBuf ( int iSize = 0 );
 	inline bool IsReplyHeader() const { return m_iReplySize<0; }
@@ -633,7 +634,6 @@ RemoteAgentsObserver_i * GetObserver ();
 
 void ScheduleDistrJobs ( VectorAgentConn_t &dRemotes, RequestBuilder_i * pQuery, ReplyParser_i * pParser,
 	Reporter_i * pReporter, int iQueryRetry = -1, int iQueryDelay = -1 );
-void ScheduleDistrJobsApi ( VectorAgentConn_t &dRemotes, RequestBuilder_i * pQuery, ReplyParser_i * pParser, Reporter_i * pReporter, int iQueryRetry, int iQueryDelay );
 
 // schedule one job. Returns false if connection s blackhole (and so, will not report anything
 using Deffered_f = std::function<void ( bool )>;
@@ -645,7 +645,6 @@ bool RunRemoteTask ( AgentConn_t* pConnection, RequestBuilder_i* pQuery, ReplyPa
 // simplified full task - schedule jobs, wait for complete, report num of succeeded
 // uses cooperated wait - i.e. yield instead of pause
 int PerformRemoteTasks ( VectorAgentConn_t & dRemotes, RequestBuilder_i * pQuery, ReplyParser_i * pParser, int iQueryRetry = -1, int iQueryDelay = -1 );
-int PerformRemoteTasksApi ( VectorAgentConn_t & dRemotes, RequestBuilder_i * pQuery, ReplyParser_i * pParser, int iQueryRetry, int iQueryDelay );
 
 /////////////////////////////////////////////////////////////////////////////
 // DISTRIBUTED QUERIES

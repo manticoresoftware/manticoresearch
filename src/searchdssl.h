@@ -24,11 +24,26 @@
 
 	// Try to initialize SSL, if not yet done. Returns whether it is usable or not (i.e. - no lib, no keys, any error).
 	// used to set 'switch-to-ssl' bit in mysql handshake depending from whether we can do it, or not.
-    bool CheckWeCanUseSSL ( CSphString * pError=nullptr );
+	bool CheckWeCanUseSSL ( CSphString * pError=nullptr );
 
 	// Replace pSource with it's SSL version.
 	// any data not consumed from original source will be considered as part of ssl handshake.
 	bool MakeSecureLayer ( std::unique_ptr<AsyncNetBuffer_c> & pSource );
+
+	constexpr int GCM_NONCE_LEN = 12;
+
+	bool EncryptGCM ( const VecTraits_T<BYTE> & dRawData, const CSphString & sUser, const VecTraits_T<BYTE> & dEncKey, const BYTE * pSrcNonce, int iHeadGap, CSphVector<BYTE> & dDstData, CSphString & sError );
+
+	class GcmUserKey_i
+	{
+	public:
+		virtual ~GcmUserKey_i() = default;
+		virtual std::optional < CSphFixedVector<BYTE> > Get ( const CSphString & sUser, CSphString & sError ) const = 0;
+		virtual bool ValidateNonceReplay ( const BYTE * pNonce, CSphString & sError ) const = 0;
+	};
+
+	bool DecryptGCM ( const VecTraits_T<BYTE> & dEncryptedData, CSphVector<BYTE> & dDstData, CSphString & sUser, GcmUserKey_i & tKey, CSphString & sError );
+	bool MakeApiKdf ( const ByteBlob_t & tSalt, const ByteBlob_t & tPwd, CSphFixedVector<BYTE> & dRes, CSphString & sError );
 
 #else
 	// these stubs work together with NOT including searchdsll.cpp into the final build

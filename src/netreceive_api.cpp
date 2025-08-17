@@ -77,6 +77,8 @@ void ApiServe ( std::unique_ptr<AsyncNetBuffer_c> pBuf )
 	// main loop for one or more commands (if persist)
 	do
 	{
+		int iPacketOff = tOut.GetSentCount();
+
 		if ( !tIn.HasBytes ())
 			tIn.DiscardProcessed ();
 
@@ -133,37 +135,20 @@ void ApiServe ( std::unique_ptr<AsyncNetBuffer_c> pBuf )
 
 		iPconnIdleS = 0;
 
-		ApiAuth_e eApiAuth = ApiAuth_e::NO_AUTH;
-		CSphFixedVector<BYTE> dApiToken ( 0 );
-		// can support old protocol version if daemon runs without auth
-		if ( uHandshake!=1 )
-		{
-			eApiAuth = (ApiAuth_e)tIn.GetByte();
-			int iApiTokenSize = GetApiTokenSize ( eApiAuth );
-			dApiToken.Reset ( iApiTokenSize );
-			if ( iApiTokenSize )
-				tIn.GetBytes ( dApiToken.Begin(), iApiTokenSize );
-		}
-
-		auto eCommand = (SearchdCommand_e)  tIn.GetWord ();
+		auto eCommand = (SearchdCommand_e)tIn.GetWord ();
 		auto uVer = tIn.GetWord ();
 		auto iReplySize = tIn.GetInt ();
 		sphLogDebugv ( "read command %d, version %d, reply size %d", eCommand, uVer, iReplySize );
-
+		
 		CSphString sUser;
-		// need to pass by the only commands:
-		// - PING
-		// - PERSIST
-		if ( eCommand!=SEARCHD_COMMAND_PING && eCommand!=SEARCHD_COMMAND_PERSIST )
+		CSphString sError;
+		if ( !ApiDecrypt ( eCommand, uVer, tIn, iReplySize, sUser, sError ) )
 		{
-			CSphString sError;
-			if ( !CheckAuth ( eApiAuth, dApiToken, sUser, sError ) )
-			{
-				SendErrorReply ( tOut, "%s", sError.cstr() );
-				tOut.Flush(); // no need to check return code since we anyway break
-				break;
-			}
+			SendErrorReply ( tOut, "%s", sError.cstr() );
+			tOut.Flush(); // no need to check return code since we anyway break
+			break;
 		}
+
 		// should set client user to pass it further into distributed index
 		session::SetUser ( sUser );
 
@@ -231,6 +216,14 @@ void ApiServe ( std::unique_ptr<AsyncNetBuffer_c> pBuf )
 		}
 		ExecuteApiCommand ( eCommand, uVer, iReplySize, tIn, tOut );
 
+		if ( !ApiEncryptReply ( sUser, tOut, iPacketOff, sError ) )
+		{
+			tOut.Rewind ( 0 );
+			SendErrorReply ( tOut, "%s", sError.cstr() );
+			tOut.Flush(); // no need to check return code since we anyway break
+			break;
+		}
+
 		if ( !tOut.Flush () )
 			break;
 
@@ -246,7 +239,7 @@ void ApiServe ( std::unique_ptr<AsyncNetBuffer_c> pBuf )
 
 
 // Start Sphinx API command/request header
-static APIBlob_c APIHeader ( ISphOutputBuffer & dBuff, WORD uCommand, WORD uVer )
+APIBlob_c APIHeader ( ISphOutputBuffer & dBuff, WORD uCommand, WORD uVer )
 {
 	dBuff.SendWord ( uCommand );
 	dBuff.SendWord ( uVer );
@@ -257,15 +250,4 @@ static APIBlob_c APIHeader ( ISphOutputBuffer & dBuff, WORD uCommand, WORD uVer 
 APIBlob_c APIAnswer ( ISphOutputBuffer & dBuff, WORD uVer, WORD uStatus )
 {
 	return APIHeader ( dBuff, uStatus, uVer );
-}
-
-APIBlob_c APIHeader ( ISphOutputBuffer & dBuff, WORD uCommand, WORD uVer, const ApiAuthToken_t & tToken )
-{
-	assert ( GetApiTokenSize ( tToken.m_eType )==tToken.m_dToken.GetLength() );
-
-	dBuff.SendByte ( (BYTE)tToken.m_eType );
-	if ( tToken.m_dToken.GetLength() )
-		dBuff.SendBytes ( tToken.m_dToken );
-
-	return APIHeader ( dBuff, uCommand, uVer );
 }

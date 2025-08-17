@@ -1162,6 +1162,22 @@ void AsyncNetBuffer_c::ResetError()
 	GenericOutputBuffer_c::ResetError();
 }
 
+void AsyncNetInputBuffer_c::SetBuffer ( CSphVector<BYTE> && dBuf )
+{
+	int64_t iLen = dBuf.GetLength64();
+	int64_t iLimit = dBuf.GetLimit();
+	BYTE * pData = dBuf.LeakData();
+	
+	Reset();
+	m_pData = pData;
+	m_iCount = iLen;
+	m_iLimit = iLimit;
+
+	m_pBuf = pData;
+	m_pCur = pData;
+	m_iLen = iLen;
+}
+
 /////////////////////////////////////////////////////////////////////////////
 /// AsyncBufferedSocket_c - provides wrapper for sending and receiving
 /////////////////////////////////////////////////////////////////////////////

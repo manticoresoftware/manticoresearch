@@ -1536,7 +1536,7 @@ void SnippetRemote_c::BuildRequest ( const AgentConn_t & tAgent, ISphOutputBuffe
 		tAgent.m_iStoreTag = iWorker;
 	}
 
-	auto tHdr = APIHeader ( tOut, SEARCHD_COMMAND_EXCERPT, VER_COMMAND_EXCERPT, tAgent.m_tAuthToken );
+	auto tHdr = APIHeader ( tOut, SEARCHD_COMMAND_EXCERPT, VER_COMMAND_EXCERPT );
 
 	tOut.SendInt ( 0 );
 	tOut.SendInt ( PackAPISnippetFlags ( m_tSettings, true ) );
@@ -2250,7 +2250,7 @@ void UpdateRequestBuilder_c::BuildRequest ( const AgentConn_t & tAgent, ISphOutp
 	auto& tUpd = *m_pUpd;
 
 	// API header
-	auto tHdr = APIHeader ( tOut, SEARCHD_COMMAND_UPDATE, VER_COMMAND_UPDATE, tAgent.m_tAuthToken );
+	auto tHdr = APIHeader ( tOut, SEARCHD_COMMAND_UPDATE, VER_COMMAND_UPDATE );
 
 	tOut.SendString ( sIndexes );
 	tOut.SendInt ( tUpd.m_dAttributes.GetLength() );
@@ -3400,7 +3400,7 @@ public:
 		}
 
 		const char * sIndex = tAgent.m_tDesc.m_sIndexes.cstr ();
-		auto tHdr = APIHeader ( tOut, SEARCHD_COMMAND_CALLPQ, VER_COMMAND_CALLPQ, tAgent.m_tAuthToken );
+		auto tHdr = APIHeader ( tOut, SEARCHD_COMMAND_CALLPQ, VER_COMMAND_CALLPQ );
 
 		DWORD uFlags = 0;
 		if ( m_tOpts.m_bGetDocs )
@@ -5446,7 +5446,7 @@ void KeywordsRequestBuilder_c::BuildRequest ( const AgentConn_t & tAgent, ISphOu
 {
 	const CSphString & sIndexes = tAgent.m_tDesc.m_sIndexes;
 
-	auto tHdr = APIHeader ( tOut, SEARCHD_COMMAND_KEYWORDS, VER_COMMAND_KEYWORDS, tAgent.m_tAuthToken );
+	auto tHdr = APIHeader ( tOut, SEARCHD_COMMAND_KEYWORDS, VER_COMMAND_KEYWORDS );
 
 	tOut.SendString ( m_sTerm.cstr() );
 	tOut.SendString ( sIndexes.cstr() );
@@ -5765,7 +5765,7 @@ public:
 
 	void BuildRequest ( const AgentConn_t & tAgent, ISphOutputBuffer & tOut ) const final
 	{
-		auto tHdr = APIHeader ( tOut, SEARCHD_COMMAND_SUGGEST, VER_COMMAND_SUGGEST, tAgent.m_tAuthToken );
+		auto tHdr = APIHeader ( tOut, SEARCHD_COMMAND_SUGGEST, VER_COMMAND_SUGGEST );
 
 		tOut.SendString ( tAgent.m_tDesc.m_sIndexes.cstr() );
 		tOut.SendString ( m_sWord );
@@ -6963,7 +6963,7 @@ public:
 	void BuildRequest ( const AgentConn_t & tAgent, ISphOutputBuffer & tOut ) const final
 	{
 		// API header
-		auto tHdr = APIHeader ( tOut, SEARCHD_COMMAND_UVAR, VER_COMMAND_UVAR, tAgent.m_tAuthToken );
+		auto tHdr = APIHeader ( tOut, SEARCHD_COMMAND_UVAR, VER_COMMAND_UVAR );
 
 		tOut.SendString ( m_sName.cstr() );
 		tOut.SendInt ( m_iUserVars );
@@ -7117,7 +7117,7 @@ void SphinxqlRequestBuilder_c::BuildRequest ( const AgentConn_t & tAgent, ISphOu
 	const char* sIndexes = tAgent.m_tDesc.m_sIndexes.cstr();
 
 	// API header
-	auto tHdr = APIHeader ( tOut, SEARCHD_COMMAND_SPHINXQL, VER_COMMAND_SPHINXQL, tAgent.m_tAuthToken );
+	auto tHdr = APIHeader ( tOut, SEARCHD_COMMAND_SPHINXQL, VER_COMMAND_SPHINXQL );
 	APIBlob_c dWrapper ( tOut ); // sphinxql wrapped twice, so one more length need to be written.
 	tOut.SendBytes ( m_sBegin );
 	tOut.SendBytes ( sIndexes );

@@ -75,7 +75,7 @@ struct GetFieldRequestBuilder_t : public RequestBuilder_i
 		auto * pRes = (RemoteFieldsAnswer_t *)tAgent.m_pResult.get();
 		assert ( pRes );
 
-		auto tHdr = APIHeader ( tOut, SEARCHD_COMMAND_GETFIELD, VER_COMMAND_GETFIELD, tAgent.m_tAuthToken );
+		auto tHdr = APIHeader ( tOut, SEARCHD_COMMAND_GETFIELD, VER_COMMAND_GETFIELD );
 
 		tOut.SendString ( tAgent.m_tDesc.m_sIndexes.cstr() );
 		tOut.SendDword ( m_dFieldCols.GetLength() );
@@ -120,7 +120,7 @@ struct ProxyFieldRequestBuilder_t : public RequestBuilder_i
 
 	void BuildRequest ( const AgentConn_t & tAgent, ISphOutputBuffer & tOut ) const final
 	{
-		auto tHdr = APIHeader ( tOut, SEARCHD_COMMAND_GETFIELD, VER_COMMAND_GETFIELD, tAgent.m_tAuthToken );
+		auto tHdr = APIHeader ( tOut, SEARCHD_COMMAND_GETFIELD, VER_COMMAND_GETFIELD );
 		tOut.SendString ( tAgent.m_tDesc.m_sIndexes.cstr() );
 		tOut.SendDword ( m_tArgs.m_dFieldNames.GetLength() );
 		ARRAY_FOREACH ( i, m_tArgs.m_dFieldNames )

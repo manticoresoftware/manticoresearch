@@ -1132,25 +1132,3 @@ UrlResult_t::UrlResult_t ( bool bOk, CSphVector<BYTE> && dRes )
 	: m_bOk ( bOk )
 	, m_dRes ( std::move ( dRes ) )
 {}
-
-void ScheduleDistrJobs ( VectorAgentConn_t &dRemotes, RequestBuilder_i * pQuery, ReplyParser_i * pParser, Reporter_i * pReporter, int iQueryRetry, int iQueryDelay )
-{
-	if ( IsAuthEnabled() && IsCurlAvailable() )
-	{
-		ScheduleHtppJobs ( dRemotes, pQuery, pParser, pReporter, iQueryRetry, iQueryDelay );
-	} else
-	{
-		ScheduleDistrJobsApi ( dRemotes, pQuery, pParser, pReporter, iQueryRetry, iQueryDelay );
-	}
-}
-
-int PerformRemoteTasks ( VectorAgentConn_t &dRemotes, RequestBuilder_i * pQuery, ReplyParser_i * pParser, int iQueryRetry , int iQueryDelay )
-{
-	if ( IsAuthEnabled() && IsCurlAvailable() )
-	{
-		return PerformRemoteHttp ( dRemotes, pQuery, pParser, iQueryRetry, iQueryDelay );
-	} else
-	{
-		return PerformRemoteTasksApi ( dRemotes, pQuery, pParser, iQueryRetry, iQueryDelay );
-	}
-}

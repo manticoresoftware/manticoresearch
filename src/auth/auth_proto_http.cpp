@@ -22,9 +22,13 @@
 
 static bool CheckPwd ( const AuthUserCred_t & tEntry, const CSphString & sPwd )
 {
-	HASH256_t tPwdHash = CalcBinarySHA2 ( sPwd.cstr(), sPwd.Length() );
+	std::unique_ptr<SHA256_i> pHasher { CreateSHA256() };
+	pHasher->Init();
+	pHasher->Update ( tEntry.m_dSalt.Begin(), tEntry.m_dSalt.GetLength() );
+	pHasher->Update ( (const BYTE*)sPwd.cstr(), sPwd.Length() );
+	HASH256_t tPwdHash = pHasher->FinalHash();
 
-	int iCmp = memcmp ( tEntry.m_sPwdSha256.cstr(), tPwdHash.data(), tPwdHash.size() );
+	int iCmp = memcmp ( tEntry.m_dPwdSha256.Begin(), tPwdHash.data(), tPwdHash.size() );
 	return ( iCmp==0 );
 }
 
@@ -157,5 +161,5 @@ CSphString GetBearer ( const CSphString & sUser )
 	if ( !pUser )
 		return CSphString();
 
-	return pUser->m_sRawBearerSha256;
+	return BinToHex ( pUser->m_dBearerSha256 );
 }

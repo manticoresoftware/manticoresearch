@@ -79,7 +79,7 @@ private:
 	HASH20_t m_dHashValue{};
 };
 
-//CSphString BinToHex ( const VecTraits_T<BYTE>& dHash );
+CSphString BinToHex ( const VecTraits_T<BYTE> & dHash );
 CSphString BinToHex ( const HASH20_t& dHash );
 CSphString BinToHex ( const BYTE* pHash, int iLen );
 CSphString CalcSHA1 ( const void* pData, int iLen );

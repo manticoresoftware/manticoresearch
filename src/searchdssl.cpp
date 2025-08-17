@@ -142,7 +142,7 @@ static SmartSSL_CTX_t GetSslCtx ()
 		SSL_CTX_set_cipher_list ( pSslCtx, "ECDHE-ECDSA-AES256-GCM-SHA384:ECDHE-RSA-AES256-GCM-SHA384:ECDHE-ECDSA-CHACHA20-POLY1305:ECDHE-RSA-CHACHA20-POLY1305:ECDHE-ECDSA-AES128-GCM-SHA256:ECDHE-RSA-AES128-GCM-SHA256" );
 		SSL_CTX_set_min_proto_version ( pSslCtx, TLS1_2_VERSION );
 
-        SSL_CTX_set_session_id_context ( pSslCtx, g_SslSessionContext, sizeof ( g_SslSessionContext )-1 );
+		SSL_CTX_set_session_id_context ( pSslCtx, g_SslSessionContext, sizeof ( g_SslSessionContext )-1 );
 		SSL_CTX_set_session_cache_mode ( pSslCtx, SSL_SESS_CACHE_SERVER );
 
 		// schedule callback for final shutdown.
@@ -515,6 +515,217 @@ bool MakeSecureLayer ( std::unique_ptr<AsyncNetBuffer_c>& pSource )
 	pSource = std::make_unique<AsyncSSBufferedSocket_c> ( std::move ( pFrontEnd ) );
 	return true;
 }
+
+static bool SslError ( CSphString & sError, const char * sEmptyMsg=nullptr )
+{
+	int iCode = 0;
+	char sBuf[256];
+
+	while ( ( iCode=ERR_get_error() )!=0 )
+	{
+		ERR_error_string_n ( iCode, sBuf, sizeof ( sBuf ) );
+		if ( !sError.IsEmpty() )
+			sError.SetSprintf ( "%s; %s", sError.cstr(), sBuf );
+		else
+			sError.SetSprintf ( "%s", sBuf );
+	}
+	if ( sError.IsEmpty() )
+	{
+		if ( sEmptyMsg )
+			sError = sEmptyMsg;
+		else
+			sError = "OpenSSL error (no details)";
+	}
+
+	return false;
+}
+
+static const int GCM_TAG_LEN = 16;
+static const BYTE ALGO_VER = 1;
+static const int AES_GCM_KEY_SIZE = 32;
+
+#include <openssl/rand.h>
+bool EncryptGCM ( const VecTraits_T<BYTE> & dRawData, const CSphString & sUser, const VecTraits_T<BYTE> & dEncKey, const BYTE * pSrcNonce, int iHeadGap, CSphVector<BYTE> & dDstData, CSphString & sError )
+{
+	assert ( dEncKey.GetLength()==AES_GCM_KEY_SIZE );
+	assert ( dRawData.GetLength() );
+
+	int iNameLen = sUser.Length();
+	dDstData.Reserve ( iHeadGap + 1 + iNameLen + 4 + GCM_NONCE_LEN + GCM_TAG_LEN + dRawData.GetLength() );
+
+	{
+		// dst got stealed
+		ISphOutputBuffer tWr ( dDstData );
+		tWr.Rewind ( iHeadGap );
+		tWr.SendByte ( ALGO_VER );
+		tWr.SendString ( Str_t ( sUser.cstr(), iNameLen ) );
+		// swap back dst
+		tWr.m_dBuf.SwapData ( dDstData );
+	}
+
+	BYTE * pNonce = dDstData.AddN ( GCM_NONCE_LEN + GCM_TAG_LEN + dRawData.GetLength() );
+	BYTE * pTag = pNonce + GCM_NONCE_LEN;
+	BYTE * pCipher = pTag + GCM_TAG_LEN;
+
+	memcpy ( pNonce, pSrcNonce, GCM_NONCE_LEN );
+	
+	EVP_CIPHER_CTX * pCtx = EVP_CIPHER_CTX_new();
+	if ( !pCtx )
+		return SslError ( sError );
+
+	AT_SCOPE_EXIT([&pCtx] { if ( pCtx ) EVP_CIPHER_CTX_free(pCtx); } );
+
+	if ( !EVP_EncryptInit_ex ( pCtx, EVP_aes_256_gcm(), nullptr, nullptr, nullptr ) )
+		return SslError ( sError );
+	
+	if ( !EVP_CIPHER_CTX_ctrl ( pCtx, EVP_CTRL_GCM_SET_IVLEN, GCM_NONCE_LEN, nullptr ) )
+		return SslError ( sError );
+	
+	if ( !EVP_EncryptInit_ex ( pCtx, nullptr, nullptr, dEncKey.Begin(), pNonce ) )
+		return SslError ( sError );
+
+	// AAD part authenticated but not encrypted goes prior to the data
+	if ( iNameLen )
+	{
+		int iAadLen = 0;
+		if ( !EVP_EncryptUpdate ( pCtx, nullptr, &iAadLen, (const BYTE *)sUser.cstr(), iNameLen ) )
+			return SslError ( sError );
+	}
+
+	int iLen = 0;
+	if ( !EVP_EncryptUpdate ( pCtx, pCipher, &iLen, dRawData.Begin(), dRawData.GetLength() ) )
+		return SslError ( sError );
+
+	int iCiphLen = iLen;
+	// GCM do not pad but lets call for correctness
+	if ( !EVP_EncryptFinal_ex ( pCtx, pCipher + iLen, &iLen ) )
+		return SslError ( sError );
+	
+	iCiphLen += iLen;
+	
+	if ( !EVP_CIPHER_CTX_ctrl ( pCtx, EVP_CTRL_GCM_GET_TAG, GCM_TAG_LEN, pTag ) )
+		return SslError ( sError );
+
+	return true;
+}
+
+bool DecryptGCM ( const VecTraits_T<BYTE> & dEncryptedData, CSphVector<BYTE> & dDstData, CSphString & sUser, GcmUserKey_i & tKey, CSphString & sError )
+{
+	const int iMinExtraLen = ( GCM_NONCE_LEN + GCM_TAG_LEN + 1 + 4 );
+	if ( dEncryptedData.GetLength()<iMinExtraLen )
+	{
+		sError.SetSprintf ( "invalid encrypted length, got %d, expected %d", dEncryptedData.GetLength(), iMinExtraLen );
+		return false;
+	}
+
+	const BYTE * pBase = nullptr;
+	int iGotVer = 0;
+	{
+		InputBuffer_c tRd ( dEncryptedData );
+		iGotVer = tRd.GetByte();
+		sUser = tRd.GetString();
+		pBase = tRd.GetBufferPtr();
+
+		if ( tRd.GetError() )
+		{
+			sError = tRd.GetErrorMessage();
+			return false;
+		}
+	}
+
+	const BYTE * pNonce = pBase;
+	const BYTE * pTag = pNonce + GCM_NONCE_LEN;
+	const BYTE * pCipher = pTag + GCM_TAG_LEN;
+	const int iCipherLen = dEncryptedData.End() - pCipher;
+	if ( iCipherLen<0 )
+	{
+		sError.SetSprintf ( "invalid encrypted data length, got %d, encrypted length %d", iCipherLen, dEncryptedData.GetLength() );
+		return false;
+	}
+
+	if ( iGotVer!=ALGO_VER )
+	{
+		sError.SetSprintf ( "invalid encrypted version, got %d, expected %d", iGotVer, int( ALGO_VER ) );
+		return false;
+	}
+
+	if ( !tKey.ValidateNonceReplay ( pNonce, sError ) )
+		return false;
+
+	auto dDecryptionKey = tKey.Get ( sUser, sError );
+	if ( !dDecryptionKey )
+		return false;
+
+	assert ( dDecryptionKey->GetLength()==AES_GCM_KEY_SIZE );
+
+	EVP_CIPHER_CTX * pCtx = EVP_CIPHER_CTX_new();
+	if ( !pCtx )
+		return SslError ( sError );
+
+	AT_SCOPE_EXIT([&pCtx] { if ( pCtx ) EVP_CIPHER_CTX_free(pCtx); } );
+
+	if ( !EVP_DecryptInit_ex ( pCtx, EVP_aes_256_gcm(), nullptr, nullptr, nullptr ) )
+		return SslError ( sError );
+	
+	if ( !EVP_CIPHER_CTX_ctrl ( pCtx, EVP_CTRL_GCM_SET_IVLEN, GCM_NONCE_LEN, nullptr ) )
+		return SslError ( sError );
+	
+	if ( !EVP_DecryptInit_ex ( pCtx, nullptr, nullptr, dDecryptionKey->Begin(), pNonce ) )
+		return SslError ( sError );
+
+	// AAD part must be identical to encryption side
+	if ( !sUser.IsEmpty())
+	{
+		int iAadLen = 0;
+		if ( !EVP_DecryptUpdate ( pCtx, nullptr, &iAadLen, (const BYTE *)sUser.cstr(), (int)sUser.Length() ) )
+			return SslError ( sError );
+	}
+
+	dDstData.Resize ( iCipherLen );
+	int iLen = 0;
+	if ( !EVP_DecryptUpdate ( pCtx, dDstData.Begin(), &iLen, pCipher, iCipherLen ) )
+		return SslError ( sError );
+
+	if ( !EVP_CIPHER_CTX_ctrl ( pCtx, EVP_CTRL_GCM_SET_TAG, GCM_TAG_LEN, (void *)pTag ) )
+		return SslError ( sError );
+	
+	int iDataLen = iLen;
+	int iRes = EVP_DecryptFinal_ex ( pCtx, dDstData.Begin() + iLen, &iLen );
+	if ( iRes<=0 )
+		return SslError ( sError, "GCM authentication failed (bad tag)" );
+	
+	iDataLen += iLen;
+	dDstData.Resize ( iDataLen );
+	return true;
+}
+
+bool MakeApiKdf ( const ByteBlob_t & tSalt, const ByteBlob_t & tPwd, CSphFixedVector<BYTE> & dRes, CSphString & sError )
+{
+	if ( IsEmpty ( tSalt ) )
+	{
+		sError = "can not generate key from an empty salt";
+		return false;
+	}
+
+	if ( IsEmpty ( tPwd ) )
+	{
+		sError = "can not generate key from an empty password_hash";
+		return false;
+	}
+
+	dRes.Reset ( 32 ); // AES-256 key length 32 bytes
+	const int PBKDF2_ITER_COUNT = 100000; // high iteration count
+
+	int iRes = PKCS5_PBKDF2_HMAC ( (const char *)tPwd.first, tPwd.second, tSalt.first, tSalt.second, PBKDF2_ITER_COUNT, EVP_sha256(), dRes.GetLength(), dRes.Begin() );
+	if ( iRes!=1 )
+	{
+		SslError ( sError, "PBKDF2 key derivation from hash failed" );
+		return false;
+	}
+
+	return true;
+}
+
 #endif
 
 const CSphString & GetSslCert()

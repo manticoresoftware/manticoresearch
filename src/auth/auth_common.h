@@ -24,19 +24,24 @@ struct AuthUserCred_t
 {
 	CSphString	m_sUser;
 
-	CSphString	m_sSalt;
+	CSphFixedVector<BYTE> m_dSalt { 0 };
 	HASH20_t	m_tPwdSha1;
-	CSphString	m_sPwdSha256;
-	CSphString	m_sBearerSha256;
+	CSphFixedVector<BYTE> m_dPwdSha256 { 0 };
+	CSphFixedVector<BYTE> m_dBearerSha256 { 0 };
 
-	CSphString	m_sRawBearerSha256;
+	CSphFixedVector<BYTE> m_dApiKey { 32 };
+
+	AuthUserCred_t() = default;
+	AuthUserCred_t ( const AuthUserCred_t & tOther );
+	AuthUserCred_t & operator= ( const AuthUserCred_t & tOther );
+	void Copy ( const AuthUserCred_t & tOther );
+	bool MakeApiKey ( CSphString & sError );
 };
 
 class AuthUsers_t
 {
 public:
 	SmallStringHash_T<AuthUserCred_t> m_hUserToken;
-	SmallStringHash_T<CSphString> m_hApiToken2User;
 	SmallStringHash_T<CSphString> m_hHttpToken2User;
 
 	SmallStringHash_T<UserPerms_t> m_hUserPerms;
@@ -65,9 +70,11 @@ const CSphString & GetIndexNameAuthPerms();
 const CSphString & GetAuthBuddyName();
 
 void AddUser ( const AuthUserCred_t & tEntry, AuthUsersMutablePtr_t & tAuth );
-CSphString ReadHex ( Str_t sRaw, int iHashLen, CSphString & sError );
-CSphString ReadHex ( const char * sName, int iHashLen, const bson::Bson_c & tNode, CSphString & sError );
+CSphFixedVector<BYTE> ReadHexVec ( const char * sName, Str_t sRaw, int iHashLen, CSphString & sError );
+CSphFixedVector<BYTE> ReadHexVec (  const char * sName, const bson::Bson_c & tRoot, int iHashLen, CSphString & sError );
 void SortUserPerms ( UserPerms_t & dPerms );
 CSphString WriteJson ( const AuthUsers_t & tAuth );
 AuthUsersMutablePtr_t ReadAuth ( char * sSrc, const CSphString & sSrcName, CSphString & sError );
 bool CreateAuthFile ( const CSphString & sFile, CSphString & sError );
+void CopyVec ( const BYTE * pSrc, int ilen, CSphFixedVector<BYTE> & dDst );
+bool Validate ( const AuthUsersMutablePtr_t & tAuth, CSphString & sError );

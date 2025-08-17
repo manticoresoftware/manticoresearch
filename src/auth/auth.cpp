@@ -82,7 +82,7 @@ CSphString GetBuddyToken()
 	const AuthUserCred_t * pBuddy = pUsers->m_hUserToken ( GetAuthBuddyName() );
 	if ( !pBuddy )
 		return CSphString();
-	return pBuddy->m_sRawBearerSha256;
+	return BinToHex ( pBuddy->m_dBearerSha256 );
 }
 
 const CSphString CreateSessionToken()
@@ -97,7 +97,7 @@ const CSphString CreateSessionToken()
 	if ( !pAuth )
 		return sToken;
 
-	sToken = pAuth->m_sRawBearerSha256;
+	sToken = BinToHex ( pAuth->m_dBearerSha256 );
 	return sToken;
 }
 
@@ -151,32 +151,34 @@ void AddBuddyToken ( const AuthUserCred_t * pSrcBuddy, AuthUsers_t & tAuth )
 		int64_t iDT = sphMicroTimer();
 		tSaltHash.Update ( (const BYTE *)&iDT, sizeof ( iDT ) );
 		tSaltHash.Update ( (const BYTE *)tBuddy.m_sUser.cstr(), tBuddy.m_sUser.Length() );
-		tBuddy.m_sSalt = BinToHex ( tSaltHash.FinalHash() );
+		auto tSaltHashData = tSaltHash.FinalHash();
+		CopyVec ( tSaltHashData.data(), tSaltHashData.size(), tBuddy.m_dSalt );
 
 		SHA1_c tSaltPwd1;
 		tSaltPwd1.Init();
-		tSaltPwd1.Update ( (const BYTE *)tBuddy.m_sSalt.cstr(), tBuddy.m_sSalt.Length() );
+		tSaltPwd1.Update ( tBuddy.m_dSalt.Begin(), tBuddy.m_dSalt.GetLength() );
 		tSaltPwd1.Update ( (const BYTE *)tBuddy.m_sUser.cstr(), tBuddy.m_sUser.Length() );
 		tBuddy.m_tPwdSha1 = tSaltPwd1.FinalHash();
 
 		std::unique_ptr<SHA256_i> pPwd256 { CreateSHA256() };
 		pPwd256->Init();
-		pPwd256->Update ( (const BYTE *)tBuddy.m_sSalt.cstr(), tBuddy.m_sSalt.Length() );
+		pPwd256->Update ( tBuddy.m_dSalt.Begin(), tBuddy.m_dSalt.GetLength() );
 		pPwd256->Update ( (const BYTE *)tBuddy.m_sUser.cstr(), tBuddy.m_sUser.Length() );
-		tBuddy.m_sPwdSha256 = BinToHex ( pPwd256->FinalHash() );
+		auto tPwd256 = pPwd256->FinalHash();
+		tBuddy.m_dPwdSha256.CopyFrom ( VecTraits_T<BYTE> ( tPwd256.data(), tPwd256.size() ) );
 
 		std::unique_ptr<SHA256_i> pToken { CreateSHA256() };
 		pToken->Init();
-		pToken->Update ( (const BYTE *)tBuddy.m_sSalt.cstr(), tBuddy.m_sSalt.Length() );
-		pToken->Update ( (const BYTE *)tBuddy.m_sPwdSha256.cstr(), tBuddy.m_sPwdSha256.Length() );
-		tBuddy.m_sRawBearerSha256 = tBuddy.m_sBearerSha256 = BinToHex ( pToken->FinalHash() );
+		pToken->Update ( tBuddy.m_dSalt.Begin(), tBuddy.m_dSalt.GetLength() );
+		pToken->Update ( tBuddy.m_dPwdSha256.Begin(), tBuddy.m_dPwdSha256.GetLength() );
+		auto tBearer = pToken->FinalHash();
+		tBuddy.m_dBearerSha256.CopyFrom ( VecTraits_T<BYTE> ( tBearer.data(), tBearer.size() ) );
 
 		pSrcBuddy = &tBuddy;
 	}
 
-	tAuth.m_hUserToken.AddUnique ( pSrcBuddy->m_sUser ) = *pSrcBuddy;
-	tAuth.m_hHttpToken2User.AddUnique ( pSrcBuddy->m_sRawBearerSha256 ) = pSrcBuddy->m_sUser;
-	tAuth.m_hApiToken2User.AddUnique ( pSrcBuddy->m_sBearerSha256 ) = pSrcBuddy->m_sUser;
+	tAuth.m_hUserToken.Add ( *pSrcBuddy, pSrcBuddy->m_sUser );
+	tAuth.m_hHttpToken2User.AddUnique ( BinToHex ( pSrcBuddy->m_dBearerSha256 ) ) = pSrcBuddy->m_sUser;
 
 	if ( !tAuth.m_hUserPerms.Exists ( pSrcBuddy->m_sUser ) )
 	{
@@ -367,15 +369,15 @@ bool AuthUsersIndex_c::FillNextMatch () const
 		// username
 		PutString ( tUser.m_sUser, m_tSchema.GetAttr ( (int)SchemaColumn_e::Username ).m_tLocator, m_pMatch );
 		// salt
-		PutString ( BinToHex ( (const BYTE *)tUser.m_sSalt.scstr(), tUser.m_sSalt.Length() ), m_tSchema.GetAttr ( (int)SchemaColumn_e::Salt ).m_tLocator, m_pMatch );
+		PutString ( BinToHex ( tUser.m_dSalt ), m_tSchema.GetAttr ( (int)SchemaColumn_e::Salt ).m_tLocator, m_pMatch );
 		// hashes
 		CSphVector<BYTE> dHashes;
 		{
 			bson::Root_c tHashes ( dHashes );
 
-			tHashes.AddString ( GetColumnName ( SchemaColumn_e::Hash_SHA1 ), BinToHex ( (const BYTE *)tUser.m_tPwdSha1.data(), tUser.m_tPwdSha1.size() ).cstr() );
-			tHashes.AddString ( GetColumnName ( SchemaColumn_e::Hash_SHA256 ), BinToHex ( (const BYTE *)tUser.m_sPwdSha256.cstr(), tUser.m_sPwdSha256.Length() ).cstr() );
-			tHashes.AddString ( GetColumnName ( SchemaColumn_e::Hash_Bearer ), BinToHex ( (const BYTE *)tUser.m_sBearerSha256.cstr(), tUser.m_sBearerSha256.Length() ).cstr() );
+			tHashes.AddString ( GetColumnName ( SchemaColumn_e::Hash_SHA1 ), BinToHex ( tUser.m_tPwdSha1 ).cstr() );
+			tHashes.AddString ( GetColumnName ( SchemaColumn_e::Hash_SHA256 ), BinToHex ( tUser.m_dPwdSha256 ).cstr() );
+			tHashes.AddString ( GetColumnName ( SchemaColumn_e::Hash_Bearer ), BinToHex ( tUser.m_dBearerSha256 ).cstr() );
 		}
 		PutBjson ( dHashes, m_tSchema.GetAttr ( (int)SchemaColumn_e::Hashes ).m_tLocator, m_pMatch );
 
@@ -506,8 +508,7 @@ static bool SaveAuth ( AuthUsersMutablePtr_t && tAuth, CSphString & sError )
 static void DeleteUser ( AuthUsersMutablePtr_t & tAuth, const CSphString & sUserName, bool bWithPerms )
 {
 	const auto & tUser = tAuth->m_hUserToken[sUserName];
-	tAuth->m_hHttpToken2User.Delete ( tUser.m_sRawBearerSha256 );
-	tAuth->m_hApiToken2User.Delete ( tUser.m_sBearerSha256 );
+	tAuth->m_hHttpToken2User.Delete ( BinToHex ( tUser.m_dBearerSha256 ) );
 	
 	if ( bWithPerms )
 		tAuth->m_hUserPerms.Delete ( sUserName );
@@ -657,7 +658,7 @@ static bool SetUserMember ( const AuthUsersIndex_c::SchemaColumn_e eCol, const S
 	return true;
 
 	case AuthUsersIndex_c::SchemaColumn_e::Salt:
-		tUser.m_sSalt = ReadHex ( FromStr ( tVal.m_sVal ), HASH20_SIZE, sError );
+		tUser.m_dSalt = ReadHexVec ( "salt", FromStr ( tVal.m_sVal ), HASH20_SIZE, sError );
 	return true;
 
 	case AuthUsersIndex_c::SchemaColumn_e::Hashes:
@@ -681,11 +682,13 @@ static bool SetUserMember ( const AuthUsersIndex_c::SchemaColumn_e eCol, const S
 			return false;
 		}
 
-		CSphString sSha1 = ReadHex ( "password_sha1_no_salt", HASH20_SIZE, tBsonSrc, sError );
-		memcpy ( tUser.m_tPwdSha1.data(), sSha1.cstr(), HASH20_SIZE );
-		tUser.m_sPwdSha256 = ReadHex ( "password_sha256", HASH256_SIZE, tBsonSrc, sError );
-		tUser.m_sBearerSha256 = ReadHex ( "bearer_sha256", HASH256_SIZE, tBsonSrc, sError );
-		tUser.m_sRawBearerSha256 = bson::String ( tBsonSrc.ChildByName ( "bearer_sha256" ) );
+		auto dSha1 = ReadHexVec ( "password_sha1_no_salt", tBsonSrc, HASH20_SIZE, sError );
+		if ( !sError.IsEmpty() )
+			return false;
+		memcpy ( tUser.m_tPwdSha1.data(), dSha1.Begin(), HASH20_SIZE );
+
+		tUser.m_dPwdSha256 = ReadHexVec ( "password_sha256", tBsonSrc, HASH256_SIZE, sError );
+		tUser.m_dBearerSha256 = ReadHexVec ( "bearer_sha256", tBsonSrc, HASH256_SIZE, sError );
 
 		return sError.IsEmpty();
 	}
@@ -748,19 +751,21 @@ static CSphFixedVector< int > CheckInsertUsers ( const SqlStmt_t & tStmt, CSphSt
 static void UserWrite ( MemoryWriter_c & tWriter, const AuthUserCred_t & tUser )
 {
 	tWriter.PutString ( tUser.m_sUser );
-	tWriter.PutString ( tUser.m_sSalt );
+	SaveArray ( tUser.m_dSalt, tWriter );
 	tWriter.PutBytes ( tUser.m_tPwdSha1.data(), tUser.m_tPwdSha1.size() );
-	tWriter.PutString ( tUser.m_sPwdSha256 );
-	tWriter.PutString ( tUser.m_sBearerSha256 );
+	SaveArray ( tUser.m_dPwdSha256, tWriter );
+	SaveArray ( tUser.m_dBearerSha256, tWriter );
+	SaveArray ( tUser.m_dApiKey, tWriter );
 }
 
 static void UserRead ( MemoryReader_c & tReader, AuthUserCred_t & tUser )
 {
 	tUser.m_sUser = tReader.GetString();
-	tUser.m_sSalt = tReader.GetString();
+	GetArrayFixed ( tUser.m_dSalt, tReader );
 	tReader.GetBytes ( tUser.m_tPwdSha1.data(), tUser.m_tPwdSha1.size() );
-	tUser.m_sPwdSha256 = tReader.GetString();
-	tUser.m_sBearerSha256 = tReader.GetString();
+	GetArrayFixed ( tUser.m_dPwdSha256, tReader );
+	GetArrayFixed ( tUser.m_dBearerSha256, tReader );
+	GetArrayFixed ( tUser.m_dApiKey, tReader );
 }
 
 static bool ApplyUsers ( const SqlStmt_t & tStmt, bool bReplace, MemoryWriter_c & tWriter, CSphString & sError )
@@ -769,7 +774,7 @@ static bool ApplyUsers ( const SqlStmt_t & tStmt, bool bReplace, MemoryWriter_c 
 	if ( !sError.IsEmpty() )
 		return false;
 
-	const AuthUsersPtr_t tAuth = GetAuth();
+	AuthUsersMutablePtr_t tAuthValidate = CopyAuth();
 
 	tWriter.ZipInt ( tStmt.m_iRowsAffected );
 
@@ -787,17 +792,24 @@ static bool ApplyUsers ( const SqlStmt_t & tStmt, bool bReplace, MemoryWriter_c 
 			return false;
 		}
 
-		const auto * pCurUser = tAuth->m_hUserToken ( tUser.m_sUser );
+		auto * pCurUser = tAuthValidate->m_hUserToken ( tUser.m_sUser );
 		if ( pCurUser && !bReplace )
 		{
 			sError.SetSprintf ( "duplicate user '%s', use REPLACE", tUser.m_sUser.cstr() );
 			return false;
 		}
+		if ( !tUser.MakeApiKey ( sError ) )
+			return false;
 
 		UserWrite ( tWriter, tUser );
+
+		if ( pCurUser )
+			*pCurUser = tUser;
+		else
+			AddUser ( tUser, tAuthValidate );
 	}
 
-	return true;
+	return Validate ( tAuthValidate, sError );
 }
 
 static void CommitUsers ( const VecTraits_T<BYTE> & dData, AuthUsersMutablePtr_t & tAuth )

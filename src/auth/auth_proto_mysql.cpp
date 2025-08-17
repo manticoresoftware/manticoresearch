@@ -298,7 +298,7 @@ void HandleMysqlShowToken ( const CSphString & sUser, RowBuffer_i & tOut )
 		if ( pUser )
 		{
 			tOut.PutString ( sUser );
-			tOut.PutString ( pUser->m_sRawBearerSha256 );
+			tOut.PutString ( BinToHex ( pUser->m_dBearerSha256 ) );
 
 			if ( !tOut.Commit () )
 				return;

@@ -16,21 +16,20 @@
 #include "auth_perms.h"
 
 // API
-enum class ApiAuth_e : BYTE
+struct ApiKey_t
 {
-	NO_AUTH = 1,
-	SHA1,
-	SHA256
-};
-int GetApiTokenSize ( ApiAuth_e eType );
-bool CheckAuth ( ApiAuth_e eType, const VecTraits_T<BYTE> & dToken, CSphString & sUser, CSphString & sError );
-
-struct ApiAuthToken_t
-{
-	ApiAuth_e m_eType = ApiAuth_e::NO_AUTH;
-	CSphFixedVector<BYTE> m_dToken  { 0 };
+	CSphString m_sUser;
+	CSphFixedVector<BYTE> m_dEncKey  { 0 };
 };
 
 bool ApiCheckPerms ( const CSphString & sUser, AuthAction_e eAction, const CSphString & sTarget, ISphOutputBuffer & tOut );
 // FIXME!!! add cluster name to all api replication command and check proper perms
 bool ApiCheckClusterPerms ( const CSphString & sUser, ISphOutputBuffer & tOut ); // !COMMIT
+
+bool ApiEncrypt ( const ApiKey_t & tApiKey, SmartOutputBuffer_t & dChunks, CSphString & sError );
+
+class AsyncNetInputBuffer_c;
+bool ApiDecrypt ( SearchdCommand_e eCmd, DWORD uVer, AsyncNetInputBuffer_c & tIn, int & iReplySize, CSphString & sUser, CSphString & sError );
+
+bool ApiEncryptReply ( const CSphString & sUser, GenericOutputBuffer_c & tOut, int iPacketOff, CSphString & sError );
+bool ApiDecryptReply ( const ApiKey_t & tApiKey, CSphFixedVector<BYTE> & dReplyBuf, CSphString & sError );

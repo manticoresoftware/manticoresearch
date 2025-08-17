@@ -859,8 +859,7 @@ void SmartOutputBuffer_t::Reset()
 	m_dBuf.Reserve( NETOUTBUF );
 };
 
-#if _WIN32
-void SmartOutputBuffer_t::LeakTo ( CSphVector<ISphOutputBuffer *> dOut )
+void SmartOutputBuffer_t::LeakTo ( CSphVector<ISphOutputBuffer *> & dOut )
 {
 	for ( auto & pChunk : m_dChunks )
 		dOut.Add ( pChunk );
@@ -868,8 +867,13 @@ void SmartOutputBuffer_t::LeakTo ( CSphVector<ISphOutputBuffer *> dOut )
 	dOut.Add ( new ISphOutputBuffer ( m_dBuf ) );
 	m_dBuf.Reserve ( NETOUTBUF );
 }
-#endif
 
+void SmartOutputBuffer_t::SwapData ( CSphVector<ISphOutputBuffer *> & dChunks )
+{
+	m_dChunks.SwapData ( dChunks );
+	m_dBuf.Reset();
+	m_dBuf.Reserve( NETOUTBUF );
+}
 
 /////////////////////////////////////////////////////////////////////////////
 

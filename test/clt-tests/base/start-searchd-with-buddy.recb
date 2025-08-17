@@ -1,5 +1,5 @@
 ––– input –––
-rm -f /var/log/manticore/searchd.log; stdbuf -oL searchd $SEARCHD_FLAGS > /dev/null
+rm -f /var/log/manticore/searchd.log; stdbuf -oL searchd --stopwait > /dev/null; stdbuf -oL searchd ${SEARCHD_ARGS:-} > /dev/null
 ––– output –––
 Buddy started!
 ––– input –––

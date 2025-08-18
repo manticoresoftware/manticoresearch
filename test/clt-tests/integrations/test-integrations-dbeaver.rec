@@ -255,7 +255,7 @@ mysql -h0 -P9306 -e "SELECT @@net_write_timeout"
 mysql -h0 -P9306 -e "SELECT @@performance_schema\G"
 ––– output –––
 *************************** 1. row ***************************
-@@performance_schema: #!/(ON|1)/!#
+@@performance_schema: 1
 ––– input –––
 mysql -h0 -P9306 -e "SELECT @@sql_mode"
 ––– output –––
@@ -316,7 +316,7 @@ mysql -h0 -P9306 -e "SELECT @@SESSION.sql_mode"
 mysql -h0 -P9306 -e "SELECT @@SESSION.autocommit\G"
 ––– output –––
 *************************** 1. row ***************************
-@@SESSION.autocommit: #!/(ON|1)/!#
+@@SESSION.autocommit: 1
 ––– input –––
 mysql -h0 -P9306 -e "SELECT @@character_set_results, @@character_set_client, @@character_set_server"
 ––– output –––

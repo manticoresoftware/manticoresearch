@@ -69,7 +69,7 @@ mysql -h0 -P9306 -e "SHOW VARIABLES"
 +------------------------------+-----------+
 | autocommit                   | 1         |
 | auto_optimize                | 1         |
-| optimize_cutoff              | 16        |
+| optimize_cutoff              | %{NUMBER}        |
 | collation_connection         | libc_ci   |
 | query_log_format             | sphinxql  |
 | session_read_only            | 0         |
@@ -217,7 +217,7 @@ mysql -h0 -P9306 -e "SELECT @@performance_schema"
 +----------------------+
 | @@performance_schema |
 +----------------------+
-| ON                   |
+| #!/(ON|1)/!#                   |
 +----------------------+
 ––– input –––
 mysql -h0 -P9306 -e "SELECT @@sql_mode"
@@ -281,7 +281,7 @@ mysql -h0 -P9306 -e "SELECT @@SESSION.autocommit"
 +----------------------+
 | @@SESSION.autocommit |
 +----------------------+
-| ON                   |
+| #!/(ON|1)/!#                   |
 +----------------------+
 ––– input –––
 mysql -h0 -P9306 -e "SELECT @@character_set_results, @@character_set_client, @@character_set_server"

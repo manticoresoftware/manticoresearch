@@ -25,6 +25,20 @@ jobs:
           echo "* Attempt: ${{ github.run_attempt }}" >> $GITHUB_STEP_SUMMARY
 
   # Separate job for each integration test
+  test_dbeaver:
+    name: Test DBeaver integration
+    runs-on: ubuntu-22.04
+    timeout-minutes: 60
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v3
+      - uses: manticoresoftware/clt@0.6.9
+        with:
+          test_prefix: test/clt-tests/integrations/test-integrations-dbeaver
+          image: ghcr.io/manticoresoftware/manticoresearch:test-kit-latest
+          comment_mode: failures
+          run_args: --privileged
+
   test_filebeat:
     name: Test Filebeat integration
     runs-on: ubuntu-22.04

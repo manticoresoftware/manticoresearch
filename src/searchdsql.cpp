@@ -1242,7 +1242,11 @@ bool SqlParser_c::AddDistinct ( SqlNode_t * pNewExpr, SqlNode_t * pStart, SqlNod
 	
 	// Check if this distinct expression already exists
 	if ( m_pQuery->m_dGroupDistinct.Contains ( sDistinct ) )
-		return AddItem ( CSphString().SetSprintf ( "@distinct_%d", m_pQuery->m_dGroupDistinct.GetFirst ( [&sDistinct] ( const CSphString & s ) { return s==sDistinct; } ) ), pStart, pEnd );
+	{
+		CSphString sItemName;
+		sItemName.SetSprintf ( "@distinct_%d", m_pQuery->m_dGroupDistinct.GetFirst ( [&sDistinct] ( const CSphString & s ) { return s==sDistinct; } ) );
+		return AddItem ( sItemName.cstr(), pStart, pEnd );
+	}
 	
 	// Add new distinct expression
 	int iDistinctIndex = m_pQuery->m_dGroupDistinct.GetLength();
@@ -1252,7 +1256,7 @@ bool SqlParser_c::AddDistinct ( SqlNode_t * pNewExpr, SqlNode_t * pStart, SqlNod
 	CSphString sItemName;
 	sItemName.SetSprintf ( "@distinct_%d", iDistinctIndex );
 	
-	return AddItem ( sItemName, pStart, pEnd );
+	return AddItem ( sItemName.cstr(), pStart, pEnd );
 }
 
 void SqlParser_c::AddDistinct ( SqlNode_t * pNewExpr )

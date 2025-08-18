@@ -1473,7 +1473,7 @@ bool QueueCreator_c::MaybeAddGroupbyMagic ( bool bGotDistinct )
 			{
 				if ( tItem.m_sExpr.Begins("@distinct_") )
 				{
-					CSphColumnInfo tDistinct ( tItem.m_sExpr, SPH_ATTR_INTEGER );
+					CSphColumnInfo tDistinct ( tItem.m_sExpr.cstr(), SPH_ATTR_INTEGER );
 					tDistinct.m_eStage = SPH_EVAL_SORTER;
 					AddColumn ( tDistinct );
 				}

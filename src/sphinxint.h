@@ -807,7 +807,15 @@ void			SetExtNodeStackSize ( int iDelta, int iExtra );
 // other positive: necessary free size of stack
 int				ConsiderStack ( const struct XQNode_t * pRoot, CSphString & sError );
 int				ConsiderStackAbsolute ( const struct XQNode_t* pRoot );
-void			sphTransformExtendedQuery ( XQNode_t ** ppNode, const CSphIndexSettings & tSettings, bool bHasBooleanOptimization = true, const ISphKeywordsStat * pKeywords = nullptr);
+
+struct TransformExtendedQueryArgs_t
+{
+	bool m_bHasBooleanOptimization = true;
+	bool m_bNeedPhraseTransform = false;
+	const ISphKeywordsStat * m_pKeywords = nullptr;
+};
+
+bool			sphTransformExtendedQuery ( XQNode_t ** ppNode, const CSphIndexSettings & tSettings, CSphString & sError, const TransformExtendedQueryArgs_t & tArgs );
 void			TransformAotFilter ( XQNode_t * pNode, const CSphWordforms * pWordforms, const CSphIndexSettings& tSettings );
 int				ExpandKeywords ( int iIndexOpt, QueryOption_e eQueryOpt, const CSphIndexSettings & tSettings, bool bWordDict );
 bool			ParseMorphFields ( const CSphString & sMorphology, const CSphString & sMorphFields, const CSphVector<CSphColumnInfo> & dFields, CSphBitvec & tMorphFields, CSphString & sError );

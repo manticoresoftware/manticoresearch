@@ -21,6 +21,7 @@ add_library ( sphinxquery OBJECT
 		transform_hungoperand.cpp
 		transform_excessandnot.cpp
 		transform_andnotnotnot.cpp
+		transform_phrase.cpp
 )
 
 include ( mybison )

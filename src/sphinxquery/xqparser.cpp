@@ -51,7 +51,6 @@ bool HasMissedField ( const XQLimitSpec_t & tSpec )
 {
 	return (tSpec.m_bFieldSpec
 		&& tSpec.m_dFieldMask.TestAll ( false )
-		&& tSpec.m_iFieldMaxPos == 0
 		);
 }
 }
@@ -82,8 +81,9 @@ public:
 	XQNode_t *		AddKeyword ( const char * sKeyword, int iSkippedPosBeforeToken=0 );
 	XQNode_t *		AddKeyword ( XQNode_t * pLeft, XQNode_t * pRight );
 	XQNode_t *		AddOp ( XQOperator_e eOp, XQNode_t * pLeft, XQNode_t * pRight, int iOpArg=0 );
-	void			SetPhrase ( XQNode_t * pNode, bool bSetExact );
+	void			SetPhrase ( XQNode_t * pNode, bool bSetExact, XQOperator_e eOp );
 	void			PhraseShiftQpos ( XQNode_t * pNode );
+	XQNode_t *		AddPhraseKeyword ( XQNode_t * pLeft, XQNode_t * pRight );
 
 	void	Cleanup () override;
 
@@ -831,9 +831,9 @@ XQNode_t * XQParser_t::AddKeyword ( XQNode_t * pLeft, XQNode_t * pRight )
 		return pLeft ? pLeft : pRight;
 
 	assert ( pLeft->dWords().GetLength()>0 );
-	assert ( pRight->dWords().GetLength()==1 );
+//	assert ( pRight->dWords().GetLength()==1 );
 
-	pLeft->AddDirtyWord ( pRight->dWord(0) );
+	pRight->WithWords ( [pLeft] ( auto& dWords ) { for ( const auto & dWord : dWords ) pLeft->AddDirtyWord ( dWord ); });
 	pLeft->Rehash();
 	DeleteSpawned ( pRight );
 	return pLeft;
@@ -887,24 +887,29 @@ XQNode_t * XQParser_t::AddOp ( XQOperator_e eOp, XQNode_t * pLeft, XQNode_t * pR
 }
 
 
-void XQParser_t::SetPhrase ( XQNode_t * pNode, bool bSetExact )
+void XQParser_t::SetPhrase ( XQNode_t * pNode, bool bSetExact, XQOperator_e eOp )
 {
 	if ( !pNode )
 		return;
 
-	assert ( !pNode->dWords().IsEmpty() );
+	assert ( eOp==SPH_QUERY_PHRASE || eOp==SPH_QUERY_PROXIMITY || eOp==SPH_QUERY_QUORUM );
+	assert ( !pNode->dWords().IsEmpty() || !pNode->dChildren().IsEmpty() );
+
 	if ( bSetExact )
 	{
 		pNode->WithWords ( [] ( auto& dWords ) {
-			dWords.for_each ([] ( XQKeyword_t& dWord ) {
+			dWords.for_each ([] ( XQKeyword_t & dWord ) {
 				if ( !dWord.m_sWord.IsEmpty() )
 					dWord.m_sWord.SetSprintf ( "=%s", dWord.m_sWord.cstr() );
 			});
 		});
 	}
-	pNode->SetOp ( SPH_QUERY_PHRASE );
+	pNode->SetOp ( eOp );
+	if ( eOp==SPH_QUERY_PROXIMITY && !pNode->dWords().IsEmpty() )
+		m_iAtomPos = pNode->FixupAtomPos();
 
 	PhraseShiftQpos ( pNode );
+	m_pParsed->m_bNeedPhraseTransform |= ( pNode->dChildren().GetLength()>0 );
 }
 
 
@@ -950,6 +955,13 @@ void XQParser_t::PhraseShiftQpos ( XQNode_t * pNode )
 	});
 }
 
+XQNode_t * XQParser_t::AddPhraseKeyword ( XQNode_t * pLeft, XQNode_t * pRight )
+{
+	if ( ( pLeft && pLeft->dChildren().GetLength() ) || ( pRight && pRight->dChildren().GetLength() ) )
+		return AddOp ( SPH_QUERY_PHRASE, pLeft, pRight );
+
+	return AddKeyword ( pLeft, pRight );
+}
 
 bool XQParser_t::Parse ( XQQuery_t & tParsed, const char * sQuery, const CSphQuery * pQuery, const TokenizerRefPtr_c& pTokenizer, const CSphSchema * pSchema, const DictRefPtr_c& pDict, const CSphIndexSettings & tSettings, const CSphBitvec * pMorphFields )
 {

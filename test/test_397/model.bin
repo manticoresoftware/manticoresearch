@@ -1,4 +1,4 @@
-a:1:{i:0;a:32:{i:0;a:2:{s:8:"sphinxql";s:358:"INSERT INTO rt1 (id, idd, content, title) VALUES
+a:1:{i:0;a:44:{i:0;a:2:{s:8:"sphinxql";s:358:"INSERT INTO rt1 (id, idd, content, title) VALUES
 ( 100, 12, 'red baron', 'he runs like me' ),
 ( 101, 12, 'blue sky','running dog' ),
 ( 102, 12, 'the box and a toy', 'online color bubles' ),
@@ -148,4 +148,28 @@ a:1:{i:0;a:32:{i:0;a:2:{s:8:"sphinxql";s:358:"INSERT INTO rt1 (id, idd, content,
     AND(KEYWORD(she, querypos=1, morphed))), 
   AND(fields=(content), KEYWORD(box, querypos=2, morphed)), 
   AND(fields=(title, content), KEYWORD(with, querypos=3, morphed)), 
-  AND(fields=(title, content), KEYWORD(i, querypos=4, morphed)))";}}}}}
+  AND(fields=(title, content), KEYWORD(i, querypos=4, morphed)))";}}}i:32;a:3:{s:8:"sphinxql";s:45:"explain query exp1 ' " ( ( a b c ) | d ) e" '";s:10:"total_rows";i:1;s:4:"rows";a:1:{i:0;a:2:{s:8:"Variable";s:16:"transformed_tree";s:5:"Value";s:168:"OR(
+  PHRASE(KEYWORD(a, querypos=1), KEYWORD(b, querypos=2), KEYWORD(c, querypos=3), KEYWORD(e, querypos=4)), 
+  PHRASE(KEYWORD(d, querypos=4), KEYWORD(e, querypos=5)))";}}}i:33;a:3:{s:8:"sphinxql";s:47:"explain query exp1 ' " ( ( a b c ) | d ) e"~5 '";s:10:"total_rows";i:1;s:4:"rows";a:1:{i:0;a:2:{s:8:"Variable";s:16:"transformed_tree";s:5:"Value";s:198:"OR(
+  PROXIMITY(distance=5, KEYWORD(a, querypos=1), KEYWORD(b, querypos=2), KEYWORD(c, querypos=3), KEYWORD(e, querypos=4)), 
+  PROXIMITY(distance=5, KEYWORD(d, querypos=4), KEYWORD(e, querypos=5)))";}}}i:34;a:3:{s:8:"sphinxql";s:47:"explain query exp1 ' " ( ( a b c ) | d ) e"/2 '";s:10:"total_rows";i:1;s:4:"rows";a:1:{i:0;a:2:{s:8:"Variable";s:16:"transformed_tree";s:5:"Value";s:186:"OR(
+  QUORUM(count=2, KEYWORD(a, querypos=1), KEYWORD(b, querypos=2), KEYWORD(c, querypos=3), KEYWORD(e, querypos=4)), 
+  QUORUM(count=2, KEYWORD(d, querypos=4), KEYWORD(e, querypos=5)))";}}}i:35;a:3:{s:8:"sphinxql";s:45:"explain query exp1 ' " e ( ( a b c ) | d )" '";s:10:"total_rows";i:1;s:4:"rows";a:1:{i:0;a:2:{s:8:"Variable";s:16:"transformed_tree";s:5:"Value";s:168:"OR(
+  PHRASE(KEYWORD(e, querypos=1), KEYWORD(a, querypos=2), KEYWORD(b, querypos=3), KEYWORD(c, querypos=4)), 
+  PHRASE(KEYWORD(e, querypos=1), KEYWORD(d, querypos=2)))";}}}i:36;a:3:{s:8:"sphinxql";s:47:"explain query exp1 ' " e ( ( a b c ) | d )"~5 '";s:10:"total_rows";i:1;s:4:"rows";a:1:{i:0;a:2:{s:8:"Variable";s:16:"transformed_tree";s:5:"Value";s:198:"OR(
+  PROXIMITY(distance=5, KEYWORD(e, querypos=1), KEYWORD(a, querypos=2), KEYWORD(b, querypos=3), KEYWORD(c, querypos=4)), 
+  PROXIMITY(distance=5, KEYWORD(e, querypos=1), KEYWORD(d, querypos=2)))";}}}i:37;a:3:{s:8:"sphinxql";s:47:"explain query exp1 ' " e ( ( a b c ) | d )"/2 '";s:10:"total_rows";i:1;s:4:"rows";a:1:{i:0;a:2:{s:8:"Variable";s:16:"transformed_tree";s:5:"Value";s:186:"OR(
+  QUORUM(count=2, KEYWORD(e, querypos=1), KEYWORD(a, querypos=2), KEYWORD(b, querypos=3), KEYWORD(c, querypos=4)), 
+  QUORUM(count=2, KEYWORD(e, querypos=1), KEYWORD(d, querypos=2)))";}}}i:38;a:3:{s:8:"sphinxql";s:84:"explain query exp1 ' "dead ( alive | poor ) but all ( ( as good ) | ( as fast ) )" '";s:10:"total_rows";i:1;s:4:"rows";a:1:{i:0;a:2:{s:8:"Variable";s:16:"transformed_tree";s:5:"Value";s:680:"OR(
+  PHRASE(KEYWORD(dead, querypos=1), KEYWORD(alive, querypos=2), KEYWORD(but, querypos=3), KEYWORD(all, querypos=4), KEYWORD(as, querypos=5), KEYWORD(good, querypos=6)), 
+  PHRASE(KEYWORD(dead, querypos=1), KEYWORD(alive, querypos=2), KEYWORD(but, querypos=3), KEYWORD(all, querypos=4), KEYWORD(as, querypos=5), KEYWORD(fast, querypos=6)), 
+  PHRASE(KEYWORD(dead, querypos=1), KEYWORD(poor, querypos=2), KEYWORD(but, querypos=3), KEYWORD(all, querypos=4), KEYWORD(as, querypos=5), KEYWORD(good, querypos=6)), 
+  PHRASE(KEYWORD(dead, querypos=1), KEYWORD(poor, querypos=2), KEYWORD(but, querypos=3), KEYWORD(all, querypos=4), KEYWORD(as, querypos=5), KEYWORD(fast, querypos=6)))";}}}i:39;a:3:{s:8:"sphinxql";s:86:"explain query exp1 ' "dead ( alive | poor ) but all ( ( as good ) | ( as fast ) )"~5 '";s:10:"total_rows";i:1;s:4:"rows";a:1:{i:0;a:2:{s:8:"Variable";s:16:"transformed_tree";s:5:"Value";s:740:"OR(
+  PROXIMITY(distance=5, KEYWORD(dead, querypos=1), KEYWORD(alive, querypos=2), KEYWORD(but, querypos=3), KEYWORD(all, querypos=4), KEYWORD(as, querypos=5), KEYWORD(good, querypos=6)), 
+  PROXIMITY(distance=5, KEYWORD(dead, querypos=1), KEYWORD(alive, querypos=2), KEYWORD(but, querypos=3), KEYWORD(all, querypos=4), KEYWORD(as, querypos=5), KEYWORD(fast, querypos=6)), 
+  PROXIMITY(distance=5, KEYWORD(dead, querypos=1), KEYWORD(poor, querypos=2), KEYWORD(but, querypos=3), KEYWORD(all, querypos=4), KEYWORD(as, querypos=5), KEYWORD(good, querypos=6)), 
+  PROXIMITY(distance=5, KEYWORD(dead, querypos=1), KEYWORD(poor, querypos=2), KEYWORD(but, querypos=3), KEYWORD(all, querypos=4), KEYWORD(as, querypos=5), KEYWORD(fast, querypos=6)))";}}}i:40;a:3:{s:8:"sphinxql";s:86:"explain query exp1 ' "dead ( alive | poor ) but all ( ( as good ) | ( as fast ) )"/3 '";s:10:"total_rows";i:1;s:4:"rows";a:1:{i:0;a:2:{s:8:"Variable";s:16:"transformed_tree";s:5:"Value";s:716:"OR(
+  QUORUM(count=3, KEYWORD(dead, querypos=1), KEYWORD(alive, querypos=2), KEYWORD(but, querypos=3), KEYWORD(all, querypos=4), KEYWORD(as, querypos=5), KEYWORD(good, querypos=6)), 
+  QUORUM(count=3, KEYWORD(dead, querypos=1), KEYWORD(alive, querypos=2), KEYWORD(but, querypos=3), KEYWORD(all, querypos=4), KEYWORD(as, querypos=5), KEYWORD(fast, querypos=6)), 
+  QUORUM(count=3, KEYWORD(dead, querypos=1), KEYWORD(poor, querypos=2), KEYWORD(but, querypos=3), KEYWORD(all, querypos=4), KEYWORD(as, querypos=5), KEYWORD(good, querypos=6)), 
+  QUORUM(count=3, KEYWORD(dead, querypos=1), KEYWORD(poor, querypos=2), KEYWORD(but, querypos=3), KEYWORD(all, querypos=4), KEYWORD(as, querypos=5), KEYWORD(fast, querypos=6)))";}}}i:41;a:3:{s:8:"sphinxql";s:124:"explain query exp1 ' "( a | b | c | aa | bb ) ( d | e | f | dd ) ( g | h | j | gg ) ( k | m | n | kk ) ( o | p | q | oo )" '";s:5:"errno";i:1064;s:5:"error";s:114:"query too complex, exceeds max variants limit during OR combination (complexity 1280, expansion_phrase_limit 1024)";}i:42;a:3:{s:8:"sphinxql";s:126:"explain query exp1 ' "( a | b | c | aa | bb ) ( d | e | f | dd ) ( g | h | j | gg ) ( k | m | n | kk ) ( o | p | q | oo )"~5 '";s:5:"errno";i:1064;s:5:"error";s:114:"query too complex, exceeds max variants limit during OR combination (complexity 1280, expansion_phrase_limit 1024)";}i:43;a:3:{s:8:"sphinxql";s:126:"explain query exp1 ' "( a | b | c | aa | bb ) ( d | e | f | dd ) ( g | h | j | gg ) ( k | m | n | kk ) ( o | p | q | oo )"/3 '";s:5:"errno";i:1064;s:5:"error";s:114:"query too complex, exceeds max variants limit during OR combination (complexity 1280, expansion_phrase_limit 1024)";}}}

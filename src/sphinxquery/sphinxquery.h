@@ -301,6 +301,7 @@ public:
 	void SetOp ( XQOperator_e eOp, CSphVector<XQNode_t*> & dArgs )
 	{
 		SetOp (eOp);
+		assert ( m_dChildren.IsEmpty() && "Ensure your node has no children. You need to explicitly reset them, or delete - to avoid memleak here" );
 		m_dChildren.SwapData(dArgs);
 		for ( auto* pChild : m_dChildren )
 			pChild->m_pParent = this;
@@ -356,6 +357,7 @@ struct XQQuery_t : ISphNoncopyable
 	bool					m_bEmpty = false;
 	// was node full-text (even folded into empty)
 	bool					m_bWasFullText = false;
+	bool					m_bNeedPhraseTransform = false;
 
 	/// dtor
 	~XQQuery_t ()
@@ -404,3 +406,6 @@ inline int GetExpansionLimit ( int iQueryLimit, int iIndexLimit  )
 {
 	return ( iQueryLimit!=DEFAULT_QUERY_EXPANSION_LIMIT ? iQueryLimit : iIndexLimit );
 }
+
+bool TransformPhraseBased ( XQNode_t ** ppNode, CSphString & sError );
+void SetExpansionPhraseLimit ( int iMaxVariants );

@@ -62,34 +62,74 @@ mysql -h0 -P9306 -e "SHOW COLLATION"
 | utf8_general_ci | utf8    |   33 | Yes     | Yes      | 1       |
 +-----------------+---------+------+---------+----------+---------+
 ––– input –––
-mysql -h0 -P9306 -e "SHOW VARIABLES"
+mysql -h0 -P9306 -e "SHOW VARIABLES\G"
 ––– output –––
-+------------------------------+-----------+
-| Variable_name                | Value     |
-+------------------------------+-----------+
-| autocommit                   | 1         |
-| auto_optimize                | 1         |
-| optimize_cutoff              | %{NUMBER}        |
-| collation_connection         | libc_ci   |
-| query_log_format             | sphinxql  |
-| session_read_only            | 0         |
-| log_level                    | info      |
-| max_allowed_packet           | 134217728 |
-| character_set_client         | utf8      |
-| character_set_connection     | utf8      |
-| grouping_in_utc              | 0         |
-| timezone                     | UTC       |
-| last_insert_id               | 0         |
-| pseudo_sharding              | 1         |
-| secondary_indexes            | 1         |
-| accurate_aggregation         | 0         |
-| distinct_precision_threshold | 3500      |
-| threads_ex_effective         |           |
-| cluster_user                 | cluster   |
-| thread_stack                 | 1048576   |
-| threads_ex                   |           |
-| user                         | root      |
-+------------------------------+-----------+
+*************************** 1. row ***************************
+Variable_name: autocommit
+        Value: 1
+*************************** 2. row ***************************
+Variable_name: auto_optimize
+        Value: 1
+*************************** 3. row ***************************
+Variable_name: optimize_cutoff
+        Value: %{NUMBER}
+*************************** 4. row ***************************
+Variable_name: collation_connection
+        Value: libc_ci
+*************************** 5. row ***************************
+Variable_name: query_log_format
+        Value: sphinxql
+*************************** 6. row ***************************
+Variable_name: session_read_only
+        Value: 0
+*************************** 7. row ***************************
+Variable_name: log_level
+        Value: info
+*************************** 8. row ***************************
+Variable_name: max_allowed_packet
+        Value: 134217728
+*************************** 9. row ***************************
+Variable_name: character_set_client
+        Value: utf8
+*************************** 10. row ***************************
+Variable_name: character_set_connection
+        Value: utf8
+*************************** 11. row ***************************
+Variable_name: grouping_in_utc
+        Value: 0
+*************************** 12. row ***************************
+Variable_name: timezone
+        Value: UTC
+*************************** 13. row ***************************
+Variable_name: last_insert_id
+        Value: 0
+*************************** 14. row ***************************
+Variable_name: pseudo_sharding
+        Value: 1
+*************************** 15. row ***************************
+Variable_name: secondary_indexes
+        Value: 1
+*************************** 16. row ***************************
+Variable_name: accurate_aggregation
+        Value: 0
+*************************** 17. row ***************************
+Variable_name: distinct_precision_threshold
+        Value: 3500
+*************************** 18. row ***************************
+Variable_name: threads_ex_effective
+        Value:
+*************************** 19. row ***************************
+Variable_name: cluster_user
+        Value: cluster
+*************************** 20. row ***************************
+Variable_name: thread_stack
+        Value: 1048576
+*************************** 21. row ***************************
+Variable_name: threads_ex
+        Value:
+*************************** 22. row ***************************
+Variable_name: user
+        Value: root
 ––– input –––
 mysql -h0 -P9306 -e "SHOW VARIABLES LIKE 'character_set%'"
 ––– output –––
@@ -212,13 +252,10 @@ mysql -h0 -P9306 -e "SELECT @@net_write_timeout"
 | 60                  |
 +---------------------+
 ––– input –––
-mysql -h0 -P9306 -e "SELECT @@performance_schema"
+mysql -h0 -P9306 -e "SELECT @@performance_schema\G"
 ––– output –––
-+----------------------+
-| @@performance_schema |
-+----------------------+
-| #!/(ON|1)/!#                   |
-+----------------------+
+*************************** 1. row ***************************
+@@performance_schema: #!/(ON|1)/!#
 ––– input –––
 mysql -h0 -P9306 -e "SELECT @@sql_mode"
 ––– output –––
@@ -276,13 +313,10 @@ mysql -h0 -P9306 -e "SELECT @@SESSION.sql_mode"
 | ONLY_FULL_GROUP_BY,STRICT_TRANS_TABLES,NO_ZERO_IN_DATE,NO_ZERO_DATE,ERROR_FOR_DIVISION_BY_ZERO,NO_ENGINE_SUBSTITUTION |
 +-----------------------------------------------------------------------------------------------------------------------+
 ––– input –––
-mysql -h0 -P9306 -e "SELECT @@SESSION.autocommit"
+mysql -h0 -P9306 -e "SELECT @@SESSION.autocommit\G"
 ––– output –––
-+----------------------+
-| @@SESSION.autocommit |
-+----------------------+
-| #!/(ON|1)/!#                   |
-+----------------------+
+*************************** 1. row ***************************
+@@SESSION.autocommit: #!/(ON|1)/!#
 ––– input –––
 mysql -h0 -P9306 -e "SELECT @@character_set_results, @@character_set_client, @@character_set_server"
 ––– output –––

@@ -1,6 +1,6 @@
 ––– block: ../base/start-searchd –––
 ––– comment –––
-Drop percolate table if it exists to ensure clean test environment
+Drop percolate table if it exists to ensure clean test environment test
 ––– input –––
 mysql -h0 -P9306 -e "drop table if exists pq;"; echo $?
 ––– output –––

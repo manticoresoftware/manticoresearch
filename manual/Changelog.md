@@ -1,19 +1,33 @@
 # Changelog
 
-## Dev version
+## Version 13.6.7
+**Released**: August 8th 2025
 
+Recommended [MCL](https://github.com/manticoresoftware/columnar) version: 8.0.1  
+Recommended [Buddy](Installation/Manticore_Buddy.md#Manticore-Buddy) version: 3.34.2  
+
+If you follow the [official installation guide](https://manticoresearch.com/install/), you don’t need to worry about this.
+
+### New Features and Improvements
+* 🆕 [v13.6.0](https://github.com/manticoresoftware/manticoresearch/releases/tag/13.6.0) [ Issue #2226](https://github.com/manticoresoftware/manticoresearch/issues/2226) Support for explicit '|' (OR) in PHRASE, PROXIMITY, and QUORUM operators.
+* 🆕 [v13.5.0](https://github.com/manticoresoftware/manticoresearch/releases/tag/13.5.0) [ PR #3591](https://github.com/manticoresoftware/manticoresearch/pull/3591) Automatic embedding generation in queries (Work in Progress, not production-ready yet).
+* 🆕 [v13.4.0](https://github.com/manticoresoftware/manticoresearch/releases/tag/13.4.0) [ PR #3585](https://github.com/manticoresoftware/manticoresearch/pull/3585) Fixed logic to prefer buddy thread count from buddy_path config if set, instead of using the daemon value.
+* 🆕 [v13.3.0](https://github.com/manticoresoftware/manticoresearch/releases/tag/13.3.0) [ PR #3577](https://github.com/manticoresoftware/manticoresearch/pull/3577) Support for joins with local distributed tables.
+* 🆕 [#3647](https://github.com/manticoresoftware/manticoresearch/issues/3647) Added support for Debian 13 "Trixie"
+
+### Bug Fixes
+* 🪲 [v13.6.7](https://github.com/manticoresoftware/manticoresearch/releases/tag/13.6.7) [ Issue #3524](https://github.com/manticoresoftware/manticoresearch/issues/3524) Fixed an issue with saving generated embeddings in row-wise storage.
+* 🪲 [v13.6.6](https://github.com/manticoresoftware/manticoresearch/releases/tag/13.6.6) [ Issue #3563](https://github.com/manticoresoftware/manticoresearch/issues/3563) Fixed issues with Sequel Ace and other integrations failing due to "unknown sysvar" errors.
+* 🪲 [v13.6.5](https://github.com/manticoresoftware/manticoresearch/releases/tag/13.6.5) [ Issue #3467](https://github.com/manticoresoftware/manticoresearch/issues/3467) Fixed issues with DBeaver and other integrations failing due to "unknown sysvar" errors.
+* 🪲 [v13.6.4](https://github.com/manticoresoftware/manticoresearch/releases/tag/13.6.4) [ Issue #3524](https://github.com/manticoresoftware/manticoresearch/issues/3524) Fixed an issue with concatenating multi-field embeddings; also fixed embedding generation from queries.
 * 🪲 [v13.6.3](https://github.com/manticoresoftware/manticoresearch/releases/tag/13.6.3) [ Issue #3641](https://github.com/manticoresoftware/manticoresearch/issues/3641) Fixed a bug in 13.6.0 where a phrase lost all bracketed keywords except the first one.
 * 🪲 [v13.6.2](https://github.com/manticoresoftware/manticoresearch/releases/tag/13.6.2) Fixed a memleak in transform_phrase.
 * 🪲 [v13.6.1](https://github.com/manticoresoftware/manticoresearch/releases/tag/13.6.1) Fixed a memory leak in version 13.6.0.
-* 🆕 [v13.6.0](https://github.com/manticoresoftware/manticoresearch/releases/tag/13.6.0) [ Issue #2226](https://github.com/manticoresoftware/manticoresearch/issues/2226) Support for explicit '|' (OR) in PHRASE, PROXIMITY, and QUORUM operators.
-* 🪲 [v13.5.2](https://github.com/manticoresoftware/manticoresearch/releases/tag/13.5.2) Fixed more issues related to full-text search fuzz testing.
+* 🪲 [v13.5.2](https://github.com/manticoresoftware/manticoresearch/releases/tag/13.5.2) [ Issue #3651](https://github.com/manticoresoftware/manticoresearch/issues/3651) Fixed more issues related to full-text search fuzz testing.
 * 🪲 [v13.5.1](https://github.com/manticoresoftware/manticoresearch/releases/tag/13.5.1) [ Issue #3560](https://github.com/manticoresoftware/manticoresearch/issues/3560) Fixed a case where OPTIMIZE TABLE could hang indefinitely with KNN data.
-* 🆕 [v13.5.0](https://github.com/manticoresoftware/manticoresearch/releases/tag/13.5.0) [ PR #3591](https://github.com/manticoresoftware/manticoresearch/pull/3591) Automatic embedding generation in queries (WIP).
 * 🪲 [v13.4.2](https://github.com/manticoresoftware/manticoresearch/releases/tag/13.4.2) [ Issue #2544](https://github.com/manticoresoftware/manticoresearch/issues/2544) Fixed an issue where adding a float_vector column could corrupt indexes.
-* 🪲 [v13.4.1](https://github.com/manticoresoftware/manticoresearch/releases/tag/13.4.1) Added fuzz testing for full-text parsing and fixed several issues found during testing.
-* 🆕 [v13.4.0](https://github.com/manticoresoftware/manticoresearch/releases/tag/13.4.0) [ PR #3585](https://github.com/manticoresoftware/manticoresearch/pull/3585) Fixed logic to prefer buddy thread count from buddy_path config if set, instead of using the daemon value.
+* 🪲 [v13.4.1](https://github.com/manticoresoftware/manticoresearch/releases/tag/13.4.1) [ Issue #3651](https://github.com/manticoresoftware/manticoresearch/issues/3651) Added fuzz testing for full-text parsing and fixed several issues found during testing.
 * 🪲 [v13.3.1](https://github.com/manticoresoftware/manticoresearch/releases/tag/13.3.1) [ Issue #3583](https://github.com/manticoresoftware/manticoresearch/issues/3583) Fixed a crash when using complex boolean filters with highlighting.
-* 🆕 [v13.3.0](https://github.com/manticoresoftware/manticoresearch/releases/tag/13.3.0) [ PR #3577](https://github.com/manticoresoftware/manticoresearch/pull/3577) Support for joins with local distributed tables.
 * 🪲 [v13.2.7](https://github.com/manticoresoftware/manticoresearch/releases/tag/13.2.7) [ Issue #3481](https://github.com/manticoresoftware/manticoresearch/issues/3481) Fixed a crash when HTTP update, distributed table, and wrong replication cluster are used together.
 * 🪲 [v13.2.6](https://github.com/manticoresoftware/manticoresearch/releases/tag/13.2.6) [ PR #3567](https://github.com/manticoresoftware/manticoresearch/pull/3567) Updated manticore-backup dependency to version 1.9.6.
 * 🪲 [v13.2.5](https://github.com/manticoresoftware/manticoresearch/releases/tag/13.2.5) [ PR #3565](https://github.com/manticoresoftware/manticoresearch/pull/3565) Fixed CI setup to improve Docker image compatibility.

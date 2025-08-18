@@ -591,7 +591,9 @@ jobs:
                 Start-Sleep -Seconds 3
                 
                 # Check if installation was successful even if process hung
-                if (Test-Path "${env:ProgramFiles}\Manticore Search\bin\searchd.exe" -or Test-Path "${env:ProgramFiles(x86)}\Manticore Search\bin\searchd.exe") {
+                $searchdPath1 = "${env:ProgramFiles}\Manticore Search\bin\searchd.exe"
+                $searchdPath2 = "${env:ProgramFiles(x86)}\Manticore Search\bin\searchd.exe"
+                if ((Test-Path $searchdPath1) -or (Test-Path $searchdPath2)) {
                     Write-Host "Found Manticore installation, marking as successful"
                     $installed = $true
                     break

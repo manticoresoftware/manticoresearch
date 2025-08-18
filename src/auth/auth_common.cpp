@@ -771,7 +771,7 @@ static bool Validate ( const AuthUsersMutablePtr_t & tAuth, Key_fn fnKey, const 
 		CSphString sKey = fnKey ( tIt.second );
 		const AuthUserCred_t ** ppExisted = hFields ( sKey );
 		if ( ppExisted )
-			sUsersDups.Appendf ( "%s=%s", tIt.second.m_sUser, ( *ppExisted )->m_sUser );
+			sUsersDups.Appendf ( "%s=%s", tIt.second.m_sUser.cstr(), ( *ppExisted )->m_sUser.cstr() );
 		else
 			hFields.Add ( &tIt.second, sKey );
 	}

@@ -249,7 +249,7 @@ bool ApiEncryptReply ( const CSphString & sUser, GenericOutputBuffer_c & tOut, i
 	if ( eRes!=SEARCHD_OK && eRes!=SEARCHD_WARNING )
 		return true;
 
-	WORD uVer = tIn.GetWord();
+	tIn.GetWord(); // WORD uVer
 	int64_t iLenOff = tIn.GetBufferPos();
 	int iSrcDataLen = tIn.GetInt();
 	VecTraits_T dSrc ( tIn.GetBufferPtr(), iSrcDataLen );

@@ -769,7 +769,7 @@ public:
 	{
 		auto iValidIndexes = (int)dIndexes.count_of ( [&] ( const auto& pIndex ) { return pIndex; } );
 
-		m_bNeedGlobalSorters = iValidIndexes>1 && !dQueries.First().m_sGroupDistinct.IsEmpty();
+		m_bNeedGlobalSorters = iValidIndexes>1 && !dQueries.First().m_dGroupDistinct.IsEmpty();
 		if ( m_bNeedGlobalSorters )
 		{
 			// check if schemas are same
@@ -2192,7 +2192,7 @@ void SearchHandler_c::RunSubset ( int iStart, int iEnd )
 			{
 				for ( auto& dItem : dItems )
 				{
-					if ( dItem.m_sExpr=="count(*)" || ( dItem.m_sExpr=="@distinct" ) )
+					if ( dItem.m_sExpr=="count(*)" || dItem.m_sExpr.Begins("@distinct_") )
 						tRes.m_dZeroCount.Add ( dItem.m_sAlias );
 				}
 			}

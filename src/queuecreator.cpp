@@ -35,7 +35,7 @@ bool HasImplicitGrouping ( const CSphQuery & tQuery )
 {
 	auto fnIsImplicit = [] ( const CSphQueryItem & t )
 	{
-		return ( t.m_eAggrFunc!=SPH_AGGR_NONE ) || t.m_sExpr=="count(*)" || t.m_sExpr=="@distinct";
+		return ( t.m_eAggrFunc!=SPH_AGGR_NONE ) || t.m_sExpr=="count(*)" || t.m_sExpr.Begins("@distinct_");
 	};
 
 	return tQuery.m_sGroupBy.IsEmpty() ? tQuery.m_dItems.any_of(fnIsImplicit) : false;
@@ -86,7 +86,7 @@ static bool IsCount ( const CSphString & s )
 static bool IsGroupby ( const CSphString & s )
 {
 	return s=="@groupby"
-		|| s=="@distinct"
+		|| s.Begins("@distinct_")
 		|| s=="groupby()"
 		|| IsSortJsonInternal(s);
 }
@@ -340,7 +340,13 @@ private:
 	void	ReplaceJsonGroupbyWithStrings ( CSphString & sJsonGroupBy );
 	void	UpdateAggregateDependencies ( CSphColumnInfo & tExprCol );
 	int		GetGroupbyAttrIndex() const			{ return GetAliasedAttrIndex ( m_tQuery.m_sGroupBy, m_tQuery, *m_pSorterSchema ); }
-	int		GetGroupDistinctAttrIndex() const	{ return GetAliasedAttrIndex ( m_tQuery.m_sGroupDistinct, m_tQuery, *m_pSorterSchema ); }
+	int		GetGroupDistinctAttrIndex() const	
+	{ 
+		// Return index of first distinct attribute for compatibility
+		if ( m_tQuery.m_dGroupDistinct.IsEmpty() )
+			return -1;
+		return GetAliasedAttrIndex ( m_tQuery.m_dGroupDistinct[0], m_tQuery, *m_pSorterSchema ); 
+	}
 
 	bool	CanCalcFastCountDistinct() const;
 	bool	CanCalcFastCountFilter() const;
@@ -463,40 +469,46 @@ void QueueCreator_c::CreateGrouperByAttr ( ESphAttr eType, const CSphColumnInfo 
 
 bool QueueCreator_c::SetupDistinctAttr()
 {
-	const CSphString & sDistinct = m_tQuery.m_sGroupDistinct;
-	if ( sDistinct.IsEmpty() )
+	if ( m_tQuery.m_dGroupDistinct.IsEmpty() )
 		return true;
 
 	assert ( m_pSorterSchema );
 	auto & tSchema = *m_pSorterSchema;
 
-	int iDistinct = tSchema.GetAttrIndex ( sDistinct.cstr() );
-	if ( iDistinct<0 )
+	// Handle multiple distinct expressions
+	for ( const auto & sDistinct : m_tQuery.m_dGroupDistinct )
 	{
-		CSphString sJsonCol;
-		if ( !sphJsonNameSplit ( sDistinct.cstr(), m_tQuery.m_sJoinIdx.cstr(), &sJsonCol ) )
+		int iDistinct = tSchema.GetAttrIndex ( sDistinct.cstr() );
+		if ( iDistinct<0 )
 		{
-			return Err ( "group-count-distinct attribute '%s' not found", sDistinct.cstr() );
-			return false;
+			CSphString sJsonCol;
+			if ( !sphJsonNameSplit ( sDistinct.cstr(), m_tQuery.m_sJoinIdx.cstr(), &sJsonCol ) )
+			{
+				return Err ( "group-count-distinct attribute '%s' not found", sDistinct.cstr() );
+			}
+
+			CSphColumnInfo tExprCol ( sDistinct.cstr(), SPH_ATTR_JSON_FIELD_PTR );
+			tExprCol.m_eStage = SPH_EVAL_SORTER;
+			tExprCol.m_uAttrFlags = CSphColumnInfo::ATTR_JOINED;
+			m_pSorterSchema->AddAttr ( tExprCol, true );
+			iDistinct = m_pSorterSchema->GetAttrIndex ( tExprCol.m_sName.cstr() );
 		}
 
-		CSphColumnInfo tExprCol ( sDistinct.cstr(), SPH_ATTR_JSON_FIELD_PTR );
-		tExprCol.m_eStage = SPH_EVAL_SORTER;
-		tExprCol.m_uAttrFlags = CSphColumnInfo::ATTR_JOINED;
-		m_pSorterSchema->AddAttr ( tExprCol, true );
-		iDistinct = m_pSorterSchema->GetAttrIndex ( tExprCol.m_sName.cstr() );
+		const auto & tDistinctAttr = tSchema.GetAttr(iDistinct);
+		if ( IsNotRealAttribute(tDistinctAttr) )
+			return Err ( "group-count-distinct attribute '%s' not found", sDistinct.cstr() );
+
+		// Use first distinct expression for fetcher (sufficient for grouping/sorting)
+		if ( !m_tGroupSorterSettings.m_pDistinctFetcher )
+		{
+			if ( tDistinctAttr.IsColumnar() )
+				m_tGroupSorterSettings.m_pDistinctFetcher = CreateColumnarDistinctFetcher ( tDistinctAttr.m_sName, tDistinctAttr.m_eAttrType, m_tQuery.m_eCollation );
+			else
+				m_tGroupSorterSettings.m_pDistinctFetcher = CreateDistinctFetcher ( tDistinctAttr.m_sName, tDistinctAttr.m_tLocator, tDistinctAttr.m_eAttrType );
+
+			m_bJoinedGroupSort |= IsJoinAttr(tDistinctAttr.m_sName);
+		}
 	}
-
-	const auto & tDistinctAttr = tSchema.GetAttr(iDistinct);
-	if ( IsNotRealAttribute(tDistinctAttr) )
-		return Err ( "group-count-distinct attribute '%s' not found", sDistinct.cstr() );
-
-	if ( tDistinctAttr.IsColumnar() )
-		m_tGroupSorterSettings.m_pDistinctFetcher = CreateColumnarDistinctFetcher ( tDistinctAttr.m_sName, tDistinctAttr.m_eAttrType, m_tQuery.m_eCollation );
-	else
-		m_tGroupSorterSettings.m_pDistinctFetcher = CreateDistinctFetcher ( tDistinctAttr.m_sName, tDistinctAttr.m_tLocator, tDistinctAttr.m_eAttrType );
-
-	m_bJoinedGroupSort |= IsJoinAttr(tDistinctAttr.m_sName);
 
 	return true;
 }
@@ -1456,9 +1468,16 @@ bool QueueCreator_c::MaybeAddGroupbyMagic ( bool bGotDistinct )
 
 		if ( bGotDistinct )
 		{
-			CSphColumnInfo tDistinct ( "@distinct", SPH_ATTR_INTEGER );
-			tDistinct.m_eStage = SPH_EVAL_SORTER;
-			AddColumn ( tDistinct );
+			// Handle multiple distinct expressions
+			for ( const auto & tItem : m_tQuery.m_dItems )
+			{
+				if ( tItem.m_sExpr.Begins("@distinct_") )
+				{
+					CSphColumnInfo tDistinct ( tItem.m_sExpr, SPH_ATTR_INTEGER );
+					tDistinct.m_eStage = SPH_EVAL_SORTER;
+					AddColumn ( tDistinct );
+				}
+			}
 		}
 
 		// add @groupbystr last in case we need to skip it on sending (like @int_attr_*)
@@ -1480,15 +1499,20 @@ bool QueueCreator_c::MaybeAddGroupbyMagic ( bool bGotDistinct )
 		m_tGroupSorterSettings.m_tLocCount = m_pSorterSchema->GetAttr ( iCount ).m_tLocator;
 		LOC_CHECK ( m_tGroupSorterSettings.m_tLocCount.m_bDynamic, "@count must be dynamic" );
 
-		int iDistinct = m_pSorterSchema->GetAttrIndex ( "@distinct" );
+		int iDistinct = -1;
 		if ( bGotDistinct )
 		{
-			LOC_CHECK ( iDistinct>=0, "missing @distinct" );
+			// Look for @distinct_0 (first distinct column) for backward compatibility
+			iDistinct = m_pSorterSchema->GetAttrIndex ( "@distinct_0" );
+		}
+		if ( bGotDistinct )
+		{
+			LOC_CHECK ( iDistinct>=0, "missing @distinct_0" );
 			m_tGroupSorterSettings.m_tLocDistinct = m_pSorterSchema->GetAttr ( iDistinct ).m_tLocator;
-			LOC_CHECK ( m_tGroupSorterSettings.m_tLocDistinct.m_bDynamic, "@distinct must be dynamic" );
+			LOC_CHECK ( m_tGroupSorterSettings.m_tLocDistinct.m_bDynamic, "@distinct_0 must be dynamic" );
 		}
 		else
-			LOC_CHECK ( iDistinct<=0, "unexpected @distinct" );
+			LOC_CHECK ( iDistinct<=0, "unexpected @distinct_0" );
 
 		int iGroupbyStr = m_pSorterSchema->GetAttrIndex ( sJsonGroupBy.cstr() );
 		if ( iGroupbyStr>=0 )
@@ -2174,9 +2198,17 @@ bool QueueCreator_c::SetupGroupSortingFunc ( bool bGotDistinct )
 
 	if ( bGotDistinct )
 	{
-		m_dGroupColumns.Add ( { m_pSorterSchema->GetAttrIndex ( m_tQuery.m_sGroupDistinct.cstr() ), true } );
-		assert ( m_dGroupColumns.Last().first>=0 );
-		m_hExtra.Add ( m_pSorterSchema->GetAttr ( m_dGroupColumns.Last().first ).m_sName );
+		// Add all distinct expressions to group columns
+		for ( const auto & sDistinct : m_tQuery.m_dGroupDistinct )
+		{
+			int iAttrIndex = m_pSorterSchema->GetAttrIndex ( sDistinct.cstr() );
+			if ( iAttrIndex >= 0 )
+			{
+				m_dGroupColumns.Add ( { iAttrIndex, true } );
+				assert ( m_dGroupColumns.Last().first>=0 );
+				m_hExtra.Add ( m_pSorterSchema->GetAttr ( m_dGroupColumns.Last().first ).m_sName );
+			}
+		}
 	}
 
 	// implicit case
@@ -2230,7 +2262,7 @@ bool QueueCreator_c::AddGroupbyStuff ()
 	m_bHeadWOGroup = ( m_tQuery.m_sGroupBy.IsEmpty () && m_tQuery.m_bFacetHead );
 	auto fnIsImplicit = [] ( const CSphQueryItem & t )
 	{
-		return ( t.m_eAggrFunc!=SPH_AGGR_NONE ) || t.m_sExpr=="count(*)" || t.m_sExpr=="@distinct";
+		return ( t.m_eAggrFunc!=SPH_AGGR_NONE ) || t.m_sExpr=="count(*)" || t.m_sExpr.Begins("@distinct_");
 	};
 
 	bool bHasImplicitGrouping = HasImplicitGrouping(m_tQuery);

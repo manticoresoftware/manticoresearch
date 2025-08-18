@@ -2801,7 +2801,7 @@ CSphString sphEncodeResultJson ( const VecTraits_T<AggrResult_t>& dRes, const Js
 		}
 		CSphString sDistinctName;
 		tQuery.m_dItems.any_of ( [&]( const CSphQueryItem & tItem ) {
-			if ( tItem.m_sExpr=="@distinct" )
+			if ( tItem.m_sExpr.Begins("@distinct_") )
 			{
 				sDistinctName = tItem.m_sAlias;
 				return true;

@@ -1939,8 +1939,8 @@ void JoinSorter_c::AddGroupbyItemsToJoinSelectList()
 			}
 		}
 
-		if ( !tQuery.m_sGroupDistinct.IsEmpty() )
-			AddToJoinSelectList ( tQuery.m_sGroupDistinct, tQuery.m_sGroupDistinct );
+		for ( const auto & sDistinct : tQuery.m_dGroupDistinct )
+			AddToJoinSelectList ( sDistinct, sDistinct );
 	}
 }
 

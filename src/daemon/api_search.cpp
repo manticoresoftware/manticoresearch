@@ -172,7 +172,7 @@ void SearchRequestBuilder_c::SendQuery ( const char * sIndexes, ISphOutputBuffer
 	tOut.SendInt ( q.m_iCutoff );
 	tOut.SendInt ( q.m_iRetryCount<0 ? 0 : q.m_iRetryCount ); // runaround for old clients.
 	tOut.SendInt ( q.m_iRetryDelay<0 ? 0 : q.m_iRetryDelay );
-	tOut.SendString ( q.m_sGroupDistinct.cstr() );
+	tOut.SendString ( q.m_dGroupDistinct.IsEmpty() ? "" : q.m_dGroupDistinct[0].cstr() );
 	tOut.SendInt ( q.m_bGeoAnchor );
 	if ( q.m_bGeoAnchor )
 	{
@@ -844,8 +844,10 @@ bool ParseSearchQuery ( InputBuffer_c & tReq, ISphOutputBuffer & tOut, CSphQuery
 	tQuery.m_iCutoff = tReq.GetInt();
 	tQuery.m_iRetryCount = tReq.GetInt ();
 	tQuery.m_iRetryDelay = tReq.GetInt ();
-	tQuery.m_sGroupDistinct = tReq.GetString ();
-	sphColumnToLowercase ( const_cast<char *>( tQuery.m_sGroupDistinct.cstr() ) );
+	CSphString sGroupDistinct = tReq.GetString ();
+	sphColumnToLowercase ( const_cast<char *>( sGroupDistinct.cstr() ) );
+	if ( !sGroupDistinct.IsEmpty() )
+		tQuery.m_dGroupDistinct.Add ( sGroupDistinct );
 
 	tQuery.m_bGeoAnchor = ( tReq.GetInt()!=0 );
 	if ( tQuery.m_bGeoAnchor )

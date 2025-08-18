@@ -35,7 +35,7 @@ struct AggregateColumnSort_fn
 		return c.m_eAggrFunc!=SPH_AGGR_NONE
 			|| c.m_sName=="@groupby"
 			|| c.m_sName=="@count"
-			|| c.m_sName=="@distinct"
+			|| c.m_sName.Begins("@distinct_")
 			|| IsSortJsonInternal ( c.m_sName );
 	}
 

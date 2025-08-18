@@ -511,7 +511,7 @@ jobs:
         Write-Host "File info: $($fileInfo.Name), Size: $($fileInfo.Length)"
         
         # Try to determine installer type
-        $fileHeader = Get-Content $installerName -Encoding Byte -TotalCount 512
+        $fileHeader = Get-Content $installerName -AsByteStream -TotalCount 512
         $headerString = [System.Text.Encoding]::ASCII.GetString($fileHeader)
         
         if ($headerString -like "*Inno Setup*") {

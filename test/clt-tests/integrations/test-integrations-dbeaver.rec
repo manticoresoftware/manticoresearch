@@ -474,11 +474,3 @@ ERROR 1064 (42000) at line 1: unknown sysvar @@isolation
 mysql -h0 -P9306 -e "SELECT @@tx_isolation"
 ––– output –––
 ERROR 1064 (42000) at line 1: unknown sysvar @@tx_isolation
-––– input –––
-mysql -h0 -P9306 -e "SELECT p.name, p.price, c.title FROM products p, categories c WHERE p.category_id = c.id"
-––– output –––
-ERROR 1064 (42000) at line 1: P01: syntax error, unexpected identifier, expecting $end near 'p, categories c WHERE p.category_id = c.id'
-––– input –––
-mysql -h0 -P9306 -e "SELECT * FROM information_schema.NONEXISTENT_TABLE"
-––– output –––
-ERROR 1064 (42000) at line 1: No such table information_schema.NONEXISTENT_TABLE

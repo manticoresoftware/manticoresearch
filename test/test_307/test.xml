@@ -38,6 +38,14 @@ create table t;
 select * from t option scroll = '!';
 drop table t;
 
+<!-- error on int64 ids -->
+create table test ( name string );
+insert into test (id, name) values (1, 'A'), (2, 'B'), (3, 'C'), (4, 'D'), (11453019889550859933, 'E'), (5, 'F');
+select * from test order by name asc, id desc limit 5;
+show scroll;
+select * from test order by name asc, id desc limit 5 option scroll='eyJvcmRlcl9ieV9zdHIiOiJuYW1lIGFzYywgaWQgZGVzYyIsIm9yZGVyX2J5IjpbeyJhdHRyIjoibmFtZSIsImRlc2MiOmZhbHNlLCJ2YWx1ZSI6IkUiLCJ0eXBlIjoic3RyaW5nIn0seyJhdHRyIjoiaWQiLCJkZXNjIjp0cnVlLCJ2YWx1ZSI6MTE0NTMwMTk4ODk1NTA4NTk5MzMsInR5cGUiOiJpbnQifV19';
+drop table test;
+
 </sphinxql>
 </queries>
 

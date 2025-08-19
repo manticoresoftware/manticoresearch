@@ -6,6 +6,7 @@
     * [• Debian and Ubuntu](Installation/Debian_and_Ubuntu.md)
     * [• MacOS](Installation/MacOS.md)
     * [• Windows](Installation/Windows.md)
+    * [• Upgrade from an older version](Installation/upgrade_from_an_older_version.md)
     * [• Compiling from sources](Installation/Compiling_from_sources.md)
     * [• Manticore Buddy](Installation/Manticore_Buddy.md)
     * [• Migration from Sphinx](Installation/Migration_from_Sphinx.md)

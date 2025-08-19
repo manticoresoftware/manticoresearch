@@ -63,7 +63,7 @@ module Sphinx
     # Current client-side command implementation versions
 
     # search command version
-    VER_COMMAND_SEARCH   = 0x11A
+    VER_COMMAND_SEARCH   = 0x119
     # excerpt command version
     VER_COMMAND_EXCERPT  = 0x102
     # update command version

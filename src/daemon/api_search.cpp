@@ -172,7 +172,7 @@ void SearchRequestBuilder_c::SendQuery ( const char * sIndexes, ISphOutputBuffer
 	tOut.SendInt ( q.m_iCutoff );
 	tOut.SendInt ( q.m_iRetryCount<0 ? 0 : q.m_iRetryCount ); // runaround for old clients.
 	tOut.SendInt ( q.m_iRetryDelay<0 ? 0 : q.m_iRetryDelay );
-	// Version 0x11A+: Send multiple distinct fields
+	// Version 0x121+: Send multiple distinct fields
 	tOut.SendInt ( q.m_dGroupDistinct.GetLength() );
 	for ( const auto & sDistinct : q.m_dGroupDistinct )
 		tOut.SendString ( sDistinct.cstr() );
@@ -847,7 +847,7 @@ bool ParseSearchQuery ( InputBuffer_c & tReq, ISphOutputBuffer & tOut, CSphQuery
 	tQuery.m_iCutoff = tReq.GetInt();
 	tQuery.m_iRetryCount = tReq.GetInt ();
 	tQuery.m_iRetryDelay = tReq.GetInt ();
-	// Version 0x11A+: Read multiple distinct fields
+	// Version 0x121+: Read multiple distinct fields
 	int iDistinctCount = tReq.GetInt();
 	for ( int i = 0; i < iDistinctCount; i++ )
 	{

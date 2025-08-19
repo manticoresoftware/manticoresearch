@@ -188,7 +188,6 @@ AuthUsersMutablePtr_t ReadAuth ( char * sSrc, const CSphString & sSrcName, CSphS
 void AddUser ( const AuthUserCred_t & tEntry, AuthUsersMutablePtr_t & tAuth )
 {
 	tAuth->m_hUserToken.Add ( tEntry, tEntry.m_sUser );
-	tAuth->m_hHttpToken2User.Add ( tEntry.m_sUser, BinToHex ( tEntry.m_dBearerSha256 ) );
 }
 
 bool ReadUsers ( const CSphString & sFile, bson::Bson_c & tBson, AuthUsersMutablePtr_t & tAuth, CSphString & sError )
@@ -805,3 +804,53 @@ bool Validate ( const AuthUsersMutablePtr_t & tAuth, CSphString & sError )
 	sError = sBuilder.cstr();
 	return bValid;
 }
+
+static uint64_t FoldHash256 ( const HASH256_t & tKey )
+{
+	return sphFNV64 ( tKey.data(), tKey.size() );
+}
+
+class BearerCache_c : public BearerCache_i
+{
+public:
+	BearerCache_c() = default;
+	~BearerCache_c() override = default;
+
+	void AddUser ( const HASH256_t & tHash, const CSphString & sUser ) override;
+	void Invalidate () override;
+	CSphString FindUser ( const HASH256_t & tHash ) const override;
+
+private:
+	mutable CSphMutex m_tLock;
+	OpenHashTable_T<uint64_t, CSphString> m_hTokens;
+};
+
+static BearerCache_c g_tBearerCache;
+
+BearerCache_i & GetBearerCache()
+{
+	return g_tBearerCache;
+}
+
+void BearerCache_c::AddUser ( const HASH256_t & tHash, const CSphString & sUser )
+{
+	CSphScopedLock tLock ( m_tLock );
+	m_hTokens.Add ( FoldHash256 ( tHash ), sUser );
+}
+
+void BearerCache_c::Invalidate ()
+{
+	CSphScopedLock tLock ( m_tLock );
+	m_hTokens.Clear();
+}
+
+CSphString BearerCache_c::FindUser ( const HASH256_t & tHash ) const
+{
+	if ( !m_hTokens.GetLength() )
+		return {};
+
+	CSphScopedLock tLock ( m_tLock );
+	const CSphString * pUser = m_hTokens.Find ( FoldHash256 ( tHash ) );
+	return CSphString ( pUser ? *pUser : "" );
+}
+

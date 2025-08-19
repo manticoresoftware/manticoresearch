@@ -29,20 +29,22 @@ struct AuthUserCred_t
 	CSphFixedVector<BYTE> m_dPwdSha256 { 0 };
 	CSphFixedVector<BYTE> m_dBearerSha256 { 0 };
 
-	CSphFixedVector<BYTE> m_dApiKey { 32 };
+	CSphFixedVector<BYTE> m_dApiKey { m_iApiKeyLen };
 
 	AuthUserCred_t() = default;
 	AuthUserCred_t ( const AuthUserCred_t & tOther );
 	AuthUserCred_t & operator= ( const AuthUserCred_t & tOther );
 	void Copy ( const AuthUserCred_t & tOther );
 	bool MakeApiKey ( CSphString & sError );
+
+	static constexpr int m_iSourceTokenLen { 32 };
+	static constexpr int m_iApiKeyLen { 32 };
 };
 
 class AuthUsers_t
 {
 public:
 	SmallStringHash_T<AuthUserCred_t> m_hUserToken;
-	SmallStringHash_T<CSphString> m_hHttpToken2User;
 
 	SmallStringHash_T<UserPerms_t> m_hUserPerms;
 	bool m_bEnabled = false;
@@ -78,3 +80,14 @@ AuthUsersMutablePtr_t ReadAuth ( char * sSrc, const CSphString & sSrcName, CSphS
 bool CreateAuthFile ( const CSphString & sFile, CSphString & sError );
 void CopyVec ( const BYTE * pSrc, int ilen, CSphFixedVector<BYTE> & dDst );
 bool Validate ( const AuthUsersMutablePtr_t & tAuth, CSphString & sError );
+
+class BearerCache_i
+{
+public:
+	virtual ~BearerCache_i() = default;
+	virtual void AddUser ( const HASH256_t & tHash, const CSphString & sUser ) = 0;
+	virtual void Invalidate () = 0;
+	virtual CSphString FindUser ( const HASH256_t & tHash ) const = 0;
+};
+
+BearerCache_i & GetBearerCache();

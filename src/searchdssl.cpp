@@ -726,6 +726,14 @@ bool MakeApiKdf ( const ByteBlob_t & tSalt, const ByteBlob_t & tPwd, CSphFixedVe
 	return true;
 }
 
+bool MakeRandBuf ( VecTraits_T<BYTE> & dRes, CSphString & sError )
+{
+	if ( RAND_bytes ( dRes.Begin(), dRes.GetLength() )==1 )
+		return true;
+	else
+		return SslError ( sError );
+}
+
 #endif
 
 const CSphString & GetSslCert()

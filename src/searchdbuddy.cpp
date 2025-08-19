@@ -383,7 +383,12 @@ BuddyState_e TryToStart ( const char * sArgs, CSphString & sError )
 
 	boost::process::environment tEnv = boost::this_process::environment();
 	if ( IsAuthEnabled() )
-		tEnv[g_sBuddyTokenName.cstr()] = GetBuddyToken().scstr();
+	{
+		CSphString sTokenError;
+		tEnv[g_sBuddyTokenName.cstr()] = CreateBuddyToken ( sTokenError ).scstr();
+		if ( !sTokenError.IsEmpty() )
+			sphLogDebug ( "[BUDDY] token error: %s", sTokenError.cstr() );
+	}
 	if ( CheckWeCanUseSSL() )
 	{
 		CSphString sSslCert = GetSslCert();

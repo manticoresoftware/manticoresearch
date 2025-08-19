@@ -3545,7 +3545,13 @@ bool HttpTokenHandler_c::Process ()
 	if( !HttpCheckPerms ( session::GetUser(), AuthAction_e::ADMIN, CSphString(), m_eHttpCode, m_sError, m_dData ) )
 		return false;
 
-	CSphString sToken = CreateSessionToken();
+	CSphString sToken = CreateSessionToken ( m_sError );
+	if ( !m_sError.IsEmpty() )
+	{
+		m_eHttpCode = EHTTP_STATUS::_403;
+		sphHttpErrorReply ( m_dData, m_eHttpCode, m_sError.cstr() );
+		return false;
+	}
 	
 	StringBuilder_c tOut;
 	tOut.Sprintf ( R"( {"token":"%s"} )", sToken.cstr() );

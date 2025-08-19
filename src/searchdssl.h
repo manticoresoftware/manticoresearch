@@ -44,6 +44,7 @@
 
 	bool DecryptGCM ( const VecTraits_T<BYTE> & dEncryptedData, CSphVector<BYTE> & dDstData, CSphString & sUser, GcmUserKey_i & tKey, CSphString & sError );
 	bool MakeApiKdf ( const ByteBlob_t & tSalt, const ByteBlob_t & tPwd, CSphFixedVector<BYTE> & dRes, CSphString & sError );
+	bool MakeRandBuf ( VecTraits_T<BYTE> & dRes, CSphString & sError );
 
 #else
 	// these stubs work together with NOT including searchdsll.cpp into the final build

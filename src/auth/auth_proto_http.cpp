@@ -85,18 +85,63 @@ static bool CheckAuthBasic ( const Str_t & sSrcUserPwd, HttpProcessResult_t & tR
 	}
 }
 
+static bool CheckBearerMatched ( const HASH256_t & tHashTokenData, const AuthUserCred_t & tUser, CSphString & sUser )
+{
+	std::unique_ptr<SHA256_i> pHashBearer256 { CreateSHA256() };
+	pHashBearer256->Init();
+	pHashBearer256->Update ( tUser.m_dSalt.Begin(), tUser.m_dSalt.GetLength() );
+	pHashBearer256->Update ( tHashTokenData.data(), tHashTokenData.size() );
+	auto tBearer256 = pHashBearer256->FinalHash();
+
+	if ( memcmp ( tUser.m_dBearerSha256.Begin(), tBearer256.data(), tBearer256.size() )==0 )
+	{
+		GetBearerCache().AddUser ( tHashTokenData, tUser.m_sUser );
+		sUser = tUser.m_sUser;
+
+		return true;
+	} else
+		return false;
+}
+
+static bool CheckCacheMatched ( const HASH256_t & tHashTokenData, const AuthUsersPtr_t & pUsers, CSphString & sUser )
+{
+	CSphString sCachedUser = GetBearerCache().FindUser ( tHashTokenData );
+	if ( sCachedUser.IsEmpty() )
+		return false;
+
+	const auto * pUser = pUsers->m_hUserToken ( sCachedUser );
+	if ( pUser && CheckBearerMatched ( tHashTokenData, *pUser, sUser ) )
+		return true;
+
+	// if the cache returns user but the bearer does not match - need to invalidate the cache
+	GetBearerCache().Invalidate();
+	return false;
+}
+
 static bool CheckAuthBearer ( const Str_t & sToken, HttpProcessResult_t & tRes, CSphVector<BYTE> & dReply, CSphString & sUser )
 {
-	AuthUsersPtr_t pUsers = GetAuth();
-	const CSphString * pUser = pUsers->m_hHttpToken2User ( sToken );
-	if ( !pUser )
+	CSphFixedVector<BYTE> dHexToken = ReadHexVec ( "token", sToken, AuthUserCred_t::m_iSourceTokenLen, tRes.m_sError );
+	if ( !tRes.m_sError.IsEmpty() )
 	{
-		tRes.m_sError.SetSprintf ( "Access denied for token '%s'", sToken.first );
+		tRes.m_sError.SetSprintf ( "Access denied for token '%s', error: %s", sToken.first, tRes.m_sError.cstr() );
 		return FailAuth ( tRes, dReply );
 	}
 
-	sUser = *pUser;
-	return true;
+	auto tHashTokenData = CalcBinarySHA2 ( dHexToken.Begin(), dHexToken.GetLength() );
+	AuthUsersPtr_t pUsers = GetAuth();
+	
+	if ( CheckCacheMatched ( tHashTokenData, pUsers, sUser ) )
+		return true;
+
+	for ( const auto & tItem : pUsers->m_hUserToken )
+	{
+		const auto & tUser = tItem.second;
+		if ( CheckBearerMatched ( tHashTokenData, tUser, sUser ) )
+			return true;
+	}
+
+	tRes.m_sError.SetSprintf ( "Access denied for token '%s'", sToken.first );
+	return FailAuth ( tRes, dReply );
 }
 
 
@@ -143,7 +188,7 @@ bool HttpCheckPerms ( const CSphString & sUser, AuthAction_e eAction, const CSph
 		return true;
 	}
 
-	if ( CheckPerms ( sUser, eAction, sTarget, false, sError ) )
+	if ( CheckPerms ( sUser, eAction, sTarget, ( eAction==AuthAction_e::ADMIN ), sError ) )
 		return true;
 
 	eReplyHttpCode = EHTTP_STATUS::_403;

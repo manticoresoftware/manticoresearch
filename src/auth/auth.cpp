@@ -18,6 +18,7 @@
 #include "client_session.h"
 #include "searchdreplication.h"
 #include "netfetch.h"
+#include "searchdssl.h"
 
 #include "auth_common.h"
 #include "auth_proto_mysql.h"
@@ -61,11 +62,13 @@ void AuthConfigure ( const CSphConfigSection & hSearchd )
 	if ( !tAuth )
 		sphFatal ( "%s", sError.cstr() );
 
-	AddBuddyToken ( nullptr, *tAuth );
 	tAuth->m_bEnabled = true;
 	
-	ScopedMutex_t tLock ( g_tAuthLock );
-	g_tAuth = std::move ( tAuth );
+	{
+		ScopedMutex_t tLock ( g_tAuthLock );
+		g_tAuth = std::move ( tAuth );
+	}
+	GetBearerCache().Invalidate();
 }
 
 bool IsAuthEnabled()
@@ -74,31 +77,6 @@ bool IsAuthEnabled()
 		return false;
 
 	return g_tAuth->m_bEnabled;
-}
-
-CSphString GetBuddyToken()
-{
-	AuthUsersPtr_t pUsers = GetAuth();
-	const AuthUserCred_t * pBuddy = pUsers->m_hUserToken ( GetAuthBuddyName() );
-	if ( !pBuddy )
-		return CSphString();
-	return BinToHex ( pBuddy->m_dBearerSha256 );
-}
-
-const CSphString CreateSessionToken()
-{
-	CSphString sToken;
-
-	if ( !IsAuthEnabled() )
-		return sToken;
-
-	AuthUsersPtr_t pUsers = GetAuth();
-	AuthUserCred_t * pAuth = pUsers->m_hUserToken ( session::GetUser() );
-	if ( !pAuth )
-		return sToken;
-
-	sToken = BinToHex ( pAuth->m_dBearerSha256 );
-	return sToken;
 }
 
 const AuthUsersPtr_t GetAuth()
@@ -128,58 +106,24 @@ bool AuthReload ( CSphString & sError )
 	if ( !tAuth )
 		return false;
 
-	ScopedMutex_t tLock ( g_tAuthLock );
-	const AuthUserCred_t * pSrcBuddy = g_tAuth->m_hUserToken ( GetAuthBuddyName() );
-	AddBuddyToken ( pSrcBuddy, *tAuth );
-	tAuth->m_bEnabled = true;
-	g_tAuth = std::move ( tAuth );
+	{
+		ScopedMutex_t tLock ( g_tAuthLock );
+		const AuthUserCred_t * pSrcBuddy = g_tAuth->m_hUserToken ( GetAuthBuddyName() );
+		AddBuddyToken ( pSrcBuddy, *tAuth );
+		tAuth->m_bEnabled = true;
+		g_tAuth = std::move ( tAuth );
+	}
+	GetBearerCache().Invalidate();
 
 	return true;
 }
 
 void AddBuddyToken ( const AuthUserCred_t * pSrcBuddy, AuthUsers_t & tAuth )
 {
-	AuthUserCred_t tBuddy;
 	if ( !pSrcBuddy )
-	{
-		tBuddy.m_sUser = GetAuthBuddyName();
-
-		SHA1_c tSaltHash;
-		tSaltHash.Init();
-		DWORD uScramble[4] = { sphRand(), sphRand(), sphRand(), sphRand() };
-		tSaltHash.Update ( (const BYTE *)&uScramble, sizeof ( uScramble ) );
-		int64_t iDT = sphMicroTimer();
-		tSaltHash.Update ( (const BYTE *)&iDT, sizeof ( iDT ) );
-		tSaltHash.Update ( (const BYTE *)tBuddy.m_sUser.cstr(), tBuddy.m_sUser.Length() );
-		auto tSaltHashData = tSaltHash.FinalHash();
-		CopyVec ( tSaltHashData.data(), tSaltHashData.size(), tBuddy.m_dSalt );
-
-		SHA1_c tSaltPwd1;
-		tSaltPwd1.Init();
-		tSaltPwd1.Update ( tBuddy.m_dSalt.Begin(), tBuddy.m_dSalt.GetLength() );
-		tSaltPwd1.Update ( (const BYTE *)tBuddy.m_sUser.cstr(), tBuddy.m_sUser.Length() );
-		tBuddy.m_tPwdSha1 = tSaltPwd1.FinalHash();
-
-		std::unique_ptr<SHA256_i> pPwd256 { CreateSHA256() };
-		pPwd256->Init();
-		pPwd256->Update ( tBuddy.m_dSalt.Begin(), tBuddy.m_dSalt.GetLength() );
-		pPwd256->Update ( (const BYTE *)tBuddy.m_sUser.cstr(), tBuddy.m_sUser.Length() );
-		auto tPwd256 = pPwd256->FinalHash();
-		tBuddy.m_dPwdSha256.CopyFrom ( VecTraits_T<BYTE> ( tPwd256.data(), tPwd256.size() ) );
-
-		std::unique_ptr<SHA256_i> pToken { CreateSHA256() };
-		pToken->Init();
-		pToken->Update ( tBuddy.m_dSalt.Begin(), tBuddy.m_dSalt.GetLength() );
-		pToken->Update ( tBuddy.m_dPwdSha256.Begin(), tBuddy.m_dPwdSha256.GetLength() );
-		auto tBearer = pToken->FinalHash();
-		tBuddy.m_dBearerSha256.CopyFrom ( VecTraits_T<BYTE> ( tBearer.data(), tBearer.size() ) );
-
-		pSrcBuddy = &tBuddy;
-	}
+		return;
 
 	tAuth.m_hUserToken.Add ( *pSrcBuddy, pSrcBuddy->m_sUser );
-	tAuth.m_hHttpToken2User.AddUnique ( BinToHex ( pSrcBuddy->m_dBearerSha256 ) ) = pSrcBuddy->m_sUser;
-
 	if ( !tAuth.m_hUserPerms.Exists ( pSrcBuddy->m_sUser ) )
 	{
 		UserPerms_t & tPerms = tAuth.m_hUserPerms.AddUnique ( pSrcBuddy->m_sUser );
@@ -490,15 +434,19 @@ ServedIndexRefPtr_c MakeDynamicAuthIndex ( const CSphString & sName, StringBuild
 
 static bool SaveAuth ( AuthUsersMutablePtr_t && tAuth, CSphString & sError )
 {
-	ScopedMutex_t tLock ( g_tAuthLock );
-	bool bSaved = SaveAuthFile ( *tAuth.get(), g_sAuthFile, sError );
-	sphLogDebug ( "save auth '%s' %s, error: %s", g_sAuthFile.cstr(), ( bSaved ? "succeed" : "failed" ), sError.scstr() );
+	{
+		ScopedMutex_t tLock ( g_tAuthLock );
+		bool bSaved = SaveAuthFile ( *tAuth.get(), g_sAuthFile, sError );
+		sphLogDebug ( "save auth '%s' %s, error: %s", g_sAuthFile.cstr(), ( bSaved ? "succeed" : "failed" ), sError.scstr() );
 	 
-	if ( !bSaved )
-		return false;
+		if ( !bSaved )
+			return false;
 
-	tAuth->m_bEnabled = true;
-	g_tAuth = std::move ( tAuth );
+		tAuth->m_bEnabled = true;
+		g_tAuth = std::move ( tAuth );
+	}
+	GetBearerCache().Invalidate();
+
 	return true;
 }
 
@@ -507,9 +455,6 @@ static bool SaveAuth ( AuthUsersMutablePtr_t && tAuth, CSphString & sError )
 
 static void DeleteUser ( AuthUsersMutablePtr_t & tAuth, const CSphString & sUserName, bool bWithPerms )
 {
-	const auto & tUser = tAuth->m_hUserToken[sUserName];
-	tAuth->m_hHttpToken2User.Delete ( BinToHex ( tUser.m_dBearerSha256 ) );
-	
 	if ( bWithPerms )
 		tAuth->m_hUserPerms.Delete ( sUserName );
 
@@ -786,7 +731,7 @@ static bool ApplyUsers ( const SqlStmt_t & tStmt, bool bReplace, MemoryWriter_c 
 		bOk &= SetUserMember ( AuthUsersIndex_c::SchemaColumn_e::Username, tStmt.m_dInsertValues[dMapping[0] + iRow * dMapping.GetLength()], iRow, tUser, sError );
 		bOk &= SetUserMember ( AuthUsersIndex_c::SchemaColumn_e::Salt, tStmt.m_dInsertValues[dMapping[1] + iRow * dMapping.GetLength()], iRow, tUser, sError );
 		bOk &= SetUserMember ( AuthUsersIndex_c::SchemaColumn_e::Hashes, tStmt.m_dInsertValues[dMapping[2] + iRow * dMapping.GetLength()], iRow, tUser, sError );
-		if ( !bOk )
+		if ( !bOk && !sError.IsEmpty() )
 		{
 			sError.SetSprintf ( "user '%s' error: %s", tUser.m_sUser.cstr(), sError.cstr() );
 			return false;
@@ -1090,4 +1035,70 @@ bool ChangeAuth ( char * sSrc, const CSphString & sSrcName, CSphString & sError 
 	AddBuddyToken ( pSrcBuddy, *tAuth );
 
 	return SaveAuth ( std::move( tAuth ), sError );
+}
+
+static CSphFixedVector<BYTE> CreateBearerToken ( const VecTraits_T<BYTE> & dSalt, const VecTraits_T<BYTE> & dRawToken )
+{
+	std::unique_ptr<SHA256_i> pHashToken { CreateSHA256() };
+	pHashToken->Init();
+	pHashToken->Update ( (const BYTE *)dRawToken.Begin(), dRawToken.GetLength() );
+	auto tHashTokenData = pHashToken->FinalHash();
+
+	std::unique_ptr<SHA256_i> pHashBearer256 { CreateSHA256() };
+	pHashBearer256->Init();
+	pHashBearer256->Update ( dSalt.Begin(), dSalt.GetLength() );
+	pHashBearer256->Update ( tHashTokenData.data(), tHashTokenData.size() );
+	auto tBearer256 = pHashBearer256->FinalHash();
+
+	CSphFixedVector<BYTE> dBearer ( 0 );
+	dBearer.CopyFrom ( VecTraits_T<BYTE> ( tBearer256.data(), tBearer256.size() ) );
+
+	return dBearer;
+}
+
+static CSphString CreateBearerToken ( const CSphString & sUser, CSphString & sError )
+{
+	if ( !IsAuthEnabled() )
+	{
+		sError = "authorization disabled, can not create token";
+		return {};
+	}
+
+	AuthUsersPtr_t pUsers = GetAuth();
+	AuthUserCred_t * pUser = pUsers->m_hUserToken ( sUser );
+	if ( !pUser )
+	{
+		sError.SetSprintf ( "user '%s' not found", sUser.cstr() );
+		return {};
+	}
+
+	CSphFixedVector<BYTE> dRawToken ( AuthUserCred_t::m_iSourceTokenLen );
+	if ( !MakeRandBuf ( dRawToken, sError ) )
+		return {};
+
+	AuthUserCred_t tNewUser = *pUser;
+	tNewUser.m_dBearerSha256 = CreateBearerToken ( pUser->m_dSalt, dRawToken );
+
+	AuthUsersMutablePtr_t tNewUsers = CopyAuth();
+	DeleteUser ( tNewUsers, sUser, false );
+	AddUser ( tNewUser, tNewUsers );
+
+	// FIXMEE!!! save only via replicate, bot not for the buddy user
+	if ( !SaveAuth ( std::move ( tNewUsers ), sError ) )
+		return {};
+
+	auto tHashTokenData = CalcBinarySHA2 ( dRawToken.Begin(), dRawToken.GetLength() );
+	GetBearerCache().AddUser ( tHashTokenData, sUser );
+
+	return BinToHex ( dRawToken );
+}
+
+CSphString CreateSessionToken ( CSphString & sError )
+{
+	return CreateBearerToken ( session::GetUser(), sError );
+}
+
+CSphString CreateBuddyToken ( CSphString & sError )
+{
+	return CreateBearerToken ( GetAuthBuddyName(), sError );
 }

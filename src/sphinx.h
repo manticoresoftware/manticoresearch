@@ -1332,6 +1332,7 @@ public:
 	virtual const BYTE *			GetRawBlobAttrs() const { return nullptr; }
 	virtual bool					AlterSI ( CSphString & sError ) { return true; }
 	virtual bool					AlterKNN ( CSphString & sError ) { return true; }
+	virtual bool					AlterApiKey ( const CSphString & sAttr, const CSphString & sKey, CSphString & sError ) { return false; }
 	const CSphBitvec &				GetMorphFields () const { return m_tMorphFields; }
 
 public:

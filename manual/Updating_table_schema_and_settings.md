@@ -324,6 +324,23 @@ Query OK, 0 rows affected (0.00 sec)
 
 <!-- end -->
 
+## Updating attribute API key (for embeddings generation) in RT mode
+
+<!-- example api_key -->
+
+`ALTER` can be used to modify an API key when a remote model is used for auto-embeddings:
+
+```sql
+ALTER TABLE table_name MODIFY COLUMN column_name API_KEY='key';
+```
+
+<!-- request Example -->
+```sql
+ALTER TABLE rt MODIFY COLUMN vector API_KEY='key';
+```
+
+<!-- end -->
+
 ## Changing a distributed table
 
 <!-- example local_dist -->

@@ -1644,6 +1644,7 @@ private:
 	int							GetAlterGeneration() const override;
 	bool						AlterSI ( CSphString & sError ) override;
 	bool						AlterKNN ( CSphString & sError ) override;
+	bool						AlterApiKey ( const CSphString & sAttr, const CSphString & sKey, CSphString & sError ) override;
 	bool						AlterRebuild ( AlterOp_fn && operation, CSphString & sError, const char * sTrace );
 
 	bool						CanAttach ( const CSphIndex * pIndex, CSphString & sError ) const;
@@ -11267,6 +11268,45 @@ bool RtIndex_c::AlterSI ( CSphString & sError )
 bool RtIndex_c::AlterKNN ( CSphString & sError )
 {
 	return AlterRebuild ( []( CSphIndex & tIndex, CSphString & sError ) { return tIndex.AlterKNN ( sError ); }, sError, "alter-knn" );
+}
+
+bool RtIndex_c::AlterApiKey ( const CSphString & sAttr, const CSphString & sKey, CSphString & sError )
+{
+	// strength single-fiber access (don't rely upon to upstream w-lock)
+	ScopedScheduler_c tSerialFiber ( m_tWorkers.SerialChunkAccess() );
+	TRACE_SCHED ( "rt", perfetto::StaticString{sTrace} );
+
+	auto pAttr = m_tSchema.GetAttr ( sAttr.cstr() );
+	if ( !pAttr )
+	{
+		sError.SetSprintf ( "attribute '%s' not found", sAttr.cstr() );
+		return false;
+	}
+
+	if ( pAttr->m_tKNNModel.m_sModelName.empty() )
+	{
+		sError.SetSprintf ( "no embeddings model specified for attribute '%s'", sAttr.cstr() );
+		return false;
+	}
+
+	std::string sOldKey = pAttr->m_tKNNModel.m_sAPIKey;
+	const_cast<CSphColumnInfo *>(pAttr)->m_tKNNModel.m_sAPIKey = sKey.cstr();
+
+	m_pEmbeddings.reset();
+	if ( !LoadEmbeddingModels(sError) )
+	{
+		// attempt to revert
+		const_cast<CSphColumnInfo *>(pAttr)->m_tKNNModel.m_sAPIKey = sOldKey;
+		m_pEmbeddings.reset();
+		CSphString sRevertError;
+		LoadEmbeddingModels(sRevertError);
+		return false;
+	}
+
+	RaiseAlterGeneration();
+	AlterSave(false);
+
+	return true;
 }
 
 void RtIndex_c::SetGlobalIDFPath ( const CSphString & sPath )

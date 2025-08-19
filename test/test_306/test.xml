@@ -1,0 +1,41 @@
+<?xml version="1.0" encoding="utf-8"?>
+<test>
+
+<name>knn embeddings</name>
+
+<requires>
+	<knn/>
+	<embeddings/>
+	<force-rt/>
+</requires>
+
+<skip_indexer/>
+
+<config>
+searchd
+{
+	<searchd_Settings/>
+	data_dir = <data_path path="data0"/>
+	engine = columnar
+}
+</config>
+
+<queries>
+<sphinxql>
+	create table test (title text, vector float_vector knn_type='hnsw' hnsw_similarity='l2' model_name = 'sentence-transformers/all-MiniLM-L6-v2' from = 'title');
+	insert into test(id, title) values (1, 'green banana');
+	insert into test(id, title) values (2, 'yellow apple');
+	flush ramchunk test;
+
+	select * from test;
+	select id, knn_dist() from test where knn(vector, 5, 'yellow apple');
+	select id, knn_dist() from test where knn(vector, 5, 'green banana');
+	select id, knn_dist() from test where knn(vector, 5, 'yellow banana');
+
+	alter table test modify column vector api_key='_';
+
+	drop table test;
+</sphinxql>
+</queries>
+
+</test>

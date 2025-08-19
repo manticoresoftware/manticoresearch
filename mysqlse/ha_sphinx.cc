@@ -160,7 +160,7 @@ enum
 {
 	SPHINX_SEARCHD_PROTO	= 1,
 	SEARCHD_COMMAND_SEARCH	= 0,
-	VER_COMMAND_SEARCH		= 0x119,
+	VER_COMMAND_SEARCH		= 0x11A,
 };
 
 /// search query sorting orders

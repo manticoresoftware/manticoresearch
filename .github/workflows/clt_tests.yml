@@ -76,7 +76,7 @@ jobs:
             test_prefix: test/clt-tests/vector-knn/
               
     steps:
-      - uses: manticoresoftware/clt@0.6.9
+      - uses: manticoresoftware/clt@fix/ui
         with:
           artifact: ${{ inputs.artifact_name }}
           image: ${{ inputs.docker_image }}
@@ -84,3 +84,4 @@ jobs:
           ref: ${{ inputs.ref }}
           test_prefix: ${{ matrix.test-suite.test_prefix }}
           comment_mode: failures
+          ui_host: "https://clt.manticoresearch.com"

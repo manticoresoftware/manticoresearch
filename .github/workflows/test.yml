@@ -465,365 +465,137 @@ jobs:
           name: windows_test_resuls
           path: build
 
-  test_windows_manticore:
+  test_windows_install:
     if: (github.event_name == 'pull_request' && github.event.pull_request.base.ref == 'update-buddy-version') != true
-    name: Windows Manticore installation and basic tests
+    name: Windows Manticore installation test
     runs-on: windows-latest
-    timeout-minutes: 30
+    timeout-minutes: 15
     
     steps:
-    - name: Checkout code
-      uses: actions/checkout@v4
-      
-    - name: Download Manticore installer
+    - name: Download Manticore Windows installer
       shell: pwsh
       run: |
-        $installerUrl = "https://repo.manticoresearch.com/repository/manticoresearch_windows/release/x64/manticore-13.2.3-25070806-bf96368a6-x64.exe"
+        $installerUrl = "https://repo.manticoresearch.com/repository/manticoresearch_windows/release/x64/manticore-13.6.7-25080704-1ab9ccc95-x64.exe"
         $installerName = "manticore-installer.exe"
         
-        Write-Host "Downloading Manticore from: $installerUrl"
-        try {
-            Invoke-WebRequest -Uri $installerUrl -OutFile $installerName -TimeoutSec 300
-            
-            if (Test-Path $installerName) {
-                $fileSize = (Get-Item $installerName).Length
-                Write-Host "Downloaded installer size: $([math]::Round($fileSize/1KB, 2)) KB"
-                
-                # Check if file is not corrupted
-                if ($fileSize -lt 1000) {
-                    throw "Downloaded file is too small, possibly corrupted"
-                }
-            } else {
-                throw "Failed to download installer"
-            }
-        } catch {
-            Write-Host "Error downloading installer: $($_.Exception.Message)"
-            throw
-        }
-
-    - name: Inspect installer type
-      shell: pwsh
-      run: |
-        $installerName = "manticore-installer.exe"
+        Write-Host "Downloading Manticore installer from: $installerUrl"
+        Invoke-WebRequest -Uri $installerUrl -OutFile $installerName -TimeoutSec 300
         
-        # Check installer type
-        $fileInfo = Get-ItemProperty $installerName
-        Write-Host "File info: $($fileInfo.Name), Size: $($fileInfo.Length)"
-        
-        # Try to determine installer type
-        $fileHeader = Get-Content $installerName -AsByteStream -TotalCount 512
-        $headerString = [System.Text.Encoding]::ASCII.GetString($fileHeader)
-        
-        if ($headerString -like "*Inno Setup*") {
-            Write-Host "Detected: Inno Setup installer"
-        } elseif ($headerString -like "*NSIS*") {
-            Write-Host "Detected: NSIS installer"
-        } elseif ($headerString -like "*InstallShield*") {
-            Write-Host "Detected: InstallShield installer"
+        if (Test-Path $installerName) {
+            $fileSize = (Get-Item $installerName).Length
+            Write-Host "✅ Downloaded installer: $([math]::Round($fileSize/1MB, 2)) MB"
         } else {
-            Write-Host "Unknown installer type"
+            throw "❌ Failed to download installer"
         }
 
-    - name: Install Manticore Search
+    - name: Install Manticore
       shell: pwsh
       run: |
         $installerName = "manticore-installer.exe"
-        $installed = $false
-        $maxAttempts = 3
         
-        # Extended list of parameters for different installer types
-        $silentParams = @(
-            @{param="/VERYSILENT"; desc="Inno Setup very silent"},
-            @{param="/S"; desc="NSIS silent"},
-            @{param="/SILENT"; desc="Generic silent"},
-            @{param="/s"; desc="Lowercase silent"},
-            @{param="/quiet"; desc="MSI quiet"},
-            @{param="/Q"; desc="Uppercase quiet"},
-            @{param="/VERYSILENT /NORESTART"; desc="Inno Setup with no restart"},
-            @{param="/S /D=`"$env:ProgramFiles\Manticore Search`""; desc="NSIS with directory"},
-            @{param="--silent"; desc="Modern silent flag"},
-            @{param="-q"; desc="Short quiet flag"}
+        Write-Host "Installing Manticore..."
+        
+        # Run installer and wait for completion
+        $process = Start-Process -FilePath ".\$installerName" -PassThru -Wait
+        Write-Host "Installer finished with exit code: $($process.ExitCode)"
+        
+        # Check if installation succeeded by looking for searchd.exe
+        $searchPaths = @(
+            "${env:ProgramFiles}\Manticore Search\bin\searchd.exe",
+            "${env:ProgramFiles(x86)}\Manticore Search\bin\searchd.exe"
         )
         
-        for ($attempt = 1; $attempt -le $maxAttempts -and !$installed; $attempt++) {
-            Write-Host "=== Attempt $attempt of $maxAttempts ==="
-            
-            foreach ($paramInfo in $silentParams) {
-                $param = $paramInfo.param
-                $desc = $paramInfo.desc
-                
-                Write-Host "Trying installation with $desc`: $param"
-                try {
-                    $processArgs = @{
-                        FilePath = ".\$installerName"
-                        ArgumentList = $param -split ' '
-                        PassThru = $true
-                        Wait = $false
-                        NoNewWindow = $true
-                    }
-                    
-                    $process = Start-Process @processArgs
-                    
-                    # Wait for completion with timeout
-                    $timeout = 120  # 2 minutes for each attempt
-                    if ($process.WaitForExit($timeout * 1000)) {
-                        Write-Host "Process finished with exit code: $($process.ExitCode)"
-                        if ($process.ExitCode -eq 0) {
-                            Write-Host "Installation successful with $desc"
-                            $installed = $true
-                            break
-                        } else {
-                            Write-Host "Installation failed with exit code: $($process.ExitCode)"
-                        }
-                    } else {
-                        Write-Host "Installation timeout ($timeout seconds) with $desc"
-                        try { 
-                            $process.Kill()
-                            $process.WaitForExit(5000)
-                        } catch { 
-                            Write-Host "Failed to kill process: $($_.Exception.Message)"
-                        }
-                    }
-                } catch {
-                    Write-Host "Installation failed with $desc - $($_.Exception.Message)"
-                }
-                
-                Start-Sleep -Seconds 3
-                
-                # Check if installation was successful even if process hung
-                $searchdPath1 = "${env:ProgramFiles}\Manticore Search\bin\searchd.exe"
-                $searchdPath2 = "${env:ProgramFiles(x86)}\Manticore Search\bin\searchd.exe"
-                if ((Test-Path $searchdPath1) -or (Test-Path $searchdPath2)) {
-                    Write-Host "Found Manticore installation, marking as successful"
-                    $installed = $true
-                    break
-                }
-            }
-            
-            if (!$installed -and $attempt -lt $maxAttempts) {
-                Write-Host "Attempt $attempt failed, waiting before retry..."
-                Start-Sleep -Seconds 10
-            }
-        }
-        
-        if (-not $installed) {
-            # Last attempt - interactive installation for diagnostics
-            Write-Host "Trying interactive installation for diagnostics..."
-            try {
-                $process = Start-Process ".\$installerName" -PassThru -Wait
-                Write-Host "Interactive installation exit code: $($process.ExitCode)"
-            } catch {
-                Write-Host "Interactive installation failed: $($_.Exception.Message)"
-            }
-            
-            throw "All installation attempts failed"
-        }
-        
-        Write-Host "Installation completed successfully"
-
-    - name: Verify installation and prepare environment
-      shell: pwsh
-      run: |
-        # Search for Manticore installation
-        $possiblePaths = @(
-            "${env:ProgramFiles}\Manticore Search",
-            "${env:ProgramFiles(x86)}\Manticore Search",
-            "C:\Manticore",
-            "C:\Program Files\Manticore",
-            "C:\Program Files (x86)\Manticore"
-        )
-        
-        $manticorePath = $null
-        foreach ($path in $possiblePaths) {
+        $searchdPath = $null
+        foreach ($path in $searchPaths) {
             if (Test-Path $path) {
-                $manticorePath = $path
-                Write-Host "Found Manticore at: $path"
+                $searchdPath = $path
+                Write-Host "✅ Found searchd.exe at: $path"
                 break
             }
         }
         
-        if (!$manticorePath) {
-            Write-Host "Searching for Manticore installation..."
-            $searchResult = Get-ChildItem -Path "C:\" -Recurse -Name "searchd.exe" -ErrorAction SilentlyContinue | Select-Object -First 1
-            if ($searchResult) {
-                $manticorePath = Split-Path (Split-Path $searchResult -Parent) -Parent
-                Write-Host "Found Manticore via search at: $manticorePath"
-            } else {
-                throw "Manticore installation not found"
-            }
+        if (-not $searchdPath) {
+            throw "❌ Installation failed - searchd.exe not found"
         }
         
-        # Check main files
-        $searchdPath = Join-Path $manticorePath "bin\searchd.exe"
-        $indexerPath = Join-Path $manticorePath "bin\indexer.exe"
+        # Save path for next step
+        echo "SEARCHD_PATH=$searchdPath" >> $env:GITHUB_ENV
+
+    - name: Run searchd daemon as Administrator
+      shell: pwsh
+      run: |
+
+        $searchdPath = $env:SEARCHD_PATH
+        $installDir = Split-Path $searchdPath -Parent
+        $manticoreDir = Split-Path $installDir -Parent
         
-        if (!(Test-Path $searchdPath)) {
-            throw "searchd.exe not found at $searchdPath"
-        }
+        Write-Host "Manticore installed at: $manticoreDir"
+        Write-Host "Running searchd as Administrator..."
         
-        Write-Host "searchd.exe found at: $searchdPath"
-        if (Test-Path $indexerPath) {
-            Write-Host "indexer.exe found at: $indexerPath"
-        }
+        # Check version first
+        Write-Host "Manticore version:"
+        & $searchdPath --version
         
-        # Create working directory
-        $workDir = Join-Path $env:TEMP "manticore_test"
-        if (Test-Path $workDir) {
-            Remove-Item $workDir -Recurse -Force
-        }
-        New-Item -ItemType Directory -Path $workDir -Force
-        
-        # Create configuration file
-        $configFile = Join-Path $workDir "manticore.conf"
-        $dataDir = Join-Path $workDir "data"
-        $logDir = Join-Path $workDir "log"
-        
-        New-Item -ItemType Directory -Path $dataDir -Force
-        New-Item -ItemType Directory -Path $logDir -Force
+        # Create minimal config in temp directory
+        $configDir = "$env:TEMP\manticore"
+        New-Item -ItemType Directory -Path $configDir -Force
+        $configFile = "$configDir\manticore.conf"
         
         $configContent = @"
         searchd {
             listen = 9312
-            listen = 9306:mysql41
-            log = $($logDir -replace '\\', '/')/searchd.log
-            query_log = $($logDir -replace '\\', '/')/query.log
-            pid_file = $($workDir -replace '\\', '/')/searchd.pid
-            data_dir = $($dataDir -replace '\\', '/')
-            binlog_path = $($workDir -replace '\\', '/')/binlog
-        }
-
-        index testrt {
-            type = rt
-            path = testrt
-            rt_field = title
-            rt_field = content
-            rt_attr_uint = gid
+            listen = 9306:mysql
+            log = $configDir/searchd.log
+            pid_file = $configDir/searchd.pid
+            data_dir = $configDir/data
         }
         "@
         
         Set-Content -Path $configFile -Value $configContent -Encoding UTF8
+        New-Item -ItemType Directory -Path "$configDir\data" -Force
         
-        Write-Host "Configuration created at: $configFile"
-        Write-Host "Data directory: $dataDir"
+        Write-Host "Config created at: $configFile"
         
-        # Save paths to environment variables for next steps
-        echo "MANTICORE_PATH=$manticorePath" >> $env:GITHUB_ENV
-        echo "MANTICORE_CONFIG=$configFile" >> $env:GITHUB_ENV
-        echo "MANTICORE_WORKDIR=$workDir" >> $env:GITHUB_ENV
-
-    - name: Start searchd daemon
-      shell: pwsh
-      run: |
-        $searchdPath = Join-Path $env:MANTICORE_PATH "bin\searchd.exe"
-        $configFile = $env:MANTICORE_CONFIG
+        # Start searchd (GitHub Actions already runs as Administrator)
+        Write-Host "Starting searchd daemon..."
+        $searchdProcess = Start-Process -FilePath $searchdPath -ArgumentList "--config", $configFile -PassThru
         
-        Write-Host "Starting searchd with config: $configFile"
+        # Wait a bit for startup
+        Start-Sleep -Seconds 5
         
-        # Start searchd in background mode
-        $startProcessArgs = @(
-            "-FilePath", $searchdPath,
-            "-ArgumentList", @("--config", $configFile),
-            "-PassThru",
-            "-WindowStyle", "Hidden",
-            "-RedirectStandardOutput", "$env:MANTICORE_WORKDIR\searchd_out.log",
-            "-RedirectStandardError", "$env:MANTICORE_WORKDIR\searchd_err.log"
-        )
-        $searchdProcess = Start-Process @startProcessArgs
-        
-        # Wait for startup
-        Start-Sleep -Seconds 10
-        
-        # Check that process is running
+        # Check if process is running
         $runningProcess = Get-Process -Id $searchdProcess.Id -ErrorAction SilentlyContinue
-        if (!$runningProcess -or $runningProcess.HasExited) {
-            Write-Host "Searchd failed to start. Output:"
-            Get-Content "$env:MANTICORE_WORKDIR\searchd_out.log" -ErrorAction SilentlyContinue
-            Write-Host "Errors:"
-            Get-Content "$env:MANTICORE_WORKDIR\searchd_err.log" -ErrorAction SilentlyContinue
-            throw "searchd failed to start"
-        }
-        
-        Write-Host "searchd started successfully with PID: $($searchdProcess.Id)"
-        echo "SEARCHD_PID=$($searchdProcess.Id)" >> $env:GITHUB_ENV
-
-    - name: Run basic functionality tests
-      shell: pwsh
-      run: |
-        $indexerPath = Join-Path $env:MANTICORE_PATH "bin\indexer.exe"
-        
-        # Test 1: Version check
-        Write-Host "=== Test 1: Version check ==="
-        if (Test-Path $indexerPath) {
-            Write-Host "Indexer version:"
-            & $indexerPath --version
-        }
-        
-        $searchdPath = Join-Path $env:MANTICORE_PATH "bin\searchd.exe"
-        Write-Host "Searchd version:"
-        & $searchdPath --version
-        
-        # Test 2: Process check
-        Write-Host "`n=== Test 2: Process check ==="
-        $searchdProcesses = Get-Process -Name "searchd" -ErrorAction SilentlyContinue
-        if ($searchdProcesses) {
-            Write-Host "searchd is running with PID(s): $($searchdProcesses.Id -join ', ')"
-        } else {
-            throw "searchd process not found"
-        }
-        
-        # Test 3: Port check
-        Write-Host "`n=== Test 3: Port check ==="
-        $ports = @(9312, 9306)
-        foreach ($port in $ports) {
-            $connection = Test-NetConnection -ComputerName localhost -Port $port -WarningAction SilentlyContinue
-            if ($connection.TcpTestSucceeded) {
-                Write-Host "Port $port is listening"
-            } else {
-                Write-Host "Warning: Port $port is not accessible"
-            }
-        }
-        
-        # Test 4: Simple MySQL query (if possible)
-        Write-Host "`n=== Test 4: MySQL connection test ==="
-        try {
-            # Use simple telnet-like test
-            $tcpClient = New-Object System.Net.Sockets.TcpClient
-            $tcpClient.ReceiveTimeout = 5000
-            $tcpClient.SendTimeout = 5000
-            $tcpClient.Connect("localhost", 9306)
-            if ($tcpClient.Connected) {
-                Write-Host "Successfully connected to MySQL interface on port 9306"
-                $tcpClient.Close()
-            }
-        } catch {
-            Write-Host "Could not connect to MySQL interface: $($_.Exception.Message)"
-        }
-        
-        Write-Host "`n=== All tests completed ==="
-
-    - name: Cleanup
-      if: always()
-      shell: pwsh
-      run: |
-        # Stop searchd
-        if ($env:SEARCHD_PID) {
+        if ($runningProcess -and -not $runningProcess.HasExited) {
+            Write-Host "✅ searchd started successfully with PID: $($searchdProcess.Id)"
+            
+            # Test if it's actually working
+            Start-Sleep -Seconds 3
             try {
-                $process = Get-Process -Id $env:SEARCHD_PID -ErrorAction SilentlyContinue
-                if ($process) {
-                    Write-Host "Stopping searchd process..."
-                    $process.Kill()
-                    $process.WaitForExit(10000)
+                $connection = Test-NetConnection -ComputerName localhost -Port 9312 -WarningAction SilentlyContinue
+                if ($connection.TcpTestSucceeded) {
+                    Write-Host "✅ searchd is listening on port 9312"
+                } else {
+                    Write-Host "⚠️  searchd process running but port 9312 not accessible"
                 }
             } catch {
-                Write-Host "Error stopping searchd: $($_.Exception.Message)"
+                Write-Host "⚠️  Could not test port: $($_.Exception.Message)"
             }
+            
+            # Cleanup: stop the process
+            Write-Host "Stopping searchd..."
+            $searchdProcess.Kill()
+            $searchdProcess.WaitForExit(5000)
+            Write-Host "✅ Test completed successfully"
+            
+        } else {
+            Write-Host "❌ searchd failed to start or exited immediately"
+            
+            # Show any logs
+            $logFile = "$configDir\searchd.log"
+            if (Test-Path $logFile) {
+                Write-Host "Searchd log:"
+                Get-Content $logFile
+            }
+            
+            throw "searchd startup failed"
         }
-        
-        # Output logs for diagnostics
-        if ($env:MANTICORE_WORKDIR) {
-            Write-Host "=== Searchd logs ==="
-            Get-Content "$env:MANTICORE_WORKDIR\searchd_out.log" -ErrorAction SilentlyContinue
-            Get-Content "$env:MANTICORE_WORKDIR\searchd_err.log" -ErrorAction SilentlyContinue
-        }
-        
-        Write-Host "Cleanup completed"

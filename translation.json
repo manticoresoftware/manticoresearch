@@ -49,7 +49,6 @@
   "Searching/Query_cache.md": "d0c881a3530d594d29eee3a7109df44b",
   "Searching/Percolate_query.md": "195f43473430eab5ba73b5babb0375ce",
   "Searching/Full_text_matching/Profiling.md": "398b040e4ce41502466ae056842ea8a8",
-  "Searching/Full_text_matching/Operators.md": "409a719783797d96fdaea273e14bebe4",
   "Searching/Full_text_matching/Escaping.md": "54bfdca8fa2e27516e4434c0756c3ab4",
   "Searching/Full_text_matching/Basic_usage.md": "eb5c5014c70097582d445e59cb2e9b15",
   "Searching/Full_text_matching/Boolean_optimization.md": "5c3f1d472eb7893323733cf409241a94",
@@ -65,7 +64,6 @@
   "Integration/Apache_Superset.md": "e529ca944102df28077be69db5e828fe",
   "Connecting_to_the_server/HTTP.md": "0e5da23c36f8870e856e26fbf6400b9d",
   "Connecting_to_the_server/MySQL_protocol.md": "0b2af74e08a43f58c550a1d33b01eb54",
-  "Updating_table_schema_and_settings.md": "0b5c9167a6d80fe9f11dc7f559ca8265",
   "Introduction.md": "cb0b273f7259199fd349ebe0c2fe1704",
   "Installation/Windows.md": "0b16621215217121647308188d9cda1c",
   "Installation/MacOS.md": "f8829f76f40e4fa652aa5ef38d9f1ae1",
@@ -167,7 +165,6 @@
   "Data_creation_and_modification/Updating_documents/UPDATE.md": "cd2be32a59903de07f40f2eed6bc1628",
   "Creating_a_table/NLP_and_tokenization/Low-level_tokenization.md": "7dd1833dc6a4d2cc7811453b5f626b43",
   "Searching/Spell_correction.md": "3582166d3e005c80d07e4d6c31027939",
-  "Searching/KNN.md": "afb839b02d25c187acddddae6abc3567",
   "Installation/Compiling_from_sources.md": "4ca1372b94a832235042f6aab54ecdb0",
   "Node_info_and_management/SHOW_THREADS.md": "c5f1478f99f19f93f6a9bbe2bbfc69bd",
   "Creating_a_table/Data_types.md": "69fe5ba9e6a448633c2e16f7031c20e4",
@@ -178,5 +175,8 @@
   "Securing_and_compacting_a_table/Flushing_RAM_chunk_to_a_new_disk_chunk.md": "054329432471757df9fc181db74bc1df",
   "Emptying_a_table.md": "a54f1b988ae6045637cca819474efd70",
   "References.md": "3428eb8e9746fe91b41e83cc2cbd7e15",
-  "Changelog.md": "ce8bb6448787740724134b0dd19126b3"
+  "Changelog.md": "ce8bb6448787740724134b0dd19126b3",
+  "Searching/Full_text_matching/Operators.md": "3d381c07770897772da85df6dda98305",
+  "Updating_table_schema_and_settings.md": "39fe1c80063e98752083b24bb132016a",
+  "Searching/KNN.md": "45e93625bbcd4e3cb5a11043de0e2741"
 }

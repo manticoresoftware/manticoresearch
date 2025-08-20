@@ -28,7 +28,7 @@ embedding_vector float_vector knn_type='hnsw' knn_dims='384' hnsw_similarity='L2
 ––– comment –––
 Test insert with auto-generated vectors using empty parentheses
 ––– input –––
-mysql -h0 -P9306 -e "INSERT INTO test (id, title1, title2, strattr) VALUES(1,'sample title','another title','string attribute'))"; echo $?
+mysql -h0 -P9306 -e "INSERT INTO test (id, title1, title2, strattr) VALUES(1,'sample title','another title','string attribute')"; echo $?
 ––– output –––
 0
 ––– comment –––
@@ -57,6 +57,11 @@ Testing selecting and expecting an empty vector because when we add a vector as 
 ––– input –––
 mysql -h0 -P9306 -e "SELECT embedding_vector FROM test WHERE id = 2"
 ––– output –––
++------------------+
+| embedding_vector |
++------------------+
+|                  |
++------------------+
 ––– comment –––
 Test error case: invalid model name
 ––– input –––

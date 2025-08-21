@@ -2,3 +2,11 @@
 echo 123
 ––– output –––
 123
+––– comment –––
+comment
+––– input –––
+sleep 2
+––– output –––
+––– input –––
+whoami
+––– output –––

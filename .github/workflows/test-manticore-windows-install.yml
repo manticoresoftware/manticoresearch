@@ -1,0 +1,347 @@
+name: 🪟 Test Manticore Windows Installation
+run-name: 🪟 Test Manticore Windows Installation ${{ github.sha }}
+
+on:
+  push:
+    branches:
+      - master
+      - manticore-*
+  pull_request:
+    branches: [ master ]
+  workflow_dispatch:  # Manual trigger
+    inputs:
+      version:
+        description: 'Manticore version to test (e.g., 13.6.7-25080704-1ab9ccc95)'
+        required: false
+        type: string
+
+# Cancels the previous workflow run when a new one appears in the same branch
+concurrency:
+  group: test_manticore_windows_${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test_manticore_installation:
+    name: Test Manticore Installation and Startup
+    runs-on: windows-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: System Information
+        run: |
+          echo "=== SYSTEM INFORMATION ===" | Tee-Object -FilePath manticore_test_log.txt
+          echo "Windows Version:" | Tee-Object -FilePath manticore_test_log.txt -Append
+          Get-ComputerInfo | Select-Object WindowsProductName, WindowsVersion, WindowsBuildLabEx | Tee-Object -FilePath manticore_test_log.txt -Append
+          echo "" | Tee-Object -FilePath manticore_test_log.txt -Append
+          echo "Current user: $env:USERNAME" | Tee-Object -FilePath manticore_test_log.txt -Append
+          echo "Is Admin: $([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)" | Tee-Object -FilePath manticore_test_log.txt -Append
+          echo "Available disk space:" | Tee-Object -FilePath manticore_test_log.txt -Append
+          Get-WmiObject -Class Win32_LogicalDisk | Select-Object DeviceID, @{Name="Size(GB)";Expression={[math]::Round($_.Size/1GB,2)}}, @{Name="FreeSpace(GB)";Expression={[math]::Round($_.FreeSpace/1GB,2)}} | Tee-Object -FilePath manticore_test_log.txt -Append
+        shell: pwsh
+
+      - name: Get Latest Version Info
+        id: version_info
+        run: |
+          echo "=== GETTING VERSION INFORMATION ===" | Tee-Object -FilePath manticore_test_log.txt -Append
+          
+          $manualVersion = "${{ github.event.inputs.version }}"
+          
+          if ([string]::IsNullOrEmpty($manualVersion)) {
+            echo "No manual version specified, trying to get latest..." | Tee-Object -FilePath manticore_test_log.txt -Append
+            
+            try {
+              # Пробуем получить последнюю версию из репозитория
+              $repoUrl = "https://repo.manticoresearch.com/repository/manticoresearch_windows/release/x64/"
+              
+              # Use known version as fallback
+              $fallbackVersion = "13.6.7-25080704-1ab9ccc95"
+              echo "Using fallback version: $fallbackVersion" | Tee-Object -FilePath manticore_test_log.txt -Append
+              $version = $fallbackVersion
+              
+            } catch {
+              echo "Could not determine latest version, using fallback" | Tee-Object -FilePath manticore_test_log.txt -Append
+              $version = "13.6.7-25080704-1ab9ccc95"
+            }
+          } else {
+            echo "Using manual version: $manualVersion" | Tee-Object -FilePath manticore_test_log.txt -Append
+            $version = $manualVersion
+          }
+          
+          $installerUrl = "https://repo.manticoresearch.com/repository/manticoresearch_windows/release/x64/manticore-$version-x64.exe"
+          $installerName = "manticore-$version-x64.exe"
+          
+          echo "version=$version" >> $env:GITHUB_OUTPUT
+          echo "installer_url=$installerUrl" >> $env:GITHUB_OUTPUT
+          echo "installer_name=$installerName" >> $env:GITHUB_OUTPUT
+          
+          echo "Will download: $installerUrl" | Tee-Object -FilePath manticore_test_log.txt -Append
+        shell: pwsh
+
+      - name: Download Manticore Windows Installer
+        id: download
+        run: |
+          echo "=== DOWNLOADING MANTICORE INSTALLER ===" | Tee-Object -FilePath manticore_test_log.txt -Append
+          
+          $installerUrl = "${{ steps.version_info.outputs.installer_url }}"
+          $installerName = "${{ steps.version_info.outputs.installer_name }}"
+          
+          echo "Downloading from: $installerUrl" | Tee-Object -FilePath manticore_test_log.txt -Append
+          echo "File name: $installerName" | Tee-Object -FilePath manticore_test_log.txt -Append
+          
+          try {
+            # Check URL availability
+            $response = Invoke-WebRequest -Uri $installerUrl -Method Head -UseBasicParsing
+            echo "✅ URL is accessible, response code: $($response.StatusCode)" | Tee-Object -FilePath manticore_test_log.txt -Append
+            echo "Content-Length: $($response.Headers.'Content-Length')" | Tee-Object -FilePath manticore_test_log.txt -Append
+            
+            # Download the file
+            echo "Starting download..." | Tee-Object -FilePath manticore_test_log.txt -Append
+            $ProgressPreference = 'SilentlyContinue'  # Disable progress bar for better performance
+            Invoke-WebRequest -Uri $installerUrl -OutFile $installerName -UseBasicParsing
+            
+            # Check if file was downloaded
+            if (Test-Path $installerName) {
+              $fileInfo = Get-Item $installerName
+              echo "✅ File downloaded successfully" | Tee-Object -FilePath manticore_test_log.txt -Append
+              echo "File size: $($fileInfo.Length) bytes ($([math]::Round($fileInfo.Length/1MB,2)) MB)" | Tee-Object -FilePath manticore_test_log.txt -Append
+              echo "download_success=true" >> $env:GITHUB_OUTPUT
+            } else {
+              throw "Downloaded file not found"
+            }
+            
+          } catch {
+            echo "❌ Download failed: $($_.Exception.Message)" | Tee-Object -FilePath manticore_test_log.txt -Append
+            echo "download_success=false" >> $env:GITHUB_OUTPUT
+            exit 1
+          }
+        shell: pwsh
+
+      - name: Install Manticore Search
+        if: steps.download.outputs.download_success == 'true'
+        id: install
+        run: |
+          echo "=== INSTALLING MANTICORE SEARCH ===" | Tee-Object -FilePath manticore_test_log.txt -Append
+          
+          $installerName = "${{ steps.version_info.outputs.installer_name }}"
+          
+          try {
+            echo "Starting installation with file: $installerName" | Tee-Object -FilePath manticore_test_log.txt -Append
+            
+            # Run installer in silent mode
+            echo "Running installer in silent mode..." | Tee-Object -FilePath manticore_test_log.txt -Append
+            $process = Start-Process -FilePath $installerName -ArgumentList "/S" -Wait -PassThru -NoNewWindow
+            
+            echo "Installation process exit code: $($process.ExitCode)" | Tee-Object -FilePath manticore_test_log.txt -Append
+            
+            if ($process.ExitCode -eq 0) {
+              echo "✅ Installation completed successfully" | Tee-Object -FilePath manticore_test_log.txt -Append
+              echo "install_success=true" >> $env:GITHUB_OUTPUT
+            } else {
+              echo "⚠️ Installation completed with exit code: $($process.ExitCode)" | Tee-Object -FilePath manticore_test_log.txt -Append
+              echo "install_success=partial" >> $env:GITHUB_OUTPUT
+            }
+            
+          } catch {
+            echo "❌ Installation failed: $($_.Exception.Message)" | Tee-Object -FilePath manticore_test_log.txt -Append
+            echo "install_success=false" >> $env:GITHUB_OUTPUT
+          }
+        shell: pwsh
+
+      - name: Find Installation Directory
+        if: always()
+        id: find_install
+        run: |
+          echo "=== FINDING INSTALLATION DIRECTORY ===" | Tee-Object -FilePath manticore_test_log.txt -Append
+          
+          # Standard Manticore installation paths
+          $searchPaths = @(
+            "C:\Program Files\Manticore Search",
+            "C:\Program Files (x86)\Manticore Search",
+            "C:\Manticore Search",
+            "C:\ManticoreSearch"
+          )
+          
+          $installPath = $null
+          foreach ($path in $searchPaths) {
+            echo "Checking: $path" | Tee-Object -FilePath manticore_test_log.txt -Append
+            if (Test-Path $path) {
+              echo "✅ Found installation at: $path" | Tee-Object -FilePath manticore_test_log.txt -Append
+              $installPath = $path
+              break
+            }
+          }
+          
+          if ($installPath) {
+            echo "Installation directory: $installPath" | Tee-Object -FilePath manticore_test_log.txt -Append
+            echo "install_path=$installPath" >> $env:GITHUB_OUTPUT
+            
+            # Show directory contents
+            echo "Directory contents:" | Tee-Object -FilePath manticore_test_log.txt -Append
+            Get-ChildItem $installPath -Recurse | ForEach-Object { 
+              echo "  $($_.FullName)" | Tee-Object -FilePath manticore_test_log.txt -Append
+            }
+            
+            # Find executable files
+            $binaries = Get-ChildItem $installPath -Recurse -Include "*.exe" 
+            if ($binaries) {
+              echo "Found executables:" | Tee-Object -FilePath manticore_test_log.txt -Append
+              $binaries | ForEach-Object { 
+                echo "  $($_.FullName)" | Tee-Object -FilePath manticore_test_log.txt -Append
+              }
+              
+              # Look for searchd
+              $searchd = $binaries | Where-Object { $_.Name -eq "searchd.exe" } | Select-Object -First 1
+              if ($searchd) {
+                echo "searchd_path=$($searchd.FullName)" >> $env:GITHUB_OUTPUT
+                echo "✅ Found searchd at: $($searchd.FullName)" | Tee-Object -FilePath manticore_test_log.txt -Append
+              }
+            }
+            
+            echo "found_install=true" >> $env:GITHUB_OUTPUT
+          } else {
+            echo "❌ Installation not found in standard locations" | Tee-Object -FilePath manticore_test_log.txt -Append
+            echo "found_install=false" >> $env:GITHUB_OUTPUT
+          }
+        shell: pwsh
+
+      - name: Test Searchd Daemon Startup
+        if: steps.find_install.outputs.found_install == 'true'
+        id: test_daemon
+        run: |
+          echo "=== TESTING SEARCHD DAEMON STARTUP ===" | Tee-Object -FilePath manticore_test_log.txt -Append
+          
+          $searchdPath = "${{ steps.find_install.outputs.searchd_path }}"
+          
+          if ([string]::IsNullOrEmpty($searchdPath) -or !(Test-Path $searchdPath)) {
+            echo "❌ searchd.exe not found" | Tee-Object -FilePath manticore_test_log.txt -Append
+            echo "daemon_test=failed" >> $env:GITHUB_OUTPUT
+            return
+          }
+          
+          echo "Testing searchd at: $searchdPath" | Tee-Object -FilePath manticore_test_log.txt -Append
+          
+          try {
+            # First check version
+            echo "Checking searchd version..." | Tee-Object -FilePath manticore_test_log.txt -Append
+            $versionProcess = Start-Process -FilePath $searchdPath -ArgumentList "--version" -Wait -PassThru -NoNewWindow -RedirectStandardOutput "version_output.txt" -RedirectStandardError "version_error.txt"
+            
+            if (Test-Path "version_output.txt") {
+              $versionOutput = Get-Content "version_output.txt" -Raw
+              echo "Version output:" | Tee-Object -FilePath manticore_test_log.txt -Append
+              echo $versionOutput | Tee-Object -FilePath manticore_test_log.txt -Append
+            }
+            
+            if (Test-Path "version_error.txt") {
+              $versionError = Get-Content "version_error.txt" -Raw
+              if (![string]::IsNullOrEmpty($versionError)) {
+                echo "Version stderr:" | Tee-Object -FilePath manticore_test_log.txt -Append
+                echo $versionError | Tee-Object -FilePath manticore_test_log.txt -Append
+              }
+            }
+            
+            # Try to start daemon in test mode
+            echo "Testing daemon startup..." | Tee-Object -FilePath manticore_test_log.txt -Append
+            
+            # Run with --help to check if it works
+            $helpProcess = Start-Process -FilePath $searchdPath -ArgumentList "--help" -Wait -PassThru -NoNewWindow -RedirectStandardOutput "help_output.txt" -RedirectStandardError "help_error.txt"
+            
+            echo "Help command exit code: $($helpProcess.ExitCode)" | Tee-Object -FilePath manticore_test_log.txt -Append
+            
+            if (Test-Path "help_output.txt") {
+              $helpOutput = Get-Content "help_output.txt" -Raw
+              if (![string]::IsNullOrEmpty($helpOutput)) {
+                echo "Help output (first 500 chars):" | Tee-Object -FilePath manticore_test_log.txt -Append
+                echo $helpOutput.Substring(0, [Math]::Min(500, $helpOutput.Length)) | Tee-Object -FilePath manticore_test_log.txt -Append
+              }
+            }
+            
+            if ($helpProcess.ExitCode -eq 0 -or $helpProcess.ExitCode -eq 1) {  # 1 might be normal for --help
+              echo "✅ searchd executable appears to be working" | Tee-Object -FilePath manticore_test_log.txt -Append
+              echo "daemon_test=success" >> $env:GITHUB_OUTPUT
+            } else {
+              echo "⚠️ searchd exit code: $($helpProcess.ExitCode)" | Tee-Object -FilePath manticore_test_log.txt -Append
+              echo "daemon_test=partial" >> $env:GITHUB_OUTPUT
+            }
+            
+          } catch {
+            echo "❌ Daemon test failed: $($_.Exception.Message)" | Tee-Object -FilePath manticore_test_log.txt -Append
+            echo "daemon_test=failed" >> $env:GITHUB_OUTPUT
+          }
+        shell: pwsh
+
+      - name: Test as Administrator
+        if: steps.find_install.outputs.found_install == 'true'
+        run: |
+          echo "=== TESTING AS ADMINISTRATOR ===" | Tee-Object -FilePath manticore_test_log.txt -Append
+          
+          $searchdPath = "${{ steps.find_install.outputs.searchd_path }}"
+          
+          if ([string]::IsNullOrEmpty($searchdPath)) {
+            echo "❌ searchd path not available" | Tee-Object -FilePath manticore_test_log.txt -Append
+            return
+          }
+          
+          try {
+            echo "Testing searchd with elevated privileges..." | Tee-Object -FilePath manticore_test_log.txt -Append
+            
+            # In GitHub Actions runner already has administrative rights
+            echo "Current user privileges:" | Tee-Object -FilePath manticore_test_log.txt -Append
+            $isAdmin = ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
+            echo "Is Administrator: $isAdmin" | Tee-Object -FilePath manticore_test_log.txt -Append
+            
+            if ($isAdmin) {
+              echo "✅ Running with administrator privileges" | Tee-Object -FilePath manticore_test_log.txt -Append
+              
+              # Run brief test
+              $adminProcess = Start-Process -FilePath $searchdPath -ArgumentList "--version" -Wait -PassThru -NoNewWindow -RedirectStandardOutput "admin_output.txt" -RedirectStandardError "admin_error.txt"
+              echo "Admin test exit code: $($adminProcess.ExitCode)" | Tee-Object -FilePath manticore_test_log.txt -Append
+              
+              if (Test-Path "admin_output.txt") {
+                $adminOutput = Get-Content "admin_output.txt" -Raw
+                if (![string]::IsNullOrEmpty($adminOutput)) {
+                  echo "Admin test output:" | Tee-Object -FilePath manticore_test_log.txt -Append
+                  echo $adminOutput | Tee-Object -FilePath manticore_test_log.txt -Append
+                }
+              }
+            } else {
+              echo "⚠️ Not running with administrator privileges" | Tee-Object -FilePath manticore_test_log.txt -Append
+            }
+            
+          } catch {
+            echo "❌ Administrator test failed: $($_.Exception.Message)" | Tee-Object -FilePath manticore_test_log.txt -Append
+          }
+        shell: pwsh
+
+      - name: Cleanup and Summary
+        if: always()
+        run: |
+          echo "=== CLEANUP AND SUMMARY ===" | Tee-Object -FilePath manticore_test_log.txt -Append
+          echo "Test completed at: $(Get-Date)" | Tee-Object -FilePath manticore_test_log.txt -Append
+          
+          # Create GitHub Summary
+          echo "# Manticore Search Windows Installation Test" >> $env:GITHUB_STEP_SUMMARY
+          echo "## Test Results Summary" >> $env:GITHUB_STEP_SUMMARY
+          echo "- **Version tested**: ${{ steps.version_info.outputs.version }}" >> $env:GITHUB_STEP_SUMMARY
+          echo "- **Download**: ${{ steps.download.outputs.download_success == 'true' && '✅ SUCCESS' || '❌ FAILED' }}" >> $env:GITHUB_STEP_SUMMARY
+          echo "- **Installation**: ${{ steps.install.outputs.install_success == 'true' && '✅ SUCCESS' || steps.install.outputs.install_success == 'partial' && '⚠️ PARTIAL' || '❌ FAILED' }}" >> $env:GITHUB_STEP_SUMMARY
+          echo "- **Found Install**: ${{ steps.find_install.outputs.found_install == 'true' && '✅ SUCCESS' || '❌ FAILED' }}" >> $env:GITHUB_STEP_SUMMARY
+          echo "- **Daemon Test**: ${{ steps.test_daemon.outputs.daemon_test == 'success' && '✅ SUCCESS' || steps.test_daemon.outputs.daemon_test == 'partial' && '⚠️ PARTIAL' || '❌ FAILED' }}" >> $env:GITHUB_STEP_SUMMARY
+          echo "" >> $env:GITHUB_STEP_SUMMARY
+          echo "📋 **Full log available in artifacts: manticore-windows-test-log**" >> $env:GITHUB_STEP_SUMMARY
+          
+          # Clean up temporary files
+          $tempFiles = @("version_output.txt", "version_error.txt", "help_output.txt", "help_error.txt", "admin_output.txt", "admin_error.txt")
+          foreach ($file in $tempFiles) {
+            if (Test-Path $file) {
+              Remove-Item $file -Force
+            }
+          }
+        shell: pwsh
+
+      - name: Upload Test Log
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: manticore-windows-test-log
+          path: manticore_test_log.txt

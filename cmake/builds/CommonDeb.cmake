@@ -39,6 +39,7 @@ set ( CPACK_COMPONENTS_GROUPING IGNORE )
 set ( CPACK_DEBIAN_FILE_NAME DEB-DEFAULT )
 set ( CPACK_DEBIAN_DEBUGINFO_PACKAGE ON )
 
+
 # dependencies will be auto calculated. FIXME! M.b. point them directly?
 #set ( CPACK_DEBIAN_BIN_PACKAGE_DEPENDS "libc6 (>= 2.15), libexpat (>= 2.0.1), libgcc1 (>= 1:3.0), libstdc++6 (>= 5.2), zlib1g (>= 1:1.1.4), lsb-base (>= 4.1+Debian11ubuntu7)" )
 

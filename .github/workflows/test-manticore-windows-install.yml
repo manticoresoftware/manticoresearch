@@ -51,7 +51,7 @@ jobs:
             echo "No manual version specified, trying to get latest..." | Tee-Object -FilePath manticore_test_log.txt -Append
             
             try {
-              # Try to get the latest version from the repository
+              # Пробуем получить последнюю версию из репозитория
               $repoUrl = "https://repo.manticoresearch.com/repository/manticoresearch_windows/release/x64/"
               
               # Use known version as fallback
@@ -183,7 +183,10 @@ jobs:
               $parameterSets = @(
                 @("/S"),
                 @("/SILENT"),
-                @("/s")  # Try lowercase as backup
+                @("/s"),  # Try lowercase as backup
+                @("/S", "/ALLUSERS"),
+                @("/VERYSILENT"),  # Sometimes NSIS supports Inno Setup params
+                @()  # Try with no parameters (interactive with timeout)
               )
             }
             "msi" {
@@ -219,22 +222,37 @@ jobs:
             try {
               echo "Attempt $installAttempt`: Running with parameters: $paramString" | Tee-Object -FilePath manticore_test_log.txt -Append
               
-              # Use timeout to prevent hanging (5 minutes max per attempt)
-              $process = Start-Process -FilePath $installerName -ArgumentList $params -Wait -PassThru -NoNewWindow
+              # Use timeout to prevent hanging (3 minutes max per attempt)
+              $timeoutSeconds = 180
+              echo "Starting installation with $timeoutSeconds second timeout..." | Tee-Object -FilePath manticore_test_log.txt -Append
               
-              echo "Exit code: $($process.ExitCode)" | Tee-Object -FilePath manticore_test_log.txt -Append
+              $job = Start-Job -ScriptBlock {
+                param($installer, $arguments)
+                $process = Start-Process -FilePath $installer -ArgumentList $arguments -Wait -PassThru -NoNewWindow
+                return $process.ExitCode
+              } -ArgumentList $installerName, $params
               
-              if ($process.ExitCode -eq 0) {
-                echo "✅ Installation successful with parameters: $paramString" | Tee-Object -FilePath manticore_test_log.txt -Append
-                $installSuccess = $true
-                echo "install_success=true" >> $env:GITHUB_OUTPUT
-                echo "install_params=$paramString" >> $env:GITHUB_OUTPUT
-                break
-              } elseif ($process.ExitCode -eq 1) {
-                echo "⚠️ Installation may have succeeded (exit code 1) with parameters: $paramString" | Tee-Object -FilePath manticore_test_log.txt -Append
-                # Don't break, try other parameters first
+              $completed = Wait-Job $job -Timeout $timeoutSeconds
+              
+              if ($completed) {
+                $exitCode = Receive-Job $job
+                Remove-Job $job
+                echo "Exit code: $exitCode" | Tee-Object -FilePath manticore_test_log.txt -Append
+                
+                if ($exitCode -eq 0) {
+                  echo "✅ Installation completed with exit code 0, checking for files..." | Tee-Object -FilePath manticore_test_log.txt -Append
+                  # Don't break yet, let's check if files were actually installed
+                } elseif ($exitCode -eq 1) {
+                  echo "⚠️ Installation completed with exit code 1" | Tee-Object -FilePath manticore_test_log.txt -Append
+                } else {
+                  echo "❌ Installation failed with exit code $exitCode" | Tee-Object -FilePath manticore_test_log.txt -Append
+                  # Continue to next parameter set
+                  continue
+                }
               } else {
-                echo "❌ Installation failed with exit code $($process.ExitCode)" | Tee-Object -FilePath manticore_test_log.txt -Append
+                Remove-Job $job -Force
+                echo "⏰ Installation timed out after $timeoutSeconds seconds with parameters: $paramString" | Tee-Object -FilePath manticore_test_log.txt -Append
+                echo "Will try next parameter set..." | Tee-Object -FilePath manticore_test_log.txt -Append
               }
               
             } catch {

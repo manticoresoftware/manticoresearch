@@ -521,7 +521,7 @@ res = await indexApi.insert({"table" : "products", "doc" : {"title" : "Pet Hair 
 ```
 
 <!-- intro -->
-##### java:
+##### Java:
 
 <!-- request Java -->
 
@@ -1081,7 +1081,7 @@ res = await indexApi.update({"table" : "products", "id" : 1513686608316989452, "
 ```
 
 <!-- intro -->
-##### java:
+##### Java:
 
 <!-- request Java -->
 ``` java
@@ -1239,7 +1239,7 @@ res = await indexApi.delete({"table" : "products", "query": {"range":{"price":{"
 
 <!-- intro -->
 
-##### java:
+##### Java:
 
 <!-- request Java -->
 ``` java

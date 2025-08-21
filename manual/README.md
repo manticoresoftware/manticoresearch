@@ -77,7 +77,7 @@
         * [• Main+delta schema](Data_creation_and_modification/Adding_data_from_external_storages/Main_delta.md)
         * [⪢ Adding data from tables]
             * [• Merging tables](Data_creation_and_modification/Adding_data_from_external_storages/Adding_data_to_tables/Merging_tables.md)
-            * [• Killlists in plain tables](Data_creation_and_modification/Adding_data_from_external_storages/Adding_data_to_tables/Killlist_in_plain_tables.md)
+            * [• Killists in plain tables](Data_creation_and_modification/Adding_data_from_external_storages/Adding_data_to_tables/Killlist_in_plain_tables.md)
             * [• Attaching one table to another](Data_creation_and_modification/Adding_data_from_external_storages/Adding_data_to_tables/Attaching_one_table_to_another.md)
             * [• Importing RT table](Data_creation_and_modification/Adding_data_from_external_storages/Adding_data_to_tables/Importing_table.md)
         * [• Rotating a table](Data_creation_and_modification/Adding_data_from_external_storages/Rotating_a_table.md)
@@ -87,9 +87,9 @@
         * [• UPDATE](Data_creation_and_modification/Updating_documents/UPDATE.md)
     * [• Deleting documents](Data_creation_and_modification/Deleting_documents.md)
     * [• Transactions](Data_creation_and_modification/Transactions.md)
-* [5️⃣ Searching]
+* [5️⃣ Searching](Searching.md)
     * [• Intro](Searching/Intro.md)
-    * [⪢ Full-text matching]
+    * [⪢ Full-text matching](Searching/Full_text_matching.md)
         * [• Basic usage](Searching/Full_text_matching/Basic_usage.md)
         * [• Operators](Searching/Full_text_matching/Operators.md)
         * [• Escaping](Searching/Full_text_matching/Escaping.md)

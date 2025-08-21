@@ -964,7 +964,7 @@ This release also includes more than 130 bug fixes and numerous features, many o
 * [MCL Issue #14](https://github.com/manticoresoftware/columnar/issues/14) MCL: crash on select when too many ft fields
 * [Issue #470](https://github.com/manticoresoftware/manticoresearch/issues/470) sql_joined_field can't be stored
 * [Issue #713](https://github.com/manticoresoftware/manticoresearch/issues/713) Crash when using LEVENSHTEIN()
-* [Issue #743](https://github.com/manticoresoftware/manticoresearch/issues/743) Manticore crashes unexpected and cant to normal restart
+* [Issue #743](https://github.com/manticoresoftware/manticoresearch/issues/743) Manticore crashes unexpectedly and can't restart normally
 * [Issue #788](https://github.com/manticoresoftware/manticoresearch/issues/788) CALL KEYWORDS through /sql returns control char which breaks json
 * [Issue #789](https://github.com/manticoresoftware/manticoresearch/issues/789) mariadb can't create table FEDERATED
 * [Issue #796](https://github.com/manticoresoftware/manticoresearch/issues/796) WARNING: dlopen() failed: /usr/bin/lib_manticore_columnar.so: cannot open shared object file: No such file or directory

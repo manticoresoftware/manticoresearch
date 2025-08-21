@@ -81,6 +81,8 @@ Var COMPONENT_EXECUTOR
 Var COMPONENT_COLUMNAR
 Var INSTALL_QUIET
 
+
+
 Function .onInit
     ; Initialize component variables (1 = install, 0 = skip)
     StrCpy $COMPONENT_CORE "1"
@@ -148,21 +150,6 @@ Function .onInit
     ; Check if running in silent mode and set quiet flag
     IfSilent 0 +2
     StrCpy $INSTALL_QUIET "1"
-    
-    ; Initialize section states based on component variables
-    Call InitComponentStates
-FunctionEnd
-
-Function InitComponentStates
-    ; Set section states based on component variables
-    StrCmp $COMPONENT_CORE "1" +2
-    SectionSetFlags ${SEC_CORE} 0
-    
-    StrCmp $COMPONENT_EXECUTOR "1" +2  
-    SectionSetFlags ${SEC_EXECUTOR} 0
-    
-    StrCmp $COMPONENT_COLUMNAR "1" +2
-    SectionSetFlags ${SEC_COLUMNAR} 0
 FunctionEnd
 
 ; String search function
@@ -302,7 +289,7 @@ Fail1:
 Ok:
 FunctionEnd
 
-Section "Manticore Search Core" SEC_CORE
+Section "Manticore Search Core"
 	; Skip this section if COMPONENT_CORE is 0
 	StrCmp $COMPONENT_CORE "0" skip_core
 	
@@ -340,7 +327,7 @@ Section "Manticore Search Core" SEC_CORE
 	skip_core:
 SectionEnd
 
-Section "Manticore Executor" SEC_EXECUTOR
+Section "Manticore Executor"
 	; Skip this section if COMPONENT_EXECUTOR is 0
 	StrCmp $COMPONENT_EXECUTOR "0" skip_executor
 	
@@ -427,7 +414,7 @@ Section "Manticore Executor" SEC_EXECUTOR
 	skip_executor:
 SectionEnd
 
-Section "Manticore Columnar Library" SEC_COLUMNAR  
+Section "Manticore Columnar Library"  
 	; Skip this section if COMPONENT_COLUMNAR is 0
 	StrCmp $COMPONENT_COLUMNAR "0" skip_columnar
 	

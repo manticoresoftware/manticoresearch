@@ -212,6 +212,10 @@ install ( DIRECTORY misc/stopwords DESTINATION ${CMAKE_INSTALL_DATADIR}/manticor
 # stuff going to /usr/local/
 install ( DIRECTORY DESTINATION /usr/local/lib/manticore COMPONENT common )
 
+# Install sysctl configuration for Manticore Search
+install ( FILES dist/70-manticore.conf DESTINATION /etc/sysctl.d COMPONENT common )
+
+
 if (WITH_ICU AND WITH_ICU_FORCE_STATIC)
 	install_icudata ( ${FULL_SHARE_DIR}/icu )
 endif ()

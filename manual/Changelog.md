@@ -1385,7 +1385,7 @@ sys	0m0.047s
   </details>
 
 - **[ALTER](Updating_table_schema_and_settings.md) can add/remove a full-text field** (in RT mode). Previously it could only add/remove an attribute.
-- 🔬 **Experimental: pseudo-sharding for full-scan queries** - allows to parallelize any non-full-text search query. Instead of preparing shards manually you can now just enable new option [searchd.pseudo_sharding](Server_settings/Searchd.md#pseudo_sharding) and expect up to `CPU cores` lower response time for non-full-text search queries. Note it can easily occupy all existing CPU cores, so if you care not only about latency, but throughput too - use it with caution.
+- 🔬 **Experimental: pseudo-sharding for full-scan queries** - allows you to parallelize any non-full-text search query. Instead of preparing shards manually you can now just enable new option [searchd.pseudo_sharding](Server_settings/Searchd.md#pseudo_sharding) and expect up to `CPU cores` lower response time for non-full-text search queries. Note it can easily occupy all existing CPU cores, so if you care not only about latency, but throughput too - use it with caution.
 
 ### Minor changes
 <!-- example -->

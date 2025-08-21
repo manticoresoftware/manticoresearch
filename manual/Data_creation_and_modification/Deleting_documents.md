@@ -516,7 +516,7 @@ Array(
 <!-- end -->
 
 <!-- example delete 5 -->
-Manticore SQL allows to use complex conditions for the `DELETE` statement.
+Manticore SQL allows you to use complex conditions for the `DELETE` statement.
 
 For example here we are deleting documents that match full-text query `test document` and have attribute `mva1` with a value greater than 206 or `mva1` values 100 or 103 from table named `test`:
 

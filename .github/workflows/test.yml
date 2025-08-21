@@ -3,7 +3,6 @@ run-name: 🔬 Test ${{ github.sha }}
 
 #on: workflow_call
 
-
 on:
   push:
     branches:

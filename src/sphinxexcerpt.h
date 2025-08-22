@@ -55,6 +55,7 @@ struct SnippetQuerySettings_t : public SnippetLimits_t
 	CSphString		m_sChunkSeparator {" ... \0"};	///< string to insert between matching chunks (in limited mode only)
 	CSphString		m_sFieldSeparator {" | "};///< string to insert between fields
 	CSphString		m_sStripMode {"index"};	///< strip mode
+	CSphString		m_sCjkDelimiter {" "};	///< CJK segmentation delimiter character (default is space)
 	int				m_iAround = 5;			///< how much words to highlight around each match
 	int				m_iPassageId = 1;		///< current %PASSAGE_ID% counter value (must start at 1)
 	bool			m_bUseBoundaries = false;	///< whether to extract passages by phrase boundaries setup in tokenizer

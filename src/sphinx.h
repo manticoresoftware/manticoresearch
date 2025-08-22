@@ -318,6 +318,7 @@ public:
 	virtual	int		Apply ( const BYTE * sField, int iLength, CSphVector<BYTE> & dStorage, bool bQuery ) = 0;
 	virtual	void	GetSettings ( CSphFieldFilterSettings & tSettings ) const = 0;
 	virtual std::unique_ptr<ISphFieldFilter> Clone ( const FieldFilterOptions_t * pOptions=nullptr ) const = 0;
+	virtual	bool	SetCjkDelimiter ( const CSphString & ) { return false; } ///< set CJK delimiter, returns true if filter supports it
 
 	int				Apply ( const void * szField, CSphVector<BYTE> & dStorage, bool bQuery )	{ return Apply ( (const BYTE*)szField, (int) strlen ( (const char*)szField ), dStorage, bQuery ); }
 	int				Apply ( ByteBlob_t sField, CSphVector<BYTE> & dStorage, bool bQuery )		{ return Apply ( sField.first, sField.second, dStorage, bQuery ); }

@@ -72,21 +72,30 @@ void CJKPreprocessor_c::AddTextChunk ( const BYTE * pStart, int iLen, CSphVector
 		int iTokenLen = 0;
 		while ( (pToken = GetNextToken(iTokenLen))!=nullptr )
 		{
-			bool bAddSpace = NeedAddSpace ( pToken, dOut, bQuery );
+			bool bAddDelimiter = NeedAddSpace ( pToken, dOut, bQuery );
+			int iDelimiterLen = bAddDelimiter ? m_sDelimiter.Length() : 0;
 
-			BYTE * pOut = dOut.AddN ( iTokenLen + ( bAddSpace ? 1 : 0 ) );
-			if ( bAddSpace )
-				*pOut++ = ' ';
+			BYTE * pOut = dOut.AddN ( iTokenLen + iDelimiterLen );
+			if ( bAddDelimiter )
+			{
+				memcpy ( pOut, m_sDelimiter.cstr(), iDelimiterLen );
+				pOut += iDelimiterLen;
+			}
 
 			memcpy ( pOut, pToken, iTokenLen );
 		}
 	}
 	else
 	{
-		bool bAddSpace = NeedAddSpace ( pStart, dOut, bQuery );
-		BYTE * pOut = dOut.AddN ( iLen + ( bAddSpace ? 1 : 0 ) );
-		if ( bAddSpace )
-			*pOut++ = ' ';
+		bool bAddDelimiter = NeedAddSpace ( pStart, dOut, bQuery );
+		int iDelimiterLen = bAddDelimiter ? m_sDelimiter.Length() : 0;
+
+		BYTE * pOut = dOut.AddN ( iLen + iDelimiterLen );
+		if ( bAddDelimiter )
+		{
+			memcpy ( pOut, m_sDelimiter.cstr(), iDelimiterLen );
+			pOut += iDelimiterLen;
+		}
 
 		memcpy ( pOut, pStart, iLen );
 	}
@@ -169,6 +178,8 @@ std::unique_ptr<ISphFieldFilter> FieldFilterCJK_c::Clone ( const FieldFilterOpti
 	auto pFilter = CreateFilterCJK ( std::move(pClonedParent), std::move(pClonedPreprocessor), m_sBlendChars.cstr(), sError );
 	if ( !pFilter )
 		sphWarning ( "ICU filter clone error '%s'", sError.cstr() );
+	else if ( !m_sDelimiter.IsEmpty() )
+		static_cast<FieldFilterCJK_c*>(pFilter.get())->SetDelimiter ( m_sDelimiter );
 
 	return pFilter;
 }
@@ -178,6 +189,20 @@ bool FieldFilterCJK_c::SetBlendChars ( const char * szBlendChars, CSphString & s
 {
 	m_sBlendChars = szBlendChars;
 	return m_pPreprocessor->SetBlendChars ( szBlendChars, sError );
+}
+
+
+void FieldFilterCJK_c::SetDelimiter ( const CSphString & sDelimiter )
+{
+	m_sDelimiter = sDelimiter;
+	m_pPreprocessor->SetDelimiter ( sDelimiter );
+}
+
+
+bool FieldFilterCJK_c::SetCjkDelimiter ( const CSphString & sDelimiter )
+{
+	SetDelimiter ( sDelimiter );
+	return true;
 }
 
 

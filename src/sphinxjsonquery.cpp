@@ -3169,6 +3169,7 @@ static bool ParseSnippetOptsSphinx ( const JsonObj_c & tSnip, SnippetQuerySettin
 
 	if ( !tSnip.FetchStrItem ( tOpt.m_sBeforeMatch, "before_match", sError, true ) )		return false;
 	if ( !tSnip.FetchStrItem ( tOpt.m_sAfterMatch, "after_match", sError, true ) )			return false;
+	if ( !tSnip.FetchStrItem ( tOpt.m_sCjkDelimiter, "cjk_delimiter", sError, true ) )		return false;
 	if ( !tSnip.FetchIntItem ( tOpt.m_iAround, "around", sError, true ) )					return false;
 	if ( !tSnip.FetchBoolItem ( tOpt.m_bUseBoundaries, "use_boundaries", sError, true ) )	return false;
 	if ( !tSnip.FetchBoolItem ( tOpt.m_bWeightOrder, "weight_order", sError, true ) )		return false;

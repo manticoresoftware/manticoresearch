@@ -398,6 +398,9 @@ Emits an HTML tag with the enclosing zone name before each snippet. The default 
 #### force_snippets
 Determines whether to force snippet generation even if limits allow highlighting the entire text. The default is 0 (don't force snippet generation).
 
+#### cjk_delimiter
+A string to use as a delimiter between CJK (Chinese, Japanese, Korean) tokens during segmentation when highlighting. This only affects highlighting when Jieba or ICU Chinese segmentation is enabled. The default is a space character (" "). You can set this to any custom string, such as "|" or "·" for better visual separation of CJK tokens in highlighted text.
+
 <!-- intro -->
 ##### SQL:
 <!-- request SQL -->

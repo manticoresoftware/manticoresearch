@@ -5054,6 +5054,7 @@ void HandleMysqlCallSnippets ( RowBuffer_i & tOut, SqlStmt_t & tStmt )
 		else if ( sOpt=="chunk_separator" || sOpt=="snippet_separator" ) { q.m_sChunkSeparator = v.m_sVal; iExpType = SqlInsert_t::QUOTED_STRING; }
 		else if ( sOpt=="html_strip_mode" )		{ q.m_sStripMode = v.m_sVal; iExpType = SqlInsert_t::QUOTED_STRING; }
 		else if ( sOpt=="passage_boundary" || sOpt=="snippet_boundary" ) { q.m_ePassageSPZ = GetPassageBoundary(v.m_sVal); iExpType = SqlInsert_t::QUOTED_STRING; }
+		else if ( sOpt=="cjk_delimiter" )		{ q.m_sCjkDelimiter = v.m_sVal; iExpType = SqlInsert_t::QUOTED_STRING; }
 
 		else if ( sOpt=="limit" )				{ q.m_iLimit = (int)v.GetValueInt(); iExpType = SqlInsert_t::CONST_INT; }
 		else if ( sOpt=="limit_words" )			{ q.m_iLimitWords = (int)v.GetValueInt(); iExpType = SqlInsert_t::CONST_INT; }

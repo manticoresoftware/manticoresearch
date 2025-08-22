@@ -93,6 +93,7 @@ static bool ParseSnippetOption ( const CSphNamedVariant & tVariant, SnippetQuery
 	else if ( sName=="after_match" ) 		tOpt.m_sAfterMatch = sVal;
 	else if ( sName=="chunk_separator" || sName=="snippet_separator")	tOpt.m_sChunkSeparator = sVal;
 	else if ( sName=="field_separator" )	tOpt.m_sFieldSeparator = sVal;
+	else if ( sName=="cjk_delimiter" )		tOpt.m_sCjkDelimiter = sVal;
 	else if ( sName=="around" ) 			tOpt.m_iAround = iVal;
 	else if ( sName=="use_boundaries" )		tOpt.m_bUseBoundaries = bVal;
 	else if ( sName=="weight_order" )		tOpt.m_bWeightOrder = bVal;

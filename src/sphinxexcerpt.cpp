@@ -22,6 +22,7 @@
 #include "snippetindex.h"
 #include "snippetstream.h"
 #include "snippetpassage.h"
+#include "cjkpreprocessor.h"
 
 #include "stripper/html_stripper.h"
 #include "tokenizer/tokenizer.h"
@@ -95,6 +96,7 @@ CSphString SnippetQuerySettings_t::AsString() const
 	if ( m_sChunkSeparator!=tDefault.m_sChunkSeparator )	tOut.Appendf ( "snippet_separator='%s'",m_sChunkSeparator.cstr() );
 	if ( m_sFieldSeparator!=tDefault.m_sFieldSeparator )	tOut.Appendf ( "field_separator='%s'",	m_sFieldSeparator.cstr() );
 	if ( m_sStripMode!=tDefault.m_sStripMode )				tOut.Appendf ( "html_strip_mode='%s'",		m_sStripMode.cstr() );
+	if ( m_sCjkDelimiter!=tDefault.m_sCjkDelimiter )		tOut.Appendf ( "cjk_delimiter='%s'",	m_sCjkDelimiter.cstr() );
 	if ( m_iAround!=tDefault.m_iAround )					tOut.Appendf ( "around=%d",				m_iAround );
 	if ( m_iPassageId!=tDefault.m_iPassageId )				tOut.Appendf ( "start_snippet_id=%d",	m_iPassageId );
 	if ( m_bUseBoundaries!=tDefault.m_bUseBoundaries )		tOut.Appendf ( "use_boundaries=%d",		m_bUseBoundaries ? 1 : 0 );
@@ -1397,7 +1399,14 @@ void SnippetBuilder_c::Impl_c::Setup ( const CSphIndex * pIndex, const SnippetQu
 	m_pState->m_pQueryParser = CreateQueryParser ( tSettings.m_bJsonQuery );
 
 	if ( pIndex->GetFieldFilter() )
+	{
 		m_pFieldFilter = pIndex->GetFieldFilter()->Clone();
+		
+		// Set CJK delimiter if it's a CJK filter
+		auto pCjkFilter = dynamic_cast<FieldFilterCJK_c*>(m_pFieldFilter.get());
+		if ( pCjkFilter && !tSettings.m_sCjkDelimiter.IsEmpty() )
+			pCjkFilter->SetDelimiter ( tSettings.m_sCjkDelimiter );
+	}
 
 	// adjust tokenizer for markup-retaining mode
 	if ( tSettings.m_sStripMode=="retain" )

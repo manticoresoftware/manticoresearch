@@ -25,6 +25,7 @@ public:
 
 	bool					Process ( const BYTE * pBuffer, int iLength, CSphVector<BYTE> & dOut, bool bQuery );
 	bool					SetBlendChars ( const char * szBlendChars, CSphString & sError );
+	void					SetDelimiter ( const CSphString & sDelimiter ) { m_sDelimiter = sDelimiter; }
 
 protected:
 	virtual void			ProcessBuffer ( const BYTE * pBuffer, int iLength ) = 0;
@@ -32,6 +33,7 @@ protected:
 
 private:
 	CSphVector<CSphRemapRange> m_dBlendChars;
+	CSphString				m_sDelimiter {" "};		///< delimiter character for CJK segmentation (default is space)
 
 	void					AddTextChunk ( const BYTE * pStart, int iLen, CSphVector<BYTE> & dOut, bool bChinese, bool bQuery );
 
@@ -77,12 +79,14 @@ public:
 	std::unique_ptr<ISphFieldFilter> Clone ( const FieldFilterOptions_t * pOptions ) const final;
 
 	bool	SetBlendChars ( const char * szBlendChars, CSphString & sError );
+	void	SetDelimiter ( const CSphString & sDelimiter );
 	void	Setup ( std::unique_ptr<ISphFieldFilter> pParent );
 
 private:
 	std::unique_ptr<CJKPreprocessor_c>	m_pPreprocessor;
 	std::unique_ptr<ISphFieldFilter>	m_pParent;
 	CSphString							m_sBlendChars;
+	CSphString							m_sDelimiter;
 };
 
 std::unique_ptr<ISphFieldFilter> CreateFilterCJK ( std::unique_ptr<ISphFieldFilter> pParent, std::unique_ptr<CJKPreprocessor_c> pPreprocessor, const char * szBlendChars, CSphString & sError );

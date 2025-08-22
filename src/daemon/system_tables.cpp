@@ -15,6 +15,8 @@
 #include "dynamic_idx.h"
 #include "searchdsql.h"
 #include "debug_cmds.h"
+#include "auth/auth.h"
+#include "auth/auth_common.h"
 
 void HandleShowThreads ( RowBuffer_i & tOut, const SqlStmt_t * pStmt );
 void HandleShowTables ( RowBuffer_i & tOut, const SqlStmt_t * pStmt );
@@ -71,9 +73,22 @@ static bool ParseSubkeys ( TableFeeder_fn & fnFeed, const CSphString & sName, Sq
 
 bool SearchHandler_c::ParseSysVarsAndTables ()
 {
-	const char* szVar = m_dLocal.First().m_sName.cstr();
+	const CSphString & sName = m_dLocal.First().m_sName;
+	const char* szVar = sName.cstr();
 	const auto & dSubkeys = m_dNQueries.First().m_dStringSubkeys;
-	const char* szEssence = "variable";
+	bool bAuthTbl = ( sName.Begins ( GetPrefixAuth().cstr() ) );
+	const char * szEssence = ( bAuthTbl ? "table" : "variable" );
+
+	if ( bAuthTbl )
+	{
+		cServedIndexRefPtr_c pIndex { MakeDynamicAuthIndex ( sName, m_sError ) };
+		if ( !pIndex )
+			return false;
+
+		m_dAcquired.AddIndex ( sName, std::move ( pIndex ) );
+		return true;
+	}
+
 	bool bValid = false;
 	AT_SCOPE_EXIT ([&,this] {
 		if ( bValid )

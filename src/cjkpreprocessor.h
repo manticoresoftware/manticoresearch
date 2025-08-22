@@ -81,6 +81,7 @@ public:
 	bool	SetBlendChars ( const char * szBlendChars, CSphString & sError );
 	void	SetDelimiter ( const CSphString & sDelimiter );
 	void	Setup ( std::unique_ptr<ISphFieldFilter> pParent );
+	bool	SetCjkDelimiter ( const CSphString & sDelimiter ) override;	///< ISphFieldFilter override
 
 private:
 	std::unique_ptr<CJKPreprocessor_c>	m_pPreprocessor;

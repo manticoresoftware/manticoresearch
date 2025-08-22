@@ -22,7 +22,6 @@
 #include "snippetindex.h"
 #include "snippetstream.h"
 #include "snippetpassage.h"
-#include "cjkpreprocessor.h"
 
 #include "stripper/html_stripper.h"
 #include "tokenizer/tokenizer.h"
@@ -1402,10 +1401,9 @@ void SnippetBuilder_c::Impl_c::Setup ( const CSphIndex * pIndex, const SnippetQu
 	{
 		m_pFieldFilter = pIndex->GetFieldFilter()->Clone();
 		
-		// Set CJK delimiter if it's a CJK filter
-		auto pCjkFilter = dynamic_cast<FieldFilterCJK_c*>(m_pFieldFilter.get());
-		if ( pCjkFilter && !tSettings.m_sCjkDelimiter.IsEmpty() )
-			pCjkFilter->SetDelimiter ( tSettings.m_sCjkDelimiter );
+		// Set CJK delimiter if the filter supports it
+		if ( !tSettings.m_sCjkDelimiter.IsEmpty() )
+			m_pFieldFilter->SetCjkDelimiter ( tSettings.m_sCjkDelimiter );
 	}
 
 	// adjust tokenizer for markup-retaining mode

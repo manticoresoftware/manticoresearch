@@ -199,6 +199,13 @@ void FieldFilterCJK_c::SetDelimiter ( const CSphString & sDelimiter )
 }
 
 
+bool FieldFilterCJK_c::SetCjkDelimiter ( const CSphString & sDelimiter )
+{
+	SetDelimiter ( sDelimiter );
+	return true;
+}
+
+
 void FieldFilterCJK_c::Setup ( std::unique_ptr<ISphFieldFilter> pParent )
 {
 	m_pParent = std::move(pParent);

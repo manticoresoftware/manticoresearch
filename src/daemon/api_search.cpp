@@ -281,6 +281,10 @@ void SearchRequestBuilder_c::SendQuery ( const char * sIndexes, ISphOutputBuffer
 		tOut.SendInt ( tKNN.m_dVec.GetLength() );
 		for ( const auto & i : tKNN.m_dVec )
 			tOut.SendFloat(i);
+
+		tOut.SendByte ( !!tKNN.m_sEmbStr );
+		if ( tKNN.m_sEmbStr )
+			tOut.SendString ( tKNN.m_sEmbStr->cstr() );
 	}
 
 	tOut.SendInt ( (int)q.m_eJiebaMode );
@@ -1045,6 +1049,13 @@ bool ParseSearchQuery ( InputBuffer_c & tReq, ISphOutputBuffer & tOut, CSphQuery
 			tKNN.m_dVec.Resize ( tReq.GetInt() );
 			for ( auto & i : tKNN.m_dVec )
 				i = tReq.GetFloat();
+
+			if ( uMasterVer>=26 )
+			{
+				bool bHasEmb = !!tReq.GetInt();
+				if ( bHasEmb )
+					tKNN.m_sEmbStr = tReq.GetString();
+			}
 		}
 	}
 

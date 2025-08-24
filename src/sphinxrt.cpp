@@ -8077,7 +8077,13 @@ ConstRtData FilterReaderChunks ( ConstRtData tOrigin, const VecTraits_T<int64_t>
 const CSphQuery * RtIndex_c::SetupAutoEmbeddings ( const CSphQuery & tQuery, CSphQuery & tUpdatedQuery, const ISphSchema & tMatchSchema, CSphString & sError ) const
 {
 	auto & tKNN = tQuery.m_tKnnSettings;
-	if ( !m_pEmbeddings || tKNN.m_sAttr.IsEmpty() || tKNN.m_sEmbStr.IsEmpty() )
+	if ( !m_pEmbeddings && tKNN.m_sEmbStr )
+	{
+		sError = "Embeddings generation string specified, but embeddings are not loaded";
+		return nullptr;
+	}
+
+	if ( !m_pEmbeddings || tKNN.m_sAttr.IsEmpty() || !tKNN.m_sEmbStr )
 		return &tQuery;
 
 	auto pAttr = m_tSchema.GetAttr ( tKNN.m_sAttr.cstr() );
@@ -8098,7 +8104,7 @@ const CSphQuery * RtIndex_c::SetupAutoEmbeddings ( const CSphQuery & tQuery, CSp
 
 	std::vector<std::vector<float>> dEmbeddings;
 	std::vector<std::string_view> dTexts;
-	dTexts.push_back( tKNN.m_sEmbStr.cstr() );
+	dTexts.push_back( tKNN.m_sEmbStr->cstr() );
 
 	std::string sConvertError;
 	if ( !pModel->Convert ( dTexts, dEmbeddings, sConvertError ) )

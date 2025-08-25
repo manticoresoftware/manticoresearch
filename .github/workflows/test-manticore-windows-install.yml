@@ -42,38 +42,79 @@ jobs:
       shell: pwsh
       continue-on-error: true
     
-    - name: Download Manticore Installer
+    - name: Check for Local Test Installer
+      run: |
+        echo "=== CHECKING FOR LOCAL TEST INSTALLER ===" | Tee-Object -FilePath manticore_test_log.txt -Append
+        
+        # Check if we have a test installer in the repository
+        $localInstaller = ".github/test-installers/manticore-13.7.2-25082110-e893feb4c-x64.exe"
+        $installerPath = "manticore-installer.exe"
+        
+        if (Test-Path $localInstaller) {
+          echo "Found local test installer: $localInstaller" | Tee-Object -FilePath manticore_test_log.txt -Append
+          Copy-Item $localInstaller -Destination $installerPath
+          $fileInfo = Get-Item $installerPath
+          echo "Using local installer, size: $($fileInfo.Length) bytes" | Tee-Object -FilePath manticore_test_log.txt -Append
+        } else {
+          echo "Local installer not found, will download from repository" | Tee-Object -FilePath manticore_test_log.txt -Append
+        }
+      shell: pwsh
+      continue-on-error: true
+    
+    - name: Download Manticore Installer from Repository
       run: |
         echo "=== DOWNLOADING MANTICORE INSTALLER ===" | Tee-Object -FilePath manticore_test_log.txt -Append
         
-        # Use the working version from repository
-        $installerUrl = "https://repo.manticoresearch.com/repository/manticoresearch_windows/dev/x64/manticore-13.7.2-25081915-1c6071110-x64.exe"
         $installerPath = "manticore-installer.exe"
         
-        echo "Downloading from: $installerUrl" | Tee-Object -FilePath manticore_test_log.txt -Append
+        # Skip if already have installer from previous step
+        if (Test-Path $installerPath) {
+          echo "Installer already exists, skipping download" | Tee-Object -FilePath manticore_test_log.txt -Append
+          return
+        }
         
-        try {
-          $ProgressPreference = 'SilentlyContinue'
-          Invoke-WebRequest -Uri $installerUrl -OutFile $installerPath -UseBasicParsing
+        # Try to download the latest working installer
+        $installerUrls = @(
+          "https://repo.manticoresearch.com/repository/manticoresearch_windows/dev/x64/manticore-13.8.0-25082110-d75910e68-x64.exe",
+          "https://repo.manticoresearch.com/repository/manticoresearch_windows/dev/x64/manticore-13.7.2-25081915-1c6071110-x64.exe",
+          "https://repo.manticoresearch.com/repository/manticoresearch_windows/release/x64/manticore-13.6.7-25080704-1ab9ccc95-x64.exe"
+        )
+        
+        $downloaded = $false
+        foreach ($url in $installerUrls) {
+          echo "Trying to download from: $url" | Tee-Object -FilePath manticore_test_log.txt -Append
           
-          if (Test-Path $installerPath) {
-            $fileInfo = Get-Item $installerPath
-            $fileSizeMB = [math]::Round($fileInfo.Length / 1MB, 2)
-            echo "Downloaded installer: $installerPath" | Tee-Object -FilePath manticore_test_log.txt -Append
-            echo "File size: $($fileInfo.Length) bytes ($fileSizeMB MB)" | Tee-Object -FilePath manticore_test_log.txt -Append
+          try {
+            $ProgressPreference = 'SilentlyContinue'
+            Invoke-WebRequest -Uri $url -OutFile $installerPath -UseBasicParsing -ErrorAction Stop
             
-            # Verify it's an executable
-            $bytes = [System.IO.File]::ReadAllBytes($installerPath)[0..1]
-            if ($bytes[0] -eq 0x4D -and $bytes[1] -eq 0x5A) {
-              echo "File is a valid Windows executable" | Tee-Object -FilePath manticore_test_log.txt -Append
-            } else {
-              echo "WARNING: File might not be a valid executable" | Tee-Object -FilePath manticore_test_log.txt -Append
+            if (Test-Path $installerPath) {
+              $fileInfo = Get-Item $installerPath
+              $fileSizeMB = [math]::Round($fileInfo.Length / 1MB, 2)
+              echo "Downloaded installer: $installerPath" | Tee-Object -FilePath manticore_test_log.txt -Append
+              echo "File size: $($fileInfo.Length) bytes ($fileSizeMB MB)" | Tee-Object -FilePath manticore_test_log.txt -Append
+              
+              # Check if it's a valid exe
+              $bytes = [System.IO.File]::ReadAllBytes($installerPath)[0..1]
+              if ($bytes[0] -eq 0x4D -and $bytes[1] -eq 0x5A) {
+                echo "File is a valid Windows executable" | Tee-Object -FilePath manticore_test_log.txt -Append
+                $downloaded = $true
+                break
+              } else {
+                echo "File is not a valid executable, trying next URL" | Tee-Object -FilePath manticore_test_log.txt -Append
+                Remove-Item $installerPath -Force
+              }
             }
-          } else {
-            throw "Installer file not found after download"
+          } catch {
+            echo "Failed to download from this URL: $_" | Tee-Object -FilePath manticore_test_log.txt -Append
+            if (Test-Path $installerPath) {
+              Remove-Item $installerPath -Force
+            }
           }
-        } catch {
-          echo "Failed to download installer: $_" | Tee-Object -FilePath manticore_test_log.txt -Append
+        }
+        
+        if (-not $downloaded) {
+          echo "ERROR: Failed to download installer from any URL" | Tee-Object -FilePath manticore_test_log.txt -Append
           exit 1
         }
       shell: pwsh
@@ -90,7 +131,8 @@ jobs:
         
         # Check installer exists
         if (Test-Path $installerPath) {
-          echo "Installer file exists" | Tee-Object -FilePath manticore_test_log.txt -Append
+          $fileInfo = Get-Item $installerPath
+          echo "Installer file exists, size: $($fileInfo.Length) bytes" | Tee-Object -FilePath manticore_test_log.txt -Append
         } else {
           echo "ERROR: Installer file not found!" | Tee-Object -FilePath manticore_test_log.txt -Append
           exit 1
@@ -106,9 +148,12 @@ jobs:
           
           if ($process.ExitCode -eq 0) {
             echo "Installation completed successfully (exit code 0)" | Tee-Object -FilePath manticore_test_log.txt -Append
+          } elseif ($process.ExitCode -eq 1) {
+            echo "Installation returned exit code 1 (possible download error)" | Tee-Object -FilePath manticore_test_log.txt -Append
+            echo "This may happen if installer couldn't download additional components" | Tee-Object -FilePath manticore_test_log.txt -Append
+            echo "Checking if core components were installed..." | Tee-Object -FilePath manticore_test_log.txt -Append
           } else {
-            echo "Installation exited with code $($process.ExitCode)" | Tee-Object -FilePath manticore_test_log.txt -Append
-            echo "Note: Some installers return non-zero codes even on success" | Tee-Object -FilePath manticore_test_log.txt -Append
+            echo "Installation exited with unexpected code $($process.ExitCode)" | Tee-Object -FilePath manticore_test_log.txt -Append
           }
           
         } catch {

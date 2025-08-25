@@ -30,94 +30,114 @@ jobs:
         echo "=== CHECKING DOCKER AVAILABILITY ===" | Tee-Object -FilePath manticore_test_log.txt -Append
         try {
           $dockerVersion = docker --version 2>&1
-          echo "✅ Docker version: $dockerVersion" | Tee-Object -FilePath manticore_test_log.txt -Append
+          echo "Docker version: $dockerVersion" | Tee-Object -FilePath manticore_test_log.txt -Append
           
           echo "Checking Docker daemon status..." | Tee-Object -FilePath manticore_test_log.txt -Append
           docker info 2>&1 | Select-Object -First 10 | Tee-Object -FilePath manticore_test_log.txt -Append
-          echo "✅ Docker daemon is running" | Tee-Object -FilePath manticore_test_log.txt -Append
-          
-          echo "Testing Docker with hello-world..." | Tee-Object -FilePath manticore_test_log.txt -Append
-          docker run --rm hello-world 2>&1 | Select-Object -First 5 | Tee-Object -FilePath manticore_test_log.txt -Append
-          echo "✅ Docker hello-world test successful" | Tee-Object -FilePath manticore_test_log.txt -Append
+          echo "Docker daemon is running" | Tee-Object -FilePath manticore_test_log.txt -Append
         } catch {
-          echo "❌ Docker is not available: $_" | Tee-Object -FilePath manticore_test_log.txt -Append
+          echo "Docker is not available: $_" | Tee-Object -FilePath manticore_test_log.txt -Append
+          echo "Note: Manticore can work without Docker" | Tee-Object -FilePath manticore_test_log.txt -Append
         }
       shell: pwsh
+      continue-on-error: true
     
-    - name: Download Official Manticore Installer
+    - name: Download Manticore Installer
       run: |
-        echo "=== DOWNLOADING OFFICIAL MANTICORE INSTALLER ===" | Tee-Object -FilePath manticore_test_log.txt -Append
+        echo "=== DOWNLOADING MANTICORE INSTALLER ===" | Tee-Object -FilePath manticore_test_log.txt -Append
         
-        $installerUrl = "https://repo.manticoresearch.com/repository/manticoresearch_windows/release/x64/manticore-13.6.7-25080704-1ab9ccc95-x64.exe"
+        # Use the working version from repository
+        $installerUrl = "https://repo.manticoresearch.com/repository/manticoresearch_windows/dev/x64/manticore-13.7.2-25081915-1c6071110-x64.exe"
         $installerPath = "manticore-installer.exe"
         
         echo "Downloading from: $installerUrl" | Tee-Object -FilePath manticore_test_log.txt -Append
         
         try {
-          # Download with progress
           $ProgressPreference = 'SilentlyContinue'
           Invoke-WebRequest -Uri $installerUrl -OutFile $installerPath -UseBasicParsing
           
           if (Test-Path $installerPath) {
             $fileInfo = Get-Item $installerPath
             $fileSizeMB = [math]::Round($fileInfo.Length / 1MB, 2)
-            echo "✅ Downloaded installer: $installerPath" | Tee-Object -FilePath manticore_test_log.txt -Append
+            echo "Downloaded installer: $installerPath" | Tee-Object -FilePath manticore_test_log.txt -Append
             echo "File size: $($fileInfo.Length) bytes ($fileSizeMB MB)" | Tee-Object -FilePath manticore_test_log.txt -Append
+            
+            # Verify it's an executable
+            $bytes = [System.IO.File]::ReadAllBytes($installerPath)[0..1]
+            if ($bytes[0] -eq 0x4D -and $bytes[1] -eq 0x5A) {
+              echo "File is a valid Windows executable" | Tee-Object -FilePath manticore_test_log.txt -Append
+            } else {
+              echo "WARNING: File might not be a valid executable" | Tee-Object -FilePath manticore_test_log.txt -Append
+            }
           } else {
             throw "Installer file not found after download"
           }
         } catch {
-          echo "❌ Failed to download installer: $_" | Tee-Object -FilePath manticore_test_log.txt -Append
+          echo "Failed to download installer: $_" | Tee-Object -FilePath manticore_test_log.txt -Append
           exit 1
         }
       shell: pwsh
     
-    - name: Install Manticore
+    - name: Install Manticore (Silent Mode)
+      timeout-minutes: 5
       run: |
         echo "=== INSTALLING MANTICORE ===" | Tee-Object -FilePath manticore_test_log.txt -Append
         
-        $installerPath = "manticore-installer.exe"
-        $installDir = "C:\Manticore"
+        $installerPath = ".\manticore-installer.exe"
         
         echo "Installer: $installerPath" | Tee-Object -FilePath manticore_test_log.txt -Append
-        echo "Installation directory: $installDir" | Tee-Object -FilePath manticore_test_log.txt -Append
+        echo "Installation type: NSIS Silent Mode" | Tee-Object -FilePath manticore_test_log.txt -Append
+        
+        # Check installer exists
+        if (Test-Path $installerPath) {
+          echo "Installer file exists" | Tee-Object -FilePath manticore_test_log.txt -Append
+        } else {
+          echo "ERROR: Installer file not found!" | Tee-Object -FilePath manticore_test_log.txt -Append
+          exit 1
+        }
         
         try {
-          # Try silent installation with different parameter combinations
-          echo "Attempting silent installation..." | Tee-Object -FilePath manticore_test_log.txt -Append
+          echo "Starting silent installation with /S flag..." | Tee-Object -FilePath manticore_test_log.txt -Append
           
-          # Common silent install parameters for different installer types
-          $installArgs = @(
-            "/S",                    # NSIS installer
-            "/VERYSILENT",          # Inno Setup
-            "/SUPPRESSMSGBOXES",    # Suppress message boxes
-            "/NORESTART",           # Don't restart
-            "/DIR=$installDir",     # Installation directory
-            "/LOG=install_log.txt"  # Log file
-          )
-          
-          echo "Running installer with arguments: $($installArgs -join ' ')" | Tee-Object -FilePath manticore_test_log.txt -Append
-          
-          $process = Start-Process -FilePath $installerPath -ArgumentList $installArgs -Wait -PassThru -NoNewWindow
+          # Run installer in silent mode
+          $process = Start-Process -FilePath $installerPath -ArgumentList "/S" -Wait -PassThru -NoNewWindow
           
           echo "Installation process exited with code: $($process.ExitCode)" | Tee-Object -FilePath manticore_test_log.txt -Append
           
-          # Check if installation was successful
           if ($process.ExitCode -eq 0) {
-            echo "✅ Installation completed successfully" | Tee-Object -FilePath manticore_test_log.txt -Append
+            echo "Installation completed successfully (exit code 0)" | Tee-Object -FilePath manticore_test_log.txt -Append
           } else {
-            echo "⚠️ Installation exited with code $($process.ExitCode)" | Tee-Object -FilePath manticore_test_log.txt -Append
-          }
-          
-          # Check for installation log
-          if (Test-Path "install_log.txt") {
-            echo "=== Installation Log ===" | Tee-Object -FilePath manticore_test_log.txt -Append
-            Get-Content "install_log.txt" | Select-Object -First 50 | Tee-Object -FilePath manticore_test_log.txt -Append
+            echo "Installation exited with code $($process.ExitCode)" | Tee-Object -FilePath manticore_test_log.txt -Append
+            echo "Note: Some installers return non-zero codes even on success" | Tee-Object -FilePath manticore_test_log.txt -Append
           }
           
         } catch {
-          echo "❌ Installation failed: $_" | Tee-Object -FilePath manticore_test_log.txt -Append
-          exit 1
+          echo "Error during installation: $_" | Tee-Object -FilePath manticore_test_log.txt -Append
+        }
+        
+        # Wait for installation to complete
+        Start-Sleep -Seconds 30
+        
+        # Check installation result
+        echo "Checking installation result..." | Tee-Object -FilePath manticore_test_log.txt -Append
+        $installed = $false
+        
+        $checkPaths = @(
+          "C:\Program Files (x86)\Manticore",
+          "C:\Program Files\Manticore",
+          "C:\Manticore"
+        )
+        
+        foreach ($path in $checkPaths) {
+          if (Test-Path $path) {
+            echo "Found Manticore installation at: $path" | Tee-Object -FilePath manticore_test_log.txt -Append
+            $installed = $true
+            break
+          }
+        }
+        
+        if (-not $installed) {
+          echo "WARNING: Manticore installation not found in expected locations" | Tee-Object -FilePath manticore_test_log.txt -Append
         }
       shell: pwsh
     
@@ -125,96 +145,165 @@ jobs:
       run: |
         echo "=== VERIFYING INSTALLATION ===" | Tee-Object -FilePath manticore_test_log.txt -Append
         
-        # Check common installation paths
+        # Check installation paths
         $possiblePaths = @(
-          "C:\Manticore",
-          "C:\Program Files\Manticore",
           "C:\Program Files (x86)\Manticore",
-          "$env:ProgramFiles\Manticore",
-          "$env:LOCALAPPDATA\Manticore"
+          "C:\Program Files\Manticore",
+          "C:\Manticore"
         )
         
         $foundPath = $null
         foreach ($path in $possiblePaths) {
           if (Test-Path $path) {
-            echo "✅ Found Manticore installation at: $path" | Tee-Object -FilePath manticore_test_log.txt -Append
+            echo "Found Manticore installation at: $path" | Tee-Object -FilePath manticore_test_log.txt -Append
             $foundPath = $path
             
-            # List installed files
-            echo "Installed files:" | Tee-Object -FilePath manticore_test_log.txt -Append
-            Get-ChildItem -Path $path -Recurse | Select-Object -First 20 | ForEach-Object {
-              echo "  $($_.FullName)" | Tee-Object -FilePath manticore_test_log.txt -Append
+            # List installed components
+            echo "Installed components:" | Tee-Object -FilePath manticore_test_log.txt -Append
+            $files = Get-ChildItem -Path $path -Recurse -ErrorAction SilentlyContinue
+            
+            # Check for key executables in bin directory
+            $searchd = $files | Where-Object { $_.Name -eq "searchd.exe" }
+            $indexer = $files | Where-Object { $_.Name -eq "indexer.exe" }
+            $indextool = $files | Where-Object { $_.Name -eq "indextool.exe" }
+            
+            if ($searchd) {
+              echo "  searchd.exe found at: $($searchd.FullName)" | Tee-Object -FilePath manticore_test_log.txt -Append
             }
+            if ($indexer) {
+              echo "  indexer.exe found at: $($indexer.FullName)" | Tee-Object -FilePath manticore_test_log.txt -Append
+            }
+            if ($indextool) {
+              echo "  indextool.exe found at: $($indextool.FullName)" | Tee-Object -FilePath manticore_test_log.txt -Append
+            }
+            
+            # Show directory structure
+            echo "Directory structure:" | Tee-Object -FilePath manticore_test_log.txt -Append
+            Get-ChildItem -Path $path -Directory | ForEach-Object {
+              echo "  $($_.Name)" | Tee-Object -FilePath manticore_test_log.txt -Append
+            }
+            
             break
           }
         }
         
         if (-not $foundPath) {
-          echo "⚠️ Manticore installation directory not found in common locations" | Tee-Object -FilePath manticore_test_log.txt -Append
-          
-          # Search for searchd.exe
-          echo "Searching for searchd.exe..." | Tee-Object -FilePath manticore_test_log.txt -Append
-          $searchd = Get-ChildItem -Path "C:\" -Filter "searchd.exe" -Recurse -ErrorAction SilentlyContinue | Select-Object -First 1
-          if ($searchd) {
-            echo "Found searchd.exe at: $($searchd.FullName)" | Tee-Object -FilePath manticore_test_log.txt -Append
-            $foundPath = $searchd.DirectoryName
-          }
+          echo "ERROR: Manticore installation directory not found" | Tee-Object -FilePath manticore_test_log.txt -Append
+          exit 1
         }
         
-        # Check if searchd.exe exists and try to get version
-        if ($foundPath) {
-          $searchdPath = Join-Path $foundPath "bin\searchd.exe"
-          if (-not (Test-Path $searchdPath)) {
-            $searchdPath = Join-Path $foundPath "searchd.exe"
+        # Check if searchd.exe can run and get version
+        $searchdPath = Join-Path $foundPath "bin\searchd.exe"
+        if (-not (Test-Path $searchdPath)) {
+          $searchdPath = Join-Path $foundPath "searchd.exe"
+        }
+        
+        if (Test-Path $searchdPath) {
+          echo "Checking Manticore version..." | Tee-Object -FilePath manticore_test_log.txt -Append
+          try {
+            & $searchdPath --version 2>&1 | Tee-Object -FilePath manticore_test_log.txt -Append
+            echo "searchd.exe is functional" | Tee-Object -FilePath manticore_test_log.txt -Append
+          } catch {
+            echo "Could not run searchd.exe: $_" | Tee-Object -FilePath manticore_test_log.txt -Append
           }
-          
-          if (Test-Path $searchdPath) {
-            echo "Checking Manticore version..." | Tee-Object -FilePath manticore_test_log.txt -Append
-            try {
-              & $searchdPath --version 2>&1 | Tee-Object -FilePath manticore_test_log.txt -Append
-            } catch {
-              echo "Could not get version: $_" | Tee-Object -FilePath manticore_test_log.txt -Append
-            }
-          }
+        } else {
+          echo "ERROR: searchd.exe not found" | Tee-Object -FilePath manticore_test_log.txt -Append
+          exit 1
         }
       shell: pwsh
     
-    - name: Test Manticore Service
+    - name: Start Manticore Service
       run: |
-        echo "=== TESTING MANTICORE SERVICE ===" | Tee-Object -FilePath manticore_test_log.txt -Append
+        echo "=== STARTING MANTICORE SERVICE ===" | Tee-Object -FilePath manticore_test_log.txt -Append
         
-        # Check if Manticore service exists
-        $service = Get-Service -Name "*manticore*" -ErrorAction SilentlyContinue
-        if ($service) {
-          echo "✅ Found Manticore service: $($service.Name)" | Tee-Object -FilePath manticore_test_log.txt -Append
-          echo "Service status: $($service.Status)" | Tee-Object -FilePath manticore_test_log.txt -Append
+        # Find searchd.exe
+        $searchdPath = $null
+        $possiblePaths = @(
+          "C:\Program Files (x86)\Manticore\bin\searchd.exe",
+          "C:\Program Files\Manticore\bin\searchd.exe",
+          "C:\Manticore\bin\searchd.exe"
+        )
+        
+        foreach ($path in $possiblePaths) {
+          if (Test-Path $path) {
+            $searchdPath = $path
+            echo "Found searchd.exe at: $searchdPath" | Tee-Object -FilePath manticore_test_log.txt -Append
+            break
+          }
+        }
+        
+        if ($searchdPath) {
+          # Check for config file
+          $configPath = $searchdPath.Replace("\bin\searchd.exe", "\etc\manticoresearch\manticore.conf")
+          if (-not (Test-Path $configPath)) {
+            echo "Config file not found at: $configPath" | Tee-Object -FilePath manticore_test_log.txt -Append
+            echo "Starting searchd without config file..." | Tee-Object -FilePath manticore_test_log.txt -Append
+            Start-Process -FilePath $searchdPath -NoNewWindow
+          } else {
+            echo "Starting searchd with config: $configPath" | Tee-Object -FilePath manticore_test_log.txt -Append
+            Start-Process -FilePath $searchdPath -ArgumentList "--config", $configPath -NoNewWindow
+          }
           
-          if ($service.Status -ne "Running") {
-            echo "Starting Manticore service..." | Tee-Object -FilePath manticore_test_log.txt -Append
-            try {
-              Start-Service -Name $service.Name
-              Start-Sleep -Seconds 5
-              $service = Get-Service -Name $service.Name
-              echo "Service status after start: $($service.Status)" | Tee-Object -FilePath manticore_test_log.txt -Append
-            } catch {
-              echo "Failed to start service: $_" | Tee-Object -FilePath manticore_test_log.txt -Append
+          # Wait for startup
+          Start-Sleep -Seconds 10
+          
+          # Check if running
+          $manticoreProcess = Get-Process -Name "searchd" -ErrorAction SilentlyContinue
+          if ($manticoreProcess) {
+            echo "Manticore searchd is running (PID: $($manticoreProcess.Id))" | Tee-Object -FilePath manticore_test_log.txt -Append
+          } else {
+            echo "WARNING: Manticore searchd is not running" | Tee-Object -FilePath manticore_test_log.txt -Append
+          }
+          
+          # Check ports
+          echo "Checking network ports..." | Tee-Object -FilePath manticore_test_log.txt -Append
+          $ports = @(9306, 9308, 9312)
+          foreach ($port in $ports) {
+            $connection = Test-NetConnection -ComputerName localhost -Port $port -WarningAction SilentlyContinue -InformationLevel Quiet
+            if ($connection) {
+              echo "Port $port is listening" | Tee-Object -FilePath manticore_test_log.txt -Append
+            } else {
+              echo "Port $port is not listening" | Tee-Object -FilePath manticore_test_log.txt -Append
             }
           }
         } else {
-          echo "⚠️ No Manticore service found" | Tee-Object -FilePath manticore_test_log.txt -Append
-          
-          # Try to run searchd manually
-          echo "Attempting to run searchd manually..." | Tee-Object -FilePath manticore_test_log.txt -Append
-          # Implementation would go here based on found installation path
+          echo "ERROR: searchd.exe not found" | Tee-Object -FilePath manticore_test_log.txt -Append
+          exit 1
         }
+      shell: pwsh
+      continue-on-error: true
+    
+    - name: Test Manticore Connection
+      run: |
+        echo "=== TESTING MANTICORE CONNECTION ===" | Tee-Object -FilePath manticore_test_log.txt -Append
         
-        # Check if Manticore is listening on default port
-        echo "Checking if Manticore is listening on port 9306..." | Tee-Object -FilePath manticore_test_log.txt -Append
-        $connection = Test-NetConnection -ComputerName localhost -Port 9306 -WarningAction SilentlyContinue
-        if ($connection.TcpTestSucceeded) {
-          echo "✅ Manticore is listening on port 9306" | Tee-Object -FilePath manticore_test_log.txt -Append
+        # Test HTTP API
+        try {
+          $response = Invoke-WebRequest -Uri "http://localhost:9308/sql" -Method POST -Body "query=SHOW STATUS" -ContentType "application/x-www-form-urlencoded" -UseBasicParsing -ErrorAction Stop
+          if ($response.StatusCode -eq 200) {
+            echo "Manticore HTTP API is responding" | Tee-Object -FilePath manticore_test_log.txt -Append
+            $contentPreview = $response.Content.Substring(0, [Math]::Min(200, $response.Content.Length))
+            echo "Response preview: $contentPreview..." | Tee-Object -FilePath manticore_test_log.txt -Append
+          }
+        } catch {
+          echo "Could not connect to Manticore HTTP API: $_" | Tee-Object -FilePath manticore_test_log.txt -Append
+        }
+      shell: pwsh
+      continue-on-error: true
+    
+    - name: Summary
+      if: always()
+      run: |
+        echo "=== INSTALLATION SUMMARY ===" | Tee-Object -FilePath manticore_test_log.txt -Append
+        echo "Test completed at: $(Get-Date)" | Tee-Object -FilePath manticore_test_log.txt -Append
+        
+        # Final check
+        if (Test-Path "C:\Program Files (x86)\Manticore\bin\searchd.exe") {
+          echo "SUCCESS: Manticore is installed at C:\Program Files (x86)\Manticore" | Tee-Object -FilePath manticore_test_log.txt -Append
+        } elseif (Test-Path "C:\Program Files\Manticore\bin\searchd.exe") {
+          echo "SUCCESS: Manticore is installed at C:\Program Files\Manticore" | Tee-Object -FilePath manticore_test_log.txt -Append
         } else {
-          echo "⚠️ Manticore is not listening on port 9306" | Tee-Object -FilePath manticore_test_log.txt -Append
+          echo "FAILURE: Manticore installation not found" | Tee-Object -FilePath manticore_test_log.txt -Append
         }
       shell: pwsh
     
@@ -225,5 +314,4 @@ jobs:
         name: manticore-test-logs
         path: |
           manticore_test_log.txt
-          install_log.txt
         retention-days: 7

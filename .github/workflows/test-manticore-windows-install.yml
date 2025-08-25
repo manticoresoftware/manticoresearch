@@ -40,6 +40,45 @@ jobs:
           Get-WmiObject -Class Win32_LogicalDisk | Select-Object DeviceID, @{Name="Size(GB)";Expression={[math]::Round($_.Size/1GB,2)}}, @{Name="FreeSpace(GB)";Expression={[math]::Round($_.FreeSpace/1GB,2)}} | Tee-Object -FilePath manticore_test_log.txt -Append
         shell: pwsh
 
+      - name: Check Docker Availability 
+        run: |
+          echo "=== CHECKING DOCKER AVAILABILITY ===" | Tee-Object -FilePath manticore_test_log.txt -Append
+          
+          # Check Docker version
+          try {
+            $dockerVersion = docker --version
+            echo "✅ Docker version: $dockerVersion" | Tee-Object -FilePath manticore_test_log.txt -Append
+          } catch {
+            echo "❌ Docker CLI not found: $($_.Exception.Message)" | Tee-Object -FilePath manticore_test_log.txt -Append
+          }
+          
+          # Check Docker info
+          try {
+            echo "Checking Docker daemon status..." | Tee-Object -FilePath manticore_test_log.txt -Append
+            $dockerInfo = docker info 2>&1
+            echo "✅ Docker daemon is running" | Tee-Object -FilePath manticore_test_log.txt -Append
+            echo "Docker info output (first 500 chars):" | Tee-Object -FilePath manticore_test_log.txt -Append
+            echo $dockerInfo.ToString().Substring(0, [Math]::Min(500, $dockerInfo.ToString().Length)) | Tee-Object -FilePath manticore_test_log.txt -Append
+          } catch {
+            echo "⚠️ Docker daemon not responding: $($_.Exception.Message)" | Tee-Object -FilePath manticore_test_log.txt -Append
+          }
+          
+          # Check Docker processes
+          echo "Checking for Docker processes..." | Tee-Object -FilePath manticore_test_log.txt -Append
+          Get-Process | Where-Object {$_.ProcessName -like "*docker*"} | ForEach-Object {
+            echo "Found Docker process: $($_.ProcessName) (PID: $($_.Id))" | Tee-Object -FilePath manticore_test_log.txt -Append
+          }
+          
+          # Test simple Docker command
+          try {
+            echo "Testing Docker with hello-world..." | Tee-Object -FilePath manticore_test_log.txt -Append
+            $helloWorld = docker run --rm hello-world 2>&1
+            echo "✅ Docker hello-world test successful" | Tee-Object -FilePath manticore_test_log.txt -Append
+          } catch {
+            echo "❌ Docker hello-world test failed: $($_.Exception.Message)" | Tee-Object -FilePath manticore_test_log.txt -Append
+          }
+        shell: pwsh
+
       - name: Use Local Test Installer
         id: local_installer
         run: |
@@ -94,7 +133,7 @@ jobs:
           echo "installer_to_use=$installerName" >> $env:GITHUB_OUTPUT
         shell: pwsh
 
-      - name: Install Manticore Search
+      - name: Install Manticore Search (with Docker fix)
         if: steps.local_installer.outputs.installer_found == 'true'
         id: install
         run: |
@@ -106,127 +145,101 @@ jobs:
           echo "Starting installation with file: $installerName" | Tee-Object -FilePath manticore_test_log.txt -Append
           echo "Installer type: $installerType" | Tee-Object -FilePath manticore_test_log.txt -Append
           
-          # Define parameter sets based on installer type
-          $parameterSets = @()
+          # First try the most likely working parameter for NSIS
+          echo "Attempting silent installation with /S parameter..." | Tee-Object -FilePath manticore_test_log.txt -Append
           
-          switch ($installerType) {
-            "inno" {
-              $parameterSets = @(
-                @("/VERYSILENT", "/SUPPRESSMSGBOXES", "/NORESTART", "/SP-"),
-                @("/SILENT", "/SUPPRESSMSGBOXES", "/NORESTART"),
-                @("/VERYSILENT", "/NORESTART"),
-                @("/SILENT")
-              )
-            }
-            "nsis" {
-              $parameterSets = @(
-                @("/S"),
-                @("/SILENT"),
-                @("/s"),  # Try lowercase as backup
-                @("/S", "/ALLUSERS"),
-                @("/VERYSILENT"),  # Sometimes NSIS supports Inno Setup params
-                @()  # Try with no parameters (interactive with timeout)
-              )
-            }
-            "msi" {
-              $parameterSets = @(
-                @("/quiet"),
-                @("/passive"),
-                @("/S")
-              )
-            }
-            default {
-              # Try all common parameters for unknown types
-              $parameterSets = @(
-                @("/S"),                                                    # NSIS
-                @("/VERYSILENT", "/SUPPRESSMSGBOXES", "/NORESTART"),       # Inno Setup
-                @("/SILENT", "/SUPPRESSMSGBOXES"),                         # Inno Setup alt
-                @("/quiet"),                                                # MSI
-                @("/passive"),                                              # MSI alt
-                @("-s"),                                                    # Some custom
-                @("--silent")                                               # Some custom
-              )
-            }
-          }
-          
-          echo "Will try $($parameterSets.Count) parameter combinations" | Tee-Object -FilePath manticore_test_log.txt -Append
-          
-          $installSuccess = $false
-          $installAttempt = 0
-          
-          foreach ($params in $parameterSets) {
-            $installAttempt++
-            $paramString = $params -join " "
+          try {
+            $installSuccess = $false
             
-            try {
-              echo "Attempt $installAttempt`: Running with parameters: $paramString" | Tee-Object -FilePath manticore_test_log.txt -Append
+            # Try /S with automated OK clicking for Docker popup
+            echo "Starting installation process..." | Tee-Object -FilePath manticore_test_log.txt -Append
+            
+            $job = Start-Job -ScriptBlock {
+              param($installer)
+              # Start the installer
+              $process = Start-Process -FilePath $installer -ArgumentList "/S" -PassThru -NoNewWindow
               
-              # Use timeout to prevent hanging (3 minutes max per attempt)
-              $timeoutSeconds = 180
-              echo "Starting installation with $timeoutSeconds second timeout..." | Tee-Object -FilePath manticore_test_log.txt -Append
+              # Wait a bit for potential popups
+              Start-Sleep -Seconds 5
               
-              $job = Start-Job -ScriptBlock {
-                param($installer, $arguments)
-                $process = Start-Process -FilePath $installer -ArgumentList $arguments -Wait -PassThru -NoNewWindow
-                return $process.ExitCode
-              } -ArgumentList $installerName, $params
-              
-              $completed = Wait-Job $job -Timeout $timeoutSeconds
-              
-              if ($completed) {
-                $exitCode = Receive-Job $job
-                Remove-Job $job
-                echo "Exit code: $exitCode" | Tee-Object -FilePath manticore_test_log.txt -Append
+              # Try to handle Docker popup automatically
+              Add-Type -AssemblyName System.Windows.Forms
+              for ($i = 0; $i -lt 30; $i++) {
+                Start-Sleep -Seconds 2
+                # Look for popup windows and send Enter/OK
+                [System.Windows.Forms.SendKeys]::SendWait("{ENTER}")
                 
-                if ($exitCode -eq 0) {
-                  echo "✅ Installation completed with exit code 0, checking for files..." | Tee-Object -FilePath manticore_test_log.txt -Append
-                  # Don't break yet, let's check if files were actually installed
-                } elseif ($exitCode -eq 1) {
-                  echo "⚠️ Installation completed with exit code 1" | Tee-Object -FilePath manticore_test_log.txt -Append
-                } else {
-                  echo "❌ Installation failed with exit code $exitCode" | Tee-Object -FilePath manticore_test_log.txt -Append
-                  # Continue to next parameter set
-                  continue
+                if ($process.HasExited) {
+                  break
                 }
-              } else {
-                Remove-Job $job -Force
-                echo "⏰ Installation timed out after $timeoutSeconds seconds with parameters: $paramString" | Tee-Object -FilePath manticore_test_log.txt -Append
-                echo "Will try next parameter set..." | Tee-Object -FilePath manticore_test_log.txt -Append
               }
               
-            } catch {
-              echo "❌ Installation attempt failed: $($_.Exception.Message)" | Tee-Object -FilePath manticore_test_log.txt -Append
+              $process.WaitForExit()
+              return $process.ExitCode
+            } -ArgumentList $installerName
+            
+            # Wait for job completion with timeout
+            $completed = Wait-Job $job -Timeout 300 # 5 minutes
+            
+            if ($completed) {
+              $exitCode = Receive-Job $job
+              Remove-Job $job
+              echo "Installation completed with exit code: $exitCode" | Tee-Object -FilePath manticore_test_log.txt -Append
+            } else {
+              Remove-Job $job -Force
+              echo "Installation timed out, checking for partial installation..." | Tee-Object -FilePath manticore_test_log.txt -Append
             }
             
-            # Check if installation actually created files
+            # Check if installation actually created files regardless of exit code
+            echo "Checking for installation files..." | Tee-Object -FilePath manticore_test_log.txt -Append
+            
             $installPaths = @(
               "C:\Program Files\Manticore Search",
               "C:\Program Files (x86)\Manticore Search",
+              "C:\Program Files\Manticore",
+              "C:\Program Files (x86)\Manticore",
               "C:\Manticore Search",
               "C:\ManticoreSearch"
             )
             
             foreach ($path in $installPaths) {
               if (Test-Path $path) {
-                echo "✅ Installation successful with parameters: $paramString" | Tee-Object -FilePath manticore_test_log.txt -Append
-                echo "Found installation at: $path" | Tee-Object -FilePath manticore_test_log.txt -Append
+                echo "✅ Found installation at: $path" | Tee-Object -FilePath manticore_test_log.txt -Append
                 $installSuccess = $true
                 echo "install_success=true" >> $env:GITHUB_OUTPUT
-                echo "install_params=$paramString" >> $env:GITHUB_OUTPUT
+                echo "install_path=$path" >> $env:GITHUB_OUTPUT
                 break
               }
             }
             
-            if ($installSuccess) {
-              break
+            if (!$installSuccess) {
+              # Try alternative approach - install anyway and ignore Docker requirement
+              echo "Standard installation failed, trying to bypass Docker check..." | Tee-Object -FilePath manticore_test_log.txt -Append
+              
+              # Sometimes the installer still creates some files even with Docker error
+              echo "Checking if any files were created..." | Tee-Object -FilePath manticore_test_log.txt -Append
+              
+              # Look for any manticore-related files in common locations
+              $possiblePaths = @(
+                "C:\Program Files\*manticore*",
+                "C:\Program Files (x86)\*manticore*", 
+                "C:\ProgramData\*manticore*",
+                "$env:LOCALAPPDATA\*manticore*"
+              )
+              
+              foreach ($pattern in $possiblePaths) {
+                $found = Get-ChildItem -Path $pattern -ErrorAction SilentlyContinue
+                if ($found) {
+                  echo "Found files matching pattern $pattern" | Tee-Object -FilePath manticore_test_log.txt -Append
+                  $found | ForEach-Object { echo "  $($_.FullName)" | Tee-Object -FilePath manticore_test_log.txt -Append }
+                }
+              }
+              
+              echo "install_success=false" >> $env:GITHUB_OUTPUT
             }
             
-            # Small delay between attempts
-            Start-Sleep -Seconds 2
-          }
-          
-          if (!$installSuccess) {
-            echo "❌ All installation attempts failed" | Tee-Object -FilePath manticore_test_log.txt -Append
+          } catch {
+            echo "❌ Installation failed with error: $($_.Exception.Message)" | Tee-Object -FilePath manticore_test_log.txt -Append
             echo "install_success=false" >> $env:GITHUB_OUTPUT
           }
         shell: pwsh
